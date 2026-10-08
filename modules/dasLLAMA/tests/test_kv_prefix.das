@@ -508,13 +508,13 @@ def test_prefix_checkpoint_kinds_and_bytes(t : T?) {
         prefix_insert_(cache, pool, tail3, toks_t3)
         release_kv_pages_(tail3)
         var w3 <- mk_recurrent(c, pool, 0l)
-        t |> equal(5l, prefix_attach_(cache, pool, w3, toks_t2), "the promoted opening stands")
+        t |> equal(5l, prefix_attach_(cache, pool, w3, toks_t2), "the promoted opening stands: it was used after the first")
         release_kv_pages_(w3)
         var w4 <- mk_recurrent(c, pool, 0l)
-        t |> equal(5l, prefix_attach_(cache, pool, w4, toks_open), "... beside the first opening")
+        t |> equal(0l, prefix_attach_(cache, pool, w4, toks_open), "the first opening went: with no other tail standing, the opening used longest ago is the victim")
         release_kv_pages_(w4)
         var w5 <- mk_recurrent(c, pool, 0l)
-        t |> equal(0l, prefix_attach_(cache, pool, w5, toks_t3), "the new tail was the one past the budget: with two openings standing, the tail goes")
+        t |> equal(5l, prefix_attach_(cache, pool, w5, toks_t3), "the new tail stands: the checkpoint just inserted is never the victim")
         release_kv_pages_(w5)
         prefix_release_(cache, pool)
         t |> equal(long_length(pool.free_groups), pool.capacity_groups, "every page back")
@@ -531,6 +531,55 @@ def test_prefix_checkpoint_kinds_and_bytes(t : T?) {
         delete opening
         delete s0
         delete probe
+        delete cache
+        delete pool
+    }
+}
+
+[test]
+def test_prefix_checkpoint_newest_stands(t : T?) {
+    t |> run("the checkpoint just inserted is never the victim: among openings alone the opening used longest ago goes, and a budget under one checkpoint keeps the newest alone") @(t : T?) {
+        let c = mk_config(2l, 4l, 2l, 16l, 32l)
+        var pool <- create_kv_pool_(c, 4l, KVDtype.f32, KVDtype.f32)
+        var cache <- create_prefix_cache_(0l, 2l)
+        var lists : array<array<int64>>
+        lists |> reserve(3)
+        for (k in range64(3l)) {
+            var s <- mk_recurrent(c, pool, 5l)
+            var inscope toks <- [for (i in range64(8l)); 100l * (k + 1l) + i]
+            prefix_insert_(cache, pool, s, toks, "", k < 2l)   // two openings fill the cap; the third is a tail
+            release_kv_pages_(s)
+            lists |> emplace(toks)
+            delete s
+        }
+        t |> equal(2, length(cache.states))
+        var w0 <- mk_recurrent(c, pool, 0l)
+        t |> equal(0l, prefix_attach_(cache, pool, w0, lists[0]), "the opening used longest ago went")
+        release_kv_pages_(w0)
+        var w2 <- mk_recurrent(c, pool, 0l)
+        t |> equal(5l, prefix_attach_(cache, pool, w2, lists[2]), "the tail just inserted stands, though tails go first")
+        release_kv_pages_(w2)
+        prefix_release_(cache, pool)
+        var tiny <- create_prefix_cache_(0l, 8l, 1l)   // a byte budget no checkpoint fits
+        var s0 <- mk_recurrent(c, pool, 5l)
+        prefix_insert_(tiny, pool, s0, lists[0])
+        release_kv_pages_(s0)
+        var s1 <- mk_recurrent(c, pool, 5l)
+        prefix_insert_(tiny, pool, s1, lists[1])
+        release_kv_pages_(s1)
+        t |> equal(1, length(tiny.states), "past a budget under one checkpoint the newest stands alone")
+        var w1 <- mk_recurrent(c, pool, 0l)
+        t |> equal(5l, prefix_attach_(cache, pool, w1, lists[1]) + prefix_attach_(tiny, pool, w1, lists[1]), "... and it is the newest")
+        release_kv_pages_(w1)
+        prefix_release_(tiny, pool)
+        t |> equal(long_length(pool.free_groups), pool.capacity_groups, "every page back")
+        delete w1
+        delete s1
+        delete s0
+        delete tiny
+        delete w2
+        delete w0
+        delete lists
         delete cache
         delete pool
     }

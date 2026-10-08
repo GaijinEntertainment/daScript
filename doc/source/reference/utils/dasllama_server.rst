@@ -903,7 +903,5 @@ prefix cache.
 Not yet implemented
 ===================
 
-The request's ``stop`` and ``response_format`` fields and the forced-function
-``tool_choice`` object form - each logged when a request carries it. On the
-media path: more than one media clip per request, media on earlier turns of a
-conversation, and remote ``image_url`` fetches.
+On the media path: more than one media clip per request, media on earlier
+turns of a conversation, and remote ``image_url`` fetches.

@@ -116,6 +116,23 @@ memory spent only when the stream actually runs:
    var toks : array<int64>
    render_assistant(m, rchat, "Paris.", toks)   // the exchange, as tokens
 
+Two user messages in a row are two user turns, as every template writes them:
+``render_user`` renders the earlier one alone, and the later one takes the
+generation prompt. A replayed assistant turn can carry the reasoning the model
+wrote - ``set_preserve_thinking(rchat, true)``, then ``render_assistant``'s last
+argument - so a thinking model's next turn attaches the whole earlier exchange
+off the prefix cache instead of re-reading it.
+
+.. code-block:: das
+
+   var rchat2 = create_chat_renderer(m, SYSTEM)
+   set_preserve_thinking(rchat2, true)
+   add_user(rchat2, "A note for the assistant: answer in one word.")
+   var two_toks : array<int64>
+   render_user(m, rchat2, two_toks)                      // the note, a user turn of its own
+   add_user(rchat2, "What is the capital of France?")
+   render_assistant(m, rchat2, "Paris.", two_toks, "The capital of France is Paris.")
+
 A dated system turn
 ===================
 

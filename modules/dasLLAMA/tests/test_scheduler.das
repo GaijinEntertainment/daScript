@@ -312,14 +312,16 @@ def test_scheduler_stop_strings(t : T?) {
                 drain(m, sch, events)
                 var got <- pieces_of(events, 1l)
                 let text = text_of(got)
-                to_log(LOG_INFO, "stop string {escape(stop)}: reference {escape(full)}, stream {escape(text)}\n")
+                // one code path on one CPU lane, greedy: the reference and the stream compute the same logits bit for bit
+                to_log(LOG_INFO, "stop string {escape(stop)}: reference {escape(full)}\n")
+                to_log(LOG_INFO, "stop string {escape(stop)}: stream    {escape(text)}\n")
                 t |> equal(slice(full, 0, find(full, stop)), text, "the text before the stop string, nothing of it")
                 let fin = finished_of(events, 1l)
                 t |> equal("stop", fin.finish)
                 t |> success(fin.n_gen < 10l, "the budget was not what ended it")
                 delete got
             } else {
-                t |> success(true, "reference too short for a two-piece stop string - arm skipped")
+                t |> skip("the reference is too short for a two-piece stop string")
             }
             // a stop string the last piece begins and nothing completes: the piece is held, the budget finish flushes it
             if (!empty(ref.pieces[length(ref.pieces) - 1])) {
@@ -330,6 +332,8 @@ def test_scheduler_stop_strings(t : T?) {
                 drain(m, sch, events)
                 var got2 <- pieces_of(events, 2l)
                 var toks2 <- toks_of(events, 2l)
+                to_log(LOG_INFO, "held tail: reference {escape(full)}\n")
+                to_log(LOG_INFO, "held tail: stream    {escape(text_of(got2))}\n")
                 t |> equal(full, text_of(got2), "the whole reference text, the held tail flushed")
                 t |> equal(-1l, toks2[length(toks2) - 1], "the flush rides a piece event of its own")
                 let fin2 = finished_of(events, 2l)

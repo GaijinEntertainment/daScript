@@ -119,7 +119,7 @@ def private page_tokens_match(entry : PrefixEntry; tokens : array<int64>; lo : i
 def create_prefix_cache_(max_groups : int64 = 0l; max_states : int64 = DEFAULT_PREFIX_STATES; max_state_bytes : int64 = 0l) : PrefixCache =>
     <- PrefixCache(max_groups = max_groups, max_states = max(max_states, 0l), max_state_bytes = max(max_state_bytes, 0l))
 
-let DEFAULT_PREFIX_STATES = 256l   //! the cap on a recurrent model's checkpoints; the byte budget (`max_state_bytes`, the server's quarter of RAM) is what binds first on any model worth caching
+let DEFAULT_PREFIX_STATES = 16l   //! a library caller's checkpoint cap with no byte budget set: a request leaves up to three, so this holds a few interleaved conversations; the server sets its own cap under a byte budget
 
 //! a snapshot's arrays and a token list of `n`
 def private snapshot_bytes_(snap : DnSnapshot; n : int64) : int64 =>
@@ -155,16 +155,6 @@ def private prefix_states_bytes_(cache : PrefixCache; pool : KVPool) : int64 {
     return total + long_length(held) * page_bytes_(pool)
 }
 
-//! how many of `a`'s leading tokens open `b`
-def private shared_opening(a, b : array<int64>) : int64 {
-    let cap = min(long_length(a), long_length(b))
-    var n = 0l
-    while (n < cap && a[n] == b[n]) {
-        n ++
-    }
-    return n
-}
-
 //! Where a recurrent session's prefill of `prompt` stops to leave a checkpoint, `matched` tokens attached: the caller's
 //! stable opening (`stable_at`, 0 = unknown), else the longest opening an earlier checkpoint's tokens share with the
 //! prompt - each only a page or more past the hit, under which a checkpoint saves less than it costs. 0 = nowhere.
@@ -179,7 +169,7 @@ def prefix_checkpoint_at_(cache : PrefixCache; pool : KVPool; s : Session; promp
     }
     var opening = 0l
     for (st in cache.states) {
-        opening = max(opening, shared_opening(st.tokens, prompt))
+        opening = max(opening, common_prefix_len(st.tokens, prompt))
     }
     opening = min(opening, long_length(prompt) - 1l)
     return opening >= floor_at ? opening : 0l
@@ -195,21 +185,23 @@ def private prefix_state_drop(var cache : PrefixCache; var pool : KVPool; at : i
     cache.state_bytes = prefix_states_bytes_(cache, pool)
 }
 
-//! the checkpoint to drop first: the tail used longest ago, and only when no tail stands the opening used longest
-//! ago - a tail serves one conversation's next turn, an opening every request that shares it
-def private prefix_state_victim(cache : PrefixCache) : int {
+//! the checkpoint to drop first, the one at `exempt` never (the checkpoint just inserted stands): the tail used longest
+//! ago, and only when no other tail stands the opening used longest ago - a tail serves one conversation's next turn,
+//! an opening every request that shares it; -1 when nothing but the exempt one stands
+def private prefix_state_victim(cache : PrefixCache; exempt : int) : int {
     var lru = -1
     for (st, i in cache.states, count()) {
-        if (st.kind == PrefixStateKind.tail && (lru < 0 || st.last_use < cache.states[lru].last_use)) {
+        if (i != exempt && st.kind == PrefixStateKind.tail && (lru < 0 || st.last_use < cache.states[lru].last_use)) {
             lru = i
         }
     }
     if (lru >= 0) {
         return lru
     }
-    lru = 0
     for (st, i in cache.states, count()) {
-        lru = st.last_use < cache.states[lru].last_use ? i : lru
+        if (i != exempt && (lru < 0 || st.last_use < cache.states[lru].last_use)) {
+            lru = i
+        }
     }
     return lru
 }
@@ -221,7 +213,7 @@ def private prefix_attach_state(var cache : PrefixCache; var pool : KVPool; var 
     var best_n = 0l
     for (st, i in cache.states, count()) {
         let n = long_length(st.tokens)
-        if (n > best_n && n < long_length(prompt) && shared_opening(st.tokens, prompt) == n) {
+        if (n > best_n && n < long_length(prompt) && common_prefix_len(st.tokens, prompt) == n) {
             best = i
             best_n = n
         }
@@ -255,7 +247,7 @@ def private prefix_insert_state(var cache : PrefixCache; var pool : KVPool; var 
     }
     cache.tick ++
     for (st in cache.states) {
-        if (long_length(st.tokens) == n && shared_opening(st.tokens, tokens) == n) {
+        if (long_length(st.tokens) == n && common_prefix_len(st.tokens, tokens) == n) {
             st.last_use = cache.tick
             if (kind == PrefixStateKind.opening) {   //! a tail another request stops at is an opening from here on
                 st.kind = kind
@@ -282,8 +274,10 @@ def private prefix_insert_state(var cache : PrefixCache; var pool : KVPool; var 
     cache.n_state_inserts ++
     cache.state_bytes = prefix_states_bytes_(cache, pool)
     while (long_length(cache.states) > cache.max_states ||
-           (cache.max_state_bytes > 0l && cache.state_bytes > cache.max_state_bytes && length(cache.states) > 1)) {
-        prefix_state_drop(cache, pool, prefix_state_victim(cache))   //! the newest stands even past the byte budget alone: a budget under one checkpoint caches the last one
+           (cache.max_state_bytes > 0l && cache.state_bytes > cache.max_state_bytes)) {
+        let victim = prefix_state_victim(cache, length(cache.states) - 1)   //! the newest stands, even alone past the budget: a budget under one checkpoint caches the last one
+        break if (victim < 0)
+        prefix_state_drop(cache, pool, victim)
     }
 }
 
@@ -519,7 +513,7 @@ def prefix_release_(var cache : PrefixCache; var pool : KVPool) {
     delete cache.chains
     delete cache.roots
     while (!empty(cache.states)) {
-        prefix_state_drop(cache, pool, length(cache.states) - 1)
+        prefix_state_drop(cache, pool, length(cache.states) - 1)   // release: the newest goes too
     }
 }
 

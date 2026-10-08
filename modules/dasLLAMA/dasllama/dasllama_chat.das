@@ -247,7 +247,9 @@ def chat_template(m : Model) : ChatTemplate {
         }
         if (kind == "qwen2") {
             ct.default_system = chatml_default_system(m.chat_template_str)
-            if (contains(m.chat_template_str, "<parameter=")) {   // the Qwen3.6 template: <function=NAME> call blocks, the tools ahead of the system text
+            //! the Qwen3.5/3.6 template: <function=NAME> call blocks and the tools ahead of the system text as `tojson` lines; the
+            //! Qwen3-Coder template writes the same call blocks but its tools as `<function>\n<name>` XML after the system text
+            if (contains(m.chat_template_str, "<parameter=") && !contains(m.chat_template_str, "<function>\n<name>")) {
                 xml_function_tools(ct)
             }
             let gen = rfind(m.chat_template_str, "add_generation_prompt")
@@ -440,10 +442,11 @@ def private think_turn_active_(c : ChatSession) : bool {
     return c.gate_rendered || think_gate_now(c)
 }
 
-// The generation prompt: the thinking-turn alternate opener when the arch declares one (gemma-4's
-// bare model header — the model emits its own thought channel), else the standard opener.
-def private render_assistant_open(m : Model; c : ChatSession; var out : array<int64>) {
-    if (think_turn_active_(c) && !empty(c.tmpl.assistant_open_think.parts)) {
+// The assistant opener: on a GENERATION prompt of a thinking turn the arch's alternate opener when it declares one
+// (gemma-4's bare model header; Qwen3.5/3.6's header with the think block opened), else the standard opener - a
+// replayed turn always takes the standard one, its think block riding the replay text
+def private render_assistant_open(m : Model; c : ChatSession; var out : array<int64>; generation : bool = true) {
+    if (generation && think_turn_active_(c) && !empty(c.tmpl.assistant_open_think.parts)) {
         render_parts(m, c.tmpl.assistant_open_think.parts, "", out)
     } else {
         render_parts(m, c.tmpl.assistant_open.parts, "", out)
@@ -570,15 +573,6 @@ def private render_opening(m : Model; c : ChatSession; var out : array<int64>; w
     return render_system_turn(m, c, out, with_tools, with_text)
 }
 
-//! how many of `a`'s leading tokens `b` shares (a tokenizer may merge at a junction, so the token lists are compared, never the texts)
-def private shared_head(a, b : array<int64>) : int64 {
-    var n = 0l
-    while (n < long_length(a) && n < long_length(b) && a[n] == b[n]) {
-        n ++
-    }
-    return n
-}
-
 //! The tokens of a first turn's opening shared beyond its system prompt and tool set: whichever the template writes
 //! first - the system text ahead of a Hermes tool block, the tool block ahead of a Qwen3.5/3.6 system text - rendered
 //! without the tools and without the text, each matched against the whole. The whole opening with no tools in the turn; 0 after the first turn.
@@ -593,10 +587,10 @@ def system_head_opening_(m : Model; c : ChatSession) : int64 {
     }
     render_opening(m, c, bare, false)
     render_opening(m, c, tools, true, false)
-    return max(shared_head(full, bare), shared_head(full, tools))
+    return max(common_prefix_len(full, bare), common_prefix_len(full, tools))   //! token lists, never texts: a tokenizer may merge at a junction
 }
 
-def private render_prompt(m : Model; c : ChatSession; var out : array<int64>; with_assistant_open : bool = true) : int64 {
+def private render_prompt(m : Model; c : ChatSession; var out : array<int64>; with_assistant_open : bool = true; generation : bool = true) : int64 {
     let base = long_length(out)
     var user_content = c.pending
     if (c.first) {
@@ -654,7 +648,7 @@ def private render_prompt(m : Model; c : ChatSession; var out : array<int64>; wi
             delete gp
         }
     } elif (with_assistant_open) {
-        render_assistant_open(m, c, out)
+        render_assistant_open(m, c, out, generation)
     }
     return opening
 }
@@ -1109,7 +1103,7 @@ def render_assistant_(m : Model; var c : ChatSession; text : string; var out : a
     if (c.first) {
         c.system_head_at = system_head_opening_(m, c)
     }
-    note_opening(c, render_prompt(m, c, out))
+    note_opening(c, render_prompt(m, c, out, true, false))
     render_think_replay(m, c, reasoning, out)
     out |> push_from(encode_(m, text, false, false))
     consume_pending_(c)
@@ -1123,6 +1117,9 @@ def render_assistant_(m : Model; var c : ChatSession; text : string; var out : a
 def render_user_(m : Model; var c : ChatSession; var out : array<int64>) {
     if (!c.has_pending) {
         return
+    }
+    if (c.n_image_rows > 0l || c.n_audio_rows > 0l) {
+        panic("render_user: the pending turn carries queued media rows, which only a generating turn renders - the server's spans ride render_user, rows do not")
     }
     if (c.first) {
         c.system_head_at = system_head_opening_(m, c)
@@ -1142,11 +1139,11 @@ def private note_opening(var c : ChatSession; opening : int64) {
 // The think block a replayed assistant turn carries under preserve_thinking: the template's empty-block form with the
 // turn's reasoning between its markers - inside the text the form keeps there (ChatML's "\n\n" splits around it), bare
 // where it keeps none (GLM). Skips where the template has no suppress form or the vocab lacks the markers.
-def private render_think_replay(m : Model; c : ChatSession; reasoning : string; var out : array<int64>) {
-    if (!c.preserve_thinking || c.tmpl.think_mode != ThinkMode.symmetric || empty(c.tmpl.think_suppress.parts) ||
-        special_id(m, c.tmpl.think_open) < 0l || special_id(m, c.tmpl.think_close) < 0l) {
+def private render_think_replay(m : Model; c : ChatSession; reasoning_in : string; var out : array<int64>) {
+    if (!c.preserve_thinking || c.tmpl.think_mode != ThinkMode.symmetric || empty(c.tmpl.think_suppress.parts) || !c.think_vocab) {
         return
     }
+    let reasoning = strip(reasoning_in)   //! the template strips the reasoning's edge newlines before it writes the block
     if (empty(reasoning)) {
         render_parts(m, c.tmpl.think_suppress.parts, "", out)
         return
@@ -1305,7 +1302,7 @@ def render_assistant_calls_(m : Model; var c : ChatSession; text : string; calls
     if (c.first) {
         c.system_head_at = system_head_opening_(m, c)
     }
-    note_opening(c, render_prompt(m, c, out))
+    note_opening(c, render_prompt(m, c, out, true, false))
     render_think_replay(m, c, reasoning, out)
     c.last_call_names |> clear()
     c.last_call_names |> reserve(length(calls))
@@ -1461,8 +1458,33 @@ def make_think_stream_(tmpl : ChatTemplate; thinking : bool) : ThinkStream {
 //! The reply matcher for `c`'s NEXT turn: armed on a thinking turn (`think_turn_active_`) and on
 //! an instruct turn of a family whose channel markers are guarded stops (`stop_nothink`) - the
 //! tolerated leading thought splits like any other.
-def make_think_stream_(c : ChatSession) : ThinkStream =>
-    make_think_stream_(c.tmpl, think_turn_active_(c) || !empty(c.stop_ids_nothink))
+def make_think_stream_(c : ChatSession) : ThinkStream {
+    var ts = make_think_stream_(c.tmpl, think_turn_active_(c) || !empty(c.stop_ids_nothink))
+    open_think_if_prompted_(c, ts)
+    return ts
+}
+
+//! the generation prompt of a thinking turn ends inside the think block on a template whose thinking opener carries the
+//! marker (Qwen3.5/3.6's `<|im_start|>assistant\n<think>\n`): the reply then opens with reasoning and never writes the opener
+def prompt_opens_think_(c : ChatSession) : bool {
+    if (!think_turn_active_(c) || c.tmpl.think_mode != ThinkMode.symmetric) {
+        return false
+    }
+    for (p in c.tmpl.assistant_open_think.parts) {
+        if (p.kind == ChatPartKind.special && p.s == c.tmpl.think_open) {
+            return true
+        }
+    }
+    return false
+}
+
+//! a splitter for a reply whose prompt opened the think block starts inside the reasoning span
+def private open_think_if_prompted_(c : ChatSession; var ts : ThinkStream) {
+    if (ts.mode == ThinkMode.symmetric && prompt_opens_think_(c)) {
+        ts.state = TS_REASON
+        ts.consumed = true
+    }
+}
 
 // Longest k < length(mark) where the view's tail from `from` ends with mark's first k characters —
 // the hold-back length that keeps a marker split across feed boundaries matchable.
@@ -1747,6 +1769,13 @@ def split_reasoning_(tmpl : ChatTemplate; reply : string) : ThinkSplit {
     return think_drain_(ts, reply)
 }
 
+//! `split_reasoning_` for a reply `c`'s own generation prompt asked for: inside the think block when the prompt opened it
+def split_reasoning_(c : ChatSession; reply : string) : ThinkSplit {
+    var ts = make_think_stream_(c.tmpl, true)
+    open_think_if_prompted_(c, ts)
+    return think_drain_(ts, reply)
+}
+
 //! Parse a complete reply per the family's wire format into (reasoning, content, calls): harmony
 //! fills all three in one walk; hermes/none/gemma-4 split reasoning first and parse calls from the
 //! content half; mistral and llama-3 parse their JSON call shapes. Buffered twin of the server parse.
@@ -1761,14 +1790,14 @@ def parse_calls_(c : ChatSession; reply : string) : ToolReply {
     if (mode == ToolMode.llama_json) {
         return <- llama_json_parse(reply)
     }
-    let sp = split_reasoning_(c.tmpl, reply)
+    let sp = split_reasoning_(c, reply)
     if (mode == ToolMode.gemma4) {
         var tr <- gemma4_parse(sp.content)
         tr.reasoning = sp.reasoning
         return <- tr
     }
     if (mode == ToolMode.xml_function) {
-        var tr <- xml_function_parse(sp.content)
+        var tr <- xml_function_parse(sp.content, tool_param_types(c.tools_json))
         tr.reasoning = sp.reasoning
         return <- tr
     }
@@ -1886,7 +1915,7 @@ def private respond_media_or_text_(m : Model; var c : ChatSession; params : Samp
     }
     // history holds only the answer - reasoning spans strip (legacy <think> strip on undeclared)
     let stored = (c.tmpl.think_mode == ThinkMode.none ? strip_think(reply)
-        : split_reasoning_(c.tmpl, reply).content)
+        : split_reasoning_(c, reply).content)
     c.history |> push(Message(role = Role.assistant, content = stored))
     return reply
 }

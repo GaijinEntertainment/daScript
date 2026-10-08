@@ -48,8 +48,7 @@ def private engine_prefill(m : Model; system, user : string) : array<int64> {
 def test_chat_tinyllama_zephyr(t : T?) {
     t |> run("TinyLlama (arch=llama + SPM) renders the Zephyr prefill") @(t : T?) {
         let path = path_join(models_dir(), "tinyllama-1.1b-chat-v1.0.Q8_0.gguf")
-        if (!stat(path).is_valid) {
-            t |> skip("{path} not present")
+        if (!model_available(t, path)) {
             return
         }
         var m <- load_capped(path)
@@ -72,8 +71,7 @@ def test_chat_tinyllama_zephyr(t : T?) {
 def test_chat_gemma(t : T?) {
     t |> run("Gemma-2 (SPM, no system role) folds system into the first user turn") @(t : T?) {
         let path = path_join(models_dir(), "gemma-2-2b-it-Q8_0.gguf")
-        if (!stat(path).is_valid) {
-            t |> skip("{path} not present")
+        if (!model_available(t, path)) {
             return
         }
         var m <- load_capped(path)
@@ -95,8 +93,7 @@ def test_chat_gemma(t : T?) {
 def test_chat_phi(t : T?) {
     t |> run("Phi-3.5 (SPM) renders the Phi-3 prefill") @(t : T?) {
         let path = path_join(models_dir(), "Phi-3.5-mini-instruct-Q4_K_M.gguf")
-        if (!stat(path).is_valid) {
-            t |> skip("{path} not present")
+        if (!model_available(t, path)) {
             return
         }
         var m <- load_capped(path)
@@ -123,8 +120,7 @@ def test_chat_phi(t : T?) {
 def test_chat_qwen(t : T?) {
     t |> run("Qwen2.5 (BPE) renders the ChatML prefill") @(t : T?) {
         let path = path_join(models_dir(), "Qwen2.5-1.5B-Instruct-Q8_0.gguf")
-        if (!stat(path).is_valid) {
-            t |> skip("{path} not present")
+        if (!model_available(t, path)) {
             return
         }
         var m <- load_capped(path)
@@ -168,8 +164,7 @@ def test_chat_qwen(t : T?) {
 def test_chat_llama3(t : T?) {
     t |> run("Llama-3 (arch=llama + BPE) renders the Llama-3 header prefill") @(t : T?) {
         let path = path_join(models_dir(), "Llama-3.2-1B-Instruct-Q8_0.gguf")
-        if (!stat(path).is_valid) {
-            t |> skip("{path} not present")
+        if (!model_available(t, path)) {
             return
         }
         var m <- load_capped(path)
@@ -208,8 +203,7 @@ def test_chat_end_to_end(t : T?) {
     t |> run("respond() streams a reply, stops on a stop token, records stats + transcript") @(t : T?) {
         return if (!jit_only(t))
         let path = path_join(models_dir(), "gemma-2-2b-it-Q8_0.gguf")
-        if (!stat(path).is_valid) {
-            t |> skip("{path} not present")
+        if (!model_available(t, path)) {
             return
         }
         var m <- load_model_(path, QuantMode.q8)
@@ -246,8 +240,7 @@ def test_chat_end_to_end(t : T?) {
 def test_chat_tools_hermes(t : T?) {   // nolint:STYLE038 — flat expected-token stream, one push per run
     t |> run("Qwen ChatML renders the Hermes tool block token-for-token (needs Qwen2.5-0.5B)") @(t : T?) {
         let path = path_join(models_dir(), "Qwen2.5-0.5B-Instruct-Q8_0.gguf")
-        if (!stat(path).is_valid) {
-            t |> skip("{path} not present")
+        if (!model_available(t, path)) {
             return
         }
         var m <- load_capped(path)
@@ -291,8 +284,7 @@ def test_chat_tools_hermes(t : T?) {   // nolint:STYLE038 — flat expected-toke
     }
     t |> run("tool-call replay + tool-results turn render token-for-token (needs Qwen2.5-0.5B)") @(t : T?) {
         let path = path_join(models_dir(), "Qwen2.5-0.5B-Instruct-Q8_0.gguf")
-        if (!stat(path).is_valid) {
-            t |> skip("{path} not present")
+        if (!model_available(t, path)) {
             return
         }
         var m <- load_capped(path)
@@ -356,8 +348,7 @@ def test_chat_tools_hermes(t : T?) {   // nolint:STYLE038 — flat expected-toke
 def test_chat_think_suppress(t : T?) {
     t |> run("set_thinking(false) appends the empty think block to the generation prompt (needs Qwen3-0.6B)") @(t : T?) {
         let path = path_join(models_dir(), "Qwen3-0.6B-Q8_0.gguf")
-        if (!stat(path).is_valid) {
-            t |> skip("{path} not present")
+        if (!model_available(t, path)) {
             return
         }
         var m <- load_capped(path)
@@ -399,8 +390,7 @@ def test_chat_think_suppress(t : T?) {
     }
     t |> run("suppress is a vocab-gated no-op without think tokens (needs Qwen2.5-0.5B)") @(t : T?) {
         let path = path_join(models_dir(), "Qwen2.5-0.5B-Instruct-Q8_0.gguf")
-        if (!stat(path).is_valid) {
-            t |> skip("{path} not present")
+        if (!model_available(t, path)) {
             return
         }
         var m <- load_capped(path)
@@ -440,8 +430,7 @@ def private replay_four(m : Model; preserve : bool; reasoning : string) : array<
 def test_chat_preserve_thinking(t : T?) {
     t |> run("preserve_thinking replays an assistant turn with its think block - empty, or around its reasoning (needs Qwen3-0.6B)") @(t : T?) {
         let path = path_join(models_dir(), "Qwen3-0.6B-Q8_0.gguf")
-        if (!stat(path).is_valid) {
-            t |> skip("{path} not present")
+        if (!model_available(t, path)) {
             return
         }
         var m <- load_capped(path)
@@ -512,7 +501,7 @@ def private pieces_text(m : Model; toks : array<int64>) : string {
 }
 
 [test]
-def test_chat_xml_function(t : T?) {
+def test_chat_xml_function(t : T?) {   // nolint:STYLE038 - one template, every form of its turns held to its own text
     t |> run("a template with <parameter= blocks installs the Qwen3.6 tool format (model-free)") @(t : T?) {
         var m = Model()
         m.chat_template_str = "xx <|im_start|> role xx <|im_end|> xx <tool_call>\n<function=example_function_name>\n<parameter=example_parameter_1>\nvalue_1 xx"
@@ -528,8 +517,7 @@ def test_chat_xml_function(t : T?) {
     }
     t |> run("the first turn and a replayed call turn render the template's own text (needs Qwen3.5-0.8B)") @(t : T?) {
         let path = path_join(models_dir(), "Qwen3.5-0.8B-Q8_0.gguf")
-        if (!stat(path).is_valid) {
-            t |> skip("{path} not present")
+        if (!model_available(t, path)) {
             return
         }
         var m <- load_capped(path)
@@ -561,6 +549,42 @@ def test_chat_xml_function(t : T?) {
         // the replay re-renders the first turn's prompt, then the call turn, the results and the next turn
         let gen = "<|im_start|>assistant\n<think>\n\n</think>\n\n"
         t |> equal("{XMLF_FIRST}{slice(XMLF_REPLAY, length(gen))}", pieces_text(m, replay), "the call turn as <function=> blocks, the results in one user turn, the next turn")
+        t |> success(find_index(first.toks, special_id(m, "<tool_call>")) >= 0, "the instruction's call markers render as the vocab's special tokens, not as text")
+        // a call turn with text alongside: the text, a blank line, the blocks
+        var c3 = create_chat_renderer(m, "You are a terse assistant.", 8l)
+        xml_function_tools(c3.tmpl)
+        set_thinking(c3, false)
+        var tools3 := tools
+        set_tools(c3, tools3)
+        add_user(c3, "Turn it off.")
+        var with_text : array<int64>
+        render_assistant_calls(m, c3, "Sure.", calls, with_text)
+        t |> success(find(pieces_text(m, with_text), "Sure.\n\n<tool_call>\n<function=control>") >= 0, "the text ahead of the block, a blank line between")
+        // thinking on: the generation prompt opens the think block, a replayed turn writes its own closed block once
+        var c4 = create_chat_renderer(m, "You are a terse assistant.", 8l)
+        xml_function_tools(c4.tmpl)
+        set_thinking(c4, true)
+        set_preserve_thinking(c4, true)
+        add_user(c4, "Turn it off.")
+        let gen4 <- render_turn_marked(m, c4)
+        let gen4_text = pieces_text(m, gen4.toks)
+        t |> success(ends_with(gen4_text, "<|im_start|>assistant\n<think>\n"), "the thinking generation prompt ends inside the think block")
+        let sp = split_reasoning(c4, "I should switch it.\n</think>\n\nDone.")
+        t |> equal("I should switch it.", sp.reasoning, "a reply to that prompt opens with reasoning and never writes the opener")
+        t |> equal("Done.", sp.content)
+        var rep4 : array<int64>
+        render_assistant(m, c4, "Done.", rep4, "I should switch it.")
+        let rep4_text = pieces_text(m, rep4)
+        t |> success(find(rep4_text, "<|im_start|>assistant\n<think>\nI should switch it.\n</think>\n\nDone.<|im_end|>") >= 0, "the replayed turn: the plain header, the think block once, the answer")
+        var openers = 0
+        var at = find(rep4_text, "<think>")
+        while (at >= 0) {
+            openers ++
+            at = find(rep4_text, "<think>", at + 1)
+        }
+        t |> equal(1, openers, "one think opener in the replay, not the generation prompt's and the block's")
+        delete c4
+        delete c3
         // two user messages in a row: the earlier renders as its own turn (render_user), the later gets the generation prompt
         var c2 = create_chat_renderer(m, "You are a terse assistant.", 8l)
         set_thinking(c2, false)
@@ -587,8 +611,7 @@ def test_chat_xml_function(t : T?) {
 def test_chat_gemma4_instruct_text_turn(t : T?) {
     t |> run("thinking off on E2B: '2+2' answers and a stray channel marker ends the turn") @(t : T?) {
         let path = path_join(models_dir(), "gemma-4-E2B-it-Q4_K_M.gguf")
-        if (!stat(path).is_valid) {
-            t |> skip("{path} not present")
+        if (!model_available(t, path)) {
             return
         }
         var m <- load_capped(path)
@@ -689,8 +712,7 @@ def test_gemma4_e_media_body(t : T?) {
 def test_chat_gemma4_thinking(t : T?) {   // nolint:STYLE038 — flat expected-token stream, one push per run
     t |> run("default = thinking; instruct opt-out = the template's bare model turn (needs gemma-4-E2B)") @(t : T?) {
         let path = path_join(models_dir(), "gemma-4-E2B-it-Q4_K_M.gguf")
-        if (!stat(path).is_valid) {
-            t |> skip("{path} not present")
+        if (!model_available(t, path)) {
             return
         }
         var m <- load_capped(path)
@@ -802,8 +824,7 @@ def test_chat_qwen35_tools(t : T?) {
     }
     t |> run("tool markers resolve in the 3.5 vocab and render as single ids (needs Qwen3.5-0.8B)") @(t : T?) {
         let path = path_join(models_dir(), "Qwen3.5-0.8B-Q8_0.gguf")
-        if (!stat(path).is_valid) {
-            t |> skip("{path} not present")
+        if (!model_available(t, path)) {
             return
         }
         var m <- load_capped(path)
@@ -873,8 +894,7 @@ def test_chat_tool_modes(t : T?) {
 def test_chat_gemma4_tool_wire(t : T?) {   // nolint:STYLE038 — flat expected-token stream, one push per run
     t |> run("defs turn + call replay + result turn token-for-token (needs gemma-4-E2B)") @(t : T?) {
         let path = path_join(models_dir(), "gemma-4-E2B-it-Q4_K_M.gguf")
-        if (!stat(path).is_valid) {
-            t |> skip("{path} not present")
+        if (!model_available(t, path)) {
             return
         }
         var m <- load_capped(path)
@@ -974,8 +994,7 @@ def test_chat_gemma4_tool_wire(t : T?) {   // nolint:STYLE038 — flat expected-
     }
     t |> run("displaced results + leaked open turn both heal on the next render (needs gemma-4-E2B)") @(t : T?) {
         let path = path_join(models_dir(), "gemma-4-E2B-it-Q4_K_M.gguf")
-        if (!stat(path).is_valid) {
-            t |> skip("{path} not present")
+        if (!model_available(t, path)) {
             return
         }
         var m <- load_capped(path)
@@ -1128,8 +1147,7 @@ def test_chat_strip_think(t : T?) {
 def test_chat_pending_cleared_on_consume(t : T?) {
     t |> run("respond()/add_assistant() clear the consumed user text (needs SmolLM2-135M)") @(t : T?) {
         let path = path_join(models_dir(), "SmolLM2-135M-Instruct-Q8_0.gguf")
-        if (!stat(path).is_valid) {
-            t |> skip("{path} not present")
+        if (!model_available(t, path)) {
             return
         }
         with_dasllama_jobque() {
@@ -1167,8 +1185,7 @@ def test_chat_render_seam(t : T?) {
     t |> run("render_assistant == add_assistant evals; renderer chat holds no KV (needs SmolLM2-135M)") @(t : T?) {
         return if (!jit_only(t))
         let path = path_join(models_dir(), "SmolLM2-135M-Instruct-Q8_0.gguf")
-        if (!stat(path).is_valid) {
-            t |> skip("{path} not present")
+        if (!model_available(t, path)) {
             return
         }
         with_dasllama_jobque() {

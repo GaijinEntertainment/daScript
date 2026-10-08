@@ -520,7 +520,7 @@ def split_reasoning(chat : ChatSession; reply : string) : ThinkSplit {
     //! Split a complete reply at its reasoning boundary per the model family's reply format
     //! (``<think>`` pair, Harmony channels, gemma-4's thought channel). Both halves come back
     //! stripped when a reasoning span is found; a reply with no reasoning passes through untouched.
-    return split_reasoning_(chat.tmpl, reply)
+    return split_reasoning_(chat, reply)
 }
 
 def make_think_stream(chat : ChatSession) : ThinkStream {

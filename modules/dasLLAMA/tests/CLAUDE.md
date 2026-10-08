@@ -1023,7 +1023,8 @@ every draft accepted plus the parked bonus draw, the first miss, RNG state equal
 per emitted token), the restored recent window, and the repetition penalty seeing the accepted
 drafts (a walk that forgot the window would accept the repeated draft).
 `test_constraint.das` - stocked suite, `-jit` only, skips without tinyllama Q8 (its session sizes the logits
-row; the cell writes the logits): the sampler under a `TokenConstraint` - the best admitted token when the
+row; the cell writes the logits): the sampler under a `TokenConstraint` - a sampled draw with no cut probing
+once and refiltering only on a refusal (the admit-all constraint's probe count), the best admitted token when the
 constraint refuses the argmax, the whole row walked when it refuses the `CONSTRAINED_PROBE_K` largest (the
 candidate list asserted at the vocabulary's size), -1 and `constrain_dead` on both the greedy and the sampled
 path when it admits nothing, only admitted survivors under a temperature, one commit per emitted token, the
@@ -1037,7 +1038,11 @@ and probabilities within the bound (a poisoned probability as the bound's contro
 draw on each path, the same token wherever the draw clears a CDF boundary (at least 500 of 512;
 a half-mass margin as the floor's control), the k+3 tie set surviving a top-k of k, and a top-k
 past the fast cap taking the reference.
-`test_chat.das` - stocked suite; the chat template renderer per family against pinned token
+`test_chat.das` - stocked suite; the Qwen3.5/3.6 `xml_function` cells (the template sniffed off `<parameter=`;
+the first turn and a replayed call turn as the template's own text, the opening's shared head as the tool block, a
+call with text alongside, the thinking generation prompt ending inside the think block and the replayed turn
+writing its block once, two consecutive user turns through `render_user`), the `preserve_thinking` replay
+cell (the think block around the turn's reasoning, ChatML's form), and the chat template renderer per family against pinned token
 streams (each cell skips without its carrier; the Qwen2.5 cell also holds `render_turn_marked`'s
 opening - the system turn on a first turn, none on a later one, its tokens the pinned ChatML
 prefill stream), the tool wires (the Qwen2.5 hermes cell holding the system turn a ChatML template
@@ -1076,9 +1081,14 @@ instruct-mode stop guard (`nothink_stop_here_`): a channel marker before the rep
 content piece passes as a leading thought, whitespace is not content, the first marker after
 content stops, an unarmed guard never stops.
 `test_tool_formats.das` - the per-ToolMode wire codecs (dasllama_tools), model-free: defs
-serializers and call parsers for harmony/gemma4/mistral/llama_json against verbatim fixtures.
+serializers and call parsers for harmony/gemma4/mistral/llama_json against verbatim fixtures, and the
+Qwen3.5/3.6 `xml_function` codec - a replayed call's block, a reply's parse (content before the first block,
+an unterminated block, a nameless block, a malformed opener, a key written twice), and the values typed by the
+declared parameters (`tool_param_types`: a declared string stays text, a declared number or boolean goes bare).
 `test_scheduler.das` - stocked suite; the continuous-batching scheduler (dasllama_scheduler) against
-`generate()` references; skips honestly without SmolLM2-135M / the MTP fixture, `-jit` only.
+`generate()` references; skips honestly without SmolLM2-135M / the MTP fixture, `-jit` only. The stop-string
+cells: `stop_scan`'s hold and release model-free, then a stream cut by a stop string spanning two pieces
+(the text before it, `finish_reason` stop) and a held tail flushed at the budget as a piece of token -1.
 The SmolLM cells drop the loaded model's GPU state (`moe_gpu_drop_model`) so they serve on
 the CPU rails under `DASLLAMA_GPU=1` too: their bit-exact claims hold on one lane, and the
 tier's device prefill, resident batch decode and CPU prefill round differently. Its two-stream
@@ -1983,7 +1993,8 @@ instruction-prefixed queries against two passages - lands the card's published c
 within 0.02 under the file's pooling (reads 0.005 at most on the M1 Max), while the mean read
 parts the relevant passage from the other by under 0.1 where the last-token read parts them by
 over 0.5 (the control); on tinyllama Q8 (a chat model, no key) the default read is the mean,
-float for float, no EOS is appended, and the last-token override differs.
+float for float, no EOS is appended, and the last-token override differs; a text past the model's context
+embeds its leading seq_len tokens - a unit vector, the same floats the text cut at that token gives.
 `test_exe_smoke.das` - stocked suite; model-gated (SmolLM2-135M, small tier): the
 standalone-exe context gate. Builds `_exe_smoke_root.das` with `-jit -exe` and runs the
 artifact - the rail where globals restore as DATA, so a function-typed global with no
@@ -2016,7 +2027,9 @@ clone so one template stamps both plane overloads.
 `test_kv_prefix.das` - stocked suite; beside each attach below, the probe `prefix_match_len_` reads the
 count the attach then attaches (0 on a recurrent cache, which attaches at checkpoints); model-free cells on a synthetic Config: the prefix cache's page
 accounting, the LRU budget and the token verify, then a recurrent session's checkpoints - one
-checkpoint a donation with the page of its last row copied, the `max_states` budget, where a
+checkpoint a donation with the page of its last row copied, the `max_states` and byte budgets (tails
+dropped before openings, a tail a prefill stops at promoted to an opening, a page two checkpoints of one
+conversation share counted once, the checkpoint just inserted never the victim), where a
 prefill stops (`prefix_checkpoint_at_`: the caller's stable opening, else the opening an earlier
 checkpoint shares, a token short of a prompt an earlier one holds whole, nowhere under a page past
 the hit or on a model with no recurrent state), and the side state (the n-gram input's last tokens

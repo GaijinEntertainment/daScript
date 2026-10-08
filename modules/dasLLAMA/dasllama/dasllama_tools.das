@@ -7,6 +7,7 @@ module dasllama_tools shared public
 require dasllama/dasllama_lint public
 require daslib/json_boost   // tool defs arrive as OpenAI JSON; non-JSON wire args normalize to JSON text
 require daslib/strings_boost
+require daslib/strings_convert   // a declared number's text is checked before it goes bare
 require strings
 
 // The per-ToolMode wire codecs: definition serializers (prompt side) and reply parsers (wire
@@ -500,7 +501,15 @@ def llama_json_parse(reply : string) : ToolReply {
 //! Parse a marker-framed (hermes-style) reply: each well-formed ``open_mark``..``close_mark`` span
 //! parses as one JSON call object (nameless spans skip; an unterminated span ends the scan); content
 //! is the text before the first opener — the whole reply when nothing parses or ``open_mark`` is empty.
-def marker_parse(reply : string; open_mark, close_mark : string) : ToolReply {
+def marker_parse(reply : string; open_mark, close_mark : string) : ToolReply =>
+    <- marker_parse_with(reply, open_mark, close_mark) $(body) {
+        return tool_call_of_json(strip(body))
+    }
+
+//! The marker-framed reply parse every marker family shares: content is the text before the first opener, each
+//! opener .. closer span is one call through `call_of` (a nameless one skipped), an unterminated span ends the scan,
+//! and a reply with no call is all content.
+def marker_parse_with(reply : string; open_mark, close_mark : string; call_of : block<(body : string) : ToolCall>) : ToolReply {
     var out = ToolReply()
     if (empty(open_mark)) {
         out.content = reply
@@ -522,7 +531,7 @@ def marker_parse(reply : string; open_mark, close_mark : string) : ToolReply {
             if (cl < 0) {
                 break   // unterminated span (token budget cut mid-call) — scan stops
             }
-            let c = tool_call_of_json(strip(slice(d, bstart, cl)))
+            let c = invoke(call_of, slice(d, bstart, cl))
             if (!empty(c.name)) {
                 out.calls |> push(c)
             }
@@ -569,26 +578,54 @@ def xml_function_calls_text(calls : array<ToolCall>) : string {
     return s
 }
 
-// a `<parameter=K>` value as a JSON value: an object or array that parses stays JSON, everything else is a string
-def private xml_function_value_json(v : string) : string {
-    if (starts_with(v, "\{") || starts_with(v, "[")) {
+//! A declared parameter's JSON type per tool and parameter name, read off the OpenAI tool definitions (`properties.K.type`):
+//! what `xml_function_parse` types a block's values by, since the block itself writes every value as bare text.
+def tool_param_types(tools_json : array<string>) : table<string; table<string; string>> {
+    var out : table<string; table<string; string>>
+    for (tj in tools_json) {
         var perr = ""
-        var js = read_json(v, perr)
-        if (js != null) {
-            let out = write_json_compact(js)
-            unsafe {
-                delete js
+        var js = read_json(tj, perr)
+        continue if (js == null)
+        let fname = js?["function"]?["name"] ?? ""
+        if (!empty(fname)) {
+            var inscope types : table<string; string>
+            let props = js?["function"]?["parameters"]?["properties"]
+            if (props != null && props.value is _object) {
+                for (k, v in keys(props.value as _object), values(props.value as _object)) {
+                    types[k] = v?["type"] ?? ""
+                }
             }
-            return out
+            out[fname] <- types
+        }
+        unsafe {
+            delete js
         }
     }
-    return json_quoted(v)
+    return <- out
 }
 
-// one `<function=NAME> ... </function>` body -> the call, nameless when malformed
-def private xml_function_call_of(body : string) : ToolCall {
+//! a `<parameter=K>` value as a JSON value, by the parameter's declared type: a `string` stays a string whatever it
+//! looks like; an `integer`/`number`/`boolean` that reads as one goes bare; an `object`/`array` - or an undeclared value -
+//! that parses as JSON stays JSON; everything else is a string
+def private xml_function_value_json(v : string; ty : string) : string {
+    if (ty == "string") {
+        return json_quoted(v)
+    }
+    let bare = strip(v)
+    if (ty == "boolean") {
+        return (bare == "true" || bare == "false") ? bare : json_quoted(v)
+    }
+    if (ty == "integer" || ty == "number") {
+        return try_to_float(bare)._is_ok ? bare : json_quoted(v)
+    }
+    return (starts_with(bare, "\{") || starts_with(bare, "[")) ? json_value_or_quoted(bare) : json_quoted(v)
+}
+
+// one `<function=NAME> ... </function>` body -> the call, nameless when malformed; a key written twice keeps its last value
+def private xml_function_call_of(body : string; types : table<string; table<string; string>>) : ToolCall {
     var c = ToolCall()
     var fields : array<string>
+    var at : table<string; int>
     peek_data(body) $(d) {
         let fo = find(d, "<function=")
         return if (fo < 0)
@@ -602,6 +639,10 @@ def private xml_function_call_of(body : string) : ToolCall {
             let pe = find(d, ">", po)
             let pc = find(d, "</parameter>", po)
             break if (pe < 0 || pc < 0)
+            if (pe > pc) {   // an opener with no `>` of its own: the block is malformed, the scan moves past its closer
+                pos = pc + length("</parameter>")
+                continue
+            }
             let key = strip(slice(d, po + length("<parameter="), pe))
             var lo = pe + 1
             var hi = pc
@@ -611,7 +652,15 @@ def private xml_function_call_of(body : string) : ToolCall {
             if (hi > lo && d[hi - 1] == uint8('\n')) {
                 hi --
             }
-            fields |> push("{json_quoted(key)}: {xml_function_value_json(slice(d, lo, hi))}")
+            let ty = types?[c.name]?[key] ?? ""
+            let field = "{json_quoted(key)}: {xml_function_value_json(slice(d, lo, hi), ty)}"
+            let seen = at?[key] ?? -1
+            if (seen >= 0) {
+                fields[seen] = field
+            } else {
+                at[key] = length(fields)
+                fields |> push(field)
+            }
             pos = pc + length("</parameter>")
         }
     }
@@ -622,36 +671,18 @@ def private xml_function_call_of(body : string) : ToolCall {
     return c
 }
 
-//! Parse a Qwen3.6 reply: content is the text before the first `<tool_call>`, each `<tool_call>` .. `</tool_call>` span
+//! Parse a Qwen3.5/3.6 reply: content is the text before the first `<tool_call>`, each `<tool_call>` .. `</tool_call>` span
 //! holds one `<function=NAME>` block whose `<parameter=K>` blocks become the arguments object; an unterminated
 //! span ends the scan, a nameless block is skipped, and a reply with no call is all content.
-def xml_function_parse(reply : string) : ToolReply {
-    var out = ToolReply()
-    var content_end = -1
-    peek_data(reply) $(d) {
-        var pos = 0
-        while (true) {
-            let o = find(d, "<tool_call>", pos)
-            if (o < 0) {
-                break
-            }
-            if (content_end < 0) {
-                content_end = o
-            }
-            let bstart = o + length("<tool_call>")
-            let cl = find(d, "</tool_call>", bstart)
-            if (cl < 0) {
-                break
-            }
-            let c = xml_function_call_of(slice(d, bstart, cl))
-            if (!empty(c.name)) {
-                out.calls |> push(c)
-            }
-            pos = cl + length("</tool_call>")
-        }
+def xml_function_parse(reply : string; types : table<string; table<string; string>>) : ToolReply =>
+    <- marker_parse_with(reply, "<tool_call>", "</tool_call>") $(body) {
+        return xml_function_call_of(body, types)
     }
-    out.content = (content_end < 0 || empty(out.calls)) ? reply : strip(slice(reply, 0, content_end))
-    return <- out
+
+//! `xml_function_parse` with no declarations at hand: every value typed by its own text alone
+def xml_function_parse(reply : string) : ToolReply {
+    let none : table<string; table<string; string>>
+    return <- xml_function_parse(reply, none)
 }
 
 // ===== gemma-4 — the bracketed DSL (unquoted keys, <|"|> string-quote token, dictsorted) =====

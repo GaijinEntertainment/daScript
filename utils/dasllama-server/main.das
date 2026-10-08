@@ -839,7 +839,7 @@ def vulkan_serving_want(cfg : ServerArgs) : GpuTierWant
 // provenance. Sentinel-is-meaning keys stay raw: ctx 0 = model default, prefix 0 = auto /
 // -1 = unbounded, threads -1 = all cores, gpu "" = legacy metal/env path.
 [arch(at = "README.md#endpoints")]
-def private build_config_surface(cfg : ServerArgs; save_path : string) : string {
+def private build_config_surface(cfg : ServerArgs; save_path : string) : string {   // nolint:STYLE037 - a flat list of surface fields, one resolution each
     let gpu = effective_gpu(cfg)
     var config = JV((
         model = cfg.model,
@@ -873,6 +873,8 @@ def private build_config_surface(cfg : ServerArgs; save_path : string) : string 
         chunk_idle = max(cfg.chunk_idle, 0),
         page_rows = cfg.page_rows > 0 ? cfg.page_rows : 64,
         prefix = cfg.prefix,
+        prefix_states = cfg_sourced("prefix_states") ? cfg.prefix_states : int(SERVER_PREFIX_STATES),
+        prefix_state_mb = cfg.prefix_state_mb,   // 0 = a quarter of the box's RAM, resolved at init
         flat = cfg.flat,
         mtp = cfg_sourced("mtp") ? cfg.mtp : mtp_default_resolved(cfg.streams > 0 ? cfg.streams : 4, gpu, cfg.metal),
         rope_scaling = cfg.rope_scaling,
@@ -1040,7 +1042,7 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
     let chunk_idle = g_cfg.chunk_idle > 0 ? int64(g_cfg.chunk_idle) : -1l
     let page_rows = g_cfg.flat ? 0l : (g_cfg.page_rows > 0 ? int64(g_cfg.page_rows) : 64l)
     let prefix = int64(g_cfg.prefix)   // 0 = auto (init_server sizes it), < 0 = unbounded
-    let prefix_states = cfg_sourced("prefix_states") ? int64(max(g_cfg.prefix_states, 0)) : DEFAULT_PREFIX_STATES   // 0 set by hand = no checkpoints
+    let prefix_states = cfg_sourced("prefix_states") ? int64(max(g_cfg.prefix_states, 0)) : SERVER_PREFIX_STATES   // 0 set by hand = no checkpoints
     let prefix_state_mb = int64(max(g_cfg.prefix_state_mb, 0))
     let dispatch_mode = to_lower(g_cfg.team_dispatch)
     if (!empty(dispatch_mode) && dispatch_mode != "hybrid"

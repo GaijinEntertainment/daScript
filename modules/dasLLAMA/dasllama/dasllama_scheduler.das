@@ -33,7 +33,7 @@ enum SchedEventKind {
 struct SchedEvent {
     stream : int64                          // Stream/PendingReq id
     kind : SchedEventKind = SchedEventKind.piece
-    token : int64 = -1l                     // piece: the sampled token id
+    token : int64 = -1l                     // piece: the sampled token id; -1 on the text a stop-string hold releases at the finish, which no one token made
     text : string = ""                      // piece: its decoded text
     finish : string = ""                    // finished: "stop" | "length" | "evicted"
     n_prompt : int64 = 0l                   // finished: prompt tokens prefilled
@@ -632,9 +632,7 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
             to_log(LOG_INFO, "[stream {st.id}] device prefix: {matched}/{length(st.prompt)} tok already on the device\n")
         } elif (sch.paged) {
             st.session <- create_session(m, sch.pool)
-            let t_attach = ref_time_ticks()   // clock: control - the attach's cost in the log line
             var matched = prefix_attach(sch.prefix, sch.pool, st.session, st.prompt)
-            let attach_ms = int64(get_time_usec(t_attach)) / 1000l
             if (cuts_a_span(st.spans, matched)) {   // a span evals whole: a hit that ends inside one is no hit
                 release_kv_pages(st.session)
                 delete st.session
@@ -670,7 +668,7 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
                 st.ckpt_end_at = end_at
             }
             if (matched > 0l) {
-                to_log(LOG_INFO, "[stream {st.id}] prefix cache HIT: {matched}/{length(st.prompt)} tok attached in {attach_ms} ms, no prefill for them (checkpoints planned at {st.ckpt_head_at}, {st.ckpt_sys_at}, {st.ckpt_at}, {st.ckpt_end_at}; stable {sch.queue[0].stable_at}, system {sys_at}, head {head_at})\n")
+                to_log(LOG_INFO, "[stream {st.id}] prefix cache HIT: {matched}/{length(st.prompt)} tok attached, no prefill for them (checkpoints planned at {st.ckpt_head_at}, {st.ckpt_sys_at}, {st.ckpt_at}, {st.ckpt_end_at}; stable {sch.queue[0].stable_at}, system {sys_at}, head {head_at})\n")
             } else {
                 to_log(LOG_INFO, "[stream {st.id}] prefix cache MISS: full {length(st.prompt)}-tok prefill (checkpoints planned at {st.ckpt_head_at}, {st.ckpt_sys_at}, {st.ckpt_at}, {st.ckpt_end_at}; stable {sch.queue[0].stable_at}, system {sys_at}, head {head_at})\n")
             }
@@ -810,14 +808,12 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
             let next_ckpt = next_checkpoint(sch.streams[i])
             let to_ckpt = next_ckpt - sch.streams[i].n_prefilled
             //! a checkpoint within a chunk and a half ends this chunk: stopping a chunk short of it would add a window, and a window's cost is mostly fixed
-            let take = to_ckpt > 0l && to_ckpt <= chunk + chunk / 2l ? to_ckpt : min(chunk, head_end - sch.streams[i].n_prefilled)
+            let take = min(to_ckpt > 0l && to_ckpt <= chunk + chunk / 2l ? to_ckpt : chunk, head_end - sch.streams[i].n_prefilled)   //! never past the next media span's start: a stop inside or past a span waits for the span's own eval
             sch.chunk |> resize(take)
             for (k in range64(take)) {
                 sch.chunk[k] = sch.streams[i].prompt[sch.streams[i].n_prefilled + k]
             }
-            let t_window = ref_time_ticks()   // clock: control - the window's cost in the log line
             eval(m, sch.streams[i].session, sch.chunk)
-            to_log(LOG_INFO, "[stream {sch.streams[i].id}] prefill window: {take} tok at {sch.streams[i].n_prefilled} in {int64(get_time_usec(t_window)) / 1000l} ms\n")
             sch.streams[i].n_prefilled += take
             sch.prefill_tokens += take
             sch.prefill_evals ++

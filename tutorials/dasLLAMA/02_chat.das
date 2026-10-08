@@ -157,6 +157,19 @@ def section_replay(m : Model; chat : ChatSession) {
     var replay_toks : array<int64>
     render_assistant(m, rchat, "Paris.", replay_toks)
     print("one replayed exchange = {length(replay_toks)} tokens, rendered without touching the model\n")
+
+    // Two user messages in a row are two user turns: render_user renders the
+    // earlier one alone, the later one takes the generation prompt. A replayed
+    // assistant turn can carry the reasoning the model wrote (set_preserve_thinking),
+    // so a thinking model's next turn attaches the whole earlier exchange.
+    var rchat2 = create_chat_renderer(m, SYSTEM)
+    set_preserve_thinking(rchat2, true)
+    add_user(rchat2, "A note for the assistant: answer in one word.")
+    var two_toks : array<int64>
+    render_user(m, rchat2, two_toks)
+    add_user(rchat2, "What is the capital of France?")
+    render_assistant(m, rchat2, "Paris.", two_toks, "The capital of France is Paris.")
+    print("two user turns and a replayed answer with its reasoning = {length(two_toks)} tokens\n")
 }
 
 // ──────────────────────────────────────────────────────────────────────────

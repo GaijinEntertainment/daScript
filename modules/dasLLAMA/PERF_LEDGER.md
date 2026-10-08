@@ -23,10 +23,12 @@ what it costs today and what the fix would change.
 
   Q4_0's six misses were plain-text answers (`finish: stop`, no call), not malformed arguments; the grammar turns every
   reply into a well-formed `control` call. The constraint adds about 40-50 ms to a 40-token call (3-4 %): the piece table
-  is built on the first constrained request (a second, folded into that request's time) and each greedy token probes
-  the argmax against the grammar. Sampled (the house assistant's `structured_check.py`, temperature 0.3, the same box and file): the
-  forced call decodes its 34 tokens at 76 tok/s, the plain decode rate - a constrained stream rides no speculative
-  round - where the unconstrained reply's 67 tokens run at 90 tok/s under MTP; the draw goes first and probes once.
+  is built on the first constrained request (a second, folded into that request's time) and each token probes the
+  candidate list against the grammar.
+- **STATED (2026-10-07) - the constrained sampled draw's candidate copy.** `Session.cand_full` (16 B an entry) holds the
+  candidate list a sampled constrained draw starts from - the top-k, at most `SAMPLE_TOPK_FAST_CAP` (1024) entries plus
+  ties at the k-th logit - so a refused first pick refilters from the logits the draw consumed: 16 KB a session at the
+  cap, `@scratch @exact_size`, reserved once at `make_run_state`. Not measured; the formula is the record.
 - **STATED (2026-10-07) - the token constraint's two vocabulary-sized allocations.** `Session.cand` (16 B an entry)
   grows to the whole row only when a constraint refuses every candidate of the probe window: 16 x vocab bytes a
   session, 2.4 MB at a 151936-entry vocabulary (Qwen), 4.2 MB at 262144 (gemma); it is `@scratch @exact_size` and

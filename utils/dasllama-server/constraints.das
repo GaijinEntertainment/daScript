@@ -203,7 +203,7 @@ def private xml_function_tool_grammar(tools : array<string>; forced_name : strin
     delete fns
     let call_open = gbnf_literal("<tool_call>\n")
     let call_close = gbnf_literal("\n</tool_call>")
-    return "{body}\nfn ::= {alts}\nvalue ::= [^<]*\nspace ::= [ \\t\\n]*\nroot ::= {call_open} fn {call_close} space\n"
+    return "{body}\nfn ::= {alts}\nvalue ::= ([^<] | \"<\" [^/])*\nspace ::= [ \\t\\n]*\nroot ::= {call_open} fn {call_close} space\n"
 }
 
 //! Read `response_format` and `tool_choice` off a chat request: the grammar text they ask for, or why the

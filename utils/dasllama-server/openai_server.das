@@ -381,6 +381,8 @@ struct private StreamWire {
     call_seen : bool                //! ... the marker has shown: no more content goes out, the finish-time parse frames the call
     call_stops : array<string>      //! ... `call_open` as the stop list the hold scans for
     content_streamed : string       //! ... the content put on the wire so far, so the finish-time parse adds only what follows it
+    think_init : ThinkStream = ThinkStream()   //! the splitter as armed, untouched by the pieces: the finish-time parse of a live stream drains the whole reply through a copy
+    tool_types : table<string; table<string; string>>   //! the declared parameter types per tool, what the xml_function parse types a block's values by
     tool_mode : ToolMode = ToolMode.none   // the family's tool wire format — the finish parse dispatches on it
     think : ThinkStream = ThinkStream()   // the reply-side reasoning splitter (pass-through when unarmed)
 }
@@ -1752,9 +1754,11 @@ def private ram_gb_from_meminfo(text : string) : int {
     return 0
 }
 
-//! The recurrent checkpoints' byte budget in MB: the one asked for, else a quarter of the box's RAM - mlx-lm's
-//! `--prompt-cache-bytes` on a 64 GB box is 16 GB - and 4 GB when the box's RAM is unknown. The count cap
-//! (`--prefix-states`) still binds first when it is the smaller.
+let SERVER_PREFIX_STATES = 256l   //! the server's checkpoint count cap under its byte budget - a library caller keeps `DEFAULT_PREFIX_STATES`
+
+//! The recurrent checkpoints' byte budget in MB: the one asked for, else a quarter of the box's RAM - what a 64 GB
+//! serving box gives a prompt cache - and 4 GB when the box's RAM is unknown. The count cap (`--prefix-states`) still
+//! binds first when it is the smaller.
 def prefix_state_budget_mb(requested_mb, ram_gb : int64) : int64 {
     return requested_mb if (requested_mb > 0l)
     return ram_gb > 0l ? ram_gb * 1024l / 4l : 4096l
@@ -2440,9 +2444,14 @@ def private read_stop_field(js : JsonValue?; var stop_ids : array<int64>; var st
         if (empty(s)) {
             return "'stop' entries must be non-empty strings"
         }
-        var inscope ids <- encode(cur_model(), s, false, true)
-        if (length(ids) == 1) {
-            stop_ids |> push(ids[0])
+        if (length(s) > STOP_MAX_BYTES) {
+            return "'stop' entries take at most {STOP_MAX_BYTES} bytes"
+        }
+        //! a special token's spelling stops on its id - a special never surfaces as text; any other text rides the text scan,
+        //! which also catches it inside a wider token (its own id would not)
+        let sid = special_id(cur_model(), s)
+        if (sid >= 0l) {
+            stop_ids |> push(sid)
         } else {
             stop_strs |> push(s)
         }
@@ -2451,6 +2460,7 @@ def private read_stop_field(js : JsonValue?; var stop_ids : array<int64>; var st
 }
 
 let STOP_MAX = 8   //! OpenAI's `stop` takes four; a lenient cap keeps a client's list from growing the per-token scan
+let STOP_MAX_BYTES = 256   //! the scan holds up to a stop's length back and re-scans it a token: a long stop is a per-token cost every stream on the slot pays
 
 // A message's content: a plain string, or the OpenAI content-parts array (agents send
 // [\{type:"text", text:"..."}] even for pure text). Text parts concatenate into the return value;
@@ -2681,8 +2691,12 @@ def private handle_embeddings(req : FrontReq; var resp : Reply) : http_status {
     var idx = 0
     for (text in inputs) {
         var inscope toks <- encode(cur_model(), text, true, false)
+        if (long_length(toks) > cur_model().config.seq_len) {   //! a cut input would embed another text and the engine's cut drops the end token the pooling reads
+            delete out
+            return resp_error(resp, http_status.BAD_REQUEST, "input {idx} is {length(toks)} tokens; the model context is {cur_model().config.seq_len} - shorten it")
+        }
         prompt_tokens += long_length(toks)
-        var inscope vec = embed(cur_model(), text, pooling, dims)   // the engine cuts and renormalizes
+        var inscope vec = embed(cur_model(), text, pooling, dims)   // the engine renormalizes
         out.data |> emplace(OaiEmbedding(_object = "embedding", embedding <- vec, index = idx))
         idx ++
     }
@@ -3034,6 +3048,26 @@ def private register_request(srv : FrontLink; writer : WriterRef;
                              var nothink : NothinkStopGuard = NothinkStopGuard(); stable_at : int64 = 0l;
                              include_usage : bool = false; resumed : bool = false;
                              var constraint : TokenConstraint? = null; system_at : int64 = 0l; system_head_at : int64 = 0l) {
+    var no_types : table<string; table<string; string>>
+    register_request(srv, writer, prompt, stop_ids, close_toks, stop_strs, spans, params, max_new, streaming, is_chat, prefix,
+                     tools_declared, call_open, call_close, seed, think, tool_mode, reuse_id, nothink, stable_at, include_usage,
+                     resumed, constraint, system_at, system_head_at, no_types)
+}
+
+//! `register_request` with the declared tools' parameter types, what a Qwen3.5/3.6 reply's values are typed by
+def private register_request(srv : FrontLink; writer : WriterRef;
+                             var prompt, stop_ids, close_toks : array<int64>;
+                             var stop_strs : array<string>;
+                             var spans : array<MediaSpan>;
+                             params : SamplingParams; max_new : int64;
+                             streaming, is_chat : bool; prefix : string;
+                             tools_declared : bool; call_open : string; call_close : string;
+                             seed : int; think : ThinkStream;
+                             tool_mode : ToolMode; reuse_id : int64;
+                             var nothink : NothinkStopGuard; stable_at : int64;
+                             include_usage : bool; resumed : bool;
+                             var constraint : TokenConstraint?; system_at : int64; system_head_at : int64;
+                             var tool_types : table<string; table<string; string>>) {
     if (bench_hold_active()) {
         unsafe {
             delete constraint
@@ -3079,7 +3113,8 @@ def private register_request(srv : FrontLink; writer : WriterRef;
                            has_tools = tools_declared && tool_mode != ToolMode.none,
                            last_keepalive_ticks = ref_time_ticks(),
                            call_open = call_open, call_close = call_close,
-                           tool_mode = tool_mode, think = think)
+                           tool_mode = tool_mode, think = think, think_init = think)
+    wire.tool_types <- tool_types
     g_wires[rid] <- wire
     if (streaming && is_chat && !resumed) {
         send_chat_chunk(srv, writer, cid, created, "assistant", "", "")   // opening role delta
@@ -3613,6 +3648,7 @@ def private handle_chat_tail(srv : FrontLink; writer : WriterRef; js : JsonValue
             return
         }
     }
+    var inscope grammar_ends := stop_ids   //! the turn's own end tokens, before the request's stops join: a user stop ends the reply, it is no sentence end a grammar must have reached
     var stop_strs : array<string>
     defer() { delete stop_strs }
     let stop_err = read_stop_field(js, stop_ids, stop_strs)
@@ -3623,7 +3659,7 @@ def private handle_chat_tail(srv : FrontLink; writer : WriterRef; js : JsonValue
     var constraint : TokenConstraint?
     if (constrained) {
         var gerr = ""
-        constraint = constraint_of(spec, cur_model(), g_cur, stop_ids, gerr)
+        constraint = constraint_of(spec, cur_model(), g_cur, grammar_ends, gerr)
         if (!empty(gerr)) {
             bad_request(srv, writer, "the request's grammar does not build: {gerr}")
             return
@@ -3634,7 +3670,8 @@ def private handle_chat_tail(srv : FrontLink; writer : WriterRef; js : JsonValue
     register_request(srv, writer, prompt, stop_ids, close, stop_strs, spans, params, max_new,
                      streaming, true, "chatcmpl",
                      has_tools, call_open, call_close, seed, think_stream, wire_tool_mode, resume_rid,
-                     nothink, stable_at, wants_usage(js), resumed, constraint, system_at, system_head_at)
+                     nothink, stable_at, wants_usage(js), resumed, constraint, system_at, system_head_at,
+                     tool_param_types(tools))
 }
 
 //! Marks the refs that bring no rows and whose span the slot's prefix cache does not hold under `prompt`; true when
@@ -3820,7 +3857,7 @@ def private oai_calls_of(tcs : array<ToolCall>; id_base : string; var calls : ar
 // channel structure once (reasoning + content + calls); the marker modes split reasoning first
 // and parse their format from the content half; hermes keeps the marker+sniff path.
 def private parse_wire_tools(var w : StreamWire?; full, id_base : string;
-                             var reasoning : string&; var calls : array<OaiToolCall>) : string {
+                             var reasoning : string&; var calls : array<OaiToolCall>; live : bool = false) : string {
     if (w.tool_mode == ToolMode.harmony) {
         var tr <- harmony_parse(full)
         reasoning = tr.reasoning
@@ -3829,15 +3866,29 @@ def private parse_wire_tools(var w : StreamWire?; full, id_base : string;
         delete tr
         return content
     }
-    let body = split_wire_reasoning(w, full, reasoning)
+    //! a live stream's pieces advanced `w.think`; its finish parse drains the whole reply through the splitter as armed
+    var body = ""
+    if (live) {
+        var fresh = w.think_init
+        let res = think_drain(fresh, full)
+        reasoning = res.reasoning
+        body = res.content
+    } else {
+        body = split_wire_reasoning(w, full, reasoning)
+    }
     if (w.tool_mode == ToolMode.gemma4 || w.tool_mode == ToolMode.mistral || w.tool_mode == ToolMode.llama_json || w.tool_mode == ToolMode.xml_function) {
         var tr <- (w.tool_mode == ToolMode.gemma4 ? gemma4_parse(body)
             : (w.tool_mode == ToolMode.mistral ? mistral_parse(body)
-            : (w.tool_mode == ToolMode.xml_function ? xml_function_parse(body) : llama_json_parse(body))))
+            : (w.tool_mode == ToolMode.xml_function ? xml_function_parse(body, w.tool_types) : llama_json_parse(body))))
         oai_calls_of(tr.calls, id_base, calls)
         let content = tr.content
         delete tr
         return content
+    }
+    //! a live hermes stream's text already went out as content: only a marker-framed call is a call now - a bare JSON
+    //! object or another family's envelope, which the buffered parse would also accept, would arrive twice
+    if (live) {
+        return parse_tool_calls(body, w.call_open, w.call_close, id_base, calls)
     }
     return parse_tool_calls_auto(body, w.call_open, w.call_close, id_base, calls)
 }
@@ -3885,8 +3936,12 @@ def private flush_events(srv : FrontLink) {   // nolint:STYLE037,STYLE038 — on
                             cnt = call_hold_pass(*w, cnt)
                         }
                         send_chat_halves(srv, *w, rsn, cnt)
+                        if (!empty(rsn) || !empty(cnt)) {
+                            w.last_keepalive_ticks = ref_time_ticks()   // a delta of its own keeps the wire alive
+                        }
                     } else {
                         send_compl_chunk(srv, w.writer, w.id, w.created, emit_now, "")
+                        w.last_keepalive_ticks = ref_time_ticks()
                     }
                 }
             }
@@ -3907,8 +3962,9 @@ def private flush_events(srv : FrontLink) {   // nolint:STYLE037,STYLE038 — on
                 let full = join(w.reply_parts, "")
                 var rsn = ""
                 var inscope calls : array<OaiToolCall>
-                let content = parse_wire_tools(w, full, "call_{e.stream}", rsn, calls)
-                if (empty(w.call_open)) {
+                let live = !empty(w.call_open)
+                let content = parse_wire_tools(w, full, "call_{e.stream}", rsn, calls, live)
+                if (!live) {
                     if (!empty(rsn)) {
                         send_chat_chunk(srv, w.writer, w.id, w.created, "", "", "", rsn)
                     }
@@ -3916,15 +3972,21 @@ def private flush_events(srv : FrontLink) {   // nolint:STYLE037,STYLE038 — on
                         send_chat_chunk(srv, w.writer, w.id, w.created, "", content, "")
                     }
                 } else {
-                    // the text went out as it came; now the splitter's reasoning tail, and the content the parse frames
-                    // past what the wire carries - a held marker tail that never completed, nothing when the parse
-                    // normalized the text another way
+                    // the text went out as it came; now the live splitter's reasoning tail, and the content the parse frames
+                    // past what the wire carries - a held marker tail that never completed - less the bytes of a character the
+                    // generation cut mid-way, which never go out; nothing when the parse normalized the text another way
                     var rsn_tail = ""
                     var cnt_tail = ""
                     think_finish(w.think, rsn_tail, cnt_tail)
                     send_chat_halves(srv, *w, rsn_tail, "")
                     if (length(content) > length(w.content_streamed) && starts_with(content, w.content_streamed)) {
-                        send_chat_chunk(srv, w.writer, w.id, w.created, "", slice(content, length(w.content_streamed)), "")
+                        var rest = slice(content, length(w.content_streamed))
+                        if (!empty(w.utf8_tail) && ends_with(rest, w.utf8_tail)) {
+                            rest = slice(rest, 0, length(rest) - length(w.utf8_tail))
+                        }
+                        if (!empty(rest)) {
+                            send_chat_chunk(srv, w.writer, w.id, w.created, "", rest, "")
+                        }
                     }
                 }
                 if (!empty(calls)) {
@@ -4340,7 +4402,7 @@ let private CONFIG_KEY_KINDS <- {
 
 let private MODEL_KEY_KINDS <- {
     "name" => "s", "path" => "s", "backend" => "s", "ctx" => "i", "quant" => "s",
-    "kv_dtype" => "s", "streams" => "i", "chunk" => "i", "chunk_idle" => "i", "page_rows" => "i", "prefix" => "i", "prefix_states" => "i", "prefix_state_mb" => "i",
+    "kv_dtype" => "s", "streams" => "i", "chunk" => "i", "chunk_idle" => "i", "page_rows" => "i", "prefix" => "i",
     "mtp" => "b", "default" => "b", "image_mmproj" => "s", "audio_mmproj" => "s",
     "rope_scaling" => "s", "rope_scale" => "f", "yarn_orig_ctx" => "i"
 }
@@ -6962,7 +7024,7 @@ def init_server(port : int; max_streams : int64 = 4l; max_queue : int64 = 32l; c
                 page_rows : int64 = 64l; prefix_groups : int64 = 0l; kv_dtype : KVDtype = KVDtype.f16;
                 team_dispatch : bool = true; asr_team : int = -1; mtp : int = -1;
                 idle_chunk_tokens : int64 = -1l; host : string = DEFAULT_BIND_HOST;
-                prefix_states : int64 = DEFAULT_PREFIX_STATES; prefix_state_mb : int64 = 0l) : bool {
+                prefix_states : int64 = SERVER_PREFIX_STATES; prefix_state_mb : int64 = 0l) : bool {
     if (g_front_up || g_jobque_owned) {
         to_log(LOG_ERROR, "dasllama-server: init_server called while already initialized\n")
         return false
@@ -6999,7 +7061,8 @@ def init_server(port : int; max_streams : int64 = 4l; max_queue : int64 = 32l; c
         }
         to_log(LOG_INFO, g_setup_mode ? "dasllama-server: setup mode - serving the catalog/config page only\n" : "dasllama-server: no LLM slot - serving the speech route and the catalog only\n")
     }
-    let state_mb = prefix_state_budget_mb(prefix_state_mb, int64(box_ram_gb()))
+    g_box_ram_gb = box_ram_gb()   // probed once: a probe spawns sysctl, wmic or powershell
+    let state_mb = prefix_state_budget_mb(prefix_state_mb, int64(g_box_ram_gb))
     to_log(LOG_INFO, "dasllama-server: a recurrent model's checkpoints: up to {prefix_states} within {state_mb} MB\n")
     init_slot_schedulers(max_streams, max_queue, chunk_tokens, idle_chunk_tokens, page_rows, prefix_groups,
                          prefix_states, state_mb * 1048576l, kv_dtype, mtp)
@@ -7023,7 +7086,6 @@ def init_server(port : int; max_streams : int64 = 4l; max_queue : int64 = 32l; c
     g_started_at = ref_time_ticks()
     g_tickprof = env_noisy_diag()
     compose_hardware_line()
-    g_box_ram_gb = box_ram_gb()
     var names <- [for (s in g_slots); s.is_default && length(g_slots) > 1 ? "{s.name}*" : s.name]
     let kv_mode = page_rows > 0l ? "{kv_dtype} paged P={page_rows}" : "{kv_dtype} flat"
     let chunk_note = empty(g_slots) ? "none" : "{g_slots[g_active].sched.chunk_tokens}, {g_slots[g_active].sched.idle_chunk_tokens} idle"
@@ -7274,7 +7336,7 @@ def run_server(port : int; max_streams : int64 = 4l; max_queue : int64 = 32l; ch
                page_rows : int64 = 64l; prefix_groups : int64 = 0l; kv_dtype : KVDtype = KVDtype.f16;
                team_dispatch : bool = true; asr_team : int = -1; mtp : int = -1;
                idle_chunk_tokens : int64 = -1l; host : string = DEFAULT_BIND_HOST;
-               prefix_states : int64 = DEFAULT_PREFIX_STATES; prefix_state_mb : int64 = 0l) {
+               prefix_states : int64 = SERVER_PREFIX_STATES; prefix_state_mb : int64 = 0l) {
     if (init_server(port, max_streams, max_queue, chunk_tokens, page_rows, prefix_groups, kv_dtype,
             team_dispatch, asr_team, mtp, idle_chunk_tokens, host, prefix_states, prefix_state_mb)) {
         while (update_server()) {

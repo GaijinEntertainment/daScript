@@ -104,7 +104,7 @@ def section_checkpoint(m : Model; var pool : KVPool; var cache : PrefixCache) {
     if (stop > 0l) {
         let head <- [for (i in range64(matched, stop)); turn.toks[i]]
         eval(m, s, head)
-        prefix_insert(cache, pool, s, turn.toks)   // a checkpoint at `stop`: the session stands exactly there
+        prefix_insert(cache, pool, s, turn.toks, "", true)   // a checkpoint at `stop`: the session stands exactly there; an OPENING, which every conversation on this system prompt shares and the budget drops last
         print("stopped at {stop} and left a checkpoint; the next conversation attaches it\n")
     } else {
         print("no stop needed: this model keeps no state between tokens\n")
@@ -156,7 +156,7 @@ def main() {
     var m <- load_model(path, QuantMode.q8)
     allow_cpu_prefill()   // a CPU tutorial, said explicitly — on a Mac, set_metal_mode(MetalMode.when_available) picks the GPU rails instead
     var pool <- create_kv_pool(m, PAGE_ROWS)
-    var cache <- create_prefix_cache()
+    var cache <- create_prefix_cache(0l, DEFAULT_PREFIX_STATES, 1024l * 1048576l)   // a recurrent model's checkpoints: up to 16 of them within 1 GB
     with_job_que() {
         setup_dasllama_jobque()
         section_donate_attach(m, pool, cache)
