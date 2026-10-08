@@ -48,6 +48,8 @@ struct MatchTo {
     failed       : bool                             //! true if a hard error occurred (unresolved types etc.)
     bind_names   : bool                             //! a `=>` arm, where a bare `x` in the pattern binds; an `if (pattern)` arm binds only `$v(x)`
     by_ref       : table<string>                    //! bound names the body reads through the access itself, not a `let` copy: pointers and types that can't be copied
+    forced       : table<uint64; int>               //! alternation node -> the one side to match (an arm split per alternative)
+    @do_not_delete split : ExprOp2?                 //! alternation whose sides bind the same names at different places
 }
 
 [macro_function, unused_argument(msg)]
@@ -461,6 +463,9 @@ def private same_names(a, b : table<string; Expression?>; wth : ExprOp2?; var to
 def match_alternatives(var wth : ExprOp2?; var to : MatchTo; matcher : block<(side : Expression?; var sideTo : MatchTo) : bool>) {
     //! ``p1 | p2 | p3``: matches when any side does; every side binds the same names. ``matcher`` matches one side.
     var sides <- op_sides(wth, string(wth.op))
+    let key = intptr(wth)
+    let chosen = to.forced?[key] ?? -1
+    return invoke(matcher, sides[chosen], to) if (chosen >= 0)
     var firstDecl : table<string; Expression?>
     var conds : array<Expression?>
     var split = false
@@ -468,9 +473,11 @@ def match_alternatives(var wth : ExprOp2?; var to : MatchTo; matcher : block<(si
         var sideTo : MatchTo
         sideTo.bind_names = to.bind_names
         sideTo.declarations := to.declarations
+        sideTo.forced := to.forced
         if (!invoke(matcher, side, sideTo)) {
             to.errors |> push_from(sideTo.errors)
             to.failed ||= sideTo.failed
+            to.split = sideTo.split
             return false
         }
         for (k in keys(to.declarations)) {
@@ -489,6 +496,10 @@ def match_alternatives(var wth : ExprOp2?; var to : MatchTo; matcher : block<(si
             }
         }
         conds |> push(join_conditions(sideTo.conditions, side.at))
+    }
+    if (split && to.bind_names) {
+        to.split = wth
+        return false
     }
     if (split) {
         to.errors |> match_error("mismatching variable declarations in {wth.op}", wth.at)
@@ -1056,6 +1067,35 @@ def private drop_last_condition(var chain : Expression?) : Expression? {
 }
 
 [macro_function]
+def private match_arm(var types : array<TypeDeclPtr>; var accesses : array<Expression?>; pattern : Expression?; bind_names : bool) : Result<array<MatchTo>; MatchTo> {
+    //! Matches one arm's pattern: one result per side of an alternation whose sides bind the same names at different places, in order - or why it does not match.
+    var results : array<MatchTo>
+    var stack : array<table<uint64; int>>
+    stack |> emplace(default<table<uint64; int>>)
+    while (!empty(stack)) {
+        var inscope forced <- stack |> back()
+        stack |> pop()
+        var to : MatchTo
+        to.bind_names = bind_names
+        to.forced := forced
+        if (match_multi(types, accesses, pattern, to)) {
+            results |> emplace(to)
+        } elif (to.split != null) {
+            let nsides = length(op_sides(to.split, string(to.split.op)))
+            stack |> reserve(length(stack) + nsides)
+            for (i in range(nsides)) {
+                var inscope choice := forced
+                choice[intptr(to.split)] = nsides - 1 - i
+                stack |> emplace(choice)
+            }
+        } else {
+            return <- move_err(to, type<array<MatchTo>>)
+        }
+    }
+    return <- move_ok(results, type<MatchTo>)
+}
+
+[macro_function]
 def private report_match_failure(prog : ProgramPtr; to : MatchTo; pattern : Expression?; typ : TypeDeclPtr) : void {
     for (e in to.errors) {
         macro_error(prog, *e.at, e.msg)
@@ -1087,7 +1127,7 @@ class MatchMacro : AstCallMacro {
         }
     }
     def add_arm_branch(var arm : Expression?; var to : MatchTo; as_value : bool; access : Expression?; var iff : Expression?) : Expression? {
-        //! The if-chain with one matched arm in front of it; an unconditional first arm is the whole chain.
+        //! The if-chain with one matched arm (or one alternative of a split arm) in front of it; an unconditional first arm is the whole chain.
         let binds <- [for (dv, dn in keys(to.declarations), values(to.declarations)); bound_let(dv, dn); where to.bind_names && !key_exists(to.by_ref, dv)]
         var nblk = arm_body(arm, as_value, binds)
         apply_template(nblk) $(rules) {
@@ -1189,17 +1229,22 @@ class MatchMacro : AstCallMacro {
                 let arm_index = eli - ei - 1
                 var arm = eblk.list[arm_index]
                 var pattern = arrows > 0 ? (arm as ExprMakeTuple).values[0] : (arm as ExprIfThenElse).cond
-                var to : MatchTo
-                to.bind_names = arrows > 0
-                let matched = match_multi(types, accesses, pattern, to)
-                if (matched) {
+                var arm_match <- match_arm(types, accesses, pattern, arrows > 0)
+                if (is_ok(arm_match)) {
+                    var results <- move_unwrap(arm_match)
                     arm_patterns[arm_index] = pattern
-                    catch_all ||= iff == null && empty(to.conditions)
-                    prefix |> push_from(to.prefix)
-                    iff = add_arm_branch(arm, to, as_value, access, iff)
-                } elif (report_match_errors || to.failed) {
+                    for (ri in range(length(results))) {
+                        var to <- results[length(results) - 1 - ri]
+                        catch_all ||= iff == null && empty(to.conditions)
+                        prefix |> push_from(to.prefix)
+                        iff = add_arm_branch(arm, to, as_value, access, iff)
+                    }
+                    continue
+                }
+                let failure <- move_unwrap_err(arm_match)
+                if (report_match_errors || failure.failed) {
                     any_errors = true
-                    report_match_failure(prog, to, pattern, what._type)
+                    report_match_failure(prog, failure, pattern, what._type)
                     break
                 }
             }

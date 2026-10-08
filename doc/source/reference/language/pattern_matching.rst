@@ -238,8 +238,9 @@ guard is true. The guard sees the names the pattern binds:
 Alternatives with ``|``
 -----------------------
 
-``p1 | p2`` matches when either pattern matches. Both sides must bind the same names to the same
-fields:
+``p1 | p2`` matches when either pattern matches. Both sides must bind the same names; a name may
+come from a different place on each side, and then it takes its value from the side that matched -
+``Figure(circle = r) | Figure(square = r) => "size {r}"`` reads the radius or the side:
 
 .. code-block:: das
 
