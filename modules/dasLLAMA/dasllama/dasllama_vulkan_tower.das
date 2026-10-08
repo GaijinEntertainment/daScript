@@ -2074,7 +2074,7 @@ def private vt_pc32(n, dout, rows : int64; woff : int64 = 0l; boff : int64 = 0l;
 
 //! the image planes up for the stem (the canvas's bytes at the plane's start)
 def private vt_planes_up(r : VtResident; planes : array<float>; w, h : int64) {
-    vt_planes_up(r, planes, w, h)
+    upload_region_at(r.vis_planes_dev, 0l, unsafe(addr<uint8 const?>(planes[0])), w * h * 3l * 4l)
 }
 
 //! the patch im2col over the planes into the column plane at the scratch's row capacity, the pixel map as the stamp's scale and shift

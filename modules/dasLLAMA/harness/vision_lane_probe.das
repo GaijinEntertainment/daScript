@@ -12,6 +12,7 @@ require ?das_metal dasllama/dasllama_metal_tower
 require ?vulkan dasllama/dasllama_vulkan_tower
 require daslib/jobque_boost
 require daslib/strings_convert
+require daslib/strings_boost
 
 let WARM = 3
 let TIMED = 10
@@ -40,8 +41,9 @@ def timed(tag : string; encode : block<() : void>) {
             times |> push(ms)
         }
     }
+    let samples : string = join([for (ms in times); "{ms}"], " ")
     sort(times)
-    print("{tag}: median {times[TIMED / 2]} ms, min {times[0]} ms, max {times[TIMED - 1]} ms\n")
+    print("{tag}: median {times[TIMED / 2]} ms, min {times[0]} ms, max {times[TIMED - 1]} ms; samples {samples}\n")
 }
 
 [export]
