@@ -164,8 +164,9 @@ def private wrap_tool_grammar(schema_gbnf : string; call_open, call_close : stri
     return "{body}\nroot ::= {gbnf_literal(call_open)} space tool-call space {gbnf_literal(call_close)} space\n"
 }
 
-// the Qwen3.6 call shape as a grammar over the forced tools: `<tool_call>` + one `<function=NAME>` block whose
-// `<parameter=K>` blocks name that tool's declared parameters, each value any text without a `<`
+// the Qwen3.5/3.6 call shape as a grammar over the forced tools: `<tool_call>` + one `<function=NAME>` block whose
+// `<parameter=K>` blocks name that tool's declared parameters - every required one present, in the schema's order, the
+// optional ones anywhere between - each value any text short of a `</`
 def private xml_function_tool_grammar(tools : array<string>; forced_name : string; required : bool) : string {
     var rules, fns : array<string>
     var idx = 0
@@ -175,20 +176,42 @@ def private xml_function_tool_grammar(tools : array<string>; forced_name : strin
         continue if (tool == null)
         let name = tool?["function"]?["name"] ?? ""
         if (!empty(name) && (required || name == forced_name)) {
-            var inscope params : array<string>
+            var inscope req_names : array<string>
+            let reqv = tool?["function"]?["parameters"]?["required"]
+            if (reqv != null && reqv.value is _array) {
+                req_names |> reserve(length(reqv.value as _array))
+                for (r in reqv.value as _array) {
+                    req_names |> push(r ?? "")
+                }
+            }
+            var inscope optional, mandatory : array<string>
             let props = tool?["function"]?["parameters"]?["properties"]
             let close_lit = gbnf_literal("\n</parameter>\n")
             if (props != null && props.value is _object) {
-                params |> reserve(length(props.value as _object))
                 for (k in keys(props.value as _object)) {
-                    let open_lit = gbnf_literal("<parameter={k}>\n")
-                    params |> push("{open_lit} value {close_lit}")
+                    if (find_index(req_names, k) < 0) {
+                        let open_lit = gbnf_literal("<parameter={k}>\n")
+                        optional |> push("{open_lit} value {close_lit}")
+                    }
+                }
+                for (r in req_names) {
+                    if (key_exists(props.value as _object, r)) {
+                        let open_lit = gbnf_literal("<parameter={r}>\n")
+                        mandatory |> push("{open_lit} value {close_lit}")
+                    }
                 }
             }
-            let plist = empty(params) ? "" : " ({join(params, " | ")})*"
+            let opt = empty(optional) ? "" : " ({join(optional, " | ")})*"
             let fn_open = gbnf_literal("<function={name}>\n")
             let fn_close = gbnf_literal("</function>")
-            rules |> push("fn-{idx} ::= {fn_open}{plist} {fn_close}")
+            let shape = build_string() $(var w) {
+                w |> write("fn-{idx} ::= {fn_open}{opt}")
+                for (m in mandatory) {
+                    w |> write(" {m}{opt}")
+                }
+                w |> write(" {fn_close}")
+            }
+            rules |> push(shape)
             fns |> push("fn-{idx}")
             idx ++
         }

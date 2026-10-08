@@ -136,7 +136,7 @@ def private page_bytes_(pool : KVPool) : int64 {
 }
 
 //! what a checkpoint of `n` tokens costs alone: its snapshot's arrays, its token list, and the rows of the pages it holds
-def prefix_state_bytes_(pool : KVPool; snap : DnSnapshot; n : int64) : int64 {
+def private prefix_state_bytes_(pool : KVPool; snap : DnSnapshot; n : int64) : int64 {
     let held = (n + pool.page_rows - 1l) / pool.page_rows
     return snapshot_bytes_(snap, n) + held * page_bytes_(pool)
 }

@@ -2693,6 +2693,7 @@ def private handle_embeddings(req : FrontReq; var resp : Reply) : http_status {
         var inscope toks <- encode(cur_model(), text, true, false)
         if (long_length(toks) > cur_model().config.seq_len) {   //! a cut input would embed another text and the engine's cut drops the end token the pooling reads
             delete out
+            delete inputs
             return resp_error(resp, http_status.BAD_REQUEST, "input {idx} is {length(toks)} tokens; the model context is {cur_model().config.seq_len} - shorten it")
         }
         prompt_tokens += long_length(toks)

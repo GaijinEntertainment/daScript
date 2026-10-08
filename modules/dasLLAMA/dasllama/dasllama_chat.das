@@ -576,7 +576,7 @@ def private render_opening(m : Model; c : ChatSession; var out : array<int64>; w
 //! The tokens of a first turn's opening shared beyond its system prompt and tool set: whichever the template writes
 //! first - the system text ahead of a Hermes tool block, the tool block ahead of a Qwen3.5/3.6 system text - rendered
 //! without the tools and without the text, each matched against the whole. The whole opening with no tools in the turn; 0 after the first turn.
-def system_head_opening_(m : Model; c : ChatSession) : int64 {
+def private system_head_opening_(m : Model; c : ChatSession) : int64 {
     if (!c.first) {
         return 0l
     }
@@ -1466,7 +1466,7 @@ def make_think_stream_(c : ChatSession) : ThinkStream {
 
 //! the generation prompt of a thinking turn ends inside the think block on a template whose thinking opener carries the
 //! marker (Qwen3.5/3.6's `<|im_start|>assistant\n<think>\n`): the reply then opens with reasoning and never writes the opener
-def prompt_opens_think_(c : ChatSession) : bool {
+def private prompt_opens_think_(c : ChatSession) : bool {
     if (!think_turn_active_(c) || c.tmpl.think_mode != ThinkMode.symmetric) {
         return false
     }
