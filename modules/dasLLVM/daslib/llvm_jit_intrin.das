@@ -255,8 +255,48 @@ let g_f16_lattice_intrin_lookup <- {
     "$::half8_hi" => @@intrinsic_half8_lo_hi
 }
 
+typedef IntrinsicFn = function<(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue?>
+
+//! the intrinsic `name` lowers to on this target: the generic table, then the tables of its features
+def private get_intrinsic(name : string) : IntrinsicFn {
+    var fn : IntrinsicFn
+    let find_in = $(tab : table<string; IntrinsicFn>) {
+        if (fn == null) {
+            tab |> get(name) $(f) {
+                fn = f
+            }
+        }
+    }
+    invoke(find_in, g_intrin_lookup)
+    if (g_target_is_aarch64) {
+        invoke(find_in, g_aarch64_intrin_lookup)
+    }
+    if (g_target_arm64_dotprod) {
+        invoke(find_in, g_aarch64_dotprod_intrin_lookup)
+    }
+    if (g_target_arm64_i8mm) {
+        invoke(find_in, g_aarch64_i8mm_intrin_lookup)
+    }
+    if (g_target_x64_avx2) {
+        invoke(find_in, g_x64_intrin_lookup)
+    }
+    if (g_target_x64_vnni256) {
+        invoke(find_in, g_x64_vnni256_intrin_lookup)
+    }
+    if (g_target_x64_avx512bw) {
+        invoke(find_in, g_x64_avx512bw_intrin_lookup)
+    }
+    if (g_target_x64_avx512vnni) {
+        invoke(find_in, g_x64_avx512vnni_intrin_lookup)
+    }
+    if (g_target_is_aarch64 || g_target_x64_f16c) {
+        invoke(find_in, g_f16_cvt_intrin_lookup)
+        invoke(find_in, g_f16_lattice_intrin_lookup)
+    }
+    return fn
+}
+
 def public has_intrinsic(expr : ExprCallFunc?) {
-    var result = false
     assume argType = expr.arguments[0]._type
     let call_name = "{expr.func._module.name}::{expr.func.name}"
 
@@ -276,107 +316,14 @@ def public has_intrinsic(expr : ExprCallFunc?) {
             return false if (is_f16_small_type(arg._type.baseType))
         }
     }
-    g_intrin_lookup |> get(call_name) $(_pfun) {
-        result = true
-    }
-    if (!result && g_target_is_aarch64) {
-        g_aarch64_intrin_lookup |> get(call_name) $(_pfun) {
-            result = true
-        }
-    }
-    if (!result && g_target_arm64_dotprod) {
-        g_aarch64_dotprod_intrin_lookup |> get(call_name) $(_pfun) {
-            result = true
-        }
-    }
-    if (!result && g_target_arm64_i8mm) {
-        g_aarch64_i8mm_intrin_lookup |> get(call_name) $(_pfun) {
-            result = true
-        }
-    }
-    if (!result && g_target_x64_avx2) {
-        g_x64_intrin_lookup |> get(call_name) $(_pfun) {
-            result = true
-        }
-    }
-    if (!result && g_target_x64_vnni256) {
-        g_x64_vnni256_intrin_lookup |> get(call_name) $(_pfun) {
-            result = true
-        }
-    }
-    if (!result && g_target_x64_avx512bw) {
-        g_x64_avx512bw_intrin_lookup |> get(call_name) $(_pfun) {
-            result = true
-        }
-    }
-    if (!result && g_target_x64_avx512vnni) {
-        g_x64_avx512vnni_intrin_lookup |> get(call_name) $(_pfun) {
-            result = true
-        }
-    }
-    if (!result && (g_target_is_aarch64 || g_target_x64_f16c)) {
-        g_f16_cvt_intrin_lookup |> get(call_name) $(_pfun) {
-            result = true
-        }
-        if (!result) {
-            g_f16_lattice_intrin_lookup |> get(call_name) $(_pfun) {
-                result = true
-            }
-        }
-    }
-    return result
+    return get_intrinsic(call_name) != null
 }
 
 def public lookup_intinsic(g_ctx : LLVMContextRef; g_builder : LLVMOpaqueBuilder?; var types : PrimitiveTypes?; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
-    var result :  LLVMOpaqueValue?
-    let call_name = "{expr.func._module.name}::{expr.func.name}"
-    g_intrin_lookup |> get(call_name) $(pfun) {
-        result = pfun |> invoke(JitCtx(ctx = g_ctx, builder = g_builder, types = types), expr, arguments)
-    }
-    if (result == null && g_target_is_aarch64) {
-        g_aarch64_intrin_lookup |> get(call_name) $(pfun) {
-            result = pfun |> invoke(JitCtx(ctx = g_ctx, builder = g_builder, types = types), expr, arguments)
-        }
-    }
-    if (result == null && g_target_arm64_dotprod) {
-        g_aarch64_dotprod_intrin_lookup |> get(call_name) $(pfun) {
-            result = pfun |> invoke(JitCtx(ctx = g_ctx, builder = g_builder, types = types), expr, arguments)
-        }
-    }
-    if (result == null && g_target_arm64_i8mm) {
-        g_aarch64_i8mm_intrin_lookup |> get(call_name) $(pfun) {
-            result = pfun |> invoke(JitCtx(ctx = g_ctx, builder = g_builder, types = types), expr, arguments)
-        }
-    }
-    if (result == null && g_target_x64_avx2) {
-        g_x64_intrin_lookup |> get(call_name) $(pfun) {
-            result = pfun |> invoke(JitCtx(ctx = g_ctx, builder = g_builder, types = types), expr, arguments)
-        }
-    }
-    if (result == null && g_target_x64_vnni256) {
-        g_x64_vnni256_intrin_lookup |> get(call_name) $(pfun) {
-            result = pfun |> invoke(JitCtx(ctx = g_ctx, builder = g_builder, types = types), expr, arguments)
-        }
-    }
-    if (result == null && g_target_x64_avx512bw) {
-        g_x64_avx512bw_intrin_lookup |> get(call_name) $(pfun) {
-            result = pfun |> invoke(JitCtx(ctx = g_ctx, builder = g_builder, types = types), expr, arguments)
-        }
-    }
-    if (result == null && g_target_x64_avx512vnni) {
-        g_x64_avx512vnni_intrin_lookup |> get(call_name) $(pfun) {
-            result = pfun |> invoke(JitCtx(ctx = g_ctx, builder = g_builder, types = types), expr, arguments)
-        }
-    }
-    if (result == null && (g_target_is_aarch64 || g_target_x64_f16c)) {
-        g_f16_cvt_intrin_lookup |> get(call_name) $(pfun) {
-            result = pfun |> invoke(JitCtx(ctx = g_ctx, builder = g_builder, types = types), expr, arguments)
-        }
-        if (result == null) {
-            g_f16_lattice_intrin_lookup |> get(call_name) $(pfun) {
-                result = pfun |> invoke(JitCtx(ctx = g_ctx, builder = g_builder, types = types), expr, arguments)
-            }
-        }
+    var result : LLVMOpaqueValue?
+    let fn = get_intrinsic("{expr.func._module.name}::{expr.func.name}")
+    if (fn != null) {
+        result = fn |> invoke(JitCtx(ctx = g_ctx, builder = g_builder, types = types), expr, arguments)
     }
     // Check initrinsic consistency
     verify(result != null == has_intrinsic(expr))
