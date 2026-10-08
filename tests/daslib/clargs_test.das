@@ -1241,7 +1241,9 @@ def test_get_host_binary_relative_start(t : T?) {
         t |> skip("the host is not under the current directory: {err}")
         return
     }
-    let argv0 = get_platform_name() == "windows" ? replace_extension(rel, "") : rel
+    let by_name = get_platform_name() == "windows" ? replace_extension(rel, "") : rel
+    // a bare name is a PATH lookup on POSIX, not a start by path: from the host's own directory the relative path needs its `./`
+    let argv0 = base_name(by_name) == by_name ? path_join(".", by_name) : by_name
     var output : string
     let rc = run_and_capture([argv0, path_join(get_das_root(), "tests/daslib/_host_binary_probe.das")], output, 120.0)
     t |> equal(rc, 0, "the host starts by '{argv0}': {output}")
