@@ -13,6 +13,7 @@ module llvm_jit_intrin shared private
 
 require llvm/daslib/llvm_boost
 require llvm/daslib/llvm_jit_common
+require llvm/daslib/llvm_jit_runtime
 require daslib/ast_boost
 require strings
 
@@ -242,9 +243,6 @@ let g_f16_cvt_intrin_lookup <- {
     "f16_cvt::f32_to_f16" => @@intrinsic_f32_to_f16
 }
 
-// fp16-family lattice ctors/converts — same hardware-convert gate as g_f16_cvt above.
-// (float2/3/4-from-half and float-from-float16 ride the unconditional ctor entries; the
-// fp16-crossing guard in has_intrinsic keeps those off targets without hardware converts.)
 let g_f16_lattice_intrin_lookup <- {
     "$::float16" => @@intrinsic_builtin_float16,
     "$::half2" => @@intrinsic_builtin_lattice_vec,
@@ -289,10 +287,10 @@ def private get_intrinsic(name : string) : IntrinsicFn {
     if (g_target_x64_avx512vnni) {
         invoke(find_in, g_x64_avx512vnni_intrin_lookup)
     }
-    if (g_target_is_aarch64 || g_target_x64_f16c) {
+    if (target_has_half_converts()) {
         invoke(find_in, g_f16_cvt_intrin_lookup)
-        invoke(find_in, g_f16_lattice_intrin_lookup)
     }
+    invoke(find_in, g_f16_lattice_intrin_lookup)
     return fn
 }
 
@@ -308,14 +306,6 @@ def public has_intrinsic(expr : ExprCallFunc?) {
         || (call_name == "$::empty" && !(argType.isGoodArrayType || argType.isGoodTableType))
         || (call_name == "$::hash" && argType.baseType != Type.tString)
         || (!expr.arguments |> empty() && argType.isHandle)) return false
-    // fp16-family values crossing ANY intrinsic need hardware half converts — without
-    // them fpext/fptrunc through half lower to compiler-rt libcalls the JIT doesn't link
-    if (!(g_target_is_aarch64 || g_target_x64_f16c)) {
-        return false if (is_f16_small_type(expr._type.baseType))
-        for (arg in expr.arguments) {
-            return false if (is_f16_small_type(arg._type.baseType))
-        }
-    }
     return get_intrinsic(call_name) != null
 }
 
@@ -604,10 +594,10 @@ def intrinsic_builtin_int_vec(var ctx : JitCtx; expr : ExprCallFunc?; arguments 
     return vres
 }
 
-def any2float(var ctx : JitCtx; val : LLVMOpaqueValue?; argType : Type; _outType : LLVMOpaqueType? = null) {   // nolint:LINT014 — private helper called from intrinsics that share the table signature
+def any2float(var ctx : JitCtx; val : LLVMOpaqueValue?; argType : Type; _outType : LLVMOpaqueType? = null) {
     let outType = _outType != null ? _outType : ctx.types.t_float
     return val                                              if (argType == Type.tFloat)
-    return LLVMBuildFPExt(ctx.builder, val, outType, "") if (argType == Type.tFloat16)
+    return build_fp_convert(ctx.builder, val, outType, "") if (argType == Type.tFloat16)
     return LLVMBuildFPTrunc(ctx.builder, val, outType, "") if (argType == Type.tDouble)
     return LLVMBuildSIToFP(ctx.builder, val, outType, "") if (argType == Type.tInt8 || argType == Type.tInt16 || argType == Type.tInt || argType == Type.tInt64)
     return LLVMBuildUIToFP(ctx.builder, val, outType, "") if (argType == Type.tUInt8 || argType == Type.tUInt16 || argType == Type.tUInt || argType == Type.tUInt64)
@@ -647,7 +637,7 @@ def intrinsic_builtin_float_vec(var ctx : JitCtx; expr : ExprCallFunc?; argument
     return vres
 }
 
-def intrinsic_builtin_float(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {   // nolint:LINT014 — table-uniform signature required by g_intrin_lookup
+def intrinsic_builtin_float(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     let floatType = base_type_to_llvm_type(expr._type.baseType)
     if (empty(arguments)) return LLVMConstReal(floatType, 0.0lf)
     assume argType = expr.arguments[0]._type
@@ -664,7 +654,7 @@ def intrinsic_builtin_float(var ctx : JitCtx; expr : ExprCallFunc?; arguments : 
             return LLVMBuildFPExt(ctx.builder, arguments[0], floatType, string(expr.name))
         }
     } elif (argType.baseType == Type.tFloat16) {
-        return LLVMBuildFPExt(ctx.builder, arguments[0], floatType, string(expr.name))
+        return build_fp_convert(ctx.builder, arguments[0], floatType, string(expr.name))
     } else {
         return null
     }
@@ -672,7 +662,7 @@ def intrinsic_builtin_float(var ctx : JitCtx; expr : ExprCallFunc?; arguments : 
 
 // ===== 16/8-bit lattice ctors / converts =====
 
-def lattice_scalar_to_elem(var ctx : JitCtx; val : LLVMOpaqueValue?; srcBt : Type; dstBt : Type) : LLVMOpaqueValue? {   // nolint:LINT014 — private helper shared by the lattice ctor intrinsics
+def lattice_scalar_to_elem(var ctx : JitCtx; val : LLVMOpaqueValue?; srcBt : Type; dstBt : Type) : LLVMOpaqueValue? {
     // one ctor/splat scalar argument -> one lattice lane, matching SVecConv semantics
     if (dstBt == Type.tFloat16) {
         // SVecConv<float16_t> is float16_t(float(v)) — always promote through float32
@@ -687,7 +677,7 @@ def lattice_scalar_to_elem(var ctx : JitCtx; val : LLVMOpaqueValue?; srcBt : Typ
         } elif (srcBt == Type.tUInt) {
             f = LLVMBuildUIToFP(ctx.builder, val, ctx.types.t_float, "")
         }
-        return LLVMBuildFPTrunc(ctx.builder, f, ctx.types.t_half, "")
+        return build_fp_convert(ctx.builder, f, ctx.types.t_half, "")
     }
     let dstT = base_type_to_llvm_type(dstBt)
     if (srcBt == Type.tFloat || srcBt == Type.tDouble) {
@@ -716,7 +706,7 @@ def intrinsic_builtin_lattice_vec(var ctx : JitCtx; expr : ExprCallFunc?; argume
             // lane-matched converts (the das_sv_cvt externs share the ctor name)
             assume srcBt = argType.vectorBaseType
             if (dstBt == Type.tFloat16 && srcBt == Type.tFloat) {
-                return LLVMBuildFPTrunc(ctx.builder, arguments[0], dstVecT, string(expr.name))
+                return build_fp_convert(ctx.builder, arguments[0], dstVecT, string(expr.name))
             }
             if ((srcBt == Type.tInt || srcBt == Type.tUInt) ||
                     (srcBt == Type.tInt16 && dstBt == Type.tInt8) ||
@@ -738,8 +728,8 @@ def intrinsic_builtin_lattice_vec(var ctx : JitCtx; expr : ExprCallFunc?; argume
     if (resType.baseType == Type.tHalf8 && length(arguments) == 2 && argType.baseType == Type.tFloat4) {
         // half8(float4 lo, float4 hi) pack
         let half4T = LLVMVectorType(ctx.types.t_half, 4u)
-        var lo = LLVMBuildFPTrunc(ctx.builder, arguments[0], half4T, "half8_pack_lo")
-        var hi = LLVMBuildFPTrunc(ctx.builder, arguments[1], half4T, "half8_pack_hi")
+        var lo = build_fp_convert(ctx.builder, arguments[0], half4T, "half8_pack_lo")
+        var hi = build_fp_convert(ctx.builder, arguments[1], half4T, "half8_pack_hi")
         return LLVMBuildShuffleVector(ctx.builder, ctx.types, lo, hi, [0, 1, 2, 3, 4, 5, 6, 7], "half8_pack")
     }
     // per-lane ctor (registrations are scalar-args-only for the lattice families)
@@ -791,16 +781,16 @@ def intrinsic_builtin_lattice_sat(var ctx : JitCtx; expr : ExprCallFunc?; argume
     return LLVMBuildTrunc(ctx.builder, clamped, type_to_llvm_type(resType), string(expr.name))
 }
 
-def intrinsic_builtin_float16(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {   // nolint:LINT014 — table-uniform signature required by g_intrin_lookup
+def intrinsic_builtin_float16(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     // scalar float16(float) — the only registered scalar fp16 ctor
-    return LLVMBuildFPTrunc(ctx.builder, arguments[0], ctx.types.t_half, string(expr.name))
+    return build_fp_convert(ctx.builder, arguments[0], ctx.types.t_half, string(expr.name))
 }
 
 def intrinsic_half8_lo_hi(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
     let base = expr.func.name == "half8_lo" ? 0 : 4
     let mask <- [for (i in range(4)); base + i]
     var quad = LLVMBuildShuffleVector(ctx.builder, ctx.types, arguments[0], arguments[0], mask, string(expr.name))
-    return LLVMBuildFPExt(ctx.builder, quad, LLVMVectorType(ctx.types.t_float, 4u), "")
+    return build_fp_convert(ctx.builder, quad, LLVMVectorType(ctx.types.t_float, 4u), "")
 }
 
 def intrinsic_builtin_range(var ctx : JitCtx; expr : ExprCallFunc?; arguments : array<LLVMOpaqueValue?>) : LLVMOpaqueValue? {
