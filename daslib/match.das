@@ -9,7 +9,8 @@ module match shared private
 //! Provides ``match`` and ``static_match`` macros
 //! that decompose values by structure, variant, tuple, array, or constant comparison.
 //! Each arm is ``pattern => body``: a bare name binds, ``_`` matches anything, ``&&`` adds a guard,
-//! ``|`` separates alternatives, and ``match (a, b)`` matches several values at once.
+//! ``|`` separates alternatives, ``&`` requires both patterns, and ``match (a, b)`` matches several
+//! values at once.
 //! In value position ``match`` is an expression. Unreachable arms and a match over a finite type
 //! (enum, bool, variant, struct pointer) that misses a value are compile errors.
 //! Also provides ``match_type`` and ``match_expr``.
@@ -657,6 +658,8 @@ def match_any(what : TypeDeclPtr; wth : Expression?; access : Expression?; var t
         }
     } elif (wth.__rtti |> starts_with("ExprConst")) {
         return match_const(what, wth, access, to)
+    } elif (to.bind_names && (wth is ExprOp2) && (wth as ExprOp2).op == "&") {
+        return match_any(what, (wth as ExprOp2).left, access, to) && match_any(what, (wth as ExprOp2).right, access, to)
     } elif (to.bind_names) {
         to.errors |> match_error("`{describe_pattern(wth)}` is not a pattern; compare against a computed value with `match_expr({describe_pattern(wth)})`", wth.at)
         return false
@@ -770,7 +773,7 @@ def prepare_pattern(var pat : Expression?; bind_bare : bool) : array<string> {
             op2.op := "||"
         }
         names <- prepare_pattern(op2.left, bind_bare)
-        names |> push_from(prepare_pattern(op2.right, bind_bare)) if (op2.op == "||")
+        names |> push_from(prepare_pattern(op2.right, bind_bare)) if (op2.op == "||" || (bind_bare && op2.op == "&"))
     } elif (pat is ExprVar) {
         let vname = string((pat as ExprVar).name)
         names |> push(vname) if (bind_bare && vname != "_")

@@ -149,6 +149,7 @@ def private is_irrefutable(typ : TypeDeclPtr; var pat : Expression?) : bool {
     //! Irrefutable: the pattern can not fail on any value of ``typ`` (on a pointer, any non-null one) - ``x``, ``_``, ``(a, _)``, ``Point(x = a, y = _)``. Such an arm covers its whole column.
     var p = peel_r2v(pat)
     return true if (is_binder(p))
+    if (p is ExprOp2 && (p as ExprOp2).op == "&") return is_irrefutable(typ, (p as ExprOp2).left) && is_irrefutable(typ, (p as ExprOp2).right)
     if (p is ExprMakeTuple) {
         for (v in (p as ExprMakeTuple).values) {
             return false if (!is_rest(v) && !is_irrefutable(null, v))
@@ -172,6 +173,15 @@ def private either(var l : MatchCell; var r : MatchCell) : MatchCell {
 }
 
 [macro_function]
+def private both(var l : MatchCell; var r : MatchCell) : MatchCell {
+    //! ``p1 & p2`` covers what both sides cover.
+    return <- r if (l.any)
+    return <- l if (r.any)
+    return <- MatchCell(opaque = true) if (l.opaque || r.opaque)
+    return <- MatchCell(keys <- [for (k in l.keys); k; where has_value(r.keys, k)])
+}
+
+[macro_function]
 def private classify_cell(typ : TypeDeclPtr; var pat : Expression?) : MatchCell {
     //! What one pattern covers of one column: everything, named values, or values the analysis can't name.
     var p = peel_r2v(pat)
@@ -179,6 +189,7 @@ def private classify_cell(typ : TypeDeclPtr; var pat : Expression?) : MatchCell 
     if (p is ExprOp2) {
         var op2 = p as ExprOp2
         return <- either(classify_cell(typ, op2.left), classify_cell(typ, op2.right)) if (op2.op == "||")
+        return <- both(classify_cell(typ, op2.left), classify_cell(typ, op2.right)) if (op2.op == "&")
         return <- MatchCell(opaque = true)
     }
     let key = constant_key(p)
