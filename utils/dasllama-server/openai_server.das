@@ -3195,7 +3195,7 @@ def private render_chat_suffix(msgs_v : JsonValue?; system : string; tools : arr
         return "the last message must be a user or tool message"
     }
     var turn <- render_turn_marked(cur_model(), chat)
-    stable_at = long_length(rendered) + turn.opening   //! every earlier turn, and the last turn's own opening
+    stable_at = long_length(rendered) + long_length(turn.toks) - 1l   //! the prompt's end less one token: the same prompt asked again attaches whole, the token left evals for the first logits
     system_at = chat.first_opening > 0l ? chat.first_opening : turn.opening   //! the conversation's opening, from the replayed first turn or this one
     system_head_at = chat.system_head_at > 0l ? chat.system_head_at : turn.system_head   //! ... and its system text before the tool block
     rendered |> push_from(turn.toks)

@@ -311,7 +311,7 @@ Run under ``-jit`` --- the interpreter is refused, it is far too slow for infere
    * - ``--prefix-states``
      -
      - ``256``
-     - Recurrent models (the Qwen3.5/3.6/3.8 hybrids) cache whole checkpoints instead of pages: the most a slot keeps (``0`` = none; config key ``prefix_states``); the byte budget binds first. Every request leaves one at its opening's shared head (the system text or the tool block, whichever its template writes first), one at its opening with the tools, one at its finished turn; finished turns are dropped before shared openings
+     - Recurrent models (the Qwen3.5/3.6/3.8 hybrids) cache whole checkpoints instead of pages: the most a slot keeps (``0`` = none; config key ``prefix_states``); the byte budget binds first. Every request leaves one at its opening's shared head (the system text or the tool block, whichever its template writes first), one at its opening with the tools, one a token short of its prompt's end, one at its finished turn; a conversation's own stops are dropped before shared openings
    * - ``--prefix-state-mb``
      -
      - *auto*

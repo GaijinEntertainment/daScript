@@ -69,7 +69,7 @@ struct PendingReq {
     max_new : int64 = 256l                  // reply token budget (>= 1)
     seed : int = 0                          // != 0 => set_seed at admit (reproducible sampling)
     t_submit : int64 = 0l                   // ref_time_ticks at submit (queue-wait logging; 0 = unset)
-    stable_at : int64 = 0l                  //! prompt tokens the request's own last turn does not reach (`render_turn_marked`); a recurrent model's prefill leaves a checkpoint there (0 = unknown)
+    stable_at : int64 = 0l                  //! the prompt position the caller wants a recurrent model's prefill to leave a checkpoint at - the server's is the prompt's end less one token, so the same prompt asked again attaches whole (0 = unknown)
     system_at : int64 = 0l                  //! prompt tokens of the conversation's opening every request on this system prompt and tool set shares (`ChatSession.first_opening`); a recurrent model's prefill leaves a second checkpoint there when it sits a page or more under `stable_at` (0 = unknown)
     system_head_at : int64 = 0l             //! the opening's tokens shared beyond this system prompt and tool set - its system text or its tool block, whichever the template writes first (`ChatSession.system_head_at`): a third checkpoint, a page or more under `system_at` (0 = unknown)
     // MEDIA splice (images today; audio rides the same fields): `n_media` embedding rows that
@@ -631,7 +631,9 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
             to_log(LOG_INFO, "[stream {st.id}] device prefix: {matched}/{length(st.prompt)} tok already on the device\n")
         } elif (sch.paged) {
             st.session <- create_session(m, sch.pool)
+            let t_attach = ref_time_ticks()   // clock: control - the attach's cost in the log line
             var matched = prefix_attach(sch.prefix, sch.pool, st.session, st.prompt)
+            let attach_ms = int64(get_time_usec(t_attach)) / 1000l
             if (cuts_a_span(st.spans, matched)) {   // a span evals whole: a hit that ends inside one is no hit
                 release_kv_pages(st.session)
                 delete st.session
@@ -644,11 +646,16 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
             sch.cached_tokens += matched
             st.ckpt_at = prefix_checkpoint_at(sch.prefix, sch.pool, st.session, st.prompt, matched, sch.queue[0].stable_at)
             //! the shared system opening gets its own stop when it sits a page or more past the hit and under the request's
-            //! own stop, and the system text before the tool block one more, a page or more under the opening's
+            //! own stop - a request's own stop under a page past the opening yields to it instead, since the opening serves
+            //! every request on it - and the opening's shared head one more, a page or more under the opening's
             let pr = sch.pool.page_rows
             let sys_at = sch.queue[0].system_at
-            if (st.ckpt_at > 0l && sys_at >= matched + pr && sys_at + pr <= st.ckpt_at) {
-                st.ckpt_sys_at = sys_at
+            if (st.ckpt_at > 0l && sys_at >= matched + pr) {
+                if (sys_at + pr <= st.ckpt_at) {
+                    st.ckpt_sys_at = sys_at
+                } elif (sys_at <= st.ckpt_at) {
+                    st.ckpt_at = sys_at
+                }
             }
             let head_at = sch.queue[0].system_head_at
             let above = st.ckpt_sys_at > 0l ? st.ckpt_sys_at : st.ckpt_at
@@ -657,7 +664,7 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
             }
             st.ckpt_at_tail = st.ckpt_at > 0l && st.ckpt_at == sch.queue[0].stable_at && st.ckpt_at != sys_at && st.ckpt_at != head_at
             if (matched > 0l) {
-                to_log(LOG_INFO, "[stream {st.id}] prefix cache HIT: {matched}/{length(st.prompt)} tok attached, no prefill for them (checkpoints planned at {st.ckpt_head_at}, {st.ckpt_sys_at}, {st.ckpt_at}; stable {sch.queue[0].stable_at}, system {sys_at}, head {head_at})\n")
+                to_log(LOG_INFO, "[stream {st.id}] prefix cache HIT: {matched}/{length(st.prompt)} tok attached in {attach_ms} ms, no prefill for them (checkpoints planned at {st.ckpt_head_at}, {st.ckpt_sys_at}, {st.ckpt_at}; stable {sch.queue[0].stable_at}, system {sys_at}, head {head_at})\n")
             } else {
                 to_log(LOG_INFO, "[stream {st.id}] prefix cache MISS: full {length(st.prompt)}-tok prefill (checkpoints planned at {st.ckpt_head_at}, {st.ckpt_sys_at}, {st.ckpt_at}; stable {sch.queue[0].stable_at}, system {sys_at}, head {head_at})\n")
             }
@@ -802,7 +809,9 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
             for (k in range64(take)) {
                 sch.chunk[k] = sch.streams[i].prompt[sch.streams[i].n_prefilled + k]
             }
+            let t_window = ref_time_ticks()   // clock: control - the window's cost in the log line
             eval(m, sch.streams[i].session, sch.chunk)
+            to_log(LOG_INFO, "[stream {sch.streams[i].id}] prefill window: {take} tok at {sch.streams[i].n_prefilled} in {int64(get_time_usec(t_window)) / 1000l} ms\n")
             sch.streams[i].n_prefilled += take
             sch.prefill_tokens += take
             sch.prefill_evals ++
