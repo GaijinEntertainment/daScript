@@ -889,7 +889,7 @@ def private ascii_only(s : string) : bool {
     return ascii
 }
 
-let TEST_PORT_PRESERVE = 18145   // 18140-18141 are the bench and catalog cells', 18150-18157 test_openai_server_mtp.das's
+let TEST_PORT_PRESERVE = 18190   // 18140-18141 are the bench and catalog cells', 18150-18157 test_openai_server_mtp.das's
 let QWEN3_PATH = path_join(models_dir(), "Qwen3-0.6B-Q8_0.gguf")
 
 //! a buffered chat reply's content and `usage` counts: prompt tokens, completion tokens, the prefix-cache hit
@@ -1038,7 +1038,7 @@ def private compl_text(base_url, body : string) : string {
     return text
 }
 
-let TEST_PORT_CKPT = 18146   // beside 18145, the preserve_thinking boot
+let TEST_PORT_CKPT = 18191   // beside 18190, the preserve_thinking boot
 let QWEN35_PATH = path_join(models_dir(), "Qwen3.5-0.8B-Q8_0.gguf")
 
 [test]
@@ -1140,8 +1140,8 @@ def test_openai_server_recurrent_checkpoints(t : T?) {   // nolint:STYLE038 - on
     }
 }
 
-let TEST_PORT_CKPT_BUDGET = 18147   // beside 18146, the recurrent-checkpoints boot
-let TEST_PORT_CKPT_BYTES = 18148    // the byte-budget boot
+let TEST_PORT_CKPT_BUDGET = 18192   // beside 18191, the recurrent-checkpoints boot
+let TEST_PORT_CKPT_BYTES = 18193    // the byte-budget boot
 
 [test]
 def test_openai_server_checkpoint_bytes(t : T?) {
