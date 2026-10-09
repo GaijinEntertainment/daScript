@@ -246,7 +246,7 @@ def private hreduce(vecName : string; width : int; op : string; at : LineInfo) :
     return call
 }
 
-def private find_chain_init(var blk : ExprBlock?; accumulatorName : string; h : int) : int {
+def private find_chain_init(blk : ExprBlock?; accumulatorName : string; h : int) : int {
     for (j in range(h)) {
         if (!(blk.list[j] is ExprLet)) continue
         let lc = blk.list[j] as ExprLet
@@ -340,7 +340,7 @@ def private lanes_independent(links : array<LinkInfo>; headAccRef : string; chai
     return ok
 }
 
-def private build_packed_lets(var blk : ExprBlock?; groups : array<int>; var laneInit : array<array<ExpressionPtr>>;
+def private build_packed_lets(blk : ExprBlock?; groups : array<int>; var laneInit : array<array<ExpressionPtr>>;
                               nameToRole : table<string; int>; h, R : int; var newLets : array<ExpressionPtr>;
                               var groupDName : array<string>; var groupWidth : array<int>) : bool {
     newLets |> reserve(length(groups) * R)

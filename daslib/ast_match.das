@@ -384,7 +384,7 @@ def qm_convert_local_function(var expr : Expression?) : Expression? {
     for (arg in fn.arguments) {
         blk.arguments |> emplace_new <| clone_variable(arg)
     }
-    var fn_body = clone_expression(fn.body)
+    let fn_body = clone_expression(fn.body)
     let fn_blk = fn_body as ExprBlock
     if (fn_blk != null) {
         for (stmt in fn_blk.list) {
@@ -1228,7 +1228,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
     }
 
     if (pattern is ExprFor) {
-        var pat_for = pattern as ExprFor
+        let pat_for = pattern as ExprFor
         var has_tags = false
         for (tag in pat_for.iteratorsTags) {
             if (tag != null) {
@@ -1241,7 +1241,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
         var as_val_f = make_var_ref(at, actual_var)
         var as_cast_f = new ExprAsVariant(at = at, value = as_val_f, name := rtti)
         body |> push <| qmacro_expr(${ var $i(cast_var) = $e(as_cast_f); })
-        var ann = unsafe(reinterpret<BasicStructureAnnotation?>(get_expression_annotation(pattern)))
+        let ann = unsafe(reinterpret<BasicStructureAnnotation?>(get_expression_annotation(pattern)))
         if (ann != null) {
             for_each_field(*ann) $(name, _cppName, xtype, offset) {
                 return if (offset == 0xFFFFFFFFu
@@ -1487,7 +1487,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
     var as_cast2 = new ExprAsVariant(at = at, value = as_val2, name := rtti)
     body |> push <| qmacro_expr(${ var $i(cast_var) = $e(as_cast2); }) // nolint:LINT004,LINT019
 
-    var ann = unsafe(reinterpret<BasicStructureAnnotation?>(get_expression_annotation(pattern)))
+    let ann = unsafe(reinterpret<BasicStructureAnnotation?>(get_expression_annotation(pattern)))
     if (ann == null) return
 
     for_each_field(*ann) $(name, _cppName, xtype, offset) {
@@ -1566,7 +1566,7 @@ def private generate_match(pattern : Expression?; actual_var : string; var body 
                     {
                         var pat_v = velem
                         if (pat_v.flags.tag && pat_v.source != null) {
-                            var src = pat_v.source
+                            let src = pat_v.source
                             if (src is ExprVar) {
                                 body |> push <| qmacro_expr(${ $i((src as ExprVar).name) = $i(cast_var).$f(name)[$v(vi)].name; })
                             }

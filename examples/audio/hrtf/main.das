@@ -149,7 +149,7 @@ def draw_grid(line_program : uint; view, proj : float4x4) {
 
 def load_sound_data() {
     let fname = "{get_das_root()}/examples/media/audio/music.wav"
-    var f = fopen(fname, "rb")
+    let f = fopen(fname, "rb")
     if (f == null) {
         // Fallback: generate a 440Hz sine tone
         delete sound_data

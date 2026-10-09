@@ -37,28 +37,28 @@ class TmmKernels {
 
     [metal_kernel(name="tmm_bf16_msl", float_a_ok=true), marker(no_coverage)]
     def tmm_bf16_k {
-        var ap = unsafe(addr(xa[0]))
-        var wp = unsafe(addr(wb[0]))
+        let ap = unsafe(addr(xa[0]))
+        let wp = unsafe(addr(wb[0]))
         var cp = unsafe(addr(oc[0]))
         tmm2d_f32_bf16_f32(8u, 16u, 2u, ap, 64u, wp, 64u, cp, 16u, 64u)
     }
 
     [metal_kernel(name="tmm_q8_msl"), marker(no_coverage)]
     def tmm_q8_k {
-        var ap = unsafe(addr(aq[0]))
-        var sp = unsafe(addr(asf[0]))
-        var wp = unsafe(addr(wq[0]))
-        var vp = unsafe(addr(wsf[0]))
+        let ap = unsafe(addr(aq[0]))
+        let sp = unsafe(addr(asf[0]))
+        let wp = unsafe(addr(wq[0]))
+        let vp = unsafe(addr(wsf[0]))
         var cp = unsafe(addr(oc[0]))
         tmm2d_q8_f32(8u, 16u, 2u, ap, 64u, sp, 2u, wp, 64u, vp, 2u, cp, 16u, 64u)
     }
 
     [metal_kernel(name="tmm_q8h_msl"), marker(no_coverage)]
     def tmm_q8h_k {
-        var ap = unsafe(addr(aq[0]))
-        var sp = unsafe(addr(asf[0]))
-        var wp = unsafe(addr(wq[0]))
-        var vp = unsafe(addr(wsh[0]))
+        let ap = unsafe(addr(aq[0]))
+        let sp = unsafe(addr(asf[0]))
+        let wp = unsafe(addr(wq[0]))
+        let vp = unsafe(addr(wsh[0]))
         var cp = unsafe(addr(oc[0]))
         tmm2d_q8_f16s(8u, 16u, 2u, ap, 64u, sp, 2u, wp, 64u, vp, 2u, cp, 16u, 64u)
     }
@@ -69,8 +69,8 @@ class TmmKernels {
     [metal_kernel(name="tmm_tg_msl"), marker(no_coverage)]
     def tmm_tg_k {
         var acc : float[128]
-        var ap = unsafe(addr(xa[0]))
-        var wp = unsafe(addr(wb[0]))
+        let ap = unsafe(addr(xa[0]))
+        let wp = unsafe(addr(wb[0]))
         var cp = unsafe(addr(oc[0]))
         tmm2d_tg_begin(acc, 8u, 16u, 2u, 32u)
         var kb = 0u
@@ -95,9 +95,9 @@ class TmmKernels {
 
     [metal_kernel(name="tmm_q8b_msl", float_a_ok=true), marker(no_coverage)]   // q8b has no half-A twin - the license is the only form
     def tmm_q8b_k {
-        var sp = unsafe(addr(bsh[0]))
-        var wp = unsafe(addr(bqb[2]))
-        var ap = unsafe(addr(xa[0]))
+        let sp = unsafe(addr(bsh[0]))
+        let wp = unsafe(addr(bqb[2]))
+        let ap = unsafe(addr(xa[0]))
         var cp = unsafe(addr(oc[0]))
         tmm2d_q8b_f32(8u, 16u, 2u, sp, wp, ap, 64u, cp, 16u, 64u, 2u)
     }
@@ -109,8 +109,8 @@ class TmmKernels {
     [metal_kernel(name="tmm_nt_msl"), marker(no_coverage)]
     def tmm_nt_k {
         var acc : float[128]
-        var ap = unsafe(addr(xa[0]))
-        var wp = unsafe(addr(wb[0]))
+        let ap = unsafe(addr(xa[0]))
+        let wp = unsafe(addr(wb[0]))
         var cp = unsafe(addr(oc[0]))
         tmm2d_tg_begin_nt(acc, 8u, 16u, 2u, 32u)
         var kb = 0u
@@ -139,8 +139,8 @@ class TmmKernels {
     [metal_kernel(name="tmm_nth_msl"), marker(no_coverage)]
     def tmm_nth_k {
         var acc : float[128]
-        var ap = unsafe(addr(xa[0]))
-        var wp = unsafe(addr(wb[0]))
+        let ap = unsafe(addr(xa[0]))
+        let wp = unsafe(addr(wb[0]))
         var cp = unsafe(addr(och[0]))
         tmm2d_tg_begin_nt(acc, 8u, 16u, 2u, 32u)
         var kb = 0u
@@ -168,7 +168,7 @@ class TmmKernels {
     [metal_kernel(name="tmm_devant_msl", float_a_ok=true), marker(no_coverage)]
     def tmm_devant_k {
         var acc : float[128]
-        var wp = unsafe(addr(wb[0]))
+        let wp = unsafe(addr(wb[0]))
         var cp = unsafe(addr(oc[0]))
         tmm2d_tg_begin_devant(acc, 8u, 16u, 2u, 32u)
         var kb = 0u
@@ -191,7 +191,7 @@ class TmmKernels {
     [metal_kernel(name="tmm_deva_msl", float_a_ok=true), marker(no_coverage)]
     def tmm_deva_k {
         var acc : float[128]
-        var wp = unsafe(addr(wb[0]))
+        let wp = unsafe(addr(wb[0]))
         var cp = unsafe(addr(oc[0]))
         tmm2d_tg_begin_deva(acc, unsafe(addr(xa[0])), 8u, 16u, 2u, 32u)
         var kb = 0u
@@ -212,7 +212,7 @@ class TmmKernels {
     [metal_kernel(name="tmm_devah_msl"), marker(no_coverage)]
     def tmm_devah_k {
         var acc : float[128]
-        var wp = unsafe(addr(wb[0]))
+        let wp = unsafe(addr(wb[0]))
         var cp = unsafe(addr(oc[0]))
         tmm2d_tg_begin_deva(acc, unsafe(addr(xah[0])), 8u, 16u, 2u, 32u)
         var kb = 0u
@@ -232,42 +232,42 @@ class TmmKernels {
 
     [metal_kernel(name="tmm_bfh_msl"), marker(no_coverage)]
     def tmm_bfh_k {
-        var ap = unsafe(addr(xah[0]))
-        var wp = unsafe(addr(wb[0]))
+        let ap = unsafe(addr(xah[0]))
+        let wp = unsafe(addr(wb[0]))
         var cp = unsafe(addr(oc[0]))
         tmm2d_f32_bf16_f32(8u, 16u, 2u, ap, 64u, wp, 64u, cp, 16u, 64u)
     }
 
     [metal_kernel(name="tmm_hw_msl", float_a_ok=true), marker(no_coverage)]
     def tmm_hw_k {
-        var ap = unsafe(addr(xa[0]))
-        var wp = unsafe(addr(wh[0]))
+        let ap = unsafe(addr(xa[0]))
+        let wp = unsafe(addr(wh[0]))
         var cp = unsafe(addr(oc[0]))
         tmm2d_f16w_f32(8u, 16u, 2u, ap, 64u, wp, 64u, cp, 16u, 64u)
     }
 
     [metal_kernel(name="tmm_hwh_msl"), marker(no_coverage)]
     def tmm_hwh_k {
-        var ap = unsafe(addr(xah[0]))
-        var wp = unsafe(addr(wh[0]))
+        let ap = unsafe(addr(xah[0]))
+        let wp = unsafe(addr(wh[0]))
         var cp = unsafe(addr(oc[0]))
         tmm2d_f16w_f32(8u, 16u, 2u, ap, 64u, wp, 64u, cp, 16u, 64u)
     }
 
     [metal_kernel(name="tmm_q8u_msl", float_a_ok=true), marker(no_coverage)]
     def tmm_q8u_k {
-        var sp = unsafe(addr(bsh[0]))
-        var wp = unsafe(addr(bqb[2]))
-        var ap = unsafe(addr(xa[0]))
+        let sp = unsafe(addr(bsh[0]))
+        let wp = unsafe(addr(bqb[2]))
+        let ap = unsafe(addr(xa[0]))
         var cp = unsafe(addr(oc[0]))
         tmm2d_q8u_f32(8u, 16u, 2u, tqu, sp, wp, ap, 64u, cp, 16u, 64u, 2u, gl_LocalInvocationIndex)
     }
 
     [metal_kernel(name="tmm_q8uh_msl"), marker(no_coverage)]
     def tmm_q8uh_k {
-        var sp = unsafe(addr(bsh[0]))
-        var wp = unsafe(addr(bqb[2]))
-        var ap = unsafe(addr(xah[0]))
+        let sp = unsafe(addr(bsh[0]))
+        let wp = unsafe(addr(bqb[2]))
+        let ap = unsafe(addr(xah[0]))
         var cp = unsafe(addr(oc[0]))
         tmm2d_q8u_f32(8u, 16u, 2u, tqu, sp, wp, ap, 64u, cp, 16u, 64u, 2u, gl_LocalInvocationIndex)
     }
@@ -301,18 +301,18 @@ class TmmBkKernels {
 
     [metal_kernel(name="tmm_bk64_msl"), marker(no_coverage)]
     def tmm_bk64_k {
-        var sp = unsafe(addr(bsh[0]))
-        var wp = unsafe(addr(bqb[2]))
-        var ap = unsafe(addr(xah[0]))
+        let sp = unsafe(addr(bsh[0]))
+        let wp = unsafe(addr(bqb[2]))
+        let ap = unsafe(addr(xah[0]))
         var cp = unsafe(addr(oc[0]))
         tmm2d_q8u_f32(8u, 16u, 2u, tq64, sp, wp, ap, 128u, cp, 16u, dims[0], dims[1], gl_LocalInvocationIndex, 64u)
     }
 
     [metal_kernel(name="tmm_bk128_msl"), marker(no_coverage)]
     def tmm_bk128_k {
-        var sp = unsafe(addr(bsh[0]))
-        var wp = unsafe(addr(bqb[2]))
-        var ap = unsafe(addr(xah[0]))
+        let sp = unsafe(addr(bsh[0]))
+        let wp = unsafe(addr(bqb[2]))
+        let ap = unsafe(addr(xah[0]))
         var cp = unsafe(addr(oc[0]))
         tmm2d_q8u_f32(8u, 16u, 2u, tq128, sp, wp, ap, 128u, cp, 16u, dims[0], dims[1], gl_LocalInvocationIndex, 128u)
     }

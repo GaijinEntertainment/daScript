@@ -260,8 +260,8 @@ class public DLLHandle {
     def create_fileinfo(fi : FileInfo?) {
         if (!created_fileinfos |> key_exists(fi)) {
             let fi_ptr = unsafe(reinterpret<void?>(fi))
-            var sym = get_function_address(DllName("fileinfo_at_{fi_ptr}"))
-            var sym_name = get_function_address(DllName("fileinfo_at_{fi_ptr}_name"))
+            let sym = get_function_address(DllName("fileinfo_at_{fi_ptr}"))
+            let sym_name = get_function_address(DllName("fileinfo_at_{fi_ptr}_name"))
             let name = unsafe(reinterpret<string>(sym_name))
 
             let src_fi = unsafe(reinterpret<FileInfo?>(sym))

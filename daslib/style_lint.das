@@ -434,12 +434,12 @@ class StyleLintVisitor : AstVisitor {
         let nargs = length(arguments)
         if (nargs == 0) return
         for (i in range(nargs)) {
-            var arg = arguments[i]
+            let arg = arguments[i]
             if (arg is ExprMakeBlock) {
-                var mkblk = arg as ExprMakeBlock
-                var blk = mkblk._block
+                let mkblk = arg as ExprMakeBlock
+                let blk = mkblk._block
                 if (blk is ExprBlock) {
-                    var eblk = blk as ExprBlock
+                    let eblk = blk as ExprBlock
                     if (eblk.blockFlags.isClosure) {
                         let block_arg_count = length(eblk.arguments)
                         let src = source_line_between(call_at, eblk.at)
@@ -644,9 +644,9 @@ class StyleLintVisitor : AstVisitor {
                 }
             }
         }
-        var blk = expr._block
+        let blk = expr._block
         if (!(blk is ExprBlock)) return
-        var eblk = blk as ExprBlock
+        let eblk = blk as ExprBlock
         if (!eblk.blockFlags.isClosure || eblk.blockFlags.isLambdaBlock || !empty(eblk.arguments)) return
         let src = source_line_between(expr.at, eblk.at)
         let dollar_pos = find(src, "$()")
@@ -1011,9 +1011,9 @@ class StyleLintVisitor : AstVisitor {
     def override preVisitExprIfThenElse(ifte : ExprIfThenElse?) : void {
         if (ifte.if_flags.isStatic || ifte.genFlags.generated) return
         st037_bump()
-        var cond = ifte.cond
+        let cond = ifte.cond
         if (cond is ExprConstBool) {
-            var cbool = cond as ExprConstBool
+            let cbool = cond as ExprConstBool
             if (cbool.value && ifte.if_false == null) {
                 style_warning("STYLE010: if (true) is always taken; use a bare block instead", ifte.at)
             }
@@ -1719,7 +1719,7 @@ class StyleLintVisitor : AstVisitor {
         //! True for `var a : Foo` (no init, struct-valued ONLY — pointer null-init is a different bug and is NOT flagged here), `var a = Foo()` (zero-arg MakeStruct), or `var a = new Foo()` / `var a = new Foo` (zero-arg ExprNew). False for any non-empty constructor, `make_foo()` call, or pipe chain — those are "modify an existing value" cases.
         if (v.init == null) return v._type != null && v._type.baseType == Type.tStructure
         if (v.init is ExprMakeStruct) {
-            var ms = v.init as ExprMakeStruct
+            let ms = v.init as ExprMakeStruct
             if (ms._block != null) return false
             for (row in ms.structs) {
                 for (_mf in *row) {
@@ -1729,7 +1729,7 @@ class StyleLintVisitor : AstVisitor {
             return true
         }
         if (v.init is ExprNew) {
-            var en = v.init as ExprNew
+            let en = v.init as ExprNew
             return empty(en.arguments)
         }
         return false
@@ -2793,7 +2793,7 @@ class StyleLintVisitor : AstVisitor {
             arg = (arg as ExprRef2Value.subexpr)
         }
         if (arg is ExprField) {
-            var field = arg as ExprField
+            let field = arg as ExprField
             return field.name == "__rtti"
         }
         return false

@@ -109,7 +109,7 @@ def document_vulkan_structs_anchors() {
     }
     names |> sort()
     let path = "{topic_root}/vulkan_structs_anchors.inc"
-    var doc_file = fopen(path, "wb")
+    let doc_file = fopen(path, "wb")
     if (doc_file == null) {
         panic("can't open {path}")
     }

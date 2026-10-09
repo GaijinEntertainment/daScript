@@ -133,7 +133,7 @@ def test_file_dialog(t : T?) { // nolint:STYLE038
 
         // --- save mode: type a name + confirm, result echoes the name ---
         click(d, "FDLG_WIN/BTN_SAVE")
-        var sd = wait_for_widget(d, "FILEDLG/NAME_FIELD", 10.0f)
+        let sd = wait_for_widget(d, "FILEDLG/NAME_FIELD", 10.0f)
         t |> success(sd != null, "save dialog renders the filename field (FILEDLG/NAME_FIELD)")
         force_set_value(d, "FILEDLG/NAME_FIELD", JV("zzz_unit_test"))
         click(d, "FILEDLG/BTN_OK")
@@ -174,7 +174,7 @@ def test_file_dialog_remembers_last_dir(t : T?) {
         // Open save, navigate into a subfolder, confirm there — then REOPEN and assert the dialog lands
         // back in that subfolder (it remembers the last confirmed folder this session) rather than the
         // start dir. Drives the full capture-on-confirm -> reuse-on-open path over the live API.
-        var snap = wait_for_widget(d, "FDLG_WIN/BTN_SAVE", 15.0f)
+        let snap = wait_for_widget(d, "FDLG_WIN/BTN_SAVE", 15.0f)
         t |> success(snap != null, "demo Save trigger renders")
         if (snap == null) {
             return

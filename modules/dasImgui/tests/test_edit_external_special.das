@@ -16,7 +16,7 @@ let FEATURE = "modules/dasImgui/examples/features/edit_external_special.das"
 [test]
 def test_edit_external_special_smoke(t : T?) {
     with_imgui_app(FEATURE) $(d) {
-        var snap = wait_for_render(d, "MAIN_WIN/ANGLE", 15.0f)
+        let snap = wait_for_render(d, "MAIN_WIN/ANGLE", 15.0f)
         t |> success(snap != null, "ANGLE renders")
         if (snap == null) return
 

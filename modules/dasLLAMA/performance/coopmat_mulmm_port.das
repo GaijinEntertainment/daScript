@@ -176,7 +176,7 @@ def private put_half_at(var buf : array<uint8>; byte_off : int; v : float) {
 }
 
 def private record_chain(rawcmd : VkCommandBuffer; rpipe : VkPipeline; rlayout : VkPipelineLayout;
-                         var rset : VkDescriptorSet; pc : uint[17]; use_pc : bool; gx, gy : uint; count : int) {
+                         rset : VkDescriptorSet; pc : uint[17]; use_pc : bool; gx, gy : uint; count : int) {
     var flags : VkShaderStageFlags
     flags.compute = true
     var mbar = VkMemoryBarrier()

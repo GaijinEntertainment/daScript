@@ -74,7 +74,7 @@ def test_wrap_tab_bar_click_by_name(t : T?) {
 
         // Click a header on the second wrapped row ("grid", index 6) -> follows too.
         click(d, "WTB_WIN/WTB_BAR/grid")
-        var snap_grid = wait_until_sec(d, 15.0f) $(var s) {
+        let snap_grid = wait_until_sec(d, 15.0f) $(var s) {
             return (widget_payload_field(s, "WTB_WIN/WTB_BAR", "value") ?? -1) == 6
         }
         t |> success(snap_grid != null, "clicking grid (second row) by name selects tab 6")

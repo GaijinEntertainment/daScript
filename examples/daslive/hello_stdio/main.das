@@ -23,15 +23,15 @@ var frame_count : int = 0
 def set_color(input : JsonValue?) : JsonValue? {
     if (input != null && input.value is _object) {
         let tab & = unsafe(input.value as _object)
-        var rv = tab?["r"] ?? null
+        let rv = tab?["r"] ?? null
         if (rv != null && rv.value is _number) {
             bg_r = float(rv.value as _number)
         }
-        var gv = tab?["g"] ?? null
+        let gv = tab?["g"] ?? null
         if (gv != null && gv.value is _number) {
             bg_g = float(gv.value as _number)
         }
-        var bv = tab?["b"] ?? null
+        let bv = tab?["b"] ?? null
         if (bv != null && bv.value is _number) {
             bg_b = float(bv.value as _number)
         }

@@ -33,7 +33,7 @@ def public create_compute_shader_program(cs_main : function<void>) : uint {
 
 [macro_function]
 def get_shader_const_name(arg : ExpressionPtr; var errors : das_string) {
-    var aAddr = arg ?as ExprAddr
+    let aAddr = arg ?as ExprAddr
     if (aAddr == null) {
         errors := "expecting @@shader_function"
         return ""

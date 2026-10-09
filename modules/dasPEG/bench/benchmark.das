@@ -21,7 +21,7 @@ require peg/peg
 
 [export]
 def main {
-    var file = fopen("canada.json", "rb")
+    let file = fopen("canada.json", "rb")
     defer() {
         fclose(file)
     }

@@ -161,7 +161,7 @@ def public load_path_excludes_from_path(path : string; var excludes : array<stri
     if (paths_obj == null || !(paths_obj.value is _object)) return
     var paths & = unsafe(paths_obj.value as _object)
     if (!key_exists(paths, "exclude")) return
-    var excl_jv : JsonValue? = paths["exclude"]
+    let excl_jv : JsonValue? = paths["exclude"]
     if (excl_jv == null || !(excl_jv.value is _array)) return
     for (pat_jv in excl_jv.value as _array) {
         if (pat_jv != null && pat_jv.value is _string) {

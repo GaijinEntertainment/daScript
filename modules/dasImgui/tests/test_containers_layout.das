@@ -68,7 +68,7 @@ def test_containers_layout_smoke(t : T?) {
         // Assert by leaf-visibility (closed tree_node hides its leaves), not `opened==false`
         // (`@optional opened` omits the field when false); leaf disappearance is the real signal.
         close_widget(d, "LAYOUT_WIN/MAIN_TABS/SETTINGS_TAB/PHYSICS_TREE")
-        var snap_closed = wait_until(d, 300) $(var snap) {
+        let snap_closed = wait_until(d, 300) $(var snap) {
             return !widget_rendered(snap, "LAYOUT_WIN/MAIN_TABS/SETTINGS_TAB/PHYSICS_TREE/GRAVITY")
         }
         t |> success(snap_closed != null,

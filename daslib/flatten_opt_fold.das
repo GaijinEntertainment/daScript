@@ -705,7 +705,7 @@ def public fold_body(var func : FunctionPtr; no_fast_math : bool = false; expand
     var blk = func.body as ExprBlock
     var si = length(blk.list) - 1
     while (si >= 0) {
-        var s = blk.list[si]
+        let s = blk.list[si]
         if (s is ExprCopy) {
             let cp = s as ExprCopy
             if (describe(cp.left) == describe(cp.right) && !has_sideeffects(cp.left)) {

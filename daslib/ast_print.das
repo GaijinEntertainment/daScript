@@ -1127,7 +1127,7 @@ def allExpr(arg : int) { // nolint:STYLE038 — coverage fixture: one of every e
 [export]
 def test {
     //! Self-test: visits this program's AST and prints it.
-    var astVisitor = new PrintVisitor();
+    let astVisitor = new PrintVisitor();
     make_visitor(*astVisitor) $(astVisitorAdapter) {
         visit(this_program(), astVisitorAdapter);
     }
@@ -1138,7 +1138,7 @@ def test {
 [export]
 def printAst(var prog : ProgramPtr; var writer : StringBuilderWriter?) {
     //! Pretty-prints the entire program AST to the given writer.
-    var flags = new PrintVisitor(writer = writer);
+    let flags = new PrintVisitor(writer = writer);
     make_visitor(*flags) $(adapter) {
         visit(prog, adapter)
     }
@@ -1147,7 +1147,7 @@ def printAst(var prog : ProgramPtr; var writer : StringBuilderWriter?) {
 [export]
 def printExpr(var expr : ExpressionPtr; var writer : StringBuilderWriter?) {
     //! Pretty-prints a single expression AST node to the given writer.
-    var flags = new PrintVisitor(writer = writer);
+    let flags = new PrintVisitor(writer = writer);
     make_visitor(*flags) $(adapter) {
         visit(expr, adapter)
     }
@@ -1156,7 +1156,7 @@ def printExpr(var expr : ExpressionPtr; var writer : StringBuilderWriter?) {
 [export]
 def printFunc(var func : FunctionPtr; var writer : StringBuilderWriter?) {
     //! Pretty-prints a single function AST node to the given writer.
-    var flags = new PrintVisitor(writer = writer);
+    let flags = new PrintVisitor(writer = writer);
     make_visitor(*flags) $(adapter) {
         visit(func, adapter)
     }
@@ -1165,7 +1165,7 @@ def printFunc(var func : FunctionPtr; var writer : StringBuilderWriter?) {
 [export]
 def setFlags(var prog : ProgramPtr) {
     //! Visits the program AST to set printer flags before pretty-printing.
-    var flags = new SetPrinterFlags();
+    let flags = new SetPrinterFlags();
     make_visitor(*flags) $(adapter) {
         visit(prog, adapter)
     }

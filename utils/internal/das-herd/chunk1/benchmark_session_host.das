@@ -67,7 +67,7 @@ def private percentile_us(var values : array<int64>; numerator : int) : int64 {
 }
 
 def read_file(path : string; var error : string&) : string {
-    var file = fopen(path, "rb")
+    let file = fopen(path, "rb")
     if (file == null) {
         error = "could not read {path}"
         return ""
@@ -196,7 +196,7 @@ def private summarize(direct, terminal : array<GitProbeSample> const;
 }
 
 def private run_command(command : GitProbeCommand const; cfg : BenchmarkOptions const;
-                        root : string; var results : FILE const?) : bool {
+                        root : string; results : FILE const?) : bool {
     var direct, terminal : array<GitProbeSample>
     var hosted : array<HostedSample>
     direct |> reserve(cfg.rounds)
@@ -278,7 +278,7 @@ def main() : int {
         return 2
     }
     let result_path = path_join(root, "samples.tsv")
-    var results = fopen(result_path, "wb")
+    let results = fopen(result_path, "wb")
     if (results == null) {
         print("could not create result file: {result_path}\n")
         return 2

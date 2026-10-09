@@ -105,7 +105,7 @@ def target_impure_reads(x : int) : int {
 def target_alias(x : int) : int {
     var t = 0
     t = x + 5
-    var p = unsafe(addr(t))
+    let p = unsafe(addr(t))
     t = x * 6 // looks dead by direct uses, but p aliases t — addr() disqualifies t
     return *p
 }

@@ -1616,7 +1616,7 @@ def private read_release_deps(path : string; var deps : ReleaseDeps) : bool {
         }
     }
     var error : string
-    var parsed = read_json(content, error)
+    let parsed = read_json(content, error)
     if (parsed == null) {
         to_log(LOG_ERROR, "release: cannot parse deps JSON: {error}\n")
         return false

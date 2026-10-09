@@ -25,7 +25,7 @@ def test_with_tab_stop_smoke(t : T?) {
         if (snap0 == null) return
         t |> equal(find_widget(snap0, "TS_WIN")?["kind"] ?? "", "window",
                    "TS_WIN.kind == 'window'")
-        var snap_skip = wait_for_widget(d, "TS_WIN/TS_FIELD_SKIP", 15.0f)
+        let snap_skip = wait_for_widget(d, "TS_WIN/TS_FIELD_SKIP", 15.0f)
         t |> success(snap_skip != null, "TS_FIELD_SKIP renders inside with_tab_stop block")
     }
 }

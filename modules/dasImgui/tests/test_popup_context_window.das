@@ -38,7 +38,7 @@ def test_popup_context_window_smoke(t : T?) {
         // Right-click LEAD to open the context popup. Gate on wait_for_visible (rendered THIS frame),
         // not wait_for_widget (exists-only) — see the re-open note below.
         right_click(d, "MAIN_WIN/LEAD")
-        var snap_open = wait_for_visible(d, "MAIN_WIN/CTX/ITEM_NEW", 5.0f)
+        let snap_open = wait_for_visible(d, "MAIN_WIN/CTX/ITEM_NEW", 5.0f)
         t |> success(snap_open != null, "ITEM_NEW visible after right-click on LEAD")
         if (snap_open == null) return
 
@@ -52,7 +52,7 @@ def test_popup_context_window_smoke(t : T?) {
         // from the first open, so wait_for_widget (exists-only) returns stale while the popup is
         // closed and the click drops (no bbox). wait_for_visible gates on rendered-this-frame instead.
         right_click(d, "MAIN_WIN/LEAD")
-        var snap_open2 = wait_for_visible(d, "MAIN_WIN/CTX/ITEM_QUIT", 5.0f)
+        let snap_open2 = wait_for_visible(d, "MAIN_WIN/CTX/ITEM_QUIT", 5.0f)
         t |> success(snap_open2 != null, "ITEM_QUIT visible on re-open")
         if (snap_open2 == null) return
         click(d, "MAIN_WIN/CTX/ITEM_QUIT")

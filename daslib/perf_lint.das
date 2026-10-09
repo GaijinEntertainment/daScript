@@ -262,7 +262,7 @@ def private is_annotated_dest(var expr : Expression?; name : string) : bool {
     return false if (expr == null)
     if (expr is ExprField) {
         var f = expr as ExprField
-        var fd = f.field
+        let fd = f.field
         if (fd != null && has_annotation(fd.annotation, name)) return true
         return is_annotated_dest(f.value, name)
     }
@@ -592,7 +592,7 @@ class PerfLintVisitor : AstVisitor {
 
     def is_character_at_zero(expr : ExprCall?) : bool {
         if (length(expr.arguments) >= 2) {
-            var idx = expr.arguments[1]
+            let idx = expr.arguments[1]
             if (idx is ExprConstInt && (idx as ExprConstInt).value == 0) return true
         }
         return false
@@ -672,9 +672,9 @@ class PerfLintVisitor : AstVisitor {
             inner = (inner as ExprRef2Value.subexpr)
         }
         return false if (inner == null || !(inner is ExprCall))
-        var call = inner as ExprCall
+        let call = inner as ExprCall
         if (empty(call.arguments) || call.name != "string") return false
-        var arg = call.arguments[0]
+        let arg = call.arguments[0]
         if (arg._type == null || arg._type.baseType != Type.tHandle) return false
         return arg._type.annotation != null && arg._type.annotation.name == "das_string"
     }
@@ -682,7 +682,7 @@ class PerfLintVisitor : AstVisitor {
     def is_get_ptr_of_smart_ptr(expr : Expression?) : bool {
         //! Returns true if expr is a X call where X is a smart_ptr.
         return false if (expr == null || !(expr is ExprCall))
-        var call = expr as ExprCall
+        let call = expr as ExprCall
         if (call.func == null || call.func.fromGeneric == null) return false
         return call.func.fromGeneric.name == "get_ptr"
     }
@@ -691,7 +691,7 @@ class PerfLintVisitor : AstVisitor {
         //! Returns true if maybe_get_ptr is get_ptr() and maybe_null is null.
         if (!is_get_ptr_of_smart_ptr(maybe_get_ptr) || maybe_null == null) return false
         if (maybe_null is ExprConstPtr) {
-            var cptr = maybe_null as ExprConstPtr
+            let cptr = maybe_null as ExprConstPtr
             return cptr.value == null
         }
         return false
@@ -1130,7 +1130,7 @@ class PerfLintVisitor : AstVisitor {
         }
         if (last && v.flags.init_via_move && v.init != null) {
             var dominated_by_clone = false
-            var ini = v.init
+            let ini = v.init
             if (ini is ExprCall) {
                 let ecall = ini as ExprCall
                 if (ecall.func != null) {
@@ -1410,7 +1410,7 @@ class PerfLintVisitor : AstVisitor {
                 perf018_stack[i] = st
                 pushes++
             } else {
-                var av = perf029_other_array_of(expr, i)
+                let av = perf029_other_array_of(expr, i)
                 if (av != null) {
                     var st = perf018_stack[i]
                     st.perf029_sibling_count++
@@ -1514,7 +1514,7 @@ class PerfLintVisitor : AstVisitor {
             arg1 = (arg1 as ExprRef2Value.subexpr)
         }
         if (arg1 == null || !(arg1 is ExprVar)) return
-        var ev = arg1 as ExprVar
+        let ev = arg1 as ExprVar
         if (ev.variable != state.iter_var) return
         state.matched = true
         state.callee_id = callee_id
@@ -1645,7 +1645,7 @@ class PerfLintVisitor : AstVisitor {
                 left = (left as ExprRef2Value.subexpr)
             }
             if (left is ExprField) {
-                var field = left as ExprField
+                let field = left as ExprField
                 if (field.name == "__rtti" && is_get_ptr_of_smart_ptr(field.value)) {
                     perf_warning("PERF008: get_ptr() is unnecessary for is/as; smart_ptr supports type checks directly", expr.at)
                 }
@@ -1955,7 +1955,7 @@ class PerfLintVisitor : AstVisitor {
         check_perf021_ternary_cast_hoist(expr)
         if (in_closure > 0 || expr.op != "?"
             || expr.subexpr == null || !(expr.subexpr is ExprOp2)) return
-        var cmp = expr.subexpr as ExprOp2
+        let cmp = expr.subexpr as ExprOp2
         let cop = string(cmp.op)
         if ((cop != "<" && cop != "<=" && cop != ">" && cop != ">=")
             || expr.left == null || expr.right == null) return
@@ -2161,7 +2161,7 @@ class PerfLintVisitor : AstVisitor {
             perf023_splice_depth--
         }
         if (expr.func.name == "character_at" && expr.func._module.name == "strings") {
-            var ecall = expr
+            let ecall = expr
             if (in_closure == 0 && loop_depth > 0 && in_character_at_call > 0) {
                 in_character_at_call--
                 current_character_at = null
@@ -2406,7 +2406,7 @@ class PerfLintVisitor : AstVisitor {
         var parts : array<string>
         var pi = fi
         while (pi >= 0) {
-            var pf = frames[pi].fn
+            let pf = frames[pi].fn
             parts |> push(string(pf.fromGeneric != null ? pf.fromGeneric.name : pf.name))
             pi = frames[pi].parent
         }

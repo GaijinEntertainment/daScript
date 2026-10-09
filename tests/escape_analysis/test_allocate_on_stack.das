@@ -12,6 +12,7 @@
 //
 // force_allocate_on_stack alone (no force_escape_free) is enough: it implies escape analysis.
 options gen2
+options _nolint = "LINT003"   // escape analysis stack-allocates only a var pointer: the `new` locals stay var
 options persistent_heap
 options no_optimization
 options force_allocate_on_stack = true

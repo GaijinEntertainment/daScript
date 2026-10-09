@@ -22,7 +22,7 @@ def test_imgui_demo_app_log_smoke(t : T?) {
         if (snap0 == null) return
         t |> equal(find_widget(snap0, "LOG_WIN")?["kind"] ?? "", "window",
                    "LOG_WIN.kind == 'window'")
-        var snap1 = wait_for_widget(d, "LOG_WIN/LOG_BTN_ADD5", 15.0f)
+        let snap1 = wait_for_widget(d, "LOG_WIN/LOG_BTN_ADD5", 15.0f)
         t |> success(snap1 != null, "LOG_BTN_ADD5 registers inside LOG_WIN")
     }
 }

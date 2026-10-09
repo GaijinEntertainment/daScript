@@ -1379,7 +1379,7 @@ def private pk_blocks_cpu(m : ParakeetModel; var st : ParakeetState; tt, ww, n_r
                                 for (q in range64(r0, r1)) {
                                     let base = tt - 1l - q
                                     var qs = scs + (q - r0) * tt
-                                    var rs = rls + (q - r0) * ww
+                                    let rs = rls + (q - r0) * ww
                                     for (k in range64(tt)) {
                                         var s = (qs[k] + rs[base + k]) * scale
                                         if (k >= n_real) {

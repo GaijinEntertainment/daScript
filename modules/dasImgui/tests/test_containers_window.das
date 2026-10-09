@@ -72,7 +72,7 @@ def test_containers_window_smoke(t : T?) {
         // DETAIL_WIN starts closed (state.open zero-init); open it, expect its first leaf (PING)
         // to paint. Existence is registered at [init], so we test paint via widget_rendered.
         open_widget(d, "DETAIL_WIN")
-        var snap_open = wait_until(d, 300) $(var snap) {
+        let snap_open = wait_until(d, 300) $(var snap) {
             return widget_rendered(snap, "DETAIL_WIN/PING")
         }
         t |> success(snap_open != null,
@@ -81,7 +81,7 @@ def test_containers_window_smoke(t : T?) {
         // ----- imgui_close hides the window again -----
         // PING stays in g_widgets (rendered:false) but stops painting.
         close_widget(d, "DETAIL_WIN")
-        var snap_closed = wait_until(d, 300) $(var snap) {
+        let snap_closed = wait_until(d, 300) $(var snap) {
             return !widget_rendered(snap, "DETAIL_WIN/PING")
         }
         t |> success(snap_closed != null,

@@ -16,7 +16,7 @@ require dastest/testing_boost public
 def test_simple_return(t : T?) {
     ast_gc_guard() {
         var lam = qmacro(@(x) { return x + 1; })
-        var body = peel_lambda_single_return(lam)
+        let body = peel_lambda_single_return(lam)
         t |> success(body != null, "single-return lambda should peel to its body")
         // Body should be `x + 1` — an ExprOp2.
         t |> success(body is ExprOp2, "peeled body should be ExprOp2")
@@ -27,7 +27,7 @@ def test_simple_return(t : T?) {
 def test_two_args_does_not_peel(t : T?) {
     ast_gc_guard() {
         var lam = qmacro(@(x, y) { return x + y; })
-        var body = peel_lambda_single_return(lam)
+        let body = peel_lambda_single_return(lam)
         t |> success(body == null, "2-arg lambda must return null from single-arg peel")
     }
 }
@@ -36,7 +36,7 @@ def test_two_args_does_not_peel(t : T?) {
 def test_multi_statement_does_not_peel(t : T?) {
     ast_gc_guard() {
         var lam = qmacro(@(x) { let a = x; return a; })
-        var body = peel_lambda_single_return(lam)
+        let body = peel_lambda_single_return(lam)
         t |> success(body == null, "multi-statement lambda must return null")
     }
 }
@@ -45,7 +45,7 @@ def test_multi_statement_does_not_peel(t : T?) {
 def test_non_lambda_does_not_peel(t : T?) {
     ast_gc_guard() {
         var notLam = qmacro(42)
-        var body = peel_lambda_single_return(notLam)
+        let body = peel_lambda_single_return(notLam)
         t |> success(body == null, "non-lambda expression must return null")
     }
 }
@@ -53,6 +53,6 @@ def test_non_lambda_does_not_peel(t : T?) {
 [test]
 def test_null_does_not_peel(t : T?) {
     var lam : Expression?
-    var body = peel_lambda_single_return(lam)
+    let body = peel_lambda_single_return(lam)
     t |> success(body == null, "null input must return null")
 }

@@ -100,7 +100,7 @@ class private AstCallMacro_LinqPred2 : AstCallMacro {
         var iterType = clone_iterator_type(arg0type)
         var bucketBind = "_"
         if (call.arguments[1] is ExprMakeBlock) {
-            var bblk = (call.arguments[1] as ExprMakeBlock)._block
+            let bblk = (call.arguments[1] as ExprMakeBlock)._block
             if (bblk != null && bblk is ExprBlock && length((bblk as ExprBlock).arguments) == 1) {
                 bucketBind = string((bblk as ExprBlock).arguments[0].name)
             }

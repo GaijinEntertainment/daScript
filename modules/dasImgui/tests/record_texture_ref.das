@@ -21,7 +21,7 @@ def main {
                        "texture_ref.apng", 25) $(app) {
         let T_PIC = "TR_WIN/TR_PIC"
 
-        var snap = wait_for_render(app, T_PIC, 10.0f)
+        let snap = wait_for_render(app, T_PIC, 10.0f)
         if (snap == null) {
             panic("{T_PIC} never rendered - texture failed to load/upload?")
         }

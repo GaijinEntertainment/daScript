@@ -129,7 +129,7 @@ def set_angle(input : JsonValue?) : JsonValue? {
     var angle_val = 0.0f
     if (input != null && input.value is _object) {
         let tab & = unsafe(input.value as _object)
-        var av = tab?["angle"] ?? null
+        let av = tab?["angle"] ?? null
         if (av != null) {
             if (av.value is _number) {
                 angle_val = float(av.value as _number)

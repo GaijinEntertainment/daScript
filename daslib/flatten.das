@@ -853,7 +853,7 @@ class FlattenAnnotation : AstFunctionAnnotation {
             return false
         }
         if (ph != PHASE_LOWERED && ph != PHASE_FOLDED && ph != PHASE_OPTIMIZED && ph != PHASE_FUSED) {
-            var ctx = flatten_function(twin, STD_WHITELIST, args |> find_arg("max_unroll") ?as tInt ?? FLATTEN_MAX_UNROLL)
+            let ctx = flatten_function(twin, STD_WHITELIST, args |> find_arg("max_unroll") ?as tInt ?? FLATTEN_MAX_UNROLL)
             if (!ctx.ok) {
                 errors := ctx.err
                 return false

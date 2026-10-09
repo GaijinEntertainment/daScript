@@ -93,7 +93,7 @@ def private sample_ok(command : GitProbeCommand const;
 
 def private run_lane(command : GitProbeCommand const; lane : GitProbeLane;
                      warmup, rounds : int; root : string;
-                     var result_file : FILE const?) : LaneSummary {
+                     result_file : FILE const?) : LaneSummary {
     var samples : array<GitProbeSample>
     samples |> reserve(rounds)
     let prefix = "{command.name}_{lane_name(lane)}"
@@ -154,7 +154,7 @@ def main() : int {
         return 2
     }
     let result_path = path_join(root, "samples.tsv")
-    var result_file = fopen(result_path, "wb")
+    let result_file = fopen(result_path, "wb")
     if (result_file == null) {
         print("could not create results file: {result_path}\n")
         return 2

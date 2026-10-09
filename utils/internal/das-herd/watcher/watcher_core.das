@@ -523,7 +523,7 @@ def private elapsed_ms(session : WatcherSession?) : int64 =>
     get_time_nsec(session.started) / 1000000l
 
 def private write_text_file(path, body : string) : bool {
-    var file = fopen(path, "wb")
+    let file = fopen(path, "wb")
     if (file == null) return false
     fwrite(file, body)
     fflush(file)
@@ -1875,7 +1875,7 @@ def public watcher_focus_revision(focus : WatcherFocusSet const;
                                   target : WatcherFocusTarget const) : string =>
                                       !empty(target.revision) ? target.revision : focus.revision
 
-def private append_mailbox_record(var session : WatcherSession?;
+def private append_mailbox_record(session : WatcherSession?;
                                   message : WatcherMailboxMessage const) {
     if (session.mailbox_file == null) return
     fwrite(session.mailbox_file, sprint_json(message, false) + "\n")
@@ -2056,7 +2056,7 @@ def private valid_bundle(bundle : WatcherReviewBundle const) : string {
     return ""
 }
 
-def private append_bundle_record(var session : WatcherSession?;
+def private append_bundle_record(session : WatcherSession?;
                                  bundle : WatcherReviewBundle const) {
     if (session.bundles_file == null) return
     fwrite(session.bundles_file, sprint_json(bundle, false) + "\n")

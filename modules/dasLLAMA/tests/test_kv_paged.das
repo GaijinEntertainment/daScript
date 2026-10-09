@@ -274,10 +274,10 @@ def private cache_rows_equal(var sf : Session; var sp : Session; c : Config; npo
             let kvd = layer_kv_dim(c, l)
             let krb = kv_row_bytes(sf.kv_dtype_k, kvd)
             let vrb = kv_row_bytes(sf.kv_dtype_v, kvd)
-            var fk = kv_layer_kbase(sf, l, c.seq_len)
-            var pk = kv_layer_kbase(sp, l, c.seq_len)
-            var fv = kv_layer_vbase(sf, l, c.seq_len)
-            var pv = kv_layer_vbase(sp, l, c.seq_len)
+            let fk = kv_layer_kbase(sf, l, c.seq_len)
+            let pk = kv_layer_kbase(sp, l, c.seq_len)
+            let fv = kv_layer_vbase(sf, l, c.seq_len)
+            let pv = kv_layer_vbase(sp, l, c.seq_len)
             for (pos in range64(npos)) {
                 let pr = kv_phys_row(sp, pos)
                 for (b in range64(krb)) {

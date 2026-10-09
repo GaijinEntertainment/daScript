@@ -32,7 +32,7 @@ let FEATURE = "modules/dasImgui/examples/features/glfw_synth_mouse.das"
 [test]
 def test_mouse_pos_lands_in_status(t : T?) {
     with_imgui_app(FEATURE) $(d) {
-        var snap0 = wait_for_render(d, "SYNTH_WIN", 15.0f)
+        let snap0 = wait_for_render(d, "SYNTH_WIN", 15.0f)
         t |> success(snap0 != null, "SYNTH_WIN renders")
         if (snap0 == null) return
 
@@ -50,7 +50,7 @@ def test_mouse_pos_lands_in_status(t : T?) {
 [test]
 def test_mouse_buttons_io_mirror(t : T?) {
     with_imgui_app(FEATURE) $(d) {
-        var snap0 = wait_for_render(d, "SYNTH_WIN", 15.0f)
+        let snap0 = wait_for_render(d, "SYNTH_WIN", 15.0f)
         t |> success(snap0 != null, "SYNTH_WIN renders")
         if (snap0 == null) return
 
@@ -75,7 +75,7 @@ def test_mouse_buttons_io_mirror(t : T?) {
 [test]
 def test_mouse_move_to_animates(t : T?) {
     with_imgui_app(FEATURE) $(d) {
-        var snap0 = wait_for_render(d, "SYNTH_WIN", 15.0f)
+        let snap0 = wait_for_render(d, "SYNTH_WIN", 15.0f)
         if (snap0 == null) {
             t |> success(false, "SYNTH_WIN renders")
             return
@@ -110,7 +110,7 @@ def test_mouse_move_to_animates(t : T?) {
 [test]
 def test_mouse_play_event_list_completes(t : T?) {
     with_imgui_app(FEATURE) $(d) {
-        var snap0 = wait_for_render(d, "SYNTH_WIN", 15.0f)
+        let snap0 = wait_for_render(d, "SYNTH_WIN", 15.0f)
         if (snap0 == null) {
             t |> success(false, "SYNTH_WIN renders")
             return
@@ -141,7 +141,7 @@ def test_mouse_play_event_list_completes(t : T?) {
 [test]
 def test_mouse_stop_aborts(t : T?) {
     with_imgui_app(FEATURE) $(d) {
-        var snap0 = wait_for_render(d, "SYNTH_WIN", 15.0f)
+        let snap0 = wait_for_render(d, "SYNTH_WIN", 15.0f)
         if (snap0 == null) {
             t |> success(false, "SYNTH_WIN renders")
             return
@@ -176,7 +176,7 @@ def test_synth_cursor_ownership_sticky(t : T?) {
     // false and effective_cursor_pos fell back to GetMousePos(), jumping the sprite to the real OS
     // cursor. Fix is sticky ownership: any synth event flips cursor_owned true (mouse_status exposes it).
     with_imgui_app(FEATURE) $(d) {
-        var snap0 = wait_for_render(d, "SYNTH_WIN", 15.0f)
+        let snap0 = wait_for_render(d, "SYNTH_WIN", 15.0f)
         if (snap0 == null) {
             t |> success(false, "SYNTH_WIN renders")
             return
@@ -215,7 +215,7 @@ def test_mouse_stop_releases_held_buttons(t : T?) {
     // release leaves ImGui believing the button is held. Press button 0 manually, verify ImGui
     // sees it held, mouse_stop, then verify held_count and io.mouse_buttons[0] both clear.
     with_imgui_app(FEATURE) $(d) {
-        var snap0 = wait_for_render(d, "SYNTH_WIN", 15.0f)
+        let snap0 = wait_for_render(d, "SYNTH_WIN", 15.0f)
         if (snap0 == null) {
             t |> success(false, "SYNTH_WIN renders")
             return

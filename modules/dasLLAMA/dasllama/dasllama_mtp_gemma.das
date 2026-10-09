@@ -456,8 +456,8 @@ def private drafter_attention(t : Model; var s : Session; dr : GemmaDrafter; l, 
     let kv_mul = dr.n_heads / dr.kvh[l]
     let lo = dr.sliding[l] ? max(0l, anchor - dr.sliding_window + 1l) : 0l
     let cnt = anchor - lo
-    var kcl = kv_layer_kbase(s, kvl, c.seq_len)
-    var vcl = kv_layer_vbase(s, kvl, c.seq_len)
+    let kcl = kv_layer_kbase(s, kvl, c.seq_len)
+    let vcl = kv_layer_vbase(s, kvl, c.seq_len)
     for (hq in range64(dr.n_heads)) {
         let qoff = hq * hs
         let sub = (hq / kv_mul) * hs

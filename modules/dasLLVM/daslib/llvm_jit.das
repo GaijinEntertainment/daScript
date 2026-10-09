@@ -1828,7 +1828,7 @@ class public LlvmJitVisitor : AstVisitor {
                 if (cmresEval != null) {
                     var cmresPtr = LLVMBuildPointerCast(g_builder, cmresEval, LLVMPointerType(type_to_llvm_type(expr.func.result), 0u), "cmresPTR")
                     params |> push(cmresPtr, 0)
-                    var ccall = build_interop_call(expr.func, typ, func, expr.arguments, params, true, "")
+                    let ccall = build_interop_call(expr.func, typ, func, expr.arguments, params, true, "")
                     setE(expr, cmresEval)
                 } elif (!JIT_HOST_ASAN && has_interop_lowering(expr)) {   //! an interop lowering skips the C++ call, which keeps the asan bookkeeping
                     var ccall = lookup_interop_lowering(g_ctx, g_builder, types, expr,
@@ -2316,7 +2316,7 @@ class public LlvmJitVisitor : AstVisitor {
         LLVMPositionBuilderAtEnd(g_builder, bb_scmp)
         var cmp = build_str_cmp(slotKey, qkey)
         var cmpEq = LLVMBuildICmp(g_builder, LLVMIntPredicate.LLVMIntEQ, cmp, types.ConstI32(0ul), "slf.cmpeq")
-        var scmpEnd = LLVMGetInsertBlock(g_builder)
+        let scmpEnd = LLVMGetInsertBlock(g_builder)
         LLVMBuildCondBr(g_builder, cmpEq, bb_found, bb_adv)
 
         LLVMPositionBuilderAtEnd(g_builder, bb_adv)
@@ -3892,7 +3892,7 @@ class public LlvmJitVisitor : AstVisitor {
 
     def is_count_or_ucount(expr : ExpressionPtr) {
         if (!(expr is ExprCall)) return false
-        var cf = expr as ExprCall
+        let cf = expr as ExprCall
         return cf.func.flags.builtIn && cf.func._module.name == "$" && (cf.func.name == "count" || cf.func.name == "ucount")
     }
 
@@ -4481,7 +4481,7 @@ class public LlvmJitVisitor : AstVisitor {
             ]
             let fmna = uid.get_dll_fn_name_ptr(expr_func)
             let (func, typ) = get_or_declare_impl(expr_func, fmna)
-            var ccall = LLVMBuildCall2(g_builder, typ, func, params, "")
+            let ccall = LLVMBuildCall2(g_builder, typ, func, params, "")
         } else {
             let name = uid.get_ctor(expr)
             var ctor : LLVMOpaqueValue?
@@ -4494,7 +4494,7 @@ class public LlvmJitVisitor : AstVisitor {
                     ctor = save_address_global(name, MNH_ADDR)
                 }
             }
-            var ccall = build_call_helper(ctor,
+            let ccall = build_call_helper(ctor,
                 LLVMConstPointerNull(LLVMPointerType(types.LLVMFloat4Type(), 0u)),
                 LLVMBuildPointerCast(g_builder, cmresEval, types.LLVMVoidPtrType(), ""))
         }
@@ -4573,7 +4573,7 @@ class public LlvmJitVisitor : AstVisitor {
 
             var func = LLVMGetNamedFunction(g_mod, FN_JIT_INVOKE_BLOCK)
             var typ = g_fn_types[FN_JIT_INVOKE_BLOCK]
-            var ccall = LLVMBuildCall2(g_builder, typ, func, params, "invoke")
+            let ccall = LLVMBuildCall2(g_builder, typ, func, params, "invoke")
         }
         return blk
     }
@@ -7199,7 +7199,7 @@ class public LlvmJitVisitor : AstVisitor {
             return LLVMBuildBitCast(g_builder, tbit, types.t_int32, "vec4f_to_int")
         } elif (bt == Type.tInt64 || bt == Type.tUInt64 || bt == Type.tEnumeration64 || bt == Type.tBitfield64) {
             var tvec = LLVMBuildBitCast(g_builder, v4f, LLVMVectorType(types.t_int64, 2u), "")
-            var tbit = LLVMBuildExtractElement(g_builder, tvec, types.ConstI32(0ul), "")
+            let tbit = LLVMBuildExtractElement(g_builder, tvec, types.ConstI32(0ul), "")
             return tbit
         } elif (bt == Type.tInt8 || bt == Type.tUInt8 || bt == Type.tEnumeration8 || bt == Type.tBitfield8) {
             var tbit = LLVMBuildExtractElement(g_builder, v4f, types.ConstI32(0ul), "")

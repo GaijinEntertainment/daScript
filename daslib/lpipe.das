@@ -18,7 +18,7 @@ require daslib/macro_boost
 
 def lpipe_expr(var fnCall : ExpressionPtr&; var arg : ExpressionPtr&) : ExpressionPtr {
     if (fnCall is ExprVar) {
-        var pVar = fnCall as ExprVar
+        let pVar = fnCall as ExprVar
         var pCall = make_call(pVar.at, "{pVar.name}")
         fnCall = null
         var pCallFunc = unsafe(reinterpret<ExprLooksLikeCall?>(pCall))

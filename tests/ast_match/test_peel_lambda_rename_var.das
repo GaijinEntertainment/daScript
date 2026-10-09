@@ -43,7 +43,7 @@ def test_rename_keeps_other_idents(t : T?) {
     ast_gc_guard() {
         // outerCapture shouldn't be touched — only x → y.
         var lam = qmacro(@(x) { return x + outerCapture; })
-        var body = peel_lambda_rename_var(lam, "y")
+        let body = peel_lambda_rename_var(lam, "y")
         t |> success(body is ExprOp2, "should peel to ExprOp2")
         let op = body as ExprOp2
         t |> success(op.left is ExprVar, "left is ExprVar")
@@ -59,7 +59,7 @@ def test_rename_keeps_other_idents(t : T?) {
 def test_two_arg_falls_back_to_invoke(t : T?) {
     ast_gc_guard() {
         var lam = qmacro(@(x, y) { return x + y; })
-        var res = peel_lambda_rename_var(lam, "z")
+        let res = peel_lambda_rename_var(lam, "z")
         t |> success(res != null, "fallback should not return null")
         // ``invoke(...)`` parses to ExprInvoke, not a generic ExprCall.
         t |> success(res is ExprInvoke, "non-peelable: result should be ExprInvoke")
@@ -70,7 +70,7 @@ def test_two_arg_falls_back_to_invoke(t : T?) {
 def test_non_lambda_falls_back_to_invoke(t : T?) {
     ast_gc_guard() {
         var notLam = qmacro(somePtr)
-        var res = peel_lambda_rename_var(notLam, "z")
+        let res = peel_lambda_rename_var(notLam, "z")
         t |> success(res is ExprInvoke, "non-lambda → ExprInvoke fallback")
     }
 }

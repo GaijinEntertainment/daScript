@@ -357,7 +357,7 @@ def unwrap_option_payload_type(var td : TypeDeclPtr) : TypeDeclPtr {
     return td
 }
 
-def private extract_string_return(var fn : FunctionPtr) : string {
+def private extract_string_return(fn : FunctionPtr) : string {
     if (fn == null || fn.body == null || !(fn.body is ExprBlock)) return ""
     let blk = fn.body as ExprBlock
     for (stmt in blk.list) {
@@ -1804,7 +1804,7 @@ def private resolve_sql_table(prog : ProgramPtr; at : LineInfo; var typeArg : Ex
 }
 
 [macro_function]
-def private resolve_field_index(var st : StructurePtr; field_name : string) : int {
+def private resolve_field_index(st : StructurePtr; field_name : string) : int {
     for (i in range(length(st.fields))) {
         if (st.fields[i].name == field_name) return i
     }
@@ -1812,7 +1812,7 @@ def private resolve_field_index(var st : StructurePtr; field_name : string) : in
 }
 
 [macro_function]
-def private field_sql_name_at(var st : StructurePtr; idx : int) : string {
+def private field_sql_name_at(st : StructurePtr; idx : int) : string {
     let ca = find_arg(st.fields[idx].annotation, "sql_column")
     if (ca is tString) return ca as tString
     return string(st.fields[idx].name)

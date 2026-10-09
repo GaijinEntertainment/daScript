@@ -264,7 +264,7 @@ def public load_preflight_settings(path : string; var error : string&) : Preflig
     let body = fread(path)
     if (empty(body)) return settings
 
-    var root : JsonValue? = read_toml(body, error)
+    let root : JsonValue? = read_toml(body, error)
     if (!empty(error) || root == null || !(root.value is _object)) {
         if (empty(error)) {
             error = "preflight config root must be a TOML table"

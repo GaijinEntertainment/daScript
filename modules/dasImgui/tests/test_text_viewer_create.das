@@ -113,7 +113,7 @@ def test_create_link_snippet_tab_flow(t : T?) {
         return if (empty(temp_dir))
         {
         return if (!open_md_editing(t, app, temp_dir, "hello\n"))
-        var probe = wait_for_render(app, SOURCE_EDITOR, 15.0f)
+        let probe = wait_for_render(app, SOURCE_EDITOR, 15.0f)
         t |> success(probe != null, "editor pane renders")
         click(app, SOURCE_EDITOR)
         t |> success(wait_for_mouse_idle(app), "editor focus click drains")
@@ -198,7 +198,7 @@ def test_create_real_ctrl_b_chord(t : T?) {
         return if (empty(temp_dir))
         {
         return if (!open_md_editing(t, app, temp_dir, "chord"))
-        var probe = wait_for_render(app, SOURCE_EDITOR, 15.0f)
+        let probe = wait_for_render(app, SOURCE_EDITOR, 15.0f)
         t |> success(probe != null, "editor pane renders")
         click(app, SOURCE_EDITOR)
         t |> success(wait_for_mouse_idle(app), "editor focus click drains")

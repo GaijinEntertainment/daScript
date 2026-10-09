@@ -35,7 +35,7 @@ def private open_edit_fixture(t : T?; d : ImguiApp; label_ : string;
     t |> success(opened != null, "fixture opens in the viewer")
     let entered = post_command(d, "text_viewer_edit", JV((on = true)))
     t |> success(entered != null, "edit mode entered")
-    var initial = wait_for_render(d, EDIT_TARGET, 15.0f)
+    let initial = wait_for_render(d, EDIT_TARGET, 15.0f)
     t |> success(initial != null, "editor surface renders")
     return initial != null
 }
@@ -92,7 +92,7 @@ def test_text_edit_keystrokes_reach_buffer(t : T?) {
         t |> success(wait_for_key_idle(d, 6.0f), "Backspace drains")
         t |> success(wait_for_int_value(d, EDIT_TARGET, "line_count", 6, 300),
             "Backspace at column zero joins the lines back")
-        var final_snap = wait_until_sec(d, 5.0f) $(var snap) {
+        let final_snap = wait_until_sec(d, 5.0f) $(var snap) {
             let line = find_widget(snap, EDIT_TARGET)?["payload"]?["lines"]?[5] ?? ""
             return line == "abc"
         }
@@ -159,7 +159,7 @@ def test_text_edit_numpad_and_overtype(t : T?) {
             "Ctrl+Right lands at the first word end (VS Code semantics)")
         key_chord_tap(d, ["Shift"], int(ImGuiKey.End))
         t |> success(wait_for_key_idle(d, 6.0f), "Shift+End drains")
-        var selected = wait_until_sec(d, 5.0f) $(var snap) {
+        let selected = wait_until_sec(d, 5.0f) $(var snap) {
             return (widget_payload_field(snap, EDIT_TARGET, "anchor_line") ?? -1) >= 0
         }
         t |> success(selected != null, "Shift+End extends a selection via its own binding")
@@ -196,7 +196,7 @@ def test_text_edit_find_replace(t : T?) {
         let typed = post_command(d, "imgui_key_type",
             JV((text = "zzfind zzfind zzfind")))
         t |> success(typed != null, "fixture text accepted")
-        var seeded = wait_until_sec(d, 10.0f) $(var snap) {
+        let seeded = wait_until_sec(d, 10.0f) $(var snap) {
             let line = find_widget(snap, EDIT_TARGET)?["payload"]?["lines"]?[5] ?? ""
             return line == "zzfind zzfind zzfind"
         }
@@ -208,7 +208,7 @@ def test_text_edit_find_replace(t : T?) {
         t |> success(wait_for_key_idle(d, 6.0f), "Ctrl+Shift+Left drains")
         key_chord_tap(d, ["Ctrl"], int(ImGuiKey.H))
         t |> success(wait_for_key_idle(d, 6.0f), "Ctrl+H drains")
-        var jumped = wait_until_sec(d, 10.0f) $(var snap) {
+        let jumped = wait_until_sec(d, 10.0f) $(var snap) {
             // seeded query rebuilt + jump applied: selection sits on match 1
             return (widget_payload_field(snap, EDIT_TARGET, "anchor_line") ?? -1) >= 0
         }
@@ -220,7 +220,7 @@ def test_text_edit_find_replace(t : T?) {
         t |> success(wait_for_key_idle(d, 6.0f), "replacement typing drains")
         key_tap(d, int(ImGuiKey.Enter))
         t |> success(wait_for_key_idle(d, 6.0f), "Enter drains")
-        var replaced_one = wait_until_sec(d, 10.0f) $(var snap) {
+        let replaced_one = wait_until_sec(d, 10.0f) $(var snap) {
             let line = find_widget(snap, EDIT_TARGET)?["payload"]?["lines"]?[5] ?? ""
             return line == "zzdone zzfind zzfind"
         }
@@ -229,7 +229,7 @@ def test_text_edit_find_replace(t : T?) {
         // Ctrl+Alt+Enter = replace all remaining matches.
         key_chord_tap(d, ["Ctrl", "Alt"], int(ImGuiKey.Enter))
         t |> success(wait_for_key_idle(d, 6.0f), "Ctrl+Alt+Enter drains")
-        var replaced_all = wait_until_sec(d, 10.0f) $(var snap) {
+        let replaced_all = wait_until_sec(d, 10.0f) $(var snap) {
             let line = find_widget(snap, EDIT_TARGET)?["payload"]?["lines"]?[5] ?? ""
             return line == "zzdone zzdone zzdone"
         }
@@ -241,7 +241,7 @@ def test_text_edit_find_replace(t : T?) {
         t |> success(wait_for_key_idle(d, 6.0f), "Escape drains")
         key_chord_tap(d, ["Ctrl"], int(ImGuiKey.Z))
         t |> success(wait_for_key_idle(d, 6.0f), "Ctrl+Z drains")
-        var undone = wait_until_sec(d, 10.0f) $(var snap) {
+        let undone = wait_until_sec(d, 10.0f) $(var snap) {
             let line = find_widget(snap, EDIT_TARGET)?["payload"]?["lines"]?[5] ?? ""
             return line == "zzdone zzfind zzfind"
         }

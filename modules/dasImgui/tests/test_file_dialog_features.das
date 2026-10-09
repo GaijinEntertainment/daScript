@@ -80,7 +80,7 @@ def private any_date_shown(var snap : JsonValue?) : bool {
 def test_file_dialog_features(t : T?) {
     let fixture = make_fixture()
     with_imgui_app("modules/dasImgui/examples/tutorial/file_dialog.das") $(d) {
-        var boot = wait_for_widget(d, "FDLG_WIN/BTN_OPEN", 15.0f)
+        let boot = wait_for_widget(d, "FDLG_WIN/BTN_OPEN", 15.0f)
         t |> success(boot != null, "demo + Open trigger render")
         if (boot != null) {
             click(d, "FDLG_WIN/BTN_OPEN")

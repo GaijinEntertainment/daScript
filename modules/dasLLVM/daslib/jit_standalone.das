@@ -109,8 +109,8 @@ def private frame_type(var abi : ThunkAbi; ctx : LLVMContextRef) : LLVMOpaqueTyp
 }
 
 
-def private emit_trampoline(ctx : LLVMContextRef; var e : CExport; var uids : UidNodes?;
-                            var types : PrimitiveTypes?; var abi : ThunkAbi; ft : LLVMOpaqueType?) : LLVMOpaqueValue? {
+def private emit_trampoline(ctx : LLVMContextRef; var e : CExport; uids : UidNodes?;
+                            types : PrimitiveTypes?; var abi : ThunkAbi; ft : LLVMOpaqueType?) : LLVMOpaqueValue? {
     let impl_name = uids.get_dll_fn_name_ptr(e.fn).impl()
     var impl = LLVMGetNamedFunction(g_mod, impl_name)
     if (impl == null) {
@@ -154,7 +154,7 @@ def private c_return_type(var e : CExport; var types : PrimitiveTypes?) : LLVMTy
 
 
 def private store_thunk_args(b : LLVMBuilderRef; var e : CExport; var abi : ThunkAbi;
-                             fn : LLVMOpaqueValue?; ft : LLVMOpaqueType?; var types : PrimitiveTypes?; frame : LLVMOpaqueValue?) {
+                             fn : LLVMOpaqueValue?; ft : LLVMOpaqueType?; types : PrimitiveTypes?; frame : LLVMOpaqueValue?) {
     for (arg, p, i in e.fn.arguments, e.params, count()) {
         var incoming = LLVMGetParam(fn, uint(i + 1))
         var slot = LLVMBuildStructGEP2(b, ft, frame, uint(i), "in_{i}")
@@ -237,7 +237,7 @@ def public emit_thunk(ctx : LLVMContextRef; var e : CExport; var uids : UidNodes
 }
 
 
-def private emit_shutdown_trampoline(ctx : LLVMContextRef; var uids : UidNodes?;
+def private emit_shutdown_trampoline(ctx : LLVMContextRef; uids : UidNodes?;
                                      var funcs : array<FunctionPtr>) : LLVMOpaqueValue? {
     var shutdown_fns <- [for (fn in funcs); fn; where fn.flags.shutdown]
     if (shutdown_fns |> empty()) {
@@ -261,7 +261,7 @@ def private emit_shutdown_trampoline(ctx : LLVMContextRef; var uids : UidNodes?;
 }
 
 
-def private emit_destroy(ctx : LLVMContextRef; var types : PrimitiveTypes?; prefix : string;
+def private emit_destroy(ctx : LLVMContextRef; types : PrimitiveTypes?; prefix : string;
                          shutdown_tramp : LLVMOpaqueValue?) {
     let void_ptr = types.LLVMVoidPtrType()
     let made = new_function(ctx, "{prefix}_destroy", jit_fn_type($(ctx : void?) : void {}), true)
@@ -282,7 +282,7 @@ def private emit_destroy(ctx : LLVMContextRef; var types : PrimitiveTypes?; pref
 }
 
 
-def private emit_last_error(ctx : LLVMContextRef; var types : PrimitiveTypes?; prefix : string;
+def private emit_last_error(ctx : LLVMContextRef; types : PrimitiveTypes?; prefix : string;
                             error_global : LLVMOpaqueValue?) {
     let void_ptr = types.LLVMVoidPtrType()
     let typ = jit_fn_type($(ctx : void?) : void? {})

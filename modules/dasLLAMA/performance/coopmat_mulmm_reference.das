@@ -52,7 +52,7 @@ def private f32_of(buf : array<uint8>; i : int) : float {
 // all-raw recording (no boost-wrapper captures): bind, push constants, count dispatches with
 // compute-compute barriers between (the in-graph dependent-chain pattern)
 def private record_gemm(rawcmd : VkCommandBuffer; rpipe : VkPipeline; rlayout : VkPipelineLayout;
-                        var rset : VkDescriptorSet; pc : uint[17]; gx, gy : uint; count : int) {
+                        rset : VkDescriptorSet; pc : uint[17]; gx, gy : uint; count : int) {
     var flags : VkShaderStageFlags
     flags.compute = true
     var mbar = VkMemoryBarrier()

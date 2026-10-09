@@ -1081,7 +1081,7 @@ def private cn_blocks_cpu(m : CanaryEncoder; var st : CanaryState; tt, ww : int6
                                 for (q in range64(r0, r1)) {
                                     let base = tt - 1l - q
                                     var qs = scs + (q - r0) * tt
-                                    var rs = rls + (q - r0) * ww
+                                    let rs = rls + (q - r0) * ww
                                     for (k in range64(tt)) {
                                         qs[k] = (qs[k] + rs[base + k]) * scale
                                     }

@@ -169,7 +169,7 @@ def main() {
     print("geometry: cnt={CNT} kv_dim={KV_DIM} kv_mul={KV_MUL} nsl={nsl} | {NL} slabs x {kvbytes / 1024l}KB KV\n")
 
     unsafe {
-        var qp = addr<float const?>(q[0])
+        let qp = addr<float const?>(q[0])
         var attp = addr(att[0])
         var flp = addr(flop[0])
         var attp2 = addr(att2[0])

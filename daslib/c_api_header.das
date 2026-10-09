@@ -202,7 +202,7 @@ struct public CNames {
 }
 
 
-def private c_type_name(names : CNames; var owner : Module?; name : das_string) : string {
+def private c_type_name(names : CNames; owner : Module?; name : das_string) : string {
     if (owner == null || owner == names.this_module || owner.name |> empty()) {
         return "{names.prefix}_{c_ident_part(string(name))}"
     }
@@ -218,7 +218,7 @@ def private peel(var t : TypeDeclPtr) : TypeDeclPtr {
 }
 
 
-def private is_pod_struct(var st : Structure?) : bool =>
+def private is_pod_struct(st : Structure?) : bool =>
     st != null && !st.flags.isClass && !(st.fields |> empty())
 
 
@@ -446,7 +446,7 @@ def private describe_params(var fn : Function?; names : CNames; var out : array<
 }
 
 
-def private returns_cmres(var fn : Function?) : bool =>
+def private returns_cmres(fn : Function?) : bool =>
     fn.flags.copyOnReturn || fn.flags.moveOnReturn
 
 
@@ -947,7 +947,7 @@ struct public DasBindings {
 }
 
 
-def private das_scalar_of(var t : TypeDeclPtr) : string {
+def private das_scalar_of(t : TypeDeclPtr) : string {
     if (t.isBool) {
         return "bool"
     }

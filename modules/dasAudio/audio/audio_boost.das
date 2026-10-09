@@ -703,7 +703,7 @@ def update_hrtf(dt : float; nFrames : uint64) {
     // The sticky margin prevents thrashing when two channels swap rank near the budget boundary.
     g_hrtf_scratch |> clear()
     for (i in range(length(g_channels))) {
-        var ch = g_channels[i]
+        let ch = g_channels[i]
         if (ch.is3D && !ch.stop) {
             let delta = ch.position3d - g_head_position
             g_hrtf_scratch |> push((dist2 = dot(delta, delta), idx = i))

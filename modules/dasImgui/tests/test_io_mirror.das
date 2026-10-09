@@ -26,19 +26,19 @@ def test_io_mirror_smoke(t : T?) {
         if (snap == null) return
 
         // Gate 1: io key is present.
-        var io = snap?["io"]
+        let io = snap?["io"]
         t |> success(io != null, "snapshot.io is present")
 
         // Gate 2: mouse_pos has x and y fields.
-        var mouse_pos = snap?["io"]?["mouse_pos"]
+        let mouse_pos = snap?["io"]?["mouse_pos"]
         t |> success(mouse_pos != null, "io.mouse_pos present")
-        var mp_x = snap?["io"]?["mouse_pos"]?["x"]
-        var mp_y = snap?["io"]?["mouse_pos"]?["y"]
+        let mp_x = snap?["io"]?["mouse_pos"]?["x"]
+        let mp_y = snap?["io"]?["mouse_pos"]?["y"]
         t |> success(mp_x != null && mp_y != null,
                      "io.mouse_pos has x and y fields")
 
         // Gate 3: mouse_buttons is a 3-element array of bools (left, middle, right).
-        var buttons = snap?["io"]?["mouse_buttons"]
+        let buttons = snap?["io"]?["mouse_buttons"]
         t |> success(buttons != null, "io.mouse_buttons present")
         // No widget interaction yet, so all three should be false.
         let b_left = snap?["io"]?["mouse_buttons"]?[0] ?? true

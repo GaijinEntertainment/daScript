@@ -423,7 +423,7 @@ def private column_sql_for_alias(alias : string; rootT : TypeDeclPtr; field : st
 [macro_function]
 def private is_fts_rank_field(rootT : TypeDeclPtr; fieldName : string) : bool {
     if (rootT == null || rootT.structType == null) return false
-    var st = rootT.structType
+    let st = rootT.structType
     for (field in st.fields) {
         if (field.name == fieldName) {
             for (annDecl in field.annotation) {
@@ -488,7 +488,7 @@ def private render_projection_alias_sql(var q : SqlQuery&; aliasIdx : int) : str
 }
 
 [macro_function]
-def private call_resolved_name(var call : ExprCall?) : string {
+def private call_resolved_name(call : ExprCall?) : string {
     if (call == null || call.func == null) return ""
     if (call.func.fromGeneric != null) return string(call.func.fromGeneric.name)
     return string(call.func.name)
@@ -747,7 +747,7 @@ def private try_peel_distinct_by_field(var node : ExpressionPtr; var distinctSou
         q.hadError = true
         return ""
     }
-    var blk = (lam as ExprMakeBlock)._block as ExprBlock
+    let blk = (lam as ExprMakeBlock)._block as ExprBlock
     if (blk == null || blk.arguments |> length != 1) {
         macro_error(prog, at, "_sql: _distinct_by key lambda must take exactly one argument")
         q.hadError = true
@@ -1653,7 +1653,7 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
         }
     }
     {
-        var dbCall = match_call_in_linq(node, "distinct_by")
+        let dbCall = match_call_in_linq(node, "distinct_by")
         if (dbCall != null) {
             let dr = maybe_divert(q, PHASE_DISTINCT, node, prog, at)
             if (dr != 0) return dr > 0
@@ -2010,7 +2010,7 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
         if (cxCall != null) return process_cross_join_call(cxCall, q, prog, at)
     }
     {
-        var smCall = match_call_in_linq(node, "select_many_pair")
+        let smCall = match_call_in_linq(node, "select_many_pair")
         if (smCall != null) {
             macro_error(prog, at, "_sql: correlated `from ... from x in <expr>` (SelectMany over a SQL source) is not translatable to SQL - the inner collection is a per-row value, not a `[sql_table]`. Use an explicit `join` on a related table, or materialize the SQL rows with `to_array()` first and flatten in memory.")
             return false
@@ -2318,7 +2318,7 @@ def private analyze_projection_impl(var body : ExpressionPtr; var q : SqlQuery&;
     }
     if (body is ExprMakeTuple) {
         var mkTup = body as ExprMakeTuple
-        var tupT = mkTup._type
+        let tupT = mkTup._type
         if (tupT != null && tupT.baseType == Type.tTuple
                 && !empty(tupT.argNames)
                 && length(mkTup.values) == length(tupT.argNames)) {
@@ -2563,7 +2563,7 @@ def private try_translate_global_aggregate(var node : ExpressionPtr; rowsArgName
             macro_error(prog, at, "_sql: `_aggregate` {fname} selector has unexpected shape")
             return true
         }
-        var selectorBlock = (selector as ExprMakeBlock)._block as ExprBlock
+        let selectorBlock = (selector as ExprMakeBlock)._block as ExprBlock
         if (selectorBlock == null || selectorBlock.arguments |> length != 1) {
             macro_error(prog, at, "_sql: `_aggregate` {fname} selector must take exactly one row argument")
             return true
@@ -2632,7 +2632,7 @@ def private analyze_global_aggregate_projection(var aggregateLambda : Expression
         macro_error(prog, at, "_sql: `_aggregate` expects a one-argument block returning a named tuple")
         return false
     }
-    var aggregateBlock = (aggregateLambda as ExprMakeBlock)._block as ExprBlock
+    let aggregateBlock = (aggregateLambda as ExprMakeBlock)._block as ExprBlock
     if (aggregateBlock == null || aggregateBlock.arguments |> length != 1) {
         macro_error(prog, at, "_sql: `_aggregate` block must take exactly one rowset argument")
         return false
@@ -2647,7 +2647,7 @@ def private analyze_global_aggregate_projection(var aggregateLambda : Expression
         return false
     }
     var mkTup = body as ExprMakeTuple
-    var tupT = mkTup._type
+    let tupT = mkTup._type
     if (tupT == null || tupT.baseType != Type.tTuple
             || empty(tupT.argNames)
             || length(tupT.argNames) != length(mkTup.values)) {
@@ -2716,7 +2716,7 @@ def private analyze_grouped_projection(var body : ExpressionPtr; var q : SqlQuer
         return false
     }
     var mkTup = body as ExprMakeTuple
-    var tupT = mkTup._type
+    let tupT = mkTup._type
     if (tupT == null || tupT.baseType != Type.tTuple
             || empty(tupT.argNames)
             || length(tupT.argNames) != length(mkTup.values)) {
@@ -3166,7 +3166,7 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
                 let iname = string(icall.name)
                 let iargc = user_arg_count(icall)
                 if (iname == "contains" && iargc == 2) {
-                    var firstT = icall.arguments[0]._type
+                    let firstT = icall.arguments[0]._type
                     if (firstT != null && (firstT.isIterator || firstT.isGoodArrayType)) {
                         let xSql = pred_to_sql(icall.arguments[1], q, prog, at)
                         return "" if (q.hadError)
@@ -3666,7 +3666,7 @@ def private fn_call_to_sql(var call : ExprCall?; var q : SqlQuery&; prog : Progr
         return ciLike ? "{lhs} GLOB ?" : "{lhs} LIKE ? ESCAPE '\\'"
     }
     if (fname == "contains" && argc == 2) {
-        var firstT = call.arguments[0]._type
+        let firstT = call.arguments[0]._type
         if (firstT != null && (firstT.isIterator || firstT.isGoodArrayType)) {
         } else {
             let lhs = pred_to_sql(call.arguments[0], q, prog, at)
@@ -3763,7 +3763,7 @@ def private fn_call_to_sql(var call : ExprCall?; var q : SqlQuery&; prog : Progr
     if (fname == "contains" && argc == 2) {
         let xSql = pred_to_sql(call.arguments[1], q, prog, at)
         return "" if (q.hadError)
-        var firstT = call.arguments[0]._type
+        let firstT = call.arguments[0]._type
         if (firstT != null && firstT.isGoodArrayType
                 && !looks_like_subquery_chain(call.arguments[0])) return emit_in_collection_json_bridge(call.arguments[0], q, xSql, false, false)
         var binds : array<ExpressionPtr>
@@ -3931,7 +3931,7 @@ def private fill_default_columns(var q : SqlQuery&; rootT : TypeDeclPtr; prog : 
         macro_error(prog, at, "_sql: select_from(type<T>): T must be a struct (got {describe(rootT)})")
         return
     }
-    var st = rootT.structType
+    let st = rootT.structType
     for (field in st.fields) {
         q.selectCols |> push(string(field.name))
     }
@@ -3940,7 +3940,7 @@ def private fill_default_columns(var q : SqlQuery&; rootT : TypeDeclPtr; prog : 
 [macro_function]
 def private sql_table_name_from_type(rootT : TypeDeclPtr) : string {
     if (rootT == null || rootT.structType == null) return ""
-    var st = rootT.structType
+    let st = rootT.structType
     for (annDecl in st.annotations) {
         if (annDecl.annotation.name == "sql_table"
                 || annDecl.annotation.name == "sql_view"
@@ -4173,7 +4173,7 @@ def private build_order_limit_tail(q : SqlQuery) : string {
 class private SqlTextMacro : AstCallMacro {
     def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
         macro_verify(call.arguments |> length == 1, prog, call.at, "_sql_text expects one argument: a chain expression")
-        var argT = call.arguments[0]._type
+        let argT = call.arguments[0]._type
         macro_verify(argT != null, prog, call.at, "_sql_text: chain argument is not inferred yet")
         macro_verify(!argT.isAutoOrAlias, prog, call.at, "_sql_text: chain type is auto/alias after inference")
         normalize_single_source_arg_names(call.arguments[0])
@@ -4224,7 +4224,7 @@ class private SqlCreateViewMacro : AstCallMacro {
                 break
             }
         }
-        var argChainT = call.arguments[2]._type
+        let argChainT = call.arguments[2]._type
         macro_verify(argChainT != null, prog, call.at, "_create_view: chain argument is not inferred yet")
         macro_verify(!argChainT.isAutoOrAlias, prog, call.at, "_create_view: chain type is auto/alias after inference")
         normalize_single_source_arg_names(call.arguments[2])
@@ -4428,7 +4428,7 @@ def private lookup_struct_field_type(rootT : TypeDeclPtr; fieldName : string) : 
 [macro_function]
 def private has_field_annotation(rootT : TypeDeclPtr; fieldName : string; annoName : string) : bool {
     if (rootT == null || rootT.structType == null) return false
-    var st = rootT.structType
+    let st = rootT.structType
     for (field in st.fields) {
         if (field.name == fieldName) {
             let v = find_arg(field.annotation, annoName)
@@ -4442,7 +4442,7 @@ def private has_field_annotation(rootT : TypeDeclPtr; fieldName : string; annoNa
 def private find_field_annotation_string(rootT : TypeDeclPtr; fieldName : string;
                                          annoName : string; defaultV : string) : string {
     if (rootT == null || rootT.structType == null) return defaultV
-    var st = rootT.structType
+    let st = rootT.structType
     for (field in st.fields) {
         if (field.name == fieldName) {
             let v = find_arg(field.annotation, annoName)
@@ -4670,7 +4670,7 @@ def private reject_bare_group_by(q : SqlQuery; prog : ProgramPtr; at : LineInfo)
 
 [macro_function]
 def private emit_sql_macro_body(prog : ProgramPtr; var call : ExprCallMacro?; isTry : bool) : ExpressionPtr {
-    var argT = call.arguments[0]._type
+    let argT = call.arguments[0]._type
     macro_verify(argT != null, prog, call.at, "_sql/_try_sql: chain argument is not inferred yet")
     macro_verify(!argT.isAutoOrAlias, prog, call.at, "_sql/_try_sql: chain type is auto/alias after inference")
     normalize_single_source_arg_names(call.arguments[0])
@@ -4735,7 +4735,7 @@ class private TrySqlMacro : AstCallMacro {
 
 [macro_function]
 def private emit_each_sql_macro_body(prog : ProgramPtr; var call : ExprCallMacro?) : ExpressionPtr {
-    var argT = call.arguments[0]._type
+    let argT = call.arguments[0]._type
     macro_verify(argT != null, prog, call.at, "_each_sql: chain argument is not inferred yet")
     macro_verify(!argT.isAutoOrAlias, prog, call.at, "_each_sql: chain type is auto/alias after inference")
     normalize_single_source_arg_names(call.arguments[0])
@@ -4817,7 +4817,7 @@ def private analyze_set_clause(var setExpr : ExpressionPtr; var q : SqlQuery&;  
         macro_error(prog, at, "_sql_update: set clause is empty - UPDATE with no columns is invalid SQL. Pass at least one (Col=expr) pair.")
         return false
     }
-    var tupT = mkTup._type
+    let tupT = mkTup._type
     var recordNames : array<string>
     if (tupT != null && tupT.baseType == Type.tTuple
             && length(tupT.argNames) == length(mkTup.values)) {
@@ -4841,7 +4841,7 @@ def private analyze_set_clause(var setExpr : ExpressionPtr; var q : SqlQuery&;  
         }
     }
     if (q.rootType != null && q.rootType.structType != null) {
-        var st = q.rootType.structType
+        let st = q.rootType.structType
         var seenCols : table<string; bool>
         for (colName in recordNames) {
             if (key_exists(seenCols, colName)) {
@@ -4889,7 +4889,7 @@ def private analyze_set_clause(var setExpr : ExpressionPtr; var q : SqlQuery&;  
 [macro_function]
 def private build_returning_clause(rootT : TypeDeclPtr) : string {
     if (rootT == null || rootT.structType == null) return ""
-    var st = rootT.structType
+    let st = rootT.structType
     return build_string() $(var w) {
         w |> write(" RETURNING ")
         var first = true
@@ -5228,7 +5228,7 @@ def private validate_conflict_cols(rootT : TypeDeclPtr; conflictCols : array<str
         macro_error(prog, at, "_sql_upsert: row type has no struct (got {describe(rootT)})")
         return false
     }
-    var st = rootT.structType
+    let st = rootT.structType
     for (col in conflictCols) {
         var found = false
         for (f in st.fields) {
@@ -5268,7 +5268,7 @@ def private analyze_upsert_set_clause(var setExpr : ExpressionPtr; var rootT : T
         macro_error(prog, at, "_sql_upsert: do_update is empty - pass at least one (Col=expr) pair")
         return false
     }
-    var tupT = mkTup._type
+    let tupT = mkTup._type
     var recordNames : array<string>
     if (tupT != null && tupT.baseType == Type.tTuple
             && length(tupT.argNames) == length(mkTup.values)) {
@@ -5286,7 +5286,7 @@ def private analyze_upsert_set_clause(var setExpr : ExpressionPtr; var rootT : T
         }
     }
     if (rootT != null && rootT.structType != null) {
-        var st = rootT.structType
+        let st = rootT.structType
         var seenCols : table<string; bool>
         for (colName in recordNames) {
             if (key_exists(seenCols, colName)) {

@@ -3727,7 +3727,7 @@ def private vulkan_resident_batch_decode(t : Model; var ws : BatchWorkspace; var
 def private rdec_batch_rows_served(t : Model; ws : BatchWorkspace; sessions : array<Session?>; nrows : int64) : bool {
     let c = t.config
     for (i in range64(nrows)) {
-        var s = sessions[i]
+        let s = sessions[i]
         return false if (!rdec_session_codec_ok(*s))
         if (ws.positions[i] + 1l > g_rdec_cap) {
             rdec_pass_once(RdecPass.cap, ws.positions[i], g_rdec_cap)

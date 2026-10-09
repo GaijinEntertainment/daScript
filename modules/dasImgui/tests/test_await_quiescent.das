@@ -35,7 +35,7 @@ let AWAIT_QUIESCENT_FEATURE = "modules/dasImgui/examples/features/await_quiescen
 def test_imgui_await(t : T?) {
     with_imgui_app(AWAIT_QUIESCENT_FEATURE) $(d) {
         // Gate 1: idle quiescence.
-        var snap0 = wait_for_widget(d, "MAIN_WIN/DEMO_SLIDER", 15.0f)
+        let snap0 = wait_for_widget(d, "MAIN_WIN/DEMO_SLIDER", 15.0f)
         t |> success(snap0 != null, "DEMO_SLIDER reachable")
         if (snap0 == null) return
         let idle = await_probe(d)

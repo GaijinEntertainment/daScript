@@ -27,7 +27,7 @@ def test_value_table_key(t : T?) {
 
     let val = tab ?[EntityId(1)] ?? "goodbye"
     t |> equal(val, "hello")
-    var ptab = unsafe(addr(tab))
+    let ptab = unsafe(addr(tab))
     let q = ptab ?[EntityId(2)] ?? "goodbye"
     t |> equal(q, "world")
 

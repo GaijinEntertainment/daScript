@@ -25,7 +25,7 @@ def test_ast_gc_guard_panic_recover(t : T?) {
     var recovered = false
     try {
         ast_gc_guard() {
-            var tmp = qmacro(type<int>)
+            let tmp = qmacro(type<int>)
             panic("boom")
         }
     } recover {

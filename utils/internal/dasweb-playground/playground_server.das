@@ -323,7 +323,7 @@ def private handle_share_link(var req : HttpRequest?; var resp : HttpResponse?) 
     return resp |> REDIRECT("/playground/index.html?s={hash}", http_status.FOUND)
 }
 
-def private body_toolchain_of(var req : HttpRequest?; var ok : bool&) : string {
+def private body_toolchain_of(req : HttpRequest?; var ok : bool&) : string {
     //! A builder body is a bare toolchain id. A das string ends at the first
     //! NUL, so "abc1234\0junk" would validate as a clean 7-hex id and be
     //! stored as one — the same asymmetry the sample route guards against.
@@ -537,7 +537,7 @@ def private build_status_payload(hash : string; toolchain : string) : string {
         let base = st.mode == BUILD_MODE_PAGE ? g_build.page_origin : ""
         var urls : array<JsonValue?>
         var jerr = ""
-        var names = read_json(st.artifact_files, jerr)
+        let names = read_json(st.artifact_files, jerr)
         if (names != null && names.value is _array) {
             urls |> reserve(length(names.value as _array))
             for (n in names.value as _array) {
