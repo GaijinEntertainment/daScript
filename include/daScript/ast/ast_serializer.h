@@ -365,7 +365,7 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 223;   // 223: TypeDecl::serialize writes the alias of an option type
+            return 224;   // 224: a nested splice keeps the alwaysSafe mark on a substituted reference binding
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;

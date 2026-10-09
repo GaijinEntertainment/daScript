@@ -439,7 +439,11 @@ namespace das {
                 if ( expr->variable ) {
                     auto it = paramSub.find(expr->variable);
                     if ( it != paramSub.end() ) {
-                        if ( it->second.substitute ) return it->second.substitute->clone();
+                        if ( it->second.substitute ) {
+                            auto sub = it->second.substitute->clone();
+                            if ( expr->alwaysSafe && sub->rtti_isVar() ) sub->alwaysSafe = true;
+                            return sub;
+                        }
                         return new ExprVar(tempAt, it->second.tempName);
                     }
                 }
