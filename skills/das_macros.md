@@ -226,25 +226,25 @@ grammar. Canonical adoption is `daslib/sql_linq.das` (37+ sites).
 For AST work the two matchers divide by what the pattern looks like: **`qmatch`** when it is
 *daslang source syntax* (`qmatch(that, $e(fa) * $e(fb))`) - operator trees, call shapes, field
 chains spelled as code; **`match`** when it is *node classes and fields*, or plain value dispatch
-(`match (op) { if ("*") ... }`, enum tables).
+(`match (op) { "*" => ... }`, enum tables).
 
 ```das
-match (keySide) {                   // null guard, is/as and ExprRef2Value peel are emitted for you
-    if (ExprField(name = "key", value = ExprVar(name = match_expr(bindName)))) { return true }
-    if (_) { return false }
+return match (keySide) {            // null guard, is/as and ExprRef2Value peel are emitted for you
+    ExprField(name = "key", value = ExprVar(name = match_expr(bindName))) => true
+    _ => false
 }
-return false   // match is statement-shaped; flow analysis wants the trailing return
 ```
 
-- **Alternation `||` works in field position** - `ExprOp2(op = "+" || "-")` - and at arm level;
-  guards compose with `&&` over captures and locals. **`match_expr(localVar)`** compares a field
-  against a runtime expression (a `das_string` field compares against a `string` local directly).
+- **Alternation `|` works in field position** - `ExprOp2(op = "+" | "-")` - and at arm level;
+  guards compose with `&&` over bound names and locals. A bare name binds; **`match_expr(localVar)`**
+  compares a field against a runtime expression (a `das_string` field compares against a `string`
+  local directly).
 - **das-vector fields can NOT be destructured** - `ExprCall.arguments` and `ExprBlock.list` are
   `dasvector`-backed and the array-pattern arm rejects them ("is not an array"). Capture the node
   and index it by hand; this is why deep block-shape probes stay hand-rolled.
-- **Statement-shaped, not expression-shaped** - a tuple-returning recognizer mixing name dispatch
-  with structural probes usually reads better hand-rolled; convert only when the ladder *is* the
-  function.
+- **Value form when the arms only produce values** - `return match (...) { ... _ => ... }` inlines to
+  the same if-chain as the statement form. A tuple-returning recognizer mixing name dispatch with
+  structural probes usually reads better hand-rolled; convert only when the ladder *is* the function.
 
 Canonical conversions: `component_read_of` + `zero_const_of` in `daslib/flatten_opt_common.das`.
 flatten_opt and the linq_fold family require BOTH libraries and use each where it fits.

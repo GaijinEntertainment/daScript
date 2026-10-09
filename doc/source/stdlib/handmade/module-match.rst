@@ -1,9 +1,11 @@
 The MATCH module implements pattern matching on variants, structs, tuples,
-arrays, and scalar values. Supports variable capture (``$v(name)``), wildcards
-(``_``), guard expressions (``&&``), and alternation (``||``).
+arrays, and scalar values. Each arm is ``pattern => body``. A bare name in a
+pattern binds the matched value, ``_`` matches anything, ``&&`` adds a guard,
+and ``|`` separates alternatives.
 
-``match`` is a **statement**, not an expression — write the arms so each one
-assigns or returns, rather than expecting the ``match`` itself to produce a value.
+As a statement, a multi-statement body is a ``$ { }`` block whose ``return``
+leaves the enclosing function. In value position ``match`` is an expression:
+every body is an expression and the last arm must always match.
 Arms are tried in source order and the first one that matches wins; a pattern
 that cannot apply to the subject type is a compile error. ``static_match``
 drops such arms silently instead of erroring, which is what makes it usable in
@@ -30,12 +32,11 @@ Example:
     }
 
     def describe(c : Color) : string {
-        match (c) {
-            if (Color.red) { return "red"; }
-            if (Color.green) { return "green"; }
-            if (_) { return "other"; }
+        return match (c) {
+            Color.red => "red"
+            Color.green => "green"
+            _ => "other"
         }
-        return "?"
     }
 
     [export]

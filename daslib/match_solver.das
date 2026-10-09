@@ -34,6 +34,9 @@ def public is_rest(p : Expression const?) : bool {
 }
 
 [macro_function]
+def public is_arrow_arm(e : Expression?) : bool => e is ExprMakeTuple && length((e as ExprMakeTuple).values) == 2
+
+[macro_function]
 def public op_sides(var e : Expression?; op : string) : array<Expression?> {
     //! The operands of a chain of one binary operator, left to right.
     return <- [e] if (e == null || !(e is ExprOp2) || (e as ExprOp2).op != op)

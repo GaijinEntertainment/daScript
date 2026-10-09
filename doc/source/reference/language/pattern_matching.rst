@@ -8,20 +8,91 @@ Pattern matching allows you to compare a value against a set of structural patte
 fields when a pattern matches.
 In Daslang, pattern matching is implemented via macros in the ``daslib/match`` module.
 
-``match`` is a statement, not an expression. Each arm is a block, and a value leaves the
-match through a ``return`` (or an assignment) inside that arm. ``return match ( x ) { ... }``
-is an error — the compiler reports ``error[30220]`` and asks for the match to be written as a
-statement whose arms return.
-
-Enumeration Matching
---------------------
-
-You can match on enumeration values using the ``match`` keyword. Each ``if`` clause represents a pattern to test.
-The ``_`` pattern is a catch-all that matches anything not covered by previous cases:
+A ``match`` is a list of arms. Each arm is ``pattern => body``; the first arm whose pattern
+matches runs, and the rest are skipped:
 
 .. code-block:: das
 
     require daslib/match
+
+    def describe_number ( n : int ) {
+        match ( n ) {
+            0 => $ { return "zero" }
+            1 | 2 => $ { return "one or two" }
+            _ => $ { return "many" }
+        }
+        return "unreachable"
+    }
+
+Arm bodies
+----------
+
+A body of several statements is a block literal, ``$ { ... }``. The block is spliced in place,
+so ``return`` inside it returns from the enclosing function and ``break`` / ``continue`` act on the
+enclosing loop. A body that is a single expression needs no block:
+
+.. code-block:: das
+
+    def print_sign ( n : int ) {
+        match ( n ) {
+            0 => print("zero\n")
+            _ => $ {
+                let sign = n > 0 ? "positive" : "negative"
+                print("{sign}\n")
+            }
+        }
+    }
+
+An assignment binds looser than ``=>``, so ``pattern => total += n`` does not parse as an arm.
+Write an assignment body as a block: ``pattern => $ { total += n }``.
+
+A plain ``{ ... }`` after ``=>`` is a table literal, not a block - always write the ``$``.
+
+match as a value
+----------------
+
+In value position - an initializer, a ``return``, an operand - ``match`` produces the value of the
+arm that matched. Every body is then an expression, and the last arm must always match
+(``_`` or a bare name), so every path yields a value:
+
+.. code-block:: das
+
+    def color_code ( c : int ) : string {
+        return match ( c ) {
+            0 => "black"
+            1 => "red"
+            _ => "other"
+        }
+    }
+
+The value form compiles to a block that the inliner splices back in place, so it costs nothing over
+the statement form. When arms produce different types - ``Square?`` and ``Rect?`` for a ``Shape?``
+result - the match takes the declared result type of the function it returns from, or the declared
+type of the variable it initializes.
+
+Binding names
+-------------
+
+A bare name in a pattern binds the matched value to a new variable, visible in the guard and the
+body. It never compares against an existing variable of the same name - it shadows it. ``_`` matches
+anything and binds nothing. To compare against the value of an existing variable, wrap it in
+``match_expr`` (see `Match Expressions`_):
+
+.. code-block:: das
+
+    def at_limit ( x, limit : int ) {
+        return match ( x ) {
+            match_expr(limit) => "at limit"
+            other => "{other} is not {limit}"
+        }
+    }
+
+Enumeration Matching
+--------------------
+
+Enumeration values match by their qualified name:
+
+.. code-block:: das
 
     enum Color {
         Black
@@ -30,24 +101,18 @@ The ``_`` pattern is a catch-all that matches anything not covered by previous c
         Blue
     }
 
-    def enum_match (color:Color) {
-        match ( color ) {
-            if ( Color.Black ) {
-                return 0
-            }
-            if ( Color.Red ) {
-                return 1
-            }
-            if ( _ ) {
-                return -1
-            }
+    def enum_match ( color : Color ) {
+        return match ( color ) {
+            Color.Black => 0
+            Color.Red => 1
+            _ => -1
         }
     }
 
 Matching Variants
 -----------------
 
-Variants can be matched using the ``as`` keyword to test and bind to a specific case:
+A variant pattern is spelled like the variant constructor; the field value is itself a pattern:
 
 .. code-block:: das
 
@@ -56,71 +121,31 @@ Variants can be matched using the ``as`` keyword to test and bind to a specific 
         f : float
     }
 
-    def variant_as_match (v:IF) {
-        match ( v ) {
-            if ( _ as i ) {
-                return "int"
-            }
-            if ( _ as f ) {
-                return "float"
-            }
-            if ( _ ) {
-                return "anything"
-            }
+    def variant_match ( v : IF ) {
+        return match ( v ) {
+            IF(i = 0) => "int zero"
+            IF(i = n) => "int {n}"
+            IF(f = x) => "float {x}"
+            _ => "anything"
         }
     }
 
-Variants can also be matched using constructor syntax:
+The ``as`` form tests the alternative by name, with the pattern on its left:
 
 .. code-block:: das
 
-    def variant_match (v : IF) {
-        match ( v ) {
-            if ( IF(i=$v(i)) ) {
-                return 1
-            }
-            if ( IF(f=$v(f)) ) {
-                return 2
-            }
-            if ( _ ) {
-                return 0
-            }
-        }
-    }
-
-Here ``$v(i)`` declares a variable ``i`` that is bound to the matched variant field.
-
-Declaring Variables in Patterns
--------------------------------
-
-The ``$v(name)`` syntax declares a new variable and binds it to the matched value.
-This works in any pattern, not just variant matching:
-
-.. code-block:: das
-
-    variant IF {
-        i : int
-        f : float
-    }
-
-    def variant_as_match (v:IF) {
-        match ( v ) {
-            if ( $v(as_int) as i ) {
-                return as_int
-            }
-            if ( $v(as_float) as f ) {
-                return int(as_float)
-            }
-            if ( _ ) {
-                return -1
-            }
+    def variant_as_match ( v : IF ) {
+        return match ( v ) {
+            as_int as i => as_int
+            as_float as f => int(as_float)
+            _ => -1
         }
     }
 
 Matching Structs
 ----------------
 
-Structs can be matched by specifying field values or binding fields to variables:
+Structs match by field values, binding the fields given a name:
 
 .. code-block:: das
 
@@ -128,24 +153,22 @@ Structs can be matched by specifying field values or binding fields to variables
         a : int
     }
 
-    def struct_match (f:Foo) {
-        match ( f ) {
-            if ( Foo(a=13) ) {
-                return 0
-            }
-            if ( Foo(a=$v(anyA)) ) {
-                return anyA
-            }
+    def struct_match ( f : Foo ) {
+        return match ( f ) {
+            Foo(a = 13) => 0
+            Foo(a = anyA) => anyA
         }
     }
 
-The first case matches only when ``a`` is 13. The second case matches any ``Foo`` and binds ``a`` to the variable ``anyA``.
+The first arm matches only when ``a`` is 13. The second matches any ``Foo`` and binds ``a`` to ``anyA``.
+A pointer to a struct matches the same way; a ``null`` pointer fails every struct pattern, and a
+``null`` arm matches it explicitly.
 
 Using Guards
 ------------
 
-Guards are additional conditions that must be satisfied for a match to succeed.
-They are specified with ``&&`` after the pattern:
+A guard is an extra condition after ``&&``; the arm matches only when the pattern matches and the
+guard is true. The guard sees the names the pattern binds:
 
 .. code-block:: das
 
@@ -153,41 +176,49 @@ They are specified with ``&&`` after the pattern:
         a, b : int
     }
 
-    def guards_match (ab:AB) {
-        match ( ab ) {
-            if ( AB(a=$v(a), b=$v(b)) && (b > a) ) {
-                return "{b} > {a}"
-            }
-            if ( AB(a=$v(a), b=$v(b)) ) {
-                return "{b} <= {a}"
-            }
+    def guards_match ( ab : AB ) {
+        return match ( ab ) {
+            AB(a = a, b = b) && b > a => "{b} > {a}"
+            AB(a = a, b = b) => "{b} <= {a}"
         }
     }
+
+Alternatives with ``|``
+-----------------------
+
+``p1 | p2`` matches when either pattern matches. Both sides must bind the same names to the same
+fields:
+
+.. code-block:: das
+
+    struct Bar {
+        a : int
+        b : float
+    }
+
+    def or_match ( B : Bar ) {
+        return match ( B ) {
+            Bar(a = 1 | 2, b = b) => b
+            _ => 0.0
+        }
+    }
+
+Inside a guard and inside ``match_expr``, ``|`` stays the bitwise operator.
 
 Tuple Matching
 --------------
 
-Tuples are matched using value or wildcard patterns. The ``...`` pattern matches any number of elements:
+Tuples are matched element by element. The ``...`` pattern matches any number of elements:
 
 .. code-block:: das
 
     def tuple_match ( A : tuple<int;float;string> ) {
-        match ( A ) {
-            if ((1,_,"3")) {
-                return 1
-            }
-            if ((13,...)) {      // starts with 13
-                return 2
-            }
-            if ((...,"13")) {    // ends with "13"
-                return 3
-            }
-            if ((2,...,"2")) {   // starts with 2, ends with "2"
-                return 4
-            }
-            if ( _ ) {
-                return 0
-            }
+        return match ( A ) {
+            (1, _, "3") => 1
+            (13, ...) => 2          // starts with 13
+            (..., "13") => 3        // ends with "13"
+            (2, ..., "2") => 4      // starts with 2, ends with "2"
+            _ => 0
         }
     }
 
@@ -201,22 +232,12 @@ Static arrays use the ``fixed_array`` pattern and support the same wildcard and 
 .. code-block:: das
 
     def static_array_match ( A : int[3] ) {
-        match ( A ) {
-            if ( fixed_array($v(a),$v(b),$v(c)) && (a+b+c)==6 ) { // total of 3 elements, sum is 6
-                return 1
-            }
-            if ( fixed_array(0,...) ) {    // starts with 0
-                return 0
-            }
-            if ( fixed_array(...,13) ) {   // ends with 13
-                return 2
-            }
-            if ( fixed_array(12,...,12) ) {    // starts and ends with 12
-                return 3
-            }
-            if ( _ ) {
-                return -1
-            }
+        return match ( A ) {
+            fixed_array(a, b, c) && a + b + c == 6 => 1   // total of 3 elements, sum is 6
+            fixed_array(0, ...) => 0                      // starts with 0
+            fixed_array(..., 13) => 2                     // ends with 13
+            fixed_array(12, ..., 12) => 3                 // starts and ends with 12
+            _ => -1
         }
     }
 
@@ -229,68 +250,31 @@ The number of explicit elements in the pattern is checked against the array leng
 .. code-block:: das
 
     def dynamic_array_match ( A : array<int> ) {
-        match ( A ) {
-            if ( [$v(a),$v(b),$v(c)] && (a+b+c)==6 ) { // total of 3 elements, sum is 6
-                return 1
-            }
-            if ( [0,0,0,...] ) {    // first 3 are 0
-                return 0
-            }
-            if ( [...,1,2] ) {      // ends with 1,2
-                return 2
-            }
-            if ( [0,1,...,2,3] ) {    // starts with 0,1, ends with 2,3
-                return 3
-            }
-            if ( _ ) {
-                return -1
-            }
+        return match ( A ) {
+            [a, b, c] && a + b + c == 6 => 1   // total of 3 elements, sum is 6
+            [0, 0, 0, ...] => 0                // first 3 are 0
+            [..., 1, 2] => 2                   // ends with 1,2
+            [0, 1, ..., 2, 3] => 3             // starts with 0,1, ends with 2,3
+            _ => -1
         }
     }
 
 Match Expressions
 -----------------
 
-The ``match_expr`` pattern matches when an expression involving previously declared variables equals the value.
-This is useful for expressing relationships between elements:
+The ``match_expr`` pattern matches when the value equals an expression, which may use the names bound
+earlier in the same pattern:
 
 .. code-block:: das
 
     def ascending_array_match ( A : int[3] ) {
-        match ( A ) {
-            if ( fixed_array($v(x),match_expr(x+1),match_expr(x+2)) ) {
-                return true
-            }
-            if ( _ ) {
-                return false
-            }
+        return match ( A ) {
+            fixed_array(x, match_expr(x + 1), match_expr(x + 2)) => true
+            _ => false
         }
     }
 
 Here the first element is bound to ``x``, and the second and third elements must equal ``x+1`` and ``x+2`` respectively.
-
-Matching with ``||``
---------------------
-
-The ``||`` operator matches either of the provided patterns. Both sides must declare the same variables:
-
-.. code-block:: das
-
-    struct Bar {
-        a : int
-        b : float
-    }
-
-    def or_match ( B:Bar ) {
-        match ( B ) {
-            if ( Bar(a=1,b=$v(b)) || Bar(a=2,b=$v(b)) ) {
-                return b
-            }
-            if ( _ ) {
-                return 0.0
-            }
-        }
-    }
 
 [match_as_is] Structure Annotation
 -----------------------------------
@@ -339,18 +323,14 @@ The required ``is`` and ``as`` operators:
         return default<CmdMove>
     }
 
-With these operators in place, you can match against ``CmdMove`` in a ``match`` statement:
+With these operators in place, you can match against ``CmdMove``:
 
 .. code-block:: das
 
-    def matching_as_and_is (cmd:Cmd) {
-        match ( cmd ) {
-            if ( CmdMove(x=$v(x), y=$v(y)) ) {
-                return x + y
-            }
-            if ( _ ) {
-                return 0.
-            }
+    def matching_as_and_is ( cmd : Cmd ) {
+        return match ( cmd ) {
+            CmdMove(x = x, y = y) => x + y
+            _ => 0.
         }
     }
 
@@ -389,14 +369,10 @@ Usage is identical to regular struct matching:
 
 .. code-block:: das
 
-    def matching_copy ( cmd:Cmd ) {
-        match ( cmd ) {
-            if ( CmdLocate(x=$v(x), y=$v(y), z=$v(z)) ) {
-                return x + y + z
-            }
-            if ( _ ) {
-                return 0.
-            }
+    def matching_copy ( cmd : Cmd ) {
+        return match ( cmd ) {
+            CmdLocate(x = x, y = y, z = z) => x + y + z
+            _ => 0.
         }
     }
 
@@ -405,30 +381,22 @@ Matching AST Nodes
 
 ``match`` decomposes compiler AST nodes (``ExpressionPtr``, ``TypeDeclPtr``, and other
 handled-type pointers) directly: the pattern names the node type, fields compare or
-capture, and nested node patterns recurse:
+bind, and nested node patterns recurse:
 
 .. code-block:: das
 
     require daslib/ast_boost
 
     def classify ( e : ExpressionPtr ) {
-        match ( e ) {
-            if ( ExprOp2(op="+", left=ExprOp2(op="*", left=$v(a), right=$v(b)), right=$v(c)) ) {
-                return "mad shape"
-            }
-            if ( ExprOp2(op="+" || "-") ) {
-                return "additive"
-            }
-            if ( ExprSwizzle(mask="xy", value=$v(v)) ) {
-                return "xy swizzle"
-            }
-            if ( _ ) {
-                return "other"
-            }
+        return match ( e ) {
+            ExprOp2(op = "+", left = ExprOp2(op = "*", left = a, right = b), right = c) => "mad shape"
+            ExprOp2(op = "+" | "-") => "additive"
+            ExprSwizzle(mask = "xy", value = v) => "xy swizzle"
+            _ => "other"
         }
     }
 
-A null pointer fails node patterns cleanly, so no explicit ``if ( null )`` arm is
+A null pointer fails node patterns cleanly, so no explicit ``null`` arm is
 required (one may still be used to handle null specifically). ``das_string`` fields
 (operator names, identifiers, swizzle masks) compare directly against string literals.
 Node-type checks are exact — ``ExprField`` does not match ``ExprSafeField``.
@@ -439,78 +407,48 @@ Static Matching
 ``static_match`` works like ``match``, but ignores patterns with type mismatches at compile time instead
 of reporting errors. This makes it suitable for generic functions:
 
-.. das-doc: skip
 .. code-block:: das
 
-    static_match ( match_expression ) {
-        if ( pattern_1 ) {
-            return result_1
-        }
-        if ( pattern_2 ) {
-            return result_2
-        }
-        ...
-        if ( _ ) {
-            return result_default
+    enum Shade {
+        light
+        dark
+    }
+
+    def enum_static_match ( shade, blah ) {
+        return static_match ( shade ) {
+            Shade.light => 0
+            match_expr(blah) => 1
+            _ => -1
         }
     }
 
-Example:
-
-.. code-block:: das
-
-    enum Color {
-        red
-        green
-        blue
-    }
-
-    def enum_static_match ( color, blah ) {
-        static_match ( color ) {
-            if ( Color.red ) {
-                return 0
-            }
-            if ( match_expr(blah) ) {
-                return 1
-            }
-            if ( _ ) {
-                return -1
-            }
-        }
-    }
-
-If ``color`` is not ``Color``, the first case is silently skipped. If ``blah`` is not ``Color``, the second case is skipped.
+If ``shade`` is not ``Shade``, the first arm is silently skipped. If ``blah`` is not ``Shade``, the second arm is skipped.
 The function always compiles regardless of the argument types.
 
 match_type
 ----------
 
-The ``match_type`` subexpression matches based on the type of an expression:
-
-.. das-doc: skip
-.. code-block:: das
-
-    if ( match_type(type<Type>, expr) ) {
-        // code to run if match is successful
-    }
-
-Example:
+The ``match_type(type<T>, pattern)`` subpattern matches when the value has type ``T``, then matches
+``pattern`` against it:
 
 .. code-block:: das
 
-    def static_match_by_type (what) {
-        static_match ( what ) {
-            if ( match_type(type<int>,$v(expr)) ) {
-                return expr
-            }
-            if ( _ ) {
-                return -1
-            }
+    def static_match_by_type ( what ) {
+        return static_match ( what ) {
+            match_type(type<int>, expr) => expr
+            _ => -1
         }
     }
 
 If ``what`` is of type ``int``, it is bound to ``expr`` and returned. Otherwise the catch-all returns ``-1``.
 
+
+The ``if ( pattern )`` arm form
+-------------------------------
+
+Earlier code spells an arm ``if ( pattern ) { body }`` and binds names with ``$v(name)``; in that
+form a bare name compares against the variable instead of binding. It still compiles, but a match
+block takes one form or the other, never both, and the ``pattern => body`` form is the one to write.
 
 .. seealso::
 

@@ -210,40 +210,51 @@ def table_by_id(t : auto(T)) {
 ## Pattern matching
 
 `require daslib/match` adds `match` and `static_match` - macros
-matching a value against structural patterns, binding parts of it. Each arm is an `if (pattern)`;
-enum cases use the dotted `Color.Red` form.
+matching a value against structural patterns, binding parts of it. Each arm is `pattern => body`;
+the first arm that matches runs. A body of several statements is a `$ { }` block - `return` inside
+it returns from the enclosing function; an assignment body always needs the block
+(`n => $ { total += n }`), and a bare `{ }` after `=>` is a table literal, not a block.
 
 | Pattern | Matches |
 |---|---|
 | `_` | anything (also any single element inside a sequence) |
 | `...` | zero or more elements inside a sequence |
-| `$v(n)` | binds the matched value to a new variable `n` |
-| `_ as f` / `$v(n) as f` | variant case `f`, optionally binding it |
-| `IF(f = $v(x))` | variant case by constructor syntax |
-| `Foo(a = 13)` / `Foo(a = $v(n))` | struct field equal to a value / bound |
+| `n` (a bare name) | anything, binding it to a new variable `n` - it never compares against an existing `n` |
+| `IF(f = x)` | variant case `f`, binding its value; `x as f` is the same test |
+| `Foo(a = 13)` / `Foo(a = n)` | struct field equal to a value / bound |
+| `Color.Red` | enum value (dotted form) |
 | `(1, _, "3")`, `(13, ...)`, `(..., "13")` | tuple by position |
-| `fixed_array($v(a), $v(b))`, `fixed_array(0, ...)` | fixed-size array |
-| `[$v(a), $v(b)]`, `[..., 1, 2]` | dynamic array (element count is checked) |
-| `pattern && cond` | guard - extra condition using the bound variables |
-| `pattern \|\| pattern` | either; both sides must bind the same variables |
-| `match_expr(x + 1)` | element equals an expression over already-bound variables |
-| `match_type(type<int>, $v(e))` | matches on the type of the expression |
+| `fixed_array(a, b)`, `fixed_array(0, ...)` | fixed-size array |
+| `[a, b]`, `[..., 1, 2]` | dynamic array (element count is checked) |
+| `pattern && cond` | guard - extra condition using the bound names |
+| `pattern \| pattern` | either; both sides must bind the same names |
+| `match_expr(limit)`, `match_expr(x + 1)` | equals an expression - an existing variable, or names bound earlier |
+| `match_type(type<int>, e)` | matches on the type of the value |
+
+
+In value position `match` is an expression: every body is an expression and the last arm must
+always match.
+
+```das
+def describe_number(n : int) : string {
+    return match (n) {
+        0 => "zero"
+        1 | 2 => "small"
+        k && k < 0 => "negative"
+        _ => "many"
+    }
+}
+```
 
 **`static_match`** silently drops arms whose pattern cannot possibly match the argument type, so
 it compiles for any type - the matcher to use inside a generic:
 
 ```das
 def static_kind(what) : string {
-    static_match (what) {
-        if (Color.Red) {
-            return "red"
-        }
-        if (match_type(type<int>, $v(n))) {
-            return "int {n}"
-        }
-        if (_) {
-            return "other"
-        }
+    return static_match (what) {
+        Color.Red => "red"
+        match_type(type<int>, n) => "int {n}"
+        _ => "other"
     }
 }
 ```
