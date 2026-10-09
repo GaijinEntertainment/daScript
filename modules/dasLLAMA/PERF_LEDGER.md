@@ -11,6 +11,21 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **MEASURED (2026-10-09, `direction-grade`) - where a short house reply's first token goes on the server, M1 Max, the
+  35B Q4_K-pure.** The house replay's server log beside the client's results (a per-request timeline: the prefill
+  windows the server ran with their GPU ms, the server's prefill-done and ttft, the client's first token), the 114 short
+  replies (64 completion tokens or fewer), medians: 374 uncached prompt tokens, prefilled in TWO windows (108 of 114 in
+  two or more), the windows' GPU time summed 679 ms, prefill done 696 ms, the server's ttft 696 ms, the client's first
+  token 752 ms. So the request's CPU side is 15 ms (prefill done less the windows' GPU time; p90 36) and the wire 12 ms
+  (client first token less server ttft; p90 582 where a request queued) - the gap above a single window's compute is
+  the WINDOW SPLIT, not the CPU: the prefill stops at every planned prefix checkpoint (the stable opening, the system
+  text) and runs the rest as its own window, and the windows past each request's largest cost a median 166 ms, 32% of
+  the short requests' window time (a 51-token window 178-191 ms, a 7-token one 40, a 16-token one 66, against the
+  300-token one at 1.4-1.5 ms a token). Sixteen tokens and fewer ride the gathered route (40-66 ms); seventeen to a few
+  hundred ride the tiles, where every populated expert pays a tile whatever its rows - the adaptive op above cuts that
+  tile, and the remaining lever is to keep the window whole: segment only the recurrent layers' scan at the checkpoint
+  positions and copy the state out there, so a checkpoint no longer ends a window.
+
 - **MEASURED (2026-10-09, `direction-grade`, external) - mlx-lm 0.32.0 on the house window, beside ours, on the M1 Max and
   the M5 Max.** `mlx-community/Qwen3.6-35B-A3B-4bit` (affine 4-bit, group 64) under mlx 0.32.3: a 4500-token prompt cache
   in 512-token chunks, then the 375-token window timed as served (`mx.eval` of the logits and the cache state, the cache
