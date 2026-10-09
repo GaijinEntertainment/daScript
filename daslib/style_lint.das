@@ -326,10 +326,13 @@ class StyleLintVisitor : AstVisitor {
         }
     }
 
+    def written_span(fn : FunctionPtr) : LineInfo =>
+        fn.atDecl.line != 0u ? fn.atDecl : fn.body.at
+
     def check_defer_pipe(fn : FunctionPtr) : void {
         if (fn.body == null || fn.at.fileInfo == null || fn.at.line == 0u) return
-        let body_at = fn.body.at
-        for (ln in range(int(body_at.line), int(body_at.last_line) + 1)) {
+        let span = written_span(fn)
+        for (ln in range(int(span.line), int(span.last_line) + 1)) {
             var src = ""
             get_file_source_line(fn.at.fileInfo, uint(ln)) $(line) {
                 src := line
@@ -374,7 +377,7 @@ class StyleLintVisitor : AstVisitor {
     def override visitFunction(var fn : FunctionPtr) : FunctionPtr {
         st037_pop_and_check("function '{fn.name}'", "split it into smaller functions", fn.at)
         if (fn.body != null) {
-            st038_check_length("function '{fn.name}'", "split it into smaller functions", fn.at, fn.atDecl.line != 0u ? fn.atDecl : fn.body.at)
+            st038_check_length("function '{fn.name}'", "split it into smaller functions", fn.at, written_span(fn))
         }
         st041_flush()
         current_function = null
