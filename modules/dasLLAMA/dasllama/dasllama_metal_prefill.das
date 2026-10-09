@@ -4951,7 +4951,7 @@ def private pf_twin_panels_wanted : bool {
         || g_pf_pso_kq_mm6_th != null || g_pf_pso_bf16_mm_th != null
         || g_pf_pso_hmm_th != null || pf_kq_iquant_th_any()   // the dev-W route and the iquant site twins read the panel
         || g_pf_pso_moe_mm_q8_th != null || g_pf_pso_moe_mm_mx4_th != null   //! the MoE down-site cvt consumes the panel too
-        || metal_kq_half_on())   //! the short window's k4 rows forms read the dual-stored twin
+        || metal_kq_half_any())   //! the short window's half-x rows forms read the dual-stored twin
 }
 
 def private pf_twin_panel(rows, kdim : int64) : MetalBuffer? {

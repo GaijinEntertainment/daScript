@@ -229,16 +229,17 @@ def private kq_k4_pairs_gate(t : T?; var queue; n, d, nr, ys : int) {
     }
 }
 
-// the k4 half-x wide forms (enc_kq_rows_half_k4): nr live rows of an f16 x twin against the CPU reference over the
-// same f16-lattice x, on the production decode PSOs; the twin holds eight rows, ys > d so a misplaced column lands
-// in the guard band
-def private kq_k4_half_gate(t : T?; var queue; n, d, nr, ys : int) {
-    let tag = "kq_rows_half_k4 n={n} d={d} nr={nr} ys={ys}"
+// a format's half-x route (enc_kq_rows_half: k4's wide forms, every other format's small-batch half stamps):
+// nr live rows of an f16 x twin against the CPU reference over the same f16-lattice x, on the production decode
+// PSOs; the twin holds eight rows, ys > d so a misplaced column lands in the guard band
+def private kq_half_gate(t : T?; var queue; fmt, n, d, nr, ys : int) {
+    let f = kq_fmt_of_id(fmt, "kq_half_gate")
+    let tag = "kq_rows_half_{f} n={n} d={d} nr={nr} ys={ys}"
     with_metal_cell(g_dev, queue) $(var mc : MetalCell) {
         let nb = n / 256
         let nsb = d * nb
         var inscope kq, ks : array<uint8>
-        kq_fill_planes(4, nsb, kq, ks)
+        kq_fill_planes(fmt, nsb, kq, ks)
         var inscope xv : array<float>
         xv |> resize(8 * n)
         for (i in range(8 * n)) {
@@ -246,31 +247,37 @@ def private kq_k4_half_gate(t : T?; var queue; n, d, nr, ys : int) {
         }
         var inscope xh <- [for (v in xv); float16(v)]
         var inscope dense <- dense_ref_env(nr, n, d, xv) $(r; var wrow) {
-            kq_row_ref(4, r * nb, nb, nsb, kq, ks, wrow)
+            kq_row_ref(fmt, r * nb, nb, nsb, kq, ks, wrow)
         }
         var inscope ref <- strided_ref(dense, d, ys, nr, -1000.0)
         let bks = mc |> in_plain(ks)
         let bkq = mc |> in_plain(kq)
         let bxh = mc |> in_plain(xh)
         let by = mc |> out_words(nr * ys, -1000.0)
+        let doff = kq_split_doff(fmt, nsb)
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
-            enc_kq_rows_half_k4(enc, mc.buf[bkq], 0ul, mc.buf[bks], 0ul, mc.buf[bxh], mc.buf[by], 0ul, int64(d), int64(n), int64(ys), int64(nr))
+            enc_kq_rows_half(enc, f, mc.buf[bkq], 0ul, mc.buf[bks], 0ul, doff, mc.buf[bxh], mc.buf[by], 0ul, int64(d), int64(n), int64(ys), int64(nr))
         }
         return if (!ran)
         check_buf(t, tag, mc.buf[by], ref.want, env_bar(2e-4, ref.env), Shape(row_width = ys), ref.env)
     }
 }
 
+//! every K-quant format with a half-x route, by id (the race table's thirteen)
+let private KQ_HALF_FORMATS <- [2, 3, 4, 5, 6, 23, 24, 25, 33, 34, 40, 44, 45]
+
 [test]
-def test_metal_kq_k4_half_forms(t : T?) {
-    t |> run("the k4 half-x wide forms match the CPU reference at every row count the dispatcher serves") <| @(t : T?) {
+def test_metal_kq_half_forms(t : T?) {
+    t |> run("every format's half-x route matches the CPU reference at every row count the dispatcher serves") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
             with_metal_decode_gate(t) $(var queue : MetalCommandQueue?) {
-                kq_k4_half_gate(t, queue, 768, 17, 2, 22)   // the two-column form; d=17 leaves a tail row pair
-                kq_k4_half_gate(t, queue, 768, 17, 3, 22)   // the four-column form with one pad column
-                kq_k4_half_gate(t, queue, 768, 33, 4, 40)
-                kq_k4_half_gate(t, queue, 512, 17, 5, 22)   // the eight-column form with three pad columns
-                kq_k4_half_gate(t, queue, 512, 33, 8, 40)
+                for (fmt in KQ_HALF_FORMATS) {
+                    kq_half_gate(t, queue, fmt, 768, 17, 2, 22)   // the two-column form; d=17 leaves a tail row pair
+                    kq_half_gate(t, queue, fmt, 768, 17, 3, 22)   // the four-column form with one pad column
+                    kq_half_gate(t, queue, fmt, 768, 33, 4, 40)
+                    kq_half_gate(t, queue, fmt, 512, 17, 5, 22)   // the eight-row form with three pad columns
+                    kq_half_gate(t, queue, fmt, 512, 33, 8, 40)
+                }
             }
         } else {
             t |> skip("das_metal is not built on this platform")

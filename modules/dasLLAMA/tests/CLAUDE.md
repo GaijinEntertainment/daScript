@@ -94,7 +94,10 @@ twin on the q8_0 mirror, no chunked dispatch on either; the same deep steps with
 (`set_metal_attn_d(false)`) are the control: the chunked pair serves every deep step and the fused
 stamp none, the tokens still the CPU's),
 batch test: `batch` (whole test), `batchB7-partd`, `batchB8-kq`, `batch-ff` (real-text forced feed,
-GPU single vs GPU batch at B=2/B=4 on identical tokens, logits tolerance).
+GPU single vs GPU batch at B=2/B=4 on identical tokens, logits tolerance). The whole test is gated on
+`batch` first, and a filter token matches an arm name as a substring OF THE NAME, so `--arm batchB8-kq`
+alone skips the whole test (`batchB8-kq` is not a substring of `batch`); `--arm batch` runs every batch
+arm, and is the way to reach a sub-arm.
 
 MTP parity (`test_metal_mtp_parity.das`, suite `mtp`): `mtp-ctrl-<tag> mtp-ff-<tag> mtp-ffk-<tag>
 mtp-vff-<tag> mtp-count-<tag>` per fixture tag `0.8b 4b 9b 27b 35b 3.8-27b 3.8fn` (4b = Qwen3.5-4B-MTP

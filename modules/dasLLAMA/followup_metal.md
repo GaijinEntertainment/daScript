@@ -1036,13 +1036,12 @@ form already beats the production forms (0.76 of their time at four and eight co
 decode's ALU. Register-resident x walked over four or eight weight rows (the mlx `qmv_wide` shape) loses on both boxes:
 sixty-four floats of x spill. Reading x as halves (`MetalKqMvW*K4H`, the f16 twin the prefill tiles already stage)
 halves the x bytes and lands the wide forms at 1.26, 1.8 and 2.8 passes for two, four and eight columns on the M1 and
-0.61 of the production time at eight columns on the M5 (`PERF_LEDGER.md`, the 2026-10-09 race tables). The k4 half-x
-forms serve under the `kq_rows_half_k4` crown off the rows norm's and the activation's dual-store twins
-(`ARCHITECTURE_GPU_MTP_DECODE.md#kq-rows-crown`). The work left: the same forms for every other K-quant and grid format
-(k5, k6, k3, k2, iq4xs, iq4nl, q40, the iq3/iq2 grids) raced beside their production forms under one crown a format; a
-twin for wo's x - the attention output has no dual-store stamp, so wo keeps the f32 forms - and for the MTP head's
-projection rows; the prefill's wo and QKV peel sites under `CVT_MIN_ROWS`, whose twin only a dual-store writes; and a
-cheaper nibble decode for the ALU-bound boxes.
+0.61 of the production time at eight columns on the M5 (`PERF_LEDGER.md`, the 2026-10-09 race tables). Every format's
+half-x route serves under its own `kq_rows_half_<fmt>` crown off the rows norm's and the activation's dual-store twins -
+k4 through the wide forms, the rest through the half stamps of their small-batch forms, one x mixin for all
+(`ARCHITECTURE_GPU_MTP_DECODE.md#kq-rows-crown`). The work left: a twin for wo's x - the attention output has no
+dual-store stamp, so wo keeps the f32 forms - and for the MTP head's projection rows; the prefill's wo and QKV peel
+sites under `CVT_MIN_ROWS`, whose twin only a dual-store writes; and a cheaper nibble decode for the ALU-bound boxes.
 
 ## 46. The Metal vision chains decline a tower off their stamps' lattice whole
 

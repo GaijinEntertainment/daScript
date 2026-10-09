@@ -1819,14 +1819,14 @@ def private rows_tier(nrows : int64) : BatchTier => BatchTier(use_mm = false, us
 
 let private KQ_HALF_TWIN_ROWS = 8l   //! a half-x form reads every one of its columns, so a twin holds eight rows whatever the step's count
 
-//! the rows step writes the f16 twins: the half-x forms are on, the row count is theirs, and a k4 plane
-//! sits at a site the rows forms serve (q, k, v, the FFN's three; wo's x has no producer twin)
+//! the rows step writes the f16 twins: the row count is the half-x forms', and a plane of a format whose
+//! half crown is on sits at a site the rows forms serve (q, k, v, the FFN's three; wo's x has no producer twin)
 [arch(at="../ARCHITECTURE_GPU_MTP_DECODE.md#kq-rows-crown")]
 def private kq_half_rows(t : Model; nrows : int64) : bool {
-    return false if (!metal_kq_half_on() || nrows < 2l || nrows > KQ_HALF_TWIN_ROWS)
+    return false if (!metal_kq_half_any() || nrows < 2l || nrows > KQ_HALF_TWIN_ROWS)
     for (l in range64(t.config.n_layers)) {
-        if (fmt_at(t.wq_fmt, l) == KqFmt.k4 || fmt_at(t.wk_fmt, l) == KqFmt.k4 || fmt_at(t.wv_fmt, l) == KqFmt.k4
-                || fmt_at(t.w1_fmt, l) == KqFmt.k4 || fmt_at(t.w3_fmt, l) == KqFmt.k4 || fmt_at(t.w2_fmt, l) == KqFmt.k4) {
+        if (metal_kq_half_on(fmt_at(t.wq_fmt, l)) || metal_kq_half_on(fmt_at(t.wk_fmt, l)) || metal_kq_half_on(fmt_at(t.wv_fmt, l))
+                || metal_kq_half_on(fmt_at(t.w1_fmt, l)) || metal_kq_half_on(fmt_at(t.w3_fmt, l)) || metal_kq_half_on(fmt_at(t.w2_fmt, l))) {
             return true
         }
     }
@@ -4324,6 +4324,10 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
     L.pooled |> push((buf = bqkv, size = bytes_qkv))
     L.pooled |> push((buf = bhb, size = bytes_h))
     L.pooled |> push((buf = bhb2, size = bytes_h))
+    if (twins) {
+        L.pooled |> push((buf = bxh, size = bytes_xh))   // nolint:STYLE012
+        L.pooled |> push((buf = bfgh, size = bytes_fgh))
+    }
     if (use_attn_d || chunked) {
         L.pooled |> push((buf = bpart, size = bytes_part))
     }

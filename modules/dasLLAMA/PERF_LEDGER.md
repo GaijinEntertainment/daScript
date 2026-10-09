@@ -11,6 +11,43 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **MEASURED (2026-10-09, `direction-grade`) - every K-quant format's half-x rows route under its own
+  `kq_rows_half_<fmt>` crown, on the M1 Max and the M5 Max; the house replay and the short-answer bench on the 35B.**
+  The per-format race (`race_kq_half`, the last of the decode races: a 5120 x 16384 plane of the format, two, four and
+  eight rows in one timed encoder, the box's f32 route the base, the half route - k4's wide forms, every other format's
+  small-batch half stamps off one x mixin - the twin; both arms bit-equal, x on the f16 lattice; the kernels suite's
+  `test_kq_rows_race_verdicts` log). The half route wins every format on both boxes; the gain follows the format's
+  decode cost - the k4 nibble halves its time on the M1, the LUT grids (iq4xs, iq4nl) move a few percent:
+
+  | format | M1 f32 ms | M1 half ms | ratio | M5 f32 ms | M5 half ms | ratio |
+  |---|---|---|---|---|---|---|
+  | k4 (wide forms) | 3.378 | 1.829 | 0.54 | 1.013 | 0.724 | 0.71 |
+  | k5 | 3.309 | 2.989 | 0.90 | 1.273 | 1.190 | 0.93 |
+  | k6 | 3.027 | 2.457 | 0.81 | 1.078 | 0.988 | 0.92 |
+  | iq4xs | 3.768 | 3.577 | 0.95 | 1.161 | 1.125 | 0.97 |
+  | iq4nl | 3.734 | 3.544 | 0.95 | 1.142 | 1.119 | 0.98 |
+  | q40 | 3.052 | 2.503 | 0.82 | 0.865 | 0.805 | 0.93 |
+  | k3 | 2.946 | 2.438 | 0.83 | 0.949 | 0.883 | 0.93 |
+  | iq3s | 3.647 | 2.839 | 0.78 | 0.976 | 0.918 | 0.94 |
+  | iq3xxs | 3.515 | 2.880 | 0.82 | 0.934 | 0.878 | 0.94 |
+  | k2 | 2.822 | 2.425 | 0.86 | 0.907 | 0.842 | 0.93 |
+  | iq2s | 4.186 | 3.262 | 0.78 | 0.972 | 0.890 | 0.92 |
+  | iq2xs | 3.481 | 2.986 | 0.86 | 0.968 | 0.912 | 0.94 |
+  | iq2xxs | 3.520 | 2.880 | 0.82 | 0.917 | 0.870 | 0.95 |
+
+  The house assistant's recorded 124 requests replayed against `dasllama-server --ctx 32768 --streams 4` (its scorer;
+  two passes, the warm one read; `DASLLAMA_METAL_KQ_HALF` on / off / on, a fresh server each): the k4 crown moves nothing
+  and nothing regresses - M1 Max, Qwen3.6-35B-A3B Q4_K-pure, the 112 short replies (64 completion tokens or fewer) at a
+  wall median of 0.91 / 0.93 / 0.93 s and a first token of 0.74 / 0.78 / 0.80 s, 91% of the prompt tokens cached, 21 of
+  22 overheard cases silent on every leg; M5 Max, the UD-Q4_K_M file, 0.40 / 0.41 / 0.43 s and 0.30 / 0.29 / 0.30 s. The
+  short-answer bench (the same requests, each phase on a fresh server so a request meets the cache the house flow gives
+  it - a median of 375 uncached prompt tokens): alone, M1 0.94 / 0.93 / 0.95 s wall (first token 0.75 s), M5 0.36 /
+  0.38 / 0.39 s (0.26 s); two consecutive requests sent at once take 0.94-0.97 of the two alone summed on both boxes -
+  no gain, and the second request of a pair misses the first one's prefix (510 uncached tokens a request). A short
+  house reply is a 375-token MoE prefill at 20-60 rows per expert - the tiles' latency regime - plus a few single-row
+  decode steps; the rows forms serve neither. Fully cached repeats of the same set gain x1.3 from pairing on the M5, so
+  the two-row decode step itself batches well.
+
 - **MEASURED (2026-10-09, `direction-grade`) - the k4 half-x rows forms served under the `kq_rows_half_k4` crown, on
   the M1 Max and the M5 Max.** The crown race (`race_kq_k4_half`, 5120 x 24576 k4, two, four and eight rows in one
   encoder, the box's f32 route the base): M1 Max 4.986 -> 2.756 ms (the half forms at 0.55 of the k4 tile route), M5

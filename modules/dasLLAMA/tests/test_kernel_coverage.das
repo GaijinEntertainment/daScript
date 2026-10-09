@@ -96,15 +96,15 @@ let private CENSUS_NEVER_DISPATCHED <- [
     // test_metal_gemv_kernels.das / test_metal_gemm_kernels.das and the per-format e2e parity
     // rows recorded in HOW_TO_ADD_A_FORMAT.md. A class naming its own kernel records the bare
     // shader entry name, so those stamps sit here under it, not under the class
-    "metal_kq_gemv_k2", "MetalKqMvB2K2", "MetalKqMvB4K2", "metal_kq_mvb8_k2", "MetalKqMulMmK2",
-    "metal_kq_gemv_k3", "MetalKqMvB2K3", "MetalKqMvB4K3", "metal_kq_mvb8_k3", "MetalKqMulMmK3",
+    "metal_kq_gemv_k2", "MetalKqMvB2K2", "MetalKqMvB4K2", "MetalKqMvB8K2", "MetalKqMulMmK2",
+    "metal_kq_gemv_k3", "MetalKqMvB2K3", "MetalKqMvB4K3", "MetalKqMvB8K3", "MetalKqMulMmK3",
     "MetalKqGemvIq4xs", "MetalKqMvB2Iq4xs", "MetalKqMvB4Iq4xs", "MetalKqMvB8Iq4xs", "MetalKqMulMmIq4xs",
     "MetalKqGemvIq4nl", "MetalKqMvB2Iq4nl", "MetalKqMvB4Iq4nl", "MetalKqMvB8Iq4nl", "MetalKqMulMmIq4nl",
-    "metal_kq_gemv_iq3s", "MetalKqMvB2Iq3s", "MetalKqMvB4Iq3s", "metal_kq_mvb8_iq3s", "MetalKqMulMmIq3s",
-    "metal_kq_gemv_iq3xxs", "MetalKqMvB2Iq3xxs", "MetalKqMvB4Iq3xxs", "metal_kq_mvb8_iq3xxs", "MetalKqMulMmIq3xxs",
-    "metal_kq_gemv_iq2s", "MetalKqMvB2Iq2s", "MetalKqMvB4Iq2s", "metal_kq_mvb8_iq2s", "MetalKqMulMmIq2s",
-    "metal_kq_gemv_iq2xs", "MetalKqMvB2Iq2xs", "MetalKqMvB4Iq2xs", "metal_kq_mvb8_iq2xs", "MetalKqMulMmIq2xs",
-    "MetalKqGemvIq2xxs", "MetalKqMvB2Iq2xxs", "MetalKqMvB4Iq2xxs", "metal_kq_mvb8_iq2xxs", "MetalKqMulMmIq2xxs",
+    "metal_kq_gemv_iq3s", "MetalKqMvB2Iq3s", "MetalKqMvB4Iq3s", "MetalKqMvB8Iq3s", "MetalKqMulMmIq3s",
+    "metal_kq_gemv_iq3xxs", "MetalKqMvB2Iq3xxs", "MetalKqMvB4Iq3xxs", "MetalKqMvB8Iq3xxs", "MetalKqMulMmIq3xxs",
+    "metal_kq_gemv_iq2s", "MetalKqMvB2Iq2s", "MetalKqMvB4Iq2s", "MetalKqMvB8Iq2s", "MetalKqMulMmIq2s",
+    "metal_kq_gemv_iq2xs", "MetalKqMvB2Iq2xs", "MetalKqMvB4Iq2xs", "MetalKqMvB8Iq2xs", "MetalKqMulMmIq2xs",
+    "MetalKqGemvIq2xxs", "MetalKqMvB2Iq2xxs", "MetalKqMvB4Iq2xxs", "MetalKqMvB8Iq2xxs", "MetalKqMulMmIq2xxs",
     // the same nine formats' crown-gated forms (the metal-kq-race arc): the f4-slab GEMV twins
     // and the tensor mul_mm T/TH stamps compile only behind a box crown and dispatch only on
     // planes the zoo does not stock. Their coverage is the same kernel-unit gates plus the
@@ -125,6 +125,13 @@ let private CENSUS_NEVER_DISPATCHED <- [
     // the r2 arm of kq_mvb_gate plus the pair-walk gate in test_metal_gemv_kernels.das, and the
     // mtp suite's parity arms
     "metal_argmax_rows", "MetalKqMvB2K4R2",
+    // the half-x stamps of the formats the zoo's batched carriers DO hold (k4's wide forms, k5 and k6's
+    // small-batch forms): each compiles only behind its `kq_rows_half_<fmt>` crown, and dispatches only where
+    // the box crowned it. Their coverage is test_metal_kq_half_forms in test_metal_gemv_kernels.das and the
+    // batchB8-kq half leg of the decode parity file. The nine formats above cover their own half stamps by
+    // prefix (the stamp is the f32 class's name plus H)
+    "MetalKqMvW2K4H", "MetalKqMvW4K4H", "MetalKqMvW8K4H",
+    "MetalKqMvB2K5H", "MetalKqMvB4K5H", "MetalKqMvB8K5H", "MetalKqMvB2K6H", "MetalKqMvB4K6H", "MetalKqMvB8K6H",
     // the Q4_0 small-batch twins: the gemma4moe row reaches every other q40 dense stamp, but its
     // decode steps are single rows, so the B2/B4/B8 tiles need a batched carrier no zoo row runs.
     // The simdgroup dense mul_mm loses the box race to its own tensor stamp, so it never serves
@@ -694,6 +701,12 @@ let private CENSUS_CROWN_CONDITIONAL : table<string; string> <- {
     "MetalKqMvW2K4H" => "kq_rows_half_k4",
     "MetalKqMvW4K4H" => "kq_rows_half_k4",
     "MetalKqMvW8K4H" => "kq_rows_half_k4",
+    "MetalKqMvB2K5H" => "kq_rows_half_k5",
+    "MetalKqMvB4K5H" => "kq_rows_half_k5",
+    "MetalKqMvB8K5H" => "kq_rows_half_k5",
+    "MetalKqMvB2K6H" => "kq_rows_half_k6",
+    "MetalKqMvB4K6H" => "kq_rows_half_k6",
+    "MetalKqMvB8K6H" => "kq_rows_half_k6",
     "metal_kq_gemv_iq3s_f4" => "kq_gemv_iq3s_f4",
     "metal_moe_gemv_iq3s_f4" => "kq_gemv_iq3s_f4",
     "metal_kq_gemv_iq3xxs_f4" => "kq_gemv_iq3xxs_f4",

@@ -239,25 +239,25 @@ def private mvb_arms(f; nrow : int) : array<KqRaceArm> {   // nolint:STYLE037,ST
         } elif (f.fmt == 5) {
             arms |> push(KqRaceArm(name = "prod", src = MetalKqMvB8K5_metal_kq_mvb8_msl, entry = MetalKqMvB8K5_metal_kq_mvb8_msl_entry, fastmath = MetalKqMvB8K5_metal_kq_mvb8_msl_fastmath, tgmem = MetalKqMvB8K5_metal_kq_mvb8_msl_tgmem, gdiv = 8))
         } elif (f.fmt == 6) {
-            arms |> push(KqRaceArm(name = "prod", src = metal_kq_mvb8_k6_msl, entry = metal_kq_mvb8_k6_msl_entry, fastmath = metal_kq_mvb8_k6_msl_fastmath, tgmem = metal_kq_mvb8_k6_msl_tgmem, gdiv = 8))
+            arms |> push(KqRaceArm(name = "prod", src = MetalKqMvB8K6_metal_kq_mvb8_k6_msl, entry = MetalKqMvB8K6_metal_kq_mvb8_k6_msl_entry, fastmath = MetalKqMvB8K6_metal_kq_mvb8_k6_msl_fastmath, tgmem = MetalKqMvB8K6_metal_kq_mvb8_k6_msl_tgmem, gdiv = 8))
         } elif (f.fmt == 44) {
             arms |> push(KqRaceArm(name = "prod", src = MetalKqMvB8Iq4xs_metal_kq_mvb8_iq4_msl, entry = MetalKqMvB8Iq4xs_metal_kq_mvb8_iq4_msl_entry, fastmath = MetalKqMvB8Iq4xs_metal_kq_mvb8_iq4_msl_fastmath, tgmem = MetalKqMvB8Iq4xs_metal_kq_mvb8_iq4_msl_tgmem, gdiv = 8))
         } elif (f.fmt == 45) {
             arms |> push(KqRaceArm(name = "prod", src = MetalKqMvB8Iq4nl_metal_kq_mvb8_iq4_msl, entry = MetalKqMvB8Iq4nl_metal_kq_mvb8_iq4_msl_entry, fastmath = MetalKqMvB8Iq4nl_metal_kq_mvb8_iq4_msl_fastmath, tgmem = MetalKqMvB8Iq4nl_metal_kq_mvb8_iq4_msl_tgmem, gdiv = 8))
         } elif (f.fmt == 3) {
-            arms |> push(KqRaceArm(name = "prod", src = metal_kq_mvb8_k3_msl, entry = metal_kq_mvb8_k3_msl_entry, fastmath = metal_kq_mvb8_k3_msl_fastmath, tgmem = metal_kq_mvb8_k3_msl_tgmem, gdiv = 8))
+            arms |> push(KqRaceArm(name = "prod", src = MetalKqMvB8K3_metal_kq_mvb8_k3_msl, entry = MetalKqMvB8K3_metal_kq_mvb8_k3_msl_entry, fastmath = MetalKqMvB8K3_metal_kq_mvb8_k3_msl_fastmath, tgmem = MetalKqMvB8K3_metal_kq_mvb8_k3_msl_tgmem, gdiv = 8))
         } elif (f.fmt == 2) {
-            arms |> push(KqRaceArm(name = "prod", src = metal_kq_mvb8_k2_msl, entry = metal_kq_mvb8_k2_msl_entry, fastmath = metal_kq_mvb8_k2_msl_fastmath, tgmem = metal_kq_mvb8_k2_msl_tgmem, gdiv = 8))
+            arms |> push(KqRaceArm(name = "prod", src = MetalKqMvB8K2_metal_kq_mvb8_k2_msl, entry = MetalKqMvB8K2_metal_kq_mvb8_k2_msl_entry, fastmath = MetalKqMvB8K2_metal_kq_mvb8_k2_msl_fastmath, tgmem = MetalKqMvB8K2_metal_kq_mvb8_k2_msl_tgmem, gdiv = 8))
         } elif (f.fmt == 33) {
-            arms |> push(KqRaceArm(name = "prod", src = metal_kq_mvb8_iq3s_msl, entry = metal_kq_mvb8_iq3s_msl_entry, fastmath = metal_kq_mvb8_iq3s_msl_fastmath, tgmem = metal_kq_mvb8_iq3s_msl_tgmem, gdiv = 8))
+            arms |> push(KqRaceArm(name = "prod", src = MetalKqMvB8Iq3s_metal_kq_mvb8_iq3s_msl, entry = MetalKqMvB8Iq3s_metal_kq_mvb8_iq3s_msl_entry, fastmath = MetalKqMvB8Iq3s_metal_kq_mvb8_iq3s_msl_fastmath, tgmem = MetalKqMvB8Iq3s_metal_kq_mvb8_iq3s_msl_tgmem, gdiv = 8))
         } elif (f.fmt == 34) {
-            arms |> push(KqRaceArm(name = "prod", src = metal_kq_mvb8_iq3xxs_msl, entry = metal_kq_mvb8_iq3xxs_msl_entry, fastmath = metal_kq_mvb8_iq3xxs_msl_fastmath, tgmem = metal_kq_mvb8_iq3xxs_msl_tgmem, gdiv = 8))
+            arms |> push(KqRaceArm(name = "prod", src = MetalKqMvB8Iq3xxs_metal_kq_mvb8_iq3xxs_msl, entry = MetalKqMvB8Iq3xxs_metal_kq_mvb8_iq3xxs_msl_entry, fastmath = MetalKqMvB8Iq3xxs_metal_kq_mvb8_iq3xxs_msl_fastmath, tgmem = MetalKqMvB8Iq3xxs_metal_kq_mvb8_iq3xxs_msl_tgmem, gdiv = 8))
         } elif (f.fmt == 23) {
-            arms |> push(KqRaceArm(name = "prod", src = metal_kq_mvb8_iq2s_msl, entry = metal_kq_mvb8_iq2s_msl_entry, fastmath = metal_kq_mvb8_iq2s_msl_fastmath, tgmem = metal_kq_mvb8_iq2s_msl_tgmem, gdiv = 8))
+            arms |> push(KqRaceArm(name = "prod", src = MetalKqMvB8Iq2s_metal_kq_mvb8_iq2s_msl, entry = MetalKqMvB8Iq2s_metal_kq_mvb8_iq2s_msl_entry, fastmath = MetalKqMvB8Iq2s_metal_kq_mvb8_iq2s_msl_fastmath, tgmem = MetalKqMvB8Iq2s_metal_kq_mvb8_iq2s_msl_tgmem, gdiv = 8))
         } elif (f.fmt == 24) {
-            arms |> push(KqRaceArm(name = "prod", src = metal_kq_mvb8_iq2xs_msl, entry = metal_kq_mvb8_iq2xs_msl_entry, fastmath = metal_kq_mvb8_iq2xs_msl_fastmath, tgmem = metal_kq_mvb8_iq2xs_msl_tgmem, gdiv = 8))
+            arms |> push(KqRaceArm(name = "prod", src = MetalKqMvB8Iq2xs_metal_kq_mvb8_iq2xs_msl, entry = MetalKqMvB8Iq2xs_metal_kq_mvb8_iq2xs_msl_entry, fastmath = MetalKqMvB8Iq2xs_metal_kq_mvb8_iq2xs_msl_fastmath, tgmem = MetalKqMvB8Iq2xs_metal_kq_mvb8_iq2xs_msl_tgmem, gdiv = 8))
         } elif (f.fmt == 25) {
-            arms |> push(KqRaceArm(name = "prod", src = metal_kq_mvb8_iq2xxs_msl, entry = metal_kq_mvb8_iq2xxs_msl_entry, fastmath = metal_kq_mvb8_iq2xxs_msl_fastmath, tgmem = metal_kq_mvb8_iq2xxs_msl_tgmem, gdiv = 8))
+            arms |> push(KqRaceArm(name = "prod", src = MetalKqMvB8Iq2xxs_metal_kq_mvb8_iq2xxs_msl, entry = MetalKqMvB8Iq2xxs_metal_kq_mvb8_iq2xxs_msl_entry, fastmath = MetalKqMvB8Iq2xxs_metal_kq_mvb8_iq2xxs_msl_fastmath, tgmem = MetalKqMvB8Iq2xxs_metal_kq_mvb8_iq2xxs_msl_tgmem, gdiv = 8))
         }
     }
     return <- arms
