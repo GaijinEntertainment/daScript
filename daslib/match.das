@@ -8,8 +8,10 @@ module match shared private
 //!
 //! Provides ``match`` and ``static_match`` macros
 //! that decompose values by structure, variant, tuple, array, or constant comparison.
-//! Also provides ``match_type`` and ``match_expr`` helpers, guard expressions (``&&``),
-//! alternation (``||``), wildcard (``_``), and variable capture (``$v(name)``).
+//! Each arm is ``pattern => body``: a bare name binds, ``_`` matches anything, ``&&`` adds a guard,
+//! ``|`` separates alternatives.
+//! In value position ``match`` is an expression. Also provides ``match_type`` and ``match_expr``.
+//! The ``if (pattern)`` arm form with ``$v(name)`` capture still compiles.
 //! Structures annotated with ``[match_as_is]`` or ``[match_copy]`` enable custom matching.
 
 require daslib/ast_boost
@@ -38,6 +40,8 @@ struct MatchTo {
     prefix       : array<Expression?>             //! prefix statements (e.g. temporaries for match_copy)
     errors       : array<MatchError>                //! errors encountered during pattern analysis
     failed       : bool                             //! true if a hard error occurred (unresolved types etc.)
+    bind_names   : bool                             //! a `=>` arm, where a bare `x` in the pattern binds; an `if (pattern)` arm binds only `$v(x)`
+    by_ref       : table<string>                    //! bound names the body reads through the access itself, not a `let` copy: pointers and types that can't be copied
 }
 
 [macro_function, unused_argument(msg)]
@@ -51,6 +55,15 @@ def log_m(msg : string) {
 def match_error(var errors : array<MatchError>; msg : string; at : LineInfo) {
     errors |> push(MatchError(msg = msg, at = unsafe(addr(at))))
 }
+
+let private MATCH_BIND_SUFFIX = "`match`bind"
+
+[macro_function]
+def bound_name(name : string) : string =>
+    name |> ends_with(MATCH_BIND_SUFFIX) ? slice(name, 0, length(name) - length(MATCH_BIND_SUFFIX)) : name
+
+[macro_function]
+def describe_pattern(pat : Expression?) : string => replace(describe(pat), MATCH_BIND_SUFFIX, "")
 
 enum MatchType {
     //! Type of pattern match clause.
@@ -167,6 +180,9 @@ def private is_rest(p : Expression const?) : bool {
     let x = match_peel_r2v(p)
     return x is ExprTag && (x as ExprTag).name == "..."
 }
+
+[macro_function]
+def is_arrow_arm(e : Expression?) => e is ExprMakeTuple && length((e as ExprMakeTuple).values) == 2
 
 [macro_function]
 def match_struct(what : TypeDeclPtr; wths : ExprMakeStruct?; access : Expression?; var to : MatchTo) {
@@ -439,7 +455,7 @@ def private same_names(a, b : table<string; Expression?>; wth : ExprOp2?; var to
     //! Every name ``a`` binds, ``b`` binds too.
     for (k in keys(a)) {
         continue if (key_exists(b, k))
-        to.errors |> match_error("the sides of {wth.op} must bind the same names; `{k}` is bound on one side only", wth.at)
+        to.errors |> match_error("the sides of {to.bind_names ? "|" : string(wth.op)} must bind the same names; `{bound_name(k)}` is bound on one side only", wth.at)
         return false
     }
     return true
@@ -453,6 +469,7 @@ def match_alternatives(var wth : ExprOp2?; var to : MatchTo; matcher : block<(si
     var split = false
     for (side, si in sides, count()) {
         var sideTo : MatchTo
+        sideTo.bind_names = to.bind_names
         sideTo.declarations := to.declarations
         if (!invoke(matcher, side, sideTo)) {
             to.errors |> push_from(sideTo.errors)
@@ -461,6 +478,9 @@ def match_alternatives(var wth : ExprOp2?; var to : MatchTo; matcher : block<(si
         }
         for (k in keys(to.declarations)) {
             sideTo.declarations |> erase(k)
+        }
+        for (k in keys(sideTo.by_ref)) {
+            to.by_ref |> insert(k)
         }
         if (si == 0) {
             firstDecl := sideTo.declarations
@@ -489,7 +509,7 @@ def match_alternatives(var wth : ExprOp2?; var to : MatchTo; matcher : block<(si
 def match_bind(what : TypeDeclPtr; name : ExprVar?; access : Expression?; var to : MatchTo) {
     let tname = string(name.name)
     if (to.declarations |> key_exists(tname)) {
-        to.errors |> match_error("duplicate variable {tname}", name.at)
+        to.errors |> match_error("duplicate variable {bound_name(tname)}", name.at)
         return false
     }
     var cap = clone_expression(access)
@@ -498,6 +518,7 @@ def match_bind(what : TypeDeclPtr; name : ExprVar?; access : Expression?; var to
         cap |> force_at(name.at)
     }
     unsafe(to.declarations[tname]) = cap
+    to.by_ref |> insert(tname) if (what == null || !what.canCopy || what.isPointer)
     log_m("\tadd variable {tname} as {describe(access)}\n")
     return true
 }
@@ -552,7 +573,9 @@ def match_const(what : TypeDeclPtr; wth : Expression?; access : Expression?; var
     }
     log_m("\tadd condition {describe(access)} == {describe(wth)}\n")
     let ee = unsafe(reinterpret<Expression?>(wth))
-    var cond = qmacro($e(access) == $e(ee))
+    var cond = (wth is ExprConstBool && what.baseType == Type.tBool
+        ? ((wth as ExprConstBool).value ? qmacro($e(access)) : qmacro(!$e(access)))
+        : qmacro($e(access) == $e(ee)))
     cond |> force_at(wth.at)
     to.conditions |> emplace(cond)
     return true
@@ -562,6 +585,10 @@ def match_const(what : TypeDeclPtr; wth : Expression?; access : Expression?; var
 def match_any(what : TypeDeclPtr; wth : Expression?; access : Expression?; var to : MatchTo) {   // nolint:STYLE037 - exact-type `is` ladder over TypeDecl shapes
     if (LOG_MATCH) {
         log_m("match {describe(what)} {debug_expression(wth)}:\n")
+    }
+    if (to.bind_names) {
+        let bare = match_peel_r2v(wth)
+        if ((bare is ExprVar) && (bare as ExprVar).name != "_") return match_bind(what, bare as ExprVar, access, to)
     }
     if (wth is ExprTag) {
         return match_tag(what, wth, access, to)
@@ -638,6 +665,225 @@ def join_conditions(var conditions : array<Expression?>; at : LineInfo; joiner :
     return tail
 }
 
+[macro_function]
+def private bound_let(name : string; value : Expression?) : Expression? {
+    //! A name a ``=>`` arm binds, at the start of the arm: a read-only copy of the matched part.
+    var decl = qmacro_expr() {
+        let $i(name) = $e(value)
+    }
+    decl |> force_at(value.at)
+    return decl
+}
+
+[macro_function]
+def arm_body(arm : Expression?; as_value : bool; binds : array<Expression?>) : ExprBlock? {
+    //! The arm's body as a fresh block, after the ``let`` of every name the arm binds.
+    var nblk = new ExprBlock(at = arm.at)
+    for (b in binds) {
+        nblk.list |> emplace_new <| clone_expression(b)
+    }
+    var body = arm is ExprIfThenElse ? (arm as ExprIfThenElse).if_true : (arm as ExprMakeTuple).values[1]
+    if (as_value) {
+        nblk.list |> emplace_new <| new ExprReturn(at = arm.at, subexpr = clone_expression(body))
+        return nblk
+    }
+    body = body is ExprMakeBlock ? (body as ExprMakeBlock)._block : body
+    if (!(body is ExprBlock)) {
+        nblk.list |> emplace_new <| clone_expression(body)
+        return nblk
+    }
+    let src = body as ExprBlock
+    for (l in src.list) {
+        nblk.list |> emplace_new <| clone_expression(l)
+    }
+    for (l in src.finalList) {
+        nblk.finalList |> push(clone_expression(l))
+    }
+    return nblk
+}
+
+[macro_function]
+def prepare_sub_patterns(var pat : Expression?; bind_bare : bool; var names : array<string>) : void {
+    if (pat is ExprMakeTuple) {
+        for (v in (pat as ExprMakeTuple).values) {
+            prepare_pattern(v, bind_bare, names)
+        }
+    } elif (pat is ExprMakeArray) {
+        for (v in (pat as ExprMakeArray).values) {
+            prepare_pattern(v, bind_bare, names)
+        }
+    } elif (pat is ExprMakeStruct) {
+        for (st in (pat as ExprMakeStruct).structs) {
+            for (mf in *st) {
+                prepare_pattern(mf.value, bind_bare, names)
+            }
+        }
+    } elif (pat is ExprMakeVariant) {
+        for (mf in (pat as ExprMakeVariant).variants) {
+            prepare_pattern(mf.value, bind_bare, names)
+        }
+    } elif (pat is ExprAsVariant) {
+        prepare_pattern((pat as ExprAsVariant).value, bind_bare, names)
+    } elif (pat is ExprCall && !is_match_call(pat, "expr")) {
+        for (a in (pat as ExprCall).arguments) {
+            prepare_pattern(a, bind_bare, names)
+        }
+    }
+}
+
+[macro_function]
+def prepare_pattern(var pat : Expression?; bind_bare : bool; var names : array<string>) : void {
+    //! Before infer: rewrites pattern-level ``|`` into ``||`` (infer would const-fold ``1 | 2`` into ``3``) and collects the names the pattern binds.
+    if (pat is ExprOp2) {
+        var op2 = pat as ExprOp2
+        if (op2.op == "|") {
+            op2.op := "||"
+        }
+        prepare_pattern(op2.left, bind_bare, names)
+        prepare_pattern(op2.right, bind_bare, names) if (op2.op == "||")
+    } elif (pat is ExprVar) {
+        let vname = string((pat as ExprVar).name)
+        names |> push(vname) if (bind_bare && vname != "_")
+    } elif (pat is ExprTag) {
+        let tag = pat as ExprTag
+        names |> push(string((tag.subexpr as ExprVar).name)) if (tag.name == "v" && tag.subexpr is ExprVar)
+    } else {
+        prepare_sub_patterns(pat, bind_bare, names)
+    }
+}
+
+class private MatchBindRenamer : AstVisitor {
+    names : table<string>
+    @do_not_delete adapter : VisitorAdapter?
+    def hidden(var name : das_string) : void {
+        let n = string(name)
+        if (key_exists(names, n)) {
+            name := n + MATCH_BIND_SUFFIX
+        }
+    }
+    def override visitExprVar(var expr : ExprVar?) : Expression? {
+        hidden(expr.name)
+        return expr
+    }
+    def override visitExprAddr(var expr : ExprAddr?) : Expression? {
+        hidden(expr.target)
+        return expr
+    }
+    def override visitExprLet(var expr : ExprLet?) : Expression? {
+        for (v in expr.variables) {
+            hidden(v.name)
+        }
+        return expr
+    }
+    def override visitExprTag(var expr : ExprTag?) : Expression? {
+        if (expr.subexpr != null && expr.subexpr is ExprVar) {
+            hidden((expr.subexpr as ExprVar).name)
+        }
+        return expr
+    }
+    def override preVisitExprCallMacro(var expr : ExprCallMacro?) : void {
+        //! Reification macros (``qmacro`` and friends) keep their arguments away from visitors; their ``$v(name)`` tags still read the bound name.
+        for (a in expr.arguments) {
+            visit(a, adapter)
+        }
+    }
+}
+
+[macro_function]
+def hide_bound_names(arm : Expression?; var pattern : Expression?; bind_bare : bool) : void {
+    //! Before infer: gives every name the arm binds a private spelling across the whole arm - qmacro tags included - so infer can not resolve (and const-fold) it as an outer variable of the same name.
+    var names : array<string>
+    prepare_pattern(pattern, bind_bare, names)
+    var renamer = new MatchBindRenamer()
+    for (n in names) {
+        renamer.names |> insert(n) if (!ends_with(n, MATCH_BIND_SUFFIX))
+    }
+    if (!empty(renamer.names)) {
+        make_visitor(*renamer) $(adapter) {
+            renamer.adapter = adapter
+            visit(arm, adapter)
+            renamer.adapter = null
+        }
+    }
+    unsafe {
+        delete renamer
+    }
+}
+
+class private MatchParentFinder : AstVisitor {
+    //! Finds where a ``match`` call sits: a block statement, or a value - typed when it is a function-level ``return`` of a function with a declared result, or a ``let`` with a declared type.
+    target : Expression const?
+    is_statement : bool
+    @do_not_delete result_type : TypeDecl?
+    @do_not_delete value_type : TypeDecl?
+    block_depth : int
+    def is_target(expr : Expression const?) : bool => intptr(expr) == intptr(target)
+    def override preVisitFunction(var fun : FunctionPtr) : void {
+        if (fun.result != null && !fun.result.isAuto) {
+            result_type = fun.result
+        }
+    }
+    def override preVisitExprBlockExpression(blk : ExprBlock?; expr : ExpressionPtr) : void {
+        is_statement ||= is_target(expr)
+    }
+    def override preVisitExprMakeBlock(expr : ExprMakeBlock?) : void {
+        block_depth ++
+    }
+    def override visitExprMakeBlock(var expr : ExprMakeBlock?) : Expression? {
+        block_depth --
+        return expr
+    }
+    def override preVisitExprReturn(expr : ExprReturn?) : void {
+        if (block_depth == 0 && is_target(expr.subexpr)) {
+            value_type = result_type
+        }
+    }
+    def override visitExprLet(var expr : ExprLet?) : Expression? {
+        for (v in expr.variables) {
+            if (is_target(v.init) && v._type != null && !v._type.isAuto) {
+                value_type = v._type
+            }
+        }
+        return expr
+    }
+}
+
+struct private MatchParent {
+    is_statement : bool
+    value_type : TypeDeclPtr
+}
+
+[macro_function]
+def match_parent(expr : ExprCallMacro?) : MatchParent {
+    //! Where the ``match`` call sits; ``value_type`` is ``auto`` unless the value's type is declared.
+    var res = MatchParent(value_type = new TypeDecl(baseType = Type.autoinfer, at = expr.at))
+    return res if (expr.inFunction == null)
+    var finder = new MatchParentFinder(target = expr)
+    make_visitor(*finder) $(adapter) {
+        visit(expr.inFunction, adapter)
+    }
+    res.is_statement = finder.is_statement
+    if (finder.value_type != null) {
+        res.value_type = clone_type(finder.value_type)
+        res.value_type.flags.constant = false
+        res.value_type.flags.ref = false
+    }
+    unsafe {
+        delete finder
+    }
+    return <- res
+}
+
+[macro_function]
+def private report_match_failure(prog : ProgramPtr; to : MatchTo; pattern : Expression?; typ : TypeDeclPtr) : void {
+    for (e in to.errors) {
+        macro_error(prog, *e.at, e.msg)
+    }
+    if (empty(to.errors)) {
+        macro_error(prog, pattern.at, "pattern `{describe_pattern(pattern)}` does not match `{describe(typ)}`")
+    }
+}
+
 [call_macro(name="match")]
 class MatchMacro : AstCallMacro {
     //! Implements `match` macro.
@@ -653,10 +899,45 @@ class MatchMacro : AstCallMacro {
         for (ee in eblk.list) {
             if (ee is ExprIfThenElse) {
                 (ee as ExprIfThenElse).if_flags.doNotFold = true
+                hide_bound_names(ee, (ee as ExprIfThenElse).cond, false)
+            } elif (is_arrow_arm(ee)) {
+                hide_bound_names(ee, (ee as ExprMakeTuple).values[0], true)
             }
         }
     }
-    def override visit(prog : ProgramPtr; mod : Module?; expr : ExprCallMacro?) : Expression? {   // nolint:STYLE037 - exact-type `is` ladder over pattern node classes
+    def add_arm_branch(var arm : Expression?; var to : MatchTo; as_value : bool; access : Expression?; var iff : Expression?&;
+                       var catch_all : bool&; var prefix : array<Expression?>) : void {
+        //! Adds one matched arm (or one alternative of a split arm) to the if-chain, innermost first.
+        let binds <- [for (dv, dn in keys(to.declarations), values(to.declarations)); bound_let(dv, dn); where to.bind_names && !key_exists(to.by_ref, dv)]
+        var nblk = arm_body(arm, as_value, binds)
+        apply_template(nblk) $(rules) {
+            for (dv, dn in keys(to.declarations), values(to.declarations)) {
+                rules |> replaceVariable(dv) <| clone_expression(dn) if (!to.bind_names || key_exists(to.by_ref, dv))
+            }
+            rules |> replaceVarTag("_") <| clone_expression(access)
+        }
+        if (iff == null && empty(to.conditions)) {
+            catch_all = true
+            iff = nblk
+        } else {
+            var new_iff = new ExprIfThenElse(at = arm.at, cond = join_conditions(to.conditions, arm.at))
+            new_iff.if_true = nblk
+            new_iff.if_false = iff
+            iff = new_iff
+        }
+        prefix |> push_from(to.prefix)
+    }
+    def assemble(var prefix : array<Expression?>; var iff : Expression?; as_value : bool; var parent : MatchParent; at : LineInfo) : Expression? {
+        //! The match's code: the prefix, then the if-chain of the arms - inside an invoke when the match is a value.
+        prefix |> emplace(iff)
+        return qmacro($b(prefix)) if (!as_value)
+        var res = qmacro(invoke($() : $t(parent.value_type) {
+            $b(prefix)
+        }))
+        res |> force_at(at)
+        return res
+    }
+    def override visit(prog : ProgramPtr; mod : Module?; var expr : ExprCallMacro?) : Expression? {   // nolint:STYLE037 - exact-type `is` ladder over pattern node classes
         macro_verify(length(expr.arguments) == 2, prog, expr.at, "expecting match (what) <| block")
         assume what = expr.arguments[0]
         assume blk = expr.arguments[1]
@@ -665,15 +946,30 @@ class MatchMacro : AstCallMacro {
         macro_verify(blk is ExprMakeBlock, prog, expr.at, "match `block` argument must be immediate block declaration")
         var eblk = ((blk as ExprMakeBlock)._block as ExprBlock)
         macro_verify(empty(eblk.finalList), prog, expr.at, "match `block` argument can't have finally section")
+        var arrows = 0
         for (ee in eblk.list) {
             if (ee is ExprIfThenElse) {
                 let eite = ee as ExprIfThenElse
                 macro_verify(eite.if_false == null, prog, expr.at, "match to `if` can't have `else` section")
+            } elif (is_arrow_arm(ee)) {
+                arrows ++
             } else {
-                macro_error(prog, ee.at, "match `block` argument can only contain match-to calls, not {ee.__rtti}")
+                macro_error(prog, ee.at, "match `block` argument can only contain `pattern => body` arms, not {ee.__rtti}; an assignment body binds looser than `=>`, write `pattern => $ \{ a = b \}`")
                 return null
             }
         }
+        macro_verify(arrows == 0 || arrows == length(eblk.list), prog, expr.at, "match can't mix `if (pattern)` and `pattern => body` arms")
+        var parent <- match_parent(expr)
+        let as_value = arrows > 0 && !parent.is_statement
+        if (as_value) {
+            for (ee in eblk.list) {
+                if ((ee as ExprMakeTuple).values[1] is ExprMakeBlock) {
+                    macro_error(prog, ee.at, "match used as a value takes `pattern => expression` arms, not `$`-block bodies")
+                    return null
+                }
+            }
+        }
+        var catch_all = false
         let access = clone_expression(what)
         var iff : Expression?
         let eli = length(eblk.list)
@@ -681,60 +977,27 @@ class MatchMacro : AstCallMacro {
         var prefix : array<Expression?>
         for (ei in range(eli)) {
             {
-                var eto = (eblk.list[eli - ei - 1]) as ExprIfThenElse
+                let arm_index = eli - ei - 1
+                var arm = eblk.list[arm_index]
+                let pattern = arrows > 0 ? (arm as ExprMakeTuple).values[0] : (arm as ExprIfThenElse).cond
                 var to : MatchTo
-                if (match_any(what._type, eto.cond, access, to)) {
-                    log_m("match_any ok\n\n")
-                    var nblk = new ExprBlock(at = eto.at)
-                    for (l in (eto.if_true as ExprBlock).list) {
-                        nblk.list |> emplace_new <| clone_expression(l)
-                    }
-                    for (l in (eto.if_true as ExprBlock).finalList) {
-                        nblk.finalList |> push(clone_expression(l))
-                    }
-                    apply_template(nblk) $(rules) {
-                        for (dv, dn in keys(to.declarations), values(to.declarations)) {
-                            rules |> replaceVariable(dv) <| clone_expression(dn)
-                        }
-                        rules |> replaceVarTag("_") <| clone_expression(access)
-                    }
-                    if (iff == null && empty(to.conditions)) {
-                        iff = nblk
-                    } else {
-                        var new_iff = new ExprIfThenElse(at = eto.at, cond = join_conditions(to.conditions, eto.at))
-                        new_iff.if_true = nblk
-                        new_iff.if_false = iff
-                        iff = new_iff
-                    }
+                to.bind_names = arrows > 0
+                let matched = match_any(what._type, pattern, access, to)
+                if (matched) {
+                    add_arm_branch(arm, to, as_value, access, iff, catch_all, prefix)
                 } elif (report_match_errors || to.failed) {
-                    log_m("match_any failed\n\n")
                     any_errors = true
-                    if (!empty(to.errors)) {
-                        for (e in to.errors) {
-                            macro_error(prog, *e.at, e.msg)
-                        }
-                    } else {
-                        macro_error(prog, eto.at, "pattern `{describe(eto.cond)}` does not match `{describe(what._type)}`")
-                    }
+                    report_match_failure(prog, to, pattern, what._type)
                     break
-                }
-                static_if (LOG_MATCH) {
-                    for (e in to.errors) {
-                        log_m("\tERROR:: {e.msg} at {describe(*e.at)}\n")
-                    }
-                }
-                if (!empty(to.prefix)) {
-                    let p0 = length(prefix)
-                    prefix |> resize(p0 + length(to.prefix))
-                    for (p, i in to.prefix, count(p0)) {
-                        prefix[i] = p
-                    }
                 }
             }
         }
         if (any_errors) return null
-        prefix |> emplace(iff)
-        return qmacro($b(prefix))
+        if (as_value && !catch_all) {
+            macro_error(prog, expr.at, "match used as a value needs a last arm that always matches, `_ => ...`")
+            return null
+        }
+        return assemble(prefix, iff, as_value, parent, expr.at)
     }
 }
 
@@ -765,7 +1028,7 @@ def public match_type(anytype, anything) : void {
 
 def public match_expr(anything) : void {
     //! Match by expression equality. Inside a ``match`` arm, ``match_expr(expr)`` generates
-    //! a condition ``value == expr``. Captured variables (``$v``) are substituted before comparison.
+    //! a condition ``value == expr``. Names bound earlier in the pattern are substituted before comparison.
     pass
 }
 

@@ -91,10 +91,12 @@ each with an optional `comment_hygiene` flag. STYLE005 is gated by the shared po
   read it before touching the hashing. Hashes only pick candidates; `subtree_equal` decides, so no
   collision can produce a finding, and `payload_key` is the single reader of per-node payload used
   by both hashing and verification so the two cannot drift.
-- **Match arms count toward STYLE037** because `MatchMacro` emits plain `ExprIfThenElse` without
-  the `generated` flag, and comprehension `for`/`where` nodes count for the same reason - only the
-  wrapper closure block is marked generated. Generated closures bill the host, so the score cannot
-  depend on whether the optimizer inlined the wrapper.
+- **Statement-form match arms count toward STYLE037** because `MatchMacro` emits plain
+  `ExprIfThenElse` without the `generated` flag, and comprehension `for`/`where` nodes count for the
+  same reason - only the wrapper closure block is marked generated. Generated closures bill the host,
+  so the score cannot depend on whether the optimizer inlined the wrapper. **Value-form arms
+  (`return match (x) { ... }`) are not metered** - the macro lowers them into an `invoke` of a block
+  literal, and the walk scores none of its arms.
 
 ## Known limitation
 
