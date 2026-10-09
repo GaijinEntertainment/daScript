@@ -374,7 +374,7 @@ class StyleLintVisitor : AstVisitor {
     def override visitFunction(var fn : FunctionPtr) : FunctionPtr {
         st037_pop_and_check("function '{fn.name}'", "split it into smaller functions", fn.at)
         if (fn.body != null) {
-            st038_check_length("function '{fn.name}'", "split it into smaller functions", fn.at, fn.body.at)
+            st038_check_length("function '{fn.name}'", "split it into smaller functions", fn.at, fn.atDecl.line != 0u ? fn.atDecl : fn.body.at)
         }
         st041_flush()
         current_function = null
@@ -382,10 +382,11 @@ class StyleLintVisitor : AstVisitor {
         return <- fn
     }
 
-    def st038_check_length(what : string; fix : string; at : LineInfo; body_at : LineInfo) : void {
+    def st038_check_length(what : string; fix : string; at : LineInfo; decl_at : LineInfo) : void {
+        //! ``decl_at`` is the declaration as parsed, before any annotation rewrote the body: its last line is the closing brace the author wrote
         if (max_function_length <= 0 || at.line == 0u || foreign_module_code()
                 || (current_function != null && current_function.flags.generated)) return
-        let nlines = int(body_at.last_line) - int(at.line) + 1
+        let nlines = int(decl_at.last_line) - int(at.line) + 1
         if (nlines > max_function_length) {
             style_warning("STYLE038: {what} is {nlines} lines long (max {max_function_length}); {fix}", at)
         }

@@ -16,7 +16,7 @@ require strings
 var g_coroutine_steps : int = 0
 
 [coroutine]
-def simple_coroutine(n : int) {   // nolint:STYLE038 length is the [coroutine] expansion, not the source body
+def simple_coroutine(n : int) {
     for (i in range(n)) {
         g_coroutine_steps ++
         co_continue()

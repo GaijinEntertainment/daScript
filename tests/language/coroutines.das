@@ -7,7 +7,7 @@ require daslib/coroutines
 
 // Typed coroutine that yields int values
 [coroutine]
-def count_up(n : int) : int {   // nolint:STYLE038 - the length measured is the [coroutine] macro's generated state machine
+def count_up(n : int) : int {
     for (i in range(1, n + 1)) {
         yield i
     }
@@ -16,7 +16,7 @@ def count_up(n : int) : int {   // nolint:STYLE038 - the length measured is the 
 
 // Typed coroutine that counts down
 [coroutine]
-def count_down(n : int) : int {     // nolint:STYLE038 - the length measured is the [coroutine] macro's generated state machine
+def count_down(n : int) : int {
     var i = n
     while (i > 0) {
         yield i

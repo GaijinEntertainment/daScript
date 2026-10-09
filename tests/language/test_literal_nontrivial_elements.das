@@ -7,14 +7,14 @@ var g_a_steps = 0
 var g_b_steps = 0
 
 [coroutine]
-def step_co_a() {   // nolint:STYLE038 length is the [coroutine] expansion, not the source body
+def step_co_a() {
     g_a_steps ++
     co_continue()
     g_a_steps ++
 }
 
 [coroutine]
-def step_co_b() {   // nolint:STYLE038 length is the [coroutine] expansion, not the source body
+def step_co_b() {
     g_b_steps ++
     co_continue()
     g_b_steps ++
