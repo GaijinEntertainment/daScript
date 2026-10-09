@@ -8,6 +8,7 @@ require daslib/ast_boost
 require dastest/testing_boost public
 require strings
 require daslib/strings_boost
+require _optimized_body_helper
 
 // structural FIRED proof + behavioral safety net for [inline] splicing
 // (src/ast/ast_inline.cpp): every direct call to an [inline] function is replaced
@@ -240,17 +241,6 @@ def target_loop_ret(src : array<int>; k : int) : int {
 def has(s, sub : string) : bool => find(s, sub, 0) >= 0
 
 def count_of(s, sub : string) : int => length(split(s, sub)) - 1
-
-def body_of(t : T?; nm : string) : string {
-    var body = "";
-    compiling_module() |> for_each_function("{nm}") $(func) {
-        if (empty(body)) {
-            body = "{describe(func.body)}";
-        }
-    }
-    t |> success(!empty(body), "target function found");
-    return body;
-}
 
 [test]
 def test_inline_fired(t : T?) {

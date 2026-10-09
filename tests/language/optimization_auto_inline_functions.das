@@ -12,6 +12,7 @@ require strings
 require daslib/strings_boost
 require _inline_generic_helper
 require _inline_constant_expression_helper
+require _optimized_body_helper
 
 // structural FIRED proof + behavioral safety net for heuristic auto inlining of plain
 // calls (src/ast/ast_inline.cpp, `options auto_inline_functions`): a call to a small
@@ -495,18 +496,6 @@ def target_upcast_of_rvalue {
 }
 
 def has(s, sub : string) : bool => find(s, sub, 0) >= 0
-
-def body_of(t : T?; nm : string) : string {
-    var body = ""
-    compiling_module() |> for_each_function("{nm}") $(func) {
-        if (empty(body)) {
-            body = "{describe(func.body)}"
-        }
-    }
-    t |> success(!empty(body), "target function found")
-    let clean <- [for (ln in split(body, "\n")); ln; where !(ln |> has("coverage("))]
-    return join(clean, "\n")
-}
 
 [test]
 def test_auto_inline_functions_fired(t : T?) {

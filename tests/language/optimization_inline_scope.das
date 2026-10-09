@@ -9,6 +9,7 @@ require dastest/testing_boost public
 require strings
 require daslib/strings_boost
 require _inline_scope_helper
+require _optimized_body_helper
 
 // structural FIRED proof + behavioral safety net for cross-module splices whose
 // bodies use the callee module's private symbols (src/ast/ast_inline.cpp): the
@@ -20,18 +21,6 @@ require _inline_scope_helper
 var g_shared = 555      // collides with _inline_scope_helper's g_shared on purpose
 
 def has(s, sub : string) : bool => !empty(sub) && find(s, sub) >= 0
-
-def body_of(t : T?; nm : string) : string {
-    var body = ""
-    compiling_module() |> for_each_function("{nm}") $(func) {
-        if (empty(body)) {
-            body = "{describe(func.body)}"
-        }
-    }
-    t |> success(!empty(body), "target function found")
-    let clean <- [for (ln in split(body, "\n")); ln; where !(ln |> has("coverage("))]
-    return join(clean, "\n")
-}
 
 [export]
 def target_scoped_add(a, b : int) : int {

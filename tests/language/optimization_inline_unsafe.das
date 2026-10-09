@@ -9,6 +9,7 @@ require dastest/testing_boost public
 require strings
 require daslib/strings_boost
 require _inline_unsafe_helper
+require _optimized_body_helper
 
 // unsafe callee bodies splice under a generated `unsafe { }` wrapper
 // (src/ast/ast_inline.cpp): a compiled callee lost its wrappers to foldUnsafe, so a
@@ -59,18 +60,6 @@ def target_devirt_unsafe_literal(x : int) : int {
 }
 
 def has(s, sub : string) : bool => find(s, sub, 0) >= 0
-
-def body_of(t : T?; nm : string) : string {
-    var body = ""
-    compiling_module() |> for_each_function("{nm}") $(func) {
-        if (empty(body)) {
-            body = "{describe(func.body)}"
-        }
-    }
-    t |> success(!empty(body), "target function found")
-    let clean <- [for (ln in split(body, "\n")); ln; where !(ln |> has("coverage("))]
-    return join(clean, "\n")
-}
 
 [test]
 def test_inline_unsafe_fired(t : T?) {

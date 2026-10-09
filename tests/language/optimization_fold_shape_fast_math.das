@@ -8,6 +8,7 @@ require daslib/ast_boost
 require dastest/testing_boost public
 require strings
 require daslib/strings_boost
+require _optimized_body_helper
 
 // structural FIRED proof for the fast_math-gated folds (x*0 / x-x on FP, reciprocal
 // division, NaN-compare flips, reassociation). the behavioral half lives in
@@ -34,21 +35,6 @@ def target_flip_f(f : float) : bool => !(f < 4.0)
 def target_reassoc_f(f : float) : float => (f + 1.0) + 2.0
 
 def has(s, sub : string) : bool => find(s, sub, 0) >= 0
-
-def body_of(t : T?; nm : string) : string {
-    var body = ""
-    compiling_module() |> for_each_function("{nm}") $(func) {
-        if (empty(body)) {
-            body = "{describe(func.body)}"
-        }
-    }
-    t |> success(!empty(body), "target function found")
-    // the coverage lane (dastest --cov-path) injects add_func_coverage/add_line_coverage
-    // statements whose arguments collide with the substrings asserted here (paths carry
-    // `/`, hex line args can carry "2f") — drop them
-    let clean <- [for (ln in split(body, "\n")); ln; where !(ln |> has("coverage("))]
-    return join(clean, "\n")
-}
 
 [test]
 def test_fast_math_folds_fired(t : T?) {

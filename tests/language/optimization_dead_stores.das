@@ -8,6 +8,7 @@ require daslib/ast_boost
 require dastest/testing_boost public
 require strings
 require daslib/strings_boost
+require _optimized_body_helper
 
 // structural FIRED proof + behavioral safety net for the dead-store-elimination pass
 // (src/ast/ast_dse.cpp): a store to a plain local is removed when nothing reads it
@@ -262,20 +263,6 @@ def target_init_live(x : int) : int {
 }
 
 def has(s, sub : string) : bool => find(s, sub, 0) >= 0
-
-def body_of(t : T?; nm : string) : string {
-    var body = ""
-    compiling_module() |> for_each_function("{nm}") $(func) {
-        if (empty(body)) {
-            body = "{describe(func.body)}"
-        }
-    }
-    t |> success(!empty(body), "target function found")
-    // the coverage lane (dastest --cov-path) injects add_func_coverage/add_line_coverage
-    // statements whose arguments collide with the substrings asserted here — drop them
-    let clean <- [for (ln in split(body, "\n")); ln; where !(ln |> has("coverage("))]
-    return join(clean, "\n")
-}
 
 [test]
 def test_dead_stores_fired(t : T?) {  // nolint:STYLE038 - flat list of independent test arms

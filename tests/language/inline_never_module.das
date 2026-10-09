@@ -9,6 +9,7 @@ require dastest/testing_boost public
 require strings
 require daslib/strings_boost
 require _never_inline_module
+require _optimized_body_helper
 
 // structural proof for `options never_inline` (src/ast/ast_inline.cpp); fixture
 // module: _never_inline_module.das - the run labels below carry the claims
@@ -44,18 +45,6 @@ def target_canon() : int {
 }
 
 def has(s, sub : string) : bool => !empty(sub) && find(s, sub) >= 0
-
-def body_of(t : T?; nm : string) : string {
-    var body = ""
-    compiling_module() |> for_each_function("{nm}") $(func) {
-        if (empty(body)) {
-            body = "{describe(func.body)}"
-        }
-    }
-    t |> success(!empty(body), "target function not found")
-    let clean <- [for (ln in split(body, "\n")); ln; where !(ln |> has("coverage("))]
-    return join(clean, "\n")
-}
 
 // a generic instance carries a mangled name (origin`name`hash) the exact-name
 // for_each_function lookup misses - match by substring instead
