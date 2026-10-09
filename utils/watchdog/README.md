@@ -55,7 +55,7 @@ bin/watchdog --cwd utils/dasllama-server
 
 Exit 3 *without* the marker is a tuner abort (the noise gate found the box too loud to trust);
 it restarts with backoff, because an immediate relaunch on a loud box just aborts again. A code
-comes back from the child's `main`: a das `exit(N)` is an abnormal termination and reports 1.
+comes back from the child's `main` or from a das `exit(N)`.
 
 ## Stopping it
 

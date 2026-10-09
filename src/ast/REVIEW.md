@@ -66,6 +66,13 @@ the `daslib/builtin.das` (repo root) helpers they name are the other side of a r
   change.** A reader accepts a stream whose stored version equals `getVersion()`, so without the
   bump an older cache decodes the changed header as the old one with no diagnostic.
 
+- **A diff that changes what a pass in this folder leaves in a compiled module - an inferred
+  flag, or a node folded, inlined or rewritten - bumps `AstSerializer::getVersion()`
+  (`include/daScript/ast/ast_serializer.h`, repo root) in the same change.** The default cache
+  stamps only the host executable, which a rebuild of the runtime library alone leaves
+  unchanged, and a `-module-cache <path>` file stamps no binary, so without the bump a rebuilt
+  `daslang` serves modules the old pass produced.
+
 - **The `setDeferredModuleLoader` call in `require_dynamic_modules` (`dyn_modules.cpp`) stays,
   and stays above the first `init_modules_for_folder` call - removing it or moving it below is a
   defect.** That call compiles the descriptors, and a descriptor can require a module an earlier

@@ -9,6 +9,7 @@ require daslib/ast_boost
 require dastest/testing_boost public
 require strings
 require daslib/strings_boost
+require _optimized_body_helper
 
 // structural FIRED proof + behavioral safety net for common-subexpression elimination
 // (src/ast/ast_cse.cpp): a pure expression already held by a clean local (`let t = E`
@@ -244,21 +245,6 @@ def target_pure_ref_read(arr : array<int>) : int {
 def has(s, sub : string) : bool => find(s, sub, 0) >= 0
 
 def count_of(s, sub : string) : int => length(split(s, sub)) - 1
-
-def body_of(t : T?; nm : string) : string {
-    var body = ""
-    compiling_module() |> for_each_function("{nm}") $(func) {
-        if (empty(body)) {
-            body = "{describe(func.body)}"
-        }
-    }
-    t |> success(!empty(body), "target function found")
-    // this module opts out of coverage injection (options no_coverage above) — injected
-    // add_line_coverage calls would make pure user callees impure and defeat the pass
-    // under the coverage lane; the filter below stays as a belt for injected statements
-    let clean <- [for (ln in split(body, "\n")); ln; where !(ln |> has("coverage("))]
-    return join(clean, "\n")
-}
 
 [test]
 def test_cse_fired(t : T?) {  // nolint:STYLE038 - flat list of independent test arms

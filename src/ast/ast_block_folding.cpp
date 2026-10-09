@@ -397,6 +397,9 @@ namespace das {
             // and have ~2 optimization passes instead of ~402
             bool anyChange = false;
             for (int i = block->list.size() - 2; i >= 0; i--) {
+                if (block->list[i + 1]->rtti_isLabel()) {
+                    break;
+                }
                 auto expr = block->list[i];
                 if (!expr->rtti_isIfThenElse()) {
                     continue;

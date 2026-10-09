@@ -205,3 +205,16 @@ def test_exit_now_carries_its_code(t : T?) {
         t |> success(!(output |> contains("[daslang atexit]")), "the runtime's atexit audit must stay quiet on a deliberate exit, got:\n{output}")
     }
 }
+
+[test]
+def test_exit_carries_its_code(t : T?) {
+    let fixture = path_join(get_das_root(), "tests/fio/_fixture_exit_child.das")
+    for (code in [42, 0]) {
+        t |> run("exit({code}) ends a child with {code}") @(t : T?) {
+            var output : string
+            let rc = run_and_capture([das_exe(), "-dasroot", get_das_root(), fixture, "--", "{code}"], output, guard(15.0))
+            t |> equal(rc, code, "the child's exit code, got:\n{output}")
+            t |> success(!(output |> contains("[daslang atexit]")), "the runtime's atexit audit must stay quiet on a deliberate exit, got:\n{output}")
+        }
+    }
+}

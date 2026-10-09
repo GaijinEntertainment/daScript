@@ -760,125 +760,125 @@ def make_simulate_macro(name : string; var someClassPtr) : SimulateMacroPtr {
 [macro_function]
 def add_new_block_annotation(name : string; var someClassPtr) {
     var ann = make_block_annotation(name, someClassPtr)
-    this_module() |> add_function_annotation(ann)
+    compiling_module() |> add_function_annotation(ann)
 }
 
 [macro_function]
 def add_new_function_annotation(name : string; var someClassPtr) {
     var ann = make_function_annotation(name, someClassPtr)
-    this_module() |> add_function_annotation(ann)
+    compiling_module() |> add_function_annotation(ann)
 }
 
 [macro_function]
 def add_new_contract_annotation(name : string; var someClassPtr) {
     var ann = make_function_annotation(name, someClassPtr)
-    this_module() |> add_function_annotation(ann)
+    compiling_module() |> add_function_annotation(ann)
 }
 
 [macro_function]
 def add_new_structure_annotation(name : string; var someClassPtr) {
     var ann = make_structure_annotation(name, someClassPtr)
-    this_module() |> add_structure_annotation(ann)
+    compiling_module() |> add_structure_annotation(ann)
 }
 
 [macro_function]
 def add_new_enumeration_annotation(name : string; var someClassPtr) {
     var ann = make_enumeration_annotation(name, someClassPtr)
-    this_module() |> add_enumeration_annotation(ann)
+    compiling_module() |> add_enumeration_annotation(ann)
 }
 
 [macro_function]
 def add_new_variant_macro(name : string; var someClassPtr) {
     var ann = make_variant_macro(name, someClassPtr)
-    this_module() |> add_variant_macro(ann)
+    compiling_module() |> add_variant_macro(ann)
 }
 
 [macro_function]
 def add_new_for_loop_macro(name : string; var someClassPtr) {
     var ann = make_for_loop_macro(name, someClassPtr)
-    this_module() |> add_for_loop_macro(ann)
+    compiling_module() |> add_for_loop_macro(ann)
 }
 
 [macro_function]
 def add_new_capture_macro(name : string; var someClassPtr) {
     var ann = make_capture_macro(name, someClassPtr)
-    this_module() |> add_capture_macro(ann)
+    compiling_module() |> add_capture_macro(ann)
 }
 
 [macro_function]
 def add_new_type_macro(name : string; var someClassPtr) {
     var ann = make_type_macro(name, someClassPtr)
-    this_module() |> add_type_macro(ann)
+    compiling_module() |> add_type_macro(ann)
 }
 
 [macro_function]
 def add_new_simulate_macro(name : string; var someClassPtr) {
     var ann = make_simulate_macro(name, someClassPtr)
-    this_module() |> add_simulate_macro(ann)
+    compiling_module() |> add_simulate_macro(ann)
 }
 
 [macro_function]
 def add_new_reader_macro(name : string; var someClassPtr) {
     var ann = make_reader_macro(name, someClassPtr)
-    this_module() |> add_reader_macro(ann)
+    compiling_module() |> add_reader_macro(ann)
 }
 
 def add_new_comment_reader(name : string; var someClassPtr) {
     var ann = make_comment_reader(name, someClassPtr)
-    this_module() |> add_comment_reader(ann)
+    compiling_module() |> add_comment_reader(ann)
 }
 
 [macro_function]
 def add_new_call_macro(name : string; var someClassPtr) {
     var ann = make_call_macro(name, someClassPtr)
-    this_module() |> add_call_macro(ann)
+    compiling_module() |> add_call_macro(ann)
 }
 
 [macro_function]
 def add_new_typeinfo_macro(name : string; var someClassPtr) {
     var ann = make_typeinfo_macro(name, someClassPtr)
-    this_module() |> add_typeinfo_macro(ann)
+    compiling_module() |> add_typeinfo_macro(ann)
 }
 
 [macro_function]
 def add_new_infer_macro(name : string; var someClassPtr) {
     var ann = make_pass_macro(name, someClassPtr)
-    this_module() |> add_infer_macro(ann)
+    compiling_module() |> add_infer_macro(ann)
 }
 
 [macro_function]
 def add_new_dirty_infer_macro(name : string; var someClassPtr) {
     var ann = make_pass_macro(name, someClassPtr)
-    this_module() |> add_dirty_infer_macro(ann)
+    compiling_module() |> add_dirty_infer_macro(ann)
 }
 
 [macro_function]
 def add_new_post_rewrite_macro(name : string; var someClassPtr) {
     var ann = make_pass_macro(name, someClassPtr)
-    this_module() |> add_post_rewrite_macro(ann)
+    compiling_module() |> add_post_rewrite_macro(ann)
 }
 
 def add_new_post_compile_macro(name : string; var someClassPtr) {
     var ann = make_pass_macro(name, someClassPtr)
-    this_module() |> add_post_compile_macro(ann)
+    compiling_module() |> add_post_compile_macro(ann)
 }
 
 [macro_function]
 def add_new_lint_macro(name : string; var someClassPtr) {
     var ann = make_pass_macro(name, someClassPtr)
-    this_module() |> add_lint_macro(ann)
+    compiling_module() |> add_lint_macro(ann)
 }
 
 [macro_function]
 def add_new_global_lint_macro(name : string; var someClassPtr) {
     var ann = make_pass_macro(name, someClassPtr)
-    this_module() |> add_global_lint_macro(ann)
+    compiling_module() |> add_global_lint_macro(ann)
 }
 
 [macro_function]
 def add_new_optimization_macro(name : string; var someClassPtr) {
     var ann = make_pass_macro(name, someClassPtr)
-    this_module() |> add_optimization_macro(ann)
+    compiling_module() |> add_optimization_macro(ann)
 }
 
 [generic]

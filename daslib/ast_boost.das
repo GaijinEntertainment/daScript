@@ -254,7 +254,7 @@ def setup_tag_annotation(name, tag : string; var classPtr) {
     //! Creates and registers a function annotation associated with a tag.
     var ann = make_function_annotation(name, classPtr)
     apply_tag_annotation(tag, ann)
-    this_module() |> add_function_annotation(ann)
+    compiling_module() |> add_function_annotation(ann)
 }
 
 def peel_distinct(typ : TypeDeclPtr) : TypeDeclPtr const {

@@ -9,6 +9,7 @@ require dastest/testing_boost public
 require strings
 require daslib/strings_boost
 require _inline_counter_helper
+require _optimized_body_helper
 
 // cross-module splice of a body that already carries interior _inl0_* temps
 // (src/ast/ast_inline.cpp): pins that the interior temps survive the splice through
@@ -29,18 +30,6 @@ def target_cross() : int {
 }
 
 def has(s, sub : string) : bool => !empty(sub) && find(s, sub) >= 0
-
-def body_of(t : T?; nm : string) : string {
-    var body = ""
-    compiling_module() |> for_each_function("{nm}") $(func) {
-        if (empty(body)) {
-            body = "{describe(func.body)}"
-        }
-    }
-    t |> success(!empty(body), "target function not found")
-    let clean <- [for (ln in split(body, "\n")); ln; where !(ln |> has("coverage("))]
-    return join(clean, "\n")
-}
 
 [test]
 def test_counter_bump(t : T?) {

@@ -73,9 +73,10 @@ def private entry_count(root : string) : int {
 }
 
 def private status_of(out, root, file : string) : string {
+    let path = to_generic_path(path_join(root, file))
     for (line in split(out, "\n")) {
         for (status in ["PASS", "CACHED", "WARN"]) {
-            return status if (line |> starts_with("{status} ") && find(line, path_join(root, file)) >= 0)
+            return status if (line |> starts_with("{status} ") && find(to_generic_path(line), path) >= 0)
         }
     }
     return "?"

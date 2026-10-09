@@ -10,6 +10,7 @@ require daslib/defer
 require dastest/testing_boost public
 require strings
 require daslib/strings_boost
+require _optimized_body_helper
 
 // structural FIRED proof for the ConstFolding algebraic identities: inspects the
 // post-optimize AST of the target functions below and asserts the rewrite actually
@@ -160,21 +161,6 @@ def target_defer_in_arm(c : bool) : int {
 }
 
 def has(s, sub : string) : bool => find(s, sub, 0) >= 0
-
-def body_of(t : T?; nm : string) : string {
-    var body = ""
-    compiling_module() |> for_each_function("{nm}") $(func) {
-        if (empty(body)) {
-            body = "{describe(func.body)}"
-        }
-    }
-    t |> success(!empty(body), "target function found")
-    // the coverage lane (dastest --cov-path) injects add_func_coverage/add_line_coverage
-    // statements whose arguments collide with the substrings asserted here (paths carry
-    // `/`, "target_dead_while" carries "while", hex line args can carry "2f") — drop them
-    let clean <- [for (ln in split(body, "\n")); ln; where !(ln |> has("coverage("))]
-    return join(clean, "\n")
-}
 
 [test]
 def test_identity_folds_fired(t : T?) {
