@@ -757,6 +757,49 @@
     render();
   }
 
+  /* ── get-it installer tabs (the daslang.io landing's forge-install block) ───── */
+  function wireInstallTabs() {
+    var tabs = Array.prototype.slice.call(document.querySelectorAll('.forge-install__tab'));
+    var panes = Array.prototype.slice.call(document.querySelectorAll('.forge-install__pane'));
+    if (!tabs.length) return;
+    tabs.forEach(function (t) {
+      t.id = t.id || 'install-tab-' + t.dataset.pane;
+      t.setAttribute('aria-controls', 'install-pane-' + t.dataset.pane);
+    });
+    panes.forEach(function (p) {
+      p.id = p.id || 'install-pane-' + p.dataset.pane;
+      p.setAttribute('aria-labelledby', 'install-tab-' + p.dataset.pane);
+    });
+    function select(tab) {
+      var key = tab.dataset.pane;
+      tabs.forEach(function (t) {
+        var on = t === tab;
+        t.classList.toggle('is-active', on);
+        t.setAttribute('aria-selected', on ? 'true' : 'false');
+        t.tabIndex = on ? 0 : -1;
+      });
+      panes.forEach(function (p) { p.classList.toggle('is-active', p.dataset.pane === key); });
+    }
+    tabs.forEach(function (tab, i) {
+      tab.addEventListener('click', function () { select(tab); });
+      // ARIA tabs: arrows move the selection, Home/End jump to the ends
+      tab.addEventListener('keydown', function (ev) {
+        var step = ev.key === 'ArrowRight' ? 1 : ev.key === 'ArrowLeft' ? -1 : 0;
+        var next = null;
+        if (step) next = tabs[(i + step + tabs.length) % tabs.length];
+        else if (ev.key === 'Home') next = tabs[0];
+        else if (ev.key === 'End') next = tabs[tabs.length - 1];
+        if (!next) return;
+        ev.preventDefault();
+        select(next);
+        next.focus();
+      });
+    });
+    var initial = tabs.filter(function (t) { return t.classList.contains('is-active'); })[0] || tabs[0];
+    select(initial);
+  }
+  wireInstallTabs();
+
   /* ── dispatch by page ─────────────────────────────────────────── */
   var newsCount = document.getElementById('dio-feed-count');
   if (newsCount) {
