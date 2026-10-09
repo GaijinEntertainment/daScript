@@ -85,7 +85,7 @@ fopen(path, "rb") $(f) {
   the whole tree (a Windows job, a POSIX process group); `process_pid` / `process_alive(pid)` serve
   a pid file. A relative `argv[0]` naming a path resolves against the caller's directory. Closing
   the handle - leaving the block - kills a child still running. A child's exit code comes from
-  `def main() : int` - a das `exit(N)` reports 1.
+  `def main() : int` or from `exit(N)`.
 
 ## Mutating operations and their three error forms
 

@@ -1090,6 +1090,8 @@ namespace das {
         }
     }
 
+    extern atomic<bool> g_deliberateExit;
+
     void builtin_exit ( int32_t ec, Context * context, LineInfoArg * at ) {
         // A script calling exit(1) produced a bare non-zero exit with no message, no stack and no
         // EXCEPTION -- indistinguishable from every other silent failure. A non-zero exit is a
@@ -1100,13 +1102,12 @@ namespace das {
             tp.output();
             if ( context ) context->stackWalk(at, false, false);
         }
+        g_deliberateExit = true;
         exit(ec);
     }
 
-    extern atomic<bool> g_exitingNow;
-
     void builtin_exit_now ( int32_t ec, Context *, LineInfoArg * ) {
-        g_exitingNow = true;
+        g_deliberateExit = true;
         fflush(stdout);
         fflush(stderr);
         _exit(ec);

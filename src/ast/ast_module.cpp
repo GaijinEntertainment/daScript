@@ -131,11 +131,11 @@ namespace das {
     }
 
     atomic<int> g_envTotal(0);
-    atomic<bool> g_exitingNow(false);
+    atomic<bool> g_deliberateExit(false);
 
     static void daslang_atexit_audit() {
         int n = g_envTotal.load();
-        if ( n != 0 && !g_exitingNow.load() ) {
+        if ( n != 0 && !g_deliberateExit.load() ) {
             fprintf(stderr, "[daslang atexit] FATAL: g_envTotal=%d at exit (Initialize/Shutdown not balanced)\n", n);
             _Exit(1);
         }

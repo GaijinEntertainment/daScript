@@ -260,9 +260,6 @@ diagnostic in any tier.
   record on a `daslib/jobque_boost` `Stream?` - `push_archive` on one side, `pop_archive` on
   the other, which copies the bytes into the reader's context; a bare `string` payload does not
   compile. The string never rides in the `@capture` list - the `Stream?` does.
-- **`exit(N)` does not set the process exit code under the daslang CLI.** It unwinds as an
-  abnormal termination and the process reports 1, whatever `N` was - a supervisor or shell sees a
-  crash. A code the parent must read comes from `def main() : int { return N }`.
 - **The order a call's arguments are evaluated in is not defined**, and it differs between
   tiers - `f(g(x), x)` with `g` writing `x` by reference reads the old `x` on one tier and the
   new one on another. Run the writing call as a statement of its own: `let r = g(x); f(r, x)`.
