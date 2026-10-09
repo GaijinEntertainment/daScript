@@ -29,7 +29,10 @@ what it costs today and what the fix would change.
   twins now compile behind the toolchain probe, each family races its own MoE-shaped `moe_mulmm_k4/k5/k6` (the q8/mx4
   shape: four experts of 32 rows, the whole-tile case) for the crown, and an uncrowned box takes the twin per dispatch
   at or under a mean of 16 rows an expert (`set_metal_moe_kq_twin_avg`, `ARCHITECTURE_GPU_PREFILL_MOE.md#prefill-moe-kq-twin-pick`).
-  The house replay on the IQ4_XS-pure 35B (the format the house serves; its twins compile behind the probe on every box)
+  End to end on the M1 under its sidecar, the Q4_K-pure 375-token window (`prefill_window_probe --prefix 4500 --windows 375`,
+  medians of 3): 483 -> 461 ms, the k4 expert twins now `MetalMoeMulMmK4TH` at 218 ms of kernel time against the base
+  form's 229 - less than the lab's 0.76 because the real routing is skewed, and an expert past sixteen rows pays the
+  whole op. The house replay on the IQ4_XS-pure 35B (the format the house serves; its twins compile behind the probe on every box)
   on the M1, warm pass: wall 0.85 s, first token 0.71, the windows' GPU sum 648 ms, 130 ms of it (31%) the windows past
   each request's largest - the checkpoint split; no pre-ADAPT replay of this file exists, the window probe's 554 -> 487
   ms is its A/B.
