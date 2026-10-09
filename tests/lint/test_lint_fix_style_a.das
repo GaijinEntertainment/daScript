@@ -57,6 +57,6 @@ def test_lint_fix_style_pipes_braces_declarations(t : T?) {
 
 [test]
 def test_lint_fix_style_guards_and_operators(t : T?) {
-    check_pair(t, "_fixture_lint_fix_style_b_before.das", "_fixture_lint_fix_style_b_after.das",
+    check_pair(t, "_fixture_lint_fix_style_a2_before.das", "_fixture_lint_fix_style_a2_after.das",
         { "STYLE006", "STYLE016", "STYLE017", "STYLE018", "STYLE019", "STYLE020", "STYLE022", "STYLE023" }, 21)
 }

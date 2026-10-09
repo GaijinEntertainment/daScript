@@ -123,7 +123,7 @@ def test_lint_fix_helpers(t : T?) {
                     make_visitor(*marks) $(adapter) {
                         visit(program, adapter)
                     }
-                    t |> equal(length(marks.found), 10)
+                    t |> equal(length(marks.found), 16)
                     for (m in marks.found) {
                         t |> equal(m.got, m.expected)
                     }
@@ -156,11 +156,11 @@ def test_lint_fix_helpers(t : T?) {
                     return if (!ok)
                     let fn = program.getThisModule |> find_unique_function("spans")
                     let edits <- [
-                        LintFix(line = 20, column = 11, last_line = 20, last_column = 16, replacement = "count"),
-                        LintFix(line = 19, column = 4, last_line = 19, last_column = 9, replacement = "count")]
+                        LintFix(line = 40, column = 11, last_line = 40, last_column = 16, replacement = "count"),
+                        LintFix(line = 39, column = 4, last_line = 39, last_column = 9, replacement = "count")]
                     let merged = lint_merge_fixes(fn.at, edits)
-                    t |> equal(merged.line, 19)
-                    t |> equal(merged.last_line, 20)
+                    t |> equal(merged.line, 39)
+                    t |> equal(merged.last_line, 40)
                     let src = fread(fixture("_fixture_lint_span.das"))
                     let fixed = apply_lint_fixes(src, [merged])
                     t |> equal(fixed.applied, 1)

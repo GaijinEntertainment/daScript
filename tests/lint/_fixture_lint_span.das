@@ -4,6 +4,26 @@ def mark(a : auto; _text : string) : int => 0
 
 def take(a : int; b : int = 5) : int => a + b
 
+struct Fx {
+    name : string
+}
+
+variant Vi {
+    i : int
+    f : float
+}
+
+def members(fx : Fx; p : Fx?; v : float3; vi : Vi) : int {
+    var total = 0
+    total += mark(fx.name, "fx.name")
+    total += mark(p?.name, "p?.name")
+    total += mark(v.xy, "v.xy")
+    total += mark(vi as i, "vi as i")
+    total += mark(Fx(), "Fx()")
+    total += mark(take(length("{total}")), "take(length(\"\{total\}\"))")
+    return total
+}
+
 def spans(s : string; var arr : array<int>; n : int64) : int {
     var total = 0
     total += mark(int64(length(s)), "int64(length(s))")
