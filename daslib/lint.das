@@ -564,8 +564,6 @@ def private lint_value_source(e : Expression const?) : Expression const? {
     return prop && length(call.arguments) > 0 ? call.arguments[0] : null
 }
 
-def private lint_ident_byte(c : int) : bool => c >= 0 && (c == '_' || is_alnum(c))
-
 //! Whether the source at ``at`` spells exactly the identifier ``name``
 def private lint_name_at(at : LineInfo; name : string) : bool {
     let line = lint_source_line(at, int(at.line))
@@ -575,24 +573,8 @@ def private lint_name_at(at : LineInfo; name : string) : bool {
 }
 
 //! The edit replacing the identifier ``name`` at ``at`` with ``replacement``; none unless the source spells ``name`` there
-def private lint_rename_fix(at : LineInfo; name, replacement : string) : LintFix {
-    if (!lint_name_at(at, name)) return LintFix()
-    let ln = int(at.line)
-    let col = int(at.column)
-    return LintFix(line = ln, column = col, last_line = ln, last_column = col + length(name), replacement = replacement)
-}
-
-def private lint_has_comment(text : string) : bool => find(text, "//") >= 0 || find(text, "/*") >= 0
-
-//! A fix replacing the source of ``e`` with ``replacement``; none when that source holds a comment or does not start with ``head``
-def private lint_rewrite_fix(e : Expression?; head, replacement : string) : LintFix {
-    var span = lint_expr_span(e)
-    if (span.line == 0 || empty(replacement)) return LintFix()
-    let text = lint_span_text(e.at, span)
-    if (lint_has_comment(text) || !starts_with(text, head)) return LintFix()
-    span.replacement = replacement
-    return span
-}
+def private lint_rename_fix(at : LineInfo; name, replacement : string) : LintFix =>
+    lint_name_at(at, name) ? lint_token_fix(at, int(at.line), int(at.column), name, replacement) : LintFix()
 
 //! The source text of each argument ``call`` spells, defaults and hidden arguments skipped; empty when one is not recoverable
 def private lint_written_args(call : ExprCall?) : array<string> {
@@ -612,89 +594,6 @@ def private lint_written_args(call : ExprCall?) : array<string> {
     return <- texts
 }
 
-//! The index right after the string literal whose quote is at ``open`` - interpolations skipped as code; -1 when unterminated
-def private lint_skip_string(d : array<uint8> const# implicit; open : int) : int {
-    var p = open + 1
-    while (p < length(d)) {
-        let c = int(d[p])
-        if (c == '\\') {
-            p += 2
-        } elif (c == '"') {
-            return p + 1
-        } elif (c == '{') {
-            p = lint_match_bracket(d, p)
-            return -1 if (p < 0)
-            p++
-        } else {
-            p++
-        }
-    }
-    return -1
-}
-
-//! The index of the bracket closing the one at ``open`` - strings and line comments skipped; -1 when unbalanced, or a block comment or character literal stands in the way
-def private lint_match_bracket(d : array<uint8> const# implicit; open : int) : int {
-    var depth = 0
-    var p = open
-    while (p < length(d)) {
-        let c = int(d[p])
-        let next = p + 1 < length(d) ? int(d[p + 1]) : 0
-        if (c == '"') {
-            p = lint_skip_string(d, p)
-            return -1 if (p < 0)
-            continue
-        }
-        return -1 if (c == '\'' || (c == '/' && next == '*'))
-        if (c == '/' && next == '/') {
-            while (p < length(d) && int(d[p]) != '\n') {
-                p++
-            }
-            continue
-        }
-        if (c == '(' || c == '[' || c == '{') {
-            depth++
-        } elif (c == ')' || c == ']' || c == '}') {
-            depth--
-            return p if (depth == 0)
-            return -1 if (depth < 0)
-        }
-        p++
-    }
-    return -1
-}
-
-def private lint_match_in(text : string; open : int) : int {
-    var res = -1
-    peek_data(text) $(d) {
-        res = lint_match_bracket(d, open)
-    }
-    return res
-}
-
-def private lint_indent_of(line : string) : int => length(line) - length(strip_left(line))
-
-//! The edit replacing ``token`` at column ``col`` of line ``ln``; none unless the source spells ``token`` there
-def private lint_token_fix(at : LineInfo; ln, col : int; token, replacement : string) : LintFix {
-    if (col < 0 || slice(lint_source_line(at, ln), col, col + length(token)) != token) return LintFix()
-    return LintFix(line = ln, column = col, last_line = ln, last_column = col + length(token), replacement = replacement)
-}
-
-//! How many times ``word`` stands as a whole identifier on lines ``lines.x..lines.y``, comments and strings included
-def private lint_count_word(at : LineInfo; lines : int2; word : string) : int {
-    var n = 0
-    for (ln in range(lines.x, lines.y + 1)) {
-        let line = lint_source_line(at, ln)
-        var p = find(line, word)
-        while (p >= 0) {
-            if (!lint_ident_byte(lint_byte_at(line, p - 1)) && !lint_ident_byte(lint_byte_at(line, p + length(word)))) {
-                n++
-            }
-            p = find(line, word, p + 1)
-        }
-    }
-    return n
-}
-
 //! ``:=`` -> ``=`` between the name of ``v`` and its initializer on the same line
 def private lint016_init_fix(v : Variable const?) : LintFix {
     let ln = int(v.at.line)
@@ -706,11 +605,8 @@ def private lint016_init_fix(v : Variable const?) : LintFix {
 
 //! Deletes the unreachable statement ``e`` when it fills whole lines and holds no comment
 def private lint001_fix(e : Expression?) : LintFix {
-    let span = lint_expr_span(e)
-    if (span.line == 0 || e.genFlags.generated) return LintFix()
-    let head = slice(lint_source_line(e.at, span.line), 0, span.column)
-    let tail = slice(lint_source_line(e.at, span.last_line), span.last_column)
-    if (!empty(strip(head)) || !empty(strip(tail)) || lint_has_comment(lint_span_text(e.at, span))) return LintFix()
+    let span = lint_lone_span(e, false)
+    if (span.line == 0 || lint_has_comment(lint_span_text(e.at, span))) return LintFix()
     return LintFix(line = span.line, column = 0, last_line = span.last_line + 1, last_column = 0, replacement = "")
 }
 
@@ -719,7 +615,7 @@ def private lint008_fix(expr : ExprOp3?) : LintFix {
     if (expr.subexpr == null || !expr.subexpr.flags.noSideEffects) return LintFix()
     let text = lint_expr_text(expr.left)
     if (empty(text)) return LintFix()
-    return lint_rewrite_fix(expr, "", find(text, "?") >= 0 ? "({text})" : text)
+    return lint_replace_fix(expr, find(text, "?") >= 0 ? "({text})" : text)
 }
 
 //! The body ``{ ... }`` held, re-indented to the statement it replaces at column ``indent``; "" when its lines do not nest under it
@@ -751,11 +647,11 @@ def private lint009_fix(expr : ExprIfThenElse?) : LintFix {
     var span = lint_expr_span(expr)
     if (span.line == 0 || !empty(strip(slice(lint_source_line(expr.at, span.line), 0, span.column)))) return LintFix()
     let text = lint_span_text(expr.at, span)
-    let cond_end = starts_with(text, "if (") ? lint_match_in(text, 3) : -1
+    let cond_end = starts_with(text, "if (") ? lint_match_bracket(text, 3) : -1
     if (cond_end < 0 || slice(text, cond_end + 1, cond_end + 3) != " \{") return LintFix()
-    let then_end = lint_match_in(text, cond_end + 2)
+    let then_end = lint_match_bracket(text, cond_end + 2)
     if (then_end < 0 || slice(text, then_end + 1, then_end + 8) != " else \{"
-            || lint_match_in(text, then_end + 7) != length(text) - 1 || lint_has_comment(slice(text, then_end))) return LintFix()
+            || lint_match_bracket(text, then_end + 7) != length(text) - 1 || lint_has_comment(slice(text, then_end))) return LintFix()
     var declares = false
     for (s in (expr.if_true as ExprBlock).list) {
         declares ||= s is ExprLet
@@ -768,7 +664,7 @@ def private lint009_fix(expr : ExprIfThenElse?) : LintFix {
 def private lint018_fix(narrow : ExprCall?; widen : string) : LintFix {
     let inner = lint_expr_text(narrow.arguments[0])
     if (empty(inner)) return LintFix()
-    return lint_rewrite_fix(narrow, "{narrow.name}(", empty(widen) ? inner : "{widen}({inner})")
+    return lint_replace_fix(narrow, empty(widen) ? inner : "{widen}({inner})", "{narrow.name}(")
 }
 
 //! ``twin(a, b)`` for ``call(narrow(a), narrow(b))`` when every argument narrows a ``wide`` value
@@ -782,7 +678,7 @@ def private lint020_fix(call : ExprCall?; twin, narrow : string; wide : Type) : 
         return LintFix() if (empty(text))
         args |> push(text)
     }
-    return lint_rewrite_fix(call, "{call.name}(", "{twin}({join(args, ", ")})")
+    return lint_replace_fix(call, "{twin}({join(args, ", ")})", "{call.name}(")
 }
 
 //! Edits widening each operand of the sum or product ``expr`` to ``wide``, relative to ``origin``; a line-0 edit marks an unrecoverable operand
@@ -1409,7 +1305,7 @@ class LintVisitor : AstVisitor {
     //! prefixes the unused ``v`` with an underscore, unless the prefixed name is spelled anywhere in the function - a read it would capture
     def underscore_fix(v : Variable const?) : LintFix {
         let name = string(v.name)
-        if (lint_count_word(v.at, lint_fun_lines, "_{name}") != 0) return LintFix()
+        if (lint_count_word_in_lines(v.at, lint_fun_lines, "_{name}") != 0) return LintFix()
         return lint_rename_fix(v.at, name, "_{name}")
     }
 
@@ -1417,7 +1313,7 @@ class LintVisitor : AstVisitor {
     def lint004_fix(v : Variable const?) : LintFix {
         let name = string(v.name)
         let bare = slice(name, 1)
-        if (!is_alpha(lint_byte_at(bare, 0)) || key_exists(lint_fun_names, bare) || lint_count_word(v.at, lint_fun_lines, bare) != 0) return LintFix()
+        if (!is_alpha(lint_byte_at(bare, 0)) || key_exists(lint_fun_names, bare) || lint_count_word_in_lines(v.at, lint_fun_lines, bare) != 0) return LintFix()
         var edits : array<LintFix>
         edits |> push(lint_rename_fix(v.at, name, bare))
         for (u in lint004_uses) {
@@ -1435,7 +1331,7 @@ class LintVisitor : AstVisitor {
         for (e in edits) {
             return LintFix() if (e.line == 0)
         }
-        if (lint_count_word(v.at, lint_fun_lines, name) != length(edits)) return LintFix()
+        if (lint_count_word_in_lines(v.at, lint_fun_lines, name) != length(edits)) return LintFix()
         return lint_merge_fixes(v.at, edits)
     }
 
@@ -1609,13 +1505,13 @@ class LintVisitor : AstVisitor {
         let twin = lint017_long_twin(iname, icall)
         if (!empty(twin)) {
             let call = lint017_twin_call(icall)
-            let fix = empty(call) ? LintFix() : lint_rewrite_fix(expr, "{expr.name}(", expr.name == "int64" ? call : "{expr.name}({call})")
+            let fix = empty(call) ? LintFix() : lint_replace_fix(expr, expr.name == "int64" ? call : "{expr.name}({call})", "{expr.name}(")
             lint_error("LINT017: {expr.name}({iname}(...)) widens an already-32-bit result, so the 2^31 limit is still hit inside {iname} (as a wrap, or as the panic guard on array/table/string length) before the cast runs; call {twin}(...) instead", expr.at, fix)
             return
         }
         if (lint017_is_32bit_parse(iname, icall)) {
             let args <- lint_written_args(icall)
-            let fix = empty(args) || length(args) > 2 ? LintFix() : lint_rewrite_fix(expr, "{expr.name}(", lint017_widened_parse(string(expr.name), iname, args[0], length(args) == 2 ? args[1] : "false"))
+            let fix = empty(args) || length(args) > 2 ? LintFix() : lint_replace_fix(expr, lint017_widened_parse(string(expr.name), iname, args[0], length(args) == 2 ? args[1] : "false"), "{expr.name}(")
             lint_error("LINT017: {expr.name}({iname}(...)) widens a 32-bit string parse - {iname} answers 0 for any value that overflows 32 bits, so the cast asks for a range the parse cannot give; call {lint017_parse_remedy(string(expr.name), iname, icall)} instead", expr.at, fix)
         }
     }

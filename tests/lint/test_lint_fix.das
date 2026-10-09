@@ -105,6 +105,26 @@ def test_lint_fix(t : T?) {
 }
 
 [test]
+def test_lint_text_helpers(t : T?) {
+    t |> run("text helpers skip literals and match whole words") @@(t : T?) {
+        t |> equal(lint_has_comment("a // b"), true)
+        t |> equal(lint_has_comment("a /* b */"), true)
+        t |> equal(lint_has_comment("f(\"http://x\")"), false)
+        t |> equal(lint_count_word("a + ab + a_ + a", "a"), 2)
+        t |> equal(lint_has_word("abc", "b"), false)
+        t |> equal(lint_indent_of("    x"), 4)
+        t |> equal(lint_operand_text("a.b[i]?.c"), "a.b[i]?.c")
+        t |> equal(lint_operand_text("a::b(x + 1)"), "a::b(x + 1)")
+        t |> equal(lint_operand_text("a + b"), "(a + b)")
+        t |> equal(lint_operand_text("0..n"), "(0..n)")
+        t |> equal(lint_match_bracket("(c == '(') \{", 0), 9)
+        t |> equal(lint_match_bracket("(f(\")\"))", 0), 7)
+        t |> equal(lint_match_bracket("(a /* ) */)", 0), -1)
+        t |> equal(lint_match_bracket("(a", 0), -1)
+    }
+}
+
+[test]
 def test_lint_fix_helpers(t : T?) {
     t |> run("lint_expr_text recovers the whole source of an expression") @@(t : T?) {
         var inscope access <- make_file_access("")

@@ -503,41 +503,6 @@ def perf033_param_taken(var fn : Function?; idx : int; depth : int) : bool {
     return takes
 }
 
-//! True when ``text`` is one primary run - names, member access, calls, subscripts - that sits beside an operator unparenthesized.
-def private perf_is_primary(text : string) : bool {
-    var ok = !empty(text)
-    peek_data(text) $(d) {
-        let n = length(d)
-        var depth = 0
-        var quoted = false
-        var i = 0
-        while (ok && i < n) {
-            let c = int(d[i])
-            let next = i + 1 < n ? int(d[i + 1]) : 0
-            if (quoted) {
-                if (c == '\\') {
-                    i++
-                } elif (c == '"') {
-                    quoted = false
-                }
-            } elif (c == '"') {
-                quoted = true
-            } elif (c == '(' || c == '[') {
-                depth++
-            } elif (c == ')' || c == ']') {
-                depth--
-            } elif (depth == 0) {
-                ok = is_alnum(c) || c == '_' || c == '.' || c == ':' || c == '`' || (c == '?' && (next == '.' || next == '['))
-            }
-            i++
-        }
-    }
-    return ok
-}
-
-//! ``text`` as an operand of a binary or postfix operator - parenthesized unless it is one primary run.
-def private perf_operand(text : string) : string => perf_is_primary(text) ? text : "({text})"
-
 //! True when ``text`` spells a call of ``name`` on ``args`` - plain, piped, or method style.
 def private perf_is_call_text(text, name : string; args : array<string>) : bool {
     let rest = build_string() $(var w) {
@@ -569,13 +534,6 @@ def private perf_squash_spaces(text : string) : string {
             }
         }
     }
-}
-
-//! A fix replacing the source of ``e`` with ``replacement``; none when that source holds a comment.
-def private perf_replace_fix(e : Expression?; replacement : string) : LintFix {
-    let text = lint_expr_text(e)
-    if (empty(text) || find(text, "//") >= 0) return LintFix()
-    return lint_replace_fix(e, replacement)
 }
 
 class PerfLintVisitor : AstVisitor {
@@ -697,27 +655,7 @@ class PerfLintVisitor : AstVisitor {
                 && (current_function == null || generic_safe || current_function.fromGeneric == null))
     }
 
-    def module_visible(name : string) : bool {
-        if (current_function == null || current_function._module == null) return false
-        let m = find_module(compiling_program(), name)
-        return m != null && is_visible_directly(current_function._module, m)
-    }
-
     def is_statement(e : Expression?) : bool => !empty(stmt_cur) && stmt_cur |> back() == e
-
-    def word_used(word : string; first, last : int) : bool {
-        for (ln in range(first, last + 1)) {
-            let line = lint_source_line(current_function.at, ln)
-            var k = find(line, word)
-            while (k >= 0) {
-                let before = lint_byte_at(line, k - 1)
-                let after = lint_byte_at(line, k + length(word))
-                return true if (!(before == '_' || is_alnum(before)) && !(after == '_' || is_alnum(after)))
-                k = find(line, word, k + 1)
-            }
-        }
-        return false
-    }
 
     //! ``base``, suffixed with a number when the current function's source already spells it.
     def fresh_local_name(base : string) : string {
@@ -725,7 +663,7 @@ class PerfLintVisitor : AstVisitor {
         let last = current_function.body != null ? int(current_function.body.at.last_line) : first
         var name = base
         var k = 1
-        while (word_used(name, first, last)) {
+        while (lint_count_word_in_lines(current_function.at, int2(first, last), name) > 0) {
             k++
             name = "{base}{k}"
         }
@@ -740,7 +678,7 @@ class PerfLintVisitor : AstVisitor {
         if (empty(call.arguments)) return LintFix()
         let arg = lint_expr_text(call.arguments[0])
         if (empty(arg) || !perf_is_call_text(lint_expr_text(ce), name, [arg])) return LintFix()
-        return lint_replace_fix(ce, perf_operand(arg))
+        return lint_replace_fix(ce, lint_operand_text(arg))
     }
 
     //! True while the walk is inside the statement right after ``decl`` in the block ``depth`` levels down.
@@ -1530,7 +1468,7 @@ class PerfLintVisitor : AstVisitor {
                 || !(has_value(current_function.arguments, av) || is_local(av))) return LintFix()
         let line = lint_source_line(iv.at, int(iv.at.line))
         let src = lint_expr_text(owning.sources[0])
-        if (iv.name != slice(line, int(iv.at.column), int(iv.at.last_column)) || empty(src) || find(src, "//") >= 0) return LintFix()
+        if (iv.name != slice(line, int(iv.at.column), int(iv.at.last_column)) || empty(src)) return LintFix()
         let arr = string(av.name)
         let name = fresh_local_name(length(arr) > 1 && ends_with(arr, "s") ? slice(arr, 0, length(arr) - 1) : "{arr}_elem")
         var edits <- [
@@ -1843,9 +1781,9 @@ class PerfLintVisitor : AstVisitor {
         let it = string(owning.iteratorVariables[0].name)
         let stmt = lint_expr_text(call)
         let whole = lint_expr_text(owning)
-        if (empty(src) || empty(dest) || find(whole, "//") >= 0 || !perf_is_call_text(stmt, name, [dest, it])
+        if (empty(src) || empty(dest) || !perf_is_call_text(stmt, name, [dest, it])
                 || perf_squash_spaces(whole) != perf_squash_spaces("for ({it} in {src}) \{ {stmt} \}")) return LintFix()
-        return lint_replace_fix(owning, "{perf_operand(dest)} |> {name}_from({src})")
+        return lint_replace_fix(owning, "{lint_operand_text(dest)} |> {name}_from({src})")
     }
 
     def override preVisitExprAt(var expr : ExprAt?) : void {
@@ -2008,7 +1946,7 @@ class PerfLintVisitor : AstVisitor {
         if (!is_statement(expr) || !fix_site_ok(expr, false)) return LintFix()
         let lt = lint_expr_text(expr.left)
         if (empty(lt) || lint_expr_text(expr) != "{lt} {expr.op} {lint_expr_text(expr.right)}") return LintFix()
-        return lint_replace_fix(expr, "{perf_operand(lt)}{postfix}")
+        return lint_replace_fix(expr, "{lint_operand_text(lt)}{postfix}")
     }
 
     def check_perf019_int_cast_or(expr : ExprOp2?) : void {
@@ -2029,7 +1967,7 @@ class PerfLintVisitor : AstVisitor {
         let rt = lint_expr_text(r)
         if (empty(lt) || empty(rt) || !perf_is_call_text(lint_expr_text(peel_ref2value(expr.left)), "int", [lt])
                 || !perf_is_call_text(lint_expr_text(peel_ref2value(expr.right)), "int", [rt])) return LintFix()
-        return perf_replace_fix(expr, "int({perf_operand(lt)} | {perf_operand(rt)})")
+        return lint_replace_fix(expr, "int({lint_operand_text(lt)} | {lint_operand_text(rt)})")
     }
 
     def check_perf020_redundant_cast(call : ExprCall?) : void {
@@ -2208,9 +2146,9 @@ class PerfLintVisitor : AstVisitor {
     }
 
     def perf014_fix(expr : ExprOp2?; v : Expression? const; call : string) : LintFix {
-        if (v == null || v._type == null || v._type.baseType != Type.tInt || !fix_site_ok(expr, false) || !module_visible("strings")) return LintFix()
+        if (v == null || v._type == null || v._type.baseType != Type.tInt || !fix_site_ok(expr, false) || !lint_module_visible(current_function, "strings")) return LintFix()
         let vt = lint_expr_text(v)
-        return empty(vt) ? LintFix() : perf_replace_fix(expr, "{call}({vt})")
+        return empty(vt) ? LintFix() : lint_replace_fix(expr, "{call}({vt})")
     }
 
     def check_perf014_alpha(expr : ExprOp2?; negated : bool) : void {
@@ -2362,14 +2300,14 @@ class PerfLintVisitor : AstVisitor {
             is_min = swap_order
         }
         let which = is_min ? "min" : "max"
-        let fix = math_fix_ok(expr, cl, false) ? perf_replace_fix(expr, "{which}({lint_expr_text(cl)}, {lint_expr_text(cr)})") : LintFix()
+        let fix = math_fix_ok(expr, cl, false) ? lint_replace_fix(expr, "{which}({lint_expr_text(cl)}, {lint_expr_text(cr)})") : LintFix()
         perf_warning("PERF015: ternary {which} - use '{which}(a, b)' from math module", expr.at, fix)
         return true
     }
 
     //! Whether a ternary over ``operand`` may become a math call: a numeric scalar operand, math in scope, a recoverable source.
     def math_fix_ok(expr : ExprOp3?; operand : Expression? const; signed_only : bool) : bool {
-        if (operand == null || !is_workhorse_numeric_scalar(operand._type) || !fix_site_ok(expr, false) || !module_visible("math")) return false
+        if (operand == null || !is_workhorse_numeric_scalar(operand._type) || !fix_site_ok(expr, false) || !lint_module_visible(current_function, "math")) return false
         let bt = operand._type.baseType
         if (signed_only && (bt == Type.tUInt || bt == Type.tUInt64)) return false
         return !empty(lint_expr_text(expr.subexpr)) && lint_expr_text(expr) == "{lint_expr_text(expr.subexpr)} ? {lint_expr_text(expr.left)} : {lint_expr_text(expr.right)}"
@@ -2411,7 +2349,7 @@ class PerfLintVisitor : AstVisitor {
             }
         }
         if (!is_abs) return false
-        let fix = math_fix_ok(expr, x_expr, true) ? perf_replace_fix(expr, "abs({lint_expr_text(x_expr)})") : LintFix()
+        let fix = math_fix_ok(expr, x_expr, true) ? lint_replace_fix(expr, "abs({lint_expr_text(x_expr)})") : LintFix()
         perf_warning("PERF016: ternary abs - use 'abs(x)' from math module", expr.at, fix)
         return true
     }
@@ -2539,7 +2477,7 @@ class PerfLintVisitor : AstVisitor {
     }
 
     def perf003_fix(expr : ExprCall?) : LintFix {
-        if (!fix_site_ok(expr, false) || !module_visible("strings")) return LintFix()
+        if (!fix_site_ok(expr, false) || !lint_module_visible(current_function, "strings")) return LintFix()
         let s = lint_expr_text(expr.arguments[0])
         if (empty(s) || !perf_is_call_text(lint_expr_text(expr), "character_at", [s, lint_expr_text(expr.arguments[1])])) return LintFix()
         return lint_replace_fix(expr, "first_character({s})")
@@ -2679,7 +2617,7 @@ class PerfLintVisitor : AstVisitor {
         let head = slice(line, int(decl.at.column), int(lv.at.last_column))
         let tail = slice(line, int(lv.at.last_column))
         if ((head != "var {lv.name}" && head != "var inscope {lv.name}") || !starts_with(tail, " : ")
-                || find(tail, "//") >= 0 || find(tail, "=") >= 0) return LintFix()
+                || lint_has_comment(tail) || find(tail, "=") >= 0) return LintFix()
         let rhs = lint_expr_text(expr.right)
         let move = lint_expr_span(expr)
         if (empty(rhs) || move.line <= 0 || lint_span_text(decl.at, move) != "{lv.name} <- {rhs}") return LintFix()

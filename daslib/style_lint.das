@@ -54,6 +54,7 @@ require daslib/dupe_detect
 require daslib/fio
 require daslib/is_local
 require daslib/lint_config
+require daslib/strings_boost
 require math
 require strings
 
@@ -111,34 +112,6 @@ struct St041Candidate {
     observed_refs : int
     poisoned : bool
     msg : string
-}
-
-def private code_find(s, two : string) : int {
-    let first_ch = lint_byte_at(two, 0)
-    let second_ch = lint_byte_at(two, 1)
-    var found = -1
-    peek_data(s) $(d) {
-        var quote = 0
-        var escaped = false
-        for (c, i in d, count()) {
-            let ch = int(c)
-            if (quote != 0) {
-                if (escaped) {
-                    escaped = false
-                } elif (ch == '\\') {
-                    escaped = true
-                } elif (ch == quote) {
-                    quote = 0
-                }
-            } elif (ch == '"' || ch == '\'') {
-                quote = ch
-            } elif (ch == first_ch && i + 1 < length(d) && int(d[i + 1]) == second_ch) {
-                found = i
-                break
-            }
-        }
-    }
-    return found
 }
 
 class StyleLintVisitor : AstVisitor {
@@ -225,70 +198,23 @@ class StyleLintVisitor : AstVisitor {
         return result
     }
 
-    def fix_has_comment(text : string) : bool => code_find(text, "//") >= 0 || code_find(text, "/*") >= 0
-
-    def fix_is_ident_byte(c : int) : bool => c >= 0 && (is_alpha(c) || is_number(c) || c == '_')
-
-    //! True when ``text`` names ``name`` as a whole identifier.
-    def fix_mentions(text, name : string) : bool {
-        var pos = find(text, name)
-        while (pos >= 0) {
-            if (!fix_is_ident_byte(lint_byte_at(text, pos - 1)) && !fix_is_ident_byte(lint_byte_at(text, pos + length(name)))) return true
-            pos = find(text, name, pos + 1)
-        }
-        return false
-    }
-
     //! True for a name a type or an ``is`` test can spell: identifier characters and ``::``.
     def fix_is_type_name(text : string) : bool {
         if (empty(text) || is_number(lint_byte_at(text, 0))) return false
         var ok = true
         peek_data(text) $(d) {
             for (c in d) {
-                ok = ok && (fix_is_ident_byte(int(c)) || int(c) == ':')
+                ok = ok && (lint_ident_byte(int(c)) || int(c) == ':')
             }
         }
         return ok
     }
 
-    //! True when ``text`` needs no parentheses as an operand: names, member and index chains, calls, literals.
-    def fix_atom_text(text : string) : bool {
-        var atom = !empty(text) && find(text, "..") < 0
-        peek_data(text) $(d) {
-            var depth = 0
-            var quote = 0
-            var i = 0
-            while (atom && i < length(d)) {
-                let c = int(d[i])
-                let next = i + 1 < length(d) ? int(d[i + 1]) : 0
-                if (quote != 0) {
-                    if (c == '\\') {
-                        i++
-                    } elif (c == quote) {
-                        quote = 0
-                    }
-                } elif (c == '"' || c == '\'') {
-                    quote = c
-                } elif (c == '(' || c == '[') {
-                    depth++
-                } elif (c == ')' || c == ']') {
-                    depth--
-                } elif (depth == 0) {
-                    atom = (fix_is_ident_byte(c) || c == '.' || (c == ':' && (next == ':' || (i > 0 && int(d[i - 1]) == ':')))
-                        || (c == '?' && (next == '.' || next == '[')))
-                }
-                i++
-            }
-            atom = atom && depth == 0 && quote == 0
-        }
-        return atom
-    }
-
     //! The source of ``e`` as an operand of a tighter-binding operator - parenthesized unless it is an atom; "" when it cannot be recovered.
     def fix_operand(e : Expression? const) : string {
         let text = lint_expr_text(e)
-        if (empty(text) || fix_has_comment(text)) return ""
-        return fix_atom_text(text) ? text : "({text})"
+        if (empty(text) || lint_has_comment(text)) return ""
+        return lint_operand_text(text)
     }
 
     //! The source of ``e`` in its own operator slot, keeping the parentheses the span leaves out.
@@ -296,42 +222,10 @@ class StyleLintVisitor : AstVisitor {
         let span = lint_expr_span(e)
         if (span.line <= 0) return ""
         let text = lint_span_text(e.at, span)
-        if (fix_has_comment(text)) return ""
+        if (lint_has_comment(text)) return ""
         let head = strip_right(slice(lint_source_line(e.at, span.line), 0, span.column))
         let tail = strip_left(slice(lint_source_line(e.at, span.last_line), span.last_column))
-        return ends_with(head, "(") && starts_with(tail, ")") && !fix_atom_text(text) ? "({text})" : text
-    }
-
-    //! True when the text around ``span`` binds looser than any operator - an argument, an initializer, a returned value.
-    def fix_isolated(at : LineInfo; span : LintFix) : bool {
-        let head = strip_right(slice(lint_source_line(at, span.line), 0, span.column))
-        let tail = strip_left(slice(lint_source_line(at, span.last_line), span.last_column))
-        let p = lint_byte_at(head, length(head) - 1)
-        let q = lint_byte_at(tail, 0)
-        let compare = ends_with(head, "==") || ends_with(head, "!=") || ends_with(head, "<=") || ends_with(head, ">=")
-        let opens = empty(head) || p == '(' || p == ',' || p == '[' || (p == '=' && !compare) || ends_with(head, "<-") || ends_with(head, " return")
-        return opens && (q < 0 || q == ')' || q == ',' || q == ']' || starts_with(tail, "//"))
-    }
-
-    def fix_join(items : array<string>) : string {
-        return build_string() $(var w) {
-            for (item, k in items, count()) {
-                if (k > 0) {
-                    w |> write(", ")
-                }
-                w |> write(item)
-            }
-        }
-    }
-
-    //! The span of statement ``e`` when it alone fills one source line; line 0 otherwise.
-    def fix_whole_line_span(e : Expression?) : LintFix {
-        if (e.genFlags.generated) return LintFix()
-        let span = lint_expr_span(e)
-        if (span.line <= 0 || span.line != span.last_line) return LintFix()
-        let line = lint_source_line(e.at, span.line)
-        if (!empty(strip(slice(line, 0, span.column))) || !empty(strip(slice(line, span.last_column)))) return LintFix()
-        return span
+        return ends_with(head, "(") && starts_with(tail, ")") && !lint_is_atom(text) ? "({text})" : text
     }
 
     //! The code of single-variable declaration ``elet`` when it alone fills its line; "" otherwise.
@@ -339,16 +233,16 @@ class StyleLintVisitor : AstVisitor {
         if (length(elet.variables) != 1 || elet.genFlags.generated || elet.variables[0].at.line != elet.at.line) return ""
         let line = lint_source_line(elet.at, int(elet.at.line))
         let code = strip(line)
-        if (!empty(strip(slice(line, 0, int(elet.at.column)))) || fix_has_comment(code) || find(code, ";") >= 0 || !starts_with(code, "var ")) return ""
+        if (!empty(strip(slice(line, 0, int(elet.at.column)))) || lint_has_comment(code) || find(code, ";") >= 0 || !starts_with(code, "var ")) return ""
         return code
     }
 
     //! ``statement`` written as ``<target> <op> <value>`` with no ``name`` in the value: the op and the value, or "" when it is not.
     def fix_assignment_tail(statement, target, name : string) : string {
-        if (!starts_with(statement, target) || fix_is_ident_byte(lint_byte_at(statement, length(target)))) return ""
+        if (!starts_with(statement, target) || lint_ident_byte(lint_byte_at(statement, length(target)))) return ""
         let rest = strip_left(slice(statement, length(target)))
         let op_ok = (starts_with(rest, "=") && !starts_with(rest, "==")) || starts_with(rest, "<-") || starts_with(rest, ":=")
-        return op_ok && !fix_mentions(rest, name) ? rest : ""
+        return op_ok && !lint_has_word(rest, name) ? rest : ""
     }
 
     def fix_is_if_keyword(ifte : ExprIfThenElse?) : bool {
@@ -362,7 +256,7 @@ class StyleLintVisitor : AstVisitor {
     //! Drops the ``<|`` before a trailing block at ``pipe`` of line ``ln``, and the ``$()`` it leaves redundant.
     def st001_pipe_fix(at : LineInfo; ln, pipe : int; is_defer : bool) : LintFix {
         let line = lint_source_line(at, ln)
-        let comment = code_find(line, "//")
+        let comment = lint_code_find(line, "//")
         if (pipe < 0 || (comment >= 0 && comment < pipe) || slice(line, pipe, pipe + 2) != "<|") return LintFix()
         let head = strip_right(slice(line, 0, pipe))
         var to = pipe + 2
@@ -389,7 +283,7 @@ class StyleLintVisitor : AstVisitor {
 
     def st001_block_pipe_fix(call_at, block_at : LineInfo) : LintFix {
         for (ln in range(int(call_at.line), int(block_at.line) + 1)) {
-            let pipe = code_find(lint_source_line(call_at, ln), "<|")
+            let pipe = lint_code_find(lint_source_line(call_at, ln), "<|")
             if (pipe >= 0) return st001_pipe_fix(call_at, ln, pipe, false)
         }
         return LintFix()
@@ -426,34 +320,11 @@ class StyleLintVisitor : AstVisitor {
         return LintFix(line = first_ln, column = open_col, last_line = last_ln, last_column = close_col + 1, replacement = statement)
     }
 
-    def fix_exports_module(mod : Module?; name : string; var seen : table<string>) : bool {
-        let mn = "{mod.name}"
-        if (mn == name) return true
-        if (key_exists(seen, mn)) return false
-        seen |> insert(mn)
-        var found = false
-        module_for_each_dependency(mod) $(dep, is_pub) {
-            found = found || (is_pub && dep != null && fix_exports_module(dep, name, seen))
-        }
-        return found
-    }
-
-    //! True when the function being linted sees module ``name`` - required directly or re-exported.
-    def fix_sees_module(name : string) : bool {
-        if (current_function == null || current_function._module == null) return false
-        var seen : table<string>
-        var found = false
-        module_for_each_dependency(current_function._module) $(dep, _is_pub) {
-            found = found || (dep != null && fix_exports_module(dep, name, seen))
-        }
-        return found
-    }
-
     def st006_fix(expr : ExprOp2?) : LintFix {
         let left_is_call = is_string_rtti_comparison(expr.left)
         let call = peel_ref2value_const(left_is_call ? expr.left : expr.right)
         let named = peel_ref2value_const(left_is_call ? expr.right : expr.left)
-        if (expr.genFlags.generated || fix_in_generic() || !(named is ExprConstString) || !fix_sees_module("ast_boost")) return LintFix()
+        if (expr.genFlags.generated || fix_in_generic() || !(named is ExprConstString) || !lint_module_visible(current_function, "ast_boost")) return LintFix()
         let name = string((named as ExprConstString).value)
         if (!fix_is_type_name(name) || lint_expr_text(named) != "\"{name}\"") return LintFix()
         let field = peel_ref2value_const((call as ExprCall).arguments[0]) as ExprField
@@ -482,7 +353,7 @@ class StyleLintVisitor : AstVisitor {
     def st011_fix(decl : Expression const?; assign : Expression?; v : Variable?) : LintFix {
         if (decl == null || !(decl is ExprLet)) return LintFix()
         let code = fix_let_line(decl as ExprLet)
-        let span = fix_whole_line_span(assign)
+        let span = lint_lone_span(assign, true)
         if (empty(code) || (decl as ExprLet).variables[0] != v || span.line != int(decl.at.line) + 1) return LintFix()
         let tail = fix_assignment_tail(lint_span_text(assign.at, span), string(v.name), string(v.name))
         if (empty(tail)) return LintFix()
@@ -501,17 +372,17 @@ class StyleLintVisitor : AstVisitor {
         var last = LintFix()
         for (k in range(count)) {
             let call = blk.list[idx + 1 + k] as ExprCall
-            let span = fix_whole_line_span(call)
+            let span = lint_lone_span(call, true)
             let arg = peel_ref2value_const(call.arguments[1])
             let text = lint_expr_text(arg)
             let is_emplace = call.func.fromGeneric.name == "emplace"
-            if (span.line != int(elet.at.line) + 1 + k || empty(text) || fix_mentions(text, name) || (is_emplace && !(arg is ExprVar))
+            if (span.line != int(elet.at.line) + 1 + k || empty(text) || lint_has_word(text, name) || (is_emplace && !(arg is ExprVar))
                     || !is_same_type(v._type.firstType, arg._type, RefMatters.no, ConstMatters.no, TemporaryMatters.no)) return LintFix()
             items |> push(is_emplace ? "<-{text}" : text)
             last = span
         }
         return LintFix(line = int(elet.at.line), column = int(elet.at.column), last_line = last.line, last_column = last.last_column,
-            replacement = "{code} <- [{fix_join(items)}]")
+            replacement = "{code} <- [{join(items, ", ")}]")
     }
 
     //! The struct type a STYLE013 declaration spells: ``var a : T``, ``var a = T()``, ``var a = new T()``.
@@ -553,7 +424,7 @@ class StyleLintVisitor : AstVisitor {
         var last = LintFix()
         for (k in range(count)) {
             let stmt = blk.list[idx + 1 + k]
-            let span = fix_whole_line_span(stmt)
+            let span = lint_lone_span(stmt, true)
             let field = field_name_of(stmt)
             let tail = span.line > 0 ? fix_assignment_tail(lint_span_text(stmt.at, span), "{name}.{field}", name) : ""
             if (span.line != int(elet.at.line) + 1 + k || empty(tail) || key_exists(seen, field)) return LintFix()
@@ -563,12 +434,12 @@ class StyleLintVisitor : AstVisitor {
         }
         let assign = is_new || v._type.canCopy ? "=" : "<-"
         return LintFix(line = int(elet.at.line), column = int(elet.at.column), last_line = last.line, last_column = last.last_column,
-            replacement = "var {name} {assign} {is_new ? "new " : ""}{type_text}({fix_join(fields)})")
+            replacement = "var {name} {assign} {is_new ? "new " : ""}{type_text}({join(fields, ", ")})")
     }
 
     def st016_or_operand(cond : Expression?) : string {
         let text = lint_expr_text(cond)
-        if (empty(text) || fix_has_comment(text)) return ""
+        if (empty(text) || lint_has_comment(text)) return ""
         return peel_ref2value_const(cond) is ExprOp3 ? "({text})" : text
     }
 
@@ -583,7 +454,7 @@ class StyleLintVisitor : AstVisitor {
                 || !fix_is_if_keyword(first) || !fix_is_if_keyword(second)) return LintFix()
         let tail = slice(lint_source_line(second.at, second_span.last_line), second_span.last_column)
         let dropped = LintFix(line = first_span.last_line, column = first_span.last_column, last_line = second_span.last_line, last_column = second_span.last_column)
-        if (fix_has_comment(lint_span_text(first.at, dropped)) || !empty(strip(tail))) return LintFix()
+        if (lint_has_comment(lint_span_text(first.at, dropped)) || !empty(strip(tail))) return LintFix()
         var cond_edit = cond_span
         cond_edit.replacement = "{a} || {b}"
         return lint_merge_fixes(first.at, [cond_edit, dropped])
@@ -597,7 +468,7 @@ class StyleLintVisitor : AstVisitor {
         if (first_span.line <= 0 || last_span.line <= 0 || empty(cond) || !fix_is_if_keyword(ifte)) return LintFix()
         let span = LintFix(line = first_span.line, column = first_span.column, last_line = last_span.last_line, last_column = last_span.last_column,
             replacement = b1 ? "return {cond}" : "return !{cond}")
-        return fix_has_comment(lint_span_text(ifte.at, span)) ? LintFix() : span
+        return lint_has_comment(lint_span_text(ifte.at, span)) ? LintFix() : span
     }
 
     def st018_fix(expr : ExprOp2?; operand, literal : Expression? const; positive : bool) : LintFix {
@@ -652,7 +523,7 @@ class StyleLintVisitor : AstVisitor {
         let x = lint_expr_text(inner.arguments[x_first ? 0 : 1])
         let limit = lint_expr_text(inner.arguments[x_first ? 1 : 0])
         let bound_text = lint_expr_text(bound)
-        if (empty(x) || empty(limit) || empty(bound_text) || fix_has_comment(x)) return LintFix()
+        if (empty(x) || empty(limit) || empty(bound_text) || lint_has_comment(x)) return LintFix()
         return lint_replace_fix(expr, outer_min ? "clamp({x}, {limit}, {bound_text})" : "clamp({x}, {bound_text}, {limit})")
     }
 
@@ -665,7 +536,7 @@ class StyleLintVisitor : AstVisitor {
         let fallback = fix_number(expr.arguments[n - 1], number) ? lint_expr_text(expr.arguments[n - 1]) : fix_operand(expr.arguments[n - 1])
         var span = lint_expr_span(expr)
         if (empty(value) || empty(fallback) || span.line <= 0) return LintFix()
-        span.replacement = fix_isolated(expr.at, span) ? "{value} ?? {fallback}" : "({value} ?? {fallback})"
+        span.replacement = lint_isolated(expr.at, span) ? "{value} ?? {fallback}" : "({value} ?? {fallback})"
         return span
     }
 
@@ -714,7 +585,7 @@ class StyleLintVisitor : AstVisitor {
             : [slice(first, open_col + 1), middle, slice(last, 0, close_col)])
         var inner, comment : string
         for (piece in pieces) {
-            let at = code_find(piece, "//")
+            let at = lint_code_find(piece, "//")
             let code = strip(at >= 0 ? slice(piece, 0, at) : piece)
             if ((at >= 0 && !empty(comment)) || (!empty(code) && !empty(inner))) return LintFix()
             if (at >= 0) {
@@ -730,30 +601,20 @@ class StyleLintVisitor : AstVisitor {
             expr = strip(slice(expr, 0, length(expr) - 1))
         }
         let tail_text = slice(last, close_col + 1)
-        if (starts_with(expr, "\{") || starts_with(expr, "<- \{") || code_find(expr, "..") >= 0) {
+        if (starts_with(expr, "\{") || starts_with(expr, "<- \{") || lint_code_find(expr, "..") >= 0) {
             return LintFix(line = -1)
         }
-        if (empty(expr) || code_find(expr, "/*") >= 0 || (!empty(comment) && !empty(strip(tail_text)))) return LintFix()
+        if (empty(expr) || lint_code_find(expr, "/*") >= 0 || (!empty(comment) && !empty(strip(tail_text)))) return LintFix()
         if (!empty(comment)) {
             expr = "{expr}  {comment}"
         }
         let tail = length(tail_text)
-        let indent = length(first) - length(strip_left(first))
+        let indent = lint_indent_of(first)
         let one_line = open_col + 3 + length(expr) + tail <= STYLE042_MAX_LINE
-        if (!one_line && code_find(pieces[0], "//") >= 0) return LintFix(line = -1)
+        if (!one_line && lint_code_find(pieces[0], "//") >= 0) return LintFix(line = -1)
         let lead = lint_byte_at(first, open_col - 1) == ' ' ? "" : " "
         let replacement = one_line ? "{lead}=> {expr}" : "{lead}=>\n{repeat(" ", indent + 4)}{expr}"
         return LintFix(line = first_ln, column = open_col, last_line = last_ln, last_column = close_col + 1, replacement = replacement)
-    }
-
-    def st_ident_byte(c : int) : bool => is_alpha(c) || is_number(c) || c == '_'
-
-    //! True when ``name`` stands as a whole word on source lines ``from..to`` of the file of ``at``.
-    def st_word_in_lines(at : LineInfo; name : string; from, to : int) : bool {
-        for (ln in range(from, to + 1)) {
-            return true if (st_has_word(lint_source_line(at, ln), name))
-        }
-        return false
     }
 
     //! ``unsafe(E)`` -> ``E``, kept in parentheses unless ``E`` is primary or the wrap stands between delimiters.
@@ -772,24 +633,11 @@ class StyleLintVisitor : AstVisitor {
         }
         let head = open - 6
         if (lint_byte_at(first, open) != '(' || lint_byte_at(last, close) != ')' || head < 0
-                || slice(first, head, open) != "unsafe" || st_ident_byte(lint_byte_at(first, head - 1))) return LintFix()
-        let left = strip_right(slice(first, 0, head))
-        let right = strip_left(slice(last, close + 1))
-        let lc = lint_byte_at(left, length(left) - 1)
-        let rc = lint_byte_at(right, 0)
-        let before_eq = lint_byte_at(left, length(left) - 2)
-        let assign = lc == '=' && before_eq != '=' && before_eq != '!' && before_eq != '<' && before_eq != '>'
-        let open_left = empty(left) || lc == '(' || lc == '[' || lc == ',' || lc == '{' || assign || ends_with(left, "<-") || ends_with(left, "return")
-        let open_right = empty(right) || rc == ')' || rc == ']' || rc == ',' || rc == '}' || rc == ';' || starts_with(right, "//")
-        var bare = expr
-        if (bare is ExprRef2Value) {
-            bare = (bare as ExprRef2Value).subexpr
-        }
-        let primary = (bare is ExprCall || bare is ExprVar || bare is ExprField || bare is ExprAt || bare is ExprStringBuilder
-            || bare is ExprConstString || bare is ExprConstInt || bare is ExprConstFloat || bare is ExprConstBool)
+                || slice(first, head, open) != "unsafe" || lint_ident_byte(lint_byte_at(first, head - 1))) return LintFix()
+        var wrap = LintFix(line = span.line, column = head, last_line = span.last_line, last_column = close + 1)
         let inner = lint_span_text(expr.at, span)
-        return LintFix(line = span.line, column = head, last_line = span.last_line, last_column = close + 1,
-            replacement = primary || (open_left && open_right) ? inner : "({inner})")
+        wrap.replacement = lint_is_atom(inner) || lint_isolated(expr.at, wrap) ? inner : "({inner})"
+        return wrap
     }
 
     //! Drops the braces of ``unsafe { ... }`` and de-indents its body one level, applying ``wrap`` inside
@@ -806,7 +654,7 @@ class StyleLintVisitor : AstVisitor {
         for (st in blk.list) {
             continue if (!(st is ExprLet))
             for (v in (st as ExprLet).variables) {
-                return LintFix() if (v.flags.inScope || st_word_in_lines(u.at, string(v.name), l1 + 1, int(current_function.body.at.last_line)))
+                return LintFix() if (v.flags.inScope || lint_count_word_in_lines(u.at, int2(l1 + 1, int(current_function.body.at.last_line)), string(v.name)) > 0)
             }
         }
         let tail = length(lint_source_line(u.at, l1))
@@ -833,7 +681,7 @@ class StyleLintVisitor : AstVisitor {
             let body = strip(slice(lines[0], col + 6))
             let inner = strip(slice(body, 1, length(body) - 1))
             if (!starts_with(body, "\{") || !ends_with(body, "\}") || empty(inner) || find(inner, "\{") >= 0 || find(inner, "\}") >= 0
-                    || find(inner, ";") >= 0 || code_find(inner, "//") >= 0) return LintFix()
+                    || find(inner, ";") >= 0 || lint_code_find(inner, "//") >= 0) return LintFix()
             return LintFix(line = l0, column = col, last_line = l1, last_column = tail, replacement = inner)
         }
         let pad = repeat(" ", col + 4)
@@ -883,53 +731,21 @@ class StyleLintVisitor : AstVisitor {
         let token = " {inert}"
         let typ = slice(text, 0, open)
         let at = find(typ, token)
-        if (at < 0 || find(typ, token, at + 1) >= 0 || st_ident_byte(lint_byte_at(typ, at + length(token)))) return LintFix()
+        if (at < 0 || find(typ, token, at + 1) >= 0 || lint_ident_byte(lint_byte_at(typ, at + length(token)))) return LintFix()
         return lint_replace_fix(expr, "{slice(text, 0, at)}{slice(text, at + length(token))}")
-    }
-
-    def st_join(items : array<string>; sep : string) : string {
-        return build_string() $(var w) {
-            for (item, k in items, count()) {
-                if (k > 0) {
-                    w |> write(sep)
-                }
-                w |> write(item)
-            }
-        }
-    }
-
-    def st_has_word(text, name : string) : bool {
-        var pos = find(text, name)
-        while (pos >= 0) {
-            return true if (!st_ident_byte(lint_byte_at(text, pos - 1)) && !st_ident_byte(lint_byte_at(text, pos + length(name))))
-            pos = find(text, name, pos + 1)
-        }
-        return false
-    }
-
-    //! The line of a statement written alone on one line with no comment; 0 otherwise.
-    def st_lone_line(e : Expression?) : int {
-        let text = lint_expr_text(e)
-        let ln = int(e.at.line)
-        return !empty(text) && strip(lint_source_line(e.at, ln)) == text ? ln : 0
     }
 
     //! The line of ``var <name> : <type>`` written alone on one line with no comment; 0 otherwise.
     def st_bare_decl_line(elet : ExprLet?; v : Variable?) : int {
         let ln = int(v.at.line)
         let line = strip(lint_source_line(v.at, ln))
-        return (length(elet.variables) == 1 && starts_with(line, "var {v.name} :") && code_find(line, "//") < 0 && code_find(line, "/*") < 0
+        return (length(elet.variables) == 1 && starts_with(line, "var {v.name} :") && !lint_has_comment(line)
             && find(line, "=") < 0) ? ln : 0
-    }
-
-    def st_indent_of(at : LineInfo; ln : int) : int {
-        let line = lint_source_line(at, ln)
-        return length(line) - length(strip_left(line))
     }
 
     //! Replaces source lines ``first..last`` (indentation of ``first`` kept) with ``text``.
     def st_lines_fix(at : LineInfo; first, last : int; text : string) : LintFix =>
-        LintFix(line = first, column = st_indent_of(at, first), last_line = last, last_column = length(lint_source_line(at, last)), replacement = text)
+        LintFix(line = first, column = lint_indent_of(lint_source_line(at, first)), last_line = last, last_column = length(lint_source_line(at, last)), replacement = text)
 
     def st_same_type(a, b : TypeDecl?) : bool =>
         a != null && b != null && b.canCopy && is_same_type(a, b, RefMatters.no, ConstMatters.no, TemporaryMatters.no)
@@ -977,18 +793,15 @@ class StyleLintVisitor : AstVisitor {
 
     //! ``require X`` alone on its line, ``X`` respelled as ``spelling``.
     def st029_fix(at : LineInfo; req_name : string implicit; spelling : string) : LintFix {
-        let ln = int(at.line)
-        let col = int(at.column)
-        let line = lint_source_line(at, ln)
-        return (empty(spelling) || strip(line) != "require {req_name}" || slice(line, col, col + length(req_name)) != req_name ? LintFix()
-            : LintFix(line = ln, column = col, last_line = ln, last_column = col + length(req_name), replacement = spelling))
+        if (empty(spelling) || strip(lint_source_line(at, int(at.line))) != "require {req_name}") return LintFix()
+        return lint_token_fix(at, int(at.line), int(at.column), req_name, spelling)
     }
 
     //! Deletes the line of an unused ``require req_name`` - or of a ``require [group]`` when ``req_name`` is empty - when nothing else shares it.
     def st030_fix(at : LineInfo; req_name : string implicit) : LintFix {
         let ln = int(at.line)
         let line = strip(lint_source_line(at, ln))
-        let whole = (empty(req_name) ? starts_with(line, "require [") && ends_with(line, "]") && code_find(line, "//") < 0 && code_find(line, "/*") < 0
+        let whole = (empty(req_name) ? starts_with(line, "require [") && ends_with(line, "]") && !lint_has_comment(line)
             : line == "require {req_name}")
         return whole ? LintFix(line = ln, column = 0, last_line = ln + 1, last_column = 0, replacement = "") : LintFix()
     }
@@ -1027,7 +840,7 @@ class StyleLintVisitor : AstVisitor {
         let last = int(fbody.at.last_line)
         for (ln in range(decl + 1, last + 1)) {
             let line = lint_source_line(v.at, ln)
-            if (code_find(line, "//") >= 0 || code_find(line, "/*") >= 0) return LintFix()
+            if (lint_has_comment(line)) return LintFix()
         }
         let head = strip(lint_source_line(v.at, decl + 1))
         if (!starts_with(head, "for (") || !ends_with(head, ") \{")) return LintFix()
@@ -1036,7 +849,7 @@ class StyleLintVisitor : AstVisitor {
         let cond = filtered ? lint_expr_text((stmt as ExprIfThenElse).cond) : ""
         let item = filtered ? st_item_text(((stmt as ExprIfThenElse).if_true as ExprBlock).list[0], v._type) : st_item_text(stmt, v._type)
         let name = string(v.name)
-        if (empty(item) || (filtered && empty(cond)) || st_has_word(item, name) || st_has_word(cond, name)) return LintFix()
+        if (empty(item) || (filtered && empty(cond)) || lint_has_word(item, name) || lint_has_word(cond, name)) return LintFix()
         let where_clause = empty(cond) ? "" : "; where {cond}"
         let source = slice(head, 4, length(head) - 2)
         let text = isArray ? "var {name} <- [for {source}; {item}{where_clause}]" : "var {name} <- \{for {source}; {item}{where_clause}\}"
@@ -1052,17 +865,17 @@ class StyleLintVisitor : AstVisitor {
         items |> reserve(count)
         for (k in range(count)) {
             let stmt = blk.list[idx + 1 + k]
-            if (st_lone_line(stmt) != decl + 1 + k) return LintFix()
+            if (lint_lone_span(stmt, true).line != decl + 1 + k) return LintFix()
             let item = st_item_text(stmt, v._type)
-            if (empty(item) || st_has_word(item, name)) return LintFix()
+            if (empty(item) || lint_has_word(item, name)) return LintFix()
             items |> push(item)
         }
-        let indent = st_indent_of(v.at, decl)
-        let one_line = "var {name} <- \{ {st_join(items, ", ")} \}"
+        let indent = lint_indent_of(lint_source_line(v.at, decl))
+        let one_line = "var {name} <- \{ {join(items, ", ")} \}"
         if (indent + length(one_line) <= STYLE042_MAX_LINE) return st_lines_fix(v.at, decl, decl + count, one_line)
         let pad = repeat(" ", indent + 4)
         let sep = ",\n{pad}"
-        return st_lines_fix(v.at, decl, decl + count, "var {name} <- \{\n{pad}{st_join(items, sep)}\n{repeat(" ", indent)}\}")
+        return st_lines_fix(v.at, decl, decl + count, "var {name} <- \{\n{pad}{join(items, sep)}\n{repeat(" ", indent)}\}")
     }
 
     //! ``var w : array<T>`` + ``push_from`` / ``push_clone_from`` runs -> ``var w := SRC`` or ``var w <- concat(...)``.
@@ -1074,7 +887,7 @@ class StyleLintVisitor : AstVisitor {
         for (k in range(count)) {
             let stmt = blk.list[idx + 1 + k]
             let src = lint_expr_text((stmt as ExprCall).arguments[1])
-            if (st_lone_line(stmt) != decl + 1 + k || empty(src) || st_has_word(src, string(v.name))) return LintFix()
+            if (lint_lone_span(stmt, true).line != decl + 1 + k || empty(src) || lint_has_word(src, string(v.name))) return LintFix()
             sources |> push(src)
         }
         if (count == 1) return st_lines_fix(v.at, decl, decl + 1, "var {v.name} := {sources[0]}")
@@ -1084,16 +897,16 @@ class StyleLintVisitor : AstVisitor {
                 linq = true
             }
         }
-        return linq ? st_lines_fix(v.at, decl, decl + count, "var {v.name} <- concat({st_join(sources, ", ")})") : LintFix()
+        return linq ? st_lines_fix(v.at, decl, decl + count, "var {v.name} <- concat({join(sources, ", ")})") : LintFix()
     }
 
     //! A run of ``count`` bulk appends into one receiver -> one variadic call.
     def st033_fix(blk : ExprBlock?; i, count : int; fname : string) : LintFix {
         let first = blk.list[i] as ExprCall
         let recv = lint_expr_text(first.arguments[0])
-        let line = st_lone_line(first)
+        let line = lint_lone_span(first, true).line
         var root_end = 0
-        while (st_ident_byte(lint_byte_at(recv, root_end))) {
+        while (lint_ident_byte(lint_byte_at(recv, root_end))) {
             root_end++
         }
         let root = slice(recv, 0, root_end)
@@ -1103,10 +916,10 @@ class StyleLintVisitor : AstVisitor {
         for (k in range(count)) {
             let stmt = blk.list[i + k]
             let src = lint_expr_text((stmt as ExprCall).arguments[1])
-            if (st_lone_line(stmt) != line + k || empty(src) || st_has_word(src, root)) return LintFix()
+            if (lint_lone_span(stmt, true).line != line + k || empty(src) || lint_has_word(src, root)) return LintFix()
             sources |> push(src)
         }
-        return st_lines_fix(first.at, line, line + count - 1, "{recv} |> {fname}({st_join(sources, ", ")})")
+        return st_lines_fix(first.at, line, line + count - 1, "{recv} |> {fname}({join(sources, ", ")})")
     }
 
     def check_style042_expression_body(fn : FunctionPtr) : void {
@@ -1881,7 +1694,7 @@ class StyleLintVisitor : AstVisitor {
     }
 
     def st043_decl(e : ExpressionPtr) : ExprLet const? {
-        if (!(e is ExprLet) || e.genFlags.generated || code_find(lint_source_line(e.at, int(e.at.line)), "//") >= 0) return null
+        if (!(e is ExprLet) || e.genFlags.generated || lint_code_find(lint_source_line(e.at, int(e.at.line)), "//") >= 0) return null
         let decl = e as ExprLet
         for (v in decl.variables) {
             if (v.init != null || v.flags.generated || !empty(v.annotation) || find(string(v.name), "`") >= 0) return null

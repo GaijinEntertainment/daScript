@@ -600,9 +600,7 @@ def private lint_trailing_name_end(expr : Expression?; b : int2) : int2 {
     while (lint_byte_at(line, k) == ' ') {
         k++
     }
-    let c = lint_byte_at(line, k + length(name))
-    let ident = is_alpha(c) || is_number(c) || c == '_'
-    return slice(line, k, k + length(name)) == name && !ident ? int2(b.x, k + length(name)) : b
+    return slice(line, k, k + length(name)) == name && !lint_ident_byte(lint_byte_at(line, k + length(name))) ? int2(b.x, k + length(name)) : b
 }
 
 class private LintSpanVisitor : AstVisitor {
@@ -655,21 +653,21 @@ struct private LintScan {
     pos : int
 }
 
-//! Advances ``st`` over ``d[st.pos..to)`` folding bracket depth, skipping strings and line comments; with
+//! Advances ``st`` over ``d[st.pos..to)`` folding bracket depth, skipping literals and line comments; with
 //! ``close`` it stops right after the byte that returns depth and quotes to zero. False on a block comment.
 def private lint_scan_brackets(d : array<uint8> const# implicit; to : int; close : bool; var st : LintScan&) : bool {
     while (st.pos < to && !(close && st.depth == 0 && st.quotes == 0)) {
         let c = int(d[st.pos])
         let next = st.pos + 1 < length(d) ? int(d[st.pos + 1]) : 0
         st.pos++
-        if (st.quotes > 0) {
+        if (st.quotes != 0) {
             if (c == '\\') {
                 st.pos++
-            } elif (c == '"') {
-                st.quotes--
+            } elif (c == st.quotes) {
+                st.quotes = 0
             }
-        } elif (c == '"') {
-            st.quotes++
+        } elif (c == '"' || c == '\'') {
+            st.quotes = c
         } elif (c == '/' && next == '*') {
             return false
         } elif (c == '/' && next == '/') {
@@ -807,12 +805,13 @@ def public lint_expr_text(e : Expression?) : string {
     return span.line > 0 ? lint_span_text(e.at, span) : ""
 }
 
-//! A fix replacing the whole source of ``e`` with ``replacement``; no fix when the span cannot be recovered.
-def public lint_replace_fix(e : Expression?; replacement : string) : LintFix {
+//! A fix replacing the whole source of ``e`` with ``replacement``; none when the span cannot be recovered, holds a comment, or does not start with ``head``.
+def public lint_replace_fix(e : Expression?; replacement : string; head : string = "") : LintFix {
     var span = lint_expr_span(e)
-    if (span.line > 0) {
-        span.replacement = replacement
-    }
+    if (span.line == 0 || empty(replacement)) return LintFix()
+    let text = lint_span_text(e.at, span)
+    if (lint_has_comment(text) || !starts_with(text, head)) return LintFix()
+    span.replacement = replacement
     return span
 }
 
@@ -845,6 +844,154 @@ def public lint_merge_fixes(at : LineInfo; edits : array<LintFix>) : LintFix {
         }
     }
     return LintFix(line = span.line, column = span.column, last_line = span.last_line, last_column = span.last_column, replacement = replacement)
+}
+
+//! Whether the byte ``c`` (-1 outside a string) can stand in an identifier.
+def public lint_ident_byte(c : int) : bool => c >= 0 && (is_alpha(c) || is_number(c) || c == '_')
+
+//! The index of the two-byte token ``two`` in ``s``, string and character literals skipped; -1 when absent.
+def public lint_code_find(s, two : string) : int {
+    let first_ch = lint_byte_at(two, 0)
+    let second_ch = lint_byte_at(two, 1)
+    var found = -1
+    peek_data(s) $(d) {
+        var quote = 0
+        var escaped = false
+        for (c, i in d, count()) {
+            let ch = int(c)
+            if (quote != 0) {
+                if (escaped) {
+                    escaped = false
+                } elif (ch == '\\') {
+                    escaped = true
+                } elif (ch == quote) {
+                    quote = 0
+                }
+            } elif (ch == '"' || ch == '\'') {
+                quote = ch
+            } elif (ch == first_ch && i + 1 < length(d) && int(d[i + 1]) == second_ch) {
+                found = i
+                break
+            }
+        }
+    }
+    return found
+}
+
+//! Whether ``text`` holds a ``//`` or ``/*`` comment outside its literals.
+def public lint_has_comment(text : string) : bool => lint_code_find(text, "//") >= 0 || lint_code_find(text, "/*") >= 0
+
+//! How many times ``word`` stands as a whole identifier in ``text``, comments and strings included.
+def public lint_count_word(text, word : string) : int {
+    if (empty(word)) return 0
+    var n = 0
+    var p = find(text, word)
+    while (p >= 0) {
+        if (!lint_ident_byte(lint_byte_at(text, p - 1)) && !lint_ident_byte(lint_byte_at(text, p + length(word)))) {
+            n++
+        }
+        p = find(text, word, p + 1)
+    }
+    return n
+}
+
+//! Whether ``word`` stands as a whole identifier in ``text``.
+def public lint_has_word(text, word : string) : bool => lint_count_word(text, word) > 0
+
+//! ``lint_count_word`` over source lines ``lines.x..lines.y`` of the file of ``at``.
+def public lint_count_word_in_lines(at : LineInfo; lines : int2; word : string) : int {
+    var n = 0
+    for (ln in range(lines.x, lines.y + 1)) {
+        n += lint_count_word(lint_source_line(at, ln), word)
+    }
+    return n
+}
+
+//! The width of the leading whitespace of ``line``.
+def public lint_indent_of(line : string) : int => length(line) - length(strip_left(line))
+
+//! Whether ``text`` needs no parentheses as an operand: names, member and index chains, calls, literals.
+def public lint_is_atom(text : string) : bool {
+    var atom = !empty(text) && find(text, "..") < 0
+    peek_data(text) $(d) {
+        var depth = 0
+        var quote = 0
+        var i = 0
+        while (atom && i < length(d)) {
+            let c = int(d[i])
+            let next = i + 1 < length(d) ? int(d[i + 1]) : 0
+            if (quote != 0) {
+                if (c == '\\') {
+                    i++
+                } elif (c == quote) {
+                    quote = 0
+                }
+            } elif (c == '"' || c == '\'') {
+                quote = c
+            } elif (c == '(' || c == '[') {
+                depth++
+            } elif (c == ')' || c == ']') {
+                depth--
+            } elif (depth == 0) {
+                atom = (lint_ident_byte(c) || c == '.' || c == '`' || (c == ':' && (next == ':' || (i > 0 && int(d[i - 1]) == ':')))
+                    || (c == '?' && (next == '.' || next == '[')))
+            }
+            i++
+        }
+        atom = atom && depth == 0 && quote == 0
+    }
+    return atom
+}
+
+//! ``text`` as the operand of a tighter-binding operator - parenthesized unless it is an atom.
+def public lint_operand_text(text : string) : string => lint_is_atom(text) ? text : "({text})"
+
+//! Whether the source around ``span`` binds looser than any operator - an argument, an initializer, a returned value, a statement.
+def public lint_isolated(at : LineInfo; span : LintFix) : bool {
+    let head = strip_right(slice(lint_source_line(at, span.line), 0, span.column))
+    let tail = strip_left(slice(lint_source_line(at, span.last_line), span.last_column))
+    let p = lint_byte_at(head, length(head) - 1)
+    let q = lint_byte_at(tail, 0)
+    let before_eq = lint_byte_at(head, length(head) - 2)
+    let assign = p == '=' && before_eq != '=' && before_eq != '!' && before_eq != '<' && before_eq != '>'
+    let returned = ends_with(head, "return") && !lint_ident_byte(lint_byte_at(head, length(head) - 7))
+    let opens = empty(head) || p == '(' || p == '[' || p == ',' || p == '{' || assign || ends_with(head, "<-") || returned
+    return opens && (q < 0 || q == ')' || q == ']' || q == ',' || q == '}' || q == ';' || starts_with(tail, "//"))
+}
+
+//! The span of ``e`` when it alone fills its source lines - a single line under ``one_line``; line 0 otherwise or for a generated node.
+def public lint_lone_span(e : Expression?; one_line : bool) : LintFix {
+    if (e.genFlags.generated) return LintFix()
+    let span = lint_expr_span(e)
+    if (span.line <= 0 || (one_line && span.line != span.last_line)) return LintFix()
+    let head = slice(lint_source_line(e.at, span.line), 0, span.column)
+    let tail = slice(lint_source_line(e.at, span.last_line), span.last_column)
+    return empty(strip(head)) && empty(strip(tail)) ? span : LintFix()
+}
+
+//! The edit replacing ``token`` at column ``col`` of line ``ln``; none unless the source spells ``token`` there.
+def public lint_token_fix(at : LineInfo; ln, col : int; token, replacement : string) : LintFix {
+    if (col < 0 || slice(lint_source_line(at, ln), col, col + length(token)) != token) return LintFix()
+    return LintFix(line = ln, column = col, last_line = ln, last_column = col + length(token), replacement = replacement)
+}
+
+//! The index of the bracket closing the one at ``open`` of ``text``, literals and line comments skipped; -1 when unbalanced or a block comment stands in the way.
+def public lint_match_bracket(text : string; open : int) : int {
+    var close = -1
+    peek_data(text) $(d) {
+        var st = LintScan(pos = open + 1, depth = 1)
+        if (open >= 0 && open < length(d) && lint_scan_brackets(d, length(d), true, st) && st.depth == 0 && st.quotes == 0) {
+            close = st.pos - 1
+        }
+    }
+    return close
+}
+
+//! Whether the module of ``fn`` sees module ``name`` - itself, a require, or a public re-export of one.
+def public lint_module_visible(fn : Function?; name : string) : bool {
+    if (fn == null || fn._module == null) return false
+    let m = find_module(compiling_program(), name)
+    return m != null && is_visible_directly(fn._module, m)
 }
 
 //! Builds a ``LintIssue`` from a lint message and its source location.
