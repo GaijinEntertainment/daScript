@@ -232,7 +232,7 @@ and it was minted on a quiet, session-free box - never hand-edited. Run the gate
 `aws_bootstrap.sh`, the user-data of section 1: sections 2, 4 and 6 and the export in one pass - the
 box clones master, builds `daslang`, fetches the 1B Q4_K_M vehicle and the 1B Q8_0 the confirm pins the
 q8 leg on, runs the TEST gate, mints and exports, and writes each step's verdict to `~/mint/mint.out`
-(`MINT-DONE` last). Read that file, then section 7's compare, then `scp` the profile home.
+(`MINT-DONE` last). Read that file, then section 6's compare, then `scp` the profile home.
 
 ```bash
 #!/bin/bash
