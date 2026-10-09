@@ -1386,6 +1386,8 @@ check by scanning to the index. For accessing the first character, use
 ``first_character`` which is O(1). For bulk access in hot paths, consider
 ``peek_data`` for reads or ``modify_data`` for mutations.
 
+``--fix`` rewrites ``character_at(s, 0)`` to ``first_character(s)``; the other indices have no fix.
+
 .. das-doc: alt
 .. code-block:: das
 
@@ -1474,6 +1476,8 @@ PERF007 — unnecessary ``string(das_string)`` in comparison
 ``das_string`` values via ``==`` and ``!=``. Wrapping in ``string()`` allocates
 a new string unnecessarily.
 
+``--fix`` drops the ``string(...)`` cast.
+
 .. das-doc: fragment
 .. code-block:: das
 
@@ -1509,6 +1513,8 @@ The clone-init flavor — ``var x := src; return <- x`` (lowered to
 ``<- clone_to_move(...)``) — collapses to ``return clone_to_move(src)``, **not**
 ``return <- src`` (which would move/destroy the clone source).
 
+``--fix`` folds the two statements into ``return <- expr`` (``return clone_to_move(src)`` for the clone flavor) when nothing - a comment included - sits between them.
+
 .. das-doc: alt
 .. code-block:: das
 
@@ -1532,6 +1538,8 @@ PERF010 — unnecessary ``get_ptr()`` for null comparison
 ``smart_ptr`` supports ``==`` and ``!=`` against ``null`` directly.
 Calling ``get_ptr()`` first is unnecessary overhead.
 
+``--fix`` drops the ``get_ptr(...)`` call.
+
 .. das-doc: fragment
 .. code-block:: das
 
@@ -1546,6 +1554,8 @@ PERF011 — unnecessary ``get_ptr()`` for field access
 
 ``smart_ptr`` auto-dereferences for field access. Calling ``get_ptr()``
 first to access a field is unnecessary.
+
+``--fix`` drops the ``get_ptr(...)`` call.
 
 .. das-doc: fragment
 .. code-block:: das
@@ -1586,6 +1596,8 @@ the canonical inc/dec idiom. Applies to the six numeric workhorse scalars
 (``int2``, ``float3``, …) do **not** support ``++``/``--`` so they are
 skipped. ``+= -1`` is also flagged (same effect as ``-= 1``).
 
+``--fix`` rewrites a statement-level ``a += 1`` / ``a -= 1`` to ``a++`` / ``a--``.
+
 .. das-doc: alt
 .. code-block:: das
 
@@ -1623,6 +1635,8 @@ Deliberately **not** flagged:
   *intersection* with different endpoints, distinct from the ``||``
   strict-inequality *complement* (``c < '0' || c > '9'``) which is flagged.
 
+``--fix`` replaces the range check with the ``is_number`` / ``is_alpha`` call when the ``strings`` module is visible and the operand is an ``int``.
+
 .. das-doc: fragment
 .. code-block:: das
 
@@ -1644,6 +1658,8 @@ PERF015 — ternary min / max
 vec-friendly and the intent is clearer. All eight orientations of
 ``< / <= / > / >=`` × ``T==L,F==R`` / ``T==R,F==L`` are flagged.
 
+``--fix`` replaces a numeric ternary with the ``min`` / ``max`` call when the ``math`` module is visible.
+
 .. das-doc: alt
 .. code-block:: das
 
@@ -1662,6 +1678,8 @@ PERF016 — ternary abs
 signed numeric type. Only the four orientations that match ``abs`` are
 flagged; the negabs shape (``x < 0 ? x : -x``) is **not** — it is a
 different function.
+
+``--fix`` replaces a signed numeric ternary with ``abs(x)`` when the ``math`` module is visible.
 
 .. das-doc: alt
 .. code-block:: das
@@ -1686,6 +1704,8 @@ idiomatic form. Six comparison ops are mapped to either ``empty(x)`` or
 
 Vector magnitude (``length(float3_var)`` from the math module) is **not**
 flagged — different semantics, no ``empty`` for vectors.
+
+``--fix`` rewrites the comparison to ``empty(x)`` / ``!empty(x)`` for strings, ``das_string``, arrays and tables.
 
 .. das-doc: fragment
 .. code-block:: das
@@ -1714,6 +1734,8 @@ the existing ``find_expr_path`` chain walker. Every use of ``i`` in the body mus
 (``arr[i+1]`` / sliding window) or use of ``i`` outside an indexing
 expression disqualifies the loop. Bare-variable sibling arrays indexed by
 the same ``i`` route the loop to PERF029 instead.
+
+``--fix`` iterates the array directly under a fresh element name and replaces every ``arr[i]``, when the array is a local or parameter and nothing else in the body - a closure included - names it or ``i``.
 
 .. das-doc: alt
 .. code-block:: das
@@ -1784,6 +1806,8 @@ Credit is per function and per site: it does not cross into or out of deferred
 bodies (a lambda's ``delete`` runs later and never credits; an inline block
 argument's counts, though the block may never run — the rule errs silent), and
 a conditional fill is best folded into the declaration as ``var a <- c ? x : y``.
+
+``--fix`` folds the move into a ``var x : T`` declaration on the statement right above it, the case where the target is provably fresh.
 
 .. das-doc: fragment
 .. code-block:: das
@@ -1863,6 +1887,8 @@ helper that takes the buffer by reference marks its own parameter
 ``@exact_size`` so the ``resize`` inside is held to the same contract.
 ``@exact_size`` on anything that is not an array is reported.
 
+``--fix`` removes ``@exact_size`` from a declaration that is not an array; the missing-reserve variant has no fix.
+
 .. das-doc: alt
 .. code-block:: das
 
@@ -1929,6 +1955,8 @@ observe the rule firing on it. The lint runner sets
 Dastest coverage in ``utils/lint/tests/perf019_int_cast_collapse.das``
 uses runtime operands; the constant case is covered by the CI lint gate.
 
+``--fix`` rewrites the expression to the single-cast form.
+
 .. das-doc: alt
 .. code-block:: das
 
@@ -1967,6 +1995,8 @@ Fires for the 15 workhorse cast names: ``int``, ``int8``, ``int16``,
 trigger) combined with a strict ``arg._type.baseType`` equality check
 against the cast's target type. Const / reference / temporary qualifiers
 on the argument are ignored — only ``baseType`` matters.
+
+``--fix`` drops the cast, except a bitfield cast.
 
 .. das-doc: alt
 .. code-block:: das
@@ -2021,6 +2051,8 @@ If the argument base types differ (e.g. ``cond ? string(intV) :
 string(int64V)``), the rule does NOT fire; the rewrite would need a
 manual widen on one branch and that is left to the author.
 
+``--fix`` hoists the cast over the ternary.
+
 .. das-doc: alt
 .. code-block:: das
 
@@ -2067,6 +2099,8 @@ because those have no direct bulk equivalent.
 Compiler folds ``B |> push(s)``, ``B.push(s)``, and ``push(B, s)`` to the
 same call shape, so all three forms are detected by the same rule.
 
+``--fix`` replaces a loop whose body is that one statement, with no comment in it, by ``B |> push_from(A)`` / ``B |> push_clone_from(A)``.
+
 .. das-doc: alt
 .. code-block:: das
 
@@ -2109,6 +2143,8 @@ all go through ``apply_template`` (``daslib/templates_boost.das``), which
 calls ``clone_expression`` on every ``$e(...)`` substitution input. Pre-cloning
 into a local variable and then splicing the local is wasted work — the same
 substitution gets cloned a second time at apply-template time.
+
+``--fix`` deletes the declaration and splices the source expression, when it has one use in the statement right after it.
 
 .. das-doc: fragment
 .. code-block:: das
@@ -2175,6 +2211,8 @@ whose only uses are direct arguments at ``[clone(...)]`` positions — any other
 use (assignment, passing elsewhere, storing into a field) makes the pre-clone
 load-bearing and the lint stays silent.
 
+``--fix`` drops the ``clone_*`` wrap of a direct argument; for the variable form it deletes the declaration and passes the source, when it has one use in the statement right after it.
+
 .. das-doc: fragment
 .. code-block:: das
 
@@ -2198,6 +2236,8 @@ String interpolation already converts every element to a string via the
 string builder's ``DebugDataWalker``. Wrapping an element in ``string(...)``
 allocates an intermediate string that the builder then copies — a wasted heap
 allocation per interpolation.
+
+``--fix`` drops the cast for signed numbers and strings; the unsigned variant has no fix.
 
 .. das-doc: alt
 .. code-block:: das

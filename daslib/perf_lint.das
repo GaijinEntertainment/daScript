@@ -83,6 +83,8 @@ struct Perf018State {
     perf029_sibling_keys : string
     perf029_sibling_names : string
     perf029_sibling_count : int
+    arr_refs : int
+    iter_refs : int
 }
 
 struct Perf022State {
@@ -100,6 +102,10 @@ struct Perf024Candidate {
     @do_not_delete v : Variable?
     safe_uses : int
     disqualified : bool
+    @do_not_delete decl : ExprLet?
+    depth : int
+    @do_not_delete use : Expression?
+    adjacent : bool
 }
 
 struct Perf033Candidate {
@@ -114,6 +120,10 @@ struct Perf023Candidate {
     @do_not_delete v : Variable?
     safe_uses : int
     disqualified : bool
+    @do_not_delete decl : ExprLet?
+    depth : int
+    @do_not_delete use : Expression?
+    adjacent : bool
 }
 
 enum private Perf025Kind {
@@ -493,6 +503,81 @@ def perf033_param_taken(var fn : Function?; idx : int; depth : int) : bool {
     return takes
 }
 
+//! True when ``text`` is one primary run - names, member access, calls, subscripts - that sits beside an operator unparenthesized.
+def private perf_is_primary(text : string) : bool {
+    var ok = !empty(text)
+    peek_data(text) $(d) {
+        let n = length(d)
+        var depth = 0
+        var quoted = false
+        var i = 0
+        while (ok && i < n) {
+            let c = int(d[i])
+            let next = i + 1 < n ? int(d[i + 1]) : 0
+            if (quoted) {
+                if (c == '\\') {
+                    i++
+                } elif (c == '"') {
+                    quoted = false
+                }
+            } elif (c == '"') {
+                quoted = true
+            } elif (c == '(' || c == '[') {
+                depth++
+            } elif (c == ')' || c == ']') {
+                depth--
+            } elif (depth == 0) {
+                ok = is_alnum(c) || c == '_' || c == '.' || c == ':' || c == '`' || (c == '?' && (next == '.' || next == '['))
+            }
+            i++
+        }
+    }
+    return ok
+}
+
+//! ``text`` as an operand of a binary or postfix operator - parenthesized unless it is one primary run.
+def private perf_operand(text : string) : string => perf_is_primary(text) ? text : "({text})"
+
+//! True when ``text`` spells a call of ``name`` on ``args`` - plain, piped, or method style.
+def private perf_is_call_text(text, name : string; args : array<string>) : bool {
+    let rest = build_string() $(var w) {
+        for (k in range(1, length(args))) {
+            w |> write(k > 1 ? ", {args[k]}" : args[k])
+        }
+    }
+    if (empty(args)) return text == "{name}()"
+    if (text == "{name}({args[0]}{length(args) > 1 ? ", " : ""}{rest})") return true
+    return (text == "{args[0]} |> {name}({rest})" || text == "{args[0]}.{name}({rest})"
+            || (length(args) == 1 && text == "{args[0]} |> {name}"))
+}
+
+//! ``text`` with every whitespace run folded to one space.
+def private perf_squash_spaces(text : string) : string {
+    return build_string() $(var w) {
+        var gap = false
+        peek_data(text) $(d) {
+            for (c in d) {
+                if (is_white_space(int(c))) {
+                    gap = true
+                    continue
+                }
+                if (gap) {
+                    w |> write_char(' ')
+                    gap = false
+                }
+                w |> write_char(int(c))
+            }
+        }
+    }
+}
+
+//! A fix replacing the source of ``e`` with ``replacement``; none when that source holds a comment.
+def private perf_replace_fix(e : Expression?; replacement : string) : LintFix {
+    let text = lint_expr_text(e)
+    if (empty(text) || find(text, "//") >= 0) return LintFix()
+    return lint_replace_fix(e, replacement)
+}
+
 class PerfLintVisitor : AstVisitor {
     compile_time_errors : bool
     perf032_reserved : table<string>
@@ -529,6 +614,11 @@ class PerfLintVisitor : AstVisitor {
     @do_not_delete pending_move_var : Variable?
     @safe_when_uninitialized pending_move_at : LineInfo
     pending_move_is_clone : bool = false
+    @do_not_delete pending_move_let : ExprLet?
+    @do_not_delete stmt_cur : array<Expression?>
+    @do_not_delete stmt_prev : array<Expression?>
+    @do_not_delete perf018_sites : array<ExprAt?>
+    perf018_site_frames : array<int>
     perf018_stack : array<Perf018State>
     @do_not_delete perf018_for_exprs : array<ExprFor?>
     in_qualifying_idx : int = 0
@@ -599,6 +689,87 @@ class PerfLintVisitor : AstVisitor {
         } else {
             to_log(LOG_WARNING, "performance warning: {msg} at {describe(at)}\n")
         }
+    }
+
+    //! Whether a fix may rewrite ``e``: user source, and - unless the rewrite holds for every instantiation - outside generic instances.
+    def fix_site_ok(e : Expression?; generic_safe : bool) : bool {
+        return (e != null && !e.genFlags.generated
+                && (current_function == null || generic_safe || current_function.fromGeneric == null))
+    }
+
+    def module_visible(name : string) : bool {
+        if (current_function == null || current_function._module == null) return false
+        let m = find_module(compiling_program(), name)
+        return m != null && is_visible_directly(current_function._module, m)
+    }
+
+    def is_statement(e : Expression?) : bool => !empty(stmt_cur) && stmt_cur |> back() == e
+
+    def word_used(word : string; first, last : int) : bool {
+        for (ln in range(first, last + 1)) {
+            let line = lint_source_line(current_function.at, ln)
+            var k = find(line, word)
+            while (k >= 0) {
+                let before = lint_byte_at(line, k - 1)
+                let after = lint_byte_at(line, k + length(word))
+                return true if (!(before == '_' || is_alnum(before)) && !(after == '_' || is_alnum(after)))
+                k = find(line, word, k + 1)
+            }
+        }
+        return false
+    }
+
+    //! ``base``, suffixed with a number when the current function's source already spells it.
+    def fresh_local_name(base : string) : string {
+        let first = int(current_function.at.line)
+        let last = current_function.body != null ? int(current_function.body.at.last_line) : first
+        var name = base
+        var k = 1
+        while (word_used(name, first, last)) {
+            k++
+            name = "{base}{k}"
+        }
+        return name
+    }
+
+    //! Drops the call ``call_e`` spelled as ``name(x)`` and keeps ``x``.
+    def unwrap_call_fix(call_e : Expression?; name : string) : LintFix {
+        let ce = peel_ref2value(call_e)
+        if (ce == null || !(ce is ExprCall) || !fix_site_ok(ce, false)) return LintFix()
+        let call = ce as ExprCall
+        if (empty(call.arguments)) return LintFix()
+        let arg = lint_expr_text(call.arguments[0])
+        if (empty(arg) || !perf_is_call_text(lint_expr_text(ce), name, [arg])) return LintFix()
+        return lint_replace_fix(ce, perf_operand(arg))
+    }
+
+    //! True while the walk is inside the statement right after ``decl`` in the block ``depth`` levels down.
+    def decl_precedes(decl : ExprLet?; depth : int) : bool => depth >= 0 && depth < length(stmt_prev) && stmt_prev[depth] == decl
+
+    //! Drops ``var X = clone_*(E)`` and puts ``E`` at the one use, which sits in the very next statement.
+    def preclone_fix(v : Variable?; decl : ExprLet?; use : Expression?; adjacent : bool; uses : int) : LintFix {
+        if (uses != 1 || !adjacent || decl == null || use == null || length(decl.variables) != 1 || !fix_site_ok(decl, false)
+                || v.init == null || !(v.init is ExprCall)) return LintFix()
+        let init = v.init as ExprCall
+        let src = lint_expr_text(init.arguments[0])
+        let init_text = lint_expr_text(init)
+        let span = lint_expr_span(decl)
+        let text = lint_span_text(decl.at, span)
+        if (empty(src) || span.line <= 0 || !perf_is_call_text(init_text, string(init.name), [src]) || lint_expr_text(use) != v.name
+                || (text != "var {v.name} = {init_text}" && text != "let {v.name} = {init_text}")
+                || !empty(strip(slice(lint_source_line(decl.at, span.line), 0, span.column)))
+                || !empty(strip(slice(lint_source_line(decl.at, span.last_line), span.last_column)))) return LintFix()
+        let edits <- [
+            LintFix(line = span.line, column = 0, last_line = span.last_line + 1, last_column = 0, replacement = ""),
+            lint_replace_fix(use, src)]
+        return lint_merge_fixes(decl.at, edits)
+    }
+
+    def is_local(v : Variable?) : bool {
+        for (entry in var_stack) {
+            return true if (entry.v == v)
+        }
+        return false
     }
 
     def is_loop_variable(v : Variable?) : bool {
@@ -939,14 +1110,14 @@ class PerfLintVisitor : AstVisitor {
             if (!c.disqualified && c.safe_uses >= 1 && c.v != null) {
                 perf_warning(
                     "PERF023: var initialized via clone_expression and only spliced into qmacro/qmacro_block/qmacro_expr/qmacro_block_to_array; the splice already clones (apply_template), so drop the pre-clone and inline the source expression",
-                    c.v.at)
+                    c.v.at, preclone_fix(c.v, c.decl, c.use, c.adjacent, c.safe_uses))
             }
         }
         for (c in perf024_candidates) {
             if (!c.disqualified && c.safe_uses >= 1 && c.v != null) {
                 perf_warning(
                     "PERF024: var initialized via clone_* and only passed to a function annotated [clone(...)] at the matching arg position; the callee clones internally, so drop the pre-clone and inline the source",
-                    c.v.at)
+                    c.v.at, preclone_fix(c.v, c.decl, c.use, c.adjacent, c.safe_uses))
             }
         }
         for (c in perf033_candidates) {
@@ -1004,6 +1175,8 @@ class PerfLintVisitor : AstVisitor {
         }
         scope_stack |> push(length(var_stack))
         block_tail_exit |> push(tail_exit_kind(blk))
+        stmt_cur |> push(null)
+        stmt_prev |> push(null)
     }
 
     def override preVisitExprBlockArgument(blk : ExprBlock?; var arg : VariablePtr; lastArg : bool) : void {
@@ -1029,6 +1202,10 @@ class PerfLintVisitor : AstVisitor {
         }
         if (!empty(block_tail_exit)) {
             block_tail_exit |> pop()
+        }
+        if (!empty(stmt_cur)) {
+            stmt_cur |> pop()
+            stmt_prev |> pop()
         }
         return <- blk
     }
@@ -1150,7 +1327,7 @@ class PerfLintVisitor : AstVisitor {
         return LintFix()
     }
 
-    def override preVisitExprLetVariable(expr : ExprLet?; var v : VariablePtr; last : bool) : void {
+    def override preVisitExprLetVariable(var expr : ExprLet?; var v : VariablePtr; last : bool) : void {
         check_perf032_declaration(v._type, v.annotation, v.at)
         if (perf033_leaks(expr, v)) {
             perf033_candidates |> push(Perf033Candidate(v = v, fix = perf033_fix(expr, v), consumed = false))
@@ -1161,11 +1338,11 @@ class PerfLintVisitor : AstVisitor {
         if (in_closure == 0 && v != null && v.init != null && v.init is ExprCall) {
             let initCall = v.init as ExprCall
             if (initCall.name == "clone_expression" && length(initCall.arguments) == 1) {
-                perf023_candidates |> push(Perf023Candidate(v = v, safe_uses = 0, disqualified = false))
+                perf023_candidates |> push(Perf023Candidate(v = v, safe_uses = 0, disqualified = false, decl = expr, depth = length(stmt_cur) - 1))
             }
         }
         if (in_closure == 0 && v != null && is_clone_init_call(v.init)) {
-            perf024_candidates |> push(Perf024Candidate(v = v, safe_uses = 0, disqualified = false))
+            perf024_candidates |> push(Perf024Candidate(v = v, safe_uses = 0, disqualified = false, decl = expr, depth = length(stmt_cur) - 1))
         }
         if (last && v.flags.init_via_move && v.init != null) {
             var dominated_by_clone = false
@@ -1178,12 +1355,17 @@ class PerfLintVisitor : AstVisitor {
                 }
             }
             pending_move_var = v
+            pending_move_let = expr
             pending_move_at = expr.at
             pending_move_is_clone = dominated_by_clone
         }
     }
 
-    def override preVisitExprBlockExpression(blk : ExprBlock?; expr : ExpressionPtr) : void {
+    def override preVisitExprBlockExpression(blk : ExprBlock?; var expr : ExpressionPtr) : void {
+        if (!empty(stmt_cur)) {
+            stmt_prev[length(stmt_prev) - 1] = stmt_cur |> back()
+            stmt_cur[length(stmt_cur) - 1] = expr
+        }
         if (pending_move_var != null) {
             var e = expr
             if (e is ExprReturn) {
@@ -1195,15 +1377,34 @@ class PerfLintVisitor : AstVisitor {
                     }
                     if (sub is ExprVar && (sub as ExprVar.variable) == pending_move_var) {
                         if (pending_move_is_clone) {
-                            perf_warning("PERF009: redundant clone into variable immediately returned; use return clone_to_move(expr) directly", pending_move_at)
+                            perf_warning("PERF009: redundant clone into variable immediately returned; use return clone_to_move(expr) directly", pending_move_at, perf009_fix(ret))
                         } else {
-                            perf_warning("PERF009: redundant move into variable immediately returned; use return <- expr directly", pending_move_at)
+                            perf_warning("PERF009: redundant move into variable immediately returned; use return <- expr directly", pending_move_at, perf009_fix(ret))
                         }
                     }
                 }
             }
             pending_move_var = null
         }
+    }
+
+    def perf009_fix(ret : ExprReturn?) : LintFix {
+        let decl = pending_move_let
+        let v = pending_move_var
+        if (decl == null || length(decl.variables) != 1 || !fix_site_ok(ret, true)
+                || (pending_move_is_clone && (!(v.init is ExprCall) || empty((v.init as ExprCall).arguments)))) return LintFix()
+        let init_text = lint_expr_text(pending_move_is_clone ? (v.init as ExprCall).arguments[0] : v.init)
+        let decl_span = lint_expr_span(decl)
+        let ret_span = lint_expr_span(ret)
+        if (empty(init_text) || decl_span.line <= 0 || ret_span.line <= 0 || lint_expr_text(ret) != "return <- {v.name}") return LintFix()
+        let decl_text = lint_span_text(ret.at, decl_span)
+        let tail = " {v.name} {pending_move_is_clone ? ":=" : "<-"} {init_text}"
+        let head = slice(decl_text, 0, length(decl_text) - length(tail))
+        if (!ends_with(decl_text, tail) || (head != "var" && head != "let" && head != "var inscope" && head != "let inscope")) return LintFix()
+        let gap = lint_span_text(ret.at, LintFix(line = decl_span.last_line, column = decl_span.last_column, last_line = ret_span.line, last_column = ret_span.column))
+        if (!empty(strip(gap))) return LintFix()
+        return LintFix(line = decl_span.line, column = decl_span.column, last_line = ret_span.last_line, last_column = ret_span.last_column,
+            replacement = pending_move_is_clone ? "return clone_to_move({init_text})" : "return <- {init_text}")
     }
 
     def override preVisitExprFor(expr : ExprFor?) : void {
@@ -1298,13 +1499,49 @@ class PerfLintVisitor : AstVisitor {
         let owning = perf018_for_exprs[top_idx]
         perf018_stack    |> pop()
         perf018_for_exprs |> pop()
+        var sites : array<ExprAt?>
+        var kept = 0
+        for (k in range(length(perf018_sites))) {
+            if (perf018_site_frames[k] == top_idx) {
+                sites |> push(perf018_sites[k])
+            } elif (perf018_site_frames[k] < top_idx) {
+                perf018_sites[kept] = perf018_sites[k]
+                perf018_site_frames[kept] = perf018_site_frames[k]
+                kept++
+            }
+        }
+        perf018_sites |> resize(kept)
+        perf018_site_frames |> resize(kept)
         if (state.matched && !state.disqualified && state.qualified_count > 0 && owning != null) {
             if (state.perf029_sibling_count > 0 && state.arr_var != null) {
                 perf_warning("PERF029: parallel-array indexing - i subscripts {state.arr_var.name}{state.perf029_sibling_names} in lockstep; zip them: 'for (a, b, ... in {state.arr_var.name}{state.perf029_sibling_names})'", owning.at)
             } else {
-                perf_warning("PERF018: for (i in range(length(X))) where i only indexes X; use 'for (c in X)' for direct iteration", owning.at)
+                perf_warning("PERF018: for (i in range(length(X))) where i only indexes X; use 'for (c in X)' for direct iteration", owning.at, perf018_fix(state, owning, sites))
             }
         }
+    }
+
+    //! Every reference to X and to i must sit in a recorded ``X[i]`` site, and X must be a local array the body cannot reach otherwise.
+    def perf018_fix(state : Perf018State; owning : ExprFor?; sites : array<ExprAt?>) : LintFix {
+        let av = state.arr_var
+        let iv = state.iter_var
+        if (!fix_site_ok(owning, false) || av._type == null || (av._type.baseType != Type.tArray && av._type.baseType != Type.tFixedArray)
+                || length(sites) != state.qualified_count || state.arr_refs != length(sites) || state.iter_refs != length(sites)
+                || !(has_value(current_function.arguments, av) || is_local(av))) return LintFix()
+        let line = lint_source_line(iv.at, int(iv.at.line))
+        let src = lint_expr_text(owning.sources[0])
+        if (iv.name != slice(line, int(iv.at.column), int(iv.at.last_column)) || empty(src) || find(src, "//") >= 0) return LintFix()
+        let arr = string(av.name)
+        let name = fresh_local_name(length(arr) > 1 && ends_with(arr, "s") ? slice(arr, 0, length(arr) - 1) : "{arr}_elem")
+        var edits <- [
+            LintFix(line = int(iv.at.line), column = int(iv.at.column), last_line = int(iv.at.line), last_column = int(iv.at.last_column), replacement = name),
+            lint_replace_fix(owning.sources[0], arr)]
+        edits |> reserve(length(edits) + length(sites))
+        for (site in sites) {
+            return LintFix() if (lint_expr_text(site) != "{arr}[{iv.name}]")
+            edits |> push(lint_replace_fix(site, name))
+        }
+        return lint_merge_fixes(owning.at, edits)
     }
 
     def perf018_bare_var_of(var e : ExpressionPtr) : Variable? {
@@ -1447,6 +1684,8 @@ class PerfLintVisitor : AstVisitor {
                 var st = perf018_stack[i]
                 st.qualified_count++
                 perf018_stack[i] = st
+                perf018_sites |> push(expr)
+                perf018_site_frames |> push(i)
                 pushes++
             } else {
                 let av = perf029_other_array_of(expr, i)
@@ -1485,6 +1724,20 @@ class PerfLintVisitor : AstVisitor {
             if (st.matched && !st.disqualified && st.iter_var == v) {
                 st.disqualified = true
                 perf018_stack[i] = st
+            }
+        }
+    }
+
+    def perf018_count_ref(v : Variable?) : void {
+        return if (v == null)
+        for (st in perf018_stack) {
+            if (st.matched) {
+                if (st.arr_var == v) {
+                    st.arr_refs++
+                }
+                if (st.iter_var == v) {
+                    st.iter_refs++
+                }
             }
         }
     }
@@ -1578,8 +1831,21 @@ class PerfLintVisitor : AstVisitor {
         perf022_for_exprs |> pop()
         if (state.matched && !state.disqualified && owning != null) {
             let name = state.callee_id == Perf022Callee.push ? "push" : "push_clone"
-            perf_warning("PERF022: for-loop body 'B |> {name}(x)' pushes one element per iteration; use 'B |> {name}_from(A)' for a bulk reserve+copy", owning.at)
+            perf_warning("PERF022: for-loop body 'B |> {name}(x)' pushes one element per iteration; use 'B |> {name}_from(A)' for a bulk reserve+copy", owning.at, perf022_fix(owning, name))
         }
+    }
+
+    def perf022_fix(owning : ExprFor?; name : string) : LintFix {
+        if (!fix_site_ok(owning, false) || length(owning.sources) != 1 || length(owning.iteratorVariables) != 1) return LintFix()
+        let call = (owning.body as ExprBlock).list[0] as ExprCall
+        let src = lint_expr_text(owning.sources[0])
+        let dest = lint_expr_text(call.arguments[0])
+        let it = string(owning.iteratorVariables[0].name)
+        let stmt = lint_expr_text(call)
+        let whole = lint_expr_text(owning)
+        if (empty(src) || empty(dest) || find(whole, "//") >= 0 || !perf_is_call_text(stmt, name, [dest, it])
+                || perf_squash_spaces(whole) != perf_squash_spaces("for ({it} in {src}) \{ {stmt} \}")) return LintFix()
+        return lint_replace_fix(owning, "{perf_operand(dest)} |> {name}_from({src})")
     }
 
     def override preVisitExprAt(var expr : ExprAt?) : void {
@@ -1675,7 +1941,14 @@ class PerfLintVisitor : AstVisitor {
             let left_is = is_string_of_das_string(expr.left)
             let right_is = is_string_of_das_string(expr.right)
             if (left_is || right_is) {
-                perf_warning("PERF007: string(das_string) in comparison is unnecessary; das_string supports == and != directly", expr.at)
+                var edits : array<LintFix>
+                if (left_is) {
+                    edits |> push(unwrap_call_fix(expr.left, "string"))
+                }
+                if (right_is) {
+                    edits |> push(unwrap_call_fix(expr.right, "string"))
+                }
+                perf_warning("PERF007: string(das_string) in comparison is unnecessary; das_string supports == and != directly", expr.at, lint_merge_fixes(expr.at, edits))
             }
         }
         if (expr.op == "==") {
@@ -1690,8 +1963,10 @@ class PerfLintVisitor : AstVisitor {
                 }
             }
         }
-        if (is_get_ptr_vs_null(expr.left, expr.right) || is_get_ptr_vs_null(expr.right, expr.left)) {
-            perf_warning("PERF010: get_ptr() is unnecessary for null comparison; smart_ptr supports == and != null directly", expr.at)
+        if (is_get_ptr_vs_null(expr.left, expr.right)) {
+            perf_warning("PERF010: get_ptr() is unnecessary for null comparison; smart_ptr supports == and != null directly", expr.at, unwrap_call_fix(expr.left, "get_ptr"))
+        } elif (is_get_ptr_vs_null(expr.right, expr.left)) {
+            perf_warning("PERF010: get_ptr() is unnecessary for null comparison; smart_ptr supports == and != null directly", expr.at, unwrap_call_fix(expr.right, "get_ptr"))
         }
         if (expr.op == "+=" || expr.op == "-=") {
             check_perf013_incdec(expr)
@@ -1723,10 +1998,17 @@ class PerfLintVisitor : AstVisitor {
             delta = expr.op == "+=" ? -1 : 1
         }
         if (delta == 1) {
-            perf_warning("PERF013: '{expr.op} {rhs_one ? 1 : -1}' on a numeric scalar; use postfix '++' for a faster, idiomatic increment", expr.at)
+            perf_warning("PERF013: '{expr.op} {rhs_one ? 1 : -1}' on a numeric scalar; use postfix '++' for a faster, idiomatic increment", expr.at, perf013_fix(expr, "++"))
         } elif (delta == -1) {
-            perf_warning("PERF013: '{expr.op} {rhs_one ? 1 : -1}' on a numeric scalar; use postfix '--' for a faster, idiomatic decrement", expr.at)
+            perf_warning("PERF013: '{expr.op} {rhs_one ? 1 : -1}' on a numeric scalar; use postfix '--' for a faster, idiomatic decrement", expr.at, perf013_fix(expr, "--"))
         }
+    }
+
+    def perf013_fix(expr : ExprOp2?; postfix : string) : LintFix {
+        if (!is_statement(expr) || !fix_site_ok(expr, false)) return LintFix()
+        let lt = lint_expr_text(expr.left)
+        if (empty(lt) || lint_expr_text(expr) != "{lt} {expr.op} {lint_expr_text(expr.right)}") return LintFix()
+        return lint_replace_fix(expr, "{perf_operand(lt)}{postfix}")
     }
 
     def check_perf019_int_cast_or(expr : ExprOp2?) : void {
@@ -1738,7 +2020,16 @@ class PerfLintVisitor : AstVisitor {
             || !(l._type |> is_same_type(r._type, RefMatters.no, ConstMatters.no, TemporaryMatters.no))) return
         let bt = l._type.baseType
         let kind = bt == Type.tBitfield ? "bitfield" : "enum"
-        perf_warning("PERF019: int(...) | int(...) on the same {kind} type can collapse to int(L | R) (one cast instead of two)", expr.at)
+        perf_warning("PERF019: int(...) | int(...) on the same {kind} type can collapse to int(L | R) (one cast instead of two)", expr.at, perf019_fix(expr, l, r))
+    }
+
+    def perf019_fix(expr : ExprOp2?; l, r : Expression? const) : LintFix {
+        if (!fix_site_ok(expr, true)) return LintFix()
+        let lt = lint_expr_text(l)
+        let rt = lint_expr_text(r)
+        if (empty(lt) || empty(rt) || !perf_is_call_text(lint_expr_text(peel_ref2value(expr.left)), "int", [lt])
+                || !perf_is_call_text(lint_expr_text(peel_ref2value(expr.right)), "int", [rt])) return LintFix()
+        return perf_replace_fix(expr, "int({perf_operand(lt)} | {perf_operand(rt)})")
     }
 
     def check_perf020_redundant_cast(call : ExprCall?) : void {
@@ -1753,7 +2044,9 @@ class PerfLintVisitor : AstVisitor {
         }
         if (arg == null || arg._type == null || arg._type.baseType != target
                 || (target == Type.tString && arg._type.flags.temporary)) return
-        perf_warning("PERF020: redundant {fname}(...) cast - argument is already {fname}", call.at)
+        let bits = target == Type.tBitfield || target == Type.tBitfield8 || target == Type.tBitfield16 || target == Type.tBitfield64
+        let fix = bits ? LintFix() : unwrap_call_fix(call, fname)
+        perf_warning("PERF020: redundant {fname}(...) cast - argument is already {fname}", call.at, fix)
     }
 
     def cast_call_workhorse_target(e : Expression?; var fname_out : string&) : Type {
@@ -1833,7 +2126,30 @@ class PerfLintVisitor : AstVisitor {
         if (lt == Type.none || rt == Type.none || lt != rt || lname != rname
             || la == Type.none || la != ra
             || !cast_call_tail_args_equal(expr.left, expr.right)) return
-        perf_warning("PERF021: redundant per-branch {lname}(...) cast in ternary - hoist as {lname}(cond ? a : b)", expr.at)
+        perf_warning("PERF021: redundant per-branch {lname}(...) cast in ternary - hoist as {lname}(cond ? a : b)", expr.at, perf021_fix(expr, lname))
+    }
+
+    //! ``e``'s text as a ternary operand - a nested ternary keeps its own parentheses.
+    def ternary_operand(e : Expression? const) : string {
+        let text = lint_expr_text(e)
+        return peel_ref2value(e) is ExprOp3 && !empty(text) ? "({text})" : text
+    }
+
+    def perf021_fix(expr : ExprOp3?; name : string) : LintFix {
+        if (!fix_site_ok(expr, true)) return LintFix()
+        let lc = peel_ref2value(expr.left)
+        let rc = peel_ref2value(expr.right)
+        if (!(lc is ExprCall) || !(rc is ExprCall)) return LintFix()
+        let a = (lc as ExprCall).arguments[0]
+        let b = (rc as ExprCall).arguments[0]
+        let lt = lint_expr_text(lc)
+        let rt = lint_expr_text(rc)
+        let cond = ternary_operand(expr.subexpr)
+        let at = ternary_operand(a)
+        let bt = ternary_operand(b)
+        if (empty(cond) || empty(at) || empty(bt) || !perf_is_call_text(lt, name, [lint_expr_text(a)]) || !perf_is_call_text(rt, name, [lint_expr_text(b)])
+                || lint_expr_text(expr) != "{lint_expr_text(expr.subexpr)} ? {lt} : {rt}") return LintFix()
+        return lint_replace_fix(expr, "{name}({cond} ? {at} : {bt})")
     }
 
     def parse_range_leg(leg : Expression?; upper_op, lower_op : string; var v_out : Expression?&; var bound_out : int&; var bounds_above : bool&) : bool {
@@ -1888,7 +2204,13 @@ class PerfLintVisitor : AstVisitor {
         var hi = 0
         if (!parse_bounded_range(expr, negated, v, lo, hi) || lo != 48 || hi != 57) return
         let neg = negated ? "!" : ""
-        perf_warning("PERF014: char-class range check{negated ? " (negated)" : ""} '0'..'9' - use '{neg}is_number({describe(v)})' from strings module", expr.at)
+        perf_warning("PERF014: char-class range check{negated ? " (negated)" : ""} '0'..'9' - use '{neg}is_number({describe(v)})' from strings module", expr.at, perf014_fix(expr, v, "{neg}is_number"))
+    }
+
+    def perf014_fix(expr : ExprOp2?; v : Expression? const; call : string) : LintFix {
+        if (v == null || v._type == null || v._type.baseType != Type.tInt || !fix_site_ok(expr, false) || !module_visible("strings")) return LintFix()
+        let vt = lint_expr_text(v)
+        return empty(vt) ? LintFix() : perf_replace_fix(expr, "{call}({vt})")
     }
 
     def check_perf014_alpha(expr : ExprOp2?; negated : bool) : void {
@@ -1909,7 +2231,7 @@ class PerfLintVisitor : AstVisitor {
         let upperLower = loL == 65 && hiL == 90 && loR == 97 && hiR == 122
         if (!lowerUpper && !upperLower) return
         let neg = negated ? "!" : ""
-        perf_warning("PERF014: char-class range check{negated ? " (negated)" : ""} 'a'..'z' + 'A'..'Z' - use '{neg}is_alpha({describe(vL)})' from strings module", expr.at)
+        perf_warning("PERF014: char-class range check{negated ? " (negated)" : ""} 'a'..'z' + 'A'..'Z' - use '{neg}is_alpha({describe(vL)})' from strings module", expr.at, perf014_fix(expr, vL, "{neg}is_alpha"))
     }
 
     def peel_ref2value(e : Expression? const) : Expression? const {
@@ -1985,10 +2307,27 @@ class PerfLintVisitor : AstVisitor {
             }
         }
         if (is_empty_pattern) {
-            perf_warning("PERF017: 'length(x) {canon_op} {k}' - use 'empty(x)' (avoids unnecessary strlen on strings)", expr.at)
+            perf_warning("PERF017: 'length(x) {canon_op} {k}' - use 'empty(x)' (avoids unnecessary strlen on strings)", expr.at, perf017_fix(expr, len_on_left, "empty"))
         } elif (is_nonempty_pattern) {
-            perf_warning("PERF017: 'length(x) {canon_op} {k}' - use '!empty(x)' (avoids unnecessary strlen on strings)", expr.at)
+            perf_warning("PERF017: 'length(x) {canon_op} {k}' - use '!empty(x)' (avoids unnecessary strlen on strings)", expr.at, perf017_fix(expr, len_on_left, "!empty"))
         }
+    }
+
+    def perf017_fix(expr : ExprOp2?; len_on_left : bool; call : string) : LintFix {
+        let len = peel_ref2value(len_on_left ? expr.left : expr.right)
+        if (!fix_site_ok(expr, false)) return LintFix()
+        let arg = (len as ExprCall).arguments[0]
+        let t = arg._type
+        if (t == null || !(t.baseType == Type.tString || t.baseType == Type.tArray || t.baseType == Type.tTable
+                || (t.baseType == Type.tHandle && t.annotation != null && t.annotation.name == "das_string"))) return LintFix()
+        let text = lint_expr_text(arg)
+        let whole = lint_expr_text(expr)
+        let l = lint_expr_text(expr.left)
+        let r = lint_expr_text(expr.right)
+        let symmetric = expr.op == "==" || expr.op == "!="
+        if (empty(text) || !perf_is_call_text(lint_expr_text(len), "length", [text])
+                || (whole != "{l} {expr.op} {r}" && !(symmetric && whole == "{r} {expr.op} {l}"))) return LintFix()
+        return lint_replace_fix(expr, "{call}({text})")
     }
 
     def override preVisitExprOp3(expr : ExprOp3?) : void {
@@ -2023,8 +2362,17 @@ class PerfLintVisitor : AstVisitor {
             is_min = swap_order
         }
         let which = is_min ? "min" : "max"
-        perf_warning("PERF015: ternary {which} - use '{which}(a, b)' from math module", expr.at)
+        let fix = math_fix_ok(expr, cl, false) ? perf_replace_fix(expr, "{which}({lint_expr_text(cl)}, {lint_expr_text(cr)})") : LintFix()
+        perf_warning("PERF015: ternary {which} - use '{which}(a, b)' from math module", expr.at, fix)
         return true
+    }
+
+    //! Whether a ternary over ``operand`` may become a math call: a numeric scalar operand, math in scope, a recoverable source.
+    def math_fix_ok(expr : ExprOp3?; operand : Expression? const; signed_only : bool) : bool {
+        if (operand == null || !is_workhorse_numeric_scalar(operand._type) || !fix_site_ok(expr, false) || !module_visible("math")) return false
+        let bt = operand._type.baseType
+        if (signed_only && (bt == Type.tUInt || bt == Type.tUInt64)) return false
+        return !empty(lint_expr_text(expr.subexpr)) && lint_expr_text(expr) == "{lint_expr_text(expr.subexpr)} ? {lint_expr_text(expr.left)} : {lint_expr_text(expr.right)}"
     }
 
     def try_perf016_abs(expr : ExprOp3?; cmp : ExprOp2?; t_branch, f_branch : Expression? const; cop : string) : bool {
@@ -2063,7 +2411,8 @@ class PerfLintVisitor : AstVisitor {
             }
         }
         if (!is_abs) return false
-        perf_warning("PERF016: ternary abs - use 'abs(x)' from math module", expr.at)
+        let fix = math_fix_ok(expr, x_expr, true) ? perf_replace_fix(expr, "abs({lint_expr_text(x_expr)})") : LintFix()
+        perf_warning("PERF016: ternary abs - use 'abs(x)' from math module", expr.at, fix)
         return true
     }
 
@@ -2078,18 +2427,18 @@ class PerfLintVisitor : AstVisitor {
     def override preVisitExprField(expr : ExprField?) : void {
         if (in_closure > 0) return
         if (is_get_ptr_of_smart_ptr(expr.value)) {
-            perf_warning("PERF011: get_ptr() is unnecessary for field access; smart_ptr auto-dereferences", expr.at)
+            perf_warning("PERF011: get_ptr() is unnecessary for field access; smart_ptr auto-dereferences", expr.at, unwrap_call_fix(expr.value, "get_ptr"))
         }
     }
 
     def override preVisitExprSafeField(expr : ExprSafeField?) : void {
         if (in_closure > 0) return
         if (is_get_ptr_of_smart_ptr(expr.value)) {
-            perf_warning("PERF011: get_ptr() is unnecessary for field access; smart_ptr auto-dereferences", expr.at)
+            perf_warning("PERF011: get_ptr() is unnecessary for field access; smart_ptr auto-dereferences", expr.at, unwrap_call_fix(expr.value, "get_ptr"))
         }
     }
 
-    def override preVisitExprCallArgument(var expr : ExprCall?; arg : ExpressionPtr; last : bool) : void {
+    def override preVisitExprCallArgument(var expr : ExprCall?; var arg : ExpressionPtr; last : bool) : void {
         perf033_consume_argument(expr, arg)
         if (expr == null || expr.func == null) return
         var indices : array<int>
@@ -2110,7 +2459,7 @@ class PerfLintVisitor : AstVisitor {
         if (is_clone_init_call(inner)) {
             perf_warning(
                 "PERF024: argument to function annotated [clone({expr.func.arguments[arg_index].name})] is wrapped in clone_*; the callee clones internally, drop the outer clone wrap",
-                arg.at)
+                arg.at, unwrap_call_fix(inner, string((inner as ExprCall).name)))
             return
         }
         if (inner is ExprVar) {
@@ -2120,6 +2469,8 @@ class PerfLintVisitor : AstVisitor {
                 for (i in 0 .. length(perf024_candidates)) {
                     if (intptr(perf024_candidates[i].v) == vv_iptr) {
                         perf024_candidates[i].safe_uses++
+                        perf024_candidates[i].use = inner
+                        perf024_candidates[i].adjacent = decl_precedes(perf024_candidates[i].decl, perf024_candidates[i].depth)
                         perf024_skip_iptr = vv_iptr
                         break
                     }
@@ -2131,8 +2482,20 @@ class PerfLintVisitor : AstVisitor {
     def check_perf032_declaration(td : TypeDeclPtr; annotations : AnnotationArgumentList; at : LineInfo) : void {
         if (td == null || !has_annotation(annotations, "exact_size")) return
         if (td.baseType != Type.tArray) {
-            perf_warning("PERF032: @exact_size does not apply to `{describe(td, false, false, false)}` - the annotation is an array contract (every resize must follow a reserve/ensure_capacity)", at)
+            perf_warning("PERF032: @exact_size does not apply to `{describe(td, false, false, false)}` - the annotation is an array contract (every resize must follow a reserve/ensure_capacity)", at, perf032_fix(at))
         }
+    }
+
+    def perf032_fix(at : LineInfo) : LintFix {
+        let ln = int(at.line)
+        let head = slice(lint_source_line(at, ln), 0, int(at.column))
+        let k = find(head, "@exact_size")
+        if (k < 0 || find(head, "@exact_size", k + 1) >= 0 || (current_function != null && current_function.fromGeneric != null)) return LintFix()
+        var e = k + length("@exact_size")
+        while (lint_byte_at(head, e) == ' ') {
+            e++
+        }
+        return LintFix(line = ln, column = k, last_line = ln, last_column = e, replacement = "")
     }
 
     def check_perf032_sizing_call(var expr : ExprCall?) : void {
@@ -2175,6 +2538,13 @@ class PerfLintVisitor : AstVisitor {
         }
     }
 
+    def perf003_fix(expr : ExprCall?) : LintFix {
+        if (!fix_site_ok(expr, false) || !module_visible("strings")) return LintFix()
+        let s = lint_expr_text(expr.arguments[0])
+        if (empty(s) || !perf_is_call_text(lint_expr_text(expr), "character_at", [s, lint_expr_text(expr.arguments[1])])) return LintFix()
+        return lint_replace_fix(expr, "first_character({s})")
+    }
+
     def check_perf031_slice_in_loop(var expr : ExprCall?) {
         if (in_deferred > 0 || inline_aware_loop_depth <= 0 || !(expr.func.name == "slice" || expr.func.name == "chop") || expr.func._module.name != "strings"
                 || empty(expr.arguments) || expr.arguments[0]._type == null || expr.arguments[0]._type.baseType != Type.tString) {
@@ -2208,7 +2578,7 @@ class PerfLintVisitor : AstVisitor {
             }
             if (!reported_character_at |> has_value(ecall)) {
                 if (is_character_at_zero(expr)) {
-                    perf_warning("PERF003: character_at(s, 0) can be replaced with first_character(s)", expr.at)
+                    perf_warning("PERF003: character_at(s, 0) can be replaced with first_character(s)", expr.at, perf003_fix(expr))
                 } else {
                     perf_warning("PERF003: character_at is O(n) due to strlen; consider peek_data() for hot paths", expr.at)
                 }
@@ -2294,7 +2664,28 @@ class PerfLintVisitor : AstVisitor {
             perf030_released |> erase(released)
             return
         }
-        perf_warning("PERF030: move-assign drops the target's old contents without release (a leak on a persistent heap); when the target can be live, delete it first; when it is fresh, fold the move into the declaration (a `cond ? a : b` init covers conditional fills); or enable force_inscope_pod so the compiler collects it", expr.at)
+        perf_warning("PERF030: move-assign drops the target's old contents without release (a leak on a persistent heap); when the target can be live, delete it first; when it is fresh, fold the move into the declaration (a `cond ? a : b` init covers conditional fills); or enable force_inscope_pod so the compiler collects it", expr.at, perf030_fix(expr, lv))
+    }
+
+    //! Folds the move into the declaration right above it - the one case where the target is provably fresh.
+    def perf030_fix(expr : ExprMove?; lv : Variable?) : LintFix {
+        if (!is_statement(expr) || !fix_site_ok(expr, false) || empty(stmt_prev) || lv.init != null) return LintFix()
+        let prev = stmt_prev |> back()
+        if (prev == null || !(prev is ExprLet)) return LintFix()
+        let decl = prev as ExprLet
+        let ln = int(decl.at.line)
+        if (length(decl.variables) != 1 || decl.variables[0] != lv || int(lv.at.line) != ln) return LintFix()
+        let line = lint_source_line(decl.at, ln)
+        let head = slice(line, int(decl.at.column), int(lv.at.last_column))
+        let tail = slice(line, int(lv.at.last_column))
+        if ((head != "var {lv.name}" && head != "var inscope {lv.name}") || !starts_with(tail, " : ")
+                || find(tail, "//") >= 0 || find(tail, "=") >= 0) return LintFix()
+        let rhs = lint_expr_text(expr.right)
+        let move = lint_expr_span(expr)
+        if (empty(rhs) || move.line <= 0 || lint_span_text(decl.at, move) != "{lv.name} <- {rhs}") return LintFix()
+        let gap = lint_span_text(decl.at, LintFix(line = ln, column = length(line), last_line = move.line, last_column = move.column))
+        if (!empty(strip(gap))) return LintFix()
+        return LintFix(line = ln, column = int(decl.at.column), last_line = move.last_line, last_column = move.last_column, replacement = "{head} <- {rhs}")
     }
 
     def perf030_mark_released(sub : ExpressionPtr) : void {
@@ -2339,19 +2730,31 @@ class PerfLintVisitor : AstVisitor {
         return <- expr
     }
 
-    def override preVisitExprStringBuilderElement(sb : ExprStringBuilder?; elem : ExpressionPtr; last : bool) {
+    def override preVisitExprStringBuilderElement(sb : ExprStringBuilder?; var elem : ExpressionPtr; last : bool) {
         let inner = perf025_unwrap_element(elem)
         let value = perf025_string_call_value(inner)
         return if (value == null)
         let kind = perf025_value_kind(value)
         if (kind == Perf025Kind.cast_is_noop) {
-            perf_warning("PERF025: string(...) inside string interpolation is redundant - the interpolation already converts to string; drop the cast", inner.at)
+            perf_warning("PERF025: string(...) inside string interpolation is redundant - the interpolation already converts to string; drop the cast", inner.at, perf025_fix(elem))
         } elif (kind == Perf025Kind.cast_changes_radix) {
             perf_warning("PERF025: string(...) inside string interpolation is redundant; drop the cast - unsigned values interpolate as hex by default, so use the '\{x:d\}' format tag to keep decimal output", inner.at)
         }
     }
 
-    def override preVisitExprVar(expr : ExprVar?) : void {
+    //! A ``:`` left bare inside the braces would read as a format spec, so such a value keeps parentheses.
+    def perf025_fix(var elem : ExpressionPtr) : LintFix {
+        var call = elem
+        if (call is ExprRef2Value) {
+            call = (call as ExprRef2Value).subexpr
+        }
+        if (!(call is ExprCall) || !fix_site_ok(call, false)) return LintFix()
+        let text = lint_expr_text((call as ExprCall).arguments[0])
+        if (empty(text) || !perf_is_call_text(lint_expr_text(call), "string", [text])) return LintFix()
+        return lint_replace_fix(call, find(text, ":") >= 0 ? "({text})" : text)
+    }
+
+    def override preVisitExprVar(var expr : ExprVar?) : void {
         if (!empty(perf023_candidates)) {
             let vv = expr.variable
             if (vv != null) {
@@ -2359,6 +2762,8 @@ class PerfLintVisitor : AstVisitor {
                     if (perf023_candidates[i].v == vv) {
                         if (perf023_splice_depth > 0) {
                             perf023_candidates[i].safe_uses++
+                            perf023_candidates[i].use = expr
+                            perf023_candidates[i].adjacent = decl_precedes(perf023_candidates[i].decl, perf023_candidates[i].depth)
                         } else {
                             perf023_candidates[i].disqualified = true
                         }
@@ -2383,6 +2788,7 @@ class PerfLintVisitor : AstVisitor {
                 }
             }
         }
+        perf018_count_ref(expr.variable)
         if (in_closure > 0) return
         let v = expr.variable
         perf018_on_var(v)
