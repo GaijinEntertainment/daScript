@@ -30,11 +30,15 @@ var private g_dsa = false
 //! returns false on an older one.
 [arch(at="../ARCHITECTURE.md#dsa")]
 def try_use_dsa() : bool {
-    var major, minor : int
-    glGetIntegerv(GL_MAJOR_VERSION, safe_addr(major))
-    glGetIntegerv(GL_MINOR_VERSION, safe_addr(minor))
-    g_dsa = major > 4 || (major == 4 && minor >= 5)
-    return g_dsa
+    static_if (WEBGL_BUILD) {
+        return false
+    } else {
+        var major, minor : int
+        glGetIntegerv(GL_MAJOR_VERSION, safe_addr(major))
+        glGetIntegerv(GL_MINOR_VERSION, safe_addr(minor))
+        g_dsa = major > 4 || (major == 4 && minor >= 5)
+        return g_dsa
+    }
 }
 
 //! Needs a current context.
@@ -56,15 +60,27 @@ def glTexParameteri(target : uint; pname : uint; param : uint) {
     glTexParameteri(target, pname, int(param))
 }
 
-def glTextureParameteri(texture : uint; pname : uint; param : uint) {
-    glTextureParameteri(texture, pname, int(param))
+def private panic_without_dsa(what : string) {
+    panic("{what} needs OpenGL 4.5 direct state access, which WebGL does not have")
 }
 
+[arch(at="../ARCHITECTURE.md#dsa")]
+def glTextureParameteri(texture : uint; pname : uint; param : uint) {
+    static_if (WEBGL_BUILD) {
+        panic_without_dsa("glTextureParameteri")
+    } else {
+        glTextureParameteri(texture, pname, int(param))
+    }
+}
+
+[arch(at="../ARCHITECTURE.md#dsa")]
 def getTexture2DSize(tex : uint; mipLevel : int = 0) {
     var w, h : int
     if (g_dsa) {
-        glGetTextureLevelParameteriv(tex, mipLevel, GL_TEXTURE_WIDTH, safe_addr(w))
-        glGetTextureLevelParameteriv(tex, mipLevel, GL_TEXTURE_HEIGHT, safe_addr(h))
+        static_if (!WEBGL_BUILD) {
+            glGetTextureLevelParameteriv(tex, mipLevel, GL_TEXTURE_WIDTH, safe_addr(w))
+            glGetTextureLevelParameteriv(tex, mipLevel, GL_TEXTURE_HEIGHT, safe_addr(h))
+        }
     } else {
         glBindTexture(GL_TEXTURE_2D, tex)
         glGetTexLevelParameteriv(GL_TEXTURE_2D, mipLevel, GL_TEXTURE_WIDTH, safe_addr(w))
@@ -131,7 +147,9 @@ def read_ssbo(ssbo : uint; var data : auto(TT)) {
 [arch(at="../ARCHITECTURE.md#dsa")]
 def delete_ssbo(ssbo : uint) {
     if (g_ssbo_mapped |> key_exists(ssbo)) {
-        glUnmapNamedBuffer(ssbo)
+        static_if (!WEBGL_BUILD) {
+            glUnmapNamedBuffer(ssbo)
+        }
         g_ssbo_mapped |> erase(ssbo)
     }
     var name = ssbo
@@ -246,16 +264,24 @@ def glBufferData(target : GLenum; arr; usage : GLenum) {
     glBufferData(target, bytes.size, bytes.data, usage)
 }
 
-[expect_any_array(arr)]
+[expect_any_array(arr), arch(at="../ARCHITECTURE.md#dsa")]
 def glNamedBufferData(buffer : uint; arr; usage : GLenum) {
-    let bytes = array_bytes(arr)
-    glNamedBufferData(buffer, bytes.size, bytes.data, usage)
+    static_if (WEBGL_BUILD) {
+        panic_without_dsa("glNamedBufferData")
+    } else {
+        let bytes = array_bytes(arr)
+        glNamedBufferData(buffer, bytes.size, bytes.data, usage)
+    }
 }
 
-[expect_any_array(arr)]
+[expect_any_array(arr), arch(at="../ARCHITECTURE.md#dsa")]
 def glNamedBufferStorage(buffer : uint; arr; flags : uint) {
-    let bytes = array_bytes(arr)
-    glNamedBufferStorage(buffer, bytes.size, bytes.data, flags)
+    static_if (WEBGL_BUILD) {
+        panic_without_dsa("glNamedBufferStorage")
+    } else {
+        let bytes = array_bytes(arr)
+        glNamedBufferStorage(buffer, bytes.size, bytes.data, flags)
+    }
 }
 
 // ===== std140 UBO runtime (the GL analogue of dasVulkan's write_field / with_mapped_memory) =====
@@ -293,14 +319,18 @@ def std140_flush(program : uint; blockName : string; bindingPoint : int) {
     var ubo = g_std140_ubos?[key] ?? 0u
     if (ubo == 0u) {
         if (g_dsa) {
-            glCreateBuffers(1, safe_addr(ubo))
+            static_if (!WEBGL_BUILD) {
+                glCreateBuffers(1, safe_addr(ubo))
+            }
         } else {
             glGenBuffers(1, safe_addr(ubo))
         }
         g_std140_ubos[key] = ubo
     }
     if (g_dsa) {
-        glNamedBufferData(ubo, g_std140_staging[key], GL_DYNAMIC_DRAW)
+        static_if (!WEBGL_BUILD) {
+            glNamedBufferData(ubo, g_std140_staging[key], GL_DYNAMIC_DRAW)
+        }
     } else {
         glBindBuffer(GL_UNIFORM_BUFFER, ubo)
         glBufferData(GL_UNIFORM_BUFFER, g_std140_staging[key], GL_DYNAMIC_DRAW)
@@ -439,15 +469,17 @@ def create_ssbo(var value : auto&) {
     var ssbo : uint
     let size = int64(typeinfo sizeof(value))
     if (g_dsa) {
-        let access = GL_MAP_READ_BIT | GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT
-        glCreateBuffers(1, safe_addr(ssbo))
-        glNamedBufferStorage(ssbo, size, unsafe(addr(value)), access)
-        let mapped = glMapNamedBufferRange(ssbo, 0l, size, access)
-        if (mapped == null) {
-            panic("can't map ssbo")
+        static_if (!WEBGL_BUILD) {
+            let access = GL_MAP_READ_BIT | GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT
+            glCreateBuffers(1, safe_addr(ssbo))
+            glNamedBufferStorage(ssbo, size, unsafe(addr(value)), access)
+            let mapped = glMapNamedBufferRange(ssbo, 0l, size, access)
+            if (mapped == null) {
+                panic("can't map ssbo")
+            }
+            g_ssbo_mapped[ssbo] = mapped
+            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0u, ssbo)
         }
-        g_ssbo_mapped[ssbo] = mapped
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0u, ssbo)
     } else {
         glGenBuffers(1, safe_addr(ssbo))
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo)
@@ -461,14 +493,16 @@ def create_ssbo(var value : auto&) {
 def load_image_from_bytes(width, height : int; data : void?) {
     var texture : uint
     if (g_dsa) {
-        glCreateTextures(GL_TEXTURE_2D, 1, safe_addr(texture))
-        glTextureStorage2D(texture, 1, GL_RGBA8, width, height)
-        glTextureSubImage2D(texture, 0, 0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, data)
-        glTextureParameteri(texture, GL_TEXTURE_WRAP_S, GL_REPEAT)
-        glTextureParameteri(texture, GL_TEXTURE_WRAP_T, GL_REPEAT)
-        glTextureParameteri(texture, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
-        glTextureParameteri(texture, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
-        return texture
+        static_if (!WEBGL_BUILD) {
+            glCreateTextures(GL_TEXTURE_2D, 1, safe_addr(texture))
+            glTextureStorage2D(texture, 1, GL_RGBA8, width, height)
+            glTextureSubImage2D(texture, 0, 0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, data)
+            glTextureParameteri(texture, GL_TEXTURE_WRAP_S, GL_REPEAT)
+            glTextureParameteri(texture, GL_TEXTURE_WRAP_T, GL_REPEAT)
+            glTextureParameteri(texture, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
+            glTextureParameteri(texture, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
+            return texture
+        }
     }
     glGenTextures(1, safe_addr(texture))
     glBindTexture(GL_TEXTURE_2D, texture)
