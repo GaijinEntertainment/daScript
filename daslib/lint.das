@@ -2466,7 +2466,7 @@ def private stale_scan_line(bytes : array<uint8> const# implicit; fname : string
     }
 }
 
-//! ``text`` with the nolint token ``tok`` dropped - with the comma beside it, or with its ``nolint:`` when it was the only code
+//! ``text`` with the nolint token ``tok`` dropped - with the comma beside it, or, when it was the only code, with its ``nolint:`` and the justification after it
 def private stale_drop_code(text : string; tok : int2) : string {
     var after = tok.y
     while (lint_blank_byte(lint_byte_at(text, after))) {
@@ -2486,10 +2486,7 @@ def private stale_drop_code(text : string; tok : int2) : string {
     if (lint_byte_at(text, before - 1) == ',') return slice(text, 0, before - 1) + slice(text, tok.y)
     let directive = before - length("nolint:")
     if (directive < 0 || slice(text, directive, before) != "nolint:") return ""
-    while (lint_blank_byte(lint_byte_at(text, after))) {
-        after++
-    }
-    return slice(text, 0, directive) + slice(text, after)
+    return slice(text, 0, directive)
 }
 
 //! The edit dropping the stale codes at ``spans`` from line ``line_no`` - and the emptied comment, and the emptied line when ``has_next``

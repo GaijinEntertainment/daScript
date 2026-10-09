@@ -988,7 +988,7 @@ the per-file scan cannot see which instantiations elsewhere consume it. Tag it w
 ``LINT019`` instead; removal is only safe where the author knows no other compile
 reaches the line.
 
-``--fix`` removes the stale code from its list - the ``nolint:`` with it when no code is left, the comment when nothing else is in it, and the line when nothing else is on it.
+``--fix`` removes the stale code from its list; when no code is left it removes the whole comment - the justification after the codes went with them - and the line when nothing else is on it.
 
 .. das-doc: fragment
 .. code-block:: das

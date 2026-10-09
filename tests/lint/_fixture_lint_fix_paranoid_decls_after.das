@@ -28,9 +28,9 @@ def private dead_after_comment(x : int) : int {
 
 def live(var q : int?) : int {
     var x = 1
-    x += 2 // - note
+    x += 2
     x += 3
-    let unused = 1 // nolint:LINT002
+    let unused = 1 // nolint:LINT002 - the reason stays with a live code
     sneaky(q, x)
     sneaky_pair(q, q, x)
     return x

@@ -48,7 +48,7 @@ def live(var q : int?) : int {
     x += 2 // nolint:LINT007,LINT008 - note
     x += 3 // nolint: LINT007, LINT006
     // nolint:LINT007
-    let unused = 1 // nolint:LINT002,LINT007
+    let unused = 1 // nolint:LINT002,LINT007 - the reason stays with a live code
     sneaky(q, x)
     sneaky_pair(q, q, x)
     return x
