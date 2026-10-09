@@ -1023,6 +1023,25 @@ the crossing as a cost model with two box constants the mint races - the route's
 cost a populated expert-tile - solved per model at load, the sidecar's knob standing above it; or the form of 47,
 which serves the whole band and retires the knee.
 
+## 50. The K-quant two-to-eight-row forms are bound by the x vector, not the weights
+
+Every K-quant small-batch form - the ext twin, the k4 register tile, the four- and eight-column forms - costs 0.65 to
+0.8 of a single-row pass per column on the M1 Max: two columns 1.6 to 1.7 passes, four 2.9, eight 5.1 to 5.5
+(`benchmarks/matmul/bench_metal_kq_race.das`, tiers `mvb`, `mvb4`, `mvb8`, the `passes` arm the incumbent). The
+weight stream is not what they wait on: a two-column probe that reads column 0's x twice runs at 1.07 passes, and the
+single-row GEMV's lane map over two columns (`MetalKqMvWK4T`) lands where the production forms land. On the M1 class
+the bound is the x traffic through L1 - every weight decoded is dotted against a float4 of x fetched per column, 2 bytes
+of x a weight against 0.56 of weight - and on the M5 Max, where the single-row GEMV streams at 890 GB/s and the wide
+form already beats the production forms (0.76 of their time at four and eight columns), the bound is the nibble
+decode's ALU. Register-resident x walked over four or eight weight rows (the mlx `qmv_wide` shape) loses on both boxes:
+sixty-four floats of x spill. Reading x as halves (`MetalKqMvW*K4H`, the f16 twin the prefill tiles already stage)
+halves the x bytes and lands the wide forms at 1.26, 1.8 and 2.8 passes for two, four and eight columns on the M1 and
+0.61 of the production time at eight columns on the M5 (`PERF_LEDGER.md`, the 2026-10-09 race tables). The work: the
+wide and half-x forms for every K-quant and grid format as race candidates beside the production forms, a per-box crown
+over {passes, production, wide, wide-half} per format, and the f16 x twin written by the row producer (the prefill's
+dual-store stamp) rather than a conversion dispatch per site - the numerics change is the prefill tiles' f16 X, already
+inside every parity bar; a cheaper nibble decode for the ALU-bound boxes is the other half.
+
 ## 46. The Metal vision chains decline a tower off their stamps' lattice whole
 
 The chain guards decide the whole encode (`metal_gemma3v_blocks`, `metal_gemma4v_blocks`, `metal_qwen3v_blocks`,

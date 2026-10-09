@@ -9267,6 +9267,138 @@ class MetalKqMvB2K4R2 {
     }
 }
 
+//! the k4 wide form: the single-row GEMV's lane map (two rows a simdgroup, four superblocks in flight
+//! through the lane/8 stride) over NCOL x columns - each lane decodes its 32 weights of both rows once
+//! and dots them against every column, so the weight pass costs what one GEMV pass costs
+[ |> template_struct_instance]
+class template MetalKqMvWK4T {
+    @ssbo @binding = 0 @role = "weight" @off = "s0off" ksh : array<float16>
+    @ssbo @binding = 1 @role = "weight" @off = "soff" ks4 : array<uint4>
+    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>
+    @ssbo @binding = 3 @role = "read" @off = "xoff" @template_gate = "!XHALF" x : array<float4>
+    @ssbo @binding = 3 @role = "read" @off = "xoff" @template_gate = XHALF xh : array<half4>   //! the f16 twin of the x panel
+    @ssbo @binding = 4 @role = "write" @off = "yoff" y : array<float>
+    @uniform @binding = 5 ka : KqMvArgs
+    @template_constant NCOL : int = 2
+    @template_constant XHALF : bool = false    //! x read as halves - half the x bytes a weight costs
+
+    def x4_at(i : uint) : float4 {
+        static_if (XHALF) {
+            return float4(xh[i])
+        } else {
+            return x[i]
+        }
+    }
+
+    //! one lane's 32 weights of one row: four regions of eight (the lo and hi nibbles of the eight
+    //! bytes at qb, then of the eight at qb + 64), each under its own scale and min
+    def decode32(blk, iq, ir : uint; var w : float[32]) {
+        let scs = kmask_scales(ks4[blk], iq)
+        let dd = float(ksh[blk * 8u])
+        let dm = float(ksh[blk * 8u + 1u])
+        let qb = blk * 32u + iq * 8u + ir * 2u
+        let dl0 = dd * float(scs.x & 255u)
+        let ml0 = dm * float(scs.y & 255u)
+        let dl1 = dd * float(scs.x >> 8u)
+        let ml1 = dm * float(scs.y >> 8u)
+        let dl2 = dd * float(scs.z & 255u)
+        let ml2 = dm * float(scs.w & 255u)
+        let dl3 = dd * float(scs.z >> 8u)
+        let ml3 = dm * float(scs.w >> 8u)
+        for [unroll_full] (u in range(2)) {
+            let q1 = kqu[qb + uint(u)]
+            let q2 = kqu[qb + 16u + uint(u)]
+            for [unroll_full] (e in range(4)) {
+                let b1 = (q1 >> (8u * uint(e))) & 255u
+                let b2 = (q2 >> (8u * uint(e))) & 255u
+                w[4 * u + e] = float(b1 & 15u) * dl0 - ml0
+                w[8 + 4 * u + e] = float(b1 >> 4u) * dl1 - ml1
+                w[16 + 4 * u + e] = float(b2 & 15u) * dl2 - ml2
+                w[24 + 4 * u + e] = float(b2 >> 4u) * dl3 - ml3
+            }
+        }
+    }
+
+    [metal_kernel]
+    def metal_kq_mvw_k4 {
+        let lane = gl_SubgroupInvocationID
+        let ix = lane / 8u
+        let it = lane % 8u
+        let iq = it / 4u
+        let ir = it % 4u
+        let nb = ka.ndim / 256u
+        let nb4 = ka.ndim / 4u
+        let first_row = (gl_WorkGroupID.x * 2u + gl_SubgroupID) * 2u
+        let dd1 = ka.ddim - 1u
+        let rowA = min(first_row, dd1)
+        let rowB = min(first_row + 1u, dd1)
+        var sumf : float[2 * NCOL]
+        var ib = ix
+        while (ib < nb) {
+            var wa, wb : float[32]
+            decode32(rowA * nb + ib, iq, ir, wa)
+            decode32(rowB * nb + ib, iq, ir, wb)
+            let xb4 = (ib * 256u + iq * 64u + ir * 8u) / 4u
+            for [unroll_full] (b in range(NCOL)) {
+                var acca = 0.0
+                var accb = 0.0
+                for [unroll_full] (g in range(4)) {
+                    let xi = uint(b) * nb4 + xb4 + (g < 2 ? uint(g) * 8u : 16u + uint(g) * 8u)
+                    for [unroll_full] (u in range(2)) {
+                        let v = x4_at(xi + uint(u))
+                        let k = 8 * g + 4 * u
+                        acca += v.x * wa[k] + v.y * wa[k + 1] + v.z * wa[k + 2] + v.w * wa[k + 3]
+                        accb += v.x * wb[k] + v.y * wb[k + 1] + v.z * wb[k + 2] + v.w * wb[k + 3]
+                    }
+                }
+                sumf[2 * b] += acca
+                sumf[2 * b + 1] += accb
+            }
+            ib += 4u
+        }
+        for [unroll_full] (i in range(2 * NCOL)) {
+            let s = simd_sum(sumf[i])
+            let row = first_row + uint(i % 2)
+            if (lane == 0u && row < ka.ddim && uint(i / 2) < ka.nr) {
+                y[uint(i / 2) * ka.ys + row] = s
+            }
+        }
+    }
+}
+
+[metal_dispatch(name = "enc_kq_mvw2_k4_c", pso = "g_pso_kq_mvw2_k4", tg = 64, grid = "rows/4", params = "rows : int64", requires = "ka.ndim % 256")]
+class MetalKqMvW2K4 : MetalKqMvWK4T {
+    override NCOL = 2
+}
+
+[metal_dispatch(name = "enc_kq_mvw2h_k4_c", pso = "g_pso_kq_mvw2h_k4", tg = 64, grid = "rows/4", params = "rows : int64", requires = "ka.ndim % 256")]
+class MetalKqMvW2K4H : MetalKqMvWK4T {
+    override NCOL = 2
+    override XHALF = true
+}
+
+[metal_dispatch(name = "enc_kq_mvw4h_k4_c", pso = "g_pso_kq_mvw4h_k4", tg = 64, grid = "rows/4", params = "rows : int64", requires = "ka.ndim % 256")]
+class MetalKqMvW4K4H : MetalKqMvWK4T {
+    override NCOL = 4
+    override XHALF = true
+}
+
+[metal_dispatch(name = "enc_kq_mvw8h_k4_c", pso = "g_pso_kq_mvw8h_k4", tg = 64, grid = "rows/4", params = "rows : int64", requires = "ka.ndim % 256")]
+class MetalKqMvW8K4H : MetalKqMvWK4T {
+    override NCOL = 8
+    override XHALF = true
+}
+
+[metal_dispatch(name = "enc_kq_mvw4_k4_c", pso = "g_pso_kq_mvw4_k4", tg = 64, grid = "rows/4", params = "rows : int64", requires = "ka.ndim % 256")]
+class MetalKqMvW4K4 : MetalKqMvWK4T {
+    override NCOL = 4
+}
+
+[metal_dispatch(name = "enc_kq_mvw8_k4_c", pso = "g_pso_kq_mvw8_k4", tg = 64, grid = "rows/4", params = "rows : int64", requires = "ka.ndim % 256")]
+class MetalKqMvW8K4 : MetalKqMvWK4T {
+    override NCOL = 8
+}
+
 [metal_dispatch(name = "enc_kq_mvb4_k4_c", pso = "g_pso_kq_mvb4_k4", tg = 64, grid = "rows/8, gcols", params = "rows : int64, gcols : int64")]
 class MetalKqMvB4K4 : MetalKqMvK4T {
     override NR = 4

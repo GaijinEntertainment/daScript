@@ -319,6 +319,12 @@ var g_pso_kq_iq4xs : MetalComputePipeline?
 var g_pso_kq_k3 : MetalComputePipeline?
 var g_pso_kq_mvb2_k4 : MetalComputePipeline?   // batch B=2..8: the kq ext small-batch mv twins
 var g_pso_kq_mvb2_k4r2 : MetalComputePipeline?   // the k4 twin's two-row register tile (the `kq_mvb2_k4_r2` crown)
+var g_pso_kq_mvw2_k4 : MetalComputePipeline?   // the k4 wide forms: the single-row GEMV's lane map over 2, 4 and 8 x columns
+var g_pso_kq_mvw4_k4 : MetalComputePipeline?
+var g_pso_kq_mvw8_k4 : MetalComputePipeline?
+var g_pso_kq_mvw2h_k4 : MetalComputePipeline?   // the wide forms over the f16 twin of x
+var g_pso_kq_mvw4h_k4 : MetalComputePipeline?
+var g_pso_kq_mvw8h_k4 : MetalComputePipeline?
 var g_pso_kq_mvb4_k4 : MetalComputePipeline?
 var g_pso_kq_mvb2_k5 : MetalComputePipeline?
 var g_pso_kq_mvb4_k5 : MetalComputePipeline?

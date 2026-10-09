@@ -11,6 +11,41 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **MEASURED (2026-10-09, `direction-grade`) - the K-quant small-batch GEMV forms against B single-row passes, on
+  the M1 Max and the M5 Max.** `benchmarks/matmul/bench_metal_kq_race.das --fmts k4 --shapes 27b --tiers
+  gemv,mvb,mvb4,mvb8` (k4 planes at Qwen3.6-27B's three dense shapes; `passes` = B dispatches of the production
+  single-row GEMV, x and y stepping a column each; `prod` = the production B-column form, `r2` the k4 register tile,
+  `wide` = the single-row GEMV's lane map over B columns, `wideh` the same reading x as halves; best of three rounds of
+  50 dispatches after a 300 ms burn; the M5 rows under its box sidecar's crowns). GB/s is the weight stream; the
+  cost column is the form's time in single-row passes.
+
+  | box | shape | single pass | B | passes | prod | r2 | wide | wideh |
+  |---|---|---|---|---|---|---|---|---|
+  | M1 Max | w13 (5120 x 17408) | 162 us, 309 GB/s | 2 | 2.00 | 1.66 | 1.55 | 1.77 | 1.26 |
+  | M1 Max | w13 | | 4 | 4.00 | 2.88 | - | 3.37 | 1.80 |
+  | M1 Max | w13 | | 8 | 7.98 | 5.14 | - | 5.35 | 2.82 |
+  | M1 Max | w2 (17408 x 5120) | 180 us, 279 GB/s | 2 | 2.00 | 1.57 | 1.62 | 1.72 | 1.14 |
+  | M1 Max | w2 | | 4 | 4.01 | 3.03 | - | 3.30 | 1.72 |
+  | M1 Max | w2 | | 8 | 8.01 | 5.07 | - | 4.72 | 2.87 |
+  | M5 Max | w13 | 56 us, 891 GB/s | 2 | 2.05 | 1.54 | 1.76 | 1.41 | 1.43 |
+  | M5 Max | w13 | | 4 | 3.94 | 2.57 | - | 1.95 | 1.89 |
+  | M5 Max | w13 | | 8 | 7.83 | 5.10 | - | 3.91 | 3.12 |
+  | M5 Max | w2 | 62 us, 813 GB/s | 2 | 1.85 | 1.59 | 1.76 | 1.47 | 1.45 |
+  | M5 Max | w2 | | 4 | 3.78 | 3.07 | - | 2.32 | 2.08 |
+  | M5 Max | w2 | | 8 | 8.01 | 5.53 | - | 4.34 | 3.49 |
+
+  Reading: on the M1 the production forms and the wide form cost the same 0.65-0.8 of a pass per column whatever the
+  lane map, and a probe that reads column 0's x for both columns runs the two-column wide form at 1.07 passes - the
+  bound is the x vector's traffic through L1 (2 bytes of f32 x a weight against 0.56 of weight), which reading x as
+  halves cuts to 1.26 / 1.80 / 2.82 passes. On the M5 the x traffic is not the bound (the half form gains nothing at
+  two columns) and the wide form beats the production forms on the decode's ALU alone - the full nibble decode is the
+  cost there, and the half form wins at eight columns on the ALU the x converts save. Register-resident x walked over
+  four or eight weight rows loses on both boxes (0.17 to 0.87 of the passes' rate - the sixty-four floats of x spill;
+  the four-row two-column form holds registers and still only reaches the production form). The two-stream decode on
+  the 35B pure IQ4_XS measured the same day: M1 Max tg128 84.8 tok/s solo, 115.2 summed over two streams (57.6 a
+  stream, 0.68 of solo); M5 Max 145.4 solo, 207.6 summed (103.8 a stream, 0.71). The work this opens is
+  `followup_metal.md` row 50.
+
 - **MEASURED (2026-10-09, `direction-grade`, `debug-jit`) - the short prefill window's routed block: the gathered
   route against the bucketed tiles, on the M1 Max and the M5 Max.** `benchmarks/prefill_window_probe.das` on
   Qwen3.6-35B-A3B-MTP-IQ4_XS-pure (the M5 under its box sidecar's crowns, the M1 on the base forms - the box has no
