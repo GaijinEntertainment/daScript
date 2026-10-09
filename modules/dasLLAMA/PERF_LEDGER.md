@@ -29,22 +29,37 @@ what it costs today and what the fix would change.
   | 24 | 84.5 | 97.6 | 0.87 |
   | 32 | 102.4 | 109.3 | 0.94 |
 
-  On the M1 the route wins through 32 rows (the decode step at that position 11.9 ms). The shipped knee of 16
-  (`pf_moe_gemv_knee`) is the value both boxes win at - the M5 sweep of the 2026-10-09 knee entry below loses at 32 on nine of
-  eleven carriers - and this race brackets it at 12 and 24. The tail A/B on the dense Qwen3.6-27B-MTP Q4_K_M, prefix 2000:
-  A = the K-quant tail peel on (`set_metal_prefill_mm_tail(true)`), B = off, GPU ms a window:
+  On the M1 the route wins through 32 rows (the decode step at that position 11.9 ms). The same A/B on the M5 Max (the
+  box's own sidecar `~/Work/daScript/modules/dasLLAMA/performance/m5.tune.json` as `DAS_TUNE_MANIFEST`, `-no-module-cache`,
+  a whisper `dasllama-server` idle on the GPU) on the IQ4_XS-pure file of the same model, the decode step 6.5 ms:
 
-  | window | peel | tile | peel / tile |
+  | window | route | tiles | route / tiles |
   |---|---|---|---|
-  | 2 | 82.0 | 275.3 | 0.30 |
-  | 3 | 102.1 | 275.2 | 0.37 |
-  | 4 | 106.0 | 275.7 | 0.38 |
-  | 5 | 175.9 | 276.1 | 0.64 |
-  | 8 | 181.7 | 277.0 | 0.66 |
+  | 2 | 9.6 | 13.0 | 0.73 |
+  | 4 | 11.3 | 16.2 | 0.70 |
+  | 8 | 16.3 | 23.3 | 0.70 |
+  | 12 | 22.7 | 31.3 | 0.73 |
+  | 16 | 25.4 | 33.9 | 0.75 |
+  | 24 | 31.1 | 39.1 | 0.79 |
+  | 32 | 36.7 | 42.7 | 0.86 |
 
-  The tile costs the same whatever the window holds - one 32-row tile a site, 275-277 ms - and the peel steps with the GEMV
-  form it takes (the two-row form at 2, the four-row at 3-4, the eight-row at 5-8); the decode step at that position is
-  62.9 ms, so a two-token window on the peel is 1.3 decode steps against the tile's 4.4.
+  The shipped knee of 16 (`pf_moe_gemv_knee`) is the value every carrier wins at on both boxes - the M5 sweep of the
+  2026-10-09 knee entry below loses at 32 on nine of eleven carriers, the 35B hybrids among the two that win - and this race
+  brackets it at 12 and 24. The tail A/B on the dense Qwen3.6-27B-MTP Q4_K_M, prefix 2000: A = the K-quant tail peel on
+  (`set_metal_prefill_mm_tail(true)`), B = off, GPU ms a window, the M1 Max then the M5 Max under the same flags:
+
+  | window | M1 peel | M1 tile | peel / tile | M5 peel | M5 tile | peel / tile |
+  |---|---|---|---|---|---|---|
+  | 2 | 82.0 | 275.3 | 0.30 | 38.2 | 95.9 | 0.40 |
+  | 3 | 102.1 | 275.2 | 0.37 | 42.2 | 96.3 | 0.44 |
+  | 4 | 106.0 | 275.7 | 0.38 | 41.8 | 95.9 | 0.44 |
+  | 5 | 175.9 | 276.1 | 0.64 | 73.3 | 96.3 | 0.76 |
+  | 8 | 181.7 | 277.0 | 0.66 | 73.5 | 95.9 | 0.77 |
+
+  The tile costs the same whatever the window holds - one 32-row tile a site, 275-277 ms on the M1, 96 on the M5 - and the
+  peel steps with the GEMV form it takes (the two-row form at 2, the four-row at 3-4, the eight-row at 5-8); the decode step
+  at that position is 62.9 ms on the M1 and 35.6 on the M5, so a two-token window on the peel is 1.3 (M1) or 1.1 (M5) decode
+  steps against the tile's 4.4 or 2.7.
 
 - **MEASURED (2026-10-09, `direction-grade`, `debug-jit`) - where a Qwen3.6-35B-A3B decode step's GPU time goes on the M1
   Max: the routed expert GEMVs are 1.9 ms of a 10.6 ms step, at the memory wall.** This entry replaces the 2026-10-06

@@ -2650,7 +2650,7 @@ def race_uniform_u32(dev : MetalDevice?; v : uint) : MetalBuffer? => scalar_buff
 // deterministic 34B-interleaved q8_0 W blob for the races: int quants, pow2 f16 scales
 def race_q8_blob(nblk : int) : array<int8> {
     var blob : array<int8>
-    blob |> resize(nblk * 34)
+    blob |> reserve_resize(nblk * 34)
     for (blk in range(nblk)) {
         for (k in range(32)) {
             blob[blk * 34 + 2 + k] = int8((blk * 7 + k * 3) % 19 - 9)
@@ -2669,7 +2669,7 @@ def race_q8_blob(nblk : int) : array<int8> {
 // deterministic f32 activation panel for the races
 def race_x_f32(count : int) : array<float> {
     var xa : array<float>
-    xa |> resize(count)
+    xa |> reserve_resize(count)
     for (i in range(count)) {
         xa[i] = 0.25 * float(i % 17 - 8)
     }
@@ -2689,13 +2689,13 @@ enum KqRaceScaleForm {
 //! scales. Returns the quant buffer, the scale buffer and the d-tail byte offset the encoders bind.
 def race_kq_planes(dev : MetalDevice?; nblk, qu_per_sb : int; sform : KqRaceScaleForm) : tuple<bq : MetalBuffer?; bs : MetalBuffer?; doff : uint64> {
     var qplane : array<uint>
-    qplane |> resize(nblk * qu_per_sb)
+    qplane |> reserve_resize(nblk * qu_per_sb)
     for (i in range(nblk * qu_per_sb)) {
         qplane[i] = uint(i) * 2654435761u   //! deterministic pseudo-random bit pattern
     }
     var splane : array<uint8>
     let sbytes = sform == KqRaceScaleForm.split_d ? nblk * 18 : (sform == KqRaceScaleForm.split_dmin ? nblk * 20 : nblk * 16)
-    splane |> resize(sbytes)
+    splane |> reserve_resize(sbytes)
     if (sform == KqRaceScaleForm.split_d || sform == KqRaceScaleForm.split_dmin) {
         for (i in range(nblk * 16)) {
             splane[i] = uint8(2)
@@ -2739,7 +2739,7 @@ def race_kq_planes(dev : MetalDevice?; nblk, qu_per_sb : int; sform : KqRaceScal
 // deterministic f16 panel — the f16-slab races (attention scores) feed and compare in half
 def race_x_f16(count : int) : array<float16> {
     var xa : array<float16>
-    xa |> resize(count)
+    xa |> reserve_resize(count)
     for (i in range(count)) {
         xa[i] = float16(0.25 * float(i % 17 - 8))
     }

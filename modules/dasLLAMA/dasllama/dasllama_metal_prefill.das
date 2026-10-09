@@ -8523,10 +8523,10 @@ def private race_moe_mulmm_kq(dev : MetalDevice?; queue : MetalCommandQueue?; fa
     var bs = planes.bs
     let doff = planes.doff
     var cnt, cnt_part, basep, bkt : array<uint>
-    cnt |> resize(ne)
-    cnt_part |> resize(ne)
-    basep |> resize(ne)
-    bkt |> resize(m)
+    cnt |> reserve_resize(ne)
+    cnt_part |> reserve_resize(ne)
+    basep |> reserve_resize(ne)
+    bkt |> reserve_resize(m)
     for (e in range(ne)) {
         cnt[e] = uint(rows_per)
         cnt_part[e] = uint(MOE_KQ_RACE_PART_ROWS)
