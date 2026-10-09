@@ -62,8 +62,7 @@ def ok(v : auto(TT); etype : auto(EE)) {
 //! (``length(src) == 0`` for arrays/tables). Useful for non-copyable
 //! payloads where ``ok`` would clone.
 [template(etype)]
-def move_ok(var v : auto(TT); etype : auto(EE)) =>
-    <- (_is_ok = true, _value <- v, _error = default<EE>)
+def move_ok(var v : auto(TT); etype : auto(EE)) => <- tuple<_is_ok : bool; _value : TT -const; _error : EE -const>(_is_ok = true, _value <- v)
 
 //! Construct ``Result<T, E>`` carrying error ``e``. Pass the value type as a witness::
 //!
@@ -89,8 +88,7 @@ def err(e : auto(EE); ttype : auto(TT)) {
 //! (``length(src) == 0`` for arrays/tables). Useful for non-copyable error
 //! payloads where ``err`` would clone.
 [template(ttype)]
-def move_err(var e : auto(EE); ttype : auto(TT)) =>
-    <- (_is_ok = false, _value = default<TT>, _error <- e)
+def move_err(var e : auto(EE); ttype : auto(TT)) => <- tuple<_is_ok : bool; _value : TT -const; _error : EE -const>(_error <- e)
 
 //! ``true`` iff the result is a successful ``ok``.
 def is_ok(r : $Result<auto(TT); auto(EE)>) : bool => r._is_ok
