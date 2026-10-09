@@ -19,6 +19,8 @@ require glsl/glsl_internal
 
 require opengl
 
+let public WEBGL_BUILD = get_platform_name() == "emscripten" || get_cross_platform_name() == "emscripten"
+
 [tag_function(compile_shader_tag), unused_argument(vs_main), unused_argument(ps_main)]
 def public create_shader_program(vs_main, ps_main : function<void>) : uint {
     panic("somehow we are in this is temporary stub for the resolved create_shader_program")
@@ -140,28 +142,35 @@ def private add_binder(var fn : FunctionPtr; var errors : das_string) : bool {
 
 //! Emits two `[template(self)] bind_vertex_buffer` overloads per struct: `(ptrd, self, vindex)` edits
 //! the bound VAO and array buffer; `(vao, vbo, self, vindex, binding)` is the GL 4.5 named-object form.
-[structure_macro(name="vertex_buffer")]
+[structure_macro(name="vertex_buffer"), arch(at="../ARCHITECTURE.md#dsa")]
 class GlslVertexBuffer : AstStructureAnnotation {
     def override apply(var st : StructurePtr; var group : ModuleGroup; var args : AnnotationArgumentList; var errors : das_string) : bool {
         let attribs <- vertex_attribs(st, errors)
         if (!empty(errors)) return false
         var stype <- new TypeDecl(baseType = Type.tStructure, structType = st, at = st.at)
         var pointerBody, namedBody : array<ExpressionPtr>
+        if (WEBGL_BUILD) {
+            let message = "bind_vertex_buffer(vao, vbo, {st.name}) needs OpenGL 4.5 direct state access, which WebGL does not have"
+            namedBody |> push(qmacro(panic($v(message))))
+        } else {
+            namedBody |> push(qmacro(glVertexArrayVertexBuffer(vao, binding, vbo, 0l, typeinfo sizeof(type<$t(stype)>))))
+        }
         for (attrib, ai in attribs, count()) {
             let attribIndex = uint(ai)
             pointerBody |> push(qmacro(glEnableVertexAttribArray($v(attribIndex) + vindex)))
             pointerBody |> push(qmacro(glVertexAttribPointer($v(attribIndex) + vindex, $v(attrib.count), $v(attrib.glType), $v(attrib.normalized),
                 typeinfo sizeof(type<$t(stype)>), ptrd, $e(offset_of(stype, attrib.fieldName)))))
-            namedBody |> push(qmacro(glEnableVertexArrayAttrib(vao, $v(attribIndex) + vindex)))
-            namedBody |> push(qmacro(glVertexArrayAttribFormat(vao, $v(attribIndex) + vindex, $v(attrib.count), $v(attrib.glType), $v(attrib.normalized),
-                uint($e(offset_of(stype, attrib.fieldName))))))
-            namedBody |> push(qmacro(glVertexArrayAttribBinding(vao, $v(attribIndex) + vindex, binding)))
+            if (!WEBGL_BUILD) {
+                namedBody |> push(qmacro(glEnableVertexArrayAttrib(vao, $v(attribIndex) + vindex)))
+                namedBody |> push(qmacro(glVertexArrayAttribFormat(vao, $v(attribIndex) + vindex, $v(attrib.count), $v(attrib.glType), $v(attrib.normalized),
+                    uint($e(offset_of(stype, attrib.fieldName))))))
+                namedBody |> push(qmacro(glVertexArrayAttribBinding(vao, $v(attribIndex) + vindex, binding)))
+            }
         }
         var fnPointer <- qmacro_function("bind_vertex_buffer") $(ptrd : void? const implicit; self : $t(stype); vindex : uint = 0u) : void {
             $b(pointerBody)
         }
         var fnNamed <- qmacro_function("bind_vertex_buffer") $(vao : uint; vbo : uint; self : $t(stype); vindex : uint = 0u; binding : uint = 0u) : void {
-            glVertexArrayVertexBuffer(vao, binding, vbo, 0l, typeinfo sizeof(type<$t(stype)>))
             $b(namedBody)
         }
         return add_binder(fnPointer, errors) && add_binder(fnNamed, errors)

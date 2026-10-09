@@ -41,3 +41,10 @@ keyed by its GL name. `write_ssbo` and `read_ssbo` copy through that map when on
 map on demand otherwise, so buffers from either path mix in one program. A read through the
 map waits on a fence first, so it returns what the GPU wrote, the same as the on-demand map
 does. `delete_ssbo` unmaps and deletes.
+
+The web build compiles `opengl_boost` against the GLES3 binding, which has no named-object
+call, so every DSA branch sits under a `static_if` on the WebGL target - the platform or the
+cross-compile target is `emscripten` - and compiles out there. On that target `try_use_dsa`
+answers false without reading the context, and each entry point only DSA serves - the
+`glTextureParameteri` and array `glNamedBufferData` / `glNamedBufferStorage` overloads, the
+named `bind_vertex_buffer` - panics, so code shared with desktop still compiles.
