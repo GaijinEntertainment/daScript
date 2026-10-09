@@ -32,3 +32,12 @@ def public is_rest(p : Expression const?) : bool {
     let x = peel_r2v(p)
     return x is ExprTag && (x as ExprTag).name == "..."
 }
+
+[macro_function]
+def public op_sides(var e : Expression?; op : string) : array<Expression?> {
+    //! The operands of a chain of one binary operator, left to right.
+    return <- [e] if (e == null || !(e is ExprOp2) || (e as ExprOp2).op != op)
+    var sides <- op_sides((e as ExprOp2).left, op)
+    sides |> push_from(op_sides((e as ExprOp2).right, op))
+    return <- sides
+}
