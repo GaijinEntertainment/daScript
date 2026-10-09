@@ -1120,6 +1120,10 @@ declared parameters (`tool_param_types`: a declared string stays text, a declare
 `generate()` references; skips honestly without SmolLM2-135M / the MTP fixture, `-jit` only. The stop-string
 cells: `stop_scan`'s hold and release model-free, then a stream cut by a stop string spanning two pieces
 (the text before it, `finish_reason` stop) and a held tail flushed at the budget as a piece of token -1.
+`test_scheduler_think_budget` holds the reasoning budget's forced close on SmolLM2 with a stand-in two-token
+close: a request whose prompt opened the span emits the model's own three tokens, then the close tokens, then
+the model's again to its length; the same budget with an open token the model never writes, and with no close
+marks, each read the reference token for token.
 The SmolLM cells drop the loaded model's GPU state (`moe_gpu_drop_model`) so they serve on
 the CPU rails under `DASLLAMA_GPU=1` too: their bit-exact claims hold on one lane, and the
 tier's device prefill, resident batch decode and CPU prefill round differently. Its two-stream

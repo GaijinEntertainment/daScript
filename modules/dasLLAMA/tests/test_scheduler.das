@@ -350,6 +350,75 @@ def test_scheduler_stop_strings(t : T?) {
     }
 }
 
+// ===== the reasoning budget: the forced close lands after the budgeted tokens, the stream continues =====
+
+[test]
+def test_scheduler_think_budget(t : T?) {
+    t |> run("a reasoning budget forces the span's close tokens after that many tokens; a budget with no close is inert (needs SmolLM2-135M)") @(t : T?) {
+        if (model_missing(t)) {
+            return
+        }
+        with_dasllama_jobque() {
+            var m <- load_capped_cpu(128l)
+            var prompt <- encode(m, "Once upon a time", true, false)
+            var none : array<int64>
+            let greedy = SamplingParams()
+            var ref <- ref_generate(m, prompt, greedy, 12l, none)
+            var sch <- create_scheduler(m, 1l, 4l, 512l)
+            var events : array<SchedEvent>
+            // the close sequence stands in for a family's: two tokens the reference never emits in a row, read off the vocab
+            var close <- encode(m, " THE END", false, false)
+            t |> success(length(close) >= 2, "the stand-in close is at least two tokens ({length(close)})")
+            // the prompt "opened" the span: the first 3 tokens count, the 4th and 5th are the forced close, the rest the model's again
+            var req <- make_req(1l, prompt, greedy, 12l, none)
+            req.think_budget = 3l
+            req.think_marks.opened = true
+            req.think_marks.close := close
+            t |> success(submit(m, sch, req), "the budgeted stream is queued")
+            drain(m, sch, events)
+            var toks <- toks_of(events, 1l)
+            t |> equal(12, length(toks), "the budget ends nothing: the reply still runs to its length")
+            for (i in range(3)) {
+                t |> equal(ref.toks[i], toks[i], "token {i} is the model's own")
+            }
+            for (i in range(length(close))) {
+                t |> equal(close[i], toks[3 + i], "forced close token {i} lands at position {3 + i}")
+            }
+            t |> equal("length", finished_of(events, 1l).finish)
+            to_log(LOG_INFO, "think budget: reference {escape(text_of(ref.pieces))}\n")
+            to_log(LOG_INFO, "think budget: stream    {escape(text_of(pieces_of(events, 1l)))}\n")
+            // the span never opened (an open token the model does not emit): the budget counts nothing and forces nothing
+            events |> clear()
+            var req2 <- make_req(2l, prompt, greedy, 12l, none)
+            req2.think_budget = 3l
+            req2.think_marks.open <- [close[0]]
+            req2.think_marks.close := close
+            t |> success(submit(m, sch, req2), "the unopened stream is queued")
+            drain(m, sch, events)
+            var toks2 <- toks_of(events, 2l)
+            t |> equal(ref.toks, toks2, "no open token emitted: the stream is the reference, token for token")
+            // a budget with no close marks is inert
+            events |> clear()
+            var req3 <- make_req(3l, prompt, greedy, 12l, none)
+            req3.think_budget = 3l
+            req3.think_marks.opened = true
+            t |> success(submit(m, sch, req3), "the markless stream is queued")
+            drain(m, sch, events)
+            var toks3 <- toks_of(events, 3l)
+            t |> equal(ref.toks, toks3, "no close marks: the budget forces nothing")
+            delete toks
+            delete toks2
+            delete toks3
+            delete close
+            delete ref
+            delete events
+            delete sch
+            delete prompt
+            delete m
+        }
+    }
+}
+
 // ===== chunked prefill: {1,3,17,64} produce the identical stream under classic prefill =====
 
 [test]

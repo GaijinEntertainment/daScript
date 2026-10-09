@@ -1493,6 +1493,14 @@ enum ThinkMode {
     asymmetric      // gemma-4: <|channel>thought ... <channel|> (asymmetric brackets by design)
 }
 
+//! The token marks a reasoning budget acts on, resolved per request from the family's template and the model's vocab
+//! (`think_budget_marks_`); an empty `close` means no budget can act - thinking off, or a vocab without the markers.
+struct ThinkBudgetMarks {
+    open : array<int64>      //!< the token a reply writes to open its reasoning span (empty where the prompt opened it)
+    close : array<int64>     //!< the tokens forced at the budget to end the span: a close special, or harmony's end mark + final header
+    opened : bool = false    //!< the generation prompt left the reply inside the span
+}
+
 //! The family's tool-calling convention — defs render, call parse, replay, and results framing
 //! all dispatch on it (`ToolMode.none` = no format declared; the server answers `tools` with an
 //! honest 400 there).

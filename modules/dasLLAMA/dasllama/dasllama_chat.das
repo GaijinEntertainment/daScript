@@ -1505,6 +1505,53 @@ def make_think_stream_(c : ChatSession) : ThinkStream {
     return ts
 }
 
+//! The marks a reasoning budget acts on for this turn (`ThinkBudgetMarks`): the family's open token and the forced close
+//! sequence, and whether the generation prompt already opened the span. Harmony's forced close is the end mark followed by
+//! the final channel's header, so the reply continues as the answer; every other thinking family closes on one special.
+def think_budget_marks_(m : Model; c : ChatSession) : ThinkBudgetMarks {
+    var marks = ThinkBudgetMarks()
+    if (!think_turn_active_(c) || c.tmpl.think_mode == ThinkMode.none) {
+        return <- marks
+    }
+    marks.opened = prompt_opens_think_(c)
+    if (c.tmpl.think_mode == ThinkMode.channel_switch) {
+        let ch = special_id(m, HARMONY_CH)
+        let msg = special_id(m, HARMONY_MSG)
+        let fin = special_id(m, HARMONY_END)
+        let start = special_id(m, "<|start|>")
+        if (ch < 0l || msg < 0l || fin < 0l || start < 0l) {
+            return <- marks
+        }
+        marks.open <- [ch]
+        marks.close <- [fin, start]
+        marks.close |> push_from(encode_(m, "assistant", false, false))
+        marks.close |> push(ch)
+        marks.close |> push_from(encode_(m, "final", false, false))
+        marks.close |> push(msg)
+        return <- marks
+    }
+    let open = special_id(m, c.tmpl.think_open)
+    let close = special_id(m, c.tmpl.think_close)
+    if (close < 0l) {
+        return <- marks
+    }
+    if (open >= 0l) {
+        marks.open <- [open]
+    }
+    //! a bare close mid-thought leaves a symmetric family reasoning on in its content and closing again at the end; the
+    //! sentence the Qwen3 recipe inserts at a spent budget turns the thought into its conclusion, and the blank line after
+    //! the close is the template's own spacing before an answer
+    if (c.tmpl.think_mode == ThinkMode.symmetric) {
+        marks.close <- encode_(m, THINK_BUDGET_SPENT, false, false)
+    }
+    marks.close |> push(close)
+    marks.close |> push_from(encode_(m, "\n\n", false, false))
+    return <- marks
+}
+
+//! what the forced close says ahead of a symmetric family's close marker, in the thought's own voice (the Qwen3 recipe)
+let private THINK_BUDGET_SPENT = "\n\nConsidering the limited time by the user, I have to give the solution based on the thinking directly now.\n"
+
 //! the generation prompt of a thinking turn ends inside the think block: on a template whose thinking opener carries the
 //! marker (Qwen3.5/3.6's `<|im_start|>assistant\n<think>\n`), and on gemma-4's continuation after a tool response, which
 //! re-opens the thought channel - the reply then opens with reasoning and never writes the opener

@@ -2116,15 +2116,3 @@
     predict it to. The work: the cached K/V rows against a cold prefill's row by row at that prompt, to name
     the row that differs and whether it is the last token's alone; then either the cold run's last row
     evaled as the cached run evals it, or the difference stated in the server's README.
-
-213. **The server ignores a request's `thinking_budget`, so a thinking reply's first content token waits on
-    the whole think block.** `utils/dasllama-server/openai_server.das` warns `ignoring unsupported request
-    field 'thinking_budget'` and lets a thinking family reason to its own close; a client that sends
-    `thinking_budget: 384` with `enable_thinking: true` (the house assistant does, on every request) gets
-    think blocks of a thousand tokens at temperature 0.6 and a first content token 7 to 16 s out on four of
-    122 requests, where the same requests at a shorter block answer in under a second. The work: the
-    scheduler counts a stream's reasoning tokens and, at the budget, forces the family's think-close tokens
-    (`dasllama_chat`'s per-family markers) so the answer begins, with the stop-string hold and the
-    reasoning/content split reading the forced close as the model's own; the field read and validated on
-    the request (a non-negative integer, 0 = unlimited), reported in the README's request-field table, and
-    a test cell that holds a budget of a few tokens to a reply whose reasoning delta count is that budget.

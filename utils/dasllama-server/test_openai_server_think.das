@@ -189,6 +189,30 @@ def test_think_qwen3(t : T?) {   // nolint:STYLE038 — one live server session:
                 delete datas
             }
         }
+        t |> run("thinking_budget: the reasoning span is closed for the model at the budget, the answer follows; a bad value is a 400") @(t : T?) {
+            var full_len = 0
+            chat_resp(t, base_url, "\{\"messages\":[\{\"role\":\"user\",\"content\":\"Explain in detail why the sky is blue.\"}],\"max_tokens\":400,\"temperature\":0}") $(r) {
+                full_len = length(r.choices[0].message.reasoning_content)
+                t |> success(full_len > 200, "the unbudgeted turn reasons at length ({full_len} chars)")
+            }
+            chat_resp(t, base_url, "\{\"messages\":[\{\"role\":\"user\",\"content\":\"Explain in detail why the sky is blue.\"}],\"max_tokens\":400,\"temperature\":0,\"thinking_budget\":6}") $(r) {
+                let msg & = unsafe(r.choices[0].message)
+                to_log(LOG_INFO, "thinking_budget 6: reasoning {escape(msg.reasoning_content)}\n")
+                to_log(LOG_INFO, "thinking_budget 6: content   {escape(msg.content)}\n")
+                t |> success(!empty(msg.reasoning_content), "the budgeted turn still reasons ({length(msg.reasoning_content)} chars)")
+                t |> success(length(msg.reasoning_content) < full_len / 4, "...but far shorter than the unbudgeted turn's {full_len} chars")
+                t |> success(!empty(msg.content), "an answer follows the forced close")
+                t |> success(find(msg.content, "</think>") < 0 && find(msg.reasoning_content, "</think>") < 0, "the forced close is a marker, not text, on either half")
+            }
+            chat_resp(t, base_url, "\{\"messages\":[\{\"role\":\"user\",\"content\":\"What is 2+2? Answer with just the number.\"}],\"max_tokens\":128,\"temperature\":0,\"thinking_budget\":0}") $(r) {
+                t |> success(!empty(r.choices[0].message.reasoning_content), "a budget of 0 is no budget")
+            }
+            for (bad in ["-1", "\"x\"", "1.5"]) {
+                POST("{base_url}/v1/chat/completions", "\{\"messages\":[\{\"role\":\"user\",\"content\":\"hi\"}],\"max_tokens\":8,\"thinking_budget\":{bad}}") $(resp) {
+                    t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST), "thinking_budget {bad} is refused")
+                }
+            }
+        }
         t |> run("tools + thinking compose: reasoning_content AND finish_reason=tool_calls") @(t : T?) {
             chat_resp(t, base_url,
                 "\{\"messages\":[\{\"role\":\"user\",\"content\":\"What is the weather in Paris right now? Use the get_weather tool.\"}]," +
