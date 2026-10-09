@@ -20,7 +20,7 @@ CPU classes and the AWS instance that carries each (`us-west-2`; the CLI on the 
 
 | class (`tune_cpu_class()`) | what gates it | instance |
 |---|---|---|
-| `x86-avx2` | avx2, no VNNI | any zen2/zen3 box (the dev zen2) |
+| `x86-avx2` | avx2, no VNNI | `c5a.4xlarge` (EPYC zen2), or any zen2/zen3 box |
 | `x86-vnni512` | avx512vnni + avx512bw | `c7a.4xlarge` (EPYC zen4) |
 | `x86-amx` | amx-int8 + amx-bf16 + amx-tile (+ avx512vnni, avx512bf16) | `c7i.4xlarge` (Sapphire Rapids), `c8i` (Granite Rapids) |
 | `arm-neon` / `arm-i8mm` | dotprod / i8mm | M1 / M2+, `c8g.2xlarge` (Graviton4) |
@@ -44,7 +44,7 @@ newest by `CreationDate`). On-demand `c7a.4xlarge` is about $0.82 an hour; termi
 
 ## 2. Dependencies and the build
 
-The user-data script (`aws_bootstrap.sh`, reproduced in the last section) does 2-4 unattended; the
+The user-data script (`aws_bootstrap.sh`, section 8) does 2, 4 and 6 unattended; the
 same lines by hand:
 
 ```
@@ -227,7 +227,53 @@ Three things the boxes taught that the walk now carries:
 and it was minted on a quiet, session-free box - never hand-edited. Run the gate before pushing:
 `bin/daslang utils/internal/preflight/main.das -- --only review-md`.
 
-## 8. Home, and the bill
+## 8. The unattended form
+
+`aws_bootstrap.sh`, the user-data of section 1: sections 2, 4 and 6 and the export in one pass - the
+box clones master, builds `daslang`, fetches the 1B Q4_K_M vehicle and the 1B Q8_0 the confirm pins the
+q8 leg on, runs the TEST gate, mints and exports, and writes each step's verdict to `~/mint/mint.out`
+(`MINT-DONE` last). Read that file, then section 6's compare, then `scp` the profile home.
+
+```bash
+#!/bin/bash
+# sidecar refresh: dependencies, the tree on master, the daslang build, the vehicle models, the TEST gate, the mint and the export - unattended
+set -u
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -y
+apt-get install -y --no-install-recommends build-essential clang cmake ninja-build git python3 pkg-config \
+    libssl-dev curl ca-certificates libatomic-ops-dev libglu1-mesa-dev freeglut3-dev mesa-common-dev \
+    libglfw3-dev libfreetype6-dev libudev-dev libopenal-dev libvorbis-dev libflac-dev libx11-dev \
+    libxrandr-dev libxcursor-dev libxinerama-dev libxi-dev
+sudo -u ubuntu -i bash <<'EOU'
+set -u
+mkdir -p ~/mint ~/models
+: > ~/mint/mint.out
+echo "boot $(date -u +%FT%TZ) $(nproc) cores $(lscpu | grep -m1 'Model name' | cut -c1-80)" >> ~/mint/mint.out
+git clone --depth 1 --recursive -b master https://github.com/GaijinEntertainment/daScript.git daScript > ~/mint/clone.log 2>&1
+cd ~/daScript
+echo "tip $(git log --oneline -1 | cut -c1-60)" >> ~/mint/mint.out
+CC=clang CXX=clang++ cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DDAS_GLFW_DISABLED=ON \
+    -DDAS_HV_DISABLED=OFF -DDAS_SQLITE_DISABLED=OFF -DDAS_LLVM_DISABLED=OFF > ~/mint/cmake.log 2>&1
+cmake --build build --target daslang -j $(nproc) > ~/mint/build.log 2>&1
+echo "build exit=$? $(ls -la bin/daslang 2>&1 | cut -c1-60) llvm=$(ls lib/LLVM.dll 2>/dev/null | wc -l)" >> ~/mint/mint.out
+cd ~/models
+curl -sL -o Llama-3.2-1B-Instruct-Q4_K_M.gguf https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q4_K_M.gguf
+curl -sL -o Llama-3.2-1B-Instruct-Q8_0.gguf https://huggingface.co/bartowski/Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q8_0.gguf
+echo "models $(ls -la ~/models | grep gguf | awk '{print $5, $9}' | tr '\n' ' ')" >> ~/mint/mint.out
+cd ~/daScript
+DAS_TUNE_MODE=test DAS_JOBQUE_THREADS=8 bin/daslang -jit modules/dasLLAMA/harness/gen_tune_probe.das > ~/mint/probe.log 2>&1
+echo "probe exit=$? ok=$(grep -c ' ok' ~/mint/probe.log) notok=$(grep -ci 'fail\|mismatch\|not ok' ~/mint/probe.log)" >> ~/mint/mint.out
+unset DAS_TUNE_MANIFEST
+DASLLAMA_MODELS_DIR=$HOME/models DASLLAMA_CONFIRM_MODEL=$HOME/models/Llama-3.2-1B-Instruct-Q8_0.gguf bin/daslang utils/daspkg/main.das -- release --root modules/dasLLAMA/benchmarks --out modules/dasLLAMA/performance/_rig > ~/mint/mint.log 2>&1
+echo "mint exit=$?" >> ~/mint/mint.out
+python3 -c 'import json;d=json.load(open("modules/dasLLAMA/benchmarks/lcpp_bench.tune.json"));p=d["provenance"];print("provenance", p["noise"],p["validation"],p["features"],len(d["kernels"]))' >> ~/mint/mint.out 2>&1
+bin/daslang -jit modules/dasLLAMA/harness/export_tune_profile.das -- --sidecar modules/dasLLAMA/benchmarks/lcpp_bench.tune.json >> ~/mint/mint.out 2>&1
+git status --short modules/dasLLAMA/performance/defaults/ >> ~/mint/mint.out
+echo MINT-DONE >> ~/mint/mint.out
+EOU
+```
+
+## 9. Home, and the bill
 
 ```
 scp -i ~/.ssh/dasbox_ed25519 ubuntu@<ip>:daScript/modules/dasLLAMA/performance/defaults/<class>.tune-defaults.json .
