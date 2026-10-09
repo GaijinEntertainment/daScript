@@ -4726,9 +4726,10 @@ def public metal_prefill_shutdown {
 
 [cold_path]   //! the moe kq twins compile behind the toolchain probe; their own MoE-shaped crowns decide the whole-tile shape, the knee the short one
 def private pf_compile_moe_kq_twins(var ok : bool&) {
-    g_pf_moe_kq_mm4_tensor = metal_tensor_crowned("moe_mulmm_k4")
-    g_pf_moe_kq_mm5_tensor = metal_tensor_crowned("moe_mulmm_k5")
-    g_pf_moe_kq_mm6_tensor = metal_tensor_crowned("moe_mulmm_k6")
+    //! a sidecar minted before the MoE-shaped races carries no verdict for them, and the section keeps winners alone - the dense crown stands in until the box re-races
+    g_pf_moe_kq_mm4_tensor = metal_tensor_crowned("moe_mulmm_k4") || g_pf_kq_mm4_tensor
+    g_pf_moe_kq_mm5_tensor = metal_tensor_crowned("moe_mulmm_k5") || g_pf_kq_mm5_tensor
+    g_pf_moe_kq_mm6_tensor = metal_tensor_crowned("moe_mulmm_k6") || g_pf_kq_mm6_tensor
     if (g_pf_tensor_ok) {
         //! q5_1 and iq4nl32 have no race of their own; the k4 crown proxies (same file, non-256-divisible axes)
         g_pf_pso_moe_mm_q51_t = compile_stamp(MetalMoeMulMmQ51T_metal_moe_mulmm_q51_t_msl, ok)
