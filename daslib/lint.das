@@ -607,15 +607,16 @@ class LintVisitor : AstVisitor {
     def lint_error(text : string; at : LineInfo; fix : LintFix = LintFix()) : void {
         if (noLint || is_suppressed(text, at)
                 || (at.fileInfo != null && !empty(funcFile) && at.fileInfo.name != funcFile)) return
+        let msg = lint_fix_message(text, fix)
         if (compile_time_errors) {
-            compiling_program() |> macro_error(at, text)
+            compiling_program() |> macro_error(at, msg)
         } elif (collect_errors) {
-            errors |> push("{text} at {describe(at)}")
-            var issue = make_lint_issue(text, at)
+            errors |> push("{msg} at {describe(at)}")
+            var issue = make_lint_issue(msg, at)
             issue.fix = fix
             issues |> push(issue)
         } else {
-            error("{text} at {describe(at)}\n")
+            error("{msg} at {describe(at)}\n")
         }
     }
     def private source_operator_is_clone(at : LineInfo) : bool {

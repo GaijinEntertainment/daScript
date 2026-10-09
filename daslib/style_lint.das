@@ -111,19 +111,9 @@ struct St041Candidate {
     msg : string
 }
 
-def private byte_at(s : string; i : int) : int {
-    var b = -1
-    peek_data(s) $(d) {
-        if (i >= 0 && i < length(d)) {
-            b = int(d[i])
-        }
-    }
-    return b
-}
-
 def private code_find(s, two : string) : int {
-    let first_ch = byte_at(two, 0)
-    let second_ch = byte_at(two, 1)
+    let first_ch = lint_byte_at(two, 0)
+    let second_ch = lint_byte_at(two, 1)
     var found = -1
     peek_data(s) $(d) {
         var quote = 0
@@ -199,10 +189,10 @@ class StyleLintVisitor : AstVisitor {
         if (key_exists(reported_locations, key)) return
         reported_locations |> insert(key)
         warning_count++
-        var msg = text
+        var msg = lint_fix_message(text, fix)
         if (current_function != null && current_function.fromGeneric != null && !empty(current_function.inferStack)) {
             msg = build_string() $(var w) {
-                w |> write(text)
+                w |> write(lint_fix_message(text, fix))
                 w |> write("\n  while compiling {current_function.name}")
                 for (ih in current_function.inferStack) {
                     w |> write("\n  instanced from {ih.func.name} at {describe(ih.at)}")
@@ -251,10 +241,10 @@ class StyleLintVisitor : AstVisitor {
         let last = lint_source_line(body.at, last_ln)
         let open_col = int(body.at.column)
         var close_col = int(body.at.last_column) - 1
-        if (byte_at(last, close_col) != '}') {
+        if (lint_byte_at(last, close_col) != '}') {
             close_col++
         }
-        if (byte_at(first, open_col) != '{' || byte_at(last, close_col) != '}') return LintFix()
+        if (lint_byte_at(first, open_col) != '{' || lint_byte_at(last, close_col) != '}') return LintFix()
         let middle = last_ln - first_ln == 2 ? lint_source_line(body.at, first_ln + 1) : ""
         let pieces <- (first_ln == last_ln ? [slice(first, open_col + 1, close_col)]
             : [slice(first, open_col + 1), middle, slice(last, 0, close_col)])
@@ -287,7 +277,7 @@ class StyleLintVisitor : AstVisitor {
         let indent = length(first) - length(strip_left(first))
         let one_line = open_col + 3 + length(expr) + tail <= STYLE042_MAX_LINE
         if (!one_line && code_find(pieces[0], "//") >= 0) return LintFix(line = -1)
-        let lead = byte_at(first, open_col - 1) == ' ' ? "" : " "
+        let lead = lint_byte_at(first, open_col - 1) == ' ' ? "" : " "
         let replacement = one_line ? "{lead}=> {expr}" : "{lead}=>\n{repeat(" ", indent + 4)}{expr}"
         return LintFix(line = first_ln, column = open_col, last_line = last_ln, last_column = close_col + 1, replacement = replacement)
     }

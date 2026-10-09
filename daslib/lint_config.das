@@ -44,6 +44,7 @@ require daslib/json
 require daslib/toml
 require daslib/ast_boost
 require daslib/strings_boost
+require math
 
 //! Path override env var. When ``DAS_LINT_CONFIG_PATH`` is set, the macro
 //! cascade reads that path instead of ``{get_das_root()}/.lint_config`` —
@@ -529,15 +530,18 @@ def public apply_lint_fixes(text : string; fixes : array<LintFix>) : tuple<text 
         continue if (f.line <= 0 || f.line > length(line_start) || f.last_line < f.line || f.last_line > length(line_start))
         spans |> push(int3(line_start[f.line - 1] + f.column, line_start[f.last_line - 1] + f.last_column, k))
     }
-    sort(spans) $(a, b) => a.x < b.x
+    sort(spans) $(a, b) => a.x < b.x || (a.x == b.x && a.y < b.y)
     var applied = 0
     let crlf = find(text, "\r\n") >= 0
     let tlen = length(text)
     let result = build_string() $(var w) {
         peek_data(text) $(d) {
             var pos = 0
+            var prev = int3(-1, -1, -1)
             for (sp in spans) {
-                continue if (sp.x < pos || sp.y < sp.x || sp.y > tlen)
+                continue if ((prev.z >= 0 && sp.x == prev.x && sp.y == prev.y && fixes[sp.z].replacement == fixes[prev.z].replacement)
+                    || sp.x < pos || sp.y < sp.x || sp.y > tlen)
+                prev = sp
                 if (sp.x > pos) write_string(w, d, pos, sp.x)
                 w |> write(crlf ? replace(fixes[sp.z].replacement, "\n", "\r\n") : fixes[sp.z].replacement)
                 pos = sp.y
@@ -557,6 +561,256 @@ def public lint_source_line(at : LineInfo; ln : int) : string {
         }
     }
     return text
+}
+
+//! The byte at ``i`` of ``s``; -1 outside the string.
+def public lint_byte_at(s : string; i : int) : int {
+    var b = -1
+    peek_data(s) $(d) {
+        if (i >= 0 && i < length(d)) {
+            b = int(d[i])
+        }
+    }
+    return b
+}
+
+//! Appended to a finding's message when the finding carries a fix.
+let public LINT_FIX_HINT = " (fixable: run lint with --fix)"
+
+//! The message a funnel reports: ``text``, plus ``LINT_FIX_HINT`` when ``fix`` holds an edit.
+def public lint_fix_message(text : string; fix : LintFix) : string => fix.line > 0 ? "{text}{LINT_FIX_HINT}" : text
+
+class private LintSpanVisitor : AstVisitor {
+    file : uint64
+    first : int2 = int2(INT_MAX, INT_MAX)
+    last : int2 = int2(0, 0)
+    last_is_call : bool
+    skipped : table<uint64>
+    skip_depth : int
+    def override preVisitExpression(expr : ExpressionPtr) : void {
+        if (key_exists(skipped, intptr(expr))) {
+            skip_depth++
+        }
+        return if (skip_depth > 0 || intptr(expr.at.fileInfo) != file || expr.at.line == 0u)
+        let a = int2(int(expr.at.line), int(expr.at.column))
+        let b = int2(int(expr.at.last_line), int(expr.at.last_column))
+        if (a.x < first.x || (a.x == first.x && a.y < first.y)) {
+            first = a
+        }
+        if (b.x > last.x || (b.x == last.x && b.y > last.y)) {
+            last = b
+            last_is_call = expr is ExprCall || expr is ExprLooksLikeCall || expr is ExprNamedCall || expr is ExprCallMacro
+        }
+    }
+    def override visitExpression(var expr : ExpressionPtr) : ExpressionPtr {
+        if (key_exists(skipped, intptr(expr))) {
+            skip_depth--
+        }
+        return expr
+    }
+    def override preVisitExprCall(var expr : ExprCall?) : void {
+        return if (expr.func == null)
+        for (arg, i in expr.arguments, count()) {
+            break if (i >= length(expr.func.arguments))
+            let init = expr.func.arguments[i].init
+            if (init != null && arg.at.line == init.at.line && arg.at.column == init.at.column && arg.at.fileInfo == init.at.fileInfo) {
+                skipped |> insert(intptr(arg))
+            }
+        }
+    }
+}
+
+struct private LintScan {
+    depth : int
+    min_depth : int
+    quotes : int
+    pos : int
+}
+
+//! Advances ``st`` over ``d[st.pos..to)`` folding bracket depth, skipping strings and line comments; with
+//! ``close`` it stops right after the byte that returns depth and quotes to zero. False on a block comment.
+def private lint_scan_brackets(d : array<uint8> const# implicit; to : int; close : bool; var st : LintScan&) : bool {
+    while (st.pos < to && !(close && st.depth == 0 && st.quotes == 0)) {
+        let c = int(d[st.pos])
+        let next = st.pos + 1 < length(d) ? int(d[st.pos + 1]) : 0
+        st.pos++
+        if (st.quotes > 0) {
+            if (c == '\\') {
+                st.pos++
+            } elif (c == '"') {
+                st.quotes--
+            }
+        } elif (c == '"') {
+            st.quotes++
+        } elif (c == '/' && next == '*') {
+            return false
+        } elif (c == '/' && next == '/') {
+            while (st.pos < to && int(d[st.pos]) != '\n') {
+                st.pos++
+            }
+        } elif (c == '(' || c == '[' || c == '{') {
+            st.depth++
+        } elif (c == ')' || c == ']' || c == '}') {
+            st.depth--
+            st.min_depth = min(st.min_depth, st.depth)
+        }
+    }
+    return true
+}
+
+//! Moves ``from`` left over the ``open`` brackets the span closes without opening; -1 when anything else stands in the way.
+def private lint_scan_open_left(d : array<uint8> const# implicit; from, open : int) : int {
+    var pos = from
+    var left = open
+    while (left > 0 && pos > 0) {
+        pos--
+        let c = int(d[pos])
+        if (c == '(' || c == '[' || c == '{') {
+            left--
+        } elif (c == ')' || c == ']' || c == '}' || c == '"' || c == '\n') {
+            return -1
+        }
+    }
+    return left == 0 ? pos : -1
+}
+
+struct private LintTokens {
+    first : int2
+    last : int2
+    last_is_call : bool
+}
+
+def private lint_expr_tokens(e : Expression?) : LintTokens {
+    var astVisitor = new LintSpanVisitor(file = intptr(e.at.fileInfo))
+    make_visitor(*astVisitor) $(adapter) {
+        var root = unsafe(reinterpret<Expression?>(e))
+        visit(root, adapter)
+    }
+    let tokens = LintTokens(first = astVisitor.first, last = astVisitor.last, last_is_call = astVisitor.last_is_call)
+    unsafe {
+        delete astVisitor
+    }
+    return tokens
+}
+
+let private LINT_SPAN_MAX_LINES = 64
+
+//! The source span ``e`` covers - its subtree's token spans joined and widened over the brackets they
+//! leave open (a node's own LineInfo is its head token only); line 0 when that is not one balanced run.
+def public lint_expr_span(e : Expression?) : LintFix {
+    if (e == null || e.at.fileInfo == null || e.at.line == 0u) return LintFix()
+    let tokens = lint_expr_tokens(e)
+    if (tokens.first.x == INT_MAX || tokens.last.x < tokens.first.x) return LintFix()
+    var line_start : array<int>
+    var size = 0
+    let text = build_string() $(var w) {
+        for (ln in range(tokens.first.x, tokens.last.x + LINT_SPAN_MAX_LINES)) {
+            let line = lint_source_line(e.at, ln)
+            line_start |> push(size)
+            size += length(line) + 1
+            w |> write(line)
+            w |> write("\n")
+        }
+    }
+    var span = LintFix()
+    peek_data(text) $(d) {
+        var from = line_start[0] + tokens.first.y
+        var to = line_start[tokens.last.x - tokens.first.x] + tokens.last.y
+        if (e is ExprStringBuilder) {
+            return if (from == 0 || int(d[from - 1]) != '"' || to >= length(d) || int(d[to]) != '"')
+            from--
+            to++
+        } elif (tokens.last_is_call) {
+            var k = to
+            while (k < length(d) && int(d[k]) == ' ') {
+                k++
+            }
+            if (k < length(d) && int(d[k]) == '(') {
+                to = k + 1
+            }
+        }
+        var st = LintScan(pos = from)
+        return if (!lint_scan_brackets(d, to, false, st) || st.quotes != 0)
+        if (st.min_depth < 0) {
+            from = lint_scan_open_left(d, from, -st.min_depth)
+            return if (from < 0)
+            st.depth -= st.min_depth
+        }
+        return if (!lint_scan_brackets(d, length(d), true, st) || st.depth != 0)
+        to = st.pos
+        var fl = 0
+        while (fl + 1 < length(line_start) && line_start[fl + 1] <= from) {
+            fl++
+        }
+        var ll = fl
+        while (ll + 1 < length(line_start) && line_start[ll + 1] <= to - 1) {
+            ll++
+        }
+        span = LintFix(line = tokens.first.x + fl, column = from - line_start[fl], last_line = tokens.first.x + ll, last_column = to - line_start[ll])
+    }
+    return span
+}
+
+//! The source text a span covers, line breaks included; "" when ``at`` has no file.
+def public lint_span_text(at : LineInfo; span : LintFix) : string {
+    if (at.fileInfo == null || span.line <= 0) return ""
+    return build_string() $(var w) {
+        for (ln in range(span.line, span.last_line + 1)) {
+            let line = lint_source_line(at, ln)
+            let from = ln == span.line ? span.column : 0
+            let to = ln == span.last_line ? span.last_column : length(line)
+            w |> write(slice(line, from, to))
+            if (ln != span.last_line) {
+                w |> write("\n")
+            }
+        }
+    }
+}
+
+//! The source text of ``e`` (see ``lint_expr_span``); "" when the span cannot be recovered.
+def public lint_expr_text(e : Expression?) : string {
+    let span = lint_expr_span(e)
+    return span.line > 0 ? lint_span_text(e.at, span) : ""
+}
+
+//! A fix replacing the whole source of ``e`` with ``replacement``; no fix when the span cannot be recovered.
+def public lint_replace_fix(e : Expression?; replacement : string) : LintFix {
+    var span = lint_expr_span(e)
+    if (span.line > 0) {
+        span.replacement = replacement
+    }
+    return span
+}
+
+//! Folds several edits to the file of ``at`` into one fix spanning all of them - for a rewrite that
+//! touches separate places (a declaration and its uses). No fix when ``edits`` is empty, holds an
+//! edit without a span, or two edits overlap.
+def public lint_merge_fixes(at : LineInfo; edits : array<LintFix>) : LintFix {
+    if (empty(edits) || at.fileInfo == null) return LintFix()
+    if (length(edits) == 1) return edits[0]
+    var sorted := edits
+    sort(sorted) $(a, b) => a.line < b.line || (a.line == b.line && a.column < b.column)
+    for (k in range(length(sorted))) {
+        return LintFix() if (sorted[k].line <= 0)
+        if (k > 0) {
+            let p = sorted[k - 1]
+            let q = sorted[k]
+            return LintFix() if (q.line < p.last_line || (q.line == p.last_line && q.column < p.last_column))
+        }
+    }
+    let first = sorted[0]
+    let last = sorted |> back()
+    let span = LintFix(line = first.line, column = first.column, last_line = last.last_line, last_column = last.last_column)
+    let replacement = build_string() $(var w) {
+        for (k in range(length(sorted))) {
+            if (k > 0) {
+                let p = sorted[k - 1]
+                w |> write(lint_span_text(at, LintFix(line = p.last_line, column = p.last_column, last_line = sorted[k].line, last_column = sorted[k].column)))
+            }
+            w |> write(sorted[k].replacement)
+        }
+    }
+    return LintFix(line = span.line, column = span.column, last_line = span.last_line, last_column = span.last_column, replacement = replacement)
 }
 
 //! Builds a ``LintIssue`` from a lint message and its source location.

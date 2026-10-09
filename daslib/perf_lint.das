@@ -579,10 +579,10 @@ class PerfLintVisitor : AstVisitor {
         if (key_exists(reported_locations, key)) return
         reported_locations |> insert(key)
         warning_count++
-        var msg = text
+        var msg = lint_fix_message(text, fix)
         if (current_function != null && current_function.fromGeneric != null && !empty(current_function.inferStack)) {
             msg = build_string() $(var w) {
-                w |> write(text)
+                w |> write(lint_fix_message(text, fix))
                 w |> write("\n  while compiling {current_function.name}")
                 for (ih in current_function.inferStack) {
                     w |> write("\n  instanced from {ih.func.name} at {describe(ih.at)}")
