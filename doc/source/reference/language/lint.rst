@@ -2906,6 +2906,9 @@ is flagged. Macro-generated subtrees are skipped by design.
     // Good
     let d = x + y
 
+``--fix`` drops ``unsafe(...)`` around the expression (keeping parentheses where precedence needs them) and
+removes the braces of an ``unsafe { ... }`` block, de-indenting its body.
+
 STYLE025 — block-form ``unsafe`` should be expression-form
 ============================================================
 
@@ -2932,6 +2935,9 @@ local whose generated delete is unsafe all keep the block.
     let a = compute()
     let p = unsafe(reinterpret<Foo?>(raw))
 
+``--fix`` removes the block and wraps the one operation that needs it in ``unsafe(...)``, when that
+operation is an expression.
+
 STYLE026 — nested ``unsafe`` block
 ====================================
 
@@ -2957,6 +2963,8 @@ a separate context the outer wrap does not reach.
         delete p
     }
 
+``--fix`` removes the braces of the inner block and de-indents its body.
+
 STYLE027 — array/table ``var`` + push/insert loop → comprehension
 =====================================================================
 
@@ -2981,6 +2989,9 @@ instantiations are excluded.
 
     // Good — comprehension
     var a <- [for (x in src); x * x]
+
+``--fix`` replaces the declaration and a single-level loop (one optional ``if`` filter) with the
+comprehension.
 
 STYLE028 — redundant ``self->`` on a method call
 ==================================================
@@ -3012,6 +3023,8 @@ bare ``m()``.
         def layout() { ... }
     }
 
+``--fix`` deletes ``self->``.
+
 STYLE029 — transitive-only ``require``
 ========================================
 
@@ -3034,6 +3047,8 @@ because the direct require would drop the hook.
     // Good — depend on Y directly
     require Y
 
+``--fix`` respells the require as the re-exported module when that module is built in or sits beside ``X``.
+
 STYLE030 — entirely-unused ``require``
 ========================================
 
@@ -3052,6 +3067,8 @@ Suppress a deliberate keep with ``// nolint:STYLE030``.
     require strings                             // STYLE030
 
     // Good — remove the require
+
+``--fix`` deletes the require line when nothing else shares it.
 
 .. _style031:
 
@@ -3088,6 +3105,8 @@ STYLE021 (the ``JV((k1=..., k2=...))`` form is the stronger suggestion).
     var t <- { "a" => 1, "b" => 2 }
     var s <- { 5, 7 }
 
+``--fix`` writes the literal in place of the declaration and the run.
+
 .. _style032:
 
 STYLE032 — array ``var`` filled by a single ``push_from`` is a clone
@@ -3121,6 +3140,8 @@ Only the immediately-following statement is inspected, and a C-array
 match requires the source's element type to equal the destination's. An
 intervening ``reserve`` / guard, a non-empty initializer, or a single-element
 ``push`` all keep the rule quiet.
+
+``--fix`` writes ``var w := src`` in place of the declaration and the call.
 
 .. _style033:
 
@@ -3168,6 +3189,8 @@ The existing-array collapse matches a **plain-variable receiver** (``dst |> …`
 only; a chain receiver (``obj.arr |> …``) is out of scope for now — a planned
 follow-up, mirroring STYLE012's separate chain form.
 
+``--fix`` writes the variadic call, or the ``concat`` when the file already requires ``daslib/linq``.
+
 .. _style034:
 
 STYLE034 — ``reinterpret<T?>(addr(x))`` collapses to ``addr<T?>(x)``
@@ -3190,6 +3213,8 @@ Pointer targets only: a pointer→integer pun such as
 silent. So does a reinterpret whose operand is not an ``addr(...)``. The
 sugar's own desugared output is exempt (it carries the ``fromAddrSugar``
 cast flag), so ``addr<T?>(x)`` never re-flags itself.
+
+``--fix`` writes the ``addr<T?>(x)`` form.
 
 STYLE035 — numeric variable compared with a cast character literal
 ===================================================================
@@ -3242,6 +3267,8 @@ generic really does strip const from whatever ``ARGT`` binds. A *concrete*
 typedef is not such a case — with ``typedef CI = int const``,
 ``reinterpret<CI? -const>`` keeps the const, so the contract is inert there
 too and the rule correctly fires.
+
+``--fix`` deletes the inert contract.
 
 STYLE037 — cyclomatic complexity over the limit
 ================================================
@@ -3353,6 +3380,9 @@ shipped-library trees whose strings reach every consumer's logs. Suppress an
 intended character (box drawing, localized text, a unicode demo) with
 ``// nolint:STYLE039`` on the line, or ``options _ascii_strings = false`` for a
 whole intentionally non-ASCII module.
+
+``--fix`` spells each non-ASCII byte as a ``\xNN`` escape, which keeps the string's value; spell the
+character out by hand when the output must be ASCII.
 
 STYLE040 — duplicated statement region a helper could absorb
 =============================================================

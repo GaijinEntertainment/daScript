@@ -580,6 +580,30 @@ let public LINT_FIX_HINT = " (fixable: run lint with --fix)"
 //! The message a funnel reports: ``text``, plus ``LINT_FIX_HINT`` when ``fix`` holds an edit.
 def public lint_fix_message(text : string; fix : LintFix) : string => fix.line > 0 ? "{text}{LINT_FIX_HINT}" : text
 
+def private lint_trailing_name(expr : Expression?) : string {
+    if (expr is ExprField) return string((expr as ExprField).name)
+    if (expr is ExprSafeField) return string((expr as ExprSafeField).name)
+    if (expr is ExprSwizzle) return string((expr as ExprSwizzle).mask)
+    if (expr is ExprAsVariant) return string((expr as ExprAsVariant).name)
+    if (expr is ExprIsVariant) return string((expr as ExprIsVariant).name)
+    if (expr is ExprSafeAsVariant) return string((expr as ExprSafeAsVariant).name)
+    return ""
+}
+
+//! Where a ``value.name`` / ``value as name`` node ends: its LineInfo stops before the name it spells last.
+def private lint_trailing_name_end(expr : Expression?; b : int2) : int2 {
+    let name = lint_trailing_name(expr)
+    if (empty(name)) return b
+    let line = lint_source_line(expr.at, b.x)
+    var k = b.y
+    while (lint_byte_at(line, k) == ' ') {
+        k++
+    }
+    let c = lint_byte_at(line, k + length(name))
+    let ident = is_alpha(c) || is_number(c) || c == '_'
+    return slice(line, k, k + length(name)) == name && !ident ? int2(b.x, k + length(name)) : b
+}
+
 class private LintSpanVisitor : AstVisitor {
     file : uint64
     first : int2 = int2(INT_MAX, INT_MAX)
@@ -594,7 +618,7 @@ class private LintSpanVisitor : AstVisitor {
         }
         return if (skip_depth > 0 || intptr(expr.at.fileInfo) != file || expr.at.line == 0u)
         let a = int2(int(expr.at.line), int(expr.at.column))
-        let b = int2(int(expr.at.last_line), int(expr.at.last_column))
+        let b = lint_trailing_name_end(expr, int2(int(expr.at.last_line), int(expr.at.last_column)))
         if (a.x < first.x || (a.x == first.x && a.y < first.y)) {
             first = a
         }

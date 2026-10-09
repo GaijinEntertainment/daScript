@@ -51,6 +51,7 @@ module style_lint shared private
 
 require daslib/ast_boost
 require daslib/dupe_detect
+require daslib/fio
 require daslib/is_local
 require daslib/lint_config
 require math
@@ -72,6 +73,7 @@ struct UnsafeFrame {
     //! Per-expression subtree summary tracked on `StyleLintVisitor.unsafe_stack`.
     count : int
     has_non_local_let_ref : bool
+    @do_not_delete op : Expression?    //!< the one node of the subtree that marked unsafe, when count is 1
 }
 
 struct St041Scan {
@@ -280,6 +282,369 @@ class StyleLintVisitor : AstVisitor {
         let lead = lint_byte_at(first, open_col - 1) == ' ' ? "" : " "
         let replacement = one_line ? "{lead}=> {expr}" : "{lead}=>\n{repeat(" ", indent + 4)}{expr}"
         return LintFix(line = first_ln, column = open_col, last_line = last_ln, last_column = close_col + 1, replacement = replacement)
+    }
+
+    def st_ident_byte(c : int) : bool => is_alpha(c) || is_number(c) || c == '_'
+
+    //! True when ``name`` stands as a whole word on source lines ``from..to`` of the file of ``at``.
+    def st_word_in_lines(at : LineInfo; name : string; from, to : int) : bool {
+        for (ln in range(from, to + 1)) {
+            return true if (st_has_word(lint_source_line(at, ln), name))
+        }
+        return false
+    }
+
+    //! ``unsafe(E)`` -> ``E``, kept in parentheses unless ``E`` is primary or the wrap stands between delimiters.
+    def st024_unwrap_expr_fix(expr : Expression?) : LintFix {
+        let span = lint_expr_span(expr)
+        if (span.line <= 0) return LintFix()
+        let first = lint_source_line(expr.at, span.line)
+        let last = lint_source_line(expr.at, span.last_line)
+        var open = span.column - 1
+        while (lint_byte_at(first, open) == ' ') {
+            open--
+        }
+        var close = span.last_column
+        while (lint_byte_at(last, close) == ' ') {
+            close++
+        }
+        let head = open - 6
+        if (lint_byte_at(first, open) != '(' || lint_byte_at(last, close) != ')' || head < 0
+                || slice(first, head, open) != "unsafe" || st_ident_byte(lint_byte_at(first, head - 1))) return LintFix()
+        let left = strip_right(slice(first, 0, head))
+        let right = strip_left(slice(last, close + 1))
+        let lc = lint_byte_at(left, length(left) - 1)
+        let rc = lint_byte_at(right, 0)
+        let before_eq = lint_byte_at(left, length(left) - 2)
+        let assign = lc == '=' && before_eq != '=' && before_eq != '!' && before_eq != '<' && before_eq != '>'
+        let open_left = empty(left) || lc == '(' || lc == '[' || lc == ',' || lc == '{' || assign || ends_with(left, "<-") || ends_with(left, "return")
+        let open_right = empty(right) || rc == ')' || rc == ']' || rc == ',' || rc == '}' || rc == ';' || starts_with(right, "//")
+        var bare = expr
+        if (bare is ExprRef2Value) {
+            bare = (bare as ExprRef2Value).subexpr
+        }
+        let primary = (bare is ExprCall || bare is ExprVar || bare is ExprField || bare is ExprAt || bare is ExprStringBuilder
+            || bare is ExprConstString || bare is ExprConstInt || bare is ExprConstFloat || bare is ExprConstBool)
+        let inner = lint_span_text(expr.at, span)
+        return LintFix(line = span.line, column = head, last_line = span.last_line, last_column = close + 1,
+            replacement = primary || (open_left && open_right) ? inner : "({inner})")
+    }
+
+    //! Drops the braces of ``unsafe { ... }`` and de-indents its body one level, applying ``wrap`` inside
+    //! it first; no fix when a brace line holds anything else, a body line is not indented one level, a
+    //! line carries a string break, or the block declares a name the rest of the function also spells.
+    def st024_unwrap_block_fix(u : ExprUnsafe?; wrap : LintFix) : LintFix {
+        if (current_function == null || current_function.body == null || u.body == null || !(u.body is ExprBlock)) return LintFix()
+        let blk = u.body as ExprBlock
+        let l0 = int(u.at.line)
+        let l1 = int(blk.at.last_line)
+        let col = int(u.at.column)
+        let head = lint_source_line(u.at, l0)
+        if (!empty(blk.finalList) || l1 < l0 || !empty(strip(slice(head, 0, col))) || slice(head, col, col + 6) != "unsafe") return LintFix()
+        for (st in blk.list) {
+            continue if (!(st is ExprLet))
+            for (v in (st as ExprLet).variables) {
+                return LintFix() if (v.flags.inScope || st_word_in_lines(u.at, string(v.name), l1 + 1, int(current_function.body.at.last_line)))
+            }
+        }
+        let tail = length(lint_source_line(u.at, l1))
+        var lines <- [for (ln in range(l0, l1 + 1)); lint_source_line(u.at, ln)]
+        for (line in lines) {
+            var quotes = 0
+            peek_data(line) $(d) {
+                for (c in d) {
+                    if (int(c) == '"') {
+                        quotes++
+                    }
+                }
+            }
+            if (quotes % 2 != 0) return LintFix()
+        }
+        if (wrap.line > 0) {
+            if (wrap.line < l0 || wrap.last_line > l1) return LintFix()
+            let last = wrap.last_line - l0
+            lines[last] = "{slice(lines[last], 0, wrap.last_column)}){slice(lines[last], wrap.last_column)}"
+            let first = wrap.line - l0
+            lines[first] = "{slice(lines[first], 0, wrap.column)}unsafe({slice(lines[first], wrap.column)}"
+        }
+        if (l0 == l1) {
+            let body = strip(slice(lines[0], col + 6))
+            let inner = strip(slice(body, 1, length(body) - 1))
+            if (!starts_with(body, "\{") || !ends_with(body, "\}") || empty(inner) || find(inner, "\{") >= 0 || find(inner, "\}") >= 0
+                    || find(inner, ";") >= 0 || code_find(inner, "//") >= 0) return LintFix()
+            return LintFix(line = l0, column = col, last_line = l1, last_column = tail, replacement = inner)
+        }
+        let pad = repeat(" ", col + 4)
+        if (length(lines) < 3 || strip(slice(lines[0], col + 6)) != "\{" || lines |> back() != "{repeat(" ", col)}\}") return LintFix()
+        for (k in range(1, length(lines) - 1)) {
+            if (!empty(strip(lines[k])) && !starts_with(lines[k], pad)) return LintFix()
+        }
+        let body = build_string() $(var w) {
+            for (k in range(1, length(lines) - 1)) {
+                if (k > 1) {
+                    w |> write("\n")
+                }
+                continue if (empty(strip(lines[k])))
+                peek_data(lines[k]) $(d) {
+                    write_string(w, d, 4, length(d))
+                }
+            }
+        }
+        return LintFix(line = l0, column = 0, last_line = l1, last_column = tail, replacement = body)
+    }
+
+    //! The edit wrapping ``op`` - the one operation of an ``unsafe`` block that needs it - in ``unsafe(...)``; no fix for a statement-shaped operation.
+    def st025_wrap_fix(op : Expression?) : LintFix {
+        if (op == null || op.genFlags.generated
+                || !(op is ExprRef2Ptr || op is ExprAddr || op is ExprCall || op is ExprCast || op is ExprAt || op is ExprSafeAt
+                    || op is ExprAsVariant || op is ExprSafeAsVariant || op is ExprField || op is ExprNew
+                    || op is ExprOp1 || op is ExprOp2 || op is ExprOp3)) return LintFix()
+        let text = lint_expr_text(op)
+        return empty(text) ? LintFix() : lint_replace_fix(op, "unsafe({text})")
+    }
+
+    //! ``reinterpret<T?>(unsafe(addr(x)))`` -> ``addr<T?>(x)``.
+    def st034_fix(expr : ExprCast?) : LintFix {
+        let text = lint_expr_text(expr)
+        let target = lint_expr_text((expr.subexpr as ExprRef2Ptr).subexpr)
+        let open = find(text, "(")
+        if (empty(target) || !starts_with(text, "reinterpret<") || open < 0 || !ends_with(strip_right(slice(text, 0, open)), ">")
+                || find(text, "addr(") < 0) return LintFix()
+        return lint_replace_fix(expr, "addr{strip_right(slice(text, 11, open))}({target})")
+    }
+
+    //! Drops the one spelling of the inert contract ``inert`` from the cast's target type.
+    def st036_fix(expr : ExprCast?; inert : string) : LintFix {
+        let text = lint_expr_text(expr)
+        let open = find(text, "(")
+        if (open < 0) return LintFix()
+        let token = " {inert}"
+        let typ = slice(text, 0, open)
+        let at = find(typ, token)
+        if (at < 0 || find(typ, token, at + 1) >= 0 || st_ident_byte(lint_byte_at(typ, at + length(token)))) return LintFix()
+        return lint_replace_fix(expr, "{slice(text, 0, at)}{slice(text, at + length(token))}")
+    }
+
+    def st_join(items : array<string>; sep : string) : string {
+        return build_string() $(var w) {
+            for (item, k in items, count()) {
+                if (k > 0) {
+                    w |> write(sep)
+                }
+                w |> write(item)
+            }
+        }
+    }
+
+    def st_has_word(text, name : string) : bool {
+        var pos = find(text, name)
+        while (pos >= 0) {
+            return true if (!st_ident_byte(lint_byte_at(text, pos - 1)) && !st_ident_byte(lint_byte_at(text, pos + length(name))))
+            pos = find(text, name, pos + 1)
+        }
+        return false
+    }
+
+    //! The line of a statement written alone on one line with no comment; 0 otherwise.
+    def st_lone_line(e : Expression?) : int {
+        let text = lint_expr_text(e)
+        let ln = int(e.at.line)
+        return !empty(text) && strip(lint_source_line(e.at, ln)) == text ? ln : 0
+    }
+
+    //! The line of ``var <name> : <type>`` written alone on one line with no comment; 0 otherwise.
+    def st_bare_decl_line(elet : ExprLet?; v : Variable?) : int {
+        let ln = int(v.at.line)
+        let line = strip(lint_source_line(v.at, ln))
+        return (length(elet.variables) == 1 && starts_with(line, "var {v.name} :") && code_find(line, "//") < 0 && code_find(line, "/*") < 0
+            && find(line, "=") < 0) ? ln : 0
+    }
+
+    def st_indent_of(at : LineInfo; ln : int) : int {
+        let line = lint_source_line(at, ln)
+        return length(line) - length(strip_left(line))
+    }
+
+    //! Replaces source lines ``first..last`` (indentation of ``first`` kept) with ``text``.
+    def st_lines_fix(at : LineInfo; first, last : int; text : string) : LintFix =>
+        LintFix(line = first, column = st_indent_of(at, first), last_line = last, last_column = length(lint_source_line(at, last)), replacement = text)
+
+    def st_same_type(a, b : TypeDecl?) : bool =>
+        a != null && b != null && b.canCopy && is_same_type(a, b, RefMatters.no, ConstMatters.no, TemporaryMatters.no)
+
+    //! ``K => V`` - or ``K`` for a push or a set insert - of an ``insert`` / ``push`` call or a ``c[K] = V`` copy into a
+    //! container of type ``vt``; "" for another shape or a key / value whose type differs from the container's.
+    def st_item_text(stmt : Expression?; vt : TypeDecl?) : string {
+        var key_text, value_text : string
+        var key_ok, value_ok : bool
+        let set_like = vt.secondType == null || vt.secondType.baseType == Type.tVoid
+        if (stmt is ExprCall) {
+            let call = stmt as ExprCall
+            let fname = call.func.fromGeneric != null ? string(call.func.fromGeneric.name) : ""
+            return "" if (fname != "push" && fname != "insert")
+            key_text = lint_expr_text(call.arguments[1])
+            key_ok = st_same_type(call.arguments[1]._type, vt.firstType)
+            value_ok = set_like == (length(call.arguments) == 2)
+            if (length(call.arguments) == 3) {
+                value_text = lint_expr_text(call.arguments[2])
+                value_ok = value_ok && st_same_type(call.arguments[2]._type, vt.secondType)
+            }
+        } elif (stmt is ExprCopy && (stmt as ExprCopy).left is ExprAt) {
+            let copy = stmt as ExprCopy
+            let index = (copy.left as ExprAt).index
+            key_text = lint_expr_text(index)
+            value_text = lint_expr_text(copy.right)
+            key_ok = st_same_type(index._type, vt.firstType)
+            value_ok = !set_like && st_same_type(copy.right._type, vt.secondType)
+        }
+        if (!key_ok || !value_ok || empty(key_text)) return ""
+        if (set_like) return key_text
+        return empty(value_text) ? "" : "{key_text} => {value_text}"
+    }
+
+    //! How a file requiring ``mod`` as ``req_name`` spells a require of ``target``: the name of a built-in module,
+    //! or the directory of ``req_name`` plus the file stem of a module sitting beside ``mod``; "" otherwise.
+    def st029_require_spelling(req_name : string implicit; mod, target : Module?) : string {
+        if (target == null || mod == null) return ""
+        let tfile = string(target.fileName)
+        if (empty(tfile)) return string(target.name)
+        let mfile = string(mod.fileName)
+        if (empty(mfile) || dir_name(tfile) != dir_name(mfile) || stem(mfile) != base_name(req_name)) return ""
+        return "{slice(req_name, 0, length(req_name) - length(base_name(req_name)))}{stem(tfile)}"
+    }
+
+    //! ``require X`` alone on its line, ``X`` respelled as ``spelling``.
+    def st029_fix(at : LineInfo; req_name : string implicit; spelling : string) : LintFix {
+        let ln = int(at.line)
+        let col = int(at.column)
+        let line = lint_source_line(at, ln)
+        return (empty(spelling) || strip(line) != "require {req_name}" || slice(line, col, col + length(req_name)) != req_name ? LintFix()
+            : LintFix(line = ln, column = col, last_line = ln, last_column = col + length(req_name), replacement = spelling))
+    }
+
+    //! Deletes the line of an unused ``require req_name`` - or of a ``require [group]`` when ``req_name`` is empty - when nothing else shares it.
+    def st030_fix(at : LineInfo; req_name : string implicit) : LintFix {
+        let ln = int(at.line)
+        let line = strip(lint_source_line(at, ln))
+        let whole = (empty(req_name) ? starts_with(line, "require [") && ends_with(line, "]") && code_find(line, "//") < 0 && code_find(line, "/*") < 0
+            : line == "require {req_name}")
+        return whole ? LintFix(line = ln, column = 0, last_line = ln + 1, last_column = 0, replacement = "") : LintFix()
+    }
+
+    //! A one-line string literal span with every non-ASCII byte spelled as a ``\xNN`` escape - the same value in ASCII source.
+    def st039_fix(at : LineInfo) : LintFix {
+        let ln = int(at.line)
+        let line = lint_source_line(at, ln)
+        let from = int(at.column)
+        let to = int(at.last_column)
+        if (int(at.last_line) != ln || to <= from || to > length(line) || find(slice(line, 0, from + 1), "\"") < 0) return LintFix()
+        let text = build_string() $(var w) {
+            peek_data(line) $(d) {
+                for (i in range(from, to)) {
+                    let b = int(d[i])
+                    if (b < 128) {
+                        w |> write_char(b)
+                    } else {
+                        w |> write("\\x")
+                        w |> write_char(lint_byte_at("0123456789ABCDEF", b >> 4))
+                        w |> write_char(lint_byte_at("0123456789ABCDEF", b & 15))
+                    }
+                }
+            }
+        }
+        return LintFix(line = ln, column = from, last_line = ln, last_column = to, replacement = text)
+    }
+
+    //! ``var a : array<T>`` + a for-loop that only pushes/inserts into it -> one comprehension; no fix for nested
+    //! loops, comments inside, element types that do not match the pushed values, or values that read ``a``.
+    def st027_fix(blk : ExprBlock?; idx : int; v : Variable?; isArray : bool) : LintFix {
+        let decl = st_bare_decl_line(blk.list[idx] as ExprLet, v)
+        let forE = blk.list[idx + 1] as ExprFor
+        let fbody = forE.body as ExprBlock
+        if (decl == 0 || int(forE.at.line) != decl + 1 || length(fbody.list) != 1) return LintFix()
+        let last = int(fbody.at.last_line)
+        for (ln in range(decl + 1, last + 1)) {
+            let line = lint_source_line(v.at, ln)
+            if (code_find(line, "//") >= 0 || code_find(line, "/*") >= 0) return LintFix()
+        }
+        let head = strip(lint_source_line(v.at, decl + 1))
+        if (!starts_with(head, "for (") || !ends_with(head, ") \{")) return LintFix()
+        let stmt = fbody.list[0]
+        let filtered = stmt is ExprIfThenElse
+        let cond = filtered ? lint_expr_text((stmt as ExprIfThenElse).cond) : ""
+        let item = filtered ? st_item_text(((stmt as ExprIfThenElse).if_true as ExprBlock).list[0], v._type) : st_item_text(stmt, v._type)
+        let name = string(v.name)
+        if (empty(item) || (filtered && empty(cond)) || st_has_word(item, name) || st_has_word(cond, name)) return LintFix()
+        let where_clause = empty(cond) ? "" : "; where {cond}"
+        let source = slice(head, 4, length(head) - 2)
+        let text = isArray ? "var {name} <- [for {source}; {item}{where_clause}]" : "var {name} <- \{for {source}; {item}{where_clause}\}"
+        return st_lines_fix(v.at, decl, last, text)
+    }
+
+    //! ``var t : table<K; V>`` + a run of inserts / ``t[k] = v`` -> one table (set) literal.
+    def st031_fix(blk : ExprBlock?; idx, count : int; v : Variable?; isSet : bool) : LintFix {
+        let decl = st_bare_decl_line(blk.list[idx] as ExprLet, v)
+        if (decl == 0) return LintFix()
+        let name = string(v.name)
+        var items : array<string>
+        items |> reserve(count)
+        for (k in range(count)) {
+            let stmt = blk.list[idx + 1 + k]
+            if (st_lone_line(stmt) != decl + 1 + k) return LintFix()
+            let item = st_item_text(stmt, v._type)
+            if (empty(item) || st_has_word(item, name)) return LintFix()
+            items |> push(item)
+        }
+        let indent = st_indent_of(v.at, decl)
+        let one_line = "var {name} <- \{ {st_join(items, ", ")} \}"
+        if (indent + length(one_line) <= STYLE042_MAX_LINE) return st_lines_fix(v.at, decl, decl + count, one_line)
+        let pad = repeat(" ", indent + 4)
+        let sep = ",\n{pad}"
+        return st_lines_fix(v.at, decl, decl + count, "var {name} <- \{\n{pad}{st_join(items, sep)}\n{repeat(" ", indent)}\}")
+    }
+
+    //! ``var w : array<T>`` + ``push_from`` / ``push_clone_from`` runs -> ``var w := SRC`` or ``var w <- concat(...)``.
+    def st032_fix(blk : ExprBlock?; idx, count : int; v : Variable?) : LintFix {
+        let decl = st_bare_decl_line(blk.list[idx] as ExprLet, v)
+        if (decl == 0) return LintFix()
+        var sources : array<string>
+        sources |> reserve(count)
+        for (k in range(count)) {
+            let stmt = blk.list[idx + 1 + k]
+            let src = lint_expr_text((stmt as ExprCall).arguments[1])
+            if (st_lone_line(stmt) != decl + 1 + k || empty(src) || st_has_word(src, string(v.name))) return LintFix()
+            sources |> push(src)
+        }
+        if (count == 1) return st_lines_fix(v.at, decl, decl + 1, "var {v.name} := {sources[0]}")
+        var linq = false
+        for (ln in range(1, int(current_function.at.line))) {
+            if (strip(lint_source_line(v.at, ln)) == "require daslib/linq") {
+                linq = true
+            }
+        }
+        return linq ? st_lines_fix(v.at, decl, decl + count, "var {v.name} <- concat({st_join(sources, ", ")})") : LintFix()
+    }
+
+    //! A run of ``count`` bulk appends into one receiver -> one variadic call.
+    def st033_fix(blk : ExprBlock?; i, count : int; fname : string) : LintFix {
+        let first = blk.list[i] as ExprCall
+        let recv = lint_expr_text(first.arguments[0])
+        let line = st_lone_line(first)
+        var root_end = 0
+        while (st_ident_byte(lint_byte_at(recv, root_end))) {
+            root_end++
+        }
+        let root = slice(recv, 0, root_end)
+        if (empty(root) || line == 0) return LintFix()
+        var sources : array<string>
+        sources |> reserve(count)
+        for (k in range(count)) {
+            let stmt = blk.list[i + k]
+            let src = lint_expr_text((stmt as ExprCall).arguments[1])
+            if (st_lone_line(stmt) != line + k || empty(src) || st_has_word(src, root)) return LintFix()
+            sources |> push(src)
+        }
+        return st_lines_fix(first.at, line, line + count - 1, "{recv} |> {fname}({st_join(sources, ", ")})")
     }
 
     def check_style042_expression_body(fn : FunctionPtr) : void {
@@ -574,7 +939,14 @@ class StyleLintVisitor : AstVisitor {
             }
             if (!prev_ok) return
         }
-        style_warning("STYLE028: 'self->{f.name}(...)' on the class instance is optional; drop 'self->' and call '{f.name}(...)' directly (compiler auto-promotes to the same method invoke). Use 'self.{f.name}(...)' if you prefer an explicit receiver", expr.at)
+        var name_at = int(col) + 2
+        while (lint_byte_at(lineTxt, name_at) == ' ') {
+            name_at++
+        }
+        let ln = int(expr.at.line)
+        let fix = (slice(lineTxt, name_at, name_at + length(f.name)) == f.name
+            ? LintFix(line = ln, column = plen - 4, last_line = ln, last_column = name_at, replacement = "") : LintFix())
+        style_warning("STYLE028: 'self->{f.name}(...)' on the class instance is optional; drop 'self->' and call '{f.name}(...)' directly (compiler auto-promotes to the same method invoke). Use 'self.{f.name}(...)' if you prefer an explicit receiver", expr.at, fix)
     }
 
 
@@ -775,7 +1147,7 @@ class StyleLintVisitor : AstVisitor {
         if (!ascii_strings || expr.genFlags.generated
                 || !string_has_non_ascii(string(expr.value), badOffset, badByte)
                 || !source_span_has_non_ascii(expr.at)) return
-        style_warning("STYLE039: non-ASCII byte {badByte} at offset {badOffset} in string literal; emitted strings must be ASCII - spell it out (e.g. '-' for an em-dash), or '// nolint:STYLE039' when the character is intended", expr.at)
+        style_warning("STYLE039: non-ASCII byte {badByte} at offset {badOffset} in string literal; emitted strings must be ASCII - spell it out (e.g. '-' for an em-dash), or '// nolint:STYLE039' when the character is intended", expr.at, st039_fix(expr.at))
     }
 
     def override preVisitExprOp2(expr : ExprOp2?) : void {
@@ -1836,7 +2208,8 @@ class StyleLintVisitor : AstVisitor {
             let rewriteForm = (isArray
                 ? "var {v.name} <- [for (x in SRC); EXPR; where COND]"
                 : "var {v.name} <- \{for (x in SRC); KEY => VAL; where COND\}")
-            style_warning("STYLE027: var {kindLabel} '{v.name}' followed by a for-loop that only push/insert into it; use a comprehension `{rewriteForm}` (drop `; where COND` when there is no filter)", v.at)
+            style_warning("STYLE027: var {kindLabel} '{v.name}' followed by a for-loop that only push/insert into it; use a comprehension `{rewriteForm}` (drop `; where COND` when there is no filter)", v.at,
+                st027_fix(blk, idx, v, isArray))
         }
     }
 
@@ -1946,9 +2319,11 @@ class StyleLintVisitor : AstVisitor {
                 count++
             }
             if (count == 1) {
-                style_warning("STYLE032: array<T> '{v.name}' default-initialized then filled by a single `push_from`/`push_clone_from`; that is a clone of the source - use `var {v.name} := SRC` (clone-assign)", v.at)
+                style_warning("STYLE032: array<T> '{v.name}' default-initialized then filled by a single `push_from`/`push_clone_from`; that is a clone of the source - use `var {v.name} := SRC` (clone-assign)", v.at,
+                    st032_fix(blk, idx, count, v))
             } elif (count >= 2 && count <= MAX_CONCAT_ARITY) {
-                style_warning("STYLE033: array<T> '{v.name}' default-initialized then filled by a run of {count} `push_from`/`push_clone_from` from arrays - that is a concatenation; use `var {v.name} <- concat(s1, s2, ...)` (needs `require daslib/linq`)", v.at)
+                style_warning("STYLE033: array<T> '{v.name}' default-initialized then filled by a run of {count} `push_from`/`push_clone_from` from arrays - that is a concatenation; use `var {v.name} <- concat(s1, s2, ...)` (needs `require daslib/linq`)", v.at,
+                    st032_fix(blk, idx, count, v))
             }
         }
     }
@@ -2026,7 +2401,8 @@ class StyleLintVisitor : AstVisitor {
                 && target._type != null && target._type.firstType != null
                 && target._type.firstType.canCloneFromConst
                 && !run_preceded_by_empty_array_decl(blk, i, target)) {
-                style_warning("STYLE033: run of {count} `{fname}` calls into '{target.name}' - collapse to one variadic call `{target.name} |> {fname}(s1, s2, ...)`", blk.list[i].at)
+                style_warning("STYLE033: run of {count} `{fname}` calls into '{target.name}' - collapse to one variadic call `{target.name} |> {fname}(s1, s2, ...)`", blk.list[i].at,
+                    st033_fix(blk, i, count, fname))
             }
             i += count
         }
@@ -2071,7 +2447,8 @@ class StyleLintVisitor : AstVisitor {
                     && recv._type != null && recv._type.firstType != null
                     && recv._type.firstType.canCloneFromConst) {
                 let cd = chain_describe(recv)
-                style_warning("STYLE033: run of {count} `{fname}` calls into '{cd}' - collapse to one variadic call `{cd} |> {fname}(s1, s2, ...)`", blk.list[i].at)
+                style_warning("STYLE033: run of {count} `{fname}` calls into '{cd}' - collapse to one variadic call `{cd} |> {fname}(s1, s2, ...)`", blk.list[i].at,
+                    st033_fix(blk, i, count, fname))
             }
             i += count
         }
@@ -2180,9 +2557,11 @@ class StyleLintVisitor : AstVisitor {
                 continue if (st031_jv_const_key_run(blk, idx, n, v) >= 2)
             }
             if (isSet) {
-                style_warning("STYLE031: table<K> set initialized by a run of insert calls; use a set literal move-assign `var {v.name} <- \{k1, k2, ...\}`", v.at)
+                style_warning("STYLE031: table<K> set initialized by a run of insert calls; use a set literal move-assign `var {v.name} <- \{k1, k2, ...\}`", v.at,
+                    st031_fix(blk, idx, count, v, isSet))
             } else {
-                style_warning("STYLE031: table<K;V> initialized by a run of insert/`[]=` statements; use a table literal move-assign `var {v.name} <- \{k1 => v1, k2 => v2, ...\}`", v.at)
+                style_warning("STYLE031: table<K;V> initialized by a run of insert/`[]=` statements; use a table literal move-assign `var {v.name} <- \{k1 => v1, k2 => v2, ...\}`", v.at,
+                    st031_fix(blk, idx, count, v, isSet))
             }
         }
     }
@@ -2435,7 +2814,7 @@ class StyleLintVisitor : AstVisitor {
             }
         }
         var keep : table<string; bool>
-        var verdict, members : table<string; string>
+        var verdict, members, respell : table<string; string>
         prog |> for_each_require_declaration() $ [unused_argument(file)] (mod, req_name, file, pub, at) {
             if (mod == null || pub
                 || at.fileInfo == null || !key_exists(module_files, string(at.fileInfo.name))) return
@@ -2468,6 +2847,7 @@ class StyleLintVisitor : AstVisitor {
                     return
                 }
                 verdict["{key}|{req_name}"] = "029:{mods}"
+                respell["{key}|{req_name}"] = st029_require_spelling(req_name, mod, reached?[mods] ?? null)
                 return
             }
             if (used_count > 0 || st029_hook_only_through(reached, hook_reach, null)) {
@@ -2487,16 +2867,18 @@ class StyleLintVisitor : AstVisitor {
             if (v == "") return
             if (starts_with(v, "029:")) {
                 let mods = slice(v, 4)
-                style_warning("STYLE029: require {req_name} is used only for the module it re-exports ({mods}); require it directly and drop {req_name}", at)
+                style_warning("STYLE029: require {req_name} is used only for the module it re-exports ({mods}); require it directly and drop {req_name}", at,
+                    st029_fix(at, req_name, respell?["{key}|{req_name}"] ?? ""))
                 return
             }
             if (group_line?[key] ?? false) {
                 if (group_reported?[key] ?? false) return
                 group_reported[key] = true
-                style_warning("STYLE030: require [group] is unused - no symbol from any member ({members?[key] ?? ""}) or a module it re-exports is referenced; drop it", at)
+                style_warning("STYLE030: require [group] is unused - no symbol from any member ({members?[key] ?? ""}) or a module it re-exports is referenced; drop it", at,
+                    st030_fix(at, ""))
                 return
             }
-            style_warning("STYLE030: require {req_name} is unused - no symbol from it (or a module it re-exports) is referenced; drop it", at)
+            style_warning("STYLE030: require {req_name} is unused - no symbol from it (or a module it re-exports) is referenced; drop it", at, st030_fix(at, req_name))
         }
     }
 
@@ -2805,13 +3187,19 @@ class StyleLintVisitor : AstVisitor {
     def override visitExpression(var expr : ExpressionPtr) : ExpressionPtr {
         //! The frame is the subtree's unsafe-requirement summary; mechanics in daslib/ARCHITECTURE_LINT.md.
         let n = length(unsafe_stack)
-        let frame = unsafe_stack[n - 1]
+        var frame = unsafe_stack[n - 1]
         unsafe_stack |> pop
+        if (frame.count > 0 && frame.op == null) {
+            frame.op = expr
+        }
         if (frame.count > 0 || frame.has_non_local_let_ref) {
             unsafeExprs |> insert(expr, frame)
             let m = length(unsafe_stack)
             if (m > 0) {
                 unsafe_stack[m - 1].count = unsafe_stack[m - 1].count + frame.count
+                if (unsafe_stack[m - 1].op == null) {
+                    unsafe_stack[m - 1].op = frame.op
+                }
                 if (frame.has_non_local_let_ref) {
                     unsafe_stack[m - 1].has_non_local_let_ref = true
                 }
@@ -2821,7 +3209,7 @@ class StyleLintVisitor : AstVisitor {
             && (current_function == null || current_function.fromGeneric == null)
             && !(skip_userSaidItsSafe |> has_value(expr))
             && frame.count == 0) {
-            style_warning("STYLE024: redundant 'unsafe(...)' wrap; the inner expression has no operation that requires unsafe - drop the wrap", expr.at)
+            style_warning("STYLE024: redundant 'unsafe(...)' wrap; the inner expression has no operation that requires unsafe - drop the wrap", expr.at, st024_unwrap_expr_fix(expr))
         }
         return expr
     }
@@ -2977,14 +3365,14 @@ class StyleLintVisitor : AstVisitor {
                 && expr.castType != null && expr.castType.baseType == Type.tPointer
                 && expr.subexpr != null && expr.subexpr is ExprRef2Ptr
                 && !expr.subexpr.genFlags.generated) {
-            style_warning("STYLE034: reinterpret<{describe(expr.castType)}>(addr(...)) collapses to addr<{describe(expr.castType)}>(...); one unsafe() covers both halves", expr.at)
+            style_warning("STYLE034: reinterpret<{describe(expr.castType)}>(addr(...)) collapses to addr<{describe(expr.castType)}>(...); one unsafe() covers both halves", expr.at, st034_fix(expr))
         }
         if (!expr.genFlags.generated && expr.castType != null
                 && (current_function == null || current_function.fromGeneric == null)) {
             let inert = style036_inert_contract(expr.castType)
             if (!empty(inert)) {
                 let tail = inert == "-const" ? "; drop it, along with any 'const' it was meant to cancel" : "; drop it"
-                style_warning("STYLE036: '{inert}' does nothing on the already-resolved cast type {describe(expr.castType)}{tail}", expr.at)
+                style_warning("STYLE036: '{inert}' does nothing on the already-resolved cast type {describe(expr.castType)}{tail}", expr.at, st036_fix(expr, inert))
             }
         }
     }
@@ -3086,7 +3474,7 @@ class StyleLintVisitor : AstVisitor {
         if (expr != null && !expr.genFlags.generated
             && (current_function == null || current_function.fromGeneric == null)
             && n > 0 && unsafe_block_stack[n - 1] > 0) {
-            style_warning("STYLE026: nested 'unsafe \{ ... }' block; the outer 'unsafe' already covers this scope - drop the inner wrap", expr.at)
+            style_warning("STYLE026: nested 'unsafe \{ ... }' block; the outer 'unsafe' already covers this scope - drop the inner wrap", expr.at, st024_unwrap_block_fix(expr, LintFix()))
         }
         if (n > 0) {
             unsafe_block_stack[n - 1]++
@@ -3113,7 +3501,7 @@ class StyleLintVisitor : AstVisitor {
         let blk = expr.body as ExprBlock
         let frame = unsafe_frame_for(blk)
         if (frame.count == 0 && !frame.has_non_local_let_ref) {
-            style_warning("STYLE024: redundant 'unsafe \{ ... }' block; no statement requires unsafe - drop the wrap", expr.at)
+            style_warning("STYLE024: redundant 'unsafe \{ ... }' block; no statement requires unsafe - drop the wrap", expr.at, st024_unwrap_block_fix(expr, LintFix()))
         } elif (frame.count == 1 &&
                 !(blk.list[0] is ExprYield ||
                   blk.list[0] is ExprDelete ||
@@ -3141,7 +3529,9 @@ class StyleLintVisitor : AstVisitor {
                 }
             }
             if (narrowable) {
-                style_warning("STYLE025: 'unsafe \{ ... }' block scope is too broad; only one operation requires unsafe - narrow to 'unsafe(<sub-expr>)' wrapping that operation", expr.at)
+                let wrap = n > 0 && unsafe_block_stack[n - 1] > 0 ? LintFix() : st025_wrap_fix(frame.op)
+                style_warning("STYLE025: 'unsafe \{ ... }' block scope is too broad; only one operation requires unsafe - narrow to 'unsafe(<sub-expr>)' wrapping that operation", expr.at,
+                    wrap.line > 0 ? st024_unwrap_block_fix(expr, wrap) : LintFix())
             }
         }
         return expr
