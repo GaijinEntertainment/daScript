@@ -563,16 +563,6 @@
     resolves against the repo root explicitly or the run REFUSES (exit 2) when the walk
     yields zero files - an empty scan is never a pass.
 
-49. **The MoE kq tensor twins (K4/K5/K6) are gated by the DENSE kq crowns - a race that never
-    measured them.** `pf_compile_moe_kq_twins` keys on `metal_tensor_crowned("kq_mulmm_k4")`
-    etc. (dense 512x2048x1024 race), but the kernels it arms add the per-expert plane fold,
-    cnt/basep indirection and the tg-uniform early exit; the q8/mx4 MoE twins already have
-    their own MoE-shaped race families (`race_moe_mulmm_q8` / `_mx4`, ne=4, 32 rows/expert).
-    On a box where the dense K4 twin wins at 512 rows while the MoE K4 twin loses at
-    32 rows/expert, every routed K4 expert site takes the slower kernel for the life of the
-    sidecar, and the sidecar cannot express the split. Done = own race families
-    (`moe_mulmm_k4/k5/k6`) beside the q8/mx4 racers, PSO gates moved onto their crowns.
-
 50. **`float_a_ok` licenses the whole kernel, so the float-A gate is disarmed on twin-stamped
     templates.** `ctx.float_a_ok` is one per-emit bool; a `[metal_kernel(float_a_ok=true)]`
     on a template method covers every stamp - including the `XT = float16` twins the gate
@@ -2105,6 +2095,23 @@
    the reference up with the channel's pending count in one step and their owner joins. Several
    workers share one events channel, so the count does not fit them as it stands. Done = a worker
    exit the owner can wait on - a status a worker, or the count sized to the workers.
+
+213. **A short request's prefill splits at the prefix checkpoints, and the short window past the
+    split costs a third of the request's GPU time.** The Metal prefill stops at every planned
+    checkpoint (`prefix_checkpoint_at_`: the stable opening, the system text) and runs the
+    remainder as its own window, because a recurrent layer's state at the checkpoint position
+    exists only where the scan stops there. On the M1 Max the house replay's short answers (375
+    uncached tokens, 2 windows each) spend a median 130-167 ms of their 650-680 ms of window
+    time in the windows past the largest: a 51-token window costs ~180 ms and a 7-token one
+    ~40, where the 300-token window runs at 1.4 ms a token. The K/V half of a checkpoint is
+    positional and already in the mirror; the recurrent half is one scan dispatch over the
+    window (`enc_dn_scan_h`), which can run as two - the rows before and after the position,
+    the state buffer copied out between them, the conv history at the position the three input
+    rows before it - with everything else in the window, the expert GEMMs above all, one pass.
+    Done = the scheduler's chunk-ends-at-checkpoint rule become a capture-at-position list for
+    the Metal prefill (the CPU prefill keeps stopping), the recurrent layer's scan segmented at
+    those positions with its state copied out, the checkpoint store taking a state snapshot from
+    a device buffer, and the replay's split cost gone from the short requests' window time.
 
 212. **A request served off the prefix cache can answer differently from its cold run.** A cached run attaches
     every row of the prompt but its last token's and evals that token alone, where the cold run evaled it

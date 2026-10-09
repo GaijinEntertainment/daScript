@@ -101,6 +101,23 @@ padded bound, and writes the down site's f16 X twin alongside its f32 rows (the 
 a panel that is mostly padding - ten rows per expert at 512 experts - costs neither a convert pass
 nor an activation pass over its tail.
 
+### The K-quant twins' pick {#prefill-moe-kq-twin-pick}
+
+The kq-scaffold twins (k4, k5, k6, and q5_1 / iq4nl32 under k4's verdict) compile behind the
+toolchain probe like the split formats, and each family carries its own MoE-shaped race -
+`moe_mulmm_k4` / `k5` / `k6`, the q8/mx4 racers' shape (four experts, 32 rows each, the
+whole-tile case) over the kq race planes, the base arm bound at the family tail's numbers and
+the twin at the scaffold's. The dense `kq_mulmm_*` crowns say nothing about them: the dense
+race measures a 512-row GEMM, where the twin's merit on the routed site is the adaptive op at
+few rows an expert, and the two disagree on an M1-class GPU. A crowned family takes the twin at
+every shape. An uncrowned one takes it per dispatch where the window's mean rows an expert sit at
+or under `set_metal_moe_kq_twin_avg` (16, the adaptive op's region: `npos * nk <= avg * ne`),
+and the base form past it (`metal_moe_kq_twin_pick`). The lab's base arm sets the knee: on the
+M1 Max the k4 twin reads 0.59 / 0.76 / 1.16 of the base form at 4 / 8-16 / 32 rows an expert
+(1.42 / 1.80 / 2.76 ms against a flat 2.38), on the M5 Max 0.31 / 0.32 / 0.38 (0.40 / 0.42 /
+0.49 against 1.31), bit-equal on every live element. The house's 375-token window on a
+256-expert model is 11.7 rows an expert; a 1024-token one is 32.
+
 ### The short window's gathered route {#prefill-moe-gemv-route}
 
 A window of `pf_moe_gemv_knee` tokens or fewer - the sidecar's `metal_moe_gemv_max` where it names

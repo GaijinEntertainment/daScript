@@ -408,11 +408,13 @@ logit that differs head to head and the logit cap, on the float, quantized and w
 gemm file's device pair arms (`attn_qk_mm_gate` with `pair_mt`, `attn_dev_pair_gate`) run both
 tile heights at a head of 96 too - QK's reduction width is the head, AV's 64-wide tiles plus the
 32-column tail stamp - and the misc file's `embed_f32_gate` the greedy chain's fp32-table gather (the
-row gather at one row under the embed scale) at a 96-wide row and past a lead of foreign floats. Two
+row gather at one row under the embed scale) at a 96-wide row and past a lead of foreign floats. Three
 cells need no
 kernel: the misc file's `test_metal_served` (a driver's forward answer through `metal_served`: a
 decline passes through and leaves the pool's spin window, a served one opens it, a later decline
-keeps it) and the prefill file's `test_resident_panel_charge` (the resident panel registry on the
+keeps it) and `test_metal_moe_kq_twin_pick` (the K-quant MoE twins' pick: a crowned family at every
+shape, an uncrowned box at or under the knee's mean rows an expert and never past it, the knob
+answering what it replaced), and the prefill file's `test_resident_panel_charge` (the resident panel registry on the
 driver's device: an uncharged ask makes its panel and charges nothing, the same key answers again,
 another size under it is refused, a charged ask counts its bytes exactly when the budget serves it,
 and a shutdown drops the registry). The StyleTTS2

@@ -11,6 +11,29 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **MEASURED (2026-10-09, `direction-grade`) - the K-quant MoE twins against the base form they were gated behind, and the
+  pick that came of it, on the M1 Max and the M5 Max.** The kq-scaffold twins (k4, k5, k6; q5_1 and iq4nl32 under k4's
+  verdict) compiled only where the DENSE `kq_mulmm_k*` crown stood, so on the M1 (its sidecar carries none) every routed
+  K-quant expert site ran the simdgroup `metal_moe_mulmm_k4` form and the adaptive op never reached it: the house replay
+  on the Q4_K-pure 35B read the same before and after ADAPT shipped (112 short answers, warm pass: wall 0.90 -> 0.92 s,
+  first token 0.75 -> 0.75, the windows' GPU sum 679 -> 682 ms). The tile lab's `base` arm (the production builder
+  `pf_enc_moe_mm_k4_c`, f32 x and the identity bucket map, the same planes and patterns as the twin arms):
+
+  | box | rows an expert | base form | twin + adaptive op | twin / base |
+  |---|---|---|---|---|
+  | M1 Max | 4 / 8-16 / 32 | 2.38 / 2.38 / 2.38 ms (63 GB/s) | 1.42 / 1.80 / 2.76 | 0.59 / 0.76 / 1.16 |
+  | M5 Max | 4 / 8-16 / 32 | 1.31 / 1.31 / 1.31 ms (115 GB/s) | 0.40 / 0.42 / 0.49 | 0.31 / 0.32 / 0.38 |
+
+  Bit-equal on every live element. The base form is flat in live rows like the fixed tile was; on the M5 the twin wins
+  everywhere, on the M1 it wins the house shape and loses whole tiles by 16%, which one crown cannot carry - so the
+  twins now compile behind the toolchain probe, each family races its own MoE-shaped `moe_mulmm_k4/k5/k6` (the q8/mx4
+  shape: four experts of 32 rows, the whole-tile case) for the crown, and an uncrowned box takes the twin per dispatch
+  at or under a mean of 16 rows an expert (`set_metal_moe_kq_twin_avg`, `ARCHITECTURE_GPU_PREFILL_MOE.md#prefill-moe-kq-twin-pick`).
+  The house replay on the IQ4_XS-pure 35B (the format the house serves; its twins compile behind the probe on every box)
+  on the M1, warm pass: wall 0.85 s, first token 0.71, the windows' GPU sum 648 ms, 130 ms of it (31%) the windows past
+  each request's largest - the checkpoint split; no pre-ADAPT replay of this file exists, the window probe's 554 -> 487
+  ms is its A/B.
+
 - **MEASURED (2026-10-09, `direction-grade`) - where a short house reply's first token goes on the server, M1 Max, the
   35B Q4_K-pure.** The house replay's server log beside the client's results (a per-request timeline: the prefill
   windows the server ran with their GPU ms, the server's prefill-done and ttft, the client's first token), the 114 short

@@ -23,6 +23,8 @@ require strings
 //   tile32     the same stamp with ADAPT off: the 32-row op whatever the expert holds (the form it replaced)
 //   ko_stage   ATTRIBUTION SWEEP: the stamp with no W staging - the tensor op's share of the tile (timing-only)
 //   ko_tensor  ATTRIBUTION SWEEP: the stamp with no tensor op - the staging's share of the tile (timing-only)
+//   base       k4 only: the simdgroup-matrix form the K-quant sites run where the dense `kq_mulmm_k4` crown is
+//              absent (f32 x, the bucket map) - the tile a box like the M1 Max ships today, against the twin
 // Three row patterns an expert: 4 (a 128-token window), 8..16 (the house's 375), 32 (whole tiles), on
 // iq4xs (the split scaffold) and k4 (the kq scaffold), 128 experts so the planes sit past the last-level
 // cache. Arms alternate one timed round each, best of ROUNDS rounds after a burn round per arm.
@@ -187,6 +189,8 @@ def main {
         for (i in range(mpad_max * KDIM)) {
             xf[i] = float16(0.03 * float(i % 61) - 0.9)
         }
+        let x32 <- [for (h in xf); float(h)]   //! the base form reads x as f32: the same values the twins read as halves
+        let bkt_id <- [for (i in range(mpad_max)); uint(i)]   //! identity bucket map: gather = 0, the rows sit contiguous an expert
         let nb = KDIM / 256
         let nsb = NE * NDIM * nb
         for (fmt in [44, 4]) {
@@ -202,12 +206,15 @@ def main {
                 let bkq = mc |> in_plain(kq)
                 let bks = mc |> in_plain(ks)
                 let bxf = mc |> in_plain(xf)
+                let bx32 = mc |> in_plain(x32)
+                let bbkt = mc |> in_plain(bkt_id)
                 let bkd = mc |> in_plain([uint(KDIM)])
                 let bnd = mc |> in_plain([uint(NDIM)])
                 let doff = kq_split_doff(fmt, nsb)
-                var inscope names <- ["prod", "tile32", "ko_stage", "ko_tensor"]
+                var inscope names <- fmt == 44 ? ["prod", "tile32", "ko_stage", "ko_tensor"] : ["prod", "tile32", "ko_stage", "ko_tensor", "base"]
                 let kiq = kernel_of(@@pf_enc_moe_mm_iq4xs_th_c)
                 let kk4 = kernel_of(@@pf_enc_moe_mm_k4_th_c)
+                let kb4 = kernel_of(@@pf_enc_moe_mm_k4_c)
                 var psos <- fmt == 44 ? [
                     invoke(kiq.make, dev, err),
                     pso_stamp(dev, LabMoeIq4xsTile32_metal_moe_mulmm_iq4xs_t_msl, err),
@@ -217,8 +224,10 @@ def main {
                     invoke(kk4.make, dev, err),
                     pso_stamp(dev, LabMoeK4Tile32_metal_moe_mulmm_k45_t_msl, err),
                     pso_stamp(dev, LabMoeK4KoStage_metal_moe_mulmm_k45_t_msl, err),
-                    pso_stamp(dev, LabMoeK4KoTensor_metal_moe_mulmm_k45_t_msl, err)
+                    pso_stamp(dev, LabMoeK4KoTensor_metal_moe_mulmm_k45_t_msl, err),
+                    invoke(kb4.make, dev, err)
                 ]
+                let BASE_ARM = 4
                 for (ps, nm in psos, names) {
                     if (ps == null) {
                         print("{fname} {nm}: pipeline compile failed: {err}\n")
@@ -244,6 +253,9 @@ def main {
                                     if (fmt == 44) {
                                         invoke(kiq.enc, enc, ps, mc.buf[bks], doff, mc.buf[bks], 0ul, mc.buf[bkq], 0ul, mc.buf[bxf], 0ul, by, 0ul,
                                             mc.buf[bkd], mc.buf[bnd], mc.buf[bcnt], mc.buf[bbase], int64(p.mpad), int64(NDIM), int64(NE), int64(NPOS / 32))
+                                    } elif (ai == BASE_ARM) {
+                                        invoke(kb4.enc, enc, ps, mc.buf[bks], doff, mc.buf[bks], mc.buf[bkq], 0ul, mc.buf[bx32], by, ka,
+                                            mc.buf[bcnt], mc.buf[bbase], mc.buf[bbkt], int64(NDIM), int64(NPOS), int64(NE))
                                     } else {
                                         invoke(kk4.enc, enc, ps, mc.buf[bks], doff, mc.buf[bks], 0ul, mc.buf[bkq], 0ul, mc.buf[bxf], by, ka,
                                             mc.buf[bcnt], mc.buf[bbase], int64(NDIM), int64(NPOS), int64(NE))
@@ -264,6 +276,7 @@ def main {
                     var inscope ref <- ref_region(fmt, p, xf, kq, ks)
                     var prod_y : int = -1
                     var adapt_y : int = -1
+                    var base_y : int = -1
                     for (ai, ps in count(), psos) {
                         var gpu_ms = 0.0lf
                         let yi = mc |> out_words(p.mpad * NDIM, 0.0)
@@ -271,6 +284,9 @@ def main {
                             if (fmt == 44) {
                                 invoke(kiq.enc, enc, ps, mc.buf[bks], doff, mc.buf[bks], 0ul, mc.buf[bkq], 0ul, mc.buf[bxf], 0ul, mc.buf[yi], 0ul,
                                     mc.buf[bkd], mc.buf[bnd], mc.buf[bcnt], mc.buf[bbase], int64(p.mpad), int64(NDIM), int64(NE), int64(NPOS / 32))
+                            } elif (ai == BASE_ARM) {
+                                invoke(kb4.enc, enc, ps, mc.buf[bks], doff, mc.buf[bks], mc.buf[bkq], 0ul, mc.buf[bx32], mc.buf[yi], ka,
+                                    mc.buf[bcnt], mc.buf[bbase], mc.buf[bbkt], int64(NDIM), int64(NPOS), int64(NE))
                             } else {
                                 invoke(kk4.enc, enc, ps, mc.buf[bks], doff, mc.buf[bks], 0ul, mc.buf[bkq], 0ul, mc.buf[bxf], mc.buf[yi], ka,
                                     mc.buf[bcnt], mc.buf[bbase], int64(NDIM), int64(NPOS), int64(NE))
@@ -280,6 +296,8 @@ def main {
                             prod_y = yi
                         } elif (ai == 1) {
                             adapt_y = yi
+                        } elif (ai == BASE_ARM) {
+                            base_y = yi
                         }
                     }
                     var inscope prod_region <- gpu_region(mc.buf[prod_y], p)
@@ -287,6 +305,11 @@ def main {
                     var inscope prod_live <- live_rows(mc.buf[prod_y], p)
                     var inscope adapt_live <- live_rows(mc.buf[adapt_y], p)
                     let adapt_rel = maxrel(adapt_live, prod_live)
+                    var base_rel = 0.0
+                    if (base_y >= 0) {
+                        var inscope base_live <- live_rows(mc.buf[base_y], p)
+                        base_rel = maxrel(base_live, prod_live)
+                    }
                     var live = 0
                     for (c in p.cnt) {
                         live += int(c)
@@ -299,6 +322,8 @@ def main {
                             note = "vs CPU reference on {length(ref)} sampled elements: max rel {prod_rel} (bound 2e-2 {prod_rel <= 0.02 ? "held" : "MISSED"})"
                         } elif (ai == 1) {
                             note = "vs prod over {length(prod_live)} live elements: max rel {adapt_rel} (bound 1e-3 {adapt_rel <= 1e-3 ? "held" : "MISSED"})"
+                        } elif (ai == BASE_ARM) {
+                            note = "vs prod over {length(prod_live)} live elements: max rel {base_rel} (f32 x against the twins' halves; bound 2e-2 {base_rel <= 0.02 ? "held" : "MISSED"})"
                         }
                         print("{fname} {p.name} {nm}: {best[ai]} ms a dispatch, {gbps} GB/s of weights, x{best[ai] / best[0]} of prod; {note}\n")
                     }

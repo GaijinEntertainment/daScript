@@ -13,6 +13,7 @@ require dasllama/dasllama_qwen3v   // q3v_reorder_src - the stem assemble gate's
 require _kernel_oracles   // pos_add_2d_ref
 require ?das_metal dasllama/dasllama_metal_kernels  // the decode elementwise/misc kernel set (Apple builds)
 require ?das_metal dasllama/dasllama_metal_common   // the pipeline globals the generated builders read
+require ?das_metal dasllama/dasllama_metal_prefill  // metal_moe_kq_twin_pick + its knee knob - the K-quant MoE twins' pick cell
 require ?das_metal metal/das_metal_boost  // device/pipeline/buffer plumbing + the leak gate
 require ?das_metal _metal_kernel_common   // the MetalCell record, check_buf, the device shell
 require _attn_oracle
@@ -2054,6 +2055,25 @@ def test_metal_served(t : T?) {
         t |> success(!metal_served(false), "a later decline still passes through")
         t |> success(get_dispatch_gpu_served(), "and the window stays until the next weights load")
         set_dispatch_gpu_served(was)
+    } else {
+        t |> skip("das_metal is not built on this platform; the Metal drivers are not compiled")
+    }
+}
+
+//! device-free: the K-quant MoE twins' pick - a crowned family takes the twin at every shape, an uncrowned
+//! box at or under the knee's mean rows an expert (the adaptive op's region), never past it
+[test]
+def test_metal_moe_kq_twin_pick(t : T?) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        let was = set_metal_moe_kq_twin_avg(16l)
+        t |> success(metal_moe_kq_twin_pick(true, 1024l, 8l, 256l), "a crowned family takes the twin at 32 rows an expert")
+        t |> success(metal_moe_kq_twin_pick(false, 375l, 8l, 256l), "uncrowned, the house window's 11.7 rows an expert take the twin")
+        t |> success(metal_moe_kq_twin_pick(false, 512l, 8l, 256l), "uncrowned, 16 rows an expert is the knee's last twin shape")
+        t |> success(!metal_moe_kq_twin_pick(false, 544l, 8l, 256l), "uncrowned, 17 rows an expert take the base form")
+        t |> equal(16l, set_metal_moe_kq_twin_avg(0l), "the knob answers the value it replaced")
+        t |> success(!metal_moe_kq_twin_pick(false, 2l, 8l, 256l), "at a knee of 0 an uncrowned box never takes the twin")
+        t |> success(metal_moe_kq_twin_pick(true, 2l, 8l, 256l), "and a crowned family still does")
+        set_metal_moe_kq_twin_avg(was)
     } else {
         t |> skip("das_metal is not built on this platform; the Metal drivers are not compiled")
     }
