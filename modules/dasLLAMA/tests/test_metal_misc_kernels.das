@@ -2217,10 +2217,21 @@ def test_kq_rows_race_verdicts(t : T?) {
                 to_log(LOG_INFO, "race {r.family}: {r.winner} (base {r.base_ms:.3f} ms, twin {r.twin_ms:.3f} ms) {r.note}\n")
                 t |> success(r.base_ms > 0.0lf && r.twin_ms > 0.0lf, "{r.family}: both arms timed (base {r.base_ms:.3f} ms, twin {r.twin_ms:.3f} ms) {r.note}")
                 t |> success(r.winner == "tensor" || r.winner == "simdgroup", "{r.family}: a verdict, not a dispatch failure ({r.winner}: {r.note})")
+                t |> success(!(r.note |> starts_with("twin OUTPUT MISMATCH")), "{r.family}: the twin's output agreed with the base arm's ({r.note})")
             }
             t |> equal(seen, 13, "every K-quant format with a small-batch twin raced")
             t |> equal(form, 1, "the k4 twin's two-row tile raced its two-column form")
             t |> equal(half, 13, "every K-quant format's half-x route raced the box's f32 rows route")
+            // every rows verdict is written back before the half races, so each half race's base arm is the rows route
+            // the box will run: the crown the process holds after the race is the verdict the race returned
+            for (r in res) {
+                continue if (!(r.family |> starts_with("kq_rows_")) || (r.family |> starts_with(KQ_HALF_CROWN_PREFIX)))
+                for (f in KQ_ROWS_RACE_FORMATS) {
+                    if (r.family == "kq_rows_{f.fmt}") {
+                        t |> equal(r.winner == "tensor", metal_kq_rows_crowned(f.fmt), "{r.family}: the rows verdict the race returned is the one the process holds")
+                    }
+                }
+            }
         } else {
             t |> skip("das_metal is not built on this platform")
         }

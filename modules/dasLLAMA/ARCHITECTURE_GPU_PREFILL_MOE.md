@@ -2,8 +2,9 @@
 
 Companion to `ARCHITECTURE_GPU_PREFILL.md`; a section is cited by its anchor. This
 document carries the routed block of the Metal prefill driver: the atomics-free
-bucket rail, the tensor-twin scaffold the gathered expert sites ride, and the split-format
-expert twins. The GEMM form ladder those sites pick from (`ARCHITECTURE_GPU_PREFILL.md#prefill-gemm-ladder`), the dev-W panel knee map
+bucket rail, the tensor-twin scaffold the gathered expert sites ride, the split-format
+expert twins, the K-quant twins' own crowns and the knee that picks them on an uncrowned box, and
+the short window's gathered expert route. The GEMM form ladder those sites pick from (`ARCHITECTURE_GPU_PREFILL.md#prefill-gemm-ladder`), the dev-W panel knee map
 (`ARCHITECTURE_GPU_PREFILL.md#devw-panel-knees`) and the dense-KQ tensor mul_mm scaffold the split-format twins derive from (`ARCHITECTURE_GPU_PREFILL.md#prefill-kq-tensor-scaffold`)
 stay in `ARCHITECTURE_GPU_PREFILL.md`.
 
@@ -61,7 +62,8 @@ walks of one op each, each in its own scope, because the emitter's cooperative-t
 are block-scoped and an op's begin, steps and store must share one. The tile's cost is the op's, not
 the live rows': over 128 experts of a 1024 x 2048 plane the 32-row stamp reads the same time whether
 an expert holds 4, 12 or 32 rows, the staging alone a third of it and the op alone three quarters,
-and the adaptive op reads 0.57 / 0.69 / 1.00 of the fixed tile at those counts, bit-equal on every
+and the adaptive op reads 0.57 / 0.69 / 1.00 of the fixed tile at those counts (`debug-jit` lab readings; the board
+row is the metal pp512 cell of `performance/records/m1.json` and `m5.json` on Qwen3.6-35B-A3B-MTP-UD-Q4_K_M), bit-equal on every
 live element (`benchmarks/matmul/bench_metal_moe_tile_lab.das`: the shipped form, the fixed 32-row
 form it replaced, and the two knockouts). The mx4 twin keeps the 32-row op, since its per-expert
 bias store is MT-only.
@@ -105,15 +107,24 @@ nor an activation pass over its tail.
 
 The kq-scaffold twins (k4, k5, k6, and q5_1 / iq4nl32 under k4's verdict) compile behind the
 toolchain probe like the split formats, and each family carries its own MoE-shaped race -
-`moe_mulmm_k4` / `k5` / `k6`, the q8/mx4 racers' shape (four experts, 32 rows each, the
-whole-tile case) over the kq race planes, the base arm bound at the family tail's numbers and
-the twin at the scaffold's. The dense `kq_mulmm_*` crowns say nothing about them: the dense
-race measures a 512-row GEMM, where the twin's merit on the routed site is the adaptive op at
-few rows an expert, and the two disagree on an M1-class GPU. A crowned family takes the twin at
-every shape. An uncrowned one takes it per dispatch where the window's mean rows an expert sit at
-or under `set_metal_moe_kq_twin_avg` (16, the adaptive op's region: `npos * nk <= avg * ne`),
-and the base form past it (`metal_moe_kq_twin_pick`). The lab's base arm sets the knee: on the
-M1 Max the k4 twin reads 0.59 / 0.76 / 1.16 of the base form at 4 / 8-16 / 32 rows an expert
+`moe_mulmm_k4` / `k5` / `k6` (`race_moe_mulmm_kq`, one body over the format) over the kq race
+planes of 128 experts of a 1024 x 2048 plane, past the last-level cache where a served model's
+planes stream, timed on one whole-tile region (32 rows an expert) and one of twelve rows an expert
+(the house window's mean) in one encoder, the outputs compared on the whole-tile region, where
+both arms write every row; the base arm binds at the family tail's numbers and the twin at the
+scaffold's. The dense `kq_mulmm_*` crowns measure a 512-row GEMM, where the twin's merit on the
+routed site is the adaptive op at few rows an expert, and the two disagree on an M1-class GPU; the
+dense crown STANDS IN for a family's verdict all the same (`g_pf_moe_kq_mm*_tensor` is the MoE
+crown or the dense one), because the sidecar's runtime section keeps winners alone, so a box
+minted before the MoE races and a box whose MoE twin lost read the same, and the stand-in keeps
+the former on the twin it ran. A crowned family takes the twin at every shape. An uncrowned one
+takes it per dispatch where the window's mean rows an expert sit at or under
+`set_metal_moe_kq_twin_avg` (16, the adaptive op's region: `npos * nk <= avg * ne`), and the
+base form past it (`metal_moe_kq_twin_pick`). That pick is made once a site
+(`pf_moe_twin_live`) and read by the gather panel, the activation's half store and the dispatch
+arm alike, so no pass runs for a twin the arm then declines. The lab's base arm sets the knee: on
+the M1 Max the k4 twin reads 0.59 / 0.76 / 1.16 of the base form at 4 / 8-16 / 32 rows an expert (`debug-jit`, the same
+lab and board row)
 (1.42 / 1.80 / 2.76 ms against a flat 2.38), on the M5 Max 0.31 / 0.32 / 0.38 (0.40 / 0.42 /
 0.49 against 1.31), bit-equal on every live element. The house's 375-token window on a
 256-expert model is 11.7 rows an expert; a 1024-token one is 32.

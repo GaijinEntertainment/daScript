@@ -30,7 +30,8 @@ any sibling companion that sends a reader to it.
   the decode pick tape a parity cell pins one arm's routing on another with
   (`ARCHITECTURE_ENGINE.md#moe-pick-tape`).
 - `ARCHITECTURE_ENGINE_SERVING.md` - the serving charter, the prefix cache's partial page
-  (`ARCHITECTURE_ENGINE_SERVING.md#prefix-tail-page`) and its checkpoints on a recurrent model.
+  (`ARCHITECTURE_ENGINE_SERVING.md#prefix-tail-page`), its checkpoints on a recurrent model, and
+  the reasoning budget that closes a thinking span for the model.
 - `ARCHITECTURE_ENGINE_FORMATS.md` - the format, load-rail and CPU-kernel-tier charters, plus
   the shapes they key off - the bigram merge heap both tokenizer backends run
   (`ARCHITECTURE_ENGINE_FORMATS.md#bpe-merge-heap`), the one RoPE fill over a position source
@@ -82,7 +83,8 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   attention slab, chunked submission, the f16 twin dual-store, the last-layer FFN tail, and the
   dense-KQ tensor mul_mm scaffold.
 - `ARCHITECTURE_GPU_PREFILL_MOE.md` - the Metal prefill driver's routed block - the MoE bucket
-  rail, its tensor-twin scaffold, and the split-format expert twins.
+  rail, its tensor-twin scaffold and the split-format expert twins, the K-quant twins' crowns and
+  the knee that picks them, and the short window's gathered expert route.
 - `ARCHITECTURE_GPU_PREFILL_WINDOW.md` - the Metal prefill driver's device attention pair (the
   K/V twins, the device-direct QK and AV with the tail stamp of a head off the 64 lattice, the row
   softmax written in place), the mirror-fed window and mirror adoption

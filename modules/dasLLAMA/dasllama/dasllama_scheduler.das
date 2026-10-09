@@ -110,6 +110,7 @@ struct Stream {
     n_think : int64                         //! reasoning tokens emitted so far
     think_state : int = 0                   //! 0 = the span not opened, 1 = inside the span, 2 = past it (closed by the model or forced)
     forced : array<int64>                   //! tokens the next steps emit in place of their samples - the budget's forced close
+    think_open_at : int = 0                 //! how many tokens of the span's open sequence the reply has written in a row
     state : StreamState = StreamState.prefilling
     finish : string = ""
     constraint : TokenConstraintBox         //! owned here (freed with the stream); the session carries the pointer and never frees it
@@ -560,26 +561,38 @@ def private advance_with(m : Model; var st : Stream; tok : int64; var events : a
 }
 
 //! Where the emitted token stands against the reasoning budget: the span's open token enters it, every token inside it counts,
-//! the close token leaves it, and the budget reached inside it queues the forced close for the steps that follow.
+//! the close token the model writes leaves it, and the budget reached inside it - or the length cap drawing closer than the
+//! forced close is long - queues the forced close for the steps that follow.
 [arch(at="../ARCHITECTURE_ENGINE_SERVING.md#think-budget")]
 def private think_budget_track(var st : Stream; tok : int64) {
     return if (st.think_budget <= 0l || empty(st.think_marks.close) || st.think_state == 2)
     if (st.think_state == 0) {
-        if (!empty(st.think_marks.open) && tok == st.think_marks.open[0]) {
+        let nopen = length(st.think_marks.open)
+        return if (nopen == 0)
+        st.think_open_at = tok == st.think_marks.open[st.think_open_at] ? st.think_open_at + 1 : (tok == st.think_marks.open[0] ? 1 : 0)
+        if (st.think_open_at >= nopen) {
             st.think_state = 1
+            st.think_open_at = 0
         }
         return
     }
-    if (tok == st.think_marks.close[0]) {
+    if (tok == st.think_marks.close_tok) {
         st.think_state = 2
         return
     }
     st.n_think ++
-    if (st.n_think >= st.think_budget) {
+    let left = st.max_new - st.n_gen - 1l   //! the steps after this token, which the length check has not counted yet
+    if (st.n_think >= st.think_budget || left <= long_length(st.think_marks.close)) {
         st.forced := st.think_marks.close
         st.think_state = 2
-        to_log(LOG_INFO, "[stream {st.id}] thinking budget of {st.think_budget} tokens reached: the span's close is forced\n")
+        think_budget_forced_log(st, left)
     }
+}
+
+[cold_path]
+def private think_budget_forced_log(st : Stream; left : int64) {
+    let why = st.n_think >= st.think_budget ? "thinking budget of {st.think_budget} tokens reached" : "{left} tokens left under max_tokens"
+    to_log(LOG_INFO, "[stream {st.id}] {why}: the span's close is forced\n")
 }
 
 //! the step's token: the sample, or the next forced token where the budget queued a close - the sample is still drawn, so a

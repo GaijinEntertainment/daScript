@@ -1496,8 +1496,9 @@ enum ThinkMode {
 //! The token marks a reasoning budget acts on, resolved per request from the family's template and the model's vocab
 //! (`think_budget_marks_`); an empty `close` means no budget can act - thinking off, or a vocab without the markers.
 struct ThinkBudgetMarks {
-    open : array<int64>      //!< the token a reply writes to open its reasoning span (empty where the prompt opened it)
+    open : array<int64>      //!< the token sequence a reply writes to open its reasoning span (a special, or harmony's channel mark and `analysis`)
     close : array<int64>     //!< the tokens forced at the budget to end the span: a close special, or harmony's end mark + final header
+    close_tok : int64 = -1l  //!< the one token the model itself writes to leave the span (the close special; harmony's end mark)
     opened : bool = false    //!< the generation prompt left the reply inside the span
 }
 
@@ -2901,6 +2902,9 @@ def public unpin_metal_tensor_crowns {
     g_tensor_crowns_pinned = false
 }
 
+//! whether a cell pinned the crowns (the box profile's apply then leaves them) - what a cell captures to put the pin back
+def public metal_tensor_crowns_pinned : bool => g_tensor_crowns_pinned
+
 // ===== Metal prefill raced constants (sidecar "runtime" knobs; prefill caches at its init) =====
 
 //! Defaults are the M5 race winners; another box's sidecar overrides without a rebuild.
@@ -2949,6 +2953,10 @@ def public set_metal_moe_gemv_max(v : int64) {
     if (v < -1l) {
         to_log(LOG_WARNING, "dasLLAMA: set_metal_moe_gemv_max({v}) out of range - keeping {g_metal_moe_gemv_max}\n")
         return
+    }
+    if (v != g_metal_moe_gemv_max) {
+        let knee = v < 0l ? "the default knee" : "{v} tokens"
+        to_log(LOG_WARNING, "dasLLAMA metal prefill: set_metal_moe_gemv_max({v}) - the gathered expert route serves a routed window of {knee} or fewer (0 = the tiles alone)\n")
     }
     g_metal_moe_gemv_max = v
 }

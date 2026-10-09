@@ -1522,7 +1522,10 @@ def think_budget_marks_(m : Model; c : ChatSession) : ThinkBudgetMarks {
         if (ch < 0l || msg < 0l || fin < 0l || start < 0l) {
             return <- marks
         }
+        //! the reasoning channel's header opens the span - the channel mark alone also opens the answer's channel
         marks.open <- [ch]
+        marks.open |> push_from(encode_(m, "analysis", false, false))
+        marks.close_tok = fin
         marks.close <- [fin, start]
         marks.close |> push_from(encode_(m, "assistant", false, false))
         marks.close |> push(ch)
@@ -1530,14 +1533,17 @@ def think_budget_marks_(m : Model; c : ChatSession) : ThinkBudgetMarks {
         marks.close |> push(msg)
         return <- marks
     }
-    let open = special_id(m, c.tmpl.think_open)
-    let close = special_id(m, c.tmpl.think_close)
-    if (close < 0l) {
+    //! the markers as the model writes them: a special, or a special followed by a word (gemma-4's `<|channel>thought`)
+    var open_seq <- encode_(m, c.tmpl.think_open, false, true)
+    let close_seq <- encode_(m, c.tmpl.think_close, false, true)
+    if (length(close_seq) != 1 || special_id(m, c.tmpl.think_close) < 0l) {
         return <- marks
     }
-    if (open >= 0l) {
-        marks.open <- [open]
+    let close = close_seq[0]
+    if (!empty(c.tmpl.think_open) && !empty(open_seq)) {
+        marks.open <- open_seq
     }
+    marks.close_tok = close
     //! a bare close mid-thought leaves a symmetric family reasoning on in its content and closing again at the end; the
     //! sentence the Qwen3 recipe inserts at a spent budget turns the thought into its conclusion, and the blank line after
     //! the close is the template's own spacing before an answer

@@ -5,15 +5,17 @@ docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`, `ARCHITECTU
 Planned work: `followup_metal.md`, `followup_vulkan.md`.
 
 Parity evidence is a compare of a GPU-served run - a run whose output the GPU computed - against
-the CPU chain, cited to show the GPU path computes what the CPU does; a kernel-unit cell's compare
-counts. Driver-against-itself evidence is a compare of two GPU-served arms of one model against
-each other. A diff cites parity or driver-against-itself evidence when it adds or changes a
-compare offered as that evidence: a cell's compare, or a citation in a doc, a ledger, a commit
-message or the PR description. A hook seat is a stage slot the CPU chain calls and a GPU driver
-fills. A tower driver is a driver serving a family's encoder or synthesis stages through hook
-seats. A serving call is a decode, a prefill, a tower or a hook seat. A bar is the largest
-difference a continuous compare accepts - a constant, or a constant times a statistic of the
-reference. A parity run is a run or cell whose compare is offered as parity evidence.
+the CPU chain (the same model's forward on the CPU kernels), cited to show the GPU path computes
+what the CPU does; a kernel-unit cell's compare - a test cell that dispatches a `[vk_dispatch]` or
+`[metal_dispatch]` class itself - counts. Driver-against-itself evidence is a compare of two
+GPU-served sides of one model against each other. A diff cites parity or driver-against-itself
+evidence when it changes what either side of a compare offered as that evidence computes, its bar
+or its assert, or adds or changes a citation of such a compare in a doc, a ledger, a commit message
+or the PR description. A serving call is a decode, a prefill, or an encoder or synthesis stage a
+GPU driver fills; a tower driver is the driver filling a family's encoder or synthesis stages
+(`dasllama/dasllama_metal_tower.das`, `dasllama/dasllama_vulkan_tower.das`,
+`dasllama/dasllama_vulkan_tts.das`). A bar is the largest difference a continuous compare accepts -
+a constant, or a constant times a statistic of the reference.
 
 **A diff that cites as parity evidence a compare whose GPU side is a `[vk_dispatch]` or
 `[metal_dispatch]` class the cell dispatches itself applies the `tests/` subfolder's
@@ -23,11 +25,10 @@ reference. A parity run is a run or cell whose compare is offered as parity evid
 identical fixed inputs - the same tokens, canvas, clip, or the same upstream rows for a stage - is
 a defect.**
 
-**A diff that cites as parity evidence a within-bar compare whose GPU side is a serving call with
-no control in the same run that changes an input the computation reads on one side (a token, a
+**A diff that cites as parity evidence a within-bar compare whose GPU side is a serving call
+shows a control from the same run - an input the computation reads changed on one side (a token, a
 frame, an upstream row, the input scaled by a small factor, a weight region zeroed, a mechanism
-disabled) and lands outside the bar is a defect.** A value moved in the output after the fact is
-not a control.
+disabled) - landing outside the bar.** A value moved in the output after the fact is not a control.
 
 **A diff that cites as parity evidence a reading from any run but `harness/parity.das`,
 `benchmarks/lcpp_bench.das --parity` (`performance/model_specs.das`'s fixed model list) or a cell
@@ -36,29 +37,27 @@ marked as a probe's, never as evidence.
 
 **A diff that cites as parity evidence a `tests/run.das` cell that compares a continuous output
 other than within a bar, or a discrete output other than exactly, is a defect.** A continuous
-output is floats - logits, a stage's rows, a waveform - or float rows in an encoding that rounds
-them, such as a K/V cache's quantized bytes; a discrete output is ids, tokens or counts - a
-counting prompt's tokens, served ids against the host's `parallel_argmax` over the same logits,
-a transcript, a frame count.
+output is floats, or float rows in an encoding that rounds them; a discrete output is ids, tokens
+or counts.
 
-**A diff that adds or changes a parity reading offered as GPU-vs-CPU evidence in a
-`PERF_LEDGER.md`, `followup_metal.md` or `followup_vulkan.md` entry names in that entry the run
+**A diff that adds or changes, in a `PERF_LEDGER.md`, `followup_metal.md` or `followup_vulkan.md`
+entry, a reading offered as parity evidence names in that entry the run
 it came from - `harness/parity.das`, `benchmarks/lcpp_bench.das --parity` or a `tests/run.das`
 run - and, for a `tests/run.das` run, the cell that read it; an entry crediting a reading to a
 cell that does not produce it is a defect.**
 
 **A diff that cites Metal parity evidence, or Metal driver-against-itself evidence, whose GPU
-side is a decode or prefill step, with no cell assert or logged before/after reading of the Metal
-driver's counter for that step kind rising across each changed call - `metal_decode_stats`'
-`decodes` for a single-row decode, `metal_batch_decode_stats`' `steps` for a batched decode,
-`metal_prefill_stats`' `prefills` for a prefill - is a defect.** Without the counter the run may
-have measured the CPU.
+side is a decode or prefill step, with no cell assert or logged before/after reading, across every
+GPU call whose reading it cites, of one of these counters rising - `metal_decode_stats`' `decodes`,
+`metal_batch_decode_stats`' `steps`, `metal_prefill_stats`' `prefills`, or a
+`metal_kernel_coverage_of` count of a kernel only the device-served step dispatches - is a
+defect.** Without the counter the run may have measured the CPU.
 
-**A diff that cites Metal parity or driver-against-itself evidence of the tower driver or the
-ASR-decoder driver with no cell assert or logged before/after reading of that driver's counter
-rising is a defect - the `metal_tower_stats` counter of the stage the change touches (`convs` for
-a front, `encodes` for any other seat - the blocks and a TTS stage included), `metal_wdec_stats`'
-`windows`.**
+**A diff that cites Metal parity or driver-against-itself evidence of the Metal tower driver or
+the ASR-decoder driver (`dasllama/dasllama_metal_asr_dec.das`) with no cell assert or logged
+before/after reading of that driver's counter rising is a defect - the `metal_tower_stats` counter
+of the stage the change touches (`convs` for a front, the conv stage ahead of the blocks; `encodes`
+for any other stage, the blocks and a TTS stage included), `metal_wdec_stats`' `windows`.**
 
 **A diff that cites as parity evidence a Vulkan run of a serving call armed by anything but
 `DASLLAMA_GPU=1` is a defect; `--ngl` arms Metal alone.**
@@ -71,12 +70,12 @@ reporting a rail (one operation family the tier serves) `resident` - the rail an
 with any text after them - never one saying the rail, or any layer of it, stays on the CPU - a
 line reading `declined`, `stopped at layer`, `leaves` or `on the CPU`.
 
-**A diff that cites as parity evidence a Vulkan run of a tower driver or the ASR-decoder driver
-with no cell assert or logged before/after reading of that driver's own stats counter rising -
-the counter its `*_stats()` accessor returns for the stage the change touches
-(`vulkan_tower_stats`: `encodes` for the blocks, `convs` for a front or the stem, `mels` for the
-mel; `vulkan_tts_stats`: `encodes` for a TTS seat; `vulkan_wdec_stats`: `windows`) - is a
-defect.**
+**A diff that cites as parity evidence a Vulkan run of a Vulkan tower driver or the ASR-decoder
+driver (`dasllama/dasllama_vulkan_asr_dec.das`) with no cell assert or logged before/after reading
+of that driver's counter for the stage the change touches rising - `vulkan_tower_stats`: `encodes`
+for the blocks, `convs` for a front (the conv stage ahead of the blocks) or the stem, `mels` for
+the mel spectrogram; `vulkan_tts_stats`: `encodes` for a TTS stage; `vulkan_wdec_stats`: `windows`
+- is a defect.**
 
 **A diff that cites as parity evidence, or as driver-against-itself evidence, a Vulkan run that
 did not arm the mirror codec the changed path reads - the storage form (f16, f32, q8_0 or tq4) of
@@ -95,8 +94,8 @@ that text.**
 **A diff that cites a driver-against-itself compare as parity evidence is a defect - such a
 compare is evidence for a `PERF_LEDGER.md` row.**
 
-**A diff that, in a parity run that is not a kernel-unit cell, holds a model file's serving-call
-output to a bar no earlier parity run held that file to, or changes the constant - or the
-statistic the constant multiplies - of such a bar, adds a `PERF_LEDGER.md` row in the same change
-naming the bar's constant and value, the reading it comes from and the box that read it.** A
-driver-against-itself compare is not a parity run, so its bar owes no such row.
+**A diff that, in a cell or run whose compare is offered as parity evidence, other than a
+kernel-unit cell, holds a model file's serving-call output to a bar no earlier such compare held
+that file to, or changes the constant - or the statistic the constant multiplies - of such a bar,
+adds a `PERF_LEDGER.md` row in the same change naming the bar (its named constant, where it has
+one, and its value), the reading it comes from and the box that read it.**

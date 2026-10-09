@@ -5,7 +5,8 @@ the GEMM form ladder, the dev-W panel knee map, the GEMV tail peel, the attentio
 pad-row and cooperative-op constraints, chunked submission, the f16 twin dual-store, the
 last-layer FFN tail, the dense-KQ tensor mul_mm scaffold and the hyper-connection window. The
 driver's routed block - the MoE bucket rail, its tensor-twin scaffold and the split-format expert
-twins - is `ARCHITECTURE_GPU_PREFILL_MOE.md#prefill-moe-buckets`.
+twins, the K-quant twins' pick and the short window's gathered route - is
+`ARCHITECTURE_GPU_PREFILL_MOE.md#prefill-moe-buckets`.
 
 ### The prefill GEMM form ladder {#prefill-gemm-ladder}
 
@@ -146,7 +147,8 @@ whole window of `MM_TAIL_MAX` rows or fewer rides the decode's row-batched forms
 (`enc_kq_site_b`: the B2, B4 and B8 stamps, which stream the plane once for every row) on a
 `kdim` of whole superblocks, where the 32-row tile would walk K serially under barriers one
 threadgroup per core: a 2-token window on Qwen3.6-27B Q4_K_M read 235 ms on the M1 Max on the
-tile, 3.6 decode steps, with the FFN site alone 114 ms. The same tile cost sets the window's floor
+tile, 3.6 decode steps, with the FFN site alone 114 ms (`debug-jit`, the window probe; the board row
+is the metal pp512 cell of `performance/records/m1.json` on Qwen3.6-27B-MTP-Q4_K_M). The same tile cost sets the window's floor
 from 9 rows up, where the remainder stays on the tile; the form for that band is
 `followup_metal.md`'s.
 

@@ -353,11 +353,11 @@ def test_scheduler_stop_strings(t : T?) {
 // ===== the reasoning budget: the forced close lands after the budgeted tokens, the stream continues =====
 
 [test]
-def test_scheduler_think_budget(t : T?) {
+def test_scheduler_think_budget(t : T?) {   // nolint:STYLE038 — one cell: the budget's six streams against one reference on one loaded model
     t |> run("a reasoning budget forces the span's close tokens after that many tokens; a budget with no close is inert (needs SmolLM2-135M)") @(t : T?) {
-        if (model_missing(t)) {
-            return
-        }
+        return if (!jit_only(t) || !model_available(t, MODEL_PATH))
+        //! the scheduler and the reference run one CPU code path over one set of weights (the model's GPU state dropped
+        //! by load_capped_cpu), so the exact compares below hold - a GPU rail would round the two apart
         with_dasllama_jobque() {
             var m <- load_capped_cpu(128l)
             var prompt <- encode(m, "Once upon a time", true, false)
@@ -406,9 +406,58 @@ def test_scheduler_think_budget(t : T?) {
             drain(m, sch, events)
             var toks3 <- toks_of(events, 3l)
             t |> equal(ref.toks, toks3, "no close marks: the budget forces nothing")
+            // the model's own close ends the count: a stream whose close token is the reference's second token leaves
+            // the span there, and the budget of 3 never fires - the close sequence's first token is NOT the close
+            // (a symmetric family's forced close opens with a sentence whose first token the reasoning writes freely)
+            events |> clear()
+            var req4 <- make_req(4l, prompt, greedy, 12l, none)
+            req4.think_budget = 3l
+            req4.think_marks.opened = true
+            req4.think_marks.close := close
+            req4.think_marks.close_tok = ref.toks[1]
+            t |> success(submit(m, sch, req4), "the self-closing stream is queued")
+            drain(m, sch, events)
+            var toks4 <- toks_of(events, 4l)
+            t |> equal(ref.toks, toks4, "the model's own close token ended the span: the budget forced nothing")
+            // a two-token open sequence: the span opens after both, so with a budget of 2 the close lands at 4 and 5
+            events |> clear()
+            var req5 <- make_req(5l, prompt, greedy, 12l, none)
+            req5.think_budget = 2l
+            req5.think_marks.open <- [ref.toks[0], ref.toks[1]]
+            req5.think_marks.close := close
+            t |> success(submit(m, sch, req5), "the sequence-opened stream is queued")
+            drain(m, sch, events)
+            var toks5 <- toks_of(events, 5l)
+            for (i in range(4)) {
+                t |> equal(ref.toks[i], toks5[i], "sequence open: token {i} is the model's own")
+            }
+            for (i in range(length(close))) {
+                t |> equal(close[i], toks5[4 + i], "sequence open: forced close token {i} lands at position {4 + i}")
+            }
+            // the length cap closer than the close is long forces it early: a budget of 20 never fires on 12 tokens,
+            // the close lands at the last positions and the reply still ends for length within its cap
+            events |> clear()
+            var req6 <- make_req(6l, prompt, greedy, 12l, none)
+            req6.think_budget = 20l
+            req6.think_marks.opened = true
+            req6.think_marks.close := close
+            t |> success(submit(m, sch, req6), "the capped stream is queued")
+            drain(m, sch, events)
+            var toks6 <- toks_of(events, 6l)
+            t |> equal(12, length(toks6), "the forced close stays inside max_tokens")
+            for (i in range(length(close))) {
+                t |> equal(close[i], toks6[12 - length(close) + i], "early close: token {i} lands at position {12 - length(close) + i}")
+            }
+            t |> equal(ref.toks[12 - length(close) - 1], toks6[12 - length(close) - 1], "the token before the early close is the model's own")
+            t |> equal("length", finished_of(events, 6l).finish)
+            to_log(LOG_INFO, "think budget: self-closed {escape(text_of(pieces_of(events, 4l)))}\n")
+            to_log(LOG_INFO, "think budget: early close {escape(text_of(pieces_of(events, 6l)))}\n")
             delete toks
             delete toks2
             delete toks3
+            delete toks4
+            delete toks5
+            delete toks6
             delete close
             delete ref
             delete events

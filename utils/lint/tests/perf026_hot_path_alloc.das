@@ -25,7 +25,7 @@ options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; s
 // sink several frames deep is still reported — anchored on the deepest line
 // written in the root's own file, not on the daslib internal that allocates.
 
-expect 31208:10
+expect 31208:11
 
 require daslib/perf_lint
 require strings
@@ -178,4 +178,27 @@ def bad_sizing_builtins_on_the_unmarked_buffer(var sc : Scratch; n : int) {
     unsafe(sc.reused |> scratch_resize(n))
     sc.fresh |> ensure_capacity(n)                          // PERF026
     unsafe(sc.fresh |> scratch_resize(n))                   // PERF026
+}
+
+// 15. a function value stored in a module table and invoked on a hot path: the walk follows every function the
+//     program stores under that function type, so a table-driven dispatch ladder is no blind spot
+struct Forms {
+    go : function<(var a : array<int>) : void>
+}
+
+def alloc_through_value(var a : array<int>) {
+    a |> push(4)                                            // PERF026, reached through the stored value
+}
+
+var g_forms : table<int; Forms>
+
+[init]
+def forms_boot {
+    g_forms[0] = Forms(go = @@alloc_through_value)
+}
+
+[no_alloc]
+def bad_table_dispatch(var a : array<int>) {
+    let f = unsafe(g_forms?[0])
+    invoke(f.go, a)
 }

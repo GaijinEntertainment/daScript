@@ -244,7 +244,8 @@ def private ff_cell(t : T?; tr, trg : Model; tag, pn : string; prompt : array<in
     }
 }
 
-def private count_cell(t : T?; tr, trg : Model; tag : string; count : array<int64>; depth : int64; sampled : bool = false) {
+//! answers the rounds the spec rail drafted - the draft-quality witness a crowned leg holds against the plain run's
+def private count_cell(t : T?; tr, trg : Model; tag : string; count : array<int64>; depth : int64; sampled : bool = false) : int64 {
     var plain, spec : array<int64>
     var drafted = 0l
     var parked = 0l
@@ -282,6 +283,34 @@ def private count_cell(t : T?; tr, trg : Model; tag : string; count : array<int6
     }
     delete plain
     delete spec
+    return drafted
+}
+
+//! the half-x leg: under the k4 / k5 / k6 half-x crowns the verify's two-to-eight-row K-quant sites read the f16 twin, the
+//! MTP head's own q/k/v among them - its rows the head's norm wrote with no twin, so the flag must be clear there, or the
+//! head projects the trunk's last FFN norm and every draft misses silently while the verify still lands the plain tokens;
+//! the witness is the drafted-round count, which must hold up to the uncrowned run's within a fifth
+def private half_crown_cell(t : T?; tr, trg : Model; tag : string; count : array<int64>) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        let plain_drafted = count_cell(t, tr, trg, "{tag} plain-crowns", count, 2l)
+        let prev_crowns = get_metal_tensor_crowns()
+        let prev_pinned = metal_tensor_crowns_pinned()
+        let prev_half = get_metal_kq_half()
+        set_metal_kq_half(true)
+        pin_metal_tensor_crowns("{kq_half_crown(KqFmt.k4)},{kq_half_crown(KqFmt.k5)},{kq_half_crown(KqFmt.k6)}")
+        metal_decode_shutdown()
+        let half_drafted = count_cell(t, tr, trg, "{tag} half-x", count, 2l)
+        to_log(LOG_INFO, "{tag} half-x leg: drafted {half_drafted} rounds under the half crowns against {plain_drafted} without\n")
+        t |> success(half_drafted * 5l >= plain_drafted * 4l, "{tag} half-x: the drafts under the half crowns hold up to the plain run's ({half_drafted} vs {plain_drafted} rounds) - a head fed a stale twin drafts garbage and the count collapses")
+        set_metal_kq_half(prev_half)
+        if (prev_pinned) {
+            pin_metal_tensor_crowns(prev_crowns)
+        } else {
+            unpin_metal_tensor_crowns()
+            set_metal_tensor_crowns(prev_crowns)
+        }
+        metal_decode_shutdown()
+    }
 }
 
 // per-row logits comparison stats (the harness probe's shape): flips against the plain top-2 margin
@@ -655,6 +684,11 @@ def private run_arms(t : T?; tr, trg : Model; tag : string; prose_a, prose_b, co
         // the deepest round: depth 8 verifies MTP_MAX_ROWS rows, one past the eight-row GEMV rail
         if (arm_on(t, "mtp-count8-{tag}")) {
             count_cell(t, tr, trg, tag, count, 8l)
+        }
+
+        // the half-x crowns over the verify's K-quant sites, the MTP head's among them
+        if (arm_on(t, "mtp-ffh-{tag}")) {
+            half_crown_cell(t, tr, trg, tag, count)
         }
 
         // the sampled walk: every verify row drawn through the session's sampler, seeded - free-run == plain sampled free-run

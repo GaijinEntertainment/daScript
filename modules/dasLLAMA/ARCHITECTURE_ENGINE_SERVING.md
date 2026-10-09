@@ -71,18 +71,25 @@ under a page or past it.
 A request's `thinking_budget` (`PendingReq.think_budget`, the server's field of that name; 0 = none)
 is the number of reasoning tokens a thinking reply may spend before the scheduler closes the span
 for it. The scheduler reads tokens, not text, so the span's bounds come with the request as token
-marks (`ThinkBudgetMarks`, `think_budget_marks_`): the token a reply writes to open the span, the
-tokens that close it, and whether the generation prompt already opened it (Qwen3.5/3.6's opener ends
-inside the block; gemma-4's continuation after a tool result re-opens the channel). A stream counts
-every token it emits inside the span (`think_budget_track`: the open token enters, the close token
-the model writes leaves) and, at the budget, queues the close tokens as `Stream.forced`: the steps
-that follow emit them in the sample's place, the sample still drawn so a device pick landed for the
-step is consumed and the sampler's state advances as on every other step (`sample_advance`). The
-forced close is the family's own - a symmetric family's close special after the sentence the Qwen3
-recipe inserts at a spent budget (a bare close mid-thought leaves the model reasoning on in its
-content and closing again at the end), gemma-4's `<channel|>`, harmony's `<|end|>` followed by the
-final channel's header, each followed by the template's blank line - so the server's reply-side
-splitter reads it as the model's and the answer begins as content. A stream with a forced close pending
+marks (`ThinkBudgetMarks`, `think_budget_marks_`): the token SEQUENCE a reply writes to open the
+span (the family's open marker encoded with its specials parsed - Qwen's `<think>` is one token,
+gemma-4's `<|channel>thought` the channel mark and a word, harmony's the channel mark and
+`analysis`, which the answer's `final` channel does not match), the one token the model writes to
+leave it (`close_tok`: the close special, harmony's `<|end|>`), the tokens the budget forces, and
+whether the generation prompt already opened it (Qwen3.5/3.6's opener ends inside the block;
+gemma-4's continuation after a tool result re-opens the channel). A stream matches the open
+sequence token by token (`think_budget_track`, `Stream.think_open_at`), counts every token it emits
+inside the span, leaves on `close_tok` - never on a token of the forced close, whose first token a
+symmetric family's reasoning writes freely - and, at the budget, queues the forced close as
+`Stream.forced`: the steps that follow emit it in the sample's place, the sample still drawn so a
+device pick landed for the step is consumed and the sampler's state advances as on every other
+step (`sample_advance`). The length cap drawing within the forced close's length forces it early,
+so the close lands inside `max_tokens`. The forced close is the family's own - a symmetric family's
+close special after the sentence the Qwen3 recipe inserts at a spent budget (a bare close
+mid-thought leaves the model reasoning on in its content and closing again at the end), gemma-4's
+`<channel|>`, harmony's `<|end|>` followed by the final channel's header, each followed by the
+template's blank line - so the server's reply-side splitter reads it as the model's and the answer
+begins as content. A stream with a forced close pending
 leaves the speculative round for a plain step, as a constrained stream does: the round's drafts
 would run past the close. A budget on a turn that does not think, or on a vocab without the
 markers, has empty marks and acts on nothing.

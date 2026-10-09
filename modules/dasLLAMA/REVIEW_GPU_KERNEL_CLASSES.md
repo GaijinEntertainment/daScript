@@ -1,8 +1,7 @@
 # dasLLAMA GPU Kernel Class Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-doc: `ARCHITECTURE_GPU.md`. Planned work: `followup_metal.md` for Metal, `followup_vulkan.md`
-for Vulkan.
+doc: `ARCHITECTURE_GPU.md`. Planned work: `followup_metal.md`, `followup_vulkan.md`.
 
 Kernel twins are two classes with the same dispatch grid formula, the same mapping of threads to
 work and the same index and guard arithmetic, whose compiled bodies differ only in expressions,
@@ -19,7 +18,8 @@ number the other twin binds it at.**
 
 **Kernel twins are written once: as stamps of one `class template`, as classes deriving one base
 shell, or - where the value that selects the difference is a run-time count - as one class whose
-body reads the count from its kargs.** Two classes with bodies of their own that share a base shell's method are not twins.
+body reads the count from its kargs.** Two classes with bodies of their own that share a base
+shell's method are not twins.
 
 **A diff that adds a bit-for-bit compare, or changes text on the path one covers - two kernel
 bodies that compile to separate shader modules, which a cell under `modules/dasLLAMA/tests/`
@@ -42,9 +42,9 @@ not a read.
 
 **A diff that changes a class body, a class template, a base shell, or a helper a stamp's body
 splices diffs, for every stamp built from what it changed, that stamp's generated source against
-the pre-change tree's (the files `DASLLAMA_METAL_MSL_DUMP=<dir>` writes, or a disassembly diff of the
-`.spv` files `DASLLAMA_VK_SPV_DUMP=<dir>` writes), and its PR body names each stamp with the kind of
-difference read there - never the source text.**
+the pre-change tree's (the files `DASLLAMA_METAL_MSL_DUMP=<dir>` writes, or a disassembly diff of
+the `.spv` files `DASLLAMA_VK_SPV_DUMP=<dir>` writes), and its PR body names each stamp with the
+kind of difference read there - never the source text.**
 
 **The kind a PR body names for a changed stamp is one of these: no difference; a difference
 confined to whitespace, scoping braces, parentheses or identifier names; the expression text
@@ -52,11 +52,11 @@ unchanged, moved into a named helper the stamp now calls; the difference named w
 compile-time choice that carries it; or the behaviour change named with the test cell that pins
 it.**
 
-**A kernel-family stamp - one stamp of a class template, or one of the classes deriving from a
-base shell that carry a `[vk_dispatch]` / `[metal_dispatch]` - that binds a buffer to a
-binding whose fields its compiled body, inherited code included, never reads or writes is a
-defect: gate the field with `@template_gate` where a template constant decides it, and where the
-family shares one set layout on purpose, name that case in `ARCHITECTURE_GPU.md#gpu-backends`'s
+**A kernel-family stamp - any stamp of a class template or derivative of a base shell that a
+lens-generated builder dispatches - that binds a buffer to a binding whose fields its compiled
+body, inherited code included, never reads or writes is a defect: gate the field with
+`@template_gate` where a template constant decides it, and where the family shares one binding
+layout for the whole family on purpose, name that case in `ARCHITECTURE_GPU.md#gpu-backends`'s
 ledgered kernel-binding asymmetries.** A binding counts as used when the compiled body reads or
 writes any field declared on it - fields in the stamp or in the shell may share a binding,
 `@role = "alias"` marks such a view - including a field touched only under a run-time flag.
@@ -80,9 +80,13 @@ performs.** The Metal builder records no hazard for a `weight` field, so nothing
 kernel's read after the encode that refilled the buffer; neither lens refuses a `weight` field
 the body only reads.
 
-A new census key is a name `modules/dasLLAMA/tests/test_kernel_coverage.das` counts a compiled
-kernel under that the pre-change tree does not compile; a `[metal_kernel]` def, a `[vk_dispatch]`
-declaration or a new instance of a template carrying one, under `dasllama/`, adds one.
+A new census key is a kernel name that `modules/dasLLAMA/tests/test_kernel_coverage.das` counts,
+that an init of the engine's Metal or Vulkan driver compiles at run time, and that the pre-change
+tree does not compile. A crown is a kernel family a box's tune sidecar enables.
+
+**A diff that adds a `[metal_dispatch]` or `[vk_dispatch]` class under `dasllama/` that no init of
+the engine's Metal or Vulkan driver compiles is a defect - the class moves under `benchmarks/`,
+into the bench that compiles it.**
 
 **A diff that adds a new census key a census row dispatches names, in the PR body, that row and
 its nonzero count for the key, read from a census run on the key's backend.**
@@ -97,9 +101,15 @@ model, the quant or the load shape sits outside what the census runs - names it 
 list of `modules/dasLLAMA/tests/test_kernel_coverage.das`: `CENSUS_NEVER_DISPATCHED` for Metal,
 `VK_CENSUS_NEVER_DISPATCHED` for Vulkan.**
 
-**A blind-spot entry a diff adds carries the reason no census row reaches the key, the stocked
-model that dispatches it where one does - one the `stocked` suite runs on a box that has it - and
-the model-free test cell that dispatches it.**
+**A blind-spot entry a diff adds, and a blind-spot entry that names a new census key by exact name
+or covers it by prefix, carries for each key it covers the reason no census row reaches it, the
+stocked model that dispatches it where one does - one the `stocked` suite runs on a box that has
+it - and the model-free test cell that dispatches it.**
+
+**A diff that adds a new census key that serves only under a crown adds, in the same change, a
+census row that pins the crown (`pin_metal_tensor_crowns`), or a `CENSUS_NEVER_DISPATCHED` entry
+for the key with a `CENSUS_CROWN_CONDITIONAL` row (both in
+`modules/dasLLAMA/tests/test_kernel_coverage.das`) naming the crown.**
 
 **Weakening the blind-entry asserts in `modules/dasLLAMA/tests/test_kernel_coverage.das` - that
 an entry matches a compiled census key, and that it matches no dispatched one - is a defect.**

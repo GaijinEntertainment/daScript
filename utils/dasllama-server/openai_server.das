@@ -3611,12 +3611,12 @@ def private handle_chat_tail(srv : FrontLink; writer : WriterRef; js : JsonValue
     let tbv = js?["thinking_budget"]
     var think_budget = 0l
     if (tbv != null && !(tbv.value is _null)) {
-        if (!(tbv.value is _number) && !(tbv.value is _longint)) {
-            bad_request(srv, writer, "'thinking_budget' is a non-negative integer (0 = no budget)")
-            return
+        var tbi = json_of_kind("i", tbv)
+        let tb = tbi != null ? tbi.value as _longint : -1l
+        unsafe {
+            delete tbi
         }
-        let tb = tbv.value is _longint ? tbv.value as _longint : int64(tbv.value as _number)
-        if (tb < 0l || (tbv.value is _number && double(tb) != tbv.value as _number)) {
+        if (tb < 0l) {
             bad_request(srv, writer, "'thinking_budget' is a non-negative integer (0 = no budget)")
             return
         }

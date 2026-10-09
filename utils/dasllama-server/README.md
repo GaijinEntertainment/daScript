@@ -654,6 +654,15 @@ channel: there `enable_thinking: false` writes `Reasoning: low` in the harmony s
 analysis the model writes) where a thinking turn writes `medium`, and the OpenAI `reasoning_effort` field
 (`low`, `medium`, `high`) sets the line outright; other families render nothing for it.
 
+`thinking_budget` (a non-negative integer, default 0 = no budget; `null` is no budget, a negative or
+fractional value is a 400) caps the reasoning span: once the reply has spent that many tokens inside it,
+the server writes the family's own close for the model - Qwen3/3.5/3.6 and GLM get the recipe's
+"Considering the limited time..." sentence and `</think>`, gemma-4 its `<channel|>`, gpt-oss the
+`<|end|>` and the final channel's header - and the answer follows; `reasoning_content` ends at the
+forced close. The span's own close, written by the model before the budget, ends the count. A budget
+reached within the close's length of `max_tokens` is forced early, so the close always lands inside
+the cap. A family whose template carries no think markers ignores the field.
+
 A thinking reply's reasoning span comes back as **`reasoning_content`** (the
 DeepSeek/llama.cpp framing) with `content` clean of the family's markers: on the
 `chat.completion` message for buffered requests, and as `delta.reasoning_content` chunks -

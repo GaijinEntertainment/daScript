@@ -3901,6 +3901,9 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     }
     g_kq_k4_r2_crowned = metal_tensor_crowned("kq_mvb2_k4_r2")
     g_kq_half_env = g_env_metal.kq_half
+    if (!g_kq_half_env) {
+        to_log(LOG_WARNING, "dasLLAMA metal decode: DASLLAMA_METAL_KQ_HALF=0 - the K-quant rows sites take the f32 forms under every half-x crown (numerics move with the form)\n")
+    }
     for (f in KQ_ROWS_RACE_FORMATS) {
         g_kq_half_crowned[int(f.fmt)] = metal_tensor_crowned(kq_half_crown(f.fmt))
     }
@@ -4043,40 +4046,60 @@ typedef KqMvbBuilder4 = function<(enc : MetalComputeEncoder?; s0 : MetalBuffer?;
                                   q : MetalBuffer?; qoff : uint64; x : MetalBuffer?; y : MetalBuffer?; yoff : uint64; var ka : KqMvArgs; rows, gcols : int64) : void>
 
 //! a format's small-batch builders - the two-column, four-column tiled (gcols column groups) and eight-row staged
-//! forms, each in its f32 stamp and its half-x stamp (the f16 twin bound at the x slot); `d_first` binds the split d
-//! plane (the caller's doff) at slot 0, else the scale plane twice; k4's half route is its wide forms, its h stamps unset
+//! forms, each in its f32 stamp and its half-x stamp (the f16 twin bound at the x slot); k4's half route is its wide
+//! forms, its h stamps unset
 struct private KqMvbForms {
     b2, b2h, b8, b8h : KqMvbBuilder
     b4, b4h : KqMvbBuilder4
-    d_first : bool
 }
 
-let private KQ_MVB_FORMS : table<KqFmt; KqMvbForms> <- {
-    KqFmt.k4 => KqMvbForms(b2 = @@enc_kq_mvb2_k4_c, b4 = @@enc_kq_mvb4_k4_c, b8 = @@enc_kq_mvb8_k4_c, d_first = false),
+//! the builders by format; `[init]` fills it, since a serialized exe restores a global as data and a function value
+//! written by a declaration initializer arrives null
+var private KQ_MVB_FORMS : table<KqFmt; KqMvbForms>
+
+def private kq_mvb_forms_build : table<KqFmt; KqMvbForms> {
+    return <- {
+    KqFmt.k4 => KqMvbForms(b2 = @@enc_kq_mvb2_k4_c, b4 = @@enc_kq_mvb4_k4_c, b8 = @@enc_kq_mvb8_k4_c),
     KqFmt.k5 => KqMvbForms(b2 = @@enc_kq_mvb2_k5_c, b2h = @@enc_kq_mvb2h_k5_c, b4 = @@enc_kq_mvb4_k5_c, b4h = @@enc_kq_mvb4h_k5_c,
-        b8 = @@enc_kq_mvb8_k5_c, b8h = @@enc_kq_mvb8h_k5_c, d_first = false),
+        b8 = @@enc_kq_mvb8_k5_c, b8h = @@enc_kq_mvb8h_k5_c),
     KqFmt.k6 => KqMvbForms(b2 = @@enc_kq_mvb2_k6_c, b2h = @@enc_kq_mvb2h_k6_c, b4 = @@enc_kq_mvb4_k6_c, b4h = @@enc_kq_mvb4h_k6_c,
-        b8 = @@enc_kq_mvb8_k6_c, b8h = @@enc_kq_mvb8h_k6_c, d_first = true),
+        b8 = @@enc_kq_mvb8_k6_c, b8h = @@enc_kq_mvb8h_k6_c),
     KqFmt.iq4xs => KqMvbForms(b2 = @@enc_kq_mvb2_iq4xs_c, b2h = @@enc_kq_mvb2h_iq4xs_c, b4 = @@enc_kq_mvb4_iq4xs_c, b4h = @@enc_kq_mvb4h_iq4xs_c,
-        b8 = @@enc_kq_mvb8_iq4xs_c, b8h = @@enc_kq_mvb8h_iq4xs_c, d_first = true),
+        b8 = @@enc_kq_mvb8_iq4xs_c, b8h = @@enc_kq_mvb8h_iq4xs_c),
     KqFmt.iq4nl => KqMvbForms(b2 = @@enc_kq_mvb2_iq4nl_c, b2h = @@enc_kq_mvb2h_iq4nl_c, b4 = @@enc_kq_mvb4_iq4nl_c, b4h = @@enc_kq_mvb4h_iq4nl_c,
-        b8 = @@enc_kq_mvb8_iq4nl_c, b8h = @@enc_kq_mvb8h_iq4nl_c, d_first = false),
+        b8 = @@enc_kq_mvb8_iq4nl_c, b8h = @@enc_kq_mvb8h_iq4nl_c),
     KqFmt.q40 => KqMvbForms(b2 = @@enc_kq_mvb2_q40_c, b2h = @@enc_kq_mvb2h_q40_c, b4 = @@enc_kq_mvb4_q40_c, b4h = @@enc_kq_mvb4h_q40_c,
-        b8 = @@enc_kq_mvb8_q40_c, b8h = @@enc_kq_mvb8h_q40_c, d_first = false),
+        b8 = @@enc_kq_mvb8_q40_c, b8h = @@enc_kq_mvb8h_q40_c),
     KqFmt.k3 => KqMvbForms(b2 = @@enc_kq_mvb2_k3_c, b2h = @@enc_kq_mvb2h_k3_c, b4 = @@enc_kq_mvb4_k3_c, b4h = @@enc_kq_mvb4h_k3_c,
-        b8 = @@enc_kq_mvb8_k3_c, b8h = @@enc_kq_mvb8h_k3_c, d_first = true),
+        b8 = @@enc_kq_mvb8_k3_c, b8h = @@enc_kq_mvb8h_k3_c),
     KqFmt.iq3s => KqMvbForms(b2 = @@enc_kq_mvb2_iq3s_c, b2h = @@enc_kq_mvb2h_iq3s_c, b4 = @@enc_kq_mvb4_iq3s_c, b4h = @@enc_kq_mvb4h_iq3s_c,
-        b8 = @@enc_kq_mvb8_iq3s_c, b8h = @@enc_kq_mvb8h_iq3s_c, d_first = true),
+        b8 = @@enc_kq_mvb8_iq3s_c, b8h = @@enc_kq_mvb8h_iq3s_c),
     KqFmt.iq3xxs => KqMvbForms(b2 = @@enc_kq_mvb2_iq3xxs_c, b2h = @@enc_kq_mvb2h_iq3xxs_c, b4 = @@enc_kq_mvb4_iq3xxs_c, b4h = @@enc_kq_mvb4h_iq3xxs_c,
-        b8 = @@enc_kq_mvb8_iq3xxs_c, b8h = @@enc_kq_mvb8h_iq3xxs_c, d_first = true),
+        b8 = @@enc_kq_mvb8_iq3xxs_c, b8h = @@enc_kq_mvb8h_iq3xxs_c),
     KqFmt.k2 => KqMvbForms(b2 = @@enc_kq_mvb2_k2_c, b2h = @@enc_kq_mvb2h_k2_c, b4 = @@enc_kq_mvb4_k2_c, b4h = @@enc_kq_mvb4h_k2_c,
-        b8 = @@enc_kq_mvb8_k2_c, b8h = @@enc_kq_mvb8h_k2_c, d_first = true),
+        b8 = @@enc_kq_mvb8_k2_c, b8h = @@enc_kq_mvb8h_k2_c),
     KqFmt.iq2s => KqMvbForms(b2 = @@enc_kq_mvb2_iq2s_c, b2h = @@enc_kq_mvb2h_iq2s_c, b4 = @@enc_kq_mvb4_iq2s_c, b4h = @@enc_kq_mvb4h_iq2s_c,
-        b8 = @@enc_kq_mvb8_iq2s_c, b8h = @@enc_kq_mvb8h_iq2s_c, d_first = true),
+        b8 = @@enc_kq_mvb8_iq2s_c, b8h = @@enc_kq_mvb8h_iq2s_c),
     KqFmt.iq2xs => KqMvbForms(b2 = @@enc_kq_mvb2_iq2xs_c, b2h = @@enc_kq_mvb2h_iq2xs_c, b4 = @@enc_kq_mvb4_iq2xs_c, b4h = @@enc_kq_mvb4h_iq2xs_c,
-        b8 = @@enc_kq_mvb8_iq2xs_c, b8h = @@enc_kq_mvb8h_iq2xs_c, d_first = true),
+        b8 = @@enc_kq_mvb8_iq2xs_c, b8h = @@enc_kq_mvb8h_iq2xs_c),
     KqFmt.iq2xxs => KqMvbForms(b2 = @@enc_kq_mvb2_iq2xxs_c, b2h = @@enc_kq_mvb2h_iq2xxs_c, b4 = @@enc_kq_mvb4_iq2xxs_c, b4h = @@enc_kq_mvb4h_iq2xxs_c,
-        b8 = @@enc_kq_mvb8_iq2xxs_c, b8h = @@enc_kq_mvb8h_iq2xxs_c, d_first = true)
+        b8 = @@enc_kq_mvb8_iq2xxs_c, b8h = @@enc_kq_mvb8h_iq2xxs_c)
+    }
+}
+
+[init]
+def private kq_mvb_forms_boot {
+    delete KQ_MVB_FORMS
+    KQ_MVB_FORMS <- kq_mvb_forms_build()
+}
+
+//! the small-batch forms table carries a builder for every format that has them and a null for k4's half stamps - the
+//! boot restore's witness, so a serialized exe that arrived with the table empty is seen before its first dispatch
+def kq_mvb_forms_ready : bool {
+    let forms = unsafe(KQ_MVB_FORMS?[KqFmt.k6])
+    let k4 = unsafe(KQ_MVB_FORMS?[KqFmt.k4])
+    return (forms != null && forms.b2 != null && forms.b2h != null && forms.b8h != null && forms.b4 != null
+        && k4 != null && k4.b2h == null)
 }
 
 //! a format's small-batch route at two to eight rows: the eight-row form past four rows where the box crowned
@@ -4089,7 +4112,7 @@ def enc_kq_mvb(enc : MetalComputeEncoder?; fmt : KqFmt; bq : MetalBuffer?; qoff 
     let forms = unsafe(KQ_MVB_FORMS?[fmt])
     assert(forms != null, "a format with no small-batch forms")
     assert(!half || forms.b2h != null, "a format with no half-x small-batch stamps (k4's half route is its wide forms)")
-    let s0off = forms.d_first ? doff : soff
+    let s0off = kq_scale_d_tail(fmt) != 0l ? doff : soff   //! a split-scale plane binds its d tail (the caller's doff) at slot 0, a compact one its scale plane twice
     if (nlive >= 5l && kq_b8_on()) {
         invoke(half ? forms.b8h : forms.b8, enc, bs, s0off, bs, soff, bq, qoff, bx, by, yoff, ka, rows)
     } elif (nlive == 2l) {
@@ -4150,9 +4173,9 @@ def enc_site_gemv(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; woff, rows
     }
 }
 
-var private g_kq_rows_crowned : bool[16]
+var private g_kq_rows_crowned : bool[KQ_FMT_COUNT]
 var private g_kq_k4_r2_crowned : bool
-var private g_kq_half_crowned : bool[16]   //! per format: the box crowned its half-x forms (`kq_half_crown(fmt)`)
+var private g_kq_half_crowned : bool[KQ_FMT_COUNT]   //! per format: the box crowned its half-x forms (`kq_half_crown(fmt)`)
 var private g_kq_half_env = true           //! `DASLLAMA_METAL_KQ_HALF` and its setter - 0 keeps the f32 forms under every crown (the A/B rail)
 
 let KQ_HALF_CROWN_PREFIX = "kq_rows_half_"
@@ -4162,6 +4185,9 @@ def kq_half_crown(fmt : KqFmt) : string => "{KQ_HALF_CROWN_PREFIX}{fmt}"
 
 //! the half-x forms serve this format's rows sites on the box: its crown is minted and the rail is on
 def metal_kq_half_on(fmt : KqFmt) : bool => g_kq_half_env && g_kq_half_crowned[int(fmt)]
+
+//! the rows verdict the process holds for a format: its `kq_rows_<fmt>` crown, as the sidecar or the race left it
+def metal_kq_rows_crowned(fmt : KqFmt) : bool => g_kq_rows_crowned[int(fmt)]
 
 //! some format's half-x forms are on - the row producers store the f16 twin beside x
 def metal_kq_half_any : bool {
@@ -4174,8 +4200,13 @@ def metal_kq_half_any : bool {
 
 //! A/B seat: the half-x forms under their crowns vs the f32 forms - `DASLLAMA_METAL_KQ_HALF`'s setter twin. Default on.
 def public set_metal_kq_half(v : bool) {
+    if (v != g_kq_half_env) {
+        to_log(LOG_WARNING, "dasLLAMA metal decode: set_metal_kq_half({v}) - the K-quant rows sites take the {v ? "half-x forms under their crowns" : "f32 forms under every half-x crown"} (numerics move with the form)\n")
+    }
     g_kq_half_env = v
 }
+
+def public get_metal_kq_half : bool => g_kq_half_env
 
 //! B >= 9 over a panel padded to the mul_mm's 32-row tile takes the kq mul_mm twin; an unpadded
 //! nine-row panel (the verify's) rides the eight-row form plus a single pass per row past eight;
@@ -5022,9 +5053,7 @@ def metal_tensor_race_decode : array<MetalTensorRaceResult> {
         results |> emplace(form)
         for (f in KQ_ROWS_RACE_FORMATS) {
             var rr = race_kq_rows(pq, f.fmt, f.qu, f.sform)
-            if (f.fmt == KqFmt.k4) {   //! the half race's incumbent is the route the two k4 verdicts above leave
-                g_kq_rows_crowned[int(KqFmt.k4)] = rr.winner == "tensor"
-            }
+            g_kq_rows_crowned[int(f.fmt)] = rr.winner == "tensor"   //! every format's half race times against the rows route this verdict leaves
             results |> emplace(rr)
         }
         for (f in KQ_ROWS_RACE_FORMATS) {
@@ -7507,6 +7536,7 @@ class template MetalKqXT : MetalKqLaneMapsT {
     @ssbo @binding = 3 @role = "read" @template_gate = "!XHALF" x : array<float4>
     @ssbo @binding = 3 @role = "read" @template_gate = XHALF xh : array<half4>
     @template_constant XHALF : bool = false
+    @template_constant KQ_SB : uint = 256u   //! the superblock width: a kernel body reads no module constant, so the family's one home for it is here
 
     def x4_at(i : uint) : float4 {
         static_if (XHALF) {
@@ -7541,9 +7571,18 @@ class template MetalKqMvShellT : MetalKqXT {
             }
             let xi = rowb * nb4 + cx4
             var acc = 0.0
-            for [unroll_full] (u in range(8)) {
-                let v = x4_at(xi + uint(u))
-                acc += v.x * w[u].x + v.y * w[u].y + v.z * w[u].z + v.w * w[u].w
+            static_if (XHALF) {
+                let xp = unsafe(addr(xh[xi]))
+                for [unroll_full] (u in range(8)) {
+                    let v = float4(unsafe(xp[u]))
+                    acc += v.x * w[u].x + v.y * w[u].y + v.z * w[u].z + v.w * w[u].w
+                }
+            } else {
+                let xp = unsafe(addr(x[xi]))
+                for [unroll_full] (u in range(8)) {
+                    let v = unsafe(xp[u])
+                    acc += v.x * w[u].x + v.y * w[u].y + v.z * w[u].z + v.w * w[u].w
+                }
             }
             sumf[b] += acc
         }
@@ -7557,9 +7596,18 @@ class template MetalKqMvShellT : MetalKqXT {
             }
             let xi = rowb * nb4 + cx4
             var acc = 0.0
-            for [unroll_full] (u in range(4)) {
-                let v = x4_at(xi + uint(u))
-                acc += v.x * w[4 * u] + v.y * w[4 * u + 1] + v.z * w[4 * u + 2] + v.w * w[4 * u + 3]
+            static_if (XHALF) {
+                let xp = unsafe(addr(xh[xi]))
+                for [unroll_full] (u in range(4)) {
+                    let v = float4(unsafe(xp[u]))
+                    acc += v.x * w[4 * u] + v.y * w[4 * u + 1] + v.z * w[4 * u + 2] + v.w * w[4 * u + 3]
+                }
+            } else {
+                let xp = unsafe(addr(x[xi]))
+                for [unroll_full] (u in range(4)) {
+                    let v = unsafe(xp[u])
+                    acc += v.x * w[4 * u] + v.y * w[4 * u + 1] + v.z * w[4 * u + 2] + v.w * w[4 * u + 3]
+                }
             }
             sumf[b] += acc
         }
@@ -7647,14 +7695,14 @@ class template MetalKqMvK2T : MetalKqMvShellT {
     }
 }
 
-[metal_dispatch(name = "enc_kq_mvb2_k2_c", pso = "g_pso_kq_mvb2_k2", tg = 64, grid = "rows/8", params = "rows : int64")]
+[metal_dispatch(name = "enc_kq_mvb2_k2_c", pso = "g_pso_kq_mvb2_k2", tg = 64, grid = "rows/8", params = "rows : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB2K2 : MetalKqMvK2T {
     override NR = 2
     override NRU = 2u
     override TILED = false
 }
 
-[metal_dispatch(name = "enc_kq_mvb4_k2_c", pso = "g_pso_kq_mvb4_k2", tg = 64, grid = "rows/8, gcols", params = "rows : int64, gcols : int64")]
+[metal_dispatch(name = "enc_kq_mvb4_k2_c", pso = "g_pso_kq_mvb4_k2", tg = 64, grid = "rows/8, gcols", params = "rows : int64, gcols : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB4K2 : MetalKqMvK2T {
     override NR = 4
     override NRU = 4u
@@ -7896,14 +7944,14 @@ class template MetalKqMvK3T : MetalKqMvShellT {
     }
 }
 
-[metal_dispatch(name = "enc_kq_mvb2_k3_c", pso = "g_pso_kq_mvb2_k3", tg = 64, grid = "rows/8", params = "rows : int64")]
+[metal_dispatch(name = "enc_kq_mvb2_k3_c", pso = "g_pso_kq_mvb2_k3", tg = 64, grid = "rows/8", params = "rows : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB2K3 : MetalKqMvK3T {
     override NR = 2
     override NRU = 2u
     override TILED = false
 }
 
-[metal_dispatch(name = "enc_kq_mvb4_k3_c", pso = "g_pso_kq_mvb4_k3", tg = 64, grid = "rows/8, gcols", params = "rows : int64, gcols : int64")]
+[metal_dispatch(name = "enc_kq_mvb4_k3_c", pso = "g_pso_kq_mvb4_k3", tg = 64, grid = "rows/8, gcols", params = "rows : int64, gcols : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB4K3 : MetalKqMvK3T {
     override NR = 4
     override NRU = 4u
@@ -8687,14 +8735,14 @@ class template MetalKqMvIq3xxsT : MetalKqMvShellT {
     }
 }
 
-[metal_dispatch(name = "enc_kq_mvb2_iq3xxs_c", pso = "g_pso_kq_mvb2_iq3xxs", tg = 64, grid = "rows/8", params = "rows : int64")]
+[metal_dispatch(name = "enc_kq_mvb2_iq3xxs_c", pso = "g_pso_kq_mvb2_iq3xxs", tg = 64, grid = "rows/8", params = "rows : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB2Iq3xxs : MetalKqMvIq3xxsT {
     override NR = 2
     override NRU = 2u
     override TILED = false
 }
 
-[metal_dispatch(name = "enc_kq_mvb4_iq3xxs_c", pso = "g_pso_kq_mvb4_iq3xxs", tg = 64, grid = "rows/8, gcols", params = "rows : int64, gcols : int64")]
+[metal_dispatch(name = "enc_kq_mvb4_iq3xxs_c", pso = "g_pso_kq_mvb4_iq3xxs", tg = 64, grid = "rows/8, gcols", params = "rows : int64, gcols : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB4Iq3xxs : MetalKqMvIq3xxsT {
     override NR = 4
     override NRU = 4u
@@ -8768,14 +8816,14 @@ class template MetalKqMvIq3sT : MetalKqMvShellT {
     }
 }
 
-[metal_dispatch(name = "enc_kq_mvb2_iq3s_c", pso = "g_pso_kq_mvb2_iq3s", tg = 64, grid = "rows/8", params = "rows : int64")]
+[metal_dispatch(name = "enc_kq_mvb2_iq3s_c", pso = "g_pso_kq_mvb2_iq3s", tg = 64, grid = "rows/8", params = "rows : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB2Iq3s : MetalKqMvIq3sT {
     override NR = 2
     override NRU = 2u
     override TILED = false
 }
 
-[metal_dispatch(name = "enc_kq_mvb4_iq3s_c", pso = "g_pso_kq_mvb4_iq3s", tg = 64, grid = "rows/8, gcols", params = "rows : int64, gcols : int64")]
+[metal_dispatch(name = "enc_kq_mvb4_iq3s_c", pso = "g_pso_kq_mvb4_iq3s", tg = 64, grid = "rows/8, gcols", params = "rows : int64, gcols : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB4Iq3s : MetalKqMvIq3sT {
     override NR = 4
     override NRU = 4u
@@ -8854,14 +8902,14 @@ class template MetalKqMvIq2sT : MetalKqMvShellT {
     }
 }
 
-[metal_dispatch(name = "enc_kq_mvb2_iq2s_c", pso = "g_pso_kq_mvb2_iq2s", tg = 64, grid = "rows/8", params = "rows : int64")]
+[metal_dispatch(name = "enc_kq_mvb2_iq2s_c", pso = "g_pso_kq_mvb2_iq2s", tg = 64, grid = "rows/8", params = "rows : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB2Iq2s : MetalKqMvIq2sT {
     override NR = 2
     override NRU = 2u
     override TILED = false
 }
 
-[metal_dispatch(name = "enc_kq_mvb4_iq2s_c", pso = "g_pso_kq_mvb4_iq2s", tg = 64, grid = "rows/8, gcols", params = "rows : int64, gcols : int64")]
+[metal_dispatch(name = "enc_kq_mvb4_iq2s_c", pso = "g_pso_kq_mvb4_iq2s", tg = 64, grid = "rows/8, gcols", params = "rows : int64, gcols : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB4Iq2s : MetalKqMvIq2sT {
     override NR = 4
     override NRU = 4u
@@ -8944,14 +8992,14 @@ class template MetalKqMvIq2xsT : MetalKqMvShellT {
     }
 }
 
-[metal_dispatch(name = "enc_kq_mvb2_iq2xs_c", pso = "g_pso_kq_mvb2_iq2xs", tg = 64, grid = "rows/8", params = "rows : int64")]
+[metal_dispatch(name = "enc_kq_mvb2_iq2xs_c", pso = "g_pso_kq_mvb2_iq2xs", tg = 64, grid = "rows/8", params = "rows : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB2Iq2xs : MetalKqMvIq2xsT {
     override NR = 2
     override NRU = 2u
     override TILED = false
 }
 
-[metal_dispatch(name = "enc_kq_mvb4_iq2xs_c", pso = "g_pso_kq_mvb4_iq2xs", tg = 64, grid = "rows/8, gcols", params = "rows : int64, gcols : int64")]
+[metal_dispatch(name = "enc_kq_mvb4_iq2xs_c", pso = "g_pso_kq_mvb4_iq2xs", tg = 64, grid = "rows/8, gcols", params = "rows : int64, gcols : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB4Iq2xs : MetalKqMvIq2xsT {
     override NR = 4
     override NRU = 4u
@@ -9031,14 +9079,14 @@ class template MetalKqMvIq2xxsT : MetalKqMvShellT {
     }
 }
 
-[metal_dispatch(name = "enc_kq_mvb2_iq2xxs_c", pso = "g_pso_kq_mvb2_iq2xxs", tg = 64, grid = "rows/8", params = "rows : int64")]
+[metal_dispatch(name = "enc_kq_mvb2_iq2xxs_c", pso = "g_pso_kq_mvb2_iq2xxs", tg = 64, grid = "rows/8", params = "rows : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB2Iq2xxs : MetalKqMvIq2xxsT {
     override NR = 2
     override NRU = 2u
     override TILED = false
 }
 
-[metal_dispatch(name = "enc_kq_mvb4_iq2xxs_c", pso = "g_pso_kq_mvb4_iq2xxs", tg = 64, grid = "rows/8, gcols", params = "rows : int64, gcols : int64")]
+[metal_dispatch(name = "enc_kq_mvb4_iq2xxs_c", pso = "g_pso_kq_mvb4_iq2xxs", tg = 64, grid = "rows/8, gcols", params = "rows : int64, gcols : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB4Iq2xxs : MetalKqMvIq2xxsT {
     override NR = 4
     override NRU = 4u
@@ -9122,21 +9170,21 @@ class template MetalKqMvIq4T : MetalKqMvShellT {
     }
 }
 
-[metal_dispatch(name = "enc_kq_mvb2_iq4xs_c", pso = "g_pso_kq_mvb2_iq4xs", tg = 64, grid = "rows/8", params = "rows : int64")]
+[metal_dispatch(name = "enc_kq_mvb2_iq4xs_c", pso = "g_pso_kq_mvb2_iq4xs", tg = 64, grid = "rows/8", params = "rows : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB2Iq4xs : MetalKqMvIq4T {
     override NR = 2
     override NRU = 2u
     override TILED = false
 }
 
-[metal_dispatch(name = "enc_kq_mvb4_iq4xs_c", pso = "g_pso_kq_mvb4_iq4xs", tg = 64, grid = "rows/8, gcols", params = "rows : int64, gcols : int64")]
+[metal_dispatch(name = "enc_kq_mvb4_iq4xs_c", pso = "g_pso_kq_mvb4_iq4xs", tg = 64, grid = "rows/8, gcols", params = "rows : int64, gcols : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB4Iq4xs : MetalKqMvIq4T {
     override NR = 4
     override NRU = 4u
     override TILED = true
 }
 
-[metal_dispatch(name = "enc_kq_mvb2_iq4nl_c", pso = "g_pso_kq_mvb2_iq4nl", tg = 64, grid = "rows/8", params = "rows : int64")]
+[metal_dispatch(name = "enc_kq_mvb2_iq4nl_c", pso = "g_pso_kq_mvb2_iq4nl", tg = 64, grid = "rows/8", params = "rows : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB2Iq4nl : MetalKqMvIq4T {
     override NR = 2
     override NRU = 2u
@@ -9144,7 +9192,7 @@ class MetalKqMvB2Iq4nl : MetalKqMvIq4T {
     override IQ4NL = true
 }
 
-[metal_dispatch(name = "enc_kq_mvb4_iq4nl_c", pso = "g_pso_kq_mvb4_iq4nl", tg = 64, grid = "rows/8, gcols", params = "rows : int64, gcols : int64")]
+[metal_dispatch(name = "enc_kq_mvb4_iq4nl_c", pso = "g_pso_kq_mvb4_iq4nl", tg = 64, grid = "rows/8, gcols", params = "rows : int64, gcols : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB4Iq4nl : MetalKqMvIq4T {
     override NR = 4
     override NRU = 4u
@@ -9152,7 +9200,7 @@ class MetalKqMvB4Iq4nl : MetalKqMvIq4T {
     override IQ4NL = true
 }
 
-[metal_dispatch(name = "enc_kq_mvb2_q40_c", pso = "g_pso_kq_mvb2_q40", tg = 64, grid = "rows/8", params = "rows : int64")]
+[metal_dispatch(name = "enc_kq_mvb2_q40_c", pso = "g_pso_kq_mvb2_q40", tg = 64, grid = "rows/8", params = "rows : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB2Q40 : MetalKqMvIq4T {
     override NR = 2
     override NRU = 2u
@@ -9161,7 +9209,7 @@ class MetalKqMvB2Q40 : MetalKqMvIq4T {
     override Q40 = true
 }
 
-[metal_dispatch(name = "enc_kq_mvb4_q40_c", pso = "g_pso_kq_mvb4_q40", tg = 64, grid = "rows/8, gcols", params = "rows : int64, gcols : int64")]
+[metal_dispatch(name = "enc_kq_mvb4_q40_c", pso = "g_pso_kq_mvb4_q40", tg = 64, grid = "rows/8, gcols", params = "rows : int64, gcols : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB4Q40 : MetalKqMvIq4T {
     override NR = 4
     override NRU = 4u
@@ -9212,16 +9260,16 @@ class template MetalKqMvB8Iq4T : MetalKqMvB8ShellT {
     }
 }
 
-[metal_dispatch(name = "enc_kq_mvb8_iq4xs_c", pso = "g_pso_kq_mvb8_iq4xs", tgmem = "MetalKqMvB8Iq4xs_metal_kq_mvb8_iq4_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64")]
+[metal_dispatch(name = "enc_kq_mvb8_iq4xs_c", pso = "g_pso_kq_mvb8_iq4xs", tgmem = "MetalKqMvB8Iq4xs_metal_kq_mvb8_iq4_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB8Iq4xs : MetalKqMvB8Iq4T {
 }
 
-[metal_dispatch(name = "enc_kq_mvb8_iq4nl_c", pso = "g_pso_kq_mvb8_iq4nl", tgmem = "MetalKqMvB8Iq4nl_metal_kq_mvb8_iq4_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64")]
+[metal_dispatch(name = "enc_kq_mvb8_iq4nl_c", pso = "g_pso_kq_mvb8_iq4nl", tgmem = "MetalKqMvB8Iq4nl_metal_kq_mvb8_iq4_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB8Iq4nl : MetalKqMvB8Iq4T {
     override IQ4NL = true
 }
 
-[metal_dispatch(name = "enc_kq_mvb8_q40_c", pso = "g_pso_kq_mvb8_q40", tgmem = "MetalKqMvB8Q40_metal_kq_mvb8_iq4_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64")]
+[metal_dispatch(name = "enc_kq_mvb8_q40_c", pso = "g_pso_kq_mvb8_q40", tgmem = "MetalKqMvB8Q40_metal_kq_mvb8_iq4_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB8Q40 : MetalKqMvB8Iq4T {
     override IQ4NL = true
     override Q40 = true
@@ -9271,7 +9319,7 @@ class template MetalKqMvK4T : MetalKqMvShellT {
     }
 }
 
-[metal_dispatch(name = "enc_kq_mvb2_k4_c", pso = "g_pso_kq_mvb2_k4", tg = 64, grid = "rows/8", params = "rows : int64")]
+[metal_dispatch(name = "enc_kq_mvb2_k4_c", pso = "g_pso_kq_mvb2_k4", tg = 64, grid = "rows/8", params = "rows : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB2K4 : MetalKqMvK4T {
     override NR = 2
     override NRU = 2u
@@ -9397,9 +9445,10 @@ class template MetalKqMvWK4T : MetalKqXT {
         let ml2 = dm * float(scs.w & 255u)
         let dl3 = dd * float(scs.z >> 8u)
         let ml3 = dm * float(scs.w >> 8u)
+        let qp = unsafe(addr(kqu[qb]))
         for [unroll_full] (u in range(2)) {
-            let q1 = kqu[qb + uint(u)]
-            let q2 = kqu[qb + 16u + uint(u)]
+            let q1 = unsafe(qp[u])
+            let q2 = unsafe(qp[16 + u])
             for [unroll_full] (e in range(4)) {
                 let b1 = (q1 >> (8u * uint(e))) & 255u
                 let b2 = (q2 >> (8u * uint(e))) & 255u
@@ -9418,7 +9467,7 @@ class template MetalKqMvWK4T : MetalKqXT {
         let it = lane % 8u
         let iq = it / 4u
         let ir = it % 4u
-        let nb = ka.ndim / 256u
+        let nb = ka.ndim / KQ_SB
         let nb4 = ka.ndim / 4u
         let first_row = (gl_WorkGroupID.x * 2u + gl_SubgroupID) * 2u
         let dd1 = ka.ddim - 1u
@@ -9430,17 +9479,28 @@ class template MetalKqMvWK4T : MetalKqXT {
             var wa, wb : float[32]
             decode32(rowA * nb + ib, iq, ir, wa)
             decode32(rowB * nb + ib, iq, ir, wb)
-            let xb4 = (ib * 256u + iq * 64u + ir * 8u) / 4u
+            let xb4 = (ib * KQ_SB + iq * 64u + ir * 8u) / 4u
             for [unroll_full] (b in range(NCOL)) {
                 var acca = 0.0
                 var accb = 0.0
                 for [unroll_full] (g in range(4)) {
                     let xi = uint(b) * nb4 + xb4 + (g < 2 ? uint(g) * 8u : 16u + uint(g) * 8u)
-                    for [unroll_full] (u in range(2)) {
-                        let v = x4_at(xi + uint(u))
-                        let k = 8 * g + 4 * u
-                        acca += v.x * wa[k] + v.y * wa[k + 1] + v.z * wa[k + 2] + v.w * wa[k + 3]
-                        accb += v.x * wb[k] + v.y * wb[k + 1] + v.z * wb[k + 2] + v.w * wb[k + 3]
+                    static_if (XHALF) {
+                        let xp = unsafe(addr(xh[xi]))
+                        for [unroll_full] (u in range(2)) {
+                            let v = float4(unsafe(xp[u]))
+                            let k = 8 * g + 4 * u
+                            acca += v.x * wa[k] + v.y * wa[k + 1] + v.z * wa[k + 2] + v.w * wa[k + 3]
+                            accb += v.x * wb[k] + v.y * wb[k + 1] + v.z * wb[k + 2] + v.w * wb[k + 3]
+                        }
+                    } else {
+                        let xp = unsafe(addr(x[xi]))
+                        for [unroll_full] (u in range(2)) {
+                            let v = unsafe(xp[u])
+                            let k = 8 * g + 4 * u
+                            acca += v.x * wa[k] + v.y * wa[k + 1] + v.z * wa[k + 2] + v.w * wa[k + 3]
+                            accb += v.x * wb[k] + v.y * wb[k + 1] + v.z * wb[k + 2] + v.w * wb[k + 3]
+                        }
                     }
                 }
                 sumf[2 * b] += acca
@@ -9458,7 +9518,7 @@ class template MetalKqMvWK4T : MetalKqXT {
     }
 }
 
-[metal_dispatch(name = "enc_kq_mvw2_k4_c", pso = "g_pso_kq_mvw2_k4", tg = 64, grid = "rows/4", params = "rows : int64", requires = "ka.ndim % 256")]
+//! the f32 wide k4 stamps are the race bench's arms alone (`bench_metal_kq_race.das`): production's wide route is the half one
 class MetalKqMvW2K4 : MetalKqMvWK4T {
     override NCOL = 2
 }
@@ -9481,17 +9541,15 @@ class MetalKqMvW8K4H : MetalKqMvWK4T {
     override XHALF = true
 }
 
-[metal_dispatch(name = "enc_kq_mvw4_k4_c", pso = "g_pso_kq_mvw4_k4", tg = 64, grid = "rows/4", params = "rows : int64", requires = "ka.ndim % 256")]
 class MetalKqMvW4K4 : MetalKqMvWK4T {
     override NCOL = 4
 }
 
-[metal_dispatch(name = "enc_kq_mvw8_k4_c", pso = "g_pso_kq_mvw8_k4", tg = 64, grid = "rows/4", params = "rows : int64", requires = "ka.ndim % 256")]
 class MetalKqMvW8K4 : MetalKqMvWK4T {
     override NCOL = 8
 }
 
-[metal_dispatch(name = "enc_kq_mvb4_k4_c", pso = "g_pso_kq_mvb4_k4", tg = 64, grid = "rows/8, gcols", params = "rows : int64, gcols : int64")]
+[metal_dispatch(name = "enc_kq_mvb4_k4_c", pso = "g_pso_kq_mvb4_k4", tg = 64, grid = "rows/8, gcols", params = "rows : int64, gcols : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB4K4 : MetalKqMvK4T {
     override NR = 4
     override NRU = 4u
@@ -9543,14 +9601,14 @@ class template MetalKqMvK6T : MetalKqMvShellT {
     }
 }
 
-[metal_dispatch(name = "enc_kq_mvb2_k6_c", pso = "g_pso_kq_mvb2_k6", tg = 64, grid = "rows/8", params = "rows : int64")]
+[metal_dispatch(name = "enc_kq_mvb2_k6_c", pso = "g_pso_kq_mvb2_k6", tg = 64, grid = "rows/8", params = "rows : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB2K6 : MetalKqMvK6T {
     override NR = 2
     override NRU = 2u
     override TILED = false
 }
 
-[metal_dispatch(name = "enc_kq_mvb4_k6_c", pso = "g_pso_kq_mvb4_k6", tg = 64, grid = "rows/8, gcols", params = "rows : int64, gcols : int64")]
+[metal_dispatch(name = "enc_kq_mvb4_k6_c", pso = "g_pso_kq_mvb4_k6", tg = 64, grid = "rows/8, gcols", params = "rows : int64, gcols : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB4K6 : MetalKqMvK6T {
     override NR = 4
     override NRU = 4u
@@ -9613,14 +9671,14 @@ class template MetalKqMvK5T : MetalKqMvShellT {
     }
 }
 
-[metal_dispatch(name = "enc_kq_mvb2_k5_c", pso = "g_pso_kq_mvb2_k5", tg = 64, grid = "rows/8", params = "rows : int64")]
+[metal_dispatch(name = "enc_kq_mvb2_k5_c", pso = "g_pso_kq_mvb2_k5", tg = 64, grid = "rows/8", params = "rows : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB2K5 : MetalKqMvK5T {
     override NR = 2
     override NRU = 2u
     override TILED = true
 }
 
-[metal_dispatch(name = "enc_kq_mvb4_k5_c", pso = "g_pso_kq_mvb4_k5", tg = 64, grid = "rows/8, gcols", params = "rows : int64, gcols : int64")]
+[metal_dispatch(name = "enc_kq_mvb4_k5_c", pso = "g_pso_kq_mvb4_k5", tg = 64, grid = "rows/8, gcols", params = "rows : int64, gcols : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB4K5 : MetalKqMvK5T {
     override NR = 4
     override NRU = 4u
@@ -9697,13 +9755,13 @@ class template MetalKqMvB8K45T : MetalKqMvB8ShellT {
     }
 }
 
-[metal_dispatch(name = "enc_kq_mvb8_k4_c", pso = "g_pso_kq_mvb8_k4", tgmem = "MetalKqMvB8K4_metal_kq_mvb8_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64")]
+[metal_dispatch(name = "enc_kq_mvb8_k4_c", pso = "g_pso_kq_mvb8_k4", tgmem = "MetalKqMvB8K4_metal_kq_mvb8_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB8K4 : MetalKqMvB8K45T {
     override SB_UINTS = 32u
     override QH = false
 }
 
-[metal_dispatch(name = "enc_kq_mvb8_k5_c", pso = "g_pso_kq_mvb8_k5", tgmem = "MetalKqMvB8K5_metal_kq_mvb8_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64")]
+[metal_dispatch(name = "enc_kq_mvb8_k5_c", pso = "g_pso_kq_mvb8_k5", tgmem = "MetalKqMvB8K5_metal_kq_mvb8_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB8K5 : MetalKqMvB8K45T {
     override SB_UINTS = 40u
     override QH = true
@@ -9756,39 +9814,39 @@ class template MetalKqMvB8K6T : MetalKqMvB8ShellT {
 // The small-batch forms' instances past the templates above: the eight-row f32 stamps of the hand-written B8
 // templates, and every format's half-x stamps (`override XHALF = true` on its f32 form's class). k4's half
 // route is its wide forms (MetalKqMvW*K4H), so it has none here.
-[metal_dispatch(name = "enc_kq_mvb8_k2_c", pso = "g_pso_kq_mvb8_k2", tgmem = "MetalKqMvB8K2_metal_kq_mvb8_k2_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64")]
+[metal_dispatch(name = "enc_kq_mvb8_k2_c", pso = "g_pso_kq_mvb8_k2", tgmem = "MetalKqMvB8K2_metal_kq_mvb8_k2_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB8K2 : MetalKqMvB8K2T {
 }
 
-[metal_dispatch(name = "enc_kq_mvb8_k3_c", pso = "g_pso_kq_mvb8_k3", tgmem = "MetalKqMvB8K3_metal_kq_mvb8_k3_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64")]
+[metal_dispatch(name = "enc_kq_mvb8_k3_c", pso = "g_pso_kq_mvb8_k3", tgmem = "MetalKqMvB8K3_metal_kq_mvb8_k3_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB8K3 : MetalKqMvB8K3T {
 }
 
-[metal_dispatch(name = "enc_kq_mvb8_iq3xxs_c", pso = "g_pso_kq_mvb8_iq3xxs", tgmem = "MetalKqMvB8Iq3xxs_metal_kq_mvb8_iq3xxs_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64")]
+[metal_dispatch(name = "enc_kq_mvb8_iq3xxs_c", pso = "g_pso_kq_mvb8_iq3xxs", tgmem = "MetalKqMvB8Iq3xxs_metal_kq_mvb8_iq3xxs_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB8Iq3xxs : MetalKqMvB8Iq3xxsT {
 }
 
-[metal_dispatch(name = "enc_kq_mvb8_iq3s_c", pso = "g_pso_kq_mvb8_iq3s", tgmem = "MetalKqMvB8Iq3s_metal_kq_mvb8_iq3s_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64")]
+[metal_dispatch(name = "enc_kq_mvb8_iq3s_c", pso = "g_pso_kq_mvb8_iq3s", tgmem = "MetalKqMvB8Iq3s_metal_kq_mvb8_iq3s_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB8Iq3s : MetalKqMvB8Iq3sT {
 }
 
-[metal_dispatch(name = "enc_kq_mvb8_iq2s_c", pso = "g_pso_kq_mvb8_iq2s", tgmem = "MetalKqMvB8Iq2s_metal_kq_mvb8_iq2s_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64")]
+[metal_dispatch(name = "enc_kq_mvb8_iq2s_c", pso = "g_pso_kq_mvb8_iq2s", tgmem = "MetalKqMvB8Iq2s_metal_kq_mvb8_iq2s_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB8Iq2s : MetalKqMvB8Iq2sT {
 }
 
-[metal_dispatch(name = "enc_kq_mvb8_iq2xs_c", pso = "g_pso_kq_mvb8_iq2xs", tgmem = "MetalKqMvB8Iq2xs_metal_kq_mvb8_iq2xs_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64")]
+[metal_dispatch(name = "enc_kq_mvb8_iq2xs_c", pso = "g_pso_kq_mvb8_iq2xs", tgmem = "MetalKqMvB8Iq2xs_metal_kq_mvb8_iq2xs_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB8Iq2xs : MetalKqMvB8Iq2xsT {
 }
 
-[metal_dispatch(name = "enc_kq_mvb8_iq2xxs_c", pso = "g_pso_kq_mvb8_iq2xxs", tgmem = "MetalKqMvB8Iq2xxs_metal_kq_mvb8_iq2xxs_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64")]
+[metal_dispatch(name = "enc_kq_mvb8_iq2xxs_c", pso = "g_pso_kq_mvb8_iq2xxs", tgmem = "MetalKqMvB8Iq2xxs_metal_kq_mvb8_iq2xxs_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB8Iq2xxs : MetalKqMvB8Iq2xxsT {
 }
 
-[metal_dispatch(name = "enc_kq_mvb8_k6_c", pso = "g_pso_kq_mvb8_k6", tgmem = "MetalKqMvB8K6_metal_kq_mvb8_k6_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64")]
+[metal_dispatch(name = "enc_kq_mvb8_k6_c", pso = "g_pso_kq_mvb8_k6", tgmem = "MetalKqMvB8K6_metal_kq_mvb8_k6_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB8K6 : MetalKqMvB8K6T {
 }
 
-[metal_dispatch(name = "enc_kq_mvb2h_k5_c", pso = "g_pso_kq_mvb2h_k5", tg = 64, grid = "rows/8", params = "rows : int64")]
+[metal_dispatch(name = "enc_kq_mvb2h_k5_c", pso = "g_pso_kq_mvb2h_k5", tg = 64, grid = "rows/8", params = "rows : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB2K5H : MetalKqMvK5T {
     override NR = 2
     override NRU = 2u
@@ -9796,7 +9854,7 @@ class MetalKqMvB2K5H : MetalKqMvK5T {
     override XHALF = true
 }
 
-[metal_dispatch(name = "enc_kq_mvb4h_k5_c", pso = "g_pso_kq_mvb4h_k5", tg = 64, grid = "rows/8, gcols", params = "rows : int64, gcols : int64")]
+[metal_dispatch(name = "enc_kq_mvb4h_k5_c", pso = "g_pso_kq_mvb4h_k5", tg = 64, grid = "rows/8, gcols", params = "rows : int64, gcols : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB4K5H : MetalKqMvK5T {
     override NR = 4
     override NRU = 4u
@@ -9804,14 +9862,14 @@ class MetalKqMvB4K5H : MetalKqMvK5T {
     override XHALF = true
 }
 
-[metal_dispatch(name = "enc_kq_mvb8h_k5_c", pso = "g_pso_kq_mvb8h_k5", tgmem = "MetalKqMvB8K5H_metal_kq_mvb8_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64")]
+[metal_dispatch(name = "enc_kq_mvb8h_k5_c", pso = "g_pso_kq_mvb8h_k5", tgmem = "MetalKqMvB8K5H_metal_kq_mvb8_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB8K5H : MetalKqMvB8K45T {
     override SB_UINTS = 40u
     override QH = true
     override XHALF = true
 }
 
-[metal_dispatch(name = "enc_kq_mvb2h_k6_c", pso = "g_pso_kq_mvb2h_k6", tg = 64, grid = "rows/8", params = "rows : int64")]
+[metal_dispatch(name = "enc_kq_mvb2h_k6_c", pso = "g_pso_kq_mvb2h_k6", tg = 64, grid = "rows/8", params = "rows : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB2K6H : MetalKqMvK6T {
     override NR = 2
     override NRU = 2u
@@ -9819,7 +9877,7 @@ class MetalKqMvB2K6H : MetalKqMvK6T {
     override XHALF = true
 }
 
-[metal_dispatch(name = "enc_kq_mvb4h_k6_c", pso = "g_pso_kq_mvb4h_k6", tg = 64, grid = "rows/8, gcols", params = "rows : int64, gcols : int64")]
+[metal_dispatch(name = "enc_kq_mvb4h_k6_c", pso = "g_pso_kq_mvb4h_k6", tg = 64, grid = "rows/8, gcols", params = "rows : int64, gcols : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB4K6H : MetalKqMvK6T {
     override NR = 4
     override NRU = 4u
@@ -9827,12 +9885,12 @@ class MetalKqMvB4K6H : MetalKqMvK6T {
     override XHALF = true
 }
 
-[metal_dispatch(name = "enc_kq_mvb8h_k6_c", pso = "g_pso_kq_mvb8h_k6", tgmem = "MetalKqMvB8K6H_metal_kq_mvb8_k6_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64")]
+[metal_dispatch(name = "enc_kq_mvb8h_k6_c", pso = "g_pso_kq_mvb8h_k6", tgmem = "MetalKqMvB8K6H_metal_kq_mvb8_k6_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB8K6H : MetalKqMvB8K6T {
     override XHALF = true
 }
 
-[metal_dispatch(name = "enc_kq_mvb2h_iq4xs_c", pso = "g_pso_kq_mvb2h_iq4xs", tg = 64, grid = "rows/8", params = "rows : int64")]
+[metal_dispatch(name = "enc_kq_mvb2h_iq4xs_c", pso = "g_pso_kq_mvb2h_iq4xs", tg = 64, grid = "rows/8", params = "rows : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB2Iq4xsH : MetalKqMvIq4T {
     override NR = 2
     override NRU = 2u
@@ -9840,7 +9898,7 @@ class MetalKqMvB2Iq4xsH : MetalKqMvIq4T {
     override XHALF = true
 }
 
-[metal_dispatch(name = "enc_kq_mvb4h_iq4xs_c", pso = "g_pso_kq_mvb4h_iq4xs", tg = 64, grid = "rows/8, gcols", params = "rows : int64, gcols : int64")]
+[metal_dispatch(name = "enc_kq_mvb4h_iq4xs_c", pso = "g_pso_kq_mvb4h_iq4xs", tg = 64, grid = "rows/8, gcols", params = "rows : int64, gcols : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB4Iq4xsH : MetalKqMvIq4T {
     override NR = 4
     override NRU = 4u
@@ -9848,12 +9906,12 @@ class MetalKqMvB4Iq4xsH : MetalKqMvIq4T {
     override XHALF = true
 }
 
-[metal_dispatch(name = "enc_kq_mvb8h_iq4xs_c", pso = "g_pso_kq_mvb8h_iq4xs", tgmem = "MetalKqMvB8Iq4xsH_metal_kq_mvb8_iq4_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64")]
+[metal_dispatch(name = "enc_kq_mvb8h_iq4xs_c", pso = "g_pso_kq_mvb8h_iq4xs", tgmem = "MetalKqMvB8Iq4xsH_metal_kq_mvb8_iq4_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB8Iq4xsH : MetalKqMvB8Iq4T {
     override XHALF = true
 }
 
-[metal_dispatch(name = "enc_kq_mvb2h_iq4nl_c", pso = "g_pso_kq_mvb2h_iq4nl", tg = 64, grid = "rows/8", params = "rows : int64")]
+[metal_dispatch(name = "enc_kq_mvb2h_iq4nl_c", pso = "g_pso_kq_mvb2h_iq4nl", tg = 64, grid = "rows/8", params = "rows : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB2Iq4nlH : MetalKqMvIq4T {
     override NR = 2
     override NRU = 2u
@@ -9862,7 +9920,7 @@ class MetalKqMvB2Iq4nlH : MetalKqMvIq4T {
     override XHALF = true
 }
 
-[metal_dispatch(name = "enc_kq_mvb4h_iq4nl_c", pso = "g_pso_kq_mvb4h_iq4nl", tg = 64, grid = "rows/8, gcols", params = "rows : int64, gcols : int64")]
+[metal_dispatch(name = "enc_kq_mvb4h_iq4nl_c", pso = "g_pso_kq_mvb4h_iq4nl", tg = 64, grid = "rows/8, gcols", params = "rows : int64, gcols : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB4Iq4nlH : MetalKqMvIq4T {
     override NR = 4
     override NRU = 4u
@@ -9871,13 +9929,13 @@ class MetalKqMvB4Iq4nlH : MetalKqMvIq4T {
     override XHALF = true
 }
 
-[metal_dispatch(name = "enc_kq_mvb8h_iq4nl_c", pso = "g_pso_kq_mvb8h_iq4nl", tgmem = "MetalKqMvB8Iq4nlH_metal_kq_mvb8_iq4_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64")]
+[metal_dispatch(name = "enc_kq_mvb8h_iq4nl_c", pso = "g_pso_kq_mvb8h_iq4nl", tgmem = "MetalKqMvB8Iq4nlH_metal_kq_mvb8_iq4_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB8Iq4nlH : MetalKqMvB8Iq4T {
     override IQ4NL = true
     override XHALF = true
 }
 
-[metal_dispatch(name = "enc_kq_mvb2h_q40_c", pso = "g_pso_kq_mvb2h_q40", tg = 64, grid = "rows/8", params = "rows : int64")]
+[metal_dispatch(name = "enc_kq_mvb2h_q40_c", pso = "g_pso_kq_mvb2h_q40", tg = 64, grid = "rows/8", params = "rows : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB2Q40H : MetalKqMvIq4T {
     override NR = 2
     override NRU = 2u
@@ -9887,7 +9945,7 @@ class MetalKqMvB2Q40H : MetalKqMvIq4T {
     override XHALF = true
 }
 
-[metal_dispatch(name = "enc_kq_mvb4h_q40_c", pso = "g_pso_kq_mvb4h_q40", tg = 64, grid = "rows/8, gcols", params = "rows : int64, gcols : int64")]
+[metal_dispatch(name = "enc_kq_mvb4h_q40_c", pso = "g_pso_kq_mvb4h_q40", tg = 64, grid = "rows/8, gcols", params = "rows : int64, gcols : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB4Q40H : MetalKqMvIq4T {
     override NR = 4
     override NRU = 4u
@@ -9897,14 +9955,14 @@ class MetalKqMvB4Q40H : MetalKqMvIq4T {
     override XHALF = true
 }
 
-[metal_dispatch(name = "enc_kq_mvb8h_q40_c", pso = "g_pso_kq_mvb8h_q40", tgmem = "MetalKqMvB8Q40H_metal_kq_mvb8_iq4_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64")]
+[metal_dispatch(name = "enc_kq_mvb8h_q40_c", pso = "g_pso_kq_mvb8h_q40", tgmem = "MetalKqMvB8Q40H_metal_kq_mvb8_iq4_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB8Q40H : MetalKqMvB8Iq4T {
     override IQ4NL = true
     override Q40 = true
     override XHALF = true
 }
 
-[metal_dispatch(name = "enc_kq_mvb2h_k3_c", pso = "g_pso_kq_mvb2h_k3", tg = 64, grid = "rows/8", params = "rows : int64")]
+[metal_dispatch(name = "enc_kq_mvb2h_k3_c", pso = "g_pso_kq_mvb2h_k3", tg = 64, grid = "rows/8", params = "rows : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB2K3H : MetalKqMvK3T {
     override NR = 2
     override NRU = 2u
@@ -9912,7 +9970,7 @@ class MetalKqMvB2K3H : MetalKqMvK3T {
     override XHALF = true
 }
 
-[metal_dispatch(name = "enc_kq_mvb4h_k3_c", pso = "g_pso_kq_mvb4h_k3", tg = 64, grid = "rows/8, gcols", params = "rows : int64, gcols : int64")]
+[metal_dispatch(name = "enc_kq_mvb4h_k3_c", pso = "g_pso_kq_mvb4h_k3", tg = 64, grid = "rows/8, gcols", params = "rows : int64, gcols : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB4K3H : MetalKqMvK3T {
     override NR = 4
     override NRU = 4u
@@ -9920,12 +9978,12 @@ class MetalKqMvB4K3H : MetalKqMvK3T {
     override XHALF = true
 }
 
-[metal_dispatch(name = "enc_kq_mvb8h_k3_c", pso = "g_pso_kq_mvb8h_k3", tgmem = "MetalKqMvB8K3H_metal_kq_mvb8_k3_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64")]
+[metal_dispatch(name = "enc_kq_mvb8h_k3_c", pso = "g_pso_kq_mvb8h_k3", tgmem = "MetalKqMvB8K3H_metal_kq_mvb8_k3_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB8K3H : MetalKqMvB8K3T {
     override XHALF = true
 }
 
-[metal_dispatch(name = "enc_kq_mvb2h_iq3s_c", pso = "g_pso_kq_mvb2h_iq3s", tg = 64, grid = "rows/8", params = "rows : int64")]
+[metal_dispatch(name = "enc_kq_mvb2h_iq3s_c", pso = "g_pso_kq_mvb2h_iq3s", tg = 64, grid = "rows/8", params = "rows : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB2Iq3sH : MetalKqMvIq3sT {
     override NR = 2
     override NRU = 2u
@@ -9933,7 +9991,7 @@ class MetalKqMvB2Iq3sH : MetalKqMvIq3sT {
     override XHALF = true
 }
 
-[metal_dispatch(name = "enc_kq_mvb4h_iq3s_c", pso = "g_pso_kq_mvb4h_iq3s", tg = 64, grid = "rows/8, gcols", params = "rows : int64, gcols : int64")]
+[metal_dispatch(name = "enc_kq_mvb4h_iq3s_c", pso = "g_pso_kq_mvb4h_iq3s", tg = 64, grid = "rows/8, gcols", params = "rows : int64, gcols : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB4Iq3sH : MetalKqMvIq3sT {
     override NR = 4
     override NRU = 4u
@@ -9941,12 +9999,12 @@ class MetalKqMvB4Iq3sH : MetalKqMvIq3sT {
     override XHALF = true
 }
 
-[metal_dispatch(name = "enc_kq_mvb8h_iq3s_c", pso = "g_pso_kq_mvb8h_iq3s", tgmem = "MetalKqMvB8Iq3sH_metal_kq_mvb8_iq3s_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64")]
+[metal_dispatch(name = "enc_kq_mvb8h_iq3s_c", pso = "g_pso_kq_mvb8h_iq3s", tgmem = "MetalKqMvB8Iq3sH_metal_kq_mvb8_iq3s_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB8Iq3sH : MetalKqMvB8Iq3sT {
     override XHALF = true
 }
 
-[metal_dispatch(name = "enc_kq_mvb2h_iq3xxs_c", pso = "g_pso_kq_mvb2h_iq3xxs", tg = 64, grid = "rows/8", params = "rows : int64")]
+[metal_dispatch(name = "enc_kq_mvb2h_iq3xxs_c", pso = "g_pso_kq_mvb2h_iq3xxs", tg = 64, grid = "rows/8", params = "rows : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB2Iq3xxsH : MetalKqMvIq3xxsT {
     override NR = 2
     override NRU = 2u
@@ -9954,7 +10012,7 @@ class MetalKqMvB2Iq3xxsH : MetalKqMvIq3xxsT {
     override XHALF = true
 }
 
-[metal_dispatch(name = "enc_kq_mvb4h_iq3xxs_c", pso = "g_pso_kq_mvb4h_iq3xxs", tg = 64, grid = "rows/8, gcols", params = "rows : int64, gcols : int64")]
+[metal_dispatch(name = "enc_kq_mvb4h_iq3xxs_c", pso = "g_pso_kq_mvb4h_iq3xxs", tg = 64, grid = "rows/8, gcols", params = "rows : int64, gcols : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB4Iq3xxsH : MetalKqMvIq3xxsT {
     override NR = 4
     override NRU = 4u
@@ -9962,12 +10020,12 @@ class MetalKqMvB4Iq3xxsH : MetalKqMvIq3xxsT {
     override XHALF = true
 }
 
-[metal_dispatch(name = "enc_kq_mvb8h_iq3xxs_c", pso = "g_pso_kq_mvb8h_iq3xxs", tgmem = "MetalKqMvB8Iq3xxsH_metal_kq_mvb8_iq3xxs_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64")]
+[metal_dispatch(name = "enc_kq_mvb8h_iq3xxs_c", pso = "g_pso_kq_mvb8h_iq3xxs", tgmem = "MetalKqMvB8Iq3xxsH_metal_kq_mvb8_iq3xxs_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB8Iq3xxsH : MetalKqMvB8Iq3xxsT {
     override XHALF = true
 }
 
-[metal_dispatch(name = "enc_kq_mvb2h_k2_c", pso = "g_pso_kq_mvb2h_k2", tg = 64, grid = "rows/8", params = "rows : int64")]
+[metal_dispatch(name = "enc_kq_mvb2h_k2_c", pso = "g_pso_kq_mvb2h_k2", tg = 64, grid = "rows/8", params = "rows : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB2K2H : MetalKqMvK2T {
     override NR = 2
     override NRU = 2u
@@ -9975,7 +10033,7 @@ class MetalKqMvB2K2H : MetalKqMvK2T {
     override XHALF = true
 }
 
-[metal_dispatch(name = "enc_kq_mvb4h_k2_c", pso = "g_pso_kq_mvb4h_k2", tg = 64, grid = "rows/8, gcols", params = "rows : int64, gcols : int64")]
+[metal_dispatch(name = "enc_kq_mvb4h_k2_c", pso = "g_pso_kq_mvb4h_k2", tg = 64, grid = "rows/8, gcols", params = "rows : int64, gcols : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB4K2H : MetalKqMvK2T {
     override NR = 4
     override NRU = 4u
@@ -9983,12 +10041,12 @@ class MetalKqMvB4K2H : MetalKqMvK2T {
     override XHALF = true
 }
 
-[metal_dispatch(name = "enc_kq_mvb8h_k2_c", pso = "g_pso_kq_mvb8h_k2", tgmem = "MetalKqMvB8K2H_metal_kq_mvb8_k2_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64")]
+[metal_dispatch(name = "enc_kq_mvb8h_k2_c", pso = "g_pso_kq_mvb8h_k2", tgmem = "MetalKqMvB8K2H_metal_kq_mvb8_k2_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB8K2H : MetalKqMvB8K2T {
     override XHALF = true
 }
 
-[metal_dispatch(name = "enc_kq_mvb2h_iq2s_c", pso = "g_pso_kq_mvb2h_iq2s", tg = 64, grid = "rows/8", params = "rows : int64")]
+[metal_dispatch(name = "enc_kq_mvb2h_iq2s_c", pso = "g_pso_kq_mvb2h_iq2s", tg = 64, grid = "rows/8", params = "rows : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB2Iq2sH : MetalKqMvIq2sT {
     override NR = 2
     override NRU = 2u
@@ -9996,7 +10054,7 @@ class MetalKqMvB2Iq2sH : MetalKqMvIq2sT {
     override XHALF = true
 }
 
-[metal_dispatch(name = "enc_kq_mvb4h_iq2s_c", pso = "g_pso_kq_mvb4h_iq2s", tg = 64, grid = "rows/8, gcols", params = "rows : int64, gcols : int64")]
+[metal_dispatch(name = "enc_kq_mvb4h_iq2s_c", pso = "g_pso_kq_mvb4h_iq2s", tg = 64, grid = "rows/8, gcols", params = "rows : int64, gcols : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB4Iq2sH : MetalKqMvIq2sT {
     override NR = 4
     override NRU = 4u
@@ -10004,12 +10062,12 @@ class MetalKqMvB4Iq2sH : MetalKqMvIq2sT {
     override XHALF = true
 }
 
-[metal_dispatch(name = "enc_kq_mvb8h_iq2s_c", pso = "g_pso_kq_mvb8h_iq2s", tgmem = "MetalKqMvB8Iq2sH_metal_kq_mvb8_iq2s_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64")]
+[metal_dispatch(name = "enc_kq_mvb8h_iq2s_c", pso = "g_pso_kq_mvb8h_iq2s", tgmem = "MetalKqMvB8Iq2sH_metal_kq_mvb8_iq2s_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB8Iq2sH : MetalKqMvB8Iq2sT {
     override XHALF = true
 }
 
-[metal_dispatch(name = "enc_kq_mvb2h_iq2xs_c", pso = "g_pso_kq_mvb2h_iq2xs", tg = 64, grid = "rows/8", params = "rows : int64")]
+[metal_dispatch(name = "enc_kq_mvb2h_iq2xs_c", pso = "g_pso_kq_mvb2h_iq2xs", tg = 64, grid = "rows/8", params = "rows : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB2Iq2xsH : MetalKqMvIq2xsT {
     override NR = 2
     override NRU = 2u
@@ -10017,7 +10075,7 @@ class MetalKqMvB2Iq2xsH : MetalKqMvIq2xsT {
     override XHALF = true
 }
 
-[metal_dispatch(name = "enc_kq_mvb4h_iq2xs_c", pso = "g_pso_kq_mvb4h_iq2xs", tg = 64, grid = "rows/8, gcols", params = "rows : int64, gcols : int64")]
+[metal_dispatch(name = "enc_kq_mvb4h_iq2xs_c", pso = "g_pso_kq_mvb4h_iq2xs", tg = 64, grid = "rows/8, gcols", params = "rows : int64, gcols : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB4Iq2xsH : MetalKqMvIq2xsT {
     override NR = 4
     override NRU = 4u
@@ -10025,12 +10083,12 @@ class MetalKqMvB4Iq2xsH : MetalKqMvIq2xsT {
     override XHALF = true
 }
 
-[metal_dispatch(name = "enc_kq_mvb8h_iq2xs_c", pso = "g_pso_kq_mvb8h_iq2xs", tgmem = "MetalKqMvB8Iq2xsH_metal_kq_mvb8_iq2xs_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64")]
+[metal_dispatch(name = "enc_kq_mvb8h_iq2xs_c", pso = "g_pso_kq_mvb8h_iq2xs", tgmem = "MetalKqMvB8Iq2xsH_metal_kq_mvb8_iq2xs_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB8Iq2xsH : MetalKqMvB8Iq2xsT {
     override XHALF = true
 }
 
-[metal_dispatch(name = "enc_kq_mvb2h_iq2xxs_c", pso = "g_pso_kq_mvb2h_iq2xxs", tg = 64, grid = "rows/8", params = "rows : int64")]
+[metal_dispatch(name = "enc_kq_mvb2h_iq2xxs_c", pso = "g_pso_kq_mvb2h_iq2xxs", tg = 64, grid = "rows/8", params = "rows : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB2Iq2xxsH : MetalKqMvIq2xxsT {
     override NR = 2
     override NRU = 2u
@@ -10038,7 +10096,7 @@ class MetalKqMvB2Iq2xxsH : MetalKqMvIq2xxsT {
     override XHALF = true
 }
 
-[metal_dispatch(name = "enc_kq_mvb4h_iq2xxs_c", pso = "g_pso_kq_mvb4h_iq2xxs", tg = 64, grid = "rows/8, gcols", params = "rows : int64, gcols : int64")]
+[metal_dispatch(name = "enc_kq_mvb4h_iq2xxs_c", pso = "g_pso_kq_mvb4h_iq2xxs", tg = 64, grid = "rows/8, gcols", params = "rows : int64, gcols : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB4Iq2xxsH : MetalKqMvIq2xxsT {
     override NR = 4
     override NRU = 4u
@@ -10046,7 +10104,7 @@ class MetalKqMvB4Iq2xxsH : MetalKqMvIq2xxsT {
     override XHALF = true
 }
 
-[metal_dispatch(name = "enc_kq_mvb8h_iq2xxs_c", pso = "g_pso_kq_mvb8h_iq2xxs", tgmem = "MetalKqMvB8Iq2xxsH_metal_kq_mvb8_iq2xxs_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64")]
+[metal_dispatch(name = "enc_kq_mvb8h_iq2xxs_c", pso = "g_pso_kq_mvb8h_iq2xxs", tgmem = "MetalKqMvB8Iq2xxsH_metal_kq_mvb8_iq2xxs_msl_tgmem", tg = 64, grid = "rows/8", params = "rows : int64", requires = "ka.ndim % 256")]
 class MetalKqMvB8Iq2xxsH : MetalKqMvB8Iq2xxsT {
     override XHALF = true
 }

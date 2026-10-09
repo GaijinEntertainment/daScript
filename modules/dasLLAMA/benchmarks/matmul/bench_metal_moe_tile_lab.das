@@ -175,8 +175,7 @@ def main {
     static_if (typeinfo builtin_module_exists(das_metal)) {
         var dev = metal_create_system_default_device()
         if (dev == null) {
-            print("no Metal device\n")
-            return
+            panic("no Metal device - no row")
         }
         var queue = metal_new_command_queue(dev)
         var inscope patterns <- [ <- pattern("rows4", $(_e) => 4), <- pattern("rows8-16", $(e) => 8 + (e * 7) % 9), <- pattern("rows32", $(_e) => 32)]
@@ -230,8 +229,7 @@ def main {
                 let BASE_ARM = 4
                 for (ps, nm in psos, names) {
                     if (ps == null) {
-                        print("{fname} {nm}: pipeline compile failed: {err}\n")
-                        return
+                        panic("{fname} {nm}: pipeline compile failed: {err} - no row")
                     }
                 }
                 for (p in patterns) {
@@ -263,8 +261,7 @@ def main {
                                 }
                             }
                             if (!ok) {
-                                print("{fname} {p.name} {names[ai]}: GPU error {err}\n")
-                                return
+                                panic("{fname} {p.name} {names[ai]}: GPU error {err} - no row")
                             }
                             if (round > 0) {
                                 best[ai] = min(best[ai], gpu_ms / double(NDISP))
@@ -341,6 +338,6 @@ def main {
         metal_release(queue)
         metal_release(dev)
     } else {
-        print("das_metal is not built on this platform\n")
+        panic("das_metal is not built on this platform - no row")
     }
 }

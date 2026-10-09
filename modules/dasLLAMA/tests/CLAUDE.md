@@ -99,7 +99,11 @@ GPU single vs GPU batch at B=2/B=4 on identical tokens, logits tolerance). The w
 alone skips the whole test (`batchB8-kq` is not a substring of `batch`); `--arm batch` runs every batch
 arm, and is the way to reach a sub-arm.
 
-MTP parity (`test_metal_mtp_parity.das`, suite `mtp`): `mtp-ctrl-<tag> mtp-ff-<tag> mtp-ffk-<tag>
+MTP parity (`test_metal_mtp_parity.das`, suite `mtp`): `mtp-ffh-<tag>` = the half-x crowns (k4, k5, k6) pinned
+over the counting walk at depth 2: the verify's two-to-eight-row K-quant sites, the MTP head's own q/k/v among
+them, read the f16 twin, and the rounds the rail drafts hold up to the uncrowned walk's within a fifth - a head fed
+a stale twin drafts garbage and the count collapses while the verify still lands the plain tokens; the crowns and
+the rail put back as found. `mtp-ctrl-<tag> mtp-ff-<tag> mtp-ffk-<tag>
 mtp-vff-<tag> mtp-count-<tag>` per fixture tag `0.8b 4b 9b 27b 35b 3.8-27b 3.8fn` (4b = Qwen3.5-4B-MTP
 Q8_0, the mid tier; 9b = Qwen3.5-9B-MTP UD-Q5_K_XL, large tier; 3.8-27b = the Qwen3.8-27B
 trunk + its split Q8_0 head; 3.8fn = Qwen3.8-Flash-Next UD-IQ4_XS + its split `shared` Q8_0 head,
@@ -171,10 +175,12 @@ counter the engage witness and `set_metal_prefill_mm_tail(false)` the off-lever)
 window's gathered expert route (`test_metal_prefill_moe_gemv_route`, families `qwen2moe` / `qwen3moe` /
 `gptoss` - the q8, K-quant and mx4 expert planes, every carrier large-tier; the hybrid's pure IQ4_XS file
 cannot twin into a blob and its UD file's twin declines the Metal prefill, so the hybrid holds its parity through
-the MTP parity file's served twin): a 300-row window on the tiles then a 2-, 7- and 24-row window the
-route serves, the last row's logits within the carrier's bar of the CPU chain's largest, the route's window
-counter up by one and the prefill counter by two, the same windows with the knee at 0 (the tiles) logged
-beside them and the counter unmoved, the control a window whose last token differs landing outside the bar;
+the MTP parity file's served twin): a 300-row window on the tiles then a 2-, 7-, 16- and 24-row window the
+route serves - the 16-row one at the shipped knee, the others at a knee pinned to 24 - the last row's logits
+within the carrier's bar of the CPU chain's largest, the route's window counter up by one and the prefill
+counter by two on the route and on the tiles leg, the same windows with the knee at 0 (the tiles) logged
+beside them and the counter unmoved, the control a window whose last token differs landing outside the bar,
+the arms' argmax pieces decoded in the log; a window the device declines skips loudly;
 mirror = the mirror-fed window
 against the f32 panels on one blob twin under the pair's pinned crown - a 300-row window and a
 20-row continuation, the last row's logits within 0.4% of the largest and the census naming each
@@ -408,13 +414,16 @@ logit that differs head to head and the logit cap, on the float, quantized and w
 gemm file's device pair arms (`attn_qk_mm_gate` with `pair_mt`, `attn_dev_pair_gate`) run both
 tile heights at a head of 96 too - QK's reduction width is the head, AV's 64-wide tiles plus the
 32-column tail stamp - and the misc file's `embed_f32_gate` the greedy chain's fp32-table gather (the
-row gather at one row under the embed scale) at a 96-wide row and past a lead of foreign floats. Three
+row gather at one row under the embed scale) at a 96-wide row and past a lead of foreign floats. Four
 cells need no
 kernel: the misc file's `test_metal_served` (a driver's forward answer through `metal_served`: a
 decline passes through and leaves the pool's spin window, a served one opens it, a later decline
 keeps it) and `test_metal_moe_kq_twin_pick` (the K-quant MoE twins' pick: a crowned family at every
 shape, an uncrowned box at or under the knee's mean rows an expert and never past it, the knob
-answering what it replaced), and the prefill file's `test_resident_panel_charge` (the resident panel registry on the
+answering what it replaced), and the prefill file's `test_moe_padded_bound` (the bucket panel's
+row bound against the rail's own padded prefix over seeded routings, reached exactly where every
+routed expert is distinct, a bound for one row fewer sitting under the rail's pad as the control)
+and `test_resident_panel_charge` (the resident panel registry on the
 driver's device: an uncharged ask makes its panel and charges nothing, the same key answers again,
 another size under it is refused, a charged ask counts its bytes exactly when the budget serves it,
 and a shutdown drops the registry). The StyleTTS2

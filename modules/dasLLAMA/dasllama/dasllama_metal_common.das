@@ -319,10 +319,7 @@ var g_pso_kq_iq4xs : MetalComputePipeline?
 var g_pso_kq_k3 : MetalComputePipeline?
 var g_pso_kq_mvb2_k4 : MetalComputePipeline?   // batch B=2..8: the kq ext small-batch mv twins
 var g_pso_kq_mvb2_k4r2 : MetalComputePipeline?   // the k4 twin's two-row register tile (the `kq_mvb2_k4_r2` crown)
-var g_pso_kq_mvw2_k4 : MetalComputePipeline?   // the k4 wide forms: the single-row GEMV's lane map over 2, 4 and 8 x columns
-var g_pso_kq_mvw4_k4 : MetalComputePipeline?
-var g_pso_kq_mvw8_k4 : MetalComputePipeline?
-var g_pso_kq_mvw2h_k4 : MetalComputePipeline?   // the wide forms over the f16 twin of x
+var g_pso_kq_mvw2h_k4 : MetalComputePipeline?   // the k4 wide forms over the f16 twin of x: the single-row GEMV's lane map over 2, 4 and 8 x columns
 var g_pso_kq_mvw4h_k4 : MetalComputePipeline?
 var g_pso_kq_mvw8h_k4 : MetalComputePipeline?
 var g_pso_kq_mvb4_k4 : MetalComputePipeline?
@@ -1123,7 +1120,7 @@ def kq_scales_of(dev : MetalDevice?; t : Model; fmt : KqFmt; off : int64) : tupl
 
 //! A superblock's packed d-tail bytes in a kq format's split scale plane: 0 for the compact formats (k4/k5/q40/iq4nl -
 //! one 16B block, no tail), 4 for k2 (d and dmin), 2 for every other format.
-def private kq_scale_d_tail(fmt : KqFmt) : int64 {
+def kq_scale_d_tail(fmt : KqFmt) : int64 {
     let compact = fmt == KqFmt.k4 || fmt == KqFmt.k5 || fmt == KqFmt.q40 || fmt == KqFmt.iq4nl
     return compact ? 0l : (fmt == KqFmt.k2 ? 4l : 2l)
 }
@@ -2726,8 +2723,8 @@ def race_kq_planes(dev : MetalDevice?; nblk, qu_per_sb : int; sform : KqRaceScal
             }
         }
         for (b in range(nblk)) {
-            for (kx in range(4, 12)) {
-                splane[b * 16 + kx] = uint8(17)   //! kmask bytes: small scales, both halves
+            for (kx in range(4, 16)) {
+                splane[b * 16 + kx] = uint8(17)   //! every kmask byte: small scales and mins in both halves - the last four carry sub-blocks 4-7's low nibbles, left zero they decode to nothing and a wrong high-half read passes
             }
         }
     }

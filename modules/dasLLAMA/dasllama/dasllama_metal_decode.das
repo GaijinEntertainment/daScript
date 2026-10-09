@@ -1475,6 +1475,10 @@ struct template LayerEncT {
                     enc_axpy_sig(enc, r.bxb, r.bxb2, r.bmoe_lg, td.b, r.u_dim, td.n)
                 }
             }
+            if (!moe_with_dense) {
+                r.xh_ok = false   //! the routed sum (and the shared expert's rows in bh12) landed with no twin
+                r.fgh_ok = false
+            }
             if (moe_with_dense && g_skip != "ew") {
                                 var bw_post_routed = upload_region(addr < void? >(t.fblob[t.rms_post_ffn2_off + l * dim]), uint64(dim * 4l))
                 rms(self, enc, r.bmoe_rt, 0ul, bw_post_routed, r.bmoe_rt)
@@ -2121,6 +2125,7 @@ def private enc_draft_head_rows(t : Model; var r : StepRes; enc : MetalComputeEn
         var bw_att = upload_region(addr < void? >(t.fblob[t.rms_att_off + c.n_layers * dim]), uint64(dim * 4l))
         enc_rms_b(enc, r.bx, 0ul, bw_att, r.bxb, r.u_dim, r.u_eps, nr)
     }
+    r.xh_ok = false   //! the head's norm wrote bxb with no twin: the MTP layer's sites read the f32 rows
 }
 
 //! the rows classifier tail: the final norm at `norm_off` over bx, the classifier GEMM into `bcls`, then

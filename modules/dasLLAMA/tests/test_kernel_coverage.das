@@ -126,8 +126,8 @@ let private CENSUS_NEVER_DISPATCHED <- [
     // mtp suite's parity arms
     "metal_argmax_rows", "MetalKqMvB2K4R2",
     // the half-x stamps of the formats the zoo's batched carriers DO hold (k4's wide forms, k5 and k6's
-    // small-batch forms): each compiles only behind its `kq_rows_half_<fmt>` crown, and dispatches only where
-    // the box crowned it. Their coverage is test_metal_kq_half_forms in test_metal_gemv_kernels.das and the
+    // small-batch forms): every half stamp compiles at decode init, and dispatches only where the box crowned
+    // its `kq_rows_half_<fmt>`. Their coverage is test_metal_kq_half_forms in test_metal_gemv_kernels.das and the
     // batchB8-kq half leg of the decode parity file. The nine formats above cover their own half stamps by
     // prefix (the stamp is the f32 class's name plus H)
     "MetalKqMvW2K4H", "MetalKqMvW4K4H", "MetalKqMvW8K4H",

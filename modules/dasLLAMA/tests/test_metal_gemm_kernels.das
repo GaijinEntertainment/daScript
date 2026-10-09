@@ -893,23 +893,7 @@ def private moe_mm_truth(fx : MoeFix; wdeq, xf, wb : array<float>; kdim, ndim : 
 //! the tensor twins' truth over the padded panel: a 32-row tile runs its op at the rows its expert leaves it (8, 16 or 32,
 //! `tile_rows`), so the rows past that height stay what the buffer held - the cell's sentinel - where the fixed op wrote them
 def private adapt_pad_truth(fx : MoeFix; ndim : int; sentinel : float; var want, env : array<float>) {
-    for (e in range(fx.ne)) {
-        let cnt = int(fx.cnt[e])
-        let rows = (cnt + 31) / 32 * 32
-        var mbase = 0
-        while (mbase < rows) {
-            let live = min(cnt - mbase, 32)
-            let tr = live <= 8 ? 8 : (live <= 16 ? 16 : 32)
-            for (r in range(mbase + tr, mbase + 32)) {
-                let row = int(fx.basep[e]) + r
-                for (j in range(ndim)) {
-                    want[row * ndim + j] = sentinel
-                    env[row * ndim + j] = 0.0
-                }
-            }
-            mbase += 32
-        }
-    }
+    adapt_pad_rows(fx.cnt, fx.basep, ndim, sentinel, want, env)
 }
 
 // The gathered K-quant mul_mm trio (MetalMoeMulMmK4/K5/K6): per-expert superblock planes off
@@ -1743,9 +1727,13 @@ def test_metal_gemm_kernels(t : T?) {
                 moe_mulmm_kq_gate(t, dev, queue, 4, 256, 128, [8, 33], false)   // 2 col tiles + contiguous
                 moe_mulmm_kq_gate(t, dev, queue, 5, 256, 128, [8, 33], false)   // twin legs per format
                 moe_mulmm_kq_gate(t, dev, queue, 6, 256, 128, [8, 33], false)
+                moe_mulmm_kq_gate(t, dev, queue, 4, 256, 128, [12, 45], false)   // the adaptive op's 16-row walk: 12 live rows, and a second tile of 13
+                moe_mulmm_kq_gate(t, dev, queue, 5, 256, 128, [12, 45], false)
+                moe_mulmm_kq_gate(t, dev, queue, 6, 256, 128, [12, 45], false)
                 moe_mulmm_kq_gate(t, dev, queue, 4, 256, 128, [130, 40, 200], false)   // tall pair: counts cross 128
                 for (fmt in [3, 44, 40, 33, 34, 23, 24, 25]) {
                     moe_mulmm_split_gate(t, dev, queue, fmt, 256, 128, [8, 33])
+                    moe_mulmm_split_gate(t, dev, queue, fmt, 256, 128, [12, 45])
                     moe_mulmm_split_gate(t, dev, queue, fmt, 256, 128, [130, 40, 200])
                 }
                 // the q40 expert site at the gemma-4-26B-A4B geometry: kdim = dim 2816, ndim =

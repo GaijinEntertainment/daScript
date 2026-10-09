@@ -3459,6 +3459,7 @@ def test_metal_prefill_kernels(t : T?) {
                 moe_gemv_gate(t, dev, queue, KqFmt.q51, 64, 24, 5, 3, 3, true)    // batch streams, down form
                 moe_mulmm_b32_gate(t, dev, queue, KqFmt.q51, 64, 64, [32, 40, 64])    // padded tail on expert 1
                 moe_mulmm_b32_gate(t, dev, queue, KqFmt.q51, 96, 128, [8, 96])        // 2 col tiles, tiny run + multi-tile
+                moe_mulmm_b32_gate(t, dev, queue, KqFmt.q51, 64, 64, [12, 45])        // the adaptive op's 16-row walk, twice
                 moe_mulmm_b32_gate(t, dev, queue, KqFmt.q51, 64, 64, [136, 32])       // counts crossing 128 — both tall-pair stamps live
 
                 // ===== iq4nl32 expert kernels (the Qwen3.8-Flash-Next 640-wide down stacks) =====
@@ -4668,13 +4669,21 @@ def private moe_mulmm_b32_gate(t : T?; var dev, queue; fmt : KqFmt; kdim, ndim :
         var terr : string
         var tw_pso = mc |> keep_stamp(ks.th, terr)
         return if (!tensor_pso_or_skip(t, "{tag} twin", tw_pso, dev, terr))
+        //! the tensor twins run the adaptive op: the rows past its height in a short tile keep each leg's sentinel
+        var inscope none_env : array<float>
+        var inscope want_t := want
+        adapt_pad_rows(csr.cnt, csr.base, ndim, -500.0, want_t, none_env)
+        var inscope want_f := want
+        adapt_pad_rows(csr.cnt, csr.base, ndim, -600.0, want_f, none_env)
+        var inscope want_p := want
+        adapt_pad_rows(csr.cnt, csr.base, ndim, -700.0, want_p, none_env)
         let bxh = mc |> in_plain([for (v in xv); float16(v)])
         let by_t = mc |> out_words(pad * ndim, -500.0)
         let rant = mc |> cell_record(t, "{tag} twin") $(enc : MetalComputeEncoder?) {
             invoke(ks.th.enc, enc, tw_pso, mc.buf[bs], 0ul, mc.buf[bw], 0ul, mc.buf[bxh], mc.buf[by_t], ka, mc.buf[bcnt], mc.buf[bbase], int64(ndim), int64(pad), int64(ne))
         }
         if (rant) {
-            check_buf(t, "{tag} twin", mc.buf[by_t], want, BAR_EXACT, Shape(row_width = ndim))
+            check_buf(t, "{tag} twin", mc.buf[by_t], want_t, BAR_EXACT, Shape(row_width = ndim))
         }
         // the float-X T stamp (the bxh == null pick arm): stages raw f32 rows to the same
         // f16 tiles, so the int-valued fixtures stay bit-exact through it too
@@ -4685,7 +4694,7 @@ def private moe_mulmm_b32_gate(t : T?; var dev, queue; fmt : KqFmt; kdim, ndim :
                 invoke(ks.t.enc, enc, tf_pso, mc.buf[bs], 0ul, mc.buf[bw], 0ul, mc.buf[bx], mc.buf[by_f], ka, mc.buf[bcnt], mc.buf[bbase], int64(ndim), int64(pad), int64(ne))
             }
             if (ranf) {
-                check_buf(t, "{tag} T stamp", mc.buf[by_f], want, BAR_EXACT, Shape(row_width = ndim))
+                check_buf(t, "{tag} T stamp", mc.buf[by_f], want_f, BAR_EXACT, Shape(row_width = ndim))
             }
         }
         // the tall pair: 128-floor stamp + remainder stamp over the same fixtures — the
@@ -4704,7 +4713,7 @@ def private moe_mulmm_b32_gate(t : T?; var dev, queue; fmt : KqFmt; kdim, ndim :
             invoke(ks.thr.enc, enc, rm_pso, mc.buf[bs], 0ul, mc.buf[bw], 0ul, mc.buf[bxh], mc.buf[by_p], ka, mc.buf[bcnt], mc.buf[bbase], int64(ndim), int64(ne))
         }
         if (ranp) {
-            check_buf(t, "{tag} tall pair", mc.buf[by_p], want, BAR_EXACT, Shape(row_width = ndim))
+            check_buf(t, "{tag} tall pair", mc.buf[by_p], want_p, BAR_EXACT, Shape(row_width = ndim))
         }
     }
 }
@@ -5293,6 +5302,8 @@ def test_moe_padded_bound(t : T?) {
                 t |> success(int64(pb.pad) <= bound, "npos={npos} k={k} ne={ne} seed={seed}: the rail pads to {pb.pad} rows under the bound {bound}")
                 if (int64(pb.pad) == bound) {
                     tight++
+                    //! the control re-runs the compare with one routed row fewer: the rail's pad then sits above that bound
+                    t |> success(int64(pb.pad) > pf_moe_padded_rows(int64(npos * k) - 1l, int64(ne)), "npos={npos} k={k} ne={ne} seed={seed}: a bound for one row fewer sits under the rail's {pb.pad}")
                 }
                 delete counts
                 delete pb

@@ -380,6 +380,7 @@ struct KqDesc {
 let KQ_SB_ELEMS = 256l
 let KQ_B32_ELEMS = 32l
 let KQ_B32_ELEMS_U = 32u   //! the Q8_0 block width as a kernel body reads it (a module `let` is a stamp; the int64 form is the host's)
+let KQ_SB_ELEMS_U = 256u   //! the superblock width in the host's uint arithmetic (a Metal kernel body reads its class's `KQ_SB` template constant instead - the lens admits no module global)
 
 //! The descriptor row of a format - a new format is one row here plus its planes; every
 //! per-format accessor below is a field of this row.

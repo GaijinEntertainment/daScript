@@ -4,10 +4,10 @@
 docs: `ARCHITECTURE_ENGINE_FORMATS.md`, `ARCHITECTURE_CPU_KERNELS.md`. Planned work:
 `followup_general.md`.
 
-A definition home of the per-format quantities is `dasllama/dasllama_kqformat.das` (the
-`kq_desc` rows and the named stride and stream-tag constants they read), the `ggml_type_bytes` table
-(`dasllama/dasllama_gguf.das`), `Q8_BLOCK_ELEMS` / `Q8_QPB` / `Q8_SPB`
-(`dasllama/dasllama_gemm_schema.das`), or the pins of `tests/test_kqformat.das`.
+A definition home of a per-format quantity is `dasllama/dasllama_kqformat.das`, the
+`ggml_type_bytes` table (`dasllama/dasllama_gguf.das`), the `Q8_*` constants of
+`dasllama/dasllama_gemm_schema.das`, a `@template_constant` on a Metal or SPIR-V kernel class, or
+the pins of `tests/test_kqformat.das`.
 
 **A diff that adds or changes a function in `dasllama/` that maps a kernel/IR format id - the int
 a generated kernel takes as its format parameter - to a `KqFmt`, a per-format value or predicate,
@@ -16,14 +16,18 @@ id through `kq_fmt_of_id` (`dasllama/dasllama_kqformat.das`): the panicking over
 `kq_fmt_of_id(id, what)`, the `bool` overload whose false branch panics, or a per-format accessor
 that takes the id (`kq_qsb` / `kq_ssb`).**
 
-**A literal that stands for a per-format quantity of a `KqFmt` member - the value a `kq_desc`
-column, that member's `ggml_type_bytes` entry or a named per-format constant defines for it -
-written anywhere under `modules/dasLLAMA/` outside a definition home is a defect: read it through a
-`KqFmt` accessor (`kq_elems`, `kq_disk_bytes`, ...), through `kq_qsb` / `kq_ssb` on a format id,
-or through a named constant a definition home declares - in a kernel body, which calls no
-accessor, a `uint` one `dasllama/dasllama_kqformat.das` declares.** A hand-copied value drifts
-from the definition it restates, and a literal `32` cannot be told apart from a tile width that
-happens to match.
+**A literal that stands for a per-format quantity of a `KqFmt` member - the value a definition
+home defines for it, in any unit (words, halves, superblocks) - written outside a Metal or SPIR-V
+kernel body and outside a definition home is a defect: read it through a `KqFmt` accessor
+(`kq_elems`, `kq_disk_bytes`, ...), through `kq_qsb` / `kq_ssb` on a format id, or through a named
+constant a definition home declares, declared there in the same change when none exists.** A
+hand-copied value drifts from the definition it restates, and a literal `32` cannot be told apart
+from a tile width that happens to match.
+
+**A Metal or SPIR-V kernel body, which calls no `KqFmt` accessor, reads a per-format quantity
+through a `@template_constant` declared on the shared base of its class family, or on the class
+when it has none, never as a bare literal; a diff that declares such a constant pins its value
+against the format's `kq_desc` row in `tests/test_kqformat.das` in the same change.**
 
 **A diff that adds or changes a `kq_desc` row (`dasllama/dasllama_kqformat.das`) or a
 `ggml_type_bytes` entry (`dasllama/dasllama_gguf.das`) lands the row's pins in

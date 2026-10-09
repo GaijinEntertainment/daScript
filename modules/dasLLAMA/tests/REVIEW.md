@@ -12,28 +12,33 @@ a function that writes an output buffer from operand buffers; one that answers a
 a layout is not. A bound assert is an assert whose pass means two sides agree or a figure is good
 enough - a difference between two computed sides, a rate, an error, or a count the run decides,
 within a nonzero tolerance or past a floor or ceiling; a guard that keeps a later index or compare
-well-defined (a length past the index it reads) is not one, and a counter asserted to show a route ran is
-such a count. A kernel-unit cell is a cell in which a `[metal_dispatch]` or `[vk_dispatch]` class is dispatched, or a CPU
-kernel in `../dasllama/dasllama_math*.das` is called, by a statement in test code - the cell
-itself, or a helper in its own file or in a `_*.das` test-helper module; a kernel run that only
-happens inside a function in `../dasllama/` does not make a cell a kernel-unit cell. To loosen
-an assert is to let pass an input the old assert failed: a wider bar, a shorter domain, a
-dropped length check.
+well-defined (a length past the index it reads) is not one, and a counter asserted to show a route
+ran is not one. A kernel-unit cell is a cell in which a `[metal_dispatch]` or `[vk_dispatch]`
+class is dispatched, or a CPU kernel in `../dasllama/dasllama_math*.das` is called, by a statement
+in test code - the cell itself, or a helper in its own file or in a `_*.das` test-helper module -
+itself or through a router, a `../dasllama/` function whose only job is to pick which compiled
+form (stamp) of the dispatched class or the CPU kernel runs; a kernel run inside any other
+`../dasllama/` function does not make a cell a kernel-unit cell. To loosen an
+assert is to let pass an input the old assert failed: a wider bar, a shorter domain, a dropped
+length check.
 
 **A kernel-unit cell, wherever the diff puts it, and a diff that changes a CPU kernel in
 `../dasllama/dasllama_math*.das`, apply `REVIEW_KERNEL_CELLS.md` (beside this file) too.**
 
-**A diff that touches a test file or cell `REVIEW_PINNED_GATES.md` (beside this file) lists,
-changes which `run.das` suites list one, or adds a cell or an assert whose expected value must be
-kept in step with something maintained outside the cell, or that a checked-in table names as its
-evidence, applies that checklist too.** An assert that compares against a `../dasllama/`
-constant by name, not against a literal copy of it, keeps nothing in step.
+**A diff that touches a test file or cell `REVIEW_PINNED_GATES.md` (beside this file) lists, or
+changes which `run.das` suites list one, applies that checklist too.**
+
+**A diff that adds a cell or an assert whose expected value must be kept in step with something
+maintained outside the cell, or that a checked-in table names as its evidence, applies
+`REVIEW_PINNED_GATES.md` too.** An assert that compares against a `../dasllama/` constant by name,
+not against a literal copy of it, keeps nothing in step.
 
 **A cell that calls, in its own code or through a helper under this folder, a `set_*` / `pin_*`
 function in `../dasllama/` whose value a later load, route choice or kernel dispatch in the same
-process reads (a loader's own box-profile setters are the loader's, not the cell's), passes a loader parameter that takes a family's lane, or whose claim depends on which
-route or serving lane runs it - a lane pin, a driver hook, a CPU-vs-GPU compare - applies
-`REVIEW_LANE_PINS.md` (beside this file) too.**
+process reads (a loader's own box-profile setters are the loader's, not the cell's), passes a
+loader parameter that takes a family's lane, or whose claim depends on which route or serving lane
+runs it - a lane pin, a driver hook, a CPU-vs-GPU compare - applies `REVIEW_LANE_PINS.md` (beside
+this file) too.**
 
 **A cell that feeds, preprocesses, or asserts on media bytes an encoder consumes - pixels or
 audio samples - compares an encoder's output rows against a second source, or compares ASR
@@ -63,9 +68,10 @@ that box in the PR body.** A reached cell run without the capability did not run
 capability selects.
 
 **A PR that adds a cell loading a model above the large tier (`LARGE_TIER_BYTES`,
-`_model_tier.das`), or changes something such a cell's result depends on, also runs that cell with `DASLLAMA_PARITY_FULL=1` set, on a box with the model
-stocked, through a `run.das` suite listing the cell's file - with `--arm` naming the cell when
-`run.das` accepts `--arm` for that suite - and names the box in the PR body.** A run without
+`_model_tier.das`), or changes something such a cell's result depends on, also runs that cell
+with `DASLLAMA_PARITY_FULL=1` set, on a box with the model stocked, through a `run.das` suite
+listing the cell's file - with `--arm` naming the cell when `run.das` accepts `--arm` for that
+suite - and names the box in the PR body.** A run without
 `DASLLAMA_PARITY_FULL=1` skips every such cell and passes.
 
 **The `--changed` run a PR cites carries no `--exclude`** - an excluding run is the
@@ -96,18 +102,19 @@ a run of skips is not the coverage the suite owes.
 **A diff that registers a test file in this folder in a `CMakeLists.txt` is a defect - a
 `run.das` suite listing is the only registration these files get.**
 
-**A diff that adds a test file here, or adds, removes, moves or renames a cell or a gate a
-kernel file's one cell runs, or changes a cell's suite, its skip condition, or any fact its
-`CLAUDE.md` entry states about it - the class it dispatches, the shapes, lengths, formats or
-lanes it sweeps, the predicate an assert reads, the bar it holds, its controls - corrects that
-entry in the same change, for every test file running the cell, counts and skip clauses
-included.** A file's entry is the clause that describes the file, named with or without its
-`.das` suffix; a `{a,b}` shorthand or a suite roster needs no update, and an input row that adds
-no fact the entry states changes no claim.
+**A diff that adds a test file here, or adds, removes, moves or renames a cell or a gate (a named
+kernel-unit compare a cell of a `test_metal_*_kernels.das` or `test_vulkan_*kernels.das` file
+calls), or changes a cell's suite, its skip condition,
+or any fact its `CLAUDE.md` entry states about it - the class it dispatches, the shapes, lengths,
+formats or lanes it sweeps, the predicate an assert reads, the bar it holds, its controls -
+corrects that entry in the same change, for every test file running the cell, counts and skip
+clauses included.** A file's entry is the clause that describes the file, named with or without
+its `.das` suffix; a `{a,b}` shorthand or a suite roster needs no update, and an input row that
+adds no fact the entry states changes no claim.
 
-**A `CLAUDE.md` entry that describes a class of cells in one clause - the cells of one helper,
-the arms of one name pattern (`mtp-ff-<tag>`) - keeps that clause's counts and skip clauses true
-for every cell in the class.**
+**A diff that adds or changes a cell a `CLAUDE.md` clause describes as one of a class - the cells
+of one helper, the arms of one name pattern (`mtp-ff-<tag>`) - keeps that clause's counts and skip
+clauses true for every cell in the class.**
 
 **A diff that adds, renames, or drops an arm name - the literal passed to `arm_on(t, name)`
 (`_model_tier.das`), what `--arm` matches - updates the arm census in `CLAUDE.md`'s "Arm filter
@@ -131,11 +138,12 @@ block and `../CLAUDE.md` in the same change.** A data row in a table `run.das` l
 behind sends its reader to a flag that no longer does what the text says.
 
 **On every platform, a cell that neither asserts nor registers a skip is a defect.** A cell that
-returns without asserting registers `t |> skip` there; `feint` is a print, not a skip. A cell
-whose claim holds only on some boxes or run modes - it depends on the device or its memory (a card
-too small for the shape the cell asks), the build, a run-mode knob's value, the value a tune
-companion returns, a host toolchain or the stocked files - registers its skip on that fact before
-the asserts that need it, never a bare return and never a failure.
+returns without asserting registers `t |> skip` there; `feint` is a print, not a skip.
+
+**A cell whose claim holds only on some boxes or run modes - it depends on the device or its
+memory (a card too small for the shape the cell asks), the build, a run-mode knob's value, the
+value a tune companion returns, a host toolchain or the stocked files - registers its skip on that
+fact before the asserts that need it, never a bare return and never a failure.**
 
 **A cell's skip condition, and any condition that picks a cell's assert or bar by something
 other than an input the cell sets itself (a format, a shape, a loop value), keys on a fact the
@@ -184,11 +192,12 @@ difference for a logits compare; with a raw-id fixture and no tokenizer, the ids
 a side.** A failure, or a pass that looks wrong, must be readable
 in the log, not only as an id or float difference.
 
-**A size, depth, or row count that a cell's name, a comment inside the cell, or an assert's text
-claims about what the cell exercises, and that the cell does not pass as a literal argument to a
-kernel it itself dispatches or calls, is asserted in that cell by an assert on the count.** A cap,
-a resize, or a counter asserted to show a route ran is not evidence the number was reached; a device's
-geometry (subgroup width, SM count) is no coverage claim.
+**A size, depth, or row count that a cell's name, a comment inside the cell or in a helper it
+calls, or an assert's text claims about what the cell exercises, and that the cell does not pass
+as a literal argument to the kernel or function under test that it itself dispatches or calls, is
+asserted in that cell by an assert on the count.** A cap, a resize, or a counter asserted to show
+a route ran is not evidence the number was reached; a device's geometry (subgroup width, SM count)
+is no coverage claim.
 
 **An exact token or id compare over a prompt whose continuation can tie, whose two sides run
 different lanes, backends, batch shapes or kernel forms, is a defect - it takes the forced-feed
@@ -242,6 +251,11 @@ that knob's value in the text a red prints - the cell label or the assert.**
 one onto another route, lane or backend, ships in the same change, in each such cell holding the
 assert, a control that lands outside that bound on that route.** A bound nothing has exceeded
 where it is applied is not known to discriminate there.
+
+**A diff that adds, in a cell that is not a kernel-unit cell, an assert on a counter showing a
+route ran ships in the same change a control under which the route does not run and the counter
+stays at its value from before the route.** A counter that rises on both legs shows nothing about
+the route.
 
 **A control for a bound assert in a cell that is not a kernel-unit cell changes an input the
 computation reads - a zeroed weight region, a poisoned input element, a mechanism disabled - and

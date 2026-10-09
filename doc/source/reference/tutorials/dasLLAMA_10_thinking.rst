@@ -128,6 +128,29 @@ content ends the turn:
        return true
    }
 
+A reasoning budget
+==================
+
+A server caps how long a reply may think with the request's ``thinking_budget``:
+once the reply has spent that many tokens inside its reasoning span, the
+scheduler writes the family's own close for it and the answer follows. The
+scheduler reads tokens, not text, so the span's bounds travel as token marks.
+``think_budget_marks`` builds them for the family the chat is on: the sequence a
+reply writes to open the span (Qwen3's ``<think>``; gemma-4's ``<|channel>``
+followed by the word ``thought``; gpt-oss's channel mark followed by
+``analysis``), the one token the model writes to leave it, and the tokens the
+budget forces at the cut - a symmetric family's close special after the recipe's
+"Considering the limited time..." sentence, each followed by the template's
+blank line. A family with no reasoning span returns empty marks, and a budget is
+ignored on it:
+
+.. code-block:: das
+
+   var marks <- think_budget_marks(m, chat)
+   if (!empty(marks.close)) {
+       print("open: {marks.open}  close token: {marks.close_tok}  forced: {decode(m, marks.close)}\n")
+   }
+
 .. seealso::
 
    Full source: :download:`tutorials/dasLLAMA/10_thinking.das <../../../../tutorials/dasLLAMA/10_thinking.das>`

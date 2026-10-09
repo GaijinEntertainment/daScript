@@ -727,6 +727,13 @@ def test_chat_gemma4_thinking(t : T?) {   // nolint:STYLE038 — flat expected-t
 
         var c = create_chat_renderer(m, "", 8l)
         t |> success(c.enable_thinking, "gemma-4 defaults to thinking on (thinking-trained family)")
+        // the reasoning budget's marks: gemma-4 opens its thought with the channel mark and the word `thought` - a
+        // sequence, which no single special lookup resolves - and leaves it on the channel close
+        var marks <- think_budget_marks(m, c)
+        t |> success(length(marks.open) >= 2 && marks.open[0] == cho, "the budget's open sequence is the channel mark followed by `thought` ({length(marks.open)} tokens)")
+        t |> equal(chc, marks.close_tok, "the budget leaves the span on the channel close the model writes")
+        t |> success(!empty(marks.close) && marks.close[0] == chc, "the forced close is the channel close")
+        delete marks
         // instruct opt-out: the E-series template opens the model turn bare
         set_thinking(c, false)
         // instruct mode stops at a stray channel marker; thinking-ON must NOT (they frame the thought)

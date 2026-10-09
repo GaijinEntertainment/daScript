@@ -41,6 +41,8 @@ struct Args {
     top : int = 24
     @clarg_doc = "the routed block's gathered-route knee in tokens (default -1: the box profile's)"
     gemv_max : int = -1
+    @clarg_doc = "an interleaved A/B over every window size, one process: `knee` = the gathered route (knee 512) against the tiles (knee 0), `tail` = the K-quant GEMV-tail peel on against off; reps a window per arm, alternating"
+    ab : string = ""
     @clarg_doc = "window sizes to sweep, comma list (default 2,3,4,8,12,16,24,32,48,64,96,128,256,512)"
     windows : string = ""
     @clarg_short = "?"
@@ -99,11 +101,15 @@ def private decode_reference(m : Model; var s : Session; pool : array<int64>; cu
             eval(m, s, [pool[cursor + i]])
         }
         let ds = metal_decode_stage_stats()
+        if (ds.steps != 12l) {
+            print("\ndecode step at pos {s.n_past}: REFUSED - the Metal driver served {ds.steps} of 12 steps (the rest fell to the CPU rails), no number\n")
+            return
+        }
         print("\ndecode step x{ds.steps} at pos {s.n_past}: gpu {ds.gpu_us / double(ds.steps) / 1000.0lf} ms  encode {double(ds.encode_us) / double(ds.steps) / 1000.0lf} ms  wait {double(ds.wait_us) / double(ds.steps) / 1000.0lf} ms\n")
     }
 }
 
-def private sweep(a : Args) : int {
+def private sweep(a : Args) : int {   // nolint:STYLE037,STYLE038 — one flat sweep: the warm prefix, the window ladder with its A/B arms, the profile and the decode row
     static_if (typeinfo builtin_module_exists(das_metal)) {
         set_metal_mode(MetalMode.required)
         set_gpu_resident_regions(1l)
@@ -115,7 +121,7 @@ def private sweep(a : Args) : int {
             set_metal_moe_gemv_max(int64(a.gemv_max))
         }
         var rows_served = 0
-        with_dasllama_jobque() {
+        with_dasllama_jobque() {   // nolint:STYLE037 — the sweep's one block: the ladder and its A/B arms
             var m <- load_model(a.model, QuantMode.q8)
             var s <- create_session(m)
             let pool <- token_pool(m, a.prefix + 6000)
@@ -125,11 +131,23 @@ def private sweep(a : Args) : int {
             print("warm prefix {s.n_past} tokens done\n")
             var cursor = a.prefix
             var inscope windows <- empty(a.windows) ? clone_to_move(WINDOWS) : [for (w in split(a.windows, ",")); to_int(w); where to_int(w) > 0]
-            print("\nnpos  gpu_ms  encode_ms  wait_ms  rb_ms  ms/tok  (medians of {a.reps - 1} after the warmup rep; windows appended in sequence from {a.prefix})\n")
+            if (empty(a.ab)) {
+                print("\nnpos  gpu_ms  encode_ms  wait_ms  rb_ms  ms/tok  (medians of {a.reps - 1} after the warmup rep; windows appended in sequence from {a.prefix})\n")
+            } else {
+                let arms = a.ab == "knee" ? "route (knee 512) vs tiles (knee 0)" : "peel on vs off"
+                print("\nnpos  A_ms  B_ms  A/B  ({a.ab}: {arms}; medians of {a.reps} a arm, the arms alternating after one warmup rep of A; windows appended in sequence from {a.prefix})\n")
+            }
             for (n in windows) {
-                var inscope gpu, enc, wait, rb : array<double>
+                var inscope gpu, enc, wait, rb, gpu_b : array<double>
                 var declined = 0
-                for (r in range(a.reps)) {
+                let reps = empty(a.ab) ? a.reps : 1 + 2 * a.reps
+                for (r in range(reps)) {
+                    let arm_b = !empty(a.ab) && r > 0 && (r - 1) % 2 == 1
+                    if (a.ab == "knee") {
+                        set_metal_moe_gemv_max(arm_b ? 0l : 512l)
+                    } elif (a.ab == "tail") {
+                        set_metal_prefill_mm_tail(!arm_b)
+                    }
                     var inscope win <- [for (i in range(n)); pool[cursor + i]]
                     cursor += n
                     metal_prefill_stage_reset()
@@ -144,6 +162,10 @@ def private sweep(a : Args) : int {
                     if (r == 0) {
                         continue
                     }
+                    if (arm_b) {
+                        gpu_b |> push(st.gpu_us / 1000.0lf)
+                        continue
+                    }
                     gpu |> push(st.gpu_us / 1000.0lf)
                     enc |> push(double(st.encode_us) / 1000.0lf)
                     wait |> push(double(st.wait_us) / 1000.0lf)
@@ -153,7 +175,12 @@ def private sweep(a : Args) : int {
                     continue
                 }
                 let g = median(gpu)
-                print("{n}  {g}  {median(enc)}  {median(wait)}  {median(rb)}  {g / double(n)}\n")
+                if (empty(a.ab)) {
+                    print("{n}  {g}  {median(enc)}  {median(wait)}  {median(rb)}  {g / double(n)}\n")
+                } else {
+                    let gb = median(gpu_b)
+                    print("{n}  {g}  {gb}  {g / gb}\n")
+                }
                 rows_served++
             }
             for (ks in split(a.kprof, ",")) {

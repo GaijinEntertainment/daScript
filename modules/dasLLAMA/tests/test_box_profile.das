@@ -207,20 +207,26 @@ def test_metal_prefill_knobs_apply(t : T?) {
     var terr = ""
     let dir = temp_directory(terr)
     let path = path_join(dir, "dasllama_test_box_profile_metal.json")
+    let prior_gemv_max = metal_moe_gemv_max()
     t |> success(fwrite(path, ("\{\"runtime\":\{\"metal_tall_floor\":96,"
-        + "\"metal_devw_small_panel_mb\":24,\"metal_cvt_min_rows\":320\}\}")), "metal-knob profile written")
+        + "\"metal_devw_small_panel_mb\":24,\"metal_cvt_min_rows\":320,\"metal_moe_gemv_max\":24\}\}")), "metal-knob profile written")
     apply_box_profile_runtime(path)
     t |> equal(metal_tall_floor(), 96l, "metal_tall_floor applied")
     t |> equal(metal_devw_small_panel_mb(), 24l, "metal_devw_small_panel_mb applied")
     t |> equal(metal_cvt_min_rows(), 320l, "metal_cvt_min_rows applied")
+    t |> equal(metal_moe_gemv_max(), 24l, "metal_moe_gemv_max applied")
 
-    // out-of-range values are refused with a warning — the stored value stands
+    // out-of-range values are refused with a warning — the stored value stands; a knee of 0 is a value (the route off)
     t |> success(fwrite(path, ("\{\"runtime\":\{\"metal_tall_floor\":0,"
-        + "\"metal_devw_small_panel_mb\":0,\"metal_cvt_min_rows\":0\}\}")), "zero-knob profile written")
+        + "\"metal_devw_small_panel_mb\":0,\"metal_cvt_min_rows\":0,\"metal_moe_gemv_max\":0\}\}")), "zero-knob profile written")
     apply_box_profile_runtime(path)
     t |> equal(metal_tall_floor(), 96l, "tall_floor 0 refused (the measured-bad unfloored config)")
     t |> equal(metal_devw_small_panel_mb(), 24l, "devw panel 0 refused")
     t |> equal(metal_cvt_min_rows(), 320l, "cvt_min_rows 0 refused (a numerics form flip from JSON)")
+    t |> equal(metal_moe_gemv_max(), 0l, "metal_moe_gemv_max 0 applied (the gathered route off)")
+    set_metal_moe_gemv_max(-2l)
+    t |> equal(metal_moe_gemv_max(), 0l, "a knee under -1 is refused by the setter")
+    set_metal_moe_gemv_max(prior_gemv_max)
 
     set_metal_tall_floor(64l)
     set_metal_devw_small_panel_mb(32l)

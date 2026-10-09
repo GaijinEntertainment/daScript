@@ -21,18 +21,20 @@ A served-turn leg is prefill, decode, a batched decode row, or a whole served re
 the wall of one internal stage (one model component's forward pass, one decoder block) is not a
 leg.
 
-An instrument is a file that times a run itself and reports the wall or rate as its result,
-printed or returned to a caller that prints it; a file reading a child process's clock, and a
-serving path's profiler-gated report (a run whose result is the served output, the numbers a side
-report), are not one. A harness is the `harness/` script that drove
-a run, where one did.
+An instrument is a file whose printed or returned result is a wall or rate of a run it drove,
+read by its own clock or by timestamps the device driver (Metal or Vulkan) returns, wherever the
+file sits; a file reading a spawned child process's clock, and a profiler-gated report a serving
+path prints beside its served output, are not one. A harness is the `harness/` script that drove
+a run, where one did. A route is the end-to-end code path a served turn takes, including the
+default route - the one a run given no command-line arguments and no environment overrides takes.
 
 The flags of a serving run are the tier (`-jit` or not), the `DAS_TUNE_POLICY` value in force,
 the CPU kernel backend the registry served (the one `DASLLAMA_PIN_BACKEND` pinned, or, with it
 unset, the one the auto-selection picked), the GPU backend where one served (Metal or Vulkan)
-with its device, and on Vulkan the coopmat mode (`DASLLAMA_COOPMAT`). The flags of an instrument run are the tier, the `DAS_TUNE_POLICY` value,
-the device, the coopmat mode where the GPU backend has one, and the instrument's arguments. An
-environment-variable flag the run left unset is named as unset.
+with its device, and on Vulkan the coopmat mode (`DASLLAMA_COOPMAT`). The flags of an instrument
+run are the tier, the `DAS_TUNE_POLICY` value, the device, the coopmat mode where the GPU backend
+has one, and the instrument's arguments. An environment-variable flag the run left unset is named
+as unset.
 
 An environment override is an env variable given to the run that changes what it compiles,
 tunes, or serves, other than the run's flags.
@@ -60,9 +62,10 @@ calls.
 
 A box can mint a spawned cell when a rig leg it neither refuses nor skips drives the path the owed
 row measures and `performance/gen_bench_records.das --catalog official` carries the model; a
-manual cell when it runs the documented command's OS and backend and holds its model. A row owed
-for a route that no rig leg drives and no `PROFILE.md` section documents a command for is one no
-box can mint.
+manual cell when it runs the documented command's OS and backend and holds its model; a cell owed
+for new code when a rig leg or a documented command reaches that code's input. A row owed for a
+route that no rig leg drives and no `PROFILE.md` section documents a command for is one no box can
+mint.
 
 **The naming that a rule governing a figure asks for attaches to a figure only by a sentence, a
 table heading, a provenance line or a `PERF_LEDGER.md` entry's opening paragraph that
@@ -88,7 +91,7 @@ modality) or a tok/s rate of the engine this repository builds only when
 `benchmarks/lcpp_bench.das` produced it - as the released exe (`daspkg release`) or as the `-jit`
 script - or a spawned or manual cell did, or, for a modality `benchmarks/lcpp_bench.das` has no
 command-line flag for, the `harness/` instrument that produced it, named with its command line.** A
-served-turn wall or rate printed by any other instrument stays in that run's log: the ledger entry
+turn wall or tok/s rate printed by any other instrument stays in that run's log: the ledger entry
 carries what the instrument decided - served, declined, how many rows it counted - never that wall
 or rate.
 
@@ -109,39 +112,46 @@ the compared pair - it is measured against.**
 **A `PERF_LEDGER.md` entry tags its reading `direction-grade` when the reading compares across
 two processes or two commits.**
 
-**A `PERF_LEDGER.md` entry tags its reading `out-of-process` when the wall was measured from
-outside the benchmark process.**
+**A `PERF_LEDGER.md` entry tags its reading `out-of-process` when the wall was read by a clock in
+a process other than the one doing the timed work - a client timing a server among them.**
 
 **A diff that writes a `-jit` reading outside `PERF_LEDGER.md` tags it `debug-jit`, and cites the
 committed board row of the same model, served-turn leg and backend where one exists.**
 
-**A figure a diff writes down - in any checked-in text - that no cell,
-script, or exe of this repository produced names where it came from: a published figure names its source and the report; a figure
-a third-party program (an exe or a script) produced names its recipe - that program, its version,
-the model, the command line, and any environment settings the command line does not show; a figure a script
-outside the tree produced names it as outside the tree, with the command line it ran.** A citation of an architecture section
-that spells that run - no placeholder in its exe, model or command line - names it.
+**A published figure that no cell, script, or exe of this repository produced, written down in any
+checked-in text, names its source and the report it appears in.**
+
+**A figure a third-party program (an exe or a script) produced, and no cell, script, or exe of this
+repository produced, written down in any checked-in text, names its recipe: that program, its
+version, the model, the command line, and any environment settings the command line does not
+show.** A citation of an architecture section that states that run's recipe in full - no
+placeholder in its exe, model or command line - names it.
+
+**A figure a script outside the tree produced, written down in any checked-in text, names it as
+outside the tree, with the command line it ran.**
 
 **A figure the diff's text gives as the reason it ships one value, formula or kernel over
 another comes from a script in the tree at the diff's tip, or an exe built from that tree, named
 with its command line.** A figure from a script outside the tree cannot be measured again.
 
 **A diff never edits the figures or conclusion of a dated `PERF_LEDGER.md` entry - one whose
-bold head, or the heading it sits under, carries a date - and never adds figures to one; a new
-dated entry carries the new figures, and where they disagree it names the old entry and the
-figure it replaces.**
+bold head, or the heading it sits under, carries a date - and never adds figures to one: new
+figures go in a new dated entry.**
+
+**A diff whose figures contradict a dated `PERF_LEDGER.md` entry's figures or conclusion adds a
+new dated entry that carries them and names the old entry and the figure or conclusion it
+replaces.**
 
 **A `PERF_LEDGER.md` entry never carries a timing that argues for code the same diff does not
 land - that timing goes in the PR that lands the code.**
 
-**A diff that routes a served turn, or a media encode a turn takes (an image, a video frame or an
-audio chunk), onto a code path no spawned or manual cell exercises mints such a cell in the same
-change.** A
-route is the end-to-end code path such a turn takes, including the default route - the one a run
-given no command-line arguments and no environment overrides takes.
+**A diff that lets a served turn, or a media encode a turn takes (an image, a video frame or an
+audio chunk), reach code no spawned or manual cell's input reaches - a new dispatch arm, a
+window-size arm inside a path a cell drives at other sizes, or a changed default route - mints a
+cell whose input reaches it, in the same change.**
 
-**A change that owes a board row no box of the author's can mint names instead, in the same
-change, an artifact that shows the route ran end to end - a record, a gate output, an
+**A change that owes a cell or board row no box of the author's can mint names instead, in the
+same change, an artifact that shows the new code ran end to end - a record, a gate output, an
 instrument's print - or the profile output that shows the change is faster
 (`benchmarks/lcpp_bench.das`'s `forward_profile` rows, or the tier's `DASLLAMA_GPU_PROF=1` token
 ledger), with the flags that run took.**
@@ -163,7 +173,7 @@ reads, the model components (encoder, decoder, tower) it runs or the backend tha
 the tokens or rows it divides the wall by, or the reference build it times (`DEFAULT_REF_SHA` in
 `benchmarks/setup_lcpp_ref.das`, or anything else deciding which reference binary or environment
 the run measures) - ships before/after rows for each affected cell and corpus, or withdraws the
-affected rows and names the withdrawal and its reason in the PR body.** A change to a kernel triggers this rule only when it changes one of those.
+affected rows and names the withdrawal and its reason in the PR body.**
 
 **Before/after rows or a withdrawal shipped for a changed board cell land in the file the affected
 rows live in - `performance/records/<box>.json` or `PERF_LEDGER.md`.**
@@ -174,25 +184,25 @@ came from, or names harness, flags, environment overrides, box, the exe or scrip
 and - for a figure aggregated over more than one timed run or input - the number of runs or
 inputs and the spread of the per-run figures: the standard deviation, or the min and max.**
 
-**A diff that records a measured number a `harness/` or `performance/` instrument prints - a
-time, a rate, or a figure computed from one - or changes what such a number measures, ships that number's alternate
-in the same change: the same instrument's row on the same fixture and input size with exactly one
-flag or environment override changed; the same instrument's row on the same fixture, input size,
-flags and overrides at a named other commit, tagged `direction-grade`; the other arm of the race
-the number comes from; or a third-party row that cites the architecture section holding its
-recipe.** A number with no alternate beside it cannot be compared to anything.
+**A diff that records a measured number an instrument prints - a time, a rate, or a figure
+computed from one - or changes what such a number measures, ships that number's alternate in the
+same change: the same instrument's row on the same fixture and input size with exactly one flag or
+environment override changed; the same instrument's row on the same fixture, input size, flags and
+overrides at a named other commit, tagged `direction-grade`; the other arm of the race the number
+comes from; or a third-party row that cites the architecture section holding its recipe.** A
+number with no alternate beside it cannot be compared to anything.
 
-**A diff that records a third-party row lands that row's recipe - the fields a third-party
-program's figure names - in the same change, in the `ARCHITECTURE_MEASUREMENT*.md` section that
-describes the harness instrument
-the row is compared with; where no section describes that instrument, the diff adds one.** The
-next entry re-runs the reference from the section, not from the earlier entry's prose.
+**A diff that records a third-party row lands that row's recipe - the program, its version, the
+model, the command line, and any environment settings the command line does not show - in the same
+change, in the `ARCHITECTURE_MEASUREMENT*.md` section that describes the instrument the row is
+compared with; where no section describes that instrument, the diff adds one.** The next entry
+re-runs the reference from the section, not from the earlier entry's prose.
 
-**A figure a cell, script or exe of this repository produced that is not a served-turn leg, whose value depends
-on the box it ran on, names the harness, the flags, the environment overrides, the box and the
-exe or script that produced it - or names the committed record file and the row or key it sits
-under, when that record is a board record or its own fields name that harness, flags, box and
-exe.**
+**A figure a cell, script or exe of this repository produced that is not a served-turn leg, whose
+value depends on the box it ran on, names the harness, the flags, the environment overrides, the
+box and the exe or script that produced it - or names the committed record file and the row or key
+it sits under, when that record is a board record or its own fields name that harness, flags, box
+and exe.**
 
 **A figure whose value is the same on every box names the build, fixture, or command that
 reproduces it.**
@@ -203,10 +213,10 @@ never spawning a child process.** A shipped exe carries no vehicle model (a real
 harness run drives) and no harness script, so a model or a child there is a hang or a silent
 skip.
 
-**A shipped exe's startup race races only a GPU pipeline-state twin - two pipeline-state objects
-built from the same shader, raced to set a runtime knob - never a `[tune]` kernel family**
-(`ARCHITECTURE_MEASUREMENT_FAT_START.md#fat-first-start`). A `[tune]` winner needs a recompiled
-clone the shipped exe does not carry.
+**A shipped exe's startup race races only a GPU pipeline-state twin - two precompiled pipeline-state
+objects the dispatcher picks between at run time, raced to set a runtime knob - never a `[tune]`
+kernel family** (`ARCHITECTURE_MEASUREMENT_FAT_START.md#fat-first-start`). A `[tune]` winner needs
+a recompiled clone the shipped exe does not carry.
 
 **A diff never adds a confirm outside `harness/` - it goes there instead.** A confirm is an
 end-to-end A/B: it serves a vehicle model in a spawned child, runs two implementations of this

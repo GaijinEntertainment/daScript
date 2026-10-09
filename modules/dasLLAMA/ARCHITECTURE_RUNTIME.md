@@ -167,7 +167,11 @@ override, batch donor) carries it too, because backends are also reached from un
 harness paths. Reused buffers take `@scratch`; debug and profiling legs take `[cold_path]`.
 The tokenizer encode/decode path is sanctioned UNCOVERED by the region contracts - its perf
 gate is the `--tok` scaling rows, whose instrument (the size-ladder ratio) catches what the
-contracts cannot.
+contracts cannot. So is the scheduler's tick (`scheduler_step` and the per-token `advance_with`
+under it): it builds its events array and its stop-string tails a tick by design, so a contract at
+its entry would name its own mechanism; its perf gate is the served-turn instrument
+(`harness/served_bench.das`), and its one per-token branch that logs - the reasoning budget's
+forced close - runs behind a `[cold_path]` helper.
 
 ### The post-CPU-burn GPU ramp and the residency heartbeat {#the-post-cpu-burn-gpu-ramp-and}
 
