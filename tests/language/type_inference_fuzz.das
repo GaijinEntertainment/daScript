@@ -36,8 +36,9 @@ typedef option_with_an_alias = int | float
 
 // A result type whose nested element is larger than INT_MAX. The type is legal - the
 // container is heap-allocated and never instantiates an element - but the debug-info walk
-// asked the element for a size that does not fit in TypeInfo::size.
-[export]
+// asked the element for a size that does not fit in TypeInfo::size. The AOT tier skips it:
+// the C++ for the element is a TDim over 8GB, and MSVC refuses any object past 0x7fffffff bytes.
+[export, no_aot]
 def result_larger_than_int_max => new array<int[2000000000]>()
 
 [export]

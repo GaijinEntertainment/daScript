@@ -3714,7 +3714,7 @@ def private vt_upload_g4v(var r : VtResident; key : uint64; t : Gemma4vTower; on
 //! the patch linear with its bias (the f32 tile over the bf16 plane widened), the second layernorm, the 2-axis positions, the third
 //! layernorm, the weightless rms and the projection; `out` takes the soft tokens
 [hot_path, unused_argument(s), arch(at = "../ARCHITECTURE_GPU_TOWER_VULKAN_VISION.md#vk-vision-chains")]
-def private vulkan_gemma4uv_encode(t : Gemma4uvEmbedder; var s : Gemma4uvState; planes : array<float>; w, h, npos, n_cols : int64; var out : array<float>) : bool {   // nolint:STYLE038 — the dispatch chain is the shape
+def private vulkan_gemma4uv_encode(t : Gemma4uvEmbedder; var s : Gemma4uvState; planes : array<float>; w, h, npos, n_cols : int64; var out : array<float>) : bool {
     var r & = g_vt_uv
     if (!vt_gate(r, true)) {
         return false
