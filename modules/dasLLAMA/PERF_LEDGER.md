@@ -11,6 +11,35 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **MEASURED (2026-10-09, `direction-grade`, external) - mlx-lm 0.32.0 on the house window, beside ours, on the M1 Max and
+  the M5 Max.** `mlx-community/Qwen3.6-35B-A3B-4bit` (affine 4-bit, group 64) under mlx 0.32.3: a 4500-token prompt cache
+  in 512-token chunks, then the 375-token window timed as served (`mx.eval` of the logits and the cache state, the cache
+  restored between reps, median of four after a warmup), then the same window with every module class's call forced to
+  evaluate for a per-class exclusive breakdown (the forced pass runs 1.4x (M1) to 2.4x (M5) the served time - the sync a
+  call and the lost overlap - so the shares are the attribution, the served figure the cost). Ours is the same window
+  under the adaptive expert tile, the IQ4_XS-pure file, the box sidecar (the M5 its real one).
+
+  | | M1 Max ours | M1 Max mlx-lm | M5 Max ours | M5 Max mlx-lm |
+  |---|---|---|---|---|
+  | 375-token window as served | 487 ms | 659 ms | 102 ms | 113 ms |
+  | dense projections (deltanet qkv / z / out, attention qkv / o, router, shared expert) | 149 ms, 31% | 47% (`QuantizedLinear`, 391 calls) | 23 ms, 22% | 43% |
+  | expert GEMMs | 232 ms, 48% | 34% (`QuantizedSwitchLinear`, 120 calls) | 49 ms, 48% | 27% |
+  | norms | ~3 ms | 10% (`RMSNorm` + the gated norm) | ~2 ms | 12% |
+  | MoE glue (sort, gather, act, scatter) | 13 ms | 6% | 8 ms | 10% |
+  | attention | 66 ms, 14% | inside the dense share (10 layers, 115 ms inclusive on the M1) | 8.5 ms | inside the dense share |
+  | deltanet (conv, scan) | 28 ms, 6% | 2% (`Conv1d` 11 ms; the scan rides the kernel the norm calls) | 9 ms | 4% |
+  | 4500-token prefix | - | 7.1 s (630 tok/s) | - | 1.18 s (3800 tok/s) |
+
+  The reading: on this shape ours is the faster window on both boxes (M1 by 26%, M5 by 10%), and the shapes differ -
+  mlx-lm's dense 4-bit `QuantizedLinear` GEMMs are its largest cost (scaled, ~310 ms on the M1 against our 149 for the
+  same sites on f16 dev-W panels), its expert GEMMs about ours (~225 scaled against our 232), and its norms are ten times
+  ours. End to end on the same M1 (the house replay against each server, two passes, the warm one): mlx-lm's short
+  replies at a first token of 0.92-0.94 s and a wall of 1.15-1.19, ours 0.74-0.75 and 0.90. Both servers sit ~260 ms above
+  their window compute on a short reply (ours 0.75 against a 0.49 window) - the request's CPU side, the first decode step
+  and the stream - which is the next thing to price. The house's M4 Pro reading (ours 46 against mlx 78 tok/s on short
+  replies) is not reproduced by the window compute on either box here; that box runs uncrowned unless its first start
+  minted a profile (the M5 under a copied profile read 121 against 107 under its own).
+
 - **MEASURED (2026-10-09, `direction-grade`) - what a routed 32-row tile costs and where, and the adaptive tensor op that
   came of it, on the M1 Max and the M5 Max.** The house's short reply is a ~375-token window over 256 experts at top-8,
   twelve live rows an expert in a 32-row tile, and the window probe (`prefill_window_probe --prefix 4500 --windows 375
