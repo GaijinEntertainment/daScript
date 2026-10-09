@@ -1005,6 +1005,15 @@ def fmt_spaces_around_operators(var ctx : FormatterCtx) {
 }
 
 
+let match_keywords <- fixed_array("match", "static_match")
+
+def is_match_keyword_with_arms(ctx : FormatterCtx; i : int) : bool {
+    //! ``match (x) { arms }`` keeps the keyword space in value position too, where the call-paren pass would glue it.
+    if (match_keywords |> find_index(ctx.tokens[i].str) < 0 || !(ctx |> eq(i + 1, "(")) || new_line_before(ctx, i + 1)) return false
+    let closingParen = ctx |> find_pair_paren(i + 1)
+    return closingParen > i + 1 && closingParen + 1 < length(ctx.tokens) && ctx |> eq(closingParen + 1, "\{")
+}
+
 let space_after_keywords <- fixed_array("if", "elif", "while", "switch", "with",
         "yield", "catch", "static_if", "static_elif", "for", "in")
 
@@ -1019,6 +1028,8 @@ def fmt_space_after_keyword(var ctx : FormatterCtx) {
             if (!new_line_before(ctx, i + 1)) {
                 ctx |> add_space_before(i + 1)
             }
+        } elif (is_match_keyword_with_arms(ctx, i)) {
+            ctx |> add_space_before(i + 1)
         }
         if (ctx.tokens[i].str == "return" && !empty(ctx.tokens[i + 1].str)) {
             if (!new_line_before(ctx, i + 1)) {
