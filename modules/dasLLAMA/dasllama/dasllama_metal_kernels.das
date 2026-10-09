@@ -3778,6 +3778,9 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_kq_k6 = compile_stamp(metal_kq_gemv_k6_msl, ok)
     g_pso_kq_mvb2_k4 = compile_stamp(MetalKqMvB2K4_metal_kq_mv_k4_msl, ok)
     g_pso_kq_mvb2_k4r2 = compile_stamp(MetalKqMvB2K4R2_metal_kq_mv_k4_r2_msl, ok)
+    g_pso_kq_mvw2h_k4 = compile_stamp(MetalKqMvW2K4H_metal_kq_mvw_k4_msl, ok)
+    g_pso_kq_mvw4h_k4 = compile_stamp(MetalKqMvW4K4H_metal_kq_mvw_k4_msl, ok)
+    g_pso_kq_mvw8h_k4 = compile_stamp(MetalKqMvW8K4H_metal_kq_mvw_k4_msl, ok)
     g_pso_kq_mvb4_k4 = compile_stamp(MetalKqMvB4K4_metal_kq_mv_k4_msl, ok)
     g_pso_kq_mvb2_k5 = compile_stamp(MetalKqMvB2K5_metal_kq_mv_k5_msl, ok)
     g_pso_kq_mvb4_k5 = compile_stamp(MetalKqMvB4K5_metal_kq_mv_k5_msl, ok)
@@ -3860,6 +3863,8 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
         g_kq_rows_crowned[int(f.fmt)] = metal_tensor_crowned("kq_rows_{f.fmt}")
     }
     g_kq_k4_r2_crowned = metal_tensor_crowned("kq_mvb2_k4_r2")
+    g_kq_half_env = g_env_metal.kq_half
+    g_kq_half_crowned = metal_tensor_crowned(KQ_HALF_CROWN)
     g_gemm_b_tensor = metal_tensor_crowned("gemmb_q8")
     g_pso_gemm_b = (g_gemm_b_tensor
         ? compile_stamp(MetalQ8GemmBT_metal_q8_gemm_b_t_msl, ok)
@@ -4160,13 +4165,26 @@ def enc_site_gemv(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; woff, rows
 
 var private g_kq_rows_crowned : bool[16]
 var private g_kq_k4_r2_crowned : bool
+var private g_kq_half_crowned : bool   //! the box crowned the half-x wide forms for k4 (`KQ_HALF_CROWN`)
+var private g_kq_half_env = true       //! `DASLLAMA_METAL_KQ_HALF` and its setter - 0 keeps the f32 forms under the crown (the A/B rail)
+
+let KQ_HALF_CROWN = "kq_rows_half_k4"
+
+//! the half-x wide forms serve k4 rows sites on this box: the crown is minted and the rail is on
+def metal_kq_half_on : bool => g_kq_half_crowned && g_kq_half_env
+
+//! A/B seat: the half-x wide forms under their crown vs the f32 forms - `DASLLAMA_METAL_KQ_HALF`'s setter twin. Default on.
+def public set_metal_kq_half(v : bool) {
+    g_kq_half_env = v
+}
 
 //! B >= 9 over a panel padded to the mul_mm's 32-row tile takes the kq mul_mm twin; an unpadded
-//! nine-row panel (the verify's) rides the eight-row form plus a single pass per row past eight
+//! nine-row panel (the verify's) rides the eight-row form plus a single pass per row past eight;
+//! bxh = the f16 twin of x at the same row stride, where the producer wrote one (null = none)
 [arch(at="../ARCHITECTURE_GPU_MTP_DECODE.md#kq-rows-crown")]
 def enc_kq_site_b(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; woff, rows, n : int64;
                   bx : MetalBuffer?; xstride : int64; by : MetalBuffer?; ystride, ycol : int64;
-                  bn, bd, bys : MetalBuffer?; nrows, mp : int64) {
+                  bn, bd, bys : MetalBuffer?; nrows, mp : int64; bxh : MetalBuffer? = null) {
     let bq = kq_quants_of(g_dev, t, fmt, woff)
     let bs = kq_scales_of(g_dev, t, fmt, woff)
     if (nrows > 8l) {
@@ -4174,26 +4192,39 @@ def enc_kq_site_b(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; woff, rows
             enc_kq_gemm_mm_b(enc, fmt, bq.buf, bq.qoff, bs.buf, bs.soff, bs.doff, bx, by, uint64(ycol * 4l), bn, bys, mp, rows)
             return
         }
-        enc_kq_site_b(enc, t, fmt, woff, rows, n, bx, xstride, by, ystride, ycol, bn, bd, bys, 8l, 8l)
+        enc_kq_site_b(enc, t, fmt, woff, rows, n, bx, xstride, by, ystride, ycol, bn, bd, bys, 8l, 8l, bxh)
         for (b in range64(8l, nrows)) {
             enc_kq_gemv(enc, fmt, bq.buf, bq.qoff, bs.buf, bs.soff, bs.doff, bx, by, bn, bd, rows, n,
                 uint64((b * ystride + ycol) * 4l), uint64(b * xstride * 4l))
         }
         return
     }
+    if (nrows >= 2l && fmt == KqFmt.k4 && bxh != null && metal_kq_half_on()) {
+        assert(xstride == n)
+        enc_kq_rows_half_k4(enc, bq.buf, bq.qoff, bs.buf, bs.soff, bxh, by, uint64(ycol * 4l), rows, n, ystride, nrows)
+        return
+    }
+    enc_kq_rows_f32(enc, fmt, bq.buf, bq.qoff, bs.buf, bs.soff, bs.doff, bx, by, uint64(ycol * 4l), bn, bd, rows, n, xstride, ystride, nrows)
+}
+
+//! the f32-x rows route of a format at one to eight rows - the crowns' incumbent: B single passes where
+//! the box crowned them (and at one row), the k4 pair walk under the tile crown, else the small-batch twin
+[arch(at="../ARCHITECTURE_GPU_MTP_DECODE.md#kq-rows-crown")]
+def enc_kq_rows_f32(enc : MetalComputeEncoder?; fmt : KqFmt; bq : MetalBuffer?; qoff : uint64; bs : MetalBuffer?; soff, doff : uint64;
+                    bx, by : MetalBuffer?; yoff : uint64; bn, bd : MetalBuffer?; rows, n, xstride, ystride, nrows : int64) {
     if (nrows >= 2l && !g_kq_rows_crowned[int(fmt)]) {
         assert(xstride == n)
         if (nrows > 2l && fmt == KqFmt.k4 && g_kq_k4_r2_crowned) {
-            enc_kq_mvb_k4_pairs(enc, bq.buf, bq.qoff, bs.buf, bs.soff, bs.doff, bx, by, uint64(ycol * 4l), bn, bd, rows, n, ystride, nrows)
+            enc_kq_mvb_k4_pairs(enc, bq, qoff, bs, soff, doff, bx, by, yoff, bn, bd, rows, n, ystride, nrows)
             return
         }
         var ka = KqMvArgs(ndim = uint(n), ddim = uint(rows), ys = uint(ystride), nr = uint(nrows))
-        enc_kq_mvb(enc, fmt, bq.buf, bq.qoff, bs.buf, bs.soff, bs.doff, bx, by, uint64(ycol * 4l), ka, rows, nrows)
+        enc_kq_mvb(enc, fmt, bq, qoff, bs, soff, doff, bx, by, yoff, ka, rows, nrows)
         return
     }
     for (b in range64(nrows)) {
-        enc_kq_gemv(enc, fmt, bq.buf, bq.qoff, bs.buf, bs.soff, bs.doff, bx, by, bn, bd, rows, n,
-            uint64((b * ystride + ycol) * 4l), uint64(b * xstride * 4l))
+        enc_kq_gemv(enc, fmt, bq, qoff, bs, soff, doff, bx, by, bn, bd, rows, n,
+            yoff + uint64(b * ystride * 4l), uint64(b * xstride * 4l))
     }
 }
 
@@ -4208,6 +4239,22 @@ def enc_kq_mvb_k4_pairs(enc : MetalComputeEncoder?; bq : MetalBuffer?; qoff : ui
     }
     if (b < nlive) {
         enc_kq_gemv(enc, KqFmt.k4, bq, qoff, bs, soff, doff, bx, by, bn, bd, rows, n, yoff + uint64(b * ystride * 4l), uint64(b * n * 4l))
+    }
+}
+
+//! the k4 half-x wide forms over nlive (2..8) rows of the f16 twin bxh (row stride n): two live rows
+//! take the two-column form, three or four the four-column one, five to eight the eight-column one;
+//! a form reads every one of its columns, so the twin holds eight rows of n halves whatever nlive is
+[arch(at="../ARCHITECTURE_GPU_MTP_DECODE.md#kq-rows-crown")]
+def enc_kq_rows_half_k4(enc : MetalComputeEncoder?; bq : MetalBuffer?; qoff : uint64; bs : MetalBuffer?; soff : uint64;
+                        bxh, by : MetalBuffer?; yoff : uint64; rows, n, ystride, nlive : int64) {
+    var ka = KqMvArgs(ndim = uint(n), ddim = uint(rows), ys = uint(ystride), nr = uint(nlive))
+    if (nlive <= 2l) {
+        enc_kq_mvw2h_k4_c(enc, bs, soff, bs, soff, bq, qoff, bxh, 0ul, by, yoff, ka, rows)
+    } elif (nlive <= 4l) {
+        enc_kq_mvw4h_k4_c(enc, bs, soff, bs, soff, bq, qoff, bxh, 0ul, by, yoff, ka, rows)
+    } else {
+        enc_kq_mvw8h_k4_c(enc, bs, soff, bs, soff, bq, qoff, bxh, 0ul, by, yoff, ka, rows)
     }
 }
 
@@ -4680,6 +4727,7 @@ def metal_kernels_release {
     release_handles(g_pso_kq_mvb8_iq4nl, g_pso_kq_mm_b45, g_pso_kq_q40, g_pso_kq_mvb2_q40, g_pso_kq_mvb4_q40, g_pso_kq_mvb8_q40)
     release_handles(g_pso_kq_mm_b40, g_pso_kq_k2, g_pso_kq_mvb2_k2, g_pso_kq_mvb4_k2, g_pso_kq_mvb8_k2, g_pso_kq_mm_b2)
     release_handles(g_pso_rms, g_pso_rms_hx, g_pso_dn_ba, g_pso_moe_router_b, g_pso_add, g_pso_addrms_hx)
+    release_handles(g_pso_kq_mvw2h_k4, g_pso_kq_mvw4h_k4, g_pso_kq_mvw8h_k4)
     release_handles(g_pso_addrms, g_pso_preaddrms, g_one, g_zero, g_pso_geglu, g_pso_geglu_hx)
     release_handles(g_pso_ln, g_pso_bias_act, g_pso_act_rows, g_pso_posadd, g_pso_q3v_stem, g_pso_clamp, g_pso_clamp_copy)
     release_handles(g_pso_rope2d, g_pso_head_pad, g_pso_head_unpad, g_pso_geglu_quick, g_pso_wdec_kv, g_pso_wdec_kv_h)
@@ -4847,25 +4895,55 @@ def private race_kq_k4_form(queue : MetalCommandQueue?) : MetalTensorRaceResult 
     })
 }
 
-// the K-quant races' fixture: one format's planes at n x rows, two x columns, two y planes per arm, the n/d uniforms
-struct private KqRaceRig {
-    bq, bs, bx, by_a, by_a2, by_b, by_b2, bn, bd : MetalBuffer?
-    doff : uint64
-    xa : array<float>
+//! the half-x crown's race: the box's f32 rows route for k4 (under the crowns the races before it decided) against
+//! the half-x wide forms, at two, four and eight rows in every timed encoder - every form the dispatcher has - on a
+//! 27B FFN plane past the last-level cache (5120 x 24576 k4 = 71 MB); the half forms are "tensor"
+[arch(at="../ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md#kernel-race-fidelity")]
+def private race_kq_k4_half(queue : MetalCommandQueue?) : MetalTensorRaceResult {
+    let n = 5120
+    let rows = 24576
+    var res = MetalTensorRaceResult(family = KQ_HALF_CROWN, winner = "", base_ms = -1.0lf, twin_ms = -1.0lf, note = "")
+    var rig <- kq_race_rig(g_dev, 32, KqRaceScaleForm.compact, n, rows, 8)
+    let widths <- [2l, 4l, 8l]
+    race_pair_ms(queue, 5, res.base_ms, res.twin_ms, $(enc) {
+        for (r in range(6)) {
+            enc_kq_rows_f32(enc, KqFmt.k4, rig.bq, 0ul, rig.bs, 0ul, rig.doff, rig.bx, (r & 1) == 0 ? rig.by_a : rig.by_a2, 0ul,
+                rig.bn, rig.bd, int64(rows), int64(n), int64(n), int64(rows), widths[r % 3])
+        }
+    }, $(enc) {
+        for (r in range(6)) {
+            enc_kq_rows_half_k4(enc, rig.bq, 0ul, rig.bs, 0ul, rig.bxh, (r & 1) == 0 ? rig.by_b : rig.by_b2, 0ul,
+                int64(rows), int64(n), int64(rows), widths[r % 3])
+        }
+    })
+    kq_race_verdict(res, rig.by_a, rig.by_b, 8 * rows)
+    release_kq_race_rig(rig)
+    return res
 }
 
-def private kq_race_rig(dev : MetalDevice?; qu_per_sb : int; sform : KqRaceScaleForm; n, rows : int) : KqRaceRig {
+// the K-quant races' fixture: one format's planes at n x rows, `cols` x columns on the f16 lattice with
+// their half twin, two y planes per arm, the n/d uniforms
+struct private KqRaceRig {
+    bq, bs, bx, bxh, by_a, by_a2, by_b, by_b2, bn, bd : MetalBuffer?
+    doff : uint64
+    xa : array<float>
+    xh : array<float16>
+}
+
+def private kq_race_rig(dev : MetalDevice?; qu_per_sb : int; sform : KqRaceScaleForm; n, rows : int; cols : int = 2) : KqRaceRig {
     var rig : KqRaceRig
     var planes = race_kq_planes(dev, rows * (n / 256), qu_per_sb, sform)
     rig.bq = planes.bq
     rig.bs = planes.bs
     rig.doff = planes.doff
-    rig.xa <- race_x_f32(2 * n)
-    rig.bx = race_buf(dev, uint64(2 * n * 4), unsafe(addr<void?>(rig.xa[0])))
-    rig.by_a = race_buf(dev, uint64(2 * rows * 4), null)
-    rig.by_a2 = race_buf(dev, uint64(2 * rows * 4), null)
-    rig.by_b = race_buf(dev, uint64(2 * rows * 4), null)
-    rig.by_b2 = race_buf(dev, uint64(2 * rows * 4), null)
+    rig.xa <- race_x_f32(cols * n)
+    rig.xh <- [for (v in rig.xa); float16(v)]   //! race_x_f32 sits on the f16 lattice, so both x views read one value
+    rig.bx = race_buf(dev, uint64(cols * n * 4), unsafe(addr<void?>(rig.xa[0])))
+    rig.bxh = race_buf(dev, uint64(cols * n * 2), unsafe(addr<void?>(rig.xh[0])))
+    rig.by_a = race_buf(dev, uint64(cols * rows * 4), null)
+    rig.by_a2 = race_buf(dev, uint64(cols * rows * 4), null)
+    rig.by_b = race_buf(dev, uint64(cols * rows * 4), null)
+    rig.by_b2 = race_buf(dev, uint64(cols * rows * 4), null)
     rig.bn = race_uniform_u32(dev, uint(n))
     rig.bd = race_uniform_u32(dev, uint(rows))
     return <- rig
@@ -4875,6 +4953,7 @@ def private release_kq_race_rig(var rig : KqRaceRig) {
     metal_release(rig.bq)
     metal_release(rig.bs)
     metal_release(rig.bx)
+    metal_release(rig.bxh)
     metal_release(rig.by_a)
     metal_release(rig.by_a2)
     metal_release(rig.by_b)
@@ -4882,6 +4961,7 @@ def private release_kq_race_rig(var rig : KqRaceRig) {
     metal_release(rig.bn)
     metal_release(rig.bd)
     delete rig.xa
+    delete rig.xh
 }
 
 //! Decode-side tuner entry (the runtime.metal_tensor crown): the batch q8 GEMM families and the
@@ -4934,8 +5014,15 @@ def metal_tensor_race_decode : array<MetalTensorRaceResult> {
         g_kq_k4_r2_crowned = form.winner == "tensor"
         results |> emplace(form)
         for (f in KQ_ROWS_RACE_FORMATS) {
-            results |> emplace(race_kq_rows(pq, f.fmt, f.qu, f.sform))
+            var rr = race_kq_rows(pq, f.fmt, f.qu, f.sform)
+            if (f.fmt == KqFmt.k4) {   //! the half race's incumbent is the route the two k4 verdicts above leave
+                g_kq_rows_crowned[int(KqFmt.k4)] = rr.winner == "tensor"
+            }
+            results |> emplace(rr)
         }
+        var half = race_kq_k4_half(pq)
+        g_kq_half_crowned = half.winner == "tensor"
+        results |> emplace(half)
         metal_release(pq)
     }
     return <- results
@@ -5037,7 +5124,8 @@ class template MetalRmsNormT : MetalTgReduceBase {
 class MetalRmsNorm : MetalRmsNormT {
 }
 
-[metal_dispatch(name = "pf_enc_rms_hx", pso = "g_pso_rms_hx", tgmem = "MetalRmsNormHX_metal_rmsnorm_msl_tgmem", tg = 256, grid = "nrows", params = "nrows : int64")]
+[metal_dispatch(name = "pf_enc_rms_hx", pso = "g_pso_rms_hx", tgmem = "MetalRmsNormHX_metal_rmsnorm_msl_tgmem", tg = 256, grid = "nrows", params = "nrows : int64"),
+    metal_dispatch(name = "enc_rms_bhx", pso = "g_pso_rms_hx", tgmem = "MetalRmsNormHX_metal_rmsnorm_msl_tgmem", tg = 1024, grid = "nrows", params = "nrows : int64")]
 class MetalRmsNormHX : MetalRmsNormT {
     override HX = true
 }

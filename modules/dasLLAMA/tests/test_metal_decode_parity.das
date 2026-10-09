@@ -10,6 +10,7 @@ require dasllama/dasllama_kv_codec   // cvt_q8kv_to_f32/cvt_tq4kv_to_f32 — the
 require _metal_blob_twin   // blob_twin - the blob-flavor carrier
 require ?das_metal dasllama/dasllama_metal_decode  // stats/mirror/shutdown rails
 require ?das_metal dasllama/dasllama_metal_common  // the greedy chain's stats and mode (arm 15)
+require ?das_metal dasllama/dasllama_metal_kernels  // set_metal_kq_half + KQ_HALF_CROWN - the half-x rows forms' rail and crown
 require ?das_metal dasllama/dasllama_metal_prefill  // the Metal-prefill→GPU-decode hybrid arm
 require ?das_metal metal/das_metal_boost  // metal_live_object_count for the leak gate
 require daslib/f16_cvt  // f16 KV row decode in the tolerance gate (Apple half only)
@@ -688,6 +689,40 @@ def test_metal_batch_decode_parity(t : T?) {   // nolint:STYLE038 — flat arm l
                     let gpuk12 <- batch_greedy(trkb, trkbg, promptsk12, 10, KVDtype.f16, true, -1, 0)
                     t |> success(metal_batch_decode_stats().steps - before > 0l, "B=12 kq arm served on the GPU")
                     t |> success(streams_match(cpuk12, gpuk12), "B=12 kq batched greedy streams match the CPU control (kq mul_mm)")
+                    // the half-x leg: under the kq_rows_half_k4 crown the k4 sites of two to eight rows read the f16
+                    // twin the norms and the activation store beside their rows - B=2 / B=3 / B=8 take the two-, four-
+                    // and eight-column forms, token for token the CPU control, the forms' dispatch counts the witness;
+                    // the rail off (set_metal_kq_half) is the control that keeps the f32 forms, the count unmoved
+                    let prev_crowns = get_metal_tensor_crowns()
+                    pin_metal_tensor_crowns(KQ_HALF_CROWN)
+                    metal_decode_shutdown()
+                    var promptsk8 : array<array<int64>>
+                    promptsk8 |> reserve(8)
+                    for (i in range(8)) {
+                        promptsk8 |> emplace <| encode(trkb, counting_prompt(2 + i, 30 + 3 * i), true, false)
+                    }
+                    let cpuk8 <- batch_greedy(trkb, trkbg, promptsk8, 12, KVDtype.f16, false, -1, 0)
+                    metal_kernel_coverage_reset()
+                    let gpukh2 <- batch_greedy(trkb, trkbg, promptsk2, 14, KVDtype.q8_0, true, -1, 0)
+                    let gpukh3 <- batch_greedy(trkb, trkbg, promptsk, 16, KVDtype.f16, true, -1, 0)
+                    let gpukh8 <- batch_greedy(trkb, trkbg, promptsk8, 12, KVDtype.f16, true, -1, 0)
+                    let h2 = metal_kernel_coverage_of("MetalKqMvW2K4H_metal_kq_mvw_k4")
+                    let h4 = metal_kernel_coverage_of("MetalKqMvW4K4H_metal_kq_mvw_k4")
+                    let h8 = metal_kernel_coverage_of("MetalKqMvW8K4H_metal_kq_mvw_k4")
+                    t |> success(h2 > 0l && h4 > 0l && h8 > 0l, "the half-x forms served the k4 sites under the crown (two-column {h2}, four-column {h4}, eight-column {h8} dispatches)")
+                    t |> success(streams_match(cpuk2, gpukh2), "B=2 kq batched greedy streams on the half-x two-column form match the CPU control")
+                    t |> success(streams_match(cpuk, gpukh3), "B=3 kq batched greedy streams on the half-x four-column form match the CPU control")
+                    t |> success(streams_match(cpuk8, gpukh8), "B=8 kq batched greedy streams on the half-x eight-column form match the CPU control")
+                    set_metal_kq_half(false)
+                    metal_kernel_coverage_reset()
+                    let gpukf8 <- batch_greedy(trkb, trkbg, promptsk8, 12, KVDtype.f16, true, -1, 0)
+                    t |> equal(metal_kernel_coverage_of("MetalKqMvW8K4H_metal_kq_mvw_k4"), 0l, "the rail off keeps the f32 forms: no eight-column half dispatch")
+                    t |> success(streams_match(cpuk8, gpukf8), "B=8 kq batched greedy streams on the f32 forms match the CPU control")
+                    set_metal_kq_half(true)
+                    unpin_metal_tensor_crowns()
+                    set_metal_tensor_crowns(prev_crowns)
+                    metal_decode_shutdown()
+                    delete promptsk8
                     delete promptsk12
                     delete promptsk
                     delete promptsk2

@@ -2184,18 +2184,22 @@ def test_kq_rows_race_verdicts(t : T?) {
             let res <- metal_tensor_race_decode()
             var seen = 0
             var form = 0
+            var half = 0
             for (r in res) {
                 if (r.family == "kq_mvb2_k4_r2") {
                     form++
+                } elif (r.family == KQ_HALF_CROWN) {
+                    half++
                 } else {
                     continue if (!(r.family |> starts_with("kq_rows_")))
                     seen++
                 }
-                t |> success(r.base_ms > 0.0lf && r.twin_ms > 0.0lf, "{r.family}: both arms timed (twin {r.base_ms:.3f} ms, passes {r.twin_ms:.3f} ms) {r.note}")
+                t |> success(r.base_ms > 0.0lf && r.twin_ms > 0.0lf, "{r.family}: both arms timed (base {r.base_ms:.3f} ms, twin {r.twin_ms:.3f} ms) {r.note}")
                 t |> success(r.winner == "tensor" || r.winner == "simdgroup", "{r.family}: a verdict, not a dispatch failure ({r.winner}: {r.note})")
             }
             t |> equal(seen, 13, "every K-quant format with a small-batch twin raced")
             t |> equal(form, 1, "the k4 twin's two-row tile raced its two-column form")
+            t |> equal(half, 1, "the k4 half-x wide forms raced the box's f32 rows route")
         } else {
             t |> skip("das_metal is not built on this platform")
         }

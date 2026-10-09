@@ -691,6 +691,9 @@ def private cov_tower_gemma4uv(t : T?) {
 //! pair is named here.
 let private CENSUS_CROWN_CONDITIONAL : table<string; string> <- {
     "MetalKqMvB2K4R2" => "kq_mvb2_k4_r2",
+    "MetalKqMvW2K4H" => "kq_rows_half_k4",
+    "MetalKqMvW4K4H" => "kq_rows_half_k4",
+    "MetalKqMvW8K4H" => "kq_rows_half_k4",
     "metal_kq_gemv_iq3s_f4" => "kq_gemv_iq3s_f4",
     "metal_moe_gemv_iq3s_f4" => "kq_gemv_iq3s_f4",
     "metal_kq_gemv_iq3xxs_f4" => "kq_gemv_iq3xxs_f4",

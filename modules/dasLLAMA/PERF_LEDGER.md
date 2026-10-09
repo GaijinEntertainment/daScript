@@ -11,6 +11,41 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **MEASURED (2026-10-09, `direction-grade`) - the k4 half-x rows forms served under the `kq_rows_half_k4` crown, on
+  the M1 Max and the M5 Max.** The crown race (`race_kq_k4_half`, 5120 x 24576 k4, two, four and eight rows in one
+  encoder, the box's f32 route the base): M1 Max 4.986 -> 2.756 ms (the half forms at 0.55 of the k4 tile route), M5
+  Max 1.458 -> 1.070 ms (0.73 of the ext twin); both arms bit-equal (x on the f16 lattice). End to end on
+  Qwen3.6-27B-MTP Q4_K_M (a deltanet hybrid, 65 layers, dim 5120, FFN 17408), `DASLLAMA_METAL_KQ_HALF=1` against `=0`
+  under the crown, medians of three after a warmup rep (`benchmarks/prefill_window_probe.das -m <27B> --windows 2,3,4,8
+  -r 4`, GPU ms of the short window after a 2000-token prefix); the single-row decode step is untouched (M1 62.9 / 62.7
+  ms, M5 35.7 / 35.6 ms):
+
+  | box | window rows | half x | f32 x | ratio |
+  |---|---|---|---|---|
+  | M1 Max | 2 | 83.0 ms | 92.6 ms | 0.90 |
+  | M1 Max | 3 | 110.1 | 132.4 | 0.83 |
+  | M1 Max | 4 | 112.6 | 150.9 | 0.75 |
+  | M1 Max | 8 | 183.3 | 280.1 | 0.65 |
+  | M5 Max | 2 | 40.3 | 40.3 | 1.00 |
+  | M5 Max | 3 | 46.3 | 52.4 | 0.88 |
+  | M5 Max | 4 | 45.1 | 50.5 | 0.89 |
+  | M5 Max | 8 | 75.6 | 93.4 | 0.81 |
+
+  The MTP verify rows (`lcpp_bench --mtp-ab --mtp-depth 2 -r 3`, eight real prompts, three verify rows a round, 68-69%
+  of the drafts accepted on both boxes and both arms): the on arm M1 14.73 -> 17.13 tok/s against an off arm of 15.70
+  on both (speculation at depth 2 turned from a loss, x0.94, into a gain, x1.09); M5 26.66 -> 31.39 against 25.35 /
+  25.73 off (x1.05 -> x1.22); the 50%-acceptance prompt lost under the f32 forms on both boxes (x0.79 M1, x0.89 M5)
+  and holds its own under the half forms (x0.92, x1.02). The two-stream row (`--npl 2 -p 32 -n 128 -r 3`): on the dense
+  Llama-3.2-3B Q4_K_M, M1, rail off / on / off interleaved, tg128@2 summed 150.0 / 166.4 / 149.9 tok/s (+11%); on the
+  27B hybrid the M1 row did not move (22.52 -> 22.68 summed) - its recurrent layers' projections ride the q8 rows GEMV,
+  not the K-quant sites, so the two-row step's bytes sit mostly off the forms this crown reaches; the M5 27B row read
+  47.47 / 48.83 / 43.57 summed off / on / off (the last at cv 7%, void; a first cold pair had read 38.58 -> 47.61 with
+  the solo row moving the same way - a clock artifact, the window probe's decode step unmoved), so neither box moves
+  the hybrid's two-stream row. The kernel cells (`test_metal_kq_k4_half_forms`, every row count the dispatcher
+  serves) and the rows parity cell (`test_metal_decode_parity.das`, `batchB8-kq`'s half-x leg: B=2/3/8 token for token
+  the CPU control under the pinned crown, the three forms' dispatch counts the witness, the rail off as the control)
+  pass on the M1.
+
 - **MEASURED (2026-10-09, `direction-grade`) - the K-quant small-batch GEMV forms against B single-row passes, on
   the M1 Max and the M5 Max.** `benchmarks/matmul/bench_metal_kq_race.das --fmts k4 --shapes 27b --tiers
   gemv,mvb,mvb4,mvb8` (k4 planes at Qwen3.6-27B's three dense shapes; `passes` = B dispatches of the production

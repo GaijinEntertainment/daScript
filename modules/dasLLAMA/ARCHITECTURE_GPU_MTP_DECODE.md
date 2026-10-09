@@ -62,6 +62,30 @@ first arm is the incumbent and the second is the "tensor" side whose win crowns:
 times the twin against B single passes (the passes are "tensor"), `race_kq_k4_form` the ext twin
 against the tile (the tile is "tensor").
 
+**The k4 rows forms read x as halves where the box crowned it.** Every f32 form above is bound by
+the x vector, not the weights: each decoded weight is dotted against a float4 of x fetched per
+column, two bytes of x a weight against 0.56 of weight, so on the M1 class every form costs 0.65
+to 0.8 of a single pass per column whatever its lane map. The half-x wide forms
+(`MetalKqMvWK4T` with `XHALF`: the single-row GEMV's lane map over two, four or eight x columns
+read as `half4`) halve that traffic and land at 1.26, 1.8 and 2.8 passes for two, four and eight
+columns on the M1 Max, and under the f32 forms on the M5 Max too. Their x is the f16 twin the
+row producer stores beside its f32 rows - the dual-store stamps of the rows norm
+(`MetalAddRmsHX`, `MetalRmsNormHX`) and of the activation (`MetalSwigluHX`, `MetalGegluHX`) -
+never a conversion dispatch: `StepRes.bxh` twins `bxb` and `StepRes.bfgh` the gate panel, each
+eight rows deep because a form reads every one of its columns, and `xh_ok` / `fgh_ok` say the twin
+is the panel's current rows (the norm sets it, attention and the w2 site clear it; wo's x, the
+attention output, has no twin and keeps the f32 forms). The step writes the twins only where
+`kq_half_rows` holds - the crown, two to eight rows, a k4 plane at a site the forms serve. The
+dispatcher (`enc_kq_rows_half_k4`) gives two rows the two-column form, three or four the
+four-column one, five to eight the eight-column one; the prefill's short-window peel hands its
+own dual-stored twin through `pf_enc_kq_site_mm`. The race (`race_kq_k4_half`, the last of the
+decode races) times the box's f32 route - `enc_kq_rows_f32` under the two k4 verdicts before it -
+against the half forms at two, four and eight rows in one timed encoder, on a 27B FFN plane past
+the last-level cache, and crowns `kq_rows_half_k4` (the half forms are "tensor");
+`DASLLAMA_METAL_KQ_HALF=0` keeps the f32 forms under the crown. The numerics are the prefill
+tiles' f16 X, already inside every parity bar; the rows parity cell holds the forms token for
+token (`test_metal_decode_parity.das`, the `batchB8-kq` arm's half-x leg).
+
 Past eight rows the form is the panel's. The kq mul_mm twins dispatch `mp / 32` threadgroups
 along M, so `enc_kq_site_b` takes them only over a panel padded to that tile (`mp` a multiple of
 32) - the batch driver's at nine rows and up. The verify's panel is padded to the GEMV forms'
