@@ -279,10 +279,24 @@ jobs:
       # `--custom-languages allow`, a flag older ast-grep releases reject
       run: npm install -g @ast-grep/cli@0.45.3 tree-sitter-cli@0.26.8
 
+    - name: "Restore the lint result cache"
+      uses: actions/cache/restore@v4
+      with:
+        path: .cache/daslang/lint_cache
+        key: lint-cache-${{ matrix.target }}@${{ github.run_id }}
+        restore-keys: lint-cache-${{ matrix.target }}@
+
     - name: "Extended checks"
       # the cron's `all` role reaches stage_doc_assets through check_doc_verify, and its
       # gh release calls refuse to run in Actions without a token
       env:
         GH_TOKEN: ${{ github.token }}
       run: cmake --build ./build --config Release --target run_extended_${{ matrix.role }} --parallel
+
+    - name: "Save the lint result cache"
+      if: ${{ !cancelled() && matrix.role != 'modules' && github.ref == 'refs/heads/master' }}
+      uses: actions/cache/save@v4
+      with:
+        path: .cache/daslang/lint_cache
+        key: lint-cache-${{ matrix.target }}@${{ github.run_id }}
 

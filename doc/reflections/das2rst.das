@@ -1436,7 +1436,7 @@ def document_module_lint(_root : string) {
 def document_module_lint_config(_root : string) {
     var mod = find_module("lint_config")
     var groups <- array<DocGroup>(
-        group_by_regex("Configuration", mod, %regex~(load_lint_config|load_lint_config_from_path|load_env_disabled|seed_default_disabled|build_lint_macro_disabled|add_module_rule_overrides|lint_config_forces_on|rule_docs_only_at)$%%),
+        group_by_regex("Configuration", mod, %regex~(load_lint_config|load_lint_config_from_path|load_env_disabled|seed_default_disabled|build_lint_macro_disabled|add_module_rule_overrides|lint_config_forces_on|rule_docs_only_at|lint_configs_for)$%%),
         group_by_regex("Path excludes", mod, %regex~(load_path_excludes_from_path|matches_path_excludes|is_lint_path_excluded)$%%),
         group_by_regex("Path-based rule defaults", mod, %regex~(is_daslib_source|is_shipped_library_source|is_core_library_source|lint029_source_exempt)$%%),
         group_by_regex("Lint-surface predicates", mod, %regex~(is_user_authored_body|is_lint_fixture_name|lint_file_skip_reason|drop_skipped_file_issues)$%%),

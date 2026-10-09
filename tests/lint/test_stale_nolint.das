@@ -84,7 +84,7 @@ def test_stale_nolint(t : T?) {
         var output = ""
         run_argv([exe, "-dasroot", root, "{root}/utils/lint/main.das", "--", fixture, "--lint-fixtures", "--lint-excluded-paths"], output)
         t |> success(find(output, "lint-skip-file") < 0, "the deep occurrence is not honored: {output}")
-        t |> success(find(output, "PASS") >= 0, "the file lints normally: {output}")
+        t |> success(find(output, "PASS") >= 0 || find(output, "CACHED") >= 0, "the file lints normally: {output}")
     }
 }
 

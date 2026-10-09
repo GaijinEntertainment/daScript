@@ -379,21 +379,12 @@ def public partition_by_format_policy(var files : array<string>; var skipped : a
     return <- jobs
 }
 
-//! Walks ``.lint_config`` files from ``file``'s directory up to the repository root (the
-//! directory holding ``.git``, read inclusively); the nearest file defining a key wins that
-//! key. Single-threaded — resolve on the coordinating thread, pass results to jobs.
-def public format_policy_for(file : string) : FormatPolicy {
-    var pol = FormatPolicy()
-    var enabled_decided = false
-    var clean_decided = false
+//! The ``.lint_config`` path of every directory from ``file``'s own up to the repository root (the directory holding ``.git``, read inclusively), nearest first
+def private folder_configs_of(file : string) : array<string> {
+    var configs : array<string>
     var dir = config_dir_of(file)
     while (true) {
-        let cfg = dir == "." ? ".lint_config" : "{dir}/.lint_config"
-        with_config_table(cfg, "format") $(var fmt_jv) {
-            take_format_key(fmt_jv, "format_enabled", pol.format_enabled, enabled_decided)
-            take_format_key(fmt_jv, "force_clean_comments", pol.force_clean_comments, clean_decided)
-        }
-        break if (enabled_decided && clean_decided)
+        configs |> push(dir == "." ? ".lint_config" : "{dir}/.lint_config")
         var st : FStat
         break if (stat(path_join(dir, ".git"), st))
         let up = dir_name(dir)
@@ -404,7 +395,69 @@ def public format_policy_for(file : string) : FormatPolicy {
             dir = up
         }
     }
+    return <- configs
+}
+
+//! Walks ``.lint_config`` files from ``file``'s directory up to the repository root (the
+//! directory holding ``.git``, read inclusively); the nearest file defining a key wins that
+//! key. Single-threaded — resolve on the coordinating thread, pass results to jobs.
+def public format_policy_for(file : string) : FormatPolicy {
+    var pol = FormatPolicy()
+    var enabled_decided = false
+    var clean_decided = false
+    for (cfg in folder_configs_of(file)) {
+        with_config_table(cfg, "format") $(var fmt_jv) {
+            take_format_key(fmt_jv, "format_enabled", pol.format_enabled, enabled_decided)
+            take_format_key(fmt_jv, "force_clean_comments", pol.force_clean_comments, clean_decided)
+        }
+        break if (enabled_decided && clean_decided)
+    }
     return pol
+}
+
+//! Every config file that can steer a lint of ``file``: its folders' ``.lint_config`` files, nearest first, then the repo-level one
+def public lint_configs_for(file : string) : array<string> {
+    var configs <- folder_configs_of(file)
+    configs |> push(resolved_config_path())
+    return <- configs
+}
+
+//! Where the lint runner keeps its result cache unless ``--cache-dir`` says otherwise
+let public LINT_CACHE_DEFAULT_DIR = ".cache/daslang/lint_cache"
+
+[function_macro(name="lint_tool_entry")]
+class private LintToolEntry : AstFunctionAnnotation {
+    //! ``[lint_tool_entry]`` marks the lint runner's entry point: its semantic hash, every function it reaches included, versions the result cache
+}
+
+def private reset_lint_cache(tool_hash : string) {
+    let args <- get_command_line_arguments()
+    var dir = LINT_CACHE_DEFAULT_DIR
+    for (a, i in args, count()) {
+        return if (a == "--no-cache")
+        if (a == "--cache-dir" && i + 1 < length(args)) {
+            dir = args[i + 1]
+        }
+    }
+    let stamp = "{dir}/lint_hash.txt"
+    return if (fread(stamp) == tool_hash)
+    rmdir_rec(dir)
+    mkdir_rec(dir)
+    fwrite(stamp, tool_hash)
+}
+
+[simulate_macro(name="lint_tool_hash")]
+class private LintToolHash : AstSimulateMacro {
+    //! Empties the lint result cache when the ``[lint_tool_entry]`` function's semantic hash differs from the one ``lint_hash.txt`` recorded; a program without one is left alone
+    def override simulate(prog : Program?; var ctx : Context?) : bool {
+        return true if (is_in_completion() || is_compiling_macros() || is_folding())
+        for_each_function(prog.getThisModule, "main") $(fn) {
+            for (ann in fn.annotations) {
+                reset_lint_cache("{get_function_aot_hash(fn)}") if (ann.annotation.name == "lint_tool_entry")
+            }
+        }
+        return true
+    }
 }
 
 //! True when `fn` is user-authored from lint's point of view: not generated, or a generated
