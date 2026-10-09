@@ -1650,7 +1650,7 @@ class LintVisitor : AstVisitor {
         var has_call = false
         lint024_scan(inner, has_product, has_call)
         if (!has_product || !has_call) return
-        lint_error("LINT024: {expr.name}(...) widens a product that already wrapped - every factor is 32-bit, so the multiply overflows at 2^31 before the cast runs; widen a factor instead: {expr.name}(a) * b", expr.at, lint024_fix(expr))
+        lint_error("LINT024: {expr.name}(...) widens a product that already wrapped - every factor is 32-bit, so the multiply overflows at 2^31 before the cast runs; widen the factors instead: {expr.name}(a) * {expr.name}(b)", expr.at, lint024_fix(expr))
     }
 
     def lint018_check_arg(expr : ExprCall?; fname : string; idx : int; isMem : bool) : bool {
