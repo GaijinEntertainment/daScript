@@ -324,24 +324,6 @@ def nested_variant_in_struct(h : HasVariant) {
 }
 
 // ===========================
-// multi_match — all matching arms execute
-// ===========================
-
-[sideeffects]
-def multi_match_categories(n : int) {
-    var result = ""
-    multi_match(n) {
-        if (0) {
-            result += "zero "
-        }
-        if (1) {
-            result += "one "
-        }
-    }
-    return result
-}
-
-// ===========================
 // static_match — fallthrough on type mismatch
 // ===========================
 
@@ -656,12 +638,6 @@ def test_match_edge_cases(t : T?) { // nolint:STYLE038 - flat list of independen
         t |> equal("x int 10", nested_variant_in_struct(HasVariant(name = "x", value = IntOrStr(i = 10))))
         t |> equal("string world", nested_variant_in_struct(HasVariant(name = "y", value = IntOrStr(s = "world"))))
         t |> equal("other", nested_variant_in_struct(HasVariant(name = "z", value = IntOrStr(i = 1))))
-    }
-
-    t |> run("multi_match categories") @(t : T?) {
-        t |> equal("zero ", multi_match_categories(0))
-        t |> equal("one ", multi_match_categories(1))
-        t |> equal("", multi_match_categories(5))
     }
 
     t |> run("static_match int or float") @(t : T?) {

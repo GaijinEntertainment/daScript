@@ -11,7 +11,6 @@
 //   - Null/pointer matching
 //   - match_expr for computed patterns
 //   - Bool matching
-//   - multi_match (all arms)
 //   - static_match (generic-safe)
 //
 // Run: daslang.exe tutorials/language/24_pattern_matching.das
@@ -154,29 +153,6 @@ def describe_point_ptr(p : Point?) : string {
     return "unreachable"
 }
 
-// === multi_match — all matching arms execute ===
-
-def tag_number(n : int) : string {
-    var tags = "{n}:"
-    multi_match(n) {
-        if (0) {
-            tags += " zero"
-        }
-        if (1) {
-            tags += " one"
-        }
-        if ($v(a) && a > 0) {
-            tags += " positive"
-        }
-        if ($v(a) && a < 0) {
-            tags += " negative"
-        }
-        if ($v(a) && (a % 2 == 0) && (a != 0)) {
-            tags += " even"
-        }
-    }
-    return tags
-}
 
 // === static_match — safe in generics ===
 // Arms with type mismatches are silently dropped,
@@ -308,12 +284,6 @@ def main {   // nolint:STYLE038 - tutorial walkthrough, the sequence IS the less
     print("  null -> {describe_point_ptr(np)}\n")
     unsafe { delete p; }
 
-    // multi_match
-    print("multi_match:\n")
-    print("  {tag_number(0)}\n")
-    print("  {tag_number(1)}\n")
-    print("  {tag_number(4)}\n")
-    print("  {tag_number(-3)}\n")
 
     // static_match
     print("static_match:\n")
@@ -361,7 +331,6 @@ def main {   // nolint:STYLE038 - tutorial walkthrough, the sequence IS the less
     // - match_expr: if (($v(a), match_expr(a+1))) — computed patterns
     // - Bool: if (true) / if (false)
     // - Null: if (null) { ... } for pointer types
-    // - multi_match — all matching arms execute
     // - static_match — silently drops type-mismatched arms (generics)
 
     print("done\n")
@@ -399,11 +368,6 @@ def main {   // nolint:STYLE038 - tutorial walkthrough, the sequence IS the less
 // null matching:
 //   point -> (10, 20)
 //   null -> null
-// multi_match:
-//   0: zero
-//   1: one positive
-//   4: positive even
-//   -3: negative
 // static_match:
 //   int(42)
 //   float(3.14)

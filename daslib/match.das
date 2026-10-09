@@ -6,7 +6,7 @@ module match shared private
 
 //! Pattern matching macro for daslang.
 //!
-//! Provides ``match``, ``static_match``, ``multi_match``, and ``static_multi_match`` macros
+//! Provides ``match`` and ``static_match`` macros
 //! that decompose values by structure, variant, tuple, array, or constant comparison.
 //! Also provides ``match_type`` and ``match_expr`` helpers, guard expressions (``&&``),
 //! alternation (``||``), wildcard (``_``), and variable capture (``$v(name)``).
@@ -639,7 +639,6 @@ def join_conditions(var conditions : array<Expression?>; at : LineInfo) : Expres
 class MatchMacro : AstCallMacro {
     //! Implements `match` macro.
     report_match_errors = true
-    multi_match = false
     def override canVisitArgument(expr : ExprCallMacro?; argIndex : int) : bool =>
         !is_reporting_compilation_errors()
     def override canFoldReturnResult(expr : ExprCallMacro?) : bool => false
@@ -654,7 +653,7 @@ class MatchMacro : AstCallMacro {
             }
         }
     }
-    def override visit(prog : ProgramPtr; mod : Module?; expr : ExprCallMacro?) : Expression? {   // nolint:STYLE037,STYLE038 - exact-type `is` ladder over pattern node classes
+    def override visit(prog : ProgramPtr; mod : Module?; expr : ExprCallMacro?) : Expression? {   // nolint:STYLE037 - exact-type `is` ladder over pattern node classes
         macro_verify(length(expr.arguments) == 2, prog, expr.at, "expecting match (what) <| block")
         assume what = expr.arguments[0]
         assume blk = expr.arguments[1]
@@ -674,13 +673,12 @@ class MatchMacro : AstCallMacro {
         }
         let access = clone_expression(what)
         var iff : Expression?
-        var iffb : array<ExprIfThenElse?>
         let eli = length(eblk.list)
         var any_errors = false
         var prefix : array<Expression?>
         for (ei in range(eli)) {
             {
-                var eto = (eblk.list[multi_match ? ei : eli - ei - 1]) as ExprIfThenElse
+                var eto = (eblk.list[eli - ei - 1]) as ExprIfThenElse
                 var to : MatchTo
                 if (match_any(what._type, eto.cond, access, to)) {
                     log_m("match_any ok\n\n")
@@ -697,17 +695,13 @@ class MatchMacro : AstCallMacro {
                         }
                         rules |> replaceVarTag("_") <| clone_expression(access)
                     }
-                    if (!multi_match && iff == null && empty(to.conditions)) {
+                    if (iff == null && empty(to.conditions)) {
                         iff = nblk
                     } else {
                         var new_iff = new ExprIfThenElse(at = eto.at, cond = join_conditions(to.conditions, eto.at))
                         new_iff.if_true = nblk
-                        if (multi_match) {
-                            iffb |> emplace(new_iff)
-                        } else {
-                            new_iff.if_false = iff
-                            iff = new_iff
-                        }
+                        new_iff.if_false = iff
+                        iff = new_iff
                     }
                 } elif (report_match_errors || to.failed) {
                     log_m("match_any failed\n\n")
@@ -736,36 +730,14 @@ class MatchMacro : AstCallMacro {
             }
         }
         if (any_errors) return null
-        if (multi_match) {
-            prefix |> reserve(length(prefix) + length(iffb))
-            for (ib in iffb) {
-                prefix |> emplace(ib)
-            }
-            iffb |> clear()
-            return qmacro($b(prefix))
-        } else {
-            prefix |> emplace(iff)
-            return qmacro($b(prefix))
-        }
+        prefix |> emplace(iff)
+        return qmacro($b(prefix))
     }
 }
 
 [call_macro(name="static_match")]
 class StaticMatchMacro : MatchMacro {
     //! Implements `static_match` macro.
-    override report_match_errors = false
-}
-
-[call_macro(name="multi_match")]
-class MultiMatchMacro : MatchMacro {
-    //! Implements `multi_match` macro.
-    override multi_match = true
-}
-
-[call_macro(name="static_multi_match")]
-class StaticMultiMatchMacro : MatchMacro {
-    //! Implements `static_multi_match` macro.
-    override multi_match = true
     override report_match_errors = false
 }
 
@@ -799,8 +771,6 @@ def private setup {
     if (is_compiling_macros_in_module("match")) {
         compiling_module() |> add_keyword("match", false)
         compiling_module() |> add_keyword("static_match", false)
-        compiling_module() |> add_keyword("multi_match", false)
-        compiling_module() |> add_keyword("static_multi_match", false)
         compiling_module() |> add_keyword("match_type", true)
     }
 }

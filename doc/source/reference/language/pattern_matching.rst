@@ -511,39 +511,6 @@ Example:
 
 If ``what`` is of type ``int``, it is bound to ``expr`` and returned. Otherwise the catch-all returns ``-1``.
 
-Multi-Match
------------
-
-``multi_match`` evaluates all matching cases instead of stopping at the first match:
-
-.. code-block:: das
-
-    def multi_match_test ( a:int ) {
-        var text = "{a}"
-        multi_match ( a ) {
-            if ( 0 ) {
-                text += " zero"
-            }
-            if ( 1 ) {
-                text += " one"
-            }
-            if ( 2 ) {
-                text += " two"
-            }
-            if ( $v(a) && (a % 2 == 0) && (a!=0) ) {
-                text += " even"
-            }
-            if ( $v(a) && (a % 2 == 1) ) {
-                text += " odd"
-            }
-        }
-        return text
-    }
-
-Unlike ``match``, which stops at the first successful pattern, ``multi_match`` continues through all cases.
-The equivalent code using regular ``match`` would require a separate ``match`` block for each case.
-
-``static_multi_match`` is a variant of ``multi_match`` that works with ``static_match``.
 
 .. seealso::
 
