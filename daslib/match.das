@@ -211,6 +211,7 @@ def private shape_part(var cell : Expression?) : Expression? {
 
 [macro_function]
 def match_struct(what : TypeDeclPtr; wths : ExprMakeStruct?; access : Expression?; var to : MatchTo) {
+    //! ``Point(x = 1, y = py)``: each named field matches its pattern; through a pointer, ``!= null`` first. An AST node pattern ``ExprCall(name = n)`` also tests the node class.
     if (wths.makeType.isHandle && isExpression(wths.makeType) && is_expression_ptr(what)) {
         let subject = (wths.makeType.annotation.name != "ExprRef2Value" ? qmacro(match_peel_r2v($e(access))) : clone_expression(access))
         subject |> force_at(wths.at)
@@ -263,6 +264,7 @@ def match_struct(what : TypeDeclPtr; wths : ExprMakeStruct?; access : Expression
 
 [macro_function]
 def match_tuple(what : TypeDeclPtr; wths : ExprMakeTuple?; access : Expression?; var to : MatchTo) {
+    //! ``(1, b, ...)``: tuple elements by position; ``...`` stands for the elements it skips.
     if (what.baseType != Type.tTuple) {
         to.errors |> match_error("{describe(what)} does not match [[ ... ]] tuple", wths.at)
         return false
@@ -300,6 +302,7 @@ def match_tuple(what : TypeDeclPtr; wths : ExprMakeTuple?; access : Expression?;
 
 [macro_function]
 def match_array(what : TypeDeclPtr; wths : ExprMakeArray?; dynamic : bool; access : Expression?; var to : MatchTo) {
+    //! ``[1, x, ...]``: array elements by index; a dynamic array also tests its length (a lower bound, with ``...``).
     let isFA = what.baseType == Type.tFixedArray
     var recT : TypeDeclPtr
     let tagIndex = rest_index(wths.values, "array", wths.at, to)
@@ -357,6 +360,7 @@ def match_array(what : TypeDeclPtr; wths : ExprMakeArray?; dynamic : bool; acces
 
 [macro_function]
 def match_variant(what : TypeDeclPtr; wths : ExprMakeVariant?; access : Expression?; var to : MatchTo) {
+    //! ``IntOrStr(i = n)``: the variant holds ``i``, and ``n`` matches its value.
     if (what.baseType != Type.tVariant) {
         to.errors |> match_error("{describe(what)} does not match [[ ... ]] variant", wths.at)
         return false
@@ -386,6 +390,7 @@ def match_variant(what : TypeDeclPtr; wths : ExprMakeVariant?; access : Expressi
 
 [macro_function]
 def match_as_variant(what : TypeDeclPtr; wthAs : ExprAsVariant?; access : Expression?; var to : MatchTo) {
+    //! ``n as i``: the variant holds ``i``, and ``n`` matches its value.
     if (what.baseType != Type.tVariant) {
         to.errors |> match_error("{describe(what)} is not a variant", wthAs.at)
         return false
@@ -401,6 +406,7 @@ def match_as_variant(what : TypeDeclPtr; wthAs : ExprAsVariant?; access : Expres
 
 [macro_function]
 def match_type(what : TypeDeclPtr; wthmt : ExprCall?; access : Expression?; var to : MatchTo) {
+    //! ``match_type(type<int>, n)``: the value's type is ``int`` - decided at compile time, for ``static_match`` in generic code - and ``n`` matches the value.
     if (length(wthmt.arguments) != 2) {
         to.errors |> match_error("match_type expects 2 arguments", wthmt.at)
         return false
@@ -425,6 +431,7 @@ def match_type(what : TypeDeclPtr; wthmt : ExprCall?; access : Expression?; var 
 
 [macro_function]
 def match_expr(what : TypeDeclPtr; wthmt : ExprCall?; access : Expression?; var to : MatchTo) {
+    //! ``match_expr(limit + 1)``: the value equals the expression; names bound earlier in the pattern can appear in it.
     if (length(wthmt.arguments) != 1) {
         to.errors |> match_error("match_expr expects 1 argument", wthmt.at)
         return false
@@ -461,6 +468,7 @@ def private add_guard(guard : Expression?; var to : MatchTo; access : Expression
     return true
 }
 
+//! ``pattern && guard``: the pattern matches, then ``guard`` holds - the names the pattern binds read in it.
 [macro_function]
 def match_guards(what : TypeDeclPtr; wth : ExprOp2?; access : Expression?; var to : MatchTo) : bool =>
     match_any(what, wth.left, access, to) && add_guard(wth.right, to, access)
@@ -487,6 +495,7 @@ def private same_names(a, b : table<string; Expression?>; wth : ExprOp2?; var to
 
 [macro_function]
 def match_alternatives(var wth : ExprOp2?; var to : MatchTo; matcher : block<(side : Expression?; var sideTo : MatchTo) : bool>) {
+    //! ``p1 | p2 | p3``: matches when any side does; every side binds the same names. ``matcher`` matches one side.
     var sides <- op_sides(wth, string(wth.op))
     let key = intptr(wth)
     let chosen = to.forced?[key] ?? -1
@@ -543,7 +552,7 @@ def match_alternatives(var wth : ExprOp2?; var to : MatchTo; matcher : block<(si
 
 [macro_function]
 def match_multi(types : array<TypeDeclPtr>; accesses : array<Expression?>; wth : Expression?; var to : MatchTo) : bool {
-    //! Matches one arm against the values: a single value takes the pattern as written, several values take one element of the arm's tuple each.
+    //! ``match (a, b) { (1, _) => ... }``: one arm against several values - element i of the arm's tuple matches value i. A single value takes the pattern as written.
     return true if (is_wildcard(wth))
     let nwhat = length(types)
     return match_any(types[0], wth, accesses[0], to) if (nwhat == 1)
@@ -567,6 +576,7 @@ def match_multi(types : array<TypeDeclPtr>; accesses : array<Expression?>; wth :
 
 [macro_function]
 def match_bind(what : TypeDeclPtr; name : ExprVar?; access : Expression?; var to : MatchTo) {
+    //! ``name`` in a ``=>`` arm, ``$v(name)`` in an ``if (pattern)`` arm: binds ``name`` to the matched part.
     let tname = string(name.name)
     if (to.declarations |> key_exists(tname)) {
         to.errors |> match_error("duplicate variable {bound_name(tname)}", name.at)
@@ -585,6 +595,7 @@ def match_bind(what : TypeDeclPtr; name : ExprVar?; access : Expression?; var to
 
 [macro_function]
 def match_tag(what : TypeDeclPtr; wth : Expression?; access : Expression?; var to : MatchTo) {
+    //! ``$v(name)``: the binding of an ``if (pattern)`` arm.
     let tag = wth as ExprTag
     if (tag.name != "v") {
         to.errors |> match_error("unsupported match tag ${tag.name}", tag.at)
@@ -700,6 +711,7 @@ def private add_condition(var r : Result<Expression?; string>; wth : Expression?
 
 [macro_function]
 def match_const(what : TypeDeclPtr; wth : Expression?; access : Expression?; var to : MatchTo) {
+    //! ``42``, ``"text"``, ``true``: the value equals the constant.
     if (wth._type == null) {
         to.errors |> match_error("unresolved constant type", wth.at)
         return false
@@ -863,6 +875,7 @@ def match_string(what : TypeDeclPtr; var wth : ExprOp2?; access : Expression?; v
 
 [macro_function]
 def match_any(what : TypeDeclPtr; wth : Expression?; access : Expression?; var to : MatchTo) {   // nolint:STYLE037 - exact-type `is` ladder over TypeDecl shapes
+    //! Matches one pattern against ``access`` of type ``what``: hands the pattern to the match_* for its shape, which adds the runtime tests to ``to.conditions`` and the bound names to ``to.declarations``.
     if (LOG_MATCH) {
         log_m("match {describe(what)} {debug_expression(wth)}:\n")
     }
