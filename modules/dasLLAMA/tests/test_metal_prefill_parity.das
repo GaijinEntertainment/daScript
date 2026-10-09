@@ -1313,3 +1313,107 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
         }
     }
 }
+
+//! the first largest element's index, serially - the cells read it outside any job queue
+def private row_argmax(v : array<float>) : int {
+    var best = 0
+    for (i in range(1, length(v))) {
+        if (v[i] > v[best]) {
+            best = i
+        }
+    }
+    return best
+}
+
+//! the largest |a - b| over the two rows, and the largest |b| - a bar reads as a share of the reference's largest logit
+def private row_gap(a, b : array<float>) : tuple<gap : float; peak : float> {
+    var gap = 0.0
+    var peak = 0.0
+    for (x, y in a, b) {
+        gap = max(gap, abs(x - y))
+        peak = max(peak, abs(y))
+    }
+    return (gap = gap, peak = peak)
+}
+
+//! One MoE carrier through the gathered route: a 300-row window on the tiles, then a short window the route serves, the
+//! last row's logits against the all-CPU chain within `bar` of its largest, the route's own window counter the engage
+//! witness, the same windows with the route off (the tiles) logged beside it, and the control a window whose last token
+//! differs landing outside the bar.
+def private moe_gemv_route_cells(t : T?; path, tag : string; bar : float) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        return if (!model_available(t, path))
+        let prior_wscale = get_wscale_f16()
+        let prior_backend = active_kernel_backend()
+        set_wscale_f16(false)
+        pin_kernel_backend("portable")
+        var tr <- load_model_(path, QuantMode.q8)
+        if (tr.config.seq_len > 2048l) {
+            tr.config.seq_len = 2048l
+        }
+        let prompt <- encode(tr, counting_prompt(ATTN_DEV_COUNT_TO), true, false)
+        var trg <- blob_twin(t, path, 2048l)
+        let w1n = min(300l, long_length(prompt) - 40l)
+        var w1 <- [for (i in range64(w1n)); prompt[i]]
+        let prior_knee = metal_moe_gemv_max()
+        let knee = pf_moe_gemv_knee()
+        t |> success(knee >= 24l, "{tag}: the box's knee admits the 24-row window ({knee} tokens)")
+        for (n in [2l, 7l, 24l]) {
+            continue if (n > knee)
+            var inscope w2 <- [for (i in range64(n)); prompt[w1n + i]]
+            var inscope w2_ctrl := w2
+            w2_ctrl[n - 1l] = prompt[w1n + n]
+            var inscope cpu <- two_window_logits(tr, w1, w2)
+            t |> success(select_prefill_override("metal"), "{tag}/{n}: override registered")
+            set_metal_prefill_min_npos(1l)
+            let served0 = metal_prefill_stats().prefills
+            let routed0 = metal_prefill_moe_gemv_stats()
+            var inscope gpu <- two_window_logits(trg, w1, w2)
+            let served = metal_prefill_stats().prefills - served0
+            let routed = metal_prefill_moe_gemv_stats() - routed0
+            var inscope gpu_ctrl <- two_window_logits(trg, w1, w2_ctrl)
+            set_metal_moe_gemv_max(0l)
+            let routed1 = metal_prefill_moe_gemv_stats()
+            var inscope gpu_tiles <- two_window_logits(trg, w1, w2)
+            set_metal_moe_gemv_max(prior_knee)
+            set_metal_prefill_min_npos(64l)
+            select_prefill_override("")
+            if (served == 0l) {
+                feint("{tag}/{n}: metal prefill declined (no Metal device?); the route's parity skipped\n")
+                continue
+            }
+            t |> equal(served, 2l, "{tag}/{n}: both windows served on the device")
+            t |> equal(routed, 1l, "{tag}/{n}: the short window alone rode the gathered route")
+            t |> equal(metal_prefill_moe_gemv_stats() - routed1, 0l, "{tag}/{n}: with the knee at 0 the tiles serve it")
+            let g = row_gap(gpu, cpu)
+            let gt = row_gap(gpu_tiles, cpu)
+            let gc = row_gap(gpu_ctrl, cpu)
+            to_log(LOG_INFO, "{tag}/{n}: route gap {g.gap} of peak {g.peak} ({g.gap / g.peak}); tiles gap {gt.gap} ({gt.gap / gt.peak}); control gap {gc.gap} ({gc.gap / gc.peak})\n")
+            t |> success(g.gap <= bar * g.peak, "{tag}/{n}: the route's last-row logits within {bar} of the CPU chain's largest ({g.gap} of {g.peak}; the tiles read {gt.gap})")
+            t |> success(gc.gap > bar * gc.peak, "{tag}/{n}: the control window (its last token changed) lands outside the bar ({gc.gap} of {gc.peak})")
+            t |> success(row_argmax(gpu) == row_argmax(cpu), "{tag}/{n}: the route's argmax is the CPU chain's ({row_argmax(gpu)} / {row_argmax(cpu)}; the tiles' {row_argmax(gpu_tiles)})")
+        }
+        metal_prefill_shutdown()
+        clear_kernel_backend_pin()
+        select_kernel_backend(prior_backend)
+        set_wscale_f16(prior_wscale)
+        delete tr
+        delete trg
+    }
+}
+
+[test]
+def test_metal_prefill_moe_gemv_route(t : T?) {
+    t |> run("the gathered expert route == CPU control on a q8 MoE (Qwen1.5-MoE-A2.7B Q8_0)") <| @(t : T?) {
+        if (!family_on(t, "qwen2moe") || !arm_on(t, "moe-gemv")) return
+        moe_gemv_route_cells(t, path_join(models_dir(), "Qwen1.5-MoE-A2.7B-Chat.Q8_0.gguf"), "moe-gemv/qwen2moe-q8", 0.08)
+    }
+    t |> run("the gathered expert route == CPU control on a K-quant MoE (Qwen3-30B-A3B Q4_K_M)") <| @(t : T?) {
+        if (!family_on(t, "qwen3moe") || !arm_on(t, "moe-gemv")) return
+        moe_gemv_route_cells(t, path_join(models_dir(), "Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf"), "moe-gemv/qwen3moe-k4", 0.10)
+    }
+    t |> run("the gathered expert route == CPU control on the mx4 MoE (gpt-oss-20b mxfp4)") <| @(t : T?) {
+        if (!family_on(t, "gptoss") || !arm_on(t, "moe-gemv")) return
+        moe_gemv_route_cells(t, path_join(models_dir(), "gpt-oss-20b-mxfp4.gguf"), "moe-gemv/gptoss-mx4", 0.12)
+    }
+}

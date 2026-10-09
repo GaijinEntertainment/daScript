@@ -1843,6 +1843,7 @@ def apply_box_profile_runtime_at(ppath : string) {   // nolint:STYLE038 — a fl
     apply_i64_knob(rt, "metal_tall_floor") $(v) { set_metal_tall_floor(v) }
     apply_i64_knob(rt, "metal_devw_small_panel_mb") $(v) { set_metal_devw_small_panel_mb(v) }
     apply_i64_knob(rt, "metal_cvt_min_rows") $(v) { set_metal_cvt_min_rows(v) }
+    apply_i64_knob(rt, "metal_moe_gemv_max") $(v) { set_metal_moe_gemv_max(v) }
     apply_i64_knob(rt, "mtp_depth_nextn") $(v) { set_mtp_depth_nextn(v) }
     apply_i64_knob(rt, "mtp_depth_assistant") $(v) { set_mtp_depth_assistant(v) }
     let mtc = read_json_field(rt, "metal_tensor", "")
@@ -2930,6 +2931,21 @@ def public set_metal_cvt_min_rows(v : int64) {
 }
 
 def public metal_cvt_min_rows : int64 => g_metal_cvt_min_rows
+
+//! The widest prefill window whose routed experts ride the decode's gathered GEMV (one dispatch slice per token and
+//! expert slot) instead of the bucketed mul_mm tiles; 0 keeps every window on the tiles, -1 takes the prefill's default
+//! (`pf_moe_gemv_knee`). Read per window, not cached.
+var private g_metal_moe_gemv_max = -1l
+
+def public set_metal_moe_gemv_max(v : int64) {
+    if (v < -1l) {
+        to_log(LOG_WARNING, "dasLLAMA: set_metal_moe_gemv_max({v}) out of range - keeping {g_metal_moe_gemv_max}\n")
+        return
+    }
+    g_metal_moe_gemv_max = v
+}
+
+def public metal_moe_gemv_max : int64 => g_metal_moe_gemv_max
 
 //! Encode text to token ids using the model's tokenizer.
 def encode_(m : Model; text : string; add_special = true; parse_special = false) : array<int64> =>

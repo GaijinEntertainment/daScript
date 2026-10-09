@@ -11,6 +11,76 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **MEASURED (2026-10-09, `direction-grade`, `debug-jit`) - the short prefill window's routed block: the gathered
+  route against the bucketed tiles, on the M1 Max and the M5 Max.** `benchmarks/prefill_window_probe.das` on
+  Qwen3.6-35B-A3B-MTP-IQ4_XS-pure (the M5 under its box sidecar's crowns, the M1 on the base forms - the box has no
+  tensor lanes), Metal required, a 2000-token warm prefix, windows appended in sequence, GPU ms a window as the
+  driver's own timestamp report, medians of three after a warmup rep (`--gemv-max 512` routes every window,
+  `--gemv-max 0` none):
+
+  | window | M1 tiles | M1 route | M5 tiles | M5 route |
+  |---|---|---|---|---|
+  | 2 | 57 | 23 | 21 | 10 |
+  | 8 | 100 | 39 | 31 | 16 |
+  | 16 | 141 | 58 | 41 | 25 |
+  | 32 | 182 | 87 | 48 | 36 |
+  | 48 | 222 | 130 | 53 | 49 |
+  | 64 | 236 | 159 | 57 | 60 |
+  | 128 | 308 | 308 | 67 | 107 |
+  | 256 | 430 | 615 | 86 | 203 |
+  | decode step | 10.9 | | 7.6 | |
+
+  The route's cost is linear in the tokens (2.4 ms a token on the M1, 0.8 on the M5); the tiles' steps with the
+  M-tile count. On this carrier the two cross near 128 tokens on the M1 and 56 on the M5. The crossing is per
+  model as well as per box - the route's slope is the layers times the slots times the expert bytes a token
+  reads, the tiles' floor the experts a window populates - so the same probe over the other MoE carriers
+  (`-r 3`, `--gemv-max 512` against `--gemv-max 0`, GPU ms a window):
+
+  | carrier | box | 8 route / tiles | 32 route / tiles | 64 route / tiles | 96 route / tiles |
+  |---|---|---|---|---|---|
+  | Qwen1.5-MoE-A2.7B Q8_0 | M1 | 37 / 58 | 95 / 105 | 179 / 130 | 265 / 146 |
+  | Qwen3-30B-A3B Q4_K_M | M1 | 65 / 100 | 151 / 143 | 278 / 175 | 415 / 214 |
+  | gpt-oss-20b mxfp4 | M1 | 60 / 80 | 163 / 106 | 305 / 144 | 450 / 175 |
+  | Qwen3.6-35B-A3B UD-Q4_K_M | M1 | 47 / 84 | 122 / 151 | 229 / 199 | 337 / 232 |
+  | Qwen3.6-35B-A3B Q4_0-pure | M1 | 38 / 97 | 85 / 176 | 155 / 232 | 228 / 272 |
+
+  | carrier | box | 2 route / tiles | 8 route / tiles | 32 route / tiles |
+  |---|---|---|---|---|
+  | Qwen3-30B-A3B Q8_0 | M5 | 14 / 20 | 24 / 34 | 61 / 51 |
+  | Qwen3-30B-A3B Q4_K_M | M5 | 16 / 22 | 23 / 32 | 55 / 43 |
+  | Qwen3-30B-A3B UD-IQ2_XXS | M5 | 17 / 22 | 25 / 33 | 58 / 43 |
+  | Qwen3-30B-A3B UD-Q3_K_XL | M5 | 17 / 22 | 27 / 32 | 69 / 43 |
+  | Qwen3.6-35B-A3B UD-IQ3_S | M5 | 10 / 16 | 16 / 27 | 36 / 47 |
+  | gemma-4-26B-A4B Q4_0 | M5 | 18 / 23 | 24 / 31 | 50 / 41 |
+  | gemma-4-26B-A4B Q4_K_M | M5 | 13 / 17 | 21 / 28 | 52 / 41 |
+  | gemma-4-26B-A4B UD-IQ3_XXS | M5 | 17 / 23 | 23 / 30 | 50 / 41 |
+  | gemma-4-26B-A4B UD-IQ4_XS | M5 | 12 / 18 | 21 / 30 | 50 / 44 |
+  | gpt-oss-20b mxfp4 | M5 | 12 / 18 | 20 / 25 | 58 / 33 |
+  | Qwen1.5-MoE-A2.7B Q6_K | M5 | 10 / 13 | 17 / 24 | 33 / 38 |
+
+  Every carrier wins at 8 tokens on both boxes; at 32 the 48-layer Qwen3-30B, the gemma 26B and gpt-oss lose on
+  both, the 35B hybrids and the 60-expert Qwen1.5-MoE still win. The default knee is 16, the window every carrier
+  won at; a one-model deployment sets the sidecar's `metal_moe_gemv_max` at its own crossing. On the house replay
+  (the 35B pure, `--ctx 32768 --streams 4`, 122 requests twice) the route leaves the first-token median where it
+  was, 0.87 s: a first-round request attaches 84 % of its prompt and prefills a tail of about 300 tokens, above
+  any knee, so the windows the route serves are the checkpoint tails (56 -> 26 ms at 2 tokens, 136 -> 84 at
+  17-64) and the band that sets the first token is the tiles' 128-512 (`followup_metal.md` 47). Replies, calls,
+  quiet and silent counts are the tile run's. On the tiles at 2 tokens the per-kernel split (each node alone) read the
+  expert mul_mm at 38 of 76 ms summed on the M1 and 7.5 of 24 on the M5, the padded-panel gather and activation
+  at 6.5 and 4.5. The dense sibling Qwen3.6-27B Q4_K_M reads a 2-token window at 235 ms on the M1 (decode step
+  64.9) and 80 on the M5 (36.3): its K-quant mul_mm sites have no small-M form (`followup_metal.md` 48).
+
+  The bars the route's parity cells hold (`tests/test_metal_prefill_parity.das`, `test_metal_prefill_moe_gemv_route`,
+  arm `moe-gemv`), each the largest |GPU - CPU| over the last row's logits as a share of the CPU row's largest,
+  after a 300-row window on the tiles and a 2-, 7- or 24-row window on the route; the readings from the cells'
+  own logs on the M1 Max (`bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite prefill --arm moe-gemv
+  --family <f>` under `DASLLAMA_PARITY_FULL=1`), the tile path's own reading on the same window beside each:
+  - Qwen1.5-MoE-A2.7B Q8_0 (`qwen2moe`): 0.08 (reads 0.020 / 0.035 / 0.015; the tiles 0.020 / 0.035 / 0.015 -
+    the two forms agree to 1e-3; the control window 0.43-1.14).
+  - Qwen3-30B-A3B-Instruct-2507 Q4_K_M (`qwen3moe`): 0.10 (reads 0.046 / 0.029 / 0.037; the tiles 0.038 /
+    0.028 / 0.036; the control 0.47-0.71).
+  - gpt-oss-20b mxfp4 (`gptoss`): 0.12 (reads 0.055 / 0.034 / 0.025; the tiles 0.055 / 0.034 / 0.033; the
+    control 0.45-0.73).
 - **MEASURED (2026-10-07, `direction-grade`, `debug-jit`) - the forced tool call under the grammar, on the house assistant's tool bench.**
   M1 Max, Metal, one stream, the server run from the tree under `-jit` with the m1 tune manifest, the house assistant's `bench_llm.py`
   tool part (the house prompt, a nonce a run, no-think, 256-token budget), 12 runs an arm; `auto` = `tools` alone,

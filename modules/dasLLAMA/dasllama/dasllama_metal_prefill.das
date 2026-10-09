@@ -5939,6 +5939,96 @@ def public set_metal_moe_gather_min(npos : int64) : int64 {
     return was
 }
 
+//! the bucket rail's padded row total: every populated expert pads to a whole 32-row tile, and at most min(ne, mtot)
+//! experts hold rows, so the total never passes mtot plus 31 pad rows an expert for that many
+def public pf_moe_padded_rows(mtot, ne : int64) : int64 => ((mtot + min(ne, mtot) * 31l + 31l) / 32l) * 32l
+
+var private g_pf_moe_gemv_windows = 0l
+
+//! windows whose routed block rode the gathered GEMV route since load - the route's engage witness
+def public metal_prefill_moe_gemv_stats() : int64 => g_pf_moe_gemv_windows
+
+//! the route's knee in tokens: the sidecar's where it names one, else 16 - the widest window the route won on every MoE
+//! carrier swept on both the M1 Max and the M5 Max; the crossing itself is per model and per box (PERF_LEDGER.md)
+[arch(at="../ARCHITECTURE_GPU_PREFILL_MOE.md#prefill-moe-gemv-route")]
+def public pf_moe_gemv_knee : int64 {
+    let knob = metal_moe_gemv_max()
+    return knob >= 0l ? knob : 16l
+}
+
+//! whether this window's routed block rides the decode's gathered expert GEMVs: the window is within the knee and every
+//! expert plane of every layer has a gathered kernel (`moe_fmt_metal_served`, or the mx4 planes)
+[arch(at="../ARCHITECTURE_GPU_PREFILL_MOE.md#prefill-moe-gemv-route")]
+def private pf_moe_gemv_route(t : Model; npos : int64) : bool {
+    return false if (npos > pf_moe_gemv_knee() || t.experts_mx4 && g_pso_moe_gemv_mx4 == null)
+    return true if (t.experts_mx4)
+    for (l in range64(t.config.n_layers)) {
+        if (!moe_fmt_metal_served(fmt_at(t.we1_fmt, l)) || !moe_fmt_metal_served(fmt_at(t.we3_fmt, l)) || !moe_fmt_metal_served(fmt_at(t.we2_fmt, l))) {
+            return false
+        }
+    }
+    return true
+}
+
+//! the gathered GEMV form of a window's routed block: gate and up over every (token, slot) pair off the selection the route
+//! wrote, the activation over the live rows alone, down the same way, and the decode's combine - no bucket panel, no
+//! padded rows, the kernels the decode step dispatches
+[arch(at="../ARCHITECTURE_GPU_PREFILL_MOE.md#prefill-moe-gemv-route")]
+def private pf_enc_moe_gemv_block(enc : MetalComputeEncoder?; t : Model; l : int64; bx, bg, bu, bdn, bsel, bout, bdim, bnk : MetalBuffer?;
+                                  npos : int64; btot_act : MetalBuffer?) {
+    let c = t.config
+    let dim = c.dim
+    let nfe = c.n_ff_exp
+    let nk = c.n_expert_used
+    let fe1 = fmt_at(t.we1_fmt, l)
+    let fe3 = fmt_at(t.we3_fmt, l)
+    let fe2 = fmt_at(t.we2_fmt, l)
+    let ege = uint(dim * nfe)   //! an expert plane's elements; the plane stride is its superblock or block count
+    //! the up/gate sites read a token's x row for each of its slots (xs = 0); the down site reads the slot's hidden row
+    var kup = MoeGemvArgs(ndim = uint(dim), ddim = uint(nfe), eplane = ege / (kq_sb(fe1) ? 256u : 32u), xs = 0u,
+        ss = uint(2l * nk), bxs = uint(dim), bys = uint(nk * nfe), hasb = 0u)
+    var kup3 = kup
+    kup3.eplane = ege / (kq_sb(fe3) ? 256u : 32u)
+    var kdn = MoeGemvArgs(ndim = uint(nfe), ddim = uint(dim), eplane = ege / (kq_sb(fe2) ? 256u : 32u), xs = uint(nfe),
+        ss = uint(2l * nk), bxs = uint(nk * nfe), bys = uint(nk * dim), hasb = 0u)
+    if (t.experts_mx4) {
+        //! gmode == 1 doubles as the has-bias flag of the mx4 twins (the decode's enc_moe_select contract)
+        let hasb = g_pf_skip != "moe_bias" ? 1u : 0u
+        kup.hasb = hasb
+        kup3.hasb = hasb
+        kdn.hasb = hasb
+        kup.eplane = ege / 32u
+        kup3.eplane = kup.eplane
+        kdn.eplane = kup.eplane
+        var bwb1 = upload_region(unsafe(addr < void? >(t.fblob[t.web1_off + l * c.n_expert * nfe])), uint64(c.n_expert * nfe * 4l))
+        var bwb3 = upload_region(unsafe(addr < void? >(t.fblob[t.web3_off + l * c.n_expert * nfe])), uint64(c.n_expert * nfe * 4l))
+        enc_moe_gemv_mx4(enc, t, t.we1_offs[l], nfe, nk, npos, bx, bg, bsel, bwb1, kup)
+        enc_moe_gemv_mx4(enc, t, t.we3_offs[l], nfe, nk, npos, bx, bu, bsel, bwb3, kup3)
+    } else {
+        enc_moe_gemv(enc, t, fe1, t.we1_offs[l], nfe, nk, npos, bx, bg, bsel, kup)
+        enc_moe_gemv(enc, t, fe3, t.we3_offs[l], nfe, nk, npos, bx, bu, bsel, kup3)
+    }
+    if (!pf_skip_moe_act()) {
+        let nact = npos * nk * nfe
+        if (c.ffn_act == FfnAct.swiglu_oai) {
+            enc_swiglu_oai(enc, bg, 0ul, bu, 0ul, btot_act, nact)
+        } elif (c.moe_dense_shexp) {
+            enc_geglu(enc, bg, 0ul, bu, 0ul, btot_act, nact)
+        } else {
+            enc_swiglu(enc, bg, 0ul, bu, 0ul, btot_act, nact)
+        }
+    }
+    if (t.experts_mx4) {
+        var bwb2 = upload_region(unsafe(addr < void? >(t.fblob[t.web2_off + l * c.n_expert * dim])), uint64(c.n_expert * dim * 4l))
+        enc_moe_gemv_mx4(enc, t, t.we2_offs[l], dim, nk, npos, bg, bdn, bsel, bwb2, kdn)
+    } else {
+        enc_moe_gemv(enc, t, fe2, t.we2_offs[l], dim, nk, npos, bg, bdn, bsel, kdn)
+    }
+    if (!pf_skip_moe_reduce()) {
+        enc_moe_combine(enc, bdn, bsel, bout, bdim, bnk, dim, npos)
+    }
+}
+
 //! The routed tall pair's engage point, in mean rows an expert; answers the value it replaced.
 def public set_metal_moe_tall_avg(rows : int64) : int64 {
     let was = g_pf_moe_tall_avg
@@ -6501,7 +6591,11 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     let moe = !t.blocks.ffn_is_dense
     let g4moe = moe && c.moe_dense_shexp
     let mtot = moe ? npos * c.n_expert_used : 0l
-    let mpad = moe ? ((mtot + c.n_expert * 31l + 31l) / 32l) * 32l : 0l
+    let mpad = moe ? pf_moe_padded_rows(mtot, c.n_expert) : 0l
+    let moe_gemv_route = moe && pf_moe_gemv_route(t, npos)
+    if (moe_gemv_route) {
+        g_pf_moe_gemv_windows++
+    }
     let bytes_mlg = uint64(mp * c.n_expert * 4l)   //! the router's GEMM lands every padded row
     let bytes_msel = uint64(mtot * 2l * 4l)
     let bytes_mcsr = uint64((c.n_expert + 1l) * 4l)   // basep carries the padded total at [ne]
@@ -6523,7 +6617,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     let mxg_th = (g_pf_pso_moe_mm_mx4_th != null || g_pf_pso_moe_mm_q8_th != null
         || g_pf_pso_moe_mm_k4_th != null || g_pf_pso_moe_mm_k5_th != null || g_pf_pso_moe_mm_k6_th != null
         || pf_moe_split_th_any())
-    let want_mxg = moe && g_pf_pso_moe_gx != null && (npos >= g_pf_mxg_min || pf_moe_model_split(t)) && mxg_th
+    let want_mxg = moe && !moe_gemv_route && g_pf_pso_moe_gx != null && (npos >= g_pf_mxg_min || pf_moe_model_split(t)) && mxg_th
     let bytes_mxg = uint64(mpad * dim * 2l)
     var bmxg = want_mxg ? pool_acquire_pinned(g_pf_pool, g_dev, bytes_mxg) : null
     var bmg4rt = g4moe ? pool_acquire_pinned(g_pf_pool, g_dev, bytes_x) : null
@@ -6738,6 +6832,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     var u_moe_nfe = moe ? uniform_u32(uint(c.n_ff_exp)) : null
     var u_moe_g0 = moe ? uniform_u32(0u) : null
     var u_moe_ptot = moe ? uniform_u32(uint(mpad * c.n_ff_exp)) : null
+    var u_moe_act_tot = moe_gemv_route ? uniform_u32(uint(mtot * c.n_ff_exp)) : null   //! the gathered route's live hidden elements
     var u_moe_invd = g4moe ? uniform_f32(1.0 / sqrt(float(dim))) : null
     var u_moe_gmode = moe ? uniform_u32(c.moe_gate == MoeGate.softmax_weight ? 1u : (c.norm_topk_prob ? 0u : 2u)) : null
     var u_moe_nsh = nsh > 0l ? uniform_u32(uint(nsh)) : null
@@ -7317,7 +7412,9 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                         pf_enc_slab_gemv_b(enc, bw_shg, bxb, bmlg, u_dim, u_moe_one, u_moe_np, 1l, npos)
                     }
                     if (!pf_skip_moe_mm()) {
-                        if (t.experts_mx4) {
+                        if (moe_gemv_route) {
+                            //! the gathered route runs whole at the reduce's seat below, after the shared expert read bxb
+                        } elif (t.experts_mx4) {
                             //! per-expert bias folds into the mm accumulator seed (hasb); the moe_bias arm knocks it out
                             let hasb = g_pf_skip != "moe_bias"
                             var bwb1 = upload_region(unsafe(addr < void? >(t.fblob[t.web1_off + l * c.n_expert * c.n_ff_exp])), uint64(c.n_expert * c.n_ff_exp * 4l))
@@ -7352,11 +7449,13 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                 }
                 // the gpt-oss activation has no HX stamp, so it keeps the convert pass
                 let down_th = moe && (t.experts_mx4 ? g_pf_pso_moe_mm_mx4_th != null : pf_moe_th_pso(fmt_at(t.we2_fmt, l)) != null)
-                let act_hx = down_th && c.ffn_act != FfnAct.swiglu_oai && mpad >= CVT_MIN_ROWS && g_pf_skip != "moe_cvt" && g_pf_skip != "act_cvt"
+                let act_hx = down_th && !moe_gemv_route && c.ffn_act != FfnAct.swiglu_oai && mpad >= CVT_MIN_ROWS && g_pf_skip != "moe_cvt" && g_pf_skip != "act_cvt"
                 var bxh_mg = act_hx ? pf_twin_panel(mpad, c.n_ff_exp) : null
                 var bxh_shh : MetalBuffer?   //!< the shared expert's hidden rows as halves, where its activation wrote them
                 if (moe && g_pf_skip != "ew" && g_pf_skip != "nongemm" && g_pf_skip != "moe" && !pf_skip_moe_act()) {
-                    if (c.ffn_act == FfnAct.swiglu_oai) {
+                    if (moe_gemv_route) {
+                        //! the gathered route's activation runs inside its block over the live rows
+                    } elif (c.ffn_act == FfnAct.swiglu_oai) {
                         pf_enc_swiglu_oai(enc, bmg, 0ul, bmg2, 0ul, u_moe_ptot, bmcnt, bmbase, u_moe_ne, u_moe_nfe, mpad * c.n_ff_exp)
                     } elif (bxh_mg != null) {
                         if (g4moe) {
@@ -7383,11 +7482,15 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                 if (moe && g_pf_skip != "gemm" && g_pf_skip != "moe") {
                     let fe2 = fmt_at(t.we2_fmt, l)
                     if (!pf_skip_moe_mm()) {
-                        // the bucket panel is PADDED - a convert must cover mpad rows, not the mtot prefix
-                        if (down_th && bxh_mg == null) {
+                        if (moe_gemv_route) {
+                            //! the gathered route's down site runs inside its block below
+                        } elif (down_th && bxh_mg == null) {
+                            // the bucket panel is PADDED - a convert must cover mpad rows, not the mtot prefix
                             bxh_mg = pf_cvt_panel(enc, bmg, mpad, c.n_ff_exp, g_pf_skip == "moe_cvt" || g_pf_skip == "act_cvt")
                         }
-                        if (t.experts_mx4) {
+                        if (moe_gemv_route) {
+                            // the route block below
+                        } elif (t.experts_mx4) {
                             var bwb2 = upload_region(unsafe(addr < void? >(t.fblob[t.web2_off + l * c.n_expert * dim])), uint64(c.n_expert * dim * 4l))
                             pf_enc_moe_mm_mx4(enc, t, t.we2_offs[l], dim, npos, bmg, bmdn,
                                 bmcnt, bmbase, bmbkt, bwb2,
@@ -7405,7 +7508,15 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                             enc_gemm_mm(enc, bwsh2.buf, bwsh2.boff, bhb, bxb2, u_moe_nsh, u_dim, mp, dim, 0ul, nsh, npos, pf_hx_panel(enc, bxh_shh, bhb, mp, nsh, g_pf_skip == "act_cvt"))
                         }
                     }
-                    if (!pf_skip_moe_reduce()) {
+                    if (moe_gemv_route) {
+                        //! after the shared expert's GEMMs read bxb: the route's combine lands the routed sum there
+                        if (!pf_skip_moe_mm()) {
+                            pf_enc_moe_gemv_block(enc, t, l, g4moe ? bxb2 : bxb, bmg, bmg2, bmdn, bmsel, g4moe ? bmg4rt : bxb, u_dim, u_moe_nk, npos, u_moe_act_tot)
+                        }
+                        if (nsh > 0l && !pf_skip_moe_reduce()) {
+                            enc_axpy_sig(enc, bxb, bxb2, bmlg, u_total_dim, u_dim, npos * dim)
+                        }
+                    } elif (!pf_skip_moe_reduce()) {
                         pf_enc_moe_reduce(enc, bmdn, bmsel, bminv, g4moe ? bmg4rt : bxb, u_dim, u_moe_nk, dim, npos)
                         if (nsh > 0l) {
                             //! routed sum lands in bxb first — the shexp branch adds σ(gate)-scaled on top
@@ -7859,6 +7970,9 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
         pool_release(g_pf_upool, u_moe_nfe, 4ul)
         pool_release(g_pf_upool, u_moe_g0, 4ul)
         pool_release(g_pf_upool, u_moe_ptot, 4ul)
+        if (u_moe_act_tot != null) {
+            pool_release(g_pf_upool, u_moe_act_tot, 4ul)
+        }
         if (g4moe) {
             pool_release(g_pf_upool, u_moe_invd, 4ul)
         }

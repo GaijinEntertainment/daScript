@@ -5249,3 +5249,59 @@ def private axpy_sig_gate(t : T?; var dev, queue; npos, dim : int) {
         check_buf(t, tag, mc.buf[by], want, BAR_FP, Shape(row_width = dim))
     }
 }
+
+//! a routing of npos tokens over k distinct experts each, from a seeded walk; the per-expert counts the bucket rail pads
+def private routed_counts(npos, k, ne : int; seed : uint) : array<int> {
+    var counts : array<int>
+    counts |> resize(ne)
+    var st = seed
+    for (_tok in range(npos)) {
+        var picked : array<int>
+        while (length(picked) < k) {
+            st = st * 1664525u + 1013904223u
+            let e = int((st >> 8u) % uint(ne))
+            if (find_index(picked, e) < 0) {
+                picked |> push(e)
+                counts[e]++
+            }
+        }
+        delete picked
+    }
+    return <- counts
+}
+
+[test]
+def test_moe_padded_bound(t : T?) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        t |> equal(pf_moe_padded_rows(0l, 256l), 0l, "no routed rows pad to nothing")
+        t |> equal(pf_moe_padded_rows(16l, 256l), 512l, "2 tokens x 8 slots: 16 experts at most, a 32-row tile each")
+        t |> equal(pf_moe_padded_rows(64l, 256l), 2048l, "8 tokens: 64 tiles at most")
+        t |> equal(pf_moe_padded_rows(4096l, 256l), ((4096l + 256l * 31l + 31l) / 32l) * 32l, "past one row an expert the bound is the old worst case")
+        t |> equal(pf_moe_padded_rows(4096l, 256l), 12032l, "...which rounds every expert's pad in")
+        // the bound against the bucket rail's own padded prefix (padded_bases is the kernel's CPU twin) over seeded routings
+        var tight = 0
+        let shapes <- [(npos = 2, k = 8, ne = 256), (npos = 8, k = 8, ne = 256), (npos = 40, k = 8, ne = 256), (npos = 64, k = 8, ne = 256),
+            (npos = 300, k = 8, ne = 256), (npos = 1024, k = 8, ne = 256), (npos = 16, k = 4, ne = 60), (npos = 3, k = 8, ne = 512), (npos = 700, k = 10, ne = 512)]
+        for (sh in shapes) {
+            let npos = sh.npos
+            let k = sh.k
+            let ne = sh.ne
+            for (seed in [11u, 29u, 83u]) {
+                var counts <- routed_counts(npos, k, ne, seed)
+                var pb <- padded_bases(counts)
+                let bound = pf_moe_padded_rows(int64(npos * k), int64(ne))
+                t |> success(int64(pb.pad) <= bound, "npos={npos} k={k} ne={ne} seed={seed}: the rail pads to {pb.pad} rows under the bound {bound}")
+                if (int64(pb.pad) == bound) {
+                    tight++
+                }
+                delete counts
+                delete pb
+            }
+        }
+        t |> success(tight > 0, "the bound is reached ({tight} routings pad to it exactly - every routed expert distinct)")
+        // the control: the old worst case stands above the bound wherever fewer tokens than experts route
+        t |> success(((16l + 256l * 31l + 31l) / 32l) * 32l > pf_moe_padded_rows(16l, 256l), "the worst case over every expert sits above the bound at 2 tokens")
+    } else {
+        t |> skip("das_metal is not built on this platform")
+    }
+}

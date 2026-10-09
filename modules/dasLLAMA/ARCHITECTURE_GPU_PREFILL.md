@@ -128,8 +128,10 @@ sites:
   still beats THAT fallback.
 
 `CVT_MIN_ROWS`, `TALL_OCC_FLOOR` and `DEVW_SMALL_PANEL` are box-raced and cached at init from
-the sidecar (`metal_cvt_min_rows`, `metal_tall_floor`, `metal_devw_small_panel_mb`); the other
-knees are fixed.
+the sidecar (`metal_cvt_min_rows`, `metal_tall_floor`, `metal_devw_small_panel_mb`); the routed
+block's gathered-route knee (`metal_moe_gemv_max`,
+`ARCHITECTURE_GPU_PREFILL_MOE.md#prefill-moe-gemv-route`) is read per window; the other knees are
+fixed.
 
 ### The GEMV tail peel {#gemv-tail-peel}
 

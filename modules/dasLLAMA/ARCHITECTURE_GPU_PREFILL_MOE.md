@@ -79,12 +79,45 @@ binds the d plane at `doff`.
 The select kernel is one template at two per-lane depths: 8 logits per lane covers 256 experts,
 the 16-deep stamp 512 (Qwen3-Coder-Next), and the serve gate admits 512.
 
-The bucket kernel runs one threadgroup past the experts: threadgroup `ne` publishes the padded
+The CPU sizes the bucket panel and the padded-row passes at `pf_moe_padded_rows`: the routed rows
+plus 31 pad rows for every expert that can hold a row, and at most `min(ne, mtot)` experts can, so a
+2-token window on 256 experts is sized at 512 rows where the all-experts worst case is 7968 - the
+gather and the activation over the panel scale with the tokens, not the expert count, until every
+expert holds a row. The bucket kernel runs one threadgroup past the experts: threadgroup `ne` publishes the padded
 total at `basep[ne]`. The routed block's activation guards on that total (`MetalEw2T`'s TOTB
 stamps read `totb[0] * tmul` off the basep buffer at its bind offset) rather than the CPU's
 padded bound, and writes the down site's f16 X twin alongside its f32 rows (the dense HX form), so
 a panel that is mostly padding - ten rows per expert at 512 experts - costs neither a convert pass
 nor an activation pass over its tail.
+
+### The short window's gathered route {#prefill-moe-gemv-route}
+
+A window of `pf_moe_gemv_knee` tokens or fewer - the sidecar's `metal_moe_gemv_max` where it names
+one, 0 for never, else 16 - whose expert planes all have a gathered decode kernel
+(`moe_fmt_metal_served`, or the mx4 planes) serves its routed block through the decode step's
+kernels instead of the bucket rail's tiles: the gate and up sites as the gathered GEMV over one
+dispatch slice per (token, slot) pair off the selection the route wrote, the activation over the
+live `npos x k x n_ff_exp` rows alone, the down site the same way over the hidden rows, and the
+decode's combine summing the k slot rows under their weights. No gather panel, no padded rows, no
+f16 convert; the selection buffer, the gate, up and down panels and the output rows are the ones
+the tile path binds. The block runs at the reduce's seat, after the shared expert's GEMMs read the
+residual rows it overwrites.
+
+Why a tile loses there: the tile path dispatches one 32-row tile per expert on a z-grid of every
+expert, each tile walking K serially under barriers, so a 2-token window on 256 experts runs 128
+working threadgroups - one per core, the GPU idle between barriers - at 16 times the time its
+expert bytes take to stream; at 64 tokens it is still 4.5 times. The gathered GEMV reads an expert's
+weights once per routed token, so its cost grows with the tokens - with the layers, the slots and the
+expert bytes a token reads: 2.2 to 4.5 ms a token on the M1 Max, a third of that on the M5 Max -
+while the tiles' cost grows with the M-tile count and the experts a window populates. The two cross
+between 16 and 128 tokens by model and by box: near 128 for the 256-expert Qwen3.6 hybrid on the M1
+Max's base-form tiles, under 32 for the 48-layer Qwen3-30B and for gpt-oss on either box, near 56 for
+the hybrid on the M5 Max's tensor twins. The default knee is the window every swept carrier won at,
+16; a deployment that serves one model sets the sidecar's knob at that model's crossing
+(`benchmarks/prefill_window_probe.das` reads it, the readings sit in `PERF_LEDGER.md`), and the form
+that serves the band above it is `followup_metal.md`'s. llama.cpp's Metal backend takes the same route below 32 tokens, MLX below 128; neither
+has a form that reads an expert's weights once for its few rows, which is the form that beats both
+on the band between (`followup_metal.md`).
 
 **The staging form that wins inside the gathered mul_mm kernels is per format, not universal.**
 The gathered q8 form carries its scale and quant pointers across k-blocks; the stateless index

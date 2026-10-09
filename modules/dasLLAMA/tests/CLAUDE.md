@@ -161,7 +161,15 @@ under the same ledgered exception as the parity file's: the Metal MTP rail is wh
 flavor serves.
 
 Prefill parity: `base mm-tail s16
-kq cont attn-dev mirror span span-fused span-mrope span-ds dim qkv` (mirror = the mirror-fed window
+kq cont attn-dev mirror span span-fused span-mrope span-ds dim qkv moe-gemv` (moe-gemv = the short
+window's gathered expert route (`test_metal_prefill_moe_gemv_route`, families `qwen2moe` / `qwen3moe` /
+`gptoss` - the q8, K-quant and mx4 expert planes, every carrier large-tier; the hybrid's pure IQ4_XS file
+cannot twin into a blob and its UD file's twin declines the Metal prefill, so the hybrid holds its parity through
+the MTP parity file's served twin): a 300-row window on the tiles then a 2-, 7- and 24-row window the
+route serves, the last row's logits within the carrier's bar of the CPU chain's largest, the route's window
+counter up by one and the prefill counter by two, the same windows with the knee at 0 (the tiles) logged
+beside them and the counter unmoved, the control a window whose last token differs landing outside the bar;
+mirror = the mirror-fed window
 against the f32 panels on one blob twin under the pair's pinned crown - a 300-row window and a
 20-row continuation, the last row's logits within 0.4% of the largest and the census naming each
 form's kernels; the decode step after them uploads no row on the mirror-fed form and every row on
