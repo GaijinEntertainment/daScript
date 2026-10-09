@@ -2376,6 +2376,9 @@ STYLE001 — unnecessary ``<|`` pipe before block argument
 The ``<|`` pipe syntax is gen1 style and unnecessary in gen2. Use direct
 trailing block syntax instead.
 
+``--fix`` drops the ``<|`` (``defer <|`` becomes ``defer()``); a generator's pipe stays, since
+``generator<T>()`` takes no trailing block.
+
 .. das-doc: alt
 .. code-block:: das
 
@@ -2395,6 +2398,8 @@ STYLE002 — ``<|`` pipe before parameterless block
 When the block takes no parameters, both the ``<|`` pipe and ``$()`` are
 unnecessary. Use a direct trailing block.
 
+``--fix`` drops the ``<|`` and the ``$()`` - ``defer <| $() {`` becomes ``defer() {``.
+
 .. das-doc: alt
 .. code-block:: das
 
@@ -2413,6 +2418,8 @@ STYLE003 — redundant ``$()`` on parameterless block
 
 When a block takes no parameters, the ``$()`` prefix is unnecessary even
 without a pipe. Use a bare trailing block.
+
+``--fix`` rewrites ``$()`` to ``$``.
 
 .. das-doc: alt
 .. code-block:: das
@@ -2440,6 +2447,9 @@ synthesized block and its inner terminator for both braceless ``if (c)
 return`` and postfix-desugared ``return X if (c)``, so a real
 user-written ``{...}`` is detectable as ``blk.at != inner.at``.
 
+``--fix`` replaces the braces with the statement they hold (``if (x > 0) return x``) when they
+open on the ``if`` line and hold nothing else, a comment included.
+
 .. das-doc: alt
 .. code-block:: das
 
@@ -2466,6 +2476,9 @@ STYLE006 — ``string(__rtti)`` comparison should use ``is``
 Comparing ``string(expr.__rtti) == "ExprFoo"`` is verbose and fragile.
 Use the ``is`` operator instead, which is type-safe and cleaner.
 
+``--fix`` rewrites the comparison to ``expr is ExprFoo`` when the module sees ``daslib/ast_boost``,
+which provides ``is`` on AST nodes.
+
 .. das-doc: fragment
 .. code-block:: das
 
@@ -2480,6 +2493,8 @@ STYLE010 — ``if (true)`` should be a bare block
 
 ``if (true)`` is always taken and adds unnecessary noise. Use a bare
 block (lexical scope) instead.
+
+``--fix`` deletes the ``if (true)`` head, leaving the bare block.
 
 .. das-doc: alt
 .. code-block:: das
@@ -2503,6 +2518,9 @@ with initialization.
 
 The rule excludes ``var inscope`` (needs separate declaration for cleanup
 semantics), compiler-generated variables, and generic instantiations.
+
+``--fix`` moves the assignment into the declaration (``var x : int = 5``) when the two sit alone
+on consecutive lines with no comment and the value does not name the variable.
 
 .. das-doc: fragment
 .. code-block:: das
@@ -2538,6 +2556,10 @@ array-literal equivalent.
 
 The rule excludes ``var inscope``, compiler-generated variables, and
 generic instantiations (same exclusions as STYLE011).
+
+``--fix`` folds the run into the declaration - ``var a : array<int> <- [1, 2]`` - when each call
+sits alone on its line, every element has exactly the element type, no element names the array,
+and each ``emplace`` moves a named variable (``<-y``).
 
 .. das-doc: fragment
 .. code-block:: das
@@ -2576,6 +2598,10 @@ Fires only for the default/empty-init shapes (``var a : Foo``, ``var a =
 Foo()``, ``var a = new Foo()``). A non-empty constructor, a factory call, or
 a single field assignment is not flagged. ``var inscope``, compiler-generated
 variables, and generic instantiations are excluded.
+
+``--fix`` folds the run into the declaration (``var a = Foo(x = 1, y = 2)``, ``<-`` for a
+non-copyable struct) when each assignment sits alone on its line and no value names the variable;
+classes and user-written constructors are left alone.
 
 .. das-doc: alt
 .. code-block:: das
@@ -2674,6 +2700,9 @@ with ``||``. Two AST shapes are detected:
 * two adjacent ``if (a) { return X }`` statements in the same block
 * the ``if (a) { return X } else if (b) { return X }`` chain
 
+``--fix`` combines two adjacent guard statements - the first ``if`` takes ``a || b``, the second
+is deleted - when no comment sits in the deleted text; the ``else if`` chain stays a finding.
+
 .. das-doc: alt
 .. code-block:: das
 
@@ -2700,6 +2729,9 @@ both forms:
 * ``if (cond) return b1 else return b2`` (b1 ≠ b2)
 * ``if (cond) return b1`` immediately followed by ``return b2`` (b1 ≠ b2)
 
+``--fix`` replaces the ``if`` and its closing ``return`` with ``return cond`` / ``return !cond``
+when no comment sits in that span.
+
 .. das-doc: alt
 .. code-block:: das
 
@@ -2723,6 +2755,8 @@ Comparing a bool to a boolean literal is redundant — the bool already IS
 the value. Drop the comparison. Both Yoda forms (``true == flag``) are
 detected.
 
+``--fix`` drops the comparison, negating with ``!`` where the literal asks for it.
+
 .. das-doc: fragment
 .. code-block:: das
 
@@ -2743,6 +2777,10 @@ STYLE019 — nested ``min(max(...))`` should be ``clamp(...)``
 directly. Both orientations (and the mirror form) are detected — the
 inner call must resolve to the math module's ``min`` / ``max``, not a
 user overload.
+
+``--fix`` rewrites to ``clamp`` only when ``lo`` and ``hi`` are numeric constants with ``lo <= hi``
+(``lo < hi`` for floats), and for floats only the ``min(max(x, lo), hi)`` spelling - the one whose
+NaN and signed-zero results match ``clamp``.
 
 .. das-doc: alt
 .. code-block:: das
@@ -2770,6 +2808,9 @@ instantiation chain (two levels deep for json_boost's
 ``[template(ent)]`` generics) and matches the root's name/module against
 ``from_JV`` / ``json_boost``. The result-type check uses ``expr._type``,
 which is robust under both pre- and post-instantiation argument shapes.
+
+``--fix`` rewrites to ``v ?? defV``, parenthesized unless it stands alone as an argument,
+initializer or returned value; a call that omits ``defV`` stays a finding.
 
 .. das-doc: alt
 .. code-block:: das
@@ -2831,6 +2872,8 @@ an explicit ``ExprOp1("~", ExprField)`` or a single-bit-complement
 ``ExprConstBitfield``. A bare ``foo &= BfT.m`` (no ``~``) is *not* the
 bit-clear idiom; it would mask off every other bit, so it stays silent.
 
+``--fix`` rewrites to the field assignment when the right-hand side is a bitfield constant.
+
 .. das-doc: alt
 .. code-block:: das
 
@@ -2867,6 +2910,8 @@ the same bitfield — under lint policies as ``ExprField(BfT, name)``,
 under normal compile as ``ExprConstBitfield`` with a single-bit mask.
 Multi-bit masks (``Mode.read | Mode.write``) are left alone since the
 ``!= 0`` semantics differ from any single field read.
+
+``--fix`` rewrites to ``bf.m`` / ``!bf.m`` when the mask is a bitfield constant.
 
 .. das-doc: fragment
 .. code-block:: das

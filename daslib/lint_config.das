@@ -610,6 +610,8 @@ class private LintSpanVisitor : AstVisitor {
     first : int2 = int2(INT_MAX, INT_MAX)
     last : int2 = int2(0, 0)
     last_is_call : bool
+    last_is_member : bool
+    last_is_keyword : bool
     skipped : table<uint64>
     skip_depth : int
     def override preVisitExpression(expr : ExpressionPtr) : void {
@@ -622,9 +624,18 @@ class private LintSpanVisitor : AstVisitor {
         if (a.x < first.x || (a.x == first.x && a.y < first.y)) {
             first = a
         }
+        let is_call = expr is ExprCall || expr is ExprLooksLikeCall || expr is ExprNamedCall || expr is ExprCallMacro || expr is ExprMakeStruct || expr is ExprNew
+        let is_member = expr is ExprField || expr is ExprSafeField || expr is ExprSwizzle
+        let is_keyword = expr is ExprAsVariant || expr is ExprIsVariant || expr is ExprSafeAsVariant
         if (b.x > last.x || (b.x == last.x && b.y > last.y)) {
             last = b
-            last_is_call = expr is ExprCall || expr is ExprLooksLikeCall || expr is ExprNamedCall || expr is ExprCallMacro
+            last_is_call = is_call
+            last_is_member = is_member
+            last_is_keyword = is_keyword
+        } elif (b == last) {
+            last_is_call ||= is_call
+            last_is_member ||= is_member
+            last_is_keyword ||= is_keyword
         }
     }
     def override visitExpression(var expr : ExpressionPtr) : ExpressionPtr {
@@ -699,10 +710,31 @@ def private lint_scan_open_left(d : array<uint8> const# implicit; from, open : i
     return left == 0 ? pos : -1
 }
 
+def private lint_is_name_byte(c : int) : bool => is_alpha(c) || is_number(c) || c == '_' || c == '`'
+
+//! Moves ``to`` - the end of a member token (``.``, ``?.``) or a variant ``as`` / ``is`` whose LineInfo stops short of the name - past that name.
+def private lint_scan_name_after(d : array<uint8> const# implicit; to : int; keyword : bool) : int {
+    var k = to
+    if (keyword && k >= 2 && int(d[k - 1]) == 's' && (int(d[k - 2]) == 'a' || int(d[k - 2]) == 'i')) {
+        while (k < length(d) && int(d[k]) == ' ') {
+            k++
+        }
+    } elif (keyword || k < 1 || int(d[k - 1]) != '.') {
+        return to
+    }
+    let start = k
+    while (k < length(d) && lint_is_name_byte(int(d[k]))) {
+        k++
+    }
+    return k > start ? k : to
+}
+
 struct private LintTokens {
     first : int2
     last : int2
     last_is_call : bool
+    last_is_member : bool
+    last_is_keyword : bool
 }
 
 def private lint_expr_tokens(e : Expression?) : LintTokens {
@@ -711,7 +743,7 @@ def private lint_expr_tokens(e : Expression?) : LintTokens {
         var root = unsafe(reinterpret<Expression?>(e))
         visit(root, adapter)
     }
-    let tokens = LintTokens(first = astVisitor.first, last = astVisitor.last, last_is_call = astVisitor.last_is_call)
+    let tokens = LintTokens(first = astVisitor.first, last = astVisitor.last, last_is_call = astVisitor.last_is_call, last_is_member = astVisitor.last_is_member, last_is_keyword = astVisitor.last_is_keyword)
     unsafe {
         delete astVisitor
     }
@@ -742,6 +774,12 @@ def public lint_expr_span(e : Expression?) : LintFix {
         var from = line_start[0] + tokens.first.y
         var to = line_start[tokens.last.x - tokens.first.x] + tokens.last.y
         if (e is ExprStringBuilder) {
+            if (from > 1 && int(d[from - 1]) == '{') {
+                from--
+            }
+            if (to + 1 < length(d) && int(d[to]) == '}') {
+                to++
+            }
             return if (from == 0 || int(d[from - 1]) != '"' || to >= length(d) || int(d[to]) != '"')
             from--
             to++
@@ -753,9 +791,11 @@ def public lint_expr_span(e : Expression?) : LintFix {
             if (k < length(d) && int(d[k]) == '(') {
                 to = k + 1
             }
+        } elif (tokens.last_is_member || tokens.last_is_keyword) {
+            to = lint_scan_name_after(d, to, tokens.last_is_keyword)
         }
         var st = LintScan(pos = from)
-        return if (!lint_scan_brackets(d, to, false, st) || st.quotes != 0)
+        return if (!lint_scan_brackets(d, to, false, st) || (st.quotes != 0 && st.min_depth < 0))
         if (st.min_depth < 0) {
             from = lint_scan_open_left(d, from, -st.min_depth)
             return if (from < 0)

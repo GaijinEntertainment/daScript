@@ -225,6 +225,468 @@ class StyleLintVisitor : AstVisitor {
         return result
     }
 
+    def fix_has_comment(text : string) : bool => code_find(text, "//") >= 0 || code_find(text, "/*") >= 0
+
+    def fix_is_ident_byte(c : int) : bool => c >= 0 && (is_alpha(c) || is_number(c) || c == '_')
+
+    //! True when ``text`` names ``name`` as a whole identifier.
+    def fix_mentions(text, name : string) : bool {
+        var pos = find(text, name)
+        while (pos >= 0) {
+            if (!fix_is_ident_byte(lint_byte_at(text, pos - 1)) && !fix_is_ident_byte(lint_byte_at(text, pos + length(name)))) return true
+            pos = find(text, name, pos + 1)
+        }
+        return false
+    }
+
+    //! True for a name a type or an ``is`` test can spell: identifier characters and ``::``.
+    def fix_is_type_name(text : string) : bool {
+        if (empty(text) || is_number(lint_byte_at(text, 0))) return false
+        var ok = true
+        peek_data(text) $(d) {
+            for (c in d) {
+                ok = ok && (fix_is_ident_byte(int(c)) || int(c) == ':')
+            }
+        }
+        return ok
+    }
+
+    //! True when ``text`` needs no parentheses as an operand: names, member and index chains, calls, literals.
+    def fix_atom_text(text : string) : bool {
+        var atom = !empty(text) && find(text, "..") < 0
+        peek_data(text) $(d) {
+            var depth = 0
+            var quote = 0
+            var i = 0
+            while (atom && i < length(d)) {
+                let c = int(d[i])
+                let next = i + 1 < length(d) ? int(d[i + 1]) : 0
+                if (quote != 0) {
+                    if (c == '\\') {
+                        i++
+                    } elif (c == quote) {
+                        quote = 0
+                    }
+                } elif (c == '"' || c == '\'') {
+                    quote = c
+                } elif (c == '(' || c == '[') {
+                    depth++
+                } elif (c == ')' || c == ']') {
+                    depth--
+                } elif (depth == 0) {
+                    atom = (fix_is_ident_byte(c) || c == '.' || (c == ':' && (next == ':' || (i > 0 && int(d[i - 1]) == ':')))
+                        || (c == '?' && (next == '.' || next == '[')))
+                }
+                i++
+            }
+            atom = atom && depth == 0 && quote == 0
+        }
+        return atom
+    }
+
+    //! The source of ``e`` as an operand of a tighter-binding operator - parenthesized unless it is an atom; "" when it cannot be recovered.
+    def fix_operand(e : Expression? const) : string {
+        let text = lint_expr_text(e)
+        if (empty(text) || fix_has_comment(text)) return ""
+        return fix_atom_text(text) ? text : "({text})"
+    }
+
+    //! The source of ``e`` in its own operator slot, keeping the parentheses the span leaves out.
+    def fix_operand_in_place(e : Expression? const) : string {
+        let span = lint_expr_span(e)
+        if (span.line <= 0) return ""
+        let text = lint_span_text(e.at, span)
+        if (fix_has_comment(text)) return ""
+        let head = strip_right(slice(lint_source_line(e.at, span.line), 0, span.column))
+        let tail = strip_left(slice(lint_source_line(e.at, span.last_line), span.last_column))
+        return ends_with(head, "(") && starts_with(tail, ")") && !fix_atom_text(text) ? "({text})" : text
+    }
+
+    //! True when the text around ``span`` binds looser than any operator - an argument, an initializer, a returned value.
+    def fix_isolated(at : LineInfo; span : LintFix) : bool {
+        let head = strip_right(slice(lint_source_line(at, span.line), 0, span.column))
+        let tail = strip_left(slice(lint_source_line(at, span.last_line), span.last_column))
+        let p = lint_byte_at(head, length(head) - 1)
+        let q = lint_byte_at(tail, 0)
+        let compare = ends_with(head, "==") || ends_with(head, "!=") || ends_with(head, "<=") || ends_with(head, ">=")
+        let opens = empty(head) || p == '(' || p == ',' || p == '[' || (p == '=' && !compare) || ends_with(head, "<-") || ends_with(head, " return")
+        return opens && (q < 0 || q == ')' || q == ',' || q == ']' || starts_with(tail, "//"))
+    }
+
+    def fix_join(items : array<string>) : string {
+        return build_string() $(var w) {
+            for (item, k in items, count()) {
+                if (k > 0) {
+                    w |> write(", ")
+                }
+                w |> write(item)
+            }
+        }
+    }
+
+    //! The span of statement ``e`` when it alone fills one source line; line 0 otherwise.
+    def fix_whole_line_span(e : Expression?) : LintFix {
+        if (e.genFlags.generated) return LintFix()
+        let span = lint_expr_span(e)
+        if (span.line <= 0 || span.line != span.last_line) return LintFix()
+        let line = lint_source_line(e.at, span.line)
+        if (!empty(strip(slice(line, 0, span.column))) || !empty(strip(slice(line, span.last_column)))) return LintFix()
+        return span
+    }
+
+    //! The code of single-variable declaration ``elet`` when it alone fills its line; "" otherwise.
+    def fix_let_line(elet : ExprLet const?) : string {
+        if (length(elet.variables) != 1 || elet.genFlags.generated || elet.variables[0].at.line != elet.at.line) return ""
+        let line = lint_source_line(elet.at, int(elet.at.line))
+        let code = strip(line)
+        if (!empty(strip(slice(line, 0, int(elet.at.column)))) || fix_has_comment(code) || find(code, ";") >= 0 || !starts_with(code, "var ")) return ""
+        return code
+    }
+
+    //! ``statement`` written as ``<target> <op> <value>`` with no ``name`` in the value: the op and the value, or "" when it is not.
+    def fix_assignment_tail(statement, target, name : string) : string {
+        if (!starts_with(statement, target) || fix_is_ident_byte(lint_byte_at(statement, length(target)))) return ""
+        let rest = strip_left(slice(statement, length(target)))
+        let op_ok = (starts_with(rest, "=") && !starts_with(rest, "==")) || starts_with(rest, "<-") || starts_with(rest, ":=")
+        return op_ok && !fix_mentions(rest, name) ? rest : ""
+    }
+
+    def fix_is_if_keyword(ifte : ExprIfThenElse?) : bool {
+        let line = lint_source_line(ifte.at, int(ifte.at.line))
+        let head = slice(line, int(ifte.at.column), int(ifte.at.column) + 3)
+        return head == "if " || head == "if("
+    }
+
+    def fix_in_generic() : bool => current_function != null && current_function.fromGeneric != null
+
+    //! Drops the ``<|`` before a trailing block at ``pipe`` of line ``ln``, and the ``$()`` it leaves redundant.
+    def st001_pipe_fix(at : LineInfo; ln, pipe : int; is_defer : bool) : LintFix {
+        let line = lint_source_line(at, ln)
+        let comment = code_find(line, "//")
+        if (pipe < 0 || (comment >= 0 && comment < pipe) || slice(line, pipe, pipe + 2) != "<|") return LintFix()
+        let head = strip_right(slice(line, 0, pipe))
+        var to = pipe + 2
+        while (lint_byte_at(line, to) == ' ') {
+            to++
+        }
+        if (slice(line, to, to + 3) == "$()") {
+            var k = to + 3
+            while (lint_byte_at(line, k) == ' ') {
+                k++
+            }
+            if (lint_byte_at(line, k) == '{') {
+                to = k
+            }
+        }
+        let c = lint_byte_at(line, to)
+        if (is_defer) {
+            if (!ends_with(head, "defer") || (c != '$' && c != '{')) return LintFix()
+            return LintFix(line = ln, column = length(head), last_line = ln, last_column = to, replacement = "() ")
+        }
+        if (!ends_with(head, ")") || (c != '$' && c != '@' && c != '{')) return LintFix()
+        return LintFix(line = ln, column = length(head), last_line = ln, last_column = to, replacement = " ")
+    }
+
+    def st001_block_pipe_fix(call_at, block_at : LineInfo) : LintFix {
+        for (ln in range(int(call_at.line), int(block_at.line) + 1)) {
+            let pipe = code_find(lint_source_line(call_at, ln), "<|")
+            if (pipe >= 0) return st001_pipe_fix(call_at, ln, pipe, false)
+        }
+        return LintFix()
+    }
+
+    //! ``$() {`` at a block's opening brace becomes ``$ {``.
+    def st003_fix(block_at : LineInfo) : LintFix {
+        let ln = int(block_at.line)
+        let line = lint_source_line(block_at, ln)
+        let open = int(block_at.column)
+        var k = open
+        while (k > 0 && lint_byte_at(line, k - 1) == ' ') {
+            k--
+        }
+        if (lint_byte_at(line, open) != '{' || k < 3 || slice(line, k - 3, k) != "$()") return LintFix()
+        return LintFix(line = ln, column = k - 3, last_line = ln, last_column = k, replacement = k == open ? "$ " : "$")
+    }
+
+    def st005_fix(ifte : ExprIfThenElse?; blk : ExprBlock?; term : Expression? const) : LintFix {
+        let first_ln = int(blk.at.line)
+        let last_ln = int(blk.at.last_line)
+        let first = lint_source_line(blk.at, first_ln)
+        let last = lint_source_line(blk.at, last_ln)
+        let open_col = int(blk.at.column)
+        var close_col = int(blk.at.last_column) - 1
+        if (lint_byte_at(last, close_col) != '}') {
+            close_col++
+        }
+        if (blk.at.line != ifte.at.line || !fix_is_if_keyword(ifte) || lint_byte_at(first, open_col) != '{' || lint_byte_at(last, close_col) != '}') return LintFix()
+        let inner = strip(lint_span_text(blk.at, LintFix(line = first_ln, column = open_col + 1, last_line = last_ln, last_column = close_col)))
+        let statement = lint_expr_text(term)
+        let tail = strip(slice(last, close_col + 1))
+        if (empty(statement) || (inner != statement && inner != "{statement};") || (!empty(tail) && !starts_with(tail, "//"))) return LintFix()
+        return LintFix(line = first_ln, column = open_col, last_line = last_ln, last_column = close_col + 1, replacement = statement)
+    }
+
+    def fix_exports_module(mod : Module?; name : string; var seen : table<string>) : bool {
+        let mn = "{mod.name}"
+        if (mn == name) return true
+        if (key_exists(seen, mn)) return false
+        seen |> insert(mn)
+        var found = false
+        module_for_each_dependency(mod) $(dep, is_pub) {
+            found = found || (is_pub && dep != null && fix_exports_module(dep, name, seen))
+        }
+        return found
+    }
+
+    //! True when the function being linted sees module ``name`` - required directly or re-exported.
+    def fix_sees_module(name : string) : bool {
+        if (current_function == null || current_function._module == null) return false
+        var seen : table<string>
+        var found = false
+        module_for_each_dependency(current_function._module) $(dep, _is_pub) {
+            found = found || (dep != null && fix_exports_module(dep, name, seen))
+        }
+        return found
+    }
+
+    def st006_fix(expr : ExprOp2?) : LintFix {
+        let left_is_call = is_string_rtti_comparison(expr.left)
+        let call = peel_ref2value_const(left_is_call ? expr.left : expr.right)
+        let named = peel_ref2value_const(left_is_call ? expr.right : expr.left)
+        if (expr.genFlags.generated || fix_in_generic() || !(named is ExprConstString) || !fix_sees_module("ast_boost")) return LintFix()
+        let name = string((named as ExprConstString).value)
+        if (!fix_is_type_name(name) || lint_expr_text(named) != "\"{name}\"") return LintFix()
+        let field = peel_ref2value_const((call as ExprCall).arguments[0]) as ExprField
+        let subject = fix_operand(field.value)
+        return empty(subject) ? LintFix() : lint_replace_fix(expr, "{subject} is {name}")
+    }
+
+    //! ``if (true) {`` loses its head, leaving the bare block.
+    def st010_fix(ifte : ExprIfThenElse?) : LintFix {
+        let body = lint_expr_span(ifte.if_true)
+        let ln = int(ifte.at.line)
+        if (body.line != ln || !fix_is_if_keyword(ifte)) return LintFix()
+        let head = slice(lint_source_line(ifte.at, ln), int(ifte.at.column), body.column)
+        if (replace(head, " ", "") != "if(true)") return LintFix()
+        return LintFix(line = ln, column = int(ifte.at.column), last_line = ln, last_column = body.column, replacement = "")
+    }
+
+    def fix_statement_before(blk : ExprBlock?; expr : ExpressionPtr) : Expression const? {
+        for (k in range(1, length(blk.list))) {
+            if (blk.list[k] == expr) return blk.list[k - 1]
+        }
+        return null
+    }
+
+    //! Folds the assignment on the next line into declaration ``decl``.
+    def st011_fix(decl : Expression const?; assign : Expression?; v : Variable?) : LintFix {
+        if (decl == null || !(decl is ExprLet)) return LintFix()
+        let code = fix_let_line(decl as ExprLet)
+        let span = fix_whole_line_span(assign)
+        if (empty(code) || (decl as ExprLet).variables[0] != v || span.line != int(decl.at.line) + 1) return LintFix()
+        let tail = fix_assignment_tail(lint_span_text(assign.at, span), string(v.name), string(v.name))
+        if (empty(tail)) return LintFix()
+        let decl_line = lint_source_line(decl.at, int(decl.at.line))
+        return LintFix(line = int(decl.at.line), column = length(strip_right(decl_line)), last_line = span.line, last_column = span.last_column, replacement = " {tail}")
+    }
+
+    //! Folds a run of ``push`` / ``emplace`` lines into the array's declaration as a literal.
+    def st012_fix(blk : ExprBlock?; idx, count : int; v : Variable?) : LintFix {
+        let elet = blk.list[idx] as ExprLet
+        let code = fix_let_line(elet)
+        let name = string(v.name)
+        if (empty(code) || v._type.firstType == null) return LintFix()
+        var items : array<string>
+        items |> reserve(count)
+        var last = LintFix()
+        for (k in range(count)) {
+            let call = blk.list[idx + 1 + k] as ExprCall
+            let span = fix_whole_line_span(call)
+            let arg = peel_ref2value_const(call.arguments[1])
+            let text = lint_expr_text(arg)
+            let is_emplace = call.func.fromGeneric.name == "emplace"
+            if (span.line != int(elet.at.line) + 1 + k || empty(text) || fix_mentions(text, name) || (is_emplace && !(arg is ExprVar))
+                    || !is_same_type(v._type.firstType, arg._type, RefMatters.no, ConstMatters.no, TemporaryMatters.no)) return LintFix()
+            items |> push(is_emplace ? "<-{text}" : text)
+            last = span
+        }
+        return LintFix(line = int(elet.at.line), column = int(elet.at.column), last_line = last.line, last_column = last.last_column,
+            replacement = "{code} <- [{fix_join(items)}]")
+    }
+
+    //! The struct type a STYLE013 declaration spells: ``var a : T``, ``var a = T()``, ``var a = new T()``.
+    def st013_type_text(code, name : string; is_new : bool) : string {
+        let head = "var {name}"
+        if (!starts_with(code, head)) return ""
+        let rest = strip_left(slice(code, length(head)))
+        var text = ""
+        if (starts_with(rest, ":") && !is_new) {
+            text = strip(slice(rest, 1))
+        } elif (starts_with(rest, "=")) {
+            text = strip(slice(rest, 1))
+            if (is_new != starts_with(text, "new ")) return ""
+            if (is_new) {
+                text = strip(slice(text, 4))
+            }
+            if (ends_with(text, "()")) {
+                text = slice(text, 0, length(text) - 2)
+            } elif (!is_new) {
+                return ""
+            }
+        }
+        return fix_is_type_name(text) ? text : ""
+    }
+
+    //! Folds a run of field assignments into the declaration as a named-field constructor.
+    def st013_fix(blk : ExprBlock?; idx, count : int; v : Variable?) : LintFix {
+        let elet = blk.list[idx] as ExprLet
+        let code = fix_let_line(elet)
+        let name = string(v.name)
+        let is_new = v.init != null && v.init is ExprNew
+        let st = is_new ? v._type.firstType.structType : v._type.structType
+        if (empty(code) || st == null || st.flags.isClass || is_new && (v.init as ExprNew).func != null && !(v.init as ExprNew).func.flags.generated) return LintFix()
+        let type_text = st013_type_text(code, name, is_new)
+        if (empty(type_text)) return LintFix()
+        var fields : array<string>
+        fields |> reserve(count)
+        var seen : table<string>
+        var last = LintFix()
+        for (k in range(count)) {
+            let stmt = blk.list[idx + 1 + k]
+            let span = fix_whole_line_span(stmt)
+            let field = field_name_of(stmt)
+            let tail = span.line > 0 ? fix_assignment_tail(lint_span_text(stmt.at, span), "{name}.{field}", name) : ""
+            if (span.line != int(elet.at.line) + 1 + k || empty(tail) || key_exists(seen, field)) return LintFix()
+            seen |> insert(field)
+            fields |> push("{field} {tail}")
+            last = span
+        }
+        let assign = is_new || v._type.canCopy ? "=" : "<-"
+        return LintFix(line = int(elet.at.line), column = int(elet.at.column), last_line = last.line, last_column = last.last_column,
+            replacement = "var {name} {assign} {is_new ? "new " : ""}{type_text}({fix_join(fields)})")
+    }
+
+    def st016_or_operand(cond : Expression?) : string {
+        let text = lint_expr_text(cond)
+        if (empty(text) || fix_has_comment(text)) return ""
+        return peel_ref2value_const(cond) is ExprOp3 ? "({text})" : text
+    }
+
+    //! Two adjacent guards with one exit become the first guard over ``a || b``.
+    def st016_fix(first, second : ExprIfThenElse?) : LintFix {
+        let a = st016_or_operand(first.cond)
+        let b = st016_or_operand(second.cond)
+        let cond_span = lint_expr_span(first.cond)
+        let first_span = lint_expr_span(first)
+        let second_span = lint_expr_span(second)
+        if (empty(a) || empty(b) || cond_span.line <= 0 || first_span.line <= 0 || second_span.line <= 0
+                || !fix_is_if_keyword(first) || !fix_is_if_keyword(second)) return LintFix()
+        let tail = slice(lint_source_line(second.at, second_span.last_line), second_span.last_column)
+        let dropped = LintFix(line = first_span.last_line, column = first_span.last_column, last_line = second_span.last_line, last_column = second_span.last_column)
+        if (fix_has_comment(lint_span_text(first.at, dropped)) || !empty(strip(tail))) return LintFix()
+        var cond_edit = cond_span
+        cond_edit.replacement = "{a} || {b}"
+        return lint_merge_fixes(first.at, [cond_edit, dropped])
+    }
+
+    //! ``if (c) return b1`` closed by ``return !b1`` (an else arm or the next statement ``last``) becomes ``return c`` / ``return !c``.
+    def st017_fix(ifte : ExprIfThenElse?; last : Expression?; b1 : bool) : LintFix {
+        let first_span = lint_expr_span(ifte)
+        let last_span = lint_expr_span(last)
+        let cond = b1 ? lint_expr_text(ifte.cond) : fix_operand(ifte.cond)
+        if (first_span.line <= 0 || last_span.line <= 0 || empty(cond) || !fix_is_if_keyword(ifte)) return LintFix()
+        let span = LintFix(line = first_span.line, column = first_span.column, last_line = last_span.last_line, last_column = last_span.last_column,
+            replacement = b1 ? "return {cond}" : "return !{cond}")
+        return fix_has_comment(lint_span_text(ifte.at, span)) ? LintFix() : span
+    }
+
+    def st018_fix(expr : ExprOp2?; operand, literal : Expression? const; positive : bool) : LintFix {
+        let lit = lint_expr_text(literal)
+        if (expr.genFlags.generated || (lit != "true" && lit != "false")) return LintFix()
+        let text = positive ? fix_operand_in_place(operand) : fix_operand(operand)
+        return empty(text) ? LintFix() : lint_replace_fix(expr, positive ? text : "!{text}")
+    }
+
+    def fix_number(e0 : Expression? const; var value : double&) : bool {
+        let e = peel_ref2value_const(e0)
+        if (e is ExprOp1 && (e as ExprOp1).op == "-") {
+            let ok = fix_number((e as ExprOp1).subexpr, value)
+            value = -value
+            return ok
+        }
+        if (e is ExprConstInt) {
+            value = double((e as ExprConstInt).value)
+        } elif (e is ExprConstUInt) {
+            value = double((e as ExprConstUInt).value)
+        } elif (e is ExprConstInt64) {
+            value = double((e as ExprConstInt64).value)
+        } elif (e is ExprConstUInt64) {
+            value = double((e as ExprConstUInt64).value)
+        } elif (e is ExprConstFloat) {
+            value = double((e as ExprConstFloat).value)
+        } elif (e is ExprConstDouble) {
+            value = (e as ExprConstDouble).value
+        } else {
+            return false
+        }
+        return true
+    }
+
+    //! ``min(max(x, lo), hi)`` with constant ``lo <= hi`` becomes ``clamp(x, lo, hi)``; integer operands also take the commuted and
+    //! ``max(min(...))`` spellings, floats only the one ``clamp``'s NaN and signed-zero behaviour matches.
+    def st019_fix(expr : ExprCall?) : LintFix {
+        let bt = expr._type != null ? expr._type.baseType : Type.none
+        let is_float = bt == Type.tFloat || bt == Type.tDouble
+        if (fix_in_generic() || expr.genFlags.generated || !(is_float || bt == Type.tInt || bt == Type.tUInt || bt == Type.tInt64 || bt == Type.tUInt64)) return LintFix()
+        let outer_min = expr.func.name == "min"
+        let inner_first = is_math_call(expr.arguments[0], outer_min ? "max" : "min")
+        let inner = peel_ref2value_const(expr.arguments[inner_first ? 0 : 1]) as ExprCall
+        let bound = expr.arguments[inner_first ? 1 : 0]
+        var bound_value = 0.0lf
+        var limit_value = 0.0lf
+        let x_first = !fix_number(inner.arguments[0], limit_value)
+        if (x_first && !fix_number(inner.arguments[1], limit_value) || !fix_number(bound, bound_value) || (is_float && (!outer_min || !inner_first || !x_first))) return LintFix()
+        let lo = outer_min ? limit_value : bound_value
+        let hi = outer_min ? bound_value : limit_value
+        if (is_float ? lo >= hi : lo > hi) return LintFix()
+        let x = lint_expr_text(inner.arguments[x_first ? 0 : 1])
+        let limit = lint_expr_text(inner.arguments[x_first ? 1 : 0])
+        let bound_text = lint_expr_text(bound)
+        if (empty(x) || empty(limit) || empty(bound_text) || fix_has_comment(x)) return LintFix()
+        return lint_replace_fix(expr, outer_min ? "clamp({x}, {limit}, {bound_text})" : "clamp({x}, {bound_text}, {limit})")
+    }
+
+    def st020_fix(expr : ExprCall?) : LintFix {
+        let n = length(expr.arguments)
+        if (fix_in_generic() || expr.genFlags.generated || n < 2 || expr.arguments[n - 1]._type == null
+                || expr.arguments[n - 1].at.fileInfo != expr.at.fileInfo || expr.arguments[n - 1]._type.baseType != expr._type.baseType) return LintFix()
+        let value = fix_operand(expr.arguments[0])
+        var number = 0.0lf
+        let fallback = fix_number(expr.arguments[n - 1], number) ? lint_expr_text(expr.arguments[n - 1]) : fix_operand(expr.arguments[n - 1])
+        var span = lint_expr_span(expr)
+        if (empty(value) || empty(fallback) || span.line <= 0) return LintFix()
+        span.replacement = fix_isolated(expr.at, span) ? "{value} ?? {fallback}" : "({value} ?? {fallback})"
+        return span
+    }
+
+    def fix_is_bit_constant(e0 : Expression? const) : bool {
+        let e = peel_ref2value_const(e0)
+        if (e is ExprOp1 && (e as ExprOp1).op == "~") return peel_ref2value_const((e as ExprOp1).subexpr) is ExprConstBitfield
+        return e is ExprConstBitfield
+    }
+
+    def st022_fix(expr : ExprOp2?; name : string) : LintFix {
+        let target = fix_operand(expr.left)
+        if (expr.genFlags.generated || empty(target) || !fix_is_bit_constant(expr.right)) return LintFix()
+        return lint_replace_fix(expr, "{target}.{name} = {expr.op == "|=" ? "true" : "false"}")
+    }
+
+    def st023_fix(expr : ExprOp2?; op2 : ExprOp2 const?; name : string) : LintFix {
+        let target = fix_operand(op2.left)
+        if (expr.genFlags.generated || empty(target) || !(peel_ref2value_const(op2.right) is ExprConstBitfield)) return LintFix()
+        return lint_replace_fix(expr, expr.op == "!=" ? "{target}.{name}" : "!{target}.{name}")
+    }
+
     def st042_written_body(fn : FunctionPtr) : ExprBlock? {
         if (fn.flags.generated || fn.body == null || !(fn.body is ExprBlock) || foreign_module_code()) return null
         var body = fn.body as ExprBlock
@@ -717,10 +1179,11 @@ class StyleLintVisitor : AstVisitor {
             at.column = uint(defer_pos)
             at.last_line = uint(ln)
             at.last_column = uint(defer_pos + 5)
+            let fix = st001_pipe_fix(fn.at, ln, pipe_pos, true)
             if (starts_with(after_pipe, "$()")) {
-                style_warning("STYLE002: remove <| pipe and $() for parameterless block; use direct trailing block", at)
+                style_warning("STYLE002: remove <| pipe and $() for parameterless block; use direct trailing block", at, fix)
             } else {
-                style_warning("STYLE001: remove <| pipe before block argument; use direct trailing block syntax", at)
+                style_warning("STYLE001: remove <| pipe before block argument; use direct trailing block syntax", at, fix)
             }
         }
     }
@@ -781,7 +1244,7 @@ class StyleLintVisitor : AstVisitor {
         if (!expr.genFlags.generated) st037_bump()
     }
 
-    def check_block_pipe(call_at : LineInfo; var arguments : dasvector`ptr`Expression) : void {
+    def check_block_pipe(call_at : LineInfo; var arguments : dasvector`ptr`Expression; fixable : bool) : void {
         let nargs = length(arguments)
         if (nargs == 0) return
         for (i in range(nargs)) {
@@ -804,10 +1267,11 @@ class StyleLintVisitor : AstVisitor {
                                 let brace_pos = find(after_pipe, "\{")
                                 let is_lambda_shorthand = arrow_pos >= 0 && (brace_pos < 0 || arrow_pos < brace_pos)
                                 if (!is_lambda_shorthand) {
+                                    let fix = fixable ? st001_block_pipe_fix(call_at, eblk.at) : LintFix()
                                     if (block_arg_count == 0) {
-                                        style_warning("STYLE002: remove <| pipe and $() for parameterless block; use direct trailing block", call_at)
+                                        style_warning("STYLE002: remove <| pipe and $() for parameterless block; use direct trailing block", call_at, fix)
                                     } else {
-                                        style_warning("STYLE001: remove <| pipe before block argument; use direct trailing block syntax", call_at)
+                                        style_warning("STYLE001: remove <| pipe before block argument; use direct trailing block syntax", call_at, fix)
                                     }
                                 }
                             }
@@ -823,7 +1287,7 @@ class StyleLintVisitor : AstVisitor {
         st029_record_func(expr.func)
         st029_record_unresolved_call(expr)
         st029_record_module_getter(expr)
-        check_block_pipe(expr.at, expr.arguments)
+        check_block_pipe(expr.at, expr.arguments, true)
         check_style019_clamp(expr)
         check_style020_from_jv(expr)
         if (lowered_unsafe_delete(expr)) {
@@ -870,7 +1334,7 @@ class StyleLintVisitor : AstVisitor {
             return if (in_cf || in_fg)
         }
         if (!is_supported_jv_scalar(expr._type)) return
-        style_warning("STYLE020: from_JV(v, type<T>, defV) on a supported scalar - use 'v ?? defV' (operator ?? from json_boost)", expr.at)
+        style_warning("STYLE020: from_JV(v, type<T>, defV) on a supported scalar - use 'v ?? defV' (operator ?? from json_boost)", expr.at, st020_fix(expr))
     }
 
     def is_math_call(expr : Expression? const; fname : string) : bool {
@@ -890,16 +1354,16 @@ class StyleLintVisitor : AstVisitor {
         if (outer_name != "min" && outer_name != "max") return
         let inner_name = outer_name == "min" ? "max" : "min"
         if (is_math_call(expr.arguments[0], inner_name)) {
-            style_warning("STYLE019: nested {outer_name}({inner_name}(...)) - use 'clamp(x, lo, hi)' from math module", expr.at)
+            style_warning("STYLE019: nested {outer_name}({inner_name}(...)) - use 'clamp(x, lo, hi)' from math module", expr.at, st019_fix(expr))
             return
         }
         if (is_math_call(expr.arguments[1], inner_name)) {
-            style_warning("STYLE019: nested {outer_name}({inner_name}(...)) - use 'clamp(x, lo, hi)' from math module", expr.at)
+            style_warning("STYLE019: nested {outer_name}({inner_name}(...)) - use 'clamp(x, lo, hi)' from math module", expr.at, st019_fix(expr))
         }
     }
 
     def override preVisitExprInvoke(var expr : ExprInvoke?) : void {
-        check_block_pipe(expr.at, expr.arguments)
+        check_block_pipe(expr.at, expr.arguments, true)
         check_style028_self_arrow(expr)
     }
 
@@ -951,7 +1415,7 @@ class StyleLintVisitor : AstVisitor {
 
 
     def override preVisitExprMakeGenerator(var expr : ExprMakeGenerator?) : void {
-        check_block_pipe(expr.at, expr.arguments)
+        check_block_pipe(expr.at, expr.arguments, false)
     }
 
     def override preVisitExprMakeStruct(var expr : ExprMakeStruct?) : void {
@@ -1002,7 +1466,7 @@ class StyleLintVisitor : AstVisitor {
         if (dollar_pos < 0 || find(src, "<|") >= 0) return
         let after_dollar = strip_left(slice(src, dollar_pos + 3))
         if (starts_with(after_dollar, ":")) return
-        style_warning("STYLE003: remove redundant $() for parameterless block; use $ \{", expr.at)
+        style_warning("STYLE003: remove redundant $() for parameterless block; use $ \{", expr.at, st003_fix(expr.at))
     }
 
     def peel_ref2value_const(e : Expression? const) : Expression? const {
@@ -1158,7 +1622,7 @@ class StyleLintVisitor : AstVisitor {
         }
         if (expr.op == "==") {
             if (is_string_rtti_comparison(expr.left) || is_string_rtti_comparison(expr.right)) {
-                style_warning("STYLE006: string(__rtti) comparison should use `is` operator; e.g. expr is ExprFoo", expr.at)
+                style_warning("STYLE006: string(__rtti) comparison should use `is` operator; e.g. expr is ExprFoo", expr.at, st006_fix(expr))
             }
         }
         if (expr.op == "==" || expr.op == "!=") {
@@ -1171,7 +1635,8 @@ class StyleLintVisitor : AstVisitor {
                 let cval = (const_side as ExprConstBool).value
                 let positive = (expr.op == "==" && cval) || (expr.op == "!=" && !cval)
                 let suggestion = positive ? "b" : "!b"
-                style_warning("STYLE018: redundant boolean comparison - use '{suggestion}' directly (drop the '{expr.op} {cval}')", expr.at)
+                style_warning("STYLE018: redundant boolean comparison - use '{suggestion}' directly (drop the '{expr.op} {cval}')", expr.at,
+                    st018_fix(expr, lbool ? expr.right : expr.left, const_side, positive))
             }
         }
         if (expr.op == "|=" || expr.op == "&=") {
@@ -1260,7 +1725,7 @@ class StyleLintVisitor : AstVisitor {
         let positive = expr.op == "!="
         let recv = describe(op2.left)
         let suggestion = positive ? "{recv}.{bit_name}" : "!{recv}.{bit_name}"
-        style_warning("STYLE023: bitfield test via int-cast can be written directly - use '{suggestion}' instead (drop the cast and the '{expr.op} 0' compare)", expr.at)
+        style_warning("STYLE023: bitfield test via int-cast can be written directly - use '{suggestion}' instead (drop the cast and the '{expr.op} 0' compare)", expr.at, st023_fix(expr, op2, bit_name))
     }
 
     def check_style022_bitfield_set_clear(expr : ExprOp2?) : void {
@@ -1269,7 +1734,7 @@ class StyleLintVisitor : AstVisitor {
         if (expr.op == "|=") {
             let name = extract_single_bit_name(expr.right, bf_type)
             if (empty(name)) return
-            style_warning("STYLE022: 'foo |= BfT.{name}' on a bitfield is the bit-set idiom; write 'foo.{name} = true' instead (bitfield-as-field assignment)", expr.at)
+            style_warning("STYLE022: 'foo |= BfT.{name}' on a bitfield is the bit-set idiom; write 'foo.{name} = true' instead (bitfield-as-field assignment)", expr.at, st022_fix(expr, name))
         } elif (expr.op == "&=") {
             var inner = expr.right
             if (inner != null && inner is ExprRef2Value) {
@@ -1280,7 +1745,7 @@ class StyleLintVisitor : AstVisitor {
                 if (op1.op != "~") return
                 let name = extract_single_bit_name(op1.subexpr, bf_type)
                 if (empty(name)) return
-                style_warning("STYLE022: 'foo &= ~BfT.{name}' on a bitfield is the bit-clear idiom; write 'foo.{name} = false' instead (bitfield-as-field assignment)", expr.at)
+                style_warning("STYLE022: 'foo &= ~BfT.{name}' on a bitfield is the bit-clear idiom; write 'foo.{name} = false' instead (bitfield-as-field assignment)", expr.at, st022_fix(expr, name))
                 return
             }
             if (inner != null && inner is ExprConstBitfield) {
@@ -1298,7 +1763,7 @@ class StyleLintVisitor : AstVisitor {
                 }
                 if (idx < 0 || idx >= length(bf_type.argNames)) return
                 let name = string(bf_type.argNames[idx])
-                style_warning("STYLE022: 'foo &= ~BfT.{name}' on a bitfield is the bit-clear idiom; write 'foo.{name} = false' instead (bitfield-as-field assignment)", expr.at)
+                style_warning("STYLE022: 'foo &= ~BfT.{name}' on a bitfield is the bit-clear idiom; write 'foo.{name} = false' instead (bitfield-as-field assignment)", expr.at, st022_fix(expr, name))
             }
         }
     }
@@ -1364,14 +1829,14 @@ class StyleLintVisitor : AstVisitor {
         if (cond is ExprConstBool) {
             let cbool = cond as ExprConstBool
             if (cbool.value && ifte.if_false == null) {
-                style_warning("STYLE010: if (true) is always taken; use a bare block instead", ifte.at)
+                style_warning("STYLE010: if (true) is always taken; use a bare block instead", ifte.at, st010_fix(ifte))
             }
         }
         let outer_term = single_terminator_body(ifte.if_true)
         if (ifte.if_false == null && outer_term != null && ifte.if_true is ExprBlock) {
             let blk = ifte.if_true as ExprBlock
             if (blk.at.line != outer_term.at.line || blk.at.column != outer_term.at.column) {
-                style_warning("STYLE005: braces around a single-statement early exit are noise; use 'if (cond) <terminator>' or postfix '<terminator> if (cond)'", ifte.at)
+                style_warning("STYLE005: braces around a single-statement early exit are noise; use 'if (cond) <terminator>' or postfix '<terminator> if (cond)'", ifte.at, st005_fix(ifte, blk, outer_term))
             }
         }
         if (outer_term != null && ifte.if_false != null) {
@@ -1390,7 +1855,7 @@ class StyleLintVisitor : AstVisitor {
                 var b2 = false
                 if (is_const_bool_return(outer_term, b1) && is_const_bool_return(else_term, b2) && b1 != b2) {
                     let suggestion = b1 ? "return cond" : "return !cond"
-                    style_warning("STYLE017: 'if (cond) return {b1}; else return {b2}' - use '{suggestion}' directly", ifte.at)
+                    style_warning("STYLE017: 'if (cond) return {b1}; else return {b2}' - use '{suggestion}' directly", ifte.at, st017_fix(ifte, ifte.if_false, b1))
                 }
             }
         }
@@ -1488,7 +1953,7 @@ class StyleLintVisitor : AstVisitor {
                 if (nxt_if.if_false == null) {
                     let nxt_term = single_terminator_body(nxt_if.if_true)
                     if (nxt_term != null && terminators_payload_equal(outer_term, nxt_term)) {
-                        style_warning("STYLE016: adjacent guards leading to identical early-exit can be combined with '||'", outer_if.at)
+                        style_warning("STYLE016: adjacent guards leading to identical early-exit can be combined with '||'", outer_if.at, st016_fix(outer_if, nxt_if))
                         continue
                     }
                 }
@@ -1497,7 +1962,7 @@ class StyleLintVisitor : AstVisitor {
             var b2 = false
             if (is_const_bool_return(outer_term, b1) && is_const_bool_return(nxt, b2) && b1 != b2) {
                 let suggestion = b1 ? "return cond" : "return !cond"
-                style_warning("STYLE017: 'if (cond) return {b1}; return {b2}' - use '{suggestion}' directly", outer_if.at)
+                style_warning("STYLE017: 'if (cond) return {b1}; return {b2}' - use '{suggestion}' directly", outer_if.at, st017_fix(outer_if, nxt, b1))
             }
         }
     }
@@ -1517,17 +1982,17 @@ class StyleLintVisitor : AstVisitor {
             if (expr is ExprCopy) {
                 let v = find_assign_var((expr as ExprCopy).left)
                 if (v != null && pending_uninit_vars |> has_value(v)) {
-                    style_warning("STYLE011: variable declaration followed by immediate assignment; combine into single declaration with initialization", expr.at)
+                    style_warning("STYLE011: variable declaration followed by immediate assignment; combine into single declaration with initialization", expr.at, st011_fix(fix_statement_before(blk, expr), expr, v))
                 }
             } elif (expr is ExprClone) {
                 let v = find_assign_var((expr as ExprClone).left)
                 if (v != null && pending_uninit_vars |> has_value(v)) {
-                    style_warning("STYLE011: variable declaration followed by immediate assignment; combine into single declaration with initialization", expr.at)
+                    style_warning("STYLE011: variable declaration followed by immediate assignment; combine into single declaration with initialization", expr.at, st011_fix(fix_statement_before(blk, expr), expr, v))
                 }
             } elif (expr is ExprMove) {
                 let v = find_assign_var((expr as ExprMove).left)
                 if (v != null && pending_uninit_vars |> has_value(v)) {
-                    style_warning("STYLE011: variable declaration followed by immediate assignment; combine into single declaration with initialization", expr.at)
+                    style_warning("STYLE011: variable declaration followed by immediate assignment; combine into single declaration with initialization", expr.at, st011_fix(fix_statement_before(blk, expr), expr, v))
                 }
             }
             pending_uninit_vars |> resize(0)
@@ -1803,7 +2268,8 @@ class StyleLintVisitor : AstVisitor {
                 count++
             }
             if (count >= 2) {
-                style_warning("STYLE012: array<T> initialized by a run of push/emplace calls; use an array literal `var a <- [x, <-y, z]` (or `var a <- array<T>(x, y, z)` when you need an explicit element type, e.g. for polymorphic upcasts)", v.at)
+                style_warning("STYLE012: array<T> initialized by a run of push/emplace calls; use an array literal `var a <- [x, <-y, z]` (or `var a <- array<T>(x, y, z)` when you need an explicit element type, e.g. for polymorphic upcasts)", v.at,
+                    st012_fix(blk, idx, count, v))
             }
         }
     }
@@ -2050,7 +2516,7 @@ class StyleLintVisitor : AstVisitor {
                     }
                     w |> write(")`")
                 }
-                style_warning(msg, v.at)
+                style_warning(msg, v.at, st013_fix(blk, idx, count, v))
             }
         }
     }
