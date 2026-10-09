@@ -353,7 +353,7 @@ def load_image_from_bytes(width, height : int; data : void?) {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
-    glBindTexture(GL_TEXTURE_2D, GL_INVALID_VALUE)
+    glBindTexture(GL_TEXTURE_2D, 0u)
     return texture
 }
 

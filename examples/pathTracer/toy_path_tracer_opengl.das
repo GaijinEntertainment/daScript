@@ -139,7 +139,7 @@ def update {
     c_destTex := texture
     compute_effect_bind_uniform(compute_program)
     glDispatchCompute(uint(TRACE_WIDTH / 16), uint(TRACE_HEIGHT / 16), 1u)
-    glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT)
+    glMemoryBarrier(GL_TEXTURE_FETCH_BARRIER_BIT)   // the display draw samples the image the dispatch wrote
     c_frame++
     // display it
     glViewport(0, 0, display_w, display_h)

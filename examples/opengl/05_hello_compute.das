@@ -139,7 +139,7 @@ def update() {
     c_destTex := texture
     compute_effect_bind_uniform(compute_program)
     glDispatchCompute(16u, 16u, 1u)
-    glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | GL_SHADER_STORAGE_BARRIER_BIT)
+    glMemoryBarrier(GL_TEXTURE_FETCH_BARRIER_BIT | GL_SHADER_STORAGE_BARRIER_BIT)   // the draw below samples the image the dispatch wrote
     read_ssbo(ssbo, c_mat)              // read c_mat back
     c_offset ++
     // make a copy in e_mat, do computations on CPU

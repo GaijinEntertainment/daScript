@@ -269,7 +269,7 @@ def update {
     c_bloom_htex := bloom_texture[1]
     bloom_effect_h_bind_uniform(bloom_program_h)
     glDispatchCompute(uint(TRACE_WIDTH / 16 / BLOOM_SCALE), uint(TRACE_HEIGHT / 16 / BLOOM_SCALE), 1u)
-    glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT)
+    glMemoryBarrier(GL_TEXTURE_FETCH_BARRIER_BIT)   // the display draw samples the images the dispatches wrote
     // display it
     glViewport(0, 0, display_w, display_h)
     glUseProgram(display_program)
