@@ -21,3 +21,23 @@ The element-buffer binding is VAO state. Switching VAOs invalidates only cached
 element-buffer knowledge.
 
 Generic vertex attribute values are context state rather than VAO state.
+
+## 2. Direct state access opt-in {#dsa}
+
+`opengl_boost` drives GL through bind-then-edit calls by default. `try_use_dsa` switches the
+helpers that create or fill objects - storage buffers, textures, std140 uniform buffers - to
+the GL 4.5 named-object calls. It reads the context version first and answers false on a
+context below 4.5, leaving the switch off; `use_dsa` is the same switch for a program that
+requires DSA, and panics there instead, so the program fails at the switch, not at the first
+missing entry point.
+
+The `[vertex_buffer]` macro emits both `bind_vertex_buffer` overloads for every struct, so the
+choice is per call rather than per switch: the pointer-offset form edits the bound VAO and
+array buffer; the named form takes the VAO, the buffer and a binding slot, and attaches the
+buffer to the slot with the struct's size as the stride.
+
+A storage buffer created under DSA stays mapped, persistent and coherent, for its lifetime,
+keyed by its GL name. `write_ssbo` and `read_ssbo` copy through that map when one exists and
+map on demand otherwise, so buffers from either path mix in one program. A read through the
+map waits on a fence first, so it returns what the GPU wrote, the same as the on-demand map
+does. `delete_ssbo` unmaps and deletes.

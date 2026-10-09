@@ -24,43 +24,118 @@ require math
 
 typedef GLenum = uint
 
+var private g_dsa = false
+
+//! Needs a current context. Enables DSA on a GL 4.5+ context and returns true; leaves it off and
+//! returns false on an older one.
+[arch(at="../ARCHITECTURE.md#dsa")]
+def try_use_dsa() : bool {
+    var major, minor : int
+    glGetIntegerv(GL_MAJOR_VERSION, safe_addr(major))
+    glGetIntegerv(GL_MINOR_VERSION, safe_addr(minor))
+    g_dsa = major > 4 || (major == 4 && minor >= 5)
+    return g_dsa
+}
+
+//! Needs a current context.
+[arch(at="../ARCHITECTURE.md#dsa")]
+def use_dsa(enabled : bool = true) {
+    if (!enabled) {
+        g_dsa = false
+    } elif (!try_use_dsa()) {
+        var major, minor : int
+        glGetIntegerv(GL_MAJOR_VERSION, safe_addr(major))
+        glGetIntegerv(GL_MINOR_VERSION, safe_addr(minor))
+        panic("direct state access needs OpenGL 4.5, the current context is {major}.{minor}")
+    }
+}
+
+def dsa_enabled() : bool => g_dsa
 
 def glTexParameteri(target : uint; pname : uint; param : uint) {
     glTexParameteri(target, pname, int(param))
 }
 
+def glTextureParameteri(texture : uint; pname : uint; param : uint) {
+    glTextureParameteri(texture, pname, int(param))
+}
+
 def getTexture2DSize(tex : uint; mipLevel : int = 0) {
     var w, h : int
-    glBindTexture(GL_TEXTURE_2D, tex)
-    glGetTexLevelParameteriv(GL_TEXTURE_2D, mipLevel, GL_TEXTURE_WIDTH, safe_addr(w))
-    glGetTexLevelParameteriv(GL_TEXTURE_2D, mipLevel, GL_TEXTURE_HEIGHT, safe_addr(h))
+    if (g_dsa) {
+        glGetTextureLevelParameteriv(tex, mipLevel, GL_TEXTURE_WIDTH, safe_addr(w))
+        glGetTextureLevelParameteriv(tex, mipLevel, GL_TEXTURE_HEIGHT, safe_addr(h))
+    } else {
+        glBindTexture(GL_TEXTURE_2D, tex)
+        glGetTexLevelParameteriv(GL_TEXTURE_2D, mipLevel, GL_TEXTURE_WIDTH, safe_addr(w))
+        glGetTexLevelParameteriv(GL_TEXTURE_2D, mipLevel, GL_TEXTURE_HEIGHT, safe_addr(h))
+    }
     return int2(w, h)
 }
 
-def write_ssbo(ssbo : uint; data : auto(TT)) {
+var private g_ssbo_mapped : table<uint; void?>
+
+//! Makes every shader write so far visible to a read through a persistent map.
+def private wait_for_gpu() {
+    glMemoryBarrier(GL_CLIENT_MAPPED_BUFFER_BARRIER_BIT)
+    let fence = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0u)
+    var status = GL_TIMEOUT_EXPIRED
+    while (status == GL_TIMEOUT_EXPIRED) {
+        status = glClientWaitSync(fence, GL_SYNC_FLUSH_COMMANDS_BIT, 1000000000ul)
+    }
+    glDeleteSync(fence)
+    if (status == GL_WAIT_FAILED) {
+        panic("glClientWaitSync failed")
+    }
+}
+
+//! Runs `blk` on the buffer's bytes: through its persistent map when it has one, else through a
+//! one-shot glMapBuffer of the given access. A read through the map waits for the GPU first.
+def private with_ssbo_pointer(ssbo : uint; access : uint; blk : block<(p : void?) : void>) {
+    let mapped = g_ssbo_mapped?[ssbo] ?? null
+    if (mapped != null) {
+        if (access == GL_READ_ONLY) {
+            wait_for_gpu()
+        }
+        invoke(blk, mapped)
+        return
+    }
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo)
-    var p_mat = glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_WRITE_ONLY)
+    let p_mat = glMapBuffer(GL_SHADER_STORAGE_BUFFER, access)
     if (p_mat == null) {
         panic("can't map ssbo")
     }
-    unsafe { // nolint:STYLE025 — expression-form unsafe loses the reinterpret in generic instances (31004)
-        *(reinterpret<TT -const?>(p_mat)) = data
-    }
+    invoke(blk, p_mat)
     glUnmapBuffer(GL_SHADER_STORAGE_BUFFER)
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0u)
 }
 
+[arch(at="../ARCHITECTURE.md#dsa")]
+def write_ssbo(ssbo : uint; data : auto(TT)) {
+    with_ssbo_pointer(ssbo, GL_WRITE_ONLY) $(p) {
+        unsafe { // nolint:STYLE025 — expression-form unsafe loses the reinterpret in generic instances (31004)
+            *(reinterpret<TT -const?>(p)) = data
+        }
+    }
+}
+
+[arch(at="../ARCHITECTURE.md#dsa")]
 def read_ssbo(ssbo : uint; var data : auto(TT)) {
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo)
-    var p_mat = glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY)
-    if (p_mat == null) {
-        panic("can't map ssbo")
+    with_ssbo_pointer(ssbo, GL_READ_ONLY) $(p) {
+        unsafe { // nolint:STYLE025 — expression-form unsafe loses the reinterpret in generic instances (31004)
+            data = *(reinterpret<TT?>(p))
+        }
     }
-    unsafe { // nolint:STYLE025 — expression-form unsafe loses the reinterpret in generic instances (31004)
-        data = *(reinterpret<TT?>(p_mat))
+}
+
+[arch(at="../ARCHITECTURE.md#dsa")]
+def delete_ssbo(ssbo : uint) {
+    if (g_ssbo_mapped |> key_exists(ssbo)) {
+        glUnmapNamedBuffer(ssbo)
+        g_ssbo_mapped |> erase(ssbo)
     }
-    glUnmapBuffer(GL_SHADER_STORAGE_BUFFER)
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0u)
+    var name = ssbo
+    glDeleteBuffers(1, safe_addr(name))
 }
 
 def bind_sampler_2d(unit : int; tex : uint) {gl_bind_texture_filtered(unit, GL_TEXTURE_2D, tex)}
@@ -158,12 +233,29 @@ def glUniformMatrix3fv(location : int; value : float3x3) {
     glUniformMatrix3fv(location, 1, false, unsafe(addr(value[0][0])))
 }
 
+//! The byte count and the first element's address of a non-empty array, for a GL upload.
+[expect_any_array(arr)]
+def private array_bytes(arr) : tuple<size : int64; data : void?> {
+    assert(!empty(arr))
+    return (size = int64(length(arr)) * int64(typeinfo sizeof(arr[0])), data = unsafe(addr<void?>(arr[0])))
+}
+
 [expect_any_array(arr)]
 def glBufferData(target : GLenum; arr; usage : GLenum) {
-    unsafe {
-        assert(!empty(arr))
-        glBufferData(target, int64(length(arr) * typeinfo sizeof(arr[0])), addr<void?>(arr[0]), usage)
-    }
+    let bytes = array_bytes(arr)
+    glBufferData(target, bytes.size, bytes.data, usage)
+}
+
+[expect_any_array(arr)]
+def glNamedBufferData(buffer : uint; arr; usage : GLenum) {
+    let bytes = array_bytes(arr)
+    glNamedBufferData(buffer, bytes.size, bytes.data, usage)
+}
+
+[expect_any_array(arr)]
+def glNamedBufferStorage(buffer : uint; arr; flags : uint) {
+    let bytes = array_bytes(arr)
+    glNamedBufferStorage(buffer, bytes.size, bytes.data, flags)
 }
 
 // ===== std140 UBO runtime (the GL analogue of dasVulkan's write_field / with_mapped_memory) =====
@@ -200,11 +292,19 @@ def std140_flush(program : uint; blockName : string; bindingPoint : int) {
     let key = "{program}/{blockName}"
     var ubo = g_std140_ubos?[key] ?? 0u
     if (ubo == 0u) {
-        glGenBuffers(1, safe_addr(ubo))
+        if (g_dsa) {
+            glCreateBuffers(1, safe_addr(ubo))
+        } else {
+            glGenBuffers(1, safe_addr(ubo))
+        }
         g_std140_ubos[key] = ubo
     }
-    glBindBuffer(GL_UNIFORM_BUFFER, ubo)
-    glBufferData(GL_UNIFORM_BUFFER, g_std140_staging[key], GL_DYNAMIC_DRAW)
+    if (g_dsa) {
+        glNamedBufferData(ubo, g_std140_staging[key], GL_DYNAMIC_DRAW)
+    } else {
+        glBindBuffer(GL_UNIFORM_BUFFER, ubo)
+        glBufferData(GL_UNIFORM_BUFFER, g_std140_staging[key], GL_DYNAMIC_DRAW)
+    }
     let blockIndex = glGetUniformBlockIndex(program, blockName)
     if (blockIndex != GL_INVALID_INDEX) {
         let nbytes = long_length(g_std140_staging[key])
@@ -334,18 +434,42 @@ def create_compute_shader_program(csrc : string implicit) {
     return program
 }
 
+[arch(at="../ARCHITECTURE.md#dsa")]
 def create_ssbo(var value : auto&) {
     var ssbo : uint
-    glGenBuffers(1, safe_addr(ssbo))
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo)
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0u, ssbo)
-    glBufferData(GL_SHADER_STORAGE_BUFFER, int64(typeinfo sizeof(value)), unsafe(addr(value)), GL_DYNAMIC_COPY)
-    glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0u)
+    let size = int64(typeinfo sizeof(value))
+    if (g_dsa) {
+        let access = GL_MAP_READ_BIT | GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT
+        glCreateBuffers(1, safe_addr(ssbo))
+        glNamedBufferStorage(ssbo, size, unsafe(addr(value)), access)
+        let mapped = glMapNamedBufferRange(ssbo, 0l, size, access)
+        if (mapped == null) {
+            panic("can't map ssbo")
+        }
+        g_ssbo_mapped[ssbo] = mapped
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0u, ssbo)
+    } else {
+        glGenBuffers(1, safe_addr(ssbo))
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo)
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0u, ssbo)
+        glBufferData(GL_SHADER_STORAGE_BUFFER, size, unsafe(addr(value)), GL_DYNAMIC_COPY)
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0u)
+    }
     return ssbo
 }
 
 def load_image_from_bytes(width, height : int; data : void?) {
     var texture : uint
+    if (g_dsa) {
+        glCreateTextures(GL_TEXTURE_2D, 1, safe_addr(texture))
+        glTextureStorage2D(texture, 1, GL_RGBA8, width, height)
+        glTextureSubImage2D(texture, 0, 0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, data)
+        glTextureParameteri(texture, GL_TEXTURE_WRAP_S, GL_REPEAT)
+        glTextureParameteri(texture, GL_TEXTURE_WRAP_T, GL_REPEAT)
+        glTextureParameteri(texture, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
+        glTextureParameteri(texture, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
+        return texture
+    }
     glGenTextures(1, safe_addr(texture))
     glBindTexture(GL_TEXTURE_2D, texture)
     glTexImage2D(GL_TEXTURE_2D, 0, int(GL_RGBA), width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data)
