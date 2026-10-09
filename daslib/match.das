@@ -297,6 +297,7 @@ def match_array(what : TypeDeclPtr; wths : ExprMakeArray?; dynamic : bool; acces
             qmacro(length($e(access)) >= $v(wthsLength - 1)) :
             qmacro(length($e(access)) == $v(wthsLength)))
         lenCond |> force_at(wths.at)
+        lenCond.genFlags.generated = true
         to.conditions |> emplace(lenCond)
     }
     log_m("\tarray match passed\n")

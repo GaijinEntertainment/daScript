@@ -10,9 +10,10 @@ options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; s
 //   var mv : float[4][4]
 //   print(probe(mv))         // LINT003 suggested `let mv` — a no-match compile error
 
-expect 50503:2
+expect 50503:4
 
 require daslib/lint
+require daslib/ast
 
 struct private Holder {
     value : int
@@ -45,10 +46,21 @@ def no_warn_element_peel() {
     print("{probe_struct(hs[0])}")
 }
 
-// note: the pointer-sink side of the suppression (a pointer field flowing into a
-// mutable-pointee slot demands the root variable stay var) is unobservable here —
-// LINT003's arms gate on canCloneFromConst, which is already false for any
-// pointer-carrying type. lint014_unwritten_var_argument.das pins those shapes
+// a C++ binding takes `Expression? const implicit`: a const pointer to a MUTABLE node
+def no_warn_pointer_into_binding(var e : ExpressionPtr; at : LineInfo) {
+    var x = e
+    force_at(x, at)
+}
+
+def private probe_const_pointee(var p : int const?) : int {   // nolint:LINT014
+    return p == null ? 0 : *p
+}
+
+// a `var` pointer parameter takes no `let` pointer, even when its pointee is const
+def no_warn_pointer_into_var_param(x : int const?) : int {
+    var q = x
+    return probe_const_pointee(q)
+}
 
 // === Positives — LINT003 still fires when nothing demands mutability ===
 
@@ -62,3 +74,17 @@ def warn_struct_read_only() : int {
     return h.value
 }
 
+def warn_pointer_read_only(p : int?) : int {
+    var q = p      // LINT003
+    return q == null ? 0 : *q
+}
+
+def warn_moved_pointer_array(var p : int?) : int {
+    var ps <- [for (_i in range(2)); p]   // LINT003
+    return length(ps)
+}
+
+def ok_pointer_written(var p : int?) : void {
+    var q = p
+    *q = 1
+}

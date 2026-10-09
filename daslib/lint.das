@@ -528,9 +528,47 @@ def private lint031_slot_written(call : ExprCall const?; arg : ExpressionPtr) : 
     return false
 }
 
+//! The edit for the `var` keyword just before the name at ``at``: ``drop`` deletes it (a parameter), otherwise it becomes `let`; none when the source has no such keyword
+def private lint_var_keyword_fix(at : LineInfo; drop : bool) : LintFix {
+    let ln = int(at.line)
+    let col = int(at.column)
+    let head = slice(lint_source_line(at, ln), 0, col)
+    let kw = strip_right(head)
+    let kw_col = length(kw) - 3
+    if (kw_col < 0 || length(head) == length(kw) || !ends_with(kw, "var")) return LintFix()
+    let before = kw_col > 0 ? slice(kw, kw_col - 1, kw_col) : " "
+    if (before != " " && before != "(" && before != ";") return LintFix()
+    return drop ? LintFix(line = ln, column = kw_col, last_line = ln, last_column = col, replacement = "") : LintFix(line = ln, column = kw_col, last_line = ln, last_column = kw_col + 3, replacement = "let")
+}
+
+//! A slot that needs a mutable value: a non-const pointer, a pointer to non-const, or a non-const ref or ref-type
+def private lint_mutable_slot(t : TypeDecl const?) : bool {
+    if (t == null) return false
+    if (t.isPointer) return !t.flags.constant || t.firstType == null || !t.firstType.flags.constant
+    return !t.flags.constant && (t.isRef || t.isRefType)
+}
+
+//! The value a field, index, dereference, cast, variant or property access reads from; null for any other node
+def private lint_value_source(e : Expression const?) : Expression const? {
+    let inner = lint031_pointee_of(e, true)
+    return inner if (inner != null)
+    let carried = lint031_carrier(e)
+    return carried if (carried != null)
+    if (e is ExprSafeField) return (e as ExprSafeField).value
+    if (e is ExprSafeAt) return (e as ExprSafeAt).subexpr
+    if (e is ExprAsVariant) return (e as ExprAsVariant).value
+    if (e is ExprSafeAsVariant) return (e as ExprSafeAsVariant).value
+    return null if (!(e is ExprCall))
+    let call = e as ExprCall
+    let prop = call.func != null && (call.func.moreFlags.propertyFunction || call.func.moreFlags.isCustomProperty)
+    return prop && length(call.arguments) > 0 ? call.arguments[0] : null
+}
+
 class LintVisitor : AstVisitor {
     lint030_frames : array<Lint030Frame>
     @do_not_delete lint014_candidates : array<Variable const?>
+    @do_not_delete lint003_deferred : array<Variable const?>
+    @do_not_delete lint_mut_result : TypeDecl const?
     lint023_candidates : array<Lint023Candidate>
     lint023_store_nodes : table<uint64>
     @do_not_delete lint029_candidates : array<Variable const?>
@@ -573,14 +611,16 @@ class LintVisitor : AstVisitor {
         }
         return is_lint_suppressed(at, code)
     }
-    def lint_error(text : string; at : LineInfo) : void {
+    def lint_error(text : string; at : LineInfo; fix : LintFix = LintFix()) : void {
         if (noLint || is_suppressed(text, at)
                 || (at.fileInfo != null && !empty(funcFile) && at.fileInfo.name != funcFile)) return
         if (compile_time_errors) {
             compiling_program() |> macro_error(at, text)
         } elif (collect_errors) {
             errors |> push("{text} at {describe(at)}")
-            issues |> push(make_lint_issue(text, at))
+            var issue = make_lint_issue(text, at)
+            issue.fix = fix
+            issues |> push(issue)
         } else {
             error("{text} at {describe(at)}\n")
         }
@@ -710,6 +750,7 @@ class LintVisitor : AstVisitor {
 
     def override preVisitFunction(fun : FunctionPtr) : void {
         noLint = lint022_generic_sweep
+        lint_mut_result = fun.result
         funcFile = fun.at.fileInfo != null ? "{fun.at.fileInfo.name}" : ""
         lint022_self_struct = null
         if (fun.flags.isClassMethod || fun.flags.generated) {
@@ -746,6 +787,7 @@ class LintVisitor : AstVisitor {
         }
     }
     def override preVisitExprReturn(expr : ExprReturn?) : void {
+        mut_use(expr.subexpr) if (lint_mut_result != null && !lint_mut_result.flags.constant)
         if (expr.subexpr != null && expr.subexpr is ExprVar) {
             let ev = expr.subexpr as ExprVar
             let idx = lint014_candidates |> find_index(ev.variable)
@@ -759,13 +801,45 @@ class LintVisitor : AstVisitor {
         }
     }
 
+    def mut_use(e : Expression const?) : void {
+        //! ``e`` is used where a mutable value is required: the variable it reads from is no longer a LINT003 / LINT014 candidate.
+        if (e == null) return
+        if (e is ExprVar) {
+            let v = (e as ExprVar).variable
+            let ai = v != null && v._type.isPointer ? lint014_candidates |> find_index(v) : -1
+            lint014_candidates |> erase(ai) if (ai >= 0)
+            let li = lint003_deferred |> find_index(v)
+            lint003_deferred |> erase(li) if (li >= 0)
+            mut_use(v.loop_source) if (v != null)
+        } elif (e is ExprOp3) {
+            mut_use((e as ExprOp3).left)
+            mut_use((e as ExprOp3).right)
+        } elif (e is ExprNullCoalescing) {
+            mut_use((e as ExprNullCoalescing).subexpr)
+            mut_use((e as ExprNullCoalescing).defaultValue)
+        } else {
+            mut_use(lint_value_source(e))
+        }
+    }
+
+    def mut_use_arguments(call : ExprCallFunc?) : void {
+        return if (call.func == null)
+        for (a, i in call.arguments, count()) {
+            mut_use(a) if (i < length(call.func.arguments) && (lint_mutable_slot(call.func.arguments[i]._type) || lint031_callee_writes(call.func, i)))
+        }
+    }
+
     def override visitFunction(var fun : FunctionPtr) : FunctionPtr {
         if (!noLint && genericDepth == 0) {
             for (v in lint014_candidates) {
-                lint_error("LINT014: mutable argument {v.name}: {describe(v._type)} is never written; declare it without 'var'", v.at)
+                lint_error("LINT014: mutable argument {v.name}: {describe(v._type)} is never written; declare it without 'var'", v.at, lint_var_keyword_fix(v.at, true))
+            }
+            for (v in lint003_deferred) {
+                lint_error("LINT003: variable {v.name}: {describe(v._type)} can be made const (declare with 'let')", v.at, lint_var_keyword_fix(v.at, false))
             }
         }
         lint014_candidates |> clear()
+        lint003_deferred |> clear()
         if (!noLint && genericDepth == 0) {
             for (c in lint023_candidates) {
                 if (!c.disqualified && c.stores > 0 && !flow_jumps) {
@@ -919,12 +993,16 @@ class LintVisitor : AstVisitor {
         }
         if (can_make_const && (v.flags.inScope || v.access_info.access_info_pass_mutable)) return
         if (can_make_const && v._type.baseType != Type.tPointer && !v._type.flags.constant && !v.access_flags.access_ref && v._type.canCloneFromConst) {
-            lint_error("LINT003: variable {v.name}: {describe(v._type)} can be made const (declare with 'let')", v.at)
+            lint_error("LINT003: variable {v.name}: {describe(v._type)} can be made const (declare with 'let')", v.at, lint_var_keyword_fix(v.at, false))
             return
         }
         if (can_make_const && v._type.baseType == Type.tPointer && !v._type.flags.constant && !(v.access_flags.access_ref || v.access_flags.access_pass) && v._type.canCloneFromConst) {
-            lint_error("LINT003: variable {v.name}: {describe(v._type)} can be made const (declare with 'let')", v.at)
+            lint_error("LINT003: variable {v.name}: {describe(v._type)} can be made const (declare with 'let')", v.at, lint_var_keyword_fix(v.at, false))
             return
+        }
+        if (can_make_const && !v._type.flags.constant
+                && (v._type.baseType == Type.tPointer || (!v.access_flags.access_ref && v.flags.init_via_move && !v._type.canCloneFromConst))) {
+            lint003_deferred |> push(v)
         }
     }
 
@@ -940,6 +1018,12 @@ class LintVisitor : AstVisitor {
     def validate_unwritten_var_argument(fun : FunctionPtr; v : VariablePtr) {
         if (noLint || genericDepth > 0 || v.flags.generated || v.flags.marked_used) return
         let name = string(v.name)
+        if (v._type != null && v._type.isPointer && !v._type.flags.constant && lint_mutable_slot(v._type) && !(name |> starts_with("_")) && find(name, "`") < 0
+                && fun.name != "finalize" && fun.flags.privateFunction && !fun.moreFlags.addressTaken
+                && !v.access_info.access_info_pass_mutable && !v.isAccessUnused) {
+            lint014_candidates |> push(v)
+            return
+        }
         if ((name |> starts_with("_")) || find(name, "`") >= 0
                 || fun.name == "finalize" || fun.moreFlags.addressTaken
                 || v._type == null || v._type.flags.constant
@@ -1282,6 +1366,7 @@ class LintVisitor : AstVisitor {
     }
 
     def override preVisitExprCall(expr : ExprCall?) : void {
+        mut_use_arguments(expr)
         lint030_frames |> emplace(Lint030Frame(call = expr, slot = -1, closure_depth = lint021_closure_depth))
         var kind = Lint021CallKind.plain
         if (!noLint && genericDepth == 0) {
@@ -1368,10 +1453,12 @@ class LintVisitor : AstVisitor {
             lint022_refs |> note_type_names(expr.typeexpr, 0)
         }
         lint022_note(expr.func, "{expr.name}")
+        mut_use_arguments(expr)
     }
 
     def override preVisitExprOp1(expr : ExprOp1?) : void {
         lint022_note(expr.func, "{expr.name}")
+        mut_use(expr.subexpr) if (expr.op == "++" || expr.op == "--" || expr.op == "+++" || expr.op == "---")
         if (lint030_steps(string(expr.op))) {
             lint031_note_write(expr.subexpr, expr.at)
         }
@@ -1525,8 +1612,9 @@ class LintVisitor : AstVisitor {
 
     def override preVisitExprOp2(expr : ExprOp2?) : void {
         lint022_note(expr.func, "{expr.name}")
-        if (noLint || genericDepth > 0) return
         let op = string(expr.op)
+        mut_use(expr.left) if (ends_with(op, "=") && op != "==" && op != "!=" && op != "<=" && op != ">=")
+        if (noLint || genericDepth > 0) return
         if (length(op) >= 2 && op |> ends_with("=") && op != "==" && op != "!=" && op != "<=" && op != ">=") {
             lint023_mark_store_target(expr.left)
             lint031_note_write(expr.left, expr.at)
@@ -1602,6 +1690,7 @@ class LintVisitor : AstVisitor {
             lint022_refs |> note_type_names(v._type, 0)
         }
         check_string_clone_init(v)
+        mut_use(v.init) if (v._type != null && !v._type.flags.constant)
         if (noLint || genericDepth > 0) return
         if (v._type != null && !v._type.flags.ref && v.init != null && !v.flags.generated
                 && (v._type.baseType == Type.tInt64 || v._type.baseType == Type.tUInt64)) {
@@ -1676,16 +1765,57 @@ class LintVisitor : AstVisitor {
     }
 
     def override preVisitExprCopy(expr : ExprCopy?) : void {
+        mut_use(expr.left)
+        mut_use(expr.right)
         lint023_mark_store_target(expr.left)
         lint031_note_write(expr.left, expr.at)
     }
     def override preVisitExprClone(expr : ExprClone?) : void {
+        mut_use(expr.left)
+        mut_use(expr.right)
         lint023_mark_store_target(expr.left)
         lint031_note_write(expr.left, expr.at)
     }
     def override preVisitExprMove(expr : ExprMove?) : void {
+        mut_use(expr.left)
+        mut_use(expr.right)
         lint023_mark_store_target(expr.left)
         lint031_note_write(expr.left, expr.at)
+    }
+    def override preVisitExprInvoke(expr : ExprInvoke?) : void {
+        return if (length(expr.arguments) == 0 || expr.arguments[0]._type == null)
+        let bt = expr.arguments[0]._type
+        for (a, i in expr.arguments, count()) {
+            mut_use(a) if (i > 0 && i - 1 < length(bt.argTypes) && lint_mutable_slot(bt.argTypes[i - 1]))
+        }
+    }
+    def override preVisitExprDelete(expr : ExprDelete?) : void {
+        mut_use(expr.subexpr)
+    }
+    def override preVisitExprAt(expr : ExprAt?) : void {
+        mut_use(expr.subexpr) if (expr.subexpr._type != null && expr.subexpr._type.isGoodTableType)
+    }
+    def override preVisitExprMakeArray(expr : ExprMakeArray?) : void {
+        for (v in expr.values) {
+            mut_use(v)
+        }
+    }
+    def override preVisitExprMakeTuple(expr : ExprMakeTuple?) : void {
+        for (v in expr.values) {
+            mut_use(v)
+        }
+    }
+    def override preVisitExprMakeStruct(expr : ExprMakeStruct?) : void {
+        for (st in expr.structs) {
+            for (mf in *st) {
+                mut_use(mf.value)
+            }
+        }
+    }
+    def override preVisitExprMakeVariant(expr : ExprMakeVariant?) : void {
+        for (mf in expr.variants) {
+            mut_use(mf.value)
+        }
     }
     def override visitExprCopy(var expr : ExprCopy?) : ExpressionPtr {
         check_string_clone_assign(expr)
@@ -1924,6 +2054,21 @@ def private uninstanced_generic_lines(prog : ProgramPtr; fname : string) : array
     return <- lines
 }
 
+//! The edit for a stale ``nolint:``: rewrite its list without ``stale``, or strip the comment once nothing is left
+def private lint019_fix(line : string; line_no : int; stale : array<string>) : LintFix {
+    var comment = -1
+    peek_data(line) $(bytes) {
+        comment = comment_start_outside_literals(bytes)
+    }
+    let at = comment < 0 ? -1 : find(line, "nolint:", comment)
+    return LintFix() if (at < 0)
+    let list_end = at + 7 + length(split(slice(line, at + 7), " ")[0])
+    let kept <- [for (code in split(slice(line, at + 7, list_end), ",")); code; where find_index(stale, code) < 0]
+    return LintFix(line = line_no, column = at + 7, last_line = line_no, last_column = list_end, replacement = join(kept, ",")) if (!empty(kept))
+    let code_end = length(strip_right(slice(line, 0, comment)))
+    return LintFix(line = line_no, column = code_end, last_line = line_no, last_column = length(line), replacement = "")
+}
+
 //! LINT019 - stale nolint detection: reports every leading ``// nolint:CODE`` directive in
 //! `source` (recognition rule: stale_scan_line) whose code suppressed nothing this process.
 //! Call AFTER all lint passes ran; a partial run under-consumes and would lie.
@@ -1947,10 +2092,11 @@ def public stale_nolint_collect(prog : ProgramPtr; fname, source : string; disab
         }
         if (!self_suppressed) {
             issues |> reserve(length(issues) + length(stale_codes))
-            for (code in stale_codes) {
+            for (code, k in stale_codes, count()) {
                 let msg = "LINT019: stale nolint - {code} suppresses nothing on this line; remove it, or add LINT019 to the list if the rule fires only in downstream compiles (generic bodies - instantiations elsewhere fire at the generic's line - macro-template lines, option-gated rules)"
                 issues |> push(LintIssue(code = "LINT019", message = msg, file = fname,
-                    line = line_no, column = 0, last_line = line_no, last_column = 0))
+                    line = line_no, column = 0, last_line = line_no, last_column = 0,
+                    fix = k == 0 ? lint019_fix(line, line_no, stale_codes) : LintFix()))
                 count++
             }
         }

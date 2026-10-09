@@ -1893,6 +1893,7 @@ class PerfLintVisitor : AstVisitor {
     }
 
     def check_perf017_length_zero(expr : ExprOp2?) : void {
+        return if (expr.genFlags.generated)
         if (current_function != null) {
             let direct_match = (current_function.name == "empty"
                 && current_function._module != null

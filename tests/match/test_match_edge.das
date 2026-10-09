@@ -195,10 +195,10 @@ def match_expr_captured(p : Point) {
 [sideeffects]
 def dynamic_array_tail_literal(A : array<int>) {
     match (A) {
-        if (array<int>(..., 42)) {   // nolint:PERF017 - length guard is emitted by the match macro
+        if (array<int>(..., 42)) {
             return "ends with 42"
         }
-        if (array<int>(1, ...)) {   // nolint:PERF017 - length guard is emitted by the match macro
+        if (array<int>(1, ...)) {
             return "starts with 1"
         }
         if (_) {
