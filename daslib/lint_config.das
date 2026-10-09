@@ -580,6 +580,7 @@ let public LINT_FIX_HINT = " (fixable: run lint with --fix)"
 //! The message a funnel reports: ``text``, plus ``LINT_FIX_HINT`` when ``fix`` holds an edit.
 def public lint_fix_message(text : string; fix : LintFix) : string => fix.line > 0 ? "{text}{LINT_FIX_HINT}" : text
 
+//! The name a field, swizzle or variant node spells after its operator; "" for any other node.
 def private lint_trailing_name(expr : Expression?) : string {
     if (expr is ExprField) return string((expr as ExprField).name)
     if (expr is ExprSafeField) return string((expr as ExprSafeField).name)
@@ -609,7 +610,6 @@ class private LintSpanVisitor : AstVisitor {
     first : int2 = int2(INT_MAX, INT_MAX)
     last : int2 = int2(0, 0)
     last_is_call : bool
-    last_is_field : bool
     skipped : table<uint64>
     skip_depth : int
     def override preVisitExpression(expr : ExpressionPtr) : void {
@@ -625,7 +625,6 @@ class private LintSpanVisitor : AstVisitor {
         if (b.x > last.x || (b.x == last.x && b.y > last.y)) {
             last = b
             last_is_call = expr is ExprCall || expr is ExprLooksLikeCall || expr is ExprNamedCall || expr is ExprCallMacro
-            last_is_field = expr is ExprField || expr is ExprSafeField || expr is ExprSwizzle
         }
     }
     def override visitExpression(var expr : ExpressionPtr) : ExpressionPtr {
@@ -704,7 +703,6 @@ struct private LintTokens {
     first : int2
     last : int2
     last_is_call : bool
-    last_is_field : bool
 }
 
 def private lint_expr_tokens(e : Expression?) : LintTokens {
@@ -713,7 +711,7 @@ def private lint_expr_tokens(e : Expression?) : LintTokens {
         var root = unsafe(reinterpret<Expression?>(e))
         visit(root, adapter)
     }
-    let tokens = LintTokens(first = astVisitor.first, last = astVisitor.last, last_is_call = astVisitor.last_is_call, last_is_field = astVisitor.last_is_field)
+    let tokens = LintTokens(first = astVisitor.first, last = astVisitor.last, last_is_call = astVisitor.last_is_call)
     unsafe {
         delete astVisitor
     }
@@ -754,13 +752,6 @@ def public lint_expr_span(e : Expression?) : LintFix {
             }
             if (k < length(d) && int(d[k]) == '(') {
                 to = k + 1
-            }
-        } elif (tokens.last_is_field) {
-            while (to < length(d) && int(d[to]) == ' ') {
-                to++
-            }
-            while (to < length(d) && (is_alnum(int(d[to])) || int(d[to]) == '_' || int(d[to]) == '`')) {
-                to++
             }
         }
         var st = LintScan(pos = from)
