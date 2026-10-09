@@ -158,3 +158,11 @@ def test_lint_inputs(t : T?) {
     t |> success(!is_lint_input("src/ast/ast.cpp"), "a .cpp is not")
     t |> success(!is_lint_input("utils/internal/preflight/ci_only_das.txt"), "a .txt is not")
 }
+
+[test]
+def test_count_fixed_files(t : T?) {
+    t |> equal(count_fixed_files(""), 0, "a run without --fix edits rewrote nothing")
+    let out = "FIXED /a/b.das (2)\nWARN /a/c.das (1)\n  LINT003: variable x ...\nFIXED /a/d.das (1)\n"
+    t |> equal(count_fixed_files(out), 2, "one FIXED line per rewritten file")
+    t |> equal(count_fixed_files("  FIXED is prose here\n"), 0, "only a line that starts with FIXED counts")
+}
