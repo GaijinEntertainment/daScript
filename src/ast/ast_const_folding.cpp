@@ -988,40 +988,33 @@ namespace das {
             return Visitor::visit(expr);
         }
     // variable
+        ExpressionPtr foldConstGlobalRead ( Expression * expr ) {
+            if ( !expr->rtti_isVar() ) return nullptr;
+            auto evar = static_cast<ExprVar *>(expr);
+            auto variable = evar->variable;
+            if ( !variable || !variable->init || !variable->type->isConst() || !variable->type->isFoldable() ) return nullptr;
+            if ( evar->local || evar->argument || evar->block ) return nullptr;
+            if ( !variable->init->rtti_isConstant() ) return nullptr;
+            reportFolding();
+            auto folded = cloneWithType(variable->init);
+            // a C++-registered constant carries no location, so the folded
+            // value reports where it was read
+            stampMissingAt(folded, evar->at);
+            return folded;
+        }
         virtual ExpressionPtr visit ( ExprVar * var ) override {
             if ( var->r2v ) {
-                auto variable = var->variable;
-                if ( variable && variable->init && variable->type->isConst() && variable->type->isFoldable() ) {
-                    if ( !var->local && !var->argument && !var->block ) {
-                        if ( variable->init->rtti_isConstant() ) {
-                            reportFolding();
-                            auto folded = cloneWithType(variable->init);
-                            // a C++-registered constant carries no location, so the folded
-                            // value reports where it was read
-                            stampMissingAt(folded, var->at);
-                            return folded;
-                        }
-                    }
-                }
+                if ( auto folded = foldConstGlobalRead(var) ) return folded;
             }
             return Visitor::visit(var);
         }
         virtual ExpressionPtr visitLetInit ( ExprLet * expr, const VariablePtr & var, Expression * init ) override {
-            if ( init->rtti_isVar() ) {
-                auto evar = static_cast<ExprVar *>(init);
-                auto variable = evar->variable;
-                if ( variable && variable->init && variable->type->isConst() && variable->type->isFoldable() ) {
-                    if ( !evar->local && !evar->argument && !evar->block ) {
-                        if ( variable->init->rtti_isConstant() ) {
-                            reportFolding();
-                            auto folded = cloneWithType(variable->init);
-                            stampMissingAt(folded, evar->at);
-                            return folded;
-                        }
-                    }
-                }
-            }
+            if ( auto folded = foldConstGlobalRead(init) ) return folded;
             return Visitor::visitLetInit(expr,var,init);
+        }
+        virtual ExpressionPtr visit ( ExprCopy * expr ) override {
+            if ( auto folded = foldConstGlobalRead(expr->right) ) expr->right = folded;
+            return Visitor::visit(expr);
         }
 
     // op1

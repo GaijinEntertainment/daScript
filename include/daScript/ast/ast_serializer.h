@@ -365,7 +365,7 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 226;   // 226: CondFolding leaves an early-exit if unfolded when a label follows it
+            return 227;   // 227: a const global folds on the right-hand side of a plain copy
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;
