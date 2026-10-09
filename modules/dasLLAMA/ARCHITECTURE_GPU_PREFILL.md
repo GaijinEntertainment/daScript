@@ -140,7 +140,15 @@ A prefill panel pads to `mp` rows, so `npos % 32` rows of every GEMM are padding
 above that the padded tile is cheaper than three or more weight streams. One peeled row rides the
 reduction-split GEMV, two or more ride the b4 form only - the reduction-split GEMV walks per
 block and needs `kdim % 32`, while the b4 form - the batched fixed-B mv stamp, up to four rows a
-dispatch (`enc_mv_b4_c`) - reads whole 128-quant rounds and needs `kdim % 128`.
+dispatch (`enc_mv_b4_c`) - reads whole 128-quant rounds and needs `kdim % 128`. That peel is the
+q8 blob's. A dense K-quant or grid-format site (`pf_enc_kq_site_mm`) has no remainder peel; a
+whole window of `MM_TAIL_MAX` rows or fewer rides the decode's row-batched forms instead
+(`enc_kq_site_b`: the B2, B4 and B8 stamps, which stream the plane once for every row) on a
+`kdim` of whole superblocks, where the 32-row tile would walk K serially under barriers one
+threadgroup per core: a 2-token window on Qwen3.6-27B Q4_K_M read 235 ms on the M1 Max on the
+tile, 3.6 decode steps, with the FFN site alone 114 ms. The same tile cost sets the window's floor
+from 9 rows up, where the remainder stays on the tile; the form for that band is
+`followup_metal.md`'s.
 
 ### The prefill attention slab {#prefill-attn-slab}
 

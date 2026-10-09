@@ -1001,16 +1001,17 @@ per-format `MetalGemvSiteT` bodies. The work: that stamp on the gathered site fo
 the route and the tiles at 8, 32, 64 and 128 tokens on the M1 Max and the M5 Max, and the two knees it moves
 (`metal_moe_gemv_max`, `set_metal_moe_tall_avg`) re-raced into the sidecars.
 
-## 48. The dense K-quant sites have no small-M form
+## 48. The dense K-quant sites keep the tile from nine rows up
 
-A dense K-quant projection (the attention q/k/v/o and the FFN of a dense model, the attention side of a MoE) runs the
-32-row mul_mm tile from its first row: the GEMV tail peel (`ARCHITECTURE_GPU_PREFILL.md#gemv-tail-peel`) serves the
-q8 blob alone. A 2-token window on Qwen3.6-27B Q4_K_M costs 235 ms on the M1 Max, 3.6 decode steps, its FFN site
-alone 114 ms, and 80 ms on the M5 Max's tensor twins with the FFN site 36 ms; on both the time steps with the M-tile
-count, not the tokens. The work: the multi-column GEMV form
-(ledger 47's dense half) on the dense K-quant, IQ4_XS and q8 sites for 2 to 8 rows - the shape that also serves
-the two-stream batched decode step - every format the Metal decode GEMV serves, then the family sweep of
-`benchmarks/prefill_window_probe.das` across every stocked family on both boxes.
+A dense K-quant or grid-format projection rides the decode's row-batched GEMV forms on a window of eight rows or fewer
+(`ARCHITECTURE_GPU_PREFILL.md#gemv-tail-peel`) and the 32-row mul_mm tile from nine rows up, remainder included - the
+q8 blob's peel takes the remainder off a padded tile, the K-quant sites' takes the whole window or nothing. A window of
+9 to 31 rows on Qwen3.6-27B Q4_K_M pays the tile's floor on the M1 Max - 235 to 282 ms, 3.6 decode steps, flat across
+the band - and 80 ms on the M5 Max's tensor twins. The work: the remainder peel on the K-quant sites - the full tiles on
+the mul_mm, the `npos % 32` rows on the B8 form at their X and y offsets, as the q8 blob's `enc_gemm_mm` does - then the
+family sweep of `benchmarks/prefill_window_probe.das` across every stocked family on both boxes; and the two-stream
+decode measured on its own (`lcpp_bench --npl 2`) before any kernel is written for it, since the batched step already
+carries the row forms.
 
 ## 49. The gathered route's knee is one token count where the crossing is per model
 

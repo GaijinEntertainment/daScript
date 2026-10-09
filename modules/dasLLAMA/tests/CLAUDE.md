@@ -161,7 +161,10 @@ under the same ledgered exception as the parity file's: the Metal MTP rail is wh
 flavor serves.
 
 Prefill parity: `base mm-tail s16
-kq cont attn-dev mirror span span-fused span-mrope span-ds dim qkv moe-gemv` (moe-gemv = the short
+kq cont attn-dev mirror span span-fused span-mrope span-ds dim qkv moe-gemv kq-tail` (kq-tail = the dense
+K-quant sites' row-batched GEMV peel on a window of eight rows or fewer (`test_metal_prefill_kq_tail`, Llama-3.2-1B
+Q4_K_M and IQ4_XS, Qwen3-4B Q4_K_M, the same two-window shape as moe-gemv at 2, 5 and 8 rows, the peel's site
+counter the engage witness and `set_metal_prefill_mm_tail(false)` the off-lever); moe-gemv = the short
 window's gathered expert route (`test_metal_prefill_moe_gemv_route`, families `qwen2moe` / `qwen3moe` /
 `gptoss` - the q8, K-quant and mx4 expert planes, every carrier large-tier; the hybrid's pure IQ4_XS file
 cannot twin into a blob and its UD file's twin declines the Metal prefill, so the hybrid holds its parity through
