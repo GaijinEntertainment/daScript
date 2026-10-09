@@ -207,7 +207,10 @@ def test_think_qwen3(t : T?) {   // nolint:STYLE038 — one live server session:
             chat_resp(t, base_url, "\{\"messages\":[\{\"role\":\"user\",\"content\":\"What is 2+2? Answer with just the number.\"}],\"max_tokens\":128,\"temperature\":0,\"thinking_budget\":0}") $(r) {
                 t |> success(!empty(r.choices[0].message.reasoning_content), "a budget of 0 is no budget")
             }
-            for (bad in ["-1", "\"x\"", "1.5"]) {
+            chat_resp(t, base_url, "\{\"messages\":[\{\"role\":\"user\",\"content\":\"What is 2+2? Answer with just the number.\"}],\"max_tokens\":128,\"temperature\":0,\"thinking_budget\":null}") $(r) {
+                t |> success(!empty(r.choices[0].message.reasoning_content), "a null budget is no budget")
+            }
+            for (bad in ["-1", "\"x\"", "1.5", "true"]) {
                 POST("{base_url}/v1/chat/completions", "\{\"messages\":[\{\"role\":\"user\",\"content\":\"hi\"}],\"max_tokens\":8,\"thinking_budget\":{bad}}") $(resp) {
                     t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST), "thinking_budget {bad} is refused")
                 }

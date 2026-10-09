@@ -93,8 +93,14 @@ the kernel census - the fused single-pass stamp once a layer a step on the f16 m
 twin on the q8_0 mirror, no chunked dispatch on either; the same deep steps with the lever off
 (`set_metal_attn_d(false)`) are the control: the chunked pair serves every deep step and the fused
 stamp none, the tokens still the CPU's),
-batch test: `batch` (whole test), `batchB7-partd`, `batchB8-kq`, `batch-ff` (real-text forced feed,
-GPU single vs GPU batch at B=2/B=4 on identical tokens, logits tolerance). The whole test is gated on
+batch test: `batch` (whole test), `batchB7-partd`, `batchB8-kq` (the kq batch arm on Llama-3.2-1B
+Q4_K_M: B=2, B=3 and B=12 batched greedy token for token the CPU control, then the half-x leg - the
+`kq_rows_half_k4` and `kq_rows_half_k6` crowns pinned with the rail on (`set_metal_kq_half`), B=2 /
+B=3 / B=8 token for token the CPU control with k4's two-, four- and eight-column half forms each
+counted at least once and the k6 half stamps counted exactly where the rail-off run served k6's f32
+small-batch forms, the rail off keeping the f32 forms with no eight-column half dispatch, every leg's
+steps the batched driver's, the crowns and the rail put back as found), `batch-ff` (real-text forced
+feed, GPU single vs GPU batch at B=2/B=4 on identical tokens, logits tolerance). The whole test is gated on
 `batch` first, and a filter token matches an arm name as a substring OF THE NAME, so `--arm batchB8-kq`
 alone skips the whole test (`batchB8-kq` is not a substring of `batch`); `--arm batch` runs every batch
 arm, and is the way to reach a sub-arm.
@@ -1099,7 +1105,11 @@ id is no token id and differs by row and by key; `test_chat_span_refusals`: a sp
 marked audio span on a template with no such marker, and a span ahead of the one before it each panic, a bare
 audio span and a span at the last one's offset the controls), and the gemma-4 E2B cells: the
 thinking renderer pins (the instruct prefill token for token, the gate + bare opener, the
-thinking-off extras on `effective_stop_ids`, a mid-conversation toggle staying instruct) and
+thinking-off extras on `effective_stop_ids`, the reasoning budget's marks - the channel mark and
+`thought` the open, the channel close the leave and the forced close - a mid-conversation toggle
+staying instruct), `test_chat_gptoss_budget_marks` (gpt-oss-20b, large tier: harmony's marks - the
+channel mark and `analysis` the open, the message end the leave, the end, a start and the `final`
+channel the forced close) and
 the instruct-mode TEXT turn through `respond` (greedy "2+2": the answer, no channel marker in
 the content half, the turn ending on a stop - red when the guard does not end the turn on the
 stray `<channel|>` the E2B emits after its answer), the gemma-4 tool wire (`test_chat_gemma4_tool_wire`: the

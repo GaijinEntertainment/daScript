@@ -710,6 +710,29 @@ def test_gemma4_e_media_body(t : T?) {
 }
 
 [test]
+def test_chat_gptoss_budget_marks(t : T?) {
+    t |> run("gpt-oss: the reasoning budget's marks are harmony's analysis channel and its end (needs gpt-oss-20b, large tier)") @(t : T?) {
+        let path = path_join(models_dir(), "gpt-oss-20b-mxfp4.gguf")
+        if (!model_available(t, path)) {
+            return
+        }
+        var m <- load_capped(path)
+        let ch = special_id(m, "<|channel|>")
+        let fin = special_id(m, "<|end|>")
+        let start = special_id(m, "<|start|>")
+        t |> success(ch >= 0l && fin >= 0l && start >= 0l, "the vocab carries the harmony channel, end and start markers")
+        var c = create_chat_renderer(m, "", 8l)
+        var marks <- think_budget_marks(m, c)
+        t |> success(length(marks.open) >= 2 && marks.open[0] == ch, "the open is the channel mark followed by `analysis` ({length(marks.open)} tokens)")
+        t |> equal(fin, marks.close_tok, "the budget leaves the span on the message end the model writes")
+        t |> success(length(marks.close) >= 3 && marks.close[0] == fin && marks.close[1] == start, "the forced close ends the message and opens the final channel ({length(marks.close)} tokens)")
+        delete marks
+        delete c
+        delete m
+    }
+}
+
+[test]
 def test_chat_gemma4_thinking(t : T?) {   // nolint:STYLE038 — flat expected-token stream, one push per run
     t |> run("default = thinking; instruct opt-out = the template's bare model turn (needs gemma-4-E2B)") @(t : T?) {
         let path = path_join(models_dir(), "gemma-4-E2B-it-Q4_K_M.gguf")

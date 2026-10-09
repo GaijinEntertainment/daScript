@@ -11,6 +11,41 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **MEASURED (2026-10-09) - the gathered route against the tiles, and the K-quant tail peel against the tile, each an
+  interleaved A/B in one process on the M1 Max.** `benchmarks/prefill_window_probe.das --ab`: medians of 4 reps an arm, the
+  arms alternating after one warmup rep of A, every window appended in sequence past the warm prefix, the figures the Metal
+  driver's GPU timestamps; `DAS_TUNE_MANIFEST=modules/dasLLAMA/performance/m1.tune.json bin/daslang -jit
+  modules/dasLLAMA/benchmarks/prefill_window_probe.das -- -m <gguf> --prefix <P> -r 4 --ab <knee|tail> --windows <list>`,
+  `DAS_TUNE_POLICY` unset, Metal on the M1 Max (MacBookPro18,2, 64 GB). The knee A/B on Qwen3.6-35B-A3B-MTP Q4_K-pure, prefix
+  4500: A = the gathered route (`set_metal_moe_gemv_max(512)`), B = the tiles (`set_metal_moe_gemv_max(0)`), GPU ms a window:
+
+  | window | route | tiles | route / tiles |
+  |---|---|---|---|
+  | 2 | 22.7 | 34.3 | 0.66 |
+  | 4 | 28.0 | 43.3 | 0.65 |
+  | 8 | 43.1 | 60.4 | 0.71 |
+  | 12 | 57.3 | 77.4 | 0.74 |
+  | 16 | 66.4 | 84.3 | 0.79 |
+  | 24 | 84.5 | 97.6 | 0.87 |
+  | 32 | 102.4 | 109.3 | 0.94 |
+
+  On the M1 the route wins through 32 rows (the decode step at that position 11.9 ms). The shipped knee of 16
+  (`pf_moe_gemv_knee`) is the value both boxes win at - the M5 sweep of the 2026-10-09 knee entry below loses at 32 on nine of
+  eleven carriers - and this race brackets it at 12 and 24. The tail A/B on the dense Qwen3.6-27B-MTP Q4_K_M, prefix 2000:
+  A = the K-quant tail peel on (`set_metal_prefill_mm_tail(true)`), B = off, GPU ms a window:
+
+  | window | peel | tile | peel / tile |
+  |---|---|---|---|
+  | 2 | 82.0 | 275.3 | 0.30 |
+  | 3 | 102.1 | 275.2 | 0.37 |
+  | 4 | 106.0 | 275.7 | 0.38 |
+  | 5 | 175.9 | 276.1 | 0.64 |
+  | 8 | 181.7 | 277.0 | 0.66 |
+
+  The tile costs the same whatever the window holds - one 32-row tile a site, 275-277 ms - and the peel steps with the GEMV
+  form it takes (the two-row form at 2, the four-row at 3-4, the eight-row at 5-8); the decode step at that position is
+  62.9 ms, so a two-token window on the peel is 1.3 decode steps against the tile's 4.4.
+
 - **MEASURED (2026-10-09, `direction-grade`, `debug-jit`) - where a Qwen3.6-35B-A3B decode step's GPU time goes on the M1
   Max: the routed expert GEMVs are 1.9 ms of a 10.6 ms step, at the memory wall.** This entry replaces the 2026-10-06
   equal-bytes entry's reading that the q8 kernel's shape is the difference between the 4-bit and the q8 files, and its
