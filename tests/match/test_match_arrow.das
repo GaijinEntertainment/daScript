@@ -1,0 +1,659 @@
+options gen2
+options no_unused_function_arguments = false
+
+require dastest/testing_boost public
+require daslib/match
+require math
+
+struct Point {
+    x : int
+    y : int
+}
+
+variant IntOrStr {
+    i : int
+    s : string
+}
+
+enum Dir {
+    north
+    east
+    south
+    west
+}
+
+[sideeffects]
+def pair_kind(x, y : int) {
+    return match (x, y) {
+        (0, 0) => "origin"
+        (0, _) | (_, 0) => "axis"
+        (a, b) && a == b => "diagonal {a}"
+        (a, b) => "{a}:{b}"
+    }
+}
+
+[test]
+def test_several_values(t : T?) {
+    t |> equal(pair_kind(0, 0), "origin")
+    t |> equal(pair_kind(0, 5), "axis")
+    t |> equal(pair_kind(5, 0), "axis")
+    t |> equal(pair_kind(3, 3), "diagonal 3")
+    t |> equal(pair_kind(3, 4), "3:4")
+}
+
+[sideeffects]
+def mixed_kinds(p : Point; d : Dir; v : IntOrStr) {
+    return match (p, d, v) {
+        (Point(x = 0, y = y), Dir.north | Dir.south, IntOrStr(i = n)) => "vertical {y} {n}"
+        (Point(x = x, y = 0), Dir.east | Dir.west, IntOrStr(s = s)) => "horizontal {x} {s}"
+        _ => "other"
+    }
+}
+
+[test]
+def test_several_values_of_different_types(t : T?) {
+    t |> equal(mixed_kinds(Point(x = 0, y = 7), Dir.south, IntOrStr(i = 3)), "vertical 7 3")
+    t |> equal(mixed_kinds(Point(x = 2, y = 0), Dir.west, IntOrStr(s = "w")), "horizontal 2 w")
+    t |> equal(mixed_kinds(Point(x = 2, y = 0), Dir.north, IntOrStr(s = "w")), "other")
+}
+
+[sideeffects]
+def int_alternation(n : int) {
+    return match (n) {
+        1 | 2 => "one or two"
+        3 => "three"
+        _ => "other"
+    }
+}
+
+[test]
+def test_int_alternation_is_not_folded(t : T?) {
+    t |> equal(int_alternation(1), "one or two")
+    t |> equal(int_alternation(2), "one or two")
+    t |> equal(int_alternation(3), "three")
+}
+
+[sideeffects]
+def guard_keeps_bitwise_or(n : int) {
+    return match (n) {
+        a && (a | 1) == 3 => "low bits {a}"
+        _ => "other"
+    }
+}
+
+[test]
+def test_guard_keeps_bitwise_or(t : T?) {
+    t |> equal(guard_keeps_bitwise_or(2), "low bits 2")
+    t |> equal(guard_keeps_bitwise_or(3), "low bits 3")
+    t |> equal(guard_keeps_bitwise_or(4), "other")
+}
+
+[sideeffects]
+def bare_name_binds(x : int) {
+    let y = 100
+    return match (x) {
+        y && y > 0 => "bound {y}"
+        _ => "outer {y}"
+    }
+}
+
+[test]
+def test_bare_name_binds_instead_of_comparing(t : T?) {
+    t |> equal(bare_name_binds(5), "bound 5")
+    t |> equal(bare_name_binds(-5), "outer 100")
+}
+
+[sideeffects]
+def pinned(x, limit : int) {
+    return match (x) {
+        match_expr(limit) => "at limit"
+        _ => "not at limit"
+    }
+}
+
+[test]
+def test_match_expr_compares_a_variable(t : T?) {
+    t |> equal(pinned(7, 7), "at limit")
+    t |> equal(pinned(6, 7), "not at limit")
+}
+
+[sideeffects]
+def bool_pair(a, b : bool) {
+    return match (a, b) {
+        (true, true) => "both"
+        (true, false) | (false, true) => "one"
+        _ => "none"
+    }
+}
+
+[test]
+def test_bool_patterns(t : T?) {
+    t |> equal(bool_pair(true, true), "both")
+    t |> equal(bool_pair(false, true), "one")
+    t |> equal(bool_pair(true, false), "one")
+    t |> equal(bool_pair(false, false), "none")
+}
+
+[sideeffects]
+def value_in_let(n : int) {
+    let s = match (n) {
+        0 => "zero"
+        k && k < 0 => "negative {-k}"
+        k => "positive {k}"
+    }
+    return s
+}
+
+[test]
+def test_value_in_let(t : T?) {
+    t |> equal(value_in_let(0), "zero")
+    t |> equal(value_in_let(-4), "negative 4")
+    t |> equal(value_in_let(9), "positive 9")
+}
+
+[sideeffects]
+def value_as_argument(n : int) {
+    return "<" + match (n % 3) {
+        0 => "fizz"
+        _ => "{n}"
+    } + ">"
+}
+
+[test]
+def test_value_as_argument(t : T?) {
+    t |> equal(value_as_argument(3), "<fizz>")
+    t |> equal(value_as_argument(4), "<4>")
+}
+
+[sideeffects]
+def value_inside_statement_arm(n : int) {
+    var res = ""
+    match (n) {
+        0 => $ {
+            res = "zero"
+        }
+        _ => $ {
+            res = match (n % 2) {
+                0 => "even"
+                _ => "odd"
+            }
+        }
+    }
+    return res
+}
+
+[test]
+def test_value_inside_statement_arm(t : T?) {
+    t |> equal(value_inside_statement_arm(0), "zero")
+    t |> equal(value_inside_statement_arm(3), "odd")
+    t |> equal(value_inside_statement_arm(8), "even")
+}
+
+[sideeffects]
+def assignment_bodies(values : array<int>) {
+    var pos = 0
+    var neg = 0
+    for (v in values) {
+        match (v) {
+            n && n > 0 => $ { pos += n }
+            n && n < 0 => $ { neg -= n }
+            _ => $ {}
+        }
+    }
+    return (pos, neg)
+}
+
+[test]
+def test_assignment_bodies(t : T?) {
+    let sums = assignment_bodies([1, -2, 0, 5, -7])
+    t |> equal(sums._0, 6)
+    t |> equal(sums._1, 9)
+}
+
+[sideeffects]
+def generic_kind(what) {
+    return static_match (what) {
+        match_type(type<int>, v) => "int {v}"
+        match_type(type<string>, v) => "string {v}"
+        _ => "other"
+    }
+}
+
+[test]
+def test_static_match_arrow_arms(t : T?) {
+    t |> equal(generic_kind(5), "int 5")
+    t |> equal(generic_kind("x"), "string x")
+    t |> equal(generic_kind(1.5), "other")
+}
+
+class Shape {
+    def abstract area : int
+}
+
+class Square : Shape {
+    side : int
+    def override area : int => side * side
+}
+
+class Rect : Shape {
+    w, h : int
+    def override area : int => w * h
+}
+
+def make_shape(n : int) : Shape? {
+    return match (n) {
+        0 => new Square(side = 3)
+        _ => new Rect(w = 2, h = n)
+    }
+}
+
+[test]
+def test_value_takes_declared_result_type(t : T?) {
+    var sq = make_shape(0)
+    var re = make_shape(5)
+    t |> equal(sq.area(), 9)
+    t |> equal(re.area(), 10)
+    var s : Shape? = match (1) {
+        1 => new Rect(w = 1, h = 7)
+        _ => new Square(side = 1)
+    }
+    t |> equal(s.area(), 7)
+    unsafe {
+        delete sq
+        delete re
+        delete s
+    }
+}
+
+var private calls = 0
+var private picked = 0
+
+def private next_value() : int {
+    calls++
+    return 3
+}
+
+def private pick() : int {
+    picked++
+    return 1
+}
+
+[test]
+def test_scrutinee_is_evaluated_once(t : T?) {
+    calls = 0
+    let s = match (next_value()) {
+        1 => "one"
+        2 => "two"
+        _ => "other"
+    }
+    t |> equal(s, "other")
+    t |> equal(calls, 1)
+    calls = 0
+    var hits = 0
+    match (next_value()) {
+        1 => $ { hits = 1 }
+        2 => $ { hits = 2 }
+        _ => $ { hits = 3 }
+    }
+    t |> equal(hits, 3)
+    t |> equal(calls, 1)
+}
+
+[test]
+def test_lvalue_scrutinee_is_evaluated_once(t : T?) {
+    var values <- [10, 20, 30]
+    picked = 0
+    match (values[pick()]) {
+        20 => $ { values[pick()] = 0 }
+        _ => $ {}
+    }
+    t |> equal(values[1], 0)
+    t |> equal(picked, 2)
+}
+
+def private dir_name(d : Dir) : string {
+    return match (d) {
+        Dir.north => "n"
+        Dir.east | Dir.west => "side"
+        Dir.south => "s"
+    }
+}
+
+def private value_kind(v : IntOrStr) : string {
+    return match (v) {
+        IntOrStr(i = n) => "int {n}"
+        IntOrStr(s = _) => "string"
+    }
+}
+
+def private point_or_null(p : Point?) : string {
+    return match (p) {
+        null => "null"
+        Point(x = x, y = y) => "{x},{y}"
+    }
+}
+
+def private both(a, b : bool) : string {
+    return match (a, b) {
+        (true, true) => "tt"
+        (true, false) => "tf"
+        (false, _) => "f_"
+    }
+}
+
+def private tuple_columns(t : tuple<bool; Dir>) : string {
+    return match (t) {
+        (true, _) => "t"
+        (false, Dir.north | Dir.south) => "f vertical"
+        (false, Dir.east | Dir.west) => "f horizontal"
+    }
+}
+
+[test]
+def test_exhaustive_value_match_needs_no_catch_all(t : T?) {
+    t |> equal(dir_name(Dir.west), "side")
+    t |> equal(dir_name(Dir.south), "s")
+    t |> equal(value_kind(IntOrStr(i = 2)), "int 2")
+    t |> equal(value_kind(IntOrStr(s = "x")), "string")
+    var p = Point(x = 1, y = 2)
+    t |> equal(point_or_null(unsafe(addr(p))), "1,2")
+    t |> equal(point_or_null(null), "null")
+    t |> equal(both(true, false), "tf")
+    t |> equal(both(false, true), "f_")
+    t |> equal(tuple_columns((false, Dir.east)), "f horizontal")
+    t |> equal(tuple_columns((true, Dir.east)), "t")
+}
+
+var private guard_limit = 2
+
+def private compare_pair(a, b : int) : string {
+    return match (a, b) {
+        (x, y) && x > y => "gt"
+        (x, y) && x <= y => "le"
+    }
+}
+
+def private three_way(a, b : int) : string {
+    return match (a, b) {
+        (x, y) && x < y => "lt"
+        (x, y) && x == y => "eq"
+        (x, y) && y < x => "gt"
+    }
+}
+
+def private against_outer(a : int) : string {
+    return match (a) {
+        n && n > guard_limit => "above"
+        n && n <= guard_limit => "not above"
+    }
+}
+
+def private bool_guard(a : int; flag : bool) : string {
+    return match (a) {
+        n && flag => "flag {n}"
+        n && !flag => "no flag {n}"
+    }
+}
+
+[test]
+def test_complementary_guards_cover_their_pattern(t : T?) {
+    t |> equal(compare_pair(3, 1), "gt")
+    t |> equal(compare_pair(1, 3), "le")
+    t |> equal(compare_pair(2, 2), "le")
+    t |> equal(three_way(1, 3), "lt")
+    t |> equal(three_way(2, 2), "eq")
+    t |> equal(three_way(3, 1), "gt")
+    t |> equal(against_outer(5), "above")
+    t |> equal(against_outer(2), "not above")
+    t |> equal(bool_guard(1, true), "flag 1")
+    t |> equal(bool_guard(1, false), "no flag 1")
+}
+
+def private whole_and_parts(p : Point) : string {
+    return match (p) {
+        q & Point(x = 0) => "y-axis {q.y}"
+        q & Point(y = 0) && q.x > 0 => "positive x {q.x}"
+        _ => "elsewhere"
+    }
+}
+
+def private warmth(d : Dir) : string {
+    return match (d) {
+        n & (Dir.north | Dir.east) => "warm {n}"
+        n & (Dir.south | Dir.west) => "cold {n}"
+    }
+}
+
+[test]
+def test_and_pattern_binds_the_whole_value(t : T?) {
+    t |> equal(whole_and_parts(Point(x = 0, y = 3)), "y-axis 3")
+    t |> equal(whole_and_parts(Point(x = 4, y = 0)), "positive x 4")
+    t |> equal(whole_and_parts(Point(x = -4, y = 0)), "elsewhere")
+    t |> equal(warmth(Dir.east), "warm east")
+    t |> equal(warmth(Dir.west), "cold west")
+}
+
+struct Light {
+    dir : Dir
+    on : bool
+}
+
+struct Lamp {
+    light : Light
+    spare : bool
+}
+
+def private light_state(l : Light) : string {
+    return match (l) {
+        Light(dir = Dir.north, on = true) => "north on"
+        Light(dir = Dir.south | Dir.east | Dir.west, on = true) => "other on"
+        Light(on = false) => "off"
+    }
+}
+
+def private lamp_state(l : Lamp) : string {
+    return match (l) {
+        Lamp(light = Light(on = true), spare = s) => "on, spare {s}"
+        Lamp(light = Light(on = false), spare = true) => "off, has spare"
+        Lamp(spare = false) => "off, no spare"
+    }
+}
+
+[test]
+def test_struct_fields_are_checked_for_coverage(t : T?) {
+    t |> equal(light_state(Light(dir = Dir.north, on = true)), "north on")
+    t |> equal(light_state(Light(dir = Dir.west, on = true)), "other on")
+    t |> equal(light_state(Light(dir = Dir.west, on = false)), "off")
+    t |> equal(lamp_state(Lamp(light = Light(on = true), spare = false)), "on, spare false")
+    t |> equal(lamp_state(Lamp(light = Light(on = false), spare = true)), "off, has spare")
+    t |> equal(lamp_state(Lamp(light = Light(on = false), spare = false)), "off, no spare")
+}
+
+def private size_class(n : int; limit : int) : string {
+    return match (n) {
+        (0..10) => "digit"
+        (10..100) | (1000..2000) => "some"
+        (100..limit) => "below limit"
+        _ => "other"
+    }
+}
+
+def private letter_case(c : int) : string {
+    return match (c, c) {
+        ('a'..'z' + 1, _) => "lower"
+        ('A'..'Z' + 1, _) => "upper"
+        _ => "other"
+    }
+}
+
+[test]
+def test_range_patterns_are_half_open(t : T?) {
+    t |> equal(size_class(0, 500), "digit")
+    t |> equal(size_class(9, 500), "digit")
+    t |> equal(size_class(10, 500), "some")
+    t |> equal(size_class(1500, 500), "some")
+    t |> equal(size_class(300, 500), "below limit")
+    t |> equal(size_class(500, 500), "other")
+    t |> equal(size_class(-1, 500), "other")
+    t |> equal(letter_case('q'), "lower")
+    t |> equal(letter_case('Z'), "upper")
+    t |> equal(letter_case('1'), "other")
+}
+
+variant Figure {
+    circle : float
+    square : float
+    tag : string
+}
+
+def private figure_size(f : Figure) : string {
+    return match (f) {
+        Figure(circle = r) | Figure(square = r) => "size {r}"
+        Figure(tag = _) => "tag"
+    }
+}
+
+def private axis_distance(p : Point) : string {
+    return match (p) {
+        Point(x = 0, y = d) | Point(y = 0, x = d) => "axis {d}"
+        _ => "elsewhere"
+    }
+}
+
+[test]
+def test_alternatives_may_bind_different_places(t : T?) {
+    t |> equal(figure_size(Figure(circle = 2.0)), "size 2")
+    t |> equal(figure_size(Figure(square = 3.0)), "size 3")
+    t |> equal(figure_size(Figure(tag = "x")), "tag")
+    t |> equal(axis_distance(Point(x = 0, y = 5)), "axis 5")
+    t |> equal(axis_distance(Point(x = 7, y = 0)), "axis 7")
+    t |> equal(axis_distance(Point(x = 1, y = 1)), "elsewhere")
+}
+
+def private request_kind(req : table<string; string>) : string {
+    return match (req) {
+        ({ "method" => "GET", "path" => p }) => "get {p}"
+        ({ "method" => m }) => "method {m}"
+        _ => "no method"
+    }
+}
+
+def private has_a_and_b(s : table<string>) : bool {
+    return match (s) {
+        ({ "a", "b" }) => true
+        _ => false
+    }
+}
+
+def private bump_counter(var t : table<string; int>) {
+    match (t) {
+        ({ "n" => n }) => $ { t["n"] = n + 1 }
+        _ => $ {}
+    }
+}
+
+[test]
+def test_table_patterns(t : T?) {
+    let get <- { "method" => "GET", "path" => "/x" }
+    let post <- { "method" => "POST" }
+    let none <- { "path" => "/y" }
+    t |> equal(request_kind(get), "get /x")
+    t |> equal(request_kind(post), "method POST")
+    t |> equal(request_kind(none), "no method")
+    t |> equal(length(none), 1)
+    let abc <- { "a", "b", "c" }
+    let a <- { "a" }
+    t |> equal(has_a_and_b(abc), true)
+    t |> equal(has_a_and_b(a), false)
+    var counter <- { "n" => 1 }
+    bump_counter(counter)
+    t |> equal(counter["n"], 2)
+    var other <- { "m" => 1 }
+    bump_counter(other)
+    t |> equal(length(other), 1)
+}
+
+var private view_calls = 0
+
+def private counted_length(a : array<int>) : int {
+    view_calls++
+    return length(a)
+}
+
+def private array_size(a : array<int>) : string {
+    return match (a) {
+        (counted_length(_) => 0) => "empty"
+        (counted_length(_) => (1..10)) => "small"
+        _ => "big"
+    }
+}
+
+def private first_or_empty(a : array<int>) : string {
+    return match (a) {
+        (length(_) => 0) => "empty"
+        (_[0] => 1) => "starts with 1"
+        _ => "other"
+    }
+}
+
+struct Bag {
+    items : array<int>
+    name : string
+}
+
+def private bag_kind(b : Bag; lo : int) : string {
+    return match (b) {
+        Bag(items = (length(_) => n) && n > lo, name = (length(_) => 3)) => "long {n}"
+        _ => "other"
+    }
+}
+
+def private clamped(x, lo, hi : int) : string {
+    return match (x) {
+        (clamp(_, lo, hi) => 5) => "at 5"
+        _ => "else"
+    }
+}
+
+[test]
+def test_view_patterns(t : T?) {
+    let empty : array<int>
+    let small <- [1, 2, 3]
+    view_calls = 0
+    t |> equal(array_size(empty), "empty")
+    t |> equal(view_calls, 1)
+    view_calls = 0
+    t |> equal(array_size(small), "small")
+    t |> equal(view_calls, 1)
+    t |> equal(first_or_empty(empty), "empty")
+    t |> equal(first_or_empty(small), "starts with 1")
+    var b = Bag(name = "abc")
+    b.items <- [1, 2, 3, 4]
+    t |> equal(bag_kind(b, 2), "long 4")
+    t |> equal(bag_kind(b, 9), "other")
+    t |> equal(clamped(9, 0, 5), "at 5")
+    t |> equal(clamped(3, 0, 5), "else")
+}
+
+def private route(req : string) : string {
+    return match (req) {
+        "GET /static/" + _ => "static"
+        "GET " + path && path != "/" => "get {path} {path}"
+        "GET " + _ => "root"
+        "<" + inner + ">" => "tag {inner}"
+        name + ".das" => "script {name}"
+        _ => "other"
+    }
+}
+
+[test]
+def test_string_prefix_and_suffix_patterns(t : T?) {
+    t |> equal(route("GET /static/a.png"), "static")
+    t |> equal(route("GET /x"), "get /x /x")
+    t |> equal(route("GET /"), "root")
+    t |> equal(route("<b>"), "tag b")
+    t |> equal(route("<>"), "tag ")
+    t |> equal(route(">"), "other")
+    t |> equal(route("main.das"), "script main")
+    t |> equal(route("zz"), "other")
+}

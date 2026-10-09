@@ -209,47 +209,70 @@ def table_by_id(t : auto(T)) {
 
 ## Pattern matching
 
-`require daslib/match` adds `match`, `static_match`, `multi_match`, `static_multi_match` - macros
-matching a value against structural patterns, binding parts of it. Each arm is an `if (pattern)`;
-enum cases use the dotted `Color.Red` form.
+`require daslib/match` adds `match` and `static_match` - macros
+matching a value against structural patterns, binding parts of it. Each arm is `pattern => body`;
+the first arm that matches runs. A body of several statements is a `$ { }` block - `return` inside
+it returns from the enclosing function; an assignment body always needs the block
+(`n => $ { total += n }`), and a bare `{ }` after `=>` is a table literal, not a block.
 
 | Pattern | Matches |
 |---|---|
 | `_` | anything (also any single element inside a sequence) |
 | `...` | zero or more elements inside a sequence |
-| `$v(n)` | binds the matched value to a new variable `n` |
-| `_ as f` / `$v(n) as f` | variant case `f`, optionally binding it |
-| `IF(f = $v(x))` | variant case by constructor syntax |
-| `Foo(a = 13)` / `Foo(a = $v(n))` | struct field equal to a value / bound |
+| `n` (a bare name) | anything, binding it to a new variable `n` - it never compares against an existing `n` |
+| `IF(f = x)` | variant case `f`, binding its value; `x as f` is the same test |
+| `Foo(a = 13)` / `Foo(a = n)` | struct field equal to a value / bound |
+| `Color.Red` | enum value (dotted form) |
 | `(1, _, "3")`, `(13, ...)`, `(..., "13")` | tuple by position |
-| `fixed_array($v(a), $v(b))`, `fixed_array(0, ...)` | fixed-size array |
-| `[$v(a), $v(b)]`, `[..., 1, 2]` | dynamic array (element count is checked) |
-| `pattern && cond` | guard - extra condition using the bound variables |
-| `pattern \|\| pattern` | either; both sides must bind the same variables |
-| `match_expr(x + 1)` | element equals an expression over already-bound variables |
-| `match_type(type<int>, $v(e))` | matches on the type of the expression |
+| `fixed_array(a, b)`, `fixed_array(0, ...)` | fixed-size array |
+| `[a, b]`, `[..., 1, 2]` | dynamic array (element count is checked) |
+| `pattern && cond` | guard - extra condition using the bound names |
+| `whole & Foo(a = 0)` | both patterns; a bare name on one side binds the whole value |
+| `({ "k" => v, "n" => 1 })` / `({ "a", "b" })` | a table with those keys, values matching (other keys allowed) / a set with those keys; reading never inserts |
+| `"GET " + path` / `name + ".das"` / `"<" + s + ">"` | string prefix / suffix / both; a named rest is a new string (one allocation per match), `_` slices nothing |
+| `(length(_) => (1..10))` | view: matches the pattern against `f(value)` (`_` is the value); computed lazily, at most once per match |
+| `(0..10)` | `0 <= value && value < 10` - half-open; parentheses required outside a tuple; `int` for `range`, `uint` for `urange` |
+| `pattern \| pattern` | either; both sides must bind the same names, possibly from different fields - `V(a = n) \| V(b = n)` takes `n` from the side that matched |
+| `match_expr(limit)`, `match_expr(x + 1)` | equals an expression - an existing variable, or names bound earlier |
+| `match_type(type<int>, e)` | matches on the type of the value |
+
+`match (a, b) { (pa, pb) => ... }` matches several values at once, one tuple element per value.
+
+In value position `match` is an expression: every body is an expression and the arms must cover
+every value. Coverage is checked at compile time: an arm an earlier one already covers (a repeated
+value, anything after `_`, a `_` after every enum value) is an error, and so is a match over an
+enum, `bool`, variant or struct pointer that misses a value - statement or value. Tuples and
+struct patterns are checked field by field, and the error names up to three missing combinations. A match used as a
+value over any other type needs a `_` arm. A guarded arm covers nothing, except that arms with the
+same pattern whose guards compare the same two int / enum / string values (or test a bool and its
+negation) cover that pattern once together they cover every outcome - `(x, y) && x > y` plus
+`(x, y) && x <= y`; float comparisons never combine (NaN). The value being matched is evaluated once; a bound name is a
+read-only copy of the part it names (a part that does not copy is read in place). A field read or call in a pattern is
+an error - compare against it with `match_expr(...)`.
+
+```das
+def quadrant(x, y : int) : string {
+    return match (x, y) {
+        (0, 0) => "origin"
+        (0, _) | (_, 0) => "on an axis"
+        (a, b) && a > 0 && b > 0 => "first"
+        _ => "elsewhere"
+    }
+}
+```
 
 **`static_match`** silently drops arms whose pattern cannot possibly match the argument type, so
 it compiles for any type - the matcher to use inside a generic:
 
 ```das
 def static_kind(what) : string {
-    static_match (what) {
-        if (Color.Red) {
-            return "red"
-        }
-        if (match_type(type<int>, $v(n))) {
-            return "int {n}"
-        }
-        if (_) {
-            return "other"
-        }
+    return static_match (what) {
+        Color.Red => "red"
+        match_type(type<int>, n) => "int {n}"
+        _ => "other"
     }
 }
 ```
-
-**`multi_match`** runs *every* matching arm instead of stopping at the first;
-`static_multi_match` is its type-tolerant form.
 
 Matching values of unrelated struct types requires opting the struct in: `[match_as_is]` plus
 user-defined `operator is` / `operator as`, or `[match_copy, safe_when_uninitialized]` plus a

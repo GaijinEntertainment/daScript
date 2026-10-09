@@ -15,7 +15,7 @@ enum EOption {
 // check this compiled silently and returned garbage (interp and jit alike).
 
 def get_string(option : EOption) : string {
-    return match(option) {         // 30220: can't return a block
+    return match (option) {        // 30220: can't return a block
         if (EOption.True) {
             return "true";
         }
@@ -30,7 +30,7 @@ def get_string(option : EOption) : string {
 
 def get_string_lambda(option : EOption) : string {
     var get = @(o : EOption) : string {
-        return match(o) {          // 30220: same hole in the block-return path
+        return match (o) {         // 30220: same hole in the block-return path
             if (EOption.True) {
                 return "true";
             }

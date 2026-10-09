@@ -80,18 +80,18 @@ class private FoldVisitor : AstVisitor {
             if (folded |> is_expr_const()) { changed = true; return folded }
         }
         match (that.op) {
-            if ("*") {
+            "*" => $ {
                 var mul = fold_mul_identities(that, noFastMath)
                 if (mul != null) {
                     changed = true
                     return mul
                 }
             }
-            if ("+") {
+            "+" => $ {
                 if (is_zero_const_op(that.right)) { changed = true; return that.left }
                 if (is_zero_const_op(that.left)) { changed = true; return that.right }
             }
-            if ("-") {
+            "-" => $ {
                 if (is_zero_const_op(that.right)) { changed = true; return that.left }
                 if (is_zero_const_op(that.left)) { changed = true; return negate(that.right) }
                 if (describe(that.left) == describe(that.right) && !has_sideeffects(that.left) &&
@@ -100,7 +100,7 @@ class private FoldVisitor : AstVisitor {
                     if (z != null) { changed = true; return z }
                 }
             }
-            if ("/") {
+            "/" => $ {
                 if (!noFastMath && is_float_valued(that)) {
                     var rec = recip_const(that.right)
                     if (rec != null) {
@@ -121,7 +121,7 @@ class private FoldVisitor : AstVisitor {
                     return that
                 }
             }
-            if ("&&" || "||") {
+            "&&" | "||" => $ {
                 var bl = fold_bool_identities(that)
                 if (bl != null) {
                     changed = true
@@ -249,14 +249,14 @@ def private negate_bool(var e : ExpressionPtr; noFastMath : bool) : ExpressionPt
         if (o.func == null || !o.func.flags.builtIn || (ordered && noFastMath && is_float_valued(o.left))) {
             return null
         }
-        var flip = ""
-        match (o.op) {
-            if (">")  { flip = "<=" }
-            if ("<")  { flip = ">=" }
-            if (">=") { flip = "<" }
-            if ("<=") { flip = ">" }
-            if ("==") { flip = "!=" }
-            if ("!=") { flip = "==" }
+        let flip = match (o.op) {
+            ">" => "<="
+            "<" => ">="
+            ">=" => "<"
+            "<=" => ">"
+            "==" => "!="
+            "!=" => "=="
+            _ => ""
         }
         return new ExprOp2(at = e.at, op := flip, left = o.left, right = o.right)
     }
@@ -274,16 +274,12 @@ def public can_negate_bool(e : ExpressionPtr; noFastMath : bool) : bool {
     if (e is ExprConstBool || (e is ExprOp1 && (e as ExprOp1).op == "!")) return true
     if (!(e is ExprOp2)) return false
     let o = e as ExprOp2
-    match (o.op) {
-        if ("==" || "!=") { return o.func != null && o.func.flags.builtIn }
-        if (">" || "<" || ">=" || "<=") {
-            return o.func != null && o.func.flags.builtIn && !(noFastMath && is_float_valued(o.left))
-        }
-        if ("&&" || "||") {
-            return can_negate_bool(o.left, noFastMath) && can_negate_bool(o.right, noFastMath)
-        }
+    return match (o.op) {
+        "==" | "!=" => o.func != null && o.func.flags.builtIn
+        ">" | "<" | ">=" | "<=" => o.func != null && o.func.flags.builtIn && !(noFastMath && is_float_valued(o.left))
+        "&&" | "||" => can_negate_bool(o.left, noFastMath) && can_negate_bool(o.right, noFastMath)
+        _ => false
     }
-    return false
 }
 
 def private ctor_lane_kill(var ctorE : ExpressionPtr; constE : ExpressionPtr) : bool {

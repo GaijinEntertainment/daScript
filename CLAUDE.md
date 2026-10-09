@@ -296,7 +296,7 @@ diagnostic in any tier.
 | >= 2 `insert`s / `t[k] = v` right after an empty table decl | a literal: `var t <- { k1 => v1, k2 => v2 }` (set: `{ k1, k2 }`) | STYLE031. Duplicate const keys: inserts overwrite, the literal is a compile error - don't rewrite those |
 | `var w : array<T>; w \|> push_from(SRC)` (fresh-empty target) | `var w := SRC`; if then returned, `return clone_to_move(SRC)` | STYLE032 + PERF009. NOT `return <- src` - that would move out of the source |
 | `var X = clone_expression(E); ... $e(X) ...` (only splice uses) | inline `$e(E)` at each splice site | PERF023: the template machinery clones every substitution already |
-| hand-rolled `is X` / `as X` / null-guard ladders in macro code | `qmatch(...)` for source-syntax shapes; `match (e) { if (ExprField(...)) }` for node-class shapes | division of labor: `skills/das_macros.md` |
+| hand-rolled `is X` / `as X` / null-guard ladders in macro code | `qmatch(...)` for source-syntax shapes; `match (e) { ExprField(...) => ... }` for node-class shapes | division of labor: `skills/das_macros.md` |
 | `unsafe(reinterpret<T?>(unsafe(addr(x))))` (pointer target) | `unsafe(addr<T?>(x))` | STYLE034 |
 | `b == T('(')` where `b` is a non-`int` numeric scalar | make `b : int`, compare `b == '('` | STYLE035: character literals are `int` |
 | `dst := src` / `push_clone(src)` on a plain `string` | `dst = src` / `push(src)`; cross-context copy = `clone_string(src)` | LINT016: the clone spelling copies only the pointer |
