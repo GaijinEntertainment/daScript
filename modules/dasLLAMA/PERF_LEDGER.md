@@ -81,6 +81,11 @@ what it costs today and what the fix would change.
     0.028 / 0.036; the control 0.47-0.71).
   - gpt-oss-20b mxfp4 (`gptoss`): 0.12 (reads 0.055 / 0.034 / 0.025; the tiles 0.055 / 0.034 / 0.033; the
     control 0.45-0.73).
+  - The Qwen3.6 hybrid cannot stand as a cell carrier (its pure IQ4_XS file refuses the in-memory blob transform and
+    its UD file's twin declines the Metal prefill), so its route reads driver-against-itself on the served image, a
+    probe's reading and no parity evidence: route against tiles on the same 2000-token prefix, 0.0006 / 0.0004 /
+    0.0014 of the peak logit at 2, 5 and 8 tokens and 0.040 at 16 (the tile arm's f16 X twins), the argmax equal at
+    every window, a window whose last token differs 0.56-0.78 off.
 - **MEASURED (2026-10-07, `direction-grade`, `debug-jit`) - the forced tool call under the grammar, on the house assistant's tool bench.**
   M1 Max, Metal, one stream, the server run from the tree under `-jit` with the m1 tune manifest, the house assistant's `bench_llm.py`
   tool part (the house prompt, a nonce a run, no-think, 256-token budget), 12 runs an arm; `auto` = `tools` alone,
