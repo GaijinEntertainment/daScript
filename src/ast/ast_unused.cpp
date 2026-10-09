@@ -286,6 +286,7 @@ namespace das {
                 auto at = (ExprAt *) expr;
                 at->write = true;
                 propagateWrite(at->subexpr);
+                if ( func && at->subexpr->type && at->subexpr->type->isPointer() ) func->sideEffectFlags |= uint32_t(SideEffects::modifyExternal);
             } else if ( expr->rtti_isOp3() ) {
                 auto op3 = (ExprOp3 *) expr;
                 propagateWrite(op3->left);
@@ -347,6 +348,7 @@ namespace das {
                 auto at = (ExprAt *) expr;
                 at->write = true;
                 propagateWriteViaCopyOrMove(at->subexpr);
+                if ( func && at->subexpr->type && at->subexpr->type->isPointer() ) func->sideEffectFlags |= uint32_t(SideEffects::modifyExternal);
             } else if ( expr->rtti_isOp3() ) {
                 auto op3 = (ExprOp3 *) expr;
                 propagateWriteViaCopyOrMove(op3->left);

@@ -365,7 +365,7 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 224;   // 224: a nested splice keeps the alwaysSafe mark on a substituted reference binding
+            return 225;   // 225: a write through a pointer index marks modifyExternal - cached side-effect flags predate it
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;
