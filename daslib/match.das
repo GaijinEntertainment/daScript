@@ -426,44 +426,79 @@ def match_guards(what : TypeDeclPtr; wth : ExprOp2?; access : Expression?; var t
 }
 
 [macro_function]
-def match_or(what : TypeDeclPtr; wth : ExprOp2?; access : Expression?; var to : MatchTo) {
-    var toL : MatchTo
-    toL.declarations := to.declarations
-    if (!match_any(what, wth.left, access, toL)) {
-        to.errors |> push_from(toL.errors)
-        to.failed ||= toL.failed
+def private op_sides(var e : Expression?; op : string) : array<Expression?> {
+    //! The operands of a chain of one binary operator, left to right.
+    return <- [e] if (e == null || !(e is ExprOp2) || (e as ExprOp2).op != op)
+    var sides <- op_sides((e as ExprOp2).left, op)
+    sides |> push_from(op_sides((e as ExprOp2).right, op))
+    return <- sides
+}
+
+[macro_function]
+def private same_names(a, b : table<string; Expression?>; wth : ExprOp2?; var to : MatchTo) : bool {
+    //! Every name ``a`` binds, ``b`` binds too.
+    for (k in keys(a)) {
+        continue if (key_exists(b, k))
+        to.errors |> match_error("the sides of {wth.op} must bind the same names; `{k}` is bound on one side only", wth.at)
         return false
     }
-    var toR : MatchTo
-    toR.declarations := to.declarations
-    if (!match_any(what, wth.right, access, toR)) {
-        to.errors |> push_from(toR.errors)
-        to.failed ||= toR.failed
-        return false
-    }
-    for (k in keys(to.declarations)) {
-        toL.declarations |> erase(k)
-        toR.declarations |> erase(k)
-    }
-    if (length(toL.declarations) != length(toR.declarations)) {
-        to.errors |> match_error("mismatching variable declarations in ||", wth.at)
-        return false
-    }
-    for (k, vL in keys(toL.declarations), values(toL.declarations)) {
-        if (describe(vL) != describe(unsafe(toR.declarations[k]))) {
-            to.errors |> match_error("mismatching variable {k} declaration in ||", wth.at)
+    return true
+}
+
+[macro_function]
+def match_alternatives(var wth : ExprOp2?; var to : MatchTo; matcher : block<(side : Expression?; var sideTo : MatchTo) : bool>) {
+    var sides <- op_sides(wth, string(wth.op))
+    var firstDecl : table<string; Expression?>
+    var conds : array<Expression?>
+    var split = false
+    for (side, si in sides, count()) {
+        var sideTo : MatchTo
+        sideTo.declarations := to.declarations
+        if (!invoke(matcher, side, sideTo)) {
+            to.errors |> push_from(sideTo.errors)
+            to.failed ||= sideTo.failed
             return false
         }
+        for (k in keys(to.declarations)) {
+            sideTo.declarations |> erase(k)
+        }
+        if (si == 0) {
+            firstDecl := sideTo.declarations
+        } elif (!same_names(firstDecl, sideTo.declarations, wth, to) || !same_names(sideTo.declarations, firstDecl, wth, to)) {
+            return false
+        } else {
+            for (k, v in keys(sideTo.declarations), values(sideTo.declarations)) {
+                split ||= describe(v) != describe(unsafe(firstDecl[k]))
+            }
+        }
+        conds |> push(join_conditions(sideTo.conditions, side.at))
     }
-    for (k, v in keys(toL.declarations), values(toL.declarations)) {
+    if (split) {
+        to.errors |> match_error("mismatching variable declarations in {wth.op}", wth.at)
+        return false
+    }
+    for (k, v in keys(firstDecl), values(firstDecl)) {
         to.declarations[k] = v
     }
-    let lcond = join_conditions(toL.conditions, wth.left.at)
-    let rcond = join_conditions(toR.conditions, wth.right.at)
-    var cond = qmacro($e(lcond) || $e(rcond))
-    cond |> force_at(wth.at)
-    to.conditions |> emplace(cond)
-    log_m("\tmatch_or {describe(what)} passed\n")
+    to.conditions |> push(join_conditions(conds, wth.at, "||"))
+    log_m("\tmatch alternatives passed\n")
+    return true
+}
+
+[macro_function]
+def match_bind(what : TypeDeclPtr; name : ExprVar?; access : Expression?; var to : MatchTo) {
+    let tname = string(name.name)
+    if (to.declarations |> key_exists(tname)) {
+        to.errors |> match_error("duplicate variable {tname}", name.at)
+        return false
+    }
+    var cap = clone_expression(access)
+    if (is_expression_ptr(what)) {
+        cap = qmacro(match_peel_r2v($e(cap)))
+        cap |> force_at(name.at)
+    }
+    unsafe(to.declarations[tname]) = cap
+    log_m("\tadd variable {tname} as {describe(access)}\n")
     return true
 }
 
@@ -474,24 +509,11 @@ def match_tag(what : TypeDeclPtr; wth : Expression?; access : Expression?; var t
         to.errors |> match_error("unsupported match tag ${tag.name}", tag.at)
         return true
     }
-    if (tag.subexpr is ExprVar) {
-        let tname  = string((tag.subexpr as ExprVar).name)
-        if (to.declarations |> key_exists(tname)) {
-            to.errors |> match_error("duplicate variable {tname}", tag.at)
-            return false
-        }
-        var cap = clone_expression(access)
-        if (what != null && what.isPointer && what.firstType != null && isExpression(what.firstType)) {
-            cap = qmacro(match_peel_r2v($e(cap)))
-            cap |> force_at(tag.at)
-        }
-        unsafe(to.declarations[tname]) = cap
-        log_m("\tadd variable {tname} as {describe(access)}\n")
-        return true
-    } else {
+    if (!(tag.subexpr is ExprVar)) {
         to.errors |> match_error("invalid $v syntax", tag.at)
         return false
     }
+    return match_bind(what, tag.subexpr as ExprVar, access, to)
 }
 
 [macro_function]
@@ -516,6 +538,24 @@ def is_to_array_move_call(wth : Expression?) {
         res = call_name |> starts_with("__::builtin`to_array_move")
     }
     return res
+}
+
+[macro_function]
+def match_const(what : TypeDeclPtr; wth : Expression?; access : Expression?; var to : MatchTo) {
+    if (wth._type == null) {
+        to.errors |> match_error("unresolved constant type", wth.at)
+        return false
+    }
+    if (!(wth is ExprConstPtr && what.isPointer) && !compatible(what, wth._type)) {
+        to.errors |> match_error("condition type mismatch {describe(what)} vs {describe(wth._type)}", wth.at)
+        return false
+    }
+    log_m("\tadd condition {describe(access)} == {describe(wth)}\n")
+    let ee = unsafe(reinterpret<Expression?>(wth))
+    var cond = qmacro($e(access) == $e(ee))
+    cond |> force_at(wth.at)
+    to.conditions |> emplace(cond)
+    return true
 }
 
 [macro_function]
@@ -562,22 +602,11 @@ def match_any(what : TypeDeclPtr; wth : Expression?; access : Expression?; var t
     } elif ((wth is ExprOp2) && (wth as ExprOp2).op == "&&") {
         return match_guards(what, wth as ExprOp2, access, to)
     } elif ((wth is ExprOp2) && (wth as ExprOp2).op == "||") {
-        return match_or(what, wth as ExprOp2, access, to)
+        return match_alternatives(wth as ExprOp2, to) $(side : Expression?; var sideTo : MatchTo) {
+            return match_any(what, side, access, sideTo)
+        }
     } elif (wth.__rtti |> starts_with("ExprConst")) {
-        if (wth._type == null) {
-            to.errors |> match_error("unresolved constant type", wth.at)
-            return false
-        }
-        if (!(wth is ExprConstPtr && what.isPointer) && !compatible(what, wth._type)) {
-            to.errors |> match_error("condition type mismatch {describe(what)} vs {describe(wth._type)}", wth.at)
-            return false
-        }
-        log_m("\tadd condition {describe(access)} == {describe(wth)}\n")
-        let ee = unsafe(reinterpret<Expression?>(wth))
-        var cond = qmacro($e(access) == $e(ee))
-        cond |> force_at(wth.at)
-        to.conditions |> emplace(cond)
-        return true
+        return match_const(what, wth, access, to)
     } elif (wth._type != null && compatible(what, wth._type)) {
         log_m("\tadd condition {describe(access)} == {describe(wth)}\n")
         let ee = unsafe(reinterpret<Expression?>(copy_to_local(wth)))
@@ -593,7 +622,7 @@ def match_any(what : TypeDeclPtr; wth : Expression?; access : Expression?; var t
 }
 
 [macro_function]
-def join_conditions(var conditions : array<Expression?>; at : LineInfo) : Expression? {
+def join_conditions(var conditions : array<Expression?>; at : LineInfo; joiner : string = "&&") : Expression? {
     let clen = length(conditions)
     if (clen == 0) return new ExprConstBool(value = true, at = at)
     var tail = conditions |> back()
@@ -602,7 +631,7 @@ def join_conditions(var conditions : array<Expression?>; at : LineInfo) : Expres
         {
             var last = conditions |> back()
             conditions |> pop()
-            var new_tail = new ExprOp2(at = last.at, op := "&&", left = last, right = tail)
+            var new_tail = new ExprOp2(at = last.at, op := joiner, left = last, right = tail)
             tail = new_tail
         }
     }
