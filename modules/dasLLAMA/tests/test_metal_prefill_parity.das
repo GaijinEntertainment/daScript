@@ -543,17 +543,17 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                     for (i in range64(nres)) {
                         sl |> push(prompt[i])
                     }
-                    let cpu_r <- continuation(tr, tr, sl, 24)
+                    var inscope cpu_r <- continuation(tr, tr, sl, 24)
                     t |> success(select_prefill_override("metal"), "override registered (mm-tail {nres})")
                     let served0 = metal_prefill_stats().prefills
                     let tail0 = metal_prefill_tail_stats()
-                    let gpu_r <- continuation(trg, tr, sl, 24)
+                    var inscope gpu_r <- continuation(trg, tr, sl, 24)
                     let served = metal_prefill_stats().prefills - served0
                     let dsites = metal_prefill_tail_stats().sites - tail0.sites
                     let drows = metal_prefill_tail_stats().rows - tail0.rows
                     set_metal_prefill_mm_tail(false)
                     let tail1 = metal_prefill_tail_stats()
-                    let gpu_p <- continuation(trg, tr, sl, 24)
+                    var inscope gpu_p <- continuation(trg, tr, sl, 24)
                     set_metal_prefill_mm_tail(true)
                     select_prefill_override("")
                     if (served == 0l) {
@@ -1275,18 +1275,17 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                 }
                 var trqg <- blob_twin(t, path, 2048l)
                 for (kdt in [KVDtype.q8_0, KVDtype.tq4]) {
-                    var cpuq : array<int64>
-                    var gpuq : array<int64>
+                    var cpuq, gpuq : array<int64>
                     with_dasllama_jobque() {
                         var sa = make_run_state(trq.config, kdt, kdt)
-                        let ids <- generate(trq, sa, prompt, length(prompt) + 24)
+                        var inscope ids <- generate(trq, sa, prompt, length(prompt) + 24)
                         cpuq := ids
                         delete sa
                         select_prefill_override("metal")
                         select_decode_override("metal")
                         set_metal_prefill_min_npos(1l)
                         var sb = make_run_state(trq.config, kdt, kdt)
-                        let ids2 <- generate(trqg, sb, prompt, length(prompt) + 24)
+                        var inscope ids2 <- generate(trqg, sb, prompt, length(prompt) + 24)
                         gpuq := ids2
                         delete sb
                         select_prefill_override("")

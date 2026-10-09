@@ -82,8 +82,7 @@ class MoeGemvK4Pair {
         let eb3 = (sel[slot] + eshift) * esb
         let y0 = slot * ddim
         let first_row = (gl_WorkGroupID.x * 2u + gl_SubgroupID) * 2u
-        var yl : float[16]
-        var yh : float[16]
+        var yl, yh : float[16]
         var sumf : float[4]
         var ib = ix
         while (ib < nb) {
@@ -114,8 +113,7 @@ class MoeGemvK4Pair {
                 let q1b = kqu[qb + 1u]
                 let q2a = kqu[qb + 16u]
                 let q2b = kqu[qb + 17u]
-                var acc1 : float[4]
-                var acc2 : float[4]
+                var acc1, acc2 : float[4]
                 for [unroll_full] (i in range(4)) {
                     let sh = 16u * (uint(i) & 1u)
                     let q1 = ((i < 2 ? q1a : q1b) >> sh) & 0xFFFF
@@ -176,8 +174,7 @@ class MoeGemvK4X4 {
         let xoff = slot * xs
         let y0 = slot * ddim
         let first_row = (gl_WorkGroupID.x * 2u + gl_SubgroupID) * 2u
-        var yl : float[16]
-        var yh : float[16]
+        var yl, yh : float[16]
         var sumf : float[2]
         var ib = ix
         while (ib < nb) {
@@ -224,8 +221,7 @@ class MoeGemvK4X4 {
                 let q1b = kqu[qb + 1u]
                 let q2a = kqu[qb + 16u]
                 let q2b = kqu[qb + 17u]
-                var acc1 : float[4]
-                var acc2 : float[4]
+                var acc1, acc2 : float[4]
                 for [unroll_full] (i in range(4)) {
                     let sh = 16u * (uint(i) & 1u)
                     let q1 = ((i < 2 ? q1a : q1b) >> sh) & 0xFFFF
@@ -286,8 +282,7 @@ class MoeGemvK4R4 {
         let xoff = slot * xs
         let y0 = slot * ddim
         let first_row = (gl_WorkGroupID.x * 2u + gl_SubgroupID) * 4u
-        var yl : float[16]
-        var yh : float[16]
+        var yl, yh : float[16]
         var sumf : float[4]
         var ib = ix
         while (ib < nb) {
@@ -318,8 +313,7 @@ class MoeGemvK4R4 {
                 let q1b = kqu[qb + 1u]
                 let q2a = kqu[qb + 16u]
                 let q2b = kqu[qb + 17u]
-                var acc1 : float[4]
-                var acc2 : float[4]
+                var acc1, acc2 : float[4]
                 for [unroll_full] (i in range(4)) {
                     let sh = 16u * (uint(i) & 1u)
                     let q1 = ((i < 2 ? q1a : q1b) >> sh) & 0xFFFF
@@ -521,9 +515,7 @@ def private ref_q51_row(wq : array<uint8>; ws : array<uint8>; xf : array<float>;
 
 // ===== host plumbing =====
 
-def private want(filter, name : string) : bool {
-    return empty(filter) || find(filter, name) >= 0
-}
+def private want(filter, name : string) : bool => empty(filter) || find(filter, name) >= 0
 
 // generic (untyped param) — non-Apple builds never compile the Metal-typed body
 def private upload_bytes(dev; arr : array<uint8>) {
@@ -1230,8 +1222,7 @@ def private run_gmx4_lab(dev; queue; rounds : int; passes : int64) {
     var pso_l = compile_or_die(dev, lab_moe_mx4_l_msl, lab_moe_mx4_l_msl_entry, lab_moe_mx4_l_msl_fastmath)
     var pso_w = compile_or_die(dev, lab_moe_mx4_w_msl, lab_moe_mx4_w_msl_entry, lab_moe_mx4_w_msl_fastmath)
     var pso_e = compile_or_die(dev, lab_moe_mx4_e_msl, lab_moe_mx4_e_msl_entry, lab_moe_mx4_e_msl_fastmath)
-    var etab : array<float>
-    var vtab : array<float>
+    var etab, vtab : array<float>
     build_mx4_tabs(etab, vtab)
     let t_fill = ref_time_ticks()
     var gq : array<uint8>
@@ -1700,8 +1691,7 @@ def private run_gmm4_lab(dev; queue; rounds : int; passes : int64) {
     var pso_p = compile_or_die(dev, metal_moe_mulmm_mx4_msl, metal_moe_mulmm_mx4_msl_entry, metal_moe_mulmm_mx4_msl_fastmath)
     var pso_b = compile_or_die(dev, lab_moe_mm_mx4_bf32_msl, lab_moe_mm_mx4_bf32_msl_entry, lab_moe_mm_mx4_bf32_msl_fastmath)
     var pso_l = compile_or_die(dev, lab_moe_mm_mx4_lcpp_msl, lab_moe_mm_mx4_lcpp_msl_entry, lab_moe_mm_mx4_lcpp_msl_fastmath)
-    var etab : array<float>
-    var vtab : array<float>
+    var etab, vtab : array<float>
     build_mx4_tabs(etab, vtab)
     var lvt : array<float>
     lvt |> resize(16)
@@ -2640,11 +2630,9 @@ def private main_apple(dummy) {
 
     // host fills (exact-arithmetic contract)
     let t_fill = ref_time_ticks()
-    var k4q : array<uint8>
-    var k4c : array<uint8>
+    var k4q, k4c : array<uint8>
     fill_k4_stack(k4q, k4c, 2l * E * NFE, DIM, 7l)
-    var q51q : array<uint8>
-    var q51s : array<uint8>
+    var q51q, q51s : array<uint8>
     fill_q51_stack(q51q, q51s, E * DIM, NFE, 11l)
     var xf : array<float>
     xf |> resize(int(DIM))

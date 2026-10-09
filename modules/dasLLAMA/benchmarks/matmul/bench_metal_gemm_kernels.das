@@ -59,14 +59,7 @@ class MetalGemmLabN64 {
         let nBase = (gl_WorkGroupID.x % ntileN) * 64u
         let qm = (sg / 2u) * 16u            // this simdgroup's 16x32 quadrant of the C block
         let qn = (sg % 2u) * 32u
-        var c00 : simdgroup_float8x8
-        var c01 : simdgroup_float8x8
-        var c02 : simdgroup_float8x8
-        var c03 : simdgroup_float8x8
-        var c10 : simdgroup_float8x8
-        var c11 : simdgroup_float8x8
-        var c12 : simdgroup_float8x8
-        var c13 : simdgroup_float8x8
+        var c00, c01, c02, c03, c10, c11, c12, c13 : simdgroup_float8x8
         var kb = 0u
         while (kb * 32u < kdim) {
             var e = lid                     // stage A: 1024 elements, 8 per thread
@@ -88,12 +81,7 @@ class MetalGemmLabN64 {
             barrier()
             var k8 = 0u
             while (k8 < 32u) {
-                var a0 : simdgroup_half8x8
-                var a1 : simdgroup_half8x8
-                var b0 : simdgroup_half8x8
-                var b1 : simdgroup_half8x8
-                var b2 : simdgroup_half8x8
-                var b3 : simdgroup_half8x8
+                var a0, a1, b0, b1, b2, b3 : simdgroup_half8x8
                 simdgroup_load(a0, ta, qm * 32u + k8, 32u)
                 simdgroup_load(a1, ta, (qm + 8u) * 32u + k8, 32u)
                 simdgroup_load(b0, tb, k8 * 64u + qn, 64u)
@@ -148,14 +136,7 @@ class MetalGemmLabM64 {
         let nBase = (gl_WorkGroupID.x % ntileN) * 32u
         let qm = (sg / 2u) * 32u            // this simdgroup's 32x16 quadrant of the C block
         let qn = (sg % 2u) * 16u
-        var c00 : simdgroup_float8x8
-        var c01 : simdgroup_float8x8
-        var c10 : simdgroup_float8x8
-        var c11 : simdgroup_float8x8
-        var c20 : simdgroup_float8x8
-        var c21 : simdgroup_float8x8
-        var c30 : simdgroup_float8x8
-        var c31 : simdgroup_float8x8
+        var c00, c01, c10, c11, c20, c21, c30, c31 : simdgroup_float8x8
         var kb = 0u
         while (kb * 32u < kdim) {
             var e = lid                     // stage A: 2048 elements, 16 per thread
@@ -177,12 +158,7 @@ class MetalGemmLabM64 {
             barrier()
             var k8 = 0u
             while (k8 < 32u) {
-                var a0 : simdgroup_half8x8
-                var a1 : simdgroup_half8x8
-                var a2 : simdgroup_half8x8
-                var a3 : simdgroup_half8x8
-                var b0 : simdgroup_half8x8
-                var b1 : simdgroup_half8x8
+                var a0, a1, a2, a3, b0, b1 : simdgroup_half8x8
                 simdgroup_load(a0, ta, qm * 32u + k8, 32u)
                 simdgroup_load(a1, ta, (qm + 8u) * 32u + k8, 32u)
                 simdgroup_load(a2, ta, (qm + 16u) * 32u + k8, 32u)
@@ -238,10 +214,7 @@ class MetalGemmLabDb32 {
         let nBase = (gl_WorkGroupID.x % ntileN) * 32u
         let qm = (sg / 2u) * 16u
         let qn = (sg % 2u) * 16u
-        var c00 : simdgroup_float8x8
-        var c01 : simdgroup_float8x8
-        var c10 : simdgroup_float8x8
-        var c11 : simdgroup_float8x8
+        var c00, c01, c10, c11 : simdgroup_float8x8
         let nkb = kdim / 32u
         var e = lid                         // prologue: stage block 0 into half 0
         while (e < 1024u) {
@@ -270,10 +243,7 @@ class MetalGemmLabDb32 {
             }
             var k8 = 0u
             while (k8 < 32u) {
-                var a0 : simdgroup_half8x8
-                var a1 : simdgroup_half8x8
-                var b0 : simdgroup_half8x8
-                var b1 : simdgroup_half8x8
+                var a0, a1, b0, b1 : simdgroup_half8x8
                 simdgroup_load(a0, ta, cur + qm * 32u + k8, 32u)
                 simdgroup_load(a1, ta, cur + (qm + 8u) * 32u + k8, 32u)
                 simdgroup_load(b0, tb, cur + k8 * 32u + qn, 32u)
@@ -318,10 +288,7 @@ class MetalGemmLabK64 {
         let nBase = (gl_WorkGroupID.x % ntileN) * 32u
         let qm = (sg / 2u) * 16u
         let qn = (sg % 2u) * 16u
-        var c00 : simdgroup_float8x8
-        var c01 : simdgroup_float8x8
-        var c10 : simdgroup_float8x8
-        var c11 : simdgroup_float8x8
+        var c00, c01, c10, c11 : simdgroup_float8x8
         var kb = 0u
         while (kb * 64u < kdim) {
             var e = lid                     // stage A: 32 rows x 64 k, 16 per thread
@@ -343,10 +310,7 @@ class MetalGemmLabK64 {
             barrier()
             var k8 = 0u
             while (k8 < 64u) {
-                var a0 : simdgroup_half8x8
-                var a1 : simdgroup_half8x8
-                var b0 : simdgroup_half8x8
-                var b1 : simdgroup_half8x8
+                var a0, a1, b0, b1 : simdgroup_half8x8
                 simdgroup_load(a0, ta, qm * 64u + k8, 64u)
                 simdgroup_load(a1, ta, (qm + 8u) * 64u + k8, 64u)
                 simdgroup_load(b0, tb, k8 * 32u + qn, 32u)
@@ -392,10 +356,7 @@ class MetalGemmLabTile32 {
         let nBase = (gl_WorkGroupID.x % ntileN) * 32u
         let qm = (sg / 2u) * 16u
         let qn = (sg % 2u) * 16u
-        var c00 : simdgroup_float8x8
-        var c01 : simdgroup_float8x8
-        var c10 : simdgroup_float8x8
-        var c11 : simdgroup_float8x8
+        var c00, c01, c10, c11 : simdgroup_float8x8
         var kb = 0u
         while (kb * 32u < kdim) {
             var e = lid
@@ -412,10 +373,7 @@ class MetalGemmLabTile32 {
             barrier()
             var k8 = 0u
             while (k8 < 32u) {
-                var a0 : simdgroup_half8x8
-                var a1 : simdgroup_half8x8
-                var b0 : simdgroup_half8x8
-                var b1 : simdgroup_half8x8
+                var a0, a1, b0, b1 : simdgroup_half8x8
                 simdgroup_load(a0, ta, ((qm / 8u) * 4u + k8 / 8u) * 64u, 8u)
                 simdgroup_load(a1, ta, ((qm / 8u + 1u) * 4u + k8 / 8u) * 64u, 8u)
                 simdgroup_load(b0, tb, ((k8 / 8u) * 4u + qn / 8u) * 64u, 8u)
@@ -460,10 +418,7 @@ class MetalGemmLabPad36 {
         let nBase = (gl_WorkGroupID.x % ntileN) * 32u
         let qm = (sg / 2u) * 16u
         let qn = (sg % 2u) * 16u
-        var c00 : simdgroup_float8x8
-        var c01 : simdgroup_float8x8
-        var c10 : simdgroup_float8x8
-        var c11 : simdgroup_float8x8
+        var c00, c01, c10, c11 : simdgroup_float8x8
         var kb = 0u
         while (kb * 32u < kdim) {
             var e = lid
@@ -478,10 +433,7 @@ class MetalGemmLabPad36 {
             barrier()
             var k8 = 0u
             while (k8 < 32u) {
-                var a0 : simdgroup_half8x8
-                var a1 : simdgroup_half8x8
-                var b0 : simdgroup_half8x8
-                var b1 : simdgroup_half8x8
+                var a0, a1, b0, b1 : simdgroup_half8x8
                 simdgroup_load(a0, ta, qm * 36u + k8, 36u)
                 simdgroup_load(a1, ta, (qm + 8u) * 36u + k8, 36u)
                 simdgroup_load(b0, tb, k8 * 36u + qn, 36u)
@@ -525,19 +477,13 @@ class MetalGemmLabNoStage {
         let nBase = (gl_WorkGroupID.x % ntileN) * 32u
         let qm = (sg / 2u) * 16u
         let qn = (sg % 2u) * 16u
-        var c00 : simdgroup_float8x8
-        var c01 : simdgroup_float8x8
-        var c10 : simdgroup_float8x8
-        var c11 : simdgroup_float8x8
+        var c00, c01, c10, c11 : simdgroup_float8x8
         var kb = 0u
         while (kb * 32u < kdim) {
             barrier()
             var k8 = 0u
             while (k8 < 32u) {
-                var a0 : simdgroup_half8x8
-                var a1 : simdgroup_half8x8
-                var b0 : simdgroup_half8x8
-                var b1 : simdgroup_half8x8
+                var a0, a1, b0, b1 : simdgroup_half8x8
                 simdgroup_load(a0, ta, qm * 32u + k8, 32u)
                 simdgroup_load(a1, ta, (qm + 8u) * 32u + k8, 32u)
                 simdgroup_load(b0, tb, k8 * 32u + qn, 32u)
@@ -634,10 +580,7 @@ class MetalGemmLabRun16 {
         let nBase = (gl_WorkGroupID.x % ntileN) * 32u
         let qm = (sg / 2u) * 16u
         let qn = (sg % 2u) * 16u
-        var c00 : simdgroup_float8x8
-        var c01 : simdgroup_float8x8
-        var c10 : simdgroup_float8x8
-        var c11 : simdgroup_float8x8
+        var c00, c01, c10, c11 : simdgroup_float8x8
         let run = lid % 64u
         let rr = run / 2u                   // row within the 32-row tile
         let c0 = (run % 2u) * 16u           // k offset within the 32-k block
@@ -665,10 +608,7 @@ class MetalGemmLabRun16 {
             barrier()
             var k8 = 0u
             while (k8 < 32u) {
-                var a0 : simdgroup_half8x8
-                var a1 : simdgroup_half8x8
-                var b0 : simdgroup_half8x8
-                var b1 : simdgroup_half8x8
+                var a0, a1, b0, b1 : simdgroup_half8x8
                 simdgroup_load(a0, ta, qm * 32u + k8, 32u)
                 simdgroup_load(a1, ta, (qm + 8u) * 32u + k8, 32u)
                 simdgroup_load(b0, tb, k8 * 32u + qn, 32u)
@@ -714,10 +654,7 @@ class MetalGemmLabVec4 {
         let nBase = (gl_WorkGroupID.x % ntileN) * 32u
         let qm = (sg / 2u) * 16u
         let qn = (sg % 2u) * 16u
-        var c00 : simdgroup_float8x8
-        var c01 : simdgroup_float8x8
-        var c10 : simdgroup_float8x8
-        var c11 : simdgroup_float8x8
+        var c00, c01, c10, c11 : simdgroup_float8x8
         let kdim4 = kdim / 4u
         let run = lid % 64u
         let rr = run / 2u
@@ -756,10 +693,7 @@ class MetalGemmLabVec4 {
             barrier()
             var k8 = 0u
             while (k8 < 32u) {
-                var a0 : simdgroup_half8x8
-                var a1 : simdgroup_half8x8
-                var b0 : simdgroup_half8x8
-                var b1 : simdgroup_half8x8
+                var a0, a1, b0, b1 : simdgroup_half8x8
                 simdgroup_load(a0, ta, qm * 32u + k8, 32u)
                 simdgroup_load(a1, ta, (qm + 8u) * 32u + k8, 32u)
                 simdgroup_load(b0, tb, k8 * 32u + qn, 32u)
@@ -805,10 +739,7 @@ class MetalGemmLabVec16 {
         let nBase = (gl_WorkGroupID.x % ntileN) * 32u
         let qm = (sg / 2u) * 16u
         let qn = (sg % 2u) * 16u
-        var c00 : simdgroup_float8x8
-        var c01 : simdgroup_float8x8
-        var c10 : simdgroup_float8x8
-        var c11 : simdgroup_float8x8
+        var c00, c01, c10, c11 : simdgroup_float8x8
         let kdim16 = kdim / 16u
         let run = lid % 64u
         let rr = run / 2u
@@ -868,10 +799,7 @@ class MetalGemmLabVec16 {
             barrier()
             var k8 = 0u
             while (k8 < 32u) {
-                var a0 : simdgroup_half8x8
-                var a1 : simdgroup_half8x8
-                var b0 : simdgroup_half8x8
-                var b1 : simdgroup_half8x8
+                var a0, a1, b0, b1 : simdgroup_half8x8
                 simdgroup_load(a0, ta, qm * 32u + k8, 32u)
                 simdgroup_load(a1, ta, (qm + 8u) * 32u + k8, 32u)
                 simdgroup_load(b0, tb, k8 * 32u + qn, 32u)
@@ -916,10 +844,7 @@ class MetalGemmLabDbVec4 {
         let nBase = (gl_WorkGroupID.x % ntileN) * 32u
         let qm = (sg / 2u) * 16u
         let qn = (sg % 2u) * 16u
-        var c00 : simdgroup_float8x8
-        var c01 : simdgroup_float8x8
-        var c10 : simdgroup_float8x8
-        var c11 : simdgroup_float8x8
+        var c00, c01, c10, c11 : simdgroup_float8x8
         let kdim4 = kdim / 4u
         let nkb = kdim / 32u
         let run = lid % 64u
@@ -993,10 +918,7 @@ class MetalGemmLabDbVec4 {
             }
             var k8 = 0u
             while (k8 < 32u) {
-                var a0 : simdgroup_half8x8
-                var a1 : simdgroup_half8x8
-                var b0 : simdgroup_half8x8
-                var b1 : simdgroup_half8x8
+                var a0, a1, b0, b1 : simdgroup_half8x8
                 simdgroup_load(a0, ta, cur + qm * 32u + k8, 32u)
                 simdgroup_load(a1, ta, cur + (qm + 8u) * 32u + k8, 32u)
                 simdgroup_load(b0, tb, cur + k8 * 32u + qn, 32u)
@@ -1042,14 +964,7 @@ class MetalGemmLabN64Vec4 {
         let nBase = (gl_WorkGroupID.x % ntileN) * 64u
         let qm = (sg / 2u) * 16u
         let qn = (sg % 2u) * 32u
-        var c00 : simdgroup_float8x8
-        var c01 : simdgroup_float8x8
-        var c02 : simdgroup_float8x8
-        var c03 : simdgroup_float8x8
-        var c10 : simdgroup_float8x8
-        var c11 : simdgroup_float8x8
-        var c12 : simdgroup_float8x8
-        var c13 : simdgroup_float8x8
+        var c00, c01, c02, c03, c10, c11, c12, c13 : simdgroup_float8x8
         let kdim4 = kdim / 4u
         let rb = lid / 2u                   // B: one run per thread (64 out-rows x 2 half-blocks)
         let c0b = (lid % 2u) * 16u
@@ -1089,12 +1004,7 @@ class MetalGemmLabN64Vec4 {
             barrier()
             var k8 = 0u
             while (k8 < 32u) {
-                var a0 : simdgroup_half8x8
-                var a1 : simdgroup_half8x8
-                var b0 : simdgroup_half8x8
-                var b1 : simdgroup_half8x8
-                var b2 : simdgroup_half8x8
-                var b3 : simdgroup_half8x8
+                var a0, a1, b0, b1, b2, b3 : simdgroup_half8x8
                 simdgroup_load(a0, ta, qm * 32u + k8, 32u)
                 simdgroup_load(a1, ta, (qm + 8u) * 32u + k8, 32u)
                 simdgroup_load(b0, tb, k8 * 64u + qn, 64u)
@@ -1149,14 +1059,7 @@ class MetalGemmLabM64Vec4 {
         let nBase = (gl_WorkGroupID.x % ntileN) * 32u
         let qm = (sg / 2u) * 32u
         let qn = (sg % 2u) * 16u
-        var c00 : simdgroup_float8x8
-        var c01 : simdgroup_float8x8
-        var c10 : simdgroup_float8x8
-        var c11 : simdgroup_float8x8
-        var c20 : simdgroup_float8x8
-        var c21 : simdgroup_float8x8
-        var c30 : simdgroup_float8x8
-        var c31 : simdgroup_float8x8
+        var c00, c01, c10, c11, c20, c21, c30, c31 : simdgroup_float8x8
         let kdim4 = kdim / 4u
         let ra = lid / 2u                   // A: one run per thread (64 rows x 2 half-blocks)
         let c0a = (lid % 2u) * 16u
@@ -1196,12 +1099,7 @@ class MetalGemmLabM64Vec4 {
             barrier()
             var k8 = 0u
             while (k8 < 32u) {
-                var a0 : simdgroup_half8x8
-                var a1 : simdgroup_half8x8
-                var a2 : simdgroup_half8x8
-                var a3 : simdgroup_half8x8
-                var b0 : simdgroup_half8x8
-                var b1 : simdgroup_half8x8
+                var a0, a1, a2, a3, b0, b1 : simdgroup_half8x8
                 simdgroup_load(a0, ta, qm * 32u + k8, 32u)
                 simdgroup_load(a1, ta, (qm + 8u) * 32u + k8, 32u)
                 simdgroup_load(a2, ta, (qm + 16u) * 32u + k8, 32u)
@@ -1257,22 +1155,7 @@ class MetalGemmLab6464Vec4 {
         let nBase = (gl_WorkGroupID.x % ntileN) * 64u
         let qm = (sg / 2u) * 32u
         let qn = (sg % 2u) * 32u
-        var c00 : simdgroup_float8x8
-        var c01 : simdgroup_float8x8
-        var c02 : simdgroup_float8x8
-        var c03 : simdgroup_float8x8
-        var c10 : simdgroup_float8x8
-        var c11 : simdgroup_float8x8
-        var c12 : simdgroup_float8x8
-        var c13 : simdgroup_float8x8
-        var c20 : simdgroup_float8x8
-        var c21 : simdgroup_float8x8
-        var c22 : simdgroup_float8x8
-        var c23 : simdgroup_float8x8
-        var c30 : simdgroup_float8x8
-        var c31 : simdgroup_float8x8
-        var c32 : simdgroup_float8x8
-        var c33 : simdgroup_float8x8
+        var c00, c01, c02, c03, c10, c11, c12, c13, c20, c21, c22, c23, c30, c31, c32, c33 : simdgroup_float8x8
         let kdim4 = kdim / 4u
         let ra = lid / 2u
         let c0a = (lid % 2u) * 16u
@@ -1310,14 +1193,7 @@ class MetalGemmLab6464Vec4 {
             barrier()
             var k8 = 0u
             while (k8 < 32u) {
-                var a0 : simdgroup_half8x8
-                var a1 : simdgroup_half8x8
-                var a2 : simdgroup_half8x8
-                var a3 : simdgroup_half8x8
-                var b0 : simdgroup_half8x8
-                var b1 : simdgroup_half8x8
-                var b2 : simdgroup_half8x8
-                var b3 : simdgroup_half8x8
+                var a0, a1, a2, a3, b0, b1, b2, b3 : simdgroup_half8x8
                 simdgroup_load(a0, ta, qm * 32u + k8, 32u)
                 simdgroup_load(a1, ta, (qm + 8u) * 32u + k8, 32u)
                 simdgroup_load(a2, ta, (qm + 16u) * 32u + k8, 32u)
@@ -1391,22 +1267,7 @@ class MetalGemmLab6464Run32 {
         let nBase = (gl_WorkGroupID.x % ntileN) * 64u
         let qm = (sg / 2u) * 32u
         let qn = (sg % 2u) * 32u
-        var c00 : simdgroup_float8x8
-        var c01 : simdgroup_float8x8
-        var c02 : simdgroup_float8x8
-        var c03 : simdgroup_float8x8
-        var c10 : simdgroup_float8x8
-        var c11 : simdgroup_float8x8
-        var c12 : simdgroup_float8x8
-        var c13 : simdgroup_float8x8
-        var c20 : simdgroup_float8x8
-        var c21 : simdgroup_float8x8
-        var c22 : simdgroup_float8x8
-        var c23 : simdgroup_float8x8
-        var c30 : simdgroup_float8x8
-        var c31 : simdgroup_float8x8
-        var c32 : simdgroup_float8x8
-        var c33 : simdgroup_float8x8
+        var c00, c01, c02, c03, c10, c11, c12, c13, c20, c21, c22, c23, c30, c31, c32, c33 : simdgroup_float8x8
         let kdim4 = kdim / 4u
         let ra = lid % 64u                  // staged row (token row for A half, output row for B)
         let isB = lid >= 64u
@@ -1443,14 +1304,7 @@ class MetalGemmLab6464Run32 {
             barrier()
             var k8 = 0u
             while (k8 < 32u) {
-                var a0 : simdgroup_half8x8
-                var a1 : simdgroup_half8x8
-                var a2 : simdgroup_half8x8
-                var a3 : simdgroup_half8x8
-                var b0 : simdgroup_half8x8
-                var b1 : simdgroup_half8x8
-                var b2 : simdgroup_half8x8
-                var b3 : simdgroup_half8x8
+                var a0, a1, a2, a3, b0, b1, b2, b3 : simdgroup_half8x8
                 simdgroup_load(a0, ta, qm * 32u + k8, 32u)
                 simdgroup_load(a1, ta, (qm + 8u) * 32u + k8, 32u)
                 simdgroup_load(a2, ta, (qm + 16u) * 32u + k8, 32u)
@@ -1525,22 +1379,7 @@ class MetalGemmLab6464Trans {
         let nBase = (gl_WorkGroupID.x % ntileN) * 64u
         let qm = (sg / 2u) * 32u
         let qn = (sg % 2u) * 32u
-        var c00 : simdgroup_float8x8
-        var c01 : simdgroup_float8x8
-        var c02 : simdgroup_float8x8
-        var c03 : simdgroup_float8x8
-        var c10 : simdgroup_float8x8
-        var c11 : simdgroup_float8x8
-        var c12 : simdgroup_float8x8
-        var c13 : simdgroup_float8x8
-        var c20 : simdgroup_float8x8
-        var c21 : simdgroup_float8x8
-        var c22 : simdgroup_float8x8
-        var c23 : simdgroup_float8x8
-        var c30 : simdgroup_float8x8
-        var c31 : simdgroup_float8x8
-        var c32 : simdgroup_float8x8
-        var c33 : simdgroup_float8x8
+        var c00, c01, c02, c03, c10, c11, c12, c13, c20, c21, c22, c23, c30, c31, c32, c33 : simdgroup_float8x8
         let kdim4 = kdim / 4u
         let ra = lid / 2u
         let c0a = (lid % 2u) * 16u
@@ -1571,14 +1410,7 @@ class MetalGemmLab6464Trans {
             barrier()
             var k8 = 0u
             while (k8 < 32u) {
-                var a0 : simdgroup_half8x8
-                var a1 : simdgroup_half8x8
-                var a2 : simdgroup_half8x8
-                var a3 : simdgroup_half8x8
-                var b0 : simdgroup_half8x8
-                var b1 : simdgroup_half8x8
-                var b2 : simdgroup_half8x8
-                var b3 : simdgroup_half8x8
+                var a0, a1, a2, a3, b0, b1, b2, b3 : simdgroup_half8x8
                 simdgroup_load(a0, ta, qm * 32u + k8, 32u)
                 simdgroup_load(a1, ta, (qm + 8u) * 32u + k8, 32u)
                 simdgroup_load(a2, ta, (qm + 16u) * 32u + k8, 32u)
@@ -1651,22 +1483,7 @@ class MetalGemmLab6464DevB {
         let nBase = (gl_WorkGroupID.x % ntileN) * 64u
         let qm = (sg / 2u) * 32u
         let qn = (sg % 2u) * 32u
-        var c00 : simdgroup_float8x8
-        var c01 : simdgroup_float8x8
-        var c02 : simdgroup_float8x8
-        var c03 : simdgroup_float8x8
-        var c10 : simdgroup_float8x8
-        var c11 : simdgroup_float8x8
-        var c12 : simdgroup_float8x8
-        var c13 : simdgroup_float8x8
-        var c20 : simdgroup_float8x8
-        var c21 : simdgroup_float8x8
-        var c22 : simdgroup_float8x8
-        var c23 : simdgroup_float8x8
-        var c30 : simdgroup_float8x8
-        var c31 : simdgroup_float8x8
-        var c32 : simdgroup_float8x8
-        var c33 : simdgroup_float8x8
+        var c00, c01, c02, c03, c10, c11, c12, c13, c20, c21, c22, c23, c30, c31, c32, c33 : simdgroup_float8x8
         let kdim4 = kdim / 4u
         let ra = lid / 2u
         let c0a = (lid % 2u) * 16u
@@ -1687,14 +1504,7 @@ class MetalGemmLab6464DevB {
             let kw = kb * 32u
             var k8 = 0u
             while (k8 < 32u) {
-                var a0 : simdgroup_half8x8
-                var a1 : simdgroup_half8x8
-                var a2 : simdgroup_half8x8
-                var a3 : simdgroup_half8x8
-                var b0 : simdgroup_half8x8
-                var b1 : simdgroup_half8x8
-                var b2 : simdgroup_half8x8
-                var b3 : simdgroup_half8x8
+                var a0, a1, a2, a3, b0, b1, b2, b3 : simdgroup_half8x8
                 simdgroup_load(a0, ta, qm * 32u + k8, 32u)
                 simdgroup_load(a1, ta, (qm + 8u) * 32u + k8, 32u)
                 simdgroup_load(a2, ta, (qm + 16u) * 32u + k8, 32u)
@@ -1765,35 +1575,13 @@ class MetalGemmLab6464NoStage {
         let nBase = (gl_WorkGroupID.x % ntileN) * 64u
         let qm = (sg / 2u) * 32u
         let qn = (sg % 2u) * 32u
-        var c00 : simdgroup_float8x8
-        var c01 : simdgroup_float8x8
-        var c02 : simdgroup_float8x8
-        var c03 : simdgroup_float8x8
-        var c10 : simdgroup_float8x8
-        var c11 : simdgroup_float8x8
-        var c12 : simdgroup_float8x8
-        var c13 : simdgroup_float8x8
-        var c20 : simdgroup_float8x8
-        var c21 : simdgroup_float8x8
-        var c22 : simdgroup_float8x8
-        var c23 : simdgroup_float8x8
-        var c30 : simdgroup_float8x8
-        var c31 : simdgroup_float8x8
-        var c32 : simdgroup_float8x8
-        var c33 : simdgroup_float8x8
+        var c00, c01, c02, c03, c10, c11, c12, c13, c20, c21, c22, c23, c30, c31, c32, c33 : simdgroup_float8x8
         var kb = 0u
         while (kb * 32u < kdim) {
             barrier()
             var k8 = 0u
             while (k8 < 32u) {
-                var a0 : simdgroup_half8x8
-                var a1 : simdgroup_half8x8
-                var a2 : simdgroup_half8x8
-                var a3 : simdgroup_half8x8
-                var b0 : simdgroup_half8x8
-                var b1 : simdgroup_half8x8
-                var b2 : simdgroup_half8x8
-                var b3 : simdgroup_half8x8
+                var a0, a1, a2, a3, b0, b1, b2, b3 : simdgroup_half8x8
                 simdgroup_load(a0, ta, qm * 32u + k8, 32u)
                 simdgroup_load(a1, ta, (qm + 8u) * 32u + k8, 32u)
                 simdgroup_load(a2, ta, (qm + 16u) * 32u + k8, 32u)
@@ -1866,14 +1654,7 @@ class MetalGemmLab6464X256 {
         let nBase = (gl_WorkGroupID.x % ntileN) * 64u
         let qm = (sg / 4u) * 32u
         let qn = (sg % 4u) * 16u
-        var c00 : simdgroup_float8x8
-        var c01 : simdgroup_float8x8
-        var c10 : simdgroup_float8x8
-        var c11 : simdgroup_float8x8
-        var c20 : simdgroup_float8x8
-        var c21 : simdgroup_float8x8
-        var c30 : simdgroup_float8x8
-        var c31 : simdgroup_float8x8
+        var c00, c01, c10, c11, c20, c21, c30, c31 : simdgroup_float8x8
         let kdim4 = kdim / 4u
         let run = lid % 128u
         let rr = run / 2u
@@ -1911,12 +1692,7 @@ class MetalGemmLab6464X256 {
             barrier()
             var k8 = 0u
             while (k8 < 32u) {
-                var a0 : simdgroup_half8x8
-                var a1 : simdgroup_half8x8
-                var a2 : simdgroup_half8x8
-                var a3 : simdgroup_half8x8
-                var b0 : simdgroup_half8x8
-                var b1 : simdgroup_half8x8
+                var a0, a1, a2, a3, b0, b1 : simdgroup_half8x8
                 simdgroup_load(a0, ta, qm * 32u + k8, 32u)
                 simdgroup_load(a1, ta, (qm + 8u) * 32u + k8, 32u)
                 simdgroup_load(a2, ta, (qm + 16u) * 32u + k8, 32u)
@@ -1972,22 +1748,7 @@ class MetalGemmLab6464Prefetch {
         let nBase = (gl_WorkGroupID.x % ntileN) * 64u
         let qm = (sg / 2u) * 32u
         let qn = (sg % 2u) * 32u
-        var c00 : simdgroup_float8x8
-        var c01 : simdgroup_float8x8
-        var c02 : simdgroup_float8x8
-        var c03 : simdgroup_float8x8
-        var c10 : simdgroup_float8x8
-        var c11 : simdgroup_float8x8
-        var c12 : simdgroup_float8x8
-        var c13 : simdgroup_float8x8
-        var c20 : simdgroup_float8x8
-        var c21 : simdgroup_float8x8
-        var c22 : simdgroup_float8x8
-        var c23 : simdgroup_float8x8
-        var c30 : simdgroup_float8x8
-        var c31 : simdgroup_float8x8
-        var c32 : simdgroup_float8x8
-        var c33 : simdgroup_float8x8
+        var c00, c01, c02, c03, c10, c11, c12, c13, c20, c21, c22, c23, c30, c31, c32, c33 : simdgroup_float8x8
         let kdim4 = kdim / 4u
         let ra = lid / 2u
         let c0a = (lid % 2u) * 16u
@@ -2025,14 +1786,7 @@ class MetalGemmLab6464Prefetch {
         var kb = 0u
         while (kb * 32u < kdim) {
             // prefetch block kb+1 into registers — loads fly while the macs run
-            var pa0 : byte4
-            var pa1 : byte4
-            var pa2 : byte4
-            var pa3 : byte4
-            var pb0 : byte4
-            var pb1 : byte4
-            var pb2 : byte4
-            var pb3 : byte4
+            var pa0, pa1, pa2, pa3, pb0, pb1, pb2, pb3 : byte4
             var sa = 0.0
             var sb = 0.0
             let more = (kb + 1u) * 32u < kdim
@@ -2053,14 +1807,7 @@ class MetalGemmLab6464Prefetch {
             }
             var k8 = 0u
             while (k8 < 32u) {
-                var a0 : simdgroup_half8x8
-                var a1 : simdgroup_half8x8
-                var a2 : simdgroup_half8x8
-                var a3 : simdgroup_half8x8
-                var b0 : simdgroup_half8x8
-                var b1 : simdgroup_half8x8
-                var b2 : simdgroup_half8x8
-                var b3 : simdgroup_half8x8
+                var a0, a1, a2, a3, b0, b1, b2, b3 : simdgroup_half8x8
                 simdgroup_load(a0, ta, qm * 32u + k8, 32u)
                 simdgroup_load(a1, ta, (qm + 8u) * 32u + k8, 32u)
                 simdgroup_load(a2, ta, (qm + 16u) * 32u + k8, 32u)
@@ -2182,14 +1929,7 @@ class MetalGemmLabGgmlGeo {
         let sg = gl_SubgroupID
         let mBase = gl_WorkGroupID.x * 32u  // token rows — FAST axis: concurrent tgs share the W panel
         let nBase = gl_WorkGroupID.y * 64u  // output (weight) rows
-        var c00 : simdgroup_float8x8
-        var c01 : simdgroup_float8x8
-        var c02 : simdgroup_float8x8
-        var c03 : simdgroup_float8x8
-        var c10 : simdgroup_float8x8
-        var c11 : simdgroup_float8x8
-        var c12 : simdgroup_float8x8
-        var c13 : simdgroup_float8x8
+        var c00, c01, c02, c03, c10, c11, c12, c13 : simdgroup_float8x8
         let kdim4 = kdim / 4u
         let nkb = kdim / 32u
         // A split: each thread stages 16 weight elems — row lr0, k half il0
@@ -2205,12 +1945,7 @@ class MetalGemmLabGgmlGeo {
         let ibB = ((lid % 4u) * 4u + lr1 / 8u) * 64u + (lr1 % 8u) * 8u
         let aB = (sg % 2u) * 256u           // this simdgroup's A quadrant: 4 row-tiles of 64
         let bB = (sg / 2u) * 128u           // this simdgroup's B quadrant: 2 token-tiles of 64
-        var ma0 : simdgroup_half8x8
-        var ma1 : simdgroup_half8x8
-        var ma2 : simdgroup_half8x8
-        var ma3 : simdgroup_half8x8
-        var mb0 : simdgroup_half8x8
-        var mb1 : simdgroup_half8x8
+        var ma0, ma1, ma2, ma3, mb0, mb1 : simdgroup_half8x8
         var kb = 0u
         while (kb < nkb) {
             // device reads first — they fly while the previous math loop drains
@@ -2340,14 +2075,7 @@ class MetalGemmLabGgmlGeoF32X {
         let sg = gl_SubgroupID
         let mBase = gl_WorkGroupID.x * 32u  // token rows — FAST axis: concurrent tgs share the W panel
         let nBase = gl_WorkGroupID.y * 64u  // output (weight) rows
-        var c00 : simdgroup_float8x8
-        var c01 : simdgroup_float8x8
-        var c02 : simdgroup_float8x8
-        var c03 : simdgroup_float8x8
-        var c10 : simdgroup_float8x8
-        var c11 : simdgroup_float8x8
-        var c12 : simdgroup_float8x8
-        var c13 : simdgroup_float8x8
+        var c00, c01, c02, c03, c10, c11, c12, c13 : simdgroup_float8x8
         let kdim4 = kdim / 4u
         let nkb = kdim / 32u
         // A split: each thread stages 16 weight elems — row lr0, k half il0
@@ -2363,12 +2091,7 @@ class MetalGemmLabGgmlGeoF32X {
         let ibB = ((lid % 4u) * 4u + lr1 / 8u) * 64u + (lr1 % 8u) * 8u
         let aB = (sg % 2u) * 256u           // this simdgroup's A quadrant: 4 row-tiles of 64
         let bB = (sg / 2u) * 128u           // this simdgroup's B quadrant: 2 token-tiles of 64
-        var ma0 : simdgroup_half8x8
-        var ma1 : simdgroup_half8x8
-        var ma2 : simdgroup_half8x8
-        var ma3 : simdgroup_half8x8
-        var mb0 : simdgroup_half8x8
-        var mb1 : simdgroup_half8x8
+        var ma0, ma1, ma2, ma3, mb0, mb1 : simdgroup_half8x8
         var kb = 0u
         while (kb < nkb) {
             // device reads first — they fly while the previous math loop drains
@@ -2495,14 +2218,7 @@ class MetalGemmLabGgmlGeoNoScale {
         let sg = gl_SubgroupID
         let mBase = gl_WorkGroupID.x * 32u  // token rows — FAST axis: concurrent tgs share the W panel
         let nBase = gl_WorkGroupID.y * 64u  // output (weight) rows
-        var c00 : simdgroup_float8x8
-        var c01 : simdgroup_float8x8
-        var c02 : simdgroup_float8x8
-        var c03 : simdgroup_float8x8
-        var c10 : simdgroup_float8x8
-        var c11 : simdgroup_float8x8
-        var c12 : simdgroup_float8x8
-        var c13 : simdgroup_float8x8
+        var c00, c01, c02, c03, c10, c11, c12, c13 : simdgroup_float8x8
         let kdim4 = kdim / 4u
         let nkb = kdim / 32u
         // A split: each thread stages 16 weight elems — row lr0, k half il0
@@ -2518,12 +2234,7 @@ class MetalGemmLabGgmlGeoNoScale {
         let ibB = ((lid % 4u) * 4u + lr1 / 8u) * 64u + (lr1 % 8u) * 8u
         let aB = (sg % 2u) * 256u           // this simdgroup's A quadrant: 4 row-tiles of 64
         let bB = (sg / 2u) * 128u           // this simdgroup's B quadrant: 2 token-tiles of 64
-        var ma0 : simdgroup_half8x8
-        var ma1 : simdgroup_half8x8
-        var ma2 : simdgroup_half8x8
-        var ma3 : simdgroup_half8x8
-        var mb0 : simdgroup_half8x8
-        var mb1 : simdgroup_half8x8
+        var ma0, ma1, ma2, ma3, mb0, mb1 : simdgroup_half8x8
         var kb = 0u
         while (kb < nkb) {
             // device reads first — they fly while the previous math loop drains
@@ -2653,14 +2364,7 @@ class MetalGemmLabGgmlGeoScT {
         let sg = gl_SubgroupID
         let mBase = gl_WorkGroupID.x * 32u  // token rows — FAST axis: concurrent tgs share the W panel
         let nBase = gl_WorkGroupID.y * 64u  // output (weight) rows
-        var c00 : simdgroup_float8x8
-        var c01 : simdgroup_float8x8
-        var c02 : simdgroup_float8x8
-        var c03 : simdgroup_float8x8
-        var c10 : simdgroup_float8x8
-        var c11 : simdgroup_float8x8
-        var c12 : simdgroup_float8x8
-        var c13 : simdgroup_float8x8
+        var c00, c01, c02, c03, c10, c11, c12, c13 : simdgroup_float8x8
         let kdim4 = kdim / 4u
         let nkb = kdim / 32u
         // A split: each thread stages 16 weight elems — row lr0, k half il0
@@ -2676,12 +2380,7 @@ class MetalGemmLabGgmlGeoScT {
         let ibB = ((lid % 4u) * 4u + lr1 / 8u) * 64u + (lr1 % 8u) * 8u
         let aB = (sg % 2u) * 256u           // this simdgroup's A quadrant: 4 row-tiles of 64
         let bB = (sg / 2u) * 128u           // this simdgroup's B quadrant: 2 token-tiles of 64
-        var ma0 : simdgroup_half8x8
-        var ma1 : simdgroup_half8x8
-        var ma2 : simdgroup_half8x8
-        var ma3 : simdgroup_half8x8
-        var mb0 : simdgroup_half8x8
-        var mb1 : simdgroup_half8x8
+        var ma0, ma1, ma2, ma3, mb0, mb1 : simdgroup_half8x8
         var kb = 0u
         while (kb < nkb) {
             // device reads first — they fly while the previous math loop drains
@@ -2811,14 +2510,7 @@ class MetalGemmLabBlob36 {
         let sg = gl_SubgroupID
         let mBase = gl_WorkGroupID.x * 32u  // token rows — FAST axis: concurrent tgs share the W panel
         let nBase = gl_WorkGroupID.y * 64u  // output (weight) rows
-        var c00 : simdgroup_float8x8
-        var c01 : simdgroup_float8x8
-        var c02 : simdgroup_float8x8
-        var c03 : simdgroup_float8x8
-        var c10 : simdgroup_float8x8
-        var c11 : simdgroup_float8x8
-        var c12 : simdgroup_float8x8
-        var c13 : simdgroup_float8x8
+        var c00, c01, c02, c03, c10, c11, c12, c13 : simdgroup_float8x8
         let kdim4 = kdim / 4u
         let nkb = kdim / 32u
         // A split: each thread stages 16 weight elems — row lr0, k half il0
@@ -2834,12 +2526,7 @@ class MetalGemmLabBlob36 {
         let ibB = ((lid % 4u) * 4u + lr1 / 8u) * 64u + (lr1 % 8u) * 8u
         let aB = (sg % 2u) * 256u           // this simdgroup's A quadrant: 4 row-tiles of 64
         let bB = (sg / 2u) * 128u           // this simdgroup's B quadrant: 2 token-tiles of 64
-        var ma0 : simdgroup_half8x8
-        var ma1 : simdgroup_half8x8
-        var ma2 : simdgroup_half8x8
-        var ma3 : simdgroup_half8x8
-        var mb0 : simdgroup_half8x8
-        var mb1 : simdgroup_half8x8
+        var ma0, ma1, ma2, ma3, mb0, mb1 : simdgroup_half8x8
         var kb = 0u
         while (kb < nkb) {
             // device reads first — they fly while the previous math loop drains
@@ -2971,14 +2658,7 @@ class MetalGemmLabBlob34 {
         let sg = gl_SubgroupID
         let mBase = gl_WorkGroupID.x * 32u  // token rows — FAST axis: concurrent tgs share the W panel
         let nBase = gl_WorkGroupID.y * 64u  // output (weight) rows
-        var c00 : simdgroup_float8x8
-        var c01 : simdgroup_float8x8
-        var c02 : simdgroup_float8x8
-        var c03 : simdgroup_float8x8
-        var c10 : simdgroup_float8x8
-        var c11 : simdgroup_float8x8
-        var c12 : simdgroup_float8x8
-        var c13 : simdgroup_float8x8
+        var c00, c01, c02, c03, c10, c11, c12, c13 : simdgroup_float8x8
         let kdim4 = kdim / 4u
         let nkb = kdim / 32u
         // A split: each thread stages 16 weight elems — row lr0, k half il0
@@ -2994,12 +2674,7 @@ class MetalGemmLabBlob34 {
         let ibB = ((lid % 4u) * 4u + lr1 / 8u) * 64u + (lr1 % 8u) * 8u
         let aB = (sg % 2u) * 256u           // this simdgroup's A quadrant: 4 row-tiles of 64
         let bB = (sg / 2u) * 128u           // this simdgroup's B quadrant: 2 token-tiles of 64
-        var ma0 : simdgroup_half8x8
-        var ma1 : simdgroup_half8x8
-        var ma2 : simdgroup_half8x8
-        var ma3 : simdgroup_half8x8
-        var mb0 : simdgroup_half8x8
-        var mb1 : simdgroup_half8x8
+        var ma0, ma1, ma2, ma3, mb0, mb1 : simdgroup_half8x8
         var kb = 0u
         while (kb < nkb) {
             // device reads first — they fly while the previous math loop drains
@@ -3136,14 +2811,7 @@ class MetalGemmLabGgmlGeoAOnly {
         let sg = gl_SubgroupID
         let mBase = gl_WorkGroupID.x * 32u  // token rows — FAST axis: concurrent tgs share the W panel
         let nBase = gl_WorkGroupID.y * 64u  // output (weight) rows
-        var c00 : simdgroup_float8x8
-        var c01 : simdgroup_float8x8
-        var c02 : simdgroup_float8x8
-        var c03 : simdgroup_float8x8
-        var c10 : simdgroup_float8x8
-        var c11 : simdgroup_float8x8
-        var c12 : simdgroup_float8x8
-        var c13 : simdgroup_float8x8
+        var c00, c01, c02, c03, c10, c11, c12, c13 : simdgroup_float8x8
         let kdim4 = kdim / 4u
         let nkb = kdim / 32u
         // A split: each thread stages 16 weight elems — row lr0, k half il0
@@ -3156,12 +2824,7 @@ class MetalGemmLabGgmlGeoAOnly {
         // B split: each thread stages 8 activation elems — token lr1, k offset iy
         let aB = (sg % 2u) * 256u           // this simdgroup's A quadrant: 4 row-tiles of 64
         let bB = (sg / 2u) * 128u           // this simdgroup's B quadrant: 2 token-tiles of 64
-        var ma0 : simdgroup_half8x8
-        var ma1 : simdgroup_half8x8
-        var ma2 : simdgroup_half8x8
-        var ma3 : simdgroup_half8x8
-        var mb0 : simdgroup_half8x8
-        var mb1 : simdgroup_half8x8
+        var ma0, ma1, ma2, ma3, mb0, mb1 : simdgroup_half8x8
         var kb = 0u
         while (kb < nkb) {
             // device reads first — they fly while the previous math loop drains
@@ -3283,14 +2946,7 @@ class MetalGemmLabGgmlGeoBOnly {
         let sg = gl_SubgroupID
         let mBase = gl_WorkGroupID.x * 32u  // token rows — FAST axis: concurrent tgs share the W panel
         let nBase = gl_WorkGroupID.y * 64u  // output (weight) rows
-        var c00 : simdgroup_float8x8
-        var c01 : simdgroup_float8x8
-        var c02 : simdgroup_float8x8
-        var c03 : simdgroup_float8x8
-        var c10 : simdgroup_float8x8
-        var c11 : simdgroup_float8x8
-        var c12 : simdgroup_float8x8
-        var c13 : simdgroup_float8x8
+        var c00, c01, c02, c03, c10, c11, c12, c13 : simdgroup_float8x8
         let kdim4 = kdim / 4u
         let nkb = kdim / 32u
         // A split: each thread stages 16 weight elems — row lr0, k half il0
@@ -3300,12 +2956,7 @@ class MetalGemmLabGgmlGeoBOnly {
         let ibB = ((lid % 4u) * 4u + lr1 / 8u) * 64u + (lr1 % 8u) * 8u
         let aB = (sg % 2u) * 256u           // this simdgroup's A quadrant: 4 row-tiles of 64
         let bB = (sg / 2u) * 128u           // this simdgroup's B quadrant: 2 token-tiles of 64
-        var ma0 : simdgroup_half8x8
-        var ma1 : simdgroup_half8x8
-        var ma2 : simdgroup_half8x8
-        var ma3 : simdgroup_half8x8
-        var mb0 : simdgroup_half8x8
-        var mb1 : simdgroup_half8x8
+        var ma0, ma1, ma2, ma3, mb0, mb1 : simdgroup_half8x8
         var kb = 0u
         while (kb < nkb) {
             // device reads first — they fly while the previous math loop drains
@@ -3410,23 +3061,11 @@ class MetalGemmLabGgmlGeoNoStage {
         let sg = gl_SubgroupID
         let mBase = gl_WorkGroupID.x * 32u
         let nBase = gl_WorkGroupID.y * 64u
-        var c00 : simdgroup_float8x8
-        var c01 : simdgroup_float8x8
-        var c02 : simdgroup_float8x8
-        var c03 : simdgroup_float8x8
-        var c10 : simdgroup_float8x8
-        var c11 : simdgroup_float8x8
-        var c12 : simdgroup_float8x8
-        var c13 : simdgroup_float8x8
+        var c00, c01, c02, c03, c10, c11, c12, c13 : simdgroup_float8x8
         let nkb = kdim / 32u
         let aB = (sg % 2u) * 256u
         let bB = (sg / 2u) * 128u
-        var ma0 : simdgroup_half8x8
-        var ma1 : simdgroup_half8x8
-        var ma2 : simdgroup_half8x8
-        var ma3 : simdgroup_half8x8
-        var mb0 : simdgroup_half8x8
-        var mb1 : simdgroup_half8x8
+        var ma0, ma1, ma2, ma3, mb0, mb1 : simdgroup_half8x8
         var kb = 0u
         while (kb < nkb) {
             barrier()
@@ -4093,9 +3732,7 @@ def private time_reps(queue; pso; bufs; groups : uint3; threads : uint; reps : i
     return gpu_ms / double(reps)
 }
 
-def private want(filter, name : string) : bool {
-    return empty(filter) || find(filter, name) >= 0
-}
+def private want(filter, name : string) : bool => empty(filter) || find(filter, name) >= 0
 
 def private run_lab(b : B?; variants) {
     let ntok = g_env_bench.bench_ntok ?? 512l

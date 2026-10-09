@@ -24,6 +24,8 @@ require strings
 // The cached twin: production's body with the per-kb scalar reload replaced by the hoisted
 // sv/dall + js==0 guard (blk changes every 8th kb) — the pre-merge production form.
 class LabKqK6Cached : MetalMmTileBase {
+    typedef TILET = float16
+    typedef SGT = simdgroup_half8x8
     @ssbo @binding = 0 @role = "weight" kdh : array<float16>
     @ssbo @binding = 1 @role = "weight" ksc : array<uint4>
     @ssbo @binding = 2 @role = "weight" kqu : array<uint>
@@ -171,8 +173,7 @@ def private main_apple(dummy) {
         let d = sh._2
         let nb = n / 256
         let nsb = d * nb
-        var kq : array<uint8>
-        var ks : array<uint8>
+        var kq, ks : array<uint8>
         kq_fill_planes(6, nsb, kq, ks)
         var xf : array<float>
         xf |> resize(m * n)
@@ -218,8 +219,7 @@ def private main_apple(dummy) {
         let mac_mm = double(m) * double(n) * double(d)
         var best_a = 1e30lf
         var best_b = 1e30lf
-        var rows_a : array<int>
-        var rows_b : array<int>
+        var rows_a, rows_b : array<int>
         rows_a |> reserve(LAB_ROUNDS)
         rows_b |> reserve(LAB_ROUNDS)
         for (_round in range(LAB_ROUNDS)) {

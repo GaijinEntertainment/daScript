@@ -739,9 +739,7 @@ def private add_single(var e : SingleLayerEnc; enc : MetalComputeEncoder?; bg : 
 
 //! the single row's expert args: one shared activation row, no stream strides
 [unused_argument(e, down)]
-def private moe_args_single(var e : SingleLayerEnc; ndim, ddim, eplane, xs, hasb : uint; down : bool) : MoeGemvArgs {
-    return MoeGemvArgs(ndim = ndim, ddim = ddim, eplane = eplane, xs = xs, ss = 0u, bxs = 0u, bys = 0u, hasb = hasb)
-}
+def private moe_args_single(var e : SingleLayerEnc; ndim, ddim, eplane, xs, hasb : uint; down : bool) : MoeGemvArgs => MoeGemvArgs(ndim = ndim, ddim = ddim, eplane = eplane, xs = xs, ss = 0u, bxs = 0u, bys = 0u, hasb = hasb)
 
 //! the single row's rope + KV store: the codec's form over the mirror's byte offsets
 def private rope_store_single(var e : SingleLayerEnc; t : Model; enc : MetalComputeEncoder?; l : int64; het, kvsh : bool;
@@ -1672,9 +1670,7 @@ def metal_mtp_draft_forward(t : Model; var s : Session; token, pos : int64; seam
 //! forward_mtp(..., false)'s GPU twin — the continuation-window SEAM: write the draft head's
 //! KV row pos-1 from (embed(token), the pre-window mtp_h) without touching logits or mtp_h.
 [hot_path]
-def metal_mtp_seam_row(t : Model; var s : Session; token, pos : int64) : bool {
-    return metal_mtp_draft_forward(t, s, token, pos, true)
-}
+def metal_mtp_seam_row(t : Model; var s : Session; token, pos : int64) : bool => metal_mtp_draft_forward(t, s, token, pos, true)
 
 // ===== MTP B=2 same-slab verify (the spec step's trunk forward) =====
 
@@ -3168,7 +3164,7 @@ def metal_decode_forward(t : Model; var s : Session; token, pos : int64) : bool 
         // verify the GPU's greedy pick against the caller's actual token — a miss means this whole
         // step ran on the wrong embedding: drop the chained pre-step and rerun (the garbage KV row
         // sits at/above the rewound watermark, so mirror_prepare's re-upload repairs it).
-        var tokp = unsafe(reinterpret<uint?>(metal_buffer_contents(r.btok)))
+        let tokp = unsafe(reinterpret<uint?>(metal_buffer_contents(r.btok)))
         let picked = int64(unsafe(tokp[0]))
         if (picked != token) {
             g_spec_misses++
@@ -4022,8 +4018,7 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
     var u_fltot = u_flcap != null ? uniform_u32(uint(nrows * c.vocab_size)) : null
     // suppressed token ids pin to -1e30 after the cap (gemma4) — per live row, the CPU order
     let nsupp = long_length(t.suppress)
-    var bsupp : MetalBuffer?
-    var u_nsupp : MetalBuffer?
+    var bsupp, u_nsupp : MetalBuffer?
     if (gpu_logits && nsupp > 0l) {
         bsupp = pool_acquire_untracked(g_upool, g_dev, uint64(nsupp * 4l))
         unsafe {

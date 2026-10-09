@@ -101,9 +101,7 @@ def private run_ew_lab(b) {   // nolint:STYLE038 — flat lab driver: buffers bo
         metal_release(dev)
         return
     }
-    var x0 : array<float>
-    var aa : array<float>
-    var w : array<float>
+    var x0, aa, w : array<float>
     x0 |> resize(int(nb * dim))
     aa |> resize(int(nb * dim))
     w |> resize(int(dim))
@@ -114,8 +112,7 @@ def private run_ew_lab(b) {   // nolint:STYLE038 — flat lab driver: buffers bo
     for (i in range64(dim)) {
         w[i] = 1.0 + float(int(i % 5l) - 2) * 0.1
     }
-    var gg : array<float>
-    var uu : array<float>
+    var gg, uu : array<float>
     gg |> resize(int(nb * hidden))
     uu |> resize(int(nb * hidden))
     for (i in range64(nb * hidden)) {

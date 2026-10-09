@@ -919,9 +919,7 @@ def test_whisper_metal_wdec_flush(t : T?) {
             let batch <- [for (i in range(33)); m.whisper.tok_sot + i]   // one past the step's cap, the first batch of a window
             var batch_moved := batch
             batch_moved[length(batch_moved) - 1]++
-            var cpu_logits : array<float>
-            var cpu_moved : array<float>
-            var dev_logits : array<float>
+            var cpu_logits, cpu_moved, dev_logits : array<float>
             with_dasllama_jobque_() {
                 set_metal_wdec(false)
                 var inscope sc <- create_session(m)

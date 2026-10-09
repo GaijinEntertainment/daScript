@@ -487,7 +487,7 @@ def private cpu_ref(blob : array<int8>; xf : array<float>; var want : array<floa
                 var acc = 0.0lf
                 for (b in range(nb)) {
                     let blk = j * nb + b
-                    var ph = reinterpret<float16?>(p8 + blk * 34)
+                    let ph = reinterpret<float16?>(p8 + blk * 34)
                     let d = double(float(ph[0]))
                     for (k in range(32)) {
                         acc += d * double(int(blob[blk * 34 + 2 + k])) * double(xf[r * kdim + b * 32 + k])
@@ -690,7 +690,7 @@ def main {   // nolint:STYLE038,STYLE037 — one-shot probe harness; buffers + P
             print("K={kdim} N={ndim}: q8u={t_q8u}ms nax={t_nax}ms ratio={t_nax / t_q8u} {verdict}\n")
             // spot CPU truth on a corner slab (full oracle is O(m*k*n) — 64 rows suffice)
             if (kdim == 2048 && ndim == 2048) {
-                var want : array<float>
+                var inscope want : array<float>
                 want |> resize(64 * ndim)
                 cpu_ref(blob, xf, want, 64, kdim, ndim)
                 var bad = 0

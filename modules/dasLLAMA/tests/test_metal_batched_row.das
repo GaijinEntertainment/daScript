@@ -293,8 +293,7 @@ def test_metal_batched_row_mtp_depth2(t : T?) {
                 var prompt <- encode(tr, "Count from one to twenty: one, two, three,", true, false)
                 let total = long_length(prompt) - 1l + 24l
                 var toks : array<array<int64>>
-                var drafted : array<int64>
-                var accepted : array<int64>
+                var drafted, accepted : array<int64>
                 for (k in range64(1l, 3l)) {   //! the scheduler's round is depth 1 by contract; the depth-k entry is the greedy walk's
                     set_mtp_depth(k)
                     var s = make_run_state(tr.config, KVDtype.f16, KVDtype.f16)

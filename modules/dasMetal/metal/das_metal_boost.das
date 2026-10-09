@@ -264,9 +264,8 @@ def public submit_trace_log(cb : MetalCommandBuffer?; gpu_ms, encode_ms : double
 //! The 4-out twin: also reports the host-side ENCODE time — the CPU cost of building the command
 //! buffer, measured from block entry through end_encoding (captured just before commit) — for the
 //! encode-CPU vs GPU-window split. The metal_commit hand-off itself falls in neither number.
-def public with_compute_encoder_timed(queue : MetalCommandQueue?; var error : string&; var gpu_ms : double&; var encode_ms : double&; blk : block<(enc : MetalComputeEncoder?) : void>) : bool {
-    return with_compute_encoder_timed(queue, error, gpu_ms, encode_ms, false, blk)
-}
+def public with_compute_encoder_timed(queue : MetalCommandQueue?; var error : string&; var gpu_ms : double&; var encode_ms : double&; blk : block<(enc : MetalComputeEncoder?) : void>) : bool =>
+    with_compute_encoder_timed(queue, error, gpu_ms, encode_ms, false, blk)
 
 //! The concurrent-dispatch twin: `concurrent` opens the encoder with concurrent dispatch, where the caller
 //! sequences its own hazards.

@@ -7711,7 +7711,7 @@ def private moe_sched_arm(t : T?) {
 //! through the slot map, then the next norm - the f32 and the f16 normed-row forms against one CPU
 //! oracle; `with_sh` = the layer has a shared expert (its rows ride the add partner)
 //! `dbias` = each slot's row takes its expert's down bias before its weight (gpt-oss), the slot -> expert map from a six-expert plane
-def private moe_ar_comb_arm(t : T?; gated, with_sh, dbias : bool) {   // nolint:STYLE037 — one arm: the fixture, both forms' dispatches, the oracle, the compares
+def private moe_ar_comb_arm(t : T?; gated, with_sh, dbias : bool) {   // nolint:STYLE037,LINT019 — one arm: the fixture, both forms' dispatches, the oracle, the compares
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let n = 64
         let k = dbias ? 12 : 3   //! twelve slots on the biased arm: the row pass's eight-slot register form and its tail past them

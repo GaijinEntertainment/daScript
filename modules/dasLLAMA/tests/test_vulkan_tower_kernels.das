@@ -222,13 +222,13 @@ def private wdec_fused_rq_shape(t : T?; d, rows, nch : int) {   // nolint:STYLE0
             var s_comb = cp |> cls_set(fixed_array(pmsp, pyp, ycp), @@set_tower_wdec_attn_comb_cls)
             var s_rq4 = cp |> cls_set(fixed_array(ycp, qp[6], sp[6]), @@set_tower_clamp_rq_cls)
             var s_combrq = cp |> cls_set(fixed_array(pmsp, pyp, qp[7], sp[7]), @@set_tower_wdec_attn_comb_rq_cls)
-            var pa_ln = GkPostAddLnArgs(d = uint(d), rows = uint(rows), eps = ROWS_EPS, ln_on = 1u, lnoff = 0u, lnboff = uint(d), xboff = 0u)   // nolint:LINT003 - the encoders take the push block by value, and the lambda below captures it
-            var pa_rq = RqArgs(inbase = 0u, nblk = uint(nd / q8e), lo = -3.0e38, hi = 3.0e38)   // nolint:LINT003 - the same
-            var pa_rqh = RqArgs(inbase = 0u, nblk = uint(nff / q8e), lo = -3.0e38, hi = 3.0e38)   // nolint:LINT003 - the same
-            var pa_post = GkPostAddLnArgs(d = uint(d), rows = uint(rows), boff = uint(2 * d), eps = ROWS_EPS, ln_on = 1u, lnoff = uint(3 * d), lnboff = uint(4 * d), ascale = 1.0, xboff = 0u)   // nolint:LINT003 - the same
-            var pa_bias = GkBiasActArgs(d = uint(ff), nelem = uint(nff), boff = uint(5 * d), act = BIAS_ACT_GELU_TANH)   // nolint:LINT003 - the same
-            var pa_biasrq = TowerBiasRqArgs(d = uint(ff), nblk = uint(nff / q8e), boff = uint(5 * d))   // nolint:LINT003 - the same
-            var pa_c = GkWdecCombArgs(dim = uint(d), nchunks = uint(nch), nheads = uint(heads), nrows = uint(rows), hs = WDEC_HS)   // nolint:LINT003 - the same
+            var pa_ln = GkPostAddLnArgs(d = uint(d), rows = uint(rows), eps = ROWS_EPS, ln_on = 1u, lnoff = 0u, lnboff = uint(d), xboff = 0u)   // nolint:LINT003,LINT019 - the encoders take the push block by value, and the lambda below captures it
+            var pa_rq = RqArgs(inbase = 0u, nblk = uint(nd / q8e), lo = -3.0e38, hi = 3.0e38)   // nolint:LINT003,LINT019 - the same
+            var pa_rqh = RqArgs(inbase = 0u, nblk = uint(nff / q8e), lo = -3.0e38, hi = 3.0e38)   // nolint:LINT003,LINT019 - the same
+            var pa_post = GkPostAddLnArgs(d = uint(d), rows = uint(rows), boff = uint(2 * d), eps = ROWS_EPS, ln_on = 1u, lnoff = uint(3 * d), lnboff = uint(4 * d), ascale = 1.0, xboff = 0u)   // nolint:LINT003,LINT019 - the same
+            var pa_bias = GkBiasActArgs(d = uint(ff), nelem = uint(nff), boff = uint(5 * d), act = BIAS_ACT_GELU_TANH)   // nolint:LINT003,LINT019 - the same
+            var pa_biasrq = TowerBiasRqArgs(d = uint(ff), nblk = uint(nff / q8e), boff = uint(5 * d))   // nolint:LINT003,LINT019 - the same
+            var pa_c = GkWdecCombArgs(dim = uint(d), nchunks = uint(nch), nheads = uint(heads), nrows = uint(rows), hs = WDEC_HS)   // nolint:LINT003,LINT019 - the same
             let wg4 = int64((nd / 4 + 255) / 256)
             let wg4h = int64((nff / 4 + 255) / 256)
             let wg_comb = int64(heads * rows)

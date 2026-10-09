@@ -798,8 +798,8 @@ class template MetalSqAttnCombT {
         let h = wg % nheads
         let bb = wg / nheads
         let lid = gl_LocalInvocationID.x
-        var nch = nchmax     // nolint:LINT003,LINT010 — the single stamp reads these inits, the
-        var chlo = ka.chlo   // nolint:LINT003,LINT010 — BATCHED stamp overwrites them in its arm
+        var nch = nchmax     // nolint:LINT003,LINT010,LINT019 — the single stamp reads these inits, the
+        var chlo = ka.chlo   // nolint:LINT003,LINT010,LINT019 — BATCHED stamp overwrites them in its arm
         static_if (BATCHED) {
             // holes past a shallow row's last chunk are never read; sliding layers skip the
             // row's below-window chunks
@@ -1117,8 +1117,8 @@ class template MetalArgmaxT {
     def argmax_row {
         let lid = gl_LocalInvocationID.x
         let nt = gl_WorkGroupSize.x
-        var base = 0u    // nolint:LINT003,LINT010 — the single stamp reads these inits, the
-        var slot = 0u    // nolint:LINT003,LINT010 — PER_ROW stamp overwrites them in its arm
+        var base = 0u    // nolint:LINT003,LINT010,LINT019 — the single stamp reads these inits, the
+        var slot = 0u    // nolint:LINT003,LINT010,LINT019 — PER_ROW stamp overwrites them in its arm
         static_if (PER_ROW) {
             let row = gl_WorkGroupID.x
             base = row * n
@@ -2115,7 +2115,7 @@ class template MetalQ8GemmBSplitT {
     @template_constant IS_SK : bool = false
 
     [metal_kernel]
-    def metal_q8_gemm_b {   // nolint:STYLE038 — MSL kernel body; the staging tiles are barrier coupled
+    def metal_q8_gemm_b {
         let lid = gl_LocalInvocationID.x
         let sg = gl_SubgroupID
         let ntileN = ka.ndim / 32u
@@ -2250,9 +2250,9 @@ class template MetalQ8GemmTensorT {
         let mBase = (gl_WorkGroupID.x / ntileN) * 32u
         let nBase = (gl_WorkGroupID.x % ntileN) * TILE_N
         let nkb = ka.kdim / 32u
-        var sp = unsafe(addr(wsh[(IS_SK ? nBase * nkb + gl_WorkGroupID.y * (nkb / ka.ksplit) : nBase * nkb) * 17u]))
-        var wp = unsafe(addr(wqb[(IS_SK ? nBase * nkb + gl_WorkGroupID.y * (nkb / ka.ksplit) : nBase * nkb) * 34u + 2u]))
-        var ap = unsafe(addr(x[IS_SK ? mBase * ka.kdim + gl_WorkGroupID.y * (nkb / ka.ksplit) * 32u : mBase * ka.kdim]))
+        let sp = unsafe(addr(wsh[(IS_SK ? nBase * nkb + gl_WorkGroupID.y * (nkb / ka.ksplit) : nBase * nkb) * 17u]))
+        let wp = unsafe(addr(wqb[(IS_SK ? nBase * nkb + gl_WorkGroupID.y * (nkb / ka.ksplit) : nBase * nkb) * 34u + 2u]))
+        let ap = unsafe(addr(x[IS_SK ? mBase * ka.kdim + gl_WorkGroupID.y * (nkb / ka.ksplit) * 32u : mBase * ka.kdim]))
         var cp = unsafe(addr(y[IS_SK ? gl_WorkGroupID.y * 32u * ka.ndim + mBase * ka.ndim + nBase : (LDC_ND ? mBase * ka.ndim + nBase : mBase * ka.ys + nBase)]))
         tmm2d_q8u_f32(32u, TILE_N, 4u, twb, sp, wp, ap, ka.kdim, cp, LDC_ND ? ka.ndim : ka.ys,
             IS_SK ? (nkb / ka.ksplit) * 32u : ka.kdim, nkb, gl_LocalInvocationIndex)
@@ -4944,7 +4944,7 @@ def metal_tensor_race_decode : array<MetalTensorRaceResult> {
 //! A GEMV f4-slab twin race over the split-scale fixture: base (constant-table, rows/4) vs
 //! the f4-slab twin. Winner "tensor" = the twin takes the family crown.
 [arch(at="../ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md#kernel-race-fidelity")]
-def private race_gemv_f4_twin(dev : MetalDevice?; queue : MetalCommandQueue?; family : string;   // nolint:STYLE038 - one-shot A/B race harness; buffers + PSOs stay live to the release tail
+def private race_gemv_f4_twin(dev : MetalDevice?; queue : MetalCommandQueue?; family : string;
                               base_src, base_entry : string; base_fm : bool;
                               twin_src, twin_entry : string; twin_fm : bool; twin_tgmem : uint64;
                               qu_per_sb : int; base_gdiv, twin_gdiv : int) : MetalTensorRaceResult {
@@ -7421,7 +7421,7 @@ class template MetalKqMvShellT : MetalKqLaneMapsT {
 
     def accum_cols32(cx4, colbase, nb4 : uint; w : float4[8]; var sumf : float[NR]) {
         for [unroll_full] (b in range(NR)) {
-            var rowb = uint(b)    // nolint:LINT003 — the TILED stamp alone reassigns it
+            var rowb = uint(b)    // nolint:LINT003,LINT019 — the TILED stamp alone reassigns it
             static_if (TILED) {
                 rowb = colbase + uint(b)
             }
@@ -7437,7 +7437,7 @@ class template MetalKqMvShellT : MetalKqLaneMapsT {
 
     def accum_cols16(cx4, colbase, nb4 : uint; w : float[16]; var sumf : float[NR]) {
         for [unroll_full] (b in range(NR)) {
-            var rowb = uint(b)    // nolint:LINT003 — the TILED stamp alone reassigns it
+            var rowb = uint(b)    // nolint:LINT003,LINT019 — the TILED stamp alone reassigns it
             static_if (TILED) {
                 rowb = colbase + uint(b)
             }
@@ -9002,7 +9002,7 @@ class template MetalKqMvIq4T : MetalKqMvShellT {
         }
         let cx4 = sb * 64u + tx * 8u
         for [unroll_full] (b in range(NR)) {
-            var rowb = uint(b)    // nolint:LINT003 — the TILED stamp alone reassigns it
+            var rowb = uint(b)    // nolint:LINT003,LINT019 — the TILED stamp alone reassigns it
             static_if (TILED) {
                 rowb = colbase + uint(b)
             }
@@ -9434,7 +9434,7 @@ class template MetalKqMvB8K45T : MetalKqMvB8ShellT {
         let qp = unsafe(addr(kqu[blk * SB_UINTS + q4i * 8u + lo]))
         let hp = unsafe(addr(kqu[blk * SB_UINTS + 32u + lo]))
         var qv : uint[8]
-        var hq : uint[4]   // nolint:LINT002 dead in the QH=false stamp — no init, no dataflow
+        var hq : uint[4]   // nolint:LINT002,LINT019 dead in the QH=false stamp — no init, no dataflow
         for [unroll_full] (u in range(4)) {
             qv[u] = unsafe(qp[u])
             qv[4 + u] = unsafe(qp[16 + u])

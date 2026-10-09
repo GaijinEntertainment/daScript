@@ -675,7 +675,7 @@ def test_tmm2d_bk_shapes(t : T?) { // nolint:STYLE038 - one flat cell sweep over
                     let entry = deva ? tmm_deva72_msl_entry : (ci < 4 ? tmm_bk64_msl_entry : tmm_bk128_msl_entry)
                     let tgm = deva ? tmm_deva72_msl_tgmem : (ci < 4 ? tmm_bk64_msl_tgmem : tmm_bk128_msl_tgmem)
                     let kkv = cell_kk(ci)
-                    var dv : array<uint>
+                    var inscope dv : array<uint>
                     dv |> resize(2)
                     dv[0] = kkv
                     dv[1] = uint(LDWB)
@@ -696,7 +696,7 @@ def test_tmm2d_bk_shapes(t : T?) { // nolint:STYLE038 - one flat cell sweep over
                     let ran = run_compute_1d(queue, pso, bufs, tpg, tpg, rerr, tgm)
                     t |> success(ran, "dispatch {entry} kk={int(kkv)}: {rerr}")
                     if (ran) {
-                        var wref : array<float>
+                        var inscope wref : array<float>
                         wref |> resize(M * N)
                         for (i in range(M * N)) {
                             wref[i] = wants[ci * M * N + i]
@@ -925,10 +925,10 @@ def test_tmm2d_devab(t : T?) { // nolint:STYLE038 - both flavors x clean/poisone
                     let src = fl == 1 ? tmm_devabnt_msl : tmm_devab_msl
                     let entry = fl == 1 ? tmm_devabnt_msl_entry : tmm_devab_msl_entry
                     var bwh = buf_upload(dev, oracle.wh)
-                    let got <- devab_gpu(t, dev, queue, src, entry, bxah, bwh, bdims)
+                    var inscope got <- devab_gpu(t, dev, queue, src, entry, bxah, bwh, bdims)
                     metal_release(bwh)
                     var bwhp = buf_upload(dev, wh_poisoned[fl])
-                    let gotp <- devab_gpu(t, dev, queue, src, entry, bxah, bwhp, bdims)
+                    var inscope gotp <- devab_gpu(t, dev, queue, src, entry, bxah, bwhp, bdims)
                     metal_release(bwhp)
                     if (length(got) != M * N || length(gotp) != M * N) {
                         gpu_bad++

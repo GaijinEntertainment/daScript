@@ -301,14 +301,13 @@ def private batch_step_gate(t : T?; tr, trg : Model; nb : int; kdt : KVDtype; to
     static_if (typeinfo builtin_module_exists(das_metal)) {
         let c = tr.config
         let vocab = c.vocab_size
-        var sa : array<Session>
-        var sb : array<Session>
+        var sa, sb : array<Session>
         var served = 0l
         with_dasllama_jobque() {
             sa |> reserve(nb)
             sb |> reserve(nb)
             for (i in range(nb)) {
-                let prompt <- encode(tr, counting_prompt(1 + i, plen + 7 * i), true, false)
+                var inscope prompt <- encode(tr, counting_prompt(1 + i, plen + 7 * i), true, false)
                 sa |> emplace <| make_run_state(c, kdt, kdt)
                 sb |> emplace <| make_run_state(c, kdt, kdt)
                 eval_(tr, sa[i], prompt)
@@ -316,8 +315,7 @@ def private batch_step_gate(t : T?; tr, trg : Model; nb : int; kdt : KVDtype; to
             }
             var wsa <- create_batch_workspace_(tr)
             var wsb <- create_batch_workspace_(tr)
-            var sessa : array<Session?>
-            var sessb : array<Session?>
+            var sessa, sessb : array<Session?>
             var cur : array<int64>
             for (i in range(nb)) {
                 unsafe {
@@ -383,8 +381,7 @@ def private batch_ff_pair(tr, trg : Model; prompts : array<array<int64>>; nsteps
         let vocab = c.vocab_size
         let nb = length(prompts)
         with_dasllama_jobque() {
-            var sa : array<Session>
-            var sb : array<Session>
+            var sa, sb : array<Session>
             sa |> reserve(nb)
             sb |> reserve(nb)
             for (i in range(nb)) {

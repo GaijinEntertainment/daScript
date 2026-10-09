@@ -938,8 +938,7 @@ def private run_attn_b2_sidebyside(b) {
         return
     }
     // same exact-in-f16 fills as the single-kernel bench
-    var kc : array<float16>
-    var vc : array<float16>
+    var kc, vc : array<float16>
     kc |> resize(int(maxrows * kv_dim))
     vc |> resize(int(maxrows * kv_dim))
     for (i in range64(maxrows * kv_dim)) {
@@ -1148,12 +1147,10 @@ def private run_sq_attn(b) {   // untyped param = generic — non-Apple builds n
         return
     }
     // exact-in-f16 fills: small ints for K/V, small ints for q
-    var kf : array<float>
-    var vf : array<float>
+    var kf, vf : array<float>
     kf |> resize(int(maxrows * kv_dim))
     vf |> resize(int(maxrows * kv_dim))
-    var kc : array<float16>
-    var vc : array<float16>
+    var kc, vc : array<float16>
     kc |> resize(int(maxrows * kv_dim))
     vc |> resize(int(maxrows * kv_dim))
     for (i in range64(maxrows * kv_dim)) {
@@ -1171,12 +1168,10 @@ def private run_sq_attn(b) {   // untyped param = generic — non-Apple builds n
     // and give the correctness gate a dequantized-f32 oracle so codec error stays out of it
     let nblk_row = kv_dim / 32l
     let rowb = nblk_row * 34l
-    var k8 : array<uint8>
-    var v8 : array<uint8>
+    var k8, v8 : array<uint8>
     k8 |> resize(int(maxrows * rowb))
     v8 |> resize(int(maxrows * rowb))
-    var kdq : array<float>
-    var vdq : array<float>
+    var kdq, vdq : array<float>
     kdq |> resize(int(maxrows * kv_dim))
     vdq |> resize(int(maxrows * kv_dim))
     unsafe {
@@ -1207,12 +1202,10 @@ def private run_sq_attn(b) {   // untyped param = generic — non-Apple builds n
             }
         }
     }
-    var k4 : array<uint8>
-    var v4 : array<uint8>
+    var k4, v4 : array<uint8>
     k4 |> resize(int(maxrows * rowb4))
     v4 |> resize(int(maxrows * rowb4))
-    var kdq4 : array<float>
-    var vdq4 : array<float>
+    var kdq4, vdq4 : array<float>
     kdq4 |> resize(int(maxrows * kv_dim))
     vdq4 |> resize(int(maxrows * kv_dim))
     unsafe {

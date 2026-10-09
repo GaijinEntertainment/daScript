@@ -1121,8 +1121,7 @@ class MetalGemmV2Lab {
         let mBase = (gl_WorkGroupID.x / ntileN) * 32u
         let nBase = (gl_WorkGroupID.x % ntileN) * 32u
         var mc : simdgroup_float8x8[4]      // this simdgroup's 16x16 quadrant: 2 token x 2 wrow tiles
-        var ma : simdgroup_half8x8[2]
-        var mb : simdgroup_half8x8[2]
+        var ma, mb : simdgroup_half8x8[2]
         let kdim4 = ndim / 4u
         let nkb = ndim / 32u
         // staging split: thread handles row lr (0..31) x k-eighth il (0..3) — 8 elems of W AND X
@@ -1214,8 +1213,7 @@ class MetalGemmV2SkLab {
         let nBase = (gl_WorkGroupID.x % ntileN) * 32u
         let sl = gl_WorkGroupID.y
         var mc : simdgroup_float8x8[4]
-        var ma : simdgroup_half8x8[2]
-        var mb : simdgroup_half8x8[2]
+        var ma, mb : simdgroup_half8x8[2]
         let kdim4 = ndim / 4u
         let kbn = (ndim / 32u) / ksplit
         let kb0 = sl * kbn
@@ -1337,8 +1335,7 @@ class MetalKqLabLcppK4 {
         let ir = it % 4u
         let nb = ndim / 256u
         let first_row = (gl_WorkGroupID.x * 2u + gl_SubgroupID) * 2u
-        var yl : float[16]
-        var yh : float[16]
+        var yl, yh : float[16]
         var sumf : float[2]
         var ib = ix
         while (ib < nb) {
@@ -1369,8 +1366,7 @@ class MetalKqLabLcppK4 {
                 let q1b = gqu[qb + 1u]
                 let q2a = gqu[qb + 16u]
                 let q2b = gqu[qb + 17u]
-                var acc1 : float[4]
-                var acc2 : float[4]
+                var acc1, acc2 : float[4]
                 for [unroll_full] (i in range(4)) {
                     let sh = 16u * (uint(i) & 1u)
                     let q1 = ((i < 2 ? q1a : q1b) >> sh) & 0xFFFF
@@ -1425,8 +1421,7 @@ class MetalKqLabK4B1 {
         let ir = it % 4u
         let nb = ndim / 256u
         let first_row = (gl_WorkGroupID.x * 2u + gl_SubgroupID) * 2u
-        var yl : float[16]
-        var yh : float[16]
+        var yl, yh : float[16]
         var sumf : float[2]
         var ib = ix
         while (ib < nb) {
@@ -1457,8 +1452,7 @@ class MetalKqLabK4B1 {
                 let q1b = kqu[qb + 1u]
                 let q2a = kqu[qb + 16u]
                 let q2b = kqu[qb + 17u]
-                var acc1 : float[4]
-                var acc2 : float[4]
+                var acc1, acc2 : float[4]
                 for [unroll_full] (i in range(4)) {
                     let sh = 16u * (uint(i) & 1u)
                     let q1 = ((i < 2 ? q1a : q1b) >> sh) & 0xFFFF
@@ -1515,8 +1509,7 @@ class MetalKqLabK4B1C {
         let ir = it % 4u
         let nb = ndim / 256u
         let first_row = (gl_WorkGroupID.x * 2u + gl_SubgroupID) * 2u
-        var yl : float[16]
-        var yh : float[16]
+        var yl, yh : float[16]
         var sumf : float[2]
         var ib = ix
         while (ib < nb) {
@@ -1547,8 +1540,7 @@ class MetalKqLabK4B1C {
                 let q1b = kqu[qb + 1u]
                 let q2a = kqu[qb + 16u]
                 let q2b = kqu[qb + 17u]
-                var acc1 : float[4]
-                var acc2 : float[4]
+                var acc1, acc2 : float[4]
                 for [unroll_full] (i in range(4)) {
                     let sh = 16u * (uint(i) & 1u)
                     let q1 = ((i < 2 ? q1a : q1b) >> sh) & 0xFFFF
@@ -1608,8 +1600,7 @@ class MetalKqLabLcppK5 {
         let hm4 = hm2 << 4u
         let nb = ndim / 256u
         let first_row = gl_WorkGroupID.x * 2u + gl_SubgroupID
-        var yl : float[16]
-        var yh : float[16]
+        var yl, yh : float[16]
         var sumf = 0.0
         var ib = ix
         while (ib < nb) {
@@ -1636,8 +1627,7 @@ class MetalKqLabLcppK5 {
             let sc3 = ((hw4 >> 4u) & 0x0F0F) | ((hw2 & 0xC0C0) >> 2u)
             let qs0 = blk * 176u + 48u + iq * 32u + l0
             let qh0 = blk * 176u + 16u + l0
-            var acc1 : float[4]
-            var acc2 : float[4]
+            var acc1, acc2 : float[4]
             for [unroll_full] (l in range(8)) {
                 let q1 = uint(gqb[qs0 + uint(l)])
                 let q2 = uint(gqb[qs0 + 64u + uint(l)])
@@ -1693,8 +1683,7 @@ class MetalKqLabK5B1C {
         let hm4 = hm2 << 4u
         let nb = ndim / 256u
         let first_row = gl_WorkGroupID.x * 2u + gl_SubgroupID
-        var yl : float[16]
-        var yh : float[16]
+        var yl, yh : float[16]
         var sumf = 0.0
         var ib = ix
         while (ib < nb) {
@@ -1721,8 +1710,7 @@ class MetalKqLabK5B1C {
             let sc3 = ((hw4 >> 4u) & 0x0F0F) | ((hw2 & 0xC0C0) >> 2u)
             let qs0 = blk * 160u + iq * 32u + l0
             let qh0 = blk * 160u + 128u + l0
-            var acc1 : float[4]
-            var acc2 : float[4]
+            var acc1, acc2 : float[4]
             for [unroll_full] (l in range(8)) {
                 let q1 = uint(kqb[qs0 + uint(l)])
                 let q2 = uint(kqb[qs0 + 64u + uint(l)])
@@ -1776,8 +1764,7 @@ class MetalKqLabK5B1D {
         let hb0 = 2u * iq
         let nb = ndim / 256u
         let first_row = gl_WorkGroupID.x * 2u + gl_SubgroupID
-        var yl : float[16]
-        var yh : float[16]
+        var yl, yh : float[16]
         var sumf = 0.0
         var ib = ix
         while (ib < nb) {
@@ -1852,8 +1839,7 @@ class MetalKqLabK5B2R {
         let hb0 = 2u * iq
         let nb = ndim / 256u
         let first_row = (gl_WorkGroupID.x * 2u + gl_SubgroupID) * 2u
-        var yl : float[16]
-        var yh : float[16]
+        var yl, yh : float[16]
         var sumf : float[2]
         var ib = ix
         while (ib < nb) {
@@ -2188,8 +2174,7 @@ class MetalKqLabK4MvB2 {
             let dm = float(ksh[blk * 8u + 1u])
             for [unroll_full] (b in range(2)) {
                 let xb4 = uint(b) * (ndim / 4u) + yb / 4u
-                var acc : float[4]
-                var sy : float[4]
+                var acc, sy : float[4]
                 for [unroll_full] (q4 in range(4)) {
                     let qo4 = q4 == 0 ? 0u : (q4 == 1 ? 8u : (q4 == 2 ? 32u : 40u))
                     let va = x[xb4 + qo4]
@@ -2270,8 +2255,7 @@ class MetalKqLabK4MvB2Ctl {
             let dm = float(ksh[blk * 8u + 1u])
             for [unroll_full] (b in range(1)) {
                 let xb4 = uint(b) * (ndim / 4u) + yb / 4u
-                var acc : float[4]
-                var sy : float[4]
+                var acc, sy : float[4]
                 for [unroll_full] (q4 in range(4)) {
                     let qo4 = q4 == 0 ? 0u : (q4 == 1 ? 8u : (q4 == 2 ? 32u : 40u))
                     let va = x[xb4 + qo4]
@@ -2345,8 +2329,7 @@ class MetalKqLabK5MvB2 {
             let dm = float(ksh[blk * 8u + 1u])
             for [unroll_full] (b in range(2)) {
                 let xb4 = uint(b) * (ndim / 4u) + yb / 4u
-                var acc : float[4]
-                var sy : float[4]
+                var acc, sy : float[4]
                 for [unroll_full] (q4 in range(4)) {
                     let qo4 = q4 == 0 ? 0u : (q4 == 1 ? 8u : (q4 == 2 ? 32u : 40u))
                     let va = x[xb4 + qo4]
@@ -2562,10 +2545,10 @@ class template MetalKqLabK4Mm8T {
         let nb4 = ka.ndim / 4u
         let nrm1 = ka.nr - 1u
         let sgb = sg * rows_sg * 264u
-        let wbase = sgb + r * 264u   // nolint:LINT002 dead in the KO_DEQ stamp
+        let wbase = sgb + r * 264u   // nolint:LINT002,LINT019 dead in the KO_DEQ stamp
         var acc : simdgroup_float8x8[RT]   // nolint:LINT003 dead in the KO_MMA stamp
-        var ma : simdgroup_half8x8   // nolint:LINT002 dead in the KO_MMA stamp
-        var mb : simdgroup_half8x8   // nolint:LINT002 dead in the KO_MMA stamp
+        var ma : simdgroup_half8x8   // nolint:LINT002,LINT019 dead in the KO_MMA stamp
+        var mb : simdgroup_half8x8   // nolint:LINT002,LINT019 dead in the KO_MMA stamp
         var sb = 0u
         while (sb < nb) {
             barrier()
@@ -2585,7 +2568,7 @@ class template MetalKqLabK4Mm8T {
                 let hp = (tx % 4u) / 2u
                 let lo = (tx % 2u) * 4u
                 let nib = (tx % 4u) < 2u
-                let nsh = nib ? 0u : 4u   // nolint:LINT002 dead in the KO_DEQ stamp
+                let nsh = nib ? 0u : 4u   // nolint:LINT002,LINT019 dead in the KO_DEQ stamp
                 let jl = 2u * q4i + hp
                 let sy = (sv.y >> (8u * jl)) & 255u
                 let szv = (sv.z >> (8u * jl)) & 255u
@@ -2593,10 +2576,10 @@ class template MetalKqLabK4Mm8T {
                 for [unroll_full] (ch in range(2)) {
                     let sc = ch == 0 ? (sy & 63u) : ((sw & 0x0Fu) | ((sy >> 6u) << 4u))
                     let mn = ch == 0 ? (szv & 63u) : ((sw >> 4u) | ((szv >> 6u) << 4u))
-                    let dl = dd * float(sc)   // nolint:LINT002 dead in the KO_DEQ stamp
-                    let ml = dm * float(mn)   // nolint:LINT002 dead in the KO_DEQ stamp
-                    let qb = blk * 32u + (q4i + uint(ch) * 2u) * 8u + lo   // nolint:LINT002 dead in the KO_DEQ stamp
-                    let k0 = (q4i + uint(ch) * 2u) * 64u + (nib ? 0u : 32u) + lo * 4u   // nolint:LINT002 dead in the KO_DEQ stamp
+                    let dl = dd * float(sc)   // nolint:LINT002,LINT019 dead in the KO_DEQ stamp
+                    let ml = dm * float(mn)   // nolint:LINT002,LINT019 dead in the KO_DEQ stamp
+                    let qb = blk * 32u + (q4i + uint(ch) * 2u) * 8u + lo   // nolint:LINT002,LINT019 dead in the KO_DEQ stamp
+                    let k0 = (q4i + uint(ch) * 2u) * 64u + (nib ? 0u : 32u) + lo * 4u   // nolint:LINT002,LINT019 dead in the KO_DEQ stamp
                     static_if (!KO_DEQ) {
                         for [unroll_full] (u in range(4)) {
                             let qv = kqu[qb + uint(u)]
@@ -2773,7 +2756,7 @@ class MetalKqLabK4R2C2 {
     @uniform @binding = 6 ddim : uint
 
     [metal_kernel(name="lab_k4_r2c2_msl")]
-    def lab_k4_r2c2 {   // nolint:STYLE038 — the ext2 body written for two rows
+    def lab_k4_r2c2 {
         let lane = gl_SubgroupInvocationID
         let tx = lane % 8u
         let ty = lane / 8u
@@ -2815,8 +2798,7 @@ class MetalKqLabK4R2C2 {
                 let qoff = (q4i + uint(ch) * 2u) * 8u + lo
                 let qbA = blkA * 32u + qoff
                 let qbB = blkB * 32u + qoff
-                var wa : float[16]
-                var wb : float[16]
+                var wa, wb : float[16]
                 for [unroll_full] (u in range(4)) {
                     let qvA = kqu[qbA + uint(u)]
                     let qvB = kqu[qbB + uint(u)]
@@ -3641,8 +3623,7 @@ class MetalKqLabK6ExtV4 {
                 let ip = uint(ch)
                 let qb = blk * 48u + ip * 16u + qoff
                 let hb = blk * 48u + 32u + ip * 8u + o4
-                var qu : uint[4]
-                var hu : uint[4]
+                var qu, hu : uint[4]
                 for [unroll_full] (u in range(4)) {
                     qu[u] = kqu[qb + uint(u)]
                     hu[u] = kqu[hb + uint(u)]
@@ -3710,8 +3691,7 @@ class MetalKqLabK6ExtV8 {
                 let ip = uint(ch)
                 let qb = blk * 48u + ip * 16u + qoff
                 let hb = blk * 48u + 32u + ip * 8u + o4
-                var qu : uint[4]
-                var hu : uint[4]
+                var qu, hu : uint[4]
                 for [unroll_full] (u in range(4)) {
                     qu[u] = kqu[qb + uint(u)]
                     hu[u] = kqu[hb + uint(u)]
@@ -4931,9 +4911,7 @@ def private time_reps_sk(queue; pso_g; bufs_g; groups_g : uint3; tgmem : uint64;
     return gpu_ms / double(reps)
 }
 
-def private want(filter, name : string) : bool {
-    return empty(filter) || find(filter, name) >= 0
-}
+def private want(filter, name : string) : bool => empty(filter) || find(filter, name) >= 0
 
 def private sk_idx(sv : int) : int => sv == 2 ? 0 : (sv == 4 ? 1 : 2)
 
@@ -5146,10 +5124,7 @@ def private run_lab(b : B?; variants) {   // nolint:STYLE037,STYLE038 — the la
         if (anyblob) {
             pack_q8_blob(wq, ws, d, n, wblob_h)
         }
-        var k4q_h : array<uint8>
-        var k4s_h : array<uint8>
-        var k4g_h : array<uint8>
-        var k4c_h : array<uint8>
+        var k4q_h, k4s_h, k4g_h, k4c_h : array<uint8>
         var yref_k4 : array<float>
         if (anyk4) {
             fill_exact_k4(k4q_h, k4s_h, k4g_h, d, n, 7l)
@@ -5163,18 +5138,13 @@ def private run_lab(b : B?; variants) {   // nolint:STYLE037,STYLE038 — the la
                 }
             }
         }
-        var k5q_h : array<uint8>
-        var k5c_h : array<uint8>
-        var k5g_h : array<uint8>
+        var k5q_h, k5c_h, k5g_h : array<uint8>
         var yref_k5 : array<float>
         if (anyk5) {
             fill_exact_k5(k5q_h, k5c_h, k5g_h, d, n, 9l)
             yref_k5 <- cpu_ref_k5(k5q_h, k5c_h, xf, n, bmax, refd)   // nolint:PERF030 — first write to the empty decl above
         }
-        var k6q_h : array<uint8>
-        var k6sc_h : array<uint8>
-        var k6d_h : array<uint8>
-        var k6g_h : array<uint8>
+        var k6q_h, k6sc_h, k6d_h, k6g_h : array<uint8>
         var yref_k6 : array<float>
         if (anyk6) {
             fill_exact_k6(k6q_h, k6sc_h, k6d_h, k6g_h, d, n, 11l)
@@ -5214,8 +5184,7 @@ def private run_lab(b : B?; variants) {   // nolint:STYLE037,STYLE038 — the la
         let groups_gemm = uint3(uint(d / 32l), 1u, 1u)   // (32/32 token tiles) x (d/32 output tiles)
         let groups_gemm64 = uint3(uint(d / 64l), 1u, 1u)
         // flattened (variant, B) runs — interleaved timing across ALL runs neutralizes drift
-        var run_v : array<int>
-        var run_b : array<int>
+        var run_v, run_b : array<int>
         run_v |> reserve(length(variants) * 5)
         run_b |> reserve(length(variants) * 5)
         for (v, idx in variants, count()) {
@@ -5228,8 +5197,7 @@ def private run_lab(b : B?; variants) {   // nolint:STYLE037,STYLE038 — the la
             }
         }
         var alive : array<bool>
-        var est_ms : array<double>
-        var best : array<double>
+        var est_ms, best : array<double>
         alive |> resize(length(run_v))
         est_ms |> resize(length(run_v))
         best |> resize(length(run_v))
