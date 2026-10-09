@@ -99,8 +99,13 @@ For example, this is how this lifetime cycle is implemented for the reader macro
 
     def add_new_reader_macro ( name:string; var someClassPtr ) {
         var ann = make_reader_macro(name, someClassPtr)
-        this_module() |> add_reader_macro(ann)
+        compiling_module() |> add_reader_macro(ann)
     }
+
+The ``add_new_*`` helpers register into ``compiling_module()``, the module being compiled when they run.
+From ``[_macro]`` that is the macro module itself.
+From an annotation's ``apply``, ``patch`` or ``visit``, it is the module that uses the annotation,
+so a macro registered there is visible in that module and in every module that requires it.
 
 ---------------------
 AstFunctionAnnotation
