@@ -6834,8 +6834,6 @@ The MATCH module implements pattern matching on variants, structs, tuples, array
 
 ### Call macros
 
-- `static_multi_match` - Implements `static_multi_match` macro.
-- `multi_match` - Implements `multi_match` macro.
 - `match` - Implements `match` macro.
 - `static_match` - Implements `static_match` macro.
 

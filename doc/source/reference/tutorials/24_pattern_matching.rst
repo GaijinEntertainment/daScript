@@ -124,18 +124,10 @@ Bool matching
       if (false) { return "no" }
   }
 
-multi_match and static_match
-=============================
+static_match
+============
 
-- ``multi_match`` — all matching arms execute (not just first)
 - ``static_match`` — silently drops type-mismatched arms (for generics)
-
-::
-
-  multi_match (n) {
-      if ($v(a) && a > 0) { tags += " positive" }
-      if ($v(a) && (a % 2 == 0)) { tags += " even" }
-  }
 
 .. seealso::
 

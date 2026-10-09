@@ -8,8 +8,6 @@ Arms are tried in source order and the first one that matches wins; a pattern
 that cannot apply to the subject type is a compile error. ``static_match``
 drops such arms silently instead of erroring, which is what makes it usable in
 generic code where only some arms apply per instantiation.
-``multi_match`` / ``static_multi_match`` run **every** matching arm instead of
-stopping at the first.
 
 See :ref:`tutorial_pattern_matching` for a hands-on tutorial.
 

@@ -209,7 +209,7 @@ def table_by_id(t : auto(T)) {
 
 ## Pattern matching
 
-`require daslib/match` adds `match`, `static_match`, `multi_match`, `static_multi_match` - macros
+`require daslib/match` adds `match` and `static_match` - macros
 matching a value against structural patterns, binding parts of it. Each arm is an `if (pattern)`;
 enum cases use the dotted `Color.Red` form.
 
@@ -247,9 +247,6 @@ def static_kind(what) : string {
     }
 }
 ```
-
-**`multi_match`** runs *every* matching arm instead of stopping at the first;
-`static_multi_match` is its type-tolerant form.
 
 Matching values of unrelated struct types requires opting the struct in: `[match_as_is]` plus
 user-defined `operator is` / `operator as`, or `[match_copy, safe_when_uninitialized]` plus a
