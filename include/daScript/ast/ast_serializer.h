@@ -365,7 +365,7 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 225;   // 225: a write through a pointer index marks modifyExternal - cached side-effect flags predate it
+            return 226;   // 226: CondFolding leaves an early-exit if unfolded when a label follows it
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;
