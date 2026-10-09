@@ -255,6 +255,8 @@ LINT001 — unreachable code
 Code after a ``return`` or ``panic()`` in the same block is unreachable and
 will never execute.
 
+``--fix`` deletes an unreachable statement that fills whole lines and holds no comment.
+
 .. das-doc: alt
 .. code-block:: das
 
@@ -268,6 +270,8 @@ LINT002 — unused variable
 
 A declared variable is never read. Prefix the name with an underscore
 (``_x``) to suppress the warning, or remove the variable entirely.
+
+``--fix`` prefixes the declared name with an underscore, unless the prefixed name is already spelled in the function.
 
 .. das-doc: alt
 .. code-block:: das
@@ -319,6 +323,8 @@ read, rename it without the underscore prefix. This applies to locals only —
 a ``_``-prefixed *argument* is never flagged (a parameter name is often
 constrained: intentionally unused, or dodging a reserved keyword / shadow such
 as ``_in``).
+
+``--fix`` renames the declaration and every read of it when those are all the name's spellings in the function (none in a comment or string) and the bare name is spelled nowhere in it.
 
 .. das-doc: alt
 .. code-block:: das
@@ -418,6 +424,8 @@ LINT008 — both ternary branches equivalent
 
 ``cond ? x : x`` ignores ``cond`` and always produces ``x``. Copy-paste bug.
 
+``--fix`` replaces the ternary with its branch when the condition has no side effects.
+
 .. das-doc: alt
 .. code-block:: das
 
@@ -433,6 +441,8 @@ LINT009 — ``then`` branch equivalent to ``else`` branch
 ``if (c) { A } else { A }`` runs ``A`` regardless of ``c``. Usually the author
 copy-pasted one branch and forgot to edit the other. Caught even when ``A``
 has side effects — the structural pattern is suspicious regardless of purity.
+
+``--fix`` replaces an ``if (c) {...} else {...}`` statement with its body when the condition has no side effects and the dropped ``else`` holds no comment - unwrapped, or kept as a bare block when it declares a variable.
 
 .. das-doc: alt
 .. code-block:: das
@@ -562,6 +572,8 @@ discarded ``static_if`` arm names counts as used: the module-gated shape
 (``static_if (typeinfo builtin_module_exists(x)) { ... } else { skip }``)
 stays clean on a box that lacks the module.
 
+``--fix`` prefixes the argument with an underscore on a private function only - another module can name a public function's arguments in a call - and only when the prefixed name is not already spelled in the function.
+
 .. das-doc: fragment
 .. code-block:: das
 
@@ -587,6 +599,8 @@ LINT013 — unused block argument
 The same check for the parameters of a block, lambda, or generator passed as
 a callback. Callbacks that ignore a parameter are common; suppress exactly as
 for LINT012.
+
+``--fix`` prefixes the argument with an underscore, unless the prefixed name is already spelled in the function.
 
 .. das-doc: alt
 .. code-block:: das
@@ -691,6 +705,8 @@ its pointer. Consequently,
 clone the character data when ``src`` is an ordinary ``string``; their clone
 spelling is misleading.
 
+``--fix`` rewrites ``:=`` to ``=`` and ``push_clone`` to ``push`` - the same-context spelling, which copies exactly what the clone spelling did.
+
 Use ordinary copy syntax for same-context storage, and make a cross-context
 copy explicit with ``clone_string`` in the receiving context:
 
@@ -727,6 +743,8 @@ a silent wrap for the unguarded pairs, or as a panic for array, table and
 string length, which carry an always-on guard. Either way the cast looks like
 it buys 64-bit range and buys nothing. Call the ``long_`` form, which is
 64-bit the whole way through.
+
+``--fix`` rewrites the call to its ``long_*`` twin, or the parse to ``to_int64`` / ``to_uint64`` with the site's own ``hex`` argument, keeping a mixed-sign outer cast.
 
 .. das-doc: alt
 .. code-block:: das
@@ -779,6 +797,8 @@ result: the overflow happened inside the parentheses, and the cast that looks
 like it buys 64-bit range buys nothing. LINT017's sibling — there the inner
 *call* clamps at 2\ :sup:`31`, here the inner *arithmetic* wraps. Widen a
 factor first, so the multiply itself runs in 64 bits.
+
+``--fix`` widens every operand of the sum or product - a ``length``-family call becomes its ``long_*`` twin, a decimal literal takes the ``l`` / ``ul`` suffix - and parenthesizes the result where a neighbouring operator would regroup it.
 
 .. das-doc: given var pixels : array<uint8>
 .. das-doc: alt
@@ -919,6 +939,8 @@ overloads. An ``int(...)`` cast on the size or position argument of any of
 them is pure loss: above 2\ :sup:`31` it silently covers the wrong count while
 the overload would have taken the 64-bit value straight through.
 
+``--fix`` drops the cast, or turns it into ``int64(...)`` for a ``uint64`` operand.
+
 .. das-doc: fragment
 .. code-block:: das
 
@@ -966,6 +988,8 @@ the per-file scan cannot see which instantiations elsewhere consume it. Tag it w
 ``LINT019`` instead; removal is only safe where the author knows no other compile
 reaches the line.
 
+``--fix`` removes the stale code from its list - the ``nolint:`` with it when no code is left, the comment when nothing else is in it, and the line when nothing else is on it.
+
 .. das-doc: fragment
 .. code-block:: das
 
@@ -984,6 +1008,8 @@ LINT020 — 64-bit bound narrowed into a 32-bit range constructor
 starts. ``range64`` and ``urange64`` take the 64-bit value directly, and the
 loop variable then indexes arrays, fixed arrays and (unsafe) pointers as-is —
 ``TypeDecl::isIndexExt`` admits ``int64``/``uint64`` subscripts natively.
+
+``--fix`` rewrites ``range`` / ``urange`` to ``range64`` / ``urange64`` and drops the casts of ``interval``, when every argument narrows a 64-bit value of the matching sign.
 
 .. das-doc: fragment
 .. code-block:: das
@@ -1055,6 +1081,8 @@ formats and lints clean while nothing outside can ever reach it. The rule
 covers functions, structures, classes and enumerations. The same applies to
 every symbol of a ``private`` module, where the module declaration makes the
 whole surface private.
+
+``--fix`` deletes the declaration with its ``//!`` lines when it starts its own line and no annotation or plain comment sits directly above it.
 
 .. code-block:: das
 
@@ -1305,6 +1333,8 @@ not a write. A call slot counts as a write when the callee's own body writes
 through that parameter, judged the same way; ``memcpy``, ``memmove`` and the
 ``memset`` family write their first argument. A parameter declared ``implicit`` waives the
 const contract and is not judged.
+
+``--fix`` inserts ``var`` before the parameter of a private function when the name opens its own declaration group and its type spells no ``const``.
 
 .. das-doc: alt
 .. code-block:: das
