@@ -460,14 +460,14 @@ def public get_dll_missing(fns : array<FunctionPtr>; disabled : array<FunctionPt
     } else {
         for (fn in fns) {
             let dll_name = uids.get_dll_fn_name(fn)
-            var written_hash = dll.get_function_hash(dll_name)
+            let written_hash = dll.get_function_hash(dll_name)
             if (written_hash == null || get_function_aot_hash(fn) != *written_hash) {
                 missing |> push(unsafe(reinterpret<Function?>(fn)))
             }
         }
         for (fn in disabled) {
             let dll_name = uids.get_dll_fn_name(fn)
-            var written_hash = dll.get_function_hash(dll_name)
+            let written_hash = dll.get_function_hash(dll_name)
             if (written_hash != null) {
                 disabled_exists |> push(unsafe(reinterpret<Function?>(fn)))
             }
@@ -485,7 +485,7 @@ def public probe_dll(var candidates : array<FunctionPtr>; disabled : array<Funct
     var mismatched = 0
     if (dll.handle != null) {
         for (fn in candidates) {
-            var written_hash = dll.get_function_hash(uids.get_dll_fn_name(fn))
+            let written_hash = dll.get_function_hash(uids.get_dll_fn_name(fn))
             if (written_hash == null) {
                 continue
             }

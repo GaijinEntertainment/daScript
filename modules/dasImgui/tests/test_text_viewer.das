@@ -1084,7 +1084,7 @@ def test_text_viewer_edit_preview_and_watch(t : T?) { // nolint:STYLE038 — one
         t |> success(split?["ok"] ?? false, "split surface selects")
 
         // markdown split editing is side-by-side: editor pane + live preview
-        var surface = wait_for_render(app, EDIT_WIDGET, 15.0f)
+        let surface = wait_for_render(app, EDIT_WIDGET, 15.0f)
         t |> success(surface != null, "editor pane renders")
         let preview_live = wait_cond(app, DEADLOCK_GUARD_SEC) $() : bool {
             var state = viewer_state(app)

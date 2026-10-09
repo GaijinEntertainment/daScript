@@ -53,7 +53,7 @@ def run_dastest(fixture : string; extra_args : string = "") : JsonReport {
     }
     remove(json_file)
     var error = ""
-    var json = read_json(json_text, error)
+    let json = read_json(json_text, error)
     if (json == null) {
         to_log(LOG_ERROR, "Command output ({exitCode}):\n\n{output}\n")
         panic("Failed to parse JSON from {json_file}: {error}")
@@ -93,14 +93,14 @@ def test_failing_json_output(tt : T?) {
     tt |> equal(report.total, 2)
     tt |> equal(report.passed, 1)
     tt |> equal(report.failed, 1)
-    var fail_result = find_test(report, "test_will_fail")
+    let fail_result = find_test(report, "test_will_fail")
     tt |> success(fail_result != null, "test_will_fail should be in results")
     if (fail_result != null) {
         tt |> success(!fail_result.passed, "test_will_fail should not pass")
         tt |> success(!empty(fail_result.messages), "failed test should have messages")
         tt |> success(!empty(fail_result.location), "failed test should have location")
     }
-    var pass_result = find_test(report, "test_will_pass")
+    let pass_result = find_test(report, "test_will_pass")
     tt |> success(pass_result != null, "test_will_pass should be in results")
     if (pass_result != null) {
         tt |> success(pass_result.passed)
@@ -114,12 +114,12 @@ def test_skipped_json_output(tt : T?) {
     let report = run_dastest("skip")
     tt |> equal(report.total, 2)
     tt |> equal(report.skipped, 1)
-    var skip_result = find_test(report, "test_skipped")
+    let skip_result = find_test(report, "test_skipped")
     tt |> success(skip_result != null)
     if (skip_result != null) {
         tt |> success(skip_result.skipped, "should be skipped")
     }
-    var pass_result = find_test(report, "test_not_skipped")
+    let pass_result = find_test(report, "test_not_skipped")
     tt |> success(pass_result != null)
     if (pass_result != null) {
         tt |> success(pass_result.passed)
@@ -131,7 +131,7 @@ def test_skipped_json_output(tt : T?) {
 def test_benchmark_json_output(tt : T?) {
     let report = run_dastest("bench", "--bench")
     tt |> success(!empty(report.tests), "should have at least one result in tests array")
-    var bench_result = find_test(report, "bench_simple")
+    let bench_result = find_test(report, "bench_simple")
     tt |> success(bench_result != null, "bench_simple should be in results")
     if (bench_result != null) {
         tt |> success(bench_result.passed, "benchmark should pass")

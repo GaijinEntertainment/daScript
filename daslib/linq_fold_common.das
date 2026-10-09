@@ -690,10 +690,10 @@ def collapse_adjacent_calls(var calls : array<tuple<ExprCall?; LinqCall?>>;
             i ++
             continue
         }
-        var innerMblk = innerLam as ExprMakeBlock
-        var innerBlk = innerMblk._block as ExprBlock
-        var outerMblk = outerLam as ExprMakeBlock
-        var outerBlk = outerMblk._block as ExprBlock
+        let innerMblk = innerLam as ExprMakeBlock
+        let innerBlk = innerMblk._block as ExprBlock
+        let outerMblk = outerLam as ExprMakeBlock
+        let outerBlk = outerMblk._block as ExprBlock
         if (innerBlk == null || outerBlk == null
                 || innerBlk.arguments |> length != 1 || outerBlk.arguments |> length != 1
                 || innerBlk.list |> length != 1 || outerBlk.list |> length != 1
@@ -701,8 +701,8 @@ def collapse_adjacent_calls(var calls : array<tuple<ExprCall?; LinqCall?>>;
             i ++
             continue
         }
-        var innerRet = innerBlk.list[0] as ExprReturn
-        var outerRet = outerBlk.list[0] as ExprReturn
+        let innerRet = innerBlk.list[0] as ExprReturn
+        let outerRet = outerBlk.list[0] as ExprReturn
         if (innerRet.subexpr == null || outerRet.subexpr == null) {
             i ++
             continue
@@ -824,7 +824,7 @@ def classify_terminator(name : string) : LinqLane {
 [macro_function]
 def peel_each(var top : Expression?) : Expression? {
     if (!(top is ExprCall)) return top
-    var topCall = top as ExprCall
+    let topCall = top as ExprCall
     if (match_call_in_module(top, "each", "builtin") == null || topCall.arguments |> length != 1) return top
     let argExpr = topCall.arguments[0]
     if ((argExpr == null || argExpr._type == null)
@@ -1692,7 +1692,7 @@ def emit_early_exit_lane(
     //   element_at        → negative index panics/defaults pre-loop; `if (cnt == idx) return v; cnt++`; tail panic/default
     //   aggregate         → seed acc; `acc = aggFn(acc, v)` each element (workhorse `=`/`return`, else `<-`/`return <-`); tail returns acc
     if (opName != "any" && opName != "all" && opName != "contains" && opName != "aggregate") {
-        var resType = mut_result_type(projection, elementType)
+        let resType = mut_result_type(projection, elementType)
         if (resType == null || !resType.canCopy) return null
     }
     var perMatchStmts : array<Expression?>
@@ -2874,7 +2874,7 @@ def emit_streaming_min(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Exp
     let bindName = ctx.src->bind_name(at)
     var oc <- extract_order_captures(c, at, bindName)
     if (!oc.ok || oc.firstName == "" || oc.distinctName != "") return null
-    var inlineCmp = oc.hasKey ? try_make_inline_cmp(oc.orderKey, oc.orderName, oc.orderElemType, at) : null
+    let inlineCmp = oc.hasKey ? try_make_inline_cmp(oc.orderKey, oc.orderName, oc.orderElemType, at) : null
     if (inlineCmp == null) return null
     let bestName = qn("order_best", at)
     let seenName = qn("order_seen", at)
@@ -5384,7 +5384,7 @@ def extract_decs_bridge(var top : Expression?) : DecsBridgeShape? {
         }
     }
     var userNames <- [for (n in mkTup.recordNames); string(n)]
-    var retStmt = blk.list[2] as ExprReturn
+    let retStmt = blk.list[2] as ExprReturn
     if (retStmt.subexpr == null || !(retStmt.subexpr is ExprCall)) return null
     let retCall = retStmt.subexpr as ExprCall
     if (get_call_short_name(retCall) != "to_sequence"

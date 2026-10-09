@@ -93,7 +93,7 @@ class MetalKernel : AstFunctionAnnotation {
     def override fixup(var func : FunctionPtr; var group : ModuleGroup; var args : AnnotationArgumentList; progArgs : AnnotationArgumentList; var errors : das_string) : bool {
         let argName = msl_global_name(func, args)
         let fastmath = args |> find_arg("fastmath") ?as tBool ?? true
-        var glob = find_variable(compiling_module(), argName)
+        let glob = find_variable(compiling_module(), argName)
         if (glob == null || glob.init != null || glob.name != argName) {
             return true
         }

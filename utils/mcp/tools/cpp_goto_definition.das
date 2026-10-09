@@ -22,7 +22,7 @@ def do_cpp_goto_definition(file, line_str, column_str : string) : string { // no
     let col_num = to_int(column_str)
     if (line_num <= 0 || col_num <= 0) return make_tool_result("'line' and 'column' must be positive integers (1-based)", true)
     let abs_path = resolve_path(file)
-    var f = fopen(abs_path, "r")
+    let f = fopen(abs_path, "r")
     if (f == null) return make_tool_result("Failed to open '{file}'", true)
     var lines : array<string>
     while (!feof(f)) {

@@ -29,7 +29,7 @@ class JIT_LLVM : AstSimulateMacro {
 
 //! the link side's plan, its probe and the emitter's load are JIT work the emitter's own report
 //! never covers, so the miss path prints them on one line
-def private run_jit_in_emitter(prog : Program?; var ctx : Context?; log_jit_time : bool; t_plan, t_probe : int) : bool {
+def private run_jit_in_emitter(prog : Program?; ctx : Context?; log_jit_time : bool; t_plan, t_probe : int) : bool {
     let load_tm = ref_time_ticks()
     let mctx = macro_context_of(EMITTER_MODULE)
     if (mctx == null) {

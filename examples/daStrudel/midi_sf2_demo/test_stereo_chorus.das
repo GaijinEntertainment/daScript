@@ -149,7 +149,7 @@ def main() {
         print("No SF2 found in {SF2_DIR}\n")
         return
     }
-    var sf2 = sf2_load(sf2_path)
+    let sf2 = sf2_load(sf2_path)
     if (sf2 == null) {
         print("Failed to load {sf2_path}\n")
         return

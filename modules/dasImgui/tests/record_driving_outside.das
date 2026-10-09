@@ -72,7 +72,7 @@ def main {
         let T_POPUP  = "DRIVE_WIN/STATUS_POPUP"
         let POPUP_PROBE = "DRIVE_WIN/STATUS_POPUP/DR_SEP_5"
 
-        var snap = wait_for_render(app, T_USER, 10.0f)
+        let snap = wait_for_render(app, T_USER, 10.0f)
         if (snap == null) {
             panic("{T_USER} never rendered - wrong app running?")
         }

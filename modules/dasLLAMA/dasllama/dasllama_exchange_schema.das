@@ -492,7 +492,7 @@ def redact_record_paths(text : string) : string {
 //! `errors` with `path: problem` lines (capped).
 def validate_record_store(text : string; var errors : array<string>) : bool {
     var jerr = ""
-    var doc = read_json(text, jerr)
+    let doc = read_json(text, jerr)
     if (doc == null) {
         err(errors, "$", "json parse failed: {jerr}")
         return false
@@ -505,7 +505,7 @@ def validate_record_store(text : string; var errors : array<string>) : bool {
 //! "official", and at least one das run present.
 def validate_record_submission(text : string; var errors : array<string>) : bool {
     var jerr = ""
-    var doc = read_json(text, jerr)
+    let doc = read_json(text, jerr)
     if (doc == null) {
         err(errors, "$", "json parse failed: {jerr}")
         return false
@@ -753,7 +753,7 @@ def exchange_strip_private(text : string) : string {
 //! charset rules double as the injection guard for everything a site renders verbatim.
 def validate_sidecar(text : string; var errors : array<string>) : bool {
     var jerr = ""
-    var doc = read_json(text, jerr)
+    let doc = read_json(text, jerr)
     if (doc == null) {
         err(errors, "$", "json parse failed: {jerr}")
         return false
@@ -765,7 +765,7 @@ def validate_sidecar(text : string; var errors : array<string>) : bool {
 //! the exchange keys validity on (version, box), so an unversioned sidecar cannot be served.
 def validate_sidecar_submission(text : string; var errors : array<string>) : bool {
     var jerr = ""
-    var doc = read_json(text, jerr)
+    let doc = read_json(text, jerr)
     if (doc == null) {
         err(errors, "$", "json parse failed: {jerr}")
         return false
@@ -778,7 +778,7 @@ def validate_sidecar_submission(text : string; var errors : array<string>) : boo
 //! Strings are copied out, so the info outlives the parsed tree under any heap policy.
 def parse_sidecar_info(text : string; var info : SidecarInfo) : bool {
     var jerr = ""
-    var doc = read_json(text, jerr)
+    let doc = read_json(text, jerr)
     if (doc == null || !(doc is _object)) {
         return false
     }

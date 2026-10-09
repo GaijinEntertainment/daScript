@@ -122,7 +122,7 @@ def main() {
 
     // null pointer — ?as returns null safely
     var nothing : Label?
-    var safe = nothing ?as IDrawable
+    let safe = nothing ?as IDrawable
     print("null ?as IDrawable = {safe}\n")  // null
 
     unsafe {

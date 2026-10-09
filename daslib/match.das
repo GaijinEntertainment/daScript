@@ -86,7 +86,7 @@ def match_as_is(what : TypeDeclPtr; wths : Expression?; makeType : TypeDeclPtr; 
     )
     cond_nz |> force_at(wths.at)
     to.conditions |> emplace(cond_nz)
-    var access_expr = new ExprAsVariant(at = wths.at,
+    let access_expr = new ExprAsVariant(at = wths.at,
         value = clone_expression(access),
         name := as_is_name
     )
@@ -97,13 +97,13 @@ def match_as_is(what : TypeDeclPtr; wths : Expression?; makeType : TypeDeclPtr; 
 def match_copy(what : TypeDeclPtr; wths : Expression?; makeType : TypeDeclPtr; as_is_name : das_string; access : Expression?; var to : MatchTo) {
     log_m("\tmatch_copy {describe(what)} {describe(makeType)} {describe(access)}")
     let tempName = make_unique_private_name("__`match`copy", wths.at)
-    var prefixType = clone_type(makeType)
+    let prefixType = clone_type(makeType)
     var prefix = qmacro_expr() {
         let $i(tempName) : $t(prefixType)
     }
     prefix |> force_at(wths.at)
     to.prefix |> emplace <| prefix
-    var access_new = qmacro($i(tempName))
+    let access_new = qmacro($i(tempName))
     access_new |> force_at(wths.at)
     var cond_nz = qmacro(match_copy($i(tempName), $e(access))); cond_nz |> force_at(wths.at)
     to.conditions |> emplace(cond_nz)
@@ -132,7 +132,7 @@ def match_struct(what : TypeDeclPtr; wths : ExprMakeStruct?; access : Expression
     if (wths.makeType.isHandle && isExpression(wths.makeType)
             && what.isPointer && what.firstType != null && isExpression(what.firstType)) {
         if (wths.makeType.annotation.name != "ExprRef2Value") {
-            var peeled = qmacro(match_peel_r2v($e(access)))
+            let peeled = qmacro(match_peel_r2v($e(access)))
             peeled |> force_at(wths.at)
             var cond_pz = qmacro($e(peeled) != null)
             cond_pz |> force_at(wths.at)
@@ -148,7 +148,7 @@ def match_struct(what : TypeDeclPtr; wths : ExprMakeStruct?; access : Expression
         var cond_nz = qmacro($e(access) != null)
         cond_nz |> force_at(wths.at)
         to.conditions |> emplace(cond_nz)
-        var access_nz = qmacro(*($e(access)))
+        let access_nz = qmacro(*($e(access)))
         access_nz |> force_at(wths.at)
         return match_struct(what.firstType, wths, access_nz, to)
     }
@@ -187,9 +187,9 @@ def match_struct(what : TypeDeclPtr; wths : ExprMakeStruct?; access : Expression
     for (i in range(wthsLength)) {
         for (mf in *wths.structs[i]) {
             {
-                var new_access = whatDim == 1 ? qmacro($e(access).$f(mf.name)) : qmacro($e(access)[$v(i)].$f(mf.name))
+                let new_access = whatDim == 1 ? qmacro($e(access).$f(mf.name)) : qmacro($e(access)[$v(i)].$f(mf.name))
                 new_access |> force_at(wths.at)
-                var ftype = get_field_type(what, string(mf.name), what.flags.constant)
+                let ftype = get_field_type(what, string(mf.name), what.flags.constant)
                 if (ftype == null) {
                     to.errors |> match_error("field {mf.name} not found", mf.at)
                     return false
@@ -240,7 +240,7 @@ def match_tuple(what : TypeDeclPtr; wths : ExprMakeTuple?; access : Expression?;
         if (i == tagIndex) continue
         let ei = i <= tagIndex ? i : whatDim - (wthsLength - i)
         {
-            var new_access = qmacro($e(access).$f("_{ei}")); new_access |> force_at(wths.at)
+            let new_access = qmacro($e(access).$f("_{ei}")); new_access |> force_at(wths.at)
             if (!match_any(what.argTypes[ei], wths.values[i], new_access, to)) return false
         }
     }
@@ -297,13 +297,14 @@ def match_array(what : TypeDeclPtr; wths : ExprMakeArray?; dynamic : bool; acces
             qmacro(length($e(access)) >= $v(wthsLength - 1)) :
             qmacro(length($e(access)) == $v(wthsLength)))
         lenCond |> force_at(wths.at)
+        lenCond.genFlags.generated = true
         to.conditions |> emplace(lenCond)
     }
     log_m("\tarray match passed\n")
     for (i in range(wthsLength)) {
         if (i != tagIndex) {
             let ei = i <= tagIndex ? i : wthsLength - i
-            var new_access = i < tagIndex ? qmacro($e(access)[$v(ei)]) : qmacro($e(access)[length($e(access)) - $v(ei)])
+            let new_access = i < tagIndex ? qmacro($e(access)[$v(ei)]) : qmacro($e(access)[length($e(access)) - $v(ei)])
             new_access |> force_at(wths.at)
             if (!match_any(recT, wths.values[i], new_access, to)) return false
         }
@@ -334,9 +335,9 @@ def match_variant(what : TypeDeclPtr; wths : ExprMakeVariant?; access : Expressi
     to.conditions |> reserve(length(to.conditions) + wthsLength)
     for (mf, i in wths.variants, count()) {
         {
-            var new_access = whatDim == 1 ? qmacro($e(access) as $f(mf.name)) : qmacro($e(access)[$v(i)] as $f(mf.name))
+            let new_access = whatDim == 1 ? qmacro($e(access) as $f(mf.name)) : qmacro($e(access)[$v(i)] as $f(mf.name))
             new_access |> force_at(wths.at)
-            var ftype = get_field_type(what, string(mf.name), what.flags.constant)
+            let ftype = get_field_type(what, string(mf.name), what.flags.constant)
             if (ftype == null) {
                 to.errors |> match_error("variant {mf.name} not found", mf.at)
                 return false
@@ -358,7 +359,7 @@ def match_as_variant(what : TypeDeclPtr; wthAs : ExprAsVariant?; access : Expres
         to.errors |> match_error("{describe(what)} is not a variant", wthAs.at)
         return false
     }
-    var ftype = get_field_type(what, string(wthAs.name), what.flags.constant)
+    let ftype = get_field_type(what, string(wthAs.name), what.flags.constant)
     if (ftype == null) {
         to.errors |> match_error("variant {wthAs.name} not found", wthAs.at)
         return false
@@ -367,7 +368,7 @@ def match_as_variant(what : TypeDeclPtr; wthAs : ExprAsVariant?; access : Expres
         value <- clone_expression(access),
         name := wthAs.name
     )
-    var new_access = new ExprAsVariant(at = wthAs.at,
+    let new_access = new ExprAsVariant(at = wthAs.at,
         value <- clone_expression(access),
         name := wthAs.name
     )
@@ -478,8 +479,8 @@ def match_or(what : TypeDeclPtr; wth : ExprOp2?; access : Expression?; var to : 
     for (k, v in keys(toL.declarations), values(toL.declarations)) {
         to.declarations[k] = v
     }
-    var lcond = join_conditions(toL.conditions, wth.left.at)
-    var rcond = join_conditions(toR.conditions, wth.right.at)
+    let lcond = join_conditions(toL.conditions, wth.left.at)
+    let rcond = join_conditions(toR.conditions, wth.right.at)
     var cond = qmacro($e(lcond) || $e(rcond))
     cond |> force_at(wth.at)
     to.conditions |> emplace(cond)
@@ -489,7 +490,7 @@ def match_or(what : TypeDeclPtr; wth : ExprOp2?; access : Expression?; var to : 
 
 [macro_function]
 def match_tag(what : TypeDeclPtr; wth : Expression?; access : Expression?; var to : MatchTo) {
-    var tag = wth as ExprTag
+    let tag = wth as ExprTag
     if (tag.name != "v") {
         to.errors |> match_error("unsupported match tag ${tag.name}", tag.at)
         return true
@@ -553,7 +554,7 @@ def match_any(what : TypeDeclPtr; wth : Expression?; access : Expression?; var t
     } elif (wth is ExprMakeTuple) {
         return match_tuple(what, wth as ExprMakeTuple, access, to)
     } elif (wth is ExprMakeArray) {
-        var mka = wth as ExprMakeArray
+        let mka = wth as ExprMakeArray
         if (length(mka.values) == 1 && (mka.values[0] is ExprMakeTuple)) {
             return match_tuple(what, (mka.values[0] as ExprMakeTuple), access, to)
         } else {
@@ -568,7 +569,7 @@ def match_any(what : TypeDeclPtr; wth : Expression?; access : Expression?; var t
     } elif (wth |> is_match_call("expr")) {
         return match_expr(what, wth as ExprCall, access, to)
     } elif (wth |> is_to_array_move_call) {
-        var cll = wth as ExprCall
+        let cll = wth as ExprCall
         if (length(cll.arguments) != 1) {
             to.errors |> match_error("to_array_move expects 1 argument", cll.at)
             return false
@@ -597,7 +598,7 @@ def match_any(what : TypeDeclPtr; wth : Expression?; access : Expression?; var t
             return false
         }
         log_m("\tadd condition {describe(access)} == {describe(wth)}\n")
-        var ee = unsafe(reinterpret<Expression?>(wth))
+        let ee = unsafe(reinterpret<Expression?>(wth))
         var cond = qmacro($e(access) == $e(ee))
         cond |> force_at(wth.at)
         to.conditions |> emplace(cond)
@@ -605,7 +606,7 @@ def match_any(what : TypeDeclPtr; wth : Expression?; access : Expression?; var t
     } elif (wth._type != null && (is_same_type(what, wth._type, RefMatters.no, ConstMatters.no, TemporaryMatters.no) ||
             (is_string_like(what) && is_string_like(wth._type)))) {
         log_m("\tadd condition {describe(access)} == {describe(wth)}\n")
-        var ee = unsafe(reinterpret<Expression?>(copy_to_local(wth)))
+        let ee = unsafe(reinterpret<Expression?>(copy_to_local(wth)))
         var cond = qmacro($e(access) == $e(ee))
         cond |> force_at(wth.at)
         to.conditions |> emplace(cond)
@@ -671,7 +672,7 @@ class MatchMacro : AstCallMacro {
                 return null
             }
         }
-        var access = clone_expression(what)
+        let access = clone_expression(what)
         var iff : Expression?
         var iffb : array<ExprIfThenElse?>
         let eli = length(eblk.list)

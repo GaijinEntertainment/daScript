@@ -243,7 +243,7 @@ def test_rich_das_edit_refreshes_one_fragment(t : T?) {
         return if (empty(temp_dir))
         {
         return if (!open_rich_das(t, app, temp_dir))
-        var probe = wait_for_render(app,
+        let probe = wait_for_render(app,
             "DOCK_ROOT/g_document_windows[1]/DOCUMENT_CONTENT/editor", 15.0f)
         t |> success(probe != null, "the caret island renders")
         click(app, "DOCK_ROOT/g_document_windows[1]/DOCUMENT_CONTENT/editor")

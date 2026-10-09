@@ -41,7 +41,7 @@ def test_replaces_buried_var(t : T?) {
         var raw = qmacro(@(x) { return x + 1; })
         var lam = wrap_ref2value_around_lhs_var(raw)
         var replacement : Expression? = qmacro(myVal)
-        var body = peel_lambda_replace_var(lam, replacement)
+        let body = peel_lambda_replace_var(lam, replacement)
         t |> success(body != null, "should peel")
         t |> success(body is ExprOp2, "result should be ExprOp2")
         let op = body as ExprOp2
@@ -55,7 +55,7 @@ def test_two_arg_falls_back_to_invoke(t : T?) {
     ast_gc_guard() {
         var lam = qmacro(@(x, y) { return x + y; })
         var replacement : Expression? = qmacro(z)
-        var res = peel_lambda_replace_var(lam, replacement)
+        let res = peel_lambda_replace_var(lam, replacement)
         // ``invoke(...)`` parses to ExprInvoke, not a generic ExprCall.
         t |> success(res is ExprInvoke, "non-peelable → ExprInvoke fallback")
     }
@@ -66,7 +66,7 @@ def test_non_lambda_falls_back_to_invoke(t : T?) {
     ast_gc_guard() {
         var notLam = qmacro(somePtr)
         var replacement : Expression? = qmacro(z)
-        var res = peel_lambda_replace_var(notLam, replacement)
+        let res = peel_lambda_replace_var(notLam, replacement)
         t |> success(res is ExprInvoke, "non-lambda → ExprInvoke fallback")
     }
 }

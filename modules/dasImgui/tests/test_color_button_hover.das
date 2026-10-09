@@ -31,7 +31,7 @@ def test_color_button_hover_smoke(t : T?) {
                        "color_button_hover",
                        "CBH_RED.kind == 'color_button_hover'")
         }
-        var snap_status = wait_for_widget(d, "CBH_WIN/CBH_STATUS", 15.0f)
+        let snap_status = wait_for_widget(d, "CBH_WIN/CBH_STATUS", 15.0f)
         t |> success(snap_status != null, "CBH_STATUS narrative renders")
     }
 }

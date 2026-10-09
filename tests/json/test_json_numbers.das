@@ -101,14 +101,14 @@ def test_integers_past_double_range_error(t : T?) {
 
 def expect_number_error(t : T?; text : string) {
     var error : string
-    var js = read_json(text, error)
+    let js = read_json(text, error)
     t |> success(js == null, "{text} is rejected")
     t |> success(!empty(error), "{text} reports an error instead of panicking")
 }
 
 def expect_number_error_matching(t : T?; text, fragment : string) {
     var error : string
-    var js = read_json(text, error)
+    let js = read_json(text, error)
     t |> success(js == null, "{text} is rejected")
     t |> success(error |> find(fragment) >= 0, "{text}: got <{error}>")
 }

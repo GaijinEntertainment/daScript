@@ -92,8 +92,7 @@ def private run_rope_sidebyside(b) {   // nolint:STYLE038 — flat lab driver: b
     }
     // per-row rope tables (adjacent-pair convention), positions pos and pos+1
     let half_hs = hs / 2l
-    var tcos : array<float>
-    var tsin : array<float>
+    var tcos, tsin : array<float>
     tcos |> resize(int(nb * half_hs))
     tsin |> resize(int(nb * half_hs))
     for (bb in range64(nb)) {

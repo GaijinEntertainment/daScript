@@ -59,9 +59,7 @@ def test_metal_gemm_vs_portable(t : T?) {   // nolint:STYLE038 — flat fixture 
             var wq : array<int8>
             var ws : array<float>
             var xq : array<int8>
-            var xs : array<float>
-            var want : array<float>
-            var got : array<float>
+            var xs, want, got : array<float>
             // exact case: pow2 scales, GPU path forced (min_ntok 1)
             fill_case(wq, ws, xq, xs, true, N, D, NTOK)
             run_batch(want, wq, ws, xq, xs, N, D, NTOK)     // portable serves the batch slot

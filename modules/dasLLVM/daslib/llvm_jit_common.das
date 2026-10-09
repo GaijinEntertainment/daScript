@@ -247,7 +247,7 @@ def public set_shared_export_linkage(val : LLVMOpaqueValue?; name : string) {
 }
 
 [arch(at="../ARCHITECTURE_EXE.md#split-exe-slots")]
-def private get_or_create_table_fn(llvm_module : LLVMOpaqueModule?; var types : PrimitiveTypes?; fn_name : DllName; at_type : LLVMOpaqueType?; fn_ptr : void?) {
+def private get_or_create_table_fn(llvm_module : LLVMOpaqueModule?; types : PrimitiveTypes?; fn_name : DllName; at_type : LLVMOpaqueType?; fn_ptr : void?) {
     var tab_fun = LLVMGetNamedGlobal(llvm_module, fn_name.glob())   //! the entry partition declares a collected slot ahead of its own first use; adding the name again would mint a twin the startup walk never fills
     if (!g_fn_types |> key_exists(fn_name.publ())) {
         g_fn_types[fn_name.publ()] = at_type

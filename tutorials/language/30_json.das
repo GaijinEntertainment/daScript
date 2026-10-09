@@ -34,7 +34,7 @@ def parsing_basics() {
     print("=== Parsing basics ===\n")
 
     var error : string
-    var js = read_json("\{ \"name\": \"Alice\", \"age\": 30, \"active\": true \}", error)
+    let js = read_json("\{ \"name\": \"Alice\", \"age\": 30, \"active\": true \}", error)
     if (js != null) {
         print("parsed OK\n")
     } else {
@@ -145,7 +145,7 @@ def safe_access() {
 def variant_checks() {
     print("\n=== Variant checks ===\n")
 
-    var js = JV("hello")
+    let js = JV("hello")
     print("is string: {js is _string}\n")
     // output: is string: true
     print("is number: {js is _number}\n")
@@ -153,7 +153,7 @@ def variant_checks() {
     print("as string: {js as _string}\n")
     // output: as string: hello
 
-    var jn = JV(42)
+    let jn = JV(42)
     print("is longint: {jn is _longint}\n")
     // output: is longint: true
 }
@@ -179,7 +179,7 @@ def struct_serialization() {
 
     // JSON → struct
     var error : string
-    var parsed = read_json("\{ \"name\": \"Mage\", \"hp\": 80, \"speed\": 3.2 \}", error)
+    let parsed = read_json("\{ \"name\": \"Mage\", \"hp\": 80, \"speed\": 3.2 \}", error)
     let p2 = from_JV(parsed, type<Player>)
     print("name: {p2.name}, hp: {p2.hp}\n")
     // output: name: Mage, hp: 80
@@ -488,7 +488,7 @@ def rename_demo() {
 
     // from_JV maps the renamed keys back to struct fields
     var error : string
-    var parsed = read_json("\{ \"type\": \"button\", \"class\": 5, \"value\": 2.0 \}", error)
+    let parsed = read_json("\{ \"type\": \"button\", \"class\": 5, \"value\": 2.0 \}", error)
     let result = from_JV(parsed, type<ApiResponse>)
     print("from_JV: _type={result._type}, _class={result._class}\n")
     // output: from_JV: _type=button, _class=5

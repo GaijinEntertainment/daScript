@@ -496,9 +496,7 @@ def main {   // nolint:STYLE037,STYLE038 — one-shot A/B race harness; buffers 
                 //! the production three-pass on its padded layout - the exact A/B production faces
                 let hst = 72
                 let qdt = heads * hst
-                var qt : array<float>
-                var kt : array<float>
-                var vt : array<float>
+                var qt, kt, vt : array<float>
                 qt |> resize(np * qdt)
                 kt |> resize(np * qdt)
                 vt |> resize(np * qdt + 256)   //! +tail slack: the lifted flash's dead PV tiles read past the last V row
@@ -649,8 +647,7 @@ def main {   // nolint:STYLE037,STYLE038 — one-shot A/B race harness; buffers 
                 if (pso_porth == null) {
                     print("  port-h pso: {perrh}\n")
                 } else {
-                    var kth : array<float16>
-                    var vth : array<float16>
+                    var kth, vth : array<float16>
                     kth |> resize(np * qdt)
                     vth |> resize(np * qdt + 256)
                     for (ii in range(np * qdt)) {
@@ -708,8 +705,7 @@ def main {   // nolint:STYLE037,STYLE038 — one-shot A/B race harness; buffers 
                     if (pso_hc == null) {
                         print("  port-hc pso: {perrc}\n")
                     } else {
-                        var khc : array<float16>
-                        var vhc : array<float16>
+                        var khc, vhc : array<float16>
                         khc |> resize(np * qdt)
                         vhc |> resize(np * qdt + 256)
                         for (hh in range(heads)) {

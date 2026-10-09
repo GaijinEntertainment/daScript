@@ -16,7 +16,7 @@ require dastest/testing_boost public
 def test_simple_rename(t : T?) {
     ast_gc_guard() {
         var lam = qmacro(@(acc, x) { return acc + x; })
-        var body = peel_lambda_rename_2vars(lam, "a", "b")
+        let body = peel_lambda_rename_2vars(lam, "a", "b")
         t |> success(body != null, "2-arg lambda should peel")
         t |> success(body is ExprOp2, "result should be ExprOp2")
         let op = body as ExprOp2
@@ -31,7 +31,7 @@ def test_simple_rename(t : T?) {
 def test_one_arg_returns_null(t : T?) {
     ast_gc_guard() {
         var lam = qmacro(@(x) { return x + 1; })
-        var body = peel_lambda_rename_2vars(lam, "a", "b")
+        let body = peel_lambda_rename_2vars(lam, "a", "b")
         t |> success(body == null, "1-arg lambda must return null (no fallback)")
     }
 }
@@ -40,7 +40,7 @@ def test_one_arg_returns_null(t : T?) {
 def test_three_arg_returns_null(t : T?) {
     ast_gc_guard() {
         var lam = qmacro(@(x, y, z) { return x + y + z; })
-        var body = peel_lambda_rename_2vars(lam, "a", "b")
+        let body = peel_lambda_rename_2vars(lam, "a", "b")
         t |> success(body == null, "3-arg lambda must return null")
     }
 }
@@ -49,7 +49,7 @@ def test_three_arg_returns_null(t : T?) {
 def test_multi_statement_returns_null(t : T?) {
     ast_gc_guard() {
         var lam = qmacro(@(acc, x) { let t = acc; return t + x; })
-        var body = peel_lambda_rename_2vars(lam, "a", "b")
+        let body = peel_lambda_rename_2vars(lam, "a", "b")
         t |> success(body == null, "multi-statement body must return null")
     }
 }
@@ -58,7 +58,7 @@ def test_multi_statement_returns_null(t : T?) {
 def test_non_lambda_returns_null(t : T?) {
     ast_gc_guard() {
         var notLam = qmacro(42)
-        var body = peel_lambda_rename_2vars(notLam, "a", "b")
+        let body = peel_lambda_rename_2vars(notLam, "a", "b")
         t |> success(body == null, "non-lambda must return null")
     }
 }

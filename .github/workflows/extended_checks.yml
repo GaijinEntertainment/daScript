@@ -274,8 +274,17 @@ jobs:
 
     - name: "Install ast-grep and the tree-sitter CLI"
       # tree-sitter-cli, pinned to the version that generated tree-sitter-daslang/src (a newer
-      # generator rewrites parser.c): tree-sitter-daslang/REVIEW.das regenerates and diffs it
-      run: npm install -g @ast-grep/cli tree-sitter-cli@0.26.8
+      # generator rewrites parser.c): tree-sitter-daslang/REVIEW.das regenerates and diffs it.
+      # ast-grep pinned too: 0.50 ignores the daslang custom language unless every call passes
+      # `--custom-languages allow`, a flag older ast-grep releases reject
+      run: npm install -g @ast-grep/cli@0.45.3 tree-sitter-cli@0.26.8
+
+    - name: "Restore the lint result cache"
+      uses: actions/cache/restore@v4
+      with:
+        path: .cache/daslang/lint_cache
+        key: lint-cache-${{ matrix.target }}@${{ github.run_id }}
+        restore-keys: lint-cache-${{ matrix.target }}@
 
     - name: "Extended checks"
       # the cron's `all` role reaches stage_doc_assets through check_doc_verify, and its
@@ -283,4 +292,11 @@ jobs:
       env:
         GH_TOKEN: ${{ github.token }}
       run: cmake --build ./build --config Release --target run_extended_${{ matrix.role }} --parallel
+
+    - name: "Save the lint result cache"
+      if: ${{ !cancelled() && matrix.role != 'modules' && github.ref == 'refs/heads/master' }}
+      uses: actions/cache/save@v4
+      with:
+        path: .cache/daslang/lint_cache
+        key: lint-cache-${{ matrix.target }}@${{ github.run_id }}
 

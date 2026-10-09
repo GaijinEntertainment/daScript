@@ -24,7 +24,7 @@ let FEATURE = "modules/dasImgui/examples/features/glfw_synth_keys.das"
 [test]
 def test_key_press_release_held_count(t : T?) {
     with_imgui_app(FEATURE) $(d) {
-        var snap0 = wait_for_render(d, "MAIN_WIN/NAME_INPUT", 15.0f)
+        let snap0 = wait_for_render(d, "MAIN_WIN/NAME_INPUT", 15.0f)
         t |> success(snap0 != null, "NAME_INPUT renders")
         if (snap0 == null) return
 
@@ -48,7 +48,7 @@ def test_key_press_release_held_count(t : T?) {
 [test]
 def test_key_type_lands_in_input(t : T?) {
     with_imgui_app(FEATURE) $(d) {
-        var snap0 = wait_for_render(d, "MAIN_WIN/NAME_INPUT", 15.0f)
+        let snap0 = wait_for_render(d, "MAIN_WIN/NAME_INPUT", 15.0f)
         t |> success(snap0 != null, "NAME_INPUT renders")
         if (snap0 == null) return
 
@@ -83,7 +83,7 @@ def test_key_type_lands_in_input(t : T?) {
 [test]
 def test_key_chord_completes(t : T?) {
     with_imgui_app(FEATURE) $(d) {
-        var snap0 = wait_for_render(d, "MAIN_WIN/NAME_INPUT", 15.0f)
+        let snap0 = wait_for_render(d, "MAIN_WIN/NAME_INPUT", 15.0f)
         if (snap0 == null) {
             t |> success(false, "NAME_INPUT renders")
             return
@@ -104,7 +104,7 @@ def test_key_chord_completes(t : T?) {
 [test]
 def test_key_play_event_list_completes(t : T?) {
     with_imgui_app(FEATURE) $(d) {
-        var snap0 = wait_for_render(d, "MAIN_WIN/NAME_INPUT", 15.0f)
+        let snap0 = wait_for_render(d, "MAIN_WIN/NAME_INPUT", 15.0f)
         if (snap0 == null) {
             t |> success(false, "NAME_INPUT renders")
             return
@@ -129,7 +129,7 @@ def test_key_play_event_list_completes(t : T?) {
 [test]
 def test_key_stop_aborts(t : T?) {
     with_imgui_app(FEATURE) $(d) {
-        var snap0 = wait_for_render(d, "MAIN_WIN/NAME_INPUT", 15.0f)
+        let snap0 = wait_for_render(d, "MAIN_WIN/NAME_INPUT", 15.0f)
         if (snap0 == null) {
             t |> success(false, "NAME_INPUT renders")
             return
@@ -163,7 +163,7 @@ def test_key_stop_aborts(t : T?) {
 // [test]
 def test_key_chord_ctrl_visible_to_imgui(t : T?) {
     with_imgui_app(FEATURE) $(d) {
-        var snap0 = wait_for_render(d, "MAIN_WIN/NAME_INPUT", 15.0f)
+        let snap0 = wait_for_render(d, "MAIN_WIN/NAME_INPUT", 15.0f)
         if (snap0 == null) {
             t |> success(false, "NAME_INPUT renders")
             return
@@ -189,7 +189,7 @@ def test_key_stop_releases_held_modifiers(t : T?) {
     // Simulate an interrupted key_chord: manually press LEFT_CONTROL (no paired release) then
     // key_stop — held_count must drop to 0 and the stop response must report released=1.
     with_imgui_app(FEATURE) $(d) {
-        var snap0 = wait_for_render(d, "MAIN_WIN/NAME_INPUT", 15.0f)
+        let snap0 = wait_for_render(d, "MAIN_WIN/NAME_INPUT", 15.0f)
         if (snap0 == null) {
             t |> success(false, "NAME_INPUT renders")
             return

@@ -237,7 +237,7 @@ class ImplementsMacro : AstStructureAnnotation {
     def override finish(var st : StructurePtr; var group : ModuleGroup; var args : AnnotationArgumentList; var errors : das_string) : bool {
         let iface_name = annotation_interface_name(args)
         if (empty(iface_name)) return true
-        var iface <- compiling_program() |> find_unique_structure(iface_name)
+        let iface <- compiling_program() |> find_unique_structure(iface_name)
         if (iface == null) return true
         let missing = build_string() $(var w) {
             for (ifld in iface.fields) {
@@ -299,7 +299,7 @@ class InterfaceAsIs : AstVariantMacro {
         var tgt = prog |> find_unique_structure(iname)
         if (tgt == null || !is_interface_struct(tgt)) return null
         let getter_field = "get`{iname}"
-        var st = vtype.firstType.structType
+        let st = vtype.firstType.structType
         for (fld in st.fields) {
             if (fld.name == getter_field) return <- quote(true)
         }
@@ -313,7 +313,7 @@ class InterfaceAsIs : AstVariantMacro {
         var tgt = prog |> find_unique_structure(iname)
         if (tgt == null || !is_interface_struct(tgt)) return null
         let getter_field = "get`{iname}"
-        var st = vtype.firstType.structType
+        let st = vtype.firstType.structType
         for (fld in st.fields) {
             if (fld.name == getter_field) {
                 let func_name = "{st.name}`get`{iname}"
@@ -330,7 +330,7 @@ class InterfaceAsIs : AstVariantMacro {
         var tgt = prog |> find_unique_structure(iname)
         if (tgt == null || !is_interface_struct(tgt)) return null
         let getter_field = "get`{iname}"
-        var st = vtype.firstType.structType
+        let st = vtype.firstType.structType
         for (fld in st.fields) {
             if (fld.name == getter_field) {
                 let func_name = "{st.name}`get`{iname}"

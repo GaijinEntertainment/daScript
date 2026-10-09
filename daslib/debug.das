@@ -230,7 +230,7 @@ class DAWalker : DapiDataWalker {
         if (n > 0) {
             var v & = unsafe(varsStack[n - 1])
             if (v.children == null) {
-                var ti = type_info(vi)
+                let ti = type_info(vi)
                 v.value = sprint_data_fast(pv, ti, print_flags_debug)
             }
             if (empty(v.value)) {

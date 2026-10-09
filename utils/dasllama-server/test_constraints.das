@@ -261,7 +261,7 @@ def private grammar_walk_cell(t : T?) {
     let bottomless <- spec_of("\{\"response_format\":\{\"type\":\"json_schema\",\"json_schema\":\{\"strict\":true,\"schema\":\{\"$ref\":\"#/$defs/a\",\"$defs\":\{\"a\":\{\"type\":\"object\",\"properties\":\{\"x\":\{\"$ref\":\"#/$defs/a\"\}\},\"required\":[\"x\"],\"additionalProperties\":false\}\}\}\}\}\}")
     t |> equal(bottomless.err, "", "the schema itself compiles")
     var berr = ""
-    var none = constraint_of(bottomless, m, 0, stops, berr)
+    let none = constraint_of(bottomless, m, 0, stops, berr)
     t |> success(none == null && find(berr, "derives no terminal string") >= 0, "the grammar does not build, by name: {berr}")
     unsafe {
         delete c

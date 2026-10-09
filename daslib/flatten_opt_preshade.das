@@ -147,7 +147,7 @@ def private pex_extract(var pe : PEX; barriers : table<string>; var e : Expressi
     return e
 }
 
-def private extract_preshader(var func : FunctionPtr; var blk : ExprBlock?; barriers : table<string>; var counter : int&; no_fast_math : bool) : bool {   // nolint:STYLE037,STYLE038 - one hoist pass; seeding, colouring and splice share the dedup state
+def private extract_preshader(func : FunctionPtr; var blk : ExprBlock?; barriers : table<string>; var counter : int&; no_fast_math : bool) : bool {   // nolint:STYLE037,STYLE038 - one hoist pass; seeding, colouring and splice share the dedup state
     var pe = PEX(counter = counter, noFastMath = no_fast_math)
     for (a in func.arguments) {
         pe.paramNames |> insert("{a.name}")

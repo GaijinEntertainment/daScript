@@ -631,7 +631,7 @@ class private AstVerifyVisitor : AstVisitor {
         if (!expr.mmFlags.isLambda) {
             return
         }
-        var blk = unsafe(reinterpret<ExprBlock?>(expr._block))
+        let blk = unsafe(reinterpret<ExprBlock?>(expr._block))
         if (!blk.blockFlags.isLambdaBlock) {
             report(expr.at, "ExprMakeBlock is isLambda but its block is not isLambdaBlock")
             expr.mmFlags.isLambda = false

@@ -487,7 +487,7 @@ def build_decs_tup_bind(bridge : DecsBridgeShape?; tupName : string; at : LineIn
 [macro_function]
 def decs_can_random_index(bridge : DecsBridgeShape?) : bool {
     if (bridge == null || !(bridge.forExpr is ExprFor)) return false
-    var fe = bridge.forExpr as ExprFor
+    let fe = bridge.forExpr as ExprFor
     if (empty(fe.sources)) return false
     for (s in fe.sources) {
         if (s == null || s._type == null || s._type.baseType != Type.tArray) return false

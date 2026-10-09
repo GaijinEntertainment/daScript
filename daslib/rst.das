@@ -1414,7 +1414,7 @@ def is_trivial_ctor(func : FunctionPtr) {
     if (func.body == null) return true
 
     if (func.body is ExprBlock) {
-        var blk = func.body as ExprBlock
+        let blk = func.body as ExprBlock
         if (length(blk.list) == 1) return blk.list[0] is ExprReturn
     }
 

@@ -66,7 +66,7 @@ class BuildDemoMacro : AstCallMacro {
         //    Returns ExpressionPtr.  Use for simple literal constants.
         // ===============================================================
         var literal_true = quote(true)   // ExprConstBool
-        var literal_zero = quote(0)      // ExprConstInt
+        let literal_zero = quote(0)      // ExprConstInt
 
         // ===============================================================
         // 2. qmacro(expr) — expression with reification splices.
@@ -92,7 +92,7 @@ class BuildDemoMacro : AstCallMacro {
         var int_type   = qmacro_type(type<int>)
         var float_type = qmacro_type(type<float>)
         // $t — compose types: array<$t(int_type)> → array<int>
-        var arr_int_type = qmacro_type(type<array<$t(int_type)>>)
+        let arr_int_type = qmacro_type(type<array<$t(int_type)>>)
 
         // ===============================================================
         // 4. qmacro_variable("name", type<T>) — build a VariablePtr.

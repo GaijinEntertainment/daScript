@@ -22,7 +22,7 @@ def utf8_bytes(s : string) : string {
 
 def decode(t : T?; text : string) : string {
     var error : string
-    var js = read_json(text, error)
+    let js = read_json(text, error)
     t |> success(js != null, "parsed {text}")
     if (js == null) {
         t |> failure("{text}: {error}")

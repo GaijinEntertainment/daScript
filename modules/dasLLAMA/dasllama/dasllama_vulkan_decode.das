@@ -2887,7 +2887,7 @@ def private rdq_sample(var led : RdqLedger; what, shape : string; st : RdqStamps
     if (st.overflow || n != uint(want)) {
         // a bare stamp or a full query pool: the whole command's GPU span reads off the first and last stamps
         unsafe {
-            var tp = reinterpret<uint64?>(g_pfq_buf.mapped)
+            let tp = reinterpret<uint64?>(g_pfq_buf.mapped)
             led.total += double(tp[n - 1u] - tp[0u]) * double(g_pfq_period) / 1000.0lf
         }
         if (led.count == 0l) {
@@ -2917,7 +2917,7 @@ def private rdq_sample(var led : RdqLedger; what, shape : string; st : RdqStamps
         led.us_by_name[nm] += pfq_us(uint(i))
     }
     unsafe {
-        var tp = reinterpret<uint64?>(g_pfq_buf.mapped)
+        let tp = reinterpret<uint64?>(g_pfq_buf.mapped)
         led.total += double(tp[n - 1u] - tp[0u]) * double(g_pfq_period) / 1000.0lf
     }
     led.count++
@@ -3222,7 +3222,7 @@ def private rd_record_n_form(var raw : VkCommandBuffer; nrows, nsplit : int64; f
 
 //! the landed pick of row `i` as a token id: the passes leave `0xFFFFFFFF` on a row with no element (never a served row)
 def private rd_landed_pick(i : int64) : int64 {
-    var pk = unsafe(reinterpret<uint?>(g_rd.pick_host.mapped))
+    let pk = unsafe(reinterpret<uint?>(g_rd.pick_host.mapped))
     let pick = int64(unsafe(pk[i]))
     if (pick >= g_rd.vocab) {
         panic("dasLLAMA vulkan tier: the device landed no pick for row {i} ({pick} of a {g_rd.vocab} vocab) - engine bug")

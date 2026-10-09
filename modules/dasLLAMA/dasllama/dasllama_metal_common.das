@@ -2391,7 +2391,7 @@ def finish_pending_step {   // nolint:STYLE038 — the pipeline join: wait/error
         // the optimistic commit-time watermark now overstates the mirror (its rows are garbage at
         // and above this step's positions) — force a full re-upload from the CPU truth
         for (i in range64(L.nrows)) {
-            var sp = L.sessions[i]
+            let sp = L.sessions[i]
             if (key_exists(g_mirrors, sp.uid)) {
                 g_mirrors[sp.uid].watermark = 0l
             }

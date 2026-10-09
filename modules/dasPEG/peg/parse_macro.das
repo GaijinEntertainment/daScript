@@ -75,8 +75,8 @@ def into_terminal(var expr : ExpressionPtr) : tuple<from : int; to : int> {
     } elif (expr is ExprCall && (expr as ExprCall).name == "interval") {
         // Range of charachters '1'..'9'
 
-        var left_exp = (expr as ExprCall).arguments[0]
-        var right_exp = (expr as ExprCall).arguments[1]
+        let left_exp = (expr as ExprCall).arguments[0]
+        let right_exp = (expr as ExprCall).arguments[1]
 
         if (!left_exp is ExprConstInt || !right_exp is ExprConstInt) {
             transfrom_error(expr.at, "Range ends should be integer constants")
@@ -135,7 +135,7 @@ def into_rule_(var expr : ExpressionPtr) : Rule_? {
     if (expr is ExprAsVariant && (expr as ExprAsVariant).value is ExprVar) {
         // Bound terminal
 
-        var as_expr <- expr as ExprAsVariant
+        let as_expr <- expr as ExprAsVariant
         let bound_name = as_expr.name |> string()
         let bound_rule = (as_expr.value as ExprVar).name |> string()
 
@@ -150,7 +150,7 @@ def into_rule_(var expr : ExpressionPtr) : Rule_? {
         return <- new Rule_(rule <- Rule(bound_nonterminal =  (bound_rule, bound_name)))
     } elif (expr is ExprAsVariant && (expr as ExprAsVariant).value is ExprCall) {
         // Optional rule (MB) -- zero or one
-        var as_expr <- expr as ExprAsVariant
+        let as_expr <- expr as ExprAsVariant
         var subrule = ((expr as ExprAsVariant).value as ExprCall).arguments[0] |> into_rule_
         subrule.name := as_expr.name
         var t <- Rule(option <- subrule)
@@ -197,7 +197,7 @@ def into_rule_(var expr : ExpressionPtr) : Rule_? {
             return <- new Rule_(rule <- Rule(nonterminal <- name))
         }
     } elif (expr is ExprConstString) {
-        var const_string <- expr as ExprConstString
+        let const_string <- expr as ExprConstString
         return <- new Rule_(rule <-
                         Rule(terminal <-
                           Terminal(lit = const_string.value |> string())))

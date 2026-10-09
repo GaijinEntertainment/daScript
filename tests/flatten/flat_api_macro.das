@@ -70,7 +70,7 @@ class FlatApiMacro : AstFunctionAnnotation {
             }
             return true
         }
-        var ctx = flatten_function(twin, MY_PRIMS)
+        let ctx = flatten_function(twin, MY_PRIMS)
         if (!ctx.ok) {
             errors := ctx.err
             return false

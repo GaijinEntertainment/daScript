@@ -323,7 +323,7 @@ def public strudel_debug_master_peak() {
 def public strudel_debug_output_peak() {
     //! Log the peak amplitude of each track's scheduler output (debug helper).
     for (i in range(length(g_tracks))) {
-        var track = g_tracks[i]
+        let track = g_tracks[i]
         if (track != null && !empty(track.sched.output)) {
             var peak = 0.0
             for (j in range(length(track.sched.output))) {
@@ -339,7 +339,7 @@ def public strudel_debug_output_peak() {
 def public strudel_debug_voices() {
     //! Log the number of active sample/oscillator voices on each track (debug helper).
     for (i in range(length(g_tracks))) {
-        var track = g_tracks[i]
+        let track = g_tracks[i]
         if (track != null) {
             to_log(0, "track {i}: voices={length(track.sched.voices)} osc={length(track.sched.osc_voices)}\n")
         }

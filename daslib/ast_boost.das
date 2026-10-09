@@ -989,7 +989,7 @@ def append_annotation(mod_name, ann_name : string) {
 
 def append_annotation(var func : FunctionPtr; mod_name, ann_name : string) {
     //! Appends an annotation to a function by module and annotation name.
-    var ann = find_annotation(mod_name, ann_name)
+    let ann = find_annotation(mod_name, ann_name)
     assert(ann != null)
     var decl = append_annotation(mod_name, ann_name)
     add_function_annotation(func, decl)
@@ -997,7 +997,7 @@ def append_annotation(var func : FunctionPtr; mod_name, ann_name : string) {
 
 def append_annotation(var blk : ExprBlock?; mod_name, ann_name : string) {
     //! Appends an annotation to an expression block by module and annotation name.
-    var ann = find_annotation(mod_name, ann_name)
+    let ann = find_annotation(mod_name, ann_name)
     assert(ann != null)
     var decl = append_annotation(mod_name, ann_name)
     add_block_annotation(blk, decl)
@@ -1005,7 +1005,7 @@ def append_annotation(var blk : ExprBlock?; mod_name, ann_name : string) {
 
 def append_annotation(var st : Structure?; mod_name, ann_name : string) {
     //! Appends an annotation to a structure by module and annotation name.
-    var ann = find_annotation(mod_name, ann_name)
+    let ann = find_annotation(mod_name, ann_name)
     assert(ann != null)
     var decl = append_annotation(mod_name, ann_name)
     add_structure_annotation(st, decl)
@@ -1013,7 +1013,7 @@ def append_annotation(var st : Structure?; mod_name, ann_name : string) {
 
 def append_annotation(var func : FunctionPtr; mod_name, ann_name : string; args : array< tuple<argname : string; argvalue : RttiValue> >) {
     //! Appends an annotation with arguments to a function.
-    var ann = find_annotation(mod_name, ann_name)
+    let ann = find_annotation(mod_name, ann_name)
     assert(ann != null)
     var decl = append_annotation(mod_name, ann_name, args)
     add_function_annotation(func, decl)
@@ -1021,7 +1021,7 @@ def append_annotation(var func : FunctionPtr; mod_name, ann_name : string; args 
 
 def append_annotation(var blk : ExprBlock?; mod_name, ann_name : string; args : array< tuple<argname : string; argvalue : RttiValue> >) {
     //! Appends an annotation with arguments to an expression block.
-    var ann = find_annotation(mod_name, ann_name)
+    let ann = find_annotation(mod_name, ann_name)
     assert(ann != null)
     var decl = append_annotation(mod_name, ann_name, args)
     add_block_annotation(blk, decl)
@@ -1029,7 +1029,7 @@ def append_annotation(var blk : ExprBlock?; mod_name, ann_name : string; args : 
 
 def append_annotation(var st : Structure?; mod_name, ann_name : string; args : array< tuple<argname : string; argvalue : RttiValue> >) {
     //! Appends an annotation with arguments to a structure.
-    var ann = find_annotation(mod_name, ann_name)
+    let ann = find_annotation(mod_name, ann_name)
     assert(ann != null)
     var decl = append_annotation(mod_name, ann_name, args)
     add_structure_annotation(st, decl)
@@ -1288,7 +1288,7 @@ def private debug_expression_impl(var writer : StringBuilderWriter; expr : Expre
         writer |> write(" {describe(expr)})")
         return
     }
-    var ann = unsafe(reinterpret<BasicStructureAnnotation?>(get_expression_annotation(expr)))
+    let ann = unsafe(reinterpret<BasicStructureAnnotation?>(get_expression_annotation(expr)))
     if (ann == null) {
         writer |> write(")")
         return

@@ -89,7 +89,7 @@ def public push_info_names(var out : array<string>; info : CommandInfo) {
 //! The generator-driver body: write the rendered doc, log the outcome. Callers pass an
 //! absolute path (usually `{get_das_root()}/...`).
 def public save_generated_doc(path, body : string) : bool {
-    var f = fopen(path, "wb")
+    let f = fopen(path, "wb")
     if (f == null) {
         to_log(LOG_ERROR, "env_registry: cannot write {path}\n")
         return false

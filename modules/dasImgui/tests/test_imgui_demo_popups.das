@@ -24,7 +24,7 @@ def test_imgui_demo_popups_smoke(t : T?) {
         if (snap0 == null) return
         t |> equal(find_widget(snap0, "MAIN_WIN")?["kind"] ?? "", "window",
                    "MAIN_WIN.kind == 'window'")
-        var snap1 = wait_for_widget(d, "MAIN_WIN/POPUPS_SECTION", 15.0f)
+        let snap1 = wait_for_widget(d, "MAIN_WIN/POPUPS_SECTION", 15.0f)
         t |> success(snap1 != null, "POPUPS_SECTION registers inside MAIN_WIN")
     }
 }

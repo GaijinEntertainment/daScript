@@ -266,7 +266,7 @@ class CollectAndReplaceIteratorFields : AstVisitor {
                             return <- expr
                         }
 
-                        var subCall = call.arguments[0] as ExprCall
+                        let subCall = call.arguments[0] as ExprCall
                         var fn = compiling_module() |> find_unique_function("{subCall.name}")
                         if (fn == null) {
                             macro_error(compiling_program(), expr.at, "expecting await(<async fn>), but function {subCall.name} is not found,\ndefine variable type explicitly: let res : <type> = await <| {subCall.name}()\nor make sure the function is defined before the coroutine")

@@ -56,9 +56,7 @@ def public clear_metal_requires_hook {
 }
 
 //! the installed `requires=` hook and whether it is armed - what a cell captures before it installs its own and restores after
-def public metal_requires_hook : tuple<hook : function<(msg : string) : void>; hooked : bool> {
-    return (hook = g_metal_requires_hook, hooked = g_metal_requires_hooked)
-}
+def public metal_requires_hook : tuple<hook : function<(msg : string) : void>; hooked : bool> => (hook = g_metal_requires_hook, hooked = g_metal_requires_hooked)
 
 //! puts back a state `metal_requires_hook` captured
 def public restore_metal_requires_hook(saved : tuple<hook : function<(msg : string) : void>; hooked : bool>) {
@@ -279,9 +277,7 @@ struct private StampSpec {
 }
 
 // a 128-row M-tile stamp: the tall forms and the dense q8 t128 spell their tile height in the form
-def private stamp_tall(form : string) : bool {
-    return form |> ends_with("128")
-}
+def private stamp_tall(form : string) : bool => form |> ends_with("128")
 
 def private stamp_form_ok(form : string; rem : bool) : bool {
     return (form == "t" || form == "th" || form == "th128"
@@ -399,7 +395,7 @@ class MetalDispatch : AstStructureAnnotation {
             }
         }
         for (dspec in split(grid, ",")) {
-            let dparts <- split(dspec, "/")
+            var inscope dparts <- split(dspec, "/")
             if (length(dparts) > 2) {
                 errors := "[metal_dispatch] {fn_name}: grid dim '{strip(dspec)}' has more than one '/' (int | param | param/coverage)"
                 return false
@@ -600,7 +596,7 @@ class MetalDispatch : AstStructureAnnotation {
         body |> reserve(length(bufs) * 3 + 4)
         if (!empty(strip(requires))) {
             for (item in split(requires, ",")) {
-                let lr <- split(item, "%")
+                var inscope lr <- split(item, "%")
                 if (length(lr) != 2 || !is_digit_tok(strip(lr[1])) || empty(strip(lr[0]))) {
                     errors := "[metal_dispatch] {fn_name}: requires item '{strip(item)}' must be 'param % int' or 'kargs.field % int'"
                     return false
@@ -646,7 +642,7 @@ class MetalDispatch : AstStructureAnnotation {
         }
         if (!empty(strip(params))) {
             for (p in split(params, ",")) {
-                let nt <- split(p, ":")
+                var inscope nt <- split(p, ":")
                 if (length(nt) != 2) {
                     errors := "[metal_dispatch] {fn_name}: param '{strip(p)}' must be 'name : type'"
                     return false

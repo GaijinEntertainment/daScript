@@ -69,8 +69,8 @@ def main {
             let gy = uint(g.n / 64l)
             time_gemm(queue, pso_base, bw, bx, by, u_k, u_n, gx, gy, 8192ul, 1)
             time_gemm(queue, pso_pad, bw, bx, by2, u_k, u_n, gx, gy, 9216ul, 1)
-            var pa = unsafe(reinterpret<float?>(metal_buffer_contents(by)))
-            var pb = unsafe(reinterpret<float?>(metal_buffer_contents(by2)))
+            let pa = unsafe(reinterpret<float?>(metal_buffer_contents(by)))
+            let pb = unsafe(reinterpret<float?>(metal_buffer_contents(by2)))
             var bad = 0
             for (i in range64(m * g.n)) {
                 if (unsafe(pa[i]) != unsafe(pb[i])) {

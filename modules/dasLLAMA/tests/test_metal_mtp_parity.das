@@ -401,8 +401,7 @@ def private dff_pair(tr, trg : Model; prompts : array<array<int64>>; nsteps : in
         let vocab = c.vocab_size
         let nb = long_length(prompts)
         with_dasllama_jobque() {
-            var sa : array<Session>
-            var sb : array<Session>
+            var sa, sb : array<Session>
             sa |> reserve(nb)
             sb |> reserve(nb)
             dn_mirror_room(2l * nb + 1l)   // a recurrent carrier: every twin and the reference row keep a live mirror, and a prefill mints one - the room comes before them

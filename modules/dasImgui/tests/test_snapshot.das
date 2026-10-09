@@ -21,7 +21,7 @@ let TRIGGERS_FEATURE = "modules/dasImgui/examples/features/triggers.das"
 [test]
 def test_one_snapshot(t : T?) {
     with_imgui_app(TRIGGERS_FEATURE) $(d) {
-        var snap = wait_for_widget(d, "MAIN_WIN/SAVE_BTN", 15.0f)
+        let snap = wait_for_widget(d, "MAIN_WIN/SAVE_BTN", 15.0f)
         t |> success(snap != null, "snapshot returned non-null payload with MAIN_WIN/SAVE_BTN registered")
     }
 }

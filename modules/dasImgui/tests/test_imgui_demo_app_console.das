@@ -22,7 +22,7 @@ def test_imgui_demo_app_console_smoke(t : T?) {
         if (snap0 == null) return
         t |> equal(find_widget(snap0, "CONSOLE_WIN")?["kind"] ?? "", "window",
                    "CONSOLE_WIN.kind == 'window'")
-        var snap1 = wait_for_widget(d, "CONSOLE_WIN/CONSOLE_INPUT", 15.0f)
+        let snap1 = wait_for_widget(d, "CONSOLE_WIN/CONSOLE_INPUT", 15.0f)
         t |> success(snap1 != null, "CONSOLE_INPUT registers inside CONSOLE_WIN")
     }
 }

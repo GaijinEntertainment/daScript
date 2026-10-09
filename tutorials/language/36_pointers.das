@@ -95,7 +95,7 @@ def main() {   // nolint:STYLE038 - tutorial walkthrough, the sequence IS the le
 
     print("=== safe_addr ===\n")
     var b = 77
-    var pb = safe_addr(b)         // pb is int?# (temporary pointer)
+    let pb = safe_addr(b)         // pb is int?# (temporary pointer)
     print("  *pb = {*pb}\n")
 
     // === Dereferencing ===
@@ -105,7 +105,7 @@ def main() {   // nolint:STYLE038 - tutorial walkthrough, the sequence IS the le
 
     print("=== deref ===\n")
     var c = 5
-    var pc = unsafe(addr(c))
+    let pc = unsafe(addr(c))
     print("  *pc = {*pc}\n")
     print("  deref(pc) = {deref(pc)}\n")
 
@@ -119,7 +119,7 @@ def main() {   // nolint:STYLE038 - tutorial walkthrough, the sequence IS the le
     // Dereferencing null panics.
 
     print("=== null ===\n")
-    var np : int?                   // null by default
+    let np : int?                   // null by default
     print("  np is null: {np == null}\n")
 
     // Catch null dereference with try/recover:
@@ -135,8 +135,8 @@ def main() {   // nolint:STYLE038 - tutorial walkthrough, the sequence IS the le
     // ?? provides a default value when the left side is null.
 
     print("=== safe navigation ===\n")
-    var sp = new Point(x = 10.0, y = 20.0)
-    var nullp : Point?
+    let sp = new Point(x = 10.0, y = 20.0)
+    let nullp : Point?
 
     print("  sp?.x = {sp?.x ?? -1.0}\n")        // 10.0
     print("  nullp?.x = {nullp?.x ?? -1.0}\n")   // -1.0 (default)
@@ -187,9 +187,9 @@ def main() {   // nolint:STYLE038 - tutorial walkthrough, the sequence IS the le
     print("=== void pointer ===\n")
     var d = 123
     unsafe {
-        var pd = addr(d)
-        var vp : void? = reinterpret<void?>(pd)       // erase type
-        var pd2 = reinterpret<int?>(vp)                // restore type
+        let pd = addr(d)
+        let vp : void? = reinterpret<void?>(pd)       // erase type
+        let pd2 = reinterpret<int?>(vp)                // restore type
         print("  *pd2 = {*pd2}\n")
     }
 

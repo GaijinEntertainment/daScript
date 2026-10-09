@@ -22,7 +22,7 @@ def test_ascend(t : T?) {
 }
 
 def test_ascend_cmres(t : T?) {
-    var f = new array<int>(1, 2)
+    let f = new array<int>(1, 2)
     t |> equal(*f |> length(), 2)
     for (a, b in *f, [1, 2]) {
         t |> equal(a, b)
@@ -102,7 +102,7 @@ def ref_count_test(t : T?) {
     var sptr <- new TestObjectSmart         // ref_count = 1
     t |> equal(1, getTotalTestObjectSmart())
     t |> equal(1u, smart_ptr_use_count(sptr))
-    var ptr = get_ptr(sptr)
+    let ptr = get_ptr(sptr)
     let _pptr : TestObjectSmart? = get_ptr(sptr)   // type-compat probe: raw ptr binds to a declared pointer var
     t |> success(sptr == ptr)
     t |> success(get_ptr(sptr) == ptr)

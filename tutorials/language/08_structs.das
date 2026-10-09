@@ -114,7 +114,7 @@ def main {
     // === Heap allocation with new ===
     // new creates a pointer to a heap-allocated struct.
     // Useful when you need the struct to outlive the current scope.
-    var p3 = new Point(x = 7.0, y = 8.0)
+    let p3 = new Point(x = 7.0, y = 8.0)
     // p3 is of type Point? (pointer to Point)
     print("p3 = ({p3.x}, {p3.y})\n")
 

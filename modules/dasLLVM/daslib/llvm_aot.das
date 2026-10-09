@@ -21,7 +21,7 @@ require strings
 
 // The das_aot_register ctor: for each emitted function, emit das_aot_register(aotHash, publ) so
 // the linked .o self-registers into the AOT library at load; also wire the glob re-resolution callback.
-def private emit_aot_register_ctor_dtor(types : PrimitiveTypes?; funcs : array<FunctionPtr>; var uids : UidNodes?; _prog : Program?; glob_ctor : LLVMOpaqueValue?) : tuple<LLVMOpaqueValue?, LLVMOpaqueValue?> {
+def private emit_aot_register_ctor_dtor(types : PrimitiveTypes?; funcs : array<FunctionPtr>; uids : UidNodes?; _prog : Program?; glob_ctor : LLVMOpaqueValue?) : tuple<LLVMOpaqueValue?, LLVMOpaqueValue?> {
     let regType = LLVMFunctionType(types.t_void,
         fixed_array<LLVMTypeRef>(types.t_int64, types.LLVMVoidPtrType()))
     var regFn = LLVMGetNamedFunction(g_mod, "das_aot_register")

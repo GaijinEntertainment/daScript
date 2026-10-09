@@ -148,7 +148,7 @@ def target_swizzle(v : float3) : float {
 def target_alias(x : int) : int {
     var y = x + 1
     let a = y * 3
-    var p = unsafe(addr(y)) // addr() disqualifies y as a leaf
+    let p = unsafe(addr(y)) // addr() disqualifies y as a leaf
     let b = y * 3           // must be recomputed
     return a + b + *p
 }

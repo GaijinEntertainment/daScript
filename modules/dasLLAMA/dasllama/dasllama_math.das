@@ -3029,7 +3029,7 @@ def swiglu4(var g : float?; u : float const?; size : int64) {
     let one = float4(1.0, 1.0, 1.0, 1.0)
     unsafe {
         var g4 = reinterpret<float4?>(g)
-        var u4 = reinterpret<float4 const?>(u)
+        let u4 = reinterpret<float4 const?>(u)
         let n4 = size / 4l
         for (k in range64(n4)) {
             let v = g4[k]
@@ -3054,7 +3054,7 @@ def geglu4(var g : float?; u : float const?; size : int64) {
     let cc = float4(0.044715)
     unsafe {
         var g4 = reinterpret<float4?>(g)
-        var u4 = reinterpret<float4 const?>(u)
+        let u4 = reinterpret<float4 const?>(u)
         let n4 = size / 4l
         for (k in range64(n4)) {
             let v = g4[k]
@@ -3080,7 +3080,7 @@ def swiglu_oai4(var g : float?; u : float const?; size : int64) {
     let nalpha = float4(-SWIGLU_OAI_ALPHA)
     unsafe {
         var g4 = reinterpret<float4?>(g)
-        var u4 = reinterpret<float4 const?>(u)
+        let u4 = reinterpret<float4 const?>(u)
         let n4 = size / 4l
         for (k in range64(n4)) {
             let x = min(g4[k], lim)

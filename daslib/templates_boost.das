@@ -473,7 +473,7 @@ def move_unquote_block(var expr : Expression?&) : ExprBlock? {
     //! Moves the corresponding block subexpression expression from the ExprMakeBlock.
     assert(expr is ExprMakeBlock)
     unsafe {
-        var mkb = reinterpret<ExprMakeBlock?>(expr)
+        let mkb = reinterpret<ExprMakeBlock?>(expr)
         let blk = mkb._block
         var res = reinterpret<ExprBlock?>(blk)
         return res

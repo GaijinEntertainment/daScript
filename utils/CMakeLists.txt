@@ -21,53 +21,6 @@ add_custom_target(check_dasgen
     COMMENT "Checking generated builtin .inc files are up to date (dasgen)"
 )
 
-# The lint gate's -P script; configure emits it into the build dir.
-set(_das_changed_files_fn [==[
-function(das_ci_changed_files out base_ref)
-    execute_process(
-        COMMAND git diff --name-only --diff-filter=AM "origin/${base_ref}...HEAD" -- ${ARGN}
-        WORKING_DIRECTORY "${DAS_ROOT}"
-        OUTPUT_VARIABLE _files
-        RESULT_VARIABLE _rc
-        OUTPUT_STRIP_TRAILING_WHITESPACE)
-    if(NOT _rc EQUAL 0)
-        message(FATAL_ERROR "git diff against origin/${base_ref} failed (${_rc})")
-    endif()
-    string(REPLACE "\n" ";" _files "${_files}")
-    set(${out} "${_files}" PARENT_SCOPE)
-endfunction()
-]==])
-
-set(DAS_LINT_CHANGED_SCRIPT ${CMAKE_BINARY_DIR}/das_lint_changed.cmake)
-file(WRITE ${DAS_LINT_CHANGED_SCRIPT} "${_das_changed_files_fn}" [==[
-if(NOT BASE_REF)
-    set(BASE_REF "$ENV{DAS_CI_BASE_REF}")
-endif()
-if(NOT BASE_REF)
-    set(BASE_REF master)
-endif()
-das_ci_changed_files(_changed "${BASE_REF}" "*.das" "*.md")
-if(NOT _changed)
-    message(STATUS "no .das or .md files changed; skipping lint")
-    return()
-endif()
-message(STATUS "linting: ${_changed}")
-execute_process(
-    COMMAND "${DASLANG}" ./utils/lint/main.das -- ${_changed} --quiet --disable LINT019
-    WORKING_DIRECTORY "${DAS_ROOT}"
-    RESULT_VARIABLE _rc)
-if(NOT _rc EQUAL 0)
-    message(FATAL_ERROR "lint reported findings (${_rc})")
-endif()
-]==])
-
-add_das_target(check_lint_changed
-    COMMAND ${CMAKE_COMMAND} -DDAS_ROOT=${PROJECT_SOURCE_DIR} -DDASLANG=$<TARGET_FILE:daslang>
-            -P ${DAS_LINT_CHANGED_SCRIPT}
-    DEPENDS daslang
-    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
-    COMMENT "Linting the .das and .md files changed against origin/DAS_CI_BASE_REF"
-)
 # check_lint_tree lints DAS_CHUNKS of the tree in parallel. LINT019 needs every compile's nolint
 set(_lint_roots daslib utils modules tutorials examples tests src)
 list(TRANSFORM _lint_roots PREPEND "${PROJECT_SOURCE_DIR}/" OUTPUT_VARIABLE _lint_globs)

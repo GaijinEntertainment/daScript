@@ -200,7 +200,7 @@ def image_peek(path : string) : DlimPeek {
         }
         return p
     }
-    var bp = unsafe(reinterpret<uint8 const?>(base))
+    let bp = unsafe(reinterpret<uint8 const?>(base))
     p.bytes = int64(msize)
     p.version = int(read_u32(bp, 4l))
     p.layout = read_u64(bp, 48l)
@@ -636,14 +636,14 @@ def private store_at(var b : array<uint8>; at : int; v : auto(TT)) {
 
 def private read_u32(p : uint8 const?; at : int64) : uint {
     unsafe {
-        var q = reinterpret<uint const?>(p + at)
+        let q = reinterpret<uint const?>(p + at)
         return q[0]
     }
 }
 
 def private read_u64(p : uint8 const?; at : int64) : uint64 {
     unsafe {
-        var q = reinterpret<uint64 const?>(p + at)
+        let q = reinterpret<uint64 const?>(p + at)
         return q[0]
     }
 }

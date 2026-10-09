@@ -19,6 +19,7 @@
 // result. [NEW] marks behavior the unified lattice added (shared-but-freeable aliases; caller frees a
 // fresh-owned return value) - now implemented and passing.
 options gen2
+options _nolint = "LINT003"   // escape analysis scope-frees only a var pointer: the `new` locals stay var
 options persistent_heap
 options no_optimization
 options force_escape_free = true

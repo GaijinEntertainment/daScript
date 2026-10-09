@@ -121,9 +121,9 @@ class template MetalQ8MulMmTensorT {
         let mBase = gl_WorkGroupID.x * MT
         let nBase = gl_WorkGroupID.y * 64u
         let blk0 = nBase * (kdim / 32u)
-        var sp = unsafe(addr(wsh[blk0 * 17u]))
-        var wp = unsafe(addr(wqb[blk0 * 34u + 2u]))
-        var ap = unsafe(addr(xf[mBase * kdim]))
+        let sp = unsafe(addr(wsh[blk0 * 17u]))
+        let wp = unsafe(addr(wqb[blk0 * 34u + 2u]))
+        let ap = unsafe(addr(xf[mBase * kdim]))
         var cp = unsafe(addr(y[mBase * ndim + nBase]))
         tmm2d_q8u_f32(MT, 64u, 4u, twb, sp, wp, ap, kdim, cp, ndim, kdim, kdim / 32u, gl_LocalInvocationIndex, BK)
     }
@@ -316,8 +316,8 @@ class template MetalHalfMulMmTensorT {
             mBase = (gl_WorkGroupID.x % mtiles) * MT
             nBase = (gl_WorkGroupID.x / mtiles) * 64u
         }
-        var wp = unsafe(addr(wh[nBase * kdim]))
-        var ap = unsafe(addr(xf[mBase * kdim]))
+        let wp = unsafe(addr(wh[nBase * kdim]))
+        let ap = unsafe(addr(xf[mBase * kdim]))
         var cp = unsafe(addr(y[mBase * ndim + nBase]))
         tmm2d_f16w_f32(MT, 64u, 4u, ap, kdim, wp, kdim, cp, ndim, kdim)
     }
@@ -350,8 +350,8 @@ class template MetalBf16MulMmTensorT {
     def metal_bf16_mulmm_t {
         let mBase = gl_WorkGroupID.x * MT
         let nBase = gl_WorkGroupID.y * 64u
-        var ap = unsafe(addr(xf[mBase * kdim]))
-        var wp = unsafe(addr(wbh[nBase * kdim]))
+        let ap = unsafe(addr(xf[mBase * kdim]))
+        let wp = unsafe(addr(wbh[nBase * kdim]))
         var cp = unsafe(addr(y[mBase * ndim + nBase]))
         tmm2d_f32_bf16_f32(MT, 64u, 4u, ap, kdim, wp, kdim, cp, ndim, kdim)
     }
@@ -1791,7 +1791,7 @@ class template MetalMoeMulMmMx4TensorT : MetalMoeMulMmKqTensorBase {
 
     def override store_out(var acc : float[8192]; var cp : float?; e, nBase : uint) {
         if (ka.hasb != 0u) {
-            var bp = unsafe(addr(wb[e * ka.ndim + nBase]))
+            let bp = unsafe(addr(wb[e * ka.ndim + nBase]))
             tmm2d_tg_store_bias(acc, cp, bp, MT, 64u, ka.ndim)
         } else {
             tmm2d_tg_store(acc, cp, MT, 64u, ka.ndim)
@@ -1970,9 +1970,9 @@ class template MetalMoeMulMmQ8TensorT {
         let rbase = basep[e]
         let nBase = gl_WorkGroupID.y * 64u
         let blk0 = e * ka.eplane + nBase * (ka.kdim / 32u)
-        var sp = unsafe(addr(wsh[blk0 * 17u]))
-        var wp = unsafe(addr(wqb[blk0 * 34u + 2u]))
-        var ap = unsafe(addr(xf[(rbase + mBase) * ka.kdim]))
+        let sp = unsafe(addr(wsh[blk0 * 17u]))
+        let wp = unsafe(addr(wqb[blk0 * 34u + 2u]))
+        let ap = unsafe(addr(xf[(rbase + mBase) * ka.kdim]))
         var cp = unsafe(addr(y[(rbase + mBase) * ka.ndim + nBase]))
         tmm2d_q8u_f32(MT, 64u, 4u, twb, sp, wp, ap, ka.kdim, cp, ka.ndim, ka.kdim, ka.kdim / 32u, gl_LocalInvocationIndex, 64u)
     }

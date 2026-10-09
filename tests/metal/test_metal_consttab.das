@@ -8,7 +8,7 @@ options indenting = 4
 
 require dastest/testing_boost public
 require metal/msl_shader
-require _metal_common   // nolint:STYLE030 — used inside the das_metal static_if arm only
+require _metal_common   // nolint:STYLE030,LINT019 — used inside the das_metal static_if arm only
 
 let N = 256
 let TPG = 64u

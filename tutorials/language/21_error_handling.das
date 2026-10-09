@@ -113,7 +113,7 @@ def main {
 
     // Catching null pointer dereference
     try {
-        var p : int?
+        let p : int?
         print("  {*p}\n")
     } recover {
         print("  caught null pointer dereference\n")

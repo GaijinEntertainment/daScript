@@ -71,7 +71,7 @@ def main {
         let T_ASPECT = "ASPECT_WIN/ASPECT_TEXT"
         let T_STEP   = "STEP_WIN/STEP_TEXT"
 
-        var snap = wait_for_render(app, T_SQUARE, 10.0f)
+        let snap = wait_for_render(app, T_SQUARE, 10.0f)
         if (snap == null) {
             panic("{T_SQUARE} never rendered - wrong app running?")
         }

@@ -236,7 +236,7 @@ def main() { // nolint:STYLE038 — tutorial client script, linear by design
             print("GET /api/status -> {resp.body}\n")
             // Parse the JSON response
             var err : string
-            var parsed = read_json(string(resp.body), err)
+            let parsed = read_json(string(resp.body), err)
             if (parsed != null) {
                 print("  parsed OK\n")
             }

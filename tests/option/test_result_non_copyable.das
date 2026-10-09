@@ -331,3 +331,15 @@ def test_chaining(t : T?) {
         t |> equal(n, -1)
     }
 }
+
+[test]
+def test_move_with_non_copyable_other_side(t : T?) {
+    var value <- make_arr(1, 2)
+    var r <- move_ok(value, type<array<int>>)
+    t |> success(is_ok(r))
+    t |> equal(length(move_unwrap(r)), 2)
+    var error <- make_arr(3, 4)
+    var e <- move_err(error, type<array<int>>)
+    t |> success(is_err(e))
+    t |> equal(length(move_unwrap_err(e)), 2)
+}

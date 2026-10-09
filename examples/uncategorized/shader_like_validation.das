@@ -38,5 +38,5 @@ def main() {
     invoke(lmb)
 
     // new requires heap → 2x error 40104
-    var f = new Foo()
+    let f = new Foo()
 }

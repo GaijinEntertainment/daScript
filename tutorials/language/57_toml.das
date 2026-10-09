@@ -230,7 +230,7 @@ def error_handling() {
     print("\n=== Error handling ===\n")
 
     var error : string
-    var doc = read_toml("key = = broken", error)
+    let doc = read_toml("key = = broken", error)
     print("doc is null: {doc == null}\n")
     // output: doc is null: true
     print("error non-empty: {!empty(error)}\n")
@@ -252,7 +252,7 @@ def struct_deserialize() {
     print("\n=== Deserialize into a struct ===\n")
 
     var error : string
-    var doc = read_toml("host = \"0.0.0.0\"
+    let doc = read_toml("host = \"0.0.0.0\"
 port = 9090
 workers = 4", error)
 

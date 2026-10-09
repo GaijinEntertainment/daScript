@@ -44,7 +44,7 @@ def test_plot_widgets_smoke(t : T?) {
         t |> equal(hist_samples, 8, "HISTOGRAM.payload.samples = 8")
 
         // Gate 3: bounds is a tuple — check its serialized shape.
-        var bounds = widget_payload_field(snap, "MAIN_WIN/SINE_WAVE", "bounds")
+        let bounds = widget_payload_field(snap, "MAIN_WIN/SINE_WAVE", "bounds")
         t |> success(bounds != null, "SINE_WAVE.payload.bounds present")
     }
 }

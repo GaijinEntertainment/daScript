@@ -141,6 +141,15 @@ let public SWEEP_HEAVY_REQUIRE = "require dasllama/"
 
 def public is_heavy_sweep_root(text : string) : bool => find(text, SWEEP_HEAVY_REQUIRE) >= 0
 
+//! How many files the lint run's ``--fix`` rewrote: one ``FIXED <file> (<n>)`` line each
+def public count_fixed_files(out : string) : int {
+    var n = 0
+    for (line in split(out, "\n")) {
+        n++ if (line |> starts_with("FIXED "))
+    }
+    return n
+}
+
 //! The files dastest's closing FAILURES block names, comma-joined, at most five.
 def public failed_files_block(out : string) : string {
     var files : array<string>
@@ -264,7 +273,7 @@ def public load_preflight_settings(path : string; var error : string&) : Preflig
     let body = fread(path)
     if (empty(body)) return settings
 
-    var root : JsonValue? = read_toml(body, error)
+    let root : JsonValue? = read_toml(body, error)
     if (!empty(error) || root == null || !(root.value is _object)) {
         if (empty(error)) {
             error = "preflight config root must be a TOML table"

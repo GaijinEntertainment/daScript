@@ -134,9 +134,9 @@ def main {   // nolint:STYLE038 - tutorial walkthrough, the sequence IS the less
     // === Static fields and methods ===
 
     // Static fields are shared across all instances
-    var t1 = new Tracker()
-    var t2 = new Tracker()
-    var t3 = new Tracker()
+    let t1 = new Tracker()
+    let t2 = new Tracker()
+    let t3 = new Tracker()
     print("tracker ids: {t1.id}, {t2.id}, {t3.id}\n")
 
     // Access static field via backtick syntax

@@ -6634,6 +6634,7 @@ The lint_config module loads `{get_das_root()}/.lint_config` (a TOML file with a
 
 ### Constants
 
+- `LINT_CACHE_DEFAULT_DIR`
 - `LINT_SKIP_HEADER_LINES`
 
 ### Structures
@@ -6643,11 +6644,16 @@ The lint_config module loads `{get_das_root()}/.lint_config` (a TOML file with a
 - `LintFix`
 - `LintIssue`
 
+### Function annotations
+
+- `lint_tool_entry` - `[lint_tool_entry]` marks the lint runner's entry point: its semantic hash, every function it reaches included, versions the result cache
+
 ### Configuration
 
 - `add_module_rule_overrides`
 - `build_lint_macro_disabled`
 - `lint_config_forces_on`
+- `lint_configs_for`
 - `load_env_disabled`
 - `load_lint_config`
 - `load_lint_config_from_path`

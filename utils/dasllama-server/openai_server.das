@@ -5207,7 +5207,7 @@ def private drain_asr_events(srv : FrontLink) {
                     g_asr_done_jobs ++
                     g_asr_audio_s += event.audio_s
                 }
-                var wire = unsafe(g_asr_wires?[event.id])
+                let wire = unsafe(g_asr_wires?[event.id])
                 if (wire != null) {
                     if (is_writer_connected(srv, wire.writer)) {
                         set_writer_keepalive_timeout(srv, wire.writer, DEFAULT_WRITER_KEEPALIVE_MS)
@@ -5718,7 +5718,7 @@ def private drain_tts_events(srv : FrontLink) {
                     g_tts_done_jobs++
                     g_tts_audio_s += event.audio_s
                 }
-                var wire = unsafe(g_tts_wires?[event.id])
+                let wire = unsafe(g_tts_wires?[event.id])
                 if (wire != null) {
                     if (is_writer_connected(srv, wire.writer)) {
                         set_writer_keepalive_timeout(srv, wire.writer, DEFAULT_WRITER_KEEPALIVE_MS)
@@ -5760,7 +5760,7 @@ def private drain_tts_events(srv : FrontLink) {
 // temp file are ours to close, so the teardown finishes the job instead of dropping it.
 def private discard_tts_completion(id : int64; file_path : string) {
     g_tts_pending = max(g_tts_pending - 1, 0)
-    var wire = unsafe(g_tts_wires?[id])
+    let wire = unsafe(g_tts_wires?[id])
     if (wire != null) {
         if (g_link.out != null) {
             release_writer(g_link, wire.writer)

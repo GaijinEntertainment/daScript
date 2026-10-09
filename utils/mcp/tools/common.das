@@ -309,7 +309,7 @@ def write_func_signature(var w : StringBuilderWriter; func) {
 
 def write_handled_type(var w : StringBuilderWriter; value : Annotation const) {
     write(w, "  handled {value.name}")
-    var ann = unsafe(reinterpret<BasicStructureAnnotation?>(value))
+    let ann = unsafe(reinterpret<BasicStructureAnnotation?>(value))
     basic_struct_for_each_parent(*ann) $(parent) {
         write(w, " : {parent.name}")
     }

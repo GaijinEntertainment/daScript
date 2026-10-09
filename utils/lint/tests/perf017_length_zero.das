@@ -26,6 +26,7 @@ options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; s
 expect 31208:16
 
 require daslib/perf_lint
+require daslib/match
 require strings
 
 // --- Bad patterns (length on left) ---
@@ -117,6 +118,15 @@ def good_string_len_other(s : string; n : int) : bool {
 
 def good_length_three(s : string) : bool {
     return length(s) == 3                      // not 0/1 — NOT flagged
+}
+
+def good_match_length_test(a : array<int>) : bool {
+    match (a) {
+        if (array<int>(1, ...)) {                 // the length test the match macro emits is generated — NOT flagged
+            return true
+        }
+    }
+    return false
 }
 
 // --- Bad: user code has a method literally named `empty` ---

@@ -746,7 +746,7 @@ def private make_reduce_group_call(var terms : array<ReTerm>; cand : array<int>;
     return hcll
 }
 
-def private hadd_fold_chain(var that : ExpressionPtr; var terms : array<ReTerm>; minWidth : int; mod : Module?) : ExpressionPtr {
+def private hadd_fold_chain(that : ExpressionPtr; var terms : array<ReTerm>; minWidth : int; mod : Module?) : ExpressionPtr {
     var cand : array<int>
     var laneScalar : array<ExpressionPtr>
     var laneWeight : array<float>

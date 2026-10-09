@@ -72,7 +72,7 @@ def read_lock_file_at(path : string; var lf : LockFile) : bool {
         if (f == null) return
         let text = fread(f)
         var error : string
-        var parsed = read_json(text, error)
+        let parsed = read_json(text, error)
         if (parsed == null) {
             to_log(LOG_ERROR, "Error reading {path}: {error}\n")
             return

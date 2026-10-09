@@ -38,14 +38,14 @@ def main {   // nolint:STYLE038 - tutorial walkthrough, the sequence IS the less
     print("deref:\n")
     {
         var y = 7
-        var p = unsafe(addr(y))
+        let p = unsafe(addr(y))
         print("  *p = {*p}\n")
         print("  deref(p) = {deref(p)}\n")
     }
 
     // Null pointer dereference panics (can be caught with try/recover):
     try {
-        var p : int?    // null pointer
+        let p : int?    // null pointer
         print("  {*p}\n")       // panics
     } recover {
         print("  caught null dereference\n")
@@ -57,8 +57,8 @@ def main {   // nolint:STYLE038 - tutorial walkthrough, the sequence IS the less
     print("null check:\n")
     {
         var a = 42
-        var p = unsafe(addr(a))
-        var q : int?            // null
+        let p = unsafe(addr(a))
+        let q : int?            // null
 
         if (p != null) {
             print("  p is valid: {*p}\n")
@@ -74,7 +74,7 @@ def main {   // nolint:STYLE038 - tutorial walkthrough, the sequence IS the less
     print("pointer indexing:\n")
     var arr <- [10, 20, 30, 40, 50]
     unsafe {
-        var p = addr(arr[0])
+        let p = addr(arr[0])
         print("  p[0] = {p[0]}\n")
         print("  p[2] = {p[2]}\n")
         print("  p[4] = {p[4]}\n")

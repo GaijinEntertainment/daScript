@@ -27,7 +27,7 @@ struct DefinitionResult {
 // Read a few lines from a file around a given line number
 def read_source_snippet(file_path : string; line : int; context_lines : int = 3) : string {
     if (empty(file_path) || line <= 0) return ""
-    var f = fopen(file_path, "r")
+    let f = fopen(file_path, "r")
     if (f == null) return ""
     var lines : array<string>
     while (!feof(f)) {

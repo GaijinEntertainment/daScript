@@ -25,7 +25,7 @@ def expect_ok(t : T?; what : string; input : string) : JsonValue? {
 
 def expect_fail(t : T?; what : string; input : string) {
     var err : string
-    var v : JsonValue? = read_toml(input, err)
+    let v : JsonValue? = read_toml(input, err)
     if (v != null) {
         t |> failure("{what}: expected parse failure but parsed OK")
         return
@@ -414,7 +414,7 @@ def test_fail_exponent_sign_no_digits(t : T?) {
 
 def expect_fail_with_eof(t : T?; what : string; input : string) {
     var err : string
-    var v : JsonValue? = read_toml(input, err)
+    let v : JsonValue? = read_toml(input, err)
     if (v != null) {
         t |> failure("{what}: expected parse failure but parsed OK")
         return
@@ -491,7 +491,7 @@ def test_fail_missing_equals(t : T?) {
 
 def expect_fail_with(t : T?; what : string; input : string; needle : string) {
     var err : string
-    var v : JsonValue? = read_toml(input, err)
+    let v : JsonValue? = read_toml(input, err)
     if (v != null) {
         t |> failure("{what}: expected parse failure but parsed OK")
         return

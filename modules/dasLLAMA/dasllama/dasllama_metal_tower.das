@@ -1278,7 +1278,7 @@ struct private TwFcFront {
     u_d : MetalBuffer?
 }
 
-def private tw_fc_front_convs(enc : MetalComputeEncoder?; var f : TwFcFront; bmel, bcol0, y0, y2, y3, y5, y6, xf, out : MetalBuffer?) {   // nolint:LINT023 — the args seats take the record's fields as values
+def private tw_fc_front_convs(enc : MetalComputeEncoder?; var f : TwFcFront; bmel, bcol0, y0, y2, y3, y5, y6, xf, out : MetalBuffer?) {
     enc_im2col2d(enc, bmel, bcol0, GkIm2col2dArgs(iw = uint(f.n_mel), ih = uint(f.n_len), cin = 1u, sstride = 1u, kdp = uint(CONV0_KDP), rows = uint(f.rows0), soff = 0u), f.rows0 * CONV0_KDP)
     enc_f32_mm(enc, f.bw0, 0ul, bcol0, y0, 0ul, f.u_k0, f.u_nch, f.mp0, f.nch)
     tw_bias(enc, y0, f.bblob, GkBiasActArgs(d = uint(f.nch), nelem = uint(f.rows0 * f.nch), boff = uint(f.c0_b), act = BIAS_ACT_RELU))
@@ -1459,7 +1459,7 @@ def set_metal_parakeet_front(on : bool) : bool {
 //! buffer off the mel, the CPU chain's stages in its order. Answers the frame count, or -1 with nothing counted
 //! where the front cannot serve: the CPU front runs then, and the block seat answers for itself.
 [hot_path, arch(at="../ARCHITECTURE_GPU_TOWER.md#tower-encode-chains")]
-def private metal_parakeet_encode(t : ParakeetModel; var st : ParakeetState) : int64 {   // nolint:STYLE038 — the dispatch chain is the shape
+def private metal_parakeet_encode(t : ParakeetModel; var st : ParakeetState) : int64 {
     if (!g_tw_env_tower || !g_tw_pk_front || t.q8) {
         return -1l
     }
@@ -4250,7 +4250,7 @@ def private metal_styletts2_text(te : St2TextEncoder; ids : array<int>; @scratch
     c.exact = true
     var bids = st2_ids_buf(c, ids)
     var ba = st2_rows_buf(c, t, cc)
-    var bb = st2_rows_buf(c, t, cc)
+    let bb = st2_rows_buf(c, t, cc)
     var lb = st2_lstm_bufs(c, g_tw_st2_text.lstm, t, te.lstm.fwd.hidden)
     let sl & = g_tw_st2_text
     var err = ""

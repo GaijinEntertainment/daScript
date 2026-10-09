@@ -59,7 +59,7 @@ struct PackageReleaseInfo {
 def run_das_package_meta(das_package_path : string; var meta : PackageMeta) : bool {
     let args : array<string>
     let ok = run_das_package(das_package_path, "package", args) $(ctx) {
-        var p = unsafe(get_context_global_variable(ctx, "_pkg_meta"))
+        let p = unsafe(get_context_global_variable(ctx, "_pkg_meta"))
         if (p != null) {
             let src = unsafe(reinterpret<PackageMeta?>(p))
             meta.pkg_name = clone_string(src.pkg_name)
@@ -109,7 +109,7 @@ def run_das_package_resolve(das_package_path : string; sdk_version, version : st
 def run_das_package_deps(das_package_path : string; version : string; var deps : array<PackageDependency>) : bool {
     let args <- [version]
     let ok = run_das_package(das_package_path, "dependencies", args) $(ctx) {
-        var p = unsafe(get_context_global_variable(ctx, "_dependencies"))
+        let p = unsafe(get_context_global_variable(ctx, "_dependencies"))
         if (p != null) {
             let arr = unsafe(reinterpret<array<Dependency>?>(p))
             for (d in *arr) {
@@ -124,7 +124,7 @@ def run_das_package_deps(das_package_path : string; version : string; var deps :
 def run_das_package_release(das_package_path : string; var info : PackageReleaseInfo) : bool {
     let args : array<string>
     let ok = run_das_package(das_package_path, "release", args) $(ctx) {
-        var p = unsafe(get_context_global_variable(ctx, "_release_spec"))
+        let p = unsafe(get_context_global_variable(ctx, "_release_spec"))
         if (p != null) {
             let src = unsafe(reinterpret<ReleaseSpec?>(p))
             info.name = clone_string(src.name)

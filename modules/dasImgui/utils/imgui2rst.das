@@ -202,7 +202,7 @@ let RULE = "----------------------------------------"
 def generate_icon_catalog() {
     let path = "{topic_root}/imgui_icons.rst"
     mkdir_rec(dir_name(path))
-    var f = fopen(path, "wb")
+    let f = fopen(path, "wb")
     if (f == null) {
         panic("can't open {path}")
     }

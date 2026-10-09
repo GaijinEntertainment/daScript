@@ -79,7 +79,7 @@ def private check_make_nodes(t : T?; var fn : FunctionPtr; lines : array<string>
     if (length(inits) != 4) return
 
     // [[Foo a=1, b=2.0]] stays a make-struct; `useInitializer` records that no () was written
-    var msd = inits[0] ?as ExprMakeStruct
+    let msd = inits[0] ?as ExprMakeStruct
     t |> success(msd != null, "first init is ExprMakeStruct")
     if (msd != null) {
         t |> success(!msd.makeStructFlags.useInitializer, "no () in [[Foo ...]] means useInitializer == false")
@@ -88,7 +88,7 @@ def private check_make_nodes(t : T?; var fn : FunctionPtr; lines : array<string>
 
     // [[auto 1; 2; 3]] — the v1 spelling is recorded in the tree, so a rewriter does not have
     // to consult the source to know which syntax was written
-    var mka = inits[1] ?as ExprMakeArray
+    let mka = inits[1] ?as ExprMakeArray
     t |> success(mka != null, "second init is ExprMakeArray")
     if (mka != null) {
         t |> success(!mka.gen2, "v1 make-array carries gen2 == false")
@@ -97,7 +97,7 @@ def private check_make_nodes(t : T?; var fn : FunctionPtr; lines : array<string>
 
     // [[auto 4, 5]] is a one-element make-array holding a make-tuple; infer is what collapses
     // that into a bare tuple, so a pre-infer walk has to expect the wrapper
-    var mkt = inits[2] ?as ExprMakeArray
+    let mkt = inits[2] ?as ExprMakeArray
     t |> success(mkt != null, "[[auto 4, 5]] is ExprMakeArray")
     if (mkt != null) {
         t |> equal(length(mkt.values), 1, "one value")
@@ -108,7 +108,7 @@ def private check_make_nodes(t : T?; var fn : FunctionPtr; lines : array<string>
 
     // {{ k => v }} is lowered to a to_table_move call over a make-array AT PARSE TIME, so
     // make-table detection is call-shaped, not node-shaped
-    var tabCall = inits[3] ?as ExprCall
+    let tabCall = inits[3] ?as ExprCall
     t |> success(tabCall != null, "fourth init is ExprCall")
     if (tabCall != null) {
         t |> success(find(string(tabCall.name), "to_table_move") >= 0, "call is to_table_move, got {tabCall.name}")

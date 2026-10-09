@@ -75,7 +75,7 @@ set(DAS_EXTENDED_CORE
     check_workflow_matrix check_shipped_skills check_md_ascii check_wheel_repack check_manifest_render
     check_example_games check_dasllama_site run_tests_bench_updater
     run_tests_pr_babysit check_dasgen run_tests_review_md run_tests_dastest
-    check_lint_changed check_ast_verify_changed check_gated_das check_review_gates
+    check_lint_tree check_ast_verify_changed check_gated_das check_review_gates
     check_standalone_exes check_format check_format_exe run_utils_tests)
 if(NOT WIN32)
     # check_model_mint: its test stands in a shell script for daslang, which Windows cannot exec;
@@ -134,9 +134,9 @@ das_lane_group(run_build_mingw_isolated "Retrying the mingw lane's sweeps in iso
 das_lane_group(run_site "Running the site lane's checks"
     run_imgui2rst run_vulkan2rst stage_doc_assets)
 das_lane_group(run_nightly "Running everything CI runs only on the cron"
-    run_build_nightly ${DAS_EXTENDED_NIGHTLY} check_lint_tree)
+    run_build_nightly ${DAS_EXTENDED_NIGHTLY})
 das_lane_group(run_all "Running every lane this configure can build"
-    run_extended_all run_doc run_build run_build_nightly check_lint_tree)
+    run_extended_all run_doc run_build run_build_nightly)
 
 # A lane runs daslang against the tree's own shared modules and descriptors. Under a single
 # ninja invocation a relink lands while another lane is reading that module, and its descriptor

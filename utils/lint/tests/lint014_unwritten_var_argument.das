@@ -9,7 +9,7 @@ options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; s
 // Cascade: a var param that is itself passed onward to a mutable slot is
 // skipped — the leaf callee gets flagged first; fixing it re-exposes this one.
 
-expect 50503:5
+expect 50503:6
 
 require daslib/lint
 
@@ -36,8 +36,7 @@ struct private PtrBox {
 }
 
 // pointer field flowing only into a void? slot — void? accepts a const pointer,
-// so nothing demands b's mutability (by-value pointer params themselves are
-// exempt; the sink stamp peels field access back to the root struct param)
+// so nothing demands b's mutability
 def bad_field_void_sink(var b : PtrBox) {   // LINT014
     var v : void?
     v = b.p
@@ -92,4 +91,31 @@ struct private Node {
 // as `int? const` and the store trips error 30915, so var is earned
 def good_field_mutable_sink(var b : PtrBox) : Node {
     return Node(next = b.p)
+}
+
+// === Pointer parameters: var asks for a mutable pointee ===
+
+def private bad_pointer_read_only(var p : int?) : int {   // LINT014
+    return p == null ? 0 : *p
+}
+
+def call_bad_pointer_read_only() : int {
+    return bad_pointer_read_only(null)
+}
+
+// another module may take the address of a public function into a function type that spells `var p`
+def good_public_pointer_read_only(var p : int?) : int {
+    return p == null ? 0 : *p
+}
+
+def good_pointer_written(var p : int?) : void {
+    *p = 1
+}
+
+def good_pointer_passed_on(var p : int?) : void {
+    good_pointer_written(p)
+}
+
+def good_pointer_builtin_writer(var p : void?; src : void?) : void {
+    unsafe(memcpy(p, src, 4))
 }

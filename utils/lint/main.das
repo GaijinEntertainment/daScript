@@ -29,6 +29,7 @@ struct LintResult {
     skip_reason : string
     excluded : int      // findings dropped by the .lint_config [paths] exclude policy
     fixed : int
+    cached : bool       // a clean result the cache vouched for: nothing was compiled
 }
 
 [CommandLineArgs]
@@ -60,6 +61,10 @@ struct Config {
 
     @clarg_doc = "Apply the fixes rules attach to their findings, then re-lint each changed file; a fix that breaks the compile is rolled back"
     fix : bool
+    @clarg_doc = "Skip the result cache: compile and lint every file, record nothing"
+    no_cache : bool
+    @clarg_doc = "Where the result cache lives (one entry per clean file: the content hash of every input its compile read)"
+    cache_dir : string = LINT_CACHE_DEFAULT_DIR
 
     @clarg_short = "j"
     @clarg_doc = "Parallel workers (default 1 = serial; 0 = auto = physical cores, at most 16). Below 16 files, stays serial regardless."
@@ -725,12 +730,88 @@ def private lint_policies(var cop : CodeOfPolicies) {
     cop.no_fold_unsafe = true
 }
 
+var lint_cache_dir = ""
+var lint_cache_header = ""
+var content_hashes : table<string; string>
+
+//! The hash of ``path``'s bytes, ``-`` for a missing file; memoized for the run
+def content_hash(path : string) : string {
+    let known = content_hashes?[path] ?? ""
+    return known if (!empty(known))
+    var st : FStat
+    let digest = stat(path, st) && st.is_reg ? "{hash(fread(path))}" : "-"
+    content_hashes[path] = digest
+    return digest
+}
+
+def sort_keys(tab : table<string>) : array<string> {
+    var keys <- [for (k in keys(tab)); k]
+    sort(keys)
+    return <- keys
+}
+
+//! The cache entry of ``file`` under these options: one per file and option set, rewritten in place, so the folder never outgrows the tree
+def lint_cache_entry(file : string; run_paranoid, run_perf, run_style, comment_hygiene, lint_fixtures, lint_excluded_paths : bool;
+                     disabled_codes, enabled_codes : table<string>) : string {
+    content_hashes |> erase(file)
+    if (empty(lint_cache_header)) {
+        let config_env = has_env_variable("DAS_LINT_CONFIG_PATH") ? get_env_variable("DAS_LINT_CONFIG_PATH") : ""
+        lint_cache_header = "config {config_env}"
+        mkdir_rec(lint_cache_dir)
+    }
+    let codes = "{join(sort_keys(disabled_codes), ",")}|{join(sort_keys(enabled_codes), ",")}"
+    let flags = "{run_paranoid}{run_perf}{run_style}{comment_hygiene}{lint_fixtures}{lint_excluded_paths}"
+    let key = "{normalize(file)}|{flags}|{codes}"
+    return "{lint_cache_dir}/{hash(key)}"
+}
+
+//! True when ``entry`` was written under this config and every input it lists still has the content it was recorded with
+def lint_cache_hit(entry : string) : bool {
+    let text = fread(entry)
+    return false if (empty(text))
+    for (line, i in split(text, "\n"), count()) {
+        if (i == 0) {
+            return false if (line != lint_cache_header)
+            continue
+        }
+        continue if (empty(line))
+        let sp = find(line, " ")
+        return false if (sp < 0 || content_hash(slice(line, sp + 1)) != slice(line, 0, sp))
+    }
+    return true
+}
+
+//! The inputs a clean lint of ``file`` depended on: every module source of ``program`` and every config that can steer it
+def lint_cache_inputs(program : ProgramPtr; file : string) : array<string> {
+    var inputs : array<string>
+    program_for_each_module(program) $(m) {
+        inputs |> push(string(m.fileName)) if (!empty(m.fileName))
+    }
+    inputs |> push_from(lint_configs_for(file))
+    return <- inputs
+}
+
+def lint_cache_store(entry : string; inputs : array<string>) {
+    fwrite(entry, build_string() $(var w) {
+        w |> write("{lint_cache_header}\n")
+        for (path in inputs) {
+            w |> write("{content_hash(path)} {path}\n")
+        }
+    })
+}
+
 def lint_file(file : string; run_paranoid, run_perf, run_style, comment_hygiene, lint_fixtures, lint_excluded_paths : bool;
               disabled_codes, enabled_codes : table<string>) : LintResult {
     var result = LintResult(file = file)
     if (set_skip_reason(file, lint_fixtures, result)) {
         return <- result
     }
+    let entry = !empty(lint_cache_dir) ? lint_cache_entry(file, run_paranoid, run_perf, run_style, comment_hygiene, lint_fixtures, lint_excluded_paths, disabled_codes, enabled_codes) : ""
+    if (!empty(entry) && lint_cache_hit(entry)) {
+        result.cached = true
+        return <- result
+    }
+    var inputs : array<string>
     var inscope access <- make_file_access("")
     using() $(var mg : ModuleGroup) {
         using() $(var cop : CodeOfPolicies) {
@@ -767,6 +848,7 @@ def lint_file(file : string; run_paranoid, run_perf, run_style, comment_hygiene,
                     result.compile_errors = issue_str
                     return
                 }
+                inputs |> push_from(lint_cache_inputs(program, file)) if (!empty(entry))
                 let file_disabled <- file_nolint_codes(program, disabled_codes)
                 if (run_paranoid) {
                     var paranoid_issues : array<LintIssue>
@@ -795,6 +877,7 @@ def lint_file(file : string; run_paranoid, run_perf, run_style, comment_hygiene,
     if (!lint_excluded_paths) {
         apply_path_excludes(result)
     }
+    lint_cache_store(entry, inputs) if (!empty(inputs) && result.count == 0 && !result.failed && empty(result.skip_reason))
     return <- result
 }
 
@@ -873,7 +956,7 @@ def print_result(result : LintResult; quiet, silent : bool) {
             write_deduped(w, result.issues, "  ", !silent)
         })
     } elif (!quiet) {
-        print("PASS {result.file}\n")
+        print(result.cached ? "CACHED {result.file}\n" : "PASS {result.file}\n")
     }
 }
 
@@ -943,6 +1026,11 @@ def build_worker_argv(spawn_prefix : array<string>; chunk_path : string; cfg : C
     if (cfg.fix) {
         argv |> push("--fix")
     }
+    if (cfg.no_cache) {
+        argv |> push("--no-cache")
+    }
+    argv |> push("--cache-dir")
+    argv |> push(cfg.cache_dir)
     if (cfg.paranoid_only) {
         argv |> push("--paranoid-only")
     }
@@ -1194,7 +1282,7 @@ def print_lint_help(rc : int) : int {
     return rc
 }
 
-[export, unsafe_heap_collect]
+[export, unsafe_heap_collect, lint_tool_entry]
 def main() : int {
     var r <- parse_args(type<Config>)
     if (r |> is_err) {
@@ -1212,6 +1300,7 @@ def main() : int {
 
     var disabled_codes, enabled_codes : table<string>
     if (!resolve_rule_filters(cfg, disabled_codes, enabled_codes)) return 1
+    lint_cache_dir = cfg.no_cache || is_standalone_exe() ? "" : cfg.cache_dir
 
     // Worker mode: lint a pre-resolved list from a paths-from file and emit
     // JSON-wrapped results. No banner, no summary, no exit-code derivation.

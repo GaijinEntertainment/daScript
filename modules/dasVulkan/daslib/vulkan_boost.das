@@ -2432,7 +2432,7 @@ def public cmd_draw(cmd : CommandBuffer; vertex_count : uint; instance_count : u
 //! `cmd_bind_vertex_buffers` takes `array<Buffer>` + `array<uint64>` which forces a per-frame
 //! allocation for single-binding draws; this overload avoids it.
 def public cmd_bind_vertex_buffer(cmd : CommandBuffer; binding : uint; buffer : Buffer; offset : uint64 = 0ul) {
-    var raw_buf = boost_value_to_vk(buffer)
+    let raw_buf = boost_value_to_vk(buffer)
     var off = offset
     unsafe {
         vkCmdBindVertexBuffers(boost_value_to_vk(cmd), binding, 1u, addr(raw_buf), addr(off))

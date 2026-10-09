@@ -126,7 +126,7 @@ class MemoizeMacro : AstFunctionAnnotation {
         let originalCopyName = "`memoize`original`{fn.name}"
 
         // Check that we haven't already generated a wrapper with this name
-        var existingWrapper = fn._module |> find_unique_function(wrapperName)
+        let existingWrapper = fn._module |> find_unique_function(wrapperName)
         if (existingWrapper != null) {
             errors := "duplicate memoize wrapper for '{fn.name}'"
             return false

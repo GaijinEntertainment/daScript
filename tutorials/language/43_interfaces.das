@@ -95,7 +95,7 @@ def demo_is_as_operators() {
 
     // ?as — null-safe
     var nothing : Circle?
-    var safe = nothing ?as IDrawable
+    let safe = nothing ?as IDrawable
     print("  null ?as IDrawable = {safe}\n")
 }
 
@@ -302,7 +302,7 @@ class Document {
 
 def print_content(doc : Document? const) {
     // `as` works on a const pointer because IReadable is const-only
-    var reader = doc as IReadable
+    let reader = doc as IReadable
     print("  content: {reader->read()}\n")
 }
 
@@ -315,12 +315,12 @@ def demo_const_interfaces() {
     let c : Document? const = doc
     print("  c is IReadable = {c is IReadable}\n")
 
-    var reader = c as IReadable
+    let reader = c as IReadable
     print("  reader->read() = {reader->read()}\n")
 
     // ?as with null const pointer
     var nothing : Document? const
-    var safe = nothing ?as IReadable
+    let safe = nothing ?as IReadable
     print("  null const ?as IReadable = {safe}\n")
 
     // Pass const pointer to a function

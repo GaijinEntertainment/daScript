@@ -55,7 +55,7 @@ def main() : int {
         return 1
     }
 
-    var screen = fopen(cfg.screen_path, "wb")
+    let screen = fopen(cfg.screen_path, "wb")
     if (screen == null) {
         fprint(fstderr(), "could not create screen snapshot: {cfg.screen_path}\n")
         return 1

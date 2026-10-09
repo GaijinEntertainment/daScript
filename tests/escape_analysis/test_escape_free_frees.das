@@ -11,6 +11,7 @@
 // test_escape_free_control_grows  : the SAME loop, escaping -> heap grows by N nodes. This is the
 //   control: if it did NOT grow, allocations would be elided and the test above would be vacuous.
 options gen2
+options _nolint = "LINT003"   // escape analysis scope-frees only a var pointer: the `new` locals stay var
 options persistent_heap
 options no_aot   // test_escape_pure is a UnitTest interop with no AOT declaration, so the generated C++ cannot name it
 options no_optimization

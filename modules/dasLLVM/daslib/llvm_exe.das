@@ -709,7 +709,7 @@ def collect_external_functions(standalone_context : LLVMOpaqueValue?; ctx : LLVM
     return (needs_whole_lib = whole_lib, registered <- registered)
 }
 
-def private emit_const_words(name : string; words : array<uint64>; elem : LLVMOpaqueType?; var types : PrimitiveTypes?) : LLVMOpaqueValue? {
+def private emit_const_words(name : string; words : array<uint64>; elem : LLVMOpaqueType?; types : PrimitiveTypes?) : LLVMOpaqueValue? {
     let wide = elem == types.t_int64
     var consts <- [for (w in words); wide ? types.ConstI64(w) : types.ConstI32(w)]
     let arr_type = LLVMArrayType(elem, uint(length(consts)))
@@ -1064,7 +1064,7 @@ def public collect_standalone_functions(prog : Program?; strict : bool) : Standa
 }
 
 
-def private find_exe_entry(var funcs : array<FunctionPtr>; var uids : UidNodes?; entry_point : string) : tuple<name : string; no_return : bool; bool_return : bool> {
+def private find_exe_entry(var funcs : array<FunctionPtr>; uids : UidNodes?; entry_point : string) : tuple<name : string; no_return : bool; bool_return : bool> {
     var start_fn_name = ""
     var no_return = true
     var bool_return = false

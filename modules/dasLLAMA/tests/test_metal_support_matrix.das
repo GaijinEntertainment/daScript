@@ -148,7 +148,7 @@ def private dim_ladder_batch_cell(t : T?; tr : Model; nb : int; tag : string) {
             set_metal_prefill_min_npos(1l)
             for (i in range(nb)) {
                 ss |> emplace <| make_run_state(c, KVDtype.f16, KVDtype.f16)
-                let p <- encode(tr, counting_prompt(1 + i, 14 + i), true, false)
+                var inscope p <- encode(tr, counting_prompt(1 + i, 14 + i), true, false)
                 eval_(tr, ss[i], p)
                 sess |> push(unsafe(addr(ss[i])))
                 cur |> push(argmax_of(ss[i].logits, vocab))
@@ -405,8 +405,7 @@ def test_metal_support_matrix(t : T?) {
                 matrix_cell(t, trkg, KVDtype.q8_0, "k4/s32/q8_0", "", "", "")
                 // the output half: GPU kq decode tokens must be the CPU truth
                 let kprompt <- encode(trk, counting_prompt(1, 30), true, false)
-                var cpu_ids : array<int64>
-                var gpu_ids : array<int64>
+                var cpu_ids, gpu_ids : array<int64>
                 with_dasllama_jobque() {
                     var s = make_run_state(trk.config, KVDtype.f16, KVDtype.f16)
                     let ids <- generate(trk, s, kprompt, length(kprompt) + 8)
@@ -553,8 +552,7 @@ def private cont_logits_cell(t : T?; tr, trg : Model; tag : string; tol : float)
         let vocab = c.vocab_size
         let full <- encode(tr, "The old lighthouse keeper watched the storm roll in from the", true, false)
         let n = long_length(full)
-        var head : array<int64>
-        var tail : array<int64>
+        var head, tail : array<int64>
         head |> reserve(n - 2l)
         for (i in range64(n - 2l)) {
             head |> push(full[i])
@@ -621,8 +619,7 @@ def private family_cells(t : T?; path, family, tag : string; expect_needs : uint
                 matrix_cell(t, trg, kv2, "{tag}+{kv2}", want, want, want)
             }
             let prompt <- encode(tr, counting_prompt(1, 30), true, false)
-            var cpu_ids : array<int64>
-            var gpu_ids : array<int64>
+            var cpu_ids, gpu_ids : array<int64>
             with_dasllama_jobque() {
                 var s = make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
                 let ids <- generate(tr, s, prompt, length(prompt) + 8)
@@ -706,8 +703,8 @@ def private qwen35_row(t : T?; path, family, tag : string; expect_needs : uint; 
             with_dasllama_jobque() {
                 var sa = make_run_state(c, kdt, kdt)
                 var sb = make_run_state(c, kdt, kdt)
-                let pa <- encode(trg, counting_prompt(1, 40), true, false)
-                let pb <- encode(trg, counting_prompt(5, 44), true, false)
+                var inscope pa <- encode(trg, counting_prompt(1, 40), true, false)
+                var inscope pb <- encode(trg, counting_prompt(5, 44), true, false)
                 t |> success(select_prefill_override("metal"), "{tag}: prefill override registered")
                 t |> success(select_decode_override("metal"), "{tag}: decode override registered")
                 set_metal_prefill_min_npos(1l)
@@ -768,18 +765,17 @@ def private qwen35_row(t : T?; path, family, tag : string; expect_needs : uint; 
         t |> success(metal_batch_decode_stats().steps - ba0 > 0l, "{tag} batch: ENGAGES on the GPU")
         let prompt <- encode(tr, counting_prompt(1, 30), true, false)
         for (kdt in [KVDtype.f16, KVDtype.q8_0, KVDtype.tq4]) {   //! each KV codec's single-row store on the partial-rope carrier against the CPU chain on the same codec
-            var cpu_ids : array<int64>
-            var gpu_ids : array<int64>
+            var cpu_ids, gpu_ids : array<int64>
             with_dasllama_jobque() {
                 var s = make_run_state(tr.config, kdt, kdt)
-                let ids <- generate(tr, s, prompt, length(prompt) + 8)
+                var inscope ids <- generate(tr, s, prompt, length(prompt) + 8)
                 cpu_ids := ids
                 delete s
                 select_decode_override("metal")
                 select_prefill_override("metal")
                 set_metal_prefill_min_npos(1l)
                 var s2 = make_run_state(trg.config, kdt, kdt)
-                let ids2 <- generate(trg, s2, prompt, length(prompt) + 8)
+                var inscope ids2 <- generate(trg, s2, prompt, length(prompt) + 8)
                 gpu_ids := ids2
                 delete s2
                 set_metal_prefill_min_npos(64l)
@@ -830,8 +826,7 @@ def private tensor_twin_row(t : T?; path, tag : string; optional : bool = false)
         tr.config.seq_len = min(tr.config.seq_len, 512l)
         var trg <- blob_twin(t, path, 512l)
         let prompt <- encode(tr, counting_prompt(1, 30), true, false)
-        var cpu_ids : array<int64>
-        var gpu_ids : array<int64>
+        var cpu_ids, gpu_ids : array<int64>
         with_dasllama_jobque() {
             var s = make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
             let ids <- generate(tr, s, prompt, length(prompt) + 8)
@@ -986,8 +981,7 @@ def private qwen2moe_row(t : T?; path : string) {
         delete bad0
         delete bad
         let prompt <- encode(tr, counting_prompt(1, 30), true, false)
-        var cpu_ids : array<int64>
-        var gpu_ids : array<int64>
+        var cpu_ids, gpu_ids : array<int64>
         with_dasllama_jobque() {
             var s = make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
             let ids <- generate(tr, s, prompt, length(prompt) + 8)
@@ -1210,8 +1204,7 @@ def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false
         delete bad0
         delete bad
         let prompt <- encode(tr, counting_prompt(1, 30), true, false)
-        var cpu_ids : array<int64>
-        var gpu_ids : array<int64>
+        var cpu_ids, gpu_ids : array<int64>
         with_dasllama_jobque() {
             var s = make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
             let ids <- generate(tr, s, prompt, length(prompt) + 8)
@@ -1273,8 +1266,7 @@ def private gemma4moe_row(t : T?; path : string; tag : string; tol_pf : float = 
             "{tag}: metal_needs derives {expected} (got {derived})")
         let vocab = c.vocab_size
         var prompt <- encode(tr, counting_prompt(1, 20), true, false)
-        var lg0 : array<float>
-        var lg1 : array<float>
+        var lg0, lg1 : array<float>
         var t0 = 0l
         var t1 = 0l
         with_dasllama_jobque() {
@@ -1354,8 +1346,7 @@ def private gptoss_row(t : T?; path : string) {
             "gptoss-20b: metal_needs derives {expected} (got {derived})")
         let vocab = c.vocab_size
         var prompt <- encode(tr, counting_prompt(1, 20), true, false)
-        var lg0 : array<float>
-        var lg1 : array<float>
+        var lg0, lg1 : array<float>
         var t0 = 0l
         var t1 = 0l
         with_dasllama_jobque() {
@@ -1432,8 +1423,7 @@ def private gemma2_window_row(t : T?; path : string) {
         let prompt <- encode(tr, counting_prompt(1, 120), true, false)
         t |> success(long_length(prompt) > 224l,
             "gemma2-2b/window: prompt depth {long_length(prompt)} crosses chunk 224")
-        var cpu_ids : array<int64>
-        var gpu_ids : array<int64>
+        var cpu_ids, gpu_ids : array<int64>
         var served_de = 0l
         var served_pf = 0l
         with_dasllama_jobque() {
@@ -1590,14 +1580,10 @@ def private gemma4_hetero_q8_row(t : T?; path : string) {
         let count_prompt2 <- encode(tr, counting_prompt(7, 36), true, false)
         let count_prompt3 <- encode(tr, counting_prompt(3, 41), true, false)
         let count_prompt4 <- encode(tr, counting_prompt(11, 29), true, false)
-        var cpu_ids : array<int64>
-        var gpu_ids : array<int64>
-        var cpu_b2 : array<int64>
-        var gpu_b2 : array<int64>
+        var cpu_ids, gpu_ids, cpu_b2, gpu_b2 : array<int64>
         var served_bat = 0l
         var d4 = 0.0
-        var b4c : array<int64>
-        var b4g : array<int64>
+        var b4c, b4g : array<int64>
         with_dasllama_jobque() {
             cpu_ids <- cached_ids(path, "gen_c1_30_n8") $ {   // nolint:PERF030,LINT019 — fresh empty target, single move; fires only on the das_metal arm
                 var s = make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
@@ -1689,12 +1675,7 @@ def private gemma4_hetero_row(t : T?; path : string) {
         let prompt <- encode(tr, "The old lighthouse keeper watched the storm roll in from the", true, false)
         let count_prompt <- encode(tr, counting_prompt(1, 30), true, false)
         let count_prompt2 <- encode(tr, counting_prompt(7, 36), true, false)
-        var cpu_ids : array<int64>
-        var gpu_picks : array<int64>
-        var cpu_cnt_ids : array<int64>
-        var both_ids : array<int64>
-        var cpu_bat : array<int64>
-        var gpu_bat : array<int64>
+        var cpu_ids, gpu_picks, cpu_cnt_ids, both_ids, cpu_bat, gpu_bat : array<int64>
         var served_pf = 0l
         var served_bat = 0l
         var served_free = 0l

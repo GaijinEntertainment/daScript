@@ -21,7 +21,7 @@ let FEATURE = "modules/dasImgui/examples/features/glfw_synth_keys.das"
 [test]
 def test_key_hud_toggle(t : T?) {
     with_imgui_app(FEATURE) $(d) {
-        var snap0 = wait_for_render(d, "MAIN_WIN/NAME_INPUT", 15.0f)
+        let snap0 = wait_for_render(d, "MAIN_WIN/NAME_INPUT", 15.0f)
         t |> success(snap0 != null, "NAME_INPUT renders")
         if (snap0 == null) return
 
@@ -44,7 +44,7 @@ def test_key_hud_signals_reachable(t : T?) {
     // modifier pills, and synth_last_codepoint_t (advances on a char event) for keycap traces. This
     // confirms both respond to the synth driver — if held_count and last_codepoint move, the HUD works.
     with_imgui_app(FEATURE) $(d) {
-        var snap0 = wait_for_render(d, "MAIN_WIN/NAME_INPUT", 15.0f)
+        let snap0 = wait_for_render(d, "MAIN_WIN/NAME_INPUT", 15.0f)
         if (snap0 == null) {
             t |> success(false, "NAME_INPUT renders")
             return

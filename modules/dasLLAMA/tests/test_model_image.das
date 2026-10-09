@@ -1544,8 +1544,7 @@ def test_parakeet_tower_metal(tst : T?) {
                 t |> skip("jfk.wav not present")
                 return
             }
-            var cpu_toks : array<int>
-            var gpu_toks : array<int>
+            var cpu_toks, gpu_toks : array<int>
             var cpu_text = ""
             var gpu_text = ""
             var nlayer = 0l

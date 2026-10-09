@@ -60,7 +60,7 @@ def test_non_array(t : T?) {
 
 [test]
 def test_null_source(t : T?) {
-    var jv : JsonValue? = null
+    let jv : JsonValue? = null
     var n = 0
     for (_c in from_json(jv, type<Car>)) {
         n++

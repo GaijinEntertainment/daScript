@@ -49,7 +49,7 @@ def test_scroll_state_smoke(t : T?) {
                      "NESTED_WIN/LOG_REGION.scroll_max.y > 0 (got {child_max_y})")
 
         // Gate 3: scroll itself is a float2 object (initial value {x:0, y:0}).
-        var win_scroll = widget_payload_field(child_snap, "SCROLLY_WIN", "scroll")
+        let win_scroll = widget_payload_field(child_snap, "SCROLLY_WIN", "scroll")
         t |> success(win_scroll != null, "SCROLLY_WIN.payload.scroll present")
     }
 }

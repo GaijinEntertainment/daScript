@@ -81,15 +81,11 @@ def metal_wdec_stats : tuple<windows : int64; steps : int64; tokens : int64; dec
 }
 
 //! The declines-by-reason table (a copy), keyed by `MetalWdecDecline` value names.
-def metal_wdec_declines : table<string; int64> {
-    return <- clone_to_move(g_wdec_declines.by_reason)
-}
+def metal_wdec_declines : table<string; int64> => <- clone_to_move(g_wdec_declines.by_reason)
 
 //! The step-time split across every served decode batch: GPU-busy vs host-encode microseconds.
 //! Wall minus their sum is the commit/wait/readback residue — the per-token overhead lens.
-def metal_wdec_times : tuple<us_gpu : int64; us_encode : int64> {
-    return (us_gpu = g_wd_us_gpu, us_encode = g_wd_us_encode)
-}
+def metal_wdec_times : tuple<us_gpu : int64; us_encode : int64> => (us_gpu = g_wd_us_gpu, us_encode = g_wd_us_encode)
 
 //! Test A/B seat: pin the ASR-decoder driver on/off in-process (the env knob's setter twin).
 def set_metal_wdec(on : bool) {
@@ -184,9 +180,8 @@ def metal_wdec_shutdown {
 }
 
 [cold_path]   // per-window bring-up: the registry/prefill inits are latched-flag cheap
-def private metal_wdec_init : bool {
-    return !g_wd_failed && metal_common_init() && metal_prefill_pso_init() && g_pso_wdec_kv != null && g_pso_wdec_kv_h != null
-}
+def private metal_wdec_init : bool =>
+    !g_wd_failed && metal_common_init() && metal_prefill_pso_init() && g_pso_wdec_kv != null && g_pso_wdec_kv_h != null
 
 // one region of the 34B-blob build: `off` is the SOURCE element offset in the dq planes; the
 // destination is the 16B-aligned cursor, recorded and advanced

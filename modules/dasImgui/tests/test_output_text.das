@@ -38,7 +38,7 @@ def test_output_text_smoke(t : T?) {
         t |> equal(status0, "", "STATUS_LINE starts empty")
 
         click(d, "MAIN_WIN/BUMP_BTN")
-        var snap_after_bump = wait_until(d, 300) $(var snap1) {
+        let snap_after_bump = wait_until(d, 300) $(var snap1) {
             let v = widget_payload_field(snap1, "MAIN_WIN/STATUS_LINE", "value") ?? ""
             return !empty(v)
         }

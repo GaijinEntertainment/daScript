@@ -27,7 +27,7 @@ struct Outer { tag : int; child : Inner ? }
 def churn_nested() : int {
     var acc = 0
     for (i in range(500)) {
-        var p = new Outer(tag = i, child = new Inner(vals <- [for (x in range(10)); x]))
+        let p = new Outer(tag = i, child = new Inner(vals <- [for (x in range(10)); x]))
         acc += p.tag + length(p.child.vals)
     }
     return acc
@@ -45,7 +45,7 @@ def finalize(var _self : WithFinalizer) { g_user_fin_calls ++ }
 
 def churn_user_finalizer() {
     for (i in range(100)) {
-        var p = new WithFinalizer(tag = i)   // freed via raw collect; finalizer must not run
+        let p = new WithFinalizer(tag = i)   // freed via raw collect; finalizer must not run
         let _t = p.tag
     }
 }
@@ -69,7 +69,7 @@ def make_node(i : int) : Node? {
 
 // `p` passed to an impure (modifyExternal) bound C++ function that retains it -> must NOT be freed
 def pass_to_retaining(i : int) {
-    var p = new Node(x = i, y = i)
+    let p = new Node(x = i, y = i)
     test_escape_keep(p)
 }
 
@@ -120,7 +120,7 @@ def move_into_escaping_box(i : int) {
 }
 def move_into_local_box_read(i : int) : int {
     var p = new Node(x = i, y = i)
-    var b = new Box(node <- p)
+    let b = new Box(node <- p)
     return b.node.x                  // read through the moved-in pointer before scope exit
 }
 
@@ -182,7 +182,7 @@ def test_escape_free_does_not_free_captured(t : T?) {
 def test_escape_free_does_not_free_retained(t : T?) {
     pass_to_retaining(42)
     for (_i in range(1000)) {
-        var z = new Node(x = -1, y = -1)
+        let z = new Node(x = -1, y = -1)
         let _ = test_escape_pure(z)     // freeable -> reuses slots
     }
     t |> equal(test_escape_retained_first_int(), 42)   // retained pointer survived -> not freed

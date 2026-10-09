@@ -58,10 +58,7 @@ class MetalQ8Gemm {
         let nBase = (gl_WorkGroupID.x % ntileN) * 32u
         let qm = (sg / 2u) * 16u            // this simdgroup's 16x16 quadrant of the C block
         let qn = (sg % 2u) * 16u
-        var c00 : simdgroup_float8x8
-        var c01 : simdgroup_float8x8
-        var c10 : simdgroup_float8x8
-        var c11 : simdgroup_float8x8
+        var c00, c01, c10, c11 : simdgroup_float8x8
         let kdim4 = kdim / 4u
         let run = lid % 64u                 // 64 A runs on threads 0-63, 64 B runs on 64-127
         let rr = run / 2u                   // row within the 32-row tile
@@ -100,10 +97,7 @@ class MetalQ8Gemm {
             barrier()
             var k8 = 0u
             while (k8 < 32u) {
-                var a0 : simdgroup_half8x8
-                var a1 : simdgroup_half8x8
-                var b0 : simdgroup_half8x8
-                var b1 : simdgroup_half8x8
+                var a0, a1, b0, b1 : simdgroup_half8x8
                 simdgroup_load(a0, ta, qm * 32u + k8, 32u)
                 simdgroup_load(a1, ta, (qm + 8u) * 32u + k8, 32u)
                 simdgroup_load(b0, tb, k8 * 32u + qn, 32u)
@@ -186,8 +180,7 @@ class MetalQ8Gemm64 {
             barrier()
             // math ROLLED over matrix arrays + das-pointer tile bumps (hand-unrolled
             // spelling measured max_threads 704 — an occupancy tier down)
-            var ma : simdgroup_half8x8[4]
-            var mb : simdgroup_half8x8[4]
+            var ma, mb : simdgroup_half8x8[4]
             var acur = unsafe(addr(ta[qm * 32u]))
             var bcur = unsafe(addr(tb[qn]))
             for [unroll_full] (_k8 in range(4)) {
@@ -217,9 +210,7 @@ class MetalQ8Gemm64 {
 //! Pick the 64x64 kernel when the shape divides evenly and the grid is big enough to fill the
 //! GPU (below ~128 threadgroups the 32x32 kernel's occupancy wins — lab-measured on M1 Max).
 //! Shared with the resident-prefill driver so both dispatch paths agree.
-def public gemm_use64(mp, d : int64) : bool {
-    return (d % 64l) == 0l && (mp / 64l) * (d / 64l) >= 128l
-}
+def public gemm_use64(mp, d : int64) : bool => (d % 64l) == 0l && (mp / 64l) * (d / 64l) >= 128l
 
 // ===== host driver =====
 
@@ -242,9 +233,7 @@ def public set_metal_gemm_min_ntok(v : int64) {
 }
 
 //! (gpu dispatches, cpu fallbacks) since load — diagnostics / tests.
-def public metal_gemm_stats() : tuple<dispatches : int64; fallbacks : int64> {
-    return (dispatches = g_dispatches, fallbacks = g_fallbacks)
-}
+def public metal_gemm_stats() : tuple<dispatches : int64; fallbacks : int64> => (dispatches = g_dispatches, fallbacks = g_fallbacks)
 
 //! Release every GPU object the driver holds (weight caches, pools, pipeline, queue, device) —
 //! the tests' leak-gate rail. The next pinned dispatch re-initializes lazily.

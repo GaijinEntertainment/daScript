@@ -10,8 +10,23 @@ Run:
 
     daslang utils/lint/main.das -- <files or dirs> --quiet
 
-Exit 2 on any warning - CI's changed-files gate and the nightly full sweep both key on it.
+Exit 2 on any warning - CI's whole-tree sweep (`check_lint_tree`, in the extended checks) keys on it.
 The SDK also ships a prebuilt `bin/lint.exe`.
+
+Clean results are cached in `.cache/daslang/lint_cache/` (`--cache-dir` moves it, `--no-cache` skips
+it). A file has one entry per flag and rule-filter set, named by their hash and rewritten in place,
+so the folder never outgrows the tree. The entry opens with the `DAS_LINT_CONFIG_PATH` in force,
+then lists the content hash of every module source the file's compile read and of every
+`.lint_config` that can steer it. A run that finds all of it unchanged prints `CACHED` for the file
+and does not compile it. A file with findings, or one that fails to compile, is never recorded. The
+folder is versioned by the semantic hash of the runner's `[lint_tool_entry]` `main`, every function
+it reaches included: the `lint_tool_hash` simulate macro (`daslib/lint_config.das`) compares it with
+`lint_hash.txt` while the runner compiles and empties the folder when it differs, so a changed rule
+re-lints everything while a comment or an unreached helper re-lints nothing. A prebuilt `lint.exe`
+never compiles, cannot check that version, and runs without the cache. The cache does not track
+`include`d files, macro-pinned environment and command-line inputs, or the C++ build: a change to
+those alone re-lints nothing until `--no-cache`. CI keeps the folder between runs, one per platform
+(`actions/cache` in `.github/workflows/extended_checks.yml`).
 
 Five rules are the runner's own, because they are about folders rather than code. Each runs
 once per invocation, over a walk of the directory roots the run was given. A directory whose

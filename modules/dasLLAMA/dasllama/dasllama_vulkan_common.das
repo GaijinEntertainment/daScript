@@ -3026,7 +3026,7 @@ def pfq_end(raw : VkCommandBuffer) {
 // query i's delta to its predecessor, usec
 def pfq_us(i : uint) : double {
     unsafe {
-        var tp = reinterpret<uint64?>(g_pfq_buf.mapped)
+        let tp = reinterpret<uint64?>(g_pfq_buf.mapped)
         return double(tp[i] - tp[i - 1u]) * double(g_pfq_period) / 1000.0lf
     }
 }

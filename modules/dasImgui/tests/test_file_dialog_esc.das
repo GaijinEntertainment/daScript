@@ -21,7 +21,7 @@ let FILE_DIALOG_FEATURE = "modules/dasImgui/examples/tutorial/file_dialog.das"
 [test]
 def test_file_dialog_esc(t : T?) {
     with_imgui_app(FILE_DIALOG_FEATURE) $(d) {
-        var snap = wait_for_widget(d, "FDLG_WIN/BTN_OPEN", 15.0f)
+        let snap = wait_for_widget(d, "FDLG_WIN/BTN_OPEN", 15.0f)
         t |> success(snap != null, "demo window + Open trigger render")
         if (snap == null) {
             return
