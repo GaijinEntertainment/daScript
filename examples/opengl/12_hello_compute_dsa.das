@@ -10,6 +10,9 @@ require daslib/strings_convert
 require daslib/safe_addr
 require live/live_gc
 
+// 05_hello_compute on the GL 4.5 direct-state-access path: use_dsa() switches opengl_boost's
+// helpers to named-object calls, and every object here is created and filled without binding it.
+
 struct MatTest {
     a, b, a_times_b, b_times_a : float4x4
     a_times_1234, b_times_1234 : float4
@@ -84,25 +87,21 @@ def create_gl_objects {
     // programs
     compute_program = create_compute_shader_program(@@compute_effect)
     display_program = create_shader_program(@@vs_effect, @@fs_effect)
-    // vao
-    glGenVertexArrays(1, safe_addr(vao))
-    glBindVertexArray(vao)
-    // vbo
-    glGenBuffers(1, safe_addr(vbo))
-    glBindBuffer(GL_ARRAY_BUFFER, vbo)
-    glBufferData(GL_ARRAY_BUFFER, effect_vertices, GL_STATIC_DRAW)
-    bind_vertex_buffer(null, type<EffectVertex>)
-    // ebo
-    glGenBuffers(1, safe_addr(ebo))
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo)
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, effect_indices, GL_STATIC_DRAW)
+    // buffers: named, filled without binding
+    glCreateBuffers(1, safe_addr(vbo))
+    glNamedBufferData(vbo, effect_vertices, GL_STATIC_DRAW)
+    glCreateBuffers(1, safe_addr(ebo))
+    glNamedBufferData(ebo, effect_indices, GL_STATIC_DRAW)
+    // vao: the named binder attaches the vbo to binding slot 0 and lays out every field
+    glCreateVertexArrays(1, safe_addr(vao))
+    bind_vertex_buffer(vao, vbo, type<EffectVertex>)
+    glVertexArrayElementBuffer(vao, ebo)
     // texture
-    glGenTextures(1, safe_addr(texture))
-    glBindTexture(GL_TEXTURE_2D, texture)
-    glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGBA8, 256, 256)
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
-    // ssbo
+    glCreateTextures(GL_TEXTURE_2D, 1, safe_addr(texture))
+    glTextureStorage2D(texture, 1, GL_RGBA8, 256, 256)
+    glTextureParameteri(texture, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
+    glTextureParameteri(texture, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
+    // ssbo: persistently mapped under DSA, so write_ssbo / read_ssbo copy through the map
     ssbo = create_ssbo(c_mat)
 }
 
@@ -112,11 +111,12 @@ def init() {
         panic("can't init glfw")
     }
     glfwInitOpenGL(4, 6)
-    window = glfwCreateWindow(1280, 720, "OpenGL - Hello compute shader", null, null)
+    window = glfwCreateWindow(1280, 720, "OpenGL - Hello compute shader (DSA)", null, null)
     if (window == null) {
         panic("can't create window")
     }
     glfwMakeContextCurrent(window)
+    use_dsa()
     create_gl_objects()
 }
 
@@ -140,7 +140,7 @@ def update() {
     compute_effect_bind_uniform(compute_program)
     glDispatchCompute(16u, 16u, 1u)
     glMemoryBarrier(GL_TEXTURE_FETCH_BARRIER_BIT | GL_SHADER_STORAGE_BARRIER_BIT)   // the draw below samples the image the dispatch wrote
-    read_ssbo(ssbo, c_mat)              // read c_mat back
+    read_ssbo(ssbo, c_mat)              // waits for the dispatch, then reads c_mat back
     c_offset ++
     // make a copy in e_mat, do computations on CPU
     var e_mat = c_mat
@@ -153,14 +153,13 @@ def update() {
     assert(e_mat.b_times_a == c_mat.b_times_a)
     assert(e_mat.a_times_1234 == c_mat.a_times_1234)
     assert(e_mat.b_times_1234 == c_mat.b_times_1234)
-    // render
+    // render: the vao owns the vertex layout and the element buffer
     glViewport(0, 0, display_w, display_h)
     glUseProgram(display_program)
-    glBindBuffer(GL_ARRAY_BUFFER, vbo)
     f_tex := texture
     vs_effect_bind_uniform(display_program)
     fs_effect_bind_uniform(display_program)
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo)
+    glBindVertexArray(vao)
     glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, null)
     // swap buffers
     glfwMakeContextCurrent(window)
@@ -170,6 +169,7 @@ def update() {
 [export]
 def shutdown() {
     if (window != null) {
+        delete_ssbo(ssbo)
         glfwDestroyWindow(window)
         window = null
     }

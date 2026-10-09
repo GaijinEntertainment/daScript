@@ -87,82 +87,84 @@ class BgfxCompileComputeShaderFunctionAnnotation : AstFunctionAnnotation {
     }
 }
 
+struct private VertexAttrib {
+    fieldName : string
+    count : int
+    glType : uint
+    normalized : bool
+}
+
+//! One row per field in declaration order; on an unsupported field `errors` is set.
+def private vertex_attribs(st : StructurePtr; var errors : das_string) : array<VertexAttrib> {
+    var attribs : array<VertexAttrib>
+    for (fld in st.fields) {
+        let dinfo = get_decl_info(fld._type, fld.annotation)
+        if (!dinfo.ok) {
+            errors := "field {fld.name} is missing type information"
+            return <- attribs
+        }
+        var glType = 0u
+        if (dinfo.info.typet == Type.tFloat) {
+            glType = GL_FLOAT
+        } elif (dinfo.info.typet == Type.tUInt) {
+            glType = GL_UNSIGNED_BYTE
+        } elif (dinfo.info.typet == Type.tInt16) {
+            glType = GL_SHORT
+        } else {
+            errors := "field {fld.name} type {dinfo.info.typet} is not supported"
+            return <- attribs
+        }
+        attribs |> push(VertexAttrib(fieldName = string(fld.name), count = dinfo.info.sizei,
+            glType = glType, normalized = dinfo.info.normalized))
+    }
+    return <- attribs
+}
+
+def private offset_of(stype : TypeDeclPtr; fieldName : string) : ExpressionPtr {
+    var offsetOf <- new ExprTypeInfo(at = stype.at, trait := "offsetof", subtrait := fieldName,
+        typeexpr <- clone_type(stype))
+    return <- offsetOf
+}
+
+def private add_binder(var fn : FunctionPtr; var errors : das_string) : bool {
+    fn.flags.generated = true
+    append_annotation(fn, "templates", "template", [(
+        (argname = "self", argvalue = RttiValue(tBool=true))
+    )])
+    if (!(compiling_module() |> add_function(fn))) {
+        errors := "can't add bind_vertex_buffer"
+        return false
+    }
+    return true
+}
+
+//! Emits two `[template(self)] bind_vertex_buffer` overloads per struct: `(ptrd, self, vindex)` edits
+//! the bound VAO and array buffer; `(vao, vbo, self, vindex, binding)` is the GL 4.5 named-object form.
 [structure_macro(name="vertex_buffer")]
 class GlslVertexBuffer : AstStructureAnnotation {
     def override apply(var st : StructurePtr; var group : ModuleGroup; var args : AnnotationArgumentList; var errors : das_string) : bool {
-        // [template(self)] bind_vertex_buffer(vbo:uint; self:VertexType; vindex:uint=0u)
-        var fn <- new Function(at = st.at, atDecl = st.at, name := "bind_vertex_buffer")
-        fn.flags.generated = true
-        fn.result = new TypeDecl(baseType = Type.tVoid, at = st.at)
-        fn.arguments |> emplace_new() <| new Variable(at = st.at,
-            name := "ptrd",
-            _type <- new TypeDecl(at = st.at, baseType = Type.tPointer,
-                flags = TypeDeclFlags._implicit | TypeDeclFlags.constant)
-        )
-        fn.arguments |> emplace_new() <| new Variable(at = st.at,
-            name := "self",
-            _type <- new TypeDecl(at = st.at,
-                baseType = Type.tStructure,
-                structType = st
-            )
-        )
-        fn.arguments |> emplace_new() <| new Variable(at = st.at,
-            name := "vindex",
-            _type <- new TypeDecl(at = st.at, baseType = Type.tUInt),
-            init <- new ExprConstUInt(at = st.at, value = 0u)
-        )
-        var blk <- new ExprBlock(at = st.at)
-        // for each field
+        let attribs <- vertex_attribs(st, errors)
+        if (!empty(errors)) return false
         var stype <- new TypeDecl(baseType = Type.tStructure, structType = st, at = st.at)
-        for (fld, attri in st.fields, count()) {
-            // attri+vindex
-            var vattr_i <- new ExprOp2(at = fld.at,
-                op := "+",
-                left <- new ExprConstUInt(at = fld.at, value = uint(attri)),
-                right <-  new ExprVar(at = fld.at, name := "vindex")
-            )
-            // glEnableVertexAttribArray(attri)
-            var cll_evaa <- new ExprCall(at = fld.at, name := "glEnableVertexAttribArray")
-            cll_evaa.arguments |> emplace_new() <| clone_expression(vattr_i)
-            blk.list |> emplace(cll_evaa)
-            let dinfo = get_decl_info(fld._type, fld.annotation)
-            if (!dinfo.ok) {
-                errors := "field {fld.name} is missing type information"
-                return false
-            }
-            var ttype = 0u
-            if (dinfo.info.typet == Type.tFloat) {
-                ttype = GL_FLOAT
-            } elif (dinfo.info.typet == Type.tUInt) {
-                ttype = GL_UNSIGNED_BYTE
-            } elif (dinfo.info.typet == Type.tInt16) {
-                ttype = GL_SHORT
-            } else {
-                errors := "field {fld.name} type {dinfo.info.typet} is not supported"
-                return false
-            }
-            // glVertexAttribPointer(attri, num_attr, attr_type, is_norm, sizeof(VertexType), offsetof(VertexType::fld))
-            var cll_vap <- new ExprCall(at = fld.at, name := "glVertexAttribPointer")
-            cll_vap.arguments |> emplace_new() <| clone_expression(vattr_i)
-            cll_vap.arguments |> emplace_new() <| new ExprConstInt(at = fld.at, value = dinfo.info.sizei)
-            cll_vap.arguments |> emplace_new() <| new ExprConstUInt(at = fld.at, value = ttype)
-            cll_vap.arguments |> emplace_new() <| new ExprConstBool(at = fld.at, value = dinfo.info.normalized)
-            cll_vap.arguments |> emplace_new() <| new ExprTypeInfo(at = fld.at, trait := "sizeof", typeexpr <- clone_type(stype))
-            cll_vap.arguments |> emplace_new() <| new ExprVar(at = fld.at, name := "ptrd")
-            cll_vap.arguments |> emplace_new() <| new ExprTypeInfo(at = fld.at, trait := "offsetof",
-                subtrait := fld.name, typeexpr <- clone_type(stype))
-            blk.list |> emplace(cll_vap)
-            vattr_i := null
+        var pointerBody, namedBody : array<ExpressionPtr>
+        for (attrib, ai in attribs, count()) {
+            let attribIndex = uint(ai)
+            pointerBody |> push(qmacro(glEnableVertexAttribArray($v(attribIndex) + vindex)))
+            pointerBody |> push(qmacro(glVertexAttribPointer($v(attribIndex) + vindex, $v(attrib.count), $v(attrib.glType), $v(attrib.normalized),
+                typeinfo sizeof(type<$t(stype)>), ptrd, $e(offset_of(stype, attrib.fieldName)))))
+            namedBody |> push(qmacro(glEnableVertexArrayAttrib(vao, $v(attribIndex) + vindex)))
+            namedBody |> push(qmacro(glVertexArrayAttribFormat(vao, $v(attribIndex) + vindex, $v(attrib.count), $v(attrib.glType), $v(attrib.normalized),
+                uint($e(offset_of(stype, attrib.fieldName))))))
+            namedBody |> push(qmacro(glVertexArrayAttribBinding(vao, $v(attribIndex) + vindex, binding)))
         }
-        stype := null
-        fn.body <- blk
-        append_annotation(fn, "templates", "template", [(
-            (argname = "self", argvalue = RttiValue(tBool=true))
-        )])
-        if (!(compiling_module() |> add_function(fn))) {
-            panic("can't setup")
+        var fnPointer <- qmacro_function("bind_vertex_buffer") $(ptrd : void? const implicit; self : $t(stype); vindex : uint = 0u) : void {
+            $b(pointerBody)
         }
-        return true
+        var fnNamed <- qmacro_function("bind_vertex_buffer") $(vao : uint; vbo : uint; self : $t(stype); vindex : uint = 0u; binding : uint = 0u) : void {
+            glVertexArrayVertexBuffer(vao, binding, vbo, 0l, typeinfo sizeof(type<$t(stype)>))
+            $b(namedBody)
+        }
+        return add_binder(fnPointer, errors) && add_binder(fnNamed, errors)
     }
 }
 
