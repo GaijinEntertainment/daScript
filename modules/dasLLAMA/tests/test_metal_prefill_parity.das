@@ -1347,7 +1347,7 @@ enum ShortForm {
 //! row's logits against the all-CPU chain within `bar` of its largest, the form's own counter the engage witness, the same
 //! windows with the form off (the tiles) logged beside it, and the control a window whose last token differs landing
 //! outside the bar.
-def private short_window_cells(t : T?; path, tag : string; bar : float; form : ShortForm) {
+def private short_window_cells(t : T?; path, tag : string; bar : float; form : ShortForm) {   // nolint:STYLE038 — one cell: load, the three windows' route/tiles/control legs, the knob restores
     static_if (typeinfo builtin_module_exists(das_metal)) {
         return if (!model_available(t, path))
         let prior_wscale = get_wscale_f16()
@@ -1364,10 +1364,10 @@ def private short_window_cells(t : T?; path, tag : string; bar : float; form : S
         var w1 <- [for (i in range64(w1n)); prompt[i]]
         let route = form == ShortForm.moe_route
         let prior_knee = metal_moe_gemv_max()
-        let knee = route ? pf_moe_gemv_knee() : 8l
         if (route) {
-            t |> success(knee >= 24l, "{tag}: the box's knee admits the 24-row window ({knee} tokens)")
+            set_metal_moe_gemv_max(24l)   //! the cell holds the route at 24 rows whatever knee the box ships (16 by default); put back after the loop
         }
+        let knee = route ? pf_moe_gemv_knee() : 8l
         let form_name = route ? "route" : "peel"
         var inscope windows <- route ? [2l, 7l, 24l] : [2l, 5l, 8l]
         for (n in windows) {
@@ -1393,7 +1393,7 @@ def private short_window_cells(t : T?; path, tag : string; bar : float; form : S
             var inscope gpu_tiles <- two_window_logits(trg, w1, w2)
             let off_engaged = (route ? metal_prefill_moe_gemv_stats() : metal_prefill_tail_stats().sites) - off0
             if (route) {
-                set_metal_moe_gemv_max(prior_knee)
+                set_metal_moe_gemv_max(24l)
             } else {
                 set_metal_prefill_mm_tail(true)
             }
@@ -1417,6 +1417,9 @@ def private short_window_cells(t : T?; path, tag : string; bar : float; form : S
             t |> success(g.gap <= bar * g.peak, "{tag}/{n}: the {form_name}'s last-row logits within {bar} of the CPU chain's largest ({g.gap} of {g.peak}; the tiles read {gt.gap})")
             t |> success(gc.gap > bar * gc.peak, "{tag}/{n}: the control window (its last token changed) lands outside the bar ({gc.gap} of {gc.peak})")
             t |> success(row_argmax(gpu) == row_argmax(cpu), "{tag}/{n}: the {form_name}'s argmax is the CPU chain's ({row_argmax(gpu)} / {row_argmax(cpu)}; the tiles' {row_argmax(gpu_tiles)})")
+        }
+        if (route) {
+            set_metal_moe_gemv_max(prior_knee)
         }
         metal_prefill_shutdown()
         clear_kernel_backend_pin()

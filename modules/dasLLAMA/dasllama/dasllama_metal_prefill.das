@@ -515,6 +515,9 @@ class template MetalKqMulMmSplitTensorBase {
     @template_constant REM : bool = false   //!< the routed THR stamp's remainder pass
     @template_constant MOE : bool = false
     @template_constant DEQW : bool = false
+    @template_constant ADAPT : bool = true   //!< a routed 32-row tile runs the tensor op at 8 or 16 rows when its expert holds that few (bit-equal; the op is the tile's cost)
+    @template_constant KO_STAGE : bool = false   //!< lab knockout: no W staging (the tensor op over whatever the tile holds)
+    @template_constant KO_TENSOR : bool = false   //!< lab knockout: no tensor op (the staging alone)
     @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16>
     @ssbo @binding = 1 @role = "weight" @off = "soff" ksc : array<uint4>  //!< the SAME buffer as binding 0, uint4 view
     @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>
@@ -583,34 +586,101 @@ class template MetalKqMulMmSplitTensorBase {
         tmm2d_tg_store(acc, cp, MT, 64u, ndim)
     }
 
-    def moe_shell(erows, rbase : uint; rem : bool) {
+    //! the rows the tile's tensor op runs at: under ADAPT a 32-row tile whose expert leaves it eight or sixteen
+    //! live rows runs the op at that height (a tile costs its op whatever its live rows; 8 and 16 rows cost
+    //! 0.62 and 0.69 of 32), every other tile its MT
+    def tile_rows(live : uint) : uint {
+        static_if (ADAPT) {
+            return MT != 32u ? MT : (live <= 8u ? 8u : (live <= 16u ? 16u : 32u))
+        } else {
+            return MT
+        }
+    }
+
+    def moe_shell(erows, rbase : uint; rem : bool) {   // nolint:STYLE038 — one kernel body: the three tile walks are one op each in its own scope
         let e = gl_WorkGroupID.z
         let mBase = gl_WorkGroupID.x * MT + (rem ? erows / 128u * 128u : 0u)
         let lim = MT == 128u ? erows / 128u * 128u : (erows + 31u) / 32u * 32u
         if (mBase >= lim) {
             return
         }
+        let live = min(erows - mBase, MT)
+        let tr = tile_rows(live)
         let nBase = gl_WorkGroupID.y * 64u
         let nkb = kdim / 32u
         let nsb = kdim / 256u
         let lid = gl_LocalInvocationID.x
-        var acc : float[8192]
         var cp = unsafe(addr(y[(rbase + mBase) * ndim + nBase]))
-        tmm2d_tg_begin_deva(acc, unsafe(addr(xf[0])), MT, 64u, 4u, 64u)
-        var kb = 0u
-        while (kb < nkb) {
-            // the expert plane base rides the stage16 call - a stage_tile argument is emitted once outside the work loop, which moves the decode's shape
-            var work = lid
-            while (work < 256u) {
-                stage16(work, kb, e * ndim + nBase, nsb, 0u)
-                work += gl_WorkGroupSize.x
+        // one tile walk per tensor height: the op's begin, steps and store share one scope (the emitter's
+        // cooperative-tensor declarations are block-scoped), so each height carries its own copy of the walk
+        if (tr == 8u) {
+            var acc : float[8192]
+            tmm2d_tg_begin_deva(acc, unsafe(addr(xf[0])), 8u, 64u, 4u, 64u)
+            var kb = 0u
+            while (kb < nkb) {
+                static_if (!KO_STAGE) {
+                    var work = lid
+                    while (work < 256u) {
+                        stage16(work, kb, e * ndim + nBase, nsb, 0u)
+                        work += gl_WorkGroupSize.x
+                    }
+                }
+                barrier()
+                static_if (!KO_TENSOR) {
+                    tmm2d_tg_step_deva(acc, unsafe(addr(xf[(rbase + mBase) * kdim + kb * 32u])), kdim, twb, 8u, 64u, 64u)
+                }
+                barrier()
+                kb += 2u
             }
-            barrier()
-            tmm2d_tg_step_deva(acc, unsafe(addr(xf[(rbase + mBase) * kdim + kb * 32u])), kdim, twb, MT, 64u, 64u)
-            barrier()
-            kb += 2u
+            static_if (!KO_TENSOR) {
+                tmm2d_tg_store(acc, cp, 8u, 64u, ndim)
+            }
+        } elif (tr == 16u) {
+            var acc : float[8192]
+            tmm2d_tg_begin_deva(acc, unsafe(addr(xf[0])), 16u, 64u, 4u, 64u)
+            var kb = 0u
+            while (kb < nkb) {
+                static_if (!KO_STAGE) {
+                    var work = lid
+                    while (work < 256u) {
+                        stage16(work, kb, e * ndim + nBase, nsb, 0u)
+                        work += gl_WorkGroupSize.x
+                    }
+                }
+                barrier()
+                static_if (!KO_TENSOR) {
+                    tmm2d_tg_step_deva(acc, unsafe(addr(xf[(rbase + mBase) * kdim + kb * 32u])), kdim, twb, 16u, 64u, 64u)
+                }
+                barrier()
+                kb += 2u
+            }
+            static_if (!KO_TENSOR) {
+                tmm2d_tg_store(acc, cp, 16u, 64u, ndim)
+            }
+        } else {
+            var acc : float[8192]
+            tmm2d_tg_begin_deva(acc, unsafe(addr(xf[0])), MT, 64u, 4u, 64u)
+            var kb = 0u
+            while (kb < nkb) {
+                static_if (!KO_STAGE) {
+                    // the expert plane base rides the stage16 call - a stage_tile argument is emitted once outside the work loop, which moves the decode's shape
+                    var work = lid
+                    while (work < 256u) {
+                        stage16(work, kb, e * ndim + nBase, nsb, 0u)
+                        work += gl_WorkGroupSize.x
+                    }
+                }
+                barrier()
+                static_if (!KO_TENSOR) {
+                    tmm2d_tg_step_deva(acc, unsafe(addr(xf[(rbase + mBase) * kdim + kb * 32u])), kdim, twb, MT, 64u, 64u)
+                }
+                barrier()
+                kb += 2u
+            }
+            static_if (!KO_TENSOR) {
+                tmm2d_tg_store(acc, cp, MT, 64u, ndim)
+            }
         }
-        tmm2d_tg_store(acc, cp, MT, 64u, ndim)
     }
 
     def moe_kernel {
@@ -1715,6 +1785,9 @@ class template MetalMoeMulMmKqTensorBase {
     @template_constant REM : bool = false
     @template_constant STAGE_ITEMS : uint = 256u     //! per staged chunk
     @template_constant STAGE_K : uint = 64u     //! staged chunk depth, in k elements
+    @template_constant ADAPT : bool = true   //!< a routed 32-row tile runs the tensor op at 8 or 16 rows when its expert holds that few (bit-equal; the op is the tile's cost)
+    @template_constant KO_STAGE : bool = false   //!< lab knockout: no W staging (the tensor op over whatever the tile holds)
+    @template_constant KO_TENSOR : bool = false   //!< lab knockout: no tensor op (the staging alone)
     @ssbo @binding = 3 xf : array<XT>
     @ssbo @binding = 4 y : array<float>
     @uniform @binding = 5 ka : MoeMmArgs
@@ -1723,11 +1796,23 @@ class template MetalMoeMulMmKqTensorBase {
 
     def abstract stage_block(work, kb, e, nBase : uint) : void
 
+    //! the MT-row tile's store (the mx4 twin's bias store overrides it); the ADAPT walk's 8- and 16-row tiles store plain
     def store_out(var acc : float[8192]; var cp : float?; e, nBase : uint) {
         tmm2d_tg_store(acc, cp, MT, 64u, ka.ndim)
     }
 
-    def run_shell {
+    //! the rows the tile's tensor op runs at: under ADAPT a 32-row tile whose expert leaves it eight or sixteen
+    //! live rows runs the op at that height (a tile costs its op whatever its live rows; 8 and 16 rows cost
+    //! 0.62 and 0.69 of 32), every other tile its MT
+    def tile_rows(live : uint) : uint {
+        static_if (ADAPT) {
+            return MT != 32u ? MT : (live <= 8u ? 8u : (live <= 16u ? 16u : 32u))
+        } else {
+            return MT
+        }
+    }
+
+    def run_shell {   // nolint:STYLE038 — one kernel body: the three tile walks are one op each in its own scope
         let e = gl_WorkGroupID.z
         let ce = cnt[e]
         let mBase = gl_WorkGroupID.x * MT + (REM ? ce / 128u * 128u : 0u)
@@ -1735,26 +1820,82 @@ class template MetalMoeMulMmKqTensorBase {
         if (mBase >= lim) {
             return
         }
+        let live = min(ce - mBase, MT)
+        let tr = tile_rows(live)
         let rbase = basep[e]
         let nBase = gl_WorkGroupID.y * 64u
         let nkb = ka.kdim / 32u
         let lid = gl_LocalInvocationID.x
-        var acc : float[8192]
         var cp = unsafe(addr(y[(rbase + mBase) * ka.ndim + nBase]))
-        tmm2d_tg_begin_deva(acc, unsafe(addr(xf[0])), MT, 64u, 4u, STAGE_K)
-        var kb = 0u
-        while (kb < nkb) {
-            var work = lid
-            while (work < STAGE_ITEMS) {
-                stage_block(work, kb, e, nBase)
-                work += gl_WorkGroupSize.x
+        // one tile walk per tensor height: the op's begin, steps and store share one scope (the emitter's
+        // cooperative-tensor declarations are block-scoped), so each height carries its own copy of the walk
+        if (tr == 8u) {
+            var acc : float[8192]
+            tmm2d_tg_begin_deva(acc, unsafe(addr(xf[0])), 8u, 64u, 4u, STAGE_K)
+            var kb = 0u
+            while (kb < nkb) {
+                static_if (!KO_STAGE) {
+                    var work = lid
+                    while (work < STAGE_ITEMS) {
+                        stage_block(work, kb, e, nBase)
+                        work += gl_WorkGroupSize.x
+                    }
+                }
+                barrier()
+                static_if (!KO_TENSOR) {
+                    tmm2d_tg_step_deva(acc, unsafe(addr(xf[(rbase + mBase) * ka.kdim + kb * 32u])), ka.kdim, twb, 8u, 64u, STAGE_K)
+                }
+                barrier()
+                kb += STAGE_K / 32u
             }
-            barrier()
-            tmm2d_tg_step_deva(acc, unsafe(addr(xf[(rbase + mBase) * ka.kdim + kb * 32u])), ka.kdim, twb, MT, 64u, STAGE_K)
-            barrier()
-            kb += STAGE_K / 32u
+            static_if (!KO_TENSOR) {
+                tmm2d_tg_store(acc, cp, 8u, 64u, ka.ndim)
+            }
+        } elif (tr == 16u) {
+            var acc : float[8192]
+            tmm2d_tg_begin_deva(acc, unsafe(addr(xf[0])), 16u, 64u, 4u, STAGE_K)
+            var kb = 0u
+            while (kb < nkb) {
+                static_if (!KO_STAGE) {
+                    var work = lid
+                    while (work < STAGE_ITEMS) {
+                        stage_block(work, kb, e, nBase)
+                        work += gl_WorkGroupSize.x
+                    }
+                }
+                barrier()
+                static_if (!KO_TENSOR) {
+                    tmm2d_tg_step_deva(acc, unsafe(addr(xf[(rbase + mBase) * ka.kdim + kb * 32u])), ka.kdim, twb, 16u, 64u, STAGE_K)
+                }
+                barrier()
+                kb += STAGE_K / 32u
+            }
+            static_if (!KO_TENSOR) {
+                tmm2d_tg_store(acc, cp, 16u, 64u, ka.ndim)
+            }
+        } else {
+            var acc : float[8192]
+            tmm2d_tg_begin_deva(acc, unsafe(addr(xf[0])), MT, 64u, 4u, STAGE_K)
+            var kb = 0u
+            while (kb < nkb) {
+                static_if (!KO_STAGE) {
+                    var work = lid
+                    while (work < STAGE_ITEMS) {
+                        stage_block(work, kb, e, nBase)
+                        work += gl_WorkGroupSize.x
+                    }
+                }
+                barrier()
+                static_if (!KO_TENSOR) {
+                    tmm2d_tg_step_deva(acc, unsafe(addr(xf[(rbase + mBase) * ka.kdim + kb * 32u])), ka.kdim, twb, MT, 64u, STAGE_K)
+                }
+                barrier()
+                kb += STAGE_K / 32u
+            }
+            static_if (!KO_TENSOR) {
+                store_out(acc, cp, e, nBase)
+            }
         }
-        store_out(acc, cp, e, nBase)
     }
 }
 
@@ -1767,6 +1908,7 @@ class template MetalMoeMulMmMx4TensorT : MetalMoeMulMmKqTensorBase {
     @workgroup twb : float16[2048]          //!< W chunk: 64 wrows x 32 k, flat row-major
     override STAGE_ITEMS = 128u
     override STAGE_K = 32u
+    override ADAPT = false   //! the per-expert bias store is MT-only, so the mx4 tile keeps its 32-row op
 
     [metal_kernel(float_a_ok=true)]
     def metal_moe_mulmm_mx4_t {
@@ -1789,6 +1931,7 @@ class template MetalMoeMulMmMx4TensorT : MetalMoeMulMmKqTensorBase {
         }
     }
 
+    //! the bias store is MT-only, so the mx4 twins keep ADAPT off (an 8- or 16-row tile would store without the bias)
     def override store_out(var acc : float[8192]; var cp : float?; e, nBase : uint) {
         if (ka.hasb != 0u) {
             let bp = unsafe(addr(wb[e * ka.ndim + nBase]))

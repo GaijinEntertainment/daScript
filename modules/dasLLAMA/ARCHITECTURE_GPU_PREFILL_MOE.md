@@ -55,6 +55,17 @@ rows in 32-row tiles past them. Both ladders compute a row the same way, so the 
 same bit for bit; the pair is the faster one from 1024 tokens up on a 256-expert model. A 64-row
 rung between the pair's two stamps serves the same rows in the same time, so the ladder carries none.
 
+A 32-row tile runs its tensor op at the rows its expert leaves it (`ADAPT`, on both scaffolds): an op
+of eight rows for one to eight live rows, sixteen for nine to sixteen, else the thirty-two - three
+walks of one op each, each in its own scope, because the emitter's cooperative-tensor declarations
+are block-scoped and an op's begin, steps and store must share one. The tile's cost is the op's, not
+the live rows': over 128 experts of a 1024 x 2048 plane the 32-row stamp reads the same time whether
+an expert holds 4, 12 or 32 rows, the staging alone a third of it and the op alone three quarters,
+and the adaptive op reads 0.57 / 0.69 / 1.00 of the fixed tile at those counts, bit-equal on every
+live element (`benchmarks/matmul/bench_metal_moe_tile_lab.das`: the shipped form, the fixed 32-row
+form it replaced, and the two knockouts). The mx4 twin keeps the 32-row op, since its per-expert
+bias store is MT-only.
+
 The split-format expert twins (k3, q40 and the iquants) do not derive from that scaffold: they
 derive from the format's DENSE split class (`ARCHITECTURE_GPU_PREFILL.md#prefill-kq-tensor-scaffold`) with the base's `MOE` axis set and run its
 `stage16` under the dense base's `moe_kernel` entry, whose expert plane rides `nBase` -

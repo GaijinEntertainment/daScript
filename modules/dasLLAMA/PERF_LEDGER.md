@@ -11,6 +11,50 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **MEASURED (2026-10-09, `direction-grade`) - what a routed 32-row tile costs and where, and the adaptive tensor op that
+  came of it, on the M1 Max and the M5 Max.** The house's short reply is a ~375-token window over 256 experts at top-8,
+  twelve live rows an expert in a 32-row tile, and the window probe (`prefill_window_probe --prefix 4500 --windows 375
+  --kprof 375`, the 35B IQ4_XS-pure) read the expert GEMMs at 298 of 554 ms on the M1 and 55 of 107 on the M5 (its real
+  sidecar; 121 under the lcpp copy, whose attention ran the plain form) - flat in live rows: the same kernels read 244 ms
+  at 4 rows an expert (128 tokens) and 298 at 12. `benchmarks/matmul/bench_metal_moe_tile_lab.das` (128 experts of a
+  1024 x 2048 plane, 146 MB past the SLC, the production builder's binds and grid, every dispatch its own output, four arms
+  alternating, best of three; ms a dispatch):
+
+  | box | format | rows an expert | fixed 32-row tile | staging alone | tensor op alone | adaptive op | adaptive / fixed |
+  |---|---|---|---|---|---|---|---|
+  | M1 Max | iq4xs | 4 / 12 / 32 | 2.97 / 2.96 / 2.97 | 1.00 | 2.18 | 1.68 / 2.03 / 2.98 | 0.57 / 0.69 / 1.00 |
+  | M1 Max | k4 | 4 / 12 / 32 | 2.76 / 2.76 / 2.76 | 0.80 | 2.11 | 1.42 / 1.80 / 2.77 | 0.51 / 0.65 / 1.00 |
+  | M5 Max | iq4xs | 4 / 12 / 32 | 0.52 / 0.52 / 0.52 | 0.33 | 0.17 / 0.18 / 0.29 | 0.43 / 0.45 / 0.52 | 0.82 / 0.86 / 1.00 |
+  | M5 Max | k4 | 4 / 12 / 32 | 0.49 / 0.49 / 0.49 | 0.31 | 0.16 / 0.17 / 0.29 | 0.40 / 0.42 / 0.49 | 0.82 / 0.86 / 1.00 |
+
+  The tile's cost does not move with its live rows. On the M1 it is the 32-row tensor op (three quarters of the tile;
+  the staging a third, the two overlapping), so an op sized to the live rows - eight for one to eight, sixteen for nine
+  to sixteen, the `ADAPT` template constant of both MoE scaffolds, now the shipped default - takes a third off the house
+  tile; on the M5 it is the staging (two thirds, ~450 GB/s over the planes, near the box's memory), so the adaptive op
+  takes 14-18% and the staging is the next lever there. The adaptive op is bit-equal to the fixed tile on every live
+  element in every cell (the op's per-element sums are the same at any height), and a 32-row expert pays nothing. End to
+  end the M1 house window read 554 -> 487 ms, its expert kernels 298 -> 232 (real routing leaves some experts past
+  sixteen rows, so the window takes less than the lab's 0.69). The reading on the same window in the Q4_K-pure 35B:
+  483 ms, its expert kernels 229 (the base `metal_moe_mulmm_k4` form under the M1's crown) - the K-quant file is 13%
+  the cheaper window for the house on this box.
+
+- **REFERENCE (2026-10-09) - the prefill expert GEMM's shape in llama.cpp and MLX, read from their sources (external:
+  llama.cpp 98c4764b6 `ggml/src/ggml-metal`, MLX 77bf1fa `mlx/backend/metal`, mlx-lm 0.32.0).** Ours: a 32-row tile of four
+  simdgroups (128 threads), W dequantized into threadgroup memory 64 x 64 a K chunk under two barriers, x streamed from
+  device, `npos / 32` tiles launched an expert with the empty ones exiting. llama.cpp (`kernel_mul_mm_id`, taken from 32
+  tokens total, below that one GEMV a (token, slot)): a 64 x 32 x 32 tile of four simdgroups, tiles over every token an
+  expert with an exit past the expert's count (our launch shape), x gathered through `ids` and converted into threadgroup
+  memory, a partial tile computing the full MMA with the write-out clipped, two barriers a K=32 step, no double buffer.
+  MLX (mlx-lm `SwitchGLU`, from 64 routed entries: argsort by expert, x gathered contiguous in expert order,
+  `gather_qmm_rhs` once the mean rows an expert pass 4): a TIGHT grid - one padded tile run an expert, `ceil(M / bm) + E - 1`
+  tiles in all, each expert padded to the next `bm` alone, the tile found by a prefix sum over the experts' offsets; the
+  non-NAX tile (M1 to M4 class) is 16 rows x 32 cols x 32 K on TWO simdgroups (64 threads), x and W both staged into
+  threadgroup memory, two barriers a step, no double buffer, a 12-row expert padded to 16; the NAX tile (M5 class) is 32
+  rows (64 past a mean of 64 an expert) x 64 x 64 on four simdgroups of 16 x 32, W alone staged, x read device to
+  registers, and a simdgroup with no live rows skips its MMA, so a 12-row expert runs two of its four simdgroups. Neither
+  engine double-buffers the staging. The reading: against ours MLX's levers are the 16-row two-simdgroup tile on the
+  non-NAX boxes, the tight grid, and the live-row skip on NAX - not the staging pattern.
+
 - **MEASURED (2026-10-09, `direction-grade`) - every K-quant format's half-x rows route under its own
   `kq_rows_half_<fmt>` crown, on the M1 Max and the M5 Max; the house replay and the short-answer bench on the 35B.**
   The per-format race (`race_kq_half`, the last of the decode races: a 5120 x 16384 plane of the format, two, four and
