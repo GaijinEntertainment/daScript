@@ -25,7 +25,8 @@ var private INTERNAL_REF_EXEMPT <- {
     "utils/REVIEW.das",             // carries the needle
     "utils/CMakeLists.txt",         // builds and CI-tests internal tools, never ships
     "utils/mcp/setup.das",          // wires the internal das-herd shim behind an exists-check; same exclusion as ci/smoke_test_bundle.sh
-    "utils/mcp/test_setup.das"      // plants that shim in a scratch root to drive the exists-check; not installed
+    "utils/mcp/test_setup.das",     // plants that shim in a scratch root to drive the exists-check; not installed
+    "utils/daslang/tests/test_tool_dispatch.das"    // runs an internal tool to prove `daslang -tool`'s source-tree fallback; not installed
 }
 
 // Extensions that can carry a reference by require, include, or command line.
@@ -185,15 +186,47 @@ def private check_supervised_tools {
 
 var private BIN_EXE <- %regex~`([A-Za-z0-9_./-]+)\.exe`%%
 
+//! the tool names `DASLANG_TOOLS = [...]` in ci/packaging/packages.py lists - its one line
+//! holds only the quoted names, so every second piece between quotes is one
+def private packaged_tool_names() : array<string> {
+    var names : array<string>
+    for (ln in split(fread("ci/packaging/packages.py"), "\n")) {
+        continue if (!starts_with(ln, "DASLANG_TOOLS = ["))
+        for (piece, i in split(ln, "\""), count()) {
+            if (i % 2 == 1) {
+                names |> push(piece)
+            }
+        }
+    }
+    return <- names
+}
+
+//! only internal drivers build as `-exe`, and the shipped tool names are the packaged ones
+def private check_tool_lists {
+    let ucm = fread("utils/CMakeLists.txt")
+    var inscope built <- cmake_list_entries(ucm, "DAS_UTILS")
+    for (b in built) {
+        continue if (b |> starts_with("$") || b |> starts_with("internal/"))
+        gate_finding("utils/CMakeLists.txt", "DAS_UTILS entry {b} is not under internal/ — a daslang -exe build loads none of a project's own modules; a shipped tool goes in DAS_UTILS_SHIPPED_EXES, as a copy of daslang")
+    }
+    var inscope exes <- cmake_list_entries(ucm, "DAS_UTILS_SHIPPED_EXES")
+    var inscope packaged <- packaged_tool_names()
+    for (e in exes) {
+        continue if (e |> starts_with("$"))
+        if (find_index(packaged, e) < 0) {
+            gate_finding("ci/packaging/packages.py", "DASLANG_TOOLS does not name {e}, a DAS_UTILS_SHIPPED_EXES entry — no package manager puts it on PATH")
+        }
+    }
+    for (p in packaged) {
+        if (find_index(exes, p) < 0) {
+            gate_finding("ci/packaging/packages.py", "DASLANG_TOOLS names {p}, which is not a DAS_UTILS_SHIPPED_EXES entry — the bundle ships no {p}.exe for its command to run")
+        }
+    }
+}
+
 def private check_shipped_exes(externals : array<string>) {
     let ucm = fread("utils/CMakeLists.txt")
     var inscope exes <- cmake_list_entries(ucm, "DAS_UTILS_SHIPPED_EXES")
-    var inscope built <- cmake_list_entries(ucm, "DAS_UTILS")
-    var inscope built_names : table<string>
-    for (b in built) {
-        continue if (b |> starts_with("$"))
-        built_names |> insert(base_name(b))
-    }
     let iclaude = fread("install/CLAUDE.md")
     for (e in exes) {
         continue if (e |> starts_with("$"))
@@ -208,8 +241,8 @@ def private check_shipped_exes(externals : array<string>) {
         if (find(iclaude, "{e}.exe") < 0) {
             gate_finding("install/CLAUDE.md", "bin/ line does not name {e}.exe — shipped exes are listed there")
         }
-        if (e != "dastest" && !key_exists(built_names, e)) {
-            gate_finding("utils/CMakeLists.txt", "shipped exe {e} has no DAS_UTILS entry — nothing builds it")
+        if (empty(get_tool_script(e, "."))) {
+            gate_finding("utils/CMakeLists.txt", "shipped exe {e}: `daslang -tool {e}` finds no entry file — the copy of daslang named {e} has no tool to run")
         }
     }
     for (e in exes) {
@@ -263,6 +296,7 @@ def main() : int {
     check_registration_triple(tools, internals)
     check_no_internal_refs()
     check_shipped_exes(externals)
+    check_tool_lists()
     check_supervised_tools()
     return gate_verdict("utils")
 }

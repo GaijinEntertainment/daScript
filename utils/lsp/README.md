@@ -43,7 +43,8 @@ of a `.das` file, and the LSP tool exposes definition / references / hover /
 documentSymbol / workspaceSymbol / implementation / call hierarchy
 (prepare + incoming + outgoing).
 
-Any other stdio LSP client works too - point it at `bin/watchdog --lsp`, or
+Any other stdio LSP client works too - point it at `bin/watchdog --lsp`
+(`daslang-watchdog -tool lsp` from an installed SDK, which is the same front), or
 from a tree with no static exe built, at the same front under the
 interpreter: `bin/daslang utils/watchdog/main.das -- --lsp`.
 

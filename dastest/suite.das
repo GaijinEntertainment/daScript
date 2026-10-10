@@ -18,12 +18,8 @@ require log
 require testing
 require suite_result public
 
-//! JIT the tests only when the HOST was launched with -jit. Inside a standalone exe
-//! jit_enabled() is always true (the exe is a JIT product), but the exe carries none of
-//! the llvm/dasbind machinery a JIT compile needs - dastest.exe runs the interpreter.
-def public tests_jit_enabled() : bool {
-    return jit_enabled() && !is_standalone_exe()
-}
+//! a standalone exe reports jit_enabled() but carries no llvm/dasbind to JIT with, so only a -jit host JITs the tests
+def public tests_jit_enabled() : bool => jit_enabled() && !is_standalone_exe()
 
 var test_results : array<SuiteTestResult>
 var bench_messages : array<string>
@@ -142,9 +138,8 @@ def FileCtx(ctx : SuiteCtx) : FileCtx {
 }
 
 
-def private internalFileCtx(ctx : SuiteCtx) : FileCtx {
-    return <- FileCtx(uriPaths = ctx.uriPaths, verbose = ctx.verbose, stackOnException = ctx.stackOnException)
-}
+def private internalFileCtx(ctx : SuiteCtx) : FileCtx =>
+    <- FileCtx(uriPaths = ctx.uriPaths, verbose = ctx.verbose, stackOnException = ctx.stackOnException)
 
 
 // match_func_name may reject a test if explicit test list
@@ -349,7 +344,7 @@ def test_module(var mod : rtti::Module; var context : rtti::Context; var suite_c
     modPtr |> module_for_each_function() $(f) {
         if (f.hash == 0ul) return
         let func = context |> get_function_by_mnh(f.hash)
-        var fn = modPtr |> find_module_function_via_rtti(func)
+        let fn = modPtr |> find_module_function_via_rtti(func)
         if (fn == null) return
         var test_name = ""
         var test_kind = ""

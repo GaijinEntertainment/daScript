@@ -16,9 +16,9 @@ it.
 
 A tool is shipped when an `install(...)` rule in `CMakeLists.txt` (beside this file) or the
 repo root's `CMakeLists.txt` puts its program in the bundle - a built executable
-(`install(PROGRAMS ...)` for a `DAS_UTILS_SHIPPED_EXES` entry, `install(TARGETS ...)` for a
-C++ target), or the entry file copied as source (`install(FILES ...)` or
-`install(DIRECTORY ...)`).
+(`install(TARGETS ...)` for a C++ target), or the entry file copied as source (`install(FILES
+...)` or `install(DIRECTORY ...)`). A `DAS_UTILS_SHIPPED_EXES` entry ships no program of its own:
+it installs a copy of daslang under the tool's name, which runs the shipped source.
 
 An arm is one test case that a test runner executes and reports pass or fail for on its own,
 in any language: a `dastest` `[test]` function and each `t |> run(...)` case inside that
@@ -54,9 +54,10 @@ puts it, applies `modules/dasLLAMA/REVIEW.md` (repo root) too.**
 walks, or rewriting a finding text so it no longer names what failed.**
 
 **A diff that drops a tool from `DAS_UTILS_SHIPPED_EXES` (`CMakeLists.txt`, beside this file)
-while keeping that tool's directory records the decision to stop shipping it in that tool's
+while keeping that tool's directory records the decision to drop its named exe in that tool's
 own `README.md`, wherever that directory is, in the same change** - `REVIEW.das` cannot see a
-removed entry, and it reads each shipped tool's `README.md` for the standing decision.
+removed entry, and it reads the `README.md` of each `DAS_UTILS_SHIPPED_EXES` entry for the
+standing decision.
 
 **A diff that deletes a tool named in `DAS_UTILS_SHIPPED_EXES` leaves a comment line beside
 the list naming the removed exe, in the same change.**

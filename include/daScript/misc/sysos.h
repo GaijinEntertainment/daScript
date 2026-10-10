@@ -19,7 +19,7 @@ namespace das {
         HwBp_8 =    2,
     };
 
-    string getExecutableFileName ( void );
+    DAS_API string getExecutableFileName ( void );
     DAS_API size_t getExecutablePathName ( char * pathName, size_t pathNameCapacity );
     DAS_API string getExecutablePathUtf8 ( void );
     DAS_API string getDasRoot ( void );
@@ -30,8 +30,8 @@ namespace das {
     //! Returns an owned FILE for regular-file reading without waiting on a FIFO; size comes from the opened object.
     DAS_API FILE * das_fopen_regular_read_utf8 ( const char * fileName, uint64_t & size );
 
-    string get_prefix ( const string & req );   // blah.... \ foo.bar - returns blah....
-    string get_suffix ( const string & req );   // blah.... \ foo.bar - returns foo.bar
+    DAS_API string get_prefix ( const string & req );   // blah.... \ foo.bar - returns blah....
+    DAS_API string get_suffix ( const string & req );   // blah.... \ foo.bar - returns foo.bar
 
     void * loadDynamicLibrary ( const char * fileName );
     void * getFunctionAddress ( void * module, const char * func );

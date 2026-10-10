@@ -52,9 +52,13 @@ class BundleFixture(unittest.TestCase):
 
 class WheelBuildTest(BundleFixture):
 
+    def windows_exes(self):
+        """Every command's Windows executable - the last candidate of each."""
+        return {wb.profile("daslang")["commands"][t][-1]: b"MZ" for t in wb.TOOLS}
+
     def stage_minimal(self, extra=None):
         files = {"LICENSE": b"BSD", "README.md": b"# daslang", "daslib/strings.das": b"// das"}
-        files.update({f"bin/{t}.exe": b"MZ" for t in wb.TOOLS})
+        files.update(self.windows_exes())
         files.update(extra or {})
         self.stage(files)
 
@@ -188,9 +192,13 @@ class WheelBuildTest(BundleFixture):
                 self.assertEqual(digest, wb.urlsafe_sha256(data), name)
             compile(z.read("daslang/_cli.py"), "_cli.py", "exec")
             compile(z.read("daslang/__init__.py"), "__init__.py", "exec")
+            init = z.read("daslang/__init__.py").decode()
+            self.assertIn("'daslang-watchdog': ['bin/watchdog', 'bin/watchdog.exe']", init,
+                          "the watchdog keeps its bundle name behind the package's command")
+            self.assertIn("'lint': ['bin/lint.exe']", init, "a tool's exe keeps .exe on every platform")
 
     def test_missing_license_is_fatal(self):
-        self.stage({f"bin/{t}.exe": b"MZ" for t in wb.TOOLS})
+        self.stage(self.windows_exes())
         with self.assertRaises(SystemExit):
             wb.build(self.bundle, "v0.6.4", self.out, platform_tag="win_amd64")
 

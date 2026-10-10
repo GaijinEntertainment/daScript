@@ -39,7 +39,8 @@ def spawn_at(cwd_root : string; args : array<string>) : tuple<rc : int; out : st
 def make_pilot_fixture(t : T?; tree, root : string) {
     // uppercase on purpose: the green run proves the case-insensitive install scan
     write_at(t, root, "CMakeLists.txt", "INSTALL(FILES src/utils/good-tool/main.das DESTINATION utils/good-tool)\n")
-    write_at(t, root, "utils/CMakeLists.txt", "set(DAS_UTILS\n    good-tool\n)\nset(DAS_UTILS_SHIPPED_EXES good-tool)\n")
+    write_at(t, root, "utils/CMakeLists.txt", "set(DAS_UTILS\n    internal/tidy-tool\n)\nset(DAS_UTILS_SHIPPED_EXES good-tool)\n")
+    write_at(t, root, "ci/packaging/packages.py", "DASLANG_TOOLS = [\"good-tool\"]\n")
     write_at(t, root, "utils/good-tool/main.das", "options gen2\n")
     write_at(t, root, "utils/good-tool/README.md", "ships as a prebuilt exe - the DAS_UTILS_SHIPPED_EXES entry\n")
     write_at(t, root, "utils/internal/tidy-tool/main.das", "options gen2\n")
@@ -70,7 +71,8 @@ def test_pilot_gate_fixtures(t : T?) {
     write_at(t, fixture, "utils/internal/Bad_Name/x.txt", "x\n")
     write_at(t, fixture, "utils/rogue-tool/main.das", "options gen2\n")
     write_at(t, fixture, "utils/good-tool/notes.md", "see utils/internal for helpers\n")
-    write_at(t, fixture, "utils/CMakeLists.txt", "set(DAS_UTILS\n    good-tool\n)\nset(DAS_UTILS_SHIPPED_EXES good-tool ghost internal/sneak)\n")
+    write_at(t, fixture, "utils/CMakeLists.txt", "set(DAS_UTILS\n    internal/tidy-tool\n    good-tool\n)\nset(DAS_UTILS_SHIPPED_EXES good-tool ghost internal/sneak)\n")
+    write_at(t, fixture, "ci/packaging/packages.py", "DASLANG_TOOLS = [\"good-tool\", \"phantom\"]\n")
     write_at(t, fixture, "install/CLAUDE.md", "- `utils/good-tool/` - tool\n- `bin/` - exes (`good-tool.exe`, `gone.exe`)\n")
 
     let red = spawn_at(fixture, [path_join(fixture, "utils/REVIEW.das")])
@@ -78,8 +80,9 @@ def test_pilot_gate_fixtures(t : T?) {
     for (needle in ["not kebab-case", "has no install rule", "no doc/source/reference/utils/rogue_tool.rst",
                     "no toctree row utils/rogue_tool.rst", "no layout row for external tool utils/rogue-tool/",
                     "references utils/internal", "must record the DAS_UTILS_SHIPPED_EXES decision",
-                    "does not name ghost.exe", "has no DAS_UTILS entry", "is a path",
-                    "is not an external tool directory", "names gone.exe"]) {
+                    "does not name ghost.exe", "`daslang -tool ghost` finds no entry file", "is a path",
+                    "is not an external tool directory", "names gone.exe", "DAS_UTILS entry good-tool is not under internal/",
+                    "DASLANG_TOOLS does not name ghost", "DASLANG_TOOLS names phantom"]) {
         t |> success(find(red.out, needle) >= 0, "finding fired: {needle}")
     }
 

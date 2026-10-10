@@ -59,6 +59,26 @@ disc shows.  Where no desktop can
 show an icon, the log says ``tray_unavailable`` and supervision runs without
 it.
 
+Serving an editor or an assistant
+=================================
+
+``-tool <name>`` starts the server an editor or an AI assistant talks to over
+stdio. The package managers put the watchdog on PATH as ``daslang-watchdog``::
+
+   daslang-watchdog -tool mcp     # the daslang MCP server
+   daslang-watchdog -tool dap     # the DAP bridge for debugging
+   daslang-watchdog -tool lsp     # the language server
+
+``mcp`` and ``dap`` run ``daslang -tool <name>`` with the ``daslang`` beside the
+watchdog, and restart it after a crash or a rebuild; ``lsp`` is the watchdog's own
+language-server front. The directory the client starts it in is the project root,
+or pass ``--cwd <dir>`` before ``-tool``. Arguments after the name go to the
+server. An MCP client's configuration needs no path::
+
+   { "command": "daslang-watchdog", "args": ["-tool", "mcp"] }
+
 .. seealso::
+
+   :ref:`utils_tools` -- running any SDK tool with ``daslang -tool``
 
    :ref:`utils_daspkg` -- ``release_include_tool("watchdog")`` ships the executable inside a package release

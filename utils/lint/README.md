@@ -1,17 +1,19 @@
 # lint
 
-lint ships in the SDK as a prebuilt exe - the `DAS_UTILS_SHIPPED_EXES` entry in `utils/CMakeLists.txt`
-(repo root); `utils/REVIEW.das` reads this line as the record of that decision.
+lint ships in the SDK as `bin/lint.exe`, a copy of daslang that runs this tool from source by its
+name - the `DAS_UTILS_SHIPPED_EXES` entry in `utils/CMakeLists.txt` (repo root); `utils/REVIEW.das`
+reads this line as the record of that decision.
 
 The lint suite runner: compiles each target file and applies the rule modules
 (`daslib/perf_lint.das`, `daslib/style_lint.das`, `daslib/lint.das`) over its AST.
 
 Run:
 
-    daslang utils/lint/main.das -- <files or dirs> --quiet
+    daslang -tool lint <files or dirs> --quiet
 
 Exit 2 on any warning - CI's whole-tree sweep (`check_lint_tree`, in the extended checks) keys on it.
-The SDK also ships a prebuilt `bin/lint.exe`.
+`lint <files>` is the same run through the SDK's `bin/lint.exe`. The directory it runs in is the
+project root, so the modules a project installs resolve.
 
 Clean results are cached in `.cache/daslang/lint_cache/` (`--cache-dir` moves it, `--no-cache` skips
 it). A file has one entry per flag and rule-filter set, named by their hash and rewritten in place,
@@ -22,8 +24,8 @@ and does not compile it. A file with findings, or one that fails to compile, is 
 folder is versioned by the semantic hash of the runner's `[lint_tool_entry]` `main`, every function
 it reaches included: the `lint_tool_hash` simulate macro (`daslib/lint_config.das`) compares it with
 `lint_hash.txt` while the runner compiles and empties the folder when it differs, so a changed rule
-re-lints everything while a comment or an unreached helper re-lints nothing. A prebuilt `lint.exe`
-never compiles, cannot check that version, and runs without the cache. The cache does not track
+re-lints everything while a comment or an unreached helper re-lints nothing. A standalone `-exe`
+build of the runner never compiles, cannot check that version, and runs without the cache. The cache does not track
 `include`d files, macro-pinned environment and command-line inputs, or the C++ build: a change to
 those alone re-lints nothing until `--no-cache`. CI keeps the folder between runs, one per platform
 (`actions/cache` in `.github/workflows/extended_checks.yml`).

@@ -50,6 +50,13 @@ class DebControlTest(unittest.TestCase):
         self.assertIn("link: /usr/bin/daslang -> /opt/daslang/bin/daslang\n", out)
         self.assertIn("link: /usr/bin/daslang-live -> /opt/daslang/bin/daslang-live\n", out)
 
+    def test_tools_and_watchdog_are_linked_by_their_command_names(self):
+        out = self.control(self.stage(["bin/daslang", "bin/lint.exe", "bin/dastest.exe", "bin/watchdog"]), "v0.6.5")
+        self.assertIn("link: /usr/bin/lint -> /opt/daslang/bin/lint.exe\n", out)
+        self.assertIn("link: /usr/bin/dastest -> /opt/daslang/bin/dastest.exe\n", out)
+        self.assertIn("link: /usr/bin/daslang-watchdog -> /opt/daslang/bin/watchdog\n", out)
+        self.assertNotIn("/usr/bin/watchdog", out, "the Debian watchdog package owns that name")
+
     def test_description_continuation_lines_are_indented(self):
         out = self.control(self.stage(["bin/daslang"]), "v0.6.5")
         after = out.split("Description:", 1)[1].splitlines()[1:]

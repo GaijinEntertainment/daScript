@@ -13,6 +13,9 @@ import re
 import shlex
 import sys
 
+DASLANG_TOOLS = ["lint", "daspkg", "dascov", "detect-dupe", "benchctl", "dastest", "das-fmt"]
+DASLANG_COMMANDS = ["daslang", "daslang-live", *DASLANG_TOOLS, "daslang-watchdog"]
+
 # A command maps its user-facing name to the candidate paths of its executable, relative
 # to the directory the builder is handed; the first one present wins. The linux packages
 # link each command into /usr/bin, the wheel gets one console_scripts shim per command.
@@ -27,10 +30,12 @@ PROFILES = {
         "deb_depends": "",
         "rpm_requires": [],
         "prefix": "/opt/daslang",
-        "links": ["daslang", "daslang-live"],
-        "commands": {t: [f"bin/{t}", f"bin/{t}.exe"] for t in
-                     ["daslang", "daslang-live", "lint", "daspkg", "dascov",
-                      "detect-dupe", "benchctl", "dastest", "das-fmt"]},
+        "links": DASLANG_COMMANDS,
+        "commands": {
+            **{t: [f"bin/{t}", f"bin/{t}.exe"] for t in ["daslang", "daslang-live"]},
+            **{t: [f"bin/{t}.exe"] for t in DASLANG_TOOLS},
+            "daslang-watchdog": ["bin/watchdog", "bin/watchdog.exe"],
+        },
         "main_command": "daslang",
         "license": "bundle",
         "probe_prefixes": ("bin/", "lib/"),

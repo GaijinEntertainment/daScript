@@ -7,7 +7,7 @@ require math
 
 // A standalone exe carries the host's require-resolver rows (register_native_path) only when it
 // links the whole compiler library - the resolver they feed lives there. A runtime-only exe has
-// no compiler, so it registers none; a --jit-register-all-modules exe (the dastest.exe shape,
+// no compiler, so it registers none; a --jit-register-all-modules exe (the jit.exe shape,
 // which compiles at run time) still carries every row.
 
 def private das_exe() : string {

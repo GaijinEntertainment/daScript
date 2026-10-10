@@ -444,6 +444,7 @@ The BUILTIN module contains core runtime functions available in all daslang prog
 - `get_das_version` - Returns the daslang SDK version as a string in "major.minor.patch" format (e.g.
 - `get_executable_path` - Returns the absolute path of the running executable with symlinks resolved (on Windows the module file name), or an empty string where the platform exposes none.
 - `get_stackwalk` - Returns the current call stack as a string — the same report `stackwalk` prints, captured instead of logged.
+- `get_tool_script` - Returns the entry file `daslang -tool name` runs from the tree at `root` (`get_das_root()` for the running SDK), or an empty string when that tree has no such tool.
 - `is_in_aot` - Returns `true` if the compiler is currently generating ahead-of-time (AOT) compiled code.
 - `is_intern_strings` - Returns `true` if string interning is enabled in the current context, meaning identical strings share the same memory.
 - `is_safe_hash` - Returns true when the runtime computes string hashes with the safe byte-at-a-time algorithm rather than the faster word-at-a-time one.

@@ -35,9 +35,8 @@ CI_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 #   * CPP_SUFFIX — for binaries built via cmake `add_executable` (daslang,
 #     daslang-live): platform-natural suffix (.exe on Windows,
 #     none on Linux/macOS).
-#   * DASEXE_SUFFIX — for binaries built via `daslang -exe`: ALWAYS `.exe` on
-#     every platform (utils/CMakeLists.txt: "daslang -exe appends `.exe` to the
-#     output path").
+#   * TOOL_EXE_SUFFIX — the shipped tool exes (DAS_UTILS_SHIPPED_EXES in
+#     utils/CMakeLists.txt): ALWAYS `.exe` on every platform.
 # Use `-f` (file-exists) rather than `-x` (executable bit) — Windows Git-Bash
 # doesn't see the +x bit on Linux ELF binaries even when this script runs
 # locally on a Linux-bundle for cross-platform repro.
@@ -51,7 +50,7 @@ else
     echo "ERROR: daslang binary not found in $BUNDLE/bin/" >&2
     exit 2
 fi
-DASEXE_SUFFIX=".exe"
+TOOL_EXE_SUFFIX=".exe"
 
 cd "$BUNDLE"
 
@@ -88,6 +87,7 @@ COMPILE_TESTS=(
     "mcp|utils/mcp/main.das"
     "mcp-cpp|utils/mcp/cpp_main.das"
     "mcp-setup|utils/mcp/setup.das"
+    "tools|utils/tools/main.das"
     "watchdog-das|utils/watchdog/main.das"
     # Not an entry point, but the library an adopting repo's REVIEW.das requires
     # (REVIEW_COMMON.md contract) — a bundle where it does not compile breaks
@@ -107,24 +107,19 @@ COMPILE_TESTS=(
 #   find-dupe — require chain needs the `anthropic/anthropic` daspkg package
 #               fetched at runtime + ANTHROPIC_API_KEY.
 
-# Prebuilt exes `cmake --install` drops into bin/. `cpp` rows are add_executable
-# targets (platform-natural suffix); `dasexe` rows are the DAS_UTILS_SHIPPED_EXES
-# set from utils/CMakeLists.txt (always `.exe`), installed from bin/ on single-config
-# generators and from bin/<config>/ on multi-config ones.
-# `cpp` rows are presence-checked; `dasexe` rows are also launched (`--help`, exit 0):
-# a `daslang -exe` binary resolves the runtime .so/.dylib through its embedded rpath,
-# and a bundle whose rpath points back at the build tree is present-but-dead on every
-# user's box.
+# Prebuilt exes in bin/: `cpp` rows are add_executable targets (platform suffix), presence-checked;
+# `tool` rows are DAS_UTILS_SHIPPED_EXES (always `.exe`), also launched (`--help`, exit 0) - a copy
+# loads the runtime through daslang's rpath, and an rpath into the build tree is dead on a user's box.
 SHIPPED_EXE_TESTS=(
     "daslang-live|cpp"
     "watchdog|cpp"
-    "benchctl|dasexe"
-    "dascov|dasexe"
-    "das-fmt|dasexe"
-    "daspkg|dasexe"
-    "dastest|dasexe"
-    "detect-dupe|dasexe"
-    "lint|dasexe"
+    "benchctl|tool"
+    "dascov|tool"
+    "das-fmt|tool"
+    "daspkg|tool"
+    "dastest|tool"
+    "detect-dupe|tool"
+    "lint|tool"
 )
 
 PASS=0
@@ -132,7 +127,7 @@ FAIL=0
 LOG="$(mktemp)"
 
 # The build tree's lib/ (CMAKE_LIBRARY_OUTPUT_DIRECTORY, beside ci/) is also on every
-# dasexe's rpath, so on the runner that built the bundle a build-tree rpath resolves
+# tool copy's rpath, so on the runner that built the bundle a build-tree rpath resolves
 # and the launch check would pass without the bundle-relative entry. Hide it for the
 # run; Windows has no rpath and locks open DLL dirs, so only POSIX.
 BUILD_LIB="$(cd "$CI_DIR/.." && pwd -P)/lib"
@@ -191,12 +186,12 @@ for entry in "${COMPILE_TESTS[@]}"; do
 done
 
 echo
-echo "Prebuilt exes (bin/) - presence, dasexe rows also launched:"
+echo "Prebuilt exes (bin/) - presence, tool rows also launched:"
 for entry in "${SHIPPED_EXE_TESTS[@]}"; do
     name="${entry%%|*}"
     kind="${entry#*|}"
     case "$kind" in
-        dasexe) suffix="$DASEXE_SUFFIX" ;;
+        tool) suffix="$TOOL_EXE_SUFFIX" ;;
         cpp)    suffix="$CPP_SUFFIX" ;;
         *)      echo "ERROR: unknown kind '$kind' for $name" >&2; FAIL=$((FAIL + 1)); continue ;;
     esac
@@ -204,7 +199,7 @@ for entry in "${SHIPPED_EXE_TESTS[@]}"; do
     if [[ ! -f "$exe" ]]; then
         printf '  %-30s MISSING (%s)\n' "$name" "$exe"
         FAIL=$((FAIL + 1))
-    elif [[ "$kind" == dasexe ]]; then
+    elif [[ "$kind" == tool ]]; then
         run_check "$name (launch)" "$exe" --help
     else
         printf '  %-30s OK\n' "$name"
@@ -249,19 +244,37 @@ run_check "watchdog --help" bash -c \
     "out=\"\$('$BUNDLE/bin/watchdog${CPP_SUFFIX}' --help)\" && printf '%s' \"\$out\" | grep -q -- '--stable-seconds'"
 run_check "watchdog --lsp (empty stdin)" bash -c \
     "'$BUNDLE/bin/watchdog${CPP_SUFFIX}' --lsp < /dev/null"
+# a `-tool` front exits 2 without a daslang beside the watchdog, so exit 0 proves the bundle layout
+for front in lsp mcp dap; do
+    run_check "watchdog -tool $front (empty stdin)" bash -c \
+        "'$BUNDLE/bin/watchdog${CPP_SUFFIX}' -tool $front < /dev/null"
+done
+run_check "daslang -tool lists the tools" bash -c \
+    "'$DASLANG' -tool | grep -qx '    lint'"
+# lint.exe must resolve the project's own modules/ from its cwd - a missed module reports main.das skipped
+PROJECT="$(mktemp -d)"
+mkdir -p "$PROJECT/modules/greeter"
+printf 'options gen2\nrequire daslib/fio\n[export]\ndef initialize(project_path : string) {\n    register_native_path("greeter", "greeter", "{project_path}/greeter.das")\n}\n' \
+    > "$PROJECT/modules/greeter/.das_module"
+printf 'options gen2\nmodule greeter public\ndef public greet() : string => "hello"\n' > "$PROJECT/modules/greeter/greeter.das"
+printf 'options gen2\nrequire greeter/greeter\n[export]\ndef main() {\n    print("{greet()}\\n")\n}\n' > "$PROJECT/main.das"
+run_check "lint.exe sees a project module" bash -c \
+    "set -o pipefail; cd '$PROJECT' && '$BUNDLE/bin/lint${TOOL_EXE_SUFFIX}' main.das --no-cache | tee '$LOG.lint' \
+     && grep -Eq '^1 files, 0 issue\(s\), 0 error\(s\)\$' '$LOG.lint'"
+rm -rf "$PROJECT"
 
 # Two prebuilt tools past --help. dastest.exe must compile and run a shipped suite
 # (isolated mode also spawns its own workers); lint.exe over daslib must resolve every
 # module native path - its summary line grows ", N skipped" when it cannot, so the
 # anchored grep is what rejects a skip.
 run_check "dastest.exe runs a shipped suite" bash -c \
-    "set -o pipefail; '$BUNDLE/bin/dastest${DASEXE_SUFFIX}' --test utils/common/tests --isolated-mode | tee '$LOG.suite' \
+    "set -o pipefail; '$BUNDLE/bin/dastest${TOOL_EXE_SUFFIX}' --test utils/common/tests --isolated-mode | tee '$LOG.suite' \
      && grep -Eq '^[1-9][0-9]* tests, [1-9][0-9]* passed, 0 failed, 0 errors' '$LOG.suite'"
 # LINT026 is armed: the arch-extract excerpts installed beside daslib make every shipped
 # [arch] citation resolve, and every excerpt anchor is cited - this run doubles as the
 # bundle's citation-closure check for daslib.
 run_check "lint.exe lints daslib, no skips" bash -c \
-    "set -o pipefail; '$BUNDLE/bin/lint${DASEXE_SUFFIX}' daslib | tee '$LOG.lint' \
+    "set -o pipefail; '$BUNDLE/bin/lint${TOOL_EXE_SUFFIX}' daslib | tee '$LOG.lint' \
      && grep -Eq '^[0-9]+ files, 0 issue\(s\), 0 error\(s\)\$' '$LOG.lint'"
 
 # The same closure check for every module that ships an arch-extract excerpt: a lint run
@@ -274,7 +287,7 @@ if [[ -d "$BUNDLE/modules" ]]; then
             | awk '{ print gsub("/","/"), $0 }' | sort -n | head -1 | cut -d' ' -f2-)
         [[ -n "$arch_md" ]] || continue
         run_check "arch citations resolve: ${arch_md#"$BUNDLE"/}" bash -c \
-            "set -o pipefail; '$BUNDLE/bin/lint${DASEXE_SUFFIX}' '$arch_md' | tee '$LOG.lint' \
+            "set -o pipefail; '$BUNDLE/bin/lint${TOOL_EXE_SUFFIX}' '$arch_md' | tee '$LOG.lint' \
              && grep -Eq ', 0 issue\(s\), 0 error\(s\)\$' '$LOG.lint'"
     done
 fi

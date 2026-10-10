@@ -51,8 +51,11 @@ the copies of record - never edit the tap or bucket by hand.
 | pip | `pip install daslang` | `pip install dasllama` |
 
 The linux packages install the bundle under `/opt/<package>` and link the commands into
-`/usr/bin`; the dasllama links drop the bundle's `.exe` suffix and name the supervisor
-`dasllama-watchdog` (the Debian `watchdog` package owns that name). A hosted apt or dnf repo is
+`/usr/bin`; the links drop the bundle's `.exe` suffix and name the supervisor
+`daslang-watchdog` / `dasllama-watchdog` (the Debian `watchdog` package owns that name). Every
+manager puts the same daslang commands on PATH: `daslang`, `daslang-live`, the tools (`lint`,
+`dastest`, `daspkg`, `dascov`, `detect-dupe`, `benchctl`, `das-fmt` - each a copy of daslang that
+runs the tool by its name) and `daslang-watchdog`; any other tool is `daslang -tool <name>`. A hosted apt or dnf repo is
 a later tier. glibc floors: the daslang bundle is built on ubuntu-24.04 (`manylinux_2_38` on the
 wheels), which every supported Fedora meets and RHEL 9 does not; the dasllama bundle on
 ubuntu-22.04 (2.35), which admits Debian 12.
@@ -71,8 +74,8 @@ C++ embedding payload and the media trees, to stay under PyPI's 100 MB per-file 
 `EXCLUDE_*` in `wheel_build.py`; the dasllama wheel carries its bundle whole. The platform tag
 is read off the binaries (highest GLIBC symbol / Mach-O minos), never assumed. Users:
 `pip install daslang` (RC: `pip install -i https://test.pypi.org/simple/ daslang==<ver>rcN`),
-then `daslang`, `dastest`, `lint`, `daspkg`, ... are on PATH and `python -m daslang file.das`
-works; `pip install dasllama` puts `dasllama-server`, `dasllama-cli`, `dasllama-bench` and
+then the daslang commands above are on PATH and `python -m daslang file.das` (or
+`python -m daslang -tool <name>`) works; `pip install dasllama` puts `dasllama-server`, `dasllama-cli`, `dasllama-bench` and
 `dasllama-watchdog` on PATH.
 
 ## Fixture tests

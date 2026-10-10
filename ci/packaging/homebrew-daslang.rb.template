@@ -31,8 +31,8 @@ class Daslang < Formula
     # unpack, but stage from it explicitly in case that ever changes.
     root = File.directory?("daslang_bundle") ? "daslang_bundle" : "."
     libexec.install Dir["#{root}/*"]
-    bin.install_symlink libexec/"bin/daslang"
-    bin.install_symlink libexec/"bin/daslang-live"
+    exes = { @BREW_EXES_LINUX@ }
+    exes.each { |cmd, exe| bin.install_symlink libexec/exe => cmd }
   end
 
   test do

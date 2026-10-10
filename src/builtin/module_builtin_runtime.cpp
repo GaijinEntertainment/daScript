@@ -7,6 +7,7 @@
 #include "daScript/ast/ast_interop.h"
 #include "daScript/ast/ast_handle.h"
 #include "daScript/simulate/aot_builtin.h"
+#include "daScript/simulate/aot_builtin_fio.h"
 #include "daScript/simulate/runtime_profile.h"
 #include "daScript/simulate/hash.h"
 #include "daScript/simulate/bin_serializer.h"
@@ -1832,6 +1833,28 @@ namespace das
         return context->allocateString(getDasRoot(), at);
     }
 
+    vector<string> toolScriptCandidates ( const string & name, const string & root ) {
+        vector<string> candidates;
+        if ( name.empty() || name.find_first_of("/\\.")!=string::npos ) return candidates;
+        if ( name=="dastest" ) candidates.push_back(root + "/dastest/dastest.das");
+        if ( name=="das-fmt" ) candidates.push_back(root + "/utils/das-fmt/dasfmt.das");
+        candidates.push_back(root + "/utils/" + name + "/main.das");
+        candidates.push_back(root + "/utils/internal/" + name + "/main.das");
+        return candidates;
+    }
+
+    string getToolScript ( const string & name, const string & root ) {
+        for ( const auto & script : toolScriptCandidates(name, root) ) {
+            if ( builtin_fexist(script.c_str()) ) return script;
+        }
+        return "";
+    }
+
+    char * builtin_get_tool_script ( const char * name, const char * root, Context * context, LineInfoArg * at ) {
+        string script = getToolScript(name ? name : "", root ? root : "");
+        return script.empty() ? nullptr : context->allocateString(script, at);
+    }
+
     char * builtin_executable_path ( Context * context, LineInfoArg * at ) {
         string exe = getExecutablePathUtf8();
         return exe.empty() ? nullptr : context->allocateString(exe, at);
@@ -2420,6 +2443,9 @@ namespace das
         addExternInline<DAS_BIND_FUN(builtin_das_root)>(*this, lib, "get_das_root",
             SideEffects::accessExternal,"builtin_das_root")
                 ->args({"context","at"})->setTempStringResult();
+        addExternInline<DAS_BIND_FUN(builtin_get_tool_script)>(*this, lib, "get_tool_script",
+            SideEffects::accessExternal,"builtin_get_tool_script")
+                ->args({"name","root","context","at"})->setTempStringResult();
         addExternInline<DAS_BIND_FUN(builtin_executable_path)>(*this, lib, "get_executable_path",
             SideEffects::accessExternal,"builtin_executable_path")
                 ->args({"context","at"})->setTempStringResult();

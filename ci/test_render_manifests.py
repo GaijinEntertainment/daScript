@@ -130,7 +130,11 @@ class RenderManifestsTest(unittest.TestCase):
         rm.render_package("daslang", "v0.6.5", self.sha, self.out)
         bucket = json.loads(self.read("scoop-daslang/bucket/daslang.json"))
         self.assertEqual(bucket["bin"][0], "bin\\daslang.exe")
-        self.assertEqual(len(bucket["bin"]), 9)
+        self.assertEqual(len(bucket["bin"]), 10)
+        self.assertIn(["bin\\watchdog.exe", "daslang-watchdog"], bucket["bin"], "the watchdog under the package's name")
+        formula = self.read("homebrew-daslang/Formula/daslang.rb")
+        self.assertIn('"lint" => "bin/lint.exe"', formula, "a tool links to its exe in the bundle")
+        self.assertIn('"daslang-watchdog" => "bin/watchdog"', formula)
 
     def test_missing_asset_is_fatal(self):
         self.stage(ASSETS["dasllama"][:-1])

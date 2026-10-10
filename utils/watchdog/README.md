@@ -186,11 +186,29 @@ protocol, so the log goes to its file only, and both stdio streams are switched 
 (`fbinary`) like the LSP front's; no pid file, no health poll, no tray.
 
 ```
-bin/watchdog --stdio --name daslang-mcp --cwd <tree> --program <tree>/bin/daslang -- -ignore-manifest utils/mcp/main.das
+bin/watchdog --stdio --name daslang-mcp --cwd <tree> --program <tree>/bin/daslang -- -ignore-manifest -tool mcp
 ```
 
-`utils/mcp/setup.das` writes that line into a tree's `.mcp.json`; `tests/watchdog/test_stdio_front.das`
-drives it through both hosts.
+`tests/watchdog/test_stdio_front.das` drives it through both hosts.
+
+## Serving a tool {#serving-a-tool}
+
+`-tool <name>` before the `--` is the short spelling of a front over an SDK tool, and the one a
+client's configuration names - from an installed SDK, `daslang-watchdog -tool mcp` needs no path.
+`mcp` and `dap` are the `--stdio` front named `daslang-<name>` over a daslang: the exe host takes
+the one beside the watchdog (or one level up, as `bin/watchdog` finds `bin/Release/daslang`), the
+interpreter host the daslang running it. Neither looks in the client's directory, which may
+belong to another tree. The DAP bridge runs `daslang -tool dap` with the project as `--repo-root`
+and that daslang as `--executable`. The MCP server runs `daslang -ignore-manifest -tool mcp`,
+except on Windows: there the child is the vcvars launcher `utils/mcp/daslang-mcp-msvc.cmd`, so the
+server's `cpp_compile_check` finds `cl.exe`, and the launcher runs the daslang of its own tree
+(`bin/Release`, then `bin`) - the same binary in an SDK install and in a source tree, while the
+front still refuses to start when no daslang sits beside the watchdog. `lsp` is the `--lsp`
+front. The watchdog options before `-tool` stay the watchdog's, the arguments after the name go
+to the tool, and `--cwd` (either spelling, `--cwd <dir>` or `--cwd=<dir>`) defaults to the
+directory the client started the watchdog in - the project root. `utils/mcp/setup.das` writes
+`bin/watchdog --cwd <tree> -tool mcp` (and `-tool dap`) into a tree's `.mcp.json`;
+`utils/watchdog/tests/test_tool_front.das` covers the expansion.
 
 ## Serving an LSP client
 

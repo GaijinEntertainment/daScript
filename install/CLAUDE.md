@@ -192,33 +192,36 @@ For path/filename ops use `fio` helpers (`base_name`/`dir_name`/`path_join`/...)
 
 ## SDK Directory Layout
 
-- `bin/` - compiler and tool binaries: `daslang`, `daslang-live`, plus prebuilt tool exes (`lint.exe`, `das-fmt.exe`, `daspkg.exe`, `dascov.exe`, `detect-dupe.exe`, `benchctl.exe`, `dastest.exe` - the `.exe` suffix on every platform) and shared-module / tree-sitter libraries on Windows. Each tool also keeps its source form - `bin/daslang utils/<tool>/main.das`, except das-fmt (`utils/das-fmt/dasfmt.das`) and dastest (`dastest/dastest.das`). **Name trap:** `utils/gen1-to-gen2/` is the gen1->gen2 syntax *converter*, not a formatter; the formatter is `das-fmt` (MCP `format_file`, `bin/das-fmt.exe`, or `bin/daslang utils/das-fmt/dasfmt.das`)
+- `bin/` - compiler and tool binaries: `daslang`, `daslang-live`, the supervisor `watchdog`, a copy of `daslang` under each shipped tool's name (`lint.exe`, `das-fmt.exe`, `daspkg.exe`, `dascov.exe`, `detect-dupe.exe`, `dastest.exe`, and `benchctl.exe` with the sqlite module - the `.exe` suffix on every platform; started under that name, daslang runs that tool) and shared-module / tree-sitter libraries on Windows. **Name trap:** `utils/gen1-to-gen2/` is the gen1->gen2 syntax *converter*, not a formatter; the formatter is `das-fmt` (MCP `format_file`, or `bin/daslang -tool das-fmt`)
 - `lib/`, `include/daScript/` - libraries and C++ headers for embedding
 - `daslib/` - standard library modules (.das)
 - `modules/` - optional plugin modules (dasHV, dasGlfw, dasPUGIXML, dasSQLITE, dasAudio, dasLLVM, dasLLAMA, ...)
 - `examples/`, `tutorials/` - example scripts; language, integration, and module tutorials
 - `dastest/` - test framework (usable for testing your own code)
-- `utils/mcp/`, `utils/dap/`, `utils/lsp/` - MCP, DAP-to-MCP, and LSP servers for AI coding assistants
-- `utils/lint/` - lint runner: `bin/daslang utils/lint/main.das -- <files> --quiet`
-- `utils/ast-verify/` - AST verifier gate: `bin/daslang utils/ast-verify/main.das -- --file <path>` (or `--changed`); exits non-zero on a finding, which `--ast-verify-batch` alone does not
+- `utils/tools/` - the tool list `bin/daslang -tool` prints
+- `utils/mcp/`, `utils/dap/`, `utils/lsp/` - MCP, DAP-to-MCP, and LSP servers for AI coding assistants, each started as `bin/watchdog -tool mcp|dap|lsp` (`daslang-watchdog -tool ...` after a package-manager install)
+- `utils/lint/` - lint runner: `bin/daslang -tool lint <files> --quiet`
+- `utils/ast-verify/` - AST verifier gate: `bin/daslang -tool ast-verify --file <path>` (or `--changed`); exits non-zero on a finding, which `--ast-verify-batch` alone does not
 - `utils/das-fmt/` - the formatter script (`dasfmt.das`, wraps `daslib/das_source_formatter`)
-- `utils/gen1-to-gen2/` - v1 (indentation) -> gen2 (braces) syntax converter, run as `bin/daslang utils/gen1-to-gen2/main.das -- <files>` (also the `convert_to_gen2` MCP tool)
+- `utils/gen1-to-gen2/` - v1 (indentation) -> gen2 (braces) syntax converter, run as `bin/daslang -tool gen1-to-gen2 <files>` (also the `convert_to_gen2` MCP tool)
 - `utils/detect-dupe/` - cross-file duplicate-function detector (also the `export_corpus` / `detect_duplicates` MCP tools)
 - `utils/find-dupe/` - Claude-based judge for detect-dupe reports (needs `ANTHROPIC_API_KEY`; also the `judge_duplicates`/`find_dupe` MCP tools)
 - `utils/daspkg/`, `utils/dascov/` - package manager; code coverage
-- `utils/aot/` - AOT generation driver (`bin/daslang utils/aot/main.das -- -aot <in.das> <out.cpp>`; `-ctx` emits a standalone context dir - the integration tutorial scaffolds invoke it)
+- `utils/aot/` - AOT generation driver (`bin/daslang -tool aot -aot <in.das> <out.cpp>`; `-ctx` emits a standalone context dir - the integration tutorial scaffolds invoke it)
 - `utils/fix-lint-errors/` - auto-fixer for mechanical lint findings (`--dry-run` to preview)
 - `utils/benchctl/` - benchmark result database + statistical comparison (needs the sqlite module)
 - `utils/dasllama-server/` - OpenAI-compatible dasLLAMA inference server (JIT-only; `deploy-jit.ps1` builds a standalone bundle), and `cli.das` - dasllama-cli, the shell front end on the same facade: `bin/daslang -jit utils/dasllama-server/cli.das -- complete | chat | transcribe | speak | talk | embed | tokenize | bench ...`
 - `utils/dasllama-convert/` - offline GGUF -> `.dlim` model prep
-- `utils/watchdog/` - supervisor for long-running daslang programs: the static `bin/watchdog --cwd <program-dir>` (no compiler, no shared module, no lock on the files a deploy replaces), or `daslang utils/watchdog/main.das -- --cwd <program-dir>` under the interpreter
+- `utils/watchdog/` - supervisor for long-running daslang programs: the static `bin/watchdog --cwd <program-dir>` (no compiler, no shared module, no lock on the files a deploy replaces), or `bin/daslang -tool watchdog --cwd <program-dir>` under the interpreter
 - `utils/jobque-timeline/` - per-lane jobque trace viewer (ImGui)
 - `utils/vscode-daslang-test/` - VSCode Test Explorer extension for dastest (source; build per its README)
 - `tree-sitter-daslang/` - tree-sitter grammar, shared library, highlighting queries (`sgconfig.yml` at the SDK root wires ast-grep to it)
 
+**Each tool `bin/daslang -tool` lists runs as `bin/daslang -tool <name> [args]`** - `utils/<name>/main.das`, das-fmt `utils/das-fmt/dasfmt.das`, dastest `dastest/dastest.das`; `bin/daslang -tool` lists them. Run a tool from your project's directory: it takes that directory as its project root, so the modules installed there resolve; `-project_root <dir>` or `-project <file>` before `-tool` names another.
+
 ## Package Manager (daspkg)
 
-`bin/daslang utils/daspkg/main.das -- <command> [args]` - installs daslang packages from GitHub or local paths, resolves dependencies, builds native modules. Commands: `install <source>`, `update [name]`, `upgrade`, `remove <name>`, `list`, `search <query>`, `check`, `cleanup`, `doctor`, `build [--global]`, `release`. Packages land in `modules/<RepoName>/`; lock file `daspkg.lock`. Full flags and the `.das_package` manifest format: `skills/daspkg.md`.
+`bin/daslang -tool daspkg <command> [args]` (`daspkg <command>` after a package-manager install) - installs daslang packages from GitHub or local paths, resolves dependencies, builds native modules. Commands: `install <source>`, `update [name]`, `upgrade`, `remove <name>`, `list`, `search <query>`, `check`, `cleanup`, `doctor`, `build [--global]`, `release`. Packages land in `modules/<RepoName>/`; lock file `daspkg.lock`. Full flags and the `.das_package` manifest format: `skills/daspkg.md`.
 
 ## MCP Server (AI Tool Integration)
 
@@ -226,4 +229,4 @@ For path/filename ops use `fio` helpers (`base_name`/`dir_name`/`path_join`/...)
 
 ## LSP Server (Push Diagnostics + Navigation)
 
-`utils/lsp/` is a language server for `.das`: the compiler and lint report after **every** edit with no explicit tool call, plus definition / references / hover / document & workspace symbols / call hierarchy / go-to-implementation. Needs `python3` on `PATH`. Claude Code sessions started at the SDK root load it automatically (shipped `.claude/skills/daslang-lsp/` manifest); elsewhere use `claude --plugin-dir <sdk-root>/utils/lsp/plugin`. Configuration (compiler override, `project_root` for native modules, `.das_project`): `utils/lsp/README.md`.
+`utils/lsp/` is a language server for `.das`: the compiler and lint report after **every** edit with no explicit tool call, plus definition / references / hover / document & workspace symbols / call hierarchy / go-to-implementation. Claude Code sessions started at the SDK root load it automatically (shipped `.claude/skills/daslang-lsp/` manifest); elsewhere use `claude --plugin-dir <sdk-root>/utils/lsp/plugin`. Configuration (compiler override, `project_root` for native modules, `.das_project`): `utils/lsp/README.md`.

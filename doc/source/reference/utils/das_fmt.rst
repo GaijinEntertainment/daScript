@@ -10,8 +10,9 @@
 
 das-fmt formats daslang source files in place using
 ``daslib/das_source_formatter``.  It is the formatter behind the MCP
-``format_file`` tool and the shipped ``pre-commit`` hook.  The SDK
-bundle also carries a prebuilt ``bin/das-fmt.exe``.
+``format_file`` tool and the shipped ``pre-commit`` hook.  Run it as
+``daslang -tool das-fmt``, or as ``das-fmt`` through the SDK's
+``bin/das-fmt.exe`` (see :ref:`utils_tools`).
 
 Not to be confused with ``gen1-to-gen2``, the gen1→gen2 syntax
 *converter*.

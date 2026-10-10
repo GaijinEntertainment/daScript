@@ -27,6 +27,9 @@ namespace das {
     DAS_API uint64_t get_context_share_counter ( Context * context );
 
     DAS_API char * builtin_das_root ( Context * context, LineInfoArg * at );
+    DAS_API vector<string> toolScriptCandidates ( const string & name, const string & root );
+    DAS_API string getToolScript ( const string & name, const string & root );
+    DAS_API char * builtin_get_tool_script ( const char * name, const char * root, Context * context, LineInfoArg * at );
     DAS_API char * builtin_executable_path ( Context * context, LineInfoArg * at );
     DAS_API char * builtin_get_das_version ( Context * context, LineInfoArg * at );
     DAS_API void builtin_throw ( char * text, Context * context, LineInfoArg * at );
