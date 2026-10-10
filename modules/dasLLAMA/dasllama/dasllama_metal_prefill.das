@@ -637,7 +637,7 @@ class template MetalKqMulMmSplitTensorBase {
             static_if (!KO_TENSOR) {
                 tmm2d_tg_store(acc, cp, 8u, 64u, ndim)
             }
-        } elif (tr == 16u) {
+        } elif (tr == 16u) {   // nolint:LINT009,LINT019 — the lab's knockout stamps drop the op, and the row heights then read alike
             var acc : float[8192]
             tmm2d_tg_begin_deva(acc, unsafe(addr(xf[0])), 16u, 64u, 4u, 64u)
             var kb = 0u
