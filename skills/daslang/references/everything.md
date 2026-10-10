@@ -5052,6 +5052,7 @@ The AST_BOOST module provides high-level utilities for working with the AST. It 
 - `is_class_method` - Returns `true` if a `TypeDeclPtr` field represents a class method — a non-dim `tFunction` whose first argument is the class structure (or a parent of it).
 - `is_same_or_inherited` - Returns `true` if `child` is the same `Structure` as `parent` or is transitively inherited from `parent` by walking the parent chain.
 - `peel_distinct` - Returns the type under every `distinct` level; a type that is not distinct comes back as is.
+- `root_generic` - Returns the generic an instance came from, walked to the root; a `[template]` instance of an overloaded generic is two levels deep (instance, mangled overload, root).
 - `table_key_storage_base_type` - Returns the base type a table key is stored and hashed as: a `distinct` key peels to its underlying type, a handled key to its value type.
 
 ### Annotations

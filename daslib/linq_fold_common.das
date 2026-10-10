@@ -630,10 +630,7 @@ var linqCalls = {
 def is_linq_call(expr : Expression?) : bool {
     if (expr is ExprCall) {
         let call = expr as ExprCall
-        var fn = call.func
-        while (fn.fromGeneric != null) {
-            fn = fn.fromGeneric
-        }
+        let fn = root_generic(call.func)
         let funcName = string(fn.name)
         if (linqCalls.key_exists(funcName)) {
             let linqCall = unsafe(linqCalls?[funcName])

@@ -300,11 +300,7 @@ class StyleLintVisitor : AstVisitor {
         if (!(ret is ExprReturn) || ret.genFlags.generated) return
         let r = ret as ExprReturn
         if (r.subexpr == null) return
-        var root = fn
-        while (root.fromGeneric != null) {
-            root = root.fromGeneric
-        }
-        let full = string(root.name)
+        let full = string(root_generic(fn).name)
         let name = fn.flags.isClassMethod ? slice(full, rfind(full, "`") + 1) : full
         let fix = st042_fix(body)
         return if (fix.line < 0)
@@ -403,10 +399,7 @@ class StyleLintVisitor : AstVisitor {
     def foreign_module_code() : bool {
         if (current_function == null || this_module == null) return false
         if (current_function._module != this_module) return true
-        var root = current_function.fromGeneric
-        while (root != null && root.fromGeneric != null) {
-            root = root.fromGeneric
-        }
+        let root = root_generic(current_function.fromGeneric)
         return root != null && root._module != this_module
     }
 
@@ -505,15 +498,6 @@ class StyleLintVisitor : AstVisitor {
                 || bt == Type.tInt64 || bt == Type.tUInt64
                 || bt == Type.tFloat || bt == Type.tDouble
                 || bt == Type.tBool  || bt == Type.tString)
-    }
-
-    def root_generic(fn : Function const?) : Function const? {
-        //! Walk fromGeneric chain to its root. Template instantiations of overloaded generics produce a 2-level chain: instantiated → mangled-overload → root.
-        var cur = fn
-        while (cur != null && cur.fromGeneric != null) {
-            cur = cur.fromGeneric
-        }
-        return cur
     }
 
     def check_style020_from_jv(expr : ExprCall?) : void {
