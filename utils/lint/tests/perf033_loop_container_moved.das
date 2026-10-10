@@ -8,6 +8,7 @@ options _nolint = "STYLE042,PERF006,PERF022"
 expect 31208:4
 
 require daslib/perf_lint
+require daslib/array_boost
 
 struct Bag {
     items : array<int>
@@ -25,6 +26,8 @@ def take(var items : array<int>) : int {
 }
 
 def peek(items : array<int>) : int => length(items)
+
+def peek_bytes(bytes : array<uint8>) : int => length(bytes)
 
 // --- Bad patterns (warnings expected) ---
 
@@ -63,6 +66,13 @@ def bad_struct_field_clone() {
 }
 
 // --- Good patterns (no warnings) ---
+
+def good_temp_array_view(var data : uint8?) {
+    for (i in range(3)) {
+        let view = unsafe(temp_array(data, 2, type<uint8>))  // inscope here would delete the borrowed pointee
+        peek_bytes(view)
+    }
+}
 
 def good_inscope() {
     for (i in range(3)) {
