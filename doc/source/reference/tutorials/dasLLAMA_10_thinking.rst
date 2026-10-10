@@ -141,8 +141,9 @@ followed by the word ``thought``; gpt-oss's channel mark followed by
 ``analysis``), the one token the model writes to leave it, and the tokens the
 budget forces at the cut - a symmetric family's close special after the recipe's
 "Considering the limited time..." sentence, each followed by the template's
-blank line. A family with no reasoning span returns empty marks, and a budget is
-ignored on it:
+blank line - and the markers that end the turn should the model re-open its span
+after the cut. A family with no reasoning span returns empty marks, and a budget
+is ignored on it:
 
 .. code-block:: das
 

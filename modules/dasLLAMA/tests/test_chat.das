@@ -726,6 +726,7 @@ def test_chat_gptoss_budget_marks(t : T?) {
         t |> success(length(marks.open) >= 2 && marks.open[0] == ch, "the open is the channel mark followed by `analysis` ({length(marks.open)} tokens)")
         t |> equal(fin, marks.close_tok, "the budget leaves the span on the message end the model writes")
         t |> success(length(marks.close) >= 3 && marks.close[0] == fin && marks.close[1] == start, "the forced close ends the message and opens the final channel ({length(marks.close)} tokens)")
+        t |> success(empty(marks.reopen), "harmony's forced close opens the final channel itself, so no marker ends the turn after it")
         delete marks
         delete c
         delete m
@@ -756,6 +757,7 @@ def test_chat_gemma4_thinking(t : T?) {   // nolint:STYLE038 — flat expected-t
         t |> success(length(marks.open) >= 2 && marks.open[0] == cho, "the budget's open sequence is the channel mark followed by `thought` ({length(marks.open)} tokens)")
         t |> equal(chc, marks.close_tok, "the budget leaves the span on the channel close the model writes")
         t |> success(!empty(marks.close) && marks.close[0] == chc, "the forced close is the channel close")
+        t |> success(find_index(marks.reopen, cho) >= 0 && find_index(marks.reopen, chc) >= 0, "both channel markers end the turn once the forced close is out ({length(marks.reopen)} markers)")
         delete marks
         // instruct opt-out: the E-series template opens the model turn bare
         set_thinking(c, false)

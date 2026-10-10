@@ -450,14 +450,33 @@ def test_scheduler_think_budget(t : T?) {   // nolint:STYLE038 — one cell: the
             }
             t |> equal(ref.toks[12 - length(close) - 1], toks6[12 - length(close) - 1], "the token before the early close is the model's own")
             t |> equal("length", finished_of(events, 6l).finish)
+            // a re-opened span past the forced close ends the turn: the stream of the first request names the token it
+            // wrote right after its forced close as the re-open marker, so this stream stops there with the marker unemitted
+            events |> clear()
+            let after_close = 3 + length(close)
+            var req7 <- make_req(7l, prompt, greedy, 12l, none)
+            req7.think_budget = 3l
+            req7.think_marks.opened = true
+            req7.think_marks.close := close
+            req7.think_marks.reopen <- [toks[after_close]]
+            t |> success(submit(m, sch, req7), "the re-open-guarded stream is queued")
+            drain(m, sch, events)
+            var toks7 <- toks_of(events, 7l)
+            t |> equal(after_close, length(toks7), "the re-opened span ends the turn at the marker, which is not emitted")
+            for (i in range(after_close)) {
+                t |> equal(toks[i], toks7[i], "re-open guard: token {i} is the budgeted stream's")
+            }
+            t |> equal("stop", finished_of(events, 7l).finish)
             to_log(LOG_INFO, "think budget: self-closed {escape(text_of(pieces_of(events, 4l)))}\n")
             to_log(LOG_INFO, "think budget: early close {escape(text_of(pieces_of(events, 6l)))}\n")
+            to_log(LOG_INFO, "think budget: re-open guard {escape(text_of(pieces_of(events, 7l)))}\n")
             delete toks
             delete toks2
             delete toks3
             delete toks4
             delete toks5
             delete toks6
+            delete toks7
             delete close
             delete ref
             delete events

@@ -605,7 +605,13 @@ def private sample_advance(m : Model; var st : Stream; var events : array<SchedE
     }
     let tok = st.forced[0]
     st.forced |> erase(0)
-    return advance_with(m, st, tok, events)
+    let alive = advance_with(m, st, tok, events)
+    if (empty(st.forced) && !empty(st.think_marks.reopen)) {
+        //! the forced close is out: from here a re-opened span ends the turn, as a marker after content does in instruct mode
+        st.nothink.ids := st.think_marks.reopen
+        st.nothink.content_seen = true
+    }
+    return alive
 }
 
 // one plain decode step over the gathered batch arrays (nothing when they are empty): the device pick

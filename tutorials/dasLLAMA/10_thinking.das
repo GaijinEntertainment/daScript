@@ -203,6 +203,7 @@ def section_budget_marks(m : Model; chat : ChatSession) {
     print("open sequence: {marks.open} ({length(marks.open)} token(s))\n")
     print("the model's close token: {marks.close_tok} = {escape(piece(m, marks.close_tok))}\n")
     print("the forced close: {length(marks.close)} token(s) = {escape(decode(m, marks.close))}\n")
+    print("the markers that end the turn once the forced close is out: {marks.reopen}\n")
     print("the generation prompt opened the span already: {marks.opened}\n")
     delete marks
 }

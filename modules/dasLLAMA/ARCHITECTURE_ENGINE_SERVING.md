@@ -89,7 +89,12 @@ close special after the sentence the Qwen3 recipe inserts at a spent budget (a b
 mid-thought leaves the model reasoning on in its content and closing again at the end), gemma-4's
 `<channel|>`, harmony's `<|end|>` followed by the final channel's header, each followed by the
 template's blank line - so the server's reply-side splitter reads it as the model's and the answer
-begins as content. A stream with a forced close pending
+begins as content. Once the forced close is out, the marks' `reopen` tokens arm the stream's
+instruct-mode marker guard (`Stream.nothink`, its content already seen): a span the model re-opens
+past the budget - gemma-4's channel markers, a symmetric family's open special - ends the turn as a
+marker after content does in instruct mode, since a thought re-opened after the cut never reaches an
+answer. The marks are looked up by name, not through the tokenizer's special parse, which does not
+see an asymmetric bracket such as `<channel|>`. A stream with a forced close pending
 leaves the speculative round for a plain step, as a constrained stream does: the round's drafts
 would run past the close. A budget on a turn that does not think, or on a vocab without the
 markers, has empty marks and acts on nothing.

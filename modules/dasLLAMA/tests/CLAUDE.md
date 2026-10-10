@@ -1106,7 +1106,8 @@ marked audio span on a template with no such marker, and a span ahead of the one
 audio span and a span at the last one's offset the controls), and the gemma-4 E2B cells: the
 thinking renderer pins (the instruct prefill token for token, the gate + bare opener, the
 thinking-off extras on `effective_stop_ids`, the reasoning budget's marks - the channel mark and
-`thought` the open, the channel close the leave and the forced close - a mid-conversation toggle
+`thought` the open, the channel close the leave and the forced close, both channel markers the
+turn's end once the forced close is out - a mid-conversation toggle
 staying instruct), `test_chat_gptoss_budget_marks` (gpt-oss-20b, large tier: harmony's marks - the
 channel mark and `analysis` the open, the message end the leave, the end, a start and the `final`
 channel the forced close) and
@@ -1150,7 +1151,10 @@ cells: `stop_scan`'s hold and release model-free, then a stream cut by a stop st
 `test_scheduler_think_budget` holds the reasoning budget's forced close on SmolLM2 with a stand-in two-token
 close: a request whose prompt opened the span emits the model's own three tokens, then the close tokens, then
 the model's again to its length; the same budget with an open token the model never writes, and with no close
-marks, each read the reference token for token.
+marks, each read the reference token for token; a close token the model writes itself (the reference's second
+token) ends the count and forces nothing; a two-token open sequence opens the span after both; a budget of 20 on
+12 tokens fires early so the close lands inside the cap; and a re-open marker (the token the first stream wrote
+right after its forced close) ends the turn there with `stop`, the marker unemitted.
 The SmolLM cells drop the loaded model's GPU state (`moe_gpu_drop_model`) so they serve on
 the CPU rails under `DASLLAMA_GPU=1` too: their bit-exact claims hold on one lane, and the
 tier's device prefill, resident batch decode and CPU prefill round differently. Its two-stream

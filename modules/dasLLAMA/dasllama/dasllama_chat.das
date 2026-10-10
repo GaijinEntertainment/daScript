@@ -1544,6 +1544,13 @@ def think_budget_marks_(m : Model; c : ChatSession) : ThinkBudgetMarks {
         marks.open <- open_seq
     }
     marks.close_tok = close
+    //! what ends the turn once the forced close is out: the family's channel markers where it declares them (gemma-4's
+    //! instruct-mode stops), else the open special alone - a thought re-opened past the budget never reaches an answer
+    if (!empty(c.stop_ids_nothink)) {
+        marks.reopen := c.stop_ids_nothink
+    } elif (length(marks.open) == 1) {
+        marks.reopen <- [marks.open[0]]
+    }
     //! a bare close mid-thought leaves a symmetric family reasoning on in its content and closing again at the end; the
     //! sentence the Qwen3 recipe inserts at a spent budget turns the thought into its conclusion, and the blank line after
     //! the close is the template's own spacing before an answer

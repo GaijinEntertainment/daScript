@@ -1499,6 +1499,7 @@ struct ThinkBudgetMarks {
     open : array<int64>      //!< the token sequence a reply writes to open its reasoning span (a special, or harmony's channel mark and `analysis`)
     close : array<int64>     //!< the tokens forced at the budget to end the span: a close special, or harmony's end mark + final header
     close_tok : int64 = -1l  //!< the one token the model itself writes to leave the span (the close special; harmony's end mark)
+    reopen : array<int64>    //!< the markers that end the turn once the forced close is out - a span re-opened past the budget is the model rambling past its answer
     opened : bool = false    //!< the generation prompt left the reply inside the span
 }
 

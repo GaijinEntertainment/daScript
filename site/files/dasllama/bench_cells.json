@@ -11125,21 +11125,24 @@
         "flavor":"tuned",
         "box":"m1",
         "threads":8,
-        "date":"2026-08-02",
+        "date":"2026-10-09",
         "hardware":{
           "cpu":"Apple M1 Max"
         },
         "tests":{
           "pp512":{
-            "tok_s":854.45736559871989
+            "tok_s":975.25810344847685
           },
           "tg128":{
-            "tok_s":64.882714423848327
+            "tok_s":73.566301509176384
+          },
+          "tg128@4":{
+            "tok_s":122.6258378730361
           }
         },
         "source":"official",
-        "sha":"7605e8476",
-        "version":"0.6.4",
+        "sha":"7e7adc950",
+        "version":"0.6.5",
         "files":[
           {
             "role":"weights",
@@ -11418,24 +11421,24 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-09-23",
+        "date":"2026-10-09",
         "hardware":{
           "cpu":"Apple M5 Max"
         },
         "tests":{
           "pp512":{
-            "tok_s":3477.6584545661549
+            "tok_s":4591.9539315022103
           },
           "tg128":{
-            "tok_s":127.94649450448291
+            "tok_s":128.59972062012071
           },
           "tg128@4":{
-            "tok_s":269.33651290972716
+            "tok_s":288.57311041742361
           }
         },
         "source":"official",
-        "sha":"9c5f93d3e",
-        "version":"0.6.4",
+        "sha":"7e7adc950",
+        "version":"0.6.5",
         "files":[
           {
             "role":"weights",
@@ -11449,19 +11452,19 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-09-23",
+        "date":"2026-10-09",
         "hardware":{
           "cpu":"Apple M5 Max"
         },
         "tests":{
           "pp512":{
-            "tok_s":3174.456745
+            "tok_s":3176.6991739999999
           },
           "tg128":{
-            "tok_s":95.519047
+            "tok_s":95.088897000000003
           },
           "tg128@4":{
-            "tok_s":217.77200012207032
+            "tok_s":217.81200256347657
           }
         },
         "source":"official",
