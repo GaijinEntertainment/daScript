@@ -1329,7 +1329,7 @@ enum ShortForm {
 //! windows with the form off (the tiles) logged beside it, and the control a window whose last token differs landing
 //! outside the bar.
 [cold_path]
-def private short_window_cells(t : T?; path, tag : string; bar : float; form : ShortForm) {   // nolint:STYLE037,STYLE038 — one cell: load, the four windows' route/tiles/control legs, the knob restores
+def private short_window_cells(t : T?; path, tag : string; bar : float; form : ShortForm) {   // nolint:STYLE037,STYLE038,LINT019 — one cell: load, the four windows' route/tiles/control legs, the knob restores
     static_if (typeinfo builtin_module_exists(das_metal)) {
         return if (!model_available(t, path))
         let prior_wscale = get_wscale_f16()
