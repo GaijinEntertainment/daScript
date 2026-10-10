@@ -1363,9 +1363,7 @@ struct TuneSidecarVerdict {
     detail : string
 }
 
-    //! The named-reason form of `tune_sidecar_entries_complete` — same verdict plus WHY, so an
-    //! "untuned" refusal can say stale vs foreign vs missing instead of leaving the operator to
-    //! diff provenance by hand. Check order mirrors `tune_sidecar_stale`: mtime, then box.
+    //! The named-reason form of `tune_sidecar_entries_complete` — same verdict plus WHY (a `TuneSidecarReason`).
 def tune_sidecar_verdict(path : string; fnames : string) : TuneSidecarVerdict {
     if (empty(fnames)) {
         return TuneSidecarVerdict(complete = true)
@@ -1373,11 +1371,6 @@ def tune_sidecar_verdict(path : string; fnames : string) : TuneSidecarVerdict {
     var sfs : FStat
     if (empty(path) || !stat(path, sfs)) {
         return TuneSidecarVerdict(reason = TuneSidecarReason.absent, detail = "no sidecar at '{path}'")
-    }
-    var bfs : FStat
-    if (stat(running_binary(), bfs) && sfs.mtime < bfs.mtime) {
-        return TuneSidecarVerdict(reason = TuneSidecarReason.stale_binary,
-            detail = "sidecar predates the running binary ({sfs.mtime} < {bfs.mtime}); a rebuild invalidates measured winners")
     }
     let theirs = sidecar_box(path, "{sfs.mtime}")
     if (empty(theirs)) {
@@ -1388,6 +1381,11 @@ def tune_sidecar_verdict(path : string; fnames : string) : TuneSidecarVerdict {
     if (box_match_key(theirs) != box_match_key(tune_box_identity())) {
         return TuneSidecarVerdict(reason = TuneSidecarReason.foreign_box,
             detail = "sidecar was minted on '{theirs}', this box is '{tune_box_identity()}'")
+    }
+    var bfs : FStat
+    if (stat(running_binary(), bfs) && sfs.mtime < bfs.mtime) {
+        return TuneSidecarVerdict(reason = TuneSidecarReason.stale_binary,
+            detail = "sidecar predates the running binary ({sfs.mtime} < {bfs.mtime}); a rebuild invalidates measured winners")
     }
     var found = false
     var inscope manifest <- read_manifest(path, found)

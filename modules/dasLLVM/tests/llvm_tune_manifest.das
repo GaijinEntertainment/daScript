@@ -190,7 +190,7 @@ def test_llvm_tune_manifest_roundtrip(t : T?) {   // nolint:STYLE038 - flat sequ
 // tune_sidecar_verdict: every refusal reason, in-process (the verdict is plain runtime code).
 // The boolean predicate must agree with the verdict on every case — the alignment invariant.
 [test]
-def test_llvm_tune_sidecar_verdict(t : T?) {
+def test_llvm_tune_sidecar_verdict(t : T?) {   // nolint:STYLE038 - one sidecar walked through every verdict in sequence; each arm rewrites the file the arm before it left
     let tmpRes = create_temp_file_result("llvm_tune_verdict_", ".tune.json")
     if (tmpRes is error) {
         t |> failure("could not create a temp file: {tmpRes as error}")
@@ -234,7 +234,7 @@ def test_llvm_tune_sidecar_verdict(t : T?) {
     v = tune_sidecar_verdict(path, "a;@version:myver=2")
     t |> success(v.complete)
 
-    // stale beats everything else: back-dated under the binary, the same complete file refuses
+    // back-dated under the binary, the same complete file of this box refuses as stale
     t |> success(!(set_mtime_result(path, mktime(2000, 1, 1, 0, 0, 0)) is error))
     v = tune_sidecar_verdict(path, "a")
     t |> equal(v.reason, TuneSidecarReason.stale_binary)
@@ -248,12 +248,24 @@ def test_llvm_tune_sidecar_verdict(t : T?) {
     t |> equal(v.reason, TuneSidecarReason.foreign_box)
     t |> success(find(v.detail, "some|other|box|id|entirely") >= 0)
 
+    // foreign AND back-dated under the binary: reads foreign, not stale
+    t |> success(fwrite(path, "\{\"kernels\":\{\"a\":\"k1\"\},\"provenance\":\{\"box\":\"some|other|box|id|entirely\"\}\}"))
+    t |> success(!(set_mtime_result(path, mktime(2001, 1, 1, 0, 0, 0)) is error))
+    v = tune_sidecar_verdict(path, "a")
+    t |> equal(v.reason, TuneSidecarReason.foreign_box)
+
     // garbage and provenance-less files read unreadable, not foreign-box-of-nothing
     t |> success(fwrite(path, "not json at all"))
     t |> success(!(set_mtime_result(path, mktime(2034, 1, 1, 0, 0, 0)) is error))
     v = tune_sidecar_verdict(path, "a")
     t |> equal(v.reason, TuneSidecarReason.unreadable)
     t |> equal(tune_sidecar_entries_complete(path, "a"), false)
+
+    // unreadable AND back-dated under the binary: reads unreadable, not stale
+    t |> success(fwrite(path, "not json either"))
+    t |> success(!(set_mtime_result(path, mktime(2002, 1, 1, 0, 0, 0)) is error))
+    v = tune_sidecar_verdict(path, "a")
+    t |> equal(v.reason, TuneSidecarReason.unreadable)
 
     // the race twin: rewrite the file unparsable at the SAME mtime as a good read — the box
     // cache still answers for (path, mtime), so the manifest read is what discovers the change

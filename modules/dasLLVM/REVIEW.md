@@ -21,11 +21,12 @@ there.
   git-tracked path.**
 
 - **A test under `tests/` here that writes at all - through its own filesystem calls, not a
-  child process's - writes only under a directory it created for this process, and removes
-  it** - a shared path under `build/` is one two concurrent runs collide on.
+  child process's - writes only to paths it created uniquely for this process (a temp file or a
+  temp directory), and removes them** - a shared path under `build/` is one two concurrent runs
+  collide on.
 
-- **A test under `tests/` here that spawns a daslang child keeps the child's artifacts inside
-  the directory it created for this process: `-output <dir>/...` for a `-exe` build,
+- **A test under `tests/` here that spawns a daslang child keeps the child's artifacts inside a
+  directory it created uniquely for this process: `-output <dir>/...` for a `-exe` build,
   `-no-module-cache` or `-module-cache <dir>/...` for a run that compiles through the front-end
   cache, and `-jit-no-cache` or a pinned `jit_output_path` for a `-jit` run that executes the
   script.** A child writes its caches relative to the cwd otherwise, which is the tree two
@@ -100,9 +101,10 @@ there.
 - **A `-lib` build that writes no artifact exits non-zero.** A build rule reads the exit code, and
   a silent success lets it link the previous run's library against this run's header.
 
-- **A diff that changes the implementation of `[tune]`, `[tune_perm]`, `[tune_companion]`,
-  `[tune_scope]`, `[tune_policy]` or `[llvm_code]` in this folder is reviewed with
-  `skills/tune.md`.**
+- **A diff that changes how the compile handles a function because it carries `[tune]`,
+  `[tune_perm]`, `[tune_companion]`, `[tune_scope]`, `[tune_policy]` or `[llvm_code]` - the body
+  it emits for it, which permutation it picks for it - or whether a saved `<app>.tune.json` is
+  applied, refused as stale, or read as another machine's, is reviewed with `skills/tune.md`.**
 
 - **A change to the tune framework - `daslib/llvm_tune.das`, its tests, or the descriptor and
   C++ rows that join it to a program (`.das_module`, `src/dasLLVM.cpp`) - is reviewed with

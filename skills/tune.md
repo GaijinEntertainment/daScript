@@ -470,7 +470,9 @@ library version reads incomplete for that scope alone.
 
 Every "untuned" refusal **names its reason** via `tune_sidecar_verdict`
 (`TuneSidecarReason`) - `absent` (no sidecar at the path), `stale_binary`
-(both dates), `foreign_box` (both identities), `unreadable` (not a tune
+(both dates), `foreign_box` (both identities; checked before the date, so a sidecar another box minted whose
+`provenance.applied_box` does not name this box reports `foreign_box` whatever its mtime),
+`unreadable` (not a tune
 sidecar), `version` (both values), `missing` (the kernel names), so a bare
 "untuned" never leaves the operator to diff provenance by hand. And when `DAS_TUNE_MANIFEST`
 points at a file that reads untuned, the compile prints one loud warning per
