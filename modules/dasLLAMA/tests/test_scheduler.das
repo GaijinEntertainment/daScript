@@ -640,6 +640,50 @@ def test_scheduler_finishing_tick(t : T?) {
     }
 }
 
+[test]
+def test_scheduler_admission_waits_for_prefill(t : T?) {
+    t |> run("a request is admitted only once no admitted stream is still prefilling (needs SmolLM2-135M)") @(t : T?) {
+        if (model_missing(t)) {
+            return
+        }
+        with_dasllama_jobque() {
+            var m <- load_capped_cpu(128l)
+            var prompt <- encode(m, "The quick brown fox jumps over the lazy dog while the little robot watches from a small hill near the old village bakery and counts every bird that crosses the evening sky", true, false)
+            var short <- encode(m, "Once upon a time", true, false)
+            let K = 8l
+            let np = long_length(prompt)
+            t |> success(np > 3l * K && long_length(short) <= K, "the long prompt spans chunks, the short one fits one ({np} and {length(short)} tokens)")
+            var none : array<int64>
+            let greedy = SamplingParams()
+            var sch <- create_scheduler(m, 2l, 4l, K, [idle_chunk_tokens = 0l])
+            var events : array<SchedEvent>
+            t |> success(submit(m, sch, make_req(1l, prompt, greedy, 4l, none)), "the long prompt queued")
+            t |> success(submit(m, sch, make_req(2l, short, greedy, 4l, none)), "the short one queued behind it")
+            scheduler_step(m, sch, events)
+            t |> equal(n_active(sch), 1l, "the first tick admits the first request alone")
+            t |> equal(n_queued(sch), 1l, "the second waits while the first prefills")
+            var ticks = 1
+            while (empty(toks_of(events, 1l)) && ticks < 64) {
+                scheduler_step(m, sch, events)
+                ticks ++
+            }
+            t |> success(!empty(toks_of(events, 1l)), "the first stream reached its first token in {ticks} ticks")
+            t |> equal(n_queued(sch), 1l, "the second is still queued on the tick the first token lands")
+            scheduler_step(m, sch, events)
+            t |> equal(n_active(sch), 2l, "the next tick admits it, the first now decoding")
+            t |> equal(n_queued(sch), 0l, "the queue is empty")
+            drain(m, sch, events)
+            t |> equal(finished_of(events, 1l).finish, "length", "stream 1 ran to its length")
+            t |> equal(finished_of(events, 2l).finish, "length", "stream 2 ran to its length")
+            delete events
+            delete sch
+            delete prompt
+            delete short
+            delete m
+        }
+    }
+}
+
 // ===== staggered admit, queue overflow, queued eviction, multi-stream token match =====
 
 [test]

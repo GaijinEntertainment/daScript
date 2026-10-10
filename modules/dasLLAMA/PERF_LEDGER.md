@@ -22,7 +22,11 @@ what it costs today and what the fix would change.
   (the close tokens' 2-token prefill, the recurrent snapshot, the donation) and still ran another stream's
   prefill chunk before the server flushed; the reap now runs at the next tick's start and a tick that finished a
   stream ends before its chunk (`dasllama_scheduler.das`, `ARCHITECTURE_ENGINE_SERVING.md#scheduler-step`), and
-  the client's tail after a reply's last token fell to the wire's floor. Both are structural: no timing chose a value, the
+  the client's tail after a reply's last token fell to the wire's floor. Two short requests admitted on one tick
+  both attached the cache before either had prefilled, so the second prefilled the shared opening again: the
+  server's `usage` read a median 582 uncached prompt tokens a request against 375 for the same request alone;
+  admission now waits while a stream is still prefilling (it would wait for those chunks anyway) and the second
+  attaches the first's checkpoints - median 401 uncached. Both are structural: no timing chose a value, the
   instrument confirmed the mechanism. Also found: the tune verdict named a sidecar binary-stale before reading its
   box, so on a box whose app sidecar is another box's (this M5's `~/.dasllama/tune/main.tune.json`, the M1's)
   the foreign runtime knobs applied and no tensor crown did; the verdict reads the box first (`llvm_tune.das`).

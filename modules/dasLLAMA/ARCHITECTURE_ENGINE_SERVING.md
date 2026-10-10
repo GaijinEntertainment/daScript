@@ -11,7 +11,12 @@ anchor.
   finished turn's close tokens eval, its snapshot and its donation run only once the caller has
   drained the finished event, so they never sit between a reply's last token and its finish on the
   wire; the reap runs ahead of admission, so the slot a finished stream frees goes to a queued
-  request on the same tick), admits queued requests, runs one `eval_batch` decode step over every
+  request on the same tick), admits queued requests while no admitted stream is still prefilling (a request admitted
+  beside a prefilling stream would wait for that stream's chunks anyway - one chunk a tick, FCFS -
+  and admitted after them it attaches the checkpoints that prefill leaves, the opening two requests
+  of one minute share, instead of prefilling them again; a queued request holds no session - its KV
+  memory exists from admission on, and in paged mode admission attaches the longest prefix-cache hit,
+  whose positions never prefill), runs one `eval_batch` decode step over every
   decoding stream (a self-speculative scheduler instead ticks every stream's round through
   `mtp_spec_eval_batch`, one joint verify where a driver seats one, and counts the tick as a
   batched step only when every stream's rows rode it), then - unless a stream finished on this

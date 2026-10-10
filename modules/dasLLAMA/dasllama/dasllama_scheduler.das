@@ -712,7 +712,7 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
         sch.recent_done |> erase(0)
     }
     reap_finished(m, sch)
-    while (!empty(sch.queue) && long_length(sch.streams) < sch.max_streams) {
+    while (!empty(sch.queue) && long_length(sch.streams) < sch.max_streams && !any_stream_in(sch, StreamState.prefilling)) {
         var st <- Stream(id = sch.queue[0].id,
                          params = sch.queue[0].params, prompt <- sch.queue[0].prompt,
                          close_toks <- sch.queue[0].close_toks, stop_ids <- sch.queue[0].stop_ids,
