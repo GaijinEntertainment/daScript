@@ -5,4 +5,3 @@ customLanguages:
   daslang:
     libraryPath: tree-sitter-daslang/daslang.dll
     extensions: [das]
-    expandoChar: "#"
