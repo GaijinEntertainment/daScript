@@ -40,16 +40,10 @@ def test_temp_dir_panics_without_a_temp_root(tt : T?) {
     tt |> run("no usable temp root: the first call panics and names itself") <| @(t : T?) {
         let exe = get_command_line_arguments()[0]
         let missing = path_join(test_temp_dir(), "no_such_dir")
-        var lines : array<string>
-        var rc = 0
+        var output : string
         let argv <- [exe, "-dasroot", get_das_root(), "{get_das_root()}/dastest/tests/_temp_dir_child.das"]
-        with_process(argv, "", ["TMP={missing}", "TEMP={missing}", "TMPDIR={missing}"]) $(var p) {
-            rc = unsafe(process_wait(p, 60.0))
-            unsafe(process_drain(p) $(line) {
-                lines |> push(clone_string(line))
-            })
-        }
+        let rc = run_and_capture(argv, "", ["TMP={missing}", "TEMP={missing}", "TMPDIR={missing}"], output, 60.0)
         t |> success(rc != 0, "the child failed: rc={rc}")
-        t |> success(find(join(lines, "\n"), "test_temp_dir: ") >= 0, "the panic names test_temp_dir:\n{join(lines, "\n")}")
+        t |> success(find(output, "test_temp_dir: ") >= 0, "the panic names test_temp_dir:\n{output}")
     }
 }

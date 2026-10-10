@@ -245,6 +245,7 @@ namespace das {
     char * builtin_fs_create_temp_file ( const char * prefix, const char * ext, char * & error, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     char * builtin_fs_create_temp_directory ( const char * prefix, char * & error, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     int builtin_popen_argv ( const Array & args_arr, float timeout_sec, const TBlock<void,const FILE *> & blk, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
+    int builtin_popen_argv_in ( const Array & args_arr, const char * cwd, const Array & env, float timeout_sec, const TBlock<void,const FILE *> & blk, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     int builtin_popen_argv_pipe ( const Array & args_arr, const TBlock<void,const FILE *,const FILE *> & blk, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     DasSubProcess * builtin_spawn_process ( const Array & argv, const char * cwd, const Array & env, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
     bool builtin_process_drain ( DasSubProcess * p, const TBlock<void,char *> & blk, Context * context, LineInfoArg * at ) GENERATE_IO_STUB
@@ -1499,13 +1500,87 @@ namespace das {
 #endif
     }
 
+#ifdef _WIN32
+    static string winBuildEnvBlock ( const Array & env ) {
+        vector<string> entries;
+        LPCH base = GetEnvironmentStringsA();
+        if ( base ) {
+            for ( LPCH e = base; *e; e += strlen(e) + 1 ) entries.emplace_back(e);
+            FreeEnvironmentStringsA(base);
+        }
+        char ** ov = (char **) env.data;
+        for ( uint64_t i = 0; i < env.size; ++i ) {
+            if ( !ov[i] ) continue;
+            string entry = ov[i];
+            size_t eq = entry.find('=');
+            string key = eq == string::npos ? entry : entry.substr(0, eq);
+            for ( auto & e : entries ) {           // replace an existing key (case-insensitive)
+                size_t k = e.find('=');
+                string ek = k == string::npos ? e : e.substr(0, k);
+                if ( ek.size() == key.size() && _stricmp(ek.c_str(), key.c_str()) == 0 ) { e.clear(); break; }
+            }
+            entries.push_back(entry);
+        }
+        string block;
+        for ( auto & e : entries ) { if ( e.empty() ) continue; block.append(e); block.push_back('\0'); }
+        block.push_back('\0');                      // the block ends in a second NUL
+        return block;
+    }
+#else
+    static vector<char *> posixArgv ( const Array & argv_arr ) {
+        char ** argv = (char **) argv_arr.data;
+        vector<char *> cargv;
+        cargv.reserve(argv_arr.size + 1);
+        for ( uint64_t i = 0; i < argv_arr.size; ++i ) cargv.push_back(argv[i] ? argv[i] : (char *)"");
+        cargv.push_back(nullptr);
+        return cargv;
+    }
+
+    // A relative argv[0] that names a path (has a '/') resolves against the caller's directory,
+    // not the child's cwd - so make it absolute before the child chdir's, matching Windows, where
+    // CreateProcess already searches the exe from the parent's directory rather than lpCurrentDirectory.
+    // A bare name (no '/') is a PATH lookup, which chdir does not affect - leave it alone.
+    static string posixAbsoluteExe ( vector<char *> & cargv, bool hasCwd ) {
+        string absExe;
+        if ( hasCwd && cargv[0][0] && cargv[0][0] != '/' && strchr(cargv[0], '/') ) {
+            char cwdbuf[4096];
+            if ( getcwd(cwdbuf, sizeof(cwdbuf)) ) {
+                absExe = string(cwdbuf) + "/" + cargv[0];
+                cargv[0] = (char *)absExe.c_str();
+            }
+        }
+        return absExe;
+    }
+
+    // the child's environment, composed here: the parent's entries minus the overridden keys,
+    // then the overrides (the eastl build poisons putenv/setenv, and execvpe is Linux-only)
+    static vector<char *> posixBuildEnv ( const Array & env ) {
+        char ** ov = (char **) env.data;
+        vector<char *> cenv;
+        if ( env.size ) {
+            for ( char ** e = environ; e && *e; ++e ) {
+                const char * eq = strchr(*e, '=');
+                size_t klen = eq ? (size_t)(eq - *e) : strlen(*e);
+                bool overridden = false;
+                for ( uint64_t i = 0; i < env.size && !overridden; ++i ) {
+                    overridden = ov[i] && strncmp(ov[i], *e, klen) == 0 && ov[i][klen] == '=';
+                }
+                if ( !overridden ) cenv.push_back(*e);
+            }
+            for ( uint64_t i = 0; i < env.size; ++i ) if ( ov[i] ) cenv.push_back(ov[i]);
+            cenv.push_back(nullptr);
+        }
+        return cenv;
+    }
+#endif
+
     // popen_argv: argv-based subprocess. Bypasses the shell entirely -- on
     // Windows, CreateProcess invokes the .exe directly (no cmd.exe, no
     // first-quote-stripping); on Unix, fork+execvp (no /bin/sh, no $() /
     // backtick expansion). timeout_sec <= 0 means no timeout.
-    int builtin_popen_argv ( const Array & args_arr, float timeout_sec,
-                             const TBlock<void,const FILE *> & blk,
-                             Context * context, LineInfoArg * at ) {
+    static int popenArgv ( const Array & args_arr, const char * cwd, const Array * env, float timeout_sec,
+                           const TBlock<void,const FILE *> & blk,
+                           Context * context, LineInfoArg * at ) {
         if ( args_arr.size == 0 ) {
             context->throw_error_at(at, "popen_argv with empty args");
             return -1;
@@ -1562,8 +1637,11 @@ namespace das {
         string cmdLine = winBuildCommandLine(argv, args_arr.size);
         DWORD createFlags = CREATE_NO_WINDOW;
         if ( timeout_sec > 0.0f ) createFlags |= CREATE_SUSPENDED;
+        string envBlock;
+        LPVOID lpEnv = NULL;
+        if ( env && env->size ) { envBlock = winBuildEnvBlock(*env); lpEnv = (LPVOID)&envBlock[0]; }
         BOOL created = CreateProcessA(NULL, (LPSTR)cmdLine.c_str(), NULL, NULL, TRUE,
-            createFlags, NULL, NULL, &si, &pi);
+            createFlags, lpEnv, (cwd && *cwd) ? cwd : NULL, &si, &pi);
         CloseHandle(hWritePipe);
         if ( hNullInput != INVALID_HANDLE_VALUE ) CloseHandle(hNullInput);
         if ( !created ) {
@@ -1617,12 +1695,11 @@ namespace das {
         // Build a NULL-terminated argv copy for execvp. We can't pass
         // args_arr.data directly because daslang doesn't guarantee a
         // trailing NULL element.
-        vector<char *> cargv;
-        cargv.reserve(args_arr.size + 1);
-        for ( uint64_t i = 0; i < args_arr.size; ++i ) {
-            cargv.push_back(argv[i] ? argv[i] : (char *)"");
-        }
-        cargv.push_back(nullptr);
+        bool hasCwd = cwd && *cwd;
+        vector<char *> cargv = posixArgv(args_arr);
+        string absExe = posixAbsoluteExe(cargv, hasCwd);
+        vector<char *> cenv;
+        if ( env ) cenv = posixBuildEnv(*env);
         pid_t pid = fork();
         if ( pid == -1 ) {
             close(pipefd[0]);
@@ -1646,6 +1723,8 @@ namespace das {
             dup2(pipefd[1], STDERR_FILENO);
             close(pipefd[1]);
             if ( timeout_sec > 0.0f ) setpgid(0, 0);
+            if ( hasCwd && chdir(cwd) != 0 ) _exit(127);
+            if ( !cenv.empty() ) environ = cenv.data();
             execvp(cargv[0], cargv.data());
             _exit(127);
         }
@@ -1679,6 +1758,18 @@ namespace das {
         if ( timedOut ) return DAS_POPEN_TIMEOUT;
         return WIFEXITED(status) ? WEXITSTATUS(status) : WIFSIGNALED(status) ? WTERMSIG(status) : status;
 #endif
+    }
+
+    int builtin_popen_argv ( const Array & args_arr, float timeout_sec,
+                             const TBlock<void,const FILE *> & blk,
+                             Context * context, LineInfoArg * at ) {
+        return popenArgv(args_arr, nullptr, nullptr, timeout_sec, blk, context, at);
+    }
+
+    int builtin_popen_argv_in ( const Array & args_arr, const char * cwd, const Array & env, float timeout_sec,
+                                const TBlock<void,const FILE *> & blk,
+                                Context * context, LineInfoArg * at ) {
+        return popenArgv(args_arr, cwd, &env, timeout_sec, blk, context, at);
     }
 
     // popen_argv_pipe: argv-based subprocess with bidirectional pipes.
@@ -1887,34 +1978,6 @@ namespace das {
         int  exitCode = 0;
     };
 
-#ifdef _WIN32
-    static string winBuildEnvBlock ( const Array & env ) {
-        vector<string> entries;
-        LPCH base = GetEnvironmentStringsA();
-        if ( base ) {
-            for ( LPCH e = base; *e; e += strlen(e) + 1 ) entries.emplace_back(e);
-            FreeEnvironmentStringsA(base);
-        }
-        char ** ov = (char **) env.data;
-        for ( uint64_t i = 0; i < env.size; ++i ) {
-            if ( !ov[i] ) continue;
-            string entry = ov[i];
-            size_t eq = entry.find('=');
-            string key = eq == string::npos ? entry : entry.substr(0, eq);
-            for ( auto & e : entries ) {           // replace an existing key (case-insensitive)
-                size_t k = e.find('=');
-                string ek = k == string::npos ? e : e.substr(0, k);
-                if ( ek.size() == key.size() && _stricmp(ek.c_str(), key.c_str()) == 0 ) { e.clear(); break; }
-            }
-            entries.push_back(entry);
-        }
-        string block;
-        for ( auto & e : entries ) { if ( e.empty() ) continue; block.append(e); block.push_back('\0'); }
-        block.push_back('\0');                      // the block ends in a second NUL
-        return block;
-    }
-#endif
-
     DasSubProcess * builtin_spawn_process ( const Array & argv_arr, const char * cwd, const Array & env,
                                             Context * context, LineInfoArg * at ) {
         if ( argv_arr.size == 0 ) {
@@ -1990,44 +2053,14 @@ namespace das {
         p->pid = pi.dwProcessId;
         return p;
 #else
-        vector<char *> cargv;
-        cargv.reserve(argv_arr.size + 1);
-        for ( uint64_t i = 0; i < argv_arr.size; ++i ) cargv.push_back(argv[i] ? argv[i] : (char *)"");
-        cargv.push_back(nullptr);
-        // A relative argv[0] that names a path (has a '/') resolves against the caller's directory,
-        // not the child's cwd - so make it absolute before the child chdir's, matching Windows, where
-        // CreateProcess already searches the exe from the parent's directory rather than lpCurrentDirectory.
-        // A bare name (no '/') is a PATH lookup, which chdir does not affect - leave it alone.
-        string absExe;
-        if ( hasCwd && cargv[0][0] && cargv[0][0] != '/' && strchr(cargv[0], '/') ) {
-            char cwdbuf[4096];
-            if ( getcwd(cwdbuf, sizeof(cwdbuf)) ) {
-                absExe = string(cwdbuf) + "/" + cargv[0];
-                cargv[0] = (char *)absExe.c_str();
-            }
-        }
+        vector<char *> cargv = posixArgv(argv_arr);
+        string absExe = posixAbsoluteExe(cargv, hasCwd);
         int pipefd[2];
         if ( pipe(pipefd) == -1 ) {
             context->throw_error_at(at, "spawn_process: pipe failed");
             return nullptr;
         }
-        // the child's environment, composed here: the parent's entries minus the overridden keys,
-        // then the overrides (the eastl build poisons putenv/setenv, and execvpe is Linux-only)
-        char ** ov = (char **) env.data;
-        vector<char *> cenv;
-        if ( env.size ) {
-            for ( char ** e = environ; e && *e; ++e ) {
-                const char * eq = strchr(*e, '=');
-                size_t klen = eq ? (size_t)(eq - *e) : strlen(*e);
-                bool overridden = false;
-                for ( uint64_t i = 0; i < env.size && !overridden; ++i ) {
-                    overridden = ov[i] && strncmp(ov[i], *e, klen) == 0 && ov[i][klen] == '=';
-                }
-                if ( !overridden ) cenv.push_back(*e);
-            }
-            for ( uint64_t i = 0; i < env.size; ++i ) if ( ov[i] ) cenv.push_back(ov[i]);
-            cenv.push_back(nullptr);
-        }
+        vector<char *> cenv = posixBuildEnv(env);
         pid_t pid = fork();
         if ( pid == -1 ) {
             close(pipefd[0]);
@@ -3341,6 +3374,9 @@ namespace das {
             addExtern<DAS_BIND_FUN(builtin_popen_argv)>(*this, lib, "popen_argv",
                 SideEffects::modifyExternal, "builtin_popen_argv")
                     ->args({"args","timeout","scope","context","at"})->unsafeOperation = true;
+            addExtern<DAS_BIND_FUN(builtin_popen_argv_in)>(*this, lib, "popen_argv",
+                SideEffects::modifyExternal, "builtin_popen_argv_in")
+                    ->args({"args","cwd","env","timeout","scope","context","at"})->unsafeOperation = true;
             addExtern<DAS_BIND_FUN(builtin_popen_argv_pipe)>(*this, lib, "popen_argv_pipe",
                 SideEffects::modifyExternal, "builtin_popen_argv_pipe")
                     ->args({"args","scope","context","at"})->unsafeOperation = true;
