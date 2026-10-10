@@ -2037,6 +2037,10 @@ install(FILES ${DAS_MCP_TOOLS} DESTINATION utils/mcp/tools)
 file(GLOB DAS_MCP_SUBTOOLS CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/utils/mcp/subtools/*.das)
 install(FILES ${DAS_MCP_SUBTOOLS} DESTINATION utils/mcp/subtools)
 install(FILES
+    ${PROJECT_SOURCE_DIR}/utils/mcp/rules/cpp_outline_rules.yml
+    DESTINATION utils/mcp/rules
+)
+install(FILES
     ${PROJECT_SOURCE_DIR}/utils/mcp/test_tools.das
     DESTINATION utils/mcp
 )
@@ -2398,8 +2402,8 @@ if(NOT ${DAS_TREE_SITTER_DISABLED})
     # Install platform-specific sgconfig.yml for ast-grep (used by grep_usage and outline MCP tools)
     install(FILES "${SGCONFIG_TEMPLATE}" DESTINATION . RENAME sgconfig.yml)
     install(FILES
-        tree-sitter-daslang/outline_rules.yml
-        DESTINATION tree-sitter-daslang
+        utils/mcp/rules/outline_rules.yml
+        DESTINATION utils/mcp/rules
     )
 endif()
 

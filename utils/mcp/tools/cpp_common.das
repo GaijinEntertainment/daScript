@@ -14,7 +14,7 @@ require strings public
 require math public
 require daslib/fio public
 
-let CPP_RULES_FILE = "tree-sitter-daslang/cpp_outline_rules.yml"
+let CPP_RULES_FILE = "utils/mcp/rules/cpp_outline_rules.yml"
 
 let private CPP_SEARCH_CONFIG_PATH = "utils/mcp/cpp_search_config.das"
 

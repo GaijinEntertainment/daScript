@@ -17,7 +17,7 @@ cpp-mcp/
   utils/mcp/tools/*.das
   utils/common/*.das           # shared modules the tools require
   utils/mcp/daslang-mcp-msvc.cmd   # Windows vcvars launcher
-  tree-sitter-daslang/*.yml    # ast-grep rule files (loaded at runtime)
+  utils/mcp/rules/*.yml        # ast-grep rule files (loaded at runtime)
   daslib/                      # daslang standard library (sources)
   README.md                    # this file
 ```
@@ -86,7 +86,7 @@ gracefully when it isn't.
 
 Install [ast-grep](https://ast-grep.github.io/guide/quick-start.html) and ensure
 `sg` is on PATH. The bundle already ships the rule files
-(`tree-sitter-daslang/*.yml`), so the **C/C++** ast-grep tools (`cpp_grep_usage`,
+(`utils/mcp/rules/*.yml`), so the **C/C++** ast-grep tools (`cpp_grep_usage`,
 `cpp_find_symbol`, `cpp_outline`, `cpp_goto_definition`) work with just `sg`
 installed. The `.das` tools (`grep_usage`, `outline`) additionally need the
 tree-sitter-daslang grammar + an `sgconfig.yml`.

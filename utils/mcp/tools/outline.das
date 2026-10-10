@@ -186,7 +186,7 @@ def get_first_line(text : string) : string {
 }
 
 def build_outline_cmd(file, glob_filter, das_root : string) : string {
-    let rules_path = "{das_root}/tree-sitter-daslang/outline_rules.yml"
+    let rules_path = "{das_root}/utils/mcp/rules/outline_rules.yml"
     // build target path(s)
     var target : string
     if (!empty(file)) {
