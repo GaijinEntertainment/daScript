@@ -3900,7 +3900,9 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
         g_kq_rows_crowned[int(f.fmt)] = metal_tensor_crowned("kq_rows_{f.fmt}")
     }
     g_kq_k4_r2_crowned = metal_tensor_crowned("kq_mvb2_k4_r2")
-    g_kq_half_env = g_env_metal.kq_half
+    if (!g_kq_half_set) {   //! a setter's value outlives a shutdown and re-init; the environment's is read only until one speaks
+        g_kq_half_env = g_env_metal.kq_half
+    }
     if (!g_kq_half_env) {
         to_log(LOG_WARNING, "dasLLAMA metal decode: DASLLAMA_METAL_KQ_HALF=0 - the K-quant rows sites take the f32 forms under every half-x crown (numerics move with the form)\n")
     }
@@ -4093,15 +4095,6 @@ def private kq_mvb_forms_boot {
     KQ_MVB_FORMS <- kq_mvb_forms_build()
 }
 
-//! the small-batch forms table carries a builder for every format that has them and a null for k4's half stamps - the
-//! boot restore's witness, so a serialized exe that arrived with the table empty is seen before its first dispatch
-def kq_mvb_forms_ready : bool {
-    let forms = unsafe(KQ_MVB_FORMS?[KqFmt.k6])
-    let k4 = unsafe(KQ_MVB_FORMS?[KqFmt.k4])
-    return (forms != null && forms.b2 != null && forms.b2h != null && forms.b8h != null && forms.b4 != null
-        && k4 != null && k4.b2h == null)
-}
-
 //! a format's small-batch route at two to eight rows: the eight-row form past four rows where the box crowned
 //! it, the two-column form at two rows (k4's pair tile under its own crown), else the four-column tiled form
 //! over ceil(nlive / 4) column groups; `half` takes each form's half-x stamp over the f16 twin bound as x
@@ -4177,6 +4170,7 @@ var private g_kq_rows_crowned : bool[KQ_FMT_COUNT]
 var private g_kq_k4_r2_crowned : bool
 var private g_kq_half_crowned : bool[KQ_FMT_COUNT]   //! per format: the box crowned its half-x forms (`kq_half_crown(fmt)`)
 var private g_kq_half_env = true           //! `DASLLAMA_METAL_KQ_HALF` and its setter - 0 keeps the f32 forms under every crown (the A/B rail)
+var private g_kq_half_set = false          //! the setter spoke: a decode re-init keeps its value instead of reading the environment again
 
 let KQ_HALF_CROWN_PREFIX = "kq_rows_half_"
 
@@ -4200,6 +4194,7 @@ def metal_kq_half_any : bool {
 
 //! A/B seat: the half-x forms under their crowns vs the f32 forms - `DASLLAMA_METAL_KQ_HALF`'s setter twin. Default on.
 def public set_metal_kq_half(v : bool) {
+    g_kq_half_set = true
     if (v != g_kq_half_env) {
         to_log(LOG_WARNING, "dasLLAMA metal decode: set_metal_kq_half({v}) - the K-quant rows sites take the {v ? "half-x forms under their crowns" : "f32 forms under every half-x crown"} (numerics move with the form)\n")
     }

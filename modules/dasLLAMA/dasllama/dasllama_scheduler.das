@@ -582,8 +582,14 @@ def private think_budget_track(var st : Stream; tok : int64) {
     }
     st.n_think ++
     let left = st.max_new - st.n_gen - 1l   //! the steps after this token, which the length check has not counted yet
-    if (st.n_think >= st.think_budget || left <= long_length(st.think_marks.close)) {
-        st.forced := st.think_marks.close
+    let nclose = long_length(st.think_marks.close)
+    if (st.n_think >= st.think_budget || left <= nclose) {
+        if (left >= nclose) {
+            st.forced := st.think_marks.close
+        } elif (left >= 1l) {
+            //! a cap too close for the whole close keeps its marker alone - the sentence and the blank line go, the span still ends
+            st.forced <- [st.think_marks.close_tok]
+        }
         st.think_state = 2
         think_budget_forced_log(st, left)
     }

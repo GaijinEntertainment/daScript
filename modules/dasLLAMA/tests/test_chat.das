@@ -720,13 +720,19 @@ def test_chat_gptoss_budget_marks(t : T?) {
         let ch = special_id(m, "<|channel|>")
         let fin = special_id(m, "<|end|>")
         let start = special_id(m, "<|start|>")
-        t |> success(ch >= 0l && fin >= 0l && start >= 0l, "the vocab carries the harmony channel, end and start markers")
+        let msg = special_id(m, "<|message|>")
+        t |> success(ch >= 0l && fin >= 0l && start >= 0l && msg >= 0l, "the vocab carries the harmony channel, end, start and message markers")
         var c = create_chat_renderer(m, "", 8l)
         var marks <- think_budget_marks(m, c)
-        t |> success(length(marks.open) >= 2 && marks.open[0] == ch, "the open is the channel mark followed by `analysis` ({length(marks.open)} tokens)")
+        var analysis <- encode(m, "analysis", false, false)
+        let nopen = length(marks.open)
+        t |> success(nopen >= 3 && marks.open[0] == ch && marks.open[nopen - 1] == msg, "the open is the channel mark, `analysis` and the message mark ({nopen} tokens)")
+        t |> success(nopen == length(analysis) + 2 && ids_equal(analysis, marks.open[1 .. nopen - 1]), "the word between the marks is `analysis` as the tokenizer writes it")
         t |> equal(fin, marks.close_tok, "the budget leaves the span on the message end the model writes")
-        t |> success(length(marks.close) >= 3 && marks.close[0] == fin && marks.close[1] == start, "the forced close ends the message and opens the final channel ({length(marks.close)} tokens)")
-        t |> success(empty(marks.reopen), "harmony's forced close opens the final channel itself, so no marker ends the turn after it")
+        let nclose = length(marks.close)
+        t |> success(nclose >= 3 && marks.close[0] == fin && marks.close[1] == start && marks.close[nclose - 1] == msg, "the forced close ends the message and opens the final channel up to its message mark ({nclose} tokens)")
+        t |> success(length(marks.reopen) == 1 && marks.reopen[0] == ch, "a channel mark written after the forced close ends the turn")
+        delete analysis
         delete marks
         delete c
         delete m
@@ -754,7 +760,9 @@ def test_chat_gemma4_thinking(t : T?) {   // nolint:STYLE038 — flat expected-t
         // the reasoning budget's marks: gemma-4 opens its thought with the channel mark and the word `thought` - a
         // sequence, which no single special lookup resolves - and leaves it on the channel close
         var marks <- think_budget_marks(m, c)
-        t |> success(length(marks.open) >= 2 && marks.open[0] == cho, "the budget's open sequence is the channel mark followed by `thought` ({length(marks.open)} tokens)")
+        var thought <- encode(m, "thought", false, false)
+        t |> success(length(marks.open) == length(thought) + 1 && marks.open[0] == cho && ids_equal(thought, marks.open[1 .. length(marks.open)]), "the budget's open sequence is the channel mark followed by `thought` as the tokenizer writes it ({length(marks.open)} tokens)")
+        delete thought
         t |> equal(chc, marks.close_tok, "the budget leaves the span on the channel close the model writes")
         t |> success(!empty(marks.close) && marks.close[0] == chc, "the forced close is the channel close")
         t |> success(find_index(marks.reopen, cho) >= 0 && find_index(marks.reopen, chc) >= 0, "both channel markers end the turn once the forced close is out ({length(marks.reopen)} markers)")

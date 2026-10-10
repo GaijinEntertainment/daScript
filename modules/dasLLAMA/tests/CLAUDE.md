@@ -108,8 +108,11 @@ arm, and is the way to reach a sub-arm.
 MTP parity (`test_metal_mtp_parity.das`, suite `mtp`): `mtp-ffh-<tag>` = the half-x crowns (k4, k5, k6) pinned
 over the counting walk at depth 2: the verify's two-to-eight-row K-quant sites, the MTP head's own q/k/v among
 them, read the f16 twin, and the rounds the rail drafts hold up to the uncrowned walk's within a fifth - a head fed
-a stale twin drafts garbage and the count collapses while the verify still lands the plain tokens; the crowns and
-the rail put back as found. `mtp-ctrl-<tag> mtp-ff-<tag> mtp-ffk-<tag>
+a stale twin drafts garbage and the count collapses while the verify still lands the plain tokens; the plain leg
+runs with every half-x crown of the box's profile removed and the rail off, so the two legs differ in the crowns
+alone, and on a carrier whose q/k/v/o or dense FFN planes carry a k4 / k5 / k6 format the half-x forms' census
+count is asserted above zero (a leg that dispatched none measured the f32 forms twice); the crowns and the rail
+put back as found. `mtp-ctrl-<tag> mtp-ff-<tag> mtp-ffk-<tag>
 mtp-vff-<tag> mtp-count-<tag>` per fixture tag `0.8b 4b 9b 27b 35b 3.8-27b 3.8fn` (4b = Qwen3.5-4B-MTP
 Q8_0, the mid tier; 9b = Qwen3.5-9B-MTP UD-Q5_K_XL, large tier; 3.8-27b = the Qwen3.8-27B
 trunk + its split Q8_0 head; 3.8fn = Qwen3.8-Flash-Next UD-IQ4_XS + its split `shared` Q8_0 head,
@@ -1020,7 +1023,10 @@ box with a minted manifest), and that manifest is the path read again once the o
 and the per-box runtime file (`test_box_runtime_file`): its path under the home's `tune/` with a
 stable key, validity as this box plus these kernels plus a runtime section (other kernels, another
 box, a kernels-only file and no file each invalid), the race writing a valid file with no kernels
-section that the apply reads, and the hook answering "" under an explicit manifest.
+section that the apply reads, the hook answering "" under an explicit manifest, and two children on
+`_box_runtime_root.das` under a temp home (`_child_run.das` spawns them, as the jobque tripwire's
+are): one with no manifest reads the box file under that home, raced and written first, and one on
+`DAS_TUNE_POLICY=reference` reads "" and writes nothing.
 `test_fat_hook_umbrella.das` - model-free: a program requiring the engine umbrella alone (what
 the shipped bench requires, never the facade) carries the first-start race hook - the umbrella's
 `[init]` set registers it, or a fat bench exe would serve Metal uncrowned forever.
@@ -1110,11 +1116,12 @@ marked audio span on a template with no such marker, and a span ahead of the one
 audio span and a span at the last one's offset the controls), and the gemma-4 E2B cells: the
 thinking renderer pins (the instruct prefill token for token, the gate + bare opener, the
 thinking-off extras on `effective_stop_ids`, the reasoning budget's marks - the channel mark and
-`thought` the open, the channel close the leave and the forced close, both channel markers the
-turn's end once the forced close is out - a mid-conversation toggle
+`thought` as the tokenizer writes it the open, the channel close the leave and the forced close, both
+channel markers the turn's end once the forced close is out - a mid-conversation toggle
 staying instruct), `test_chat_gptoss_budget_marks` (gpt-oss-20b, large tier: harmony's marks - the
-channel mark and `analysis` the open, the message end the leave, the end, a start and the `final`
-channel the forced close) and
+channel mark, `analysis` as the tokenizer writes it and the message mark the open, the message end
+the leave, the end, a start and the `final` channel's header through its message mark the forced
+close, the channel mark alone the turn's end once the forced close is out) and
 the instruct-mode TEXT turn through `respond` (greedy "2+2": the answer, no channel marker in
 the content half, the turn ending on a stop - red when the guard does not end the turn on the
 stray `<channel|>` the E2B emits after its answer), the gemma-4 tool wire (`test_chat_gemma4_tool_wire`: the

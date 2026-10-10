@@ -6010,6 +6010,12 @@ def private pf_moe_twin_live(fmt : KqFmt; kdim, npos, nk, ne : int64) : bool {
     return true
 }
 
+//! whether an expert plane wants the gathered x panel: a split format serves through its tensor twins over contiguous
+//! rows whenever they compiled, a kq-scaffold format only where its twin is picked for this window - the up and gate
+//! planes share one panel, so either sibling wanting it builds it for both
+def private pf_moe_panel_wanted(fmt : KqFmt; kdim, npos, nk, ne : int64) : bool =>
+    pf_moe_split_fmt(fmt) ? pf_moe_th_pso(fmt) != null : pf_moe_twin_live(fmt, kdim, npos, nk, ne)
+
 def private pf_moe_th_pso(fmt : KqFmt) : MetalComputePipeline? {
     if (fmt == KqFmt.q8) return g_pf_pso_moe_mm_q8_th
     if (fmt == KqFmt.k4) return g_pf_pso_moe_mm_k4_th
@@ -7619,7 +7625,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                             pf_enc_moe_mm_mx4(enc, t, t.we3_offs[l], c.n_ff_exp, npos, g4moe ? bxb2 : bxb, bmg2,
                                 bmcnt, bmbase, bmbkt, bwb3, kaup, contiguous = bxg1 != null, bxh = bxg1)
                         } else {
-                            let gx_q8 = pf_moe_twin_live(fe1, dim, npos, c.n_expert_used, c.n_expert) && pf_moe_twin_live(fe3, dim, npos, c.n_expert_used, c.n_expert)
+                            let gx_q8 = pf_moe_panel_wanted(fe1, dim, npos, c.n_expert_used, c.n_expert) || pf_moe_panel_wanted(fe3, dim, npos, c.n_expert_used, c.n_expert)
                             let bxg1 = pf_moe_gather_panel(enc, bmbkt, g4moe ? bxb2 : bxb, bmxg,
                                 gx_q8, dim, c.n_expert_used, c.n_expert, mpad, npos)
                             pf_enc_moe_mm(enc, t, fe1, t.we1_offs[l], c.n_ff_exp, npos, g4moe ? bxb2 : bxb, bmg,

@@ -157,11 +157,20 @@ struct private HotInvoke {
     @do_not_delete site : ExpressionPtr
 }
 
-//! a function type's key for the stored-value edges: its description with the const and reference marks dropped, so a
-//! `@@fn` and the field or variable it is stored in key alike
+//! a function type's key for the stored-value edges: the result and the argument types, each with its own qualifiers, so a
+//! `@@fn` and the field or variable it is stored in key alike - the const or reference a read of the holder adds, and the
+//! argument names a declaration carries, are not part of the key
 def private hot_fn_type_key(ty : TypeDecl?) : string {
-    let d = describe(ty, false, false, true)
-    return replace(replace(d, " const", ""), "&", "")
+    let key = build_string() $(w) {
+        write(w, ty.firstType != null ? describe(ty.firstType, false, false, true) : "void")
+        write(w, "(")
+        for (a in ty.argTypes) {
+            write(w, describe(a, false, false, true))
+            write(w, ";")
+        }
+        write(w, ")")
+    }
+    return key
 }
 
 struct private HotCache {

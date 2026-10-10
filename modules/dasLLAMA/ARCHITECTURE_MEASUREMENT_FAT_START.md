@@ -52,20 +52,26 @@ beside its own root script (`<script>.tune.json`), so a program that was never m
 runtime section and, before this file existed, served Metal uncrowned with a warning nobody read.
 Such a run now reads the box's file instead: `~/.dasllama/tune/box-<key>.tune.json`
 (`dasllama_box_runtime_path`), the key this box's identity folded as the sidecar staleness rule
-folds it (`box_match_key`), one file for every program on the box. The checked apply
-(`apply_box_profile_runtime_checked`) asks for it through the box-runtime hook
-(`set_box_runtime_hook`, registered by `dasllama_fat_start`'s `[init]`) wherever the manifest
-holds no section of this box's own - absent, another box's, unreadable, or a kernels-only mint -
-and the hook (`dasllama_box_runtime_file`) answers "" for a process that keeps its manifest: a fat
-exe (its per-user sidecar above), an explicit `DAS_TUNE_MANIFEST`, a standalone exe with its
-sidecar beside it. The rig, the suite runner and the records cells set the manifest, so they never
-reach the file.
+folds it (`box_match_key`), one file for every program on the box. The default apply
+(`apply_box_profile_runtime_checked` with `box_fallback` on, the form `apply_box_profile_runtime`
+runs for the program's own manifest) asks for it through the box-runtime hook
+(`set_box_runtime_hook`, registered by `dasllama_fat_start`'s `[init]`) wherever that manifest
+holds no section of this box's own - absent, another box's, unreadable, or a kernels-only mint;
+an apply a caller points at a path of its own never falls back, since the path is the caller's
+choice. The hook (`dasllama_box_runtime_file`) answers "" for a process that keeps its manifest - a
+fat exe (its per-user sidecar above), an explicit `DAS_TUNE_MANIFEST`, a standalone exe with its
+sidecar beside it - and for a run on the `reference` or `fallback` kernel policy
+(`tune_policy_env`), the portable tier's arm, which runs crownless by its own contract. The rig and
+the records cells set the manifest, and the suite runner sets it on a box whose
+`performance/<box>.tune.json` is committed; a runner on a box with no committed manifest reaches
+the file like any other script.
 
 The file holds the runtime section alone - the Metal twin crowns and the knob snapshot
 (`dasllama_runtime_snapshot`) - beside the box identity and `kernel_library`, the digest of the
 Metal driver sources this process compiles its kernels from (`dasllama_kernel_sources_digest`: the
-name, size and mtime of every `dasllama_metal*.das` and `dasllama_gpu_kernels_common.das` beside
-the engine's own source, located through `get_this_module_dir`). A file whose identity or digest
+name, size and mtime of every `dasllama_metal*.das`, `dasllama_gpu_kernels_common.das` and
+`dasllama_gpu_math.das` beside the engine's own source, located through `get_this_module_dir`,
+and of the MSL emitter under `modules/dasMetal/metal/`, whose edits move every kernel's text). A file whose identity or digest
 differs is not valid for this run (`dasllama_box_runtime_valid`), and the hook races again
 (`dasllama_box_runtime_race`: the same synthetic twin race the fat exe runs, no model, no child)
 and overwrites it; a shared binary's mtime is no key here, since every script on a box shares one

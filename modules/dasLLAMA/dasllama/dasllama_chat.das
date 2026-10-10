@@ -1522,15 +1522,18 @@ def think_budget_marks_(m : Model; c : ChatSession) : ThinkBudgetMarks {
         if (ch < 0l || msg < 0l || fin < 0l || start < 0l) {
             return <- marks
         }
-        //! the reasoning channel's header opens the span - the channel mark alone also opens the answer's channel
+        //! the reasoning channel's whole header opens the span - the channel mark alone also opens the answer's channel, and
+        //! the message mark closes the header, so the budget counts the reasoning and none of its framing
         marks.open <- [ch]
         marks.open |> push_from(encode_(m, "analysis", false, false))
+        marks.open |> push(msg)
         marks.close_tok = fin
         marks.close <- [fin, start]
         marks.close |> push_from(encode_(m, "assistant", false, false))
         marks.close |> push(ch)
         marks.close |> push_from(encode_(m, "final", false, false))
         marks.close |> push(msg)
+        marks.reopen <- [ch]   //! a channel re-opened past the forced final header ends the turn
         return <- marks
     }
     //! the markers as the model writes them: a special, or a special followed by a word (gemma-4's `<|channel>thought`) -

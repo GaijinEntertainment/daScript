@@ -84,14 +84,16 @@ symmetric family's reasoning writes freely - and, at the budget, queues the forc
 `Stream.forced`: the steps that follow emit it in the sample's place, the sample still drawn so a
 device pick landed for the step is consumed and the sampler's state advances as on every other
 step (`sample_advance`). The length cap drawing within the forced close's length forces it early,
-so the close lands inside `max_tokens`. The forced close is the family's own - a symmetric family's
+so the close lands inside `max_tokens`; a cap already shorter than the forced close keeps the
+model's own close marker alone, so the span still ends. The forced close is the family's own - a symmetric family's
 close special after the sentence the Qwen3 recipe inserts at a spent budget (a bare close
 mid-thought leaves the model reasoning on in its content and closing again at the end), gemma-4's
 `<channel|>`, harmony's `<|end|>` followed by the final channel's header, each followed by the
 template's blank line - so the server's reply-side splitter reads it as the model's and the answer
 begins as content. Once the forced close is out, the marks' `reopen` tokens arm the stream's
 instruct-mode marker guard (`Stream.nothink`, its content already seen): a span the model re-opens
-past the budget - gemma-4's channel markers, a symmetric family's open special - ends the turn as a
+past the budget - gemma-4's channel markers, harmony's channel mark, a symmetric family's open
+special - ends the turn as a
 marker after content does in instruct mode, since a thought re-opened after the cut never reaches an
 answer. The marks are looked up by name, not through the tokenizer's special parse, which does not
 see an asymmetric bracket such as `<channel|>`. A stream with a forced close pending

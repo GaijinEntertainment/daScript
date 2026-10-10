@@ -25,7 +25,7 @@ options auto_inline_functions = false   // lint fixtures assert SOURCE shapes; s
 // sink several frames deep is still reported — anchored on the deepest line
 // written in the root's own file, not on the daslib internal that allocates.
 
-expect 31208:11
+expect 31208:12
 
 require daslib/perf_lint
 require strings
@@ -201,4 +201,27 @@ def forms_boot {
 def bad_table_dispatch(var a : array<int>) {
     let f = unsafe(g_forms?[0])
     invoke(f.go, a)
+}
+
+// 16. the same, with the stored function's parameter named otherwise than the field's type names it: the key is the
+//     argument types, never their names, so the walk still follows the value
+struct Hooks {
+    run : function<(var buf : array<int>) : void>
+}
+
+def alloc_through_renamed(var items : array<int>) {
+    items |> push(5)                                        // PERF026, reached through the stored value
+}
+
+var g_hooks : table<int; Hooks>
+
+[init]
+def hooks_boot {
+    g_hooks[0] = Hooks(run = @@alloc_through_renamed)
+}
+
+[no_alloc]
+def bad_renamed_dispatch(var a : array<int>) {
+    let h = unsafe(g_hooks?[0])
+    invoke(h.run, a)
 }

@@ -109,7 +109,7 @@ def private decode_reference(m : Model; var s : Session; pool : array<int64>; cu
     }
 }
 
-def private sweep(a : Args) : int {   // nolint:STYLE037,STYLE038 — one flat sweep: the warm prefix, the window ladder with its A/B arms, the profile and the decode row
+def private sweep(a : Args) : int {   // nolint:STYLE038 — one flat sweep: the warm prefix, the window ladder with its A/B arms, the profile and the decode row
     static_if (typeinfo builtin_module_exists(das_metal)) {
         set_metal_mode(MetalMode.required)
         set_gpu_resident_regions(1l)
@@ -120,6 +120,12 @@ def private sweep(a : Args) : int {   // nolint:STYLE037,STYLE038 — one flat s
         if (a.gemv_max >= 0) {
             set_metal_moe_gemv_max(int64(a.gemv_max))
         }
+        if (!empty(a.ab) && a.ab != "knee" && a.ab != "tail") {
+            print("prefill_window_probe: --ab takes `knee` or `tail`, not `{a.ab}`\n")
+            return 2
+        }
+        let knee_before = metal_moe_gemv_max()
+        let tail_before = get_metal_prefill_mm_tail()
         var rows_served = 0
         with_dasllama_jobque() {   // nolint:STYLE037 — the sweep's one block: the ladder and its A/B arms
             var m <- load_model(a.model, QuantMode.q8)
@@ -182,6 +188,10 @@ def private sweep(a : Args) : int {   // nolint:STYLE037,STYLE038 — one flat s
                     print("{n}  {g}  {gb}  {g / gb}\n")
                 }
                 rows_served++
+            }
+            if (!empty(a.ab)) {   //! the ladder ends on an arm-B rep: the profiles and the decode row below run at the settings the run started with
+                set_metal_moe_gemv_max(knee_before)
+                set_metal_prefill_mm_tail(tail_before)
             }
             for (ks in split(a.kprof, ",")) {
                 let n = to_int(ks)

@@ -52,8 +52,6 @@ def attn_q_val(i : int) : float => float((i * 5) % 11 - 5) * 0.125
 //! `n` query elements, `attn_q_val` of 0 .. n - 1
 def attn_q_row(n : int) : array<float> => <- [for (i in range(n)); attn_q_val(i)]
 
-//! The padded-CSR prefix of a MoE route: each expert's row count, its rows' base on the 32-row tile lattice, and `pad`, the
-//! padded total past the last expert.
 //! the rows a routed tile's adaptive tensor op leaves unwritten: a 32-row tile of one to eight live rows runs an 8-row op,
 //! of nine to sixteen a 16-row one, so the rows from the op's height to 32 keep the sentinel the compare filled - the
 //! expectation over `want` (and its envelope, where one rides) for every twin stamp of both MoE scaffolds
@@ -79,6 +77,8 @@ def adapt_pad_rows(cnt, base : array<uint>; ndim : int; sentinel : float; var wa
     }
 }
 
+//! The padded-CSR prefix of a MoE route: each expert's row count, its rows' base on the 32-row tile lattice, and `pad`, the
+//! padded total past the last expert.
 def padded_bases(counts : array<int>) : tuple<cnt : array<uint>; base : array<uint>; pad : int> {
     var cnt, base : array<uint>
     cnt |> reserve(length(counts))

@@ -165,27 +165,36 @@ def private fnv_hex(s : string) : string {
     return "{h}"
 }
 
-//! The digest of the Metal driver sources this process compiles its kernels from: the name, size and mtime of every
-//! `dasllama_metal*.das` and the shared kernel templates beside this file; "" where those sources are not on disk.
-def public dasllama_kernel_sources_digest() : string {
-    let dir = get_this_module_dir()
+// the files of `dir` whose names `keep` admits, sorted, each as name:size:mtime
+def private digest_files(dir : string; keep : block<(fname : string) : bool>; var w : StringBuilderWriter) : int {
     var names : array<string>
     fio::dir(dir) $(fname) {
-        if ((fname |> starts_with("dasllama_metal") || fname == "dasllama_gpu_kernels_common.das") && fname |> ends_with(".das")) {
+        if (fname |> ends_with(".das") && invoke(keep, fname)) {
             names |> push(fname)
         }
     }
-    return "" if (empty(names))
     sort(names)
-    let acc = build_string() $(w) {
-        for (n in names) {
-            var fs : FStat
-            if (stat(path_join(dir, n), fs)) {
-                write(w, "{n}:{fs.size}:{fs.mtime};")
-            }
+    for (n in names) {
+        var fs : FStat
+        if (stat(path_join(dir, n), fs)) {
+            write(w, "{n}:{fs.size}:{fs.mtime};")
         }
     }
-    return fnv_hex(acc)
+    return length(names)
+}
+
+//! The digest of the sources this process compiles its Metal kernels from: the name, size and mtime of every
+//! `dasllama_metal*.das`, the shared kernel templates and the spliced math helpers beside this file, and the MSL emitter
+//! under `modules/dasMetal/metal/`; "" where the engine's sources are not on disk.
+def public dasllama_kernel_sources_digest() : string {
+    let dir = get_this_module_dir()
+    var seen = 0
+    let acc = build_string() $(w) {
+        seen = digest_files(dir, $(fname) => fname |> starts_with("dasllama_metal") || fname == "dasllama_gpu_kernels_common.das"
+            || fname == "dasllama_gpu_math.das", w)
+        digest_files(path_join(path_join(path_join(dir, ".."), ".."), path_join("dasMetal", "metal")), $(_fname) => true, w)
+    }
+    return seen > 0 ? fnv_hex(acc) : ""
 }
 
 //! Where every run on this box keeps the runtime section it raced: `<dasllama home>/tune/box-<box key>.tune.json`, the
@@ -236,12 +245,19 @@ def public dasllama_box_runtime_race(path, digest : string) : bool {
         let crowns = join(race.wins, ",")
         tune_progress_kernel_end("metal_crowns", crowns, !race.ran ? "skipped" : (empty(crowns) ? "holds" : "beats"))
         tune_progress_finish()
+        //! the crowns alone: the knobs a process holds at its first apply are its own, not the box's, so none of them ride here
         var doc = JV((kernel_library = digest, provenance = JV((box = tune_box_identity(),
-            platform = get_platform_name(), arch = get_architecture_name()))))
-        var runtime = dasllama_runtime_snapshot(crowns)
-        update(doc, "runtime", runtime)   //! the document adopts the section
+            platform = get_platform_name(), arch = get_architecture_name())), runtime = JV((metal_tensor = crowns))))
         mkdir_rec(dir_name(path))
-        let wrote = fwrite(path, write_json(doc))
+        let tmp = "{path}.{get_time_usec(0l)}.tmp"
+        var wrote = fwrite(tmp, write_json(doc))
+        if (wrote) {
+            let moved = rename_result(tmp, path)   //! one rename: a reader never sees a half-written file
+            wrote = moved is value && moved as value
+            if (!wrote) {
+                remove(tmp)
+            }
+        }
         delete_json(doc)
         let secs = get_clock() - t0
         if (wrote) {
@@ -261,12 +277,15 @@ def public dasllama_box_runtime_race(path, digest : string) : bool {
 var private g_box_race_ran = false
 
 //! The per-box runtime file a run that keeps no sidecar of its own reads: "" where this process keeps its manifest - a
-//! fat exe (its own per-user sidecar), an explicit `DAS_TUNE_MANIFEST`, a standalone exe with its sidecar beside it -
-//! else the file's path, raced and written first when none valid for these kernels exists.
+//! fat exe (its own per-user sidecar), an explicit `DAS_TUNE_MANIFEST`, a standalone exe with its sidecar beside it, a
+//! run on the reference or fallback kernel policy (the portable tier's arm, crownless by its own contract) - else the
+//! file's path, raced and written first when none valid for these kernels exists.
 [arch(at = "../ARCHITECTURE_MEASUREMENT_FAT_START.md#box-runtime-file")]
 def public dasllama_box_runtime_file() : string {
     static_if (typeinfo module_exists(llvm_tune)) {
         return "" if (tune_fat_built() || tune_manifest_explicit() || is_standalone_exe())
+        let policy = tune_policy_env()
+        return "" if (policy == "reference" || policy == "fallback")
         let path = dasllama_box_runtime_path()
         let digest = dasllama_kernel_sources_digest()
         return path if (dasllama_box_runtime_valid(path, digest))

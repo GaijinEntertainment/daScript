@@ -12,6 +12,8 @@ require daslib/jobque_boost   // with_job_que - the snapshot's lane count and th
 require daslib/fio
 require daslib/env_registry
 require strings
+require _child_run   // the per-box file's policy stand-down reads the tune policy at context init, so it is a child's to show
+require dasllama/dasllama_env   // dasllama_home_dir_from - the box file's path under a child's redirected home
 
 // The runtime section's writer and first-start race (dasllama_fat_start), model-free: the
 // snapshot carries the crowns and the knobs; the race writes the app sidecar's runtime section
@@ -195,6 +197,25 @@ def test_box_runtime_file(t : T?) {
         with_temp_sidecar(t) $(_path) {
             t |> equal("", dasllama_box_runtime_file(), "a chosen manifest keeps the process off the box file")
         }
+    }
+    t |> run("a run with no manifest races into the home's box file; the reference policy stands down") @(t : T?) {
+        var terr = ""
+        let home = path_join(temp_directory(terr), "dasllama_box_home_{get_time_usec(0l)}")
+        mkdir_rec(home)
+        let want = dasllama_box_runtime_path_from(dasllama_home_dir_from(home))
+        var no_manifest <- [(name = "HOME", value = home), (name = "USERPROFILE", value = home), (name = "DAS_TUNE_MANIFEST", value = "")]
+        var out : string
+        let rc = run_child(child_cmd("_box_runtime_root.das", no_manifest), out)
+        t |> equal(0, rc, "the child ran (rc {rc}):\n{out}")
+        t |> success(find(out, "BOX_FILE=[{want}] exists=true") >= 0, "with no manifest the run reads the box file under its home, raced and written first:\n{out}")
+        t |> success(stat(want).is_valid, "the file is on disk: {want}")
+        remove(want)
+        no_manifest |> push((name = "DAS_TUNE_POLICY", value = "reference"))
+        let rc2 = run_child(child_cmd("_box_runtime_root.das", no_manifest), out)
+        t |> equal(0, rc2, "the child ran (rc {rc2}):\n{out}")
+        t |> success(find(out, "BOX_FILE=[] exists=false") >= 0, "on the reference policy the hook stands down and writes nothing:\n{out}")
+        t |> success(!stat(want).is_valid, "no box file was written under the reference policy")
+        rmdir_rec(home)
     }
 }
 

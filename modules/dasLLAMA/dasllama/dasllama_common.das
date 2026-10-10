@@ -1763,16 +1763,16 @@ def apply_box_profile_runtime(path : string = "") {
         if (g_sidecar_place_hook != null) {
             invoke(g_sidecar_place_hook)
         }
-        apply_box_profile_runtime_checked(box_profile_path())
+        apply_box_profile_runtime_checked(box_profile_path(), true)
     } else {
         apply_box_profile_runtime_at(path)
     }
 }
 
-//! A sidecar another box minted, or one that does not read as a sidecar, is somewhere else's box
-//! state and applies nothing; one that merely predates the binary keeps its runtime section - the
-//! knobs are this box's state, only the kernel winners died with the rebuild.
-def apply_box_profile_runtime_checked(path : string) {
+//! A sidecar another box minted, or one that does not read as a sidecar, is somewhere else's box state and applies
+//! nothing; one that merely predates the binary keeps its runtime section - the knobs are this box's state, only the
+//! kernel winners died. `box_fallback` is the default apply's: a path a caller names never falls back to the box file.
+def apply_box_profile_runtime_checked(path : string; box_fallback : bool = false) {
     g_box_profile_runtime_applied = false   // both flags describe THIS apply, never an earlier one
     g_box_profile_runtime_declined = ""
     var reason = box_profile_verdict_at(path)
@@ -1780,7 +1780,7 @@ def apply_box_profile_runtime_checked(path : string) {
     if ((reason == "absent" || reason == "foreign_box") && runtime_race_writes()) {
         reason = box_profile_verdict_at(path)
     }
-    if (reason == "absent" || reason == "foreign_box" || reason == "unreadable") {
+    if (box_fallback && (reason == "absent" || reason == "foreign_box" || reason == "unreadable")) {
         //! no section of this box's own in the manifest: the per-box file every run on the box shares, raced once
         let bp = box_runtime_file_()
         if (!empty(bp)) {
@@ -1804,7 +1804,7 @@ def apply_box_profile_runtime_checked(path : string) {
     if (g_box_profile_runtime_declined == "no_runtime_section" && runtime_race_writes()) {
         apply_box_profile_runtime_at(path)
     }
-    if (g_box_profile_runtime_declined == "no_runtime_section") {
+    if (box_fallback && g_box_profile_runtime_declined == "no_runtime_section") {
         let bp = box_runtime_file_()
         if (!empty(bp)) {
             apply_box_profile_runtime_at(bp)

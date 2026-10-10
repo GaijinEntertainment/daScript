@@ -661,8 +661,9 @@ the server writes the family's own close for the model - Qwen3/3.5/3.6 and GLM g
 `<|end|>` and the final channel's header - and the answer follows; `reasoning_content` ends at the
 forced close. The span's own close, written by the model before the budget, ends the count. A budget
 reached within the close's length of `max_tokens` is forced early, so the close always lands inside
-the cap. A span the model re-opens after the forced close ends the turn, as a channel marker after
-content does in instruct mode. A family whose template carries no think markers ignores the field.
+the cap; a cap already shorter than the forced close keeps the model's own close marker alone. A
+span the model re-opens after the forced close ends the turn, as a channel marker after content does
+in instruct mode. A family whose template carries no think markers ignores the field.
 
 A thinking reply's reasoning span comes back as **`reasoning_content`** (the
 DeepSeek/llama.cpp framing) with `content` clean of the family's markers: on the

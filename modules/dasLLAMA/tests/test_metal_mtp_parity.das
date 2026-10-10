@@ -19,6 +19,7 @@ require daslib/jobque_boost
 require daslib/fio   // nolint:STYLE030,LINT019 — path_join, used only inside the das_metal static_if halves
 require math
 require strings
+require daslib/strings_boost   // nolint:STYLE030,LINT019 — split, the crown list's parse in the das_metal half
 require _model_tier
 require ../performance/model_specs.das   // nolint:STYLE030,LINT019 — counting_prompt, read only inside the das_metal static_if halves
 require _metal_blob_twin   // metal_kernel_count - the census reader
@@ -286,22 +287,52 @@ def private count_cell(t : T?; tr, trg : Model; tag : string; count : array<int6
     return drafted
 }
 
+//! whether any layer's rows site - q, k, v, o or the dense FFN triple - reads a k4 / k5 / k6 plane, the formats the half-x
+//! crowns cover
+def private has_kq_rows_planes(t : Model) : bool {
+    for (l in range64(long_length(t.wq_offs))) {
+        for (f in [fmt_at(t.wq_fmt, l), fmt_at(t.wk_fmt, l), fmt_at(t.wv_fmt, l), fmt_at(t.wo_fmt, l), fmt_at(t.w1_fmt, l), fmt_at(t.w3_fmt, l), fmt_at(t.w2_fmt, l)]) {
+            if (f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.k6) {
+                return true
+            }
+        }
+    }
+    return false
+}
+
 //! the half-x leg: under the k4 / k5 / k6 half-x crowns the verify's two-to-eight-row K-quant sites read the f16 twin, the
 //! MTP head's own q/k/v among them - its rows the head's norm wrote with no twin, so the flag must be clear there, or the
 //! head projects the trunk's last FFN norm and every draft misses silently while the verify still lands the plain tokens;
 //! the witness is the drafted-round count, which must hold up to the uncrowned run's within a fifth
 def private half_crown_cell(t : T?; tr, trg : Model; tag : string; count : array<int64>) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
-        let plain_drafted = count_cell(t, tr, trg, "{tag} plain-crowns", count, 2l)
         let prev_crowns = get_metal_tensor_crowns()
         let prev_pinned = metal_tensor_crowns_pinned()
         let prev_half = get_metal_kq_half()
-        set_metal_kq_half(true)
-        pin_metal_tensor_crowns("{kq_half_crown(KqFmt.k4)},{kq_half_crown(KqFmt.k5)},{kq_half_crown(KqFmt.k6)}")
+        //! the plain leg runs with every half-x crown off whatever the box's profile crowned, else both legs read the twin
+        let no_half <- [for (f in split(prev_crowns, ",")); f; where !empty(f) && !(f |> starts_with(KQ_HALF_CROWN_PREFIX))]
+        pin_metal_tensor_crowns(join(no_half, ","))
+        set_metal_kq_half(false)
         metal_prefill_shutdown()   //! both drivers share the device the decode release drops - a live prefill driver would allocate on null
         metal_decode_shutdown()
+        let plain_drafted = count_cell(t, tr, trg, "{tag} plain-crowns", count, 2l)
+        set_metal_kq_half(true)
+        pin_metal_tensor_crowns("{kq_half_crown(KqFmt.k4)},{kq_half_crown(KqFmt.k5)},{kq_half_crown(KqFmt.k6)}")
+        metal_prefill_shutdown()
+        metal_decode_shutdown()
         let half_drafted = count_cell(t, tr, trg, "{tag} half-x", count, 2l)
-        to_log(LOG_INFO, "{tag} half-x leg: drafted {half_drafted} rounds under the half crowns against {plain_drafted} without\n")
+        let half_stamps = (metal_kernel_count("MetalKqMvW2K4H_metal_kq_mvw_k4") + metal_kernel_count("MetalKqMvW4K4H_metal_kq_mvw_k4")
+            + metal_kernel_count("MetalKqMvW8K4H_metal_kq_mvw_k4")
+            + metal_kernel_count("MetalKqMvB2K5H_metal_kq_mv_k5") + metal_kernel_count("MetalKqMvB4K5H_metal_kq_mv_k5")
+            + metal_kernel_count("MetalKqMvB8K5H_metal_kq_mvb8")
+            + metal_kernel_count("MetalKqMvB2K6H_metal_kq_mv_k6") + metal_kernel_count("MetalKqMvB4K6H_metal_kq_mv_k6")
+            + metal_kernel_count("MetalKqMvB8K6H_metal_kq_mvb8_k6"))
+        to_log(LOG_INFO, "{tag} half-x leg: drafted {half_drafted} rounds under the half crowns against {plain_drafted} without, {half_stamps} half-x dispatches\n")
+        if (has_kq_rows_planes(tr)) {
+            t |> success(half_stamps > 0l, "{tag} half-x: the verify's K-quant rows sites took the half-x forms under the crowns ({half_stamps} dispatches) - a leg that dispatched none measured the f32 forms twice")
+        } else {
+            to_log(LOG_INFO, "{tag} half-x: no K-quant rows plane on this carrier, the half-x dispatch count is not asserted\n")
+        }
         t |> success(half_drafted * 5l >= plain_drafted * 4l, "{tag} half-x: the drafts under the half crowns hold up to the plain run's ({half_drafted} vs {plain_drafted} rounds) - a head fed a stale twin drafts garbage and the count collapses")
         set_metal_kq_half(prev_half)
         if (prev_pinned) {
