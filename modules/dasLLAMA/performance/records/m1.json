@@ -106,25 +106,25 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":975.0747158217107,
-            "stddev":1.5292757749557495
+            "tok_s":974.4756432580491,
+            "stddev":1.5481283664703369
           },
           "tg128":{
-            "tok_s":73.568643765927547,
-            "stddev":0.097890451550483704
+            "tok_s":73.512872183105415,
+            "stddev":0.089266866445541382
           },
           "tg128@4":{
-            "tok_s":122.5858954351291,
-            "stddev":0.9121328592300415
+            "tok_s":122.43706001096328,
+            "stddev":0.55678802728652954
           }
         },
         "source":"official",
-        "sha":"1211b80c1",
+        "sha":"e872d6ffa",
         "version":"0.6.5",
         "dasllama_version":16,
         "versions":"exe one unit",
         "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr8 (manifest); q40q8_tile_gen=mr8 (manifest); iq4xsq8_tile_gen=mr8 (manifest); iq3s4q8_tile_gen=mr8 (manifest); k3q8_tile_gen=mr8 (manifest); iq3sq8_tile_gen=mr8 (manifest); iq3xxsq8_tile_gen=mr8 (manifest); iq4nlq8_tile_gen=mr8 (manifest); k2q8_tile_gen=mr8 (manifest); iq2sq8_tile_gen=mr8 (manifest); iq2xsq8_tile_gen=mr8 (manifest); iq2xxsq8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr8 (manifest); iq4nl32q8_tile_gen=mr8 (manifest)",
-        "tune_sha":"d9e71e194f993864ab8b5bc9ec69a71fa6a74ddfc76e3a9a2337a97902a667ab",
+        "tune_sha":"2cb4c60fa594161adece5af6edf73ef6d382741a7c6649b3fa834a6a8611899a",
         "noise":"ok",
         "parity":"ok",
         "exec_fmt":"weights k4/k5/k6/q8 native; q8 activations; f16 scales; metal blob",
@@ -158,12 +158,12 @@
         },
         "tests":{
           "pp512":{
-            "tok_s":830.02533800000003,
-            "stddev":7.6979899999999999
+            "tok_s":830.72084099999995,
+            "stddev":6.524203
           },
           "tg128":{
-            "tok_s":54.008540000000004,
-            "stddev":0.17821600000000001
+            "tok_s":54.094099999999997,
+            "stddev":0.040065000000000003
           }
         },
         "source":"official",
