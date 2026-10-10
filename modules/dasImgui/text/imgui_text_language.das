@@ -42,9 +42,9 @@ def private profile_daslang : TextLanguageProfile {
         bracket_pairs <- standard_brackets(),
         indent_pairs <- [int2('{', '}')],
         fold_kinds <- {
-            "function_declaration", "structure_declaration", "enum_declaration",
-            "variant_alias_declaration", "bitfield_alias_declaration",
-            "typedef_declaration", "structure_method", "block_comment"
+            "function_declaration", "struct_declaration", "class_declaration",
+            "enumeration_declaration", "variant_alias_declaration", "bitfield_alias_declaration",
+            "typedef_declaration", "block_comment"
         },
         keywords <- [
             "abstract", "addr", "aka", "array", "as", "assert", "assume",

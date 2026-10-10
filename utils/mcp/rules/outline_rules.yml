@@ -1,27 +1,41 @@
 id: outline-structures
 language: daslang
 rule:
-  kind: structure_declaration
+  any:
+    - kind: struct_declaration
+    - kind: class_declaration
 ---
 id: outline-functions
 language: daslang
 rule:
   kind: function_declaration
+  not:
+    inside:
+      stopBy: end
+      any:
+        - kind: struct_declaration
+        - kind: class_declaration
 ---
 id: outline-enums
 language: daslang
 rule:
-  kind: enum_declaration
+  kind: enumeration_declaration
 ---
 id: outline-globals
 language: daslang
 rule:
-  kind: global_variable_declaration
+  kind: global_let
 ---
 id: outline-typedefs
 language: daslang
 rule:
-  kind: typedef_statement
+  kind: typedef_declaration
+  not:
+    inside:
+      stopBy: end
+      any:
+        - kind: struct_declaration
+        - kind: class_declaration
 ---
 id: outline-bitfields
 language: daslang

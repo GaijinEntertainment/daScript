@@ -33,10 +33,11 @@ def test_language_lookup_canonicalizes(t : T?) {
 
 [test]
 def test_language_fold_kinds_migrated(t : T?) {
-    // the fold tables moved here verbatim from imgui_text_tree_sitter
     text_language_profile("daslang") $(profile) {
-        t |> success(key_exists(profile.fold_kinds, "structure_declaration"),
+        t |> success(key_exists(profile.fold_kinds, "struct_declaration"),
             "das folds structures")
+        t |> success(key_exists(profile.fold_kinds, "class_declaration"),
+            "das folds classes")
         t |> success(key_exists(profile.fold_kinds, "block_comment"),
             "das folds block comments")
     }
