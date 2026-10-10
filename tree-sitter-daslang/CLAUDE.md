@@ -1,16 +1,16 @@
 # tree-sitter-daslang
 
-Tree-sitter grammar for the gen2 syntax of daslang, the scripting language of the daScript compiler
-(GaijinEntertainment/daScript).
+Tree-sitter grammar for the gen2 syntax of daslang. The daslang compiler is in the daslang repository,
+GaijinEntertainment/daScript, whose name keeps the old spelling.
 
 ## Reference
 
-- The authority is the gen2 syntax of the daScript compiler: `src/parser/ds2_parser.ypp` (the grammar),
+- The authority is the gen2 syntax of the daslang compiler: `src/parser/ds2_parser.ypp` (the grammar),
   `src/parser/ds2_lexer.lpp` (the tokens and the lexer states), `src/parser/parser_impl.cpp`, `parser_impl.h`, and
   `parser_state.h` (the parser helpers and the lexer state). Settle each grammar question in that code, not in the docs.
 - Gen1 is out of scope. `src/parser/ds_parser.ypp` and `ds_lexer.lpp` are not a source, and a file with
   `options gen2 = false` is not input of the grammar.
-- Two releases of the compiler are in use: daScript `master` (0.6.5) and the copy in `prog/1stPartyLibs/daScript/` of
+- Two releases of the compiler are in use: daslang `master` (0.6.5) and the copy in `prog/1stPartyLibs/daScript/` of
   the Dagor engine (0.6.4). The grammar accepts the input of both. Only 0.6.5 accepts these forms:
   - `-9223372036854775808l`, the minimum of `int64`, as a number constant and an annotation argument.
   - An `int64`, a negative `int64`, a `uint64`, and a negative `int` or `float` constant as an annotation argument.
@@ -32,7 +32,7 @@ Tree-sitter grammar for the gen2 syntax of daslang, the scripting language of th
 - In Dagor, a file without the marker is gen1 for the game hosts: they set `policies.version_2_syntax` from the
   `DasSyntax` of the loader context (`prog/gameLibs/ecs/scripts/das/das_scripts.cpp`, the enum in
   `prog/gameLibs/publicInclude/ecs/scripts/dasEs.h`), and no game setting selects `V2_0`. Two sets of such files are
-  gen2: those in the daScript copy, `prog/1stPartyLibs/daScript/`, which `daslang` runs, and those that the internal
+  gen2: those in the daslang copy, `prog/1stPartyLibs/daScript/`, which `daslang` runs, and those that the internal
   hosts with gen2 policies load. Outside the copy, `git grep -n -E 'version_2_syntax = true|syntax_version=V2_0'` finds
   these hosts. On Dagor `master`, two of them load files of the checkout: a user-script host loads a samples directory,
   and a server started with `--local_dascript_syntax_version=V2_0` loads the directory that its start script passes in
@@ -87,7 +87,7 @@ Tree-sitter grammar for the gen2 syntax of daslang, the scripting language of th
 - `.github/` - the CI and publish workflows, dependabot, and issue templates. The publish workflow authenticates to
   crates.io, PyPI, and npm with trusted publishing and holds no registry token.
 - `.github/workflows/sync.yml`, `.github/scripts/sync-mirror.sh`, and `.github/workflows/close-pull-requests.yml` - the
-  copy of the grammar changes of daScript `master` to `main`, and the close of pull requests. Both workflows run only
+  copy of the grammar changes of daslang `master` to `main`, and the close of pull requests. Both workflows run only
   when the repository variable `MIRROR_SYNC` is `on`.
 - `eslint.config.mjs` - the lint configuration for `grammar.js` (`npm run lint`).
 - `examples/` - daslang files that the CI workflow parses.
@@ -215,23 +215,23 @@ Tree-sitter grammar for the gen2 syntax of daslang, the scripting language of th
   capture of an earlier match that shares a node with a later match.
 - A `#match?` regex must mean the same in Rust regex syntax and in Vim very-magic syntax (Neovim). Write a literal `@`
   as `[@]` and a literal `~` as `[~]`.
-- `queries/highlights.scm` uses only the `#match?`, `#not-match?`, `#eq?`, and `#not-eq?` predicates. The daScript
+- `queries/highlights.scm` uses only the `#match?`, `#not-match?`, `#eq?`, and `#not-eq?` predicates. The daslang
   editor runs the file through `modules/dasTreeSitter`, which drops each pattern that uses another predicate or a
   directive.
-- The daScript editor ranks overlapping captures by pattern order, not by nesting: inside the range of an earlier
+- The daslang editor ranks overlapping captures by pattern order, not by nesting: inside the range of an earlier
   capture, a later pattern's capture wins. Put a pattern that captures a node holding other captured nodes, such as a
   string with interpolations, before the patterns of what it holds.
 - Each capture name in `queries/highlights.scm` starts with `comment`, `string`, `character`, `number`, `boolean`,
   `keyword`, `type`, `function`, `variable`, `property`, `constant`, `label`, `attribute`, `module`, `operator`,
-  `punctuation`, or `none`. The daScript editor colors a capture by the start of its name and gives no color to
+  `punctuation`, or `none`. The daslang editor colors a capture by the start of its name and gives no color to
   another name.
-- Every `.md` file other than `README.md` is ASCII only, and no link names an anchor of another `.md` file: daScript
-  checks the `.md` files in its tree.
-- The daScript build writes `daslang.dylib`, `daslang.so`, or `daslang.dll` into this directory. Keep the `*.dylib`,
+- Every `.md` file other than `README.md` is ASCII only, and no link names an anchor of another `.md` file: the
+  daslang repository checks the `.md` files in its tree.
+- The daslang build writes `daslang.dylib`, `daslang.so`, or `daslang.dll` into this directory. Keep the `*.dylib`,
   `*.so`, and `*.dll` entries of `.gitignore`.
-- `.lint_config` sets `format_enabled = false` for the daScript formatter, which checks every `.das` file in the
-  daScript tree. The assertions in `test/highlight/` and `test/tags/` point at exact columns, so the formatter must not
-  touch these files.
+- `.lint_config` sets `format_enabled = false` for the daslang formatter, which checks every `.das` file in the
+  daslang repository. The assertions in `test/highlight/` and `test/tags/` point at exact columns, so the formatter
+  must not touch these files.
 - In `queries/tags.scm`, tree-sitter-tags keeps one tag per name node, from the earliest pattern that matches it. Put
   a specific pattern before the general pattern for the same node.
 - A workflow pins each action to the commit SHA of a release and names the release in a comment

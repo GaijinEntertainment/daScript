@@ -5,8 +5,9 @@
 [![npm][npm]](https://www.npmjs.com/package/tree-sitter-daslang)
 [![pypi][pypi]](https://pypi.org/project/tree-sitter-daslang)
 
-Daslang grammar for [tree-sitter](https://github.com/tree-sitter/tree-sitter). Daslang is the scripting language of the
-[daScript](https://github.com/GaijinEntertainment/daScript) compiler.
+Daslang grammar for [tree-sitter](https://github.com/tree-sitter/tree-sitter). [Daslang](https://daslang.io/) is a
+statically typed programming language for games and real-time applications. Its compiler is in the daslang repository,
+[GaijinEntertainment/daScript](https://github.com/GaijinEntertainment/daScript).
 
 The grammar follows the gen2 syntax of the daslang compiler. It does not read the gen1 syntax, which a file selects with
 `options gen2 = false`. The grammar checks the syntax only: it does not do the checks that the compiler does after it

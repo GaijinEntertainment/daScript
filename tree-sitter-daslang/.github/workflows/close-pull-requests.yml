@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   close:
-    name: Send the pull request to daScript
+    name: Send the pull request to the daslang repository
     if: vars.MIRROR_SYNC == 'on'
     runs-on: ubuntu-latest
     steps:
@@ -19,6 +19,7 @@ jobs:
           PULL_REQUEST: ${{github.event.pull_request.html_url}}
           COMMENT: >-
             This repository is a read-only copy of the tree-sitter-daslang
-            directory of https://github.com/GaijinEntertainment/daScript.
-            Open the pull request there.
+            directory of the daslang repository,
+            https://github.com/GaijinEntertainment/daScript. Open the pull
+            request there.
         run: gh pr close "${PULL_REQUEST}" --comment "${COMMENT}"

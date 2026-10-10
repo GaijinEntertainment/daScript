@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   sync:
-    name: Copy the grammar changes of daScript
+    name: Copy the grammar changes of the daslang repository
     if: >-
       github.repository == 'GaijinEntertainment/tree-sitter-daslang'
       && vars.MIRROR_SYNC == 'on'
@@ -23,7 +23,7 @@ jobs:
       GIT_SSH_COMMAND: ssh -i ~/.ssh/sync_key -o IdentitiesOnly=yes
       MIRROR: git@github.com:${{github.repository}}.git
     steps:
-      - name: Check out daScript
+      - name: Check out the daslang repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: GaijinEntertainment/daScript
