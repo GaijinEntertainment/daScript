@@ -149,7 +149,6 @@ def test_failed_files_block(t : T?) {
     t |> equal(failed_files_block(many), "tests/t0.das, tests/t1.das, tests/t2.das, tests/t3.das, tests/t4.das, and 2 more", "five named, the rest counted")
 }
 
-// CI's changed-set lint reads .das and .md in one command; the local gate must not read less
 [test]
 def test_lint_inputs(t : T?) {
     t |> success(is_lint_input("daslib/lint.das"), "a .das file is a lint input")
@@ -157,6 +156,16 @@ def test_lint_inputs(t : T?) {
     t |> success(!is_lint_input("doc/source/index.rst"), "an .rst is not")
     t |> success(!is_lint_input("src/ast/ast.cpp"), "a .cpp is not")
     t |> success(!is_lint_input("utils/internal/preflight/ci_only_das.txt"), "a .txt is not")
+}
+
+[test]
+def test_lint_gate_files(t : T?) {
+    var inscope files <- lint_gate_files(["daslib/lint.das", "tree-sitter-daslang/test/tags/tags.das"],
+                                         ["tree-sitter-daslang/CLAUDE.md", "utils/REVIEW.md"],
+                                         ["tree-sitter-daslang/bindings/node/binding.cc"],
+                                         ["tree-sitter-daslang/src/scanner.c", "src/ast/ast.h"])
+    t |> equal(join(files, ","), "daslib/lint.das,utils/REVIEW.md,src/ast/ast.h",
+               "every changed lint input but the grammar copy, which mirrors its own repository byte for byte")
 }
 
 [test]
