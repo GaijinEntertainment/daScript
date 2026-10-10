@@ -321,9 +321,16 @@ def public load_preflight_settings(path : string; var error : string&) : Preflig
     return settings
 }
 
-//! CI's changed-set lint reads `.das` and `.md` alike (extended_checks: `-- '*.das' '*.md'`); a
-//! changed file of either kind goes to the lint gate, and nothing else does
+//! A changed `.md` goes to the lint gate beside the changed `.das`: the rule-document passes read it
 def is_lint_input(path : string) : bool {
     let ext = extension(path)
     return ext == ".das" || ext == ".md"
+}
+
+//! The files the lint gate reads: every changed lint input outside `tree-sitter-daslang/`, which mirrors its own
+//! repository byte for byte and holds `.das` highlight fixtures that do not compile
+def lint_gate_files(das, md, cpp, cxx_other : array<string>) : array<string> {
+    var files : array<string>
+    files |> push_from(das, md, cpp, cxx_other)
+    return <- [for (f in files); f; where !starts_with(f, "tree-sitter-daslang/")]
 }

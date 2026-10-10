@@ -1,0 +1,113 @@
+name: tree-sitter-daslang
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "tree-sitter-daslang/**"
+      - ".github/workflows/tree_sitter_daslang.yml"
+  pull_request:
+    paths:
+      - "tree-sitter-daslang/**"
+      - ".github/workflows/tree_sitter_daslang.yml"
+
+concurrency:
+  group: ${{github.workflow}}-${{github.ref}}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test parser
+    timeout-minutes: 30
+    runs-on: ${{matrix.os}}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-15]
+    steps:
+      - name: Check out the grammar
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: daScript
+          sparse-checkout: tree-sitter-daslang
+          persist-credentials: false
+      # parser-test-action and parse-action read a grammar repository at the workspace root.
+      - name: Make the grammar the workspace root
+        shell: bash
+        run: |
+          cp -R daScript/tree-sitter-daslang/. .
+          rm -rf daScript
+          git init --quiet
+          git add --all
+          git -c user.name=ci -c user.email=ci@localhost \
+            commit --quiet --message grammar
+      - name: Set up tree-sitter
+        uses: tree-sitter/setup-action/cli@faab9a23fa6195da0f1cf868219cc1e89f238d3d # v2
+        with:
+          tree-sitter-ref: v0.27.1
+      - name: Run tests
+        uses: tree-sitter/parser-test-action@05f6ce7c7e54603c45cd87ed926725dc870bcc63 # v3
+        with:
+          test-rust: true
+          test-node: true
+          test-python: true
+          test-go: true
+          go-version: "1.23"
+          test-swift: true
+      - name: Check that the generated files match grammar.js
+        shell: bash
+        run: |
+          git diff --exit-code -- src/
+          test -z "$(git status --porcelain -- src/)"
+      - name: Parse examples
+        uses: tree-sitter/parse-action@f44ffa94f802024f27e821a72e6f2f3efc5dd521 # v4
+        with:
+          files: examples/*
+      # `tree-sitter fuzz` ends with status 0 when a test fails, so the step reads its output.
+      - name: Compare incremental parses with fresh parses
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          tree-sitter fuzz --iterations 30 2>&1 | tee fuzz.log
+          ! grep --quiet 'failed fuzzing' fuzz.log
+
+  lint:
+    name: Lint
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the grammar
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: tree-sitter-daslang
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          cache: npm
+          cache-dependency-path: tree-sitter-daslang/package-lock.json
+          node-version: lts/*
+      - name: Install modules
+        working-directory: tree-sitter-daslang
+        run: npm ci --legacy-peer-deps
+      - name: Run ESLint
+        working-directory: tree-sitter-daslang
+        run: npm run lint
+
+  fuzz:
+    name: Fuzz parser
+    timeout-minutes: 15
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the grammar
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: tree-sitter-daslang
+          persist-credentials: false
+      - name: Run fuzzer
+        uses: tree-sitter/fuzz-action@6a1dcff00aefd038ba418bd63732a9add4901266 # v4
+        with:
+          directory: tree-sitter-daslang

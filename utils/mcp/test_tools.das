@@ -1641,6 +1641,18 @@ def test_outline(t : T?) {
         t |> success(find(text, "[variant]") >= 0, "should find variants")
         t |> success(find(text, "Value") >= 0, "should find 'Value' variant")
     }
+    t |> run("lists typedefs, globals and classes") <| @(t : T?) {
+        var text : string
+        var is_error = false
+        parse_result(do_outline("utils/mcp/tests/_fixture_outline.das", ""), text, is_error)
+        t |> success(!is_error, "should not be error")
+        t |> success(find(text, "[typedef] typedef Coord") >= 0, "should find the 'Coord' typedef")
+        t |> success(find(text, "Local") < 0, "should not list a typedef local to a function")
+        t |> success(find(text, "[global] let ORIGIN") >= 0, "should find the 'ORIGIN' global")
+        t |> success(find(text, "[struct] class Shape") >= 0, "should find the 'Shape' class")
+        t |> success(find(text, "get_area") < 0, "should not list a method of a class")
+        t |> success(find(text, "Inner") < 0, "should not list a typedef of a class")
+    }
     t |> run("sorted by line number") <| @(t : T?) {
         var text : string
         var is_error = false

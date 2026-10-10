@@ -37,4 +37,5 @@ built-in leak-detection mechanism.
    utils/dasllama_convert.rst
    utils/watchdog.rst
    utils/vscode_daslang_test.rst
+   utils/zed_daslang.rst
    utils/memory_leak_detection.rst

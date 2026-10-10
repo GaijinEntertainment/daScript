@@ -1,0 +1,43 @@
+name: tree-sitter-daslang sources
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "**.das"
+      - "tree-sitter-daslang/**"
+      - "ci/tree_sitter_parse_sources.sh"
+      - "ci/tree_sitter_compiler_rejected_sources.txt"
+      - ".github/workflows/tree_sitter_daslang_sources.yml"
+  pull_request:
+    paths:
+      - "**.das"
+      - "tree-sitter-daslang/**"
+      - "ci/tree_sitter_parse_sources.sh"
+      - "ci/tree_sitter_compiler_rejected_sources.txt"
+      - ".github/workflows/tree_sitter_daslang_sources.yml"
+
+concurrency:
+  group: ${{github.workflow}}-${{github.ref}}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  sources:
+    name: Parse the daslang sources
+    timeout-minutes: 15
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out daScript
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up tree-sitter
+        uses: tree-sitter/setup-action/cli@faab9a23fa6195da0f1cf868219cc1e89f238d3d # v2
+        with:
+          tree-sitter-ref: v0.27.1
+      - name: Parse every gen2 file
+        shell: bash
+        run: ci/tree_sitter_parse_sources.sh

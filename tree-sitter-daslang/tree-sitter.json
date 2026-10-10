@@ -1,0 +1,45 @@
+{
+  "$schema": "https://tree-sitter.github.io/tree-sitter/assets/schemas/config.schema.json",
+  "grammars": [
+    {
+      "name": "daslang",
+      "camelcase": "Daslang",
+      "title": "Daslang",
+      "scope": "source.daslang",
+      "path": ".",
+      "file-types": [
+        "das"
+      ],
+      "injection-regex": "^(daslang|das)$",
+      "highlights": "queries/highlights.scm",
+      "tags": "queries/tags.scm"
+    }
+  ],
+  "metadata": {
+    "version": "0.6.0",
+    "license": "BSD-3-Clause",
+    "description": "Daslang grammar for tree-sitter",
+    "authors": [
+      {
+        "name": "Gaijin Entertainment"
+      },
+      {
+        "name": "Anton Zinovyev",
+        "email": "xog3@yandex.ru"
+      }
+    ],
+    "links": {
+      "repository": "https://github.com/GaijinEntertainment/tree-sitter-daslang"
+    }
+  },
+  "bindings": {
+    "c": true,
+    "go": true,
+    "java": false,
+    "node": true,
+    "python": true,
+    "rust": true,
+    "swift": true,
+    "zig": false
+  }
+}

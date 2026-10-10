@@ -18,3 +18,9 @@ nothing, or that a build or test run contradicts, is a defect.** The first file 
 compiles that declares `module X shared` becomes that process's module `X`, and every later file
 declaring or requiring `X` in the same process gets that module - so any process compiling both
 gives the second file the first's module.
+
+**A diff that adds or changes syntax in `tree-sitter-daslang/grammar.js` also adds a case for that
+syntax to `tree-sitter-daslang/test/corpus/`, in the same change.**
+
+**A diff that adds syntax to `tree-sitter-daslang/grammar.js` also adds a section exercising it to
+`modules/dasImgui/tests/test_grammar_canary.das`, in the same change.**

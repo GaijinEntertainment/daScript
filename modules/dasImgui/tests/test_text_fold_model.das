@@ -7,7 +7,7 @@ require imgui/imgui_text_tree_sitter
 
 //! Fold extraction from the tree-sitter structure walk — no UI, no live host.
 
-let DAS_FIXTURE = "options gen2\n\ndef add(a, b : int) : int \{\n    let c = a + b\n    return c\n\}\n\nstruct Point \{\n    x : int\n    y : int\n\}\n\nenum Mode \{\n    one\n    two\n\}\n"
+let DAS_FIXTURE = "options gen2\n\ndef add(a, b : int) : int \{\n    let c = a + b\n    return c\n\}\n\nstruct Point \{\n    x : int\n    y : int\n\}\n\nenum Mode \{\n    one\n    two\n\}\n\nclass Shape \{\n    area : float\n\}\n"
 
 [test]
 def test_das_fold_extraction(t : T?) {
@@ -17,8 +17,9 @@ def test_das_fold_extraction(t : T?) {
         kinds[fold.kind]++
     }
     t |> equal(kinds?["function_declaration"] ?? 0, 1, "one function folds")
-    t |> equal(kinds?["structure_declaration"] ?? 0, 1, "one struct folds")
-    t |> equal(kinds?["enum_declaration"] ?? 0, 1, "one enum folds")
+    t |> equal(kinds?["struct_declaration"] ?? 0, 1, "one struct folds")
+    t |> equal(kinds?["class_declaration"] ?? 0, 1, "one class folds")
+    t |> equal(kinds?["enumeration_declaration"] ?? 0, 1, "one enum folds")
     var fn_index = -1
     for (index in range(length(document.folds))) {
         if (document.folds[index].kind == "function_declaration") {
@@ -54,6 +55,21 @@ def test_das_folds_survive_bare_named_arguments(t : T?) {
         }
     }
     t |> equal(functions, 2, "the function AFTER a bare named call still folds")
+    text_source_document_dispose(document)
+}
+
+[test]
+def test_das_method_folds(t : T?) {
+    let source = ("options gen2\n\nclass Shape \{\n    area : float\n"
+        + "    def get_area() : float \{\n        return area\n    \}\n\}\n")
+    var document <- tree_sitter_source_document(source, "das", 1)
+    var methods = 0
+    for (fold in document.folds) {
+        if (fold.kind == "function_declaration" && fold.header_row == 4) {
+            methods++
+        }
+    }
+    t |> equal(methods, 1, "a method folds as a function declaration")
     text_source_document_dispose(document)
 }
 

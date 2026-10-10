@@ -1,0 +1,270 @@
+================================================================================
+Module declaration
+================================================================================
+
+module foo
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (module_declaration
+    name: (identifier)))
+
+================================================================================
+Module declaration with every modifier
+================================================================================
+
+module foo shared private !inscope
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (module_declaration
+    name: (identifier)))
+
+================================================================================
+Module named $
+================================================================================
+
+module $
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (module_declaration))
+
+================================================================================
+Options
+================================================================================
+
+options gen2
+options indenting = 4, no_aot = true, log = false
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (options_declaration
+    (annotation_argument
+      name: (identifier)))
+  (options_declaration
+    (annotation_argument
+      name: (identifier)
+      value: (constant_integer))
+    (annotation_argument
+      name: (identifier)
+      value: (constant_boolean))
+    (annotation_argument
+      name: (identifier)
+      value: (constant_boolean))))
+
+================================================================================
+Option values
+================================================================================
+
+options a = "text\n", b = -1, c = 2.5, d = -2.5, e = 3l, f = -9223372036854775808l, g = 0x10l, h = (1, "x", true), i = @@main, j = name
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (options_declaration
+    (annotation_argument
+      name: (identifier)
+      value: (constant_string
+        (escape_sequence)))
+    (annotation_argument
+      name: (identifier)
+      value: (constant_integer))
+    (annotation_argument
+      name: (identifier)
+      value: (constant_float))
+    (annotation_argument
+      name: (identifier)
+      value: (constant_float))
+    (annotation_argument
+      name: (identifier)
+      value: (constant_integer64))
+    (annotation_argument
+      name: (identifier)
+      value: (constant_integer64))
+    (annotation_argument
+      name: (identifier)
+      value: (constant_unsigned_integer64))
+    (annotation_argument
+      name: (identifier)
+      value: (constant_integer)
+      value: (constant_string)
+      value: (constant_boolean))
+    (annotation_argument
+      name: (identifier)
+      value: (identifier))
+    (annotation_argument
+      name: (identifier)
+      value: (identifier))))
+
+================================================================================
+Require declarations
+================================================================================
+
+require daslib/strings_boost
+require foo as bar public
+require ./local/mod
+require ../up/mod
+require %daslib/x
+require %/x
+require a.b.c
+require [group] public
+require ?guard real
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (require_declaration
+    name: (module_path
+      (identifier)
+      (identifier)))
+  (require_declaration
+    name: (module_path
+      (identifier))
+    alias: (identifier))
+  (require_declaration
+    name: (module_path
+      (identifier)
+      (identifier)))
+  (require_declaration
+    name: (module_path
+      (identifier)
+      (identifier)))
+  (require_declaration
+    name: (module_path
+      (identifier)
+      (identifier)))
+  (require_declaration
+    name: (module_path
+      (identifier)))
+  (require_declaration
+    name: (module_path
+      (identifier)
+      (identifier)
+      (identifier)))
+  (require_declaration
+    group: (identifier))
+  (require_declaration
+    guard: (module_path
+      (identifier))
+    name: (module_path
+      (identifier))))
+
+================================================================================
+Expect declarations
+================================================================================
+
+expect 30101
+expect 30101:2, 20003
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (expect_declaration
+    (expected_error
+      code: (constant_integer)))
+  (expect_declaration
+    (expected_error
+      code: (constant_integer)
+      count: (constant_integer))
+    (expected_error
+      code: (constant_integer))))
+
+================================================================================
+Comments
+================================================================================
+
+// line comment
+/* block /* nested */ comment */
+options gen2 // trailing
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (comment)
+  (block_comment)
+  (options_declaration
+    (annotation_argument
+      name: (identifier)))
+  (comment))
+
+================================================================================
+Line continuation
+================================================================================
+
+options \
+  gen2
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (options_declaration
+    (annotation_argument
+      name: (identifier))))
+
+================================================================================
+Empty statements
+================================================================================
+
+;
+options gen2;;
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (options_declaration
+    (annotation_argument
+      name: (identifier))))
+
+================================================================================
+Include directive
+================================================================================
+
+include common/shared.das
+let include_count = 1
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (include_directive)
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (constant_integer))))
+
+================================================================================
+Include directive with the file name on the next line
+================================================================================
+
+include
+    common/shared.das
+let include_count = 1
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (include_directive)
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (constant_integer))))
+
+================================================================================
+Include directive without a file name at the end of the text
+================================================================================
+
+let a = 1
+include
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (constant_integer)))
+  (include_directive))

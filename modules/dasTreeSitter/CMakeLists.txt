@@ -63,14 +63,19 @@ IF ((NOT DAS_TREE_SITTER_INCLUDED) AND (NOT DAS_TREE_SITTER_DISABLED))
         TARGET_COMPILE_OPTIONS(dasTreeSitterRuntime PRIVATE -w)
     ENDIF()
 
-    FILE(READ ${PROJECT_SOURCE_DIR}/tree-sitter-daslang/queries/highlights.scm
-        DAS_TS_DASLANG_QUERY)
-    FILE(READ ${DAS_TREE_SITTER_DIR}/languages/c/highlights.scm DAS_TS_C_QUERY)
-    FILE(READ ${DAS_TREE_SITTER_DIR}/languages/cpp/highlights.scm DAS_TS_CPP_ONLY_QUERY)
-    FILE(READ ${DAS_TREE_SITTER_DIR}/languages/markdown/highlights.scm
-        DAS_TS_MARKDOWN_QUERY)
-    FILE(READ ${DAS_TREE_SITTER_DIR}/languages/markdown_inline/highlights.scm
-        DAS_TS_MARKDOWN_INLINE_QUERY)
+    MACRO(DAS_TREE_SITTER_READ_QUERY variable path)
+        FILE(READ ${path} ${variable})
+        SET_PROPERTY(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${path})
+    ENDMACRO()
+
+    DAS_TREE_SITTER_READ_QUERY(DAS_TS_DASLANG_QUERY
+        ${PROJECT_SOURCE_DIR}/tree-sitter-daslang/queries/highlights.scm)
+    DAS_TREE_SITTER_READ_QUERY(DAS_TS_C_QUERY ${DAS_TREE_SITTER_DIR}/languages/c/highlights.scm)
+    DAS_TREE_SITTER_READ_QUERY(DAS_TS_CPP_ONLY_QUERY ${DAS_TREE_SITTER_DIR}/languages/cpp/highlights.scm)
+    DAS_TREE_SITTER_READ_QUERY(DAS_TS_MARKDOWN_QUERY
+        ${DAS_TREE_SITTER_DIR}/languages/markdown/highlights.scm)
+    DAS_TREE_SITTER_READ_QUERY(DAS_TS_MARKDOWN_INLINE_QUERY
+        ${DAS_TREE_SITTER_DIR}/languages/markdown_inline/highlights.scm)
     # tree-sitter-cpp intentionally publishes only its C++ overrides. Its
     # complete highlight query is the C query followed by those overrides.
     SET(DAS_TS_CPP_QUERY "${DAS_TS_C_QUERY}\n${DAS_TS_CPP_ONLY_QUERY}")

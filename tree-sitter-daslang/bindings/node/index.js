@@ -1,0 +1,56 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
+const root = fileURLToPath(new URL("../..", import.meta.url));
+
+// A `bun build --compile` executable has no package directory for node-gyp-build to search, so
+// require the prebuild directly. Its path has to stay static for Bun to embed the addon.
+const binding = typeof process.versions.bun === "string" && Bun.isStandaloneExecutable
+  ? require(`../../prebuilds/${process.platform}-${process.arch}/tree-sitter-daslang.node`)
+  : (await import("node-gyp-build")).default(root);
+
+try {
+  // Bun only embeds static paths, and `import()` rejects absolute Windows paths like `root`.
+  const nodeTypes = await import("../../src/node-types.json", { with: { type: "json" } });
+  binding.nodeTypeInfo = nodeTypes.default;
+} catch { }
+
+if (typeof process.versions.bun === "string" && Bun.isStandaloneExecutable) {
+  // Static paths so Bun embeds the queries. Grammars often lack some of them, and inside a `try` a
+  // missing file is skipped instead of failing the build.
+  try {
+    binding.HIGHLIGHTS_QUERY = (await import("../../queries/highlights.scm", { with: { type: "text" } })).default;
+  } catch { }
+  try {
+    binding.INJECTIONS_QUERY = (await import("../../queries/injections.scm", { with: { type: "text" } })).default;
+  } catch { }
+  try {
+    binding.LOCALS_QUERY = (await import("../../queries/locals.scm", { with: { type: "text" } })).default;
+  } catch { }
+  try {
+    binding.TAGS_QUERY = (await import("../../queries/tags.scm", { with: { type: "text" } })).default;
+  } catch { }
+} else {
+  const queries = [
+    ["HIGHLIGHTS_QUERY", `${root}/queries/highlights.scm`],
+    ["INJECTIONS_QUERY", `${root}/queries/injections.scm`],
+    ["LOCALS_QUERY", `${root}/queries/locals.scm`],
+    ["TAGS_QUERY", `${root}/queries/tags.scm`],
+  ];
+
+  for (const [prop, path] of queries) {
+    Object.defineProperty(binding, prop, {
+      configurable: true,
+      enumerable: true,
+      get() {
+        delete binding[prop];
+        try {
+          binding[prop] = readFileSync(path, "utf8");
+        } catch { }
+        return binding[prop];
+      }
+    });
+  }
+}
+
+export default binding;

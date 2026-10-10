@@ -8,9 +8,9 @@ require dasllama/dasllama_common   // apply_box_profile_runtime, set_metal_mode,
 require ?das_metal dasllama/dasllama_metal_prefill   // the driver's per-window stage report
 require ?das_metal dasllama/dasllama_metal_common    // the decode stage report, the per-kernel profile
 require daslib/clargs
-require daslib/strings_boost
-require strings
-require math
+require daslib/strings_boost   // nolint:STYLE030,LINT019 - split, used only inside the das_metal static_if halves
+require strings   // nolint:STYLE030,LINT019 - to_int, used only inside the das_metal static_if halves
+require math   // nolint:STYLE030,LINT019 - min, used only inside the das_metal static_if halves
 
 // The short-window prefill probe: the Metal prefill driver's own stage report (GPU timestamps, the encode and
 // wait walls, the readback) for windows of 2 to 512 tokens appended to a warm prefix, each a median over the
@@ -127,7 +127,7 @@ def private sweep(a : Args) : int {   // nolint:STYLE038 — one flat sweep: the
         let knee_before = metal_moe_gemv_max()
         let tail_before = get_metal_prefill_mm_tail()
         var rows_served = 0
-        with_dasllama_jobque() {   // nolint:STYLE037 — the sweep's one block: the ladder and its A/B arms
+        with_dasllama_jobque() {   // nolint:STYLE037,LINT019 — the sweep's one block: the ladder and its A/B arms
             var m <- load_model(a.model, QuantMode.q8)
             var s <- create_session(m)
             let pool <- token_pool(m, a.prefix + 6000)

@@ -102,12 +102,13 @@ No extra build dependencies (stdio transport). See [`utils/mcp/README.md`](utils
 
 ## Tree-sitter grammar
 
-A full tree-sitter grammar for daslang lives in [`tree-sitter-daslang/`](tree-sitter-daslang/). It parses 99.4% of the codebase (all valid files) and is built automatically by CMake as a shared library.
+A tree-sitter grammar for the gen2 syntax of daslang lives in [`tree-sitter-daslang/`](tree-sitter-daslang/). Every gen2 file that the compiler accepts parses without error, and CMake builds the grammar as a shared library.
 
 Use it for:
 - **Syntax highlighting** - `queries/highlights.scm` included, works in editors that support tree-sitter (Neovim, Helix, Zed)
-- **Parse-aware search** - via [ast-grep](https://ast-grep.github.io/) (`sg`) for structural code search across `.das` files
-- **Editor extensions** - `tree-sitter-daslang/zed-daslang/` includes a Zed extension
+- **Code navigation** - `queries/tags.scm` lists the definitions and references for `tree-sitter tags`
+- **Parse-aware search** - via [ast-grep](https://ast-grep.github.io/) (`sg` 0.37.0 or later, before 0.50.0) for code search across `.das` files. A daslang pattern is literal code: metavariables such as `$A` do not match
+- **Editor extensions** - `utils/zed-daslang/` includes a Zed extension
 
 Build the grammar:
 ```sh

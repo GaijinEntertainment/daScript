@@ -74,6 +74,9 @@ def test_sibling_and_orphan_gates(t : T?) {
     t |> equal(1, length(orphans), "c/ has a gate and no checklist")
     t |> equal("c/REVIEW.das", orphans[0])
 
+    var inscope deleted_orphans <- orphan_gates(fixture, ["d/REVIEW.das"])
+    t |> equal(0, length(deleted_orphans), "a gate the diff deletes with its checklist is no orphan")
+
     // root arms: a gate beside the root checklist, and a root gate with no checklist
     write_marker("{fixture}/REVIEW.das")
     var inscope root_gate <- sibling_gates(fixture, ["REVIEW.md"])

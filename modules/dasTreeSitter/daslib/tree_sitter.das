@@ -114,6 +114,7 @@ def public syntax_role_for_capture(capture_name : string) : SyntaxRole { // noli
     if (starts_with(capture_name, "type")) return SyntaxRole.type_
     if (starts_with(capture_name, "function")) return SyntaxRole.function_
     if (capture_name == "variable.parameter") return SyntaxRole.parameter
+    if (starts_with(capture_name, "variable.member")) return SyntaxRole.property
     if (starts_with(capture_name, "variable")) return SyntaxRole.variable
     if (starts_with(capture_name, "property")) return SyntaxRole.property
     if (starts_with(capture_name, "constant")) return SyntaxRole.constant

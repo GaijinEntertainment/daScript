@@ -215,6 +215,7 @@ For path/filename ops use `fio` helpers (`base_name`/`dir_name`/`path_join`/...)
 - `utils/watchdog/` - supervisor for long-running daslang programs: the static `bin/watchdog --cwd <program-dir>` (no compiler, no shared module, no lock on the files a deploy replaces), or `bin/daslang -tool watchdog --cwd <program-dir>` under the interpreter
 - `utils/jobque-timeline/` - per-lane jobque trace viewer (ImGui)
 - `utils/vscode-daslang-test/` - VSCode Test Explorer extension for dastest (source; build per its README)
+- `utils/zed-daslang/` - Zed extension: the `.das` file type, the grammar built from a pinned daScript revision, highlighting (install as a dev extension)
 - `tree-sitter-daslang/` - tree-sitter grammar, shared library, highlighting queries (`sgconfig.yml` at the SDK root wires ast-grep to it)
 
 **Each tool `bin/daslang -tool` lists runs as `bin/daslang -tool <name> [args]`** - `utils/<name>/main.das`, das-fmt `utils/das-fmt/dasfmt.das`, dastest `dastest/dastest.das`; `bin/daslang -tool` lists them. Run a tool from your project's directory: it takes that directory as its project root, so the modules installed there resolve; `-project_root <dir>` or `-project <file>` before `-tool` names another.

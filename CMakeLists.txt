@@ -2037,6 +2037,10 @@ install(FILES ${DAS_MCP_TOOLS} DESTINATION utils/mcp/tools)
 file(GLOB DAS_MCP_SUBTOOLS CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/utils/mcp/subtools/*.das)
 install(FILES ${DAS_MCP_SUBTOOLS} DESTINATION utils/mcp/subtools)
 install(FILES
+    ${PROJECT_SOURCE_DIR}/utils/mcp/rules/cpp_outline_rules.yml
+    DESTINATION utils/mcp/rules
+)
+install(FILES
     ${PROJECT_SOURCE_DIR}/utils/mcp/test_tools.das
     DESTINATION utils/mcp
 )
@@ -2384,22 +2388,25 @@ if(NOT ${DAS_TREE_SITTER_DISABLED})
         tree-sitter-daslang/src/node-types.json
         tree-sitter-daslang/grammar.js
         tree-sitter-daslang/package.json
+        tree-sitter-daslang/tree-sitter.json
+        tree-sitter-daslang/LICENSE
         DESTINATION tree-sitter-daslang
     )
     install(FILES
         tree-sitter-daslang/queries/highlights.scm
+        tree-sitter-daslang/queries/tags.scm
         DESTINATION tree-sitter-daslang/queries
     )
     # The Zed extension — the installed install/README.md points users at this
     # directory, so it has to travel with the bundle.
-    install(DIRECTORY tree-sitter-daslang/zed-daslang/
-        DESTINATION tree-sitter-daslang/zed-daslang
+    install(DIRECTORY utils/zed-daslang/
+        DESTINATION utils/zed-daslang
     )
     # Install platform-specific sgconfig.yml for ast-grep (used by grep_usage and outline MCP tools)
     install(FILES "${SGCONFIG_TEMPLATE}" DESTINATION . RENAME sgconfig.yml)
     install(FILES
-        tree-sitter-daslang/outline_rules.yml
-        DESTINATION tree-sitter-daslang
+        utils/mcp/rules/outline_rules.yml
+        DESTINATION utils/mcp/rules
     )
 endif()
 

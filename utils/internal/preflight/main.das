@@ -594,13 +594,12 @@ def gate_format(ctx : PreflightCtx) : GateResult {
 // outside the PR — staleness belongs to the nightly whole-tree -j 1 pass.
 def gate_lint(ctx : PreflightCtx) : GateResult {
     let t0 = ref_time_ticks()
-    if (empty(ctx.changed_das) && empty(ctx.changed_md) && empty(ctx.changed_cpp) && empty(ctx.changed_cxx_other)) {
-        return GateResult(name = "lint", status = GateStatus.Skip, seconds = seconds_since(t0),
-            detail = "no .das, .md or C/C++ files changed vs {ctx.base}")
-    }
-    var files <- [for (f in ctx.changed_das); f]
     // a C/C++ positional compiles nothing; it arms its folder's [arch] pass, whose pointers it may carry
-    files |> push_from(ctx.changed_md, ctx.changed_cpp, ctx.changed_cxx_other)
+    var files <- lint_gate_files(ctx.changed_das, ctx.changed_md, ctx.changed_cpp, ctx.changed_cxx_other)
+    if (empty(files)) {
+        return GateResult(name = "lint", status = GateStatus.Skip, seconds = seconds_since(t0),
+            detail = "no .das, .md or C/C++ files changed vs {ctx.base} outside tree-sitter-daslang/")
+    }
     var host_args <- [ctx.daslang, "utils/lint/main.das", "--"]
     host_args |> push_from(files)
     host_args |> push("--quiet")

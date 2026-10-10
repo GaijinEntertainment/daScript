@@ -9,6 +9,10 @@ still fails. A new `--exclude` or skip may name only a file no check flagged bef
 and a skip on a file the same diff adds states in the PR body why the file cannot be fixed
 instead.
 
+**A diff after which `tree_sitter_parse_sources.sh` skips a gen2 file that it parsed before and
+that `daslang -dry-run` does not reject with an `error[1xxxx]` code or a `syntax error` message
+is a defect** - fix `tree-sitter-daslang/grammar.js` (repo root) instead.
+
 **Weakening `test_ci_matrix.py` - dropping or loosening any assertion it makes - is a
 defect.** Those assertions are what turns a job or step that stopped running per PR into a red
 test.
