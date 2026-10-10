@@ -272,12 +272,10 @@ jobs:
           || python3 -m pip install --user -r ci/requirements.txt \
           || python3 -m pip install --break-system-packages -r ci/requirements.txt
 
-    - name: "Install ast-grep and the tree-sitter CLI"
-      # tree-sitter-cli, pinned to the version that generated tree-sitter-daslang/src (a newer
-      # generator rewrites parser.c): tree-sitter-daslang/REVIEW.das regenerates and diffs it.
-      # ast-grep pinned too: 0.50 ignores the daslang custom language unless every call passes
+    - name: "Install ast-grep"
+      # ast-grep pinned: 0.50 ignores the daslang custom language unless every call passes
       # `--custom-languages allow`, a flag older ast-grep releases reject
-      run: npm install -g @ast-grep/cli@0.45.3 tree-sitter-cli@0.26.8
+      run: npm install -g @ast-grep/cli@0.45.3
 
     - name: "Restore the lint result cache"
       uses: actions/cache/restore@v4

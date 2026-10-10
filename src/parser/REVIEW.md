@@ -10,7 +10,9 @@ rule to `tree-sitter-daslang/grammar.js` (repo root), in the same change.** The 
 MCP search tools parse with the tree-sitter grammar, not with bison, so syntax missing from
 `grammar.js` does not appear in code folding, outline or `grep_usage`.
 
+**A diff that lets `ds2_parser.ypp` or `ds2_lexer.lpp` accept new syntax also adds a case for it
+to `tree-sitter-daslang/test/corpus/` (repo root), in the same change.**
+
 **A diff that lets `ds2_parser.ypp` or `ds2_lexer.lpp` accept new syntax also adds a section
 exercising it to `modules/dasImgui/tests/test_grammar_canary.das` (repo root), in the same
-change.** The canary reds only for syntax it already carries, so syntax it lacks can drift from
-the tree-sitter grammar with no test to say so.
+change.** The canary reds only for syntax it already carries.
