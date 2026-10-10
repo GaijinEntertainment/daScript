@@ -120,7 +120,8 @@ set(_lane_util_bin ${UTIL_BIN_DIR})
 
 
 das_lane_dastest_target(run_tests_daspkg COMMENT "Testing daspkg"
-    FILES utils/daspkg/test_daspkg.das ARGS --timeout 600)
+    FILES utils/daspkg/test_daspkg.das utils/daspkg/test_release_workspace.das utils/daspkg/test_package_runner_errors.das
+    ARGS --timeout 600)
 add_custom_target(run_daspkg_tests
     COMMAND $<TARGET_FILE:daslang> ${PROJECT_SOURCE_DIR}/dastest/dastest.das -- --color --failures-only
             --test ${PROJECT_SOURCE_DIR}/utils/daspkg/test_daspkg_git.das --timeout 1200
@@ -323,6 +324,8 @@ SET(DAS_UTILS_TO_TEST
     internal/requirefix
     internal/test-release
     daspkg/test_daspkg.das
+    daspkg/test_release_workspace.das
+    daspkg/test_package_runner_errors.das
     daslang/tests
     watchdog/tests
 )
