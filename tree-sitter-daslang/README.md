@@ -13,6 +13,13 @@ The grammar follows the gen2 syntax of the daslang compiler. It does not read th
 `options gen2 = false`. The grammar checks the syntax only: it does not do the checks that the compiler does after it
 reads a file, such as type inference and name lookup.
 
+## Contributing
+
+The grammar is the `tree-sitter-daslang` directory of the daslang repository,
+[GaijinEntertainment/daScript](https://github.com/GaijinEntertainment/daScript).
+[GaijinEntertainment/tree-sitter-daslang](https://github.com/GaijinEntertainment/tree-sitter-daslang) is a read-only
+copy of that directory and publishes the packages. Report problems and open pull requests in the daslang repository.
+
 ## Versioning
 
 The version of the grammar is `X.Y.P`. It is not a semantic version.

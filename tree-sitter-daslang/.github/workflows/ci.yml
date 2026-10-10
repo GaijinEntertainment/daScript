@@ -79,7 +79,7 @@ jobs:
       - name: Run fuzzer
         uses: tree-sitter/fuzz-action@6a1dcff00aefd038ba418bd63732a9add4901266 # v4
 
-  # The protect-main ruleset requires the status check of this job.
+  # The require-pull-request ruleset requires the status check of this job.
   ci-ok:
     if: always()
     needs: [test, lint, fuzz]
