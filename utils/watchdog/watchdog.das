@@ -280,6 +280,67 @@ def private find_daslang(dirs : array<string>) : string {
     return ""
 }
 
+[arch(at="README.md#serving-a-tool")]
+def public daslang_beside_watchdog(program_dir : string) : string =>
+    find_daslang([program_dir, dir_name(program_dir)])
+
+//! What a `-tool` front reads off the process it starts in.
+struct public ToolHost {
+    daslang : string    //! the daslang the stdio front spawns
+    cwd : string        //! the client's directory, the default `--cwd`
+    das_root : string
+    is_windows : bool
+    cmd_exe : string    //! the shell that runs the MSVC launcher on Windows
+}
+
+struct public ToolFront {
+    args : array<string>
+    error : string
+}
+
+[arch(at="README.md#serving-a-tool")]
+def public tool_front(args : array<string>; host : ToolHost) : ToolFront {
+    var tool_at = -1
+    for (arg, i in args, count()) {
+        break if (arg == "--")
+        if (arg == "-tool") {
+            tool_at = i
+            break
+        }
+    }
+    if (tool_at < 0) return ToolFront(args := args)
+    if (tool_at + 1 >= length(args)) return ToolFront(error = "watchdog -tool: name the tool - lsp, mcp or dap")
+    let name = args[tool_at + 1]
+    var opts <- [for (i in range(tool_at)); args[i]]
+    let rest <- [for (i in range(tool_at + 2, length(args))); args[i]]
+    if (name == "lsp") {
+        var lsp <- ["--lsp"]
+        lsp |> push_from(opts, rest)
+        return ToolFront(args <- lsp)
+    }
+    if (name != "mcp" && name != "dap") return ToolFront(error = "watchdog -tool: no front for '{name}' - the tools are lsp, mcp and dap")
+    if (empty(host.daslang)) return ToolFront(error = "watchdog -tool {name}: no daslang beside the watchdog")
+    let given_cwd = find_flag_raw_value(opts, "--cwd")
+    let cwd = is_some(given_cwd) ? unwrap(given_cwd) : host.cwd
+    if (!flag_present(opts, "--cwd")) {
+        opts |> push_from(["--cwd", cwd])
+    }
+    var front <- ["--stdio", "--name", "daslang-{name}"]
+    front |> push_from(opts)
+    if (name == "dap") {
+        front |> push_from(["--program", host.daslang, "--", "-tool", "dap", "--repo-root", cwd, "--executable", host.daslang])
+    } elif (host.is_windows) {
+        front |> push_from(["--program", host.cmd_exe, "--", "/c", path_join(host.das_root, "utils/mcp/daslang-mcp-msvc.cmd")])
+        if (!empty(rest)) {
+            front |> push_from(["main.das", "--"])
+        }
+    } else {
+        front |> push_from(["--program", host.daslang, "--", "-ignore-manifest", "-tool", "mcp"])
+    }
+    front |> push_from(rest)
+    return ToolFront(args <- front)
+}
+
 //! A name, not a path: a file of that name beside the program (the flat-bundle layout) may still
 //! claim it, PATH resolves it at spawn otherwise - never test it against the process cwd.
 def private daslang_on_path() : string =>

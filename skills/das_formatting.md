@@ -18,7 +18,7 @@ For a module under `modules/` whose files `require` sibling modules (e.g. `requi
 
 **What the formatter does and does not do.** It normalizes spacing inside expressions (`if( a>0 )` -> `if (a > 0)`, `print( x )` -> `print(x)`). It does **not** re-indent: a misindented file is rewritten with its indentation untouched and still passes `--verify`, so it also passes the CI format gate. Indent width is taken from the file itself - inferred from the first indented line, or pinned by a file-level `options indenting = N` (clamped 1..8). Getting indentation right is on you; neither the formatter nor CI will catch it.
 
-**CI check (repo-only):** The `extended_checks` job builds `das-fmt` from the in-tree `utils/das-fmt/dasfmt.das` and runs the formatter over the whole tree twice - interpreted (`daslang utils/das-fmt/dasfmt.das -- --path ./ --verify`) and compiled (`das-fmt.exe --path ./ --verify`). Both call `daslib/das_source_formatter` - the same engine as the MCP `format_file` tool. If CI reports `[E] Unformatted file`, the file was not formatted.
+**CI check (repo-only):** CI verifies formatting over the whole tree with the same engine as the MCP `format_file` tool (`daslib/das_source_formatter`), both interpreted and as an `-exe` build of `utils/das-fmt/dasfmt.das`. If CI reports `[E] Unformatted file`, the file was not formatted.
 
 **Procedure:**
 

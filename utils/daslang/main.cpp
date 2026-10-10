@@ -6,6 +6,8 @@
 #include "daScript/misc/das_common.h"
 #include "daScript/misc/das_asan.h"
 #include "daScript/simulate/fs_file_info.h"
+#include "daScript/simulate/aot_builtin.h"
+#include "daScript/simulate/aot_builtin_fio.h"
 #include "daScript/ast/ast_aot_cpp.h"
 #include "daScript/ast/ast_serializer.h"
 #include "daScript/misc/crash_handler.h"
@@ -748,7 +750,12 @@ void print_help() {
     tout
         << "daslang version " << DAS_VERSION_MAJOR << "." << DAS_VERSION_MINOR << "." << DAS_VERSION_PATCH << "\n"
         << "daslang scriptName1 {scriptName2} .. {-main mainFnName} {-log} {-pause} -- {script arguments}\n"
+        << "daslang {options} -tool <name> {tool arguments}\n"
         << "    --version, -version  print daslang version and exit\n"
+        << "    -tool <name> run the SDK tool <dasroot>/utils/<name>/main.das (lint, daspkg, ast-verify, ...);\n"
+        << "                every argument after the name is the tool's. Without a name, lists the tools.\n"
+        << "                Started under a tool's name (a link or copy named lint, dastest, ...), daslang\n"
+        << "                runs that tool the same way\n"
         << "    -main <fnName> set entry function name (default: main)\n"
         << "    -v2syntax   enable version 2 syntax (uses braces {} for code blocks) [default]\n"
         << "    -v1syntax   enable version 1 syntax (uses Python-style indentation for code blocks)\n"
@@ -824,6 +831,86 @@ void print_help() {
     ;
 }
 
+static string tool_name_of_binary ( const char * arg0 ) {
+    string name = get_suffix(arg0);
+#if defined(_WIN32)
+    for ( auto & ch : name ) ch = char(tolower((unsigned char)ch));
+#endif
+    if ( name.size()>4 && name.compare(name.size() - 4, 4, ".exe")==0 ) name.resize(name.size() - 4);
+    return name.compare(0, 7, "daslang")==0 ? string() : name;
+}
+
+static string daslang_beside_this_binary ( const char * arg0 ) {
+    string self = getExecutableFileName();
+    if ( self.empty() ) return arg0;
+#if defined(_WIN32)
+    string daslang = get_prefix(self) + "/daslang.exe";
+#else
+    string daslang = get_prefix(self) + "/daslang";
+#endif
+    return builtin_fexist(daslang.c_str()) ? daslang : self;
+}
+
+enum class ToolInvocation { NotATool, Refused, Rewritten };
+
+struct ToolCommandLine {
+    ToolInvocation  invocation = ToolInvocation::NotATool;
+    vector<string>  args;
+};
+
+static ToolCommandLine tool_command_line ( int argc, char * argv[] ) {
+    ToolCommandLine result;
+    string name = tool_name_of_binary(argv[0]);
+    bool byBinary = !getToolScript(name, getDasRoot()).empty();
+    int optsEnd = 1;
+    int toolAt = 0;
+    if ( !byBinary ) {
+        toolAt = -1;
+        for ( int i=1; i < argc && strcmp(argv[i],"--")!=0; ++i ) {
+            if ( strcmp(argv[i],"-dasroot")==0 && i+1 < argc ) {
+                setDasRoot(argv[i+1]);
+            } else if ( strcmp(argv[i],"-tool")==0 ) {
+                optsEnd = i;
+                toolAt = i + 1;
+                break;
+            }
+        }
+        if ( toolAt<0 ) return result;
+        name = toolAt < argc ? argv[toolAt] : "tools";
+    }
+    string script = getToolScript(name, getDasRoot());
+    if ( script.empty() ) {
+        auto tried = toolScriptCandidates(name, getDasRoot());
+        tout << "daslang -tool: no tool '" << name << "'";
+        if ( tried.empty() ) {
+            tout << " - a tool name has no '/', '\\' or '.'";
+        } else {
+            tout << " - looked for";
+            for ( const auto & path : tried ) tout << " " << path;
+        }
+        tout << "; `daslang -tool` lists the tools\n";
+        result.invocation = ToolInvocation::Refused;
+        return result;
+    }
+    result.invocation = ToolInvocation::Rewritten;
+    auto & args = result.args;
+    args.push_back(byBinary ? daslang_beside_this_binary(argv[0]) : string(argv[0]));
+    bool hasProjectRoot = false;
+    for ( int i=1; i < optsEnd; ++i ) {
+        args.push_back(argv[i]);
+        hasProjectRoot |= strcmp(argv[i],"-project_root")==0 || strcmp(argv[i],"-project-root")==0 || strcmp(argv[i],"-project")==0;
+    }
+    if ( !hasProjectRoot ) {
+        args.push_back("-project_root");
+        args.push_back(".");
+    }
+    args.push_back(script);
+    int firstToolArg = toolAt + 1;
+    if ( firstToolArg >= argc || strcmp(argv[firstToolArg],"--")!=0 ) args.push_back("--");
+    for ( int i=firstToolArg; i < argc; ++i ) args.push_back(argv[i]);
+    return result;
+}
+
 
 #include <inttypes.h>
 
@@ -859,6 +946,15 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
     pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
 #endif
     das::arm_alloc_tracking();
+    ToolCommandLine toolCommandLine = tool_command_line(argc, argv);
+    vector<char *> toolArgv;
+    if ( toolCommandLine.invocation==ToolInvocation::Refused ) return 1;
+    if ( toolCommandLine.invocation==ToolInvocation::Rewritten ) {
+        for ( auto & arg : toolCommandLine.args ) toolArgv.push_back((char *)arg.c_str());
+        toolArgv.push_back(nullptr);
+        argc = int(toolCommandLine.args.size());
+        argv = toolArgv.data();
+    }
     bool isArgAot = false;
     if (argc > 1) {
         isArgAot = strcmp(argv[1],"-aot")==0;

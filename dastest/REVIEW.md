@@ -3,8 +3,8 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
 `README.md`.
 
-**A diff under this folder applies `utils/REVIEW.md` (repo root) too** - dastest ships as a
-prebuilt exe, the `DAS_UTILS_SHIPPED_EXES` entry in `utils/CMakeLists.txt` (repo root).
+**A diff under this folder applies `utils/REVIEW.md` (repo root) too** - dastest is a shipped
+tool: `CMakeLists.txt` (repo root) installs `dastest/dastest.das`.
 
 **A dastest `[test]` file, and any file one of them spawns, wherever the diff puts it, answers
 to the `tests/` subfolder's checklist.**

@@ -43,6 +43,10 @@ def private program_dir_from(args : array<string>) : string {
     return getcwd()
 }
 
+def private tool_host(daslang : string) : ToolHost =>
+    ToolHost(daslang = daslang, cwd = getcwd(), das_root = get_das_root(), is_windows = get_platform_name() == "windows",
+             cmd_exe = path_join(get_env_variable("SystemRoot"), "System32/cmd.exe"))
+
 //! Every minute, or as soon as the string heap grew a megabyte past what the last collect left
 //! live - a fixed ceiling would collect every tick once the live set outgrew it - with only this
 //! module's frame on the stack: the collector walks the interpreter stack from here.
@@ -60,9 +64,15 @@ def private collect_if_due() {
 [export, unsafe_heap_collect]
 def start(self_pid : int) : bool {
     let argv <- get_command_line_arguments()
-    let args <- [for (i in range(1, length(argv))); argv[i]]
     let exe = get_executable_path()
     let program_dir = !empty(exe) ? dir_name(exe) : (!empty(argv) ? dir_name(get_full_file_name(argv[0])) : getcwd())
+    var expanded <- tool_front([for (i in range(1, length(argv))); argv[i]], tool_host(daslang_beside_watchdog(program_dir)))
+    if (!empty(expanded.error)) {
+        fprint(fstderr(), "{expanded.error}\n")
+        g_exit_code = 2
+        return false
+    }
+    let args <- expanded.args
     if (wants_mode(args, "--stdio")) {
         g_front = stdio_front_start(args, program_dir, g_exit_code)
         return g_front != null
@@ -138,7 +148,12 @@ def result() : int {
 //! The interpreter host: the program directory is `--cwd`, or the current directory.
 [export, unsafe_heap_collect]
 def main() : int {
-    let args <- get_cli_arguments()
+    var expanded <- tool_front(get_cli_arguments(), tool_host(get_host_binary()))
+    if (!empty(expanded.error)) {
+        fprint(fstderr(), "{expanded.error}\n")
+        return 2
+    }
+    let args <- expanded.args
     var code = 0
     if (wants_mode(args, "--stdio")) {
         var front = stdio_front_start(args, program_dir_from(args), code)

@@ -16,8 +16,8 @@ hash, and computes per-benchmark and geometric-mean deltas between two
 sets.
 
 Requires a daslang build with the sqlite module
-(``-DDAS_SQLITE_DISABLED=off``).  The SDK bundle also carries a prebuilt
-``bin/benchctl.exe``.
+(``-DDAS_SQLITE_DISABLED=off``).  Run it as ``daslang -tool benchctl``, or as
+``benchctl`` through the SDK's ``bin/benchctl.exe`` (see :ref:`utils_tools`).
 
 Quick start
 ===========

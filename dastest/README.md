@@ -112,8 +112,8 @@ helpers: `das_requires`, `strip_line_comments`, `cmake_command_blocks`,
 `is_ident_byte`, `contains_word`. The CMake helpers match command names case-insensitively, as CMake itself
 does. It lives under
 `dastest/` so an installed SDK carries it the same way it carries the test framework -
-dastest itself ships in the SDK as a prebuilt exe, the `DAS_UTILS_SHIPPED_EXES` entry in
-`utils/CMakeLists.txt` (repo root).
+dastest itself ships in the SDK as `bin/dastest.exe`, a copy of daslang that runs `dastest.das` by
+its name, the `DAS_UTILS_SHIPPED_EXES` entry in `utils/CMakeLists.txt` (repo root).
 
 ### The web gate's scanned set {#web-gate-scanned-set}
 

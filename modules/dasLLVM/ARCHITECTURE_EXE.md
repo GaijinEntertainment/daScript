@@ -14,7 +14,7 @@ require resolver (`FsFileAccess::getModuleInfo`), which lives in the compiler li
 runtime-only exe has no compiler and can never reach them, and every row it would carry is a
 startup `jit_register_native_path_resolve` call - one exe-file lookup and one stat per row, for
 every row the host scan loaded - and a build-machine path baked into the binary. A whole-lib exe
-(`dastest.exe`, which compiles test files at run time) still carries every row, re-rooted at run
+(the internal `jit.exe`, which compiles scripts at run time) still carries every row, re-rooted at run
 time the way dynamic modules are.
 
 ## 2. A global initializer's addresses are filled at startup

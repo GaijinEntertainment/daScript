@@ -3,7 +3,8 @@
 `utils/dap/main.das` exposes the repository's TCP Debug Adapter Protocol server as a
 stateful MCP server. One bridge process owns one DAP connection and, for
 `debug_launch`, the `daslang` process it started. It runs on the daslang binary, under
-the watchdog's stdio front like the daslang MCP server; `utils/mcp/setup.das` writes the
+the watchdog's `-tool dap` front like the daslang MCP server - `daslang-watchdog -tool dap`
+from an installed SDK, rooted at the client's directory; `utils/mcp/setup.das` writes the
 `daslang-dap` entry into a tree's `.mcp.json`.
 
 For an external project, start the bridge with that project's workspace root and

@@ -13,6 +13,7 @@ built-in leak-detection mechanism.
 .. toctree::
    :maxdepth: 2
 
+   utils/tools.rst
    utils/daslang_live.rst
    utils/dastest.rst
    utils/dascov.rst

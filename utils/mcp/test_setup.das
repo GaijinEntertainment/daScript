@@ -60,11 +60,9 @@ def test_emit_dap_entry(t : T?) {
         let dap = doc?["mcpServers"]?["daslang-dap"]
         t |> success(dap != null, "the daslang-dap entry is written")
         t |> equal(string_of(dap?["command"]), path_join(root, "bin/daslang"), "no watchdog exe beside the binary: the interpreter host is the command")
-        t |> success(json_array_has(dap?["args"], "--stdio"), "the front is asked for")
-        t |> success(json_array_has(dap?["args"], "daslang-dap"), "named daslang-dap")
-        t |> success(json_array_has(dap?["args"], "utils/dap/main.das"), "it runs the bridge")
-        t |> success(json_array_has(dap?["args"], "--repo-root"), "rooted at the tree")
-        t |> success(json_array_has(dap?["args"], path_join(root, "bin/daslang")), "--executable names this root's binary")
+        t |> success(json_array_has(dap?["args"], "-tool"), "the watchdog's -tool front is asked for")
+        t |> success(json_array_has(dap?["args"], "dap"), "over the DAP bridge")
+        t |> success(json_array_has(dap?["args"], root), "--cwd roots it at the tree")
         unsafe {
             delete doc
         }
@@ -83,7 +81,8 @@ def test_emit_mcp_config(t : T?) {
         t |> success(entry != null, "the daslang entry is written")
         t |> equal(string_of(entry?["command"]), path_join(root, "bin/daslang"), "no watchdog exe beside the binary: the interpreter host is the command")
         t |> success(json_array_has(entry?["args"], "utils/watchdog/main.das"), "the interpreter host runs the watchdog's main.das")
-        t |> success(json_array_has(entry?["args"], "--stdio"), "the front is asked for")
+        t |> success(json_array_has(entry?["args"], "-tool"), "the watchdog's -tool front is asked for")
+        t |> success(json_array_has(entry?["args"], "mcp"), "over the MCP server")
         t |> success(json_array_has(entry?["args"], root), "--cwd names the root")
         let herd = doc?["mcpServers"]?["dasherd"]
         t |> success(herd == null || herd.value is _null, "no dasherd entry without the das-herd shim")

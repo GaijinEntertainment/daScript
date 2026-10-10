@@ -2115,6 +2115,9 @@ install(DIRECTORY ${PROJECT_SOURCE_DIR}/utils/lint/tests/
 # so the verdict is read from its output)
 install(FILES ${PROJECT_SOURCE_DIR}/utils/ast-verify/main.das DESTINATION utils/ast-verify)
 
+# Install tools (`daslang -tool` without a name: lists the tools of the install)
+install(FILES ${PROJECT_SOURCE_DIR}/utils/tools/main.das DESTINATION utils/tools)
+
 # Install detect-dupe (cross-file duplicate-function detector)
 file(GLOB DAS_DETECT_DUPE_FILES CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/utils/detect-dupe/*.das)
 install(FILES ${DAS_DETECT_DUPE_FILES} DESTINATION utils/detect-dupe)
@@ -2127,9 +2130,8 @@ install(DIRECTORY ${PROJECT_SOURCE_DIR}/utils/detect-dupe/fixture/
     FILES_MATCHING PATTERN "*.das"
 )
 
-# Install find-dupe (AI judge for detect-dupe clusters via das-claude).
-# Not built into all_utils_exe — it depends on the das-claude daspkg
-# package fetched at runtime, which isn't available at build time.
+# Install find-dupe (AI judge for detect-dupe clusters via das-claude). Not a shipped exe:
+# it runs only after `daspkg install --root utils/find-dupe` fetches das-claude.
 file(GLOB DAS_FIND_DUPE_FILES CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/utils/find-dupe/*.das)
 install(FILES ${DAS_FIND_DUPE_FILES} DESTINATION utils/find-dupe)
 install(FILES

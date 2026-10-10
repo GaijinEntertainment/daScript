@@ -235,10 +235,8 @@ def stage_jit_backend(root : string) {
     }
 }
 
-//! the watchdog's stdio front for this tree, named `name`, over the program `program_args`
-//! spell (the daslang binary first): the watchdog exe beside the binary when it is built, else
-//! the interpreter host on the binary itself
-def stdio_front(root, binary, name : string; program_args : array<string>) : tuple<command : string; args : array<string>> {
+//! the watchdog exe beside `binary`, else the interpreter host on it - either way the front spawns this tree's binary
+def tool_front_command(root, binary, tool : string) : tuple<command : string; args : array<string>> {
     let exe_suffix = get_platform_name() == "windows" ? ".exe" : ""
     let binary_abs = path_join(root, binary)
     let watchdog = path_join(dir_name(binary_abs), "watchdog{exe_suffix}")
@@ -248,18 +246,8 @@ def stdio_front(root, binary, name : string; program_args : array<string>) : tup
         command = binary_abs
         args |> push_from(["utils/watchdog/main.das", "--"])
     }
-    args |> push_from(["--stdio", "--name", name, "--cwd", root, "--program"], program_args)
+    args |> push_from(["--cwd", root, "-tool", tool])
     return <- (command = command, args <- args)
-}
-
-//! the MCP server's front: Windows serves through the vcvars launcher so cpp_compile_check
-//! finds cl.exe, elsewhere the child is the binary on the server script
-def front_command(root, binary : string) : tuple<command : string; args : array<string>> {
-    if (get_platform_name() == "windows") {
-        let cmd_exe = path_join(get_env_variable("SystemRoot"), "System32/cmd.exe")
-        return <- stdio_front(root, binary, "daslang-mcp", [cmd_exe, "--", "/c", path_join(root, "utils/mcp/daslang-mcp-msvc.cmd")])
-    }
-    return <- stdio_front(root, binary, "daslang-mcp", [path_join(root, binary), "--", "-ignore-manifest", "utils/mcp/main.das"])
 }
 
 def private replace_server(var servers : table<string; JsonValue?>&; name, command : string; args : array<string>) {
@@ -277,17 +265,8 @@ def private replace_server(var servers : table<string; JsonValue?>&; name, comma
     servers[name] = JV(entry)
 }
 
-//! the DAP bridge's front: the same stdio front over `utils/dap/main.das`, rooted at the tree
-//! and launching this tree's own binary
-def dap_command(root, binary : string) : tuple<command : string; args : array<string>> {
-    let binary_abs = path_join(root, binary)
-    return <- stdio_front(root, binary, "daslang-dap", [binary_abs, "--", "utils/dap/main.das", "--", "--repo-root", root, "--executable", binary_abs])
-}
-
-//! .mcp.json: the daslang entry spawns the watchdog's stdio front over this tree's own binary,
-//! the daslang-dap entry the DAP bridge over the same binary, every other server stays as it
-//! is, each entry's own defer_loading survives, and the das-herd shim rides along where the
-//! tree carries it. An unparseable file is left alone.
+//! writes the daslang and daslang-dap entries, and the dasherd entry where the tree carries its
+//! shim; other servers, each entry's defer_loading and an unparseable file stay as is
 def emit_mcp_config(root, binary : string) : bool {
     let path = path_join(root, ".mcp.json")
     var config : JsonValue?
@@ -314,9 +293,9 @@ def emit_mcp_config(root, binary : string) : bool {
         }
         return false
     }
-    let front = front_command(root, binary)
-    replace_server(servers_node.value as _object, "daslang", front.command, front.args)
-    let dap = dap_command(root, binary)
+    let mcp = tool_front_command(root, binary, "mcp")
+    replace_server(servers_node.value as _object, "daslang", mcp.command, mcp.args)
+    let dap = tool_front_command(root, binary, "dap")
     replace_server(servers_node.value as _object, "daslang-dap", dap.command, dap.args)
     if (fexist(path_join(root, "utils/internal/das-herd/mcp_main.das"))) {
         replace_server(servers_node.value as _object, "dasherd", path_join(root, binary), ["-ignore-manifest", "utils/internal/das-herd/mcp_main.das"])
@@ -353,7 +332,7 @@ def emit_mcp_config(root, binary : string) : bool {
     if (had) {
         remove(kept)
     }
-    print("wrote {path}: daslang -> {front.command} {join(front.args, " ")}\n")
+    print("wrote {path}: daslang -> {mcp.command} {join(mcp.args, " ")}\n")
     print("  daslang-dap -> {dap.command} {join(dap.args, " ")}\n")
     return true
 }
