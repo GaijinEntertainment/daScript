@@ -16,3 +16,4 @@ and pattern matching.
    generated/linq_fold.rst
    generated/match.rst
    generated/sha_256.rst
+   lz4.rst
