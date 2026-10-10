@@ -1540,8 +1540,7 @@ namespace das {
     // not the child's cwd - so make it absolute before the child chdir's, matching Windows, where
     // CreateProcess already searches the exe from the parent's directory rather than lpCurrentDirectory.
     // A bare name (no '/') is a PATH lookup, which chdir does not affect - leave it alone.
-    static string posixAbsoluteExe ( vector<char *> & cargv, bool hasCwd ) {
-        string absExe;
+    static void posixAbsoluteExe ( vector<char *> & cargv, bool hasCwd, string & absExe ) {
         if ( hasCwd && cargv[0][0] && cargv[0][0] != '/' && strchr(cargv[0], '/') ) {
             char cwdbuf[4096];
             if ( getcwd(cwdbuf, sizeof(cwdbuf)) ) {
@@ -1549,7 +1548,6 @@ namespace das {
                 cargv[0] = (char *)absExe.c_str();
             }
         }
-        return absExe;
     }
 
     // the child's environment, composed here: the parent's entries minus the overridden keys,
@@ -1697,7 +1695,8 @@ namespace das {
         // trailing NULL element.
         bool hasCwd = cwd && *cwd;
         vector<char *> cargv = posixArgv(args_arr);
-        string absExe = posixAbsoluteExe(cargv, hasCwd);
+        string absExe;
+        posixAbsoluteExe(cargv, hasCwd, absExe);
         vector<char *> cenv;
         if ( env ) cenv = posixBuildEnv(*env);
         pid_t pid = fork();
@@ -2054,7 +2053,8 @@ namespace das {
         return p;
 #else
         vector<char *> cargv = posixArgv(argv_arr);
-        string absExe = posixAbsoluteExe(cargv, hasCwd);
+        string absExe;
+        posixAbsoluteExe(cargv, hasCwd, absExe);
         int pipefd[2];
         if ( pipe(pipefd) == -1 ) {
             context->throw_error_at(at, "spawn_process: pipe failed");
