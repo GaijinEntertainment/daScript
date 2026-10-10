@@ -7,10 +7,20 @@ anchor.
 
 - **`dasllama_scheduler.das`** - the continuous-batching scheduler, the serving layer over the
   facade (its one engine require is `dasllama/dasllama`). One synchronous thread: each
-  `scheduler_step` admits queued requests, runs one `eval_batch` decode step over every
+  `scheduler_step` reaps the streams that finished on an earlier tick (`reap_finished` - the
+  finished turn's close tokens eval, its snapshot and its donation run only once the caller has
+  drained the finished event, so they never sit between a reply's last token and its finish on the
+  wire; the reap runs ahead of admission, so the slot a finished stream frees goes to a queued
+  request on the same tick), admits queued requests while no admitted stream is still prefilling (a request admitted
+  beside a prefilling stream would wait for that stream's chunks anyway - one chunk a tick, FCFS -
+  and admitted after them it attaches the checkpoints that prefill leaves, the opening two requests
+  of one minute share, instead of prefilling them again; a queued request holds no session - its KV
+  memory exists from admission on, and in paged mode admission attaches the longest prefix-cache hit,
+  whose positions never prefill), runs one `eval_batch` decode step over every
   decoding stream (a self-speculative scheduler instead ticks every stream's round through
   `mtp_spec_eval_batch`, one joint verify where a driver seats one, and counts the tick as a
-  batched step only when every stream's rows rode it), then at most one prefill chunk FCFS - `chunk_tokens` while
+  batched step only when every stream's rows rode it), then - unless a stream finished on this
+  tick, which ends it there for the same reason - at most one prefill chunk FCFS - `chunk_tokens` while
   a stream decodes, since the chunk is the stall every decoding stream waits out, and at least `idle_chunk_tokens`
   while none does, since a prefill window's cost is mostly fixed and nothing waits on it; `chunk_defaults` names
   both sizes per serving backend (the chunk 512 where a GPU prefills and 64 on the CPU, whose chunk costs its token count, so the stall follows it down; idle 512,
@@ -42,9 +52,10 @@ anchor.
   taken back, and a stop string split across tokens still cuts. Results flow out as `SchedEvent`s - no HTTP here.
   `utils/dasllama-server` owns the writers; `tutorials/dasLLAMA/13_serving.das` is the
   teaching consumer; `tests/test_scheduler.das` gates it against `generate()` references.
-  The step clears its gather arrays (`batch_rows`, `batch_toks`, `batch_idx`) before it reaps
-  finished streams: `batch_rows` holds borrowed pointers into the sessions the reap deletes,
-  and a validating heap collect between steps walks every pointer the array still holds.
+  The step clears its gather arrays (`batch_rows`, `batch_toks`, `batch_idx`) at the end of its
+  decode step, before the tick's prefill chunk and before the next tick's reap: `batch_rows` holds
+  borrowed pointers into the sessions the reap deletes, and a validating heap collect between
+  steps walks every pointer the array still holds.
 
 ### The prefix cache's partial page {#prefix-tail-page}
 

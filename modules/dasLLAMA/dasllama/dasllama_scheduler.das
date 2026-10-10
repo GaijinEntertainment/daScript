@@ -143,10 +143,11 @@ struct DoneStream {
     done_at : int64                         // ref_time_ticks at reap
 }
 
-//! true while a stream is decoding: the tick's prefill chunk is a stall every one of them waits out
-def private any_decoding(sch : Scheduler) : bool {
+//! true while a stream sits in `state`: decoding (the tick's prefill chunk is a stall every one of them waits out),
+//! prefilling (admission waits for it), done (the tick ends before its chunk, so the finished event reaches the caller first)
+def private any_stream_in(sch : Scheduler; state : StreamState) : bool {
     for (st in sch.streams) {
-        return true if (st.state == StreamState.decoding)
+        return true if (st.state == state)
     }
     return false
 }
@@ -154,7 +155,7 @@ def private any_decoding(sch : Scheduler) : bool {
 //! on a host-cached stream `chunk_tokens` while a stream decodes and at least `idle_chunk_tokens` while none does; on a device-home stream at least the device's window, and the whole head at once for a model whose device prefill cannot continue past zero
 def private prefill_chunk(m : Model; sch : Scheduler; head_end : int64) : int64 {
     if (!sch.device_kv) {
-        return any_decoding(sch) ? sch.chunk_tokens : max(sch.chunk_tokens, sch.idle_chunk_tokens)
+        return any_stream_in(sch, StreamState.decoding) ? sch.chunk_tokens : max(sch.chunk_tokens, sch.idle_chunk_tokens)
     }
     return gpu_device_prefill_continues(m) ? max(sch.chunk_tokens, gpu_device_prefill_window()) : head_end   // a chunk under the device's window is one submit per chunk for no bounded-stall gain
 }
@@ -393,7 +394,6 @@ def submit(model : Model; var sch : Scheduler; var req : PendingReq) : bool {
     return true
 }
 
-// Terminate a stream: mark done (reaped at step end) and append its finished event.
 //! the nearest checkpoint stop past the rows prefilled so far, 0 when none is left: the system text, the system opening, the request's own
 def private next_checkpoint(st : Stream) : int64 {
     for (at in fixed_array(st.ckpt_head_at, st.ckpt_sys_at, st.ckpt_at, st.ckpt_end_at)) {
@@ -667,13 +667,43 @@ def evict(var sch : Scheduler; id : int64; var events : array<SchedEvent>) : boo
     return false
 }
 
-//! One scheduler tick: admit from the queue while under max_streams, ONE eval_batch decode step
-//! over every decoding stream, at most ONE prefill chunk (`chunk_tokens`, or `prefill_chunk`'s wider one on an idle tick and in device mode; FCFS; the final chunk's
-//! logits sample the first token inline), then reap finished streams. Events append to `events`
-//! (the caller drains it). Returns true while any stream or queued request remains.
+def private reap_finished(m : Model; var sch : Scheduler) {
+    var i = 0
+    while (i < length(sch.streams)) {
+        if (sch.streams[i].state == StreamState.done) {
+            if (sch.streams[i].ttft_us > 0l) {
+                sch.ttft_sum_us += sch.streams[i].ttft_us
+                sch.ttft_count ++
+                sch.last_ttft_us = sch.streams[i].ttft_us
+            }
+            sch.recent_done |> push(DoneStream(
+                id = sch.streams[i].id, finish = sch.streams[i].finish,
+                n_prompt = long_length(sch.streams[i].prompt),
+                n_cached = sch.streams[i].n_cached,
+                n_gen = sch.streams[i].n_gen, ttft_us = sch.streams[i].ttft_us,
+                prompt_head = sch.streams[i].prompt_head, gen_tail = string(sch.streams[i].gen_tail_bytes),
+                done_at = ref_time_ticks()))
+            if (sch.streams[i].session.device_kv) {
+                park_stream(m, sch, sch.streams[i])
+            } elif (sch.paged) {
+                if (sch.streams[i].finish != "media_lost") {
+                    donate_stream(m, sch, sch.streams[i])
+                }
+                release_kv_pages(sch.streams[i].session)
+            }
+            delete sch.streams[i]   // erase is a raw memmove — finalize the owned session first
+            sch.streams |> erase(i)
+            sch.n_finished ++
+        } else {
+            i ++
+        }
+    }
+}
+
+//! One scheduler tick: events append to `events` (the caller drains it); true while any stream or queued request remains
 [arch(at="../ARCHITECTURE_ENGINE_SERVING.md#scheduler-step")]
-def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent>) : bool {  // nolint:STYLE037,STYLE038 - admit/decode/prefill/reap, one linear pass
-    // (0) drop finished-stream linger entries past their poll window (bounded backstop at 32).
+def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent>) : bool {  // nolint:STYLE037,STYLE038 - linger/reap/admit/decode/prefill, one linear pass
+    // drop finished-stream linger entries past their poll window (bounded backstop at 32).
     // get_time_nsec, NOT get_time_usec: the usec helper returns int and wraps at ~35.8 min,
     // which would freeze this comparison for any entry that survived a wrap
     while (!empty(sch.recent_done)
@@ -681,9 +711,8 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
         delete sch.recent_done[0]
         sch.recent_done |> erase(0)
     }
-    // (1) admit FIFO while under the cap — sessions (KV memory) exist only from this point on.
-    // Paged mode also attaches the longest prefix-cache hit: those positions never prefill.
-    while (!empty(sch.queue) && long_length(sch.streams) < sch.max_streams) {
+    reap_finished(m, sch)
+    while (!empty(sch.queue) && long_length(sch.streams) < sch.max_streams && !any_stream_in(sch, StreamState.prefilling)) {
         var st <- Stream(id = sch.queue[0].id,
                          params = sch.queue[0].params, prompt <- sch.queue[0].prompt,
                          close_toks <- sch.queue[0].close_toks, stop_ids <- sch.queue[0].stop_ids,
@@ -780,7 +809,7 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
         sch.n_admitted ++
     }
     sch.peak_active = max(sch.peak_active, long_length(sch.streams))
-    // (2) ONE batched decode step over every decoding stream (decode priority). Rows are gathered
+    // ONE batched decode step over every decoding stream (decode priority). Rows are gathered
     // fresh each step: admission above may have reallocated `streams`, and nothing below grows it.
     sch.batch_rows |> clear()
     sch.batch_toks |> clear()
@@ -852,7 +881,8 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
     sch.batch_rows |> clear()
     sch.batch_toks |> clear()
     sch.batch_idx |> clear()
-    // (3) at most ONE prefill chunk, FCFS — decode-priority with a bounded prefill quantum
+    return true if (any_stream_in(sch, StreamState.done))
+    // at most ONE prefill chunk, FCFS — decode-priority with a bounded prefill quantum
     for (i in range64(long_length(sch.streams))) {
         if (sch.streams[i].state != StreamState.prefilling) {
             continue
@@ -908,40 +938,9 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
         }
         break
     }
-    // (4) reap done streams (their finished events were emitted at the state flip); paged streams
-    // donate their pages to the prefix cache on the way out
-    var i = 0
-    while (i < length(sch.streams)) {
-        if (sch.streams[i].state == StreamState.done) {
-            if (sch.streams[i].ttft_us > 0l) {
-                sch.ttft_sum_us += sch.streams[i].ttft_us
-                sch.ttft_count ++
-                sch.last_ttft_us = sch.streams[i].ttft_us
-            }
-            sch.recent_done |> push(DoneStream(
-                id = sch.streams[i].id, finish = sch.streams[i].finish,
-                n_prompt = long_length(sch.streams[i].prompt),
-                n_cached = sch.streams[i].n_cached,
-                n_gen = sch.streams[i].n_gen, ttft_us = sch.streams[i].ttft_us,
-                prompt_head = sch.streams[i].prompt_head, gen_tail = string(sch.streams[i].gen_tail_bytes),
-                done_at = ref_time_ticks()))
-            if (sch.streams[i].session.device_kv) {
-                park_stream(m, sch, sch.streams[i])
-            } elif (sch.paged) {
-                if (sch.streams[i].finish != "media_lost") {
-                    donate_stream(m, sch, sch.streams[i])
-                }
-                release_kv_pages(sch.streams[i].session)
-            }
-            delete sch.streams[i]   // erase is a raw memmove — finalize the owned session first
-            sch.streams |> erase(i)
-            sch.n_finished ++
-        } else {
-            i ++
-        }
-    }
     return !empty(sch.streams) || !empty(sch.queue)
 }
+
 
 //! One eval for span `si` and the text around it, up to a chunk of text: a prefill call's cost is mostly fixed, so
 //! the text either side of a span rides the span's call. False where the body is not one eval - a recurrent

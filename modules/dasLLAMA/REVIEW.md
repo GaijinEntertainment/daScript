@@ -45,7 +45,8 @@ serving step), wherever the diff puts it, applies `REVIEW_HOT_PATH.md` (beside t
 together with this list.**
 
 **A diff that adds an allocation, changes an allocation's size formula, or adds, changes or
-drops a `resize` or an `@exact_size` on a buffer; that adds or changes a module global, a call
+drops a `resize` or an `@exact_size` on a buffer; that adds or changes a module global (an
+`[EnvConfig]` field is a declared environment variable, not a global), a call
 to a function-typed one, or the `[init]` that sets one; or that adds or changes code a job runs
 in a forked context or code reachable from a `team_parallel_*` or `maybe_parallel_for*` body,
 wherever the diff puts it, applies `REVIEW_MEMORY.md` (beside this file) too.**
@@ -167,14 +168,14 @@ spelling missing from `DEVICE_CREATION_CALLS` weakens it.**
 
 **Weakening `check_ple_gather_sites` in `REVIEW.das` is a defect.**
 
-**A diff that makes any choice in `dasllama/` because one candidate measured faster - a constant
-set to a value, a formula that gains or drops a term and a predicate that picks among kernel
-variants computing the same result included - takes the winner from a race that timed every
-candidate interleaved in one process with one script, each candidate selectable in that script at
-the diff's tip by a flag or argument, never by editing the source between runs, and puts that
-race's rows, each naming its candidate, in the PR body or the change's dated
-`PERF_LEDGER.md` row.** Timings taken in two processes or at two commits also differ by everything
-else that changed between the runs, so they cannot pick a candidate.
+**A diff under `dasllama/` whose ledger entry, commit message or PR body cites a timing as the
+reason it picks one candidate over another - a constant's value, a formula, or a predicate choosing
+among kernels that compute the same result - takes the winner from one script that races every
+candidate in one process, interleaved, each chosen by a flag or argument at the diff's tip** - two
+commits or two processes differ by everything else that changed, so their timings pick nothing.
+
+**A diff whose ledger entry, commit message or PR body cites a timing as the reason for a pick
+puts that race's rows, each naming its candidate, in the PR body or the `PERF_LEDGER.md` row.**
 
 **A race that picks a numeric threshold times the chosen value and at least one value on each side
 of it.**

@@ -8,6 +8,8 @@ require daslib/fio
 require dasllama/dasllama_env
 require dasllama/dasllama_tune   // box_profile_verdict_at
 require llvm/daslib/llvm_tune    // tune_box_identity
+require _child_run   // the metal_tensor knob is read at context init, so a child shows what it leaves unapplied
+require strings
 
 // The tune sidecar's "runtime" section: apply_box_profile_runtime(path) sets the runtime knobs
 // and logs each applied entry. The explicit-path form keeps the test independent of the app's
@@ -255,20 +257,30 @@ def test_backend_pin_applies(t : T?) {
     remove(path)
 }
 
+//! a sidecar fixture in the temp dir - `runtime` the q8_token_block knob at 320 (a kernels-only file when `kernels_only`),
+//! `box` its provenance ("" = none), back-dated under the binary when `stale`; the path to apply and remove
+def private write_profile(t : T?; name : string; box : string; stale : bool; kernels_only : bool = false) : string {
+    var terr = ""
+    let dir = temp_directory(terr)
+    t |> success(terr == "", "temp_directory resolves")
+    let path = path_join(dir, "dasllama_test_box_profile_{name}.json")
+    let prov = empty(box) ? "" : ",\"provenance\":\{\"box\":\"{box}\"\}"
+    let body = kernels_only ? "\"kernels\":\{\"dot\":\"vec8_u2\"\}" : "\"kernels\":\{\},\"runtime\":\{\"q8_token_block\":320\}"
+    t |> success(fwrite(path, "\{{body}{prov}\}"), "profile written")
+    if (stale) {
+        var err : string
+        let mtime_set = set_mtime(path, mktime(2020, 1, 1, 0, 0, 0), err)
+        t |> success(mtime_set, "mtime set into the past ({err})")
+    }
+    return path
+}
+
 // The checked route (what the no-path apply takes): a sidecar older than the binary keeps its
 // runtime section - the knobs are this box's state and only the kernel winners died with the
 // rebuild - while another box's sidecar applies nothing.
 [test]
 def test_stale_binary_sidecar_keeps_runtime(t : T?) {
-    var terr = ""
-    let dir = temp_directory(terr)
-    t |> success(terr == "", "temp_directory resolves")
-    let path = path_join(dir, "dasllama_test_box_profile_stale.json")
-    let js = "\{\"kernels\":\{\},\"runtime\":\{\"q8_token_block\":320\},\"provenance\":\{\"box\":\"{tune_box_identity()}\"\}\}"
-    t |> success(fwrite(path, js), "profile written")
-    var err : string
-    let mtime_set = set_mtime(path, mktime(2020, 1, 1, 0, 0, 0), err)
-    t |> success(mtime_set, "mtime set into the past ({err})")
+    let path = write_profile(t, "stale", tune_box_identity(), true)
     t |> equal(box_profile_verdict_at(path), "stale_binary", "reads as binary-stale")
     apply_box_profile_runtime_checked(path)
     t |> equal(get_q8_token_block(), 320l, "runtime knob applied off a binary-stale sidecar")
@@ -279,12 +291,7 @@ def test_stale_binary_sidecar_keeps_runtime(t : T?) {
 
 [test]
 def test_foreign_sidecar_applies_nothing(t : T?) {
-    var terr = ""
-    let dir = temp_directory(terr)
-    t |> success(terr == "", "temp_directory resolves")
-    let path = path_join(dir, "dasllama_test_box_profile_foreign.json")
-    let js = "\{\"kernels\":\{\},\"runtime\":\{\"q8_token_block\":320\},\"provenance\":\{\"box\":\"dasllama-test-foreign-box\"\}\}"
-    t |> success(fwrite(path, js), "profile written")
+    let path = write_profile(t, "foreign", "dasllama-test-foreign-box", false)
     t |> equal(box_profile_verdict_at(path), "foreign_box", "reads as another box's")
     apply_box_profile_runtime_checked(path)
     t |> equal(get_q8_token_block(), 128l, "runtime knob NOT applied off another box's sidecar")
@@ -294,13 +301,43 @@ def test_foreign_sidecar_applies_nothing(t : T?) {
 }
 
 [test]
+def test_stale_foreign_sidecar_applies_nothing(t : T?) {
+    let path = write_profile(t, "stale_foreign", "dasllama-test-foreign-box", true)
+    t |> equal(box_profile_verdict_at(path), "foreign_box", "another box's sidecar reads foreign whatever its date")
+    apply_box_profile_runtime_checked(path)
+    t |> equal(get_q8_token_block(), 128l, "runtime knob NOT applied off another box's back-dated sidecar")
+    t |> equal(box_profile_runtime_declined(), "foreign_box", "the decline names the box, not the date")
+    remove(path)
+    restore_defaults()
+}
+
+[test]
+def test_stale_unreadable_sidecar_applies_nothing(t : T?) {
+    let path = write_profile(t, "stale_unreadable", "", true)   // no provenance: not a tune sidecar, whatever its date
+    t |> equal(box_profile_verdict_at(path), "unreadable", "a provenance-less sidecar reads unreadable, not stale")
+    apply_box_profile_runtime_checked(path)
+    t |> equal(get_q8_token_block(), 128l, "runtime knob NOT applied off a provenance-less back-dated sidecar")
+    t |> equal(box_profile_runtime_declined(), "unreadable", "the decline names the read, not the date")
+    remove(path)
+    restore_defaults()
+}
+
+// DASLLAMA_METAL_TENSOR is read at context init, so a child process shows what the knob leaves unapplied
+[test]
+def test_metal_tensor_knob_leaves_the_crowns_unapplied(t : T?) {
+    var out : string
+    let rc = run_child(child_cmd("_metal_tensor_root.das", [(name = "DASLLAMA_METAL_TENSOR", value = "0")]), out)
+    t |> equal(0, rc, "the child ran (rc {rc}):\n{out}")
+    t |> success(find(out, "CROWNS=[]") >= 0, "under DASLLAMA_METAL_TENSOR=0 the profile's crowns stay unapplied:\n{out}")
+    var out2 : string
+    let rc2 = run_child(child_cmd("_metal_tensor_root.das", [(name = "DASLLAMA_METAL_TENSOR", value = "")]), out2)
+    t |> equal(0, rc2, "the control child ran (rc {rc2}):\n{out2}")
+    t |> success(find(out2, "CROWNS=[mulmm_q8]") >= 0, "with the knob unset the same profile crowns mulmm_q8:\n{out2}")
+}
+
+[test]
 def test_kernels_only_sidecar_declines_as_no_runtime(t : T?) {
-    var terr = ""
-    let dir = temp_directory(terr)
-    t |> success(terr == "", "temp_directory resolves")
-    let path = path_join(dir, "dasllama_test_box_profile_kernels_only.json")
-    let js = "\{\"kernels\":\{\"dot\":\"vec8_u2\"\},\"provenance\":\{\"box\":\"{tune_box_identity()}\"\}\}"
-    t |> success(fwrite(path, js), "profile written")
+    let path = write_profile(t, "kernels_only", tune_box_identity(), false, true)
     apply_box_profile_runtime_checked(path)
     t |> equal(box_profile_runtime_declined(), "no_runtime_section", "a fallback-stamp sidecar declines by name")
     remove(path)
@@ -309,13 +346,8 @@ def test_kernels_only_sidecar_declines_as_no_runtime(t : T?) {
 
 [test]
 def test_apply_status_describes_the_last_checked_apply(t : T?) {
-    var terr = ""
-    let dir = temp_directory(terr)
-    t |> success(terr == "", "temp_directory resolves")
-    let foreign = path_join(dir, "dasllama_test_box_profile_last_foreign.json")
-    let own = path_join(dir, "dasllama_test_box_profile_last_own.json")
-    t |> success(fwrite(foreign, "\{\"kernels\":\{\},\"runtime\":\{\"q8_token_block\":320\},\"provenance\":\{\"box\":\"dasllama-test-foreign-box\"\}\}"), "foreign profile written")
-    t |> success(fwrite(own, "\{\"kernels\":\{\},\"runtime\":\{\"q8_token_block\":320\},\"provenance\":\{\"box\":\"{tune_box_identity()}\"\}\}"), "own profile written")
+    let foreign = write_profile(t, "last_foreign", "dasllama-test-foreign-box", false)
+    let own = write_profile(t, "last_own", tune_box_identity(), false)
     apply_box_profile_runtime_checked(foreign)
     t |> equal(box_profile_runtime_declined(), "foreign_box", "the first apply declines")
     apply_box_profile_runtime_checked(own)

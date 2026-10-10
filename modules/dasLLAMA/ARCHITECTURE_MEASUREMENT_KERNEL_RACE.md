@@ -45,7 +45,8 @@ dispatches - a data race - is not its subject. Its terms:
 A kernel A/B race times two spellings of one compute on a synthetic fixture. Its winner is
 minted as a crown - the family's name in the box sidecar's `runtime.metal_tensor` set, which
 makes every later run on that box serve the twin in place of the base kernel
-(`metal_tensor_crowned`, `dasllama/dasllama_common.das`). Three conditions decide whether its
+(`metal_tensor_crowned`, `dasllama/dasllama_common.das`; `DASLLAMA_METAL_TENSOR=0` leaves the set
+unapplied, so a run reads as a GPU without the tensor lane would). Three conditions decide whether its
 winner is the winner the served graph would pick, and a race missing any of them mints a wrong
 crown:
 

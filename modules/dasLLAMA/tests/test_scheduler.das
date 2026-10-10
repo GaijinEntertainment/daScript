@@ -593,6 +593,97 @@ def test_scheduler_idle_quantum(t : T?) {
     }
 }
 
+// ===== the tick's order around a finishing stream, and admission behind a prefilling one =====
+
+[test]
+def test_scheduler_finishing_tick(t : T?) {
+    t |> run("a tick that finishes a stream ends before its prefill chunk and reaps the stream on the next tick (needs SmolLM2-135M)") @(t : T?) {
+        if (model_missing(t)) {
+            return
+        }
+        with_dasllama_jobque() {
+            var m <- load_capped_cpu(128l)
+            var short <- encode(m, "Once upon a time", true, false)
+            var prompt <- encode(m, "The quick brown fox jumps over the lazy dog while the little robot watches from a small hill near the old village bakery", true, false)
+            let K = 8l
+            t |> success(long_length(short) <= K && long_length(prompt) > 2l * K, "the short prompt fits one chunk, the long one spans chunks ({length(short)} and {length(prompt)} tokens)")
+            var none : array<int64>
+            let greedy = SamplingParams()
+            var sch <- create_scheduler(m, 2l, 4l, K, [idle_chunk_tokens = 0l])
+            var events : array<SchedEvent>
+            t |> success(submit(m, sch, make_req(1l, short, greedy, 2l, none)), "a two-token stream queued")
+            scheduler_step(m, sch, events)   // admitted, prefilled whole, its first token sampled inline
+            t |> equal(sch.prefill_tokens, long_length(short), "the short prompt prefilled in its first tick")
+            t |> success(submit(m, sch, make_req(2l, prompt, greedy, 4l, none)), "a long prompt queued beside the decoding stream")
+            let before = sch.prefill_tokens
+            let more = scheduler_step(m, sch, events)   // admits 2, decodes 1 to its length - and ends there
+            t |> equal(finished_of(events, 1l).stream, 1l, "stream 1 finished on this tick")
+            t |> equal(finished_of(events, 1l).finish, "length", "at its length")
+            t |> equal(sch.prefill_tokens, before, "the finishing tick prefilled nothing for stream 2 ({sch.prefill_tokens - before} tokens)")
+            t |> success(empty(toks_of(events, 2l)), "and emitted nothing of stream 2")
+            t |> equal(sch.n_finished, 0l, "the finished stream is not reaped on the tick it finished")
+            t |> equal(n_active(sch), 2l, "it still holds its slot")
+            t |> success(more, "the step asks for another tick")
+            scheduler_step(m, sch, events)   // reaps 1, prefills one chunk of 2
+            t |> equal(sch.n_finished, 1l, "the next tick reaped it")
+            t |> equal(length(sch.recent_done), 1, "into the poll surface")
+            t |> equal(n_active(sch), 1l, "freeing its slot")
+            t |> equal(sch.prefill_tokens - before, K, "and prefilled one chunk of stream 2 ({sch.prefill_tokens - before} tokens)")
+            drain(m, sch, events)
+            t |> equal(finished_of(events, 2l).stream, 2l, "stream 2 ran to its end")
+            delete events
+            delete sch
+            delete prompt
+            delete short
+            delete m
+        }
+    }
+}
+
+[test]
+def test_scheduler_admission_waits_for_prefill(t : T?) {
+    t |> run("a request is admitted only once no admitted stream is still prefilling (needs SmolLM2-135M)") @(t : T?) {
+        if (model_missing(t)) {
+            return
+        }
+        with_dasllama_jobque() {
+            var m <- load_capped_cpu(128l)
+            var prompt <- encode(m, "The quick brown fox jumps over the lazy dog while the little robot watches from a small hill near the old village bakery and counts every bird that crosses the evening sky", true, false)
+            var short <- encode(m, "Once upon a time", true, false)
+            let K = 8l
+            let np = long_length(prompt)
+            t |> success(np > 3l * K && long_length(short) <= K, "the long prompt spans chunks, the short one fits one ({np} and {length(short)} tokens)")
+            var none : array<int64>
+            let greedy = SamplingParams()
+            var sch <- create_scheduler(m, 2l, 4l, K, [idle_chunk_tokens = 0l])
+            var events : array<SchedEvent>
+            t |> success(submit(m, sch, make_req(1l, prompt, greedy, 4l, none)), "the long prompt queued")
+            t |> success(submit(m, sch, make_req(2l, short, greedy, 4l, none)), "the short one queued behind it")
+            scheduler_step(m, sch, events)
+            t |> equal(n_active(sch), 1l, "the first tick admits the first request alone")
+            t |> equal(n_queued(sch), 1l, "the second waits while the first prefills")
+            var ticks = 1
+            while (empty(toks_of(events, 1l)) && ticks < 64) {
+                scheduler_step(m, sch, events)
+                ticks ++
+            }
+            t |> success(!empty(toks_of(events, 1l)), "the first stream reached its first token in {ticks} ticks")
+            t |> equal(n_queued(sch), 1l, "the second is still queued on the tick the first token lands")
+            scheduler_step(m, sch, events)
+            t |> equal(n_active(sch), 2l, "the next tick admits it, the first now decoding")
+            t |> equal(n_queued(sch), 0l, "the queue is empty")
+            drain(m, sch, events)
+            t |> equal(finished_of(events, 1l).finish, "length", "stream 1 ran to its length")
+            t |> equal(finished_of(events, 2l).finish, "length", "stream 2 ran to its length")
+            delete events
+            delete sch
+            delete prompt
+            delete short
+            delete m
+        }
+    }
+}
+
 // ===== staggered admit, queue overflow, queued eviction, multi-stream token match =====
 
 [test]
