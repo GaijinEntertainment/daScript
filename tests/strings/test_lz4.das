@@ -1,5 +1,5 @@
 options gen2
-require ../../daslib/lz4.das
+require daslib/lz4
 require strings
 require dastest/testing_boost
 [test]
@@ -92,4 +92,27 @@ def borrowed_byte_views_roundtrip(t : T?) {
     t |> success(compressed); t |> equal(encoded, [0x30u8, 97u8, 98u8, 99u8])
     peek_data("0abc") $(bytes) { restored = lz4_decompress(bytes, decoded, 3) }
     t |> success(restored); t |> equal(decoded, [97u8, 98u8, 99u8])
+}
+
+[test]
+def tiny_blocks_do_not_allocate_a_match_table(t : T?) {
+    for (size in range(13)) {
+        var inscope input, encoded, decoded : array<uint8>; resize(input, size)
+        for (byte, i in input, count()) { byte = uint8(i + 97) }
+        let before = heap_allocation_stats().x
+        let compressed = lz4_compress(input, encoded)
+        let allocated = heap_allocation_stats().x - before
+        t |> success(compressed)
+        t |> success(allocated < 1024ul, "tiny blocks allocate only small output storage, not a match table")
+        t |> equal(length(encoded), size + 1); t |> equal(encoded[0], uint8(size << 4))
+        t |> success(lz4_decompress(encoded, decoded, size)); t |> equal(decoded, input)
+    }
+}
+
+[test]
+def minimum_matchable_block_still_compresses(t : T?) {
+    var inscope input <- [for (_ in range(13)); 97u8]
+    var inscope encoded, decoded : array<uint8>
+    t |> success(lz4_compress(input, encoded)); t |> success(length(encoded) < length(input))
+    t |> success(lz4_decompress(encoded, decoded, 13)); t |> equal(decoded, input)
 }

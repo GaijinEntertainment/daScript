@@ -10,6 +10,7 @@ compression library dependency.
 ``lz4_compress(input, output) : bool`` creates an independent LZ4 block from an
 ``array<uint8>`` or borrowed byte view. Output replaces the previous array only
 on success. Inputs exceeding the safe signed-array encoded-size bound are refused.
+Inputs shorter than 13 bytes avoid allocating the match-search table.
 
 ``lz4_decompress(input, output, max_output_bytes) : bool`` requires a nonnegative
 output budget. It checks literal lengths, copy offsets, overlapping matches,
@@ -30,7 +31,7 @@ Example::
 
     [export]
     def main() {
-        var input <- [uint8(1), uint8(2), uint8(3)]
+        var input <- [1u8, 2u8, 3u8]
         var encoded, decoded : array<uint8>
         verify(lz4_compress(input, encoded))
         verify(lz4_decompress(encoded, decoded, length(input)))

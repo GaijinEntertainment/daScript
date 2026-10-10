@@ -22,26 +22,29 @@ def public lz4_compress(input : array<uint8> | #; var output : array<uint8>) : b
     let size = length(input)
     var inscope encoded : array<uint8>
     reserve(encoded, size + size / 255 + 16)
-    var inscope positions : array<int>; resize(positions, 65536)
     var anchor = 0; var cursor = 0
-    while (cursor <= size - 12) {
-        let word = lz4_word(input, cursor)
-        let bucket = (word * 2654435761u) >> 16u
-        let previous = positions[bucket] - 1; positions[bucket] = cursor + 1
-        if (previous < 0 || cursor - previous > 65535 || lz4_word(input, previous) != word) { cursor++; continue }
-        var matched = 4
-        while (cursor + matched < size - 5 && input[previous + matched] == input[cursor + matched]) { matched++ }
-        let literals = cursor - anchor
-        encoded |> push(uint8((min(literals, 15) << 4) | min(matched - 4, 15)))
-        if (literals >= 15) { lz4_length(encoded, literals - 15) }
-        for (i in range(anchor, cursor)) { encoded |> push(input[i]) }
-        let offset = cursor - previous
-        encoded |> push(uint8(offset & 255)); encoded |> push(uint8(offset >> 8))
-        if (matched >= 19) { lz4_length(encoded, matched - 19) }
-        cursor += matched; anchor = cursor
-        if (cursor <= size - 12) {
-            let at = cursor - 2
-            positions[(lz4_word(input, at) * 2654435761u) >> 16u] = at + 1
+    // A match needs a preceding byte and twelve bytes remaining in the block.
+    if (size >= 13) {
+        var inscope positions : array<int>; resize(positions, 65536)
+        while (cursor <= size - 12) {
+            let word = lz4_word(input, cursor)
+            let bucket = (word * 2654435761u) >> 16u
+            let previous = positions[bucket] - 1; positions[bucket] = cursor + 1
+            if (previous < 0 || cursor - previous > 65535 || lz4_word(input, previous) != word) { cursor++; continue }
+            var matched = 4
+            while (cursor + matched < size - 5 && input[previous + matched] == input[cursor + matched]) { matched++ }
+            let literals = cursor - anchor
+            encoded |> push(uint8((min(literals, 15) << 4) | min(matched - 4, 15)))
+            if (literals >= 15) { lz4_length(encoded, literals - 15) }
+            for (i in range(anchor, cursor)) { encoded |> push(input[i]) }
+            let offset = cursor - previous
+            encoded |> push(uint8(offset & 255)); encoded |> push(uint8(offset >> 8))
+            if (matched >= 19) { lz4_length(encoded, matched - 19) }
+            cursor += matched; anchor = cursor
+            if (cursor <= size - 12) {
+                let at = cursor - 2
+                positions[(lz4_word(input, at) * 2654435761u) >> 16u] = at + 1
+            }
         }
     }
     let literals = size - anchor
