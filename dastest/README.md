@@ -28,15 +28,37 @@ Running only **some** selected benchmarks (uses `vector_alloc` as a filtering pr
 
 - `--test`: Path to the folder with scripts or single script to test
 - `--test-names <namePrefix>`: Run top-level tests matching "namePrefix", such as "namePrefix1"
+- `--test-list <path>`: Path to a file listing one test path per line; restricts the collected set to those paths
+- `--test-only <path>`: Restrict the collected set to this test path (repeatable)
+- `--exclude <substring>`: Skip test files whose base name contains this substring (repeatable)
 - `--test-project <path.das_project>`: Project file. Will be used to compile given tests
 - `--uri-paths`: Print uri paths instead of file paths (vscode friendly)
 - `--color`: Print colored output
+- `--headless`: Passed to every test run, including each `--run` worker, so a harness that reads it opens no window
 - `--verbose`: Print verbose output
+- `--failures-only`: Only print output for failed tests, suppressing successful ones
+- `--compile-only`: Compile test files without executing them
+- `--json-file <path>`: Path to write the JSON test results report to
+- `--cov-path <path>`: Path to write coverage report data to
+- `--timing-outliers <n>`: Print the top N slowest test files and highlight statistical timing outliers (above mean + 2x stddev). `0` (default) prints none
 - `--timeout <seconds>`: The whole suite's timeout. Past it the process ends at once with exit code 124 and no summary, after one line naming the timeout; the `run N/M` lines say which file was running. `0` disables it. The default is 20 minutes
 - `--max-file-time <seconds>`: Fail after the suite finishes if any completed test file exceeded this wall-clock duration. `0` (default) disables the limit; this is independent of the global `--timeout` deadlock guard.
 - `--isolated-mode`: Run tests in isolated processes, useful to catch crashes
 - `--isolated-mode-threads <n>`: Number of worker threads in isolated mode. `0` uses a conservative JIT rule (`min(32, max(4, logical_threads / 2))`) and 2x hardware threads otherwise. Preflight can override the JIT width per machine through its user config.
 - `--batch <n>`: Files per worker subprocess in isolated mode (semi-isolated sharding). `1` (default) is one process per test (full isolation). `>1` amortizes process/compile cold-start across a batch - much faster, especially on Windows. A crash in a batch is auto-recovered: the file that died is reported as crashed and the rest of the batch is re-run one-process-per-file, so isolation is preserved exactly where it is needed.
+- `--test-timeout <seconds>`: Per-test timeout in isolated mode. `0` (default) disables it
+- `--use-aot`: Compile and run tests using AOT (ahead-of-time) compilation, failing if AOT is unavailable
+- `--aot-macros`: Force `quote()`/`qmacro` lowering (`daslib/quote` QuotePass) when compiling test files
+- `--ser <path>`: Path to serialize compiled test programs to (for use with `--deser`)
+- `--deser <path>`: Path to a previously serialized program file to load and run tests from (see `--ser`)
+- `--debugger`: Set `cop.debugger` so `context.debugger` is truthy, exercising `_Debug` SimNode variants
+- `--keep-alive`: Set `cop.keep_alive` so `_KeepAlive` SimNode variants get dispatched
+- `--persistent-heap`: Run every test on the persistent heap (`cop.persistent_heap`), whose frees and sweeps an address-sanitizer build hands to its own allocator, so a stale pointer into them is reported; a test that pins the default heap's byte counts fails under it
+- `--disable-cse`: Compile every test with the CSE (common-subexpression-elimination) pass disabled (`cop.disable_cse`)
+- `--disable-dse`: Compile every test with the DSE (dead-store-elimination) pass disabled (`cop.disable_dse`)
+- `--disable-temp-string-reclaim`: Compile every test with the temp-string reclaim pass disabled (`cop.disable_temp_string_reclaim`)
+- `--disable-inline`: Compile every test with the `[inline]` function inliner disabled (`cop.disable_inline`)
+- `--disable-auto-inline`: Compile every test with automatic block-inlining and invoke-of-literal devirtualization disabled (`cop.disable_auto_inline`)
 - `--stack-on-exception`: On a test panic, walk the call stack *at throw time* (frames intact) and print a real `CALL STACK` trace, instead of the default that reports only the panic message and location. Off by default (a test that swallows a panic via `try`/`recover` would also emit a walk); enable for one-iteration debugging of a failing/crashing test. Works in isolated mode too - the trace is folded under the failing test's log.
 - `--bench`: Enable benchmark execution (all of them)
 - `--bench-names <namePrefix>`: Run top-level benchmark matching "namePrefix"
@@ -48,6 +70,7 @@ Note that benchmarks will be executed only if all module tests have already pass
 #### Internal arguments
 
 - `--run`: Script file(s) to run in a single subprocess (repeatable). Used by isolated/semi-isolated mode to dispatch a batch to one worker; each file streams its own JSON report so the parent can attribute results and recover from a mid-batch crash
+- `--worker-index <n>`: Stable worker index the parent dastest passes to each worker in isolated mode; tests read it from `get_user_args()` to derive per-worker ports and paths. Default `0`
 
 ### Benchmark measurement {#benchmark-measurement}
 

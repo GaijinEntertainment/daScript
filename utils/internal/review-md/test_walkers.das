@@ -19,13 +19,9 @@ def write_at(t : T?; root, rel, text : string) {
 }
 
 def run_in(cwd_root : string; args : array<string>) : tuple<rc : int; out : string> {
-    let prev = getcwd()
-    if (!chdir(cwd_root)) {
-        return (rc = -1, out = "chdir failed: {cwd_root}")
-    }
+    let noenv : array<string>
     var out : string
-    let rc = run_and_capture(args, out, 120.0)
-    chdir(prev)
+    let rc = run_and_capture(args, cwd_root, noenv, out, 120.0)
     return (rc = rc, out = out)
 }
 
@@ -733,9 +729,55 @@ def test_root_gate_fixtures(t : T?) {
     t |> equal(1, third.rc, "a third declaration of a tolerated name is red")
     t |> success(find(third.out, "c/foo.das:2: shared module `foo`") >= 0, "the third foo is named: {third.out}")
 
+    t |> equal(0, run_in(fixture, ["git", "rm", "-q", "--cached", "c/foo.das"]).rc, "third foo untracked again")
+
+    // a tracked CMake file that calls ExternalProject_Add_StepTargets is red; a commented-out call is not
+    write_at(t, fixture, "ext/dep.cmake", "# ExternalProject_Add_StepTargets(DEP install)\nproject(dep)\n")
+    t |> equal(0, run_in(fixture, ["git", "add", "ext/dep.cmake"]).rc, "cmake file tracked")
+    let commented = spawn_at(fixture, [gate])
+    t |> equal(0, commented.rc, "a commented-out StepTargets call is green: {commented.out}")
+    write_at(t, fixture, "ext/dep.cmake", "project(dep)\nexternalproject_add_steptargets (DEP install)\n")
+    let steps = spawn_at(fixture, [gate])
+    t |> equal(1, steps.rc, "a StepTargets call is red, whatever its case")
+    t |> success(find(steps.out, "ext/dep.cmake:2: calls ExternalProject_Add_StepTargets") >= 0, "the call's line is named: {steps.out}")
+    t |> equal(0, run_in(fixture, ["git", "rm", "-q", "-f", "--cached", "ext/dep.cmake"]).rc, "cmake file untracked again")
+
     // outside the repo root the gate refuses rather than scanning nothing
     let elsewhere = spawn_at(path_join(fixture, "a"), [gate])
     t |> equal(2, elsewhere.rc, "run from a subfolder is a usage error: {elsewhere.out}")
+
+    t |> success(rmdir_rec_result(fixture) is value, "fixture removed")
+}
+
+[test]
+def test_doc_gate_rst_comment_first(t : T?) {
+    let tree = getcwd()
+    if (!fexist(path_join(tree, "doc/REVIEW.das"))) {
+        t |> skip("not run from the repo root")
+        return
+    }
+    let fixture_r = create_temp_directory_result("review_doc")
+    t |> success(fixture_r is value, "temp fixture dir created")
+    if (!(fixture_r is value)) return
+    let fixture = unsafe(fixture_r.value)
+    write_at(t, fixture, "doc/source/conf.py", "project = 'fixture'\n")
+    var err : string
+    t |> success(copy_file(path_join(tree, "doc/REVIEW.das"), path_join(fixture, "doc/REVIEW.das"), true, err), "copied the real gate")
+    let gate = path_join(fixture, "doc/REVIEW.das")
+    let das2rst = "doc/reflections/das2rst.das"
+
+    let missing = spawn_at(fixture, [gate])
+    t |> equal(1, missing.rc, "no das2rst.das is red")
+    t |> success(find(missing.out, "{das2rst}: missing, unreadable, or has no require") >= 0, missing.out)
+
+    write_at(t, fixture, das2rst, "options gen2\n\nrequire daslib/rst_comment public\nrequire daslib/rst\n")
+    let green = spawn_at(fixture, [gate])
+    t |> equal(0, green.rc, "rst_comment first is green: {green.out}")
+
+    write_at(t, fixture, das2rst, "options gen2\n\nrequire daslib/rst\nrequire daslib/rst_comment public\n")
+    let red = spawn_at(fixture, [gate])
+    t |> equal(1, red.rc, "another require first is red")
+    t |> success(find(red.out, "{das2rst}:3: requires daslib/rst before daslib/rst_comment") >= 0, red.out)
 
     t |> success(rmdir_rec_result(fixture) is value, "fixture removed")
 }

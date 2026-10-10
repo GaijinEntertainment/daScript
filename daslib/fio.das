@@ -711,17 +711,24 @@ def with_process(argv : array<string>; blk : block<(var p : process) : void>) {
     with_process(argv, "", noenv, blk)
 }
 
-def run_and_capture(args : array<string>; var output : string&; timeout_sec : float = 0.0) : int {
-    //! Run an external command and capture its stdout+stderr (merged into one pipe by the underlying ``popen_argv``). Returns the process exit code;
-    //! -1 means the spawn itself failed. No shell is involved, and a forward-slash ``args[0]`` spawns on every platform (``popen_argv`` hands Windows the backslash spelling).
+def run_and_capture(args : array<string>; cwd : string; env : array<string>; var output : string&; timeout_sec : float = 0.0) : int {
+    //! Run an external command from `cwd` ("" inherits) with `env` ``KEY=VALUE`` overrides, capturing its stdout+stderr through ``popen_argv``.
+    //! Returns the exit code: -1 when the spawn itself failed, ``popen_timed_out`` when a positive `timeout_sec` passed first (the child's tree is killed).
+    //! No shell is involved, and a forward-slash ``args[0]`` spawns on every platform (``popen_argv`` hands Windows the backslash spelling).
     var captured : string
-    let exit_code = unsafe(popen_argv(args, timeout_sec, $(f) {
+    let exit_code = unsafe(popen_argv(args, cwd, env, timeout_sec, $(f) {
         if (f != null) {
             captured = fread(f)
         }
     }))
     output = captured
     return exit_code
+}
+
+def run_and_capture(args : array<string>; var output : string&; timeout_sec : float = 0.0) : int {
+    //! `run_and_capture` inheriting the parent's directory and environment.
+    let noenv : array<string>
+    return run_and_capture(args, "", noenv, output, timeout_sec)
 }
 
 def executable_on_path(name : string) : bool {

@@ -143,6 +143,7 @@ namespace das {
     DAS_API int builtin_popen_timeout ( const char * cmd, float timeout_sec, const TBlock<void,const FILE *> & blk, Context * context, LineInfoArg * at );
     DAS_API bool builtin_spawn_argv ( const Array & args_arr, Context * context, LineInfoArg * at );
     DAS_API int builtin_popen_argv ( const Array & args_arr, float timeout_sec, const TBlock<void,const FILE *> & blk, Context * context, LineInfoArg * at );
+    DAS_API int builtin_popen_argv_in ( const Array & args_arr, const char * cwd, const Array & env, float timeout_sec, const TBlock<void,const FILE *> & blk, Context * context, LineInfoArg * at );
     DAS_API int builtin_popen_argv_pipe ( const Array & args_arr, const TBlock<void,const FILE *,const FILE *> & blk, Context * context, LineInfoArg * at );
     // A long-lived child process: spawned once, polled and drained across many ticks, unlike the
     // block-scoped popen_argv. The handle (das `SubProcess?`) is opaque; free it with close_process.

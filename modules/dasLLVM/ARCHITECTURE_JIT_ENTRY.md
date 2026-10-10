@@ -75,7 +75,7 @@ only a slot the DLL holds and nothing can fill is an error. The emitter and the 
 one resolver, and the visitor's borrowed fields (`dll`, `jit_context`, `uid`) carry
 `@do_not_delete` because the resolver is deleted after the walk and its objects live on.
 
-## 4. What stays out of the program's jitted set
+## 4. What stays out of the program's jitted set {#jit-set-exclusions}
 
 The finalizer is program code, so everything it reaches joins the program's used set and is a JIT
 candidate in every jitted program. `free_jit_context` is one function - a jitted program carries

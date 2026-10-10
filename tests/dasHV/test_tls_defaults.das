@@ -16,11 +16,8 @@ def default_https_refuses_an_untrusted_certificate(t : T?) {
 def default_https_does_not_send_a_downgraded_request(t : T?) {
     with_tls_fixture(t) $(root, dns_port, _ip_port) {
         let fixture = "{get_das_root()}/tests/dasHV/no_aot/_fixture_https_redirect.das"
-        with_process([get_host_binary(), "-dasroot", get_das_root(), fixture, "--", "https://localhost:{dns_port}"], "", ["SSL_CERT_FILE={root}/ca.pem"]) $(var child) {
-            let code = unsafe(process_wait(child, 15.0))
-            var output : string
-            unsafe(process_drain(child) $(line) { output += "{line}\n"; })
-            t |> equal(code, 0, output)
-        }
+        var output : string
+        let code = run_and_capture([get_host_binary(), "-dasroot", get_das_root(), fixture, "--", "https://localhost:{dns_port}"], "", ["SSL_CERT_FILE={root}/ca.pem"], output, 15.0)
+        t |> equal(code, 0, output)
     }
 }

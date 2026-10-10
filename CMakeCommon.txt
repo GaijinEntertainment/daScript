@@ -14,6 +14,13 @@ MACRO(SETUP_LTO _targetName)
     ENDIF()
 ENDMACRO()
 
+# Tool arguments for an ExternalProject's nested `cmake --build`: under Visual Studio the nested
+# MSBuild otherwise leaves its worker nodes running after the build, holding the sub-build's files.
+SET(DAS_NESTED_BUILD_TOOL_ARGS "")
+IF(CMAKE_GENERATOR MATCHES "^Visual Studio")
+	SET(DAS_NESTED_BUILD_TOOL_ARGS -- /nodeReuse:false)
+ENDIF()
+
 IF(WIN32)
 include(CheckCXXSourceRuns)
 

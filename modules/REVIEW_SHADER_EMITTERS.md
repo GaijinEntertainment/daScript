@@ -2,6 +2,8 @@
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 docs: `dasMetal/ARCHITECTURE.md`, `dasSpirv/ARCHITECTURE.md`, `dasSpirv/ARCHITECTURE_COOPMAT.md`.
+A kernel is a function carrying `[metal_kernel]`, `[spirv_kernel]`, or an annotation from
+`dasSpirv`, `dasVulkan` or `dasMetal` whose name ends in `_shader`.
 
 **A kernel body that computes on a marker struct with anything but the device ops it exists for -
 the coopmat and `tmm2d` load, multiply-accumulate, convert and store builtins with the layout or

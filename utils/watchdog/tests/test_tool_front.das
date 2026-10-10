@@ -106,6 +106,14 @@ def test_tool_front_hosts(t : T?) {
         t |> equal(r.rc, 2, r.out)
         t |> success(find(r.out, "watchdog -tool: no front for 'bogus'") >= 0, r.out)
     }
+    t |> run("--help lists the fronts the watchdog reads before its flags") @(t : T?) {
+        let r = run_captured([daslang, path_join(get_das_root(), "utils/watchdog/main.das"), "--", "--help"])
+        t |> equal(r.rc, 0, r.out)
+        for (front in ["-tool lsp|mcp|dap            Serve a daslang tool", "--stdio                      Be a newline-delimited",
+                       "--lsp                        Be the daslang language server"]) {
+            t |> success(find(r.out, "      {front}") >= 0, "{front} in: {r.out}")
+        }
+    }
     let watchdog = path_join(dir_name(get_full_file_name(daslang)), get_platform_name() == "windows" ? "watchdog.exe" : "watchdog")
     if (!fexist(watchdog)) {
         t |> skip("no watchdog exe beside {daslang}")

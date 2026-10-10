@@ -6,8 +6,8 @@
 **A diff that makes `JobQue::is_slow_tier_compute` treat a perflevel name outside the list it
 carries ("Performance", "Super") as compute is a defect.**
 
-**A diff that makes `JobQue::get_num_perf_cores` return nonzero on a platform that reports no
-tier structure is a defect - it returns 0 there.**
+**A diff that makes `JobQue::get_num_perf_cores` return nonzero on a platform that reports fewer
+than two CPU performance levels is a defect.**
 
 **A fixed-length copy in `luau_float2string.cpp` stays fixed-length.** `DAS_F2S_MEMCPY` and
 `DAS_F2S_MEMSET` write the constant `sizefast` bytes, not the requested `size`; a diff that
@@ -30,16 +30,16 @@ and the caller gets trailing garbage.
 **Weakening `REVIEW.das` (beside this file) is a defect: dropping a check, narrowing the files or
 lines a check scans, or rewriting a finding text so it no longer names what failed.**
 
-**A diff that makes `dep_recorder.cpp` write more than one rule per depfile is a defect** -
-several rules naming one target is ninja's deprecated `depfilemulti`, and a parallel sweep whose
-workers each wrote their own would produce one per worker. A process merges into the rule already
-there, under the lock file beside it.
+**A diff that makes `dep_recorder.cpp` write more than one rule per depfile is a defect - a
+process merges its paths into the rule already in the depfile, under the lock file beside it.**
+Several rules naming one target is ninja's deprecated `depfilemulti`, and a parallel sweep whose
+workers each wrote their own would produce one per worker.
 
 **A diff that has `dep_recorder.cpp` record anything but a source the compile read is a
-defect** - a file read at runtime, a directory listing, a build artifact. A check's inputs are
-its require graph; an artifact belongs to another edge, so naming one makes ninja build that
-edge, and an artifact the build rewrites leaves the check dirty for good.
+defect** - a file read at runtime, a directory listing, a build artifact. Ninja builds whatever
+a depfile names, so a named build artifact makes ninja build it before the compile, and an
+artifact the build rewrites makes ninja re-run the compile every time.
 
-**A diff that drops the exists-at-flush filter in `dep_recorder.cpp` is a defect**: a path under
-a temp directory the run removed would be named, and ninja treats a missing dependency as dirty
-forever.
+**A diff that makes `das_dep_flush` (`dep_recorder.cpp`) name a path without first checking that
+the file exists is a defect**: a path under a temp directory the run removed would be named, and
+ninja treats a missing dependency as dirty forever.

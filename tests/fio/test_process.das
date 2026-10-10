@@ -195,6 +195,66 @@ def test_process_terminate(t : T?) {
 }
 
 [test]
+def test_run_and_capture_with_cwd_and_env(t : T?) {
+    let fixture = path_join(get_das_root(), "tests/fio/_fixture_process_child.das")
+    t |> run("the child runs in cwd with the env overrides, and its code and every line come back") @(t : T?) {
+        let root_dir = make_temp_root(t, "das capture cwd ")
+        return if (empty(root_dir))
+        let release = path_join(root_dir, "release")
+        t |> success(fwrite(release, "go"), "released before the start, so the child runs straight through")
+        var output : string
+        let rc = run_and_capture(child_argv(fixture, path_join(root_dir, "ready"), release), root_dir, ["DAS_PROC_TEST=marker42"], output, guard(30.0))
+        t |> equal(rc, 7, output)
+        t |> equal(output, "env=marker42\ncwd={base_name(root_dir)}\nhello one\nhello two\n")
+        rmdir_rec(root_dir)
+    }
+    t |> run("a child still running when the timeout passes is killed and reads as popen_timed_out") @(t : T?) {
+        let root_dir = make_temp_root(t, "das capture timeout ")
+        return if (empty(root_dir))
+        let ready = path_join(root_dir, "ready")
+        let noenv : array<string>
+        var output : string
+        let rc = run_and_capture(child_argv(fixture, ready, path_join(root_dir, "never")), "", noenv, output, 1.0)
+        t |> equal(rc, popen_timed_out, output)
+        rmdir_rec(root_dir)
+    }
+    t |> run("a binary that cannot start answers -1 on Windows (no process) and 127 on POSIX (the child's exec), with no output") @(t : T?) {
+        let noenv : array<string>
+        var output = "stale"
+        let expected = get_running_platform_name() == "windows" ? -1 : 127
+        t |> equal(run_and_capture(["/nonexistent/daslang-that-is-not-there"], "", noenv, output), expected)
+        t |> equal(output, "")
+    }
+    t |> run("a partial last line the child wrote before the timeout still comes back") @(t : T?) {
+        let noenv : array<string>
+        var output : string
+        let partial = path_join(get_das_root(), "tests/fio/_fixture_partial_line_child.das")
+        let rc = run_and_capture([das_exe(), "-dasroot", get_das_root(), partial], "", noenv, output, guard(5.0))
+        t |> equal(rc, popen_timed_out, output)
+        t |> success(output |> contains("partial"), "got: {output}")
+    }
+    t |> run("a timeout of 0 sets no limit") @(t : T?) {
+        let root_dir = make_temp_root(t, "das capture no limit ")
+        return if (empty(root_dir))
+        let release = path_join(root_dir, "release")
+        t |> success(fwrite(release, "go"), "released before the start")
+        let noenv : array<string>
+        var output : string
+        let rc = run_and_capture(child_argv(fixture, path_join(root_dir, "ready"), release), "", noenv, output, 0.0)
+        t |> equal(rc, 7, output)
+        rmdir_rec(root_dir)
+    }
+    t |> run("output past what a pipe holds is read while the child runs, so the child finishes") @(t : T?) {
+        let noenv : array<string>
+        var output : string
+        let big = path_join(get_das_root(), "tests/fio/_fixture_big_output_child.das")
+        let rc = run_and_capture([das_exe(), "-dasroot", get_das_root(), big, "--", "5000"], "", noenv, output, guard(60.0))
+        t |> equal(rc, 0, "rc={rc}")
+        t |> equal(length(output), 500000)
+    }
+}
+
+[test]
 def test_exit_now_carries_its_code(t : T?) {
     t |> run("exit_now ends a child with the code it was given, and the line printed before it arrives") @(t : T?) {
         let fixture = path_join(get_das_root(), "tests/fio/_fixture_exit_now_child.das")

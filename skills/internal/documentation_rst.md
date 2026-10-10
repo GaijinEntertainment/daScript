@@ -9,6 +9,11 @@
 **`doc/source/stdlib/generated/`** (NOT the `doc/source/stdlib/` root). C++ modules carry no `//!`
  - handmade only.
 
+**`require daslib/rst_comment` is the first require in `das2rst.das`.** The `//!` reader
+(`rst_comment`'s `[comment_reader]`) is installed when `rst_comment` compiles, so a module compiled
+before it - an earlier require, or a dependency of one - gets no `//!` comments on its page.
+`doc/REVIEW.das` checks the order.
+
 **Regenerate** - exit code 0 = success; "regenerate" below means exactly this:
 
 ```
@@ -75,9 +80,13 @@ variant typedef, an enumeration, a structure, a class, a structure annotation - 
 paired from the end: the last line describes the last member, and the lines left over at the
 top become the type description - so a line added or dropped anywhere but the top moves every
 member above it one line off, and a file with fewer than one line per member plus one for the
-type fails the regeneration with `has less documentation than values`. A distinct type (`typedef distinct Foo = int`)
-gets its stub at `typedef-<module>-Foo.rst`, the same file name a type alias gets. Regenerate, then
-`Select-String -Path "doc\source\stdlib\*.rst" -Pattern "// stub"` must return 0 matches.
+type fails the regeneration with `has less documentation than values`. The member order is the
+order of the Values, Fields or Variants table on the type's generated page: a class's static
+fields come first, and a structure annotation's fields follow their C++ declaration order (the
+page sorts them by field offset), not the order of the `addField` calls. A distinct type
+(`typedef distinct Foo = int`) gets its stub at `typedef-<module>-Foo.rst`, the same file name a
+type alias gets. Regenerate, then `Select-String -Path "doc\source\stdlib\handmade\*.rst" -Pattern
+"// stub" -SimpleMatch` must return 0 matches.
 
 ### Handmade files are for C++ builtin modules ONLY - daslang modules use `//!`
 

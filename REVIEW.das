@@ -38,14 +38,16 @@ def private is_tolerated_set(name : string; files : array<string>) : bool {
     return true
 }
 
-//! every tracked .das in the tree - the generated and vendored copies git ignores stay out;
-//! a git that fails is a finding, never an empty tree
-def private tracked_das_files : array<string> {
+//! every tracked file matching one of `globs` - the generated and vendored copies git ignores
+//! stay out; a git that fails is a finding, never an empty tree
+def private tracked_files(globs : array<string>; check_name : string) : array<string> {
     var out : string
-    let rc = run_and_capture(["git", "ls-files", "--", "*.das"], out, 60.0)
+    var inscope cmd <- ["git", "ls-files", "--"]
+    cmd |> push_from(globs)
+    let rc = run_and_capture(cmd, out, 60.0)
     var inscope files <- [for (ln in split(out, "\n")); strip(ln); where !empty(strip(ln))]
     if (rc != 0 || empty(files)) {
-        gate_finding("REVIEW.das", "git ls-files failed (exit {rc}, {length(files)} files) - the shared-module check ran over nothing")
+        gate_finding("REVIEW.das", "git ls-files failed (exit {rc}, {length(files)} files) - the {check_name} check ran over nothing")
     }
     return <- files
 }
@@ -73,7 +75,7 @@ def private shared_module_decl(path : string) : SharedDecl {
 }
 
 def private check_shared_module_names {
-    var inscope files <- tracked_das_files()
+    var inscope files <- tracked_files(["*.das"], "shared-module")
     var sites : table<string; array<string>>
     for (f in files) {
         let d = shared_module_decl(f)
@@ -93,6 +95,19 @@ def private check_shared_module_names {
     }
 }
 
+def private check_no_step_targets {
+    var inscope files <- tracked_files(["*CMakeLists.txt", "*.cmake"], "ExternalProject_Add_StepTargets")
+    for (f in files) {
+        continue if (!fexist(f))
+        let text = fread(f)
+        var inscope calls <- cmake_command_blocks(text, "ExternalProject_Add_StepTargets")
+        if (!empty(calls)) {
+            gate_finding(f, find_line(text, calls[0]),
+                "calls ExternalProject_Add_StepTargets - under this tree's CMake 3.17 minimum, policy CMP0114 is unset, and Visual Studio then gives the step target its own copy of the external project's whole build chain with no dependency on the main target, so the two build the external project at the same time (two links of one DLL fail with LNK1104); add the step with ExternalProject_Add_Step and depend on the external project's main target, which runs the step")
+        }
+    }
+}
+
 [export]
 def main {
     if (!fexist("REVIEW_COMMON.md") || !fexist("CMakeLists.txt")) {
@@ -100,5 +115,6 @@ def main {
         return 2
     }
     check_shared_module_names()
+    check_no_step_targets()
     return gate_verdict("repo root")
 }

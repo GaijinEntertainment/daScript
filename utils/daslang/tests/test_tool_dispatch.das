@@ -15,25 +15,11 @@ struct Captured {
     out : string
 }
 
-//! `argv` from `cwd` ("" inherits), stdout and stderr merged, the pipe drained while the child runs
+//! `argv` from `cwd` ("" inherits), stdout and stderr merged
 def run_daslang(argv : array<string>; cwd : string = "") : Captured {
-    var res = Captured(rc = -1)
+    var res : Captured
     let noenv : array<string>
-    let started = ref_time_ticks()
-    with_process(argv, cwd, noenv) $(var p) {
-        while (res.rc == -1 && get_time_usec(started) < 300000000) {
-            unsafe(process_drain(p) $(line) {
-                res.out += "{line}\n"
-            })
-            let rc = unsafe(process_wait(p, 0.1))
-            if (rc != process_running) {
-                res.rc = rc
-            }
-        }
-        unsafe(process_drain(p) $(line) {
-            res.out += "{line}\n"
-        })
-    }
+    res.rc = run_and_capture(argv, cwd, noenv, res.out, 300.0)
     return res
 }
 

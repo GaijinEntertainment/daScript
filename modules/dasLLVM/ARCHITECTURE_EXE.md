@@ -17,7 +17,7 @@ every row the host scan loaded - and a build-machine path baked into the binary.
 (the internal `jit.exe`, which compiles scripts at run time) still carries every row, re-rooted at run
 time the way dynamic modules are.
 
-## 2. A global initializer's addresses are filled at startup
+## 2. A global initializer's addresses are filled at startup {#exe-global-init-walk}
 
 The exe emitter leaves every address global - a `@@fn` value, a handled type's `new`, the
 table accessors - null and private, since a JIT-process address means nothing in the exe, and

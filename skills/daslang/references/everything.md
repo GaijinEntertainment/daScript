@@ -930,7 +930,7 @@ The FIO module implements file input/output and filesystem operations. It provid
 - `get_env_variable` - Returns the string value of the environment variable with the given name, or an empty string if undefined.
 - `has_env_variable` - Returns true if an environment variable with the given name is defined in the current process environment.
 - `popen` - Opens a pipe to the given shell command, provides the resulting FILE pointer to the block, and returns the process exit code.
-- `popen_argv` - Spawns a subprocess directly via argv (Windows: CreateProcess; Unix: fork+execvp), bypassing the shell entirely so arguments are not subject to `$()`, backtick, or cmd.exe quote-stripping.
+- `popen_argv` - Spawns a subprocess directly via argv, bypassing the shell, in the directory `cwd` (empty inherits the caller's) with each `env` entry, `KEY=VALUE`, applied over the inherited environment.
 - `popen_argv_pipe` - Spawns a subprocess with bidirectional pipes connected to its stdin and stdout (child stderr is merged into stdout).
 - `popen_binary` - Opens a pipe to the given shell command in binary mode, provides the resulting FILE pointer to the block, and returns the process exit code.
 - `popen_timeout` - Opens a process for reading, kills the entire process tree if it exceeds `timeout` seconds.

@@ -3,14 +3,14 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 doc: `README.md`.
 
-**A diff that changes the paths `find_daslang` tries (`watchdog.das`) - the names it looks for
-or the roots it is handed - updates every other text in `watchdog.das` that names them and the
-"Layout discovery" step of `README.md`'s "Running it", in the same change** - a text that names
-paths the supervisor no longer tries sends the user to the wrong folder.
+**A diff that changes the names `find_daslang` (`watchdog.das`) tries, or the roots any caller
+hands it - a new caller included - updates every text in `watchdog.das` and `README.md` that
+names a path `find_daslang` tries, in the same change** - a text that names paths the
+supervisor no longer tries sends the user to the wrong folder.
 
 **A diff that adds a field key to a JSON-lines log line describes it in the `## The log`
 section of `README.md`, in the same change** - that section is the list a rename sweep starts
-from. The `event` half is `REVIEW.das`'s.
+from.
 
 **A diff that adds an `event` value or a field key to the log from any `.das` in this folder
 uses the name another file here already writes for the same thing** - one meaning under two
@@ -25,10 +25,14 @@ on the `@tune <kind> k=v` lines `watchdog.das` reads from the child - updates ev
 name appears in the tree in the same change, and names any out-of-tree reader in the PR
 description** - a reader that stops seeing the name it waits for never fails loudly.
 
-**A diff that adds a field to `WatchdogConfig` makes it discoverable in the same change: a
-`@clarg_doc` on a flag field, or - for a `@clarg_skip` field - its key exemption in
-`config_to_args` and its line in `README.md`** - the flag table is the whole of `--help`, and
+**A diff that adds a `WatchdogConfig` field makes it discoverable in the same change: a flag
+field gets a `@clarg_doc`; a `@clarg_skip` field gets its key exemption in `config_to_args` and
+its line in `README.md`.** `--help` lists a flag field only through its `@clarg_doc`, and
 `watchdog.json` keys are validated against the same field list.
+
+**A diff that adds a switch, or a value of a switch, read before the config (`wants_mode` in
+`main.das`, `tool_front` in `watchdog.das`) adds or updates its line in `print_watchdog_help`
+or `README.md`, in the same change.**
 
 **A diff that removes or renames a `WatchdogConfig` field updates every `watchdog.json` in the
 tree in the same change, and names any out-of-tree `watchdog.json` in the PR description** -
@@ -36,14 +40,11 @@ an unknown key refuses the start, so a stale key in a bundled config is a superv
 comes up.
 
 **A diff that adds a `require` to a `.das` in this folder for an optional module - one a build
-can leave out, so `has_module` reports it absent - adds that module to the `watchdog` arm of
-`tests/.das_test` (repo root) in the same change** - without the entry the whole test suite
-fails to compile on a machine where that module is missing.
-
-**A diff that adds a `require` to a `.das` in this folder for an optional module adds that
-module to the `if(TARGET ...)` guard and the link line of the `watchdog` target in
-`utils/CMakeLists.txt` (repo root), in the same change** - without the guard a configure that
-leaves the module out fails at the link instead of skipping the target.
+can leave out, so `has_module` reports it absent - adds that module, in the same change, to the
+`watchdog` arm of `tests/.das_test` and to the `if(TARGET ...)` guard and the link line of the
+`watchdog` target in `utils/CMakeLists.txt` (both repo root)** - a build that leaves the module
+out otherwise fails: the whole test suite at compile, the target at link instead of being
+skipped.
 
 **A diff that makes the tray or a notification depend on something the host machine may not
 have - a call into `stddlg`, a spawned program that shows something on the desktop, or a file

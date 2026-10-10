@@ -52,6 +52,56 @@ def test_walk_collects_governing_checklists(t : T?) {
 }
 
 [test]
+def test_walk_follows_the_root_routing(t : T?) {
+    let fixture_r = create_temp_directory_result("review_md_routes")
+    t |> success(fixture_r is value, "temp fixture dir created")
+    if (!(fixture_r is value)) return
+    let fixture = unsafe(fixture_r.value)
+    for (d in ["include/daScript/misc", "src/misc", "tests", "tests-cpp/small", "utils/x", "modules/m", "c"]) {
+        t |> success(mkdir_rec("{fixture}/{d}"))
+    }
+    for (md in ["REVIEW.md", "src/misc/REVIEW.md", "tests/REVIEW.md", "tests-cpp/small/REVIEW.md"]) {
+        write_marker("{fixture}/{md}")
+    }
+    for (file in [
+            ("utils/x/test_x.das", "options gen2\n\n[test]\ndef test_x(t : T?) \{\n\}\n"),
+            ("utils/x/test_y.das", "options gen2\n\n[test, no_jit]\ndef test_y(t : T?) \{\n\}\n"),
+            ("utils/x/test_z.das", "options gen2\n\n[test(slow)]\ndef test_z(t : T?) \{\n\}\n"),
+            ("utils/x/tool.das", "options gen2\n\n// [test] in a comment does not count\n"),
+            ("utils/x/notes.txt", "[test]\n"),
+            ("modules/m/test_m.das", "options gen2\n\n[test]\ndef test_m(t : T?) \{\n\}\n"),
+            ("c/check.cpp", "#include \"doctest/doctest.h\"\n"),
+            ("c/plain.cpp", "#include \"daScript/daScript.h\"\n"),
+            ("c/mention.cpp", "// built without doctest\nint x;\n")]) {
+        t |> success(fwrite("{fixture}/{file._0}", file._1), "wrote {file._0}")
+    }
+    t |> run("a header under include/daScript/<dir>/ answers to src/<dir>/REVIEW.md") @(t : T?) {
+        t |> equal(affected_review_md(fixture, ["include/daScript/misc/sysos.h"]), ["REVIEW.md", "src/misc/REVIEW.md"])
+        t |> equal(affected_review_md(fixture, ["include/daScript/misc/ops.inc"]), ["REVIEW.md", "src/misc/REVIEW.md"])
+        t |> equal(affected_review_md(fixture, ["include/daScript/misc/NOTES.md"]), ["REVIEW.md"])
+    }
+    t |> run("a [test] file outside modules/ answers to tests/REVIEW.md, a file without one does not") @(t : T?) {
+        t |> equal(affected_review_md(fixture, ["utils/x/test_x.das"]), ["REVIEW.md", "tests/REVIEW.md"])
+        t |> equal(affected_review_md(fixture, ["utils/x/test_y.das"]), ["REVIEW.md", "tests/REVIEW.md"])
+        t |> equal(affected_review_md(fixture, ["utils/x/test_z.das"]), ["REVIEW.md", "tests/REVIEW.md"])
+        t |> equal(affected_review_md(fixture, ["utils/x/tool.das"]), ["REVIEW.md"])
+        t |> equal(affected_review_md(fixture, ["utils/x/notes.txt"]), ["REVIEW.md"])
+    }
+    t |> run("a [test] file under modules/ keeps its own folder's checklists") @(t : T?) {
+        t |> equal(affected_review_md(fixture, ["modules/m/test_m.das"]), ["REVIEW.md"])
+    }
+    t |> run("a doctest .cpp answers to tests-cpp/small/REVIEW.md, another .cpp does not") @(t : T?) {
+        t |> equal(affected_review_md(fixture, ["c/check.cpp"]), ["REVIEW.md", "tests-cpp/small/REVIEW.md"])
+        t |> equal(affected_review_md(fixture, ["c/plain.cpp"]), ["REVIEW.md"])
+        t |> equal(affected_review_md(fixture, ["c/mention.cpp"]), ["REVIEW.md"])
+    }
+    t |> run("a deleted file routes by its path alone") @(t : T?) {
+        t |> equal(affected_review_md(fixture, ["c/gone.cpp", "include/daScript/misc/gone.h"]), ["REVIEW.md", "src/misc/REVIEW.md"])
+    }
+    t |> success(rmdir_rec_result(fixture) is value, "fixture removed")
+}
+
+[test]
 def test_sibling_and_orphan_gates(t : T?) {
     let fixture_r = create_temp_directory_result("review_md_gates")
     t |> success(fixture_r is value, "temp fixture dir created")
