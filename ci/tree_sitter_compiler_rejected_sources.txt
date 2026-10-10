@@ -1,0 +1,12 @@
+tests/language/failed_aka.das
+tests/language/failed_annotation_int64_overflow.das
+tests/language/failed_annotation_int64_positive.das
+tests/language/failed_cast_requires_parens.das
+tests/language/failed_comment_eof.das
+tests/language/failed_constants.das
+tests/language/failed_mismatching_curly_bracers.das
+tests/language/failed_mismatching_parentheses.das
+tests/language/failed_named_call_order.das
+utils/detect-dupe/fixture/_fixture_broken_cases.das
+utils/mcp/tests/_fixture_gen1.das
+utils/mcp/tests/_fixture_syntax_error.das

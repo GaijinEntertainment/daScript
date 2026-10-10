@@ -73,6 +73,8 @@ working-tree copy.
 | `dasllama_server_release.yml` | `release: prereleased` of a `dasllama-v*` tag (a daslang tag runs nothing), `workflow_dispatch` (`publish` input), and a branch push editing a non-`.md` file the workflow's `paths:` filter names (the workflow itself, what the bundle carries, `ci/packaging/**`) | four cells (linux x86_64 on ubuntu-22.04, linux arm64 on ubuntu-22.04-arm, darwin arm64, windows x64): daslang with the release modules, `daspkg release --fat x86-avx2 \| arm-neon` of `utils/dasllama-server`, the smoke run from a copy with a fresh HOME (write-protected off Windows), the `dasllama` archive, `.deb` + `.rpm` (linux) and pip wheel with their smokes; a release or a `publish` dispatch uploads the archives to the rolling `dasllama-server` release, and a release also uploads every asset to the dasllama release being cut; then, on a release event only, `pypi_route` + `publish_pypi` by tag shape (`dasllama-vX.Y.Z` to PyPI, any other to TestPyPI), and `publish_manifests` - section below |
 | `release.yml` | `release: prereleased` of a daslang tag (`v*`; a `dasllama-*` tag runs nothing) and `workflow_dispatch` (build + smoke; publishes nothing) | four cells (linux x86_64, linux arm64, darwin26 arm64, windows x86_64): build, the test suite under `-jit`, bundle + smoke, `.deb` / `.rpm` / pip wheel, sha256 per asset, the `.rpm` and wheel smokes, upload; then `pypi_route` + `publish_pypi` by tag shape - section below |
 | `cpp_mcp_release.yml` | `pull_request` touching `utils/mcp/**`, `utils/common/**`, `ci/make_cpp_mcp_bundle.sh`, `ci/smoke_test_cpp_mcp.sh`, the workflow file or `CMakeLists.txt` (linux cell only); `workflow_dispatch` (all four cells, no upload); `release: prereleased` of a daslang tag (a `dasllama-*` tag runs nothing) | per cell: a lean build of `cpp-mcp` with every external module off, the bundle assembly + smoke, the archive; a release uploads it to the daslang release being cut - section below |
+| `tree_sitter_daslang.yml` | `pull_request` and a `master` push, each touching `tree-sitter-daslang/**` or the workflow file itself | `test` (ubuntu, windows, macos-15), `lint`, and `fuzz` - section below |
+| `tree_sitter_daslang_sources.yml` | `pull_request` and a `master` push, each touching a `.das` file, `tree-sitter-daslang/**`, `ci/tree_sitter_parse_sources.sh`, `ci/tree_sitter_compiler_rejected_sources.txt`, or the workflow file itself | `sources` (ubuntu) - section below |
 | `nightly_issue.yml` | `workflow_call`, from `nightly.yml` once a `schedule` run has a failed job | keeps ONE open `nightly-failure` issue for the whole nightly, titled `The nightly is red`: the first red night files it with a link to each failed job, and every red night after that comments on it with its own while it is open. Close the issue when the nightly is green. No local mirror |
 
 > A manual **`workflow_dispatch`** of `nightly.yml` runs every nightly lane; `build.yml` carries no cron.
@@ -230,6 +232,7 @@ test rather than a check that silently stopped running.
 | Shipped-skills gate | `cmake --build build --config Release --target check_shipped_skills` | |
 | pip wheel repack | `cmake --build build --config Release --target check_wheel_repack` | |
 | rpm spec render | `cmake --build build --config Release --target check_rpm_spec` | the spec `rpm_build.sh` emits under `--spec-only` - no rpmbuild, so it runs on every cell |
+| tree-sitter source selection | `cmake --build build --config Release --target check_tree_sitter_parse_sources` | posix only; the files `ci/tree_sitter_parse_sources.sh` hands to the parser, against a stub `tree-sitter` - the real parse is `tree_sitter_daslang_sources.yml` |
 | Benchmark results updater | `cmake --build build --config Release --target run_tests_bench_updater` | |
 | pr-babysit verdict core | `cmake --build build --config Release --target run_tests_pr_babysit` | |
 | dasllama.io news + metadata | `cmake --build build --config Release --target check_dasllama_site` | needs python `markdown` |
@@ -373,6 +376,37 @@ only; dispatch and a release build all four. The build job runs for a daslang ta
 |---|---|
 | Configure + build cpp-mcp, Assemble and smoke-test bundle | `cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DDAS_BUILD_CPP_MCP=ON` with the workflow's `*_DISABLED=ON` set, then `cmake --build build --target check_cpp_mcp_bundle` |
 | the packaging and the uploads | none - runner-side plumbing |
+
+## tree_sitter_daslang.yml
+
+`test` (ubuntu-latest, windows-latest, macos-15): copies `tree-sitter-daslang/` to the
+workspace root, then regenerates the parser and fails on a difference under `src/`, runs the
+corpus, highlight and tags tests, tests the Rust, Node, Python, Go and Swift bindings, parses
+`examples/`, and, on Linux, compares incremental parses with fresh parses. `lint`
+(ubuntu-latest): ESLint over `grammar.js`. `fuzz` (ubuntu-latest): libFuzzer over the parser
+and the scanner for 60 s.
+
+Run each mirror in `tree-sitter-daslang/`, with tree-sitter CLI 0.27.1 on PATH.
+
+| CI step | Local mirror |
+|---|---|
+| `test`: Verify generated parser, Check that the generated files match grammar.js | `tree-sitter generate`, then `git diff --exit-code -- src/` and `git status --porcelain -- src/` empty |
+| `test`: Run parser tests | `tree-sitter test` |
+| `test`: Run Rust, Node, Python, Go and Swift tests | `cargo test --all-features`; `npm install && node --test bindings/node/*_test.js`; `pip install -e .[core] && python -m unittest discover -s bindings/python/tests`; `go test`; `swift build --build-tests && swift test --skip-build` |
+| `test`: Parse examples | `tree-sitter parse examples/*` |
+| `test`: Compare incremental parses with fresh parses | `tree-sitter fuzz --iterations 30`, and no `failed fuzzing` line in its output - the command ends with status 0 when a test fails |
+| `lint` | `npm ci --legacy-peer-deps && npm run lint` |
+| `fuzz` | none off Linux - libFuzzer needs a Linux clang |
+
+## tree_sitter_daslang_sources.yml
+
+`sources` (ubuntu-latest): `ci/tree_sitter_parse_sources.sh` parses every gen2 `.das` file of
+the tree with `tree-sitter-daslang/`, except those `ci/tree_sitter_compiler_rejected_sources.txt`
+lists, and fails on an error, or on a listed file that git does not track.
+
+| CI step | Local mirror |
+|---|---|
+| Parse every gen2 file | `ci/tree_sitter_parse_sources.sh` from the repo root, tree-sitter CLI 0.27.1 on PATH; the file selection alone: `cmake --build build --config Release --target check_tree_sitter_parse_sources` |
 
 ## nightly_imgui.yml
 
