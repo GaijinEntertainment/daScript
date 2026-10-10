@@ -27,7 +27,7 @@ def private ranges_are_ordered(tokens : array<SyntaxToken> const) : bool {
 
 [test]
 def test_tree_sitter_language_registry(t : T?) {
-    t |> success(syntax_language_available("das"), "daScript alias is available")
+    t |> success(syntax_language_available("das"), "daslang alias is available")
     t |> success(syntax_language_available("c"), "C is available")
     t |> success(syntax_language_available("c++"), "C++ alias is available")
     t |> success(syntax_language_available(".hpp"), "C++ extension alias is available")
@@ -41,7 +41,7 @@ def test_tree_sitter_daslang_highlights_utf8_and_incomplete_source(t : T?) {
     let source = "// привет\ndef greet(name : string) {lb}\n    let value = \"мир\"\n    return name\n"
     var tokens : array<SyntaxToken>
     t |> equal(syntax_highlight("das", source, tokens), SyntaxHighlightStatus.ok,
-               "incomplete daScript still highlights")
+               "incomplete daslang still highlights")
     t |> success(ranges_are_ordered(tokens), "tokens are flattened and ordered")
     t |> success(has_role_at(tokens, find(source, "greet"), SyntaxRole.function_),
                  "function declaration is semantic")
