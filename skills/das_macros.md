@@ -151,7 +151,7 @@ only-one restriction is for handled-type annotations.
 - **Annotation argument NAMES accept only three keywords** - `type`, `in`, `default`. Any other
   keyword or type token is `error[30151] syntax error, unexpected <token>, expecting type or in or
   default or name`, and the same whitelist governs field annotations, so `@range = 5` fails too -
-  pick a synonym (`span`, `kind`, `fallback`). Extending the whitelist is one `src/parser/ds2_parser.ypp` line plus the twin `_annotation_argument_name` line in `tree-sitter-daslang/grammar.js`; keep both grammars in lockstep. (repo-only)
+  pick a synonym (`span`, `kind`, `fallback`). Extending the whitelist is one `src/parser/ds2_parser.ypp` line plus the twin `name` field of `annotation_argument` in `tree-sitter-daslang/grammar.js`; keep both grammars in lockstep. (repo-only)
 - **`add_structure_field(st, name, type, default)`** (in `daslib/templates_boost`, not `ast`)
   returns the new field's **index** - keep it when you must touch the field again.
 - **`ExprFieldFieldFlags.no_promotion` / `ExprAtFlags.no_promotion`** stop the compiler promoting a

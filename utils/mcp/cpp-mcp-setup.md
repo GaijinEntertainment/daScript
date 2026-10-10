@@ -89,7 +89,9 @@ Install [ast-grep](https://ast-grep.github.io/guide/quick-start.html) and ensure
 (`utils/mcp/rules/*.yml`), so the **C/C++** ast-grep tools (`cpp_grep_usage`,
 `cpp_find_symbol`, `cpp_outline`, `cpp_goto_definition`) work with just `sg`
 installed. The `.das` tools (`grep_usage`, `outline`) additionally need the
-tree-sitter-daslang grammar + an `sgconfig.yml`.
+tree-sitter-daslang grammar + an `sgconfig.yml`, and `sg` 0.37.0 or later,
+before 0.50.0. With that `sgconfig.yml` in place, the C/C++ tools return no
+matches under an older `sg` too.
 
 ## Notes
 

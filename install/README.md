@@ -97,7 +97,7 @@ usual thread and dl libraries in place of the Windows list.
 A full tree-sitter grammar for daslang is included in `tree-sitter-daslang/`. Use it for:
 
 - **Syntax highlighting** - `tree-sitter-daslang/queries/highlights.scm` works in editors that support tree-sitter (Neovim, Helix, Zed)
-- **Parse-aware search** - via [ast-grep](https://ast-grep.github.io/) (`sg`) for structural code search. Install `sg`, then run from the SDK root (where `sgconfig.yml` lives):
+- **Parse-aware search** - via [ast-grep](https://ast-grep.github.io/) (`sg` 0.37.0 or later, before 0.50.0) for code search. A daslang pattern is literal code: metavariables such as `$A` do not match. Install `sg`, then run from the SDK root (where `sgconfig.yml` lives):
   ```sh
   sg run -p "symbol_name" -l daslang
   ```

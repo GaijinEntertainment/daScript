@@ -280,6 +280,8 @@ After creating/editing these files, restart Claude Code (or start a new session)
 
 The `grep_usage` and `outline` tools use [ast-grep](https://ast-grep.github.io/) (`sg` CLI) with a custom tree-sitter grammar for daslang. The `sgconfig.yml` config file is platform-specific (shared library extension differs), so it is gitignored.
 
+The tools need `sg` 0.37.0 or later, before 0.50.0. With `sgconfig.yml` in place, an older `sg` cannot load the grammar library and every ast-grep tool returns no matches, the C++ tools included; `sg` 0.50.0 and later ignore the daslang language.
+
 Copy the appropriate template to `sgconfig.yml` in the project root:
 
 ```bash
