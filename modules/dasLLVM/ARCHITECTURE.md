@@ -1,6 +1,6 @@
 # dasLLVM Architecture
 
-The design document `REVIEW.md` cites. Numbered sections are the stable reference targets;
+The design document `REVIEW.md` cites. A section's `{#anchor}` is its stable reference target;
 usage and installation live in `README.md`, the debugger rail and its roadmap in `DEBUGGING.md`.
 Companions: `ARCHITECTURE_TARGET_FEATURES.md` (CPU feature truth, the tier gates, the CPU classes),
 `ARCHITECTURE_DEBUG_INFO.md` (the `--jit-debug` DWARF rail - sec.12), `ARCHITECTURE_JIT_ENTRY.md`
@@ -24,7 +24,7 @@ is the caller's choice, a JIT DLL or an exe or, for `-lib`, a shared library or 
 with the C header written beside it), **install** (resolve externs, instrument sim nodes), and
 **finalize** (engine teardown / state install). On a hit irgen, optimize and emit+link read as zero.
 
-### 1.1 The timing contract
+### 1.1 The timing contract {#jit-timing-contract}
 
 Every phase above reports its wall time in the `LLVM JIT time:` breakdown printed under
 `options log_compile_time` / `policies.log_compile_time` - the same option the front end uses
@@ -58,7 +58,7 @@ lld-link, `-flto` on a POSIX driver, where the plan links through `clang++` unle
 `--jit-path-to-linker` names another - a GNU driver handles no bitcode). `DAS_JIT_PROBE_LTO` is
 the DLL path's dev twin of that rail; the slots the partitions own and the LTO link's needs are `ARCHITECTURE_EXE.md` sec.3 and 4.
 
-### 1.2 The codegen tier
+### 1.2 The codegen tier {#codegen-tier}
 
 Code that EMITS machine code - the surface whose changes bump `LLVM_JIT_CODEGEN_VERSION` -
 is IR generation, target-machine setup, the `[llvm_code]` generator bodies, and the jit call
@@ -94,7 +94,7 @@ element the builder did not fold to a constant of the element type sends the who
 Moved to `ARCHITECTURE_CODEGEN_IDENTITY.md`: sec.2 (the content-addressed DLL key and the jit call
 ABI) and sec.2.1 (the split obj cache's positional invalidation).
 
-## 3. Overrides and their announces
+## 3. Overrides and their announces {#override-knobs}
 
 The backend's override knobs - the escapes that change what a run compiles, tunes, or emits
 beyond its defaults - are: `DAS_TUNE_POLICY` (replaces the declared/injected tune policy),
@@ -202,3 +202,12 @@ a global written on one branch is looked up on that branch only. Every access to
 function therefore shares one base pointer, which is what lets LLVM see `xs[j]` and `xs[j + 1]` as
 adjacent. Under `options solid_context` the address is instead `context->globals + stackTop`,
 computed once per function in the entry block.
+
+## 12. A macro-time line prints once per module-cache record {#macro-line-cache-replay}
+
+A compile that hits a front-end module-cache record replays the cached AST and runs no macro
+again. A line a macro prints at compile time - the `llvm_tune:` apply lines, a `[tune]`-family
+compile error - therefore prints on the run that wrote the record and on no later run, and an
+assertion that such a line is absent passes on a hit whatever the macro would do. A line printed
+after the front end - by the backend or by the runtime guard, such as the `LLVM JIT:` announce,
+the covered-box announce or `re-tuning (--tune)` - prints on every run, hit or miss.

@@ -1,11 +1,9 @@
 # Tests Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
-`README.md` (this folder).
+`README.md`.
 
 **A test answers to its kind's checklist wherever under this folder the diff puts it:**
-a test that asserts on `require` path lookup, module compile order, or files under the module
-cache folder - `module_cache/REVIEW.md`;
 a test that runs a dasMetal kernel class or creates any Metal object - `metal/REVIEW.md`;
 an MSL emitter fixture (a test that compiles a kernel and checks the emitted MSL) or a change to
 `msl/test_msl_census.das` - `msl/REVIEW.md`;
@@ -13,29 +11,30 @@ a SPIR-V emitter fixture (a test holding a `*_words` function that compiles a sh
 its emitted words) or a change to `spirv/test_census.das` - `spirv/REVIEW.md`;
 a test that calls `tick_debug_agent` - `debug_agent/REVIEW.md`.
 
-**A file or directory whose path a test names - written by the test itself, a C++-bound function,
-or a program or server the test starts - goes under `test_temp_dir()` (`dastest/testing_boost`,
+**A diff that adds, moves, or changes a test that asserts on `require` path lookup, module
+compile order, or files under the module cache folder leaves it under `module_cache/`.**
+
+**Every file or directory a test writes - itself, through a C++-bound function it calls, or
+through a program or server it starts, including what that program writes under a working
+directory or project root the test passes it - goes under `test_temp_dir()` (`dastest/testing_boost`,
 repo root) or a directory from `create_temp_directory` (`daslib/fio`, repo root), never under the
-repo tree or at a fixed name in `temp_directory`.** Two runs of one test file can share the tree
-at once, so a fixed path is shared between them. `REVIEW.das` finds only fio's
-`remove`/`rmdir`/`mkdir`/`fwrite`/`rename`/`copy_file` calls, a writing `fopen`, `stbi_write_*` and
-image `save` whose path is built from `get_das_root()`, plus a writing `fopen` of a relative
-literal; the reviewer checks every other write, and weakening that check is a defect.
+repo tree or at a fixed name in `temp_directory`.** Two runs of one test file can share the tree at once, so a fixed path is
+shared between them. The reviewer checks every write `REVIEW.das` does not flag; weakening that
+check is a defect.
 
 **A diff that widens the `dasbind` skip in `.das_test` or drops one of the `[extern]` probe
 functions or any of its assertions from `dasbind/test_extern_abi.das` is a defect.** The suite is the only
 check of which register or stack slot an interpreted `[extern]` call puts each argument in - the
 JIT never takes that path - so coverage lost there reports green on every lane.
 
-**A changed `.das` file under this folder that sits in an `AOT_*_FILES` variable of
-`tests/aot/CMakeLists.txt` (by glob or by name) and is not marked `options no_aot` passes its
-`dastest` run and `test_aot` (and the per-PR AOT subset binary too when it sits under
-`language/`), and the PR body names the run that showed the `test_aot` pass: a local
-`preflight --full`, a `--target run_tests_aot` build, or a CI job link.** Per-PR CI builds only
-the AOT subset binary (`tests/aot/CMakeLists.txt`), so the PR's own checks do not prove
-`test_aot`, and the glob picks a new file up silently.
+**A diff that changes a `.das` file under this folder that sits in an `AOT_*_FILES` variable of
+`tests/aot/CMakeLists.txt` (by glob or by name) and is not marked `options no_aot` names in the
+PR body the run that showed its `test_aot` pass: a local `preflight --full`, a
+`--target run_tests_aot` build, or a CI job link.** Per-PR CI builds only the AOT subset binary,
+so the PR's own checks do not prove `test_aot`, and the glob picks a new file up silently.
 
 **A diff that marks a `.das` file under `tests/` `options no_aot`, or filters one out of an
 `AOT_*_FILES` variable of `tests/aot/CMakeLists.txt`, states in a comment beside the option or
-the filter what stops the file compiling or running on its suite's `test_aot` lane.** Without a
-stated reason no later diff can tell whether the opt-out is still needed.
+the filter what stops the file compiling or running on its suite's `test_aot` lane, or why an
+AOT build of it tests nothing.** Without a stated reason no later diff can tell whether the
+opt-out is still needed.

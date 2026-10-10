@@ -1,7 +1,9 @@
 # daslib Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE.md` and its `ARCHITECTURE_<CONCERN>.md` companions in this folder.
+docs: `ARCHITECTURE.md`, `ARCHITECTURE_CAPI.md`, `ARCHITECTURE_CURSOR.md`, `ARCHITECTURE_EMIT.md`,
+`ARCHITECTURE_JOBQUE.md`, `ARCHITECTURE_LINQ.md`, `ARCHITECTURE_LINT.md`, `ARCHITECTURE_MEMORY.md`,
+`ARCHITECTURE_SHADER.md`, `ARCHITECTURE_SYNTAX.md`.
 A diff touching the linq family - `linq*.das`, `sql_*.das` - applies `REVIEW_LINQ.md` too. A
 diff that changes compile-time AST-building code - a class deriving an `Ast*Annotation` or
 `Ast*Macro`, an `AstVisitor` a macro or an annotation runs at compile time, a
@@ -10,7 +12,8 @@ diff that changes compile-time AST-building code - a class deriving an `Ast*Anno
 diff touching `daspkg.das` - the functions a `.das_package` manifest body calls - applies
 `utils/daspkg/REVIEW.md` (repo root) too. A diff touching `shader_lingua_franca.das` - the
 declarations both shader emitters compile - applies `modules/REVIEW_SHADER_EMITTERS.md` (repo
-root) too.
+root) too. A diff touching a file listed in `RULE_MODULES` of `utils/lint/REVIEW.das` (repo
+root) applies `utils/lint/REVIEW.md` (repo root) too.
 
 **A diff that changes a `.das` here that an `AOT_*_MODULE_FILES` variable of
 `tests/aot/CMakeLists.txt` (repo root) picks up, and that is not marked `options no_aot`, states
@@ -32,7 +35,7 @@ the actionable line is an intermediate call site.
 
 **A diff that moves an `in_closure` / `in_deferred` guard to a different statement position
 inside a lint visitor method is a defect.** The guard's position decides which rules apply
-inside a lambda; the per-rule policy is in `ARCHITECTURE_LINT.md` sec. 1.
+inside a lambda; the per-rule policy is in `ARCHITECTURE_LINT.md#perf-lint`.
 
 **Never move PERF023's `add_ptr_ref` splice-depth tracking (`perf_lint.das`) behind the
 `in_closure` gate.** The rules block is itself a closure, so a gated tracker never sees the
@@ -46,8 +49,8 @@ initializer reports the variable.
 state scoped to that construct.** State an early return leaves set poisons the next
 construct's visit.
 
-**Visitor state that must be restored to a value saved when its construct was entered lives in
-a stack, never in a bare scalar.** A saved value kept in a scalar survives into the sibling
+**A diff that keeps visitor state, restored to a value saved when its construct was entered, in
+a bare scalar is a defect - use a stack.** A saved value kept in a scalar survives into the sibling
 construct's exit path and unbalances it.
 
 **A diff that adds or changes something a second site must agree with - a daslib fact (code or a
@@ -233,7 +236,7 @@ visitor machinery.
 the same change.** The scanners match daslang source text; a missing spelling makes every
 enforcement test pass vacuously.
 
-**A diff that adds or changes an `ast_verify` check names, in `ARCHITECTURE.md` sec. 8, the
+**A diff that adds or changes an `ast_verify` check names, in `ARCHITECTURE.md#ast-verify`, the
 C++ `::visit` site that dereferences the slot unguarded.** A check with no such site invents
 an invariant the compiler does not hold, and the two passes disagree - a slot infer fills in
 is checkable only post-infer.
@@ -250,8 +253,8 @@ wrapper's signature checks nothing the call does not: the target is found by nam
 count, and a pointer crosses into a context that holds its lock for the whole run, so the
 `unsafe` belongs at the site that hands the pointer over.
 
-**A diff that adds or changes a buffer-I/O overload returns before taking `addr(buf[0])` on
-an empty buffer.** The address is out of bounds and the call sits inside `unsafe`, so an
+**A diff that adds or changes a function that takes `addr(buf[0])` of an array or string
+argument returns before taking it on an empty buffer.** The address is out of bounds and the call sits inside `unsafe`, so an
 overload without the guard passes every non-empty test.
 
 **Never decide lvalue-ness in `apply`'s inline path from a ref flag - decide it by node
@@ -290,8 +293,8 @@ every target with every test green, and a row in a table gated on a weaker featu
 instruction the generic machine cannot select - the `tests/jit_tests` twins compare hardware
 against a reference body and catch a wrong emitter, never a missing or misplaced one.
 
-**A function in `aarch64_neon.das`, `x64_avx.das` or `f16_cvt.das` that is the wider- or
-newer-tier variant of the same math another function in that file computes calls that function -
-never a hand-written scalar loop.** A box whose CPU lacks the tier then runs the recognized
-narrower path instead of scalar code. A tier function with no same-math sibling (`smmla`'s 2x8
-by 8x2 shape) keeps its own fallback body.
+**A diff that adds or changes a function in `aarch64_neon.das`, `x64_avx.das` or `f16_cvt.das`
+that is the wider- or newer-tier variant of the same math another function in that file computes
+makes its fallback call that function - never a hand-written scalar loop.** A box whose CPU lacks
+the tier then runs the recognized narrower path instead of scalar code. A tier function with no
+same-math sibling keeps its own fallback body.

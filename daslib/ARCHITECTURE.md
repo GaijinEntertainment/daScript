@@ -11,7 +11,7 @@ Companion documents carry separate concerns.
 - `ARCHITECTURE_SYNTAX.md` - sec. 42: the raw assignment spellings, the formatter / printer / builtin sides of the lexer, parser and inference pairs.
 - `ARCHITECTURE_MEMORY.md` - sec. 43: runtime memory snapshots.
 
-## 8. ast_verify
+## 8. ast_verify {#ast-verify}
 
 - **One node set answers two opposite questions**: a node reached TWICE has two parents
   (broken unique ownership); a gc-owned node reached ZERO times sits in a slot no visitor

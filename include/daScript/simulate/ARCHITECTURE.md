@@ -1,6 +1,6 @@
 # Simulate headers - architecture notes
 
-## The hot-path model
+## The hot-path model {#hot-path-model}
 
 The interpreter's throughput is a handful of functions: the `SimNode::eval*` methods
 (`simulate_nodes.h`, `runtime_*.h`, the extern-call nodes in `interop.h`), their AOT twins
@@ -10,6 +10,15 @@ Work added there runs once per evaluated node, so a single load, branch, or coun
 every program on every step. Amortized container work - growth in `src/simulate/runtime_array.cpp`
 (repo root) / `runtime_table.h`, reached from eval nodes but running once per capacity change - is outside
 the hot set; its cost is judged against the allocate/copy/rehash it rides.
+
+Added hot-path work is any per-evaluation operation the old body did not have: a load, branch,
+call, copy, or counter, a direct call made indirect, a static dispatch made virtual, an unboxed
+value made a boxed round-trip. A body that gains one is added work even at no measured cost, and
+a replacement body that performs the same operations and measures no slower is not. A diff shows
+source, not the optimized codegen the shipped build runs, so whether added work costs anything is
+shown by the emitted codegen or by a measurement against the code it replaces. The cost baseline
+is code that answered correctly: a slot that returned a wrong constant costs more once it
+computes the right one, and that cost is the fix, not a regression.
 
 ## Table key hashing
 
@@ -130,7 +139,7 @@ already; `Context::callOrFastcall`, the entry AOT and JIT code use to call back 
 interpreted function, stays frameless and uncounted, and the native code around it has no
 guard of its own either.
 
-## Sanctioned hot-path additions
+## Sanctioned hot-path additions {#sanctioned-hot-path-additions}
 
 The ledger the checklist's hot-path rules route to. Each entry: what was added, where, why
 correctness required it, and the alternative that was rejected.

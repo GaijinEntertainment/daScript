@@ -4,20 +4,22 @@
 `README.md`.
 
 **A change to a `.das` file in this folder without a green unit run is a defect.** The unit
-suite is `bin/daslang dastest/dastest.das -- --test utils/daspkg/test_daspkg.das` - fast, no
-network, interpreted.
+suite is `bin/daslang dastest/dastest.das -- --test utils/daspkg --exclude test_daspkg_git` -
+no network, interpreted.
 
-**A diff whose changed lines sit inside `run_cmd` (`utils.das`), or inside a function whose
-body passes a `git` command line to `run_cmd`, also runs the integration suite, in the same
-change.** The integration suite is `bin/daslang dastest/dastest.das -- --test
-utils/daspkg/test_daspkg_git.das`, and it needs network (the `borisbat/daspkg-test-*` fixture
-repos).
+**A diff whose changed lines sit inside `run_cmd` (`utils.das`), or inside a function in any
+`.das` in this folder that passes a `git` command line to `run_cmd` or calls a function whose
+name starts with `git_`, also runs the integration suite, in the same change.** The integration
+suite is `bin/daslang dastest/dastest.das -- --test utils/daspkg/test_daspkg_git.das`, and it
+needs network (the `borisbat/daspkg-test-*` fixture repos).
 
-**A diff whose changed lines - in `cmd_release`, `cmd_release_wasm`, or a function either one
-runs - write a file into the bundle, choose a file's name or location inside it, or build the
-command that compiles or links an exe, runs that release and states in the review which
-platform it ran on.** The native release layout differs per platform (`.app` bundle vs flat
-directory), and the wasm release links with the emsdk installed on that platform.
+**A diff whose changed lines in a release function write a file into the bundle, choose a
+file's name or location inside it, or build the command that compiles or links an exe, runs
+that release and states in the review which platform it ran on.** A release function is
+`cmd_release`, `cmd_release_wasm`, or a function in `commands.das` that either one calls,
+directly or through other `commands.das` functions. The native release layout differs per
+platform (`.app` bundle vs flat directory), and the wasm release links with the emsdk installed
+on that platform.
 
 **A diff that adds a command also adds its `print_usage` line and its row in the `README.md`
 Commands table, in the same change.**
@@ -33,10 +35,10 @@ Options table to say the same thing, in the same change.**
 root) exports for a manifest body to call - also adds it to the `README.md` `.das_package`
 manifest section, in the same change.**
 
-**A `cmd_release` bundle built without `--fat` carries a `<stem>.tune.json` sidecar beside every
-exe it ships - the main exe, and each companion the package's `release()` declares with
-`release_program`; a missing one is a defect** - the sidecar holds the measured kernel choices
-an exe reads at run time, under that exe's own file name.
+**A diff that lets a `cmd_release` bundle built without `--fat` finish without a
+`<stem>.tune.json` sidecar beside every exe it ships - the main exe, and each companion the
+package's `release()` declares with `release_program` - is a defect** - the sidecar holds the
+measured kernel choices an exe reads at run time, under that exe's own file name.
 
 **A diff that lets a `--fat` release finish while any scope's `fat_unprofiled` list is non-empty
 in any deps JSON the release wrote - the file `daslang -exe --list-shared-modules` writes beside
@@ -54,21 +56,24 @@ wrote.
 tune scope the main program's deps JSON does not is a defect** - the release refuses that
 companion.
 
-**A release path that overwrites or deletes a `release_include_if_missing` file is a defect** -
-one the package's `release()` declares that way: a starter file deployed once, then owned by
-the user.
+**A diff that lets a release path overwrite or delete a `release_include_if_missing` file is a
+defect** - one the package's `release()` declares that way: a starter file deployed once, then
+owned by the user.
 
-**A `cmd_release` bundle that finishes without writing `.daspkg_release.manifest` is a
-defect.**
+**A diff that lets a `cmd_release` bundle finish without writing `.daspkg_release.manifest` is
+a defect.**
 
-**A test in `test_daspkg.das` that reaches the network is a defect** - network coverage belongs
-in `test_daspkg_git.das`.
+**A test outside `test_daspkg_git.das` that reaches the network is a defect - put it in
+`test_daspkg_git.das`.**
 
-**A shell command or filesystem path built from any string this tool did not produce itself -
-a name a `.das_package` or the command line supplied, a CPU class, a companion's script path -
-outside `commands.das`, or without an `is_safe_pkg_name` check first - on the whole string,
-or on each `/`-separated segment when the string is a path declared to reach another tree,
-where a `..` segment passes - is a defect; a directory the command line names as an input or
-output root is not such a string** - `is_safe_pkg_name` is private to `commands.das`, and a
-string carrying a space, a quote, a separator or `..` splits the command or reads outside the
-directory the path was built for.
+**A diff that builds a shell command or filesystem path from a name a `.das_package` or the
+command line supplied that becomes one file name, one directory name, or one bare word of a
+shell command - never a directory the command line names as an input or output root - outside
+`commands.das`, or before `is_safe_pkg_name` accepts the whole name, is a defect.**
+`is_safe_pkg_name` is private to `commands.das`, and a string carrying a space, a quote, a
+separator or `..` splits the command or reads outside the directory the path was built for.
+
+**A diff that builds a shell command or filesystem path from a `/`-separated path a
+`.das_package` supplies is a defect when it does so outside `commands.das`, or before
+`is_safe_pkg_name` accepts every segment; only a `release_program` script path and a
+`release_include_from` source path may also carry `..` segments, which reach another tree.**

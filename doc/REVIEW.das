@@ -9,6 +9,8 @@ require dastest/review_gate
 
 let private CONF = "doc/source/conf.py"
 let private SOURCE_ROOT = "doc/source"
+let private DAS2RST = "doc/reflections/das2rst.das"
+let private RST_COMMENT = "daslib/rst_comment"
 
 // Hosts a built doc page may reach without a click. daslang.io is where the tree is served
 // (html_baseurl) and jsDelivr serves the DocSearch bundle and its base stylesheet; the theme
@@ -35,6 +37,17 @@ def private check_conf_hosts {
     }
 }
 
+def private check_rst_comment_first {
+    let requires <- das_requires(DAS2RST)
+    if (empty(requires)) {
+        gate_finding(DAS2RST, "missing, unreadable, or has no require")
+        return
+    }
+    return if (requires[0] == RST_COMMENT)
+    gate_finding(DAS2RST, find_line(fread(DAS2RST), "require {requires[0]}"),
+        "requires {requires[0]} before {RST_COMMENT} - the //! comment reader is installed when {RST_COMMENT} compiles, so a module compiled before it gets no //! comments on its doc page; make require {RST_COMMENT} the first require")
+}
+
 [export]
 def main() : int {
     if (!fexist(CONF)) {
@@ -42,6 +55,7 @@ def main() : int {
         return 2
     }
     check_conf_hosts()
+    check_rst_comment_first()
     let no_skipped_dirs : table<string>
     gate_web_third_party([SOURCE_ROOT], no_skipped_dirs, ALLOWED_HOSTS)
     return gate_verdict("doc")

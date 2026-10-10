@@ -2,7 +2,7 @@
 
 Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across the family.
 
-## 1. perf_lint
+## 1. perf_lint {#perf-lint}
 
 - **Three loop spaces.** `loop_depth`/`in_closure` (+ `VarStackEntry.depth`) is the
   contract for every loop rule: any closure body is deferred, hence not "in" the loop.

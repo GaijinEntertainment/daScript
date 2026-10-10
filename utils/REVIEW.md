@@ -29,19 +29,19 @@ skip-path assertion.
 A CI row is a workflow step whose command runs the arm, directly or through a process it
 spawns. An assertion no CI row can run is one that needs something no pull-request lane's
 runner image provides - a GPU, a host tool the image does not carry, a network service, a
-credential - or one the arm returns or skips before on every such runner; whether a row runs
-the arm today does not decide it. An arm that skips unless a host tool is present has
-assertions a CI row can run when the pull-request lane's runner image carries that tool, and
-the change names that lane. One arm can hold assertions of both kinds.
+credential - that list is closed; whether a row runs the arm today does not decide it. An arm
+that skips unless something the build can produce is present - a target, an exe, a generated
+file - has assertions a CI row can run. An arm that skips unless a host tool is present has
+assertions a CI row can run when a pull-request lane's runner image carries that tool. One arm
+can hold assertions of both kinds.
 
 **A changed file that belongs to a tool, wherever the tool sits, is reviewed with that tool's
 own `REVIEW.md`, where one exists, as well as with this checklist.**
 
 **A diff that adds a `[test]` file covering a change to a tool puts that file under the tool's
 directory; a test that calls a `common/` module directly goes under `common/`, even when it also
-runs a tool, one that tests a
-`common/` change by running a tool that requires it goes under that tool, and a test covering
-two tools goes under either one.**
+runs a tool, one that tests a `common/` change by running a tool that requires it goes under that
+tool, and a test covering two tools goes under either one.**
 
 **A diff that changes how a tool builds a `.dlim` from a gguf, how one loads it, or what
 identifies one - the fields that decide whether two `.dlim`s are the same image - answers to
@@ -65,8 +65,9 @@ the list naming the removed exe, in the same change.**
 **An arm the diff adds or changes that covers a change to a tool, whose load-bearing
 assertions a CI row can run against the change, ships with a CI row that executes those
 assertions on every pull request, wherever the diff puts the arm, added in the same change
-when no row does that yet.** A row that only compile-checks the arm (`dastest --compile-only`)
-does not execute them.
+when no row does that yet; when the arm skips unless a host tool is present, the PR description
+names the pull-request lane whose runner image carries that tool.** A row that only
+compile-checks the arm (`dastest --compile-only`) does not execute them.
 
 **An arm the diff adds or changes that covers a change to a tool, whose load-bearing
 assertions no CI row can run, ships with a row that compile-checks the file the arm sits in -

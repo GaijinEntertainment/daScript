@@ -15,16 +15,11 @@ reader sends that host and whether the host sets cookies.**
 
 **A diff that adds to an authored `.rst` under `source`, or to a stub under
 `source/stdlib/handmade`, anything a reader is told to fetch, run, or type that the file did not
-carry before - an address, a file, a command, a flag, an API, a `.das_package` name - states, in
-the PR body, for each: where it was checked to exist and work at merge, or which job of a
-release-tag workflow in `.github/workflows/` creates and smoke-tests it** - the build proves the
-page renders, never that what it points a reader at is there.
-
-**A diff that touches the `require` list of `reflections/das2rst.das` keeps
-`require daslib/rst_comment` ahead of every other require** - the `//!` comment reader
-(`rst_comment`'s `[comment_reader]`) is installed when `rst_comment` compiles, and a module
-compiled before it, as an earlier require or as a dependency of one, gets no `//!` comments on
-its page.
+carry before states in the PR body, for each such item, where it was checked to exist and work
+at merge, the job of a release-tag workflow in `.github/workflows/` that creates and smoke-tests
+it, or - for a name that exists only after a package-manager install - a `ci/` test (repo root)
+that asserts the name in the package manifest that ships it** - the build proves the page
+renders, never that what it points a reader at is there.
 
 **A diff that changes a generator under `reflections/` (a file there, its `group_by_regex`
 calls included) states, in the PR body, that every name the generator newly places on a page

@@ -3,35 +3,28 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
 `ARCHITECTURE.md`.
 
-- **Weakening `review_nttp.das`'s bind-flavor scan, which `REVIEW.das` runs, is a defect - fix a
-  bind the scan reports by switching the bind.** The Inline modules are `$` (builtin), `math`,
-  `strings` and `jit`. What the scan enforces, and which shared generic helpers it exempts, is
-  read from the scan itself.
+- **Weakening `review_nttp.das`'s bind-flavor scan, which `REVIEW.das` runs, is a defect - a bind
+  the scan reports is rebound with the other call: `addExtern` becomes `addExternInline` in an
+  Inline module, and `addExternInline` becomes `addExtern` in any other module.** A bind's flavor
+  is which of the two calls registers it; an Inline module is one of the modules the next sentence
+  lists. The Inline modules are `$` (builtin), `math`, `strings` and `jit`. Which
+  shared generic helpers the scan exempts is read from the scan itself.
 
-- **A diff that adds or changes a bind - any `addExtern*` call - under this folder rebuilds
-  the binary from that diff before the folder's gate runs** - the scan reads the binds
-  compiled into the running binary, so a stale binary is a false green.
+- **A diff that adds or changes a bind - any `addExtern*` call - under this folder states in the
+  PR description that the folder's gate ran on a binary built from the diff** - the scan reads
+  the binds compiled into the running binary, so a stale binary is a false green.
 
 - **A diff that adds a module under this folder adds it to `review_nttp.das`'s `require` list in
-  the same change - directly, or through the daslib wrapper that requires it.** A module the list
-  does not reach is a module the scan never sees.
+  the same change - directly, or through the daslib wrapper that requires it - and a diff never
+  drops a module from that list: it keeps the `require`, or removes the module itself.** The list
+  sets the modules the scan covers.
 
-- **Never drop a module from `review_nttp.das`'s `require` list.** The list is what sets the
-  modules the scan covers.
-
-- **A diff that changes the bytes a module-cache record carries or what they resolve to - a
-  field added, removed, reordered or re-typed in `module_builtin_ast_serialize.cpp`, an encoding
-  changed there, or a change to which module owns a streamed annotation, function or type -
-  bumps the version `getVersion()` returns in `include/daScript/ast/ast_serializer.h`, in the
-  same change** - a reader accepts a stream only when its stored version equals `getVersion()`,
-  so without the bump an older cache passes that check and decodes the changed bytes as
-  something else. A C++ layout change to a handled type or an AST class is not a record byte.
-
-- **A diff that makes a record written before it wrong - the bytes still decode, but what they
-  encode is no longer what this build would write - bumps the version `getVersion()` returns in
-  `include/daScript/ast/ast_serializer.h`, in the same change** - a record reached through an
-  explicit `-module-cache <path>` carries no binary stamp in its key, so the version is the only
-  thing that discards it.
+- **A diff after which a module-cache record an older build wrote no longer matches what this
+  build writes bumps `getVersion()` (`include/daScript/ast/ast_serializer.h`) in the same change -
+  a field added, removed, reordered or re-typed in `module_builtin_ast_serialize.cpp`, an encoding
+  changed there, or a streamed annotation, function or type moved to another module.** A reader
+  discards a record only on a version mismatch, an explicit `-module-cache <path>` key included. A
+  C++ layout change to a handled type or an AST class is not a record byte.
 
 - **A diff that streams or compares a `CodeOfPolicies` field in `module_builtin_ast_serialize.cpp`
   outside `DAS_MODULE_CACHE_POLICY_FIELDS` is a defect - put the field on the list instead** - the
@@ -77,25 +70,19 @@
   built from a narrow string decodes through the ANSI codepage, so a UTF-8 name the codepage
   cannot represent is misread on the way in and throws on the way out.
 
-- **A diff that changes the function or block a citing comment annotates - a comment naming a
-  section of an architecture document, this folder's (`// src/builtin/ARCHITECTURE.md#<anchor>`)
-  or another's (`// src/ast/ARCHITECTURE.md#<anchor>`) - updates that section in the same
-  change.** C++ carries no `[arch]` annotation; LINT026 checks that the pointer resolves, and
-  nothing but this rule keeps the cited section true.
+- **A diff that changes a C++ type das binds through an annotation with `addField` in this folder
+  and leaves a member whose type is a standard-library class other than `std::string`, or a
+  platform struct embedded by value, before the last das-visible field is a defect - declare that
+  member after that field.** A cross-compiled exe bakes the host's field offsets into the code it
+  generates, and the target's standard library sizes such a member differently, so every
+  das-visible field behind one is read at the wrong address.
 
-- **In a C++ type das binds through an annotation with `addField` in this folder, a member
-  whose size differs between the standard libraries the repo's targets use
-  (`std::mutex`, `std::function`, `condition_variable`; not `std::string`) or a platform struct
-  embedded by value (`struct stat`) is declared after the last das-visible field.** A
-  cross-compiled exe bakes the host's field offsets into the code it generates, and the
-  target's standard library sizes such a member differently, so every das-visible field behind
-  one is read at the wrong address.
-
-- **A type das holds by value (`isLocal`, `canCopy` or `canMove` true in its annotation) is
-  built from members whose size is the same under every target's standard library -
-  fixed-width scalars and `std::string`: copy what das needs out of a platform struct instead of
-  embedding one.** The exe bakes the host's `sizeof` for such a type, so a target that sizes an
-  embedded member differently gives every das local of it the wrong length.
+- **A diff that adds a member whose type is a standard-library class other than `std::string`, or
+  a platform struct embedded by value, to a type das holds by value (`isLocal`, `canCopy` or
+  `canMove` true in its annotation), or makes a type holding one by-value, is a defect - build the
+  type from fixed-width scalars and `std::string`, and copy what das needs out of a platform struct
+  instead of embedding one.** The exe bakes the host's `sizeof` for such a type, so a target that
+  sizes an embedded member differently gives every das local of it the wrong length.
 
 - **A diff that changes the data-member order or data-member set of a C++ type das binds
   through an annotation states its `--jit-check-abi` result for a cross target in its own PR

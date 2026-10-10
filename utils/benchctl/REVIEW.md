@@ -3,11 +3,16 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
 `README.md`.
 
-**Never put a `[test]` file outside `tests/`, and never let a test touch the filesystem outside a
-`temp_directory`-rooted path or leave behind what it creates.**
+**A diff that adds a `[test]` file outside `tests/` (beside this file) is a defect - put it in
+`tests/` (beside this file).**
 
-**A module file orders its top level types, then `private` helpers, then its public functions, so
-the tail of the file is the module's whole API.**
+**Never let a test write outside a `temp_directory`-rooted path or leave behind what it wrote -
+write through `with_temp_dir` (`tests/_test_common.das`), which creates the directory and removes
+it.**
+
+**A diff that puts a type after a function, or a `private` helper after a public function, in a
+module file is a defect - move it above.** The tail of the file is then the whole API of the
+module.
 
 **Never add a run-record field - a field of `RunRecord` or `FileResult` in `bench_history.das`,
 what `run` writes per night - without saying in `README.md`'s "Run records" section what reads
@@ -15,17 +20,13 @@ it - the viewer, or a person opening the record.** A field nobody named is one n
 going wrong.
 
 **A diff that changes a run-record field keeps the new reader parsing a record written by the old
-code, a missing field keeping its declared default.** Records already on the box are never
-rewritten.
+code, a missing field keeping its declared default.**
 
 **Never let a child's own output overwrite a `timeout` status in `run_bench_file` - a killed child
 that printed a passing report is still killed.** Loosen `timeout_seconds` in `suite.json` instead.
 
-**Never read a benchmark's identity from anywhere but its path under `benchmarks/`** - the group
-is the directory, the id is the path without `.das`.
-
-**Statistics live in `benchstat.das` and nowhere else** - it depends on no storage, so a second
-median or spread helper anywhere in this folder is a defect.
+**Never read a benchmark's identity from anywhere but its path under `benchmarks/` (repo
+root)** - the group is the directory, the id is the path without `.das`.
 
 **Placement - one file, one line: a diff keeps each file inside its line, and a new file adds its
 line here, with its tests, in the same change.**
