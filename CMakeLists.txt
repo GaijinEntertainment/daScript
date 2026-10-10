@@ -2396,8 +2396,8 @@ if(NOT ${DAS_TREE_SITTER_DISABLED})
     )
     # The Zed extension — the installed install/README.md points users at this
     # directory, so it has to travel with the bundle.
-    install(DIRECTORY tree-sitter-daslang/zed-daslang/
-        DESTINATION tree-sitter-daslang/zed-daslang
+    install(DIRECTORY utils/zed-daslang/
+        DESTINATION utils/zed-daslang
     )
     # Install platform-specific sgconfig.yml for ast-grep (used by grep_usage and outline MCP tools)
     install(FILES "${SGCONFIG_TEMPLATE}" DESTINATION . RENAME sgconfig.yml)
