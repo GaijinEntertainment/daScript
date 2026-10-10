@@ -26,7 +26,7 @@ def public lz4_compress(input : array<uint8> | #; var output : array<uint8>) : b
     var anchor = 0; var cursor = 0
     while (cursor <= size - 12) {
         let word = lz4_word(input, cursor)
-        let bucket = int((word * 2654435761u) >> 16u)
+        let bucket = (word * 2654435761u) >> 16u
         let previous = positions[bucket] - 1; positions[bucket] = cursor + 1
         if (previous < 0 || cursor - previous > 65535 || lz4_word(input, previous) != word) { cursor++; continue }
         var matched = 4
@@ -41,7 +41,7 @@ def public lz4_compress(input : array<uint8> | #; var output : array<uint8>) : b
         cursor += matched; anchor = cursor
         if (cursor <= size - 12) {
             let at = cursor - 2
-            positions[int((lz4_word(input, at) * 2654435761u) >> 16u)] = at + 1
+            positions[(lz4_word(input, at) * 2654435761u) >> 16u] = at + 1
         }
     }
     let literals = size - anchor
