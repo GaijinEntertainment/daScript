@@ -102,24 +102,24 @@
           "ram_gb":64,
           "gpu":"Apple M1 Max (32-core)",
           "model_id":"MacBookPro18,2",
-          "remote_desktop":"parsec"
+          "remote_desktop":"off"
         },
         "tests":{
           "pp512":{
-            "tok_s":974.4756432580491,
-            "stddev":1.5481283664703369
+            "tok_s":974.01242709324413,
+            "stddev":3.0671596527099609
           },
           "tg128":{
-            "tok_s":73.512872183105415,
-            "stddev":0.089266866445541382
+            "tok_s":73.385844748733888,
+            "stddev":0.29579085111618042
           },
           "tg128@4":{
-            "tok_s":122.43706001096328,
-            "stddev":0.55678802728652954
+            "tok_s":121.91010357275047,
+            "stddev":0.28314849734306335
           }
         },
         "source":"official",
-        "sha":"e872d6ffa",
+        "sha":"050c75ad0",
         "version":"0.6.5",
         "dasllama_version":16,
         "versions":"exe one unit",
@@ -154,16 +154,16 @@
           "ram_gb":64,
           "gpu":"Apple M1 Max (32-core)",
           "model_id":"MacBookPro18,2",
-          "remote_desktop":"parsec"
+          "remote_desktop":"off"
         },
         "tests":{
           "pp512":{
-            "tok_s":830.72084099999995,
-            "stddev":6.524203
+            "tok_s":832.831143,
+            "stddev":4.9673280000000002
           },
           "tg128":{
-            "tok_s":54.094099999999997,
-            "stddev":0.040065000000000003
+            "tok_s":54.12294,
+            "stddev":0.079411999999999996
           }
         },
         "source":"official",
