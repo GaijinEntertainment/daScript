@@ -1,0 +1,29 @@
+[build-system]
+build-backend = "setuptools.build_meta"
+requires = [ "setuptools>=62.4.0", "wheel" ]
+
+[project]
+authors = [ { name = "Gaijin Entertainment" }, { email = "xog3@yandex.ru", name = "Anton Zinovyev" } ]
+classifiers = [
+  "Intended Audience :: Developers",
+  "Topic :: Software Development :: Compilers",
+  "Topic :: Text Processing :: Linguistic",
+  "Typing :: Typed",
+]
+description = "Daslang grammar for tree-sitter"
+keywords = [ "incremental", "parsing", "tree-sitter", "daslang" ]
+license.text = "BSD-3-Clause"
+name = "tree-sitter-daslang"
+readme = "README.md"
+requires-python = ">=3.10"
+version = "0.6.0"
+
+[project.urls]
+Homepage = "https://github.com/GaijinEntertainment/tree-sitter-daslang"
+
+[project.optional-dependencies]
+core = [ "tree-sitter~=0.25" ]
+
+[tool.cibuildwheel]
+build = "cp310-*"
+build-frontend = "build"

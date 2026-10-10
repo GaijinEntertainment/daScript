@@ -1,55 +1,64 @@
 {
   "name": "tree-sitter-daslang",
-  "version": "0.1.0",
-  "description": "Tree-sitter grammar for the daslang programming language",
-  "main": "bindings/node",
+  "version": "0.6.0",
+  "description": "Daslang grammar for tree-sitter",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/GaijinEntertainment/tree-sitter-daslang.git"
+  },
+  "license": "BSD-3-Clause",
+  "author": {
+    "name": "Gaijin Entertainment"
+  },
+  "contributors": [
+    {
+      "name": "Anton Zinovyev",
+      "email": "xog3@yandex.ru"
+    }
+  ],
+  "main": "bindings/node/index.js",
   "types": "bindings/node",
   "keywords": [
-    "parser",
+    "incremental",
+    "parsing",
     "tree-sitter",
-    "daslang",
-    "dascript"
+    "daslang"
   ],
   "files": [
     "grammar.js",
+    "tree-sitter.json",
     "binding.gyp",
     "prebuilds/**",
     "bindings/node/*",
     "queries/*",
-    "src/**"
+    "src/**",
+    "*.wasm"
   ],
-  "license": "BSD-3-Clause",
   "dependencies": {
-    "node-addon-api": "^7.1.0",
-    "node-gyp-build": "^4.8.0"
+    "node-addon-api": "^8.5.0",
+    "node-gyp-build": "^4.8.4"
+  },
+  "devDependencies": {
+    "eslint": "^9.39.5",
+    "eslint-config-treesitter": "^1.0.2",
+    "prebuildify": "^6.0.1",
+    "tree-sitter": "^0.25.0",
+    "tree-sitter-cli": "^0.27.1"
   },
   "peerDependencies": {
-    "tree-sitter": "^0.21.0"
+    "tree-sitter": "^0.25.0"
   },
   "peerDependenciesMeta": {
-    "tree_sitter": {
+    "tree-sitter": {
       "optional": true
     }
   },
-  "devDependencies": {
-    "tree-sitter-cli": "^0.22.0",
-    "prebuildify": "^6.0.0"
-  },
   "scripts": {
-    "generate": "tree-sitter generate",
-    "test": "tree-sitter test",
-    "parse": "tree-sitter parse",
     "install": "node-gyp-build",
-    "prebuildify": "prebuildify --napi --strip"
-  },
-  "tree-sitter": [
-    {
-      "scope": "source.daslang",
-      "file-types": [
-        "das"
-      ],
-      "injection-regex": "^daslang$",
-      "highlights": "queries/highlights.scm"
-    }
-  ]
+    "lint": "eslint grammar.js",
+    "prestart": "tree-sitter build --wasm",
+    "start": "tree-sitter playground",
+    "test": "node --test bindings/node/*_test.js"
+  }
 }

@@ -1,0 +1,310 @@
+name: Publish packages
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{github.workflow}}-${{github.ref}}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  PACKAGE: tree-sitter-daslang
+  TREE_SITTER_CLI_VERSION: v0.27.1
+  TREE_SITTER_CLI_SHA256: d01042f94ba3d6827ddc9788e235f75d8366431be42bdf90ade534d960c98b7d
+
+jobs:
+  version:
+    name: Check the version
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{steps.version.outputs.version}}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Read the grammar version
+        id: version
+        run: echo "version=$(jq -r .metadata.version tree-sitter.json)" >> "$GITHUB_OUTPUT"
+      - name: Compare the tag with the grammar version
+        if: github.event_name == 'push'
+        run: |
+          if [ "v$VERSION" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match version $VERSION in tree-sitter.json"
+            exit 1
+          fi
+        env:
+          VERSION: ${{steps.version.outputs.version}}
+      - name: Compare the grammar version with the Go module path
+        run: |
+          major=${VERSION%%.*}
+          expected=github.com/$GITHUB_REPOSITORY
+          [ "$major" -lt 2 ] || expected=$expected/v$major
+          module=$(sed -n 's/^module //p' go.mod)
+          if [ "$module" != "$expected" ]; then
+            echo "::error file=go.mod::module path $module must be $expected for version $VERSION"
+            exit 1
+          fi
+        env:
+          VERSION: ${{steps.version.outputs.version}}
+
+  wasm:
+    name: Build the Wasm binary
+    needs: version
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Download the tree-sitter CLI
+        run: |
+          curl -fsSL -o /tmp/tree-sitter.gz \
+            "https://github.com/tree-sitter/tree-sitter/releases/download/$TREE_SITTER_CLI_VERSION/tree-sitter-linux-x64.gz"
+          echo "$TREE_SITTER_CLI_SHA256  /tmp/tree-sitter.gz" | sha256sum --check
+          gunzip /tmp/tree-sitter.gz
+          chmod +x /tmp/tree-sitter
+      - name: Build the Wasm binary
+        run: /tmp/tree-sitter build --wasm
+      - name: Upload the Wasm binary
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: wasm
+          path: "*.wasm"
+          retention-days: 2
+
+  github:
+    name: Create the GitHub release
+    if: github.event_name == 'push'
+    needs: [version, wasm]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Download the Wasm binary
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: wasm
+      - name: Create the source tarball
+        run: git archive --format=tar.gz --prefix="$PACKAGE/" -o "$PACKAGE.tar.gz" HEAD
+      - name: Attest the release artifacts
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            *.wasm
+            ${{env.PACKAGE}}.tar.gz
+      - name: Create the GitHub release
+        run: gh release create "$GITHUB_REF_NAME" ./*.wasm "$PACKAGE.tar.gz" --generate-notes
+        env:
+          GH_TOKEN: ${{github.token}}
+
+  crates:
+    name: Publish the Rust package
+    if: github.event_name == 'push'
+    needs: version
+    runs-on: ubuntu-24.04
+    environment:
+      name: crates
+      url: https://crates.io/crates/tree-sitter-daslang
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check whether crates.io has the version
+        id: published
+        run: |
+          status=$(curl -s -o /dev/null -w '%{http_code}' -A "$PACKAGE publish workflow ($GITHUB_SERVER_URL/$GITHUB_REPOSITORY)" \
+            "https://crates.io/api/v1/crates/$PACKAGE/$VERSION")
+          echo "exists=$([ "$status" = 200 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+        env:
+          VERSION: ${{needs.version.outputs.version}}
+      - name: Set up Rust
+        if: steps.published.outputs.exists == 'false'
+        run: rustup toolchain install stable --profile minimal --no-self-update && rustup default stable
+      - name: Authenticate with crates.io
+        if: steps.published.outputs.exists == 'false'
+        id: auth
+        uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5
+      - name: Publish to crates.io
+        if: steps.published.outputs.exists == 'false'
+        run: cargo publish
+        env:
+          CARGO_REGISTRY_TOKEN: ${{steps.auth.outputs.token}}
+
+  python-sdist:
+    name: Build the Python source distribution
+    needs: version
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Install build
+        run: pip install --upgrade build
+      - name: Build the source distribution
+        run: python -m build --sdist
+      - name: Upload the source distribution
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dist-sdist
+          path: dist/*.tar.gz
+          retention-days: 2
+
+  python-wheels:
+    name: Build Python wheels on ${{matrix.os}}
+    needs: version
+    runs-on: ${{matrix.os}}
+    strategy:
+      matrix:
+        os:
+          - windows-2025
+          - windows-11-arm
+          - ubuntu-24.04
+          - ubuntu-24.04-arm
+          - macos-15
+          - macos-15-intel
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build wheels
+        uses: pypa/cibuildwheel@adba99c781d3746d38b3a09b1cf797965bcb7fe6 # v4.3.0
+        with:
+          output-dir: dist
+        env:
+          CIBW_ARCHS: native
+      - name: Upload the wheels
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dist-wheels-${{matrix.os}}
+          path: dist/*.whl
+          retention-days: 2
+
+  pypi:
+    name: Publish the Python package
+    if: github.event_name == 'push'
+    needs: [python-sdist, python-wheels]
+    runs-on: ubuntu-24.04
+    environment:
+      name: pypi
+      url: https://pypi.org/project/tree-sitter-daslang/
+    permissions:
+      id-token: write
+    steps:
+      - name: Download the distributions
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: dist
+          pattern: dist-*
+          merge-multiple: true
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+        with:
+          skip-existing: true
+
+  node-binaries:
+    name: Build Node.js binaries on ${{matrix.os}}
+    needs: version
+    runs-on: ${{matrix.os}}
+    strategy:
+      matrix:
+        os:
+          - windows-2025
+          - windows-11-arm
+          - ubuntu-24.04
+          - ubuntu-24.04-arm
+          - macos-15
+          - macos-15-intel
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          package-manager-cache: false
+      - name: Install dependencies
+        run: npm ci --omit peer --omit optional
+      - name: Build the binary
+        run: npx prebuildify -t 20.19.5
+      - name: Upload the binary
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: prebuilds-${{matrix.os}}
+          path: prebuilds/**
+          retention-days: 2
+
+  npm:
+    name: Publish the Node.js package
+    if: github.event_name == 'push'
+    needs: [version, wasm, node-binaries]
+    runs-on: ubuntu-24.04
+    environment:
+      name: npm
+      url: https://www.npmjs.com/package/tree-sitter-daslang
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - name: Check that npm supports trusted publishing
+        run: |
+          node -e '
+            const [major, minor, patch] = process.argv[1].split(".").map(Number);
+            const supported = major > 11 || (major === 11 && (minor > 5 || (minor === 5 && patch >= 1)));
+            if (!supported) { console.error(`npm ${process.argv[1]} is older than 11.5.1`); process.exit(1); }
+          ' "$(npm --version)"
+      - name: Check whether npm has the version
+        id: published
+        run: |
+          found=$(npm view "$PACKAGE@$VERSION" version 2>/dev/null || true)
+          echo "exists=$([ -n "$found" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+        env:
+          VERSION: ${{needs.version.outputs.version}}
+      - name: Download the Node.js binaries
+        if: steps.published.outputs.exists == 'false'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: prebuilds
+          pattern: prebuilds-*
+          merge-multiple: true
+      - name: Download the Wasm binary
+        if: steps.published.outputs.exists == 'false'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: wasm
+      - name: Publish to npm
+        if: steps.published.outputs.exists == 'false'
+        run: npm publish --provenance --access public

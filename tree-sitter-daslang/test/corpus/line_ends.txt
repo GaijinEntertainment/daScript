@@ -1,0 +1,293 @@
+================================================================================
+Line break inside parentheses
+================================================================================
+
+def f() {
+    g(1,
+      2)
+    let a = (b
+        + c)
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    body: (block_expression
+      (call
+        name: (identifier)
+        arguments: (constant_integer)
+        arguments: (constant_integer))
+      (let_expression
+        variables: (variable_declaration
+          name: (identifier)
+          init: (parenthesized_expression
+            (binary_operation
+              left: (variable
+                name: (identifier))
+              right: (variable
+                name: (identifier)))))))))
+
+================================================================================
+Line break inside brackets and a table
+================================================================================
+
+let a = [
+    1,
+    2
+]
+let b = {
+    "a" => 1,
+    "b" => 2
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (make_array
+        values: (constant_integer)
+        values: (constant_integer))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (make_table
+        values: (make_tuple
+          values: (constant_string)
+          values: (constant_integer))
+        values: (make_tuple
+          values: (constant_string)
+          values: (constant_integer))))))
+
+================================================================================
+Line continuation
+================================================================================
+
+let a = 1 + \
+    2
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (binary_operation
+        left: (constant_integer)
+        right: (constant_integer)))))
+
+================================================================================
+Tuple pair at the end of a line
+================================================================================
+
+def f() =>
+    1
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    body: (constant_integer)))
+
+================================================================================
+One-line bodies end before the brace
+================================================================================
+
+def f() { return 1 }
+
+def g() {
+    if (a) { b() }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    body: (block_expression
+      (return_expression
+        subexpression: (constant_integer))))
+  (function_declaration
+    name: (identifier)
+    body: (block_expression
+      (if_then_else
+        condition: (variable
+          name: (identifier))
+        if_true: (block_expression
+          (call
+            name: (identifier)))))))
+
+================================================================================
+Line break before the body of a loop
+================================================================================
+
+def f() {
+    for (x in xs)
+    {
+        g(x)
+    }
+    while (a)
+    {
+        b()
+    }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    body: (block_expression
+      (for_expression
+        iterators: (identifier)
+        sources: (variable
+          name: (identifier))
+        body: (block_expression
+          (call
+            name: (identifier)
+            arguments: (variable
+              name: (identifier)))))
+      (while_expression
+        condition: (variable
+          name: (identifier))
+        body: (block_expression
+          (call
+            name: (identifier)))))))
+
+================================================================================
+Statements after an if on the next lines
+================================================================================
+
+def f() {
+    if (a) {
+        b()
+    }
+
+    c()
+    if (d) {
+        e()
+    }
+    {
+        g()
+    }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    body: (block_expression
+      (if_then_else
+        condition: (variable
+          name: (identifier))
+        if_true: (block_expression
+          (call
+            name: (identifier))))
+      (call
+        name: (identifier))
+      (if_then_else
+        condition: (variable
+          name: (identifier))
+        if_true: (block_expression
+          (call
+            name: (identifier))))
+      (block_expression
+        (call
+          name: (identifier))))))
+
+================================================================================
+Line breaks inside a block in parentheses
+================================================================================
+
+def f() {
+    g($(x) {
+        let y = x
+        return y
+    })
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    body: (block_expression
+      (call
+        name: (identifier)
+        arguments: (make_block
+          arguments: (variable_declaration
+            name: (identifier))
+          body: (block_expression
+            (let_expression
+              variables: (variable_declaration
+                name: (identifier)
+                init: (variable
+                  name: (identifier))))
+            (return_expression
+              subexpression: (variable
+                name: (identifier)))))))))
+
+================================================================================
+Line breaks separate enumeration entries
+================================================================================
+
+enum E {
+    A
+    B
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (enumeration_declaration
+    name: (identifier)
+    list: (enumeration_entry
+      name: (identifier))
+    list: (enumeration_entry
+      name: (identifier))))
+
+================================================================================
+Line break separates the types of a tuple
+================================================================================
+
+var a : tuple<int
+    float>
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      type: (tuple_type
+        argument_types: (basic_type)
+        argument_types: (basic_type)))))
+
+================================================================================
+Piped block inside parentheses with explicit semicolons
+================================================================================
+
+def f() {
+    g(h() { x; })
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    body: (block_expression
+      (call
+        name: (identifier)
+        arguments: (pipe
+          function_call: (call
+            name: (identifier))
+          argument: (make_block
+            body: (block_expression
+              (variable
+                name: (identifier)))))))))

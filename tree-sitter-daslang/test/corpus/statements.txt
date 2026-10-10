@@ -1,413 +1,831 @@
 ================================================================================
-If statement
+Local variables
 ================================================================================
 
-def test() {
-  if (x > 0) {
-    return 1;
-  }
+def f() {
+    let a = 1
+    var b : int
+    var c : float = 2.0
+    let d & = e
+    var inscope f <- g()
+    let h := i
+    let j, k : int
 }
 
 --------------------------------------------------------------------------------
 
 (source_file
   (function_declaration
-    name: (function_name
-      (identifier))
-    (function_argument_list)
-    body: (block
-      (if_statement
-        condition: (binary_expression
-          (identifier)
-          (integer_literal))
-        consequence: (block
-          (return_statement
-            (integer_literal)))))))
+    name: (identifier)
+    body: (block_expression
+      (let_expression
+        variables: (variable_declaration
+          name: (identifier)
+          init: (constant_integer)))
+      (let_expression
+        variables: (variable_declaration
+          name: (identifier)
+          type: (basic_type)))
+      (let_expression
+        variables: (variable_declaration
+          name: (identifier)
+          type: (basic_type)
+          init: (constant_float)))
+      (let_expression
+        variables: (variable_declaration
+          name: (identifier)
+          init: (variable
+            name: (identifier))))
+      (let_expression
+        variables: (variable_declaration
+          name: (identifier)
+          init: (call
+            name: (identifier))))
+      (let_expression
+        variables: (variable_declaration
+          name: (identifier)
+          init: (variable
+            name: (identifier))))
+      (let_expression
+        variables: (variable_declaration
+          name: (identifier)
+          name: (identifier)
+          type: (basic_type))))))
 
 ================================================================================
-If-elif-else
+Local variable with a name alias and metadata
 ================================================================================
 
-def test() {
-  if (x > 0) {
-    return 1;
-  } elif (x < 0) {
-    return -1;
-  } else {
-    return 0;
-  }
+def f() {
+    let a aka b = 1
+    let @tag c = 2
 }
 
 --------------------------------------------------------------------------------
 
 (source_file
   (function_declaration
-    name: (function_name
-      (identifier))
-    (function_argument_list)
-    body: (block
-      (if_statement
-        condition: (binary_expression
-          (identifier)
-          (integer_literal))
-        consequence: (block
-          (return_statement
-            (integer_literal)))
-        (elif_clause
-          condition: (binary_expression
+    name: (identifier)
+    body: (block_expression
+      (let_expression
+        variables: (variable_declaration
+          name: (identifier)
+          aka: (identifier)
+          init: (constant_integer)))
+      (let_expression
+        variables: (variable_declaration
+          annotation: (annotation_argument
+            name: (identifier))
+          name: (identifier)
+          init: (constant_integer))))))
+
+================================================================================
+Local variable list
+================================================================================
+
+def f() {
+    let {
+        a = 1
+        b : int = 2
+    }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    body: (block_expression
+      (let_expression
+        variables: (variable_declaration
+          name: (identifier)
+          init: (constant_integer))
+        variables: (variable_declaration
+          name: (identifier)
+          type: (basic_type)
+          init: (constant_integer))))))
+
+================================================================================
+Tuple expansion
+================================================================================
+
+def f() {
+    let (a, b) = t
+    var (c, d) : tuple<int; float> = u
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    body: (block_expression
+      (let_expression
+        variables: (variable_declaration
+          name: (tuple_expansion
             (identifier)
-            (integer_literal))
-          body: (block
-            (return_statement
-              (unary_expression
-                (integer_literal)))))
-        (else_clause
-          body: (block
-            (return_statement
-              (integer_literal))))))))
+            (identifier))
+          init: (variable
+            name: (identifier))))
+      (let_expression
+        variables: (variable_declaration
+          name: (tuple_expansion
+            (identifier)
+            (identifier))
+          type: (tuple_type
+            argument_types: (basic_type)
+            argument_types: (basic_type))
+          init: (variable
+            name: (identifier)))))))
 
 ================================================================================
-For loop
+Assignments
 ================================================================================
 
-def test() {
-  for (i in range(10)) {
-    print("{i}\n")
-  }
+def f() {
+    a = 1
+    b <- c
+    d := e
+    f += 1
+    g >>= 2
+    h !== i
+    j !<- k
+    l !:= m
 }
 
 --------------------------------------------------------------------------------
 
 (source_file
   (function_declaration
-    name: (function_name
-      (identifier))
-    (function_argument_list)
-    body: (block
-      (for_statement
-        variables: (for_variable
+    name: (identifier)
+    body: (block_expression
+      (copy
+        left: (variable
+          name: (identifier))
+        right: (constant_integer))
+      (move
+        left: (variable
+          name: (identifier))
+        right: (variable
+          name: (identifier)))
+      (clone
+        left: (variable
+          name: (identifier))
+        right: (variable
+          name: (identifier)))
+      (binary_operation
+        left: (variable
+          name: (identifier))
+        right: (constant_integer))
+      (binary_operation
+        left: (variable
+          name: (identifier))
+        right: (constant_integer))
+      (copy
+        left: (variable
+          name: (identifier))
+        right: (variable
+          name: (identifier)))
+      (move
+        left: (variable
+          name: (identifier))
+        right: (variable
+          name: (identifier)))
+      (clone
+        left: (variable
+          name: (identifier))
+        right: (variable
+          name: (identifier))))))
+
+================================================================================
+Move of a table
+================================================================================
+
+def f() {
+    a <- {1 => 2}
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    body: (block_expression
+      (move
+        left: (variable
+          name: (identifier))
+        right: (make_table
+          values: (make_tuple
+            values: (constant_integer)
+            values: (constant_integer)))))))
+
+================================================================================
+If, elif, and else
+================================================================================
+
+def f() {
+    if (a) {
+        b()
+    } elif (c) {
+        d()
+    } else {
+        e()
+    }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    body: (block_expression
+      (if_then_else
+        condition: (variable
+          name: (identifier))
+        if_true: (block_expression
+          (call
+            name: (identifier)))
+        if_false: (if_then_else
+          condition: (variable
+            name: (identifier))
+          if_true: (block_expression
+            (call
+              name: (identifier)))
+          if_false: (block_expression
+            (call
+              name: (identifier))))))))
+
+================================================================================
+Else on its own line
+================================================================================
+
+def f() {
+    if (a) {
+        b()
+    }
+    else
+    {
+        c()
+    }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    body: (block_expression
+      (if_then_else
+        condition: (variable
+          name: (identifier))
+        if_true: (block_expression
+          (call
+            name: (identifier)))
+        if_false: (block_expression
+          (call
+            name: (identifier)))))))
+
+================================================================================
+Static if
+================================================================================
+
+def f() {
+    static_if (typeinfo is_pod(a)) {
+        b()
+    } static_elif (c) {
+        d()
+    }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    body: (block_expression
+      (if_then_else
+        condition: (type_info
+          trait: (identifier)
+          subexpression: (variable
+            name: (identifier)))
+        if_true: (block_expression
+          (call
+            name: (identifier)))
+        if_false: (if_then_else
+          condition: (variable
+            name: (identifier))
+          if_true: (block_expression
+            (call
+              name: (identifier))))))))
+
+================================================================================
+One-line if
+================================================================================
+
+def f() {
+    if (a) return
+    if (b) c(); else d()
+    if (e) {
+        f()
+    } else return 1
+    if (g) h(); elif (i) j()
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    body: (block_expression
+      (if_then_else
+        condition: (variable
+          name: (identifier))
+        if_true: (return_expression))
+      (if_then_else
+        condition: (variable
+          name: (identifier))
+        if_true: (call
+          name: (identifier))
+        if_false: (call
+          name: (identifier)))
+      (if_then_else
+        condition: (variable
+          name: (identifier))
+        if_true: (block_expression
+          (call
+            name: (identifier)))
+        if_false: (return_expression
+          subexpression: (constant_integer)))
+      (if_then_else
+        condition: (variable
+          name: (identifier))
+        if_true: (call
+          name: (identifier))
+        if_false: (if_then_else
+          condition: (variable
+            name: (identifier))
+          if_true: (call
+            name: (identifier)))))))
+
+================================================================================
+Postfix if
+================================================================================
+
+def f() {
+    return 1 if (a) else return 2
+    break if (b)
+    c() if (d)
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    body: (block_expression
+      (if_then_else
+        if_true: (return_expression
+          subexpression: (constant_integer))
+        condition: (variable
+          name: (identifier))
+        if_false: (return_expression
+          subexpression: (constant_integer)))
+      (if_then_else
+        if_true: (break_expression)
+        condition: (variable
+          name: (identifier)))
+      (if_then_else
+        if_true: (call
+          name: (identifier))
+        condition: (variable
+          name: (identifier))))))
+
+================================================================================
+Line break before the condition of an if
+================================================================================
+
+def f() {
+    if
+    (a) {
+        b()
+    }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    body: (block_expression
+      (if_then_else
+        condition: (variable
+          name: (identifier))
+        if_true: (block_expression
+          (call
+            name: (identifier)))))))
+
+================================================================================
+For loops
+================================================================================
+
+def f() {
+    for (x in xs) {
+        g(x)
+    }
+    for (i, v in range(10), values) {
+        h(i, v)
+    }
+    for ((a, b) in pairs) {
+        k(a)
+    }
+    for (x aka y in xs) {
+        m(y)
+    }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    body: (block_expression
+      (for_expression
+        iterators: (identifier)
+        sources: (variable
+          name: (identifier))
+        body: (block_expression
+          (call
+            name: (identifier)
+            arguments: (variable
+              name: (identifier)))))
+      (for_expression
+        iterators: (identifier)
+        iterators: (identifier)
+        sources: (call
+          name: (basic_type)
+          arguments: (constant_integer))
+        sources: (variable
+          name: (identifier))
+        body: (block_expression
+          (call
+            name: (identifier)
+            arguments: (variable
+              name: (identifier))
+            arguments: (variable
+              name: (identifier)))))
+      (for_expression
+        iterators: (tuple_expansion
+          (identifier)
           (identifier))
-        iterators: (call_expression
-          function: (basic_type)
-          (argument_list
-            (integer_literal)))
-        body: (block
-          (expression_statement
-            (call_expression
-              function: (identifier)
-              (argument_list
-                (string_literal
-                  (string_interpolation
-                    (identifier))
-                  (escape_sequence))))))))))
+        sources: (variable
+          name: (identifier))
+        body: (block_expression
+          (call
+            name: (identifier)
+            arguments: (variable
+              name: (identifier)))))
+      (for_expression
+        iterators: (identifier)
+        iterators_aka: (identifier)
+        sources: (variable
+          name: (identifier))
+        body: (block_expression
+          (call
+            name: (identifier)
+            arguments: (variable
+              name: (identifier))))))))
+
+================================================================================
+Loop annotations
+================================================================================
+
+def f() {
+    for [unroll] (x in xs) {
+        g(x)
+    }
+    while @hint = 2 (a) {
+        b()
+    }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    body: (block_expression
+      (for_expression
+        annotations: (annotation_argument
+          name: (identifier))
+        iterators: (identifier)
+        sources: (variable
+          name: (identifier))
+        body: (block_expression
+          (call
+            name: (identifier)
+            arguments: (variable
+              name: (identifier)))))
+      (while_expression
+        annotations: (annotation_argument
+          name: (identifier)
+          value: (constant_integer))
+        condition: (variable
+          name: (identifier))
+        body: (block_expression
+          (call
+            name: (identifier)))))))
 
 ================================================================================
 While loop
 ================================================================================
 
-def test() {
-  while (x > 0) {
-    x -= 1
-  }
+def f() {
+    while (a < 10) {
+        a++
+        if (a == 5) {
+            continue
+        }
+        break
+    }
 }
 
 --------------------------------------------------------------------------------
 
 (source_file
   (function_declaration
-    name: (function_name
-      (identifier))
-    (function_argument_list)
-    body: (block
-      (while_statement
-        condition: (binary_expression
+    name: (identifier)
+    body: (block_expression
+      (while_expression
+        condition: (binary_operation
+          left: (variable
+            name: (identifier))
+          right: (constant_integer))
+        body: (block_expression
+          (unary_operation
+            subexpression: (variable
+              name: (identifier)))
+          (if_then_else
+            condition: (binary_operation
+              left: (variable
+                name: (identifier))
+              right: (constant_integer))
+            if_true: (block_expression
+              (continue_expression)))
+          (break_expression))))))
+
+================================================================================
+With
+================================================================================
+
+def f() {
+    with (a) {
+        b = 1
+    }
+    with (module daslib/strings) {
+        c()
+    }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    body: (block_expression
+      (with_expression
+        with: (variable
+          name: (identifier))
+        body: (block_expression
+          (copy
+            left: (variable
+              name: (identifier))
+            right: (constant_integer))))
+      (with_expression
+        module_name: (module_path
           (identifier)
-          (integer_literal))
-        body: (block
-          (expression_statement
-            (assignment_expression
-              left: (identifier)
-              right: (integer_literal))))))))
-
-================================================================================
-Try-recover
-================================================================================
-
-def test() {
-  try {
-    dangerous()
-  } recover {
-    print("error\n")
-  }
-}
-
---------------------------------------------------------------------------------
-
-(source_file
-  (function_declaration
-    name: (function_name
-      (identifier))
-    (function_argument_list)
-    body: (block
-      (try_recover_statement
-        body: (block
-          (expression_statement
-            (call_expression
-              function: (identifier))))
-        handler: (block
-          (expression_statement
-            (call_expression
-              function: (identifier)
-              (argument_list
-                (string_literal
-                  (escape_sequence))))))))))
-
-================================================================================
-Variable declaration
-================================================================================
-
-def test() {
-  var x = 42
-  let y : float = 3.14
-  var inscope z <- create_something()
-}
-
---------------------------------------------------------------------------------
-
-(source_file
-  (function_declaration
-    name: (function_name
-      (identifier))
-    (function_argument_list)
-    body: (block
-      (variable_declaration_statement
-        (variable_binding
-          name: (identifier)
-          value: (integer_literal)))
-      (variable_declaration_statement
-        (variable_binding
-          name: (identifier)
-          type: (basic_type)
-          value: (float_literal)))
-      (variable_declaration_statement
-        (variable_binding
-          name: (identifier)
-          value: (call_expression
-            function: (identifier)))))))
-
-================================================================================
-Variable declaration with metadata annotations
-================================================================================
-
-def test() {
-  var @exact_size buf : array<int>
-  let @tag = "x" @other n = 3
-}
-
---------------------------------------------------------------------------------
-
-(source_file
-  (function_declaration
-    name: (function_name
-      (identifier))
-    (function_argument_list)
-    body: (block
-      (variable_declaration_statement
-        (metadata_argument_list
-          (annotation_argument
-            name: (identifier)))
-        (variable_binding
-          name: (identifier)
-          type: (array_type
-            (basic_type))))
-      (variable_declaration_statement
-        (metadata_argument_list
-          (annotation_argument
-            name: (identifier)
-            value: (string_literal))
-          (annotation_argument
-            name: (identifier)))
-        (variable_binding
-          name: (identifier)
-          value: (integer_literal))))))
-
-================================================================================
-For loop with bracketed annotations
-================================================================================
-
-def test() {
-  for [unroll_count = 4, vectorize] (i in range(10)) {
-    pass
-  }
-}
-
---------------------------------------------------------------------------------
-
-(source_file
-  (function_declaration
-    name: (function_name
-      (identifier))
-    (function_argument_list)
-    body: (block
-      (for_statement
-        annotations: (annotation_argument_list
-          (annotation_argument
-            name: (identifier)
-            value: (integer_literal))
-          (annotation_argument
-            name: (identifier)))
-        variables: (for_variable
           (identifier))
-        iterators: (call_expression
-          function: (basic_type)
-          (argument_list
-            (integer_literal)))
-        body: (block
-          (pass_statement))))))
+        body: (block_expression
+          (call
+            name: (identifier)))))))
 
 ================================================================================
-For loop with metadata annotations
+Unsafe block
 ================================================================================
 
-def test() {
-  for @unroll_full (i in range(10)) {
-    pass
-  }
+def f() {
+    unsafe {
+        delete a
+    }
 }
 
 --------------------------------------------------------------------------------
 
 (source_file
   (function_declaration
-    name: (function_name
-      (identifier))
-    (function_argument_list)
-    body: (block
-      (for_statement
-        annotations: (metadata_argument_list
-          (annotation_argument
+    name: (identifier)
+    body: (block_expression
+      (unsafe_expression
+        body: (block_expression
+          (delete_expression
+            subexpression: (variable
+              name: (identifier))))))))
+
+================================================================================
+Try and recover
+================================================================================
+
+def f() {
+    try {
+        a()
+    } recover {
+        b()
+    }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    body: (block_expression
+      (try_catch
+        try_block: (block_expression
+          (call
             name: (identifier)))
-        variables: (for_variable
-          (identifier))
-        iterators: (call_expression
-          function: (basic_type)
-          (argument_list
-            (integer_literal)))
-        body: (block
-          (pass_statement))))))
+        catch_block: (block_expression
+          (call
+            name: (identifier)))))))
 
 ================================================================================
-While loop with bracketed annotations
+Return and yield
 ================================================================================
 
-def test() {
-  while [unroll_disable] (false) {
+def f() {
+    return
+    return 1
+    return <- a
+    yield 2
+    yield <- b
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    body: (block_expression
+      (return_expression)
+      (return_expression
+        subexpression: (constant_integer))
+      (return_expression
+        subexpression: (variable
+          name: (identifier)))
+      (yield_expression
+        subexpression: (constant_integer))
+      (yield_expression
+        subexpression: (variable
+          name: (identifier))))))
+
+================================================================================
+Labels and goto
+================================================================================
+
+def f() {
+    label 1:
+    goto label 1
+    goto a
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    body: (block_expression
+      (label_expression
+        label_name: (constant_integer))
+      (goto_expression
+        label_name: (constant_integer))
+      (goto_expression
+        subexpression: (variable
+          name: (identifier))))))
+
+================================================================================
+Assume and local typedef
+================================================================================
+
+def f() {
+    assume a = b.c
+    typedef T = array<int>
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    body: (block_expression
+      (assume_expression
+        alias: (identifier)
+        subexpression: (field
+          value: (variable
+            name: (identifier))
+          name: (identifier)))
+      (local_type_alias
+        alias: (identifier)
+        assume_type: (array_type
+          first_type: (basic_type))))))
+
+================================================================================
+Delete
+================================================================================
+
+def f() {
+    delete a
+    delete explicit b
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    body: (block_expression
+      (delete_expression
+        subexpression: (variable
+          name: (identifier)))
+      (delete_expression
+        subexpression: (variable
+          name: (identifier))))))
+
+================================================================================
+Pass and empty statements
+================================================================================
+
+def f() {
     pass
-  }
+    ;
 }
 
 --------------------------------------------------------------------------------
 
 (source_file
   (function_declaration
-    name: (function_name
-      (identifier))
-    (function_argument_list)
-    body: (block
-      (while_statement
-        annotations: (annotation_argument_list
-          (annotation_argument
-            name: (identifier)))
-        condition: (boolean_literal)
-        body: (block
-          (pass_statement))))))
+    name: (identifier)
+    body: (block_expression)))
 
 ================================================================================
-Raw copy, move and clone
+Bare block with finally
 ================================================================================
 
-def raw_forms() {
-  a !== b
-  c !<- d
-  e !:= f
+def f() {
+    {
+        a()
+    } finally {
+        b()
+    }
 }
 
 --------------------------------------------------------------------------------
 
 (source_file
   (function_declaration
-    (function_name
-      (identifier))
-    (function_argument_list)
-    (block
-      (expression_statement
-        (assignment_expression
-          (identifier)
-          (identifier)))
-      (expression_statement
-        (assignment_expression
-          (identifier)
-          (identifier)))
-      (expression_statement
-        (assignment_expression
-          (identifier)
-          (identifier))))))
+    name: (identifier)
+    body: (block_expression
+      (block_expression
+        (call
+          name: (identifier))
+        (finally_block
+          (call
+            name: (identifier)))))))
 
 ================================================================================
-Copy and move operator overloads
+Finally of a loop body
 ================================================================================
 
-def operator = (var dst : Handle&; src : int) {
-  dst !== Handle(uint(src))
-}
-
-def operator <- (var dst : Handle&; var src : Payload) {
-  dst !<- src.handle
+def f() {
+    for (x in xs) {
+        g(x)
+    } finally {
+        h()
+    }
 }
 
 --------------------------------------------------------------------------------
 
 (source_file
   (function_declaration
-    (function_name
-      (operator_name))
-    (function_argument_list
-      (function_argument
-        (identifier)
-        (ref_type
-          (named_type
-            (identifier))))
-      (function_argument
-        (identifier)
-        (basic_type)))
-    (block
-      (expression_statement
-        (assignment_expression
-          (identifier)
-          (call_expression
-            (identifier)
-            (argument_list
-              (call_expression
-                (basic_type)
-                (argument_list
-                  (identifier)))))))))
-  (function_declaration
-    (function_name
-      (operator_name))
-    (function_argument_list
-      (function_argument
-        (identifier)
-        (ref_type
-          (named_type
-            (identifier))))
-      (function_argument
-        (identifier)
-        (named_type
-          (identifier))))
-    (block
-      (expression_statement
-        (assignment_expression
-          (identifier)
-          (field_expression
-            (identifier)
-            (identifier)))))))
+    name: (identifier)
+    body: (block_expression
+      (for_expression
+        iterators: (identifier)
+        sources: (variable
+          name: (identifier))
+        body: (block_expression
+          (call
+            name: (identifier)
+            arguments: (variable
+              name: (identifier)))
+          (finally_block
+            (call
+              name: (identifier))))))))

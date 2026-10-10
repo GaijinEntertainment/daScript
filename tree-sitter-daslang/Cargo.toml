@@ -1,0 +1,27 @@
+[package]
+authors = [ "Gaijin Entertainment", "Anton Zinovyev <xog3@yandex.ru>" ]
+autoexamples = false
+categories = [ "parser-implementations", "parsing", "text-editors" ]
+description = "Daslang grammar for tree-sitter"
+edition = "2024"
+keywords = [ "incremental", "parsing", "tree-sitter", "daslang" ]
+license = "BSD-3-Clause"
+name = "tree-sitter-daslang"
+readme = "README.md"
+repository = "https://github.com/GaijinEntertainment/tree-sitter-daslang"
+version = "0.6.0"
+
+build = "bindings/rust/build.rs"
+include = [ "bindings/rust/*", "grammar.js", "queries/*", "src/*", "tree-sitter.json", "/LICENSE" ]
+
+[lib]
+path = "bindings/rust/lib.rs"
+
+[dependencies]
+tree-sitter-language = "0.1"
+
+[build-dependencies]
+cc = "1.2"
+
+[dev-dependencies]
+tree-sitter = "0.27.1"

@@ -1,0 +1,63 @@
+name: Sync
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{github.workflow}}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    name: Copy the grammar changes of daScript
+    if: >-
+      github.repository == 'GaijinEntertainment/tree-sitter-daslang'
+      && vars.MIRROR_SYNC == 'on'
+    runs-on: ubuntu-latest
+    env:
+      GIT_SSH_COMMAND: ssh -i ~/.ssh/sync_key -o IdentitiesOnly=yes
+      MIRROR: git@github.com:${{github.repository}}.git
+    steps:
+      - name: Check out daScript
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: GaijinEntertainment/daScript
+          ref: master
+          fetch-depth: 0
+          filter: blob:none
+          sparse-checkout: tree-sitter-daslang
+          persist-credentials: false
+      # The push uses a deploy key, because the workflow token cannot push a
+      # change to a workflow file.
+      - name: Set up the deploy key
+        env:
+          SYNC_DEPLOY_KEY: ${{secrets.SYNC_DEPLOY_KEY}}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "${SYNC_DEPLOY_KEY}" > ~/.ssh/sync_key
+          chmod 600 ~/.ssh/sync_key
+          curl --fail --silent --show-error https://api.github.com/meta \
+            | jq --raw-output '.ssh_keys[] | "github.com " + .' \
+            > ~/.ssh/known_hosts
+      - name: Fetch the mirror
+        run: git fetch --no-tags "${MIRROR}" main:refs/mirror/main
+      - name: Copy the changes
+        id: copy
+        run: |
+          tip=$(tree-sitter-daslang/.github/scripts/sync-mirror.sh \
+            HEAD refs/mirror/main)
+          printf 'tip=%s\n' "${tip}" >> "${GITHUB_OUTPUT}"
+      - name: Push to the mirror
+        env:
+          TIP: ${{steps.copy.outputs.tip}}
+        run: |
+          if [[ "${TIP}" == "$(git rev-parse refs/mirror/main)" ]]; then
+            echo 'The mirror has every change.'
+            exit 0
+          fi
+          git push "${MIRROR}" "${TIP}:refs/heads/main"

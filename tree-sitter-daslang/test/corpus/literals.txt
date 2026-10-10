@@ -1,0 +1,415 @@
+================================================================================
+Integer constants
+================================================================================
+
+let a = 42
+let b = 1_000_000
+let c = 0x7fffffff
+let d = 2147483647
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (constant_integer)))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (constant_integer)))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (constant_unsigned_integer)))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (constant_integer))))
+
+================================================================================
+Integer constants with suffixes
+================================================================================
+
+let a = 42u
+let b = 42U
+let c = 42l
+let d = 42ul
+let e = 255u8
+let f = 0xffu8
+let g = 0xffffffffffffffffUL
+let h = 0x10l
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (constant_unsigned_integer)))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (constant_unsigned_integer)))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (constant_integer64)))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (constant_unsigned_integer64)))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (constant_unsigned_integer8)))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (constant_unsigned_integer8)))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (constant_unsigned_integer64)))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (constant_unsigned_integer64))))
+
+================================================================================
+Minimum of int64
+================================================================================
+
+let a = -9223372036854775808l
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (constant_integer64))))
+
+================================================================================
+Float constants
+================================================================================
+
+let a = 1.5
+let b = .5
+let c = 1.
+let d = 1e10
+let e = 1.5e-3f
+let f = 2f
+let g = 1.e5
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (constant_float)))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (constant_float)))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (constant_float)))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (constant_float)))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (constant_float)))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (constant_float)))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (constant_float))))
+
+================================================================================
+Double and float16 constants
+================================================================================
+
+let a = 1.5lf
+let b = 1.5d
+let c = 2d
+let d = 1e3lf
+let e = 1.5h
+let f = 3H
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (constant_double)))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (constant_double)))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (constant_double)))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (constant_double)))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (constant_float16)))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (constant_float16))))
+
+================================================================================
+Floats at the limits of a double
+================================================================================
+
+let a = 1.7976931348623157e308
+let b = 4.9e-324
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (constant_float)))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (constant_float))))
+
+================================================================================
+Integer before a range
+================================================================================
+
+let a = 1..10
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (interval
+        arguments: (constant_integer)
+        arguments: (constant_integer)))))
+
+================================================================================
+Character constants
+================================================================================
+
+let a = 'a'
+let b = '\n'
+let c = '\''
+let d = '\\'
+let e = 'x'u8
+let f = 'y'u
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (constant_integer)))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (constant_integer)))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (constant_integer)))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (constant_integer)))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (constant_unsigned_integer8)))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (constant_unsigned_integer))))
+
+================================================================================
+Boolean and null constants
+================================================================================
+
+let a = true
+let b = false
+let c : int? = null
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (constant_boolean)))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (constant_boolean)))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      type: (pointer_type
+        first_type: (basic_type))
+      init: (constant_pointer))))
+
+================================================================================
+Strings with escape sequences
+================================================================================
+
+let a = "plain"
+let b = ""
+let c = "tab\tnewline\nquote\"brace\{\}"
+let d = "hex\x41 unicodeA wide\U00000041"
+let e = "unknown \q escape"
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (constant_string)))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (constant_string)))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (constant_string
+        (escape_sequence)
+        (escape_sequence)
+        (escape_sequence)
+        (escape_sequence)
+        (escape_sequence))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (constant_string
+        (escape_sequence)
+        (escape_sequence))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (constant_string))))
+
+================================================================================
+Multiline string
+================================================================================
+
+let a = "first
+second"
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (constant_string))))
+
+================================================================================
+String interpolation
+================================================================================
+
+let a = "value {x} and {y + 1}"
+let b = "{x}"
+let c = "table {{ "k" => 1 }}"
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (string_builder
+        (interpolation
+          (variable
+            name: (identifier)))
+        (interpolation
+          (binary_operation
+            left: (variable
+              name: (identifier))
+            right: (constant_integer))))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (string_builder
+        (interpolation
+          (variable
+            name: (identifier))))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (string_builder
+        (interpolation
+          (make_table
+            values: (make_tuple
+              values: (constant_string)
+              values: (constant_integer))))))))
+
+================================================================================
+Interpolation with a format
+================================================================================
+
+let a = "{x:08x} {y:.2f} {z:}"
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (string_builder
+        (interpolation
+          (variable
+            name: (identifier))
+          (format_specifier))
+        (interpolation
+          (variable
+            name: (identifier))
+          (format_specifier))
+        (interpolation
+          (variable
+            name: (identifier)))))))
+
+================================================================================
+Interpolation with a ternary operator
+================================================================================
+
+let a = "{c ? 1 : 2}"
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (string_builder
+        (interpolation
+          (ternary_operation
+            subexpression: (variable
+              name: (identifier))
+            left: (constant_integer)
+            right: (constant_integer)))))))

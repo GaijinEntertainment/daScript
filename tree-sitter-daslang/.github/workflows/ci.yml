@@ -1,0 +1,93 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{github.workflow}}-${{github.ref}}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test parser
+    runs-on: ${{matrix.os}}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-15]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up tree-sitter
+        uses: tree-sitter/setup-action/cli@faab9a23fa6195da0f1cf868219cc1e89f238d3d # v2
+        with:
+          tree-sitter-ref: v0.27.1
+      - name: Run tests
+        uses: tree-sitter/parser-test-action@05f6ce7c7e54603c45cd87ed926725dc870bcc63 # v3
+        with:
+          test-rust: true
+          test-node: true
+          test-python: true
+          test-go: true
+          go-version: "1.23"
+          test-swift: true
+      - name: Parse examples
+        uses: tree-sitter/parse-action@f44ffa94f802024f27e821a72e6f2f3efc5dd521 # v4
+        with:
+          files: examples/*
+      # `tree-sitter fuzz` ends with status 0 when a test fails, so the step reads its output.
+      - name: Compare incremental parses with fresh parses
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          tree-sitter fuzz --iterations 30 2>&1 | tee fuzz.log
+          ! grep --quiet 'failed fuzzing' fuzz.log
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          cache: npm
+          node-version: lts/*
+      - name: Install modules
+        run: npm ci --legacy-peer-deps
+      - name: Run ESLint
+        run: npm run lint
+
+  fuzz:
+    name: Fuzz parser
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Run fuzzer
+        uses: tree-sitter/fuzz-action@6a1dcff00aefd038ba418bd63732a9add4901266 # v4
+
+  # The protect-main ruleset requires the status check of this job.
+  ci-ok:
+    if: always()
+    needs: [test, lint, fuzz]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check that each job passed
+        run: |
+          echo "$RESULTS"
+          jq --exit-status 'all(. == "success")' <<< "$RESULTS"
+        env:
+          RESULTS: ${{toJSON(needs.*.result)}}

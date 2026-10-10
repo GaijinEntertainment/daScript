@@ -1,0 +1,472 @@
+================================================================================
+Basic types
+================================================================================
+
+var a : int
+var b : float4
+var c : string
+var d : bool
+var e : range64
+var f : bitfield
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      type: (basic_type)))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      type: (basic_type)))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      type: (basic_type)))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      type: (basic_type)))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      type: (basic_type)))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      type: (basic_type))))
+
+================================================================================
+Auto types
+================================================================================
+
+def f(a : auto; b : auto(T)) {
+    pass
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    arguments: (variable_declaration
+      name: (identifier)
+      type: (auto_type))
+    arguments: (variable_declaration
+      name: (identifier)
+      type: (auto_type
+        alias: (identifier)))
+    body: (block_expression)))
+
+================================================================================
+Pointers
+================================================================================
+
+var a : int?
+var b : int??
+var c : smart_ptr<Foo>
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      type: (pointer_type
+        first_type: (basic_type))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      type: (pointer_type
+        first_type: (basic_type))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      type: (smart_pointer_type
+        first_type: (structure_type
+          (identifier))))))
+
+================================================================================
+Fixed arrays
+================================================================================
+
+var a : int[3]
+var b : float[2][4]
+var c : int? [N]
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      type: (fixed_array_type
+        first_type: (basic_type)
+        fixed_dimension_expression: (constant_integer))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      type: (fixed_array_type
+        first_type: (basic_type)
+        fixed_dimension_expression: (constant_integer)
+        fixed_dimension_expression: (constant_integer))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      type: (fixed_array_type
+        first_type: (pointer_type
+          first_type: (basic_type))
+        fixed_dimension_expression: (variable
+          name: (identifier))))))
+
+================================================================================
+Containers
+================================================================================
+
+var a : array<int>
+var b : table<string; int>
+var c : table<int>
+var d : iterator<string>
+var e : array<array<int>>
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      type: (array_type
+        first_type: (basic_type))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      type: (table_type
+        first_type: (basic_type)
+        second_type: (basic_type))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      type: (table_type
+        first_type: (basic_type))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      type: (iterator_type
+        first_type: (basic_type))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      type: (array_type
+        first_type: (array_type
+          first_type: (basic_type))))))
+
+================================================================================
+Function types
+================================================================================
+
+var a : block
+var b : block<(x : int) : int>
+var c : function<int>
+var d : lambda<(a : int; b : float) : void>
+var e : block<>
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      type: (block_type)))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      type: (block_type
+        arguments: (variable_declaration
+          name: (identifier)
+          type: (basic_type))
+        result: (basic_type))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      type: (function_type
+        first_type: (basic_type))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      type: (lambda_type
+        arguments: (variable_declaration
+          name: (identifier)
+          type: (basic_type))
+        arguments: (variable_declaration
+          name: (identifier)
+          type: (basic_type))
+        result: (basic_type))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      type: (block_type))))
+
+================================================================================
+Tuple and variant types
+================================================================================
+
+var a : tuple<int; float>
+var b : tuple<x : int, y : float>
+var c : variant<i : int; f : float>
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      type: (tuple_type
+        argument_types: (basic_type)
+        argument_types: (basic_type))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      type: (tuple_type
+        argument_names: (identifier)
+        argument_types: (basic_type)
+        argument_names: (identifier)
+        argument_types: (basic_type))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      type: (variant_type
+        argument_names: (identifier)
+        argument_types: (basic_type)
+        argument_names: (identifier)
+        argument_types: (basic_type)))))
+
+================================================================================
+Bitfield types
+================================================================================
+
+var a : bitfield<a; b; c>
+var b : bitfield : uint8<x, y>
+var c : bitfield<>
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      type: (bitfield_type
+        argument_names: (identifier)
+        argument_names: (identifier)
+        argument_names: (identifier))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      type: (bitfield_type
+        argument_names: (identifier)
+        argument_names: (identifier))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      type: (bitfield_type))))
+
+================================================================================
+Type modifiers
+================================================================================
+
+def f(a : int const; b : int&; c : Foo#; d : Foo implicit; e : Foo explicit) {
+    pass
+}
+
+def g(a : auto -const; b : auto -&; c : auto -[]; d : auto -#; e : auto ==const; f : auto ==&) {
+    pass
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    arguments: (variable_declaration
+      name: (identifier)
+      type: (modified_type
+        (basic_type)))
+    arguments: (variable_declaration
+      name: (identifier)
+      type: (modified_type
+        (basic_type)))
+    arguments: (variable_declaration
+      name: (identifier)
+      type: (modified_type
+        (structure_type
+          (identifier))))
+    arguments: (variable_declaration
+      name: (identifier)
+      type: (modified_type
+        (structure_type
+          (identifier))))
+    arguments: (variable_declaration
+      name: (identifier)
+      type: (modified_type
+        (structure_type
+          (identifier))))
+    body: (block_expression))
+  (function_declaration
+    name: (identifier)
+    arguments: (variable_declaration
+      name: (identifier)
+      type: (modified_type
+        (auto_type)))
+    arguments: (variable_declaration
+      name: (identifier)
+      type: (modified_type
+        (auto_type)))
+    arguments: (variable_declaration
+      name: (identifier)
+      type: (modified_type
+        (auto_type)))
+    arguments: (variable_declaration
+      name: (identifier)
+      type: (modified_type
+        (auto_type)))
+    arguments: (variable_declaration
+      name: (identifier)
+      type: (modified_type
+        (auto_type)))
+    arguments: (variable_declaration
+      name: (identifier)
+      type: (modified_type
+        (auto_type)))
+    body: (block_expression)))
+
+================================================================================
+Option types
+================================================================================
+
+def f(a : int | float | string; b : Foo | #) {
+    pass
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    arguments: (variable_declaration
+      name: (identifier)
+      type: (option_type
+        argument_types: (basic_type)
+        argument_types: (basic_type)
+        argument_types: (basic_type)))
+    arguments: (variable_declaration
+      name: (identifier)
+      type: (option_type
+        argument_types: (structure_type
+          (identifier))))
+    body: (block_expression)))
+
+================================================================================
+Typedecl and type
+================================================================================
+
+def f(a : auto) {
+    var b : typedecl(a)
+    var c : type<int>
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    arguments: (variable_declaration
+      name: (identifier)
+      type: (auto_type))
+    body: (block_expression
+      (let_expression
+        variables: (variable_declaration
+          name: (identifier)
+          type: (typedecl_type
+            type_macro_expression: (variable
+              name: (identifier)))))
+      (let_expression
+        variables: (variable_declaration
+          name: (identifier)
+          type: (type_type
+            first_type: (basic_type)))))))
+
+================================================================================
+Type macros
+================================================================================
+
+var a : Foo(1, 2)
+var b : $Bar
+var c : Baz<int; float>(3)
+var d : $Qux<int>
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      type: (type_macro
+        name: (identifier)
+        type_macro_expression: (constant_integer)
+        type_macro_expression: (constant_integer))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      type: (type_macro
+        name: (identifier))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      type: (type_macro
+        name: (identifier)
+        type_macro_expression: (basic_type)
+        type_macro_expression: (basic_type)
+        type_macro_expression: (constant_integer))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      type: (type_macro
+        name: (identifier)
+        type_macro_expression: (basic_type)))))
+
+================================================================================
+Qualified type name
+================================================================================
+
+var a : mod::Foo
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      type: (structure_type
+        (qualified_name
+          module: (identifier)
+          name: (identifier))))))
+
+================================================================================
+Type tag
+================================================================================
+
+def f(a : $t(b)) {
+    pass
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    arguments: (variable_declaration
+      name: (identifier)
+      type: (tag
+        subexpression: (variable
+          name: (identifier))))
+    body: (block_expression)))

@@ -1,310 +1,1760 @@
 ================================================================================
-Binary arithmetic
+Variables
 ================================================================================
 
-def test() {
-  var x = a + b * c;
+let a = b
+let c = mod::d
+let e = ::f
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (variable
+        name: (identifier))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (variable
+        name: (qualified_name
+          module: (identifier)
+          name: (identifier)))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (variable
+        name: (qualified_name
+          name: (identifier))))))
+
+================================================================================
+Arithmetic precedence
+================================================================================
+
+let a = 1 + 2 * 3 - 4 / 5 % 6
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (binary_operation
+        left: (binary_operation
+          left: (constant_integer)
+          right: (binary_operation
+            left: (constant_integer)
+            right: (constant_integer)))
+        right: (binary_operation
+          left: (binary_operation
+            left: (constant_integer)
+            right: (constant_integer))
+          right: (constant_integer))))))
+
+================================================================================
+Comparison and logic precedence
+================================================================================
+
+let a = x < 1 || y >= 2 && z != 3 ^^ w == 4
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (binary_operation
+        left: (binary_operation
+          left: (variable
+            name: (identifier))
+          right: (constant_integer))
+        right: (binary_operation
+          left: (binary_operation
+            left: (binary_operation
+              left: (variable
+                name: (identifier))
+              right: (constant_integer))
+            right: (binary_operation
+              left: (variable
+                name: (identifier))
+              right: (constant_integer)))
+          right: (binary_operation
+            left: (variable
+              name: (identifier))
+            right: (constant_integer)))))))
+
+================================================================================
+Bitwise and shift operators
+================================================================================
+
+let a = x & 1 | y ^ 2 << 3 >> 4 <<< 5 >>> 6
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (binary_operation
+        left: (binary_operation
+          left: (variable
+            name: (identifier))
+          right: (constant_integer))
+        right: (binary_operation
+          left: (variable
+            name: (identifier))
+          right: (binary_operation
+            left: (binary_operation
+              left: (binary_operation
+                left: (binary_operation
+                  left: (constant_integer)
+                  right: (constant_integer))
+                right: (constant_integer))
+              right: (constant_integer))
+            right: (constant_integer)))))))
+
+================================================================================
+Unary operators
+================================================================================
+
+let a = -x + +y - ~z
+let b = !c
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (binary_operation
+        left: (binary_operation
+          left: (unary_operation
+            subexpression: (variable
+              name: (identifier)))
+          right: (unary_operation
+            subexpression: (variable
+              name: (identifier))))
+        right: (unary_operation
+          subexpression: (variable
+            name: (identifier))))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (unary_operation
+        subexpression: (variable
+          name: (identifier))))))
+
+================================================================================
+Unary minus over a field access
+================================================================================
+
+let a = -b.c
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (unary_operation
+        subexpression: (field
+          value: (variable
+            name: (identifier))
+          name: (identifier))))))
+
+================================================================================
+Prefix and postfix updates
+================================================================================
+
+def f() {
+    ++a
+    b--
+    -c++
 }
 
 --------------------------------------------------------------------------------
 
 (source_file
   (function_declaration
-    name: (function_name
-      (identifier))
-    (function_argument_list)
-    body: (block
-      (variable_declaration_statement
-        (variable_binding
-          name: (identifier)
-          value: (binary_expression
-            (identifier)
-            (binary_expression
-              (identifier)
-              (identifier))))))))
+    name: (identifier)
+    body: (block_expression
+      (unary_operation
+        subexpression: (variable
+          name: (identifier)))
+      (unary_operation
+        subexpression: (variable
+          name: (identifier)))
+      (unary_operation
+        subexpression: (unary_operation
+          subexpression: (variable
+            name: (identifier)))))))
 
 ================================================================================
-Function call
+Ternary operator
 ================================================================================
 
-def test() {
-  foo(1, 2, 3);
-}
+let a = c ? 1 : d ? 2 : 3
 
 --------------------------------------------------------------------------------
 
 (source_file
-  (function_declaration
-    name: (function_name
-      (identifier))
-    (function_argument_list)
-    body: (block
-      (expression_statement
-        (call_expression
-          function: (identifier)
-          (argument_list
-            (integer_literal)
-            (integer_literal)
-            (integer_literal)))))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (ternary_operation
+        subexpression: (variable
+          name: (identifier))
+        left: (constant_integer)
+        right: (ternary_operation
+          subexpression: (variable
+            name: (identifier))
+          left: (constant_integer)
+          right: (constant_integer))))))
 
 ================================================================================
-Pipe expression
+Null coalescing
 ================================================================================
 
-def test() {
-  x |> foo();
-}
+let a = b ?? c ?? 0
+let d = e !?? f
 
 --------------------------------------------------------------------------------
 
 (source_file
-  (function_declaration
-    name: (function_name
-      (identifier))
-    (function_argument_list)
-    body: (block
-      (expression_statement
-        (pipe_expression
-          (identifier)
-          (call_expression
-            function: (identifier)))))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (null_coalescing
+        subexpression: (variable
+          name: (identifier))
+        default_value: (null_coalescing
+          subexpression: (variable
+            name: (identifier))
+          default_value: (constant_integer)))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (null_coalescing
+        subexpression: (variable
+          name: (identifier))
+        default_value: (variable
+          name: (identifier))))))
 
 ================================================================================
-Ternary expression
+Null coalescing binds tighter than multiplication
 ================================================================================
 
-def test() {
-  var x = a ? b : c;
-}
+let a = b * c ?? d
 
 --------------------------------------------------------------------------------
 
 (source_file
-  (function_declaration
-    name: (function_name
-      (identifier))
-    (function_argument_list)
-    body: (block
-      (variable_declaration_statement
-        (variable_binding
-          name: (identifier)
-          value: (ternary_expression
-            condition: (identifier)
-            consequence: (identifier)
-            alternative: (identifier)))))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (binary_operation
+        left: (variable
+          name: (identifier))
+        right: (null_coalescing
+          subexpression: (variable
+            name: (identifier))
+          default_value: (variable
+            name: (identifier)))))))
+
+================================================================================
+Interval
+================================================================================
+
+let a = 0 .. n + 1
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (interval
+        arguments: (constant_integer)
+        arguments: (binary_operation
+          left: (variable
+            name: (identifier))
+          right: (constant_integer))))))
+
+================================================================================
+Tuple pair
+================================================================================
+
+let a = "key" => 1 + 2
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (make_tuple
+        values: (constant_string)
+        values: (binary_operation
+          left: (constant_integer)
+          right: (constant_integer))))))
+
+================================================================================
+Parenthesized expression
+================================================================================
+
+let a = (b + c) * d
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (binary_operation
+        left: (parenthesized_expression
+          (binary_operation
+            left: (variable
+              name: (identifier))
+            right: (variable
+              name: (identifier))))
+        right: (variable
+          name: (identifier))))))
 
 ================================================================================
 Field access
 ================================================================================
 
-def test() {
-  var x = a.b.c;
+let a = b.c.d
+let e = f!.g
+let h = i. .j
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (field
+        value: (field
+          value: (variable
+            name: (identifier))
+          name: (identifier))
+        name: (identifier))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (field
+        value: (variable
+          name: (identifier))
+        name: (identifier))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (field
+        value: (variable
+          name: (identifier))
+        name: (identifier)))))
+
+================================================================================
+Field access without a name
+================================================================================
+
+let a = (b.) + c. + 1
+def f() {
+    d.
 }
 
 --------------------------------------------------------------------------------
 
 (source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (binary_operation
+        left: (binary_operation
+          left: (parenthesized_expression
+            (field
+              value: (variable
+                name: (identifier))))
+          right: (field
+            value: (variable
+              name: (identifier))))
+        right: (constant_integer))))
   (function_declaration
-    name: (function_name
-      (identifier))
-    (function_argument_list)
-    body: (block
-      (variable_declaration_statement
-        (variable_binding
-          name: (identifier)
-          value: (field_expression
-            object: (field_expression
-              object: (identifier)
-              field: (identifier))
-            field: (identifier)))))))
-
-================================================================================
-Index expression
-================================================================================
-
-def test() {
-  var x = a[0];
-}
-
---------------------------------------------------------------------------------
-
-(source_file
-  (function_declaration
-    name: (function_name
-      (identifier))
-    (function_argument_list)
-    body: (block
-      (variable_declaration_statement
-        (variable_binding
-          name: (identifier)
-          value: (index_expression
-            object: (identifier)
-            index: (integer_literal)))))))
-
-================================================================================
-Array literal
-================================================================================
-
-def test() {
-  var x = [1, 2, 3];
-}
-
---------------------------------------------------------------------------------
-
-(source_file
-  (function_declaration
-    name: (function_name
-      (identifier))
-    (function_argument_list)
-    body: (block
-      (variable_declaration_statement
-        (variable_binding
-          name: (identifier)
-          value: (array_literal
-            (integer_literal)
-            (integer_literal)
-            (integer_literal)))))))
-
-================================================================================
-Expression-level reader macro
-================================================================================
-
-def test() {
-  let names <- %linq! from c in cars where c.price > 100 select c.name %%
-}
-
---------------------------------------------------------------------------------
-
-(source_file
-  (function_declaration
-    name: (function_name
-      (identifier))
-    (function_argument_list)
-    body: (block
-      (variable_declaration_statement
-        (variable_binding
-          name: (identifier)
-          value: (reader_macro
-            name: (identifier)
-            content: (reader_macro_content)))))))
-
-================================================================================
-Module-level reader macro
-================================================================================
-
-%define~ foo %%
-
---------------------------------------------------------------------------------
-
-(source_file
-  (reader_macro
     name: (identifier)
-    content: (reader_macro_content)))
+    body: (block_expression
+      (field
+        value: (variable
+          name: (identifier))))))
 
 ================================================================================
-Bare named call arguments
+Safe navigation
 ================================================================================
 
-def beta() {
-    foo(1, primary = true, scope = x)
+let a = b?.c
+let d = e?[0]
+let f = g!?.h
+let i = j!?[1]
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (safe_field
+        value: (variable
+          name: (identifier))
+        name: (identifier))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (safe_at
+        subexpression: (variable
+          name: (identifier))
+        index: (constant_integer))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (safe_field
+        value: (variable
+          name: (identifier))
+        name: (identifier))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (safe_at
+        subexpression: (variable
+          name: (identifier))
+        index: (constant_integer)))))
+
+================================================================================
+Indexing
+================================================================================
+
+let a = b[0][1]
+let c = d![2]
+let e = f.[3]
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (at
+        subexpression: (at
+          subexpression: (variable
+            name: (identifier))
+          index: (constant_integer))
+        index: (constant_integer))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (at
+        subexpression: (variable
+          name: (identifier))
+        index: (constant_integer))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (at
+        subexpression: (variable
+          name: (identifier))
+        index: (constant_integer)))))
+
+================================================================================
+Calls
+================================================================================
+
+let a = f()
+let b = g(1, x)
+let c = mod::h(<- y)
+let d = int(3.5)
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (call
+        name: (identifier))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (call
+        name: (identifier)
+        arguments: (constant_integer)
+        arguments: (variable
+          name: (identifier)))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (call
+        name: (qualified_name
+          module: (identifier)
+          name: (identifier))
+        arguments: (move_argument
+          arguments: (variable
+            name: (identifier))))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (call
+        name: (basic_type)
+        arguments: (constant_float)))))
+
+================================================================================
+Named argument calls
+================================================================================
+
+let a = f([x = 1, y = 2])
+let b = g(1, [y = 2])
+let c = h(1, y <- z)
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (named_call
+        name: (identifier)
+        arguments: (make_field_declaration
+          name: (identifier)
+          value: (constant_integer))
+        arguments: (make_field_declaration
+          name: (identifier)
+          value: (constant_integer)))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (named_call
+        name: (identifier)
+        non_named_arguments: (constant_integer)
+        arguments: (make_field_declaration
+          name: (identifier)
+          value: (constant_integer)))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (named_call
+        name: (identifier)
+        non_named_arguments: (constant_integer)
+        arguments: (make_field_declaration
+          name: (identifier)
+          value: (variable
+            name: (identifier)))))))
+
+================================================================================
+Method calls
+================================================================================
+
+let a = b.c(1)
+let d = e->f()
+let g = h!.i(2)
+let j = k.float(3)
+let l = m.n([o = 1])
+let p = q->r(1, s = 2)
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (invoke
+        value: (variable
+          name: (identifier))
+        name: (identifier)
+        arguments: (constant_integer))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (invoke
+        value: (variable
+          name: (identifier))
+        name: (identifier))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (invoke
+        value: (variable
+          name: (identifier))
+        name: (identifier)
+        arguments: (constant_integer))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (invoke
+        value: (variable
+          name: (identifier))
+        name: (basic_type)
+        arguments: (constant_integer))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (named_call
+        value: (variable
+          name: (identifier))
+        name: (identifier)
+        arguments: (make_field_declaration
+          name: (identifier)
+          value: (constant_integer)))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (named_call
+        value: (variable
+          name: (identifier))
+        name: (identifier)
+        non_named_arguments: (constant_integer)
+        arguments: (make_field_declaration
+          name: (identifier)
+          value: (constant_integer))))))
+
+================================================================================
+Pipes
+================================================================================
+
+let a = x |> f() |> g()
+let b = h() <| y
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (pipe
+        argument: (pipe
+          argument: (variable
+            name: (identifier))
+          function_call: (call
+            name: (identifier)))
+        function_call: (call
+          name: (identifier)))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (pipe
+        function_call: (call
+          name: (identifier))
+        argument: (variable
+          name: (identifier))))))
+
+================================================================================
+Pipe binds tighter than addition
+================================================================================
+
+let a = b + c |> d()
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (binary_operation
+        left: (variable
+          name: (identifier))
+        right: (pipe
+          argument: (variable
+            name: (identifier))
+          function_call: (call
+            name: (identifier)))))))
+
+================================================================================
+Pipe to a basic type
+================================================================================
+
+let a = b |> int
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (pipe
+        argument: (variable
+          name: (identifier))
+        function_call: (basic_type)))))
+
+================================================================================
+Is and as
+================================================================================
+
+let a = b is int
+let c = d is type<Foo>
+let e = f is name
+let g = h !is name
+let i = j as name
+let k = l ?as name
+let m = n !as type<Foo>
+let o = p !?as int
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (is_expression
+        subexpression: (variable
+          name: (identifier))
+        type_expression: (basic_type))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (is_expression
+        subexpression: (variable
+          name: (identifier))
+        type_expression: (structure_type
+          (identifier)))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (is_variant
+        value: (variable
+          name: (identifier))
+        name: (identifier))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (is_variant
+        value: (variable
+          name: (identifier))
+        name: (identifier))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (as_variant
+        value: (variable
+          name: (identifier))
+        name: (identifier))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (safe_as_variant
+        value: (variable
+          name: (identifier))
+        name: (identifier))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (as_variant
+        value: (variable
+          name: (identifier))
+        name: (structure_type
+          (identifier)))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (safe_as_variant
+        value: (variable
+          name: (identifier))
+        name: (basic_type)))))
+
+================================================================================
+Is binds tighter than unary minus
+================================================================================
+
+let a = -b is int
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (unary_operation
+        subexpression: (is_expression
+          subexpression: (variable
+            name: (identifier))
+          type_expression: (basic_type))))))
+
+================================================================================
+Safe as after a binary operator
+================================================================================
+
+let a = b + c ?as d
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (safe_as_variant
+        value: (binary_operation
+          left: (variable
+            name: (identifier))
+          right: (variable
+            name: (identifier)))
+        name: (identifier)))))
+
+================================================================================
+Casts
+================================================================================
+
+let a = cast<int>(b)
+let c = upcast<Foo?>(d)
+let e = reinterpret<uint8?>(f)
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (cast_expression
+        cast_type: (basic_type)
+        subexpression: (variable
+          name: (identifier)))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (cast_expression
+        cast_type: (pointer_type
+          first_type: (structure_type
+            (identifier)))
+        subexpression: (variable
+          name: (identifier)))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (cast_expression
+        cast_type: (pointer_type
+          first_type: (basic_type))
+        subexpression: (variable
+          name: (identifier))))))
+
+================================================================================
+Address and dereference
+================================================================================
+
+let a = addr(b)
+let c = deref(d)
+let e = *f
+let g = addr<int?>(h)
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (reference_to_pointer
+        subexpression: (variable
+          name: (identifier)))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (pointer_to_reference
+        subexpression: (variable
+          name: (identifier)))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (pointer_to_reference
+        subexpression: (variable
+          name: (identifier)))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (cast_expression
+        cast_type: (pointer_type
+          first_type: (basic_type))
+        subexpression: (variable
+          name: (identifier))))))
+
+================================================================================
+Dereference over a field and before an update
+================================================================================
+
+def f() {
+    *p.x++
 }
 
 --------------------------------------------------------------------------------
 
 (source_file
   (function_declaration
-    name: (function_name
-      (identifier))
-    (function_argument_list)
-    body: (block
-      (expression_statement
-        (call_expression
-          function: (identifier)
-          (argument_list
-            (integer_literal)
-            (make_struct_field
-              name: (identifier)
-              value: (boolean_literal))
-            (make_struct_field
-              name: (identifier)
-              value: (identifier))))))))
+    name: (identifier)
+    body: (block_expression
+      (unary_operation
+        subexpression: (pointer_to_reference
+          subexpression: (field
+            value: (variable
+              name: (identifier))
+            name: (identifier)))))))
 
 ================================================================================
-Raw (original) operator family
+Function addresses
 ================================================================================
 
-def probe {
-    let x = g!.a
-    let y = pg!?.a
-    let z = arr![1]
-    let w = arr!?[2]
-    let q = vif !is i
-    let r = vif !as i
-    let s = vif !?as i
-    let t = pq !?? d
-    let m = obj!.method(1)
+let a = @@f
+let b = @@mod::g
+let c = @@<function<(x : int) : int>> h
+let d = @@<(x : int) : int> i
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (address
+        target: (identifier))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (address
+        target: (qualified_name
+          module: (identifier)
+          name: (identifier)))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (address
+        function_type: (function_type
+          arguments: (variable_declaration
+            name: (identifier)
+            type: (basic_type))
+          result: (basic_type))
+        target: (identifier))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (address
+        arguments: (variable_declaration
+          name: (identifier)
+          type: (basic_type))
+        result: (basic_type)
+        target: (identifier)))))
+
+================================================================================
+Typeinfo and type
+================================================================================
+
+let a = typeinfo sizeof(b)
+let c = typeinfo has_field<name>(d)
+let e = typeinfo rtti<x; y>(type<int>)
+let f = type<array<int>>
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (type_info
+        trait: (identifier)
+        subexpression: (variable
+          name: (identifier)))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (type_info
+        trait: (identifier)
+        subtrait: (identifier)
+        subexpression: (variable
+          name: (identifier)))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (type_info
+        trait: (identifier)
+        subtrait: (identifier)
+        extratrait: (identifier)
+        subexpression: (type_declaration
+          type_expression: (basic_type)))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (type_declaration
+        type_expression: (array_type
+          first_type: (basic_type))))))
+
+================================================================================
+New
+================================================================================
+
+let a = new Foo
+let b = new <Foo>
+let c = new Foo()
+let d = new Foo(uninitialized)
+let e = new Foo(1, 2)
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (new_expression
+        type_expression: (structure_type
+          (identifier)))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (new_expression
+        type_expression: (structure_type
+          (identifier)))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (new_expression
+        type_expression: (structure_type
+          (identifier)))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (new_expression
+        type_expression: (structure_type
+          (identifier)))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (new_expression
+        type_expression: (structure_type
+          (identifier))
+        arguments: (constant_integer)
+        arguments: (constant_integer)))))
+
+================================================================================
+New with an initializer
+================================================================================
+
+let a = new Foo(x = 1)
+let b = new [1, 2]
+let c = new {"k" => 1}
+let d = new struct<Foo>(x = 1)
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (ascend
+        subexpression: (make_struct
+          make_type: (structure_type
+            (identifier))
+          structs: (make_field_declaration
+            name: (identifier)
+            value: (constant_integer))))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (ascend
+        subexpression: (make_array
+          values: (constant_integer)
+          values: (constant_integer)))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (ascend
+        subexpression: (make_table
+          values: (make_tuple
+            values: (constant_string)
+            values: (constant_integer))))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (ascend
+        subexpression: (make_struct
+          make_type: (structure_type
+            (identifier))
+          structs: (make_field_declaration
+            name: (identifier)
+            value: (constant_integer)))))))
+
+================================================================================
+Array constructors
+================================================================================
+
+let a = [1, 2, 3]
+let b = []
+let c = array(1, 2)
+let d = array<int>()
+let e = fixed_array(1, 2,)
+let f = fixed_array<float>(1.0, 2.0)
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (make_array
+        values: (constant_integer)
+        values: (constant_integer)
+        values: (constant_integer))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (make_array)))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (make_array
+        values: (constant_integer)
+        values: (constant_integer))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (make_array
+        make_type: (basic_type))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (make_array
+        values: (constant_integer)
+        values: (constant_integer))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (make_array
+        make_type: (basic_type)
+        values: (constant_float)
+        values: (constant_float)))))
+
+================================================================================
+Arrays of structures, tuples, and variants
+================================================================================
+
+let a = array struct<Foo>((x = 1), (x = 2))
+let b = array tuple<int; float>((_0 = 1, _1 = 2.0))
+let c = array variant<i : int; f : float>(i = 1)
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (make_array
+        make_type: (structure_type
+          (identifier))
+        structs: (make_field_declaration
+          name: (identifier)
+          value: (constant_integer))
+        structs: (make_field_declaration
+          name: (identifier)
+          value: (constant_integer)))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (make_array
+        argument_types: (basic_type)
+        argument_types: (basic_type)
+        structs: (make_field_declaration
+          name: (identifier)
+          value: (constant_integer))
+        structs: (make_field_declaration
+          name: (identifier)
+          value: (constant_float)))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (make_array
+        argument_names: (identifier)
+        argument_types: (basic_type)
+        argument_names: (identifier)
+        argument_types: (basic_type)
+        structs: (make_field_declaration
+          name: (identifier)
+          value: (constant_integer))))))
+
+================================================================================
+Table constructors
+================================================================================
+
+let a = {"a" => 1, "b" => 2}
+let b = {}
+let c = table("a" => 1)
+let d = table<string; int>()
+let e = table<int>(1, 2)
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (make_table
+        values: (make_tuple
+          values: (constant_string)
+          values: (constant_integer))
+        values: (make_tuple
+          values: (constant_string)
+          values: (constant_integer)))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (make_table)))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (make_table
+        values: (make_tuple
+          values: (constant_string)
+          values: (constant_integer)))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (make_table
+        make_type: (basic_type)
+        make_type: (basic_type))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (make_table
+        make_type: (basic_type)
+        values: (constant_integer)
+        values: (constant_integer)))))
+
+================================================================================
+Tuple constructors
+================================================================================
+
+let a = (1, "two")
+let b = (1,)
+let c = tuple(1, 2.0)
+let d = (x = 1, y = 2)
+let e = tuple<x : int; y : float>(x = 1, y = 2.0)
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (make_tuple
+        values: (constant_integer)
+        values: (constant_string))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (make_tuple
+        values: (constant_integer))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (make_tuple
+        values: (constant_integer)
+        values: (constant_float))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (make_tuple
+        values: (make_field_declaration
+          name: (identifier)
+          value: (constant_integer))
+        values: (make_field_declaration
+          name: (identifier)
+          value: (constant_integer)))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (make_tuple
+        argument_names: (identifier)
+        argument_types: (basic_type)
+        argument_names: (identifier)
+        argument_types: (basic_type)
+        structs: (make_field_declaration
+          name: (identifier)
+          value: (constant_integer))
+        structs: (make_field_declaration
+          name: (identifier)
+          value: (constant_float))))))
+
+================================================================================
+Structure constructors
+================================================================================
+
+let a = Foo(x = 1, y := z)
+let b = Foo(uninitialized)
+let c = struct<Foo>(x = 1)
+let d = class<Bar>(uninitialized)
+let e = default<Foo>
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (make_struct
+        make_type: (structure_type
+          (identifier))
+        structs: (make_field_declaration
+          name: (identifier)
+          value: (constant_integer))
+        structs: (make_field_declaration
+          name: (identifier)
+          value: (variable
+            name: (identifier))))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (make_struct
+        make_type: (structure_type
+          (identifier)))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (make_struct
+        make_type: (structure_type
+          (identifier))
+        structs: (make_field_declaration
+          name: (identifier)
+          value: (constant_integer)))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (make_struct
+        make_type: (structure_type
+          (identifier)))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (make_struct
+        make_type: (structure_type
+          (identifier))))))
+
+================================================================================
+Variant constructors
+================================================================================
+
+let a = variant<i : int; f : float>(i = 1)
+let b = variant type<V>(f = 1.0)
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (make_variant
+        argument_names: (identifier)
+        argument_types: (basic_type)
+        argument_names: (identifier)
+        argument_types: (basic_type)
+        structs: (make_field_declaration
+          name: (identifier)
+          value: (constant_integer)))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (make_variant
+        make_type: (structure_type
+          (identifier))
+        structs: (make_field_declaration
+          name: (identifier)
+          value: (constant_float))))))
+
+================================================================================
+Comprehensions
+================================================================================
+
+let a = [for (x in xs); x * 2]
+let b = [iterator for (x in xs); x; where x > 0]
+let c = {for (x, y in xs, ys); x => y}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (array_comprehension
+        iterators: (identifier)
+        sources: (variable
+          name: (identifier))
+        subexpression: (binary_operation
+          left: (variable
+            name: (identifier))
+          right: (constant_integer)))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (array_comprehension
+        iterators: (identifier)
+        sources: (variable
+          name: (identifier))
+        subexpression: (variable
+          name: (identifier))
+        expression_where: (binary_operation
+          left: (variable
+            name: (identifier))
+          right: (constant_integer)))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (array_comprehension
+        iterators: (identifier)
+        iterators: (identifier)
+        sources: (variable
+          name: (identifier))
+        sources: (variable
+          name: (identifier))
+        subexpression: (make_tuple
+          values: (variable
+            name: (identifier))
+          values: (variable
+            name: (identifier)))))))
+
+================================================================================
+Blocks, lambdas, and local functions
+================================================================================
+
+let a = $(x : int) : int { return x }
+let b = @(x) => x + 1
+let c = @@(x : int) => x
+let d = @capture(& e, = f, <- g, := h) () { return 1 }
+let i = $ [annotation] () => 0
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (make_block
+        arguments: (variable_declaration
+          name: (identifier)
+          type: (basic_type))
+        result: (basic_type)
+        body: (block_expression
+          (return_expression
+            subexpression: (variable
+              name: (identifier)))))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (make_block
+        arguments: (variable_declaration
+          name: (identifier))
+        body: (binary_operation
+          left: (variable
+            name: (identifier))
+          right: (constant_integer)))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (make_block
+        arguments: (variable_declaration
+          name: (identifier)
+          type: (basic_type))
+        body: (variable
+          name: (identifier)))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (make_block
+        capture: (capture_entry
+          name: (identifier))
+        capture: (capture_entry
+          name: (identifier))
+        capture: (capture_entry
+          name: (identifier))
+        capture: (capture_entry
+          name: (identifier))
+        body: (block_expression
+          (return_expression
+            subexpression: (constant_integer))))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (make_block
+        annotations: (annotation_list
+          (annotation_declaration
+            name: (identifier)))
+        body: (constant_integer)))))
+
+================================================================================
+Lambda body takes the operators after it
+================================================================================
+
+let a = @(x) => x + 1 * 2
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (make_block
+        arguments: (variable_declaration
+          name: (identifier))
+        body: (binary_operation
+          left: (variable
+            name: (identifier))
+          right: (binary_operation
+            left: (constant_integer)
+            right: (constant_integer)))))))
+
+================================================================================
+Capture with a mode name
+================================================================================
+
+let a = @capture(ref(b), copy(c)) () => b + c
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (make_block
+        capture: (capture_entry
+          mode: (identifier)
+          name: (identifier))
+        capture: (capture_entry
+          mode: (identifier)
+          name: (identifier))
+        body: (binary_operation
+          left: (variable
+            name: (identifier))
+          right: (variable
+            name: (identifier)))))))
+
+================================================================================
+Piped blocks
+================================================================================
+
+def f() {
+    g() $(x) {
+        print(x)
+    }
+    h(1) {
+        print(2)
+    }
+    v.each() @(x) => x
 }
 
 --------------------------------------------------------------------------------
 
 (source_file
   (function_declaration
-    name: (function_name
-      (identifier))
-    body: (block
-      (variable_declaration_statement
-        (variable_binding
+    name: (identifier)
+    body: (block_expression
+      (pipe
+        function_call: (call
+          name: (identifier))
+        argument: (make_block
+          arguments: (variable_declaration
+            name: (identifier))
+          body: (block_expression
+            (call
+              name: (identifier)
+              arguments: (variable
+                name: (identifier))))))
+      (pipe
+        function_call: (call
           name: (identifier)
-          value: (field_expression
-            object: (identifier)
-            field: (identifier))))
-      (variable_declaration_statement
-        (variable_binding
-          name: (identifier)
-          value: (safe_field_expression
-            object: (identifier)
-            field: (identifier))))
-      (variable_declaration_statement
-        (variable_binding
-          name: (identifier)
-          value: (bypass_index_expression
-            object: (identifier)
-            index: (integer_literal))))
-      (variable_declaration_statement
-        (variable_binding
-          name: (identifier)
-          value: (safe_index_expression
-            object: (identifier)
-            index: (integer_literal))))
-      (variable_declaration_statement
-        (variable_binding
-          name: (identifier)
-          value: (is_expression
-            value: (identifier)
-            type: (identifier))))
-      (variable_declaration_statement
-        (variable_binding
-          name: (identifier)
-          value: (as_expression
-            value: (identifier)
-            type: (identifier))))
-      (variable_declaration_statement
-        (variable_binding
-          name: (identifier)
-          value: (as_expression
-            value: (identifier)
-            type: (identifier))))
-      (variable_declaration_statement
-        (variable_binding
-          name: (identifier)
-          value: (null_coalescing_expression
-            value: (identifier)
-            default: (identifier))))
-      (variable_declaration_statement
-        (variable_binding
-          name: (identifier)
-          value: (method_call_expression
-            object: (identifier)
-            method: (identifier)
-            (argument_list
-              (integer_literal))))))))
+          arguments: (constant_integer))
+        argument: (make_block
+          body: (block_expression
+            (call
+              name: (identifier)
+              arguments: (constant_integer)))))
+      (pipe
+        function_call: (invoke
+          value: (variable
+            name: (identifier))
+          name: (identifier))
+        argument: (make_block
+          arguments: (variable_declaration
+            name: (identifier))
+          body: (variable
+            name: (identifier)))))))
+
+================================================================================
+Piped block after a structure constructor
+================================================================================
+
+def f() {
+    S(ok = x) {
+        g()
+    }
+    S(uninitialized) $() {
+    }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    body: (block_expression
+      (pipe
+        function_call: (make_struct
+          make_type: (structure_type
+            (identifier))
+          structs: (make_field_declaration
+            name: (identifier)
+            value: (variable
+              name: (identifier))))
+        argument: (make_block
+          body: (block_expression
+            (call
+              name: (identifier)))))
+      (pipe
+        function_call: (make_struct
+          make_type: (structure_type
+            (identifier)))
+        argument: (make_block
+          body: (block_expression))))))
+
+================================================================================
+Generators
+================================================================================
+
+let a = generator<int>() <| $() {
+    yield 1
+    return false
+}
+let b = generator<int> capture(<- c) {
+    yield 2
+    return false
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (pipe
+        function_call: (make_generator
+          iterator_type: (basic_type))
+        argument: (make_block
+          body: (block_expression
+            (yield_expression
+              subexpression: (constant_integer))
+            (return_expression
+              subexpression: (constant_boolean)))))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (make_generator
+        iterator_type: (basic_type)
+        capture: (capture_entry
+          name: (identifier))
+        subexpression: (block_expression
+          (yield_expression
+            subexpression: (constant_integer))
+          (return_expression
+            subexpression: (constant_boolean)))))))
+
+================================================================================
+Unsafe expression
+================================================================================
+
+let a = unsafe(addr(b))
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (unsafe_call
+        subexpression: (reference_to_pointer
+          subexpression: (variable
+            name: (identifier)))))))
+
+================================================================================
+Reification tags
+================================================================================
+
+let a = $e(b) + $v(c)
+let d = $c(e)(1, 2)
+let f = g.$f(h)
+let i = j as $f(k)
+let l = @@$c(m)
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (binary_operation
+        left: (tag
+          subexpression: (variable
+            name: (identifier)))
+        right: (tag
+          subexpression: (variable
+            name: (identifier))))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (tag
+        subexpression: (variable
+          name: (identifier))
+        arguments: (constant_integer)
+        arguments: (constant_integer))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (field
+        value: (variable
+          name: (identifier))
+        name: (tag
+          subexpression: (variable
+            name: (identifier))))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (as_variant
+        value: (variable
+          name: (identifier))
+        name: (tag
+          subexpression: (variable
+            name: (identifier))))))
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (tag
+        subexpression: (variable
+          name: (identifier))))))
+
+================================================================================
+Reader macros
+================================================================================
+
+let a = %stringify~ any text %%
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (reader
+        macro: (identifier)
+        sequence: (reader_text)))))
+
+================================================================================
+Inline reader macros
+================================================================================
+
+let a = %stringify! any 50% text
+    on two lines %% + 1
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (global_let
+    variables: (variable_declaration
+      name: (identifier)
+      init: (binary_operation
+        left: (inline_reader)
+        right: (constant_integer)))))
