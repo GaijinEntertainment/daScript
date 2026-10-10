@@ -298,6 +298,7 @@ def private half_crown_cell(t : T?; tr, trg : Model; tag : string; count : array
         let prev_half = get_metal_kq_half()
         set_metal_kq_half(true)
         pin_metal_tensor_crowns("{kq_half_crown(KqFmt.k4)},{kq_half_crown(KqFmt.k5)},{kq_half_crown(KqFmt.k6)}")
+        metal_prefill_shutdown()   //! both drivers share the device the decode release drops - a live prefill driver would allocate on null
         metal_decode_shutdown()
         let half_drafted = count_cell(t, tr, trg, "{tag} half-x", count, 2l)
         to_log(LOG_INFO, "{tag} half-x leg: drafted {half_drafted} rounds under the half crowns against {plain_drafted} without\n")
@@ -309,6 +310,7 @@ def private half_crown_cell(t : T?; tr, trg : Model; tag : string; count : array
             unpin_metal_tensor_crowns()
             set_metal_tensor_crowns(prev_crowns)
         }
+        metal_prefill_shutdown()
         metal_decode_shutdown()
     }
 }

@@ -1533,14 +1533,14 @@ def think_budget_marks_(m : Model; c : ChatSession) : ThinkBudgetMarks {
         marks.close |> push(msg)
         return <- marks
     }
-    //! the markers as the model writes them: a special, or a special followed by a word (gemma-4's `<|channel>thought`)
-    var open_seq <- encode_(m, c.tmpl.think_open, false, true)
-    let close_seq <- encode_(m, c.tmpl.think_close, false, true)
-    if (length(close_seq) != 1 || special_id(m, c.tmpl.think_close) < 0l) {
+    //! the markers as the model writes them: a special, or a special followed by a word (gemma-4's `<|channel>thought`) -
+    //! looked up by name, since the tokenizer's special parse does not see an asymmetric bracket like `<channel|>`
+    let close = special_id(m, c.tmpl.think_close)
+    if (close < 0l) {
         return <- marks
     }
-    let close = close_seq[0]
-    if (!empty(c.tmpl.think_open) && !empty(open_seq)) {
+    var open_seq <- marker_tokens_(m, c.tmpl.think_open)
+    if (!empty(open_seq)) {
         marks.open <- open_seq
     }
     marks.close_tok = close
@@ -1553,6 +1553,26 @@ def think_budget_marks_(m : Model; c : ChatSession) : ThinkBudgetMarks {
     marks.close |> push(close)
     marks.close |> push_from(encode_(m, "\n\n", false, false))
     return <- marks
+}
+
+//! a marker's tokens: its longest leading prefix that names a special, then the rest as plain text; empty when no prefix is one
+def private marker_tokens_(m : Model; text : string) : array<int64> {
+    var toks : array<int64>
+    peek_data(text) $(d) {
+        var n = length(d)
+        while (n > 0) {
+            let id = special_id(m, slice(d, 0, n))
+            if (id >= 0l) {
+                toks |> push(id)
+                if (n < length(d)) {
+                    toks |> push_from(encode_(m, slice(d, n), false, false))
+                }
+                break
+            }
+            n--
+        }
+    }
+    return <- toks
 }
 
 //! what the forced close says ahead of a symmetric family's close marker, in the thought's own voice (the Qwen3 recipe)

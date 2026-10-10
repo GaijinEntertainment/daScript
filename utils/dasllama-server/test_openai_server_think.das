@@ -313,6 +313,22 @@ def test_think_gemma4(t : T?) {
                 t |> success(find(msg.reasoning_content, "<|channel>") < 0, "reasoning clean of the opener")
             }
         }
+        t |> run("thinking_budget: the asymmetric channel closes for the model at the budget, the answer follows") @(t : T?) {
+            var full_len = 0
+            chat_resp(t, base_url, "\{\"messages\":[\{\"role\":\"user\",\"content\":\"What is 17 times 23? Think it through, then answer.\"}],\"max_tokens\":512,\"temperature\":0,\"enable_thinking\":true}") $(r) {
+                full_len = length(r.choices[0].message.reasoning_content)
+                t |> success(full_len > 100, "the unbudgeted turn reasons at length ({full_len} chars)")
+            }
+            chat_resp(t, base_url, "\{\"messages\":[\{\"role\":\"user\",\"content\":\"What is 17 times 23? Think it through, then answer.\"}],\"max_tokens\":512,\"temperature\":0,\"enable_thinking\":true,\"thinking_budget\":8}") $(r) {
+                let msg & = unsafe(r.choices[0].message)
+                to_log(LOG_INFO, "gemma-4 thinking_budget 8: reasoning {escape(msg.reasoning_content)}\n")
+                to_log(LOG_INFO, "gemma-4 thinking_budget 8: content   {escape(msg.content)}\n")
+                t |> success(!empty(msg.reasoning_content), "the budgeted turn still reasons ({length(msg.reasoning_content)} chars)")
+                t |> success(length(msg.reasoning_content) < full_len / 4, "...but far shorter than the unbudgeted turn's {full_len} chars")
+                t |> success(!empty(msg.content), "an answer follows the forced channel close")
+                t |> success(find(msg.content, "<channel|>") < 0 && find(msg.content, "<|channel>") < 0, "the forced close is a marker, not text, in the content")
+            }
+        }
     }
 }
 

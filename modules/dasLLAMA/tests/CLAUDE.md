@@ -1601,7 +1601,7 @@ chunk is three quarters of the opening with the idle quantum off: the first tick
 opening, a checkpoint within a chunk and a half landing in one window; `test_metal_prefix_checkpoint_hinted` - a
 request marked with its stable opening (`PendingReq.stable_at`) leaves the checkpoint at once, the
 second prompt attaches it; a marked first request leaves two checkpoints (its opening and its
-finished turn), an unmarked one only its finished turn's, and the attached reply is token for
+finished turn), an unmarked one its prompt's end and its finished turn, and the attached reply is token for
 token the uncached reply at the same cut;
 `test_metal_prefix_checkpoint_logits` - the verbs direct: a session attached at a checkpoint off a
 page boundary lands the donor's logits bit for bit after the same tail (the carry's position

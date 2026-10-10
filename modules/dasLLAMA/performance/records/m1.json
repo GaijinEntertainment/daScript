@@ -91,34 +91,43 @@
         "flavor":"tuned",
         "box":"m1",
         "threads":8,
-        "date":"2026-08-02",
-        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --ngl 99",
+        "date":"2026-10-09",
+        "cmd":"modules/dasLLAMA/performance/_rig/dasllama-bench.app/Contents/MacOS/dasllama-bench -- -m ~/Work/llama.cpp/models/Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf -p 512 -n 128 -r 5 -t 8 -o json --json-path modules/dasLLAMA/performance/records/_cell_m1.json --ngl 99 --npl 4",
         "hardware":{
           "cpu":"Apple M1 Max",
           "arch":"arm64",
-          "os":"macOS 26.5.2",
+          "os":"macOS 27.0",
           "perf_cores":8,
           "total_cores":10,
           "ram_gb":64,
           "gpu":"Apple M1 Max (32-core)",
-          "model_id":"MacBookPro18,2"
+          "model_id":"MacBookPro18,2",
+          "remote_desktop":"parsec"
         },
         "tests":{
           "pp512":{
-            "tok_s":854.45736559871989,
-            "stddev":24.288177490234375
+            "tok_s":975.25810344847685,
+            "stddev":1.7190102338790894
           },
           "tg128":{
-            "tok_s":64.882714423848327,
-            "stddev":0.064102247357368469
+            "tok_s":73.566301509176384,
+            "stddev":0.12840794026851654
+          },
+          "tg128@4":{
+            "tok_s":122.6258378730361,
+            "stddev":0.3579593300819397
           }
         },
         "source":"official",
-        "sha":"7605e8476",
-        "version":"0.6.4",
-        "tune_sha":"145736219c515a76bc38c3da1f9d40e0e1ef3044990d2e55a0543493607d4ca6",
+        "sha":"7e7adc950",
+        "version":"0.6.5",
+        "dasllama_version":16,
+        "versions":"exe one unit",
+        "tune":"k4q8_tile_gen=mr8 (manifest); k5q8_tile_gen=mr8 (manifest); k6q8_tile_gen=mr8 (manifest); q40q8_tile_gen=mr8 (manifest); iq4xsq8_tile_gen=mr8 (manifest); iq3s4q8_tile_gen=mr8 (manifest); k3q8_tile_gen=mr8 (manifest); iq3sq8_tile_gen=mr8 (manifest); iq3xxsq8_tile_gen=mr8 (manifest); iq4nlq8_tile_gen=mr8 (manifest); k2q8_tile_gen=mr8 (manifest); iq2sq8_tile_gen=mr8 (manifest); iq2xsq8_tile_gen=mr8 (manifest); iq2xxsq8_tile_gen=mr8 (manifest); q8q8_tile_gen=mr8_budget (manifest); q51q8_tile_gen=mr8 (manifest); iq4nl32q8_tile_gen=mr8 (manifest)",
+        "tune_sha":"10e61f3aeccb5c4500c7052fe147eb4d01568003639b57e2b52e165bf3a9b866",
+        "noise":"ok",
+        "parity":"ok",
         "exec_fmt":"weights k4/k5/k6/q8 native; q8 activations; f16 scales; metal blob",
-        "env":"DASLLAMA_BOX=m1 DASLLAMA_MODELS_DIR=~/Work/llama.cpp/models",
         "files":[
           {
             "role":"weights",
