@@ -2388,10 +2388,13 @@ if(NOT ${DAS_TREE_SITTER_DISABLED})
         tree-sitter-daslang/src/node-types.json
         tree-sitter-daslang/grammar.js
         tree-sitter-daslang/package.json
+        tree-sitter-daslang/tree-sitter.json
+        tree-sitter-daslang/LICENSE
         DESTINATION tree-sitter-daslang
     )
     install(FILES
         tree-sitter-daslang/queries/highlights.scm
+        tree-sitter-daslang/queries/tags.scm
         DESTINATION tree-sitter-daslang/queries
     )
     # The Zed extension — the installed install/README.md points users at this
