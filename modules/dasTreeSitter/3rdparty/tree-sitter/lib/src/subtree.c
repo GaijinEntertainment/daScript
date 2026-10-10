@@ -193,6 +193,7 @@ Subtree ts_subtree_new_leaf(
       .has_changes = false,
       .is_missing = false,
       .is_keyword = is_keyword,
+      .depends_on_column = depends_on_column,
       .is_inline = true,
     }};
   } else {
@@ -335,6 +336,15 @@ void ts_subtree_compress(
   }
 }
 
+// The part of an error node's cost that penalizes the extent it spans, as
+// opposed to the cost of its contents.
+static inline uint32_t ts_subtree__error_extent_cost(Length size) {
+  return
+    ERROR_COST_PER_RECOVERY +
+    ERROR_COST_PER_SKIPPED_CHAR * size.bytes +
+    ERROR_COST_PER_SKIPPED_LINE * size.extent.row;
+}
+
 // Assign all of the node's properties that depend on its children.
 void ts_subtree_summarize_children(
   MutableSubtree self,
@@ -361,7 +371,7 @@ void ts_subtree_summarize_children(
     Subtree child = children[i];
 
     if (
-      self.ptr->size.extent.row == 0 &&
+      (i == 0 || self.ptr->size.extent.row == 0) &&
       ts_subtree_depends_on_column(child)
     ) {
       self.ptr->depends_on_column = true;
@@ -386,20 +396,25 @@ void ts_subtree_summarize_children(
       lookahead_end_byte = child_lookahead_end_byte;
     }
 
-    if (ts_subtree_symbol(child) != ts_builtin_sym_error_repeat) {
-      self.ptr->error_cost += ts_subtree_error_cost(child);
-    }
-
     uint32_t grandchild_count = ts_subtree_child_count(child);
-    if (
-      self.ptr->symbol == ts_builtin_sym_error ||
-      self.ptr->symbol == ts_builtin_sym_error_repeat
-    ) {
-      if (!ts_subtree_extra(child) && !(ts_subtree_is_error(child) && grandchild_count == 0)) {
-        if (ts_subtree_visible(child)) {
-          self.ptr->error_cost += ERROR_COST_PER_SKIPPED_TREE;
-        } else if (grandchild_count > 0) {
-          self.ptr->error_cost += ERROR_COST_PER_SKIPPED_TREE * child.ptr->visible_child_count;
+    if (ts_subtree_symbol(child) == ts_builtin_sym_error_repeat) {
+      // Refund an `_ERROR` child's extent penalty, which this node re-charges
+      // as part of its own extent below, so that the grouping is cost-neutral.
+      uint32_t extent_cost = ts_subtree__error_extent_cost(ts_subtree_size(child));
+      ts_assert(ts_subtree_error_cost(child) >= extent_cost);
+      self.ptr->error_cost += ts_subtree_error_cost(child) - extent_cost;
+    } else {
+      self.ptr->error_cost += ts_subtree_error_cost(child);
+      if (
+        self.ptr->symbol == ts_builtin_sym_error ||
+        self.ptr->symbol == ts_builtin_sym_error_repeat
+      ) {
+        if (!ts_subtree_extra(child) && !(ts_subtree_is_error(child) && grandchild_count == 0)) {
+          if (ts_subtree_visible(child)) {
+            self.ptr->error_cost += ERROR_COST_PER_SKIPPED_TREE;
+          } else if (grandchild_count > 0) {
+            self.ptr->error_cost += ERROR_COST_PER_SKIPPED_TREE * child.ptr->visible_child_count;
+          }
         }
       }
     }
@@ -443,10 +458,7 @@ void ts_subtree_summarize_children(
     self.ptr->symbol == ts_builtin_sym_error ||
     self.ptr->symbol == ts_builtin_sym_error_repeat
   ) {
-    self.ptr->error_cost +=
-      ERROR_COST_PER_RECOVERY +
-      ERROR_COST_PER_SKIPPED_CHAR * self.ptr->size.bytes +
-      ERROR_COST_PER_SKIPPED_LINE * self.ptr->size.extent.row;
+    self.ptr->error_cost += ts_subtree__error_extent_cost(self.ptr->size);
   }
 
   if (self.ptr->child_count > 0) {
@@ -519,7 +531,7 @@ MutableSubtree ts_subtree_new_node(
 // Create a new error node containing the given children.
 //
 // This node is treated as 'extra'. Its children are prevented from having
-// having any effect on the parse state.
+// any effect on the parse state.
 Subtree ts_subtree_new_error_node(
   SubtreeArray *children,
   bool extra,
@@ -535,17 +547,18 @@ Subtree ts_subtree_new_error_node(
 // Create a new 'missing leaf' node.
 //
 // This node is treated as 'extra'. Its children are prevented from having
-// having any effect on the parse state.
+// any effect on the parse state.
 Subtree ts_subtree_new_missing_leaf(
   SubtreePool *pool,
   TSSymbol symbol,
+  TSStateId state,
   Length padding,
   uint32_t lookahead_bytes,
   const TSLanguage *language
 ) {
   Subtree result = ts_subtree_new_leaf(
     pool, symbol, padding, length_zero(), lookahead_bytes,
-    0, false, false, false, language
+    state, false, false, false, language
   );
   if (result.data.is_inline) {
     result.data.is_missing = true;
@@ -710,7 +723,7 @@ Subtree ts_subtree_edit(Subtree self, const TSInputEdit *input_edit, SubtreePool
         data->fragile_right = false;
         data->has_changes = false;
         data->has_external_tokens = false;
-        data->depends_on_column = false;
+        data->depends_on_column = result.data.depends_on_column;
         data->is_missing = result.data.is_missing;
         data->is_keyword = result.data.is_keyword;
         result.ptr = data;
@@ -758,7 +771,7 @@ Subtree ts_subtree_edit(Subtree self, const TSInputEdit *input_edit, SubtreePool
       };
 
       // Interpret all inserted text as applying to the *first* child that touches the edit.
-      // Subsequent children are only never have any text inserted into them; they are only
+      // Subsequent children never have any text inserted into them; they are only
       // shrunk to compensate for the edit.
       if (
         child_right.bytes > edit.start.bytes ||
@@ -818,109 +831,158 @@ static size_t ts_subtree__write_char_to_string(char *str, size_t n, int32_t chr)
 
 static const char *const ROOT_FIELD = "__ROOT__";
 
+typedef struct {
+  Subtree subtree;
+  TSSymbol alias_symbol;
+  bool alias_is_named;
+  const char *field_name;
+  bool is_root;
+
+  bool pre_written;
+  bool is_visible;
+  uint32_t child_index;
+  uint32_t structural_child_index;
+  const TSSymbol *alias_sequence;
+  const TSFieldMapEntry *field_map;
+  const TSFieldMapEntry *field_map_end;
+} WriteToStringFrame;
+
 static size_t ts_subtree__write_to_string(
   Subtree self, char *string, size_t limit,
   const TSLanguage *language, bool include_all,
-  TSSymbol alias_symbol, bool alias_is_named, const char *field_name
+  TSSymbol root_alias_symbol, bool root_alias_is_named, const char *root_field_name
 ) {
-  if (!self.ptr) return snprintf(string, limit, "(NULL)");
-
   char *cursor = string;
   char **writer = (limit > 1) ? &cursor : &string;
-  bool is_root = field_name == ROOT_FIELD;
-  bool is_visible =
-    include_all ||
-    ts_subtree_missing(self) ||
-    (
-      alias_symbol
-        ? alias_is_named
-        : ts_subtree_visible(self) && ts_subtree_named(self)
-    );
 
-  if (is_visible) {
-    if (!is_root) {
-      cursor += snprintf(*writer, limit, " ");
-      if (field_name) {
-        cursor += snprintf(*writer, limit, "%s: ", field_name);
-      }
-    }
+  Array(WriteToStringFrame) stack = array_new();
+  array_push(&stack, ((WriteToStringFrame) {
+    .subtree = self,
+    .alias_symbol = root_alias_symbol,
+    .alias_is_named = root_alias_is_named,
+    .field_name = root_field_name,
+    .is_root = root_field_name == ROOT_FIELD,
+  }));
 
-    if (ts_subtree_is_error(self) && ts_subtree_child_count(self) == 0 && self.ptr->size.bytes > 0) {
-      cursor += snprintf(*writer, limit, "(UNEXPECTED ");
-      cursor += ts_subtree__write_char_to_string(*writer, limit, self.ptr->lookahead_char);
-    } else {
-      TSSymbol symbol = alias_symbol ? alias_symbol : ts_subtree_symbol(self);
-      const char *symbol_name = ts_language_symbol_name(language, symbol);
-      if (ts_subtree_missing(self)) {
-        cursor += snprintf(*writer, limit, "(MISSING ");
-        if (alias_is_named || ts_subtree_named(self)) {
-          cursor += snprintf(*writer, limit, "%s", symbol_name);
-        } else {
-          cursor += snprintf(*writer, limit, "\"%s\"", symbol_name);
+  while (stack.size) {
+    WriteToStringFrame *frame = array_back(&stack);
+    Subtree node = frame->subtree;
+
+    if (!node.ptr) {
+      if (!frame->is_root) {
+        cursor += snprintf(*writer, limit, " ");
+        if (frame->field_name) {
+          cursor += snprintf(*writer, limit, "%s: ", frame->field_name);
         }
-      } else {
-        cursor += snprintf(*writer, limit, "(%s", symbol_name);
       }
+      cursor += snprintf(*writer, limit, "(NULL)");
+      (void)array_pop(&stack);
+      continue;
     }
-  } else if (is_root) {
-    TSSymbol symbol = alias_symbol ? alias_symbol : ts_subtree_symbol(self);
-    const char *symbol_name = ts_language_symbol_name(language, symbol);
-    if (ts_subtree_child_count(self) > 0) {
-      cursor += snprintf(*writer, limit, "(%s", symbol_name);
-    } else if (ts_subtree_named(self)) {
-      cursor += snprintf(*writer, limit, "(%s)", symbol_name);
-    } else {
-      cursor += snprintf(*writer, limit, "(\"%s\")", symbol_name);
-    }
-  }
 
-  if (ts_subtree_child_count(self)) {
-    const TSSymbol *alias_sequence = ts_language_alias_sequence(language, self.ptr->production_id);
-    const TSFieldMapEntry *field_map, *field_map_end;
-    ts_language_field_map(
-      language,
-      self.ptr->production_id,
-      &field_map,
-      &field_map_end
-    );
-
-    uint32_t structural_child_index = 0;
-    for (uint32_t i = 0; i < self.ptr->child_count; i++) {
-      Subtree child = ts_subtree_children(self)[i];
-      if (ts_subtree_extra(child)) {
-        cursor += ts_subtree__write_to_string(
-          child, *writer, limit,
-          language, include_all,
-          0, false, NULL
+    if (!frame->pre_written) {
+      bool is_visible =
+        include_all ||
+        ts_subtree_missing(node) ||
+        (
+          frame->alias_symbol
+            ? frame->alias_is_named
+            : ts_subtree_visible(node) && ts_subtree_named(node)
         );
+
+      if (is_visible) {
+        if (!frame->is_root) {
+          cursor += snprintf(*writer, limit, " ");
+          if (frame->field_name) {
+            cursor += snprintf(*writer, limit, "%s: ", frame->field_name);
+          }
+        }
+
+        if (ts_subtree_is_error(node) && ts_subtree_child_count(node) == 0 && node.ptr->size.bytes > 0) {
+          cursor += snprintf(*writer, limit, "(UNEXPECTED ");
+          cursor += ts_subtree__write_char_to_string(*writer, limit, node.ptr->lookahead_char);
+        } else {
+          TSSymbol symbol = frame->alias_symbol ? frame->alias_symbol : ts_subtree_symbol(node);
+          const char *symbol_name = ts_language_symbol_name(language, symbol);
+          if (ts_subtree_missing(node)) {
+            cursor += snprintf(*writer, limit, "(MISSING ");
+            if (frame->alias_is_named || ts_subtree_named(node)) {
+              cursor += snprintf(*writer, limit, "%s", symbol_name);
+            } else {
+              cursor += snprintf(*writer, limit, "\"%s\"", symbol_name);
+            }
+          } else {
+            cursor += snprintf(*writer, limit, "(%s", symbol_name);
+          }
+        }
+      } else if (frame->is_root) {
+        TSSymbol symbol = frame->alias_symbol ? frame->alias_symbol : ts_subtree_symbol(node);
+        const char *symbol_name = ts_language_symbol_name(language, symbol);
+        if (ts_subtree_child_count(node) > 0) {
+          cursor += snprintf(*writer, limit, "(%s", symbol_name);
+        } else if (ts_subtree_named(node)) {
+          cursor += snprintf(*writer, limit, "(%s)", symbol_name);
+        } else {
+          cursor += snprintf(*writer, limit, "(\"%s\")", symbol_name);
+        }
+      }
+
+      if (ts_subtree_child_count(node)) {
+        frame->alias_sequence = ts_language_alias_sequence(language, node.ptr->production_id);
+        ts_language_field_map(
+          language,
+          node.ptr->production_id,
+          &frame->field_map,
+          &frame->field_map_end
+        );
+      }
+
+      frame->is_visible = is_visible;
+      frame->pre_written = true;
+    }
+
+    if (frame->child_index < ts_subtree_child_count(node)) {
+      Subtree child = ts_subtree_children(node)[frame->child_index];
+      WriteToStringFrame child_frame = {
+        .subtree = child,
+        .is_root = false,
+      };
+
+      if (ts_subtree_extra(child)) {
+        // Extra children carry no alias/field info.
       } else {
-        TSSymbol subtree_alias_symbol = alias_sequence
-          ? alias_sequence[structural_child_index]
+        TSSymbol subtree_alias_symbol = frame->alias_sequence
+          ? frame->alias_sequence[frame->structural_child_index]
           : 0;
         bool subtree_alias_is_named = subtree_alias_symbol
           ? ts_language_symbol_metadata(language, subtree_alias_symbol).named
           : false;
 
-        const char *child_field_name = is_visible ? NULL : field_name;
-        for (const TSFieldMapEntry *map = field_map; map < field_map_end; map++) {
-          if (!map->inherited && map->child_index == structural_child_index) {
+        const char *child_field_name = frame->is_visible ? NULL : frame->field_name;
+        for (const TSFieldMapEntry *map = frame->field_map; map < frame->field_map_end; map++) {
+          if (!map->inherited && map->child_index == frame->structural_child_index) {
             child_field_name = language->field_names[map->field_id];
             break;
           }
         }
 
-        cursor += ts_subtree__write_to_string(
-          child, *writer, limit,
-          language, include_all,
-          subtree_alias_symbol, subtree_alias_is_named, child_field_name
-        );
-        structural_child_index++;
+        child_frame.alias_symbol = subtree_alias_symbol;
+        child_frame.alias_is_named = subtree_alias_is_named;
+        child_frame.field_name = child_field_name;
+        frame->structural_child_index++;
       }
+
+      frame->child_index++;
+      // After this push, `frame` may be invalidated by a realloc.
+      array_push(&stack, child_frame);
+      continue;
     }
+
+    if (frame->is_visible) cursor += snprintf(*writer, limit, ")");
+    (void)array_pop(&stack);
   }
 
-  if (is_visible) cursor += snprintf(*writer, limit, ")");
-
+  array_delete(&stack);
   return cursor - string;
 }
 

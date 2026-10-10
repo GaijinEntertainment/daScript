@@ -230,10 +230,12 @@ const TSLanguage *ts_parser_language(const TSParser *self);
  * Set the language that the parser should use for parsing.
  *
  * Returns a boolean indicating whether or not the language was successfully
- * assigned. True means assignment succeeded. False means there was a version
- * mismatch: the language was generated with an incompatible version of the
- * Tree-sitter CLI. Check the language's ABI version using [`ts_language_abi_version`]
- * and compare it to this library's [`TREE_SITTER_LANGUAGE_VERSION`] and
+ * assigned. True means assignment succeeded. False means the language cannot
+ * be used for parsing, or it was generated with an incompatible version of the
+ * Tree-sitter CLI. Check whether the language can be used for parsing with
+ * [`ts_language_is_parseable`]. Check the language's ABI version using
+ * [`ts_language_abi_version`] and compare it to this library's
+ * [`TREE_SITTER_LANGUAGE_VERSION`] and
  * [`TREE_SITTER_MIN_COMPATIBLE_LANGUAGE_VERSION`] constants.
  */
 bool ts_parser_set_language(TSParser *self, const TSLanguage *language);
@@ -307,9 +309,9 @@ const TSRange *ts_parser_included_ranges(
  *    to the [`code_point`] pointer, or write -1 if the input is invalid.
  *
  * This function returns a syntax tree on success, and `NULL` on failure. There
- * are four possible reasons for failure:
+ * are two possible reasons for failure:
  * 1. The parser does not have a language assigned. Check for this using the
-      [`ts_parser_language`] function.
+ *    [`ts_parser_language`] function.
  * 2. Parsing was cancelled due to the progress callback returning true. This callback
  *    is passed in [`ts_parser_parse_with_options`] inside the [`TSParseOptions`] struct.
  *
@@ -434,6 +436,11 @@ TSNode ts_tree_root_node_with_offset(
 
 /**
  * Get the language that was used to parse the syntax tree.
+ *
+ * When Tree-sitter is compiled to WebAssembly, this returns the original
+ * language if the tree is being accessed from the same WebAssembly instance
+ * that created it. Otherwise, this returns a copy of the language that can be
+ * used to inspect the tree but cannot be assigned to a parser.
  */
 const TSLanguage *ts_tree_language(const TSTree *self);
 
@@ -504,6 +511,11 @@ TSSymbol ts_node_symbol(TSNode self);
 
 /**
  * Get the node's language.
+ *
+ * When Tree-sitter is compiled to WebAssembly, this returns the original
+ * language if the node is being accessed from the same WebAssembly instance
+ * that created its tree. Otherwise, this returns a copy of the language that
+ * can be used to inspect the tree but cannot be assigned to a parser.
  */
 const TSLanguage *ts_node_language(TSNode self);
 
@@ -570,7 +582,7 @@ bool ts_node_is_missing(TSNode self);
 
 /**
  * Check if the node is *extra*. Extra nodes represent things like comments,
- * which are not required the grammar, but can appear anywhere.
+ * which are not required by the grammar, but can appear anywhere.
  */
 bool ts_node_is_extra(TSNode self);
 
@@ -591,6 +603,11 @@ bool ts_node_is_error(TSNode self);
 
 /**
  * Get this node's parse state.
+ *
+ * For a missing node, this is the state from the recovery path that was
+ * selected by the parser. It can be used with [`ts_lookahead_iterator_new`] to
+ * inspect the symbols that are valid in that state. This does not necessarily
+ * include every symbol that could be recovered by inserting a missing node.
 */
 TSStateId ts_node_parse_state(TSNode self);
 
@@ -924,6 +941,11 @@ TSQuery *ts_query_new(
 void ts_query_delete(TSQuery *self);
 
 /**
+ * Create a copy of a query.
+ */
+TSQuery *ts_query_copy(const TSQuery *self);
+
+/**
  * Get the number of patterns, captures, or string literals in the query.
  */
 uint32_t ts_query_pattern_count(const TSQuery *self);
@@ -1001,7 +1023,7 @@ const char *ts_query_capture_name_for_id(
 );
 
 /**
- * Get the quantifier of the query's captures. Each capture is * associated
+ * Get the quantifier of the query's captures. Each capture is associated
  * with a numeric id based on the order that it appeared in the query's source.
  */
 TSQuantifier ts_query_capture_quantifier_for_id(
@@ -1047,7 +1069,7 @@ void ts_query_disable_pattern(TSQuery *self, uint32_t pattern_index);
  *    captures that appear *before* some of the captures from a previous match.
  * 2. Repeatedly call [`ts_query_cursor_next_capture`] to iterate over all of the
  *    individual *captures* in the order that they appear. This is useful if
- *    don't care about which pattern matched, and just want a single ordered
+ *    you don't care about which pattern matched, and just want a single ordered
  *    sequence of captures.
  *
  * If you don't care about consuming all of the results, you can stop calling
@@ -1069,6 +1091,12 @@ void ts_query_cursor_exec(TSQueryCursor *self, const TSQuery *query, TSNode node
 
 /**
  * Start running a given query on a given node, with some options.
+ *
+ * If a progress callback is given, it is called periodically while the query
+ * runs. If it returns `true`, query execution halts. Matches that were still in
+ * progress are discarded, matches that had already finished can still be
+ * returned, and after that the cursor returns nothing more until it is started
+ * again with [`ts_query_cursor_exec`] or [`ts_query_cursor_exec_with_options`].
  */
 void ts_query_cursor_exec_with_options(
   TSQueryCursor *self,
@@ -1189,9 +1217,9 @@ bool ts_query_cursor_next_capture(
  *
  * The zero max start depth value can be used as a special behavior and
  * it helps to destructure a subtree by staying on a node and using captures
- * for interested parts. Note that the zero max start depth only limit a search
+ * for interested parts. Note that the zero max start depth only limits a search
  * depth for a pattern's root node but other nodes that are parts of the pattern
- * may be searched at any depth what defined by the pattern structure.
+ * may be searched at any depth as defined by the pattern structure.
  *
  * Set to `UINT32_MAX` to remove the maximum start depth.
  */
@@ -1211,6 +1239,17 @@ const TSLanguage *ts_language_copy(const TSLanguage *self);
  * this is the last reference.
  */
 void ts_language_delete(const TSLanguage *self);
+
+/**
+ * Check whether this language can be assigned to a parser.
+ *
+ * Languages obtained from a syntax tree may be used to inspect that tree, but
+ * are not necessarily usable for parsing. When Tree-sitter is compiled to
+ * WebAssembly, a language obtained from a tree can be used for parsing only
+ * within the same WebAssembly instance that created the tree, because lexer
+ * function pointers are local to a WebAssembly instance.
+ */
+bool ts_language_is_parseable(const TSLanguage *self);
 
 /**
  * Get the number of distinct node types in the language.
@@ -1270,7 +1309,7 @@ const char *ts_language_symbol_name(const TSLanguage *self, TSSymbol symbol);
 
 /**
  * Check whether the given node type id belongs to named nodes, anonymous nodes,
- * or a hidden nodes.
+ * or hidden nodes.
  *
  * See also [`ts_node_is_named`]. Hidden nodes are never returned from the API.
  */
@@ -1317,13 +1356,17 @@ const char *ts_language_name(const TSLanguage *self);
  *
  * Repeatedly using [`ts_lookahead_iterator_next`] and
  * [`ts_lookahead_iterator_current_symbol`] will generate valid symbols in the
- * given parse state. Newly created lookahead iterators will contain the `ERROR`
- * symbol.
+ * given parse state. A newly created iterator is not positioned on a symbol
+ * until [`ts_lookahead_iterator_next`] is called.
+ *
+ * The iterator retains the language, so the language may be deleted while the
+ * iterator is still in use.
  *
  * Lookahead iterators can be useful to generate suggestions and improve syntax
  * error diagnostics. To get symbols valid in an ERROR node, use the lookahead
  * iterator on its first leaf node state. For `MISSING` nodes, a lookahead
- * iterator created on the previous non-extra leaf node may be appropriate.
+ * iterator created on the previous non-extra leaf node, or using the node's
+ * parse state may be appropriate.
 */
 TSLookaheadIterator *ts_lookahead_iterator_new(const TSLanguage *self, TSStateId state);
 
@@ -1336,7 +1379,7 @@ void ts_lookahead_iterator_delete(TSLookaheadIterator *self);
  * Reset the lookahead iterator to another state.
  *
  * This returns `true` if the iterator was reset to the given state and `false`
- * otherwise.
+ * otherwise. A reset iterator is not positioned on a symbol.
 */
 bool ts_lookahead_iterator_reset_state(TSLookaheadIterator *self, TSStateId state);
 
@@ -1344,7 +1387,7 @@ bool ts_lookahead_iterator_reset_state(TSLookaheadIterator *self, TSStateId stat
  * Reset the lookahead iterator.
  *
  * This returns `true` if the language was set successfully and `false`
- * otherwise.
+ * otherwise. A reset iterator is not positioned on a symbol.
 */
 bool ts_lookahead_iterator_reset(TSLookaheadIterator *self, const TSLanguage *language, TSStateId state);
 
@@ -1361,13 +1404,19 @@ const TSLanguage *ts_lookahead_iterator_language(const TSLookaheadIterator *self
 bool ts_lookahead_iterator_next(TSLookaheadIterator *self);
 
 /**
- * Get the current symbol of the lookahead iterator;
+ * Get the current symbol of the lookahead iterator.
+ *
+ * This is only meaningful when the most recent call to
+ * [`ts_lookahead_iterator_next`] on `self` returned `true`.
 */
 TSSymbol ts_lookahead_iterator_current_symbol(const TSLookaheadIterator *self);
 
 /**
  * Get the current symbol type of the lookahead iterator as a null terminated
  * string.
+ *
+ * This returns `NULL` unless the most recent call to
+ * [`ts_lookahead_iterator_next`] on `self` returned `true`.
 */
 const char *ts_lookahead_iterator_current_symbol_name(const TSLookaheadIterator *self);
 

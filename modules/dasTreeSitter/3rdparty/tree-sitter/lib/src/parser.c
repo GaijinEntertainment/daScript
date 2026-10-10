@@ -543,6 +543,7 @@ static Subtree ts_parser__lex(
       ts_lexer_start(&self->lexer);
       ts_parser__external_scanner_deserialize(self, external_token);
       found_token = ts_parser__external_scanner_scan(self, lex_mode.external_lex_state);
+      called_get_column |= self->lexer.did_get_column;
       if (self->has_scanner_error) return NULL_SUBTREE;
       ts_lexer_finish(&self->lexer, &lookahead_end_byte);
 
@@ -582,7 +583,6 @@ static Subtree ts_parser__lex(
 
       if (found_token) {
         found_external_token = true;
-        called_get_column = self->lexer.did_get_column;
         break;
       }
 
@@ -1104,6 +1104,35 @@ static void ts_parser__accept(
   ts_stack_halt(self->stack, version);
 }
 
+static bool ts_parser__process_candidate_recovery_actions(
+  TSParser *self,
+  const TSParseAction *actions,
+  uint32_t action_count
+) {
+  bool has_shift_action = false;
+  for (uint32_t i = 0; i < action_count; i++) {
+    TSParseAction action = actions[i];
+    switch (action.type) {
+      case TSParseActionTypeShift:
+      case TSParseActionTypeRecover:
+        if (!action.shift.extra && !action.shift.repetition) has_shift_action = true;
+        break;
+      case TSParseActionTypeReduce:
+        if (action.reduce.child_count > 0)
+          ts_reduce_action_set_add(&self->reduce_actions, (ReduceAction) {
+            .symbol = action.reduce.symbol,
+            .count = action.reduce.child_count,
+            .dynamic_precedence = action.reduce.dynamic_precedence,
+            .production_id = action.reduce.production_id,
+          });
+        break;
+      default:
+        break;
+    }
+  }
+  return has_shift_action;
+}
+
 static bool ts_parser__do_all_potential_reductions(
   TSParser *self,
   StackVersion starting_version,
@@ -1130,37 +1159,33 @@ static bool ts_parser__do_all_potential_reductions(
     bool has_shift_action = false;
     array_clear(&self->reduce_actions);
 
-    TSSymbol first_symbol, end_symbol;
     if (lookahead_symbol != 0) {
-      first_symbol = lookahead_symbol;
-      end_symbol = lookahead_symbol + 1;
-    } else {
-      first_symbol = 1;
-      end_symbol = self->language->token_count;
-    }
-
-    for (TSSymbol symbol = first_symbol; symbol < end_symbol; symbol++) {
       TableEntry entry;
-      ts_language_table_entry(self->language, state, symbol, &entry);
-      for (uint32_t j = 0; j < entry.action_count; j++) {
-        TSParseAction action = entry.actions[j];
-        switch (action.type) {
-          case TSParseActionTypeShift:
-          case TSParseActionTypeRecover:
-            if (!action.shift.extra && !action.shift.repetition) has_shift_action = true;
-            break;
-          case TSParseActionTypeReduce:
-            if (action.reduce.child_count > 0)
-              ts_reduce_action_set_add(&self->reduce_actions, (ReduceAction) {
-                .symbol = action.reduce.symbol,
-                .count = action.reduce.child_count,
-                .dynamic_precedence = action.reduce.dynamic_precedence,
-                .production_id = action.reduce.production_id,
-              });
-            break;
-          default:
-            break;
+      ts_language_table_entry(self->language, state, lookahead_symbol, &entry);
+      has_shift_action = ts_parser__process_candidate_recovery_actions(self, entry.actions, entry.action_count);
+    } else {
+      LookaheadIterator iter = ts_language_lookaheads(self->language, state);
+      while (ts_lookahead_iterator__next(&iter)) {
+        // only terminal tokens are valid lookaheads for reduction decisions
+        if (iter.symbol == ts_builtin_sym_end || iter.symbol >= self->language->token_count) continue;
+        if (ts_parser__process_candidate_recovery_actions(self, iter.actions, iter.action_count))
+          has_shift_action = true;
+      }
+
+      // Sort reduce_actions by symbol descending to ensure deterministic
+      // ordering. The LookaheadIterator may visit symbols in a different
+      // order than the original linear scan (group order vs symbol order
+      // for small parse states), which can produce different orderings.
+      // Since reductions are applied sequentially and the last reduction
+      // version survives, the order affects error recovery outcomes.
+      for (uint32_t j = 1; j < self->reduce_actions.size; j++) {
+        ReduceAction key = self->reduce_actions.contents[j];
+        int32_t k = (int32_t)j - 1;
+        while (k >= 0 && self->reduce_actions.contents[k].symbol < key.symbol) {
+          self->reduce_actions.contents[k + 1] = self->reduce_actions.contents[k];
+          k--;
         }
+        self->reduce_actions.contents[k + 1] = key;
       }
     }
 
@@ -1182,6 +1207,9 @@ static bool ts_parser__do_all_potential_reductions(
       continue;
     } else if (lookahead_symbol != 0) {
       ts_stack_remove_version(self->stack, version);
+      // Removing this version shifts the next reduction version into its slot.
+      // Check that version before advancing.
+      continue;
     }
 
     if (version == starting_version) {
@@ -1225,10 +1253,17 @@ static bool ts_parser__recover_to_state(
       Subtree error_tree = *array_get(&error_trees, 0);
       uint32_t error_child_count = ts_subtree_child_count(error_tree);
       if (error_child_count > 0) {
-        array_splice(&slice.subtrees, 0, 0, error_child_count, ts_subtree_children(error_tree));
+        SubtreeArray nested = array_new();
+        array_reserve(&nested, error_child_count);
         for (unsigned j = 0; j < error_child_count; j++) {
-          ts_subtree_retain(*array_get(&slice.subtrees, j));
+          Subtree child = ts_subtree_children(error_tree)[j];
+          ts_subtree_retain(child);
+          array_push(&nested, child);
         }
+        Subtree nested_error = ts_subtree_from_mut(ts_subtree_new_node(
+          ts_builtin_sym_error_repeat, &nested, 0, self->language
+        ));
+        array_insert(&slice.subtrees, 0, nested_error);
       }
       ts_subtree_array_delete(&self->tree_pool, &error_trees);
     }
@@ -1489,7 +1524,7 @@ static void ts_parser__handle_error(
 
           StackVersion version_with_missing_tree = ts_stack_copy_version(self->stack, v);
           Subtree missing_tree = ts_subtree_new_missing_leaf(
-            &self->tree_pool, missing_symbol,
+            &self->tree_pool, missing_symbol, state,
             padding, lookahead_bytes,
             self->language
           );
@@ -1747,6 +1782,13 @@ static bool ts_parser__advance(
       }
     }
 
+    // If the current lookahead token is not valid and the parser is
+    // already in the error state, restart the error recovery process.
+    if (state == ERROR_STATE) {
+      ts_parser__recover(self, version, lookahead);
+      return true;
+    }
+
     // If the current lookahead token is not valid and the previous subtree on
     // the stack was reused from an old tree, then it wasn't actually valid to
     // reuse that previous subtree. Remove it from the stack, and in its place,
@@ -1888,7 +1930,7 @@ static bool ts_parser__balance_subtree(TSParser *self) {
       return false;
     }
 
-    MutableSubtree tree = *array_get(&self->tree_pool.tree_stack,
+    MutableSubtree tree = *array_get(&self->tree_pool.tree_stack, 
       self->tree_pool.tree_stack.size - 1
     );
 
@@ -2002,6 +2044,8 @@ bool ts_parser_set_language(TSParser *self, const TSLanguage *language) {
       language->abi_version < TREE_SITTER_MIN_COMPATIBLE_LANGUAGE_VERSION
     ) return false;
 
+    if (!ts_language_is_parseable(language)) return false;
+
     if (ts_language_is_wasm(language)) {
       if (
         !self->wasm_store ||
@@ -2083,7 +2127,10 @@ TSTree *ts_parser_parse(
   TSInput input
 ) {
   TSTree *result = NULL;
-  if (!self->language || !input.read) return NULL;
+  if (
+    !self->language || !input.read ||
+    (old_tree && old_tree->language != self->language)
+  ) return NULL;
 
   if (ts_language_is_wasm(self->language)) {
     if (!self->wasm_store) return NULL;

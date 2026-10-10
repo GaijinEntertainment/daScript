@@ -1,9 +1,67 @@
 #include "./language.h"
+#include "./atomic.h"
 #include "./wasm_store.h"
 #include "tree_sitter/api.h"
+#include <stddef.h>
 #include <string.h>
 
+#ifdef __wasm__
+
+typedef struct {
+  TSLanguage language;
+  volatile uint32_t ref_count;
+} TSUnparseableLanguage;
+
+// Linear memory can be shared by multiple WebAssembly instances, but a
+// module-defined global belongs to one instance. Assign each instance an ID
+// from a counter in shared memory so trees can identify the function table
+// that owns their language callbacks.
+static volatile uint32_t ts_language_next_context_id;
+
+__asm__(
+  ".globaltype ts_language_context_id, i32\n"
+  "ts_language_context_id:\n"
+);
+
+static inline TSUnparseableLanguage *ts_language__unparseable(const TSLanguage *self) {
+  return (TSUnparseableLanguage *)((char *)self - offsetof(TSUnparseableLanguage, language));
+}
+
+static inline bool ts_language__is_unparseable(const TSLanguage *self) {
+  return (
+    self &&
+    !self->lex_fn &&
+    self->external_scanner.states == (const bool *)self
+  );
+}
+
+uint32_t ts_language_current_context_id(void) {
+  uint32_t result;
+  __asm__(
+    "global.get ts_language_context_id\n"
+    "local.set %0\n"
+    : "=r"(result)
+  );
+  if (!result) {
+    result = atomic_inc(&ts_language_next_context_id);
+    __asm__(
+      "local.get %0\n"
+      "global.set ts_language_context_id\n"
+      :
+      : "r"(result)
+    );
+  }
+  return result;
+}
+
+#endif
+
 const TSLanguage *ts_language_copy(const TSLanguage *self) {
+#ifdef __wasm__
+  if (ts_language__is_unparseable(self)) {
+    atomic_inc(&ts_language__unparseable(self)->ref_count);
+  } else
+#endif
   if (self && ts_language_is_wasm(self)) {
     ts_wasm_language_retain(self);
   }
@@ -11,9 +69,41 @@ const TSLanguage *ts_language_copy(const TSLanguage *self) {
 }
 
 void ts_language_delete(const TSLanguage *self) {
+#ifdef __wasm__
+  if (ts_language__is_unparseable(self)) {
+    TSUnparseableLanguage *language = ts_language__unparseable(self);
+    if (atomic_dec(&language->ref_count) == 0) {
+      ts_free(language);
+    }
+  } else
+#endif
   if (self && ts_language_is_wasm(self)) {
     ts_wasm_language_release(self);
   }
+}
+
+bool ts_language_is_parseable(const TSLanguage *self) {
+  return self && self->lex_fn;
+}
+
+const TSLanguage *ts_language_copy_without_callbacks(const TSLanguage *self) {
+#ifdef __wasm__
+  if (self && ts_language_is_parseable(self)) {
+    TSUnparseableLanguage *result = ts_malloc(sizeof(TSUnparseableLanguage));
+    result->language = *self;
+    result->language.lex_fn = NULL;
+    result->language.keyword_lex_fn = NULL;
+    result->language.external_scanner.states = (const bool *)&result->language;
+    result->language.external_scanner.create = NULL;
+    result->language.external_scanner.destroy = NULL;
+    result->language.external_scanner.scan = NULL;
+    result->language.external_scanner.serialize = NULL;
+    result->language.external_scanner.deserialize = NULL;
+    result->ref_count = 1;
+    return &result->language;
+  }
+#endif
+  return ts_language_copy(self);
 }
 
 uint32_t ts_language_symbol_count(const TSLanguage *self) {
@@ -39,7 +129,11 @@ const TSSymbol *ts_language_subtypes(
   TSSymbol supertype,
   uint32_t *length
 ) {
-  if (self->abi_version < LANGUAGE_VERSION_WITH_RESERVED_WORDS || !ts_language_symbol_metadata(self, supertype).supertype) {
+  if (
+    self->abi_version < LANGUAGE_VERSION_WITH_RESERVED_WORDS ||
+    supertype >= ts_language_symbol_count(self) ||
+    !ts_language_symbol_metadata(self, supertype).supertype
+  ) {
     *length = 0;
     return NULL;
   }
@@ -144,7 +238,12 @@ TSStateId ts_language_next_state(
   TSStateId state,
   TSSymbol symbol
 ) {
-  if (symbol == ts_builtin_sym_error || symbol == ts_builtin_sym_error_repeat) {
+  if (
+    symbol == ts_builtin_sym_error ||
+    symbol == ts_builtin_sym_error_repeat ||
+    symbol >= self->symbol_count ||
+    state >= self->state_count
+  ) {
     return 0;
   } else if (symbol < self->token_count) {
     uint32_t count;
@@ -246,12 +345,15 @@ TSFieldId ts_language_field_id_for_name(
 TSLookaheadIterator *ts_lookahead_iterator_new(const TSLanguage *self, TSStateId state) {
   if (state >= self->state_count) return NULL;
   LookaheadIterator *iterator = ts_malloc(sizeof(LookaheadIterator));
-  *iterator = ts_language_lookaheads(self, state);
+  *iterator = ts_language_lookaheads(ts_language_copy(self), state);
   return (TSLookaheadIterator *)iterator;
 }
 
 void ts_lookahead_iterator_delete(TSLookaheadIterator *self) {
-  ts_free(self);
+  if (!self) return;
+  LookaheadIterator *iterator = (LookaheadIterator *)self;
+  ts_language_delete(iterator->language);
+  ts_free(iterator);
 }
 
 bool ts_lookahead_iterator_reset_state(TSLookaheadIterator * self, TSStateId state) {
@@ -269,7 +371,9 @@ const TSLanguage *ts_lookahead_iterator_language(const TSLookaheadIterator *self
 bool ts_lookahead_iterator_reset(TSLookaheadIterator *self, const TSLanguage *language, TSStateId state) {
   if (state >= language->state_count) return false;
   LookaheadIterator *iterator = (LookaheadIterator *)self;
-  *iterator = ts_language_lookaheads(language, state);
+  const TSLanguage *previous = iterator->language;
+  *iterator = ts_language_lookaheads(ts_language_copy(language), state);
+  ts_language_delete(previous);
   return true;
 }
 
@@ -285,5 +389,6 @@ TSSymbol ts_lookahead_iterator_current_symbol(const TSLookaheadIterator *self) {
 
 const char *ts_lookahead_iterator_current_symbol_name(const TSLookaheadIterator *self) {
   const LookaheadIterator *iterator = (const LookaheadIterator *)self;
+  if (iterator->phase != LookaheadPositioned) return NULL;
   return ts_language_symbol_name(iterator->language, iterator->symbol);
 }
