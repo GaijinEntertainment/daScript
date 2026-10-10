@@ -9,7 +9,7 @@ require math
 
 def private lz4_length(var output : array<uint8>; value : int) {
     var remaining = value
-    while (remaining >= 255) { output |> push(uint8(255)); remaining -= 255 }
+    while (remaining >= 255) { output |> push(255u8); remaining -= 255 }
     output |> push(uint8(remaining))
 }
 def private lz4_word(input : array<uint8> | #; at : int) : uint =>

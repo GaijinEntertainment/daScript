@@ -5,22 +5,22 @@ require dastest/testing_boost
 [test]
 def literal_and_overlapping_match_vectors(t : T?) {
     var inscope output : array<uint8>
-    t |> success(lz4_decompress([uint8(0x30), uint8(97), uint8(98), uint8(99)], output, 3))
-    t |> equal(output, [uint8(97), uint8(98), uint8(99)])
+    t |> success(lz4_decompress([0x30u8, 97u8, 98u8, 99u8], output, 3))
+    t |> equal(output, [97u8, 98u8, 99u8])
     // One literal, an overlapping eight-byte match, then five final literals.
-    t |> success(lz4_decompress([uint8(0x14), uint8(97), uint8(1), uint8(0), uint8(0x50), uint8(98), uint8(99), uint8(100), uint8(101), uint8(102)], output, 14))
+    t |> success(lz4_decompress([0x14u8, 97u8, 1u8, 0u8, 0x50u8, 98u8, 99u8, 100u8, 101u8, 102u8], output, 14))
     t |> equal(length(output), 14)
-    for (i in range(9)) { t |> equal(output[i], uint8(97)) }
-    t |> equal(output[13], uint8(102))
+    for (i in range(9)) { t |> equal(output[i], 97u8) }
+    t |> equal(output[13], 102u8)
 }
 [test]
 def malformed_blocks_and_bombs_leave_output_unchanged(t : T?) {
-    var inscope output <- [uint8(42)]
-    for (input in [[uint8(0xf0)], [uint8(0x20), uint8(1)], [uint8(0x10), uint8(97), uint8(0), uint8(0)], [uint8(0x10), uint8(97), uint8(2), uint8(0)], [uint8(0x1f), uint8(97), uint8(1), uint8(0), uint8(255), uint8(255)]]) {
-        t |> success(!lz4_decompress(input, output, 32)); t |> equal(output, [uint8(42)])
+    var inscope output <- [42u8]
+    for (input in [[0xf0u8], [0x20u8, 1u8], [0x10u8, 97u8, 0u8, 0u8], [0x10u8, 97u8, 2u8, 0u8], [0x1fu8, 97u8, 1u8, 0u8, 255u8, 255u8]]) {
+        t |> success(!lz4_decompress(input, output, 32)); t |> equal(output, [42u8])
     }
-    t |> success(!lz4_decompress([uint8(0)], output, -1)); t |> equal(output, [uint8(42)])
-    t |> success(lz4_decompress([uint8(0)], output, 0)); t |> success(empty(output))
+    t |> success(!lz4_decompress([0u8], output, -1)); t |> equal(output, [42u8])
+    t |> success(lz4_decompress([0u8], output, 0)); t |> success(empty(output))
 }
 [test]
 def blocks_roundtrip_and_compress_repeated_data(t : T?) {
@@ -36,10 +36,10 @@ def blocks_roundtrip_and_compress_repeated_data(t : T?) {
 }
 [test]
 def decoder_rejects_missing_terminal_literals(t : T?) {
-    var inscope output <- [uint8(42)]
-    t |> success(!lz4_decompress([uint8(0x10), uint8(97), uint8(1), uint8(0)], output, 100))
-    t |> success(!lz4_decompress([uint8(0x10), uint8(97), uint8(1), uint8(0), uint8(0)], output, 100))
-    t |> equal(output, [uint8(42)])
+    var inscope output <- [42u8]
+    t |> success(!lz4_decompress([0x10u8, 97u8, 1u8, 0u8], output, 100))
+    t |> success(!lz4_decompress([0x10u8, 97u8, 1u8, 0u8, 0u8], output, 100))
+    t |> equal(output, [42u8])
 }
 [test]
 def deterministic_malformed_inputs_stay_bounded(t : T?) {
@@ -47,9 +47,9 @@ def deterministic_malformed_inputs_stay_bounded(t : T?) {
     for (trial in range(1000)) {
         var inscope input, output : array<uint8>; resize(input, trial % 64)
         for (byte in input) { random = random * 1664525u + 1013904223u; byte = uint8(random >> 24u) }
-        output |> push(uint8(42))
+        output |> push(42u8)
         if (lz4_decompress(input, output, 128)) { t |> success(length(output) <= 128) }
-        else { t |> equal(output, [uint8(42)], "failure never publishes a partial decode") }
+        else { t |> equal(output, [42u8], "failure never publishes a partial decode") }
     }
 }
 
@@ -57,7 +57,7 @@ require daslib/debugger
 [test]
 def oversized_views_are_rejected_before_narrowing_or_access(t : T?) {
     var input : array<uint8>
-    var inscope output <- [uint8(42)]
+    var inscope output <- [42u8]
     var header = unsafe(addr<DapiArray?>(input))
     // A header-only view exercises admission without allocating gigabytes.
     header.size = 2147483648ul
@@ -65,31 +65,31 @@ def oversized_views_are_rejected_before_narrowing_or_access(t : T?) {
     let decoded = lz4_decompress(input, output, 128)
     header.size = 0ul
     t |> success(!compressed && !decoded)
-    t |> equal(output, [uint8(42)])
+    t |> equal(output, [42u8])
 }
 
 [test]
 def terminal_constraints_are_independent(t : T?) {
-    var inscope output <- [uint8(42)]
+    var inscope output <- [42u8]
     // Match starts early enough, but only four final literals remain.
-    t |> success(!lz4_decompress([uint8(0x18), uint8(97), uint8(1), uint8(0), uint8(0x40), uint8(98), uint8(99), uint8(100), uint8(101)], output, 17))
-    t |> equal(output, [uint8(42)])
+    t |> success(!lz4_decompress([0x18u8, 97u8, 1u8, 0u8, 0x40u8, 98u8, 99u8, 100u8, 101u8], output, 17))
+    t |> equal(output, [42u8])
     // Five final literals, but the last match starts fewer than twelve bytes from the end.
-    t |> success(!lz4_decompress([uint8(0x10), uint8(97), uint8(1), uint8(0), uint8(0x50), uint8(98), uint8(99), uint8(100), uint8(101), uint8(102)], output, 10))
-    t |> equal(output, [uint8(42)])
+    t |> success(!lz4_decompress([0x10u8, 97u8, 1u8, 0u8, 0x50u8, 98u8, 99u8, 100u8, 101u8, 102u8], output, 10))
+    t |> equal(output, [42u8])
 }
 [test]
 def compression_refuses_encoded_size_overflow_with_signed_input_size(t : T?) {
-    var input : array<uint8>; var inscope output <- [uint8(42)]
+    var input : array<uint8>; var inscope output <- [42u8]
     var header = unsafe(addr<DapiArray?>(input)); header.size = 2147483647ul
     let result = lz4_compress(input, output); header.size = 0ul
-    t |> success(!result); t |> equal(output, [uint8(42)])
+    t |> success(!result); t |> equal(output, [42u8])
 }
 [test]
 def borrowed_byte_views_roundtrip(t : T?) {
     var inscope encoded, decoded : array<uint8>; var compressed = false; var restored = false
     peek_data("abc") $(bytes) { compressed = lz4_compress(bytes, encoded) }
-    t |> success(compressed); t |> equal(encoded, [uint8(0x30), uint8(97), uint8(98), uint8(99)])
+    t |> success(compressed); t |> equal(encoded, [0x30u8, 97u8, 98u8, 99u8])
     peek_data("0abc") $(bytes) { restored = lz4_decompress(bytes, decoded, 3) }
-    t |> success(restored); t |> equal(decoded, [uint8(97), uint8(98), uint8(99)])
+    t |> success(restored); t |> equal(decoded, [97u8, 98u8, 99u8])
 }
