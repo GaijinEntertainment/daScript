@@ -22,11 +22,11 @@ requires - and not marked `options no_aot`, states in the PR body that the full 
 (`preflight --full`, or a manual dispatch of `build.yml` on the branch) ran green on the diff's
 head commit.** Per-PR CI compiles only the `tests/language` AOT subset.
 
-**In its own hand-written `initDependencies`, a C++ module calls `Module::require("<name>")` for
-every in-tree module its CMake target links, and calls `initDependencies()` on each module that
-call returns - in the same change as the link.** A module no other module requires is left
-unloaded, and the linking module's imports are resolved before any of its code runs, so its next
-load fails on the missing sibling.
+**A diff that links an in-tree module into a C++ module's CMake target calls `Module::require`
+with the linked module's registered name in the linking module's hand-written `initDependencies`,
+and calls `initDependencies()` on the module that call returns, in the same change.** A module no
+other module requires is left unloaded, so the linking module's next load fails on the missing
+sibling.
 
 **A diff that makes a `dasClangBind`-generated binding depend on another in-tree module declares
 that dependency in the module's binder - its `bind_*.das`, under `modules/<M>/bind/` or

@@ -6,8 +6,7 @@ docs: `ARCHITECTURE.md`, `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_MEASUREMENT.md`
 
 **A change to the tokenizer - `dasllama/dasllama_tokenizer.das`, `dasllama/dasllama_spm.das`,
 `dasllama/dasllama_bpe.das` or `dasllama/dasllama_pretok.das` - or to a special-token or template
-string passed to their lookups, wherever it sits, applies `REVIEW_TOKENIZER.md` (beside this
-file) too.**
+string passed to their lookups, wherever it sits, applies `REVIEW_TOKENIZER.md` (beside this file) too.**
 
 **A diff that touches a `followup_*.md` or an `ARCHITECTURE*.md` under this folder, adds a file
 under `dasllama/`, or adds a STYLE037/STYLE038 suppression anywhere under this folder applies
@@ -21,27 +20,36 @@ this file) too.**
 lists several items, only the item it resolved - and repoints every checked-in citation naming
 that item to where the fact now lives (the architecture doc or the code) or drops it.**
 
-**Code that times a run on its own clock (not a spawned child process's) and hands the wall or
-rate back as its result - a file that prints it, or a function that returns it to whichever file
-calls it - a kernel race (a run timing two kernel variants - arms - against each other in one
-process), or a file `benchmarks/lcpp_bench.das` requires directly, wherever it lives, answers to
-this folder's `benchmarks/REVIEW.md` beside its own folder's checklist.**
+**Code that times a run on its own clock (not a spawned child's) and hands the wall or rate back
+as its result - a file printing it, or a function returning it to whichever file calls it -
+wherever it lives, answers to this folder's `benchmarks/REVIEW.md` beside its own folder's checklist.**
+
+**A kernel race - a run timing two kernel variants (arms) against each other in one process -
+wherever it lives, answers to this folder's `benchmarks/REVIEW.md` beside its own folder's checklist.**
+
+**A file `benchmarks/lcpp_bench.das` requires directly, wherever it lives, answers to this
+folder's `benchmarks/REVIEW.md` beside its own folder's checklist.**
 
 **A diff that writes a measured number down - into `PERF_LEDGER.md`, a checked-in doc outside
 `site*/` (repo root), a code comment, checked-in data a run produced, a commit message, or a PR
 body - or adds a serving path or moves an existing one onto other code, or changes what a
-measured or served run with no flags and no environment overrides computes, applies
-`REVIEW_MEASUREMENT.md`.** A serving path is the end-to-end route a run takes from prompt to
-tokens; its compile tier (interpreted, JIT, AOT) and its cross target (a build for another
-platform) are part of it.
+measured or served run with no flags and no environment variables set computes (a change only to
+when, or in what order, it does the same work does not route), applies `REVIEW_MEASUREMENT.md`.**
+A serving path is the end-to-end route a run takes from prompt to tokens; its compile tier
+(interpreted, JIT, AOT) and its cross target (a build for another platform) are part of it.
 
-**A diff that adds a kernel, loop or call path the runtime re-enters once per serving step - a
-token, a prefill quantum (one batch of prompt tokens the prefill path processes in a single
-pass), one encoded media input (an image, a video frame, an audio chunk), or one synthesized
-speech chunk or frame - adds, moves, renames or removes a `[hot_path]`, `[cold_path]`,
-`[no_alloc]`, `[no_env]` or `[no_io]` annotation, or adds or changes a test, harness, benchmark
-or performance-rig function that reaches a region entry (the outermost function re-entered each
-serving step), wherever the diff puts it, applies `REVIEW_HOT_PATH.md` (beside this file)
+**A diff that adds a kernel, loop or call path the runtime re-enters once per serving step,
+wherever the diff puts it, applies `REVIEW_HOT_PATH.md` (beside this file) together with this
+list.** A serving step is a token, a prefill quantum (one batch of prompt tokens prefilled in one
+pass), one encoded image, video frame or audio chunk, or one synthesized speech chunk or frame.
+
+**A diff that adds, moves, renames or removes a `[hot_path]`, `[cold_path]`, `[no_alloc]`,
+`[no_env]` or `[no_io]` annotation, wherever the diff puts it, applies `REVIEW_HOT_PATH.md`
+together with this list.**
+
+**A diff that adds or changes a test, harness, benchmark or performance-rig function that reaches
+a region entry - the outermost function re-entered each serving step (each token, prefill quantum,
+media input, or speech chunk or frame) - wherever the diff puts it, applies `REVIEW_HOT_PATH.md`
 together with this list.**
 
 **A diff that adds an allocation, changes an allocation's size formula, or adds, changes or
@@ -72,8 +80,27 @@ every area, so a missing row costs every later run the whole suite.
 the module counts, wherever it sits. A row missing an area makes `run.das -- --changed` skip that
 area's tests, so a regression there goes unrun.
 
-**A dasLLAMA `[test]` file, wherever the diff puts it, and every `dasllama/` change answer to this
-folder's `tests/REVIEW.md` - open it; the walk does not surface it for a `dasllama/`-only diff.**
+**A `[test]` file with a `require dasllama/...` line of its own, wherever the diff puts it, and
+every `dasllama/` change answer to this folder's `tests/REVIEW.md` - open it; the walk does not
+surface it for a `dasllama/`-only diff.**
+
+**A diff that changes a CPU kernel - a function in `dasllama/dasllama_math*.das` that writes an
+output buffer from operand buffers - applies `tests/REVIEW_KERNEL_CELLS.md` too.**
+
+**A diff that adds, moves or removes a `[test]` file outside this folder's `tests/` with a
+`require dasllama/...` line of its own adds, corrects or drops its row, with the reason it lives
+there, in `tests/CLAUDE.md`'s "Out-of-folder test files" ledger in the same change.** A file
+reaching an engine module through another module's public require owes no row.
+
+**A new pre-tokenizer family, or a new tokenizer backend, ships a `corpus_case(...)` call for it in
+`tests/test_tokenizer.das`, naming its `ggml-vocab-*.gguf` fixture.**
+
+**A diff that adds an ASR family ships a test comparing its transcript token for token against a
+reference - another backend's run, an external dump, or the CPU path.**
+
+**A family that gains a thinking or tool-call format the server parses ships, in the same change,
+tests asserting the format's exact wire text, its rendered template output, and a server case gated
+on the family's smallest GGUF under `LARGE_TIER_BYTES` (`tests/_model_tier.das`).**
 
 **A GPU kernel, driver, dispatch class (a class a `[metal_dispatch]` or `[vk_dispatch]`
 declares), or K/V-mirror (the device copy of the K/V cache a GPU decode reads and writes)
@@ -130,10 +157,9 @@ of the pass that turns text into phonemes (`dasllama/dasllama_textnorm.das`,
 named constant, or a `require` in a file under `dasllama/`, applies `REVIEW_PLACEMENT.md`** - the
 what-lands-where rules.
 
-**A diff that adds or changes a def in a file `REVIEW.das`'s `FACADE_FILES` lists, or adds
-`public` to a require, new or existing, in `dasllama/dasllama.das` or in a file it reaches
-through `public` requires alone, or adds an `[EnvConfig]` area struct, applies
-`REVIEW_FACADE.md` too.**
+**A diff that adds or changes a def in a file `REVIEW.das`'s `FACADE_FILES` lists, or adds `public`
+to a require, new or existing, in `dasllama/dasllama.das` or in a file it reaches through `public`
+requires alone, or adds an `[EnvConfig]` area struct, applies `REVIEW_FACADE.md` too.**
 
 **A diff that turns a weight-format id - a `KqFmt` member, a GGUF type number, or the int a
 generated kernel takes as its format parameter - into plane strides, reads a per-block or
@@ -148,15 +174,13 @@ Every recorded row, tune sidecar and exchange entry carries the release, so a bu
 **A change that invalidates only images never bumps `DASLLAMA_RELEASE` - it applies
 `REVIEW_IMAGE.md`.**
 
-**A diff that adds or changes a function in `dasllama/dasllama_common.das` that performs work
-through a hook another module registers makes it run its own CPU code for that work when the hook
-is unset or, where it has no CPU code for that work, panic with a message naming the module to
-require.** A function with no fallback that returns quietly hides which registration a program
-root forgot.
-
-**A diff that adds or changes a function in `dasllama/dasllama_common.das` that reports whether a
-hook another module registers is installed makes it return false when the hook is unset - never
-panic.**
+**A diff that adds or changes a `dasllama/dasllama_common.das` function working through or reporting
+on another module's hook, moves a family encode stage (a `dasllama/dasllama_<family>.das` stage
+turning input into embeddings or filling a cache the next stage reads) onto a GPU hook, calls a
+`set_*_q8` lane setter under `dasllama/` or `harness/`, adds or changes an override (an environment
+knob, a public setter or a state file that moves a default), or adds or changes an announce (the
+line a run prints where an override changes the outcome) applies `REVIEW_OVERRIDES.md` (beside
+this file) too.**
 
 **Weakening the token-exact RoPE fixtures - the tests that pin the angle tables
 `dasllama/dasllama_rope.das` builds - is a defect.**
@@ -185,7 +209,7 @@ of it.**
 correctness-comparison path (one whose only job is to produce a reference result to check another
 against), where a faster-format twin on the same backend already serves the same weights and
 shape, is a defect - call that twin instead.** A site that must stay f32 for another reason is
-ledgered on its file's charter line (the line, in the companion `ARCHITECTURE.md#file-charters`
+ledgered on its file's charter line (the line, in the companion that `ARCHITECTURE.md#file-charters`
 routes to, that says what the file holds); a comment at the call site does not discharge this.
 
 **A caller never re-checks a guard its callee checks - drop the caller's copy, or, where the
@@ -217,19 +241,6 @@ flow, eviction, a generated name; not a reported wall-clock time or a best-of re
 reported wall-clock times - is marked `// clock: control`** - unmarked, it cannot be told
 apart from the ad-hoc profiling an engine file may not carry.
 
-**A diff that adds an override, or changes what one does - a value it now clamps or ignores
-included - without the announce is a defect.** An announce is the line the run prints where the
-override changes the outcome. An override is an environment knob, a public setter reachable from
-`dasllama/dasllama.das` through `public` requires, or an on-disk state file - one a run writes or
-a user places, never data a build ships - that moves a gate, policy, or threshold off its default
-and so changes what the run executes, writes, reads, mints, or computes. A measured
-time, the run's own duration, or a different moment at which the same work happens is not such a
-change; a CLI flag is never an override.
-
-**An announce names the override by the spelling a user would set - the env variable, the sidecar
-or file key, the setter's name - and, for one on unless turned off, the spelling that turns it off
-(none: it says so).**
-
 **A tutorial source, `.rst` page, docstring, help string, `README.md`, recorded server response
 fixture (`utils/dasllama-server/tests/fixtures/`), or any other checked-in document, all outside
 this folder, left showing the old call, flag, default, response or stated behaviour after a change
@@ -252,11 +263,10 @@ without both halves of the pair that makes it an entry module - the `ARCHITECTUR
 charter line naming it a sanctioned public entry point, and the DASLLAMA001 error text
 naming it beside the facade. The allowed set is the table in the lint.
 
-**`options _dasllama_internal` belongs only in a file whose job is to reach engine
-internals: an engine file under `dasllama/`, a test, harness, benchmark, or rig this module
-owns, or a consumer `ARCHITECTURE_ENGINE.md#instrumentation-and-support` names as ruled** - a
-symbol the facade lacks is added to `dasllama/dasllama.das`, not obtained by adding this option to
-the consumer.
+**`options _dasllama_internal` belongs only in a file whose job is to reach engine internals: an
+engine file under `dasllama/`, a test, harness, benchmark, or rig this module owns, or a consumer
+`ARCHITECTURE_ENGINE.md#instrumentation-and-support` names as ruled** - a symbol the facade lacks is
+added to `dasllama/dasllama.das`, not obtained by adding this option to the consumer.
 
 **A file whose entry under `ARCHITECTURE_ENGINE.md#instrumentation-and-support` rules its
 `options _dasllama_internal` re-exports an engine module with `require ... public` only where
@@ -277,16 +287,6 @@ author's whole brief: a step dropped there is a step the next format silently sk
 a model card (the provenance-and-licence page beside a released model or pack), this folder's
 `THIRD_PARTY_NOTICES.md`, the `LICENSE.*` files, or a ledger row naming a licence as a reason to
 adopt or reject a model, a dataset, or a dependency; anywhere else in prose it is a defect.**
-
-**A diff that moves a family encode stage - a `dasllama/dasllama_<family>.das` stage that turns
-input into embeddings or fills a cache the next stage reads - onto a GPU hook leaves the CPU form
-in place and changes no value that code after the stage reads.** The CPU form serves every box
-with no driver.
-
-**A call to a `set_*_q8` lane setter - one that picks whether a model family's weights run the
-q8 or the float path - in a file under `dasllama/` or `harness/`, outside the body of another
-`set_*_q8` setter, is followed at once by a `defer()` calling its `reset_*_q8` twin.** A pin
-still set after its caller returns silently changes the lane of the next model the process loads.
 
 **A diff that writes a CPU feature name in a `[tune_perm]` `requires=` argument that
 `TUNE_KNOWN_FEATURES` (`modules/dasLLVM/daslib/llvm_tune.das`, repo root) does not list adds it
