@@ -4,9 +4,8 @@ Companion to `ARCHITECTURE.md`; a section is cited by its anchor. This document 
 the GEMM form ladder, the dev-W panel knee map, the GEMV tail peel, the attention slab, the
 pad-row and cooperative-op constraints, chunked submission, the f16 twin dual-store, the
 last-layer FFN tail, the dense-KQ tensor mul_mm scaffold and the hyper-connection window. The
-driver's routed block - the MoE bucket rail, its tensor-twin scaffold and the split-format expert
-twins, the K-quant twins' pick and the short window's gathered route - is
-`ARCHITECTURE_GPU_PREFILL_MOE.md#prefill-moe-buckets`.
+driver's routed block - the MoE bucket rail, its tensor-twin scaffold, the split-format expert twins, the
+K-quant twins' pick and the short window's gathered route - is `ARCHITECTURE_GPU_PREFILL_MOE.md#prefill-moe-buckets`.
 
 ### The prefill GEMM form ladder {#prefill-gemm-ladder}
 
@@ -121,36 +120,26 @@ sites:
   with the form forced per run).
 - **An over-knee panel runs as N-column TILES**, each under the small-panel knee, with the tile
   count bounded by `DEVW_MAX_TILES` (32), divisibility, the small-panel knee and the pool.
-  Narrow tiles measure fine in the same A/B. A K-quant site whose panel reaches
-  `TALLKQ_MIN_PANEL` leaves dev-W entirely for the tall in-kernel-dequant stamp (`ARCHITECTURE_GPU_PREFILL.md#prefill-gemm-ladder`
-  form 1).
-- **A k-quant tg fallback is slower than the q8 half-panel form**, so a k-quant site lowers the
-  over-knee bar, the tiled-rows floor, and the long-K floor (1024 rows to 512): a tiled read
-  still beats THAT fallback.
+  Narrow tiles measure fine in the same A/B. A K-quant site whose panel reaches `TALLKQ_MIN_PANEL` leaves dev-W
+  entirely for the tall in-kernel-dequant stamp (`ARCHITECTURE_GPU_PREFILL.md#prefill-gemm-ladder` form 1).
+- **A k-quant tg fallback is slower than the q8 half-panel form**, so a k-quant site lowers the over-knee bar, the
+  tiled-rows floor, and the long-K floor (1024 rows to 512): a tiled read still beats THAT fallback.
 
-`CVT_MIN_ROWS`, `TALL_OCC_FLOOR` and `DEVW_SMALL_PANEL` are box-raced and cached at init from
-the sidecar (`metal_cvt_min_rows`, `metal_tall_floor`, `metal_devw_small_panel_mb`); the routed
-block's gathered-route knee (`metal_moe_gemv_max`,
-`ARCHITECTURE_GPU_PREFILL_MOE.md#prefill-moe-gemv-route`) is read per window; the other knees are
-fixed.
+`CVT_MIN_ROWS`, `TALL_OCC_FLOOR` and `DEVW_SMALL_PANEL` are box-raced and cached at init from the sidecar
+(`metal_cvt_min_rows`, `metal_tall_floor`, `metal_devw_small_panel_mb`); the routed block's gathered-route knee
+(`metal_moe_gemv_max`, `ARCHITECTURE_GPU_PREFILL_MOE.md#prefill-moe-gemv-route`) is read per window; the other knees are fixed.
 
 ### The GEMV tail peel {#gemv-tail-peel}
 
-A prefill panel pads to `mp` rows, so `npos % 32` rows of every GEMM are padding. Up to
-`MM_TAIL_MAX` (8) remainder rows peel off the padded tile onto the fixed-B mv family instead;
-above that the padded tile is cheaper than three or more weight streams. One peeled row rides the
-reduction-split GEMV, two or more ride the b4 form only - the reduction-split GEMV walks per
-block and needs `kdim % 32`, while the b4 form - the batched fixed-B mv stamp, up to four rows a
-dispatch (`enc_mv_b4_c`) - reads whole 128-quant rounds and needs `kdim % 128`. That peel is the
-q8 blob's. A dense K-quant or grid-format site (`pf_enc_kq_site_mm`) has no remainder peel; a
-whole window of `MM_TAIL_MAX` rows or fewer rides the decode's row-batched forms instead
-(`enc_kq_site_b`: the B2, B4 and B8 stamps, which stream the plane once for every row) on a
-`kdim` of whole superblocks, where the 32-row tile would walk K serially under barriers one
-threadgroup per core: a 2-token window on Qwen3.6-27B Q4_K_M read 235 ms on the M1 Max on the
-tile, 3.6 decode steps, with the FFN site alone 114 ms (`debug-jit`, the window probe; the board row
-is the metal pp512 cell of `performance/records/m1.json` on Qwen3.6-27B-MTP-Q4_K_M). The same tile cost sets the window's floor
-from 9 rows up, where the remainder stays on the tile; the form for that band is
-`followup_metal.md`'s.
+A prefill panel pads to `mp` rows, so `npos % 32` rows of every GEMM are padding. Up to `MM_TAIL_MAX` (8) remainder rows peel
+off the padded tile onto the fixed-B mv family instead; above that the padded tile is cheaper than three or more weight streams.
+One peeled row rides the reduction-split GEMV, two or more ride the b4 form only - the reduction-split GEMV walks per block and
+needs `kdim % 32`, while the b4 form - the batched fixed-B mv stamp, up to four rows a dispatch (`enc_mv_b4_c`) - reads whole
+128-quant rounds and needs `kdim % 128`. That peel is the q8 blob's. A dense K-quant or grid-format site (`pf_enc_kq_site_mm`)
+has no remainder peel; a whole window of `MM_TAIL_MAX` rows or fewer rides the decode's row-batched forms instead
+(`enc_kq_site_b`: the B2, B4 and B8 stamps, which stream the plane once for every row) on a `kdim` of whole superblocks, where
+the 32-row tile would walk K serially under barriers one threadgroup per core. From 9 rows up the remainder stays on the tile
+and the tile cost sets the window's floor; the form for that band is `followup_metal.md`'s.
 
 ### The prefill attention slab {#prefill-attn-slab}
 
