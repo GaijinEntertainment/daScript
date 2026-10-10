@@ -84,8 +84,9 @@ GaijinEntertainment/daScript, whose name keeps the old spelling.
   branches of the `install` and `uninstall` rules in `Makefile` differ from the template; keep them.
 - `package-lock.json`, `Cargo.lock`, `go.sum`, `Package.resolved` - lockfiles that npm, cargo, go, and swift write when
   they resolve the dependencies of the manifests. Commit them with the manifest change.
-- `.github/` - the CI and publish workflows, dependabot, and issue templates. The publish workflow authenticates to
-  crates.io, PyPI, and npm with trusted publishing and holds no registry token.
+- `.github/` - the CI and publish workflows, and the issue template config that sends issues to the daslang
+  repository. The publish workflow authenticates to crates.io, PyPI, and npm with trusted publishing and holds no
+  registry token.
 - `.github/workflows/sync.yml`, `.github/scripts/sync-mirror.sh`, and `.github/workflows/close-pull-requests.yml` - the
   copy of the grammar changes of daslang `master` to `main`, and the close of pull requests. Both workflows run only
   when the repository variable `MIRROR_SYNC` is `on`.
@@ -235,8 +236,7 @@ GaijinEntertainment/daScript, whose name keeps the old spelling.
 - In `queries/tags.scm`, tree-sitter-tags keeps one tag per name node, from the earliest pattern that matches it. Put
   a specific pattern before the general pattern for the same node.
 - A workflow pins each action to the commit SHA of a release and names the release in a comment
-  (`actions/checkout@<sha> # v7.0.1`), which Dependabot reads to update both. A checkout sets
-  `persist-credentials: false`.
+  (`actions/checkout@<sha> # v7.0.1`). A checkout sets `persist-credentials: false`.
 - A change reaches `main` through a pull request, merged by squash or rebase after the `ci-ok` job of
   `.github/workflows/ci.yml` passes; the `protect-main` ruleset rejects a direct push. Add each new CI job to the
   `needs` list of `ci-ok`.
