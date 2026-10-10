@@ -1016,7 +1016,11 @@ path, the one-time adoption of a sidecar beside the exe, the placement hook's wi
 by the engine, run before the apply reads the path, absent without harm), and when a sidecar
 location counts as explicitly chosen: a runtime override is, and is the path read; with none, the
 location is explicit exactly where `DAS_TUNE_MANIFEST` chose one (the suite runner sets it on a
-box with a minted manifest), and that manifest is the path read again once the override clears.
+box with a minted manifest), and that manifest is the path read again once the override clears;
+and the per-box runtime file (`test_box_runtime_file`): its path under the home's `tune/` with a
+stable key, validity as this box plus these kernels plus a runtime section (other kernels, another
+box, a kernels-only file and no file each invalid), the race writing a valid file with no kernels
+section that the apply reads, and the hook answering "" under an explicit manifest.
 `test_fat_hook_umbrella.das` - model-free: a program requiring the engine umbrella alone (what
 the shipped bench requires, never the facade) carries the first-start race hook - the umbrella's
 `[init]` set registers it, or a fat bench exe would serve Metal uncrowned forever.

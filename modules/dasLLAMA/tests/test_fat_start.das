@@ -146,6 +146,58 @@ def private fake_place() {
     set_tune_manifest_runtime_path(g_fake_place_target)
 }
 
+//! the per-box runtime file: its path under the home's tune/, what makes it valid for this run (this box, these kernels, a
+//! runtime section), the race writing one the apply reads, and the hook standing down under an explicit manifest
+[test]
+def test_box_runtime_file(t : T?) {
+    t |> run("the per-box path sits under tune/ with a key that is this box's and stable") @(t : T?) {
+        let p = dasllama_box_runtime_path_from("H/.dasllama")
+        t |> success(p |> starts_with(path_join(path_join("H/.dasllama", "tune"), "box-")), "under the home's tune/: {p}")
+        t |> success(p |> ends_with(".tune.json"), "a .tune.json file")
+        t |> equal(p, dasllama_box_runtime_path_from("H/.dasllama"), "the key is stable across calls")
+        t |> success(!empty(dasllama_kernel_sources_digest()), "the Metal driver sources beside the engine digest to a name")
+    }
+    t |> run("valid = this box, these kernels, a runtime section; anything else is not") @(t : T?) {
+        var terr = ""
+        let dir = temp_directory(terr)
+        t |> success(terr == "", "temp_directory resolves")
+        let path = path_join(dir, "dasllama_test_box_runtime_{get_time_usec(0l)}.json")
+        let digest = dasllama_kernel_sources_digest()
+        let box = tune_box_identity()
+        fwrite(path, "\{\"kernel_library\":\"{digest}\",\"provenance\":\{\"box\":\"{box}\"},\"runtime\":\{\"q8_token_block\":224}}")
+        t |> success(dasllama_box_runtime_valid(path, digest), "this box, these kernels, a section: valid")
+        t |> success(!dasllama_box_runtime_valid(path, "{digest}x"), "other kernels: not valid")
+        fwrite(path, "\{\"kernel_library\":\"{digest}\",\"provenance\":\{\"box\":\"other|box|id|0|cpu\"},\"runtime\":\{\"q8_token_block\":224}}")
+        t |> success(!dasllama_box_runtime_valid(path, digest), "another box's file: not valid")
+        fwrite(path, "\{\"kernel_library\":\"{digest}\",\"provenance\":\{\"box\":\"{box}\"},\"kernels\":\{}}")
+        t |> success(!dasllama_box_runtime_valid(path, digest), "no runtime section: not valid")
+        remove(path)
+        t |> success(!dasllama_box_runtime_valid(path, digest), "no file: not valid")
+    }
+    t |> run("the race writes a file the apply reads, valid for these kernels") @(t : T?) {
+        with_job_que() {
+            var terr = ""
+            let dir = temp_directory(terr)
+            let path = path_join(path_join(dir, "dasllama_test_box_home_{get_time_usec(0l)}"), "box.tune.json")
+            let digest = dasllama_kernel_sources_digest()
+            let crowns = get_metal_tensor_crowns()
+            t |> success(dasllama_box_runtime_race(path, digest), "the race writes the file: {path}")
+            t |> success(dasllama_box_runtime_valid(path, digest), "the file it wrote is valid for this run")
+            let text = fread(path)
+            t |> success(find(text, "\"kernels\"") < 0, "no kernels section is written to the box file:\n{text}")
+            apply_box_profile_runtime_at(path)
+            t |> success(box_profile_runtime_applied(), "the apply reads the section (declined: '{box_profile_runtime_declined()}')")
+            set_metal_tensor_crowns(crowns)
+            remove(path)
+        }
+    }
+    t |> run("under an explicit manifest the hook stands down") @(t : T?) {
+        with_temp_sidecar(t) $(_path) {
+            t |> equal("", dasllama_box_runtime_file(), "a chosen manifest keeps the process off the box file")
+        }
+    }
+}
+
 [test]
 def test_fat_sidecar_lives_per_user(t : T?) {
     t |> run("the per-user path keeps the exe's sidecar name under tune/") @(t : T?) {
@@ -173,9 +225,13 @@ def test_fat_sidecar_lives_per_user(t : T?) {
         let registered = set_sidecar_place_hook(@@fake_place)
         set_sidecar_place_hook(registered)
         t |> success(registered == @@dasllama_place_fat_sidecar, "dasllama_fat_start's [init] installs the placement hook")
+        let none_box : function<() : string>
+        let box_hook = set_box_runtime_hook(none_box)   //! disarmed for this apply: an unmanifested test process must not race into the user's box file
+        t |> success(box_hook == @@dasllama_box_runtime_file, "dasllama_fat_start's [init] installs the box-runtime hook")
         let before = tune_manifest_path()
         apply_box_profile_runtime()
         t |> equal(tune_manifest_path(), before)
+        set_box_runtime_hook(box_hook)
     }
     t |> run("the default apply runs the placement hook before it reads the path") @(t : T?) {
         with_temp_sidecar(t) $(path) {

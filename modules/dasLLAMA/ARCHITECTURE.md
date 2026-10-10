@@ -140,7 +140,9 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   instrumentation rails, the ASR board's GPU row pairs, the `[tuned]` perm precedence, the mint
   wall in the sidecar's provenance, and the speculative round's ruler record.
 - `ARCHITECTURE_MEASUREMENT_FAT_START.md` - a fat exe's first-start race and its per-user
-  sidecar (`ARCHITECTURE_MEASUREMENT_FAT_START.md#fat-first-start`).
+  sidecar (`ARCHITECTURE_MEASUREMENT_FAT_START.md#fat-first-start`), and the per-box runtime
+  file a run with no sidecar of its own races into
+  (`ARCHITECTURE_MEASUREMENT_FAT_START.md#box-runtime-file`).
 - `ARCHITECTURE_MEASUREMENT_SERVED.md` - the client clock around a live chat server's turns and
   what its figures are (`ARCHITECTURE_MEASUREMENT_SERVED.md#served-turn-instrument`).
 - `ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md` - the Vulkan GEMM probe's arms, the shapes they run

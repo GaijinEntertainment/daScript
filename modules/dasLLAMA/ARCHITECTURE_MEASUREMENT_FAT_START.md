@@ -1,10 +1,11 @@
 # dasLLAMA Architecture - a fat exe's first start
 
 Companion to `ARCHITECTURE_MEASUREMENT.md`; a section is cited by its anchor. This document
-carries one section, `ARCHITECTURE_MEASUREMENT_FAT_START.md#fat-first-start`: how a fat exe,
+carries two sections: `ARCHITECTURE_MEASUREMENT_FAT_START.md#fat-first-start`, how a fat exe,
 which ships no tuner, mints its sidecar's runtime section on its first start, and where that
-sidecar lives. The benchmark rig, the tune gate and the instrumentation rails stay in
-`ARCHITECTURE_MEASUREMENT.md`.
+sidecar lives; and `ARCHITECTURE_MEASUREMENT_FAT_START.md#box-runtime-file`, the per-box file a
+run with no sidecar of its own races the same section into. The benchmark rig, the tune gate and
+the instrumentation rails stay in `ARCHITECTURE_MEASUREMENT.md`.
 
 ### A fat exe races its runtime section at first start {#fat-first-start}
 
@@ -43,3 +44,31 @@ confirms - the generator half's end-to-end prefill A/B, the kernel half's servin
 confirms - each spawn a daslang child on a harness script and a vehicle model, and they are the
 harness's alone; under `harness/dasllama_tuner.das` on the M5 Max the confirms take 147 s of the
 metal_crowns family's 161 s, the twin race itself 14 s.
+
+### A run with no sidecar of its own races into the box's file {#box-runtime-file}
+
+A `-jit` script, the server run from the tree, a probe, a test child: each keeps its sidecar
+beside its own root script (`<script>.tune.json`), so a program that was never minted has no
+runtime section and, before this file existed, served Metal uncrowned with a warning nobody read.
+Such a run now reads the box's file instead: `~/.dasllama/tune/box-<key>.tune.json`
+(`dasllama_box_runtime_path`), the key this box's identity folded as the sidecar staleness rule
+folds it (`box_match_key`), one file for every program on the box. The checked apply
+(`apply_box_profile_runtime_checked`) asks for it through the box-runtime hook
+(`set_box_runtime_hook`, registered by `dasllama_fat_start`'s `[init]`) wherever the manifest
+holds no section of this box's own - absent, another box's, unreadable, or a kernels-only mint -
+and the hook (`dasllama_box_runtime_file`) answers "" for a process that keeps its manifest: a fat
+exe (its per-user sidecar above), an explicit `DAS_TUNE_MANIFEST`, a standalone exe with its
+sidecar beside it. The rig, the suite runner and the records cells set the manifest, so they never
+reach the file.
+
+The file holds the runtime section alone - the Metal twin crowns and the knob snapshot
+(`dasllama_runtime_snapshot`) - beside the box identity and `kernel_library`, the digest of the
+Metal driver sources this process compiles its kernels from (`dasllama_kernel_sources_digest`: the
+name, size and mtime of every `dasllama_metal*.das` and `dasllama_gpu_kernels_common.das` beside
+the engine's own source, located through `get_this_module_dir`). A file whose identity or digest
+differs is not valid for this run (`dasllama_box_runtime_valid`), and the hook races again
+(`dasllama_box_runtime_race`: the same synthetic twin race the fat exe runs, no model, no child)
+and overwrites it; a shared binary's mtime is no key here, since every script on a box shares one
+binary and a kernel edit moves the verdict without rebuilding it. A race runs at most once per
+process, so an unwritable home keeps the crowns for the process and says so. No kernels section is
+ever written to this file, so the tune framework's stale-sidecar merge cannot drop one from it.

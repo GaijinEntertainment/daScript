@@ -12,6 +12,7 @@ require dasllama/dasllama_math   // the runtime knob getters the snapshot record
 require dasllama/dasllama_par    // get_total_hw_jobs - the advisory "threads" entry
 require daslib/json_boost
 require daslib/strings_boost   // nolint:STYLE030,LINT019 - join, used only inside the llvm_tune static_if half
+require daslib/module_path   // get_this_module_dir, is_standalone_exe - the engine's own source directory, for the kernel digest
 require [tune_framework]
 require ?das_metal dasllama/dasllama_metal_prefill  // metal_tensor_race (Apple static_if half)
 require ?das_metal dasllama/dasllama_metal_kernels  // metal_tensor_race_decode (Apple static_if half)
@@ -153,8 +154,133 @@ def public dasllama_place_fat_sidecar {
     }
 }
 
+// fnv-1a over a string's bytes, as a hex word: the kernel digest and the box key are names, never compared as numbers
+def private fnv_hex(s : string) : string {
+    var h = 0xcbf29ce484222325ul
+    peek_data(s) $(d) {
+        for (b in d) {
+            h = (h ^ uint64(b)) * 0x100000001b3ul
+        }
+    }
+    return "{h}"
+}
+
+//! The digest of the Metal driver sources this process compiles its kernels from: the name, size and mtime of every
+//! `dasllama_metal*.das` and the shared kernel templates beside this file; "" where those sources are not on disk.
+def public dasllama_kernel_sources_digest() : string {
+    let dir = get_this_module_dir()
+    var names : array<string>
+    fio::dir(dir) $(fname) {
+        if ((fname |> starts_with("dasllama_metal") || fname == "dasllama_gpu_kernels_common.das") && fname |> ends_with(".das")) {
+            names |> push(fname)
+        }
+    }
+    return "" if (empty(names))
+    sort(names)
+    let acc = build_string() $(w) {
+        for (n in names) {
+            var fs : FStat
+            if (stat(path_join(dir, n), fs)) {
+                write(w, "{n}:{fs.size}:{fs.mtime};")
+            }
+        }
+    }
+    return fnv_hex(acc)
+}
+
+//! Where every run on this box keeps the runtime section it raced: `<dasllama home>/tune/box-<box key>.tune.json`, the
+//! key this box's identity folded as the sidecar staleness rule folds it.
+def public dasllama_box_runtime_path_from(dasllama_home : string) : string {
+    var key : string
+    static_if (typeinfo module_exists(llvm_tune)) {
+        key = fnv_hex(box_match_key(tune_box_identity()))
+    } else {
+        key = "nobox"
+    }
+    return path_join(path_join(dasllama_home, "tune"), "box-{key}.tune.json")
+}
+
+def public dasllama_box_runtime_path() : string => dasllama_box_runtime_path_from(dasllama_home_dir())
+
+//! True when the per-box runtime file at `path` is this box's, carries a runtime section, and was raced over the kernel
+//! sources this process compiles (`digest`); anything else is another box's or another build's state.
+def public dasllama_box_runtime_valid(path, digest : string) : bool {
+    let text = fread(path)
+    return false if (empty(text))
+    var err = ""
+    var doc = read_json(text, err)
+    return false if (doc == null)
+    let box : string = doc?["provenance"]?["box"] ?? ""
+    let kl : string = doc?["kernel_library"] ?? ""
+    let rt = doc?["runtime"]
+    var same_box : bool
+    static_if (typeinfo module_exists(llvm_tune)) {
+        same_box = !empty(box) && box_match_key(box) == box_match_key(tune_box_identity())
+    } else {
+        same_box = false
+    }
+    let ok = same_box && kl == digest && rt != null && rt.value is _object
+    delete_json(doc)
+    return ok
+}
+
+//! Race the Metal twin crowns on this box and write the runtime section, the box identity and `digest` to `path` - the
+//! per-box file every run on the box reads from then on. True when the file was written.
+def public dasllama_box_runtime_race(path, digest : string) : bool {
+    static_if (typeinfo module_exists(llvm_tune)) {
+        let t0 = get_clock()
+        to_log(LOG_INFO, "dasLLAMA: first run on this box with these kernels - racing the Metal twin crowns, kept in {path} for every run on it\n")
+        tune_progress_plan("dasllama_box_start", 1)
+        tune_progress_kernel_begin("metal_crowns", 0)
+        var race <- dasllama_metal_crown_race()
+        let crowns = join(race.wins, ",")
+        tune_progress_kernel_end("metal_crowns", crowns, !race.ran ? "skipped" : (empty(crowns) ? "holds" : "beats"))
+        tune_progress_finish()
+        var doc = JV((kernel_library = digest, provenance = JV((box = tune_box_identity(),
+            platform = get_platform_name(), arch = get_architecture_name()))))
+        var runtime = dasllama_runtime_snapshot(crowns)
+        update(doc, "runtime", runtime)   //! the document adopts the section
+        mkdir_rec(dir_name(path))
+        let wrote = fwrite(path, write_json(doc))
+        delete_json(doc)
+        let secs = get_clock() - t0
+        if (wrote) {
+            to_log(LOG_WARNING, "dasLLAMA: metal crowns raced for this box ({secs} s) -> {path}\n")
+        } else {
+            to_log(LOG_WARNING, "dasLLAMA: could not write {path} - the crowns hold for this process only\n")
+            set_metal_tensor_crowns(crowns)
+        }
+        delete race
+        return wrote
+    } else {
+        return false
+    }
+}
+
+// once per process: an unwritable per-box file would otherwise race again on every apply
+var private g_box_race_ran = false
+
+//! The per-box runtime file a run that keeps no sidecar of its own reads: "" where this process keeps its manifest - a
+//! fat exe (its own per-user sidecar), an explicit `DAS_TUNE_MANIFEST`, a standalone exe with its sidecar beside it -
+//! else the file's path, raced and written first when none valid for these kernels exists.
+[arch(at = "../ARCHITECTURE_MEASUREMENT_FAT_START.md#box-runtime-file")]
+def public dasllama_box_runtime_file() : string {
+    static_if (typeinfo module_exists(llvm_tune)) {
+        return "" if (tune_fat_built() || tune_manifest_explicit() || is_standalone_exe())
+        let path = dasllama_box_runtime_path()
+        let digest = dasllama_kernel_sources_digest()
+        return path if (dasllama_box_runtime_valid(path, digest))
+        return "" if (g_box_race_ran)
+        g_box_race_ran = true
+        return dasllama_box_runtime_race(path, digest) ? path : ""
+    } else {
+        return ""
+    }
+}
+
 [init]
 def private register_fat_start {
     set_runtime_race_hook(@@dasllama_fat_first_start)
     set_sidecar_place_hook(@@dasllama_place_fat_sidecar)
+    set_box_runtime_hook(@@dasllama_box_runtime_file)
 }

@@ -1730,6 +1730,18 @@ def public set_runtime_race_hook(hook : function<() : bool>) : function<() : boo
 
 def private runtime_race_writes() : bool => g_runtime_race_armed && invoke(g_runtime_race_hook)
 
+var private g_box_runtime_hook : function<() : string>
+
+//! Install what answers the per-box runtime file for a run that keeps no sidecar of its own (`dasllama_fat_start`
+//! registers the engine's): the path of a file this box raced, or "" where the process keeps its manifest.
+def public set_box_runtime_hook(hook : function<() : string>) : function<() : string> {
+    let old = g_box_runtime_hook
+    g_box_runtime_hook = hook
+    return old
+}
+
+def private box_runtime_file_() : string => g_box_runtime_hook != null ? invoke(g_box_runtime_hook) : ""
+
 var private g_sidecar_place_hook : function<() : void>
 
 //! Install what chooses the app sidecar's location before the default apply reads it
@@ -1768,6 +1780,14 @@ def apply_box_profile_runtime_checked(path : string) {
     if ((reason == "absent" || reason == "foreign_box") && runtime_race_writes()) {
         reason = box_profile_verdict_at(path)
     }
+    if (reason == "absent" || reason == "foreign_box" || reason == "unreadable") {
+        //! no section of this box's own in the manifest: the per-box file every run on the box shares, raced once
+        let bp = box_runtime_file_()
+        if (!empty(bp)) {
+            apply_box_profile_runtime_at(bp)
+            return
+        }
+    }
     if (reason == "absent") {
         g_box_profile_runtime_declined = reason
         return
@@ -1783,6 +1803,12 @@ def apply_box_profile_runtime_checked(path : string) {
     apply_box_profile_runtime_at(path)
     if (g_box_profile_runtime_declined == "no_runtime_section" && runtime_race_writes()) {
         apply_box_profile_runtime_at(path)
+    }
+    if (g_box_profile_runtime_declined == "no_runtime_section") {
+        let bp = box_runtime_file_()
+        if (!empty(bp)) {
+            apply_box_profile_runtime_at(bp)
+        }
     }
 }
 
