@@ -1831,11 +1831,20 @@ def private create_tray(cfg : WatchdogConfig; var log : Emitter?) : WatchdogTray
     return null
 }
 
+//! the flag table, then the fronts `main.das` and `tool_front` read before the flags parse
+def private print_watchdog_help() {
+    print_help(get_command_info(type<WatchdogConfig>), "watchdog")
+    print("Everything after -- goes to the supervised program.\n\n")
+    print("Fronts (one of these before the -- serves a client instead of supervising a program):\n")
+    print("      -tool lsp|mcp|dap            Serve a daslang tool to a client: lsp is --lsp, mcp and dap are --stdio over daslang -tool <name>\n")
+    print("      --stdio                      Be a newline-delimited JSON-RPC client's pipe to the child\n")
+    print("      --lsp                        Be the daslang language server for an LSP client\n")
+}
+
 def public watchdog_start(args : array<string>; program_dir : string; self_pid : int; var exit_code : int&) : Supervisor? {
     exit_code = 0
     if (wants_help(args)) {
-        print_help(get_command_info(type<WatchdogConfig>), "watchdog")
-        print("Everything after -- goes to the supervised program.\n")
+        print_watchdog_help()
         return null
     }
     var resolved <- resolve_config(args, program_dir)
