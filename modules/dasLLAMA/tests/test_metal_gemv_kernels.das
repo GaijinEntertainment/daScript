@@ -229,6 +229,76 @@ def private kq_k4_pairs_gate(t : T?; var queue; n, d, nr, ys : int) {
     }
 }
 
+// a format's half-x route (enc_kq_rows_half: k4's wide forms, every other format's small-batch half stamps):
+// nr live rows of an f16 x twin against the CPU reference over the same f16-lattice x, on the production decode
+// PSOs; the twin holds eight rows, ys > d so a misplaced column lands in the guard band
+def private kq_half_gate(t : T?; var queue; fmt, n, d, nr, ys : int) {
+    let f = kq_fmt_of_id(fmt, "kq_half_gate")
+    let tag = "kq_rows_half_{f} n={n} d={d} nr={nr} ys={ys}"
+    with_metal_cell(g_dev, queue) $(var mc : MetalCell) {
+        let nb = n / 256
+        let nsb = d * nb
+        var inscope kq, ks : array<uint8>
+        kq_fill_planes(fmt, nsb, kq, ks)
+        var inscope xv : array<float>
+        xv |> resize(8 * n)
+        for (i in range(8 * n)) {
+            xv[i] = i < nr * n ? float(float16(0.09 * float(i % 43) - 1.8)) : 0.0
+        }
+        var inscope xh <- [for (v in xv); float16(v)]
+        var inscope dense <- dense_ref_env(nr, n, d, xv) $(r; var wrow) {
+            kq_row_ref(fmt, r * nb, nb, nsb, kq, ks, wrow)
+        }
+        var inscope ref <- strided_ref(dense, d, ys, nr, -1000.0)
+        //! the form's own row count - two, four or eight - sizes y, so a write into a pad row lands in the buffer and reads
+        //! as a miss against the sentinel the reference keeps there
+        let frows = nr <= 2 ? 2 : (nr <= 4 ? 4 : 8)
+        ref.want |> resize(frows * ys)
+        ref.env |> resize(frows * ys)
+        for (i in range(nr * ys, frows * ys)) {
+            ref.want[i] = -1000.0
+            ref.env[i] = 0.0
+        }
+        let bks = mc |> in_plain(ks)
+        let bkq = mc |> in_plain(kq)
+        let bxh = mc |> in_plain(xh)
+        let by = mc |> out_words(frows * ys, -1000.0)
+        let doff = kq_split_doff(fmt, nsb)
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            enc_kq_rows_half(enc, f, mc.buf[bkq], 0ul, mc.buf[bks], 0ul, doff, mc.buf[bxh], mc.buf[by], 0ul, int64(d), int64(n), int64(ys), int64(nr))
+        }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[by], ref.want, env_bar(2e-4, ref.env), Shape(row_width = ys), ref.env)
+    }
+}
+
+//! every K-quant format with a half-x route, by schema id (the race table's thirteen)
+let private KQ_HALF_FORMATS <- [for (f in [KqFmt.k2, KqFmt.k3, KqFmt.k4, KqFmt.k5, KqFmt.k6, KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs, KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.q40, KqFmt.iq4xs, KqFmt.iq4nl]); kq_desc(f).schema_id]
+
+[test]
+def test_metal_kq_half_forms(t : T?) {
+    t |> run("every format's half-x route matches the CPU reference at every row count the dispatcher serves") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            with_metal_decode_gate(t) $(var queue : MetalCommandQueue?) {
+                for (fmt in KQ_HALF_FORMATS) {
+                    kq_half_gate(t, queue, fmt, 768, 17, 2, 22)   // the two-column form; d=17 leaves a tail row pair
+                    kq_half_gate(t, queue, fmt, 768, 17, 3, 22)   // the four-column form with one pad row, kept at the sentinel
+                    kq_half_gate(t, queue, fmt, 768, 33, 4, 40)
+                    kq_half_gate(t, queue, fmt, 512, 17, 5, 22)   // the eight-row form with three pad rows, kept at the sentinel
+                    kq_half_gate(t, queue, fmt, 512, 33, 8, 40)
+                }
+                // k4's wide forms step four superblocks a lane: a row of one whole stride (1024) and one of two strides and a
+                // tail (2560, Qwen3-4B's width), where the gate's 512 and 768 sit under one stride
+                kq_half_gate(t, queue, kq_desc(KqFmt.k4).schema_id, 1024, 17, 2, 22)
+                kq_half_gate(t, queue, kq_desc(KqFmt.k4).schema_id, 2560, 17, 4, 22)
+                kq_half_gate(t, queue, kq_desc(KqFmt.k4).schema_id, 2560, 33, 8, 40)
+            }
+        } else {
+            t |> skip("das_metal is not built on this platform")
+        }
+    }
+}
+
 [test]
 def test_metal_kq_k4_pair_walk(t : T?) {
     t |> run("the k4 pair walk matches the CPU reference at 3, 4 and 5 columns") <| @(t : T?) {

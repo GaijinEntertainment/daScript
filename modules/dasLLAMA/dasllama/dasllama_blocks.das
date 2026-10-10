@@ -227,8 +227,7 @@ def private attention_chain_decode(t : Model; var s : Session; l : int64; pos : 
         var flmp = nsl > 1 ? addr(s.fl_m[0]) : null
         var fllp = nsl > 1 ? addr(s.fl_l[0]) : null
         var flop = nsl > 1 ? addr(s.fl_o[0]) : null
-        // the lambda's capture frame is heap per call — the dispatch API's cost, not this kernel's
-        team_parallel_stages(s.chain_stages) <| @(stage : int; jb : int; je : int) {
+        team_parallel_stages(s.chain_stages) <| @(stage : int; jb : int; je : int) {   // nolint:PERF026 — the lambda's capture frame is heap per call: the dispatch API's cost, not this kernel's
             if (stage == 0) {
                 // qkv rows in 32-row groups (row-local); a group never straddles a q/k/v region boundary
                 unsafe {

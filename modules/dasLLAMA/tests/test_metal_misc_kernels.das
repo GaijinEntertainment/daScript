@@ -13,6 +13,7 @@ require dasllama/dasllama_qwen3v   // q3v_reorder_src - the stem assemble gate's
 require _kernel_oracles   // pos_add_2d_ref
 require ?das_metal dasllama/dasllama_metal_kernels  // the decode elementwise/misc kernel set (Apple builds)
 require ?das_metal dasllama/dasllama_metal_common   // the pipeline globals the generated builders read
+require ?das_metal dasllama/dasllama_metal_prefill  // metal_moe_kq_twin_pick + its knee knob - the K-quant MoE twins' pick cell
 require ?das_metal metal/das_metal_boost  // device/pipeline/buffer plumbing + the leak gate
 require ?das_metal _metal_kernel_common   // the MetalCell record, check_buf, the device shell
 require _attn_oracle
@@ -2059,6 +2060,25 @@ def test_metal_served(t : T?) {
     }
 }
 
+//! device-free: the K-quant MoE twins' pick - a crowned family takes the twin at every shape, an uncrowned
+//! box at or under the knee's mean rows an expert (the adaptive op's region), never past it
+[test]
+def test_metal_moe_kq_twin_pick(t : T?) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        let was = set_metal_moe_kq_twin_avg(16l)
+        t |> success(metal_moe_kq_twin_pick(true, 1024l, 8l, 256l), "a crowned family takes the twin at 32 rows an expert")
+        t |> success(metal_moe_kq_twin_pick(false, 375l, 8l, 256l), "uncrowned, the house window's 11.7 rows an expert take the twin")
+        t |> success(metal_moe_kq_twin_pick(false, 512l, 8l, 256l), "uncrowned, 16 rows an expert is the knee's last twin shape")
+        t |> success(!metal_moe_kq_twin_pick(false, 544l, 8l, 256l), "uncrowned, 17 rows an expert take the base form")
+        t |> equal(16l, set_metal_moe_kq_twin_avg(0l), "the knob answers the value it replaced")
+        t |> success(!metal_moe_kq_twin_pick(false, 2l, 8l, 256l), "at a knee of 0 an uncrowned box never takes the twin")
+        t |> success(metal_moe_kq_twin_pick(true, 2l, 8l, 256l), "and a crowned family still does")
+        set_metal_moe_kq_twin_avg(was)
+    } else {
+        t |> skip("das_metal is not built on this platform; the Metal drivers are not compiled")
+    }
+}
+
 [test]
 def test_lens_tgmem_gate(t : T?) {
     t |> run("[metal_dispatch] on @workgroup state refuses to compile without tgmem=") @(t : T?) {
@@ -2184,18 +2204,34 @@ def test_kq_rows_race_verdicts(t : T?) {
             let res <- metal_tensor_race_decode()
             var seen = 0
             var form = 0
+            var half = 0
             for (r in res) {
                 if (r.family == "kq_mvb2_k4_r2") {
                     form++
+                } elif (r.family |> starts_with(KQ_HALF_CROWN_PREFIX)) {
+                    half++
                 } else {
                     continue if (!(r.family |> starts_with("kq_rows_")))
                     seen++
                 }
-                t |> success(r.base_ms > 0.0lf && r.twin_ms > 0.0lf, "{r.family}: both arms timed (twin {r.base_ms:.3f} ms, passes {r.twin_ms:.3f} ms) {r.note}")
+                to_log(LOG_INFO, "race {r.family}: {r.winner} (base {r.base_ms:.3f} ms, twin {r.twin_ms:.3f} ms) {r.note}\n")
+                t |> success(r.base_ms > 0.0lf && r.twin_ms > 0.0lf, "{r.family}: both arms timed (base {r.base_ms:.3f} ms, twin {r.twin_ms:.3f} ms) {r.note}")
                 t |> success(r.winner == "tensor" || r.winner == "simdgroup", "{r.family}: a verdict, not a dispatch failure ({r.winner}: {r.note})")
+                t |> success(!(r.note |> starts_with("twin OUTPUT MISMATCH")), "{r.family}: the twin's output agreed with the base arm's ({r.note})")
             }
             t |> equal(seen, 13, "every K-quant format with a small-batch twin raced")
             t |> equal(form, 1, "the k4 twin's two-row tile raced its two-column form")
+            t |> equal(half, 13, "every K-quant format's half-x route raced the box's f32 rows route")
+            // every rows verdict is written back before the half races, so each half race's base arm is the rows route
+            // the box will run: the crown the process holds after the race is the verdict the race returned
+            for (r in res) {
+                continue if (!(r.family |> starts_with("kq_rows_")) || (r.family |> starts_with(KQ_HALF_CROWN_PREFIX)))
+                for (f in KQ_ROWS_RACE_FORMATS) {
+                    if (r.family == "kq_rows_{f.fmt}") {
+                        t |> equal(r.winner == "tensor", metal_kq_rows_crowned(f.fmt), "{r.family}: the rows verdict the race returned is the one the process holds")
+                    }
+                }
+            }
         } else {
             t |> skip("das_metal is not built on this platform")
         }

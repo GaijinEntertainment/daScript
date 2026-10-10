@@ -13,22 +13,18 @@ number, applies `modules/dasLLAMA/REVIEW.md` (repo root) too.**
 **A `[test]` file in this folder that carries a `require dasllama/...` line of its own answers
 to `modules/dasLLAMA/tests/REVIEW.md` (repo root) as well.**
 
-**A diff that adds a `main.das` or `cli_args.das` flag, changes what the flag makes the program
-do, its default, or a file or path it reads or writes, or edits any copy of its text, leaves
-every copy of the flag stating the same behavior, default, and files and paths, each as the diff
-leaves them.** A flag's copies are its `@clarg_doc`, every `README.md` passage that names the
-flag, its row in `doc/source/reference/utils/dasllama_server.rst` or
+**A diff that adds a `main.das` or `cli_args.das` flag, or changes a flag's default, a file or
+path it reads or writes, what it makes the program do, or the value `serving_knobs.das` derives
+from it, or edits any copy of a flag's text, leaves every copy of that flag stating the same
+behavior, default, and files and paths.** A flag's copies are its
+`@clarg_doc`, every `README.md` passage that names the flag, its row in
+`doc/source/reference/utils/dasllama_server.rst` or
 `doc/source/reference/utils/dasllama_cli.rst` (repo root), and every passage saying it means the
 same as the other file's flag of its name. A copy need not match another's reasons or measured
 numbers.
 
-**A diff that changes the value `serving_knobs.das` derives for a knob, or what a `dasllama/*`
-facade call a flag's handler makes does, changes what every flag reading it does - the flag's
-copies answer to the flag-copies rule (the README section, the RST row and every passage saying
-the same).** The flag's text is read beside the engine, not beside the flag.
-
 **Weakening `REVIEW.das` (beside this file) - dropping a check, narrowing what a check scans,
-adding a name to a check's exempt set (the names it does not flag), or blunting a finding
+adding a name to the names a check skips, or blunting a finding
 text so it no longer names what failed - is a defect.** What the gate enforces is read from
 the gate itself.
 
@@ -44,12 +40,10 @@ before - a new route requires all of its fields - adds that field to every `cont
 request to that route, in the same change.**
 
 **A diff that changes the response a fixture's recorded request gets - a key, an item in a list
-it answers, or a value the code sets itself, whether this folder's code or a `dasllama/*`
-module's - re-captures every fixture under `tests/fixtures/` that records that route, in the same
-change; a value the traffic since boot, the configuration, the loaded model or the machine
-decides is not shape, and a key only a request field the fixture does not send can produce
-needs no re-capture when a test in the diff sends that field and reads the key.** The fixtures
-are the recorded response shape.
+it answers, or a value the code sets itself (not one the traffic since boot, the configuration,
+the loaded model or the machine decides) - re-captures every fixture under `tests/fixtures/` that
+records that route, in the same change.**
+The fixtures are the recorded response shape.
 
 **A diff that adds a read of a response key in `control.html` or in a Playwright `.spec.js`,
 wherever the diff puts it, or edits a line that reads one, and no fixture under
@@ -60,10 +54,10 @@ produce, hand-compose the fixture and name it as hand-composed, with why, in its
 
 **A diff that adds a key to what a route answers, or changes when the route answers a key or
 what decides that key's value, names the key, when the route answers it and what decides its
-value in the route's `README.md` row, and updates every other `README.md` passage that names any
-of them, in the same change.** A diff changes what decides a key's value only when it adds or
-removes a value class - one kind of value the key takes, which the row names in one phrase - or
-changes which request field, flag or config key decides the class the key takes.
+value in the route's `README.md` row, and leaves every other `README.md` passage that names the
+key, or the request field that decides it, stating what the row states, in the same change.** A
+diff changes what decides a key's value only when it adds or removes a request field, flag or
+config key the value depends on, or adds or removes a kind of value the key takes.
 
 **A `served` or `served_note` value a diff adds or changes in `openai_server.das` - all of it
 but the engine text it quotes - uses only words a user understands without knowing how the

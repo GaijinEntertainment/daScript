@@ -890,6 +890,12 @@ def private moe_mm_truth(fx : MoeFix; wdeq, xf, wb : array<float>; kdim, ndim : 
     }
 }
 
+//! the tensor twins' truth over the padded panel: a 32-row tile runs its op at the rows its expert leaves it (8, 16 or 32,
+//! `tile_rows`), so the rows past that height stay what the buffer held - the cell's sentinel - where the fixed op wrote them
+def private adapt_pad_truth(fx : MoeFix; ndim : int; sentinel : float; var want, env : array<float>) {
+    adapt_pad_rows(fx.cnt, fx.basep, ndim, sentinel, want, env)
+}
+
 // The gathered K-quant mul_mm trio (MetalMoeMulMmK4/K5/K6): per-expert superblock planes off
 // the shared kq fixture, truth through the shipped dequant_k*_plane_superblock. Binds at the
 // MetalMoeMulMmBase family numbers (0..2 weight views, x 3, y 4, cnt/base/bkt 7..9); k6's
@@ -963,8 +969,11 @@ def private moe_mulmm_kq_gate(t : T?; var dev, queue; fmt : int; kdim, ndim : in
         let rant = mc |> cell_record(t, "{tag} twin") $(enc : MetalComputeEncoder?) {
             invoke(kw.enc, enc, tw_pso, mc.buf[bks], doff, mc.buf[bks], 0ul, mc.buf[bkq], 0ul, mc.buf[bxh], mc.buf[by_t], ka, mc.buf[bcnt], mc.buf[bbase], int64(ndim), int64(fx.maxtiles * 32), int64(ne))
         }
+        var inscope want_t := want
+        var inscope env_t := env
+        adapt_pad_truth(fx, ndim, -500.0, want_t, env_t)
         if (rant) {
-            check_buf(t, "{tag} twin", mc.buf[by_t], want, env_bar(2e-4, env), Shape(row_width = ndim), env)
+            check_buf(t, "{tag} twin", mc.buf[by_t], want_t, env_bar(2e-4, env_t), Shape(row_width = ndim), env_t)
         }
         // the tall pair: 128-floor stamp + remainder stamp over the same fixtures — the
         // production >=256-row moe dispatch shape (counts crossing 128 exercise both)
@@ -986,7 +995,10 @@ def private moe_mulmm_kq_gate(t : T?; var dev, queue; fmt : int; kdim, ndim : in
             invoke(kr.enc, enc, rm_pso, mc.buf[bks], doff, mc.buf[bks], 0ul, mc.buf[bkq], 0ul, mc.buf[bxh], mc.buf[by_p], ka, mc.buf[bcnt], mc.buf[bbase], int64(ndim), int64(ne))
         }
         return if (!ranp2)
-        check_buf(t, "{tag} tall pair", mc.buf[by_p], want, env_bar(2e-4, env), Shape(row_width = ndim), env)
+        var inscope want_p := want
+        var inscope env_p := env
+        adapt_pad_truth(fx, ndim, -700.0, want_p, env_p)
+        check_buf(t, "{tag} tall pair", mc.buf[by_p], want_p, env_bar(2e-4, env_p), Shape(row_width = ndim), env_p)
     }
 }
 
@@ -1093,8 +1105,11 @@ def private moe_mulmm_split_gate(t : T?; var dev, queue; fmt : int; kdim, ndim :
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
             moe_split_dispatch(enc, fmt, th, tw_pso, mc.buf[bks], mc.buf[bkq], mc.buf[bxh], mc.buf[by], mc.buf[bk], mc.buf[bn], mc.buf[bcnt], mc.buf[bbase], nsb, fx.pad, fx.maxtiles, ndim, ne)
         }
+        var inscope want_t := want
+        var inscope env_t := env
+        adapt_pad_truth(fx, ndim, -500.0, want_t, env_t)
         if (ran) {
-            check_buf(t, tag, mc.buf[by], want, env_bar(2e-4, env), Shape(row_width = ndim), env)
+            check_buf(t, tag, mc.buf[by], want_t, env_bar(2e-4, env_t), Shape(row_width = ndim), env_t)
         }
         var maxce = 0
         for (c in fx.cnt) {
@@ -1113,7 +1128,10 @@ def private moe_mulmm_split_gate(t : T?; var dev, queue; fmt : int; kdim, ndim :
             moe_split_dispatch(enc, fmt, rm, rm_pso, mc.buf[bks], mc.buf[bkq], mc.buf[bxh], mc.buf[by_p], mc.buf[bk], mc.buf[bn], mc.buf[bcnt], mc.buf[bbase], nsb, fx.pad, 4, ndim, ne)
         }
         return if (!ranp)
-        check_buf(t, "{tag} tall pair", mc.buf[by_p], want, env_bar(2e-4, env), Shape(row_width = ndim), env)
+        var inscope want_p := want
+        var inscope env_p := env
+        adapt_pad_truth(fx, ndim, -700.0, want_p, env_p)
+        check_buf(t, "{tag} tall pair", mc.buf[by_p], want_p, env_bar(2e-4, env_p), Shape(row_width = ndim), env_p)
     }
 }
 
@@ -1709,9 +1727,13 @@ def test_metal_gemm_kernels(t : T?) {
                 moe_mulmm_kq_gate(t, dev, queue, 4, 256, 128, [8, 33], false)   // 2 col tiles + contiguous
                 moe_mulmm_kq_gate(t, dev, queue, 5, 256, 128, [8, 33], false)   // twin legs per format
                 moe_mulmm_kq_gate(t, dev, queue, 6, 256, 128, [8, 33], false)
+                moe_mulmm_kq_gate(t, dev, queue, 4, 256, 128, [12, 45], false)   // the adaptive op's 16-row walk: 12 live rows, and a second tile of 13
+                moe_mulmm_kq_gate(t, dev, queue, 5, 256, 128, [12, 45], false)
+                moe_mulmm_kq_gate(t, dev, queue, 6, 256, 128, [12, 45], false)
                 moe_mulmm_kq_gate(t, dev, queue, 4, 256, 128, [130, 40, 200], false)   // tall pair: counts cross 128
                 for (fmt in [3, 44, 40, 33, 34, 23, 24, 25]) {
                     moe_mulmm_split_gate(t, dev, queue, fmt, 256, 128, [8, 33])
+                    moe_mulmm_split_gate(t, dev, queue, fmt, 256, 128, [12, 45])
                     moe_mulmm_split_gate(t, dev, queue, fmt, 256, 128, [130, 40, 200])
                 }
                 // the q40 expert site at the gemma-4-26B-A4B geometry: kdim = dim 2816, ndim =

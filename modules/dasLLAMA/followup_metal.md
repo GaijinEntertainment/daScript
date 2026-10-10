@@ -979,15 +979,60 @@ differently: `mp = 1` buffers under a two-row tile, no `verify` row-total unifor
 (`acquire_step`). The work: find which of those the rows form reads wrong at one row, key every single-row
 branch on `SINGLE`, then race the one-row draft against the two-row form.
 
-## 45. The 4-bit expert GEMVs run at 60 % of the q8 GEMV's bytes a second
+## 47. A gathered expert form that reads a plane once for an expert's few rows
 
-On the M1 Max the q8 expert GEMV (`MetalQ8GemvT`, one simdgroup a row, four 32-weight chunks loaded ahead of the
-FMA chains) moves 250 GB/s on Qwen3.6-35B-A3B; the IQ4/Q4_0 and Q4_K templates (two rows a simdgroup, sixteen or
-eight lanes a superblock, two words a lane in flight before the arithmetic) move 160 GB/s on the same model
-(`PERF_LEDGER.md`'s 2026-10-06 equal-bytes entry). Four races on the codebook read and the grid staging moved nothing
-past noise, so the gap is the memory-level parallelism. The work: a row-a-simdgroup IQ4_XS form with the q8 kernel's
-chunk batching and the staged LUT kept, on the gathered site first (the routed experts carry the bytes), raced e2e on
-the pure IQ4_XS file; then the same shape for Q4_K, whose 5 % over Q4_0 at equal bytes is the same template.
+The gathered route (`ARCHITECTURE_GPU_PREFILL_MOE.md#prefill-moe-gemv-route`) reads an expert's weights once per
+routed token, and the bucketed tile reads them once per 32-row tile but walks K serially one threadgroup per tile;
+between 8 and 128 tokens on a 256-expert model every expert holds a few rows and both forms waste the plane read -
+the route by re-reading it per token, the tile by idling the GPU. Neither llama.cpp nor MLX ships the form in between:
+the dense multi-column GEMV both carry (`mul_mv_ext` reading a dequantized chunk once for up to five columns, MLX's
+`qmv_wide`) applied per expert over the bucket's rows, with the row count a template constant over the existing
+per-format `MetalGemvSiteT` bodies. The work: that stamp on the gathered site for every served format, raced against
+the route and the tiles at 8, 32, 64 and 128 tokens on the M1 Max and the M5 Max, and the two knees it moves
+(`metal_moe_gemv_max`, `set_metal_moe_tall_avg`) re-raced into the sidecars.
+
+## 48. The dense K-quant sites keep the tile from nine rows up
+
+A dense K-quant or grid-format projection rides the decode's row-batched GEMV forms on a window of eight rows or fewer
+(`ARCHITECTURE_GPU_PREFILL.md#gemv-tail-peel`) and the 32-row mul_mm tile from nine rows up, remainder included - the
+q8 blob's peel takes the remainder off a padded tile, the K-quant sites' takes the whole window or nothing. A window of
+9 to 31 rows on Qwen3.6-27B Q4_K_M pays the tile's floor on the M1 Max - 235 to 282 ms, 3.6 decode steps, flat across
+the band - and 80 ms on the M5 Max's tensor twins (`debug-jit`, the window probe; the board row is the metal pp512 cell of
+`performance/records/m1.json` and `m5.json` on Qwen3.6-27B-MTP-Q4_K_M). The work: the remainder peel on the K-quant sites - the full tiles on
+the mul_mm, the `npos % 32` rows on the B8 form at their X and y offsets, as the q8 blob's `enc_gemm_mm` does - then the
+family sweep of `benchmarks/prefill_window_probe.das` across every stocked family on both boxes; and the two-stream
+decode measured on its own (`lcpp_bench --npl 2`) before any kernel is written for it, since the batched step already
+carries the row forms.
+
+## 49. The gathered route's knee is one token count where the crossing is per model
+
+`pf_moe_gemv_knee` reads one token count, and the window where the gathered route and the bucketed tiles cross runs
+from under 32 tokens (the 48-layer Qwen3-30B, gpt-oss) to 128 (the Qwen3.6 hybrid on the M1 Max), by the layers, the
+slots and the expert bytes a token reads against the experts a window populates (`PERF_LEDGER.md`, the 2026-10-09
+tables). The default sits at the window every carrier wins, 16, and leaves the hybrids half their route band. The work:
+the crossing as a cost model with two box constants the mint races - the route's cost a slot-layer and the tiles'
+cost a populated expert-tile - solved per model at load, the sidecar's knob standing above it; or the form of 47,
+which serves the whole band and retires the knee.
+
+## 50. The K-quant two-to-eight-row forms are bound by the x vector, not the weights
+
+Every K-quant small-batch form - the ext twin, the k4 register tile, the four- and eight-column forms - costs 0.65 to
+0.8 of a single-row pass per column on the M1 Max: two columns 1.6 to 1.7 passes, four 2.9, eight 5.1 to 5.5
+(`benchmarks/matmul/bench_metal_kq_race.das`, tiers `mvb`, `mvb4`, `mvb8`, the `passes` arm the incumbent). The
+weight stream is not what they wait on: a two-column probe that reads column 0's x twice runs at 1.07 passes, and the
+single-row GEMV's lane map over two columns (`MetalKqMvWK4T`) lands where the production forms land. On the M1 class
+the bound is the x traffic through L1 - every weight decoded is dotted against a float4 of x fetched per column, 2 bytes
+of x a weight against 0.56 of weight - and on the M5 Max, where the single-row GEMV streams at 890 GB/s and the wide
+form already beats the production forms (0.76 of their time at four and eight columns), the bound is the nibble
+decode's ALU. Register-resident x walked over four or eight weight rows (the mlx `qmv_wide` shape) loses on both boxes:
+sixty-four floats of x spill. Reading x as halves (`MetalKqMvW*K4H`, the f16 twin the prefill tiles already stage)
+halves the x bytes and lands the wide forms at 1.26, 1.8 and 2.8 passes for two, four and eight columns on the M1 and
+0.61 of the production time at eight columns on the M5 (`PERF_LEDGER.md`, the 2026-10-09 race tables). Every format's
+half-x route serves under its own `kq_rows_half_<fmt>` crown off the rows norm's and the activation's dual-store twins -
+k4 through the wide forms, the rest through the half stamps of their small-batch forms, one x mixin for all
+(`ARCHITECTURE_GPU_MTP_DECODE.md#kq-rows-crown`). The work left: a twin for wo's x - the attention output has no
+dual-store stamp, so wo keeps the f32 forms - and for the MTP head's projection rows; the prefill's wo and QKV peel
+sites under `CVT_MIN_ROWS`, whose twin only a dual-store writes; and a cheaper nibble decode for the ALU-bound boxes.
 
 ## 46. The Metal vision chains decline a tower off their stamps' lattice whole
 
@@ -998,3 +1043,28 @@ or a window past 64 rows (qwen25v) is a `shape` decline, and the CPU chain serve
 No stocked tower trips a guard; a family added at another geometry would run on the CPU with no outage. The work:
 the ragged stamps - a row tail on the tile GEMMs and the attention restride, a head-width parameter on the window
 attention - so the guards narrow to what the kernels cannot read.
+
+## 51. A short request's prefill splits at the prefix checkpoints, and the window past the split costs a third of its GPU time
+
+The Metal prefill stops at every planned checkpoint (`prefix_checkpoint_at_`: the stable opening, the system text)
+and runs the remainder as its own window, because a recurrent layer's state at the checkpoint position exists only
+where the scan stops there. On the M1 Max the house replay's short answers (375 uncached tokens, two windows each)
+spend a median 130-167 ms of their 650-680 ms of window time in the windows past the largest: a 51-token window
+costs ~180 ms and a 7-token one ~40, where the 300-token window runs at 1.4 ms a token. The K/V half of a checkpoint
+is positional and already in the mirror; the recurrent half is one scan dispatch over the window (`enc_dn_scan_h`),
+which can run as two - the rows before and after the position, the state buffer copied out between them, the conv
+history at the position the three input rows before it - with everything else in the window, the expert GEMMs above
+all, one pass. The work: the scheduler's chunk-ends-at-checkpoint rule becomes a capture-at-position list for the
+Metal prefill (the CPU prefill keeps stopping), the recurrent layer's scan is segmented at those positions with its
+state copied out, the checkpoint store takes a state snapshot from a device buffer, and the replay's split cost
+leaves the short requests' window time. The figures are `PERF_LEDGER.md`'s 2026-10-09 server-timeline entry.
+
+## 52. The decode step's time sits outside the expert GEMVs
+
+On the M1 Max a Qwen3.6-35B-A3B decode step is 10.6 ms of GPU time, and the routed expert GEMVs are 1.9 ms of it
+for 0.8 GB of expert bytes - the memory wall; the other 8.7 ms move 0.7 GB through the dense attention-side
+projections, the recurrent layers, the 248k-row classifier and some 600 dispatches with their gaps
+(`PERF_LEDGER.md`, the 2026-10-09 stage-split entry). A row-a-simdgroup IQ4_XS form with four or eight superblocks
+in flight and a four-rows-share-x form each tie or lose to the two-row template, so the 4-bit expert kernel is not
+latency-bound and is not the lever. The work: the dense-side classes by skip-control - the kq GEMV sites, the
+classifier, the deltanet recurrence - and the dispatch count a token, each against its bytes.

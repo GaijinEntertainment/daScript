@@ -93,10 +93,26 @@ the kernel census - the fused single-pass stamp once a layer a step on the f16 m
 twin on the q8_0 mirror, no chunked dispatch on either; the same deep steps with the lever off
 (`set_metal_attn_d(false)`) are the control: the chunked pair serves every deep step and the fused
 stamp none, the tokens still the CPU's),
-batch test: `batch` (whole test), `batchB7-partd`, `batchB8-kq`, `batch-ff` (real-text forced feed,
-GPU single vs GPU batch at B=2/B=4 on identical tokens, logits tolerance).
+batch test: `batch` (whole test), `batchB7-partd`, `batchB8-kq` (the kq batch arm on Llama-3.2-1B
+Q4_K_M: B=2, B=3 and B=12 batched greedy token for token the CPU control, then the half-x leg - the
+`kq_rows_half_k4` and `kq_rows_half_k6` crowns pinned with the rail on (`set_metal_kq_half`), B=2 /
+B=3 / B=8 token for token the CPU control with k4's two-, four- and eight-column half forms each
+counted at least once and the k6 half stamps counted exactly where the rail-off run served k6's f32
+small-batch forms, the rail off keeping the f32 forms with no eight-column half dispatch, every leg's
+steps the batched driver's, the crowns and the rail put back as found), `batch-ff` (real-text forced
+feed, GPU single vs GPU batch at B=2/B=4 on identical tokens, logits tolerance). The whole test is gated on
+`batch` first, and a filter token matches an arm name as a substring OF THE NAME, so `--arm batchB8-kq`
+alone skips the whole test (`batchB8-kq` is not a substring of `batch`); `--arm batch` runs every batch
+arm, and is the way to reach a sub-arm.
 
-MTP parity (`test_metal_mtp_parity.das`, suite `mtp`): `mtp-ctrl-<tag> mtp-ff-<tag> mtp-ffk-<tag>
+MTP parity (`test_metal_mtp_parity.das`, suite `mtp`): `mtp-ffh-<tag>` = the half-x crowns (k4, k5, k6) pinned
+over the counting walk at depth 2: the verify's two-to-eight-row K-quant sites, the MTP head's own q/k/v among
+them, read the f16 twin, and the rounds the rail drafts hold up to the uncrowned walk's within a fifth - a head fed
+a stale twin drafts garbage and the count collapses while the verify still lands the plain tokens; the plain leg
+runs with every half-x crown of the box's profile removed and the rail off, so the two legs differ in the crowns
+alone, and on a carrier whose q/k/v/o or dense FFN planes carry a k4 / k5 / k6 format the half-x forms' census
+count is asserted above zero (a leg that dispatched none measured the f32 forms twice); the crowns and the rail
+put back as found. `mtp-ctrl-<tag> mtp-ff-<tag> mtp-ffk-<tag>
 mtp-vff-<tag> mtp-count-<tag>` per fixture tag `0.8b 4b 9b 27b 35b 3.8-27b 3.8fn` (4b = Qwen3.5-4B-MTP
 Q8_0, the mid tier; 9b = Qwen3.5-9B-MTP UD-Q5_K_XL, large tier; 3.8-27b = the Qwen3.8-27B
 trunk + its split Q8_0 head; 3.8fn = Qwen3.8-Flash-Next UD-IQ4_XS + its split `shared` Q8_0 head,
@@ -161,7 +177,20 @@ under the same ledgered exception as the parity file's: the Metal MTP rail is wh
 flavor serves.
 
 Prefill parity: `base mm-tail s16
-kq cont attn-dev mirror span span-fused span-mrope span-ds dim qkv` (mirror = the mirror-fed window
+kq cont attn-dev mirror span span-fused span-mrope span-ds dim qkv moe-gemv kq-tail` (kq-tail = the dense
+K-quant sites' row-batched GEMV peel on a window of eight rows or fewer (`test_metal_prefill_kq_tail`, Llama-3.2-1B
+Q4_K_M and IQ4_XS, Qwen3-4B Q4_K_M, the same two-window shape as moe-gemv at 2, 5 and 8 rows, the peel's site
+counter the engage witness and `set_metal_prefill_mm_tail(false)` the off-lever); moe-gemv = the short
+window's gathered expert route (`test_metal_prefill_moe_gemv_route`, families `qwen2moe` / `qwen3moe` /
+`gptoss` - the q8, K-quant and mx4 expert planes, every carrier large-tier; the hybrid's pure IQ4_XS file
+cannot twin into a blob and its UD file's twin declines the Metal prefill, so the hybrid holds its parity through
+the MTP parity file's served twin): a 300-row window on the tiles then a 2-, 7-, 16- and 24-row window the
+route serves - the 16-row one at the shipped knee, the others at a knee pinned to 24 - the last row's logits
+within the carrier's bar of the CPU chain's largest, the route's window counter up by one and the prefill
+counter by two on the route and on the tiles leg, the same windows with the knee at 0 (the tiles) logged
+beside them and the counter unmoved, the control a window whose last token differs landing outside the bar,
+the arms' argmax pieces decoded in the log; a window the device declines skips loudly;
+mirror = the mirror-fed window
 against the f32 panels on one blob twin under the pair's pinned crown - a 300-row window and a
 20-row continuation, the last row's logits within 0.4% of the largest and the census naming each
 form's kernels; the decode step after them uploads no row on the mirror-fed form and every row on
@@ -394,11 +423,16 @@ logit that differs head to head and the logit cap, on the float, quantized and w
 gemm file's device pair arms (`attn_qk_mm_gate` with `pair_mt`, `attn_dev_pair_gate`) run both
 tile heights at a head of 96 too - QK's reduction width is the head, AV's 64-wide tiles plus the
 32-column tail stamp - and the misc file's `embed_f32_gate` the greedy chain's fp32-table gather (the
-row gather at one row under the embed scale) at a 96-wide row and past a lead of foreign floats. Two
+row gather at one row under the embed scale) at a 96-wide row and past a lead of foreign floats. Four
 cells need no
 kernel: the misc file's `test_metal_served` (a driver's forward answer through `metal_served`: a
 decline passes through and leaves the pool's spin window, a served one opens it, a later decline
-keeps it) and the prefill file's `test_resident_panel_charge` (the resident panel registry on the
+keeps it) and `test_metal_moe_kq_twin_pick` (the K-quant MoE twins' pick: a crowned family at every
+shape, an uncrowned box at or under the knee's mean rows an expert and never past it, the knob
+answering what it replaced), and the prefill file's `test_moe_padded_bound` (the bucket panel's
+row bound against the rail's own padded prefix over seeded routings, reached exactly where every
+routed expert is distinct, a bound for one row fewer sitting under the rail's pad as the control)
+and `test_resident_panel_charge` (the resident panel registry on the
 driver's device: an uncharged ask makes its panel and charges nothing, the same key answers again,
 another size under it is refused, a charged ask counts its bytes exactly when the budget serves it,
 and a shutdown drops the registry). The StyleTTS2
@@ -985,7 +1019,14 @@ path, the one-time adoption of a sidecar beside the exe, the placement hook's wi
 by the engine, run before the apply reads the path, absent without harm), and when a sidecar
 location counts as explicitly chosen: a runtime override is, and is the path read; with none, the
 location is explicit exactly where `DAS_TUNE_MANIFEST` chose one (the suite runner sets it on a
-box with a minted manifest), and that manifest is the path read again once the override clears.
+box with a minted manifest), and that manifest is the path read again once the override clears;
+and the per-box runtime file (`test_box_runtime_file`): its path under the home's `tune/` with a
+stable key, validity as this box plus these kernels plus a runtime section (other kernels, another
+box, a kernels-only file and no file each invalid), the race writing a valid file with no kernels
+section that the apply reads, the hook answering "" under an explicit manifest, and two children on
+`_box_runtime_root.das` under a temp home (`_child_run.das` spawns them, as the jobque tripwire's
+are): one with no manifest reads the box file under that home, raced and written first, and one on
+`DAS_TUNE_POLICY=reference` reads "" and writes nothing.
 `test_fat_hook_umbrella.das` - model-free: a program requiring the engine umbrella alone (what
 the shipped bench requires, never the facade) carries the first-start race hook - the umbrella's
 `[init]` set registers it, or a fat bench exe would serve Metal uncrowned forever.
@@ -1074,7 +1115,13 @@ id is no token id and differs by row and by key; `test_chat_span_refusals`: a sp
 marked audio span on a template with no such marker, and a span ahead of the one before it each panic, a bare
 audio span and a span at the last one's offset the controls), and the gemma-4 E2B cells: the
 thinking renderer pins (the instruct prefill token for token, the gate + bare opener, the
-thinking-off extras on `effective_stop_ids`, a mid-conversation toggle staying instruct) and
+thinking-off extras on `effective_stop_ids`, the reasoning budget's marks - the channel mark and
+`thought` as the tokenizer writes it the open, the channel close the leave and the forced close, both
+channel markers the turn's end once the forced close is out - a mid-conversation toggle
+staying instruct), `test_chat_gptoss_budget_marks` (gpt-oss-20b, large tier: harmony's marks - the
+channel mark, `analysis` as the tokenizer writes it and the message mark the open, the message end
+the leave, the end, a start and the `final` channel's header through its message mark the forced
+close, the channel mark alone the turn's end once the forced close is out) and
 the instruct-mode TEXT turn through `respond` (greedy "2+2": the answer, no channel marker in
 the content half, the turn ending on a stop - red when the guard does not end the turn on the
 stray `<channel|>` the E2B emits after its answer), the gemma-4 tool wire (`test_chat_gemma4_tool_wire`: the
@@ -1112,6 +1159,13 @@ declared parameters (`tool_param_types`: a declared string stays text, a declare
 `generate()` references; skips honestly without SmolLM2-135M / the MTP fixture, `-jit` only. The stop-string
 cells: `stop_scan`'s hold and release model-free, then a stream cut by a stop string spanning two pieces
 (the text before it, `finish_reason` stop) and a held tail flushed at the budget as a piece of token -1.
+`test_scheduler_think_budget` holds the reasoning budget's forced close on SmolLM2 with a stand-in two-token
+close: a request whose prompt opened the span emits the model's own three tokens, then the close tokens, then
+the model's again to its length; the same budget with an open token the model never writes, and with no close
+marks, each read the reference token for token; a close token the model writes itself (the reference's second
+token) ends the count and forces nothing; a two-token open sequence opens the span after both; a budget of 20 on
+12 tokens fires early so the close lands inside the cap; and a re-open marker (the token the first stream wrote
+right after its forced close) ends the turn there with `stop`, the marker unemitted.
 The SmolLM cells drop the loaded model's GPU state (`moe_gpu_drop_model`) so they serve on
 the CPU rails under `DASLLAMA_GPU=1` too: their bit-exact claims hold on one lane, and the
 tier's device prefill, resident batch decode and CPU prefill round differently. Its two-stream
@@ -1562,7 +1616,7 @@ chunk is three quarters of the opening with the idle quantum off: the first tick
 opening, a checkpoint within a chunk and a half landing in one window; `test_metal_prefix_checkpoint_hinted` - a
 request marked with its stable opening (`PendingReq.stable_at`) leaves the checkpoint at once, the
 second prompt attaches it; a marked first request leaves two checkpoints (its opening and its
-finished turn), an unmarked one only its finished turn's, and the attached reply is token for
+finished turn), an unmarked one its prompt's end and its finished turn, and the attached reply is token for
 token the uncached reply at the same cut;
 `test_metal_prefix_checkpoint_logits` - the verbs direct: a session attached at a checkpoint off a
 page boundary lands the donor's logits bit for bit after the same tail (the carry's position

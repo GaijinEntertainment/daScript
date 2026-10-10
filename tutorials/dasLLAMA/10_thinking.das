@@ -181,6 +181,33 @@ def section_thinking_off(m : Model; var chat : ChatSession) {
     print("\n(ended by {cut})\n")
 }
 
+// ---------------------------------------------------------------------------------------------
+// Section 4 — A reasoning budget: think_budget_marks
+// ---------------------------------------------------------------------------------------------
+// A server caps how long a reply may think with the request's `thinking_budget`: once the reply
+// has spent that many tokens inside its reasoning span, the scheduler writes the family's own
+// close for it and the answer follows. The scheduler reads tokens, not text, so the span's
+// bounds travel as token marks: the sequence a reply writes to open the span, the one token the
+// model writes to leave it, and the tokens the budget forces at the cut. The marks are the
+// family's - Qwen3's `<think>` / `</think>` with the recipe's "Considering the limited time..."
+// sentence ahead of the forced close, gemma-4's `<|channel>thought` / `<channel|>`, gpt-oss's
+// `<|channel|>analysis` / `<|end|>` - and a hand-rolled loop reads them the same way the
+// server's scheduler does.
+def section_budget_marks(m : Model; chat : ChatSession) {
+    print("\n=== Section 4: the reasoning budget's marks ===\n")
+    var marks <- think_budget_marks(m, chat)
+    if (empty(marks.close)) {
+        print("this family carries no reasoning span: a thinking_budget is ignored\n")
+        return
+    }
+    print("open sequence: {marks.open} ({length(marks.open)} token(s))\n")
+    print("the model's close token: {marks.close_tok} = {escape(piece(m, marks.close_tok))}\n")
+    print("the forced close: {length(marks.close)} token(s) = {escape(decode(m, marks.close))}\n")
+    print("the markers that end the turn once the forced close is out: {marks.reopen}\n")
+    print("the generation prompt opened the span already: {marks.opened}\n")
+    delete marks
+}
+
 [export]
 def main() {
     let path = model_path()
@@ -196,5 +223,7 @@ def main() {
         section_buffered_split(m, chat)
         section_streamed_split(m)
         section_thinking_off(m, chat)
+        set_thinking(chat, true)
+        section_budget_marks(m, chat)
     }
 }

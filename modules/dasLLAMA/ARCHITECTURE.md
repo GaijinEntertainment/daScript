@@ -30,7 +30,8 @@ any sibling companion that sends a reader to it.
   the decode pick tape a parity cell pins one arm's routing on another with
   (`ARCHITECTURE_ENGINE.md#moe-pick-tape`).
 - `ARCHITECTURE_ENGINE_SERVING.md` - the serving charter, the prefix cache's partial page
-  (`ARCHITECTURE_ENGINE_SERVING.md#prefix-tail-page`) and its checkpoints on a recurrent model.
+  (`ARCHITECTURE_ENGINE_SERVING.md#prefix-tail-page`), its checkpoints on a recurrent model, and
+  the reasoning budget that closes a thinking span for the model.
 - `ARCHITECTURE_ENGINE_FORMATS.md` - the format, load-rail and CPU-kernel-tier charters, plus
   the shapes they key off - the bigram merge heap both tokenizer backends run
   (`ARCHITECTURE_ENGINE_FORMATS.md#bpe-merge-heap`), the one RoPE fill over a position source
@@ -82,7 +83,8 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   attention slab, chunked submission, the f16 twin dual-store, the last-layer FFN tail, and the
   dense-KQ tensor mul_mm scaffold.
 - `ARCHITECTURE_GPU_PREFILL_MOE.md` - the Metal prefill driver's routed block - the MoE bucket
-  rail, its tensor-twin scaffold, and the split-format expert twins.
+  rail, its tensor-twin scaffold and the split-format expert twins, the K-quant twins' crowns and
+  the knee that picks them, and the short window's gathered expert route.
 - `ARCHITECTURE_GPU_PREFILL_WINDOW.md` - the Metal prefill driver's device attention pair (the
   K/V twins, the device-direct QK and AV with the tail stamp of a head off the 64 lattice, the row
   softmax written in place), the mirror-fed window and mirror adoption
@@ -138,7 +140,9 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   instrumentation rails, the ASR board's GPU row pairs, the `[tuned]` perm precedence, the mint
   wall in the sidecar's provenance, and the speculative round's ruler record.
 - `ARCHITECTURE_MEASUREMENT_FAT_START.md` - a fat exe's first-start race and its per-user
-  sidecar (`ARCHITECTURE_MEASUREMENT_FAT_START.md#fat-first-start`).
+  sidecar (`ARCHITECTURE_MEASUREMENT_FAT_START.md#fat-first-start`), and the per-box runtime
+  file a run with no sidecar of its own races into
+  (`ARCHITECTURE_MEASUREMENT_FAT_START.md#box-runtime-file`).
 - `ARCHITECTURE_MEASUREMENT_SERVED.md` - the client clock around a live chat server's turns and
   what its figures are (`ARCHITECTURE_MEASUREMENT_SERVED.md#served-turn-instrument`).
 - `ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md` - the Vulkan GEMM probe's arms, the shapes they run

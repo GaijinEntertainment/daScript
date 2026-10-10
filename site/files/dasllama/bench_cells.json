@@ -11125,21 +11125,24 @@
         "flavor":"tuned",
         "box":"m1",
         "threads":8,
-        "date":"2026-08-02",
+        "date":"2026-10-09",
         "hardware":{
           "cpu":"Apple M1 Max"
         },
         "tests":{
           "pp512":{
-            "tok_s":854.45736559871989
+            "tok_s":974.01242709324413
           },
           "tg128":{
-            "tok_s":64.882714423848327
+            "tok_s":73.385844748733888
+          },
+          "tg128@4":{
+            "tok_s":121.91010357275047
           }
         },
         "source":"official",
-        "sha":"7605e8476",
-        "version":"0.6.4",
+        "sha":"050c75ad0",
+        "version":"0.6.5",
         "files":[
           {
             "role":"weights",
@@ -11153,16 +11156,16 @@
         "flavor":"stock",
         "box":"m1",
         "threads":8,
-        "date":"2026-08-02",
+        "date":"2026-10-09",
         "hardware":{
           "cpu":"Apple M1 Max"
         },
         "tests":{
           "pp512":{
-            "tok_s":833.47756000000004
+            "tok_s":832.831143
           },
           "tg128":{
-            "tok_s":54.498489999999997
+            "tok_s":54.12294
           }
         },
         "source":"official",
@@ -11418,24 +11421,24 @@
         "flavor":"tuned",
         "box":"m5",
         "threads":6,
-        "date":"2026-09-23",
+        "date":"2026-10-09",
         "hardware":{
           "cpu":"Apple M5 Max"
         },
         "tests":{
           "pp512":{
-            "tok_s":3477.6584545661549
+            "tok_s":4596.3975906296755
           },
           "tg128":{
-            "tok_s":127.94649450448291
+            "tok_s":128.56665990336992
           },
           "tg128@4":{
-            "tok_s":269.33651290972716
+            "tok_s":288.47905841434692
           }
         },
         "source":"official",
-        "sha":"9c5f93d3e",
-        "version":"0.6.4",
+        "sha":"e872d6ffa",
+        "version":"0.6.5",
         "files":[
           {
             "role":"weights",
@@ -11449,19 +11452,19 @@
         "flavor":"stock",
         "box":"m5",
         "threads":6,
-        "date":"2026-09-23",
+        "date":"2026-10-09",
         "hardware":{
           "cpu":"Apple M5 Max"
         },
         "tests":{
           "pp512":{
-            "tok_s":3174.456745
+            "tok_s":3180.7712740000002
           },
           "tg128":{
-            "tok_s":95.519047
+            "tok_s":94.897222999999997
           },
           "tg128@4":{
-            "tok_s":217.77200012207032
+            "tok_s":217.83999938964843
           }
         },
         "source":"official",

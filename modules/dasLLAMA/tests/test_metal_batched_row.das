@@ -734,7 +734,14 @@ def test_metal_prefix_checkpoint_hinted(t : T?) {
                 t |> equal(rc.cached, cut, "the second prompt attaches the opening ({cut} tokens)")
                 var plain <- create_scheduler(tr, 1l, 4l, 64l, 64l, 0l, KVDtype.f16, true)
                 var rn <- serve_one(t, tr, plain, 1l, pa, CKPT_NEW)
-                t |> equal(plain.prefix.n_state_inserts, 1l, "an unmarked first request leaves its finished turn alone")
+                t |> equal(plain.prefix.n_state_inserts, 2l, "an unmarked first request leaves its prompt's end and its finished turn, no opening")
+                var at_cut = 0
+                for (st in plain.prefix.states) {
+                    if (long_length(st.tokens) == cut) {
+                        at_cut++
+                    }
+                }
+                t |> equal(0, at_cut, "none of the unmarked request's checkpoints stands at the opening ({cut} tokens)")
                 var ref_sch <- create_scheduler(tr, 1l, 4l, cut, 64l, 0l, KVDtype.f16, true, 0l, 0l)
                 var xc <- serve_one(t, tr, ref_sch, 2l, pc, CKPT_NEW)
                 log_gen_texts(tr, "second prompt (whole, attached)", xc.toks, rc.toks)

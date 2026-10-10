@@ -283,3 +283,14 @@ depth and prompt. The shape is the ruler's, not the board's - `list_record_store
 records gate read `records/` one level deep and never see the folder - and `mtp_ruler --render
 <record>` prints the table. Every third-party wall in the file is the other half of a pair
 taken in that run.
+
+### The mlx-lm window recipe {#mlx-window-recipe}
+
+`harness/mlx_window_profile.py` is the third-party twin of the window probe: under mlx-lm it
+builds a prompt cache of `--prefix` tokens in 512-token chunks, times a `--window`-token prefill
+as served (`mx.eval` of the logits and the cache state, the cache restored between reps, the
+median of `--reps` after a warmup), then runs the same window once more with every module class's
+call forced to evaluate for a per-class exclusive breakdown - the forced pass is slower than the
+served one by the sync a call and the lost overlap, so its shares are the attribution and the served
+figure the cost. Every reading it yields is `external`; the ledger pairs it with the window probe's
+`--kprof` report on the same box, model geometry and window.

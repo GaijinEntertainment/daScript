@@ -5,37 +5,15 @@ require dastest/testing_boost public
 require dasllama/dasllama_par
 require dasllama/dasllama_math   // with_dasllama_jobque_
 require daslib/jobque_boost
-require daslib/fio
 require strings
+require _child_run
 
 // The bare-queue tripwire: the engine's first dispatch on a job queue nobody configured panics and
 // names the setup call; DASLLAMA_ALLOW_BARE_JOBQUE=1 keeps a warning and runs; a configured queue
 // dispatches silently. The bare arms run in child processes - the check fires once per process and
 // the env knob loads at context init - so a child's stdout and exit code are the instrument.
 
-def private das_exe() : string {
-    let args <- get_command_line_arguments()
-    return empty(args) ? "" : args[0]
-}
-
-def private run(cmd : string; var output : string&) : int {
-    return unsafe(popen_timeout(cmd, 300.0, $(f) {
-        if (f != null) {
-            output = fread(f)
-        }
-    }))
-}
-
-//! the command that runs `root` (a file of this folder) under `envs` on this platform's shell, stderr folded into stdout
-def private child_cmd(root : string; envs : array<tuple<name : string; value : string>>) : string {
-    let win = get_platform_name() == "windows"
-    let prefix = build_string() $(w) {
-        for (e in envs) {
-            w |> write(win ? "set \"{e.name}={e.value}\"&& " : "{e.name}={e.value} ")
-        }
-    }
-    return "{prefix}\"{das_exe()}\" -dasroot \"{get_das_root()}\" \"{get_das_root()}/modules/dasLLAMA/tests/{root}\" 2>&1"
-}
+def private run(cmd : string; var output : string&) : int => run_child(cmd, output)
 
 [test]
 def test_bare_queue_panics(t : T?) {

@@ -5,10 +5,10 @@ docs: `../ARCHITECTURE_MEASUREMENT.md`, `../ARCHITECTURE_MEASUREMENT_KERNEL_RACE
 work: `../followup_metal.md` for Metal, `../followup_vulkan.md` for Vulkan,
 `../followup_general.md` otherwise.
 
-An instrument is a file that times a run itself and reports the wall or rate as its result,
-printed or returned to a caller that prints it; a file reading a child process's clock, and a
-serving path's profiler-gated report (a run whose result is the served output, the numbers a side
-report), are not one.
+An instrument is a file whose result is a time or a rate - printed or returned to a caller that
+prints it - of a run it times with its own clock or with GPU timestamp queries; a file reading a
+spawned child process's clock, and a profiler-gated report a serving path prints beside its served
+output, are not one.
 
 A race times two implementations of one computation in one process, either of which the run
 could adopt - two values of one lever are not two implementations.
@@ -18,10 +18,11 @@ An A/B is two or more timed runs an instrument makes in ONE process that differ 
 each, off/on or graded.
 
 An arm is every timed run of one implementation in a race or of one lever value in an A/B; an
-A/B arm is an arm of an A/B; a compared arm is one whose output - what a run of the same
+A/B arm is an arm of an A/B. A compared arm is one whose output - what a run of the same
 implementation or lever value wrote, timed or not - the run reads back and measures against
-another arm's output or a CPU reference; the baseline arm is the arm running the implementation,
-or the lever value, already in use.
+another arm's output or a CPU reference over the compare region. The compare region is the set of
+output elements the instrument's header names. The baseline arm is the arm the instrument's header
+names as its baseline.
 
 A board cell is a run whose reading lands as a row of `../performance/records/<box>.json` or as a
 figure in `../PERF_LEDGER.md`.
@@ -35,13 +36,16 @@ environment the run measures) applies `../REVIEW_MEASUREMENT.md` too.**
 **Code that dispatches a GPU kernel to measure it rather than to serve a call, wherever the diff
 puts it, applies `../REVIEW_GPU_RACE.md` too.**
 
-**A diff that adds or changes the timed body of an instrument dispatching a `[tune]` kernel - one
-whose body the engine's tune selection picks, not one the instrument compiled itself or a
-reference tool's own runtime - calls `tune_gate()` (`../performance/profile_common.das`) before
-its first timed rep, or - where the instrument cannot require this module's
-performance tree - stamps its rows with the tune manifest (`DAS_TUNE_MANIFEST`) or the class
-profile (`../performance/defaults/<class>.tune-defaults.json`) the run compiled
-against.** Without the gate or the stamp the instrument measures fallback kernels silently.
+**A diff that adds or changes the timed body of an instrument dispatching a kernel whose form a
+tune sidecar (the `.tune.json` beside the file or the box's) or `DAS_TUNE_MANIFEST` picks calls
+`tune_gate()` (`../performance/profile_common.das`) before its first timed rep, or - where the
+instrument cannot require this module's performance tree - stamps its rows with the tune manifest
+(`DAS_TUNE_MANIFEST`) or the class profile (`../performance/defaults/<class>.tune-defaults.json`)
+the run compiled against.** Without the gate or the stamp the instrument measures fallback kernels
+silently.
+
+**A diff that adds a compared arm to an instrument, or changes a compared arm's run or report line,
+makes the instrument's header name the baseline arm and the compare region.**
 
 **A diff that adds or changes a race alternates its arms - one timed round per arm, best-of
 across rounds.**
@@ -50,23 +54,25 @@ across rounds.**
 on one row.**
 
 **A diff that adds a compared arm other than the baseline, or changes its run or report line,
-prints on that line the bit-exact compare over the sampled region (the output elements the run
-compares), on a `bit-exact vs ...` line, when the arm's result is bit-identical to the
-baseline's, or a bounded-difference compare against the baseline arm or the CPU reference plus
-the bound it passed.** How the arm orders its sums, and whether its multiply-adds fuse, decide
-bit-identity - not the declared precision.
+prints one compare on that line: `bit-exact vs <baseline>` when the arm's result over the compare
+region is bit-identical to the baseline's, otherwise a bounded-difference compare against the
+baseline arm or the CPU reference with the bound it passed.** How the arm orders its sums, and
+whether its multiply-adds fuse, decide bit-identity - not the declared precision.
+
+**A diff that adds a compared arm, or changes its run or report line, makes its row print no time
+when the arm misses its bound - only the miss and the bound.**
 
 **A diff that adds a race or an A/B with a compared arm, or changes its arms' runs or report
 lines, also checks its baseline arm against a CPU reference, and prints that compare on the
 baseline's report line, bit-exact or bounded with the bound it passed.** The reference check runs
-in the same process, on the same output elements the arms are judged on. Two arms can agree and
-both be wrong; only the reference makes the winner right.
+in the same process, over the compare region. Two arms can agree and both be wrong; only the
+reference makes the winner right.
 
 **A diff that adds a race arm that is not a compared arm, or changes its run or report line,
 makes that arm carry the literal token `timing-only` on its report line.**
 
-**A diff that adds a mode that times its arms without reading their outputs back and comparing
-them, or changes such a mode's arms, makes that mode carry the literal text `ATTRIBUTION SWEEP`
+**A diff that adds a mode none of whose arms it reads back and compares, or changes such a mode's
+arms, makes that mode carry the literal text `ATTRIBUTION SWEEP`
 on its own header-comment line, naming the mode and what its arms attribute.** A mode is one
 selectable run of the file, chosen by its own flag or argument; a file with none is one mode.
 Without the line a reader takes the mode's arms for an adoption decision it never made.
@@ -93,12 +99,14 @@ re-derives.
 what it times or that report line, also prints both of those times on that report line.** A
 plain elapsed-time row - one clock pair, no attribution across stages - is not a difference.
 
-**A diff that changes a GPU kernel emitter under this folder - a `[vk_dispatch]` or
-`[metal_kernel]` body or a `*_msl` source global - either ships before/after rows for a board
-cell or instrument that times the changed kernel, or names in the PR body the compare showing
-the emitted kernel code byte-identical before and after: the `*_msl` source text, the AIR it
-builds into, or the SPIR-V words `DASLLAMA_VK_SPV_DUMP` writes** (the engine's own emitters
-answer to `../REVIEW_GPU.md`).
+**A diff that adds a GPU kernel emitter under this folder - a `[vk_dispatch]` or `[metal_kernel]`
+body or a `*_msl` source global - ships rows for a board cell or instrument that times the
+kernel** (the engine's own emitters answer to `../REVIEW_GPU.md`).
+
+**A diff that changes a GPU kernel emitter under this folder either ships before/after rows for a
+board cell or instrument that times the kernel, or names in the PR body the compare showing the
+emitted kernel code byte-identical before and after: the `*_msl` source text, the AIR it builds
+into, or the SPIR-V words `DASLLAMA_VK_SPV_DUMP` writes.**
 
 **A diff that adds a result-row mode - one reporting rows that carry a time, a rate, or a
 per-kernel occupancy count - to an instrument, or changes how such a mode reports or exits, makes

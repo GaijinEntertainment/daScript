@@ -73,6 +73,8 @@ struct PendingReq {
     system_at : int64 = 0l                  //! prompt tokens of the conversation's opening every request on this system prompt and tool set shares (`ChatSession.first_opening`); a recurrent model's prefill leaves a second checkpoint there when it sits a page or more under `stable_at` (0 = unknown)
     system_head_at : int64 = 0l             //! the opening's tokens shared beyond this system prompt and tool set - its system text or its tool block, whichever the template writes first (`ChatSession.system_head_at`): a third checkpoint, a page or more under `system_at` (0 = unknown)
     messages_end_at : int64 = 0l            //! prompt tokens through the last message's close, ahead of the generation prompt (`RenderedTurn.messages_end`): the last checkpoint sits there, where the conversation's next turn still matches whatever its replayed assistant turn renders (0 = unknown; the prompt's end less one token stands in)
+    think_budget : int64 = 0l               //! reasoning tokens the reply may spend before the span is closed for it (0 = no budget)
+    think_marks : ThinkBudgetMarks = ThinkBudgetMarks()   //! the span's open and forced-close tokens (`think_budget_marks_`); an empty close leaves the budget inert
     // MEDIA splice (images today; audio rides the same fields): `n_media` embedding rows that
     // prefill BETWEEN prompt[media_at-1] and prompt[media_at] — the render seam hands the two
     // token spans and the encoder hands the rows. Zero rows = an ordinary text request.
@@ -103,6 +105,12 @@ struct Stream {
     max_new : int64
     n_gen : int64                           // tokens emitted so far
     cur_tok : int64 = -1l                   // sampled but not yet evaled — the next decode step's input
+    think_budget : int64 = 0l               //! the request's reasoning budget (0 = none)
+    think_marks : ThinkBudgetMarks = ThinkBudgetMarks()   //! the span's marks the budget acts on
+    n_think : int64                         //! reasoning tokens emitted so far
+    think_state : int = 0                   //! 0 = the span not opened, 1 = inside the span, 2 = past it (closed by the model or forced)
+    forced : array<int64>                   //! tokens the next steps emit in place of their samples - the budget's forced close
+    think_open_at : int = 0                 //! how many tokens of the span's open sequence the reply has written in a row
     state : StreamState = StreamState.prefilling
     finish : string = ""
     constraint : TokenConstraintBox         //! owned here (freed with the stream); the session carries the pointer and never frees it
@@ -519,6 +527,7 @@ def private advance_with(m : Model; var st : Stream; tok : int64; var events : a
         finish_stream(st, "stop", events)
         return false
     }
+    think_budget_track(st, tok)
     var emit = ptxt
     if (!empty(st.stop_strs) && stop_scan(st.stop_hold, ptxt, st.stop_strs, emit)) {
         if (!empty(emit)) {
@@ -551,8 +560,65 @@ def private advance_with(m : Model; var st : Stream; tok : int64; var events : a
     return true
 }
 
-def private sample_advance(m : Model; var st : Stream; var events : array<SchedEvent>) : bool =>
-    advance_with(m, st, sample(st.session, st.params), events)
+//! Where the emitted token stands against the reasoning budget: the span's open token enters it, every token inside it counts,
+//! the close token the model writes leaves it, and the budget reached inside it - or the length cap drawing closer than the
+//! forced close is long - queues the forced close for the steps that follow.
+[arch(at="../ARCHITECTURE_ENGINE_SERVING.md#think-budget")]
+def private think_budget_track(var st : Stream; tok : int64) {
+    return if (st.think_budget <= 0l || empty(st.think_marks.close) || st.think_state == 2)
+    if (st.think_state == 0) {
+        let nopen = length(st.think_marks.open)
+        return if (nopen == 0)
+        st.think_open_at = tok == st.think_marks.open[st.think_open_at] ? st.think_open_at + 1 : (tok == st.think_marks.open[0] ? 1 : 0)
+        if (st.think_open_at >= nopen) {
+            st.think_state = 1
+            st.think_open_at = 0
+        }
+        return
+    }
+    if (tok == st.think_marks.close_tok) {
+        st.think_state = 2
+        return
+    }
+    st.n_think ++
+    let left = st.max_new - st.n_gen - 1l   //! the steps after this token, which the length check has not counted yet
+    let nclose = long_length(st.think_marks.close)
+    if (st.n_think >= st.think_budget || left <= nclose) {
+        if (left >= nclose) {
+            st.forced := st.think_marks.close
+        } elif (left >= 1l) {
+            //! a cap too close for the whole close keeps its marker alone - the sentence and the blank line go, the span still ends
+            st.forced <- [st.think_marks.close_tok]
+        }
+        st.think_state = 2
+        think_budget_forced_log(st, left)
+    }
+}
+
+[cold_path]
+def private think_budget_forced_log(st : Stream; left : int64) {
+    let why = st.n_think >= st.think_budget ? "thinking budget of {st.think_budget} tokens reached" : "{left} tokens left under max_tokens"
+    to_log(LOG_INFO, "[stream {st.id}] {why}: the span's close is forced\n")
+}
+
+//! the step's token: the sample, or the next forced token where the budget queued a close - the sample is still drawn, so a
+//! device pick landed for the step is consumed and the sampler's state advances as on every other step
+[arch(at="../ARCHITECTURE_ENGINE_SERVING.md#think-budget")]
+def private sample_advance(m : Model; var st : Stream; var events : array<SchedEvent>) : bool {
+    let sampled = sample(st.session, st.params)
+    if (empty(st.forced)) {
+        return advance_with(m, st, sampled, events)
+    }
+    let tok = st.forced[0]
+    st.forced |> erase(0)
+    let alive = advance_with(m, st, tok, events)
+    if (empty(st.forced) && !empty(st.think_marks.reopen)) {
+        //! the forced close is out: from here a re-opened span ends the turn, as a marker after content does in instruct mode
+        st.nothink.ids := st.think_marks.reopen
+        st.nothink.content_seen = true
+    }
+    return alive
+}
 
 // one plain decode step over the gathered batch arrays (nothing when they are empty): the device pick
 // asked for an argmax stream with no constraint, then every row sampled and advanced
@@ -623,7 +689,9 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
                          close_toks <- sch.queue[0].close_toks, stop_ids <- sch.queue[0].stop_ids,
                          stop_strs <- sch.queue[0].stop_strs, nothink <- sch.queue[0].nothink,
                          spans <- sch.queue[0].spans, constraint <- sch.queue[0].constraint,
-                         max_new = sch.queue[0].max_new, t_admit = ref_time_ticks())
+                         max_new = sch.queue[0].max_new, t_admit = ref_time_ticks(),
+                         think_budget = sch.queue[0].think_budget, think_marks <- sch.queue[0].think_marks)
+        st.think_state = st.think_marks.opened ? 1 : 0
         if (sch.device_kv) {
             st.session <- create_device_session(m, gpu_device_session_dtype())
             let matched = parked_attach(sch, st.session, st.prompt)   // a model whose prefill cannot continue parks nothing, so nothing matches
@@ -725,8 +793,8 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
             finish_stream(sch.streams[i], "length", events)
             continue
         }
-        if (sch.mtp && sch.streams[i].constraint.constraint != null) {
-            continue   // a constrained stream decodes plain, after the speculative round (below)
+        if (sch.mtp && (sch.streams[i].constraint.constraint != null || !empty(sch.streams[i].forced))) {
+            continue   // a constrained stream, or one with a forced close pending, decodes plain, after the speculative round (below)
         }
         if (sch.mtp) {
             // self-spec tick: the stream trades its cross-stream batch row for up to two positions per
@@ -772,8 +840,8 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
         sch.batch_idx |> clear()
     }
     if (sch.mtp) {
-        for (i in range64(long_length(sch.streams))) {   // the constrained streams the round skipped: one plain step, round or no round
-            if (sch.streams[i].state == StreamState.decoding && sch.streams[i].constraint.constraint != null) {
+        for (i in range64(long_length(sch.streams))) {   // the constrained and forced-close streams the round skipped: one plain step, round or no round
+            if (sch.streams[i].state == StreamState.decoding && (sch.streams[i].constraint.constraint != null || !empty(sch.streams[i].forced))) {
                 sch.batch_rows |> push(unsafe(addr(sch.streams[i].session)))
                 sch.batch_toks |> push(sch.streams[i].cur_tok)
                 sch.batch_idx |> push(i)

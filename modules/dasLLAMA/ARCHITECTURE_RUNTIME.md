@@ -159,15 +159,15 @@ tools' existing config and status lines instead.
 
 ### The [hot_path] coverage model {#the-hot-path-coverage-model}
 
-`[hot_path]` sits at the REGION ENTRY - the `*_encode` / `*_decode` / step drivers - and its
-`[no_alloc]` / `[no_env]` / `[no_io]` contracts arm transitively down the call graph, so
-interior kernels stay bare. A new function needs the annotation itself only when no annotated
-entry reaches it: a new entry point carries it, and a new backend entry (kernel-backend
-override, batch donor) carries it too, because backends are also reached from un-annotated
-harness paths. Reused buffers take `@scratch`; debug and profiling legs take `[cold_path]`.
-The tokenizer encode/decode path is sanctioned UNCOVERED by the region contracts - its perf
-gate is the `--tok` scaling rows, whose instrument (the size-ladder ratio) catches what the
-contracts cannot.
+`[hot_path]` sits at the REGION ENTRY - the `*_encode` / `*_decode` / step drivers - and its `[no_alloc]` / `[no_env]` /
+`[no_io]` contracts arm transitively down the call graph, so interior kernels stay bare. A new function needs the annotation
+itself only when no annotated entry reaches it: a new entry point carries it, and a new backend entry (kernel-backend override,
+batch donor) carries it too, because backends are also reached from un-annotated harness paths. Reused buffers take
+`@scratch`; debug and profiling legs take `[cold_path]`. The tokenizer encode/decode path is sanctioned UNCOVERED by the
+region contracts - its perf gate is the `--tok` scaling rows, whose instrument (the size-ladder ratio) catches what the
+contracts cannot. So is the scheduler's tick (`scheduler_step` and its per-token `advance_with`): it builds its events array
+and stop-string tails a tick by design, so an entry contract would name its own mechanism; its perf gate is the served-turn
+instrument (`harness/served_bench.das`), and its one logging per-token branch - the budget's forced close - is a `[cold_path]` helper.
 
 ### The post-CPU-burn GPU ramp and the residency heartbeat {#the-post-cpu-burn-gpu-ramp-and}
 

@@ -96,6 +96,7 @@ Apple GPU backend. Absent on non-Apple builds, where setting them does nothing.
 | `DASLLAMA_METAL_ATTN_SINGLE` | number | 64 | Row count below which attention uses the single-chunk kernel; clamped to 128. |
 | `DASLLAMA_METAL_MULMM` | flag | on | The mul_mm prefill GEMM; 0 falls back to the legacy per-op path. |
 | `DASLLAMA_METAL_MM_TAIL` | flag | on | GEMV-tail prefill dispatch: npos % 32 in [1,8] peels the last M tile's real rows onto the fixed-B GEMV family instead of billing a full 32-row tile; 0 pins the padded-tile path (the A/B rail). |
+| `DASLLAMA_METAL_KQ_HALF` | flag | on | The K-quant rows sites (two to eight rows: the verify, the batch step, the prefill's short window) read x as the f16 twin the row producer stores beside it, for every format whose half-x route the box crowned (kq_rows_half_<fmt>); 0 keeps the f32 forms under every crown (the A/B rail). |
 | `DASLLAMA_METAL_QK_ROPE` | flag | on | Fused prefill qk_norm+rope pass (one panel rewrite, q panel dual-stores its f16 twin); 0 restores the split norm/rope/cvt dispatches (the A/B rail). |
 | `DASLLAMA_METAL_GRID1D` | flag | off | 1-D-grid tall hmm GEMM twin: the threadgroup launch order is forced linear (M-fastest) instead of the driver's 2-D walk; experiment rail, off by default. |
 | `DASLLAMA_METAL_LASTROW` | flag | on | Last-layer FFN tail narrowing: the final dense layer's FFN runs the last row alone (only the classifier reads past the final attention); 0 pins the full-panel tail (the A/B rail). Session keep_hidden opts a forward out. |

@@ -2386,7 +2386,7 @@ let CHAT_FIELDS : table<string> <- { "model", "messages", "stream", "temperature
                                      "presence_penalty", "frequency_penalty", "repeat_penalty", "seed",
                                      "max_tokens", "max_completion_tokens", "tools", "tool_choice",
                                      "enable_thinking", "chat_template_kwargs", "truncation", "stream_options",
-                                     "response_format", "stop", "reasoning_effort" }
+                                     "response_format", "stop", "reasoning_effort", "thinking_budget" }
 let COMPL_FIELDS : table<string> <- { "model", "prompt", "stream", "temperature", "top_k", "top_p", "min_p",
                                      "presence_penalty", "frequency_penalty", "repeat_penalty", "seed",
                                      "max_tokens", "stream_options", "stop" }
@@ -3054,9 +3054,10 @@ def private register_request(srv : FrontLink; writer : WriterRef;
                              var constraint : TokenConstraint? = null; system_at : int64 = 0l; system_head_at : int64 = 0l;
                              messages_end_at : int64 = 0l) {
     var no_types : table<string; table<string; string>>
+    var no_marks = ThinkBudgetMarks()
     register_request(srv, writer, prompt, stop_ids, close_toks, stop_strs, spans, params, max_new, streaming, is_chat, prefix,
                      tools_declared, call_open, call_close, seed, think, tool_mode, reuse_id, nothink, stable_at, include_usage,
-                     resumed, constraint, system_at, system_head_at, messages_end_at, no_types)
+                     resumed, constraint, system_at, system_head_at, messages_end_at, no_types, 0l, no_marks)
 }
 
 //! `register_request` with the declared tools' parameter types, what a Qwen3.5/3.6 reply's values are typed by
@@ -3072,7 +3073,7 @@ def private register_request(srv : FrontLink; writer : WriterRef;
                              var nothink : NothinkStopGuard; stable_at : int64;
                              include_usage : bool; resumed : bool;
                              var constraint : TokenConstraint?; system_at : int64; system_head_at : int64; messages_end_at : int64;
-                             var tool_types : table<string; table<string; string>>) {
+                             var tool_types : table<string; table<string; string>>; think_budget : int64; var think_marks : ThinkBudgetMarks) {
     if (bench_hold_active()) {
         unsafe {
             delete constraint
@@ -3092,7 +3093,8 @@ def private register_request(srv : FrontLink; writer : WriterRef;
     let cid = "{prefix}-{rid}"
     let created = created_ts()
     var preq <- PendingReq(id = rid, params = params, max_new = max_new, seed = seed, stable_at = stable_at, system_at = system_at, system_head_at = system_head_at,
-                           messages_end_at = messages_end_at)
+                           messages_end_at = messages_end_at, think_budget = think_budget)
+    preq.think_marks <- think_marks
     var encoded_rows = 0l
     for (sp in spans) {
         encoded_rows += empty(sp.rows) ? 0l : sp.n
@@ -3138,7 +3140,7 @@ def private render_chat_suffix(msgs_v : JsonValue?; system : string; tools : arr
                                var nothink_out : NothinkStopGuard&;
                                var call_open, call_close : string&; var think_out : ThinkStream&;
                                var tool_mode_out : ToolMode&; var stable_at : int64&; var system_at : int64&; var system_head_at : int64&;
-                               var messages_end_at : int64&) : string {
+                               var messages_end_at : int64&; var think_marks_out : ThinkBudgetMarks&) : string {
     var chat <- create_chat_renderer(cur_model(), system, max_new)
     defer() { delete chat }
     if (think_set) {   // absent from the request => the family's own default (gemma-4 E: off)
@@ -3271,6 +3273,7 @@ def private render_chat_suffix(msgs_v : JsonValue?; system : string; tools : arr
     call_open = chat.tmpl.tool_call_open
     call_close = chat.tmpl.tool_call_close
     think_out = make_think_stream(chat)   // armed per the family's reply format + effective thinking
+    think_marks_out <- think_budget_marks(cur_model(), chat)   // nolint:PERF030 — empty on entry, like stop_ids
     tool_mode_out = chat.tmpl.tool_mode
     return ""
 }
@@ -3604,6 +3607,21 @@ def private handle_chat_tail(srv : FrontLink; writer : WriterRef; js : JsonValue
         bad_request(srv, writer, "'reasoning_effort' is one of none, minimal, low, medium, high")
         return
     }
+    //! the reasoning budget: tokens a thinking reply may spend before the server closes its span for it (0 = none)
+    let tbv = js?["thinking_budget"]
+    var think_budget = 0l
+    if (tbv != null && !(tbv.value is _null)) {
+        var tbi = json_of_kind("i", tbv)
+        let tb = tbi != null ? tbi.value as _longint : -1l
+        unsafe {
+            delete tbi
+        }
+        if (tb < 0l) {
+            bad_request(srv, writer, "'thinking_budget' is a non-negative integer (0 = no budget)")
+            return
+        }
+        think_budget = tb
+    }
     // tri-state: an ABSENT enable_thinking leaves the family's own default in force (qwen thinks,
     // gemma-4 E doesn't); a present bool — either spelling — overrides it
     let tv = js?["enable_thinking"]
@@ -3627,11 +3645,13 @@ def private handle_chat_tail(srv : FrontLink; writer : WriterRef; js : JsonValue
     var system_at = 0l
     var system_head_at = 0l
     var messages_end_at = 0l
+    var think_marks = ThinkBudgetMarks()
+    defer() { delete think_marks }
     var start = 0
     while (true) {
         let render_error = render_chat_suffix(msgs_v, system, tools, max_new, start, think_set, think_val, preserve_think, effort,
                                               refs, prompt, stop_ids, close, nothink, call_open, call_close,
-                                              think_stream, wire_tool_mode, stable_at, system_at, system_head_at, messages_end_at)
+                                              think_stream, wire_tool_mode, stable_at, system_at, system_head_at, messages_end_at, think_marks)
         if (!empty(render_error)) {
             bad_request(srv, writer, render_error)
             return
@@ -3652,6 +3672,7 @@ def private handle_chat_tail(srv : FrontLink; writer : WriterRef; js : JsonValue
         delete stop_ids
         delete nothink
         delete close
+        delete think_marks
     }
     if (resume_rid != 0l && g_media_cover_probe && uncovered_media(prompt, refs)) {
         // a part this slot knows, under a prompt whose cached prefix stops short of it: the worker encodes it, and
@@ -3686,7 +3707,7 @@ def private handle_chat_tail(srv : FrontLink; writer : WriterRef; js : JsonValue
                      streaming, true, "chatcmpl",
                      has_tools, call_open, call_close, seed, think_stream, wire_tool_mode, resume_rid,
                      nothink, stable_at, wants_usage(js), resumed, constraint, system_at, system_head_at, messages_end_at,
-                     tool_param_types(tools))
+                     tool_param_types(tools), think_budget, think_marks)
 }
 
 //! Marks the refs that bring no rows and whose span the slot's prefix cache does not hold under `prompt`; true when

@@ -319,6 +319,9 @@ var g_pso_kq_iq4xs : MetalComputePipeline?
 var g_pso_kq_k3 : MetalComputePipeline?
 var g_pso_kq_mvb2_k4 : MetalComputePipeline?   // batch B=2..8: the kq ext small-batch mv twins
 var g_pso_kq_mvb2_k4r2 : MetalComputePipeline?   // the k4 twin's two-row register tile (the `kq_mvb2_k4_r2` crown)
+var g_pso_kq_mvw2h_k4 : MetalComputePipeline?   // the k4 wide forms over the f16 twin of x: the single-row GEMV's lane map over 2, 4 and 8 x columns
+var g_pso_kq_mvw4h_k4 : MetalComputePipeline?
+var g_pso_kq_mvw8h_k4 : MetalComputePipeline?
 var g_pso_kq_mvb4_k4 : MetalComputePipeline?
 var g_pso_kq_mvb2_k5 : MetalComputePipeline?
 var g_pso_kq_mvb4_k5 : MetalComputePipeline?
@@ -375,6 +378,42 @@ var g_pso_kq_mm_b25 : MetalComputePipeline?
 var g_pso_kq_mvb2_iq3xxs : MetalComputePipeline?
 var g_pso_kq_mvb4_iq3xxs : MetalComputePipeline?
 var g_pso_kq_mvb8_iq3xxs : MetalComputePipeline?
+var g_pso_kq_mvb2h_k5 : MetalComputePipeline?   // the small-batch forms' half-x stamps (the per-format `kq_rows_half_<fmt>` crowns; k4 rides the wide forms)
+var g_pso_kq_mvb4h_k5 : MetalComputePipeline?
+var g_pso_kq_mvb8h_k5 : MetalComputePipeline?
+var g_pso_kq_mvb2h_k6 : MetalComputePipeline?
+var g_pso_kq_mvb4h_k6 : MetalComputePipeline?
+var g_pso_kq_mvb8h_k6 : MetalComputePipeline?
+var g_pso_kq_mvb2h_iq4xs : MetalComputePipeline?
+var g_pso_kq_mvb4h_iq4xs : MetalComputePipeline?
+var g_pso_kq_mvb8h_iq4xs : MetalComputePipeline?
+var g_pso_kq_mvb2h_iq4nl : MetalComputePipeline?
+var g_pso_kq_mvb4h_iq4nl : MetalComputePipeline?
+var g_pso_kq_mvb8h_iq4nl : MetalComputePipeline?
+var g_pso_kq_mvb2h_q40 : MetalComputePipeline?
+var g_pso_kq_mvb4h_q40 : MetalComputePipeline?
+var g_pso_kq_mvb8h_q40 : MetalComputePipeline?
+var g_pso_kq_mvb2h_k3 : MetalComputePipeline?
+var g_pso_kq_mvb4h_k3 : MetalComputePipeline?
+var g_pso_kq_mvb8h_k3 : MetalComputePipeline?
+var g_pso_kq_mvb2h_iq3s : MetalComputePipeline?
+var g_pso_kq_mvb4h_iq3s : MetalComputePipeline?
+var g_pso_kq_mvb8h_iq3s : MetalComputePipeline?
+var g_pso_kq_mvb2h_iq3xxs : MetalComputePipeline?
+var g_pso_kq_mvb4h_iq3xxs : MetalComputePipeline?
+var g_pso_kq_mvb8h_iq3xxs : MetalComputePipeline?
+var g_pso_kq_mvb2h_k2 : MetalComputePipeline?
+var g_pso_kq_mvb4h_k2 : MetalComputePipeline?
+var g_pso_kq_mvb8h_k2 : MetalComputePipeline?
+var g_pso_kq_mvb2h_iq2s : MetalComputePipeline?
+var g_pso_kq_mvb4h_iq2s : MetalComputePipeline?
+var g_pso_kq_mvb8h_iq2s : MetalComputePipeline?
+var g_pso_kq_mvb2h_iq2xs : MetalComputePipeline?
+var g_pso_kq_mvb4h_iq2xs : MetalComputePipeline?
+var g_pso_kq_mvb8h_iq2xs : MetalComputePipeline?
+var g_pso_kq_mvb2h_iq2xxs : MetalComputePipeline?
+var g_pso_kq_mvb4h_iq2xxs : MetalComputePipeline?
+var g_pso_kq_mvb8h_iq2xxs : MetalComputePipeline?
 var g_pso_kq_mm_b34 : MetalComputePipeline?
 var g_pso_kq_mm_b4 : MetalComputePipeline?   // batch B>=9: the prefill-owned kq mul_mm twins
 var g_pso_kq_mm_b5 : MetalComputePipeline?
@@ -1081,7 +1120,7 @@ def kq_scales_of(dev : MetalDevice?; t : Model; fmt : KqFmt; off : int64) : tupl
 
 //! A superblock's packed d-tail bytes in a kq format's split scale plane: 0 for the compact formats (k4/k5/q40/iq4nl -
 //! one 16B block, no tail), 4 for k2 (d and dmin), 2 for every other format.
-def private kq_scale_d_tail(fmt : KqFmt) : int64 {
+def kq_scale_d_tail(fmt : KqFmt) : int64 {
     let compact = fmt == KqFmt.k4 || fmt == KqFmt.k5 || fmt == KqFmt.q40 || fmt == KqFmt.iq4nl
     return compact ? 0l : (fmt == KqFmt.k2 ? 4l : 2l)
 }
@@ -2611,7 +2650,7 @@ def race_uniform_u32(dev : MetalDevice?; v : uint) : MetalBuffer? => scalar_buff
 // deterministic 34B-interleaved q8_0 W blob for the races: int quants, pow2 f16 scales
 def race_q8_blob(nblk : int) : array<int8> {
     var blob : array<int8>
-    blob |> resize(nblk * 34)
+    blob |> reserve_resize(nblk * 34)
     for (blk in range(nblk)) {
         for (k in range(32)) {
             blob[blk * 34 + 2 + k] = int8((blk * 7 + k * 3) % 19 - 9)
@@ -2630,7 +2669,7 @@ def race_q8_blob(nblk : int) : array<int8> {
 // deterministic f32 activation panel for the races
 def race_x_f32(count : int) : array<float> {
     var xa : array<float>
-    xa |> resize(count)
+    xa |> reserve_resize(count)
     for (i in range(count)) {
         xa[i] = 0.25 * float(i % 17 - 8)
     }
@@ -2650,13 +2689,13 @@ enum KqRaceScaleForm {
 //! scales. Returns the quant buffer, the scale buffer and the d-tail byte offset the encoders bind.
 def race_kq_planes(dev : MetalDevice?; nblk, qu_per_sb : int; sform : KqRaceScaleForm) : tuple<bq : MetalBuffer?; bs : MetalBuffer?; doff : uint64> {
     var qplane : array<uint>
-    qplane |> resize(nblk * qu_per_sb)
+    qplane |> reserve_resize(nblk * qu_per_sb)
     for (i in range(nblk * qu_per_sb)) {
         qplane[i] = uint(i) * 2654435761u   //! deterministic pseudo-random bit pattern
     }
     var splane : array<uint8>
     let sbytes = sform == KqRaceScaleForm.split_d ? nblk * 18 : (sform == KqRaceScaleForm.split_dmin ? nblk * 20 : nblk * 16)
-    splane |> resize(sbytes)
+    splane |> reserve_resize(sbytes)
     if (sform == KqRaceScaleForm.split_d || sform == KqRaceScaleForm.split_dmin) {
         for (i in range(nblk * 16)) {
             splane[i] = uint8(2)
@@ -2684,8 +2723,8 @@ def race_kq_planes(dev : MetalDevice?; nblk, qu_per_sb : int; sform : KqRaceScal
             }
         }
         for (b in range(nblk)) {
-            for (kx in range(4, 12)) {
-                splane[b * 16 + kx] = uint8(17)   //! kmask bytes: small scales, both halves
+            for (kx in range(4, 16)) {
+                splane[b * 16 + kx] = uint8(17)   //! every kmask byte: small scales and mins in both halves - the last four carry sub-blocks 4-7's low nibbles, left zero they decode to nothing and a wrong high-half read passes
             }
         }
     }
@@ -2700,7 +2739,7 @@ def race_kq_planes(dev : MetalDevice?; nblk, qu_per_sb : int; sform : KqRaceScal
 // deterministic f16 panel — the f16-slab races (attention scores) feed and compare in half
 def race_x_f16(count : int) : array<float16> {
     var xa : array<float16>
-    xa |> resize(count)
+    xa |> reserve_resize(count)
     for (i in range(count)) {
         xa[i] = float16(0.25 * float(i % 17 - 8))
     }

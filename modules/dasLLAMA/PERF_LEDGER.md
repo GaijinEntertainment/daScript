@@ -11,6 +11,390 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **MEASURED (2026-10-09) - the gathered route against the tiles, and the K-quant tail peel against the tile, each an
+  interleaved A/B in one process on the M1 Max.** `benchmarks/prefill_window_probe.das --ab`: medians of 4 reps an arm, the
+  arms alternating after one warmup rep of A, every window appended in sequence past the warm prefix, the figures the Metal
+  driver's GPU timestamps; `DAS_TUNE_MANIFEST=modules/dasLLAMA/performance/m1.tune.json bin/daslang -jit
+  modules/dasLLAMA/benchmarks/prefill_window_probe.das -- -m <gguf> --prefix <P> -r 4 --ab <knee|tail> --windows <list>`,
+  `DAS_TUNE_POLICY` unset, Metal on the M1 Max (MacBookPro18,2, 64 GB). The knee A/B on Qwen3.6-35B-A3B-MTP Q4_K-pure, prefix
+  4500: A = the gathered route (`set_metal_moe_gemv_max(512)`), B = the tiles (`set_metal_moe_gemv_max(0)`), GPU ms a window:
+
+  | window | route | tiles | route / tiles |
+  |---|---|---|---|
+  | 2 | 22.7 | 34.3 | 0.66 |
+  | 4 | 28.0 | 43.3 | 0.65 |
+  | 8 | 43.1 | 60.4 | 0.71 |
+  | 12 | 57.3 | 77.4 | 0.74 |
+  | 16 | 66.4 | 84.3 | 0.79 |
+  | 24 | 84.5 | 97.6 | 0.87 |
+  | 32 | 102.4 | 109.3 | 0.94 |
+
+  On the M1 the route wins through 32 rows (the decode step at that position 11.9 ms). The same A/B on the M5 Max (the
+  box's own sidecar `~/Work/daScript/modules/dasLLAMA/performance/m5.tune.json` as `DAS_TUNE_MANIFEST`, `-no-module-cache`,
+  a whisper `dasllama-server` idle on the GPU) on the IQ4_XS-pure file of the same model, the decode step 6.5 ms:
+
+  | window | route | tiles | route / tiles |
+  |---|---|---|---|
+  | 2 | 9.6 | 13.0 | 0.73 |
+  | 4 | 11.3 | 16.2 | 0.70 |
+  | 8 | 16.3 | 23.3 | 0.70 |
+  | 12 | 22.7 | 31.3 | 0.73 |
+  | 16 | 25.4 | 33.9 | 0.75 |
+  | 24 | 31.1 | 39.1 | 0.79 |
+  | 32 | 36.7 | 42.7 | 0.86 |
+
+  The shipped knee of 16 (`pf_moe_gemv_knee`) is the value every carrier wins at on both boxes - the M5 sweep of the
+  2026-10-09 knee entry below loses at 32 on nine of eleven carriers, the 35B hybrids among the two that win - and this race
+  brackets it at 12 and 24. The tail A/B on the dense Qwen3.6-27B-MTP Q4_K_M, prefix 2000: A = the K-quant tail peel on
+  (`set_metal_prefill_mm_tail(true)`), B = off, GPU ms a window, the M1 Max then the M5 Max under the same flags:
+
+  | window | M1 peel | M1 tile | peel / tile | M5 peel | M5 tile | peel / tile |
+  |---|---|---|---|---|---|---|
+  | 2 | 82.0 | 275.3 | 0.30 | 38.2 | 95.9 | 0.40 |
+  | 3 | 102.1 | 275.2 | 0.37 | 42.2 | 96.3 | 0.44 |
+  | 4 | 106.0 | 275.7 | 0.38 | 41.8 | 95.9 | 0.44 |
+  | 5 | 175.9 | 276.1 | 0.64 | 73.3 | 96.3 | 0.76 |
+  | 8 | 181.7 | 277.0 | 0.66 | 73.5 | 95.9 | 0.77 |
+
+  The tile costs the same whatever the window holds - one 32-row tile a site, 275-277 ms on the M1, 96 on the M5 - and the
+  peel steps with the GEMV form it takes (the two-row form at 2, the four-row at 3-4, the eight-row at 5-8); the decode step
+  at that position is 62.9 ms on the M1 and 35.6 on the M5, so a two-token window on the peel is 1.3 (M1) or 1.1 (M5) decode
+  steps against the tile's 4.4 or 2.7.
+
+- **MEASURED (2026-10-09, `direction-grade`, `debug-jit`) - where a Qwen3.6-35B-A3B decode step's GPU time goes on the M1
+  Max: the routed expert GEMVs are 1.9 ms of a 10.6 ms step, at the memory wall.** This entry replaces the 2026-10-06
+  equal-bytes entry's reading that the q8 kernel's shape is the difference between the 4-bit and the q8 files, and its
+  citation of `followup_metal.md` 45 (the row is deleted; its successor is row 52). M1 Max (MacBookPro18,2, 64 GB), Metal,
+  one stream, the pure IQ4_XS file of the 2026-10-06 entry; `benchmarks/lcpp_bench.das` as the `-jit` script, `-m <gguf>
+  --ngl 99 -n 64 -r 2 --mtp-ab --prof --for-debug-purposes` under `DAS_TUNE_MANIFEST=modules/dasLLAMA/performance/m1.tune.json`
+  and `DAS_LOG_LEVEL=info` (the decode driver's stage report is `LOG_INFO`), `DAS_TUNE_POLICY` unset, decode = the tg-real64
+  row, MTP off. The step's stage report: setup 5 us, encode 578 us, wait 11047 us of which the GPU is busy 10638 us, readback
+  9 us - GPU-bound, 10.6 ms of GPU time a token. The knockout (the decode driver's `moe_rt` stage drop, which skips the
+  routed expert GEMVs and leaves the router and the select live; its output is garbage, so the arm is timing-only) reads
+  100.7 tok/s against the full step's 84.4 (3 reps each, interleaved in one process): the expert GEMVs are 1.9 ms of the
+  step for about 0.8 GB of expert bytes a token, 420 GB/s - the M1 Max's wall - and an infinitely fast 4-bit expert kernel
+  would gain 19 % at most. The other 8.7 ms move about 0.7 GB (the attention-side and deltanet projections, the 248k x 2048
+  classifier, the router, the norms and the recurrence kernels) at about 80 GB/s through some 600 dispatches a token with
+  their gaps. The 2026-10-06 entry's 160 GB/s is the end-to-end average over the whole step, not the expert kernel's rate.
+
+- **MEASURED (2026-10-09, `direction-grade`) - the K-quant MoE twins against the base form they were gated behind, and the
+  pick that came of it, on the M1 Max and the M5 Max.** The kq-scaffold twins (k4, k5, k6; q5_1 and iq4nl32 under k4's
+  verdict) compiled only where the DENSE `kq_mulmm_k*` crown stood, so on the M1 (its sidecar carries none) every routed
+  K-quant expert site ran the simdgroup `metal_moe_mulmm_k4` form and the adaptive op never reached it: the house replay
+  on the Q4_K-pure 35B read the same before and after ADAPT shipped (`external`, `out-of-process`: the house assistant's
+  recorded 124 requests replayed by its out-of-tree harness against `dasllama-server --ctx 32768 --streams 4` on this box,
+  two passes, the warm one scored by its scorer; the 112 short answers of 64 completion tokens or fewer: wall 0.90 -> 0.92 s,
+  first token 0.75 -> 0.75, the windows' GPU sum 679 -> 682 ms off the server log). The tile lab's `base` arm
+  (`bin/daslang -jit modules/dasLLAMA/benchmarks/matmul/bench_metal_moe_tile_lab.das`, no model, `DAS_TUNE_POLICY` unset,
+  the M5 under `DAS_TUNE_MANIFEST=modules/dasLLAMA/performance/m5.tune.json`; the production builder `pf_enc_moe_mm_k4_c`,
+  f32 x and the identity bucket map, the same planes and patterns as the twin arms):
+
+  | box | rows an expert | base form | twin + adaptive op | twin / base |
+  |---|---|---|---|---|
+  | M1 Max | 4 / 8-16 / 32 | 2.38 / 2.38 / 2.38 ms (63 GB/s) | 1.42 / 1.80 / 2.76 | 0.59 / 0.76 / 1.16 |
+  | M5 Max | 4 / 8-16 / 32 | 1.31 / 1.31 / 1.31 ms (115 GB/s) | 0.40 / 0.42 / 0.49 | 0.31 / 0.32 / 0.38 |
+
+  Bit-equal on every live element. The base form is flat in live rows like the fixed tile was; on the M5 the twin wins
+  everywhere, on the M1 it wins the house shape and loses whole tiles by 16%, which one crown cannot carry - so the
+  twins now compile behind the toolchain probe, each family races its own MoE-shaped `moe_mulmm_k4/k5/k6` (128 experts of a
+  1024 x 2048 plane, past the cache; one whole-tile region and one of twelve rows an expert, the outputs compared on the
+  whole-tile region) for the crown, and an uncrowned box takes the twin per dispatch at or under a mean of 16 rows an
+  expert (`set_metal_moe_kq_twin_avg`, `ARCHITECTURE_GPU_PREFILL_MOE.md#prefill-moe-kq-twin-pick`). The races on the two boxes
+  (the read-only race, `DAS_LOG_LEVEL=info`): M1 the base form wins all three (k4 0.115 vs 0.131 ms, k5 0.130 vs 0.143,
+  k6 0.125 vs 0.141, the four-expert shape before this entry's race resize), M5 the twin wins all three (k4 0.067 vs 0.042,
+  k5 0.070 vs 0.045, k6 0.068 vs 0.046); both sidecars carry the verdicts. End to end on the M1 under its sidecar
+  (`DAS_TUNE_MANIFEST=modules/dasLLAMA/performance/m1.tune.json bin/daslang -jit modules/dasLLAMA/benchmarks/prefill_window_probe.das
+  -- -m <Q4_K-pure> --prefix 4500 --windows 375 --kprof 375`, `DAS_TUNE_POLICY` unset, medians of 3 after the warmup rep),
+  the Q4_K-pure 375-token window: 483 -> 461 ms, the k4 expert twins now `MetalMoeMulMmK4TH` at 218 ms of kernel time
+  against the base form's 229 - less than the lab's 0.76 because the real routing is skewed, and an expert past sixteen
+  rows pays the whole op. The house replay on the IQ4_XS-pure 35B (the format the house serves; its twins compile behind
+  the probe on every box) on the M1, the warm pass (`external`, `out-of-process`, the same harness): wall 0.85 s, first
+  token 0.71, the windows' GPU sum 648 ms, 130 ms of it (31%) the windows past each request's largest - the checkpoint
+  split (`followup_metal.md` 51); no pre-ADAPT replay of this file exists, the window probe's 554 -> 487 ms is its A/B.
+
+- **MEASURED (2026-10-09, `direction-grade`, `external`, `out-of-process`) - where a short house reply's first token goes on
+  the server, M1 Max, the 35B Q4_K-pure.** The house replay's server log (`DAS_LOG_LEVEL=info`, the server's own per-window
+  and per-stream lines) beside the client's results (the house assistant's recorded 124 requests, its out-of-tree harness
+  and scorer, two passes, the warm one), read by an out-of-tree timeline script into a per-request timeline: the prefill
+  windows the server ran with their GPU ms, the server's prefill-done and ttft, the client's first token; the 114 short
+  replies (64 completion tokens or fewer), medians: 374 uncached prompt tokens, prefilled in TWO windows (108 of 114 in
+  two or more), the windows' GPU time summed 679 ms, prefill done 696 ms, the server's ttft 696 ms, the client's first
+  token 752 ms. So the request's CPU side is 15 ms (prefill done less the windows' GPU time; p90 36) and the wire 12 ms
+  (client first token less server ttft; p90 582 where a request queued) - the gap above a single window's compute is
+  the WINDOW SPLIT, not the CPU: the prefill stops at every planned prefix checkpoint (the stable opening, the system
+  text) and runs the rest as its own window, and the windows past each request's largest cost a median 166 ms, 32% of
+  the short requests' window time (a 51-token window 178-191 ms, a 7-token one 40, a 16-token one 66, against the
+  300-token one at 1.4-1.5 ms a token). Sixteen tokens and fewer ride the gathered route (40-66 ms); seventeen to a few
+  hundred ride the tiles, where every populated expert pays a tile whatever its rows - the adaptive op above cuts that
+  tile; the split itself is `followup_metal.md` 51.
+
+- **MEASURED (2026-10-09, `direction-grade`; the mlx-lm columns `external`) - mlx-lm 0.32.0 on the house window, beside
+  ours, on the M1 Max and the M5 Max.** `mlx-community/Qwen3.6-35B-A3B-4bit` (affine 4-bit, group 64) under mlx 0.32.3, the
+  recipe `ARCHITECTURE_MEASUREMENT.md#mlx-window-recipe` (`python modules/dasLLAMA/harness/mlx_window_profile.py --prefix 4500
+  --window 375`): a 4500-token prompt cache in 512-token chunks, then the 375-token window timed as served (`mx.eval` of the
+  logits and the cache state, the cache restored between reps, median of four after a warmup), then the same window with
+  every module class's call forced to evaluate for a per-class exclusive breakdown (the forced pass reads 925.8 ms on the M1
+  and 269.1 on the M5 against 659 and 113 served - the sync a call and the lost overlap - so the shares are the attribution,
+  the served figure the cost; the class times in ms: M1 `QuantizedLinear` 431.6, `QuantizedSwitchLinear` 314.6, the two norm
+  classes 93.4, `Conv1d` 11.5; M5 116.3, 73.8, 32.7, 6.1). Ours is the same window under the adaptive expert tile, the
+  IQ4_XS-pure file, the box sidecar (the M5 its real one), the window probe's `--kprof` report.
+
+  | | M1 Max ours | M1 Max mlx-lm | M5 Max ours | M5 Max mlx-lm |
+  |---|---|---|---|---|
+  | 375-token window as served | 487 ms | 659 ms | 102 ms | 113 ms |
+  | dense projections (deltanet qkv / z / out, attention qkv / o, router, shared expert) | 149 ms, 31% | 47% (`QuantizedLinear`, 391 calls) | 23 ms, 22% | 43% |
+  | expert GEMMs | 232 ms, 48% | 34% (`QuantizedSwitchLinear`, 120 calls) | 49 ms, 48% | 27% |
+  | norms | ~3 ms | 10% (`RMSNorm` + the gated norm) | ~2 ms | 12% |
+  | MoE glue (sort, gather, act, scatter) | 13 ms | 6% | 8 ms | 10% |
+  | attention | 66 ms, 14% | inside the dense share (10 layers, 115 ms inclusive on the M1) | 8.5 ms | inside the dense share |
+  | deltanet (conv, scan) | 28 ms, 6% | 2% (`Conv1d` 11 ms; the scan rides the kernel the norm calls) | 9 ms | 4% |
+  | 4500-token prefix | - | 7.1 s (630 tok/s) | - | 1.18 s (3800 tok/s) |
+
+  The reading: on this shape ours is the faster window on both boxes (M1 by 26%, M5 by 10%), and the shapes differ -
+  mlx-lm's dense 4-bit `QuantizedLinear` GEMMs are its largest cost (scaled, ~310 ms on the M1 against our 149 for the
+  same sites on f16 dev-W panels), its expert GEMMs about ours (~225 scaled against our 232), and its norms are ten times
+  ours. End to end on the same M1 (`external`, `out-of-process`: the house replay against each server, two passes, the warm
+  one): mlx-lm's short replies at a first token of 0.92-0.94 s and a wall of 1.15-1.19, ours 0.74-0.75 and 0.90. Both servers
+  sit ~260 ms above their window compute on a short reply (ours 0.75 against a 0.49 window) - the entry above reads where. The
+  house's M4 Pro reading (`external`: the house assistant's own run on its M4 Pro, ours 46 against mlx 78 tok/s on short
+  replies, reported, not reproduced here) is not explained by the window compute on either box here; that box runs
+  uncrowned unless its first start minted a profile (the M5 under a copied profile read 121 against 107 under its own).
+
+- **MEASURED (2026-10-09, `direction-grade`) - what a routed 32-row tile costs and where, and the adaptive tensor op that
+  came of it, on the M1 Max and the M5 Max.** The house's short reply is a ~375-token window over 256 experts at top-8,
+  twelve live rows an expert in a 32-row tile, and the window probe (`prefill_window_probe --prefix 4500 --windows 375
+  --kprof 375`, the 35B IQ4_XS-pure) read the expert GEMMs at 298 of 554 ms on the M1 and 55 of 107 on the M5 (its real
+  sidecar; 121 under the lcpp copy, whose attention ran the plain form) - flat in live rows: the same kernels read 244 ms
+  at 4 rows an expert (128 tokens) and 298 at 12. `benchmarks/matmul/bench_metal_moe_tile_lab.das` (no model; the M1 with
+  no sidecar read, the M5 under `DAS_TUNE_MANIFEST=modules/dasLLAMA/performance/m5.tune.json`, `DAS_TUNE_POLICY` unset;
+  128 experts of a 1024 x 2048 plane, 146 MB past the SLC, the production builder's binds and grid, every dispatch its own
+  output, four arms alternating, best of three; ms a dispatch):
+
+  | box | format | rows an expert | fixed 32-row tile | staging alone | tensor op alone | adaptive op | adaptive / fixed |
+  |---|---|---|---|---|---|---|---|
+  | M1 Max | iq4xs | 4 / 12 / 32 | 2.97 / 2.96 / 2.97 | 1.00 | 2.18 | 1.68 / 2.03 / 2.98 | 0.57 / 0.69 / 1.00 |
+  | M1 Max | k4 | 4 / 12 / 32 | 2.76 / 2.76 / 2.76 | 0.80 | 2.11 | 1.42 / 1.80 / 2.77 | 0.51 / 0.65 / 1.00 |
+  | M5 Max | iq4xs | 4 / 12 / 32 | 0.52 / 0.52 / 0.52 | 0.33 | 0.17 / 0.18 / 0.29 | 0.43 / 0.45 / 0.52 | 0.82 / 0.86 / 1.00 |
+  | M5 Max | k4 | 4 / 12 / 32 | 0.49 / 0.49 / 0.49 | 0.31 | 0.16 / 0.17 / 0.29 | 0.40 / 0.42 / 0.49 | 0.82 / 0.86 / 1.00 |
+
+  The tile's cost does not move with its live rows. On the M1 it is the 32-row tensor op (three quarters of the tile;
+  the staging a third, the two overlapping), so an op sized to the live rows - eight for one to eight, sixteen for nine
+  to sixteen, the `ADAPT` template constant of both MoE scaffolds, now the shipped default - takes a third off the house
+  tile; on the M5 it is the staging (two thirds, ~450 GB/s over the planes, near the box's memory), so the adaptive op
+  takes 14-18% and the staging is the next lever there. The adaptive op is bit-equal to the fixed tile on every live
+  element in every cell (the op's per-element sums are the same at any height), and a 32-row expert pays nothing. End to
+  end the M1 house window read 554 -> 487 ms, its expert kernels 298 -> 232 (real routing leaves some experts past
+  sixteen rows, so the window takes less than the lab's 0.69). The reading on the same window in the Q4_K-pure 35B:
+  483 ms, its expert kernels 229 (the base `metal_moe_mulmm_k4` form, the M1 carrying no twin crown) - 13% under the
+  IQ4_XS window's pre-adaptive 554 ms, 1% under its adaptive 487.
+
+- **REFERENCE (2026-10-09) - the prefill expert GEMM's shape in llama.cpp and MLX, read from their sources (external:
+  llama.cpp 98c4764b6 `ggml/src/ggml-metal`, MLX 77bf1fa `mlx/backend/metal`, mlx-lm 0.32.0).** Ours: a 32-row tile of four
+  simdgroups (128 threads), W dequantized into threadgroup memory 64 x 64 a K chunk under two barriers, x streamed from
+  device, `npos / 32` tiles launched an expert with the empty ones exiting. llama.cpp (`kernel_mul_mm_id`, taken from 32
+  tokens total, below that one GEMV a (token, slot)): a 64 x 32 x 32 tile of four simdgroups, tiles over every token an
+  expert with an exit past the expert's count (our launch shape), x gathered through `ids` and converted into threadgroup
+  memory, a partial tile computing the full MMA with the write-out clipped, two barriers a K=32 step, no double buffer.
+  MLX (mlx-lm `SwitchGLU`, from 64 routed entries: argsort by expert, x gathered contiguous in expert order,
+  `gather_qmm_rhs` once the mean rows an expert pass 4): a TIGHT grid - one padded tile run an expert, `ceil(M / bm) + E - 1`
+  tiles in all, each expert padded to the next `bm` alone, the tile found by a prefix sum over the experts' offsets; the
+  non-NAX tile (M1 to M4 class) is 16 rows x 32 cols x 32 K on TWO simdgroups (64 threads), x and W both staged into
+  threadgroup memory, two barriers a step, no double buffer, a 12-row expert padded to 16; the NAX tile (M5 class) is 32
+  rows (64 past a mean of 64 an expert) x 64 x 64 on four simdgroups of 16 x 32, W alone staged, x read device to
+  registers, and a simdgroup with no live rows skips its MMA, so a 12-row expert runs two of its four simdgroups. Neither
+  engine double-buffers the staging. The reading: against ours MLX's levers are the 16-row two-simdgroup tile on the
+  non-NAX boxes, the tight grid, and the live-row skip on NAX - not the staging pattern.
+
+- **MEASURED (2026-10-09, `direction-grade`) - every K-quant format's half-x rows route under its own
+  `kq_rows_half_<fmt>` crown, on the M1 Max and the M5 Max; the house replay and the short-answer bench on the 35B.**
+  The per-format race (`race_kq_half`, the last of the decode races: a 5120 x 16384 plane of the format, two, four and
+  eight rows in one timed encoder, the box's f32 route the base, the half route - k4's wide forms, every other format's
+  small-batch half stamps off one x mixin - the twin; both arms bit-equal, x on the f16 lattice; the kernels suite's
+  `test_kq_rows_race_verdicts` log: `bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite kernels --arm kernels`,
+  no model, the box sidecar through the runner's `DAS_TUNE_MANIFEST`). The twins a step acquires for the route are
+  `bxh = max(mp, 8) * max(dim, qd_max) * 2` and `bfgh = max(mp, 8) * hid_max * 2` bytes (Llama-3.2-1B at eight rows 32 KB and
+  128 KB, Qwen3.6-27B 80 KB and 272 KB), pooled and released with the step. The half route wins every format on both
+  boxes; the gain follows the format's decode cost - the k4 nibble halves its time on the M1, the LUT grids (iq4xs,
+  iq4nl) move a few percent:
+
+  | format | M1 f32 ms | M1 half ms | ratio | M5 f32 ms | M5 half ms | ratio |
+  |---|---|---|---|---|---|---|
+  | k4 (wide forms) | 3.378 | 1.829 | 0.54 | 1.013 | 0.724 | 0.71 |
+  | k5 | 3.309 | 2.989 | 0.90 | 1.273 | 1.190 | 0.93 |
+  | k6 | 3.027 | 2.457 | 0.81 | 1.078 | 0.988 | 0.92 |
+  | iq4xs | 3.768 | 3.577 | 0.95 | 1.161 | 1.125 | 0.97 |
+  | iq4nl | 3.734 | 3.544 | 0.95 | 1.142 | 1.119 | 0.98 |
+  | q40 | 3.052 | 2.503 | 0.82 | 0.865 | 0.805 | 0.93 |
+  | k3 | 2.946 | 2.438 | 0.83 | 0.949 | 0.883 | 0.93 |
+  | iq3s | 3.647 | 2.839 | 0.78 | 0.976 | 0.918 | 0.94 |
+  | iq3xxs | 3.515 | 2.880 | 0.82 | 0.934 | 0.878 | 0.94 |
+  | k2 | 2.822 | 2.425 | 0.86 | 0.907 | 0.842 | 0.93 |
+  | iq2s | 4.186 | 3.262 | 0.78 | 0.972 | 0.890 | 0.92 |
+  | iq2xs | 3.481 | 2.986 | 0.86 | 0.968 | 0.912 | 0.94 |
+  | iq2xxs | 3.520 | 2.880 | 0.82 | 0.917 | 0.870 | 0.95 |
+
+  The house assistant's recorded 124 requests replayed against `dasllama-server --ctx 32768 --streams 4` (`external`,
+  `out-of-process`: its out-of-tree harness and scorer; two passes, the warm one read; `DASLLAMA_METAL_KQ_HALF` on / off /
+  on, a fresh server each): the k4 crown moves nothing
+  and nothing regresses - M1 Max, Qwen3.6-35B-A3B Q4_K-pure, the 112 short replies (64 completion tokens or fewer) at a
+  wall median of 0.91 / 0.93 / 0.93 s and a first token of 0.74 / 0.78 / 0.80 s, 91% of the prompt tokens cached, 21 of
+  22 overheard cases silent on every leg; M5 Max, the UD-Q4_K_M file, 0.40 / 0.41 / 0.43 s and 0.30 / 0.29 / 0.30 s. The
+  short-answer bench (the same requests, each phase on a fresh server so a request meets the cache the house flow gives
+  it - a median of 375 uncached prompt tokens): alone, M1 0.94 / 0.93 / 0.95 s wall (first token 0.75 s), M5 0.36 /
+  0.38 / 0.39 s (0.26 s); two consecutive requests sent at once take 0.94-0.97 of the two alone summed on both boxes -
+  no gain, and the second request of a pair misses the first one's prefix (510 uncached tokens a request). A short
+  house reply is a 375-token MoE prefill at 20-60 rows per expert - the tiles' latency regime - plus a few single-row
+  decode steps; the rows forms serve neither. Fully cached repeats of the same set gain x1.3 from pairing on the M5, so
+  the two-row decode step itself batches well.
+
+- **MEASURED (2026-10-09, `direction-grade`) - the k4 half-x rows forms served under the `kq_rows_half_k4` crown, on
+  the M1 Max and the M5 Max.** The crown race is the k4 row of the table above (`race_kq_half`, 5120 x 16384, two, four
+  and eight rows in one encoder, the box's f32 route the base): M1 Max 3.378 -> 1.829 ms (the half forms at 0.54 of the
+  f32 route), M5 Max 1.013 -> 0.724 (0.71); both arms bit-equal (x on the f16 lattice). End to end on
+  Qwen3.6-27B-MTP Q4_K_M (a deltanet hybrid, 65 layers, dim 5120, FFN 17408), `DASLLAMA_METAL_KQ_HALF=1` against `=0`
+  under the crown, medians of three after a warmup rep (`benchmarks/prefill_window_probe.das -m <27B> --windows 2,3,4,8
+  -r 4`, GPU ms of the short window after a 2000-token prefix); the single-row decode step is untouched (M1 62.9 / 62.7
+  ms, M5 35.7 / 35.6 ms):
+
+  | box | window rows | half x | f32 x | ratio |
+  |---|---|---|---|---|
+  | M1 Max | 2 | 83.0 ms | 92.6 ms | 0.90 |
+  | M1 Max | 3 | 110.1 | 132.4 | 0.83 |
+  | M1 Max | 4 | 112.6 | 150.9 | 0.75 |
+  | M1 Max | 8 | 183.3 | 280.1 | 0.65 |
+  | M5 Max | 2 | 40.3 | 40.3 | 1.00 |
+  | M5 Max | 3 | 46.3 | 52.4 | 0.88 |
+  | M5 Max | 4 | 45.1 | 50.5 | 0.89 |
+  | M5 Max | 8 | 75.6 | 93.4 | 0.81 |
+
+  The MTP verify rows (`lcpp_bench --mtp-ab --mtp-depth 2 -r 3`, eight real prompts, three verify rows a round, 68-69%
+  of the drafts accepted on both boxes and both arms): the on arm M1 14.73 -> 17.13 tok/s against an off arm of 15.70
+  on both (speculation at depth 2 turned from a loss, x0.94, into a gain, x1.09); M5 26.66 -> 31.39 against 25.35 /
+  25.73 off (x1.05 -> x1.22); the 50%-acceptance prompt lost under the f32 forms on both boxes (x0.79 M1, x0.89 M5)
+  and holds its own under the half forms (x0.92, x1.02). The two-stream row (`--npl 2 -p 32 -n 128 -r 3`): on the dense
+  Llama-3.2-3B Q4_K_M, M1, rail off / on / off interleaved, tg128@2 summed 150.0 / 166.4 / 149.9 tok/s (+11%); on the
+  27B hybrid the M1 row did not move (22.52 -> 22.68 summed) - its recurrent layers' projections ride the q8 rows GEMV,
+  not the K-quant sites, so the two-row step's bytes sit mostly off the forms this crown reaches; the M5 27B row read
+  47.47 / 48.83 / 43.57 summed off / on / off (the last at cv 7%, void; a first cold pair had read 38.58 -> 47.61 with
+  the solo row moving the same way - a clock artifact, the window probe's decode step unmoved), so neither box moves
+  the hybrid's two-stream row. The kernel cells (`test_metal_kq_k4_half_forms`, every row count the dispatcher
+  serves; `tests/run.das -- --suite kernels --arm kernels`) and the rows parity cell (`test_metal_decode_parity.das`,
+  `batchB8-kq`'s half-x leg, reached through `tests/run.das -- --suite decode --arm batch`: B=2/3/8 token for token
+  the CPU control under the pinned crown, the three forms' dispatch counts and the batched driver's step count the
+  witnesses, the rail off as the control) pass on the M1.
+
+- **MEASURED (2026-10-09, `direction-grade`) - the K-quant small-batch GEMV forms against B single-row passes, on
+  the M1 Max and the M5 Max.** `benchmarks/matmul/bench_metal_kq_race.das --fmts k4 --shapes 27b --tiers
+  gemv,mvb,mvb4,mvb8` (k4 planes at Qwen3.6-27B's three dense shapes; `passes` = B dispatches of the production
+  single-row GEMV, x and y stepping a column each; `prod` = the production B-column form, `r2` the k4 register tile,
+  `wide` = the single-row GEMV's lane map over B columns, `wideh` the same reading x as halves; best of three rounds of
+  50 dispatches after a 300 ms burn; the M5 rows under its box sidecar's crowns). GB/s is the weight stream; the
+  cost column is the form's time in single-row passes.
+
+  | box | shape | single pass | B | passes | prod | r2 | wide | wideh |
+  |---|---|---|---|---|---|---|---|---|
+  | M1 Max | w13 (5120 x 17408) | 162 us, 309 GB/s | 2 | 2.00 | 1.66 | 1.55 | 1.77 | 1.26 |
+  | M1 Max | w13 | | 4 | 4.00 | 2.88 | - | 3.37 | 1.80 |
+  | M1 Max | w13 | | 8 | 7.98 | 5.14 | - | 5.35 | 2.82 |
+  | M1 Max | w2 (17408 x 5120) | 180 us, 279 GB/s | 2 | 2.00 | 1.57 | 1.62 | 1.72 | 1.14 |
+  | M1 Max | w2 | | 4 | 4.01 | 3.03 | - | 3.30 | 1.72 |
+  | M1 Max | w2 | | 8 | 8.01 | 5.07 | - | 4.72 | 2.87 |
+  | M5 Max | w13 | 56 us, 891 GB/s | 2 | 2.05 | 1.54 | 1.76 | 1.41 | 1.43 |
+  | M5 Max | w13 | | 4 | 3.94 | 2.57 | - | 1.95 | 1.89 |
+  | M5 Max | w13 | | 8 | 7.83 | 5.10 | - | 3.91 | 3.12 |
+  | M5 Max | w2 | 62 us, 813 GB/s | 2 | 1.85 | 1.59 | 1.76 | 1.47 | 1.45 |
+  | M5 Max | w2 | | 4 | 3.78 | 3.07 | - | 2.32 | 2.08 |
+  | M5 Max | w2 | | 8 | 8.01 | 5.53 | - | 4.34 | 3.49 |
+
+  Reading: on the M1 the production forms and the wide form cost the same 0.65-0.8 of a pass per column whatever the
+  lane map, and a probe that reads column 0's x for both columns runs the two-column wide form at 1.07 passes - the
+  bound is the x vector's traffic through L1 (2 bytes of f32 x a weight against 0.56 of weight), which reading x as
+  halves cuts to 1.26 / 1.80 / 2.82 passes. On the M5 the x traffic is not the bound (the half form gains nothing at
+  two columns) and the wide form beats the production forms on the decode's ALU alone - the full nibble decode is the
+  cost there, and the half form wins at eight columns on the ALU the x converts save. Register-resident x walked over
+  four or eight weight rows loses on both boxes (0.17 to 0.87 of the passes' rate - the sixty-four floats of x spill;
+  the four-row two-column form holds registers and still only reaches the production form). In absolute terms the cost
+  column times the single pass: M1 w13 at eight columns prod 833 us against wideh 457, M5 w13 prod 286 against wideh 175.
+  The two-stream decode on the 35B pure IQ4_XS measured the same day (`lcpp_bench`'s tg128 row and its `--npl 2`
+  two-stream row, MTP off, three reps, the box sidecar): M1 Max tg128 84.8 tok/s solo, 115.2 summed over two streams
+  (57.6 a stream, 0.68 of solo); M5 Max 145.4 solo, 207.6 summed (103.8 a stream, 0.71). The work this opens is
+  `followup_metal.md` row 50.
+
+- **MEASURED (2026-10-09, `direction-grade`, `debug-jit`) - the short prefill window's routed block: the gathered
+  route against the bucketed tiles, on the M1 Max and the M5 Max.** `benchmarks/prefill_window_probe.das` on
+  Qwen3.6-35B-A3B-MTP-IQ4_XS-pure (the M5 under its box sidecar's crowns through `DAS_TUNE_MANIFEST`, the M1 on the base
+  forms under its own sidecar - the box has no tensor lanes; `DAS_TUNE_POLICY` unset), Metal required, a 2000-token warm
+  prefix, windows appended in sequence, GPU ms a window as the driver's own timestamp report, medians of three after a
+  warmup rep (`--gemv-max 512` routes every window, `--gemv-max 0` none, each a process of its own):
+
+  | window | M1 tiles | M1 route | M5 tiles | M5 route |
+  |---|---|---|---|---|
+  | 2 | 57 | 23 | 21 | 10 |
+  | 8 | 100 | 39 | 31 | 16 |
+  | 16 | 141 | 58 | 41 | 25 |
+  | 32 | 182 | 87 | 48 | 36 |
+  | 48 | 222 | 130 | 53 | 49 |
+  | 64 | 236 | 159 | 57 | 60 |
+  | 128 | 308 | 308 | 67 | 107 |
+  | 256 | 430 | 615 | 86 | 203 |
+  | decode step | 10.9 | | 7.6 | |
+
+  The route's cost is linear in the tokens (2.4 ms a token on the M1, 0.8 on the M5); the tiles' steps with the
+  M-tile count. On this carrier the two cross near 128 tokens on the M1 and 56 on the M5. The crossing is per
+  model as well as per box - the route's slope is the layers times the slots times the expert bytes a token
+  reads, the tiles' floor the experts a window populates - so the same probe over the other MoE carriers
+  (`-r 3`, `--gemv-max 512` against `--gemv-max 0`, GPU ms a window):
+
+  | carrier | box | 8 route / tiles | 32 route / tiles | 64 route / tiles | 96 route / tiles |
+  |---|---|---|---|---|---|
+  | Qwen1.5-MoE-A2.7B Q8_0 | M1 | 37 / 58 | 95 / 105 | 179 / 130 | 265 / 146 |
+  | Qwen3-30B-A3B Q4_K_M | M1 | 65 / 100 | 151 / 143 | 278 / 175 | 415 / 214 |
+  | gpt-oss-20b mxfp4 | M1 | 60 / 80 | 163 / 106 | 305 / 144 | 450 / 175 |
+  | Qwen3.6-35B-A3B UD-Q4_K_M | M1 | 47 / 84 | 122 / 151 | 229 / 199 | 337 / 232 |
+  | Qwen3.6-35B-A3B Q4_0-pure | M1 | 38 / 97 | 85 / 176 | 155 / 232 | 228 / 272 |
+
+  | carrier | box | 2 route / tiles | 8 route / tiles | 32 route / tiles |
+  |---|---|---|---|---|
+  | Qwen3-30B-A3B Q8_0 | M5 | 14 / 20 | 24 / 34 | 61 / 51 |
+  | Qwen3-30B-A3B Q4_K_M | M5 | 16 / 22 | 23 / 32 | 55 / 43 |
+  | Qwen3-30B-A3B UD-IQ2_XXS | M5 | 17 / 22 | 25 / 33 | 58 / 43 |
+  | Qwen3-30B-A3B UD-Q3_K_XL | M5 | 17 / 22 | 27 / 32 | 69 / 43 |
+  | Qwen3.6-35B-A3B UD-IQ3_S | M5 | 10 / 16 | 16 / 27 | 36 / 47 |
+  | gemma-4-26B-A4B Q4_0 | M5 | 18 / 23 | 24 / 31 | 50 / 41 |
+  | gemma-4-26B-A4B Q4_K_M | M5 | 13 / 17 | 21 / 28 | 52 / 41 |
+  | gemma-4-26B-A4B UD-IQ3_XXS | M5 | 17 / 23 | 23 / 30 | 50 / 41 |
+  | gemma-4-26B-A4B UD-IQ4_XS | M5 | 12 / 18 | 21 / 30 | 50 / 44 |
+  | gpt-oss-20b mxfp4 | M5 | 12 / 18 | 20 / 25 | 58 / 33 |
+  | Qwen1.5-MoE-A2.7B Q6_K | M5 | 10 / 13 | 17 / 24 | 33 / 38 |
+
+  Every carrier wins at 8 tokens on both boxes; at 32 the 48-layer Qwen3-30B, the gemma 26B and gpt-oss lose on
+  both, the 35B hybrids and the 60-expert Qwen1.5-MoE still win. The default knee is 16, the window every carrier
+  won at; a one-model deployment sets the sidecar's `metal_moe_gemv_max` at its own crossing. On the house replay
+  (the 35B pure, `--ctx 32768 --streams 4`, 122 requests twice) the route leaves the first-token median where it
+  was, 0.87 s: a first-round request attaches 84 % of its prompt and prefills a tail of about 300 tokens, above
+  any knee, so the windows the route serves are the checkpoint tails (56 -> 26 ms at 2 tokens, 136 -> 84 at
+  17-64) and the band that sets the first token is the tiles' 128-512 (`followup_metal.md` 47). Replies, calls,
+  quiet and silent counts are the tile run's. On the tiles at 2 tokens the per-kernel split (each node alone) read the
+  expert mul_mm at 38 of 76 ms summed on the M1 and 7.5 of 24 on the M5, the padded-panel gather and activation
+  at 6.5 and 4.5. The dense sibling Qwen3.6-27B Q4_K_M reads a 2-token window at 235 ms on the M1 (decode step
+  64.9) and 80 on the M5 (36.3): its K-quant mul_mm sites have no small-M form (`followup_metal.md` 48).
+
+  The bars the route's parity cells hold (`tests/test_metal_prefill_parity.das`, `test_metal_prefill_moe_gemv_route`,
+  arm `moe-gemv`), each the largest |GPU - CPU| over the last row's logits as a share of the CPU row's largest,
+  after a 300-row window on the tiles and a 2-, 7- or 24-row window on the route; the readings from the cells'
+  own logs on the M1 Max (`bin/daslang -jit modules/dasLLAMA/tests/run.das -- --suite prefill --arm moe-gemv
+  --family <f>` under `DASLLAMA_PARITY_FULL=1`), the tile path's own reading on the same window beside each:
+  - Qwen1.5-MoE-A2.7B Q8_0 (`qwen2moe`): 0.08 (reads 0.020 / 0.035 / 0.015; the tiles 0.020 / 0.035 / 0.015 -
+    the two forms agree to 1e-3; the control window 0.43-1.14).
+  - Qwen3-30B-A3B-Instruct-2507 Q4_K_M (`qwen3moe`): 0.10 (reads 0.046 / 0.029 / 0.037; the tiles 0.038 /
+    0.028 / 0.036; the control 0.47-0.71).
+  - gpt-oss-20b mxfp4 (`gptoss`): 0.12 (reads 0.055 / 0.034 / 0.025; the tiles 0.055 / 0.034 / 0.033; the
+    control 0.45-0.73).
+  - The Qwen3.6 hybrid cannot stand as a cell carrier (its pure IQ4_XS file refuses the in-memory blob transform and
+    its UD file's twin declines the Metal prefill), so its route reads driver-against-itself on the served image, a
+    probe's reading and no parity evidence: route against tiles on the same 2000-token prefix, 0.0006 / 0.0004 /
+    0.0014 of the peak logit at 2, 5 and 8 tokens and 0.040 at 16 (the tile arm's f16 X twins), the argmax equal at
+    every window, a window whose last token differs 0.56-0.78 off.
 - **MEASURED (2026-10-07, `direction-grade`, `debug-jit`) - the forced tool call under the grammar, on the house assistant's tool bench.**
   M1 Max, Metal, one stream, the server run from the tree under `-jit` with the m1 tune manifest, the house assistant's `bench_llm.py`
   tool part (the house prompt, a nonce a run, no-think, 256-token budget), 12 runs an arm; `auto` = `tools` alone,

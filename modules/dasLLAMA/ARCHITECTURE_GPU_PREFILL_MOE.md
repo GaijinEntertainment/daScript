@@ -2,8 +2,9 @@
 
 Companion to `ARCHITECTURE_GPU_PREFILL.md`; a section is cited by its anchor. This
 document carries the routed block of the Metal prefill driver: the atomics-free
-bucket rail, the tensor-twin scaffold the gathered expert sites ride, and the split-format
-expert twins. The GEMM form ladder those sites pick from (`ARCHITECTURE_GPU_PREFILL.md#prefill-gemm-ladder`), the dev-W panel knee map
+bucket rail, the tensor-twin scaffold the gathered expert sites ride, the split-format
+expert twins, the K-quant twins' own crowns and the knee that picks them on an uncrowned box, and
+the short window's gathered expert route. The GEMM form ladder those sites pick from (`ARCHITECTURE_GPU_PREFILL.md#prefill-gemm-ladder`), the dev-W panel knee map
 (`ARCHITECTURE_GPU_PREFILL.md#devw-panel-knees`) and the dense-KQ tensor mul_mm scaffold the split-format twins derive from (`ARCHITECTURE_GPU_PREFILL.md#prefill-kq-tensor-scaffold`)
 stay in `ARCHITECTURE_GPU_PREFILL.md`.
 
@@ -55,6 +56,18 @@ rows in 32-row tiles past them. Both ladders compute a row the same way, so the 
 same bit for bit; the pair is the faster one from 1024 tokens up on a 256-expert model. A 64-row
 rung between the pair's two stamps serves the same rows in the same time, so the ladder carries none.
 
+A 32-row tile runs its tensor op at the rows its expert leaves it (`ADAPT`, on both scaffolds): an op
+of eight rows for one to eight live rows, sixteen for nine to sixteen, else the thirty-two - three
+walks of one op each, each in its own scope, because the emitter's cooperative-tensor declarations
+are block-scoped and an op's begin, steps and store must share one. The tile's cost is the op's, not
+the live rows': over 128 experts of a 1024 x 2048 plane the 32-row stamp reads the same time whether
+an expert holds 4, 12 or 32 rows, the staging alone a third of it and the op alone three quarters,
+and the adaptive op reads 0.57 / 0.69 / 1.00 of the fixed tile at those counts (`debug-jit` lab readings; the board
+row is the metal pp512 cell of `performance/records/m1.json` and `m5.json` on Qwen3.6-35B-A3B-MTP-UD-Q4_K_M), bit-equal on every
+live element (`benchmarks/matmul/bench_metal_moe_tile_lab.das`: the shipped form, the fixed 32-row
+form it replaced, and the two knockouts). The mx4 twin keeps the 32-row op, since its per-expert
+bias store is MT-only.
+
 The split-format expert twins (k3, q40 and the iquants) do not derive from that scaffold: they
 derive from the format's DENSE split class (`ARCHITECTURE_GPU_PREFILL.md#prefill-kq-tensor-scaffold`) with the base's `MOE` axis set and run its
 `stage16` under the dense base's `moe_kernel` entry, whose expert plane rides `nBase` -
@@ -79,12 +92,71 @@ binds the d plane at `doff`.
 The select kernel is one template at two per-lane depths: 8 logits per lane covers 256 experts,
 the 16-deep stamp 512 (Qwen3-Coder-Next), and the serve gate admits 512.
 
-The bucket kernel runs one threadgroup past the experts: threadgroup `ne` publishes the padded
+The CPU sizes the bucket panel and the padded-row passes at `pf_moe_padded_rows`: the routed rows
+plus 31 pad rows for every expert that can hold a row, and at most `min(ne, mtot)` experts can, so a
+2-token window on 256 experts is sized at 512 rows where the all-experts worst case is 7968 - the
+gather and the activation over the panel scale with the tokens, not the expert count, until every
+expert holds a row. The bucket kernel runs one threadgroup past the experts: threadgroup `ne` publishes the padded
 total at `basep[ne]`. The routed block's activation guards on that total (`MetalEw2T`'s TOTB
 stamps read `totb[0] * tmul` off the basep buffer at its bind offset) rather than the CPU's
 padded bound, and writes the down site's f16 X twin alongside its f32 rows (the dense HX form), so
 a panel that is mostly padding - ten rows per expert at 512 experts - costs neither a convert pass
 nor an activation pass over its tail.
+
+### The K-quant twins' pick {#prefill-moe-kq-twin-pick}
+
+The kq-scaffold twins (k4, k5, k6, and q5_1 / iq4nl32 under k4's verdict) compile behind the
+toolchain probe like the split formats, and each family carries its own MoE-shaped race -
+`moe_mulmm_k4` / `k5` / `k6` (`race_moe_mulmm_kq`, one body over the format) over the kq race
+planes of 128 experts of a 1024 x 2048 plane, past the last-level cache where a served model's
+planes stream, timed on one whole-tile region (32 rows an expert) and one of twelve rows an expert
+(the house window's mean) in one encoder, the outputs compared on the whole-tile region, where
+both arms write every row; the base arm binds at the family tail's numbers and the twin at the
+scaffold's. The dense `kq_mulmm_*` crowns measure a 512-row GEMM, where the twin's merit on the
+routed site is the adaptive op at few rows an expert, and the two disagree on an M1-class GPU; the
+dense crown STANDS IN for a family's verdict all the same (`g_pf_moe_kq_mm*_tensor` is the MoE
+crown or the dense one), because the sidecar's runtime section keeps winners alone, so a box
+minted before the MoE races and a box whose MoE twin lost read the same, and the stand-in keeps
+the former on the twin it ran. A crowned family takes the twin at every shape. An uncrowned one
+takes it per dispatch where the window's mean rows an expert sit at or under
+`set_metal_moe_kq_twin_avg` (16, the adaptive op's region: `npos * nk <= avg * ne`), and the
+base form past it (`metal_moe_kq_twin_pick`). That pick is made once a site
+(`pf_moe_twin_live`) and read by the gather panel, the activation's half store and the dispatch
+arm alike, so no pass runs for a twin the arm then declines. The lab's base arm sets the knee: on
+the M1 Max the k4 twin reads 0.59 / 0.76 / 1.16 of the base form at 4 / 8-16 / 32 rows an expert (`debug-jit`, the same
+lab and board row)
+(1.42 / 1.80 / 2.76 ms against a flat 2.38), on the M5 Max 0.31 / 0.32 / 0.38 (0.40 / 0.42 /
+0.49 against 1.31), bit-equal on every live element. The house's 375-token window on a
+256-expert model is 11.7 rows an expert; a 1024-token one is 32.
+
+### The short window's gathered route {#prefill-moe-gemv-route}
+
+A window of `pf_moe_gemv_knee` tokens or fewer - the sidecar's `metal_moe_gemv_max` where it names
+one, 0 for never, else 16 - whose expert planes all have a gathered decode kernel
+(`moe_fmt_metal_served`, or the mx4 planes) serves its routed block through the decode step's
+kernels instead of the bucket rail's tiles: the gate and up sites as the gathered GEMV over one
+dispatch slice per (token, slot) pair off the selection the route wrote, the activation over the
+live `npos x k x n_ff_exp` rows alone, the down site the same way over the hidden rows, and the
+decode's combine summing the k slot rows under their weights. No gather panel, no padded rows, no
+f16 convert; the selection buffer, the gate, up and down panels and the output rows are the ones
+the tile path binds. The block runs at the reduce's seat, after the shared expert's GEMMs read the
+residual rows it overwrites.
+
+Why a tile loses there: the tile path dispatches one 32-row tile per expert on a z-grid of every
+expert, each tile walking K serially under barriers, so a 2-token window on 256 experts runs 128
+working threadgroups - one per core, the GPU idle between barriers - at 16 times the time its
+expert bytes take to stream; at 64 tokens it is still 4.5 times. The gathered GEMV reads an expert's
+weights once per routed token, so its cost grows with the tokens - with the layers, the slots and the
+expert bytes a token reads: 2.2 to 4.5 ms a token on the M1 Max, a third of that on the M5 Max -
+while the tiles' cost grows with the M-tile count and the experts a window populates. The two cross
+between 16 and 128 tokens by model and by box: near 128 for the 256-expert Qwen3.6 hybrid on the M1
+Max's base-form tiles, under 32 for the 48-layer Qwen3-30B and for gpt-oss on either box, near 56 for
+the hybrid on the M5 Max's tensor twins. The default knee is the window every swept carrier won at,
+16; a deployment that serves one model sets the sidecar's knob at that model's crossing
+(`benchmarks/prefill_window_probe.das` reads it, the readings sit in `PERF_LEDGER.md`), and the form
+that serves the band above it is `followup_metal.md`'s. llama.cpp's Metal backend takes the same route below 32 tokens, MLX below 128; neither
+has a form that reads an expert's weights once for its few rows, which is the form that beats both
+on the band between (`followup_metal.md`).
 
 **The staging form that wins inside the gathered mul_mm kernels is per format, not universal.**
 The gathered q8 form carries its scale and quant pointers across k-blocks; the stateless index

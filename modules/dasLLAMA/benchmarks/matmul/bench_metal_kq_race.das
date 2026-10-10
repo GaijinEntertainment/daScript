@@ -40,7 +40,7 @@ struct Args {
     @clarg_doc = "Substring filter over format names, comma list (empty = all)"
     fmts : string
 
-    @clarg_doc = "Tiers to race: gemv (decode), mm (512-token prefill), mvb (2-column batch decode; grid formats only, no lcpp rows - their bs 2-8 runs the GEMV per column), comma list"
+    @clarg_doc = "Tiers to race: gemv (decode), mm (512-token prefill), mvb / mvb4 / mvb8 (the 2-, 4- and 8-column small-batch forms against B single-row GEMV passes - the 'passes' arm; no lcpp rows, their bs 2-8 runs the GEMV per column), comma list"
     tiers : string = "gemv,mm"
 
     @clarg_doc = "Substring filter over shape names, comma list (empty = all)"
@@ -78,6 +78,8 @@ struct KqRaceArm {
     fastmath : bool
     tgmem : uint64
     gdiv : int          //!< GEMV only; a candidate arm may change the row map
+    passes : int        //!< the small-batch tiers' incumbent: this many single-row GEMV dispatches per rep, x and y stepping one column each (0 = one dispatch of the arm's own form)
+    xhalf : bool        //!< the arm reads x as halves: binding 3 takes the f16 twin of the x panel
 }
 
 def race_formats : array<KqRaceFmt> {
@@ -102,7 +104,8 @@ def race_formats : array<KqRaceFmt> {
 def race_shapes : array<tuple<name : string; n : int; d : int>> {
     return <- [(name = "kv1b", n = 2048, d = 512), (name = "q1b", n = 2048, d = 2048),
         (name = "w13_1b", n = 2048, d = 8192), (name = "w2_1b", n = 8192, d = 2048),
-        (name = "q3b", n = 3072, d = 3072), (name = "w13_3b", n = 3072, d = 8192)]
+        (name = "q3b", n = 3072, d = 3072), (name = "w13_3b", n = 3072, d = 8192),
+        (name = "qkv27b", n = 5120, d = 8192), (name = "w13_27b", n = 5120, d = 17408), (name = "w2_27b", n = 17408, d = 5120)]
 }
 
 def private want(filter, name : string) : bool {
@@ -113,6 +116,14 @@ def private want(filter, name : string) : bool {
         if (!empty(tok) && find(name, tok) >= 0) {
             return true
         }
+    }
+    return false
+}
+
+//! the tier filter's exact form: "mvb" must not select mvb4 and mvb8 as a substring would
+def private want_exact(filter, name : string) : bool {
+    for (tok in split(filter, ",")) {
+        return true if (tok == name)
     }
     return false
 }
@@ -150,18 +161,104 @@ def private gemv_arms(f) : array<KqRaceArm> {   // candidate GEMV spellings regi
     return <- arms
 }
 
-def private mvb_arms(f) : array<KqRaceArm> {   // the B2 batch-decode arm per grid format; candidate spellings register here, after prod; generic on purpose (see gemv_arms)
+//! the small-batch tiers' arms: the incumbent is B single-row passes of the format's production GEMV
+//! (what `enc_kq_site_b` dispatches under a `kq_rows_<fmt>` crown), then the production B-column
+//! form, then its candidate spellings; generic on purpose (see gemv_arms)
+def private mvb_arms(f; nrow : int) : array<KqRaceArm> {   // nolint:STYLE037,STYLE038,LINT019 - the flat per-format-per-width ladder is the honest shape; generic, so the rules fire at the instantiation
     var arms : array<KqRaceArm>
-    if (f.fmt == 33) {
-        arms |> push(KqRaceArm(name = "prod", src = MetalKqMvB2Iq3s_metal_kq_mv_iq3s_msl, entry = MetalKqMvB2Iq3s_metal_kq_mv_iq3s_msl_entry, fastmath = MetalKqMvB2Iq3s_metal_kq_mv_iq3s_msl_fastmath, tgmem = 0ul, gdiv = 8))
-    } elif (f.fmt == 34) {
-        arms |> push(KqRaceArm(name = "prod", src = MetalKqMvB2Iq3xxs_metal_kq_mv_iq3xxs_msl, entry = MetalKqMvB2Iq3xxs_metal_kq_mv_iq3xxs_msl_entry, fastmath = MetalKqMvB2Iq3xxs_metal_kq_mv_iq3xxs_msl_fastmath, tgmem = 0ul, gdiv = 8))
-    } elif (f.fmt == 23) {
-        arms |> push(KqRaceArm(name = "prod", src = MetalKqMvB2Iq2s_metal_kq_mv_iq2s_msl, entry = MetalKqMvB2Iq2s_metal_kq_mv_iq2s_msl_entry, fastmath = MetalKqMvB2Iq2s_metal_kq_mv_iq2s_msl_fastmath, tgmem = 0ul, gdiv = 8))
-    } elif (f.fmt == 24) {
-        arms |> push(KqRaceArm(name = "prod", src = MetalKqMvB2Iq2xs_metal_kq_mv_iq2xs_msl, entry = MetalKqMvB2Iq2xs_metal_kq_mv_iq2xs_msl_entry, fastmath = MetalKqMvB2Iq2xs_metal_kq_mv_iq2xs_msl_fastmath, tgmem = 0ul, gdiv = 8))
-    } elif (f.fmt == 25) {
-        arms |> push(KqRaceArm(name = "prod", src = MetalKqMvB2Iq2xxs_metal_kq_mv_iq2xxs_msl, entry = MetalKqMvB2Iq2xxs_metal_kq_mv_iq2xxs_msl_entry, fastmath = MetalKqMvB2Iq2xxs_metal_kq_mv_iq2xxs_msl_fastmath, tgmem = 0ul, gdiv = 8))
+    var gemv <- gemv_arms(f)
+    if (!empty(gemv)) {
+        var p = gemv[0]
+        p.name = "passes"
+        p.passes = nrow
+        arms |> push(p)
+    }
+    delete gemv
+    if (nrow == 2) {
+        if (f.fmt == 4) {
+            arms |> push(KqRaceArm(name = "prod", src = MetalKqMvB2K4_metal_kq_mv_k4_msl, entry = MetalKqMvB2K4_metal_kq_mv_k4_msl_entry, fastmath = MetalKqMvB2K4_metal_kq_mv_k4_msl_fastmath, tgmem = 0ul, gdiv = 8))
+            arms |> push(KqRaceArm(name = "r2", src = MetalKqMvB2K4R2_metal_kq_mv_k4_r2_msl, entry = MetalKqMvB2K4R2_metal_kq_mv_k4_r2_msl_entry, fastmath = MetalKqMvB2K4R2_metal_kq_mv_k4_r2_msl_fastmath, tgmem = 0ul, gdiv = 16))
+            arms |> push(KqRaceArm(name = "wide", src = MetalKqMvW2K4_metal_kq_mvw_k4_msl, entry = MetalKqMvW2K4_metal_kq_mvw_k4_msl_entry, fastmath = MetalKqMvW2K4_metal_kq_mvw_k4_msl_fastmath, tgmem = 0ul, gdiv = 4))
+            arms |> push(KqRaceArm(name = "wideh", src = MetalKqMvW2K4H_metal_kq_mvw_k4_msl, entry = MetalKqMvW2K4H_metal_kq_mvw_k4_msl_entry, fastmath = MetalKqMvW2K4H_metal_kq_mvw_k4_msl_fastmath, tgmem = 0ul, gdiv = 4, xhalf = true))
+        } elif (f.fmt == 5) {
+            arms |> push(KqRaceArm(name = "prod", src = MetalKqMvB2K5_metal_kq_mv_k5_msl, entry = MetalKqMvB2K5_metal_kq_mv_k5_msl_entry, fastmath = MetalKqMvB2K5_metal_kq_mv_k5_msl_fastmath, tgmem = 0ul, gdiv = 8))
+        } elif (f.fmt == 6) {
+            arms |> push(KqRaceArm(name = "prod", src = MetalKqMvB2K6_metal_kq_mv_k6_msl, entry = MetalKqMvB2K6_metal_kq_mv_k6_msl_entry, fastmath = MetalKqMvB2K6_metal_kq_mv_k6_msl_fastmath, tgmem = 0ul, gdiv = 8))
+        } elif (f.fmt == 44) {
+            arms |> push(KqRaceArm(name = "prod", src = MetalKqMvB2Iq4xs_metal_kq_mv_iq4_msl, entry = MetalKqMvB2Iq4xs_metal_kq_mv_iq4_msl_entry, fastmath = MetalKqMvB2Iq4xs_metal_kq_mv_iq4_msl_fastmath, tgmem = 0ul, gdiv = 8))
+        } elif (f.fmt == 45) {
+            arms |> push(KqRaceArm(name = "prod", src = MetalKqMvB2Iq4nl_metal_kq_mv_iq4_msl, entry = MetalKqMvB2Iq4nl_metal_kq_mv_iq4_msl_entry, fastmath = MetalKqMvB2Iq4nl_metal_kq_mv_iq4_msl_fastmath, tgmem = 0ul, gdiv = 8))
+        } elif (f.fmt == 3) {
+            arms |> push(KqRaceArm(name = "prod", src = MetalKqMvB2K3_metal_kq_mv_k3_msl, entry = MetalKqMvB2K3_metal_kq_mv_k3_msl_entry, fastmath = MetalKqMvB2K3_metal_kq_mv_k3_msl_fastmath, tgmem = 0ul, gdiv = 8))
+        } elif (f.fmt == 2) {
+            arms |> push(KqRaceArm(name = "prod", src = MetalKqMvB2K2_metal_kq_mv_k2_msl, entry = MetalKqMvB2K2_metal_kq_mv_k2_msl_entry, fastmath = MetalKqMvB2K2_metal_kq_mv_k2_msl_fastmath, tgmem = 0ul, gdiv = 8))
+        } elif (f.fmt == 33) {
+            arms |> push(KqRaceArm(name = "prod", src = MetalKqMvB2Iq3s_metal_kq_mv_iq3s_msl, entry = MetalKqMvB2Iq3s_metal_kq_mv_iq3s_msl_entry, fastmath = MetalKqMvB2Iq3s_metal_kq_mv_iq3s_msl_fastmath, tgmem = 0ul, gdiv = 8))
+        } elif (f.fmt == 34) {
+            arms |> push(KqRaceArm(name = "prod", src = MetalKqMvB2Iq3xxs_metal_kq_mv_iq3xxs_msl, entry = MetalKqMvB2Iq3xxs_metal_kq_mv_iq3xxs_msl_entry, fastmath = MetalKqMvB2Iq3xxs_metal_kq_mv_iq3xxs_msl_fastmath, tgmem = 0ul, gdiv = 8))
+        } elif (f.fmt == 23) {
+            arms |> push(KqRaceArm(name = "prod", src = MetalKqMvB2Iq2s_metal_kq_mv_iq2s_msl, entry = MetalKqMvB2Iq2s_metal_kq_mv_iq2s_msl_entry, fastmath = MetalKqMvB2Iq2s_metal_kq_mv_iq2s_msl_fastmath, tgmem = 0ul, gdiv = 8))
+        } elif (f.fmt == 24) {
+            arms |> push(KqRaceArm(name = "prod", src = MetalKqMvB2Iq2xs_metal_kq_mv_iq2xs_msl, entry = MetalKqMvB2Iq2xs_metal_kq_mv_iq2xs_msl_entry, fastmath = MetalKqMvB2Iq2xs_metal_kq_mv_iq2xs_msl_fastmath, tgmem = 0ul, gdiv = 8))
+        } elif (f.fmt == 25) {
+            arms |> push(KqRaceArm(name = "prod", src = MetalKqMvB2Iq2xxs_metal_kq_mv_iq2xxs_msl, entry = MetalKqMvB2Iq2xxs_metal_kq_mv_iq2xxs_msl_entry, fastmath = MetalKqMvB2Iq2xxs_metal_kq_mv_iq2xxs_msl_fastmath, tgmem = 0ul, gdiv = 8))
+        }
+    } elif (nrow == 4) {
+        if (f.fmt == 4) {
+            arms |> push(KqRaceArm(name = "prod", src = MetalKqMvB4K4_metal_kq_mv_k4_msl, entry = MetalKqMvB4K4_metal_kq_mv_k4_msl_entry, fastmath = MetalKqMvB4K4_metal_kq_mv_k4_msl_fastmath, tgmem = 0ul, gdiv = 8))
+            arms |> push(KqRaceArm(name = "wide", src = MetalKqMvW4K4_metal_kq_mvw_k4_msl, entry = MetalKqMvW4K4_metal_kq_mvw_k4_msl_entry, fastmath = MetalKqMvW4K4_metal_kq_mvw_k4_msl_fastmath, tgmem = 0ul, gdiv = 4))
+            arms |> push(KqRaceArm(name = "wideh", src = MetalKqMvW4K4H_metal_kq_mvw_k4_msl, entry = MetalKqMvW4K4H_metal_kq_mvw_k4_msl_entry, fastmath = MetalKqMvW4K4H_metal_kq_mvw_k4_msl_fastmath, tgmem = 0ul, gdiv = 4, xhalf = true))
+        } elif (f.fmt == 5) {
+            arms |> push(KqRaceArm(name = "prod", src = MetalKqMvB4K5_metal_kq_mv_k5_msl, entry = MetalKqMvB4K5_metal_kq_mv_k5_msl_entry, fastmath = MetalKqMvB4K5_metal_kq_mv_k5_msl_fastmath, tgmem = 0ul, gdiv = 8))
+        } elif (f.fmt == 6) {
+            arms |> push(KqRaceArm(name = "prod", src = MetalKqMvB4K6_metal_kq_mv_k6_msl, entry = MetalKqMvB4K6_metal_kq_mv_k6_msl_entry, fastmath = MetalKqMvB4K6_metal_kq_mv_k6_msl_fastmath, tgmem = 0ul, gdiv = 8))
+        } elif (f.fmt == 44) {
+            arms |> push(KqRaceArm(name = "prod", src = MetalKqMvB4Iq4xs_metal_kq_mv_iq4_msl, entry = MetalKqMvB4Iq4xs_metal_kq_mv_iq4_msl_entry, fastmath = MetalKqMvB4Iq4xs_metal_kq_mv_iq4_msl_fastmath, tgmem = 0ul, gdiv = 8))
+        } elif (f.fmt == 45) {
+            arms |> push(KqRaceArm(name = "prod", src = MetalKqMvB4Iq4nl_metal_kq_mv_iq4_msl, entry = MetalKqMvB4Iq4nl_metal_kq_mv_iq4_msl_entry, fastmath = MetalKqMvB4Iq4nl_metal_kq_mv_iq4_msl_fastmath, tgmem = 0ul, gdiv = 8))
+        } elif (f.fmt == 3) {
+            arms |> push(KqRaceArm(name = "prod", src = MetalKqMvB4K3_metal_kq_mv_k3_msl, entry = MetalKqMvB4K3_metal_kq_mv_k3_msl_entry, fastmath = MetalKqMvB4K3_metal_kq_mv_k3_msl_fastmath, tgmem = 0ul, gdiv = 8))
+        } elif (f.fmt == 2) {
+            arms |> push(KqRaceArm(name = "prod", src = MetalKqMvB4K2_metal_kq_mv_k2_msl, entry = MetalKqMvB4K2_metal_kq_mv_k2_msl_entry, fastmath = MetalKqMvB4K2_metal_kq_mv_k2_msl_fastmath, tgmem = 0ul, gdiv = 8))
+        } elif (f.fmt == 33) {
+            arms |> push(KqRaceArm(name = "prod", src = MetalKqMvB4Iq3s_metal_kq_mv_iq3s_msl, entry = MetalKqMvB4Iq3s_metal_kq_mv_iq3s_msl_entry, fastmath = MetalKqMvB4Iq3s_metal_kq_mv_iq3s_msl_fastmath, tgmem = 0ul, gdiv = 8))
+        } elif (f.fmt == 34) {
+            arms |> push(KqRaceArm(name = "prod", src = MetalKqMvB4Iq3xxs_metal_kq_mv_iq3xxs_msl, entry = MetalKqMvB4Iq3xxs_metal_kq_mv_iq3xxs_msl_entry, fastmath = MetalKqMvB4Iq3xxs_metal_kq_mv_iq3xxs_msl_fastmath, tgmem = 0ul, gdiv = 8))
+        } elif (f.fmt == 23) {
+            arms |> push(KqRaceArm(name = "prod", src = MetalKqMvB4Iq2s_metal_kq_mv_iq2s_msl, entry = MetalKqMvB4Iq2s_metal_kq_mv_iq2s_msl_entry, fastmath = MetalKqMvB4Iq2s_metal_kq_mv_iq2s_msl_fastmath, tgmem = 0ul, gdiv = 8))
+        } elif (f.fmt == 24) {
+            arms |> push(KqRaceArm(name = "prod", src = MetalKqMvB4Iq2xs_metal_kq_mv_iq2xs_msl, entry = MetalKqMvB4Iq2xs_metal_kq_mv_iq2xs_msl_entry, fastmath = MetalKqMvB4Iq2xs_metal_kq_mv_iq2xs_msl_fastmath, tgmem = 0ul, gdiv = 8))
+        } elif (f.fmt == 25) {
+            arms |> push(KqRaceArm(name = "prod", src = MetalKqMvB4Iq2xxs_metal_kq_mv_iq2xxs_msl, entry = MetalKqMvB4Iq2xxs_metal_kq_mv_iq2xxs_msl_entry, fastmath = MetalKqMvB4Iq2xxs_metal_kq_mv_iq2xxs_msl_fastmath, tgmem = 0ul, gdiv = 8))
+        }
+    } elif (nrow == 8) {
+        if (f.fmt == 4) {
+            arms |> push(KqRaceArm(name = "prod", src = MetalKqMvB8K4_metal_kq_mvb8_msl, entry = MetalKqMvB8K4_metal_kq_mvb8_msl_entry, fastmath = MetalKqMvB8K4_metal_kq_mvb8_msl_fastmath, tgmem = MetalKqMvB8K4_metal_kq_mvb8_msl_tgmem, gdiv = 8))
+            arms |> push(KqRaceArm(name = "wide", src = MetalKqMvW8K4_metal_kq_mvw_k4_msl, entry = MetalKqMvW8K4_metal_kq_mvw_k4_msl_entry, fastmath = MetalKqMvW8K4_metal_kq_mvw_k4_msl_fastmath, tgmem = 0ul, gdiv = 4))
+            arms |> push(KqRaceArm(name = "wideh", src = MetalKqMvW8K4H_metal_kq_mvw_k4_msl, entry = MetalKqMvW8K4H_metal_kq_mvw_k4_msl_entry, fastmath = MetalKqMvW8K4H_metal_kq_mvw_k4_msl_fastmath, tgmem = 0ul, gdiv = 4, xhalf = true))
+        } elif (f.fmt == 5) {
+            arms |> push(KqRaceArm(name = "prod", src = MetalKqMvB8K5_metal_kq_mvb8_msl, entry = MetalKqMvB8K5_metal_kq_mvb8_msl_entry, fastmath = MetalKqMvB8K5_metal_kq_mvb8_msl_fastmath, tgmem = MetalKqMvB8K5_metal_kq_mvb8_msl_tgmem, gdiv = 8))
+        } elif (f.fmt == 6) {
+            arms |> push(KqRaceArm(name = "prod", src = MetalKqMvB8K6_metal_kq_mvb8_k6_msl, entry = MetalKqMvB8K6_metal_kq_mvb8_k6_msl_entry, fastmath = MetalKqMvB8K6_metal_kq_mvb8_k6_msl_fastmath, tgmem = MetalKqMvB8K6_metal_kq_mvb8_k6_msl_tgmem, gdiv = 8))
+        } elif (f.fmt == 44) {
+            arms |> push(KqRaceArm(name = "prod", src = MetalKqMvB8Iq4xs_metal_kq_mvb8_iq4_msl, entry = MetalKqMvB8Iq4xs_metal_kq_mvb8_iq4_msl_entry, fastmath = MetalKqMvB8Iq4xs_metal_kq_mvb8_iq4_msl_fastmath, tgmem = MetalKqMvB8Iq4xs_metal_kq_mvb8_iq4_msl_tgmem, gdiv = 8))
+        } elif (f.fmt == 45) {
+            arms |> push(KqRaceArm(name = "prod", src = MetalKqMvB8Iq4nl_metal_kq_mvb8_iq4_msl, entry = MetalKqMvB8Iq4nl_metal_kq_mvb8_iq4_msl_entry, fastmath = MetalKqMvB8Iq4nl_metal_kq_mvb8_iq4_msl_fastmath, tgmem = MetalKqMvB8Iq4nl_metal_kq_mvb8_iq4_msl_tgmem, gdiv = 8))
+        } elif (f.fmt == 3) {
+            arms |> push(KqRaceArm(name = "prod", src = MetalKqMvB8K3_metal_kq_mvb8_k3_msl, entry = MetalKqMvB8K3_metal_kq_mvb8_k3_msl_entry, fastmath = MetalKqMvB8K3_metal_kq_mvb8_k3_msl_fastmath, tgmem = MetalKqMvB8K3_metal_kq_mvb8_k3_msl_tgmem, gdiv = 8))
+        } elif (f.fmt == 2) {
+            arms |> push(KqRaceArm(name = "prod", src = MetalKqMvB8K2_metal_kq_mvb8_k2_msl, entry = MetalKqMvB8K2_metal_kq_mvb8_k2_msl_entry, fastmath = MetalKqMvB8K2_metal_kq_mvb8_k2_msl_fastmath, tgmem = MetalKqMvB8K2_metal_kq_mvb8_k2_msl_tgmem, gdiv = 8))
+        } elif (f.fmt == 33) {
+            arms |> push(KqRaceArm(name = "prod", src = MetalKqMvB8Iq3s_metal_kq_mvb8_iq3s_msl, entry = MetalKqMvB8Iq3s_metal_kq_mvb8_iq3s_msl_entry, fastmath = MetalKqMvB8Iq3s_metal_kq_mvb8_iq3s_msl_fastmath, tgmem = MetalKqMvB8Iq3s_metal_kq_mvb8_iq3s_msl_tgmem, gdiv = 8))
+        } elif (f.fmt == 34) {
+            arms |> push(KqRaceArm(name = "prod", src = MetalKqMvB8Iq3xxs_metal_kq_mvb8_iq3xxs_msl, entry = MetalKqMvB8Iq3xxs_metal_kq_mvb8_iq3xxs_msl_entry, fastmath = MetalKqMvB8Iq3xxs_metal_kq_mvb8_iq3xxs_msl_fastmath, tgmem = MetalKqMvB8Iq3xxs_metal_kq_mvb8_iq3xxs_msl_tgmem, gdiv = 8))
+        } elif (f.fmt == 23) {
+            arms |> push(KqRaceArm(name = "prod", src = MetalKqMvB8Iq2s_metal_kq_mvb8_iq2s_msl, entry = MetalKqMvB8Iq2s_metal_kq_mvb8_iq2s_msl_entry, fastmath = MetalKqMvB8Iq2s_metal_kq_mvb8_iq2s_msl_fastmath, tgmem = MetalKqMvB8Iq2s_metal_kq_mvb8_iq2s_msl_tgmem, gdiv = 8))
+        } elif (f.fmt == 24) {
+            arms |> push(KqRaceArm(name = "prod", src = MetalKqMvB8Iq2xs_metal_kq_mvb8_iq2xs_msl, entry = MetalKqMvB8Iq2xs_metal_kq_mvb8_iq2xs_msl_entry, fastmath = MetalKqMvB8Iq2xs_metal_kq_mvb8_iq2xs_msl_fastmath, tgmem = MetalKqMvB8Iq2xs_metal_kq_mvb8_iq2xs_msl_tgmem, gdiv = 8))
+        } elif (f.fmt == 25) {
+            arms |> push(KqRaceArm(name = "prod", src = MetalKqMvB8Iq2xxs_metal_kq_mvb8_iq2xxs_msl, entry = MetalKqMvB8Iq2xxs_metal_kq_mvb8_iq2xxs_msl_entry, fastmath = MetalKqMvB8Iq2xxs_metal_kq_mvb8_iq2xxs_msl_fastmath, tgmem = MetalKqMvB8Iq2xxs_metal_kq_mvb8_iq2xxs_msl_tgmem, gdiv = 8))
+        }
     }
     return <- arms
 }
@@ -246,7 +343,7 @@ def private load_ref_table(path : string; var tab : table<string; double>) {
 }
 
 //! one timed encoder: bind once, `reps` back-to-back dispatches; per-dispatch GPU us, <0 on failure
-def private time_arm_us(queue; pso; arm : KqRaceArm; bks, bkq, bx, by, b5, b6; sc_off : uint64; groups : uint3; tgsz, reps : int) : double {
+def private time_arm_us(queue; pso; arm : KqRaceArm; bks, bkq, bx, bxh, by, b5, b6, bn; sc_off : uint64; n, d : int; groups : uint3; tgsz, reps : int) : double {
     var err = ""
     var gpu_ms = 0.0lf
     let ok = with_compute_encoder_timed(queue, err, gpu_ms) $(enc : MetalComputeEncoder?) {
@@ -257,12 +354,21 @@ def private time_arm_us(queue; pso; arm : KqRaceArm; bks, bkq, bx, by, b5, b6; s
         metal_set_buffer(enc, bks, sc_off, 0)
         metal_set_buffer(enc, bks, 0ul, 1)
         metal_set_buffer(enc, bkq, 0ul, 2)
-        metal_set_buffer(enc, bx, 0ul, 3)
+        metal_set_buffer(enc, arm.xhalf ? bxh : bx, 0ul, 3)
         metal_set_buffer(enc, by, 0ul, 4)
-        metal_set_buffer(enc, b5, 0ul, 5)
+        metal_set_buffer(enc, arm.passes > 0 ? bn : b5, 0ul, 5)
         metal_set_buffer(enc, b6, 0ul, 6)
         for (_r in range(reps)) {
-            metal_dispatch_threadgroups(enc, groups, uint3(uint(tgsz), 1u, 1u))
+            if (arm.passes > 0) {
+                //! B single-row passes, as `enc_kq_site_b` dispatches them under a kq_rows crown: x and y step one column a pass
+                for (p in range(arm.passes)) {
+                    metal_set_buffer(enc, bx, uint64(p * n * 4), 3)
+                    metal_set_buffer(enc, by, uint64(p * d * 4), 4)
+                    metal_dispatch_threadgroups(enc, groups, uint3(uint(tgsz), 1u, 1u))
+                }
+            } else {
+                metal_dispatch_threadgroups(enc, groups, uint3(uint(tgsz), 1u, 1u))
+            }
         }
     }
     if (!ok) {
@@ -299,16 +405,20 @@ def private build_oracle(fmt; n, d, nsb : int; kq, ks : array<uint8>; xf : array
 def private race_cell(queue, dev; f : KqRaceFmt; tier, shname : string; n, d : int;
                       arms : array<KqRaceArm>; args : Args; ref_tab : table<string; double>) : int {
     let is_mm = tier == "mm"
-    let is_mvb = tier == "mvb"   //! 2-column batch decode: gemv's dispatch shape at gdiv 8, ka args at binding 5
+    let is_mvb = tier == "mvb" || tier == "mvb4" || tier == "mvb8"   //! the B-column small-batch forms: gemv's dispatch shape at gdiv 8, ka args at binding 5
+    let nrow = tier == "mvb" ? 2 : (tier == "mvb4" ? 4 : (tier == "mvb8" ? 8 : 1))
     let nb = n / 256
     let nsb = d * nb
     var kq, ks : array<uint8>
     kq_fill_planes(f.fmt, nsb, kq, ks)
-    let xrows = is_mm ? PREFILL_M : (is_mvb ? 2 : 1)
+    let xrows = is_mm ? PREFILL_M : nrow
     var xf : array<float>
     xf |> resize(xrows * n)
+    var xh : array<float16>   //! the f16 twin of x; every arm's x is rounded to the half lattice first, so the oracle holds on both views
+    xh |> resize(xrows * n)
     for (i in range(xrows * n)) {
-        xf[i] = 0.11 * float(i % 41) - 2.2
+        xh[i] = float16(0.11 * float(i % 41) - 2.2)
+        xf[i] = float(xh[i])
     }
     var want, env : array<float>
     want |> resize(xrows * d)
@@ -317,8 +427,10 @@ def private race_cell(queue, dev; f : KqRaceFmt; tier, shname : string; n, d : i
     var bks = buf_upload(dev, ks)
     var bkq = buf_upload(dev, kq)
     var bx = buf_upload(dev, xf)
-    var kav <- [uint(n), uint(d), uint(d), 2u]   //! KqMvArgs{ndim, ddim, ys, nr} as its raw words
-    var b5 = is_mvb ? buf_upload(dev, kav) : buf_u32(dev, uint(n))
+    var bxh = buf_upload(dev, xh)
+    var kav <- [uint(n), uint(d), uint(d), uint(nrow)]   //! KqMvArgs{ndim, ddim, ys, nr} as its raw words
+    var bn = buf_u32(dev, uint(n))   //! the single-row GEMV's ndim uniform - binding 5 for the gemv tier and for a passes arm
+    var b5 = is_mvb ? buf_upload(dev, kav) : bn
     var b6 = buf_u32(dev, uint(d))
     let sc_off = f.split ? uint64(nsb * 16) : 0ul
     let wbytes = double(length(kq) + length(ks))
@@ -345,7 +457,7 @@ def private race_cell(queue, dev; f : KqRaceFmt; tier, shname : string; n, d : i
         continue if (!lv)
         let groups = is_mm ? uint3(uint(PREFILL_M / 32), uint(d / 64), 1u) : uint3(uint((d + arm.gdiv - 1) / arm.gdiv), 1u, 1u)
         let tgsz = is_mm ? 128 : 64
-        let us0 = time_arm_us(queue, pso, arm, bks, bkq, bx, by, b5, b6, sc_off, groups, tgsz, 1)
+        let us0 = time_arm_us(queue, pso, arm, bks, bkq, bx, bxh, by, b5, b6, bn, sc_off, n, d, groups, tgsz, 1)
         if (us0 < 0.0lf) {
             lv = false
             continue
@@ -364,7 +476,7 @@ def private race_cell(queue, dev; f : KqRaceFmt; tier, shname : string; n, d : i
         for (arm, lv, pso, by in arms, live, psos, bys) {
             continue if (!lv)
             let groups = is_mm ? uint3(uint(PREFILL_M / 32), uint(d / 64), 1u) : uint3(uint((d + arm.gdiv - 1) / arm.gdiv), 1u, 1u)
-            let us = time_arm_us(queue, pso, arm, bks, bkq, bx, by, b5, b6, sc_off, groups, is_mm ? 128 : 64, args.reps)
+            let us = time_arm_us(queue, pso, arm, bks, bkq, bx, bxh, by, b5, b6, bn, sc_off, n, d, groups, is_mm ? 128 : 64, args.reps)
             break if (us < 0.0lf)
             burned += us * double(args.reps)
             did = true
@@ -382,7 +494,7 @@ def private race_cell(queue, dev; f : KqRaceFmt; tier, shname : string; n, d : i
             continue if (!lv)
             let groups = is_mm ? uint3(uint(PREFILL_M / 32), uint(d / 64), 1u) : uint3(uint((d + arm.gdiv - 1) / arm.gdiv), 1u, 1u)
             let tgsz = is_mm ? 128 : 64
-            let us = time_arm_us(queue, pso, arm, bks, bkq, bx, by, b5, b6, sc_off, groups, tgsz, args.reps)
+            let us = time_arm_us(queue, pso, arm, bks, bkq, bx, bxh, by, b5, b6, bn, sc_off, n, d, groups, tgsz, args.reps)
             if (us < 0.0lf) {
                 lv = false
             } elif (round > 0 && (bst < 0.0lf || us < bst)) {
@@ -399,13 +511,13 @@ def private race_cell(queue, dev; f : KqRaceFmt; tier, shname : string; n, d : i
             base_us = us
         }
         let gbs = wbytes / (us * 1000.0lf)   //! us * 1e3 = ns; bytes/ns = GB/s
-        var line = "  {arm.name}: {us:.2f} us/dispatch  {gbs:.1f} wGB/s"
+        var line = "  {arm.name}: {us:.2f} us/dispatch  {gbs:.1f} wGB/s  occ {metal_pipeline_max_total_threads(psos[i])}"   //! occ = the pipeline's max threads a threadgroup; under 1024 the kernel's registers cap residency
         if (is_mm) {
             let gmac = double(PREFILL_M) * double(n) * double(d) / (us * 1000.0lf)
             line = "{line}  {gmac:.0f} GMAC/s"
         }
         if (i > 0 && base_us > 0.0lf) {
-            line = "{line}  vs prod {base_us / us:.3f}x"
+            line = "{line}  vs {arms[0].name} {base_us / us:.3f}x"
         }
         let rk = "{f.name}/{tier}/{shname}"
         if (ref_tab |> key_exists(rk)) {
@@ -425,7 +537,12 @@ def private race_cell(queue, dev; f : KqRaceFmt; tier, shname : string; n, d : i
     metal_release(bks)
     metal_release(bkq)
     metal_release(bx)
-    metal_release(b5)
+    metal_release(bxh)
+    delete xh
+    if (is_mvb) {
+        metal_release(b5)
+    }
+    metal_release(bn)
     metal_release(b6)
     psos |> clear()   //! borrowed pointers - clear before delete (delete would free the pointees)
     bys |> clear()
@@ -470,10 +587,11 @@ def private main_apple(args) {   // generic on purpose (see gemv_arms)
                 rows += race_cell(queue, dev, f, "mm", sh.name, sh.n, sh.d, arms, args, ref_tab)
                 delete arms
             }
-            if (want(args.tiers, "mvb")) {
-                var arms <- mvb_arms(f)
-                if (!empty(arms)) {
-                    rows += race_cell(queue, dev, f, "mvb", sh.name, sh.n, sh.d, arms, args, ref_tab)
+            for (mt in ["mvb", "mvb4", "mvb8"]) {
+                continue if (!want_exact(args.tiers, mt))
+                var arms <- mvb_arms(f, mt == "mvb" ? 2 : (mt == "mvb4" ? 4 : 8))
+                if (length(arms) > 1) {
+                    rows += race_cell(queue, dev, f, mt, sh.name, sh.n, sh.d, arms, args, ref_tab)
                 }
                 delete arms
             }

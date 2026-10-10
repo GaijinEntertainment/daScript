@@ -10,6 +10,7 @@ require dasllama/dasllama_kv_codec   // cvt_q8kv_to_f32/cvt_tq4kv_to_f32 — the
 require _metal_blob_twin   // blob_twin - the blob-flavor carrier
 require ?das_metal dasllama/dasllama_metal_decode  // stats/mirror/shutdown rails
 require ?das_metal dasllama/dasllama_metal_common  // the greedy chain's stats and mode (arm 15)
+require ?das_metal dasllama/dasllama_metal_kernels  // set_metal_kq_half + kq_half_crown - the half-x rows forms' rail and crowns
 require ?das_metal dasllama/dasllama_metal_prefill  // the Metal-prefill→GPU-decode hybrid arm
 require ?das_metal metal/das_metal_boost  // metal_live_object_count for the leak gate
 require daslib/f16_cvt  // f16 KV row decode in the tolerance gate (Apple half only)
@@ -688,6 +689,68 @@ def test_metal_batch_decode_parity(t : T?) {   // nolint:STYLE038 — flat arm l
                     let gpuk12 <- batch_greedy(trkb, trkbg, promptsk12, 10, KVDtype.f16, true, -1, 0)
                     t |> success(metal_batch_decode_stats().steps - before > 0l, "B=12 kq arm served on the GPU")
                     t |> success(streams_match(cpuk12, gpuk12), "B=12 kq batched greedy streams match the CPU control (kq mul_mm)")
+                    // the half-x leg: under the kq_rows_half_k4 and kq_rows_half_k6 crowns the K-quant sites of two to
+                    // eight rows read the f16 twin the norms and the activation store beside their rows - B=2 / B=3 / B=8
+                    // take k4's two-, four- and eight-column wide forms and k6's small-batch half stamps, token for token
+                    // the CPU control, the forms' dispatch counts the witness; the rail off (set_metal_kq_half) is the
+                    // control that keeps the f32 forms, the half counts at zero - and its k6 f32 count says whether this
+                    // carrier puts a k6 plane at a rows site at all, which decides whether the k6 half count must move
+                    let prev_crowns = get_metal_tensor_crowns()
+                    let prev_pinned = metal_tensor_crowns_pinned()
+                    let prev_half = get_metal_kq_half()
+                    set_metal_kq_half(true)   //! the rail decides every half-x assert below, whatever the environment set
+                    pin_metal_tensor_crowns("{kq_half_crown(KqFmt.k4)},{kq_half_crown(KqFmt.k6)}")
+                    metal_decode_shutdown()
+                    var promptsk8 : array<array<int64>>
+                    promptsk8 |> reserve(8)
+                    for (i in range(8)) {
+                        promptsk8 |> emplace <| encode(trkb, counting_prompt(2 + i, 30 + 3 * i), true, false)
+                    }
+                    t |> equal(2, length(promptsk2), "the B=2 leg runs two streams")
+                    t |> equal(3, length(promptsk), "the B=3 leg runs three streams")
+                    t |> equal(8, length(promptsk8), "the B=8 leg runs eight streams")
+                    let cpuk8 <- batch_greedy(trkb, trkbg, promptsk8, 12, KVDtype.f16, false, -1, 0)
+                    metal_kernel_coverage_reset()
+                    let steps_h0 = metal_batch_decode_stats().steps
+                    let gpukh2 <- batch_greedy(trkb, trkbg, promptsk2, 14, KVDtype.q8_0, true, -1, 0)
+                    let gpukh3 <- batch_greedy(trkb, trkbg, promptsk, 16, KVDtype.f16, true, -1, 0)
+                    let gpukh8 <- batch_greedy(trkb, trkbg, promptsk8, 12, KVDtype.f16, true, -1, 0)
+                    t |> success(metal_batch_decode_stats().steps - steps_h0 >= 3l * 12l, "the three half-x legs' steps were the batched driver's ({metal_batch_decode_stats().steps - steps_h0} steps)")
+                    let h2 = metal_kernel_coverage_of("MetalKqMvW2K4H_metal_kq_mvw_k4")
+                    let h4 = metal_kernel_coverage_of("MetalKqMvW4K4H_metal_kq_mvw_k4")
+                    let h8 = metal_kernel_coverage_of("MetalKqMvW8K4H_metal_kq_mvw_k4")
+                    let k6h = (metal_kernel_coverage_of("MetalKqMvB2K6H_metal_kq_mv_k6") + metal_kernel_coverage_of("MetalKqMvB4K6H_metal_kq_mv_k6")
+                        + metal_kernel_coverage_of("MetalKqMvB8K6H_metal_kq_mvb8_k6"))
+                    t |> success(h2 > 0l && h4 > 0l && h8 > 0l, "the half-x forms served the k4 sites under the crown (two-column {h2}, four-column {h4}, eight-column {h8} dispatches)")
+                    t |> success(streams_match(cpuk2, gpukh2), "B=2 kq batched greedy streams on the half-x two-column form match the CPU control")
+                    t |> success(streams_match(cpuk, gpukh3), "B=3 kq batched greedy streams on the half-x four-column form match the CPU control")
+                    t |> success(streams_match(cpuk8, gpukh8), "B=8 kq batched greedy streams on the half-x eight-column form match the CPU control")
+                    for (i in range(length(cpuk8))) {
+                        log_gen_texts(trkb, "half-x B=8 row {i}", cpuk8[i], gpukh8[i])
+                    }
+                    log_gen_texts(trkb, "half-x B=2 row 0", cpuk2[0], gpukh2[0])
+                    log_gen_texts(trkb, "half-x B=3 row 0", cpuk[0], gpukh3[0])
+                    set_metal_kq_half(false)
+                    metal_kernel_coverage_reset()
+                    let steps_f0 = metal_batch_decode_stats().steps
+                    let gpukf8 <- batch_greedy(trkb, trkbg, promptsk8, 12, KVDtype.f16, true, -1, 0)
+                    t |> success(metal_batch_decode_stats().steps - steps_f0 >= 12l, "the rail-off leg's steps were the batched driver's ({metal_batch_decode_stats().steps - steps_f0} steps)")
+                    let k6f = (metal_kernel_coverage_of("MetalKqMvB2K6_metal_kq_mv_k6") + metal_kernel_coverage_of("MetalKqMvB4K6_metal_kq_mv_k6")
+                        + metal_kernel_coverage_of("MetalKqMvB8K6_metal_kq_mvb8_k6"))
+                    to_log(LOG_INFO, "half-x leg: k4 wide forms {h2} / {h4} / {h8} dispatches, k6 half stamps {k6h}, k6 f32 forms with the rail off {k6f}\n")
+                    t |> equal(metal_kernel_coverage_of("MetalKqMvW8K4H_metal_kq_mvw_k4"), 0l, "the rail off keeps the f32 forms: no eight-column half dispatch")
+                    t |> success((k6f > 0l) == (k6h > 0l), "the k6 half stamps served exactly where the rail-off run served k6's f32 small-batch forms (half {k6h}, f32 {k6f} dispatches)")
+                    t |> success(streams_match(cpuk8, gpukf8), "B=8 kq batched greedy streams on the f32 forms match the CPU control")
+                    log_gen_texts(trkb, "rail-off B=8 row 0", cpuk8[0], gpukf8[0])
+                    set_metal_kq_half(prev_half)
+                    if (prev_pinned) {
+                        pin_metal_tensor_crowns(prev_crowns)
+                    } else {
+                        unpin_metal_tensor_crowns()
+                        set_metal_tensor_crowns(prev_crowns)
+                    }
+                    metal_decode_shutdown()
+                    delete promptsk8
                     delete promptsk12
                     delete promptsk
                     delete promptsk2
@@ -756,7 +819,7 @@ def test_metal_batch_decode_parity(t : T?) {   // nolint:STYLE038 — flat arm l
             // the leak gate: every GPU object the driver holds releases
             metal_decode_stage_report()
             metal_decode_shutdown()
-            t |> equal(metal_live_object_count(), 0l)
+            t |> equal(metal_live_object_count(), 0l, "every GPU object the driver holds releases: {metal_live_object_report()}")
             clear_kernel_backend_pin()
             select_kernel_backend(prior_backend)
             set_wscale_f16(prior_wscale)

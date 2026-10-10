@@ -257,6 +257,12 @@ struct private StepRes {
     bh12s : MetalBuffer?       // the dense-shared/shexp branch's OWN gate|up panel — off bh12 so
                                // the schedule can run the shared chain under the routed chain
     bytes_h12s : uint64
+    bxh : MetalBuffer?         //! the f16 twin of bxb's rows, eight rows deep - the k4 half-x forms' x; null = the step writes none
+    bfgh : MetalBuffer?        //! the f16 twin of the gate panel after its activation - the w2 site's x
+    bytes_xh : uint64
+    bytes_fgh : uint64
+    xh_ok : bool               //! bxh holds the twin of what bxb holds now: set by the norm that wrote both, cleared where another pass overwrites bxb
+    fgh_ok : bool              //! the same for bfgh and the gate panel
     bmoe_rt : MetalBuffer?     // gemma4: router-input row, reused as the routed-branch acc
     u_moe_invd : MetalBuffer?  // gemma4: 1/sqrt(dim) router scale
     u_moe_gmode : MetalBuffer? // select gating mode (1 = gpt-oss softmax_weight)
@@ -407,6 +413,12 @@ def private acquire_step(t : Model; s : Session; pos : int64; koff, voff : uint6
     r.bxb2 = pool_acquire(g_pool, g_dev, r.bytes_x)
     r.bqkv = pool_acquire(g_pool, g_dev, r.bytes_qkv)   // q | roped-in-place q, k, raw v
     r.bh12 = pool_acquire(g_pool, g_dev, r.bytes_h2)    // w1 gate | swiglu in place, w3 up
+    if (kq_half_rows(t, nrows)) {
+        r.bytes_xh = uint64(max(mp, KQ_HALF_TWIN_ROWS) * max(dim, qd_mx) * 2l)
+        r.bytes_fgh = uint64(max(mp, KQ_HALF_TWIN_ROWS) * hid_mx * 2l)
+        r.bxh = pool_acquire(g_pool, g_dev, r.bytes_xh)
+        r.bfgh = pool_acquire(g_pool, g_dev, r.bytes_fgh)
+    }
     r.bcos = pool_acquire_untracked(g_upool, g_dev, r.bytes_tab)
     r.bsin = pool_acquire_untracked(g_upool, g_dev, r.bytes_tab)
     if (has_dual_rope(c)) {
@@ -1238,6 +1250,7 @@ struct template LayerEncT {
                 if (c.attn_sinks) {
                     bsnk = upload_region(addr < void? >(t.fblob[t.sinks_off + l * n_heads]), uint64(n_heads * 4l))
                 }
+                r.xh_ok = false   //! the attention output lands in bxb with no twin
                 attention(self, t, enc, l, lsl, het, bsnk, lkoff, lvoff, nchunks, head_size, n_heads)
                 if (r.kdt == KVDtype.tq4) {
                     // the attention out is rotated-basis per head — un-rotate before the wo projection
@@ -1332,15 +1345,25 @@ struct template LayerEncT {
             site(self, t, enc, SiteKind.w13, f3, t.w3_offs[l], hid_l, dim, hid_l, r.bxb, pan.fu, r.u_dim, u_hid_l, u_hid_l, pan.fu_col)
         }
         if (g_skip != "ew" && !fused13) {
+            let twin = r.bfgh != null && pan.fg == r.bh12   //! the activation dual-stores the gate panel's f16 twin for the w2 site
             if (geglu) {
-                enc_geglu(enc, pan.fg, 0ul, pan.fu, uint64(pan.fu_col * 4l), th.b, th.n)
+                if (twin) {
+                    enc_geglu_hx(enc, pan.fg, 0ul, pan.fu, uint64(pan.fu_col * 4l), th.b, r.bfgh, th.n)
+                } else {
+                    enc_geglu(enc, pan.fg, 0ul, pan.fu, uint64(pan.fu_col * 4l), th.b, th.n)
+                }
+            } elif (twin) {
+                enc_swiglu_hx(enc, pan.fg, 0ul, pan.fu, uint64(pan.fu_col * 4l), th.b, r.bfgh, th.n)
             } else {
                 enc_swiglu(enc, pan.fg, 0ul, pan.fu, uint64(pan.fu_col * 4l), th.b, th.n)
             }
+            r.fgh_ok = twin
         }
         if (sites_on) {
             site(self, t, enc, SiteKind.w2, fmt_at(t.w2_fmt, l), t.w2_offs[l], dim, hid_l, dim, pan.fg, r.bxb, u_hid_l, r.u_dim, r.u_dim, 0l)
         }
+        r.fgh_ok = false   //! the gate panel is spent; w2 wrote bxb with no twin
+        r.xh_ok = false
     }
 
     //! the routed FFN: router -> select -> experts -> combine; moe_with_dense = gemma4's parallel-dense form
@@ -1451,6 +1474,10 @@ struct template LayerEncT {
                     // routed sum lands in bxb first — the shexp branch adds σ(gate)-scaled on top
                     enc_axpy_sig(enc, r.bxb, r.bxb2, r.bmoe_lg, td.b, r.u_dim, td.n)
                 }
+            }
+            if (!moe_with_dense) {
+                r.xh_ok = false   //! the routed sum (and the shared expert's rows in bh12) landed with no twin
+                r.fgh_ok = false
             }
             if (moe_with_dense && g_skip != "ew") {
                                 var bw_post_routed = upload_region(addr < void? >(t.fblob[t.rms_post_ffn2_off + l * dim]), uint64(dim * 4l))
@@ -1755,13 +1782,26 @@ def private moe_args_rows(var e : auto(ET); ndim, ddim, eplane, xs, hasb : uint;
         bxs = down ? r.k_moe_knfe : r.k_dim, bys = down ? r.k_moe_kdim : r.k_moe_knfe, hasb = hasb)
 }
 
+//! the norm into bxb dual-stores its f16 twin where the step carries one (the k4 half-x forms' x)
 def private add_rms_rows(var e : auto(ET); enc : MetalComputeEncoder?; bx, ba, bw, by : MetalBuffer?; dim : int64; bosc : MetalBuffer?) {
-    let r & = unsafe(*e.r)
+    var r & = unsafe(*e.r)
+    let twin = r.bxh != null && by == r.bxb
     if (dim <= ADD_RMS_MAX_DIM && !g_b_addrms_unfused) {
-        enc_add_rms_b(enc, bx, ba, bw, by, r.u_dim, r.u_eps, r.nrows, bosc)
+        if (twin) {
+            pf_enc_add_rms_bhx(enc, bx, ba, bw, by, r.u_dim, r.u_eps, r.bxh, r.nrows, bosc)
+        } else {
+            enc_add_rms_b(enc, bx, ba, bw, by, r.u_dim, r.u_eps, r.nrows, bosc)
+        }
     } else {
         enc_add(enc, bx, 0ul, ba, 0ul, r.u_total_dim, r.nrows * dim, bosc)
-        enc_rms_b(enc, bx, 0ul, bw, by, r.u_dim, r.u_eps, r.nrows)
+        if (twin) {
+            enc_rms_bhx(enc, bx, 0ul, bw, by, r.u_dim, r.u_eps, r.bxh, r.nrows)
+        } else {
+            enc_rms_b(enc, bx, 0ul, bw, by, r.u_dim, r.u_eps, r.nrows)
+        }
+    }
+    if (by == r.bxb) {
+        r.xh_ok = twin
     }
 }
 
@@ -1781,10 +1821,40 @@ def private total_rows(e : auto(ET); u : MetalBuffer?; n : int64) : tuple<b : Me
 [arch(at="../ARCHITECTURE_GPU_MTP_DECODE.md#metal-layer-enc")]
 def private rows_tier(nrows : int64) : BatchTier => BatchTier(use_mm = false, use_gemm = false, mp = nrows, nrows = nrows, bpsk = null)
 
+let private KQ_HALF_TWIN_ROWS = 8l   //! a half-x form reads every one of its columns, so a twin holds eight rows whatever the step's count
+
+//! the rows step writes the f16 twins: the row count is the half-x forms', and a plane of a format whose
+//! half crown is on sits at a site the rows forms serve (q, k, v, the FFN's three; wo's x has no producer twin)
+[arch(at="../ARCHITECTURE_GPU_MTP_DECODE.md#kq-rows-crown")]
+def private kq_half_rows(t : Model; nrows : int64) : bool {
+    return false if (!metal_kq_half_any() || nrows < 2l || nrows > KQ_HALF_TWIN_ROWS)
+    for (l in range64(t.config.n_layers)) {
+        if (metal_kq_half_on(fmt_at(t.wq_fmt, l)) || metal_kq_half_on(fmt_at(t.wk_fmt, l)) || metal_kq_half_on(fmt_at(t.wv_fmt, l))
+                || metal_kq_half_on(fmt_at(t.w1_fmt, l)) || metal_kq_half_on(fmt_at(t.w3_fmt, l)) || metal_kq_half_on(fmt_at(t.w2_fmt, l))) {
+            return true
+        }
+    }
+    return false
+}
+
+//! the twin a site's x carries: bxb's where the norm that wrote bxb stored it, the gate panel's where the activation did
+def private site_x_twin(e : auto(ET); bx : MetalBuffer?; blk : block<(bxh : MetalBuffer?) : void>) {
+    let r & = unsafe(*e.r)
+    if (bx == r.bxb && r.xh_ok) {
+        invoke(blk, r.bxh)
+    } elif (bx == r.bh12 && r.fgh_ok) {
+        invoke(blk, r.bfgh)
+    } else {
+        invoke(blk, null)
+    }
+}
+
 [unused_argument(kind)]
 def private site_verify(e : VerifyLayerEnc; t : Model; enc : MetalComputeEncoder?; kind : SiteKind; fmt : KqFmt;
                         woff, rows, n, ys : int64; bx, by, bn, bd, bys : MetalBuffer?; ycol : int64) {
-    enc_batch_site(enc, t, rows_tier(e.r.nrows), fmt, woff, rows, n, ys, bx, by, bn, bd, bys, ycol, false)
+    site_x_twin(e, bx) $(bxh) {
+        enc_batch_site(enc, t, rows_tier(e.r.nrows), fmt, woff, rows, n, ys, bx, by, bn, bd, bys, ycol, false, bxh = bxh)
+    }
 }
 
 //! the verify rows' panels: the single row's, at nrows rows and with no gemma4 branch
@@ -1982,7 +2052,12 @@ def private encode_verify_step(t : Model; var r : StepRes) {
         enc_hc_init(enc, r.bx, r.bhc, r.u_dim, r.u_hc, r.u_hcd_tot, nr * hc_dim(c))
     } else {
         var bw_att0 = upload_region(unsafe(addr < void? >(t.fblob[t.rms_att_off])), uint64(dim * 4l))
-        enc_rms_b(enc, r.bx, 0ul, bw_att0, r.bxb, r.u_dim, r.u_eps, nr)
+        if (r.bxh != null) {
+            enc_rms_bhx(enc, r.bx, 0ul, bw_att0, r.bxb, r.u_dim, r.u_eps, r.bxh, nr)
+            r.xh_ok = true
+        } else {
+            enc_rms_b(enc, r.bx, 0ul, bw_att0, r.bxb, r.u_dim, r.u_eps, nr)
+        }
     }
     var dnli = 0l
     var pdeep = g_v_groups[0].pos   //! the chain's chunk count follows the DEEPEST group: a shallower count leaves the deep rows' partials unwritten
@@ -2050,6 +2125,7 @@ def private enc_draft_head_rows(t : Model; var r : StepRes; enc : MetalComputeEn
         var bw_att = upload_region(addr < void? >(t.fblob[t.rms_att_off + c.n_layers * dim]), uint64(dim * 4l))
         enc_rms_b(enc, r.bx, 0ul, bw_att, r.bxb, r.u_dim, r.u_eps, nr)
     }
+    r.xh_ok = false   //! the head's norm wrote bxb with no twin: the MTP layer's sites read the f32 rows
 }
 
 //! the rows classifier tail: the final norm at `norm_off` over bx, the classifier GEMM into `bcls`, then
@@ -2854,6 +2930,10 @@ def private release_step(var r : StepRes) {   // nolint:STYLE037,STYLE038 — fl
     if (r.bh12s != null) {
         pool_release(g_pool, r.bh12s, r.bytes_h12s)
     }
+    if (r.bxh != null) {
+        pool_release(g_pool, r.bxh, r.bytes_xh)
+        pool_release(g_pool, r.bfgh, r.bytes_fgh)
+    }
     pool_release(g_upool, r.bcos, r.bytes_tab)
     pool_release(g_upool, r.bsin, r.bytes_tab)
     if (r.bcos_swa != null) {
@@ -3324,9 +3404,9 @@ def private batch_decode_decline(t : Model; ws : BatchWorkspace; sessions : arra
 //! 64-wide or plain tile GEMM, or the row GEMVs. y lands at column ycol of a ys-wide row.
 def private enc_batch_site(enc : MetalComputeEncoder?; t : Model; bt : BatchTier; fmt : KqFmt;
                            woff, rows, n, ys : int64; bx, by, bn, bd, bys : MetalBuffer?;
-                           ycol : int64; mv_ok : bool; sk : int64 = 0l; gemm64 : bool = false) {
+                           ycol : int64; mv_ok : bool; sk : int64 = 0l; gemm64 : bool = false; bxh : MetalBuffer? = null) {
     if (fmt != KqFmt.q8) {
-        enc_kq_site_b(enc, t, fmt, woff, rows, n, bx, n, by, ys, ycol, bn, bd, bys, bt.nrows, bt.mp)
+        enc_kq_site_b(enc, t, fmt, woff, rows, n, bx, n, by, ys, ycol, bn, bd, bys, bt.nrows, bt.mp, bxh)
         return
     }
     let bw = blob_of(g_dev, t, woff)
@@ -3353,7 +3433,9 @@ def private site_batch(e : BatchLayerEnc; t : Model; enc : MetalComputeEncoder?;
     let r & = unsafe(*e.r)
     let mv_ok = kind == SiteKind.wo ? r.mv_wo : (kind == SiteKind.w2 ? r.mv_w2 : (kind == SiteKind.other ? false : r.mv_kdim))
     let sk = kind == SiteKind.wo ? r.wo_sk : (kind == SiteKind.w2 ? r.w2_sk : 0l)
-    enc_batch_site(enc, t, r.bt, fmt, woff, rows, n, ys, bx, by, bn, bd, bys, ycol, mv_ok, sk, kind == SiteKind.cls && r.cls64)
+    site_x_twin(e, bx) $(bxh) {
+        enc_batch_site(enc, t, r.bt, fmt, woff, rows, n, ys, bx, by, bn, bd, bys, ycol, mv_ok, sk, kind == SiteKind.cls && r.cls64, bxh)
+    }
 }
 
 //! the batch rows' panels: gate and up in two panels; gemma4's experts take their own pair so the
@@ -3905,6 +3987,11 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
         nrows * n_heads * nchmax * (hs_mx + 2l) * 4l)
     var bx = pool_acquire(g_pool, g_dev, bytes_x)
     var bxb = pool_acquire(g_pool, g_dev, bytes_xb)
+    let twins = kq_half_rows(t, nrows)
+    let bytes_xh = twins ? uint64(max(mp, KQ_HALF_TWIN_ROWS) * max(dim, qd_mx) * 2l) : 0ul
+    let bytes_fgh = twins ? uint64(max(mp, KQ_HALF_TWIN_ROWS) * hid_mx * 2l) : 0ul
+    var bxh = twins ? pool_acquire(g_pool, g_dev, bytes_xh) : null
+    var bfgh = twins ? pool_acquire(g_pool, g_dev, bytes_fgh) : null
     var bxb2 = pool_acquire(g_pool, g_dev, bytes_x)
     var bqkv = pool_acquire(g_pool, g_dev, bytes_qkv)
     var bhb = pool_acquire(g_pool, g_dev, bytes_h)
@@ -4119,12 +4206,18 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
         }
     }
     // layer-0 attention norm (the per-layer trailing add+rms feeds the NEXT layer's); a hyper-connection model opens the rows' wide residual instead
+    var xh0 = false
     if (g_skip != "ew") {
         if (hc) {
             enc_hc_init(enc, bx, bhc, u_dim, u_hc, u_hcd_tot, nrows * hcd)
         } else {
             var bw_att0 = upload_region(unsafe(addr < void? >(t.fblob[t.rms_att_off])), uint64(dim * 4l))
-            enc_rms_b(enc, bx, 0ul, bw_att0, bxb, u_dim, u_eps, nrows)
+            if (bxh != null) {
+                enc_rms_bhx(enc, bx, 0ul, bw_att0, bxb, u_dim, u_eps, bxh, nrows)
+                xh0 = true
+            } else {
+                enc_rms_b(enc, bx, 0ul, bw_att0, bxb, u_dim, u_eps, nrows)
+            }
         }
     }
     var r = StepRes(valid = true, pos = maxcnt - 1l, chain_pos = maxcnt - nrows, nrows = nrows, kdt = kdt, hetero = hetero, moe = moe,
@@ -4139,6 +4232,7 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
         u_cd = u_cd, u_nvh = u_nvh, u_di = u_di,
         bdn_qg = bdn_qg, bdn_gate = bdn_gate, u_dn_qd2 = u_dn_qd2, u_total_qd = u_total_qd,
         bx = bx, bxb = bxb, bxb2 = bxb2, bqkv = bqkv, bh12 = bhb, bh12b = bhb2, bpart = bpart,
+        bxh = bxh, bfgh = bfgh, bytes_xh = bytes_xh, bytes_fgh = bytes_fgh, xh_ok = xh0,
         bcos = bcos, bsin = bsin, bcos_swa = bcos_swa, bsin_swa = bsin_swa, brt = brt,
         bmoe_lg = bmlg, bmoe_sel = bmsel, bmoe_dn = bmdn, bmoe_rt = bmg4rt, bmg4x = bmg4x, bmgh = bmgh, bmghb = bmgh2,
         bt = bt, mv_kdim = mv_kdim, mv_wo = mv_wo, mv_w2 = mv_w2, wo_sk = wo_sk, w2_sk = w2_sk, cls64 = cls64, fuse13 = fuse13,
@@ -4235,6 +4329,10 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
     L.pooled |> push((buf = bqkv, size = bytes_qkv))
     L.pooled |> push((buf = bhb, size = bytes_h))
     L.pooled |> push((buf = bhb2, size = bytes_h))
+    if (twins) {
+        L.pooled |> push((buf = bxh, size = bytes_xh))   // nolint:STYLE012
+        L.pooled |> push((buf = bfgh, size = bytes_fgh))
+    }
     if (use_attn_d || chunked) {
         L.pooled |> push((buf = bpart, size = bytes_part))
     }

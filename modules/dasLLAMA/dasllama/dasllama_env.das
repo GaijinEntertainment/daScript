@@ -260,6 +260,9 @@ struct public MetalEnv {
     @clarg_doc = "GEMV-tail prefill dispatch: npos % 32 in [1,8] peels the last M tile's real rows onto the fixed-B GEMV family instead of billing a full 32-row tile; 0 pins the padded-tile path (the A/B rail)."
     mm_tail : bool = true
 
+    @clarg_doc = "The K-quant rows sites (two to eight rows: the verify, the batch step, the prefill's short window) read x as the f16 twin the row producer stores beside it, for every format whose half-x route the box crowned (kq_rows_half_<fmt>); 0 keeps the f32 forms under every crown (the A/B rail)."
+    kq_half : bool = true
+
     @clarg_doc = "Fused prefill qk_norm+rope pass (one panel rewrite, q panel dual-stores its f16 twin); 0 restores the split norm/rope/cvt dispatches (the A/B rail)."
     qk_rope : bool = true
 

@@ -18,6 +18,8 @@ require daslib/fio   // nolint:STYLE030,LINT019 — used only inside the Apple s
 require math   // nolint:STYLE030,LINT019 - min/max inside the das_metal halves
 require daslib/strings_boost   // split / join: the crown list a cell narrows
 require _model_tier
+require _compares   // nolint:STYLE030,LINT019 — logits_maxdiff / logits_maxabs, the short-window cells' bar, inside the das_metal half
+require daslib/algorithm   // nolint:STYLE030,LINT019 — max_element, the short-window cells' argmax, inside the das_metal half
 require ../performance/model_specs.das   // nolint:STYLE030,LINT019 — counting_prompt, read only inside the das_metal static_if halves
 
 // End-to-end gate for the dasMetal whole-prefill override (Phase 6): greedy continuation of a
@@ -1311,5 +1313,156 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
         } else {
             feint("das_metal is not built on this platform; nothing to compare\n")
         }
+    }
+}
+
+//! the first largest element's index, serially - the cells read it outside any job queue
+//! the short-window form under test: the routed block's gathered route (a MoE carrier) or the dense K-quant sites' row-batched
+//! GEMV peel (any K-quant carrier) - each with its own engage counter and its own off-lever
+enum ShortForm {
+    moe_route
+    kq_tail
+}
+
+//! One carrier through a short-window form: a 300-row window on the tiles, then a short window the form serves, the last
+//! row's logits against the all-CPU chain within `bar` of its largest, the form's own counter the engage witness, the same
+//! windows with the form off (the tiles) logged beside it, and the control a window whose last token differs landing
+//! outside the bar.
+[cold_path]
+def private short_window_cells(t : T?; path, tag : string; bar : float; form : ShortForm) {   // nolint:STYLE037,STYLE038 — one cell: load, the four windows' route/tiles/control legs, the knob restores
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        return if (!model_available(t, path))
+        let prior_wscale = get_wscale_f16()
+        let prior_backend = active_kernel_backend()
+        let prior_pin = kernel_backend_pin()
+        let prior_override = active_prefill_override()
+        let prior_min_npos = get_metal_prefill_min_npos()
+        let prior_tail = get_metal_prefill_mm_tail()
+        set_wscale_f16(false)
+        pin_kernel_backend("portable")
+        var tr <- load_model_(path, QuantMode.q8)
+        if (tr.config.seq_len > 2048l) {
+            tr.config.seq_len = 2048l
+        }
+        let prompt <- encode(tr, counting_prompt(ATTN_DEV_COUNT_TO), true, false)
+        var trg <- blob_twin(t, path, 2048l)
+        let w1n = min(300l, long_length(prompt) - 40l)
+        t |> equal(300l, w1n, "the first window is the 300-row one the tiles serve")
+        var w1 <- [for (i in range64(w1n)); prompt[i]]
+        let route = form == ShortForm.moe_route
+        let prior_knee = metal_moe_gemv_max()
+        let form_name = route ? "route" : "peel"
+        set_metal_prefill_mm_tail(true)   //! the peel's rail decides its engage assert, whatever the environment set
+        //! the route's windows: 2, 7 and 24 rows at a knee pinned to 24 (the shipped knee is 16), and 16 rows at the shipped knee itself
+        var inscope windows <- route ? [2l, 7l, 16l, 24l] : [2l, 5l, 8l]
+        for (n in windows) {
+            if (route) {
+                set_metal_moe_gemv_max(n == 16l ? -1l : 24l)
+                if (n == 16l) {
+                    t |> equal(16l, pf_moe_gemv_knee(), "{tag}/{n}: the shipped knee is 16 rows")
+                }
+            }
+            let knee = route ? pf_moe_gemv_knee() : 8l
+            continue if (n > knee)
+            var inscope w2 <- [for (i in range64(n)); prompt[w1n + i]]
+            t |> equal(n, long_length(w2), "{tag}/{n}: the short window holds {n} rows")
+            var inscope w2_ctrl := w2
+            w2_ctrl[n - 1l] = prompt[w1n + n]
+            var inscope cpu <- two_window_logits(tr, w1, w2)
+            t |> success(select_prefill_override("metal"), "{tag}/{n}: override registered")
+            set_metal_prefill_min_npos(1l)
+            let served0 = metal_prefill_stats().prefills
+            let engaged0 = route ? metal_prefill_moe_gemv_stats() : metal_prefill_tail_stats().kq_sites
+            var inscope gpu <- two_window_logits(trg, w1, w2)
+            let served = metal_prefill_stats().prefills - served0
+            let engaged = (route ? metal_prefill_moe_gemv_stats() : metal_prefill_tail_stats().kq_sites) - engaged0
+            var inscope gpu_ctrl <- two_window_logits(trg, w1, w2_ctrl)
+            if (route) {
+                set_metal_moe_gemv_max(0l)
+            } else {
+                set_metal_prefill_mm_tail(false)
+            }
+            let off0 = route ? metal_prefill_moe_gemv_stats() : metal_prefill_tail_stats().kq_sites
+            let served_tiles0 = metal_prefill_stats().prefills
+            var inscope gpu_tiles <- two_window_logits(trg, w1, w2)
+            let served_tiles = metal_prefill_stats().prefills - served_tiles0
+            let off_engaged = (route ? metal_prefill_moe_gemv_stats() : metal_prefill_tail_stats().kq_sites) - off0
+            if (!route) {
+                set_metal_prefill_mm_tail(true)
+            }
+            set_metal_prefill_min_npos(prior_min_npos)
+            select_prefill_override(prior_override)
+            if (served == 0l) {
+                t |> skip("{tag}/{n}: metal prefill declined (no Metal device?); the {form_name}'s parity skipped")
+                continue
+            }
+            t |> equal(served, 2l, "{tag}/{n}: both windows served on the device")
+            t |> equal(served_tiles, 2l, "{tag}/{n}: both windows of the tiles leg served on the device")
+            if (route) {
+                t |> equal(engaged, 1l, "{tag}/{n}: the short window alone rode the gathered route")
+            } else {
+                t |> success(engaged > 0l, "{tag}/{n}: the short window's K-quant sites rode the row-batched GEMV ({engaged} sites)")
+            }
+            t |> equal(off_engaged, 0l, "{tag}/{n}: with the {form_name} off the tiles serve it")
+            let g = logits_maxdiff(gpu, cpu)
+            let gt = logits_maxdiff(gpu_tiles, cpu)
+            let gc = logits_maxdiff(gpu_ctrl, cpu)
+            let peak = logits_maxabs(cpu)
+            to_log(LOG_INFO, "{tag}/{n}: {form_name} gap {g} of peak {peak} ({g / peak}); tiles gap {gt} ({gt / peak}); control gap {gc} ({gc / peak})\n")
+            t |> success(g <= bar * peak, "{tag}/{n}: the {form_name}'s last-row logits within {bar} of the CPU chain's largest ({g} of {peak}; the tiles read {gt})")
+            t |> success(gc > bar * peak, "{tag}/{n}: the control window (its last token changed) lands outside the bar ({gc} of {peak})")
+            let am_gpu = max_element(gpu)
+            let am_cpu = max_element(cpu)
+            to_log(LOG_INFO, "{tag}/{n}: argmax pieces - {form_name} {escape(piece(tr, int64(am_gpu)))}, CPU {escape(piece(tr, int64(am_cpu)))}, tiles {escape(piece(tr, int64(max_element(gpu_tiles))))}\n")
+            t |> success(am_gpu == am_cpu, "{tag}/{n}: the {form_name}'s argmax is the CPU chain's ({am_gpu} / {am_cpu}; the tiles' {max_element(gpu_tiles)})")
+        }
+        if (route) {
+            set_metal_moe_gemv_max(prior_knee)
+        }
+        set_metal_prefill_mm_tail(prior_tail)
+        metal_prefill_shutdown()
+        if (empty(prior_pin)) {
+            clear_kernel_backend_pin()
+        } else {
+            pin_kernel_backend(prior_pin)
+        }
+        select_kernel_backend(prior_backend)
+        set_wscale_f16(prior_wscale)
+        delete tr
+        delete trg
+    } else {
+        t |> skip("das_metal is not built on this platform; the Metal prefill is not compiled")
+    }
+}
+
+[test]
+def test_metal_prefill_moe_gemv_route(t : T?) {
+    t |> run("the gathered expert route == CPU control on a q8 MoE (Qwen1.5-MoE-A2.7B Q8_0)") <| @(t : T?) {
+        if (!family_on(t, "qwen2moe") || !arm_on(t, "moe-gemv")) return
+        short_window_cells(t, path_join(models_dir(), "Qwen1.5-MoE-A2.7B-Chat.Q8_0.gguf"), "moe-gemv/qwen2moe-q8", 0.08, ShortForm.moe_route)
+    }
+    t |> run("the gathered expert route == CPU control on a K-quant MoE (Qwen3-30B-A3B Q4_K_M)") <| @(t : T?) {
+        if (!family_on(t, "qwen3moe") || !arm_on(t, "moe-gemv")) return
+        short_window_cells(t, path_join(models_dir(), "Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf"), "moe-gemv/qwen3moe-k4", 0.10, ShortForm.moe_route)
+    }
+    t |> run("the gathered expert route == CPU control on the mx4 MoE (gpt-oss-20b mxfp4)") <| @(t : T?) {
+        if (!family_on(t, "gptoss") || !arm_on(t, "moe-gemv")) return
+        short_window_cells(t, path_join(models_dir(), "gpt-oss-20b-mxfp4.gguf"), "moe-gemv/gptoss-mx4", 0.12, ShortForm.moe_route)
+    }
+}
+
+[test]
+def test_metal_prefill_kq_tail(t : T?) {
+    t |> run("the dense K-quant sites' row-batched GEMV peel == CPU control (Llama-3.2-1B Q4_K_M)") <| @(t : T?) {
+        if (!family_on(t, "llama") || !arm_on(t, "kq-tail")) return
+        short_window_cells(t, path_join(models_dir(), "Llama-3.2-1B-Instruct-Q4_K_M.gguf"), "kq-tail/llama-k4", 0.08, ShortForm.kq_tail)
+    }
+    t |> run("the dense K-quant sites' row-batched GEMV peel == CPU control on a grid format (Llama-3.2-1B IQ4_XS)") <| @(t : T?) {
+        if (!family_on(t, "llama") || !arm_on(t, "kq-tail")) return
+        short_window_cells(t, path_join(models_dir(), "Llama-3.2-1B-Instruct-IQ4_XS.gguf"), "kq-tail/llama-iq4xs", 0.08, ShortForm.kq_tail)
+    }
+    t |> run("the dense K-quant sites' row-batched GEMV peel == CPU control (Qwen3-4B Q4_K_M)") <| @(t : T?) {
+        if (!family_on(t, "qwen3") || !arm_on(t, "kq-tail")) return
+        short_window_cells(t, path_join(models_dir(), "Qwen3-4B-Instruct-2507-Q4_K_M.gguf"), "kq-tail/qwen3-k4", 0.08, ShortForm.kq_tail)
     }
 }

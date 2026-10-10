@@ -537,6 +537,13 @@ def make_think_stream(chat : ChatSession) : ThinkStream {
     return make_think_stream_(chat)
 }
 
+def think_budget_marks(model : Model; chat : ChatSession) : ThinkBudgetMarks {
+    //! The token marks a reasoning budget acts on for ``chat``'s next turn (``ThinkBudgetMarks``): the span's open token,
+    //! the close tokens a scheduler forces at a stream's ``think_budget`` (the family's close special; harmony's end mark
+    //! and final-channel header), and whether the prompt opened the span. Empty where the turn does not think.
+    return <- think_budget_marks_(model, chat)
+}
+
 def think_drain(var ts : ThinkStream; full : string) : ThinkSplit {
     //! Drain a COMPLETE reply through the splitter in one call: feed + finish + the strip rule
     //! (both halves strip when a reasoning span was consumed). The buffered-response twin of the

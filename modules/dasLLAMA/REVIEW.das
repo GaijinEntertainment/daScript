@@ -703,6 +703,13 @@ def private check_exe_fn_global_restore {
                 rest = slice(line, length("var private "))
             } elif (line |> starts_with("var ")) {
                 rest = slice(line, length("var "))
+            } elif (line |> starts_with("let private ") || line |> starts_with("let ")) {
+                //! a `let` global's initializer holding function values - a table or struct of `@@fn` - restores as data too, and no [init] can refill a `let`
+                let at = find(line, "@@")
+                if (at >= 0 && !(find(line, "//") >= 0 && find(line, "//") < at)) {
+                    gate_finding(path, line_no, "`let` global carries a function value (`@@`) in its declaration initializer - a serialized exe restores it as NULL and the first invoke dies; declare it `var` and fill it in an [init]")
+                }
+                continue
             } else {
                 continue
             }

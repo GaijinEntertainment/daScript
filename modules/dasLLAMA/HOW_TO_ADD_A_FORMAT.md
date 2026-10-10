@@ -528,7 +528,7 @@ silently, which is why the tier's gate (`kq_fmt_gpu_supported`) is closed by def
    `g_pso_*` global is declared by hand in `dasllama_metal_common.das`, since the lens only
    names it. The prefill's per-format picks are tables, one row per format: `pf_kq_split_stamps`
    (dense split), `pf_kq_deep_stamps` (k4/k5/k6), `pf_moe_split_stamps` (routed split).
-4. **Ladders:** `enc_kq_gemv`, `enc_kq_mvb`, `enc_kq_gemm_mm_b` (kernels), `pf_enc_kq_site_mm`,
+4. **Ladders:** `enc_kq_gemv`, `enc_kq_gemm_mm_b` (kernels), `pf_enc_kq_site_mm`,
    `enc_site_gemv` (the classifier site prefill and decode share), `moe_site_ok` + the `sb1/2/3`
    predicates (shapes), and last the gate. The tensor side is one class: a `stage16` override on
    `MetalKqMulMmSplitTensorBase` (`ARCHITECTURE_GPU_PREFILL.md#prefill-kq-tensor-scaffold`) gives the format its T/TH
@@ -539,6 +539,14 @@ silently, which is why the tier's gate (`kq_fmt_gpu_supported`) is closed by def
    A format whose decode already rides another format's split class stamps the four expert leaves
    (`T`, `TH`, `TH128`, `THR`) off THAT class's MoE template with its own template constants
    instead of authoring a new one - q40 off iq4xs's is the worked case.
+   **The small-batch forms are a table row, not a ladder arm:** `KQ_MVB_FORMS` (kernels) carries the
+   format's two-, four- and eight-row builders in their f32 stamps and their half-x stamps
+   (`MetalKqMvB{2,4,8}<Fmt>H`: the f32 class with `override XHALF = true`, each with a
+   `g_pso_kq_mvb*h_<fmt>` global compiled in `metal_decode_init` and released beside the f32 one),
+   a `KQ_ROWS_RACE_FORMATS` row runs its `kq_rows_<fmt>` and `kq_rows_half_<fmt>` races, the
+   gemv file's `KQ_HALF_FORMATS` list and the coverage census (`test_kernel_coverage.das`) name the
+   stamps, and `enc_kq_mvb` asserts on a format with no row - a crowned half route on a format
+   without its half stamps panics at the first dispatch.
    **Serving an expert plane is six ladders, not one** (`followup_metal.md` sec.15 names the
    dispatch-vs-predicate invariant): `pf_moe_split_fmt`, `pf_moe_split_stamps` (the per-format
    row `pf_moe_split_enc` reads), `pf_moe_th_pso` and

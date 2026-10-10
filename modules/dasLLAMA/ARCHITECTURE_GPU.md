@@ -167,13 +167,13 @@ that a question answered for one backend has an obvious address in the other. Th
   shared bind path may span the two layouts; the MoE combine pair (`MetalMoeCombine` y/dim/nk at
   2/3/4, `MetalMoeReduce` at 3/4/5 under its gated `inv`) keeps each leaf's numbers; the in-engine moe mul_mm A/B race harnesses
   (`dasllama_metal_prefill.das`) encode through `kn_moe_mm_family_tail` rather than a per-class
-  `enc_*` builder; the iq4 family's iq4nl stamps (`MetalKqGemvIq4T`, `MetalKqMvIq4T`, `MetalKqMvB8Iq4T`)
-  and the mul_mm tensor template's compact-scale stamps off the same family (`MetalKqMulMmIq4xsTensorT`
-  at IQ4NL, the dense `MetalKqMulMmIq4nlT` / `TH` and `MetalKqMulMmQ40T` / `TH`, and the four
-  `MetalMoeMulMmQ40*` expert stamps) bind the strip plane unread, so both formats share one set layout
-  and one host bind path; the split-scale dev-W dequant stamps (`MetalKqDequant<Fmt>`) inherit the
-  mul_mm scaffold's `xf` and `y` bindings unread - they write only the f16 panel at binding 7 - so a
-  format's dequant pass and its mul_mm twins keep one set layout and one host bind path; and the Vulkan
+  `enc_*` builder; the iq4 family's iq4nl stamps (`MetalKqGemvIq4T`, `MetalKqMvIq4T`, `MetalKqMvB8Iq4T`) and the mul_mm tensor
+  template's compact-scale stamps off the same family (`MetalKqMulMmIq4xsTensorT` at IQ4NL, the dense `MetalKqMulMmIq4nlT` / `TH`
+  and `MetalKqMulMmQ40T` / `TH`, the four `MetalMoeMulMmQ40*` expert stamps) bind the strip plane unread, so both formats share
+  one set layout and one host bind path; the split-scale dev-W dequant stamps (`MetalKqDequant<Fmt>`) inherit the mul_mm
+  scaffold's `xf` and `y` bindings unread - they write only the f16 panel at binding 7 - so a format's dequant pass and its
+  mul_mm twins keep one set layout and one host bind path; the MoE tile lab's knockout stamps (`LabMoe*Ko*`,
+  `benchmarks/matmul/bench_metal_moe_tile_lab.das`) keep the full bind lists, the dropped stage's buffer unread; and the Vulkan
   `kq_gemv_cls` family binds `gridb` (the grid formats' codebook plane, `kq_grid_dev`) at binding 6 on
   every stamp, one set layout for the family - the grid stamps (iq2xxs, iq2xs, iq2s, iq3xxs, iq3s) and
   their N leaves read it; every other stamp (k2 k3 k4 k5 k6 q40 iq4xs iq4nl, iq3s4 - whose codebook is arithmetic - and the fused `kq_gemv_k4_gu_cls`) binds it unread.

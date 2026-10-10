@@ -563,16 +563,6 @@
     resolves against the repo root explicitly or the run REFUSES (exit 2) when the walk
     yields zero files - an empty scan is never a pass.
 
-49. **The MoE kq tensor twins (K4/K5/K6) are gated by the DENSE kq crowns - a race that never
-    measured them.** `pf_compile_moe_kq_twins` keys on `metal_tensor_crowned("kq_mulmm_k4")`
-    etc. (dense 512x2048x1024 race), but the kernels it arms add the per-expert plane fold,
-    cnt/basep indirection and the tg-uniform early exit; the q8/mx4 MoE twins already have
-    their own MoE-shaped race families (`race_moe_mulmm_q8` / `_mx4`, ne=4, 32 rows/expert).
-    On a box where the dense K4 twin wins at 512 rows while the MoE K4 twin loses at
-    32 rows/expert, every routed K4 expert site takes the slower kernel for the life of the
-    sidecar, and the sidecar cannot express the split. Done = own race families
-    (`moe_mulmm_k4/k5/k6`) beside the q8/mx4 racers, PSO gates moved onto their crowns.
-
 50. **`float_a_ok` licenses the whole kernel, so the float-A gate is disarmed on twin-stamped
     templates.** `ctx.float_a_ok` is one per-emit bool; a `[metal_kernel(float_a_ok=true)]`
     on a template method covers every stamp - including the `XT = float16` twins the gate

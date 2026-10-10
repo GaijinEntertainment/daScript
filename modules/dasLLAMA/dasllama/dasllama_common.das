@@ -1493,6 +1493,16 @@ enum ThinkMode {
     asymmetric      // gemma-4: <|channel>thought ... <channel|> (asymmetric brackets by design)
 }
 
+//! The token marks a reasoning budget acts on, resolved per request from the family's template and the model's vocab
+//! (`think_budget_marks_`); an empty `close` means no budget can act - thinking off, or a vocab without the markers.
+struct ThinkBudgetMarks {
+    open : array<int64>      //!< the token sequence a reply writes to open its reasoning span (a special, or harmony's channel mark and `analysis`)
+    close : array<int64>     //!< the tokens forced at the budget to end the span: a close special, or harmony's end mark + final header
+    close_tok : int64 = -1l  //!< the one token the model itself writes to leave the span (the close special; harmony's end mark)
+    reopen : array<int64>    //!< the markers that end the turn once the forced close is out - a span re-opened past the budget is the model rambling past its answer
+    opened : bool = false    //!< the generation prompt left the reply inside the span
+}
+
 //! The family's tool-calling convention — defs render, call parse, replay, and results framing
 //! all dispatch on it (`ToolMode.none` = no format declared; the server answers `tools` with an
 //! honest 400 there).
@@ -1720,6 +1730,18 @@ def public set_runtime_race_hook(hook : function<() : bool>) : function<() : boo
 
 def private runtime_race_writes() : bool => g_runtime_race_armed && invoke(g_runtime_race_hook)
 
+var private g_box_runtime_hook : function<() : string>
+
+//! Install what answers the per-box runtime file for a run that keeps no sidecar of its own (`dasllama_fat_start`
+//! registers the engine's): the path of a file this box raced, or "" where the process keeps its manifest.
+def public set_box_runtime_hook(hook : function<() : string>) : function<() : string> {
+    let old = g_box_runtime_hook
+    g_box_runtime_hook = hook
+    return old
+}
+
+def private box_runtime_file_() : string => g_box_runtime_hook != null ? invoke(g_box_runtime_hook) : ""
+
 var private g_sidecar_place_hook : function<() : void>
 
 //! Install what chooses the app sidecar's location before the default apply reads it
@@ -1741,22 +1763,30 @@ def apply_box_profile_runtime(path : string = "") {
         if (g_sidecar_place_hook != null) {
             invoke(g_sidecar_place_hook)
         }
-        apply_box_profile_runtime_checked(box_profile_path())
+        apply_box_profile_runtime_checked(box_profile_path(), true)
     } else {
         apply_box_profile_runtime_at(path)
     }
 }
 
-//! A sidecar another box minted, or one that does not read as a sidecar, is somewhere else's box
-//! state and applies nothing; one that merely predates the binary keeps its runtime section - the
-//! knobs are this box's state, only the kernel winners died with the rebuild.
-def apply_box_profile_runtime_checked(path : string) {
+//! A sidecar another box minted, or one that does not read as a sidecar, is somewhere else's box state and applies
+//! nothing; one that merely predates the binary keeps its runtime section - the knobs are this box's state, only the
+//! kernel winners died. `box_fallback` is the default apply's: a path a caller names never falls back to the box file.
+def apply_box_profile_runtime_checked(path : string; box_fallback : bool = false) {
     g_box_profile_runtime_applied = false   // both flags describe THIS apply, never an earlier one
     g_box_profile_runtime_declined = ""
     var reason = box_profile_verdict_at(path)
     // no section of this box's own to apply: the first-start race, when one is installed, mints it now
     if ((reason == "absent" || reason == "foreign_box") && runtime_race_writes()) {
         reason = box_profile_verdict_at(path)
+    }
+    if (box_fallback && (reason == "absent" || reason == "foreign_box" || reason == "unreadable")) {
+        //! no section of this box's own in the manifest: the per-box file every run on the box shares, raced once
+        let bp = box_runtime_file_()
+        if (!empty(bp)) {
+            apply_box_profile_runtime_at(bp)
+            return
+        }
     }
     if (reason == "absent") {
         g_box_profile_runtime_declined = reason
@@ -1773,6 +1803,12 @@ def apply_box_profile_runtime_checked(path : string) {
     apply_box_profile_runtime_at(path)
     if (g_box_profile_runtime_declined == "no_runtime_section" && runtime_race_writes()) {
         apply_box_profile_runtime_at(path)
+    }
+    if (box_fallback && g_box_profile_runtime_declined == "no_runtime_section") {
+        let bp = box_runtime_file_()
+        if (!empty(bp)) {
+            apply_box_profile_runtime_at(bp)
+        }
     }
 }
 
@@ -1843,6 +1879,7 @@ def apply_box_profile_runtime_at(ppath : string) {   // nolint:STYLE038 — a fl
     apply_i64_knob(rt, "metal_tall_floor") $(v) { set_metal_tall_floor(v) }
     apply_i64_knob(rt, "metal_devw_small_panel_mb") $(v) { set_metal_devw_small_panel_mb(v) }
     apply_i64_knob(rt, "metal_cvt_min_rows") $(v) { set_metal_cvt_min_rows(v) }
+    apply_i64_knob(rt, "metal_moe_gemv_max") $(v) { set_metal_moe_gemv_max(v) }
     apply_i64_knob(rt, "mtp_depth_nextn") $(v) { set_mtp_depth_nextn(v) }
     apply_i64_knob(rt, "mtp_depth_assistant") $(v) { set_mtp_depth_assistant(v) }
     let mtc = read_json_field(rt, "metal_tensor", "")
@@ -2892,6 +2929,9 @@ def public unpin_metal_tensor_crowns {
     g_tensor_crowns_pinned = false
 }
 
+//! whether a cell pinned the crowns (the box profile's apply then leaves them) - what a cell captures to put the pin back
+def public metal_tensor_crowns_pinned : bool => g_tensor_crowns_pinned
+
 // ===== Metal prefill raced constants (sidecar "runtime" knobs; prefill caches at its init) =====
 
 //! Defaults are the M5 race winners; another box's sidecar overrides without a rebuild.
@@ -2930,6 +2970,25 @@ def public set_metal_cvt_min_rows(v : int64) {
 }
 
 def public metal_cvt_min_rows : int64 => g_metal_cvt_min_rows
+
+//! The widest prefill window whose routed experts ride the decode's gathered GEMV (one dispatch slice per token and
+//! expert slot) instead of the bucketed mul_mm tiles; 0 keeps every window on the tiles, -1 takes the prefill's default
+//! (`pf_moe_gemv_knee`). Read per window, not cached.
+var private g_metal_moe_gemv_max = -1l
+
+def public set_metal_moe_gemv_max(v : int64) {
+    if (v < -1l) {
+        to_log(LOG_WARNING, "dasLLAMA: set_metal_moe_gemv_max({v}) out of range - keeping {g_metal_moe_gemv_max}\n")
+        return
+    }
+    if (v != g_metal_moe_gemv_max) {
+        let knee = v < 0l ? "the default knee" : "{v} tokens"
+        to_log(LOG_WARNING, "dasLLAMA metal prefill: set_metal_moe_gemv_max({v}) - the gathered expert route serves a routed window of {knee} or fewer (0 = the tiles alone)\n")
+    }
+    g_metal_moe_gemv_max = v
+}
+
+def public metal_moe_gemv_max : int64 => g_metal_moe_gemv_max
 
 //! Encode text to token ids using the model's tokenizer.
 def encode_(m : Model; text : string; add_special = true; parse_special = false) : array<int64> =>
