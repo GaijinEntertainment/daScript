@@ -8,5 +8,5 @@ repository = "https://github.com/GaijinEntertainment/daScript"
 
 [grammars.daslang]
 repository = "https://github.com/GaijinEntertainment/daScript"
-rev = "2800e07dc0233251f0d498160115104a712893ea"
+rev = "b27a43477807b6a2772f72cba5a45d544aba0bd2"
 path = "tree-sitter-daslang"
