@@ -60,6 +60,16 @@ def private absorb_twin(var wins : array<string>; var ran : bool&; r) {
     }
 }
 
+//! the raced crowns kept for this process alone (the sidecar could not be written) - unless `DASLLAMA_METAL_TENSOR=0`
+//! keeps every family on its base form, as the box-profile apply does for a written sidecar
+def private hold_crowns(crowns : string) {
+    if (g_env_metal.tensor) {
+        set_metal_tensor_crowns(crowns)
+    } else {
+        to_log(LOG_WARNING, "dasLLAMA: DASLLAMA_METAL_TENSOR=0 - the raced crowns NOT applied; every family serves its base form\n")
+    }
+}
+
 //! The Metal-4 tensor twin race: each tensor pso twin against its shipped simdgroup kernel on
 //! this box's GPU, prefill and decode halves. `wins` is the families whose twin won - the
 //! `"metal_tensor"` crown list - and `ran` says a device raced at all (false = no Metal device,
@@ -100,7 +110,7 @@ def public dasllama_race_runtime_section() : bool {
         let wrote = tune_sidecar_merge(noKernels, runtime)
         if (!wrote) {
             to_log(LOG_WARNING, "dasLLAMA: could not write {path} - the crowns hold for this process only; set DAS_TUNE_MANIFEST to a writable path to keep them\n")
-            set_metal_tensor_crowns(crowns)
+            hold_crowns(crowns)
         }
         delete race
         return wrote
@@ -264,7 +274,7 @@ def public dasllama_box_runtime_race(path, digest : string) : bool {
             to_log(LOG_WARNING, "dasLLAMA: metal crowns raced for this box ({secs} s) -> {path}\n")
         } else {
             to_log(LOG_WARNING, "dasLLAMA: could not write {path} - the crowns hold for this process only\n")
-            set_metal_tensor_crowns(crowns)
+            hold_crowns(crowns)
         }
         delete race
         return wrote

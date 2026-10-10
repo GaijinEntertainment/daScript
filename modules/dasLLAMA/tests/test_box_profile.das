@@ -8,6 +8,8 @@ require daslib/fio
 require dasllama/dasllama_env
 require dasllama/dasllama_tune   // box_profile_verdict_at
 require llvm/daslib/llvm_tune    // tune_box_identity
+require _child_run   // the metal_tensor knob is read at context init, so a child shows what it leaves unapplied
+require strings
 
 // The tune sidecar's "runtime" section: apply_box_profile_runtime(path) sets the runtime knobs
 // and logs each applied entry. The explicit-path form keeps the test independent of the app's
@@ -318,6 +320,19 @@ def test_stale_unreadable_sidecar_applies_nothing(t : T?) {
     t |> equal(box_profile_runtime_declined(), "unreadable", "the decline names the read, not the date")
     remove(path)
     restore_defaults()
+}
+
+// DASLLAMA_METAL_TENSOR is read at context init, so a child process shows what the knob leaves unapplied
+[test]
+def test_metal_tensor_knob_leaves_the_crowns_unapplied(t : T?) {
+    var out : string
+    let rc = run_child(child_cmd("_metal_tensor_root.das", [(name = "DASLLAMA_METAL_TENSOR", value = "0")]), out)
+    t |> equal(0, rc, "the child ran (rc {rc}):\n{out}")
+    t |> success(find(out, "CROWNS=[]") >= 0, "under DASLLAMA_METAL_TENSOR=0 the profile's crowns stay unapplied:\n{out}")
+    var out2 : string
+    let rc2 = run_child(child_cmd("_metal_tensor_root.das", [(name = "DASLLAMA_METAL_TENSOR", value = "")]), out2)
+    t |> equal(0, rc2, "the control child ran (rc {rc2}):\n{out2}")
+    t |> success(find(out2, "CROWNS=[mulmm_q8]") >= 0, "with the knob unset the same profile crowns mulmm_q8:\n{out2}")
 }
 
 [test]

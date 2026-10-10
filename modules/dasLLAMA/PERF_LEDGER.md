@@ -11,6 +11,24 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **MEASURED (2026-10-10) - the house replay on the M5 Max: a reply's tail, the pair's re-prefill, the uncrowned
+  sidecar.** The instrument is outside the tree (`external`, `out-of-process`): the house replay's runners,
+  `BOX=m5 ./run_replay.sh <tag>` and `BOX=m5 ./run_short.sh <tag>` in the private `dasllama-bench` repository, a
+  client replaying a home assistant's recorded requests against `utils/dasllama-server/main.das` under `-jit`,
+  `--ctx 32768 --streams 4`, `DAS_TUNE_MANIFEST=modules/dasLLAMA/performance/m5.tune.json`, Metal, the model
+  `Qwen3.6-35B-A3B-MTP-IQ4_XS-pure.gguf`; its walls and rates stay in that repository's ledger. What it decided,
+  master `9f285a9339` against this change (`direction-grade`): every reply's finished event waited for the
+  finishing tick's remaining work - the scheduler reaped a finished stream inside the tick that finished it
+  (the close tokens' 2-token prefill, the recurrent snapshot, the donation) and still ran another stream's
+  prefill chunk before the server flushed; the reap now runs at the next tick's start and a tick that finished a
+  stream ends before its chunk (`dasllama_scheduler.das`, `ARCHITECTURE_ENGINE_SERVING.md#scheduler-step`), and
+  the client's tail after a reply's last token fell to the wire's floor. Both are structural: no timing chose a value, the
+  instrument confirmed the mechanism. Also found: the tune verdict named a sidecar binary-stale before reading its
+  box, so on a box whose app sidecar is another box's (this M5's `~/.dasllama/tune/main.tune.json`, the M1's)
+  the foreign runtime knobs applied and no tensor crown did; the verdict reads the box first (`llvm_tune.das`).
+  `DASLLAMA_METAL_TENSOR=0` is the arm that serves every family on its base form, as a GPU without the tensor
+  lane does.
+
 - **MEASURED (2026-10-09) - the gathered route against the tiles, and the K-quant tail peel against the tile, each an
   interleaved A/B in one process on the M1 Max.** `benchmarks/prefill_window_probe.das --ab`: medians of 4 reps an arm, the
   arms alternating after one warmup rep of A, every window appended in sequence past the warm prefix, the figures the Metal

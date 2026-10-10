@@ -163,10 +163,14 @@ ledger), with the flags that run took.**
 run printed none.** A fat exe is what `daspkg release --fat <class>` builds (`DAS_TUNE_MODE=fat`,
 `ARCHITECTURE_MEASUREMENT_FAT_START.md#fat-first-start`).
 
-**A diff that claims to make an already-served path faster, where a rig leg drives that path,
-re-mints a board row (`performance/records/<box>.json`) that exercises it, in the same change, and
-names that row in the PR body.** The board is the module's committed record of what serving
-costs; a kernel win that never lands there is invisible to the next regression check.
+**A diff that claims to make a route the tree served before the diff faster, where a rig leg
+runs the changed lines, re-mints in the same change a board row (`performance/records/<box>.json`)
+from that leg and names that row in the PR body.** The board is the module's committed record of
+what serving costs; a kernel win that never lands there is invisible to the next regression check.
+
+**A diff that claims to make a route the tree served before the diff faster, where no rig leg runs
+the changed lines, states in its PR body that no rig leg runs them and names the instrument that
+does, with its command line.**
 
 **A diff that changes what a board cell loads, runs, counts or times - the model or corpus it
 reads, the model components (encoder, decoder, tower) it runs or the backend that serves them,

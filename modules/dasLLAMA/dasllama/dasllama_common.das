@@ -1883,7 +1883,9 @@ def apply_box_profile_runtime_at(ppath : string) {   // nolint:STYLE038 — a fl
     apply_i64_knob(rt, "mtp_depth_nextn") $(v) { set_mtp_depth_nextn(v) }
     apply_i64_knob(rt, "mtp_depth_assistant") $(v) { set_mtp_depth_assistant(v) }
     let mtc = read_json_field(rt, "metal_tensor", "")
-    if (mtc != "" && !g_tensor_crowns_pinned) {
+    if (mtc != "" && !g_tensor_crowns_pinned && !g_env_metal.tensor) {
+        to_log(LOG_WARNING, "dasLLAMA: DASLLAMA_METAL_TENSOR=0 - the box profile's metal_tensor crowns NOT applied; every family serves its base form, as a GPU without the tensor lane does\n")
+    } elif (mtc != "" && !g_tensor_crowns_pinned) {
         set_metal_tensor_crowns(mtc)
         to_log(LOG_INFO, "dasLLAMA: box profile runtime: metal_tensor crowns = {mtc}\n")
     } elif (mtc != "") {
