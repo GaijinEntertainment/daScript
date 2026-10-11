@@ -52,6 +52,13 @@ let DEC_25O = "Qwen2.5-Omni-3B-Q8_0.gguf"
 let Q_IMAGE_OPEN = 151652l
 let Q_IMAGE_CLOSE = 151653l
 let Q_CATS_ROWS = 300l
+let HOST_CTX_4B = 4096l   //! every host session's K/V on the 4B decoder: its file's 262144 positions commit 38 GB a flat session, and an image turn here holds under a thousand
+
+def load_dec_4b() : Model {
+    var m <- load_model_(path_join(models_dir(), DEC_4B), QuantMode.q8)
+    m.config.seq_len = min(m.config.seq_len, HOST_CTX_4B)
+    return <- m
+}
 
 [test]
 def test_vision_chat(t : T?) {   // nolint:STYLE038 — one sequential turn story: shape → caption → tower legs
@@ -408,7 +415,7 @@ def test_vision_chat_deepstack(t : T?) {   // nolint:STYLE038 — one sequential
             return
         }
         let img <- load_image_rgb(cats)
-        var m <- load_model_(dec, QuantMode.q8)
+        var m <- load_dec_4b()
         tt |> equal(m.config.n_deepstack, 3l, "the decoder carries n_deepstack_layers")
         allow_cpu_prefill()
         with_dasllama_jobque_() {
@@ -494,7 +501,7 @@ def test_vision_chat_rows_seam(t : T?) {
             return
         }
         let img <- load_image_rgb(cats)
-        var m <- load_model_(dec, QuantMode.q8)
+        var m <- load_dec_4b()
         allow_cpu_prefill()
         with_dasllama_jobque_() {
             var params = SamplingParams()
