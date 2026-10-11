@@ -49,7 +49,7 @@ def da_nsplit(n_heads, sm_count : int64) : int64 {
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain"), arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command"), arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head"), arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-block-codecs"), arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-tq4-basis")]
 def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap : int64;
                     neox : bool; eps, scale : float; qk_norm : bool; kv_dtype : int; q_gated : bool; rot : int64; dn : RdecDnGeom;
-                    mir_units, cos_elems, regions : int64; carry, head : bool; verify_rows : int64) : bool {
+                    mir_units, n_slabs, cos_elems, regions : int64; carry, head : bool; verify_rows : int64) : bool {
     if (!gpu_want_arms_tier() || !vk_moe_init()) {
         return false
     }
@@ -60,11 +60,11 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     let unit_bytes = kv_unit_bytes(dt)
     let mir_slack_units = kv_row_units(dt, RDEC_MIR_SLACK)
     let gated_stamp = q_gated && !kvtq4
-    // every region and its slack bind in one range: past maxStorageBufferRange, or the shaders' uint word index, every mirror read is undefined
+    // a slab's every region and its slack bind in one range: past maxStorageBufferRange, or the shaders' uint word index, every mirror read is undefined
     let mir_bound = (mir_units + mir_slack_units) * regions
     let byte_offset_ok = !kvq || mir_bound * unit_bytes <= RDEC_CODEC_BYTE_SPAN
     if (!vk_range_ok(mir_bound * unit_bytes) || mir_bound > 4_294_967_295l || !byte_offset_ok) {
-        to_log(LOG_WARNING, "dasLLAMA vulkan resident: KV mirror ({n_attn} layers x {seq_cap} positions, {mir_units} units a side plus the {mir_slack_units} slack) exceeds maxStorageBufferRange {vk_max_storage_range()} / the 32-bit word index / a block codec's 32-bit byte offset\n")
+        to_log(LOG_WARNING, "dasLLAMA vulkan resident: a KV mirror slab ({n_attn} layers over {n_slabs} slabs x {seq_cap} positions, {mir_units} units a region plus the {mir_slack_units} slack) exceeds maxStorageBufferRange {vk_max_storage_range()} / the 32-bit word index / a block codec's 32-bit byte offset\n")
         return false
     }
     let shadow_bytes = kvq ? (seq_cap * kv_dim + RDEC_MIR_SLACK) * 2l : 0l
@@ -178,13 +178,17 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     r.n_attn = n_attn
     r.mir_units = mir_units + mir_slack_units
     r.regions = regions
-    // the two largest allocations of the load: a heap the last model fragmented can refuse them though the plan fit - decline, never die mid-upload
-    let mir = zeroed_pair(rd_mir_bytes())
-    r.k_mirror = mir.a
-    r.v_mirror = mir.b
-    if (r.k_mirror == 0ul || r.v_mirror == 0ul) {
-        to_log(LOG_WARNING, "dasLLAMA vulkan resident: the KV mirror ({(2l * rd_mir_bytes()) >> 20l} MB for {regions} regions of ctx {seq_cap}) found no room on the device - resident driver declines, the per-op rails serve\n")
-        return false
+    // the largest allocations of the load, one pair a slab: a heap the last model fragmented can refuse them though the plan fit - decline, never die mid-upload
+    r.k_slabs |> reserve(max(n_slabs, 1l))
+    r.v_slabs |> reserve(max(n_slabs, 1l))
+    for (_si in range64(max(n_slabs, 1l))) {
+        let mir = zeroed_pair(rd_mir_bytes())
+        r.k_slabs |> push(mir.a)
+        r.v_slabs |> push(mir.b)
+        if (mir.a == 0ul || mir.b == 0ul) {
+            to_log(LOG_WARNING, "dasLLAMA vulkan resident: the KV mirror ({(2l * rd_mir_bytes() * max(n_slabs, 1l)) >> 20l} MB in {max(n_slabs, 1l)} slab pairs for {regions} regions of ctx {seq_cap}) found no room on the device - resident driver declines, the per-op rails serve\n")
+            return false
+        }
     }
     if (kvtq4) {
         var signs : array<float>
@@ -420,6 +424,7 @@ def private rd_layer_geom(var L : RLayer; g : RdecLayerGeom) {
     L.moe_g4 = g.moe_g4
     L.window = g.window
     L.mir_base = g.mir_base
+    L.mir_slab = g.mir_slab
     L.cbase = g.cbase
     L.boff = g.boff
 }
@@ -497,8 +502,9 @@ def private rd_attn_sets(var L : RLayer; mir_idx : int64; bq, bk, bv, bo : int64
         let cosbytes = g_rd.cos_elems * 4l
         let bias_bind = rd_bias_bind()
         let stagebytes = g_rd.kv_dim * 4l * nb
-        let kstore = kvq ? g_rd.kst_dev : g_rd.k_mirror
-        let vstore = kvq ? g_rd.vst_dev : g_rd.v_mirror
+        let (kmir, vmir) = rd_slab(L)
+        let kstore = kvq ? g_rd.kst_dev : kmir
+        let vstore = kvq ? g_rd.vst_dev : vmir
         let storebytes = kvq ? stagebytes : mirbytes
         let storebit = kvq ? VHZ_VST : VHZ_MIR
         let storetok = kvq ? g_rd.stage_tok.buf : tok
@@ -520,13 +526,13 @@ def private rd_attn_sets(var L : RLayer; mir_idx : int64; bq, bk, bv, bo : int64
         let rbits = fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, storebit, storebit, VHZ_COS, 0u, 0u)
         L.s_rope = kv16 ? set_rope_kv_f16_cls(rbufs, rsizes, rbits) : set_rope_kv_cls(rbufs, rsizes, rbits)
         if (rd_kvq8()) {
-            L.s_kv_store = set_kv_q8_store_cls(fixed_array(g_rd.kst_dev, g_rd.vst_dev, g_rd.k_mirror, g_rd.v_mirror, tok),
+            L.s_kv_store = set_kv_q8_store_cls(fixed_array(g_rd.kst_dev, g_rd.vst_dev, kmir, vmir, tok),
                 fixed_array(stagebytes, stagebytes, mirbytes, mirbytes, TOK_META_BYTES * nb),
                 fixed_array(VHZ_VST, VHZ_VST, VHZ_MIR, VHZ_MIR, 0u))
         }
         if (rd_kvtq4()) {
             let signbytes = KV_TQ4_SIGNS * 4l
-            L.s_kv_store = set_kv_tq4_store_cls(fixed_array(g_rd.q_dev, g_rd.kst_dev, g_rd.vst_dev, g_rd.k_mirror, g_rd.v_mirror, g_rd.tq4_signs_dev, tok),
+            L.s_kv_store = set_kv_tq4_store_cls(fixed_array(g_rd.q_dev, g_rd.kst_dev, g_rd.vst_dev, kmir, vmir, g_rd.tq4_signs_dev, tok),
                 fixed_array(qplane, stagebytes, stagebytes, mirbytes, mirbytes, signbytes, TOK_META_BYTES * nb),
                 fixed_array(VHZ_Q, VHZ_VST, VHZ_VST, VHZ_MIR, VHZ_MIR, 0u, 0u))
             L.s_unrot = set_kv_tq4_unrot_cls(fixed_array(g_rd.attn_dev, g_rd.q_dev, g_rd.tq4_signs_dev),
@@ -535,7 +541,7 @@ def private rd_attn_sets(var L : RLayer; mir_idx : int64; bq, bk, bv, bo : int64
         // the partials ride the attention-out bit (written and read within the pass); the folded requant lands in the wo feed's aq/as
         let partbytes = (g_rd.attn_cnt_off + g_rd.n_heads * nb) * 4l
         L.s_attn = da_attn_stamp_set(dt, da_slab_of(g_rd.has_sinks, L.kv_mul),
-            fixed_array(g_rd.q_dev, g_rd.k_mirror, g_rd.v_mirror, g_rd.attn_dev, tok, g_rd.attn_part_dev, g_rd.aq_dev, g_rd.as_dev, g_rd.sinks_dev),
+            fixed_array(g_rd.q_dev, kmir, vmir, g_rd.attn_dev, tok, g_rd.attn_part_dev, g_rd.aq_dev, g_rd.as_dev, g_rd.sinks_dev),
             fixed_array(qplane, mirbytes, mirbytes, qd * 4l * nb, TOK_META_BYTES * nb, partbytes, qd * nb, (qd / 32l) * 4l * nb, g_rd.sinks_bytes),
             fixed_array(VHZ_Q, VHZ_MIR, VHZ_MIR, VHZ_ATT, 0u, VHZ_ATT, VHZ_AQ, VHZ_AQ, 0u))
         // quantize attn -> aq/as
@@ -2995,7 +3001,7 @@ def private rd_xlog(nrows : int64; picks_only : bool) : VkCommandBuffer {
 
 var private g_rd_xlog_wait = 0ul   //! the transfer timeline value the step's landing (logits or picks) completes at (0 = the command carried its own copy, the fence is the wait)
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#logits-transfer-queue")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_LANDING.md#logits-transfer-queue")]
 def private rd_submit_land(var cmd : VkCommandBuffer; nrows : int64; picks_only : bool) {
     if (g_rd.log_xfer) {
         let cv = submit_signal(cmd)
@@ -3246,7 +3252,7 @@ def private rd_carry_src : uint64 => g_rd.hc ? g_rd.hccarry_out_dev : g_rd.xb_de
 
 def private rd_carry_bit : uint => g_rd.hc ? VHZ_X : VHZ_XB
 
-[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#logits-transfer-queue")]   //! per token, reached through the tier's registered seat
+[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_LANDING.md#logits-transfer-queue")]   //! per token, reached through the tier's registered seat
 def vk_rdec_land_carry(row : int64; var dst : array<float>) {
     assert(g_rd != null && g_rd.carry, "vk_rdec_land_carry on a driver prepared without the carry")
     let row_bytes = rd_carry_width() * 4l
@@ -3886,8 +3892,9 @@ def vk_rdec_kv_sync(l, row0, nrows : int64; kp : uint8 const?; vp : uint8 const?
     let rowb = rd_kv_row_units(L.kvd) * kv_unit_bytes(g_rd.kv_dt)
     let base = rd_mir_base(L) * kv_unit_bytes(g_rd.kv_dt) + row0 * rowb
     unsafe {
-        upload_region_at(g_rd.k_mirror, base, kp + row0 * rowb, nrows * rowb)
-        upload_region_at(g_rd.v_mirror, base, vp + row0 * rowb, nrows * rowb)
+        let slab = rd_slab(L)
+        upload_region_at(slab.k, base, kp + row0 * rowb, nrows * rowb)
+        upload_region_at(slab.v, base, vp + row0 * rowb, nrows * rowb)
     }
 }
 
@@ -3908,8 +3915,9 @@ def vk_rdec_kv_read(l, row0, nrows : int64; var kp : uint8?; var vp : uint8?) {
         let bytes = rows * rowb
         let off = rd_mir_base(L) * kv_unit_bytes(g_rd.kv_dt) + (row0 + p0) * rowb
         record_submit_wait(raw, false) $(r : VkCommandBuffer) {
-            cmd_copy_range(r, g_rd.k_mirror, off, g_rd.kv_readback.buf, 0l, bytes)
-            cmd_copy_range(r, g_rd.v_mirror, off, g_rd.kv_readback.buf, bytes, bytes)
+            let slab = rd_slab(L)
+            cmd_copy_range(r, slab.k, off, g_rd.kv_readback.buf, 0l, bytes)
+            cmd_copy_range(r, slab.v, off, g_rd.kv_readback.buf, bytes, bytes)
         }
         unsafe {
             memcpy(reinterpret<void?>(kp + (row0 + p0) * rowb), g_rd.kv_readback.mapped, bytes)

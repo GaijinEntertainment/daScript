@@ -19,8 +19,11 @@ anchor.
   whose positions never prefill), runs one `eval_batch` decode step over every
   decoding stream (a self-speculative scheduler instead ticks every stream's round through
   `mtp_spec_eval_batch`, one joint verify where a driver seats one, and counts the tick as a
-  batched step only when every stream's rows rode it), then - unless a stream finished on this
-  tick, which ends it there for the same reason - at most one prefill chunk FCFS - `chunk_tokens` while
+  batched step only when every stream's rows rode it), then - unless a stream is still on its prompt
+  and the decode phase emitted an event, a token or a finish, which ends the tick there (the caller
+  drains the event to the wire, and the chunk the tick owes runs first on the next tick, which
+  decodes nothing: a token a stream produced never waits out another stream's prefill window; the
+  stream the chunk goes to is picked once, `next_prefilling`) - at most one prefill chunk FCFS - `chunk_tokens` while
   a stream decodes, since the chunk is the stall every decoding stream waits out, and at least `idle_chunk_tokens`
   while none does, since a prefill window's cost is mostly fixed and nothing waits on it; `chunk_defaults` names
   both sizes per serving backend (the chunk 512 where a GPU prefills and 64 on the CPU, whose chunk costs its token count, so the stall follows it down; idle 512,

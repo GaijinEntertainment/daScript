@@ -128,7 +128,7 @@ struct public GpuTierEnv {
     gpu_min_ctx : int64 = 0l
 
     @clarg_default_doc = "the model's context"
-    @clarg_doc = "Cap the resident driver's KV mirror at this many positions (the card's room and the 4 GiB binding cap still bound it); a cap under the arming floor lowers the floor to the cap (never under 256), since the cap is the shape the caller serves; 0 follows the model's context; a server keeps the model's."
+    @clarg_doc = "Cap the resident driver's KV mirror at this many positions (the card's room and the 4 GiB binding cap on the widest layer's rows still bound it); a cap under the arming floor lowers the floor to the cap (never under 256), since the cap is the shape the caller serves; 0 follows the model's context; a server keeps the model's."
     gpu_ctx_max : int64 = 0l
 
     @clarg_doc = "The context pin (DASLLAMA_GPU_CTX_MAX, set_gpu_ctx_max) is the context asked, not a cap: a K/V mirror the card cannot hold at it declines the resident driver instead of shortening, and the per-op rails serve the asked context; the load log names the room."

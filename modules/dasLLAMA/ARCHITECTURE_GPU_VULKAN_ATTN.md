@@ -170,7 +170,7 @@ in blocks. `RLayer.mir_base`, a token's `mirbase` and the region stride count un
 under f16 and f32, a block under the block codecs (`kv_row_units`, `kv_unit_bytes` the unit's
 bytes, over `RDec.kv_dt`) - so every base the float kernels compute carries over, and only the
 kernels that touch mirror bytes know a unit's size. Those kernels address a byte in 32 bits
-(`RDEC_CODEC_BYTE_SPAN`), so a block-codec side holds 4 GiB at most whatever range the device
+(`RDEC_CODEC_BYTE_SPAN`), so a block-codec slab holds 4 GiB a side at most whatever range the device
 binds, and the plan caps the context there (`resident_binding_ctx`, `BLOCK_CODEC_SIDE_BYTES`).
 
 **The stores stay the float stamps; a store pass quantizes.** Under a block codec the rope stamps

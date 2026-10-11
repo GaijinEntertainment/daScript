@@ -351,18 +351,23 @@ def private sidecar_prov_value(path : string; key : string) : string {
     return r
 }
 
-    //! True when the sidecar predates the running binary OR carries a different box identity —
-    //! the stale-file and cross-box-copy traps; stale reads as ABSENT everywhere. A
-    //! `provenance.applied_box` naming this box overrides the identity check (resolver adoption).
+    //! True when the sidecar predates the running binary OR carries a different box identity (the stale-file and
+    //! cross-box-copy traps): its kernels read as ABSENT everywhere, a save keeps only this box's `runtime` section
+    //! (`load_sidecar_doc`); a `provenance.applied_box` naming this box overrides the identity check (resolver adoption)
 def tune_sidecar_stale(path : string) : bool {
     var sfs : FStat
     return false if (!stat(path, sfs))   // absent is "missing", not "stale"
-    var bfs : FStat
-    if (stat(running_binary(), bfs) && sfs.mtime < bfs.mtime) {
-        return true
-    }
-    return box_match_key(sidecar_box(path, "{sfs.mtime}")) != box_match_key(tune_box_identity())
+    return sidecar_predates_binary(sfs) || !tune_sidecar_same_box(path, "{sfs.mtime}")
 }
+
+//! the sidecar was written before the running binary: a rebuild invalidates its measured winners
+def private sidecar_predates_binary(sfs : FStat) : bool {
+    var bfs : FStat
+    return stat(running_binary(), bfs) && sfs.mtime < bfs.mtime
+}
+
+//! the sidecar's box identity reads as this box's (`sidecar_box`: a `provenance.applied_box` naming this box counts); `mtime_key` is its cache key
+def tune_sidecar_same_box(path, mtime_key : string) : bool => box_match_key(sidecar_box(path, mtime_key)) == box_match_key(tune_box_identity())
 
     //! The compile-time half of a sidecar or profile read: the module cache records the file, existing
     //! or not, so a re-mint invalidates the stamps minted against it. Kept out of every reader the
@@ -539,22 +544,33 @@ def tune_kernel_pick(fname : string; var source : string&) : string {
     return r
 }
 
-// the sidecar document for read-modify-write: a new empty object when absent, unparsable,
-// STALE, or EXCHANGE-ADOPTED — a local tuner writing over an adopted file must not blend its
-// measured keys with the donor's (that yields a complete-looking, wrongly re-submittable mix).
+//! the document a save builds on: the file whole when it is this box's and no older than the binary;
+//! its `"runtime"` section alone when this box's but older than the binary (box facts survive a rebuild,
+//! the kernel winners are the binary's); empty when another box's, exchange-adopted, or unreadable
 def private load_sidecar_doc(path : string) : JsonValue? {
     var doc : JsonValue?
-    if (!tune_sidecar_stale(path)) {
-        let text = fread(path)
-        if (!empty(text)) {
-            var err = ""
-            doc = read_json(text, err)
-            if (doc != null && doc.value is _object
-                && (doc?["provenance"]?["origin"] ?? "") == "exchange") {
-                delete_json(doc)
-                doc = null
-            }
+    let text = fread(path)
+    if (!empty(text)) {
+        var err = ""
+        doc = read_json(text, err)
+        if (doc != null && doc.value is _object
+            && (doc?["provenance"]?["origin"] ?? "") == "exchange") {
+            delete_json(doc)
+            doc = null
         }
+    }
+    if (doc != null && doc.value is _object && tune_sidecar_stale(path)) {
+        var kept : table<string; JsonValue?>
+        var runtime = doc?["runtime"]
+        var sfs : FStat
+        let mkey = stat(path, sfs) ? "{sfs.mtime}" : ""
+        if (runtime != null && runtime.value is _object && tune_sidecar_same_box(path, mkey)) {
+            var sections & = unsafe(doc.value as _object)
+            sections |> erase("runtime")   // the subtree moves to the fresh document; the old one frees the rest
+            kept["runtime"] = runtime
+        }
+        delete_json(doc)
+        doc = JV(kept)
     }
     if (doc == null || !(doc.value is _object)) {
         var fresh : table<string; JsonValue?>
@@ -1382,10 +1398,9 @@ def tune_sidecar_verdict(path : string; fnames : string) : TuneSidecarVerdict {
         return TuneSidecarVerdict(reason = TuneSidecarReason.foreign_box,
             detail = "sidecar was minted on '{theirs}', this box is '{tune_box_identity()}'")
     }
-    var bfs : FStat
-    if (stat(running_binary(), bfs) && sfs.mtime < bfs.mtime) {
+    if (sidecar_predates_binary(sfs)) {
         return TuneSidecarVerdict(reason = TuneSidecarReason.stale_binary,
-            detail = "sidecar predates the running binary ({sfs.mtime} < {bfs.mtime}); a rebuild invalidates measured winners")
+            detail = "sidecar predates the running binary ({sfs.mtime}); a rebuild invalidates measured winners")
     }
     var found = false
     var inscope manifest <- read_manifest(path, found)

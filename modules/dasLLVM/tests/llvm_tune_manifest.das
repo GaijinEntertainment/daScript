@@ -280,3 +280,46 @@ def test_llvm_tune_sidecar_verdict(t : T?) {   // nolint:STYLE038 - one sidecar 
 
     remove(path)
 }
+
+// a save onto a binary-stale sidecar keeps the box's own "runtime" section and nothing else;
+// another box's stale file keeps nothing
+[test]
+def test_llvm_tune_stale_save_keeps_runtime(t : T?) {
+    let tmpRes = create_temp_file_result("llvm_tune_stale_save_", ".tune.json")
+    if (tmpRes is error) {
+        t |> failure("could not create a temp file: {tmpRes as error}")
+        return
+    }
+    let path = tmpRes as value
+    let ourBox = tune_box_identity()
+    set_tune_manifest_runtime_path(path)
+    t |> success(fwrite(path, "\{\"kernels\":\{\"old\":\"k2\"\},\"runtime\":\{\"metal_tensor\":\"mulmm_q8\"\},\"race\":\{\"old\":1\},\"provenance\":\{\"box\":\"{ourBox}\"\}\}"))
+    t |> success(!(set_mtime_result(path, mktime(2000, 1, 1, 0, 0, 0)) is error))
+    t |> success(tune_manifest_set("fresh", "k1"))
+    var err = ""
+    var doc = read_json(fread(path), err)
+    t |> equal(doc?["runtime"]?["metal_tensor"] ?? "", "mulmm_q8", "the box's runtime section survives the stale reset")
+    t |> equal(doc?["kernels"]?["fresh"] ?? "", "k1")
+    t |> equal(doc?["kernels"]?["old"] ?? "", "", "the stale winners reset")
+    t |> success((doc?["race"]).value is _null, "the stale race tables reset")
+    delete_json(doc)
+
+    t |> success(fwrite(path, "\{\"kernels\":\{\"old\":\"k2\"\},\"runtime\":\{\"metal_tensor\":\"mulmm_q8\"\},\"provenance\":\{\"box\":\"some|other|box|id|entirely\"\}\}"))
+    t |> success(!(set_mtime_result(path, mktime(2001, 1, 1, 0, 0, 0)) is error))
+    t |> success(tune_manifest_set("fresh", "k1"))
+    doc = read_json(fread(path), err)
+    t |> success((doc?["runtime"]).value is _null, "another box's runtime section does not survive")
+    t |> equal(doc?["kernels"]?["fresh"] ?? "", "k1")
+    delete_json(doc)
+
+    t |> success(fwrite(path, "\{\"kernels\":\{\"old\":\"k2\"\},\"provenance\":\{\"box\":\"{ourBox}\"\}\}"))
+    t |> success(!(set_mtime_result(path, mktime(2002, 1, 1, 0, 0, 0)) is error))
+    t |> success(tune_manifest_set("fresh", "k1"), "a stale file of this box with no runtime section saves")
+    doc = read_json(fread(path), err)
+    t |> success((doc?["runtime"]).value is _null, "and keeps no runtime section it never had")
+    t |> equal(doc?["kernels"]?["fresh"] ?? "", "k1")
+    t |> equal(doc?["kernels"]?["old"] ?? "", "", "the stale winners reset")
+    delete_json(doc)
+    set_tune_manifest_runtime_path("")
+    remove(path)
+}

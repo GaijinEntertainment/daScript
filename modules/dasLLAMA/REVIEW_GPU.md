@@ -228,10 +228,11 @@ bakes.** Parity runs never reach it.
 **An f16 store into any device buffer holding K or V rows that does not clamp to the f16 finite
 range (+/-65504) is a defect.**
 
-**Never gather, store or release a per-layer K/V panel (the per-layer device K/V slab the prefill
-GEMMs write; the Vulkan resident mirror is one) or mirror slab that aliases another layer's
-through the aliasing layer - do it only through its source layer.** An aliasing layer that
-gathers, stores or releases a second time double-frees the panel or overwrites the source's rows.
+**Never gather, store or release K/V rows a layer borrows from another layer - a shared-KV layer
+reading its donor layer's rows, held in a per-layer device K/V panel the prefill GEMMs write or in
+the donor's slab of the Vulkan resident mirror - through the borrowing layer; do it only through
+the donor.** A borrower that gathers, stores or releases them again frees the donor's storage
+twice or overwrites its rows.
 
 **A resident override that touches the mirror before gating the session on the armed mirror
 codec and on the flat (non-paged) cache is a defect** - a resident override is a

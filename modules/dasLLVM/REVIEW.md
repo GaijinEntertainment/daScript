@@ -1,21 +1,20 @@
 # dasLLVM Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture docs:
-`ARCHITECTURE.md`, `ARCHITECTURE_TARGET_FEATURES.md`, `ARCHITECTURE_DEBUG_INFO.md`,
-`ARCHITECTURE_JIT_ENTRY.md`, `ARCHITECTURE_EXE.md`, `ARCHITECTURE_LIB.md`,
-`ARCHITECTURE_CODEGEN_IDENTITY.md`, `ARCHITECTURE_VECTOR_MATH.md`. Planned work: `LEDGER.md`.
+every `ARCHITECTURE*.md` beside this file. Planned work: `LEDGER.md`.
 
 **A `[test]` file under this module that carries a `require dasllama/...` line of its own answers
 to `modules/dasLLAMA/REVIEW.md` (repo root) as well** - its out-of-folder ledger row lives there.
 
 **A diff that changes how the compile handles a function because it carries `[tune]`,
 `[tune_perm]`, `[tune_companion]`, `[tune_scope]`, `[tune_policy]` or `[llvm_code]` - the body
-it emits for it, which permutation it picks for it - or whether a saved `<app>.tune.json` is
-applied, refused as stale, or read as another machine's, is reviewed with `skills/tune.md`.**
+it emits for it, which permutation it picks for it - or what a read or a save of `<app>.tune.json`
+takes from a saved sidecar that is stale (its mtime is older than the running binary) or that
+another machine minted, is reviewed with `skills/tune.md`.**
 
-**A change to the tune framework - `daslib/llvm_tune.das`, its tests, or the descriptor and
-C++ rows that join it to a program (`.das_module`, `src/dasLLVM.cpp`) - is reviewed with
-`skills/internal/llvm_tune_internals.md`.**
+**A change to the tune framework - `daslib/llvm_tune.das`, a test under `tests/` here that requires
+`llvm/daslib/llvm_tune` or spawns a child that does, or the descriptor and C++ rows that join it to
+a program (`.das_module`, `src/dasLLVM.cpp`) - is reviewed with `skills/internal/llvm_tune_internals.md`.**
 
 - **A change to any file under this module but a `.md` runs the module-owned suite** (command
   and build gate: `tests/README.md` here). The suite is outside the core `tests/` sweep, so no
@@ -119,8 +118,7 @@ C++ rows that join it to a program (`.das_module`, `src/dasLLVM.cpp`) - is revie
   `daslib/llvm_tune.das`) updates `modules/dasLLAMA/dasllama/dasllama_exchange_schema.das` in
   the same change and keeps `modules/dasLLAMA/tests/test_exchange_schema.das` green** - the
   validator allow-lists sections, so a section it does not know fails every newly minted
-  sidecar at submission, and the checked-in corpus the test sweeps cannot show it. A new key
-  inside an existing section passes the validator as it stands.
+  sidecar at submission, and the checked-in corpus the test sweeps cannot show it.
 
 - **A diff that adds an override knob, or gives one a new effect, adds the knob or the effect
   to the inventory in `ARCHITECTURE.md#override-knobs` in the same change.** An override knob is
@@ -141,7 +139,8 @@ C++ rows that join it to a program (`.das_module`, `src/dasLLVM.cpp`) - is revie
   it passes to a filesystem call stays raw.** No filesystem call resolves `~`, and a recorded
   path is read by other people, so it must not name the user who minted it.
 
-- **Weakening `tests/llvm_tune_manifest.das` (beside this file) is a defect.**
+- **Weakening `tests/llvm_tune_manifest.das` (beside this file) is a defect** - deleting a
+  `[test]`, or dropping or loosening an assertion weakens it.
 
 - **A diff that emits an instruction into the entry block of a function whose body das
   statements emit - the impl half of a generated function pair (the body the wrapper half calls),

@@ -211,6 +211,7 @@ struct Scheduler {
     n_admitted : int64
     mrope_streams : int64                   // admitted streams whose media rode the mrope grid walk
     n_finished : int64                      // reaped streams (any finish, evictions included)
+    chunk_owed : bool                       //! the prefill chunk a tick that emitted events put off: the next tick runs it first and decodes nothing
     n_evicted : int64                       // evictions, active or still queued
     decode_steps : int64
     gen_tokens : int64
@@ -809,6 +810,15 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
         sch.n_admitted ++
     }
     sch.peak_active = max(sch.peak_active, long_length(sch.streams))
+    if (sch.chunk_owed) {   //! the chunk the last tick put off: run it alone, the decode comes next tick
+        sch.chunk_owed = false
+        let owed = next_prefilling(sch)
+        if (owed >= 0l) {
+            prefill_one_chunk(m, sch, events, owed)
+        }
+        return !empty(sch.streams) || !empty(sch.queue)
+    }
+    let n_events0 = length(events)
     // ONE batched decode step over every decoding stream (decode priority). Rows are gathered
     // fresh each step: admission above may have reallocated `streams`, and nothing below grows it.
     sch.batch_rows |> clear()
@@ -881,12 +891,30 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
     sch.batch_rows |> clear()
     sch.batch_toks |> clear()
     sch.batch_idx |> clear()
-    return true if (any_stream_in(sch, StreamState.done))
-    // at most ONE prefill chunk, FCFS — decode-priority with a bounded prefill quantum
-    for (i in range64(long_length(sch.streams))) {
-        if (sch.streams[i].state != StreamState.prefilling) {
-            continue
+    //! a decode phase that emitted events ends the tick: the caller drains them to the wire ahead of the chunk, which the
+    //! next tick runs first - the token a stream just produced never waits out another stream's prefill window
+    let next = next_prefilling(sch)
+    if (next >= 0l) {
+        if (length(events) > n_events0) {
+            sch.chunk_owed = true
+            return true
         }
+        prefill_one_chunk(m, sch, events, next)
+    }
+    return !empty(sch.streams) || !empty(sch.queue)
+}
+
+//! the first stream still on its prompt, -1 with none: the tick's one chunk is its (FCFS)
+def private next_prefilling(sch : Scheduler) : int64 {
+    for (i in range64(long_length(sch.streams))) {
+        return i if (sch.streams[i].state == StreamState.prefilling)
+    }
+    return -1l
+}
+
+//! ONE prefill chunk of stream `i` - decode-priority with a bounded prefill quantum
+def private prefill_one_chunk(m : Model; var sch : Scheduler; var events : array<SchedEvent>; i : int64) {
+    {
         let np = long_length(sch.streams[i].prompt)
         // a media span takes the whole quantum: its rows eval as ONE body, because the mask (gemma vision's
         // non-causal span) is per-call and a chunk boundary would split it. Text chunks normally up to the next span.
@@ -936,9 +964,7 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
                 sch.gen_tokens ++
             }
         }
-        break
     }
-    return !empty(sch.streams) || !empty(sch.queue)
 }
 
 

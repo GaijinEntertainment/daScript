@@ -192,14 +192,13 @@ spelling missing from `DEVICE_CREATION_CALLS` weakens it.**
 
 **Weakening `check_ple_gather_sites` in `REVIEW.das` is a defect.**
 
-**A diff under `dasllama/` whose ledger entry, commit message or PR body cites a timing as the
-reason it picks one candidate over another - a constant's value, a formula, or a predicate choosing
-among kernels that compute the same result - takes the winner from one script that races every
-candidate in one process, interleaved, each chosen by a flag or argument at the diff's tip** - two
-commits or two processes differ by everything else that changed, so their timings pick nothing.
-
-**A diff whose ledger entry, commit message or PR body cites a timing as the reason for a pick
-puts that race's rows, each naming its candidate, in the PR body or the `PERF_LEDGER.md` row.**
+**A diff that cites a timing (in a `PERF_LEDGER.md` row, a `followup_*.md` row, a commit message
+or the PR body) as the reason it picks one candidate over another - a constant's value, a formula,
+or a predicate choosing among kernels that compute the same result - takes the winner from one
+script that races every candidate in one process, interleaved, each chosen by a flag or argument
+in the code the diff ships, and puts the race's output lines, one per candidate and each naming
+it, in the PR body or in a `PERF_LEDGER.md` row the diff adds** - two commits or two processes
+differ by everything else that changed, so their timings pick nothing.
 
 **A race that picks a numeric threshold times the chosen value and at least one value on each side
 of it.**

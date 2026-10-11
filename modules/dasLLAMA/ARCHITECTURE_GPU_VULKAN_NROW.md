@@ -191,7 +191,7 @@ head's K/V rows stay on the device after the command, as a draft's row does, and
 pass (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head`).
 
 **The seat leaves the session as the CPU verify does.** Every row's pick and post-norm hidden leave
-on the transfer queue (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#logits-transfer-queue`), and the rows'
+on the transfer queue (`ARCHITECTURE_GPU_VULKAN_LANDING.md#logits-transfer-queue`), and the rows'
 logits with them unless the round asked for the picks alone - the caller's pick ask
 (`Session.pick_asked`, `RdecVerifyFn`'s `pick_only`): the picks-only twin then carries the landing,
 the logits plane never leaves the device, and a guard step (`rd_guard_rows`: any of the rows on the

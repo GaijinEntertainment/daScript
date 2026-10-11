@@ -106,13 +106,21 @@ reduce sums partial planes counted from row 0, so a dispatch starting above row 
 the wrong rows.
 
 **Never leave a K/V codec unserved by the kernels that read or write the whole-model driver's
-`k_mirror`/`v_mirror` slabs, or the decode block's per-layer `DatLayer.k_mir`/`v_mir` pair - a
+`k_slabs`/`v_slabs` mirror slabs, or the decode block's per-layer `DatLayer.k_mir`/`v_mir` pair - a
 K/V codec is the mirror's storage form: f16 or f32 elements on both, q8_0 or tq4 blocks on the
 driver's slabs alone.** Three shapes serve a codec: stamps of one template cover it; a
 single-codec kernel has a sibling behind an arming gate on the driver's codec (`RDec.kv_dt`); or
 a kernel that reads f16 or f32 rows binds, in the mirror's place, the float rows a block codec's
 store quantizes from (`RDec.kst_dev`/`vst_dev`, `pf_kst`/`pf_vst`) or its f16 copy of one layer's
 rows (`RDec.ksh_dev`/`vsh_dev`). A codec no kernel covers silently drops that codec's GPU path.
+
+**A per-layer dispatch, or the upload of a session's CPU K/V rows into the mirror and their copy
+back, reaches its layer's slab only through the layer's slab number - `rd_slab(L)` for the slab
+pair, `<per-slab array>[L.mir_slab]` for a per-slab set - never `rd_slab_at` or a slab number of
+its own. A diff that adds an array with one entry per slab adds the array's name to `REVIEW.das`'s
+`check_mirror_slab_access` in the same change. Weakening that check is a defect.** A slab holds a contiguous run of layers
+(`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan`), so a site that names a slab number itself
+binds the wrong rows for every layer in another slab, with no error.
 
 **Never write a block codec's mirror bytes from any kernel but the codec's store kernel
 (`KvQ8StoreT`, `KvTq4StoreT`).** When a session passes to the CPU chain, the tier copies the
