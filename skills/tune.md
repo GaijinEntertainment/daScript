@@ -456,8 +456,9 @@ manifest a runner pinned for it.
 
 A sidecar whose mtime **predates the running binary's** is stale: its
 `"kernels"` read as absent (stamps fall back, the policy rail re-tunes), and
-the first `tune_manifest_set` resets the whole document - the `"runtime"`
-section included. Measurements never outlive the binary that made them. A sidecar carrying another box's
+the first `tune_manifest_set` resets the document - every section but this
+box's own `"runtime"`, whose knobs and crowns are facts of the box, not of the
+binary. Measurements never outlive the binary that made them. A sidecar carrying another box's
 identity is stale too - measurements are a property of the box - unless
 `provenance.applied_box` names this box, which is how a scope resolver (below)
 adopts a compatible sibling box's mint deliberately. That identity is the
