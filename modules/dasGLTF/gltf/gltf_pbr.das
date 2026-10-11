@@ -250,14 +250,15 @@ def gltf_pbr_fs {
         ambient += reflected * gltf_fresnel_roughness(max(dot(n, v), 0.0), f0, roughness) * u_reflection_amount * gltf_occlusion_factor(occ, u_occlusion_strength)
     }
     var local_light = float3(0.0)
-    for (i in range(GLTF_MAX_POINT_LIGHTS)) {
-        if (i < u_point_count) {
-            let delta = u_point_position[i].xyz - v_world_pos
+    for (i in range(u_point_count)) {
+        {
+            let position = gltf_point_data(i, 0)
+            let delta = position.xyz - v_world_pos
             let distance = max(length(delta), 0.001)
             let visibility = gltf_point_shadow_visibility(i, v_world_pos, n)
-            if (distance < u_point_position[i].w){
-            let falloff = max(0.0, 1.0 - distance / max(u_point_position[i].w, 0.001))
-            let radiance = u_point_color[i].xyz * (falloff * falloff / (1.0 + distance * distance)) * visibility
+            if (distance < position.w){
+            let falloff = max(0.0, 1.0 - distance / max(position.w, 0.001))
+            let radiance = gltf_point_data(i, 1).xyz * (falloff * falloff / (1.0 + distance * distance)) * visibility
             local_light += gltf_pbr_direct(albedo, metallic, roughness, n, v, delta / distance, radiance)
             }
         }
@@ -312,10 +313,13 @@ struct GltfPbrRenderer {
     shadowStrength : float
     localShadowTex : uint
     localShadowSize : float2
-    pointShadow : float4[GLTF_MAX_POINT_LIGHTS]
+    pointShadow : array<float4>
     pointCount : int
-    pointPosition : float4[GLTF_MAX_POINT_LIGHTS]
-    pointColor : float4[GLTF_MAX_POINT_LIGHTS]
+    pointPosition : array<float4>
+    pointColor : array<float4>
+    pointTexture : uint
+    pointWidth, pointHeight : int
+    pointUploaded : array<float4>
 }
 
 struct GltfPbrPointLight {
@@ -325,15 +329,46 @@ struct GltfPbrPointLight {
     radius : float
 }
 
-//! Small local-light set, useful for torches/spells. Colors are linear radiance.
+//! Local lights with linear radiance colors.
 //! Unshadowed unless the caller supplies the optional per-light depth atlas settings.
-//! Passing an empty array clears the set. Excess lights are ignored after the first eight.
+//! Passing an empty array clears the set. Light data uses a renderer-owned texture.
 def gltf_pbr_set_point_lights(var r : GltfPbrRenderer; lights : array<GltfPbrPointLight>) {
-    r.pointCount = min(length(lights), GLTF_MAX_POINT_LIGHTS)
+    r.pointCount = length(lights)
+    resize(r.pointPosition, r.pointCount); resize(r.pointColor, r.pointCount); resize(r.pointShadow, r.pointCount)
+    for (shadow in r.pointShadow){shadow = float4(0.0)}
     for (i in range(r.pointCount)) {
         r.pointPosition[i] = float4(lights[i].position, max(lights[i].radius, 0.001))
         r.pointColor[i] = float4(max(lights[i].color, float3(0.0)), 0.0)
     }
+}
+
+def private gltf_pbr_upload_point_lights(var r : GltfPbrRenderer){
+    if (r.pointCount == 0){return }
+    assert(length(r.pointPosition) == r.pointCount && length(r.pointColor) == r.pointCount && length(r.pointShadow) == r.pointCount)
+    let allocate = r.pointTexture == 0u || r.pointCount * 3 > length(r.pointUploaded)
+    if (allocate){
+        var maximum : int; glGetIntegerv(GL_MAX_TEXTURE_SIZE, unsafe(addr(maximum)))
+        r.pointWidth = min(256, maximum)
+        r.pointHeight = (r.pointCount * 3 + r.pointWidth - 1) / r.pointWidth
+        assert(r.pointHeight <= maximum, "Point light data exceeds GL texture capacity")
+        resize(r.pointUploaded, r.pointWidth * r.pointHeight)
+    }
+    var changed = allocate
+    for (i in range(r.pointCount)){
+        let offset = i * 3
+        if (r.pointUploaded[offset] != r.pointPosition[i] || r.pointUploaded[offset + 1] != r.pointColor[i] || r.pointUploaded[offset + 2] != r.pointShadow[i]){changed = true}
+        r.pointUploaded[offset] = r.pointPosition[i]; r.pointUploaded[offset + 1] = r.pointColor[i]; r.pointUploaded[offset + 2] = r.pointShadow[i]
+    }
+    if (!changed){return }
+    var previous : int; glGetIntegerv(GL_TEXTURE_BINDING_2D, unsafe(addr(previous)))
+    if (r.pointTexture == 0u){glGenTextures(1, unsafe(addr(r.pointTexture)))}
+    glBindTexture(GL_TEXTURE_2D, r.pointTexture)
+    if (allocate){
+        glTexImage2D(GL_TEXTURE_2D, 0, int(GL_RGBA32F), r.pointWidth, r.pointHeight, 0, GL_RGBA, GL_FLOAT, unsafe(addr(r.pointUploaded[0])))
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST); glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE); glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
+    }else{glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, r.pointWidth, r.pointHeight, GL_RGBA, GL_FLOAT, unsafe(addr(r.pointUploaded[0])))}
+    glBindTexture(GL_TEXTURE_2D, uint(previous))
 }
 
 //! Configure a caller-owned depth texture (compare mode NONE, nearest filtering).
@@ -362,6 +397,8 @@ def gltf_pbr_create : GltfPbrRenderer =>
 
 def finalize(var r : GltfPbrRenderer) {
     delete r.shadowComparison
+    if (r.pointTexture != 0u){gl_binding_invalidate(); glDeleteTextures(1, unsafe(addr(r.pointTexture)))}
+    delete r.pointPosition; delete r.pointColor; delete r.pointShadow; delete r.pointUploaded
     for (program in [r.program, r.depthProgram, r.silhouetteProgram, r.materialProgram, r.surfaceProgram, r.normalProgram, r.motionProgram]){gl_binding_forget_program(program)}
     if (r.program != 0u) {
         glDeleteProgram(r.program)
@@ -526,7 +563,7 @@ def gltf_pbr_render_silhouette(var r : GltfPbrRenderer; model : GltfGlModel; sce
 //! with a `skin` is drawn skinned (its joint palette is uploaded and the mesh-node transform ignored);
 //! otherwise the node's precomputed `world` matrix is the model transform. Per primitive the material
 //! factors + textures are bound and doubleSided/alpha GL state is set. Caller owns clear + depth state.
-def gltf_pbr_render(r : GltfPbrRenderer; model : GltfGlModel; scene : GltfScene;
+def gltf_pbr_render(var r : GltfPbrRenderer; model : GltfGlModel; scene : GltfScene;
                     view, proj : float4x4; camPos : float3; light : GltfPbrLight; opacity : float = 1.0) {
     gltf_pbr_render(r, model, scene, identity4x4(), view, proj, camPos, light, opacity)
 }
@@ -535,7 +572,7 @@ def gltf_pbr_render(r : GltfPbrRenderer; model : GltfGlModel; scene : GltfScene;
 //! rotation/scale, say). Rigid nodes render at `root * node.world`; for skinned nodes `root` is baked into
 //! the joint palette, so it transforms rigid and skinned geometry alike — and lighting responds correctly
 //! (root reaches the world-space normals). The plain overload passes `identity4x4()`, so it is unchanged.
-def gltf_pbr_render(r : GltfPbrRenderer; model : GltfGlModel; scene : GltfScene; root : float4x4;
+def gltf_pbr_render(var r : GltfPbrRenderer; model : GltfGlModel; scene : GltfScene; root : float4x4;
                     view, proj : float4x4; camPos : float3; light : GltfPbrLight; opacity : float = 1.0) {
     gltf_shadow_comparison_bind(r.shadowComparison, r.shadowTex, r.localShadowTex); u_shadow_filter = r.shadowFilter
     gl_use_program_filtered(r.program)
@@ -564,11 +601,9 @@ def gltf_pbr_render(r : GltfPbrRenderer; model : GltfGlModel; scene : GltfScene;
     u_local_shadow_tex := r.localShadowTex != 0u ? r.localShadowTex : model.whiteTex
     u_local_shadow_size = r.localShadowSize
     u_point_count = r.pointCount
-    for (i in range(GLTF_MAX_POINT_LIGHTS)) {
-        u_point_shadow[i] = r.pointShadow[i]
-        u_point_position[i] = r.pointPosition[i]
-        u_point_color[i] = r.pointColor[i]
-    }
+    gltf_pbr_upload_point_lights(r)
+    u_point_data := r.pointTexture != 0u ? r.pointTexture : model.whiteTex
+    u_point_width = max(r.pointWidth, 1)
     var palette = -1
     for (node in scene.nodes) {
         if (node.mesh < 0 || node.mesh >= length(model.meshes)) {

@@ -65,7 +65,7 @@ def init() {
         panic("no meshes loaded from {path}")
     }
     model <- upload_gltf(scene)   // nolint:PERF030 - module global, first and only write (init runs once)
-    renderer <- gltf_pbr_create()
+    renderer <- gltf_pbr_create()   // nolint:PERF030 - module global, first and only write (init runs once)
 
     // auto-frame: orbit the world-space bounding sphere so any model (Fox is ~80 units) fills the view
     let bounds = gltf_scene_bounds(scene)
