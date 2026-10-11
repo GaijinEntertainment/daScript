@@ -36,8 +36,6 @@ require live/live_commands
 require live_host
 require math
 
-let private WAIT_FOREVER = 0xFFFFFFFFFFFFFFFFul
-
 // ============================================================================
 // Registered target (option b -- the app hands us the objects; we own nothing)
 // ============================================================================
@@ -153,85 +151,67 @@ def private readback_swapchain_image(image_index : int) : array<uint8> {
 // Frame (drop-in for vulkan_window's draw_frame, with integrated capture)
 // ============================================================================
 
-def public vk_live_draw_frame(render_pass : RenderPass; sync : FrameSync; clear : VkClearValue;
-                              dynamic_viewport : bool; blk : block<(cmd : CommandBuffer) : void>) : bool {
-    //! acquire -> record (render pass + `blk`) -> submit -> present on the `vk_live_set_target` target;
-    //! drop-in for vulkan_window's `draw_frame` that also tracks the presented image and feeds the APNG
-    //! writer. False = swapchain out-of-date/lost (recreate, keep calling); other GPU errors vk_check-panic.
+//! Acquire on the registered target; -1 when the swapchain is out of date or lost (the caller
+//! recreates and keeps calling), so a garbage index never reaches the views or framebuffers.
+def private live_acquire(sync : FrameSync) : int {
     if (!g.valid || g.swap == null) {
         panic("vk_live_draw_frame: no target -- call vk_live_set_target first")
     }
     let sc & = unsafe(*g.swap)
-    let dev = boost_value_to_vk(g.device)
-
     var image_index = 0u
-    let acquired = vkAcquireNextImageKHR(dev, boost_value_to_vk(sc.handle), WAIT_FOREVER,
-        boost_value_to_vk(sync.image_available), null, image_index)
-    // SUCCESS/SUBOPTIMAL give a valid image_index; out-of-date or a hard error (surface/device lost)
-    // leave it undefined -- bail so we never index framebuffers with garbage.
-    if (acquired != VkResult.SUCCESS && acquired != VkResult.SUBOPTIMAL_KHR) {
-        return false
+    if (!frame_acquired(acquire_frame_image(g.device, sc, sync, image_index))) {
+        return -1
     }
+    return int(image_index)
+}
 
-    var ai = VkCommandBufferAllocateInfo()
-    ai.commandPool = boost_value_to_vk(g.pool)
-    ai.level = VkCommandBufferLevel.PRIMARY
-    ai.commandBufferCount = 1u
-    var raw_cmd : VkCommandBuffer
-    vk_check(vkAllocateCommandBuffers(dev, ai, unsafe(addr(raw_cmd))), null)
-    let cmd = vk_value_to_boost(raw_cmd)
-    let begin = VkCommandBufferBeginInfo()
-    vk_check(vkBeginCommandBuffer(raw_cmd, begin), null)
-    record_render_pass(cmd, render_pass, sc.framebuffers[int(image_index)],
-            full_area(sc.width, sc.height), clear) {
-        if (dynamic_viewport) {
-            set_dynamic_viewport(cmd, sc.width, sc.height)
-        }
-        invoke(blk, cmd)
-    }
-    vk_check(vkEndCommandBuffer(raw_cmd), null)
-
-    var wait_sem = boost_value_to_vk(sync.image_available)
-    var signal_sem = boost_value_to_vk(sync.render_finished)
-    var wait_stage : VkPipelineStageFlags
-    wait_stage.color_attachment_output = true
-    var submit = VkSubmitInfo()
-    submit.waitSemaphoreCount = 1u
-    submit.commandBufferCount = 1u
-    submit.signalSemaphoreCount = 1u
-    unsafe {
-        submit.pWaitSemaphores = addr(wait_sem)
-        submit.pWaitDstStageMask = addr<uint?>(wait_stage)
-        submit.pCommandBuffers = addr(raw_cmd)
-        submit.pSignalSemaphores = addr(signal_sem)
-        vk_check(vkQueueSubmit(g.queue, 1u, addr(submit), null), null)
-    }
-
-    var sc_handle = boost_value_to_vk(sc.handle)
-    var present = VkPresentInfoKHR()
-    present.waitSemaphoreCount = 1u
-    present.swapchainCount = 1u
-    var presented : VkResult
-    unsafe {
-        present.pWaitSemaphores = addr(signal_sem)
-        present.pSwapchains = addr(sc_handle)
-        present.pImageIndices = addr(image_index)
-        presented = vkQueuePresentKHR(g.queue, present)
-    }
-    vk_check(vkQueueWaitIdle(g.queue), null)
-    vkFreeCommandBuffers(dev, boost_value_to_vk(g.pool), 1u, unsafe(addr(raw_cmd)))
-
-    // SUBOPTIMAL is still a usable present; out-of-date or any other error -> false so the caller recreates.
-    // Only count the frame as presented (track last-index + capture) when present actually succeeded.
+//! Records a present's outcome for the live session - last index, frame count, the APNG capture when the
+//! recorder is on - and says whether the frame reached the screen: SUBOPTIMAL is still a usable present,
+//! out-of-date or any other error is false so the caller recreates.
+def private track_present(presented : VkResult; image_index : int) : bool {
     let ok = presented == VkResult.SUCCESS || presented == VkResult.SUBOPTIMAL_KHR
     if (ok) {
-        g_last_index = int(image_index)
+        g_last_index = image_index
         g_frames_rendered++
         if (recorder_active) {
-            record_capture_frame(int(image_index))
+            record_capture_frame(image_index)
         }
     }
     return ok
+}
+
+def public vk_live_draw_frame(sync : FrameSync; clear : VkClearValue;
+                              dynamic_viewport : bool; blk : block<(cmd : CommandBuffer) : void>) : bool {
+    //! vulkan_window's render-pass-free `draw_frame` on the `vk_live_set_target` target, which also
+    //! tracks the presented image and feeds the APNG writer. False = swapchain out-of-date/lost
+    //! (recreate, keep calling); other GPU errors vk_check-panic.
+    let image_index = live_acquire(sync)
+    if (image_index < 0) {
+        return false
+    }
+    let sc & = unsafe(*g.swap)
+    var raw_cmd = begin_one_time_commands(g.device, g.pool)
+    record_swapchain_rendering(vk_value_to_boost(raw_cmd), sc, image_index, clear, dynamic_viewport, blk)
+    let presented = submit2_and_present(g.device, g.queue, sc, g.pool, sync, raw_cmd, uint(image_index),
+        VkPipelineStageFlags2.color_attachment_output)
+    return track_present(presented, image_index)
+}
+
+def public vk_live_draw_frame(render_pass : RenderPass; sync : FrameSync; clear : VkClearValue;
+                              dynamic_viewport : bool; blk : block<(cmd : CommandBuffer) : void>) : bool {
+    //! `vk_live_draw_frame` over a render pass: `blk` records inside the pass on the image's framebuffer
+    //! (the app ran `build_swapchain_framebuffers`); drop-in for vulkan_window's render-pass `draw_frame`.
+    let image_index = live_acquire(sync)
+    if (image_index < 0) {
+        return false
+    }
+    let sc & = unsafe(*g.swap)
+    var raw_cmd = begin_one_time_commands(g.device, g.pool)
+    record_swapchain_render_pass(vk_value_to_boost(raw_cmd), sc, render_pass, image_index, clear, dynamic_viewport, blk)
+    var wait_stage : VkPipelineStageFlags
+    wait_stage.color_attachment_output = true
+    let presented = submit_and_present(g.device, g.queue, sc, g.pool, sync, raw_cmd, uint(image_index), wait_stage)
+    return track_present(presented, image_index)
 }
 
 // ============================================================================

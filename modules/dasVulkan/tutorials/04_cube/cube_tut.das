@@ -198,14 +198,12 @@ def gen_synthwave_texture(w, h : int) : array<uint8> {
 
 // ===== reusable per-frame context =====
 
-//! All cube rendering state depending only on (device, phys, queue, pool): offscreen targets, render
-//! pass, framebuffer, geometry/UBO buffers, procedural texture + sampler + descriptors, pipeline and a
-//! host-visible readback. The driver passes those in, so one bundle serves the oracle or a swapchain blit.
+//! All cube rendering state depending only on (device, phys, queue, pool): offscreen targets,
+//! geometry/UBO buffers, procedural texture + sampler + descriptors, pipeline and a host-visible
+//! readback. The driver passes those in, so one bundle serves the oracle or a swapchain blit.
 struct public CubeResources {
     color       : OffscreenTarget
     depth       : OffscreenDepth
-    render_pass : RenderPass
-    framebuffer : Framebuffer
     vb          : HostBuffer
     ib          : HostBuffer
     ubo         : HostBuffer
@@ -238,8 +236,6 @@ def public finalize(var r : CubeResources) {
     delete r.ubo
     delete r.ib
     delete r.vb
-    delete r.framebuffer
-    delete r.render_pass
     delete r.depth
     delete r.color
 }
@@ -270,13 +266,6 @@ def public build_cube_resources(device : Device; phys : VkPhysicalDevice; queue 
 
     var inscope color <- build_offscreen_target(device, phys, CUBE_W, CUBE_H, CUBE_COLOR_FMT)
     var inscope depth <- build_offscreen_depth(device, phys, CUBE_W, CUBE_H, CUBE_DEPTH_FMT)
-    var inscope render_pass <- create_render_pass_color_depth(device, CUBE_COLOR_FMT, CUBE_DEPTH_FMT)
-    var inscope framebuffer <- create_framebuffer(device, FramebufferCreateInfo(
-        renderPass = weak_copy(render_pass),
-        pAttachments <- [weak_copy(color.view), weak_copy(depth.view)],
-        width = uint(CUBE_W),
-        height = uint(CUBE_H),
-        layers = 1u))
 
     var vb_usage : VkBufferUsageFlags
     vb_usage.vertex_buffer = true
@@ -422,7 +411,8 @@ def public build_cube_resources(device : Device; phys : VkPhysicalDevice; queue 
     attr_n.format = VkFormat.R32G32B32_SFLOAT
     attr_n.offset = 20u
     vattrs |> push(attr_n)
-    var inscope pipeline <- create_graphics_pipeline_v3d(device, render_pass, pipe_layout, vert, frag,
+    // the pipeline names the color + depth formats it renders into (no render pass to bind it to)
+    var inscope pipeline <- create_graphics_pipeline_v3d(device, CUBE_COLOR_FMT, CUBE_DEPTH_FMT, pipe_layout, vert, frag,
         CUBE_W, CUBE_H, vbindings, vattrs)
     delete vbindings
     delete vattrs
@@ -432,19 +422,8 @@ def public build_cube_resources(device : Device; phys : VkPhysicalDevice; queue 
 
     // one-shot texture upload: staging -> tex_image, transitioned UNDEFINED -> TRANSFER_DST -> SHADER_READ_ONLY
     run_cmd_sync(device, pool, queue) $(cmd) {
-        var to_dst : VkAccessFlags
-        to_dst.transfer_write = true
-        let none : VkAccessFlags
-        var top : VkPipelineStageFlags
-        top.top_of_pipe = true
-        var xfer : VkPipelineStageFlags
-        xfer.transfer = true
-        var frag_stage : VkPipelineStageFlags
-        frag_stage.fragment_shader = true
-        var to_read : VkAccessFlags
-        to_read.shader_read = true
-        transition_image(cmd, tex_image, VkImageLayout.UNDEFINED, VkImageLayout.TRANSFER_DST_OPTIMAL,
-            none, to_dst, top, xfer)
+        transition_image2(cmd, tex_image, VkImageLayout.UNDEFINED, VkImageLayout.TRANSFER_DST_OPTIMAL,
+            PIPELINE_STAGE_2_NONE, ACCESS_2_NONE, VkPipelineStageFlags2.copy, VkAccessFlags2.transfer_write)
         var region : BufferImageCopy
         region.imageSubresource.aspectMask.color = true
         region.imageSubresource.layerCount = 1u
@@ -454,12 +433,13 @@ def public build_cube_resources(device : Device; phys : VkPhysicalDevice; queue 
         var regions : array<BufferImageCopy>
         regions |> emplace(region)
         cmd_copy_buffer_to_image(cmd, staging.buffer, tex_image, VkImageLayout.TRANSFER_DST_OPTIMAL, regions)
-        transition_image(cmd, tex_image, VkImageLayout.TRANSFER_DST_OPTIMAL, VkImageLayout.SHADER_READ_ONLY_OPTIMAL,
-            to_dst, to_read, xfer, frag_stage)
+        transition_image2(cmd, tex_image, VkImageLayout.TRANSFER_DST_OPTIMAL, VkImageLayout.SHADER_READ_ONLY_OPTIMAL,
+            VkPipelineStageFlags2.copy, VkAccessFlags2.transfer_write,
+            VkPipelineStageFlags2.fragment_shader, VkAccessFlags2.shader_sampled_read)
     }
 
     return <- CubeResources(
-        color <- color, depth <- depth, render_pass <- render_pass, framebuffer <- framebuffer,
+        color <- color, depth <- depth,
         vb <- vb, ib <- ib, ubo <- ubo,
         tex_image <- tex_image, tex_memory <- tex_memory, tex_view <- tex_view, sampler <- sampler,
         set_layouts <- set_layouts, desc_pool <- desc_pool, desc_set = raw_set,
@@ -512,12 +492,19 @@ def public update_cube_uniforms(res : CubeResources; device : Device; time, came
     pc.model = model_matrix(spin, breathe)
 }
 
-//! Record the cube's render pass + draw. The pass ends with the color attachment in TRANSFER_SRC_OPTIMAL
-//! (create_render_pass_color_depth's default), so a windowed driver blits res.color.image straight into
-//! the swap target. Caller must run update_cube_uniforms first to load the UBO + push-constant globals.
-def public record_cube_render_pass(res : CubeResources; cmd : CommandBuffer) {
+//! Record the cube's frame: both attachments move out of UNDEFINED, the draw runs inside
+//! `record_rendering`, and the color attachment ends in TRANSFER_SRC_OPTIMAL for the blit or copy that
+//! follows. Caller must run update_cube_uniforms first to load the UBO + push-constant globals.
+def public record_cube_frame(res : CubeResources; cmd : CommandBuffer) {
+    transition_image2(cmd, res.color.image, VkImageLayout.UNDEFINED, VkImageLayout.COLOR_ATTACHMENT_OPTIMAL,
+        PIPELINE_STAGE_2_NONE, ACCESS_2_NONE,
+        VkPipelineStageFlags2.color_attachment_output, VkAccessFlags2.color_attachment_write)
+    transition_depth_image2(cmd, res.depth.image, VkImageLayout.UNDEFINED, VkImageLayout.DEPTH_ATTACHMENT_OPTIMAL,
+        PIPELINE_STAGE_2_NONE, ACCESS_2_NONE,
+        VkPipelineStageFlags2.early_fragment_tests | VkPipelineStageFlags2.late_fragment_tests,
+        VkAccessFlags2.depth_stencil_attachment_write)
     var clears <- [clear_color(0.02f, 0.0f, 0.06f, 1.0f), clear_depth(1.0f)]
-    record_render_pass(cmd, res.render_pass, res.framebuffer, full_area(CUBE_W, CUBE_H), clears) {
+    record_rendering(cmd, res.color.view, res.depth.view, full_area(CUBE_W, CUBE_H), clears) {
         cmd_bind_pipeline(cmd, res.pipeline)
         let sets <- [vk_value_to_boost(res.desc_set)]
         var no_dyn : array<uint>
@@ -531,15 +518,19 @@ def public record_cube_render_pass(res : CubeResources; cmd : CommandBuffer) {
         cmd_draw_indexed(cmd, uint(N_INDICES), 1u, 0u, 0, 0u)
     }
     delete clears
+    // the finished color goes to whoever copies or blits it next
+    transition_image2(cmd, res.color.image, VkImageLayout.COLOR_ATTACHMENT_OPTIMAL, VkImageLayout.TRANSFER_SRC_OPTIMAL,
+        VkPipelineStageFlags2.color_attachment_output, VkAccessFlags2.color_attachment_write,
+        VkPipelineStageFlags2.copy | VkPipelineStageFlags2.blit, VkAccessFlags2.transfer_read)
 }
 
-//! Per-frame work: update UBO + push constant, record the render pass, copy the color attachment
+//! Per-frame work: update UBO + push constant, record the frame, copy the color attachment
 //! into the readback buffer, clone the bytes out as RGBA8.
 def public render_cube_frame(var ctx : CubeContext; time, camera_t : float) : array<uint8> {
     update_cube_uniforms(ctx.res, ctx.device, time, camera_t)
     var pixels : array<uint8>
     run_cmd_sync(ctx.device, ctx.pool, ctx.queue) $(cmd) {
-        record_cube_render_pass(ctx.res, cmd)
+        record_cube_frame(ctx.res, cmd)
         copy_image_to_buffer(cmd, ctx.res.color.image, ctx.res.readback, CUBE_W, CUBE_H)
     }
     map_memory_to_array(ctx.device, ctx.res.readback.memory, ctx.res.buf_size) $(m) {

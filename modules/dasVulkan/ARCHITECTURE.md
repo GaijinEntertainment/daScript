@@ -2,8 +2,8 @@
 
 **Read `ARCHITECTURE_COMMON.md` (repo root) first - its contract binds this document.** The
 checklist that binds a diff here is `REVIEW.md` (this folder); `generator/` and `tutorials/`
-carry their own. Planned work: `ROADMAP.md`. Agent instructions - build, run, test, where
-things live: `CLAUDE.md`.
+carry their own; how a frame is drawn and synchronized: the companion `ARCHITECTURE_RENDERING.md`. Planned work:
+`ROADMAP.md`. Agent instructions - build, run, test, where things live: `CLAUDE.md`.
 
 ## 1. The two layers
 
@@ -268,13 +268,11 @@ A tutorial is a self-contained unit under `tutorials/<NN_name>/`: an offscreen m
 where the tutorials `.das_test` skips it - the lavapipe CI daslang build is
 `-DDAS_GLFW_DISABLED=ON`, so it has no display and no GLFW.
 
-Shared helpers are copied per tutorial rather than factored out, because daslang `require`
-cannot parse an unquoted path segment starting with a digit:
-`require ../../02_mandelbrot/window/x.das` fails with `error[30151] unexpected integer
-constant`. The `mandelbrot_compute` of 02 and the `resident_compute` of 03 are the same generic
-resident single-float-pushconstant compute-to-image builder, held as two copies for that
-reason. A non-digit shared path such as `tutorials/common/` is what a third windowed compute
-tutorial would need.
+Shared helpers are copied per tutorial rather than factored out: daslang `require` cannot parse
+an unquoted path segment starting with a digit (`require ../../02_mandelbrot/window/x.das` fails
+with `error[30151] unexpected integer constant`). The `mandelbrot_compute` of 02 and the
+`resident_compute` of 03 are the same resident compute-to-image builder held as two copies for
+that reason; a non-digit shared path such as `tutorials/common/` is what a third would need.
 
 ## 15. CI gates
 
@@ -295,4 +293,7 @@ and compute into a storage buffer. No window, no subprocess. A test body calls
 
 ## 16. Exception ledger
 
-Empty. No rule in `REVIEW.md` has a ruled-acceptable case here yet.
+- `tutorials/10_deferred` keeps its render passes and its `transition_image` calls ("A diff that
+  records a draw in a tutorial" and "A diff that changes an image layout in a tutorial" in
+  `REVIEW.md`): the pass-to-pass hand-off through attachment layouts is its lesson, and the
+  dynamic-rendering form of it, `dynamic_rendering_local_read`, is Vulkan 1.4 core.

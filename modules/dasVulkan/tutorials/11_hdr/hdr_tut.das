@@ -4,16 +4,17 @@ options indenting = 4
 
 // Tutorial 11 render path: HDR scene -> Karis-style 5-mip bloom -> ACES-tonemapped LDR.
 //
-// Eleven render-pass instances per frame:
+// Eleven rendering passes per frame, each a record_rendering on the target view:
 //   * 1 x scene pass (HDR_W x HDR_H, R16G16B16A16_SFLOAT)
 //   * 1 x bright pass (BLOOM_W[0] x BLOOM_H[0], R16G16B16A16_SFLOAT)
 //   * 4 x downsample passes (bloom[i] -> bloom[i+1])
-//   * 4 x upsample passes (bloom[i+1] added onto bloom[i])
+//   * 4 x upsample passes (bloom[i+1] added onto bloom[i], loadOp = LOAD)
 //   * 1 x composite pass (HDR_W x HDR_H LDR target, R8G8B8A8_UNORM)
 //
-// Three render-pass *objects* are shared across these instances: rp_scene (color+depth, clear),
-// rp_post_clear (single-color HDR, clear), rp_post_load (single-color HDR, load). Each of the 5
-// bloom mips has both a clear- and load-framebuffer, plus one fb_scene and one fb_composite.
+// A render pass carries these hand-offs as external subpass dependencies; here each is one explicit
+// barrier: a target goes COLOR_ATTACHMENT_OPTIMAL -> SHADER_READ_ONLY_OPTIMAL when the next pass
+// samples it, and back when the upsample draws onto it again. Each barrier names the stage that wrote
+// and the stage that reads, so every hand-off inside the frame is explicit.
 //
 // Five pipelines: scene_pipeline (instanced vertex+fragment, depth-tested), bright_pipeline +
 // downsample_pipeline (fullscreen-tri, no depth, no blend) and upsample_pipeline (fullscreen-tri,
@@ -172,16 +173,6 @@ struct public HdrResources {
     ldr_color    : OffscreenTarget        // 16-bit float linear post-tonemap (the composite output)
     readback_8bit : OffscreenTarget       // 8-bit sRGB intermediate for the static-test readback path
 
-    rp_scene       : RenderPass
-    rp_post_clear  : RenderPass
-    rp_post_load   : RenderPass
-    rp_composite   : RenderPass
-
-    fb_scene       : Framebuffer
-    fb_post_clear  : array<Framebuffer>     // BLOOM_LEVELS entries (one per bloom mip)
-    fb_post_load   : array<Framebuffer>     // BLOOM_LEVELS entries; the upsample writes to mips 0..3 (4 is the smallest mip and only ever a source)
-    fb_composite   : Framebuffer
-
     sampler_linear_clamp : Sampler
 
     cube_vb   : HostBuffer
@@ -233,14 +224,6 @@ def public finalize(var r : HdrResources) {
     delete r.cube_ib
     delete r.cube_vb
     delete r.sampler_linear_clamp
-    delete r.fb_composite
-    delete r.fb_post_load
-    delete r.fb_post_clear
-    delete r.fb_scene
-    delete r.rp_composite
-    delete r.rp_post_load
-    delete r.rp_post_clear
-    delete r.rp_scene
     delete r.readback_8bit
     delete r.ldr_color
     delete r.bloom
@@ -294,47 +277,6 @@ def public build_hdr_resources(device : Device; phys : VkPhysicalDevice; queue :
     // a blit-dst + blit-src) doesn't need. The minimal usage set keeps us portable to drivers that
     // report `R8G8B8A8_SRGB` as supporting `BLIT_*` but not `COLOR_ATTACHMENT` -- rare, but legal.
     var inscope readback_8bit <- build_readback_image(device, phys, HDR_W, HDR_H, READBACK_FMT)
-
-    // ----- render passes ----- explicit external subpass deps, so frames in flight in the windowed
-    // viewer see each other's writes: the boost helpers' implicit BOTTOM->TOP dep orders stages but
-    // never makes COLOR_ATTACHMENT_WRITE visible to a later FRAGMENT_SHADER SHADER_READ.
-    var inscope rp_scene      <- build_scene_render_pass(device)                                  // HDR sampled by post passes
-    var inscope rp_post_clear <- build_post_clear_render_pass(device)                             // bright + downsample
-    var inscope rp_post_load  <- build_post_load_render_pass(device)                              // upsample (loadOp=LOAD)
-    var inscope rp_composite  <- build_composite_render_pass(device)                              // final blit target (TRANSFER_SRC)
-
-    // ----- framebuffers -----
-    var scene_attach <- [weak_copy(hdr_color.view), weak_copy(hdr_depth.view)]
-    var inscope fb_scene <- create_framebuffer(device, FramebufferCreateInfo(
-        renderPass = weak_copy(rp_scene),
-        pAttachments <- scene_attach,
-        width = uint(HDR_W), height = uint(HDR_H), layers = 1u))
-
-    var inscope fb_post_clear, fb_post_load : array<Framebuffer>
-    fb_post_clear |> reserve(BLOOM_LEVELS)
-    fb_post_load  |> reserve(BLOOM_LEVELS)
-    for (i in range(BLOOM_LEVELS)) {
-        var inscope ac <- [weak_copy(bloom[i].view)]
-        var inscope fbc <- create_framebuffer(device, FramebufferCreateInfo(
-            renderPass = weak_copy(rp_post_clear),
-            pAttachments <- ac,
-            width = uint(BLOOM_W[i]), height = uint(BLOOM_H[i]), layers = 1u))
-        fb_post_clear |> emplace(fbc)
-
-        var inscope al <- [weak_copy(bloom[i].view)]
-        var inscope fbl <- create_framebuffer(device, FramebufferCreateInfo(
-            renderPass = weak_copy(rp_post_load),
-            pAttachments <- al,
-            width = uint(BLOOM_W[i]), height = uint(BLOOM_H[i]), layers = 1u))
-        fb_post_load |> emplace(fbl)
-    }
-
-    var comp_attach : array<ImageView>
-    comp_attach |> push(weak_copy(ldr_color.view))
-    var inscope fb_composite <- create_framebuffer(device, FramebufferCreateInfo(
-        renderPass = weak_copy(rp_composite),
-        pAttachments <- comp_attach,
-        width = uint(HDR_W), height = uint(HDR_H), layers = 1u))
 
     // ----- sampler -----
     // mipmapMode LINEAR (NEAREST broke linear filtering in practice); maxLod 1.0 covers the single mip
@@ -436,17 +378,18 @@ def public build_hdr_resources(device : Device; phys : VkPhysicalDevice; queue :
         VkVertexInputAttributeDescription(location = 4u, binding = 1u, format = VkFormat.R32_SFLOAT,       offset = 24u),
         VkVertexInputAttributeDescription(location = 5u, binding = 1u, format = VkFormat.R32_SFLOAT,       offset = 28u)]
 
-    var inscope scene_pipeline <- create_graphics_pipeline_v3d(device, rp_scene, scene_pipe_layout, sh_scene_v, sh_scene_f,
+    var inscope scene_pipeline <- create_graphics_pipeline_v3d(device, HDR_FMT, DEPTH_FMT, scene_pipe_layout, sh_scene_v, sh_scene_f,
         HDR_W, HDR_H, vbindings, vattrs)
     delete vbindings
     delete vattrs
 
-    var inscope bright_pipeline <- create_graphics_pipeline_simple(device, rp_post_clear, post_pipe_layout, sh_full_v, sh_bright,
+    // every post pipeline names the format of the target it draws into
+    var inscope bright_pipeline <- create_graphics_pipeline_simple(device, HDR_FMT, post_pipe_layout, sh_full_v, sh_bright,
         HDR_W, HDR_H, /*dynamic_viewport*/true)
-    var inscope down_pipeline   <- create_graphics_pipeline_simple(device, rp_post_clear, post_pipe_layout, sh_full_v, sh_down,
+    var inscope down_pipeline   <- create_graphics_pipeline_simple(device, HDR_FMT, post_pipe_layout, sh_full_v, sh_down,
         HDR_W, HDR_H, /*dynamic_viewport*/true)
-    var inscope up_pipeline     <- build_additive_pipeline(device, rp_post_load, post_pipe_layout, sh_full_v, sh_up)
-    var inscope composite_pipeline <- create_graphics_pipeline_simple(device, rp_composite, composite_pipe_layout,
+    var inscope up_pipeline     <- build_additive_pipeline(device, post_pipe_layout, sh_full_v, sh_up)
+    var inscope composite_pipeline <- create_graphics_pipeline_simple(device, LDR_FMT, composite_pipe_layout,
         sh_full_v, sh_comp, HDR_W, HDR_H)
 
     delete scene_refl
@@ -460,14 +403,6 @@ def public build_hdr_resources(device : Device; phys : VkPhysicalDevice; queue :
         bloom <- bloom,
         ldr_color <- ldr_color,
         readback_8bit <- readback_8bit,
-        rp_scene <- rp_scene,
-        rp_post_clear <- rp_post_clear,
-        rp_post_load <- rp_post_load,
-        rp_composite <- rp_composite,
-        fb_scene <- fb_scene,
-        fb_post_clear <- fb_post_clear,
-        fb_post_load <- fb_post_load,
-        fb_composite <- fb_composite,
         sampler_linear_clamp <- sampler_linear_clamp,
         cube_vb <- cube_vb,
         cube_ib <- cube_ib,
@@ -574,233 +509,12 @@ def private build_readback_image(device : Device; phys : VkPhysicalDevice;
     return <- OffscreenTarget(image <- image, memory <- memory, view <- view)
 }
 
-// ===== render passes / pipelines =====
+// ===== pipelines =====
 
-//! Two external deps for a "writer" pass: BEFORE, the previous frame's sample must finish before we write;
-//! AFTER, our write must reach the next pass's fragment read. The implicit finalLayout dep (BOTTOM->TOP, no
-//! access masks) orders stages only, so frames in flight tear -- a fence-per-frame test hides the gap.
-def private color_write_sample_deps() : array<VkSubpassDependency> {
-    var deps : array<VkSubpassDependency>
-    var d0 : VkSubpassDependency
-    d0.srcSubpass = VK_SUBPASS_EXTERNAL
-    d0.dstSubpass = 0u
-    d0.srcStageMask.fragment_shader = true              // previous frame sampled this image
-    d0.dstStageMask.color_attachment_output = true      // this pass will write to it
-    d0.srcAccessMask.shader_read = true
-    d0.dstAccessMask.color_attachment_write = true
-    deps |> push(d0)
-    var d1 : VkSubpassDependency
-    d1.srcSubpass = 0u
-    d1.dstSubpass = VK_SUBPASS_EXTERNAL
-    d1.srcStageMask.color_attachment_output = true      // this pass wrote the image
-    d1.dstStageMask.fragment_shader = true              // next pass will sample it
-    d1.srcAccessMask.color_attachment_write = true
-    d1.dstAccessMask.shader_read = true
-    deps |> push(d1)
-    return <- deps
-}
-
-//! Scene render pass (HDR target), color and depth both cleared. Color finalLayout is
-//! SHADER_READ_ONLY (post passes sample it); depth stays DEPTH_STENCIL_ATTACHMENT (never read back).
-//! External deps cover both, so the next frame's scene write waits on the previous frame's sample.
-def private build_scene_render_pass(device : Device) : RenderPass {
-    var attaches : array<VkAttachmentDescription>
-    var color : VkAttachmentDescription
-    color.format = HDR_FMT
-    color.samples._1 = true
-    color.loadOp = VkAttachmentLoadOp.CLEAR
-    color.storeOp = VkAttachmentStoreOp.STORE
-    color.stencilLoadOp = VkAttachmentLoadOp.DONT_CARE
-    color.stencilStoreOp = VkAttachmentStoreOp.DONT_CARE
-    color.initialLayout = VkImageLayout.UNDEFINED
-    color.finalLayout = VkImageLayout.SHADER_READ_ONLY_OPTIMAL
-    attaches |> push(color)
-    var depth : VkAttachmentDescription
-    depth.format = DEPTH_FMT
-    depth.samples._1 = true
-    depth.loadOp = VkAttachmentLoadOp.CLEAR
-    depth.storeOp = VkAttachmentStoreOp.DONT_CARE
-    depth.stencilLoadOp = VkAttachmentLoadOp.DONT_CARE
-    depth.stencilStoreOp = VkAttachmentStoreOp.DONT_CARE
-    depth.initialLayout = VkImageLayout.UNDEFINED
-    depth.finalLayout = VkImageLayout.DEPTH_STENCIL_ATTACHMENT_OPTIMAL
-    attaches |> push(depth)
-    var color_ref : VkAttachmentReference
-    color_ref.attachment = 0u
-    color_ref.layout = VkImageLayout.COLOR_ATTACHMENT_OPTIMAL
-    var depth_ref : VkAttachmentReference
-    depth_ref.attachment = 1u
-    depth_ref.layout = VkImageLayout.DEPTH_STENCIL_ATTACHMENT_OPTIMAL
-    var subpass : VkSubpassDescription
-    subpass.pipelineBindPoint = VkPipelineBindPoint.GRAPHICS
-    subpass.colorAttachmentCount = 1u
-    // BEGIN dep waits on the previous frame's color sample; END dep publishes our write to the bright pass.
-    var deps <- color_write_sample_deps()
-    // src: previous frame's depth write lands at early OR late fragment-tests, so draining fragment_shader alone leaves a WAW hazard.
-    deps[0].srcStageMask.early_fragment_tests = true
-    deps[0].srcStageMask.late_fragment_tests = true
-    deps[0].srcAccessMask.depth_stencil_attachment_write = true
-    // dst: without `EarlyFragmentTests` (or with discard/depth export) our depth write defers to late -- cover both stages.
-    deps[0].dstStageMask.early_fragment_tests = true
-    deps[0].dstStageMask.late_fragment_tests = true
-    deps[0].dstAccessMask.depth_stencil_attachment_write = true
-    var ci = VkRenderPassCreateInfo()
-    ci.attachmentCount = uint(length(attaches))
-    ci.subpassCount = 1u
-    ci.dependencyCount = uint(length(deps))
-    var h : VkRenderPass
-    unsafe {
-        subpass.pColorAttachments = addr(color_ref)
-        subpass.pDepthStencilAttachment = addr(depth_ref)
-        ci.pAttachments = addr(attaches[0])
-        ci.pSubpasses = addr(subpass)
-        ci.pDependencies = addr(deps[0])
-        vk_check(vkCreateRenderPass(boost_value_to_vk(device), ci, null, h), null)
-    }
-    delete attaches
-    delete deps
-    var b = vk_value_to_boost(h)
-    b._needs_delete = true
-    b._device = unsafe(reinterpret<uint64>(boost_value_to_vk(device)))
-    return <- b
-}
-
-//! Single-color CLEAR render pass for bright + downsample. FinalLayout SHADER_READ_ONLY so the next
-//! pass can sample it directly.
-def private build_post_clear_render_pass(device : Device) : RenderPass {
-    var attach : VkAttachmentDescription
-    attach.format = HDR_FMT
-    attach.samples._1 = true
-    attach.loadOp = VkAttachmentLoadOp.CLEAR
-    attach.storeOp = VkAttachmentStoreOp.STORE
-    attach.stencilLoadOp = VkAttachmentLoadOp.DONT_CARE
-    attach.stencilStoreOp = VkAttachmentStoreOp.DONT_CARE
-    attach.initialLayout = VkImageLayout.UNDEFINED
-    attach.finalLayout = VkImageLayout.SHADER_READ_ONLY_OPTIMAL
-    var ref : VkAttachmentReference
-    ref.layout = VkImageLayout.COLOR_ATTACHMENT_OPTIMAL
-    var subpass : VkSubpassDescription
-    subpass.pipelineBindPoint = VkPipelineBindPoint.GRAPHICS
-    subpass.colorAttachmentCount = 1u
-    var deps <- color_write_sample_deps()
-    var ci = VkRenderPassCreateInfo()
-    ci.attachmentCount = 1u
-    ci.subpassCount = 1u
-    ci.dependencyCount = uint(length(deps))
-    var h : VkRenderPass
-    unsafe {
-        subpass.pColorAttachments = addr(ref)
-        ci.pAttachments = addr(attach)
-        ci.pSubpasses = addr(subpass)
-        ci.pDependencies = addr(deps[0])
-        vk_check(vkCreateRenderPass(boost_value_to_vk(device), ci, null, h), null)
-    }
-    delete deps
-    var b = vk_value_to_boost(h)
-    b._needs_delete = true
-    b._device = unsafe(reinterpret<uint64>(boost_value_to_vk(device)))
-    return <- b
-}
-
-//! Single-color LOAD render pass for the upsample: the previous mip is loaded and the tent-filter
-//! contribution from below is blended on top. loadOp=LOAD reads that previous write, so the BEGIN dep
-//! covers both it and the previous sample; the END dep publishes the blend to the next sampler read.
-def private build_post_load_render_pass(device : Device) : RenderPass {
-    var attach : VkAttachmentDescription
-    attach.format = HDR_FMT
-    attach.samples._1 = true
-    attach.loadOp = VkAttachmentLoadOp.LOAD
-    attach.storeOp = VkAttachmentStoreOp.STORE
-    attach.stencilLoadOp = VkAttachmentLoadOp.DONT_CARE
-    attach.stencilStoreOp = VkAttachmentStoreOp.DONT_CARE
-    attach.initialLayout = VkImageLayout.SHADER_READ_ONLY_OPTIMAL     // previous pass left it sampled
-    attach.finalLayout   = VkImageLayout.SHADER_READ_ONLY_OPTIMAL
-    var ref : VkAttachmentReference
-    ref.layout = VkImageLayout.COLOR_ATTACHMENT_OPTIMAL
-    var subpass : VkSubpassDescription
-    subpass.pipelineBindPoint = VkPipelineBindPoint.GRAPHICS
-    subpass.colorAttachmentCount = 1u
-    var deps <- color_write_sample_deps()
-    // loadOp=LOAD: BEGIN dep also needs the previous color write visible, plus COLOR_ATTACHMENT_READ to load the pixel into the blender.
-    deps[0].srcStageMask.color_attachment_output = true
-    deps[0].srcAccessMask.color_attachment_write = true
-    deps[0].dstAccessMask.color_attachment_read = true
-    var ci = VkRenderPassCreateInfo()
-    ci.attachmentCount = 1u
-    ci.subpassCount = 1u
-    ci.dependencyCount = uint(length(deps))
-    var h : VkRenderPass
-    unsafe {
-        subpass.pColorAttachments = addr(ref)
-        ci.pAttachments = addr(attach)
-        ci.pSubpasses = addr(subpass)
-        ci.pDependencies = addr(deps[0])
-        vk_check(vkCreateRenderPass(boost_value_to_vk(device), ci, null, h), null)
-    }
-    delete deps
-    var b = vk_value_to_boost(h)
-    b._needs_delete = true
-    b._device = unsafe(reinterpret<uint64>(boost_value_to_vk(device)))
-    return <- b
-}
-
-//! Single-color CLEAR render pass for the final composite. FinalLayout TRANSFER_SRC because the
-//! caller blits this to the swap target. The reader side is the BLIT (TRANSFER), not a sampler.
-def private build_composite_render_pass(device : Device) : RenderPass {
-    var attach : VkAttachmentDescription
-    attach.format = LDR_FMT
-    attach.samples._1 = true
-    attach.loadOp = VkAttachmentLoadOp.CLEAR
-    attach.storeOp = VkAttachmentStoreOp.STORE
-    attach.stencilLoadOp = VkAttachmentLoadOp.DONT_CARE
-    attach.stencilStoreOp = VkAttachmentStoreOp.DONT_CARE
-    attach.initialLayout = VkImageLayout.UNDEFINED
-    attach.finalLayout = VkImageLayout.TRANSFER_SRC_OPTIMAL
-    var ref : VkAttachmentReference
-    ref.layout = VkImageLayout.COLOR_ATTACHMENT_OPTIMAL
-    var subpass : VkSubpassDescription
-    subpass.pipelineBindPoint = VkPipelineBindPoint.GRAPHICS
-    subpass.colorAttachmentCount = 1u
-    var deps : array<VkSubpassDependency>
-    var d0 : VkSubpassDependency
-    d0.srcSubpass = VK_SUBPASS_EXTERNAL
-    d0.dstSubpass = 0u
-    d0.srcStageMask.transfer = true                     // previous frame's blit read the LDR target
-    d0.dstStageMask.color_attachment_output = true
-    d0.srcAccessMask.transfer_read = true
-    d0.dstAccessMask.color_attachment_write = true
-    deps |> push(d0)
-    var d1 : VkSubpassDependency
-    d1.srcSubpass = 0u
-    d1.dstSubpass = VK_SUBPASS_EXTERNAL
-    d1.srcStageMask.color_attachment_output = true      // this pass wrote the LDR
-    d1.dstStageMask.transfer = true                     // next op is the blit
-    d1.srcAccessMask.color_attachment_write = true
-    d1.dstAccessMask.transfer_read = true
-    deps |> push(d1)
-    var ci = VkRenderPassCreateInfo()
-    ci.attachmentCount = 1u
-    ci.subpassCount = 1u
-    ci.dependencyCount = uint(length(deps))
-    var h : VkRenderPass
-    unsafe {
-        subpass.pColorAttachments = addr(ref)
-        ci.pAttachments = addr(attach)
-        ci.pSubpasses = addr(subpass)
-        ci.pDependencies = addr(deps[0])
-        vk_check(vkCreateRenderPass(boost_value_to_vk(device), ci, null, h), null)
-    }
-    delete deps
-    var b = vk_value_to_boost(h)
-    b._needs_delete = true
-    b._device = unsafe(reinterpret<uint64>(boost_value_to_vk(device)))
-    return <- b
-}
-
-//! Fullscreen-triangle pipeline with additive blend (ONE/ONE on RGB) for the upsample passes: each
-//! smaller mip's contribution is *added* to the destination, rebuilding the energy pyramid. The
-//! colour-write mask drops alpha, pinning dst alpha at the bright-pass value for honest debug views.
-def private build_additive_pipeline(device : Device; rp : RenderPass; layout : PipelineLayout;
+//! Fullscreen-triangle pipeline with additive blend (ONE/ONE on RGB) into an HDR_FMT target, for the
+//! upsample passes: each smaller mip's contribution is *added* to the destination, rebuilding the energy
+//! pyramid. The colour-write mask drops alpha, pinning dst alpha at the bright-pass value for honest debug views.
+def private build_additive_pipeline(device : Device; layout : PipelineLayout;
                                     vert : ShaderModule; frag : ShaderModule) : Pipeline {
     var stages : array<VkPipelineShaderStageCreateInfo>
     stages |> resize(2)
@@ -851,7 +565,8 @@ def private build_additive_pipeline(device : Device; rp : RenderPass; layout : P
     var gp = VkGraphicsPipelineCreateInfo()
     gp.stageCount = 2u
     gp.layout = boost_value_to_vk(layout)
-    gp.renderPass = boost_value_to_vk(rp)
+    var fmts = rendering_formats(HDR_FMT)
+    attach_rendering_formats(gp, fmts)
     var h : VkPipeline
     unsafe {
         dynstate.pDynamicStates = addr(dyn_states[0])
@@ -939,17 +654,38 @@ def private set_pc(src_rcp_w, src_rcp_h, threshold, soft_knee, bloom_intensity :
 
 // ===== record =====
 
-//! Record the full HDR + bloom + composite frame into `cmd`. Eleven render-pass instances; the
-//! final `rp_composite` ends with `ldr_color` in `TRANSFER_SRC_OPTIMAL` so the caller can blit it
-//! straight to the readback buffer or the swap target.
+//! A target the previous frame sampled, about to be drawn into from scratch: UNDEFINED discards the
+//! old contents, and the barrier orders the write after the last fragment-shader read of them.
+def private begin_color_target(cmd : CommandBuffer; target : OffscreenTarget) {
+    transition_image2(cmd, target.image, VkImageLayout.UNDEFINED, VkImageLayout.COLOR_ATTACHMENT_OPTIMAL,
+        VkPipelineStageFlags2.fragment_shader, ACCESS_2_NONE,
+        VkPipelineStageFlags2.color_attachment_output, VkAccessFlags2.color_attachment_write)
+}
+
+//! A target that was just drawn into, about to be sampled by the next pass's fragment shader.
+def private end_color_target_for_sampling(cmd : CommandBuffer; target : OffscreenTarget) {
+    transition_image2(cmd, target.image, VkImageLayout.COLOR_ATTACHMENT_OPTIMAL, VkImageLayout.SHADER_READ_ONLY_OPTIMAL,
+        VkPipelineStageFlags2.color_attachment_output, VkAccessFlags2.color_attachment_write,
+        VkPipelineStageFlags2.fragment_shader, VkAccessFlags2.shader_sampled_read)
+}
+
+//! Record the full HDR + bloom + composite frame into `cmd`. Eleven rendering passes with one barrier
+//! per hand-off; the final composite leaves `ldr_color` in `TRANSFER_SRC_OPTIMAL` so the caller can
+//! blit it straight to the readback buffer or the swap target.
 def public record_hdr_frame(res : HdrResources; cmd : CommandBuffer) {   // nolint:STYLE038 - flat command-record run
     let threshold = 1.0f
     let soft_knee = 0.5f
     let bloom_intensity = 0.12f
+    let depth_tests = VkPipelineStageFlags2.early_fragment_tests | VkPipelineStageFlags2.late_fragment_tests
 
     // ---- scene pass ----
+    begin_color_target(cmd, res.hdr_color)
+    // the previous frame's depth write lands at early OR late fragment tests; name both on each side
+    transition_depth_image2(cmd, res.hdr_depth.image, VkImageLayout.UNDEFINED, VkImageLayout.DEPTH_ATTACHMENT_OPTIMAL,
+        depth_tests, VkAccessFlags2.depth_stencil_attachment_write,
+        depth_tests, VkAccessFlags2.depth_stencil_attachment_write)
     var scene_clears <- [clear_color(0.02f, 0.0f, 0.04f, 1.0f), clear_depth(1.0f)]
-    record_render_pass(cmd, res.rp_scene, res.fb_scene, full_area(HDR_W, HDR_H), scene_clears) {
+    record_rendering(cmd, res.hdr_color.view, res.hdr_depth.view, full_area(HDR_W, HDR_H), scene_clears) {
         cmd_bind_pipeline(cmd, res.scene_pipeline)
         let sets <- [vk_value_to_boost(res.scene_set)]
         var no_dyn : array<uint>
@@ -961,10 +697,12 @@ def public record_hdr_frame(res : HdrResources; cmd : CommandBuffer) {   // noli
         cmd_draw_indexed(cmd, uint(N_INDICES), uint(N_INSTANCES), 0u, 0, 0u)
     }
     delete scene_clears
+    end_color_target_for_sampling(cmd, res.hdr_color)
 
     // ---- bright pass : HDR scene -> bloom[0] ----
-    var b0_clears <- [clear_color(0.0f, 0.0f, 0.0f, 1.0f)]
-    record_render_pass(cmd, res.rp_post_clear, res.fb_post_clear[0], full_area(BLOOM_W[0], BLOOM_H[0]), b0_clears) {
+    let black = clear_color(0.0f, 0.0f, 0.0f, 1.0f)
+    begin_color_target(cmd, res.bloom[0])
+    record_rendering(cmd, res.bloom[0].view, full_area(BLOOM_W[0], BLOOM_H[0]), black) {
         set_dyn_vp(cmd, BLOOM_W[0], BLOOM_H[0])
         cmd_bind_pipeline(cmd, res.bright_pipeline)
         let sets <- [vk_value_to_boost(res.bright_set)]
@@ -974,13 +712,12 @@ def public record_hdr_frame(res : HdrResources; cmd : CommandBuffer) {   // noli
         hdr_bright_fs_push_constants(cmd, res.post_pipe_layout)
         cmd_draw(cmd, 3u, 1u)
     }
-    delete b0_clears
+    end_color_target_for_sampling(cmd, res.bloom[0])
 
     // ---- downsample chain : bloom[i] -> bloom[i+1] ----
     for (i in range(BLOOM_LEVELS - 1)) {
-        var inscope clears <- [clear_color(0.0f, 0.0f, 0.0f, 1.0f)]
-        record_render_pass(cmd, res.rp_post_clear, res.fb_post_clear[i + 1],
-                           full_area(BLOOM_W[i + 1], BLOOM_H[i + 1]), clears) {
+        begin_color_target(cmd, res.bloom[i + 1])
+        record_rendering(cmd, res.bloom[i + 1].view, full_area(BLOOM_W[i + 1], BLOOM_H[i + 1]), black) {
             set_dyn_vp(cmd, BLOOM_W[i + 1], BLOOM_H[i + 1])
             cmd_bind_pipeline(cmd, res.down_pipeline)
             var inscope sets <- [vk_value_to_boost(res.down_set[i])]
@@ -991,17 +728,19 @@ def public record_hdr_frame(res : HdrResources; cmd : CommandBuffer) {   // noli
             hdr_down_fs_push_constants(cmd, res.post_pipe_layout)
             cmd_draw(cmd, 3u, 1u)
         }
-        delete clears
+        end_color_target_for_sampling(cmd, res.bloom[i + 1])
     }
 
     // ---- upsample chain (additive blend) : bloom[i+1] -> bloom[i] ----
     for (k in range(BLOOM_LEVELS - 1)) {
         let i = BLOOM_LEVELS - 2 - k       // iterate dst = 3, 2, 1, 0
-        // record_render_pass requires N clears for N attachments even when loadOp=LOAD ignores
-        // them; pass a single dummy clear so the pClearValues pointer is valid.
-        var inscope up_clears <- [clear_color(0.0f, 0.0f, 0.0f, 1.0f)]
-        record_render_pass(cmd, res.rp_post_load, res.fb_post_load[i],
-                           full_area(BLOOM_W[i], BLOOM_H[i]), up_clears) {
+        // bloom[i] was sampled by the downsample step; it comes back as a color attachment whose
+        // contents the LOAD keeps - the blender reads them, so the destination access is read + write
+        transition_image2(cmd, res.bloom[i].image, VkImageLayout.SHADER_READ_ONLY_OPTIMAL, VkImageLayout.COLOR_ATTACHMENT_OPTIMAL,
+            VkPipelineStageFlags2.fragment_shader, VkAccessFlags2.shader_sampled_read,
+            VkPipelineStageFlags2.color_attachment_output,
+            VkAccessFlags2.color_attachment_read | VkAccessFlags2.color_attachment_write)
+        record_rendering(cmd, res.bloom[i].view, full_area(BLOOM_W[i], BLOOM_H[i]), black, VkAttachmentLoadOp.LOAD) {
             set_dyn_vp(cmd, BLOOM_W[i], BLOOM_H[i])
             cmd_bind_pipeline(cmd, res.up_pipeline)
             var inscope sets <- [vk_value_to_boost(res.up_set[i])]
@@ -1012,12 +751,15 @@ def public record_hdr_frame(res : HdrResources; cmd : CommandBuffer) {   // noli
             hdr_up_fs_push_constants(cmd, res.post_pipe_layout)
             cmd_draw(cmd, 3u, 1u)
         }
-        delete up_clears
+        end_color_target_for_sampling(cmd, res.bloom[i])
     }
 
     // ---- composite pass : HDR + bloom[0] -> ACES -> LDR ----
-    var comp_clears <- [clear_color(0.0f, 0.0f, 0.0f, 1.0f)]
-    record_render_pass(cmd, res.rp_composite, res.fb_composite, full_area(HDR_W, HDR_H), comp_clears) {
+    // the previous frame's blit read the LDR target; this frame overwrites it from scratch
+    transition_image2(cmd, res.ldr_color.image, VkImageLayout.UNDEFINED, VkImageLayout.COLOR_ATTACHMENT_OPTIMAL,
+        VkPipelineStageFlags2.blit, ACCESS_2_NONE,
+        VkPipelineStageFlags2.color_attachment_output, VkAccessFlags2.color_attachment_write)
+    record_rendering(cmd, res.ldr_color.view, full_area(HDR_W, HDR_H), black) {
         cmd_bind_pipeline(cmd, res.composite_pipeline)
         let sets <- [vk_value_to_boost(res.composite_set)]
         var no_dyn : array<uint>
@@ -1026,7 +768,10 @@ def public record_hdr_frame(res : HdrResources; cmd : CommandBuffer) {   // noli
         hdr_composite_fs_push_constants(cmd, res.composite_pipe_layout)
         cmd_draw(cmd, 3u, 1u)
     }
-    delete comp_clears
+    // the composite's writes become the blit's reads (readback intermediate or swap target)
+    transition_image2(cmd, res.ldr_color.image, VkImageLayout.COLOR_ATTACHMENT_OPTIMAL, VkImageLayout.TRANSFER_SRC_OPTIMAL,
+        VkPipelineStageFlags2.color_attachment_output, VkAccessFlags2.color_attachment_write,
+        VkPipelineStageFlags2.blit, VkAccessFlags2.transfer_read)
 }
 
 //! Per-frame: update UBO, record the HDR/bloom/composite chain, blit the linear 16-bit-float LDR
@@ -1037,19 +782,10 @@ def public render_hdr_frame(var ctx : HdrContext; time, camera_t : float) : arra
     var pixels : array<uint8>
     run_cmd_sync(ctx.device, ctx.pool, ctx.queue) $(cmd) {
         record_hdr_frame(ctx.res, cmd)
-        // ldr_color is in TRANSFER_SRC_OPTIMAL (composite's finalLayout). Bring readback_8bit to
+        // ldr_color is in TRANSFER_SRC_OPTIMAL (the frame's closing barrier). Bring readback_8bit to
         // TRANSFER_DST_OPTIMAL so we can blit into it.
-        let none : VkAccessFlags
-        var transfer_write : VkAccessFlags
-        transfer_write.transfer_write = true
-        var transfer_read : VkAccessFlags
-        transfer_read.transfer_read = true
-        var top_of_pipe : VkPipelineStageFlags
-        top_of_pipe.top_of_pipe = true
-        var transfer_stage : VkPipelineStageFlags
-        transfer_stage.transfer = true
-        transition_image(cmd, ctx.res.readback_8bit.image, VkImageLayout.UNDEFINED, VkImageLayout.TRANSFER_DST_OPTIMAL,
-            none, transfer_write, top_of_pipe, transfer_stage)
+        transition_image2(cmd, ctx.res.readback_8bit.image, VkImageLayout.UNDEFINED, VkImageLayout.TRANSFER_DST_OPTIMAL,
+            PIPELINE_STAGE_2_NONE, ACCESS_2_NONE, VkPipelineStageFlags2.blit, VkAccessFlags2.transfer_write)
         // Blit linear 16-bit float -> 8-bit sRGB. Hardware applies the encoding at the format
         // conversion; the dark-region precision boost from sRGB hides what would otherwise be
         // visible banding in a smooth 8-bit-UNORM target.
@@ -1069,8 +805,9 @@ def public render_hdr_frame(var ctx : HdrContext; time, camera_t : float) : arra
             boost_value_to_vk(ctx.res.readback_8bit.image), VkImageLayout.TRANSFER_DST_OPTIMAL,
             1u, unsafe(addr(region)), VkFilter.NEAREST)
         // readback_8bit -> TRANSFER_SRC_OPTIMAL so copy_image_to_buffer can read it.
-        transition_image(cmd, ctx.res.readback_8bit.image, VkImageLayout.TRANSFER_DST_OPTIMAL, VkImageLayout.TRANSFER_SRC_OPTIMAL,
-            transfer_write, transfer_read, transfer_stage, transfer_stage)
+        transition_image2(cmd, ctx.res.readback_8bit.image, VkImageLayout.TRANSFER_DST_OPTIMAL, VkImageLayout.TRANSFER_SRC_OPTIMAL,
+            VkPipelineStageFlags2.blit, VkAccessFlags2.transfer_write,
+            VkPipelineStageFlags2.copy, VkAccessFlags2.transfer_read)
         copy_image_to_buffer(cmd, ctx.res.readback_8bit.image, ctx.res.readback, HDR_W, HDR_H)
     }
     map_memory_to_array(ctx.device, ctx.res.readback.memory, ctx.res.buf_size) $(m) {

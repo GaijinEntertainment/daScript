@@ -88,31 +88,29 @@ The offscreen triangle, in full boost form — no hand-set ``sType``, no user
     volkLoadDevice(boost_value_to_vk(device))
     let queue = get_device_queue(device, gfx, 0u)
 
-    var inscope target      <- build_offscreen_target(device, phys, WIDTH, HEIGHT, FORMAT)
-    var inscope render_pass <- create_render_pass_single_color(device, FORMAT)
-
-    // CreateInfo view structs use the named-argument constructor. Handle fields
-    // take a weak_copy (a non-owning alias — the create_* keeps ownership);
-    // non-copyable array fields are move-initialized with <-. Note the C-style
-    // field names (renderPass, pAttachments) — see the p-prefix note above.
-    var fbci = FramebufferCreateInfo(renderPass = weak_copy(render_pass),
-                                     pAttachments <- [weak_copy(target.view)],
-                                     width = uint(WIDTH), height = uint(HEIGHT), layers = 1u)
-    var inscope framebuffer <- create_framebuffer(device, fbci)
+    var inscope target <- build_offscreen_target(device, phys, WIDTH, HEIGHT, FORMAT)
 
     var inscope vert     <- create_shader_module(device, vert_code)
     var inscope frag     <- create_shader_module(device, frag_code)
     var inscope layout   <- create_pipeline_layout(device)
-    var inscope pipeline <- create_graphics_pipeline_simple(device, render_pass, layout, vert, frag, WIDTH, HEIGHT)
+    // the pipeline carries the color format it renders into - no render pass, no framebuffer
+    var inscope pipeline <- create_graphics_pipeline_simple(device, FORMAT, layout, vert, frag, WIDTH, HEIGHT)
     var inscope readback <- create_host_buffer(device, phys, buf_size)
-    var inscope pool     <- create_command_pool(device, command_pool_info(gfx))
+    // CreateInfo view structs use the named-argument constructor; see the p-prefix note above
+    var inscope pool     <- create_command_pool(device, CommandPoolCreateInfo(queueFamilyIndex = gfx))
 
     run_cmd_sync(device, pool, queue) $(cmd) {
-        record_render_pass(cmd, render_pass, framebuffer, full_area(WIDTH, HEIGHT),
-                           clear_color(0.1f, 0.1f, 0.15f, 1.0f)) {
+        // synchronization2 barriers name the stage on each side: nothing before, the color writes after
+        transition_image2(cmd, target.image, VkImageLayout.UNDEFINED, VkImageLayout.COLOR_ATTACHMENT_OPTIMAL,
+            PIPELINE_STAGE_2_NONE, ACCESS_2_NONE,
+            VkPipelineStageFlags2.color_attachment_output, VkAccessFlags2.color_attachment_write)
+        record_rendering(cmd, target.view, full_area(WIDTH, HEIGHT), clear_color(0.1f, 0.1f, 0.15f, 1.0f)) {
             cmd_bind_pipeline(cmd, pipeline)
             cmd_draw(cmd, 3u)
         }
+        transition_image2(cmd, target.image, VkImageLayout.COLOR_ATTACHMENT_OPTIMAL, VkImageLayout.TRANSFER_SRC_OPTIMAL,
+            VkPipelineStageFlags2.color_attachment_output, VkAccessFlags2.color_attachment_write,
+            VkPipelineStageFlags2.copy, VkAccessFlags2.transfer_read)
         copy_image_to_buffer(cmd, target.image, readback, WIDTH, HEIGHT)
     }
 

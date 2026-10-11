@@ -18,7 +18,7 @@ require daslib/defer
 require math
 
 [export]
-def main {   // nolint:STYLE038 - flat viewer lifecycle scaffold
+def main {
     if (volkInitialize() != 0) {
         panic("no vulkan loader")
     }
@@ -45,7 +45,7 @@ def main {   // nolint:STYLE038 - flat viewer lifecycle scaffold
     for (i in range(int(ext_count))) {
         inst_exts |> push(unsafe(glfw_exts[i]))
     }
-    var inscope instance <- create_instance("dasVulkan tutorial 12 (window)", make_api_version(1u, 2u, 0u), inst_exts)
+    var inscope instance <- create_instance("dasVulkan tutorial 12 (window)", make_api_version(1u, 3u, 0u), inst_exts)
     volkLoadInstance(boost_value_to_vk(instance))
 
     var inscope surface <- create_surface(instance, glfwGetNativeWindow(window), glfwGetNativeDisplay())
@@ -85,34 +85,7 @@ def main {   // nolint:STYLE038 - flat viewer lifecycle scaffold
 
         let ok = present_frame(device, queue, swap, pool, sync) $(cmd; target; _idx) {
             record_frame(res, cmd, wall_x)
-
-            let none : VkAccessFlags
-            var transfer_write : VkAccessFlags
-            transfer_write.transfer_write = true
-            var top : VkPipelineStageFlags
-            top.top_of_pipe = true
-            var xfer : VkPipelineStageFlags
-            xfer.transfer = true
-            var bottom : VkPipelineStageFlags
-            bottom.bottom_of_pipe = true
-            let dst = vk_value_to_boost(target)
-            transition_image(cmd, dst, VkImageLayout.UNDEFINED, VkImageLayout.TRANSFER_DST_OPTIMAL,
-                none, transfer_write, top, xfer)
-            var region : VkImageBlit
-            region.srcSubresource.aspectMask.color = true
-            region.srcSubresource.layerCount = 1u
-            region.srcOffsets[1].x = OUT_W
-            region.srcOffsets[1].y = OUT_H
-            region.srcOffsets[1].z = 1
-            region.dstSubresource.aspectMask.color = true
-            region.dstSubresource.layerCount = 1u
-            region.dstOffsets[1].x = swap.width
-            region.dstOffsets[1].y = swap.height
-            region.dstOffsets[1].z = 1
-            vkCmdBlitImage(boost_value_to_vk(cmd), boost_value_to_vk(res.out_color.image), VkImageLayout.TRANSFER_SRC_OPTIMAL,
-                target, VkImageLayout.TRANSFER_DST_OPTIMAL, 1u, unsafe(addr(region)), VkFilter.LINEAR)
-            transition_image(cmd, dst, VkImageLayout.TRANSFER_DST_OPTIMAL, VkImageLayout.PRESENT_SRC_KHR,
-                transfer_write, none, xfer, bottom)
+            blit_to_swapchain(cmd, res.out_color.image, VkImageLayout.TRANSFER_SRC_OPTIMAL, OUT_W, OUT_H, swap, target)
         }
         if (!ok) {
             vkDeviceWaitIdle(boost_value_to_vk(device))

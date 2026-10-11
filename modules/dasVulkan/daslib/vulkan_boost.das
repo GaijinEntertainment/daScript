@@ -147,7 +147,9 @@ def public mesh_shader_supported(phys : VkPhysicalDevice) : bool {
     return mf.meshShader != 0u && mf.taskShader != 0u
 }
 
-[arch(at="../ARCHITECTURE.md#portability-subset")]
+var private g_instance_api_version = 0u
+
+[arch(at="../ARCHITECTURE.md#portability-subset"), arch(at="../ARCHITECTURE_RENDERING.md#dynamic-rendering")]
 def public create_instance(application_name : string; api_version : uint; extensions : array<string>) : Instance {
     var ai = VkApplicationInfo()
     ai.apiVersion = api_version
@@ -171,6 +173,7 @@ def public create_instance(application_name : string; api_version : uint; extens
     }
     var h : VkInstance
     vk_check(vkCreateInstance(ci, null, h), null)
+    g_instance_api_version = api_version
     var b = vk_value_to_boost(h)
     b._needs_delete = true
     return <- b
@@ -189,6 +192,97 @@ def private append_portability_subset(phys : VkPhysicalDevice; var exts : array<
     }
 }
 
+//! Reads the device's ``VkPhysicalDeviceVulkan13Features`` into `q13`; false below API 1.3, where the
+//! struct is not legal to query.
+def private query_features13(phys : VkPhysicalDevice; var q13 : VkPhysicalDeviceVulkan13Features) : bool {
+    var props : VkPhysicalDeviceProperties
+    vkGetPhysicalDeviceProperties(phys, props)
+    if (props.apiVersion < make_api_version(1u, 3u, 0u)) {
+        return false
+    }
+    q13 = VkPhysicalDeviceVulkan13Features()
+    var q2 = VkPhysicalDeviceFeatures2()
+    q2.pNext = unsafe(addr<void?>(q13))
+    vkGetPhysicalDeviceFeatures2(phys, q2)
+    return true
+}
+
+[arch(at="../ARCHITECTURE_RENDERING.md#dynamic-rendering")]
+def public dynamic_rendering_supported(phys : VkPhysicalDevice) : bool {
+    //! True when the ``create_instance`` instance and `phys` are both 1.3 and the device reports
+    //! ``dynamicRendering`` + ``synchronization2``.
+    if (g_instance_api_version < make_api_version(1u, 3u, 0u)) {
+        return false
+    }
+    var q13 : VkPhysicalDeviceVulkan13Features
+    if (!query_features13(phys, q13)) {
+        return false
+    }
+    return q13.dynamicRendering != 0u && q13.synchronization2 != 0u
+}
+
+//! Fills `f13` with the dynamic-rendering pair when `phys` reports it and says whether it did; the
+//! caller then chains `f13` onto its ``pNext`` list. A device without the pair gets no 1.3 struct in its chain.
+def private request_dynamic_rendering(phys : VkPhysicalDevice; var f13 : VkPhysicalDeviceVulkan13Features) : bool {
+    if (!dynamic_rendering_supported(phys)) {
+        return false
+    }
+    f13 = VkPhysicalDeviceVulkan13Features()
+    f13.dynamicRendering = 1u
+    f13.synchronization2 = 1u
+    return true
+}
+
+//! The one ``vkCreateDevice`` body every creator routes through: one queue at priority 1 per listed
+//! family, `extensions` plus the portability subset, `base_features` on ``pEnabledFeatures`` (null
+//! when the chain carries a ``VkPhysicalDeviceFeatures2``), `next` as the head of the ``pNext`` chain.
+def private create_device_chain(phys : VkPhysicalDevice; queue_families : array<uint>; extensions : array<string>;
+                                var base_features : VkPhysicalDeviceFeatures?; next : void?) : Device {
+    var prio = 1.0f
+    var qcis : array<VkDeviceQueueCreateInfo>
+    qcis |> resize(length(queue_families))
+    for (qf, qc in queue_families, qcis) {
+        qc = VkDeviceQueueCreateInfo()
+        qc.queueFamilyIndex = qf
+        qc.queueCount = 1u
+        qc.pQueuePriorities = unsafe(addr(prio))
+    }
+    var ci = VkDeviceCreateInfo()
+    ci.queueCreateInfoCount = uint(length(qcis))
+    ci.pNext = next
+    ci.pQueueCreateInfos = unsafe(addr(qcis[0]))
+    ci.pEnabledFeatures = base_features
+    var exts <- [for (e in extensions); e]
+    append_portability_subset(phys, exts)
+    if (!empty(exts)) {
+        ci.enabledExtensionCount = uint(length(exts))
+        ci.ppEnabledExtensionNames = unsafe(addr<void?>(exts[0]))
+    }
+    var h : VkDevice
+    vk_check(vkCreateDevice(phys, ci, null, h), null)
+    var b = vk_value_to_boost(h)
+    b._needs_delete = true
+    return <- b
+}
+
+//! The body behind the single-feature-struct `create_device` overloads: stamps `stype` on `head`, chains
+//! the dynamic-rendering pair after it when `chain13` and the caller left `head.pNext` null, creates, and
+//! hands `head` back with the ``pNext`` the caller passed - the pair lives on this frame only.
+def private create_device_head(phys : VkPhysicalDevice; queue_family : uint; extensions : array<string>;
+                               var head : auto(TT); stype : VkStructureType; chain13 : bool) : Device {
+    head.sType = stype
+    var f13 : VkPhysicalDeviceVulkan13Features
+    let chained = chain13 && head.pNext == null && request_dynamic_rendering(phys, f13)
+    if (chained) {
+        head.pNext = unsafe(addr<void?>(f13))
+    }
+    var dev <- create_device_chain(phys, [queue_family], extensions, null, unsafe(addr<void?>(head)))
+    if (chained) {
+        head.pNext = null
+    }
+    return <- dev
+}
+
 def public create_device(phys : VkPhysicalDevice; queue_family : uint; extensions : array<string>) : Device {
     var no_features : VkPhysicalDeviceFeatures
     return <- create_device(phys, queue_family, extensions, no_features)
@@ -201,31 +295,15 @@ def public create_device(phys : VkPhysicalDevice; queue_family : uint) : Device 
 }
 
 //! Create a device with a caller-supplied ``VkPhysicalDeviceFeatures`` block — for opt-in features like
-//! ``largePoints`` (so a vertex shader's ``gl_PointSize`` takes effect under POINT_LIST) or ``wideLines``.
-//! Verify support via ``vkGetPhysicalDeviceFeatures`` first: an unsupported bit fails ``vkCreateDevice``.
+//! ``largePoints`` or ``wideLines``; an unsupported bit fails ``vkCreateDevice``, so probe first. Under a
+//! 1.3 ``create_instance`` instance and a device that reports them, ``dynamicRendering`` and ``synchronization2`` are enabled too.
 def public create_device(phys : VkPhysicalDevice; queue_family : uint; extensions : array<string>; var features : VkPhysicalDeviceFeatures) : Device {
-    var prio = 1.0f
-    var qci = VkDeviceQueueCreateInfo()
-    qci.queueFamilyIndex = queue_family
-    qci.queueCount = 1u
-    qci.pQueuePriorities = unsafe(addr(prio))
-    var ci = VkDeviceCreateInfo()
-    ci.queueCreateInfoCount = 1u
-    unsafe {
-        ci.pQueueCreateInfos = addr(qci)
-        ci.pEnabledFeatures = addr(features)
+    var f13 : VkPhysicalDeviceVulkan13Features
+    var next : void? = null
+    if (request_dynamic_rendering(phys, f13)) {
+        next = unsafe(addr<void?>(f13))
     }
-    var exts <- [for (e in extensions); e]
-    append_portability_subset(phys, exts)
-    if (!empty(exts)) {
-        ci.enabledExtensionCount = uint(length(exts))
-        ci.ppEnabledExtensionNames = unsafe(addr<void?>(exts[0]))
-    }
-    var h : VkDevice
-    vk_check(vkCreateDevice(phys, ci, null, h), null)
-    var b = vk_value_to_boost(h)
-    b._needs_delete = true
-    return <- b
+    return <- create_device_chain(phys, [queue_family], extensions, unsafe(addr(features)), next)
 }
 
 //! Create a device with Vulkan 1.3 features (``dynamicRendering``, ``synchronization2``, …). 1.3
@@ -233,89 +311,26 @@ def public create_device(phys : VkPhysicalDevice; queue_family : uint; extension
 //! ``VkPhysicalDeviceVulkan13Features`` through pNext. Instance must be api 1.3 or vkCreateDevice fails.
 def public create_device(phys : VkPhysicalDevice; queue_family : uint; extensions : array<string>;
                          var features13 : VkPhysicalDeviceVulkan13Features) : Device {
-    var prio = 1.0f
-    var qci = VkDeviceQueueCreateInfo()
-    qci.queueFamilyIndex = queue_family
-    qci.queueCount = 1u
-    qci.pQueuePriorities = unsafe(addr(prio))
-    features13.sType = VkStructureType.PHYSICAL_DEVICE_VULKAN_1_3_FEATURES
-    var ci = VkDeviceCreateInfo()
-    ci.queueCreateInfoCount = 1u
-    unsafe {
-        ci.pQueueCreateInfos = addr(qci)
-        ci.pNext = addr<void?>(features13)
-    }
-    var exts <- [for (e in extensions); e]
-    append_portability_subset(phys, exts)
-    if (!empty(exts)) {
-        ci.enabledExtensionCount = uint(length(exts))
-        ci.ppEnabledExtensionNames = unsafe(addr<void?>(exts[0]))
-    }
-    var h : VkDevice
-    vk_check(vkCreateDevice(phys, ci, null, h), null)
-    var b = vk_value_to_boost(h)
-    b._needs_delete = true
-    return <- b
+    return <- create_device_head(phys, queue_family, extensions, features13,
+        VkStructureType.PHYSICAL_DEVICE_VULKAN_1_3_FEATURES, false)
 }
 
-//! Create a device with Vulkan 1.2 features (``descriptorIndexing``, ``runtimeDescriptorArray``,
-//! ``shaderSampledImageArrayNonUniformIndexing``, …). VK_EXT_descriptor_indexing is 1.2 core, so a 1.2+
-//! instance opts into bindless through this pNext struct with no extension string; api < 1.2 fails.
+//! Create a device with Vulkan 1.2 features (``descriptorIndexing``, ``runtimeDescriptorArray``, …):
+//! a 1.2+ instance opts into bindless through this pNext struct with no extension string. With
+//! ``features12.pNext`` null and ``dynamic_rendering_supported(phys)``, ``dynamicRendering`` and ``synchronization2`` chain after it.
 def public create_device(phys : VkPhysicalDevice; queue_family : uint; extensions : array<string>;
                          var features12 : VkPhysicalDeviceVulkan12Features) : Device {
-    var prio = 1.0f
-    var qci = VkDeviceQueueCreateInfo()
-    qci.queueFamilyIndex = queue_family
-    qci.queueCount = 1u
-    qci.pQueuePriorities = unsafe(addr(prio))
-    features12.sType = VkStructureType.PHYSICAL_DEVICE_VULKAN_1_2_FEATURES
-    var ci = VkDeviceCreateInfo()
-    ci.queueCreateInfoCount = 1u
-    unsafe {
-        ci.pQueueCreateInfos = addr(qci)
-        ci.pNext = addr<void?>(features12)
-    }
-    var exts <- [for (e in extensions); e]
-    append_portability_subset(phys, exts)
-    if (!empty(exts)) {
-        ci.enabledExtensionCount = uint(length(exts))
-        ci.ppEnabledExtensionNames = unsafe(addr<void?>(exts[0]))
-    }
-    var h : VkDevice
-    vk_check(vkCreateDevice(phys, ci, null, h), null)
-    var b = vk_value_to_boost(h)
-    b._needs_delete = true
-    return <- b
+    return <- create_device_head(phys, queue_family, extensions, features12,
+        VkStructureType.PHYSICAL_DEVICE_VULKAN_1_2_FEATURES, true)
 }
 
-//! Create a device from a caller-built ``VkPhysicalDeviceFeatures2`` pNext CHAIN — the multi-struct
-//! escape hatch, since the single-struct overloads carry only one (16-bit Vulkan11Features + 8-bit
-//! Vulkan12Features must go together). ``pEnabledFeatures`` stays null; ``features2.features`` is base.
+//! Create a device from a caller-built ``VkPhysicalDeviceFeatures2`` pNext CHAIN — the multi-struct escape
+//! hatch (16-bit Vulkan11Features + 8-bit Vulkan12Features must go together). ``pEnabledFeatures`` stays null,
+//! ``features2.features`` is base, and the chain is the caller's: the dynamic-rendering pair is not added to it.
 def public create_device(phys : VkPhysicalDevice; queue_family : uint; extensions : array<string>;
                          var features2 : VkPhysicalDeviceFeatures2) : Device {
-    var prio = 1.0f
-    var qci = VkDeviceQueueCreateInfo()
-    qci.queueFamilyIndex = queue_family
-    qci.queueCount = 1u
-    qci.pQueuePriorities = unsafe(addr(prio))
-    features2.sType = VkStructureType.PHYSICAL_DEVICE_FEATURES_2
-    var ci = VkDeviceCreateInfo()
-    ci.queueCreateInfoCount = 1u
-    unsafe {
-        ci.pQueueCreateInfos = addr(qci)
-        ci.pNext = addr<void?>(features2)
-    }
-    var exts <- [for (e in extensions); e]
-    append_portability_subset(phys, exts)
-    if (!empty(exts)) {
-        ci.enabledExtensionCount = uint(length(exts))
-        ci.ppEnabledExtensionNames = unsafe(addr<void?>(exts[0]))
-    }
-    var h : VkDevice
-    vk_check(vkCreateDevice(phys, ci, null, h), null)
-    var b = vk_value_to_boost(h)
-    b._needs_delete = true
-    return <- b
+    return <- create_device_head(phys, queue_family, extensions, features2,
+        VkStructureType.PHYSICAL_DEVICE_FEATURES_2, false)
 }
 
 //! The features2 overload with MULTIPLE queue families — one queue per listed (distinct) family.
@@ -330,34 +345,8 @@ def public create_device(phys : VkPhysicalDevice; queue_families : array<uint>; 
             assert(queue_families[i] != queue_families[j], "create_device: duplicate queue family")
         }
     }
-    var prio = 1.0f
-    var qcis : array<VkDeviceQueueCreateInfo>
-    qcis |> resize(length(queue_families))
-    for (qf, qc in queue_families, qcis) {
-        qc = VkDeviceQueueCreateInfo()
-        qc.queueFamilyIndex = qf
-        qc.queueCount = 1u
-        qc.pQueuePriorities = unsafe(addr(prio))
-    }
     features2.sType = VkStructureType.PHYSICAL_DEVICE_FEATURES_2
-    var ci = VkDeviceCreateInfo()
-    ci.queueCreateInfoCount = uint(length(queue_families))
-    unsafe {
-        ci.pQueueCreateInfos = addr(qcis[0])
-        ci.pNext = addr<void?>(features2)
-    }
-    var exts <- [for (e in extensions); e]
-    append_portability_subset(phys, exts)
-    if (!empty(exts)) {
-        ci.enabledExtensionCount = uint(length(exts))
-        ci.ppEnabledExtensionNames = unsafe(addr<void?>(exts[0]))
-    }
-    var h : VkDevice
-    vk_check(vkCreateDevice(phys, ci, null, h), null)
-    var b = vk_value_to_boost(h)
-    b._needs_delete = true
-    delete qcis
-    return <- b
+    return <- create_device_chain(phys, queue_families, extensions, null, unsafe(addr<void?>(features2)))
 }
 
 [arch(at="../ARCHITECTURE.md#storage-8-16")]
@@ -963,64 +952,26 @@ def public create_device_descriptor_indexing(phys : VkPhysicalDevice; queue_fami
 //! (``gl_DrawID`` / BuiltIn DrawIndex) via Vulkan11Features — 1.1 core, so no extension string.
 //! Exercised by ``tests/integration/test_gl_draw_id.das``.
 def public create_device_draw_parameters(phys : VkPhysicalDevice; queue_family : uint) : Device {
-    var prio = 1.0f
-    var qci = VkDeviceQueueCreateInfo()
-    qci.queueFamilyIndex = queue_family
-    qci.queueCount = 1u
-    qci.pQueuePriorities = unsafe(addr(prio))
     var base : VkPhysicalDeviceFeatures
     base.multiDrawIndirect = 1u
     var f11 : VkPhysicalDeviceVulkan11Features
     f11.sType = VkStructureType.PHYSICAL_DEVICE_VULKAN_1_1_FEATURES
     f11.shaderDrawParameters = 1u
-    var ci = VkDeviceCreateInfo()
-    ci.queueCreateInfoCount = 1u
-    unsafe {
-        ci.pQueueCreateInfos = addr(qci)
-        ci.pEnabledFeatures = addr(base)
-        ci.pNext = addr<void?>(f11)
+    var f13 : VkPhysicalDeviceVulkan13Features
+    if (request_dynamic_rendering(phys, f13)) {
+        f11.pNext = unsafe(addr<void?>(f13))
     }
-    var exts : array<string>
-    append_portability_subset(phys, exts)
-    if (!empty(exts)) {
-        ci.enabledExtensionCount = uint(length(exts))
-        ci.ppEnabledExtensionNames = unsafe(addr<void?>(exts[0]))
-    }
-    var h : VkDevice
-    vk_check(vkCreateDevice(phys, ci, null, h), null)
-    var b = vk_value_to_boost(h)
-    b._needs_delete = true
-    return <- b
+    let no_ext : array<string>
+    return <- create_device_chain(phys, [queue_family], no_ext, unsafe(addr(base)), unsafe(addr<void?>(f11)))
 }
 
-//! Create a device with ``VK_EXT_mesh_shader``: caller sets the flags (``mf.meshShader``,
-//! ``mf.taskShader``) and MUST also pass the ``"VK_EXT_mesh_shader"`` string in ``extensions`` — the
-//! flags alone are not enough. Instance must be api >= 1.2 (SPIR-V 1.4); verify the bits or create fails.
+//! Create a device with ``VK_EXT_mesh_shader``: caller sets ``mf.meshShader`` / ``mf.taskShader`` AND passes the
+//! ``"VK_EXT_mesh_shader"`` string in ``extensions``; instance api >= 1.2 (SPIR-V 1.4), probe the bits or create fails.
+//! With ``meshFeatures.pNext`` null and ``dynamic_rendering_supported(phys)``, the dynamic-rendering pair chains after it.
 def public create_device(phys : VkPhysicalDevice; queue_family : uint; extensions : array<string>;
                          var meshFeatures : VkPhysicalDeviceMeshShaderFeaturesEXT) : Device {
-    var prio = 1.0f
-    var qci = VkDeviceQueueCreateInfo()
-    qci.queueFamilyIndex = queue_family
-    qci.queueCount = 1u
-    qci.pQueuePriorities = unsafe(addr(prio))
-    meshFeatures.sType = VkStructureType.PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT
-    var ci = VkDeviceCreateInfo()
-    ci.queueCreateInfoCount = 1u
-    unsafe {
-        ci.pQueueCreateInfos = addr(qci)
-        ci.pNext = addr<void?>(meshFeatures)
-    }
-    var exts <- [for (e in extensions); e]
-    append_portability_subset(phys, exts)
-    if (!empty(exts)) {
-        ci.enabledExtensionCount = uint(length(exts))
-        ci.ppEnabledExtensionNames = unsafe(addr<void?>(exts[0]))
-    }
-    var h : VkDevice
-    vk_check(vkCreateDevice(phys, ci, null, h), null)
-    var b = vk_value_to_boost(h)
-    b._needs_delete = true
-    return <- b
+    return <- create_device_head(phys, queue_family, extensions, meshFeatures,
+        VkStructureType.PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT, true)
 }
 
 //! Create a device with the mesh-shader pipeline enabled: ``meshShader`` + ``taskShader`` features plus
@@ -1075,35 +1026,23 @@ def public create_device_ray_tracing(phys : VkPhysicalDevice; queue_family : uin
     if (!rt_supported(phys)) {
         panic("create_device_ray_tracing: device does not support VK_KHR_ray_tracing_pipeline + VK_KHR_acceleration_structure + bufferDeviceAddress")
     }
-    var prio = 1.0f
-    var qci = VkDeviceQueueCreateInfo()
-    qci.queueFamilyIndex = queue_family
-    qci.queueCount = 1u
     var f12 = VkPhysicalDeviceVulkan12Features()
     f12.bufferDeviceAddress = 1u
     var asf = VkPhysicalDeviceAccelerationStructureFeaturesKHR()
     asf.accelerationStructure = 1u
     var rtf = VkPhysicalDeviceRayTracingPipelineFeaturesKHR()
     rtf.rayTracingPipeline = 1u
-    var extensions <- ["VK_KHR_acceleration_structure", "VK_KHR_ray_tracing_pipeline", "VK_KHR_deferred_host_operations"]
-    extensions |> push_from(extra_extensions)
-    append_portability_subset(phys, extensions)
-    var ci = VkDeviceCreateInfo()
-    ci.queueCreateInfoCount = 1u
-    ci.enabledExtensionCount = uint(length(extensions))
+    var f13 : VkPhysicalDeviceVulkan13Features
     unsafe {
-        qci.pQueuePriorities = addr(prio)
-        ci.pQueueCreateInfos = addr(qci)
-        ci.pNext = addr<void?>(f12)
         f12.pNext = addr<void?>(asf)
         asf.pNext = addr<void?>(rtf)
-        ci.ppEnabledExtensionNames = addr<void?>(extensions[0])
+        if (request_dynamic_rendering(phys, f13)) {
+            rtf.pNext = addr<void?>(f13)
+        }
     }
-    var h : VkDevice
-    vk_check(vkCreateDevice(phys, ci, null, h), null)
-    var b = vk_value_to_boost(h)
-    b._needs_delete = true
-    return <- b
+    var extensions <- ["VK_KHR_acceleration_structure", "VK_KHR_ray_tracing_pipeline", "VK_KHR_deferred_host_operations"]
+    extensions |> push_from(extra_extensions)
+    return <- create_device_chain(phys, [queue_family], extensions, null, unsafe(addr<void?>(f12)))
 }
 
 def public get_device_queue(device : Device; queue_family, index : uint) : VkQueue {
@@ -1273,11 +1212,56 @@ def public create_render_pass_color_depth(device : Device; color_format, depth_f
     return <- b
 }
 
-//! `dynamic_viewport` leaves the viewport/scissor out of the pipeline (VIEWPORT+SCISSOR
-//! dynamic state) so the pipeline survives swapchain resize -- set them per frame with
-//! cmd_set_viewport / cmd_set_scissor (draw_frame does this when its dynamic_viewport is true).
-def public create_graphics_pipeline_simple(device : Device; render_pass : RenderPass; layout : PipelineLayout;
-                                           vert : ShaderModule; frag : ShaderModule; width, height : int; dynamic_viewport : bool = false) : Pipeline {
+//! The attachment formats a graphics pipeline renders into when no render pass is involved - what
+//! ``VkPipelineRenderingCreateInfo`` carries. `rendering_formats` builds one, `attach_rendering_formats`
+//! wires it into a create info that points into it, so it lives through ``vkCreateGraphicsPipelines``.
+struct public RenderingFormats {
+    color : VkFormat                      //!< the one color attachment; UNDEFINED for a depth-only pipeline
+    depth : VkFormat                      //!< the depth attachment; UNDEFINED when the pipeline has none
+    info  : VkPipelineRenderingCreateInfo //!< the pNext struct `attach_rendering_formats` fills
+}
+
+def public rendering_formats(color_format : VkFormat; depth_format : VkFormat = VkFormat.UNDEFINED) : RenderingFormats {
+    //! The `RenderingFormats` of a pipeline drawing into `color_format` and `depth_format` views;
+    //! UNDEFINED leaves that attachment out.
+    return <- RenderingFormats(color = color_format, depth = depth_format)
+}
+
+def public attach_rendering_formats(var gp : VkGraphicsPipelineCreateInfo; var fmts : RenderingFormats) {
+    //! Chains `fmts.info`, filled from `fmts`, at the head of `gp.pNext` - what the chain held before
+    //! follows it. A pipeline built this way draws inside `record_rendering` on any view of these
+    //! formats; `fmts` must outlive the pipeline creation.
+    fmts.info = VkPipelineRenderingCreateInfo()
+    fmts.info.pNext = gp.pNext
+    fmts.info.depthAttachmentFormat = fmts.depth
+    unsafe {
+        if (fmts.color != VkFormat.UNDEFINED) {
+            fmts.info.colorAttachmentCount = 1u
+            fmts.info.pColorAttachmentFormats = addr(fmts.color)
+        }
+        gp.pNext = addr<void?>(fmts.info)
+    }
+}
+
+[arch(at="../ARCHITECTURE_RENDERING.md#dynamic-rendering")]
+def public set_pipeline_target(var gp : VkGraphicsPipelineCreateInfo; render_pass : RenderPass; var fmts : RenderingFormats) {
+    //! Points a ``VkGraphicsPipelineCreateInfo`` at its target: `render_pass` when it holds a handle,
+    //! else the dynamic-rendering `fmts` through `attach_rendering_formats`. The one place a pipeline
+    //! builder that serves both frame loops decides between them.
+    if (boost_value_to_vk(render_pass) != null) {
+        gp.renderPass = boost_value_to_vk(render_pass)
+    } else {
+        attach_rendering_formats(gp, fmts)
+    }
+}
+
+//! The color attachment count a pipeline's blend state declares for its target: one inside a render
+//! pass, else one per color format `fmts` names - none for a depth-only pipeline.
+def private target_color_count(render_pass : RenderPass; fmts : RenderingFormats) : uint =>
+    (boost_value_to_vk(render_pass) != null || fmts.color != VkFormat.UNDEFINED) ? 1u : 0u
+
+def private build_simple_pipeline(device : Device; render_pass : RenderPass; var fmts : RenderingFormats; layout : PipelineLayout;
+                                  vert : ShaderModule; frag : ShaderModule; width, height : int; dynamic_viewport : bool) : Pipeline {
     var stages : array<VkPipelineShaderStageCreateInfo>
     stages |> resize(2)
     stages[0] = VkPipelineShaderStageCreateInfo()
@@ -1316,7 +1300,7 @@ def public create_graphics_pipeline_simple(device : Device; render_pass : Render
     blend_att.colorWriteMask.b = true
     blend_att.colorWriteMask.a = true
     var blend = VkPipelineColorBlendStateCreateInfo()
-    blend.attachmentCount = 1u
+    blend.attachmentCount = target_color_count(render_pass, fmts)
 
     var dyn_states : array<VkDynamicState>
     var dynstate = VkPipelineDynamicStateCreateInfo()
@@ -1329,7 +1313,7 @@ def public create_graphics_pipeline_simple(device : Device; render_pass : Render
     var gp = VkGraphicsPipelineCreateInfo()
     gp.stageCount = 2u
     gp.layout = boost_value_to_vk(layout)
-    gp.renderPass = boost_value_to_vk(render_pass)
+    set_pipeline_target(gp, render_pass, fmts)
     var h : VkPipeline
     unsafe {
         if (dynamic_viewport) {
@@ -1356,13 +1340,28 @@ def public create_graphics_pipeline_simple(device : Device; render_pass : Render
     return <- b
 }
 
-//! Graphics pipeline for VK_EXT_mesh_shader: a task -> mesh -> fragment chain with NO vertex-input and
-//! NO input-assembly state (a mesh pipeline amplifies geometry on the GPU, so both are ignored/null);
-//! rest matches create_graphics_pipeline_simple. Needs a mesh-shader device; draw cmd_draw_mesh_tasks_e_x_t.
-def public create_mesh_pipeline(device : Device; render_pass : RenderPass; layout : PipelineLayout;   // nolint:STYLE038 — linear CreateInfo assembly, the Vulkan pipeline-build shape
+//! `dynamic_viewport` leaves the viewport/scissor out of the pipeline (VIEWPORT+SCISSOR
+//! dynamic state) so the pipeline survives swapchain resize -- set them per frame with
+//! cmd_set_viewport / cmd_set_scissor (draw_frame does this when its dynamic_viewport is true).
+def public create_graphics_pipeline_simple(device : Device; render_pass : RenderPass; layout : PipelineLayout;
+                                           vert : ShaderModule; frag : ShaderModule; width, height : int; dynamic_viewport : bool = false) : Pipeline {
+    var no_fmts : RenderingFormats
+    return <- build_simple_pipeline(device, render_pass, no_fmts, layout, vert, frag, width, height, dynamic_viewport)
+}
+
+def public create_graphics_pipeline_simple(device : Device; color_format : VkFormat; layout : PipelineLayout;
+                                           vert : ShaderModule; frag : ShaderModule; width, height : int; dynamic_viewport : bool = false) : Pipeline {
+    //! Dynamic-rendering twin of `create_graphics_pipeline_simple`: the pipeline carries `color_format` in
+    //! a ``VkPipelineRenderingCreateInfo`` instead of a render pass, so it draws inside `record_rendering`
+    //! on any view of that format - an offscreen target or a swapchain image - with no depth attachment.
+    var fmts = rendering_formats(color_format)
+    let no_rp : RenderPass
+    return <- build_simple_pipeline(device, no_rp, fmts, layout, vert, frag, width, height, dynamic_viewport)
+}
+
+def private build_mesh_pipeline(device : Device; render_pass : RenderPass; var fmts : RenderingFormats; layout : PipelineLayout;   // nolint:STYLE038 — linear CreateInfo assembly, the Vulkan pipeline-build shape
                                 task : ShaderModule; mesh : ShaderModule; frag : ShaderModule;
-                                width, height : int; dynamic_viewport : bool = false;
-                                enable_depth : bool = false) : Pipeline {
+                                width, height : int; dynamic_viewport : bool; enable_depth : bool) : Pipeline {
     var stages : array<VkPipelineShaderStageCreateInfo>
     stages |> resize(3)
     stages[0] = VkPipelineShaderStageCreateInfo()
@@ -1401,10 +1400,8 @@ def public create_mesh_pipeline(device : Device; render_pass : RenderPass; layou
     blend_att.colorWriteMask.b = true
     blend_att.colorWriteMask.a = true
     var blend = VkPipelineColorBlendStateCreateInfo()
-    blend.attachmentCount = 1u
+    blend.attachmentCount = target_color_count(render_pass, fmts)
 
-    // depth test + write (LESS_OR_EQUAL) when the render pass carries a depth attachment; left off
-    // (pDepthStencilState null) by default so the depthless Tutorial 13 path is unchanged.
     var depthstate = VkPipelineDepthStencilStateCreateInfo()
     if (enable_depth) {
         depthstate.depthTestEnable = VK_TRUE
@@ -1424,7 +1421,7 @@ def public create_mesh_pipeline(device : Device; render_pass : RenderPass; layou
     var gp = VkGraphicsPipelineCreateInfo()
     gp.stageCount = 3u
     gp.layout = boost_value_to_vk(layout)
-    gp.renderPass = boost_value_to_vk(render_pass)
+    set_pipeline_target(gp, render_pass, fmts)
     var h : VkPipeline
     unsafe {
         if (dynamic_viewport) {
@@ -1453,127 +1450,37 @@ def public create_mesh_pipeline(device : Device; render_pass : RenderPass; layou
     return <- b
 }
 
-//! Graphics pipeline for textured / lit 3D meshes: vertex-input bindings + attributes (a real vertex
-//! buffer, not `gl_VertexIndex` fabrication) and depth test + write on by default (LESS_OR_EQUAL) — the
-//! render pass MUST have a depth attachment then. `dynamic_viewport=true` for swapchain-resize windowing.
-def public create_graphics_pipeline_v3d(device : Device; render_pass : RenderPass; layout : PipelineLayout;   // nolint:STYLE038 — linear CreateInfo assembly, the Vulkan pipeline-build shape
-                                        vert : ShaderModule; frag : ShaderModule; width, height : int;
-                                        var vertex_bindings : array<VkVertexInputBindingDescription>;
-                                        var vertex_attributes : array<VkVertexInputAttributeDescription>;
-                                        depth_test_enable : bool = true; depth_write_enable : bool = true;
-                                        depth_compare_op : VkCompareOp = VkCompareOp.LESS_OR_EQUAL;
-                                        dynamic_viewport : bool = false) : Pipeline {
-    var stages : array<VkPipelineShaderStageCreateInfo>
-    stages |> resize(2)
-    stages[0] = VkPipelineShaderStageCreateInfo()
-    stages[0].stage.vertex = true
-    stages[0].module_ = boost_value_to_vk(vert)
-    stages[0].pName = "main"
-    stages[1] = VkPipelineShaderStageCreateInfo()
-    stages[1].stage.fragment = true
-    stages[1].module_ = boost_value_to_vk(frag)
-    stages[1].pName = "main"
-
-    var vinput = VkPipelineVertexInputStateCreateInfo()
-    vinput.vertexBindingDescriptionCount = uint(length(vertex_bindings))
-    vinput.vertexAttributeDescriptionCount = uint(length(vertex_attributes))
-    var iasm = VkPipelineInputAssemblyStateCreateInfo()
-    iasm.topology = VkPrimitiveTopology.TRIANGLE_LIST
-
-    var viewport : VkViewport
-    viewport.width = float(width)
-    viewport.height = float(height)
-    viewport.maxDepth = 1.0f
-    var scissor : VkRect2D
-    scissor.extent.width = uint(width)
-    scissor.extent.height = uint(height)
-    var vpstate = VkPipelineViewportStateCreateInfo()
-    vpstate.viewportCount = 1u
-    vpstate.scissorCount = 1u
-
-    var raster = VkPipelineRasterizationStateCreateInfo()
-    raster.polygonMode = VkPolygonMode.FILL
-    raster.cullMode.back = true
-    raster.frontFace = VkFrontFace.COUNTER_CLOCKWISE
-    raster.lineWidth = 1.0f
-    var msaa = VkPipelineMultisampleStateCreateInfo()
-    msaa.rasterizationSamples._1 = true
-
-    var depthstate = VkPipelineDepthStencilStateCreateInfo()
-    depthstate.depthTestEnable = depth_test_enable ? VK_TRUE : VK_FALSE
-    depthstate.depthWriteEnable = depth_write_enable ? VK_TRUE : VK_FALSE
-    depthstate.depthCompareOp = depth_compare_op
-    depthstate.minDepthBounds = 0.0f
-    depthstate.maxDepthBounds = 1.0f
-
-    var blend_att : VkPipelineColorBlendAttachmentState
-    blend_att.colorWriteMask.r = true
-    blend_att.colorWriteMask.g = true
-    blend_att.colorWriteMask.b = true
-    blend_att.colorWriteMask.a = true
-    var blend = VkPipelineColorBlendStateCreateInfo()
-    blend.attachmentCount = 1u
-
-    var dyn_states : array<VkDynamicState>
-    var dynstate = VkPipelineDynamicStateCreateInfo()
-    if (dynamic_viewport) {
-        dyn_states |> push(VkDynamicState.VIEWPORT)
-        dyn_states |> push(VkDynamicState.SCISSOR)
-        dynstate.dynamicStateCount = uint(length(dyn_states))
-    }
-
-    var gp = VkGraphicsPipelineCreateInfo()
-    gp.stageCount = 2u
-    gp.layout = boost_value_to_vk(layout)
-    gp.renderPass = boost_value_to_vk(render_pass)
-    var h : VkPipeline
-    unsafe {
-        if (!empty(vertex_bindings)) {
-            vinput.pVertexBindingDescriptions = addr(vertex_bindings[0])
-        }
-        if (!empty(vertex_attributes)) {
-            vinput.pVertexAttributeDescriptions = addr(vertex_attributes[0])
-        }
-        if (dynamic_viewport) {
-            dynstate.pDynamicStates = addr(dyn_states[0])
-            gp.pDynamicState = addr(dynstate)
-        } else {
-            vpstate.pViewports = addr(viewport)
-            vpstate.pScissors = addr(scissor)
-        }
-        blend.pAttachments = addr(blend_att)
-        gp.pStages = addr(stages[0])
-        gp.pVertexInputState = addr(vinput)
-        gp.pInputAssemblyState = addr(iasm)
-        gp.pViewportState = addr(vpstate)
-        gp.pRasterizationState = addr(raster)
-        gp.pMultisampleState = addr(msaa)
-        gp.pDepthStencilState = addr(depthstate)
-        gp.pColorBlendState = addr(blend)
-        vk_check(vkCreateGraphicsPipelines(boost_value_to_vk(device), null, 1u, addr(gp), null, addr(h)), null)
-    }
-    delete dyn_states
-    var b = vk_value_to_boost(h)
-    b._needs_delete = true
-    b._device = unsafe(reinterpret<uint64>(boost_value_to_vk(device)))
-    return <- b
+def public create_mesh_pipeline(device : Device; render_pass : RenderPass; layout : PipelineLayout;
+                                task : ShaderModule; mesh : ShaderModule; frag : ShaderModule;
+                                width, height : int; dynamic_viewport : bool = false;
+                                enable_depth : bool = false) : Pipeline {
+    //! Graphics pipeline for VK_EXT_mesh_shader: a task -> mesh -> fragment chain with no vertex-input or
+    //! input-assembly state (a mesh pipeline amplifies geometry on the GPU); the rest matches create_graphics_pipeline_simple.
+    //! `enable_depth` turns on depth test + write (LESS_OR_EQUAL), so the pass must carry a depth attachment.
+    var no_fmts : RenderingFormats
+    return <- build_mesh_pipeline(device, render_pass, no_fmts, layout, task, mesh, frag,
+        width, height, dynamic_viewport, enable_depth)
 }
 
-//!@nolint
-//! `create_graphics_pipeline_v3d` parallel for the dynamic-rendering path (Vulkan 1.3 core). No
-//! `RenderPass` — the pipeline carries a `VkPipelineRenderingCreateInfo` in pNext with the color/depth
-//! format and view mask. `samples` flows into both the multisample state and the rendering info.
-//! Tutorial 09 drives this with 4x MSAA.
-def public create_graphics_pipeline_dyn(device : Device;   // nolint:STYLE038 — linear CreateInfo assembly, the Vulkan pipeline-build shape
-                                        color_format, depth_format : VkFormat;
-                                        samples : VkSampleCountFlags;
-                                        layout : PipelineLayout;
-                                        vert : ShaderModule; frag : ShaderModule; width, height : int;
-                                        var vertex_bindings : array<VkVertexInputBindingDescription>;
-                                        var vertex_attributes : array<VkVertexInputAttributeDescription>;
-                                        depth_test_enable : bool = true; depth_write_enable : bool = true;
-                                        depth_compare_op : VkCompareOp = VkCompareOp.LESS_OR_EQUAL;
-                                        dynamic_viewport : bool = false) : Pipeline {
+def public create_mesh_pipeline(device : Device; color_format, depth_format : VkFormat; layout : PipelineLayout;
+                                task : ShaderModule; mesh : ShaderModule; frag : ShaderModule;
+                                width, height : int; dynamic_viewport : bool = false) : Pipeline {
+    //! Dynamic-rendering twin of `create_mesh_pipeline`: `color_format` and `depth_format` ride in a
+    //! ``VkPipelineRenderingCreateInfo`` instead of a render pass; depth test + write are on exactly when a
+    //! depth format is given.
+    var fmts = rendering_formats(color_format, depth_format)
+    let no_rp : RenderPass
+    return <- build_mesh_pipeline(device, no_rp, fmts, layout, task, mesh, frag,
+        width, height, dynamic_viewport, depth_format != VkFormat.UNDEFINED)
+}
+
+def private build_v3d_pipeline(device : Device; render_pass : RenderPass; var fmts : RenderingFormats;   // nolint:STYLE038 — linear CreateInfo assembly, the Vulkan pipeline-build shape
+                               samples : VkSampleCountFlags; layout : PipelineLayout;
+                               vert : ShaderModule; frag : ShaderModule; width, height : int;
+                               var vertex_bindings : array<VkVertexInputBindingDescription>;
+                               var vertex_attributes : array<VkVertexInputAttributeDescription>;
+                               depth_test_enable, depth_write_enable : bool;
+                               depth_compare_op : VkCompareOp; dynamic_viewport : bool) : Pipeline {
     var stages : array<VkPipelineShaderStageCreateInfo>
     stages |> resize(2)
     stages[0] = VkPipelineShaderStageCreateInfo()
@@ -1623,7 +1530,7 @@ def public create_graphics_pipeline_dyn(device : Device;   // nolint:STYLE038 �
     blend_att.colorWriteMask.b = true
     blend_att.colorWriteMask.a = true
     var blend = VkPipelineColorBlendStateCreateInfo()
-    blend.attachmentCount = 1u
+    blend.attachmentCount = target_color_count(render_pass, fmts)
 
     var dyn_states : array<VkDynamicState>
     var dynstate = VkPipelineDynamicStateCreateInfo()
@@ -1633,18 +1540,10 @@ def public create_graphics_pipeline_dyn(device : Device;   // nolint:STYLE038 �
         dynstate.dynamicStateCount = uint(length(dyn_states))
     }
 
-    // dynamic-rendering pipeline carries the color/depth formats in a VkPipelineRenderingCreateInfo
-    // attached via pNext (instead of a VkRenderPass handle). We allocate the color format slot
-    // separately so addr() is valid through the call.
-    var dyn_render = VkPipelineRenderingCreateInfo()
-    var cf = color_format
-    dyn_render.depthAttachmentFormat = depth_format
-    dyn_render.colorAttachmentCount = 1u
-
     var gp = VkGraphicsPipelineCreateInfo()
     gp.stageCount = 2u
     gp.layout = boost_value_to_vk(layout)
-    // no render_pass on the dynamic-rendering path; pNext carries the format info instead
+    set_pipeline_target(gp, render_pass, fmts)
     var h : VkPipeline
     unsafe {
         if (!empty(vertex_bindings)) {
@@ -1661,8 +1560,6 @@ def public create_graphics_pipeline_dyn(device : Device;   // nolint:STYLE038 �
             vpstate.pScissors = addr(scissor)
         }
         blend.pAttachments = addr(blend_att)
-        dyn_render.pColorAttachmentFormats = addr(cf)
-        gp.pNext = addr<void?>(dyn_render)
         gp.pStages = addr(stages[0])
         gp.pVertexInputState = addr(vinput)
         gp.pInputAssemblyState = addr(iasm)
@@ -1678,6 +1575,61 @@ def public create_graphics_pipeline_dyn(device : Device;   // nolint:STYLE038 �
     b._needs_delete = true
     b._device = unsafe(reinterpret<uint64>(boost_value_to_vk(device)))
     return <- b
+}
+
+//! Graphics pipeline for textured / lit 3D meshes: vertex-input bindings + attributes (a real vertex
+//! buffer, not `gl_VertexIndex` fabrication) and depth test + write on by default (LESS_OR_EQUAL) — the
+//! render pass MUST have a depth attachment then. `dynamic_viewport=true` for swapchain-resize windowing.
+def public create_graphics_pipeline_v3d(device : Device; render_pass : RenderPass; layout : PipelineLayout;
+                                        vert : ShaderModule; frag : ShaderModule; width, height : int;
+                                        var vertex_bindings : array<VkVertexInputBindingDescription>;
+                                        var vertex_attributes : array<VkVertexInputAttributeDescription>;
+                                        depth_test_enable : bool = true; depth_write_enable : bool = true;
+                                        depth_compare_op : VkCompareOp = VkCompareOp.LESS_OR_EQUAL;
+                                        dynamic_viewport : bool = false) : Pipeline {
+    var no_fmts : RenderingFormats
+    var samples : VkSampleCountFlags
+    samples._1 = true
+    return <- build_v3d_pipeline(device, render_pass, no_fmts, samples, layout, vert, frag,
+        width, height, vertex_bindings, vertex_attributes, depth_test_enable, depth_write_enable,
+        depth_compare_op, dynamic_viewport)
+}
+
+def public create_graphics_pipeline_dyn(device : Device;
+                                        color_format, depth_format : VkFormat;
+                                        samples : VkSampleCountFlags;
+                                        layout : PipelineLayout;
+                                        vert : ShaderModule; frag : ShaderModule; width, height : int;
+                                        var vertex_bindings : array<VkVertexInputBindingDescription>;
+                                        var vertex_attributes : array<VkVertexInputAttributeDescription>;
+                                        depth_test_enable : bool = true; depth_write_enable : bool = true;
+                                        depth_compare_op : VkCompareOp = VkCompareOp.LESS_OR_EQUAL;
+                                        dynamic_viewport : bool = false) : Pipeline {
+    //! The format overload of `create_graphics_pipeline_v3d` with a sample count: `samples` sets the
+    //! rasterization samples, `color_format` and `depth_format` ride in a ``VkPipelineRenderingCreateInfo``.
+    //! Tutorial 09 drives it at 4x.
+    var fmts = rendering_formats(color_format, depth_format)
+    let no_rp : RenderPass
+    return <- build_v3d_pipeline(device, no_rp, fmts, samples, layout, vert, frag,
+        width, height, vertex_bindings, vertex_attributes, depth_test_enable, depth_write_enable,
+        depth_compare_op, dynamic_viewport)
+}
+
+def public create_graphics_pipeline_v3d(device : Device; color_format, depth_format : VkFormat; layout : PipelineLayout;
+                                        vert : ShaderModule; frag : ShaderModule; width, height : int;
+                                        var vertex_bindings : array<VkVertexInputBindingDescription>;
+                                        var vertex_attributes : array<VkVertexInputAttributeDescription>;
+                                        depth_test_enable : bool = true; depth_write_enable : bool = true;
+                                        depth_compare_op : VkCompareOp = VkCompareOp.LESS_OR_EQUAL;
+                                        dynamic_viewport : bool = false) : Pipeline {
+    //! Dynamic-rendering twin of `create_graphics_pipeline_v3d`: `color_format` and `depth_format` ride in
+    //! a ``VkPipelineRenderingCreateInfo`` instead of a render pass - ``create_graphics_pipeline_dyn`` with
+    //! one sample per pixel. A depth format of UNDEFINED leaves depth testing off.
+    var samples : VkSampleCountFlags
+    samples._1 = true
+    return <- create_graphics_pipeline_dyn(device, color_format, depth_format, samples, layout, vert, frag,
+        width, height, vertex_bindings, vertex_attributes, depth_test_enable, depth_write_enable,
+        depth_compare_op, dynamic_viewport)
 }
 
 //! One specialization-constant override: ``id`` is the shader's SpecId (a dasSpirv ``@constant_id``
@@ -1754,15 +1706,10 @@ def public create_compute_pipeline(device : Device; layout : PipelineLayout; sha
 
 [arch(at="../ARCHITECTURE.md#subgroup-pair")]
 def public compute_full_subgroups_supported(phys : VkPhysicalDevice) : bool {
-    var props : VkPhysicalDeviceProperties
-    vkGetPhysicalDeviceProperties(phys, props)
-    if (props.apiVersion < make_api_version(1u, 3u, 0u)) {
+    var q13 : VkPhysicalDeviceVulkan13Features
+    if (!query_features13(phys, q13)) {
         return false
     }
-    var q13 = VkPhysicalDeviceVulkan13Features()
-    var q2 = VkPhysicalDeviceFeatures2()
-    q2.pNext = unsafe(addr<void?>(q13))
-    vkGetPhysicalDeviceFeatures2(phys, q2)
     return q13.subgroupSizeControl != 0u && q13.computeFullSubgroups != 0u
 }
 
@@ -1786,35 +1733,6 @@ def public create_compute_pipeline_full_subgroups(device : Device; layout : Pipe
     return <- b
 }
 
-//! Record a single-image pipeline barrier that transitions `image` from `old_layout` to `new_layout`,
-//! with the given access masks and pipeline stages (color aspect, 1 mip, 1 layer). The building block
-//! for storage-image / transfer layout moves; used by compute_to_storage_image below.
-def public transition_image(cmd : CommandBuffer; image : Image; old_layout, new_layout : VkImageLayout;
-                            src_access, dst_access : VkAccessFlags; src_stage, dst_stage : VkPipelineStageFlags) {
-    var barrier = ImageMemoryBarrier(srcAccessMask = src_access, dstAccessMask = dst_access,
-        oldLayout = old_layout, newLayout = new_layout, srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED, image = weak_copy(image))
-    barrier.subresourceRange.aspectMask.color = true
-    barrier.subresourceRange.levelCount = 1u
-    barrier.subresourceRange.layerCount = 1u
-    let no_mem : array<MemoryBarrier>
-    let no_buf : array<BufferMemoryBarrier>
-    var imgs : array<ImageMemoryBarrier>
-    imgs |> emplace(barrier)
-    let no_dep : VkDependencyFlags
-    cmd_pipeline_barrier(cmd, src_stage, dst_stage, no_dep, no_mem, no_buf, imgs)
-}
-
-//! Depth-aspect counterpart of `transition_image` — same barrier mechanics, aspectMask `depth = true`.
-//! For depth transitions the render-pass finalLayout doesn't cover (e.g. sampling a shadow map in pass
-//! 2). Stencil-combined formats need the stencil bit too: use `transition_image_aspect` below.
-def public transition_depth_image(cmd : CommandBuffer; image : Image; old_layout, new_layout : VkImageLayout;
-                                  src_access, dst_access : VkAccessFlags; src_stage, dst_stage : VkPipelineStageFlags) {
-    var aspect : VkImageAspectFlags
-    aspect.depth = true
-    transition_image_aspect(cmd, image, old_layout, new_layout, src_access, dst_access, src_stage, dst_stage, aspect)
-}
-
 //! Fully general `transition_image` — caller supplies the `aspectMask` (stencil, combined
 //! depth+stencil, anything the two convenience helpers miss). `levelCount = layerCount = 1`; for mip
 //! chains or array layers drop to a raw `cmd_pipeline_barrier`.
@@ -1833,6 +1751,85 @@ def public transition_image_aspect(cmd : CommandBuffer; image : Image; old_layou
     imgs |> emplace(barrier)
     let no_dep : VkDependencyFlags
     cmd_pipeline_barrier(cmd, src_stage, dst_stage, no_dep, no_mem, no_buf, imgs)
+}
+
+//! Record a single-image pipeline barrier that transitions `image` from `old_layout` to `new_layout`,
+//! with the given access masks and pipeline stages (color aspect, 1 mip, 1 layer). The building block
+//! for storage-image / transfer layout moves; used by compute_to_storage_image below.
+def public transition_image(cmd : CommandBuffer; image : Image; old_layout, new_layout : VkImageLayout;
+                            src_access, dst_access : VkAccessFlags; src_stage, dst_stage : VkPipelineStageFlags) {
+    var aspect : VkImageAspectFlags
+    aspect.color = true
+    transition_image_aspect(cmd, image, old_layout, new_layout, src_access, dst_access, src_stage, dst_stage, aspect)
+}
+
+//! Depth-aspect counterpart of `transition_image` — same barrier mechanics, aspectMask `depth = true`.
+//! For depth transitions the render-pass finalLayout doesn't cover (e.g. sampling a shadow map in pass
+//! 2). Stencil-combined formats need the stencil bit too: use `transition_image_aspect` above.
+def public transition_depth_image(cmd : CommandBuffer; image : Image; old_layout, new_layout : VkImageLayout;
+                                  src_access, dst_access : VkAccessFlags; src_stage, dst_stage : VkPipelineStageFlags) {
+    var aspect : VkImageAspectFlags
+    aspect.depth = true
+    transition_image_aspect(cmd, image, old_layout, new_layout, src_access, dst_access, src_stage, dst_stage, aspect)
+}
+
+let public PIPELINE_STAGE_2_NONE = VkPipelineStageFlags2(0ul)   //! no stage: the source of a transition out of UNDEFINED, the destination of a hand-off to presentation
+let public ACCESS_2_NONE = VkAccessFlags2(0ul)                  //! no access: the side of a synchronization2 barrier with nothing to make visible
+
+def public transition_image_aspect2(cmd : CommandBuffer; image : Image; old_layout, new_layout : VkImageLayout;
+                                    src_stage : VkPipelineStageFlags2; src_access : VkAccessFlags2;
+                                    dst_stage : VkPipelineStageFlags2; dst_access : VkAccessFlags2;
+                                    aspect : VkImageAspectFlags; level_count : uint = 1u; layer_count : uint = 1u) {
+    //! `transition_image_aspect` on synchronization2: the same layout move through ``cmd_pipeline_barrier2``
+    //! with the 64-bit flags in barrier order (source stage and access, destination stage and access;
+    //! `PIPELINE_STAGE_2_NONE` / `ACCESS_2_NONE` for an idle side), over `level_count` mips and `layer_count` layers.
+    var barrier = ImageMemoryBarrier2(srcStageMask = src_stage, srcAccessMask = src_access,
+        dstStageMask = dst_stage, dstAccessMask = dst_access,
+        oldLayout = old_layout, newLayout = new_layout, srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED, image = weak_copy(image))
+    barrier.subresourceRange.aspectMask = aspect
+    barrier.subresourceRange.levelCount = level_count
+    barrier.subresourceRange.layerCount = layer_count
+    var dep : DependencyInfo
+    dep.pImageMemoryBarriers |> emplace(barrier)
+    cmd_pipeline_barrier2(cmd, dep)
+}
+
+def public transition_image2(cmd : CommandBuffer; image : Image; old_layout, new_layout : VkImageLayout;
+                             src_stage : VkPipelineStageFlags2; src_access : VkAccessFlags2;
+                             dst_stage : VkPipelineStageFlags2; dst_access : VkAccessFlags2) {
+    //! Color-aspect `transition_image_aspect2` - the synchronization2 `transition_image`.
+    var aspect : VkImageAspectFlags
+    aspect.color = true
+    transition_image_aspect2(cmd, image, old_layout, new_layout, src_stage, src_access, dst_stage, dst_access, aspect)
+}
+
+def public transition_depth_image2(cmd : CommandBuffer; image : Image; old_layout, new_layout : VkImageLayout;
+                                   src_stage : VkPipelineStageFlags2; src_access : VkAccessFlags2;
+                                   dst_stage : VkPipelineStageFlags2; dst_access : VkAccessFlags2) {
+    //! Depth-aspect `transition_image_aspect2` - the synchronization2 `transition_depth_image`.
+    var aspect : VkImageAspectFlags
+    aspect.depth = true
+    transition_image_aspect2(cmd, image, old_layout, new_layout, src_stage, src_access, dst_stage, dst_access, aspect)
+}
+
+def public blit_full_image(cmd : CommandBuffer; src : VkImage; src_layout : VkImageLayout; src_width, src_height : int;
+                           dst : VkImage; dst_layout : VkImageLayout; dst_width, dst_height : int; filter : VkFilter) {
+    //! One ``vkCmdBlitImage`` of the whole of `src` (`src_width` x `src_height`, in `src_layout`) over the
+    //! whole of `dst` (`dst_width` x `dst_height`, in `dst_layout`): color aspect, mip 0, one layer,
+    //! scaled with `filter` when the extents differ.
+    var region : VkImageBlit
+    region.srcSubresource.aspectMask.color = true
+    region.srcSubresource.layerCount = 1u
+    region.srcOffsets[1].x = src_width
+    region.srcOffsets[1].y = src_height
+    region.srcOffsets[1].z = 1
+    region.dstSubresource.aspectMask.color = true
+    region.dstSubresource.layerCount = 1u
+    region.dstOffsets[1].x = dst_width
+    region.dstOffsets[1].y = dst_height
+    region.dstOffsets[1].z = 1
+    vkCmdBlitImage(boost_value_to_vk(cmd), src, src_layout, dst, dst_layout, 1u, unsafe(addr(region)), filter)
 }
 
 def private set_extent_2d(var ici : ImageCreateInfo; width, height : int) {
@@ -1986,21 +1983,8 @@ def public compute_to_storage_image(var words : array<uint>; w, h : int; srgb_en
             transfer_write.transfer_write = true
             transition_image(cmd, srgb_image, VkImageLayout.UNDEFINED, VkImageLayout.TRANSFER_DST_OPTIMAL,
                 none, transfer_write, top, xfer)
-            var region : VkImageBlit
-            region.srcSubresource.aspectMask.color = true
-            region.srcSubresource.layerCount = 1u
-            region.srcOffsets[1].x = w
-            region.srcOffsets[1].y = h
-            region.srcOffsets[1].z = 1
-            region.dstSubresource.aspectMask.color = true
-            region.dstSubresource.layerCount = 1u
-            region.dstOffsets[1].x = w
-            region.dstOffsets[1].y = h
-            region.dstOffsets[1].z = 1
-            vkCmdBlitImage(boost_value_to_vk(cmd),
-                boost_value_to_vk(image),      VkImageLayout.TRANSFER_SRC_OPTIMAL,
-                boost_value_to_vk(srgb_image), VkImageLayout.TRANSFER_DST_OPTIMAL,
-                1u, unsafe(addr(region)), VkFilter.NEAREST)
+            blit_full_image(cmd, boost_value_to_vk(image), VkImageLayout.TRANSFER_SRC_OPTIMAL, w, h,
+                boost_value_to_vk(srgb_image), VkImageLayout.TRANSFER_DST_OPTIMAL, w, h, VkFilter.NEAREST)
             transition_image(cmd, srgb_image, VkImageLayout.TRANSFER_DST_OPTIMAL, VkImageLayout.TRANSFER_SRC_OPTIMAL,
                 transfer_write, to_read, xfer, xfer)
             copy_image_to_buffer(cmd, srgb_image, readback, w, h)
@@ -2223,17 +2207,24 @@ def public create_host_buffer_from_bytes(device : Device; phys : VkPhysicalDevic
 
 // ===== block brackets =====
 
-//! allocate a one-shot primary command buffer, record the block, submit, wait idle
-def public run_cmd_sync(device : Device; pool : CommandPool; queue : VkQueue; blk : block<(cmd : CommandBuffer) : void>) {
+def public begin_one_time_commands(device : Device; pool : CommandPool) : VkCommandBuffer {
+    //! One primary command buffer from `pool`, allocated and begun. The caller ends it, submits it and
+    //! frees it back to `pool` - `run_cmd_sync` and the window layer's `submit_and_present` pair do.
     var ai = VkCommandBufferAllocateInfo()
     ai.commandPool = boost_value_to_vk(pool)
     ai.level = VkCommandBufferLevel.PRIMARY
     ai.commandBufferCount = 1u
     var raw_cmd : VkCommandBuffer
     vk_check(vkAllocateCommandBuffers(boost_value_to_vk(device), ai, unsafe(addr(raw_cmd))), null)
-    let cmd = vk_value_to_boost(raw_cmd)   // non-owning wrapper (pool-freed below)
     let begin = VkCommandBufferBeginInfo()
     vk_check(vkBeginCommandBuffer(raw_cmd, begin), null)
+    return raw_cmd
+}
+
+//! allocate a one-shot primary command buffer, record the block, submit, wait idle
+def public run_cmd_sync(device : Device; pool : CommandPool; queue : VkQueue; blk : block<(cmd : CommandBuffer) : void>) {
+    var raw_cmd = begin_one_time_commands(device, pool)
+    let cmd = vk_value_to_boost(raw_cmd)   // non-owning wrapper (pool-freed below)
     invoke(blk, cmd)
     vk_check(vkEndCommandBuffer(raw_cmd), null)
     var submit = VkSubmitInfo()
@@ -2305,6 +2296,54 @@ def public record_rendering(cmd : CommandBuffer; area : VkRect2D; layer_count : 
     cmd_begin_rendering(cmd, info)
     invoke(blk)
     cmd_end_rendering(cmd)
+}
+
+def public rendering_color_attachment(view : ImageView; clear : VkClearValue;
+                                      load_op : VkAttachmentLoadOp = VkAttachmentLoadOp.CLEAR;
+                                      store_op : VkAttachmentStoreOp = VkAttachmentStoreOp.STORE) : RenderingAttachmentInfo {
+    //! A color attachment for `record_rendering`: `view` in COLOR_ATTACHMENT_OPTIMAL, `load_op` on entry
+    //! (CLEAR takes `clear`), `store_op` on exit. The view's image must already be in that layout - the
+    //! caller's `transition_image2` puts it there.
+    return <- RenderingAttachmentInfo(imageView = weak_copy(view), imageLayout = VkImageLayout.COLOR_ATTACHMENT_OPTIMAL,
+        loadOp = load_op, storeOp = store_op, clearValue = clear)
+}
+
+def public rendering_depth_attachment(view : ImageView; clear : VkClearValue;
+                                      store_op : VkAttachmentStoreOp = VkAttachmentStoreOp.DONT_CARE) : RenderingAttachmentInfo {
+    //! A depth attachment for `record_rendering`: `view` in DEPTH_ATTACHMENT_OPTIMAL, cleared to `clear`
+    //! (`clear_depth`), `store_op` on exit - DONT_CARE when nothing reads the depth afterwards, STORE for a
+    //! shadow map or a depth pre-pass.
+    return <- RenderingAttachmentInfo(imageView = weak_copy(view), imageLayout = VkImageLayout.DEPTH_ATTACHMENT_OPTIMAL,
+        loadOp = VkAttachmentLoadOp.CLEAR, storeOp = store_op, clearValue = clear)
+}
+
+def public record_rendering(cmd : CommandBuffer; color_view : ImageView; area : VkRect2D; clear : VkClearValue;
+                            load_op : VkAttachmentLoadOp = VkAttachmentLoadOp.CLEAR; blk : block<() : void>) {
+    //! The dynamic-rendering twin of the single-clear `record_render_pass`: one color view, cleared to
+    //! `clear` and stored. `load_op = LOAD` draws over what the view holds instead (the clear is ignored).
+    var color_atts : array<RenderingAttachmentInfo>
+    color_atts |> emplace(rendering_color_attachment(color_view, clear, load_op))
+    record_rendering(cmd, area, 1u, color_atts, blk)
+}
+
+def public record_rendering(cmd : CommandBuffer; color_view, depth_view : ImageView; area : VkRect2D;
+                            clears : array<VkClearValue>; blk : block<() : void>) {
+    //! The dynamic-rendering twin of the color + depth `record_render_pass`: `clears` is `[color, depth]`,
+    //! both attachments cleared, color stored, depth discarded at the end (as `create_render_pass_color_depth`).
+    assert(length(clears) == 2, "record_rendering color + depth: clears must be [color, depth]")
+    var color_atts : array<RenderingAttachmentInfo>
+    color_atts |> emplace(rendering_color_attachment(color_view, clears[0]))
+    var depth_att <- rendering_depth_attachment(depth_view, clears[1])
+    record_rendering(cmd, area, 1u, color_atts, depth_att, blk)
+}
+
+def public record_rendering_depth_only(cmd : CommandBuffer; depth_view : ImageView; area : VkRect2D; clear : VkClearValue;
+                                       blk : block<() : void>) {
+    //! The dynamic-rendering twin of a `create_render_pass_depth_only` pass: no color attachment, the depth
+    //! view cleared to `clear` and STORED, for a shadow map or a depth pre-pass that a later pass reads.
+    var no_color : array<RenderingAttachmentInfo>
+    var depth_att <- rendering_depth_attachment(depth_view, clear, VkAttachmentStoreOp.STORE)
+    record_rendering(cmd, area, 1u, no_color, depth_att, blk)
 }
 
 //! Block-form device-memory mapping: maps the whole allocation (VK_WHOLE_SIZE), invokes the block with

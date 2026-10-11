@@ -7,11 +7,10 @@ options indenting = 4
 // sampler2DShadow in pass 2 (when the main pass asks "is anything closer to the light here than
 // I am?"). The headline rails:
 //
-//   1. **Depth-only render pass + one image, two roles.** ``create_render_pass_depth_only`` makes a
-//      pass with one depth attachment, no colors; ``build_offscreen_depth(extra=sampled)`` allocates
-//      the shadow map with ``USAGE_DEPTH_STENCIL_ATTACHMENT | USAGE_SAMPLED``. The depth-only
-//      pass's ``finalLayout = DEPTH_STENCIL_READ_ONLY_OPTIMAL`` hands the image to the main pass
-//      already laid out for sampling -- no manual barrier between the passes.
+//   1. **Depth-only pass + one image, two roles.** ``record_rendering_depth_only`` opens a pass with
+//      one depth attachment, no colors; ``build_offscreen_depth(extra=sampled)`` allocates the shadow
+//      map with ``USAGE_DEPTH_STENCIL_ATTACHMENT | USAGE_SAMPLED``. One ``transition_depth_image2``
+//      between the passes turns the depth writes into ``DEPTH_STENCIL_READ_ONLY_OPTIMAL`` sampler reads.
 //
 //   2. ``sampler2DShadow`` + ``textureCompare(...)``. dasSpirv emits OpTypeImage with the Depth=1
 //      flag and ``OpImageSampleDrefImplicitLod`` for the sample, returning the [0,1] PCF result.
@@ -192,17 +191,13 @@ def private ortho_m4(left, right, bottom, top, znear, zfar : float) : float4x4 {
 
 // ===== resources =====
 
-//! All shadow-tutorial render state owned together: two render passes, two framebuffers, two pipelines
-//! (shadow + main), four buffers (cube + floor vb/ib), the shadow map + sampler, UBO, descriptors and
-//! readback. The driver (offscreen test or window viewer) owns instance/device/queue/pool, and passes.
+//! All shadow-tutorial render state owned together: two pipelines (shadow + main), four buffers (cube +
+//! floor vb/ib), the shadow map + sampler, UBO, descriptors and readback. The driver (offscreen test or
+//! window viewer) owns instance/device/queue/pool, and passes.
 struct public ShadowResources {
     color        : OffscreenTarget
     depth        : OffscreenDepth
     shadow_map   : OffscreenDepth   // D32_SFLOAT image used as depth attachment AND sampled in pass 2
-    rp_color     : RenderPass
-    rp_shadow    : RenderPass
-    fb_color     : Framebuffer
-    fb_shadow    : Framebuffer
     cube_vb      : HostBuffer
     cube_ib      : HostBuffer
     floor_vb     : HostBuffer
@@ -242,10 +237,6 @@ def public finalize(var r : ShadowResources) {
     delete r.floor_vb
     delete r.cube_ib
     delete r.cube_vb
-    delete r.fb_shadow
-    delete r.fb_color
-    delete r.rp_shadow
-    delete r.rp_color
     delete r.shadow_map
     delete r.depth
     delete r.color
@@ -280,8 +271,9 @@ def private vertex_input() : VkPipelineVertexInputStateCreateInfo {
     return v
 }
 
-//! Inline shadow pipeline: vertex-only, no color attachments, depth bias enabled.
-def private build_shadow_pipeline(device : Device; rp : RenderPass; layout : PipelineLayout;   // nolint:STYLE038 - flat one-call-per-item Vulkan setup run
+//! Inline shadow pipeline: vertex-only, no color attachments, depth bias enabled. Renders into the
+//! SHADOW_FMT depth attachment alone.
+def private build_shadow_pipeline(device : Device; layout : PipelineLayout;   // nolint:STYLE038 - flat one-call-per-item Vulkan setup run
                                   vert : ShaderModule) : Pipeline {
     var stages : array<VkPipelineShaderStageCreateInfo>
     stages |> resize(1)
@@ -357,16 +349,20 @@ def private build_shadow_pipeline(device : Device; rp : RenderPass; layout : Pip
         gp.pDepthStencilState = addr(depthstate)
         gp.pColorBlendState = addr(blend)
         gp.layout = boost_value_to_vk(layout)
-        gp.renderPass = boost_value_to_vk(rp)
+        var fmts = rendering_formats(VkFormat.UNDEFINED, SHADOW_FMT)   // depth-only: no color format
+        attach_rendering_formats(gp, fmts)
         vk_check(vkCreateGraphicsPipelines(boost_value_to_vk(device), null, 1u, addr(gp), null, addr(h)), null)
     }
     delete stages
     delete attrs
-    return <- vk_value_to_boost(h)
+    var b = vk_value_to_boost(h)
+    b._needs_delete = true
+    b._device = unsafe(reinterpret<uint64>(boost_value_to_vk(device)))
+    return <- b
 }
 
 //! Inline main pipeline: vertex + fragment, color + depth attachments, two vertex attributes.
-def private build_main_pipeline(device : Device; rp : RenderPass; layout : PipelineLayout;   // nolint:STYLE038 - flat one-call-per-item Vulkan setup run
+def private build_main_pipeline(device : Device; layout : PipelineLayout;   // nolint:STYLE038 - flat one-call-per-item Vulkan setup run
                                 vert, frag : ShaderModule) : Pipeline {
     var stages : array<VkPipelineShaderStageCreateInfo>
     stages |> resize(2)
@@ -456,12 +452,16 @@ def private build_main_pipeline(device : Device; rp : RenderPass; layout : Pipel
         blend.pAttachments = addr(blend_att)
         gp.pColorBlendState = addr(blend)
         gp.layout = boost_value_to_vk(layout)
-        gp.renderPass = boost_value_to_vk(rp)
+        var fmts = rendering_formats(SCENE_COLOR_FMT, SCENE_DEPTH_FMT)
+        attach_rendering_formats(gp, fmts)
         vk_check(vkCreateGraphicsPipelines(boost_value_to_vk(device), null, 1u, addr(gp), null, addr(h)), null)
     }
     delete stages
     delete attrs
-    return <- vk_value_to_boost(h)
+    var b = vk_value_to_boost(h)
+    b._needs_delete = true
+    b._device = unsafe(reinterpret<uint64>(boost_value_to_vk(device)))
+    return <- b
 }
 
 // ===== build =====
@@ -478,18 +478,6 @@ def public build_shadow_resources(device : Device; phys : VkPhysicalDevice;   //
     var sm_usage : VkImageUsageFlags
     sm_usage.sampled = true
     var inscope shadow_map <- build_offscreen_depth(device, phys, SHADOW_W, SHADOW_H, SHADOW_FMT, sm_usage)
-
-    var inscope rp_color  <- create_render_pass_color_depth(device, SCENE_COLOR_FMT, SCENE_DEPTH_FMT)
-    var inscope rp_shadow <- create_render_pass_depth_only(device, SHADOW_FMT)
-
-    var inscope fb_color <- create_framebuffer(device, FramebufferCreateInfo(
-        renderPass = weak_copy(rp_color),
-        pAttachments <- [weak_copy(color.view), weak_copy(depth.view)],
-        width = uint(SCENE_W), height = uint(SCENE_H), layers = 1u))
-    var inscope fb_shadow <- create_framebuffer(device, FramebufferCreateInfo(
-        renderPass = weak_copy(rp_shadow),
-        pAttachments <- [weak_copy(shadow_map.view)],
-        width = uint(SHADOW_W), height = uint(SHADOW_H), layers = 1u))
 
     var vb_usage : VkBufferUsageFlags
     vb_usage.vertex_buffer = true
@@ -616,8 +604,8 @@ def public build_shadow_resources(device : Device; phys : VkPhysicalDevice;   //
     var inscope main_vert   <- create_shader_module(device, main_vert_spv)
     var inscope main_frag   <- create_shader_module(device, main_frag_spv)
 
-    var inscope pipeline_shadow <- build_shadow_pipeline(device, rp_shadow, pipe_layout, shadow_vert)
-    var inscope pipeline_main   <- build_main_pipeline(device, rp_color, pipe_layout, main_vert, main_frag)
+    var inscope pipeline_shadow <- build_shadow_pipeline(device, pipe_layout, shadow_vert)
+    var inscope pipeline_main   <- build_main_pipeline(device, pipe_layout, main_vert, main_frag)
 
     let buf_size = uint64(SCENE_W) * uint64(SCENE_H) * 4ul
     var inscope readback <- create_host_buffer(device, phys, buf_size)
@@ -626,10 +614,6 @@ def public build_shadow_resources(device : Device; phys : VkPhysicalDevice;   //
         color <- color,
         depth <- depth,
         shadow_map <- shadow_map,
-        rp_color <- rp_color,
-        rp_shadow <- rp_shadow,
-        fb_color <- fb_color,
-        fb_shadow <- fb_shadow,
         cube_vb <- cube_vb,
         cube_ib <- cube_ib,
         floor_vb <- floor_vb,
@@ -655,7 +639,7 @@ def public build_shadow_context() : ShadowContext {
     if (volkInitialize() != 0) {
         panic("no Vulkan loader")
     }
-    var inscope instance <- create_instance("shadow_tut", make_api_version(1u, 1u, 0u))
+    var inscope instance <- create_instance("shadow_tut", make_api_version(1u, 3u, 0u))
     volkLoadInstance(boost_value_to_vk(instance))
     let phys = select_physical_device(instance)
     let qfam = select_graphics_queue_family(phys)
@@ -699,17 +683,19 @@ def public update_shadow_uniforms(res : ShadowResources; device : Device; time, 
     main_vs_bind_uniform(device, res.ubo.memory)
 }
 
-//! Per-frame work for both passes. Pass 1 renders cube + floor depth into the shadow map, whose
-//! `finalLayout = DEPTH_STENCIL_READ_ONLY_OPTIMAL` hands it to pass 2 ready to sample. Pass 2 renders
-//! cube + floor into the color attachment, with the fragment shader reading that shadow map.
-def public record_shadow_render_pass(res : ShadowResources; cmd : CommandBuffer) {
+//! Per-frame work for both passes. Pass 1 renders cube + floor depth into the shadow map; one barrier
+//! hands it to pass 2 as a DEPTH_STENCIL_READ_ONLY_OPTIMAL texture. Pass 2 renders cube + floor into
+//! the color attachment, sampling that shadow map, and leaves the color in TRANSFER_SRC_OPTIMAL.
+def public record_shadow_frame(res : ShadowResources; cmd : CommandBuffer) {
     let sets <- [vk_value_to_boost(res.desc_set)]
     var no_dyn : array<uint>
 
     // ===== Pass 1: shadow map =====
-    var shadow_clears <- [clear_depth(1.0)]
-    record_render_pass(cmd, res.rp_shadow, res.fb_shadow,
-                       full_area(SHADOW_W, SHADOW_H), shadow_clears) {
+    transition_depth_image2(cmd, res.shadow_map.image, VkImageLayout.UNDEFINED, VkImageLayout.DEPTH_ATTACHMENT_OPTIMAL,
+        PIPELINE_STAGE_2_NONE, ACCESS_2_NONE,
+        VkPipelineStageFlags2.early_fragment_tests | VkPipelineStageFlags2.late_fragment_tests,
+        VkAccessFlags2.depth_stencil_attachment_write)
+    record_rendering_depth_only(cmd, res.shadow_map.view, full_area(SHADOW_W, SHADOW_H), clear_depth(1.0)) {
         cmd_bind_pipeline(cmd, res.pipeline_shadow)
         cmd_bind_descriptor_sets(cmd, VkPipelineBindPoint.GRAPHICS, res.pipe_layout, 0u, sets, no_dyn)
         cmd_bind_index_buffer(cmd, weak_copy(res.cube_ib.buffer), 0ul, VkIndexType.UINT16)
@@ -729,12 +715,22 @@ def public record_shadow_render_pass(res : ShadowResources; cmd : CommandBuffer)
         cmd_push_constants(cmd, res.pipe_layout, vstage, 0u, floor_model)
         cmd_draw_indexed(cmd, uint(FLOOR_INDEX_COUNT), 1u, 0u, 0, 0u)
     }
-    delete shadow_clears
+    // the depth writes of pass 1 become the sampler2DShadow reads of pass 2
+    transition_depth_image2(cmd, res.shadow_map.image, VkImageLayout.DEPTH_ATTACHMENT_OPTIMAL, VkImageLayout.DEPTH_STENCIL_READ_ONLY_OPTIMAL,
+        VkPipelineStageFlags2.early_fragment_tests | VkPipelineStageFlags2.late_fragment_tests,
+        VkAccessFlags2.depth_stencil_attachment_write,
+        VkPipelineStageFlags2.fragment_shader, VkAccessFlags2.shader_sampled_read)
 
     // ===== Pass 2: main color, sampling the shadow map =====
+    transition_image2(cmd, res.color.image, VkImageLayout.UNDEFINED, VkImageLayout.COLOR_ATTACHMENT_OPTIMAL,
+        PIPELINE_STAGE_2_NONE, ACCESS_2_NONE,
+        VkPipelineStageFlags2.color_attachment_output, VkAccessFlags2.color_attachment_write)
+    transition_depth_image2(cmd, res.depth.image, VkImageLayout.UNDEFINED, VkImageLayout.DEPTH_ATTACHMENT_OPTIMAL,
+        PIPELINE_STAGE_2_NONE, ACCESS_2_NONE,
+        VkPipelineStageFlags2.early_fragment_tests | VkPipelineStageFlags2.late_fragment_tests,
+        VkAccessFlags2.depth_stencil_attachment_write)
     var clears <- [clear_color(0.04f, 0.04f, 0.08f, 1.0f), clear_depth(1.0)]
-    record_render_pass(cmd, res.rp_color, res.fb_color,
-                       full_area(SCENE_W, SCENE_H), clears) {
+    record_rendering(cmd, res.color.view, res.depth.view, full_area(SCENE_W, SCENE_H), clears) {
         cmd_bind_pipeline(cmd, res.pipeline_main)
         cmd_bind_descriptor_sets(cmd, VkPipelineBindPoint.GRAPHICS, res.pipe_layout, 0u, sets, no_dyn)
         cmd_bind_index_buffer(cmd, weak_copy(res.cube_ib.buffer), 0ul, VkIndexType.UINT16)
@@ -753,6 +749,9 @@ def public record_shadow_render_pass(res : ShadowResources; cmd : CommandBuffer)
         cmd_draw_indexed(cmd, uint(FLOOR_INDEX_COUNT), 1u, 0u, 0, 0u)
     }
     delete clears
+    transition_image2(cmd, res.color.image, VkImageLayout.COLOR_ATTACHMENT_OPTIMAL, VkImageLayout.TRANSFER_SRC_OPTIMAL,
+        VkPipelineStageFlags2.color_attachment_output, VkAccessFlags2.color_attachment_write,
+        VkPipelineStageFlags2.copy | VkPipelineStageFlags2.blit, VkAccessFlags2.transfer_read)
 }
 
 //! Per-frame work: update UBO, record both passes, copy color → readback, clone RGBA8.
@@ -760,7 +759,7 @@ def public render_shadow_frame(var ctx : ShadowContext; time, camera_t : float) 
     update_shadow_uniforms(ctx.res, ctx.device, time, camera_t)
     var pixels : array<uint8>
     run_cmd_sync(ctx.device, ctx.pool, ctx.queue) $(cmd) {
-        record_shadow_render_pass(ctx.res, cmd)
+        record_shadow_frame(ctx.res, cmd)
         copy_image_to_buffer(cmd, ctx.res.color.image, ctx.res.readback, SCENE_W, SCENE_H)
     }
     map_memory_to_array(ctx.device, ctx.res.readback.memory, ctx.res.buf_size) $(m) {

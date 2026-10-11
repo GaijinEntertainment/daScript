@@ -4,7 +4,7 @@
 :doc:`04_cube` introduced the depth attachment as a back-face hider;
 :doc:`07_particles` introduced two pipelines sharing one ``VkBuffer`` with a
 single barrier between them. This tutorial composes both: it runs **two**
-render passes per frame and uses **one image in two roles** — depth
+rendering passes per frame and uses **one image in two roles** — depth
 attachment in pass 1, sampled depth texture in pass 2. Concretely:
 **Pass 1** renders the scene's depth from the light's point of view into an
 offscreen ``D32_SFLOAT`` image; **pass 2** renders the scene from the camera,
@@ -20,12 +20,12 @@ fragment is in shadow. The headline rails:
   fully lit, 0 = fully shadowed). ``create_sampler_shadow`` is the host-side
   preset (``compareOp=LESS``, white border so off-shadow-map fragments default
   to lit).
-- **Depth-only render pass + one image, two roles** -- the shadow map is
-  created ``USAGE_DEPTH_STENCIL_ATTACHMENT | USAGE_SAMPLED``;
-  ``create_render_pass_depth_only`` makes a pass with no color attachments and
-  ``finalLayout = DEPTH_STENCIL_READ_ONLY_OPTIMAL``. The same image is the
-  depth attachment in pass 1 and the ``sampler2DShadow`` descriptor in pass 2,
-  with no explicit barrier between the passes.
+- **Depth-only pass + one image, two roles** -- the shadow map is created
+  ``USAGE_DEPTH_STENCIL_ATTACHMENT | USAGE_SAMPLED``;
+  ``record_rendering_depth_only`` opens a pass with no color attachments. The
+  same image is the depth attachment in pass 1 and the ``sampler2DShadow``
+  descriptor in pass 2; one ``transition_depth_image2`` between the passes turns
+  the depth-test writes into ``DEPTH_STENCIL_READ_ONLY_OPTIMAL`` sampler reads.
 - **Vertex-only graphics pipeline for the shadow pass** -- ``stageCount = 1``
   (no fragment shader), ``cullMode = back`` flips for casters, and
   ``colorBlendStateCreateInfo.attachmentCount = 0`` because the pass has no
@@ -70,7 +70,7 @@ The shaders
 Two vertex shaders share one push-constant model matrix + the shared UBO
 (camera view/proj + light view-projection + light direction + camera position).
 The shadow vertex shader has no fragment shader -- the pipeline is built with
-``stageCount = 1`` against the depth-only render pass.
+``stageCount = 1`` for a depth-only target (``rendering_formats(UNDEFINED, SHADOW_FMT)``).
 
 .. literalinclude:: ../../../../../modules/dasVulkan/tutorials/08_shadow/shadow_tut_shaders.das
    :language: das
@@ -79,22 +79,22 @@ The shadow vertex shader has no fragment shader -- the pipeline is built with
 The render (headless)
 ---------------------
 
-The host builds **two render passes**, **two pipelines** (shadow + main), the
-shadow map (D32_SFLOAT, attachment + sampled), one shared descriptor set
-(UBO + shadow sampler), and the geometry buffers for the cube + floor.
+The host builds **two pipelines** (shadow + main, each naming the formats it
+renders into), the shadow map (D32_SFLOAT, attachment + sampled), one shared
+descriptor set (UBO + shadow sampler), and the geometry buffers for the cube + floor.
 
 .. literalinclude:: ../../../../../modules/dasVulkan/tutorials/08_shadow/shadow_tut.das
    :language: das
    :start-at: def public build_shadow_resources
    :end-before: def public build_shadow_context
 
-``record_shadow_render_pass`` is the per-frame work: pass 1 records cube +
-floor depth into the shadow map; pass 2 records cube + floor color, with the
-fragment reading the shadow map.
+``record_shadow_frame`` is the per-frame work: pass 1 records cube + floor
+depth into the shadow map; a barrier hands the map over as a texture; pass 2
+records cube + floor color, with the fragment reading the shadow map.
 
 .. literalinclude:: ../../../../../modules/dasVulkan/tutorials/08_shadow/shadow_tut.das
    :language: das
-   :start-at: def public record_shadow_render_pass
+   :start-at: def public record_shadow_frame
 
 Self-verifying
 --------------
@@ -112,11 +112,11 @@ See it live
 -----------
 
 ``window/show_shadow.das`` opens a GLFW window with a Vulkan swapchain and
-runs both render passes every frame with ``time`` derived from wall-clock.
+runs both passes every frame with ``time`` derived from wall-clock.
 It owns its own instance (with surface extensions) + device (with
 ``VK_KHR_swapchain``), then calls ``build_shadow_resources`` to share the
 two-pass setup with the headless oracle. Each frame it runs
-``update_shadow_uniforms`` + ``record_shadow_render_pass`` into the present
+``update_shadow_uniforms`` + ``record_shadow_frame`` into the present
 command buffer, then blits the color attachment onto the swapchain image.
 
 .. literalinclude:: ../../../../../modules/dasVulkan/tutorials/08_shadow/window/show_shadow.das
@@ -140,9 +140,6 @@ Running it
 Next
 ----
 
-:doc:`09_msaa` drops ``VkRenderPass`` and ``VkFramebuffer`` entirely in
-favour of Vulkan 1.3 **dynamic rendering** (``cmd_begin_rendering`` +
-``VkPipelineRenderingCreateInfo``), and turns on **4× MSAA** with an
-auto-resolve attachment so the cube's silhouette stops being jaggy. A
-runtime indicator strip + AUTO-toggle lets the recording show 4× MSAA
-and 1× rasterization side-by-side in one clip.
+:doc:`09_msaa` turns on **4× MSAA** with an auto-resolve attachment so the
+cube's silhouette stops being jaggy. A runtime indicator strip + AUTO-toggle
+lets the recording show 4× MSAA and 1× rasterization side-by-side in one clip.

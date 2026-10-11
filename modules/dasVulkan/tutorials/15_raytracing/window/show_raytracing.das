@@ -94,46 +94,16 @@ def main {   // nolint:STYLE038 - flat viewer lifecycle scaffold
         }
         let angle = float(glfwGetTime()) * 0.4
         let ok = present_frame(device, queue, swap, pool, sync) $(cmd; target; _idx) {
-            let none : VkAccessFlags
-            var shader_write : VkAccessFlags
-            shader_write.shader_write = true
-            var transfer_read : VkAccessFlags
-            transfer_read.transfer_read = true
-            var transfer_write : VkAccessFlags
-            transfer_write.transfer_write = true
-            var top : VkPipelineStageFlags
-            top.top_of_pipe = true
-            var rt_stage : VkPipelineStageFlags
-            rt_stage.ray_tracing_shader_khr = true
-            var xfer : VkPipelineStageFlags
-            xfer.transfer = true
-            var bottom : VkPipelineStageFlags
-            bottom.bottom_of_pipe = true
             // trace this frame's orbit angle into the storage image (GENERAL)
-            transition_image(cmd, rv.image, VkImageLayout.UNDEFINED, VkImageLayout.GENERAL,
-                none, shader_write, top, rt_stage)
+            transition_image2(cmd, rv.image, VkImageLayout.UNDEFINED, VkImageLayout.GENERAL,
+                PIPELINE_STAGE_2_NONE, ACCESS_2_NONE,
+                VkPipelineStageFlags2.ray_tracing_shader_khr, VkAccessFlags2.shader_storage_write)
             record_trace(cmd, rv, angle)
             // make the raygen writes available to the blit (GENERAL is a legal blit source)
-            transition_image(cmd, rv.image, VkImageLayout.GENERAL, VkImageLayout.GENERAL,
-                shader_write, transfer_read, rt_stage, xfer)
-            let dst = vk_value_to_boost(target)
-            transition_image(cmd, dst, VkImageLayout.UNDEFINED, VkImageLayout.TRANSFER_DST_OPTIMAL,
-                none, transfer_write, top, xfer)
-            var region : VkImageBlit
-            region.srcSubresource.aspectMask.color = true
-            region.srcSubresource.layerCount = 1u
-            region.srcOffsets[1].x = rv.width
-            region.srcOffsets[1].y = rv.height
-            region.srcOffsets[1].z = 1
-            region.dstSubresource.aspectMask.color = true
-            region.dstSubresource.layerCount = 1u
-            region.dstOffsets[1].x = swap.width
-            region.dstOffsets[1].y = swap.height
-            region.dstOffsets[1].z = 1
-            vkCmdBlitImage(boost_value_to_vk(cmd), boost_value_to_vk(rv.image), VkImageLayout.GENERAL,
-                target, VkImageLayout.TRANSFER_DST_OPTIMAL, 1u, unsafe(addr(region)), VkFilter.LINEAR)
-            transition_image(cmd, dst, VkImageLayout.TRANSFER_DST_OPTIMAL, VkImageLayout.PRESENT_SRC_KHR,
-                transfer_write, none, xfer, bottom)
+            transition_image2(cmd, rv.image, VkImageLayout.GENERAL, VkImageLayout.GENERAL,
+                VkPipelineStageFlags2.ray_tracing_shader_khr, VkAccessFlags2.shader_storage_write,
+                VkPipelineStageFlags2.blit, VkAccessFlags2.transfer_read)
+            blit_to_swapchain(cmd, rv.image, VkImageLayout.GENERAL, rv.width, rv.height, swap, target)
         }
         if (!ok) {
             vkDeviceWaitIdle(boost_value_to_vk(device))

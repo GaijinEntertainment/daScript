@@ -33,7 +33,7 @@ The headline rails:
   (mip 4 → 3, 3 → 2, 2 → 1, 1 → 0), a nine-tap 1-2-1 / 2-4-2 / 1-2-1
   tent filter samples the smaller mip and the blend state adds it on
   top of the larger mip (``srcColorBlendFactor = ONE``,
-  ``dstColorBlendFactor = ONE``). The render pass uses
+  ``dstColorBlendFactor = ONE``). The pass opens with
   ``loadOp = LOAD`` so the previously-downsampled contents survive.
 - **ACES tonemap composite.** The final pass reads HDR scene + bloom
   mip 0, sums them with a configurable intensity, applies Krzysztof
@@ -80,11 +80,12 @@ The render (headless)
 ---------------------
 
 The host builds the HDR scene target, five bloom mip targets, the LDR
-final target; three render passes; one framebuffer for the scene, two
-per bloom mip (clear + load variants), one composite; five pipelines;
+final target; five pipelines, each naming the format it renders into;
 eleven descriptor sets. ``record_hdr_frame`` records the eleven
-render-pass instances in order: scene -> bright -> 4× downsample -> 4×
-upsample -> composite.
+rendering passes in order: scene -> bright -> 4× downsample -> 4×
+upsample -> composite, with one barrier per hand-off: a target goes from
+colour attachment to sampled texture when the next pass reads it, and back
+when the upsample draws onto it again.
 
 .. literalinclude:: ../../../../../modules/dasVulkan/tutorials/11_hdr/hdr_tut.das
    :language: das

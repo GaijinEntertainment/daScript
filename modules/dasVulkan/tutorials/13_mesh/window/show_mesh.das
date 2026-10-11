@@ -72,16 +72,14 @@ def main {   // nolint:STYLE038 - flat viewer lifecycle scaffold
     let queue = get_device_queue(device, gfx, 0u)
 
     var inscope swap <- create_swapchain(device, phys, surface, W, H)
-    var inscope render_pass <- create_render_pass_single_color(device, swap.format, VkImageLayout.PRESENT_SRC_KHR)
-    build_swapchain_framebuffers(device, swap, render_pass)
 
     // task / mesh / fragment SPIR-V emitted by dasSpirv from mesh_tut_shaders.das
     var inscope task <- create_shader_module(device, mesh_tut_task_spv)
     var inscope mesh <- create_shader_module(device, mesh_tut_mesh_spv)
     var inscope frag <- create_shader_module(device, mesh_tut_frag_spv)
     var inscope layout <- create_pipeline_layout(device)
-    // dynamic viewport/scissor so the one pipeline survives every resize
-    var inscope pipeline <- create_mesh_pipeline(device, render_pass, layout, task, mesh, frag, swap.width, swap.height, true)
+    // built for the swapchain's color format; dynamic viewport/scissor so the one pipeline survives every resize
+    var inscope pipeline <- create_mesh_pipeline(device, swap.format, VkFormat.UNDEFINED, layout, task, mesh, frag, swap.width, swap.height, true)
 
     var poolci : CommandPoolCreateInfo
     poolci.queueFamilyIndex = gfx
@@ -100,14 +98,14 @@ def main {   // nolint:STYLE038 - flat viewer lifecycle scaffold
             continue
         }
         if (fbw != swap.width || fbh != swap.height) {
-            recreate_swapchain(swap, device, phys, surface, render_pass, fbw, fbh)
+            recreate_swapchain(swap, device, phys, surface, fbw, fbh)
         }
-        let ok = draw_frame(device, queue, swap, render_pass, pool, sync, clear, true) $(cmd) {
+        let ok = draw_frame(device, queue, swap, pool, sync, clear, true) $(cmd) {
             cmd_bind_pipeline(cmd, pipeline)
             cmd_draw_mesh_tasks_e_x_t(cmd, 1u, 1u, 1u)   // one task workgroup -> cull -> mesh workgroups
         }
         if (!ok) {
-            recreate_swapchain(swap, device, phys, surface, render_pass, fbw, fbh)
+            recreate_swapchain(swap, device, phys, surface, fbw, fbh)
         }
         frames ++
     }

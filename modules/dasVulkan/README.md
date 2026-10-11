@@ -20,7 +20,7 @@ daslang -load_module <path-to-dasVulkan> examples/enumerate.das                 
 ### Layers
 
 - **`vulkan`** - the raw binding, generated from `vk.xml` over volk.
-- **`vulkan/vulkan_boost`** - the ergonomic layer: `create_instance` / `create_device` / `create_image` ... return RAII wrappers (`var inscope` destroys in reverse), VkFlags are daslang bitfields (`usage.color_attachment = true`), and builders (`build_offscreen_target`, `run_cmd_sync`, `record_render_pass`) collapse the boilerplate. The boost triangle is ~1/3 the lines of the raw one and renders byte-identically.
+- **`vulkan/vulkan_boost`** - the ergonomic layer: `create_instance` / `create_device` / `create_image` ... return RAII wrappers (`var inscope` destroys in reverse), VkFlags are daslang bitfields (`usage.color_attachment = true`), and builders (`build_offscreen_target`, `run_cmd_sync`, `record_rendering`) collapse the boilerplate. The boost triangle is ~1/3 the lines of the raw one and renders byte-identically.
 
 ## Vendored dependencies
 

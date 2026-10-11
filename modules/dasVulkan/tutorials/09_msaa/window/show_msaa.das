@@ -55,10 +55,7 @@ def main {   // nolint:STYLE038 - flat viewer lifecycle scaffold
     if (!queue_family_supports_present(phys, gfx, surface)) {
         panic("graphics queue family does not support presentation")
     }
-    // Swapchain extension + dynamicRendering Vulkan 1.3 feature (pNext chain)
-    var features13 = VkPhysicalDeviceVulkan13Features()
-    features13.dynamicRendering = 1u
-    var inscope device <- create_device(phys, gfx, ["VK_KHR_swapchain"], features13)
+    var inscope device <- create_device(phys, gfx, ["VK_KHR_swapchain"])
     volkLoadDevice(boost_value_to_vk(device))
     let queue = get_device_queue(device, gfx, 0u)
 
@@ -116,35 +113,7 @@ def main {   // nolint:STYLE038 - flat viewer lifecycle scaffold
 
         let ok = present_frame(device, queue, swap, pool, sync) $(cmd; target; _idx) {
             record_msaa_render(res, cmd, use_msaa)
-
-            let none : VkAccessFlags
-            var transfer_write : VkAccessFlags
-            transfer_write.transfer_write = true
-            var top : VkPipelineStageFlags
-            top.top_of_pipe = true
-            var xfer : VkPipelineStageFlags
-            xfer.transfer = true
-            var bottom : VkPipelineStageFlags
-            bottom.bottom_of_pipe = true
-            let dst = vk_value_to_boost(target)
-            transition_image(cmd, dst, VkImageLayout.UNDEFINED, VkImageLayout.TRANSFER_DST_OPTIMAL,
-                none, transfer_write, top, xfer)
-            let src_img = final_image(res, use_msaa)
-            var region : VkImageBlit
-            region.srcSubresource.aspectMask.color = true
-            region.srcSubresource.layerCount = 1u
-            region.srcOffsets[1].x = MSAA_W
-            region.srcOffsets[1].y = MSAA_H
-            region.srcOffsets[1].z = 1
-            region.dstSubresource.aspectMask.color = true
-            region.dstSubresource.layerCount = 1u
-            region.dstOffsets[1].x = swap.width
-            region.dstOffsets[1].y = swap.height
-            region.dstOffsets[1].z = 1
-            vkCmdBlitImage(boost_value_to_vk(cmd), boost_value_to_vk(src_img), VkImageLayout.TRANSFER_SRC_OPTIMAL,
-                target, VkImageLayout.TRANSFER_DST_OPTIMAL, 1u, unsafe(addr(region)), VkFilter.LINEAR)
-            transition_image(cmd, dst, VkImageLayout.TRANSFER_DST_OPTIMAL, VkImageLayout.PRESENT_SRC_KHR,
-                transfer_write, none, xfer, bottom)
+            blit_to_swapchain(cmd, final_image(res, use_msaa), VkImageLayout.TRANSFER_SRC_OPTIMAL, MSAA_W, MSAA_H, swap, target)
         }
         if (!ok) {
             vkDeviceWaitIdle(boost_value_to_vk(device))

@@ -55,7 +55,7 @@ The render (headless)
 ---------------------
 
 Per-frame work splits into the same two halves as tutorial 04. ``update_instancing_uniforms``
-rewrites the UBO with the new camera matrices + ``time``. ``record_instancing_render_pass``
+rewrites the UBO with the new camera matrices + ``time``. ``record_instancing_frame``
 binds the pipeline + descriptor set, **binds both vertex buffers in one
 ``vkCmdBindVertexBuffers`` call** (binding 0 is per-vertex, binding 1 is
 per-instance), binds the index buffer, and issues
@@ -99,9 +99,9 @@ See it live
 ``window/show_instancing.das`` opens a GLFW window with a Vulkan swapchain and
 presents the swarm every frame. It owns its own instance (with surface
 extensions) + device (with ``VK_KHR_swapchain``), then calls
-``build_instancing_resources`` to share the offscreen render pass, framebuffer
-and graphics pipeline with the headless oracle. Each frame it runs
-``update_instancing_uniforms`` + ``record_instancing_render_pass`` into the
+``build_instancing_resources`` to share the offscreen targets and graphics
+pipeline with the headless oracle. Each frame it runs
+``update_instancing_uniforms`` + ``record_instancing_frame`` into the
 present command buffer, then blits the colour attachment onto the swapchain
 image. It needs a display and the ``glfw`` module, so it lives in a
 ``window/`` subfolder that the tutorial's CI gate skips (CI is headless and

@@ -52,19 +52,13 @@ def public render_mesh() : array<uint8> {
     let fmt = VkFormat.R8G8B8A8_SRGB   // sRGB: gamma-encode the linear output on write (recording readback + window blit match)
 
     var inscope target <- build_offscreen_target(device, phys, MESH_W, MESH_H, fmt)
-    var inscope render_pass <- create_render_pass_single_color(device, fmt)
-    var inscope framebuffer <- create_framebuffer(device, FramebufferCreateInfo(
-        renderPass = weak_copy(render_pass),
-        pAttachments <- [weak_copy(target.view)],
-        width = uint(MESH_W),
-        height = uint(MESH_H),
-        layers = 1u))
 
     var inscope task <- create_shader_module(device, mesh_tut_task_spv)
     var inscope mesh <- create_shader_module(device, mesh_tut_mesh_spv)
     var inscope frag <- create_shader_module(device, mesh_tut_frag_spv)
     var inscope layout <- create_pipeline_layout(device)
-    var inscope pipeline <- create_mesh_pipeline(device, render_pass, layout, task, mesh, frag, MESH_W, MESH_H)
+    // color-only mesh pipeline for `fmt`; no depth attachment, no render pass
+    var inscope pipeline <- create_mesh_pipeline(device, fmt, VkFormat.UNDEFINED, layout, task, mesh, frag, MESH_W, MESH_H)
 
     let buf_size = uint64(MESH_W * MESH_H * 4)
     var inscope readback <- create_host_buffer(device, phys, buf_size)
@@ -73,10 +67,16 @@ def public render_mesh() : array<uint8> {
     var inscope pool <- create_command_pool(device, poolci)
 
     run_cmd_sync(device, pool, queue) $(cmd) {
-        record_render_pass(cmd, render_pass, framebuffer, full_area(MESH_W, MESH_H), clear_color(0.05f, 0.05f, 0.08f, 1.0f)) {
+        transition_image2(cmd, target.image, VkImageLayout.UNDEFINED, VkImageLayout.COLOR_ATTACHMENT_OPTIMAL,
+            PIPELINE_STAGE_2_NONE, ACCESS_2_NONE,
+            VkPipelineStageFlags2.color_attachment_output, VkAccessFlags2.color_attachment_write)
+        record_rendering(cmd, target.view, full_area(MESH_W, MESH_H), clear_color(0.05f, 0.05f, 0.08f, 1.0f)) {
             cmd_bind_pipeline(cmd, pipeline)
             cmd_draw_mesh_tasks_e_x_t(cmd, 1u, 1u, 1u)   // one task workgroup -> cull -> dispatch mesh workgroups
         }
+        transition_image2(cmd, target.image, VkImageLayout.COLOR_ATTACHMENT_OPTIMAL, VkImageLayout.TRANSFER_SRC_OPTIMAL,
+            VkPipelineStageFlags2.color_attachment_output, VkAccessFlags2.color_attachment_write,
+            VkPipelineStageFlags2.copy, VkAccessFlags2.transfer_read)
         copy_image_to_buffer(cmd, target.image, readback, MESH_W, MESH_H)
     }
     map_memory_to_array(device, readback.memory, buf_size) $(m) {

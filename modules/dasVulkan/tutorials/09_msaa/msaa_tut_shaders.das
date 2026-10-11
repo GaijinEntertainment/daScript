@@ -2,12 +2,10 @@ options gen2
 options _comment_hygiene = true
 options indenting = 4
 
-// Tutorial 09 -- MSAA + dynamic rendering on the synthwave cube. Pedagogically the cube is the same
-// scene as tutorial 04, but the render PIPELINE is different: this pipeline carries a
-// VkPipelineRenderingCreateInfo in pNext (so no VkRenderPass / VkFramebuffer object), and writes
-// into a 4x multi-sample color attachment that resolves into a 1x readback target. The shader code
-// itself is unchanged -- MSAA happens at the pipeline / attachment level, invisible to the fragment
-// program.
+// Tutorial 09 -- MSAA on the synthwave cube. Pedagogically the cube is the same scene as tutorial
+// 04, but the render PIPELINE is different: it is built with a 4x sample count and writes into a 4x
+// multi-sample color attachment that resolves into a 1x readback target. The shader code itself is
+// unchanged -- MSAA happens at the pipeline / attachment level, invisible to the fragment program.
 
 module msaa_tut_shaders public
 

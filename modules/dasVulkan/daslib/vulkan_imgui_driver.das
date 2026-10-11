@@ -126,9 +126,9 @@ def public finalize(var r : ImguiVkRenderer) {
 }
 
 //! ImGui's pipeline: per-vertex (pos, uv, col-as-rgba8), alpha blend, no depth, no cull, dynamic
-//! viewport+scissor (paired with vulkan_window's draw_frame). Built against `render_pass` so it can
-//! draw into the same pass as the app's own geometry.
-def private build_imgui_pipeline(device : Device; render_pass : RenderPass; layout : PipelineLayout;   // nolint:STYLE038 - flat one-call-per-item pipeline setup
+//! viewport+scissor (paired with vulkan_window's draw_frame). Targets `render_pass` when one is given,
+//! else the swapchain color format in `fmts`, so it draws beside the app's own geometry either way.
+def private build_imgui_pipeline(device : Device; render_pass : RenderPass; var fmts : RenderingFormats; layout : PipelineLayout;   // nolint:STYLE038 - flat one-call-per-item pipeline setup
                                  vert, frag : ShaderModule) : Pipeline {
     var stages : array<VkPipelineShaderStageCreateInfo>
     stages |> resize(2)
@@ -203,7 +203,7 @@ def private build_imgui_pipeline(device : Device; render_pass : RenderPass; layo
     var gp = VkGraphicsPipelineCreateInfo()
     gp.stageCount = 2u
     gp.layout = boost_value_to_vk(layout)
-    gp.renderPass = boost_value_to_vk(render_pass)
+    set_pipeline_target(gp, render_pass, fmts)
     var h : VkPipeline
     unsafe {
         dynstate.pDynamicStates = addr(dyn_states[0])
@@ -229,10 +229,10 @@ def private build_imgui_pipeline(device : Device; render_pass : RenderPass; layo
     return <- b
 }
 
-//! Build the renderer: sampler, descriptor layout (one combined image sampler), a pool sized for a
-//! handful of textures, the pipeline layout (push constant + sampler) reflected from the imgui
-//! shaders, and the pipeline itself. `render_pass` is the pass the UI will be recorded into.
-def public imgui_vk_create(device : Device; render_pass : RenderPass) : ImguiVkRenderer {
+//! The renderer behind both `imgui_vk_create` overloads: sampler, descriptor layout (one combined image
+//! sampler), a pool sized for a handful of textures, the pipeline layout (push constant + sampler)
+//! reflected from the imgui shaders, and the pipeline on `render_pass` or on `fmts`.
+def private build_imgui_renderer(device : Device; render_pass : RenderPass; var fmts : RenderingFormats) : ImguiVkRenderer {
     let sci = SamplerCreateInfo(
         magFilter = VkFilter.LINEAR,
         minFilter = VkFilter.LINEAR,
@@ -256,12 +256,29 @@ def public imgui_vk_create(device : Device; render_pass : RenderPass) : ImguiVkR
 
     var inscope vert_mod <- create_shader_module(device, imgui_vert_spv)
     var inscope frag_mod <- create_shader_module(device, imgui_frag_spv)
-    var inscope pipeline <- build_imgui_pipeline(device, render_pass, pipe_layout, vert_mod, frag_mod)
+    var inscope pipeline <- build_imgui_pipeline(device, render_pass, fmts, pipe_layout, vert_mod, frag_mod)
 
     return <- ImguiVkRenderer(
         sampler <- sampler, set_layouts <- set_layouts, desc_pool <- desc_pool,
         pipe_layout <- pipe_layout, pipeline <- pipeline, vert_mod <- vert_mod, frag_mod <- frag_mod,
         vbuf_cap = 0ul, ibuf_cap = 0ul)
+}
+
+def public imgui_vk_create(device : Device; render_pass : RenderPass) : ImguiVkRenderer {
+    //! Build the renderer: sampler, descriptor layout (one combined image sampler), a pool sized for a
+    //! handful of textures, the pipeline layout (push constant + sampler) reflected from the imgui
+    //! shaders, and the pipeline itself. `render_pass` is the pass the UI will be recorded into.
+    var no_fmts : RenderingFormats
+    return <- build_imgui_renderer(device, render_pass, no_fmts)
+}
+
+def public imgui_vk_create(device : Device; color_format : VkFormat) : ImguiVkRenderer {
+    //! `imgui_vk_create` for the dynamic-rendering frame loop: `color_format` is the swapchain's
+    //! (`sc.format`), the format of the view `record_rendering` draws the UI into - a color-only
+    //! rendering, as `record_swapchain_rendering` opens.
+    let no_rp : RenderPass
+    var fmts = rendering_formats(color_format)
+    return <- build_imgui_renderer(device, no_rp, fmts)
 }
 
 //! Allocate one descriptor set pointing at (sampler, view) and return its raw handle.

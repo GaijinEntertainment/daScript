@@ -146,13 +146,11 @@ def gen_instance_data(n : int) : array<float> {
 // ===== reusable per-frame context =====
 
 //! All instancing-render state depending only on (device, phys, queue, pool). Same shape as tutorial 04's
-//! CubeResources (offscreen targets + render pass + framebuffer + pipeline + readback), plus a second
-//! vertex buffer ``inst_buf`` for the per-instance stream. No texture/sampler -- the buffer is the point.
+//! CubeResources (offscreen targets + pipeline + readback), plus a second vertex buffer ``inst_buf``
+//! for the per-instance stream. No texture/sampler -- the buffer is the point.
 struct public InstancingResources {
     color       : OffscreenTarget
     depth       : OffscreenDepth
-    render_pass : RenderPass
-    framebuffer : Framebuffer
     vb          : HostBuffer        // per-vertex, binding 0
     ib          : HostBuffer        // index buffer
     inst_buf    : HostBuffer        // per-instance, binding 1
@@ -176,8 +174,6 @@ def public finalize(var r : InstancingResources) {
     delete r.inst_buf
     delete r.ib
     delete r.vb
-    delete r.framebuffer
-    delete r.render_pass
     delete r.depth
     delete r.color
 }
@@ -208,13 +204,6 @@ def public build_instancing_resources(device : Device; phys : VkPhysicalDevice; 
 
     var inscope color <- build_offscreen_target(device, phys, INSTANCE_W, INSTANCE_H, INSTANCE_COLOR_FMT)
     var inscope depth <- build_offscreen_depth(device, phys, INSTANCE_W, INSTANCE_H, INSTANCE_DEPTH_FMT)
-    var inscope render_pass <- create_render_pass_color_depth(device, INSTANCE_COLOR_FMT, INSTANCE_DEPTH_FMT)
-    var inscope framebuffer <- create_framebuffer(device, FramebufferCreateInfo(
-        renderPass = weak_copy(render_pass),
-        pAttachments <- [weak_copy(color.view), weak_copy(depth.view)],
-        width = uint(INSTANCE_W),
-        height = uint(INSTANCE_H),
-        layers = 1u))
 
     var vb_usage : VkBufferUsageFlags
     vb_usage.vertex_buffer = true
@@ -317,7 +306,7 @@ def public build_instancing_resources(device : Device; phys : VkPhysicalDevice; 
     attr_ph.offset = 24u
     vattrs |> push(attr_ph)
 
-    var inscope pipeline <- create_graphics_pipeline_v3d(device, render_pass, pipe_layout, vert, frag,
+    var inscope pipeline <- create_graphics_pipeline_v3d(device, INSTANCE_COLOR_FMT, INSTANCE_DEPTH_FMT, pipe_layout, vert, frag,
         INSTANCE_W, INSTANCE_H, vbindings, vattrs)
     delete vbindings
     delete vattrs
@@ -326,7 +315,7 @@ def public build_instancing_resources(device : Device; phys : VkPhysicalDevice; 
     var inscope readback <- create_host_buffer(device, phys, buf_size)
 
     return <- InstancingResources(
-        color <- color, depth <- depth, render_pass <- render_pass, framebuffer <- framebuffer,
+        color <- color, depth <- depth,
         vb <- vb, ib <- ib, inst_buf <- inst_buf, ubo <- ubo,
         set_layouts <- set_layouts, desc_pool <- desc_pool, desc_set = raw_set,
         pipe_layout <- pipe_layout, pipeline <- pipeline, readback <- readback,
@@ -371,12 +360,18 @@ def public update_instancing_uniforms(res : InstancingResources; device : Device
     instancing_vs_bind_uniform(device, res.ubo.memory)
 }
 
-//! Record the instanced draw into the given command buffer. The render pass ends with the color
-//! attachment in TRANSFER_SRC_OPTIMAL (boost default), so the windowed driver can blit straight
-//! onto the swap target.
-def public record_instancing_render_pass(res : InstancingResources; cmd : CommandBuffer) {
+//! Record the instanced draw into the given command buffer. The frame ends with the color attachment
+//! in TRANSFER_SRC_OPTIMAL, so the windowed driver can blit straight onto the swap target.
+def public record_instancing_frame(res : InstancingResources; cmd : CommandBuffer) {
+    transition_image2(cmd, res.color.image, VkImageLayout.UNDEFINED, VkImageLayout.COLOR_ATTACHMENT_OPTIMAL,
+        PIPELINE_STAGE_2_NONE, ACCESS_2_NONE,
+        VkPipelineStageFlags2.color_attachment_output, VkAccessFlags2.color_attachment_write)
+    transition_depth_image2(cmd, res.depth.image, VkImageLayout.UNDEFINED, VkImageLayout.DEPTH_ATTACHMENT_OPTIMAL,
+        PIPELINE_STAGE_2_NONE, ACCESS_2_NONE,
+        VkPipelineStageFlags2.early_fragment_tests | VkPipelineStageFlags2.late_fragment_tests,
+        VkAccessFlags2.depth_stencil_attachment_write)
     var clears <- [clear_color(0.02f, 0.0f, 0.04f, 1.0f), clear_depth(1.0f)]
-    record_render_pass(cmd, res.render_pass, res.framebuffer, full_area(INSTANCE_W, INSTANCE_H), clears) {
+    record_rendering(cmd, res.color.view, res.depth.view, full_area(INSTANCE_W, INSTANCE_H), clears) {
         cmd_bind_pipeline(cmd, res.pipeline)
         let sets <- [vk_value_to_boost(res.desc_set)]
         var no_dyn : array<uint>
@@ -390,6 +385,9 @@ def public record_instancing_render_pass(res : InstancingResources; cmd : Comman
         cmd_draw_indexed(cmd, uint(N_INDICES), uint(N_INSTANCES), 0u, 0, 0u)
     }
     delete clears
+    transition_image2(cmd, res.color.image, VkImageLayout.COLOR_ATTACHMENT_OPTIMAL, VkImageLayout.TRANSFER_SRC_OPTIMAL,
+        VkPipelineStageFlags2.color_attachment_output, VkAccessFlags2.color_attachment_write,
+        VkPipelineStageFlags2.copy | VkPipelineStageFlags2.blit, VkAccessFlags2.transfer_read)
 }
 
 //! Per-frame work: update UBO, record + submit the instanced draw, copy the colour attachment to
@@ -398,7 +396,7 @@ def public render_instancing_frame(var ctx : InstancingContext; time, camera_t :
     update_instancing_uniforms(ctx.res, ctx.device, time, camera_t)
     var pixels : array<uint8>
     run_cmd_sync(ctx.device, ctx.pool, ctx.queue) $(cmd) {
-        record_instancing_render_pass(ctx.res, cmd)
+        record_instancing_frame(ctx.res, cmd)
         copy_image_to_buffer(cmd, ctx.res.color.image, ctx.res.readback, INSTANCE_W, INSTANCE_H)
     }
     map_memory_to_array(ctx.device, ctx.res.readback.memory, ctx.res.buf_size) $(m) {

@@ -77,19 +77,14 @@ def private build_mandel_recorder() : MandelRecorder {
 def private render_mandel_frame(var rec : MandelRecorder; t : float) : array<uint8> {
     var pixels : array<uint8>
     run_cmd_sync(rec.device, rec.pool, rec.queue) $(cmd) {
-        let none          : VkAccessFlags
-        var shader_write  : VkAccessFlags; shader_write.shader_write  = true
-        var transfer_read : VkAccessFlags; transfer_read.transfer_read = true
-        var top           : VkPipelineStageFlags; top.top_of_pipe       = true
-        var comp          : VkPipelineStageFlags; comp.compute_shader   = true
-        var xfer          : VkPipelineStageFlags; xfer.transfer         = true
         // UNDEFINED -> GENERAL so the compute shader can write the storage image
-        transition_image(cmd, rec.mc.image, VkImageLayout.UNDEFINED, VkImageLayout.GENERAL,
-            none, shader_write, top, comp)
+        transition_image2(cmd, rec.mc.image, VkImageLayout.UNDEFINED, VkImageLayout.GENERAL,
+            PIPELINE_STAGE_2_NONE, ACCESS_2_NONE, VkPipelineStageFlags2.compute_shader, VkAccessFlags2.shader_storage_write)
         record_compute(cmd, rec.mc, t)
         // GENERAL -> TRANSFER_SRC_OPTIMAL so vkCmdCopyImageToBuffer can read it
-        transition_image(cmd, rec.mc.image, VkImageLayout.GENERAL, VkImageLayout.TRANSFER_SRC_OPTIMAL,
-            shader_write, transfer_read, comp, xfer)
+        transition_image2(cmd, rec.mc.image, VkImageLayout.GENERAL, VkImageLayout.TRANSFER_SRC_OPTIMAL,
+            VkPipelineStageFlags2.compute_shader, VkAccessFlags2.shader_storage_write,
+            VkPipelineStageFlags2.copy, VkAccessFlags2.transfer_read)
         copy_image_to_buffer(cmd, rec.mc.image, rec.readback, ZOOM_DIM, ZOOM_DIM)
     }
     // map + clone the bytes out (the mapped pointer is invalidated when the block ends)

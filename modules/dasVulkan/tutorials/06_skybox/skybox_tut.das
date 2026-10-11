@@ -221,14 +221,11 @@ def gen_skybox_pixels() : array<uint8> {
 
 // ===== reusable per-frame context =====
 
-//! Long-lived skybox state: offscreen color + depth, render pass + framebuffer, cube geometry
-//! buffers, UBO, cubemap image + view + sampler, descriptors, the depth-trick pipeline, and the
-//! readback buffer.
+//! Long-lived skybox state: offscreen color + depth, cube geometry buffers, UBO, cubemap image +
+//! view + sampler, descriptors, the depth-trick pipeline, and the readback buffer.
 struct public SkyboxResources {
     color       : OffscreenTarget
     depth       : OffscreenDepth
-    render_pass : RenderPass
-    framebuffer : Framebuffer
     vb          : HostBuffer
     ib          : HostBuffer
     sphere_vb   : HostBuffer
@@ -272,8 +269,6 @@ def public finalize(var r : SkyboxResources) {
     delete r.sphere_vb
     delete r.ib
     delete r.vb
-    delete r.framebuffer
-    delete r.render_pass
     delete r.depth
     delete r.color
 }
@@ -295,8 +290,8 @@ def public finalize(var ctx : SkyboxContext) {
 
 //! Foreground (sphere/floor) pipeline: vertex + fragment, pos+normal vertex input (stride 24), depth
 //! test + write LESS, NO culling (so the procedural sphere/floor winding is irrelevant). Shares the
-//! skybox's pipeline layout (same UBO + cubemap bindings).
-def private build_scene_pipeline(device : Device; rp : RenderPass; layout : PipelineLayout;   // nolint:STYLE038 - flat one-call-per-item Vulkan setup run
+//! skybox's pipeline layout (same UBO + cubemap bindings) and renders into the same color + depth formats.
+def private build_scene_pipeline(device : Device; layout : PipelineLayout;   // nolint:STYLE038 - flat one-call-per-item Vulkan setup run
                                  vert, frag : ShaderModule) : Pipeline {
     var stages : array<VkPipelineShaderStageCreateInfo>
     stages |> resize(2)
@@ -382,7 +377,8 @@ def private build_scene_pipeline(device : Device; rp : RenderPass; layout : Pipe
         blend.pAttachments = addr(blend_att)
         gp.pColorBlendState = addr(blend)
         gp.layout = boost_value_to_vk(layout)
-        gp.renderPass = boost_value_to_vk(rp)
+        var fmts = rendering_formats(SKY_COLOR_FMT, SKY_DEPTH_FMT)
+        attach_rendering_formats(gp, fmts)
         vk_check(vkCreateGraphicsPipelines(boost_value_to_vk(device), null, 1u, addr(gp), null, addr(h)), null)
     }
     delete stages
@@ -401,13 +397,6 @@ def public build_skybox_resources(device : Device; phys : VkPhysicalDevice; queu
 
     var inscope color <- build_offscreen_target(device, phys, SKY_W, SKY_H, SKY_COLOR_FMT)
     var inscope depth <- build_offscreen_depth(device, phys, SKY_W, SKY_H, SKY_DEPTH_FMT)
-    var inscope render_pass <- create_render_pass_color_depth(device, SKY_COLOR_FMT, SKY_DEPTH_FMT)
-    var inscope framebuffer <- create_framebuffer(device, FramebufferCreateInfo(
-        renderPass = weak_copy(render_pass),
-        pAttachments <- [weak_copy(color.view), weak_copy(depth.view)],
-        width = uint(SKY_W),
-        height = uint(SKY_H),
-        layers = 1u))
 
     var vb_usage : VkBufferUsageFlags
     vb_usage.vertex_buffer = true
@@ -563,7 +552,7 @@ def public build_skybox_resources(device : Device; phys : VkPhysicalDevice; queu
     // depth-trick pipeline: test LESS_OR_EQUAL, write disabled. The vertex shader's z=w snap puts every
     // skybox fragment at NDC z=1.0, so the test passes against a cleared 1.0 depth but never overwrites
     // it -- foreground geometry (or a re-ordered scene) keeps its own z values intact.
-    var inscope pipeline <- create_graphics_pipeline_v3d(device, render_pass, pipe_layout, vert, frag,
+    var inscope pipeline <- create_graphics_pipeline_v3d(device, SKY_COLOR_FMT, SKY_DEPTH_FMT, pipe_layout, vert, frag,
         SKY_W, SKY_H, vbindings, vattrs, /*depth_test_enable=*/true, /*depth_write_enable=*/false,
         VkCompareOp.LESS_OR_EQUAL)
     delete vbindings
@@ -573,8 +562,8 @@ def public build_skybox_resources(device : Device; phys : VkPhysicalDevice; queu
     var inscope scene_vert  <- create_shader_module(device, scene_vert_spv)
     var inscope sphere_frag <- create_shader_module(device, sphere_frag_spv)
     var inscope floor_frag  <- create_shader_module(device, floor_frag_spv)
-    var inscope sphere_pipeline <- build_scene_pipeline(device, render_pass, pipe_layout, scene_vert, sphere_frag)
-    var inscope floor_pipeline  <- build_scene_pipeline(device, render_pass, pipe_layout, scene_vert, floor_frag)
+    var inscope sphere_pipeline <- build_scene_pipeline(device, pipe_layout, scene_vert, sphere_frag)
+    var inscope floor_pipeline  <- build_scene_pipeline(device, pipe_layout, scene_vert, floor_frag)
 
     let buf_size = uint64(SKY_W * SKY_H * 4)
     var inscope readback <- create_host_buffer(device, phys, buf_size)
@@ -582,21 +571,12 @@ def public build_skybox_resources(device : Device; phys : VkPhysicalDevice; queu
     // one-shot cubemap upload: staging -> sky_image (all 6 layers in one copy), transitioned
     // UNDEFINED -> TRANSFER_DST -> SHADER_READ_ONLY across all layers.
     run_cmd_sync(device, pool, queue) $(cmd) {
-        var to_dst : VkAccessFlags
-        to_dst.transfer_write = true
-        let none : VkAccessFlags
-        var top : VkPipelineStageFlags
-        top.top_of_pipe = true
-        var xfer : VkPipelineStageFlags
-        xfer.transfer = true
-        var frag_stage : VkPipelineStageFlags
-        frag_stage.fragment_shader = true
-        var to_read : VkAccessFlags
-        to_read.shader_read = true
-        // transition_image only takes the layout pair; the cube transitions across all 6 layers
-        // because the boost helper uses the full subresource range.
-        transition_image(cmd, sky_image, VkImageLayout.UNDEFINED, VkImageLayout.TRANSFER_DST_OPTIMAL,
-            none, to_dst, top, xfer)
+        // all six cube faces move together: the barrier names the layer count
+        var color_aspect : VkImageAspectFlags
+        color_aspect.color = true
+        transition_image_aspect2(cmd, sky_image, VkImageLayout.UNDEFINED, VkImageLayout.TRANSFER_DST_OPTIMAL,
+            PIPELINE_STAGE_2_NONE, ACCESS_2_NONE, VkPipelineStageFlags2.copy, VkAccessFlags2.transfer_write,
+            color_aspect, 1u, uint(N_FACES))
         // One vkCmdCopyBufferToImage call with 6 regions, one per array layer. The staging buffer
         // has the faces laid out contiguously in the order (+X, -X, +Y, -Y, +Z, -Z).
         var regions : array<BufferImageCopy>
@@ -612,12 +592,14 @@ def public build_skybox_resources(device : Device; phys : VkPhysicalDevice; queu
             regions |> emplace(region)
         }
         cmd_copy_buffer_to_image(cmd, staging.buffer, sky_image, VkImageLayout.TRANSFER_DST_OPTIMAL, regions)
-        transition_image(cmd, sky_image, VkImageLayout.TRANSFER_DST_OPTIMAL, VkImageLayout.SHADER_READ_ONLY_OPTIMAL,
-            to_dst, to_read, xfer, frag_stage)
+        transition_image_aspect2(cmd, sky_image, VkImageLayout.TRANSFER_DST_OPTIMAL, VkImageLayout.SHADER_READ_ONLY_OPTIMAL,
+            VkPipelineStageFlags2.copy, VkAccessFlags2.transfer_write,
+            VkPipelineStageFlags2.fragment_shader, VkAccessFlags2.shader_sampled_read,
+            color_aspect, 1u, uint(N_FACES))
     }
 
     return <- SkyboxResources(
-        color <- color, depth <- depth, render_pass <- render_pass, framebuffer <- framebuffer,
+        color <- color, depth <- depth,
         vb <- vb, ib <- ib,
         sphere_vb <- sphere_vb, sphere_ib <- sphere_ib, floor_vb <- floor_vb, floor_ib <- floor_ib,
         sphere_index_count = sphere_index_count, floor_index_count = floor_index_count,
@@ -687,12 +669,18 @@ def public update_skybox_uniforms(res : SkyboxResources; device : Device; time, 
     skybox_vs_bind_uniform(device, res.ubo.memory)          // writes the whole cam block
 }
 
-//! Record the skybox draw into the given command buffer. The render pass ends with the colour
-//! attachment in TRANSFER_SRC_OPTIMAL (boost default), so the windowed driver can blit the result
-//! straight onto the swapchain image.
-def public record_skybox_render_pass(res : SkyboxResources; cmd : CommandBuffer) {
+//! Record the skybox draw into the given command buffer. The frame ends with the colour attachment in
+//! TRANSFER_SRC_OPTIMAL, so the windowed driver can blit the result straight onto the swapchain image.
+def public record_skybox_frame(res : SkyboxResources; cmd : CommandBuffer) {
+    transition_image2(cmd, res.color.image, VkImageLayout.UNDEFINED, VkImageLayout.COLOR_ATTACHMENT_OPTIMAL,
+        PIPELINE_STAGE_2_NONE, ACCESS_2_NONE,
+        VkPipelineStageFlags2.color_attachment_output, VkAccessFlags2.color_attachment_write)
+    transition_depth_image2(cmd, res.depth.image, VkImageLayout.UNDEFINED, VkImageLayout.DEPTH_ATTACHMENT_OPTIMAL,
+        PIPELINE_STAGE_2_NONE, ACCESS_2_NONE,
+        VkPipelineStageFlags2.early_fragment_tests | VkPipelineStageFlags2.late_fragment_tests,
+        VkAccessFlags2.depth_stencil_attachment_write)
     var clears <- [clear_color(0.0f, 0.0f, 0.0f, 1.0f), clear_depth(1.0f)]
-    record_render_pass(cmd, res.render_pass, res.framebuffer, full_area(SKY_W, SKY_H), clears) {
+    record_rendering(cmd, res.color.view, res.depth.view, full_area(SKY_W, SKY_H), clears) {
         let sets <- [vk_value_to_boost(res.desc_set)]
         var no_dyn : array<uint>
         cmd_bind_descriptor_sets(cmd, VkPipelineBindPoint.GRAPHICS, res.pipe_layout, 0u, sets, no_dyn)
@@ -720,6 +708,9 @@ def public record_skybox_render_pass(res : SkyboxResources; cmd : CommandBuffer)
         cmd_draw_indexed(cmd, uint(N_INDICES), 1u, 0u, 0, 0u)
     }
     delete clears
+    transition_image2(cmd, res.color.image, VkImageLayout.COLOR_ATTACHMENT_OPTIMAL, VkImageLayout.TRANSFER_SRC_OPTIMAL,
+        VkPipelineStageFlags2.color_attachment_output, VkAccessFlags2.color_attachment_write,
+        VkPipelineStageFlags2.copy | VkPipelineStageFlags2.blit, VkAccessFlags2.transfer_read)
 }
 
 //! Per-frame work: update UBO, record the skybox draw, copy the colour attachment to the readback
@@ -728,7 +719,7 @@ def public render_skybox_frame(var ctx : SkyboxContext; time, camera_t : float) 
     update_skybox_uniforms(ctx.res, ctx.device, time, camera_t)
     var pixels : array<uint8>
     run_cmd_sync(ctx.device, ctx.pool, ctx.queue) $(cmd) {
-        record_skybox_render_pass(ctx.res, cmd)
+        record_skybox_frame(ctx.res, cmd)
         copy_image_to_buffer(cmd, ctx.res.color.image, ctx.res.readback, SKY_W, SKY_H)
     }
     map_memory_to_array(ctx.device, ctx.res.readback.memory, ctx.res.buf_size) $(m) {
