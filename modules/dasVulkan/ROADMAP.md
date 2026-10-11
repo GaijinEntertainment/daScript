@@ -172,10 +172,7 @@ What remains:
   creators already chain: a chain holding both is invalid
   (`VUID-VkDeviceCreateInfo-pNext-06532`).
 - **Pre-existing validation-layer findings** the flip left in place, each a
-  shader or descriptor shape, not a barrier: 08, 10 and 14 declare the shadow
-  sampler as `SAMPLER` where the shader consumes a combined image sampler
-  (`VUID-VkWriteDescriptorSet-descriptorType-00319`, `-layout-07990`); 11's
-  readback intermediate gets an image view its usage does not allow
+  shader or descriptor shape, not a barrier: 11's readback intermediate gets an image view its usage does not allow
   (`VUID-VkImageViewCreateInfo-image-04441`); 12's cull shader writes a
   `NonWritable` storage member (`VUID-RuntimeSpirv-NonWritable-06341`); 10
   carries one synchronization hazard inside its render pass.
