@@ -521,10 +521,13 @@ def test_metal_paged_deltanet(t : T?) {
             with_dasllama_jobque_() {
                 for (nst in [1l, 2l]) {
                     let steps0 = metal_decode_stats().decodes + metal_batch_decode_stats().steps
+                    let segw0 = metal_prefill_segment_windows()
                     var flat <- served_tokens(tr, nst, 0l, PAGED_NEW)
                     let steps1 = metal_decode_stats().decodes + metal_batch_decode_stats().steps
                     var paged <- served_tokens(tr, nst, 64l, PAGED_NEW)
                     let steps2 = metal_decode_stats().decodes + metal_batch_decode_stats().steps
+                    //! two streams submitted together prefill as one window on the flat and the paged scheduler alike
+                    t |> equal(metal_prefill_segment_windows() - segw0, nst == 2l ? 2l : 0l, "{nst} stream(s): the prompts rode {nst == 2l ? "one window a scheduler" : "windows of their own"}")
                     var first <- served_tokens(tr, nst, 64l, 1l)   // the control: a reply of one token takes it off the prefill
                     let steps3 = metal_decode_stats().decodes + metal_batch_decode_stats().steps
                     to_log(LOG_INFO, "{nst} stream(s): Metal decode steps - flat {steps1 - steps0}, paged {steps2 - steps1}, a one-token reply {steps3 - steps2}\n")
@@ -546,6 +549,66 @@ def test_metal_paged_deltanet(t : T?) {
                     delete paged
                     delete first
                 }
+            }
+            set_metal_mode(prior_mode)
+            delete tr
+        } else {
+            t |> skip("dasMetal not built")
+        }
+    }
+}
+
+let SEG_DN_NEW = 24l   //! the greedy steps after a segmented window: enough for a divergent state to show as text
+
+//! Two sessions' tails as ONE window on the deltanet hybrid: each recurrent layer walks a segment's rows against that
+//! session's own state and conv history, so the steps after it read what the single-window session's read.
+[test]
+def test_metal_segments_deltanet(t : T?) {
+    t |> run("two sessions' chunks as one window on a deltanet hybrid emit what single windows emit - each segment's state its own (Qwen3.5-0.8B Q8)") <| @(t : T?) {
+        if (!family_on(t, "qwen35")) return
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            let path = path_join(models_dir(), "Qwen3.5-0.8B-Q8_0.gguf")
+            return if (!jit_model_available(t, path))
+            let prior_mode = get_metal_mode()
+            set_metal_mode(MetalMode.when_available)
+            var tr <- blob_twin(t, path, 512l)
+            with_dasllama_jobque_() {
+                let pa <- encode(tr, "The quick brown fox jumps over the lazy dog while the farmer counts his sheep one by one, and then the", true, false)
+                let pb <- encode(tr, "In the beginning there was a small village by the river, where every morning", true, false)
+                let ca = long_length(pa) * 2l / 3l
+                let cb = long_length(pb) / 2l
+                var a1 <- [for (i in range64(ca)); pa[i]]
+                var a2 <- [for (i in range64(ca, long_length(pa))); pa[i]]
+                var b1 <- [for (i in range64(cb)); pb[i]]
+                var b2 <- [for (i in range64(cb, long_length(pb))); pb[i]]
+                var ra <- two_window_greedy(tr, a1, a2, SEG_DN_NEW)
+                var rb <- two_window_greedy(tr, b1, b2, SEG_DN_NEW)
+                var sa = make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
+                var sb = make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
+                eval_(tr, sa, a1)
+                eval_(tr, sb, b1)
+                segments_window(t, tr, sa, sb, a2, b2, "the deltanet tails")
+                let dec0 = metal_decode_stats().decodes
+                var ga2 <- greedy_from(tr, sa, long_length(pa), SEG_DN_NEW)
+                var gb2 <- greedy_from(tr, sb, long_length(pb), SEG_DN_NEW)
+                t |> equal(metal_decode_stats().decodes - dec0, 2l * SEG_DN_NEW, "the greedy steps were the device's")
+                to_log(LOG_INFO, "segments first, single windows: {eyeball_text(tr, ra.ids)}\n")
+                to_log(LOG_INFO, "segments first, one window:     {eyeball_text(tr, ga2)}\n")
+                to_log(LOG_INFO, "segments second, single windows: {eyeball_text(tr, rb.ids)}\n")
+                to_log(LOG_INFO, "segments second, one window:     {eyeball_text(tr, gb2)}\n")
+                t |> success(ids_equal(ra.ids, ga2), "the first session's {SEG_DN_NEW} greedy steps after the segmented window are its single windows'")
+                t |> success(ids_equal(rb.ids, gb2), "the second session's {SEG_DN_NEW} greedy steps after the segmented window are its single windows'")
+                t |> success(!ids_equal(ra.ids, rb.ids), "the two sessions' streams differ, so a crossed state would show")
+                delete ra
+                delete rb
+                delete sa
+                delete sb
+                delete ga2
+                delete gb2
+                delete a1
+                delete a2
+                delete b1
+                delete b2
             }
             set_metal_mode(prior_mode)
             delete tr

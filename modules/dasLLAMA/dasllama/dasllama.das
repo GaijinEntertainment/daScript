@@ -180,6 +180,13 @@ def eval(model : Model; var session : Session; tokens : array<int64>) {
     eval_(model, session, tokens)
 }
 
+def eval_segments(model : Model; var sessions : array<Session?>; toks : array<array<int64>>) {
+    //! Several sessions' prompt chunks as ONE prefill: segment i runs ``toks[i]`` at ``sessions[i]``'s position and
+    //! advances it, each segment's logits landing in its own session. Where the serving GPU prefills, the chunks share
+    //! one window; elsewhere each runs as ``eval`` would. Distinct sessions, no empty chunk; no segments is a no-op.
+    eval_segments_(model, sessions, toks)
+}
+
 def eval_embd(model : Model; var session : Session; embd : array<float>; npos : int64; non_causal : bool = false) {
     //! ``eval``'s embedding-input twin: prefill ``npos`` pre-built embedding rows (``npos × dim``,
     //! token-major) at the session's current position and advance it — the multimodal splice entry.

@@ -3,8 +3,8 @@
 Companion to `ARCHITECTURE_GPU_PREFILL.md`; a section is cited by its anchor. This document
 carries the third form of the prefill attention - the pair of device-direct tensor GEMMs around a
 row softmax written in place - the mirror-fed window that pair reads its keys from and the
-adoption of a released session's mirror, the recurrent scan over half rows, and how a kernel's
-hot loads are addressed. The score slab the attention pair shares with the other two forms, and their
+adoption of a released session's mirror, the segmented window that holds several sessions' chunks,
+the recurrent scan over half rows, and how a kernel's hot loads are addressed. The score slab the attention pair shares with the other two forms, and their
 kernels, stay in `ARCHITECTURE_GPU_PREFILL.md#prefill-attn-slab`.
 
 ### A hot load is a pointer and a constant offset {#kernel-load-addressing}
@@ -120,3 +120,57 @@ own block table, the watermark at their end (`mirror_adopt`). A stamp is process
 each time a group is allocated, so a group freed and taken again matches nothing. The pages a
 prefix-cache hit attaches are a finished stream's, so the rows a warm turn skips on the host it
 skips on the device too; `DASLLAMA_METAL_MIRROR_ADOPT=0` uploads them.
+
+### The segmented window {#prefill-segments}
+
+A window holds several sessions' chunks at once: its rows are the segments' back to back, a
+segment one session's `npos` rows from its own position (`PrefillSeg`; `eval_segments` on the
+facade, `forward_prefill_segments` in the engine, the Metal driver's `metal_prefill_window` over
+`PfSeg` records). The engine splits a prefill into a head, a body and a warm. The head
+(`forward_prefill_head`) does everything the layer stack reads of one session's chunk: the KV
+room, the scratch, the token embeddings into `x_b`, the arch's residual shape and side inputs, and
+the MTP seam row. So `forward_prefill_segments` runs every segment's head first, then offers the
+active override the window; a declined window runs each segment's body (`forward_prefill_body`)
+as `forward_prefill` does, and every segment's warm follows. A one-token chunk never rides the
+window: `eval_segments` runs it as `eval` does - the decode step - since a segment costs the window
+a layer's worth of dispatches whatever its row count, and the decode step is what a one-token
+`eval` dispatches on every backend.
+
+Inside the window the row-independent stages - the norms, the Q/K/V, output and FFN GEMMs, the
+routed experts, the rope over its per-row tables, the biases - run once over the window, so two
+tails cost about one window where two windows cost two; on prompts of thousands of rows the
+window is compute-bound and the two cost the same either way. What a session owns runs a segment
+at a time inside the layer:
+
+- **Attention.** Each segment's dispatches bind its query rows at their byte offset of the Q
+  panel or its half twin, its own keys - the session's cached rows and its chunk - and its rows
+  of the output (`qboff`, `qhoff`, `xboff`); each segment carries an `AttnArgs` with its position
+  and key extent. A row never sees another session's keys, so the mask is block-diagonal by construction,
+  with no kernel change. The score slab and the stats are one scratch each segment uses in turn,
+  sized for the largest; a segment's tiles read up to 31 query rows past its own, so the Q, output
+  and twin panels carry 32 rows of slack past the window and the segments run in order, each
+  overwriting the output rows the one before it padded into.
+- **K/V.** The window's K/V panel takes every chunk's rows at the window rows. The mirror-fed form
+  converts each segment's rows into that session's own mirror slab at the chunk's position. The
+  panel form over several segments keeps a gathered panel a segment, filled with its cached rows
+  from the host, and copies the chunk's roped rows into it behind the rope (`enc_copy_row`), so
+  one segment's gathered panel is the window's panel, as a window of one session has it.
+  The host store reads each segment's slab or panel into its own cache.
+- **Mirrors.** Every segment's slice is reserved before any is prepared and the uids are pinned
+  meanwhile (`mirror_reserve`, `g_pin`, the batched decode's pattern), so one session's prepare
+  never evicts another's rows; a reservation or a prepare that fails sends the whole window to the
+  panels. The recurrent mirrors are prepared a segment at a time under `dn_mirror_room`.
+- **The recurrent scan.** The conv, its history and the scan dispatch a segment at a time with
+  `DnArgs.row` at the segment's first row and that session's state and history slices: the conv
+  reads no row before the segment's first, the scan its own state. The row-wise passes between
+  them - the normalization, the gates' preparation, the gate - run once over the window.
+- **Outputs.** Each segment's last row runs the final norm and the classifier into the one-row
+  scratches, copied into a per-segment plane, and lands in its session's logits, its hidden rows
+  and MTP carry; the watermarks and recurrent advances move a session at a time.
+
+The window serves segments of one codec and form alone: a media span, an mrope or deepstack
+quantum, a hyper-connection model (its n-gram ring and wide residual stand for one session), and
+segments that differ in codec, in where the K/V lives (`device_kv`), in a pending device PLE
+pre-step, in `keep_hidden` or in pool decline it whole (`pf_segments_servable`), and the engine
+then prefills the segments one at a time, as `eval` would. The witness is
+`metal_prefill_segment_windows`; the stage log carries `segs=`.

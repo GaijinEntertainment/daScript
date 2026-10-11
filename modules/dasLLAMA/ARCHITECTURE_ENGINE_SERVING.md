@@ -11,20 +11,29 @@ anchor.
   finished turn's close tokens eval, its snapshot and its donation run only once the caller has
   drained the finished event, so they never sit between a reply's last token and its finish on the
   wire; the reap runs ahead of admission, so the slot a finished stream frees goes to a queued
-  request on the same tick), admits queued requests while no admitted stream is still prefilling (a request admitted
-  beside a prefilling stream would wait for that stream's chunks anyway - one chunk a tick, FCFS -
-  and admitted after them it attaches the checkpoints that prefill leaves, the opening two requests
-  of one minute share, instead of prefilling them again; a queued request holds no session - its KV
-  memory exists from admission on, and in paged mode admission attaches the longest prefix-cache hit,
-  whose positions never prefill), runs one `eval_batch` decode step over every
+  request on the same tick), admits queued requests while no admitted stream is prefilling with a
+  SHARED checkpoint stop still ahead of it - the opening's head, the system opening, a stable
+  opening that is no tail (a request admitted then would prefill the opening that stop is
+  about to leave for it; admitted after the stop it attaches the checkpoint, the opening two
+  requests of one minute share, instead of prefilling it again - and a prefilling stream past its
+  shared stops, with only its own conversation's stops ahead, or with none, holds nothing back,
+  since the newcomer's chunks ride the same windows; a
+  queued request holds no session - its KV memory exists from admission on, and in paged mode
+  admission attaches the longest prefix-cache hit, whose positions never prefill), runs one `eval_batch` decode step over every
   decoding stream (a self-speculative scheduler instead ticks every stream's round through
   `mtp_spec_eval_batch`, one joint verify where a driver seats one, and counts the tick as a
   batched step only when every stream's rows rode it), then - unless a stream is still on its prompt
   and the decode phase emitted an event, a token or a finish, which ends the tick there (the caller
   drains the event to the wire, and the chunk the tick owes runs first on the next tick, which
-  decodes nothing: a token a stream produced never waits out another stream's prefill window; the
-  stream the chunk goes to is picked once, `next_prefilling`) - at most one prefill chunk FCFS - `chunk_tokens` while
-  a stream decodes, since the chunk is the stall every decoding stream waits out, and at least `idle_chunk_tokens`
+  decodes nothing: a token a stream produced never waits out another stream's prefill window) - ONE
+  prefill call over every prefilling stream's next text chunk (`prefill_tick`: the segments of one
+  window through `eval_segments`, FCFS inside the quantum - the first stream's chunk whole, the next
+  streams' rows while the quantum leaves room - so two prompts' tails cost about one window where
+  the GPU serves segments (`ARCHITECTURE_GPU_PREFILL_WINDOW.md#prefill-segments`) and run one after
+  the other elsewhere; a stream with a media span ahead takes no segment, and when the first
+  prefilling stream is one, or the scheduler is device-home, the tick is that stream's own call,
+  `prefill_one_chunk`) - the quantum `chunk_tokens` while
+  a stream decodes, since the call is the stall every decoding stream waits out, and at least `idle_chunk_tokens`
   while none does, since a prefill window's cost is mostly fixed and nothing waits on it; `chunk_defaults` names
   both sizes per serving backend (the chunk 512 where a GPU prefills and 64 on the CPU, whose chunk costs its token count, so the stall follows it down; idle 512,
   2048 on Metal, where four windows in one call run within a few percent of the whole prompt's rate); paged serving donates finished streams'
@@ -58,7 +67,9 @@ anchor.
   The step clears its gather arrays (`batch_rows`, `batch_toks`, `batch_idx`) at the end of its
   decode step, before the tick's prefill chunk and before the next tick's reap: `batch_rows` holds
   borrowed pointers into the sessions the reap deletes, and a validating heap collect between
-  steps walks every pointer the array still holds.
+  steps walks every pointer the array still holds. `prefill_tick` clears `seg_rows` before it
+  returns for the same reason: it holds borrowed pointers into the streams' sessions, and
+  admission and the reap move the streams.
 
 ### The prefix cache's partial page {#prefix-tail-page}
 

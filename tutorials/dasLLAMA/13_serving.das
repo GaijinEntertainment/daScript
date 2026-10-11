@@ -10,7 +10,8 @@ require strings
 // Tutorial dasLLAMA-13: Serving Many Conversations
 //
 // This tutorial covers:
-//   - The raw mechanism: paged KV sessions + one hand-rolled eval_batch step
+//   - The raw mechanism: paged KV sessions, one eval_segments prefill over every
+//     stream's prompt, one hand-rolled eval_batch step
 //   - The continuous-batching scheduler: create_scheduler / submit / scheduler_step
 //   - Batched vs sequential wall-clock for the same four conversations
 //   - The prefix cache: a repeated system prompt skips its own prefill
@@ -51,12 +52,15 @@ def model_path() : string {
 // Section 1 — The raw mechanism: one batched step by hand
 // ──────────────────────────────────────────────────────────────────────────
 //
-// Serving B conversations means B sessions over ONE model. Two primitives make
+// Serving B conversations means B sessions over ONE model. Three primitives make
 // that cheap. A paged KV pool (tutorial 04 sized one session's cache; here
-// sessions allocate pages on demand instead of full slabs). And eval_batch:
-// one decode step for ALL sessions in one pass of the weights — B matrix-vector
-// products fuse into one matrix-matrix product, which is exactly where the
-// throughput comes from. This section is what a scheduler's inner step IS.
+// sessions allocate pages on demand instead of full slabs). eval_segments: every
+// stream's prompt chunk as ONE prefill — where the serving GPU prefills, the
+// chunks share one window, so two tails cost about one; elsewhere each runs as
+// eval would. And eval_batch: one decode step for ALL sessions in one pass of
+// the weights — B matrix-vector products fuse into one matrix-matrix product,
+// which is exactly where the throughput comes from. This section is what a
+// scheduler's tick IS.
 
 def section_raw(m : Model) {
     var pool <- create_kv_pool(m, 16l)
@@ -67,10 +71,13 @@ def section_raw(m : Model) {
     var s1 = create_session(m, pool)
     var s2 = create_session(m, pool)
     var rows <- [unsafe(addr(s0)), unsafe(addr(s1)), unsafe(addr(s2))]
+    var prompts : array<array<int64>>
+    prompts |> reserve(3)
     for (i in range(3)) {
-        var inscope prompt <- encode(m, QUESTIONS[i])
-        eval(m, *rows[i], prompt)   // prefill each stream at its own position
+        prompts |> emplace(encode(m, QUESTIONS[i]))
     }
+    eval_segments(m, rows, prompts)   // ONE prefill over all three prompts, each at its own stream's position
+    print("one eval_segments call prefilled 3 streams: n_past {s0.n_past}, {s1.n_past}, {s2.n_past}\n")
     var toks : array<int64>
     toks |> resize(3)
     for (i in range(3)) {
@@ -114,8 +121,9 @@ def render_request(m : Model; id : int64; question : string) : PendingReq {
 //
 // dasllama_scheduler is the production shape of section 1: scheduler_step
 // admits queued requests, runs one batched decode step over every live stream,
-// then at most one bounded prefill chunk — a long prompt stalls the others by
-// a chunk, not by its whole length. Results come back as SchedEvents. The
+// then one bounded prefill call over every prefilling stream's next chunk (the
+// eval_segments of section 1) — a long prompt stalls the others by a chunk,
+// not by its whole length. Results come back as SchedEvents. The
 // digit stream printed below is the stream id of each generated piece — the
 // interleaving IS continuous batching, visible.
 //

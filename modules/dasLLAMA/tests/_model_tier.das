@@ -57,9 +57,7 @@ def models_dir() : string => root_or(g_env_harness.models_dir, "/Users/borisbatk
 def llama2c_dir() : string => root_or(g_env_test.llama2c_dir, "/Users/borisbatkin/Work/llama2.c")
 
 // True when the large tier is enabled for this run (the pre-PR full sweep).
-def parity_full_mode() : bool {
-    return g_env_test.parity_full
-}
+def parity_full_mode() : bool => g_env_test.parity_full
 
 // Arm filter for the metal suites: DASLLAMA_TEST_ARMS = comma-separated substrings; when set,
 // only arm blocks whose name matches a token run. The skip is LOUD (t |> skip) so a filtered
@@ -123,6 +121,24 @@ def greedy_gen(tr : Model; prompt : array<int64>; n_gen : int) : array<int64> {
         delete s
     }
     return <- out
+}
+
+//! A fresh f16 session's two prefill windows - `w1`, then `w2` - and `n` greedy steps after them: the last window's
+//! logits and the steps' tokens, the reference a segmented-window cell holds a session to.
+struct TwoWindowRun {
+    logits : array<float>
+    ids : array<int64>
+}
+
+def two_window_greedy(tr : Model; w1, w2 : array<int64>; n : int64) : TwoWindowRun {
+    var r : TwoWindowRun
+    var s = make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
+    eval_(tr, s, w1)
+    eval_(tr, s, w2)
+    r.logits := s.logits
+    r.ids <- greedy_from(tr, s, long_length(w1) + long_length(w2), n)
+    delete s
+    return <- r
 }
 
 //! `n` greedy steps through `s` from position `pos`, each pick the argmax of the logits the step before left
@@ -330,6 +346,4 @@ def model_available(t : T?; path : string) : bool {
 }
 
 //! true under the JIT with the model at `path` stocked; else the cell has registered the loud skip and its caller returns
-def jit_model_available(t : T?; path : string) : bool {
-    return jit_only(t) && model_available(t, path)
-}
+def jit_model_available(t : T?; path : string) : bool => jit_only(t) && model_available(t, path)

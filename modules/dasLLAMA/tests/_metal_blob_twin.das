@@ -6,6 +6,7 @@ require dasllama/dasllama   // load_model_ - the engine load (a tokenizer rides 
 require dasllama/dasllama_layout   // convert_model_to_metal_blob - the blob-flavor transform
 require ?das_metal dasllama/dasllama_metal_common   // metal_kernel_coverage_of - the dispatch census
 require ?das_metal dasllama/dasllama_metal_decode   // the fused attention's knob
+require ?das_metal dasllama/dasllama_metal_prefill   // metal_prefill_segment_windows, metal_prefill_stats - the segmented window's witnesses
 require math
 
 //! one Metal kernel's dispatch count since the census reset - 0 for a compiled kernel that never ran, a panic for a name no
@@ -38,4 +39,23 @@ def blob_twin(t : T?; path : string; seq_cap : int64) : Model {
     t |> success(convert_model_to_metal_blob(tg), "metal-blob transform")
     tg.config.seq_len = min(tg.config.seq_len, seq_cap)
     return <- tg
+}
+
+//! Two sessions' chunks `ta` and `tb` as ONE prefill window: the segmented window's witness rises by one and the
+//! prefill count by one, both asserted under `tag`.
+def segments_window(t : T?; tr : Model; var sa, sb : Session; ta, tb : array<int64>; tag : string) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        var sess <- [unsafe(addr(sa)), unsafe(addr(sb))]
+        var toks : array<array<int64>>
+        toks |> resize(2)
+        toks[0] := ta
+        toks[1] := tb
+        let sw0 = metal_prefill_segment_windows()
+        let pf0 = metal_prefill_stats().prefills
+        eval_segments(tr, sess, toks)
+        t |> equal(metal_prefill_segment_windows() - sw0, 1l, "{tag}: both chunks rode one window")
+        t |> equal(metal_prefill_stats().prefills - pf0, 1l, "{tag}: the window was one prefill the device served")
+        sess |> clear()   //! borrowed pointers: the caller owns the sessions
+        delete toks
+    }
 }

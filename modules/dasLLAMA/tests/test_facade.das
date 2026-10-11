@@ -119,6 +119,32 @@ def test_facade_model(t : T?) {
     }
 }
 
+[test]
+def test_facade_eval_segments_empty(t : T?) {
+    t |> run("no segments is a no-op on a bare model shell: nothing is dispatched, nothing read") @(t : T?) {
+        var m = Model()
+        var sessions : array<Session?>
+        var toks : array<array<int64>>
+        let why = panic_text() $ {
+            eval_segments(m, sessions, toks)
+        }
+        t |> equal(why, "", "an empty segment list returns before any backend is asked")
+        var one : array<array<int64>>
+        one |> resize(1)
+        let why1 = panic_text() $ {
+            eval_segments(m, sessions, one)
+        }
+        t |> success(find(why1, "0 sessions and 1 chunks") >= 0, "one chunk and no session is refused by name ({why1})")
+        var nulls : array<Session?>
+        nulls |> push(null)
+        one[0] |> push(1l)
+        let why2 = panic_text() $ {
+            eval_segments(m, nulls, one)
+        }
+        t |> success(find(why2, "segment 0 names no session") >= 0, "a null session is refused by name before any read ({why2})")
+    }
+}
+
 def private room_of_a_megabyte(row_bytes : int64) : int64 => 1000000l / row_bytes
 
 //! The rows a device holds a session's K/V for: the installed room seam over the model's K/V bytes a row, both planes of every

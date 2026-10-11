@@ -177,7 +177,16 @@ under the same ledgered exception as the parity file's: the Metal MTP rail is wh
 flavor serves.
 
 Prefill parity: `base mm-tail s16
-kq cont attn-dev mirror span span-fused span-mrope span-ds dim qkv moe-gemv kq-tail` (kq-tail = the dense
+kq cont attn-dev mirror segs span span-fused span-mrope span-ds dim qkv moe-gemv kq-tail` (segs = the segmented
+window: two sessions' chunks as ONE window against the same chunks as two windows on one blob twin - Llama-3.2-1B at
+Q8_0, Q4_K_M and IQ4_XS, the three formats the window's GEMM ladder serves apart - on the mirror-fed form and the
+panel form: the continuations' last-row logits within the mirror arm's bar, eight greedy steps off each session token
+for token and every one of them a device decode (`metal_decode_stats().decodes`), then both openings as one window
+from position zero the same way; every segmented window counted by `metal_prefill_segment_windows` and as one device
+prefill by `metal_prefill_stats().prefills` (`segments_window` in `_metal_blob_twin.das`, the two-window reference
+`two_window_greedy` in `_model_tier.das`); the deltanet form's cell is `test_metal_segments_deltanet` in
+`test_metal_batched_row.das`, two Qwen3.5-0.8B sessions' tails as one window and 24 greedy steps each token for
+token their single windows' on the same witnesses; kq-tail = the dense
 K-quant sites' row-batched GEMV peel on a window of eight rows or fewer (`test_metal_prefill_kq_tail`, Llama-3.2-1B
 Q4_K_M and IQ4_XS, Qwen3-4B Q4_K_M, the same two-window shape as moe-gemv at 2, 5 and 8 rows, the peel's site
 counter the engage witness and `set_metal_prefill_mm_tail(false)` the off-lever); moe-gemv = the short
