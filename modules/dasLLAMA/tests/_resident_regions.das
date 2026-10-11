@@ -93,9 +93,9 @@ def private hold_within(t : T?; tr : Model; got, want, control : array<float>; w
 
 //! `file` loaded at `regions` regions. A card whose room the plan does not fit registers a skip naming it, any other decline
 //! is a red; either way the driver is left unarmed, which the caller reads off `moe_gpu_resident_active()` before it runs rows.
-def private load_regions(t : T?; file : string; regions : int64) : Model {
+def private load_regions(t : T?; file : string; regions : int64; host_ctx : int64 = REGIONS_RIG_CTX) : Model {
     var tr <- load_resident(path_join(models_dir(), file), regions)   //! the rig measures the resident driver: its route is pinned on for the load whatever the environment says
-    tr.config.seq_len = min(tr.config.seq_len, REGIONS_RIG_CTX)
+    tr.config.seq_len = min(tr.config.seq_len, host_ctx)
     resident_admitted(t, "the whole-model driver armed at {regions} regions (the load log names any decline)", " at {regions} regions")
     return <- tr
 }
@@ -119,6 +119,7 @@ def private regions_ready(t : T?; file : string) : bool {
 struct private RegionsLoad {
     regions : int64 = 2l
     ctx : int64 = REGIONS_RIG_CTX
+    host_ctx : int64 = REGIONS_RIG_CTX   //! every host-cached session's K/V cache: the rig's cap, or the mirror's context for a cell whose prompts run past it
     split_forms : bool
 }
 
@@ -133,7 +134,7 @@ def private with_regions_rig(t : T?; file : string; load : RegionsLoad; body : b
     let levers = resident_levers()
     split_forms_pin(load.split_forms)
     set_gpu_ctx_max(load.ctx)
-    var tr <- load_regions(t, file, load.regions)
+    var tr <- load_regions(t, file, load.regions, load.host_ctx)
     restore_resident_levers(levers)
     if (moe_gpu_resident_active()) {
         with_dasllama_jobque_() {
@@ -388,6 +389,191 @@ def cell_regions_batched_steps(t : T?; file : string; bar : LogitsBar = LogitsBa
     }
 }
 
+//! a long-context file's shape: the regions and the context the carrier loads at (every host-cached session's cache sized to
+//! that context), the prompt the CPU chain answers and its bar, the continuation's length and cut (a window multiple), and
+//! the bar the batched rows hold against each session alone; the streams cell runs `regions` device-home streams at
+//! ctx x (28 + 18 i) / 100 positions
+struct LongCtx {
+    regions : int64 = 2l
+    ctx : int64
+    cpu_n : int64 = 12288l
+    cpu_bar_rel : float = 0.10
+    split_n : int64
+    split_cut : int64
+    bar : LogitsBar = LogitsBar.bit_exact
+    streams_bar : LogitsBar = LogitsBar.bit_exact   //! the streams cell's: past the wide position the one-row command's wide twin and the N-row command's split pieces sum the keys in another order, so a carrier bit for bit at short prompts holds the split bar there
+}
+
+def private long_load(lc : LongCtx) : RegionsLoad => RegionsLoad(regions = lc.regions, ctx = lc.ctx, host_ctx = lc.ctx)
+
+def private stream_positions(lc : LongCtx) : array<int64> => <- [for (i in range64(lc.regions)); lc.ctx * (28l + 18l * i) / 100l]
+
+//! the mirror in slabs: `regions` regions at `ctx` positions each ask more of the layers' rows than one binding holds, so the
+//! plan seats the layers in two or more slab pairs; the interleaved single steps and the batched steps over two sessions
+//! then read what each session reads alone - every layer's sets, sync and readback bound the slab its rows sit in
+[cold_path]
+def cell_regions_slabbed_mirror(t : T?; file : string; lc : LongCtx) {
+    t |> run("a mirror of {lc.regions} regions x {lc.ctx} positions binds in slabs, and the steps over two sessions read what each reads alone") @(t : T?) {
+        with_regions_rig(t, file, long_load(lc)) $(tr) {
+            let slabs = gpu_resident_mirror_slabs()
+            t |> success(slabs > 1l, "the mirror binds more than one slab pair at {lc.regions} regions x {lc.ctx} positions ({slabs} slabs)")
+            t |> equal(gpu_device_sessions(), lc.regions, "the armed driver serves a device-home session per region asked")
+            t |> equal(gpu_device_session_ctx(), lc.ctx, "a region holds the whole context asked - nothing shortened to one binding's range")
+            var pa <- prompt_a()
+            var pb <- prompt_b()
+            let steps0 = rdec_nrow_steps()
+            interleaved_single_steps_body(t, tr, pa, pb)
+            t |> equal(rdec_nrow_steps(), steps0, "the one-row steps moved no N-row count: the batched cell's counter control")
+            batched_steps_body(t, tr, pa, pb, lc.bar)
+            delete pa
+            delete pb
+        }
+    }
+}
+
+//! a long prompt against the CPU chain: `cpu_n` prose tokens prefilled on the device and eight fed steps, every row within
+//! the bar of the CPU chain's row with the one-step-off control - the rows deep in a region read as the host's do
+[cold_path]
+def cell_long_prompt_against_cpu(t : T?; file : string; lc : LongCtx) {
+    t |> run("a {lc.cpu_n}-token prompt on a {lc.regions} x {lc.ctx} mirror: the resident rows against the CPU chain at every step") @(t : T?) {
+        with_regions_rig(t, file, long_load(lc)) $(tr) {
+            t |> equal(gpu_device_session_ctx(), lc.ctx, "a region holds the whole context asked")
+            forced_feed_over(t, tr, "long prompt: ", lc.cpu_n, STEPS, lc.cpu_bar_rel, 3l) $ {
+                served_every_call(t)
+            }
+        }
+    }
+}
+
+//! a long prompt continued on the device: `split_n` tokens in one call against the same cut at `split_cut`, then four steps
+//! over the continued rows, within the split bar with the one-token-off control
+[cold_path]
+def cell_long_continuation(t : T?; file : string; lc : LongCtx) {
+    t |> run("a {lc.split_n}-token prompt cut at {lc.split_cut}: the continued prefill and the steps over it against the one-call prefill") @(t : T?) {
+        with_regions_rig(t, file, long_load(lc)) $(tr) {
+            assert_pf_window(t)
+            continue_at(t, tr, lc.split_n, lc.split_cut)
+            served_every_call(t)
+        }
+    }
+}
+
+//! the rows that cross the host at a slab past the first: a session's rows brought down after a device prefill (`rows_n`
+//! tokens, every layer's slab read back) carry eight CPU steps within the bar of the CPU chain's, and a session prefilled
+//! on the CPU rails under the server's prefill pin (its rows uploaded to every layer's slab) carries eight resident steps
+//! within the same bar - a layer seated past slab 0 synced or read through slab 0 lands its keys in another layer's rows
+[cold_path]
+def cell_long_rows_through_host(t : T?; file : string; lc : LongCtx) {
+    let rows_n = lc.cpu_n / 3l
+    t |> run("{rows_n} tokens prefilled on the device, the rows brought down: the CPU chain's steps over them against the CPU chain alone") @(t : T?) {
+        with_regions_rig(t, file, long_load(lc)) $(tr) {
+            t |> success(gpu_resident_mirror_slabs() > 1l, "the mirror binds more than one slab pair ({gpu_resident_mirror_slabs()})")
+            var prompt <- prose_ids(rows_n, 5l)
+            var toks <- feed_a()
+            var s <- create_session(tr, mirror_kv_dtype())
+            let served0 = moe_gpu_resident_prefills()
+            forward_prefill(tr, s, prompt, rows_n, 0l)
+            t |> equal(moe_gpu_resident_prefills(), served0 + 1l, "the window chain served the prompt")
+            moe_gpu_hydrate_session(tr, s)
+            t |> success(s.rdec_host_current, "every layer's rows came down to the host")
+            moe_gpu_drop_model()
+            var down : array<array<float>>
+            down |> emplace <| logits_of(s, tr.config.vocab_size)
+            for (st in range64(STEPS)) {
+                forward(tr, s, toks[st], rows_n + st)
+                down |> emplace <| logits_of(s, tr.config.vocab_size)
+            }
+            var cpu <- feed_alone(tr, mirror_kv_dtype(), prompt, toks)
+            feed_steps_within(t, tr, "rows down: ", rows_n, down, cpu, toks, lc.cpu_bar_rel, "the CPU chain over the rows brought down")
+            delete s
+            delete down
+            delete cpu
+            delete prompt
+            delete toks
+        }
+    }
+    t |> run("{rows_n} tokens prefilled on the CPU rails under the prefill pin, the rows uploaded: the resident steps over them against the CPU chain alone") @(t : T?) {
+        with_regions_rig(t, file, long_load(lc)) $(tr) {
+            t |> success(gpu_resident_mirror_slabs() > 1l, "the mirror binds more than one slab pair ({gpu_resident_mirror_slabs()})")
+            var prompt <- prose_ids(rows_n, 5l)
+            var toks <- feed_a()
+            reset_gpu_cpu_passes()
+            set_resident_prefill_allowed(false)
+            var sg <- create_session(tr, mirror_kv_dtype())
+            var up <- feed_logits(tr, sg, prompt, toks)
+            set_resident_prefill_allowed(true)
+            only_pass(t, "pinned_off", "the prompt passed to the CPU rails under the server's prefill pin and nothing else did", 1l)
+            delete sg
+            moe_gpu_drop_model()
+            var cpu <- feed_alone(tr, mirror_kv_dtype(), prompt, toks)
+            feed_steps_within(t, tr, "rows up: ", rows_n, up, cpu, toks, lc.cpu_bar_rel, "resident over the rows uploaded")
+            delete up
+            delete cpu
+            delete prompt
+            delete toks
+        }
+    }
+}
+
+//! `regions` device-home streams at `stream_positions`, a region each: every prefill bit for bit the host-cached session's,
+//! then a batched step over every row at every step reads what each session reads alone under the bar
+[cold_path]
+def cell_long_streams(t : T?; file : string; lc : LongCtx) {
+    t |> run("{lc.regions} device-home streams at {lc.ctx * 28l / 100l} to {lc.ctx * (28l + 18l * (lc.regions - 1l)) / 100l} positions: a batched step over all of them reads what each reads alone") @(t : T?) {
+        with_regions_rig(t, file, long_load(lc)) $(tr) {
+            let n = lc.regions
+            var at <- stream_positions(lc)
+            t |> equal(gpu_device_sessions(), n, "the armed driver serves a device-home session per region")
+            var prompts, feeds : array<array<int64>>
+            var alone : array<array<array<float>>>
+            let steps0 = rdec_nrow_steps()
+            for (i in range64(n)) {
+                prompts |> emplace <| prose_ids(at[i], 11l * (i + 1l))
+                feeds |> emplace <| ramp_ids(STEPS, i, 2000l + 100l * i, 53l, 4000l)
+                alone |> emplace <| feed_alone(tr, mirror_kv_dtype(), prompts[i], feeds[i])
+            }
+            t |> equal(rdec_nrow_steps(), steps0, "the one-row steps alone moved no N-row count: the batched counter's control")
+            var owned : array<Session>
+            owned |> reserve(n)
+            for (_i in range64(n)) {
+                owned |> emplace <| device_session(tr)
+            }
+            for (i in range64(n)) {
+                eval(tr, owned[i], prompts[i])
+                hold_equal(t, tr, owned[i].logits, alone[i][0], "stream {i}'s {at[i]}-token prefill on the device")
+            }
+            var sess <- [for (i in range64(n)); unsafe(addr(owned[i]))]
+            with_batch_rows(tr, sess) $(var ws; var rows) {
+                for (st in range64(STEPS)) {
+                    var toks <- [for (i in range64(n)); feeds[i][st]]
+                    eval_batch(tr, ws, rows, toks)
+                    delete toks
+                    for (i in range64(n)) {
+                        hold_bar(t, tr, owned[i].logits, alone[i][st + 1l], alone[i][st], lc.streams_bar, "batched step {st}, stream {i} at {at[i] + st} positions")
+                    }
+                }
+            }
+            unsafe {
+                delete sess
+            }
+            t |> equal(rdec_nrow_steps() - steps0, STEPS, "every batched step went through the N-row command")
+            static_if (typeinfo builtin_module_exists(vulkan)) {
+                let nrows = vk_rdec_token_n_rows()
+                t |> success(nrows >= n, "the N-row token command serves the {n} rows at once ({nrows} rows)")
+            }
+            served_every_call(t)
+            for (i in range64(n)) {
+                gpu_device_kv_park(owned[i])
+            }
+            delete owned
+            delete prompts
+            delete feeds
+            delete alone
+            delete at
+        }
+    }
+}
+
 //! the same past the unsplit position: both prompts run longer than RD_UNSPLIT_POS, so the batched steps take the
 //! N-row command's split attention form - the arrival counters a row apart, the last piece of each row combining
 def cell_regions_batched_steps_split(t : T?; file : string; bar : LogitsBar = LogitsBar.bit_exact) {
@@ -473,8 +659,7 @@ def cell_regions_batched_first(t : T?; file : string) {
             var sb <- create_session(tr, mirror_kv_dtype())
             eval(tr, sa, pa)
             eval(tr, sb, pb)
-            var got_a : array<array<float>>
-            var got_b : array<array<float>>
+            var got_a, got_b : array<array<float>>
             with_batch_rows(tr, sa, sb) $(var ws; var sess) {
                 for (st in range64(STEPS)) {
                     if (st == 1l) {
@@ -682,8 +867,7 @@ def private serve_four(m : Model; device : bool; var events : array<SchedEvent>)
 def cell_scheduler_device_mode(t : T?; file : string) {
     t |> run("a device-mode scheduler emits what the host-cached one does where the two run one code path, and a second turn adopts its first turn's rows") @(t : T?) {
         with_regions_rig(t, file) $(tr) {
-            var host : array<SchedEvent>
-            var dev : array<SchedEvent>
+            var host, dev : array<SchedEvent>
             let served0 = moe_gpu_resident_prefills()
             t |> success(!serve_four(tr, false, host).on, "the control scheduler serves host-cached sessions")
             let served1 = moe_gpu_resident_prefills()
@@ -969,9 +1153,7 @@ def cell_regions_batched_widen(t : T?; file : string; bar : LogitsBar = LogitsBa
             var ws <- create_batch_workspace(tr)
             var two <- [unsafe(addr(sa)), unsafe(addr(sb))]
             var three <- [unsafe(addr(sa)), unsafe(addr(sb)), unsafe(addr(sc))]
-            var got_a : array<array<float>>
-            var got_b : array<array<float>>
-            var got_c : array<array<float>>
+            var got_a, got_b, got_c : array<array<float>>
             let steps0 = rdec_nrow_steps()
             for (st in range64(STEPS)) {
                 widen_step(tr, ws, sa, sb, two, three, fa, fb, fc, st)
