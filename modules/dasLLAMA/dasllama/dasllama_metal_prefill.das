@@ -3421,10 +3421,10 @@ class MetalAttnAVMmP : MetalAttnAVMmSgT {
     override PADFREE = true
 }
 
-//! A K and a V panel of `total` elements as halves, the softmax scale on K: the device pair's twins.
-def enc_kv_twin(enc : MetalComputeEncoder?; bk, bv, bkh, bvh : MetalBuffer?; scale : float; total : int64) {
-    tw_half(enc, bk, bkh, total, scale)
-    tw_half(enc, bv, bvh, total)
+//! A K and a V panel of `total` elements as halves, the softmax scale on K: the device pair's twins, or the KV mirror's rows at `khoff`/`vhoff`.
+def enc_kv_twin(enc : MetalComputeEncoder?; bk, bv, bkh, bvh : MetalBuffer?; scale : float; total : int64; khoff : uint64 = 0ul; vhoff : uint64 = 0ul) {
+    tw_half(enc, bk, bkh, total, scale, khoff)
+    tw_half(enc, bv, bvh, total, 1.0, vhoff)
 }
 
 [ |> template_struct_instance]
@@ -4568,6 +4568,11 @@ var private g_pf_mirror_served = 0l
 
 //! Lifetime prefill windows served on the mirror-fed form - the form's witness.
 def public metal_prefill_mirror_served : int64 => g_pf_mirror_served
+
+var private g_pf_mirror_panel_served = 0l
+
+//! Lifetime prefill windows whose panel form fed the mirror - that form's witness.
+def public metal_prefill_mirror_panel_served : int64 => g_pf_mirror_panel_served
 
 //! A/B seat: the half-X activation convert (f16-stream GEMM stamps at >= 256 rows) vs the
 //! f32 forms. Default on; a form-identity witness pins it off like the GEMV tail — the
@@ -6755,15 +6760,20 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     var mirk = (g_pf_env_mirror && s.kv_dtype_k == KVDtype.f16 && s.kv_dtype_v == KVDtype.f16 && !s.device_kv
         && (head_size % 32l) == 0l && (hs_sw % 32l) == 0l && g_pf_env_attn && pf_attn_dev_ready()   //! the device pair takes a head off the 64 lattice through its tail stamp
         && nk64 <= c.seq_len && g_pf_env_half_x && pf_twin_panels_wanted())   //! the Q twin rides a scratch panel, which covers the widest A panel
+    //! the panel forms feed the mirror too: the whole f32 panel converts to halves there, so the first decode step uploads none
+    var mirw = (!mirk && g_pf_env_mirror && s.kv_dtype_k == KVDtype.f16 && s.kv_dtype_v == KVDtype.f16 && !s.device_kv
+        && nk64 <= c.seq_len && psos_ready(fixed_array(g_pf_pso_half_rows)))
+    let mir_row0 = mirk ? start_pos : 0l   //! the first row the window writes into the mirror: the mirror-fed form's rows come off the host up to it, the panel form's all come off the panel
     var mir_koff = 0ul
     var mir_voff = 0ul
     var mir_cap = 0l
-    if (mirk) {
+    if (mirk || mirw) {
         if (!mirror_stands(s, start_pos, nk64)) {   //! slices move or rows upload: no step may be writing one
             mirror_quiesce()
         }
-        let mir = mirror_prepare_rows(t, s, start_pos, nk64)
-        mirk = mir.ok
+        let mir = mirror_prepare_rows(t, s, mir_row0, nk64)
+        mirk = mirk && mir.ok
+        mirw = mirw && mir.ok
         mir_koff = mir.koff
         mir_voff = mir.voff
         mir_cap = mir.cap
@@ -7226,8 +7236,8 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                 let koff = mirk ? 0ul : uint64(start_pos * kvd_l * 4l)
                 let scale_l = het ? (c.attn_scale > 0.0 ? c.attn_scale : 1.0 / sqrt(float(hs_sw))) : scale
                 //! layer l's K and V slabs in the mirror
-                let mir_kb = mirk ? mir_koff + uint64(mirror_lbase(t, KVDtype.f16, mir_cap, l)) : 0ul
-                let mir_vb = mirk ? mir_voff + uint64(mirror_lbase(t, KVDtype.f16, mir_cap, l)) : 0ul
+                let mir_kb = (mirk || mirw) ? mir_koff + uint64(mirror_lbase(t, KVDtype.f16, mir_cap, l)) : 0ul
+                let mir_vb = (mirk || mirw) ? mir_voff + uint64(mirror_lbase(t, KVDtype.f16, mir_cap, l)) : 0ul
                 var u_qd_l = het ? u_qd_sw : u_qd
                 var u_kvd_l = het ? u_kvd_sw : u_kvd
                 var u_hs_l = het ? u_hs_sw : u_hs
@@ -7436,10 +7446,9 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                         enc_rope(enc, bks[l], koff, bcos_l, bsin_l, u_kvd_l, u_hs_l, u_npairs_k_l, u_neox, u_rot, null, npos * kvd_l / 2l)
                     }
                 }
-                if (mirk && !recr && !kvsh) {
-                    let rows_off = uint64(start_pos * kvd_l * 2l)
-                    tw_half(enc, bks[l], g_arena, npos * kvd_l, 1.0, (mir_kb + rows_off) / 2ul)
-                    tw_half(enc, bvs[l], g_arena, npos * kvd_l, 1.0, (mir_vb + rows_off) / 2ul)
+                if ((mirk || mirw) && !recr && !kvsh) {
+                    let rows_off = uint64(mir_row0 * kvd_l * 2l)
+                    enc_kv_twin(enc, bks[l], bvs[l], g_arena, g_arena, 1.0, (nk - mir_row0) * kvd_l, (mir_kb + rows_off) / 2ul, (mir_vb + rows_off) / 2ul)
                 }
                 if (!recr && g_pf_skip != "attn" && g_pf_skip != "nongemm") {
                     var atka = AttnArgs(qd = uint(qd_l), kv_dim = uint(kvd_l), head_size = uint(hs_l),
@@ -7896,7 +7905,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
                     if (bks[l] == null || kv_shared_layer(t, l)) {
                         continue
                     }
-                    if (mirk) {   //! the mirror's halves are the rows: the host store takes them byte for byte
+                    if (mirk || mirw) {   //! the mirror's halves are the rows: the host store takes them byte for byte
                         let rowb = layer_kv_dim(c, l) * 2l
                         let lb = mirror_lbase(t, KVDtype.f16, mir_cap, l)
                         let ab = reinterpret<uint8?>(metal_buffer_contents(g_arena))
@@ -7932,9 +7941,10 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     gpu_ms = (gpu_t1 - gpu_t0) * 1000.0lf   //! whole-GPU window: first chunk start -> last chunk end
     let encwait_us = get_time_usec(ts_enc)
     let ok = ran
-    if (mirk) {   //! a served chunk's rows stand in the mirror; a failed one leaves the rows before it
-        mirror_set_watermark(s.uid, ran ? start_pos + npos : start_pos)
-        g_pf_mirror_served += ran ? 1l : 0l
+    if (mirk || mirw) {
+        mirror_set_watermark(s.uid, ran ? start_pos + npos : mir_row0)
+        g_pf_mirror_served += ran && mirk ? 1l : 0l
+        g_pf_mirror_panel_served += ran && mirw ? 1l : 0l
     }
     if (ran) {
         if (dn) {   //! the window completed — the GPU state now holds position start_pos+npos-1's update
@@ -8193,7 +8203,7 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
         g_pf_stage_gpu_ms += gpu_ms
         g_pf_stage_rb_us += readback_us
         let total_us = get_time_usec(ts_all)
-        to_log(LOG_INFO, "dasLLAMA metal prefill: npos={npos} gemm=mulmm total={float(total_us) / 1000.0}ms setup={float(setup_us) / 1000.0}ms encode+wait={float(encwait_us) / 1000.0}ms (encode {encode_ms}ms, gpu {gpu_ms}ms) kv+readback={float(readback_us) / 1000.0}ms dispatches={17l * c.n_layers + (gpu_logits ? 2l : 0l)} logits={gpu_logits ? "gpu" : "cpu"} kv={mirk ? "mirror" : "panels"}\n")   // nolint:PERF028,PERF026 — one line per prefill call, not per token
+        to_log(LOG_INFO, "dasLLAMA metal prefill: npos={npos} gemm=mulmm total={float(total_us) / 1000.0}ms setup={float(setup_us) / 1000.0}ms encode+wait={float(encwait_us) / 1000.0}ms (encode {encode_ms}ms, gpu {gpu_ms}ms) kv+readback={float(readback_us) / 1000.0}ms dispatches={17l * c.n_layers + (gpu_logits ? 2l : 0l)} logits={gpu_logits ? "gpu" : "cpu"} kv={mirk ? "mirror" : (mirw ? "panels+mirror" : "panels")}\n")   // nolint:PERF028,PERF026 — one line per prefill call, not per token
     }
     return ok
 }

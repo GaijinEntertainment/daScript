@@ -88,14 +88,29 @@ at its byte offset in the arena. It serves at any row count: the pair's 256-row 
 whole-panel twin pass, and this form has none. The mirror's K carries no softmax scale, so the Q
 twin does - `QkRopeArgs.hscale` on the fused rope, a `MetalHalfRows` pass after the unfused one.
 The host cache takes the window's rows from the mirror byte for byte and the watermark moves to
-the window's end, so a continuation gathers no cached row and the first decode step uploads none;
-the f32-panel form copies every cached row to the device each window, and the decode driver
-uploads them again. It needs the `attn_dev` crown, the forward's twin scratch panels, and key rows
-that pad to 64 inside `seq_len`; `DASLLAMA_METAL_PF_MIRROR=0` keeps the panels.
+the window's end, so a continuation gathers no cached row and the first decode step uploads none. A
+window that fails leaves the watermark at its own first row: the prepare uploaded the rows
+before it, so they stand. It needs the `attn_dev` crown, the forward's twin scratch panels, and key rows that pad to 64
+inside `seq_len`; `DASLLAMA_METAL_PF_MIRROR=0` keeps the panels.
+
+**The panel forms feed the mirror too.** An f16 host-cached session whose window the mirror-fed
+form does not take reads its attention off the K/V panels, f32 or their half twins on the device
+pair. A continuation fills the panels with every cached row from the host. After each layer's rope
+the whole panel, the gathered rows and the window's, converts to halves into the mirror's slab
+from its first row (`mirw`: the same `MetalHalfRows` pair, from element zero), the mirror prepared
+for the capacity alone (`mirror_prepare_rows` at position zero uploads nothing). The gathered rows
+round-trip through f32 exactly, so host and mirror agree byte for byte. The host store then takes
+the window's rows from the mirror as the mirror-fed form does, and the watermark moves to the
+window's end; a window that fails leaves it at zero, since the panel wrote every row. Without this
+the first decode step after a window uploads the whole context's rows into the mirror, a cost
+that grows with the context and that the client reads as a slow second token.
 
 A prepare that moves an arena slice or uploads rows first retires every step encoded ahead
 (`mirror_quiesce`); one that finds the mirror standing at the window's first row
-(`mirror_stands`) leaves them.
+(`mirror_stands`) leaves them. The panel form's prepare at row zero on a standing mirror moves
+nothing and uploads nothing either, and its conversion is GPU work on the one queue, ordered
+after every step committed before it, so the rows below the window are rewritten with the bytes
+they already hold and no step reads a moved slice or a half-written row.
 
 **A released session's mirror goes to the next session on the same pages.** `release_kv_pages_`
 announces a paged session before its groups return to the pool, and its mirror stays under a

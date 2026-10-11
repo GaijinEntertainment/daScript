@@ -104,8 +104,9 @@ asymmetries a stamp family ledgers - stays in `ARCHITECTURE_GPU.md#gpu-backends`
 - **The device KV room seat is Metal-only.** `set_gpu_kv_room_hook` has one registrant, the Metal mirror's ceiling
   (`mirror_rows_within_ceiling`); `gpu_kv_room_rows` reads unbounded elsewhere and `device_kv_max_rows` the model's
   own context, since the Vulkan plan sizes its regions at the load (`set_gpu_ctx_max`).
-- **The mirror-fed prefill window and mirror adoption are Metal-only** (`ARCHITECTURE_GPU_PREFILL_WINDOW.md#prefill-kv-mirror`,
-  the knobs `DASLLAMA_METAL_PF_MIRROR` and `DASLLAMA_METAL_MIRROR_ADOPT`, the counters `metal_prefill_mirror_served`,
+- **The mirror-fed prefill window, the panel forms' mirror feed and mirror adoption are Metal-only**
+  (`ARCHITECTURE_GPU_PREFILL_WINDOW.md#prefill-kv-mirror`, the knobs `DASLLAMA_METAL_PF_MIRROR` and
+  `DASLLAMA_METAL_MIRROR_ADOPT`, the counters `metal_prefill_mirror_served`, `metal_prefill_mirror_panel_served`,
   `metal_mirror_uploaded_rows` and `metal_mirror_adopted_rows`): the Vulkan resident driver's window chain writes its
   K/V into the region the decode reads, so it has no mirror to feed or adopt.
 - **The NextN draft seat is Vulkan-only.** `register_mtp_draft_override("vulkan", ...)` has one registrant, the resident driver's head (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head`); Metal drafts inside its round seat. Each backend's owner (`register_mtp_seat_owner`, `mtp_seats_own`) claims the round its own way: Metal's a blob model alone, so a planar one under the metal overrides runs the CPU round, Vulkan's the resident driver armed on a NextN model. The head's prompt warm is a seat on Vulkan alone (`install_rdec_head_warm`: the window chain's extra layer, `ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm`), where Metal's prefill driver warms the slab inside its own loop; the CPU warm stands down behind either once the driver landed the logits (`prefill_override_logits_done`).

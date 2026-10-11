@@ -320,7 +320,7 @@ struct public MetalEnv {
     @clarg_doc = "A released paged session's KV mirror goes to the next session whose leading pages are the same pool groups, its rows not uploaded again; 0 uploads every attached row - the A/B rail."
     mirror_adopt : bool = true
 
-    @clarg_doc = "An f16-KV prefill writes its K/V rows into the session's KV mirror and its attention reads the cached rows there (the device pair, at any row count), so a continuation gathers nothing on the CPU and the first decode step uploads nothing; 0 keeps the f32 panels and the gather - the A/B rail."
+    @clarg_doc = "An f16-KV prefill writes its K/V rows into the session's KV mirror and its attention reads the cached rows there (the device pair, at any row count), so a continuation gathers nothing on the CPU and the first decode step uploads nothing; without the attn_dev crown the attention keeps its f32 panels and the gather, and the whole panel still converts into the mirror, so that first step uploads nothing there either; 0 keeps the panels and leaves the mirror to the decode step's upload - the A/B rail."
     pf_mirror : bool = true
 
     @clarg_doc = "Pin the served working set (weight regions, planes, the recycled pool buffers) in an MTLResidencySet, macOS 15+: the per-commit residency pass stays a no-op, so the first submission after a CPU-only window stops repaying it (~15 ms/encode on the M1 Max released-rig image cell; ARCHITECTURE_RUNTIME.md 2.12); 0 is the A/B rail."
