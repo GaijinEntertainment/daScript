@@ -22,9 +22,9 @@ if(NOT DAS_TOOLS_DISABLED)
 
     set(_DAS_DASTEST  ${PROJECT_SOURCE_DIR}/dastest/dastest.das)
     set(_DAS_TEST_DIR ${PROJECT_SOURCE_DIR}/tests)
-    set(_DAS_TEST_COMMON --color --failures-only --test ${_DAS_TEST_DIR})
+    set(_DAS_TEST_COMMON --color --failures-only --test ${_DAS_TEST_DIR} --cache-dir ${DAS_TEST_CACHE_DIR})
 
-    set(_DAS_TEST_HOSTS daslang)
+    set(_DAS_TEST_HOSTS daslang dastest_cache_guard)
     foreach(_host daslang-live watchdog dasbind_probe)
         if(TARGET ${_host})
             list(APPEND _DAS_TEST_HOSTS ${_host})
@@ -61,7 +61,7 @@ if(NOT DAS_TOOLS_DISABLED)
         if(DAS_USE_SANITIZER AND NOT DAS_USE_SANITIZER STREQUAL "none")
             set(_DAS_JIT_TEST_DIR ${_DAS_TEST_DIR}/language)
         endif()
-        set(_DAS_JIT_COMMON --color --failures-only --test ${_DAS_JIT_TEST_DIR})
+        set(_DAS_JIT_COMMON --color --failures-only --test ${_DAS_JIT_TEST_DIR} --cache-dir ${DAS_TEST_CACHE_DIR})
 
         set(DAS_TEST_JIT_TIMEOUT 1800 CACHE STRING
             "dastest global suite watchdog, seconds, for run_tests_jit")

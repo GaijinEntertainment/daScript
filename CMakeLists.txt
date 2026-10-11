@@ -2508,6 +2508,30 @@ if(NOT DAS_TOOLS_DISABLED)
 endif()
 
 get_property(_das_shared_modules GLOBAL PROPERTY DAS_SHARED_MODULE_TARGETS)
+
+if(TARGET daslang)
+    if(NOT DAS_TEST_CACHE_DIR MATCHES "/\\.cache/daslang/test_cache$")
+        message(FATAL_ERROR "dastest_cache_guard runs rm -rf on DAS_TEST_CACHE_DIR; refusing \"${DAS_TEST_CACHE_DIR}\"")
+    endif()
+    set(_das_test_binaries)
+    foreach(_t daslang libDaScriptDyn libDaScriptDyn_runtime daslang-live watchdog dasbind_probe ${_das_shared_modules})
+        if(TARGET ${_t})
+            list(APPEND _das_test_binaries ${_t})
+        endif()
+    endforeach()
+    list(TRANSFORM _das_test_binaries REPLACE "^(.+)$" "$<TARGET_FILE:\\1>" OUTPUT_VARIABLE _das_test_binary_files)
+    set(_identity ${DAS_LANE_STAMP_DIR}/binary_identity.txt)
+    set(_same_binaries ${CMAKE_COMMAND} -E compare_files ${_identity} ${DAS_TEST_CACHE_DIR}/binary_identity.txt)
+    if(NOT DAS_TEST_RESULT_CACHE)
+        set(_same_binaries ${CMAKE_COMMAND} -E false)
+    endif()
+    add_custom_target(dastest_cache_guard
+        COMMAND ${CMAKE_COMMAND} -E sha256sum ${_das_test_binary_files} > ${_identity}
+        COMMAND ${_same_binaries} || ${CMAKE_COMMAND} -E rm -rf ${DAS_TEST_CACHE_DIR}
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${DAS_TEST_CACHE_DIR}
+        COMMAND ${CMAKE_COMMAND} -E copy ${_identity} ${DAS_TEST_CACHE_DIR})
+    add_dependencies(dastest_cache_guard ${_das_test_binaries})
+endif()
 foreach(_t check_lint_tree check_vulkan run_tests_vulkan run_tests_imgui_integration
         build_site_wasm check_playground_samples run_imgui2rst run_vulkan2rst)
     if(TARGET ${_t} AND _das_shared_modules)

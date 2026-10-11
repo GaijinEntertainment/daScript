@@ -51,6 +51,9 @@ struct DastestArgs {
     @clarg_doc = "Per-test timeout in seconds when running in isolated mode"
     test_timeout : float
 
+    @clarg_doc = "Folder of the test result cache. A file whose last run passed is not run again while dastest's sources, every module source its compile read, and the arguments that are not report-only all stay the same. The cache does not see the daslang binaries: whoever rebuilds them empties the folder. Empty (default) disables the cache; benchmarks, coverage and --ser/--deser runs never use it"
+    cache_dir : string
+
     @clarg_doc = "Path to serialize compiled test programs to (for use with --deser)"
     ser : string
 
