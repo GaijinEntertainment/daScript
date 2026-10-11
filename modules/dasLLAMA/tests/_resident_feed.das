@@ -212,14 +212,20 @@ def draft_from(tr : Model; var s : Session; tok, row : int64; h0 : array<float>)
 //! `body` over a batch workspace for `tr` and the borrowed handles of `sa` and `sb`; the handles cleared before the array goes (a
 //! delete of array<T?> frees the pointees), the workspace deleted after
 def with_batch_rows(tr : Model; var sa, sb : Session; body : block<(var ws : BatchWorkspace; var sess : array<Session?>) : void>) {
-    var ws <- create_batch_workspace(tr)
     var sess <- [unsafe(addr(sa)), unsafe(addr(sb))]
-    invoke(body, ws, sess)
-    sess |> clear()
+    with_batch_rows(tr, sess, body)
     unsafe {
-        delete ws
         delete sess
     }
+}
+
+//! `body` over a batch workspace for `tr` and the borrowed handles `sess` - any count; the handles cleared before `body`
+//! returns to the caller (a delete of array<T?> frees the pointees), the workspace deleted after
+def with_batch_rows(tr : Model; var sess : array<Session?>; body : block<(var ws : BatchWorkspace; var sess : array<Session?>) : void>) {
+    var ws <- create_batch_workspace(tr)
+    invoke(body, ws, sess)
+    sess |> clear()
+    delete ws
 }
 
 //! one speculative round of `tok` on `s` with its draft forced to reject, the reject cadence put back after; true where it accepted
@@ -334,9 +340,7 @@ def feed_logits(tr : Model; var s : Session; prompt : array<int64>; toks : array
 def logits_of(s : Session; vocab : int64) : array<float> => <- [for (i in range64(vocab)); s.logits[i]]
 
 //! the prefill's logits, then each fed step's, through `s`
-def feed_logits(tr : Model; var s : Session; prompt : array<int64>; toks : array<int64>) : array<array<float>> {
-    return <- feed_logits(tr, s, prompt, toks) $ {}
-}
+def feed_logits(tr : Model; var s : Session; prompt : array<int64>; toks : array<int64>) : array<array<float>> => <- feed_logits(tr, s, prompt, toks) $ {}
 
 //! `feed_logits` on a fresh session of codec `kv`, the session gone after
 def feed_alone(tr : Model; kv : KVDtype; prompt, toks : array<int64>) : array<array<float>> {
@@ -370,14 +374,17 @@ def resident_then_cpu_feed(t : T?; tr : Model; prompt, toks : array<int64>; afte
 }
 
 //! the same with no seat between the resident prefill and its first step
-def resident_then_cpu_feed(t : T?; tr : Model; prompt, toks : array<int64>; after_gpu : block<void>) : FeedPair {
-    return <- resident_then_cpu_feed(t, tr, prompt, toks, $ {}, after_gpu)
-}
+def resident_then_cpu_feed(t : T?; tr : Model; prompt, toks : array<int64>; after_gpu : block<void>) : FeedPair => <- resident_then_cpu_feed(t, tr, prompt, toks, $ {}, after_gpu)
 
 //! the forced-feed form: an `n`-token `resident_prompt` and `steps` fed tokens through `resident_then_cpu_feed` (`after_gpu`
 //! the caller's witnesses), every row held by `feed_steps_within` at `bar_rel` under `tag`
 def forced_feed_over(t : T?; tr : Model; tag : string; n, steps : int64; bar_rel : float; after_gpu : block<void>) {
-    var prompt <- resident_prompt(n)
+    forced_feed_over(t, tr, tag, n, steps, bar_rel, 0l, after_gpu)
+}
+
+//! the same over the prompt `resident_prompt(n, salt)`
+def forced_feed_over(t : T?; tr : Model; tag : string; n, steps : int64; bar_rel : float; salt : int64; after_gpu : block<void>) {
+    var prompt <- resident_prompt(n, salt)
     var toks <- resident_feed(steps)
     var fed <- resident_then_cpu_feed(t, tr, prompt, toks, after_gpu)
     feed_steps_within(t, tr, tag, n, fed.gpu, fed.cpu, toks, bar_rel)

@@ -263,6 +263,40 @@ def private check_fastmath_default {
     delete files
 }
 
+//! every code line of the `.das` files under `folders` (comments stripped) carrying one of `tokens`, each a finding with
+//! `msg` - but a line `allowed` admits, and a file `exempt` names
+def private gate_banned_tokens(folders : array<string>; exempt : string; tokens : array<string>; msg : string; allowed : block<(line : string) : bool>) {
+    var files : array<string>
+    for (folder in folders) {
+        collect_das_files(folder, files)
+    }
+    for (p in files) {
+        continue if (base_name(p) == exempt)
+        var line_no = 0
+        for (line in split(strip_line_comments(fread(p)), "\n")) {
+            line_no++
+            for (tok in tokens) {
+                if (find(line, tok) >= 0 && !invoke(allowed, line)) {
+                    gate_finding(p, line_no, msg)
+                    break
+                }
+            }
+        }
+    }
+    delete files
+}
+
+//! the K/V mirror's per-slab arrays - the slab pairs, the window store and shadow sets - are indexed by a layer's seat
+//! (`mir_slab`) at every dispatch, sync, readback and hydrate; the bare index lives in dasllama_vulkan_common.das's
+//! accessors alone (ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan)
+def private check_mirror_slab_access {
+    gate_banned_tokens(["modules/dasLLAMA/dasllama"], "dasllama_vulkan_common.das",
+        ["k_slabs[", "v_slabs[", "pf_kv_store_sets[", "pf_kv_shadow_sets["],
+        "indexes a K/V mirror slab array by something other than a layer's seat - take the layer's slab through rd_slab(L), or index the per-slab set by L.mir_slab (ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan)") $(line) {
+        return find(line, ".mir_slab]") >= 0
+    }
+}
+
 //! the top-level ` + ` summands of an index expression (parentheses and brackets keep their sums whole)
 def private index_summands(idx : string) : array<string> {
     var out : array<string>
@@ -1533,20 +1567,10 @@ def private check_vk_extension_roster {
 // hazard rail and the dispatch census, so its races and its coverage are invisible. The two llama.cpp
 // shader ports under performance/ are reference measurements of another engine's kernels, outside this walk.
 def private check_no_hand_pipelines {
-    var files : array<string>
-    for (folder in ["modules/dasLLAMA/dasllama", "modules/dasLLAMA/harness", "modules/dasLLAMA/tests"]) {
-        collect_das_files(folder, files)
+    gate_banned_tokens(["modules/dasLLAMA/dasllama", "modules/dasLLAMA/harness", "modules/dasLLAMA/tests"], "", ["vkCreateComputePipelines("],
+        "hand-built Vulkan pipeline - a pipeline is created only by a [vk_dispatch]-generated ensure_*, which puts it on the hazard rail and in the dispatch census") $(_line) {
+        return false
     }
-    for (p in files) {
-        var line_no = 0
-        for (line in split(strip_line_comments(fread(p)), "\n")) {
-            line_no++
-            if (find(line, "vkCreateComputePipelines(") >= 0) {
-                gate_finding(p, line_no, "hand-built Vulkan pipeline - a pipeline is created only by a [vk_dispatch]-generated ensure_*, which puts it on the hazard rail and in the dispatch census")
-            }
-        }
-    }
-    delete files
 }
 
 let private RESIDENT_FILE = "modules/dasLLAMA/dasllama/dasllama_gpu_resident.das"
@@ -1935,6 +1959,7 @@ def main() : int {
     check_race_bind_numbers()
     check_gpu_role_partition()
     check_fastmath_default()
+    check_mirror_slab_access()
     check_metal_kernel_load_addressing()
     check_image_backing_release()
     check_khr_stage16_abstract()

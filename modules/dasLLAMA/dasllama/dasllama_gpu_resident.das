@@ -907,7 +907,7 @@ def private fill_plan_room(var p : ResidentPlan) {
     p.others_bytes = room.others
 }
 
-//! One region's context: the regions share each mirror side's one binding, so `bctx` - the positions that binding holds, 0 = unknown - divides by their count.
+//! One region's context: the regions share each mirror slab's one binding, so `bctx` - the positions that binding holds, 0 = unknown - divides by their count.
 [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
 def resident_region_ctx(seq_cap, bctx, regions : int64) : int64 => bctx > 0l ? min(seq_cap, bctx / max(regions, 1l)) : seq_cap
 
@@ -915,12 +915,142 @@ def resident_region_ctx(seq_cap, bctx, regions : int64) : int64 => bctx > 0l ? m
 [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
 def resident_region_ctx_declines(asked, region_ctx : int64; asked_whole : bool) : bool => asked_whole && region_ctx < asked
 
-//! the positions one mirror side's binding holds under the device's range cap; 0 = no cap known, or no attention layer
+//! the positions one K/V mirror slab's binding holds under the device's range cap: a slab holds whole layers, so the widest
+//! layer's row bounds every slab's context, whatever the layer count; 0 = no cap known, or no attention layer
 [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
 def resident_binding_ctx(t : Model; dt : KVDtype; bcap : int64) : int64 {
-    let side_row_bytes = resident_kv_row_bytes(t, dt, dt).krow
-    let cap = kv_block_codec(dt) ? min(bcap, BLOCK_CODEC_SIDE_BYTES) : bcap
-    return (cap > 0l && side_row_bytes > 0l) ? cap / side_row_bytes : 0l
+    let row_bytes = kv_row_bytes(dt, resident_widest_kv_row(t))
+    let cap = resident_slab_cap_bytes(dt, bcap)
+    return (cap > 0l && row_bytes > 0l) ? cap / row_bytes : 0l
+}
+
+//! the bytes one slab's binding may hold over every region: the device's range, and under a block codec the kernels' 32-bit byte index
+def private resident_slab_cap_bytes(dt : KVDtype; bcap : int64) : int64 => kv_block_codec(dt) ? min(bcap, BLOCK_CODEC_SIDE_BYTES) : bcap
+
+//! the units one slab holds a region under the device's binding cap; 0 = no cap known
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
+def resident_slab_cap_units(dt : KVDtype; regions : int64) : int64 {
+    let cap = resident_slab_cap_bytes(dt, moe_gpu_binding_cap(regions))
+    return cap > 0l ? cap / (max(regions, 1l) * kv_unit_bytes(dt)) : 0l
+}
+
+//! the widest K/V row the mirror holds: the attention layers' (a sharer's row is its donor's), and the NextN head's where the driver takes the head
+def private resident_widest_kv_row(t : Model) : int64 {
+    let c = t.config
+    return max(resident_attn_maxima(c).kvd, resident_head_on(t) ? layer_kv_dim(c, c.n_layers) : 0l)
+}
+
+//! the K/V mirror's slabs - contiguous layer runs under `cap_units` a region (0 = one slab), every slab at the widest slab's
+//! stride, the cut the one that charges the least (`slab_limit`); indexed by layer, the NextN head last: a shared-KV layer
+//! carries its donor's seat, a recurrent layer or an absent head -1
+struct MirrorSlabs {
+    @exact_size slab : array<int64>
+    @exact_size base : array<int64>
+    n_slabs : int64
+    units : int64
+}
+
+//! the bytes the mirror allocates: both sides of every slab, each `regions` copies of the widest slab's stride plus the
+//! tier's slack (the slabs that seat fewer rows carry the padding) - what the plan charges the card, as the prepare allocates
+def resident_mirror_bytes(t : Model; seq_cap : int64; dt : KVDtype; regions : int64) : int64 {
+    var inscope s <- resident_mirror_slabs(t, seq_cap, dt, resident_slab_cap_units(dt, regions), resident_head_on(t))
+    return 2l * max(regions, 1l) * s.n_slabs * (s.units + kv_row_units(dt, moe_gpu_mirror_slack())) * kv_unit_bytes(dt)
+}
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
+def resident_mirror_slabs(t : Model; seq_cap : int64; dt : KVDtype; cap_units : int64; head : bool) : MirrorSlabs {
+    let c = t.config
+    var s : MirrorSlabs
+    s.slab |> reserve_resize(c.n_layers + 1l)
+    s.base |> reserve_resize(c.n_layers + 1l)
+    var owners, units : array<int64>   // the layers that hold rows, in order, the head last, and each one's units a region
+    for (l in range64(c.n_layers + 1l)) {
+        s.slab[l] = -1l
+        s.base[l] = -1l
+        let rows = l < c.n_layers ? !layer_is_recurrent(c, l) : (head && c.n_layer_nextn > 0l)
+        if (rows && !kv_shared_layer(t, l)) {
+            owners |> push(l)
+            units |> push(seq_cap * kv_row_units(dt, layer_kv_dim(c, l)))
+        }
+    }
+    let limit = slab_limit(units, cap_units)
+    var slab = 0l
+    var base = 0l
+    for (l, u in owners, units) {
+        if (base > 0l && base + u > limit) {
+            slab++
+            base = 0l
+        }
+        s.slab[l] = slab
+        s.base[l] = base
+        base += u
+        s.units = max(s.units, base)
+    }
+    s.n_slabs = empty(owners) ? 0l : slab + 1l
+    for (l in range64(c.n_layers)) {   // a sharer takes its donor's seat
+        if (!layer_is_recurrent(c, l) && kv_shared_layer(t, l)) {
+            s.slab[l] = s.slab[t.kv_src[l]]
+            s.base[l] = s.base[t.kv_src[l]]
+        }
+    }
+    delete owners
+    delete units
+    return <- s
+}
+
+//! the stride the partition fills slabs to: every slab allocates the widest slab's units, so over the slab counts whose
+//! widest slab fits `cap_units` the cut with the least `count x widest` wins (ties to fewer slabs); the whole run with
+//! no cap, and one layer's stride where no cut fits (the binding cap bounds the context before the partition)
+def slab_limit(units : array<int64>; cap_units : int64) : int64 {
+    var total = 0l
+    var widest = 0l
+    for (u in units) {
+        total += u
+        widest = max(widest, u)
+    }
+    let n = long_length(units)
+    return total if (cap_units <= 0l || total <= cap_units)
+    let k_min = (total + cap_units - 1l) / cap_units
+    var best = widest
+    var best_charge = 0l
+    for (k in range64(k_min, n + 1l)) {
+        let m = least_widest(units, k, widest, total)
+        continue if (m > cap_units)   // the fewest slabs the total admits can still leave one slab past the cap when the widths vary
+        if (best_charge == 0l || k * m < best_charge) {
+            best = m
+            best_charge = k * m
+        }
+    }
+    return best
+}
+
+//! the least widest run over every cut of `units` into at most `k` contiguous runs (a binary search over the limit, each probe a greedy fill)
+def private least_widest(units : array<int64>; k, lo0, hi0 : int64) : int64 {
+    var lo = lo0
+    var hi = hi0
+    while (lo < hi) {
+        let mid = (lo + hi) / 2l
+        if (runs_under(units, mid) <= k) {
+            hi = mid
+        } else {
+            lo = mid + 1l
+        }
+    }
+    return lo
+}
+
+//! the runs a greedy fill to `limit` cuts `units` into
+def private runs_under(units : array<int64>; limit : int64) : int64 {
+    var runs = 1l
+    var base = 0l
+    for (u in units) {
+        if (base > 0l && base + u > limit) {
+            runs++
+            base = 0l
+        }
+        base += u
+    }
+    return runs
 }
 
 //! what the plan gives one side of a block-codec mirror, whatever range the device binds: the kernels' byte span less room for every region's slack blocks
@@ -931,7 +1061,7 @@ let BLOCK_CODEC_SIDE_BYTES = RDEC_CODEC_BYTE_SPAN - 67_108_864l
 //! 0 = no cap (a scalar codec, no cap known, no attention layer)
 [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan"), arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-block-codecs")]
 def resident_shadow_ctx(t : Model; dt : KVDtype; bcap : int64) : int64 {
-    let kvd = resident_attn_maxima(t.config).kvd
+    let kvd = resident_widest_kv_row(t)
     return (kv_block_codec(dt) && bcap > 0l && kvd > 0l) ? bcap / (2l * kvd) : 0l
 }
 
@@ -970,7 +1100,7 @@ def resident_plan(t : Model; seq_cap : int64; kdt, vdt : KVDtype; hot_cap : int6
         return p
     }
     let (krow, vrow) = resident_kv_row_bytes(t, kdt, vdt)
-    p.kv_bytes = g_rdec_regions_want * seq_cap * (krow + vrow)
+    p.kv_bytes = resident_mirror_bytes(t, seq_cap, kdt, g_rdec_regions_want)
     p.scratch_bytes = rdec_scratch_bytes(t) + resident_shadow_bytes(t, seq_cap, kdt)
     fill_plan_room(p)
     let n_moe = resident_moe_layers(t)
@@ -1095,7 +1225,7 @@ def resident_plan_pick(t : Model; rkdt : KVDtype; var seq_cap : int64&; announce
         var short = resident_plan(t, seq_cap, rkdt, rkdt)
         short.fits = false
         short.memory = true
-        short.reason = "one K/V binding's range on this device ({moe_gpu_binding_cap(g_rdec_regions_want) >> 20l} MB) holds {seq_cap} positions over {g_rdec_regions_want} regions, under the {asked} asked whole (set_gpu_ctx_strict, DASLLAMA_GPU_CTX_STRICT) - fewer regions would hold more"
+        short.reason = "one K/V mirror slab's range on this device ({moe_gpu_binding_cap(g_rdec_regions_want) >> 20l} MB) holds {seq_cap} positions of the widest attention layer's rows over {g_rdec_regions_want} regions, under the {asked} asked whole (set_gpu_ctx_strict, DASLLAMA_GPU_CTX_STRICT) - fewer regions would hold more"
         return short
     }
     var plan = resident_plan(t, seq_cap, rkdt, rkdt)
@@ -1190,7 +1320,7 @@ def private resident_ctx_shortened_say(plan : ResidentPlan; asked, seq_cap : int
     let kv_per_k = seq_cap > 0l ? (plan.kv_bytes / regions) * 1000l / seq_cap >> 20l : 0l
     let each = regions > 1l ? " a region ({regions} regions, set_gpu_resident_regions - a server's streams - share the mirror)" : ""
     let hot = plan.hot_bytes > 0l ? " and the hot expert pool {plan.hot_bytes >> 20l} MB" : ""
-    var why = "one K/V binding's range on this device ({moe_gpu_binding_cap(regions) >> 20l} MB) over the regions"
+    var why = "one K/V mirror slab's range on this device ({moe_gpu_binding_cap(regions) >> 20l} MB) over the widest attention layer's rows and the regions"
     if (room_bound) {
         why = "the card's room: {plan.usable_bytes >> 20l} MB usable, the weights {plan.weight_bytes >> 20l} MB and the scratch {plan.scratch_bytes >> 20l} MB{hot} leave {plan.kv_bytes >> 20l} MB for the K/V mirror at {kv_per_k} MB a thousand positions"
     }
@@ -1786,15 +1916,15 @@ def private resident_rot_swa(c : Config) : int64 => c.head_size_swa > 0l ? c.hea
 //! then the sliding class's where the two rope differently (`has_dual_rope`); a layer reads its class's row at its `cbase`
 def private resident_cos_elems(c : Config) : int64 => resident_rot(c) + (has_dual_rope(c) ? resident_rot_swa(c) : 0l)
 
-//! one attention layer's geometry record for the driver; `mir_base` is the caller's running mirror element count
-def private resident_layer_geom(t : Model; l, mir_base : int64) : RdecLayerGeom {
+//! one attention layer's geometry record for the driver; `mir_base` and `mir_slab` are its seat in the mirror (`resident_mirror_slabs`)
+def private resident_layer_geom(t : Model; l, mir_base, mir_slab : int64) : RdecLayerGeom {
     let c = t.config
     let sliding = layer_is_sliding(c, l)
     let swa_row = sliding && has_dual_rope(c)
     let vfk = resident_v_from_k(c, l)
     return RdecLayerGeom(hs = layer_head_size(c, l), qd = layer_qd(c, l), kvd = layer_kv_dim(c, l),
         hid = resident_dense_width(t, l), rot = swa_row ? resident_rot_swa(c) : resident_rot(c),
-        window = sliding ? c.sliding_window : 0l, mir_base = mir_base,
+        window = sliding ? c.sliding_window : 0l, mir_base = mir_base, mir_slab = mir_slab,
         cbase = swa_row ? resident_rot(c) : 0l, boff = resident_bias_off(c, l),
         pre_post = c.pre_post_norm, gelu = c.ffn_act == FfnAct.gelu,
         vfk = vfk, vnorm = c.v_norm && !vfk,
@@ -1864,19 +1994,12 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     let cls_fmt = c.shared_weights ? t.emb_fmt : t.wcls_fmt
     // the class maxima size the driver's scratch; each layer's own geometry rides its registration
     let (qd, kvd, hs) = resident_attn_maxima(c)
-    var mir_units = 0l
-    for (l in range64(c.n_layers)) {
-        if (layer_owns_kv(t, l)) {
-            mir_units += seq_cap * kv_row_units(rkdt, layer_kv_dim(c, l))
-        }
-    }
     let head_why = c.n_layer_nextn > 0l ? resident_head_decline(t) : ""
     let head = c.n_layer_nextn > 0l && empty(head_why)
     if (!empty(head_why)) {
         to_log(LOG_WARNING, "dasLLAMA: resident driver - the NextN draft head stays off the device ({head_why}); the CPU draft serves\n")
     }
-    let head_kv_units = head ? seq_cap * kv_row_units(rkdt, layer_kv_dim(c, c.n_layers)) : 0l
-    mir_units += head_kv_units
+    var inscope slabs <- resident_mirror_slabs(t, seq_cap, rkdt, resident_slab_cap_units(rkdt, g_rdec_regions_want), head)
     let cos_elems = resident_cos_elems(c)
     let dng = rdec_dn_geom(t)
     // tally arena blocks per format
@@ -1910,7 +2033,7 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     let rot = resident_rot(c)
     if (!rdec_prepare(c.n_layers, c.n_layers - n_recurrent, dim, qd, kvd, hs, c.n_heads, resident_hidden(t), c.vocab_size, seq_cap, neox,
                       c.norm_eps, c.attn_scale > 0.0 ? c.attn_scale : 1.0 / sqrt(float(hs)), c.qk_norm,
-                      int(rkdt), c.q_gated, rot, dng, mir_units, cos_elems, g_rdec_regions_want, rdec_carry_planned(c), head, head ? rdec_verify_rows_want(t) : 0l)) {
+                      int(rkdt), c.q_gated, rot, dng, slabs.units, slabs.n_slabs, cos_elems, g_rdec_regions_want, rdec_carry_planned(c), head, head ? rdec_verify_rows_want(t) : 0l)) {
         return rdec_decline("the device prepare declined (a kernel class or the mirror range - the tier's line above)")
     }
     rdec_note_weight_bytes(plan.weight_bytes)
@@ -1935,11 +2058,9 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     // place + wire each layer. One quantized X image feeds each consumer group (qkv shares one,
     // gate/up another), so a group must agree on its quant form — mixed groups decline
     var mir_idx = 0l
-    var mir_base = 0l
     var rec_idx = 0l
-    // per layer: its mirror base and slot (a shared-KV layer records its donor's), for the layers above it that share
-    var mir_bases, mir_slots : array<int64>
-    mir_bases |> reserve_resize(c.n_layers)
+    // per layer: its mirror slot (a shared-KV layer records its donor's), for the layers above it that share
+    var mir_slots : array<int64>
     mir_slots |> reserve_resize(c.n_layers)
     let ple = has_ple(c) ? c.n_embd_per_layer : 0l
     if (ple > 0l && !rdec_set_ple(ple)) return rdec_decline("the per-layer-embedding width {ple} is not a 32-multiple")
@@ -2016,10 +2137,9 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
             }
             continue
         }
-        //! a shared-KV layer attends over its donor's mirror rows: its record carries the donor's base and no mirror slot of its own
+        //! a shared-KV layer attends over its donor's mirror rows: its record carries the donor's seat and no mirror slot of its own
         let kvsh = t.kv_src[l] != l
-        let g = resident_layer_geom(t, l, kvsh ? mir_bases[t.kv_src[l]] : mir_base)
-        mir_bases[l] = g.mir_base
+        let g = resident_layer_geom(t, l, slabs.base[l], slabs.slab[l])
         mir_slots[l] = kvsh ? mir_slots[t.kv_src[l]] : mir_idx
         let bq = place_plane(t, planes, cur, ResidentRole.q, l, mr, kg, wb)
         let bk = kvsh ? -1l : place_plane(t, planes, cur, ResidentRole.k, l, mr, kg, wb)
@@ -2046,7 +2166,6 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
         }
         if (!kvsh) {
             mir_idx++
-            mir_base += seq_cap * kv_row_units(rkdt, g.kvd)
         }
     }
     if (ple > 0l) {   //! the pre-step's projection on device where the driver takes it (the cm2 f16 GEMM, or the KHR twin off cm2); the CPU pre-step serves otherwise
@@ -2073,6 +2192,7 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     }
     g_rdec_experts_host = host_experts
     g_rdec_host_layers = host_layers
+    g_rdec_mirror_slabs = slabs.n_slabs
     if (host_experts) {
         g_rdec_trace_header = (layers = int(resident_routed_layers(t)), experts = int(c.n_expert), k = int(c.n_expert_used))
         if (!empty(g_env_gpu.moe_trace)) {
@@ -2082,7 +2202,7 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
         resident_hot_arm(t, plan)
     }
     if (head) {
-        resident_place_head(t, planes, cur, mir_base, g_rdec_regions_want * seq_cap * kv_row_bytes(rkdt, layer_kv_dim(c, c.n_layers)) * 2l, mr, kg, wb)
+        resident_place_head(t, planes, cur, slabs.base[c.n_layers], slabs.slab[c.n_layers], g_rdec_regions_want * seq_cap * kv_row_bytes(rkdt, layer_kv_dim(c, c.n_layers)) * 2l, mr, kg, wb)
     }
     //! a per-layer-embedding model keeps the CPU embed unless its token table sits on the device too: the pre-step wants both gathers in one
     //! place; a hyper-connection model keeps it too - its window chain reads the pre-step's rows, never token ids
@@ -2169,12 +2289,13 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     select_prefill_override("vulkan")
     select_decode_override("vulkan")
     let regions = g_rdec_regions_want > 1l ? " x {g_rdec_regions_want} regions (set_gpu_resident_regions in process: each region takes a share of the mirror's context)" : ""
-    to_log(LOG_INFO, "dasLLAMA: resident driver armed ({c.n_layers} layers, dim {dim}, ctx {seq_cap}{regions}, kv {kvname}, device prefill + decode)\n")
+    let slab_say = slabs.n_slabs > 1l ? " in {slabs.n_slabs} mirror slabs" : ""
+    to_log(LOG_INFO, "dasLLAMA: resident driver armed ({c.n_layers} layers, dim {dim}, ctx {seq_cap}{regions}, kv {kvname}{slab_say}, device prefill + decode)\n")
     return true
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head"), arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-draft-head")]
-def private resident_place_head(t : Model; planes : array<ResidentPlane>; var cur : int&; mir_base, slot_bytes, mr, kg, wb : int64) {
+def private resident_place_head(t : Model; planes : array<ResidentPlane>; var cur : int&; mir_base, mir_slab, slot_bytes, mr, kg, wb : int64) {
     let c = t.config
     let l = c.n_layers
     var blks : int64[8]
@@ -2190,7 +2311,7 @@ def private resident_place_head(t : Model; planes : array<ResidentPlane>; var cu
     }
     let lf = resident_head_fmts(t)
     if (!rdec_set_head(blks[0], int(t.mtp_ehproj_fmt), blks[1], blks[2], blks[3], blks[4], blks[5], blks[6], blks[7],
-            int(lf.fq), int(lf.fk), int(lf.fv), int(lf.fo), int(lf.f1), int(lf.f3), int(lf.f2), resident_layer_geom(t, l, mir_base))) {
+            int(lf.fq), int(lf.fk), int(lf.fv), int(lf.fo), int(lf.f1), int(lf.f3), int(lf.f2), resident_layer_geom(t, l, mir_base, mir_slab))) {
         to_log(LOG_WARNING, "dasLLAMA: resident driver - the NextN draft head stays off the device (the device declined its classes, the tier's line above); the CPU draft serves\n")
         return
     }
@@ -2504,7 +2625,7 @@ def private rdec_carry_planned(c : Config) : bool => c.n_layer_nextn > 0l && rde
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-spec-knob-gate")]
 def private rdec_carry_on(c : Config) : bool => rdec_carry_planned(c) && get_mtp_spec()
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#logits-transfer-queue")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_LANDING.md#logits-transfer-queue")]
 def private rdec_stash_carry(c : Config; var s : Session; row, pos1 : int64) {
     return if (!rdec_carry_on(c) || s.device_kv)
     rdec_land_carry(row, s.mtp_h)
@@ -2719,6 +2840,11 @@ def gpu_resident_experts_host_() : bool => g_rdec_active && g_rdec_experts_host
 
 //! The routed layers of the armed model whose experts serve on the host - the first this many in layer order; 0 = every expert on the device.
 def gpu_resident_host_layers() : int64 => g_rdec_active ? g_rdec_host_layers : 0l
+
+var private g_rdec_mirror_slabs = 0l
+
+//! the K/V mirror slabs the armed driver binds (`resident_mirror_slabs`); 0 with no driver armed
+def gpu_resident_mirror_slabs() : int64 => g_rdec_active ? g_rdec_mirror_slabs : 0l
 
 //! the rows the last device verify landed
 def moe_gpu_resident_verify_rows() : int64 => long_length(g_rdec_verify_picks)
@@ -4077,6 +4203,7 @@ def moe_gpu_drop_model_() {
     g_rdec_trace_header = (layers = 0, experts = 0, k = 0)
     g_rdec_experts_host = false
     g_rdec_host_layers = 0l
+    g_rdec_mirror_slabs = 0l
     rdec_set_host_experts(false)
     moe_gpu_dn_invalidate()
     rdec_set_active(false)

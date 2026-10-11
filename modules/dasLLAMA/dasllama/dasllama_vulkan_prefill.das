@@ -951,28 +951,37 @@ def private pf_setup {
     }
     let stagebytes = np * kvd * 4l
     let shbytes = kvq ? rd_shadow_bytes() : 0l
+    g_rd.pf_kv_store_sets |> clear()
+    g_rd.pf_kv_shadow_sets |> clear()
+    for (si in range64(rd_mir_slabs())) {   //! a block codec's window store writes, and its shadow pass reads, the layer's slab: one set a slab
+        let (kmir, vmir) = rd_slab_at(si)
+        if (kvtq4) {
+            let signbytes = KV_TQ4_SIGNS * 4l
+            g_rd.pf_kv_store_sets |> push(set_kv_tq4_store_b_cls(fixed_array(g_rd.pf_q, g_rd.pf_kst, g_rd.pf_vst, kmir, vmir, g_rd.tq4_signs_dev),
+                fixed_array(np * qrow * 4l, stagebytes, stagebytes, mirbytes, mirbytes, signbytes), fixed_array(VHZ_Q, VHZ_VST, VHZ_VST, VHZ_MIR, VHZ_MIR, 0u)))
+            g_rd.pf_kv_shadow_sets |> push(set_kv_tq4_shadow_cls(fixed_array(kmir, vmir, g_rd.ksh_dev, g_rd.vsh_dev),
+                fixed_array(mirbytes, mirbytes, shbytes, shbytes), fixed_array(VHZ_MIR, VHZ_MIR, VHZ_SK, VHZ_SK)))
+        }
+        if (kvq8) {
+            g_rd.pf_kv_store_sets |> push(set_kv_q8_store_b_cls(fixed_array(g_rd.pf_kst, g_rd.pf_vst, kmir, vmir),
+                fixed_array(stagebytes, stagebytes, mirbytes, mirbytes), fixed_array(VHZ_VST, VHZ_VST, VHZ_MIR, VHZ_MIR)))
+            g_rd.pf_kv_shadow_sets |> push(set_kv_q8_shadow_cls(fixed_array(kmir, vmir, g_rd.ksh_dev, g_rd.vsh_dev),
+                fixed_array(mirbytes, mirbytes, shbytes, shbytes), fixed_array(VHZ_MIR, VHZ_MIR, VHZ_SK, VHZ_SK)))
+        }
+    }
     if (kvtq4) {
         let signbytes = KV_TQ4_SIGNS * 4l
-        g_rd.pf_kv_store_set = set_kv_tq4_store_b_cls(fixed_array(g_rd.pf_q, g_rd.pf_kst, g_rd.pf_vst, g_rd.k_mirror, g_rd.v_mirror, g_rd.tq4_signs_dev),
-            fixed_array(np * qrow * 4l, stagebytes, stagebytes, mirbytes, mirbytes, signbytes), fixed_array(VHZ_Q, VHZ_VST, VHZ_VST, VHZ_MIR, VHZ_MIR, 0u))
-        g_rd.pf_kv_shadow_set = set_kv_tq4_shadow_cls(fixed_array(g_rd.k_mirror, g_rd.v_mirror, g_rd.ksh_dev, g_rd.vsh_dev),
-            fixed_array(mirbytes, mirbytes, shbytes, shbytes), fixed_array(VHZ_MIR, VHZ_MIR, VHZ_SK, VHZ_SK))
         g_rd.pf_unrot_set = set_kv_tq4_unrot_cls(fixed_array(g_rd.pf_attn, g_rd.pf_q, g_rd.tq4_signs_dev),
             fixed_array(np * qd * 4l, np * qrow * 4l, signbytes), fixed_array(VHZ_ATT, VHZ_Q, 0u))
     }
-    if (kvq8) {
-        g_rd.pf_kv_store_set = set_kv_q8_store_b_cls(fixed_array(g_rd.pf_kst, g_rd.pf_vst, g_rd.k_mirror, g_rd.v_mirror),
-            fixed_array(stagebytes, stagebytes, mirbytes, mirbytes), fixed_array(VHZ_VST, VHZ_VST, VHZ_MIR, VHZ_MIR))
-        g_rd.pf_kv_shadow_set = set_kv_q8_shadow_cls(fixed_array(g_rd.k_mirror, g_rd.v_mirror, g_rd.ksh_dev, g_rd.vsh_dev),
-            fixed_array(mirbytes, mirbytes, shbytes, shbytes), fixed_array(VHZ_MIR, VHZ_MIR, VHZ_SK, VHZ_SK))
-    }
-    let kread = kvq ? g_rd.ksh_dev : g_rd.k_mirror
-    let vread = kvq ? g_rd.vsh_dev : g_rd.v_mirror
     let readbytes = kvq ? shbytes : mirbytes
     let readbit = kvq ? VHZ_SK : VHZ_MIR
     for (l in range64(g_rd.n_layers)) {
         var L & = unsafe(g_rd.layers[l])
         let b = int(l * PF_ROLES)
+        let slab = L.recurrent ? (k = 0ul, v = 0ul) : rd_slab(L)   //! the f16 mirror's rows are the layer's slab; a block codec's shadow is one plane for every layer
+        let kread = kvq ? g_rd.ksh_dev : slab.k
+        let vread = kvq ? g_rd.vsh_dev : slab.v
         if (L.recurrent) {
             pf_dn_layer_sets(l, dim, g_rd.dn_cd, g_rd.dn_di)
         }
@@ -989,7 +998,7 @@ def private pf_setup {
         // (GEMM roles 1/2/3/7/10/11/13 build lazily per router variant at record time)
         if (!L.recurrent) {
             // 4 rope+store (class: q, kv, Kmir, Vmir, cos, bias)
-            g_rd.pf_sets[b + 4] = pf_rope_kv_set(g_rd.pf_cos)
+            g_rd.pf_sets[b + 4] = pf_rope_kv_set(g_rd.pf_cos, L)
         // 5 attn (class: q, Kmir, Vmir, out) — the cm2 fa tile / h128 coopmat twin when they serve this layer's head size
         let fa128l = fa128s && L.hs == 128l
         if ((L.pf_fa || L.pf_fakhr) && g_rd.has_sinks) {
@@ -1109,7 +1118,7 @@ def private pf_head_setup : bool {
     g_rd.pf_sets[hb + 7] = set_cls_ar(fixed_array(g_rd.head_pf_hsrc, g_rd.head_pf_hsrc, g_rd.norms_dev, g_rd.pf_ffnout),
         fixed_array(xb, xb, normbytes, xb), fixed_array(VHZ_GATE, VHZ_GATE, 0u, VHZ_FFO))
     g_rd.pf_sets[hb + 0] = pf_feed_set(q6, g_rd.pf_xb, VHZ_XB, g_rd.pf_xf, g_rd.pf_xq, g_rd.pf_xs, dim, VHZ_XQ)
-    g_rd.pf_sets[hb + 4] = pf_rope_kv_set(g_rd.head_pf_hcos)
+    g_rd.pf_sets[hb + 4] = pf_rope_kv_set(g_rd.head_pf_hcos, g_rd.head)
     if (g_rd.qk_norm) {
         g_rd.pf_sets[hb + 15] = pf_qk_rms_set()
     }
@@ -1224,7 +1233,7 @@ def private pf_head_kv_store(raw : VkCommandBuffer; var h : VkHaz; L : RLayer; n
     let ropewg = (nh * int64(pairs) + int64(WG_X) - 1l) / int64(WG_X)
     rope_kv_b_stamp_enc(rd_kv16(), raw, h, g_rd.pf_sets[hb + 4], pcr, ropewg)
     // the warm attends nothing: no q head to rotate under tq4
-    rd_enc_kv_store(raw, h, g_rd.pf_kv_store_set, true, kvd, hs, nh, 0l, kvd / hs, mirb, uint(pos0), uint(g_rd.n_heads * int64(qhs)), uint(qhs))
+    rd_enc_kv_store(raw, h, g_rd.pf_kv_store_sets[L.mir_slab], true, kvd, hs, nh, 0l, kvd / hs, mirb, uint(pos0), uint(g_rd.n_heads * int64(qhs)), uint(qhs))
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm")]
@@ -1283,14 +1292,15 @@ def private pf_head_cat_set(streams : int64) : VkDescriptorSet {
     return pf_feed_set(e6, g_rd.head_pf_cat, VHZ_ATT, g_rd.head_pf_catf, g_rd.head_pf_catq, g_rd.head_pf_cats, width, VHZ_AQ)
 }
 
-def private pf_rope_kv_set(cos : uint64) : VkDescriptorSet {
+def private pf_rope_kv_set(cos : uint64; L : RLayer) : VkDescriptorSet {
     let np = g_rd.pf_np
     let kvd = g_rd.kv_dim
     let qrow = g_rd.q_gated ? 2l * g_rd.qd : g_rd.qd
     let kvq = rd_kv_block_codec()
     let storebytes = kvq ? np * kvd * 4l : rd_mir_bytes()
     let storebit = kvq ? VHZ_VST : VHZ_MIR
-    let rbufs = fixed_array(g_rd.pf_q, g_rd.pf_kv, kvq ? g_rd.pf_kst : g_rd.k_mirror, kvq ? g_rd.pf_vst : g_rd.v_mirror, cos, g_rd.has_bias ? g_rd.bias_dev : g_rd.norms_dev)
+    let slab = rd_slab(L)
+    let rbufs = fixed_array(g_rd.pf_q, g_rd.pf_kv, kvq ? g_rd.pf_kst : slab.k, kvq ? g_rd.pf_vst : slab.v, cos, g_rd.has_bias ? g_rd.bias_dev : g_rd.norms_dev)
     let rsizes = fixed_array(np * qrow * 4l, np * 2l * kvd * 4l, storebytes, storebytes, np * g_rd.cos_elems * 4l, g_rd.has_bias ? g_rd.bias_bytes : g_rd.norms_bytes)
     let rgbits = fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, storebit, storebit, VHZ_COS, 0u)
     return rope_kv_b_stamp_set(rd_kv16(), rbufs, rsizes, rgbits)
@@ -1773,15 +1783,15 @@ def private pf_attn_block(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : i
         cstride = uint(cos_elems), cbase = uint(g_rd.layers[l].cbase))
     rope_kv_b_stamp_enc(rd_kv16(), raw, h, g_rd.pf_sets[b + 4], pcr, ropewg)
     if (kvq) {
-        rd_enc_kv_store(raw, h, g_rd.pf_kv_store_set, true, kvd, hs, wlen, g_rd.n_heads, kvsh ? 0l : kvd / hs, mirb, uint(pos0w), uint(qrow), uint(qhs))
+        rd_enc_kv_store(raw, h, g_rd.pf_kv_store_sets[g_rd.layers[l].mir_slab], true, kvd, hs, wlen, g_rd.n_heads, kvsh ? 0l : kvd / hs, mirb, uint(pos0w), uint(qrow), uint(qhs))
         let kvlen = pos0w + wlen
         let shadow_pos0 = window != 0u && pos0w > int64(window) ? ((pos0w - int64(window)) / 64l) * 64l : 0l   // a sliding layer's tiles start a 64-key step under its window
         var pch = KvQShadowArgs(kvd = uint(kvd), pos0 = uint(shadow_pos0), rows = uint(kvlen - shadow_pos0), layerbase = mirb)
         let shwg = (rd_kv_row_units(kvd) * (kvlen - shadow_pos0) + int64(WG_X) - 1l) / int64(WG_X)
         if (kvtq4) {
-            enc_kv_tq4_shadow_cls(raw, h, g_rd.pf_kv_shadow_set, pch, shwg)
+            enc_kv_tq4_shadow_cls(raw, h, g_rd.pf_kv_shadow_sets[g_rd.layers[l].mir_slab], pch, shwg)
         } else {
-            enc_kv_q8_shadow_cls(raw, h, g_rd.pf_kv_shadow_set, pch, shwg)
+            enc_kv_q8_shadow_cls(raw, h, g_rd.pf_kv_shadow_sets[g_rd.layers[l].mir_slab], pch, shwg)
         }
     }
     pfq_ts(raw)
@@ -1845,7 +1855,7 @@ def private pf_ffn_block(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : in
         p2.wqb, p2.wsb, hf.qn, hf.sn, np * dim * 4l, VHZ_HQ, VHZ_FFO, hid, dim, g_rd.layers[l].b2, ffn_rows, dn6, 0l, ffn_row0)
 }
 
-[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain"), arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm"), arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#logits-transfer-queue"), arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-window-chain")]
+[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain"), arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm"), arch(at="../ARCHITECTURE_GPU_VULKAN_LANDING.md#logits-transfer-queue"), arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-window-chain")]
 def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; emb_scale : float;
                    cos_batch : array<float>; ple_rows : array<float>; ple_raw : bool; npos, pos0 : int64; var logits : array<float>;
                    experts : RdecHostExpertsRowsFn) {
