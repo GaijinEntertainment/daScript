@@ -96,19 +96,6 @@ def private check_shared_module_names {
     }
 }
 
-def private check_no_step_targets {
-    var inscope files <- tracked_files(["*CMakeLists.txt", "*.cmake"], "ExternalProject_Add_StepTargets")
-    for (f in files) {
-        continue if (!fexist(f))
-        let text = fread(f)
-        var inscope calls <- cmake_command_blocks(text, "ExternalProject_Add_StepTargets")
-        if (!empty(calls)) {
-            gate_finding(f, find_line(text, calls[0]),
-                "calls ExternalProject_Add_StepTargets - under this tree's CMake 3.17 minimum, policy CMP0114 is unset, and Visual Studio then gives the step target its own copy of the external project's whole build chain with no dependency on the main target, so the two build the external project at the same time (two links of one DLL fail with LNK1104); add the step with ExternalProject_Add_Step and depend on the external project's main target, which runs the step")
-        }
-    }
-}
-
 def private is_url_download(command : string; args : array<string>) : bool {
     if (command == "file") {
         return !empty(args) && to_upper(args[0]) == "DOWNLOAD"
@@ -148,7 +135,6 @@ def main {
         return 2
     }
     check_shared_module_names()
-    check_no_step_targets()
     check_download_timeouts()
     return gate_verdict("repo root")
 }

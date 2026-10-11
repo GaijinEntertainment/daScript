@@ -97,8 +97,10 @@ to it: loop-hint annotation arguments, `[llvm_code]` generator arguments, `[hint
 `[never_fast_math]` (`ARCHITECTURE_FAST_MATH.md#never-fast-math`). None of them has a SimNode, so
 changing one alone leaves the AOT hash identical, and the cache would serve the old code back.
 `fold_loop_hints`, `fold_llvm_code_hints` and `fold_function_hints` (`daslib/llvm_jit_plan.das`)
-fold them per function into both cache keys - the DLL key and each split partition's key - beside
-the AOT hashes. `fold_function_hints` folds each annotation after its function's mangled name:
+fold them per function, and `fold_jit_only_inputs` chains them with the extern slot names
+(`ARCHITECTURE_CODEGEN_IDENTITY.md#extern-slot-names-key`): it is the one fold both cache keys
+take - the DLL key and each split partition's key - beside the AOT hashes, so an input added to it
+reaches both. `fold_function_hints` folds each annotation after its function's mangled name:
 the key is a sequence of tokens, so without the name a marker moved from one function to another
 folds to the same key and a warm cache serves code where the wrong function carries it.
 

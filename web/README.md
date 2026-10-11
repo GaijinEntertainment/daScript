@@ -7,7 +7,7 @@ Outputs land in `output/`: `daslang.wasm`, `daslang_static.wasm`, `das-fmt.wasm`
 
 ## Prerequisites
 
-- **CMake >= 3.16**, **Ninja**, **Python 3**
+- **CMake >= 3.24**, **Ninja**, **Python 3**
 - **Emscripten** - `emcc` / `em++` / `emcmake` on `PATH`. Install via your package manager (easiest) or pin a specific version via `emsdk` (CI does this).
 
 ## Install Emscripten

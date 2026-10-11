@@ -38,7 +38,7 @@ var LINK_WHOLE_LIB = false // when true, standalone exe links against the whole 
 
 // Read by tests-cpp/small/test_jit_emitter_pin.cpp: FNV-1a64 of the emitter sources
 // (normalized to LF; file list in the test)
-let LLVM_JIT_EMITTER_HASH : uint64 = 0x7ecc8f363857e6e8ul
+let LLVM_JIT_EMITTER_HASH : uint64 = 0xf810e6b7611323e6ul
 
 [arch(at = "../ARCHITECTURE_FAST_MATH.md#never-fast-math")]
 def private apply_fast_math_to_module(m : LLVMOpaqueModule?) {
@@ -384,9 +384,7 @@ def private run_split_codegen(prog : Program?; ctx : Context?; funcs : array<Fun
             chain = (chain ^ hash(get_mangled_name(fun))) * JIT_FNV_PRIME   // a rename must re-key: the symbol lives in the .o
             chain = (chain ^ get_function_aot_hash(fun)) * JIT_FNV_PRIME
         }
-        chain = fold_loop_hints(buckets[pname], chain)
-        chain = fold_llvm_code_hints(buckets[pname], chain)
-        chain = fold_function_hints(buckets[pname], chain)
+        chain = fold_jit_only_inputs(prog, buckets[pname], chain)
         let pkey = (chain ^ env_salt) * JIT_FNV_PRIME
         // cache off (incl. a pinned output path, where no GC may run): positional names, overwritten in place - key-named objs would accumulate without bound there
         let obj_final = (obj_cache ? artifact_path("{dir_name(output_path)}/{pkey}.m_{ptag}", JitArtifact.object)
