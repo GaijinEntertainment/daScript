@@ -190,11 +190,13 @@ if(NOT DAS_TOOLS_DISABLED)
     das_lane_dastest_target(run_tests_llvm_tune COMMENT "Testing the llvm_tune framework"
         JIT_FILES modules/dasLLVM/tests/llvm_tune.das modules/dasLLVM/tests/llvm_tune_fat.das
                   modules/dasLLVM/tests/llvm_tune_manifest.das modules/dasLLVM/tests/llvm_tune_modes.das
-                  modules/dasLLVM/tests/llvm_tune_modes_client.das modules/dasLLVM/tests/llvm_tune_profiles.das
+                  modules/dasLLVM/tests/llvm_tune_modes_client.das
                   modules/dasLLVM/tests/llvm_tune_progress.das modules/dasLLVM/tests/llvm_tune_requires.das
-                  modules/dasLLVM/tests/llvm_tune_scope.das modules/dasLLVM/tests/llvm_tune_stats.das
+                  modules/dasLLVM/tests/llvm_tune_stats.das
                   modules/dasLLVM/tests/test_grid.das modules/dasLLVM/tests/test_tune.das
                   modules/dasLLVM/tests/test_tuned.das)
+    das_lane_dastest_target(run_tests_llvm_tune_slow COMMENT "Testing the llvm_tune framework (slow tuner runs)"
+        JIT_FILES modules/dasLLVM/tests/llvm_tune_profiles.das modules/dasLLVM/tests/llvm_tune_scope.das)
     das_lane_dastest_target(run_tests_llvm_exe COMMENT "Testing the standalone exe"
         JIT_FILES modules/dasLLVM/tests/llvm_exe_name_lookup.das modules/dasLLVM/tests/llvm_exe_native_paths.das
                   modules/dasLLVM/tests/llvm_exe_shared_addr.das modules/dasLLVM/tests/llvm_exe_split_lto.das
