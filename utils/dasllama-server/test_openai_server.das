@@ -743,6 +743,38 @@ def test_openai_server(t : T?) {   // nolint:STYLE038 — one live server sessio
                     }
                 }
             }
+            // POST /cache/drop - the finished turns' donated pages leave the prompt cache on an idle server, the model stays
+            var held_pages = -1l
+            GET("{base_url}/v1/stats") $(resp) {
+                var err : string
+                var js = read_json(string(resp.body), err)
+                held_pages = js?["prefix_pages"] ?? -1l
+                unsafe {
+                    delete js
+                }
+            }
+            t |> success(held_pages > 0l, "the finished turns left pages in the prompt cache (held {held_pages})")
+            POST("{base_url}/cache/drop", "") $(resp) {
+                t |> equal(int(resp.status_code), int(http_status.OK), "an idle server drops its prompt cache")
+                var err : string
+                var js = read_json(string(resp.body), err)
+                t |> success(js != null && (js?["ok"] ?? false), "the drop answers ok")
+                t |> equal(js?["pages_dropped"] ?? -1l, held_pages, "the drop reports the pages the stats held")
+                unsafe {
+                    delete js
+                }
+            }
+            GET("{base_url}/v1/stats") $(resp) {
+                var err : string
+                var js = read_json(string(resp.body), err)
+                t |> equal(js?["prefix_pages"] ?? -1l, 0l, "the prompt cache is empty after the drop")
+                unsafe {
+                    delete js
+                }
+            }
+            POST("{base_url}/v1/chat/completions", "\{\"messages\":[\{\"role\":\"user\",\"content\":\"hi\"}],\"max_tokens\":4}") $(resp) {
+                t |> equal(int(resp.status_code), int(http_status.OK), "the server serves on after the drop")
+            }
             POST("{base_url}/v1/models/unload", "\{\"model\":\"test-llm\"}") $(resp) {
                 t |> equal(int(resp.status_code), int(http_status.BAD_REQUEST), "unloading the default is refused")
             }
@@ -1220,6 +1252,9 @@ def test_bench_inprocess(t : T?) {   // nolint:STYLE038 — one live server sess
                 }
                 POST("{base_url}/bake", "") $(resp) {
                     t |> equal(int(resp.status_code), int(http_status.CONFLICT), "a bake during the run is refused")
+                }
+                POST("{base_url}/cache/drop", "") $(resp) {
+                    t |> equal(int(resp.status_code), int(http_status.CONFLICT), "a cache drop during the run is refused")
                 }
             }
             let started = ref_time_ticks()
