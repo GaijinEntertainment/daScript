@@ -523,7 +523,8 @@ SPIR-V at compile time by dasSpirv (no GLSL, no glslang) -- the same language as
 the host, compute and graphics alike.
 
 The series builds **graphics → compute → 3D scene → instancing → environment →
-GPU-driven scene → multi-pass → modern pipeline → mesh shaders → ray tracing**:
+GPU-driven scene → multi-pass → modern pipeline → mesh shaders → ray tracing →
+Vulkan 1.4**:
 01_triangle is the canonical hello-triangle, 02_mandelbrot and 03_sdf swap to the
 compute pipeline, 04_cube takes graphics into 3D with depth + UBO + push constant
 + texture, 05_instancing draws 1000 cubes in one call, 06_skybox wraps the scene
@@ -538,10 +539,14 @@ survivors into an indirect-draw buffer with a GPU-written count, and
 ``cmd_draw_indexed_indirect_count`` draws them with bindless materials. 13_mesh
 and 14_teapot drop the vertex buffer entirely for the GPU-driven **mesh-shader**
 pipeline -- cluster culling, then on-GPU Bezier tessellation of the Utah teapot.
-Finally 15_raytracing leaves the rasterizer behind for **hardware ray tracing**:
+15_raytracing leaves the rasterizer behind for **hardware ray tracing**:
 acceleration structures, a ``VK_KHR_ray_tracing_pipeline``, and a traced shadow
 ray per hit -- raygen, miss, and closest-hit shaders all authored in daslang.
-Each tutorial's `Next` footer links to the one after.
+Finally 16_vulkan14 takes the three **Vulkan 1.4** promotions that change how a
+frame is put together -- host image copy, push descriptors, and dynamic
+rendering local read -- on a two-pass G-buffer scene with no descriptor pool, no
+staging buffer and no render pass. Each tutorial's `Next` footer links to the
+one after.
 
 Every tutorial lives in its own self-contained directory under
 ``modules/dasVulkan/tutorials/``: the shaders, the offscreen render, a
@@ -551,9 +556,9 @@ pixel-checked **every CI run** by the tutorial's oracle test; the ``.mp4`` is th
 documentation figure of that same verified render, regenerated manually with the
 local recording driver (which needs stbimage + audio + ffmpeg, so it does not run
 in CI). The mesh-shader tutorials (13_mesh, 14_teapot) soft-skip on CI's software
-renderer, which lacks ``VK_EXT_mesh_shader``, and 15_raytracing soft-skips there
-too (no ``VK_KHR_ray_tracing_pipeline``); 13_mesh's figure is a still image
-rather than a video.
+renderer, which lacks ``VK_EXT_mesh_shader``, 15_raytracing soft-skips there
+too (no ``VK_KHR_ray_tracing_pipeline``), and 16_vulkan14 soft-skips below
+Vulkan 1.4; 13_mesh's figure is a still image rather than a video.
 
 .. toctree::
    :maxdepth: 1
@@ -573,6 +578,7 @@ rather than a video.
    tutorials/vulkan/13_mesh.rst
    tutorials/vulkan/14_teapot.rst
    tutorials/vulkan/15_raytracing.rst
+   tutorials/vulkan/16_vulkan14.rst
 
 .. _tutorials_opengl:
 

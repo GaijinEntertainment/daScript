@@ -124,22 +124,38 @@ def merge_set_bindings(reflections : array<SpirvReflection>; set : int) : array<
     return <- result
 }
 
-//! Build one DescriptorSetLayout per descriptor set across all reflections, bindings merged by
-//! (set, binding) with stage flags OR-ed. Indexed by set number 0..maxSet — a set with no bindings gets
-//! an empty layout so indices line up with the pipeline layout. Caller owns them (`var inscope sl <- ...`).
-def build_descriptor_set_layouts(device : Device; reflections : array<SpirvReflection>) : array<DescriptorSetLayout> {
+def private build_descriptor_set_layouts(device : Device; reflections : array<SpirvReflection>;
+                                         flags : VkDescriptorSetLayoutCreateFlags) : array<DescriptorSetLayout> {
     var layouts : array<DescriptorSetLayout>
     let topSet = max_set(reflections)
     layouts |> reserve(topSet + 1)
     for (set in range(topSet + 1)) {
-        var dslci : DescriptorSetLayoutCreateInfo
-        dslci.pBindings <- merge_set_bindings(reflections, set)
+        var dslci = DescriptorSetLayoutCreateInfo(flags = flags, pBindings <- merge_set_bindings(reflections, set))
         layouts |> emplace(create_descriptor_set_layout(device, dslci))
-        // create_descriptor_set_layout's vk_view_destroy frees only the _vk_view_* temporaries, not the
-        // idiomatic pBindings array we moved in — delete it so a per-frame caller does not accumulate.
+        // vk_view_destroy frees only the _vk_view_* temporaries, not the pBindings array moved in above
         unsafe { delete dslci.pBindings }
     }
     return <- layouts
+}
+
+def build_descriptor_set_layouts(device : Device; reflections : array<SpirvReflection>) : array<DescriptorSetLayout> {
+    //! Build one DescriptorSetLayout per descriptor set across all reflections, bindings merged by
+    //! (set, binding) with stage flags OR-ed. Indexed by set number 0..maxSet - a set with no bindings gets
+    //! an empty layout so indices line up with the pipeline layout. Caller owns them (`var inscope sl <- ...`).
+    let plain : VkDescriptorSetLayoutCreateFlags
+    return <- build_descriptor_set_layouts(device, reflections, plain)
+}
+
+def build_push_descriptor_set_layouts(device : Device; reflections : array<SpirvReflection>) : array<DescriptorSetLayout> {
+    //! `build_descriptor_set_layouts` for shaders whose every binding sits in set 0, that one layout flagged
+    //! ``push_descriptor``: a pipeline on it takes its descriptors from `cmd_push_descriptor_set` per draw and
+    //! allocates no set. A pipeline layout holds at most one pushed set, so a binding past set 0 is a panic.
+    if (max_set(reflections) > 0) {
+        panic("build_push_descriptor_set_layouts: push descriptors take one set - every binding in set 0, found set {max_set(reflections)}")
+    }
+    var pushed : VkDescriptorSetLayoutCreateFlags
+    pushed.push_descriptor = true
+    return <- build_descriptor_set_layouts(device, reflections, pushed)
 }
 
 //! Build a PipelineLayout from the given (reflection-built) descriptor set layouts plus the merged

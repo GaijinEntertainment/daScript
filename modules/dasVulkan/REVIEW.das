@@ -8,9 +8,9 @@ require dastest/review_gate
 // repo root). Run from the repo root: bin/daslang modules/dasVulkan/REVIEW.das - exit 0
 // clean, 1 with findings.
 
-//! The frame-shape rules' mechanical half: every call to a render-pass or legacy-flag barrier helper
-//! under `roots` is a finding, except under `ignore_prefix` (the ARCHITECTURE.md exception ledger's
-//! tutorials/10_deferred).
+//! The tutorial and example half of REVIEW.md's two frame-shape rules: every call to a render-pass or
+//! legacy-flag barrier helper under `roots` is a finding, except under `ignore_prefix` (the
+//! ARCHITECTURE.md exception ledger's tutorials/10_deferred).
 def gate_legacy_frame_shape(roots : array<string>; ignore_prefix : string) {
     let legacy <- ["record_render_pass", "transition_image", "transition_depth_image", "transition_image_aspect"]
     for (root in roots) {
@@ -28,8 +28,8 @@ def gate_legacy_frame_shape(roots : array<string>; ignore_prefix : string) {
     }
 }
 
-//! The viewer-naming rule's mechanical half: every `tutorials/NN_<name>/` holds a `window/show_<name>.das`
-//! or `window/show_<name>_<method>.das`, and every `window/show_*.das` is one of those two forms.
+//! Every tutorial's viewer set: at least one `window/show_*.das`, named `show_<name>.das` when alone and
+//! `show_<name>_<way>.das` each once there are two - `<name>` the folder's name without its numeric prefix.
 def gate_tutorial_viewers(tutorials_root : string) {
     dir(tutorials_root) $(folder) {
         let us = find(folder, "_")
@@ -38,14 +38,24 @@ def gate_tutorial_viewers(tutorials_root : string) {
         let name = slice(folder, us + 1)
         let window = "{tutorials_root}/{folder}/window"
         var viewers = 0
+        var bare = false
         dir(window) $(file) {
             return if (!ends_with(file, ".das") || !starts_with(file, "show_"))
             let stem = slice(file, 0, length(file) - 4)
-            if (stem == "show_{name}" || starts_with(stem, "show_{name}_")) {
+            if (stem == "show_{name}") {
+                viewers++
+                bare = true
+            } elif (starts_with(stem, "show_{name}_")) {
                 viewers++
             } else {
-                gate_finding("{window}/{file}", "a viewer is show_{name}.das, or show_{name}_<method>.das when the tutorial presents more than one way")
+                gate_finding("{window}/{file}", "a viewer is show_{name}.das, or show_{name}_<way>.das when the tutorial presents more than one way")
             }
+        }
+        if (viewers > 1 && bare) {
+            gate_finding("{window}/show_{name}.das", "a tutorial with more than one viewer names every viewer show_{name}_<way>.das - the bare one is renamed")
+        }
+        if (viewers == 1 && !bare) {
+            gate_finding(window, "a tutorial's only viewer is named show_{name}.das - the _<way> suffix appears once there are two")
         }
         if (viewers == 0) {
             gate_finding("{tutorials_root}/{folder}", "no window/show_{name}*.das viewer - every tutorial ships a GLFW window that presents its output live")

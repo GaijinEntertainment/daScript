@@ -21,18 +21,9 @@ let public MESH_H = 256
 //! (mesh_shader_supported) -- so the pixel-oracle gate skips cleanly on a driver that lacks it (e.g. Mesa
 //! lavapipe < 24.1) instead of crashing vkCreateDevice. Creates and tears down a throwaway instance.
 def public mesh_shader_available() : bool {
-    if (volkInitialize() != 0) {
-        return false
+    return probe_device("dasVulkan tutorial 13 probe", make_api_version(1u, 3u, 0u)) $(phys) {
+        return mesh_shader_supported(phys)
     }
-    var inscope instance <- create_instance("dasVulkan tutorial 13 probe", make_api_version(1u, 3u, 0u))
-    volkLoadInstance(boost_value_to_vk(instance))
-    var count = 0u
-    vkEnumeratePhysicalDevices(boost_value_to_vk(instance), count, null)
-    if (count == 0u) {
-        return false   // loader present but no device: soft-skip instead of panicking in select_physical_device
-    }
-    let phys = select_physical_device(instance)
-    return mesh_shader_supported(phys)
 }
 
 //! Render the meshlet grid offscreen; returns MESH_W*MESH_H RGBA8 pixels. The device is created with

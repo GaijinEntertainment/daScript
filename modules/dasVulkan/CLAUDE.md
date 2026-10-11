@@ -39,7 +39,7 @@ cmake --build build --config Release
 ```
 
 **Build the shared twin at `--parallel 2`, not unbounded** - unbounded exhausts a 7 GB runner
-(`ARCHITECTURE.md` sec.1):
+(`ARCHITECTURE.md#two-layers`):
 
 ```
 cmake --build ./build --parallel 2 --target dasModuleVulkan
