@@ -23,7 +23,7 @@ is archived with full history; development continues in the daslang tree.
 
 ### Requirements
 
-- CMake 3.16+
+- CMake 3.24+
 - C++17 compiler (MSVC, GCC, Clang)
 - OpenGL
 

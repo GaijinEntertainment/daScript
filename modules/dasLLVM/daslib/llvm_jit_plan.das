@@ -31,7 +31,7 @@ require jit
 // invalidates cached DLLs (e.g. edits to llvm_jit.das, llvm_macro.das, llvm_jit_common.das,
 // runtime helper ABI, default target triple). Cache filenames fold this in, so a bump
 // makes every previously written DLL miss the cache on the next run and get GC'd.
-let public LLVM_JIT_CODEGEN_VERSION : uint64 = 0x99ul
+let public LLVM_JIT_CODEGEN_VERSION : uint64 = 0x9Aul
 
 let public JIT_FNV_PRIME : uint64 = 1099511628211ul
 
@@ -322,16 +322,14 @@ def public jit_env_salt(opt_level : int; size_level : int; emit_prologue : bool;
     return h
 }
 
-def public jit_dll_basename(funcs : array<FunctionPtr>; opt_level : int; size_level : int;
+def public jit_dll_basename(prog : Program?; funcs : array<FunctionPtr>; opt_level : int; size_level : int;
                             emit_prologue : bool; debug_info : bool; target_triple : string; split : bool;
                             use_host_cpu : bool; sanitize : JitSanitize) : string {
     var h = LLVM_JIT_CODEGEN_VERSION
     for (fn in funcs) {
         h = (h ^ get_function_aot_hash(fn)) * JIT_FNV_PRIME
     }
-    h = fold_loop_hints(funcs, h)   // JIT-only loop tune hints (see LoopHintHashVisitor)
-    h = fold_llvm_code_hints(funcs, h)   // [llvm_code] generator params (annotation args)
-    h = fold_function_hints(funcs, h)   // [hint(...)] function attributes (backend-only, aot-hash-blind)
+    h = fold_jit_only_inputs(prog, funcs, h)
     h = (h ^ jit_env_salt(opt_level, size_level, emit_prologue, debug_info, target_triple, split, use_host_cpu, sanitize)) * JIT_FNV_PRIME
     return "{h}"
 }
@@ -526,6 +524,8 @@ class public DllExternResolver : AstVisitor {
     @do_not_delete thisBlock : array<ExprBlock?>
     @do_not_delete uid : UidNodes?
     errors : array<string>
+    fold_only : bool   //! the cache key's walk: fold every slot name a load could bind, compute no address, fill nothing
+    slot_name_fold : uint64
 
     def override canVisitWithAliasSubexpression(expr : ExprAssume?) : bool => false
 
@@ -551,6 +551,14 @@ class public DllExternResolver : AstVisitor {
         errors |> push(msg)
     }
 
+    //! true on the cache key's walk, which takes the slot's name and stops before any address is computed
+    def private folded(name : DllName) : bool {
+        if (fold_only) {
+            slot_name_fold = (slot_name_fold ^ hash(name.name)) * JIT_FNV_PRIME
+        }
+        return fold_only
+    }
+
     //! `what` names the slot only on failure - the message is a `describe` the success path never pays for
     def private set_slot(name : DllName; ptr : void?; what : block<() : string>) {
         if (dll.set_glob_address(name, ptr) && ptr == null) {
@@ -561,6 +569,7 @@ class public DllExternResolver : AstVisitor {
     def make_call(expr : ExprCallFunc?) {
         if (expr.func == null) return
         let slot = uid.get_dll_fn_name_ptr(expr.func)
+        return if (folded(slot))
         if (expr.func.flags.builtIn) {
             let FUNC_PTR = get_builtin_function_address(expr.func)
             if (dll.set_glob_address(slot, FUNC_PTR) && FUNC_PTR == null && !is_dasbind_late(expr.func)) {
@@ -575,7 +584,9 @@ class public DllExternResolver : AstVisitor {
 
     def override preVisitExprNew(expr : ExprNew?) {
         if (expr.typeexpr.isHandle) {
-            set_slot(uid.get_new(expr.typeexpr), get_jit_new(expr.typeexpr.annotation)) {
+            let slot = uid.get_new(expr.typeexpr)
+            return if (folded(slot))
+            set_slot(slot, get_jit_new(expr.typeexpr.annotation)) {
                 return "new`handle function pointer for {describe(expr.typeexpr)}"
             }
         } elif (expr.typeexpr.baseType == Type.tFixedArray) {
@@ -586,7 +597,9 @@ class public DllExternResolver : AstVisitor {
                 elemT = elemT.firstType
             }
             if (elemT.baseType == Type.tHandle) {
-                set_slot(uid.get_new(expr.typeexpr), get_jit_new(elemT.annotation)) {
+                let slot = uid.get_new(expr.typeexpr)
+                return if (folded(slot))
+                set_slot(slot, get_jit_new(elemT.annotation)) {
                     return "new`handle function pointer for {describe(expr.typeexpr)}"
                 }
             } elif (expr.initializer) {
@@ -617,7 +630,9 @@ class public DllExternResolver : AstVisitor {
         assume subT = expr.subexpr._type
         if (subT.isPointer && subT.firstType.isHandle) {
             assume firstT = subT.firstType
-            set_slot(uid.get_delete_type(firstT), get_jit_delete(firstT.annotation)) {
+            let slot = uid.get_delete_type(firstT)
+            return if (folded(slot))
+            set_slot(slot, get_jit_delete(firstT.annotation)) {
                 return "delete`handle function pointer for {describe(firstT)}"
             }
         }
@@ -626,30 +641,37 @@ class public DllExternResolver : AstVisitor {
     def override preVisitExprClone(expr : ExprClone?) : void {
         assume leftT = expr.left._type
         if (leftT.isHandle) {
-            set_slot(uid.get_clone_type(leftT), get_jit_clone(leftT.annotation)) {
+            let slot = uid.get_clone_type(leftT)
+            return if (folded(slot))
+            set_slot(slot, get_jit_clone(leftT.annotation)) {
                 return "clone`handle function pointer for {describe(leftT)}"
             }
         }
     }
 
     def override preVisitExprAddr(expr : ExprAddr?) {
-        set_slot(uid.get_addr(expr), interpreter_function_addr(jit_context, expr.func)) {
+        let slot = uid.get_addr(expr)
+        return if (folded(slot))
+        set_slot(slot, interpreter_function_addr(jit_context, expr.func)) {
             return "function pointer for {expr.func.name}"
         }
     }
 
     def override preVisitExprMakeStructIndex(expr : ExprMakeStruct?; index : int; last : bool) : void {
-        if (expr.constructor != null && !is_jit_selected(prog, expr.constructor)) {
-            set_slot(uid.get_ctor(expr), interpreter_function_addr(jit_context, expr.constructor)) {
-                return "function pointer for {expr.constructor.name}"
-            }
+        return if (expr.constructor == null)
+        let slot = uid.get_ctor(expr)
+        return if (folded(slot) || is_jit_selected(prog, expr.constructor))
+        set_slot(slot, interpreter_function_addr(jit_context, expr.constructor)) {
+            return "function pointer for {expr.constructor.name}"
         }
     }
 
     def override preVisitExprAscend(expr : ExprAscend?) : void {
         if (expr.subexpr._type.isHandle) {
             assume firstT = expr.subexpr._type
-            set_slot(uid.get_ascend_new(expr), get_jit_new(firstT.annotation)) {
+            let slot = uid.get_ascend_new(expr)
+            return if (folded(slot))
+            set_slot(slot, get_jit_new(firstT.annotation)) {
                 return "new`handle function pointer for {describe(firstT)}"
             }
         }
@@ -671,17 +693,27 @@ class public DllExternResolver : AstVisitor {
         // String find is fully inline (no glob). Non-string binds the per-type C++ find glob — still
         // used by non-workhorse keys (vectors / structs) that route through build_table_find_call.
         if (t != Type.tString) {
-            dll.set_glob_address(DllName(FN_JIT_TABLE_FIND(t)), get_jit_table_find(unsafe(reinterpret<int>(t))))
+            let slot = DllName(FN_JIT_TABLE_FIND(t))
+            return if (folded(slot))
+            dll.set_glob_address(slot, get_jit_table_find(unsafe(reinterpret<int>(t))))
         }
     }
     def bind_jit_table_at_glob(t : Type) {
         if (t == Type.tString) {
-            dll.set_glob_address(DllName(FN_JIT_STRING_TABLE_AT_WITH_HASH()), get_jit_string_table_at_with_hash())
-            dll.set_glob_address(DllName(FN_JIT_STRING_TABLE_AT_AFTER_PACKED_MISS()), get_jit_string_table_at_after_packed_miss())
+            let with_hash = DllName(FN_JIT_STRING_TABLE_AT_WITH_HASH())
+            let after_miss = DllName(FN_JIT_STRING_TABLE_AT_AFTER_PACKED_MISS())
+            if (folded(with_hash)) {
+                folded(after_miss)
+                return
+            }
+            dll.set_glob_address(with_hash, get_jit_string_table_at_with_hash())
+            dll.set_glob_address(after_miss, get_jit_string_table_at_after_packed_miss())
         } else {
             // Non-string keys are open-addressed: the inline probe handles find/at hits and routes a
             // miss to the regular C++ at (FN_JIT_TABLE_AT) — no packed after-miss helper needed.
-            dll.set_glob_address(DllName(FN_JIT_TABLE_AT(t)), get_jit_table_at(unsafe(reinterpret<int>(t))))
+            let slot = DllName(FN_JIT_TABLE_AT(t))
+            return if (folded(slot))
+            dll.set_glob_address(slot, get_jit_table_at(unsafe(reinterpret<int>(t))))
         }
     }
 
@@ -691,14 +723,17 @@ class public DllExternResolver : AstVisitor {
             bind_jit_table_at_glob(table_key_storage_base_type(subExprT.firstType))
         } elif (handle_at_is_jitable(expr)) {
             assume ixT = expr.index._type
-            dll.set_glob_address(uid.get_at_type(subExprT, ixT),
-                get_jit_at(subExprT.annotation, jit_index_base_type(ixT)))
+            let slot = uid.get_at_type(subExprT, ixT)
+            return if (folded(slot))
+            dll.set_glob_address(slot, get_jit_at(subExprT.annotation, jit_index_base_type(ixT)))
         }
     }
 
     def override preVisitExprForSource(var expr : ExprFor?, var source : ExpressionPtr, last : bool) : void {
         if (handle_each_is_jitable(source)) {
-            dll.set_glob_address(uid.get_each_type(source._type), get_jit_each(source._type.annotation))
+            let slot = uid.get_each_type(source._type)
+            return if (folded(slot))
+            dll.set_glob_address(slot, get_jit_each(source._type.annotation))
         }
     }
 
@@ -724,8 +759,41 @@ class public DllExternResolver : AstVisitor {
 
     def override preVisitExprErase(expr : ExprErase?) {
         let t = table_key_storage_base_type(expr.arguments[0]._type.firstType)
-        dll.set_glob_address(DllName(FN_JIT_TABLE_ERASE(t)), get_jit_table_erase(unsafe(reinterpret<int>(t))))
+        let slot = DllName(FN_JIT_TABLE_ERASE(t))
+        return if (folded(slot))
+        dll.set_glob_address(slot, get_jit_table_erase(unsafe(reinterpret<int>(t))))
     }
+}
+
+//! the name of every extern slot a load of `funcs` could bind, folded into `seed`
+[arch(at = "../ARCHITECTURE_CODEGEN_IDENTITY.md#extern-slot-names-key")]
+def public fold_extern_slot_names(prog : Program?; funcs : array<FunctionPtr>; seed : uint64) : uint64 {
+    var no_ids : table<void?, uint64>
+    var uids = new UidNodes(prog, no_ids)
+    uids.hints_only = true
+    var resolver = new DllExternResolver(prog, null, null, uids)
+    resolver.fold_only = true
+    resolver.slot_name_fold = seed
+    make_visitor(*resolver) $(adapter) {
+        for (fn in funcs) {
+            visit(fn, adapter)
+        }
+    }
+    let res = resolver.slot_name_fold
+    unsafe {
+        delete resolver
+        delete uids
+    }
+    return res
+}
+
+//! every backend-only input of `funcs` no AOT hash sees, folded into `seed` - the ONE fold both the DLL key and each split partition's key take
+[arch(at = "../ARCHITECTURE_JIT_ENTRY.md#hint-folds")]
+def public fold_jit_only_inputs(prog : Program?; funcs : array<FunctionPtr>; seed : uint64) : uint64 {
+    var h = fold_loop_hints(funcs, seed)
+    h = fold_llvm_code_hints(funcs, h)
+    h = fold_function_hints(funcs, h)
+    return fold_extern_slot_names(prog, funcs, h)
 }
 
 //! fills the DLL's extern slots for `funcs`; the errors, empty on success
@@ -1048,7 +1116,7 @@ def public make_jit_plan(prog : Program?; var ctx : Context?; announce : bool; c
     // inputs → same filename → cache hit. Only in dll-mode with the default output path; a pinned
     // jit_output_path or an exe keeps the user's path.
     if (plan.use_dll && plan.config_out_path |> empty()) {
-        plan.dll_hash_basename = jit_dll_basename(plan.candidates, plan.opt_level, plan.size_level, plan.emit_prologue, plan.debug_info, plan.target_triple, plan.jit_split, plan.use_host_cpu, plan.sanitize)
+        plan.dll_hash_basename = jit_dll_basename(prog, plan.candidates, plan.opt_level, plan.size_level, plan.emit_prologue, plan.debug_info, plan.target_triple, plan.jit_split, plan.use_host_cpu, plan.sanitize)
         plan.output_path = ".cache/daslang/{prog.thisNamespace}/{plan.dll_hash_basename}"
     }
     return <- plan

@@ -8165,7 +8165,7 @@ class public DisableJitVisitor : AstVisitor {
     }
 
     def disable_builtin_call(expr : ExprCallFunc?) {
-        // an unresolved call has no builtin to gate on; ResolveExternVisitor takes the same early out
+        // an unresolved call has no builtin to gate on; DllExternResolver takes the same early out
         if (expr.func == null) {
             return
         }

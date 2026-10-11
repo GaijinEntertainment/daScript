@@ -18,7 +18,7 @@ def test_reflect_mappers(t : T?) {
     t |> success(to_vk_descriptor_type(SpirvDescriptorKind.storage_image) == VkDescriptorType.STORAGE_IMAGE, "storage_image -> STORAGE_IMAGE")
     t |> success(to_vk_descriptor_type(SpirvDescriptorKind.sampled_image) == VkDescriptorType.SAMPLED_IMAGE, "sampled_image -> SAMPLED_IMAGE")
     t |> success(to_vk_descriptor_type(SpirvDescriptorKind.sampler) == VkDescriptorType.SAMPLER, "sampler -> SAMPLER")
-    t |> success(to_vk_descriptor_type(SpirvDescriptorKind.comparison_sampler) == VkDescriptorType.SAMPLER, "comparison_sampler -> SAMPLER")
+    t |> success(to_vk_descriptor_type(SpirvDescriptorKind.comparison_sampler) == VkDescriptorType.COMBINED_IMAGE_SAMPLER, "comparison_sampler -> COMBINED_IMAGE_SAMPLER: a sampler2DShadow is a combined image sampler with the depth flag")
     t |> success(to_vk_descriptor_type(SpirvDescriptorKind.input_attachment) == VkDescriptorType.INPUT_ATTACHMENT, "input_attachment -> INPUT_ATTACHMENT")
     t |> success(to_vk_descriptor_type(SpirvDescriptorKind.acceleration_structure) == VkDescriptorType.ACCELERATION_STRUCTURE_KHR, "acceleration_structure -> ACCELERATION_STRUCTURE_KHR")
     let vf = to_vk_stage_flags(SpirvStageFlags.vertex | SpirvStageFlags.compute)

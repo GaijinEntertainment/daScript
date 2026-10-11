@@ -9,7 +9,7 @@
 #  - configured directly for emscripten: static wasm archives for daspkg release
 #    wasm and the interpreter-in-wasm playground.
 IF(NOT COMMAND ADD_MODULE_CPP)
-    cmake_minimum_required(VERSION 3.16)
+    cmake_minimum_required(VERSION 3.24)
     project(dasImgui CXX C)
 ENDIF()
 

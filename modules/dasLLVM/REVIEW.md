@@ -64,13 +64,27 @@ a program (`.das_module`, `src/dasLLVM.cpp`) - is reviewed with `skills/internal
   from the DLL cache or the split-obj cache - without changing any input the JIT cache keys fold,
   bumps `LLVM_JIT_CODEGEN_VERSION` (`daslib/llvm_jit_plan.das`)**
   (`ARCHITECTURE.md#codegen-tier`). The folded inputs are what `jit_dll_basename`
-  (`daslib/llvm_jit_plan.das`) and the split-partition key in `run_jit`
+  (`daslib/llvm_jit_plan.das`) and the split-partition key in `run_split_codegen`
   (`daslib/llvm_jit_run.das`) fold; a key that does not change serves the old machine code back.
 
-- **A diff that adds an input only the backend reads - an annotation, or an annotation argument,
-  that changes emitted code and leaves the function's AOT hash unchanged - folds it, after the
-  carrying function's mangled name, into the DLL key and the split-obj key through a
-  `fold_*_hints` function in `daslib/llvm_jit_plan.das`, in the same change**
+- **A diff that adds or changes an extern slot name - one a `UidNodes` getter
+  (`daslib/llvm_dll_utils.das`) or an `FN_JIT_*` name function (`daslib/llvm_jit_plan.das`)
+  builds - names the callee or type the slot binds by its mangled name, its mangled-name hash, or
+  the table key's `Type`, never by interpolating an AST node**
+  (`ARCHITECTURE_CODEGEN_IDENTITY.md#extern-slot-names-key`). Every slot name folds into the cache
+  key, and a node's text changes every run.
+
+- **A diff that adds a kind of extern slot - a `UidNodes` getter (`daslib/llvm_dll_utils.das`) or
+  `FN_JIT_*` name function (`daslib/llvm_jit_plan.das`) that `DllExternResolver` binds a slot
+  through - adds to `other_slots` in `tests/_slot_names_fixture.das` a statement that makes the
+  resolver bind a slot of that kind, in the same change.** `tests/llvm_slot_names_key.das` folds
+  `other_slots` in a second process and requires the same value, so a name that changes from run
+  to run fails there.
+
+- **A diff that adds an input that can differ between two functions of one compile, that the JIT
+  emitter reads, and that the function's AOT hash does not cover, folds it into
+  `fold_jit_only_inputs` (`daslib/llvm_jit_plan.das`) in the same change, and the fold's result
+  changes when the input moves from one function to another**
   (`ARCHITECTURE_JIT_ENTRY.md#hint-folds`). A `LLVM_JIT_CODEGEN_VERSION` bump re-keys once, so
   adding or removing the input on a function afterwards still serves the old machine code back.
 
