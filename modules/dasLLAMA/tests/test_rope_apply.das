@@ -468,6 +468,22 @@ def test_rope_apply_freq_factors(t : T?) {
 }
 
 [test]
+def test_rope_tabs_long_prompt(t : T?) {
+    t |> run("a table over a long prompt at a wide head grows past the unreserved-growth guard's 64 MB and builds") @(t : T?) {
+        var ff <- ff_none()
+        var ct, st : array<float>
+        let rows = 120000l
+        build_rope_tabs(ct, st, 10000.0, 1.0, 1.0, ff, true, 0l, rows, 512l)
+        t |> equal(long_length(ct), rows * 256l, "every position's half-head row of cos")
+        t |> equal(long_length(st), rows * 256l, "and of sin")
+        t |> success(ct[0] == 1.0 && abs(st[(rows - 1l) * 256l]) <= 1.0, "position 0's cos is one and the last row's sin is a sine")
+        delete ct
+        delete st
+        delete ff
+    }
+}
+
+[test]
 def test_rope_tabs_no_rows(t : T?) {
     t |> run("a table over no positions is empty, and a table that held rows is cut to it") @(t : T?) {
         var ff <- ff_none()

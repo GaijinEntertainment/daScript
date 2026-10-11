@@ -116,6 +116,8 @@ def private rope_freq_of(src : RopeGrid; j, head_size : int64; theta : float; _f
 def private rope_tabs_fill(@scratch var cos_tab : array<float>; @scratch var sin_tab : array<float>; src : auto(TS);
                            theta, fscale, mscale : float; ffp : float const?; nrows, head_size : int64) {
     let half = head_size / 2l
+    cos_tab |> reserve(nrows * half)   // a long prompt's table passes the unreserved-growth guard: 120000 rows of a 512 head is 123 MB
+    sin_tab |> reserve(nrows * half)
     cos_tab |> resize(nrows * half)
     sin_tab |> resize(nrows * half)
     return if (nrows * half == 0l)
