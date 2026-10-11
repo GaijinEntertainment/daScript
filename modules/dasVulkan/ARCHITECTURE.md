@@ -5,11 +5,11 @@ checklist that binds a diff here is `REVIEW.md` (this folder); `generator/` and 
 carry their own; how a frame is drawn and synchronized: the companion `ARCHITECTURE_RENDERING.md`. Planned work:
 `ROADMAP.md`. Agent instructions - build, run, test, where things live: `CLAUDE.md`.
 
-## 1. The two layers
+## The two layers
 
 dasVulkan binds [Vulkan](https://www.vulkan.org/) from the Khronos `vk.xml` registry and lives
 in-tree at `modules/dasVulkan/`. It builds by default on Linux and Windows: the root CMake option
-`DAS_VULKAN_DISABLED` defaults to `OFF` there and to `ON` on Apple (sec.9), and the headers plus
+`DAS_VULKAN_DISABLED` defaults to `OFF` there and to `ON` on Apple (the portability section), and the headers plus
 volk are vendored, so building needs no Vulkan SDK.
 
 - **`vulkan`** - the raw binding: the full API, core and extensions, generated as a daslang
@@ -32,7 +32,7 @@ lane builds that one target at `--parallel 2`.
 `daspkg` treats `require_package("dasVulkan")` as in-tree and reports *part of this daslang
 tree - nothing to install*, so in-repo example `.das_package` manifests do not declare it.
 
-## 2. The generator and the skip ratchet
+## The generator and the skip ratchet
 
 `generator/*.das` parses the `vk.xml` vendored under `vendor/` at its SDK tag, using
 `dasPUGIXML`, and emits both layers: C++ into `src/*.gen.*` and boost `.das` into
@@ -49,7 +49,7 @@ skip tail is the part whose growth is a loss.
 The generated files are lint-clean by construction: the emitter writes conforming code, so a
 lint finding in one of them points at the emitter rather than at the file.
 
-## 3. Boost file layout
+## Boost file layout
 
 The boost `.das` files form an acyclic graph. `vulkan_runtime` (hand-written) and
 `vulkan_ctors` (generated) are the roots; `vulkan_handles` sits on `vulkan_runtime`;
@@ -69,7 +69,7 @@ derives the compiled-in resolver rows from that descriptor at configure time
 censuses the descriptor against the folder, so a file the list misses and a listed name whose
 file is gone both fail review.
 
-## 4. Handles are stored as uint64 {#handles-uint64}
+## Handles are stored as uint64 {#handles-uint64}
 
 A boost wrapper stores its Vulkan handle as `uint64`, not as the handle pointer type, and
 reinterprets at the C boundary. Vulkan handles are const-tracked pointers, so copying a const
@@ -80,7 +80,7 @@ layer, not a local workaround.
 A wrapper holds its parent the same way - a raw `uint64` field such as `Buffer._device` -
 never as a nested wrapper, so a child never owns its parent.
 
-## 5. Ownership {#ownership}
+## Ownership {#ownership}
 
 A boost wrapper carries `_needs_delete`, and its generated `finalize` destroys the handle only
 when that flag is set. Ownership travels with the value and the scope machinery does the
@@ -92,7 +92,7 @@ leaks.
 
 `weak_copy(x)` is the intentional non-owning alias: it copies the wrapper and clears
 `_needs_delete`, so only the original frees. The copy is a plain struct copy because a wrapper
-stores its handle as `uint64` (sec.4). Handle fields inside a view struct take a `weak_copy`,
+stores its handle as `uint64` (the handles section). Handle fields inside a view struct take a `weak_copy`,
 because the `create_*` that produced the handle keeps ownership.
 
 A composite struct that owns several handles - `OffscreenTarget`, `OffscreenDepth`,
@@ -100,7 +100,7 @@ A composite struct that owns several handles - `OffscreenTarget`, `OffscreenDept
 `FrameSync` - carries a hand-written `finalize` that deletes its members in reverse dependency
 order, so the composite behaves like a single owner to whoever holds it.
 
-## 6. Filling a boost view struct
+## Filling a boost view struct
 
 Boost view-struct fields keep the C spelling - `renderPass`, `pAttachments`,
 `queueFamilyIndex`: camelCase with the Hungarian `p`, not `render_pass` or `attachments`. The
@@ -124,7 +124,7 @@ Leading with a non-empty constructor is what keeps those residual assignments li
 STYLE013 fires on field-by-field filling after an empty or default init, and not after a
 constructor that already initialized something.
 
-## 7. Count fields
+## Count fields
 
 Count fields are derived from array length and are not part of the public surface. The
 exceptions are the optional and `noautovalidity` arrays - `descriptorCount` without samplers is
@@ -132,14 +132,14 @@ the standing case - which stay settable boost fields under the independent-count
 view emits `count != 0 ? count : max(length of the referencing arrays)`. An explicit non-zero
 count therefore wins, and zero means "derive it".
 
-## 8. Raw-layer out-parameters
+## Raw-layer out-parameters
 
 In the raw `vulkan` binding a single out-handle - a command with no `len` parameter - is
 by-reference: pass `var h`. An array out-handle - a command that has a `len`, even when the
 count is 1 - is a double pointer: pass `addr(h)`. The boost creators and commands hide this
 distinction; it is visible only when calling the raw layer directly.
 
-## 9. Portability: macOS and MoltenVK {#portability-subset}
+## Portability: macOS and MoltenVK {#portability-subset}
 
 macOS runs through MoltenVK as an opt-in: an Apple build leaves the module out unless it is
 configured with `-DDAS_VULKAN_DISABLED=OFF`, because MoltenVK's compute limits (a 32 KB
@@ -170,7 +170,7 @@ A windowed application calls `glfwInitVulkanLoader(vk_get_instance_proc_addr())`
 Code that calls raw `vkCreateDevice` instead of a boost creator gets none of this: nothing
 appends the extension on its behalf.
 
-## 10. The 8/16-bit storage set {#storage-8-16}
+## The 8/16-bit storage set {#storage-8-16}
 
 `shaderInt16` is a core `VkPhysicalDeviceFeatures` bit, set on `f2.features` directly - it is
 not in the Vulkan11 or Vulkan12 chain that carries `storageBuffer16BitAccess`,
@@ -187,7 +187,7 @@ the cm2 device its name gates is a superset of this one.
 The probe and the creators are two halves of one claim. A bit that one side names and the other
 misses either fails `vkCreateDevice` or lets a kernel use a feature the device never enabled.
 
-## 11. The Vulkan 1.3 subgroup pair {#subgroup-pair}
+## The Vulkan 1.3 subgroup pair {#subgroup-pair}
 
 `subgroupSizeControl` and `computeFullSubgroups` are a pair: a compute pipeline may set
 `REQUIRE_FULL_SUBGROUPS` only on a device where both are enabled. When the coopmat2 creator
@@ -220,7 +220,7 @@ either way, and a missing pair leaves the bits off.
 partial-subgroup guards. A pipeline it returns is valid only on a device from a creator that
 enabled the pair, and only for a workgroup width that is a multiple of the subgroup size.
 
-## 12. The OS's video memory numbers {#os-video-memory}
+## The OS's video memory numbers {#os-video-memory}
 
 `vk_os_video_memory` (`src/dasVULKAN.main.cpp`, bound by hand) answers what Vulkan cannot: how
 much of the adapter's dedicated memory every process holds right now, and how much system memory
@@ -238,7 +238,7 @@ is 0, which a caller reads as "no answer". The boost helper `os_video_memory` ta
 process's own WDDM budget carries the desktop: on the NVIDIA Windows driver both read the card
 minus the OS reserve whatever other processes hold.
 
-## 13. Documentation pipeline
+## Documentation pipeline
 
 `utils/vulkan2rst.das` documents the ergonomic layer into the generated stdlib pages of the
 main Sphinx tree by RTTI introspection, modeled on the `imgui2rst` of dasImgui. The hand-filled
@@ -260,7 +260,7 @@ explains the patterns and points at the spec, which stays correct as the registr
 
 Doc snippets are not compile-checked.
 
-## 14. Tutorial units
+## Tutorial units
 
 A tutorial is a self-contained unit under `tutorials/<NN_name>/`: an offscreen module, its
 `[compute_shader]` or `[shader]` blob, a pixel-oracle `[test]` that CI gates, and a
@@ -274,7 +274,7 @@ with `error[30151] unexpected integer constant`). The `mandelbrot_compute` of 02
 `resident_compute` of 03 are the same resident compute-to-image builder held as two copies for
 that reason; a non-digit shared path such as `tutorials/common/` is what a third would need.
 
-## 15. CI gates
+## CI gates
 
 - `.github/workflows/vulkan_checks.yml` - the per-PR gate, paths-filtered to
   `modules/dasVulkan/**` so an unrelated PR pays nothing. It carries the two cheap correctness
@@ -291,7 +291,7 @@ paravirtualized GPU that MoltenVK cannot render the suite on.
 and compute into a storage buffer. No window, no subprocess. A test body calls
 `volkInitialize()` itself, because nothing in the harness does it.
 
-## 16. Exception ledger
+## Exception ledger
 
 - `tutorials/10_deferred` keeps its render passes and its `transition_image` calls ("A diff that
   records a draw in a tutorial" and "A diff that changes an image layout in a tutorial" in

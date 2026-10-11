@@ -296,6 +296,7 @@ def public submit2_and_present(device : Device; queue : VkQueue; sc : Swapchain;
                                var raw_cmd : VkCommandBuffer; image_index : uint; wait_stage : VkPipelineStageFlags2) : VkResult {
     //! `submit_and_present` through ``vkQueueSubmit2`` (synchronization2): `wait_stage` is the 64-bit
     //! ``VkPipelineStageFlags2`` the image-available wait lands on.
+    require_dynamic_rendering("submit2_and_present")
     vk_check(vkEndCommandBuffer(raw_cmd), null)
     var submit : SubmitInfo2
     submit.pWaitSemaphoreInfos |> emplace(SemaphoreSubmitInfo(semaphore = weak_copy(sync.image_available), stageMask = wait_stage))

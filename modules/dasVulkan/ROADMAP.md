@@ -135,31 +135,21 @@ a device-local (staged, NOT mappable) one -- `deferred_tut.das`'s
 `write_scene_ubo_manual` is the sanctioned pattern, not a workaround.
 Per-binding multi-UBO auto-bind stays unimplemented.
 
-## Vulkan 1.4 tutorial, shader objects, the 1.4 CI lane
+## The frame-shape lint, the 1.4 render lane's proof, dasLLAMA's barriers
 
 The tutorials and the window layer draw with dynamic rendering and
-synchronization2, the Vulkan 1.3 idiom (`ARCHITECTURE_RENDERING.md#dynamic-rendering`).
-1.4 adds no new way to draw a frame; its promotions that touch us are
-`dynamic_rendering_local_read` (the subpass replacement), `push_descriptor`,
-`host_image_copy`, `maintenance5/6`. Shader objects (`VK_EXT_shader_object`) are
-an extension in every version. What remains:
+synchronization2 (`ARCHITECTURE_RENDERING.md#dynamic-rendering`); tutorial 16
+teaches the three 1.4 promotions that change how a frame is put together and
+`examples/shader_objects.das` the opt-in shader-object path
+(`ARCHITECTURE_RENDERING.md#vulkan-14`, `#shader-objects`). What remains:
 
-- **Tutorial 16 "Vulkan 1.4"** - the three promotions that change a workflow:
-  push descriptors (per-draw data written into the command buffer, no set
-  allocation), host image copy (texture upload with no staging buffer or
-  transfer command), local read (the subpass replacement, on the deferred
-  scene). `create_device` gains an optional requested API version + feature
-  list, defaulting to today's 1.3 behavior; the tutorial asks for 1.4 + the
-  three features and skips with a message when refused.
-- **Shader objects** - one example under `examples/` + test, opt-in only:
-  absent on Android, partial on MoltenVK, and dasllama's compute path is
-  `VkPipeline`. Lavapipe is the extension's reference implementation, so the
-  nightly lane runs it.
-- **The nightly render lane** installs `mesa-vulkan-drivers` from Ubuntu 24.04
-  (Mesa 24.0-24.2, lavapipe at 1.3); lavapipe reports 1.4 from Mesa 25.0, so the
-  lane needs a Mesa PPA or tutorial 16 skips on the only lane that renders. The
-  macOS lane is build + loader smoke only; Windows has no lane - a local 1.4 GPU
-  is the proof there.
+- **The nightly render lane's 1.4 proof.** The lane installs Mesa from the
+  kisak-mesa PPA so lavapipe reports 1.4 and tutorial 16's oracle runs instead of
+  skipping; the PPA is an external dependency, and a lane whose PPA is gone
+  silently falls back to Ubuntu's Mesa 24.x and a skipped oracle. A guard that
+  fails the lane when `vulkaninfo` reports below 1.4 is owed. The macOS lane is
+  build + loader smoke only; Windows has no lane - a local 1.4 GPU is the proof
+  there.
 - **A `vulkan_lint` rule for the frame-shape mix** - a pipeline built for a render pass bound
   inside `record_rendering`, or one built for formats bound inside `record_render_pass`. A
   `[lint_macro]` sees the consumer after inlining: the `record_rendering` call and its block are
@@ -167,11 +157,6 @@ an extension in every version. What remains:
   surface their raw `vkCmd*` calls at the call site's line, which is also why VK001 fires on a
   `record_render_pass` call today. The rule needs an inline-aware anchor (the begin/end pair that
   survives splicing) and the same fix for VK001.
-- **A loud failure below 1.3** - on an instance or device below 1.3 the plain
-  creators leave the pair off and say nothing, and a tutorial then crashes on a
-  null `vkCmdBeginRendering` entry point. `record_rendering`,
-  `cmd_pipeline_barrier2` and `queue_submit2` panic with a message instead when
-  `dynamic_rendering_supported` is false for the device they record on.
 - **dasLLAMA** keeps its legacy barriers until its own arc: four hot-path files,
   so a `vulkan_lint` nudge from the legacy flags to the `_2` ones waits for it.
   Legacy barriers are not slower - drivers lower both forms to the same work;

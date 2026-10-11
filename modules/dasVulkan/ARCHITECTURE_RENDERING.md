@@ -54,3 +54,43 @@ The render-pass helpers - `create_render_pass_*`, `record_render_pass`,
 the new ones: Vulkan removes nothing and external modules compile unchanged. A pipeline built for
 a render pass binds only inside `record_render_pass`, and one built for formats only inside
 `record_rendering`; the two frame shapes do not mix within a pass.
+
+A creator that asks for the pair records whether it got it, and `require_dynamic_rendering` panics
+with that record's reason from `record_rendering`, the `transition_image2` family and
+`submit2_and_present`: the `_2` entry points are null on a device without the pair, and a call into
+one is a crash with no message. A device from raw `vkCreateDevice` or from a creator that takes the
+caller's whole chain leaves the record alone.
+
+### Vulkan 1.4 {#vulkan-14}
+
+A 1.4 device comes from `create_device_vulkan14`, which enables the three promotions that change how
+a frame is put together - `pushDescriptor`, `hostImageCopy`, `dynamicRenderingLocalRead` - behind the
+1.3 pair, and panics unless `vulkan14_supported` holds: the `create_instance` instance and the device
+both 1.4, the device reporting the three features. Tutorial 16 is the consumer; its oracle skips with
+a message where the probe fails, because lavapipe reports 1.4 only from Mesa 25.0.
+
+Push descriptors need a set layout flagged `push_descriptor` - `build_push_descriptor_set_layouts`
+over the reflections `build_descriptor_set_layouts` takes - and are written per draw with
+`cmd_push_descriptor_set`; no descriptor pool exists. Host image copy fills an image created with
+usage `host_transfer` through `upload_image_from_host`: a host-side layout transition out of
+`UNDEFINED` into the layout `host_copy_layout` picked - the wanted one when the device lists it among
+its copy destinations, else `GENERAL`, which every device lists - then one `vkCopyMemoryToImage`; no
+staging buffer, no command buffer, no queue. Local read keeps the attachments one pass writes in
+`RENDERING_LOCAL_READ` and lets a later pass of the same rendering read them as input attachments:
+each pipeline carries a `VkRenderingAttachmentLocationInfo` (fragment location to attachment) and a
+`VkRenderingInputAttachmentIndexInfo` (attachment to `subpassInput` index) on its chain, the command
+buffer sets the same two maps before that pass's draws, and a by-region memory barrier from
+color-attachment writes to fragment-shader input-attachment reads sits between the passes.
+
+### Shader objects {#shader-objects}
+
+`VK_EXT_shader_object` is an opt-in beside the pipeline path, never the path the tutorials teach: it
+is an extension in every Vulkan version, absent on Android and partial on MoltenVK, and dasLLAMA's
+compute path is a `VkPipeline`. `create_device_shader_objects` appends the extension string and chains
+its feature, `examples/shader_objects.das` is the one consumer, and `tests/integration` checks it draws
+the pipeline path's triangle. A draw with shader objects has no pipeline to fix the fixed-function
+state, so `cmd_set_shader_object_baseline` sets every piece of it the extension requires before a
+draw - viewport and scissor with count, rasterization, sample, depth, stencil, vertex-input, blend and
+write-mask state - in the shape a pipeline would have frozen, and `cmd_bind_graphics_shaders` binds the
+vertex and fragment objects with the tessellation and geometry slots emptied, as the extension
+requires of a graphics draw.

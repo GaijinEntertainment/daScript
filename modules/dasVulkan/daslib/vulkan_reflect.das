@@ -128,15 +128,27 @@ def merge_set_bindings(reflections : array<SpirvReflection>; set : int) : array<
 //! (set, binding) with stage flags OR-ed. Indexed by set number 0..maxSet — a set with no bindings gets
 //! an empty layout so indices line up with the pipeline layout. Caller owns them (`var inscope sl <- ...`).
 def build_descriptor_set_layouts(device : Device; reflections : array<SpirvReflection>) : array<DescriptorSetLayout> {
+    let plain : VkDescriptorSetLayoutCreateFlags
+    return <- build_descriptor_set_layouts(device, reflections, plain)
+}
+
+//! `build_descriptor_set_layouts` with every layout flagged ``push_descriptor``: a pipeline on these
+//! layouts takes its descriptors from `cmd_push_descriptor_set` per draw and allocates no set from a pool.
+def build_push_descriptor_set_layouts(device : Device; reflections : array<SpirvReflection>) : array<DescriptorSetLayout> {
+    var pushed : VkDescriptorSetLayoutCreateFlags
+    pushed.push_descriptor = true
+    return <- build_descriptor_set_layouts(device, reflections, pushed)
+}
+
+def private build_descriptor_set_layouts(device : Device; reflections : array<SpirvReflection>;
+                                         flags : VkDescriptorSetLayoutCreateFlags) : array<DescriptorSetLayout> {
     var layouts : array<DescriptorSetLayout>
     let topSet = max_set(reflections)
     layouts |> reserve(topSet + 1)
     for (set in range(topSet + 1)) {
-        var dslci : DescriptorSetLayoutCreateInfo
-        dslci.pBindings <- merge_set_bindings(reflections, set)
+        var dslci = DescriptorSetLayoutCreateInfo(flags = flags, pBindings <- merge_set_bindings(reflections, set))
         layouts |> emplace(create_descriptor_set_layout(device, dslci))
-        // create_descriptor_set_layout's vk_view_destroy frees only the _vk_view_* temporaries, not the
-        // idiomatic pBindings array we moved in — delete it so a per-frame caller does not accumulate.
+        // vk_view_destroy frees only the _vk_view_* temporaries, not the pBindings array moved in above
         unsafe { delete dslci.pBindings }
     }
     return <- layouts

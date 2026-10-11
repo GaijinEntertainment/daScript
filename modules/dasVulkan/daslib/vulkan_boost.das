@@ -221,16 +221,227 @@ def public dynamic_rendering_supported(phys : VkPhysicalDevice) : bool {
     return q13.dynamicRendering != 0u && q13.synchronization2 != 0u
 }
 
+var private g_dynamic_rendering_off = false   //! true when the latest creator that asked for the pair created without it
+
 //! Fills `f13` with the dynamic-rendering pair when `phys` reports it and says whether it did; the
 //! caller then chains `f13` onto its ``pNext`` list. A device without the pair gets no 1.3 struct in its chain.
 def private request_dynamic_rendering(phys : VkPhysicalDevice; var f13 : VkPhysicalDeviceVulkan13Features) : bool {
-    if (!dynamic_rendering_supported(phys)) {
+    g_dynamic_rendering_off = !dynamic_rendering_supported(phys)
+    if (g_dynamic_rendering_off) {
         return false
     }
     f13 = VkPhysicalDeviceVulkan13Features()
     f13.dynamicRendering = 1u
     f13.synchronization2 = 1u
     return true
+}
+
+[arch(at="../ARCHITECTURE_RENDERING.md#dynamic-rendering")]
+def public require_dynamic_rendering(what : string) {
+    //! Panics, naming `what`, when the latest `create_device*` creator that asks for the pair ran where
+    //! the device or the instance could not give it - the ``_2`` entry points are null there, and a call
+    //! into one would crash with no message.
+    if (g_dynamic_rendering_off) {
+        panic("{what}: the device was created without dynamicRendering + synchronization2 - create the instance at 1.3 and check dynamic_rendering_supported(phys) first")
+    }
+}
+
+//! Reads the device's ``VkPhysicalDeviceVulkan14Features`` into `q14`; false below API 1.4, where the
+//! struct is not legal to query.
+def private query_features14(phys : VkPhysicalDevice; var q14 : VkPhysicalDeviceVulkan14Features) : bool {
+    var props : VkPhysicalDeviceProperties
+    vkGetPhysicalDeviceProperties(phys, props)
+    if (props.apiVersion < make_api_version(1u, 4u, 0u)) {
+        return false
+    }
+    q14 = VkPhysicalDeviceVulkan14Features()
+    var q2 = VkPhysicalDeviceFeatures2()
+    q2.pNext = unsafe(addr<void?>(q14))
+    vkGetPhysicalDeviceFeatures2(phys, q2)
+    return true
+}
+
+[arch(at="../ARCHITECTURE_RENDERING.md#vulkan-14")]
+def public vulkan14_supported(phys : VkPhysicalDevice) : bool {
+    //! True when the ``create_instance`` instance and `phys` are both 1.4 and the device reports
+    //! ``pushDescriptor``, ``hostImageCopy`` and ``dynamicRenderingLocalRead`` - what `create_device_vulkan14` enables.
+    if (g_instance_api_version < make_api_version(1u, 4u, 0u)) {
+        return false
+    }
+    var q14 : VkPhysicalDeviceVulkan14Features
+    if (!query_features14(phys, q14)) {
+        return false
+    }
+    return q14.pushDescriptor != 0u && q14.hostImageCopy != 0u && q14.dynamicRenderingLocalRead != 0u
+}
+
+[arch(at="../ARCHITECTURE_RENDERING.md#vulkan-14")]
+def public create_device_vulkan14(phys : VkPhysicalDevice; queue_family : uint; extensions : array<string>) : Device {
+    //! A Vulkan 1.4 device with ``pushDescriptor``, ``hostImageCopy`` and ``dynamicRenderingLocalRead``
+    //! on and the dynamic-rendering pair chained behind them; panics unless `vulkan14_supported` - a
+    //! tutorial checks that first and skips with a message.
+    if (!vulkan14_supported(phys)) {
+        panic("create_device_vulkan14: the instance or the device is below 1.4, or the device lacks pushDescriptor / hostImageCopy / dynamicRenderingLocalRead - check vulkan14_supported(phys) first")
+    }
+    var f14 : VkPhysicalDeviceVulkan14Features
+    f14.pushDescriptor = 1u
+    f14.hostImageCopy = 1u
+    f14.dynamicRenderingLocalRead = 1u
+    return <- create_device_head(phys, queue_family, extensions, f14, VkStructureType.PHYSICAL_DEVICE_VULKAN_1_4_FEATURES, true)
+}
+
+def public create_device_vulkan14(phys : VkPhysicalDevice; queue_family : uint) : Device {
+    let no_ext : array<string>
+    return <- create_device_vulkan14(phys, queue_family, no_ext)
+}
+
+def public shader_object_supported(phys : VkPhysicalDevice) : bool {
+    //! True when `phys` advertises ``VK_EXT_shader_object`` and reports its ``shaderObject`` feature -
+    //! what `create_device_shader_objects` enables.
+    if (!device_extension_available(phys, "VK_EXT_shader_object")) {
+        return false
+    }
+    var sof = VkPhysicalDeviceShaderObjectFeaturesEXT()
+    var q2 = VkPhysicalDeviceFeatures2()
+    q2.pNext = unsafe(addr<void?>(sof))
+    vkGetPhysicalDeviceFeatures2(phys, q2)
+    return sof.shaderObject != 0u
+}
+
+[arch(at="../ARCHITECTURE_RENDERING.md#shader-objects")]
+def public create_device_shader_objects(phys : VkPhysicalDevice; queue_family : uint; extensions : array<string>) : Device {
+    //! A device with ``VK_EXT_shader_object`` on: the extension string appended to `extensions`, the
+    //! ``shaderObject`` feature chained with the dynamic-rendering pair behind it; panics unless
+    //! `shader_object_supported`.
+    if (!shader_object_supported(phys)) {
+        panic("create_device_shader_objects: the device does not support VK_EXT_shader_object - check shader_object_supported(phys) first")
+    }
+    var exts := extensions
+    exts |> push("VK_EXT_shader_object")
+    var sof : VkPhysicalDeviceShaderObjectFeaturesEXT
+    sof.shaderObject = 1u
+    return <- create_device_head(phys, queue_family, exts, sof, VkStructureType.PHYSICAL_DEVICE_SHADER_OBJECT_FEATURES_EXT, true)
+}
+
+def public create_device_shader_objects(phys : VkPhysicalDevice; queue_family : uint) : Device {
+    let no_ext : array<string>
+    return <- create_device_shader_objects(phys, queue_family, no_ext)
+}
+
+def public spirv_bytes(words : array<uint>) : array<uint8> {
+    //! A SPIR-V word blob as the byte array ``ShaderCreateInfoEXT.pCode`` takes.
+    var bytes : array<uint8>
+    bytes |> resize(length(words) * 4)
+    unsafe {
+        memcpy(addr<void?>(bytes[0]), addr<void?>(words[0]), length(bytes))
+    }
+    return <- bytes
+}
+
+def public cmd_bind_graphics_shaders(cmd : CommandBuffer; vert, frag : ShaderEXT) {
+    //! Binds `vert` and `frag` as the vertex and fragment shader objects and empties the tessellation
+    //! and geometry slots, as ``vkCmdBindShadersEXT`` asks for a graphics draw; the fixed-function state
+    //! comes from `cmd_set_shader_object_baseline`.
+    var stages <- [1u, 2u, 4u, 8u, 16u]   // VK_SHADER_STAGE_ VERTEX, TESSELLATION_CONTROL, TESSELLATION_EVALUATION, GEOMETRY, FRAGMENT
+    var shaders : array<VkShaderEXT>
+    shaders |> resize(5)
+    shaders[0] = boost_value_to_vk(vert)
+    shaders[4] = boost_value_to_vk(frag)
+    vkCmdBindShadersEXT(boost_value_to_vk(cmd), 5u, unsafe(addr(stages[0])), unsafe(addr(shaders[0])))
+}
+
+[arch(at="../ARCHITECTURE_RENDERING.md#shader-objects")]
+def public cmd_set_shader_object_baseline(cmd : CommandBuffer; width, height : int; color_attachments : uint) {
+    //! The dynamic state a draw with bound shader objects needs set, in the shape a pipeline fixes: a
+    //! full-extent viewport and scissor, filled triangles, one sample, no culling, CCW front faces, depth
+    //! and stencil tests off, no vertex input, and `color_attachments` opaque unblended writes.
+    let vps <- [Viewport(width = float(width), height = float(height), maxDepth = 1.0f)]
+    cmd_set_viewport_with_count(cmd, vps)
+    var sci : Rect2D
+    sci.extent.width = uint(width)
+    sci.extent.height = uint(height)
+    let scis <- [sci]
+    cmd_set_scissor_with_count(cmd, scis)
+    cmd_set_rasterizer_discard_enable(cmd, VK_FALSE)
+    cmd_set_polygon_mode_e_x_t(cmd, VkPolygonMode.FILL)
+    var one : VkSampleCountFlags
+    one._1 = true
+    cmd_set_rasterization_samples_e_x_t(cmd, one)
+    var all_samples <- [0xFFFFFFFFu]
+    cmd_set_sample_mask_e_x_t(cmd, one, all_samples)
+    cmd_set_alpha_to_coverage_enable_e_x_t(cmd, VK_FALSE)
+    let no_cull : VkCullModeFlags
+    cmd_set_cull_mode(cmd, no_cull)
+    cmd_set_front_face(cmd, VkFrontFace.COUNTER_CLOCKWISE)
+    cmd_set_depth_test_enable(cmd, VK_FALSE)
+    cmd_set_depth_write_enable(cmd, VK_FALSE)
+    cmd_set_depth_compare_op(cmd, VkCompareOp.LESS)
+    cmd_set_depth_bias_enable(cmd, VK_FALSE)
+    cmd_set_depth_bounds_test_enable(cmd, VK_FALSE)
+    cmd_set_stencil_test_enable(cmd, VK_FALSE)
+    cmd_set_depth_clamp_enable_e_x_t(cmd, VK_FALSE)
+    cmd_set_primitive_topology(cmd, VkPrimitiveTopology.TRIANGLE_LIST)
+    cmd_set_primitive_restart_enable(cmd, VK_FALSE)
+    let no_bindings : array<VertexInputBindingDescription2EXT>
+    let no_attributes : array<VertexInputAttributeDescription2EXT>
+    cmd_set_vertex_input_e_x_t(cmd, no_bindings, no_attributes)
+    var blend_off : array<uint>
+    blend_off |> resize(int(color_attachments))
+    cmd_set_color_blend_enable_e_x_t(cmd, 0u, blend_off)
+    var equations : array<ColorBlendEquationEXT>
+    equations |> resize(int(color_attachments))
+    cmd_set_color_blend_equation_e_x_t(cmd, 0u, equations)
+    var write_all : array<uint>
+    write_all |> resize(int(color_attachments))
+    for (m in write_all) {
+        m = 0xFu   // R | G | B | A
+    }
+    vkCmdSetColorWriteMaskEXT(boost_value_to_vk(cmd), 0u, color_attachments, unsafe(addr(write_all[0])))
+    cmd_set_logic_op_enable_e_x_t(cmd, VK_FALSE)
+}
+
+def public host_copy_layout(phys : VkPhysicalDevice; wanted : VkImageLayout) : VkImageLayout {
+    //! The layout a host image copy into a `phys` image can land in: `wanted` when the device lists it
+    //! among its copy destinations (``VkPhysicalDeviceHostImageCopyProperties``), else GENERAL, which
+    //! every device lists. Two property queries: the first sizes the list, the second fills it.
+    var hic = VkPhysicalDeviceHostImageCopyProperties()
+    var p2 = VkPhysicalDeviceProperties2()
+    p2.pNext = unsafe(addr<void?>(hic))
+    vkGetPhysicalDeviceProperties2(phys, p2)
+    var dst : array<VkImageLayout>
+    dst |> resize(int(hic.copyDstLayoutCount))
+    if (!empty(dst)) {
+        hic.pCopyDstLayouts = unsafe(addr(dst[0]))
+        vkGetPhysicalDeviceProperties2(phys, p2)
+    }
+    return find_index(dst, wanted) >= 0 ? wanted : VkImageLayout.GENERAL
+}
+
+[arch(at="../ARCHITECTURE_RENDERING.md#vulkan-14")]
+def public upload_image_from_host(device : Device; image : Image; pixels : array<uint8>; width, height : int; layout : VkImageLayout) {
+    //! Fills mip 0, layer 0 of `image` (created with usage ``host_transfer``) from tightly packed `pixels`
+    //! with no staging buffer and no command buffer: a host-side transition out of UNDEFINED into `layout`
+    //! (from `host_copy_layout`), then one ``vkCopyMemoryToImage``; the image is ready to sample on return.
+    var tr = HostImageLayoutTransitionInfo(image = weak_copy(image), oldLayout = VkImageLayout.UNDEFINED, newLayout = layout)
+    tr.subresourceRange.aspectMask.color = true
+    tr.subresourceRange.levelCount = 1u
+    tr.subresourceRange.layerCount = 1u
+    var trs : array<HostImageLayoutTransitionInfo>
+    trs |> emplace(tr)
+    transition_image_layout(device, trs)
+    var region = VkMemoryToImageCopy()
+    region.pHostPointer = unsafe(addr<void?>(pixels[0]))
+    region.imageSubresource.aspectMask.color = true
+    region.imageSubresource.layerCount = 1u
+    region.imageExtent.width = uint(width)
+    region.imageExtent.height = uint(height)
+    region.imageExtent.depth = 1u
+    var info = VkCopyMemoryToImageInfo()
+    info.dstImage = boost_value_to_vk(image)
+    info.dstImageLayout = layout
+    info.regionCount = 1u
+    info.pRegions = unsafe(addr(region))
+    vk_check(vkCopyMemoryToImage(boost_value_to_vk(device), info), null)
 }
 
 //! The one ``vkCreateDevice`` body every creator routes through: one queue at priority 1 per listed
@@ -1783,6 +1994,7 @@ def public transition_image_aspect2(cmd : CommandBuffer; image : Image; old_layo
     //! `transition_image_aspect` on synchronization2: the same layout move through ``cmd_pipeline_barrier2``
     //! with the 64-bit flags in barrier order (source stage and access, destination stage and access;
     //! `PIPELINE_STAGE_2_NONE` / `ACCESS_2_NONE` for an idle side), over `level_count` mips and `layer_count` layers.
+    require_dynamic_rendering("transition_image_aspect2")
     var barrier = ImageMemoryBarrier2(srcStageMask = src_stage, srcAccessMask = src_access,
         dstStageMask = dst_stage, dstAccessMask = dst_access,
         oldLayout = old_layout, newLayout = new_layout, srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
@@ -2278,6 +2490,7 @@ def public record_rendering(cmd : CommandBuffer; area : VkRect2D; layer_count : 
                             var color_attachments : array<RenderingAttachmentInfo>;
                             var depth_attachment : RenderingAttachmentInfo;
                             blk : block<() : void>) {
+    require_dynamic_rendering("record_rendering")
     var info = RenderingInfo(renderArea = area, layerCount = layer_count, viewMask = 0u,
         pColorAttachments <- color_attachments)
     info.pDepthAttachment = unsafe(addr(depth_attachment))
@@ -2291,6 +2504,7 @@ def public record_rendering(cmd : CommandBuffer; area : VkRect2D; layer_count : 
 def public record_rendering(cmd : CommandBuffer; area : VkRect2D; layer_count : uint;
                             var color_attachments : array<RenderingAttachmentInfo>;
                             blk : block<() : void>) {
+    require_dynamic_rendering("record_rendering")
     var info = RenderingInfo(renderArea = area, layerCount = layer_count, viewMask = 0u,
         pColorAttachments <- color_attachments)
     cmd_begin_rendering(cmd, info)
