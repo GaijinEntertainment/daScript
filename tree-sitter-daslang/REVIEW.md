@@ -7,4 +7,4 @@ doc: `CLAUDE.md`.
 `test/corpus/`, in the same change.**
 
 **A diff that adds syntax to `grammar.js` also adds a section exercising it to
-`modules/dasImgui/tests/test_grammar_canary.das`, in the same change.**
+`modules/dasImgui/tests/test_grammar_canary.das` (repo root), in the same change.**
