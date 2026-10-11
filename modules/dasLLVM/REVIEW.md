@@ -6,16 +6,25 @@
 `ARCHITECTURE_CODEGEN_IDENTITY.md`, `ARCHITECTURE_VECTOR_MATH.md`. Planned work: `LEDGER.md`.
 
 **A `[test]` file under this module that carries a `require dasllama/...` line of its own answers
-to `modules/dasLLAMA/tests/REVIEW.md` (repo root) as well** - its out-of-folder ledger row lives
-there.
+to `modules/dasLLAMA/REVIEW.md` (repo root) as well** - its out-of-folder ledger row lives there.
+
+**A diff that changes how the compile handles a function because it carries `[tune]`,
+`[tune_perm]`, `[tune_companion]`, `[tune_scope]`, `[tune_policy]` or `[llvm_code]` - the body
+it emits for it, which permutation it picks for it - or whether a saved `<app>.tune.json` is
+applied, refused as stale, or read as another machine's, is reviewed with `skills/tune.md`.**
+
+**A change to the tune framework - `daslib/llvm_tune.das`, its tests, or the descriptor and
+C++ rows that join it to a program (`.das_module`, `src/dasLLVM.cpp`) - is reviewed with
+`skills/internal/llvm_tune_internals.md`.**
 
 - **A change to any file under this module but a `.md` runs the module-owned suite** (command
   and build gate: `tests/README.md` here). The suite is outside the core `tests/` sweep, so no
   other lane covers it.
 
 - **A diff that adds or changes a branch keyed on what `get_platform_name()`,
-  `get_architecture_name()`, `cpu_supports()`, or `host_llvm_feature()` returns runs the
-  module-owned suite on a machine that takes the new branch.**
+  `get_architecture_name()`, `cpu_supports()`, or `host_llvm_feature()` returns, directly or
+  through a value built from it, runs the module-owned suite on a machine that takes the new
+  branch.**
 
 - **A test under `tests/` (beside this file) never creates, overwrites, or deletes a
   git-tracked path.**
@@ -72,11 +81,11 @@ there.
   names no package, so a build that does not carry the package registers nothing and compiles
   unchanged; the generators this module ships stay named.
 
-- **A das function the jit finalizer reaches - `free_jit_context` (`daslib/llvm_jit_link.das`)
-  and anything it calls - is `[no_jit]` and calls only externs or other `[no_jit]` das
-  functions; a das helper on that path (`macro_context_of` and the rest of
-  `daslib/cross_context`, repo root) is a defect - call the externs directly.** The finalizer
-  is program code, so a jittable function on its path joins every jitted program's DLL (the
+- **A diff that puts a function on the jit finalizer's path - `free_jit_context`
+  (`daslib/llvm_jit_link.das`) and every function it calls - marks that function `[no_jit]`; a
+  helper from another module (`macro_context_of` and the rest of `daslib/cross_context`, repo
+  root) is never called there - call the externs it wraps directly.** The finalizer is program
+  code, so a function without `[no_jit]` on its path joins every jitted program's DLL (the
   block-passing helpers cannot be lowered: `ARCHITECTURE_JIT_ENTRY.md#jit-set-exclusions`).
 
 - **A diff that adds to a JIT cache key an input that is the same for every function of one
@@ -98,15 +107,6 @@ there.
 - **A `-lib` build path a diff adds or changes that writes no artifact and exits 0 is a defect -
   exit non-zero instead.** A build rule reads the exit code, and a silent success lets
   it link the previous run's library against this run's header.
-
-- **A diff that changes how the compile handles a function because it carries `[tune]`,
-  `[tune_perm]`, `[tune_companion]`, `[tune_scope]`, `[tune_policy]` or `[llvm_code]` - the body
-  it emits for it, which permutation it picks for it - or whether a saved `<app>.tune.json` is
-  applied, refused as stale, or read as another machine's, is reviewed with `skills/tune.md`.**
-
-- **A change to the tune framework - `daslib/llvm_tune.das`, its tests, or the descriptor and
-  C++ rows that join it to a program (`.das_module`, `src/dasLLVM.cpp`) - is reviewed with
-  `skills/internal/llvm_tune_internals.md`.**
 
 - **A test under `tests/` here whose child compiles through the front-end module cache - any
   child but a `-exe`, `-compile-only`, `-documentation`, debugger or AOT run - and asserts a
@@ -144,7 +144,8 @@ there.
 - **Weakening `tests/llvm_tune_manifest.das` (beside this file) is a defect.**
 
 - **A diff that emits an instruction into the entry block of a function whose body das
-  statements emit - the impl half of a pair, or a block body - gives it no debug location, and
+  statements emit - the impl half of a generated function pair (the body the wrapper half calls),
+  or a block body - gives it no debug location, and
   one it emits into a loop's latch (the block that jumps back to the loop head) gives it the
   loop's own line** (`daslib/llvm_jit.das`). Those are the two places the emitter fills out of
   das statement order, and an instruction that keeps whatever location was current when it was

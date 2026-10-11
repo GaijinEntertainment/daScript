@@ -1896,7 +1896,9 @@ PERF033 — container declared inside a loop without ``inscope``
 An ``array`` or ``table`` declared inside a loop body is never freed: every iteration
 leaks its buffer until the heap resets. Declare it ``var inscope``; ``--fix`` adds it.
 A container holding raw pointers, lambdas or iterators is not reported - ``inscope``
-would delete what they point at.
+would delete what they point at. Neither is a ``temp_array(...)`` view: it borrows memory
+the loop does not own, so there is nothing to free, and ``inscope`` on it deletes the
+pointee (``can't delete locked array`` at the loop's end).
 
 PERF019 — ``int(T.a) | int(T.b)`` on bitfield/enum — collapse to one cast
 ==========================================================================

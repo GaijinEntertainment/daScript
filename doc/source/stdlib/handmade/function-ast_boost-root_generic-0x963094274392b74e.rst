@@ -1,0 +1,1 @@
+Returns the generic an instance came from, walked to the root; a ``[template]`` instance of an overloaded generic is two levels deep (instance, mangled overload, root). A function that is no instance comes back as is.

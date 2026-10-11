@@ -2664,7 +2664,7 @@ def private handle_embeddings(req : FrontReq; var resp : Reply) : http_status {
     if (iv == null) {
         return resp_error(resp, http_status.BAD_REQUEST, "'input' is required (a string or array of strings)")
     }
-    var inputs : array<string>
+    var inscope inputs : array<string>
     if (iv.value is _array) {
         inputs <- from_JV(iv, type<array<string>>)   // nolint:PERF030 — first write to the empty decl above
     } else {
@@ -2688,15 +2688,13 @@ def private handle_embeddings(req : FrontReq; var resp : Reply) : http_status {
         return resp_error(resp, http_status.BAD_REQUEST, "'dimensions' must be 1..{cur_model().config.dim} (the model's hidden width)")
     }
 
-    var out = OaiEmbeddingList(_object = "list", model = cur_name())
+    var inscope out = OaiEmbeddingList(_object = "list", model = cur_name())
     out.data |> reserve(length(inputs))
     var prompt_tokens = 0l
     var idx = 0
     for (text in inputs) {
         var inscope toks <- encode(cur_model(), text, true, false)
         if (long_length(toks) > cur_model().config.seq_len) {   //! a cut input would embed another text and the engine's cut drops the end token the pooling reads
-            delete out
-            delete inputs
             return resp_error(resp, http_status.BAD_REQUEST, "input {idx} is {length(toks)} tokens; the model context is {cur_model().config.seq_len} - shorten it")
         }
         prompt_tokens += long_length(toks)
@@ -2706,8 +2704,6 @@ def private handle_embeddings(req : FrontReq; var resp : Reply) : http_status {
     }
     out.usage = OaiEmbUsage(prompt_tokens = prompt_tokens, total_tokens = prompt_tokens)
     let body = sprint_json(out, false)
-    delete out
-    delete inputs
     return resp |> JSON(body, http_status.OK)
 }
 

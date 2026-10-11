@@ -1072,12 +1072,20 @@ class PerfLintVisitor : AstVisitor {
         check_perf032_declaration(decl._type, decl.annotation, decl.at)
     }
 
+    //! a `temp_array(...)` initializer is a view over memory the loop does not own: nothing to free, and `inscope` would free the pointee
+    def perf033_borrowed_view(init : ExpressionPtr) : bool {
+        if (init == null || !(init is ExprCall)) return false
+        let root = root_generic((init as ExprCall).func)
+        return root != null && root.name == "temp_array" && root._module != null && root._module.name == "array_boost"
+    }
+
     def perf033_leaks(expr : ExprLet?; v : VariablePtr) : bool {
         let origin = current_function != null ? current_function.fromGeneric : null
         if (any_loop_depth == 0 || (origin != null && origin._module != current_function._module)
                 || expr.genFlags.generated || v.flags.generated || v.flags.inScope
                 || v.flags.pod_delete_gen || v._type == null || v._type.flags.ref
-                || !(v._type.baseType == Type.tArray || v._type.baseType == Type.tTable)) return false
+                || !(v._type.baseType == Type.tArray || v._type.baseType == Type.tTable)
+                || perf033_borrowed_view(v.init)) return false
         var seen : table<Structure?>
         return !perf033_delete_frees_shared(v._type, seen)
     }

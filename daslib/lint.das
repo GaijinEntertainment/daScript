@@ -387,14 +387,7 @@ def private lint031_carrier(expr : Expression const?) : Expression const? {
     return null
 }
 
-//! the name of the generic an instance came from, walked to the root; the function's own otherwise
-def private lint031_root_name(fn : Function const?) : string {
-    var root = fn
-    while (root.fromGeneric != null) {
-        root = root.fromGeneric
-    }
-    return string(root.name)
-}
+def private lint031_root_name(fn : Function const?) : string => string(root_generic(fn).name)
 
 def private lint031_is_intptr(call : ExprCall const?) : bool {
     if (call.func == null || length(call.arguments) != 1) return false
@@ -646,13 +639,6 @@ class LintVisitor : AstVisitor {
             }
         }
         return found
-    }
-    def private root_generic(fn : Function const?) : Function const? {
-        var root = fn
-        while (root != null && root.fromGeneric != null) {
-            root = root.fromGeneric
-        }
-        return root
     }
     def private is_temporary_string_source(expr : Expression?) : bool {
         if (expr == null) return false
@@ -2037,10 +2023,7 @@ def private uninstanced_generic_lines(prog : ProgramPtr; fname : string) : array
     let mod = prog.getThisModule
     var instanced : table<int>
     for_each_function(mod, "") $(fn) {
-        var root = fn.fromGeneric
-        while (root != null && root.fromGeneric != null) {
-            root = root.fromGeneric
-        }
+        let root = root_generic(fn.fromGeneric)
         if (root != null && root._module == mod) {
             instanced |> insert(int(root.at.line))
         }
