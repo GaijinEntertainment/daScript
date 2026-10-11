@@ -5322,3 +5322,19 @@ probe alone, no box profile applied; the Vulkan box ran it under `DASLLAMA_GPU=1
   shutdown; the Vulkan tower forgets its vision marks (`vt_vis_forget` - the planes, im2col, stem
   weight and norm buffers' capacities and the stem-slab freshness) with its scratch, so the next
   file's canvas grows them from zero instead of reading a stale key as fresh.
+
+### From the llama leg's K/V mirror slabs (2026-10-11, RunPod RTX PRO 4500 Blackwell 32 GB, the models network volume)
+
+- The whole-model driver's K/V mirror allocates `2 x regions x n_slabs x widest-slab units x unit bytes`
+  (`resident_mirror_bytes`): the slabs are contiguous layer runs under one binding's range, the cut the one with the
+  least `n_slabs x widest`, so the padding is the widest slab less each other slab. Before the slabs each side was one
+  binding over every layer's rows, and a context asked whole past it declined the driver: Llama-3.2-3B f16 held 18715
+  positions a region at four regions, and the house's `--ctx 32768 --streams 4` server ran on the per-op tier (the earlier
+  row). With them the 3B at 32768 x 4 regions seats 28 layers of 2 KiB rows a position in two slabs of 14, 15.0 GiB
+  charged and allocated, no padding, and the server arms the resident driver under the house's flags.
+- Llama-3.2-3B-Instruct Q4_K_M, the resident rows against the CPU chain over a 12288-token prompt and eight fed steps on
+  the f16 mirror at four regions, the cm2 tiles (`test_gpu_resident_regions_llama3b_ctx32k.das`, the 10% bar the codec
+  llama files hold): the prefill row reads 0.47 of a 24.5 max logit (bar 2.45), the steps 0.22 to 0.63 against bars 0.57 to
+  0.78 - the tightest 0.63 of 0.78 at step 0 - and the one-step-off control 1.1 to 19; the 30000-token prompt continued
+  from 20480 and four device-home streams at 9000 to 27000 positions read bit for bit the one-call prefill and the
+  sessions alone.
