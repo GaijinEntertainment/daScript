@@ -1522,9 +1522,7 @@ module) is independent and can land any time - it is pure structure.
     flush and an upload a layer a token; a slot per region removes both. (b) A slot with a vision or
     audio tower: the span eval is not the chain's (`span`), so the whole slot stays host-cached.
     (c) Self-speculation, which has no Vulkan arm. (d) A host-cached outsider - the embeddings
-    route - while every region is held by a live stream (`busy`). Two costs ride beside them:
-    the regions share each side's single binding, so their total stops at the binding range (a
-    buffer per region lifts it).
+    route - while every region is held by a live stream (`busy`).
 70. **The N-row command's K-quant feeds take the split residual pair.** `cls_ar_rq_b` fuses the
     residual step with its requant a row a workgroup for a Q8_0 feed; the Q8_K twin has no row
     form, so every site whose consumer reads superblocks (`rd_ensure_n_sets` skips it) runs the
@@ -1966,7 +1964,7 @@ module) is independent and can land any time - it is pure structure.
     to the host (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm`; the CPU warm stands
     down behind a driver that landed the logits, so it never reads the host `x_b` rows such a
     driver leaves unwritten); the resident overrides land the
-    post-norm hidden carry (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#logits-transfer-queue`), so with
+    post-norm hidden carry (`ARCHITECTURE_GPU_VULKAN_LANDING.md#logits-transfer-queue`), so with
     `set_mtp_spec` or the server's `--mtp` the round's cold gate passes and the CPU round runs
     around the device draft and verify, and a reject of a verify the seat served rolls the region
     back on the device from the copies the verify command took - no snapshot, no replayed step

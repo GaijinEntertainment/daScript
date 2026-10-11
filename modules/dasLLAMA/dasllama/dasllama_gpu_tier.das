@@ -157,7 +157,8 @@ def public rdec_norms_len(n_layers, dim, qk_hs : int64; head : bool) : int64
 struct RdecLayerGeom {
     hs, qd, kvd, hid, rot : int64
     window : int64                  //! positions a sliding layer attends over; 0 = every position
-    mir_base : int64                //! its first element in each K/V mirror side
+    mir_base : int64                //! its first unit in its K/V mirror slab (one region's layout; the region stride is the slab's)
+    mir_slab : int64                //! the K/V mirror slab its rows sit in (a contiguous run of attention layers under one binding's range)
     cbase : int64                   //! its rope class's row inside a position's cos/sin plane
     boff : int64                    //! its row base in the q/k/v bias plane
     pre_post : bool                 //! the residual steps norm their add partner first (a gemma's post-attention and post-FFN norms)
@@ -169,10 +170,10 @@ struct RdecLayerGeom {
     attn_cap : float                //! the attention logit softcap on the scaled scores (gemma-2: 50); 0 = none
     moe_g4 : bool                   //! the gemma-4 MoE layer: a parallel dense shared expert, the routed branch and the router each on their own norm of x
 }
-//! qd / kv_dim / head_size / hidden / rot are the layers' maxima; `mir_units` one mirror side's units (elements, or 32-element blocks under a block codec), `cos_elems` a position's cos/sin
+//! qd / kv_dim / head_size / hidden / rot are the layers' maxima; `mir_units` one K/V mirror slab's units a region (elements, or 32-element blocks under a block codec; the widest slab's, every slab the same stride), `n_slabs` the slabs a side, `cos_elems` a position's cos/sin
 //! plane; `carry`: every step lands its rows' post-final-norm hidden (`rdec_land_carry`); `head`: the NextN draft head rides the driver,
 //! its norm rows in the plane and its slot in `mir_units`; `verify_rows`: one stream's verify rows the per-row planes hold too
-typedef RdecPrepareFn = function<(n_layers : int64; n_attn : int64; dim : int64; qd : int64; kv_dim : int64; head_size : int64; n_heads : int64; hidden : int64; vocab : int64; seq_cap : int64; neox : bool; eps : float; scale : float; qk_norm : bool; kv_dtype : int; q_gated : bool; rot : int64; dn : RdecDnGeom; mir_units : int64; cos_elems : int64; regions : int64; carry : bool; head : bool; verify_rows : int64) : bool>
+typedef RdecPrepareFn = function<(n_layers : int64; n_attn : int64; dim : int64; qd : int64; kv_dim : int64; head_size : int64; n_heads : int64; hidden : int64; vocab : int64; seq_cap : int64; neox : bool; eps : float; scale : float; qk_norm : bool; kv_dtype : int; q_gated : bool; rot : int64; dn : RdecDnGeom; mir_units : int64; n_slabs : int64; cos_elems : int64; regions : int64; carry : bool; head : bool; verify_rows : int64) : bool>
 //! `obias`: the plane's `RDEC_NORM_ROWS`-th row a layer is the attention output bias the residual step adds (gpt-oss); zero rows otherwise
 typedef RdecNormsFn = function<(norms : array<float>; obias : bool) : void>
 typedef RdecSetLayerFn = function<(l : int64; mir_idx : int64; bq : int64; bk : int64; bv : int64; bo : int64; b1 : int64; b3 : int64; b2 : int64; fq : int; fk : int; fv : int; fo : int; f1 : int; f3 : int; f2 : int; g : RdecLayerGeom) : void>
@@ -198,8 +199,8 @@ typedef RdecKvReadFn = function<(l : int64; row0 : int64; nrows : int64; var kp 
 def private rdec_unset_reserve(fmt : int; cap_blocks : int64) : bool => false
 [unused_argument(wq, ws, n, rows, fmt)]
 def private rdec_unset_place(wq : array<uint8>; ws : array<uint8>; n, rows : int64; fmt : int) : int64 => -1l
-[unused_argument(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap, neox, eps, scale, qk_norm, kv_dtype, q_gated, rot, dn, mir_units, cos_elems, regions, carry, head, verify_rows)]
-def private rdec_unset_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap : int64; neox : bool; eps, scale : float; qk_norm : bool; kv_dtype : int; q_gated : bool; rot : int64; dn : RdecDnGeom; mir_units, cos_elems, regions : int64; carry, head : bool; verify_rows : int64) : bool => false
+[unused_argument(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap, neox, eps, scale, qk_norm, kv_dtype, q_gated, rot, dn, mir_units, n_slabs, cos_elems, regions, carry, head, verify_rows)]
+def private rdec_unset_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap : int64; neox : bool; eps, scale : float; qk_norm : bool; kv_dtype : int; q_gated : bool; rot : int64; dn : RdecDnGeom; mir_units, n_slabs, cos_elems, regions : int64; carry, head : bool; verify_rows : int64) : bool => false
 [unused_argument(norms, obias)]
 def private rdec_unset_norms(norms : array<float>; obias : bool) {}
 [unused_argument(l, mir_idx, bq, bk, bv, bo, b1, b3, b2, fq, fk, fv, fo, f1, f3, f2, g)]
@@ -620,7 +621,7 @@ def private rdec_unset_land_carry(row : int64; var dst : array<float>) {
 var g_rdec_land_carry = @@rdec_unset_land_carry
 var g_rdec_carry_installed = false
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#logits-transfer-queue")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_LANDING.md#logits-transfer-queue")]
 def public install_rdec_carry(land : RdecLandCarryFn) {
     g_rdec_land_carry = land
     g_rdec_carry_installed = true
@@ -793,7 +794,7 @@ def public rdec_ple_proj_set(on : bool) { g_rdec_ple_proj_on = on }
 def public moe_gpu_resident_installed() : bool => g_rdec_installed
 def public rdec_reserve(fmt : int; cap_blocks : int64) : bool => invoke(g_rdec_reserve, fmt, cap_blocks)
 def public rdec_place(wq : array<uint8>; ws : array<uint8>; n, rows : int64; fmt : int) : int64 => invoke(g_rdec_place, wq, ws, n, rows, fmt)
-def public rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap : int64; neox : bool; eps, scale : float; qk_norm : bool; kv_dtype : int; q_gated : bool; rot : int64; dn : RdecDnGeom; mir_units, cos_elems, regions : int64; carry, head : bool; verify_rows : int64) : bool => invoke(g_rdec_prepare, n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap, neox, eps, scale, qk_norm, kv_dtype, q_gated, rot, dn, mir_units, cos_elems, regions, carry, head, verify_rows)
+def public rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap : int64; neox : bool; eps, scale : float; qk_norm : bool; kv_dtype : int; q_gated : bool; rot : int64; dn : RdecDnGeom; mir_units, n_slabs, cos_elems, regions : int64; carry, head : bool; verify_rows : int64) : bool => invoke(g_rdec_prepare, n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidden, vocab, seq_cap, neox, eps, scale, qk_norm, kv_dtype, q_gated, rot, dn, mir_units, n_slabs, cos_elems, regions, carry, head, verify_rows)
 def public rdec_upload_norms(norms : array<float>; obias : bool) { invoke(g_rdec_norms, norms, obias) }
 def public rdec_set_layer(l, mir_idx, bq, bk, bv, bo, b1, b3, b2 : int64; fq, fk, fv, fo, f1, f3, f2 : int; g : RdecLayerGeom) { invoke(g_rdec_set_layer, l, mir_idx, bq, bk, bv, bo, b1, b3, b2, fq, fk, fv, fo, f1, f3, f2, g) }
 def public rdec_set_cls(cls_block : int64; cls_fmt : int; cap : float; supp : array<int64>) { invoke(g_rdec_set_cls, cls_block, cls_fmt, cap, supp) }
@@ -1571,13 +1572,24 @@ def private moe_gpu_no_binding_cap(regions : int64) : int64 => 0l
 var private g_moe_gpu_binding_cap = @@moe_gpu_no_binding_cap
 
 //! The tier's largest legal single-SSBO binding range in bytes for planes shared by `regions` K/V mirror
-//! regions (0 = no tier / unknown). The resident KV mirror binds one range per side, every region
+//! regions (0 = no tier / unknown). The resident KV mirror binds one range per slab a side, every region
 //! carrying its own slack past its planes, so the ctx negotiation must cap against it.
 def public set_moe_gpu_binding_cap(f : function<(regions : int64) : int64>) {
     g_moe_gpu_binding_cap = f
 }
 
 def public moe_gpu_binding_cap(regions : int64) : int64 => invoke(g_moe_gpu_binding_cap, regions)
+
+def private moe_gpu_no_mirror_slack : int64 => 0l
+var private g_moe_gpu_mirror_slack = @@moe_gpu_no_mirror_slack
+
+//! The elements a K/V mirror slab allocates past its planes a region (a flash fragment's over-read, the kernels' slack);
+//! 0 = no tier. The plan charges it with every slab, as the driver's prepare allocates it.
+def public set_moe_gpu_mirror_slack(f : function<() : int64>) {
+    g_moe_gpu_mirror_slack = f
+}
+
+def public moe_gpu_mirror_slack() : int64 => invoke(g_moe_gpu_mirror_slack)
 
 [unused_argument(v)]
 def private moe_gpu_no_dry_bake(v : DlimVulkanConfig) : bool => false

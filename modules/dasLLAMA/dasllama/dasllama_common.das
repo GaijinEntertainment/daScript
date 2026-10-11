@@ -594,7 +594,7 @@ def mtp_walk_samples(s : Session) : bool {
     return true
 }
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#logits-transfer-queue")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_LANDING.md#logits-transfer-queue")]
 def land_pick(var s : Session; pick : int64) {
     verify(!s.pick_ready, "dasLLAMA: a session's landed pick was never sampled before its next step - engine bug")
     s.pick_tok = pick

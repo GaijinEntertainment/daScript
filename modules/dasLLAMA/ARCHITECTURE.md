@@ -104,8 +104,8 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   seat, the MoE expert chain on those tiles, the KHR arm's hand-staged kq tile - and the decode
   GEMV family's lane split by row length.
 - `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` - what a model has to fit on the card before the driver
-  runs - the residency plan, and the GPU-slot marks swap that lets one slot serve many models -
-  and the token command's logits landing.
+  runs - the residency plan, and the GPU-slot marks swap that lets one slot serve many models.
+- `ARCHITECTURE_GPU_VULKAN_LANDING.md` - the token command's logits landing on the transfer queue.
 - `ARCHITECTURE_GPU_VULKAN_MTP.md` - the NextN draft head the resident driver homes beside the
   trunk: the draft command that steps it, the prompt warm the window chain gives its slab, the
   rollback a rejected device verify takes from the verify command's own copies, the verify

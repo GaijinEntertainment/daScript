@@ -232,8 +232,8 @@ def private vulkan_no_group3(var y0p : float?; var y1p : float?; var y2p : float
 [unused_argument(wp, sp, n, d)]
 def private vulkan_repack_noop(var wp : int8?; var sp : float?; n, d : int64) {}
 
-//! what the loaded model holds on the device: the per-op tier's planes, and under the whole-model driver its weights and both K/V mirror sides
-def private vk_resident_bytes : int64 => (g_gpu != null ? g_gpu.resident_bytes : 0l) + (g_rd != null && g_rd.ready ? g_rd.weight_bytes + 2l * rd_mir_bytes() : 0l)
+//! what the loaded model holds on the device: the per-op tier's planes, and under the whole-model driver its weights and both sides of every K/V mirror slab
+def private vk_resident_bytes : int64 => (g_gpu != null ? g_gpu.resident_bytes : 0l) + (g_rd != null && g_rd.ready ? g_rd.weight_bytes + 2l * rd_mir_bytes() * rd_mir_slabs() : 0l)
 
 // The resident driver sizes a whole model against these BEFORE uploading anything. Probing the
 // device here (rather than reporting 0 until something else arms it) is what lets the gate answer
@@ -244,6 +244,9 @@ def private vk_weight_budget : int64 => vk_moe_init() ? carved_budget() : 0l
 //! the range a KV mirror side may bind, less the slack each of its `regions` carries past its planes (at the f32 codec's
 //! element size) - the bound `vk_rdec_prepare` holds the mirror to
 def private vk_binding_cap(regions : int64) : int64 => vk_moe_init() ? vk_max_storage_range() - RDEC_MIR_SLACK * 4l * regions : 0l
+
+//! the slack elements every K/V mirror slab allocates past its planes a region - what `vk_rdec_prepare` adds to the stride
+def private vk_mirror_slack : int64 => RDEC_MIR_SLACK
 
 def private vk_plane_bytes(n, rows : int64; fmt : int) : int64 {
     if (!kq_rows_ok(n, fmt)) {
@@ -370,6 +373,7 @@ def dasllama_math_vulkan_register() {
     set_moe_gpu_device_report(@@vk_device_name)
     set_moe_gpu_budget_hooks(@@vk_weight_budget, @@vk_plane_bytes)
     set_moe_gpu_binding_cap(@@vk_binding_cap)
+    set_moe_gpu_mirror_slack(@@vk_mirror_slack)
     install_rdec_prefill_ids(@@vk_rdec_prefill_ids, @@vk_rdec_set_emb, @@vk_rdec_upload_emb_f32)
     install_rdec_ple(@@vk_rdec_set_ple, @@vk_rdec_set_ple_layer, @@vk_rdec_set_ple_proj, @@vk_rdec_set_ple_table)
     install_moe_gpu_resident(@@vk_arena_reserve, @@vk_arena_place, @@vk_rdec_prepare,
