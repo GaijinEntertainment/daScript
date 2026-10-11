@@ -85,7 +85,10 @@ jobs:
     - name: "Restore sccache objects (read-only)"
       uses: actions/cache/restore@v4
       with:
-        path: ${{ runner.temp }}/sccache
+        path: |
+          ${{ runner.temp }}/sccache
+          .cache/daslang/lint_cache
+          .cache/daslang/test_cache
         key: sccache-extended-linux-64@${{ github.run_id }}
         restore-keys: sccache-extended-linux-64@
 

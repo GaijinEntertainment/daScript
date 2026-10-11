@@ -197,7 +197,9 @@ jobs:
     - name: "Restore sccache objects"
       uses: actions/cache/restore@v4
       with:
-        path: ${{ runner.temp }}/sccache
+        path: |
+          ${{ runner.temp }}/sccache
+          .cache/daslang/test_cache
         key: sccache-${{ matrix.target }}-${{ matrix.architecture }}-${{ matrix.cmake_preset }}-${{ matrix.sanitizers }}${{ matrix.fast_math == 'ON' && '-fastmath' || '' }}@${{ github.run_id }}
         restore-keys: sccache-${{ matrix.target }}-${{ matrix.architecture }}-${{ matrix.cmake_preset }}-${{ matrix.sanitizers }}${{ matrix.fast_math == 'ON' && '-fastmath' || '' }}@
 
@@ -254,7 +256,9 @@ jobs:
       if: ${{ !cancelled() && github.ref == 'refs/heads/master' && matrix.phase != 'slow' && matrix.phase != 'backend' }}
       uses: actions/cache/save@v4
       with:
-        path: ${{ runner.temp }}/sccache
+        path: |
+          ${{ runner.temp }}/sccache
+          .cache/daslang/test_cache
         key: sccache-${{ matrix.target }}-${{ matrix.architecture }}-${{ matrix.cmake_preset }}-${{ matrix.sanitizers }}${{ matrix.fast_math == 'ON' && '-fastmath' || '' }}@${{ github.run_id }}
     - name: "Prune older sccache slots"
       if: ${{ !cancelled() && github.ref == 'refs/heads/master' && matrix.phase != 'slow' && matrix.phase != 'backend' }}

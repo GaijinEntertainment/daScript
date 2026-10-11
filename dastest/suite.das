@@ -23,6 +23,7 @@ def public tests_jit_enabled() : bool => jit_enabled() && !is_standalone_exe()
 
 var test_results : array<SuiteTestResult>
 var bench_messages : array<string>
+var test_inputs : array<string>
 
 def clear_test_results() {
     delete test_results
@@ -166,6 +167,7 @@ def test_file(file_name : string; var ctx : SuiteCtx; var file_ctx : FileCtx) : 
     var inscope access <- make_file_access(ctx.projectPath)
     access |> add_file_access_root("dastest", ctx.dastestRoot)
     let gc_before = gc_thread_root_count()
+    test_inputs |> clear()
     using() $(var mg : ModuleGroup) {
         using() $(var cop : CodeOfPolicies) {
             ctx.queued_benchmarks |> clear
@@ -201,6 +203,9 @@ def test_file(file_name : string; var ctx : SuiteCtx; var file_ctx : FileCtx) : 
             compile_file(file_name, access, unsafe(addr(mg)), cop) $(ok, program, output) {
                 var expectedErrors : table<CompilationError; int>
                 if (program != null) {
+                    program_for_each_module(program) $(m) {
+                        test_inputs |> push(string(m.fileName)) if (!empty(m.fileName))
+                    }
                     program |> for_each_expected_error() $(err, count) {
                         expectedErrors |> insert(err, count)
                     }

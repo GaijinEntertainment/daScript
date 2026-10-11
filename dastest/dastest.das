@@ -15,6 +15,7 @@ require daslib/strings_boost
 
 require fs
 require suite
+require result_cache
 require log
 require math
 require dastest_clargs
@@ -47,6 +48,7 @@ struct JsonTestReport {
     success : bool
     time_usec : int64
     tests : array<SuiteTestResult>
+    inputs : array<string>
 }
 
 struct FailedFile {
@@ -144,11 +146,13 @@ struct IsoInput {
 
 struct IsolatedResult {
     uri : string
+    file : string
     cmd : string
     exitCode : int
     parsedResult : bool
     status : SuiteResult
     tests : array<SuiteTestResult>
+    inputs : array<string>
     fileDt : int64
     err : array<string>
     log : array<string>
@@ -232,8 +236,10 @@ def private run_iso_subprocess(cmd : string; timeoutSec : float; var br : BatchR
                             let obj & = unsafe(js as _object)
                             var r = IsolatedResult(
                                 parsedResult = true,
+                                file = from_JV(obj?["file"] ?? JV(""), type<string>), // nolint:STYLE020 — `?? defV` doesn't typecheck on _object indexing; suite_result.das pattern
                                 status = SuiteResult(js),
                                 fileDt = from_JV(obj?["time_usec"] ?? JV(0), type<int64>), // nolint:STYLE020 — `?? defV` doesn't typecheck on _object indexing; suite_result.das pattern
+                                inputs <- from_JV(obj?["inputs"] ?? JV(""), type<array<string>>),
                                 log <- pending
                             )
                             parse_test_results(js, r.tests)
@@ -476,6 +482,25 @@ def deserialize_path(var ctx : SuiteCtx, _files : array<string>, in_file : strin
     return res
 }
 
+struct ResultCache {
+    dir : string
+    keyArgs : string
+    runnerInputs : array<string>
+}
+
+def private open_result_cache(test_args : DastestArgs; dastest_root : string; raw_args : array<string>) : ResultCache {
+    return ResultCache() if (empty(test_args.cache_dir) || test_args.bench || !empty(test_args.cov_path) || !empty(test_args.ser) || !empty(test_args.deser))
+    return ResultCache(dir = test_args.cache_dir, keyArgs = cache_key_args(raw_args), runnerInputs <- runner_inputs(dastest_root))
+}
+
+def private record_pass(cache : ResultCache; file : string implicit; status : SuiteResult implicit; inputs : array<string> implicit) {
+    return if (empty(cache.dir) || empty(inputs) || status.failed + status.errors != 0)
+    var all := inputs
+    all |> push_from(cache.runnerInputs)
+    cache_store(cache_entry(cache.dir, file, cache.keyArgs), status, all)
+}
+
+
 [export]
 def main() : int {  // nolint:STYLE037,STYLE038 - CLI dispatch, one arm per mode
     // ansi-colors detection scans full argv for --color / --no-color so the
@@ -520,7 +545,8 @@ def main() : int {  // nolint:STYLE037,STYLE038 - CLI dispatch, one arm per mode
                 skipped = res.skipped,
                 success = res.failed + res.errors == 0,
                 time_usec = dt,
-                tests <- suite::test_results
+                tests <- suite::test_results,
+                inputs := suite::test_inputs
             )
             log::info_raw("\n{jsonResultPrefix}{sprint_json(report, false)}\n{jsonResultPrefix}")
             rc += res.failed + res.errors
@@ -615,6 +641,20 @@ def main() : int {  // nolint:STYLE037,STYLE038 - CLI dispatch, one arm per mode
         remove(ctx.cov_path)
     }
 
+    let cache <- open_result_cache(test_args, ctx.dastestRoot, raw_args)
+    if (!empty(cache.dir)) {
+        let collected = length(files)
+        files |> erase_if() $(f) {
+            let hit = cache_lookup(cache_entry(cache.dir, f, cache.keyArgs))
+            return false if (is_none(hit))
+            res += unwrap(hit)
+            log::green("CACHED {ctx.uriPaths ? file_name_to_uri(f) : f}")
+            return true
+        }
+        let served = collected - length(files)
+        log::info("{served} of {collected} files served from the result cache in {cache.dir}") if (served > 0)
+    }
+
     let ser_file = test_args.ser
     let deser_file = test_args.deser
     if (!empty(ser_file)) {
@@ -630,6 +670,7 @@ def main() : int {  // nolint:STYLE037,STYLE038 - CLI dispatch, one arm per mode
             log::started("run {fileIndex}/{length(files)}: {uri}")
             let status = suite::test_file(file, ctx)
             let fileDt = get_time_nsec(fileTime) / 1000
+            record_pass(cache, file, status, suite::test_inputs)
             if (status.errors + status.failed == 0) {
                 if (status.total > 0) {
                     log::green("PASS {uri} {time_dt_hr(fileDt)}")
@@ -779,6 +820,7 @@ def main() : int {  // nolint:STYLE037,STYLE038 - CLI dispatch, one arm per mode
                             }
                         }
                         if (isoPassed) {
+                            record_pass(cache, isoRes.file, isoRes.status, isoRes.inputs)
                             log::green("PASS {isoRes.uri} {time_dt_hr(isoRes.fileDt)}")
                         } else {
                             log::red("FAIL {isoRes.uri} {time_dt_hr(isoRes.fileDt)}")

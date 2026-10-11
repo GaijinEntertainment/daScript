@@ -201,7 +201,10 @@ jobs:
     - name: "Restore sccache objects"
       uses: actions/cache/restore@v4
       with:
-        path: ${{ runner.temp }}/sccache
+        path: |
+          ${{ runner.temp }}/sccache
+          .cache/daslang/lint_cache
+          .cache/daslang/test_cache
         key: sccache-extended-${{ matrix.target }}-${{ matrix.architecture }}@${{ github.run_id }}
         restore-keys: sccache-extended-${{ matrix.target }}-${{ matrix.architecture }}@
 
@@ -247,26 +250,6 @@ jobs:
         esac
         cmake --build ./build --config Release --target daslang daslang_static dasbind_probe --parallel
 
-    - name: "Save sccache objects"
-      if: matrix.role != 'modules' && github.ref == 'refs/heads/master'
-      uses: actions/cache/save@v4
-      with:
-        path: ${{ runner.temp }}/sccache
-        key: sccache-extended-${{ matrix.target }}-${{ matrix.architecture }}@${{ github.run_id }}
-
-    - name: "Prune older sccache slots"
-      if: matrix.role != 'modules' && github.ref == 'refs/heads/master'
-      env:
-        GH_TOKEN: ${{ github.token }}
-        SCKEY: sccache-extended-${{ matrix.target }}-${{ matrix.architecture }}@
-      run: |
-        # best effort, and the newest entry survives whatever this run saved: a save that produced
-        # nothing must not wipe the last good slot, and a listing hiccup must not fail the lane
-        set +e
-        gh cache list -R ${{ github.repository }} --key "$SCKEY" --limit 100 --json id,createdAt \
-          --jq 'sort_by(.createdAt) | reverse | .[1:] | .[].id' \
-          | while read -r id; do gh cache delete "$id" -R ${{ github.repository }}; done
-        true
     - name: "Install python packages"
       run: |
         set -eux
@@ -279,13 +262,6 @@ jobs:
       # `--custom-languages allow`, a flag older ast-grep releases reject
       run: npm install -g @ast-grep/cli@0.45.3
 
-    - name: "Restore the lint result cache"
-      uses: actions/cache/restore@v4
-      with:
-        path: .cache/daslang/lint_cache
-        key: lint-cache-${{ matrix.target }}@${{ github.run_id }}
-        restore-keys: lint-cache-${{ matrix.target }}@
-
     - name: "Extended checks"
       # the cron's `all` role reaches stage_doc_assets through check_doc_verify, and its
       # gh release calls refuse to run in Actions without a token
@@ -293,10 +269,27 @@ jobs:
         GH_TOKEN: ${{ github.token }}
       run: cmake --build ./build --config Release --target run_extended_${{ matrix.role }} --parallel
 
-    - name: "Save the lint result cache"
+    - name: "Save sccache objects"
       if: ${{ !cancelled() && matrix.role != 'modules' && github.ref == 'refs/heads/master' }}
       uses: actions/cache/save@v4
       with:
-        path: .cache/daslang/lint_cache
-        key: lint-cache-${{ matrix.target }}@${{ github.run_id }}
+        path: |
+          ${{ runner.temp }}/sccache
+          .cache/daslang/lint_cache
+          .cache/daslang/test_cache
+        key: sccache-extended-${{ matrix.target }}-${{ matrix.architecture }}@${{ github.run_id }}
+
+    - name: "Prune older sccache slots"
+      if: ${{ !cancelled() && matrix.role != 'modules' && github.ref == 'refs/heads/master' }}
+      env:
+        GH_TOKEN: ${{ github.token }}
+        SCKEY: sccache-extended-${{ matrix.target }}-${{ matrix.architecture }}@
+      run: |
+        # best effort, and the newest entry survives whatever this run saved: a save that produced
+        # nothing must not wipe the last good slot, and a listing hiccup must not fail the lane
+        set +e
+        gh cache list -R ${{ github.repository }} --key "$SCKEY" --limit 100 --json id,createdAt \
+          --jq 'sort_by(.createdAt) | reverse | .[1:] | .[].id' \
+          | while read -r id; do gh cache delete "$id" -R ${{ github.repository }}; done
+        true
 
