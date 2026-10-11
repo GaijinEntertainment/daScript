@@ -7,6 +7,7 @@ IF ((NOT DAS_AUDIO_INCLUDED) AND ((NOT ${DAS_AUDIO_DISABLED}) OR (NOT DEFINED DA
 	FetchContent_Declare(miniaudio
 		URL https://github.com/mackron/miniaudio/archive/refs/tags/0.11.25.tar.gz
 		DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+		INACTIVITY_TIMEOUT 60
 	)
 	FetchContent_Populate(miniaudio)
 

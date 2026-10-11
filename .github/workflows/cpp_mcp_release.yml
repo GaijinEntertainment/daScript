@@ -36,6 +36,7 @@ jobs:
   build:
     if: github.event_name != 'release' || !startsWith(github.event.release.tag_name, 'dasllama-')
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       # Vary the matrix by event: a PR builds only linux (a cheap, cross-platform-

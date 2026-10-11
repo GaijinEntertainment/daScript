@@ -21,6 +21,7 @@ jobs:
   ###########################################################
     # continue-on-error: true # Uncomment once integration is finished
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     # Map a step output to a job output
     outputs:
       should_skip: ${{ steps.skip_check.outputs.should_skip }}
@@ -38,6 +39,7 @@ jobs:
     needs: pre_job
     if: needs.pre_job.outputs.should_skip != 'true'
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
 
     strategy:
       fail-fast: false
@@ -173,6 +175,7 @@ jobs:
     needs: pre_job
     if: needs.pre_job.outputs.should_skip != 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
     - name: "SCM Checkout"
       uses: actions/checkout@v4

@@ -17,6 +17,7 @@ jobs:
 
   pre_job:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
       nightly: ${{ steps.nightly.outputs.nightly }}
     steps:
@@ -110,6 +111,7 @@ jobs:
     needs: pre_job
     if: needs.pre_job.outputs.nightly == 'true'
     runs-on: windows-latest
+    timeout-minutes: 150
     permissions:
       contents: read
       actions: write
@@ -232,6 +234,7 @@ jobs:
     needs: pre_job
     if: needs.pre_job.outputs.nightly == 'true'
     runs-on: windows-latest
+    timeout-minutes: 150
     permissions:
       contents: read
       actions: write
@@ -363,6 +366,7 @@ jobs:
     needs: pre_job
     if: needs.pre_job.outputs.nightly == 'true'
     runs-on: windows-latest
+    timeout-minutes: 150
     permissions:
       contents: read
       actions: write
@@ -502,6 +506,7 @@ jobs:
     needs: pre_job
     if: needs.pre_job.outputs.nightly == 'true'
     runs-on: windows-latest
+    timeout-minutes: 150
     permissions:
       contents: read
       actions: write

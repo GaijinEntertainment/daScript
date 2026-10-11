@@ -38,12 +38,16 @@ def make_temp_root(t : T?; prefix : string) : string {
 def guard(seconds : float) : float =>
     shared_module_extension() == "_debug.shared_module" ? min(seconds * 3.0, 300.0) : seconds
 
+//! the child compiles its fixture before it signals ready, which a sanitizer build on a loaded
+//! runner stretches far past a quick startup
+let private READY_SECONDS = 60.0
+
 // drain until the child's ready file appears; the file event drives it, the clock only guards
 def wait_for_ready(t : T?; var p : process; ready : string) {
     let started = ref_time_ticks()
     while (!fexist(ready)) {
         unsafe(process_drain(p) $(_line) {})
-        if (float(get_time_usec(started)) > guard(15.0) * 1000000.0) {
+        if (float(get_time_usec(started)) > guard(READY_SECONDS) * 1000000.0) {
             t |> failure("child never signaled ready")
             return
         }
@@ -97,7 +101,7 @@ def test_process_lifecycle(t : T?) {
             unsafe(process_drain(p) $(line) {
                 lines |> push(clone_string(line))
             })
-            if (float(get_time_usec(started)) > guard(15.0) * 1000000.0) {
+            if (float(get_time_usec(started)) > guard(READY_SECONDS) * 1000000.0) {
                 t |> failure("child never signaled ready")
                 break
             }
@@ -173,15 +177,7 @@ def test_process_terminate(t : T?) {
         let noenv : array<string>
         var p = unsafe(spawn_process(child_argv(fixture, ready, release), "", noenv))
         t |> success(p != null, "spawn_process returned a handle")
-        let started = ref_time_ticks()
-        while (!fexist(ready)) {
-            unsafe(process_drain(p) $(_line) {})
-            if (float(get_time_usec(started)) > guard(15.0) * 1000000.0) {
-                t |> failure("child never signaled ready")
-                break
-            }
-            sleep(5u)
-        }
+        wait_for_ready(t, p, ready)
         let pid = unsafe(process_pid(p))
         t |> equal(unsafe(process_wait(p, 0.2)), process_running, "wait answers process_running when the timeout passes first")
         unsafe(process_terminate(p))

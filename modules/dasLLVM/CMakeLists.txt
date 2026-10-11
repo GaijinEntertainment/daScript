@@ -125,7 +125,6 @@ IF ((NOT DAS_LLVM_INCLUDED) AND ((NOT ${DAS_LLVM_DISABLED}) OR (NOT DEFINED DAS_
                 URL_HASH               SHA256=${DAS_LLVM_FILE_HASH}
                 DOWNLOAD_EXTRACT_TIMESTAMP 1
                 INACTIVITY_TIMEOUT 60
-                DOWNLOAD_RETRIES 5
                 URL ${LLVM_LINK}
             )
             FetchContent_MakeAvailable(das_llvm_shared_lib)

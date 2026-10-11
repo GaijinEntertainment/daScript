@@ -3,11 +3,15 @@
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture doc:
 `skills/internal/preflight.md` (repo root).
 
-A per-PR check is a step, a matrix cell, or a workflow trigger whose failure means the tree or a
-published artifact is wrong, and that turns the lane red before a human merges or ships it - a
-`pull_request` lane's step and a branch-push lane's smoke alike. A provisioning step only
-prepares the runner and checks nothing - a checkout, a toolchain install, a version pin - and is
-not itself a per-PR check.
+A per-PR lane is a workflow job that runs - directly or through a workflow that calls it - on every
+pull request, or every push to a branch other than `master`, that its path filter matches, when it
+has one; a job that runs on a pull request only when the author opts in - a label, a tag in the PR
+body - is not one. A per-PR check is a step or a matrix cell that a per-PR lane runs on such a pull
+request or push and that fails the lane when the tree or a published artifact is wrong; the job's
+trigger and the job-level keys that decide whether, where, and how long it runs - `if:`, `needs:`,
+`runs-on`, `timeout-minutes` - are part of every check the job runs. A provisioning step only
+prepares the runner and checks nothing - a checkout, a toolchain install, a version pin - and is not
+itself a per-PR check.
 
 **A diff that weakens a per-PR check is a defect: deleting it, or a step it depends on, while
 no per-PR lane still runs its cases, stopping its failure from failing the lane
@@ -18,9 +22,11 @@ still runs it on every pull request or the nightly-cron condition (`github.event
 
 **A per-PR check the diff adds fails the lane when it finds a defect.**
 
-**A workflow the diff adds declares `timeout-minutes` on every job, a `concurrency` group, and
-`permissions` naming only the scopes its own steps use.** A job with no timeout holds its
-runners until GitHub's six-hour ceiling on one hung step.
+**A workflow the diff adds declares a `concurrency` group and `permissions` naming only the
+scopes its own steps use.**
+
+**A diff that makes `REVIEW.das` (beside this file) read fewer workflow files or jobs, report
+fewer cases than before, or word a finding so it no longer names what failed is a defect.**
 
 **A workflow the diff adds or deletes, or whose trigger or matrix the diff adds, changes, or
 removes, adds, corrects, or deletes in the same change its row in sec."What CI runs (per-PR +

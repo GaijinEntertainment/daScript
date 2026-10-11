@@ -50,6 +50,7 @@ jobs:
   build:
     if: github.event_name != 'release' || !startsWith(github.event.release.tag_name, 'dasllama-')
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     steps:
     - name: "SCM Checkout"
       uses: actions/checkout@v4

@@ -14,6 +14,7 @@ defaults:
 jobs:
   matrix:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
       matrix: ${{ steps.matrix.outputs.matrix }}
     steps:
@@ -31,6 +32,7 @@ jobs:
     needs: matrix
     name: "build (${{ matrix.target }}, ${{ matrix.architecture }}, ${{ matrix.cmake_preset }}, ${{ matrix.sanitizers }}${{ matrix.fast_math == 'ON' && ', fastmath' || '' }}${{ matrix.phase != 'all' && format(', {0}', matrix.phase) || '' }})"
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 270
     # actions: write needed for `gh cache delete` in the sccache refresh step.
     permissions:
       contents: read

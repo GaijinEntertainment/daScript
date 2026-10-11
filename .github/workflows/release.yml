@@ -26,6 +26,7 @@ jobs:
     ###########################################################
     # continue-on-error: true # Uncomment once integration is finished
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     # Map a step output to a job output
     outputs:
       should_skip: ${{ steps.skip_check.outputs.should_skip }}
@@ -44,6 +45,7 @@ jobs:
     # a dasllama-v* tag is dasllama's own release (dasllama_server_release.yml) and cuts no SDK
     if: needs.pre_job.outputs.should_skip != 'true' && (github.event_name != 'release' || !startsWith(github.event.release.tag_name, 'dasllama-'))
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 270
     env:
       das_dll_build: ${{ github.event_name == 'release' && 'YES' || 'NO' }}
 
@@ -394,6 +396,7 @@ jobs:
     needs: build
     if: github.event_name == 'release' && (github.event.action == 'published' || github.event.action == 'prereleased')
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
       environment: ${{ steps.route.outputs.environment }}
       repository_url: ${{ steps.route.outputs.repository_url }}
@@ -424,6 +427,7 @@ jobs:
     needs: [build, pypi_route]
     if: github.event_name == 'release' && (github.event.action == 'published' || github.event.action == 'prereleased')
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     environment:
       name: ${{ needs.pypi_route.outputs.environment }}
       url: ${{ needs.pypi_route.outputs.project_url }}

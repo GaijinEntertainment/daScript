@@ -32,6 +32,17 @@ def spawn_at(cwd_root : string; args : array<string>) : tuple<rc : int; out : st
     return run_in(cwd_root, full)
 }
 
+//! "" when the test skipped (not run from the repo root, where `anchor` exists) or has no temp dir
+def repo_fixture(t : T?; anchor, prefix : string) : string {
+    if (!fexist(path_join(getcwd(), anchor))) {
+        t |> skip("not run from the repo root")
+        return ""
+    }
+    let fixture_r = create_temp_directory_result(prefix)
+    t |> success(fixture_r is value, "temp fixture dir created")
+    return fixture_r is value ? unsafe(fixture_r.value) : ""
+}
+
 def make_pilot_fixture(t : T?; tree, root : string) {
     // uppercase on purpose: the green run proves the case-insensitive install scan
     write_at(t, root, "CMakeLists.txt", "INSTALL(FILES src/utils/good-tool/main.das DESTINATION utils/good-tool)\n")
@@ -50,14 +61,8 @@ def make_pilot_fixture(t : T?; tree, root : string) {
 [test]
 def test_pilot_gate_fixtures(t : T?) {
     let tree = getcwd()
-    if (!fexist(path_join(tree, "utils/REVIEW.das"))) {
-        t |> skip("not run from the repo root")
-        return
-    }
-    let fixture_r = create_temp_directory_result("review_pilot")
-    t |> success(fixture_r is value, "temp fixture dir created")
-    if (!(fixture_r is value)) return
-    let fixture = unsafe(fixture_r.value)
+    let fixture = repo_fixture(t, "utils/REVIEW.das", "review_pilot")
+    if (empty(fixture)) return
     make_pilot_fixture(t, tree, fixture)
 
     let green = spawn_at(fixture, [path_join(fixture, "utils/REVIEW.das")])
@@ -230,14 +235,8 @@ def restamp_dasllama_gate(t : T?; root : string) {
 [test]
 def test_dasllama_gate_fixtures(t : T?) {
     let tree = getcwd()
-    if (!fexist(path_join(tree, "modules/dasLLAMA/REVIEW.das"))) {
-        t |> skip("not run from the repo root")
-        return
-    }
-    let fixture_r = create_temp_directory_result("review_dasllama")
-    t |> success(fixture_r is value, "temp fixture dir created")
-    if (!(fixture_r is value)) return
-    let fixture = unsafe(fixture_r.value)
+    let fixture = repo_fixture(t, "modules/dasLLAMA/REVIEW.das", "review_dasllama")
+    if (empty(fixture)) return
     make_dasllama_fixture(t, tree, fixture)
     restamp_dasllama_gate(t, fixture)
 
@@ -320,14 +319,8 @@ let DASLLAMA_RED_NEEDLE_CENSUS <- [
 [test]
 def test_dasllama_cite_require_gates(t : T?) {
     let tree = getcwd()
-    if (!fexist(path_join(tree, "modules/dasLLAMA/REVIEW.das"))) {
-        t |> skip("not run from the repo root")
-        return
-    }
-    let fixture_r = create_temp_directory_result("review_dasllama_bans")
-    t |> success(fixture_r is value, "temp fixture dir created")
-    if (!(fixture_r is value)) return
-    let fixture = unsafe(fixture_r.value)
+    let fixture = repo_fixture(t, "modules/dasLLAMA/REVIEW.das", "review_dasllama_bans")
+    if (empty(fixture)) return
     make_dasllama_fixture(t, tree, fixture)
     restamp_dasllama_gate(t, fixture)
     let gate = path_join(fixture, "modules/dasLLAMA/REVIEW.das")
@@ -379,14 +372,8 @@ def test_dasllama_cite_require_gates(t : T?) {
 [test]
 def test_dasllama_gemm_gen_stamp(t : T?) {
     let tree = getcwd()
-    if (!fexist(path_join(tree, "modules/dasLLAMA/REVIEW.das"))) {
-        t |> skip("not run from the repo root")
-        return
-    }
-    let fixture_r = create_temp_directory_result("review_dasllama_gemm_gen")
-    t |> success(fixture_r is value, "temp fixture dir created")
-    if (!(fixture_r is value)) return
-    let fixture = unsafe(fixture_r.value)
+    let fixture = repo_fixture(t, "modules/dasLLAMA/REVIEW.das", "review_dasllama_gemm_gen")
+    if (empty(fixture)) return
     make_dasllama_fixture(t, tree, fixture)
     restamp_dasllama_gate(t, fixture)
     let gate = path_join(fixture, "modules/dasLLAMA/REVIEW.das")
@@ -440,14 +427,8 @@ def make_vulkan_fixture(t : T?; tree, root : string) {
 [test]
 def test_vulkan_gate_fixtures(t : T?) {
     let tree = getcwd()
-    if (!fexist(path_join(tree, "modules/dasVulkan/REVIEW.das"))) {
-        t |> skip("not run from the repo root")
-        return
-    }
-    let fixture_r = create_temp_directory_result("review_vulkan")
-    t |> success(fixture_r is value, "temp fixture dir created")
-    if (!(fixture_r is value)) return
-    let fixture = unsafe(fixture_r.value)
+    let fixture = repo_fixture(t, "modules/dasVulkan/REVIEW.das", "review_vulkan")
+    if (empty(fixture)) return
     make_vulkan_fixture(t, tree, fixture)
 
     let green = spawn_at(fixture, [path_join(fixture, "modules/dasVulkan/REVIEW.das")])
@@ -486,14 +467,8 @@ def make_llvm_fixture(t : T?; tree, root : string) {
 [test]
 def test_llvm_gate_fixtures(t : T?) {
     let tree = getcwd()
-    if (!fexist(path_join(tree, "modules/dasLLVM/REVIEW.das"))) {
-        t |> skip("not run from the repo root")
-        return
-    }
-    let fixture_r = create_temp_directory_result("review_llvm")
-    t |> success(fixture_r is value, "temp fixture dir created")
-    if (!(fixture_r is value)) return
-    let fixture = unsafe(fixture_r.value)
+    let fixture = repo_fixture(t, "modules/dasLLVM/REVIEW.das", "review_llvm")
+    if (empty(fixture)) return
     make_llvm_fixture(t, tree, fixture)
 
     let green = spawn_at(fixture, [path_join(fixture, "modules/dasLLVM/REVIEW.das")])
@@ -561,14 +536,8 @@ def make_server_fixture(t : T?; tree, root : string) {
 [test]
 def test_server_gate_fixtures(t : T?) {
     let tree = getcwd()
-    if (!fexist(path_join(tree, "utils/dasllama-server/REVIEW.das"))) {
-        t |> skip("not run from the repo root")
-        return
-    }
-    let fixture_r = create_temp_directory_result("review_server")
-    t |> success(fixture_r is value, "temp fixture dir created")
-    if (!(fixture_r is value)) return
-    let fixture = unsafe(fixture_r.value)
+    let fixture = repo_fixture(t, "utils/dasllama-server/REVIEW.das", "review_server")
+    if (empty(fixture)) return
     make_server_fixture(t, tree, fixture)
 
     let green = spawn_at(fixture, [path_join(fixture, "utils/dasllama-server/REVIEW.das")])
@@ -617,14 +586,8 @@ def test_all_and_main_walker_wiring(t : T?) {
     let tree = getcwd()
     let all_das = path_join(tree, "utils/internal/review-md/all.das")
     let main_das = path_join(tree, "utils/internal/review-md/main.das")
-    if (!fexist(all_das)) {
-        t |> skip("not run from the repo root")
-        return
-    }
-    let fixture_r = create_temp_directory_result("review_walk")
-    t |> success(fixture_r is value, "temp fixture dir created")
-    if (!(fixture_r is value)) return
-    let fixture = unsafe(fixture_r.value)
+    let fixture = repo_fixture(t, "utils/internal/review-md/all.das", "review_walk")
+    if (empty(fixture)) return
     let git = run_in(fixture, ["git", "init", "-q"])
     if (git.rc != 0) {
         t |> skip("git init unavailable: {git.out}")
@@ -695,14 +658,8 @@ def make_root_gate_fixture(t : T?; tree, root : string) {
 [test]
 def test_root_gate_fixtures(t : T?) {
     let tree = getcwd()
-    if (!fexist(path_join(tree, "REVIEW.das"))) {
-        t |> skip("not run from the repo root")
-        return
-    }
-    let fixture_r = create_temp_directory_result("review_root")
-    t |> success(fixture_r is value, "temp fixture dir created")
-    if (!(fixture_r is value)) return
-    let fixture = unsafe(fixture_r.value)
+    let fixture = repo_fixture(t, "REVIEW.das", "review_root")
+    if (empty(fixture)) return
     make_root_gate_fixture(t, tree, fixture)
     let gate = path_join(fixture, "REVIEW.das")
 
@@ -750,16 +707,104 @@ def test_root_gate_fixtures(t : T?) {
 }
 
 [test]
+def test_root_gate_download_timeouts(t : T?) {
+    let tree = getcwd()
+    let fixture = repo_fixture(t, "REVIEW.das", "review_root_dl")
+    if (empty(fixture)) return
+    make_root_gate_fixture(t, tree, fixture)
+    let gate = path_join(fixture, "REVIEW.das")
+
+    // a URL download with a positive literal INACTIVITY_TIMEOUT is green, and so is every call that downloads nothing
+    write_at(t, fixture, "ext/dl_ok.cmake", "ExternalProject_Add(ok_a URL https://x INACTIVITY_TIMEOUT 60)\nFetchContent_Declare(ok_b URL https://x https://y INACTIVITY_TIMEOUT 60)\nfile(DOWNLOAD https://x out INACTIVITY_TIMEOUT 60 STATUS s)\nExternalProject_Add(ok_c SOURCE_DIR d)\nFetchContent_Declare(ok_d GIT_REPOSITORY r)\nfile(GLOB g *)\nfile()\n# ExternalProject_Add(ok_e URL https://x)\n")
+    t |> equal(0, run_in(fixture, ["git", "add", "ext/dl_ok.cmake"]).rc, "timed downloads tracked")
+    let timed = spawn_at(fixture, [gate])
+    t |> equal(0, timed.rc, "timed downloads and non-downloads are green: {timed.out}")
+
+    // no timeout, a zero, a variable, and a keyword with no value are each red at their own line
+    write_at(t, fixture, "ext/dl.cmake", "ExternalProject_Add(dl_a URL https://x)\nFetchContent_Declare(dl_b URL https://x https://y)\nfile(download https://x out)\nExternalProject_Add(dl_c URL https://x INACTIVITY_TIMEOUT 0)\nFetchContent_Declare(dl_d URL https://x INACTIVITY_TIMEOUT $\{T\})\nExternalProject_Add(dl_e URL https://x INACTIVITY_TIMEOUT)\n")
+    t |> equal(0, run_in(fixture, ["git", "add", "ext/dl.cmake"]).rc, "untimed downloads tracked")
+    let untimed = spawn_at(fixture, [gate])
+    t |> equal(1, untimed.rc, "untimed downloads are red")
+    let expected = [
+        "ext/dl.cmake:1: ExternalProject_Add downloads",
+        "ext/dl.cmake:2: FetchContent_Declare downloads",
+        "ext/dl.cmake:3: file(DOWNLOAD) downloads",
+        "ext/dl.cmake:4: ExternalProject_Add downloads",
+        "ext/dl.cmake:5: FetchContent_Declare downloads",
+        "ext/dl.cmake:6: ExternalProject_Add downloads"
+    ]
+    for (prefix in expected) {
+        t |> success(find(untimed.out, prefix) >= 0, "'{prefix}' is reported: {untimed.out}")
+    }
+    t |> success(find(untimed.out, "ext/dl_ok.cmake") < 0, "the timed file stays clean: {untimed.out}")
+    for (line in split(untimed.out, "\n")) {
+        if (line |> starts_with("ext/dl.cmake:1:")) {
+            t |> success(find(line, "(ExternalProject_Add then retries it") >= 0, "a URL-list command's finding names its retry: {line}")
+        } elif (line |> starts_with("ext/dl.cmake:3:")) {
+            t |> success(find(line, "retries") < 0, "a file(DOWNLOAD) finding claims no retry: {line}")
+        }
+    }
+
+    // a tracked file deleted from disk is skipped, not read
+    t |> success(remove(path_join(fixture, "ext/dl.cmake")), "untimed file deleted from disk")
+    let deleted = spawn_at(fixture, [gate])
+    t |> equal(0, deleted.rc, "a tracked file missing from disk is green: {deleted.out}")
+
+    t |> success(rmdir_rec_result(fixture) is value, "fixture removed")
+}
+
+[test]
+def test_workflows_gate_job_timeouts(t : T?) {
+    let tree = getcwd()
+    let fixture = repo_fixture(t, ".github/workflows/REVIEW.das", "review_workflows")
+    if (empty(fixture)) return
+    write_at(t, fixture, "REVIEW_COMMON.md", "# contract\n")
+    mkdir_rec(path_join(fixture, ".github/workflows"))
+    var err : string
+    t |> success(copy_file(path_join(tree, ".github/workflows/REVIEW.das"), path_join(fixture, ".github/workflows/REVIEW.das"), true, err), "copied the real gate")
+    let gate = path_join(fixture, ".github/workflows/REVIEW.das")
+
+    // green: a timed job, a reusable-workflow call with no runs-on, banner comments between jobs, a runs-on
+    // under a top-level key other than jobs:, and an untimed job in a file that is not .yml or .yaml
+    write_at(t, fixture, ".github/workflows/ok.yml", "name: ok\non: [push]\nx-tpl:\n  t:\n    runs-on: x\njobs:\n  ####\n  timed:\n  ####\n    runs-on: ubuntu-latest\n    timeout-minutes: 10\n    steps:\n      - run: echo hi\n  reusable:\n    uses: ./.github/workflows/other.yml\n")
+    write_at(t, fixture, ".github/workflows/notes.txt", "jobs:\n  txt_job:\n    runs-on: x\n")
+    let green = spawn_at(fixture, [gate])
+    t |> equal(0, green.rc, "timed jobs, reusable calls, non-jobs keys and non-YAML files are green: {green.out}")
+
+    // red: only a job-level timeout-minutes counts; blank lines and column-0 comments stay inside jobs:,
+    // each job sets its own key column, and a top-level key after jobs: closes the last job
+    write_at(t, fixture, ".github/workflows/bad.yml", "name: bad\njobs:\n  untimed:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo hi\n\n# banner\n  scripted:\n    runs-on: ubuntu-latest\n    steps:\n      - run: |\n          timeout-minutes: 5\n  nested:\n    runs-on: ubuntu-latest\n    steps:\n      - name: x\n        timeout-minutes: 5\n  deep:\n      runs-on: ubuntu-latest\n")
+    write_at(t, fixture, ".github/workflows/after.yml", "jobs:\n  after_job:\n    runs-on: x\nenv:\n  K: v\n")
+    write_at(t, fixture, ".github/workflows/y.yaml", "jobs:\n  yaml_job:\n    runs-on: x\n")
+    write_at(t, fixture, ".github/workflows/crlf.yml", "jobs:\r\n  crlf_job:\r\n    runs-on: ubuntu-latest\r\n")
+    write_at(t, fixture, ".github/workflows/commented.yml", "jobs: # every job\n  commented_job:\n    runs-on: ubuntu-latest\n")
+    let red = spawn_at(fixture, [gate])
+    t |> equal(1, red.rc, "untimed jobs are red")
+    let expected = [
+        ".github/workflows/bad.yml:3: job `untimed`", ".github/workflows/bad.yml:9: job `scripted`",
+        ".github/workflows/bad.yml:14: job `nested`", ".github/workflows/bad.yml:19: job `deep`",
+        ".github/workflows/after.yml:2: job `after_job`", ".github/workflows/y.yaml:2: job `yaml_job`",
+        ".github/workflows/crlf.yml:2: job `crlf_job`", ".github/workflows/commented.yml:2: job `commented_job`"
+    ]
+    for (finding in expected) {
+        t |> success(find(red.out, "{finding} sets runs-on and no timeout-minutes") >= 0, "'{finding}' is reported: {red.out}")
+    }
+    t |> success(find(red.out, "ok.yml") < 0 && find(red.out, "notes.txt") < 0, "the green files stay clean: {red.out}")
+
+    // a root missing either REVIEW_COMMON.md or the workflows folder is a usage error, not a clean scan
+    write_at(t, fixture, "no_workflows/REVIEW_COMMON.md", "# contract\n")
+    write_at(t, fixture, "no_contract/.github/workflows/x.yml", "jobs:\n  j:\n    runs-on: x\n")
+    t |> equal(2, spawn_at(path_join(fixture, "no_workflows"), [gate]).rc, "no .github/workflows is a usage error")
+    t |> equal(2, spawn_at(path_join(fixture, "no_contract"), [gate]).rc, "no REVIEW_COMMON.md is a usage error")
+
+    t |> success(rmdir_rec_result(fixture) is value, "fixture removed")
+}
+
+[test]
 def test_doc_gate_rst_comment_first(t : T?) {
     let tree = getcwd()
-    if (!fexist(path_join(tree, "doc/REVIEW.das"))) {
-        t |> skip("not run from the repo root")
-        return
-    }
-    let fixture_r = create_temp_directory_result("review_doc")
-    t |> success(fixture_r is value, "temp fixture dir created")
-    if (!(fixture_r is value)) return
-    let fixture = unsafe(fixture_r.value)
+    let fixture = repo_fixture(t, "doc/REVIEW.das", "review_doc")
+    if (empty(fixture)) return
     write_at(t, fixture, "doc/source/conf.py", "project = 'fixture'\n")
     var err : string
     t |> success(copy_file(path_join(tree, "doc/REVIEW.das"), path_join(fixture, "doc/REVIEW.das"), true, err), "copied the real gate")
