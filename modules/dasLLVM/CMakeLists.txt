@@ -182,7 +182,7 @@ if(NOT DAS_TOOLS_DISABLED)
                   modules/dasLLVM/tests/llvm_split_modules.das modules/dasLLVM/tests/llvm_ast_roundtrip.das
                   modules/dasLLVM/tests/llvm_cache_selfheal.das modules/dasLLVM/tests/exe_host_cpu.das
                   modules/dasLLVM/tests/llvm_jit_never_fast_math.das
-                  modules/dasLLVM/tests/llvm_jit_hint_folds.das)
+                  modules/dasLLVM/tests/llvm_jit_hint_folds.das modules/dasLLVM/tests/llvm_slot_names_key.das)
     das_lane_dastest_target(run_tests_llvm_exe COMMENT "Testing the standalone exe"
         JIT_FILES modules/dasLLVM/tests/llvm_exe_name_lookup.das modules/dasLLVM/tests/llvm_exe_native_paths.das
                   modules/dasLLVM/tests/llvm_exe_shared_addr.das modules/dasLLVM/tests/llvm_exe_split_lto.das
