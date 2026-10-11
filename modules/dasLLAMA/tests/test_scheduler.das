@@ -26,14 +26,7 @@ require _model_tier
 
 let MODEL_PATH = path_join(models_dir(), "SmolLM2-135M-Instruct-Q8_0.gguf")
 
-def private model_missing(t : T?) : bool {
-    return true if (!jit_only(t))
-    if (!stat(MODEL_PATH).is_valid) {
-        t |> skip("{MODEL_PATH} not present")
-        return true
-    }
-    return false
-}
+def private model_missing(t : T?) : bool => !jit_model_available(t, MODEL_PATH)
 
 def private load_capped_cpu(cap : int64) : Model {
     var m <- load_model_(MODEL_PATH, QuantMode.q8)
@@ -579,8 +572,9 @@ def test_scheduler_idle_quantum(t : T?) {
             t |> equal(sch.prefill_tokens, long_length(short), "the short prompt prefilled in its first tick")
             t |> success(submit(m, sch, make_req(3l, prompt, greedy, 6l, none)), "second stream queued beside it")
             let before = sch.prefill_tokens
+            scheduler_step(m, sch, events)   // decodes 2 - the chunk is owed to the next tick
             scheduler_step(m, sch, events)
-            t |> equal(sch.prefill_tokens - before, K, "beside a decoding stream the tick prefilled one chunk ({sch.prefill_tokens - before} tokens)")
+            t |> equal(sch.prefill_tokens - before, K, "beside a decoding stream the owed tick prefilled one chunk ({sch.prefill_tokens - before} tokens)")
             drain(m, sch, events)
             set_prefill_attn_mode(saved_mode)
             delete events
@@ -630,6 +624,62 @@ def test_scheduler_finishing_tick(t : T?) {
             t |> equal(n_active(sch), 1l, "freeing its slot")
             t |> equal(sch.prefill_tokens - before, K, "and prefilled one chunk of stream 2 ({sch.prefill_tokens - before} tokens)")
             drain(m, sch, events)
+            t |> equal(finished_of(events, 2l).stream, 2l, "stream 2 ran to its end")
+            delete events
+            delete sch
+            delete prompt
+            delete short
+            delete m
+        }
+    }
+}
+
+[test]
+def test_scheduler_decode_events_precede_chunk(t : T?) {
+    t |> run("a tick whose decode step emitted a token ends before its prefill chunk; the next tick runs the chunk alone (needs SmolLM2-135M)") @(t : T?) {
+        if (model_missing(t)) {
+            return
+        }
+        with_dasllama_jobque() {
+            var m <- load_capped_cpu(128l)
+            var short <- encode(m, "Once upon a time", true, false)
+            var prompt <- encode(m, "The quick brown fox jumps over the lazy dog while the little robot watches from a small hill near the old village bakery", true, false)
+            let K = 8l
+            t |> success(long_length(short) <= K && long_length(prompt) > 2l * K, "the short prompt fits one chunk, the long one spans chunks ({length(short)} and {length(prompt)} tokens)")
+            var none : array<int64>
+            let greedy = SamplingParams()
+            var sch <- create_scheduler(m, 2l, 4l, K, [idle_chunk_tokens = 0l])
+            var events : array<SchedEvent>
+            t |> success(submit(m, sch, make_req(1l, short, greedy, 8l, none)), "an eight-token stream queued")
+            scheduler_step(m, sch, events)   // admitted, prefilled whole, its first token sampled inline
+            t |> success(submit(m, sch, make_req(2l, prompt, greedy, 4l, none)), "a long prompt queued beside the decoding stream")
+            delete events
+            let before = sch.prefill_tokens
+            let steps = sch.decode_steps
+            scheduler_step(m, sch, events)   // admits 2, decodes 1 one token - and ends there
+            t |> equal(long_length(toks_of(events, 1l)), 1l, "the tick emitted stream 1's token")
+            t |> equal(sch.decode_steps - steps, 1l, "one decode step ran")
+            t |> equal(sch.prefill_tokens, before, "the tick prefilled nothing for stream 2 ({sch.prefill_tokens - before} tokens)")
+            delete events
+            scheduler_step(m, sch, events)   // the owed chunk alone
+            t |> equal(sch.prefill_tokens - before, K, "the next tick prefilled one chunk of stream 2 ({sch.prefill_tokens - before} tokens)")
+            t |> equal(sch.decode_steps - steps, 1l, "and ran no decode step")
+            t |> success(empty(toks_of(events, 1l)), "so stream 1 emitted nothing on it")
+            delete events
+            scheduler_step(m, sch, events)   // decode again
+            t |> equal(long_length(toks_of(events, 1l)), 1l, "the tick after decodes stream 1 again")
+            t |> equal(sch.prefill_tokens - before, K, "and puts the next chunk off again")
+            var ticks = 0l
+            while (sch.prefill_tokens - before < long_length(prompt) && ticks < 64l) {   // the chunks and the decodes alternate until stream 2 is off its prompt
+                scheduler_step(m, sch, events)
+                ticks++
+            }
+            t |> success(ticks < 64l, "stream 2 left its prompt within the ticks ({ticks})")
+            let both = sch.decode_steps
+            scheduler_step(m, sch, events)
+            t |> equal(sch.decode_steps - both, 1l, "with no stream on its prompt a tick decodes - nothing is owed to the next one")
+            drain(m, sch, events)
+            t |> equal(finished_of(events, 1l).stream, 1l, "stream 1 ran to its end")
             t |> equal(finished_of(events, 2l).stream, 2l, "stream 2 ran to its end")
             delete events
             delete sch
