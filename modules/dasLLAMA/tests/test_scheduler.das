@@ -656,7 +656,7 @@ def test_scheduler_decode_events_precede_chunk(t : T?) {
             delete events
             let before = sch.prefill_tokens
             let steps = sch.decode_steps
-            scheduler_step(m, sch, events)   // admits 2, decodes 1 one token - and ends there
+            scheduler_step(m, sch, events)   // admits stream 2, decodes stream 1 by one token - and ends there
             t |> equal(long_length(toks_of(events, 1l)), 1l, "the tick emitted stream 1's token")
             t |> equal(sch.decode_steps - steps, 1l, "one decode step ran")
             t |> equal(sch.prefill_tokens, before, "the tick prefilled nothing for stream 2 ({sch.prefill_tokens - before} tokens)")
