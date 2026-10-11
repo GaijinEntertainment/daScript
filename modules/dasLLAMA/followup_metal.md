@@ -854,8 +854,9 @@ its deletion with its kernel cell, its `[metal_dispatch]` builder and its census
 ## 36. The mirror-fed prefill window serves only an f16 KV session on a box crowned `attn_dev`
 
 `ARCHITECTURE_GPU_PREFILL_WINDOW.md#prefill-kv-mirror`: every other window keeps the f32 K/V
-panels, gathers the cached rows on the host each continuation (about 3.7 us a cached row on
-Llama-3.2-3B, M5 Max), and leaves the decode driver to upload them again. Three shapes stay there:
+panels and gathers the cached rows on the host each continuation (about 3.7 us a cached row on
+Llama-3.2-3B, M5 Max); the panel forms feed the mirror, so the gather is what the mirror-fed form
+spares. Three shapes stay there:
 
 - **A box without the `attn_dev` crown.** The crown races the device pair against the staged trio
   at one shape, the pair paying its whole-panel twin pass; the mirror-fed form has no such pass, so

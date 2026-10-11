@@ -909,6 +909,19 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                     pick_panels = argmax_of(step_panels)
                 }
                 t |> success(sdiff <= ATTN_DEV_BAR * smag, "the step's logits sit within the bar across the two forms ({sdiff} of {smag}; argmax {pick_mirror} / {pick_panels})")
+                pin_metal_tensor_crowns("mulmm_q8,attn_qkmm")   //! no attn_dev crown: the panel form, which feeds the mirror too
+                metal_prefill_shutdown()
+                let pserved0 = metal_prefill_mirror_panel_served()
+                let mserved0 = metal_prefill_mirror_served()
+                let up_pm0 = metal_mirror_uploaded_rows()
+                var step_pm <- two_window_logits(trmg, w1, w2, step_tok)
+                t |> equal(metal_prefill_mirror_panel_served() - pserved0, 2l, "both windows ran the panel form into the mirror")
+                t |> equal(metal_prefill_mirror_served() - mserved0, 0l, "and neither the mirror-fed form")
+                t |> equal(metal_mirror_uploaded_rows() - up_pm0, 0l, "after a panel-form prefill into the mirror the first decode step uploads none")
+                let pdiff = logits_maxdiff(step_pm, step_panels)
+                t |> success(pdiff <= ATTN_DEV_BAR * smag, "the step's logits after the panel form into the mirror sit within the bar of the panels form's ({pdiff} of {smag})")
+                pin_metal_tensor_crowns("mulmm_q8,attn_qkmm,attn_dev")
+                metal_prefill_shutdown()
                 set_metal_mirror_adopt(true)
                 var took <- adopt_run(trmg, w1, whole, true)
                 t |> equal(took.matched, 300l, "the cache hands the taker the opening's four whole pages and a copy of the fifth for its 44 rows")
@@ -939,6 +952,7 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                 delete mirror_off
                 delete step_panels
                 delete step_mirror
+                delete step_pm
                 delete took
                 delete copied
                 delete fresh
