@@ -223,14 +223,12 @@ def public draw_indirect_count_available() : bool {
     return f12.drawIndirectCount != 0u
 }
 
-//! Extensions overload -- the windowed viewer passes `["VK_KHR_swapchain"]`.
+//! Extensions overload -- the windowed viewer passes `["VK_KHR_swapchain"]`. The feature set spans three
+//! core versions, so it goes through the ``VkPhysicalDeviceFeatures2`` chain overload of `create_device`:
+//! the base features ride in `f2.features`, 1.2 -> 1.1 -> 1.3 structs behind it.
 def public create_device_gpu_driven(phys : VkPhysicalDevice; queue_family : uint; extensions : array<string>) : Device {
-    var prio = 1.0f
-    var qci = VkDeviceQueueCreateInfo()
-    qci.queueFamilyIndex = queue_family
-    qci.queueCount = 1u
-    var base : VkPhysicalDeviceFeatures
-    base.multiDrawIndirect = 1u
+    var f2 : VkPhysicalDeviceFeatures2
+    f2.features.multiDrawIndirect = 1u
     var f11 : VkPhysicalDeviceVulkan11Features
     f11.sType = VkStructureType.PHYSICAL_DEVICE_VULKAN_1_1_FEATURES
     f11.shaderDrawParameters = 1u
@@ -239,24 +237,17 @@ def public create_device_gpu_driven(phys : VkPhysicalDevice; queue_family : uint
     f12.drawIndirectCount = 1u
     f12.descriptorIndexing = 1u
     f12.shaderSampledImageArrayNonUniformIndexing = 1u
-    var ci = VkDeviceCreateInfo()
-    ci.queueCreateInfoCount = 1u
-    var h : VkDevice
+    // 1.3: dynamic rendering + synchronization2, what the frame's record_rendering and _2 barriers run on
+    var f13 : VkPhysicalDeviceVulkan13Features
+    f13.sType = VkStructureType.PHYSICAL_DEVICE_VULKAN_1_3_FEATURES
+    f13.dynamicRendering = 1u
+    f13.synchronization2 = 1u
     unsafe {
-        qci.pQueuePriorities = addr(prio)
-        f12.pNext = addr<void?>(f11)           // chain: ci -> f12 -> f11
-        ci.pNext = addr<void?>(f12)
-        ci.pEnabledFeatures = addr(base)
-        ci.pQueueCreateInfos = addr(qci)
-        if (!empty(extensions)) {
-            ci.enabledExtensionCount = uint(length(extensions))
-            ci.ppEnabledExtensionNames = addr<void?>(extensions[0])
-        }
-        vk_check(vkCreateDevice(phys, ci, null, h), null)
+        f11.pNext = addr<void?>(f13)           // chain: f2 -> f12 -> f11 -> f13
+        f12.pNext = addr<void?>(f11)
+        f2.pNext = addr<void?>(f12)
     }
-    var b = vk_value_to_boost(h)
-    b._needs_delete = true
-    return <- b
+    return <- create_device(phys, queue_family, extensions, f2)
 }
 
 // ===== bindless material textures =====
@@ -326,19 +317,8 @@ def private create_material(device : Device; phys : VkPhysicalDevice; queue : Vk
     vk_check(vkBindImageMemory(dev, boost_value_to_vk(img), boost_value_to_vk(mem), 0ul), null)
 
     run_cmd_sync(device, pool, queue) $(cmd) {
-        let none : VkAccessFlags
-        var to_dst : VkAccessFlags
-        to_dst.transfer_write = true
-        var to_read : VkAccessFlags
-        to_read.shader_read = true
-        var top : VkPipelineStageFlags
-        top.top_of_pipe = true
-        var xfer : VkPipelineStageFlags
-        xfer.transfer = true
-        var frag : VkPipelineStageFlags
-        frag.fragment_shader = true
-        transition_image(cmd, img, VkImageLayout.UNDEFINED, VkImageLayout.TRANSFER_DST_OPTIMAL,
-            none, to_dst, top, xfer)
+        transition_image2(cmd, img, VkImageLayout.UNDEFINED, VkImageLayout.TRANSFER_DST_OPTIMAL,
+            PIPELINE_STAGE_2_NONE, ACCESS_2_NONE, VkPipelineStageFlags2.copy, VkAccessFlags2.transfer_write)
         var region : BufferImageCopy
         region.imageSubresource.aspectMask.color = true
         region.imageSubresource.layerCount = 1u
@@ -348,8 +328,9 @@ def private create_material(device : Device; phys : VkPhysicalDevice; queue : Vk
         var regions : array<BufferImageCopy>
         regions |> emplace(region)
         cmd_copy_buffer_to_image(cmd, staging.buffer, img, VkImageLayout.TRANSFER_DST_OPTIMAL, regions)
-        transition_image(cmd, img, VkImageLayout.TRANSFER_DST_OPTIMAL, VkImageLayout.SHADER_READ_ONLY_OPTIMAL,
-            to_dst, to_read, xfer, frag)
+        transition_image2(cmd, img, VkImageLayout.TRANSFER_DST_OPTIMAL, VkImageLayout.SHADER_READ_ONLY_OPTIMAL,
+            VkPipelineStageFlags2.copy, VkAccessFlags2.transfer_write,
+            VkPipelineStageFlags2.fragment_shader, VkAccessFlags2.shader_sampled_read)
     }
     delete bytes
 
@@ -486,7 +467,7 @@ def private write_sampler_array(set : VkDescriptorSet; binding : uint; var views
 
 //! depth-only pipeline (vertex stage only, no color attachment) for the occluder pre-pass. Reads the
 //! cube vertex buffer's position attribute (location 0); normal/uv are ignored.
-def private build_depth_pipeline(device : Device; rp : RenderPass; layout : PipelineLayout;
+def private build_depth_pipeline(device : Device; layout : PipelineLayout;
                                  vert : ShaderModule) : Pipeline {
     var stage = VkPipelineShaderStageCreateInfo()
     stage.stage.vertex = true
@@ -536,7 +517,8 @@ def private build_depth_pipeline(device : Device; rp : RenderPass; layout : Pipe
         gp.pDepthStencilState = addr(depthstate)
         gp.pColorBlendState = addr(blend)
         gp.layout = boost_value_to_vk(layout)
-        gp.renderPass = boost_value_to_vk(rp)
+        var fmts = rendering_formats(VkFormat.UNDEFINED, DEPTH_FMT)   // depth-only: no color format
+        attach_rendering_formats(gp, fmts)
         vk_check(vkCreateGraphicsPipelines(boost_value_to_vk(device), null, 1u, addr(gp), null, addr(h)), null)
     }
     var b = vk_value_to_boost(h)
@@ -548,7 +530,7 @@ def private build_depth_pipeline(device : Device; rp : RenderPass; layout : Pipe
 //! full graphics pipeline (vertex+fragment, color+depth, dynamic viewport) with caller-chosen vertex
 //! input, depth-write and alpha-blend. Covers all four color-pass pipelines: main + occluder-solid (blend
 //! off), god + occluder-ghost (blend on; ghost skips depth-write so the wall doesn't stamp over cubes).
-def private build_color_pipeline(device : Device; rp : RenderPass; layout : PipelineLayout;   // nolint:STYLE038 - flat one-call-per-item Vulkan setup run
+def private build_color_pipeline(device : Device; layout : PipelineLayout;   // nolint:STYLE038 - flat one-call-per-item Vulkan setup run
                                  vert, frag : ShaderModule;
                                  var vbindings : array<VkVertexInputBindingDescription>;
                                  var vattrs : array<VkVertexInputAttributeDescription>;
@@ -626,7 +608,8 @@ def private build_color_pipeline(device : Device; rp : RenderPass; layout : Pipe
         gp.pColorBlendState = addr(blend)
         gp.pDynamicState = addr(dynstate)
         gp.layout = boost_value_to_vk(layout)
-        gp.renderPass = boost_value_to_vk(rp)
+        var fmts = rendering_formats(OUT_FMT, DEPTH_FMT)
+        attach_rendering_formats(gp, fmts)
         vk_check(vkCreateGraphicsPipelines(boost_value_to_vk(device), null, 1u, addr(gp), null, addr(h)), null)
     }
     delete stages
@@ -660,11 +643,6 @@ struct public GpuDrivenResources {
     out_depth : OffscreenDepth         // shared depth for both viewports
     occ_depth : OffscreenDepth         // occluder depth pre-pass (sampled by HZB mip0)
     hzb       : Hzb
-
-    rp_depth  : RenderPass             // depth-only pre-pass
-    rp_color  : RenderPass             // color+depth, both viewports
-    fb_depth  : Framebuffer
-    fb_color  : Framebuffer
 
     depth_sampler : Sampler            // samples occ_depth + the HZB
     mat_sampler   : Sampler            // bindless material sampler
@@ -744,10 +722,6 @@ def public finalize(var r : GpuDrivenResources) {
     delete r.materials
     delete r.mat_sampler
     delete r.depth_sampler
-    delete r.fb_color
-    delete r.fb_depth
-    delete r.rp_color
-    delete r.rp_depth
     delete r.hzb
     delete r.occ_depth
     delete r.out_depth
@@ -784,21 +758,6 @@ def public build_gpu_driven_resources(device : Device; phys : VkPhysicalDevice; 
     occ_extra.sampled = true                         // HZB mip0 samples the occluder depth
     var inscope occ_depth <- build_offscreen_depth(device, phys, HZB_BASE, HZB_BASE, DEPTH_FMT, occ_extra)
     var inscope hzb <- build_hzb(device, phys)
-
-    // ----- render passes -----
-    var inscope rp_depth <- create_render_pass_depth_only(device, DEPTH_FMT, VkImageLayout.DEPTH_STENCIL_READ_ONLY_OPTIMAL)
-    var inscope rp_color <- create_render_pass_color_depth(device, OUT_FMT, DEPTH_FMT, VkImageLayout.TRANSFER_SRC_OPTIMAL)
-
-    // ----- framebuffers -----
-    var depth_attach : array<ImageView>
-    depth_attach |> push(weak_copy(occ_depth.view))
-    var inscope fb_depth <- create_framebuffer(device, FramebufferCreateInfo(
-        renderPass = weak_copy(rp_depth), pAttachments <- depth_attach,
-        width = uint(HZB_BASE), height = uint(HZB_BASE), layers = 1u))
-    var color_attach <- [weak_copy(out_color.view), weak_copy(out_depth.view)]
-    var inscope fb_color <- create_framebuffer(device, FramebufferCreateInfo(
-        renderPass = weak_copy(rp_color), pAttachments <- color_attach,
-        width = uint(OUT_W), height = uint(OUT_H), layers = 1u))
 
     // ----- samplers -----
     let dsci = SamplerCreateInfo(magFilter = VkFilter.NEAREST, minFilter = VkFilter.NEAREST,
@@ -941,26 +900,26 @@ def public build_gpu_driven_resources(device : Device; phys : VkPhysicalDevice; 
     var inscope cull_pipe <- create_compute_pipeline(device, cull_pl, sh_cull)
     var inscope mip0_pipe <- create_compute_pipeline(device, hzb_pl, sh_mip0)
     var inscope down_pipe <- create_compute_pipeline(device, hzb_pl, sh_down)
-    var inscope depth_pipe <- build_depth_pipeline(device, rp_depth, occ_pl, sh_occ_v)
+    var inscope depth_pipe <- build_depth_pipeline(device, occ_pl, sh_occ_v)
 
     var mvb <- cube_vbindings()
     var mva <- cube_vattrs()
-    var inscope main_pipe <- build_color_pipeline(device, rp_color, main_pl, sh_main_v, sh_main_f, mvb, mva, true, false)
+    var inscope main_pipe <- build_color_pipeline(device, main_pl, sh_main_v, sh_main_f, mvb, mva, true, false)
     delete mvb
     delete mva
     var gvb <- cube_vbindings()
     var gva <- cube_vattrs()
-    var inscope god_pipe <- build_color_pipeline(device, rp_color, god_pl, sh_god_v, sh_god_f, gvb, gva, true, true)
+    var inscope god_pipe <- build_color_pipeline(device, god_pl, sh_god_v, sh_god_f, gvb, gva, true, true)
     delete gvb
     delete gva
     var ovb <- occ_vbindings()
     var ova <- occ_vattrs()
-    var inscope occ_solid_pipe <- build_color_pipeline(device, rp_color, occ_pl, sh_occ_v, sh_occ_solid, ovb, ova, true, false)
+    var inscope occ_solid_pipe <- build_color_pipeline(device, occ_pl, sh_occ_v, sh_occ_solid, ovb, ova, true, false)
     delete ovb
     delete ova
     var ovb2 <- occ_vbindings()
     var ova2 <- occ_vattrs()
-    var inscope occ_ghost_pipe <- build_color_pipeline(device, rp_color, occ_pl, sh_occ_v, sh_occ_ghost, ovb2, ova2, false, true)
+    var inscope occ_ghost_pipe <- build_color_pipeline(device, occ_pl, sh_occ_v, sh_occ_ghost, ovb2, ova2, false, true)
     delete ovb2
     delete ova2
 
@@ -969,7 +928,6 @@ def public build_gpu_driven_resources(device : Device; phys : VkPhysicalDevice; 
 
     return <- GpuDrivenResources(
         out_color <- out_color, out_depth <- out_depth, occ_depth <- occ_depth, hzb <- hzb,
-        rp_depth <- rp_depth, rp_color <- rp_color, fb_depth <- fb_depth, fb_color <- fb_color,
         depth_sampler <- depth_sampler, mat_sampler <- mat_sampler, materials <- materials,
         cube_vb <- cube_vb, cube_ib <- cube_ib, ubo <- ubo, instances <- instances,
         draw_cmds <- draw_cmds, draw_count <- draw_count, draw_inst <- draw_inst, cull_reason <- cull_reason,
@@ -986,7 +944,7 @@ def public build_gpu_driven_context() : GpuDrivenContext {
     if (volkInitialize() != 0) {
         panic("no Vulkan loader")
     }
-    var inscope instance <- create_instance("dasVulkan tutorial 12", make_api_version(1u, 2u, 0u))
+    var inscope instance <- create_instance("dasVulkan tutorial 12", make_api_version(1u, 3u, 0u))
     volkLoadInstance(boost_value_to_vk(instance))
     let phys = select_physical_device(instance)
     let gfx = select_graphics_queue_family(phys)
@@ -1027,90 +985,59 @@ def private set_panel(cmd : CommandBuffer; p : int) {
     }
 }
 
-//! Full memory barrier between two compute stages (all shader writes visible to all shader reads).
+//! Full memory barrier between two compute stages: the storage writes (SSBOs, the HZB mip images) made
+//! visible to the next dispatch's storage reads AND its sampled reads - the downsample and the cull read
+//! the HZB through a sampler.
 def private compute_barrier(cmd : CommandBuffer) {
-    var mb : MemoryBarrier
-    mb.srcAccessMask.shader_write = true
-    mb.dstAccessMask.shader_read = true
-    var mems : array<MemoryBarrier>
-    mems |> emplace(mb)
-    let no_buf : array<BufferMemoryBarrier>
-    let no_img : array<ImageMemoryBarrier>
-    var src : VkPipelineStageFlags
-    src.compute_shader = true
-    var dst : VkPipelineStageFlags
-    dst.compute_shader = true
-    let no_dep : VkDependencyFlags
-    cmd_pipeline_barrier(cmd, src, dst, no_dep, mems, no_buf, no_img)
+    var dep : DependencyInfo
+    dep.pMemoryBarriers |> emplace(MemoryBarrier2(
+        srcStageMask = VkPipelineStageFlags2.compute_shader, srcAccessMask = VkAccessFlags2.shader_storage_write,
+        dstStageMask = VkPipelineStageFlags2.compute_shader,
+        dstAccessMask = VkAccessFlags2.shader_storage_read | VkAccessFlags2.shader_sampled_read))
+    cmd_pipeline_barrier2(cmd, dep)
+}
+
+//! One buffer barrier: `buffer`'s whole range, from the compute writes to `dst_stage` with `dst_access`.
+def private buffer_barrier_from_compute(buffer : Buffer; dst_stage : VkPipelineStageFlags2; dst_access : VkAccessFlags2) : BufferMemoryBarrier2 {
+    return <- BufferMemoryBarrier2(
+        srcStageMask = VkPipelineStageFlags2.compute_shader, srcAccessMask = VkAccessFlags2.shader_storage_write,
+        dstStageMask = dst_stage, dstAccessMask = dst_access,
+        srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED, dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        buffer = weak_copy(buffer), offset = 0ul, size = VK_WHOLE_SIZE)
 }
 
 //! Record the whole GPU-driven frame for a given wall X. One command buffer, five passes, the barrier
 //! chain between them. Leaves out_color in TRANSFER_SRC_OPTIMAL for the caller's readback / present.
 def public record_frame(res : GpuDrivenResources; cmd : CommandBuffer; wall_x : float) {   // nolint:STYLE038 - flat command-record run
     let raw = boost_value_to_vk(cmd)
+    let depth_tests = VkPipelineStageFlags2.early_fragment_tests | VkPipelineStageFlags2.late_fragment_tests
 
     // ===== pass 1: occluder depth pre-pass (camera view) =====
     occ_pc.mvp = camera_view_proj() * wall_model(wall_x)
-    var depth_clear <- [clear_depth(1.0f)]
-    record_render_pass(cmd, res.rp_depth, res.fb_depth, full_area(HZB_BASE, HZB_BASE), depth_clear) {
+    transition_depth_image2(cmd, res.occ_depth.image, VkImageLayout.UNDEFINED, VkImageLayout.DEPTH_ATTACHMENT_OPTIMAL,
+        PIPELINE_STAGE_2_NONE, ACCESS_2_NONE, depth_tests, VkAccessFlags2.depth_stencil_attachment_write)
+    record_rendering_depth_only(cmd, res.occ_depth.view, full_area(HZB_BASE, HZB_BASE), clear_depth(1.0f)) {
         cmd_bind_pipeline(cmd, res.depth_pipe)
         occluder_vs_push_constants(cmd, res.occ_pl)
         cmd_bind_vertex_buffer(cmd, 0u, weak_copy(res.cube_vb.buffer))
         cmd_bind_index_buffer(cmd, weak_copy(res.cube_ib.buffer), 0ul, VkIndexType.UINT16)
         cmd_draw_indexed(cmd, uint(N_INDICES), 1u, 0u, 0, 0u)
     }
-    delete depth_clear
 
-    // barrier: depth write -> compute sampled read (occ_depth is in DEPTH_STENCIL_READ_ONLY already)
-    {
-        var ib : ImageMemoryBarrier
-        ib.srcAccessMask.depth_stencil_attachment_write = true
-        ib.dstAccessMask.shader_read = true
-        ib.oldLayout = VkImageLayout.DEPTH_STENCIL_READ_ONLY_OPTIMAL
-        ib.newLayout = VkImageLayout.DEPTH_STENCIL_READ_ONLY_OPTIMAL
-        ib.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED
-        ib.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED
-        ib.image = weak_copy(res.occ_depth.image)
-        ib.subresourceRange.aspectMask.depth = true
-        ib.subresourceRange.levelCount = 1u
-        ib.subresourceRange.layerCount = 1u
-        var imgs : array<ImageMemoryBarrier>
-        imgs |> emplace(ib)
-        let no_mem : array<MemoryBarrier>
-        let no_buf : array<BufferMemoryBarrier>
-        var src : VkPipelineStageFlags
-        src.early_fragment_tests = true       // the depth-only occluder pipeline has no fragment
-        src.late_fragment_tests = true        // shader, so its depth write lands in EARLY tests; cover both
-        var dst : VkPipelineStageFlags
-        dst.compute_shader = true
-        let no_dep : VkDependencyFlags
-        cmd_pipeline_barrier(cmd, src, dst, no_dep, no_mem, no_buf, imgs)
-    }
+    // depth write -> compute sampled read. The depth-only occluder pipeline has no fragment shader, so
+    // its depth write lands in EARLY tests; both test stages are named to cover either placement.
+    transition_depth_image2(cmd, res.occ_depth.image, VkImageLayout.DEPTH_ATTACHMENT_OPTIMAL, VkImageLayout.DEPTH_STENCIL_READ_ONLY_OPTIMAL,
+        depth_tests, VkAccessFlags2.depth_stencil_attachment_write,
+        VkPipelineStageFlags2.compute_shader, VkAccessFlags2.shader_sampled_read)
 
     // ===== pass 2: HZB build =====
-    // transition the whole HZB chain UNDEFINED -> GENERAL for storage writes
-    {
-        var ib : ImageMemoryBarrier
-        ib.dstAccessMask.shader_write = true
-        ib.oldLayout = VkImageLayout.UNDEFINED
-        ib.newLayout = VkImageLayout.GENERAL
-        ib.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED
-        ib.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED
-        ib.image = weak_copy(res.hzb.image)
-        ib.subresourceRange.aspectMask.color = true
-        ib.subresourceRange.levelCount = uint(MIP_COUNT)
-        ib.subresourceRange.layerCount = 1u
-        var imgs : array<ImageMemoryBarrier>
-        imgs |> emplace(ib)
-        let no_mem : array<MemoryBarrier>
-        let no_buf : array<BufferMemoryBarrier>
-        var src : VkPipelineStageFlags
-        src.top_of_pipe = true
-        var dst : VkPipelineStageFlags
-        dst.compute_shader = true
-        let no_dep : VkDependencyFlags
-        cmd_pipeline_barrier(cmd, src, dst, no_dep, no_mem, no_buf, imgs)
-    }
+    // transition the whole HZB chain UNDEFINED -> GENERAL for storage writes (all MIP_COUNT levels at once)
+    var color_aspect : VkImageAspectFlags
+    color_aspect.color = true
+    transition_image_aspect2(cmd, res.hzb.image, VkImageLayout.UNDEFINED, VkImageLayout.GENERAL,
+        PIPELINE_STAGE_2_NONE, ACCESS_2_NONE,
+        VkPipelineStageFlags2.compute_shader, VkAccessFlags2.shader_storage_write,
+        color_aspect, uint(MIP_COUNT))
     // mip 0: copy occluder depth -> HZB[0]
     cmd_bind_pipeline(cmd, res.mip0_pipe, VkPipelineBindPoint.COMPUTE)
     bind_compute_set(cmd, res.hzb_pl, res.hzb_sets[0])
@@ -1132,25 +1059,14 @@ def public record_frame(res : GpuDrivenResources; cmd : CommandBuffer; wall_x : 
     // zero the draw count, then make it visible to the cull shader
     vkCmdFillBuffer(raw, boost_value_to_vk(res.draw_count.buffer), 0ul, 4ul, 0u)
     {
-        var bb : BufferMemoryBarrier
-        bb.srcAccessMask.transfer_write = true
-        bb.dstAccessMask.shader_read = true
-        bb.dstAccessMask.shader_write = true
-        bb.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED
-        bb.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED
-        bb.buffer = weak_copy(res.draw_count.buffer)
-        bb.offset = 0ul
-        bb.size = 4ul
-        var bufs : array<BufferMemoryBarrier>
-        bufs |> emplace(bb)
-        let no_mem : array<MemoryBarrier>
-        let no_img : array<ImageMemoryBarrier>
-        var src : VkPipelineStageFlags
-        src.transfer = true
-        var dst : VkPipelineStageFlags
-        dst.compute_shader = true
-        let no_dep : VkDependencyFlags
-        cmd_pipeline_barrier(cmd, src, dst, no_dep, no_mem, bufs, no_img)
+        var dep : DependencyInfo
+        dep.pBufferMemoryBarriers |> emplace(BufferMemoryBarrier2(
+            srcStageMask = VkPipelineStageFlags2.clear, srcAccessMask = VkAccessFlags2.transfer_write,
+            dstStageMask = VkPipelineStageFlags2.compute_shader,
+            dstAccessMask = VkAccessFlags2.shader_storage_read | VkAccessFlags2.shader_storage_write,
+            srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED, dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            buffer = weak_copy(res.draw_count.buffer), offset = 0ul, size = 4ul))
+        cmd_pipeline_barrier2(cmd, dep)
     }
     cmd_bind_pipeline(cmd, res.cull_pipe, VkPipelineBindPoint.COMPUTE)
     bind_compute_set(cmd, res.cull_pl, res.cull_set)
@@ -1158,49 +1074,22 @@ def public record_frame(res : GpuDrivenResources; cmd : CommandBuffer; wall_x : 
 
     // barrier: cull writes -> indirect draw read (draw_cmds/draw_count) + vertex read (draw_inst/cull_reason)
     {
-        var bb_ind : BufferMemoryBarrier
-        bb_ind.srcAccessMask.shader_write = true
-        bb_ind.dstAccessMask.indirect_command_read = true
-        bb_ind.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED
-        bb_ind.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED
-        bb_ind.buffer = weak_copy(res.draw_cmds.buffer)
-        bb_ind.size = VK_WHOLE_SIZE
-        var bb_cnt : BufferMemoryBarrier
-        bb_cnt.srcAccessMask.shader_write = true
-        bb_cnt.dstAccessMask.indirect_command_read = true
-        bb_cnt.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED
-        bb_cnt.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED
-        bb_cnt.buffer = weak_copy(res.draw_count.buffer)
-        bb_cnt.size = VK_WHOLE_SIZE
-        var bb_vtx : BufferMemoryBarrier
-        bb_vtx.srcAccessMask.shader_write = true
-        bb_vtx.dstAccessMask.shader_read = true
-        bb_vtx.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED
-        bb_vtx.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED
-        bb_vtx.buffer = weak_copy(res.draw_inst.buffer)
-        bb_vtx.size = VK_WHOLE_SIZE
-        var bb_rsn : BufferMemoryBarrier
-        bb_rsn.srcAccessMask.shader_write = true
-        bb_rsn.dstAccessMask.shader_read = true
-        bb_rsn.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED
-        bb_rsn.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED
-        bb_rsn.buffer = weak_copy(res.cull_reason.buffer)
-        bb_rsn.size = VK_WHOLE_SIZE
-        let bufs <- [ <- bb_ind, <- bb_cnt, <- bb_vtx, <- bb_rsn]
-        let no_mem : array<MemoryBarrier>
-        let no_img : array<ImageMemoryBarrier>
-        var src : VkPipelineStageFlags
-        src.compute_shader = true
-        var dst : VkPipelineStageFlags
-        dst.draw_indirect = true
-        dst.vertex_shader = true
-        let no_dep : VkDependencyFlags
-        cmd_pipeline_barrier(cmd, src, dst, no_dep, no_mem, bufs, no_img)
+        var dep <- DependencyInfo(pBufferMemoryBarriers <- [
+            <- buffer_barrier_from_compute(res.draw_cmds.buffer, VkPipelineStageFlags2.draw_indirect, VkAccessFlags2.indirect_command_read),
+            <- buffer_barrier_from_compute(res.draw_count.buffer, VkPipelineStageFlags2.draw_indirect, VkAccessFlags2.indirect_command_read),
+            <- buffer_barrier_from_compute(res.draw_inst.buffer, VkPipelineStageFlags2.vertex_shader, VkAccessFlags2.shader_storage_read),
+            <- buffer_barrier_from_compute(res.cull_reason.buffer, VkPipelineStageFlags2.vertex_shader, VkAccessFlags2.shader_storage_read)])
+        cmd_pipeline_barrier2(cmd, dep)
     }
 
     // ===== passes 4 + 5: main view (left) + god view (right) into one wide target =====
+    transition_image2(cmd, res.out_color.image, VkImageLayout.UNDEFINED, VkImageLayout.COLOR_ATTACHMENT_OPTIMAL,
+        PIPELINE_STAGE_2_NONE, ACCESS_2_NONE,
+        VkPipelineStageFlags2.color_attachment_output, VkAccessFlags2.color_attachment_write)
+    transition_depth_image2(cmd, res.out_depth.image, VkImageLayout.UNDEFINED, VkImageLayout.DEPTH_ATTACHMENT_OPTIMAL,
+        PIPELINE_STAGE_2_NONE, ACCESS_2_NONE, depth_tests, VkAccessFlags2.depth_stencil_attachment_write)
     var clears <- [clear_color(0.04f, 0.05f, 0.08f, 1.0f), clear_depth(1.0f)]
-    record_render_pass(cmd, res.rp_color, res.fb_color, full_area(OUT_W, OUT_H), clears) {
+    record_rendering(cmd, res.out_color.view, res.out_depth.view, full_area(OUT_W, OUT_H), clears) {
         // ---- left panel: camera view, occluder + survivors via indirect count ----
         set_panel(cmd, 0)
         occ_pc.mvp = camera_view_proj() * wall_model(wall_x)
@@ -1233,6 +1122,9 @@ def public record_frame(res : GpuDrivenResources; cmd : CommandBuffer; wall_x : 
         cmd_draw_indexed(cmd, uint(N_INDICES), 1u, 0u, 0, 0u)
     }
     delete clears
+    transition_image2(cmd, res.out_color.image, VkImageLayout.COLOR_ATTACHMENT_OPTIMAL, VkImageLayout.TRANSFER_SRC_OPTIMAL,
+        VkPipelineStageFlags2.color_attachment_output, VkAccessFlags2.color_attachment_write,
+        VkPipelineStageFlags2.copy | VkPipelineStageFlags2.blit, VkAccessFlags2.transfer_read)
 }
 
 //! bind a single descriptor set for a compute pipeline.

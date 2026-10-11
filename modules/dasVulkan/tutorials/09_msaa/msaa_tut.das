@@ -2,20 +2,12 @@ options gen2
 options _comment_hygiene = true
 options indenting = 4
 
-// Tutorial 09 render path: re-renders the synthwave cube from tutorial 04, but with two new rails
-// stacked on top -- 4x MSAA color + dynamic rendering. Concretely:
-//
-//   * Color attachment is created with samples = 4, depth attachment is also 4 (the spec requires
-//     the attachments in one render pass to agree on sample count). A separate 1x "resolve" color
-//     image receives the MSAA-averaged pixels via the rendering attachment's resolveImageView,
-//     and is the one that gets blitted into the readback buffer.
-//   * No VkRenderPass, no VkFramebuffer. The pipeline carries a VkPipelineRenderingCreateInfo in
-//     its pNext chain (color format, depth format, sample count); the per-frame work calls
-//     cmd_begin_rendering / cmd_end_rendering with an inline VkRenderingInfo that points at the
-//     three image views. Vulkan 1.3 core.
-//
-// Both rails ship as new vulkan_boost helpers (build_offscreen_target/depth with samples,
-// create_graphics_pipeline_dyn, record_rendering, create_device with Vulkan 1.3 features). The
+// Tutorial 09 render path: re-renders the synthwave cube from tutorial 04 with 4x MSAA. Color and
+// depth attachments are created with samples = 4 (the attachments of one rendering must agree on
+// sample count); a separate 1x "resolve" color image receives the MSAA-averaged pixels through the
+// color attachment's resolveImageView and is the one blitted into the readback buffer. The pipeline
+// comes from create_graphics_pipeline_dyn, the sample-count overload of the format creators, and the
+// frame builds its RenderingAttachmentInfo by hand because the resolve fields are the lesson. The
 // shaders are unchanged from the cube tutorial -- MSAA is a pipeline + attachment concern, the
 // fragment program doesn't know it's being sampled four times.
 
@@ -484,19 +476,8 @@ def public build_msaa_resources(device : Device; phys : VkPhysicalDevice; queue 
 
     // one-shot texture upload: staging -> tex_image, UNDEFINED -> TRANSFER_DST -> SHADER_READ_ONLY
     run_cmd_sync(device, pool, queue) $(cmd) {
-        var to_dst : VkAccessFlags
-        to_dst.transfer_write = true
-        let none : VkAccessFlags
-        var top : VkPipelineStageFlags
-        top.top_of_pipe = true
-        var xfer : VkPipelineStageFlags
-        xfer.transfer = true
-        var frag_stage : VkPipelineStageFlags
-        frag_stage.fragment_shader = true
-        var to_read : VkAccessFlags
-        to_read.shader_read = true
-        transition_image(cmd, tex_image, VkImageLayout.UNDEFINED, VkImageLayout.TRANSFER_DST_OPTIMAL,
-            none, to_dst, top, xfer)
+        transition_image2(cmd, tex_image, VkImageLayout.UNDEFINED, VkImageLayout.TRANSFER_DST_OPTIMAL,
+            PIPELINE_STAGE_2_NONE, ACCESS_2_NONE, VkPipelineStageFlags2.copy, VkAccessFlags2.transfer_write)
         var region : BufferImageCopy
         region.imageSubresource.aspectMask.color = true
         region.imageSubresource.layerCount = 1u
@@ -506,8 +487,9 @@ def public build_msaa_resources(device : Device; phys : VkPhysicalDevice; queue 
         var regions : array<BufferImageCopy>
         regions |> emplace(region)
         cmd_copy_buffer_to_image(cmd, staging.buffer, tex_image, VkImageLayout.TRANSFER_DST_OPTIMAL, regions)
-        transition_image(cmd, tex_image, VkImageLayout.TRANSFER_DST_OPTIMAL, VkImageLayout.SHADER_READ_ONLY_OPTIMAL,
-            to_dst, to_read, xfer, frag_stage)
+        transition_image2(cmd, tex_image, VkImageLayout.TRANSFER_DST_OPTIMAL, VkImageLayout.SHADER_READ_ONLY_OPTIMAL,
+            VkPipelineStageFlags2.copy, VkAccessFlags2.transfer_write,
+            VkPipelineStageFlags2.fragment_shader, VkAccessFlags2.shader_sampled_read)
     }
 
     return <- MsaaResources(
@@ -522,8 +504,8 @@ def public build_msaa_resources(device : Device; phys : VkPhysicalDevice; queue 
         buf_size = buf_size, push_size = push_size, index_count = spiky_index_count)
 }
 
-//! Build the offscreen-self-contained context. The instance asks for Vulkan 1.3 API; the device
-//! opts in to the dynamicRendering feature via VkPhysicalDeviceVulkan13Features.
+//! Build the offscreen-self-contained context. The instance asks for Vulkan 1.3 API; `create_device`
+//! enables dynamic rendering + synchronization2 on any 1.3 device that reports them.
 def public build_msaa_context() : MsaaContext {
     if (volkInitialize() != 0) {
         panic("no Vulkan loader")
@@ -532,10 +514,7 @@ def public build_msaa_context() : MsaaContext {
     volkLoadInstance(boost_value_to_vk(instance))
     let phys = select_physical_device(instance)
     let gfx = select_graphics_queue_family(phys)
-    let no_ext : array<string>
-    var features13 = VkPhysicalDeviceVulkan13Features()
-    features13.dynamicRendering = 1u
-    var inscope device <- create_device(phys, gfx, no_ext, features13)
+    var inscope device <- create_device(phys, gfx)
     volkLoadDevice(boost_value_to_vk(device))
     var queue = get_device_queue(device, gfx, 0u)
     var poolci : CommandPoolCreateInfo
@@ -578,17 +557,10 @@ def public final_image(res : MsaaResources; use_msaa : bool) : Image =>
 //! path has its own pipeline + color/depth attachments built up front, so toggling needs no rebuild.
 //! Ends with the chosen final image (resolve or 1x color) in TRANSFER_SRC_OPTIMAL, ready for blit.
 def public record_msaa_render(res : MsaaResources; cmd : CommandBuffer; use_msaa : bool = true) {   // nolint:STYLE038 - flat command-record run
-    var to_color : VkAccessFlags
-    to_color.color_attachment_write = true
-    var to_depth : VkAccessFlags
-    to_depth.depth_stencil_attachment_write = true
-    let none : VkAccessFlags
-    var top : VkPipelineStageFlags
-    top.top_of_pipe = true
-    var color_out : VkPipelineStageFlags
-    color_out.color_attachment_output = true
-    var depth_tests : VkPipelineStageFlags
-    depth_tests.early_fragment_tests = true
+    let color_out = VkPipelineStageFlags2.color_attachment_output
+    let color_write = VkAccessFlags2.color_attachment_write
+    let depth_tests = VkPipelineStageFlags2.early_fragment_tests | VkPipelineStageFlags2.late_fragment_tests
+    let depth_write = VkAccessFlags2.depth_stencil_attachment_write
 
     var color_att = RenderingAttachmentInfo(imageLayout = VkImageLayout.COLOR_ATTACHMENT_OPTIMAL,
         loadOp = VkAttachmentLoadOp.CLEAR)
@@ -605,12 +577,12 @@ def public record_msaa_render(res : MsaaResources; cmd : CommandBuffer; use_msaa
     let final_img = final_image(res, use_msaa)
 
     if (use_msaa) {
-        transition_image(cmd, res.color_msaa.image, VkImageLayout.UNDEFINED, VkImageLayout.COLOR_ATTACHMENT_OPTIMAL,
-            none, to_color, top, color_out)
-        transition_image(cmd, res.color_resolve.image, VkImageLayout.UNDEFINED, VkImageLayout.COLOR_ATTACHMENT_OPTIMAL,
-            none, to_color, top, color_out)
-        transition_depth_image(cmd, res.depth_msaa.image, VkImageLayout.UNDEFINED, VkImageLayout.DEPTH_ATTACHMENT_OPTIMAL,
-            none, to_depth, top, depth_tests)
+        transition_image2(cmd, res.color_msaa.image, VkImageLayout.UNDEFINED, VkImageLayout.COLOR_ATTACHMENT_OPTIMAL,
+            PIPELINE_STAGE_2_NONE, ACCESS_2_NONE, color_out, color_write)
+        transition_image2(cmd, res.color_resolve.image, VkImageLayout.UNDEFINED, VkImageLayout.COLOR_ATTACHMENT_OPTIMAL,
+            PIPELINE_STAGE_2_NONE, ACCESS_2_NONE, color_out, color_write)
+        transition_depth_image2(cmd, res.depth_msaa.image, VkImageLayout.UNDEFINED, VkImageLayout.DEPTH_ATTACHMENT_OPTIMAL,
+            PIPELINE_STAGE_2_NONE, ACCESS_2_NONE, depth_tests, depth_write)
         // Color attachment: 4x MSAA source + 1x resolve target. resolveMode=AVERAGE is the
         // standard box filter; SAMPLE_ZERO would be the no-AA fast path.
         color_att.imageView = weak_copy(res.color_msaa.view)
@@ -620,10 +592,10 @@ def public record_msaa_render(res : MsaaResources; cmd : CommandBuffer; use_msaa
         color_att.resolveImageLayout = VkImageLayout.COLOR_ATTACHMENT_OPTIMAL
         depth_att.imageView = weak_copy(res.depth_msaa.view)
     } else {
-        transition_image(cmd, res.color_1x.image, VkImageLayout.UNDEFINED, VkImageLayout.COLOR_ATTACHMENT_OPTIMAL,
-            none, to_color, top, color_out)
-        transition_depth_image(cmd, res.depth_1x.image, VkImageLayout.UNDEFINED, VkImageLayout.DEPTH_ATTACHMENT_OPTIMAL,
-            none, to_depth, top, depth_tests)
+        transition_image2(cmd, res.color_1x.image, VkImageLayout.UNDEFINED, VkImageLayout.COLOR_ATTACHMENT_OPTIMAL,
+            PIPELINE_STAGE_2_NONE, ACCESS_2_NONE, color_out, color_write)
+        transition_depth_image2(cmd, res.depth_1x.image, VkImageLayout.UNDEFINED, VkImageLayout.DEPTH_ATTACHMENT_OPTIMAL,
+            PIPELINE_STAGE_2_NONE, ACCESS_2_NONE, depth_tests, depth_write)
         // 1x path: no resolve attachment, store the rasterized pixels directly.
         color_att.imageView = weak_copy(res.color_1x.view)
         color_att.storeOp = VkAttachmentStoreOp.STORE
@@ -650,6 +622,8 @@ def public record_msaa_render(res : MsaaResources; cmd : CommandBuffer; use_msaa
     // Mode indicator strip: a second dynamic-rendering "pass" with renderArea narrowed to the top
     // INDICATOR_H rows, loadOp=CLEAR with a mode-coloured value. No draw calls -- the clear at begin
     // time IS the indicator. Green = 4x, red = 1x; works in window and recording with no font texture.
+    transition_image2(cmd, final_img, VkImageLayout.COLOR_ATTACHMENT_OPTIMAL, VkImageLayout.COLOR_ATTACHMENT_OPTIMAL,
+        color_out, color_write, color_out, color_write)   // two renderings on one image are unordered without it
     var indicator_att = RenderingAttachmentInfo(
         imageView = use_msaa ? weak_copy(res.color_resolve.view) : weak_copy(res.color_1x.view),
         imageLayout = VkImageLayout.COLOR_ATTACHMENT_OPTIMAL,
@@ -669,12 +643,8 @@ def public record_msaa_render(res : MsaaResources; cmd : CommandBuffer; use_msaa
     }
 
     // Final image -> TRANSFER_SRC for the readback / blit-out.
-    var to_xfer : VkAccessFlags
-    to_xfer.transfer_read = true
-    var xfer : VkPipelineStageFlags
-    xfer.transfer = true
-    transition_image(cmd, final_img, VkImageLayout.COLOR_ATTACHMENT_OPTIMAL, VkImageLayout.TRANSFER_SRC_OPTIMAL,
-        to_color, to_xfer, color_out, xfer)
+    transition_image2(cmd, final_img, VkImageLayout.COLOR_ATTACHMENT_OPTIMAL, VkImageLayout.TRANSFER_SRC_OPTIMAL,
+        color_out, color_write, VkPipelineStageFlags2.copy | VkPipelineStageFlags2.blit, VkAccessFlags2.transfer_read)
 }
 
 //! Per-frame work: update UBO + push constant, record the dyn-rendering pass, copy the final

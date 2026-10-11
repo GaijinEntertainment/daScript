@@ -101,7 +101,7 @@ def gen_initial_particles(n : int) : array<float> {
 //! POINT_LIST graphics pipeline (one vertex per point) -- v3d hardcodes TRIANGLE_LIST, so this tutorial
 //! inlines its own. Same rasteriser/depth defaults as v3d (depth test + write on, LESS_OR_EQUAL), but
 //! cull mode is NONE (points have no winding) and the topology draws one screen-space point per vertex.
-def private build_points_pipeline(device : Device; render_pass : RenderPass; layout : PipelineLayout;   // nolint:STYLE038 - flat one-call-per-item Vulkan setup run
+def private build_points_pipeline(device : Device; layout : PipelineLayout;   // nolint:STYLE038 - flat one-call-per-item Vulkan setup run
                                   vert : ShaderModule; frag : ShaderModule; width, height : int;
                                   var vertex_bindings : array<VkVertexInputBindingDescription>;
                                   var vertex_attributes : array<VkVertexInputAttributeDescription>) : Pipeline {
@@ -167,7 +167,9 @@ def private build_points_pipeline(device : Device; render_pass : RenderPass; lay
     var gp = VkGraphicsPipelineCreateInfo()
     gp.stageCount = 2u
     gp.layout = boost_value_to_vk(layout)
-    gp.renderPass = boost_value_to_vk(render_pass)
+    // the color + depth formats the points render into (dynamic rendering: no render pass to bind to)
+    var fmts = rendering_formats(PART_COLOR_FMT, PART_DEPTH_FMT)
+    attach_rendering_formats(gp, fmts)
     var h : VkPipeline
     unsafe {
         if (!empty(vertex_bindings)) {
@@ -189,20 +191,21 @@ def private build_points_pipeline(device : Device; render_pass : RenderPass; lay
         gp.pColorBlendState = addr(blend)
         vk_check(vkCreateGraphicsPipelines(boost_value_to_vk(device), null, 1u, addr(gp), null, addr(h)), null)
     }
-    return <- vk_value_to_boost(h)
+    var b = vk_value_to_boost(h)
+    b._needs_delete = true
+    b._device = unsafe(reinterpret<uint64>(boost_value_to_vk(device)))
+    return <- b
 }
 
 
 // ===== reusable per-frame context =====
 
-//! Long-lived particle state: offscreen targets, render pass + framebuffer, quad VB + IB, particle
-//! buffer (shared between compute SSBO and graphics per-instance stream), the graphics UBO, both
-//! pipelines + their layouts + descriptor sets, and a readback buffer.
+//! Long-lived particle state: offscreen targets, quad VB + IB, particle buffer (shared between compute
+//! SSBO and graphics per-instance stream), the graphics UBO, both pipelines + their layouts +
+//! descriptor sets, and a readback buffer.
 struct public ParticlesResources {
     color           : OffscreenTarget
     depth           : OffscreenDepth
-    render_pass     : RenderPass
-    framebuffer     : Framebuffer
 
     particle_buf    : HostBuffer        // SSBO for compute, per-instance vertex for graphics
     ubo             : HostBuffer
@@ -237,8 +240,6 @@ def public finalize(var r : ParticlesResources) {
     delete r.cset_layouts
     delete r.ubo
     delete r.particle_buf
-    delete r.framebuffer
-    delete r.render_pass
     delete r.depth
     delete r.color
 }
@@ -268,13 +269,6 @@ def public build_particles_resources(device : Device; phys : VkPhysicalDevice; q
 
     var inscope color <- build_offscreen_target(device, phys, PART_W, PART_H, PART_COLOR_FMT)
     var inscope depth <- build_offscreen_depth(device, phys, PART_W, PART_H, PART_DEPTH_FMT)
-    var inscope render_pass <- create_render_pass_color_depth(device, PART_COLOR_FMT, PART_DEPTH_FMT)
-    var inscope framebuffer <- create_framebuffer(device, FramebufferCreateInfo(
-        renderPass = weak_copy(render_pass),
-        pAttachments <- [weak_copy(color.view), weak_copy(depth.view)],
-        width = uint(PART_W),
-        height = uint(PART_H),
-        layers = 1u))
 
     // SHARED particle buffer: storage_buffer for the compute SSBO + vertex_buffer for the graphics
     // per-instance binding. HOST_VISIBLE so the initial state can be uploaded without a staging
@@ -392,7 +386,7 @@ def public build_particles_resources(device : Device; phys : VkPhysicalDevice; q
     a_vel.offset = 16u                                    // vel at struct offset 16
     vattrs |> push(a_vel)
 
-    var inscope gpipeline <- build_points_pipeline(device, render_pass, gpipe_layout, vert, frag,
+    var inscope gpipeline <- build_points_pipeline(device, gpipe_layout, vert, frag,
         PART_W, PART_H, vbindings, vattrs)
     delete vbindings
     delete vattrs
@@ -402,7 +396,7 @@ def public build_particles_resources(device : Device; phys : VkPhysicalDevice; q
     var inscope readback <- create_host_buffer(device, phys, buf_size)
 
     return <- ParticlesResources(
-        color <- color, depth <- depth, render_pass <- render_pass, framebuffer <- framebuffer,
+        color <- color, depth <- depth,
         particle_buf <- particle_buf, ubo <- ubo,
         cset_layouts <- cset_layouts, cdesc_pool <- cdesc_pool, cdesc_set = craw_set,
         cpipe_layout <- cpipe_layout, cpipeline <- cpipeline,
@@ -451,8 +445,8 @@ def public update_particles_uniforms(res : ParticlesResources; device : Device; 
 }
 
 //! Record the compute dispatch + the compute->graphics barrier + the points draw into
-//! the given command buffer.
-def public record_particles_render_pass(res : ParticlesResources; cmd : CommandBuffer; time, dt : float) {
+//! the given command buffer. The frame ends with the color attachment in TRANSFER_SRC_OPTIMAL.
+def public record_particles_frame(res : ParticlesResources; cmd : CommandBuffer; time, dt : float) {
     let raw_cmd = boost_value_to_vk(cmd)
 
     // 1) Compute pass: dispatch the integrator over all N_PARTICLES particles.
@@ -466,35 +460,28 @@ def public record_particles_render_pass(res : ParticlesResources; cmd : CommandB
     cmd_push_constants(cmd, res.cpipe_layout, cstage, 0u, cpc)
     cmd_dispatch(cmd, uint(N_PARTICLES / 64), 1u, 1u)
 
-    // 2) Compute -> graphics barrier: the integrator's last write (SHADER_WRITE in COMPUTE_SHADER) must
-    //    be visible to the vertex-input fetch (VERTEX_ATTRIBUTE_READ in VERTEX_INPUT) before graphics
-    //    reads particles[i].pos. Without it the graphics pipeline races compute and reads stale values.
-    var bmb : VkBufferMemoryBarrier
-    bmb.srcAccessMask.shader_write = true
-    bmb.dstAccessMask.vertex_attribute_read = true
-    bmb.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED
-    bmb.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED
-    bmb.buffer = boost_value_to_vk(res.particle_buf.buffer)
-    bmb.offset = 0ul
-    bmb.size = uint64(N_PARTICLES) * uint64(PARTICLE_STRIDE)
-    var src_stage : VkPipelineStageFlags
-    src_stage.compute_shader = true
-    var dst_stage : VkPipelineStageFlags
-    dst_stage.vertex_input = true
-    var bmbs : array<VkBufferMemoryBarrier>
-    bmbs |> push(bmb)
-    let no_dep : VkDependencyFlags
-    vkCmdPipelineBarrier(raw_cmd, src_stage, dst_stage,
-        no_dep,
-        0u, null,
-        1u, unsafe(addr(bmbs[0])),
-        0u, null)
-    delete bmbs
+    // 2) Compute -> graphics barrier: the integrator's last write (shader_storage_write in compute_shader)
+    //    must be visible to the vertex-input fetch (vertex_attribute_read in vertex_attribute_input)
+    //    before graphics reads particles[i].pos. Without it the graphics pipeline races compute.
+    var dep <- DependencyInfo(pBufferMemoryBarriers <- [BufferMemoryBarrier2(
+        srcStageMask = VkPipelineStageFlags2.compute_shader, srcAccessMask = VkAccessFlags2.shader_storage_write,
+        dstStageMask = VkPipelineStageFlags2.vertex_attribute_input, dstAccessMask = VkAccessFlags2.vertex_attribute_read,
+        srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED, dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        buffer = weak_copy(res.particle_buf.buffer), offset = 0ul,
+        size = uint64(N_PARTICLES) * uint64(PARTICLE_STRIDE))])
+    cmd_pipeline_barrier2(cmd, dep)
 
     // 3) Graphics pass: bind the SAME particle buffer (the bytes the compute just wrote) at
     //    binding 0 as a per-vertex stream, draw N_PARTICLES points (POINT_LIST topology).
+    transition_image2(cmd, res.color.image, VkImageLayout.UNDEFINED, VkImageLayout.COLOR_ATTACHMENT_OPTIMAL,
+        PIPELINE_STAGE_2_NONE, ACCESS_2_NONE,
+        VkPipelineStageFlags2.color_attachment_output, VkAccessFlags2.color_attachment_write)
+    transition_depth_image2(cmd, res.depth.image, VkImageLayout.UNDEFINED, VkImageLayout.DEPTH_ATTACHMENT_OPTIMAL,
+        PIPELINE_STAGE_2_NONE, ACCESS_2_NONE,
+        VkPipelineStageFlags2.early_fragment_tests | VkPipelineStageFlags2.late_fragment_tests,
+        VkAccessFlags2.depth_stencil_attachment_write)
     var clears <- [clear_color(0.01f, 0.0f, 0.03f, 1.0f), clear_depth(1.0f)]
-    record_render_pass(cmd, res.render_pass, res.framebuffer, full_area(PART_W, PART_H), clears) {
+    record_rendering(cmd, res.color.view, res.depth.view, full_area(PART_W, PART_H), clears) {
         cmd_bind_pipeline(cmd, res.gpipeline)
         let gsets <- [vk_value_to_boost(res.gdesc_set)]
         var no_gdyn : array<uint>
@@ -503,6 +490,9 @@ def public record_particles_render_pass(res : ParticlesResources; cmd : CommandB
         cmd_draw(cmd, uint(N_PARTICLES))
     }
     delete clears
+    transition_image2(cmd, res.color.image, VkImageLayout.COLOR_ATTACHMENT_OPTIMAL, VkImageLayout.TRANSFER_SRC_OPTIMAL,
+        VkPipelineStageFlags2.color_attachment_output, VkAccessFlags2.color_attachment_write,
+        VkPipelineStageFlags2.copy | VkPipelineStageFlags2.blit, VkAccessFlags2.transfer_read)
 }
 
 //! Per-frame work: update UBO, compute + barrier + draw, copy the colour attachment to readback,
@@ -511,7 +501,7 @@ def public render_particles_frame(var ctx : ParticlesContext; time, dt, camera_t
     update_particles_uniforms(ctx.res, ctx.device, time, camera_t)
     var pixels : array<uint8>
     run_cmd_sync(ctx.device, ctx.pool, ctx.queue) $(cmd) {
-        record_particles_render_pass(ctx.res, cmd, time, dt)
+        record_particles_frame(ctx.res, cmd, time, dt)
         copy_image_to_buffer(cmd, ctx.res.color.image, ctx.res.readback, PART_W, PART_H)
     }
     map_memory_to_array(ctx.device, ctx.res.readback.memory, ctx.res.buf_size) $(m) {

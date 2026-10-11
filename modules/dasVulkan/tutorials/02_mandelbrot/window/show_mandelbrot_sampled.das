@@ -5,10 +5,10 @@ options indenting = 4
 // Tutorial 02, present method TWO of two: SAMPLE-AS-TEXTURE. Same animated Mandelbrot zoom as the blit
 // viewer -- the compute shader recomputes the fractal every frame from a `time` push constant -- but here
 // a graphics pass draws a single full-screen triangle whose fragment shader SAMPLES that image as a
-// texture (mandelbrot_view_shaders.das). The result reaches the swapchain through the ordinary render
-// pass, so this reuses draw_frame, the framebuffers and the graphics pipeline wholesale -- it adds only a
-// sampler, one combined-image-sampler descriptor, and the two view shaders. Because a compute dispatch
-// cannot run inside a render pass, each frame runs the compute as its own submit first, then draw_frame
+// texture (mandelbrot_view_shaders.das). The result reaches the swapchain through draw_frame's own
+// rendering, so this reuses draw_frame and the graphics pipeline wholesale -- it adds only a sampler,
+// one combined-image-sampler descriptor, and the two view shaders. Because a compute dispatch cannot
+// run inside a rendering, each frame runs the compute as its own submit first, then draw_frame
 // samples the result. Compare show_mandelbrot_blit.das, which blits the image straight onto the swapchain.
 //
 // Needs a display + the glfw module, so it lives in this window/ subfolder the tutorials .das_test skips
@@ -116,14 +116,12 @@ def main {   // nolint:STYLE038 - flat viewer lifecycle scaffold
 
     // graphics pipeline: full-screen triangle vert + texture-sampling frag, the descriptor set in the layout
     var inscope swap <- create_swapchain(device, phys, surface, ZOOM_DIM, ZOOM_DIM)
-    var inscope render_pass <- create_render_pass_single_color(device, swap.format, VkImageLayout.PRESENT_SRC_KHR)
-    build_swapchain_framebuffers(device, swap, render_pass)
     var inscope vert <- create_shader_module(device, fsq_vert_spv)
     var inscope frag <- create_shader_module(device, fsq_frag_spv)
     var plci : PipelineLayoutCreateInfo
     plci.pSetLayouts <- [weak_copy(set_layout)]
     var inscope layout <- create_pipeline_layout(device, plci)
-    var inscope pipeline <- create_graphics_pipeline_simple(device, render_pass, layout, vert, frag, swap.width, swap.height, true)
+    var inscope pipeline <- create_graphics_pipeline_simple(device, swap.format, layout, vert, frag, swap.width, swap.height, true)
 
     var inscope sync <- create_frame_sync(device)
     let clear = clear_color(0.0f, 0.0f, 0.0f, 1.0f)
@@ -138,30 +136,21 @@ def main {   // nolint:STYLE038 - flat viewer lifecycle scaffold
             continue
         }
         if (fbw != swap.width || fbh != swap.height) {
-            recreate_swapchain(swap, device, phys, surface, render_pass, fbw, fbh)
+            recreate_swapchain(swap, device, phys, surface, fbw, fbh)
         }
         let t = float(glfwGetTime())
         // recompute the fractal for this frame, then leave it ready to sample (its own submit -- a
-        // compute dispatch cannot run inside the draw_frame render pass)
+        // compute dispatch cannot run inside draw_frame's rendering)
         run_cmd_sync(device, pool, queue) $(cmd) {
-            let none : VkAccessFlags
-            var shader_write : VkAccessFlags
-            shader_write.shader_write = true
-            var shader_read : VkAccessFlags
-            shader_read.shader_read = true
-            var top : VkPipelineStageFlags
-            top.top_of_pipe = true
-            var comp : VkPipelineStageFlags
-            comp.compute_shader = true
-            var frag_stage : VkPipelineStageFlags
-            frag_stage.fragment_shader = true
-            transition_image(cmd, mc.image, VkImageLayout.UNDEFINED, VkImageLayout.GENERAL,
-                none, shader_write, top, comp)
+            transition_image2(cmd, mc.image, VkImageLayout.UNDEFINED, VkImageLayout.GENERAL,
+                PIPELINE_STAGE_2_NONE, ACCESS_2_NONE,
+                VkPipelineStageFlags2.compute_shader, VkAccessFlags2.shader_storage_write)
             record_compute(cmd, mc, t)
-            transition_image(cmd, mc.image, VkImageLayout.GENERAL, VkImageLayout.SHADER_READ_ONLY_OPTIMAL,
-                shader_write, shader_read, comp, frag_stage)
+            transition_image2(cmd, mc.image, VkImageLayout.GENERAL, VkImageLayout.SHADER_READ_ONLY_OPTIMAL,
+                VkPipelineStageFlags2.compute_shader, VkAccessFlags2.shader_storage_write,
+                VkPipelineStageFlags2.fragment_shader, VkAccessFlags2.shader_sampled_read)
         }
-        let ok = draw_frame(device, queue, swap, render_pass, pool, sync, clear, true) $(cmd) {
+        let ok = draw_frame(device, queue, swap, pool, sync, clear, true) $(cmd) {
             cmd_bind_pipeline(cmd, pipeline)
             var inscope sets : array<DescriptorSet>
             sets |> push(vk_value_to_boost(raw_set))
@@ -170,7 +159,7 @@ def main {   // nolint:STYLE038 - flat viewer lifecycle scaffold
             cmd_draw(cmd, 3u)
         }
         if (!ok) {
-            recreate_swapchain(swap, device, phys, surface, render_pass, fbw, fbh)
+            recreate_swapchain(swap, device, phys, surface, fbw, fbh)
         }
     }
     vkDeviceWaitIdle(boost_value_to_vk(device))

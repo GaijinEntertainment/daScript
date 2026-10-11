@@ -97,49 +97,17 @@ def main {   // nolint:STYLE038 - flat viewer lifecycle scaffold
         }
         let t = float(glfwGetTime())
         let ok = present_frame(device, queue, swap, pool, sync) $(cmd; target; _idx) {
-            let none : VkAccessFlags
-            var shader_write : VkAccessFlags
-            shader_write.shader_write = true
-            var transfer_read : VkAccessFlags
-            transfer_read.transfer_read = true
-            var transfer_write : VkAccessFlags
-            transfer_write.transfer_write = true
-            var top : VkPipelineStageFlags
-            top.top_of_pipe = true
-            var comp : VkPipelineStageFlags
-            comp.compute_shader = true
-            var xfer : VkPipelineStageFlags
-            xfer.transfer = true
-            var bottom : VkPipelineStageFlags
-            bottom.bottom_of_pipe = true
             // recompute the fractal into the storage image (GENERAL) for this frame's time
-            transition_image(cmd, mc.image, VkImageLayout.UNDEFINED, VkImageLayout.GENERAL,
-                none, shader_write, top, comp)
+            transition_image2(cmd, mc.image, VkImageLayout.UNDEFINED, VkImageLayout.GENERAL,
+                PIPELINE_STAGE_2_NONE, ACCESS_2_NONE,
+                VkPipelineStageFlags2.compute_shader, VkAccessFlags2.shader_storage_write)
             record_compute(cmd, mc, t)
             // make the compute writes available to the blit (image stays GENERAL, a legal blit source)
-            transition_image(cmd, mc.image, VkImageLayout.GENERAL, VkImageLayout.GENERAL,
-                shader_write, transfer_read, comp, xfer)
-            // swapchain image: UNDEFINED -> TRANSFER_DST (we overwrite the whole image)
-            let dst = vk_value_to_boost(target)
-            transition_image(cmd, dst, VkImageLayout.UNDEFINED, VkImageLayout.TRANSFER_DST_OPTIMAL,
-                none, transfer_write, top, xfer)
+            transition_image2(cmd, mc.image, VkImageLayout.GENERAL, VkImageLayout.GENERAL,
+                VkPipelineStageFlags2.compute_shader, VkAccessFlags2.shader_storage_write,
+                VkPipelineStageFlags2.blit, VkAccessFlags2.transfer_read)
             // blit the fractal onto the swapchain image, scaling ZOOM_DIM -> window, linear filter
-            var region : VkImageBlit
-            region.srcSubresource.aspectMask.color = true
-            region.srcSubresource.layerCount = 1u
-            region.srcOffsets[1].x = mc.width
-            region.srcOffsets[1].y = mc.height
-            region.srcOffsets[1].z = 1
-            region.dstSubresource.aspectMask.color = true
-            region.dstSubresource.layerCount = 1u
-            region.dstOffsets[1].x = swap.width
-            region.dstOffsets[1].y = swap.height
-            region.dstOffsets[1].z = 1
-            vkCmdBlitImage(boost_value_to_vk(cmd), boost_value_to_vk(mc.image), VkImageLayout.GENERAL,
-                target, VkImageLayout.TRANSFER_DST_OPTIMAL, 1u, unsafe(addr(region)), VkFilter.LINEAR)
-            // TRANSFER_DST -> PRESENT_SRC for the present
-            transition_image(cmd, dst, VkImageLayout.TRANSFER_DST_OPTIMAL, VkImageLayout.PRESENT_SRC_KHR,
-                transfer_write, none, xfer, bottom)
+            blit_to_swapchain(cmd, mc.image, VkImageLayout.GENERAL, mc.width, mc.height, swap, target)
         }
         if (!ok) {
             vkDeviceWaitIdle(boost_value_to_vk(device))

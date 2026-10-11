@@ -1,22 +1,17 @@
-09 - MSAA + Dynamic Rendering: No Render Pass, Smooth Edges
-===========================================================
+09 - MSAA: Smooth Edges
+=======================
 
-:doc:`08_shadow` was the last tutorial built on ``VkRenderPass`` +
-``VkFramebuffer``. This one drops both: the pipeline carries a
-``VkPipelineRenderingCreateInfo`` in its pNext chain (color + depth format +
-sample count), and each frame opens a ``VkRenderingInfo`` inline with
-``cmd_begin_rendering`` / ``cmd_end_rendering``. Vulkan 1.3 core. While we're
-re-doing the cube scene from :doc:`04_cube`, we also turn on **4× MSAA** with
-an auto-resolve target -- the GPU averages 4 samples per pixel into a 1×
-image at the end of the render. The headline rails:
+We re-do the cube scene from :doc:`04_cube` and turn on **4× MSAA** with an
+auto-resolve target -- the GPU averages 4 samples per pixel into a 1× image at
+the end of the render. The headline rails:
 
-- **No more ``VkRenderPass`` / ``VkFramebuffer``.** The pipeline carries
-  ``VkPipelineRenderingCreateInfo`` via pNext (one color format, one depth
-  format, sample count). Per-frame, ``record_rendering`` opens an inline
-  ``VkRenderingInfo`` with attachment views + clear values and the body
-  records draws. ``create_graphics_pipeline_dyn`` is the new boost helper;
-  the existing ``create_graphics_pipeline_v3d`` (render-pass-bound) stays
-  available for legacy code.
+- **A sample count on the pipeline and its attachments.**
+  ``create_graphics_pipeline_dyn`` is ``create_graphics_pipeline_v3d`` with a
+  ``samples`` argument: the count goes into the multisample state and into the
+  ``VkPipelineRenderingCreateInfo`` the pipeline carries. Here the frame builds
+  its ``RenderingAttachmentInfo`` values by hand instead of through the
+  ``record_rendering`` view overloads, because the color attachment needs a
+  resolve target.
 - **4× MSAA + auto-resolve.** The color attachment is built at samples = 4
   with ``build_offscreen_target(..., samples, extra_usage)``. The
   ``RenderingAttachmentInfo`` carries ``resolveMode = AVERAGE`` and a
@@ -25,11 +20,6 @@ image at the end of the render. The headline rails:
   blitted into the readback buffer or swapchain target. The depth
   attachment matches at samples = 4 (the spec requires color + depth to
   agree).
-- **Vulkan 1.3 feature opt-in.** Dynamic rendering became core in 1.3 but
-  is still a feature toggle; the device-create call goes through a new
-  ``create_device`` overload that takes
-  ``VkPhysicalDeviceVulkan13Features`` and threads it via the
-  ``pNext`` chain. Caller sets ``f13.dynamicRendering = 1u`` and we're done.
 - **Built-in side-by-side comparison.** The cube uses **two** pipelines
   built from the same shader modules -- one 4× MSAA, one 1× -- each with
   matching color + depth attachments. ``record_msaa_render(res, cmd,
@@ -77,10 +67,7 @@ The render (headless)
 
 The host builds **two** pipelines (4× MSAA + 1×), three color/depth attachment
 sets (MSAA + resolve + 1×), and one descriptor set; the per-frame call
-``record_msaa_render(res, cmd, use_msaa)`` picks the path. No
-``VkRenderPass`` and no ``VkFramebuffer`` ever -- both rails replaced by
-``VkPipelineRenderingCreateInfo`` on the pipeline and ``cmd_begin_rendering``
-in the command buffer.
+``record_msaa_render(res, cmd, use_msaa)`` picks the path.
 
 .. literalinclude:: ../../../../../modules/dasVulkan/tutorials/09_msaa/msaa_tut.das
    :language: das

@@ -33,13 +33,6 @@ def public render_spin_triangle(angle : float) : array<uint8> {
     let fmt = VkFormat.R8G8B8A8_SRGB   // sRGB: gamma-encode the linear output on write (recording readback + window blit match)
 
     var inscope target <- build_offscreen_target(device, phys, TRI_W, TRI_H, fmt)
-    var inscope render_pass <- create_render_pass_single_color(device, fmt)
-    var inscope framebuffer <- create_framebuffer(device, FramebufferCreateInfo(
-        renderPass = weak_copy(render_pass),
-        pAttachments <- [weak_copy(target.view)],
-        width = uint(TRI_W),
-        height = uint(TRI_H),
-        layers = 1u))
 
     var inscope vert <- create_shader_module(device, tri_spin_vert_spv)
     var inscope frag <- create_shader_module(device, tri_spin_frag_spv)
@@ -53,7 +46,8 @@ def public render_spin_triangle(angle : float) : array<uint8> {
     plci.pPushConstantRanges |> emplace(pcr)
     var inscope layout <- create_pipeline_layout(device, plci)
     delete plci.pPushConstantRanges   // owned input array; the layout copied the ranges, so free it now
-    var inscope pipeline <- create_graphics_pipeline_simple(device, render_pass, layout, vert, frag, TRI_W, TRI_H)
+    // the pipeline carries the color format it renders into; there is no render pass to bind it to
+    var inscope pipeline <- create_graphics_pipeline_simple(device, fmt, layout, vert, frag, TRI_W, TRI_H)
 
     let buf_size = uint64(TRI_W * TRI_H * 4)
     var inscope readback <- create_host_buffer(device, phys, buf_size)
@@ -63,11 +57,19 @@ def public render_spin_triangle(angle : float) : array<uint8> {
 
     pc.angle = angle
     run_cmd_sync(device, pool, queue) $(cmd) {
-        record_render_pass(cmd, render_pass, framebuffer, full_area(TRI_W, TRI_H), clear_color(0.1f, 0.1f, 0.15f, 1.0f)) {
+        // the image starts UNDEFINED; a barrier makes it a color attachment before the draw...
+        transition_image2(cmd, target.image, VkImageLayout.UNDEFINED, VkImageLayout.COLOR_ATTACHMENT_OPTIMAL,
+            PIPELINE_STAGE_2_NONE, ACCESS_2_NONE,
+            VkPipelineStageFlags2.color_attachment_output, VkAccessFlags2.color_attachment_write)
+        record_rendering(cmd, target.view, full_area(TRI_W, TRI_H), clear_color(0.1f, 0.1f, 0.15f, 1.0f)) {
             cmd_bind_pipeline(cmd, pipeline)
             tri_spin_vert_push_constants(cmd, layout)
             cmd_draw(cmd, 3u)
         }
+        // ...and a second one hands the finished pixels to the copy
+        transition_image2(cmd, target.image, VkImageLayout.COLOR_ATTACHMENT_OPTIMAL, VkImageLayout.TRANSFER_SRC_OPTIMAL,
+            VkPipelineStageFlags2.color_attachment_output, VkAccessFlags2.color_attachment_write,
+            VkPipelineStageFlags2.copy, VkAccessFlags2.transfer_read)
         copy_image_to_buffer(cmd, target.image, readback, TRI_W, TRI_H)
     }
     map_memory_to_array(device, readback.memory, buf_size) $(m) {

@@ -63,15 +63,13 @@ def main {   // nolint:STYLE038 - flat example scaffold
     let queue = get_device_queue(device, gfx, 0u)
 
     var inscope swap <- create_swapchain(device, phys, surface, W, H)
-    var inscope render_pass <- create_render_pass_single_color(device, swap.format, VkImageLayout.PRESENT_SRC_KHR)
-    build_swapchain_framebuffers(device, swap, render_pass)
 
     // tri_vert_spv / tri_frag_spv: SPIR-V words emitted by dasSpirv from triangle_example_shaders.das
     var inscope vert <- create_shader_module(device, tri_vert_spv)
     var inscope frag <- create_shader_module(device, tri_frag_spv)
     var inscope layout <- create_pipeline_layout(device)
-    // dynamic viewport/scissor so the one pipeline survives every resize
-    var inscope pipeline <- create_graphics_pipeline_simple(device, render_pass, layout, vert, frag, swap.width, swap.height, true)
+    // built for the swapchain's color format; dynamic viewport/scissor so the one pipeline survives every resize
+    var inscope pipeline <- create_graphics_pipeline_simple(device, swap.format, layout, vert, frag, swap.width, swap.height, true)
 
     var poolci : CommandPoolCreateInfo
     poolci.queueFamilyIndex = gfx
@@ -92,15 +90,15 @@ def main {   // nolint:STYLE038 - flat example scaffold
         }
         // proactively match the window: recreate when the framebuffer size drifts
         if (fbw != swap.width || fbh != swap.height) {
-            recreate_swapchain(swap, device, phys, surface, render_pass, fbw, fbh)
+            recreate_swapchain(swap, device, phys, surface, fbw, fbh)
         }
         // draw_frame returns false when the swapchain went out of date mid-frame
-        let ok = draw_frame(device, queue, swap, render_pass, pool, sync, clear, true) $(cmd) {
+        let ok = draw_frame(device, queue, swap, pool, sync, clear, true) $(cmd) {
             cmd_bind_pipeline(cmd, pipeline)
             cmd_draw(cmd, 3u)
         }
         if (!ok) {
-            recreate_swapchain(swap, device, phys, surface, render_pass, fbw, fbh)
+            recreate_swapchain(swap, device, phys, surface, fbw, fbh)
         }
         frames ++
     }

@@ -2,10 +2,12 @@
 ==============================================
 
 Tutorials 1-9 each introduced one rail (triangle, mandelbrot SDF, cube, instancing,
-skybox, particles, shadow map, MSAA + dynamic rendering). This one is the
-**payoff scene**: a cube on a brick floor, lit by ONE shadowed directional sun
-plus THREE orbiting coloured point lights, composed via **deferred shading** --
-all in pure daslang lowered to SPIR-V at compile time.
+skybox, particles, shadow map, MSAA). This one is the **payoff scene**: a cube on
+a brick floor, lit by ONE shadowed directional sun plus THREE orbiting coloured
+point lights, composed via **deferred shading** -- all in pure daslang lowered to
+SPIR-V at compile time. It is also the one tutorial that keeps ``VkRenderPass``:
+the hand-off between its passes is the lesson, and the dynamic-rendering form of
+that hand-off (``dynamic_rendering_local_read``) is Vulkan 1.4 core.
 
 The headline rails:
 

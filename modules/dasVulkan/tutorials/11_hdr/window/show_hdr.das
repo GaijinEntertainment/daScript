@@ -105,34 +105,7 @@ def main {   // nolint:STYLE038 - flat viewer lifecycle scaffold
 
         let ok = present_frame(device, queue, swap, pool, sync) $(cmd; target; _idx) {
             record_hdr_frame(res, cmd)
-
-            let none : VkAccessFlags
-            var transfer_write : VkAccessFlags
-            transfer_write.transfer_write = true
-            var top : VkPipelineStageFlags
-            top.top_of_pipe = true
-            var xfer : VkPipelineStageFlags
-            xfer.transfer = true
-            var bottom : VkPipelineStageFlags
-            bottom.bottom_of_pipe = true
-            let dst = vk_value_to_boost(target)
-            transition_image(cmd, dst, VkImageLayout.UNDEFINED, VkImageLayout.TRANSFER_DST_OPTIMAL,
-                none, transfer_write, top, xfer)
-            var region : VkImageBlit
-            region.srcSubresource.aspectMask.color = true
-            region.srcSubresource.layerCount = 1u
-            region.srcOffsets[1].x = HDR_W
-            region.srcOffsets[1].y = HDR_H
-            region.srcOffsets[1].z = 1
-            region.dstSubresource.aspectMask.color = true
-            region.dstSubresource.layerCount = 1u
-            region.dstOffsets[1].x = swap.width
-            region.dstOffsets[1].y = swap.height
-            region.dstOffsets[1].z = 1
-            vkCmdBlitImage(boost_value_to_vk(cmd), boost_value_to_vk(res.ldr_color.image), VkImageLayout.TRANSFER_SRC_OPTIMAL,
-                target, VkImageLayout.TRANSFER_DST_OPTIMAL, 1u, unsafe(addr(region)), VkFilter.LINEAR)
-            transition_image(cmd, dst, VkImageLayout.TRANSFER_DST_OPTIMAL, VkImageLayout.PRESENT_SRC_KHR,
-                transfer_write, none, xfer, bottom)
+            blit_to_swapchain(cmd, res.ldr_color.image, VkImageLayout.TRANSFER_SRC_OPTIMAL, HDR_W, HDR_H, swap, target)
         }
         if (!ok) {
             vkDeviceWaitIdle(boost_value_to_vk(device))

@@ -68,8 +68,6 @@ def main {   // nolint:STYLE038 - flat viewer lifecycle scaffold
     let queue = get_device_queue(device, gfx, 0u)
 
     var inscope swap <- create_swapchain(device, phys, surface, W, H)
-    var inscope render_pass <- create_render_pass_single_color(device, swap.format, VkImageLayout.PRESENT_SRC_KHR)
-    build_swapchain_framebuffers(device, swap, render_pass)
 
     // tri_spin_vert_spv / tri_spin_frag_spv: SPIR-V words emitted by dasSpirv from triangle_tut_shaders.das
     var inscope vert <- create_shader_module(device, tri_spin_vert_spv)
@@ -85,8 +83,8 @@ def main {   // nolint:STYLE038 - flat viewer lifecycle scaffold
     var inscope layout <- create_pipeline_layout(device, plci)
     delete plci.pPushConstantRanges   // owned input array; the layout copied the ranges, so free it now
 
-    // dynamic viewport/scissor so the one pipeline survives every resize
-    var inscope pipeline <- create_graphics_pipeline_simple(device, render_pass, layout, vert, frag, swap.width, swap.height, true)
+    // built for the swapchain's color format; dynamic viewport/scissor so the one pipeline survives every resize
+    var inscope pipeline <- create_graphics_pipeline_simple(device, swap.format, layout, vert, frag, swap.width, swap.height, true)
 
     var poolci : CommandPoolCreateInfo
     poolci.queueFamilyIndex = gfx
@@ -107,17 +105,17 @@ def main {   // nolint:STYLE038 - flat viewer lifecycle scaffold
         }
         // proactively match the window: recreate when the framebuffer size drifts
         if (fbw != swap.width || fbh != swap.height) {
-            recreate_swapchain(swap, device, phys, surface, render_pass, fbw, fbh)
+            recreate_swapchain(swap, device, phys, surface, fbw, fbh)
         }
         // one full turn every 2*pi seconds; pushed to the vertex shader each frame
         pc.angle = float(glfwGetTime())
-        let ok = draw_frame(device, queue, swap, render_pass, pool, sync, clear, true) $(cmd) {
+        let ok = draw_frame(device, queue, swap, pool, sync, clear, true) $(cmd) {
             cmd_bind_pipeline(cmd, pipeline)
             tri_spin_vert_push_constants(cmd, layout)
             cmd_draw(cmd, 3u)
         }
         if (!ok) {
-            recreate_swapchain(swap, device, phys, surface, render_pass, fbw, fbh)
+            recreate_swapchain(swap, device, phys, surface, fbw, fbh)
         }
         frames ++
     }

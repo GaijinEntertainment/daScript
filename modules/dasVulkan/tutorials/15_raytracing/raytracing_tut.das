@@ -224,22 +224,13 @@ def build_rt_offscreen(w, h : int) : RtOffscreen {
 //! discarded (UNDEFINED) at the top of every frame, so frames are independent.
 def render_rt_frame(var ro : RtOffscreen; angle : float) : array<uint8> {
     run_cmd_sync(ro.device, ro.pool, ro.queue) $(cmd) {
-        let none : VkAccessFlags
-        var shader_write : VkAccessFlags
-        shader_write.shader_write = true
-        var to_read : VkAccessFlags
-        to_read.transfer_read = true
-        var top : VkPipelineStageFlags
-        top.top_of_pipe = true
-        var rt_stage : VkPipelineStageFlags
-        rt_stage.ray_tracing_shader_khr = true
-        var xfer : VkPipelineStageFlags
-        xfer.transfer = true
-        transition_image(cmd, ro.rv.image, VkImageLayout.UNDEFINED, VkImageLayout.GENERAL,
-            none, shader_write, top, rt_stage)
+        transition_image2(cmd, ro.rv.image, VkImageLayout.UNDEFINED, VkImageLayout.GENERAL,
+            PIPELINE_STAGE_2_NONE, ACCESS_2_NONE,
+            VkPipelineStageFlags2.ray_tracing_shader_khr, VkAccessFlags2.shader_storage_write)
         record_trace(cmd, ro.rv, angle)
-        transition_image(cmd, ro.rv.image, VkImageLayout.GENERAL, VkImageLayout.TRANSFER_SRC_OPTIMAL,
-            shader_write, to_read, rt_stage, xfer)
+        transition_image2(cmd, ro.rv.image, VkImageLayout.GENERAL, VkImageLayout.TRANSFER_SRC_OPTIMAL,
+            VkPipelineStageFlags2.ray_tracing_shader_khr, VkAccessFlags2.shader_storage_write,
+            VkPipelineStageFlags2.copy, VkAccessFlags2.transfer_read)
         copy_image_to_buffer(cmd, ro.rv.image, ro.readback, ro.width, ro.height)
     }
     var pixels : array<uint8>

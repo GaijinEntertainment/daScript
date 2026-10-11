@@ -124,12 +124,8 @@ def public build_sdf_renderer() : SdfRenderer {   // nolint:STYLE038 - flat one-
     // can assume a stable starting layout across all frames (first frame and every subsequent one
     // transition TRANSFER_SRC_OPTIMAL -> GENERAL -> TRANSFER_SRC_OPTIMAL, never UNDEFINED).
     run_cmd_sync(device, pool, queue) $(cmd) {
-        let none            : VkAccessFlags
-        var transfer_read   : VkAccessFlags; transfer_read.transfer_read = true
-        var top             : VkPipelineStageFlags; top.top_of_pipe       = true
-        var xfer            : VkPipelineStageFlags; xfer.transfer         = true
-        transition_image(cmd, image, VkImageLayout.UNDEFINED, VkImageLayout.TRANSFER_SRC_OPTIMAL,
-            none, transfer_read, top, xfer)
+        transition_image2(cmd, image, VkImageLayout.UNDEFINED, VkImageLayout.TRANSFER_SRC_OPTIMAL,
+            PIPELINE_STAGE_2_NONE, ACCESS_2_NONE, VkPipelineStageFlags2.blit, VkAccessFlags2.transfer_read)
     }
 
     // descriptor set: binding 0 = STORAGE_IMAGE, compute stage
@@ -194,15 +190,11 @@ def public build_sdf_renderer() : SdfRenderer {   // nolint:STYLE038 - flat one-
 def public render_sdf_frame(var r : SdfRenderer; time : float) : array<uint8> {
     var pixels : array<uint8>
     run_cmd_sync(r.device, r.pool, r.queue) $(cmd) {
-        let none          : VkAccessFlags
-        var shader_write  : VkAccessFlags; shader_write.shader_write  = true
-        var transfer_read : VkAccessFlags; transfer_read.transfer_read = true
-        var comp          : VkPipelineStageFlags; comp.compute_shader   = true
-        var xfer          : VkPipelineStageFlags; xfer.transfer         = true
         // image enters this command buffer in TRANSFER_SRC_OPTIMAL (set up at create-time on the
         // first frame, left there by the previous frame's final transition on every subsequent one)
-        transition_image(cmd, r.image, VkImageLayout.TRANSFER_SRC_OPTIMAL, VkImageLayout.GENERAL,
-            transfer_read, shader_write, xfer, comp)
+        transition_image2(cmd, r.image, VkImageLayout.TRANSFER_SRC_OPTIMAL, VkImageLayout.GENERAL,
+            VkPipelineStageFlags2.blit, VkAccessFlags2.transfer_read,
+            VkPipelineStageFlags2.compute_shader, VkAccessFlags2.shader_storage_write)
 
         cmd_bind_pipeline(cmd, r.pipeline, VkPipelineBindPoint.COMPUTE)
         let sets <- [vk_value_to_boost(r.set)]
@@ -212,16 +204,15 @@ def public render_sdf_frame(var r : SdfRenderer; time : float) : array<uint8> {
         sdf_main_push_constants(cmd, r.pipe_layout)
         cmd_dispatch(cmd, uint(SDF_DIM / 8), uint(SDF_DIM / 8), 1u)
 
-        transition_image(cmd, r.image, VkImageLayout.GENERAL, VkImageLayout.TRANSFER_SRC_OPTIMAL,
-            shader_write, transfer_read, comp, xfer)
+        transition_image2(cmd, r.image, VkImageLayout.GENERAL, VkImageLayout.TRANSFER_SRC_OPTIMAL,
+            VkPipelineStageFlags2.compute_shader, VkAccessFlags2.shader_storage_write,
+            VkPipelineStageFlags2.blit, VkAccessFlags2.transfer_read)
 
         // r.image (linear UNORM) is now TRANSFER_SRC. Blit it into the R8G8B8A8_SRGB intermediate so the
         // hardware applies the linear->sRGB encode at the format conversion; the recording then reads
         // gamma-encoded bytes. Bring srgb_image UNDEFINED -> TRANSFER_DST first (we overwrite it whole).
-        var transfer_write : VkAccessFlags; transfer_write.transfer_write = true
-        var top            : VkPipelineStageFlags; top.top_of_pipe = true
-        transition_image(cmd, r.srgb_image, VkImageLayout.UNDEFINED, VkImageLayout.TRANSFER_DST_OPTIMAL,
-            none, transfer_write, top, xfer)
+        transition_image2(cmd, r.srgb_image, VkImageLayout.UNDEFINED, VkImageLayout.TRANSFER_DST_OPTIMAL,
+            PIPELINE_STAGE_2_NONE, ACCESS_2_NONE, VkPipelineStageFlags2.blit, VkAccessFlags2.transfer_write)
         var region : VkImageBlit
         region.srcSubresource.aspectMask.color = true
         region.srcSubresource.layerCount = 1u
@@ -238,8 +229,9 @@ def public render_sdf_frame(var r : SdfRenderer; time : float) : array<uint8> {
             boost_value_to_vk(r.srgb_image), VkImageLayout.TRANSFER_DST_OPTIMAL,
             1u, unsafe(addr(region)), VkFilter.NEAREST)
         // srgb_image -> TRANSFER_SRC so copy_image_to_buffer can read it
-        transition_image(cmd, r.srgb_image, VkImageLayout.TRANSFER_DST_OPTIMAL, VkImageLayout.TRANSFER_SRC_OPTIMAL,
-            transfer_write, transfer_read, xfer, xfer)
+        transition_image2(cmd, r.srgb_image, VkImageLayout.TRANSFER_DST_OPTIMAL, VkImageLayout.TRANSFER_SRC_OPTIMAL,
+            VkPipelineStageFlags2.blit, VkAccessFlags2.transfer_write,
+            VkPipelineStageFlags2.copy, VkAccessFlags2.transfer_read)
         copy_image_to_buffer(cmd, r.srgb_image, r.readback, SDF_DIM, SDF_DIM)
     }
     map_memory_to_array(r.device, r.readback.memory, r.buf_size) $(m) {

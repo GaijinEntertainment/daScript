@@ -6,7 +6,9 @@ options indenting = 4
 // 08 and builds the deferred renderer as FOUR single-subpass render passes that hand off via
 // attachment finalLayouts -- the more common real-world architecture than one multi-subpass pass
 // with input attachments (and the architecture REAL screen-space AO needs, since SSAO must sample
-// NEIGHBOUR G-buffer texels, which input attachments cannot do):
+// NEIGHBOUR G-buffer texels, which input attachments cannot do). This tutorial keeps VkRenderPass: the
+// pass-to-pass hand-off is its lesson, and its dynamic-rendering form (dynamic_rendering_local_read) is
+// Vulkan 1.4 core.
 //
 //   * SHADOW pass: depth-only render from the sun's POV into a 1024x1024 D32_SFLOAT image
 //     (DEPTH_STENCIL_READ_ONLY at end-of-pass), sampled in the lighting pass as `sampler2DShadow`.

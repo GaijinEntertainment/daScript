@@ -528,8 +528,7 @@ GPU-driven scene → multi-pass → modern pipeline → mesh shaders → ray tra
 compute pipeline, 04_cube takes graphics into 3D with depth + UBO + push constant
 + texture, 05_instancing draws 1000 cubes in one call, 06_skybox wraps the scene
 in a cubemap, 07_particles hands the vertex stream itself to a compute shader,
-08_shadow runs two render passes per frame sharing one depth image, 09_msaa drops
-``VkRenderPass`` entirely in favour of Vulkan 1.3 dynamic rendering plus 4x MSAA
+08_shadow runs two passes per frame sharing one depth image, 09_msaa adds 4x MSAA
 with auto-resolve, 10_deferred brings everything together in a three-pass
 deferred renderer (sampled G-buffer) with SSAO + shadow + many lights, and
 11_hdr adds an HDR offscreen target + Karis-style five-level bloom pyramid + ACES

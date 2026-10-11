@@ -48,8 +48,9 @@ The render
 ----------
 
 The offscreen render is the dasVulkan boost path -- an offscreen color target, a
-single-color render pass, a graphics pipeline -- with one addition over a static
-triangle: a vertex **push-constant range** carrying the angle, pushed each draw
+graphics pipeline built for its format, a ``record_rendering`` block between two
+barriers -- with one addition over a static triangle: a vertex **push-constant
+range** carrying the angle, pushed each draw
 through the macro-generated ``tri_spin_vert_push_constants(cmd, layout)``. The
 host just writes ``pc.angle = angle`` to the shader's ``@push_constant`` global;
 ``[vulkan_vertex_shader]`` synthesised the rest of the upload at compile time.

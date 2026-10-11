@@ -93,36 +93,9 @@ def main {   // nolint:STYLE038 - flat viewer lifecycle scaffold
         update_teapot_uniforms(res, device, t, false)
 
         let ok = present_frame(device, queue, swap, pool, sync) $(cmd; target; _idx) {
-            // record_teapot_render_pass leaves res.color.image in TRANSFER_SRC_OPTIMAL (render-pass finalLayout)
-            record_teapot_render_pass(res, cmd)
-
-            let none : VkAccessFlags
-            var transfer_write : VkAccessFlags
-            transfer_write.transfer_write = true
-            var top : VkPipelineStageFlags
-            top.top_of_pipe = true
-            var xfer : VkPipelineStageFlags
-            xfer.transfer = true
-            var bottom : VkPipelineStageFlags
-            bottom.bottom_of_pipe = true
-            let dst = vk_value_to_boost(target)
-            transition_image(cmd, dst, VkImageLayout.UNDEFINED, VkImageLayout.TRANSFER_DST_OPTIMAL,
-                none, transfer_write, top, xfer)
-            var region : VkImageBlit
-            region.srcSubresource.aspectMask.color = true
-            region.srcSubresource.layerCount = 1u
-            region.srcOffsets[1].x = TEAPOT_W
-            region.srcOffsets[1].y = TEAPOT_H
-            region.srcOffsets[1].z = 1
-            region.dstSubresource.aspectMask.color = true
-            region.dstSubresource.layerCount = 1u
-            region.dstOffsets[1].x = swap.width
-            region.dstOffsets[1].y = swap.height
-            region.dstOffsets[1].z = 1
-            vkCmdBlitImage(boost_value_to_vk(cmd), boost_value_to_vk(res.color.image), VkImageLayout.TRANSFER_SRC_OPTIMAL,
-                target, VkImageLayout.TRANSFER_DST_OPTIMAL, 1u, unsafe(addr(region)), VkFilter.LINEAR)
-            transition_image(cmd, dst, VkImageLayout.TRANSFER_DST_OPTIMAL, VkImageLayout.PRESENT_SRC_KHR,
-                transfer_write, none, xfer, bottom)
+            // record_teapot_frame leaves res.color.image in TRANSFER_SRC_OPTIMAL
+            record_teapot_frame(res, cmd)
+            blit_to_swapchain(cmd, res.color.image, VkImageLayout.TRANSFER_SRC_OPTIMAL, TEAPOT_W, TEAPOT_H, swap, target)
         }
         if (!ok) {
             vkDeviceWaitIdle(boost_value_to_vk(device))

@@ -84,13 +84,13 @@ pipeline goes through a small local ``build_points_pipeline`` because v3d's
    :start-at: def public update_particles_uniforms
    :end-before: //! Per-frame work
 
-``record_particles_render_pass`` is the per-frame work: a compute dispatch, a
-``vkCmdPipelineBarrier`` against the shared buffer (the **handoff**), and the
-``POINT_LIST`` draw inside the render pass.
+``record_particles_frame`` is the per-frame work: a compute dispatch, a
+``cmd_pipeline_barrier2`` on the shared buffer (the **handoff**), and the
+``POINT_LIST`` draw inside ``record_rendering``.
 
 .. literalinclude:: ../../../../../modules/dasVulkan/tutorials/07_particles/particles_tut.das
    :language: das
-   :start-at: def public record_particles_render_pass
+   :start-at: def public record_particles_frame
    :end-before: //! Per-frame work
 
 Self-verifying
@@ -112,9 +112,9 @@ See it live
 runs the integrator + draw every frame with ``dt`` derived from wall-clock. It
 owns its own instance (with surface extensions) + device (with
 ``VK_KHR_swapchain``), then calls ``build_particles_resources`` to share the
-offscreen render pass + both pipelines + the shared particle buffer with the
+offscreen targets + both pipelines + the shared particle buffer with the
 headless oracle. Each frame it runs ``update_particles_uniforms`` +
-``record_particles_render_pass`` into the present command buffer, then blits
+``record_particles_frame`` into the present command buffer, then blits
 the colour attachment onto the swapchain image.
 
 .. literalinclude:: ../../../../../modules/dasVulkan/tutorials/07_particles/window/show_particles.das
@@ -138,7 +138,7 @@ Running it
 Next
 ----
 
-:doc:`08_shadow` runs **two** render passes per frame: a depth-only pass
+:doc:`08_shadow` runs **two** rendering passes per frame: a depth-only pass
 from the light's POV writes a shadow map, then the main pass reads that
 same image as a ``sampler2DShadow``. Same "one image, two roles" discipline
 as this tutorial's compute SSBO + vertex stream, lifted to a depth texture

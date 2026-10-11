@@ -17,7 +17,7 @@ conservative raster (esoteric), hardware ray tracing (booked separately).
 
 | # | Tutorial | New rails |
 |---|---|---|
-| 09 | MSAA + dynamic rendering | `vkCmdBeginRendering`, `VkRenderingInfo`, `VkPipelineRenderingCreateInfo`, MSAA `samples` + `pResolveAttachments` |
+| 09 | MSAA | MSAA `samples` on color + depth, `resolveMode` + `resolveImageView` on the rendering attachment, a 1x resolve target |
 | 10 | Deferred shading (subpasses + input attachments) | Multi-subpass render pass, `VkSubpassDependency`, input-attachment image usage, MRT, `subpassInput` / `subpassLoad` |
 | 11 | HDR + bloom (post-processing chain) | Ping-pong offscreen targets, `R16G16B16A16_SFLOAT`, fullscreen-triangle pattern, tonemap |
 | 12 | GPU-driven rendering (indirect + bindless) | `vkCmdDrawIndexedIndirectCount`, `VkDrawIndexedIndirectCommand`, `UPDATE_AFTER_BIND` + `descriptorBindingVariableDescriptorCount`, `nonuniformEXT()`, `gl_DrawID` |
@@ -77,7 +77,7 @@ daslang main tree (`modules/dasSpirv/`). Tutorial PRs land here, gated on their
 impl prereqs. Mark `[merged]` and the PR number inline as each lands.
 
 1. dasVulkan - `cmd_begin_rendering` wrapper.
-2. dasVulkan - **Tutorial 09** (MSAA + dynamic rendering on existing cube scene).
+2. dasVulkan - **Tutorial 09** (MSAA on the existing cube scene).
 3. daslang - dasSpirv MRT: multiple `@location` outputs from fragment.
 4. daslang - dasSpirv subpass inputs: `subpassInput` + `OpTypeImage
    Dim=SubpassData` + `subpassLoad` + `InputAttachmentIndex` decoration.
@@ -135,43 +135,59 @@ a device-local (staged, NOT mappable) one -- `deferred_tut.das`'s
 `write_scene_ubo_manual` is the sanctioned pattern, not a workaround.
 Per-binding multi-UBO auto-bind stays unimplemented.
 
-## Vulkan 1.4 arc - the boost layer and tutorials move off deprecated shapes
+## Vulkan 1.4 tutorial, shader objects, the 1.4 CI lane
 
-User feedback: `vulkan_boost` reads as pre-1.3 Vulkan. The [Vulkan guide's
-deprecation page](https://docs.vulkan.org/guide/latest/deprecated.html) names
-three of its shapes - `VkRenderPass` / `VkFramebuffer` (replaced by dynamic
-rendering), `VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT` and the other legacy stage /
-access bits (replaced by `VK_KHR_synchronization2`), and `VkPipeline` (shader
-objects, `VK_EXT_shader_object`).
+The tutorials and the window layer draw with dynamic rendering and
+synchronization2, the Vulkan 1.3 idiom (`ARCHITECTURE_RENDERING.md#dynamic-rendering`).
+1.4 adds no new way to draw a frame; its promotions that touch us are
+`dynamic_rendering_local_read` (the subpass replacement), `push_descriptor`,
+`host_image_copy`, `maintenance5/6`. Shader objects (`VK_EXT_shader_object`) are
+an extension in every version. What remains:
 
-Where the layers stand: the generated binding carries every replacement -
-`cmd_pipeline_barrier2` / `queue_submit2` with the 64-bit `VkPipelineStageFlags2`
-/ `VkAccessFlags2` bitfields (`tBitfield64`), the dynamic-rendering structs and
-commands, `vkCmdBindShadersEXT`. `create_device` already enables
-`dynamicRendering` + `synchronization2` and gates at API 1.3, where both are
-core. The boost layer is what teaches the old shape: three render-pass creators
-and two `vkCmdBeginRenderPass` wrappers, `transition_image*` typed on the legacy
-`VkPipelineStageFlags` / `VkAccessFlags` (and `top_of_pipe` set inside the
-library), `vkQueueSubmit` in `vulkan_boost`, `vulkan_window` and `vulkan_live`,
-framebuffers in the window swapchain path. Tutorials 01-08 and 10-14 sit on
-render passes; only 09 uses dynamic rendering; no tutorial or example uses sync2.
-
-Order, one arc, after 0.6.4 and the queued Vulkan coverage work:
-
-1. **sync2 first** - `transition_image*` and the submit helpers move to the `_2`
-   structs; `top_of_pipe` leaves the library. No floor bump: 1.3 is already the
-   boost's floor.
-2. **Dynamic rendering as the boost default** - the window swapchain path drops
-   framebuffers, tutorials 01-08 and 11-14 migrate. Tutorial 10 (deferred:
-   subpasses + input attachments) is the honest exception - its replacement is
-   `VK_KHR_dynamic_rendering_local_read`, core in 1.4, so it either keeps its
-   render pass on purpose or becomes the 1.4 showcase.
-3. **Shader objects stay opt-in** - an extension, not 1.4 core, absent on
-   Android, partial on MoltenVK, and dasllama's compute path is `VkPipeline`.
-   One example showing the workflow; never a boost default.
-
-The render-pass helpers stay beside the new ones: deprecated is not removed. Once
-the sync2 twins exist, a `vulkan_lint` rule nudges `top_of_pipe` toward them.
+- **Tutorial 16 "Vulkan 1.4"** - the three promotions that change a workflow:
+  push descriptors (per-draw data written into the command buffer, no set
+  allocation), host image copy (texture upload with no staging buffer or
+  transfer command), local read (the subpass replacement, on the deferred
+  scene). `create_device` gains an optional requested API version + feature
+  list, defaulting to today's 1.3 behavior; the tutorial asks for 1.4 + the
+  three features and skips with a message when refused.
+- **Shader objects** - one example under `examples/` + test, opt-in only:
+  absent on Android, partial on MoltenVK, and dasllama's compute path is
+  `VkPipeline`. Lavapipe is the extension's reference implementation, so the
+  nightly lane runs it.
+- **The nightly render lane** installs `mesa-vulkan-drivers` from Ubuntu 24.04
+  (Mesa 24.0-24.2, lavapipe at 1.3); lavapipe reports 1.4 from Mesa 25.0, so the
+  lane needs a Mesa PPA or tutorial 16 skips on the only lane that renders. The
+  macOS lane is build + loader smoke only; Windows has no lane - a local 1.4 GPU
+  is the proof there.
+- **A `vulkan_lint` rule for the frame-shape mix** - a pipeline built for a render pass bound
+  inside `record_rendering`, or one built for formats bound inside `record_render_pass`. A
+  `[lint_macro]` sees the consumer after inlining: the `record_rendering` call and its block are
+  spliced away, so the nesting that would anchor the rule is gone, and the spliced boost bodies
+  surface their raw `vkCmd*` calls at the call site's line, which is also why VK001 fires on a
+  `record_render_pass` call today. The rule needs an inline-aware anchor (the begin/end pair that
+  survives splicing) and the same fix for VK001.
+- **A loud failure below 1.3** - on an instance or device below 1.3 the plain
+  creators leave the pair off and say nothing, and a tutorial then crashes on a
+  null `vkCmdBeginRendering` entry point. `record_rendering`,
+  `cmd_pipeline_barrier2` and `queue_submit2` panic with a message instead when
+  `dynamic_rendering_supported` is false for the device they record on.
+- **dasLLAMA** keeps its legacy barriers until its own arc: four hot-path files,
+  so a `vulkan_lint` nudge from the legacy flags to the `_2` ones waits for it.
+  Legacy barriers are not slower - drivers lower both forms to the same work;
+  the only win is the stage choice, which `_2` makes easier to express. The same
+  arc moves `shaderIntegerDotProduct` out of its own struct and into the
+  `VkPhysicalDeviceVulkan13Features` the `create_device_storage_8_16_int_dot*`
+  creators already chain: a chain holding both is invalid
+  (`VUID-VkDeviceCreateInfo-pNext-06532`).
+- **Pre-existing validation-layer findings** the flip left in place, each a
+  shader or descriptor shape, not a barrier: 08, 10 and 14 declare the shadow
+  sampler as `SAMPLER` where the shader consumes a combined image sampler
+  (`VUID-VkWriteDescriptorSet-descriptorType-00319`, `-layout-07990`); 11's
+  readback intermediate gets an image view its usage does not allow
+  (`VUID-VkImageViewCreateInfo-image-04441`); 12's cull shader writes a
+  `NonWritable` storage member (`VUID-RuntimeSpirv-NonWritable-06341`); 10
+  carries one synchronization hazard inside its render pass.
 
 ## p-prefix strip on boost field names
 

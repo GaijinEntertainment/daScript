@@ -21,7 +21,7 @@ infinity, sampled by a 3D direction vector. The headline rails:
   skybox fragment land at NDC ``z = 1.0`` (the far plane). Combined with
   ``LESS_OR_EQUAL`` depth test + ``depthWriteEnable = false``, the skybox
   passes against a depth buffer cleared to 1.0 but never updates depth, so a
-  future foreground pass in the same render pass will properly draw in front
+  later foreground draw in the same rendering pass will properly draw in front
   of it without modification;
 - **Rotation-only view** -- the host strips the translation column from the
   view matrix so the cube stays glued to the camera. Camera position cancels;
@@ -69,7 +69,7 @@ sky with no visible seams.
    :start-at: def public update_skybox_uniforms
    :end-before: //! Per-frame work
 
-``render_skybox_frame`` runs ``update_skybox_uniforms`` + ``record_skybox_render_pass``
+``render_skybox_frame`` runs ``update_skybox_uniforms`` + ``record_skybox_frame``
 inside a ``run_cmd_sync``, copies the colour attachment to the readback buffer,
 and clones it out. The pipeline is built with ``depth_write_enable=false`` so
 the depth=1.0 fragments don't overwrite depth -- a future combined scene can
@@ -102,9 +102,9 @@ See it live
 ``window/show_skybox.das`` opens a GLFW window with a Vulkan swapchain and
 presents the orbiting skybox every frame. It owns its own instance (with
 surface extensions) + device (with ``VK_KHR_swapchain``), then calls
-``build_skybox_resources`` to share the offscreen render pass, framebuffer,
-cubemap and pipeline with the headless oracle. Each frame it runs
-``update_skybox_uniforms`` + ``record_skybox_render_pass`` into the present
+``build_skybox_resources`` to share the offscreen targets, cubemap and
+pipeline with the headless oracle. Each frame it runs
+``update_skybox_uniforms`` + ``record_skybox_frame`` into the present
 command buffer, then blits the colour attachment onto the swapchain image.
 
 .. literalinclude:: ../../../../../modules/dasVulkan/tutorials/06_skybox/window/show_skybox.das

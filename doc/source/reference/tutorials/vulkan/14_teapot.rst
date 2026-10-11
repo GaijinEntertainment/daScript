@@ -67,14 +67,14 @@ module also carries the ground-floor and env-sky shaders.
 The render (headless)
 ---------------------
 
-``record_teapot_render_pass`` records two passes per frame: a depth-only
+``record_teapot_frame`` records two passes per frame: a depth-only
 mesh-shader shadow pass (the teapot's silhouette from the light's view), then
 the colour pass -- env sky, the reflective floor (sampling the shadow map), and
 the tessellated teapot.
 
 .. literalinclude:: ../../../../../modules/dasVulkan/tutorials/14_teapot/teapot_tut.das
    :language: das
-   :start-at: def public record_teapot_render_pass
+   :start-at: def public record_teapot_frame
    :end-before: def public render_teapot_frame
 
 Self-verifying

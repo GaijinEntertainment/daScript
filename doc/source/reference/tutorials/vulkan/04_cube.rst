@@ -56,9 +56,9 @@ The per-frame work is split into two reusable halves so the windowed viewer can
 share the same render with the offscreen test. ``update_cube_uniforms`` writes
 the new view / projection / camera position into ``cam`` (the UBO) and the new
 model matrix into ``pc`` (the push constant) -- host-only work, no command
-buffer touched. ``record_cube_render_pass`` records the pipeline bind, the
-descriptor set, the push-constants upload, and the indexed draw into a caller-
-supplied command buffer; the render pass's ``finalLayout`` leaves the colour
+buffer touched. ``record_cube_frame`` moves both attachments out of ``UNDEFINED``,
+records the pipeline bind, the descriptor set, the push-constants upload, and the
+indexed draw inside ``record_rendering``, then a closing barrier leaves the colour
 attachment in ``TRANSFER_SRC_OPTIMAL`` so a swapchain blit is one command away.
 
 .. literalinclude:: ../../../../../modules/dasVulkan/tutorials/04_cube/cube_tut.das
@@ -98,9 +98,9 @@ See it live
 ``window/show_cube.das`` opens a GLFW window with a Vulkan swapchain and presents
 the spinning cube every frame. It owns its own instance (with surface extensions)
 and device (with ``VK_KHR_swapchain``), then calls ``build_cube_resources`` to
-share the offscreen render pass, framebuffer, geometry, texture and graphics
-pipeline with the headless oracle. Each frame it runs ``update_cube_uniforms`` +
-``record_cube_render_pass`` into the present command buffer, then blits the
+share the offscreen targets, geometry, texture and graphics pipeline with the
+headless oracle. Each frame it runs ``update_cube_uniforms`` +
+``record_cube_frame`` into the present command buffer, then blits the
 colour attachment onto the swapchain image. It needs a display and the ``glfw``
 module, so it lives in a ``window/`` subfolder that the tutorial's CI gate skips
 (CI is headless and built without GLFW); it is the run-and-watch companion to

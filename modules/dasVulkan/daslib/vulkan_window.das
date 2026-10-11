@@ -3,10 +3,12 @@ options _comment_hygiene = true
 options indenting = 4
 
 // Windowing tier: bridge a native window handle to a VkSurfaceKHR, build a
-// swapchain (format/present-mode/extent picked from surface caps, image views +
-// framebuffers owned together), per-frame sync, and an acquire/record/submit/
-// present helper. Pairs with daslib/vulkan_boost; the surface bridge takes raw
-// void* handles (e.g. from glfwGetNativeWindow/Display) so there is no GLFW dep.
+// swapchain (format/present-mode/extent picked from surface caps, image views
+// owned together, framebuffers only for the render-pass frame loop), per-frame
+// sync, and an acquire/record/submit/present helper in two shapes - dynamic
+// rendering on the swapchain view, or a render pass over a framebuffer. Pairs
+// with daslib/vulkan_boost; the surface bridge takes raw void* handles (e.g. from
+// glfwGetNativeWindow/Display) so there is no GLFW dep.
 
 module vulkan_window shared
 
@@ -166,15 +168,22 @@ def public create_swapchain(device : Device; phys : VkPhysicalDevice; surface : 
     return <- sc
 }
 
-//! rebuild the swapchain + framebuffers at a new size (window resize / out-of-date
-//! present). Waits for the device to idle, then replaces `sc` in place (the move-assign
-//! finalizes the old swapchain's framebuffers, views and handle).
 def public recreate_swapchain(var sc : Swapchain; device : Device; phys : VkPhysicalDevice;
-                              surface : SurfaceKHR; render_pass : RenderPass; width, height : int) {
+                              surface : SurfaceKHR; width, height : int) {
+    //! rebuild the swapchain at a new size (window resize / out-of-date present) for the
+    //! dynamic-rendering frame loop: wait for the device to idle, then replace `sc` in place (the
+    //! move-assign finalizes the old views and handle). The format is kept - the pipelines were built for it.
     vkDeviceWaitIdle(boost_value_to_vk(device))
-    let keep_format = sc.format     // preserve the format across resize (the render pass was built for it)
+    let keep_format = sc.format
     delete sc       // release the old swapchain before making a new one (the surface is app-owned)
     sc <- create_swapchain(device, phys, surface, width, height, keep_format)
+}
+
+def public recreate_swapchain(var sc : Swapchain; device : Device; phys : VkPhysicalDevice;
+                              surface : SurfaceKHR; render_pass : RenderPass; width, height : int) {
+    //! `recreate_swapchain` for the render-pass frame loop: also rebuilds one framebuffer per
+    //! image against `render_pass`.
+    recreate_swapchain(sc, device, phys, surface, width, height)
     build_swapchain_framebuffers(device, sc, render_pass)
 }
 
@@ -226,125 +235,175 @@ def public set_dynamic_viewport(cmd : CommandBuffer; width, height : int) {
     delete scis
 }
 
-//! acquire -> record (render pass + user block) -> submit -> present, then wait idle. Returns false if
-//! the swapchain is out of date (caller should recreate). `dynamic_viewport` sets a full-extent
-//! viewport+scissor each frame — pairs with create_graphics_pipeline_simple(..., dynamic_viewport=true).
-def public draw_frame(device : Device; queue : VkQueue; sc : Swapchain; render_pass : RenderPass;
-                      pool : CommandPool; sync : FrameSync; clear : VkClearValue; dynamic_viewport : bool = false;
-                      blk : block<(cmd : CommandBuffer) : void>) : bool {
-    let dev = boost_value_to_vk(device)
-
-    var image_index = 0u
-    let acquired = vkAcquireNextImageKHR(dev, boost_value_to_vk(sc.handle), UINT64_MAX,
+def public acquire_frame_image(device : Device; sc : Swapchain; sync : FrameSync; var image_index : uint&) : VkResult {
+    //! `vkAcquireNextImageKHR` on `sc`, signalling `sync.image_available`. `image_index` is valid only when
+    //! `frame_acquired` says so of the result.
+    return vkAcquireNextImageKHR(boost_value_to_vk(device), boost_value_to_vk(sc.handle), UINT64_MAX,
         boost_value_to_vk(sync.image_available), null, image_index)
-    if (acquired == VkResult.ERROR_OUT_OF_DATE_KHR) {
-        return false
-    }
+}
 
-    var ai = VkCommandBufferAllocateInfo()
-    ai.commandPool = boost_value_to_vk(pool)
-    ai.level = VkCommandBufferLevel.PRIMARY
-    ai.commandBufferCount = 1u
-    var raw_cmd : VkCommandBuffer
-    vk_check(vkAllocateCommandBuffers(dev, ai, unsafe(addr(raw_cmd))), null)
-    let cmd = vk_value_to_boost(raw_cmd)
-    let begin = VkCommandBufferBeginInfo()
-    vk_check(vkBeginCommandBuffer(raw_cmd, begin), null)
-    record_render_pass(cmd, render_pass, sc.framebuffers[int(image_index)],
-            full_area(sc.width, sc.height), clear) {
+def public frame_acquired(acquired : VkResult) : bool {
+    //! True when an `acquire_frame_image` result carries a usable image index: SUCCESS, or SUBOPTIMAL_KHR,
+    //! which still presents. Anything else means the swapchain is out of date or lost - recreate it.
+    return acquired == VkResult.SUCCESS || acquired == VkResult.SUBOPTIMAL_KHR
+}
+
+//! Presents `image_index` of `sc` once `sync.render_finished` signals, waits for `queue` to idle and
+//! frees `raw_cmd` back to `pool`; returns the present result.
+def private present_and_free(device : Device; queue : VkQueue; sc : Swapchain; pool : CommandPool;
+                             sync : FrameSync; raw_cmd : VkCommandBuffer; var image_index : uint) : VkResult {
+    var signal_sem = boost_value_to_vk(sync.render_finished)
+    var sc_handle = boost_value_to_vk(sc.handle)
+    var present = VkPresentInfoKHR()
+    present.waitSemaphoreCount = 1u
+    present.swapchainCount = 1u
+    var presented : VkResult
+    unsafe {
+        present.pWaitSemaphores = addr(signal_sem)
+        present.pSwapchains = addr(sc_handle)
+        present.pImageIndices = addr(image_index)
+        presented = vkQueuePresentKHR(queue, present)
+    }
+    vk_check(vkQueueWaitIdle(queue), null)
+    vkFreeCommandBuffers(boost_value_to_vk(device), boost_value_to_vk(pool), 1u, unsafe(addr(raw_cmd)))
+    return presented
+}
+
+def public submit_and_present(device : Device; queue : VkQueue; sc : Swapchain; pool : CommandPool; sync : FrameSync;
+                              var raw_cmd : VkCommandBuffer; image_index : uint; wait_stage : VkPipelineStageFlags) : VkResult {
+    //! Ends `raw_cmd`, submits it through ``vkQueueSubmit`` - waiting on `sync.image_available` at
+    //! `wait_stage`, signalling `sync.render_finished` - then presents `image_index`, waits for the queue to
+    //! idle and frees the buffer. Returns the present result.
+    vk_check(vkEndCommandBuffer(raw_cmd), null)
+    var wait_sem = boost_value_to_vk(sync.image_available)
+    var signal_sem = boost_value_to_vk(sync.render_finished)
+    var stage = wait_stage
+    var submit = VkSubmitInfo()
+    submit.waitSemaphoreCount = 1u
+    submit.commandBufferCount = 1u
+    submit.signalSemaphoreCount = 1u
+    unsafe {
+        submit.pWaitSemaphores = addr(wait_sem)
+        submit.pWaitDstStageMask = addr<uint?>(stage)
+        submit.pCommandBuffers = addr(raw_cmd)
+        submit.pSignalSemaphores = addr(signal_sem)
+        vk_check(vkQueueSubmit(queue, 1u, addr(submit), null), null)
+    }
+    return present_and_free(device, queue, sc, pool, sync, raw_cmd, image_index)
+}
+
+def public submit2_and_present(device : Device; queue : VkQueue; sc : Swapchain; pool : CommandPool; sync : FrameSync;
+                               var raw_cmd : VkCommandBuffer; image_index : uint; wait_stage : VkPipelineStageFlags2) : VkResult {
+    //! `submit_and_present` through ``vkQueueSubmit2`` (synchronization2): `wait_stage` is the 64-bit
+    //! ``VkPipelineStageFlags2`` the image-available wait lands on.
+    vk_check(vkEndCommandBuffer(raw_cmd), null)
+    var submit : SubmitInfo2
+    submit.pWaitSemaphoreInfos |> emplace(SemaphoreSubmitInfo(semaphore = weak_copy(sync.image_available), stageMask = wait_stage))
+    submit.pCommandBufferInfos |> emplace(CommandBufferSubmitInfo(commandBuffer = vk_value_to_boost(raw_cmd)))
+    submit.pSignalSemaphoreInfos |> emplace(SemaphoreSubmitInfo(semaphore = weak_copy(sync.render_finished),
+        stageMask = VkPipelineStageFlags2.all_commands))
+    var submits : array<SubmitInfo2>
+    submits |> emplace(submit)
+    let no_fence : Fence
+    queue_submit2(vk_value_to_boost(queue), submits, no_fence)
+    return present_and_free(device, queue, sc, pool, sync, raw_cmd, image_index)
+}
+
+[arch(at="../ARCHITECTURE_RENDERING.md#dynamic-rendering")]
+def public record_swapchain_rendering(cmd : CommandBuffer; sc : Swapchain; image_index : int; clear : VkClearValue;
+                                      dynamic_viewport : bool; blk : block<(cmd : CommandBuffer) : void>) {
+    //! The dynamic-rendering body of a frame on swapchain image `image_index`: UNDEFINED -> COLOR_ATTACHMENT_OPTIMAL
+    //! sourced at `color_attachment_output` (the stage the acquire wait lands on), `blk` inside `record_rendering`
+    //! on the image's view (a full-extent viewport+scissor first when `dynamic_viewport`), then -> PRESENT_SRC_KHR.
+    let target = vk_value_to_boost(sc.images[image_index])
+    transition_image2(cmd, target, VkImageLayout.UNDEFINED, VkImageLayout.COLOR_ATTACHMENT_OPTIMAL,
+        VkPipelineStageFlags2.color_attachment_output, ACCESS_2_NONE,
+        VkPipelineStageFlags2.color_attachment_output, VkAccessFlags2.color_attachment_write)
+    record_rendering(cmd, sc.views[image_index], full_area(sc.width, sc.height), clear) {
         if (dynamic_viewport) {
             set_dynamic_viewport(cmd, sc.width, sc.height)
         }
         invoke(blk, cmd)
     }
-    vk_check(vkEndCommandBuffer(raw_cmd), null)
+    transition_image2(cmd, target, VkImageLayout.COLOR_ATTACHMENT_OPTIMAL, VkImageLayout.PRESENT_SRC_KHR,
+        VkPipelineStageFlags2.color_attachment_output, VkAccessFlags2.color_attachment_write,
+        PIPELINE_STAGE_2_NONE, ACCESS_2_NONE)
+}
 
-    var wait_sem = boost_value_to_vk(sync.image_available)
-    var signal_sem = boost_value_to_vk(sync.render_finished)
-    var wait_stage : VkPipelineStageFlags
-    wait_stage.color_attachment_output = true
-    var submit = VkSubmitInfo()
-    submit.waitSemaphoreCount = 1u
-    submit.commandBufferCount = 1u
-    submit.signalSemaphoreCount = 1u
-    unsafe {
-        submit.pWaitSemaphores = addr(wait_sem)
-        submit.pWaitDstStageMask = addr<uint?>(wait_stage)
-        submit.pCommandBuffers = addr(raw_cmd)
-        submit.pSignalSemaphores = addr(signal_sem)
-        vk_check(vkQueueSubmit(queue, 1u, addr(submit), null), null)
+def public record_swapchain_render_pass(cmd : CommandBuffer; sc : Swapchain; render_pass : RenderPass; image_index : int;
+                                        clear : VkClearValue; dynamic_viewport : bool; blk : block<(cmd : CommandBuffer) : void>) {
+    //! The render-pass body of a frame on swapchain image `image_index`: `blk` records inside
+    //! `record_render_pass` on the image's framebuffer (`build_swapchain_framebuffers` first); the pass's
+    //! final layout leaves the image in PRESENT_SRC_KHR.
+    record_render_pass(cmd, render_pass, sc.framebuffers[image_index], full_area(sc.width, sc.height), clear) {
+        if (dynamic_viewport) {
+            set_dynamic_viewport(cmd, sc.width, sc.height)
+        }
+        invoke(blk, cmd)
     }
+}
 
-    var sc_handle = boost_value_to_vk(sc.handle)
-    var present = VkPresentInfoKHR()
-    present.waitSemaphoreCount = 1u
-    present.swapchainCount = 1u
-    var presented : VkResult
-    unsafe {
-        present.pWaitSemaphores = addr(signal_sem)
-        present.pSwapchains = addr(sc_handle)
-        present.pImageIndices = addr(image_index)
-        presented = vkQueuePresentKHR(queue, present)
+def public blit_to_swapchain(cmd : CommandBuffer; src : Image; src_layout : VkImageLayout; src_width, src_height : int;
+                             sc : Swapchain; target : VkImage) {
+    //! The blit-present body for a frame rendered offscreen: `target` (the acquired image, UNDEFINED) goes to
+    //! TRANSFER_DST_OPTIMAL sourced at `blit` (the transfer stage `present_frame`'s acquire wait lands on), `src` in
+    //! `src_layout` (TRANSFER_SRC_OPTIMAL or GENERAL) is blitted over the swapchain extent, `target` leaves in PRESENT_SRC_KHR.
+    let dst = vk_value_to_boost(target)
+    transition_image2(cmd, dst, VkImageLayout.UNDEFINED, VkImageLayout.TRANSFER_DST_OPTIMAL,
+        VkPipelineStageFlags2.blit, ACCESS_2_NONE, VkPipelineStageFlags2.blit, VkAccessFlags2.transfer_write)
+    blit_full_image(cmd, boost_value_to_vk(src), src_layout, src_width, src_height,
+        target, VkImageLayout.TRANSFER_DST_OPTIMAL, sc.width, sc.height, VkFilter.LINEAR)
+    transition_image2(cmd, dst, VkImageLayout.TRANSFER_DST_OPTIMAL, VkImageLayout.PRESENT_SRC_KHR,
+        VkPipelineStageFlags2.blit, VkAccessFlags2.transfer_write, PIPELINE_STAGE_2_NONE, ACCESS_2_NONE)
+}
+
+def public draw_frame(device : Device; queue : VkQueue; sc : Swapchain;
+                      pool : CommandPool; sync : FrameSync; clear : VkClearValue; dynamic_viewport : bool = false;
+                      blk : block<(cmd : CommandBuffer) : void>) : bool {
+    //! acquire -> record (`record_swapchain_rendering` around the user block) -> ``vkQueueSubmit2`` -> present,
+    //! then wait idle; false when the swapchain is out of date or lost (caller recreates). Pipelines come from
+    //! the `color_format` creators with `sc.format`, `dynamic_viewport` ones with a per-frame viewport+scissor.
+    var image_index = 0u
+    if (!frame_acquired(acquire_frame_image(device, sc, sync, image_index))) {
+        return false
     }
-    vk_check(vkQueueWaitIdle(queue), null)
-    vkFreeCommandBuffers(dev, boost_value_to_vk(pool), 1u, unsafe(addr(raw_cmd)))
+    var raw_cmd = begin_one_time_commands(device, pool)
+    record_swapchain_rendering(vk_value_to_boost(raw_cmd), sc, int(image_index), clear, dynamic_viewport, blk)
+    let presented = submit2_and_present(device, queue, sc, pool, sync, raw_cmd, image_index,
+        VkPipelineStageFlags2.color_attachment_output)
     return presented != VkResult.ERROR_OUT_OF_DATE_KHR
 }
 
-//! acquire -> record a RAW command block (no render pass) -> submit -> present, then wait idle. Sibling
-//! of draw_frame; the block gets (cmd, acquired VkImage, index) and MUST leave the image — UNDEFINED on
-//! entry — in `PRESENT_SRC_KHR`. Waits at the transfer stage. Returns false if the swapchain is stale.
-def public present_frame(device : Device; queue : VkQueue; sc : Swapchain; pool : CommandPool;
-                         sync : FrameSync; blk : block<(cmd : CommandBuffer; target : VkImage; image_index : uint) : void>) : bool {
-    let dev = boost_value_to_vk(device)
-
+def public draw_frame(device : Device; queue : VkQueue; sc : Swapchain; render_pass : RenderPass;
+                      pool : CommandPool; sync : FrameSync; clear : VkClearValue; dynamic_viewport : bool = false;
+                      blk : block<(cmd : CommandBuffer) : void>) : bool {
+    //! `draw_frame` over a render pass (`record_swapchain_render_pass` around the user block, ``vkQueueSubmit``).
     var image_index = 0u
-    let acquired = vkAcquireNextImageKHR(dev, boost_value_to_vk(sc.handle), UINT64_MAX,
-        boost_value_to_vk(sync.image_available), null, image_index)
-    if (acquired == VkResult.ERROR_OUT_OF_DATE_KHR) {
+    if (!frame_acquired(acquire_frame_image(device, sc, sync, image_index))) {
         return false
     }
+    var raw_cmd = begin_one_time_commands(device, pool)
+    record_swapchain_render_pass(vk_value_to_boost(raw_cmd), sc, render_pass, int(image_index), clear, dynamic_viewport, blk)
+    var wait_stage : VkPipelineStageFlags
+    wait_stage.color_attachment_output = true
+    let presented = submit_and_present(device, queue, sc, pool, sync, raw_cmd, image_index, wait_stage)
+    return presented != VkResult.ERROR_OUT_OF_DATE_KHR
+}
 
-    var ai = VkCommandBufferAllocateInfo()
-    ai.commandPool = boost_value_to_vk(pool)
-    ai.level = VkCommandBufferLevel.PRIMARY
-    ai.commandBufferCount = 1u
-    var raw_cmd : VkCommandBuffer
-    vk_check(vkAllocateCommandBuffers(dev, ai, unsafe(addr(raw_cmd))), null)
+def public present_frame(device : Device; queue : VkQueue; sc : Swapchain; pool : CommandPool;
+                         sync : FrameSync; blk : block<(cmd : CommandBuffer; target : VkImage; image_index : uint) : void>) : bool {
+    //! acquire -> record a RAW command block (no render pass) -> submit -> present, then wait idle. Sibling
+    //! of draw_frame; the block gets (cmd, acquired VkImage, index) and MUST leave the image — UNDEFINED on
+    //! entry — in `PRESENT_SRC_KHR`. Waits at the transfer stage. Returns false if the swapchain is stale.
+    var image_index = 0u
+    if (!frame_acquired(acquire_frame_image(device, sc, sync, image_index))) {
+        return false
+    }
+    var raw_cmd = begin_one_time_commands(device, pool)
     let cmd = vk_value_to_boost(raw_cmd)
-    let begin = VkCommandBufferBeginInfo()
-    vk_check(vkBeginCommandBuffer(raw_cmd, begin), null)
     invoke(blk, cmd, sc.images[int(image_index)], image_index)
-    vk_check(vkEndCommandBuffer(raw_cmd), null)
-
-    var wait_sem = boost_value_to_vk(sync.image_available)
-    var signal_sem = boost_value_to_vk(sync.render_finished)
     var wait_stage : VkPipelineStageFlags
     wait_stage.transfer = true
-    var submit = VkSubmitInfo()
-    submit.waitSemaphoreCount = 1u
-    submit.commandBufferCount = 1u
-    submit.signalSemaphoreCount = 1u
-    unsafe {
-        submit.pWaitSemaphores = addr(wait_sem)
-        submit.pWaitDstStageMask = addr<uint?>(wait_stage)
-        submit.pCommandBuffers = addr(raw_cmd)
-        submit.pSignalSemaphores = addr(signal_sem)
-        vk_check(vkQueueSubmit(queue, 1u, addr(submit), null), null)
-    }
-
-    var sc_handle = boost_value_to_vk(sc.handle)
-    var present = VkPresentInfoKHR()
-    present.waitSemaphoreCount = 1u
-    present.swapchainCount = 1u
-    var presented : VkResult
-    unsafe {
-        present.pWaitSemaphores = addr(signal_sem)
-        present.pSwapchains = addr(sc_handle)
-        present.pImageIndices = addr(image_index)
-        presented = vkQueuePresentKHR(queue, present)
-    }
-    vk_check(vkQueueWaitIdle(queue), null)
-    vkFreeCommandBuffers(dev, boost_value_to_vk(pool), 1u, unsafe(addr(raw_cmd)))
+    let presented = submit_and_present(device, queue, sc, pool, sync, raw_cmd, image_index, wait_stage)
     return presented != VkResult.ERROR_OUT_OF_DATE_KHR
 }

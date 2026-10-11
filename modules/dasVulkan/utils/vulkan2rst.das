@@ -67,14 +67,15 @@ def document_module_vulkan_boost() {
     var mod = find_module("vulkan_boost")
     var groups <- array<DocGroup>(
         group_by_regex("Device selection", mod, %regex~^(select_physical_device|select_graphics_queue_family|try_find_memory_type|find_memory_type)$%%),
-        group_by_regex("Instance & device", mod, %regex~^(create_instance|create_device|create_device_descriptor_indexing|create_device_draw_parameters|get_device_queue|instance_extension_available|device_extension_available)$%%),
+        group_by_regex("Instance & device", mod, %regex~^(create_instance|create_device|create_device_descriptor_indexing|create_device_draw_parameters|dynamic_rendering_supported|get_device_queue|instance_extension_available|device_extension_available)$%%),
         group_by_regex("Shaders & pipelines", mod, %regex~^(create_shader_module|create_pipeline_layout|create_graphics_pipeline_simple|create_graphics_pipeline_v3d|create_graphics_pipeline_dyn|create_compute_pipeline|create_compute_pipeline_full_subgroups)$%%),
+        group_by_regex("Dynamic rendering", mod, %regex~^(rendering_formats|attach_rendering_formats|set_pipeline_target|record_rendering|record_rendering_depth_only|rendering_color_attachment|rendering_depth_attachment)$%%),
         group_by_regex("Mesh shaders",     mod, %regex~^(create_device_mesh_shader|mesh_shader_supported|create_mesh_pipeline)$%%),
         group_by_regex("Hardware ray tracing", mod, %regex~^(rt_supported|create_device_ray_tracing|create_address_buffer|get_ray_tracing_properties|get_ray_tracing_shader_group_handles|create_ray_tracing_pipeline|build_shader_binding_table|cmd_trace_rays|make_accel_instance|build_blas|build_tlas|write_descriptor_acceleration_structure)$%%),
         group_by_regex("Render passes",    mod, %regex~^create_render_pass_(single_color|color_depth|depth_only)$%%),
         group_by_regex("Builders",         mod, %regex~^(build_offscreen_target|build_offscreen_depth|create_host_buffer|create_host_buffer_from_bytes|create_sampler_shadow|compute_to_storage_image)$%%),
-        group_by_regex("Memory & brackets", mod, %regex~^(run_cmd_sync|record_render_pass|record_rendering|map_memory_to_array|read_memory|with_mapped_memory|with_push_staging|write_field|upload_bytes)$%%),
-        group_by_regex("Command recording", mod, %regex~^(cmd_bind_pipeline|cmd_bind_vertex_buffer|cmd_draw|cmd_push_constants|copy_image_to_buffer|transition_image|transition_depth_image|transition_image_aspect)$%%),
+        group_by_regex("Memory & brackets", mod, %regex~^(run_cmd_sync|begin_one_time_commands|record_render_pass|map_memory_to_array|read_memory|with_mapped_memory|with_push_staging|write_field|upload_bytes)$%%),
+        group_by_regex("Command recording", mod, %regex~^(cmd_bind_pipeline|cmd_bind_vertex_buffer|cmd_draw|cmd_push_constants|copy_image_to_buffer|blit_full_image|transition_image|transition_depth_image|transition_image_aspect|transition_image2|transition_depth_image2|transition_image_aspect2)$%%),
         group_by_regex("Conveniences",     mod, %regex~^(full_area|clear_color|clear_depth)$%%),
         group_by_regex("Compute tier & device capabilities", mod, %regex~^(storage_8_16_supported|compute_full_subgroups_supported|subgroup_properties|subgroup_compute_ops_supported|integer_dot_product_supported|cooperative_matrix_supported|cooperative_matrix2_supported|cooperative_matrix2_fa_supported|cooperative_matrix2_decode_vector_supported|cooperative_matrix2_properties|cooperative_vector_supported|memory_priority_supported|timeline_semaphore_supported|external_memory_host_supported|external_memory_host_min_alignment|select_transfer_queue_family|create_device_(storage_8_16.*|cooperative_matrix|coopmat_full_subgroups))$%%),
         group_by_regex("Pipeline introspection", mod, %regex~^(pipeline_exec_props_supported|dump_pipeline_executables)$%%),
@@ -90,7 +91,8 @@ def document_module_vulkan_window() {
         group_by_regex("Surfaces",   mod, %regex~^(create_surface|queue_family_supports_present)$%%),
         group_by_regex("Swapchain",  mod, %regex~^(create_swapchain|recreate_swapchain|build_swapchain_framebuffers)$%%),
         group_by_regex("Frame sync", mod, %regex~^create_frame_sync$%%),
-        group_by_regex("Frame loop", mod, %regex~^(draw_frame|present_frame|set_dynamic_viewport)$%%),
+        group_by_regex("Frame loop", mod, %regex~^(draw_frame|present_frame|set_dynamic_viewport|record_swapchain_rendering|record_swapchain_render_pass|blit_to_swapchain)$%%),
+        group_by_regex("Frame steps", mod, %regex~^(acquire_frame_image|frame_acquired|submit_and_present|submit2_and_present)$%%),
         hide_group(group_by_regex("Finalizers", mod, %regex~^finalize$%%))
     )
     document("Window — surface, swapchain, frame sync, and the present loop", mod, "vulkan_window.rst", groups)

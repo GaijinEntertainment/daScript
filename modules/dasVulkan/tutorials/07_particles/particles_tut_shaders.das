@@ -13,8 +13,8 @@ options indenting = 4
 //      buffer USAGE_STORAGE_BUFFER | USAGE_VERTEX_BUFFER so the same VkBuffer can also bind as a
 //      vertex input.
 //
-//   2. **A per-frame execution + memory barrier** (``vkCmdPipelineBarrier`` with
-//      COMPUTE_SHADER -> VERTEX_INPUT, SHADER_WRITE -> VERTEX_ATTRIBUTE_READ) -- the canonical
+//   2. **A per-frame execution + memory barrier** (a synchronization2 buffer barrier: compute shader
+//      -> vertex attribute input, storage write -> vertex attribute read) -- the canonical
 //      compute->graphics handoff. Without it the graphics pipeline can read stale particle values
 //      from before the compute dispatch.
 //

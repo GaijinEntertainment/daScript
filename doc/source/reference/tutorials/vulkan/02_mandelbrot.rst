@@ -74,7 +74,7 @@ math rail (``cos`` / ``sin`` / ``pow`` / ``log2``):
    :start-at: [vulkan_compute_shader
 
 The compute result still lives in a *storage image*, off-screen, and still has to reach the
-swapchain -- a triangle draws straight into it through a render pass, a compute result does not.
+swapchain -- a triangle draws straight into it inside ``record_rendering``, a compute result does not.
 There are two standard ways, and a runnable viewer for each. Both build the resident compute
 resources once (``build_mandel_compute``) and re-dispatch them each frame with the new ``time``
 (``record_compute``); they live in a ``window/`` subfolder the CI gate skips (CI is headless and
@@ -90,9 +90,10 @@ Method 1 -- blit
 ~~~~~~~~~~~~~~~~~
 
 The most direct route: ``vkCmdBlitImage`` copies the storage image straight onto the acquired
-swapchain image (scaled to the window, linear filter) -- no graphics pipeline, no render pass, no
+swapchain image (scaled to the window, linear filter) -- no graphics pipeline, no rendering pass, no
 fragment shader. Both the per-frame compute dispatch and the blit are recorded into vulkan_window's
-``present_frame`` (the non-render-pass sibling of ``draw_frame``):
+``present_frame`` (the raw-command sibling of ``draw_frame``); ``blit_to_swapchain`` is the blit
+with its two barriers:
 
 .. literalinclude:: ../../../../../modules/dasVulkan/tutorials/02_mandelbrot/window/show_mandelbrot_blit.das
    :language: das
@@ -104,8 +105,8 @@ Method 2 -- sample as a texture
 
 The other route reuses the entire graphics path: draw one full-screen triangle whose fragment
 shader **samples** the storage image as a texture -- the canonical "compute writes, graphics reads"
-pattern, through the ordinary render pass, reusing ``draw_frame``, the framebuffers and the graphics
-pipeline wholesale. Because a compute dispatch cannot run inside a render pass, each frame runs the
+pattern, through the ordinary ``draw_frame`` rendering and a graphics pipeline built for the
+swapchain's format. Because a compute dispatch cannot run inside a rendering pass, each frame runs the
 compute as its own submit first, then ``draw_frame`` samples. The two view shaders:
 
 .. literalinclude:: ../../../../../modules/dasVulkan/tutorials/02_mandelbrot/window/mandelbrot_view_shaders.das
