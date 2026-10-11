@@ -191,8 +191,7 @@ jobs:
     # no-op, so we delete first). PRs read-only. Bounded footprint: N configs ×
     # one tarball, no run_id pileup. Every run restores, the cron included: the
     # nightly cells are the slow ones, and the cron's save is the seeder every PR
-    # lane warms from (master PUSH runs are usually pre_job-skipped as
-    # same-content duplicates). A sanitizer cell's three phase jobs share one
+    # lane warms from. A sanitizer cell's three phase jobs share one
     # slot; only the tests phase writes it, so there is one writer per key.
     - name: "Restore sccache objects"
       uses: actions/cache/restore@v4

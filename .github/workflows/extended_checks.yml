@@ -21,7 +21,7 @@ concurrency:
   # cancel-in-progress kills the cron — which then skips itself as a duplicate,
   # so the sccache seeding the cron exists to do silently never happens.
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ github.event_name }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
 
@@ -38,7 +38,7 @@ jobs:
         uses: fkirc/skip-duplicate-actions@v5
         with:
           concurrent_skipping: 'same_content'
-          do_not_skip: '["pull_request", "workflow_dispatch"]'
+          do_not_skip: '["pull_request", "workflow_dispatch", "push"]'
       # The job matrix is data in ci/ci_matrix.py, evaluated per event here (ci/test_ci_matrix.py pins it).
       - uses: actions/checkout@v4
         with:
@@ -196,8 +196,7 @@ jobs:
     # Stable per-config key in its own `sccache-extended-*` namespace so it never
     # clobbers build.yml's slots. Every run restores; save only on master (delete
     # first — GHA caches are immutable, so a plain save under an existing key is
-    # a no-op). The nightly cron is what makes the save reliable (the master PUSH
-    # run is usually skipped as a concurrent duplicate).
+    # a no-op).
     - name: "Restore sccache objects"
       uses: actions/cache/restore@v4
       with:
