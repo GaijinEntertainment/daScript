@@ -8,7 +8,7 @@ module linq_fold_array shared public
 
 //! linq_fold array source adapters: ArrayAdapter / ZipAdapter / ArrayJoinAdapter plus the
 //! array-shaped emit lanes (counter / accumulator / early-exit / loop-or-count / zip) and
-//! their row-builders. Requires linq_fold_common. See daslib/ARCHITECTURE_LINQ.md sec. 37.
+//! their row-builders. Requires linq_fold_common. See ``ARCHITECTURE_LINQ_FOLD_SOURCES.md``.
 
 require daslib/linq public
 require daslib/ast_boost
@@ -21,14 +21,14 @@ require daslib/linq_fold_common public
 struct ZipShape {
     srcAExpr, srcBExpr : Expression?
     srcAName, srcBName : string
-    srcAType, srcBType : TypeDeclPtr
+    srcAParamType, srcBParamType : TypeDeclPtr
     itAName, itBName : string
 }
 
 struct ArrayJoinShape {
     srcAExpr, srcBExpr : Expression?
     srcAName, srcBName : string
-    srcAType, srcBType : TypeDeclPtr
+    srcAParamType, srcBParamType : TypeDeclPtr
     tupAType, tupBType : TypeDeclPtr
     keyaLam, keybLam, resultLam : Expression?
     keyType, resultType : TypeDeclPtr
@@ -41,6 +41,7 @@ class ArrayAdapter : SourceAdapter {
     def override can_reserve_by_length() : bool => true
     def override const can_group_by() : bool => true
     def override const can_join() : bool => true
+    [arch(at="ARCHITECTURE_LINQ_FOLD.md#linq-fold-direct-return")]
     def override supports_direct_return() : bool => true
     def override emit_join_hook(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? =>
         emit_array_join(c, ctx, at)
@@ -99,6 +100,7 @@ class ArrayAdapter : SourceAdapter {
         if (!type_has_length(top._type)) return null
         return emit_length_shortcut(opName, top, srcName, at)
     }
+    [arch(at="ARCHITECTURE_LINQ_FOLD_SOURCES.md#linq-fold-group-by-over-join")]
     def override build_group_by_adapter(var c : Captures; var ctx : EmitCtx; at : LineInfo) : SourceAdapter? {
         if (top._type == null) {
             return null
@@ -117,8 +119,8 @@ class ArrayAdapter : SourceAdapter {
                 srcBExpr = srcb.srcbClone,
                 srcAName = qn("ajoin_srcA", at),
                 srcBName = qn("ajoin_srcB", at),
-                srcAType = invoke_src_param_type(top),
-                srcBType = srcb.srcbType,
+                srcAParamType = invoke_src_param_type(top),
+                srcBParamType = srcb.srcbParamType,
                 tupAType = strip_const_ref(clone_type(top._type.firstType)),
                 tupBType = srcb.tupBType,
                 keyaLam = core.keyaLam,
@@ -136,17 +138,17 @@ class ArrayAdapter : SourceAdapter {
 def private wrap_two_source_invoke(shape; var stmts : array<Expression?>; retType : TypeDeclPtr; wrapIter : bool; at : LineInfo) : Expression? {
     let srcAName = shape.srcAName
     let srcBName = shape.srcBName
-    let srcAType = shape.srcAType
-    let srcBType = shape.srcBType
+    let srcAParamType = shape.srcAParamType
+    let srcBParamType = shape.srcBParamType
     let srcAExpr = shape.srcAExpr
     let srcBExpr = shape.srcBExpr
     var emission : Expression?
     if (retType != null) {
-        emission = qmacro(invoke($($i(srcAName) : $t(srcAType), $i(srcBName) : $t(srcBType)) : $t(retType) {
+        emission = qmacro(invoke($($i(srcAName) : $t(srcAParamType), $i(srcBName) : $t(srcBParamType)) : $t(retType) {
             $b(stmts)
         }, $e(srcAExpr), $e(srcBExpr)))
     } else {
-        emission = qmacro(invoke($($i(srcAName) : $t(srcAType), $i(srcBName) : $t(srcBType)) {
+        emission = qmacro(invoke($($i(srcAName) : $t(srcAParamType), $i(srcBName) : $t(srcBParamType)) {
             $b(stmts)
         }, $e(srcAExpr), $e(srcBExpr)))
     }
@@ -165,6 +167,7 @@ def private wrap_two_source_invoke(shape; var stmts : array<Expression?>; retTyp
 class ZipAdapter : SourceAdapter {
     shape : ZipShape
     def override name_prefix() : string => "zip_"
+    [arch(at="ARCHITECTURE_LINQ_FOLD.md#linq-fold-direct-return")]
     def override supports_direct_return() : bool => true
     def override bind_name(at : LineInfo) : string => qn("it", at)
     def override element_type() : TypeDeclPtr => null
@@ -188,6 +191,7 @@ class ZipAdapter : SourceAdapter {
         }
         return wrap_invoke(bodyStmts, null, false, at)
     }
+    [arch(at="ARCHITECTURE_LINQ_FOLD_SOURCES.md#linq-fold-array-zip")]
     def override wrap_source_loop(loopShape : LoopDispatch; var body : Expression?; at : LineInfo) : Expression? {
         let srcAName = shape.srcAName
         let srcBName = shape.srcBName
@@ -206,9 +210,11 @@ class ZipAdapter : SourceAdapter {
 class ArrayJoinAdapter : SourceAdapter {
     shape : ArrayJoinShape
     def override name_prefix() : string => "ajoin_"
+    [arch(at="ARCHITECTURE_LINQ_FOLD.md#linq-fold-direct-return")]
     def override supports_direct_return() : bool => true
     def override bind_name(at : LineInfo) : string => shape.resBindName
     def override element_type() : TypeDeclPtr => clone_type(shape.resultType)
+    [arch(at="ARCHITECTURE_LINQ_FOLD_SOURCES.md#linq-fold-group-by-over-join")]
     def override wrap_source_loop(loopShape : LoopDispatch; var body : Expression?; at : LineInfo) : Expression? {
         let jhashName = qn("ajoin_jhash", at)
         let arrName   = qn("ajoin_jarr", at)
@@ -260,11 +266,11 @@ def build_zip_rows {
     )
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_LINQ_FOLD_SOURCES.md#linq-fold-array-zip")]
 def emit_zip(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
     var zipCall = c.single["zip"]
     let zipArgCount = zipCall.arguments |> length
-    var lastName = ""
+    var terminatorName = ""
     var counterPred : Expression?
     if (c.single |> key_exists("term")) {
         var termCall = c.single["term"]
@@ -276,19 +282,19 @@ def emit_zip(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
                 if (termCall.arguments[1] == null) return null
                 counterPred = clone_expression(termCall.arguments[1])
             }
-            lastName = candidateName
+            terminatorName = candidateName
         } elif (candidateName == "sum" || candidateName == "min" || candidateName == "max" || candidateName == "average" || candidateName == "first") {
             if (candidateArgs != 1) return null
-            lastName = candidateName
+            terminatorName = candidateName
         } elif (candidateName == "first_or_default" || candidateName == "contains") {
             if (candidateArgs != 2) return null
-            lastName = candidateName
+            terminatorName = candidateName
         } elif (candidateName == "any") {
             if (candidateArgs != 1 && candidateArgs != 2) return null
-            lastName = candidateName
+            terminatorName = candidateName
         } elif (candidateName == "all") {
             if (candidateArgs != 2) return null
-            lastName = candidateName
+            terminatorName = candidateName
         } else {
             return null
         }
@@ -306,8 +312,8 @@ def emit_zip(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
     if (srcAExpr == null || srcAExpr._type == null || srcBExpr == null || srcBExpr._type == null) return null
     srcAExpr.genFlags.alwaysSafe = true
     srcBExpr.genFlags.alwaysSafe = true
-    var srcAType = invoke_src_param_type(srcAExpr)
-    var srcBType = invoke_src_param_type(srcBExpr)
+    var srcAParamType = invoke_src_param_type(srcAExpr)
+    var srcBParamType = invoke_src_param_type(srcBExpr)
     var elementType = clone_type(zipCall._type.firstType)
     var whereCond, projection, skipExpr, takeExpr, skipWhileCond, takeWhileCond : Expression?
     var seenSelect = false
@@ -395,16 +401,16 @@ def emit_zip(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
     let noLimits = skipExpr == null && takeExpr == null && skipWhileCond == null && takeWhileCond == null
     let noChain = whereCond == null && projection == null && noLimits && counterPred == null
     let bothHaveLength = type_has_length(srcAExpr._type) && type_has_length(srcBExpr._type)
-    let isCounter = lastName == "count" || lastName == "long_count"
+    let isCounter = terminatorName == "count" || terminatorName == "long_count"
     if (seenSelect && !allProjectionsPure && !noLimits) return null
-    let lane = classify_terminator(lastName)
+    let lane = classify_terminator(terminatorName)
     var zipShape = ZipShape(
         srcAExpr = srcAExpr,
         srcBExpr = srcBExpr,
         srcAName := srcAName,
         srcBName := srcBName,
-        srcAType = srcAType,
-        srcBType = srcBType,
+        srcAParamType = srcAParamType,
+        srcBParamType = srcBParamType,
         itAName := itAName,
         itBName := itBName
     )
@@ -416,7 +422,7 @@ def emit_zip(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
             let $i(itName) = ($i(itAName), $i(itBName))
         }
         var intermediateBinds : array<Expression?>
-        return emit_accumulator_lane(lastName, adapter, projection, whereCond, null,
+        return emit_accumulator_lane(terminatorName, adapter, projection, whereCond, null,
             intermediateBinds, preCondStmts, elementType, accName, itName, names,
             skipExpr, takeExpr, skipWhileCond, takeWhileCond, at)
     }
@@ -427,13 +433,13 @@ def emit_zip(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
         }
         var intermediateBinds : array<Expression?>
         let terminatorCall = c.single["term"]
-        return emit_early_exit_lane(lastName, adapter, projection, whereCond, null,
+        return emit_early_exit_lane(terminatorName, adapter, projection, whereCond, null,
             intermediateBinds, preCondStmts, elementType, terminatorCall, itName, names,
             skipExpr, takeExpr, skipWhileCond, takeWhileCond, at)
     }
     if (isCounter) {
         if (noChain) {
-            var sc = adapter->count_shortcut(lastName, at)
+            var sc = adapter->count_shortcut(terminatorName, at)
             if (sc != null) return sc
         }
         var stmts : array<Expression?>
@@ -472,7 +478,7 @@ def emit_zip(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
             loopBody = stmts_to_expr(preStmts)
         }
         return emit_counter_lane(adapter, accName, itName, names,
-            skipExpr, takeExpr, skipWhileCond, loopBody, at, lastName == "long_count")
+            skipExpr, takeExpr, skipWhileCond, loopBody, at, terminatorName == "long_count")
     }
     let needsItBindLocal = whereCond != null || projection != null || skipWhileCond != null || takeWhileCond != null
     var pushStmts : array<Expression?>

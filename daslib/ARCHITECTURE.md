@@ -6,7 +6,7 @@ Companion documents carry separate concerns.
 - `ARCHITECTURE_LINT.md` - sec. 1-4: perf_lint, lint_config, lint, style_lint.
 - `ARCHITECTURE_EMIT.md` - sec. 5-6: aot_cpp, aot_standalone; `ARCHITECTURE_SHADER.md` - sec. 7, 28-29: flatten, the shader rails.
 - `ARCHITECTURE_CAPI.md` - sec. 30: c_api_header, the C surface both backends emit.
-- `ARCHITECTURE_LINQ.md` - sec. 11-17, 33, 37: the linq family, sql_linq, sql_migrate.
+- `ARCHITECTURE_LINQ.md` - the in-memory linq family (linq, linq_boost, linq_das); `ARCHITECTURE_LINQ_FOLD.md` - the `_fold` splice kernel, `ARCHITECTURE_LINQ_FOLD_SOURCES.md` - its array, decs, json, table and sql adapters; `ARCHITECTURE_SQL_LINQ.md` - sql_linq and sql_migrate.
 - `ARCHITECTURE_CURSOR.md` - sec. 40: ast_cursor, the cursor module the LSP and MCP navigation tools share.
 - `ARCHITECTURE_SYNTAX.md` - sec. 42: the raw assignment spellings, the formatter / printer / builtin sides of the lexer, parser and inference pairs.
 - `ARCHITECTURE_MEMORY.md` - sec. 43: runtime memory snapshots.

@@ -41,7 +41,7 @@ require daslib/linq_fold_sql
 require daslib/module_group
 require [linq_fold_source]
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_LINQ_FOLD.md#linq-fold-file-charters")]
 def private fold_linq_default(var expr : Expression?) : Expression? {   // nolint:STYLE037 - one arm per linq call shape in the folded chain
     var blk = new ExprBlock(at = expr.at)
     var (top, calls) = flatten_linq(expr)
@@ -62,12 +62,12 @@ def private fold_linq_default(var expr : Expression?) : Expression? {   // nolin
                 let sep : string = ends_with(callName, "_") ? "" : "_"
                 if (argIndex == 0 && top._type.isIterator && !cll._1.noToArrayVariant) {
                     callName = "{callName}{sep}to_array"
-                } elif (argIndex != 0 && cll._1.inplace) {
+                } elif (argIndex != 0 && cll._1.hasInplaceVariant) {
                     callName = "{callName}{sep}inplace"
                     inplace = true
                 }
             }
-            for (i in cll._1.recursive) {
+            for (i in cll._1.foldedArgIndices) {
                 if (i >= 1 && i < cll._0.arguments |> length && is_linq_call(cll._0.arguments[i])) {
                     var argExpr = make_call(cll._0.at, "_fold")
                     (argExpr as ExprCallMacro).arguments |> emplace <| cll._0.arguments[i]
@@ -78,6 +78,7 @@ def private fold_linq_default(var expr : Expression?) : Expression? {   // nolin
             let numArgs = cll._0.arguments |> length
             for (i in 1..numArgs) {
                 var argClone = clone_expression(cll._0.arguments[i])
+                // a bare each(arr) srcB is a call argument, not a for source - unmarked it trips error 31013
                 if (match_call_in_module(argClone, "each", "builtin") != null) {
                     argClone.genFlags.alwaysSafe = true
                 }
@@ -116,7 +117,7 @@ def private fold_linq_default(var expr : Expression?) : Expression? {   // nolin
     return res
 }
 
-[_macro]
+[_macro, arch(at="ARCHITECTURE_LINQ_FOLD.md#linq-fold-row-registration")]
 def private register_all_linq_fold_rows {
     if (!is_compiling_macros_in_module("linq_fold")) return
     build_order_family_rows()
@@ -129,7 +130,7 @@ def private register_all_linq_fold_rows {
     call_module_group("linq_fold_source", "register_linq_fold_source")
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_LINQ_FOLD.md#linq-fold-adapter-contract")]
 def private run_splice_adapter(var calls : array<tuple<ExprCall?; LinqCall?>>; var matchTop, ctxTop : Expression?;
                                var adapter : SourceAdapter?; exprIsIter : bool; at : LineInfo;
                                onlyRow : string = "") : Expression? {
@@ -162,7 +163,7 @@ def private run_splice_adapter(var calls : array<tuple<ExprCall?; LinqCall?>>; v
     return null
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_LINQ_FOLD.md#linq-fold-dispatch")]
 def private try_splice_patterns(prog : ProgramPtr; var expr : Expression?) : Expression? {
     var (top, calls) = flatten_linq(expr)
     if (expr._type == null) return null
@@ -199,10 +200,12 @@ def private try_splice_patterns(prog : ProgramPtr; var expr : Expression?) : Exp
     if (tabCall != null) {
         let tabName = get_call_short_name(tabCall)
         let valT = tabCall.arguments[0]._type.secondType
+        // a non-copyable each_kv goes to the array arm, whose each_kv instantiation reports the user-facing concept error
         if (tabName != "each_kv" || (valT != null && valT.canCopy)) {
             let lane = tabName == "each_kv" ? TableLane.KV : (tabName == "keys" ? TableLane.KEYS : TableLane.VALUES)
             var ttopClone = clone_expression(top)
             if (ttopClone._type != null && ttopClone._type.firstType != null) {
+                // keys/each_kv type their element -const; spelled into an emitted buffer type it breaks push_clone unification
                 ttopClone._type.firstType.flags.removeConstant = false
             }
             var elemT = clone_type(tabCall._type.firstType)
@@ -214,7 +217,7 @@ def private try_splice_patterns(prog : ProgramPtr; var expr : Expression?) : Exp
                 if (probe != null) return probe
             }
             if (lane != TableLane.VALUES) {
-                drop_redundant_distinct(calls)
+                drop_distinct_over_unique_keys(calls)
             }
             return run_splice_adapter(calls, ttopClone, ttopClone, tadapter, exprIsIter, at)
         }
@@ -227,6 +230,7 @@ def private try_splice_patterns(prog : ProgramPtr; var expr : Expression?) : Exp
 
 [call_macro(name="_fold")]
 class private LinqFold : AstCallMacro {
+    [arch(at="ARCHITECTURE_LINQ_FOLD.md#linq-fold-dispatch")]
     def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
         macro_verify(call.arguments |> length == 1, prog, call.at, "expecting _fold(expression)")
         macro_verify(call.arguments[0]._type != null, prog, call.at, "expecting linq expression")

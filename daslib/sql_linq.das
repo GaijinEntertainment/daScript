@@ -111,6 +111,7 @@ def to_sql_literal(value : auto(TT)) : string {
     static_if (typeinfo is_enum(value)) {
         return "{int(value)}"
     } static_elif (typeinfo is_bitfield(value)) {
+        // const-folding can turn uint8(SomeBitfield.bit) into a bitfield-typed constant, so workhorse-looking binds land here
         return "{uint64(value)}"
     } else {
         concept_assert(false, "to_sql_literal: unsupported type for `_create_view` body inlining. Define `def to_sql_literal(v : YourType) : string` in YourType's module.")
@@ -247,8 +248,8 @@ struct private SqlQuery {
     hadError    : bool
     lastError   : string
     inlineConstants : bool
-    innerSql       : string
-    innerBindExprs : array<ExpressionPtr>
+    fromSubquerySql       : string
+    fromSubqueryBinds : array<ExpressionPtr>
     minPhaseSeen   : int = INT_MAX_PHASE
     fromRowType    : TypeDeclPtr
 }
@@ -286,7 +287,7 @@ def private push_inline_lit(var out : array<SqlFrag>; e : ExpressionPtr) {
     out |> push(SqlFrag(inline_lit = clone_expression(e)))
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_SQL_LINQ.md#sql-in-band-markers")]
 def private fold_to_builder(var frags : array<SqlFrag>; providerIdx : int; at : LineInfo;
                             var sqlExpr : ExpressionPtr&;
                             var bindExprs : array<ExpressionPtr>) {
@@ -295,7 +296,7 @@ def private fold_to_builder(var frags : array<SqlFrag>; providerIdx : int; at : 
     var pending = ""
     for (f in frags) {
         if (f is text) {
-            pending += f as text // nolint:PERF001
+            pending += f as text // nolint:PERF001 - short-burst run in a macro function, flushed into ExprConstString nodes
         } elif (f is bind) {
             pending += invoke(prov.renderPlaceholder, length(bindExprs) + 1) // nolint:PERF001
             var be : ExpressionPtr = f as bind
@@ -340,7 +341,7 @@ def private sql_to_frags(sql : string; var orderedBinds : array<ExpressionPtr>; 
     sql_to_frags_ex(sql, orderedBinds, noInlineIds, out)
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_SQL_LINQ.md#sql-in-band-markers")]
 def private sql_to_frags_ex(sql : string;
                             var orderedBinds : array<ExpressionPtr>;
                             var orderedInlineIds : array<ExpressionPtr>;
@@ -391,7 +392,7 @@ def private source_alias_for_idx(q : SqlQuery; idx : int) : string {
     return q.joins[idx - 1].alias
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_SQL_LINQ.md#sql-multi-q-lowering")]
 def private source_rootType_for_idx(var q : SqlQuery&; idx : int) : TypeDeclPtr {
     if (idx == 0) {
         if (q.rootType == null && q.fromRowType != null) return q.fromRowType
@@ -412,6 +413,7 @@ def private source_rootType_for_alias(var q : SqlQuery&; alias : string) : TypeD
     return q.rootType
 }
 
+//! @sql_fts_rank renders FTS5's hidden rank column unquoted - a quoted "rank" names a real column
 [macro_function]
 def private column_sql_for_alias(alias : string; rootT : TypeDeclPtr; field : string) : string {
     if (is_fts_rank_field(rootT, field)) return "rank"
@@ -458,7 +460,7 @@ def private lookup_arg_source(q : SqlQuery; argName : string) : int {
     return -1
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_SQL_LINQ.md#sql-join-projection-snapshot")]
 def private find_projection_alias(q : SqlQuery; name : string) : int {
     let n = length(q.joinProjRecordNames)
     for (i in range(n)) {
@@ -478,7 +480,7 @@ def private projection_alias_list(q : SqlQuery) : string {
     }
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_SQL_LINQ.md#sql-join-projection-snapshot")]
 def private render_projection_alias_sql(var q : SqlQuery&; aliasIdx : int) : string {
     if (!empty(q.joinSelectColSqlFragments[aliasIdx])) return q.joinSelectColSqlFragments[aliasIdx]
     let alias = q.joinSelectColAliases[aliasIdx]
@@ -577,7 +579,7 @@ def private is_nullable_column_ref(var node : ExpressionPtr; var q : SqlQuery&) 
     return true
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_SQL_LINQ.md#sql-distinct-by-wrap")]
 def private build_distinct_by_inner_subquery(q : SqlQuery; pkField : string; useMax : bool) : string {
     let sqlK = field_to_column_name(q.rootType, q.distinctByCol)
     let pkCol = field_to_column_name(q.rootType, pkField)
@@ -615,7 +617,7 @@ def private finalize_distinct_by_count_wrap(var q : SqlQuery&; isLong : bool; pr
         q.hadError = true
         return
     }
-    q.innerSql = build_distinct_by_inner_subquery(q, pkField, q.distinctByLast)
+    q.fromSubquerySql = build_distinct_by_inner_subquery(q, pkField, q.distinctByLast)
     q.fromRowType = q.rootType
     q.whereSql = predSql
     q.aggregateExpr = "COUNT(*)"
@@ -635,7 +637,7 @@ def private finalize_distinct_by_aggregate_wrap(var q : SqlQuery&; sqlOp : strin
         q.hadError = true
         return
     }
-    q.innerSql = build_distinct_by_inner_subquery(q, pkField, q.distinctByLast)
+    q.fromSubquerySql = build_distinct_by_inner_subquery(q, pkField, q.distinctByLast)
     q.fromRowType = q.rootType
     q.aggregateExpr = "{sqlOp}(\"{sqlCol}\")"
     q.aggregateType = aggregateType
@@ -651,7 +653,7 @@ def private finalize_distinct_by_passthrough_wrap(var q : SqlQuery&; prog : Prog
         q.hadError = true
         return
     }
-    q.innerSql = build_distinct_by_inner_subquery(q, pkField, q.distinctByLast)
+    q.fromSubquerySql = build_distinct_by_inner_subquery(q, pkField, q.distinctByLast)
     q.fromRowType = q.rootType
 }
 
@@ -663,7 +665,7 @@ def private check_distinct_by_passthrough_gating(var q : SqlQuery&; prog : Progr
         q.hadError = true
         return false
     }
-    if (!empty(q.innerSql) || !empty(q.innerBindExprs)) {
+    if (!empty(q.fromSubquerySql) || !empty(q.fromSubqueryBinds)) {
         macro_error(prog, at, "_sql: chain operators that phase-divert before `_distinct_by(K)` (e.g. `take(N) |> _distinct_by(K)` or `skip(N) |> _distinct_by(K)`) are not yet supported - restructure so `_distinct_by` sits directly above the source (e.g. `_distinct_by(K) |> take(N)` for cap-after-distinct semantics)")
         q.hadError = true
         return false
@@ -671,7 +673,7 @@ def private check_distinct_by_passthrough_gating(var q : SqlQuery&; prog : Progr
     return true
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_SQL_LINQ.md#sql-distinct-by-wrap")]
 def private maybe_finalize_distinct_by_passthrough(var q : SqlQuery&; prog : ProgramPtr; at : LineInfo) : bool {
     if (empty(q.distinctByCol) || q.proj == ProjectionShape.Aggregate) return true
     if (!check_distinct_by_passthrough_gating(q, prog, at)) return false
@@ -679,7 +681,7 @@ def private maybe_finalize_distinct_by_passthrough(var q : SqlQuery&; prog : Pro
     return !q.hadError
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_SQL_LINQ.md#sql-distinct-by-wrap")]
 def private peel_column_aggregate(var node : ExpressionPtr; var q : SqlQuery&;
                                   linqName : string; sqlOp : string; promote_to_double : bool;
                                   prog : ProgramPtr; at : LineInfo) : bool {
@@ -778,7 +780,7 @@ def private try_peel_distinct_by_field(var node : ExpressionPtr; var distinctSou
     return fieldName
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_SQL_LINQ.md#sql-distinct-by-wrap")]
 def private peel_count_terminal(var node : ExpressionPtr; var q : SqlQuery&;
                                 linqName : string; isLong : bool;
                                 prog : ProgramPtr; at : LineInfo) : bool {
@@ -860,7 +862,7 @@ def private extract_key_selector_field(var keyLambda : ExpressionPtr; expectedAr
     return fieldName
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_SQL_LINQ.md#sql-multi-q-lowering")]
 def private snapshot_q_to_subquery_wrap(var q : SqlQuery&; prog : ProgramPtr; at : LineInfo;   // nolint:STYLE038 - flat field-by-field snapshot of SqlQuery; the enumeration IS the function
                                         fillPassthrough : bool = false; keepLimitInner : bool = false) : bool {
     // nolint:STYLE015
@@ -931,9 +933,9 @@ def private snapshot_q_to_subquery_wrap(var q : SqlQuery&; prog : ProgramPtr; at
     var savedDb = q.dbExpr
     let savedInView = q.inView
     let savedHadError = q.hadError
-    let innerSql = build_sql_string(q, true)
-    var innerBinds : array<ExpressionPtr>
-    collect_query_binds(q, innerBinds)
+    let fromSubquerySql = build_sql_string(q, true)
+    var fromSubqueryBinds : array<ExpressionPtr>
+    collect_query_binds(q, fromSubqueryBinds)
     var projType = inner_projection_type(q, at)
     q.rootType = null
     q.projectedRowType = null
@@ -985,8 +987,8 @@ def private snapshot_q_to_subquery_wrap(var q : SqlQuery&; prog : ProgramPtr; at
     q.argSourceIdx |> clear
     q.upsertMode = false
     q.minPhaseSeen = INT_MAX_PHASE
-    q.innerSql = innerSql
-    q.innerBindExprs <- innerBinds
+    q.fromSubquerySql = fromSubquerySql
+    q.fromSubqueryBinds <- fromSubqueryBinds
     q.fromRowType = projType
     q.dbExpr = savedDb
     q.inView = savedInView
@@ -1015,7 +1017,7 @@ def private snapshot_q_to_subquery_wrap(var q : SqlQuery&; prog : ProgramPtr; at
     return true
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_SQL_LINQ.md#sql-multi-q-lowering")]
 def private maybe_wrap_take_before_aggregate(var q : SqlQuery&; prog : ProgramPtr; at : LineInfo) : bool {
     if (q.proj != ProjectionShape.Aggregate || (q.limitBindExpr == null && q.offsetBindExpr == null)) return true
     return snapshot_q_to_subquery_wrap(q, prog, at, [keepLimitInner = true])
@@ -1055,7 +1057,7 @@ def private apply_passthrough_projection(var q : SqlQuery&; projType : TypeDeclP
     return true
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_SQL_LINQ.md#sql-column-resolution")]
 def private process_join_call(var jCall : ExprCall?; var q : SqlQuery&;   // nolint:STYLE037,STYLE038 - one arm per join shape; the arms share the projection registry
                               kind : JoinKind; prog : ProgramPtr; at : LineInfo) : bool {
     if (q.seenJoin) {
@@ -1238,7 +1240,7 @@ def private process_join_call(var jCall : ExprCall?; var q : SqlQuery&;   // nol
     return true
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_SQL_LINQ.md#sql-column-resolution")]
 def private process_cross_join_call(var jCall : ExprCall?; var q : SqlQuery&;   // nolint:STYLE037,STYLE038 - one arm per cross-join shape; the arms share the projection registry
                                     prog : ProgramPtr; at : LineInfo) : bool {
     if (q.seenJoin) {
@@ -1371,13 +1373,13 @@ def private collect_query_binds(var q : SqlQuery&; var out : array<ExpressionPtr
     //   6. Set-op RHS binds (compound `<lhs> UNION <rhs>` — RHS parsed before any outer LIMIT)
     //   7. LIMIT bind (compound applies to combined result, parsed last)
     //   8. OFFSET bind
-    var total = length(q.projBindExprs) + length(q.innerBindExprs) + length(q.bindExprs) + length(q.havingBindExprs) + length(q.setOpRhsBinds) + 2
+    var total = length(q.projBindExprs) + length(q.fromSubqueryBinds) + length(q.bindExprs) + length(q.havingBindExprs) + length(q.setOpRhsBinds) + 2
     for (j in q.joins) {
         total += length(j.rightOnBindExprs)
     }
     out |> reserve(out |> length + total)
     out |> push_from(q.projBindExprs)
-    out |> push_from(q.innerBindExprs)
+    out |> push_from(q.fromSubqueryBinds)
     for (j in q.joins) {
         out |> push_from(j.rightOnBindExprs)
     }
@@ -1427,7 +1429,7 @@ def private fromrow_alias_list(rowT : TypeDeclPtr) : string {
 //   GroupedNamedTuple    → same shape from groupedSelectTypes.
 //   SingleColumn / Aggregate → returned as a 1-arg tuple (alias = projRecordNames[0] when set, else "_0"); outer reference is `_._0` or `_.alias`.
 // fromRowType is the witness pred_to_sql consults to know "is this an over-subquery outer Q, and what aliases does it expose?"
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_SQL_LINQ.md#sql-whole-source-projection")]
 def private inner_projection_type(var inner : SqlQuery&; at : LineInfo) : TypeDeclPtr {
     if (inner.proj == ProjectionShape.FullRow) {
         return inner.projectedRowType != null ? inner.projectedRowType : inner.rootType
@@ -1459,7 +1461,7 @@ def private inner_projection_type(var inner : SqlQuery&; at : LineInfo) : TypeDe
     return inner.rootType
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_SQL_LINQ.md#sql-multi-q-lowering")]
 def private divert_to_inner(var node : ExpressionPtr; var q : SqlQuery&;
                             prog : ProgramPtr; at : LineInfo) : bool {
     var subQ = SqlQuery(inView = q.inView)
@@ -1481,11 +1483,11 @@ def private divert_to_inner(var node : ExpressionPtr; var q : SqlQuery&;
     }
     // nolint:STYLE015 force_aliases=true: outer references inner cols by alias. Without AS, SQLite
     // names the column as the raw expr (e.g. `COUNT(*)`); outer can't bind `_.alias` → `"alias"`.
-    let innerSql = build_sql_string(subQ, true)
-    var innerBinds : array<ExpressionPtr>
-    collect_query_binds(subQ, innerBinds)
-    q.innerSql = innerSql
-    q.innerBindExprs <- innerBinds
+    let fromSubquerySql = build_sql_string(subQ, true)
+    var fromSubqueryBinds : array<ExpressionPtr>
+    collect_query_binds(subQ, fromSubqueryBinds)
+    q.fromSubquerySql = fromSubquerySql
+    q.fromSubqueryBinds <- fromSubqueryBinds
     q.fromRowType = inner_projection_type(subQ, at)
     if (empty(q.tableName)) {
         q.tableName = subQ.tableName
@@ -1520,7 +1522,7 @@ def private divert_to_inner(var node : ExpressionPtr; var q : SqlQuery&;
 // Returns: 0 = no divert (caller continues normal processing).
 //          1 = divert succeeded (caller should `return true`).
 //         -1 = divert errored (caller should `return false`).
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_SQL_LINQ.md#sql-eval-phases")]
 def private maybe_divert(var q : SqlQuery&; my_phase : int; var node : ExpressionPtr;
                          prog : ProgramPtr; at : LineInfo;
                          max_outer_phase : int = INT_MAX_PHASE) : int {
@@ -1530,7 +1532,7 @@ def private maybe_divert(var q : SqlQuery&; my_phase : int; var node : Expressio
     return 0
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_SQL_LINQ.md#sql-chain-peel-order")]
 def private peel_to_array_terminal(var node : ExpressionPtr) : ExpressionPtr {
     var inner : ExpressionPtr
     if (qmatch(node, _to_array($e(inner))).matched) return inner
@@ -1539,7 +1541,7 @@ def private peel_to_array_terminal(var node : ExpressionPtr) : ExpressionPtr {
     return null
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_SQL_LINQ.md#sql-chain-peel-order")]
 def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : ProgramPtr; at : LineInfo) : bool {   // nolint:STYLE037,STYLE038 - one arm per linq chain operator; the dispatch table IS the analyzer
     if (node == null) {
         macro_error(prog, at, "_sql: empty chain")
@@ -1948,6 +1950,7 @@ def private analyze_chain(var node : ExpressionPtr; var q : SqlQuery&; prog : Pr
             let preHadLimit = q.limitBindExpr != null
             let preHadOffset = q.offsetBindExpr != null
             if (!analyze_chain(soCall.arguments[0], q, prog, at)) return false
+            // SQLite rejects ORDER BY / LIMIT on one side of a compound SELECT - both sides are checked
             if (q.seenOrderBy && !preSeenOrderBy) {
                 macro_error(prog, at, "_sql: set-op LHS cannot use `_order_by` (apply to the combined set-op result instead)")
                 return false
@@ -2205,7 +2208,7 @@ def private resolve_proj_arg_to_source(q : SqlQuery; argName : string; prog : Pr
     return idx
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_SQL_LINQ.md#sql-bind-order")]
 def private analyze_projection(var body : ExpressionPtr; var q : SqlQuery&; prog : ProgramPtr; at : LineInfo) : bool {
     let beforeBinds = length(q.bindExprs)
     let ok = analyze_projection_impl(body, q, prog, at)
@@ -2219,7 +2222,7 @@ def private analyze_projection(var body : ExpressionPtr; var q : SqlQuery&; prog
     return ok
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_SQL_LINQ.md#sql-whole-source-projection")]
 def private analyze_projection_impl(var body : ExpressionPtr; var q : SqlQuery&; prog : ProgramPtr; at : LineInfo) : bool {   // nolint:STYLE037,STYLE038 - one arm per projection shape; the arms share the select-column registry
     if (body == null) {
         macro_error(prog, at, "_sql: _select: missing projection")
@@ -2681,7 +2684,7 @@ def private analyze_global_aggregate_projection(var aggregateLambda : Expression
     return true
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_SQL_LINQ.md#sql-group-first-row")]
 def private is_first_of_group_call(var node : ExpressionPtr) : bool {
     var n = node
     if (n is ExprRef2Value) {
@@ -2698,7 +2701,7 @@ def private is_first_of_group_call(var node : ExpressionPtr) : bool {
     return qmatch(call.arguments[0], _._1).matched
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_SQL_LINQ.md#sql-group-first-row")]
 def private analyze_grouped_projection(var body : ExpressionPtr; var q : SqlQuery&; prog : ProgramPtr; at : LineInfo) : bool {   // nolint:STYLE037,STYLE038 - one arm per grouped-projection slot shape
     if (body == null) {
         macro_error(prog, at, "_sql: _select after _group_by: missing projection")
@@ -2836,7 +2839,7 @@ def private analyze_grouped_projection(var body : ExpressionPtr; var q : SqlQuer
     return true
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_SQL_LINQ.md#sql-in-band-markers")]
 def private collect_one_order_key(var val : ExpressionPtr; var q : SqlQuery&; direction : string; prog : ProgramPtr; at : LineInfo) : bool {
     var fieldName : string
     if (qmatch(val, _.$f(fieldName)).matched) {
@@ -2875,6 +2878,7 @@ def private collect_one_order_key(var val : ExpressionPtr; var q : SqlQuery&; di
     return false
 }
 
+[arch(at="ARCHITECTURE_SQL_LINQ.md#sql-group-keys")]
 def private collect_order_keys(var body : ExpressionPtr; var q : SqlQuery&; direction : string; prog : ProgramPtr; at : LineInfo) : bool {   // nolint:STYLE037 - one arm per order-key expression shape
     if (body == null) {
         macro_error(prog, at, "_sql: _order_by: missing key expression")
@@ -2946,6 +2950,7 @@ def private collect_order_keys(var body : ExpressionPtr; var q : SqlQuery&; dire
     return collect_one_order_key(body, q, direction, prog, at)
 }
 
+//! descMask is 32 bits: keys past bit 31 sort ASC, and i < 32u keeps the shift defined
 def private collect_order_by_keys(var body : ExpressionPtr; var q : SqlQuery&; descMask : uint; prog : ProgramPtr; at : LineInfo) : bool {
     if (body == null) {
         macro_error(prog, at, "_sql: _order_by_keys: missing key expression")
@@ -2976,7 +2981,7 @@ def private collect_order_by_keys(var body : ExpressionPtr; var q : SqlQuery&; d
     return collect_one_order_key(body, q, dir, prog, at)
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_SQL_LINQ.md#sql-inlined-key-constants")]
 def private render_inlined_key_sql(var body : ExpressionPtr; var q : SqlQuery&; ctx : string; prog : ProgramPtr; at : LineInfo) : string {
     let savedInlineFlag = q.inlineConstants
     let beforeBinds = length(q.bindExprs)
@@ -2993,7 +2998,7 @@ def private render_inlined_key_sql(var body : ExpressionPtr; var q : SqlQuery&; 
     return frag
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_SQL_LINQ.md#sql-group-keys")]
 def private push_group_key(var entry : ExpressionPtr; var q : SqlQuery&; prog : ProgramPtr; at : LineInfo) : bool {
     var fieldName : string
     if (qmatch(entry, _.$f(fieldName)).matched) {
@@ -3085,6 +3090,7 @@ def private pred_fail(var q : SqlQuery&; prog : ProgramPtr; at : LineInfo; msg :
 def private is_string_typed(e : ExpressionPtr) : bool =>
     e != null && e._type != null && e._type.baseType == Type.tString
 
+[arch(at="ARCHITECTURE_SQL_LINQ.md#sql-column-resolution")]
 def private mentions_source_arg(node : ExpressionPtr; q : SqlQuery; asReceiver : bool = false) : bool {    // nolint:STYLE037 — exact-type is-ladder over handled AST node types
     if (node == null) return false
     if (node is ExprRef2Value) {
@@ -3152,6 +3158,7 @@ def private pred_to_sql_boolctx(var node : ExpressionPtr; var q : SqlQuery&; pro
     return s
 }
 
+[arch(at="ARCHITECTURE_SQL_LINQ.md#sql-column-resolution")]
 def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : ProgramPtr; at : LineInfo) : string {   // nolint:STYLE037,STYLE038 - one arm per predicate node kind; the ladder IS the translator
     if (node == null) return pred_fail(q, prog, at, "_sql: _where: null sub-expression")
     if (node is ExprRef2Value) {
@@ -3236,6 +3243,7 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
     {
         var lhs, rhs : ExpressionPtr
         if (qmatch(node, $e(lhs) + $e(rhs)).matched) {
+            // string + is SQL || - SQLite's + is numeric ('a' + 'b' = 0)
             let op = (is_string_typed(node) || is_string_typed(lhs) || is_string_typed(rhs)) ? "||" : "+"
             return "({pred_to_sql(lhs, q, prog, at)}) {op} ({pred_to_sql(rhs, q, prog, at)})"
         }
@@ -3256,6 +3264,7 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
         var lhs, rhs : ExpressionPtr
         if (qmatch(node, $e(lhs) % $e(rhs)).matched) return "({pred_to_sql(lhs, q, prog, at)}) % ({pred_to_sql(rhs, q, prog, at)})"
     }
+    // bitwise ops match on the operator string - qmatch cannot parse >>
     if (node is ExprOp2) {
         var op2 = node as ExprOp2
         let opName = string(op2.op)
@@ -3307,6 +3316,7 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
                     if (has_field_annotation(srcType, colName, "sql_blob")) return pred_fail(q, prog, at, "_sql: cannot descend into @sql_blob column '{colName}'; filter in daslang after round-trip, or use raw SQL")
                     if (has_field_annotation(srcType, colName, "sql_json")) {
                         let jsonPath <- reversed_json_path(chain)
+                        // every JSON path segment is checked: SQLite answers NULL for a missing path, so a typo would filter silently
                         let leaf = resolve_nested_field_type(srcType, colName, jsonPath)
                         if (leaf == null) return pred_fail(q, prog, at, "_sql: JSON path on @sql_json column '{colName}' walks into a field that isn't a struct/tuple member at depth {length(jsonPath)}")
                         return render_json_extract(q.providerIdx, srcType, source_alias_for_idx(q, srcIdx), colName, jsonPath)
@@ -3340,7 +3350,7 @@ def private pred_to_sql(var node : ExpressionPtr; var q : SqlQuery&; prog : Prog
             } else {
                 if (argName == "_") {
                     // nolint:STYLE015 Multi-Q outer over named-tuple inner: rootType is null, resolve `_.alias`
-                    // against fromRowType.argNames; FROM is `(<innerSql>) AS t0` so unqualified suffices.
+                    // against fromRowType.argNames; FROM is `(<fromSubquerySql>) AS t0` so unqualified suffices.
                     if (q.rootType == null && q.fromRowType != null) {
                         if (!fromrow_alias_exists(q.fromRowType, fieldName)) return pred_fail(q, prog, at, "_sql: column `{fieldName}` is not a projection alias of the inner subquery; valid aliases are {fromrow_alias_list(q.fromRowType)}")
                         return "\"{fieldName}\""
@@ -3611,6 +3621,7 @@ def private analyze_subquery_with_pred(var subqExpr : ExpressionPtr; var predLam
     return sql
 }
 
+//! exact workhorse names only - vector constructors (int2, float3, ...) are not casts
 let private WORKHORSE_CAST_SQL : table<string; string> <- {
     "int"    => "INTEGER", "int64"  => "INTEGER", "int8"  => "INTEGER", "int16" => "INTEGER",
     "uint"   => "INTEGER", "uint64" => "INTEGER", "uint8" => "INTEGER", "uint16" => "INTEGER",
@@ -3618,7 +3629,7 @@ let private WORKHORSE_CAST_SQL : table<string; string> <- {
     "string" => "TEXT"
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_SQL_LINQ.md#sql-membership-lowering")]
 def private fn_call_to_sql(var call : ExprCall?; var q : SqlQuery&; prog : ProgramPtr; at : LineInfo) : string {   // nolint:STYLE037,STYLE038 - one arm per translatable daslang function name
     if (call == null) return ""
     var fname : string
@@ -3726,6 +3737,7 @@ def private fn_call_to_sql(var call : ExprCall?; var q : SqlQuery&; prog : Progr
     }
     let castType = WORKHORSE_CAST_SQL?[fname] ?? ""
     if (!empty(castType)) {
+        // integer string(v, hex) lowers only for a literal hex=false - SQL CAST cannot format hex
         var lowerable = argc == 1
         if (!lowerable && fname == "string" && argc == 2) {
             let hexArg = call.arguments[1]
@@ -3737,6 +3749,7 @@ def private fn_call_to_sql(var call : ExprCall?; var q : SqlQuery&; prog : Progr
             return "CAST({inner} AS {castType})"
         }
     }
+    // a bare Option<T> join-side var probes its join key column - NULL exactly on null-padded rows
     if (fname == "is_some" && argc == 1) {
         var argName : string
         let nullProbe = try_join_null_probe(call.arguments[0], q, argName, true)
@@ -3892,6 +3905,7 @@ def private is_none_call(node : ExpressionPtr) : bool {
         let c = peeled as ExprCall
         let cname = string(c.name)
         if (cname == "none") return true
+        // reified template form
         return cname |> find("option") >= 0 && cname |> find("none") >= 0
     }
     return false
@@ -3901,7 +3915,7 @@ def private is_none_call(node : ExpressionPtr) : bool {
 def private next_bind_placeholder(bytes : array<uint8> const implicit; from : int) : int =>
     next_placeholder(bytes, from)._0
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_SQL_LINQ.md#sql-in-band-markers")]
 def private next_placeholder(bytes : array<uint8> const implicit; from : int) : tuple<int; uint8> {
     let n = length(bytes)
     var i = from
@@ -3937,6 +3951,7 @@ def private fill_default_columns(var q : SqlQuery&; rootT : TypeDeclPtr; prog : 
     }
 }
 
+//! reads the annotation: the user's generated _::_sql_table_name is unreachable from this module's macro context
 [macro_function]
 def private sql_table_name_from_type(rootT : TypeDeclPtr) : string {
     if (rootT == null || rootT.structType == null) return ""
@@ -4043,9 +4058,9 @@ def private build_sql_select(var q : SqlQuery&; force_aliases : bool = false) : 
             }
         }
         if (q.seenJoin) {
-            if (!empty(q.innerSql)) {
+            if (!empty(q.fromSubquerySql)) {
                 w |> write(" FROM (")
-                w |> write(q.innerSql)
+                w |> write(q.fromSubquerySql)
                 w |> write(") AS \"")
                 w |> write(q.rootAlias)
                 w |> write("\"")
@@ -4057,6 +4072,7 @@ def private build_sql_select(var q : SqlQuery&; force_aliases : bool = false) : 
                 w |> write("\"")
             }
             for (j in q.joins) {
+                // RIGHT / FULL OUTER JOIN need SQLite 3.39+
                 if (j.kind == JoinKind.Inner) {
                     w |> write(" INNER JOIN ")
                 } elif (j.kind == JoinKind.Left) {
@@ -4096,9 +4112,9 @@ def private build_sql_select(var q : SqlQuery&; force_aliases : bool = false) : 
                     }
                 }
             }
-        } elif (!empty(q.innerSql)) {
+        } elif (!empty(q.fromSubquerySql)) {
             w |> write(" FROM (")
-            w |> write(q.innerSql)
+            w |> write(q.fromSubquerySql)
             w |> write(") AS \"t0\"")
         } else {
             w |> write(" FROM \"")
@@ -4520,7 +4536,7 @@ def private resolve_nested_field_type(rootT : TypeDeclPtr; colName : string; jso
     return cur
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_SQL_LINQ.md#sql-group-first-row")]
 def private build_row_make_struct(var rowT : TypeDeclPtr; baseCol : int; at : LineInfo) : ExpressionPtr {
     var mkStruct = new ExprMakeStruct(at = at, makeType = clone_type(rowT))
     var mkS = new MakeStruct(uninitialized)
@@ -4540,7 +4556,7 @@ def private build_row_make_struct(var rowT : TypeDeclPtr; baseCol : int; at : Li
     return mkStruct
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_SQL_LINQ.md#sql-whole-source-projection")]
 def private build_row_builder(var q : SqlQuery&; prog : ProgramPtr; at : LineInfo) : ExpressionPtr {
     if (q.proj == ProjectionShape.Aggregate) {
         let colIdx = 0
@@ -4653,7 +4669,7 @@ def private normalize_chain_blocks(var node : ExpressionPtr) {
     if (!empty(call.arguments)) { normalize_chain_blocks(call.arguments[0]) }
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_SQL_LINQ.md#sql-single-source-arg-names")]
 def private normalize_single_source_arg_names(var node : ExpressionPtr) {
     if (chain_has_multi_source(node)) return
     normalize_chain_blocks(node)
@@ -4745,6 +4761,7 @@ def private emit_each_sql_macro_body(prog : ProgramPtr; var call : ExprCallMacro
         macro_error(prog, call.at, "_each_sql: chain ends in `_to_array()` - _each_sql streams rows lazily; drop the terminal, or switch to `_sql(...)` for materialization")
         return null
     }
+    // test proj before matr - an aggregate terminal also sets Materializer.One
     if (q.proj == ProjectionShape.Aggregate) {
         macro_error(prog, call.at, "_each_sql: chain ends in an aggregate (_count/_sum/_avg/_min/_max) - aggregates collapse to one scalar; iteration is degenerate. Use `_sql(...)` for the scalar value, or drop the aggregate to iterate over rows.")
         return null
@@ -4778,6 +4795,7 @@ def private emit_each_sql_macro_body(prog : ProgramPtr; var call : ExprCallMacro
     let prov = sql_provider_at(q.providerIdx)
     var stmtT = invoke(prov.makeStmtType)
     var stmtTC = invoke(prov.makeStmtTypeConst)
+    // binds run once in a block before the generator; the row reader is a lambda (@) because it outlives run_each_select's call
     var res = qmacro(_::run_each_select($e(dbExpr), $e(sqlExpr),
         $(var _sql_stmt : $t(stmtT)) {
             $b(bind_stmts)
@@ -4795,7 +4813,7 @@ class private EachSqlMacro : AstCallMacro {
     }
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_SQL_LINQ.md#sql-bind-order")]
 def private analyze_set_clause(var setExpr : ExpressionPtr; var q : SqlQuery&;   // nolint:STYLE037,STYLE038 - one arm per SET-clause assignment shape
                                var setSqlClauses : array<string>&;
                                var setBindExprs : array<ExpressionPtr>&;
@@ -4930,7 +4948,7 @@ def private emit_dml_call(var dbE : ExpressionPtr; var sqlExpr : ExpressionPtr;
     return res
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_SQL_LINQ.md#sql-bind-order")]
 def private emit_update_body(prog : ProgramPtr; var call : ExprCallMacro?;
                              var rootT : TypeDeclPtr;
                              isTry : bool; isReturning : bool) : ExpressionPtr {
@@ -5068,10 +5086,12 @@ def private validate_outer_args(prog : ProgramPtr; var call : ExprCallMacro?; va
 }
 
 class private OuterArgZeroMacro : AstCallMacro {
+    [arch(at="ARCHITECTURE_SQL_LINQ.md#sql-dml-raw-args")]
     def override canVisitArgument(call : ExprCallMacro?; argIndex : int) : bool => argIndex == 0
 }
 
 class private OuterArgTwoMacro : AstCallMacro {
+    [arch(at="ARCHITECTURE_SQL_LINQ.md#sql-dml-raw-args")]
     def override canVisitArgument(call : ExprCallMacro?; argIndex : int) : bool => argIndex < 2
 }
 
@@ -5245,7 +5265,7 @@ def private validate_conflict_cols(rootT : TypeDeclPtr; conflictCols : array<str
     return true
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_SQL_LINQ.md#sql-dml-raw-args")]
 def private analyze_upsert_set_clause(var setExpr : ExpressionPtr; var rootT : TypeDeclPtr; tableName : string;   // nolint:STYLE037,STYLE038 - one arm per upsert SET-clause assignment shape
                                       providerIdx : int;
                                       var setSqlClauses : array<string>&;
@@ -5413,7 +5433,7 @@ def private emit_upsert_variant(var dbE : ExpressionPtr; var rootT : TypeDeclPtr
     return emit_dml_call(dbE, sqlExpr, bindStmts, isTry, isReturning, rootT, provIdx, at)
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_SQL_LINQ.md#sql-upsert-pk-dispatch")]
 def private emit_upsert_body(prog : ProgramPtr; var call : ExprCallMacro?;
                              var rootT : TypeDeclPtr;
                              isTry : bool; isReturning : bool) : ExpressionPtr {

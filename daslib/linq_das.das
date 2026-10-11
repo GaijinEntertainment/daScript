@@ -51,6 +51,9 @@ require daslib/linq_boost public
 
 def private is_ident_byte(c : int) : bool => is_alnum(c) || c == '_'
 
+let private ORDERBY_MAX_KEYS = 4
+
+[arch(at="ARCHITECTURE_LINQ.md#linq-das-reader-pipeline")]
 def private strip_query_comments(query : string) : string {
     return modify_data(query) $(var arr) {
         let n = length(arr)
@@ -121,11 +124,11 @@ def private find_kw_depth0(q : string; kw : string; from : int) : int {
     return found
 }
 
-def private split_depth0(text : string) : array<string> {
+def private split_commas_depth0(text : string) : array<string> {
     var segs : array<string>
     peek_data(text) $(arr) {
         let n = length(arr)
-        segs |> reserve(4)
+        segs |> reserve(ORDERBY_MAX_KEYS)
         var depth = 0
         var inStr = false
         var segStart = 0
@@ -158,10 +161,11 @@ struct private OrderKeys {
     ok       : bool
 }
 
+[arch(at="ARCHITECTURE_LINQ.md#linq-das-orderby")]
 def private parse_orderby(rawOrder : string) : OrderKeys {
     var r : OrderKeys
     r.ok = true
-    let segs <- split_depth0(rawOrder)
+    let segs <- split_commas_depth0(rawOrder)
     r.keys |> reserve(length(segs))
     var idx = 0u
     for (seg in segs) {
@@ -172,6 +176,7 @@ def private parse_orderby(rawOrder : string) : OrderKeys {
             return <- r
         }
         r.keys |> push(keyText)
+        // idx < 32u only guards the shift - callers reject more than ORDERBY_MAX_KEYS keys with their own message
         if (dseg._1 && idx < 32u) { r.descMask = r.descMask | (1u << idx) }
         idx++
     }
@@ -179,12 +184,13 @@ def private parse_orderby(rawOrder : string) : OrderKeys {
     return <- r
 }
 
-def private emit_order_op(keys : array<string>; descMask : uint; ti : string) : string {
+[arch(at="ARCHITECTURE_LINQ.md#linq-das-orderby")]
+def private emit_order_op(keys : array<string>; descMask : uint; lambdaParam : string) : string {
     if (length(keys) == 1) {
         let op = (descMask & 1u) != 0u ? "_order_by_descending" : "_order_by"
-        return " |> {op}($({ti}) => {keys[0]})"
+        return " |> {op}($({lambdaParam}) => {keys[0]})"
     }
-    return " |> _order_by_keys($({ti}) => ({join(keys, ", ")}), {descMask}u)"
+    return " |> _order_by_keys($({lambdaParam}) => ({join(keys, ", ")}), {descMask}u)"
 }
 
 def private read_ident(q : string; from : int) : tuple<string; int> {
@@ -202,6 +208,7 @@ def private read_ident(q : string; from : int) : tuple<string; int> {
     return (slice(q, s, e), e)
 }
 
+//! a trailing kw counts only after whitespace, so a member access (c.iterator, c.descending) is never stripped
 def private strip_trailing_keyword(text : string; kw : string) : tuple<string; bool> {
     let p = strip(text)
     let m = length(kw)
@@ -215,6 +222,7 @@ def private strip_trailing_keyword(text : string; kw : string) : tuple<string; b
     return (p, false)
 }
 
+[arch(at="ARCHITECTURE_LINQ.md#linq-das-two-source")]
 def private build_src(rowType : string; srcText : string; fused : bool) : string {
     if (rowType == "") return fused ? "from_in({srcText})" : "({srcText})"
     if (srcText == "decs") return "from_decs_template(type<{rowType}>)"
@@ -271,6 +279,7 @@ def private is_label_position(arr : auto; j, n : int) : bool {
     return k < n && int(arr[k]) == '=' && (k + 1 >= n || (int(arr[k + 1]) != '=' && int(arr[k + 1]) != '>'))
 }
 
+[arch(at="ARCHITECTURE_LINQ.md#linq-das-token-model")]
 def private substitute_idents(text : string; subs : table<string; string>) : string {
     return build_string() $(var w) {
         peek_data(text) $(arr) {
@@ -336,6 +345,7 @@ def private rewrite_idents(text : string; names : array<string>; prefix : string
     return substitute_idents(text, subs)
 }
 
+[arch(at="ARCHITECTURE_LINQ.md#linq-das-token-model")]
 def private mentions_ident(text : string; name : string) : bool {
     var found = false
     let m = length(name)
@@ -391,6 +401,7 @@ def private mentions_ident(text : string; name : string) : bool {
 
 let JOIN_TI = "linq_join_ti"
 
+[arch(at="ARCHITECTURE_LINQ.md#linq-das-two-source")]
 def private emit_two_source(q : string; nq : int; varName : string; var2Name : string; srcA : string;   // nolint:STYLE037,STYLE038 - one arm per emitted `_fold` shape; the clause offsets are shared state
                             isJoin : bool; keyA : string; srcBForJoin : string; rowType2 : string;
                             secondIntroPos : int; tailStart : int; firstWhere : int;
@@ -422,6 +433,7 @@ def private emit_two_source(q : string; nq : int; varName : string; var2Name : s
     let isGroup = groupPos >= 0
     let termPos = isGroup ? groupPos : selectPos
     let orderByPos = (rawOrderByPos >= 0 && rawOrderByPos < termPos) ? rawOrderByPos : -1
+    // rejected here, or the 'into ...' text lands in the projection and fails as a bare syntax error
     let postTermInto = find_kw_depth0(q, "into", isGroup ? groupPos + 5 : selectPos + 6)
     if (postTermInto >= 0) {
         macro_error(prog, at, "linq: query-continuation 'into' after the 'select'/'group' terminal is not supported on a 'join' or multiple-'from' query - it works on single-source queries; a group-join 'into' goes before the terminal (`join ... equals ... into g select ...`)")
@@ -526,14 +538,15 @@ def private emit_two_source(q : string; nq : int; varName : string; var2Name : s
     var orderKeys : array<string>
     var orderDescMask = 0u
     if (orderByPos >= 0) {
+        // a 'where' may follow the 'orderby', so the keys end at the next clause, not at the terminal
         let rawOrder = strip(slice(q, orderByPos + 7, next_clause_kw(q, orderByPos + 7)))
         var op <- parse_orderby(rawOrder)
         if (!op.ok) {
             macro_error(prog, at, "linq: empty 'orderby' expression")
             return "(0)"
         }
-        if (length(op.keys) > 4) {
-            macro_error(prog, at, "linq: 'orderby' supports at most 4 keys (got {length(op.keys)})")
+        if (length(op.keys) > ORDERBY_MAX_KEYS) {
+            macro_error(prog, at, "linq: 'orderby' supports at most {ORDERBY_MAX_KEYS} keys (got {length(op.keys)})")
             return "(0)"
         }
         orderKeys <- op.keys   // nolint:PERF030 - target is the fresh empty decl above; the fill is conditional, so it cannot fold into the declaration
@@ -734,6 +747,7 @@ def private transpile_cross(q : string; nq : int; varName : string; rowType : st
                            secondFromPos, in2 + 2, firstWhere, prog, at)
 }
 
+//! the set is every clause that can end a 'let' right-hand side or open the body after the source
 def private next_clause_kw(q : string; from : int) : int {
     var best = length(q)
     for (kw in ["let", "where", "orderby", "select", "group", "join", "from", "into"]) {
@@ -743,10 +757,11 @@ def private next_clause_kw(q : string; from : int) : int {
     return best
 }
 
+[arch(at="ARCHITECTURE_LINQ.md#linq-das-let-inlining")]
 def private extract_lets(q : string; bodyStart : int; rangeVar : string;
                          prog : ProgramPtr; at : LineInfo) : tuple<bool; string> {
-    var subs : table<string; string>
-    var cuts : array<tuple<int; int; string>>
+    var resolvedLets : table<string; string>
+    var letSpans : array<tuple<int; int; string>>
     let srcEnd = next_clause_kw(q, bodyStart)
     let joinPos = find_kw_depth0(q, "join", bodyStart)
     let secondFromPos = find_kw_depth0(q, "from", bodyStart)
@@ -769,7 +784,7 @@ def private extract_lets(q : string; bodyStart : int; rangeVar : string;
                 letErr = "linq: 'let {name}' shadows the range variable '{name}'"
                 return
             }
-            if (key_exists(subs, name)) {
+            if (key_exists(resolvedLets, name)) {
                 letErr = "linq: 'let {name}' is already bound earlier in the query"
                 return
             }
@@ -791,9 +806,9 @@ def private extract_lets(q : string; bodyStart : int; rangeVar : string;
                 letErr = "linq: 'let {name}' has no following clause - a 'let' must precede the 'select'/'group' terminal"
                 return
             }
-            if (!empty(subs)) { rhs = substitute_idents(rhs, subs) }
-            subs[name] = "({rhs})"
-            cuts |> push((lp, rhsEnd, name))
+            if (!empty(resolvedLets)) { rhs = substitute_idents(rhs, resolvedLets) }
+            resolvedLets[name] = "({rhs})"
+            letSpans |> push((lp, rhsEnd, name))
             searchFrom = rhsEnd
         }
     }
@@ -801,15 +816,15 @@ def private extract_lets(q : string; bodyStart : int; rangeVar : string;
         macro_error(prog, at, letErr)
         return (false, "")
     }
-    if (empty(subs)) return (true, q)
+    if (empty(resolvedLets)) return (true, q)
     let body = build_string() $(var w) {
         peek_data(q) $(qd) {
             var active : table<string; string>
             var pos = srcEnd
-            for (c in cuts) {
+            for (c in letSpans) {
                 w |> write(substitute_idents(slice(qd, pos, c._0), active))
                 w |> write(" ")
-                active[c._2] = subs[c._2]
+                active[c._2] = resolvedLets[c._2]
                 pos = c._1
             }
             w |> write(substitute_idents(slice(qd, pos, length(qd)), active))
@@ -818,6 +833,7 @@ def private extract_lets(q : string; bodyStart : int; rangeVar : string;
     return (true, "{slice(q, 0, srcEnd)}{body}")
 }
 
+[arch(at="ARCHITECTURE_LINQ.md#linq-das-token-model")]
 def private rewrite_group_var(text : string; gname : string) : string {
     return build_string() $(var w) {
         peek_data(text) $(arr) {   // nolint:STYLE037 - one byte-level scanner state machine
@@ -875,6 +891,7 @@ def private rewrite_group_var(text : string; gname : string) : string {
                         if (keyEnd >= 0) {
                             w |> write("{gname}._0")
                             i = keyEnd
+                            // '_' stands in for the identifier just written - anything but '.'
                             lastNonWs = '_'
                             continue
                         } elif (!dotFollows) {
@@ -913,6 +930,7 @@ struct private QueryStage {
     nextStart : int = 0
 }
 
+[arch(at="ARCHITECTURE_LINQ.md#linq-das-query-stages")]
 def private parse_one_stage(q : string; nq : int; start : int; rangeVar : string; isGroupVar : bool;   // nolint:STYLE037,STYLE038 - one arm per query clause; the arms share the scan cursor
                             prog : ProgramPtr; at : LineInfo; var stage : QueryStage) : bool {
     stage.rangeVar = rangeVar
@@ -959,14 +977,15 @@ def private parse_one_stage(q : string; nq : int; start : int; rangeVar : string
         return false
     }
     if (stage.hasOrderBy) {
+        // a 'where' may follow the 'orderby', so the keys end at the next clause, not at the terminal
         let rawOrder = strip(slice(q, orderByPos + 7, next_clause_kw(q, orderByPos + 7)))
         var op <- parse_orderby(rawOrder)
         if (!op.ok) {
             macro_error(prog, at, "linq: empty 'orderby' expression")
             return false
         }
-        if (length(op.keys) > 4) {
-            macro_error(prog, at, "linq: 'orderby' supports at most 4 keys (got {length(op.keys)})")
+        if (length(op.keys) > ORDERBY_MAX_KEYS) {
+            macro_error(prog, at, "linq: 'orderby' supports at most {ORDERBY_MAX_KEYS} keys (got {length(op.keys)})")
             return false
         }
         if (isGroupVar) {
@@ -1034,6 +1053,7 @@ def private parse_one_stage(q : string; nq : int; start : int; rangeVar : string
     return true
 }
 
+[arch(at="ARCHITECTURE_LINQ.md#linq-das-reader-pipeline")]
 def private transpile_query(query : string; prog : ProgramPtr; at : LineInfo) : string {   // nolint:STYLE038 - one arm per query form; the dispatch IS the transpiler
     var q = strip(strip_query_comments(query))
     let fromWord = read_ident(q, 0)
@@ -1132,6 +1152,7 @@ def private transpile_query(query : string; prog : ProgramPtr; at : LineInfo) : 
 [call_macro(name="from_in")]
 class FromInMacro : AstCallMacro {
     //! Source dispatcher for the C# query `from` clause. The typed form `from c : Row in <src>` arrives as `from_in(src, type<Row>)` and rewrites to the concrete `_fold` source builder by `src`'s type — a SQL runner → `select_from`, an XML node → `from_xml_node`, a JSON value → `from_json`. The UNTYPED form `from c in <src>` arrives as `from_in(src)` — a table → `each_kv` (`keys` for the `table<K>` set form), anything else → `each` (the array path). Must be a call macro: a plain function would leave `from_in(...)` at the chain head, which `_fold`'s name-based source detection cannot route.
+    [arch(at="ARCHITECTURE_LINQ.md#linq-das-from-in")]
     def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : ExpressionPtr {
         if (length(call.arguments) != 1 && length(call.arguments) != 2) {
             macro_error(prog, call.at, "from_in(src[, type<Row>]): expected 1 or 2 arguments")

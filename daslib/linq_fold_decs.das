@@ -8,7 +8,7 @@ module linq_fold_decs shared public
 //! linq_fold decs (ECS) source adapters: DecsAdapter / DecsJoinAdapter, the decs-bridge tuple
 //! scanners/rewriters, and the decs-specific emit hooks (count_shortcut, reverse-skip-into-tail,
 //! join, min_by/max_by). Terminators ride the generic lanes in linq_fold_common via DecsAdapter.
-//! Requires linq_fold_common. See daslib/ARCHITECTURE_LINQ.md sec. 37.
+//! Requires linq_fold_common. See ``ARCHITECTURE_LINQ_FOLD_SOURCES.md``.
 
 require daslib/linq public
 require daslib/ast_boost
@@ -45,6 +45,7 @@ class DecsAdapter : SourceAdapter {
     rangeInfo : DecsRangeInfo?
     def override name_prefix() : string => "decs_"
     def override has_own_loop_or_count_lane() : bool => true
+    [arch(at="ARCHITECTURE_LINQ_FOLD.md#linq-fold-loop-dispatch")]
     def override effective_dispatch(base : LoopDispatch) : LoopDispatch {
         if (rangeInfo != null && base is Each && (rangeInfo.takeExpr != null || rangeInfo.takeWhileCond != null)) {
             return LoopDispatch(Find = null)
@@ -73,6 +74,7 @@ class DecsAdapter : SourceAdapter {
             })
         }
     }
+    [arch(at="ARCHITECTURE_LINQ_FOLD_SOURCES.md#decs-join")]
     def override build_group_by_adapter(var c : Captures; var ctx : EmitCtx; at : LineInfo) : SourceAdapter? {
         if (c.single |> key_exists("upstream_join")) {
             var joinCall = c.single["upstream_join"]
@@ -103,6 +105,7 @@ class DecsAdapter : SourceAdapter {
         if (opName != "count") return null
         return emit_decs_count_archsize(bridge, at)
     }
+    [arch(at="ARCHITECTURE_LINQ_FOLD_SOURCES.md#decs-terminator-walk")]
     def override bind_name(at : LineInfo) : string {
         if (chainInfo != null) return chainInfo.finalBind
         return tupName
@@ -114,6 +117,7 @@ class DecsAdapter : SourceAdapter {
         if (chainInfo != null) return clone_type(chainInfo.finalType)
         return clone_type(bridge.elementType)
     }
+    [arch(at="ARCHITECTURE_LINQ_FOLD_SOURCES.md#decs-terminator-walk")]
     def override wrap_source_loop(loopShape : LoopDispatch; var body : Expression?; at : LineInfo) : Expression? {
         let archName = bridge.archName
         let br = bridge
@@ -180,6 +184,7 @@ class DecsJoinAdapter : SourceAdapter {
     def override name_prefix() : string => "djoin_"
     def override bind_name(at : LineInfo) : string => shape.resBindName
     def override element_type() : TypeDeclPtr => clone_type(shape.resultType)
+    [arch(at="ARCHITECTURE_LINQ_FOLD_SOURCES.md#decs-join")]
     def override wrap_source_loop(loopShape : LoopDispatch; var body : Expression?; at : LineInfo) : Expression? {
         let jhashName = qn("djoin_jhash", at)
         let arrName   = qn("djoin_jarr", at)
@@ -225,7 +230,7 @@ class DecsJoinAdapter : SourceAdapter {
     }
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_LINQ_FOLD_SOURCES.md#decs-terminator-walk")]
 def private make_decs_term_adapter(var bridge : DecsBridgeShape?; var chainInfo : DecsChainInfo?;
                                    var rangeInfo : DecsRangeInfo?; var calls : array<tuple<ExprCall?; LinqCall?>>;
                                    intermediateEnd : int) : SourceAdapter? {
@@ -233,7 +238,7 @@ def private make_decs_term_adapter(var bridge : DecsBridgeShape?; var chainInfo 
                            calls <- calls, intermediateEnd = intermediateEnd, rangeInfo = rangeInfo)
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_LINQ_FOLD_SOURCES.md#decs-terminator-walk")]
 def emit_loop_or_count_lane_decs(var bridge : DecsBridgeShape?; tupName : string; var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {  // nolint:STYLE037 - one arm per loop-lane shape
     let hasTerm = c.single |> key_exists("term")
     var termCall : ExprCall?
@@ -247,14 +252,14 @@ def emit_loop_or_count_lane_decs(var bridge : DecsBridgeShape?; tupName : string
     if (hasTerm && termName == "count" && length(termCall.arguments) == 1
             && (c.many["head"] |> empty) && noRangeOps) return ctx.src->count_shortcut("count", at)
     var calls : array<tuple<ExprCall?; LinqCall?>>
-    calls |> reserve(length(c.many["head"]) + 5)
+    let rangeSlots = ["skip", "skip_while", "take_while", "take"]
+    calls |> reserve(length(c.many["head"]) + length(rangeSlots) + (hasTerm ? 1 : 0))
     for (call in c.many["head"]) {
         let nm = call_norm_name(call)
         if (!(linqCalls |> key_exists(nm))) return null
         let lc = unsafe(linqCalls?[nm])
         calls |> push((call, lc))
     }
-    let rangeSlots = ["skip", "skip_while", "take_while", "take"]
     for (sn in rangeSlots) {
         if (c.single |> key_exists(sn)) {
             let scall = c.single[sn]
@@ -361,7 +366,7 @@ def emit_loop_or_count_lane_decs(var bridge : DecsBridgeShape?; tupName : string
         dispatch = adapter->effective_dispatch(LoopDispatch(Each = null))), adapter, at)
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_LINQ_FOLD_SOURCES.md#decs-random-index")]
 def emit_decs_reverse_skip_into_tail(var takeExpr : Expression?; bridge : DecsBridgeShape?; tupName : string; needIterWrap : bool; var terminalSelectLam : Expression?; terminalSelectElemType : TypeDeclPtr; at : LineInfo) : Expression? {
     let bufName = qn("buf", at)
     let takeNName = qn("take_n", at)
@@ -484,7 +489,7 @@ def build_decs_tup_bind(bridge : DecsBridgeShape?; tupName : string; at : LineIn
     }
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_LINQ_FOLD_SOURCES.md#decs-random-index")]
 def decs_can_random_index(bridge : DecsBridgeShape?) : bool {
     if (bridge == null || !(bridge.forExpr is ExprFor)) return false
     let fe = bridge.forExpr as ExprFor
@@ -495,7 +500,7 @@ def decs_can_random_index(bridge : DecsBridgeShape?) : bool {
     return true
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_LINQ_FOLD_SOURCES.md#decs-random-index")]
 def build_decs_index_tup(bridge : DecsBridgeShape?; idxName : string; at : LineInfo) : Expression? {
     var fe = bridge.forExpr as ExprFor
     var mkTup = new ExprMakeTuple(at = at)
@@ -578,7 +583,7 @@ def emit_decs_last_random_index(bridge : DecsBridgeShape?; termName : string; va
     return finalize_decs_emission(emission, at, false)
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_LINQ_FOLD_SOURCES.md#decs-terminator-walk")]
 def build_decs_inner_for(bridge : DecsBridgeShape?; var tupBind : Expression?; var body : Expression?; at : LineInfo) : Expression? {
     var forBodyStmts <- [tupBind, body]
     var forBody = stmts_to_expr(forBodyStmts)
@@ -594,7 +599,7 @@ class DecsTupUsageScanner : AstVisitor {
     tupName       : string
     iterToUser    : table<string; string>
     usedFields    : table<string>
-    allFieldsUsed : bool = false
+    usesWholeRow : bool = false
     inTargetField : bool = false
     def DecsTupUsageScanner(n : string; var i2u : table<string; string>) {
         tupName = n
@@ -616,7 +621,7 @@ class DecsTupUsageScanner : AstVisitor {
     }
     def override preVisitExprVar(expr : ExprVar?) : void {
         if (expr.name == tupName && !inTargetField) {
-            allFieldsUsed = true
+            usesWholeRow = true
             return
         }
         let nm = string(expr.name)
@@ -626,24 +631,24 @@ class DecsTupUsageScanner : AstVisitor {
     }
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_LINQ_FOLD_SOURCES.md#decs-column-pruning")]
 def collect_decs_tup_usage(var e : Expression?; tupName : string; bridge : DecsBridgeShape?) : tuple<bool; array<string>> {
-    var allUsed = false
+    var usesWholeRow = false
     var used : array<string>
-    if (e == null) return (allUsed, used)
+    if (e == null) return (usesWholeRow, used)
     var iterToUser <- {for (i in 0 .. length(bridge.iterNames)); bridge.iterNames[i] => bridge.userNames[i]}
     var sc = new DecsTupUsageScanner(tupName, iterToUser)
     make_visitor(*sc) $(astVisitorAdapter) {
         visit_expression(e, astVisitorAdapter)
     }
-    allUsed = sc.allFieldsUsed
+    usesWholeRow = sc.usesWholeRow
     for (k in keys(sc.usedFields)) {
         used |> push(k)
     }
     unsafe {
         delete sc
     }
-    return (allUsed, used)
+    return (usesWholeRow, used)
 }
 
 class DecsTupWholeRewriter : AstVisitor {
@@ -731,18 +736,18 @@ def flatten_decs_tup_to_iter(var body : Expression?; tupName : string; var field
     }
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_LINQ_FOLD_SOURCES.md#decs-column-pruning")]
 def build_decs_inner_for_pruned(bridge : DecsBridgeShape?;
                                 tupName : string;
                                 var body : Expression?;
                                 at : LineInfo) : Expression? {
-    var (allUsed, usedNames) = collect_decs_tup_usage(body, tupName, bridge)
-    if (allUsed && rewrite_decs_tup_wholes(body, tupName, bridge)) {
-        var (allUsed2, usedNames2) = collect_decs_tup_usage(body, tupName, bridge)
-        allUsed = allUsed2
-        usedNames <- usedNames2
+    var (usesWholeRow, usedNames) = collect_decs_tup_usage(body, tupName, bridge)
+    if (usesWholeRow && rewrite_decs_tup_wholes(body, tupName, bridge)) {
+        var (rescanUsesWholeRow, rescanUsedNames) = collect_decs_tup_usage(body, tupName, bridge)
+        usesWholeRow = rescanUsesWholeRow
+        usedNames <- rescanUsedNames
     }
-    if (allUsed || empty(usedNames)) {
+    if (usesWholeRow || empty(usedNames)) {
         var tupBind = build_decs_tup_bind(bridge, tupName, at)
         return build_decs_inner_for(bridge, tupBind, body, at)
     }
@@ -976,7 +981,7 @@ def extract_decs_ranges(var calls : array<tuple<ExprCall?; LinqCall?>>;  // noli
     return info
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_LINQ_FOLD_SOURCES.md#decs-terminator-walk")]
 def wrap_inner_for_with_decs_ranges(var body : Expression?;
                                     rangeInfo : DecsRangeInfo?;
                                     names : DecsRangeStateNames) : Expression? {
@@ -1132,7 +1137,7 @@ def emit_decs_min_max_by(var bridge : DecsBridgeShape?;
         dispatch = dispatch), adapter, at)
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_LINQ_FOLD_SOURCES.md#decs-join")]
 def emit_decs_join_impl(bridgeA : DecsBridgeShape?; var c : Captures; ctx : EmitCtx; at : LineInfo) : Expression? {
     if (bridgeA == null || (c.single_name |> key_exists("join") && c.single_name["join"] == "group_join")) return null
     var joinCall = c.single["join"]

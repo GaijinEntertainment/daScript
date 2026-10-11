@@ -2467,7 +2467,7 @@ def test_wave4_unpruned_pass_to_fn_parity(t : T?) {
     fixture_wave4(3)
     // _where peel renames `_` to `decs_tup`; the predicate body becomes
     // `wave4_pred_uses_whole_tup(decs_tup)` — decs_tup referenced as a whole-var arg →
-    // walker sets allFieldsUsed=true → pruning disabled. All 3 fields materialized.
+    // walker sets usesWholeRow=true → pruning disabled. All 3 fields materialized.
     // All 3 rows pass the > 0 predicate (year always ≥ 2000), so count = 3.
     t |> equal(target_wave4_unpruned_pass_to_fn_fold(), 3, "pass-to-fn predicate must see full tuple")
 }

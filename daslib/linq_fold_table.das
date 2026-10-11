@@ -15,7 +15,7 @@ module linq_fold_table shared public
 //! field-pruning); bare ``count()`` folds to O(1) ``length(tab)``; a plain ``distinct`` over raw keys/kv
 //! elements is dropped (keys are unique by construction). In-tree companion to ``daslib/linq_fold``
 //! (required unconditionally; the matcher returns null for non-table chains). Emits ``keys`` / ``values``
-//! / the kv zip BY NAME at the user's splice site. See daslib/ARCHITECTURE_LINQ.md sec. 37.
+//! / the kv zip BY NAME at the user's splice site. See ``ARCHITECTURE_LINQ_FOLD_SOURCES.md``.
 
 require daslib/ast_boost
 require daslib/ast_match
@@ -30,7 +30,7 @@ enum TableLane {
     VALUES
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_LINQ_FOLD_SOURCES.md#linq-fold-table-source")]
 def private build_table_walk(lane : TableLane; srcName, bindName : string; var body : Expression?;
                              var breakGuard : Expression?; at : LineInfo) : Expression? {
     var inner : array<Expression?>
@@ -60,9 +60,9 @@ def private build_table_walk(lane : TableLane; srcName, bindName : string; var b
             }
         }
     }
-    var (allUsed, usedFields) = collect_row_usage(body, bindName)
-    allUsed = needs_full_row_bind(usedFields, allUsed)
-    if (allUsed) {
+    var (usesWholeRow, usedFields) = collect_row_usage(body, bindName)
+    usesWholeRow = needs_full_row_bind(usedFields, usesWholeRow)
+    if (usesWholeRow) {
         inner |> push <| qmacro_expr() {
             let $i(bindName) = (key = $i(kIter), value = $i(vIter))
         }
@@ -111,17 +111,21 @@ class TableAdapter : SourceAdapter {
     elemType : TypeDeclPtr
     lane     : TableLane
     def override name_prefix() : string => "tab_"
+    [arch(at="ARCHITECTURE_LINQ_FOLD.md#linq-fold-direct-return")]
     def override supports_direct_return() : bool => true
+    [arch(at="ARCHITECTURE_LINQ_FOLD_SOURCES.md#linq-fold-table-source")]
     def override can_reserve_by_length() : bool => true
     def override const can_join() : bool => true
     def override const can_group_by() : bool => true
     def override emit_join_hook(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? =>
         emit_array_join(c, ctx, at)
+    [arch(at="ARCHITECTURE_LINQ_FOLD_SOURCES.md#linq-fold-table-source")]
     def override build_group_by_adapter(var c : Captures; var ctx : EmitCtx; at : LineInfo) : SourceAdapter? {
         if (c.single |> key_exists("upstream_join")) return null
         return new TableAdapter(tabExpr = clone_expression(tabExpr), srcName = qn("tsrc", at),
                                 elemType = clone_type(elemType), lane = lane)
     }
+    [arch(at="ARCHITECTURE_LINQ_FOLD_SOURCES.md#linq-fold-table-source")]
     def override loop_source_expr() : Expression? => tabExpr
     def override loop_source_name() : string => srcName
     def override bind_name(at : LineInfo) : string => qn("it", at)
@@ -134,6 +138,7 @@ class TableAdapter : SourceAdapter {
         var breakGuard = qmacro($i(takenName) >= $i(takeLimName))
         return build_table_walk(lane, srcName, bindName, perElement, breakGuard, at)
     }
+    [arch(at="ARCHITECTURE_LINQ_FOLD_SOURCES.md#linq-fold-table-source")]
     def override invoke_param_type() : TypeDeclPtr {
         var tabType = strip_const_ref(clone_type(tabExpr._type))
         tabType.flags.constant = true
@@ -163,7 +168,7 @@ class TableAdapter : SourceAdapter {
     }
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_LINQ_FOLD_SOURCES.md#table-point-lookup")]
 def private match_key_probe_side(var keySide, otherSide : Expression?; lane : TableLane; bindName : string) : Expression? {
     if (!is_bare_key_ref(keySide, bindName, lane == TableLane.KV)
             || expr_uses_var(otherSide, bindName) || has_sideeffects(otherSide)) {
@@ -172,13 +177,13 @@ def private match_key_probe_side(var keySide, otherSide : Expression?; lane : Ta
     return clone_expression(otherSide)
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_LINQ_FOLD_SOURCES.md#table-point-lookup")]
 def private extract_key_probe(var pred : Expression?; lane : TableLane; bindName : string; var residual : Expression?&) : Expression? {
     var leaf = pred
-    var conjuncts : array<Expression?>
+    var conjunctsReversed : array<Expression?>
     while (leaf != null && leaf is ExprOp2 && (leaf as ExprOp2).op == "&&") {
         var andOp = leaf as ExprOp2
-        conjuncts |> push(andOp.right)
+        conjunctsReversed |> push(andOp.right)
         leaf = andOp.left
     }
     var lhs, rhs : ExpressionPtr
@@ -188,14 +193,14 @@ def private extract_key_probe(var pred : Expression?; lane : TableLane; bindName
         probe = match_key_probe_side(rhs, lhs, lane, bindName)
     }
     if (probe == null) return null
-    for (c in conjuncts) {
+    for (c in conjunctsReversed) {
         var cc = clone_expression(c)
         residual = residual == null ? cc : merge_where_cond(cc, residual)
     }
     return probe
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_LINQ_FOLD_SOURCES.md#table-point-lookup")]
 def private make_probe_miss(termName : string; dName : string) : Expression? {
     if (termName == "any") {
         return qmacro_expr() {
@@ -217,7 +222,7 @@ def private make_probe_miss(termName : string; dName : string) : Expression? {
     }
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_LINQ_FOLD_SOURCES.md#table-point-lookup")]
 def try_table_point_lookup(var calls : array<tuple<ExprCall?; LinqCall?>>; var adapter : TableAdapter?; at : LineInfo) : Expression? {
     if (adapter.lane == TableLane.VALUES) return null
     let n = length(calls)
@@ -345,7 +350,7 @@ def try_table_point_lookup(var calls : array<tuple<ExprCall?; LinqCall?>>; var a
     return adapter->wrap_invoke(stmts, retT, false, at)
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_LINQ_FOLD_SOURCES.md#linq-fold-table-source")]
 def extract_table_source(var top : Expression?) : ExprCall? {
     if (top == null || !(top is ExprCall)) return null
     var c = top as ExprCall
@@ -361,8 +366,8 @@ def extract_table_source(var top : Expression?) : ExprCall? {
     return c
 }
 
-[macro_function]
-def drop_redundant_distinct(var calls : array<tuple<ExprCall?; LinqCall?>>) {
+[macro_function, arch(at="ARCHITECTURE_LINQ_FOLD_SOURCES.md#linq-fold-table-source")]
+def drop_distinct_over_unique_keys(var calls : array<tuple<ExprCall?; LinqCall?>>) {
     var dropIdx = -1
     for (i in range(length(calls))) {
         let name = calls[i]._1.name
