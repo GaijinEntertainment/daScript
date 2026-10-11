@@ -90,6 +90,7 @@ FetchContent_Declare(freetype_src
         https://download.savannah.gnu.org/releases/freetype/freetype-2.14.3.tar.xz
     URL_HASH SHA256=36bc4f1cc413335368ee656c42afca65c5a3987e8768cc28cf11ba775e785a5f
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+    INACTIVITY_TIMEOUT 60
 )
 FetchContent_MakeAvailable(freetype_src)
 SET_TARGET_PROPERTIES(freetype PROPERTIES POSITION_INDEPENDENT_CODE ON)
@@ -112,6 +113,7 @@ FetchContent_Declare(md4c_src
     URL https://github.com/mity/md4c/archive/refs/tags/release-0.5.3.tar.gz
     URL_HASH SHA256=353c346f376b87c954a13f3415ede2d51264cc61dc5abcd38ff1d2aa0d059b9e
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+    INACTIVITY_TIMEOUT 60
     # Populate without adding MD4C's own CMake project. Its top-level build
     # changes compiler flags and creates HTML/CLI targets we do not use.
     SOURCE_SUBDIR __dasimgui_source_only
@@ -133,6 +135,7 @@ FetchContent_Declare(imgui_src
     URL https://github.com/ocornut/imgui/archive/refs/tags/v${IMGUI_VERSION}.tar.gz
     URL_HASH SHA256=5e84cdaa6a6041586a0d11a3071b749734a0439d66fdbdad37ae5b27e37d396c
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+    INACTIVITY_TIMEOUT 60
     SOURCE_DIR ${DAS_IMGUI_DIR}/imgui
 )
 FetchContent_MakeAvailable(imgui_src)

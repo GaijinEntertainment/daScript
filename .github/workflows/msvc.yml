@@ -16,6 +16,7 @@ jobs:
 
     name: ${{ matrix.target }} - ${{ matrix.cmake_configuration }}
     runs-on: ${{ matrix.target }}
+    timeout-minutes: 120
 
     strategy:
       fail-fast: false

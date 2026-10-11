@@ -9,7 +9,7 @@ if(DEFINED PACKAGES_JSON)
     configure_file("${PACKAGES_JSON}" "${OUT}/packages.json" COPYONLY)
 else()
     file(DOWNLOAD https://raw.githubusercontent.com/borisbat/daspkg-index/main/packages.json
-        "${OUT}/packages.json" STATUS _status)
+        "${OUT}/packages.json" INACTIVITY_TIMEOUT 60 STATUS _status)
     list(GET _status 0 _code)
     if(NOT _code EQUAL 0)
         message(FATAL_ERROR "packages.json: ${_status}")
