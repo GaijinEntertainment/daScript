@@ -22,14 +22,11 @@ because the review walk does not.**
 **Weakening `REVIEW.das` (beside this file) is a defect: dropping a check it runs, narrowing
 what a check walks, or rewording a finding so it no longer names what failed.**
 
-**A row of `REVIEW.das`'s `TOLERATED_SHARED_TWINS` table names in its `why` either the test that
-compiles the pair on purpose or what keeps every process from compiling two of the files that
-row lists; a `why` that names nothing, or that a build or test run contradicts, is a defect.** A
-process that compiles two files declaring one `shared` module name gives the second file the first
-file's module.
+**A diff that adds or changes a `TOLERATED_SHARED_TWINS` row names in its `why` the test
+compiling the files under its name together, or what keeps other processes from compiling two
+of them.** Two files declaring one `shared` module name compiled together share the first's
+module.
 
-**A diff that adds or changes syntax in `tree-sitter-daslang/grammar.js` also adds a case for that
-syntax to `tree-sitter-daslang/test/corpus/`, in the same change.**
-
-**A diff that adds syntax to `tree-sitter-daslang/grammar.js` also adds a section exercising it to
-`modules/dasImgui/tests/test_grammar_canary.das`, in the same change.**
+**A diff after which one process compiles two files that `TOLERATED_SHARED_TWINS` lists under
+one name, and no `why` among that name's rows names that process, is a defect - rename the
+module one of them declares.**
