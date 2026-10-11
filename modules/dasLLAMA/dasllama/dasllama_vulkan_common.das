@@ -1218,7 +1218,7 @@ def public vk_ext_roster(phys : VkPhysicalDevice) : array<VkExtEntry> {
             knob = "DASLLAMA_VK_REBAR", off = !g_env_vulkan.vk_rebar,
             rides = "uploads write straight into VRAM; without it every upload stages through host memory"),
         VkExtEntry(name = "maxStorageBufferRange", present = props.limits.maxStorageBufferRange > 0u,
-            rides = "one side of the whole-model driver's K/V mirror binds as one range ({int(props.limits.maxStorageBufferRange >> 20u)} MiB here): every stream's region shares it, so the region count divides each stream's context; a mirror past it declines the driver and the per-op tier serves; a hyper-connection model's mixer inject rows and window panels bind as one range each and decline the seats past it, and a routed layer's hot expert pool binds each plane as one range and keeps its experts on the host past it; the tower driver (the vision and audio towers) binds a tower's gathered weights, its largest scratch buffer and canary's rel table as one range each, and declines `shape` past it; the TTS seats bind each weight slab and each scratch slot as one range and decline a slot past it (the Pocket codec's column slots at a long chunk)"),
+            rides = "one side of a whole-model driver's K/V mirror slab - a contiguous run of attention layers - binds as one range ({int(props.limits.maxStorageBufferRange >> 20u)} MiB here): every stream's region shares it, so the region count divides each stream's context, and the widest layer's rows bound it; a layer past it declines the driver and the per-op tier serves; a hyper-connection model's mixer inject rows and window panels bind as one range each and decline the seats past it, and a routed layer's hot expert pool binds each plane as one range and keeps its experts on the host past it; the tower driver (the vision and audio towers) binds a tower's gathered weights, its largest scratch buffer and canary's rel table as one range each, and declines `shape` past it; the TTS seats bind each weight slab and each scratch slot as one range and decline a slot past it (the Pocket codec's column slots at a long chunk)"),
         VkExtEntry(name = "maxComputeSharedMemorySize of 33024 B or more", present = props.limits.maxComputeSharedMemorySize >= 33024u,
             rides = "the 8192-float row slabs of the add+rms family and the prefill-attention prep ({int(props.limits.maxComputeSharedMemorySize)} B here); without them the deltanet and prefill-attention chains stay on the CPU rail"),
         VkExtEntry(name = "VK_NV_cooperative_vector", present = cooperative_vector_supported(phys),
@@ -2313,7 +2313,8 @@ struct RLayer {
     hs, qd, kvd, hid, rot : int64   //! head size, query width, kv width, dense FFN width, rotary width per head
     kv_mul : int64                  //! query heads per kv head
     window : int64                  //! positions a sliding layer attends over; 0 = every position
-    mir_base : int64                //! this layer's first unit in each K/V mirror side (its rows are seq_cap x the row's units from there)
+    mir_base : int64                //! this layer's first unit in its K/V mirror slab, one region's layout (its rows are seq_cap x the row's units from there)
+    mir_slab : int64                //! the K/V mirror slab the layer's rows sit in (`rd_k_slab` / `rd_v_slab`)
     cbase : int64                   //! its rope class's row base inside a position's cos/sin plane
     boff : int64                    //! its row base in the q/k/v bias plane
     pf_fa : bool                    //! the window chain takes the cm2 flash tile on this layer (its head size has a stamp)
@@ -2435,7 +2436,7 @@ struct RDec {
     ar_scal_off : int64            // eps/ascale pair, appended to the norms buffer (float units) —
                                    // the fused ar+requant needs binding 4 for its scale output
     cos_elems : int64              //! a position's cos/sin plane: every rope class's row (cos[half] + sin[half]) end to end
-    mir_units : int64              //! one K/V mirror side's units over every attention layer (seq_cap x its row's units each): elements, or blocks under a block codec
+    mir_units : int64              //! one K/V mirror slab's units a region, the slack included - the widest slab's, so every slab and every region share one stride: elements, or blocks under a block codec
     eps, scale : float
     // per-token device buffers
     x_dev, xb_dev : uint64        // residual, normed activation
@@ -2450,12 +2451,12 @@ struct RDec {
     gate_dev, up_dev : uint64
     ffnout_dev : uint64
     xb2_dev : uint64              // wo output
-    k_mirror, v_mirror : uint64   // `regions` consecutive copies of `mir_units` units in the armed codec: each attention layer's seq_cap rows from RLayer.mir_base
+    k_slabs, v_slabs : array<uint64>   //! the K/V mirror, one buffer pair a slab - a contiguous run of attention layers whose `regions` copies of `mir_units` units bind under the device's range: a layer's seq_cap rows sit at RLayer.mir_base in slab RLayer.mir_slab
     kst_dev, vst_dev : uint64     //! a block codec's staged rows: the token command's float K and V rows [nb x kv_dim], which the codec's store quantizes into the mirror
     stage_tok : HostBuf           //! ... and the token block the staging stores read: row r at position r of the staged planes
     ksh_dev, vsh_dev : uint64     //! a block codec's f16 shadow of one layer's rows [seq_cap x kv_dim], refilled before each layer's prefill attention
     pf_kst, pf_vst : uint64       //! the prefill window's staged rows [PF_WINDOW x kv_dim]
-    pf_kv_store_set, pf_kv_shadow_set : VkDescriptorSet   //! the window's quant store and its shadow pass
+    pf_kv_store_sets, pf_kv_shadow_sets : array<VkDescriptorSet>   //! the window's quant store and its shadow pass, one set a slab (the store writes and the shadow reads the layer's slab)
     pf_unrot_set : VkDescriptorSet  //! tq4: the window's attention rows out of the rotated basis
     tq4_signs_dev : uint64          //! tq4: the rotation's sign row, `KV_TQ4_SIGNS` floats
     regions : int64 = 1l          //! one mirror region per served stream: a region is a session's whole K/V history, addressed as a unit offset into both sides
@@ -2753,11 +2754,20 @@ def f16g_shape_ok(dim : int64) : bool => g_gpu.coopmat_mode == COOPMAT_CM2 && di
 
 var g_rd : RDec?
 
-//! a layer's first mirror unit in the selected region
+//! a layer's first mirror unit in the selected region of its slab
 def rd_mir_base(L : RLayer) : int64 => L.mir_base + g_rd.region * g_rd.mir_units
 
-//! one mirror side's binding: all `regions` copies end to end
+//! one slab's binding, either side: all `regions` copies end to end (every slab the same size)
 def rd_mir_bytes : int64 => g_rd.regions * g_rd.mir_units * kv_unit_bytes(g_rd.kv_dt)
+
+//! the K and V sides of slab `si` - for a set built once a slab; a layer's dispatch takes `rd_slab`
+def rd_slab_at(si : int64) : tuple<k : uint64; v : uint64> => (k = g_rd.k_slabs[si], v = g_rd.v_slabs[si])
+
+//! the K and V sides of the slab a layer's rows sit in
+def rd_slab(L : RLayer) : tuple<k : uint64; v : uint64> => rd_slab_at(L.mir_slab)
+
+//! the slab count: how many buffer pairs the mirror binds
+def rd_mir_slabs : int64 => long_length(g_rd.k_slabs)
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-block-codecs")]
 def rd_kv_row_units(kvd : int64) : int64 => kv_row_units(g_rd.kv_dt, kvd)

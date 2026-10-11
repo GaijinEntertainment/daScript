@@ -401,37 +401,114 @@ def test_resident_fit_ctx(t : T?) {
 
 [test]
 def test_resident_binding_ctx(t : T?) {
-    t |> run("the KV mirror's binding cap counts the attention layers' rows, whatever layer 0 is") @(t : T?) {
+    t |> run("the KV mirror's binding cap is one slab's range over the widest attention layer's row, whatever the layer count") @(t : T?) {
         let bcap = 4_294_967_295l   //! the 4 GiB maxStorageBufferRange of the NV/AMD drivers
-        //! 32 layers, attention every fourth (3, 7, ..., 31), kv width 8 x 128 in f16: one side is 8 x 2048 B per position
+        //! 32 layers, attention every fourth (3, 7, ..., 31), kv width 8 x 128 in f16: one layer's row is 2048 B a position
         var hy <- shell(32l, 0x7777_7777ul)
         hy.config.n_kv_heads = 8l
         hy.config.head_size = 128l
         t |> success(layer_is_recurrent(hy.config, 0l) && layer_kv_dim(hy.config, 0l) == 0l, "layer 0 is recurrent: its kv width reads 0")
-        t |> equal(resident_binding_ctx(hy, KVDtype.f16, bcap), 262143l, "the hybrid's ctx is the range over eight attention rows, not skipped for layer 0's zero width")
-        t |> equal(resident_binding_ctx(hy, KVDtype.f32, bcap), 131071l, "f32 rows halve it")
+        t |> equal(resident_binding_ctx(hy, KVDtype.f16, bcap), 2097151l, "the hybrid's ctx is the range over one attention layer's row, not skipped for layer 0's zero width")
+        t |> equal(resident_binding_ctx(hy, KVDtype.f32, bcap), 1048575l, "f32 rows halve it")
         t |> equal(resident_binding_ctx(hy, KVDtype.f16, 0l), 0l, "no cap known reads 0")
         //! a block codec's kernels address bytes in 32 bits: past that many bytes the device's range no longer raises the context
         let wide = 4l * BLOCK_CODEC_SIDE_BYTES
         t |> equal(resident_binding_ctx(hy, KVDtype.q8_0, wide), resident_binding_ctx(hy, KVDtype.q8_0, BLOCK_CODEC_SIDE_BYTES), "a q8_0 mirror stops at the byte cap on a device that binds four times it")
         t |> equal(resident_binding_ctx(hy, KVDtype.tq4, wide), resident_binding_ctx(hy, KVDtype.tq4, BLOCK_CODEC_SIDE_BYTES), "... and a tq4 mirror")
-        t |> equal(resident_binding_ctx(hy, KVDtype.f16, wide), 4l * resident_binding_ctx(hy, KVDtype.f16, BLOCK_CODEC_SIDE_BYTES), "control: an f16 mirror, addressed by element, takes the wider range")
+        t |> equal(resident_binding_ctx(hy, KVDtype.f16, wide), wide / 2048l, "control: an f16 mirror, addressed by element, takes the wider range over its 2048-byte row")
         t |> success(resident_binding_ctx(hy, KVDtype.tq4, bcap) > resident_binding_ctx(hy, KVDtype.q8_0, bcap)
             && resident_binding_ctx(hy, KVDtype.q8_0, bcap) > resident_binding_ctx(hy, KVDtype.f16, bcap), "under the cap one range holds more tq4 positions than q8_0, and more q8_0 than f16")
         delete hy
         var dense <- shell(32l, 0ul)
         dense.config.n_kv_heads = 8l
         dense.config.head_size = 128l
-        t |> equal(resident_binding_ctx(dense, KVDtype.f16, bcap), 65535l, "the dense twin counts all 32 rows")
+        t |> equal(resident_binding_ctx(dense, KVDtype.f16, bcap), 2097151l, "the dense twin's thirty-two rows read the same: a slab holds whole layers, so the widest row bounds the context and the layers fill slabs")
         for (k in range64(8l)) {   //! every fourth layer shares the K/V of the layer below it: eight sharers, twenty-four owners
             dense.kv_src[4l * k + 1l] = 4l * k
         }
-        t |> equal(resident_binding_ctx(dense, KVDtype.f16, bcap), 87381l, "a shared-KV layer adds no row of its own: the cap divides by the twenty-four rows the mirror allocates, not the thirty-two layers")
+        t |> equal(resident_binding_ctx(dense, KVDtype.f16, bcap), 2097151l, "a shared-KV layer adds no row of its own and moves nothing")
         delete dense
         var recr <- shell(4l, 0xFul)
         t |> equal(resident_binding_ctx(recr, KVDtype.f16, bcap), 0l, "no attention layer reads 0")
         delete recr
     }
+}
+
+[test]
+def test_resident_mirror_slabs(t : T?) {
+    t |> run("the mirror's slabs: contiguous layer runs under the cap, cut for the least charge, one stride for every slab, the donor's seat for a sharer, the head last") @(t : T?) {
+        //! 8 layers, kv width 32 in f16: a layer's rows are 100 x 32 = 3200 units; a slab of 13000 holds four
+        var dense <- shell(8l, 0ul)
+        var s <- resident_mirror_slabs(dense, 100l, KVDtype.f16, 13000l, false)
+        t |> equal(s.n_slabs, 2l, "eight attention layers over a cap of four: two slabs of four")
+        t |> equal(s.units, 12800l, "every slab takes the widest slab's stride - four layers' rows, no padding")
+        t |> equal("{s.slab}", "{[0l, 0l, 0l, 0l, 1l, 1l, 1l, 1l, -1l]}", "the layers fill slabs in order, and no head")
+        t |> equal("{s.base}", "{[0l, 3200l, 6400l, 9600l, 0l, 3200l, 6400l, 9600l, -1l]}", "a layer's base restarts at every slab")
+        delete s
+        delete dense
+        //! layer 2 recurrent: seven owners, which no cut into two or three slabs fills evenly
+        var m <- shell(8l, 0x4ul)
+        s <- resident_mirror_slabs(m, 100l, KVDtype.f16, 13000l, false)
+        t |> equal(s.n_slabs, 7l, "seven layers over a cap of four: the cut that charges least is a slab a layer (22400 units) - four and three would pad to 25600")
+        t |> equal(s.units, 3200l, "at one layer's stride")
+        t |> equal("{s.slab}", "{[0l, 1l, -1l, 2l, 3l, 4l, 5l, 6l, -1l]}", "the recurrent layer sits in no slab")
+        delete s
+        m.kv_src[4l] = 3l
+        s <- resident_mirror_slabs(m, 100l, KVDtype.f16, 13000l, false)
+        t |> equal(s.n_slabs, 2l, "a shared-KV layer holds no rows: six owners cut three and three")
+        t |> equal(s.units, 9600l, "at three layers' stride, no padding")
+        t |> equal("{s.slab}", "{[0l, 0l, -1l, 0l, 0l, 1l, 1l, 1l, -1l]}", "the sharer carries its donor's slab")
+        t |> equal("{s.base}", "{[0l, 3200l, -1l, 6400l, 6400l, 0l, 3200l, 6400l, -1l]}", "and its donor's base")
+        delete s
+        s <- resident_mirror_slabs(m, 100l, KVDtype.f16, 0l, false)
+        t |> equal(s.n_slabs, 1l, "no cap: one slab")
+        t |> equal(s.units, 19200l, "of every owner's rows")
+        t |> equal(s.base[7l], 16000l, "the last owner sits after the five before it")
+        delete s
+        m.config.n_layer_nextn = 1l
+        s <- resident_mirror_slabs(m, 100l, KVDtype.f16, 13000l, true)
+        t |> equal(s.n_slabs, 7l, "the head's rows seat after the last layer's: seven owners again, a slab each")
+        t |> equal(s.slab[8l], 6l, "... the head in the last slab")
+        t |> equal(s.base[8l], 0l, "... at its start")
+        delete s
+        s <- resident_mirror_slabs(m, 100l, KVDtype.f16, 26000l, true)
+        t |> equal(s.n_slabs, 1l, "a cap past every row: one slab")
+        t |> equal(s.base[8l], 19200l, "the head's rows after the six layers'")
+        delete s
+        s <- resident_mirror_slabs(m, 100l, KVDtype.f16, 3000l, true)
+        t |> equal(s.n_slabs, 7l, "a cap under one layer's rows gives every owner its own slab (the binding cap bounds the context before the partition)")
+        t |> equal(s.units, 3200l, "at one layer's stride")
+        delete s
+        s <- resident_mirror_slabs(m, 100l, KVDtype.q8_0, 7000l, true)
+        t |> equal(s.units, 700l, "a block codec counts blocks: six owners and the head at 100 x 1 blocks each")
+        t |> equal(s.n_slabs, 1l, "... in one slab, since the cap counts the same units")
+        delete s
+        m.config.n_layer_nextn = 0l
+        var cut <- resident_mirror_slabs(m, 100l, KVDtype.f16, resident_slab_cap_units(KVDtype.f16, 2l), false)
+        t |> equal(resident_mirror_bytes(m, 100l, KVDtype.f16, 2l), 2l * 2l * cut.n_slabs * (cut.units + moe_gpu_mirror_slack()) * 2l, "the plan charges both sides of every slab at the widest slab's stride plus the tier's slack, times the regions ({cut.n_slabs} slabs of {cut.units} units under this box's cap)")
+        delete cut
+        delete m
+        var recr <- shell(4l, 0xFul)
+        var s4 <- resident_mirror_slabs(recr, 100l, KVDtype.f16, 7000l, false)
+        t |> equal(s4.n_slabs, 0l, "no attention layer: no slab")
+        t |> equal(s4.units, 0l, "and no stride")
+        delete s4
+        delete recr
+    }
+}
+
+[test]
+def test_slab_limit(t : T?) {
+    t |> run("the cut's stride on varied widths: the fewest slabs the total admits can leave one past the cap, which no cut may") @(t : T?) {
+        t |> equal(slab_limit([9l, 2l, 9l], 10l), 9l, "two slabs would hold 11 and 9 against a cap of 10, so three of at most 9 cut")
+        t |> equal(slab_limit([9l, 2l, 9l], 20l), 20l, "a cap past the total: one slab")
+        t |> equal(slab_limit([5l, 5l, 5l, 5l], 10l), 10l, "uniform widths that divide: two slabs of two charge the total, as four of one would - the fewer win")
+        t |> equal(slab_limit([5l, 5l, 5l, 5l], 3l), 5l, "a cap under one layer: one layer's stride")
+    }
+}
+
+[test]
+def test_resident_shadow_ctx(t : T?) {
     t |> run("a block codec's f16 shadow caps a region's context at one binding of the widest K/V row's halves") @(t : T?) {
         let bcap = 4_294_967_295l
         var hy <- shell(32l, 0x7777_7777ul)

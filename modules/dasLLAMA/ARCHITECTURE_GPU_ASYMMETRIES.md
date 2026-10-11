@@ -162,7 +162,7 @@ asymmetries a stamp family ledgers - stays in `ARCHITECTURE_GPU.md#gpu-backends`
   handoff), so a tier without the seats declines a recurrent layer by name
   (`resident_layer_decline`) and the per-op rails serve it. Metal has no seat to install: its
   whole-forward driver carries the recurrent branch inside its layer encoder.
-- **The device argmax pick is Vulkan-only** (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#logits-transfer-queue`): a
+- **The device argmax pick is Vulkan-only** (`ARCHITECTURE_GPU_VULKAN_LANDING.md#logits-transfer-queue`): a
   bare-argmax stream's token id lands in place of its logits row, its speculative round's rows too; Metal lands every row's logits.
 - **The short window's gathered expert route and its knee are Metal-only** (`set_metal_moe_gemv_max`, the
   sidecar's `metal_moe_gemv_max`, `ARCHITECTURE_GPU_PREFILL_MOE.md#prefill-moe-gemv-route`): the Metal prefill

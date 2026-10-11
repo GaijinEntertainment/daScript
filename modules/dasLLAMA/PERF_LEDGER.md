@@ -4428,7 +4428,7 @@ rank the shapes and bound them from above; the reference's tg steps launch as on
   re-reads and still loses on this card, so the lever stays at its off default; the E-series' down group (1616 us
   a step against the reference's 1187) waits on another form.
 - **The device argmax pick (`ClsArgmaxPart` + `ClsArgmaxFin` after the epilogue, the picks-only transfer twin;
-  `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#logits-transfer-queue`), tg128@4 before -> after / CUDA:** E2B 578.3 -> 630.0 +/- 0.7 (745.5:
+  `ARCHITECTURE_GPU_VULKAN_LANDING.md#logits-transfer-queue`), tg128@4 before -> after / CUDA:** E2B 578.3 -> 630.0 +/- 0.7 (745.5:
   0.78 -> 0.85), E4B 362.3 -> 382.0 +/- 0.1 (440.2: 0.87), gpt-oss 461.1 -> 476.8 +/- 4.6 (523.3: 0.91), Llama-3.2-1B
   1432.8 -> 1577.4 +/- 3.9, Qwen3-30B-A3B 450.2 -> 467.7 +/- 21.9 (within the spread); flat E2B 198.5 -> 198.8, E4B 112.5 ->
   112.4, Llama-1B 465.0 -> 464.1, gpt-oss 209.2 -> 207.8 (the two passes over a 201k vocab, on a step the flat row still

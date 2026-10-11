@@ -37,7 +37,7 @@ epilogue (a final softcap, the suppressed ids pinned - the token command's, so a
 a suppressed id) and the pick; the pick and that row land (`mtp_h`, `mtp_h_pos1` 0), and the seat answers the pick as the
 draft's token (`MtpDraftOverrideFn`), so the round's greedy walk (`mtp_draft`, `pick_only`)
 compares ids the host never re-derives and the logits stay on the device - the picks-only
-transfer twin (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#logits-transfer-queue`); `forward_mtp`'s
+transfer twin (`ARCHITECTURE_GPU_VULKAN_LANDING.md#logits-transfer-queue`); `forward_mtp`'s
 callers and a sampled walk land the logits too, and the landing's finite check reads them there.
 The head's rows the device writes stay on the device: the region counts the rows its slot holds
 (`RdecRegion.head_cnt`: a claim zeroes it, every prefill call lowers it to `start_pos - 1` and the
