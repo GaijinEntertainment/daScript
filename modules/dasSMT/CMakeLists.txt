@@ -78,7 +78,6 @@ IF ((NOT DAS_SMT_INCLUDED) AND ((NOT ${DAS_SMT_DISABLED}) OR (NOT DEFINED DAS_SM
             URL_HASH               SHA256=${DAS_Z3_FILE_HASH}
             DOWNLOAD_EXTRACT_TIMESTAMP 1
             INACTIVITY_TIMEOUT 60
-            DOWNLOAD_RETRIES 5
             URL ${DAS_Z3_LINK}
         )
         FetchContent_MakeAvailable(das_z3_shared_lib)

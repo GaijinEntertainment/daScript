@@ -2,6 +2,7 @@ options gen2
 
 require strings
 require daslib/strings_boost
+require daslib/strings_convert
 require daslib/fio
 require dastest/review_gate
 
@@ -108,6 +109,38 @@ def private check_no_step_targets {
     }
 }
 
+def private is_url_download(command : string; args : array<string>) : bool {
+    if (command == "file") {
+        return !empty(args) && to_upper(args[0]) == "DOWNLOAD"
+    }
+    return find_index(args, "URL") >= 0
+}
+
+//! `0`, a variable, or a missing value leaves the download without a timeout
+def private has_inactivity_timeout(args : array<string>) : bool {
+    let at = find_index(args, "INACTIVITY_TIMEOUT")
+    return at >= 0 && at + 1 < length(args) && (try_to_int(args[at + 1]) ?? 0) > 0
+}
+
+def private check_download_timeouts {
+    var inscope files <- tracked_files(["*CMakeLists.txt", "*.cmake"], "download-timeout")
+    for (f in files) {
+        continue if (!fexist(f))
+        let text = fread(f)
+        for (command in ["ExternalProject_Add", "FetchContent_Declare", "file"]) {
+            var inscope calls <- cmake_command_blocks(text, command)
+            for (call in calls) {
+                var inscope args <- cmake_args(call)
+                continue if (!is_url_download(command, args) || has_inactivity_timeout(args))
+                let shown_command = command == "file" ? "file(DOWNLOAD)" : command
+                let retry = command == "file" ? "" : " ({command} then retries it and moves on to the next URL)"
+                gate_finding(f, find_line(text, call),
+                    "{shown_command} downloads from a URL with no positive literal INACTIVITY_TIMEOUT - a server that stops sending leaves the download waiting until the CI job's own time limit kills it; add INACTIVITY_TIMEOUT 60, so a stalled transfer fails instead{retry}")
+            }
+        }
+    }
+}
+
 [export]
 def main {
     if (!fexist("REVIEW_COMMON.md") || !fexist("CMakeLists.txt")) {
@@ -116,5 +149,6 @@ def main {
     }
     check_shared_module_names()
     check_no_step_targets()
+    check_download_timeouts()
     return gate_verdict("repo root")
 }

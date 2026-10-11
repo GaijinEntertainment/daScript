@@ -48,6 +48,7 @@ include(ExternalProject)
 				URL "https://www.openssl.org/source/openssl-3.5.1.tar.gz"
 				URL_HASH SHA256=529043b15cffa5f36077a4d0af83f3de399807181d607441d734196d889b641f
 				DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+				INACTIVITY_TIMEOUT 60
 				PREFIX ${OPENSSL_ROOT_DIR}
 				CONFIGURE_COMMAND perl Configure ${OPENSSL_ARCH} no-shared --prefix=${OPENSSL_ROOT_DIR} --openssldir=${OPENSSL_ROOT_DIR}
 				BUILD_COMMAND ${_OSSL_BUILD_CMD}

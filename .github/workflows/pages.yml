@@ -18,6 +18,7 @@ permissions:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 150
     # KEEP THIS, despite nothing deploying to GitHub Pages any more. The environment
     # is now purely a SECRET SCOPE: DASWEB_DEPLOY_KEY is an environment secret on
     # `github-pages` (the repository has no repo-level secrets), and the VPS deploy
