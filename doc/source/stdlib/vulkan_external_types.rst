@@ -69,8 +69,67 @@ pipeline — the ``depth_compare_op`` argument to
 ``create_graphics_pipeline_v3d`` (defaults to ``LESS_OR_EQUAL`` for the
 standard z-buffer convention).
 
+.. _enum-vulkan-vkattachmentloadop:
+
+``vulkan::VkAttachmentLoadOp``
+------------------------------
+
+What a rendering does with an attachment's contents on entry: ``CLEAR`` to the
+clear value, ``LOAD`` to keep what the view holds, ``DONT_CARE``. The
+``load_op`` of ``rendering_color_attachment`` and of the single-view
+``record_rendering``.
+
+.. _enum-vulkan-vkattachmentstoreop:
+
+``vulkan::VkAttachmentStoreOp``
+-------------------------------
+
+What a rendering does with an attachment's contents on exit: ``STORE`` for a
+target something reads afterwards, ``DONT_CARE`` for one nothing reads (an MSAA
+source after its resolve, a depth buffer no later pass samples). The
+``store_op`` of ``rendering_color_attachment`` and ``rendering_depth_attachment``.
+
+.. _enum-vulkan-vkfilter:
+
+``vulkan::VkFilter``
+--------------------
+
+Sampling filter (``NEAREST``, ``LINEAR``) for a sampler or a scaled blit; the
+``filter`` of ``blit_full_image``.
+
 Core handles and aliases
 ========================
+
+.. _alias-vkcommandbuffer:
+
+``vulkan::VkCommandBuffer``
+---------------------------
+
+Raw handle for a command buffer. ``begin_one_time_commands`` returns one
+allocated and begun; the ``submit_and_present`` pair ends, submits and frees
+it. ``vk_value_to_boost`` wraps it as the non-owning ``CommandBuffer`` the
+record helpers take.
+
+.. _alias-vkpipelinestageflags2:
+
+``vulkan::VkPipelineStageFlags2``
+---------------------------------
+
+The 64-bit synchronization2 pipeline-stage bitfield (``color_attachment_output``,
+``compute_shader``, ``copy``, ``blit``, ``fragment_shader``, …). Spelled as
+``VkPipelineStageFlags2.copy | VkPipelineStageFlags2.blit``;
+``PIPELINE_STAGE_2_NONE`` is the empty mask. The stage masks of the
+``transition_image2`` family and the acquire wait of ``submit2_and_present``.
+
+.. _alias-vkaccessflags2:
+
+``vulkan::VkAccessFlags2``
+--------------------------
+
+The 64-bit synchronization2 memory-access bitfield (``color_attachment_write``,
+``shader_sampled_read``, ``shader_storage_write``, ``transfer_read``, …);
+``ACCESS_2_NONE`` is the empty mask. The access masks of the
+``transition_image2`` family.
 
 .. _alias-vkphysicaldevice:
 
@@ -219,6 +278,25 @@ The chained feature struct a device is created with: core features in
 ``create_device`` overloads that take one let a caller assemble an arbitrary
 chain, which is how the compute-tier creators enable coopmat, memory-priority
 and timeline-semaphore features in a single ``vkCreateDevice``.
+
+.. _handle-vulkan-vkgraphicspipelinecreateinfo:
+
+``vulkan::VkGraphicsPipelineCreateInfo``
+----------------------------------------
+
+The raw create info a graphics pipeline is built from: shader stages, fixed-
+function state pointers, the layout, and either a ``renderPass`` or a
+``VkPipelineRenderingCreateInfo`` on ``pNext``. ``set_pipeline_target`` and
+``attach_rendering_formats`` take one a hand-built pipeline assembles.
+
+.. _handle-vulkan-vkpipelinerenderingcreateinfo:
+
+``vulkan::VkPipelineRenderingCreateInfo``
+-----------------------------------------
+
+The ``pNext`` struct that names the color and depth attachment formats a
+pipeline renders into when it is built without a render pass. ``RenderingFormats``
+owns one; ``attach_rendering_formats`` fills it and chains it.
 
 ``vulkan_structs`` view structs
 ===============================
