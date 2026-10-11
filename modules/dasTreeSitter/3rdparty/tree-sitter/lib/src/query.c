@@ -197,7 +197,7 @@ typedef struct {
  *    step must be matched by the very next sibling. This is used when
  *    processing repetitions, or when processing a wildcard node followed by
  *    an anchor.
- * - `has_in_progress_alternatives` - A flag that indicates that there is are
+ * - `has_in_progress_alternatives` - A flag that indicates that there are
  *    other states that have the same captures as this state, but are at
  *    different steps in their pattern. This means that in order to obey the
  *    'longest-match' rule, this state should not be returned as a match until
@@ -234,11 +234,11 @@ typedef struct {
   // never allow `list` to allocate more entries than this, dropping pending
   // matches if needed to stay under the limit.
   uint32_t max_capture_list_count;
-  // The number of capture lists allocated in `list` that are not currently in
+  // The ids of the capture lists allocated in `list` that are not currently in
   // use. We reuse those existing-but-unused capture lists before trying to
-  // allocate any new ones. We use an invalid value (UINT32_MAX) for a capture
+  // allocate any new ones. We use an invalid value (`UINT32_MAX`) for a capture
   // list's length to indicate that it's not in use.
-  uint32_t free_capture_list_count;
+  Array(uint32_t) free_id_stack;
 } CaptureListPool;
 
 /*
@@ -344,7 +344,7 @@ struct TSQueryCursor {
   uint32_t next_finished_state_id;
   const TSQueryCursorOptions *query_options;
   TSQueryCursorState query_state;
-  unsigned operation_count;
+  unsigned work_count;
   bool on_visible_node;
   bool ascending;
   bool halted;
@@ -356,7 +356,10 @@ static const uint16_t PATTERN_DONE_MARKER = UINT16_MAX;
 static const uint16_t NONE = UINT16_MAX;
 static const uint32_t CAPTURE_LIST_NONE = UINT32_MAX;
 static const TSSymbol WILDCARD_SYMBOL = 0;
-static const unsigned OP_COUNT_PER_QUERY_CALLBACK_CHECK = 100;
+// The cursor calls the progress callback once it has done this much work.
+// Entering or leaving a node costs one, plus one for each in-progress state,
+// because every step visits all of them.
+static const unsigned WORK_PER_QUERY_CALLBACK_CHECK = 1000;
 
 /**********
  * Stream
@@ -445,16 +448,17 @@ static CaptureListPool capture_list_pool_new(void) {
     .list = array_new(),
     .empty_list = array_new(),
     .max_capture_list_count = UINT32_MAX,
-    .free_capture_list_count = 0,
+    .free_id_stack = array_new(),
   };
 }
 
 static void capture_list_pool_reset(CaptureListPool *self) {
+  array_clear(&self->free_id_stack);
   for (uint32_t i = 0; i < self->list.size; i++) {
     // This invalid size means that the list is not in use.
     array_get(&self->list, i)->size = UINT32_MAX;
+    array_push(&self->free_id_stack, i);
   }
-  self->free_capture_list_count = self->list.size;
 }
 
 static void capture_list_pool_delete(CaptureListPool *self) {
@@ -462,6 +466,7 @@ static void capture_list_pool_delete(CaptureListPool *self) {
     array_delete(array_get(&self->list, i));
   }
   array_delete(&self->list);
+  array_delete(&self->free_id_stack);
 }
 
 static const CaptureList *capture_list_pool_get(const CaptureListPool *self, uint32_t id) {
@@ -477,19 +482,15 @@ static CaptureList *capture_list_pool_get_mut(CaptureListPool *self, uint32_t id
 static bool capture_list_pool_is_empty(const CaptureListPool *self) {
   // The capture list pool is empty if all allocated lists are in use, and we
   // have reached the maximum allowed number of allocated lists.
-  return self->free_capture_list_count == 0 && self->list.size >= self->max_capture_list_count;
+  return self->free_id_stack.size == 0 && self->list.size >= self->max_capture_list_count;
 }
 
 static uint32_t capture_list_pool_acquire(CaptureListPool *self) {
   // First see if any already allocated capture list is currently unused.
-  if (self->free_capture_list_count > 0) {
-    for (uint32_t i = 0; i < self->list.size; i++) {
-      if (array_get(&self->list, i)->size == UINT32_MAX) {
-        array_clear(array_get(&self->list, i));
-        self->free_capture_list_count--;
-        return i;
-      }
-    }
+  if (self->free_id_stack.size > 0) {
+    uint32_t id = array_pop(&self->free_id_stack);
+    array_clear(array_get(&self->list, id));
+    return id;
   }
 
   // Otherwise allocate and initialize a new capture list, as long as that
@@ -506,8 +507,10 @@ static uint32_t capture_list_pool_acquire(CaptureListPool *self) {
 
 static void capture_list_pool_release(CaptureListPool *self, uint32_t id) {
   if (id >= self->list.size) return;
-  array_get(&self->list, id)->size = UINT32_MAX;
-  self->free_capture_list_count++;
+  CaptureList *list = array_get(&self->list, id);
+  if (list->size == UINT32_MAX) return; // Guard against releasing a list twice
+  list->size = UINT32_MAX;
+  array_push(&self->free_id_stack, id);
 }
 
 /********************
@@ -2551,7 +2554,7 @@ static TSQueryError ts_query__parse_pattern(
         // Parse the wildcard symbol
         if (length == 1 && node_name[0] == '_') {
           symbol = WILDCARD_SYMBOL;
-        } else if (!strncmp(node_name, "MISSING", length)) {
+        } else if (length == 7 && !strncmp(node_name, "MISSING", length)) {
           is_missing = true;
           stream_skip_whitespace(stream);
 
@@ -3229,6 +3232,39 @@ void ts_query_delete(TSQuery *self) {
   }
 }
 
+TSQuery *ts_query_copy(const TSQuery *self) {
+  TSQuery *copy = ts_malloc(sizeof(TSQuery));
+  *copy = (TSQuery) {
+    .captures = symbol_table_new(),
+    .predicate_values = symbol_table_new(),
+    .language = ts_language_copy(self->language),
+    .wildcard_root_pattern_count = self->wildcard_root_pattern_count,
+  };
+
+  array_assign(&copy->steps, &self->steps);
+  array_assign(&copy->pattern_map, &self->pattern_map);
+  array_assign(&copy->predicate_steps, &self->predicate_steps);
+  array_assign(&copy->patterns, &self->patterns);
+  array_assign(&copy->step_offsets, &self->step_offsets);
+  array_assign(&copy->negated_fields, &self->negated_fields);
+  array_assign(&copy->string_buffer, &self->string_buffer);
+  array_assign(&copy->repeat_symbols_with_rootless_patterns, &self->repeat_symbols_with_rootless_patterns);
+  array_assign(&copy->captures.characters, &self->captures.characters);
+  array_assign(&copy->captures.slices, &self->captures.slices);
+  array_assign(&copy->predicate_values.characters, &self->predicate_values.characters);
+  array_assign(&copy->predicate_values.slices, &self->predicate_values.slices);
+
+  array_assign(&copy->capture_quantifiers, &self->capture_quantifiers);
+  for (uint32_t i = 0; i < copy->capture_quantifiers.size; i++) {
+    CaptureQuantifiers *dst = array_get(&copy->capture_quantifiers, i);
+    const CaptureQuantifiers *src = array_get(&self->capture_quantifiers, i);
+    *dst = capture_quantifiers_new();
+    array_assign(dst, src);
+  }
+
+  return copy;
+}
+
 uint32_t ts_query_pattern_count(const TSQuery *self) {
   return self->patterns.size;
 }
@@ -3409,7 +3445,7 @@ TSQueryCursor *ts_query_cursor_new(void) {
       .end_byte = UINT32_MAX,
     },
     .max_start_depth = UINT32_MAX,
-    .operation_count = 0,
+    .work_count = 0,
   };
   array_reserve(&self->states, 8);
   array_reserve(&self->finished_states, 8);
@@ -3486,7 +3522,7 @@ void ts_query_cursor_exec(
   self->halted = false;
   self->query = query;
   self->did_exceed_match_limit = false;
-  self->operation_count = 0;
+  self->work_count = 0;
   self->query_options = NULL;
   self->query_state = (TSQueryCursorState) {0};
 }
@@ -4010,24 +4046,22 @@ static inline bool ts_query_cursor__advance(
       }
     }
 
-    if (++self->operation_count == OP_COUNT_PER_QUERY_CALLBACK_CHECK) {
-      self->operation_count = 0;
-    }
+    if (did_match || self->halted) return did_match;
 
-    if (self->query_options && self->query_options->progress_callback) {
-      self->query_state.current_byte_offset = ts_node_start_byte(ts_tree_cursor_current_node(&self->cursor));
-    }
-    if (
-      did_match ||
-      self->halted ||
-      (
-        self->operation_count == 0 &&
-        (
-          (self->query_options && self->query_options->progress_callback && self->query_options->progress_callback(&self->query_state))
-        )
-      )
-    ) {
-      return did_match;
+    // Consult the progress callback after a bounded amount of work.
+    // Only iterations that do work are charged.
+    self->work_count += 1 + self->states.size;
+    if (self->work_count >= WORK_PER_QUERY_CALLBACK_CHECK) {
+      self->work_count = 0;
+      if (self->query_options && self->query_options->progress_callback) {
+        self->query_state.current_byte_offset = ts_node_start_byte(ts_tree_cursor_current_node(&self->cursor));
+        if (self->query_options->progress_callback(&self->query_state)) {
+          // Halt the same way reaching the end of the tree does. The next iteration
+          // discards the in-progress states, so only finished matches are returned.
+          self->halted = true;
+          continue;
+        }
+      }
     }
 
     // Exit the current node.
@@ -4445,9 +4479,30 @@ static inline bool ts_query_cursor__advance(
                   copy->seeking_immediate_match = true;
                 }
                 // Taking a `?`/`*` zero-skip means the quantified subpattern matched
-                // nothing, so an immediately-following anchor is vacuous for this copy.
+                // nothing. How an adjacent anchor behaves then depends on where it sat:
                 if (child_step->alternative_is_skip) {
-                  copy->skipped_quantifier = true;
+                  if (!child_step->is_immediate) {
+                    QueryStep *skip_target = array_get(
+                      &self->query->steps,
+                      child_step->alternative_index
+                    );
+                    // No leading anchor on the skipped step, so an immediately-following
+                    // anchor on the skip target is vacuous (`Q* . B` with zero `Q` lets
+                    // `B` match anywhere).
+                    copy->skipped_quantifier = skip_target->depth == child_step->depth;
+                  } else if (
+                    array_get(&self->query->steps, child_state->step_index - 1)->depth <
+                    child_step->depth
+                  ) {
+                    // The skipped step was the parent's first child pattern and carried a
+                    // leading *boundary* anchor (`(P . Q* Y)`). Transfer the first-child
+                    // requirement to the skip target so it survives the empty run: `Y`
+                    // must still be the parent's first named child.
+                    copy->seeking_immediate_match = true;
+                  }
+                  // Otherwise the skipped step carried a leading *between* anchor
+                  // (`A . Q* ...`): with zero `Q` that adjacency vanishes, while the skip
+                  // target's own anchor, if any, still applies (`A . Q* . B` stays adjacent).
                 }
               }
             }
