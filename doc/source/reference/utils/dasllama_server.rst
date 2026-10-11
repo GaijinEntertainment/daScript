@@ -646,6 +646,9 @@ Endpoints
      - ``/gc``
      - Schedule a validated collection at the next lifecycle safe point; concurrent requests coalesce
    * - ``POST``
+     - ``/cache/drop``
+     - Loopback-only: drop every slot's prompt cache (donated pages and checkpoints) while the model stays loaded, so the next request prefills cold; 409 while streams are live
+   * - ``POST``
      - ``/restart``
      - Drain, then exit 4 --- the watchdog relaunches with the saved config
    * - ``POST``

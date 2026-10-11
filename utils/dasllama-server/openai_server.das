@@ -80,6 +80,7 @@ enum private Route {
     restart
     shutdown
     gc
+    cache_drop
 }
 
 enum private FrontKind {
@@ -2709,6 +2710,25 @@ def private handle_embeddings(req : FrontReq; var resp : Reply) : http_status {
 
 def private streams_busy() : bool =>
     total_active() > 0l || total_queued() > 0l || g_asr_pending > 0 || g_media_pending > 0
+
+//! ``POST /cache/drop``: every slot's prompt cache - the donated pages and a recurrent model's checkpoints -
+//! goes back to its pool, so the next request prefills cold on a server that keeps its model loaded. A
+//! bench that replays the same requests on one server starts each phase here instead of booting a server a
+//! phase. The counters stay. 409 while a stream, an upload or a bench holds the engine.
+def private handle_cache_drop(var resp : Reply) : http_status {
+    if (streams_busy() || bench_hold_active()) {
+        return resp |> JSON(error_body(bench_hold_active() ? ibench_hold_text() : "streams are live (active {total_active()}, queued {total_queued()}) — retry when idle", "busy"), http_status.CONFLICT)
+    }
+    var pages = 0l
+    var states = 0l
+    for (s in g_slots) {
+        pages += prefix_held_groups(s.sched.prefix)
+        states += long_length(s.sched.prefix.states)
+        prefix_release(s.sched.prefix, s.sched.pool)
+    }
+    to_log(LOG_INFO, "dasllama-server: prompt cache dropped via POST /cache/drop - {pages} pages, {states} checkpoints over {length(g_slots)} slot(s)\n")
+    return resp |> JSON("\{\"ok\":true,\"pages_dropped\":{pages},\"checkpoints_dropped\":{states}}", http_status.OK)
+}
 
 // Free the tier for a runtime load and recreate the boot precondition (nothing installed, the
 // want set for THIS load). Boot-order semantics: the load arms under the engine's want, so the
@@ -6174,7 +6194,8 @@ let private ROUTES = fixed_array(
     RouteRow(path = "/v1/images", method = "GET", route = Route.images),
     RouteRow(path = "/restart", method = "POST", route = Route.restart),
     RouteRow(path = "/shutdown", method = "POST", route = Route.shutdown),
-    RouteRow(path = "/gc", method = "POST", route = Route.gc))
+    RouteRow(path = "/gc", method = "POST", route = Route.gc),
+    RouteRow(path = "/cache/drop", method = "POST", route = Route.cache_drop))
 
 // ===== The front's own state: it lives in the front thread's context, never the engine's =====
 var private g_fwires : table<int64; HttpResponseWriter?>   //! wire id -> the writer the engine's reply goes to
@@ -6420,7 +6441,8 @@ def private reply_on(wid : int64; resp : Reply) {
 
 def private operator_route(route : Route) : bool
     => (route == Route.config_save || route == Route.bench_start || route == Route.bake_start
-        || route == Route.catalog_download || route == Route.restart || route == Route.shutdown || route == Route.gc)
+        || route == Route.catalog_download || route == Route.restart || route == Route.shutdown || route == Route.gc
+        || route == Route.cache_drop)
 
 def private note_drain_request(what : string) {
     if (!g_shutdown_requested) {
@@ -6487,6 +6509,7 @@ def private buffered_route(req : FrontReq; var resp : Reply) : http_status {   /
             "\{\"ok\":true,\"scheduled\":true,\"coalesced\":{coalesced}}",
             http_status.ACCEPTED)
     }
+    if (req.route == Route.cache_drop) return handle_cache_drop(resp)
     return handle_unknown(req, resp)
 }
 

@@ -509,6 +509,7 @@ DLLs; the config and the bundle's tune state live in `~/.dasllama` and survive t
 | `POST` | `/exchange/retune` | Arm a local re-tune: removes the sidecar, skips the exchange once, restarts - the next boot races this box (~12 min, quiet machine) |
 | `POST` | `/exchange/consent` | `{"accept": true\|false}`: record the first-contact choice; replies `{ok, accepted, restarting?}`. Accept on an untuned/stale box drains and exits **4** so the relaunch runs the lookup |
 | `POST` | `/gc` | Schedule a validated collection at the next lifecycle safe point; concurrent requests coalesce |
+| `POST` | `/cache/drop` | Loopback-only: every slot's prompt cache - the donated pages and a recurrent model's checkpoints - goes back to its pool, so the next request prefills cold while the model stays loaded; replies `{ok, pages_dropped, checkpoints_dropped}`; 409 while streams are live or a bench holds the engine. A bench that replays the same requests on one server starts each phase here |
 | `POST` | `/shutdown` | Stop admitting new LLM/ASR work, drain accepted work, then exit |
 
 Config precedence: `defaults < config TOML < explicit CLI flags` - unless the TOML carries
