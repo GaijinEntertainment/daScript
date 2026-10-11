@@ -29,9 +29,7 @@ def gate_finding(path : string; line : int; msg : string) {
 }
 
 //! All findings recorded so far, in report order.
-def gate_findings : array<string> {
-    return clone_to_move(g_findings)
-}
+def gate_findings : array<string> => <- clone_to_move(g_findings)
 
 //! Drop accumulated findings (for tests).
 def gate_reset {
@@ -52,9 +50,7 @@ def gate_verdict(name : string) : int {
 }
 
 //! True for `like-this` names: lowercase [a-z0-9] runs joined by single hyphens.
-def is_kebab_case(name : string) : bool {
-    return regex_match(KEBAB, name) >= 0
-}
+def is_kebab_case(name : string) : bool => regex_match(KEBAB, name) >= 0
 
 //! 1-based line number of the first occurrence of `needle` in `text`; 0 when absent.
 def find_line(text : string; needle : string) : int {
@@ -98,9 +94,7 @@ def das_requires(path : string) : array<string> {
 }
 
 //! True for a byte that can sit inside a daslang identifier: `[A-Za-z0-9_]`.
-def is_ident_byte(b : int) : bool {
-    return is_alnum(b) || b == '_'
-}
+def is_ident_byte(b : int) : bool => is_alnum(b) || b == '_'
 
 //! True when `word` appears in `text` as a whole identifier - no identifier byte on either side.
 def contains_word(text : string; word : string) : bool {
@@ -120,9 +114,7 @@ def contains_word(text : string; word : string) : bool {
     return hit
 }
 
-def private to_lower_byte(b : int) : int {
-    return b >= 'A' && b <= 'Z' ? b + 32 : b
-}
+def private to_lower_byte(b : int) : int => b >= 'A' && b <= 'Z' ? b + 32 : b
 
 def private lowered_bytes(s : string) : array<int> {
     var out : array<int>
@@ -194,9 +186,7 @@ def private strip_to_line_comment(text : string; script_quotes : bool) : string 
 //! a quoted URL survives). Use before scanning sources or descriptors: a name mentioned
 //! only in a comment must not count. Only `"` opens a literal - for script text, where a
 //! single quote does too, `script_urls` is the scanner that reads it correctly.
-def strip_line_comments(text : string) : string {
-    return strip_to_line_comment(text, false)
-}
+def strip_line_comments(text : string) : string => strip_to_line_comment(text, false)
 
 def private quoted_ident_tokens(text : string) : array<string> {
     var out : array<string>
@@ -255,9 +245,8 @@ def gate_descriptor_census(descriptor_path : string; census_dirs : array<string>
     }
 }
 
-def private without_group_rows(text : string) : string {
-    return join([for (line in split(text, "\n")); line; where find(line, "register_module_group(") < 0], "\n")
-}
+def private without_group_rows(text : string) : string =>
+    join([for (line in split(text, "\n")); line; where find(line, "register_module_group(") < 0], "\n")
 
 def private any_dir_holds(census_dirs : array<string>; fname : string) : bool {
     for (folder in census_dirs) {
@@ -272,6 +261,38 @@ def private any_dir_holds(census_dirs : array<string>; fname : string) : bool {
 def gate_descriptor_census(descriptor_path : string; census_dirs : array<string>) {
     let no_ignored_tokens : table<string>
     gate_descriptor_census(descriptor_path, census_dirs, no_ignored_tokens)
+}
+
+//! Every test file directly in `tests_dir` - a `.das` not named `_*` that declares a `[test]`
+//! function - is named by some `das_lane_dastest_target` call in `cmake_path`. A lane runs only
+//! the files it names, with no directory scan, so an unnamed test file runs in no CI lane and
+//! nothing at build or run time says so.
+def gate_lane_census(cmake_path : string; tests_dir : string) {
+    if (!fexist(cmake_path)) {
+        gate_finding(cmake_path, "missing - it holds the lanes that run {tests_dir}")
+        return
+    }
+    var inscope named : table<string>
+    for (lane in cmake_command_blocks(fread(cmake_path), "das_lane_dastest_target")) {
+        for (word in cmake_args(lane)) {
+            named |> insert(word)
+        }
+    }
+    dir(tests_dir) $(name) {
+        return if (!(name |> ends_with(".das")) || name |> starts_with("_"))
+        let path = "{tests_dir}/{name}"
+        return if (key_exists(named, path) || !declares_test(fread(path)))
+        gate_finding(path,
+            "declares [test] functions, but no das_lane_dastest_target in {cmake_path} names it - a lane runs only the files it lists, so this file runs in no CI lane. Add it to the lane whose subject it tests")
+    }
+}
+
+def private declares_test(text : string) : bool {
+    for (line in split(strip_line_comments(text), "\n")) {
+        let s = strip(line)
+        return true if (s |> starts_with("[test]") || s |> starts_with("[test("))
+    }
+    return false
 }
 
 //! Every `command( ... )` invocation in CMake text, paren-balanced, with `#` comments and
@@ -385,9 +406,7 @@ def cmake_words(text : string) : array<string> {
     return <- out
 }
 
-def private is_word_break_byte(b : int) : bool {
-    return is_white_space(b) || b == '(' || b == ')' || b == '#' || b == '"'
-}
+def private is_word_break_byte(b : int) : bool => is_white_space(b) || b == '(' || b == ')' || b == '#' || b == '"'
 
 //! The argument words of one `command(...)` block - the command name and the enclosing
 //! parens dropped.
@@ -495,7 +514,7 @@ def cmake_list_entries(text : string; listname : string) : array<string> {
         for (blk in cmake_command_blocks(text, cmd)) {
             let open = find(blk, "(")
             let body = slice(blk, open + 1, length(blk) - 1)
-            var toks : array<string>
+            var inscope toks : array<string>
             for (raw in split(body, "\n")) {
                 var line = raw
                 let cut = find(line, "#")
@@ -542,7 +561,7 @@ def shell_cp_sources(text : string; dest_prefix : string) : array<string> {
         var inscope toks <- cmake_words(line)
         let at = find_index(toks, "cp")
         continue if (at < 0)
-        var args : array<string>
+        var inscope args : array<string>
         args |> reserve(length(toks))
         for (i in range(at + 1, length(toks))) {
             break if (is_shell_operator(toks[i]))
@@ -572,7 +591,7 @@ def cmake_copy_sources(text : string; dest_marker : string) : array<string> {
             continue
         }
         var j = i + 2
-        var args : array<string>
+        var inscope args : array<string>
         args |> reserve(8)
         while (j < n && words[j] != ")" && words[j] != "(" && !is_cmake_keyword(words[j])) {
             args |> push(words[j])
@@ -639,9 +658,7 @@ def prefixed_tokens(text : string; prefix : string) : table<string> {
     return <- out
 }
 
-def private is_token_byte(b : int) : bool {
-    return is_alnum(b) || b == '_' || b == '-'
-}
+def private is_token_byte(b : int) : bool => is_alnum(b) || b == '_' || b == '-'
 
 //! Every `prefix`-token that appears in a stylesheet's SELECTORS - the text outside rule
 //! bodies, block comments stripped, the rules nested in a group at-rule (`@media`,
@@ -1163,18 +1180,14 @@ def html_resource_urls(text : string) : array<string> {
 
 //! True for a repository rule or architecture document - a `.md` the document system owns,
 //! which no site serves (the SDK bundle gate bans every one of them from an install).
-def private is_rule_document(name : string) : bool {
-    return (name |> starts_with("REVIEW") || name |> starts_with("ARCHITECTURE") || name == "README.md")
-}
+def private is_rule_document(name : string) : bool =>
+    name |> starts_with("REVIEW") || name |> starts_with("ARCHITECTURE") || name == "README.md"
 
-def private is_markup_file(name : string) : bool {
-    return (name |> ends_with(".html") || name |> ends_with(".rst") || name |> ends_with(".md"))
-}
+def private is_markup_file(name : string) : bool =>
+    name |> ends_with(".html") || name |> ends_with(".rst") || name |> ends_with(".md")
 
 [arch(at="README.md#web-gate-scanned-set")]
-def private is_asset_manifest(name : string) : bool {
-    return name |> ends_with(".assets.json")
-}
+def private is_asset_manifest(name : string) : bool => name |> ends_with(".assets.json")
 
 // the walker takes basenames, so the rule-document test reads a name, never a path
 def private is_scanned_file(name : string) : bool {

@@ -199,6 +199,7 @@ def main() : int {
         return 2
     }
     check_tests_folder()
+    gate_lane_census("modules/dasLLVM/CMakeLists.txt", TESTS_DIR)
     gate_descriptor_census(DESCRIPTOR, ["modules/dasLLVM/daslib", "modules/dasLLVM/bindings"],
         DESCRIPTOR_CATEGORY_TOKENS)
     return gate_verdict("dasLLVM")

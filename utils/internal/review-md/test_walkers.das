@@ -460,6 +460,9 @@ def make_llvm_fixture(t : T?; tree, root : string) {
     write_at(t, root, "modules/dasLLVM/REVIEW.md", "rules\n")
     write_at(t, root, "modules/dasLLVM/tests/llvm_tune_profiles_defaults/arm64.tune-defaults.json", "\{\}\n")
     write_at(t, root, "modules/dasLLVM/tests/llvm_toy_profiles.das", LLVM_TESTS_GREEN)
+    write_at(t, root, "modules/dasLLVM/tests/llvm_toy_laned.das", "options gen2\n[test]\ndef test_toy(t : T?) \{\}\n")
+    write_at(t, root, "modules/dasLLVM/CMakeLists.txt",
+        "das_lane_dastest_target(run_tests_toy COMMENT \"toy\"\n    JIT_FILES modules/dasLLVM/tests/llvm_toy_laned.das)\n")
     var err : string
     t |> success(copy_file(path_join(tree, "modules/dasLLVM/REVIEW.das"), path_join(root, "modules/dasLLVM/REVIEW.das"), true, err), "copied the real dasllvm gate")
 }
@@ -484,6 +487,7 @@ def test_llvm_gate_fixtures(t : T?) {
         "options gen2\ndef private copy_one(name, dstdir : string) \{\n    fwrite(path_join(dstdir, name), fread(name))\n\}\ndef private plant() \{\n    copy_one(\"x.json\", \"\{get_this_module_dir()\}/llvm_tune_profiles_defaults\")\n\}\n")
     write_at(t, fixture, "modules/dasLLVM/tests/llvm_red_fopen.das",
         "options gen2\ndef private plant() \{\n    fopen(\"\{get_this_module_dir()\}/llvm_tune_profiles_defaults/x.json\", \"wb\") $(f) \{\n    \}\n\}\n")
+    write_at(t, fixture, "modules/dasLLVM/tests/llvm_red_unlaned.das", "options gen2\n[test]\ndef test_toy(t : T?) \{\}\n")
     write_at(t, fixture, "modules/dasLLVM/daslib/llvm_unlisted.das", "options gen2\n")
     write_at(t, fixture, "modules/dasLLVM/.das_module",
         "\"llvm\", \"llvm_toy\", \"llvm_gone\"\n// \"llvm_toy_bind\" commented out must not count\n")
@@ -495,6 +499,7 @@ def test_llvm_gate_fixtures(t : T?) {
                     "llvm_red_traced.das:4: {tracked_msg}",
                     "llvm_red_helper.das:6: {tracked_msg}",
                     "llvm_red_fopen.das:3: {tracked_msg}",
+                    "modules/dasLLVM/tests/llvm_red_unlaned.das: declares [test] functions, but no das_lane_dastest_target in modules/dasLLVM/CMakeLists.txt names it",
                     "llvm_unlisted.das: absent from modules/dasLLVM/.das_module",
                     "llvm_toy_bind.das: absent from modules/dasLLVM/.das_module",
                     "names llvm_gone, but no census dir (modules/dasLLVM/daslib, modules/dasLLVM/bindings) holds llvm_gone.das"]) {

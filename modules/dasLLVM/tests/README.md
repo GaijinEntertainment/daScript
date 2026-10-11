@@ -11,5 +11,9 @@ Run the suite explicitly from the repository root, on an LLVM-enabled build
 bin/Release/daslang.exe dastest/dastest.das -jit -- --timing-outliers 10 --test modules/dasLLVM/tests
 ```
 
+CI runs every test file here through the `das_lane_dastest_target` lanes in `../CMakeLists.txt`,
+which list their files one by one; a new test file joins one of them (`../REVIEW.das` reports a
+test file no lane names).
+
 Files ending in `_client`, `_client_lib`, `_lib`, `_tuner`, or `_root` (a program root a test builds
 or runs through a child daslang) are child-process fixtures rather than standalone test cases.

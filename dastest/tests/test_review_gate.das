@@ -307,6 +307,37 @@ def test_gate_web_third_party(t : T?) {
 }
 
 [test]
+def test_gate_lane_census(t : T?) {
+    let dir_r = create_temp_directory_result("review_gate_lanes")
+    t |> success(dir_r is value, "temp fixture directory created")
+    if (!(dir_r is value)) {
+        return
+    }
+    let root = unsafe(dir_r.value)
+    let tests = "{root}/tests"
+    t |> success(mkdir(tests))
+    t |> success(fwrite("{tests}/named.das", "[test]\ndef test_a(t : T?) \{\}\n"))
+    t |> success(fwrite("{tests}/named_jit.das", "[test(slow)]\ndef test_a(t : T?) \{\}\n"))
+    t |> success(fwrite("{tests}/unnamed.das", "\n[test]\ndef test_a(t : T?) \{\}\n"))
+    t |> success(fwrite("{tests}/commented.das", "// [test] in prose only\ndef helper() \{\}\n"))
+    t |> success(fwrite("{tests}/client.das", "def helper() \{\}\n"))
+    t |> success(fwrite("{tests}/_fixture.das", "[test]\ndef test_a(t : T?) \{\}\n"))
+    let cmake = "{root}/CMakeLists.txt"
+    t |> success(fwrite(cmake, "das_lane_dastest_target(lane_a FILES {tests}/named.das)\n# das_lane_dastest_target(lane_off FILES {tests}/unnamed.das)\nDAS_LANE_DASTEST_TARGET(lane_b COMMENT \"x\"\n    JIT_FILES {tests}/named_jit.das)\n"))
+    gate_reset()
+    gate_lane_census(cmake, tests)
+    var inscope fs <- gate_findings()
+    gate_reset()
+    t |> equal(1, length(fs), join(fs, "\n"))
+    t |> success(length(fs) == 1 && find(fs[0], "{tests}/unnamed.das: declares [test] functions") == 0, join(fs, "\n"))
+    gate_lane_census("{root}/absent.txt", tests)
+    var inscope missing <- gate_findings()
+    gate_reset()
+    t |> equal(1, length(missing))
+    t |> success(rmdir_rec("{root}"))
+}
+
+[test]
 def test_css_urls(t : T?) {
     let sheet = "@import url(\"https://fonts.googleapis.com/css2?family=Inter\");\n@font-face \{ src: url(//cdn.example/a.woff2) format('woff2'); \}\nbody \{ background: url('files/local.png'); \}\n/* see http://ie.microsoft.com/testdrive/ for the prefix history */\n"
     var inscope urls <- css_urls(sheet)
