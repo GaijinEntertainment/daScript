@@ -7,12 +7,12 @@ A kernel is a function carrying `[metal_kernel]`, `[spirv_kernel]`, or an annota
 
 **A kernel body that computes on a marker struct with anything but the device ops it exists for -
 the coopmat and `tmm2d` load, multiply-accumulate, convert and store builtins with the layout or
-descriptor values they take, and resource reads and writes on a sampler or image - is a defect;
-arithmetic on what those ops produce is ordinary das, so the kernel is compared against its own
-CPU run.** A marker struct is one that stands on
-the CPU for a value whose storage exists only on the device (a tile, a tensor, a layout or view
-over one, a sampler, an image) and has no storage of its own; the builtins over it compile on the
-CPU, and their CPU bodies compute nothing.
+descriptor values they take, resource reads and writes on a sampler or an image, and `subpassLoad`
+on a `subpassInput` - is a defect; arithmetic on what those ops produce is ordinary das, so the
+kernel is compared against its own CPU run.** A marker struct is one that stands on the CPU for a
+value whose storage exists only on the device (a tile, a tensor, a layout or view over one, a
+sampler, an image, a `subpassInput`) and has no storage of its own; the builtins over it compile on
+the CPU, and their CPU bodies compute nothing.
 
 **A diff that adds or changes an emitter builtin whose operands are all ordinary CPU values - a
 declaration in `daslib/shader_lingua_franca.das`, `dasSpirv/spirv/spirv_builtins.das` or

@@ -4,7 +4,7 @@ options _comment_hygiene = true
 require vulkan
 require vulkan/vulkan_boost
 require triangle_example_shaders
-require daslib/fio
+require example_ppm
 require math
 
 let WIDTH = 256
@@ -21,20 +21,6 @@ def is_clear(c : int3) : bool => abs(c.x - 26) <= 8 && abs(c.y - 26) <= 8 && abs
 def vcheck(what : string; ok : bool) : int {
     print("  [{ok ? "PASS" : "FAIL"}] {what}\n")
     return ok ? 0 : 1
-}
-
-def write_ppm(path : string; pixels : array<uint8>; w, h : int) {
-    fopen(path, "wb") $(f) {
-        fprint(f, "P6\n{w} {h}\n255\n")
-        var rgb : array<uint8>
-        rgb |> resize(w * h * 3)
-        for (i in range(w * h)) {
-            rgb[i * 3] = pixels[i * 4]
-            rgb[i * 3 + 1] = pixels[i * 4 + 1]
-            rgb[i * 3 + 2] = pixels[i * 4 + 2]
-        }
-        fwrite(f, rgb)
-    }
 }
 
 [export]
@@ -61,27 +47,12 @@ def main() : int {
     // the pipeline carries the color format it renders into; no render pass, no framebuffer
     var inscope pipeline <- create_graphics_pipeline_simple(device, FORMAT, layout, vert, frag, WIDTH, HEIGHT)
 
-    let buf_size = uint64(WIDTH * HEIGHT * 4)
-    var inscope readback <- create_host_buffer(device, phys, buf_size)
     var inscope pool <- create_command_pool(device, command_pool_info(gfx))
 
-    run_cmd_sync(device, pool, queue) $(cmd) {
-        transition_image2(cmd, target.image, VkImageLayout.UNDEFINED, VkImageLayout.COLOR_ATTACHMENT_OPTIMAL,
-            PIPELINE_STAGE_2_NONE, ACCESS_2_NONE,
-            VkPipelineStageFlags2.color_attachment_output, VkAccessFlags2.color_attachment_write)
-        record_rendering(cmd, target.view, full_area(WIDTH, HEIGHT), clear_color(0.1f, 0.1f, 0.15f, 1.0f)) {
-            cmd_bind_pipeline(cmd, pipeline)
-            cmd_draw(cmd, 3u)
-        }
-        transition_image2(cmd, target.image, VkImageLayout.COLOR_ATTACHMENT_OPTIMAL, VkImageLayout.TRANSFER_SRC_OPTIMAL,
-            VkPipelineStageFlags2.color_attachment_output, VkAccessFlags2.color_attachment_write,
-            VkPipelineStageFlags2.copy, VkAccessFlags2.transfer_read)
-        copy_image_to_buffer(cmd, target.image, readback, WIDTH, HEIGHT)
-    }
-
-    var pixels : array<uint8>
-    map_memory_to_array(device, readback.memory, buf_size) $(m) {
-        pixels := m
+    // one synchronous frame: the barriers around the rendering and the readback copy live in the helper
+    let pixels <- render_offscreen_rgba8(device, phys, queue, pool, target, WIDTH, HEIGHT, clear_color(0.1f, 0.1f, 0.15f, 1.0f)) $(cmd) {
+        cmd_bind_pipeline(cmd, pipeline)
+        cmd_draw(cmd, 3u)
     }
 
     write_ppm("triangle_boost.ppm", pixels, WIDTH, HEIGHT)

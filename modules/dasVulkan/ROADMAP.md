@@ -141,15 +141,21 @@ The tutorials and the window layer draw with dynamic rendering and
 synchronization2 (`ARCHITECTURE_RENDERING.md#dynamic-rendering`); tutorial 16
 teaches the three 1.4 promotions that change how a frame is put together and
 `examples/shader_objects.das` the opt-in shader-object path
-(`ARCHITECTURE_RENDERING.md#vulkan-14`, `#shader-objects`). What remains:
+(`ARCHITECTURE_RENDERING.md#vulkan-14`, `ARCHITECTURE_RENDERING.md#shader-objects`).
+What remains:
 
 - **The nightly render lane's 1.4 proof.** The lane installs Mesa from the
   kisak-mesa PPA so lavapipe reports 1.4 and tutorial 16's oracle runs instead of
-  skipping; the PPA is an external dependency, and a lane whose PPA is gone
-  silently falls back to Ubuntu's Mesa 24.x and a skipped oracle. A guard that
-  fails the lane when `vulkaninfo` reports below 1.4 is owed. The macOS lane is
-  build + loader smoke only; Windows has no lane - a local 1.4 GPU is the proof
-  there.
+  skipping. A PPA that is gone fails the install step loudly; what fails
+  silently is a lavapipe that reports 1.4 without `hostImageCopy` (optional in
+  1.4), where the oracle skips and the lane stays green. A guard that fails the
+  lane when `vulkan14_supported` is false on the lane's device is owed. The
+  macOS lane is build + loader smoke only; Windows has no lane - a local 1.4 GPU
+  is the proof there.
+- **`RenderingFormats` with several color attachments and a cull-mode choice on
+  `create_graphics_pipeline_dyn`** - tutorial 16 builds its two pipelines by
+  hand because each names three color formats and carries its own attachment
+  maps; widening the boost builder lets the tutorial keep only the maps.
 - **A `vulkan_lint` rule for the frame-shape mix** - a pipeline built for a render pass bound
   inside `record_rendering`, or one built for formats bound inside `record_render_pass`. A
   `[lint_macro]` sees the consumer after inlining: the `record_rendering` call and its block are

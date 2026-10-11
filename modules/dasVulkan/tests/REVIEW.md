@@ -7,6 +7,7 @@ doc: `../ARCHITECTURE.md`.
 first - before anything it calls reaches a `vk*` function.** Nothing in the harness calls it, and
 every `vk*` function is null until it runs.
 
-**A `[test]` check compares a number a driver or OS query reported - count, limit, version or
-size - only to another reported number or its no-answer value (zero, an empty list), never to a
-threshold.** Machines differ; whether the query answered does not.
+**A `[test]` check compares a value a driver or OS query returned - a property, feature bit,
+limit, count or budget, never a rendered or computed result - only to another query's value or to
+its no-answer value (zero, an empty list); a fixed value may pick a skip or another query's
+expected answer.** Machines differ; whether a query answered does not.

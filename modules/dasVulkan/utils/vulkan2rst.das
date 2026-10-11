@@ -67,15 +67,15 @@ def document_module_vulkan_boost() {
     var mod = find_module("vulkan_boost")
     var groups <- array<DocGroup>(
         group_by_regex("Device selection", mod, %regex~^(select_physical_device|select_graphics_queue_family|try_find_memory_type|find_memory_type)$%%),
-        group_by_regex("Instance & device", mod, %regex~^(create_instance|create_device|create_device_descriptor_indexing|create_device_draw_parameters|create_device_vulkan14|create_device_shader_objects|dynamic_rendering_supported|require_dynamic_rendering|vulkan14_supported|shader_object_supported|get_device_queue|instance_extension_available|device_extension_available)$%%),
+        group_by_regex("Instance & device", mod, %regex~^(create_instance|create_device|create_device_descriptor_indexing|create_device_draw_parameters|create_device_vulkan14|create_device_shader_object|dynamic_rendering_supported|vulkan14_supported|shader_object_supported|probe_device|get_device_queue|instance_extension_available|device_extension_available)$%%),
         group_by_regex("Host image copy", mod, %regex~^(host_copy_layout|upload_image_from_host)$%%),
         group_by_regex("Shader objects", mod, %regex~^(spirv_bytes|cmd_bind_graphics_shaders|cmd_set_shader_object_baseline)$%%),
         group_by_regex("Shaders & pipelines", mod, %regex~^(create_shader_module|create_pipeline_layout|create_graphics_pipeline_simple|create_graphics_pipeline_v3d|create_graphics_pipeline_dyn|create_compute_pipeline|create_compute_pipeline_full_subgroups)$%%),
-        group_by_regex("Dynamic rendering", mod, %regex~^(rendering_formats|attach_rendering_formats|set_pipeline_target|record_rendering|record_rendering_depth_only|rendering_color_attachment|rendering_depth_attachment)$%%),
+        group_by_regex("Dynamic rendering", mod, %regex~^(require_dynamic_rendering|rendering_formats|attach_rendering_formats|set_pipeline_target|record_rendering|record_rendering_depth_only|rendering_color_attachment|rendering_depth_attachment|render_offscreen_rgba8)$%%),
         group_by_regex("Mesh shaders",     mod, %regex~^(create_device_mesh_shader|mesh_shader_supported|create_mesh_pipeline)$%%),
         group_by_regex("Hardware ray tracing", mod, %regex~^(rt_supported|create_device_ray_tracing|create_address_buffer|get_ray_tracing_properties|get_ray_tracing_shader_group_handles|create_ray_tracing_pipeline|build_shader_binding_table|cmd_trace_rays|make_accel_instance|build_blas|build_tlas|write_descriptor_acceleration_structure)$%%),
         group_by_regex("Render passes",    mod, %regex~^create_render_pass_(single_color|color_depth|depth_only)$%%),
-        group_by_regex("Builders",         mod, %regex~^(build_offscreen_target|build_offscreen_depth|create_host_buffer|create_host_buffer_from_bytes|create_sampler_shadow|compute_to_storage_image)$%%),
+        group_by_regex("Builders",         mod, %regex~^(build_image|build_offscreen_target|build_offscreen_depth|create_host_buffer|create_host_buffer_from_bytes|create_sampler_shadow|compute_to_storage_image)$%%),
         group_by_regex("Memory & brackets", mod, %regex~^(run_cmd_sync|begin_one_time_commands|record_render_pass|map_memory_to_array|read_memory|with_mapped_memory|with_push_staging|write_field|upload_bytes)$%%),
         group_by_regex("Command recording", mod, %regex~^(cmd_bind_pipeline|cmd_bind_vertex_buffer|cmd_draw|cmd_push_constants|copy_image_to_buffer|blit_full_image|transition_image|transition_depth_image|transition_image_aspect|transition_image2|transition_depth_image2|transition_image_aspect2)$%%),
         group_by_regex("Conveniences",     mod, %regex~^(full_area|clear_color|clear_depth)$%%),

@@ -21,10 +21,10 @@ def test_shader_objects_triangle(t : T?) {
     let br = px(p, 180, 190)
     let mid = px(p, 128, 150)
     let corner = px(p, 5, 5)
+    delete p
     t |> success(top.x > top.y + 40 && top.x > top.z + 40, "top vertex region is red")
     t |> success(bl.z > bl.x + 40 && bl.z > bl.y + 40, "bottom-left region is blue")
     t |> success(br.y > br.x + 40 && br.y > br.z + 40, "bottom-right region is green")
     t |> success(mid.x > 20 && mid.y > 20 && mid.z > 20, "centroid shows the interpolated blend")
     t |> success(corner.x < 40 && corner.z > corner.x, "the corner holds the clear color")
-    delete p
 }

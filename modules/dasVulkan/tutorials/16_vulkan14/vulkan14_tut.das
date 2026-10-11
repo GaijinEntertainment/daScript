@@ -15,11 +15,11 @@ module vulkan14_tut
 require vulkan public
 require vulkan/vulkan_boost public
 require vulkan/vulkan_reflect
-require vulkan14_tut_shaders
+require vulkan14_tut_shaders public
+require daslib/math_boost
+require daslib/enum_trait
 require math
 
-let public V14_W = 768
-let public V14_H = 512
 let ALBEDO_FMT = VkFormat.R8G8B8A8_UNORM    // G-buffer stays linear: the lighting pass does the math on it
 let NORMAL_FMT = VkFormat.R8G8B8A8_UNORM    // world normal packed into [0,1]
 let COLOR_FMT = VkFormat.R8G8B8A8_SRGB      // the lit result, gamma-encoded on write for readback and blit
@@ -27,9 +27,11 @@ let DEPTH_FMT = VkFormat.D32_SFLOAT
 let TEX_DIM = 64
 let public N_CUBES = 3
 let public N_INDICES = 36
+let N_COLOR_ATTACHMENTS = 3u                // albedo, normal, lit color: one rendering holds all three
+let CUBE_VERTEX_STRIDE = 32u                // 8 floats: pos.xyz, uv, normal.xyz
+let CAMERA_UBO_BYTES = 128ul                // two column-major mat4, std140
 
-// ===== cube geometry (tutorial 04's: pos.xyz +0, uv +12, normal.xyz +20, 32-byte stride, CCW) =====
-
+//! CUBE_VERTEX_STRIDE bytes per vertex - pos.xyz, uv, normal.xyz - faces wound CCW.
 let private cube_vertices : array<float> <- [
     -0.5, -0.5, 0.5,  0.0, 1.0,   0.0, 0.0, 1.0,
      0.5, -0.5, 0.5,  1.0, 1.0,   0.0, 0.0, 1.0,
@@ -64,41 +66,14 @@ let private cube_indices : array<uint16> <- [
     uint16(16), uint16(17), uint16(18), uint16(16), uint16(18), uint16(19),
     uint16(20), uint16(21), uint16(22), uint16(20), uint16(22), uint16(23)]
 
-// ===== matrices (column-major) =====
-
+//! `perspective_rh_0_to_1` with the Y flip Vulkan's framebuffer needs (+Y is down in its NDC).
 def perspective_vk(fov_y, aspect, znear, zfar : float) : float4x4 {
-    let f = 1.0f / tan(fov_y * 0.5f)
-    let nf = 1.0f / (znear - zfar)
-    var m : float4x4
-    m[0] = float4(f / aspect, 0.0f, 0.0f, 0.0f)
-    m[1] = float4(0.0f, -f, 0.0f, 0.0f)                 // Vulkan NDC has +Y down
-    m[2] = float4(0.0f, 0.0f, zfar * nf, -1.0f)
-    m[3] = float4(0.0f, 0.0f, znear * zfar * nf, 0.0f)
+    var m = perspective_rh_0_to_1(fov_y, aspect, znear, zfar)
+    m[1].y = -m[1].y
     return m
 }
 
-def vec3_sub(a, b : float3) : float3 => float3(a.x - b.x, a.y - b.y, a.z - b.z)
-def vec3_cross(a, b : float3) : float3 => float3(a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x)
-def vec3_dot(a, b : float3) : float => a.x * b.x + a.y * b.y + a.z * b.z
-def vec3_normalize(v : float3) : float3 {
-    let len = sqrt(vec3_dot(v, v))
-    return float3(v.x / len, v.y / len, v.z / len)
-}
-
-def look_at_rh(eye, center, up : float3) : float4x4 {
-    let f = vec3_normalize(vec3_sub(center, eye))
-    let s = vec3_normalize(vec3_cross(f, up))
-    let u = vec3_cross(s, f)
-    var m : float4x4
-    m[0] = float4(s.x, u.x, -f.x, 0.0f)
-    m[1] = float4(s.y, u.y, -f.y, 0.0f)
-    m[2] = float4(s.z, u.z, -f.z, 0.0f)
-    m[3] = float4(-vec3_dot(s, eye), -vec3_dot(u, eye), vec3_dot(f, eye), 1.0f)
-    return m
-}
-
-//! Rotation around Y by `angle`, then a translation to `pos`; rotation + translation only, so the
-//! vertex shader transforms normals with the same matrix.
+//! Rotation about Y, then translation to `pos` - no scale, so the vertex shader transforms normals by this same matrix.
 def model_matrix(angle : float; pos : float3) : float4x4 {
     let c = cos(angle)
     let s = sin(angle)
@@ -110,161 +85,80 @@ def model_matrix(angle : float; pos : float3) : float4x4 {
     return m
 }
 
-// ===== procedural textures: one pattern per cube, so each cube is told apart by hue =====
+//! One hue per cube: the oracle tells the three cubes apart by color.
+enum CubePattern {
+    red_checker
+    green_stripes
+    blue_dots
+}
 
-//! TEX_DIM x TEX_DIM RGBA8: 0 = red/white checker, 1 = green/black stripes, 2 = blue/white dots.
-def gen_cube_texture(kind : int) : array<uint8> {
+//! TEX_DIM x TEX_DIM RGBA8 of `pattern`.
+def gen_cube_texture(pattern : CubePattern) : array<uint8> {
     var px : array<uint8>
     px |> resize(TEX_DIM * TEX_DIM * 4)
     for (y in range(TEX_DIM)) {
         for (x in range(TEX_DIM)) {
-            var on = false
-            if (kind == 0) {
-                on = ((x / 8) + (y / 8)) % 2 == 0
-            } elif (kind == 1) {
-                on = (x / 8) % 2 == 0
+            var rgb = int3(0, 0, 0)
+            if (pattern == CubePattern.red_checker) {
+                let on = ((x / 8) + (y / 8)) % 2 == 0
+                rgb = int3(230, on ? 40 : 230, on ? 40 : 230)
+            } elif (pattern == CubePattern.green_stripes) {
+                let on = (x / 8) % 2 == 0
+                rgb = int3(on ? 30 : 10, on ? 210 : 40, on ? 60 : 10)
             } else {
                 let dx = (x % 16) - 8
                 let dy = (y % 16) - 8
-                on = dx * dx + dy * dy < 20
-            }
-            var r = 0
-            var g = 0
-            var b = 0
-            if (kind == 0) {
-                r = 230
-                g = on ? 40 : 230
-                b = on ? 40 : 230
-            } elif (kind == 1) {
-                r = on ? 30 : 10
-                g = on ? 210 : 40
-                b = on ? 60 : 10
-            } else {
-                r = on ? 50 : 230
-                g = on ? 90 : 230
-                b = 240
+                let on = dx * dx + dy * dy < 20
+                rgb = int3(on ? 50 : 230, on ? 90 : 230, 240)
             }
             let o = (y * TEX_DIM + x) * 4
-            px[o] = uint8(r)
-            px[o + 1] = uint8(g)
-            px[o + 2] = uint8(b)
+            px[o] = uint8(rgb.x)
+            px[o + 1] = uint8(rgb.y)
+            px[o + 2] = uint8(rgb.z)
             px[o + 3] = uint8(255)
         }
     }
     return <- px
 }
 
-//! One sampled texture: image + memory + view, filled by `upload_image_from_host`.
-struct public Texture {
-    image  : Image
-    memory : DeviceMemory
-    view   : ImageView
-}
-
-def public finalize(var t : Texture) {
-    delete t.view
-    delete t.image
-    delete t.memory
-}
-
-//! Create a TEX_DIM x TEX_DIM RGBA8 texture whose usage carries ``host_transfer`` beside ``sampled``, and
-//! fill it from `pixels` through a host image copy into `layout` (the device's choice from `host_copy_layout`).
+//! One TEX_DIM x TEX_DIM RGBA8 texture whose usage carries ``host_transfer`` beside ``sampled``, filled
+//! from `pixels` through a host image copy into `layout` (the device's choice from `host_copy_layout`).
 //! No staging buffer, no command buffer, no queue: the image is ready to sample when this returns.
-def create_host_copied_texture(device : Device; phys : VkPhysicalDevice; pixels : array<uint8>; layout : VkImageLayout) : Texture {
-    let dev = boost_value_to_vk(device)
-    var ici = ImageCreateInfo(
-        imageType = VkImageType._2D,
-        format = VkFormat.R8G8B8A8_UNORM,
-        mipLevels = 1u,
-        arrayLayers = 1u,
-        tiling = VkImageTiling.OPTIMAL,
-        initialLayout = VkImageLayout.UNDEFINED)
-    ici.extent.width = uint(TEX_DIM)
-    ici.extent.height = uint(TEX_DIM)
-    ici.extent.depth = 1u
-    ici.samples._1 = true
-    ici.usage.sampled = true
-    ici.usage.host_transfer = true              // the 1.4 usage bit a host copy needs
-    var inscope image <- create_image(device, ici)
-    var req : VkMemoryRequirements
-    vkGetImageMemoryRequirements(dev, boost_value_to_vk(image), req)
-    var want : VkMemoryPropertyFlags
-    want.device_local = true
-    let mai = MemoryAllocateInfo(allocationSize = req.size,
-        memoryTypeIndex = find_memory_type(phys, req.memoryTypeBits, want))
-    var inscope memory <- allocate_memory(device, mai)
-    vk_check(vkBindImageMemory(dev, boost_value_to_vk(image), boost_value_to_vk(memory), 0ul), null)
-    upload_image_from_host(device, image, pixels, TEX_DIM, TEX_DIM, layout)
-    var vci = ImageViewCreateInfo(image = weak_copy(image), viewType = VkImageViewType._2D, format = VkFormat.R8G8B8A8_UNORM)
-    vci.subresourceRange.aspectMask.color = true
-    vci.subresourceRange.levelCount = 1u
-    vci.subresourceRange.layerCount = 1u
-    var inscope view <- create_image_view(device, vci)
-    return <- Texture(image <- image, memory <- memory, view <- view)
+def create_host_copied_texture(device : Device; phys : VkPhysicalDevice; pixels : array<uint8>; layout : VkImageLayout) : OffscreenTarget {
+    let usage = VkImageUsageFlags.sampled | VkImageUsageFlags.host_transfer     // host_transfer: the 1.4 usage bit a host copy needs
+    var tex <- build_image(device, phys, TEX_DIM, TEX_DIM, VkFormat.R8G8B8A8_UNORM, VkSampleCountFlags._1, usage)
+    upload_image_from_host(device, tex.image, pixels, TEX_DIM, TEX_DIM, layout)
+    return <- tex
 }
 
-// ===== pipelines: built by hand, because each names THREE color attachments and its own location map =====
+// ===== the two passes inside one rendering =====
 
-//! The three-attachment rendering both pipelines draw into, and the pNext chain that maps a pipeline's
-//! fragment output locations to attachments (``VkRenderingAttachmentLocationInfo``) and attachments to its
-//! ``subpassInput`` indices (``VkRenderingInputAttachmentIndexInfo``); the command buffer sets the same maps.
-struct PassLayout {
-    color_fmts : array<VkFormat>
-    locations  : array<uint>
-    inputs     : array<uint>
-    rendering  : VkPipelineRenderingCreateInfo
-    loc_info   : VkRenderingAttachmentLocationInfo
-    in_info    : VkRenderingInputAttachmentIndexInfo
+//! Per pass, which attachment each fragment output location lands in and which attachment each ``subpassInput``
+//! index reads: geometry writes attachments 0 and 1 and reads nothing, lighting writes 2 and reads 0 and 1.
+//! Each pipeline is built with its pass's maps, and the command buffer sets the same maps before that pass's draws.
+let GBUF_LOCATIONS <- [0u, 1u, VK_ATTACHMENT_UNUSED]
+let GBUF_INPUTS <- [VK_ATTACHMENT_UNUSED, VK_ATTACHMENT_UNUSED, VK_ATTACHMENT_UNUSED]
+let LIGHT_LOCATIONS <- [VK_ATTACHMENT_UNUSED, VK_ATTACHMENT_UNUSED, 0u]
+let LIGHT_INPUTS <- [0u, 1u, VK_ATTACHMENT_UNUSED]
+
+enum PassKind {
+    geometry
+    lighting
 }
 
-def pass_layout(locations, inputs : array<uint>) : PassLayout {
-    var p : PassLayout
-    p.color_fmts <- [ALBEDO_FMT, NORMAL_FMT, COLOR_FMT]
-    p.locations := locations
-    p.inputs := inputs
-    p.rendering = VkPipelineRenderingCreateInfo()
-    p.rendering.colorAttachmentCount = 3u
-    p.rendering.depthAttachmentFormat = DEPTH_FMT
-    p.loc_info = VkRenderingAttachmentLocationInfo()
-    p.loc_info.colorAttachmentCount = 3u
-    p.in_info = VkRenderingInputAttachmentIndexInfo()
-    p.in_info.colorAttachmentCount = 3u
-    unsafe {
-        p.rendering.pColorAttachmentFormats = addr(p.color_fmts[0])
-        p.loc_info.pColorAttachmentLocations = addr(p.locations[0])
-        p.in_info.pColorAttachmentInputIndices = addr(p.inputs[0])
-        p.rendering.pNext = addr<void?>(p.loc_info)
-        p.loc_info.pNext = addr<void?>(p.in_info)
-    }
-    return <- p
-}
-
-//! The 32-byte vertex: pos (location 0), uv (1), normal (2).
+//! The cube vertex: pos (location 0), uv (1), normal (2).
 def cube_vertex_attributes() : array<VkVertexInputAttributeDescription> {
-    var attrs : array<VkVertexInputAttributeDescription>
-    var a_pos = VkVertexInputAttributeDescription()
-    a_pos.location = 0u
-    a_pos.format = VkFormat.R32G32B32_SFLOAT
-    a_pos.offset = 0u
-    attrs |> push(a_pos)
-    var a_uv = VkVertexInputAttributeDescription()
-    a_uv.location = 1u
-    a_uv.format = VkFormat.R32G32_SFLOAT
-    a_uv.offset = 12u
-    attrs |> push(a_uv)
-    var a_n = VkVertexInputAttributeDescription()
-    a_n.location = 2u
-    a_n.format = VkFormat.R32G32B32_SFLOAT
-    a_n.offset = 20u
-    attrs |> push(a_n)
-    return <- attrs
+    return <- [
+        VkVertexInputAttributeDescription(location = 0u, format = VkFormat.R32G32B32_SFLOAT, offset = 0u),
+        VkVertexInputAttributeDescription(location = 1u, format = VkFormat.R32G32_SFLOAT, offset = 12u),
+        VkVertexInputAttributeDescription(location = 2u, format = VkFormat.R32G32B32_SFLOAT, offset = 20u)]
 }
 
-//! One graphics pipeline over `maps`: `geometry` draws the 32-byte cube vertex with depth test + write
-//! and back-face culling, the lighting pass draws three unindexed vertices with depth off. Three color
-//! blend attachments either way - one per attachment of the rendering, written or not.
-def build_pass_pipeline(device : Device; layout : PipelineLayout; vert, frag : ShaderModule;   // nolint:STYLE038 - flat one-call-per-item Vulkan setup run
-                        var maps : PassLayout; geometry : bool) : Pipeline {
+//! Built by hand: each pipeline names the rendering's three color attachments and carries its pass's maps on
+//! the create info's pNext chain (``VkPipelineRenderingCreateInfo`` -> ``VkRenderingAttachmentLocationInfo`` ->
+//! ``VkRenderingInputAttachmentIndexInfo``); the chain is linked here, in the frame the create info lives in.
+def build_pass_pipeline(device : Device; layout : PipelineLayout; vert, frag : ShaderModule; kind : PassKind) : Pipeline {   // nolint:STYLE038 - flat one-call-per-item Vulkan setup run
+    let is_geometry_pass = kind == PassKind.geometry
     var stages : array<VkPipelineShaderStageCreateInfo>
     stages |> resize(2)
     stages[0] = VkPipelineShaderStageCreateInfo()
@@ -278,11 +172,11 @@ def build_pass_pipeline(device : Device; layout : PipelineLayout; vert, frag : S
 
     var binding = VkVertexInputBindingDescription()
     binding.binding = 0u
-    binding.stride = 32u
+    binding.stride = CUBE_VERTEX_STRIDE
     binding.inputRate = VkVertexInputRate.VERTEX
     var attrs <- cube_vertex_attributes()
     var vinput = VkPipelineVertexInputStateCreateInfo()
-    if (geometry) {
+    if (is_geometry_pass) {
         vinput.vertexBindingDescriptionCount = 1u
         vinput.vertexAttributeDescriptionCount = uint(length(attrs))
     }
@@ -302,32 +196,47 @@ def build_pass_pipeline(device : Device; layout : PipelineLayout; vert, frag : S
 
     var rast = VkPipelineRasterizationStateCreateInfo()
     rast.polygonMode = VkPolygonMode.FILL
-    rast.cullMode.back = geometry
+    rast.cullMode.back = is_geometry_pass
     rast.frontFace = VkFrontFace.COUNTER_CLOCKWISE
     rast.lineWidth = 1.0
     var msaa = VkPipelineMultisampleStateCreateInfo()
     msaa.rasterizationSamples._1 = true
 
+    // the geometry pass tests and writes depth; the lighting pass is a fullscreen triangle with depth off
     var depthstate = VkPipelineDepthStencilStateCreateInfo()
-    depthstate.depthTestEnable = geometry ? VK_TRUE : VK_FALSE
-    depthstate.depthWriteEnable = geometry ? VK_TRUE : VK_FALSE
+    depthstate.depthTestEnable = is_geometry_pass ? VK_TRUE : VK_FALSE
+    depthstate.depthWriteEnable = is_geometry_pass ? VK_TRUE : VK_FALSE
     depthstate.depthCompareOp = VkCompareOp.LESS
 
+    // one blend attachment per attachment of the rendering, written by this pass or not
     var blend_atts : array<VkPipelineColorBlendAttachmentState>
-    blend_atts |> resize(3)
+    blend_atts |> resize(int(N_COLOR_ATTACHMENTS))
     for (att in blend_atts) {
-        att.colorWriteMask.r = true
-        att.colorWriteMask.g = true
-        att.colorWriteMask.b = true
-        att.colorWriteMask.a = true
+        att.colorWriteMask = VkColorComponentFlags.r | VkColorComponentFlags.g | VkColorComponentFlags.b | VkColorComponentFlags.a
     }
     var blend = VkPipelineColorBlendStateCreateInfo()
-    blend.attachmentCount = 3u
+    blend.attachmentCount = N_COLOR_ATTACHMENTS
+
+    var color_fmts <- [ALBEDO_FMT, NORMAL_FMT, COLOR_FMT]
+    var locations := is_geometry_pass ? GBUF_LOCATIONS : LIGHT_LOCATIONS
+    var inputs := is_geometry_pass ? GBUF_INPUTS : LIGHT_INPUTS
+    var rendering = VkPipelineRenderingCreateInfo()
+    rendering.colorAttachmentCount = N_COLOR_ATTACHMENTS
+    rendering.depthAttachmentFormat = DEPTH_FMT
+    var loc_info = VkRenderingAttachmentLocationInfo()
+    loc_info.colorAttachmentCount = N_COLOR_ATTACHMENTS
+    var in_info = VkRenderingInputAttachmentIndexInfo()
+    in_info.colorAttachmentCount = N_COLOR_ATTACHMENTS
 
     var h : VkPipeline
     unsafe {
+        rendering.pColorAttachmentFormats = addr(color_fmts[0])
+        loc_info.pColorAttachmentLocations = addr(locations[0])
+        in_info.pColorAttachmentInputIndices = addr(inputs[0])
+        rendering.pNext = addr<void?>(loc_info)
+        loc_info.pNext = addr<void?>(in_info)
         var gp = VkGraphicsPipelineCreateInfo()
-        gp.pNext = addr<void?>(maps.rendering)
+        gp.pNext = addr<void?>(rendering)
         gp.stageCount = 2u
         gp.pStages = addr(stages[0])
         vinput.pVertexBindingDescriptions = addr(binding)
@@ -347,45 +256,47 @@ def build_pass_pipeline(device : Device; layout : PipelineLayout; vert, frag : S
     }
     delete stages
     delete attrs
+    delete blend_atts
+    delete color_fmts
+    delete locations
+    delete inputs
     var b = vk_value_to_boost(h)
     b._needs_delete = true
     b._device = unsafe(reinterpret<uint64>(boost_value_to_vk(device)))
     return <- b
 }
 
-// ===== resources =====
-
 //! Everything the frame needs that depends only on (device, phys): the G-buffer and color targets, the
 //! cube geometry, the camera UBO, the three host-copied textures, both pipelines on push-descriptor set
 //! layouts, and a host-visible readback. No descriptor pool anywhere.
 struct public Vulkan14Resources {
-    albedo         : OffscreenTarget
-    normal         : OffscreenTarget
-    color          : OffscreenTarget
-    depth          : OffscreenDepth
-    vb             : HostBuffer
-    ib             : HostBuffer
-    ubo            : HostBuffer
-    textures       : array<Texture>
-    tex_layout     : VkImageLayout          // the layout host_copy_layout chose; the pushed descriptor names it
-    sampler        : Sampler
-    gbuf_layouts   : array<DescriptorSetLayout>
-    gbuf_pipe      : PipelineLayout
-    gbuf_pipeline  : Pipeline
-    light_layouts  : array<DescriptorSetLayout>
-    light_pipe     : PipelineLayout
-    light_pipeline : Pipeline
-    readback       : HostBuffer
-    buf_size       : uint64
+    albedo            : OffscreenTarget
+    normal            : OffscreenTarget
+    color             : OffscreenTarget
+    depth             : OffscreenDepth
+    vb                : HostBuffer
+    ib                : HostBuffer
+    ubo               : HostBuffer
+    textures          : array<OffscreenTarget>
+    tex_layout        : VkImageLayout       // the layout host_copy_layout chose; the pushed descriptor names it
+    sampler           : Sampler
+    gbuf_layouts      : array<DescriptorSetLayout>
+    gbuf_pipe_layout  : PipelineLayout
+    gbuf_pipeline     : Pipeline
+    light_layouts     : array<DescriptorSetLayout>
+    light_pipe_layout : PipelineLayout
+    light_pipeline    : Pipeline
+    readback          : HostBuffer
+    buf_size          : uint64
 }
 
 def public finalize(var r : Vulkan14Resources) {
     delete r.readback
     delete r.light_pipeline
-    delete r.light_pipe
+    delete r.light_pipe_layout
     delete r.light_layouts
     delete r.gbuf_pipeline
-    delete r.gbuf_pipe
+    delete r.gbuf_pipe_layout
     delete r.gbuf_layouts
     delete r.sampler
     delete r.textures
@@ -398,15 +309,11 @@ def public finalize(var r : Vulkan14Resources) {
     delete r.albedo
 }
 
-//! Build the scene's resources against a caller-owned 1.4 device (`create_device_vulkan14`). Both the
-//! oracle's context and the windowed viewer call this.
+//! The scene's resources on a caller-owned device from `create_device_vulkan14` (the context's or the viewer's).
 def public build_vulkan14_resources(device : Device; phys : VkPhysicalDevice) : Vulkan14Resources {
-    var one : VkSampleCountFlags
-    one._1 = true
-    var gbuf_usage : VkImageUsageFlags
-    gbuf_usage.input_attachment = true          // read back inside the rendering by the lighting pass
-    var inscope albedo <- build_offscreen_target(device, phys, V14_W, V14_H, ALBEDO_FMT, one, gbuf_usage)
-    var inscope normal <- build_offscreen_target(device, phys, V14_W, V14_H, NORMAL_FMT, one, gbuf_usage)
+    let gbuf_usage = VkImageUsageFlags.input_attachment          // read back inside the rendering by the lighting pass
+    var inscope albedo <- build_offscreen_target(device, phys, V14_W, V14_H, ALBEDO_FMT, VkSampleCountFlags._1, gbuf_usage)
+    var inscope normal <- build_offscreen_target(device, phys, V14_W, V14_H, NORMAL_FMT, VkSampleCountFlags._1, gbuf_usage)
     var inscope color <- build_offscreen_target(device, phys, V14_W, V14_H, COLOR_FMT)
     var inscope depth <- build_offscreen_depth(device, phys, V14_W, V14_H, DEPTH_FMT)
 
@@ -422,15 +329,14 @@ def public build_vulkan14_resources(device : Device; phys : VkPhysicalDevice) : 
     delete indices_copy
     var ubo_usage : VkBufferUsageFlags
     ubo_usage.uniform_buffer = true
-    var inscope ubo <- create_host_buffer(device, phys, 128ul, ubo_usage)
+    var inscope ubo <- create_host_buffer(device, phys, CAMERA_UBO_BYTES, ubo_usage)
 
-    // host image copy: the device says which layout it copies into; SHADER_READ_ONLY_OPTIMAL when it
-    // can, else GENERAL - either is a legal layout to sample from
+    // host image copy lands in SHADER_READ_ONLY_OPTIMAL where the device lists it, else GENERAL - both sample legally
     let tex_layout = host_copy_layout(phys, VkImageLayout.SHADER_READ_ONLY_OPTIMAL)
-    var inscope textures : array<Texture>
+    var inscope textures : array<OffscreenTarget>
     textures |> reserve(N_CUBES)
-    for (kind in range(N_CUBES)) {
-        var pixels <- gen_cube_texture(kind)
+    for (pattern in each(CubePattern.red_checker)) {
+        var pixels <- gen_cube_texture(pattern)
         textures |> emplace(create_host_copied_texture(device, phys, pixels, tex_layout))
         delete pixels
     }
@@ -447,23 +353,19 @@ def public build_vulkan14_resources(device : Device; phys : VkPhysicalDevice) : 
     // push-descriptor set layouts: the reflected bindings, flagged so the sets are never allocated
     var gbuf_refl <- [decode_reflection(gbuf_vert_spv_reflect), decode_reflection(gbuf_frag_spv_reflect)]
     var inscope gbuf_layouts <- build_push_descriptor_set_layouts(device, gbuf_refl)
-    var inscope gbuf_pipe <- build_pipeline_layout(device, gbuf_layouts, gbuf_refl)
+    var inscope gbuf_pipe_layout <- build_pipeline_layout(device, gbuf_layouts, gbuf_refl)
     delete gbuf_refl
     var light_refl <- [decode_reflection(light_vert_spv_reflect), decode_reflection(light_frag_spv_reflect)]
     var inscope light_layouts <- build_push_descriptor_set_layouts(device, light_refl)
-    var inscope light_pipe <- build_pipeline_layout(device, light_layouts, light_refl)
+    var inscope light_pipe_layout <- build_pipeline_layout(device, light_layouts, light_refl)
     delete light_refl
 
     var inscope gbuf_vert <- create_shader_module(device, gbuf_vert_spv)
     var inscope gbuf_frag <- create_shader_module(device, gbuf_frag_spv)
     var inscope light_vert <- create_shader_module(device, light_vert_spv)
     var inscope light_frag <- create_shader_module(device, light_frag_spv)
-    // geometry: fragment locations 0 and 1 land in attachments 0 and 1, nothing is read
-    var gbuf_pass <- pass_layout([0u, 1u, VK_ATTACHMENT_UNUSED], [VK_ATTACHMENT_UNUSED, VK_ATTACHMENT_UNUSED, VK_ATTACHMENT_UNUSED])
-    var inscope gbuf_pipeline <- build_pass_pipeline(device, gbuf_pipe, gbuf_vert, gbuf_frag, gbuf_pass, true)
-    // lighting: fragment location 0 lands in attachment 2; attachments 0 and 1 are input indices 0 and 1
-    var light_pass <- pass_layout([VK_ATTACHMENT_UNUSED, VK_ATTACHMENT_UNUSED, 0u], [0u, 1u, VK_ATTACHMENT_UNUSED])
-    var inscope light_pipeline <- build_pass_pipeline(device, light_pipe, light_vert, light_frag, light_pass, false)
+    var inscope gbuf_pipeline <- build_pass_pipeline(device, gbuf_pipe_layout, gbuf_vert, gbuf_frag, PassKind.geometry)
+    var inscope light_pipeline <- build_pass_pipeline(device, light_pipe_layout, light_vert, light_frag, PassKind.lighting)
 
     let buf_size = uint64(V14_W * V14_H * 4)
     var inscope readback <- create_host_buffer(device, phys, buf_size)
@@ -472,8 +374,8 @@ def public build_vulkan14_resources(device : Device; phys : VkPhysicalDevice) : 
         albedo <- albedo, normal <- normal, color <- color, depth <- depth,
         vb <- vb, ib <- ib, ubo <- ubo,
         textures <- textures, tex_layout = tex_layout, sampler <- sampler,
-        gbuf_layouts <- gbuf_layouts, gbuf_pipe <- gbuf_pipe, gbuf_pipeline <- gbuf_pipeline,
-        light_layouts <- light_layouts, light_pipe <- light_pipe, light_pipeline <- light_pipeline,
+        gbuf_layouts <- gbuf_layouts, gbuf_pipe_layout <- gbuf_pipe_layout, gbuf_pipeline <- gbuf_pipeline,
+        light_layouts <- light_layouts, light_pipe_layout <- light_pipe_layout, light_pipeline <- light_pipeline,
         readback <- readback, buf_size = buf_size)
 }
 
@@ -495,20 +397,11 @@ def public finalize(var ctx : Vulkan14Context) {
     delete ctx.instance
 }
 
-//! True when a 1.4 instance can be made and the device reports the three features `create_device_vulkan14`
-//! needs - the oracle soft-skips otherwise (lavapipe below Mesa 25.0 reports 1.3).
+//! True when a 1.4 instance can be made and its device reports the three features `create_device_vulkan14` needs.
 def public vulkan14_available() : bool {
-    if (volkInitialize() != 0) {
-        return false
+    return probe_device("dasVulkan tutorial 16 probe", make_api_version(1u, 4u, 0u)) $(phys) {
+        return vulkan14_supported(phys)
     }
-    var inscope instance <- create_instance("dasVulkan tutorial 16 probe", make_api_version(1u, 4u, 0u))
-    volkLoadInstance(boost_value_to_vk(instance))
-    var count = 0u
-    vkEnumeratePhysicalDevices(boost_value_to_vk(instance), count, null)
-    if (count == 0u) {
-        return false
-    }
-    return vulkan14_supported(select_physical_device(instance))
 }
 
 def public build_vulkan14_context() : Vulkan14Context {
@@ -531,8 +424,7 @@ def public build_vulkan14_context() : Vulkan14Context {
 
 // ===== per frame =====
 
-//! Host-side prep: a camera orbiting slowly, the light direction swinging with `time`; the camera lands in
-//! the UBO through the generated `gbuf_vs_bind_uniform`, the light in the push-constant global.
+//! Camera orbit into the UBO through the generated `gbuf_vs_bind_uniform`; light direction into the push-constant global.
 def public update_vulkan14_uniforms(res : Vulkan14Resources; device : Device; time : float) {
     let orbit = time * 0.25f
     let eye = float3(4.6f * sin(orbit), 1.6f, 4.6f * cos(orbit))
@@ -542,52 +434,54 @@ def public update_vulkan14_uniforms(res : Vulkan14Resources; device : Device; ti
     pc.light_dir = float4(0.7f * cos(time * 0.8f), 1.0f, 0.7f * sin(time * 0.8f) + 0.4f, 0.0f)
 }
 
-//! The frame's descriptors for cube `i`: the camera UBO at binding 0 and this cube's texture at binding 1,
-//! pushed into the command buffer - there is no set to allocate or update.
+//! Cube `i`'s camera UBO and texture, pushed into the command buffer - there is no set to allocate or update.
 def push_cube_descriptors(res : Vulkan14Resources; cmd : CommandBuffer; i : int) {
     var w0 = WriteDescriptorSet(dstBinding = 0u, descriptorType = VkDescriptorType.UNIFORM_BUFFER, descriptorCount = 1u)
-    w0.pBufferInfo |> push(DescriptorBufferInfo(buffer = weak_copy(res.ubo.buffer), range_ = 128ul))
+    w0.pBufferInfo |> push(DescriptorBufferInfo(buffer = weak_copy(res.ubo.buffer), range_ = CAMERA_UBO_BYTES))
     var w1 = WriteDescriptorSet(dstBinding = 1u, descriptorType = VkDescriptorType.COMBINED_IMAGE_SAMPLER, descriptorCount = 1u)
     w1.pImageInfo |> push(DescriptorImageInfo(sampler = weak_copy(res.sampler), imageView = weak_copy(res.textures[i].view),
         imageLayout = res.tex_layout))
-    var writes <- [<-w0, <-w1]
-    cmd_push_descriptor_set(cmd, VkPipelineBindPoint.GRAPHICS, res.gbuf_pipe, 0u, writes)
+    var writes <- [ <- w0, <- w1]
+    cmd_push_descriptor_set(cmd, VkPipelineBindPoint.GRAPHICS, res.gbuf_pipe_layout, 0u, writes)
+    unsafe { delete writes }
 }
 
-//! The lighting pass's descriptors: the albedo and normal attachments as INPUT_ATTACHMENT descriptors,
-//! in the layout the rendering holds them in, pushed like everything else.
+//! Albedo and normal as input attachments in RENDERING_LOCAL_READ, the layout the rendering holds them in.
 def push_light_descriptors(res : Vulkan14Resources; cmd : CommandBuffer) {
     var writes : array<WriteDescriptorSet>
     writes |> reserve(2)
-    for (binding, target in [0u, 1u], [res.albedo.view, res.normal.view]) {
+    for (binding, target in [0u, 1u], [weak_copy(res.albedo.view), weak_copy(res.normal.view)]) {
         var w = WriteDescriptorSet(dstBinding = binding, descriptorType = VkDescriptorType.INPUT_ATTACHMENT, descriptorCount = 1u)
         w.pImageInfo |> push(DescriptorImageInfo(imageView = weak_copy(target), imageLayout = VkImageLayout.RENDERING_LOCAL_READ))
         writes |> emplace(w)
     }
-    cmd_push_descriptor_set(cmd, VkPipelineBindPoint.GRAPHICS, res.light_pipe, 0u, writes)
+    cmd_push_descriptor_set(cmd, VkPipelineBindPoint.GRAPHICS, res.light_pipe_layout, 0u, writes)
+    unsafe { delete writes }
 }
 
-//! Tell the rendering which attachments the next draws write (fragment location -> attachment) and read
-//! (attachment -> ``subpassInput`` index): the dynamic twin of the maps the pipeline was built with.
+//! The command-buffer twin of the pipeline's maps: fragment location -> attachment, attachment -> ``subpassInput`` index.
 def set_pass_maps(cmd : CommandBuffer; locations, inputs : array<uint>) {
     var loc : RenderingAttachmentLocationInfo
     loc.pColorAttachmentLocations := locations
     cmd_set_rendering_attachment_locations(cmd, loc)
+    delete loc
     var inp : RenderingInputAttachmentIndexInfo
     inp.pColorAttachmentInputIndices := inputs
     cmd_set_rendering_input_attachment_indices(cmd, inp)
+    delete inp
 }
 
 //! Record the frame: the G-buffer attachments move to RENDERING_LOCAL_READ (written as attachments and read
 //! as input attachments in that one layout), then ONE rendering holds both passes - geometry into attachments
 //! 0 and 1, a by-region barrier, lighting into attachment 2. Ends with the lit color in TRANSFER_SRC_OPTIMAL.
 def public record_vulkan14_frame(res : Vulkan14Resources; cmd : CommandBuffer; time : float) {
-    let local_read = VkPipelineStageFlags2.color_attachment_output | VkPipelineStageFlags2.fragment_shader
+    let local_read_stages = VkPipelineStageFlags2.color_attachment_output | VkPipelineStageFlags2.fragment_shader
     let local_read_access = VkAccessFlags2.color_attachment_write | VkAccessFlags2.input_attachment_read
+    // every attachment starts the frame UNDEFINED: the previous frame's reads finished at its queue-idle wait
     transition_image2(cmd, res.albedo.image, VkImageLayout.UNDEFINED, VkImageLayout.RENDERING_LOCAL_READ,
-        PIPELINE_STAGE_2_NONE, ACCESS_2_NONE, local_read, local_read_access)
+        PIPELINE_STAGE_2_NONE, ACCESS_2_NONE, local_read_stages, local_read_access)
     transition_image2(cmd, res.normal.image, VkImageLayout.UNDEFINED, VkImageLayout.RENDERING_LOCAL_READ,
-        PIPELINE_STAGE_2_NONE, ACCESS_2_NONE, local_read, local_read_access)
+        PIPELINE_STAGE_2_NONE, ACCESS_2_NONE, local_read_stages, local_read_access)
     transition_image2(cmd, res.color.image, VkImageLayout.UNDEFINED, VkImageLayout.COLOR_ATTACHMENT_OPTIMAL,
         PIPELINE_STAGE_2_NONE, ACCESS_2_NONE,
         VkPipelineStageFlags2.color_attachment_output, VkAccessFlags2.color_attachment_write)
@@ -598,24 +492,24 @@ def public record_vulkan14_frame(res : Vulkan14Resources; cmd : CommandBuffer; t
 
     // the G-buffer attachments are transient: cleared on entry, read inside, never stored
     var atts <- [
-        <-RenderingAttachmentInfo(imageView = weak_copy(res.albedo.view), imageLayout = VkImageLayout.RENDERING_LOCAL_READ,
+        <- RenderingAttachmentInfo(imageView = weak_copy(res.albedo.view), imageLayout = VkImageLayout.RENDERING_LOCAL_READ,
             loadOp = VkAttachmentLoadOp.CLEAR, storeOp = VkAttachmentStoreOp.DONT_CARE, clearValue = clear_color(0.0f, 0.0f, 0.0f, 0.0f)),
-        <-RenderingAttachmentInfo(imageView = weak_copy(res.normal.view), imageLayout = VkImageLayout.RENDERING_LOCAL_READ,
+        <- RenderingAttachmentInfo(imageView = weak_copy(res.normal.view), imageLayout = VkImageLayout.RENDERING_LOCAL_READ,
             loadOp = VkAttachmentLoadOp.CLEAR, storeOp = VkAttachmentStoreOp.DONT_CARE, clearValue = clear_color(0.5f, 0.5f, 0.5f, 0.0f)),
-        <-rendering_color_attachment(res.color.view, clear_color(0.0f, 0.0f, 0.0f, 1.0f))]
+        <- rendering_color_attachment(res.color.view, clear_color(0.0f, 0.0f, 0.0f, 1.0f))]
     var depth_att <- rendering_depth_attachment(res.depth.view, clear_depth(1.0f))
     record_rendering(cmd, full_area(V14_W, V14_H), 1u, atts, depth_att) {
-        // pass 1: the cubes into albedo + normal
-        set_pass_maps(cmd, [0u, 1u, VK_ATTACHMENT_UNUSED], [VK_ATTACHMENT_UNUSED, VK_ATTACHMENT_UNUSED, VK_ATTACHMENT_UNUSED])
+        set_pass_maps(cmd, GBUF_LOCATIONS, GBUF_INPUTS)
         cmd_bind_pipeline(cmd, res.gbuf_pipeline)
-        let vbufs <- [weak_copy(res.vb.buffer)]
-        var voffs : array<uint64>
-        voffs |> push(0ul)
+        var vbufs <- [weak_copy(res.vb.buffer)]
+        var voffs <- [0ul]
         cmd_bind_vertex_buffers(cmd, 0u, vbufs, voffs)
+        delete vbufs
+        delete voffs
         cmd_bind_index_buffer(cmd, weak_copy(res.ib.buffer), 0ul, VkIndexType.UINT16)
         for (i in range(N_CUBES)) {
             pc.model = model_matrix(time * (0.6f + 0.3f * float(i)), float3(1.7f * float(i - 1), 0.0f, 0.0f))
-            gbuf_vs_push_constants(cmd, res.gbuf_pipe)
+            gbuf_vs_push_constants(cmd, res.gbuf_pipe_layout)
             push_cube_descriptors(res, cmd, i)
             cmd_draw_indexed(cmd, uint(N_INDICES), 1u, 0u, 0, 0u)
         }
@@ -626,19 +520,21 @@ def public record_vulkan14_frame(res : Vulkan14Resources; cmd : CommandBuffer; t
             srcStageMask = VkPipelineStageFlags2.color_attachment_output, srcAccessMask = VkAccessFlags2.color_attachment_write,
             dstStageMask = VkPipelineStageFlags2.fragment_shader, dstAccessMask = VkAccessFlags2.input_attachment_read))
         cmd_pipeline_barrier2(cmd, dep)
-        // pass 2: albedo + normal -> lit color, in the third attachment
-        set_pass_maps(cmd, [VK_ATTACHMENT_UNUSED, VK_ATTACHMENT_UNUSED, 0u], [0u, 1u, VK_ATTACHMENT_UNUSED])
+        delete dep
+        set_pass_maps(cmd, LIGHT_LOCATIONS, LIGHT_INPUTS)
         cmd_bind_pipeline(cmd, res.light_pipeline)
-        light_fs_push_constants(cmd, res.light_pipe)
+        light_fs_push_constants(cmd, res.light_pipe_layout)
         push_light_descriptors(res, cmd)
         cmd_draw(cmd, 3u)
     }
+    delete atts
+    delete depth_att
     transition_image2(cmd, res.color.image, VkImageLayout.COLOR_ATTACHMENT_OPTIMAL, VkImageLayout.TRANSFER_SRC_OPTIMAL,
         VkPipelineStageFlags2.color_attachment_output, VkAccessFlags2.color_attachment_write,
         VkPipelineStageFlags2.copy | VkPipelineStageFlags2.blit, VkAccessFlags2.transfer_read)
 }
 
-//! One frame at `time`: uniforms, record, copy the lit color into the readback, return RGBA8 pixels.
+//! The lit frame at `time` as V14_W x V14_H RGBA8 pixels.
 def public render_vulkan14_frame(var ctx : Vulkan14Context; time : float) : array<uint8> {
     update_vulkan14_uniforms(ctx.res, ctx.device, time)
     var pixels : array<uint8>
@@ -652,8 +548,7 @@ def public render_vulkan14_frame(var ctx : Vulkan14Context; time : float) : arra
     return <- pixels
 }
 
-//! One-shot: build a context and render one frame. The oracle uses this; the recording driver keeps one
-//! context across its frames.
+//! One-shot: a fresh context per call - a caller rendering many frames keeps one `Vulkan14Context` instead.
 def public render_vulkan14_scene(time : float) : array<uint8> {
     var inscope ctx <- build_vulkan14_context()
     return <- render_vulkan14_frame(ctx, time)

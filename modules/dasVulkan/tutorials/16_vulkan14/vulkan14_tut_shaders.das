@@ -8,8 +8,7 @@ options indenting = 4
 // `subpassInput` / `subpassLoad` -- dynamic rendering LOCAL READ, Vulkan 1.4's form of a subpass -- and
 // composes the lit color into the third attachment. Every descriptor the host binds is PUSHED per
 // draw (vkCmdPushDescriptorSet, 1.4 core): the camera UBO, each cube's texture, both input attachments.
-// None is allocated from a pool. One push-constant struct serves both passes: the vertex stage reads
-// `model`, the lighting stage reads `light_dir`.
+// None is allocated from a pool.
 
 module vulkan14_tut_shaders public
 
@@ -17,6 +16,10 @@ require vulkan/vulkan_boost public
 require vulkan/spirv_vulkan_shader public
 require spirv/spirv_builtins public
 require math
+
+//! Frame size, shared by the shaders (the sky gradient spans V14_H) and the host side.
+let public V14_W = 768
+let public V14_H = 512
 
 // ===== shared =====
 
@@ -89,12 +92,13 @@ def light_fs {
     let albedo = subpassLoad(in_albedo)
     if (albedo.w < 0.5) {
         // nothing drawn here: a sky gradient, brighter toward the top (y = 0 is the top row in Vulkan)
-        let t = gl_FragCoord.y / 512.0
+        let t = gl_FragCoord.y / float(V14_H)
         out_color = float4(0.05 + 0.10 * (1.0 - t), 0.06 + 0.12 * (1.0 - t), 0.12 + 0.20 * (1.0 - t), 1.0)
         return
     }
     let n = normalize(subpassLoad(in_normal).xyz * 2.0 - float3(1.0, 1.0, 1.0))
     let l = normalize(pc.light_dir.xyz)
-    let diffuse = max(dot(n, l), 0.0) * 0.85 + 0.15   // ambient floor 0.15
+    let ambient = 0.15
+    let diffuse = max(dot(n, l), 0.0) * (1.0 - ambient) + ambient
     out_color = float4(albedo.xyz * diffuse, 1.0)
 }

@@ -118,3 +118,11 @@ Running it
 
    # regenerate the recording (needs stbimage + audio + ffmpeg locally)
    daslang.exe modules/dasVulkan/tutorials/15_raytracing/recording/record_raytracing.das
+
+Next
+----
+
+:doc:`16_vulkan14` takes the three **Vulkan 1.4** promotions that change how a
+frame is put together -- host image copy, push descriptors and dynamic rendering
+local read -- on a two-pass G-buffer scene with no descriptor pool, no staging
+buffer and no render pass.

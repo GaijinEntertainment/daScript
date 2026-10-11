@@ -204,23 +204,13 @@ def public create_device_gpu_driven(phys : VkPhysicalDevice; queue_family : uint
 //! already exercise on CI's lavapipe (they prove descriptorIndexing + multiDrawIndirect + shaderDrawParameters).
 //! Gates the indirect-count path so the oracle soft-skips rather than panicking. Mirrors ``mesh_shader_supported``.
 def public draw_indirect_count_available() : bool {
-    if (volkInitialize() != 0) {
-        return false
+    return probe_device("dasVulkan tutorial 12 probe", make_api_version(1u, 2u, 0u)) $(phys) {
+        var f12 = VkPhysicalDeviceVulkan12Features()
+        var f2 = VkPhysicalDeviceFeatures2()
+        f2.pNext = unsafe(addr<void?>(f12))
+        vkGetPhysicalDeviceFeatures2(phys, f2)
+        return f12.drawIndirectCount != 0u
     }
-    var inscope instance <- create_instance("dasVulkan tutorial 12 probe", make_api_version(1u, 2u, 0u))
-    volkLoadInstance(boost_value_to_vk(instance))
-    var count = 0u
-    vkEnumeratePhysicalDevices(boost_value_to_vk(instance), count, null)
-    if (count == 0u) {
-        return false
-    }
-    let phys = select_physical_device(instance)
-    var f12 = VkPhysicalDeviceVulkan12Features()
-    f12.sType = VkStructureType.PHYSICAL_DEVICE_VULKAN_1_2_FEATURES
-    var f2 = VkPhysicalDeviceFeatures2()
-    f2.pNext = unsafe(addr<void?>(f12))
-    vkGetPhysicalDeviceFeatures2(phys, f2)
-    return f12.drawIndirectCount != 0u
 }
 
 //! Extensions overload -- the windowed viewer passes `["VK_KHR_swapchain"]`. The feature set spans three

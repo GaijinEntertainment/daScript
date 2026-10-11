@@ -5,11 +5,11 @@ checklist that binds a diff here is `REVIEW.md` (this folder); `generator/` and 
 carry their own; how a frame is drawn and synchronized: the companion `ARCHITECTURE_RENDERING.md`. Planned work:
 `ROADMAP.md`. Agent instructions - build, run, test, where things live: `CLAUDE.md`.
 
-## The two layers
+## The two layers {#two-layers}
 
 dasVulkan binds [Vulkan](https://www.vulkan.org/) from the Khronos `vk.xml` registry and lives
 in-tree at `modules/dasVulkan/`. It builds by default on Linux and Windows: the root CMake option
-`DAS_VULKAN_DISABLED` defaults to `OFF` there and to `ON` on Apple (the portability section), and the headers plus
+`DAS_VULKAN_DISABLED` defaults to `OFF` there and to `ON` on Apple (`ARCHITECTURE.md#portability-subset`), and the headers plus
 volk are vendored, so building needs no Vulkan SDK.
 
 - **`vulkan`** - the raw binding: the full API, core and extensions, generated as a daslang
@@ -92,7 +92,7 @@ leaks.
 
 `weak_copy(x)` is the intentional non-owning alias: it copies the wrapper and clears
 `_needs_delete`, so only the original frees. The copy is a plain struct copy because a wrapper
-stores its handle as `uint64` (the handles section). Handle fields inside a view struct take a `weak_copy`,
+stores its handle as `uint64` (`ARCHITECTURE.md#handles-uint64`). Handle fields inside a view struct take a `weak_copy`,
 because the `create_*` that produced the handle keeps ownership.
 
 A composite struct that owns several handles - `OffscreenTarget`, `OffscreenDepth`,
@@ -264,7 +264,8 @@ Doc snippets are not compile-checked.
 
 A tutorial is a self-contained unit under `tutorials/<NN_name>/`: an offscreen module, its
 `[compute_shader]` or `[shader]` blob, a pixel-oracle `[test]` that CI gates, and a
-`recording/` driver. Its windowed viewer lives at `<NN_name>/window/show_<name>.das`, which is
+`recording/` driver. Its windowed viewer lives at `<NN_name>/window/show_<name>.das` - one per
+way the output reaches the swapchain, `show_<name>_<way>.das` each once there are two - which is
 where the tutorials `.das_test` skips it - the lavapipe CI daslang build is
 `-DDAS_GLFW_DISABLED=ON`, so it has no display and no GLFW.
 
@@ -293,7 +294,7 @@ and compute into a storage buffer. No window, no subprocess. A test body calls
 
 ## Exception ledger
 
-- `tutorials/10_deferred` keeps its render passes and its `transition_image` calls ("A diff that
-  records a draw in a tutorial" and "A diff that changes an image layout in a tutorial" in
-  `REVIEW.md`): the pass-to-pass hand-off through attachment layouts is its lesson, and the
-  dynamic-rendering form of it, `dynamic_rendering_local_read`, is Vulkan 1.4 core.
+- `tutorials/10_deferred` keeps its render passes and its `transition_image` calls (the legacy
+  frame-shape gate in `REVIEW.das` ignores the folder): the pass-to-pass hand-off through
+  attachment layouts is its lesson, and the dynamic-rendering form of it, local read, is Vulkan
+  1.4 core - tutorial 16.

@@ -25,14 +25,16 @@ jobs:
 
       - name: "Install lavapipe (software Vulkan) + tools"
         # Ubuntu 24.04 ships Mesa 24.x, whose lavapipe reports Vulkan 1.3; the
-        # kisak-mesa PPA carries Mesa 25.x, where lavapipe reports 1.4 and the
-        # tutorial 16 oracle runs instead of skipping. The lavapipe ICD JSON path
-        # is not stable across distro versions, so discover it after install
-        # rather than hardcoding it (a missing VK_DRIVER_FILES path disables
-        # default ICD discovery entirely -> ERROR_INCOMPATIBLE_DRIVER). Export the
-        # found path for later steps.
+        # kisak-mesa PPA carries a current Mesa (25.0 was the first whose lavapipe
+        # reports 1.4), so the tutorial 16 oracle runs instead of skipping. -n keeps
+        # add-apt-repository from running its own apt update against the Azure
+        # mirror; ci/apt_install.sh swaps the mirror and updates with bounded
+        # retries. The lavapipe ICD JSON path is not stable across distro
+        # versions, so discover it after install rather than hardcoding it (a
+        # missing VK_DRIVER_FILES path disables default ICD discovery entirely ->
+        # ERROR_INCOMPATIBLE_DRIVER). Export the found path for later steps.
         run: |
-          sudo add-apt-repository -y ppa:kisak/kisak-mesa
+          sudo add-apt-repository -y -n ppa:kisak/kisak-mesa
           sudo bash ci/apt_install.sh mesa-vulkan-drivers libvulkan1 vulkan-tools
           LVP=$(find /usr -iname 'lvp_icd*.json' 2>/dev/null | head -1)
           if [ -n "$LVP" ]; then

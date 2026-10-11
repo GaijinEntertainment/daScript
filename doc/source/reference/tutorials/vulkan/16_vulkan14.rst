@@ -81,11 +81,11 @@ The textures and the resources
 attachments and the depth buffer, the cube geometry, the camera UBO, the two
 pipelines on push-descriptor set layouts. Each pipeline is built by hand because
 it names three color attachments and carries its own location and input-index
-maps on the create info's ``pNext`` chain (``pass_layout``).
+maps on the create info's ``pNext`` chain (``build_pass_pipeline``).
 
 .. literalinclude:: ../../../../../modules/dasVulkan/tutorials/16_vulkan14/vulkan14_tut.das
    :language: das
-   :start-at: //! One sampled texture
+   :start-at: //! One TEX_DIM x TEX_DIM RGBA8 texture
    :end-before: //! Self-contained one-shot context
 
 The frame
@@ -100,18 +100,18 @@ lighting pass, two pushed input attachments, and the fullscreen draw.
 
 .. literalinclude:: ../../../../../modules/dasVulkan/tutorials/16_vulkan14/vulkan14_tut.das
    :language: das
-   :start-at: //! The frame's descriptors for cube
-   :end-before: //! One frame at `time`
+   :start-at: //! Cube `i`'s camera UBO and texture
+   :end-before: //! The lit frame at `time`
 
 Self-verifying
 --------------
 
-The oracle renders one frame at time 0 and samples it: the sky between the cubes
-is the lighting pass's gradient (not the cleared black of the third attachment),
-each cube shows the hue of the texture host image copy uploaded, and a face
-toward the light is brighter than one facing away -- which only the normal
-attachment, read back through local read, can produce. It skips where
-``vulkan14_supported`` is false.
+The oracle renders one frame at time 0 and samples it: the sky at the frame's
+edge is the lighting pass's gradient (not the cleared black of the third
+attachment), each cube shows the hue of the texture host image copy uploaded,
+and the top face under the light is brighter than the side face turned away
+from it -- which only the normal attachment, read back through local read, can
+produce. It skips where ``vulkan14_supported`` is false.
 
 .. literalinclude:: ../../../../../modules/dasVulkan/tutorials/16_vulkan14/test_vulkan14.das
    :language: das
@@ -128,7 +128,7 @@ Running it
    # watch it live in a window (needs the glfw module, a display and a 1.4 driver)
    daslang.exe modules/dasVulkan/tutorials/16_vulkan14/window/show_vulkan14.das
 
-   # regenerate the recording (needs stbimage + audio + ffmpeg locally)
+   # regenerate the recording (needs stbimage + audio + ffmpeg + dasHV, and Kokoro TTS at :8880, locally)
    daslang.exe modules/dasVulkan/tutorials/16_vulkan14/recording/record_vulkan14.das
 
 Beside the tutorials
@@ -137,7 +137,8 @@ Beside the tutorials
 ``examples/shader_objects.das`` draws the hello triangle with **no pipeline at
 all**: ``VK_EXT_shader_object`` binds a shader object per stage and takes every
 piece of fixed-function state from the command buffer
-(``cmd_set_shader_object_baseline`` sets the lot). It is an opt-in beside the
+(``cmd_set_shader_object_baseline`` sets what a device from
+``create_device_shader_object`` requires). It is an opt-in beside the
 pipeline path -- an extension in every Vulkan version, absent on Android and
 partial on MoltenVK -- and ``tests/integration/test_shader_objects.das`` checks
 it draws the same triangle.

@@ -523,7 +523,8 @@ SPIR-V at compile time by dasSpirv (no GLSL, no glslang) -- the same language as
 the host, compute and graphics alike.
 
 The series builds **graphics → compute → 3D scene → instancing → environment →
-GPU-driven scene → multi-pass → modern pipeline → mesh shaders → ray tracing**:
+GPU-driven scene → multi-pass → modern pipeline → mesh shaders → ray tracing →
+Vulkan 1.4**:
 01_triangle is the canonical hello-triangle, 02_mandelbrot and 03_sdf swap to the
 compute pipeline, 04_cube takes graphics into 3D with depth + UBO + push constant
 + texture, 05_instancing draws 1000 cubes in one call, 06_skybox wraps the scene
