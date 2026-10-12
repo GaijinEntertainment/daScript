@@ -5338,3 +5338,21 @@ probe alone, no box profile applied; the Vulkan box ran it under `DASLLAMA_GPU=1
   0.78 - the tightest 0.63 of 0.78 at step 0 - and the one-step-off control 1.1 to 19; the 30000-token prompt continued
   from 20480 and four device-home streams at 9000 to 27000 positions read bit for bit the one-call prefill and the
   sessions alone.
+
+### From the llama leg's parity gaps (2026-10-12, RunPod RTX PRO 4500 Blackwell 32 GB and Apple M5 Max)
+
+- **The decode rope-and-store on one template costs the Vulkan step 0.7%.** Llama-3.2-3B Q4_K_M on the pod, the
+  `-jit` bench form, two runs an arm: tg128 252.0 / 252.0 tok/s before the fold (`RopeKvStore` with its own body),
+  250.3 / 250.4 after (`GkRopeKvStore`'s `rope_kv_pair`, the partial-rotation cover and the per-row table stride in
+  the shared body), each at +-0.1; pp512 13830 against 13874 / 13824, within the rep noise. On the M5 the fold reads
+  pp512 within 0.3% and tg128 rep for rep the same (205 tok/s, +-8.5 on both arms - the box's own spread).
+- **A short window on the Vulkan chain costs about two decode steps whatever its row count.** The probe's one-session
+  continuation after a 40-row prompt on the 3B: a window of 1 / 2 / 4 / 8 / 16 rows reads 13.4 / 13.4 / 13.4 / 11.9 /
+  11.8 ms, 32 rows 11.0, 64 rows 14.6; the same rows stepped one at a time 6.5 ms a row (a host-cached session, the
+  row read back each step). The 1B Q8_0 reads 6.5 ms a window at 1 to 16 rows against 3.8 ms a step. The peel
+  (`ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-prefill-peel`) routes a window of at most the N-row command's rows through the
+  token command.
+- **The house probe on the M5's M4 arm reads the branch the same as its base** (the quick probe, 22 turns, alone
+  then pair, two alternated rounds, Llama-3.2-3B Q4_K_M): alone wall 0.37 / 0.45 s on the base and 0.36 / 0.40 on
+  the branch, pair 0.75 / 0.91 against 0.78 / 0.82, the pair's throughput share x0.91 / x1.00 against x0.87 / x0.93 -
+  the rounds drift more than the arms differ (the probe is direction-grade).

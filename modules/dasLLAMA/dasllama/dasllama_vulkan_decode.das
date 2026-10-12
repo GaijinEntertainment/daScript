@@ -28,7 +28,7 @@ require daslib/algorithm
 // decode arms, and the heat-pinned expert cache.
 
 let DA_NSPLIT_MAX = 16l   //! the decode attention's key splits a head, at most (the partials plane sizes to it)
-let RD_NB_MAX = 8l   //! the N-row token command's rows, at most, and the same-slab verify's
+let RD_NB_MAX = RDEC_NROW_MAX   //! the N-row token command's rows, and the same-slab verify's at most
 let RD_PICK_CHUNKS = int64(CLS_ARGMAX_CHUNKS)   //! the pick's first pass: a workgroup a (row, chunk)
 let NROW_BX_ATTN = 1        //! `DASLLAMA_VK_NROW_BISECT`, the N-row command's probe bits: no attention
 let NROW_BX_NCOL1 = 2       //! the one-column GEMV leaves over row 0
@@ -132,8 +132,7 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     r.rot = rot
     rdq_reset()
     g_rdq_prev_last = 0ul   // the device clock's last sampled stamp is this file's: a new model starts with none
-    let rows_want = max(regions, head ? verify_rows : 0l)
-    r.nb = min(rows_want, RD_NB_MAX)
+    r.nb = RD_NB_MAX   //! the peel's rows ride the planes whatever the region count
     let nb = r.nb
     r.verify_rows = min(nb, head ? verify_rows : 0l)
     let wide = max(max(max(qd, hidden), dim), head ? 2l * dim : 0l)

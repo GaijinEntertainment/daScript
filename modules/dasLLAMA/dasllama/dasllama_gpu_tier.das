@@ -127,6 +127,7 @@ struct RdecDnGeom {
     ba_f32 : bool
     zsig : bool    //! the out-gate is sigmoid(z) (qwen4exp) instead of silu(z): the step and scan kernels' `ZSIG` stamps serve
 }
+let public RDEC_NROW_MAX = 8l   //! the rows the N-row token command steps at once, the per-row planes' height: the N-column GEMV leaves' width, and the short window's peel
 let public RDEC_CODEC_BYTE_SPAN = 4_294_967_296l   //! one side of a block-codec K/V mirror, at most: its kernels address a block by a 32-bit byte offset
 let public RDEC_ROUTED_SLOTS = 64l   //! the routed slots a decode step stages: every row's k picks fit in them, and the hot expert pool takes no more picks a step
 let public RDEC_NORM_ROWS = 10l   //! rms_att, rms_ffn, post-attention, post-FFN, the per-layer-embedding post norm, then the gemma-4 MoE layer's router scale, routed pre norm, dense post norm and routed post norm, then the attention output bias row (gpt-oss) - zero rows where a model lacks them

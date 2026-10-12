@@ -2559,7 +2559,7 @@ struct RDec {
     cmd_wide : array<VkCommandBuffer>   //! the wide twin: the same chain with the attention at RD_SPLIT_WIDE_PIECES, submitted from RD_WIDE_POS, recorded on first use
     wide_on : bool                //! ... exists: the device's split count reaches past the split form's pieces
     tok_wide_recorded : array<bool>
-    nb : int64 = 1l               //! the rows the per-row planes hold: one per region, or the speculative verify's rows where it asks more, to RD_NB_MAX
+    nb : int64 = 1l               //! the rows the per-row planes hold: RD_NB_MAX, whatever the region count - the batched rows', the verify's and the peel's
     cmd_n : array<VkCommandBuffer>   //! the N-row token commands by row count (index 0 unused): every row reads its own TokMeta entry, so one command serves any region mix
     cmd_n_unsplit : array<VkCommandBuffer>   //! ... and their unsplit attention twins, submitted while every row sits under RD_UNSPLIT_POS; the rows take no wide form (ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-decode-attn-split)
     tok_n_recorded : array<bool>

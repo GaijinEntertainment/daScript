@@ -148,7 +148,7 @@ def private llama_peel(t : T?; file : string) {
             eval(tr, sa, opening)
             let peels0 = moe_gpu_resident_peels()
             let pf0 = moe_gpu_resident_prefills()
-            eval(tr, sa, tail)
+            forward_prefill(tr, sa, tail, k, PEEL_OPEN)   //! the prefill call a scheduler's chunk takes (`eval` steps a one-token tail)
             t |> equal(moe_gpu_resident_peels() - peels0, k <= at_once ? 1l : 0l, "a tail of {k} rows {k <= at_once ? "peels through the token command" : "takes the window chain"}")
             t |> equal(moe_gpu_resident_prefills() - pf0, 1l, "the tail of {k} counted one served prefill")
             var got <- [logits_of(sa, tr.config.vocab_size)]
