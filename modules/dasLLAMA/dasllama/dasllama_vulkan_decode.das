@@ -2320,7 +2320,7 @@ def private rd_encode_attn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RL
         let qpairs = kv_only ? 0l : qd / 2l
         let npairs = qpairs + (L.kv_shared ? 0l : kvd / 2l)   // the k pairs also store the mirror row: none on a shared-KV layer
         //! the whole head rotates (`rot = hs`): a partial-rope class's table carries the (1, 0) pairs past its rotated width
-        var pcr = rope_kv_args(qd, kvd, hs, qpairs, npairs, g_rd.neox, g_rd.has_bias, hs, int64(rd_bias_off(L)), L.cbase,
+        var pcr = gk_rope_kv_args(qd, kvd, hs, qpairs, npairs, g_rd.neox, g_rd.has_bias, hs, int64(rd_bias_off(L)), L.cbase,
             int64(nr), int64(kvrow), int64(q_plane_row), g_rd.cos_elems, int64(storebase))
         let rwgs = (npairs * nrows + int64(WG_X) - 1l) / int64(WG_X)
         if (rd_kv16()) {
@@ -5087,7 +5087,7 @@ def private at_chain_enc(raw : VkCommandBuffer; var h : VkHaz; var L : DatLayer;
             neox = neox ? 1u : 0u, nh = uint(n_heads), layerbase = 0u, qwoff = 0u, kwoff = uint(hs), eps = eps, boff = 0u, hasb = hb)
         enc_qkn_rope_f16_cls(raw, h, L.s_qkr, pcf, n_heads + kvd / hs)
     } else {
-        var pcr = rope_kv_args(qd, kvd, hs, qd / 2l, qd / 2l + kvd / 2l, neox, L.has_bias, hs, 0l, 0l, 1l, 0l, 0l, 0l, 0l)   //! one row: every stride 0, the row's own cos plane and bias row bound
+        var pcr = gk_rope_kv_args(qd, kvd, hs, qd / 2l, qd / 2l + kvd / 2l, neox, L.has_bias, hs, 0l, 0l, 1l, 0l, 0l, 0l, 0l)   //! one row: every stride 0, the row's own cos plane and bias row bound
         enc_rope_kv_f16_cls(raw, h, L.s_qkr, pcr, (qd / 2l + kvd / 2l + int64(WG_X) - 1l) / int64(WG_X))
     }
     var pca = DaAttnArgs(kvd = uint(kvd), hs = uint(hs), kv_mul = uint(kv_mul), kbase = 0u, vbase = 0u, scale = scale, rqk = DA_RQ_NONE)   //! unsplit: no counters

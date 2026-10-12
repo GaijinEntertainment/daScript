@@ -248,7 +248,7 @@ def private encode_gemma_layer(t : Model; s : Session; enc : MetalComputeEncoder
         var qka = QkNormArgs(nq = uint(dr.n_heads), koffe = 0u, rstride = uint(qd), hs = uint(hs), woffe = 0u, eps = dr.eps, soffe = 0u)
         enc_qk_norm(enc, g.bq, 0ul, bw_qn, qka, dr.n_heads, 1l, hs)
         // rope on Q only: every pair is a Q pair, so the fused store's K/V lanes never run
-        var rka = rope_store_args(qd, 0l, hs, qd / 2l, qd / 2l, c.rope_neox, false, hs)
+        var rka = gk_rope_kv_args(qd, 0l, hs, qd / 2l, qd / 2l, c.rope_neox, false, hs)
         enc_rope_store(enc, true, g.bq, 0ul, g_arena, g_arena, 0ul, 0ul, sl ? g.bcos_sw : g.bcos, sl ? g.bsin_sw : g.bsin, 0ul, g_one, rka, qd / 2l)
         let lb = uint64(mirror_lbase(t, kdt, mr.cap_rows, kvl))
         let lkoff = mr.koff + lb

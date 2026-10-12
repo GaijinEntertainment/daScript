@@ -4909,7 +4909,7 @@ def private pk_fr_layer(enc : MetalComputeEncoder?; var c : St2GpuCtx; tf : Pock
     }
     pk_lin(enc, c, L.in_proj, b.xb, 0ul, b.qkv, 0ul)
     let dh = uint(d / tf.heads)
-    var kr = rope_store_args(d, d, int64(dh), d / 2l, d, false, false, int64(dh))
+    var kr = gk_rope_kv_args(d, d, int64(dh), d / 2l, d, false, false, int64(dh))
     enc_rpst32_c(enc, b.qkv, b.qkv, b.qkv, uint64(2l * d * 4l), g_tw_pk_voice.bk[li], uint64(p * d * 4l), g_tw_pk_voice.bv[li], uint64(p * d * 4l),
         g_one, g_tw_pk_voice.bcos, uint64(p * (d / tf.heads / 2l) * 4l), g_tw_pk_voice.bsin, kr, d)
     var ka = GkPkAttnArgs(t = 1u, qs = uint(3l * d), qcol = 0u, d = uint(d), pos0 = uint(p), ctx = uint(tf.context))

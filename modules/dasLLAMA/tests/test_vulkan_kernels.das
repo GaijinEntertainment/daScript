@@ -2187,7 +2187,7 @@ def private rope_kv_arm(t : T?; f16, biased : bool) {
             let pb = biased ? in_(cp, bh) : pcs
             let planes = fixed_array(pq, pkv, pkv, pkm, pvm, pb, pcs, pcs, ptok)
             var sc = f16 ? cls_set(cp, planes, @@set_rope_kv_f16_cls) : cls_set(cp, planes, @@set_rope_kv_cls)
-            var pc = rope_kv_args(int64(qd), int64(kvd), int64(hs), int64(nh * half), int64(npairs), true, biased, int64(hs), int64(bpad), 0l, 1l, 0l, 0l, 0l, 0l)
+            var pc = gk_rope_kv_args(int64(qd), int64(kvd), int64(hs), int64(nh * half), int64(npairs), true, biased, int64(hs), int64(bpad), 0l, 1l, 0l, 0l, 0l, 0l)
             cp |> cell_record() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
                 if (f16) {
                     enc_rope_kv_f16_cls(raw2, h2, sc, pc, int64((npairs + 255) / 256))

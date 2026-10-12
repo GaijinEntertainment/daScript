@@ -5852,16 +5852,9 @@ def private pf_kq_deep_stamps(fmt : KqFmt) : KqDeepStamps {
         enc_thdb = @@enc_kq_mm_k5_thdb_c, enc_thdb128 = @@enc_kq_mm_k5_thdb128_c)
 }
 
-def private pf_fmt_has_one_row_gemv(f : KqFmt; kdim : int64) : bool => f == KqFmt.q8 || (kq_sb(int(f)) && kq_fmt_gpu_supported(f) && kdim % KQ_SB_ELEMS == 0l)
-
 [arch(at="../ARCHITECTURE_GPU_PREFILL.md#prefill-last-row-tail")]
 def private pf_enc_narrow_gemv(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; woff : int64; bx, by, bk, bn : MetalBuffer?; kdim, d : int64) {
-    if (fmt == KqFmt.q8) {
-        let bw = blob_of(g_dev, t, woff)
-        enc_gemv(enc, bw.buf, bw.boff, bx, by, bk, bn, d, 0ul, 0ul)
-    } else {
-        enc_kq_site_b(enc, t, fmt, woff, d, kdim, bx, kdim, by, d, 0l, bk, bn, bn, 1l, 1l, null)
-    }
+    enc_site_gemv(enc, t, fmt, woff, d, kdim, bx, by, bk, bn)
 }
 
 [arch(at="../ARCHITECTURE_GPU_PREFILL.md#prefill-kq-tensor-scaffold")]
@@ -7742,8 +7735,8 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                     && !c.pre_post_norm && l >= nds && !c.q_gated
                     && c.n_layer_nextn == 0l
                     && dim % 32l == 0l && hid_l % 32l == 0l
-                    && pf_fmt_has_one_row_gemv(fmt_at(t.w1_fmt, l), dim) && pf_fmt_has_one_row_gemv(fmt_at(t.w3_fmt, l), dim)
-                    && pf_fmt_has_one_row_gemv(fmt_at(t.w2_fmt, l), hid_l))
+                    && kq_fmt_one_row_gemv(fmt_at(t.w1_fmt, l), dim) && kq_fmt_one_row_gemv(fmt_at(t.w3_fmt, l), dim)
+                    && kq_fmt_one_row_gemv(fmt_at(t.w2_fmt, l), hid_l))
                 if (narrow_last) {
                     for (sg in segs) {
                         let nro = uint64((sg.row0 + sg.npos - 1l) * dim * 4l)

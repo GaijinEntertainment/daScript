@@ -92,7 +92,7 @@ def private gemma_model(t : T?; file : string) : Model {
 
 //! the gemma cell's rig: the fixture on the armed driver (or the cell skipped, saying why - its arm filtered among the reasons),
 //! `body` inside the engine's job queue, the model deleted after
-def private with_gemma_rig(t : T?; gf : GemmaFile; body : block<(tr : Model) : void>) {
+def with_gemma_rig(t : T?; gf : GemmaFile; body : block<(tr : Model) : void>) {
     return if (!arm_on(t, gf.arm))
     var tr <- gemma_model(t, gf.file)
     if (tr.config.n_layers > 0l) {
@@ -132,8 +132,7 @@ def prefill_vs_decode(t : T?; n : int64; gf : GemmaFile) {
         var window_steps <- [for (i in range64(n, n + 4l)); toks[i]]
         var token_prompt <- [toks[0]]
         var token_steps <- [for (i in range64(1l, n + 4l)); toks[i]]
-        var gap : float[2]
-        var gap_off : float[2]
+        var gap, gap_off : float[2]
         for (arm in range(2)) {
             if (arm == CPU) {
                 moe_gpu_drop_model()

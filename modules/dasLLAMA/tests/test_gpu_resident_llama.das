@@ -135,6 +135,9 @@ def private llama_peel(t : T?; file : string) {
     with_dasllama_jobque_() {
         let at_once = rdec_token_n_rows()
         t |> success(at_once >= 8l, "the N-row token command steps eight rows or more at once on the model ({at_once})")
+        var cap = 0l
+        let plan = resident_plan_pick(tr, mirror_kv_dtype(), cap, false)
+        t |> success(plan.scratch_bytes >= tr.config.vocab_size * 4l * RDEC_NROW_MAX, "the plan charges the per-row planes at {RDEC_NROW_MAX} rows whatever the region count ({plan.scratch_bytes} B of scratch)")
         var opening <- resident_prompt(PEEL_OPEN)
         var feed <- resident_feed(at_once + 1l)
         let lever = vulkan_prefill_peel_()
@@ -151,21 +154,17 @@ def private llama_peel(t : T?; file : string) {
             forward_prefill(tr, sa, tail, rows, PEEL_OPEN)   //! the prefill call a scheduler's chunk takes (`eval` steps a one-token tail)
             t |> equal(moe_gpu_resident_peels() - peels0, peels ? 1l : 0l, "a tail of {rows} rows {peels ? "peels through the token command" : k < 0l ? "takes the window chain with the lever off" : "takes the window chain"}")
             t |> equal(moe_gpu_resident_prefills() - pf0, 1l, "the tail of {rows} counted one served prefill")
-            var got <- [logits_of(sa, tr.config.vocab_size)]
-            for (st in range64(PEEL_STEPS)) {
-                forward(tr, sa, steps[st], PEEL_OPEN + rows + st)
-                got |> emplace <| logits_of(sa, tr.config.vocab_size)
-            }
+            sa.n_past = PEEL_OPEN + rows   //! `forward_prefill` leaves the position to its caller
+            var got <- steps_after(tr, sa, steps)
             var sb <- create_session(tr, gpu_device_session_dtype_())
             eval(tr, sb, opening)
+            var inscope one : array<int64>
+            one |> resize(1)
             for (i in range64(rows)) {
-                forward(tr, sb, tail[i], PEEL_OPEN + i)
+                one[0] = tail[i]
+                eval_(tr, sb, one)
             }
-            var want <- [logits_of(sb, tr.config.vocab_size)]
-            for (st in range64(PEEL_STEPS)) {
-                forward(tr, sb, steps[st], PEEL_OPEN + rows + st)
-                want |> emplace <| logits_of(sb, tr.config.vocab_size)
-            }
+            var want <- steps_after(tr, sb, steps)
             let what = "{file}, a tail of {rows} rows{k < 0l ? " with the lever off" : ""}"
             rows_within_control(t, what, got, want, SPLIT_BAR_REL, 1l, 1.0, $(r) => r == 0l ? "the tail's last row" : "step {r}")
             log_argmax_rows(tr, "{what}: the row-at-a-time rows, then the tail's", got, want)

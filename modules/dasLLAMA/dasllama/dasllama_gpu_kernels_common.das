@@ -1700,8 +1700,18 @@ struct GkRopeKvArgs {
     cstride : uint     //! a row's stride in tcos and tsin (0: every row reads the one table row)
     ccos : uint        //! the cos row's element base in tcos; the sin row sits a half head past it (read where the stamp binds the planes whole)
     rows : uint        //! the rows a dispatch covers (0 reads as one)
-    mirbase : uint     //! the layer's base in the mirror planes, ahead of a row's own (the Vulkan token block's; Metal binds the row)
+    mirbase : uint     //! the layer's base in the mirror planes, ahead of a row's own (the Vulkan token block's; Metal binds the row), or the
+                       //! layer index where a row table carries the per-layer stride (Metal's window form)
 }
+
+//! the rope-and-store args a home builds: the one-row defaults (one row, every stride 0, the bias row, the cos row and the mirror
+//! base bound at their own offsets), and the N-row form's strides and bases where a home passes them
+def gk_rope_kv_args(qd, kvd, hs, npairs_q, npairs : int64; neox, has_bias : bool; rot : int64; boff : int64 = 0l; cbase : int64 = 0l;
+                    rows : int64 = 1l; kvrow : int64 = 0l; qrow : int64 = 0l; cosrow : int64 = 0l; mirbase : int64 = 0l) : GkRopeKvArgs
+    => GkRopeKvArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), npairs_q = uint(npairs_q), npairs = uint(npairs),
+        neox = neox ? 1u : 0u, has_bias = has_bias ? 1u : 0u, rot = uint(rot),
+        qrow = uint(qrow), kvrow = uint(kvrow), boff = uint(boff), cstride = uint(cosrow), ccos = uint(cbase),
+        rows = uint(rows), mirbase = uint(mirbase))
 
 //! The fused rope and K/V store, an invocation a rotation pair of a row: a q pair ropes in place, a k pair ropes into the mirror
 //! K row and copies its v pair into the V row, the bias rows added first, the f16 stamps clamped into the half range, the pairs
@@ -1719,6 +1729,7 @@ class template GkRopeKvStore {
     @kargs pa : GkRopeKvArgs
     @template_constant CLAMP16 : bool = true
     @template_constant BOUND_VIEWS : bool = false   //!< the stamp binds the v projection, the bias row and the table rows at their offsets, so their element bases are zero
+    @template_constant SPLIT_TABLES : bool = false  //!< the sin rows are their own plane (bound at `tsin`), not a half head past the cos rows
 
     //! one mirror K element, clamped into the half range on the f16 stamp
     def st_k(i : uint; v : float) {
@@ -1747,10 +1758,28 @@ class template GkRopeKvStore {
         }
     }
 
+    //! the sin row's element base: a half head past the cos row in the one plane, or zero in a plane of its own
+    def sin_base(half : uint) : uint {
+        static_if (BOUND_VIEWS || SPLIT_TABLES) {
+            return 0u
+        } else {
+            return pa.ccos + half
+        }
+    }
+
     //! the one-row form a kernel over `npairs` invocations takes: pair `gid` of row 0, the mirror rows bound at their own offsets
     def rope_kv_one(gid : uint) {
         if (gid < pa.npairs) {
             rope_kv_pair(0u, gid, 0u, 0u)
+        }
+    }
+
+    //! the row-table form a kernel over (`npairs` x rows) invocations takes: pair `gid` of row `row`, whose table entry `rrow` holds
+    //! its mirror K and V bases, the per-layer stride `pa.mirbase` layers of which sit ahead, and its depth (the row lands at depth - 1)
+    def rope_kv_tabled(gid, row : uint; rrow : uint4) {
+        if (gid < pa.npairs) {
+            let ahead = pa.mirbase * rrow.z + (rrow.w - 1u) * pa.kvd
+            rope_kv_pair(row, gid, rrow.x + ahead, rrow.y + ahead)
         }
     }
 
@@ -1767,7 +1796,7 @@ class template GkRopeKvStore {
         let i2 = pa.neox != 0u ? (pair_rotates ? i + halfr : i + (half - halfr)) : i + 1u
         let cb = row * pa.cstride
         let fcr = pair_rotates ? tcos[base_in_plane(pa.ccos) + cb + j] : 1.0
-        let fci = pair_rotates ? tsin[base_in_plane(pa.ccos + half) + cb + j] : 0.0
+        let fci = pair_rotates ? tsin[sin_base(half) + cb + j] : 0.0
         let boff = base_in_plane(pa.boff)
         if (isk) {
             let kb = row * pa.kvrow + pa.qd

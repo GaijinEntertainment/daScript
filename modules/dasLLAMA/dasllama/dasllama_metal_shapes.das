@@ -181,6 +181,10 @@ def record_needs(var tab : table<string; int64>; missing : MetalNeed) {
 def kq_fmt_gpu_supported(f : KqFmt) : bool =>
     f == KqFmt.q8 || f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.k6 || f == KqFmt.iq4xs || f == KqFmt.k3 || f == KqFmt.iq3s || f == KqFmt.iq3xxs || f == KqFmt.iq4nl || f == KqFmt.q40 || f == KqFmt.k2 || f == KqFmt.iq2s || f == KqFmt.iq2xs || f == KqFmt.iq2xxs
 
+//! a plane format with a one-row GEMV on this home: q8's, or a superblock format's row-batched decode form at one row, whose K
+//! (`kdim`) is whole superblocks and whose format the Metal kernels serve
+def kq_fmt_one_row_gemv(f : KqFmt; kdim : int64) : bool => f == KqFmt.q8 || (kq_sb(int(f)) && kq_fmt_gpu_supported(f) && kdim % KQ_SB_ELEMS == 0l)
+
 def private kq_fmts_gpu_supported(a : array<KqFmt>) : bool {
     for (f in a) {
         if (!kq_fmt_gpu_supported(f)) {

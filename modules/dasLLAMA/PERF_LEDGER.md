@@ -5353,8 +5353,11 @@ probe alone, no box profile applied; the Vulkan box ran it under `DASLLAMA_GPU=1
   11.8 ms, 32 rows 11.0, 64 rows 14.6; the same rows stepped one at a time 6.5 ms a row (a host-cached session, the
   row read back each step). The 1B Q8_0 reads 6.5 ms a window at 1 to 16 rows against 3.8 ms a step. The peel
   (`ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-prefill-peel`) routes a window of at most the N-row command's rows through the
-  token command: the same probe then reads 6.5 / 6.9 / 7.0 / 7.4 ms at 1 / 2 / 4 / 8 rows - one decode step - and the
-  chain's 11.8 ms from 16 rows up.
+  token command. The race (`harness/vk_short_window_race.das`, the lever `set_vulkan_prefill_peel_` flipped between the
+  forms in one process, five interleaved reps a form, the fastest kept): the 3B reads peel 6.5 / 6.9 / 4.5 / 7.4 ms
+  against the chain's 13.5 / 11.7 / 13.4 / 13.5 at 1 / 2 / 4 / 8 rows, the 1B Q8_0 2.2 / 4.1 / 4.2 / 3.0 against
+  5.4 / 6.6 / 6.6 / 5.5, the forms' last-row logits at most 0.27 apart on the 3B and 0.23 on the 1B (the chain's tiles
+  and the command's GEMV leaves round apart; the split bar holds them); the probe reads the chain's 11.8 ms from 16 rows up.
 - **The one-row decode's attention split follows the command's rows, and the house replay's tool call on the pod reads
   0.54 -> 0.39 s.** `rd_layer_pieces` divided the SM wave by the per-row planes' height - the region count before this
   leg, eight after - so the one-row command split a head's keys into a quarter, then an eighth, of the pieces that fill the

@@ -10,8 +10,6 @@ options stack = 524288
 options _dasllama_internal = true
 
 require daslib/clargs
-require daslib/strings_boost
-require daslib/strings_convert
 require dasllama/dasllama
 require dasllama/dasllama_transformer   // the umbrella fires each arch [init] registration
 require dasllama/dasllama_common        // nolint:STYLE030,LINT019 - forward_prefill, allow_cpu_prefill
@@ -19,6 +17,7 @@ require dasllama/dasllama_math          // with_dasllama_jobque_
 require dasllama/dasllama_gpu_resident  // moe_gpu_resident_active, moe_gpu_resident_peels, the peel's lever
 require dasllama/dasllama_gpu_tier      // gpu_device_session_dtype_, rdec_token_n_rows
 require ../tests/_compares.das          // nolint:STYLE030,LINT019 - logits_maxdiff
+require _race_fixture   // int_list, counting_tokens
 
 [CommandLineArgs]
 struct RaceArgs {
@@ -30,36 +29,6 @@ struct RaceArgs {
     reps : int = 5
     @clarg_doc = "The prompt's rows ahead of the continuation"
     prompt : int = 40
-}
-
-//! the comma list's numbers; a part that is no number is skipped
-def private int_list(s : string) : array<int64> {
-    var out : array<int64>
-    for (part in split(s, ",")) {
-        let n = try_to_int(part)
-        if (is_ok(n)) {
-            out |> push(int64(unwrap(n)))
-        }
-    }
-    return <- out
-}
-
-//! `n` tokens of a counting text, the BOS first
-def private counting_tokens(tr : Model; n : int64) : array<int64> {
-    let text = build_string() $(var w : StringBuilderWriter) {
-        var i = 1
-        var chars = 0
-        while (chars < int(n) * 6) {
-            let piece = "{i}, "
-            w |> write(piece)
-            chars += length(piece)
-            i ++
-        }
-    }
-    var all <- encode(tr, text, true, false)
-    var toks <- [for (k in range64(n)); all[k]]
-    delete all
-    return <- toks
 }
 
 //! the continuation `tail` after `prompt` on a fresh session with the peel's lever at `peel`: the wall of the continuation's
@@ -97,7 +66,7 @@ def main : int {
     let lever = vulkan_prefill_peel_()
     with_dasllama_jobque_() {
         let np = int64(args.prompt)
-        var all <- counting_tokens(tr, np + 64l)
+        var all <- counting_tokens(tr, np + 64l, 1l)
         var prompt <- [for (k in range64(np)); all[k]]
         print("rows the token command steps at once: {rdec_token_n_rows()}\n")
         for (k in rows) {

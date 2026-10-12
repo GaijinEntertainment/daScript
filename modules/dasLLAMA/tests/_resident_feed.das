@@ -42,6 +42,36 @@ def ramp_ids(n, salt, base, stride, span : int64) : array<int64> => <- [for (i i
 //! of the row's max |logit|: the resident rigs' split bar - the window's GEMMs split k by the row count, so two row counts round apart
 let SPLIT_BAR_REL = 0.06
 
+//! the logits now, then after each of `toks` stepped one at a time on `s` at its own position (`eval_` advancing it)
+def steps_after(tr : Model; var s : Session; toks : array<int64>) : array<array<float>> {
+    var out : array<array<float>>
+    out |> reserve(long_length(toks) + 1l)
+    out |> emplace <| logits_of(s, tr.config.vocab_size)
+    var one : array<int64>
+    one |> resize(1)
+    for (tok in toks) {
+        one[0] = tok
+        eval_(tr, s, one)
+        out |> emplace <| logits_of(s, tr.config.vocab_size)
+    }
+    return <- out
+}
+
+//! a two-token prompt on `tr` from position zero takes the window chain, never the token command's peel (`rdec_peel_fits`
+//! declines the model: `why`), the prefill counted and every call served
+def assert_short_window_takes_chain(t : T?; tr : Model; why : string) {
+    var prompt <- resident_prompt(2l)
+    var s <- create_session(tr, mirror_kv_dtype())
+    let peels0 = moe_gpu_resident_peels()
+    let pf0 = moe_gpu_resident_prefills()
+    forward_prefill(tr, s, prompt, 2l, 0l)
+    t |> equal(moe_gpu_resident_peels() - peels0, 0l, "a two-token prompt on {why} takes the chain, not the peel")
+    t |> equal(moe_gpu_resident_prefills() - pf0, 1l, "... and the driver counted its prefill")
+    served_every_call(t)
+    delete s
+    delete prompt
+}
+
 //! both sides' argmax rows decoded under `tag`, the readable form of a logits compare (`log_gen_texts` over each row's argmax)
 def log_argmax_rows(tr : Model; tag : string; got, want : array<array<float>>) {
     log_gen_texts(tr, tag, [for (r in want); argmax_of(r)], [for (r in got); argmax_of(r)])

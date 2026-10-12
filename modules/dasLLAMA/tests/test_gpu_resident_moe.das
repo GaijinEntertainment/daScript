@@ -6,6 +6,7 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require dasllama/dasllama_kv_dtype   // KVDtype: the block-codec cells' mirror ask
 require _moe_resident
+require dasllama/dasllama_math   // with_dasllama_jobque_ (the engine-standard jobque config)
 
 // The whole-model resident driver on a MoE (Qwen1.5-MoE-A2.7B-Chat-Q4_K_M-local, the Q4_K_M mint of
 // the Q8_0 carrier, under DASLLAMA_GPU=1): the expert stacks in the arena beside the attention
@@ -98,5 +99,21 @@ def test_gpu_resident_moe_ctx_strict(t : T?) {
     t |> run("Qwen3.6-35B-A3B-UD-IQ2_XXS at a context asked whole (131072): the experts yield to the mirror and serve on the host, the hybrid chain against the CPU over two windows") @(t : T?) {
         assert_pf_window(t)
         moe_forced_feed(t, PF_WINDOW_ROWS + 88l, HOST_CTX)
+    }
+}
+
+//! a two-token prompt on a MoE whose experts serve on the host takes the window chain: the token command's peel declines the host experts
+[test]
+def test_gpu_resident_moe_host_layers_short_window(t : T?) {
+    t |> run("Qwen3-30B-A3B-Q4_K_M with host layers: a two-token prompt takes the window chain, not the token command's peel") @(t : T?) {
+        let path = path_join(models_dir(), HOST_LAYERS.file)
+        if (!resident_ready(t, path)) return
+        var tr <- load_resident(path, 1l, HOST_LAYERS.strict_ctx)
+        if (moe_fixture_admitted(t, tr, HOST_LAYERS) > 0l) {
+            with_dasllama_jobque_() {
+                assert_short_window_takes_chain(t, tr, "routed experts on the host")
+            }
+        }
+        delete tr
     }
 }

@@ -619,3 +619,22 @@ def test_segments_served_by_override(t : T?) {
         }
     }
 }
+
+//! the say-once helper every GPU driver file shares: a reason set holds each `why` once, a second call with the same `why` leaves
+//! it as it was, another `why` joins it, and a cleared set says it again
+[test]
+def test_gpu_said_once(t : T?) {
+    t |> run("gpu_said_once keeps one entry a reason and says a cleared reason again") @(t : T?) {
+        var said : table<string>
+        gpu_said_once(said, LOG_INFO, "the test's prefix - ", "a reason")
+        t |> equal(length(said), 1, "the first call records the reason")
+        gpu_said_once(said, LOG_INFO, "the test's prefix - ", "a reason")
+        t |> equal(length(said), 1, "the same reason again records nothing")
+        gpu_said_once(said, LOG_WARNING, "the test's prefix - ", "another reason")
+        t |> equal(length(said), 2, "another reason joins the set")
+        said |> clear()
+        gpu_said_once(said, LOG_INFO, "the test's prefix - ", "a reason")
+        t |> equal(length(said), 1, "a cleared set (an arm) says the reason again")
+        delete said
+    }
+}

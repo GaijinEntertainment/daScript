@@ -4,7 +4,7 @@ options persistent_heap
 options _dasllama_internal = true
 
 require dastest/testing_boost public
-require dasllama/dasllama_transformer   // nolint:STYLE029 - the umbrella fires each arch [init] registration (llama)
+require dasllama/dasllama_transformer   // the umbrella fires each arch [init] registration (llama)
 require dasllama/dasllama
 require dasllama/dasllama_common   // nolint:STYLE030,LINT019 - eval_segments_, forward_prefill, forward
 require daslib/jobque_boost
@@ -53,21 +53,6 @@ def private open_session(tr : Model; var s : Session; opening : array<int64>) {
     eval_(tr, s, opening)
 }
 
-//! the prefill's logits then each fed step's on `s` at its own position, the prefill already run
-def private steps_after(tr : Model; var s : Session; toks : array<int64>) : array<array<float>> {
-    var out : array<array<float>>
-    out |> reserve(long_length(toks) + 1l)
-    out |> emplace <| logits_of(s, tr.config.vocab_size)
-    var one : array<int64>
-    one |> resize(1)
-    for (tok in toks) {
-        one[0] = tok
-        eval_(tr, s, one)
-        out |> emplace <| logits_of(s, tr.config.vocab_size)
-    }
-    return <- out
-}
-
 def private solo_rows(tr : Model; opening, tail, toks : array<int64>) : array<array<float>> {
     var s <- create_session(tr, mirror_kv_dtype())
     open_session(tr, s, opening)
@@ -111,8 +96,8 @@ def private segments_cell(t : T?; tr : Model) {
     var got_b <- steps_after(tr, sb, toks)
     hold_rows(t, "session A, the tail as a segment", got_a, want_a)
     hold_rows(t, "session B, the tail as a segment", got_b, want_b)
-    log_gen_texts(tr, "session A: solo window, then the tail as a segment", [for (r in want_a); argmax_of(r)], [for (r in got_a); argmax_of(r)])
-    log_gen_texts(tr, "session B: solo window, then the tail as a segment", [for (r in want_b); argmax_of(r)], [for (r in got_b); argmax_of(r)])
+    log_argmax_rows(tr, "session A: solo window, then the tail as a segment", got_a, want_a)
+    log_argmax_rows(tr, "session B: solo window, then the tail as a segment", got_b, want_b)
     delete sa
     delete sb
     var ca <- create_session(tr, mirror_kv_dtype())
@@ -186,6 +171,81 @@ def private decline_cell(t : T?; tr : Model) {
 }
 
 [cold_path]
+//! the segmented form's other declines, each leaving the segmented-window counter where it was: a segment's session on
+//! another K/V codec than the mirror (the one-session fallback passing it as `codec`), both regions held by device-home
+//! sessions (the fallback passing each as `busy`), and a session adding deepstack slices the override has no arm for (the
+//! engine runs the segments one at a time, the CPU prefill loop serving that one with no pass counted)
+def private decline_arms_cell(t : T?; tr : Model) {
+    var open_a <- resident_prompt(OPEN_ROWS, 0l)
+    var open_b <- resident_prompt(OPEN_ROWS, 7l)
+    var opens : array<array<int64>>
+    opens |> reserve(2l)
+    opens |> push_clone(open_a)
+    opens |> push_clone(open_b)
+    if (mirror_kv_dtype() != KVDtype.f32) {
+        var sa <- create_session(tr, mirror_kv_dtype())
+        var sb <- create_session(tr, KVDtype.f32)
+        var sess <- [unsafe(addr(sa)), unsafe(addr(sb))]
+        let sw0 = segment_windows()
+        let codec0 = pass_count("codec")
+        eval_segments_(tr, sess, opens)
+        sess |> clear()
+        t |> equal(segment_windows() - sw0, 0l, "a segment on another K/V codec: no segmented window")
+        t |> equal(pass_count("codec") - codec0, 1l, "... the fallback passed that session to the CPU rails as codec")
+        unsafe {
+            delete sess
+        }
+        delete sa
+        delete sb
+    }
+    {
+        var da <- create_device_session(tr)
+        var db <- create_device_session(tr)
+        var ha <- create_session(tr, mirror_kv_dtype())
+        var hb <- create_session(tr, mirror_kv_dtype())
+        var sess <- [unsafe(addr(ha)), unsafe(addr(hb))]
+        let sw0 = segment_windows()
+        let busy0 = pass_count("busy")
+        eval_segments_(tr, sess, opens)
+        sess |> clear()
+        t |> equal(segment_windows() - sw0, 0l, "both regions held by device-home sessions: no segmented window")
+        t |> equal(pass_count("busy") - busy0, 2l, "... the fallback passed each host-cached session as busy")
+        unsafe {
+            delete sess
+        }
+        delete ha
+        delete hb
+        delete da
+        delete db
+    }
+    {
+        var sa <- create_session(tr, mirror_kv_dtype())
+        var sb <- create_session(tr, mirror_kv_dtype())
+        sb.ds_active = true
+        var sess <- [unsafe(addr(sa)), unsafe(addr(sb))]
+        let sw0 = segment_windows()
+        let pf0 = moe_gpu_resident_prefills()
+        var passes0 <- gpu_cpu_passes_()
+        eval_segments_(tr, sess, opens)
+        sess |> clear()
+        var passes1 <- gpu_cpu_passes_()
+        t |> equal(segment_windows() - sw0, 0l, "a session adding deepstack slices: no segmented window on an override with no slice-add arm")
+        t |> equal(moe_gpu_resident_prefills() - pf0, 1l, "... the other session's segment ran alone on the driver")
+        t |> equal(length(passes1), length(passes0), "... and the deepstack session took the CPU prefill loop with no pass counted ({passes1})")
+        sb.ds_active = false
+        unsafe {
+            delete sess
+        }
+        delete sa
+        delete sb
+        delete passes0
+        delete passes1
+    }
+    delete opens
+    delete open_a
+    delete open_b
+}
+
 def private segments_cells(t : T?; file : string) {
     let path = path_join(models_dir(), file)
     return if (!resident_ready(t, path))
@@ -195,6 +255,7 @@ def private segments_cells(t : T?; file : string) {
     with_dasllama_jobque_() {
         segments_cell(t, tr)
         decline_cell(t, tr)
+        decline_arms_cell(t, tr)
     }
     delete tr
 }

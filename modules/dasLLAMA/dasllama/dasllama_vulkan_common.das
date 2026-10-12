@@ -2756,7 +2756,10 @@ def f16g_shape_ok(dim : int64) : bool => g_gpu.coopmat_mode == COOPMAT_CM2 && di
 var g_rd : RDec?
 
 //! a layer's first mirror unit in the selected region of its slab
-def rd_mir_base(L : RLayer) : int64 => L.mir_base + g_rd.region * g_rd.mir_units
+def rd_mir_base(L : RLayer) : int64 => rd_mir_base(L, g_rd.region)
+
+//! ... and in region `region`: a segment's
+def rd_mir_base(L : RLayer; region : int64) : int64 => L.mir_base + region * g_rd.mir_units
 
 //! one slab's binding, either side: all `regions` copies end to end (every slab the same size)
 def rd_mir_bytes : int64 => g_rd.regions * g_rd.mir_units * kv_unit_bytes(g_rd.kv_dt)

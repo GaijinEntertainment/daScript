@@ -253,6 +253,19 @@ def private moe_shell(fmt : KqFmt) : Model {
     return <- m
 }
 
+//! the Metal prefill's one-row GEMV predicate (`kq_fmt_one_row_gemv`): q8 at any width, a served superblock format at a
+//! whole-superblock width and not at a partial one, and a superblock format the Metal kernels do not serve at no width
+[test]
+def test_kq_fmt_one_row_gemv(t : T?) {
+    t |> run("the last-layer narrowing admits q8 at any width and a served superblock format at whole superblocks alone") @(t : T?) {
+        t |> success(kq_fmt_one_row_gemv(KqFmt.q8, 100l), "q8 has a one-row GEMV at any width")
+        t |> success(kq_fmt_one_row_gemv(KqFmt.k4, 8192l), "a served K-quant at whole superblocks")
+        t |> success(!kq_fmt_one_row_gemv(KqFmt.k4, 8191l), "... and not at a partial superblock")
+        t |> success(!kq_fmt_one_row_gemv(KqFmt.iq3s4, 8192l), "a superblock format the Metal kernels do not serve has none")
+        t |> success(!kq_fmt_one_row_gemv(KqFmt.q51, 8192l), "a per-32 format is no superblock format")
+    }
+}
+
 [test]
 def test_moe_metal_expert_formats(t : T?) {
     t |> run("the Metal routed block admits exactly the expert plane formats it has kernels for; every other format declines") @(t : T?) {

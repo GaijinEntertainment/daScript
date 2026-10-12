@@ -9984,14 +9984,6 @@ class TowerRopeTab : GkRopeTab {
     }
 }
 
-//! the token command's rope-and-store args on this home (`GkRopeKvArgs`): the cos row at the layer's rope class base of the
-//! position's plane, the rows' strides the projection row's, the mirror base the layer's (a row's own rides its token block)
-def rope_kv_args(qd, kvd, hs, npairs_q, npairs : int64; neox, has_bias : bool; rot, boff, cbase, rows, kvrow, qrow, cosrow, mirbase : int64) : GkRopeKvArgs
-    => GkRopeKvArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), npairs_q = uint(npairs_q), npairs = uint(npairs),
-        neox = neox ? 1u : 0u, has_bias = has_bias ? 1u : 0u, rot = uint(rot),
-        qrow = uint(qrow), kvrow = uint(kvrow), boff = uint(boff), cstride = uint(cosrow), ccos = uint(cbase),
-        rows = uint(rows), mirbase = uint(mirbase))
-
 //! the K/V mirror stores the window's rope-store stamps share: the K plane at binding 2, the V plane at 3, KT the mirror element type;
 //! the f16 stamps clamp +-65504 (the metal CLAMP16 contract - an inf in the mirror poisons attention)
 [ |> template_struct_instance]

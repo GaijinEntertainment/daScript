@@ -1188,11 +1188,20 @@ def public moe_gpu_shexp_on_gpu(l : int64) : bool =>
 //! The prefill's shared expert stays on the CPU for `why`: said once per reason per model while the tier is armed.
 [cold_path]
 def public moe_gpu_shexp_declined(why : string) {
-    if (!g_moe_gpu_installed || key_exists(g_moe_gpu_shexp_said, why)) {
-        return
-    }
-    g_moe_gpu_shexp_said |> insert(why)
-    to_log(LOG_INFO, "dasLLAMA: the prefill's shared expert takes the CPU rail - {why} (said once per reason)\n")
+    return if (!g_moe_gpu_installed)
+    gpu_said_once(g_moe_gpu_shexp_said, LOG_INFO, "the prefill's shared expert takes the CPU rail - ", why)
+}
+
+//! `why` logged at `level` once under `said` (a reason set the owner clears when it re-arms); the check every call pays is the lookup alone
+def public gpu_said_once(var said : table<string>; level : int; prefix, why : string) {
+    return if (key_exists(said, why))
+    gpu_say_once_now(said, level, prefix, why)
+}
+
+[cold_path]
+def private gpu_say_once_now(var said : table<string>; level : int; prefix, why : string) {
+    said |> insert(why)
+    to_log(level, "dasLLAMA: {prefix}{why} (said once per reason)\n")
 }
 
 //! Runtime routing gate over the shared-expert marks (the --shexp-ab in-process lever).

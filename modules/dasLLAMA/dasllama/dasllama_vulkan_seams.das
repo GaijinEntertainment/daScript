@@ -101,7 +101,7 @@ def vk_rope_kv_store(var qkv : array<float>; var qout : array<float>; var krow :
         // q ropes in place in its own plane — seed it with the raw q rows
         upload_region_at(g_gpu.rks_q_dev, 0l, addr<uint8 const?>(qkv[0]), qd * 4l)
         cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-            var pc = rope_kv_args(qd, kv_dim, head_size, int64(kpair0), int64(npairs), neox, false, head_size, 0l, 0l, 1l, 0l, 0l, 0l, 0l)
+            var pc = gk_rope_kv_args(qd, kv_dim, head_size, int64(kpair0), int64(npairs), neox, false, head_size, 0l, 0l, 1l, 0l, 0l, 0l, 0l)
             enc_rope_kv_cls(raw, h, g_gpu.rks_set, pc, (int64(npairs) + int64(WG_X) - 1l) / int64(WG_X))
             vhz_dep(raw, h, VHG_Y1 | VHG_Y2 | VHG_Y3, 0u, true)
             cmd_copy_whole(raw, g_gpu.rks_q_dev, g_gpu.rks_q_host.buf, qd * 4l)

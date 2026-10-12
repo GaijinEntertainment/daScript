@@ -339,41 +339,69 @@ def private dn_state_home(var s : Session) : double {
 }
 
 //! two sessions over `pa` and `pb`, a region each, through STEPS batched steps against each session alone, every step through the N-row command
-def private batched_steps_body(t : T?; tr : Model; pa, pb : array<int64>; bar : LogitsBar) {
-    var al <- alone_runs(tr, pa, pb)
-    var sa <- create_session(tr, mirror_kv_dtype())
-    var sb <- create_session(tr, mirror_kv_dtype())
-    eval(tr, sa, pa)   // `eval` advances `n_past`, the position a batched step reads
-    eval(tr, sb, pb)
+def private batched_steps_body(t : T?; tr : Model; prompts, feeds : array<array<int64>>; bar : LogitsBar) {
+    let rows = long_length(prompts)
+    let steps_alone0 = rdec_nrow_steps()
+    var alone <- [for (i in range64(rows)); logits_alone(tr, prompts[i], feeds[i])]
+    t |> equal(rdec_nrow_steps() - steps_alone0, 0l, "the sessions alone stepped through the one-row command: the N-row counter's control")
+    var sessions : array<Session>
+    sessions |> reserve(rows)
+    for (i in range64(rows)) {
+        sessions |> emplace <| create_session(tr, mirror_kv_dtype())
+        eval(tr, sessions[i], prompts[i])   // `eval` advances `n_past`, the position a batched step reads
+    }
     let hybrid = tr.config.recr_mask != 0ul
-    let home0 = hybrid ? dn_state_home(sb) : 0.0lf   //! session B's state after its prefill: the batched steps must move what comes home
-    let gen_a = sa.rdec_gen
-    let gen_b = sb.rdec_gen
+    let home0 = hybrid ? dn_state_home(sessions[rows - 1l]) : 0.0lf   //! the last session's state after its prefill: the batched steps must move what comes home
+    var gens <- [for (i in range64(rows)); sessions[i].rdec_gen]
+    var sess <- [for (i in range64(rows)); unsafe(addr(sessions[i]))]
     let steps0 = rdec_nrow_steps()
-    with_batch_rows(tr, sa, sb) $(var ws; var sess) {
+    with_batch_rows(tr, sess) $(var ws; var sx) {
         for (st in range64(STEPS)) {
-            var toks <- [al.fa[st], al.fb[st]]
-            eval_batch(tr, ws, sess, toks)
+            var toks <- [for (i in range64(rows)); feeds[i][st]]
+            eval_batch(tr, ws, sx, toks)
             delete toks
-            hold_bar(t, tr, sa.logits, al.ra[st + 1l], al.ra[st], bar, "batched step {st}, row A")
-            hold_bar(t, tr, sb.logits, al.rb[st + 1l], al.rb[st], bar, "batched step {st}, row B")
+            for (i in range64(rows)) {
+                hold_bar(t, tr, sessions[i].logits, alone[i][st + 1l], alone[i][st], bar, "batched step {st}, row {i}")
+            }
         }
     }
     if (hybrid) {
-        t |> success(dn_state_home(sb) != home0, "session B's recurrent state came home from its region's slot after the batched steps")
+        t |> success(dn_state_home(sessions[rows - 1l]) != home0, "the last session's recurrent state came home from its region's slot after the batched steps")
     }
-    t |> equal(sa.rdec_gen, gen_a, "row A kept its claim through every step: its history never came up from the host again")
-    t |> equal(sb.rdec_gen, gen_b, "row B kept its claim through every step")
+    for (i in range64(rows)) {
+        t |> equal(sessions[i].rdec_gen, gens[i], "row {i} kept its claim through every step: its history never came up from the host again")
+    }
     served_every_call(t)
-    static_if (typeinfo builtin_module_exists(vulkan)) {   //! the rows stepped through the N-row command, not a row at a time: a declined command passes the bars above the same
-        let nrows = vk_rdec_token_n_rows()
-        t |> success(nrows >= 2l, "the N-row token command serves the two rows at once ({nrows} rows)")
-    }
+    let groups = batched_groups(t, rows)
     let stepped = rdec_nrow_steps() - steps0
-    t |> equal(stepped, STEPS, "every batched step went through the N-row command ({stepped} of {STEPS})")
-    delete sa
-    delete sb
-    delete al
+    t |> equal(stepped, STEPS * groups, "every batched step went through the N-row command, {groups} command(s) a step ({stepped} of {STEPS * groups})")
+    unsafe {
+        delete sess
+    }
+    delete sessions
+    delete gens
+    delete alone
+}
+
+//! the commands a batched step of `rows` rows takes: the fewest groups of the rows the N-row command steps at once, the command
+//! asserted to serve the rows at once (a declined command passes the bars above the same); one where the module is absent
+def private batched_groups(t : T?; rows : int64) : int64 {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        let at_once = vk_rdec_token_n_rows()
+        t |> success(at_once >= 2l, "the N-row token command serves the rows at once ({at_once} rows)")
+        return at_once > 0l ? (rows + at_once - 1l) / at_once : 1l
+    } else {
+        return 1l
+    }
+}
+
+//! the two-prompt form over `pa` and `pb` with the rig's feeds
+def private batched_steps_body(t : T?; tr : Model; pa, pb : array<int64>; bar : LogitsBar) {
+    var prompts <- [ <- clone_to_move(pa), <- clone_to_move(pb)]
+    var feeds <- [ <- feed_a(), <- feed_b()]
+    batched_steps_body(t, tr, prompts, feeds, bar)
+    delete prompts
+    delete feeds
 }
 
 def cell_regions_batched_steps(t : T?; file : string; bar : LogitsBar = LogitsBar.bit_exact; split_forms : bool = false) {
@@ -1199,46 +1227,19 @@ def cell_regions_batched_widen(t : T?; file : string; bar : LogitsBar = LogitsBa
     }
 }
 
-//! `rows` sessions over `rows` regions - more than the N-row command steps at once - through STEPS batched steps: every
-//! row within `bar` of its session alone with the one-token-off control, each step the fewest commands of at most the
-//! rows the command steps at once (`vk_rdec_token_n_rows`), never a row at a time, and every call served
-[cold_path]
+//! `rows` sessions over `rows` regions - more than the N-row command steps at once - through STEPS batched steps: the
+//! two-row cell's body over `rows` rows, each step the fewest commands of at most the rows the command steps at once
+//! (`vk_rdec_token_n_rows`), never a row at a time
 def cell_regions_batched_groups(t : T?; file : string; rows : int64; bar : LogitsBar = LogitsBar.split_bar) {
     t |> run("{rows} sessions, a region each: a batched step over all of them runs in groups of the command's rows, and every row reads what its session reads alone") @(t : T?) {
         with_regions_rig(t, file, RegionsLoad(regions = rows)) $(tr) {
+            static_if (typeinfo builtin_module_exists(vulkan)) {
+                let at_once = vk_rdec_token_n_rows()
+                t |> success(at_once >= 2l && at_once < rows, "the command steps {at_once} rows at once, fewer than the {rows} rows (the cell measures the groups)")
+            }
             var prompts <- [for (i in range64(rows)); ramp_ids(40l + i, i, 1000l + 100l * i, 37l + 2l * i, 5000l)]
             var feeds <- [for (i in range64(rows)); ramp_ids(STEPS, i, 2000l, 53l, 4000l)]
-            let steps_alone0 = rdec_nrow_steps()
-            var alone <- [for (i in range64(rows)); logits_alone(tr, prompts[i], feeds[i])]
-            t |> equal(rdec_nrow_steps() - steps_alone0, 0l, "the sessions alone stepped through the one-row command: the N-row counter's control")
-            var sessions : array<Session>
-            sessions |> reserve(rows)
-            for (i in range64(rows)) {
-                sessions |> emplace <| create_session(tr, mirror_kv_dtype())
-                eval(tr, sessions[i], prompts[i])
-            }
-            var sess <- [for (i in range64(rows)); unsafe(addr(sessions[i]))]
-            let at_once = rdec_token_n_rows()
-            t |> success(at_once >= 2l && at_once < rows, "the command steps {at_once} rows at once, fewer than the {rows} rows (the cell measures the groups)")
-            let steps0 = rdec_nrow_steps()
-            with_batch_rows(tr, sess) $(var ws; var sx) {
-                for (st in range64(STEPS)) {
-                    var toks <- [for (i in range64(rows)); feeds[i][st]]
-                    eval_batch(tr, ws, sx, toks)
-                    delete toks
-                    for (i in range64(rows)) {
-                        hold_bar(t, tr, sessions[i].logits, alone[i][st + 1l], alone[i][st], bar, "batched step {st}, row {i}")
-                    }
-                }
-            }
-            let groups = (rows + at_once - 1l) / at_once
-            t |> equal(rdec_nrow_steps() - steps0, STEPS * groups, "every batched step went through {groups} N-row commands")
-            served_every_call(t)
-            unsafe {
-                delete sess
-            }
-            delete sessions
-            delete alone
+            batched_steps_body(t, tr, prompts, feeds, bar)
             delete prompts
             delete feeds
         }

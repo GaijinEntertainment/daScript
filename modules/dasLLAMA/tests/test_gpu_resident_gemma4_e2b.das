@@ -43,3 +43,13 @@ def test_gpu_resident_gemma4_e2b_block_codecs(t : T?) {
         }
     }
 }
+
+//! a two-token prompt on the E-series takes the window chain: the token command's peel declines the per-layer-embedding side rows
+[test]
+def test_gpu_resident_gemma4_e2b_short_window(t : T?) {
+    t |> run("gemma-4-E2B Q8_0: a two-token prompt takes the window chain, not the token command's peel") @(t : T?) {
+        with_gemma_rig(t, GEMMA4E_FILE) $(tr) {
+            assert_short_window_takes_chain(t, tr, "a per-layer-embedding model")
+        }
+    }
+}

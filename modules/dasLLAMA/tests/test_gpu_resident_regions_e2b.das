@@ -13,6 +13,13 @@ require _resident_regions
 // without DASLLAMA_GPU=1 on a device the driver serves, or without the file under models_dir().
 let private REGIONS_FILE = "gemma-4-E2B-it-Q8_0.gguf"
 
+//! nine rows over nine regions: past the N-row command's eight the step runs two commands, each group's per-layer-embedding
+//! side rows read from the group's own row base
+[test]
+def test_regions_batched_groups_e2b(t : T?) {
+    cell_regions_batched_groups(t, REGIONS_FILE, 9l, LogitsBar.bit_exact)
+}
+
 [test]
 def test_regions_interleaved_single_steps(t : T?) {
     cell_regions_interleaved_single_steps(t, REGIONS_FILE)

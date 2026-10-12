@@ -54,8 +54,9 @@ module it ships in.**
 **A diff that makes a claim, in a commit message, a PR body or a line of an `ARCHITECTURE*.md`,
 about a kernel's emitted shape, or that a kernel's emitted output did not change, reads the claim
 from the emitted artifact - the SPIR-V words `dasSpirv` builds or the MSL text `dasMetal` writes -
-never from the das source.** A statement of what the das source declares, worded as the das
-declaration, is not such a claim. Emitted shape is the structure of the emitted kernel - its
+never from the das source.** A claim about what the emitted text contains or leaves out is a claim
+about the emitted shape whatever das mechanism produces it; only a statement naming the das
+construct itself (a `static_if` arm, a template constant) is not such a claim. Emitted shape is the structure of the emitted kernel - its
 signature, its parameter attributes and binding numbers, its statement forms - and the constants
 that structure
 carries: a tile, an unroll width, a SPIR-V kernel's local size (the `LocalSize` execution mode the

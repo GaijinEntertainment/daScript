@@ -3206,6 +3206,7 @@ def private resident_hot_arm(t : Model; plan : ResidentPlan) {
     g_rdec_hot_slots = 0l
     g_rdec_hot_declined |> clear()
     g_rdec_seg_declined |> clear()
+    g_rdec_seg_pass_said |> clear()
     g_rdec_peel_declined |> clear()
     g_rdec_hot_hits = 0l
     g_rdec_hot_picks = 0l
@@ -3664,10 +3665,7 @@ def private rdec_hot_rows_begin(t : Model; var s : Session; l, nrows : int64) : 
 [cold_path]
 def private rdec_hot_window_declined(past_chunk : bool; nk, chunk, nrows : int64; f1, f3, f2 : int) {
     let why = past_chunk ? "the window's {nk} slot rows pass the expert chain's one chunk of {chunk}" : "the expert chain's f16 feed does not admit formats {f1}/{f3}/{f2} at {nrows} rows"
-    if (!key_exists(g_rdec_hot_declined, why)) {
-        g_rdec_hot_declined |> insert(why)
-        to_log(LOG_WARNING, "dasLLAMA: resident driver - the hot expert pool leaves a window's picks to the host: {why} (said once per reason)\n")
-    }
+    gpu_said_once(g_rdec_hot_declined, LOG_WARNING, "resident driver - the hot expert pool leaves a window's picks to the host: ", why)
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-hot-pool")]
@@ -3744,21 +3742,68 @@ var private g_rdec_seg_declined : table<string>
 
 [cold_path]
 def private rdec_segs_declined(why : string) {
-    rdec_said_once(g_rdec_seg_declined, "segmented prefill passed a call - ", why)
+    gpu_said_once(g_rdec_seg_declined, LOG_INFO, "resident segmented prefill passed a call - ", why)
 }
 
-def private rdec_segs_admitted(segs : array<PrefillSeg>; ids : bool) : bool {
+//! the one-session call's admission, the segments form's too: the pass a session's call takes, or none (`passes` false)
+struct private RdecGate {
+    passes : bool
+    kind : RdecPass
+    a : int64
+    b : int64
+}
+
+def private rdec_prefill_gate(t : Model; s : Session; npos, start_pos : int64) : RdecGate {
+    if (mtp_verify_window_active(s)) {
+        return RdecGate(passes = true, kind = RdecPass.verify_window)
+    }
+    if (!g_resident_prefill_allowed && !s.device_kv) {
+        return RdecGate(passes = true, kind = RdecPass.pinned_off)
+    }
+    if (s.attn_uniform_end != 0l) {
+        return RdecGate(passes = true, kind = RdecPass.span)
+    }
+    if (start_pos != 0l && t.config.recr_mask != 0ul) {
+        return RdecGate(passes = true, kind = RdecPass.continuation, a = start_pos)
+    }
+    if (start_pos + npos > g_rdec_cap) {
+        return RdecGate(passes = true, kind = RdecPass.cap, a = start_pos + npos, b = g_rdec_cap)
+    }
+    return RdecGate()
+}
+
+var private g_rdec_seg_pass_said : table<int>   //! the passes the segments form declined on, by kind, said once per armed model
+
+def private rdec_segs_admitted(t : Model; segs : array<PrefillSeg>; ids : bool) : bool {
     for (sg in segs) {
         let s = sg.s
-        let why = (mtp_verify_window_active(*s) ? "a segment inside the speculative verify window" : (!g_resident_prefill_allowed && !s.device_kv) ? "a host-cached segment under the prefill pin (set_resident_prefill_allowed(false))"
-            : !rdec_session_codec_ok(*s) ? "a segment's session on another K/V codec than the mirror" : s.attn_uniform_end != 0l ? "a segment with a media span"
-            : sg.start_pos + sg.npos > g_rdec_cap ? "a segment past the region's context" : s.embed_gpu_pending != ids ? "the segments' embed forms differ" : "")
-        if (!empty(why)) {
-            rdec_segs_declined(why)
+        let gate = rdec_prefill_gate(t, *s, sg.npos, sg.start_pos)
+        if (gate.passes) {
+            rdec_segs_declined_pass(gate)
+            return false
+        }
+        if (!rdec_session_codec_ok(*s)) {
+            rdec_segs_declined("a segment's session on another K/V codec than the mirror")
+            return false
+        }
+        if (s.embed_gpu_pending != ids) {
+            rdec_segs_declined("the segments' embed forms differ")
             return false
         }
     }
     return true
+}
+
+//! a segment's pass the one-session call would take too, said once per kind in the one-session pass's words
+def private rdec_segs_declined_pass(gate : RdecGate) {
+    return if (key_exists(g_rdec_seg_pass_said, int(gate.kind)))
+    rdec_segs_declined_pass_now(gate)
+}
+
+[cold_path]
+def private rdec_segs_declined_pass_now(gate : RdecGate) {
+    g_rdec_seg_pass_said |> insert(int(gate.kind))
+    to_log(LOG_INFO, "dasLLAMA: resident segmented prefill passed a call - a segment the one-session call would pass: {rdec_pass_text(gate.kind, gate.a, gate.b)} (said once per armed model)\n")
 }
 
 def private rdec_segs_regions(t : Model; var segs : array<PrefillSeg>) : bool {
@@ -3772,11 +3817,9 @@ def private rdec_segs_regions(t : Model; var segs : array<PrefillSeg>) : bool {
             rdec_segs_declined("a segment's session has no region to prefill in")
             return false
         }
-        for (ri in g_rdec_seg_regions) {
-            if (ri == r) {
-                rdec_segs_declined("the segments outnumber the regions free for them")
-                return false
-            }
+        if (rdec_region_repeats(g_rdec_seg_regions, long_length(g_rdec_seg_regions), r)) {
+            rdec_segs_declined("the segments outnumber the regions free for them")
+            return false
         }
         g_rdec_seg_regions |> push(r)
     }
@@ -3831,7 +3874,7 @@ def private vulkan_resident_prefill_segments(t : Model; var segs : array<Prefill
         return false
     }
     let ids = segs[0].s.embed_gpu_pending
-    return false if (!rdec_segs_admitted(segs, ids) || !rdec_segs_regions(t, segs))
+    return false if (!rdec_segs_admitted(t, segs, ids) || !rdec_segs_regions(t, segs))
     let total = rdec_segs_gather(t, segs, ids)
     let vocab = long_length(segs[0].s.logits)
     g_rdec_seg_logits |> reserve(n * vocab)
@@ -3840,22 +3883,14 @@ def private vulkan_resident_prefill_segments(t : Model; var segs : array<Prefill
     rdec_prefill_segs(g_rdec_seg_x, g_rdec_seg_ids, ids, c.embed_scale, g_rdec_seg_cos, g_rdec_segs, g_rdec_seg_logits, @@rdec_host_experts_rows)
     for (sg, i in segs, count()) {
         var s & = unsafe(*sg.s)
-        let r = g_rdec_seg_regions[i]
         copy_floats(g_rdec_seg_logits, int64(i) * vocab, s.logits, 0l, vocab)
-        if (sg.start_pos == 0l) {
-            rdec_claim(s, r, sg.npos)
-        } else {
-            g_rdec_regions[r].cnt = sg.start_pos + sg.npos
-        }
-        s.rdec_host_current = false
         s.embed_gpu_pending = false
         s.ple_gpu_pending = false
+        rdec_prefill_landed(t, s, g_rdec_seg_regions[i], sg.npos, sg.start_pos, 0l)
     }
     if (g_env_gpu.gpu_prof) {
         to_log(LOG_INFO, "dasLLAMA: resident segmented prefill host: {n} segments, {total} rows, the driver's run {get_time_usec(ts_run)} us\n")   // nolint:PERF026,PERF028 — the profile flag's report leg
     }
-    g_rdec_prefills += n
-    prefill_override_logits_done()
     return true
 }
 
@@ -3902,23 +3937,12 @@ def private rdec_prefill_region(t : Model; var s : Session; start_pos : int64) :
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-window")]
 def private vulkan_resident_prefill_go(t : Model; var s : Session; npos, start_pos : int64) : bool {
     return false if (!g_rdec_active)
-    if (mtp_verify_window_active(s)) {
-        return rdec_pass_hydrated(t, s, RdecPass.verify_window, 0l, 0l)
-    }
-    if (!g_resident_prefill_allowed && !s.device_kv) {
-        return rdec_pass_hydrated(t, s, RdecPass.pinned_off, 0l, 0l)
+    let gate = rdec_prefill_gate(t, s, npos, start_pos)
+    if (gate.passes) {
+        return rdec_pass_hydrated(t, s, gate.kind, gate.a, gate.b)
     }
     return false if (!rdec_session_codec_ok(s))
-    if (s.attn_uniform_end != 0l) {
-        return rdec_pass_hydrated(t, s, RdecPass.span, 0l, 0l)
-    }
     let c = t.config
-    if (start_pos != 0l && c.recr_mask != 0ul) {
-        return rdec_pass_hydrated(t, s, RdecPass.continuation, start_pos, 0l)
-    }
-    if (start_pos + npos > g_rdec_cap) {
-        return rdec_pass_hydrated(t, s, RdecPass.cap, start_pos + npos, g_rdec_cap)
-    }
     let r = rdec_prefill_region(t, s, start_pos)
     if (r < 0l) {
         return false
@@ -3926,7 +3950,7 @@ def private vulkan_resident_prefill_go(t : Model; var s : Session; npos, start_p
     if (start_pos == 0l && c.recr_mask != 0ul) {
         dn_reset(s)
     }
-    if (rdec_peel_fits(t, s, npos)) {
+    if (rdec_peel_fits(t, npos)) {
         let ts_peel = ref_time_ticks()
         rdec_prefill_peel(t, s, r, npos, start_pos)
         if (g_env_gpu.gpu_prof) {
@@ -3992,11 +4016,11 @@ var private g_rdec_peels = 0l
 def moe_gpu_resident_peels() : int64 => g_rdec_peels
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-prefill-peel")]
-def private rdec_peel_fits(t : Model; s : Session; npos : int64) : bool {
+def private rdec_peel_fits(t : Model; npos : int64) : bool {
     return false if (!g_vulkan_prefill_peel || !(npos == 1l || npos <= rdec_token_n_rows()))
     let c = t.config
-    let why = (c.recr_mask != 0ul ? "a recurrent model" : c.hyper_conn ? "a hyper-connection chain" : has_ple(c) ? "a per-layer-embedding model"
-        : c.n_layer_nextn > 0l ? "a NextN-headed model" : g_rdec_experts_host ? "routed experts on the host" : s.ple_gpu_pending ? "a pending side-row pre-step" : "")
+    let why = (c.n_layer_nextn > 0l ? "a NextN-headed model" : c.hyper_conn ? "a hyper-connection chain" : has_ple(c) ? "a per-layer-embedding model"
+        : g_rdec_experts_host ? "routed experts on the host" : c.recr_mask != 0ul ? "a recurrent model" : "")
     return true if (empty(why))
     rdec_peel_declined(why)
     return false
@@ -4005,20 +4029,9 @@ def private rdec_peel_fits(t : Model; s : Session; npos : int64) : bool {
 var private g_rdec_peel_declined : table<string>
 
 def private rdec_peel_declined(why : string) {
-    rdec_said_once(g_rdec_peel_declined, "the short window takes the chain, not the token command's peel - ", why)
+    gpu_said_once(g_rdec_peel_declined, LOG_INFO, "resident short window takes the chain, not the token command's peel - ", why)
 }
 
-//! `why` logged once per armed model under `said`, the set the arm clears: the check every call pays is the lookup alone
-def private rdec_said_once(var said : table<string>; prefix, why : string) {
-    return if (key_exists(said, why))
-    rdec_say_once_now(said, prefix, why)
-}
-
-[cold_path]
-def private rdec_say_once_now(var said : table<string>; prefix, why : string) {
-    said |> insert(why)
-    to_log(LOG_INFO, "dasLLAMA: resident {prefix}{why} (said once per armed model)\n")
-}
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-prefill-peel")]
 def private rdec_prefill_peel(t : Model; var s : Session; r, npos, start_pos : int64) {
@@ -4028,36 +4041,21 @@ def private rdec_prefill_peel(t : Model; var s : Session; r, npos, start_pos : i
     g_rdec_x_n |> grow_resize(dim * npos)
     g_rdec_cos_n |> grow_resize(ce * npos)
     if (s.embed_gpu_pending) {
-        for (i in range64(npos)) {
-            embed_row(t, s.embed_gpu_tokens[i], unsafe(addr(g_rdec_x_n[i * dim])))
-        }
-        if (c.embed_scale != 1.0) {
-            scale_inplace(unsafe(addr(g_rdec_x_n[0])), c.embed_scale, dim * npos)
-        }
+        embed_text_rows(t, s.embed_gpu_tokens, g_rdec_x_n, 0l)
         s.embed_gpu_pending = false
     } else {
         copy_floats(s.x_b, 0l, g_rdec_x_n, 0l, dim * npos)
     }
-    for (i in range64(npos)) {
-        rdec_rope_rows(t, s.rope_pos_delta + start_pos + i, g_rdec_cos_n, i * ce)
-    }
+    resident_prefill_rope_rows(t, s.rope_pos_delta + start_pos, npos, ce, g_rdec_cos_n)
     g_rdec_ple_rows |> clear()
     rdec_select_region(r)
     if (npos == 1l) {
         rdec_token(g_rdec_x_n, g_rdec_cos_n, g_rdec_ple_rows, start_pos, start_pos + 1l, false, s.logits)
     } else {
-        g_rdec_poss |> resize(npos)
-        g_rdec_cnts |> resize(npos)
-        g_rdec_regs |> resize(npos)
-        g_rdec_lrows |> resize(npos)
-        g_rdec_picks |> resize(npos)
-        for (i in range64(npos)) {
-            g_rdec_poss[i] = start_pos + i
-            g_rdec_cnts[i] = start_pos + i + 1l
-            g_rdec_regs[i] = r
-            g_rdec_lrows[i] = null
+        rdec_rows_planes(npos)
+        for (i in range64(npos)) {   //! a row before the last lands its pick alone, which nobody reads
+            rdec_row_plane(i, start_pos + i, r, i == npos - 1l ? unsafe(addr(s.logits[0])) : null)
         }
-        g_rdec_lrows[npos - 1l] = unsafe(addr(s.logits[0]))
         rdec_token_n(g_rdec_x_n, g_rdec_cos_n, g_rdec_ple_rows, false, g_rdec_poss, g_rdec_cnts, g_rdec_regs, npos, g_rdec_lrows, g_rdec_picks)
     }
     g_rdec_peels++
@@ -4138,6 +4136,14 @@ def private rdec_read_row_kv(t : Model; var s : Session; pos : int64) {
     }
 }
 
+//! whether region `r` already sits among the first `n` of `regs`: two rows or segments of one call on one region
+def private rdec_region_repeats(regs : array<int64>; n, r : int64) : bool {
+    for (j in range64(n)) {
+        return true if (regs[j] == r)
+    }
+    return false
+}
+
 var private @scratch g_rdec_bregs : array<int64>   //! a batched step's region a row, bound before its first group runs
 var private @scratch g_rdec_grp_toks : array<int64>
 
@@ -4149,13 +4155,8 @@ def private rdec_batch_rows_at_once(t : Model; ws : BatchWorkspace; var sessions
     for (i in range64(nrows)) {
         var s & = unsafe(*sessions[i])
         let r = rdec_bind_region(s)
-        if (r < 0l) {
+        if (r < 0l || rdec_region_repeats(g_rdec_bregs, i, r)) {   //! no region, or two rows one region: the row-at-a-time loop resyncs between them
             return false
-        }
-        for (j in range64(i)) {
-            if (g_rdec_bregs[j] == r) {
-                return false
-            }
         }
         rdec_row_bind(t, s, r, ws.positions[i], i, "batch")
         g_rdec_bregs[i] = r
@@ -4176,6 +4177,23 @@ def private rdec_batch_rows_at_once(t : Model; ws : BatchWorkspace; var sessions
     return true
 }
 
+//! the N-row command's per-row planes at `nrows` rows
+def private rdec_rows_planes(nrows : int64) {
+    g_rdec_poss |> resize(nrows)
+    g_rdec_cnts |> resize(nrows)
+    g_rdec_regs |> resize(nrows)
+    g_rdec_lrows |> resize(nrows)
+    g_rdec_picks |> resize(nrows)
+}
+
+//! row `i` of the N-row command: at `pos` in region `r`, its key count the position plus one, its logits landing at `lrow` (null: its pick alone)
+def private rdec_row_plane(i, pos, r : int64; var lrow : float?) {
+    g_rdec_poss[i] = pos
+    g_rdec_cnts[i] = pos + 1l
+    g_rdec_regs[i] = r
+    g_rdec_lrows[i] = lrow
+}
+
 //! rows `row0` .. `row0 + nrows` of the step through one N-row command, their regions bound
 def private rdec_batch_group(t : Model; ws : BatchWorkspace; var sessions : array<Session?>; row0, nrows : int64) {
     let c = t.config
@@ -4192,24 +4210,13 @@ def private rdec_batch_group(t : Model; ws : BatchWorkspace; var sessions : arra
         }
         rdec_ple_side_rows(t, g_rdec_grp_toks, nrows, ws, row0 * c.n_layers * c.n_embd_per_layer)
     }
-    g_rdec_lrows |> resize(nrows)
-    g_rdec_poss |> resize(nrows)
-    g_rdec_cnts |> resize(nrows)
-    g_rdec_regs |> resize(nrows)
+    rdec_rows_planes(nrows)
     for (i in range64(nrows)) {
         var s & = unsafe(*sessions[row0 + i])
-        let pos = ws.positions[row0 + i]
         copy_floats(ws.scr.x_b, (row0 + i) * dim, g_rdec_x_n, i * dim, dim)
         rdec_rope_rows(t, ws.rope_positions[row0 + i], g_rdec_cos_n, i * ce)
-        g_rdec_poss[i] = pos
-        g_rdec_cnts[i] = pos + 1l
-        g_rdec_regs[i] = g_rdec_bregs[row0 + i]
-        g_rdec_lrows[i] = null
-        if (!s.pick_asked) {
-            g_rdec_lrows[i] = unsafe(addr(s.logits[0]))
-        }
+        rdec_row_plane(i, ws.positions[row0 + i], g_rdec_bregs[row0 + i], s.pick_asked ? null : unsafe(addr(s.logits[0])))
     }
-    g_rdec_picks |> resize(nrows)
     prof_add("nrow_prep", ts_prep)
     let ts_gpu = prof_ticks()
     rdec_token_n(g_rdec_x_n, g_rdec_cos_n, g_rdec_ple_rows, ple_raw, g_rdec_poss, g_rdec_cnts, g_rdec_regs, nrows, g_rdec_lrows, g_rdec_picks)

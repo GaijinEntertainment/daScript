@@ -90,8 +90,6 @@ def private pf_seg_ending_at(w0, row : int64) : int64 {
     return -1l
 }
 
-def private pf_seg_mir_base(L : RLayer; sg : RdecPfSeg) : int64 => L.mir_base + sg.region * g_rd.mir_units
-
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
 def private pf_kv_merged(l, dim, kvd : int64) : bool {
     if (!g_env_vulkan.vk_kv_merge || g_rd.layers[l].fq != int(KqFmt.q8)
@@ -1819,14 +1817,14 @@ def private pf_attn_block(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : i
         let ropewg = (sg.npos * int64(pairs) + int64(WG_X) - 1l) / int64(WG_X)
         var pcr = RopeKvBArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), half = uint(g_rd.layers[l].rot / 2l),
             neox = g_rd.neox ? 1u : 0u, kpair0 = uint(qd / 2l), ppp = uint(pairs),
-            layerbase = kvq ? 0u : uint(pf_seg_mir_base(g_rd.layers[l], sg)), npos = uint(sg.npos), pos0 = uint(kvq ? sg.row0 : sg.pos0),
+            layerbase = kvq ? 0u : uint(rd_mir_base(g_rd.layers[l], sg.region)), npos = uint(sg.npos), pos0 = uint(kvq ? sg.row0 : sg.pos0),
             voff = voff, kstride = uint(kv_merged ? 2l * kvd : kvd), qhs = uint(qhs),
             boff = uint(g_rd.layers[l].boff), hasb = g_rd.has_bias ? 1u : 0u,
             cstride = uint(cos_elems), cbase = uint(g_rd.layers[l].cbase), row0 = uint(sg.row0))
         rope_kv_b_stamp_enc(rd_kv16(), raw, h, g_rd.pf_sets[b + 4], pcr, ropewg)
     }
     if (kvq) {
-        let mirb = uint(pf_seg_mir_base(g_rd.layers[l], g_pf_wsegs[0]))
+        let mirb = uint(rd_mir_base(g_rd.layers[l], g_pf_wsegs[0].region))
         rd_enc_kv_store(raw, h, g_rd.pf_kv_store_sets[g_rd.layers[l].mir_slab], true, kvd, hs, wlen, g_rd.n_heads, kvsh ? 0l : kvd / hs, mirb, uint(pos0w), uint(qrow), uint(qhs))
         let kvlen = pos0w + wlen
         let shadow_pos0 = window != 0u && pos0w > int64(window) ? ((pos0w - int64(window)) / 64l) * 64l : 0l   // a sliding layer's tiles start a 64-key step under its window
@@ -1841,7 +1839,7 @@ def private pf_attn_block(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : i
     pfq_ts(raw)
     let fa_lands_f16 = pf_fa_lands_f16(fo6)
     for (sg in g_pf_wsegs) {
-        let kv_base = kvq ? 0u : uint(pf_seg_mir_base(g_rd.layers[l], sg))   // the rows the attention reads: the mirror's, or a block codec's shadow of this layer from 0
+        let kv_base = kvq ? 0u : uint(rd_mir_base(g_rd.layers[l], sg.region))   // the rows the attention reads: the mirror's, or a block codec's shadow of this layer from 0
         if (g_rd.layers[l].pf_fa || g_rd.layers[l].pf_fakhr) {
             let khr = g_rd.layers[l].pf_fakhr
             var pcf = FaArgs(rows = uint(sg.npos), w0 = uint(sg.pos0), qd = uint(qd),

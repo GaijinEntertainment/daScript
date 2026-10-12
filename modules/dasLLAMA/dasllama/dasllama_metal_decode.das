@@ -796,8 +796,7 @@ def private rope_store_single(var e : SingleLayerEnc; t : Model; enc : MetalComp
                 bcos_l, bsin_l, bqkw, bbias, hka,
                 kvsh ? n_heads : n_heads + 2l * (kv_dim / head_size), head_size)
         } else {
-            var rka = GkRopeKvArgs(qd = k_qd_l, kvd = uint(kv_dim), hs = k_hs_l, npairs_q = k_npq_l,
-                npairs = k_npall_l, neox = r.k_neox, has_bias = r.k_hasb, rot = rs_rot, rows = 1u)
+            var rka = gk_rope_kv_args(int64(k_qd_l), kv_dim, int64(k_hs_l), int64(k_npq_l), int64(k_npall_l), r.k_neox != 0u, r.k_hasb != 0u, int64(rs_rot))
             enc_rope_store(enc, f16v, r.bqkv, uint64((qd + kv_dim) * 4l), g_arena, g_arena,
                 lkoff + uint64(pos * rowb), lvoff + uint64(pos * rowb),
                 bcos_l, bsin_l, 0ul, bbias, rka,
@@ -1883,9 +1882,9 @@ def private rope_store_verify(var e : VerifyLayerEnc; t : Model; enc : MetalComp
                               bbias, bcos_l, bsin_l : MetalBuffer?; lkoff, lvoff : uint64; rowb, qd, kv_dim, head_size, n_heads : int64) {
     let r & = unsafe(*e.r)
     let qkvd = uint(qd + 2l * kv_dim)
-    var vrka = RopeStoreBArgs(lay = 0u, kv_dim = r.k_kvd, qd = r.k_qd, head_size = r.k_hs,
-        npairs_q = r.k_npq, npairs = r.k_npall, qstride = qkvd, neox = r.k_neox,
-        has_bias = r.k_hasb, rot = r.k_rot != 0u ? r.k_rot : r.k_hs)
+    let vrot = int64(r.k_rot != 0u ? r.k_rot : r.k_hs)
+    var vrka = gk_rope_kv_args(int64(r.k_qd), int64(r.k_kvd), int64(r.k_hs), int64(r.k_npq), int64(r.k_npall), r.k_neox != 0u, r.k_hasb != 0u, vrot,
+        0l, 0l, r.nrows, int64(qkvd), int64(qkvd), vrot / 2l, 0l)
     enc_rope_store_b(enc, true, r.bqkv, bcos_l, bsin_l, r.brt, bbias, vrka,
         (qd + kv_dim) / 2l, r.nrows, [rtoff = uint64(l * 16l * r.nrows)])
 }
@@ -3489,10 +3488,8 @@ def private rope_store_batch(var e : BatchLayerEnc; t : Model; enc : MetalComput
             kvsh ? qd / 2l : qd / 2l + 2l * (kv_dim / 32l), r.nrows)
     } else {
         let npairs = kvsh ? qd / 2l : (qd + kv_dim) / 2l
-        var rka = RopeStoreBArgs(lay = lay_l, kv_dim = uint(kv_dim), qd = uint(qd),
-            head_size = uint(head_size), npairs_q = uint(qd / 2l),
-            npairs = uint(npairs), qstride = qkvd,
-            neox = r.k_neox, has_bias = r.k_hasb, rot = rot_l)
+        var rka = gk_rope_kv_args(qd, kv_dim, head_size, qd / 2l, npairs, r.k_neox != 0u, r.k_hasb != 0u, int64(rot_l),
+            0l, 0l, r.nrows, int64(qkvd), int64(qkvd), int64(rot_l) / 2l, int64(lay_l))
         enc_rope_store_b(enc, r.kdt == KVDtype.f16, r.bqkv, bcos_l, bsin_l, r.brt, bbias, rka,
             npairs, r.nrows)
     }

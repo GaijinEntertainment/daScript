@@ -2564,7 +2564,7 @@ def private rope_store_pocket_gate(t : T?; var dev, queue) {
         }
         var inscope none, tcos, tsin : array<float>
         build_rope_tabs(tcos, tsin, period, 1.0, 1.0, none, false, 0l, int64(cap), int64(dh))
-        let ka = rope_store_args(int64(d), int64(d), int64(dh), int64(d / 2), int64(d), false, false, int64(dh))
+        let ka = gk_rope_kv_args(int64(d), int64(d), int64(dh), int64(d / 2), int64(d), false, false, int64(dh))
         let pcos = mc |> in_(tcos)
         let psin = mc |> in_(tsin)
         let pbias = mc |> in_(plane_of(3 * d, 0.0))
