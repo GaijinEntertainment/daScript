@@ -9984,23 +9984,14 @@ class TowerRopeTab : GkRopeTab {
     }
 }
 
-struct RopeKvArgs {
-    qd : uint       // query width (the kv rows start here in kvsrc)
-    kvd : uint      // kv width (v rows start at qd + kvd)
-    hs : uint
-    half : uint     // rotation pairs per head
-    neox : uint     // pair select: 0 = NORM (2j, 2j+1), else NEOX (j, j+half)
-    kpair0 : uint   // first k pair's global index (q pairs come first)
-    npairs : uint
-    layerbase : uint   // this layer's K/V mirror base; the row rides tok[row].pos past tok[row].mirbase
-    boff : uint     // this layer's row base in the bias buffer ([q | k | v] rows, one layer after another)
-    hasb : uint
-    cbase : uint    //! this layer's rope class's row base in the cos/sin plane (a second class's row follows the first's)
-    rows : uint     //! rows in the dispatch, `npairs` threads each; 0 = one (the one-row command passes 1: the same reading)
-    kvrow : uint    //! ... a row's stride in kvsrc (the projection row's width), in qrows, and in the cos/sin plane
-    qrow : uint
-    cosrow : uint
-}
+//! the token command's rope-and-store args on this home (`GkRopeKvArgs`): the k projection at `qd` of the [q | k | v] rows, v
+//! at `qd + kvd`, the cos row at the layer's rope class base of the position's plane and the sin row a half head past it, the
+//! rows' strides the projection row's, the mirror base the layer's (a row's own rides its token block)
+def rope_kv_args(qd, kvd, hs, npairs_q, npairs : int64; neox, has_bias : bool; rot, boff, cbase, rows, kvrow, qrow, cosrow, mirbase : int64) : GkRopeKvArgs
+    => GkRopeKvArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), npairs_q = uint(npairs_q), npairs = uint(npairs),
+        neox = neox ? 1u : 0u, has_bias = has_bias ? 1u : 0u, rot = uint(rot), koffe = uint(qd), voffe = uint(qd + kvd),
+        qrow = uint(qrow), kvrow = uint(kvrow), boff = uint(boff), cstride = uint(cosrow), ccos = uint(cbase), csin = uint(cbase + hs / 2l),
+        rows = uint(rows), mirbase = uint(mirbase))
 
 //! the K/V mirror stores the rope-store stamps share: the K plane at binding 2, the V plane at 3, KT the mirror element type;
 //! the f16 stamps clamp +-65504 (the metal CLAMP16 contract - an inf in the mirror poisons attention)
@@ -10029,69 +10020,41 @@ class template KvMirStoreT {
     }
 }
 
-// fused rope + KV-row store (decode, one token): one thread per rotation pair, each owning
-// 2 distinct K + 2 V slots
-[ |> template_struct_instance]
-class template RopeKvStoreT : KvMirStoreT {
-    @ssbo @binding = 0 qrows : array<float>    // q, roped in place
-    @ssbo @binding = 1 kvsrc : array<float>    // the projection buffer: [q | k | v] rows
-    @ssbo @binding = 4 cossin : array<float>   // this position's cos row then sin row
-    @ssbo @binding = 5 tok : array<TokMeta>    // the shared per-token block (element 0)
-    @ssbo @binding = 6 @role = "weight" bias : array<float>   // per-layer [q | k | v] projection biases (hasb), else a placeholder
-    @push_constant pa : RopeKvArgs
+//! the fused rope and K/V store of the token command (one or N rows), on the template both homes stamp (`GkRopeKvStore`): the q
+//! rows in `qsrc`, the [q | k | v] projection rows in `ksrc` and `vsrc` (one buffer, k at `koffe`, v at `voffe`), the cos and sin
+//! rows one plane (`csin` past the cos row); a row's mirror element base is the layer's plus its token block's
+[vk_dispatch(name = "rope_kv_cls", grid = "wgs", params = "wgs : int64")]
+class RopeKvStore : GkRopeKvStore {
+    typedef KT = float
+    override CLAMP16 = false
+    @ssbo @binding = 8 tok : array<TokMeta>    //! the per-row token block: the row's mirror region base and position
 
     [spirv_kernel(local_size_x = 256)]
     def run {
         let gid = gl_GlobalInvocationID.x
         if (gid < pa.npairs * max(pa.rows, 1u)) {
             let row = gid / pa.npairs
-            let pr = gid % pa.npairs
-            let is_k = pr >= pa.kpair0
-            let lp = is_k ? pr - pa.kpair0 : pr
-            let h = lp / pa.half
-            let j = lp % pa.half
-            let cb = row * pa.cosrow + pa.cbase
-            let fcr = cossin[cb + j]
-            let fci = cossin[cb + pa.half + j]
-            let e0 = pa.neox != 0u ? j : j * 2u
-            let e1 = pa.neox != 0u ? j + pa.half : j * 2u + 1u
-            if (is_k) {
-                let mrow = pa.layerbase + tok[row].mirbase + tok[row].pos * pa.kvd
-                let kb = row * pa.kvrow + pa.qd + h * pa.hs
-                let bk = pa.boff + pa.qd + h * pa.hs
-                let a0 = kvsrc[kb + e0] + (pa.hasb != 0u ? bias[bk + e0] : 0.0)
-                let a1 = kvsrc[kb + e1] + (pa.hasb != 0u ? bias[bk + e1] : 0.0)
-                // v is not roped — copy the same two elements raw (plus their bias) into the V plane
-                let vb = row * pa.kvrow + pa.qd + pa.kvd + h * pa.hs
-                let bv = pa.boff + pa.qd + pa.kvd + h * pa.hs
-                let v0 = kvsrc[vb + e0] + (pa.hasb != 0u ? bias[bv + e0] : 0.0)
-                let v1 = kvsrc[vb + e1] + (pa.hasb != 0u ? bias[bv + e1] : 0.0)
-                st_k(mrow + h * pa.hs + e0, a0 * fcr - a1 * fci)
-                st_k(mrow + h * pa.hs + e1, a0 * fci + a1 * fcr)
-                st_v(mrow + h * pa.hs + e0, v0)
-                st_v(mrow + h * pa.hs + e1, v1)
-            } else {
-                let qb = row * pa.qrow + h * pa.hs
-                let bq = pa.boff + h * pa.hs
-                let a0 = qrows[qb + e0] + (pa.hasb != 0u ? bias[bq + e0] : 0.0)
-                let a1 = qrows[qb + e1] + (pa.hasb != 0u ? bias[bq + e1] : 0.0)
-                qrows[qb + e0] = a0 * fcr - a1 * fci
-                qrows[qb + e1] = a0 * fci + a1 * fcr
-            }
+            let mir = pa.mirbase + tok[row].mirbase + tok[row].pos * pa.kvd
+            rope_kv_pair(row, gid % pa.npairs, mir, mir)
         }
     }
 }
 
-[vk_dispatch(name = "rope_kv_cls", grid = "wgs", params = "wgs : int64")]
-class RopeKvStore : RopeKvStoreT {
-    typedef KT = float
-    override CLAMP16 = false
-}
-
 // f16-mirror twin — clamped stores
 [vk_dispatch(name = "rope_kv_f16_cls", grid = "wgs", params = "wgs : int64")]
-class RopeKvStoreF16 : RopeKvStoreT {
+class RopeKvStoreF16 : GkRopeKvStore {
     typedef KT = float16
+    @ssbo @binding = 8 tok : array<TokMeta>    //! the per-row token block: the row's mirror region base and position
+
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        let gid = gl_GlobalInvocationID.x
+        if (gid < pa.npairs * max(pa.rows, 1u)) {
+            let row = gid / pa.npairs
+            let mir = pa.mirbase + tok[row].mirbase + tok[row].pos * pa.kvd
+            rope_kv_pair(row, gid % pa.npairs, mir, mir)
+        }
+    }
 }
 
 struct RopeKvBArgs {

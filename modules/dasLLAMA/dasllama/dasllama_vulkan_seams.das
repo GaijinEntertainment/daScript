@@ -74,11 +74,12 @@ def private ensure_rks_state {
     g_gpu.rks_tok = make_host_buf(TOK_META_BYTES, true)   // TokMeta: per-call pos/cnt, shared with the attn seam
     g_gpu.rks_q_host = make_host_buf(RKS_MAX_QD * 4l, false, [cached = true])
     g_gpu.rks_kv_host = make_host_buf(2l * RKS_MAX_KVD * 4l, false, [cached = true])
+    let qkvbytes = (RKS_MAX_QD + 2l * RKS_MAX_KVD) * 4l
+    let mirbytes = RKS_MAX_CTX * RKS_MAX_KVD * 4l
     g_gpu.rks_set = set_rope_kv_cls(
-        fixed_array(g_gpu.rks_q_dev, g_gpu.rks_qkv_dev, g_gpu.rks_k_dev, g_gpu.rks_v_dev, g_gpu.rks_scal.buf, g_gpu.rks_tok.buf, g_gpu.rks_scal.buf),
-        fixed_array(RKS_MAX_QD * 4l, (RKS_MAX_QD + 2l * RKS_MAX_KVD) * 4l,
-            RKS_MAX_CTX * RKS_MAX_KVD * 4l, RKS_MAX_CTX * RKS_MAX_KVD * 4l, XS_BYTES, TOK_META_BYTES, XS_BYTES),
-        fixed_array(VHG_Y1, 0u, VHG_Y2, VHG_Y3, 0u, 0u, 0u))   // roped q / K mirror / V mirror; the bias slot is a never-read placeholder (the seam has no bias arm)
+        fixed_array(g_gpu.rks_q_dev, g_gpu.rks_qkv_dev, g_gpu.rks_qkv_dev, g_gpu.rks_k_dev, g_gpu.rks_v_dev, g_gpu.rks_scal.buf, g_gpu.rks_scal.buf, g_gpu.rks_scal.buf, g_gpu.rks_tok.buf),
+        fixed_array(RKS_MAX_QD * 4l, qkvbytes, qkvbytes, mirbytes, mirbytes, XS_BYTES, XS_BYTES, XS_BYTES, TOK_META_BYTES),
+        fixed_array(VHG_Y1, 0u, 0u, VHG_Y2, VHG_Y3, 0u, 0u, 0u, 0u))   // roped q / the k and v views / K mirror / V mirror; the bias slot is a never-read placeholder (the seam has no bias arm); the cos and sin views of the row
     g_gpu.rks_ready = true
 }
 
@@ -88,7 +89,6 @@ def private ensure_rks_state {
 def vk_rope_kv_store(var qkv : array<float>; var qout : array<float>; var krow : array<float>; var vrow : array<float>;
                      cossin : array<float>; qd, kv_dim, head_size, pos : int64; neox : bool) {
     verify(vk_moe_init())
-    let half = int(head_size / 2l)
     assert(qd <= RKS_MAX_QD && kv_dim <= RKS_MAX_KVD && pos < RKS_MAX_CTX, "dasLLAMA vulkan: rope_kv geometry over scratch")
     ensure_rks_state()
     let kpair0 = int(qd / 2l)
@@ -101,9 +101,7 @@ def vk_rope_kv_store(var qkv : array<float>; var qout : array<float>; var krow :
         // q ropes in place in its own plane — seed it with the raw q rows
         upload_region_at(g_gpu.rks_q_dev, 0l, addr<uint8 const?>(qkv[0]), qd * 4l)
         cmd_one_shot() $(raw : VkCommandBuffer; var h : VkHaz) {
-            var pc = RopeKvArgs(qd = uint(qd), kvd = uint(kv_dim), hs = uint(head_size),
-                half = uint(half), neox = neox ? 1u : 0u, kpair0 = uint(kpair0),
-                npairs = uint(npairs), layerbase = 0u)
+            var pc = rope_kv_args(qd, kv_dim, head_size, int64(kpair0), int64(npairs), neox, false, head_size, 0l, 0l, 1l, 0l, 0l, 0l, 0l)
             enc_rope_kv_cls(raw, h, g_gpu.rks_set, pc, (int64(npairs) + int64(WG_X) - 1l) / int64(WG_X))
             vhz_dep(raw, h, VHG_Y1 | VHG_Y2 | VHG_Y3, 0u, true)
             cmd_copy_whole(raw, g_gpu.rks_q_dev, g_gpu.rks_q_host.buf, qd * 4l)

@@ -520,10 +520,11 @@ def private rd_attn_sets(var L : RLayer; mir_idx : int64; bq, bk, bv, bo : int64
             L.s_qkn_rope = (kv16 ? set_qkn_rope_f16_cls(qrbufs, qrsizes, qrbits)
                 : set_qkn_rope_cls(qrbufs, qrsizes, qrbits))
         }
-        // rope+store (class): per-token mirror row rides TokMeta, the bias rows their buffer
-        let rbufs = fixed_array(g_rd.q_dev, g_rd.kv_dev, kstore, vstore, cos, storetok, bias_bind.buf)
-        let rsizes = fixed_array(qplane, (qd + 2l * kvd) * 4l * nb, storebytes, storebytes, cosbytes * nb, TOK_META_BYTES * nb, bias_bind.bytes)
-        let rbits = fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, storebit, storebit, VHZ_COS, 0u, 0u)
+        //! rope+store on the shared template's class: the [q | k | v] rows as the k and v views, the cos/sin plane as the cos and sin views
+        let kvbytes = (qd + 2l * kvd) * 4l * nb
+        let rbufs = fixed_array(g_rd.q_dev, g_rd.kv_dev, g_rd.kv_dev, kstore, vstore, bias_bind.buf, cos, cos, storetok)
+        let rsizes = fixed_array(qplane, kvbytes, kvbytes, storebytes, storebytes, bias_bind.bytes, cosbytes * nb, cosbytes * nb, TOK_META_BYTES * nb)
+        let rbits = fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, VHZ_KVK | VHZ_KVV, storebit, storebit, 0u, VHZ_COS, VHZ_COS, 0u)
         L.s_rope = kv16 ? set_rope_kv_f16_cls(rbufs, rsizes, rbits) : set_rope_kv_cls(rbufs, rsizes, rbits)
         if (rd_kvq8()) {
             L.s_kv_store = set_kv_q8_store_cls(fixed_array(g_rd.kst_dev, g_rd.vst_dev, kmir, vmir, tok),
@@ -2319,10 +2320,9 @@ def private rd_encode_attn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RL
         }
         let qpairs = kv_only ? 0l : qd / 2l
         let npairs = qpairs + (L.kv_shared ? 0l : kvd / 2l)   // the k pairs also store the mirror row: none on a shared-KV layer
-        var pcr = RopeKvArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), half = uint(hs / 2l),
-            neox = g_rd.neox ? 1u : 0u, kpair0 = uint(qpairs), npairs = uint(npairs),
-            layerbase = storebase, boff = rd_bias_off(L), hasb = g_rd.has_bias ? 1u : 0u, cbase = uint(L.cbase),
-            rows = nr, kvrow = kvrow, qrow = q_plane_row, cosrow = uint(g_rd.cos_elems))
+        //! the whole head rotates (`rot = hs`): a partial-rope class's table carries the (1, 0) pairs past its rotated width
+        var pcr = rope_kv_args(qd, kvd, hs, qpairs, npairs, g_rd.neox, g_rd.has_bias, hs, int64(rd_bias_off(L)), L.cbase,
+            int64(nr), int64(kvrow), int64(q_plane_row), g_rd.cos_elems, int64(storebase))
         let rwgs = (npairs * nrows + int64(WG_X) - 1l) / int64(WG_X)
         if (rd_kv16()) {
             enc_rope_kv_f16_cls(raw, h, L.s_rope, pcr, rwgs)
@@ -4991,9 +4991,9 @@ def private dat_layer_sets(woq, wok, wov, woo : int64; fq, fk, fv, fo : int; rms
             fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, VHZ_MIR, VHZ_MIR, 0u, 0u, 0u, 0u))
     } else {
         L.s_qkr = set_rope_kv_f16_cls(
-            fixed_array(g_gpu.dat_q_dev, g_gpu.dat_kv_dev, L.k_mir, L.v_mir, g_gpu.dat_cos.buf, g_gpu.dat_tok.buf, bbuf),
-            fixed_array(qd * 4l, (qd + 2l * kvd) * 4l, mirbytes, mirbytes, hs * 4l, TOK_META_BYTES, bbytes),
-            fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, VHZ_MIR, VHZ_MIR, 0u, 0u, 0u))
+            fixed_array(g_gpu.dat_q_dev, g_gpu.dat_kv_dev, g_gpu.dat_kv_dev, L.k_mir, L.v_mir, bbuf, g_gpu.dat_cos.buf, g_gpu.dat_cos.buf, g_gpu.dat_tok.buf),
+            fixed_array(qd * 4l, (qd + 2l * kvd) * 4l, (qd + 2l * kvd) * 4l, mirbytes, mirbytes, bbytes, hs * 4l, hs * 4l, TOK_META_BYTES),
+            fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, VHZ_KVK | VHZ_KVV, VHZ_MIR, VHZ_MIR, 0u, 0u, 0u, 0u))
     }
     L.s_attn = set_da_attn_f16_cls(   //! the unsplit, unfolded pass: the out rows fill the partials and quant bindings, never read or written
         fixed_array(g_gpu.dat_q_dev, L.k_mir, L.v_mir, g_gpu.dat_attn_dev, g_gpu.dat_tok.buf, g_gpu.dat_attn_dev, g_gpu.dat_attn_dev, g_gpu.dat_attn_dev),
@@ -5088,8 +5088,7 @@ def private at_chain_enc(raw : VkCommandBuffer; var h : VkHaz; var L : DatLayer;
             neox = neox ? 1u : 0u, nh = uint(n_heads), layerbase = 0u, qwoff = 0u, kwoff = uint(hs), eps = eps, boff = 0u, hasb = hb)
         enc_qkn_rope_f16_cls(raw, h, L.s_qkr, pcf, n_heads + kvd / hs)
     } else {
-        var pcr = RopeKvArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), half = uint(hs / 2l),
-            neox = neox ? 1u : 0u, kpair0 = uint(qd / 2l), npairs = uint(qd / 2l + kvd / 2l), layerbase = 0u, boff = 0u, hasb = hb)
+        var pcr = rope_kv_args(qd, kvd, hs, qd / 2l, qd / 2l + kvd / 2l, neox, L.has_bias, hs, 0l, 0l, 1l, 0l, 0l, 0l, 0l)   //! one row: every stride 0, the row's own cos plane and bias row bound
         enc_rope_kv_f16_cls(raw, h, L.s_qkr, pcr, (qd / 2l + kvd / 2l + int64(WG_X) - 1l) / int64(WG_X))
     }
     var pca = DaAttnArgs(kvd = uint(kvd), hs = uint(hs), kv_mul = uint(kv_mul), kbase = 0u, vbase = 0u, scale = scale, rqk = DA_RQ_NONE)   //! unsplit: no counters

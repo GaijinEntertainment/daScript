@@ -1364,84 +1364,37 @@ class MetalPreAddRms : MetalTgReduceBase {
 }
 
 
-// Fused rope + KV-row store, one thread per rotation pair (ntok == 1): q pairs rope in place; k
-// pairs rope straight into the mirror K row (f16 instances clamp to ±65504) and the same thread
-// copies its V pair. Replaces the rope_qk + kv_store dispatch pair. KT is the mirror element type.
-[ |> template_struct_instance]
-class template MetalRopeStoreKvT {
-    @ssbo @binding = 0 qk : array<float>    // q at [0, qd) roped in place, k at [qd, qd + kvd)
-    @ssbo @binding = 1 @role = "alias" @off = "vsoff" vs : array<float>    // raw v (the QKV buffer at the v offset)
-    @ssbo @binding = 2 @off = "koff" kd : array<KT>  // mirror K row (bound at the (layer, pos) row offset)
-    @ssbo @binding = 3 @off = "voff" vd : array<KT>
-    @ssbo @binding = 4 @role = "weight" @off = "toff" tcos : array<float>  //!< [head_size/2] this position's rope row, bound at its row offset
-    @ssbo @binding = 5 @role = "weight" @off = "toff" tsin : array<float>
-    @ssbo @binding = 6 @role = "weight" bias : array<float> // [qd | kvd | kvd] QKV bias (dummy-bound when has_bias == 0)
-    @uniform @binding = 7 ka : RopeStoreArgs
-    @template_constant CLAMP16 : bool = true
+//! The fused rope and K/V store at one row, on the template both homes stamp (`GkRopeKvStore`): the q and k projections in the
+//! one QKV buffer (ksrc its second view, vsrc its view at the v offset), the mirror K and V rows bound at their (layer, pos)
+//! offsets, this position's rope row bound at its offset. Replaces the rope_qk + kv_store dispatch pair.
+[metal_dispatch(name = "enc_rpst16_c", pso = "g_pso_rpst16", tg = 64, grid = "npairs/64", params = "npairs : int64")]
+class MetalRopeStoreF16 : GkRopeKvStore {
+    typedef KT = float16
 
     [metal_kernel]
     def metal_rope_store {
-        let qd = ka.qd
-        let head_size = ka.head_size
-        let npairs_q = ka.npairs_q
-        let npairs = ka.npairs
-        let neox = ka.neox
-        let has_bias = ka.has_bias
-        let rot = ka.rot
         let gid = gl_GlobalInvocationID.x
-        if (gid >= npairs) {
+        if (gid >= pa.npairs) {
             return
         }
-        let isK = gid >= npairs_q
-        let lgid = isK ? gid - npairs_q : gid
-        let half = head_size / 2u
-        let halfr = rot / 2u
-        let j = lgid % half
-        let hbase = (lgid / half) * head_size
-        // threads j < rot/2 rotate the (j, j+rot/2) pair; the rest identity-cover [rot, hs)
-        let rotp = j < halfr
-        let i = neox != 0u ? (rotp ? hbase + j : hbase + rot + (j - halfr)) : hbase + 2u * j
-        let i2 = neox != 0u ? (rotp ? i + halfr : i + (half - halfr)) : i + 1u
-        let fcr = rotp ? tcos[j] : 1.0
-        let fci = rotp ? tsin[j] : 0.0
-        let kvd = npairs * 2u - qd   // grid = (qd + kvd)/2 pairs
-        if (isK) {
-            let v0 = qk[qd + i] + (has_bias != 0u ? bias[qd + i] : 0.0)
-            let v1 = qk[qd + i2] + (has_bias != 0u ? bias[qd + i2] : 0.0)
-            static_if (CLAMP16) {
-                let r0 = v0 * fcr - v1 * fci
-                let r1 = v0 * fci + v1 * fcr
-                kd[i] = float16(min(max(r0, -65504.0), 65504.0))   // nolint:STYLE019 — the MSL emitter lowers min/max only, no clamp
-                kd[i2] = float16(min(max(r1, -65504.0), 65504.0))   // nolint:STYLE019
-                let b0 = has_bias != 0u ? bias[qd + kvd + i] : 0.0
-                let b1 = has_bias != 0u ? bias[qd + kvd + i2] : 0.0
-                vd[i] = float16(min(max(vs[i] + b0, -65504.0), 65504.0))   // nolint:STYLE019
-                vd[i2] = float16(min(max(vs[i2] + b1, -65504.0), 65504.0))   // nolint:STYLE019
-            } else {
-                kd[i] = v0 * fcr - v1 * fci
-                kd[i2] = v0 * fci + v1 * fcr
-                vd[i] = vs[i] + (has_bias != 0u ? bias[qd + kvd + i] : 0.0)
-                vd[i2] = vs[i2] + (has_bias != 0u ? bias[qd + kvd + i2] : 0.0)
-            }
-        } else {
-            let v0 = qk[i] + (has_bias != 0u ? bias[i] : 0.0)
-            let v1 = qk[i2] + (has_bias != 0u ? bias[i2] : 0.0)
-            qk[i] = v0 * fcr - v1 * fci
-            qk[i2] = v0 * fci + v1 * fcr
-        }
+        rope_kv_pair(0u, gid, 0u, 0u)
     }
-}
-
-[metal_dispatch(name = "enc_rpst16_c", pso = "g_pso_rpst16", tg = 64, grid = "npairs/64", params = "npairs : int64")]
-class MetalRopeStoreF16 : MetalRopeStoreKvT {
-    typedef KT = float16
 }
 
 // f32-mirror twin — straight stores, no clamp.
 [metal_dispatch(name = "enc_rpst32_c", pso = "g_pso_rpst32", tg = 64, grid = "npairs/64", params = "npairs : int64")]
-class MetalRopeStoreF32 : MetalRopeStoreKvT {
+class MetalRopeStoreF32 : GkRopeKvStore {
     typedef KT = float
     override CLAMP16 = false
+
+    [metal_kernel]
+    def metal_rope_store {
+        let gid = gl_GlobalInvocationID.x
+        if (gid >= pa.npairs) {
+            return
+        }
+        rope_kv_pair(0u, gid, 0u, 0u)
+    }
 }
 
 // The head-cooperative fused form (QK-norm models): ONE threadgroup per head folds bias ->
@@ -2714,19 +2667,9 @@ struct MoeGemvArgs {
     hasb : uint
 }
 
-// The fused rope + KV-row store family binds its uniforms as ONE kargs value. `rot` is the
-// partial-rotary width (== head_size for full rope); the batched forms add the layer prefix and
+// The fused rope + KV-row store family binds its uniforms as ONE kargs value (the one-row form's are the shared template's,
+// `GkRopeKvArgs`). `rot` is the partial-rotary width (== head_size for full rope); the batched forms add the layer prefix and
 // `qstride`, the per-row stride of the fused QKV block.
-struct RopeStoreArgs {
-    qd : uint
-    head_size : uint
-    npairs_q : uint
-    npairs : uint
-    neox : uint
-    has_bias : uint
-    rot : uint
-}
-
 struct RopeStoreBArgs {
     lay : uint
     kv_dim : uint
@@ -4285,14 +4228,20 @@ def enc_kq_rows_half(enc : MetalComputeEncoder?; fmt : KqFmt; bq : MetalBuffer?;
     }
 }
 
+//! the one-row rope and K/V store's args on this home: the k projection at `qd` of the QKV buffer, the v view bound at its own
+//! offset, one row, every base in the bound buffers
+def rope_store_args(qd, kvd, hs, npairs_q, npairs : int64; neox, has_bias : bool; rot : int64) : GkRopeKvArgs
+    => GkRopeKvArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), npairs_q = uint(npairs_q), npairs = uint(npairs),
+        neox = neox ? 1u : 0u, has_bias = has_bias ? 1u : 0u, rot = uint(rot), koffe = uint(qd), rows = 1u)
+
 //! toff = the position's row in the rope tables (0 where the caller binds the row's own buffer); vsoff = v's byte offset in the one QKV buffer.
 def enc_rope_store(enc : MetalComputeEncoder?; f16 : bool; bqkv : MetalBuffer?; vsoff : uint64;
                    kmb, vmb : MetalBuffer?; koff, voff : uint64;
-                   bcos, bsin : MetalBuffer?; toff : uint64; bbias : MetalBuffer?; var ka : RopeStoreArgs; npairs : int64) {
+                   bcos, bsin : MetalBuffer?; toff : uint64; bbias : MetalBuffer?; var ka : GkRopeKvArgs; npairs : int64) {
     if (f16) {
-        enc_rpst16_c(enc, bqkv, bqkv, vsoff, kmb, koff, vmb, voff, bcos, toff, bsin, bbias, ka, npairs)
+        enc_rpst16_c(enc, bqkv, bqkv, bqkv, vsoff, kmb, koff, vmb, voff, bbias, bcos, toff, bsin, ka, npairs)
     } else {
-        enc_rpst32_c(enc, bqkv, bqkv, vsoff, kmb, koff, vmb, voff, bcos, toff, bsin, bbias, ka, npairs)
+        enc_rpst32_c(enc, bqkv, bqkv, bqkv, vsoff, kmb, koff, vmb, voff, bbias, bcos, toff, bsin, ka, npairs)
     }
 }
 

@@ -92,11 +92,11 @@ def private rpst_flat_gate(t : T?; var dev, queue; f16dst : bool; hs, nheads, kv
         let btc = mc |> in_(tcos)
         let bts = mc |> in_(tsin)
         let bbias = mc |> in_(bias)
-        var ka = RopeStoreArgs(qd = uint(qd), head_size = uint(hs), npairs_q = uint(npairs_q),
-            npairs = uint(npairs), neox = neox ? 1u : 0u, has_bias = hasbias ? 1u : 0u, rot = uint(rot))
+        var ka = rope_store_args(int64(qd), int64(kvd), int64(hs), int64(npairs_q), int64(npairs), neox, hasbias, int64(rot))
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
             stamp_run(st, pso) {
-                invoke(st.enc, enc, mc.buf[bqk], mc.buf[bvs], 0ul, mc.buf[bkd], 0ul, mc.buf[bvd], 0ul, mc.buf[btc], 0ul, mc.buf[bts], mc.buf[bbias], ka, int64(npairs))
+                //! the shared template's binds: q, the k view of the same buffer, the v rows, the mirror K and V rows, the bias, the cos and sin rows
+                invoke(st.enc, enc, mc.buf[bqk], mc.buf[bqk], mc.buf[bvs], 0ul, mc.buf[bkd], 0ul, mc.buf[bvd], 0ul, mc.buf[bbias], mc.buf[btc], 0ul, mc.buf[bts], ka, int64(npairs))
             }
         }
         return if (!ran)

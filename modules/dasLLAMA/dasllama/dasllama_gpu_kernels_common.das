@@ -1685,6 +1685,96 @@ class template GkClampRows {
     }
 }
 
+struct GkRopeKvArgs {
+    qd : uint          //! the q row's width
+    kvd : uint         //! the k and v rows' width (the mirror row's)
+    hs : uint
+    npairs_q : uint    //! the q pairs of a row; the k pairs follow them
+    npairs : uint      //! the pairs a row, q's and k's
+    neox : uint        //! the pair select: 0 = NORM (2j, 2j+1), else NEOX (j, j+half)
+    has_bias : uint
+    rot : uint         //! the rotated width of a head; the pairs past it copy through
+    koffe : uint       //! k's element base in a ksrc row
+    voffe : uint       //! v's element base in a vsrc row
+    qrow : uint        //! a row's stride in qsrc
+    kvrow : uint       //! a row's stride in ksrc and vsrc
+    boff : uint        //! the layer's [q | k | v] row base in bias
+    cstride : uint     //! a row's stride in tcos and tsin (0: every row reads the one table row)
+    ccos : uint        //! the cos row's element base in tcos
+    csin : uint        //! the sin row's element base in tsin
+    rows : uint        //! the rows a dispatch covers (0 reads as one)
+    mirbase : uint     //! the layer's base in the mirror planes, ahead of a row's own (the Vulkan token block's; Metal binds the row)
+}
+
+//! The fused rope and K/V store, an invocation a rotation pair of a row: a q pair ropes in place, a k pair ropes into the mirror
+//! K row and copies its v pair into the V row, the bias rows added first, the f16 stamps clamped into the half range, the pairs
+//! past `rot` copied through; a stamp's kernel hands `rope_kv_pair` the row's mirror bases, resolved its home's way
+[ |> template_struct_instance]
+class template GkRopeKvStore {
+    @ssbo @binding = 0 @role = "readwrite" qsrc : array<float>       //! the q rows, roped in place
+    @ssbo @binding = 1 @role = "read" ksrc : array<float>            //! the rows the k projection sits in (`koffe`)
+    @ssbo @binding = 2 @role = "read" @off = "vsoff" vsrc : array<float>   //! ... and the v projection (`voffe`)
+    @ssbo @binding = 3 @role = "write" @off = "koff" kd : array<KT>  //! the mirror K plane
+    @ssbo @binding = 4 @role = "write" @off = "voff" vd : array<KT>  //! the mirror V plane
+    @ssbo @binding = 5 @role = "weight" bias : array<float>          //! the [q | k | v] projection biases (dummy-bound without `has_bias`)
+    @ssbo @binding = 6 @role = "weight" @off = "toff" tcos : array<float>   //! the rope table's cos rows
+    @ssbo @binding = 7 @role = "weight" @off = "toff" tsin : array<float>   //! ... and sin rows (one plane on Vulkan, `csin` past the cos row)
+    @kargs pa : GkRopeKvArgs
+    @template_constant CLAMP16 : bool = true
+
+    //! one mirror K element, clamped into the half range on the f16 stamp
+    def st_k(i : uint; v : float) {
+        static_if (CLAMP16) {
+            kd[i] = float16(min(max(v, -65504.0), 65504.0))   // nolint:STYLE019,LINT019 - the MSL subset has no clamp lowering; the rule fires where the stamp lands
+        } else {
+            kd[i] = v
+        }
+    }
+
+    //! ... and one V element
+    def st_v(i : uint; v : float) {
+        static_if (CLAMP16) {
+            vd[i] = float16(min(max(v, -65504.0), 65504.0))   // nolint:STYLE019,LINT019 - the same
+        } else {
+            vd[i] = v
+        }
+    }
+
+    //! pair `lp` of row `row`: a q pair in place, a k pair into the mirror row at element `mirk` of kd and its v pair at `mirv` of vd
+    def rope_kv_pair(row, lp, mirk, mirv : uint) {
+        let isk = lp >= pa.npairs_q
+        let lgid = isk ? lp - pa.npairs_q : lp
+        let half = pa.hs / 2u
+        let halfr = pa.rot / 2u
+        let j = lgid % half
+        let hbase = (lgid / half) * pa.hs
+        let rotp = j < halfr   //! the pairs under the rotated width rotate; the rest copy through [rot, hs)
+        let i = pa.neox != 0u ? (rotp ? hbase + j : hbase + pa.rot + (j - halfr)) : hbase + 2u * j
+        let i2 = pa.neox != 0u ? (rotp ? i + halfr : i + (half - halfr)) : i + 1u
+        let cb = row * pa.cstride
+        let fcr = rotp ? tcos[pa.ccos + cb + j] : 1.0
+        let fci = rotp ? tsin[pa.csin + cb + j] : 0.0
+        if (isk) {
+            let kb = row * pa.kvrow + pa.koffe
+            let bk = pa.boff + pa.qd
+            let v0 = ksrc[kb + i] + (pa.has_bias != 0u ? bias[bk + i] : 0.0)
+            let v1 = ksrc[kb + i2] + (pa.has_bias != 0u ? bias[bk + i2] : 0.0)
+            st_k(mirk + i, v0 * fcr - v1 * fci)
+            st_k(mirk + i2, v0 * fci + v1 * fcr)
+            let vb = row * pa.kvrow + pa.voffe
+            let bv = pa.boff + pa.qd + pa.kvd
+            st_v(mirv + i, vsrc[vb + i] + (pa.has_bias != 0u ? bias[bv + i] : 0.0))
+            st_v(mirv + i2, vsrc[vb + i2] + (pa.has_bias != 0u ? bias[bv + i2] : 0.0))
+        } else {
+            let qb = row * pa.qrow
+            let v0 = qsrc[qb + i] + (pa.has_bias != 0u ? bias[pa.boff + i] : 0.0)
+            let v1 = qsrc[qb + i2] + (pa.has_bias != 0u ? bias[pa.boff + i2] : 0.0)
+            qsrc[qb + i] = v0 * fcr - v1 * fci
+            qsrc[qb + i2] = v0 * fci + v1 * fcr
+        }
+    }
+}
+
 struct GkGegluArgs {
     nelem : uint
     glo : float     //! the gate GEMM's output bounds

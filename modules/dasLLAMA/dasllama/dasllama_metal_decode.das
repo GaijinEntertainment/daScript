@@ -796,8 +796,8 @@ def private rope_store_single(var e : SingleLayerEnc; t : Model; enc : MetalComp
                 bcos_l, bsin_l, bqkw, bbias, hka,
                 kvsh ? n_heads : n_heads + 2l * (kv_dim / head_size), head_size)
         } else {
-            var rka = RopeStoreArgs(qd = k_qd_l, head_size = k_hs_l, npairs_q = k_npq_l,
-                npairs = k_npall_l, neox = r.k_neox, has_bias = r.k_hasb, rot = rs_rot)
+            var rka = GkRopeKvArgs(qd = k_qd_l, kvd = uint(kv_dim), hs = k_hs_l, npairs_q = k_npq_l,
+                npairs = k_npall_l, neox = r.k_neox, has_bias = r.k_hasb, rot = rs_rot, koffe = k_qd_l, rows = 1u)
             enc_rope_store(enc, f16v, r.bqkv, uint64((qd + kv_dim) * 4l), g_arena, g_arena,
                 lkoff + uint64(pos * rowb), lvoff + uint64(pos * rowb),
                 bcos_l, bsin_l, 0ul, bbias, rka,

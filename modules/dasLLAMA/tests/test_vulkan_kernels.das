@@ -2177,7 +2177,8 @@ def private rope_kv_arm(t : T?; f16, biased : bool) {
         var bh <- biased ? bias_past_pad(bpad, qd + 2 * kvd, 13, 0.05, 0.7, 29, 55.0) : array<float>()
         var ref <- rope_kv_rows(qh, kvh, bh, csh, 0, qd, qd + kvd, 0, bpad, nh, nkvh, hs) $(x : float) => f16 ? f16r(x) : x
         with_cell_planes() $(var cp : CellPlanes) {
-            //! the class kernel: q@0, kvsrc@1, kmir@2, vmir@3, cossin@4, tok@5 (pos 0 -> row 0), bias@6
+            //! the shared template's class: q@0, the [q | k | v] rows@1 and @2 (the k and v views), kmir@3, vmir@4, bias@5,
+            //! cossin@6 and @7 (the cos and sin views), tok@8 (pos 0 -> row 0)
             let pq = cp |> io_(qh)
             let pkv = cp |> in_(kvh)
             let pkm = mirror_plane(cp, kvd, f16)
@@ -2185,10 +2186,9 @@ def private rope_kv_arm(t : T?; f16, biased : bool) {
             let pcs = cp |> in_(csh)
             let ptok = cp |> in_plain([TokMeta()])
             let pb = biased ? in_(cp, bh) : pcs
-            let planes = fixed_array(pq, pkv, pkm, pvm, pcs, ptok, pb)
+            let planes = fixed_array(pq, pkv, pkv, pkm, pvm, pb, pcs, pcs, ptok)
             var sc = f16 ? cls_set(cp, planes, @@set_rope_kv_f16_cls) : cls_set(cp, planes, @@set_rope_kv_cls)
-            var pc = RopeKvArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), half = uint(half),
-                neox = 1u, kpair0 = uint(nh * half), npairs = uint(npairs), layerbase = 0u, boff = uint(bpad), hasb = biased ? 1u : 0u)
+            var pc = rope_kv_args(int64(qd), int64(kvd), int64(hs), int64(nh * half), int64(npairs), true, biased, int64(hs), int64(bpad), 0l, 1l, 0l, 0l, 0l, 0l)
             cp |> cell_record() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
                 if (f16) {
                     enc_rope_kv_f16_cls(raw2, h2, sc, pc, int64((npairs + 255) / 256))
