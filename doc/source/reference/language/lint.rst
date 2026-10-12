@@ -109,6 +109,9 @@ Options:
 - ``--disable CODE[,CODE...]`` — disable specific rules; on overlap with ``--enable``, ``--disable`` wins
 - ``--lint-fixtures`` — also lint fixture-named files (underscore-led names containing ``fixture``)
 - ``--lint-excluded-paths`` — report findings the ``.lint_config`` ``[paths]`` exclude policy would drop
+- ``--fix`` — apply the edits rules attach to their findings, then re-lint each changed file; an edit
+  that breaks the compile is rolled back. A finding that carries an edit ends with
+  ``(fixable: run lint with --fix)``, and the summary counts them
 
 Examples::
 
@@ -252,6 +255,8 @@ LINT001 — unreachable code
 Code after a ``return`` or ``panic()`` in the same block is unreachable and
 will never execute.
 
+``--fix`` deletes an unreachable statement that fills whole lines and holds no comment.
+
 .. das-doc: alt
 .. code-block:: das
 
@@ -265,6 +270,8 @@ LINT002 — unused variable
 
 A declared variable is never read. Prefix the name with an underscore
 (``_x``) to suppress the warning, or remove the variable entirely.
+
+``--fix`` prefixes the declared name with an underscore, unless the prefixed name is already spelled in the function.
 
 .. das-doc: alt
 .. code-block:: das
@@ -316,6 +323,8 @@ read, rename it without the underscore prefix. This applies to locals only —
 a ``_``-prefixed *argument* is never flagged (a parameter name is often
 constrained: intentionally unused, or dodging a reserved keyword / shadow such
 as ``_in``).
+
+``--fix`` renames the declaration and every read of it when those are all the name's spellings in the function (none in a comment or string) and the bare name is spelled nowhere in it.
 
 .. das-doc: alt
 .. code-block:: das
@@ -415,6 +424,8 @@ LINT008 — both ternary branches equivalent
 
 ``cond ? x : x`` ignores ``cond`` and always produces ``x``. Copy-paste bug.
 
+``--fix`` replaces the ternary with its branch when the condition has no side effects.
+
 .. das-doc: alt
 .. code-block:: das
 
@@ -430,6 +441,8 @@ LINT009 — ``then`` branch equivalent to ``else`` branch
 ``if (c) { A } else { A }`` runs ``A`` regardless of ``c``. Usually the author
 copy-pasted one branch and forgot to edit the other. Caught even when ``A``
 has side effects — the structural pattern is suspicious regardless of purity.
+
+``--fix`` replaces an ``if (c) {...} else {...}`` statement with its body when the condition has no side effects and the dropped ``else`` holds no comment - unwrapped, or kept as a bare block when it declares a variable.
 
 .. das-doc: alt
 .. code-block:: das
@@ -559,6 +572,8 @@ discarded ``static_if`` arm names counts as used: the module-gated shape
 (``static_if (typeinfo builtin_module_exists(x)) { ... } else { skip }``)
 stays clean on a box that lacks the module.
 
+``--fix`` prefixes the argument with an underscore on a private function only - another module can name a public function's arguments in a call - and only when the prefixed name is not already spelled in the function.
+
 .. das-doc: fragment
 .. code-block:: das
 
@@ -584,6 +599,8 @@ LINT013 — unused block argument
 The same check for the parameters of a block, lambda, or generator passed as
 a callback. Callbacks that ignore a parameter are common; suppress exactly as
 for LINT012.
+
+``--fix`` prefixes the argument with an underscore, unless the prefixed name is already spelled in the function.
 
 .. das-doc: alt
 .. code-block:: das
@@ -688,6 +705,8 @@ its pointer. Consequently,
 clone the character data when ``src`` is an ordinary ``string``; their clone
 spelling is misleading.
 
+``--fix`` rewrites ``:=`` to ``=`` and ``push_clone`` to ``push`` - the same-context spelling, which copies exactly what the clone spelling did.
+
 Use ordinary copy syntax for same-context storage, and make a cross-context
 copy explicit with ``clone_string`` in the receiving context:
 
@@ -724,6 +743,8 @@ a silent wrap for the unguarded pairs, or as a panic for array, table and
 string length, which carry an always-on guard. Either way the cast looks like
 it buys 64-bit range and buys nothing. Call the ``long_`` form, which is
 64-bit the whole way through.
+
+``--fix`` rewrites the call to its ``long_*`` twin, or the parse to ``to_int64`` / ``to_uint64`` with the site's own ``hex`` argument, keeping a mixed-sign outer cast.
 
 .. das-doc: alt
 .. code-block:: das
@@ -776,6 +797,8 @@ result: the overflow happened inside the parentheses, and the cast that looks
 like it buys 64-bit range buys nothing. LINT017's sibling — there the inner
 *call* clamps at 2\ :sup:`31`, here the inner *arithmetic* wraps. Widen a
 factor first, so the multiply itself runs in 64 bits.
+
+``--fix`` widens every operand of the sum or product - a ``length``-family call becomes its ``long_*`` twin, a decimal literal takes the ``l`` / ``ul`` suffix - and parenthesizes the result where a neighbouring operator would regroup it.
 
 .. das-doc: given var pixels : array<uint8>
 .. das-doc: alt
@@ -916,6 +939,8 @@ overloads. An ``int(...)`` cast on the size or position argument of any of
 them is pure loss: above 2\ :sup:`31` it silently covers the wrong count while
 the overload would have taken the 64-bit value straight through.
 
+``--fix`` drops the cast, or turns it into ``int64(...)`` for a ``uint64`` operand.
+
 .. das-doc: fragment
 .. code-block:: das
 
@@ -963,6 +988,8 @@ the per-file scan cannot see which instantiations elsewhere consume it. Tag it w
 ``LINT019`` instead; removal is only safe where the author knows no other compile
 reaches the line.
 
+``--fix`` removes the stale code from its list; when no code is left it removes the whole comment - the justification after the codes went with them - and the line when nothing else is on it.
+
 .. das-doc: fragment
 .. code-block:: das
 
@@ -981,6 +1008,8 @@ LINT020 — 64-bit bound narrowed into a 32-bit range constructor
 starts. ``range64`` and ``urange64`` take the 64-bit value directly, and the
 loop variable then indexes arrays, fixed arrays and (unsafe) pointers as-is —
 ``TypeDecl::isIndexExt`` admits ``int64``/``uint64`` subscripts natively.
+
+``--fix`` rewrites ``range`` / ``urange`` to ``range64`` / ``urange64`` and drops the casts of ``interval``, when every argument narrows a 64-bit value of the matching sign.
 
 .. das-doc: fragment
 .. code-block:: das
@@ -1052,6 +1081,8 @@ formats and lints clean while nothing outside can ever reach it. The rule
 covers functions, structures, classes and enumerations. The same applies to
 every symbol of a ``private`` module, where the module declaration makes the
 whole surface private.
+
+``--fix`` deletes the declaration with its ``//!`` lines when it starts its own line and no annotation or plain comment sits directly above it.
 
 .. code-block:: das
 
@@ -1303,6 +1334,8 @@ through that parameter, judged the same way; ``memcpy``, ``memmove`` and the
 ``memset`` family write their first argument. A parameter declared ``implicit`` waives the
 const contract and is not judged.
 
+``--fix`` inserts ``var`` before the parameter of a private function when the name opens its own declaration group and its type spells no ``const``.
+
 .. das-doc: alt
 .. code-block:: das
 
@@ -1382,6 +1415,8 @@ Informational warning for any use of ``character_at``. Each call does a bounds
 check by scanning to the index. For accessing the first character, use
 ``first_character`` which is O(1). For bulk access in hot paths, consider
 ``peek_data`` for reads or ``modify_data`` for mutations.
+
+``--fix`` rewrites ``character_at(s, 0)`` to ``first_character(s)``; the other indices have no fix.
 
 .. das-doc: alt
 .. code-block:: das
@@ -1471,6 +1506,8 @@ PERF007 — unnecessary ``string(das_string)`` in comparison
 ``das_string`` values via ``==`` and ``!=``. Wrapping in ``string()`` allocates
 a new string unnecessarily.
 
+``--fix`` drops the ``string(...)`` cast.
+
 .. das-doc: fragment
 .. code-block:: das
 
@@ -1506,6 +1543,8 @@ The clone-init flavor — ``var x := src; return <- x`` (lowered to
 ``<- clone_to_move(...)``) — collapses to ``return clone_to_move(src)``, **not**
 ``return <- src`` (which would move/destroy the clone source).
 
+``--fix`` folds the two statements into ``return <- expr`` (``return clone_to_move(src)`` for the clone flavor) when nothing - a comment included - sits between them.
+
 .. das-doc: alt
 .. code-block:: das
 
@@ -1529,6 +1568,8 @@ PERF010 — unnecessary ``get_ptr()`` for null comparison
 ``smart_ptr`` supports ``==`` and ``!=`` against ``null`` directly.
 Calling ``get_ptr()`` first is unnecessary overhead.
 
+``--fix`` drops the ``get_ptr(...)`` call.
+
 .. das-doc: fragment
 .. code-block:: das
 
@@ -1543,6 +1584,8 @@ PERF011 — unnecessary ``get_ptr()`` for field access
 
 ``smart_ptr`` auto-dereferences for field access. Calling ``get_ptr()``
 first to access a field is unnecessary.
+
+``--fix`` drops the ``get_ptr(...)`` call.
 
 .. das-doc: fragment
 .. code-block:: das
@@ -1583,6 +1626,8 @@ the canonical inc/dec idiom. Applies to the six numeric workhorse scalars
 (``int2``, ``float3``, …) do **not** support ``++``/``--`` so they are
 skipped. ``+= -1`` is also flagged (same effect as ``-= 1``).
 
+``--fix`` rewrites a statement-level ``a += 1`` / ``a -= 1`` to ``a++`` / ``a--``.
+
 .. das-doc: alt
 .. code-block:: das
 
@@ -1620,6 +1665,8 @@ Deliberately **not** flagged:
   *intersection* with different endpoints, distinct from the ``||``
   strict-inequality *complement* (``c < '0' || c > '9'``) which is flagged.
 
+``--fix`` replaces the range check with the ``is_number`` / ``is_alpha`` call when the ``strings`` module is visible and the operand is an ``int``.
+
 .. das-doc: fragment
 .. code-block:: das
 
@@ -1641,6 +1688,8 @@ PERF015 — ternary min / max
 vec-friendly and the intent is clearer. All eight orientations of
 ``< / <= / > / >=`` × ``T==L,F==R`` / ``T==R,F==L`` are flagged.
 
+``--fix`` replaces a numeric ternary with the ``min`` / ``max`` call when the ``math`` module is visible.
+
 .. das-doc: alt
 .. code-block:: das
 
@@ -1659,6 +1708,8 @@ PERF016 — ternary abs
 signed numeric type. Only the four orientations that match ``abs`` are
 flagged; the negabs shape (``x < 0 ? x : -x``) is **not** — it is a
 different function.
+
+``--fix`` replaces a signed numeric ternary with ``abs(x)`` when the ``math`` module is visible.
 
 .. das-doc: alt
 .. code-block:: das
@@ -1683,6 +1734,8 @@ idiomatic form. Six comparison ops are mapped to either ``empty(x)`` or
 
 Vector magnitude (``length(float3_var)`` from the math module) is **not**
 flagged — different semantics, no ``empty`` for vectors.
+
+``--fix`` rewrites the comparison to ``empty(x)`` / ``!empty(x)`` for strings, ``das_string``, arrays and tables.
 
 .. das-doc: fragment
 .. code-block:: das
@@ -1711,6 +1764,8 @@ the existing ``find_expr_path`` chain walker. Every use of ``i`` in the body mus
 (``arr[i+1]`` / sliding window) or use of ``i`` outside an indexing
 expression disqualifies the loop. Bare-variable sibling arrays indexed by
 the same ``i`` route the loop to PERF029 instead.
+
+``--fix`` iterates the array directly under a fresh element name and replaces every ``arr[i]``, when the array is a local or parameter and nothing else in the body - a closure included - names it or ``i``.
 
 .. das-doc: alt
 .. code-block:: das
@@ -1781,6 +1836,8 @@ Credit is per function and per site: it does not cross into or out of deferred
 bodies (a lambda's ``delete`` runs later and never credits; an inline block
 argument's counts, though the block may never run — the rule errs silent), and
 a conditional fill is best folded into the declaration as ``var a <- c ? x : y``.
+
+``--fix`` folds the move into a ``var x : T`` declaration on the statement right above it, the case where the target is provably fresh.
 
 .. das-doc: fragment
 .. code-block:: das
@@ -1860,6 +1917,8 @@ helper that takes the buffer by reference marks its own parameter
 ``@exact_size`` so the ``resize`` inside is held to the same contract.
 ``@exact_size`` on anything that is not an array is reported.
 
+``--fix`` removes ``@exact_size`` from a declaration that is not an array; the missing-reserve variant has no fix.
+
 .. das-doc: alt
 .. code-block:: das
 
@@ -1926,6 +1985,8 @@ observe the rule firing on it. The lint runner sets
 Dastest coverage in ``utils/lint/tests/perf019_int_cast_collapse.das``
 uses runtime operands; the constant case is covered by the CI lint gate.
 
+``--fix`` rewrites the expression to the single-cast form.
+
 .. das-doc: alt
 .. code-block:: das
 
@@ -1964,6 +2025,8 @@ Fires for the 15 workhorse cast names: ``int``, ``int8``, ``int16``,
 trigger) combined with a strict ``arg._type.baseType`` equality check
 against the cast's target type. Const / reference / temporary qualifiers
 on the argument are ignored — only ``baseType`` matters.
+
+``--fix`` drops the cast, except a bitfield cast.
 
 .. das-doc: alt
 .. code-block:: das
@@ -2018,6 +2081,8 @@ If the argument base types differ (e.g. ``cond ? string(intV) :
 string(int64V)``), the rule does NOT fire; the rewrite would need a
 manual widen on one branch and that is left to the author.
 
+``--fix`` hoists the cast over the ternary.
+
 .. das-doc: alt
 .. code-block:: das
 
@@ -2064,6 +2129,8 @@ because those have no direct bulk equivalent.
 Compiler folds ``B |> push(s)``, ``B.push(s)``, and ``push(B, s)`` to the
 same call shape, so all three forms are detected by the same rule.
 
+``--fix`` replaces a loop whose body is that one statement, with no comment in it, by ``B |> push_from(A)`` / ``B |> push_clone_from(A)``.
+
 .. das-doc: alt
 .. code-block:: das
 
@@ -2106,6 +2173,8 @@ all go through ``apply_template`` (``daslib/templates_boost.das``), which
 calls ``clone_expression`` on every ``$e(...)`` substitution input. Pre-cloning
 into a local variable and then splicing the local is wasted work — the same
 substitution gets cloned a second time at apply-template time.
+
+``--fix`` deletes the declaration and splices the source expression, when it has one use in the statement right after it.
 
 .. das-doc: fragment
 .. code-block:: das
@@ -2172,6 +2241,8 @@ whose only uses are direct arguments at ``[clone(...)]`` positions — any other
 use (assignment, passing elsewhere, storing into a field) makes the pre-clone
 load-bearing and the lint stays silent.
 
+``--fix`` drops the ``clone_*`` wrap of a direct argument; for the variable form it deletes the declaration and passes the source, when it has one use in the statement right after it.
+
 .. das-doc: fragment
 .. code-block:: das
 
@@ -2195,6 +2266,8 @@ String interpolation already converts every element to a string via the
 string builder's ``DebugDataWalker``. Wrapping an element in ``string(...)``
 allocates an intermediate string that the builder then copies — a wasted heap
 allocation per interpolation.
+
+``--fix`` drops the cast for signed numbers and strings; the unsigned variant has no fix.
 
 .. das-doc: alt
 .. code-block:: das
@@ -2333,6 +2406,9 @@ STYLE001 — unnecessary ``<|`` pipe before block argument
 The ``<|`` pipe syntax is gen1 style and unnecessary in gen2. Use direct
 trailing block syntax instead.
 
+``--fix`` drops the ``<|`` (``defer <|`` becomes ``defer()``); a generator's pipe stays, since
+``generator<T>()`` takes no trailing block.
+
 .. das-doc: alt
 .. code-block:: das
 
@@ -2352,6 +2428,8 @@ STYLE002 — ``<|`` pipe before parameterless block
 When the block takes no parameters, both the ``<|`` pipe and ``$()`` are
 unnecessary. Use a direct trailing block.
 
+``--fix`` drops the ``<|`` and the ``$()`` - ``defer <| $() {`` becomes ``defer() {``.
+
 .. das-doc: alt
 .. code-block:: das
 
@@ -2370,6 +2448,8 @@ STYLE003 — redundant ``$()`` on parameterless block
 
 When a block takes no parameters, the ``$()`` prefix is unnecessary even
 without a pipe. Use a bare trailing block.
+
+``--fix`` rewrites ``$()`` to ``$``.
 
 .. das-doc: alt
 .. code-block:: das
@@ -2397,6 +2477,9 @@ synthesized block and its inner terminator for both braceless ``if (c)
 return`` and postfix-desugared ``return X if (c)``, so a real
 user-written ``{...}`` is detectable as ``blk.at != inner.at``.
 
+``--fix`` replaces the braces with the statement they hold (``if (x > 0) return x``) when they
+open on the ``if`` line and hold nothing else, a comment included.
+
 .. das-doc: alt
 .. code-block:: das
 
@@ -2423,6 +2506,9 @@ STYLE006 — ``string(__rtti)`` comparison should use ``is``
 Comparing ``string(expr.__rtti) == "ExprFoo"`` is verbose and fragile.
 Use the ``is`` operator instead, which is type-safe and cleaner.
 
+``--fix`` rewrites the comparison to ``expr is ExprFoo`` when the module sees ``daslib/ast_boost``,
+which provides ``is`` on AST nodes.
+
 .. das-doc: fragment
 .. code-block:: das
 
@@ -2437,6 +2523,8 @@ STYLE010 — ``if (true)`` should be a bare block
 
 ``if (true)`` is always taken and adds unnecessary noise. Use a bare
 block (lexical scope) instead.
+
+``--fix`` deletes the ``if (true)`` head, leaving the bare block.
 
 .. das-doc: alt
 .. code-block:: das
@@ -2460,6 +2548,9 @@ with initialization.
 
 The rule excludes ``var inscope`` (needs separate declaration for cleanup
 semantics), compiler-generated variables, and generic instantiations.
+
+``--fix`` moves the assignment into the declaration (``var x : int = 5``) when the two sit alone
+on consecutive lines with no comment and the value does not name the variable.
 
 .. das-doc: fragment
 .. code-block:: das
@@ -2495,6 +2586,10 @@ array-literal equivalent.
 
 The rule excludes ``var inscope``, compiler-generated variables, and
 generic instantiations (same exclusions as STYLE011).
+
+``--fix`` folds the run into the declaration - ``var a : array<int> <- [1, 2]`` - when each call
+sits alone on its line, every element has exactly the element type, no element names the array,
+and each ``emplace`` moves a named variable (``<-y``).
 
 .. das-doc: fragment
 .. code-block:: das
@@ -2533,6 +2628,10 @@ Fires only for the default/empty-init shapes (``var a : Foo``, ``var a =
 Foo()``, ``var a = new Foo()``). A non-empty constructor, a factory call, or
 a single field assignment is not flagged. ``var inscope``, compiler-generated
 variables, and generic instantiations are excluded.
+
+``--fix`` folds the run into the declaration (``var a = Foo(x = 1, y = 2)``, ``<-`` for a
+non-copyable struct) when each assignment sits alone on its line and no value names the variable;
+classes and user-written constructors are left alone.
 
 .. das-doc: alt
 .. code-block:: das
@@ -2631,6 +2730,9 @@ with ``||``. Two AST shapes are detected:
 * two adjacent ``if (a) { return X }`` statements in the same block
 * the ``if (a) { return X } else if (b) { return X }`` chain
 
+``--fix`` combines two adjacent guard statements - the first ``if`` takes ``a || b``, the second
+is deleted - when no comment sits in the deleted text; the ``else if`` chain stays a finding.
+
 .. das-doc: alt
 .. code-block:: das
 
@@ -2657,6 +2759,9 @@ both forms:
 * ``if (cond) return b1 else return b2`` (b1 ≠ b2)
 * ``if (cond) return b1`` immediately followed by ``return b2`` (b1 ≠ b2)
 
+``--fix`` replaces the ``if`` and its closing ``return`` with ``return cond`` / ``return !cond``
+when no comment sits in that span.
+
 .. das-doc: alt
 .. code-block:: das
 
@@ -2680,6 +2785,8 @@ Comparing a bool to a boolean literal is redundant — the bool already IS
 the value. Drop the comparison. Both Yoda forms (``true == flag``) are
 detected.
 
+``--fix`` drops the comparison, negating with ``!`` where the literal asks for it.
+
 .. das-doc: fragment
 .. code-block:: das
 
@@ -2700,6 +2807,10 @@ STYLE019 — nested ``min(max(...))`` should be ``clamp(...)``
 directly. Both orientations (and the mirror form) are detected — the
 inner call must resolve to the math module's ``min`` / ``max``, not a
 user overload.
+
+``--fix`` rewrites to ``clamp`` only when ``lo`` and ``hi`` are numeric constants with ``lo <= hi``
+(``lo < hi`` for floats), and for floats only the ``min(max(x, lo), hi)`` spelling - the one whose
+NaN and signed-zero results match ``clamp``.
 
 .. das-doc: alt
 .. code-block:: das
@@ -2727,6 +2838,9 @@ instantiation chain (two levels deep for json_boost's
 ``[template(ent)]`` generics) and matches the root's name/module against
 ``from_JV`` / ``json_boost``. The result-type check uses ``expr._type``,
 which is robust under both pre- and post-instantiation argument shapes.
+
+``--fix`` rewrites to ``v ?? defV``, parenthesized unless it stands alone as an argument,
+initializer or returned value; a call that omits ``defV`` stays a finding.
 
 .. das-doc: alt
 .. code-block:: das
@@ -2788,6 +2902,8 @@ an explicit ``ExprOp1("~", ExprField)`` or a single-bit-complement
 ``ExprConstBitfield``. A bare ``foo &= BfT.m`` (no ``~``) is *not* the
 bit-clear idiom; it would mask off every other bit, so it stays silent.
 
+``--fix`` rewrites to the field assignment when the right-hand side is a bitfield constant.
+
 .. das-doc: alt
 .. code-block:: das
 
@@ -2824,6 +2940,8 @@ the same bitfield — under lint policies as ``ExprField(BfT, name)``,
 under normal compile as ``ExprConstBitfield`` with a single-bit mask.
 Multi-bit masks (``Mode.read | Mode.write``) are left alone since the
 ``!= 0`` semantics differ from any single field read.
+
+``--fix`` rewrites to ``bf.m`` / ``!bf.m`` when the mask is a bitfield constant.
 
 .. das-doc: fragment
 .. code-block:: das
@@ -2863,6 +2981,9 @@ is flagged. Macro-generated subtrees are skipped by design.
     // Good
     let d = x + y
 
+``--fix`` drops ``unsafe(...)`` around the expression (keeping parentheses where precedence needs them) and
+removes the braces of an ``unsafe { ... }`` block, de-indenting its body.
+
 STYLE025 — block-form ``unsafe`` should be expression-form
 ============================================================
 
@@ -2889,6 +3010,9 @@ local whose generated delete is unsafe all keep the block.
     let a = compute()
     let p = unsafe(reinterpret<Foo?>(raw))
 
+``--fix`` removes the block and wraps the one operation that needs it in ``unsafe(...)``, when that
+operation is an expression.
+
 STYLE026 — nested ``unsafe`` block
 ====================================
 
@@ -2914,6 +3038,8 @@ a separate context the outer wrap does not reach.
         delete p
     }
 
+``--fix`` removes the braces of the inner block and de-indents its body.
+
 STYLE027 — array/table ``var`` + push/insert loop → comprehension
 =====================================================================
 
@@ -2938,6 +3064,9 @@ instantiations are excluded.
 
     // Good — comprehension
     var a <- [for (x in src); x * x]
+
+``--fix`` replaces the declaration and a single-level loop (one optional ``if`` filter) with the
+comprehension.
 
 STYLE028 — redundant ``self->`` on a method call
 ==================================================
@@ -2969,6 +3098,8 @@ bare ``m()``.
         def layout() { ... }
     }
 
+``--fix`` deletes ``self->``.
+
 STYLE029 — transitive-only ``require``
 ========================================
 
@@ -2991,6 +3122,8 @@ because the direct require would drop the hook.
     // Good — depend on Y directly
     require Y
 
+``--fix`` respells the require as the re-exported module when that module is built in or sits beside ``X``.
+
 STYLE030 — entirely-unused ``require``
 ========================================
 
@@ -3009,6 +3142,8 @@ Suppress a deliberate keep with ``// nolint:STYLE030``.
     require strings                             // STYLE030
 
     // Good — remove the require
+
+``--fix`` deletes the require line when nothing else shares it.
 
 .. _style031:
 
@@ -3045,6 +3180,8 @@ STYLE021 (the ``JV((k1=..., k2=...))`` form is the stronger suggestion).
     var t <- { "a" => 1, "b" => 2 }
     var s <- { 5, 7 }
 
+``--fix`` writes the literal in place of the declaration and the run.
+
 .. _style032:
 
 STYLE032 — array ``var`` filled by a single ``push_from`` is a clone
@@ -3078,6 +3215,8 @@ Only the immediately-following statement is inspected, and a C-array
 match requires the source's element type to equal the destination's. An
 intervening ``reserve`` / guard, a non-empty initializer, or a single-element
 ``push`` all keep the rule quiet.
+
+``--fix`` writes ``var w := src`` in place of the declaration and the call.
 
 .. _style033:
 
@@ -3125,6 +3264,8 @@ The existing-array collapse matches a **plain-variable receiver** (``dst |> …`
 only; a chain receiver (``obj.arr |> …``) is out of scope for now — a planned
 follow-up, mirroring STYLE012's separate chain form.
 
+``--fix`` writes the variadic call, or the ``concat`` when the file already requires ``daslib/linq``.
+
 .. _style034:
 
 STYLE034 — ``reinterpret<T?>(addr(x))`` collapses to ``addr<T?>(x)``
@@ -3147,6 +3288,8 @@ Pointer targets only: a pointer→integer pun such as
 silent. So does a reinterpret whose operand is not an ``addr(...)``. The
 sugar's own desugared output is exempt (it carries the ``fromAddrSugar``
 cast flag), so ``addr<T?>(x)`` never re-flags itself.
+
+``--fix`` writes the ``addr<T?>(x)`` form.
 
 STYLE035 — numeric variable compared with a cast character literal
 ===================================================================
@@ -3199,6 +3342,8 @@ generic really does strip const from whatever ``ARGT`` binds. A *concrete*
 typedef is not such a case — with ``typedef CI = int const``,
 ``reinterpret<CI? -const>`` keeps the const, so the contract is inert there
 too and the rule correctly fires.
+
+``--fix`` deletes the inert contract.
 
 STYLE037 — cyclomatic complexity over the limit
 ================================================
@@ -3310,6 +3455,9 @@ shipped-library trees whose strings reach every consumer's logs. Suppress an
 intended character (box drawing, localized text, a unicode demo) with
 ``// nolint:STYLE039`` on the line, or ``options _ascii_strings = false`` for a
 whole intentionally non-ASCII module.
+
+``--fix`` spells each non-ASCII byte as a ``\xNN`` escape, which keeps the string's value; spell the
+character out by hand when the output must be ASCII.
 
 STYLE040 — duplicated statement region a helper could absorb
 =============================================================

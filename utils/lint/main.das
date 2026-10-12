@@ -1216,7 +1216,7 @@ def collect_input_files(var files : array<string>&; var dirs : array<string>&) :
     return -1
 }
 
-def tally_result(result : LintResult; var issues : int&; var errors : int&; var skipped : int&; var excluded : int&) : void {
+def tally_result(result : LintResult; var issues : int&; var errors : int&; var skipped : int&; var excluded : int&; var fixable : int&) : void {
     excluded += result.excluded
     if (!empty(result.skip_reason)) {
         skipped++
@@ -1224,7 +1224,16 @@ def tally_result(result : LintResult; var issues : int&; var errors : int&; var 
         errors++
     } elif (result.count > 0) {
         issues += result.count
+        fixable += count_fixable(result.issues)
     }
+}
+
+def count_fixable(issues : array<LintIssue>) : int {
+    var n = 0
+    for (issue in issues) {
+        n += issue.fix.line > 0 ? 1 : 0
+    }
+    return n
 }
 
 // Folder policy, not file policy: the three folder rules answer for the run's scan ROOTS rather
@@ -1255,11 +1264,14 @@ def run_folder_passes(docs_roots : array<string>; disabled_codes, enabled_codes 
 }
 
 // Prints the summary block; returns the process exit code (0 clean, 1 errors, 2 issues).
-def print_summary(files_count, total_issues, total_errors, total_skipped, total_excluded : int) : int {
+def print_summary(files_count, total_issues, total_errors, total_skipped, total_excluded, total_fixable : int) : int {
     print("\n--- Summary ---\n")
     let skip_part = total_skipped > 0 ? ", {total_skipped} skipped" : ""
     let excl_part = total_excluded > 0 ? ", {total_excluded} excluded by path policy" : ""
     print("{files_count} files, {total_issues} issue(s), {total_errors} error(s){skip_part}{excl_part}\n")
+    if (total_fixable > 0) {
+        print("{total_fixable} issue(s) can be fixed inline - run lint with --fix to apply them\n")
+    }
     if (total_errors > 0) {
         return 1
     } elif (total_issues > 0) {
@@ -1323,6 +1335,7 @@ def main() : int {
     var total_errors = 0
     var total_skipped = 0
     var total_excluded = 0
+    var total_fixable = 0
 
     if (parallel_workers::should_parallelize(length(files), cfg.workers)) {
         var results <- run_parallel_lint(files, cfg)
@@ -1330,7 +1343,7 @@ def main() : int {
         sort(results, $(a, b : LintResult) => a.file < b.file)
         for (result in results) {
             print_result(result, cfg.quiet, cfg.silent)
-            tally_result(result, total_issues, total_errors, total_skipped, total_excluded)
+            tally_result(result, total_issues, total_errors, total_skipped, total_excluded, total_fixable)
         }
     } else {
         if (!cfg.quiet) {
@@ -1343,12 +1356,12 @@ def main() : int {
             }
             let result = lint_file_fixing(file, run_paranoid, run_perf, run_style, cfg.comment_hygiene, cfg.lint_fixtures, cfg.lint_excluded_paths, disabled_codes, enabled_codes, cfg.fix)
             print_result(result, cfg.quiet, cfg.silent)
-            tally_result(result, total_issues, total_errors, total_skipped, total_excluded)
+            tally_result(result, total_issues, total_errors, total_skipped, total_excluded, total_fixable)
             maybe_collect(since_collect)
         }
     }
 
     total_issues += run_folder_passes(docs_roots, disabled_codes, enabled_codes)
 
-    return print_summary(length(files), total_issues, total_errors, total_skipped, total_excluded)
+    return print_summary(length(files), total_issues, total_errors, total_skipped, total_excluded, total_fixable)
 }

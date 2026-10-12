@@ -1453,7 +1453,7 @@ def document_module_lint_config(_root : string) {
         group_by_regex("Path-based rule defaults", mod, %regex~(is_daslib_source|is_shipped_library_source|is_core_library_source|lint029_source_exempt)$%%),
         group_by_regex("Lint-surface predicates", mod, %regex~(is_user_authored_body|is_lint_fixture_name|lint_file_skip_reason|drop_skipped_file_issues)$%%),
         group_by_regex("Structured findings", mod, %regex~(make_lint_issue)$%%),
-        group_by_regex("Fixes", mod, %regex~(apply_lint_fixes|lint_source_line)$%%),
+        group_by_regex("Fixes", mod, %regex~(apply_lint_fixes|lint_source_line|lint_byte_at|lint_fix_message|lint_expr_span|lint_span_text|lint_expr_text|lint_replace_fix|lint_merge_fixes|lint_ident_byte|lint_code_find|lint_has_comment|lint_count_word|lint_has_word|lint_count_word_in_lines|lint_indent_of|lint_is_atom|lint_operand_text|lint_isolated|lint_lone_span|lint_token_fix|lint_match_bracket|lint_module_visible)$%%),
         group_by_regex("Format policy", mod, %regex~(format_policy_for|partition_by_format_policy)$%%)
     )
     document("Repo-level lint configuration", mod, "lint_config.rst", groups)

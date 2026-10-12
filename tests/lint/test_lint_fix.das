@@ -2,14 +2,25 @@ options gen2
 
 require dastest/testing_boost
 require daslib/ast
+require daslib/ast_boost
 require daslib/rtti
 require daslib/fio
+require strings
 require daslib/lint
 require daslib/perf_lint
 require daslib/style_lint
 require daslib/lint_config
 
 def fixture(name : string) : string => "{get_das_root()}/tests/lint/{name}"
+
+class SpanMarks : AstVisitor {
+    found : array<tuple<expected : string; got : string>>
+    def override preVisitExprCall(var expr : ExprCall?) : void {
+        return if (expr.func == null || expr.func.fromGeneric == null || expr.func.fromGeneric.name != "mark")
+        let tag = expr.arguments[1]
+        found |> push((expected = tag is ExprConstString ? string((tag as ExprConstString).value) : "", got = lint_expr_text(expr.arguments[0])))
+    }
+}
 
 def collect_fixes(t : T?; path : string; enabled : table<string>) : array<LintFix> {
     var fixes : array<LintFix>
@@ -90,5 +101,93 @@ def test_lint_fix(t : T?) {
         let fixes <- [LintFix(line = 1, column = 3, last_line = 1, last_column = 6, replacement = "\n  x")]
         let fixed = apply_lint_fixes("abcdef\r\nnext\r\n", fixes)
         t |> equal(fixed.text, "abc\r\n  x\r\nnext\r\n")
+    }
+}
+
+[test]
+def test_lint_text_helpers(t : T?) {
+    t |> run("text helpers skip literals and match whole words") @@(t : T?) {
+        t |> equal(lint_has_comment("a // b"), true)
+        t |> equal(lint_has_comment("a /* b */"), true)
+        t |> equal(lint_has_comment("f(\"http://x\")"), false)
+        t |> equal(lint_count_word("a + ab + a_ + a", "a"), 2)
+        t |> equal(lint_has_word("abc", "b"), false)
+        t |> equal(lint_indent_of("    x"), 4)
+        t |> equal(lint_operand_text("a.b[i]?.c"), "a.b[i]?.c")
+        t |> equal(lint_operand_text("a::b(x + 1)"), "a::b(x + 1)")
+        t |> equal(lint_operand_text("a + b"), "(a + b)")
+        t |> equal(lint_operand_text("0..n"), "(0..n)")
+        t |> equal(lint_match_bracket("(c == '(') \{", 0), 9)
+        t |> equal(lint_match_bracket("(f(\")\"))", 0), 7)
+        t |> equal(lint_match_bracket("(a /* ) */)", 0), -1)
+        t |> equal(lint_match_bracket("(a", 0), -1)
+    }
+}
+
+[test]
+def test_lint_fix_helpers(t : T?) {
+    t |> run("lint_expr_text recovers the whole source of an expression") @@(t : T?) {
+        var inscope access <- make_file_access("")
+        using() $(var mg : ModuleGroup) {
+            using() $(var cop : CodeOfPolicies) {
+                cop.export_all = true
+                cop.lint_check = true
+                cop.no_optimizations = true
+                cop.no_infer_time_folding = true
+                compile_file(fixture("_fixture_lint_span.das"), access, unsafe(addr(mg)), cop) $(ok; program; issues) {
+                    if (!ok) {
+                        t |> failure("span fixture failed to compile: {issues}")
+                        return
+                    }
+                    var marks = new SpanMarks()
+                    make_visitor(*marks) $(adapter) {
+                        visit(program, adapter)
+                    }
+                    t |> equal(length(marks.found), 16)
+                    for (m in marks.found) {
+                        t |> equal(m.got, m.expected)
+                    }
+                    unsafe {
+                        delete marks
+                    }
+                }
+            }
+        }
+    }
+    t |> run("a finding with a fix says so, one without does not") @@(t : T?) {
+        t |> equal(lint_fix_message("X", LintFix(line = 1, column = 0, last_line = 1, last_column = 1)), "X{LINT_FIX_HINT}")
+        t |> equal(lint_fix_message("X", LintFix()), "X")
+    }
+    t |> run("identical fixes from sibling instantiations apply once") @@(t : T?) {
+        let fixes <- [
+            LintFix(line = 1, column = 2, last_line = 1, last_column = 2, replacement = "Y"),
+            LintFix(line = 1, column = 2, last_line = 1, last_column = 2, replacement = "Y")]
+        let fixed = apply_lint_fixes("abcdef\n", fixes)
+        t |> equal(fixed.applied, 1)
+        t |> equal(fixed.text, "abYcdef\n")
+    }
+    t |> run("merged edits become one fix over their span") @@(t : T?) {
+        var inscope access <- make_file_access("")
+        using() $(var mg : ModuleGroup) {
+            using() $(var cop : CodeOfPolicies) {
+                cop.export_all = true
+                compile_file(fixture("_fixture_lint_span.das"), access, unsafe(addr(mg)), cop) $(ok; program; _issues) {
+                    t |> success(ok)
+                    return if (!ok)
+                    let fn = program.getThisModule |> find_unique_function("spans")
+                    let edits <- [
+                        LintFix(line = 40, column = 11, last_line = 40, last_column = 16, replacement = "count"),
+                        LintFix(line = 39, column = 4, last_line = 39, last_column = 9, replacement = "count")]
+                    let merged = lint_merge_fixes(fn.at, edits)
+                    t |> equal(merged.line, 39)
+                    t |> equal(merged.last_line, 40)
+                    let src = fread(fixture("_fixture_lint_span.das"))
+                    let fixed = apply_lint_fixes(src, [merged])
+                    t |> equal(fixed.applied, 1)
+                    t |> success(find(fixed.text, "    count += mark(int(n), \"int(n)\")\n    return count\n") >= 0)
+                    t |> equal(lint_merge_fixes(fn.at, [edits[0], edits[0]]).line, 0)
+                }
+            }
+        }
     }
 }
