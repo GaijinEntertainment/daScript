@@ -39,6 +39,14 @@ def assert_pf_window(t : T?) {
 //! `n` ramp ids `base + ((i + salt) * stride) % span`: a prompt or a fed run no tokenizer is needed for
 def ramp_ids(n, salt, base, stride, span : int64) : array<int64> => <- [for (i in range64(n)); base + ((i + salt) * stride) % span]
 
+//! of the row's max |logit|: the resident rigs' split bar - the window's GEMMs split k by the row count, so two row counts round apart
+let SPLIT_BAR_REL = 0.06
+
+//! both sides' argmax rows decoded under `tag`, the readable form of a logits compare (`log_gen_texts` over each row's argmax)
+def log_argmax_rows(tr : Model; tag : string; got, want : array<array<float>>) {
+    log_gen_texts(tr, tag, [for (r in want); argmax_of(r)], [for (r in got); argmax_of(r)])
+}
+
 //! the resident cells' `n`-id prompt, shifted `salt` ids along the ramp
 def resident_prompt(n : int64; salt : int64 = 0l) : array<int64> => <- ramp_ids(n, salt, 1000l, 37l, 5000l)
 

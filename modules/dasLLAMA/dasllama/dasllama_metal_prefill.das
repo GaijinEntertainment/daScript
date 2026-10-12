@@ -5852,7 +5852,7 @@ def private pf_kq_deep_stamps(fmt : KqFmt) : KqDeepStamps {
         enc_thdb = @@enc_kq_mm_k5_thdb_c, enc_thdb128 = @@enc_kq_mm_k5_thdb128_c)
 }
 
-def private pf_fmt_has_one_row_gemv(f : KqFmt; kdim : int64) : bool => f == KqFmt.q8 || (kq_sb(int(f)) && kdim % KQ_SB_ELEMS == 0l)
+def private pf_fmt_has_one_row_gemv(f : KqFmt; kdim : int64) : bool => f == KqFmt.q8 || (kq_sb(int(f)) && kq_fmt_gpu_supported(f) && kdim % KQ_SB_ELEMS == 0l)
 
 [arch(at="../ARCHITECTURE_GPU_PREFILL.md#prefill-last-row-tail")]
 def private pf_enc_narrow_gemv(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; woff : int64; bx, by, bk, bn : MetalBuffer?; kdim, d : int64) {

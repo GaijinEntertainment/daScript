@@ -144,8 +144,8 @@ pod: the step's host stamps under `DASLLAMA_GPU_PROF=1`, `PERF_LEDGER.md`'s 2026
 **The engine reaches the command through the driver seam, and falls back a row at a time.**
 `install_moe_gpu_resident_batch` installs the pair (`rdec_token_n`, `rdec_token_n_rows`) beside
 the resident driver, so a tier with no batch arm answers 0 rows. `rdec_batch_rows_at_once` gathers
-the step's residuals, rope rows, positions, counts and regions, submits once, reads each
-host-cached row's K/V back and lands its logits; it returns false when a row finds no region or
+the step's residuals, rope rows, positions, counts and regions, submits once a group of the rows
+the command steps at once, reads each host-cached row's K/V back and lands its logits; it returns false when a row finds no region or
 two rows share one, and the caller's row-at-a-time loop serves that step. `DASLLAMA_VK_NROW_BISECT`
 (`ENVIRONMENT.md`) drops a class of dispatch from the recorded command so a profile prices it; the
 logits are garbage under any bit.
@@ -157,9 +157,9 @@ that stream's region.** Row i is the round's token or draft i at position `pos +
 names the region's mirror base and state slot, the position and a cached count of `pos + i + 1`.
 The command stores every row's K/V before any row attends, and the count masks each row to the keys
 at or below its own position, so row i reads the rows the same command stored below it and never
-one above. The per-row planes hold the rows: where the driver homes a NextN head it sizes them at
-the larger of the region count and the verify's rows - the round's depth plus one, read at load
-(`get_mtp_depth`) - `RD_NB_MAX` capping both, so a verify of more rows passes to the CPU (`verify_rows`). The
+one above. The per-row planes hold `RD_NB_MAX` rows whatever the region count; where the driver
+homes a NextN head the verify takes up to the round's depth plus one of them, read at load
+(`get_mtp_depth`), `RD_NB_MAX` capping it, so a verify of more rows passes to the CPU (`verify_rows`). The
 command records once per row count and attention form (`RDec.v_cmd`, `v_cmd_unsplit`) - and, on
 a hybrid, per region, since the rollback copies it carries bake the region's slot
 (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-rollback`) - the rows' form the furthest row's,

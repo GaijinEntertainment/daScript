@@ -2586,6 +2586,7 @@ def private rope_store_pocket_gate(t : T?; var dev, queue) {
         let pk = mc |> out_words(cap * d, -7.0)
         let pv = mc |> out_words(cap * d, -7.0)
         if (invoke(run, mc.buf[px], mc.buf[pk], mc.buf[pv])) {
+            t |> success(abs(want_qkv[3] - qkv[3]) > 1e-3, "{tag}: the roped q row differs from its input at a rotated index (the in-place compare has teeth)")
             check_buf(t, "{tag} q", mc.buf[px], want_qkv, bar, Shape(row_width = d, head_width = dh))
             check_buf(t, "{tag} k", mc.buf[pk], want_k, bar, Shape(row_width = d, head_width = dh))
             check_buf(t, "{tag} v", mc.buf[pv], want_v, bar, Shape(row_width = d, head_width = dh))

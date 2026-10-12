@@ -288,15 +288,16 @@ The witness is `vk_rdec_prefill_segment_windows`; the driver counts a prefill a 
 
 ### The short window's peel {#vk-prefill-peel}
 
-A prefill of at most the rows the N-row token command steps at once (`vk_rdec_token_n_rows`;
-one row is the one-row command's) skips the window chain: `rdec_prefill_peel` embeds the rows on
-the host (the ids the embed gate stashed, or the rows `forward_prefill` embedded) and runs them
-through the token command with every row in the session's region at its own position, row i's
-key count its own position plus one, so a row never reads a row after it; the last row lands the
-session's logits, the rows before it land picks nobody reads. The window chain costs a short
-continuation about two decode steps whatever its row count (a one-row window on the 3B reads
-13 ms against a 6.5 ms step); the token command reads the weights once for the rows. The peel
-fits a chain with no recurrent state, side rows, wide residual, NextN head or host experts - what
-the token commands carry per region (`rdec_peel_fits`); the rest take the chain. The rows stay on
-the device as the chain leaves them, and the bookkeeping after either form is `rdec_prefill_landed`.
-The witness is `moe_gpu_resident_peels`; a peel counts as a served prefill too.
+A prefill of at most the rows the N-row token command steps at once (`vk_rdec_token_n_rows`; one
+row is the one-row command's) skips the window chain: `rdec_prefill_peel` embeds the rows on the
+host and runs them through the token command with every row in the session's region at its own
+position, row i's key count its position plus one, so a row never reads a row after it; the last
+row lands the session's logits, the rows before it land picks nobody reads. The chain costs a short
+continuation about two decode steps whatever its row count (a one-row window on the 3B reads 13 ms
+against a 6.5 ms step); the token command reads the weights once. The peel fits a chain with no
+recurrent state, side rows, wide residual, NextN head or host experts (`rdec_peel_fits`, logging
+the property that keeps a model off it once per armed model); the rest take the chain, as does
+every window under the lever `set_vulkan_prefill_peel_(false)`, which
+`harness/vk_short_window_race.das` races the two forms through. The rows stay on the device as the
+chain leaves them; `rdec_prefill_landed` is either form's bookkeeping; the witness is
+`moe_gpu_resident_peels`, a peel counting as a served prefill too.

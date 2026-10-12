@@ -101,6 +101,7 @@ def private rpst_flat_gate(t : T?; var dev, queue; f16dst : bool; hs, nheads, kv
         }
         return if (!ran)
         let heads = Shape(row_width = hs)
+        t |> success(abs(want_qk[3] - qk[3]) > 1e-3, "{tag}: the roped q row differs from its input at a rotated index (the in-place compare has teeth)")
         check_buf(t, "{tag} q", mc.buf[bqk], want_qk, BAR_FP, heads)
         if (f16dst) {
             check_buf_h(t, "{tag} k", mc.buf[bkd], want_k, BAR_F16, heads)

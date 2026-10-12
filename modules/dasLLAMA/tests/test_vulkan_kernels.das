@@ -2198,6 +2198,7 @@ def private rope_kv_arm(t : T?; f16, biased : bool) {
             var cls_q <- cp |> plane_run(pq)
             var m <- mirror_pair(cp, pkm, pvm, kvd, f16)
             let tag = "{f16 ? "rope_kv_f16" : "rope_kv_store"}{biased ? " with the q/k/v bias" : ""}"
+            t |> success(abs(ref.q[3] - qh[3]) > 1e-3, "{tag}: the roped q row differs from its input at a rotated index (the in-place compare has teeth)")
             check_rows(t, "{tag}, q", cls_q, ref.q, BAR_APPROX_CTRL, qd, hs)
             mirror_rows_check(t, tag, m, ref.k, ref.v, 0, kvd, kvd)
             delete cls_q

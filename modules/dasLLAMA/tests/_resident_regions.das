@@ -216,7 +216,6 @@ def cell_regions_wide_single_steps(t : T?; file : string) {
 
 //! of the last logits' max |logit|: the window chain at two window splits of one prompt reduces its attention in two orders,
 //! and the 0.5B's own device-vs-CPU rounding reads 0.30-0.50 of a 9.5-18 max logit (`test_gpu_resident_qwen2.das`'s bar)
-let private SPLIT_BAR_REL = 0.06
 
 def private prose_ids(n, salt : int64) : array<int64> => <- resident_prompt(n, salt)
 
@@ -1208,7 +1207,9 @@ def cell_regions_batched_groups(t : T?; file : string; rows : int64; bar : Logit
         with_regions_rig(t, file, RegionsLoad(regions = rows)) $(tr) {
             var prompts <- [for (i in range64(rows)); ramp_ids(40l + i, i, 1000l + 100l * i, 37l + 2l * i, 5000l)]
             var feeds <- [for (i in range64(rows)); ramp_ids(STEPS, i, 2000l, 53l, 4000l)]
+            let steps_alone0 = rdec_nrow_steps()
             var alone <- [for (i in range64(rows)); logits_alone(tr, prompts[i], feeds[i])]
+            t |> equal(rdec_nrow_steps() - steps_alone0, 0l, "the sessions alone stepped through the one-row command: the N-row counter's control")
             var sessions : array<Session>
             sessions |> reserve(rows)
             for (i in range64(rows)) {

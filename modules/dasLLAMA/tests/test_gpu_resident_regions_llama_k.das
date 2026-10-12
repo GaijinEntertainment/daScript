@@ -11,7 +11,8 @@ require _resident_regions
 // window, and past the unsplit position so the split attention form records. The rows hold the split bar with
 // the one-token-off control, not bit for bit: the N-row command's Q8_K sites round apart from the one-row
 // command's (`../followup_vulkan.md` item 75). Skips off the JIT, without DASLLAMA_GPU=1 on a device the driver
-// serves, or without the file under models_dir().
+// serves, without the file under models_dir(), or on a card whose room the plan does not fit at the regions a cell asks
+// (twelve for the groups cell).
 let private REGIONS_FILE = "Llama-3.2-1B-Instruct-Q4_K_M.gguf"
 
 [test]

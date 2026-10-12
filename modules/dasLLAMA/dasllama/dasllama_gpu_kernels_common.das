@@ -1686,7 +1686,7 @@ class template GkClampRows {
 }
 
 struct GkRopeKvArgs {
-    qd : uint          //! the q row's width
+    qd : uint          //! the q row's width; the k projection sits at `qd` of a ksrc row, the v projection at `qd + kvd` of a vsrc row
     kvd : uint         //! the k and v rows' width (the mirror row's)
     hs : uint
     npairs_q : uint    //! the q pairs of a row; the k pairs follow them
@@ -1694,14 +1694,11 @@ struct GkRopeKvArgs {
     neox : uint        //! the pair select: 0 = NORM (2j, 2j+1), else NEOX (j, j+half)
     has_bias : uint
     rot : uint         //! the rotated width of a head; the pairs past it copy through
-    koffe : uint       //! k's element base in a ksrc row
-    voffe : uint       //! v's element base in a vsrc row
     qrow : uint        //! a row's stride in qsrc
     kvrow : uint       //! a row's stride in ksrc and vsrc
-    boff : uint        //! the layer's [q | k | v] row base in bias
+    boff : uint        //! the layer's [q | k | v] row base in bias (read where the stamp binds the planes whole)
     cstride : uint     //! a row's stride in tcos and tsin (0: every row reads the one table row)
-    ccos : uint        //! the cos row's element base in tcos
-    csin : uint        //! the sin row's element base in tsin
+    ccos : uint        //! the cos row's element base in tcos; the sin row sits a half head past it (read where the stamp binds the planes whole)
     rows : uint        //! the rows a dispatch covers (0 reads as one)
     mirbase : uint     //! the layer's base in the mirror planes, ahead of a row's own (the Vulkan token block's; Metal binds the row)
 }
@@ -1712,15 +1709,16 @@ struct GkRopeKvArgs {
 [ |> template_struct_instance]
 class template GkRopeKvStore {
     @ssbo @binding = 0 @role = "readwrite" qsrc : array<float>       //! the q rows, roped in place
-    @ssbo @binding = 1 @role = "read" ksrc : array<float>            //! the rows the k projection sits in (`koffe`)
-    @ssbo @binding = 2 @role = "read" @off = "vsoff" vsrc : array<float>   //! ... and the v projection (`voffe`)
+    @ssbo @binding = 1 @role = "read" ksrc : array<float>            //! the rows the k projection sits in
+    @ssbo @binding = 2 @role = "read" @off = "vsoff" vsrc : array<float>   //! ... and the v projection
     @ssbo @binding = 3 @role = "write" @off = "koff" kd : array<KT>  //! the mirror K plane
     @ssbo @binding = 4 @role = "write" @off = "voff" vd : array<KT>  //! the mirror V plane
     @ssbo @binding = 5 @role = "weight" bias : array<float>          //! the [q | k | v] projection biases (dummy-bound without `has_bias`)
-    @ssbo @binding = 6 @role = "weight" @off = "toff" tcos : array<float>   //! the rope table's cos rows
-    @ssbo @binding = 7 @role = "weight" @off = "toff" tsin : array<float>   //! ... and sin rows (one plane on Vulkan, `csin` past the cos row)
+    @ssbo @binding = 6 @role = "read" @off = "toff" tcos : array<float>   //! the rope table's cos rows (the Vulkan command refills its plane a step)
+    @ssbo @binding = 7 @role = "read" @off = "toff" tsin : array<float>   //! ... and sin rows (one plane on Vulkan, a half head past the cos row)
     @kargs pa : GkRopeKvArgs
     @template_constant CLAMP16 : bool = true
+    @template_constant BOUND_VIEWS : bool = false   //!< the stamp binds the v projection, the bias row and the table rows at their offsets, so their element bases are zero
 
     //! one mirror K element, clamped into the half range on the f16 stamp
     def st_k(i : uint; v : float) {
@@ -1740,11 +1738,27 @@ class template GkRopeKvStore {
         }
     }
 
+    //! an element base inside a plane bound whole, or zero where the stamp binds the view at its offset
+    def base_in_plane(e : uint) : uint {
+        static_if (BOUND_VIEWS) {
+            return 0u
+        } else {
+            return e
+        }
+    }
+
+    //! the one-row form a kernel over `npairs` invocations takes: pair `gid` of row 0, the mirror rows bound at their own offsets
+    def rope_kv_one(gid : uint) {
+        if (gid < pa.npairs) {
+            rope_kv_pair(0u, gid, 0u, 0u)
+        }
+    }
+
     //! pair `lp` of row `row`: a q pair in place, a k pair into the mirror row at element `mirk` of kd and its v pair at `mirv` of vd
     def rope_kv_pair(row, lp, mirk, mirv : uint) {
         let isk = lp >= pa.npairs_q
         let lgid = isk ? lp - pa.npairs_q : lp
-        let half = pa.hs / 2u
+        let half = max(1u, pa.hs / 2u)
         let halfr = pa.rot / 2u
         let j = lgid % half
         let hbase = (lgid / half) * pa.hs
@@ -1752,23 +1766,24 @@ class template GkRopeKvStore {
         let i = pa.neox != 0u ? (pair_rotates ? hbase + j : hbase + pa.rot + (j - halfr)) : hbase + 2u * j
         let i2 = pa.neox != 0u ? (pair_rotates ? i + halfr : i + (half - halfr)) : i + 1u
         let cb = row * pa.cstride
-        let fcr = pair_rotates ? tcos[pa.ccos + cb + j] : 1.0
-        let fci = pair_rotates ? tsin[pa.csin + cb + j] : 0.0
+        let fcr = pair_rotates ? tcos[base_in_plane(pa.ccos) + cb + j] : 1.0
+        let fci = pair_rotates ? tsin[base_in_plane(pa.ccos + half) + cb + j] : 0.0
+        let boff = base_in_plane(pa.boff)
         if (isk) {
-            let kb = row * pa.kvrow + pa.koffe
-            let bk = pa.boff + pa.qd
+            let kb = row * pa.kvrow + pa.qd
+            let bk = boff + pa.qd
             let v0 = ksrc[kb + i] + (pa.has_bias != 0u ? bias[bk + i] : 0.0)
             let v1 = ksrc[kb + i2] + (pa.has_bias != 0u ? bias[bk + i2] : 0.0)
             st_k(mirk + i, v0 * fcr - v1 * fci)
             st_k(mirk + i2, v0 * fci + v1 * fcr)
-            let vb = row * pa.kvrow + pa.voffe
-            let bv = pa.boff + pa.qd + pa.kvd
+            let vb = row * pa.kvrow + base_in_plane(pa.qd + pa.kvd)
+            let bv = boff + pa.qd + pa.kvd
             st_v(mirv + i, vsrc[vb + i] + (pa.has_bias != 0u ? bias[bv + i] : 0.0))
             st_v(mirv + i2, vsrc[vb + i2] + (pa.has_bias != 0u ? bias[bv + i2] : 0.0))
         } else {
             let qb = row * pa.qrow
-            let v0 = qsrc[qb + i] + (pa.has_bias != 0u ? bias[pa.boff + i] : 0.0)
-            let v1 = qsrc[qb + i2] + (pa.has_bias != 0u ? bias[pa.boff + i2] : 0.0)
+            let v0 = qsrc[qb + i] + (pa.has_bias != 0u ? bias[boff + i] : 0.0)
+            let v1 = qsrc[qb + i2] + (pa.has_bias != 0u ? bias[boff + i2] : 0.0)
             qsrc[qb + i] = v0 * fcr - v1 * fci
             qsrc[qb + i2] = v0 * fci + v1 * fcr
         }

@@ -18,21 +18,22 @@ number the other twin binds it at.**
 
 **Kernel twins are written once: as stamps of one `class template`, as classes deriving one base
 shell, or - where the value that selects the difference is a run-time count - as one class whose
-body reads the count from its kargs.** Two classes with bodies of their own that share a base
-shell's method are not twins.
+body reads the count from its kargs; a twin's own body holds only what the selecting value
+changes, the shared guard and index arithmetic living in the template or the shell.**
 
 **A diff that adds a bit-for-bit compare, or changes text on the path one covers - two kernel
 bodies that compile to separate shader modules, which a cell under `modules/dasLLAMA/tests/`
-holds bit for bit against each other - spells as `mad` every multiply on that path that feeds an
-add, shared method or function text included.** A driver decides per shader module whether to
+holds bit for bit against each other - spells as `mad` every floating-point multiply on that path
+that feeds an add, shared method or function text included.** A driver decides per shader module whether to
 contract a multiply-add into one fma, so two bodies spelled alike round a ulp apart.
 
 **A value that no model file and no request can change - a tile width, a math constant, a cap
 fixed by the model architecture the class serves - which every dispatch site under `dasllama/`
 passes identically to one stamp never reaches that stamp through a per-dispatch argument channel
 (a uniform, a `@push_constant` field, a kargs field, an `@off` bind offset): stamp it into the
-class as a `@template_constant` where the class's stamps differ on it, or write it as a literal or
-a module `let` in the body - never a module `var`.**
+class as a `@template_constant` where the class's stamps differ on it, pass it as a literal
+argument of the shared method the stamp's kernel calls, or write it as a literal or a module `let`
+in the body - never a module `var`.**
 
 **A stamp sets only `@template_constant`s its own compiled body reads: a `static_if` arm, a
 `@template_gate`, an expression, a loop bound, an array extent.** A constant
@@ -66,19 +67,20 @@ shell they derive from, gives the class a `//!` line above its `[metal_dispatch]
 `[vk_dispatch]` declaration naming the body difference that keeps it out of that template or
 shell.**
 
-**A diff that moves a standalone kernel class onto a template both homes stamp
-(`dasllama/dasllama_gpu_kernels_common.das`) gives the class a `//!` line above its declaration
-naming the template it joined.**
+**A diff that makes a kernel class stamp or derive a template both homes stamp
+(`dasllama/dasllama_gpu_kernels_common.das`), which it did not before, gives the class a `//!`
+line above its declaration naming the template it joined.**
 
 **A diff that adds or changes a `[metal_dispatch]` / `[vk_dispatch]` binding that no site writes
 after arming - a binding filled before the first encode and never written again - puts
 `@role = "weight"` on a field at that binding.**
 
 **`@role = "weight"` on per-encode data the kernel reads - a pooled buffer the host refills
-each encode - is a defect; a per-encode field either omits `@role` or names the access its body
-performs.** The Metal builder records no hazard for a `weight` field, so nothing orders the
-kernel's read after the encode that refilled the buffer; neither lens refuses a `weight` field
-the body only reads.
+each encode - is a defect, judged per stamp by the buffer its dispatch sites bind; a per-encode
+field either omits `@role` or names the access its body performs.** `weight` means never written
+during a step on either home: the Metal builder records no hazard for it and the Vulkan lens
+leaves its ordering to the bits a site passes by hand, so nothing orders the kernel's read after
+the encode that refilled the buffer; neither lens refuses a `weight` field the body only reads.
 
 A new census key is a kernel name that `modules/dasLLAMA/tests/test_kernel_coverage.das` counts,
 that an init of the engine's Metal or Vulkan driver compiles at run time, and that the pre-change

@@ -1491,6 +1491,16 @@ def set_resident_prefill_allowed_(allowed : bool) {
 
 def resident_prefill_allowed_() : bool => g_resident_prefill_allowed
 
+var private g_vulkan_prefill_peel = true   //! the short window's peel through the token commands; off = every window takes the chain (the A/B lever)
+
+//! The short window's peel on or off (`ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-prefill-peel`); the window chain serves every window with it off
+def set_vulkan_prefill_peel_(on : bool) {
+    g_vulkan_prefill_peel = on
+    to_log(LOG_INFO, "dasLLAMA: set_vulkan_prefill_peel({on}) - the short window's peel through the token commands ({on ? "on" : "off: every window takes the chain"})\n")
+}
+
+def vulkan_prefill_peel_() : bool => g_vulkan_prefill_peel
+
 // Bulk-hydrate the session's host KV from the live rows of the mirror region it owns — the rail that
 // keeps host KV authoritative at rest after device-resident prefills/decodes.
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head")]   // the continuation/steal/drop rail, not the steady-state token path
@@ -3195,6 +3205,8 @@ def private resident_hot_arm(t : Model; plan : ResidentPlan) {
     g_rdec_hot |> clear()
     g_rdec_hot_slots = 0l
     g_rdec_hot_declined |> clear()
+    g_rdec_seg_declined |> clear()
+    g_rdec_peel_declined |> clear()
     g_rdec_hot_hits = 0l
     g_rdec_hot_picks = 0l
     g_rdec_hot_uploads = 0l
@@ -3732,17 +3744,17 @@ var private g_rdec_seg_declined : table<string>
 
 [cold_path]
 def private rdec_segs_declined(why : string) {
-    return if (key_exists(g_rdec_seg_declined, why))
-    g_rdec_seg_declined |> insert(why)
-    to_log(LOG_INFO, "dasLLAMA: resident segmented prefill passed a call - {why} (said once per reason)\n")
+    rdec_said_once(g_rdec_seg_declined, "segmented prefill passed a call - {why}")
 }
 
 def private rdec_segs_admitted(segs : array<PrefillSeg>; ids : bool) : bool {
     for (sg in segs) {
         let s = sg.s
-        if (mtp_verify_window_active(*s) || (!g_resident_prefill_allowed && !s.device_kv) || !rdec_session_codec_ok(*s)
-                || s.attn_uniform_end != 0l || sg.start_pos + sg.npos > g_rdec_cap || s.embed_gpu_pending != ids) {
-            rdec_segs_declined("a segment the one-session form would pass too, or the segments' embed forms differ")
+        let why = (mtp_verify_window_active(*s) ? "a segment inside the speculative verify window" : (!g_resident_prefill_allowed && !s.device_kv) ? "a host-cached segment under the prefill pin"
+            : !rdec_session_codec_ok(*s) ? "a segment's session on another K/V codec than the mirror" : s.attn_uniform_end != 0l ? "a segment with a media span"
+            : sg.start_pos + sg.npos > g_rdec_cap ? "a segment past the region's context" : s.embed_gpu_pending != ids ? "the segments' embed forms differ" : "")
+        if (!empty(why)) {
+            rdec_segs_declined(why)
             return false
         }
     }
@@ -3981,9 +3993,28 @@ def moe_gpu_resident_peels() : int64 => g_rdec_peels
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-prefill-peel")]
 def private rdec_peel_fits(t : Model; s : Session; npos : int64) : bool {
+    return false if (!g_vulkan_prefill_peel || !(npos == 1l || npos <= rdec_token_n_rows()))
     let c = t.config
-    return false if (c.recr_mask != 0ul || c.hyper_conn || has_ple(c) || c.n_layer_nextn > 0l || g_rdec_experts_host || s.ple_gpu_pending)
-    return npos == 1l || npos <= rdec_token_n_rows()
+    let why = (c.recr_mask != 0ul ? "a recurrent model" : c.hyper_conn ? "a hyper-connection chain" : has_ple(c) ? "a per-layer-embedding model"
+        : c.n_layer_nextn > 0l ? "a NextN-headed model" : g_rdec_experts_host ? "routed experts on the host" : s.ple_gpu_pending ? "a pending side-row pre-step" : "")
+    return true if (empty(why))
+    rdec_peel_declined(why)
+    return false
+}
+
+var private g_rdec_peel_declined : table<string>
+
+[cold_path]
+def private rdec_peel_declined(why : string) {
+    rdec_said_once(g_rdec_peel_declined, "the short window takes the chain, not the token command's peel - {why}")
+}
+
+//! `line` logged once per armed model under `said`, the set the arm clears
+[cold_path]
+def private rdec_said_once(var said : table<string>; line : string) {
+    return if (key_exists(said, line))
+    said |> insert(line)
+    to_log(LOG_INFO, "dasLLAMA: resident {line} (said once per armed model)\n")
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-prefill-peel")]
@@ -4232,7 +4263,7 @@ def private vulkan_resident_batch_decode_go(t : Model; ws : BatchWorkspace; var 
     if (dasllama_noisy()) {
         to_log(LOG_INFO, "dasLLAMA: resident batch decode engaged ({nrows} streams)\n")   // nolint:PERF026,PERF028 — noisy-gated diagnostics
     }
-    // the N-row command takes a region a row: a plan short of the rows (one region under a verify-widened nb) steps them one at a time
+    // the N-row command takes a region a row: a plan short of the rows steps them one at a time
     if (nrows > 1l && long_length(g_rdec_regions) >= nrows && rdec_token_n_rows() >= 2l && rdec_batch_rows_at_once(t, ws, sessions, nrows)) {
         return true
     }

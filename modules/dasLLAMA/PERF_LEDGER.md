@@ -5341,11 +5341,13 @@ probe alone, no box profile applied; the Vulkan box ran it under `DASLLAMA_GPU=1
 
 ### From the llama leg's parity gaps (2026-10-12, RunPod RTX PRO 4500 Blackwell 32 GB and Apple M5 Max)
 
-- **The decode rope-and-store on one template costs the Vulkan step 0.7%.** Llama-3.2-3B Q4_K_M on the pod, the
-  `-jit` bench form, two runs an arm: tg128 252.0 / 252.0 tok/s before the fold (`RopeKvStore` with its own body),
-  250.3 / 250.4 after (`GkRopeKvStore`'s `rope_kv_pair`, the partial-rotation cover and the per-row table stride in
-  the shared body), each at +-0.1; pp512 13830 against 13874 / 13824, within the rep noise. On the M5 the fold reads
-  pp512 within 0.3% and tg128 rep for rep the same (205 tok/s, +-8.5 on both arms - the box's own spread).
+- **The decode rope-and-store on one template leaves the Vulkan step where it was.** Llama-3.2-3B Q4_K_M on the pod,
+  the `-jit` bench form with the GPU profile on, two alternated rounds an arm on a warm card: tg128 227.8 / 227.6 tok/s
+  before the fold (`RopeKvStore` with its own body), 227.4 / 227.7 after (`GkRopeKvStore`'s `rope_kv_pair`, the
+  partial-rotation cover and the per-row table stride in the shared body), the rope stamp 113 -> 115 us a token over
+  28 layers; a first pair of runs separated by a rebuild read 252.0 against 250.3, the card's clock state between
+  builds, not the kernel. On the M5 the fold reads pp512 within 0.3% and tg128 rep for rep the same (205 tok/s, +-8.5
+  on both arms - the box's own spread).
 - **A short window on the Vulkan chain costs about two decode steps whatever its row count.** The probe's one-session
   continuation after a 40-row prompt on the 3B: a window of 1 / 2 / 4 / 8 / 16 rows reads 13.4 / 13.4 / 13.4 / 11.9 /
   11.8 ms, 32 rows 11.0, 64 rows 14.6; the same rows stepped one at a time 6.5 ms a row (a host-cached session, the
@@ -5353,6 +5355,13 @@ probe alone, no box profile applied; the Vulkan box ran it under `DASLLAMA_GPU=1
   (`ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-prefill-peel`) routes a window of at most the N-row command's rows through the
   token command: the same probe then reads 6.5 / 6.9 / 7.0 / 7.4 ms at 1 / 2 / 4 / 8 rows - one decode step - and the
   chain's 11.8 ms from 16 rows up.
+- **The one-row decode's attention split follows the command's rows, and the house replay's tool call on the pod reads
+  0.54 -> 0.39 s.** `rd_layer_pieces` divided the SM wave by the per-row planes' height - the region count before this
+  leg, eight after - so the one-row command split a head's keys into a quarter, then an eighth, of the pieces that fill the
+  card: the house probe (Llama-3.2-3B Q4_K_M, 4 regions, the GPU profile on, `DAS_LOG_LEVEL=info`) read the decode
+  attention at 2220 us a token on the base, 3780 with the planes at eight, 1274 with the wave over the command's own rows
+  (the step 6232 -> 7792 -> 5295 us; prompts of 4000 to 6000 tokens, 55 to 5900 cached); the tool-call whole-call median
+  0.540 -> 0.482 -> 0.385 s. The short-context bench never saw it: at 128 keys the attention is 3% of the step.
 - **The house probe on the M5's M4 arm reads the branch the same as its base** (the quick probe, 22 turns, alone
   then pair, two alternated rounds, Llama-3.2-3B Q4_K_M): alone wall 0.37 / 0.45 s on the base and 0.36 / 0.40 on
   the branch, pair 0.75 / 0.91 against 0.78 / 0.82, the pair's throughput share x0.91 / x1.00 against x0.87 / x0.93 -

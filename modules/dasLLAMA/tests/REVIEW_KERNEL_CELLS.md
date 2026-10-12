@@ -37,7 +37,8 @@ own reference is never its control.
 
 **A diff that changes a kernel's dispatch grid (the count its dispatch needs, or its workgroup
 size) or its kargs (the struct, any buffer binding, or the layout of a struct a bound buffer holds)
-updates every gate that dispatches that kernel, in the same change.** A gate left on the old count
+leaves no gate dispatching that kernel whose count, binds or kargs values the change made wrong, in
+the same change.** A gate left on the old count
 dispatches the wrong shape with no error; a stale kargs gate reads the wrong buffer and passes on
 garbage that happens to compare.
 
@@ -72,6 +73,11 @@ cell that already does.** A cell that dispatches a sibling stamp - another stamp
 same class - counts only when no constant or method either stamp overrides appears in the moved
 path. At every value the change left where it was the kernel computes what it did before, so a
 cell that dispatches only those values passes whether the change is right or wrong.
+
+**A diff that adds a kargs field to a `[vk_dispatch]` or `[metal_dispatch]` class, or gives one a
+new meaning, so that it moves which elements a stamp reads or writes, ships a kernel-unit cell
+that dispatches the stamp at a non-default value of that field.** At the default every read and
+write sits where it did, so a cell at the default alone passes whether the offset is right or wrong.
 
 **A diff that adds a `[vk_dispatch]` or `[metal_dispatch]` class ships a kernel-unit cell that
 dispatches it on every path its body has.** A path no cell reaches is one a merge can drop and

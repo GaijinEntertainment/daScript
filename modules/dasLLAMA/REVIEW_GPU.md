@@ -174,13 +174,12 @@ carries one of the same class; a diff that removes one deletes its entry; in the
 same path served faster or slower is not a behavior; a pin or knob is a setter or environment
 variable that changes what a run selects or computes.
 
-**A diff that adds a serving capability on one GPU home - a prefill or decode form (a segmented
-window, a batched or same-slab step, a short-window peel), a K/V cache feature (a codec, a prefix
-share, a paged adoption), or a scheduler path the backend decides - for a model family the other
-home serves lands it on that home in the same change; where that home cannot hold it, the change
-lands, instead, its `ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries` entry naming what stops the
-home and a `followup_<home>.md` row; a PR body deferring the other home is a defect.** A capability
-one home has makes a served model's behavior depend on the box it runs on.
+**A diff that adds or extends, for one GPU backend (Metal or Vulkan), a prefill or decode form, a
+K/V cache feature or a scheduler path the backend decides, where the other backend serves the same
+model family, lands the other backend's form that serves the same calls in the same change or
+names it in the PR body; where the other backend has none and cannot hold one, the change lands
+its `ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries` entry naming what stops it.** A capability
+one backend has makes a served model's behavior depend on the box it runs on.
 
 **A change that can alter what a GPU decode or prefill call on a session computes or selects ships
 GPU-vs-CPU parity on one q8 model, one K-quant model, and one model of a format outside both, for
@@ -259,7 +258,9 @@ own forward-only guard never runs.
 
 **A module-level variable in a GPU driver file whose value derives from a loaded model's weights,
 or names, sizes or points at device content built from a loaded model (a served model, a draft
-or tower model, a TTS voice), gets a model-swap discharge in the same change that adds it: a path
+or tower model, a TTS voice), and which a later call reads before that call writes it - a
+said-once reason set included, a scratch every call fills before it reads excluded - gets a
+model-swap discharge in the same change that adds it: a path
 the unload or reload of that model runs that returns the variable to its no-model value.** The
 discharge paths: for a Vulkan driver file, a reset `moe_gpu_model_marks_restore_` or
 `moe_gpu_drop_model_` runs - in its body, or in a listener the file registers with
@@ -289,7 +290,8 @@ decided, so a mint-time read bakes a verdict the drivers do not share.
 **A diff that gives a per-format pick that maps a weight format to a Metal pipeline or
 builder - a dispatch ladder, a table row, a picker function - an arm for a weight format adds that
 format to `kq_fmt_gpu_supported`, or, for an expert plane, to `moe_fmt_metal_served` (both
-`dasllama/dasllama_metal_shapes.das`), in the same change.** Those predicates are what declines
+`dasllama/dasllama_metal_shapes.das`), in the same change; an arm admitting a whole class of
+formats (every superblock format) ANDs that predicate into its own.** Those predicates are what declines
 an unserved format, so an unlisted format decodes under whatever the pick's default arm holds.
 
 **A diff that gives the Metal PLE (per-layer embedding) token-table gather a weight format makes

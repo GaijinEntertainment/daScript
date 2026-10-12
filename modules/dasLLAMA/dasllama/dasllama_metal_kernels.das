@@ -841,7 +841,7 @@ class MetalSqAttnComb : MetalSqAttnCombT {
 
 // The fused QKV GEMV + rope + KV-row store, one THREADGROUP per rope pair — rows adjacent
 // (2p, 2p+1) under NORM, (r, r+hs/2) in-head under NEOX — reduction split across the 4 sgs
-// (the MetalQ8Gemv discipline); KT/CLAMP16 = the mirror codec axis (the MetalRopeStoreKvT shape).
+// (the MetalQ8Gemv discipline); KT/CLAMP16 = the mirror codec axis (the GkRopeKvStore stamps' shape).
 [ |> template_struct_instance]
 class template MetalQ8GemvQkvRsT {
     @ssbo @binding = 0 @role = "weight" @off = "wqoff" wqbq : array<int8>   // wq blob, byte view @ the q tensor's byte offset
@@ -1364,36 +1364,30 @@ class MetalPreAddRms : MetalTgReduceBase {
 }
 
 
-//! The fused rope and K/V store at one row, on the template both homes stamp (`GkRopeKvStore`): the q and k projections in the
-//! one QKV buffer (ksrc its second view, vsrc its view at the v offset), the mirror K and V rows bound at their (layer, pos)
-//! offsets, this position's rope row bound at its offset.
+//! The fused rope and K/V store at one row, the f16-mirror stamp of the template both homes stamp (`GkRopeKvStore`): the q and
+//! k projections in the one QKV buffer (ksrc its second view, vsrc its view at the v offset), the mirror K and V rows bound at
+//! their (layer, pos) offsets, this position's rope row bound at its offset.
 [metal_dispatch(name = "enc_rpst16_c", pso = "g_pso_rpst16", tg = 64, grid = "npairs/64", params = "npairs : int64")]
 class MetalRopeStoreF16 : GkRopeKvStore {
     typedef KT = float16
+    override BOUND_VIEWS = true
 
     [metal_kernel]
     def metal_rope_store {
-        let gid = gl_GlobalInvocationID.x
-        if (gid >= pa.npairs) {
-            return
-        }
-        rope_kv_pair(0u, gid, 0u, 0u)
+        rope_kv_one(gl_GlobalInvocationID.x)
     }
 }
 
-// f32-mirror twin — straight stores, no clamp.
+//! the f32-mirror stamp of `GkRopeKvStore`: straight stores, no clamp
 [metal_dispatch(name = "enc_rpst32_c", pso = "g_pso_rpst32", tg = 64, grid = "npairs/64", params = "npairs : int64")]
 class MetalRopeStoreF32 : GkRopeKvStore {
     typedef KT = float
     override CLAMP16 = false
+    override BOUND_VIEWS = true
 
     [metal_kernel]
     def metal_rope_store {
-        let gid = gl_GlobalInvocationID.x
-        if (gid >= pa.npairs) {
-            return
-        }
-        rope_kv_pair(0u, gid, 0u, 0u)
+        rope_kv_one(gl_GlobalInvocationID.x)
     }
 }
 
@@ -4230,7 +4224,7 @@ def enc_kq_rows_half(enc : MetalComputeEncoder?; fmt : KqFmt; bq : MetalBuffer?;
 //! offset, one row, every base in the bound buffers
 def rope_store_args(qd, kvd, hs, npairs_q, npairs : int64; neox, has_bias : bool; rot : int64) : GkRopeKvArgs
     => GkRopeKvArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), npairs_q = uint(npairs_q), npairs = uint(npairs),
-        neox = neox ? 1u : 0u, has_bias = has_bias ? 1u : 0u, rot = uint(rot), koffe = uint(qd), rows = 1u)
+        neox = neox ? 1u : 0u, has_bias = has_bias ? 1u : 0u, rot = uint(rot), rows = 1u)
 
 //! toff = the position's row in the rope tables (0 where the caller binds the row's own buffer); vsoff = v's byte offset in the one QKV buffer.
 def enc_rope_store(enc : MetalComputeEncoder?; f16 : bool; bqkv : MetalBuffer?; vsoff : uint64;

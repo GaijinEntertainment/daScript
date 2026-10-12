@@ -27,16 +27,14 @@ require _resident_feed
 // the call whole and the engine runs each session alone (the pass counted once a session, the counter unmoved), every
 // row still within the bar of the device-prefilled references. Never more live host-cached sessions than regions: a
 // later prefill would take a live session's region, which the engine leaves to the scheduler's pin.
-// Every cell skips off the JIT, without DASLLAMA_GPU=1 on a device the driver serves, or without its file under
-// models_dir().
+// Every cell skips off the JIT, without DASLLAMA_GPU=1 on a device the driver serves, without its file under
+// models_dir(), or on a card whose room the plan does not fit at two regions.
 
 [init]
 def private allow_cpu_prefill_intent() {
     allow_cpu_prefill()   // the decline cell's pinned chunks prefill on the CPU by design
 }
 
-//! of the step's max |logit|: the regions rig's split bar - the window's GEMMs split k by the row count, so two row counts round apart
-let private SPLIT_BAR_REL = 0.06
 let private OPEN_ROWS = 40l
 let private TAIL_A = 23l
 let private TAIL_B = 31l
@@ -137,6 +135,7 @@ def private segments_cell(t : T?; tr : Model) {
     open_session(tr, rb, open_b)
     let w0 <- [ <- logits_of(ra, tr.config.vocab_size), <- logits_of(rb, tr.config.vocab_size)]
     rows_within_control(t, "the openings as one window", g0, w0, SPLIT_BAR_REL, 1l, 1.0, $(r) => r == 0l ? "session A's last row (B's as the control)" : "session B's last row")
+    log_argmax_rows(tr, "the openings as one window: the solo rows, then the segmented rows", g0, w0)
     served_every_call(t)
     delete ra
     delete rb
@@ -158,12 +157,15 @@ def private decline_cell(t : T?; tr : Model) {
         sess |> push(unsafe(addr(sessions[i])))
     }
     let sw0 = segment_windows()
+    let pf0 = moe_gpu_resident_prefills()
     let pinned = pass_count("pinned_off")
+    let allowed = resident_prefill_allowed()
     set_resident_prefill_allowed(false)
     eval_segments_(tr, sess, opens)
-    set_resident_prefill_allowed(true)
+    set_resident_prefill_allowed(allowed)
     sess |> clear()
     t |> equal(segment_windows() - sw0, 0l, "under the prefill pin the sessions rode no segmented window")
+    t |> equal(moe_gpu_resident_prefills() - pf0, 0l, "... and the driver counted no prefill (the served cells' counter's control)")
     t |> equal(pass_count("pinned_off") - pinned, 2l, "the engine ran each session alone, each passed to the CPU rails as pinned off")
     //! the steps on both sessions before any reference session takes a region: two live host-cached sessions a region each
     var got : array<array<array<float>>>
@@ -177,6 +179,7 @@ def private decline_cell(t : T?; tr : Model) {
         open_session(tr, ref, opens[i])
         var inscope want <- steps_after(tr, ref, toks)
         hold_rows(t, "session {i} prefilled alone after the decline", got[i], want)
+        log_argmax_rows(tr, "session {i}: the device-prefilled reference, then the pinned-off form", got[i], want)
         delete ref
     }
     delete got

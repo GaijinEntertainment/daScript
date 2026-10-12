@@ -179,8 +179,9 @@ difference for a logits compare; with a raw-id fixture and no tokenizer, the ids
 a side.** A failure, or a pass that looks wrong, must be readable in the log, not only as an id or
 float difference.
 
-**A size, depth, or row count that a cell's name, a comment inside the cell or in a helper it
-calls, or an assert's text claims about what the cell exercises, and that the cell does not pass
+**A size, depth, or row count that a cell's name, a comment inside the cell, on the `[test]`
+function that runs it or in a helper it calls, or an assert's text claims about what the cell
+exercises, and that the cell does not pass
 as a literal argument to the kernel or function under test that it itself dispatches or calls, is
 asserted in that cell by an assert on the count.** A cap, a resize, or a counter asserted to show
 a route ran is not evidence the number was reached; a device's geometry (subgroup width, SM count)
@@ -228,8 +229,9 @@ environment, by setting the knob right before the spawn and restoring the previo
 after (unsetting it if it was unset).** A set after that process starts is invisible to a config
 already read.
 
-**A cell whose claim depends on an environment-read knob its own process has already read names
-that knob's value in the text a red prints - the cell label or the assert.**
+**A cell that picks its bar, its route or its expected value by an environment-read knob its own
+process has already read - a skip gate on the knob is no such pick - names that knob's value in
+the text a red prints - the cell label or the assert.**
 
 **A diff that adds or loosens (lets pass an input the old assert failed) a bound assert in a cell
 that is not a kernel-unit cell, or moves one onto another route, lane or backend, ships in the
@@ -240,12 +242,13 @@ nothing has exceeded where it is applied is not known to discriminate there.
 
 **A diff that adds, in a cell that is not a kernel-unit cell, an assert on a counter showing a
 route ran ships in the same change a control under which the route does not run and the counter
-stays at its value from before the route.** A counter that rises on both legs shows nothing about
-the route.
+stays at its value from before the route - its own, or an existing one for the same counter in a
+cell the same file runs.** A counter that rises on both legs shows nothing about the route.
 
 **A control for a bound assert in a cell that is not a kernel-unit cell changes an input the
 computation reads - a zeroed weight region, a poisoned input element, a mechanism disabled - and
-re-runs the compare; a value added to the output after the fact is not one.**
+re-runs the compare, or holds the output against the reference computed over inputs one row off
+(the row one step off); a value added to the output after the fact is not one.**
 
 **A float compare against a bar that a diff adds, changes, moves or extracts into a helper reads a
 NaN in the output, the reference, or their difference as outside the bar: it passes on
