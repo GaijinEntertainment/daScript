@@ -875,7 +875,7 @@ Coverage of per-iteration `finally` semantics across every loop form. Each cell 
 
 | File | Description | Expects errors |
 |---|---|---|
-| all_matches.das | match/multi_match/static_match on enums, variants, structs, tuples | |
+| all_matches.das | match/static_match on enums, variants, structs, tuples | |
 | test_match_edge.das | Match edge cases - nested, empty struct, wildcard, bindings, guards | |
 
 ## module_tests/

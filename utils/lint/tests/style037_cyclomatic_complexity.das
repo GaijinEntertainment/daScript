@@ -111,22 +111,22 @@ def bad_recover(x : int) : int {                        // STYLE037
 // match arms expand to plain if-chains -> each arm is a decision
 def bad_match(x : int) : int {                          // STYLE037
     match (x) {
-        if (1) {
+        1 => $ {
             return 10
         }
-        if (2) {
+        2 => $ {
             return 20
         }
-        if (3) {
+        3 => $ {
             return 30
         }
-        if (4) {
+        4 => $ {
             return 40
         }
-        if (5) {
+        5 => $ {
             return 50
         }
-        if (6) {
+        6 => $ {
             return 60
         }
     }

@@ -202,25 +202,13 @@ def getT(var st : TokenStream; result : Result) : string {
 }
 
 def func_call_length(var st : TokenStream; result : Result) : Result {
-    match (result.tinfo) {
-        if (TypeInfo(dimSize = $v(dim)) && (dim != 0u)) {
-            let idim = result.tinfo |> get_dim(int(result.tinfo.dimSize - 1u))
-            return <- Result(int64(idim))
-        }
-        if (TypeInfo(basicType = Type.tString)) {
-            let pstr = unsafe(reinterpret<string?>(getPD(st, result)))
-            return <- Result(long_length(*pstr))
-        }
-        if (TypeInfo(basicType = Type.tArray)) {
-            let parr = unsafe(reinterpret<DapiArray?>(getPD(st, result)))
-            return <- Result(int64(parr.size))
-        }
-        if (TypeInfo(basicType = Type.tTable)) {
-            let ptab = unsafe(reinterpret<DapiTable?>(getPD(st, result)))
-            return <- Result(int64(ptab.size))
-        }
+    return match (result.tinfo) {
+        TypeInfo(dimSize = dim) && dim != 0u => Result(int64(result.tinfo |> get_dim(int(dim - 1u))))
+        TypeInfo(basicType = Type.tString) => Result(long_length(*unsafe(reinterpret<string?>(getPD(st, result)))))
+        TypeInfo(basicType = Type.tArray) => Result(int64(unsafe(reinterpret<DapiArray?>(getPD(st, result))).size))
+        TypeInfo(basicType = Type.tTable) => Result(int64(unsafe(reinterpret<DapiTable?>(getPD(st, result))).size))
+        _ => st |> eval_error("unsupported length for type {result.tinfo.basicType}")
     }
-    return st |> eval_error("unsupported length for type {result.tinfo.basicType}")
 }
 
 def func_call(var st : TokenStream; name : string; arg : Result) : Result {
@@ -231,16 +219,14 @@ def func_call(var st : TokenStream; name : string; arg : Result) : Result {
 def expr_value(var st : TokenStream) : Result {
     let token = token(st)
     match (token) {
-        if (Token(invalid = _)) {
+        Token(invalid = _) => $ {
             return st |> syntax_error("invalid token {token}, expecting number or (")
         }
-        if (Token(eos = _)) {
+        Token(eos = _) => $ {
             return st |> syntax_error("unexpected end of stream")
         }
-        if (Token(number = $v(value))) {
-            return <- Result(value)
-        }
-        if (Token(ident = $v(name))) {
+        Token(number = value) => $ { return <- Result(value) }
+        Token(ident = name) => $ {
             var ntoken = token(st)
             if (ntoken ?as punkt ?? 0 == '(') {
                 let arg = expr(st);
@@ -255,12 +241,12 @@ def expr_value(var st : TokenStream) : Result {
             if (st.names |> key_exists(name)) return st.names |> get_value(name)
             return st |> eval_error("unknown variable {name}")
         }
-        if (Token(punkt = '(')) {
+        Token(punkt = '(') => $ {
             var res = expr(st);
             if (token(st) ?as punkt ?? 0 != ')') return st |> syntax_error("expecting )")
             return <- res
         }
-        if (Token(punkt = $v(any))) return st |> syntax_error("unexpected character {to_char(any)}, expecting number or (")  // nolint:STYLE005 (qmatch macro expansion)
+        Token(punkt = any) => $ { return st |> syntax_error("unexpected character {to_char(any)}, expecting number or (") }
     }
     return st |> syntax_error("unexpected token {token}, expecting number or (")
 }
@@ -319,24 +305,13 @@ def expr_field(var st : TokenStream) : Result {
     if (token ?as punkt ?? 0 == '.') {
         let field = token(st)
         if (field is ident) {
-            var oti : tuple<offset : int; tinfo : TypeInfo>
-            oti.offset = -1
-            match (result.tinfo) {
-                if (TypeInfo(dimSize = $v(dimSize)) && (dimSize != 0u)) {
-                    return st |> eval_error("can't access field of array")
-                }
-                if (TypeInfo(basicType = Type.tStructure)) {
-                    oti = getStructFieldOffset(st, field as ident, result)
-                }
-                if (TypeInfo(basicType = Type.tTuple)) {
-                    oti = getTupleFieldOffset(st, field as ident, result)
-                }
-                if (TypeInfo(basicType = $v(bt)) && (getVectorElementCount(bt) != 0)) {
-                    oti = getVectorOffset(st, field as ident, result)
-                }
-                if (TypeInfo(basicType = Type.tHandle)) {
-                    oti = getHandleFieldOffset(st, field as ident, result)
-                }
+            if (result.tinfo.dimSize != 0u) return st |> eval_error("can't access field of array")
+            let oti = match (result.tinfo.basicType) {
+                Type.tStructure => getStructFieldOffset(st, field as ident, result)
+                Type.tTuple => getTupleFieldOffset(st, field as ident, result)
+                Type.tHandle => getHandleFieldOffset(st, field as ident, result)
+                bt && getVectorElementCount(bt) != 0 => getVectorOffset(st, field as ident, result)
+                _ => (offset = -1, tinfo = TypeInfo(uninitialized))
             }
             if (oti.offset < 0) return st |> eval_error("unknown field {field} in type {result.tinfo.basicType}")
             let newData = getPD(st, result, oti.offset)
@@ -413,22 +388,12 @@ def expr_at(var st : TokenStream) : Result {
         let eindex = expr(st);
         if (token(st) ?as punkt ?? 0 != ']') return st |> syntax_error("expecting ]")
         var nresult : Result
-        match (result.tinfo) {
-            if (TypeInfo(basicType = Type.tString, dimSize = 0u)) {
-                nresult = opDimString(st, st |> getI(eindex), result)
-            }
-            if (TypeInfo(basicType = Type.tArray, dimSize = 0u)) {
-                nresult = opArray(st, st |> getI(eindex), result)
-            }
-            if (TypeInfo(basicType = Type.tTable, dimSize = 0u)) {
-                nresult = opTable(st, eindex, result)
-            }
-            if (TypeInfo(dimSize = 0u)) {
-                return st |> eval_error("can't index non-array")
-            }
-            if (_) {
-                nresult = opDim(st, st |> getI(eindex), result)
-            }
+        match (result.tinfo.basicType, result.tinfo.dimSize) {
+            (Type.tString, 0u) => $ { nresult = opDimString(st, st |> getI(eindex), result) }
+            (Type.tArray, 0u) => $ { nresult = opArray(st, st |> getI(eindex), result) }
+            (Type.tTable, 0u) => $ { nresult = opTable(st, eindex, result) }
+            (_, 0u) => $ { return st |> eval_error("can't index non-array") }
+            _ => $ { nresult = opDim(st, st |> getI(eindex), result) }
         }
         result = nresult
         token = token(st)
@@ -440,19 +405,15 @@ def expr_at(var st : TokenStream) : Result {
 def expr_unary(var st : TokenStream) : Result {
     let token = token(st)
     match (token) {
-        if (Token(punkt = '+')) {
-            return Result(st |> getI(expr_unary(st)))
+        Token(punkt = '+') => $ { return Result(st |> getI(expr_unary(st))) }
+        Token(punkt = '-') => $ { return Result(-st |> getI(expr_unary(st))) }
+        Token(punkt = '~') => $ { return Result(~st |> getI(expr_unary(st))) }
+        Token(punkt = '!') => $ { return Result(st |> getI(expr_unary(st)) == 0l) }
+        _ => $ {
+            unput(st, token)
+            return expr_at(st)
         }
-        if (Token(punkt = '-')) {
-            return Result(-st |> getI(expr_unary(st)))
-        }
-        if (Token(punkt = '~')) {
-            return Result(~st |> getI(expr_unary(st)))
-        }
-        if (Token(punkt = '!')) return Result(st |> getI(expr_unary(st)) == 0l)  // nolint:STYLE005 (qmatch macro expansion)
     }
-    unput(st, token)
-    return expr_at(st)
 }
 
 def try_accept_punkt(var st : TokenStream; punkt : int) {

@@ -273,7 +273,7 @@ module's public symbols with a one-line description - search it by intent (`uri`
 | `linq` / `linq_boost` | Chainable queries: `where_` (trailing underscore - `where` is a keyword), `select`, `order_by`, `group_by`, `zip`, `to_array`. `linq_boost` adds the `\|>` rewrite fusing a chain into one pass. |
 | `algorithm` / `sort_boost` | `unique`, `sort_unique`, `reverse`, `combine`; `partial_sort`, `nth_element`, heap ops. |
 | `functional` | Lazy `filter`/`map`/`reduce`/`scan`. Legacy - prefer comprehensions or `linq`. |
-| `match` | `match` / `static_match` / `multi_match` over values, enums, variants, structs. |
+| `match` | `match` / `static_match` over values, enums, variants, structs. |
 | `option` / `result` | Monadic `Option<T>` and `Result<T; E>`. |
 | `defer` / `safe_addr` / `static_let` | LIFO scope-exit cleanup; `safe_addr(x)` giving `T?#` with no `unsafe`; locals promoted to globals. |
 | `class_boost` / `interfaces` / `dynamic_cast_rtti` / `contracts` | `[class_method]` on structs; `[interface]` classes; `is_instance_of` / `as_instance_of`; `[expect_*]` argument contracts. |

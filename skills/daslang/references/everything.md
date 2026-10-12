@@ -6834,13 +6834,11 @@ The MD_BOOST module provides Markdown generation helpers: GitHub-flavored table 
 
 ## match
 
-The MATCH module implements pattern matching on variants, structs, tuples, arrays, and scalar values. Supports variable capture (`$v(name)`), wildcards (`_`), guard expressions (`&&`), and alternation (`||`).
+The MATCH module implements pattern matching on variants, structs, tuples, arrays, and scalar values. Each arm is `pattern => body`. A bare name in a pattern binds the matched value, `_` matches anything, `&&` adds a guard, `|` separates alternatives, and `&` requires both patterns. `match (a, b)` matches several values at once.
 
 
 ### Call macros
 
-- `static_multi_match` - Implements `static_multi_match` macro.
-- `multi_match` - Implements `multi_match` macro.
 - `match` - Implements `match` macro.
 - `static_match` - Implements `static_match` macro.
 
