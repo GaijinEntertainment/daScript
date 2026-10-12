@@ -28,7 +28,7 @@ require daslib/algorithm
 // decode arms, and the heat-pinned expert cache.
 
 let DA_NSPLIT_MAX = 16l   //! the decode attention's key splits a head, at most (the partials plane sizes to it)
-let RD_NB_MAX = 8l   //! the N-row token command's rows, at most, and the same-slab verify's
+let RD_NB_MAX = RDEC_NROW_MAX   //! the N-row token command's rows, and the same-slab verify's at most
 let RD_PICK_CHUNKS = int64(CLS_ARGMAX_CHUNKS)   //! the pick's first pass: a workgroup a (row, chunk)
 let NROW_BX_ATTN = 1        //! `DASLLAMA_VK_NROW_BISECT`, the N-row command's probe bits: no attention
 let NROW_BX_NCOL1 = 2       //! the one-column GEMV leaves over row 0
@@ -132,8 +132,7 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     r.rot = rot
     rdq_reset()
     g_rdq_prev_last = 0ul   // the device clock's last sampled stamp is this file's: a new model starts with none
-    let rows_want = max(regions, head ? verify_rows : 0l)
-    r.nb = min(rows_want, RD_NB_MAX)
+    r.nb = RD_NB_MAX
     let nb = r.nb
     r.verify_rows = min(nb, head ? verify_rows : 0l)
     let wide = max(max(max(qd, hidden), dim), head ? 2l * dim : 0l)
@@ -520,10 +519,11 @@ def private rd_attn_sets(var L : RLayer; mir_idx : int64; bq, bk, bv, bo : int64
             L.s_qkn_rope = (kv16 ? set_qkn_rope_f16_cls(qrbufs, qrsizes, qrbits)
                 : set_qkn_rope_cls(qrbufs, qrsizes, qrbits))
         }
-        // rope+store (class): per-token mirror row rides TokMeta, the bias rows their buffer
-        let rbufs = fixed_array(g_rd.q_dev, g_rd.kv_dev, kstore, vstore, cos, storetok, bias_bind.buf)
-        let rsizes = fixed_array(qplane, (qd + 2l * kvd) * 4l * nb, storebytes, storebytes, cosbytes * nb, TOK_META_BYTES * nb, bias_bind.bytes)
-        let rbits = fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, storebit, storebit, VHZ_COS, 0u, 0u)
+        //! rope+store on the shared template's class: the [q | k | v] rows as the k and v views, the cos/sin plane as the cos and sin views
+        let kvbytes = (qd + 2l * kvd) * 4l * nb
+        let rbufs = fixed_array(g_rd.q_dev, g_rd.kv_dev, g_rd.kv_dev, kstore, vstore, bias_bind.buf, cos, cos, storetok)
+        let rsizes = fixed_array(qplane, kvbytes, kvbytes, storebytes, storebytes, bias_bind.bytes, cosbytes * nb, cosbytes * nb, TOK_META_BYTES * nb)
+        let rbits = fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, VHZ_KVK | VHZ_KVV, storebit, storebit, 0u, VHZ_COS, VHZ_COS, 0u)
         L.s_rope = kv16 ? set_rope_kv_f16_cls(rbufs, rsizes, rbits) : set_rope_kv_cls(rbufs, rsizes, rbits)
         if (rd_kvq8()) {
             L.s_kv_store = set_kv_q8_store_cls(fixed_array(g_rd.kst_dev, g_rd.vst_dev, kmir, vmir, tok),
@@ -587,6 +587,11 @@ def vk_rdec_prepare_moe(ne, k, nfe, nsh, n_moe : int64; sh_gated, norm_topk, is_
     r.moe = true
     r.ne = ne
     r.k = k
+    if (k > 0l && !rd_routed_slots_fit(r.nb, k)) {   //! the per-row planes hold RD_NB_MAX rows; the N-row command steps as many as the slot planes hold a row's picks for
+        r.nb = max(1l, MAX_ROUTED_SLOTS / k)
+        r.verify_rows = min(r.verify_rows, r.nb)
+        to_log(LOG_INFO, "dasLLAMA vulkan resident: the N-row command steps {r.nb} rows at once - {k} picks a row over {MAX_ROUTED_SLOTS} routed slots\n")
+    }
     r.nfe = nfe
     r.nsh = nsh
     r.n_moe = n_moe
@@ -1680,7 +1685,7 @@ def private rd_encode_hc_layer(raw : VkCommandBuffer; var h : VkHaz; var L : RLa
     if (L.recurrent) {
         rd_encode_dn_head(raw, h, L, nrows, ncols, seq)
     } else {
-        rd_encode_attn_head(raw, h, L, l, fuse_qkr, nlfin, rd_layer_pieces(L, rd_split_pieces()), nrows, ncols, 0)
+        rd_encode_attn_head(raw, h, L, l, fuse_qkr, nlfin, rd_layer_pieces(L, rd_split_pieces(), nrows), nrows, ncols, 0)
     }
     rd_encode_hc_scatter(raw, h, L, false, nrows)
     rd_encode_hc_mix(raw, h, 2l * l + 1l, false, nrows)
@@ -1800,7 +1805,7 @@ def private rd_encode_hc_verify_warm(raw : VkCommandBuffer; var h : VkHaz; nrows
     rd_encode_hc_cat_eh(raw, h, nrows, g_rd.xb2_dev, "t:warm_")
     rd_encode_hc_mix(raw, h, 2l * g_rd.n_layers, false, nrows)
     rq_enc(raw, h, L.s_quant_xb, L.fq, dim * nrows)
-    rd_encode_attn_head(raw, h, L, g_rd.n_layers, rd_head_fuse_qkr(), rd_norm_final(), rd_layer_pieces(L, rd_split_pieces()), nrows, uint(nrows), 0, true, "t:warm_")
+    rd_encode_attn_head(raw, h, L, g_rd.n_layers, rd_head_fuse_qkr(), rd_norm_final(), rd_layer_pieces(L, rd_split_pieces(), nrows), nrows, uint(nrows), 0, true, "t:warm_")
 }
 
 //! the one-row command's TokMeta row at `pos` with `cnt` cached positions (the window chain's: its first position and its rows): the region rides the push, so `mirbase` is 0
@@ -1960,10 +1965,25 @@ def private rd_pieces_for_span(span : int64) : int64 {
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-decode-attn-split")]
-def private rd_layer_pieces(L : RLayer; nsplit : int64) : int64 {
+def private rd_layer_pieces(L : RLayer; nsplit, rows : int64) : int64 {
     let span = L.window == 0l ? nsplit : min(nsplit, rd_pieces_for_span(L.window))
-    let wave = max(1l, int64(g_gpu.sm_count) / (da_attn_row_wgs(g_rd.n_heads, L.kv_mul, 1l) * g_rd.nb))
+    let wave = max(1l, int64(g_gpu.sm_count) / (da_attn_row_wgs(g_rd.n_heads, L.kv_mul, 1l) * max(rows, 1l)))   //! the command's own rows, never the planes' height
     return min(span, wave)
+}
+
+//! whether the N-row command over `rows` splits every layer's keys into the pieces the one-row command's form at `pos` does, so
+//! the two sum the keys in one order: false where the rows' workgroups over the pieces run past one wave of the SMs (the N-row
+//! command takes fewer) and past the wide position (the wide twin takes more; `ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-decode-attn-split`)
+def vk_rdec_rows_split_alike(rows, pos : int64) : bool {
+    if (g_rd == null || !g_rd.ready) return true
+    let form = rd_form_at(pos)
+    return true if (form == RdForm.unsplit)
+    for (L in g_rd.layers) {
+        continue if (L.recurrent)
+        let one = rd_layer_pieces(L, form == RdForm.wide ? rd_wide_pieces() : rd_split_pieces(), 1l)
+        return false if (one != rd_layer_pieces(L, rd_split_pieces(), rows))
+    }
+    return true
 }
 
 //! the attention form a one-row step at `pos` takes
@@ -2319,10 +2339,9 @@ def private rd_encode_attn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RL
         }
         let qpairs = kv_only ? 0l : qd / 2l
         let npairs = qpairs + (L.kv_shared ? 0l : kvd / 2l)   // the k pairs also store the mirror row: none on a shared-KV layer
-        var pcr = RopeKvArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), half = uint(hs / 2l),
-            neox = g_rd.neox ? 1u : 0u, kpair0 = uint(qpairs), npairs = uint(npairs),
-            layerbase = storebase, boff = rd_bias_off(L), hasb = g_rd.has_bias ? 1u : 0u, cbase = uint(L.cbase),
-            rows = nr, kvrow = kvrow, qrow = q_plane_row, cosrow = uint(g_rd.cos_elems))
+        //! the whole head rotates (`rot = hs`): a partial-rope class's table carries the (1, 0) pairs past its rotated width
+        var pcr = gk_rope_kv_args(qd, kvd, hs, qpairs, npairs, g_rd.neox, g_rd.has_bias, hs, int64(rd_bias_off(L)), L.cbase,
+            int64(nr), int64(kvrow), int64(q_plane_row), g_rd.cos_elems, int64(storebase))
         let rwgs = (npairs * nrows + int64(WG_X) - 1l) / int64(WG_X)
         if (rd_kv16()) {
             enc_rope_kv_f16_cls(raw, h, L.s_rope, pcr, rwgs)
@@ -2721,7 +2740,7 @@ def private rd_encode_token(var first_seg_raw : VkCommandBuffer; nrows, nsplit :
             if (L.recurrent) {
                 rd_encode_dn_head(raw, h, L, nrows, ncols, verify)
             } else {
-                rd_encode_attn_head(raw, h, L, l, fuse_qkr, nlfin, rd_layer_pieces(L, nsplit), nrows, ncols, nrow_bx)
+                rd_encode_attn_head(raw, h, L, l, fuse_qkr, nlfin, rd_layer_pieces(L, nsplit, nrows), nrows, ncols, nrow_bx)
             }
             var pc8 = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(rd_norm_off(l, RD_NORM_FFN)), eps = g_rd.eps, ascale = 1.0,
                 pre_on = L.pre_post ? 1u : 0u, pwoff = uint(rd_norm_off(l, RD_NORM_POST_ATT)),
@@ -3281,7 +3300,7 @@ def private rd_record_draft {
     rd_take_stamps(one, g_rdq_n)
     rd_stamps_begin(raw)
     rd_encode_head_cat_eh(raw, h, 1l, "p:upload", "p:draft_", g_rd.s_prologue, L.s_quant_xb)
-    rd_encode_attn_head(raw, h, L, l, rd_head_fuse_qkr(), rd_norm_final(), rd_layer_pieces(L, rd_split_pieces()), 1l, 1u, 0)
+    rd_encode_attn_head(raw, h, L, l, rd_head_fuse_qkr(), rd_norm_final(), rd_layer_pieces(L, rd_split_pieces(), 1l), 1l, 1u, 0)
     var pcf = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(hb + RDEC_HEAD_FFN * dim), eps = g_rd.eps, ascale = 1.0)
     enc_cls_ar(raw, h, L.s_addr_ffn, pcf, 1l)
     rd_ts(raw, "a:ar1")
@@ -3507,7 +3526,7 @@ def private rd_encode_head_cat_eh(raw : VkCommandBuffer; var h : VkHaz; nrows : 
 def private rd_encode_verify_warm(raw : VkCommandBuffer; var h : VkHaz; nrows : int64) {
     var L & = unsafe(g_rd.head)
     rd_encode_head_cat_eh(raw, h, nrows, "", "t:warm_", g_rd.head_s_hx_ar, g_rd.head_s_cat_rq)
-    rd_encode_attn_head(raw, h, L, g_rd.n_layers, rd_head_fuse_qkr(), rd_norm_final(), rd_layer_pieces(L, rd_split_pieces()), nrows, uint(nrows), 0, true, "t:warm_")
+    rd_encode_attn_head(raw, h, L, g_rd.n_layers, rd_head_fuse_qkr(), rd_norm_final(), rd_layer_pieces(L, rd_split_pieces(), nrows), nrows, uint(nrows), 0, true, "t:warm_")
 }
 
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command")]   //! once per row count, region and set epoch
@@ -4991,9 +5010,9 @@ def private dat_layer_sets(woq, wok, wov, woo : int64; fq, fk, fv, fo : int; rms
             fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, VHZ_MIR, VHZ_MIR, 0u, 0u, 0u, 0u))
     } else {
         L.s_qkr = set_rope_kv_f16_cls(
-            fixed_array(g_gpu.dat_q_dev, g_gpu.dat_kv_dev, L.k_mir, L.v_mir, g_gpu.dat_cos.buf, g_gpu.dat_tok.buf, bbuf),
-            fixed_array(qd * 4l, (qd + 2l * kvd) * 4l, mirbytes, mirbytes, hs * 4l, TOK_META_BYTES, bbytes),
-            fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, VHZ_MIR, VHZ_MIR, 0u, 0u, 0u))
+            fixed_array(g_gpu.dat_q_dev, g_gpu.dat_kv_dev, g_gpu.dat_kv_dev, L.k_mir, L.v_mir, bbuf, g_gpu.dat_cos.buf, g_gpu.dat_cos.buf, g_gpu.dat_tok.buf),
+            fixed_array(qd * 4l, (qd + 2l * kvd) * 4l, (qd + 2l * kvd) * 4l, mirbytes, mirbytes, bbytes, hs * 4l, hs * 4l, TOK_META_BYTES),
+            fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, VHZ_KVK | VHZ_KVV, VHZ_MIR, VHZ_MIR, 0u, 0u, 0u, 0u))
     }
     L.s_attn = set_da_attn_f16_cls(   //! the unsplit, unfolded pass: the out rows fill the partials and quant bindings, never read or written
         fixed_array(g_gpu.dat_q_dev, L.k_mir, L.v_mir, g_gpu.dat_attn_dev, g_gpu.dat_tok.buf, g_gpu.dat_attn_dev, g_gpu.dat_attn_dev, g_gpu.dat_attn_dev),
@@ -5088,8 +5107,7 @@ def private at_chain_enc(raw : VkCommandBuffer; var h : VkHaz; var L : DatLayer;
             neox = neox ? 1u : 0u, nh = uint(n_heads), layerbase = 0u, qwoff = 0u, kwoff = uint(hs), eps = eps, boff = 0u, hasb = hb)
         enc_qkn_rope_f16_cls(raw, h, L.s_qkr, pcf, n_heads + kvd / hs)
     } else {
-        var pcr = RopeKvArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), half = uint(hs / 2l),
-            neox = neox ? 1u : 0u, kpair0 = uint(qd / 2l), npairs = uint(qd / 2l + kvd / 2l), layerbase = 0u, boff = 0u, hasb = hb)
+        var pcr = gk_rope_kv_args(qd, kvd, hs, qd / 2l, qd / 2l + kvd / 2l, neox, L.has_bias, hs, 0l, 0l, 1l, 0l, 0l, 0l, 0l)   //! one row: every stride 0, the row's own cos plane and bias row bound
         enc_rope_kv_f16_cls(raw, h, L.s_qkr, pcr, (qd / 2l + kvd / 2l + int64(WG_X) - 1l) / int64(WG_X))
     }
     var pca = DaAttnArgs(kvd = uint(kvd), hs = uint(hs), kv_mul = uint(kv_mul), kbase = 0u, vbase = 0u, scale = scale, rqk = DA_RQ_NONE)   //! unsplit: no counters

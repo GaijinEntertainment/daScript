@@ -2,7 +2,7 @@
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 docs: `ARCHITECTURE.md`, `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_MEASUREMENT.md`. Planned work:
-`followup_general.md`, `followup_vulkan.md`, `followup_metal.md`, `PERF_LEDGER.md`.
+`followup_general.md`, `followup_vulkan.md`, `followup_metal.md`; the measured record: `PERF_LEDGER.md`.
 
 **A change to the tokenizer - `dasllama/dasllama_tokenizer.das`, `dasllama/dasllama_spm.das`,
 `dasllama/dasllama_bpe.das` or `dasllama/dasllama_pretok.das` - or to a special-token or template
@@ -229,8 +229,8 @@ without first proving both stdin and stdout are terminals is a defect - emit the
 a `@sidecar` event instead.** A supervised or piped boot must never block on input.
 
 **A print or log of an elapsed interval whose site is in an engine file (`dasllama/`), outside
-the profiling rails (`profile_tag` / `profile_marker`, `prof_add`, `asr_prof_add`, the Vulkan
-tier's `vk_prof()`-gated ledgers and logs), a cold one-shot load, bake, map or tokenizer-build
+the profiling rails (`profile_tag` / `profile_marker`, `prof_add`, `asr_prof_add`, the ledgers
+and logs the GPU profile flag `DASLLAMA_GPU_PROF` gates), a cold one-shot load, bake, map or tokenizer-build
 progress log, or the first-start kernel race report of a fat exe (one built `DAS_TUNE_MODE=fat`,
 shipping its tune profile), is a defect - route it through a rail
 (`ARCHITECTURE_MEASUREMENT.md#sanctioned-instrumentation-rails`).**

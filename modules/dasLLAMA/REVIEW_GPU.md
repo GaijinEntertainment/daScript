@@ -163,16 +163,23 @@ builder a tower driver borrows, names it - the hook by the seat's register funct
 by its name - in that driver's row of the role table in `ARCHITECTURE_GPU.md#gpu-backends`; a
 diff that removes one deletes its name from that row; in the same change.**
 
-**A diff that adds a surface only one GPU backend has - a `dasllama/dasllama_gpu_tier.das` seat
-only Metal fills; an override only one backend registers (`register_*("metal", ...)` /
-`register_*("vulkan", ...)`), a tower driver's family hook excepted; an export with no counterpart
-under the other backend's prefix that `dasllama/` engine code outside the backend's files calls; a
-function kind, argument or field annotation only one dispatch lens generates or accepts; a decode
-or prefill behavior, the precision of a step included, or a pin or knob only one backend has -
-lands one entry for it in `ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries`, even when the list
-carries one of the same class; a diff that removes one deletes its entry; in the same change.** The
-same path served faster or slower is not a behavior; a pin or knob is a setter or environment
+**A diff that adds a surface only one GPU backend has - a `dasllama/dasllama_gpu_tier.das` seat only
+Metal fills; an override only one backend registers (`register_*("metal", ...)` /
+`register_*("vulkan", ...)`) other than a hook a tower driver registers in a model family's
+registry; an export with no counterpart under the other backend's prefix that `dasllama/` engine
+code outside the backend's files calls; a function kind, argument or field annotation only one
+dispatch lens generates or accepts; a decode or prefill behavior, the precision of a step included,
+or a pin or knob only one backend has - lands one entry for it, naming the operation the other
+backend's API or device lacks, in `ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries`, even when the
+list carries one of the same class; a diff that removes one deletes its entry; in the same change.**
+The same path served faster or slower is not a behavior; a pin or knob is a setter or environment
 variable that changes what a run selects or computes.
+
+**A diff that adds or extends, on one GPU backend (Metal or Vulkan), a prefill or decode path or
+a K/V cache feature for a model family the other backend also serves lands the same capability on
+the other backend in the same change, wherever the other backend's API offers the operations it
+uses on any device it supports; a PR body that defers it is a defect.** A capability one backend
+has makes a served model's behavior depend on the box it runs on.
 
 **A change that can alter what a GPU decode or prefill call on a session computes or selects ships
 GPU-vs-CPU parity on one q8 model, one K-quant model, and one model of a format outside both, for
@@ -249,16 +256,17 @@ other than the next position the state it advances expects - `Session.dn_pos` fo
 state, `DnMirror.pos` for a device mirror.** It runs the whole forward itself, so the engine's
 own forward-only guard never runs.
 
-**A module-level variable in a GPU driver file whose value derives from a loaded model's weights,
-or names, sizes or points at device content built from a loaded model (a served model, a draft
-or tower model, a TTS voice), gets a model-swap discharge in the same change that adds it: a path
-the unload or reload of that model runs that returns the variable to its no-model value.** The
-discharge paths: for a Vulkan driver file, a reset `moe_gpu_model_marks_restore_` or
-`moe_gpu_drop_model_` runs - in its body, or in a listener the file registers with
-`register_vk_drop_hook` (`dasllama/dasllama_vulkan_common.das`), which the drop's sweep runs; for
-every Metal driver file, the tower driver included, `register_reload_prep`
-(`dasllama/dasllama_metal_common.das`). A global with no discharge survives a model swap and
-routes the next model's dispatches at the old model's planes.
+**A module-level variable in a GPU driver file whose value derives from a loaded model's weights, or
+names, sizes or points at device content built from a loaded model (a served model, a draft or tower
+model, a TTS voice), and which a later call reads before that call writes it - a record of the
+decline reasons the driver has logged for that model is one - gets a model-swap discharge in the
+same change that adds it: a path the unload or reload of that model runs that returns the variable
+to its no-model value.** The discharge paths: for a Vulkan driver file, a reset
+`moe_gpu_model_marks_restore_` or `moe_gpu_drop_model_` runs - in its body, or in a listener the
+file registers with `register_vk_drop_hook` (`dasllama/dasllama_vulkan_common.das`), which the
+drop's sweep runs; for every Metal driver file, the tower driver included, `register_reload_prep`
+(`dasllama/dasllama_metal_common.das`). A global with no discharge survives a model swap and routes
+the next model's dispatches at the old model's planes.
 
 **A module-level variable in a Vulkan driver file whose value derives from, or names, sizes or
 points at device content built from, a TTS model (a StyleTTS2 or Pocket model) also discharges
@@ -278,11 +286,13 @@ runs only where the gate's `mint_time` flag is false, and the mint-time verdict 
 model's own fields.** The load selects the repacking CPU backend before the GPU backend is
 decided, so a mint-time read bakes a verdict the drivers do not share.
 
-**A diff that gives a per-format pick that maps a weight format to a Metal pipeline or
-builder - a dispatch ladder, a table row, a picker function - an arm for a weight format adds that
-format to `kq_fmt_gpu_supported`, or, for an expert plane, to `moe_fmt_metal_served` (both
-`dasllama/dasllama_metal_shapes.das`), in the same change.** Those predicates are what declines
-an unserved format, so an unlisted format decodes under whatever the pick's default arm holds.
+**A diff that gives a per-format pick that maps a weight format to a Metal pipeline or builder - a
+dispatch ladder, a table row, a picker function - an arm for a weight format adds that format to
+`kq_fmt_gpu_supported`, or, for an expert plane, to `moe_fmt_metal_served` (both
+`dasllama/dasllama_metal_shapes.das`), in the same change; an arm whose condition matches more than
+one format (a range or family test) also tests `kq_fmt_gpu_supported` - for an expert plane,
+`moe_fmt_metal_served` - in that condition.** Those predicates are what declines an unserved format,
+so an unlisted format decodes under whatever the pick's default arm holds.
 
 **A diff that gives the Metal PLE (per-layer embedding) token-table gather a weight format makes
 `metal_ple_pre_gpu_gate` admit that format only where the table's base and row stride are whole

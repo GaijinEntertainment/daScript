@@ -460,6 +460,15 @@ def private dn_row_within(t : T?; what : string; gpu, cpu, off : array<float>) {
 }
 
 [test]
+def test_gpu_resident_hybrid_mtp_short_window(t : T?) {
+    t |> run("Qwen3.5-0.8B-MTP: a two-token prompt takes the window chain - the token command's peel declines a NextN-headed model") @(t : T?) {
+        with_mtp_carrier(t, 1l) $(var tr) {
+            assert_short_window_takes_chain(t, tr, "a NextN-headed model")
+        }
+    }
+}
+
+[test]
 def test_gpu_resident_hybrid_mtp_draft(t : T?) {
     t |> run("Qwen3.5-0.8B-MTP: one NextN draft through the resident head against the CPU forward_mtp on the same token, carry and row") @(t : T?) {
         with_warm_carrier(t) $(var tr; prompt; var s) {

@@ -1685,6 +1685,140 @@ class template GkClampRows {
     }
 }
 
+struct GkRopeKvArgs {
+    qd : uint          //! the q row's width; the k projection sits at `qd` of a ksrc row, the v projection at `qd + kvd` of a vsrc row
+    kvd : uint         //! the k and v rows' width (the mirror row's)
+    hs : uint
+    npairs_q : uint    //! the q pairs of a row; the k pairs follow them
+    npairs : uint      //! the pairs a row, q's and k's
+    neox : uint        //! the pair select: 0 = NORM (2j, 2j+1), else NEOX (j, j+half)
+    has_bias : uint
+    rot : uint         //! the rotated width of a head; the pairs past it copy through
+    qrow : uint        //! a row's stride in qsrc
+    kvrow : uint       //! a row's stride in ksrc and vsrc
+    boff : uint        //! the layer's [q | k | v] row base in bias (read where the stamp binds the planes whole)
+    cstride : uint     //! a row's stride in tcos and tsin (0: every row reads the one table row)
+    ccos : uint        //! the cos row's element base in tcos; the sin row sits a half head past it (read where the stamp binds the planes whole)
+    rows : uint        //! the rows a dispatch covers (0 reads as one)
+    mirbase : uint     //! the layer's base in the mirror planes, ahead of a row's own (the Vulkan token block's; Metal binds the row), or the
+                       //! layer index where a row table carries the per-layer stride (Metal's window form)
+}
+
+//! the rope-and-store args a home builds: the one-row defaults (one row, every stride 0, the bias row, the cos row and the mirror
+//! base bound at their own offsets), and the N-row form's strides and bases where a home passes them
+def gk_rope_kv_args(qd, kvd, hs, npairs_q, npairs : int64; neox, has_bias : bool; rot : int64; boff : int64 = 0l; cbase : int64 = 0l;
+                    rows : int64 = 1l; kvrow : int64 = 0l; qrow : int64 = 0l; cosrow : int64 = 0l; mirbase : int64 = 0l) : GkRopeKvArgs
+    => GkRopeKvArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), npairs_q = uint(npairs_q), npairs = uint(npairs),
+        neox = neox ? 1u : 0u, has_bias = has_bias ? 1u : 0u, rot = uint(rot),
+        qrow = uint(qrow), kvrow = uint(kvrow), boff = uint(boff), cstride = uint(cosrow), ccos = uint(cbase),
+        rows = uint(rows), mirbase = uint(mirbase))
+
+//! The fused rope and K/V store, an invocation a rotation pair of a row: a q pair ropes in place, a k pair ropes into the mirror
+//! K row and copies its v pair into the V row, the bias rows added first, the f16 stamps clamped into the half range, the pairs
+//! past `rot` copied through; a stamp's kernel hands `rope_kv_pair` the row's mirror bases, resolved its home's way
+[ |> template_struct_instance]
+class template GkRopeKvStore {
+    @ssbo @binding = 0 @role = "readwrite" qsrc : array<float>       //! the q rows, roped in place
+    @ssbo @binding = 1 @role = "read" ksrc : array<float>            //! the rows the k projection sits in
+    @ssbo @binding = 2 @role = "read" @off = "vsoff" vsrc : array<float>   //! ... and the v projection
+    @ssbo @binding = 3 @role = "write" @off = "koff" kd : array<KT>  //! the mirror K plane
+    @ssbo @binding = 4 @role = "write" @off = "voff" vd : array<KT>  //! the mirror V plane
+    @ssbo @binding = 5 @role = "weight" bias : array<float>          //! the [q | k | v] projection biases (dummy-bound without `has_bias`)
+    @ssbo @binding = 6 @role = "read" @off = "toff" tcos : array<float>   //! the rope table's cos rows (the Vulkan command refills its plane a step)
+    @ssbo @binding = 7 @role = "read" @off = "toff" tsin : array<float>   //! ... and sin rows (one plane on Vulkan, a half head past the cos row)
+    @kargs pa : GkRopeKvArgs
+    @template_constant CLAMP16 : bool = true
+    @template_constant BOUND_VIEWS : bool = false   //!< the stamp binds the v projection, the bias row and the table rows at their offsets, so their element bases are zero
+    @template_constant SPLIT_TABLES : bool = false  //!< the sin rows are their own plane (bound at `tsin`), not a half head past the cos rows
+
+    //! one mirror K element, clamped into the half range on the f16 stamp
+    def st_k(i : uint; v : float) {
+        static_if (CLAMP16) {
+            kd[i] = float16(min(max(v, -65504.0), 65504.0))   // nolint:STYLE019,LINT019 - the MSL subset has no clamp lowering; the rule fires where the stamp lands
+        } else {
+            kd[i] = v
+        }
+    }
+
+    //! ... and one V element
+    def st_v(i : uint; v : float) {
+        static_if (CLAMP16) {
+            vd[i] = float16(min(max(v, -65504.0), 65504.0))   // nolint:STYLE019,LINT019 - the same
+        } else {
+            vd[i] = v
+        }
+    }
+
+    //! an element base inside a plane bound whole, or zero where the stamp binds the view at its offset
+    def base_in_plane(e : uint) : uint {
+        static_if (BOUND_VIEWS) {
+            return 0u
+        } else {
+            return e
+        }
+    }
+
+    //! the sin row's element base: a half head past the cos row in the one plane, or zero in a plane of its own
+    def sin_base(half : uint) : uint {
+        static_if (BOUND_VIEWS || SPLIT_TABLES) {
+            return 0u
+        } else {
+            return pa.ccos + half
+        }
+    }
+
+    //! the one-row form a kernel over `npairs` invocations takes: pair `gid` of row 0, the mirror rows bound at their own offsets
+    def rope_kv_one(gid : uint) {
+        if (gid < pa.npairs) {
+            rope_kv_pair(0u, gid, 0u, 0u)
+        }
+    }
+
+    //! the row-table form a kernel over (`npairs` x rows) invocations takes: pair `gid` of row `row`, whose table entry `rrow` holds
+    //! its mirror K and V bases, the per-layer stride `pa.mirbase` layers of which sit ahead, and its depth (the row lands at depth - 1)
+    def rope_kv_tabled(gid, row : uint; rrow : uint4) {
+        if (gid < pa.npairs) {
+            let ahead = pa.mirbase * rrow.z + (rrow.w - 1u) * pa.kvd
+            rope_kv_pair(row, gid, rrow.x + ahead, rrow.y + ahead)
+        }
+    }
+
+    //! pair `lp` of row `row`: a q pair in place, a k pair into the mirror row at element `mirk` of kd and its v pair at `mirv` of vd
+    def rope_kv_pair(row, lp, mirk, mirv : uint) {
+        let isk = lp >= pa.npairs_q
+        let lgid = isk ? lp - pa.npairs_q : lp
+        let half = max(1u, pa.hs / 2u)
+        let halfr = pa.rot / 2u
+        let j = lgid % half
+        let hbase = (lgid / half) * pa.hs
+        let pair_rotates = j < halfr
+        let i = pa.neox != 0u ? (pair_rotates ? hbase + j : hbase + pa.rot + (j - halfr)) : hbase + 2u * j
+        let i2 = pa.neox != 0u ? (pair_rotates ? i + halfr : i + (half - halfr)) : i + 1u
+        let cb = row * pa.cstride
+        let fcr = pair_rotates ? tcos[base_in_plane(pa.ccos) + cb + j] : 1.0
+        let fci = pair_rotates ? tsin[sin_base(half) + cb + j] : 0.0
+        let boff = base_in_plane(pa.boff)
+        if (isk) {
+            let kb = row * pa.kvrow + pa.qd
+            let bk = boff + pa.qd
+            let v0 = ksrc[kb + i] + (pa.has_bias != 0u ? bias[bk + i] : 0.0)
+            let v1 = ksrc[kb + i2] + (pa.has_bias != 0u ? bias[bk + i2] : 0.0)
+            st_k(mirk + i, v0 * fcr - v1 * fci)
+            st_k(mirk + i2, v0 * fci + v1 * fcr)
+            let vb = row * pa.kvrow + base_in_plane(pa.qd + pa.kvd)
+            let bv = boff + pa.qd + pa.kvd
+            st_v(mirv + i, vsrc[vb + i] + (pa.has_bias != 0u ? bias[bv + i] : 0.0))
+            st_v(mirv + i2, vsrc[vb + i2] + (pa.has_bias != 0u ? bias[bv + i2] : 0.0))
+        } else {
+            let qb = row * pa.qrow
+            let v0 = qsrc[qb + i] + (pa.has_bias != 0u ? bias[boff + i] : 0.0)
+            let v1 = qsrc[qb + i2] + (pa.has_bias != 0u ? bias[boff + i2] : 0.0)
+            qsrc[qb + i] = v0 * fcr - v1 * fci
+            qsrc[qb + i2] = v0 * fci + v1 * fcr
+        }
+    }
+}
+
 struct GkGegluArgs {
     nelem : uint
     glo : float     //! the gate GEMM's output bounds

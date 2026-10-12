@@ -40,7 +40,7 @@ let private HC_PROMPT = 48l   //! past the pool's 32-row window floor: the promp
 //! (PERF_LEDGER.md, the NextN entry: the draft cell's readings)
 let private CARRY_BAR_REL = 0.05
 //! the verify rows against the split command's one-row steps on the same lanes (N-column stamps round apart, the two pools split picks apart; the regions files' split bar): rows read 0.05-0.07 of the max logit, carry rows 0.01-0.08, the one-row-off controls 10 bars and more
-let private SPLIT_BAR_REL = 0.12
+let private HC_SPLIT_BAR_REL = 0.12
 let private SPLIT_CARRY_BAR_REL = 0.10
 //! ... and against the CPU chain's one-row steps, that rounding compounding with the rails' own (the regions files' rows-form wide bar): rows read 0.16-0.25 of the max logit (row 1 inherits row 0's), carry rows 0.07-0.17
 //! (both PERF_LEDGER.md, the NextN entry: the verify cell's readings)
@@ -144,6 +144,7 @@ def test_gpu_resident_hc_mtp_verify(t : T?) {
         clear_mtp_head_path()
         t |> success(!mtp_head_path_pin().set, "the head pin is cleared for the process after the load")
         t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the trunk and its head (the load log names any decline)")
+        t |> equal(rdec_token_n_rows(), 6l, "the N-row command steps the rows the routed slot planes hold a row's ten picks for: 64 over 10")
         with_dasllama_jobque_() {
             let tape_before = moe_pick_tape_mode()
             var prompt <- resident_prompt(HC_PROMPT)
@@ -160,8 +161,8 @@ def test_gpu_resident_hc_mtp_verify(t : T?) {
             set_mtp_spec(spec1)
             delete sd
             t |> equal(ds.seen, 2l * nl, "the two split steps replayed the rows' lanes, a select a routed layer each")
-            row_within_ctrl(t, "hc verify row 0 against the split command's one-row step, picks alike (DASLLAMA_GPU_HEAT {heat})", r.dev0, ds.l0, ds.l1, SPLIT_BAR_REL, "(the split command's row 1 as the control)")
-            row_within_ctrl(t, "hc verify row 1 against the split command's one-row step, picks alike (DASLLAMA_GPU_HEAT {heat})", r.dev1, ds.l1, ds.l0, SPLIT_BAR_REL, "(the split command's row 0 as the control)")
+            row_within_ctrl(t, "hc verify row 0 against the split command's one-row step, picks alike (DASLLAMA_GPU_HEAT {heat})", r.dev0, ds.l0, ds.l1, HC_SPLIT_BAR_REL, "(the split command's row 1 as the control)")
+            row_within_ctrl(t, "hc verify row 1 against the split command's one-row step, picks alike (DASLLAMA_GPU_HEAT {heat})", r.dev1, ds.l1, ds.l0, HC_SPLIT_BAR_REL, "(the split command's row 0 as the control)")
             row_within_ctrl(t, "hc verify carry row 0 against the split command's one-row step, picks alike (DASLLAMA_GPU_HEAT {heat})", r.devh0, ds.h0, ds.h1, SPLIT_CARRY_BAR_REL, "(the split command's carry row 1 as the control)")
             row_within_ctrl(t, "hc verify carry row 1 against the split command's one-row step, picks alike (DASLLAMA_GPU_HEAT {heat})", r.devh1, ds.h1, ds.h0, SPLIT_CARRY_BAR_REL, "(the split command's carry row 0 as the control)")
             delete ds
@@ -298,6 +299,20 @@ def test_gpu_resident_hc(t : T?) {
             delete cpu
             delete prompt
             delete toks
+        }
+        delete tr
+    }
+}
+
+//! a two-token prompt on the hyper-connection chain takes the window chain: the token command's peel declines the wide residual
+[test]
+def test_gpu_resident_hc_short_window(t : T?) {
+    t |> run("Qwen3.8-Flash-Next: a two-token prompt takes the window chain, not the token command's peel") @(t : T?) {
+        if (!hc_ready(t)) return
+        var tr <- load_resident(path_join(models_dir(), FN_TRUNK), 1l)   //! the route pinned on for the load, the levers put back
+        t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the trunk (the load log names any decline)")
+        with_dasllama_jobque_() {
+            assert_short_window_takes_chain(t, tr, "a hyper-connection chain")
         }
         delete tr
     }

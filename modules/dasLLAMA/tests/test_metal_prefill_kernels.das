@@ -2526,7 +2526,7 @@ def private pk_attn_gate(t : T?; var dev, queue; ctx, n_old : int) {
 
 //! one row of q, k, v at position 5 over a 64-wide model of two heads: q and k rotated as
 //! `rope_rows` rotates them, the rotated k and the v landing on the caches' row 5
-//! MetalRopeStoreKvT's f32 stamp at the frame loop's binds: neox 0, no bias, the whole head, the tables and the caches at the position's row
+//! the shared rope-and-store template's f32 stamp (`MetalRopeStoreF32`) at the frame loop's binds: neox 0, no bias, the whole head, the tables and the caches at the position's row
 def private rope_store_pocket_gate(t : T?; var dev, queue) {
     let tag = "rope_store f32 pocket"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
@@ -2564,7 +2564,7 @@ def private rope_store_pocket_gate(t : T?; var dev, queue) {
         }
         var inscope none, tcos, tsin : array<float>
         build_rope_tabs(tcos, tsin, period, 1.0, 1.0, none, false, 0l, int64(cap), int64(dh))
-        let ka = RopeStoreArgs(qd = uint(d), head_size = uint(dh), npairs_q = uint(d / 2), npairs = uint(d), neox = 0u, has_bias = 0u, rot = uint(dh))
+        let ka = gk_rope_kv_args(int64(d), int64(d), int64(dh), int64(d / 2), int64(d), false, false, int64(dh))
         let pcos = mc |> in_(tcos)
         let psin = mc |> in_(tsin)
         let pbias = mc |> in_(plane_of(3 * d, 0.0))
@@ -2577,7 +2577,7 @@ def private rope_store_pocket_gate(t : T?; var dev, queue) {
             var kl = ka
             return queue_record(t, queue, tag) $(enc : MetalComputeEncoder?) {
                 stamp_run(st, pso) {   // v from the fused row's third, the caches and the tables at the position's row
-                    invoke(st.enc, enc, bxx, bxx, uint64(2 * d * 4), bkk, roff, bvv, roff, bcos, toff, bsin, bbias, kl, int64(d))
+                    invoke(st.enc, enc, bxx, bxx, bxx, uint64(2 * d * 4), bkk, roff, bvv, roff, bbias, bcos, toff, bsin, kl, int64(d))
                 }
             }
         }
@@ -2586,6 +2586,7 @@ def private rope_store_pocket_gate(t : T?; var dev, queue) {
         let pk = mc |> out_words(cap * d, -7.0)
         let pv = mc |> out_words(cap * d, -7.0)
         if (invoke(run, mc.buf[px], mc.buf[pk], mc.buf[pv])) {
+            t |> success(abs(want_qkv[3] - qkv[3]) > 1e-3, "{tag}: the roped q row differs from its input at a rotated index (the in-place compare has teeth)")
             check_buf(t, "{tag} q", mc.buf[px], want_qkv, bar, Shape(row_width = d, head_width = dh))
             check_buf(t, "{tag} k", mc.buf[pk], want_k, bar, Shape(row_width = d, head_width = dh))
             check_buf(t, "{tag} v", mc.buf[pv], want_v, bar, Shape(row_width = d, head_width = dh))

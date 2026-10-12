@@ -154,10 +154,11 @@ def private any_stream_in(sch : Scheduler; state : StreamState) : bool {
 
 //! on a host-cached stream `chunk_tokens` while a stream decodes and at least `idle_chunk_tokens` while none does; on a device-home stream at least the device's window, and the whole head at once for a model whose device prefill cannot continue past zero
 def private prefill_chunk(m : Model; sch : Scheduler; head_end : int64) : int64 {
+    let chunk = any_stream_in(sch, StreamState.decoding) ? sch.chunk_tokens : max(sch.chunk_tokens, sch.idle_chunk_tokens)
     if (!sch.device_kv) {
-        return any_stream_in(sch, StreamState.decoding) ? sch.chunk_tokens : max(sch.chunk_tokens, sch.idle_chunk_tokens)
+        return chunk
     }
-    return gpu_device_prefill_continues(m) ? max(sch.chunk_tokens, gpu_device_prefill_window()) : head_end   // a chunk under the device's window is one submit per chunk for no bounded-stall gain
+    return gpu_device_prefill_continues(m) ? max(chunk, gpu_device_prefill_window()) : head_end   // a chunk under the device's window is one submit per chunk for no bounded-stall gain
 }
 
 let DEFAULT_CHUNK_TOKENS = 512l   //! one prefill window: a window's cost is mostly fixed, so a smaller chunk runs a prompt at a fraction of the window's rate
@@ -937,7 +938,7 @@ def private chunk_take(st : Stream; chunk, prompt_end : int64) : int64 {
 def private prefill_tick(m : Model; var sch : Scheduler; var events : array<SchedEvent>) {
     let first = next_prefilling(sch)
     return if (first < 0l)
-    if (sch.device_kv || stream_has_span_ahead(sch.streams[first])) {
+    if (stream_has_span_ahead(sch.streams[first]) || (sch.device_kv && !gpu_device_prefill_segments(m))) {
         prefill_one_chunk(m, sch, events, first)
         return
     }

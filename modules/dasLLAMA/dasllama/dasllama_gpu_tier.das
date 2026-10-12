@@ -127,6 +127,7 @@ struct RdecDnGeom {
     ba_f32 : bool
     zsig : bool    //! the out-gate is sigmoid(z) (qwen4exp) instead of silu(z): the step and scan kernels' `ZSIG` stamps serve
 }
+let public RDEC_NROW_MAX = 8l   //! the rows the N-row token command steps at once, the per-row planes' height: the N-column GEMV leaves' width, and the short window's peel
 let public RDEC_CODEC_BYTE_SPAN = 4_294_967_296l   //! one side of a block-codec K/V mirror, at most: its kernels address a block by a 32-bit byte offset
 let public RDEC_ROUTED_SLOTS = 64l   //! the routed slots a decode step stages: every row's k picks fit in them, and the hot expert pool takes no more picks a step
 let public RDEC_NORM_ROWS = 10l   //! rms_att, rms_ffn, post-attention, post-FFN, the per-layer-embedding post norm, then the gemma-4 MoE layer's router scale, routed pre norm, dense post norm and routed post norm, then the attention output bias row (gpt-oss) - zero rows where a model lacks them
@@ -606,6 +607,41 @@ def public rdec_prefill_ids_installed() : bool => g_rdec_prefill_ids_installed
 def public rdec_prefill_ids(tokens : array<int64>; emb_scale : float; cos_batch : array<float>; npos : int64; pos0 : int64; var logits : array<float>; experts : RdecHostExpertsRowsFn) {
     invoke(g_rdec_prefill_ids, tokens, emb_scale, cos_batch, npos, pos0, logits, experts)
 }
+//! One segment of a segmented resident prefill: `npos` rows at `row0` of the call's rows are one session's chunk from
+//! absolute position `pos0`, its K/V into mirror `region`
+struct public RdecPfSeg {
+    row0 : int64
+    npos : int64
+    pos0 : int64
+    region : int64
+}
+
+//! The segmented resident prefill: every segment's embedded rows (or ids, where the driver gathers) and rope rows back to
+//! back in segment order, each segment's logits at its slot of `logits` (`vocab` floats a slot)
+typedef RdecPrefillSegsFn = function<(x_batch : array<float>; tokens : array<int64>; use_ids : bool; emb_scale : float; cos_batch : array<float>; segs : array<RdecPfSeg>; var logits : array<float>; experts : RdecHostExpertsRowsFn) : void>
+
+[unused_argument(x_batch, tokens, use_ids, emb_scale, cos_batch, segs, logits, experts)]
+def private rdec_unset_prefill_segs(x_batch : array<float>; tokens : array<int64>; use_ids : bool; emb_scale : float; cos_batch : array<float>; segs : array<RdecPfSeg>; var logits : array<float>; experts : RdecHostExpertsRowsFn) {
+    panic("dasLLAMA: segmented resident prefill hit without an installed GPU driver - require dasllama/dasllama_math_vulkan (the Vulkan tier installs it)")
+}
+
+var g_rdec_prefill_segs = @@rdec_unset_prefill_segs
+var g_rdec_prefill_segs_installed = false
+
+//! Install the driver's segmented prefill (a GPU backend whose window chain takes several sessions' chunks)
+[arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
+def public install_rdec_prefill_segs(prefill_segs : RdecPrefillSegsFn) {
+    g_rdec_prefill_segs = prefill_segs
+    g_rdec_prefill_segs_installed = true
+}
+
+[arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
+def public rdec_prefill_segs_installed() : bool => g_rdec_prefill_segs_installed
+[arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
+def public rdec_prefill_segs(x_batch : array<float>; tokens : array<int64>; use_ids : bool; emb_scale : float; cos_batch : array<float>; segs : array<RdecPfSeg>; var logits : array<float>; experts : RdecHostExpertsRowsFn) {
+    invoke(g_rdec_prefill_segs, x_batch, tokens, use_ids, emb_scale, cos_batch, segs, logits, experts)
+}
+
 [arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
 def public rdec_set_emb(emb_block : int64) : bool => invoke(g_rdec_set_emb, emb_block)
 [arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
@@ -1152,11 +1188,22 @@ def public moe_gpu_shexp_on_gpu(l : int64) : bool =>
 //! The prefill's shared expert stays on the CPU for `why`: said once per reason per model while the tier is armed.
 [cold_path]
 def public moe_gpu_shexp_declined(why : string) {
-    if (!g_moe_gpu_installed || key_exists(g_moe_gpu_shexp_said, why)) {
-        return
-    }
-    g_moe_gpu_shexp_said |> insert(why)
-    to_log(LOG_INFO, "dasLLAMA: the prefill's shared expert takes the CPU rail - {why} (said once per reason)\n")
+    return if (!g_moe_gpu_installed)
+    gpu_said_once(g_moe_gpu_shexp_said, LOG_INFO, "the prefill's shared expert takes the CPU rail - ", why)
+}
+
+//! `why` logged at `level` once under `said` (a reason set the owner clears when it re-arms), true when this call said it;
+//! the check every call pays is the lookup alone
+def public gpu_said_once(var said : table<string>; level : int; prefix, why : string) : bool {
+    return false if (key_exists(said, why))
+    gpu_say_once_now(said, level, prefix, why)
+    return true
+}
+
+[cold_path]
+def private gpu_say_once_now(var said : table<string>; level : int; prefix, why : string) {
+    said |> insert(why)
+    to_log(level, "dasLLAMA: {prefix}{why} (said once per reason)\n")
 }
 
 //! Runtime routing gate over the shared-expert marks (the --shexp-ab in-process lever).
@@ -1564,7 +1611,7 @@ def public rdec_token_n(x : array<float>; cossin : array<float>; ple : array<flo
 def public rdec_token_n_rows() : int64 => invoke(g_rdec_token_n_rows)
 
 var private g_rdec_nrow_steps = 0l
-//! the batched steps the N-row command has served this process: a cell reads the difference across its steps
+//! the N-row commands served this process - one a group of a batched step, one a peeled window: a cell reads the difference across its steps
 def public rdec_nrow_steps() : int64 => g_rdec_nrow_steps
 
 [unused_argument(regions)]

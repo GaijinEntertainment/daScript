@@ -7,6 +7,7 @@ require dasllama/dasllama_env  // the g_env_* knob globals ([EnvConfig] declarat
 require metal/msl_shader
 require ?das_metal metal/das_metal_boost  // GPU driver half, Apple builds only
 require dasllama/dasllama_metal_decode  // the production rope+KV-store MSL (zero copy drift)
+require dasllama/dasllama_gpu_kernels_common   // gk_rope_kv_args: the shared template's kargs
 require math
 require strings
 
@@ -114,11 +115,9 @@ def private run_rope_sidebyside(b) {   // nolint:STYLE038 — flat lab driver: b
     let npairs = (qd + kv_dim) / 2l
     // bias is dummy-bound (has_bias = 0, never read); full rope (rot == head_size), adjacent pairs
     var biasbuf = metal_new_buffer(dev, uint64(qkvd * 4l))
-    var kabuf = upload_kargs(dev, RopeStoreBArgs(lay = 0u, kv_dim = uint(kv_dim), qd = uint(qd),
-        head_size = uint(hs), npairs_q = uint(npairs_q), npairs = uint(npairs), qstride = uint(qkvd),
-        neox = 0u, has_bias = 0u, rot = uint(hs)))
-    // arm descriptors
-    var bufs_ours <- [qkbuf, karena, varena, tcosbuf, tsinbuf, rtbuf, biasbuf, kabuf]
+    var kabuf = upload_kargs(dev, gk_rope_kv_args(qd, kv_dim, hs, npairs_q, npairs, false, false, hs, 0l, 0l, nb, qkvd, qkvd, half_hs, 0l))
+    //! the shared template's slots: the fused rows as the q, k and v views, the mirror K and V arenas, the bias, the cos and sin rows, the row table, the kargs
+    var bufs_ours <- [qkbuf, qkbuf, qkbuf, karena, varena, biasbuf, tcosbuf, tsinbuf, rtbuf, kabuf]
     var psos_ours <- [pso_ours]
     var bufss_ours <- [bufs_ours]
     var groups_ours <- [uint3(uint((npairs + 63l) / 64l), uint(nb), 1u)]

@@ -848,6 +848,13 @@ def gpu_device_prefill_continues(model : Model) : bool {
     return gpu_device_prefill_continues_(model)
 }
 
+def gpu_device_prefill_segments(model : Model) : bool {
+    //! A device-home scheduler's tick hands ``model``'s prefilling streams to one segmented window
+    //! (``eval_segments``): the armed driver has the form and the model's chain holds several
+    //! sessions a window. False where the driver would run each stream's chunk as its own window.
+    return gpu_device_prefill_segments_(model)
+}
+
 def gpu_device_kv_park(var session : Session) : int64 {
     //! A FINISHED device-home session lets go of its K/V region and answers the claim its rows stay
     //! under (0 = none) - call it before every such session's ``delete``. Keep the claim and

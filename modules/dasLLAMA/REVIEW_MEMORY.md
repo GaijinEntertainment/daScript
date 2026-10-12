@@ -38,11 +38,11 @@ number, enum or bitfield type whose initializer is a constant - never a module `
 module `let`.** A pooled lane runs in another context, so a module global it reads comes back zero;
 the optimizer, when on, folds such a `let` into its literal at each read.
 
-**Nothing in a team-lane body writes or resizes a module global - write into a buffer the
+**Nothing in a team-lane body names a module global it writes or resizes - write into a buffer the
 dispatching caller sizes and passes in instead.** A pooled lane runs in another context, so a
 resize acts on that context's out-of-date copy of the global.
 
-**A buffer in `dasllama/` whose element count grows with a count the model file sets and is not
+**An array in `dasllama/` whose element count grows with a count the model file sets and is not
 declared `@exact_size` (`@scratch @exact_size` when the buffer is `@scratch`) is a defect.**
 PERF032 - the lint that flags a `resize` with no reserve before it - checks only `@exact_size`
 arrays.
@@ -54,8 +54,8 @@ on a `@scratch` buffer; weakening PERF032 is a defect.**
 The lint never compares the two counts, and a resize past the heap's limit on unreserved growth
 (`max_unreserved_size`) panics on the first model big enough.
 
-**A diff that adds a lasting allocation, or adds a term to one's size, that grows with a scaling
-count states that size in bytes in a `PERF_LEDGER.md` row: at the largest shape the code path
+**A diff that adds a lasting allocation the path never made before, or adds a term to one's size,
+that grows with a scaling count states that size in bytes in a `PERF_LEDGER.md` row: at the largest shape the code path
 accepts, or, where the path accepts any value of the count, as a formula in the count with its
 value at two shapes that differ in it.**
 

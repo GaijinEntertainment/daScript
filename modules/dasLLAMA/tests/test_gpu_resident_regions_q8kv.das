@@ -62,6 +62,7 @@ def test_scheduler_device_mode(t : T?) {
 [test]
 def test_gpu_resident_regions_scheduler_chunks(t : T?) {
     cell_scheduler_device_prefill_chunks(t, REGIONS_FILE)
+    cell_scheduler_device_handoff(t, REGIONS_FILE)
 }
 
 [test]

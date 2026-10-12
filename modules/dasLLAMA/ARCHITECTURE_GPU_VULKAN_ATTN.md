@@ -1,12 +1,12 @@
 # dasLLAMA Architecture - the Vulkan resident driver's attention
 
-Companion to `ARCHITECTURE_GPU_VULKAN.md`; a section is cited by its anchor. This document
-carries the token command's attention key split, the attention-side
-planes the resident driver uploads beside its norms - the q/k/v projection bias, gpt-oss's sink
-logits and its output bias - with the flash tiles' sink stamps, and the K/V mirror's block codecs,
-q8_0 and tq4. The window chain the flash tiles
-serve is `ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain`; the token command the decode pass sits in is
-`ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command`.
+Companion to `ARCHITECTURE_GPU_VULKAN.md`; a section is cited by its anchor. This document carries the
+token command's attention key split, the attention-side planes the resident driver uploads beside its
+norms - the q/k/v projection bias, gpt-oss's sink logits and its output bias - with the flash tiles'
+sink stamps, the K/V mirror's block codecs, q8_0 and tq4, the segmented window, which holds several
+sessions' chunks, and the short window's peel through the token command. The window chain the flash
+tiles serve is `ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain`; the token command the decode pass
+sits in is `ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command`.
 
 ### The token command's attention splits a head's keys across workgroups {#vk-decode-attn-split}
 
@@ -53,17 +53,15 @@ nothing). The piece count is the span's: one piece under
 (`da_nsplit`: enough (head, split) workgroups to cover the SM count twice, at most
 `DA_NSPLIT_MAX`); a sliding-window layer attends at most its window, so its count is its
 window's span's under the command's; and a layer's count is capped so its (kv head, slab)
-workgroups over the plan's rows (`RDec.nb`) fit one wave of the SMs (`rd_layer_pieces`: the
-SM count over the row's workgroups times the rows, one at least) - the pass is a chain of
+workgroups over the command's rows fit one wave of the SMs (`rd_layer_pieces`: the SM count over
+the row's workgroups times the rows the command steps, never the planes' height, one at least) - the pass is a chain of
 latencies a workgroup, and the ruler reads a second wave as a second chain: at 640 positions
 and four rows gpt-oss's shape (64 heads, eight a kv head: sixteen workgroups a row) reads 16.4
 us a layer unsplit and 34.9 at four pieces, Llama-1B's (eight a row) 14.5 and 22.6, the 30B's
 (eight a row, head 128) 22.6 at one and 20.6 at two, where E4B's (two a row) wants its four
 pieces - 22.7 against 34.4 unsplit - and every shape climbs past about thirty-two
-workgroups a layer. The cap reads the plan's rows for both commands, so a one-row step on a
-plan of four rows takes the four-row count and the two commands' rows sum in one order (the regions
-files' bit-for-bit claim); the flat rows of a `--npl 4` bench run are that shape, and they held
-through the cap (gpt-oss 209.1 -> 209.2, Llama-1B 459.2 -> 465.0, E4B 112.5 unchanged; `PERF_LEDGER.md`'s
+workgroups a layer. The cap reads each command's own rows, so the one-row command fills the wave alone and the N-row
+command fills it with its rows; the flat rows of a `--npl 4` bench run held through the cap (gpt-oss 209.1 -> 209.2, Llama-1B 459.2 -> 465.0, E4B 112.5 unchanged; `PERF_LEDGER.md`'s
 2026-09-21 section). Where the cap reads one, the unsplit and wide twins record the same chain as
 the split command (`unsplit_on` and `wide_on` read `attn_nsplit` alone), a duplicate the form switch
 pays in recording, never in a step. The ruler (`harness/vk_attn_probe.das`
@@ -75,10 +73,12 @@ against 26.7 (the edge sits between 640 and 1024; the qwen3 0.6B geometry's four
 eight pieces pay for one row alone - 33 against four's 41 at 8192, 47 against 72 at 16384 - and
 lose at four rows (51 against 44, 81 against 74), so the N-row command stays at four pieces at
 every span past 512. The old rule, covering the card twice whatever the span, recorded sixteen
-pieces for a one-row step and eleven for a four-row step and paid double. One count for every
-row count also keeps the one-row and N-row forms summing in one order, so a batched row is the
-row alone bit for bit on any SM count while every row of the batch sits in one band; the batch's
-furthest row picks the form, and a row batched across a band edge takes the batch's. The
+pieces for a one-row step and eleven for a four-row step and paid double. The one-row and N-row
+forms sum a layer's keys in one order - a batched row the row alone bit for bit - while the N-row
+command's rows times the row's workgroups times the span's pieces fit one wave; past that the
+N-row command takes fewer pieces and the regions rig holds its rows to the split bar instead
+(`vk_rdec_rows_split_alike`). Every row of the batch sits in one band: a group's furthest row
+picks the group's form, and a row batched across a band edge takes its group's. The
 pieces land in the partials plane; past them sit the arrival counters (`partu`, a word a (row, kv
 head, slab) at `cntoff`), each atomically bumped after a device-scope release. The piece that reads
 its group's count last aligns each head's pieces by their maxes, normalizes, gates and stores the
@@ -249,3 +249,51 @@ bytes and the attention to the dequantized rows (`test_vulkan_kv_codec_kernels.d
 model cells hold comparisons: the device reads no further from the f16 chain than the CPU's tq4
 rows do, and layer 0's stored bytes are the CPU cache's but for a quant on a rounding edge
 (`test_gpu_resident_qwen2.das`).
+
+### The segmented window {#vk-prefill-segments}
+
+The window chain holds several sessions' chunks at once: the window's rows are the segments' back to back, a
+segment one session's `npos` rows from its own position into its own mirror region (`RdecPfSeg` on the tier's
+SPI: `row0`, `npos`, `pos0`, `region`; the engine's `eval_segments` reaches it through the `vulkan` segments
+override, `vulkan_resident_prefill_segments`, which `rdec_prefill_segs` hands to `vk_rdec_prefill_segs`). The
+row-independent stages - the prologue norm, every GEMM, the feeds, the activation, the residual steps - run
+once over the window as the one-session chain runs them. What a session owns runs a segment at a time inside
+the layer: the rope-and-store writes the segment's K/V rows at its positions of its region
+(`RopeKvBArgs.pos0`, `layerbase`, the window row base `row0`), and the attention binds the segment's query
+rows and its output rows at `row0` of the window's planes (`FaArgs.row0`, `DaAttnBArgs.row0`: the flash tiles'
+tensor layouts end at the segment's last row, so a padded load past it reads zero rows; the chunked pair reads
+its q tile from `row0` and keeps its causal arithmetic segment-local) and its keys at its region's base
+(`kvbase`), so a row never sees another session's keys. Under a block-codec mirror the window holds one
+segment: the codec stages the window's rows window-local (the rope-and-store's `pos0` is the segment's window
+row), so its store and shadow run once over the whole window. A window past `PF_WINDOW` rows loops as the
+one-session chain does, the parts of the segments inside each window the window's own (`pf_window_segs`).
+Every segment whose last row a window holds takes the final requant and the classifier at that row, its logits
+landing at its slot of the host buffer (`pf_logits_host`, `regions` slots of `vocab`); a segmented window runs
+the last layer's FFN over every row, since every segment's last row wants it. The one-session call is one
+segment at row 0, so both forms are one code path.
+
+The segmented form serves where every segment would take the one-session form - the codec armed, no span,
+under the cap, every session's embed form alike (the ids the driver gathers, or the host's rows) - and each
+session binds a region of its own, the owners first; the admission decides before any bind, so a declined call
+binds, steals and counts nothing (the one-session fallback counts the pass it takes). It declines a recurrent
+model, a per-layer-embedding or NextN-headed one, a routed one, a hyper-connection chain and a block-codec
+mirror: their state, side rows, carry, host experts and staged rows are per call on this driver. A declined
+call falls to the engine, which prefills the segments one at a time through the one-session override. The
+scheduler's prefill tick hands a device-home scheduler its segments like a host-cached one, but for a model
+whose device prefill cannot continue past zero, which takes each stream's whole head alone. The witness is
+`vk_rdec_prefill_segment_windows`; the driver counts a prefill a segment.
+
+### The short window's peel {#vk-prefill-peel}
+
+A prefill of at most the rows the N-row token command steps at once (`vk_rdec_token_n_rows`; one row is the
+one-row command's) skips the window chain: `rdec_prefill_peel` embeds the rows on the host and runs them
+through the token command with every row in the session's region at its own position, row i's key count its
+position plus one, so a row never reads a row after it; the last row lands the session's logits, the rows
+before it land picks nobody reads. The chain costs a short continuation about two decode steps whatever its
+row count (the race bed's rows are the `PERF_LEDGER.md` entry's); the token command reads the weights once.
+The peel fits a chain with no recurrent state, side rows, wide residual, NextN head or host experts
+(`rdec_peel_fits`, logging the property that keeps a model off it once per armed model); the rest take the
+chain, as does every window under the lever `set_vulkan_prefill_peel(false)`, which
+`harness/vk_short_window_race.das` races the two forms through. The rows stay on the device as the chain
+leaves them; `rdec_prefill_landed` is either form's bookkeeping; the witness is `moe_gpu_resident_peels`, a
+peel counting as a served prefill too.

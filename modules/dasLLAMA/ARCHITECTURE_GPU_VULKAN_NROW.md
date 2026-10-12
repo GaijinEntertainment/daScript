@@ -12,9 +12,15 @@ decode era, whose routed block the command's rows form mirrors, is `ARCHITECTURE
 
 **A batched decode step runs its rows through ONE recorded command, so a layer's weights stream
 once for the step instead of once a row.** The driver sizes every per-token plane to `RDec.nb`
-rows - one a region, or the speculative verify's rows where a NextN model asks more
-(`ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command`), `RD_NB_MAX` at most, eight, the N-column GEMV leaves' width - and
-`vk_rdec_token_n_rows` answers how many rows the armed model steps at once: `nb` over dense,
+rows - `RD_NB_MAX` (`RDEC_NROW_MAX`, eight, the N-column GEMV leaves' width) whatever the region
+count, so the short window's peel and the speculative verify
+(`ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command`) ride the planes on a one-region driver; a
+routed model steps at most the rows whose picks the slot planes hold, `MAX_ROUTED_SLOTS` over its
+picks a row (`vk_rdec_prepare_moe` lowers `nb`, the verify rows with it) - and
+`vk_rdec_token_n_rows` answers how many rows the armed model steps at once - a step of more rows
+than that runs them in the fewest groups of at most that many, the groups balanced so none is a
+single row (a single row is the one-row command's), every row's region bound before the first group
+runs, so a row the regions refuse declines the step before any row steps - `nb` over dense,
 MoE, per-layer-embedding, shared-KV and recurrent layers and a gated q, and none where a layer or
 the tail has no N-row form - a dense plane in a per-32 expert format (q51, iq4nl32, mx4: the formats
 with no N-column leaf, every kq leaf having one), a routed block beside a per-layer-embedding
@@ -56,8 +62,9 @@ cached count and mirror region, which ride the shared `TokMeta` block a row (`mi
 offset in mirror units; `DaAttnArgs.rowwg` and `qrow` carry the row stride into the attention, `rowwg`
 0 naming a one-row dispatch). The attention's key split is the span's, the ladder the one-row
 command takes below its wide form (`rd_split_pieces` and the layer's window cap,
-`ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-decode-attn-split`), so the rows sum as each row does alone while every
-row sits in one band - the batch's furthest row picks the form, the unsplit twin under
+`ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-decode-attn-split`, the wave cap over the command's own rows: the rows sum as
+each row does alone while the rows' workgroups over the pieces fit one wave of the SMs, `vk_rdec_rows_split_alike`)
+while every row sits in one band - a group's furthest row picks the group's form, the unsplit twin under
 `RD_UNSPLIT_POS` and the split form at every span past it (the ruler reads eight pieces slower
 than four at four rows, so the rows take no wide twin). A command is recorded once per row
 count and form - the split form and the unsplit twin on first use of the row count, the twin's
@@ -129,9 +136,9 @@ shared-KV layer's head projects q as the N-column GEMV alone: the rope and store
 pairs and no k-head groups, and the attention reads the donor layer's rows from the mirror.
 
 **The rows' logits come home a row a job-queue lane, straight off the cached mapping.**
-`rdec_nrow_steps` counts the steps the command served, so a cell holds that its batched steps
-went through the command and not the row-at-a-time loop the two silent declines (no region, two
-rows one region) fall to. `rd_land_logits_n` hands each row's copy to a lane where a queue serves (`maybe_parallel_for`,
+`rdec_nrow_steps` counts the N-row commands served - one a group of a batched step, one a peeled
+window - so a cell holds that its batched steps went through the command and not the
+row-at-a-time loop the two silent declines (no region, two rows one region) fall to. `rd_land_logits_n` hands each row's copy to a lane where a queue serves (`maybe_parallel_for`,
 the lanes idle while the device owns the step) and copies in order without one: a lane copies
 about 14 GB/s, and the earlier form - the whole plane into a scratch row on one lane, then a row
 a copy out of it - passed four rows of a 152k vocab twice over one lane (322 us a step on the
@@ -140,8 +147,8 @@ pod: the step's host stamps under `DASLLAMA_GPU_PROF=1`, `PERF_LEDGER.md`'s 2026
 **The engine reaches the command through the driver seam, and falls back a row at a time.**
 `install_moe_gpu_resident_batch` installs the pair (`rdec_token_n`, `rdec_token_n_rows`) beside
 the resident driver, so a tier with no batch arm answers 0 rows. `rdec_batch_rows_at_once` gathers
-the step's residuals, rope rows, positions, counts and regions, submits once, reads each
-host-cached row's K/V back and lands its logits; it returns false when a row finds no region or
+the step's residuals, rope rows, positions, counts and regions, submits once a group of the rows
+the command steps at once, reads each host-cached row's K/V back and lands its logits; it returns false when a row finds no region or
 two rows share one, and the caller's row-at-a-time loop serves that step. `DASLLAMA_VK_NROW_BISECT`
 (`ENVIRONMENT.md`) drops a class of dispatch from the recorded command so a profile prices it; the
 logits are garbage under any bit.
@@ -153,9 +160,9 @@ that stream's region.** Row i is the round's token or draft i at position `pos +
 names the region's mirror base and state slot, the position and a cached count of `pos + i + 1`.
 The command stores every row's K/V before any row attends, and the count masks each row to the keys
 at or below its own position, so row i reads the rows the same command stored below it and never
-one above. The per-row planes hold the rows: where the driver homes a NextN head it sizes them at
-the larger of the region count and the verify's rows - the round's depth plus one, read at load
-(`get_mtp_depth`) - `RD_NB_MAX` capping both, so a verify of more rows passes to the CPU (`verify_rows`). The
+one above. The per-row planes hold `RD_NB_MAX` rows whatever the region count; where the driver
+homes a NextN head the verify takes up to the round's depth plus one of them, read at load
+(`get_mtp_depth`), `RD_NB_MAX` capping it, so a verify of more rows passes to the CPU (`verify_rows`). The
 command records once per row count and attention form (`RDec.v_cmd`, `v_cmd_unsplit`) - and, on
 a hybrid, per region, since the rollback copies it carries bake the region's slot
 (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-rollback`) - the rows' form the furthest row's,

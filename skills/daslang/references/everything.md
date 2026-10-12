@@ -3312,6 +3312,7 @@ CPU large-language-model inference in pure daslang: load a GGUF model, tokenize,
 - `gpu_device_kv_adopt` - Hand the first `npos` rows a kept `claim` holds to the fresh device-home `session`, whose `n_past` becomes `npos`.
 - `gpu_device_kv_park` - A FINISHED device-home session lets go of its K/V region and answers the claim its rows stay under (0 = none) - call it before every such session's `delete`.
 - `gpu_device_prefill_continues` - A device-home session of `model` prefills from a position past zero - a prompt in chunks, a turn over the turns before it.
+- `gpu_device_prefill_segments` - A device-home scheduler's tick hands `model`'s prefilling streams to one segmented window (`eval_segments`): the armed driver has the form and the model's chain holds several sessions a window.
 - `gpu_device_prefill_window` - The positions the device prefills in one window - the shortest chunk worth handing a device-home session.
 - `gpu_device_session_ctx` - The positions one device-home session holds - the armed driver's per-region context.
 - `gpu_device_session_dtype` - The K/V codec a device-home session must carry: the armed driver's.

@@ -2559,7 +2559,7 @@ struct RDec {
     cmd_wide : array<VkCommandBuffer>   //! the wide twin: the same chain with the attention at RD_SPLIT_WIDE_PIECES, submitted from RD_WIDE_POS, recorded on first use
     wide_on : bool                //! ... exists: the device's split count reaches past the split form's pieces
     tok_wide_recorded : array<bool>
-    nb : int64 = 1l               //! the rows the per-row planes hold: one per region, or the speculative verify's rows where it asks more, to RD_NB_MAX
+    nb : int64 = 1l               //! the rows the per-row planes hold: RD_NB_MAX, whatever the region count - the batched rows', the verify's and the peel's
     cmd_n : array<VkCommandBuffer>   //! the N-row token commands by row count (index 0 unused): every row reads its own TokMeta entry, so one command serves any region mix
     cmd_n_unsplit : array<VkCommandBuffer>   //! ... and their unsplit attention twins, submitted while every row sits under RD_UNSPLIT_POS; the rows take no wide form (ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-decode-attn-split)
     tok_n_recorded : array<bool>
@@ -2595,7 +2595,8 @@ struct RDec {
     // is f16 — the fa tiles bind the mirrors directly, no shadow planes)
     pf_facm2 : bool
     pf_fakhr : bool   //! the KHR flash tile armed instead (KHR cooperative matrices, no cm2 flash)
-    pf_logits_host : HostBuf
+    pf_logits_host : HostBuf      //! the window's logits, a slot of `vocab` a segment: `regions` slots, the one-session window at slot 0
+    pf_seg_windows : int64        //! the windows that held several sessions' chunks as segments (a cell's witness)
     pf_midx_host : HostBuf        //! the last MoE layer's picks, read back for the profile's bucket report
     pf_meta : array<HostBuf>      // one host meta per (layer, role) + prologue/final/cls
     pf_sets : array<VkDescriptorSet>
@@ -2755,7 +2756,10 @@ def f16g_shape_ok(dim : int64) : bool => g_gpu.coopmat_mode == COOPMAT_CM2 && di
 var g_rd : RDec?
 
 //! a layer's first mirror unit in the selected region of its slab
-def rd_mir_base(L : RLayer) : int64 => L.mir_base + g_rd.region * g_rd.mir_units
+def rd_mir_base(L : RLayer) : int64 => rd_mir_base(L, g_rd.region)
+
+//! ... and in region `region`: a segment's
+def rd_mir_base(L : RLayer; region : int64) : int64 => L.mir_base + region * g_rd.mir_units
 
 //! one slab's binding, either side: all `regions` copies end to end (every slab the same size)
 def rd_mir_bytes : int64 => g_rd.regions * g_rd.mir_units * kv_unit_bytes(g_rd.kv_dt)

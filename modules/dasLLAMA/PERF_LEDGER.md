@@ -1427,7 +1427,7 @@ what it costs today and what the fix would change.
   the CPU's one-row steps at `WIDE_BAR_REL` 0.35 and `WIDE_CARRY_BAR_REL` 0.25, the other row as each
   row's control - rows 1.52 and 3.10 within 3.47 and 4.24, the carry rows 0.49 and 0.49 within 1.74 and
   1.02, the controls 12.53 and 12.06, 4.86 and 4.81 - and the rounding control against the split
-  command's own one-row steps on the same picks at `SPLIT_BAR_REL` 0.12 and `SPLIT_CARRY_BAR_REL` 0.10 -
+  command's own one-row steps on the same picks at `HC_SPLIT_BAR_REL` 0.12 and `SPLIT_CARRY_BAR_REL` 0.10 -
   rows 0.42 and 0.82 within 1.14 and 1.52, the carry rows 0.07 and 0.30 within 0.73 and 0.39, the
   controls 11.62 and 11.74, 5.10 and 5.12; 97 selects replayed, 2 of the CPU draft's own picks off the
   device's); kernel
@@ -5338,3 +5338,66 @@ probe alone, no box profile applied; the Vulkan box ran it under `DASLLAMA_GPU=1
   0.78 - the tightest 0.63 of 0.78 at step 0 - and the one-step-off control 1.1 to 19; the 30000-token prompt continued
   from 20480 and four device-home streams at 9000 to 27000 positions read bit for bit the one-call prefill and the
   sessions alone.
+
+### From the llama leg's parity gaps (2026-10-12, RunPod RTX PRO 4500 Blackwell 32 GB - `DAS_TUNE_POLICY` unset, the x86-avx2 class profile stamped, `DASLLAMA_ALLOW_UNTUNED=1`, `DASLLAMA_COOPMAT` unset - and Apple M5 Max)
+
+Every rate here is `debug-jit`: the `-jit` script form `DASLLAMA_GPU=1 DASLLAMA_MODELS_DIR=<models> bin/daslang -jit
+modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m <gguf> --for-debug-purposes`, no fat exe; the Vulkan rig has no leg (no
+record store carries a Vulkan row), so the pod's figures are direction-grade throughout.
+
+- **The decode rope-and-store on one template leaves the Vulkan step where it was** (`direction-grade`, two commits).
+  Llama-3.2-3B Q4_K_M, the bench above with `--plen 0 --reps 3` and `DASLLAMA_GPU_PROF=1 DAS_LOG_LEVEL=info`, two alternated
+  rounds an arm on a warm card: tg128 227.8 +-0.05 / 227.6 +-0.18 tok/s at 8624bce999 (`RopeKvStore` with its own body), 227.4
+  +-0.01 / 227.7 +-0.07 at 5c5d49e363 (`GkRopeKvStore`'s `rope_kv_pair`, the partial-rotation cover and the per-row table
+  stride in the shared body); the profile's rope stamp 113 -> 115 us a token over 28 layers (the `vk_rdec gpu avg/token`
+  line of the same runs). A first pair of runs separated by a rebuild had read 252.0 against 250.3 at `--reps 5` with the
+  profile off - the card's clock state between builds, not the kernel. On the M5 (`DASLLAMA_CPU_PREFILL=1`, the m5 tune
+  manifest, `--ngl 99`, `--reps 5`, three alternated pairs on worktrees of the two commits) the fold reads pp512 5541 / 5534 /
+  5507 against 5538 / 5523 / 5490 tok/s and tg128 205.3 / 204.8 / 204.6 against 205.1 / 204.7 / 204.7, every tg128 at
+  +-8.5 - the box's own spread.
+- **A short window on the Vulkan chain costs about two decode steps whatever its row count, and the peel brings it to
+  one.** The race bed `DASLLAMA_GPU=1 bin/daslang -jit modules/dasLLAMA/harness/vk_short_window_race.das -- --model <gguf>`
+  (`--rows 1,2,4,8 --reps 5 --prompt 40`: the lever `set_vulkan_prefill_peel` flipped between the forms in one process, five
+  interleaved reps a form, the fastest kept; `ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-prefill-peel`) at 0f1e793e18 reads on the 3B
+  peel 6.5 / 6.9 / 4.5 / 7.4 ms against the chain's 13.5 / 11.7 / 13.4 / 13.5 at 1 / 2 / 4 / 8 rows, on the 1B Q8_0 2.2 / 4.1
+  / 4.2 / 3.0 against 5.4 / 6.6 / 6.6 / 5.5, the forms' last-row logits at most 0.27 apart on the 3B and 0.23 on the 1B (the
+  chain's tiles and the command's GEMV leaves round apart; the split bar holds them). The bed prints the slowest rep beside the
+  fastest from 0f1e793e18 on; the rows above predate that print. At e38a26bb46 the same bed reads on the 3B peel 4.0 / 4.2 /
+  7.0 / 7.4 against the chain's 13.4 / 13.5 / 11.8 / 11.8, on the 1B 3.8 / 2.5 / 4.2 / 4.6 against 6.6 / 5.5 / 6.7 / 6.6, the
+  slowest rep of either form 35 to 78 ms (the first rep's compile), the logits at most 0.38 and 0.23 apart, no call passed to
+  the CPU rails: the two readings part most on the peel at one row (6.5 against 4.0), the chain within 0.3 ms.
+- **The one-row decode's attention split follows the command's rows.** `rd_layer_pieces` divided the SM wave by the per-row
+  planes' height - the region count before this leg, eight after - so the one-row command split a head's keys into a quarter,
+  then an eighth, of the pieces that fill the card. The instrument (`external`, outside the tree: a client replaying 22
+  conversation turns of 4000 to 6000 tokens, 55 to 5900 of them cached, against `DASLLAMA_GPU=1 DASLLAMA_GPU_PROF=1
+  DAS_LOG_LEVEL=info bin/daslang -jit utils/dasllama-server/main.das -- -m <3B gguf> --ctx 32768 --streams 4`; its
+  server-side `vk_rdec gpu avg/token` lines are the figures; `direction-grade`, three commits) read the decode attention at
+  2220 us a token at 1e2302d610, 3780 at 5c5d49e363 (the planes at eight) and 1274 at a343012085 (the wave over the command's
+  own rows), the step 6232 / 7792 / 5295 us. The short-context bench never sees it: at 128 keys the attention is 3% of the
+  step.
+- **The Metal side of the leg reads the same as its base on the house's shape.** The same client (`external`, outside the
+  tree, `direction-grade`) on the M5's M4 arm, Llama-3.2-3B Q4_K_M, two alternated rounds of the base tree and the branch:
+  the arms sit inside the rounds' own drift, so the probe decided nothing moved; its walls are the client's and stay
+  out of this ledger.
+- **The leg's lasting allocations, in bytes.** The segmented window's staging (`g_rdec_seg_x`, `g_rdec_seg_cos`,
+  `g_rdec_seg_logits`, `g_rdec_segs`, `g_rdec_seg_regions`): `rows x dim x 4` + `rows x cos_elems x 4` + `regions x vocab x 4`
+  + `segments x 32` + `segments x 8` - on Llama-3.2-3B (dim 3072, head 128, vocab 128256) a 512-row window of two segments
+  holds 6.3 MB + 0.26 MB + 1.0 MB + 80 B at two regions, 12.6 MB + 0.52 MB + 2.1 MB at four regions and a 1024-row window.
+  The grouped step's `g_rdec_bregs` / `g_rdec_grp_toks`: `rows x 8` each, 96 B at twelve rows. The window's segment tables
+  `g_pf_segs` / `g_pf_wsegs`: `segments x 32` each. The driver's logits slots `pf_logits_host`: `regions x vocab x 4` (host,
+  was `vocab x 4`) - 2.1 MB at four regions on the 3B against 0.5 MB before. The per-row planes at `RDEC_NROW_MAX` rows
+  whatever the region count, where they held one row a region: the plan charges `(vocab x 4 + heads x RDEC_ATTN_SPLIT_CAP x
+  (hs + 2) x 4) x 8` = (513 KB + 200 KB) x 8 = 5.7 MB on the 3B, against 0.7 MB a region before; the x, cos, residual and
+  logits rows the command stages scale the same way (`dasllama_vulkan_decode.das`, `vk_rdec_prepare`).
+- **The leg's footprint on the one-region bench is the base's.** `/usr/bin/time -v` around the bench above (`--plen 0 --reps
+  2`, Llama-3.2-3B Q4_K_M, the JIT cache warm, two runs an arm): max RSS 3687160 / 3656932 KB at faf9ef95e8 against 3672036 /
+  3988724 KB at 1e2302d610 (the base's higher run the first after its rebuild - a JIT recompile; a cold tip run read 5740944 KB
+  at 294 s of user time against the warm runs' 16 s), tg128 250.3 +-0.1 against 252.2 +-0.0 tok/s (`direction-grade`, two
+  reps; the fold's 0.7% above).
+- **The segmented window's rows against the one-session window, on the 1B.** `test_gpu_resident_segments.das` at
+  a9fa027c9c under `DAS_LOG_LEVEL=info`, the split bar `SPLIT_BAR_REL` 0.06 of the row's max |logit| (bars 0.47 to 0.85): the
+  two tails as one segmented call read a widest miss of 0.18 (Q8_0) and 0.47 (Q4_K_M, session B's 31-row tail at a 0.50 bar -
+  the K-quant window's GEMM ladder at the two row counts) on the f16 mirror, 0.20 and 0.39 on the f32 mirror
+  (`DASLLAMA_VK_KV32=1`); the two openings as one window 0.07 / 0.12; the 300-row tails 0.13 / 0.26; the decline cell's two
+  sessions, prefilled on the CPU rails after the pin and held to the device-prefilled references, 0.22 / 0.20 (Q8_0) and
+  0.35 / 0.35 (Q4_K_M) against bars of 0.53 to 0.55; every control 2.5 to 8.7 bars out.

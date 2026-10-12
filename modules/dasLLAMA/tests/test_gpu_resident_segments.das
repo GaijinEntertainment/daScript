@@ -1,0 +1,412 @@
+options gen2
+options stack = 524288
+options persistent_heap
+options _dasllama_internal = true
+
+require dastest/testing_boost public
+require dasllama/dasllama_transformer   // the umbrella fires each arch [init] registration (llama)
+require dasllama/dasllama
+require dasllama/dasllama_common   // nolint:STYLE030,LINT019 - eval_segments_, forward_prefill, forward
+require daslib/jobque_boost
+require daslib/fio
+require dasllama/dasllama_math
+require dasllama/dasllama_gpu_tier
+require dasllama/dasllama_gpu_resident
+require ?vulkan dasllama/dasllama_vulkan_prefill   // nolint:STYLE030,LINT019 - vk_rdec_prefill_segment_windows, read in the vulkan half
+require ?vulkan dasllama/dasllama_vulkan_common   // nolint:STYLE030,LINT019 - PF_WINDOW: the windows a long segmented call runs
+require _model_tier
+require _resident_feed
+
+// The whole-model resident driver's SEGMENTED window (`DASLLAMA_GPU=1`): two host-cached sessions' chunks as ONE window
+// chain, each in its own mirror region, against the same chunks as two one-session windows on the same driver - the
+// driver against itself, no CPU chain. Llama-3.2-1B at Q8_0 (the ids form: the driver gathers the embedding) and at
+// Q4_K_M (the x form: the host embeds). The continuations' rows - two 40-token openings, then tails of 23 and 31 - and
+// then eight fed steps on each session, every row within the split bar of the one-session form's with the row one
+// step off as the control; then both openings as one window from position zero the same way. The witnesses: the
+// segmented-window counter up by one a segmented call, the driver's prefill count up by a segment, and every call
+// served. The decline: under the server's prefill pin a host-cached chunk passes to the CPU rails, so the form declines
+// the call whole and the engine runs each session alone (the pass counted once a session, the counter unmoved), every
+// row still within the bar of the device-prefilled references. Never more live host-cached sessions than regions: a
+// later prefill would take a live session's region, which the engine leaves to the scheduler's pin.
+// Every cell skips off the JIT, without DASLLAMA_GPU=1 on a device the driver serves, without its file under
+// models_dir(), or on a card whose room the plan does not fit at two regions.
+
+[init]
+def private allow_cpu_prefill_intent() {
+    allow_cpu_prefill()   // the decline cell's pinned chunks prefill on the CPU by design
+}
+
+let private OPEN_ROWS = 40l
+let private TAIL_A = 23l
+let private TAIL_B = 31l
+let private LONG_TAIL = 300l   //! two of them run past PF_WINDOW (512), so the segmented call runs two windows, the second holding B's rows alone
+let private STEPS = 8l
+
+//! the segmented windows the Vulkan driver counted so far; 0 with no vulkan module (the cells then skip on the tier)
+def private segment_windows : int64 {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        return vk_rdec_prefill_segment_windows()
+    } else {
+        return 0l
+    }
+}
+
+def private open_session(tr : Model; var s : Session; opening : array<int64>) {
+    eval_(tr, s, opening)
+}
+
+def private solo_rows(tr : Model; opening, tail, toks : array<int64>) : array<array<float>> {
+    var s <- create_session(tr, mirror_kv_dtype())
+    open_session(tr, s, opening)
+    eval_(tr, s, tail)
+    var rows <- steps_after(tr, s, toks)
+    delete s
+    return <- rows
+}
+
+//! the two sessions' rows held to their solo forms: every row within the bar, the row one step off past it
+def private hold_rows(t : T?; what : string; got, want : array<array<float>>) {
+    rows_within_control(t, what, got, want, SPLIT_BAR_REL, 1l, 1.0, $(r) => r == 0l ? "the prefill's row" : "step {r}")
+}
+
+//! the windows of a segmented call that hold both segments - the one the boundary between A and B falls in; 0 with no vulkan module
+def private shared_windows(ta : int64) : int64 {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        return ta % PF_WINDOW != 0l ? 1l : 0l
+    } else {
+        return 0l
+    }
+}
+
+//! two host-cached sessions' tails of `ta` and `tb` rows after their openings as ONE segmented call, then `STEPS` fed steps
+//! each, against the same tails as two one-session windows: a call past one window runs its segments across windows, the
+//! first segment ending in an earlier window than the last
+def private tails_as_segments(t : T?; tr : Model; ta, tb : int64; what : string) {
+    var open_a <- resident_prompt(OPEN_ROWS, 0l)
+    var open_b <- resident_prompt(OPEN_ROWS, 7l)
+    var tail_a <- ramp_ids(ta, 3l, 2000l, 53l, 4000l)
+    var tail_b <- ramp_ids(tb, 11l, 2000l, 53l, 4000l)
+    let toks <- resident_feed(STEPS)
+    var want_a <- solo_rows(tr, open_a, tail_a, toks)
+    var want_b <- solo_rows(tr, open_b, tail_b, toks)
+    var sa <- create_session(tr, mirror_kv_dtype())
+    var sb <- create_session(tr, mirror_kv_dtype())
+    open_session(tr, sa, open_a)
+    open_session(tr, sb, open_b)
+    let sw0 = segment_windows()
+    let pf0 = moe_gpu_resident_prefills()
+    var sess <- [unsafe(addr(sa)), unsafe(addr(sb))]
+    var chunks : array<array<int64>>
+    chunks |> reserve(2l)
+    chunks |> push_clone(tail_a)
+    chunks |> push_clone(tail_b)
+    eval_segments_(tr, sess, chunks)
+    sess |> clear()
+    t |> equal(segment_windows() - sw0, shared_windows(ta), "{what}: the two tails rode one segmented call, {shared_windows(ta)} window holding both segments")
+    t |> equal(moe_gpu_resident_prefills() - pf0, 2l, "{what}: the driver counted a prefill a segment")
+    t |> equal(sa.n_past, OPEN_ROWS + ta, "{what}: session A's position moved by its tail")
+    t |> equal(sb.n_past, OPEN_ROWS + tb, "{what}: session B's position moved by its tail")
+    var got_a <- steps_after(tr, sa, toks)
+    var got_b <- steps_after(tr, sb, toks)
+    hold_rows(t, "{what}: session A, the tail as a segment", got_a, want_a)
+    hold_rows(t, "{what}: session B, the tail as a segment", got_b, want_b)
+    log_argmax_rows(tr, "{what}: session A: solo window, then the tail as a segment", got_a, want_a)
+    log_argmax_rows(tr, "{what}: session B: solo window, then the tail as a segment", got_b, want_b)
+    delete sa
+    delete sb
+    delete open_a
+    delete open_b
+}
+
+def private segments_cell(t : T?; tr : Model) {
+    tails_as_segments(t, tr, TAIL_A, TAIL_B, "short tails")
+    var open_a <- resident_prompt(OPEN_ROWS, 0l)
+    var open_b <- resident_prompt(OPEN_ROWS, 7l)
+    var ca <- create_session(tr, mirror_kv_dtype())
+    var cb <- create_session(tr, mirror_kv_dtype())
+    var sess0 <- [unsafe(addr(ca)), unsafe(addr(cb))]
+    var opens : array<array<int64>>
+    opens |> reserve(2l)
+    opens |> push_clone(open_a)
+    opens |> push_clone(open_b)
+    let sw1 = segment_windows()
+    eval_segments_(tr, sess0, opens)
+    sess0 |> clear()
+    t |> equal(segment_windows() - sw1, 1l, "the two openings rode one segmented window from position zero")
+    let g0 <- [ <- logits_of(ca, tr.config.vocab_size), <- logits_of(cb, tr.config.vocab_size)]
+    delete ca   //! the two regions go free before the references take them: a live host-cached session's region is never taken
+    delete cb
+    var ra <- create_session(tr, mirror_kv_dtype())
+    var rb <- create_session(tr, mirror_kv_dtype())
+    open_session(tr, ra, open_a)
+    open_session(tr, rb, open_b)
+    let w0 <- [ <- logits_of(ra, tr.config.vocab_size), <- logits_of(rb, tr.config.vocab_size)]
+    rows_within_control(t, "the openings as one window", g0, w0, SPLIT_BAR_REL, 1l, 1.0, $(r) => r == 0l ? "session A's last row (B's as the control)" : "session B's last row")
+    log_argmax_rows(tr, "the openings as one window: the solo rows, then the segmented rows", g0, w0)
+    served_every_call(t)
+    delete ra
+    delete rb
+}
+
+//! the segmented admission decides before any bind: a continuation owning its region beside a session with none binds the
+//! owner first - the other region, touched later, is the newcomer's and the owner's is never taken
+def private owner_first_cell(t : T?; tr : Model) {
+    var open_a <- resident_prompt(OPEN_ROWS, 0l)
+    var open_b <- resident_prompt(OPEN_ROWS, 7l)
+    var open_c <- resident_prompt(OPEN_ROWS, 13l)
+    var tail_a <- ramp_ids(TAIL_A, 3l, 2000l, 53l, 4000l)
+    let toks <- resident_feed(STEPS)
+    let want_a <- solo_rows(tr, open_a, tail_a, toks)
+    var sa <- create_session(tr, mirror_kv_dtype())
+    open_session(tr, sa, open_a)   //! A owns a region
+    var sc <- create_session(tr, mirror_kv_dtype())
+    open_session(tr, sc, open_c)   //! C takes the other region and touches it last
+    delete sc
+    var sb <- create_session(tr, mirror_kv_dtype())
+    var sess <- [unsafe(addr(sa)), unsafe(addr(sb))]
+    var chunks : array<array<int64>>
+    chunks |> reserve(2l)
+    chunks |> push_clone(tail_a)
+    chunks |> push_clone(open_b)
+    let sw0 = segment_windows()
+    let pf0 = moe_gpu_resident_prefills()
+    eval_segments_(tr, sess, chunks)
+    sess |> clear()
+    t |> equal(segment_windows() - sw0, 1l, "an owner's continuation beside a session with no region: one segmented window (the owner bound first, the free region the newcomer's)")
+    t |> equal(moe_gpu_resident_prefills() - pf0, 2l, "... a prefill a segment")
+    let got_a <- steps_after(tr, sa, toks)
+    hold_rows(t, "the owner's tail beside a newcomer's opening", got_a, want_a)
+    unsafe {
+        delete sess
+    }
+    delete sa
+    delete sb
+    delete open_a
+    delete open_b
+    delete open_c
+    delete tail_a
+}
+
+//! three segments over two regions, one of them owned, decline whole before any bind: each is then served alone, no pass counted
+def private outnumber_cell(t : T?; tr : Model) {
+    var open_a <- resident_prompt(OPEN_ROWS, 0l)
+    var open_b <- resident_prompt(OPEN_ROWS, 7l)
+    var open_c <- resident_prompt(OPEN_ROWS, 13l)
+    var tail_a <- ramp_ids(TAIL_A, 3l, 2000l, 53l, 4000l)
+    var sa <- create_session(tr, mirror_kv_dtype())
+    open_session(tr, sa, open_a)
+    var sb <- create_session(tr, mirror_kv_dtype())
+    var sc <- create_session(tr, mirror_kv_dtype())
+    var sess <- [unsafe(addr(sa)), unsafe(addr(sb)), unsafe(addr(sc))]
+    var chunks : array<array<int64>>
+    chunks |> reserve(3l)
+    chunks |> push_clone(tail_a)
+    chunks |> push_clone(open_b)
+    chunks |> push_clone(open_c)
+    let sw0 = segment_windows()
+    let pf0 = moe_gpu_resident_prefills()
+    let passes0 <- gpu_cpu_passes_()
+    eval_segments_(tr, sess, chunks)
+    sess |> clear()
+    let passes1 <- gpu_cpu_passes_()
+    t |> equal(segment_windows() - sw0, 0l, "three segments over two regions, one of them owned: no segmented window")
+    t |> equal(moe_gpu_resident_prefills() - pf0, 3l, "... the fallback served each segment alone on the driver")
+    t |> equal(length(passes1), length(passes0), "... and the declined call counted no pass ({passes1})")
+    unsafe {
+        delete sess
+    }
+    delete sa
+    delete sb
+    delete sc
+    delete open_a
+    delete open_b
+    delete open_c
+    delete tail_a
+}
+
+//! an owner whose region holds fewer rows than its start declines the segmented call before any bind; the fallback counts
+//! that session's gap once
+def private gap_cell(t : T?; tr : Model) {
+    var open_a <- resident_prompt(OPEN_ROWS, 0l)
+    var open_b <- resident_prompt(OPEN_ROWS, 7l)
+    var tail_a <- ramp_ids(TAIL_A, 3l, 2000l, 53l, 4000l)
+    var sa <- create_session(tr, mirror_kv_dtype())
+    open_session(tr, sa, open_a)
+    sa.n_past += 10l   //! the region holds OPEN_ROWS rows; the continuation starts ten past them
+    var sb <- create_session(tr, mirror_kv_dtype())
+    var sess <- [unsafe(addr(sa)), unsafe(addr(sb))]
+    var chunks : array<array<int64>>
+    chunks |> reserve(2l)
+    chunks |> push_clone(tail_a)
+    chunks |> push_clone(open_b)
+    let sw0 = segment_windows()
+    let gap0 = pass_count("gap")
+    eval_segments_(tr, sess, chunks)
+    sess |> clear()
+    t |> equal(segment_windows() - sw0, 0l, "an owner short of its start: no segmented window")
+    t |> equal(pass_count("gap") - gap0, 1l, "... the fallback passed that session's call as the gap, once")
+    unsafe {
+        delete sess
+    }
+    delete sa
+    delete sb
+    delete open_a
+    delete open_b
+    delete tail_a
+}
+
+def private ownership_cells(t : T?; tr : Model) {
+    owner_first_cell(t, tr)
+    outnumber_cell(t, tr)
+    gap_cell(t, tr)
+}
+
+def private decline_cell(t : T?; tr : Model) {
+    let toks <- resident_feed(STEPS)
+    var opens : array<array<int64>>
+    opens |> reserve(2l)
+    var sess : array<Session?>
+    sess |> reserve(2l)
+    var sessions : array<Session>
+    sessions |> reserve(2l)
+    for (i in range64(2l)) {
+        opens |> emplace <| resident_prompt(OPEN_ROWS + i * 5l, i * 13l)
+        sessions |> emplace <| create_session(tr, mirror_kv_dtype())
+    }
+    for (i in range64(2l)) {
+        sess |> push(unsafe(addr(sessions[i])))
+    }
+    let sw0 = segment_windows()
+    let pf0 = moe_gpu_resident_prefills()
+    let pinned = pass_count("pinned_off")
+    let allowed = resident_prefill_allowed()
+    set_resident_prefill_allowed(false)
+    eval_segments_(tr, sess, opens)
+    set_resident_prefill_allowed(allowed)
+    sess |> clear()
+    t |> equal(segment_windows() - sw0, 0l, "under the prefill pin the sessions rode no segmented window")
+    t |> equal(moe_gpu_resident_prefills() - pf0, 0l, "... and the driver counted no prefill (the served cells' counter's control)")
+    t |> equal(pass_count("pinned_off") - pinned, 2l, "the engine ran each session alone, each passed to the CPU rails as pinned off")
+    //! the steps on both sessions before any reference session takes a region: two live host-cached sessions a region each
+    var got : array<array<array<float>>>
+    got |> reserve(2l)
+    for (i in range64(2l)) {
+        got |> emplace <| steps_after(tr, sessions[i], toks)
+    }
+    delete sessions
+    for (i in range64(2l)) {
+        var ref <- create_session(tr, mirror_kv_dtype())
+        open_session(tr, ref, opens[i])
+        var inscope want <- steps_after(tr, ref, toks)
+        hold_rows(t, "session {i} prefilled alone after the decline", got[i], want)
+        log_argmax_rows(tr, "session {i}: the device-prefilled reference, then the pinned-off form", got[i], want)
+        delete ref
+    }
+    delete got
+}
+
+[cold_path]
+//! the segmented form's other declines, each leaving the segmented-window counter where it was: a segment's session on
+//! another K/V codec than the mirror (the one-session fallback passing it as `codec`), both regions held by device-home
+//! sessions (the fallback passing each as `busy`), and a session adding deepstack slices the override has no arm for (the
+//! engine runs the segments one at a time, the CPU prefill loop serving that one with no pass counted)
+def private decline_arms_cell(t : T?; tr : Model) {
+    var open_a <- resident_prompt(OPEN_ROWS, 0l)
+    var open_b <- resident_prompt(OPEN_ROWS, 7l)
+    var opens : array<array<int64>>
+    opens |> reserve(2l)
+    opens |> push_clone(open_a)
+    opens |> push_clone(open_b)
+    if (mirror_kv_dtype() != KVDtype.f32) {
+        var sa <- create_session(tr, mirror_kv_dtype())
+        var sb <- create_session(tr, KVDtype.f32)
+        var sess <- [unsafe(addr(sa)), unsafe(addr(sb))]
+        let sw0 = segment_windows()
+        let codec0 = pass_count("codec")
+        eval_segments_(tr, sess, opens)
+        sess |> clear()
+        t |> equal(segment_windows() - sw0, 0l, "a segment on another K/V codec: no segmented window")
+        t |> equal(pass_count("codec") - codec0, 1l, "... the fallback passed that session to the CPU rails as codec")
+        unsafe {
+            delete sess
+        }
+        delete sa
+        delete sb
+    }
+    {
+        var da <- create_device_session(tr, mirror_kv_dtype())
+        var db <- create_device_session(tr, mirror_kv_dtype())
+        forward_prefill(tr, da, open_a, OPEN_ROWS, 0l)   //! a device-home session pins its region on its first prefill
+        forward_prefill(tr, db, open_b, OPEN_ROWS, 0l)
+        var ha <- create_session(tr, mirror_kv_dtype())
+        var hb <- create_session(tr, mirror_kv_dtype())
+        var sess <- [unsafe(addr(ha)), unsafe(addr(hb))]
+        let sw0 = segment_windows()
+        let busy0 = pass_count("busy")
+        eval_segments_(tr, sess, opens)
+        sess |> clear()
+        t |> equal(segment_windows() - sw0, 0l, "both regions held by device-home sessions: no segmented window")
+        t |> equal(pass_count("busy") - busy0, 2l, "... the fallback passed each host-cached session as busy")
+        unsafe {
+            delete sess
+        }
+        delete ha
+        delete hb
+        gpu_device_kv_park(da)   //! a deleted session keeps its region pinned: parked, so the next arm's sessions find both free
+        gpu_device_kv_park(db)
+        delete da
+        delete db
+    }
+    {
+        var sa <- create_session(tr, mirror_kv_dtype())
+        var sb <- create_session(tr, mirror_kv_dtype())
+        sb.ds_active = true
+        var sess <- [unsafe(addr(sa)), unsafe(addr(sb))]
+        let sw0 = segment_windows()
+        let pf0 = moe_gpu_resident_prefills()
+        let passes0 = pass_total()
+        eval_segments_(tr, sess, opens)
+        sess |> clear()
+        t |> equal(segment_windows() - sw0, 0l, "a session adding deepstack slices: no segmented window on an override with no slice-add arm")
+        t |> equal(moe_gpu_resident_prefills() - pf0, 1l, "... the other session's segment ran alone on the driver")
+        t |> equal(pass_total() - passes0, 0l, "... and the deepstack session took the CPU prefill loop with no pass counted")
+        sb.ds_active = false
+        unsafe {
+            delete sess
+        }
+        delete sa
+        delete sb
+    }
+    delete opens
+    delete open_a
+    delete open_b
+}
+
+def private segments_cells(t : T?; file : string) {
+    let path = path_join(models_dir(), file)
+    return if (!resident_ready(t, path))
+    var tr <- load_resident(path, 2l)
+    return if (!resident_admitted(t, "the whole-model driver armed on {file} (the load log names any decline)", ""))
+    t |> equal(tr.arch, "llama", "the file is a llama-family model")
+    let allowed = resident_prefill_allowed()
+    set_resident_prefill_allowed(true)   //! the served cells read the pin's default: pinned here, put back as found
+    with_dasllama_jobque_() {
+        segments_cell(t, tr)
+        tails_as_segments(t, tr, LONG_TAIL, LONG_TAIL, "tails past one window")   //! two windows: segment A ends in the first, B crosses into the second
+        ownership_cells(t, tr)
+        decline_cell(t, tr)
+        decline_arms_cell(t, tr)
+    }
+    set_resident_prefill_allowed(allowed)
+    delete tr
+}
+
+[test]
+def test_gpu_resident_segments_llama_1b_q8(t : T?) {
+    segments_cells(t, "Llama-3.2-1B-Instruct-Q8_0.gguf")
+}
+
+[test]
+def test_gpu_resident_segments_llama_1b_k(t : T?) {
+    segments_cells(t, "Llama-3.2-1B-Instruct-Q4_K_M.gguf")
+}

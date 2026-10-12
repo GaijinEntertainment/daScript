@@ -11,7 +11,8 @@ require _resident_regions
 // window, and past the unsplit position so the split attention form records. The rows hold the split bar with
 // the one-token-off control, not bit for bit: the N-row command's Q8_K sites round apart from the one-row
 // command's (`../followup_vulkan.md` item 75). Skips off the JIT, without DASLLAMA_GPU=1 on a device the driver
-// serves, or without the file under models_dir().
+// serves, without the file under models_dir(), or on a card whose room the plan does not fit at the regions a cell asks
+// (twelve for the groups cell).
 let private REGIONS_FILE = "Llama-3.2-1B-Instruct-Q4_K_M.gguf"
 
 [test]
@@ -22,4 +23,10 @@ def test_regions_batched_steps_k(t : T?) {
 [test]
 def test_regions_batched_steps_split_k(t : T?) {
     cell_regions_batched_steps_split(t, REGIONS_FILE, LogitsBar.split_bar)
+}
+
+//! twelve rows over twelve regions: past the N-row command's eight the step runs two commands of six, never a row at a time
+[test]
+def test_regions_batched_groups_k(t : T?) {
+    cell_regions_batched_groups(t, REGIONS_FILE, 12l)
 }

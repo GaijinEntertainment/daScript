@@ -31,8 +31,11 @@ anchor.
   streams' rows while the quantum leaves room - so two prompts' tails cost about one window where
   the GPU serves segments (`ARCHITECTURE_GPU_PREFILL_WINDOW.md#prefill-segments`) and run one after
   the other elsewhere; a stream with a media span ahead takes no segment, and when the first
-  prefilling stream is one, or the scheduler is device-home, the tick is that stream's own call,
-  `prefill_one_chunk`) - the quantum `chunk_tokens` while
+  prefilling stream is one, or the scheduler is device-home on a model the driver's segmented window
+  declines (`gpu_device_prefill_segments`: a recurrent, per-layer-embedding, NextN, routed or
+  hyper-connection model, or a block-codec mirror - each stream's chunk would cost its own window
+  and the tick would cut the next stream's prompt short for nothing), the tick is that stream's own
+  call, `prefill_one_chunk`) - the quantum `chunk_tokens` while
   a stream decodes, since the call is the stall every decoding stream waits out, and at least `idle_chunk_tokens`
   while none does, since a prefill window's cost is mostly fixed and nothing waits on it; `chunk_defaults` names
   both sizes per serving backend (the chunk 512 where a GPU prefills and 64 on the CPU, whose chunk costs its token count, so the stall follows it down; idle 512,

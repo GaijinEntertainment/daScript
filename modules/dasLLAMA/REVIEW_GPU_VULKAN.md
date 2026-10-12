@@ -55,8 +55,8 @@ routed off and why.** A silent decline is a fallback a user finds only by profil
 dispatches through a `moe_gpu_*` or `vk_*` entry, wherever the diff puts it, and whose false
 branch or `continue` routes work off the path it armed, to the CPU path, to another path inside
 the tier, or to a slower form inside the same path (a host upload in place of a device-to-device
-copy) - that does not log the concrete reason it declined, once per reason per armed model, is a
-defect.**
+copy) because of a model, session or device property, never because of the work's size - that does
+not log the concrete reason it declined, once per reason per armed model, is a defect.**
 
 **A `*_decline_words` return that a diff adds or changes, for a reason a `VK_DECLINE_WORDS_*`
 constant in `dasllama/dasllama_vulkan_tower.das` already states, returns that constant or starts
@@ -222,14 +222,14 @@ handed to `DaAttnT`'s set). The picker asks one stamp's set and the encode
 dispatches another, so the stamp the diff left behind reads the set's buffers in the wrong
 slots, and nothing refuses it.
 
-**A diff that changes how many GPU timestamps the resident prefill's window command records - a
-`pfq_ts` call in `pf_run` or in any function `pf_run` reaches, all in
-`dasllama/dasllama_vulkan_prefill.das` - updates `pf_roles_per_layer` and that file's
-`pf_prof_report` in the same change.** Both index a fixed count per layer, so one extra or
+**A diff that changes how many GPU timestamps the resident prefill's window command records in
+the window `pf_prof_report` reads - the call's last - through a `pfq_ts` call in `pf_run` or in
+any function `pf_run` reaches, all in `dasllama/dasllama_vulkan_prefill.das`, updates
+`pf_roles_per_layer` and that file's `pf_prof_report` in the same change.** Both index a fixed count per layer, so one extra or
 missing timestamp reports every later stamp under the wrong role name.
 
 **A descriptor set the resident driver builds binds a buffer it allocated per row or per region -
-one slot per batched row (`* RDec.nb`, the rows the N-row token command steps in one dispatch), or
+one slot per batched row (`* RDec.nb`, the rows the per-row planes hold), or
 one slot per region, a region being one session's share of the device K/V mirror and recurrent
 state - over the whole buffer, never over one row's or one slot's range.** Each dispatch picks its
 row or region at run time, from `TokMeta` or its push constants, so a set narrowed to one slot sends

@@ -10,11 +10,13 @@ A definition home of a per-format quantity is `dasllama/dasllama_kqformat.das`, 
 the pins of `tests/test_kqformat.das`.
 
 **A diff that adds or changes a function in `dasllama/` that maps a kernel/IR format id - the int
-a generated kernel takes as its format parameter - to a `KqFmt`, a per-format value or predicate,
-or a choice among per-format functions through its own table or branch is a defect - resolve the
-id through `kq_fmt_of_id` (`dasllama/dasllama_kqformat.das`): the panicking overload
-`kq_fmt_of_id(id, what)`, the `bool` overload whose false branch panics, or a per-format accessor
-that takes the id (`kq_qsb` / `kq_ssb`).**
+a generated kernel takes as its format parameter (`KqDesc.schema_id`) - or a format slot - the
+`int(KqFmt)` the GPU drivers carry - to a `KqFmt`, a per-format value or predicate, or a choice
+among per-format functions through its own table or branch is a defect - resolve an id through
+`kq_fmt_of_id` (`dasllama/dasllama_kqformat.das`: the panicking overload `kq_fmt_of_id(id, what)`,
+or the `bool` overload with the caller panicking when it returns false) or an id-taking accessor (`kq_qsb(int)` /
+`kq_ssb(int)`, `dasllama/dasllama_gemm_schema.das`), and a slot through `kq_fmt_of_slot` or a
+slot-taking accessor (`kq_sb(int)`, `kq_unit(int)`).**
 
 **A literal that stands for a per-format quantity of a `KqFmt` member - the value a definition
 home defines for it, in any unit (words, halves, superblocks) - written outside a Metal or SPIR-V
@@ -24,10 +26,10 @@ constant a definition home declares, declared there in the same change when none
 hand-copied value drifts from the definition it restates, and a literal `32` cannot be told apart
 from a tile width that happens to match.
 
-**A Metal or SPIR-V kernel body, which calls no `KqFmt` accessor, reads a per-format quantity
-through a `@template_constant` declared on the shared base of its class family, or on the class
-when it has none, never as a bare literal; a diff that declares such a constant pins its value
-against the format's `kq_desc` row in `tests/test_kqformat.das` in the same change.**
+**A diff that writes a per-format quantity as a bare literal in a Metal or SPIR-V kernel body is a
+defect - read it through a `@template_constant` declared on the shared base of its class family, or
+on the class when it has none; a diff that declares such a constant pins its value against the
+format's `kq_desc` row in `tests/test_kqformat.das` in the same change.**
 
 **A diff that adds or changes a `kq_desc` row (`dasllama/dasllama_kqformat.das`) or a
 `ggml_type_bytes` entry (`dasllama/dasllama_gguf.das`) lands the row's pins in

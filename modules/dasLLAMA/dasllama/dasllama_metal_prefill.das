@@ -4551,7 +4551,7 @@ def public set_metal_prefill_mulmm_legacy(v : bool) {
 //! family) vs the padded-tile path — `DASLLAMA_METAL_MM_TAIL`'s setter twin. Default on.
 def public set_metal_prefill_mm_tail(v : bool) {
     if (v != g_pf_env_mm_tail) {
-        to_log(LOG_WARNING, "dasLLAMA metal prefill: set_metal_prefill_mm_tail({v}) - {v ? "small remainders and K-quant sites of eight rows or fewer peel onto the GEMV forms" : "small npos % 32 remainders bill the padded tile"} (numerics move with the form)\n")
+        to_log(LOG_WARNING, "dasLLAMA metal prefill: set_metal_prefill_mm_tail({v}) - {v ? "small remainders and K-quant sites of eight rows or fewer peel onto the GEMV forms" : "small npos % 32 remainders bill the padded tile; the last layer's narrowed FFN row keeps its one-row form (DASLLAMA_METAL_LASTROW=0 for the full panel)"} (numerics move with the form)\n")
     }
     g_pf_env_mm_tail = v
 }
@@ -5850,6 +5850,11 @@ def private pf_kq_deep_stamps(fmt : KqFmt) : KqDeepStamps {
         pso_thdb = g_pf_pso_kq_mm5_thdb, pso_thdb128 = g_pf_pso_kq_mm5_thdb128,
         enc_t = @@enc_kq_mm_k5_t_c, enc_th = @@enc_kq_mm_k5_th_c, enc_th128 = @@enc_kq_mm_k5_th128_c,
         enc_thdb = @@enc_kq_mm_k5_thdb_c, enc_thdb128 = @@enc_kq_mm_k5_thdb128_c)
+}
+
+[arch(at="../ARCHITECTURE_GPU_PREFILL.md#prefill-last-row-tail")]
+def private pf_enc_narrow_gemv(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; woff : int64; bx, by, bk, bn : MetalBuffer?; kdim, d : int64) {
+    enc_site_gemv(enc, t, fmt, woff, d, kdim, bx, by, bk, bn)
 }
 
 [arch(at="../ARCHITECTURE_GPU_PREFILL.md#prefill-kq-tensor-scaffold")]
@@ -7730,8 +7735,8 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                     && !c.pre_post_norm && l >= nds && !c.q_gated
                     && c.n_layer_nextn == 0l
                     && dim % 32l == 0l && hid_l % 32l == 0l
-                    && fmt_at(t.w1_fmt, l) == KqFmt.q8 && fmt_at(t.w3_fmt, l) == KqFmt.q8
-                    && fmt_at(t.w2_fmt, l) == KqFmt.q8)
+                    && kq_fmt_one_row_gemv(fmt_at(t.w1_fmt, l), dim) && kq_fmt_one_row_gemv(fmt_at(t.w3_fmt, l), dim)
+                    && kq_fmt_one_row_gemv(fmt_at(t.w2_fmt, l), hid_l))
                 if (narrow_last) {
                     for (sg in segs) {
                         let nro = uint64((sg.row0 + sg.npos - 1l) * dim * 4l)
@@ -7740,10 +7745,8 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                             pf_enc_rms(enc, bx, nro, bw_ffn, bxb, u_dim, u_eps, 1l)
                         }
                         if (g_pf_skip != "gemm") {
-                            let bw1b = blob_of(g_dev, t, t.w1_offs[l])
-                            enc_gemv(enc, bw1b.buf, bw1b.boff, bxb, bhb, u_dim, u_hid_l, hid_l, 0ul, 0ul)
-                            let bw3b = blob_of(g_dev, t, t.w3_offs[l])
-                            enc_gemv(enc, bw3b.buf, bw3b.boff, bxb, bhb2, u_dim, u_hid_l, hid_l, 0ul, 0ul)
+                            pf_enc_narrow_gemv(enc, t, fmt_at(t.w1_fmt, l), t.w1_offs[l], bxb, bhb, u_dim, u_hid_l, dim, hid_l)
+                            pf_enc_narrow_gemv(enc, t, fmt_at(t.w3_fmt, l), t.w3_offs[l], bxb, bhb2, u_dim, u_hid_l, dim, hid_l)
                         }
                         if (g_pf_skip != "ew" && g_pf_skip != "nongemm") {
                             if (c.ffn_act != FfnAct.silu) {
@@ -7753,8 +7756,7 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                             }
                         }
                         if (g_pf_skip != "gemm") {
-                            let bw2b = blob_of(g_dev, t, t.w2_offs[l])
-                            enc_gemv(enc, bw2b.buf, bw2b.boff, bhb, bxb, u_hid_l, u_dim, dim, 0ul, 0ul)
+                            pf_enc_narrow_gemv(enc, t, fmt_at(t.w2_fmt, l), t.w2_offs[l], bhb, bxb, u_hid_l, u_dim, hid_l, dim)
                         }
                         if (g_pf_skip != "ew" && g_pf_skip != "nongemm") {
                             var bosc : MetalBuffer?
@@ -8512,7 +8514,7 @@ def dasllama_metal_prefill_register() {
     }
     g_pf_env_mm_tail = g_env_metal.mm_tail
     if (!g_pf_env_mm_tail) {
-        to_log(LOG_WARNING, "dasLLAMA metal prefill: DASLLAMA_METAL_MM_TAIL=0 - small npos % 32 remainders bill the padded tile (numerics move with the form)\n")
+        to_log(LOG_WARNING, "dasLLAMA metal prefill: DASLLAMA_METAL_MM_TAIL=0 - small npos % 32 remainders bill the padded tile; the last layer's narrowed FFN row keeps its one-row form (DASLLAMA_METAL_LASTROW=0 for the full panel) (numerics move with the form)\n")
     }
     g_pf_env_qkr = g_env_metal.qk_rope
     if (!g_pf_env_qkr) {

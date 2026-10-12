@@ -253,6 +253,21 @@ def private moe_shell(fmt : KqFmt) : Model {
     return <- m
 }
 
+//! the Metal prefill's one-row GEMV predicate (`kq_fmt_one_row_gemv`): q8 at any width, a served superblock format at a
+//! whole-superblock width and not at a partial one, and a superblock format the Metal kernels do not serve at no width
+[test]
+def test_kq_fmt_one_row_gemv(t : T?) {
+    t |> run("the last-layer narrowing admits q8 at any width and a served superblock format at whole superblocks alone") @(t : T?) {
+        t |> success(kq_fmt_one_row_gemv(KqFmt.q8, 100l), "q8 has a one-row GEMV at any width")
+        t |> success(kq_fmt_one_row_gemv(KqFmt.k4, 8192l), "a served K-quant at whole superblocks")
+        t |> success(!kq_fmt_one_row_gemv(KqFmt.k4, 8191l), "... and not at a partial superblock")
+        t |> success(!kq_fmt_one_row_gemv(KqFmt.iq3s4, 8192l), "a superblock format the Metal kernels do not serve has none")
+        t |> success(!kq_fmt_one_row_gemv(KqFmt.q51, 8192l), "a per-32 format is no superblock format")
+        t |> success(!kq_fmt_one_row_gemv(KqFmt.iq4nl32, 8192l), "... nor the per-32 IQ4_NL plane")
+        t |> success(kq_fmt_one_row_gemv(KqFmt.q40, 8192l), "Q4_0 repacks to whole superblocks, so it has the form")
+    }
+}
+
 [test]
 def test_moe_metal_expert_formats(t : T?) {
     t |> run("the Metal routed block admits exactly the expert plane formats it has kernels for; every other format declines") @(t : T?) {
@@ -1051,5 +1066,31 @@ def test_mtp_verify_snapshot(t : T?) {
         t |> equal(rs.mtp_h[0], 0.25, "the carry re-seeds from the verify's row-0 hidden")
         delete rs
         delete rm
+    }
+}
+
+//! the shape arms that keep a short window off the token command's peel, one at a time on a dense shell that fits
+[test]
+def test_peel_shape_arms(t : T?) {
+    t |> run("the peel's shape arms name the NextN head, the hyper-connection chain, the per-layer embedding and the recurrent state apart") @(t : T?) {
+        var fits <- shell(2l, 0ul)
+        t |> equal(rdec_peel_shape_why(fits.config), "", "a dense shell fits the peel")
+        var nextn <- shell(2l, 0ul)
+        nextn.config.n_layer_nextn = 1l
+        t |> equal(rdec_peel_shape_why(nextn.config), "a NextN-headed model", "a NextN head keeps the chain")
+        var hc <- shell(2l, 0ul)
+        hc.config.hyper_conn = true
+        t |> equal(rdec_peel_shape_why(hc.config), "a hyper-connection chain", "a hyper-connection chain keeps the chain")
+        var ple <- shell(2l, 0ul)
+        ple.config.n_embd_per_layer = 64l
+        t |> equal(rdec_peel_shape_why(ple.config), "a per-layer-embedding model", "a per-layer embedding keeps the chain")
+        var recr <- shell(2l, 1ul)
+        t |> equal(rdec_peel_shape_why(recr.config), "a recurrent model", "a recurrent state keeps the chain")
+        t |> success(!gpu_device_prefill_segments_(fits), "with no driver armed on it, no model's device-home tick takes the segmented window")
+        delete fits
+        delete nextn
+        delete hc
+        delete ple
+        delete recr
     }
 }

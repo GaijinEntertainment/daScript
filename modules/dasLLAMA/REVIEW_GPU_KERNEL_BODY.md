@@ -55,7 +55,8 @@ kernel steps along K, or by the multiple of that chunk the site's split of K acr
 forces.** A gate that checks less than the kernel's chunk silently drops a tail; a gate that
 checks more than the site's own split forces never sees a shape the kernel could serve. A divisor
 the source weight format forces is a check that the weights are well-formed, not an alignment
-gate; the site keeps it as a separate check next to the kernel-chunk gate.
+gate; where it differs from the kernel chunk the site keeps it as a separate check next to the
+kernel-chunk gate.
 
 **A value that dispatch sites read in more than one role - K at one, the output extent at another -
 is gated, at every one of those sites, on the least common multiple of the divisors each role

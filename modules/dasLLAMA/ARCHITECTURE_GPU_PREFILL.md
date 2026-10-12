@@ -225,19 +225,19 @@ threadgroup slab rather than from device memory.
 
 ### The last-layer FFN tail {#prefill-last-row-tail}
 
-Past the final attention only the classifier's logits and the MTP head read the residual
-stream, and both read one row. The last dense layer's FFN therefore runs that final row alone:
-the add, the norm and the three FFN GEMMs dispatch at one row through the fixed-B GEMV forms,
-not through `enc_gemm_mm`, so the mm-tail peel counters (`ARCHITECTURE_GPU_PREFILL.md#gemv-tail-peel`) stay an instrument of the
-full-panel path only. The narrowing declines wherever another consumer reads every row - a
-session keeping the hidden state, a warm or MTP forward (`n_layer_nextn` present), a
-recurrent, MoE or PLE layer, a sandwich-norm or gated-query model, a deepstack-tapped layer -
-and it engages only at `npos > 1` with `dim` and the layer's hidden width both %32 and every
-FFN weight on the q8 plane (the GEMV forms it narrows onto are q8); a Q4_K_M carrier never
-takes it. `DASLLAMA_METAL_LASTROW=0` pins the full-panel tail.
-A caller that reads `x_b` rows afterwards - embedding pooling, whichever rows its pooling picks, a
-plane-compare probe - sets `Session.keep_hidden` and the prefill keeps every row; the flag is
-zero-init, so narrowing is the default.
+Past the final attention only the classifier's logits and the MTP head read the residual stream, and both read
+one row. The last dense layer's FFN therefore runs that final row alone: the add, the norm and the three FFN
+GEMMs dispatch at one row through the fixed-B GEMV forms, not through `enc_gemm_mm`, so the mm-tail peel
+counters (`ARCHITECTURE_GPU_PREFILL.md#gemv-tail-peel`) stay an instrument of the full-panel path only. The
+narrowing declines wherever another consumer reads every row - a session keeping the hidden state, a warm or
+MTP forward (`n_layer_nextn` present), a recurrent, MoE or PLE layer, a sandwich-norm or gated-query model, a
+deepstack-tapped layer - and it engages only at `npos > 1` with `dim` and the layer's hidden width both %32
+and every FFN weight on a plane with a one-row form - the q8 plane's GEMV, or a superblock format's
+row-batched decode form at one row (`pf_enc_narrow_gemv`; the site's K must be whole superblocks, so a K-quant
+carrier whose `dim` or hidden width is off 256 keeps the full panel) - whatever the mm-tail lever
+(`DASLLAMA_METAL_MM_TAIL`) says. `DASLLAMA_METAL_LASTROW=0` pins the full-panel tail. A caller that reads
+`x_b` rows afterwards - embedding pooling, whichever rows its pooling picks, a plane-compare probe - sets
+`Session.keep_hidden` and the prefill keeps every row; the flag is zero-init, so narrowing is the default.
 
 ### The dense-KQ tensor mul_mm scaffold {#prefill-kq-tensor-scaffold}
 

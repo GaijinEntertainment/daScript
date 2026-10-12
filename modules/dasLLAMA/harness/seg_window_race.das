@@ -11,8 +11,6 @@ options stack = 524288
 options _dasllama_internal = true
 
 require daslib/clargs
-require daslib/strings_boost
-require daslib/strings_convert
 require dasllama/dasllama
 require dasllama/dasllama_common   // nolint:STYLE030,LINT019 - eval_, make_run_state, eval_segments_
 require dasllama/dasllama_math     // with_dasllama_jobque_
@@ -20,6 +18,7 @@ require ../tests/_metal_blob_twin.das // nolint:STYLE030,LINT019 - blob_twin, us
 require ../tests/_compares.das     // nolint:STYLE030,LINT019 - logits_maxdiff
 require ?das_metal dasllama/dasllama_metal_prefill   // metal_prefill_segment_windows, metal_prefill_shutdown
 require dastest/testing_boost
+require _window_race_fixture   // int_list, counting_tokens
 
 [CommandLineArgs]
 struct RaceArgs {
@@ -31,36 +30,6 @@ struct RaceArgs {
     streams : string = "2"
     @clarg_doc = "Timed repetitions a row (the fastest counts)"
     reps : int = 3
-}
-
-//! the comma list's numbers; a part that is no number is skipped
-def private int_list(s : string) : array<int64> {
-    var out : array<int64>
-    for (part in split(s, ",")) {
-        let n = try_to_int(part)
-        if (is_ok(n)) {
-            out |> push(int64(unwrap(n)))
-        }
-    }
-    return <- out
-}
-
-//! `n` tokens of a counting text from `seed`, the BOS first: two seeds make two prompts of the same length
-def private counting_tokens(tr : Model; n, seed : int64) : array<int64> {
-    let text = build_string() $(var w : StringBuilderWriter) {
-        var i = seed
-        var chars = 0
-        while (chars < int(n) * 6) {   //! a number and its comma is two to four tokens; the encode is cut to n
-            let piece = "{i}, "
-            w |> write(piece)
-            chars += length(piece)
-            i ++
-        }
-    }
-    var all <- encode(tr, text, true, false)
-    var toks <- [for (k in range64(n)); all[k]]
-    delete all
-    return <- toks
 }
 
 [export]

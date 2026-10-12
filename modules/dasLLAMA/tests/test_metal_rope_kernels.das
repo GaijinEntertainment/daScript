@@ -92,15 +92,16 @@ def private rpst_flat_gate(t : T?; var dev, queue; f16dst : bool; hs, nheads, kv
         let btc = mc |> in_(tcos)
         let bts = mc |> in_(tsin)
         let bbias = mc |> in_(bias)
-        var ka = RopeStoreArgs(qd = uint(qd), head_size = uint(hs), npairs_q = uint(npairs_q),
-            npairs = uint(npairs), neox = neox ? 1u : 0u, has_bias = hasbias ? 1u : 0u, rot = uint(rot))
+        var ka = gk_rope_kv_args(int64(qd), int64(kvd), int64(hs), int64(npairs_q), int64(npairs), neox, hasbias, int64(rot))
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
             stamp_run(st, pso) {
-                invoke(st.enc, enc, mc.buf[bqk], mc.buf[bvs], 0ul, mc.buf[bkd], 0ul, mc.buf[bvd], 0ul, mc.buf[btc], 0ul, mc.buf[bts], mc.buf[bbias], ka, int64(npairs))
+                //! the shared template's binds: q, the k view of the same buffer, the v rows, the mirror K and V rows, the bias, the cos and sin rows
+                invoke(st.enc, enc, mc.buf[bqk], mc.buf[bqk], mc.buf[bvs], 0ul, mc.buf[bkd], 0ul, mc.buf[bvd], 0ul, mc.buf[bbias], mc.buf[btc], 0ul, mc.buf[bts], ka, int64(npairs))
             }
         }
         return if (!ran)
         let heads = Shape(row_width = hs)
+        t |> success(abs(want_qk[3] - qk[3]) > 1e-3, "{tag}: the roped q row differs from its input at a rotated index (the in-place compare has teeth)")
         check_buf(t, "{tag} q", mc.buf[bqk], want_qk, BAR_FP, heads)
         if (f16dst) {
             check_buf_h(t, "{tag} k", mc.buf[bkd], want_k, BAR_F16, heads)
@@ -451,15 +452,16 @@ def private rpst_b_gate(t : T?; var dev, queue; f16dst : bool; hs, nheads, kv_mu
         let bts = mc |> in_(tsin)
         let brt = mc |> in_plain(rt)
         let bbias = mc |> in_(bias)
-        var ka = RopeStoreBArgs(lay = uint(lay), kv_dim = uint(kvd), qd = uint(qd), head_size = uint(hs),
-            npairs_q = uint(npairs_q), npairs = uint(npairs), qstride = uint(qstride),
-            neox = neox ? 1u : 0u, has_bias = hasbias ? 1u : 0u, rot = uint(rot))
+        var ka = gk_rope_kv_args(int64(qd), int64(kvd), int64(hs), int64(npairs_q), int64(npairs), neox, hasbias, int64(rot),
+            0l, 0l, int64(nb), int64(qstride), int64(qstride), int64(rot / 2), int64(lay))
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
             stamp_run(st, pso) {
-                invoke(st.enc, enc, mc.buf[bqk], mc.buf[bka], mc.buf[bva], mc.buf[btc], mc.buf[bts], mc.buf[brt], 0ul, mc.buf[bbias], ka, int64(npairs), int64(nb))
+                //! the shared template's binds: the fused rows as q, k and v views, the mirror K and V arenas, the bias, the cos and sin rows, the row table
+                invoke(st.enc, enc, mc.buf[bqk], mc.buf[bqk], mc.buf[bqk], 0ul, mc.buf[bka], 0ul, mc.buf[bva], 0ul, mc.buf[bbias], mc.buf[btc], 0ul, mc.buf[bts], mc.buf[brt], 0ul, ka, int64(npairs), int64(nb))
             }
         }
         return if (!ran)
+        t |> success(moved_off(want_qk, qk, 3, BAR_FP), "{tag}: the roped q row differs from its input at a rotated index past the bar (the in-place compare has teeth)")
         check_buf(t, "{tag} q", mc.buf[bqk], want_qk, BAR_FP, Shape(row_width = qstride))
         if (f16dst) {
             check_buf_h(t, "{tag} karena", mc.buf[bka], want_ka, BAR_F16, FLAT_SHAPE)

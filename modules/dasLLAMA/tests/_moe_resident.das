@@ -115,7 +115,7 @@ def private device_has_expert_tiles() : bool {
 
 //! the driver's admission of the fixture and the host-layer count it armed, against the fixture's expectation;
 //! -1 where the cell ends here - a skip the box earns, or the red that names the load log
-def private moe_fixture_admitted(t : T?; tr : Model; fx : MoeFixture) : int64 {
+def moe_fixture_admitted(t : T?; tr : Model; fx : MoeFixture) : int64 {
     t |> success(tr.config.n_expert > 0l && (tr.config.n_ff_shexp > 0l) == fx.shexp, "the fixture routes experts {fx.shexp ? "beside" : "with no"} shared expert")
     if (fx.window > 0l) {
         t |> equal(tr.config.sliding_window, fx.window, "the fixture's sliding layers attend {fx.window} keys")

@@ -20,6 +20,7 @@ require dasllama/dasllama_gpu_resident   // set_gpu_resident_regions_, moe_gpu_r
 require ?vulkan dasllama/dasllama_vulkan_common   // PF_WINDOW, where the module exists
 require ?vulkan dasllama/dasllama_vulkan_decode   // vk_rdec_token_n_rows: the N-row command served the batched cells' rows
 require ?vulkan dasllama/dasllama_vulkan_classes
+require ?vulkan dasllama/dasllama_vulkan_prefill   // vk_rdec_prefill_segment_windows: the device-mode tick's segmented-window witness
 require _model_tier public   // models_dir() + model_available() presence/size-tier gate
 require _resident_feed   // served_every_call: the shared served witness
 
@@ -214,10 +215,6 @@ def cell_regions_wide_single_steps(t : T?; file : string) {
     }
 }
 
-//! of the last logits' max |logit|: the window chain at two window splits of one prompt reduces its attention in two orders,
-//! and the 0.5B's own device-vs-CPU rounding reads 0.30-0.50 of a 9.5-18 max logit (`test_gpu_resident_qwen2.das`'s bar)
-let private SPLIT_BAR_REL = 0.06
-
 def private prose_ids(n, salt : int64) : array<int64> => <- resident_prompt(n, salt)
 
 //! the logits of `prompt`'s first `n - 1` tokens on a session of its own, gone before the caller makes the compared pair (two
@@ -340,41 +337,99 @@ def private dn_state_home(var s : Session) : double {
 }
 
 //! two sessions over `pa` and `pb`, a region each, through STEPS batched steps against each session alone, every step through the N-row command
-def private batched_steps_body(t : T?; tr : Model; pa, pb : array<int64>; bar : LogitsBar) {
-    var al <- alone_runs(tr, pa, pb)
-    var sa <- create_session(tr, mirror_kv_dtype())
-    var sb <- create_session(tr, mirror_kv_dtype())
-    eval(tr, sa, pa)   // `eval` advances `n_past`, the position a batched step reads
-    eval(tr, sb, pb)
+//! the segmented windows the Vulkan driver counted so far; 0 with no vulkan module
+def private segment_windows_count : int64 {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        return vk_rdec_prefill_segment_windows()
+    } else {
+        return 0l
+    }
+}
+
+//! `bar`, or the split bar where a bit-for-bit claim cannot hold over `rows`: past the unsplit position the N-row command splits
+//! a layer's keys into fewer pieces than the row alone wherever its rows' workgroups over the pieces run past one wave of the
+//! card's SMs, and the two commands then sum the keys in two orders (`vk_rdec_rows_split_alike`)
+def private rows_bar(bar : LogitsBar; rows, pos : int64) : LogitsBar {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        if (bar == LogitsBar.bit_exact && !vk_rdec_rows_split_alike(rows, pos)) {
+            to_log(LOG_WARNING, "the N-row command over {rows} rows splits the keys apart from the row alone at {pos} positions on this card: the batched rows hold the split bar, not bit for bit\n")
+            return LogitsBar.split_bar
+        }
+    }
+    return bar
+}
+
+def private batched_steps_body(t : T?; tr : Model; prompts, feeds : array<array<int64>>; bar0 : LogitsBar) {
+    let rows = long_length(prompts)
+    var furthest = 0l
+    for (p in prompts) {
+        furthest = max(furthest, long_length(p))
+    }
+    let bar = rows_bar(bar0, rows, furthest + long_length(feeds[0]))
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        t |> success(vk_rdec_rows_split_alike(1l, furthest + long_length(feeds[0])), "one row splits a layer's keys as one row does")
+    }
+    let steps_alone0 = rdec_nrow_steps()
+    var alone <- [for (i in range64(rows)); logits_alone(tr, prompts[i], feeds[i])]
+    t |> equal(rdec_nrow_steps() - steps_alone0, 0l, "the sessions alone stepped through the one-row command: the N-row counter's control")
+    var sessions : array<Session>
+    sessions |> reserve(rows)
+    for (i in range64(rows)) {
+        sessions |> emplace <| create_session(tr, mirror_kv_dtype())
+        eval(tr, sessions[i], prompts[i])   // `eval` advances `n_past`, the position a batched step reads
+    }
     let hybrid = tr.config.recr_mask != 0ul
-    let home0 = hybrid ? dn_state_home(sb) : 0.0lf   //! session B's state after its prefill: the batched steps must move what comes home
-    let gen_a = sa.rdec_gen
-    let gen_b = sb.rdec_gen
+    let home0 = hybrid ? dn_state_home(sessions[rows - 1l]) : 0.0lf   //! the last session's state after its prefill: the batched steps must move what comes home
+    var gens <- [for (i in range64(rows)); sessions[i].rdec_gen]
+    var sess <- [for (i in range64(rows)); unsafe(addr(sessions[i]))]
     let steps0 = rdec_nrow_steps()
-    with_batch_rows(tr, sa, sb) $(var ws; var sess) {
+    with_batch_rows(tr, sess) $(var ws; var sx) {
         for (st in range64(STEPS)) {
-            var toks <- [al.fa[st], al.fb[st]]
-            eval_batch(tr, ws, sess, toks)
+            var toks <- [for (i in range64(rows)); feeds[i][st]]
+            eval_batch(tr, ws, sx, toks)
             delete toks
-            hold_bar(t, tr, sa.logits, al.ra[st + 1l], al.ra[st], bar, "batched step {st}, row A")
-            hold_bar(t, tr, sb.logits, al.rb[st + 1l], al.rb[st], bar, "batched step {st}, row B")
+            for (i in range64(rows)) {
+                hold_bar(t, tr, sessions[i].logits, alone[i][st + 1l], alone[i][st], bar, "batched step {st}, row {i}")
+            }
         }
     }
     if (hybrid) {
-        t |> success(dn_state_home(sb) != home0, "session B's recurrent state came home from its region's slot after the batched steps")
+        t |> success(dn_state_home(sessions[rows - 1l]) != home0, "the last session's recurrent state came home from its region's slot after the batched steps")
     }
-    t |> equal(sa.rdec_gen, gen_a, "row A kept its claim through every step: its history never came up from the host again")
-    t |> equal(sb.rdec_gen, gen_b, "row B kept its claim through every step")
+    for (i in range64(rows)) {
+        t |> equal(sessions[i].rdec_gen, gens[i], "row {i} kept its claim through every step: its history never came up from the host again")
+    }
     served_every_call(t)
-    static_if (typeinfo builtin_module_exists(vulkan)) {   //! the rows stepped through the N-row command, not a row at a time: a declined command passes the bars above the same
-        let nrows = vk_rdec_token_n_rows()
-        t |> success(nrows >= 2l, "the N-row token command serves the two rows at once ({nrows} rows)")
-    }
+    let groups = batched_groups(t, rows)
     let stepped = rdec_nrow_steps() - steps0
-    t |> equal(stepped, STEPS, "every batched step went through the N-row command ({stepped} of {STEPS})")
-    delete sa
-    delete sb
-    delete al
+    t |> equal(stepped, STEPS * groups, "every batched step went through the N-row command, {groups} command(s) a step ({stepped} of {STEPS * groups})")
+    unsafe {
+        delete sess
+    }
+    delete sessions
+    delete gens
+    delete alone
+}
+
+//! the commands a batched step of `rows` rows takes: the fewest groups of the rows the N-row command steps at once, the command
+//! asserted to serve the rows at once (a declined command passes the bars above the same); one where the module is absent
+def private batched_groups(t : T?; rows : int64) : int64 {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        let at_once = vk_rdec_token_n_rows()
+        t |> success(at_once >= 2l, "the N-row token command serves the rows at once ({at_once} rows)")
+        return at_once > 0l ? (rows + at_once - 1l) / at_once : 1l
+    } else {
+        return 1l
+    }
+}
+
+//! the two-prompt form over `pa` and `pb` with the rig's feeds
+def private batched_steps_body(t : T?; tr : Model; pa, pb : array<int64>; bar : LogitsBar) {
+    var prompts <- [ <- clone_to_move(pa), <- clone_to_move(pb)]
+    var feeds <- [ <- feed_a(), <- feed_b()]
+    batched_steps_body(t, tr, prompts, feeds, bar)
+    delete prompts
+    delete feeds
 }
 
 def cell_regions_batched_steps(t : T?; file : string; bar : LogitsBar = LogitsBar.bit_exact; split_forms : bool = false) {
@@ -543,13 +598,14 @@ def cell_long_streams(t : T?; file : string; lc : LongCtx) {
                 hold_equal(t, tr, owned[i].logits, alone[i][0], "stream {i}'s {at[i]}-token prefill on the device")
             }
             var sess <- [for (i in range64(n)); unsafe(addr(owned[i]))]
+            let streams_bar = rows_bar(lc.streams_bar, n, at[n - 1l] + STEPS)
             with_batch_rows(tr, sess) $(var ws; var rows) {
                 for (st in range64(STEPS)) {
                     var toks <- [for (i in range64(n)); feeds[i][st]]
                     eval_batch(tr, ws, rows, toks)
                     delete toks
                     for (i in range64(n)) {
-                        hold_bar(t, tr, owned[i].logits, alone[i][st + 1l], alone[i][st], lc.streams_bar, "batched step {st}, stream {i} at {at[i] + st} positions")
+                        hold_bar(t, tr, owned[i].logits, alone[i][st + 1l], alone[i][st], streams_bar, "batched step {st}, stream {i} at {at[i] + st} positions")
                     }
                 }
             }
@@ -872,8 +928,14 @@ def cell_scheduler_device_mode(t : T?; file : string) {
             t |> success(!serve_four(tr, false, host).on, "the control scheduler serves host-cached sessions")
             let served1 = moe_gpu_resident_prefills()
             let picks0 = rdec_picks_served()
+            let segw0 = segment_windows_count()
             let served = serve_four(tr, true, dev)
             t |> success(served.on, "an idle scheduler switches to device-home sessions")
+            if (gpu_device_prefill_segments(tr)) {   //! the two prompts admitted together ride one segmented window: the tick's witness
+                t |> success(segment_windows_count() - segw0 >= 1l, "the device-home tick handed its prefilling streams to the segmented window ({segment_windows_count() - segw0} windows)")
+            } else {
+                t |> equal(segment_windows_count() - segw0, 0l, "a model the segmented window declines takes a stream's own call a tick")
+            }
             //! every decode step of the three argmax requests lands a pick (their first token samples off the prefill's logits inline);
             //! the sampled fourth request's steps land logits, so the count is the rows stepped less its own
             var td4 <- toks_of(dev, 4l)
@@ -931,6 +993,44 @@ def cell_scheduler_device_prefill_chunks(t : T?; file : string) {
             set_device_kv(sch, false)
             delete events
             delete long_prompt
+            delete sch
+        }
+    }
+}
+
+//! a device-home scheduler's tick on two streams whose first has fewer rows left than the quantum: where the model's segmented
+//! window serves, the tick hands both to one window and the second stream's prompt is cut there (A 300 + B 212, B 512, B 300:
+//! four calls counted a segment); where it declines, each tick is one stream's own call (A 300, B 512, B 512: three; A 300,
+//! B 1024: two where the model's prefill cannot continue) - the handoff never costs a declining model a window
+def cell_scheduler_device_handoff(t : T?; file : string) {
+    t |> run("a device-home tick hands two streams to one segmented window where the model's window serves, and takes one stream's call where it declines") @(t : T?) {
+        with_regions_rig(t, file) $(tr) {
+            var sch <- create_scheduler(tr, 2l, 4l, 64l, 0l, 0l, mirror_kv_dtype())
+            t |> success(set_device_kv(sch, true), "an idle scheduler switches to device-home sessions")
+            var pa <- prose_ids(300l, 5l)
+            var pb <- prose_ids(2l * PF_WINDOW_ROWS, 9l)
+            var events : array<SchedEvent>
+            let served0 = moe_gpu_resident_prefills()
+            let segw0 = segment_windows_count()
+            submit(tr, sch, make_req(1l, pa, 2l))
+            submit(tr, sch, make_req(2l, pb, 2l))
+            drain(tr, sch, events)
+            let calls = moe_gpu_resident_prefills() - served0
+            if (gpu_device_prefill_segments(tr)) {
+                t |> equal(calls, 4l, "the first tick's window carried both streams and cut the second's prompt there ({calls} calls)")
+                t |> success(segment_windows_count() - segw0 >= 1l, "... through the segmented window")
+            } else {
+                let whole = gpu_device_prefill_continues(tr) ? 2l : 1l
+                t |> equal(calls, 1l + whole, "each tick took one stream's own call, the second stream's prompt whole windows or whole where the model's prefill cannot continue ({calls} calls)")
+                t |> equal(segment_windows_count() - segw0, 0l, "... no segmented window")
+            }
+            t |> equal(length(toks_of(events, 1l)), 2, "the first stream ran its two tokens")
+            t |> equal(length(toks_of(events, 2l)), 2, "the second stream ran its two tokens")
+            served_every_call(t)
+            set_device_kv(sch, false)
+            delete events
+            delete pa
+            delete pb
             delete sch
         }
     }
@@ -1196,6 +1296,25 @@ def cell_regions_batched_widen(t : T?; file : string; bar : LogitsBar = LogitsBa
             delete fb
             delete fc
             delete fc_short
+        }
+    }
+}
+
+//! `rows` sessions over `rows` regions - more than the N-row command steps at once - through STEPS batched steps: the
+//! two-row cell's body over `rows` rows, each step the fewest commands of at most the rows the command steps at once
+//! (`vk_rdec_token_n_rows`), never a row at a time
+def cell_regions_batched_groups(t : T?; file : string; rows : int64; bar : LogitsBar = LogitsBar.split_bar) {
+    t |> run("{rows} sessions, a region each: a batched step over all of them runs in groups of the command's rows, and every row reads what its session reads alone") @(t : T?) {
+        with_regions_rig(t, file, RegionsLoad(regions = rows)) $(tr) {
+            static_if (typeinfo builtin_module_exists(vulkan)) {
+                let at_once = vk_rdec_token_n_rows()
+                t |> success(at_once >= 2l && at_once < rows, "the command steps {at_once} rows at once, fewer than the {rows} rows (the cell measures the groups)")
+            }
+            var prompts <- [for (i in range64(rows)); ramp_ids(40l + i, i, 1000l + 100l * i, 37l + 2l * i, 5000l)]
+            var feeds <- [for (i in range64(rows)); ramp_ids(STEPS, i, 2000l, 53l, 4000l)]
+            batched_steps_body(t, tr, prompts, feeds, bar)
+            delete prompts
+            delete feeds
         }
     }
 }

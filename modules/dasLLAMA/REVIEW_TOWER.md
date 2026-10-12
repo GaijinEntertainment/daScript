@@ -10,9 +10,11 @@ stages through hooks - stage seats the CPU chain calls, drop hooks, reload or we
 listeners - registered by `dasllama_metal_tower_register` (Metal) or by
 `dasllama_vulkan_tower_register` and `dasllama_vulkan_tts_register` (Vulkan)
 (`ARCHITECTURE_GPU_TOWER.md#tower-reach`). A diff reaches a tower when a function it touches is,
-calls, or is reachable from one of those hooks, and reaches the Metal tower also when it touches
-`dasllama/dasllama_metal_asr_dec.das`, `dasllama/dasllama_metal_common.das`, or a kernel class
-or builder the ASR decoder uses.
+calls, or is reachable from one of those hooks, or when it touches a kernel class or builder a
+driver of that tower or its ASR decoder dispatches, a kernel-argument struct such a driver fills,
+or a kernel template such a class stamps (instantiates into a concrete kernel); the Metal tower is
+also reached by a touch of `dasllama/dasllama_metal_asr_dec.das` or
+`dasllama/dasllama_metal_common.das`.
 
 **A non-comment diff routed here that reaches neither tower says so in the PR body.**
 
@@ -83,12 +85,14 @@ compute changes that CPU code the same way, in the same diff.**
 
 **A diff that adds or changes a family's chain in the Metal tower or in the Metal ASR-decoder
 driver (`dasllama/dasllama_metal_asr_dec.das`) leaves every stage of that family's served chain -
-the mel, the front, the blocks, the tail, the cross-KV and the decode step - on the device, for
-every model and every weight lane the family serves: a stage that runs on the CPU, or a decline
-other than the knob's, the device's or a failed command buffer's, that a stocked model or lane
-reaches, is a defect - moved to the device in the same change, or filed in `followup_metal.md`
-with the stage and the model named.**
-A stage on the CPU behind a Metal chain reads as served and sets the whole chain's rate.
+the mel, the front, the blocks, the tail, the cross-KV and the decode step - on the device for
+every model and every weight lane the family serves; a stage returns its work to the CPU only when
+`DASLLAMA_METAL_TOWER` (`DASLLAMA_METAL_WDEC` for the cross-KV, `DASLLAMA_METAL_WDEC` or
+`DASLLAMA_METAL_WDEC_STEP` for the decode step) is 0, the decoder sits under the decode step's
+width floor (`set_metal_wdec_step_min_d`), no Metal device is present, or its command buffer
+failed, and any other stage on the CPU is filed in `followup_metal.md` with the stage and the
+model named, in the same change.** A stage on the CPU behind a Metal chain reads as served and
+sets the whole chain's rate.
 
 **A diff that changes what a TTS seat's chain computes in a tower driver applies `REVIEW_TTS.md`
 too.**

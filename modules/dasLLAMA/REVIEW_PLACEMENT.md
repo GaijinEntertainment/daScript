@@ -62,10 +62,11 @@ function moves the chain with it.**
 
 **A HOST-side tensor format conversion lands in `dasllama/dasllama_convert.das`.**
 
-**A kernel-side helper that one backend's kernels splice lands in that backend's kernel file
-(`dasllama/dasllama_metal_kernels.das`, `dasllama/dasllama_vulkan_classes.das`); one that both
-backends' kernels splice and that reads no codebook table lands in
-`dasllama/dasllama_gpu_math.das`, never as a copy per home.**
+**A kernel-side helper - a free `def` outside any class that a kernel body calls - that one
+backend's kernels splice lands in that backend's kernel file (`dasllama/dasllama_metal_kernels.das`,
+`dasllama/dasllama_vulkan_classes.das`); one that both backends' kernels splice and that reads no
+codebook table lands in `dasllama/dasllama_gpu_math.das`, never as a copy per home; a method of a
+class template both homes stamp lands with its template.**
 
 **A disk-order -> compute-order transform lands by its consumer: a transform into the layout
 the CPU kernels read row by row in `dasllama/dasllama_repack.das`, a transform into the layout a
