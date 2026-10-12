@@ -526,6 +526,7 @@ class SqlMigrationMacro : AstFunctionAnnotation {
     }
 }
 
+[arch(at="ARCHITECTURE_SQL_LINQ.md#sql-migrate-rail")]
 def struct_convert_field(var dst : auto(SCF_T)&; src : SCF_T) : void {
     //! Identity — same source and target type.
     dst = src

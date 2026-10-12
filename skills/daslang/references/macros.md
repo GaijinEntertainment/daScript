@@ -230,7 +230,10 @@ patterns spelled as node classes and fields rather than as source syntax.
 
 ## Annotations
 
-Bracketed before the declaration; several combine with commas (`[export, no_aot]`).
+Bracketed before the declaration; several combine with commas (`[export, no_aot]`). Two bracket
+lines in a row do not parse - the second `[` is read as the start of a struct or class
+annotation (`error[30151] ... expecting struct or class`), so a new annotation joins the
+existing list, never its own line.
 
 **Function.** Lifecycle: `[export]` (callable from the host), `[init]` / `[init(tag=...)]` /
 `[init(before=...)]` / `[init(after=...)]`, `[finalize]`, `[run]` (runs at compile time). Safety:

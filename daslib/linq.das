@@ -204,7 +204,7 @@ def private concat_impl(var a; var b; tt : auto(TT); reserveSize : int) : array<
     if (reserveSize > 0) {
         c.reserve(reserveSize)
     }
-    for (it in a) { // nolint:PERF022,LINT019 - fires only when a consumer instantiates an array source
+    for (it in a) { // nolint:PERF022,LINT019 - one body serves array AND iterator sources (push_clone_from binds only arrays); fires only when a consumer instantiates an array source
         c.push_clone(it)
     }
     for (it in b) { // nolint:PERF022,LINT019
@@ -1024,6 +1024,7 @@ def top_n_descending(var a : iterator<auto(TT)>; n : int) : array<TT -const -&> 
     return <- top_n_by_descending(a, n, $(v : TT -&) => v)
 }
 
+[arch(at="ARCHITECTURE_LINQ.md#linq-top-n-with-cmp")]
 def top_n_by_with_cmp(arr : array<auto(TT)>; n : int; cmp : block<(v1 : TT -&, v2 : TT -&) : bool>) : array<TT -const -&> {
     //! Returns the ``n`` smallest-per-``cmp`` elements of ``arr``.
     //! Pass a reversed comparator to extract the ``n`` largest instead.
@@ -1036,6 +1037,7 @@ def top_n_by_with_cmp(arr : array<auto(TT)>; n : int; cmp : block<(v1 : TT -&, v
     return <- buf
 }
 
+[arch(at="ARCHITECTURE_LINQ.md#linq-top-n-with-cmp")]
 def top_n_by_with_cmp(var a : iterator<auto(TT)>; n : int; cmp : block<(v1 : TT -&, v2 : TT -&) : bool>) : array<TT -const -&> {
     //! Iterator variant — bounded heap of size ``n`` maintained during scan.
     var buf : array<TT -const -&>
@@ -2469,6 +2471,7 @@ def right_join_to_array(srca : array<auto(TA)>; var srcb : iterator<auto(TB) con
     return <- right_join_impl_const(srca, srcb, type<TA -const -&>, type<TB -const -&>, keya, keyb, result)
 }
 
+//! srcb may be single-pass, so srcb_arr replays it for the unmatched-right pass (keys absent from seen_b)
 [unused_argument(ta, tb)]
 def private full_outer_join_impl(var srca; var srcb; ta : auto(TA); tb : auto(TB); keya, keyb; result) : array<typedecl(result(type<$Option<TA -const -&>>, type<$Option<TB -const -&>>)) -const -&> {
     var inscope tableb : table<typedecl(_::unique_key(keyb(type<TB>))); array<TB -const -&>>

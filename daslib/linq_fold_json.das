@@ -18,7 +18,7 @@ module linq_fold_json shared public
 //! ``for_each_archetype``), so this module pulls in no json dependency. The field-pruning
 //! row-usage scanners (``RowUsageScanner`` / ``collect_row_usage`` / ``RowFieldFlattener`` /
 //! ``flatten_row_to_locals`` / ``hoist_prelude``) are shared with the XML and table adapters and
-//! live in ``daslib/linq_fold_common.das``. See daslib/ARCHITECTURE_LINQ.md sec. 37.
+//! live in ``daslib/linq_fold_common.das``. See ``ARCHITECTURE_LINQ_FOLD_SOURCES.md``.
 
 require daslib/ast_boost
 require daslib/ast_match
@@ -28,7 +28,7 @@ require daslib/linq_fold_common public
 [macro_function]
 def private emit_full_row_by_name(bindName : string; declT : TypeDeclPtr; defName, curName : string;
                                   var dest : array<Expression?>) {
-    //! by-name row materialize — every field via ``read_json_field``, deliberately bypassing a whole-row ``from_JV(T)`` override (field values still convert via ``from_JV``); caller pre-declares ``var <bindName>`` and the ``<defName>`` default row
+    //! by-name row materialize — every field via ``read_json_field``, bypassing a whole-row ``from_JV(T)`` override; caller pre-declares ``var <bindName>`` and the ``<defName>`` default row
     for (fld in declT.structType.fields) {
         let fname = string(fld.name)
         dest |> push <| qmacro_expr() {
@@ -37,15 +37,15 @@ def private emit_full_row_by_name(bindName : string; declT : TypeDeclPtr; defNam
     }
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_LINQ_FOLD_SOURCES.md#linq-fold-json-materialize")]
 def private try_json_under_guard_materialize(var body : Expression?; bindName : string; declT : TypeDeclPtr;
                                              defName, curName : string; at : LineInfo;
                                              var prelude : array<Expression?>; var inner : array<Expression?>) : bool {
     if (!(body is ExprIfThenElse)) return false
     var ite = body as ExprIfThenElse
     if (ite.if_false != null || ite.cond == null || ite.if_true == null) return false
-    var (condAllUsed, condFields) = collect_row_usage(ite.cond, bindName)
-    if (condAllUsed || empty(condFields)) return false
+    var (condUsesWholeRow, condFields) = collect_row_usage(ite.cond, bindName)
+    if (condUsesWholeRow || empty(condFields)) return false
     sort(condFields)
     var fieldToLocal <- {for (f in condFields); f => qn("jf_{f}", at)}
     prelude |> push <| qmacro_expr() {
@@ -70,12 +70,12 @@ def private try_json_under_guard_materialize(var body : Expression?; bindName : 
     return true
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_LINQ_FOLD_SOURCES.md#linq-fold-json-materialize")]
 def private build_json_materializer(var body : Expression?; bindName : string; declT : TypeDeclPtr;
                                     defName, curName : string; at : LineInfo;
                                     var prelude : array<Expression?>; var inner : array<Expression?>) {
-    var (allUsed, usedFields) = collect_row_usage(body, bindName)
-    if (allUsed) {
+    var (usesWholeRow, usedFields) = collect_row_usage(body, bindName)
+    if (usesWholeRow) {
         if (try_json_under_guard_materialize(body, bindName, declT, defName, curName, at, prelude, inner)) {
             return
         }
@@ -115,7 +115,7 @@ def private build_json_materializer(var body : Expression?; bindName : string; d
     inner |> push(body)
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_LINQ_FOLD_SOURCES.md#linq-fold-json-walk")]
 def private build_json_array_walk(srcName : string; curName : string; var inner : array<Expression?>;
                                   var breakGuard : Expression?) : Expression? {
     var elemBody : array<Expression?>
@@ -146,9 +146,9 @@ def private build_pruned_array_walk(srcName : string; elemType : TypeDeclPtr; bi
     return hoist_prelude(prelude, loop, at)
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_LINQ_FOLD_SOURCES.md#linq-fold-json-join")]
 def private build_json_join_invoke(var jsonExpr : Expression?; srcName : string; var bodyStmts : array<Expression?>;
-                                   srcBName : string; srcBType : TypeDeclPtr; var srcBExpr : Expression?;
+                                   srcBName : string; srcBParamType : TypeDeclPtr; var srcBExpr : Expression?;
                                    retType : TypeDeclPtr; wrapIter : bool; at : LineInfo) : Expression? {
     var jsonType = strip_const_ref(clone_type(jsonExpr._type))
     jsonType.flags.constant = true
@@ -159,11 +159,11 @@ def private build_json_join_invoke(var jsonExpr : Expression?; srcName : string;
     let sn = srcName
     var emission : Expression?
     if (retType != null) {
-        emission = qmacro(invoke($($i(sn) : $t(jsonType), $i(srcBName) : $t(srcBType)) : $t(retType) {
+        emission = qmacro(invoke($($i(sn) : $t(jsonType), $i(srcBName) : $t(srcBParamType)) : $t(retType) {
             $b(bodyStmts)
         }, $e(jsonClone), $e(srcbClone)))
     } else {
-        emission = qmacro(invoke($($i(sn) : $t(jsonType), $i(srcBName) : $t(srcBType)) {
+        emission = qmacro(invoke($($i(sn) : $t(jsonType), $i(srcBName) : $t(srcBParamType)) {
             $b(bodyStmts)
         }, $e(jsonClone), $e(srcbClone)))
     }
@@ -180,9 +180,11 @@ class JsonAdapter : SourceAdapter {
     srcName  : string
     elemType : TypeDeclPtr
     def override name_prefix() : string => "json_"
+    [arch(at="ARCHITECTURE_LINQ_FOLD.md#linq-fold-direct-return")]
     def override supports_direct_return() : bool => true
     def override const can_group_by() : bool => true
     def override const can_join() : bool => true
+    [arch(at="ARCHITECTURE_LINQ_FOLD_SOURCES.md#linq-fold-json-join")]
     def override emit_join_hook(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
         if (c.single_name |> key_exists("join") && c.single_name["join"] == "group_join") return null
         var joinCall = c.single["join"]
@@ -231,6 +233,7 @@ class JsonAdapter : SourceAdapter {
         allStmts |> push(pieces.returnStmt)
         return build_json_join_invoke(jsonExpr, srcName, allStmts, srcBName, invoke_src_param_type(srcbSrc), srcbSrc, pieces.invokeRetType, wrapIter, at)
     }
+    [arch(at="ARCHITECTURE_LINQ_FOLD_SOURCES.md#linq-fold-json-join")]
     def override build_group_by_adapter(var c : Captures; var ctx : EmitCtx; at : LineInfo) : SourceAdapter? {
         if (c.single |> key_exists("upstream_join")) {
             var joinCall = c.single["upstream_join"]
@@ -245,7 +248,7 @@ class JsonAdapter : SourceAdapter {
                 elemType = clone_type(elemType),
                 srcBExpr = srcb.srcbClone,
                 srcBName = qn("jjoin_srcB", at),
-                srcBType = srcb.srcbType,
+                srcBParamType = srcb.srcbParamType,
                 keyaLam = core.keyaLam,
                 keybLam = core.keybLam,
                 resultLam = core.resultLam,
@@ -266,6 +269,7 @@ class JsonAdapter : SourceAdapter {
         var breakGuard = qmacro($i(takenName) >= $i(takeLimName))
         return build_pruned_array_walk(srcName, elemType, bindName, perElement, breakGuard, at)
     }
+    [arch(at="ARCHITECTURE_LINQ_FOLD_SOURCES.md#linq-fold-json-walk")]
     def override wrap_invoke(var stmts : array<Expression?>; retType : TypeDeclPtr; wrapIter : bool; at : LineInfo) : Expression? {
         var jsonType = strip_const_ref(clone_type(jsonExpr._type))
         jsonType.flags.constant = true
@@ -290,6 +294,7 @@ class JsonAdapter : SourceAdapter {
         return emission
     }
     def override const defers_materialization() : bool => true
+    [arch(at="ARCHITECTURE_LINQ_FOLD_SOURCES.md#linq-fold-json-materialize")]
     def override handle_type() : TypeDeclPtr {
         var ht = strip_const_ref(clone_type(jsonExpr._type))
         if (ht.firstType != null) {
@@ -297,10 +302,12 @@ class JsonAdapter : SourceAdapter {
         }
         return ht
     }
+    [arch(at="ARCHITECTURE_LINQ_FOLD_SOURCES.md#linq-fold-json-materialize")]
     def override current_handle_expr(at : LineInfo) : Expression? {
         let cn = qn("jcur", at)
         return qmacro($i(cn))
     }
+    [arch(at="ARCHITECTURE_LINQ_FOLD_SOURCES.md#linq-fold-json-materialize")]
     def override materialize_handle(var handleExpr : Expression?; outBind : string; at : LineInfo) : Expression? {
         var declT = strip_const_ref(clone_type(elemType))
         if (declT.baseType != Type.tStructure) {
@@ -328,7 +335,7 @@ struct JsonJoinShape {
     elemType : TypeDeclPtr
     srcBExpr : Expression?
     srcBName : string
-    srcBType : TypeDeclPtr
+    srcBParamType : TypeDeclPtr
     keyaLam, keybLam, resultLam : Expression?
     keyType, tupBType, resultType : TypeDeclPtr
     resBindName : string
@@ -337,9 +344,11 @@ struct JsonJoinShape {
 class JsonJoinAdapter : SourceAdapter {
     shape : JsonJoinShape
     def override name_prefix() : string => "jjoin_"
+    [arch(at="ARCHITECTURE_LINQ_FOLD.md#linq-fold-direct-return")]
     def override supports_direct_return() : bool => true
     def override bind_name(at : LineInfo) : string => shape.resBindName
     def override element_type() : TypeDeclPtr => clone_type(shape.resultType)
+    [arch(at="ARCHITECTURE_LINQ_FOLD_SOURCES.md#linq-fold-json-join")]
     def override wrap_source_loop(loopShape : LoopDispatch; var body : Expression?; at : LineInfo) : Expression? {
         let jhashName = qn("jjoin_jhash", at)
         let arrName   = qn("jjoin_jarr", at)
@@ -360,10 +369,11 @@ class JsonJoinAdapter : SourceAdapter {
         }
     }
     def override wrap_invoke(var stmts : array<Expression?>; retType : TypeDeclPtr; wrapIter : bool; at : LineInfo) : Expression? =>
-        build_json_join_invoke(shape.jsonExpr, shape.srcName, stmts, shape.srcBName, shape.srcBType, shape.srcBExpr, retType, wrapIter, at)
+        build_json_join_invoke(shape.jsonExpr, shape.srcName, stmts, shape.srcBName, shape.srcBParamType, shape.srcBExpr, retType, wrapIter, at)
 }
 
-[macro_function]
+//! Returns the ``from_json(jv, type<Row>)`` call at a chain top (``arguments[0]`` is ``jv``, ``_type.firstType`` is ``Row``), or null.
+[macro_function, arch(at="ARCHITECTURE_LINQ_FOLD_SOURCES.md#linq-fold-json-source")]
 def extract_json_source(var top : Expression?) : ExprCall? {
     if (top == null || !(top is ExprCall)) return null
     var c = top as ExprCall

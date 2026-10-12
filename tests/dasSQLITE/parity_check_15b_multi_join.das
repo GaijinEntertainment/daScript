@@ -11,7 +11,7 @@ require daslib/sql_linq
 // Parity check for v2 multi-Q lowering — multi-join (3+ tables in a single chain).
 //
 // Inner `_join(A, B, ...)` produces a NamedTuple. The outer `_join(<inner>, C, ...)`
-// snapshots the inner Q to an `(<innerSql>) AS "t0"` subquery FROM and joins C against
+// snapshots the inner Q to an `(<fromSubquerySql>) AS "t0"` subquery FROM and joins C against
 // it. Outer ON-clause and `into` projection resolve `<lhsArg>.<alias>` against the
 // inner's projected named tuple (via `q.fromRowType`).
 //

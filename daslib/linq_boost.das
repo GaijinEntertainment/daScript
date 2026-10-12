@@ -31,6 +31,7 @@ class private BucketLambdaStamper : AstVisitor {
         bindName = n
         elemT = et
     }
+    [arch(at="ARCHITECTURE_LINQ.md#linq-boost-bucket-lambda-stamping")]
     def override visitExprCall(var expr : ExprCall?) : ExpressionPtr {
         let nm = string(expr.name)
         if ((nm != "select" && nm != "select_to_array" && nm != "sum" && nm != "min"
@@ -66,7 +67,7 @@ class private BucketLambdaStamper : AstVisitor {
     }
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_LINQ.md#linq-boost-bucket-lambda-stamping")]
 def private stamp_bucket_reducer_lambdas(var projExpr : ExpressionPtr; bindName : string; iterType : TypeDeclPtr) {
     if (projExpr == null || iterType == null || iterType.baseType != Type.tTuple
             || length(iterType.argTypes) != 2) {
@@ -89,6 +90,7 @@ class private AstCallMacro_LinqPred2 : AstCallMacro {
     //! This macro converts ``_where(iterator, expression)`` into equivalent inline code.
     //!     where_(iterator, $(_) => expression)
     //!
+    [arch(at="ARCHITECTURE_LINQ.md#linq-boost-argument-forms")]
     def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {   // nolint:STYLE037 - one arm per accepted predicate/iterable shape
         //! Visits the LINQ predicate macro call and rewrites it with a lambda argument.
         macro_verify(call.arguments |> length == 2, prog, call.at, "expecting {predName}(iterator, predicate)")
@@ -266,6 +268,7 @@ class private AstCallMacro_LinqOrderByKeys : AstCallMacro {
     //! Base call macro for the multi-key order operator. The key argument is already a `$(x) => (k1, k2, …)` block (tuple of keys); the third argument is a compile-time `uint` descMask (bit i → key i descending). Injects the element type onto the key block parameter, then passes all three through to `order_by_keys` / `order_by_keys_to_array`.
     predName = "order_by_keys"
 
+    [arch(at="ARCHITECTURE_LINQ.md#linq-boost-argument-forms")]
     def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
         macro_verify(call.arguments |> length == 3, prog, call.at, "expecting {predName}(iterator, key-lambda, descMask)")
         assume arg0 = call.arguments[0]
@@ -310,6 +313,7 @@ class private AstCallMacro_LinqPredII2 : AstCallMacro {
     //! Base call macro for LINQ-style two-iterator two-argument predicate operators.
     predName = "sequence_equal_by"
     //! implements sequence_equal_by(i1, i2, expresion) shorthand notation that expands into sequence_equal_by(i1, i2, $(_) => expression).
+    [arch(at="ARCHITECTURE_LINQ.md#linq-boost-argument-forms")]
     def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
         //! Visits the LINQ two-iterator predicate macro call and rewrites it with a lambda argument.
         macro_verify(call.arguments |> length == 3, prog, call.at, "expecting {predName}(iterator or array, iterator or array, predicate)")
@@ -456,6 +460,7 @@ def private parse_equi_join_on(var on_pred : Expression?; prog : ProgramPtr; at 
 class private AstCallMacro_LinqJoinBase : AstCallMacro {
     //! Base call macro for ``_join`` and ``_left_join`` equi-join sugar.
     fnName = "join"
+    [arch(at="ARCHITECTURE_LINQ.md#linq-boost-result-lambda-typing")]
     def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
         macro_verify(call.arguments |> length == 4, prog, call.at, "expecting {fnName}(srca, srcb, on, into) — 4 arguments")
         assume srcaType = call.arguments[0]._type
@@ -500,6 +505,7 @@ class private AstCallMacro_LinqJoinBase : AstCallMacro {
         res.force_at(call.at)
         return res
     }
+    [arch(at="ARCHITECTURE_LINQ.md#linq-boost-result-lambda-typing")]
     def result_param1_type(iterTypeB : TypeDeclPtr; at : LineInfo) : TypeDeclPtr => null
 }
 
@@ -544,6 +550,7 @@ class private LinqFullOuterJoin : AstCallMacro_LinqJoinBase {
 [call_macro(name="_cross_join")]
 class private LinqCrossJoin : AstCallMacro {
     //! implements _cross_join(srca, srcb, result) shorthand notation that expands into cross_join(srca, srcb, result). 3-arg form with no `on` lambda — every (TA, TB) pair surfaces. Use `_where` after the cross to filter; that's the explicit-shape inner join.
+    [arch(at="ARCHITECTURE_LINQ.md#linq-boost-result-lambda-typing")]
     def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
         macro_verify(call.arguments |> length == 3, prog, call.at, "expecting _cross_join(srca, srcb, into) — 3 arguments")
         assume srcaType = call.arguments[0]._type
@@ -593,6 +600,7 @@ def private inject_block_param_type(var arg : ExpressionPtr; idx : int; ty : Typ
 [call_macro(name="_select_many")]
 class private LinqSelectMany : AstCallMacro {
     //! Stage 1 of the correlated SelectMany sugar — `_select_many(src, $(o) => coll, $(o, x) => result)`.
+    [arch(at="ARCHITECTURE_LINQ.md#linq-boost-select-many-stages")]
     def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
         macro_verify(call.arguments |> length == 3, prog, call.at, "expecting _select_many(src, collection_selector, result_selector) — 3 arguments")
         assume srcaType = call.arguments[0]._type
@@ -617,6 +625,7 @@ class private LinqSelectMany2 : AstCallMacro {
     //! Stage 2 of `_select_many` (see above). The collection selector's parameter is now typed, so its
     //! body — and hence its element type — is inferred. Read that element type, inject it onto the result
     //! selector's SECOND parameter, and expand into `select_many_pair`.
+    [arch(at="ARCHITECTURE_LINQ.md#linq-boost-select-many-stages")]
     def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
         macro_verify(call.arguments |> length == 3, prog, call.at, "expecting _select_many_2(src, collection_selector, result_selector) — 3 arguments")
         assume collType = call.arguments[1]._type

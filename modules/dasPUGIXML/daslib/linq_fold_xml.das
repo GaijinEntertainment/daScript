@@ -9,7 +9,7 @@ module linq_fold_xml shared public
 //! linq_fold XML source adapter: ``XmlAdapter`` + ``extract_xml_source``. Lets ``_fold`` over a
 //! ``from_xml_node(node[, name], type<Row>)`` chain emit an inlined DOM child-element walk (mirroring
 //! ``PUGIXML_boost``'s generator body) instead of driving the generator + an intermediate array.
-//! Optional companion to ``daslib/linq_fold``. See daslib/ARCHITECTURE_LINQ.md sec. 37.
+//! Optional companion to ``daslib/linq_fold``. See daslib/ARCHITECTURE_LINQ_FOLD_SOURCES.md.
 
 require pugixml public
 require pugixml/PUGIXML_boost   // nolint:STYLE030 — build_xml_row / read_xml_field / peek_xml_field are emitted via qmacro, invisible to the require-usage scan
@@ -62,14 +62,14 @@ def private try_xml_under_guard_materialize(var body : Expression?; bindName : s
 }
 
 // Fills `prelude` (the hoisted default-row decl, flatten path only) + `inner` (per-element, ends with
-// `body`): allUsed -> full build_xml_row; no field refs -> body only; pruned -> one `let xf_<f>` read
-// per referenced field with body's `it.<f>` rewritten to it (struct dropped). See daslib/ARCHITECTURE_LINQ.md sec. 37.
+// `body`): usesWholeRow -> full build_xml_row; no field refs -> body only; pruned -> one `let xf_<f>` read
+// per referenced field with body's `it.<f>` rewritten to it (struct dropped). See daslib/ARCHITECTURE_LINQ_FOLD.md, the row-usage field pruning section.
 [macro_function]
 def private build_xml_materializer(var body : Expression?; bindName : string; declT : TypeDeclPtr;
                                    defName, chName : string; at : LineInfo;
                                    var prelude : array<Expression?>; var inner : array<Expression?>) {
-    var (allUsed, usedFields) = collect_row_usage(body, bindName)
-    if (allUsed) {
+    var (usesWholeRow, usedFields) = collect_row_usage(body, bindName)
+    if (usesWholeRow) {
         if (try_xml_under_guard_materialize(body, bindName, declT, defName, chName, at, prelude, inner)) {
             return
         }
@@ -158,7 +158,7 @@ def private build_xml_dom_walk(sn : string; var nameArg : Expression?; curName, 
 // XmlJoinAdapter.wrap_invoke (group_by-after-join). Mirrors XmlAdapter.wrap_invoke with the extra param.
 [macro_function]
 def private build_xml_join_invoke(var nodeExpr : Expression?; srcName : string; var bodyStmts : array<Expression?>;
-                                  srcBName : string; srcBType : TypeDeclPtr; var srcBExpr : Expression?;
+                                  srcBName : string; srcBParamType : TypeDeclPtr; var srcBExpr : Expression?;
                                   retType : TypeDeclPtr; wrapIter : bool; at : LineInfo) : Expression? {
     var nodeType = strip_const_ref(clone_type(nodeExpr._type))
     var nodeClone = clone_expression(nodeExpr)
@@ -168,11 +168,11 @@ def private build_xml_join_invoke(var nodeExpr : Expression?; srcName : string; 
     let sn = srcName
     var emission : Expression?
     if (retType != null) {
-        emission = qmacro(invoke($($i(sn) : $t(nodeType), $i(srcBName) : $t(srcBType)) : $t(retType) {
+        emission = qmacro(invoke($($i(sn) : $t(nodeType), $i(srcBName) : $t(srcBParamType)) : $t(retType) {
             $b(bodyStmts)
         }, $e(nodeClone), $e(srcbClone)))
     } else {
-        emission = qmacro(invoke($($i(sn) : $t(nodeType), $i(srcBName) : $t(srcBType)) {
+        emission = qmacro(invoke($($i(sn) : $t(nodeType), $i(srcBName) : $t(srcBParamType)) {
             $b(bodyStmts)
         }, $e(nodeClone), $e(srcbClone)))
     }
@@ -287,7 +287,7 @@ class XmlAdapter : SourceAdapter {
                 nameArg = nameJoinClone,
                 srcBExpr = srcb.srcbClone,
                 srcBName = qn("xjoin_srcB", at),
-                srcBType = srcb.srcbType,
+                srcBParamType = srcb.srcbParamType,
                 keyaLam = core.keyaLam,
                 keybLam = core.keybLam,
                 resultLam = core.resultLam,
@@ -453,7 +453,7 @@ struct XmlJoinShape {
     nameArg  : Expression?
     srcBExpr : Expression?
     srcBName : string
-    srcBType : TypeDeclPtr
+    srcBParamType : TypeDeclPtr
     keyaLam, keybLam, resultLam : Expression?
     keyType, tupBType, resultType : TypeDeclPtr
     resBindName : string
@@ -489,7 +489,7 @@ class XmlJoinAdapter : SourceAdapter {
         }
     }
     def override wrap_invoke(var stmts : array<Expression?>; retType : TypeDeclPtr; wrapIter : bool; at : LineInfo) : Expression? =>
-        build_xml_join_invoke(shape.nodeExpr, shape.srcName, stmts, shape.srcBName, shape.srcBType, shape.srcBExpr, retType, wrapIter, at)
+        build_xml_join_invoke(shape.nodeExpr, shape.srcName, stmts, shape.srcBName, shape.srcBParamType, shape.srcBExpr, retType, wrapIter, at)
 }
 
 // Recognize a `from_xml_node(node[, name], type<Row>)` chain top. Returns the call (caller reads

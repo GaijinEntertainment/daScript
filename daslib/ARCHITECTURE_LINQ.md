@@ -1,16 +1,34 @@
-# daslib architecture notes - the linq and sql families
+# daslib architecture notes - the linq family
 
-Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across the family.
+Companion to `ARCHITECTURE.md` in this folder. This document covers the in-memory family a
+user writes against: `linq` (the overload surface), `linq_boost` (the `_`-shorthand call
+macros) and `linq_das` (the `%linq!` query reader). The `_fold` splice that fuses a chain is
+`ARCHITECTURE_LINQ_FOLD.md`; the SQL lowering is `ARCHITECTURE_SQL_LINQ.md`.
 
-## 11. linq
+## linq
 
-- **`top_n_by_with_cmp` exists for the fold splice and has no daslib call site.** When an
-  order-by key body is pure and inlineable, `linq_fold_common` emits it with that body
-  spliced into BOTH sides of the comparator - killing the per-comparison comparator dispatch
-  and the per-side `key(v)` dispatch the key-lambda overloads pay. It is not a redundant
-  twin of `top_n_by`.
+### top_n with a spliced comparator {#linq-top-n-with-cmp}
 
-## 12. linq_boost
+- **`top_n_by_with_cmp` exists for the fold splice: no daslib function calls it, only code
+  that `linq_fold_common` emits.** When an order-by key body is pure and inlineable,
+  `linq_fold_common` emits it with that body spliced into BOTH sides of the comparator -
+  removing the per-comparison comparator dispatch and the per-side `key(v)` dispatch the
+  key-lambda overloads pay. It is not a redundant twin of `top_n_by`.
+
+## linq_boost
+
+### Call-macro argument forms {#linq-boost-argument-forms}
+
+- **A lambda-taking call macro accepts a bare expression or a ready one-parameter block.** A
+  bare expression over `_` (`_where(src, _.x > 1)`) is wrapped into `$(_ : T) => expr`, where
+  `T` is the source element type made const and non-ref. A block (`$(c) => c.x > 1`) is passed
+  through unwrapped: its parameter gets `T` only when it is untyped, and its name stays as
+  written. linq_das emits the block form, spelling the query's range variable as the
+  parameter, so the range variable reaches the generated call verbatim. `_order_by_keys`
+  accepts the same two forms for its key-tuple argument, and the two-source `_*_by` macros
+  accept them for their third argument.
+
+### Bucket-lambda stamping {#linq-boost-bucket-lambda-stamping}
 
 - **`BucketLambdaStamper` exists because a bucket-surface lambda cannot infer on its own.**
   On the `group_by_lazy` element shape `tuple<K; array<E>>`, an untyped lambda in
@@ -18,13 +36,44 @@ Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across
   tier-2 parameters (error 30303); the chain type knows `E`, so the macro stamps the
   lambda's parameter before the rewrite - the same move as the outer-parameter injection in
   `visit()`.
+
+### Join result-lambda auto-typing {#linq-boost-result-lambda-typing}
+
+- **An untyped two-parameter result lambda takes its parameter types from the join
+  sources.** `on` already accepts an untyped `(l, r)`, and the result lambda matches it:
+  neither linq_das, which emits `$(c, d) => ...` for every join it lowers, nor a user spells
+  an element type - for a `from_decs_template(type<T>)` source that type is an unnamed tuple.
+  The stamp fires only when the lambda has exactly two parameters and both are untyped; a
+  lambda with either one typed is left as written.
 - **`result_param1_type` is the join result-lambda auto-typing hook.** param0 is always TA;
   param1 is whatever the override returns - `_join` -> TB, `_group_join` -> a bare `array<TB>`
   with const/ref cleared to match the bucket type. `_left_join` / `_right_join` /
   `_full_outer_join` deliberately do not override: their result parameter is `$Option<T>` on
   one or both sides, so those result lambdas stay user-spelled.
+- **`_cross_join` stamps both parameters itself, TA and TB, with no hook** - neither side of a
+  cross join is ever an `$Option<T>`. linq_das lowers an uncorrelated multiple-`from` to
+  `_cross_join` with an untyped result lambda, so that lowering depends on this stamp.
 
-## 13. linq_das
+### Two-stage _select_many {#linq-boost-select-many-stages}
+
+- **Stage 1 hands off to `_select_many_2` through `make_call`, not `qmacro`.** `make_call`
+  returns an `ExprCallMacro` when a call macro of that name is registered, so the next infer
+  pass, by which time the collection selector's body has inferred, dispatches stage 2 as a
+  macro. A `qmacro`-built `_select_many_2(...)` is a plain `ExprCall`, which infer resolves as
+  a call to a function that does not exist.
+
+## linq_das
+
+### The reader pipeline {#linq-das-reader-pipeline}
+
+- **`%linq! ... %%` is a reader macro.** `LinqDasReader.suffix` passes the query text to
+  `transpile_query`, and the daslang source it returns replaces the macro, starting on the
+  macro's line. Comments inside the query are blanked to spaces and their newlines are kept,
+  so the spliced text keeps the query's lines and columns. A malformed query reports
+  `macro_error` and splices the literal `(0)`. The statement around the macro still parses,
+  and the macro error is the only diagnostic.
+
+### The substituting scanners' token model {#linq-das-token-model}
 
 - **The substituting scanners share one token model.** `substitute_idents`,
   `mentions_ident` and `rewrite_group_var` all read it: plain `"..."` content is verbatim, a
@@ -32,24 +81,101 @@ Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across
   string literal inside an interpolation is verbatim again, and identifier position
   classifies the same way everywhere - after-`.` field access and before-single-`=` labels
   are not references, with `is_label_position` the shared judge.
+
+### let inlining {#linq-das-let-inlining}
+
+- **`let n = <expr>` is inlined as text before anything else is parsed**: each later
+  reference to `n` becomes `(<expr>)`. The rest of the reader therefore sees a query with no
+  `let` in every form (single source, `join`, second `from`), and an inlined computed column
+  or key pushes down to SQL like one written out by hand. Chained lets resolve in order,
+  because each right-hand side is inlined with the earlier bindings. Scope is forward-only, as
+  in C#: the source expression and the text before a binding stay as written, so an outer
+  name that a later binding shadows keeps its meaning up to the binding. A `let` may not
+  reuse either range variable's name. After the second variable's clause it would shadow that
+  variable, and before the clause the substitution would rewrite the variable's declaration.
+
+### Query stages {#linq-das-query-stages}
+
+- **A single-source query is a chain of stages on one `_fold` chain.** A stage is
+  `[where]* [orderby] (select <proj> | group <var> by <key>) [iterator]`. An `into <var>`
+  after the terminal starts the next stage, with `<var>` bound to this stage's output (C#
+  query continuation). Every stage appends to the same `_fold` chain, with no array between
+  stages, so fusion and SQL's single-statement pushdown hold across `into`. When a stage's
+  range variable came from `group ... into g`, the stage's clause text goes through
+  `rewrite_group_var`.
+- **A stage's `where`s all emit ahead of its order op, in source order.** As in C#, there may
+  be several of them anywhere before the terminal. A `where` written after `orderby` filters
+  the sorted sequence, and when the keys give a total order that is the same result as
+  filtering first.
+
+### orderby lowering {#linq-das-orderby}
+
+- **`orderby` lowers to one of two operators.** The clause body `k1 [ascending|descending],
+  k2 ...` is split on commas at bracket depth zero, into at most `ORDERBY_MAX_KEYS` keys. One
+  key emits `_order_by` or `_order_by_descending`. Several keys emit `_order_by_keys` over a
+  key tuple and a `uint` mask in which bit i marks key i as descending, with the least
+  significant bit for the first key. This is the encoding that `less_masked` (`linq.das`)
+  reads. `ORDERBY_MAX_KEYS` equals the largest key-tuple arity among the `less_masked`
+  overloads, and the two change together: no test runs a query at the cap.
+
+### Two-source forms {#linq-das-two-source}
+
+- **`join` and a second `from` share one emit with two shapes, picked from the query text
+  alone because the reader runs before type inference.** *Select-terminal* (no `where` or
+  `orderby` after the second source, and a `select` terminal): the projection is the
+  operator's result lambda, spliced verbatim with both range variables in scope. This shape
+  pushes down to SQL. *Transparent identifier* (a `where` or `orderby` after the second
+  source, or a `group` terminal): the result lambda builds the pair `(c = c, d = d)`, and
+  every later clause is rewritten to read `linq_join_ti.c` / `linq_join_ti.d` from the one
+  carried parameter `JOIN_TI`. The pairs are filtered, sorted and grouped in the same `_fold`
+  chain, with no array in between, and a `group` terminal yields `(key, array<pair>)` per
+  bucket. This shape runs in memory only, because over SQL the carried whole-row tuple fails
+  `_sql`'s column-reference check.
 - **`JOIN_TI` is a spellable identifier on purpose.** `__`-prefixed names are reserved by
   the compiler, so the transparent-identifier carrier cannot be hidden outside the user's
   namespace and must stay a single plain token - hence the explicit rejection of a range
   variable named `linq_join_ti` instead of an unspellable name.
-- **`build_src`'s two arms are a fusion decision, not a formatting one.** A fused source
-  (chain head, join) is built as `from_in(...)` so `_fold` can route it; an UNFUSED operator
-  argument - the uncorrelated multiple-`from`, whose `_cross_join` runs at tier-3
-  passthrough - is passed as the bare parenthesized expression, so `each`'s
-  `[unsafe_outside_of_for]` does not trip and the arrayxarray overload is selected.
+- **A `where` is placed by its position.** Before the second source it filters the left
+  source. It reads only `c`, needs no rewrite, and pushes down to SQL, with several such
+  `where`s joined by AND. After the second source it filters the carried pair. Between the
+  start of the second clause and its tail (inside `join ... equals`, or between the second
+  range variable and `in`) it is a grammar error. Each `where` runs to the next clause
+  keyword.
+- **A select-terminal lambda underscores any range variable its projection does not use.**
+  `mentions_ident` checks the projection, and an unused parameter is emitted as `_c` / `_d`.
+  The generated lambda then raises no LINT013 (unused variable) in the user's code. For
+  example, `select c.name` over a cross product leaves `d` unused.
+- **A second `from` is correlated when its source text mentions the first range variable.**
+  An uncorrelated one is the cross product `_cross_join`, which pushes down to a SQL CROSS
+  JOIN. A correlated one (`from d in c.items`) is the flatten `_select_many` and runs in
+  memory only, because its second source is a per-row collection, not a table. The outer row
+  holds the collection being flattened, so the row is non-copyable and the transparent
+  identifier cannot carry it. A correlated query is therefore always select-terminal:
+  `orderby` and `group` are rejected, and a `where` after the second `from` may read only
+  `d`. That `where` is pushed into the collection selector ahead of the flatten, which yields
+  the same rows as filtering the pairs.
 - **The correlated-flatten collection selector borrows, it never copies.** `unsafe(each(tail))`
   is chosen over `to_sequence` (whose const-array overload clones per row) and over
   `where_`'s array overload (which materializes per row). Borrowing a TEMPORARY tail
   (`from x in [c.id]`, a function result) is safe because daslang heap-allocates arrays and
   does not finalize them at scope exit - the backing storage outlives the borrow and is
-  reclaimed by GC.
-- **A `FromInMacro` reject returns null so infer can stabilize.** Errors clear on every pass,
-  so the not-yet-inferred-source arm's error survives only when the source never infers at
-  all - that is what makes that arm a deferral rather than a final verdict.
+  reclaimed by GC. Each pushed-in `where` chains onto the borrowed iterator as `_where`, whose
+  iterator overload stays lazy. A typed `from d : RowB in c.items` builds
+  `from_in(<tail>, type<RowB>)` in place of the `each` borrow.
+- **`join ... into g` is a group-join.** It emits `_group_join`, whose result lambda takes
+  `g`, the ARRAY of matches, as its second parameter, and its key lambda is the `_join` one.
+  It is select-terminal only, because the `(c, g)` pair cannot be carried while `g` is a
+  non-copyable array. It runs in memory only, because `_sql` rejects `_group_join`.
+- **`build_src`'s two arms are a fusion decision, not a formatting one.** A fused source -
+  the chain head, both join sources, the second `from`'s source - is built as `from_in(...)`
+  so `_fold` can route it. The one bare arm is the left source of a two-`from` query, correlated
+  or not: `_cross_join` and `_select_many` both run at tier-3 passthrough, so that source is
+  passed as the bare parenthesized expression, where `each`'s `[unsafe_outside_of_for]` does not
+  trip and the array overloads are selected. `transpile_cross` builds it before correlation is
+  known, which is decided inside `emit_two_source`.
+
+### from_in dispatch {#linq-das-from-in}
+
 - **`from_in` identifies typed sources by matching module + type NAME as strings**, not by
   requiring the provider modules: `sqlite_boost::SqlRunner` -> `select_from`, pugixml
   `xml_node` -> `from_xml_node`, `json::JsonValue?` -> `from_json` - linq_das stays
@@ -57,195 +183,11 @@ Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across
   so the emitted call carries the `unsafe` wrap a `_fold` chain requires. A table source is
   rejected with a fix message before those arms: it already carries its row shape, and the
   typed builders would all mis-fire.
-
-## 14. linq_fold_common
-
-- **group_by's per-key update is a dummy plus an address compare, not a `key_exists`
-  probe.** `entry &= tab?[uk] ?? dummy` costs one hash op per element on hits;
-  `addr(entry) == addr(dummy)` identifies the miss, which then fills the dummy, inserts it,
-  and re-defaults it - the second hash op is paid on misses only. Average slots hold a
-  `(sum, count)` accumulator and divide with no zero guard: sound because a key enters the
-  table only on its first element.
-- **`hoist_prelude` hand-builds a flat block on purpose.** The materializer prelude - the
-  hoisted default-row declaration on the field-prune path - must be a SIBLING of the walk; a
-  `$b(prelude)` splice nests it in its own scope, where the per-element reads cannot see it.
-- **One `at` can reach two materializers.** A `group_by` chain closed by
-  `first`/`order`/`distinct`/`take` emits through both the array-walk materializer and the
-  handle materializer at the same source location, so `qn` - which keys on (prefix, at) -
-  keeps the two sites' binds apart only while each site carries its own prefix.
-- **An `ExprFor` the typer has not re-inferred carries an EMPTY `iteratorVariables`.** A
-  decs bridge feeding a no-chain terminator (`from_decs_template(...).count()`) has no chain
-  op to force the second inference pass, so the iterator names are recovered from the push
-  tuple's values - each references its iter var by name under an `ExprRef2Value` wrap - and
-  match what the loop binds once a later pass infers it.
-
-## 15. linq_fold_sql
-
-- **`extract_sql_source` walks the call's own `arguments[0]` spine, not linq_fold's
-  flattened `top`** - the SQL DSL ops are not `linqCalls`, so `flatten_linq` stops at the
-  first one and never reaches the `select_from` source. `sql_linq_loaded(prog)` then gates
-  on `_sql` being in THIS program: a consumer can get `select_from` from a provider boost
-  without `daslib/sql_linq`, and that chain must fall through to the in-memory path.
-
-## 16. linq_fold_decs
-
-- **Column pruning is a four-step pipeline over the `decs_tup` bind, and every step exists
-  to reach bind elision.** Scan the body for `decs_tup.<field>` uses; if the bind is
-  referenced as a WHOLE var, rewrite each whole-var use into a synthesized
-  `(userName1 = iter1, ...)` literal - semantically identical - and re-scan; then flatten the
-  surviving field reads to the iter vars and drop the bind entirely. Unused `get_ro` slots
-  disappear along with one tuple-make plus N field reads per iteration. The unpruned bind
-  stays only for whole-var refs that survive the rewrite.
-- **The decs random-index fast paths rest on these source facts.** A plain `[decs_template]`
-  field compiles to `get_ro` (an indexable array) while a default-init field compiles to
-  `get_default_ro` - an iterator, not indexable - so `decs_can_random_index` bails and the
-  walk stands. `get_ro` is `[unsafe_outside_of_for]`, so each cloned source AND the index
-  read are marked `alwaysSafe` (mirroring `decs_boost`'s `append_index_lookup`).
-  `for_each_archetype` visits archetypes in order and skips empty ones, so a no-predicate
-  `last()` overwriting a result per archetype ends holding the global last in
-  O(num_archetypes), and `reverse |> take(N)` collects only the tail with the boundary
-  archetype's head indexed past rather than walked.
-- **Trivial-select elision removes the copy a `_select(_.userName)` would emit.** The
-  pruned inner-for already keeps that component's iter var, so the synthetic bind would
-  flatten to a pure copy; renaming the chain's `finalBind` to the iter var skips the binding
-  entirely. Detecting the shape needs TWO `ExprRef2Value` peels: the typer wraps both the
-  projection root and the `ExprVar` inside the `ExprField`.
-- **The decs join hook keeps hash-collect and probe inline rather than routing through
-  `wrap_source_loop`** - that is what preserves the count-no-`where` fast path, which
-  answers from bucket lengths instead of walking pairs. Its key lambdas are synthesized
-  upstream by the LinqJoin macro as 1-arg single-return blocks, so the BLOCK's return type
-  is the key type; a change to that synthesized shape breaks the decs join silently.
-
-## 17. sql_linq
-
-- **Equal phase numbers are deliberate.** `PHASE_ORDER_BY == PHASE_SELECT` - ORDER BY
-  commutes with the projection in SQL (it may reference projected aliases or source
-  columns) - and `PHASE_GROUP_BY == PHASE_DISTINCT == PHASE_SET_OP`. Giving either member
-  its own number spuriously diverts the canonical `_group_by |> _order_by |> _select` into
-  a nested SELECT.
-- **Emitted SQL is a template over two in-band markers.** `?` is a bind, `\x01` a runtime
-  identifier (a dynamic `_order_by` column name); `next_placeholder` scans outside
-  single-quoted literals and always resumes just past a placeholder, so the scan starts
-  with no quote open. `sql_to_frags_ex` pairs each marker with `orderedBinds` /
-  `orderedInlineIds` in occurrence order and preserves a marker as text once its list is
-  exhausted. Nothing reaches the text unquoted: a compile-time constant folds in with SQL
-  doubling, a non-constant emits a runtime `sql_quote_id` / `sql_quote_lit` call, and every
-  other runtime value stays a `?`.
-- **Key contexts render with constants inlined because their fragment is re-used.** A
-  computed `_group_by` / `_order_by` key fragment is emitted at several SQL positions
-  (SELECT, GROUP BY, ORDER BY) while a placeholder can be bound only once, so
-  `render_inlined_key_sql` sets `q.inlineConstants`, admits only `ExprConst*` (strings
-  through `sql_quote_lit`), and rejects any key that pushed a bind.
-- **`_distinct_by(K)` is dialect-routed on `caps.distinct_on`.** Without it, SQLite's
-  bare-aggregate form `SELECT *, MIN/MAX(pk) FROM t GROUP BY K` keeps the `*` columns of
-  the min-pk (or max-pk) row per K - SQLite-only semantics; strict engines reject bare
-  columns beside GROUP BY. With it, `SELECT DISTINCT ON (K) * ... ORDER BY K, pk [DESC]` - a
-  PostgreSQL extension DuckDB also implements. MIN/ASC is linq's "first row per K", MAX/DESC
-  is `reverse() |> _distinct_by(K)` "last row per K" - both only while pk is monotonic with
-  insertion order.
-- **A join's `into` projection registry is snapshotted because the outer projection
-  clobbers the live one.** `process_join_call` copies the live projection into
-  `joinProjRecordNames` + the `joinSelectCol*` arrays, which survive
-  `analyze_grouped_projection`'s clear-and-repopulate. Post-join `_.<alias>` resolves
-  through that snapshot in every post-join consumer - `pred_to_sql`'s column-ref arm,
-  `collect_one_order_key`, `push_group_key`, `try_translate_group_aggregate`,
-  `try_translate_global_aggregate` - all through `find_projection_alias` +
-  `render_projection_alias_sql`. A registry miss is rejected loudly everywhere alike: falling
-  back to base-table resolution would leak the unqualified base-table namespace into post-join
-  predicates.
-- **`normalize_single_source_arg_names` exists for the linq_das front end.** `_sql`
-  resolves a single source against the placeholder `_`, but LINQ-syntax lowering splices
-  the user's range variable verbatim (`$(c) => c.field`), so a single-parameter chain-op
-  lambda's bound variable is renamed to `_`. Gated on a pure single-source chain - join and
-  set-op key lambdas bind distinct sources and are left alone.
-
-## 33. sql_migrate
-
-- **The audit table is provider-neutral by construction** (client-side epoch seconds,
-  BIGINT); duplicate versions are caught in two layers because neither sees everything; the
-  `struct_convert_field` overload set is a specificity ladder - deleting a "duplicate"
-  silently re-routes conversions.
-
-## 37. linq_fold module layout and the SourceAdapter contract
-
-- **Charters.** `linq_fold` is dispatch only: source recognition (`try_splice_patterns`),
-  adapter construction, the tier-2 `fold_linq_default` cascade, the `LinqFold` call macro,
-  and the single registrar `register_all_linq_fold_rows`. `linq_fold_common` holds what no
-  source can influence - the pattern-table types, the walker, the predicate library, the
-  chain pre-passes, the generic emit lanes, the `splice_patterns` registry, and the abstract
-  `SourceAdapter`. Each remaining file owns one source: `linq_fold_array` (array, zip,
-  array-join), `linq_fold_decs`, `linq_fold_json`, `linq_fold_table`, and pugixml's
-  `linq_fold_xml`. `linq_fold_sql` is the exception - it recognizes a `[sql_table]` source
-  and hands the whole chain to the `_sql` macro, so it has no adapter and no emit. A source
-  file requires `linq_fold_common` and never a sibling source.
-- **`try_splice_patterns` tries recognizers in a fixed order** - sql, decs, the registered
-  `linq_fold_sources` in registration order, json, table - and the array arm runs last with
-  no recognizer of its own: it is what claims a chain nobody else claimed. A source outside
-  daslib joins the `linq_fold_source` group from its descriptor and from its C++ module's
-  constructor, and registers a
-  `LinqFoldSourceRecognizer` from its `register_linq_fold_source` entry, which
-  `register_all_linq_fold_rows` calls on every member; pugixml's `linq_fold_xml` is the one
-  such source.
-- **The adapter contract is four abstract methods; everything else on the base has a
-  default.** `bind_name`, `element_type`, `wrap_source_loop` and `wrap_invoke` are abstract,
-  so every source answers them. The per-operation hooks (`emit_loop_or_count`,
-  `emit_reverse_skip_into_tail`, `emit_reverse_last_backward`, `emit_distinct_take_loop`,
-  `build_group_by_adapter`, `emit_join_hook`) return null on the base, and a null sends the
-  caller down its generic path. The capability methods (`can_group_by`, `can_join`,
-  `can_reserve_by_length`, `has_own_loop_or_count_lane`, `supports_direct_return`,
-  `effective_dispatch`, `defers_materialization`, `count_shortcut`, `invoke_param_type`,
-  `name_prefix`) are the source answering questions about itself. daslang classes have no
-  `is`/`as` downcast, so an emit fn holding a `SourceAdapter?` reaches source-specific
-  behavior only through these methods - there is no place to write a per-source branch, and
-  adding a source needs no edit to a central enum or switch.
-- **The capability defaults are fail-closed, and `supports_direct_return` is the one that
-  matters.** A wrong `true` emits a mid-loop `return` that escapes a nested-callback walk
-  (decs's `for_each_archetype`); a wrong `false` only costs the slower state-var +
-  find-stop + tail path.
-- **`loop_source_expr` / `loop_source_name` is what lights up the array-shaped lanes.** The
-  shared lanes spell their loop and their `length(...)` reads with the name, and read the
-  expr for compile-time facts - the `type_has_length` reserve gate and the join's srcA
-  element-type check. Array and table override both, xml and json override the name only,
-  decs overrides neither.
-- **`ProjectedSourceAdapter` absorbs a leading source projection.** When a row captures the
-  optional `srcsel` slot (`source |> _select(f) |> order/distinct/take`), the dispatcher
-  wraps the real adapter in this decorator: it binds `projName = f(rawElem)` on top of the
-  per-element body and delegates loop and invoke to the inner adapter, so every emit sees the
-  projected element unchanged. It leaves `loop_source_expr` / `loop_source_name` /
-  `can_reserve_by_length` at the base defaults, which disables the source-direct fast paths -
-  those would bypass the projection.
-- **Rows are per operator family, not per source.** The seven `build_*_rows` fns
-  (order_family, loop_or_count, reverse, distinct, group_by, join, zip) emplace 17 rows into
-  the one `splice_patterns` table; only zip's builder lives outside `linq_fold_common`.
-  Source gating happens inside a row - through a `RequiresPredicate` that asks the adapter
-  (`can_group_by_source`, `can_join_source`, `array_source`, `non_array_source`) or through
-  a hook that returns null. Registration order is match priority: the dispatcher walks the
-  table top to bottom and the first row whose chain matches and whose emit returns non-null
-  wins, so more specific chains are declared first. A row whose slot chain is a strict prefix
-  of a later row's shadows that row (`chain_prefix_of`).
-- **The walker consumes the whole call list or fails.** `match_pattern` walks the flattened
-  calls left to right against the row's slots: `c_one` must match and advances both cursors,
-  `c_opt` advances both on a match and skips the slot otherwise, `c_chain` matches greedily
-  while the call is in the slot's name set and always succeeds - including with zero matches,
-  which still creates the (empty) `captures.many` entry, so an emit fn can rely on the key
-  existing. Any call left unconsumed after the last slot is a no-match. The `requires`
-  predicates run last, against the populated captures.
-- **`Captures.single_name` exists because a pre-pass renames the op without touching the
-  AST.** `normalize_order_reverse` folds a trailing `reverse` into the order op by swapping
-  the tuple's `LinqCall` record, leaving the `ExprCall` alone; deriving the name back from
-  the `ExprCall` (`call_norm_name`) would silently undo the swap. The walker therefore
-  records the `LinqCall.name` at match time, and any emit fn that cares about the
-  post-normalize name reads `single_name`.
-- **`alias_table` names the op-name groups a `m_alias` slot admits, and a missing name fails
-  silently.** A terminator the lanes handle but `loop_terminator_family` omits never matches
-  the terminator slot, so the chain leaves the splice and lands on the tier-2 cascade with no
-  diagnostic - the symptom is a slow chain, not an error.
-- **Predicates and emit fns are named module-level functions, referenced as
-  `@@<RequiresPredicate> name` / `@@<EmitFn> name`.** An anonymous `@@(...)` lambda compiles
-  to a `_localfunction_*` symbol the LLVM JIT pass cannot resolve; a named function has a
-  stable address.
-- **The table lane's key and value binds are asymmetric on purpose.** `keys(tab)` yields
-  non-const elements (writable temp copies), so the key lanes rebind the loop var through a
-  `let` before the body sees it; `values(tab)` over the const table param already yields
-  `V& const` and binds directly. Keys are workhorse types, so the copy is free, and
-  downstream `==const` composition (a `push_clone` of a bare projected key) needs the const.
+- **`from_in` emits each builder as a bare `alwaysSafe` call.** In the qmacro,
+  `unsafe($c(...)(...))` becomes the `alwaysSafe` flag on the call itself, not a wrapper
+  node, so linq_fold's source extractors and `peel_each` see a bare `ExprCall`. An
+  `[unsafe_outside_of_for]` head is therefore fine both fused and unfused. The untyped form
+  adds no check of its own for a source that cannot be iterated: `each` reports that error.
+- **A `FromInMacro` reject returns null so infer can stabilize.** Errors clear on every pass,
+  so the not-yet-inferred-source arm's error survives only when the source never infers at
+  all - that is what makes that arm a deferral rather than a final verdict.

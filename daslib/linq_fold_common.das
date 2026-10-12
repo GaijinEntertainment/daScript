@@ -8,7 +8,7 @@ module linq_fold_common shared public
 
 //! linq_fold source-independent kernel: pattern-table types, walker, predicate library,
 //! chain transforms, generic emit lanes, and the abstract ``SourceAdapter`` base. Carries
-//! the shared ``splice_patterns`` registry. See daslib/ARCHITECTURE_LINQ.md sec. 37.
+//! the shared ``splice_patterns`` registry. See ``ARCHITECTURE_LINQ_FOLD.md``.
 
 require daslib/linq public
 require daslib/ast_boost
@@ -22,10 +22,10 @@ require strings
 struct LinqCall {
     name : string
     moduleName : string = "linq"
-    skip : bool = false
-    inplace : bool = false
+    dropFromChain : bool = false
+    hasInplaceVariant : bool = false
     noToArrayVariant : bool = false
-    recursive : array<int>
+    foldedArgIndices : array<int>
 }
 
 variant LoopDispatch {
@@ -87,6 +87,7 @@ class ProjectedSourceAdapter : SourceAdapter {
     def override bind_name(at : LineInfo) : string => projName
     def override supports_direct_return() : bool => inner->supports_direct_return()
     def override element_type() : TypeDeclPtr => clone_type(projType)
+    [arch(at="ARCHITECTURE_LINQ_FOLD.md#linq-fold-row-usage")]
     def override wrap_source_loop(loopShape : LoopDispatch; var body : Expression?; at : LineInfo) : Expression? {
         let innerBind = inner->bind_name(at)
         var projExpr = peel_lambda_rename_var(selectLam, innerBind)
@@ -104,7 +105,7 @@ class ProjectedSourceAdapter : SourceAdapter {
 class RowUsageScanner : AstVisitor {
     bindName      : string
     usedFields    : table<string>
-    allFieldsUsed : bool = false
+    usesWholeRow : bool = false
     inTargetField : bool = false
     def RowUsageScanner(n : string) {
         bindName = n
@@ -125,34 +126,34 @@ class RowUsageScanner : AstVisitor {
     }
     def override preVisitExprVar(expr : ExprVar?) : void {
         if (expr.name == bindName && !inTargetField) {
-            allFieldsUsed = true
+            usesWholeRow = true
         }
     }
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_LINQ_FOLD.md#linq-fold-row-usage")]
 def collect_row_usage(var body : Expression?; bindName : string) : tuple<bool; array<string>> {
-    var allUsed = false
+    var usesWholeRow = false
     var used : array<string>
-    if (body == null) return (allUsed, used)
+    if (body == null) return (usesWholeRow, used)
     var sc = new RowUsageScanner(bindName)
     make_visitor(*sc) $(astVisitorAdapter) {
         visit_expression(body, astVisitorAdapter)
     }
-    allUsed = sc.allFieldsUsed
+    usesWholeRow = sc.usesWholeRow
     for (k in keys(sc.usedFields)) {
         used |> push(k)
     }
     unsafe {
         delete sc
     }
-    return (allUsed, used)
+    return (usesWholeRow, used)
 }
 
 [macro_function]
-def needs_full_row_bind(usedFields : array<string>; allUsed : bool) : bool {
+def needs_full_row_bind(usedFields : array<string>; usesWholeRow : bool) : bool {
     //! true when the walk must bind the whole row rather than key/value locals
-    if (allUsed) return true
+    if (usesWholeRow) return true
     for (f in usedFields) {
         if (f != "key" && f != "value") return true
     }
@@ -179,7 +180,8 @@ class RowFieldFlattener : AstVisitor {
     }
 }
 
-[macro_function]
+//! Returns the possibly-replaced root: a body that is itself a bare bind.<field> read (where(_.flag)) is replaced whole.
+[macro_function, arch(at="ARCHITECTURE_LINQ_FOLD.md#linq-fold-row-usage")]
 def flatten_row_to_locals(var body : Expression?; bindName : string; var fieldToLocal : table<string; string>) : Expression? {
     if (body == null) return body
     var fl = new RowFieldFlattener(bindName, fieldToLocal)
@@ -192,7 +194,7 @@ def flatten_row_to_locals(var body : Expression?; bindName : string; var fieldTo
     return body
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_LINQ_FOLD.md#linq-fold-row-usage")]
 def hoist_prelude(var prelude : array<Expression?>; var loop : Expression?; at : LineInfo) : Expression? {
     if (empty(prelude)) return loop
     var outBlk = new ExprBlock(at = at)
@@ -220,8 +222,8 @@ variant SlotCardinality {
 struct Slot {
     matcher      : SlotMatcher
     cardinality  : SlotCardinality
-    capture_name : string = ""
-    arity        : int = -1
+    capture_name : string = ""  //! "" leaves the matched call uncaptured
+    arity        : int = -1  //! -1 admits any argument count; N requires exactly N arguments
 }
 
 struct Captures {
@@ -238,7 +240,7 @@ variant MatchResult {
 typedef RequiresPredicate = function<(var c : Captures; var top : Expression?; src : SourceAdapter?) : bool>
 
 struct EmitCtx {
-    top              : Expression?
+    top              : Expression?  //! the peel_each'd chain source; null for a bridge-driven (decs) source
     src              : SourceAdapter?
     expr_is_iterator : bool
 }
@@ -312,6 +314,7 @@ def slots_structurally_match(a : Slot; b : Slot) : bool {
         && a.arity == b.arity)
 }
 
+[arch(at="ARCHITECTURE_LINQ_FOLD.md#linq-fold-row-registration")]
 def chain_prefix_of(a : array<Slot>; b : array<Slot>) : bool {
     if (length(a) >= length(b)) return false
     for (i in 0 .. length(a)) {
@@ -320,7 +323,7 @@ def chain_prefix_of(a : array<Slot>; b : array<Slot>) : bool {
     return true
 }
 
-[unused_argument(name)]
+[unused_argument(name), arch(at="ARCHITECTURE_LINQ_FOLD.md#linq-fold-row-registration")]
 def check_pattern_table_reachable(name : string; patterns : array<SplicePattern>) : bool {
     for (i in 0 .. length(patterns)) {
         for (j in i + 1 .. length(patterns)) {
@@ -346,11 +349,6 @@ var alias_table : table<string; array<string>> <- {
     "count_family"               => ["count", "long_count"],
     "distinct_terminator_family" => ["count", "long_count", "sum"],
     "order_family"               => ["order", "order_descending", "order_by", "order_by_descending", "order_by_keys"],
-    "range_op_family"            => ["skip", "skip_while", "take_while", "take"],
-    "accum_family"               => ["sum", "min", "max", "average", "aggregate",
-                                     "min_by", "max_by", "min_max", "min_max_by",
-                                     "min_max_average", "min_max_average_by", "long_count"],
-    "early_exit_family"          => ["any", "all", "contains", "first", "first_or_default"],
     "loop_terminator_family"     => ["count", "long_count", "sum", "min", "max", "average", "aggregate",
                                      "min_by", "max_by", "min_max", "min_max_by",
                                      "min_max_average", "min_max_average_by",
@@ -381,6 +379,7 @@ def slot_matches_call(slot : Slot; call : ExprCall?; name : string; pattern_name
     return in_set && (slot.arity == -1 || length(call.arguments) == slot.arity)
 }
 
+[arch(at="ARCHITECTURE_LINQ_FOLD.md#linq-fold-walker")]
 def match_pattern(p : SplicePattern;
                   var calls : array<tuple<ExprCall?; LinqCall?>>;
                   var top : Expression?;
@@ -510,7 +509,7 @@ def zip_no_while_after_select(var c : Captures; var top : Expression?; src : Sou
     return true
 }
 
-[unused_argument(top, src)]
+[unused_argument(top, src), arch(at="ARCHITECTURE_LINQ_FOLD_SOURCES.md#linq-fold-array-zip")]
 def zip_reverse_compatible_with_term(var c : Captures; var top : Expression?; src : SourceAdapter?) : bool {
     if (!(c.single |> key_exists("trailing_reverse")) || !(c.single |> key_exists("term"))) return true
     let name = c.single_name["term"]
@@ -526,20 +525,20 @@ var linqCalls = {
     "select_to_array" => LinqCall(name = "select"),
     "select_many" => LinqCall(name = "select_many"),
     "select_many_to_array" => LinqCall(name = "select_many"),
-    "zip" => LinqCall(name = "zip", recursive = [1, 2]),
-    "zip_to_array" => LinqCall(name = "zip", recursive = [1, 2]),
-    "reverse" => LinqCall(name = "reverse", inplace = true),
-    "reverse_to_array" => LinqCall(name = "reverse", inplace = true),
-    "order" => LinqCall(name = "order", inplace = true),
-    "order_to_array" => LinqCall(name = "order", inplace = true),
-    "order_descending" => LinqCall(name = "order_descending", inplace = true),
-    "order_descending_to_array" => LinqCall(name = "order_descending", inplace = true),
-    "order_by" => LinqCall(name = "order_by", inplace = true),
-    "order_by_to_array" => LinqCall(name = "order_by", inplace = true),
-    "order_by_descending" => LinqCall(name = "order_by_descending", inplace = true),
-    "order_by_descending_to_array" => LinqCall(name = "order_by_descending", inplace = true),
-    "order_by_keys" => LinqCall(name = "order_by_keys", inplace = true),
-    "order_by_keys_to_array" => LinqCall(name = "order_by_keys", inplace = true),
+    "zip" => LinqCall(name = "zip", foldedArgIndices = [1, 2]),
+    "zip_to_array" => LinqCall(name = "zip", foldedArgIndices = [1, 2]),
+    "reverse" => LinqCall(name = "reverse", hasInplaceVariant = true),
+    "reverse_to_array" => LinqCall(name = "reverse", hasInplaceVariant = true),
+    "order" => LinqCall(name = "order", hasInplaceVariant = true),
+    "order_to_array" => LinqCall(name = "order", hasInplaceVariant = true),
+    "order_descending" => LinqCall(name = "order_descending", hasInplaceVariant = true),
+    "order_descending_to_array" => LinqCall(name = "order_descending", hasInplaceVariant = true),
+    "order_by" => LinqCall(name = "order_by", hasInplaceVariant = true),
+    "order_by_to_array" => LinqCall(name = "order_by", hasInplaceVariant = true),
+    "order_by_descending" => LinqCall(name = "order_by_descending", hasInplaceVariant = true),
+    "order_by_descending_to_array" => LinqCall(name = "order_by_descending", hasInplaceVariant = true),
+    "order_by_keys" => LinqCall(name = "order_by_keys", hasInplaceVariant = true),
+    "order_by_keys_to_array" => LinqCall(name = "order_by_keys", hasInplaceVariant = true),
     "top_n" => LinqCall(name = "top_n", noToArrayVariant = true),
     "top_n_by" => LinqCall(name = "top_n_by", noToArrayVariant = true),
     "top_n_descending" => LinqCall(name = "top_n_descending", noToArrayVariant = true),
@@ -558,46 +557,46 @@ var linqCalls = {
     "min_max_average_by" => LinqCall(name = "min_max_average_by", noToArrayVariant = true),
     "aggregate" => LinqCall(name = "aggregate", noToArrayVariant = true),
     "sum" => LinqCall(name = "sum"),
-    "skip" => LinqCall(name = "skip", inplace = true),
-    "skip_to_array" => LinqCall(name = "skip", inplace = true),
+    "skip" => LinqCall(name = "skip", hasInplaceVariant = true),
+    "skip_to_array" => LinqCall(name = "skip", hasInplaceVariant = true),
     "skip_while" => LinqCall(name = "skip_while"),
     "skip_while_to_array" => LinqCall(name = "skip_while"),
-    "take" => LinqCall(name = "take", inplace = true),
-    "take_to_array" => LinqCall(name = "take", inplace = true),
+    "take" => LinqCall(name = "take", hasInplaceVariant = true),
+    "take_to_array" => LinqCall(name = "take", hasInplaceVariant = true),
     "take_while" => LinqCall(name = "take_while"),
     "take_while_to_array" => LinqCall(name = "take_while"),
-    "skip_last" => LinqCall(name = "skip_last", inplace = true),
-    "skip_last_to_array" => LinqCall(name = "skip_last", inplace = true),
-    "take_last" => LinqCall(name = "take_last", inplace = true),
-    "take_last_to_array" => LinqCall(name = "take_last", inplace = true),
+    "skip_last" => LinqCall(name = "skip_last", hasInplaceVariant = true),
+    "skip_last_to_array" => LinqCall(name = "skip_last", hasInplaceVariant = true),
+    "take_last" => LinqCall(name = "take_last", hasInplaceVariant = true),
+    "take_last_to_array" => LinqCall(name = "take_last", hasInplaceVariant = true),
     "chunk" => LinqCall(name = "chunk"),
     "chunk_to_array" => LinqCall(name = "chunk"),
-    "concat" => LinqCall(name = "concat", recursive = [1, 2, 3, 4, 5, 6, 7], inplace = true),
-    "concat_to_array" => LinqCall(name = "concat", recursive = [1, 2, 3, 4, 5, 6, 7], inplace = true),
-    "prepend" => LinqCall(name = "prepend", inplace = true),
-    "prepend_to_array" => LinqCall(name = "prepend", inplace = true),
-    "append" => LinqCall(name = "append", inplace = true),
-    "append_to_array" => LinqCall(name = "append", inplace = true),
-    "distinct" => LinqCall(name = "distinct", inplace = true),
-    "distinct_to_array" => LinqCall(name = "distinct", inplace = true),
-    "distinct_by" => LinqCall(name = "distinct_by", inplace = true),
-    "distinct_by_to_array" => LinqCall(name = "distinct_by", inplace = true),
-    "union" => LinqCall(name = "union", recursive = [1]),
-    "union_to_array" => LinqCall(name = "union", recursive = [1]),
-    "union_by" => LinqCall(name = "union_by", recursive = [1]),
-    "union_by_to_array" => LinqCall(name = "union_by", recursive = [1]),
-    "except" => LinqCall(name = "except", recursive = [1]),
-    "except_to_array" => LinqCall(name = "except", recursive = [1]),
-    "except_by" => LinqCall(name = "except_by", recursive = [1]),
-    "except_by_to_array" => LinqCall(name = "except_by", recursive = [1]),
-    "intersect" => LinqCall(name = "intersect", recursive = [1]),
-    "intersect_to_array" => LinqCall(name = "intersect", recursive = [1]),
-    "intersect_by" => LinqCall(name = "intersect_by", recursive = [1]),
-    "intersect_by_to_array" => LinqCall(name = "intersect_by", recursive = [1]),
-    "unique" => LinqCall(name = "unique", inplace = true),
-    "unique_to_array" => LinqCall(name = "unique", inplace = true),
-    "unique_by" => LinqCall(name = "unique_by", inplace = true),
-    "unique_by_to_array" => LinqCall(name = "unique_by", inplace = true),
+    "concat" => LinqCall(name = "concat", foldedArgIndices = [1, 2, 3, 4, 5, 6, 7], hasInplaceVariant = true),
+    "concat_to_array" => LinqCall(name = "concat", foldedArgIndices = [1, 2, 3, 4, 5, 6, 7], hasInplaceVariant = true),
+    "prepend" => LinqCall(name = "prepend", hasInplaceVariant = true),
+    "prepend_to_array" => LinqCall(name = "prepend", hasInplaceVariant = true),
+    "append" => LinqCall(name = "append", hasInplaceVariant = true),
+    "append_to_array" => LinqCall(name = "append", hasInplaceVariant = true),
+    "distinct" => LinqCall(name = "distinct", hasInplaceVariant = true),
+    "distinct_to_array" => LinqCall(name = "distinct", hasInplaceVariant = true),
+    "distinct_by" => LinqCall(name = "distinct_by", hasInplaceVariant = true),
+    "distinct_by_to_array" => LinqCall(name = "distinct_by", hasInplaceVariant = true),
+    "union" => LinqCall(name = "union", foldedArgIndices = [1]),
+    "union_to_array" => LinqCall(name = "union", foldedArgIndices = [1]),
+    "union_by" => LinqCall(name = "union_by", foldedArgIndices = [1]),
+    "union_by_to_array" => LinqCall(name = "union_by", foldedArgIndices = [1]),
+    "except" => LinqCall(name = "except", foldedArgIndices = [1]),
+    "except_to_array" => LinqCall(name = "except", foldedArgIndices = [1]),
+    "except_by" => LinqCall(name = "except_by", foldedArgIndices = [1]),
+    "except_by_to_array" => LinqCall(name = "except_by", foldedArgIndices = [1]),
+    "intersect" => LinqCall(name = "intersect", foldedArgIndices = [1]),
+    "intersect_to_array" => LinqCall(name = "intersect", foldedArgIndices = [1]),
+    "intersect_by" => LinqCall(name = "intersect_by", foldedArgIndices = [1]),
+    "intersect_by_to_array" => LinqCall(name = "intersect_by", foldedArgIndices = [1]),
+    "unique" => LinqCall(name = "unique", hasInplaceVariant = true),
+    "unique_to_array" => LinqCall(name = "unique", hasInplaceVariant = true),
+    "unique_by" => LinqCall(name = "unique_by", hasInplaceVariant = true),
+    "unique_by_to_array" => LinqCall(name = "unique_by", hasInplaceVariant = true),
     "element_at" => LinqCall(name = "element_at", noToArrayVariant = true),
     "element_at_or_default" => LinqCall(name = "element_at_or_default", noToArrayVariant = true),
     "first" => LinqCall(name = "first", noToArrayVariant = true),
@@ -606,12 +605,12 @@ var linqCalls = {
     "last_or_default" => LinqCall(name = "last_or_default", noToArrayVariant = true),
     "single" => LinqCall(name = "single", noToArrayVariant = true),
     "single_or_default" => LinqCall(name = "single_or_default", noToArrayVariant = true),
-    "join" => LinqCall(name = "join", recursive = [1]),
-    "join_to_array" => LinqCall(name = "join", recursive = [1]),
-    "left_join" => LinqCall(name = "left_join", recursive = [1]),
-    "left_join_to_array" => LinqCall(name = "left_join", recursive = [1]),
-    "group_join" => LinqCall(name = "group_join", recursive = [1]),
-    "group_join_to_array" => LinqCall(name = "group_join", recursive = [1]),
+    "join" => LinqCall(name = "join", foldedArgIndices = [1]),
+    "join_to_array" => LinqCall(name = "join", foldedArgIndices = [1]),
+    "left_join" => LinqCall(name = "left_join", foldedArgIndices = [1]),
+    "left_join_to_array" => LinqCall(name = "left_join", foldedArgIndices = [1]),
+    "group_join" => LinqCall(name = "group_join", foldedArgIndices = [1]),
+    "group_join_to_array" => LinqCall(name = "group_join", foldedArgIndices = [1]),
     "group_by" => LinqCall(name = "group_by"),
     "group_by_to_array" => LinqCall(name = "group_by"),
     "group_by_lazy" => LinqCall(name = "group_by_lazy"),
@@ -622,8 +621,8 @@ var linqCalls = {
     "all" => LinqCall(name = "all"),
     "contains" => LinqCall(name = "contains"),
     "to_table" => LinqCall(name = "to_table"),
-    "to_array" => LinqCall(name = "to_array", moduleName = "builtin", skip = true),
-    "to_sequence" => LinqCall(name = "to_sequence", skip = true),
+    "to_array" => LinqCall(name = "to_array", moduleName = "builtin", dropFromChain = true),
+    "to_sequence" => LinqCall(name = "to_sequence", dropFromChain = true),
 }
 
 [macro_function]
@@ -640,7 +639,7 @@ def is_linq_call(expr : Expression?) : bool {
     return false
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_LINQ_FOLD.md#linq-fold-chain-prepasses")]
 def normalize_order_reverse(var calls : array<tuple<ExprCall?; LinqCall?>>) {
     var i = 0
     while (i + 1 < length(calls)) {
@@ -670,7 +669,7 @@ def normalize_order_reverse(var calls : array<tuple<ExprCall?; LinqCall?>>) {
 
 typedef ComposeFn = function<(innerLam, outerLam : Expression?; freshName : string) : Expression?>
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_LINQ_FOLD.md#linq-fold-chain-prepasses")]
 def collapse_adjacent_calls(var calls : array<tuple<ExprCall?; LinqCall?>>;
                             opName, freshNamePrefix : string;
                             composeBodies : ComposeFn) {
@@ -726,7 +725,7 @@ def collapse_adjacent_calls(var calls : array<tuple<ExprCall?; LinqCall?>>;
     }
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_LINQ_FOLD.md#linq-fold-chain-prepasses")]
 def compose_select_bodies(innerLam, outerLam : Expression?; freshName : string) : Expression? {
     var outerMblk = outerLam as ExprMakeBlock
     var outerBlk = outerMblk._block as ExprBlock
@@ -743,7 +742,7 @@ def collapse_chained_selects(var calls : array<tuple<ExprCall?; LinqCall?>>) {
     collapse_adjacent_calls(calls, "select", "cs", @@ < ComposeFn > compose_select_bodies)
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_LINQ_FOLD.md#linq-fold-chain-prepasses")]
 def compose_where_bodies(innerLam, outerLam : Expression?; freshName : string) : Expression? {
     var innerBodyFresh = peel_lambda_rename_var(innerLam, freshName)
     var outerBodyFresh = peel_lambda_rename_var(outerLam, freshName)
@@ -771,7 +770,7 @@ def flatten_linq(var expr : Expression?)  {
             if (!linqCalls.key_exists(funcName)) break
             let linqCall = unsafe(linqCalls?[funcName])
             if (linqCall.moduleName != topFunc._module.name) break
-            if (!linqCall.skip) {
+            if (!linqCall.dropFromChain) {
                 calls.push((topCall, linqCall))
             }
             top = topCall.arguments[0]
@@ -954,6 +953,7 @@ def append_ranges_prelude(var preludeStmts : array<Expression?>; var skipExpr, t
     }
 }
 
+//! The take guard is >=, so a non-positive N stops before the first element.
 [macro_function]
 def wrap_with_ranges(var stmts : array<Expression?>; var skipExpr, takeExpr, skipWhileCond, takeWhileCond : Expression?;
                      names : RangeStateNames) {
@@ -1648,7 +1648,7 @@ def emit_min_max_family_lane(
     ), adapter, at)
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_LINQ_FOLD.md#linq-fold-loop-dispatch")]
 def emit_early_exit_lane(
                          opName : string;
                          var adapter : SourceAdapter?;
@@ -2181,7 +2181,7 @@ def emit_early_exit_lane(
     ), adapter, at)
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_LINQ_FOLD.md#linq-fold-to-table")]
 def emit_loop_or_count_lane(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {    // nolint:STYLE037 — at the cap already; the +2 is the intermediate-bind flush guards, no natural seam
     // nolint:STYLE014 — the loop_or_count planner. Walks the head chain (where_ / select runs) into a whereCond,
     // a running projection, intermediate select-binds + preCond binds; then reads skip / take / skip_while /
@@ -2619,7 +2619,7 @@ def try_make_inline_cmp(orderKey : Expression?; orderName : string;
     })
 }
 
-[unused_argument(at)]
+[unused_argument(at), arch(at="ARCHITECTURE_LINQ_FOLD.md#linq-fold-order-rows")]
 def make_inline_less_call(orderKey : Expression?; orderName : string;
                           var lhsExpr, rhsExpr : Expression?; at : LineInfo) : Expression? {
     if (orderKey == null || !(orderKey is ExprMakeBlock)) return null
@@ -2709,7 +2709,7 @@ def try_make_inline_cmp_keys(orderKey : Expression?; descMask : uint;
     return cmp
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_LINQ_FOLD.md#linq-fold-order-rows")]
 def build_order_family_rows {
     splice_patterns |> emplace <| SplicePattern(
         name = "order_streaming_min",
@@ -2855,7 +2855,7 @@ def extract_order_captures(var c : Captures; at : LineInfo; itName : string) : O
     return oc
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_LINQ_FOLD.md#linq-fold-deferred-materialization")]
 def emit_streaming_min(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
     // nolint:STYLE014 — `order_by(K) |> first[_or_default]()` collapses to a single O(n) min/max scan — no sort,
     // no buffer. Tracks the best element so far; the tail returns it. Generated (via emit_terminator_lane):
@@ -3025,7 +3025,7 @@ def private build_surrogate_cmp(descending : bool; at : LineInfo) : Expression? 
     return qmacro($(v1, v2) { return _::less(v1._0, v2._0) })
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_LINQ_FOLD.md#linq-fold-deferred-materialization")]
 def private build_surrogate_materialize_loop(var ctx : EmitCtx; bufName, outBufName : string;
                                              rowType : TypeDeclPtr; var selectLam : Expression?;
                                              handleIsTuple : bool; at : LineInfo) : array<Expression?> {
@@ -3054,7 +3054,7 @@ def private build_surrogate_materialize_loop(var ctx : EmitCtx; bufName, outBufN
 //   elif (<it beats buf[0]>) { spliced_pop_heap(buf, cmp); buf[last] := it; spliced_push_heap(buf, cmp) }
 // Tail: order_inplace(buf, cmp); return <- buf  (or re-project for a terminal _select).
 // XML defers: heap holds (orderKey, handle) surrogates; build the K survivor rows once at the tail.
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_LINQ_FOLD.md#linq-fold-deferred-materialization")]
 def emit_bounded_heap(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
     let bindName = ctx.src->bind_name(at)
     var oc <- extract_order_captures(c, at, bindName)
@@ -3279,7 +3279,7 @@ def emit_buffer_helper_dispatch(var c : Captures; var ctx : EmitCtx; at : LineIn
 //   tail: bare order → order_inplace(buf); +take → top_n[_by](buf, N);
 //         +first → min/max(buf) (panic if empty); +first_or_default → top_n(buf,1) |> first_or_default(d)
 // XML defers (distinct, no-take, no-first): buffer (orderKey, handle) surrogates, build survivor rows at the tail.
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_LINQ_FOLD.md#linq-fold-deferred-materialization")]
 def emit_fused_prefilter(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
     let bindName = ctx.src->bind_name(at)
     var oc <- extract_order_captures(c, at, bindName)
@@ -3522,7 +3522,7 @@ def emit_reverse_counter(var c : Captures; var ctx : EmitCtx; at : LineInfo) : E
 //   for (it in src) { last := <projection ?? it>; found = true }
 //   first            → if (!found) panic("…"); return <select(last) ?? last>
 //   first_or_default → return found ? <select(last) ?? last> : d
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_LINQ_FOLD.md#linq-fold-hook-null")]
 def emit_reverse_walk_overwrite_scalar(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
     let bindName = ctx.src->bind_name(at)
     let foundName = qn("found", at)
@@ -3756,7 +3756,7 @@ def emit_reverse_backward_walk_dset_gate(var c : Captures; var ctx : EmitCtx; at
 //   for (it in src) { tab[unique_key(<key>)] = (seq, <it ?? handle>); seq ++ }
 //   pairs <- values(tab); order_inplace(pairs, by descending seq); push each pairs._1 into outBuf; return <- outBuf
 // XML defers (distinct_by only): Val = node handle; build the survivor rows once at the tail.
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_LINQ_FOLD.md#linq-fold-deferred-materialization")]
 def emit_reverse_distinct_forward_keeplast(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
     if (!(c.single |> key_exists("dist"))) return null
     let distinctCall = c.single["dist"]
@@ -3845,7 +3845,7 @@ def emit_reverse_distinct_forward_keeplast(var c : Captures; var ctx : EmitCtx; 
 // handle-defer below), else rides emit_fold_array_lane:
 //   var buf : array<Elem>; for (it in src) { if (where) buf |> push_clone(<projection ?? it>) }
 //   reverse_inplace(buf); [buf |> resize(clamp(N, 0, len));] [re-project termsel into outBuf;] return <- buf
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_LINQ_FOLD.md#linq-fold-deferred-materialization")]
 def emit_reverse_buffer_inplace(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
     let bindName = ctx.src->bind_name(at)
     let bufName = qn("buf", at)
@@ -4036,7 +4036,7 @@ def build_reverse_rows {
     )
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_LINQ_FOLD.md#linq-fold-hook-null")]
 def emit_hashtable_dedup(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
     // nolint:STYLE014 — distinct / distinct_by lane (optional where / select / take / count). One forward pass with
     // a `seen` set; the first occurrence per key passes. Generated (canonical `distinct |> to_array` shape):
@@ -4871,7 +4871,7 @@ def expr_uses_var(var e : Expression?; name : string) : bool {
     return hit
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_LINQ_FOLD.md#linq-fold-group-by")]
 def plan_group_by_core(var calls : array<tuple<ExprCall?; LinqCall?>>;    // nolint:STYLE037 — at the cap already; +1 is the wrap_source_loop null guard, no natural seam
                        var keyBlock : Expression?;
                        var groupProjCall : ExprCall?;
@@ -5236,7 +5236,7 @@ def plan_group_by_core(var calls : array<tuple<ExprCall?; LinqCall?>>;    // nol
     return adapter->wrap_invoke(stmts, retType, false, at)
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_LINQ_FOLD.md#linq-fold-hook-null")]
 def emit_group_by(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? {
     var gbCall = c.single["gb"]
     var keyBlock = clone_expression(gbCall.arguments[1])
@@ -5296,7 +5296,7 @@ def build_group_by_rows {
 struct DecsBridgeShape {
     reqHashExpr : ExpressionPtr
     erqExpr     : ExpressionPtr
-    archName    : string
+    archName    : string  //! the bridge's own arch parameter name - the cloned get_ro sources reference it
     forExpr     : ExpressionPtr
     iterNames   : array<string>
     userNames   : array<string>
@@ -5316,7 +5316,8 @@ def get_call_short_name(c : ExprCall?) : string {
     return s
 }
 
-[macro_function]
+//! The push target must be the res statement 0 declares - an invoke that pushes elsewhere is user code, not a bridge.
+[macro_function, arch(at="ARCHITECTURE_LINQ_FOLD_SOURCES.md#linq-fold-uninferred-for")]
 def extract_decs_bridge(var top : Expression?) : DecsBridgeShape? {
     if (!(top is ExprInvoke)) return null
     var topInv = top as ExprInvoke
@@ -5415,6 +5416,7 @@ def emit_default_bind(name : string; argExpr : Expression?; canCopy : bool) : Ex
     return out
 }
 
+//! Clones out of the bound default without consuming it, so a lane may emit any number of default-return sites.
 [macro_function]
 def emit_default_return(name : string; canCopy : bool) : Expression? {
     var out : Expression?
@@ -5471,7 +5473,7 @@ def extract_upstream_join_core(var joinCall : ExprCall?) : UpstreamJoinCore? {
 
 struct UpstreamJoinArraySrcB {
     srcbClone : Expression?
-    srcbType  : TypeDeclPtr
+    srcbParamType  : TypeDeclPtr
     tupBType  : TypeDeclPtr
 }
 
@@ -5485,7 +5487,7 @@ def extract_upstream_join_array_srcb(var joinCall : ExprCall?) : UpstreamJoinArr
     var srcbClone = clone_expression(srcbSrc)
     srcbClone.genFlags.alwaysSafe = true
     return new UpstreamJoinArraySrcB(srcbClone = srcbClone,
-                                     srcbType = invoke_src_param_type(srcbSrc),
+                                     srcbParamType = invoke_src_param_type(srcbSrc),
                                      tupBType = strip_const_ref(clone_type(srcbSrc._type.firstType)))
 }
 
@@ -5522,6 +5524,7 @@ struct JoinPairCore {
     cntName       : string
 }
 
+//! The buffer element type comes from the peeled select body: a trailing select's call type can stay an unresolved typedecl when no to_array closes the chain.
 [macro_function]
 def build_join_pair_core(
                          var joinCall  : ExprCall?;
@@ -5619,7 +5622,7 @@ def build_join_pair_core(
                                returnStmt = returnStmt, invokeRetType = invokeRetType, cntName = "")
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_LINQ_FOLD.md#linq-fold-hashed-join")]
 def build_join_standalone_pieces(
                                  var joinCall   : ExprCall?;
                                  var whereLam   : Expression?;
@@ -5760,7 +5763,7 @@ def is_bare_key_ref(keyBody : Expression?; bindName : string; kvLane : bool) : b
     return false
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_LINQ_FOLD.md#linq-fold-hashed-join")]
 def build_join_probe_pieces(
                             var joinCall   : ExprCall?;
                             var whereLam   : Expression?;
@@ -5792,9 +5795,9 @@ def build_join_probe_pieces(
         var pairBlock = qmacro_block() {
             $b(pairStmts)
         }
-        var (allUsed, usedFields) = collect_row_usage(pairBlock, bElemName)
-        allUsed = needs_full_row_bind(usedFields, allUsed)
-        if (allUsed) {
+        var (usesWholeRow, usedFields) = collect_row_usage(pairBlock, bElemName)
+        usesWholeRow = needs_full_row_bind(usedFields, usesWholeRow)
+        if (usesWholeRow) {
             probeOuter = qmacro_block() {
                 let $i(kName) = $e(keyaBody)
                 let $i(pName) = unsafe($i(tabSrcName)?[$i(kName)])
@@ -5867,7 +5870,7 @@ def build_join_rows {
     )
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_LINQ_FOLD.md#linq-fold-hook-null")]
 def emit_join(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expression? =>
     ctx.src->emit_join_hook(c, ctx, at)
 
