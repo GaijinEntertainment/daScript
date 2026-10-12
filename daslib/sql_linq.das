@@ -127,8 +127,6 @@ let private INT_MAX_PHASE : int = int(0x7fffffff)
 // On peel: P > q.minPhaseSeen → push inner subQ (this op runs AFTER something already
 // in q per chain order, but its eval phase says BEFORE — preserve linq positional
 // semantics by lowering to a nested SELECT).
-let private PHASE_SOURCE     : int = 0
-let private PHASE_JOIN       : int = 1
 let private PHASE_WHERE      : int = 2
 let private PHASE_GROUP_BY   : int = 3
 let private PHASE_DISTINCT   : int = 3
@@ -138,7 +136,6 @@ let private PHASE_SELECT     : int = 5
 let private PHASE_ORDER_BY   : int = 5
 let private PHASE_SKIP       : int = 7
 let private PHASE_TAKE       : int = 8
-let private PHASE_TERMINAL   : int = 9
 
 enum private Materializer {
     Array

@@ -29,7 +29,7 @@ struct ArrayJoinShape {
     srcAExpr, srcBExpr : Expression?
     srcAName, srcBName : string
     srcAParamType, srcBParamType : TypeDeclPtr
-    tupAType, tupBType : TypeDeclPtr
+    tupBType : TypeDeclPtr
     keyaLam, keybLam, resultLam : Expression?
     keyType, resultType : TypeDeclPtr
     resBindName : string
@@ -121,7 +121,6 @@ class ArrayAdapter : SourceAdapter {
                 srcBName = qn("ajoin_srcB", at),
                 srcAParamType = invoke_src_param_type(top),
                 srcBParamType = srcb.srcbParamType,
-                tupAType = strip_const_ref(clone_type(top._type.firstType)),
                 tupBType = srcb.tupBType,
                 keyaLam = core.keyaLam,
                 keybLam = core.keybLam,

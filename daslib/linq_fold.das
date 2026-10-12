@@ -132,10 +132,8 @@ def private register_all_linq_fold_rows {
 
 [macro_function, arch(at="ARCHITECTURE_LINQ_FOLD.md#linq-fold-adapter-contract")]
 def private run_splice_adapter(var calls : array<tuple<ExprCall?; LinqCall?>>; var matchTop, ctxTop : Expression?;
-                               var adapter : SourceAdapter?; exprIsIter : bool; at : LineInfo;
-                               onlyRow : string = "") : Expression? {
+                               var adapter : SourceAdapter?; exprIsIter : bool; at : LineInfo) : Expression? {
     for (p in splice_patterns) {
-        if (onlyRow != "" && p.name != onlyRow) continue
         var r <- match_pattern(p, calls, matchTop, adapter)
         if (r is matched) {
             var caps <- r as matched
