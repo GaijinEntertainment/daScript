@@ -682,7 +682,10 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             parity <- ev_qwen_count()),
         // the single-format IQ4_XS twin with the MTP head (4.27 bpw): the fewest bytes of the 4-bit
         // ladder at the K-quant files' quality (PERF_LEDGER.md's 2026-10-06 equal-bytes entry); the
-        // recipe is deterministic (no imatrix) from unsloth's BF16 shards, the published file its output
+        // recipe is deterministic (no imatrix) from unsloth's BF16 shards, the published file its output.
+        // The file exists for the bandwidth-bound boxes (the house's M4 Pro): the routed experts, 93 % of
+        // its bytes, are IQ4_XS by design; every other plane is served in the file's own format too
+        // (REVIEW_KQ_FORMATS.md) - a plane the engine reads as a q8 copy is a gap, not the file's recipe
         ModelSpec(file = "Qwen3.6-35B-A3B-MTP-IQ4_XS-pure.gguf",
             url = "{HF}/borisbat/Qwen3.6-35B-A3B-MTP-IQ4_XS-pure-GGUF/resolve/6a1d560e64f8a9058773e5c1521534d9ef533bc8/Qwen3.6-35B-A3B-MTP-IQ4_XS-pure.gguf",
             recipe = "llama-quantize --pure Qwen3.6-35B-A3B-BF16-00001-of-00002.gguf Qwen3.6-35B-A3B-MTP-IQ4_XS-pure.gguf IQ4_XS",
