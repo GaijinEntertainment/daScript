@@ -17,7 +17,7 @@ require dasllama/dasllama_math          // with_dasllama_jobque_
 require dasllama/dasllama_gpu_resident  // moe_gpu_resident_active, moe_gpu_resident_peels, the peel's lever
 require dasllama/dasllama_gpu_tier      // gpu_device_session_dtype_, rdec_token_n_rows
 require ../tests/_compares.das          // nolint:STYLE030,LINT019 - logits_maxdiff
-require _race_fixture   // int_list, counting_tokens
+require _window_race_fixture   // int_list, counting_tokens
 
 [CommandLineArgs]
 struct RaceArgs {
