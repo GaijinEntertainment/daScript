@@ -68,6 +68,31 @@ def private pf_qkv_feed_fused(l : int64) : bool => !g_rd.layers[l].recurrent && 
 
 let private PF_CHUNK_MAX = 8l   // the overlap ramp doubles 1,2,4 then holds here; the cmd ring is sized from it
 
+var private @scratch g_pf_segs : array<RdecPfSeg>    //! the call's segments (`RdecPfSeg`), rows over the whole call; a one-session call is one segment at row 0
+var private @scratch g_pf_wsegs : array<RdecPfSeg>   //! the parts of them inside the window being recorded, `row0` window-local, `npos` the part's rows
+
+//! the segment parts a window `[w0, w0 + wlen)` holds, into `g_pf_wsegs`; a part's `pos0` is the segment's position at the window's first row of it
+def private pf_window_segs(w0, wlen : int64) {
+    g_pf_wsegs |> clear()
+    for (sg in g_pf_segs) {
+        let lo = max(sg.row0, w0)
+        let hi = min(sg.row0 + sg.npos, w0 + wlen)
+        continue if (hi <= lo)
+        g_pf_wsegs |> push(RdecPfSeg(row0 = lo - w0, npos = hi - lo, pos0 = sg.pos0 + (lo - sg.row0), region = sg.region))
+    }
+}
+
+//! the slot of the segment whose last row is window row `row` of the window at `w0`, else -1
+def private pf_seg_ending_at(w0, row : int64) : int64 {
+    for (sg, i in g_pf_segs, count()) {
+        return int64(i) if (sg.row0 + sg.npos - 1l == w0 + row)
+    }
+    return -1l
+}
+
+//! a segment's K/V mirror base in layer `L`: the layer's base plus its region's units
+def private pf_seg_mir_base(L : RLayer; sg : RdecPfSeg) : int64 => L.mir_base + sg.region * g_rd.mir_units
+
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
 def private pf_kv_merged(l, dim, kvd : int64) : bool {
     if (!g_env_vulkan.vk_kv_merge || g_rd.layers[l].fq != int(KqFmt.q8)
@@ -774,7 +799,7 @@ def private pf_setup {
                 fixed_array(np * all * 4l, np * all * 4l, g_rd.ple * 4l, np * all * 4l), fixed_array(VHZ_COS, VHZ_MRT, 0u, VHZ_MRT))
         }
     }
-    g_rd.pf_logits_host = make_host_buf(g_rd.vocab * 4l, false, [cached = true])
+    g_rd.pf_logits_host = make_host_buf(g_rd.regions * g_rd.vocab * 4l, false, [cached = true])   //! a slot a segment: a window holds at most a region's worth of sessions
     g_rd.pf_cmd = alloc_cmd()
     if (g_env_vulkan.vk_overlap) {
         let nring = 3l + (g_rd.n_layers + PF_CHUNK_MAX - 1l) / PF_CHUNK_MAX
@@ -1332,7 +1357,8 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; ple_rows :
     let noids : array<int64>
     vk_demotion_check("prefill")
     assert(!ple_raw || g_rd.ple_gpu, "vk_rdec_prefill: raw per-layer-embedding rows without the projection on device")
-    pf_run(x_batch, noids, false, 1.0, cos_batch, ple_rows, ple_raw, npos, pos0, logits, experts)
+    let nosegs : array<RdecPfSeg>
+    pf_run(x_batch, noids, false, 1.0, cos_batch, ple_rows, ple_raw, npos, pos0, logits, experts, nosegs)
 }
 
 def ple_proj_shape_ok(dim, all : int64) : bool
@@ -1384,8 +1410,28 @@ def vk_rdec_prefill_ids(tokens : array<int64>; emb_scale : float; cos_batch : ar
     vk_demotion_check("prefill")
     let ple_tbl = pf_ple_tbl_on()
     assert(g_rd.ple == 0l || ple_tbl, "vk_rdec_prefill_ids: a per-layer-embedding model without its token table and projection on device")
-    pf_run(nox, tokens, true, emb_scale, cos_batch, nox, ple_tbl, npos, pos0, logits, experts)
+    let nosegs : array<RdecPfSeg>
+    pf_run(nox, tokens, true, emb_scale, cos_batch, nox, ple_tbl, npos, pos0, logits, experts, nosegs)
 }
+
+//! The segmented resident prefill: several sessions' chunks as ONE window chain - the rows (`x_batch`, or `tokens` where the
+//! driver gathers) and the rope rows of every segment back to back, `segs` naming each one's rows, position and region;
+//! each segment's logits land at its slot of `logits` (`vocab` floats a slot). No per-layer-embedding rows.
+[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-prefill-segments")]
+def vk_rdec_prefill_segs(x_batch : array<float>; tokens : array<int64>; use_ids : bool; emb_scale : float; cos_batch : array<float>;
+                         segs : array<RdecPfSeg>; var logits : array<float>; experts : RdecHostExpertsRowsFn) {
+    assert(g_rd != null && g_rd.ple == 0l && !empty(segs), "vk_rdec_prefill_segs: a per-layer-embedding model, or no segment")
+    let nox : array<float>
+    vk_demotion_check("prefill")
+    var npos = 0l
+    for (sg in segs) {
+        npos += sg.npos
+    }
+    pf_run(x_batch, tokens, use_ids, emb_scale, cos_batch, nox, false, npos, segs[0].pos0, logits, experts, segs)
+}
+
+//! The windows that held several sessions' chunks as segments in this process (a cell's witness)
+def vk_rdec_prefill_segment_windows : int64 => g_rd != null ? g_rd.pf_seg_windows : 0l
 
 //! After a resident prefill, hand recurrent layer `l`'s device slot to the session `stp`/`histp` name (valid, dirty, bound)
 [arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command")]
@@ -1714,10 +1760,8 @@ def private pf_attn_block(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : i
     let window = uint(g_rd.layers[l].window)
     let kvsh = g_rd.layers[l].kv_shared
     let pairs = int(qd / 2l + (kvsh ? 0l : kvd / 2l))
-    let ropewg = (wlen * int64(pairs) + int64(WG_X) - 1l) / int64(WG_X)
     let fa128 = pf_fa128s() && hs == 128l
     let wide = hs > 256l
-    let attnwg = fa128 ? g_rd.n_heads * ((wlen + 31l) / 32l) : (wide ? g_rd.n_heads * ((wlen + 3l) / 4l) : g_rd.n_heads * ((wlen + 7l) / 8l))
     let vfk = g_rd.layers[l].vfk
     let vnorm = g_rd.layers[l].vnorm
     // f16-fed roles (mode 4's cm2 tiles): the f32->f16 convert feeds decode-in-load; the fill's tile rule keys off the same flag
@@ -1726,10 +1770,8 @@ def private pf_attn_block(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : i
     // kq consumers take the Q8_K quant/act forms — unless the f16 feed serves them (k4 cm2)
     let fqk = kq_sb(g_rd.layers[l].fq) && !fq6
     let fok = kq_sb(g_rd.layers[l].fo) && !fo6
-    let mirb = uint(rd_mir_base(g_rd.layers[l]))
     let kvtq4 = rd_kvtq4()
     let kvq = rd_kv_block_codec()
-    let attn_kv_base = kvq ? 0u : mirb   // the rows the attention reads: the mirror's, or a block codec's shadow of this layer from 0
     if (!feed_fused) {
         pf_feed_enc(raw, h, g_rd.pf_sets[b + 0], fq6, fqk, 0l, wlen * dim)
     }
@@ -1776,14 +1818,21 @@ def private pf_attn_block(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : i
         enc_qk_rms_cls(raw, h, g_rd.pf_sets[b + 15], pcn, wlen * (g_rd.n_heads + nkvh + vgroups))
         pfq_ts(raw)
     }
-    var pcr = RopeKvBArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), half = uint(g_rd.layers[l].rot / 2l),
-        neox = g_rd.neox ? 1u : 0u, kpair0 = uint(qd / 2l), ppp = uint(pairs),
-        layerbase = kvq ? 0u : mirb, npos = uint(wlen), pos0 = kvq ? 0u : uint(pos0w),   // a block codec's store writes the window's staged rows from 0
-        voff = voff, kstride = uint(kv_merged ? 2l * kvd : kvd), qhs = uint(qhs),
-        boff = uint(g_rd.layers[l].boff), hasb = g_rd.has_bias ? 1u : 0u,
-        cstride = uint(cos_elems), cbase = uint(g_rd.layers[l].cbase))
-    rope_kv_b_stamp_enc(rd_kv16(), raw, h, g_rd.pf_sets[b + 4], pcr, ropewg)
+    //! the rope and the K/V store a segment at a time: a segment's rows sit at `row0` of the window, its K/V at its own
+    //! positions of its own region; a block codec stages the rows window-local, so its store and shadow take the window whole
+    assert(!kvq || long_length(g_pf_wsegs) == 1l, "vk prefill: a block codec's window holds one segment")
+    for (sg in g_pf_wsegs) {
+        let ropewg = (sg.npos * int64(pairs) + int64(WG_X) - 1l) / int64(WG_X)
+        var pcr = RopeKvBArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), half = uint(g_rd.layers[l].rot / 2l),
+            neox = g_rd.neox ? 1u : 0u, kpair0 = uint(qd / 2l), ppp = uint(pairs),
+            layerbase = kvq ? 0u : uint(pf_seg_mir_base(g_rd.layers[l], sg)), npos = uint(sg.npos), pos0 = uint(kvq ? sg.row0 : sg.pos0),
+            voff = voff, kstride = uint(kv_merged ? 2l * kvd : kvd), qhs = uint(qhs),
+            boff = uint(g_rd.layers[l].boff), hasb = g_rd.has_bias ? 1u : 0u,
+            cstride = uint(cos_elems), cbase = uint(g_rd.layers[l].cbase), row0 = uint(sg.row0))
+        rope_kv_b_stamp_enc(rd_kv16(), raw, h, g_rd.pf_sets[b + 4], pcr, ropewg)
+    }
     if (kvq) {
+        let mirb = uint(pf_seg_mir_base(g_rd.layers[l], g_pf_wsegs[0]))
         rd_enc_kv_store(raw, h, g_rd.pf_kv_store_sets[g_rd.layers[l].mir_slab], true, kvd, hs, wlen, g_rd.n_heads, kvsh ? 0l : kvd / hs, mirb, uint(pos0w), uint(qrow), uint(qhs))
         let kvlen = pos0w + wlen
         let shadow_pos0 = window != 0u && pos0w > int64(window) ? ((pos0w - int64(window)) / 64l) * 64l : 0l   // a sliding layer's tiles start a 64-key step under its window
@@ -1797,20 +1846,25 @@ def private pf_attn_block(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : i
     }
     pfq_ts(raw)
     let fa_lands_f16 = pf_fa_lands_f16(fo6)
-    if (g_rd.layers[l].pf_fa || g_rd.layers[l].pf_fakhr) {
-        let khr = g_rd.layers[l].pf_fakhr
-        var pcf = FaArgs(rows = uint(wlen), w0 = uint(pos0w), qd = uint(qd),
-            kvd = uint(kvd), kv_mul = kv_mul, kvbase = attn_kv_base,
-            scale = g_rd.scale, qstride = uint(qrow), qhs = uint(qhs), window = window, cap = g_rd.layers[l].attn_cap,
-            sinkoff = uint(l * g_rd.n_heads))
-        fa_stamp_enc(khr, hs, hs == 256l && rd_attn_gated(), pcf.cap != 0.0, g_rd.has_sinks, fa_lands_f16, raw, h, g_rd.pf_sets[b + 5], pcf,
-            fa_stamp_wgs(khr, g_rd.n_heads, wlen))
-    } else {
-        var pca = DaAttnBArgs(npos = uint(wlen), nh = uint(g_rd.n_heads), kvd = uint(kvd),
-            hs = uint(hs), kv_mul = kv_mul, kbase = attn_kv_base, vbase = attn_kv_base,
-            w0 = uint(pos0w), scale = g_rd.scale, qhs = uint(qhs), gated = rd_attn_gated() ? 1u : 0u, window = window,
-            cap = g_rd.layers[l].attn_cap)
-        da_attn_b_stamp_enc(fa128, wide, rd_pf_reads_f16(), raw, h, g_rd.pf_sets[b + 5], pca, attnwg)
+    //! the attention a segment at a time too: its query rows at `row0`, its keys its own region's rows up to its position
+    for (sg in g_pf_wsegs) {
+        let kv_base = kvq ? 0u : uint(pf_seg_mir_base(g_rd.layers[l], sg))   // the rows the attention reads: the mirror's, or a block codec's shadow of this layer from 0
+        if (g_rd.layers[l].pf_fa || g_rd.layers[l].pf_fakhr) {
+            let khr = g_rd.layers[l].pf_fakhr
+            var pcf = FaArgs(rows = uint(sg.npos), w0 = uint(sg.pos0), qd = uint(qd),
+                kvd = uint(kvd), kv_mul = kv_mul, kvbase = kv_base,
+                scale = g_rd.scale, qstride = uint(qrow), qhs = uint(qhs), window = window, cap = g_rd.layers[l].attn_cap,
+                sinkoff = uint(l * g_rd.n_heads), row0 = uint(sg.row0))
+            fa_stamp_enc(khr, hs, hs == 256l && rd_attn_gated(), pcf.cap != 0.0, g_rd.has_sinks, fa_lands_f16, raw, h, g_rd.pf_sets[b + 5], pcf,
+                fa_stamp_wgs(khr, g_rd.n_heads, sg.npos))
+        } else {
+            let attnwg = fa128 ? g_rd.n_heads * ((sg.npos + 31l) / 32l) : (wide ? g_rd.n_heads * ((sg.npos + 3l) / 4l) : g_rd.n_heads * ((sg.npos + 7l) / 8l))
+            var pca = DaAttnBArgs(npos = uint(sg.npos), nh = uint(g_rd.n_heads), kvd = uint(kvd),
+                hs = uint(hs), kv_mul = kv_mul, kbase = kv_base, vbase = kv_base,
+                w0 = uint(sg.pos0), scale = g_rd.scale, qhs = uint(qhs), gated = rd_attn_gated() ? 1u : 0u, window = window,
+                cap = g_rd.layers[l].attn_cap, row0 = uint(sg.row0))
+            da_attn_b_stamp_enc(fa128, wide, rd_pf_reads_f16(), raw, h, g_rd.pf_sets[b + 5], pca, attnwg)
+        }
     }
     if (kvtq4) {
         rd_enc_tq4_unrot(raw, h, g_rd.pf_unrot_set, hs, wlen, uint(qd), uint(qrow), uint(qhs))
@@ -1859,8 +1913,16 @@ def private pf_ffn_block(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : in
 [hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain"), arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm"), arch(at="../ARCHITECTURE_GPU_VULKAN_LANDING.md#logits-transfer-queue"), arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-window-chain")]
 def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; emb_scale : float;
                    cos_batch : array<float>; ple_rows : array<float>; ple_raw : bool; npos, pos0 : int64; var logits : array<float>;
-                   experts : RdecHostExpertsRowsFn) {
+                   experts : RdecHostExpertsRowsFn; segs : array<RdecPfSeg>) {
     assert(g_rd != null && g_rd.ready, "vk prefill before prepare/set_cls")
+    g_pf_segs |> clear()
+    if (empty(segs)) {   //! the one-session call: one segment over the whole call, in the selected region
+        g_pf_segs |> push(RdecPfSeg(row0 = 0l, npos = npos, pos0 = pos0, region = g_rd.region))
+    } else {
+        g_pf_segs |> push_clone_from(segs)
+    }
+    let nseg = long_length(g_pf_segs)
+    assert(nseg <= g_rd.regions && long_length(logits) >= nseg * g_rd.vocab, "vk prefill: the segments outnumber the regions, or the logits are short of a slot a segment")
     let ple_tbl = use_ids && ple_raw   //! the side rows gather on device from the token table
     assert(g_rd.ple == 0l || ple_tbl || long_length(ple_rows) >= npos * g_rd.n_layers * g_rd.ple, "vk prefill: the per-layer-embedding rows are short of the prompt")
     pf_setup()
@@ -1880,6 +1942,11 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
             let tp0 = ref_time_ticks()
             let wlen = pf_window_len(npos, w0)
             let last = w0 + wlen >= npos
+            pf_window_segs(w0, wlen)
+            let nwseg = long_length(g_pf_wsegs)
+            if (nwseg > 1l) {
+                g_rd.pf_seg_windows++
+            }
             if (warm) {
                 pf_warm_cos(cos_batch, w0, wlen)
             }
@@ -1995,7 +2062,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                     }
                 }
                 pfq_ts(raw)
-                let ffn_row0 = warm ? 0l : pf_ffn_slice_row0(l, g_rd.n_layers, wlen, gu6 && !moe, dn6)
+                let ffn_row0 = warm || nwseg > 1l ? 0l : pf_ffn_slice_row0(l, g_rd.n_layers, wlen, gu6 && !moe, dn6)   //! every segment's last row wants the last layer's FFN: a segmented window runs it whole
                 let ffn_rows = wlen - ffn_row0
                 if (has_dense_triple(g_rd.layers[l])) {
                     pf_ffn_block(raw, h, l, b, wlen, ffn_row0, gu6, dn6, dnk)
@@ -2031,18 +2098,30 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 }
                 pfq_ts(raw)
             }
-            if (last) {
-                rq_enc(raw, h, g_rd.pf_sets[bp + 1], kq_sb(g_rd.cls_fmt_marker), (wlen - 1l) * dim, dim)
-                pfq_ts(raw)
+            //! every segment whose last row this window holds takes the final requant and the classifier at that row, its logits
+            //! landing at its slot of the host buffer; the one-session call is the one segment ending at the last window's last row
+            var ends = 0l
+            for (ws in g_pf_wsegs) {
+                let row = ws.row0 + ws.npos - 1l
+                let slot = pf_seg_ending_at(w0, row)
+                continue if (slot < 0l)
+                ends++
+                rq_enc(raw, h, g_rd.pf_sets[bp + 1], kq_sb(g_rd.cls_fmt_marker), row * dim, dim)
+                if (ends == 1l) {
+                    pfq_ts(raw)   // the requant's stamp: the first segment's; the rest bill to the classifier's
+                }
                 pf_cls_enc(raw, h)   // the epilogue bills to the classifier's stamp
-                pfq_ts(raw)
                 vhz_dep(raw, h, VHZ_LOG, 0u, true)
-                cmd_copy_whole(raw, g_rd.logits_dev, g_rd.pf_logits_host.buf, g_rd.vocab * 4l)
-                if (g_rd.carry_live) {
+                cmd_copy_range(raw, g_rd.logits_dev, 0l, g_rd.pf_logits_host.buf, slot * g_rd.vocab * 4l, g_rd.vocab * 4l)
+                if (g_rd.carry_live && slot == 0l) {   //! the carry lands for the one-session call alone: a segmented window declines a carrying model
                     vhz_dep(raw, h, VHZ_XB, 0u, true)
-                    cmd_copy_range(raw, g_rd.pf_xb, (wlen - 1l) * dim * 4l, g_rd.hid_host.buf, 0l, dim * 4l)
+                    cmd_copy_range(raw, g_rd.pf_xb, row * dim * 4l, g_rd.hid_host.buf, 0l, dim * 4l)
                 }
             }
+            if (ends > 0l) {
+                pfq_ts(raw)
+            }
+            assert(!last || ends > 0l, "vk prefill: the last window ends no segment")
             if (warm) {
                 pf_head_warm(raw, h, w0, wlen, pos0)
             }
@@ -2063,7 +2142,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
             w0 += wlen
             last_wlen = wlen
         }
-        host_buf_read(g_rd.pf_logits_host, addr<void?>(logits[0]), g_rd.vocab * 4l)
+        host_buf_read(g_rd.pf_logits_host, addr<void?>(logits[0]), nseg * g_rd.vocab * 4l)
         // per-role GPU aggregation, LAST window, only when every stamp landed; overlapped levels (q|k|v, gate|up) bill the level on the last member's delta
         if (vk_prof()) {
             pf_prof_report(npos)

@@ -3083,7 +3083,7 @@ class template AtAttnTileT {
         let r = tid / KS
         let c = tid % KS
         let kvh = h / pa.kv_mul
-        load_q(q0, pa.npos, qrow, h, pa.hs, qhs)
+        load_q(pa.row0 + q0, pa.row0 + pa.npos, qrow, h, pa.hs, qhs)   //! the segment's rows sit at row0 in the panel; the causal math below stays segment-local
         var o0 = 0.0
         var o1 = 0.0
         var o2 = 0.0
@@ -3145,8 +3145,8 @@ class template AtAttnTileT {
         }
         if (q0 + r < pa.npos) {
             let inv = 1.0 / fl[r]
-            let ob = (q0 + r) * qd + h * pa.hs + c
-            let gb = (q0 + r) * qrow + h * qhs + pa.hs + c
+            let ob = (pa.row0 + q0 + r) * qd + h * pa.hs + c
+            let gb = (pa.row0 + q0 + r) * qrow + h * qhs + pa.hs + c
             var jj = 0u
             while (jj < dpl) {
                 var v = (jj == 0u ? o0 : (jj == 1u ? o1 : (jj == 2u ? o2 : (jj == 3u ? o3
@@ -3298,6 +3298,7 @@ struct FaArgs {
     window : uint   //! a sliding layer's queries attend the `window` positions up to their own; 0 = every position
     cap : float     //! the attention logit softcap on the scaled scores (gemma-2: 50), read by the CAP stamps; 0 = none
     sinkoff : uint  //! the SINK stamps: this layer's row base in the sink plane ([n_heads] a layer)
+    row0 : uint     //! the segment's first row in the q panel and the out plane: a segmented window dispatches a segment at its rows
 }
 
 //! gemma-2's attention logit softcap on a scaled score tile
@@ -3358,7 +3359,7 @@ class template FaT {
                 let qr = q0 + i / hw
                 let jp = (i % hw) * 2u
                 if (qr < pa.rows) {
-                    let src = qr * qstride + h * qhs + jp
+                    let src = (pa.row0 + qr) * qstride + h * qhs + jp
                     fq[i] = packHalf2x16(float2(qpanel[src] * pa.scale, qpanel[src + 1u] * pa.scale))
                 } else {
                     fq[i] = 0u
@@ -3459,7 +3460,7 @@ class template FaT {
             }
             if (q0 + srow < pa.rows) {
                 let inv = 1.0 / l
-                let ob = (q0 + srow) * pa.qd + h * HS + o_dim0
+                let ob = (pa.row0 + q0 + srow) * pa.qd + h * HS + o_dim0
                 for [unroll] (z3 in range(int(HS / 8u))) {
                     static_if (OUT16) {
                         outp[ob + uint(z3)] = float16(o[z3] * inv)
@@ -3479,7 +3480,7 @@ class template FaT {
             let qhs = pa.qhs == 0u ? HS : pa.qhs
             var tlq : tensorLayout2DPad
             tensorLayoutCreate(tlq)
-            tensorLayoutSetDimension(tlq, pa.rows, qstride)
+            tensorLayoutSetDimension(tlq, pa.row0 + pa.rows, qstride)   //! the segment's end: a padded load past it reads zero rows
             tensorLayoutSetStride(tlq, qstride, 1u)
             var tlk : tensorLayout2DPad
             tensorLayoutCreate(tlk)
@@ -3487,12 +3488,12 @@ class template FaT {
             tensorLayoutSetStride(tlk, pa.kvd, 1u)
             var tlo : tensorLayout2DPad
             tensorLayoutCreate(tlo)
-            tensorLayoutSetDimension(tlo, pa.rows, pa.qd)
+            tensorLayoutSetDimension(tlo, pa.row0 + pa.rows, pa.qd)
             tensorLayoutSetStride(tlo, pa.qd, 1u)
             var tv : tensorView2Dt
             tensorViewCreate(tv)
             var q : QACC
-            coopmatLoadTensor(q, qpanel, 0u, tlq, q0, 64u, h * qhs, HS)
+            coopmatLoadTensor(q, qpanel, 0u, tlq, pa.row0 + q0, 64u, h * qhs, HS)
             coopmatScale(q, pa.scale)
             var qf : QA
             coopmatConvert(qf, q)
@@ -3561,16 +3562,16 @@ class template FaT {
             coopmatMulElem(o32, ld, o32)                                    // O /= L (padding rows discard at store)
             static_if (GATED) {
                 var g : QACC
-                coopmatLoadTensor(g, qpanel, 0u, tlq, q0, 64u, h * qhs + HS, HS)
+                coopmatLoadTensor(g, qpanel, 0u, tlq, pa.row0 + q0, 64u, h * qhs + HS, HS)
                 coopmatPerElement(g, g, @@facm2_sigmoid)
                 coopmatMulElem(o32, g, o32)
             }
             static_if (OUT16) {
                 var of : OF
                 coopmatConvert(of, o32)
-                coopmatStoreTensor(of, outp, 0u, tlo, q0, 64u, h * HS, HS)
+                coopmatStoreTensor(of, outp, 0u, tlo, pa.row0 + q0, 64u, h * HS, HS)
             } else {
-                coopmatStoreTensor(o32, outp, 0u, tlo, q0, 64u, h * HS, HS)
+                coopmatStoreTensor(o32, outp, 0u, tlo, pa.row0 + q0, 64u, h * HS, HS)
             }
         }
     }
@@ -3918,6 +3919,7 @@ struct DaAttnBArgs {
     gated : uint    // multiply each head's output by the sigmoid of its gate half
     window : uint   //! a sliding layer's queries attend the `window` positions up to their own; 0 = every position
     cap : float     //! the attention logit softcap on the scaled scores (gemma-2: 50); 0 = none
+    row0 : uint     //! the segment's first row in the q panel and the out plane: a segmented window dispatches a segment at its rows
 }
 
 // the wide-head twin of DaAttnB for heads past 256 (gemma-4's global layers, 512): a 4-row q tile and
@@ -3942,7 +3944,7 @@ class template DaAttnBWT : AtAttnTileT {
         let q0 = (gl_WorkGroupID.x % qtiles) * TQ
         let tid = gl_LocalInvocationID.x
         let kvh = h / pa.kv_mul
-        load_q(q0, pa.npos, qrow, h, hs, qhs)
+        load_q(pa.row0 + q0, pa.row0 + pa.npos, qrow, h, hs, qhs)
         var o : float[8]   // row vr's dims vc + 64 * z
         for (z in range(8)) {
             o[z] = 0.0
@@ -3981,8 +3983,8 @@ class template DaAttnBWT : AtAttnTileT {
         }
         if (q0 + vr < pa.npos) {
             let inv = 1.0 / fl[vr]
-            let ob = (q0 + vr) * qd + h * hs + vc
-            let gb = (q0 + vr) * qrow + h * qhs + hs + vc
+            let ob = (pa.row0 + q0 + vr) * qd + h * hs + vc
+            let gb = (pa.row0 + q0 + vr) * qrow + h * qhs + hs + vc
             for (z in range(8)) {
                 if (vc + 64u * uint(z) < hs) {
                     var v = o[z] * inv
@@ -4059,7 +4061,7 @@ class template DaAttnBH128T {
             let qr = q0 + i / 64u
             let jp = (i % 64u) * 2u
             if (qr < pa.npos) {
-                let src = qr * qrow + h * qhs + jp
+                let src = (pa.row0 + qr) * qrow + h * qhs + jp
                 fbq[i] = packHalf2x16(float2(qpanel[src], qpanel[src + 1u]))
             } else {
                 fbq[i] = 0u
@@ -4179,8 +4181,8 @@ class template DaAttnBH128T {
         }
         if (q0 + orow0 < pa.npos) {
             let inv0 = 1.0 / fbl[orow0]
-            let ob0 = (q0 + orow0) * qd + h * 128u + oe
-            let gb0 = (q0 + orow0) * qrow + h * qhs + 128u + oe
+            let ob0 = (pa.row0 + q0 + orow0) * qd + h * 128u + oe
+            let gb0 = (pa.row0 + q0 + orow0) * qrow + h * qhs + 128u + oe
             for (z in range(16)) {
                 var v = o[z] * inv0
                 if (pa.gated != 0u) {
@@ -4191,8 +4193,8 @@ class template DaAttnBH128T {
         }
         if (q0 + orow0 + 1u < pa.npos) {
             let inv1 = 1.0 / fbl[orow0 + 1u]
-            let ob1 = (q0 + orow0 + 1u) * qd + h * 128u + oe
-            let gb1 = (q0 + orow0 + 1u) * qrow + h * qhs + 128u + oe
+            let ob1 = (pa.row0 + q0 + orow0 + 1u) * qd + h * 128u + oe
+            let gb1 = (pa.row0 + q0 + orow0 + 1u) * qrow + h * qhs + 128u + oe
             for (z in range(16)) {
                 var v = o[16 + z] * inv1
                 if (pa.gated != 0u) {
@@ -10110,6 +10112,7 @@ struct RopeKvBArgs {
     hasb : uint
     cstride : uint   //! a position's cos/sin plane width (every rope class's row); 0 = hs, the one-class plane
     cbase : uint     //! this layer's rope class's row base inside the plane
+    row0 : uint      //! the segment's first row in the q, k/v and cos planes: a segmented window dispatches a segment at its rows
 }
 
 // batched rope + KV-store (prefill, npos positions): q roped in place, k/v from the projection
@@ -10134,7 +10137,8 @@ class template RopeKvStoreBT : KvMirStoreT {
             let h = pr / hpairs
             let j = pr % hpairs
             let rot = j < pa.half
-            let cb = p * (pa.cstride == 0u ? pa.hs : pa.cstride) + pa.cbase
+            let pw = pa.row0 + p   //! the window row: the segment's rows sit at row0 in the q, k/v and cos planes
+            let cb = pw * (pa.cstride == 0u ? pa.hs : pa.cstride) + pa.cbase
             let cj = min(j, pa.half - 1u)   // the pass-through pairs past the rotated half read a clamped table entry the select then drops
             let tcr = cossin[cb + cj]
             let tci = cossin[cb + pa.half + cj]
@@ -10145,11 +10149,11 @@ class template RopeKvStoreBT : KvMirStoreT {
             let apos = pa.pos0 + p
             let bhead = h * pa.hs
             if (is_k) {
-                let kb = p * pa.kstride + h * pa.hs
+                let kb = pw * pa.kstride + h * pa.hs
                 let a0 = kvrows[kb + e0] + (pa.hasb != 0u ? bias[pa.boff + pa.qd + bhead + e0] : 0.0)
                 let a1 = kvrows[kb + e1] + (pa.hasb != 0u ? bias[pa.boff + pa.qd + bhead + e1] : 0.0)
                 let mo = pa.layerbase + apos * pa.kvd + h * pa.hs
-                let vb = pa.voff + p * pa.kstride + h * pa.hs
+                let vb = pa.voff + pw * pa.kstride + h * pa.hs
                 let v0 = kvrows[vb + e0] + (pa.hasb != 0u ? bias[pa.boff + pa.qd + pa.kvd + bhead + e0] : 0.0)
                 let v1 = kvrows[vb + e1] + (pa.hasb != 0u ? bias[pa.boff + pa.qd + pa.kvd + bhead + e1] : 0.0)
                 st_k(mo + e0, a0 * fcr - a1 * fci)
@@ -10158,7 +10162,7 @@ class template RopeKvStoreBT : KvMirStoreT {
                 st_v(mo + e1, v1)
             } elif (rot || pa.hasb != 0u) {   // a pass-through q pair (fcr 1, fci 0) is rewritten only when a bias lands on it
                 let qhs = pa.qhs == 0u ? pa.hs : pa.qhs   // 0 = compact (non-gated); a gated model passes 2 * hs
-                let qb = p * (pa.qd / pa.hs) * qhs + h * qhs
+                let qb = pw * (pa.qd / pa.hs) * qhs + h * qhs
                 let a0 = qrows[qb + e0] + (pa.hasb != 0u ? bias[pa.boff + bhead + e0] : 0.0)
                 let a1 = qrows[qb + e1] + (pa.hasb != 0u ? bias[pa.boff + bhead + e1] : 0.0)
                 qrows[qb + e0] = a0 * fcr - a1 * fci

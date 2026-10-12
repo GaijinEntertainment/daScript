@@ -2415,14 +2415,15 @@ def private rdec_rope_rows(t : Model; pos : int64; var dst : array<float>; base 
     }
 }
 
-//! a prompt's rope rows, one cos/sin plane per position at `delta` past its index, across the job threads: each row is its own work
-def private resident_prefill_rope_rows(t : Model; delta, npos, ce : int64; var cb : array<float>) {
+//! a prompt's rope rows, one cos/sin plane per position at `delta` past its index, across the job threads: each row is its own
+//! work; the rows land from row `row0` of the buffer (a segmented call's segments back to back)
+def private resident_prefill_rope_rows(t : Model; delta, npos, ce : int64; var cb : array<float>; row0 : int64 = 0l) {
     unsafe {   // the rows land in disjoint ranges of the caller's buffer, one position each; the jobs take the model and the buffer by address
         let tp = addr(t)
         var cbp = addr(cb)
         maybe_parallel_for(npos >= 64l, 0, int(npos), get_dispatch_lanes()) $(rb, re) {
             for (p in range(rb, re)) {
-                rdec_rope_rows(*tp, int64(p) + delta, *cbp, int64(p) * ce)
+                rdec_rope_rows(*tp, int64(p) + delta, *cbp, (row0 + int64(p)) * ce)
             }
         }
     }
@@ -3722,6 +3723,141 @@ def private vulkan_resident_prefill(t : Model; var s : Session; npos, start_pos 
     return done
 }
 
+var private @scratch g_rdec_seg_x : array<float>        //! a segmented prefill's embedded rows, the segments back to back
+var private @scratch g_rdec_seg_ids : array<int64>      //! ... or their ids, where the driver gathers the embedding
+var private @scratch g_rdec_seg_cos : array<float>      //! ... their rope rows
+var private @scratch g_rdec_seg_logits : array<float>   //! ... and a logits slot a segment
+var private @scratch g_rdec_segs : array<RdecPfSeg>
+var private @scratch g_rdec_seg_regions : array<int64>
+var private g_rdec_seg_declined : table<string>
+
+//! why the segmented form passed a call, said once per reason (the caller runs the segments one at a time)
+[cold_path]
+def private rdec_segs_declined(why : string) {
+    return if (key_exists(g_rdec_seg_declined, why))
+    g_rdec_seg_declined |> insert(why)
+    to_log(LOG_INFO, "dasLLAMA: resident segmented prefill passed a call - {why} (said once per reason)\n")
+}
+
+//! every segment one the one-session form would take, their embed forms alike (`ids`, the first's)
+def private rdec_segs_admitted(segs : array<PrefillSeg>; ids : bool) : bool {
+    for (sg in segs) {
+        let s = sg.s
+        if (mtp_verify_window_active(*s) || (!g_resident_prefill_allowed && !s.device_kv) || !rdec_session_codec_ok(*s)
+                || s.attn_uniform_end != 0l || sg.start_pos + sg.npos > g_rdec_cap || s.embed_gpu_pending != ids) {
+            rdec_segs_declined("a segment the one-session form would pass too, or the segments' embed forms differ")
+            return false
+        }
+    }
+    return true
+}
+
+//! every segment's region bound in order into `g_rdec_seg_regions`: false where one has none, or two share one (the later
+//! bind stole the earlier segment's, so the window cannot hold both)
+def private rdec_segs_regions(t : Model; var segs : array<PrefillSeg>) : bool {
+    g_rdec_seg_regions |> clear()
+    g_rdec_seg_regions |> reserve(long_length(segs))
+    for (sg in segs) {
+        var s & = unsafe(*sg.s)
+        rdec_head_device_rows_stale_from(s, sg.start_pos - 1l)
+        let r = rdec_prefill_region(t, s, sg.start_pos)
+        if (r < 0l) {
+            rdec_segs_declined("a segment's session has no region to prefill in")
+            return false
+        }
+        for (ri in g_rdec_seg_regions) {
+            if (ri == r) {
+                rdec_segs_declined("the segments outnumber the regions free for them")
+                return false
+            }
+        }
+        g_rdec_seg_regions |> push(r)
+    }
+    return true
+}
+
+//! the segments' rows back to back - the embedded rows or the ids, and the rope rows - and the segment table; the row count
+def private rdec_segs_gather(t : Model; var segs : array<PrefillSeg>; ids : bool) : int64 {
+    let c = t.config
+    let dim = c.dim
+    let ce = g_rdec_cos_elems
+    var total = 0l
+    for (sg in segs) {
+        total += sg.npos
+    }
+    g_rdec_segs |> clear()
+    g_rdec_segs |> reserve(long_length(segs))
+    if (ids) {
+        g_rdec_seg_ids |> reserve(total)
+        g_rdec_seg_ids |> resize(total)
+    } else {
+        g_rdec_seg_x |> reserve(total * dim)
+        g_rdec_seg_x |> resize(total * dim)
+    }
+    g_rdec_seg_cos |> reserve(total * ce)
+    g_rdec_seg_cos |> resize(total * ce)
+    var row0 = 0l
+    for (sg, i in segs, count()) {
+        var s & = unsafe(*sg.s)
+        g_rdec_segs |> push(RdecPfSeg(row0 = row0, npos = sg.npos, pos0 = sg.start_pos, region = g_rdec_seg_regions[i]))
+        if (ids) {
+            for (k in range64(sg.npos)) {
+                g_rdec_seg_ids[row0 + k] = s.embed_gpu_tokens[k]
+            }
+        } else {
+            copy_floats(s.x_b, 0l, g_rdec_seg_x, row0 * dim, sg.npos * dim)
+        }
+        resident_prefill_rope_rows(t, s.rope_pos_delta + sg.start_pos, sg.npos, ce, g_rdec_seg_cos, row0)
+        row0 += sg.npos
+    }
+    return total
+}
+
+//! The "vulkan" segments override: several sessions' chunks as ONE window chain where every segment takes the driver as
+//! the one-session form would, each in a region of its own - declined whole otherwise, and the engine prefills the
+//! segments one at a time through the one-session override.
+[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-prefill-segments")]
+def private vulkan_resident_prefill_segments(t : Model; var segs : array<PrefillSeg>) : bool {
+    return false if (!g_rdec_active || !rdec_prefill_segs_installed())
+    let c = t.config
+    let n = long_length(segs)
+    return false if (n < 2l)
+    //! the shapes the segmented chain does not hold: the recurrent state, the side rows, the NextN carry and the routed experts
+    //! are per call on this driver, a block codec stages its rows window-wide, and a hyper-connection chain is its own window
+    if (c.recr_mask != 0ul || has_ple(c) || c.n_layer_nextn > 0l || c.hyper_conn || c.n_expert > 0l
+            || (g_rdec_kvdt != KVDtype.f16 && g_rdec_kvdt != KVDtype.f32)) {
+        rdec_segs_declined("the model's chain takes one session a window (recurrent, per-layer-embedding, NextN, routed, hyper-connection, or a block-codec mirror)")
+        return false
+    }
+    let ids = segs[0].s.embed_gpu_pending
+    return false if (!rdec_segs_admitted(segs, ids) || !rdec_segs_regions(t, segs))
+    let total = rdec_segs_gather(t, segs, ids)
+    let vocab = long_length(segs[0].s.logits)
+    g_rdec_seg_logits |> reserve(n * vocab)
+    g_rdec_seg_logits |> resize(n * vocab)
+    let ts_run = ref_time_ticks()
+    rdec_prefill_segs(g_rdec_seg_x, g_rdec_seg_ids, ids, c.embed_scale, g_rdec_seg_cos, g_rdec_segs, g_rdec_seg_logits, @@rdec_host_experts_rows)
+    for (sg, i in segs, count()) {
+        var s & = unsafe(*sg.s)
+        let r = g_rdec_seg_regions[i]
+        copy_floats(g_rdec_seg_logits, int64(i) * vocab, s.logits, 0l, vocab)
+        if (sg.start_pos == 0l) {
+            rdec_claim(s, r, sg.npos)
+        } else {
+            g_rdec_regions[r].cnt = sg.start_pos + sg.npos
+        }
+        s.rdec_host_current = false
+        s.embed_gpu_pending = false
+        s.ple_gpu_pending = false
+    }
+    if (g_env_gpu.gpu_prof) {
+        to_log(LOG_INFO, "dasLLAMA: resident segmented prefill host: {n} segments, {total} rows, the driver's run {get_time_usec(ts_run)} us\n")   // nolint:PERF026,PERF028 — the profile flag's report leg
+    }
+    g_rdec_prefills += n
+    prefill_override_logits_done()
+    return true
+}
+
 [hot_path, unused_argument(token), arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head")]   //! per continuation prefill
 def private vulkan_resident_seam(t : Model; var s : Session; token, pos : int64) : bool {
     rdec_head_hydrate(t, s, pos - 1l)
@@ -4036,6 +4172,7 @@ def resident_driver_register() {
     register_decode_override("vulkan", @@vulkan_resident_decode)
     register_batch_decode_override("vulkan", @@vulkan_resident_batch_decode)
     register_prefill_override("vulkan", @@vulkan_resident_prefill)
+    register_prefill_segments_override("vulkan", @@vulkan_resident_prefill_segments)
     register_mtp_seat_owner("vulkan", @@vulkan_mtp_owns)
     register_mtp_seam_override("vulkan", @@vulkan_resident_seam)
     register_mtp_draft_override("vulkan", @@vulkan_resident_draft)

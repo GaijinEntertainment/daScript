@@ -606,6 +606,41 @@ def public rdec_prefill_ids_installed() : bool => g_rdec_prefill_ids_installed
 def public rdec_prefill_ids(tokens : array<int64>; emb_scale : float; cos_batch : array<float>; npos : int64; pos0 : int64; var logits : array<float>; experts : RdecHostExpertsRowsFn) {
     invoke(g_rdec_prefill_ids, tokens, emb_scale, cos_batch, npos, pos0, logits, experts)
 }
+//! One segment of a segmented resident prefill: `npos` rows at `row0` of the call's rows are one session's chunk from
+//! absolute position `pos0`, its K/V into mirror `region`
+struct public RdecPfSeg {
+    row0 : int64
+    npos : int64
+    pos0 : int64
+    region : int64
+}
+
+//! The segmented resident prefill: every segment's embedded rows (or ids, where the driver gathers) and rope rows back to
+//! back in segment order, each segment's logits at its slot of `logits` (`vocab` floats a slot)
+typedef RdecPrefillSegsFn = function<(x_batch : array<float>; tokens : array<int64>; use_ids : bool; emb_scale : float; cos_batch : array<float>; segs : array<RdecPfSeg>; var logits : array<float>; experts : RdecHostExpertsRowsFn) : void>
+
+[unused_argument(x_batch, tokens, use_ids, emb_scale, cos_batch, segs, logits, experts)]
+def private rdec_unset_prefill_segs(x_batch : array<float>; tokens : array<int64>; use_ids : bool; emb_scale : float; cos_batch : array<float>; segs : array<RdecPfSeg>; var logits : array<float>; experts : RdecHostExpertsRowsFn) {
+    panic("dasLLAMA: segmented resident prefill hit without an installed GPU driver")
+}
+
+var g_rdec_prefill_segs = @@rdec_unset_prefill_segs
+var g_rdec_prefill_segs_installed = false
+
+//! Install the driver's segmented prefill (a GPU backend whose window chain takes several sessions' chunks)
+[arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
+def public install_rdec_prefill_segs(prefill_segs : RdecPrefillSegsFn) {
+    g_rdec_prefill_segs = prefill_segs
+    g_rdec_prefill_segs_installed = true
+}
+
+[arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
+def public rdec_prefill_segs_installed() : bool => g_rdec_prefill_segs_installed
+[arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
+def public rdec_prefill_segs(x_batch : array<float>; tokens : array<int64>; use_ids : bool; emb_scale : float; cos_batch : array<float>; segs : array<RdecPfSeg>; var logits : array<float>; experts : RdecHostExpertsRowsFn) {
+    invoke(g_rdec_prefill_segs, x_batch, tokens, use_ids, emb_scale, cos_batch, segs, logits, experts)
+}
+
 [arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
 def public rdec_set_emb(emb_block : int64) : bool => invoke(g_rdec_set_emb, emb_block)
 [arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]

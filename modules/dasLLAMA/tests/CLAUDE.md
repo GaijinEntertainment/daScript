@@ -1560,6 +1560,21 @@ row asking more streams than the device homes refuses by name and reads 0, and a
 serves at a rate with every stream parked after it and no call passed to the CPU chain (a
 one-stream row is no batch - the step census counts it a row at a time and the row refuses). The forced-feed helpers it shares with the
 other resident files live in `_resident_feed.das`. Skips without the model or the armed tier.
+`test_gpu_resident_segments.das` - stocked suite, `-jit` only; the whole-model resident driver's
+SEGMENTED window (`ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-prefill-segments`, `DASLLAMA_GPU=1`) on
+Llama-3.2-1B at Q8_0 (the ids form) and Q4_K_M (the x form), two mirror regions: two host-cached
+sessions' tails (23 and 31 rows after 40-row openings) as ONE window chain against the same tails as
+two one-session windows on the same driver, then eight fed steps each - every row within the regions
+rig's split bar of the one-session form's with the row one step off as the control, both argmax
+streams decoded in the log - then both openings as one window from position zero the same way; the
+witnesses are the segmented-window counter (`vk_rdec_prefill_segment_windows`) up by one a call,
+the driver's prefill count up by a segment, and every call served; the decline cell runs two
+sessions' openings under the server's prefill pin (`set_resident_prefill_allowed(false)`, put back)
+- no segmented window, the engine's one-at-a-time fallback passing each to the CPU rails as
+`pinned_off` and landing every row within the bar of the device-prefilled references. The file
+never holds more live host-cached sessions than regions: a later prefill would take a live
+session's region, which the engine leaves to the scheduler's pin. Skips without the model or the
+armed tier.
 `test_batch_decode.das` - stocked suite, `-jit` only: the CPU batched stack against the
 per-session sequential forward on llama2.c's stories15M (fp32, Q8 and Q4_0 weights - the Q4_0
 tier rides the batched Q4_0 GEMM, bit for bit the GEMV's dot - and the f16 / q8_0 / tq4 KV

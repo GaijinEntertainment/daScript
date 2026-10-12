@@ -375,6 +375,7 @@ def dasllama_math_vulkan_register() {
     set_moe_gpu_binding_cap(@@vk_binding_cap)
     set_moe_gpu_mirror_slack(@@vk_mirror_slack)
     install_rdec_prefill_ids(@@vk_rdec_prefill_ids, @@vk_rdec_set_emb, @@vk_rdec_upload_emb_f32)
+    install_rdec_prefill_segs(@@vk_rdec_prefill_segs)
     install_rdec_ple(@@vk_rdec_set_ple, @@vk_rdec_set_ple_layer, @@vk_rdec_set_ple_proj, @@vk_rdec_set_ple_table)
     install_moe_gpu_resident(@@vk_arena_reserve, @@vk_arena_place, @@vk_rdec_prepare,
         @@vk_rdec_upload_norms, @@vk_rdec_set_layer, @@vk_rdec_set_cls, @@vk_rdec_token, @@vk_rdec_prefill,

@@ -2595,7 +2595,8 @@ struct RDec {
     // is f16 — the fa tiles bind the mirrors directly, no shadow planes)
     pf_facm2 : bool
     pf_fakhr : bool   //! the KHR flash tile armed instead (KHR cooperative matrices, no cm2 flash)
-    pf_logits_host : HostBuf
+    pf_logits_host : HostBuf      //! the window's logits, a slot of `vocab` a segment: `regions` slots, the one-session window at slot 0
+    pf_seg_windows : int64        //! the windows that held several sessions' chunks as segments (a cell's witness)
     pf_midx_host : HostBuf        //! the last MoE layer's picks, read back for the profile's bucket report
     pf_meta : array<HostBuf>      // one host meta per (layer, role) + prologue/final/cls
     pf_sets : array<VkDescriptorSet>
