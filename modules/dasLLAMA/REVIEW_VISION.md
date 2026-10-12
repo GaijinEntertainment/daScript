@@ -37,12 +37,13 @@ the media rows.
 
 **A media splice's rows reaching the layer stack as more than one `forward_prefill_embd` call, or
 as row chunks inside one call, is a defect; a driver declining the whole call to the CPU loop, or
-splitting its command buffers per layer, keeps the one call, as does the head and tail text riding
-it** - the span bounds are counted from the start of the call, so a boundary inside the span
+splitting its command buffers per layer, still makes one call, and that call may also carry the
+text tokens before and after the span** - the span bounds are counted from the start of the call, so a boundary inside the span
 changes the mask.
 
-**A diff that adds or changes a scheduler path a stream carrying decoded media can reach either
-serves that stream on it or refuses it at admission - a path that admits such a stream and then
+**A diff that adds or changes a session kind or an admission mode of the in-process scheduler
+(`dasllama/dasllama_scheduler.das`) that a stream carrying decoded media can reach either serves
+that stream on it or refuses it at admission - a path that admits such a stream and then
 panics, or drops its rows, is a defect.**
 
 **A media splice written, where the media rows join the prompt's tokens, as anything other than

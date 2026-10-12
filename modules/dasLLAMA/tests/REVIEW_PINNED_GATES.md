@@ -7,8 +7,7 @@ A cell is one `t |> run` subtest, or a `[test]` function that runs no subtest; a
 asserts belong to every cell that calls it. A pinned test cell is a cell the pinned set lists,
 or any cell of a file the pinned set lists whole - a file entry, one naming the file and no cell -
 and the pinned set is the only test of whether a cell is one; a named-cell entry pins the whole
-cell, its helpers' asserts included. The pinned set, one entry a line, each with what it must keep
-holding:
+cell. The pinned set, one entry a line, each with what it must keep holding:
 
 - `test_run_suites.das` must hold the per-PR split, the folder census, the area tables and the
   `--exclude` filter.
@@ -68,10 +67,10 @@ entry does not name.**
 An axis is one distinct behaviour the cell asserts - an output form, a refusal path, an argument's
 order; a new input row on an axis the cell already asserts is not an axis gained.
 
-**A diff that loosens a pinned test cell's bound - widens a tolerance or weakens a comparison, a
-rewritten expected value that tracks what the asserted function now answers on a kept input being
-neither - drops its input, or drops a `run.das` suite listing that reaches it is a defect - keep
-the cell's asserts and fix the code that fails them instead; so is a diff that removes a pinned
+**A diff that widens a pinned test cell's tolerance, swaps its comparison for one more outputs
+pass, drops its input, or drops a `run.das` suite listing that reaches it is a defect - keep the
+cell's asserts and fix the code that fails them instead (rewriting an expected value to what the
+asserted function now answers on a kept input is none of these); so is a diff that removes a pinned
 test cell's assert without adding to the same cell, in the same change, an assert that holds the
 same values to an equal or tighter bound, with its control (an extra assert in the same cell
 proving the compare can fail).**

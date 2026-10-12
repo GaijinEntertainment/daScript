@@ -11,16 +11,19 @@ the family runs a model's weights in; the blob form is a model after
 `convert_model_to_metal_blob`, the only form the Metal drivers serve. A lane setter is a call that
 writes the value a family's loader or its `*_serves_q8` accessor reads to choose the family's
 serving lane (`set_<name>_q8`, whisper's `set_asr_fp32` / `set_asr_tower_fp32`), or a facade call
-that makes that call. A driver setter is any other `../dasllama/` call that writes state outliving
-the call - a module global or process-global state - that a later load, route choice or kernel
-dispatch reads. A driver setter's getter is the
+that makes that call. A driver setter is any other `../dasllama/` call the cell makes whose purpose
+is to set a value - a `set_*`, `enable_*`, `disable_*` or override call - stored in a module global
+or process-global state that a later load, route choice or kernel dispatch reads; a call a loader
+makes on its own is not the cell's. `REVIEW.md`'s routing line carries the same definition, and the
+two change together. A driver setter's getter is the
 `../dasllama/` call, or the set of them, that returns the values the driver setter last wrote.
 
 **A diff that adds or edits a cell makes the cell, the `[test]` function that runs it, or the
 `[init]` of the file holding that function, call - directly or through a helper it calls - every
-driver setter whose last-written value decides which route, arm or kernel an asserted call takes,
-whether an assert the cell makes passes, or what an assert's expected value is computed from,
-BEFORE the first such assert, even when the value it writes is the DEFAULT.**
+driver setter whose last-written value decides which route or kernel (which branch of a dispatch)
+an asserted call takes, whether an assert the cell makes passes, or what an assert's expected value
+is computed from, BEFORE the first call or assert that value decides, even when the value it writes
+is the DEFAULT.**
 
 **A cell whose claim depends on a family's serving lane pins that lane in the cell itself - through
 a lane setter or a loader parameter that takes the lane - never in the file's `[init]`.** A cell

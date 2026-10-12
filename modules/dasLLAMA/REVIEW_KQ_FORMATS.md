@@ -13,10 +13,10 @@ the pins of `tests/test_kqformat.das`.
 a generated kernel takes as its format parameter (`KqDesc.schema_id`) - or a format slot - the
 `int(KqFmt)` the GPU drivers carry - to a `KqFmt`, a per-format value or predicate, or a choice
 among per-format functions through its own table or branch is a defect - resolve an id through
-`kq_fmt_of_id` (`dasllama/dasllama_kqformat.das`: the panicking overload `kq_fmt_of_id(id, what)`,
-the `bool` overload whose false branch panics, or a per-format accessor that takes the id,
-`kq_qsb` / `kq_ssb`) and a slot through `kq_fmt_of_slot` or a slot-taking accessor (`kq_sb(int)`,
-`kq_unit(int)`).**
+`kq_fmt_of_id` (`dasllama/dasllama_kqformat.das`: the panicking overload `kq_fmt_of_id(id, what)`
+or the `bool` overload whose false branch panics) or an id-taking accessor (`kq_qsb(int)` /
+`kq_ssb(int)`, `dasllama/dasllama_gemm_schema.das`), and a slot through `kq_fmt_of_slot` or a
+slot-taking accessor (`kq_sb(int)`, `kq_unit(int)`).**
 
 **A literal that stands for a per-format quantity of a `KqFmt` member - the value a definition
 home defines for it, in any unit (words, halves, superblocks) - written outside a Metal or SPIR-V

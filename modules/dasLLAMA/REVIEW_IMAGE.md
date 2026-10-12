@@ -16,9 +16,8 @@ it belongs to the mint.** Going live is `parse_image` pointing a live carrier's 
 mapped `.dlim`.
 
 **A diff that adds a weight carrier - anything that reads weights from a file and serves
-inference from them - serves it from its `.dlim`, minted first where it is missing, or ledgers it
-as a non-image lane in `ARCHITECTURE_IMAGE.md` (the drafter's entry is
-`ARCHITECTURE_IMAGE.md#drafter-non-image-lane`) in the same change.**
+inference from them - serves it from its `.dlim`, minted first where it is missing, or records it
+in `ARCHITECTURE_IMAGE.md` as a carrier served without an image, in the same change.**
 
 **A weight carrier becomes live only through `build_image` and `parse_image` in
 `dasllama/dasllama_image.das`: reading weights into a live carrier, or releasing an image
@@ -69,8 +68,8 @@ with the meta flags describing the layout - a per-tensor type split is not a sec
 **A plane the target platform or config never reads is not written into the image - the mint
 decides that, not the load.**
 
-**A flavor takes its image file through `image_path_for` and its tag through
-`register_image_family_tag`.**
+**A flavor gets its image file only from `image_path_for` and its tag only from
+`register_image_family_tag`; any other way of building the path or the tag is a defect.**
 
 **A family whose plane bytes no box property shapes - no backend pin, no tune state, no lane
 width - registers its tag with `register_image_family_tag(tag, config_free = true)`; a family
