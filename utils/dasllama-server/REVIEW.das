@@ -368,10 +368,10 @@ def private is_notice_file(name : string) : bool =>
 //! The `install(FILES <src>... DESTINATION $\{DAS_INSTALL_DOCDIR\} [RENAME <name>])` rows of one
 //! CMake file as (source relative to the repo root, name at the doc root). A source under
 //! examples/ rides with the examples, which the bundle does not carry.
-def private doc_root_licenses(owner : string) : array<tuple<source : string; name : string>> {
+def doc_root_licenses(owner, text : string) : array<tuple<source : string; name : string>> {
     var out : array<tuple<source : string; name : string>>
     let module_dir = owner == "CMakeLists.txt" ? "" : dir_name(owner)
-    for (blk in cmake_command_blocks(fread(owner), "install")) {
+    for (blk in cmake_command_blocks(text, "install")) {
         var inscope args <- cmake_args(blk)
         continue if (length(args) < 3 || args[0] != "FILES")
         var dest = ""
@@ -385,6 +385,8 @@ def private doc_root_licenses(owner : string) : array<tuple<source : string; nam
                 i += 2
             } elif (a == "RENAME" && i + 1 < length(args)) {
                 rename = args[i + 1]
+                i += 2
+            } elif (a == "COMPONENT" && i + 1 < length(args)) {
                 i += 2
             } else {
                 sources |> push(a)   // a bare all-caps name is a file here, not a keyword: the notice filter below sorts them
@@ -428,7 +430,7 @@ def check_bundle_licenses() {
     var expected : table<string>
     for (owner in bundle_license_owners()) {
         continue if (!fexist(owner))
-        for (lic in doc_root_licenses(owner)) {
+        for (lic in doc_root_licenses(owner, fread(owner))) {
             let row = "release_include_from(\"{lic.source}\", \"licenses/{lic.name}\")"
             expected |> insert(row)
             if (!key_exists(live_rows, row)) {

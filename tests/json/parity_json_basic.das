@@ -51,7 +51,7 @@ def parity_where_select(t : T?) {
 [test]
 def parity_whole_row(t : T?) {
     // whole-row escape: `to_array()` with no `_select` yields `array<Car>`, so the entire row escapes ->
-    // allUsed -> the adapter materializes every field by name (Option B, not an overridable `from_JV(it)`).
+    // usesWholeRow -> the adapter materializes every field by name (Option B, not an overridable `from_JV(it)`).
     let jv = fixture_json()
     let arr <- fixture_array()
     let j <- _fold(unsafe(from_json(jv, type<Car>))._where(_.brand == "Ford").to_array())
@@ -105,7 +105,7 @@ def parity_group_by(t : T?) {
 def parity_group_by_first(t : T?) {
     let jv = fixture_json()
     let arr <- fixture_array()
-    // group brand -> the FIRST whole row of each bucket escapes into the result tuple (allUsed whole-row
+    // group brand -> the FIRST whole row of each bucket escapes into the result tuple (usesWholeRow whole-row
     // materialize), which fires the deferred survivor materialize (jhdef) alongside the group-key array
     // walk (jdef) at the same source line — a qname-collision regression (groupby_first benchmark).
     let j <- _fold(unsafe(from_json(jv, type<Car>))._group_by(_.brand)._select((Brand = _._0, First = _._1 |> first())).to_array())

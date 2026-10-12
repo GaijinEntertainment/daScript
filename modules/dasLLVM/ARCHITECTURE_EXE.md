@@ -78,3 +78,15 @@ int, or bool installs the browser lifecycle, with optional `init` and `shutdown`
 and needs no native entry function. Other paths require the requested native
 entry. Entry validation follows lifecycle selection so a browser-only module can
 build without weakening the checks on its included functions.
+
+## Dynamic module startup {#dynamic-module-startup}
+
+`collect_external_functions` completes the emitted `initialize_modules` body after
+walking extern references, which can discover dynamic libraries beyond the require
+walk. On native targets, deferred dynamic-module loads retry after these
+registrations and before `jit_initialize_modules_done` initializes module bindings.
+A retry after binding initialization leaves functions from a deferred library
+unregistered. Exe startup uses `jit_finalize_dynamic_modules`; emitted library
+startup uses `jit_lib_finalize_dynamic_modules` so a failed load reaches the host
+without aborting its process. Register-all tools retain the module scanner's Quiet
+optional-load policy; unrelated unavailable descriptors do not become fatal.

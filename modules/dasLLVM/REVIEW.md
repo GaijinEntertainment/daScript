@@ -17,8 +17,8 @@ another machine minted, is reviewed with `skills/tune.md`.**
 a program (`.das_module`, `src/dasLLVM.cpp`) - is reviewed with `skills/internal/llvm_tune_internals.md`.**
 
 - **A change to any file under this module but a `.md` runs the module-owned suite** (command
-  and build gate: `tests/README.md` here). The suite is outside the core `tests/` sweep, so no
-  other lane covers it.
+  and build gate: `tests/README.md` here). CI runs some of its test files only nightly, so before
+  merge this run is the only one that covers every file.
 
 - **A diff that adds or changes a branch keyed on what `get_platform_name()`,
   `get_architecture_name()`, `cpu_supports()`, or `host_llvm_feature()` returns, directly or

@@ -615,6 +615,15 @@ class public CollectExternVisitor : AstVisitor {
     }
 }
 
+def private program_uses_dynamic_module(prog : Program?; dynamic_modules : table<string; bool>) : bool {
+    var found = false
+    prog |> for_each_module() $(module_) {
+        if (dynamic_modules |> key_exists("{module_.name}")) { found = true }
+    }
+    return found
+}
+
+[arch(at="../ARCHITECTURE_EXE.md#dynamic-module-startup")]
 def collect_external_functions(standalone_context : LLVMOpaqueValue?; ctx : LLVMContextRef; builder : LLVMBuilderRef, // nolint:STYLE038 — flat emission walk: one registration form per function class
                                mod : LLVMOpaqueModule ?; var types : PrimitiveTypes?;
                                var funcs : array<FunctionPtr>; var uids : UidNodes?;
@@ -671,6 +680,13 @@ def collect_external_functions(standalone_context : LLVMOpaqueValue?; ctx : LLVM
             let name_str = get_string_constant_ptr(ib, mod_name)
             LLVMBuildCall2(ib, reg_dyn_mod_type, jit_reg_dyn_mod, fixed_array(rel_str, abs_str, name_str), "")
         }
+    }
+    if (!g_target_is_wasm && !register_all_modules && program_uses_dynamic_module(prog, dynamic_modules)) {
+        let finish_type = LLVMFunctionType(t.t_void, array<LLVMTypeRef>())
+        let finish_name = LLVMGetNamedGlobal(g_mod, LIB_GUARD_GLOBAL) == null ? "jit_finalize_dynamic_modules" : "jit_lib_finalize_dynamic_modules"
+        var finish = LLVMGetNamedFunction(g_mod, finish_name)
+        if (finish == null) { finish = LLVMAddFunctionWithType(g_mod, finish_name, finish_type) }
+        LLVMBuildCall2(ib, finish_type, finish, array<LLVMValueRef>(), "")
     }
     if (!empty(extern_resolver.registered_modules) || !empty(used_modules)) {
         let init_done_type = LLVMFunctionType(t.t_void, array(t.t_int32))
@@ -1113,12 +1129,7 @@ def public emit_standalone_runtime_init(builder : LLVMBuilderRef; prog : Program
     // A dynamic module's ctor may bind externs typed against ANY builtin handled type (C++ deps the
     // used-functions sweep can't see). So when the program ships a dynamic module, register every
     // builtin C++ module in the graph — except the compiler-lib pair (ast_core/network_core), used-gated.
-    var ships_dynamic = false
-    prog |> for_each_module() $(m) {
-        if (dynamic_modules |> key_exists("{m.name}")) {
-            ships_dynamic = true
-        }
-    }
+    let ships_dynamic = program_uses_dynamic_module(prog, dynamic_modules)
     if (ships_dynamic) {
         prog |> for_each_module() $(m) {
             let mn = "{m.name}"
@@ -1191,14 +1202,6 @@ def public emit_standalone_runtime_init(builder : LLVMBuilderRef; prog : Program
         init_modules_fn = LLVMAddFunctionWithType(g_mod, "initialize_modules", init_modules_type)
     }
     LLVMBuildCall2(builder, init_modules_type, init_modules_fn, array<LLVMValueRef>(), "")
-
-    // Dynamic modules load Quiet (sibling DT_NEEDED ordering): retry after the last registration
-    if (ships_dynamic && !g_target_is_wasm && !scan_all) {
-        let fin_dyn_type = LLVMFunctionType(types.t_void, array<LLVMTypeRef>())
-        let fin_dyn_name = guest ? "jit_lib_finalize_dynamic_modules" : "jit_finalize_dynamic_modules"
-        var fin_dyn = LLVMAddFunctionWithType(g_mod, fin_dyn_name, fin_dyn_type)
-        LLVMBuildCall2(builder, fin_dyn_type, fin_dyn, array<LLVMValueRef>(), "")
-    }
 
     return ships_dynamic
 }

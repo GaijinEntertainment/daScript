@@ -203,6 +203,7 @@ class WorkflowShapes(unittest.TestCase):
         "check_nano_arm",
         "check_ast_verify_tree",
         "run_coverage",
+        "run_tests_llvm_tune_slow",
     }
 
     def test_nightly_only_checks_are_exactly_the_pinned_set(self):

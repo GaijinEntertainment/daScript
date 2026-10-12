@@ -15,9 +15,15 @@ cannot be fixed.**
 that `daslang -dry-run` does not reject with an `error[1xxxx]` code or a `syntax error` message
 is a defect** - fix `tree-sitter-daslang/grammar.js` (repo root) instead.
 
-**Weakening `test_ci_matrix.py` - dropping or loosening any assertion it makes - is a
-defect.** Those assertions are what turns a job or step that stopped running per PR into a red
-test.
+**A diff that drops an assertion from `test_ci_matrix.py`, or loosens the comparison one makes -
+an exact match made partial, a pattern an assertion checks text against made to accept more, a
+pattern that collects the names an assertion compares made to collect fewer - is a defect.**
+Those assertions are what turns a job or step that stopped running per PR into a red test.
+
+**A diff that adds a target to `DAS_EXTENDED_NIGHTLY` in `CMakeLists.txt` beside this file
+names, in its PR body, the command that runs that target locally, or the platform reason no such
+command exists.** A nightly-only target never runs on a PR; that command is how a reviewer runs
+it before merge.
 
 **Weakening `REVIEW.das` (beside this file) is a defect: dropping a check, narrowing what a check
 walks, or rewriting a finding text so it no longer names what failed.**

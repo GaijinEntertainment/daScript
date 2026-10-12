@@ -30,3 +30,6 @@ modules/dasClangBind/src/*.inc text eol=lf
 # from that same fixture. Under autocrlf=true the fixtures check out as CRLF,
 # which fails the LF expectations and gives the twin doubled carriage returns.
 utils/gen1-to-gen2/tests/_fixture_*.das text eol=lf
+
+# Preserve pinned Unicode source bytes and manifest checksums on every checkout.
+3rdparty/unicode/** -text

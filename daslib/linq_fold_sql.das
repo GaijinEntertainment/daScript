@@ -10,16 +10,13 @@ module linq_fold_sql shared public
 //! materialized full-table ``array<Row>`` in memory. There is no emitting adapter — ``_sql`` is a
 //! complete parallel lowering; this module only recognizes the source. Companion to
 //! ``daslib/linq_fold``; provider-neutral (matches the ``[sql_table]`` annotation, not a runner
-//! type), so it loads unconditionally. See daslib/ARCHITECTURE_LINQ.md sec. 37.
+//! type), so it loads unconditionally. See ``ARCHITECTURE_LINQ_FOLD_SOURCES.md#linq-fold-sql-source``.
 
 require daslib/linq_fold_common public
 require daslib/ast_boost
 require daslib/ast
 
-// True iff `sql_linq` (which defines the `_sql` macro) is in the current program. A consumer may
-// require a provider boost (for `select_from`) without `daslib/sql_linq`; then we must NOT rewrite
-// to `_sql` (it wouldn't resolve) — `_fold` falls back to the in-memory array path instead.
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_LINQ_FOLD_SOURCES.md#linq-fold-sql-source")]
 def sql_linq_loaded(prog : ProgramPtr) : bool {
     var found = false
     program_for_each_module(prog) $(mod) {
@@ -30,6 +27,7 @@ def sql_linq_loaded(prog : ProgramPtr) : bool {
     return found
 }
 
+[arch(at="ARCHITECTURE_LINQ_FOLD_SOURCES.md#linq-fold-sql-source")]
 def private is_sql_table_select(c : ExprCall?) : bool {
     if (c._type == null || !c._type.isGoodArrayType || c._type.firstType == null) return false
     let st = c._type.firstType.structType
@@ -41,7 +39,7 @@ def private is_sql_table_select(c : ExprCall?) : bool {
     return false
 }
 
-[macro_function]
+[macro_function, arch(at="ARCHITECTURE_LINQ_FOLD_SOURCES.md#linq-fold-sql-source")]
 def extract_sql_source(var expr : Expression?) : ExprCall? {
     var e = expr
     while (e != null && e is ExprCall) {

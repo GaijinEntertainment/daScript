@@ -4,7 +4,7 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require openai_server
-require dasllama/dasllama
+require dasllama/dasllama_core
 require dasllama/dasllama_par
 require daslib/jobque_boost
 

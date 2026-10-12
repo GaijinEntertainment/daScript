@@ -98,6 +98,8 @@ let public g_env_tune = env_config(type<TuneEnv>)
 // Variables dasLLVM reads but does not own - documented so the coverage scan knows them.
 def private ambient_rows() : array<EnvDocRow> {
     return <- [
+        EnvDocRow(name = "PATH", kind = "path list", dflt = "unset",
+            doc = "Executable and Windows runtime DLL search path; standalone tests prepend the producing SDK's binary directory for their children."),
         EnvDocRow(name = "HOME", kind = "path", dflt = "unset",
             doc = "The tune-history home (USERPROFILE on Windows when unset)."),
         EnvDocRow(name = "USERPROFILE", kind = "path", dflt = "unset",

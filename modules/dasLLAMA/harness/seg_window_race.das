@@ -14,7 +14,7 @@ require daslib/clargs
 require dasllama/dasllama
 require dasllama/dasllama_common   // nolint:STYLE030,LINT019 - eval_, make_run_state, eval_segments_
 require dasllama/dasllama_math     // with_dasllama_jobque_
-require ../tests/_metal_blob_twin.das
+require ../tests/_metal_blob_twin.das // nolint:STYLE030,LINT019 - blob_twin, used only under static_if das_metal
 require ../tests/_compares.das     // nolint:STYLE030,LINT019 - logits_maxdiff
 require ?das_metal dasllama/dasllama_metal_prefill   // metal_prefill_segment_windows, metal_prefill_shutdown
 require dastest/testing_boost

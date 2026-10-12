@@ -1300,7 +1300,7 @@ def main() : int {
 
     var disabled_codes, enabled_codes : table<string>
     if (!resolve_rule_filters(cfg, disabled_codes, enabled_codes)) return 1
-    lint_cache_dir = cfg.no_cache || is_standalone_exe() ? "" : cfg.cache_dir
+    lint_cache_dir = cfg.no_cache || is_standalone_exe() || jit_enabled() ? "" : cfg.cache_dir
 
     // Worker mode: lint a pre-resolved list from a paths-from file and emit
     // JSON-wrapped results. No banner, no summary, no exit-code derivation.
