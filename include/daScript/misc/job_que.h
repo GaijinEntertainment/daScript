@@ -80,7 +80,7 @@ namespace das {
         void trackInsert();
         void trackRemove();
     protected:
-        mutable mutex       mCompleteMutex;
+        mutable std::mutex  mCompleteMutex;
         atomic<uint32_t>    mRemaining{0};  // atomic so Wait()'s spin phase can poll lock-free; all writes stay under mCompleteMutex for the condvar protocol
         condition_variable  mCond;
         atomic<int>         mRef{0};
@@ -250,7 +250,7 @@ namespace das {
         atomic<bool>    mShutdown{false};
         atomic<int>     mThreadCount{0};
         static thread::id mTheMainThread;
-        mutex mFifoMutex;
+        std::mutex mFifoMutex;
     protected:
         deque<JobEntry> mFifo;
         vector<ThreadEntry> mThreads;
