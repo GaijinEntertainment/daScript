@@ -162,11 +162,12 @@ what-lands-where rules.
 to a require, new or existing, in `dasllama/dasllama.das` or in a file it reaches through `public`
 requires alone, or adds an `[EnvConfig]` area struct, applies `REVIEW_FACADE.md` too.**
 
-**A diff that turns a weight-format id - a `KqFmt` member, a GGUF type number, or the int a
-generated kernel takes as its format parameter - into plane strides, reads a per-block or
-per-element byte count of one weight format, or writes as a literal a number fixed by one weight
-format - its kernel format id, its element or word count per block, or a plane stride - wherever
-it sits, applies `REVIEW_KQ_FORMATS.md`.**
+**A diff that does any of these, wherever it sits, applies `REVIEW_KQ_FORMATS.md`: turns a
+weight-format id (a `KqFmt` member, a GGUF type number, or the int a generated kernel takes as its
+format parameter) into plane strides; reads a per-block or per-element byte count of one weight
+format; writes as a literal a number fixed by one weight format (its kernel format id, its element
+or word count per block, a plane stride); converts a weight format at a site a backend serves; or
+states a format served on a backend.**
 
 **A diff that bumps `DASLLAMA_RELEASE` (`dasllama/dasllama_version.das`) cites in the PR body the
 maintainer's ruling that rows measured before it can no longer be compared with rows after it.**
