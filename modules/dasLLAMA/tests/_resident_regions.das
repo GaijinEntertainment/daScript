@@ -366,6 +366,9 @@ def private batched_steps_body(t : T?; tr : Model; prompts, feeds : array<array<
         furthest = max(furthest, long_length(p))
     }
     let bar = rows_bar(bar0, rows, furthest + long_length(feeds[0]))
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        t |> success(vk_rdec_rows_split_alike(1l, furthest + long_length(feeds[0])), "one row splits a layer's keys as one row does")
+    }
     let steps_alone0 = rdec_nrow_steps()
     var alone <- [for (i in range64(rows)); logits_alone(tr, prompts[i], feeds[i])]
     t |> equal(rdec_nrow_steps() - steps_alone0, 0l, "the sessions alone stepped through the one-row command: the N-row counter's control")
@@ -990,6 +993,43 @@ def cell_scheduler_device_prefill_chunks(t : T?; file : string) {
             set_device_kv(sch, false)
             delete events
             delete long_prompt
+            delete sch
+        }
+    }
+}
+
+//! a device-home scheduler's tick on two streams whose first has fewer rows left than the quantum: where the model's segmented
+//! window serves, the tick hands both to one window and the second stream's prompt is cut there (A 300 + B 212, B 512, B 300:
+//! four calls counted a segment); where it declines, each tick is one stream's own call (A 300, B 512, B 512: three) - the
+//! handoff never costs a declining model a window
+def cell_scheduler_device_handoff(t : T?; file : string) {
+    t |> run("a device-home tick hands two streams to one segmented window where the model's window serves, and takes one stream's call where it declines") @(t : T?) {
+        with_regions_rig(t, file) $(tr) {
+            var sch <- create_scheduler(tr, 2l, 4l, 64l, 0l, 0l, mirror_kv_dtype())
+            t |> success(set_device_kv(sch, true), "an idle scheduler switches to device-home sessions")
+            var pa <- prose_ids(300l, 5l)
+            var pb <- prose_ids(2l * PF_WINDOW_ROWS, 9l)
+            var events : array<SchedEvent>
+            let served0 = moe_gpu_resident_prefills()
+            let segw0 = segment_windows_count()
+            submit(tr, sch, make_req(1l, pa, 2l))
+            submit(tr, sch, make_req(2l, pb, 2l))
+            drain(tr, sch, events)
+            let calls = moe_gpu_resident_prefills() - served0
+            if (gpu_device_prefill_segments(tr)) {
+                t |> equal(calls, 4l, "the first tick's window carried both streams and cut the second's prompt there ({calls} calls)")
+                t |> success(segment_windows_count() - segw0 >= 1l, "... through the segmented window")
+            } else {
+                t |> equal(calls, 3l, "each tick took one stream's own call, the second stream's prompt whole windows ({calls} calls)")
+                t |> equal(segment_windows_count() - segw0, 0l, "... no segmented window")
+            }
+            t |> equal(length(toks_of(events, 1l)), 2, "the first stream ran its two tokens")
+            t |> equal(length(toks_of(events, 2l)), 2, "the second stream ran its two tokens")
+            served_every_call(t)
+            set_device_kv(sch, false)
+            delete events
+            delete pa
+            delete pb
             delete sch
         }
     }

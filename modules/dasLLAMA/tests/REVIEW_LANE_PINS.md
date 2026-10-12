@@ -14,8 +14,8 @@ serving lane (`set_<name>_q8`, whisper's `set_asr_fp32` / `set_asr_tower_fp32`),
 that makes that call. A driver setter is any other `../dasllama/` call the cell makes whose purpose
 is to set a value - a `set_*`, `enable_*`, `disable_*` or override call - stored in a module global
 or process-global state that a later load, route choice or kernel dispatch reads; a call a loader
-makes on its own is not the cell's. `REVIEW.md`'s routing line carries the same definition, and the
-two change together. A driver setter's getter is the
+makes on its own is not the cell's. `REVIEW.md`'s routing line carries the same two definitions,
+and the two files change together. A driver setter's getter is the
 `../dasllama/` call, or the set of them, that returns the values the driver setter last wrote.
 
 **A diff that adds or edits a cell makes the cell, the `[test]` function that runs it, or the

@@ -626,15 +626,15 @@ def test_segments_served_by_override(t : T?) {
 def test_gpu_said_once(t : T?) {
     t |> run("gpu_said_once keeps one entry a reason and says a cleared reason again") @(t : T?) {
         var said : table<string>
-        gpu_said_once(said, LOG_INFO, "the test's prefix - ", "a reason")
-        t |> equal(length(said), 1, "the first call records the reason")
-        gpu_said_once(said, LOG_INFO, "the test's prefix - ", "a reason")
-        t |> equal(length(said), 1, "the same reason again records nothing")
-        gpu_said_once(said, LOG_WARNING, "the test's prefix - ", "another reason")
-        t |> equal(length(said), 2, "another reason joins the set")
+        t |> success(gpu_said_once(said, LOG_INFO, "the test's prefix - ", "a reason"), "the first call says the reason")
+        t |> equal(length(said), 1, "... and records it")
+        t |> success(!gpu_said_once(said, LOG_INFO, "the test's prefix - ", "a reason"), "the same reason again says nothing")
+        t |> equal(length(said), 1, "... and records nothing")
+        t |> success(gpu_said_once(said, LOG_WARNING, "the test's prefix - ", "another reason"), "another reason is said")
+        t |> equal(length(said), 2, "... and joins the set")
         said |> clear()
-        gpu_said_once(said, LOG_INFO, "the test's prefix - ", "a reason")
-        t |> equal(length(said), 1, "a cleared set (an arm) says the reason again")
+        t |> success(gpu_said_once(said, LOG_INFO, "the test's prefix - ", "a reason"), "a cleared set (an arm) says the reason again")
+        t |> equal(length(said), 1, "... and records it again")
         delete said
     }
 }

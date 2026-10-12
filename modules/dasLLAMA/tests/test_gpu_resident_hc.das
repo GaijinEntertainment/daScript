@@ -144,6 +144,7 @@ def test_gpu_resident_hc_mtp_verify(t : T?) {
         clear_mtp_head_path()
         t |> success(!mtp_head_path_pin().set, "the head pin is cleared for the process after the load")
         t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the trunk and its head (the load log names any decline)")
+        t |> equal(rdec_token_n_rows(), 6l, "the N-row command steps the rows the routed slot planes hold a row's ten picks for: 64 over 10")
         with_dasllama_jobque_() {
             let tape_before = moe_pick_tape_mode()
             var prompt <- resident_prompt(HC_PROMPT)

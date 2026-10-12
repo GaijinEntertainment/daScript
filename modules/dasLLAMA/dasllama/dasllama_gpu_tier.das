@@ -1192,10 +1192,12 @@ def public moe_gpu_shexp_declined(why : string) {
     gpu_said_once(g_moe_gpu_shexp_said, LOG_INFO, "the prefill's shared expert takes the CPU rail - ", why)
 }
 
-//! `why` logged at `level` once under `said` (a reason set the owner clears when it re-arms); the check every call pays is the lookup alone
-def public gpu_said_once(var said : table<string>; level : int; prefix, why : string) {
-    return if (key_exists(said, why))
+//! `why` logged at `level` once under `said` (a reason set the owner clears when it re-arms), true when this call said it;
+//! the check every call pays is the lookup alone
+def public gpu_said_once(var said : table<string>; level : int; prefix, why : string) : bool {
+    return false if (key_exists(said, why))
     gpu_say_once_now(said, level, prefix, why)
+    return true
 }
 
 [cold_path]

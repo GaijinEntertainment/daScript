@@ -23,15 +23,17 @@ or a knob list) - never a value the cell's own claim defines - or that a checked
 its evidence, applies `REVIEW_PINNED_GATES.md` too.** An assert that compares against a
 `../dasllama/` constant by name, not against a literal copy of it, keeps nothing in step.
 
-**A cell that calls a lane setter or a driver setter, in its own code or through a helper under
-this folder, passes a loader parameter that takes a family's lane, or whose claim depends on which
+**A cell that calls a lane setter or a driver setter, in its own code or through a helper it
+calls, passes a loader parameter that takes a family's lane, or whose claim depends on which
 route or serving lane runs it - a lane pin, a driver hook, a CPU-vs-GPU compare - applies
-`REVIEW_LANE_PINS.md` (beside this file) too.** A lane setter picks a family's q8 or float serving
-lane (`set_<name>_q8`, `set_asr_fp32`, `set_asr_tower_fp32`, or a facade call making one); a driver
-setter is any other `../dasllama/` call the cell makes whose purpose is to set a value - a `set_*`,
-`enable_*`, `disable_*` or override call - stored in a module global or process-global state that a
-later load, route choice or kernel dispatch reads; a call a loader makes on its own is not the
-cell's (`REVIEW_LANE_PINS.md` carries the same definition, and the two change together).
+`REVIEW_LANE_PINS.md` (beside this file) too.** A lane setter is a call that writes the value a
+family's loader or its `*_serves_q8` accessor reads to choose the family's serving lane
+(`set_<name>_q8`, whisper's `set_asr_fp32` / `set_asr_tower_fp32`), or a facade call that makes
+that call; a driver setter is any other `../dasllama/` call the cell makes whose purpose is to set a
+value - a `set_*`, `enable_*`, `disable_*` or override call - stored in a module global or
+process-global state that a later load, route choice or kernel dispatch reads; a call a loader
+makes on its own is not the cell's (`REVIEW_LANE_PINS.md` carries the same two definitions, and
+the two files change together).
 
 **A cell that feeds, preprocesses, or asserts on media bytes an encoder consumes - pixels or
 audio samples - compares an encoder's output rows against a second source, or compares ASR

@@ -148,6 +148,119 @@ def private segments_cell(t : T?; tr : Model) {
     delete rb
 }
 
+//! the segmented admission decides before any bind: a continuation owning its region beside a session with none binds the
+//! owner first - the other region, touched later, is the newcomer's and the owner's is never taken
+def private owner_first_cell(t : T?; tr : Model) {
+    var open_a <- resident_prompt(OPEN_ROWS, 0l)
+    var open_b <- resident_prompt(OPEN_ROWS, 7l)
+    var open_c <- resident_prompt(OPEN_ROWS, 13l)
+    var tail_a <- ramp_ids(TAIL_A, 3l, 2000l, 53l, 4000l)
+    let toks <- resident_feed(STEPS)
+    let want_a <- solo_rows(tr, open_a, tail_a, toks)
+    var sa <- create_session(tr, mirror_kv_dtype())
+    open_session(tr, sa, open_a)   //! A owns a region
+    var sc <- create_session(tr, mirror_kv_dtype())
+    open_session(tr, sc, open_c)   //! C takes the other region and touches it last
+    delete sc
+    var sb <- create_session(tr, mirror_kv_dtype())
+    var sess <- [unsafe(addr(sa)), unsafe(addr(sb))]
+    var chunks : array<array<int64>>
+    chunks |> reserve(2l)
+    chunks |> push_clone(tail_a)
+    chunks |> push_clone(open_b)
+    let sw0 = segment_windows()
+    let pf0 = moe_gpu_resident_prefills()
+    eval_segments_(tr, sess, chunks)
+    sess |> clear()
+    t |> equal(segment_windows() - sw0, 1l, "an owner's continuation beside a session with no region: one segmented window (the owner bound first, the free region the newcomer's)")
+    t |> equal(moe_gpu_resident_prefills() - pf0, 2l, "... a prefill a segment")
+    let got_a <- steps_after(tr, sa, toks)
+    hold_rows(t, "the owner's tail beside a newcomer's opening", got_a, want_a)
+    unsafe {
+        delete sess
+    }
+    delete sa
+    delete sb
+    delete open_a
+    delete open_b
+    delete open_c
+    delete tail_a
+}
+
+//! three segments over two regions, one of them owned, decline whole before any bind: each is then served alone, no pass counted
+def private outnumber_cell(t : T?; tr : Model) {
+    var open_a <- resident_prompt(OPEN_ROWS, 0l)
+    var open_b <- resident_prompt(OPEN_ROWS, 7l)
+    var open_c <- resident_prompt(OPEN_ROWS, 13l)
+    var tail_a <- ramp_ids(TAIL_A, 3l, 2000l, 53l, 4000l)
+    var sa <- create_session(tr, mirror_kv_dtype())
+    open_session(tr, sa, open_a)
+    var sb <- create_session(tr, mirror_kv_dtype())
+    var sc <- create_session(tr, mirror_kv_dtype())
+    var sess <- [unsafe(addr(sa)), unsafe(addr(sb)), unsafe(addr(sc))]
+    var chunks : array<array<int64>>
+    chunks |> reserve(3l)
+    chunks |> push_clone(tail_a)
+    chunks |> push_clone(open_b)
+    chunks |> push_clone(open_c)
+    let sw0 = segment_windows()
+    let pf0 = moe_gpu_resident_prefills()
+    let passes0 <- gpu_cpu_passes_()
+    eval_segments_(tr, sess, chunks)
+    sess |> clear()
+    let passes1 <- gpu_cpu_passes_()
+    t |> equal(segment_windows() - sw0, 0l, "three segments over two regions, one of them owned: no segmented window")
+    t |> equal(moe_gpu_resident_prefills() - pf0, 3l, "... the fallback served each segment alone on the driver")
+    t |> equal(length(passes1), length(passes0), "... and the declined call counted no pass ({passes1})")
+    unsafe {
+        delete sess
+    }
+    delete sa
+    delete sb
+    delete sc
+    delete open_a
+    delete open_b
+    delete open_c
+    delete tail_a
+}
+
+//! an owner whose region holds fewer rows than its start declines the segmented call before any bind; the fallback counts
+//! that session's gap once
+def private gap_cell(t : T?; tr : Model) {
+    var open_a <- resident_prompt(OPEN_ROWS, 0l)
+    var open_b <- resident_prompt(OPEN_ROWS, 7l)
+    var tail_a <- ramp_ids(TAIL_A, 3l, 2000l, 53l, 4000l)
+    var sa <- create_session(tr, mirror_kv_dtype())
+    open_session(tr, sa, open_a)
+    sa.n_past += 10l   //! the region holds OPEN_ROWS rows; the continuation starts ten past them
+    var sb <- create_session(tr, mirror_kv_dtype())
+    var sess <- [unsafe(addr(sa)), unsafe(addr(sb))]
+    var chunks : array<array<int64>>
+    chunks |> reserve(2l)
+    chunks |> push_clone(tail_a)
+    chunks |> push_clone(open_b)
+    let sw0 = segment_windows()
+    let gap0 = pass_count("gap")
+    eval_segments_(tr, sess, chunks)
+    sess |> clear()
+    t |> equal(segment_windows() - sw0, 0l, "an owner short of its start: no segmented window")
+    t |> equal(pass_count("gap") - gap0, 1l, "... the fallback passed that session's call as the gap, once")
+    unsafe {
+        delete sess
+    }
+    delete sa
+    delete sb
+    delete open_a
+    delete open_b
+    delete tail_a
+}
+
+def private ownership_cells(t : T?; tr : Model) {
+    owner_first_cell(t, tr)
+    outnumber_cell(t, tr)
+    gap_cell(t, tr)
+}
+
 def private decline_cell(t : T?; tr : Model) {
     let toks <- resident_feed(STEPS)
     var opens : array<array<int64>>
@@ -281,6 +394,7 @@ def private segments_cells(t : T?; file : string) {
     with_dasllama_jobque_() {
         segments_cell(t, tr)
         tails_as_segments(t, tr, LONG_TAIL, LONG_TAIL, "tails past one window")   //! two windows: segment A ends in the first, B crosses into the second
+        ownership_cells(t, tr)
         decline_cell(t, tr)
         decline_arms_cell(t, tr)
     }

@@ -4068,11 +4068,21 @@ var private g_rdec_peels = 0l
 def moe_gpu_resident_peels() : int64 => g_rdec_peels
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-prefill-peel")]
+//! The property of `c`'s chain that keeps a short window off the token command's peel - its state, side rows, wide residual or
+//! carry are per call - or "" where the chain's shape fits; the host experts' arm reads the armed plan (`rdec_peel_fits`).
+def rdec_peel_shape_why(c : Config) : string {
+    if (c.n_layer_nextn > 0l) return "a NextN-headed model"
+    if (c.hyper_conn) return "a hyper-connection chain"
+    if (has_ple(c)) return "a per-layer-embedding model"
+    return c.recr_mask != 0ul ? "a recurrent model" : ""
+}
+
 def private rdec_peel_fits(t : Model; npos : int64) : bool {
     return false if (!g_vulkan_prefill_peel || !(npos == 1l || npos <= rdec_token_n_rows()))
-    let c = t.config
-    let why = (c.n_layer_nextn > 0l ? "a NextN-headed model" : c.hyper_conn ? "a hyper-connection chain" : has_ple(c) ? "a per-layer-embedding model"
-        : g_rdec_experts_host ? "routed experts on the host" : c.recr_mask != 0ul ? "a recurrent model" : "")
+    var why = rdec_peel_shape_why(t.config)
+    if (empty(why) && g_rdec_experts_host) {
+        why = "routed experts on the host"
+    }
     return true if (empty(why))
     rdec_peel_declined(why)
     return false

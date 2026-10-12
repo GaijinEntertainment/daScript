@@ -1217,7 +1217,7 @@ by the drafted rounds; a pick left unconsumed would refuse the next round's open
 `test_gpu_tier.das` - model-free: the segments form's media guard (`test_segments_served_by_override`: under a
 probe override registered with a segments form and neither the per-row-table nor the deepstack arm, two plain sessions
 take the form, a session with `mrope_pos` rows or `ds_active` declines it, both take it again cleared, and no active
-override means no form; the override found is put back), and the say-once helper the GPU driver files share (`test_gpu_said_once`: one entry a reason, a repeat recording nothing, a cleared set saying it again), and the tier's seat forwarders on doubles - among them the NextN
+override means no form; the override found is put back), and the say-once helper the GPU driver files share (`test_gpu_said_once`: one entry a reason and the call answering that it said it, a repeat recording nothing and answering that it did not, a cleared set saying it again), and the tier's seat forwarders on doubles - among them the NextN
 draft seat (`test_rdec_draft_seat`: the row, the hydrate start and the pick ask forwarded, the
 double's pick answered and the logits left alone under the ask, the unset seat declining until the
 reinstall, and the seat unset again at the cell's end so the process reads it as it found it; its
@@ -1242,7 +1242,7 @@ no attention layer; a block codec's byte cap on a device that binds four times i
 taking the wider range the control); and the cap a block codec's f16 shadow puts on a region's
 context (`resident_shadow_ctx`: one binding of the widest K/V row's halves, the same under q8_0
 and tq4, halved by a row twice as wide, none under a scalar codec). The Metal serving gates ride the
-same synthetic shells: `test_kq_fmt_one_row_gemv` holds the Metal prefill's one-row GEMV predicate (q8 at any width, a served superblock format at whole superblocks and not at a partial one, an unserved superblock format and a per-32 format at none); `test_moe_metal_expert_formats` sweeps `moe_metal_ok` over the thirteen
+same synthetic shells: `test_kq_fmt_one_row_gemv` holds the Metal prefill's one-row GEMV predicate (q8 at any width, a served superblock format at whole superblocks and not at a partial one, an unserved superblock format and a per-32 format at none; Q4_0 repacks to superblocks and has it); `test_peel_shape_arms` holds the token command's peel off the NextN-headed, hyper-connection, per-layer-embedding and recurrent shapes one at a time on dense shells (`rdec_peel_shape_why`), and the device-home tick's segmented-window predicate (`gpu_device_prefill_segments_`) false with no driver armed; `test_moe_metal_expert_formats` sweeps `moe_metal_ok` over the thirteen
 expert plane formats the routed block serves and the two it declines (iq4nl, k2), one
 mixed-format model, and the drift guard walking all fifteen `KqFmt` members - the kernel roster
 (`moe_fmt_metal_served`) and the site-alignment gate (`moe_site_ok`) name ONE set, which is the
@@ -1555,7 +1555,7 @@ tape, the logits and the wide carry each within their bar with the one-row-back 
 one speculative round on the device (the draft, the two-row verify, the accept or the rollback) and holds its
 two rows to the split command's own one-row steps on the same picks (`moe_pick_tape_lane`, a lane replay of the
 rows-form tape) at the split bars, and to the CPU's one-row steps at the wide bars, the other row as each
-row's control. Both also skip where the head shard is not beside the model. `test_gpu_resident_hc_short_window` holds a two-token prompt on the trunk to the window chain (the peel declines the hyper-connection chain).
+row's control. Both also skip where the head shard is not beside the model. `test_gpu_resident_hc_short_window` holds a two-token prompt on the trunk to the window chain (the peel declines the hyper-connection chain); the round cell also holds the N-row command at six rows on the trunk - the routed slot planes hold 64 picks, the trunk picks ten a row.
 `test_gpu_resident_llama.das` - stocked suite, `-jit` only; the whole-model resident driver on the
 llama family (Llama-3.2-1B Q8_0 and its Q4_0 requant `Llama-3.2-1B-Instruct-Q4_0-local.gguf`, whose
 recipe row is `../performance/model_specs.das`'s, Llama-3.2-3B Q8_0, Llama-3.1-8B Q4_K_M,
@@ -1595,7 +1595,11 @@ argmax rows decoded; the decline-arms cell holds the form's other declines, each
 segmented-window counter where it was - a segment's session on another K/V codec than the mirror (the fallback
 passing it as `codec`), both regions held by device-home sessions (each host-cached session passed as `busy`),
 and a session adding deepstack slices (`ds_active`) the override has no arm for, the other segment running alone
-on the driver and that one taking the CPU prefill loop with no pass counted. The file never holds more live host-cached sessions than regions: a later
+on the driver and that one taking the CPU prefill loop with no pass counted; the ownership cells hold the admission's
+dry run - an owner's continuation beside a newcomer binds the owner first and the newcomer takes the region touched
+last (one window, the owner's rows the solo form's), three segments over two regions decline whole with no pass
+counted and each served alone, and an owner whose region holds fewer rows than its start declines whole with the
+fallback's one `gap` pass. The file never holds more live host-cached sessions than regions: a later
 prefill would take a live session's region, which the engine leaves to the scheduler's pin. Skips
 without the model or the armed tier, and on a card whose room the plan does not fit at two regions.
 `test_batch_decode.das` - stocked suite, `-jit` only: the CPU batched stack against the
@@ -1698,7 +1702,10 @@ one window-chain call, each step the batched token command, the prefill counter 
 and for the second turn, which adopts the rows of the turn it continues and so splits its
 prefill, the adopted count alone; the device-home side's two prompts admitted together ride one segmented
 window where the model's segmented window serves (`gpu_device_prefill_segments`), the counter's rise the
-tick's witness; the three argmax requests' decode steps land their picks on the
+tick's witness; the handoff cell (`cell_scheduler_device_handoff`) runs two device-home streams of 300 and 1024
+rows whose first leaves fewer rows than the quantum: where the model's window serves, the first tick carries both
+and cuts the second's prompt there (four calls counted a segment, the segmented-window counter up), where it
+declines each tick is one stream's own call (three calls, no segmented window); the three argmax requests' decode steps land their picks on the
 device (the count held equal to the rows stepped less the second turn's, which samples at top-k 1
 under a temperature and so lands logits). Every cell holds `gpu_cpu_passes_()` empty
 (the pin cell its one `busy`). The qwen2 file adds the tolerance cells, at the 6% bar of

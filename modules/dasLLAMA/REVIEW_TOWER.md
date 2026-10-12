@@ -86,16 +86,13 @@ compute changes that CPU code the same way, in the same diff.**
 **A diff that adds or changes a family's chain in the Metal tower or in the Metal ASR-decoder
 driver (`dasllama/dasllama_metal_asr_dec.das`) leaves every stage of that family's served chain -
 the mel, the front, the blocks, the tail, the cross-KV and the decode step - on the device for
-every model and every weight lane the family serves, or files the stage that stays on the CPU in
-`followup_metal.md` with the stage and the model named, in the same change.** A stage on the CPU
-behind a Metal chain reads as served and sets the whole chain's rate.
-
-**A diff that adds or changes a family's chain in the Metal tower or in
-`dasllama/dasllama_metal_asr_dec.das` lets a stage of that chain hand its work back to the CPU
-only when `DASLLAMA_METAL_TOWER` (`DASLLAMA_METAL_WDEC` for the cross-KV and the decode step) is
-0, no Metal device is present, or the stage's command buffer failed; for any other cause on a
-model or weight lane the box holds, it serves the stage on the device or files it in
-`followup_metal.md`, in the same change.**
+every model and every weight lane the family serves; a stage returns its work to the CPU only when
+`DASLLAMA_METAL_TOWER` (`DASLLAMA_METAL_WDEC` for the cross-KV, `DASLLAMA_METAL_WDEC` or
+`DASLLAMA_METAL_WDEC_STEP` for the decode step) is 0, the decoder sits under the decode step's
+width floor (`set_metal_wdec_step_min_d`), no Metal device is present, or its command buffer
+failed, and any other stage on the CPU is filed in `followup_metal.md` with the stage and the
+model named, in the same change.** A stage on the CPU behind a Metal chain reads as served and
+sets the whole chain's rate.
 
 **A diff that changes what a TTS seat's chain computes in a tower driver applies `REVIEW_TTS.md`
 too.**

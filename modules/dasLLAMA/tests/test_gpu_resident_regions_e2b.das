@@ -48,4 +48,5 @@ def test_device_home_sessions(t : T?) {
 [test]
 def test_scheduler_device_mode(t : T?) {
     cell_scheduler_device_mode(t, REGIONS_FILE)
+    cell_scheduler_device_handoff(t, REGIONS_FILE)
 }
