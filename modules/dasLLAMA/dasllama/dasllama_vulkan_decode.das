@@ -587,6 +587,11 @@ def vk_rdec_prepare_moe(ne, k, nfe, nsh, n_moe : int64; sh_gated, norm_topk, is_
     r.moe = true
     r.ne = ne
     r.k = k
+    if (k > 0l && !rd_routed_slots_fit(r.nb, k)) {   //! the per-row planes hold RD_NB_MAX rows; the N-row command steps as many as the slot planes hold a row's picks for
+        r.nb = max(1l, MAX_ROUTED_SLOTS / k)
+        r.verify_rows = min(r.verify_rows, r.nb)
+        to_log(LOG_INFO, "dasLLAMA vulkan resident: the N-row command steps {r.nb} rows at once - {k} picks a row over {MAX_ROUTED_SLOTS} routed slots\n")
+    }
     r.nfe = nfe
     r.nsh = nsh
     r.n_moe = n_moe

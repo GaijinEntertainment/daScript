@@ -14,7 +14,9 @@ decode era, whose routed block the command's rows form mirrors, is `ARCHITECTURE
 once for the step instead of once a row.** The driver sizes every per-token plane to `RDec.nb`
 rows - `RD_NB_MAX` (`RDEC_NROW_MAX`, eight, the N-column GEMV leaves' width) whatever the region
 count, so the short window's peel and the speculative verify
-(`ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command`) ride the planes on a one-region driver - and
+(`ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command`) ride the planes on a one-region driver; a
+routed model steps at most the rows whose picks the slot planes hold, `MAX_ROUTED_SLOTS` over its
+picks a row (`vk_rdec_prepare_moe` lowers `nb`, the verify rows with it) - and
 `vk_rdec_token_n_rows` answers how many rows the armed model steps at once - a step of more rows
 than that runs them in the fewest groups of at most that many, the groups balanced so none is a
 single row (a single row is the one-row command's), every row's region bound before the first group
