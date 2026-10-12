@@ -1,20 +1,20 @@
 options gen2
-options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
-options persistent_heap   // + explicit deletes below: the model and sessions free before exit
+options stack = 524288
+options persistent_heap
 options _dasllama_internal = true
 
 require dastest/testing_boost public
 require dasllama/dasllama_transformer   // nolint:STYLE029 - the umbrella fires each arch [init] registration (llama)
-require dasllama/dasllama   // create_session, mirror_kv_dtype
+require dasllama/dasllama
 require dasllama/dasllama_common   // nolint:STYLE030,LINT019 - eval_segments_, forward_prefill, forward
 require daslib/jobque_boost
 require daslib/fio
-require dasllama/dasllama_math   // with_dasllama_jobque_ (the engine-standard jobque config)
-require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed / gpu_want_auto: is the tier armed
-require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active, moe_gpu_resident_prefills
+require dasllama/dasllama_math
+require dasllama/dasllama_gpu_tier
+require dasllama/dasllama_gpu_resident
 require ?vulkan dasllama/dasllama_vulkan_prefill   // nolint:STYLE030,LINT019 - vk_rdec_prefill_segment_windows, read in the vulkan half
-require _model_tier   // models_dir() + model_available() presence/size-tier gate
-require _resident_feed   // resident_ready, load_resident, the ramps, rows_within_control, served_every_call
+require _model_tier
+require _resident_feed
 
 // The whole-model resident driver's SEGMENTED window (`DASLLAMA_GPU=1`): two host-cached sessions' chunks as ONE window
 // chain, each in its own mirror region, against the same chunks as two one-session windows on the same driver - the
@@ -32,7 +32,7 @@ require _resident_feed   // resident_ready, load_resident, the ramps, rows_withi
 
 [init]
 def private allow_cpu_prefill_intent() {
-    allow_cpu_prefill()   // the fallback arms prefill through the one-session override; nothing here means the CPU
+    allow_cpu_prefill()   // the decline cell's pinned chunks prefill on the CPU by design
 }
 
 //! of the step's max |logit|: the regions rig's split bar - the window's GEMMs split k by the row count, so two row counts round apart
@@ -51,7 +51,6 @@ def private segment_windows : int64 {
     }
 }
 
-//! `s` after `opening` from position zero: the one-session window, the session's position past it
 def private open_session(tr : Model; var s : Session; opening : array<int64>) {
     eval_(tr, s, opening)
 }
@@ -71,7 +70,6 @@ def private steps_after(tr : Model; var s : Session; toks : array<int64>) : arra
     return <- out
 }
 
-//! the one-session form: `opening` then `tail` as two windows of one session, then the fed steps
 def private solo_rows(tr : Model; opening, tail, toks : array<int64>) : array<array<float>> {
     var s <- create_session(tr, mirror_kv_dtype())
     open_session(tr, s, opening)
@@ -86,7 +84,6 @@ def private hold_rows(t : T?; what : string; got, want : array<array<float>>) {
     rows_within_control(t, what, got, want, SPLIT_BAR_REL, 1l, 1.0, $(r) => r == 0l ? "the prefill's row" : "step {r}")
 }
 
-//! two sessions' tails as one window against their solo windows, then both openings as one window from zero
 def private segments_cell(t : T?; tr : Model) {
     var open_a <- resident_prompt(OPEN_ROWS, 0l)
     var open_b <- resident_prompt(OPEN_ROWS, 7l)
@@ -120,7 +117,6 @@ def private segments_cell(t : T?; tr : Model) {
     log_gen_texts(tr, "session B: solo window, then the tail as a segment", [for (r in want_b); argmax_of(r)], [for (r in got_b); argmax_of(r)])
     delete sa
     delete sb
-    // the openings as one window from position zero
     var ca <- create_session(tr, mirror_kv_dtype())
     var cb <- create_session(tr, mirror_kv_dtype())
     var sess0 <- [unsafe(addr(ca)), unsafe(addr(cb))]
@@ -146,9 +142,6 @@ def private segments_cell(t : T?; tr : Model) {
     delete rb
 }
 
-//! the decline: under the server's prefill pin (`set_resident_prefill_allowed(false)`) a host-cached session's chunk passes to
-//! the CPU rails, so the segmented form declines the call whole and the engine runs each session alone - the pass counted once a
-//! session, no segmented window - and the sessions' rows still land within the bar of the device-prefilled references
 def private decline_cell(t : T?; tr : Model) {
     let toks <- resident_feed(STEPS)
     var opens : array<array<int64>>
@@ -196,8 +189,8 @@ def private segments_cells(t : T?; file : string) {
     return if (!resident_admitted(t, "the whole-model driver armed on {file} (the load log names any decline)", ""))
     t |> equal(tr.arch, "llama", "the file is a llama-family model")
     with_dasllama_jobque_() {
-        segments_cell(t, tr)   // two sessions' tails as one window, then both openings as one
-        decline_cell(t, tr)    // three sessions over two regions decline the window and still land
+        segments_cell(t, tr)
+        decline_cell(t, tr)
     }
     delete tr
 }

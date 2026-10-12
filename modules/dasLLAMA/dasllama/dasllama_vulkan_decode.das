@@ -132,7 +132,7 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     r.rot = rot
     rdq_reset()
     g_rdq_prev_last = 0ul   // the device clock's last sampled stamp is this file's: a new model starts with none
-    r.nb = RD_NB_MAX   //! the peel's rows ride the planes whatever the region count
+    r.nb = RD_NB_MAX
     let nb = r.nb
     r.verify_rows = min(nb, head ? verify_rows : 0l)
     let wide = max(max(max(qd, hidden), dim), head ? 2l * dim : 0l)
@@ -1680,7 +1680,7 @@ def private rd_encode_hc_layer(raw : VkCommandBuffer; var h : VkHaz; var L : RLa
     if (L.recurrent) {
         rd_encode_dn_head(raw, h, L, nrows, ncols, seq)
     } else {
-        rd_encode_attn_head(raw, h, L, l, fuse_qkr, nlfin, rd_layer_pieces(L, rd_split_pieces()), nrows, ncols, 0)
+        rd_encode_attn_head(raw, h, L, l, fuse_qkr, nlfin, rd_layer_pieces(L, rd_split_pieces(), nrows), nrows, ncols, 0)
     }
     rd_encode_hc_scatter(raw, h, L, false, nrows)
     rd_encode_hc_mix(raw, h, 2l * l + 1l, false, nrows)
@@ -1800,7 +1800,7 @@ def private rd_encode_hc_verify_warm(raw : VkCommandBuffer; var h : VkHaz; nrows
     rd_encode_hc_cat_eh(raw, h, nrows, g_rd.xb2_dev, "t:warm_")
     rd_encode_hc_mix(raw, h, 2l * g_rd.n_layers, false, nrows)
     rq_enc(raw, h, L.s_quant_xb, L.fq, dim * nrows)
-    rd_encode_attn_head(raw, h, L, g_rd.n_layers, rd_head_fuse_qkr(), rd_norm_final(), rd_layer_pieces(L, rd_split_pieces()), nrows, uint(nrows), 0, true, "t:warm_")
+    rd_encode_attn_head(raw, h, L, g_rd.n_layers, rd_head_fuse_qkr(), rd_norm_final(), rd_layer_pieces(L, rd_split_pieces(), nrows), nrows, uint(nrows), 0, true, "t:warm_")
 }
 
 //! the one-row command's TokMeta row at `pos` with `cnt` cached positions (the window chain's: its first position and its rows): the region rides the push, so `mirbase` is 0
@@ -1960,9 +1960,9 @@ def private rd_pieces_for_span(span : int64) : int64 {
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-decode-attn-split")]
-def private rd_layer_pieces(L : RLayer; nsplit : int64) : int64 {
+def private rd_layer_pieces(L : RLayer; nsplit, rows : int64) : int64 {
     let span = L.window == 0l ? nsplit : min(nsplit, rd_pieces_for_span(L.window))
-    let wave = max(1l, int64(g_gpu.sm_count) / (da_attn_row_wgs(g_rd.n_heads, L.kv_mul, 1l) * g_rd.nb))
+    let wave = max(1l, int64(g_gpu.sm_count) / (da_attn_row_wgs(g_rd.n_heads, L.kv_mul, 1l) * max(rows, 1l)))   //! the command's own rows, never the planes' height
     return min(span, wave)
 }
 
@@ -2720,7 +2720,7 @@ def private rd_encode_token(var first_seg_raw : VkCommandBuffer; nrows, nsplit :
             if (L.recurrent) {
                 rd_encode_dn_head(raw, h, L, nrows, ncols, verify)
             } else {
-                rd_encode_attn_head(raw, h, L, l, fuse_qkr, nlfin, rd_layer_pieces(L, nsplit), nrows, ncols, nrow_bx)
+                rd_encode_attn_head(raw, h, L, l, fuse_qkr, nlfin, rd_layer_pieces(L, nsplit, nrows), nrows, ncols, nrow_bx)
             }
             var pc8 = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(rd_norm_off(l, RD_NORM_FFN)), eps = g_rd.eps, ascale = 1.0,
                 pre_on = L.pre_post ? 1u : 0u, pwoff = uint(rd_norm_off(l, RD_NORM_POST_ATT)),
@@ -3280,7 +3280,7 @@ def private rd_record_draft {
     rd_take_stamps(one, g_rdq_n)
     rd_stamps_begin(raw)
     rd_encode_head_cat_eh(raw, h, 1l, "p:upload", "p:draft_", g_rd.s_prologue, L.s_quant_xb)
-    rd_encode_attn_head(raw, h, L, l, rd_head_fuse_qkr(), rd_norm_final(), rd_layer_pieces(L, rd_split_pieces()), 1l, 1u, 0)
+    rd_encode_attn_head(raw, h, L, l, rd_head_fuse_qkr(), rd_norm_final(), rd_layer_pieces(L, rd_split_pieces(), 1l), 1l, 1u, 0)
     var pcf = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(hb + RDEC_HEAD_FFN * dim), eps = g_rd.eps, ascale = 1.0)
     enc_cls_ar(raw, h, L.s_addr_ffn, pcf, 1l)
     rd_ts(raw, "a:ar1")
@@ -3506,7 +3506,7 @@ def private rd_encode_head_cat_eh(raw : VkCommandBuffer; var h : VkHaz; nrows : 
 def private rd_encode_verify_warm(raw : VkCommandBuffer; var h : VkHaz; nrows : int64) {
     var L & = unsafe(g_rd.head)
     rd_encode_head_cat_eh(raw, h, nrows, "", "t:warm_", g_rd.head_s_hx_ar, g_rd.head_s_cat_rq)
-    rd_encode_attn_head(raw, h, L, g_rd.n_layers, rd_head_fuse_qkr(), rd_norm_final(), rd_layer_pieces(L, rd_split_pieces()), nrows, uint(nrows), 0, true, "t:warm_")
+    rd_encode_attn_head(raw, h, L, g_rd.n_layers, rd_head_fuse_qkr(), rd_norm_final(), rd_layer_pieces(L, rd_split_pieces(), nrows), nrows, uint(nrows), 0, true, "t:warm_")
 }
 
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command")]   //! once per row count, region and set epoch

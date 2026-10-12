@@ -5351,7 +5351,8 @@ probe alone, no box profile applied; the Vulkan box ran it under `DASLLAMA_GPU=1
   11.8 ms, 32 rows 11.0, 64 rows 14.6; the same rows stepped one at a time 6.5 ms a row (a host-cached session, the
   row read back each step). The 1B Q8_0 reads 6.5 ms a window at 1 to 16 rows against 3.8 ms a step. The peel
   (`ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-prefill-peel`) routes a window of at most the N-row command's rows through the
-  token command.
+  token command: the same probe then reads 6.5 / 6.9 / 7.0 / 7.4 ms at 1 / 2 / 4 / 8 rows - one decode step - and the
+  chain's 11.8 ms from 16 rows up.
 - **The house probe on the M5's M4 arm reads the branch the same as its base** (the quick probe, 22 turns, alone
   then pair, two alternated rounds, Llama-3.2-3B Q4_K_M): alone wall 0.37 / 0.45 s on the base and 0.36 / 0.40 on
   the branch, pair 0.75 / 0.91 against 0.78 / 0.82, the pair's throughput share x0.91 / x1.00 against x0.87 / x0.93 -

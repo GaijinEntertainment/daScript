@@ -90,7 +90,6 @@ def private pf_seg_ending_at(w0, row : int64) : int64 {
     return -1l
 }
 
-//! a segment's K/V mirror base in layer `L`: the layer's base plus its region's units
 def private pf_seg_mir_base(L : RLayer; sg : RdecPfSeg) : int64 => L.mir_base + sg.region * g_rd.mir_units
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
@@ -799,7 +798,7 @@ def private pf_setup {
                 fixed_array(np * all * 4l, np * all * 4l, g_rd.ple * 4l, np * all * 4l), fixed_array(VHZ_COS, VHZ_MRT, 0u, VHZ_MRT))
         }
     }
-    g_rd.pf_logits_host = make_host_buf(g_rd.regions * g_rd.vocab * 4l, false, [cached = true])   //! a slot a segment: a window holds at most a region's worth of sessions
+    g_rd.pf_logits_host = make_host_buf(g_rd.regions * g_rd.vocab * 4l, false, [cached = true])
     g_rd.pf_cmd = alloc_cmd()
     if (g_env_vulkan.vk_overlap) {
         let nring = 3l + (g_rd.n_layers + PF_CHUNK_MAX - 1l) / PF_CHUNK_MAX
@@ -1414,9 +1413,6 @@ def vk_rdec_prefill_ids(tokens : array<int64>; emb_scale : float; cos_batch : ar
     pf_run(nox, tokens, true, emb_scale, cos_batch, nox, ple_tbl, npos, pos0, logits, experts, nosegs)
 }
 
-//! The segmented resident prefill: several sessions' chunks as ONE window chain - the rows (`x_batch`, or `tokens` where the
-//! driver gathers) and the rope rows of every segment back to back, `segs` naming each one's rows, position and region;
-//! each segment's logits land at its slot of `logits` (`vocab` floats a slot). No per-layer-embedding rows.
 [hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-prefill-segments")]
 def vk_rdec_prefill_segs(x_batch : array<float>; tokens : array<int64>; use_ids : bool; emb_scale : float; cos_batch : array<float>;
                          segs : array<RdecPfSeg>; var logits : array<float>; experts : RdecHostExpertsRowsFn) {
@@ -1745,7 +1741,7 @@ def vk_rdec_prefill_hc(x_batch : array<float>; cos_batch : array<float>; side : 
     pf_run_hc(x_batch, cos_batch, side, npos, pos0, logits, experts)
 }
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-tq4-basis")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-tq4-basis"), arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-prefill-segments")]
 def private pf_attn_block(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : int; wlen, pos0w : int64; feed_fused : bool) {
     let dim = g_rd.dim
     let np = g_rd.pf_np
@@ -1818,8 +1814,6 @@ def private pf_attn_block(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : i
         enc_qk_rms_cls(raw, h, g_rd.pf_sets[b + 15], pcn, wlen * (g_rd.n_heads + nkvh + vgroups))
         pfq_ts(raw)
     }
-    //! the rope and the K/V store a segment at a time: a segment's rows sit at `row0` of the window, its K/V at its own
-    //! positions of its own region; a block codec stages the rows window-local, so its store and shadow take the window whole
     assert(!kvq || long_length(g_pf_wsegs) == 1l, "vk prefill: a block codec's window holds one segment")
     for (sg in g_pf_wsegs) {
         let ropewg = (sg.npos * int64(pairs) + int64(WG_X) - 1l) / int64(WG_X)
@@ -1846,7 +1840,6 @@ def private pf_attn_block(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : i
     }
     pfq_ts(raw)
     let fa_lands_f16 = pf_fa_lands_f16(fo6)
-    //! the attention a segment at a time too: its query rows at `row0`, its keys its own region's rows up to its position
     for (sg in g_pf_wsegs) {
         let kv_base = kvq ? 0u : uint(pf_seg_mir_base(g_rd.layers[l], sg))   // the rows the attention reads: the mirror's, or a block codec's shadow of this layer from 0
         if (g_rd.layers[l].pf_fa || g_rd.layers[l].pf_fakhr) {
@@ -1916,7 +1909,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                    experts : RdecHostExpertsRowsFn; segs : array<RdecPfSeg>) {
     assert(g_rd != null && g_rd.ready, "vk prefill before prepare/set_cls")
     g_pf_segs |> clear()
-    if (empty(segs)) {   //! the one-session call: one segment over the whole call, in the selected region
+    if (empty(segs)) {
         g_pf_segs |> push(RdecPfSeg(row0 = 0l, npos = npos, pos0 = pos0, region = g_rd.region))
     } else {
         g_pf_segs |> push_clone_from(segs)
@@ -2062,7 +2055,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                     }
                 }
                 pfq_ts(raw)
-                let ffn_row0 = warm || nwseg > 1l ? 0l : pf_ffn_slice_row0(l, g_rd.n_layers, wlen, gu6 && !moe, dn6)   //! every segment's last row wants the last layer's FFN: a segmented window runs it whole
+                let ffn_row0 = warm || nwseg > 1l ? 0l : pf_ffn_slice_row0(l, g_rd.n_layers, wlen, gu6 && !moe, dn6)
                 let ffn_rows = wlen - ffn_row0
                 if (has_dense_triple(g_rd.layers[l])) {
                     pf_ffn_block(raw, h, l, b, wlen, ffn_row0, gu6, dn6, dnk)
@@ -2098,8 +2091,6 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 }
                 pfq_ts(raw)
             }
-            //! every segment whose last row this window holds takes the final requant and the classifier at that row, its logits
-            //! landing at its slot of the host buffer; the one-session call is the one segment ending at the last window's last row
             var ends = 0l
             for (ws in g_pf_wsegs) {
                 let row = ws.row0 + ws.npos - 1l
@@ -2108,7 +2099,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 ends++
                 rq_enc(raw, h, g_rd.pf_sets[bp + 1], kq_sb(g_rd.cls_fmt_marker), row * dim, dim)
                 if (ends == 1l) {
-                    pfq_ts(raw)   // the requant's stamp: the first segment's; the rest bill to the classifier's
+                    pfq_ts(raw)   //! the requant's stamp: the first segment's; the rest bill to the classifier's
                 }
                 pf_cls_enc(raw, h)   // the epilogue bills to the classifier's stamp
                 vhz_dep(raw, h, VHZ_LOG, 0u, true)

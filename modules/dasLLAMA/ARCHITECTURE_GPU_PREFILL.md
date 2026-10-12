@@ -235,7 +235,9 @@ recurrent, MoE or PLE layer, a sandwich-norm or gated-query model, a deepstack-t
 and it engages only at `npos > 1` with `dim` and the layer's hidden width both %32 and every
 FFN weight on a plane with a one-row form: the q8 plane's GEMV, or a superblock format's
 row-batched decode form at one row (`pf_enc_narrow_gemv`; the site's K must be whole
-superblocks, so a K-quant carrier whose `dim` or hidden width is off 256 keeps the full panel).
+superblocks, so a K-quant carrier whose `dim` or hidden width is off 256 keeps the full panel). The
+narrowed row takes its one-row form whatever the mm-tail lever (`DASLLAMA_METAL_MM_TAIL`,
+`set_metal_prefill_mm_tail`) says.
 `DASLLAMA_METAL_LASTROW=0` pins the full-panel tail.
 A caller that reads `x_b` rows afterwards - embedding pooling, whichever rows its pooling picks, a
 plane-compare probe - sets `Session.keep_hidden` and the prefill keeps every row; the flag is

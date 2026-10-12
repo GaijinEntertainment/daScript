@@ -1748,12 +1748,12 @@ class template GkRopeKvStore {
         let halfr = pa.rot / 2u
         let j = lgid % half
         let hbase = (lgid / half) * pa.hs
-        let rotp = j < halfr   //! the pairs under the rotated width rotate; the rest copy through [rot, hs)
-        let i = pa.neox != 0u ? (rotp ? hbase + j : hbase + pa.rot + (j - halfr)) : hbase + 2u * j
-        let i2 = pa.neox != 0u ? (rotp ? i + halfr : i + (half - halfr)) : i + 1u
+        let pair_rotates = j < halfr
+        let i = pa.neox != 0u ? (pair_rotates ? hbase + j : hbase + pa.rot + (j - halfr)) : hbase + 2u * j
+        let i2 = pa.neox != 0u ? (pair_rotates ? i + halfr : i + (half - halfr)) : i + 1u
         let cb = row * pa.cstride
-        let fcr = rotp ? tcos[pa.ccos + cb + j] : 1.0
-        let fci = rotp ? tsin[pa.csin + cb + j] : 0.0
+        let fcr = pair_rotates ? tcos[pa.ccos + cb + j] : 1.0
+        let fci = pair_rotates ? tsin[pa.csin + cb + j] : 0.0
         if (isk) {
             let kb = row * pa.kvrow + pa.koffe
             let bk = pa.boff + pa.qd

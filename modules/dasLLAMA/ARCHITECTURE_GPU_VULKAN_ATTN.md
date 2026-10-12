@@ -53,8 +53,8 @@ nothing). The piece count is the span's: one piece under
 (`da_nsplit`: enough (head, split) workgroups to cover the SM count twice, at most
 `DA_NSPLIT_MAX`); a sliding-window layer attends at most its window, so its count is its
 window's span's under the command's; and a layer's count is capped so its (kv head, slab)
-workgroups over the plan's rows (`RDec.nb`) fit one wave of the SMs (`rd_layer_pieces`: the
-SM count over the row's workgroups times the rows, one at least) - the pass is a chain of
+workgroups over the command's rows fit one wave of the SMs (`rd_layer_pieces`: the SM count over
+the row's workgroups times the rows the command steps, never the planes' height, one at least) - the pass is a chain of
 latencies a workgroup, and the ruler reads a second wave as a second chain: at 640 positions
 and four rows gpt-oss's shape (64 heads, eight a kv head: sixteen workgroups a row) reads 16.4
 us a layer unsplit and 34.9 at four pieces, Llama-1B's (eight a row) 14.5 and 22.6, the 30B's
@@ -264,7 +264,10 @@ rope-and-store writes the segment's K/V rows at its positions of its region (`Ro
 output rows at `row0` of the window's planes (`FaArgs.row0`, `DaAttnBArgs.row0`: the flash tiles'
 tensor layouts end at the segment's last row, so a padded load past it reads zero rows; the chunked
 pair reads its q tile from `row0` and keeps its causal arithmetic segment-local) and its keys at
-its region's base (`kvbase`), so a row never sees another session's keys. A window past
+its region's base (`kvbase`), so a row never sees another session's keys. Under a block-codec
+mirror the window holds one segment: the codec stages the window's rows window-local (the
+rope-and-store's `pos0` is the segment's window row), so its store and shadow run once over the
+whole window. A window past
 `PF_WINDOW` rows loops as the one-session chain does, the parts of the segments inside each window
 the window's own (`pf_window_segs`). Every segment whose last row a window holds takes the final
 requant and the classifier at that row, its logits landing at its slot of the host buffer

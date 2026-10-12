@@ -3083,7 +3083,7 @@ class template AtAttnTileT {
         let r = tid / KS
         let c = tid % KS
         let kvh = h / pa.kv_mul
-        load_q(pa.row0 + q0, pa.row0 + pa.npos, qrow, h, pa.hs, qhs)   //! the segment's rows sit at row0 in the panel; the causal math below stays segment-local
+        load_q(pa.row0 + q0, pa.row0 + pa.npos, qrow, h, pa.hs, qhs)
         var o0 = 0.0
         var o1 = 0.0
         var o2 = 0.0
@@ -3480,7 +3480,7 @@ class template FaT {
             let qhs = pa.qhs == 0u ? HS : pa.qhs
             var tlq : tensorLayout2DPad
             tensorLayoutCreate(tlq)
-            tensorLayoutSetDimension(tlq, pa.row0 + pa.rows, qstride)   //! the segment's end: a padded load past it reads zero rows
+            tensorLayoutSetDimension(tlq, pa.row0 + pa.rows, qstride)
             tensorLayoutSetStride(tlq, qstride, 1u)
             var tlk : tensorLayout2DPad
             tensorLayoutCreate(tlk)
@@ -10100,8 +10100,8 @@ class template RopeKvStoreBT : KvMirStoreT {
             let h = pr / hpairs
             let j = pr % hpairs
             let rot = j < pa.half
-            let pw = pa.row0 + p   //! the window row: the segment's rows sit at row0 in the q, k/v and cos planes
-            let cb = pw * (pa.cstride == 0u ? pa.hs : pa.cstride) + pa.cbase
+            let window_row = pa.row0 + p
+            let cb = window_row * (pa.cstride == 0u ? pa.hs : pa.cstride) + pa.cbase
             let cj = min(j, pa.half - 1u)   // the pass-through pairs past the rotated half read a clamped table entry the select then drops
             let tcr = cossin[cb + cj]
             let tci = cossin[cb + pa.half + cj]
@@ -10112,11 +10112,11 @@ class template RopeKvStoreBT : KvMirStoreT {
             let apos = pa.pos0 + p
             let bhead = h * pa.hs
             if (is_k) {
-                let kb = pw * pa.kstride + h * pa.hs
+                let kb = window_row * pa.kstride + h * pa.hs
                 let a0 = kvrows[kb + e0] + (pa.hasb != 0u ? bias[pa.boff + pa.qd + bhead + e0] : 0.0)
                 let a1 = kvrows[kb + e1] + (pa.hasb != 0u ? bias[pa.boff + pa.qd + bhead + e1] : 0.0)
                 let mo = pa.layerbase + apos * pa.kvd + h * pa.hs
-                let vb = pa.voff + pw * pa.kstride + h * pa.hs
+                let vb = pa.voff + window_row * pa.kstride + h * pa.hs
                 let v0 = kvrows[vb + e0] + (pa.hasb != 0u ? bias[pa.boff + pa.qd + pa.kvd + bhead + e0] : 0.0)
                 let v1 = kvrows[vb + e1] + (pa.hasb != 0u ? bias[pa.boff + pa.qd + pa.kvd + bhead + e1] : 0.0)
                 st_k(mo + e0, a0 * fcr - a1 * fci)
@@ -10125,7 +10125,7 @@ class template RopeKvStoreBT : KvMirStoreT {
                 st_v(mo + e1, v1)
             } elif (rot || pa.hasb != 0u) {   // a pass-through q pair (fcr 1, fci 0) is rewritten only when a bias lands on it
                 let qhs = pa.qhs == 0u ? pa.hs : pa.qhs   // 0 = compact (non-gated); a gated model passes 2 * hs
-                let qb = pw * (pa.qd / pa.hs) * qhs + h * qhs
+                let qb = window_row * (pa.qd / pa.hs) * qhs + h * qhs
                 let a0 = qrows[qb + e0] + (pa.hasb != 0u ? bias[pa.boff + bhead + e0] : 0.0)
                 let a1 = qrows[qb + e1] + (pa.hasb != 0u ? bias[pa.boff + bhead + e1] : 0.0)
                 qrows[qb + e0] = a0 * fcr - a1 * fci

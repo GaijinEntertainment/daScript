@@ -5852,12 +5852,8 @@ def private pf_kq_deep_stamps(fmt : KqFmt) : KqDeepStamps {
         enc_thdb = @@enc_kq_mm_k5_thdb_c, enc_thdb128 = @@enc_kq_mm_k5_thdb128_c)
 }
 
-//! the last-row tail serves a plane whose format has a one-row GEMV: q8's `enc_gemv`, or a superblock format's row-batched
-//! decode form at one row, whose K is whole superblocks
-def private pf_narrow_fmt(f : KqFmt; kdim : int64) : bool => f == KqFmt.q8 || (kq_sb(int(f)) && kdim % KQ_SB_ELEMS == 0l)
+def private pf_fmt_has_one_row_gemv(f : KqFmt; kdim : int64) : bool => f == KqFmt.q8 || (kq_sb(int(f)) && kdim % KQ_SB_ELEMS == 0l)
 
-//! one row of a GEMM site as a GEMV: x row 0 of `bx` (`kdim` wide) against the plane at `woff` into y row 0 of `by` (`d` rows) -
-//! q8's GEMV, or the decode's row-batched K-quant form at one row, whatever the tail peel's lever says (the peel counts nothing here)
 [arch(at="../ARCHITECTURE_GPU_PREFILL.md#prefill-last-row-tail")]
 def private pf_enc_narrow_gemv(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; woff : int64; bx, by, bk, bn : MetalBuffer?; kdim, d : int64) {
     if (fmt == KqFmt.q8) {
@@ -7746,8 +7742,8 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                     && !c.pre_post_norm && l >= nds && !c.q_gated
                     && c.n_layer_nextn == 0l
                     && dim % 32l == 0l && hid_l % 32l == 0l
-                    && pf_narrow_fmt(fmt_at(t.w1_fmt, l), dim) && pf_narrow_fmt(fmt_at(t.w3_fmt, l), dim)
-                    && pf_narrow_fmt(fmt_at(t.w2_fmt, l), hid_l))
+                    && pf_fmt_has_one_row_gemv(fmt_at(t.w1_fmt, l), dim) && pf_fmt_has_one_row_gemv(fmt_at(t.w3_fmt, l), dim)
+                    && pf_fmt_has_one_row_gemv(fmt_at(t.w2_fmt, l), hid_l))
                 if (narrow_last) {
                     for (sg in segs) {
                         let nro = uint64((sg.row0 + sg.npos - 1l) * dim * 4l)

@@ -938,8 +938,6 @@ def private chunk_take(st : Stream; chunk, prompt_end : int64) : int64 {
 def private prefill_tick(m : Model; var sch : Scheduler; var events : array<SchedEvent>) {
     let first = next_prefilling(sch)
     return if (first < 0l)
-    //! a stream with a media span ahead evals the span's body as one call of its own; a device-home scheduler whose device prefills
-    //! a prompt whole from position zero (a recurrent model) hands each stream its whole head
     if (stream_has_span_ahead(sch.streams[first]) || (sch.device_kv && !gpu_device_prefill_continues(m))) {
         prefill_one_chunk(m, sch, events, first)
         return

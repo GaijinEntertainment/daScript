@@ -79,7 +79,7 @@ def private ensure_rks_state {
     g_gpu.rks_set = set_rope_kv_cls(
         fixed_array(g_gpu.rks_q_dev, g_gpu.rks_qkv_dev, g_gpu.rks_qkv_dev, g_gpu.rks_k_dev, g_gpu.rks_v_dev, g_gpu.rks_scal.buf, g_gpu.rks_scal.buf, g_gpu.rks_scal.buf, g_gpu.rks_tok.buf),
         fixed_array(RKS_MAX_QD * 4l, qkvbytes, qkvbytes, mirbytes, mirbytes, XS_BYTES, XS_BYTES, XS_BYTES, TOK_META_BYTES),
-        fixed_array(VHG_Y1, 0u, 0u, VHG_Y2, VHG_Y3, 0u, 0u, 0u, 0u))   // roped q / the k and v views / K mirror / V mirror; the bias slot is a never-read placeholder (the seam has no bias arm); the cos and sin views of the row
+        fixed_array(VHG_Y1, 0u, 0u, VHG_Y2, VHG_Y3, 0u, 0u, 0u, 0u))   //! the bias slot binds a placeholder the seam never reads (it has no bias arm)
     g_gpu.rks_ready = true
 }
 

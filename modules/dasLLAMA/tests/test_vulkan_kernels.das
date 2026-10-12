@@ -2177,8 +2177,7 @@ def private rope_kv_arm(t : T?; f16, biased : bool) {
         var bh <- biased ? bias_past_pad(bpad, qd + 2 * kvd, 13, 0.05, 0.7, 29, 55.0) : array<float>()
         var ref <- rope_kv_rows(qh, kvh, bh, csh, 0, qd, qd + kvd, 0, bpad, nh, nkvh, hs) $(x : float) => f16 ? f16r(x) : x
         with_cell_planes() $(var cp : CellPlanes) {
-            //! the shared template's class: q@0, the [q | k | v] rows@1 and @2 (the k and v views), kmir@3, vmir@4, bias@5,
-            //! cossin@6 and @7 (the cos and sin views), tok@8 (pos 0 -> row 0)
+            //! the shared template's class: q@0, the [q | k | v] rows@1 and @2 (k, v views), kmir@3, vmir@4, bias@5, cossin@6 and @7 (cos, sin views), tok@8 (pos 0 -> row 0)
             let pq = cp |> io_(qh)
             let pkv = cp |> in_(kvh)
             let pkm = mirror_plane(cp, kvd, f16)

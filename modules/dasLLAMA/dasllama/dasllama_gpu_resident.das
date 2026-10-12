@@ -2415,8 +2415,7 @@ def private rdec_rope_rows(t : Model; pos : int64; var dst : array<float>; base 
     }
 }
 
-//! a prompt's rope rows, one cos/sin plane per position at `delta` past its index, across the job threads: each row is its own
-//! work; the rows land from row `row0` of the buffer (a segmented call's segments back to back)
+//! a prompt's rope rows across the job threads: row `p`'s cos/sin plane is position `p + delta`, at row `row0 + p` of `cb`
 def private resident_prefill_rope_rows(t : Model; delta, npos, ce : int64; var cb : array<float>; row0 : int64 = 0l) {
     unsafe {   // the rows land in disjoint ranges of the caller's buffer, one position each; the jobs take the model and the buffer by address
         let tp = addr(t)
@@ -3731,7 +3730,6 @@ var private @scratch g_rdec_segs : array<RdecPfSeg>
 var private @scratch g_rdec_seg_regions : array<int64>
 var private g_rdec_seg_declined : table<string>
 
-//! why the segmented form passed a call, said once per reason (the caller runs the segments one at a time)
 [cold_path]
 def private rdec_segs_declined(why : string) {
     return if (key_exists(g_rdec_seg_declined, why))
@@ -3739,7 +3737,6 @@ def private rdec_segs_declined(why : string) {
     to_log(LOG_INFO, "dasLLAMA: resident segmented prefill passed a call - {why} (said once per reason)\n")
 }
 
-//! every segment one the one-session form would take, their embed forms alike (`ids`, the first's)
 def private rdec_segs_admitted(segs : array<PrefillSeg>; ids : bool) : bool {
     for (sg in segs) {
         let s = sg.s
@@ -3752,8 +3749,6 @@ def private rdec_segs_admitted(segs : array<PrefillSeg>; ids : bool) : bool {
     return true
 }
 
-//! every segment's region bound in order into `g_rdec_seg_regions`: false where one has none, or two share one (the later
-//! bind stole the earlier segment's, so the window cannot hold both)
 def private rdec_segs_regions(t : Model; var segs : array<PrefillSeg>) : bool {
     g_rdec_seg_regions |> clear()
     g_rdec_seg_regions |> reserve(long_length(segs))
@@ -3776,7 +3771,6 @@ def private rdec_segs_regions(t : Model; var segs : array<PrefillSeg>) : bool {
     return true
 }
 
-//! the segments' rows back to back - the embedded rows or the ids, and the rope rows - and the segment table; the row count
 def private rdec_segs_gather(t : Model; var segs : array<PrefillSeg>; ids : bool) : int64 {
     let c = t.config
     let dim = c.dim
@@ -3813,17 +3807,12 @@ def private rdec_segs_gather(t : Model; var segs : array<PrefillSeg>; ids : bool
     return total
 }
 
-//! The "vulkan" segments override: several sessions' chunks as ONE window chain where every segment takes the driver as
-//! the one-session form would, each in a region of its own - declined whole otherwise, and the engine prefills the
-//! segments one at a time through the one-session override.
 [hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-prefill-segments")]
 def private vulkan_resident_prefill_segments(t : Model; var segs : array<PrefillSeg>) : bool {
     return false if (!g_rdec_active || !rdec_prefill_segs_installed())
     let c = t.config
     let n = long_length(segs)
     return false if (n < 2l)
-    //! the shapes the segmented chain does not hold: the recurrent state, the side rows, the NextN carry and the routed experts
-    //! are per call on this driver, a block codec stages its rows window-wide, and a hyper-connection chain is its own window
     if (c.recr_mask != 0ul || has_ple(c) || c.n_layer_nextn > 0l || c.hyper_conn || c.n_expert > 0l
             || (g_rdec_kvdt != KVDtype.f16 && g_rdec_kvdt != KVDtype.f32)) {
         rdec_segs_declined("the model's chain takes one session a window (recurrent, per-layer-embedding, NextN, routed, hyper-connection, or a block-codec mirror)")
@@ -3967,8 +3956,6 @@ def private vulkan_resident_prefill_go(t : Model; var s : Session; npos, start_p
     return true
 }
 
-//! the served prefill's bookkeeping, the chain's or the peel's: the carry from landed row `carry_row`, the recurrent slots
-//! owned, the region claimed (a fresh prompt) or its count moved (a continuation), the head rows, the counters
 def private rdec_prefill_landed(t : Model; var s : Session; r, npos, start_pos, carry_row : int64) {
     let c = t.config
     rdec_stash_carry(c, s, carry_row, start_pos + npos)
@@ -3992,8 +3979,6 @@ var private g_rdec_peels = 0l
 //! How many short windows the resident driver peeled through the token commands in this process (a cell's served witness)
 def moe_gpu_resident_peels() : int64 => g_rdec_peels
 
-//! the short window's peel fits: at most the rows the N-row command steps at once (one row is the one-row command's) on a chain
-//! with no recurrent state, side rows, wide residual, NextN head or host experts - what the token commands carry per region
 [arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-prefill-peel")]
 def private rdec_peel_fits(t : Model; s : Session; npos : int64) : bool {
     let c = t.config
@@ -4001,9 +3986,6 @@ def private rdec_peel_fits(t : Model; s : Session; npos : int64) : bool {
     return npos == 1l || npos <= rdec_token_n_rows()
 }
 
-//! `npos` rows from `start_pos` through the token commands over region `r` - one row the one-row command, more the N-row
-//! command with every row in the session's region, row i's keys ending at its own position - the last row's logits landing
-//! in the session's; the rows stay on the device as the chain leaves them
 [arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-prefill-peel")]
 def private rdec_prefill_peel(t : Model; var s : Session; r, npos, start_pos : int64) {
     let c = t.config
@@ -4011,7 +3993,7 @@ def private rdec_prefill_peel(t : Model; var s : Session; r, npos, start_pos : i
     let ce = g_rdec_cos_elems
     g_rdec_x_n |> grow_resize(dim * npos)
     g_rdec_cos_n |> grow_resize(ce * npos)
-    if (s.embed_gpu_pending) {   //! the embed gate stashed the ids for the driver's gather: the peel embeds them on the host
+    if (s.embed_gpu_pending) {
         for (i in range64(npos)) {
             embed_row(t, s.embed_gpu_tokens[i], unsafe(addr(g_rdec_x_n[i * dim])))
         }
@@ -4039,7 +4021,7 @@ def private rdec_prefill_peel(t : Model; var s : Session; r, npos, start_pos : i
             g_rdec_poss[i] = start_pos + i
             g_rdec_cnts[i] = start_pos + i + 1l
             g_rdec_regs[i] = r
-            g_rdec_lrows[i] = null   //! a row before the last lands its pick alone, which nobody reads
+            g_rdec_lrows[i] = null
         }
         g_rdec_lrows[npos - 1l] = unsafe(addr(s.logits[0]))
         rdec_token_n(g_rdec_x_n, g_rdec_cos_n, g_rdec_ple_rows, false, g_rdec_poss, g_rdec_cnts, g_rdec_regs, npos, g_rdec_lrows, g_rdec_picks)
@@ -4125,9 +4107,6 @@ def private rdec_read_row_kv(t : Model; var s : Session; pos : int64) {
 var private @scratch g_rdec_bregs : array<int64>   //! a batched step's region a row, bound before its first group runs
 var private @scratch g_rdec_grp_toks : array<int64>
 
-//! the step's rows through the N-row token command in the fewest groups of the rows it steps at once, one weight pass a
-//! group, the groups balanced so none is a single row; every row's region bound first, so a row the regions refuse
-//! declines the step before any row steps; false where they do
 [arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
 def private rdec_batch_rows_at_once(t : Model; ws : BatchWorkspace; var sessions : array<Session?>; nrows : int64) : bool {
     let at_once = rdec_token_n_rows()
@@ -4140,7 +4119,7 @@ def private rdec_batch_rows_at_once(t : Model; ws : BatchWorkspace; var sessions
             return false
         }
         for (j in range64(i)) {
-            if (g_rdec_bregs[j] == r) {   //! two rows one region: the row-at-a-time loop resyncs between them
+            if (g_rdec_bregs[j] == r) {
                 return false
             }
         }
@@ -4227,7 +4206,7 @@ def private rdec_batch_one_row(t : Model; ws : BatchWorkspace; var s : Session; 
     g_rdec_cossin |> grow_resize(g_rdec_cos_elems)
     g_rdec_tmp |> grow_resize(c.vocab_size)
     rdec_select_region(r)
-    copy_floats(ws.scr.x_b, i * dim, g_rdec_x, 0l, dim)   // this row's embedded residual is already in ws.scr.x_b; its rope row for pos
+    copy_floats(ws.scr.x_b, i * dim, g_rdec_x, 0l, dim)
     rdec_rope_rows(t, ws.rope_positions[i], g_rdec_cossin, 0l)
     if (has_ple(c)) {
         rdec_batch_ple_row(t, ws, i)

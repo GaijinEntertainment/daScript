@@ -31,7 +31,8 @@ anchor.
   streams' rows while the quantum leaves room - so two prompts' tails cost about one window where
   the GPU serves segments (`ARCHITECTURE_GPU_PREFILL_WINDOW.md#prefill-segments`) and run one after
   the other elsewhere; a stream with a media span ahead takes no segment, and when the first
-  prefilling stream is one, or the scheduler is device-home, the tick is that stream's own call,
+  prefilling stream is one, or the scheduler is device-home on a model whose device prefill cannot
+  continue past position zero (a recurrent model), the tick is that stream's own call,
   `prefill_one_chunk`) - the quantum `chunk_tokens` while
   a stream decodes, since the call is the stall every decoding stream waits out, and at least `idle_chunk_tokens`
   while none does, since a prefill window's cost is mostly fixed and nothing waits on it; `chunk_defaults` names

@@ -127,10 +127,7 @@ let private PEEL_BAR_REL = 0.06
 let private PEEL_OPEN = 40l
 let private PEEL_STEPS = 4l
 
-//! the short window's peel on `file`: a 40-row opening, then a tail of 1, 2, 5 and 8 rows as one call - the peel counted,
-//! one prefill counted - and four fed steps, every row within the split bar of the same tail stepped a row at a time through
-//! the one-row command on a second session, the row one step off as the control; a tail one row past the N-row command's rows
-//! takes the chain (no peel counted, the prefill counted) and holds the same bar
+//! tails of 1, 2, 5 and 8 rows peel (a peel and a prefill counted) within the split bar of the row-at-a-time tail; one row more takes the chain
 def private llama_peel(t : T?; file : string) {
     let path = llama_model_path(t, file)
     if (empty(path)) return

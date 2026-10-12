@@ -1366,7 +1366,7 @@ class MetalPreAddRms : MetalTgReduceBase {
 
 //! The fused rope and K/V store at one row, on the template both homes stamp (`GkRopeKvStore`): the q and k projections in the
 //! one QKV buffer (ksrc its second view, vsrc its view at the v offset), the mirror K and V rows bound at their (layer, pos)
-//! offsets, this position's rope row bound at its offset. Replaces the rope_qk + kv_store dispatch pair.
+//! offsets, this position's rope row bound at its offset.
 [metal_dispatch(name = "enc_rpst16_c", pso = "g_pso_rpst16", tg = 64, grid = "npairs/64", params = "npairs : int64")]
 class MetalRopeStoreF16 : GkRopeKvStore {
     typedef KT = float16
@@ -2667,9 +2667,7 @@ struct MoeGemvArgs {
     hasb : uint
 }
 
-// The fused rope + KV-row store family binds its uniforms as ONE kargs value (the one-row form's are the shared template's,
-// `GkRopeKvArgs`). `rot` is the partial-rotary width (== head_size for full rope); the batched forms add the layer prefix and
-// `qstride`, the per-row stride of the fused QKV block.
+//! the batched rope + K/V-row store's kargs (the one-row form's are `GkRopeKvArgs`): `rot` the partial-rotary width (head_size for full rope), `qstride` a row's stride in the fused QKV block
 struct RopeStoreBArgs {
     lay : uint
     kv_dim : uint
