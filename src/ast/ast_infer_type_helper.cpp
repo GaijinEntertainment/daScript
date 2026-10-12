@@ -752,6 +752,7 @@ namespace das {
                 if (!type->typeMacroExpr[0]->type->isAutoOrAlias()) {
                     auto resType = new TypeDecl(*type->typeMacroExpr[0]->type);
                     resType->ref = false;
+                    if ( !resType->at.fileInfo ) resType->at = type->at;
                     TypeDecl::applyAutoContracts(resType, type);
                     type = resType;
                     return true;
