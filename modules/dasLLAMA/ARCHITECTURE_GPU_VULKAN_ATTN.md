@@ -282,3 +282,18 @@ to the engine, which prefills the segments one at a time through the one-session
 scheduler's prefill tick hands a device-home scheduler its segments like a host-cached one, but for
 a model whose device prefill cannot continue past zero, which takes each stream's whole head alone.
 The witness is `vk_rdec_prefill_segment_windows`; the driver counts a prefill a segment.
+
+### The short window's peel {#vk-prefill-peel}
+
+A prefill of at most the rows the N-row token command steps at once (`vk_rdec_token_n_rows`;
+one row is the one-row command's) skips the window chain: `rdec_prefill_peel` embeds the rows on
+the host (the ids the embed gate stashed, or the rows `forward_prefill` embedded) and runs them
+through the token command with every row in the session's region at its own position, row i's
+key count its own position plus one, so a row never reads a row after it; the last row lands the
+session's logits, the rows before it land picks nobody reads. The window chain costs a short
+continuation about two decode steps whatever its row count (a one-row window on the 3B reads
+13 ms against a 6.5 ms step); the token command reads the weights once for the rows. The peel
+fits a chain with no recurrent state, side rows, wide residual, NextN head or host experts - what
+the token commands carry per region (`rdec_peel_fits`); the rest take the chain. The rows stay on
+the device as the chain leaves them, and the bookkeeping after either form is `rdec_prefill_landed`.
+The witness is `moe_gpu_resident_peels`; a peel counts as a served prefill too.

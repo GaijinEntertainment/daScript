@@ -121,3 +121,76 @@ def test_gpu_resident_llama_3b(t : T?) {
 def test_gpu_resident_llama_8b_k(t : T?) {
     llama_cells(t, "Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf")
 }
+
+//! of the step's max |logit|: the regions rig's split bar - the N-row command's K-quant sites round apart from the one-row command's
+let private PEEL_BAR_REL = 0.06
+let private PEEL_OPEN = 40l
+let private PEEL_STEPS = 4l
+
+//! the short window's peel on `file`: a 40-row opening, then a tail of 1, 2, 5 and 8 rows as one call - the peel counted,
+//! one prefill counted - and four fed steps, every row within the split bar of the same tail stepped a row at a time through
+//! the one-row command on a second session, the row one step off as the control; a tail one row past the N-row command's rows
+//! takes the chain (no peel counted, the prefill counted) and holds the same bar
+def private llama_peel(t : T?; file : string) {
+    let path = llama_model_path(t, file)
+    if (empty(path)) return
+    var tr <- load_model_(path, QuantMode.q8)
+    t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the model (the load log names any decline)")
+    with_dasllama_jobque_() {
+        let at_once = rdec_token_n_rows()
+        t |> success(at_once >= 8l, "the N-row token command steps eight rows or more at once on the model ({at_once})")
+        var opening <- resident_prompt(PEEL_OPEN)
+        var feed <- resident_feed(at_once + 1l)
+        for (k in [1l, 2l, 5l, 8l, at_once + 1l]) {
+            var tail <- [for (i in range64(k)); feed[i]]
+            var steps <- ramp_ids(PEEL_STEPS, k, 2500l, 71l, 4500l)
+            var sa <- create_session(tr, gpu_device_session_dtype_())
+            eval(tr, sa, opening)
+            let peels0 = moe_gpu_resident_peels()
+            let pf0 = moe_gpu_resident_prefills()
+            eval(tr, sa, tail)
+            t |> equal(moe_gpu_resident_peels() - peels0, k <= at_once ? 1l : 0l, "a tail of {k} rows {k <= at_once ? "peels through the token command" : "takes the window chain"}")
+            t |> equal(moe_gpu_resident_prefills() - pf0, 1l, "the tail of {k} counted one served prefill")
+            var got <- [logits_of(sa, tr.config.vocab_size)]
+            for (st in range64(PEEL_STEPS)) {
+                forward(tr, sa, steps[st], PEEL_OPEN + k + st)
+                got |> emplace <| logits_of(sa, tr.config.vocab_size)
+            }
+            var sb <- create_session(tr, gpu_device_session_dtype_())
+            eval(tr, sb, opening)
+            for (i in range64(k)) {
+                forward(tr, sb, tail[i], PEEL_OPEN + i)
+            }
+            var want <- [logits_of(sb, tr.config.vocab_size)]
+            for (st in range64(PEEL_STEPS)) {
+                forward(tr, sb, steps[st], PEEL_OPEN + k + st)
+                want |> emplace <| logits_of(sb, tr.config.vocab_size)
+            }
+            rows_within_control(t, "{file}, a tail of {k} rows", got, want, PEEL_BAR_REL, 1l, 1.0, $(r) => r == 0l ? "the tail's last row" : "step {r}")
+            served_every_call(t)
+            delete sa
+            delete sb
+            delete got
+            delete want
+            delete tail
+            delete steps
+        }
+        delete opening
+        delete feed
+    }
+    delete tr
+}
+
+[test]
+def test_gpu_resident_llama_peel_1b(t : T?) {
+    t |> run("Llama-3.2-1B Q8_0: a short tail peels through the token commands and reads what the one-row steps read") @(t : T?) {
+        llama_peel(t, "Llama-3.2-1B-Instruct-Q8_0.gguf")
+    }
+}
+
+[test]
+def test_gpu_resident_llama_peel_1b_k(t : T?) {
+    t |> run("Llama-3.2-1B Q4_K_M: the same on the K-quant planes' N-column leaves") @(t : T?) {
+        llama_peel(t, "Llama-3.2-1B-Instruct-Q4_K_M.gguf")
+    }
+}

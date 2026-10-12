@@ -3925,6 +3925,15 @@ def private vulkan_resident_prefill_go(t : Model; var s : Session; npos, start_p
     if (start_pos == 0l && c.recr_mask != 0ul) {
         dn_reset(s)
     }
+    if (rdec_peel_fits(t, s, npos)) {
+        let ts_peel = ref_time_ticks()
+        rdec_prefill_peel(t, s, r, npos, start_pos)
+        if (g_env_gpu.gpu_prof) {
+            to_log(LOG_INFO, "dasLLAMA: resident prefill peeled {npos} rows through the token command in {get_time_usec(ts_peel)} us\n")   // nolint:PERF026,PERF028 — the profile flag's report leg
+        }
+        rdec_prefill_landed(t, s, r, npos, start_pos, npos - 1l)
+        return true
+    }
     let ce = g_rdec_cos_elems
     g_rdec_tmp |> grow_resize(npos * ce)   // the rope-plane batch borrows the scratch row
     var cb & = g_rdec_tmp
@@ -3951,10 +3960,18 @@ def private vulkan_resident_prefill_go(t : Model; var s : Session; npos, start_p
             }
         }
     }
-    rdec_stash_carry(c, s, 0l, start_pos + npos)
     if (g_env_gpu.gpu_prof) {
         to_log(LOG_INFO, "dasLLAMA: resident prefill host: {npos} rows, rope rows {us_rope} us, ple gather {us_gather} us, the driver's run {get_time_usec(ts_run) - us_gather} us\n")   // nolint:PERF026,PERF028 — the profile flag's report leg
     }
+    rdec_prefill_landed(t, s, r, npos, start_pos, 0l)
+    return true
+}
+
+//! the served prefill's bookkeeping, the chain's or the peel's: the carry from landed row `carry_row`, the recurrent slots
+//! owned, the region claimed (a fresh prompt) or its count moved (a continuation), the head rows, the counters
+def private rdec_prefill_landed(t : Model; var s : Session; r, npos, start_pos, carry_row : int64) {
+    let c = t.config
+    rdec_stash_carry(c, s, carry_row, start_pos + npos)
     if (c.recr_mask != 0ul) {
         rdec_dn_own_all(s, c.n_layers, true)
         s.dn_pos = npos
@@ -3968,7 +3985,66 @@ def private vulkan_resident_prefill_go(t : Model; var s : Session; npos, start_p
     s.rdec_host_current = false
     g_rdec_prefills++
     prefill_override_logits_done()
-    return true
+}
+
+var private g_rdec_peels = 0l
+
+//! How many short windows the resident driver peeled through the token commands in this process (a cell's served witness)
+def moe_gpu_resident_peels() : int64 => g_rdec_peels
+
+//! the short window's peel fits: at most the rows the N-row command steps at once (one row is the one-row command's) on a chain
+//! with no recurrent state, side rows, wide residual, NextN head or host experts - what the token commands carry per region
+[arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-prefill-peel")]
+def private rdec_peel_fits(t : Model; s : Session; npos : int64) : bool {
+    let c = t.config
+    return false if (c.recr_mask != 0ul || c.hyper_conn || has_ple(c) || c.n_layer_nextn > 0l || g_rdec_experts_host || s.ple_gpu_pending)
+    return npos == 1l || npos <= rdec_token_n_rows()
+}
+
+//! `npos` rows from `start_pos` through the token commands over region `r` - one row the one-row command, more the N-row
+//! command with every row in the session's region, row i's keys ending at its own position - the last row's logits landing
+//! in the session's; the rows stay on the device as the chain leaves them
+[arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-prefill-peel")]
+def private rdec_prefill_peel(t : Model; var s : Session; r, npos, start_pos : int64) {
+    let c = t.config
+    let dim = c.dim
+    let ce = g_rdec_cos_elems
+    g_rdec_x_n |> grow_resize(dim * npos)
+    g_rdec_cos_n |> grow_resize(ce * npos)
+    if (s.embed_gpu_pending) {   //! the embed gate stashed the ids for the driver's gather: the peel embeds them on the host
+        for (i in range64(npos)) {
+            embed_row(t, s.embed_gpu_tokens[i], unsafe(addr(g_rdec_x_n[i * dim])))
+        }
+        if (c.embed_scale != 1.0) {
+            scale_inplace(unsafe(addr(g_rdec_x_n[0])), c.embed_scale, dim * npos)
+        }
+        s.embed_gpu_pending = false
+    } else {
+        copy_floats(s.x_b, 0l, g_rdec_x_n, 0l, dim * npos)
+    }
+    for (i in range64(npos)) {
+        rdec_rope_rows(t, s.rope_pos_delta + start_pos + i, g_rdec_cos_n, i * ce)
+    }
+    g_rdec_ple_rows |> clear()
+    rdec_select_region(r)
+    if (npos == 1l) {
+        rdec_token(g_rdec_x_n, g_rdec_cos_n, g_rdec_ple_rows, start_pos, start_pos + 1l, false, s.logits)
+    } else {
+        g_rdec_poss |> resize(npos)
+        g_rdec_cnts |> resize(npos)
+        g_rdec_regs |> resize(npos)
+        g_rdec_lrows |> resize(npos)
+        g_rdec_picks |> resize(npos)
+        for (i in range64(npos)) {
+            g_rdec_poss[i] = start_pos + i
+            g_rdec_cnts[i] = start_pos + i + 1l
+            g_rdec_regs[i] = r
+            g_rdec_lrows[i] = null   //! a row before the last lands its pick alone, which nobody reads
+        }
+        g_rdec_lrows[npos - 1l] = unsafe(addr(s.logits[0]))
+        rdec_token_n(g_rdec_x_n, g_rdec_cos_n, g_rdec_ple_rows, false, g_rdec_poss, g_rdec_cnts, g_rdec_regs, npos, g_rdec_lrows, g_rdec_picks)
+    }
+    g_rdec_peels++
 }
 
 // the resident batch-decode override — each session SEQUENTIALLY through the single-session chain, in its own mirror region

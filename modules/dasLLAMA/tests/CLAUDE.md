@@ -1558,7 +1558,13 @@ GPU-served window in force while the driver is armed, the CPU window back after 
 also runs the batched bench row (`bench_tg_batched_rep`) with the driver homing two streams: a
 row asking more streams than the device homes refuses by name and reads 0, and a row it homes
 serves at a rate with every stream parked after it and no call passed to the CPU chain (a
-one-stream row is no batch - the step census counts it a row at a time and the row refuses). The forced-feed helpers it shares with the
+one-stream row is no batch - the step census counts it a row at a time and the row refuses); the 1B
+Q8_0 and Q4_K_M also run the short window's peel (`ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-prefill-peel`):
+after a 40-row opening a tail of 1, 2, 5 and 8 rows as one call peels through the token commands
+(`moe_gpu_resident_peels` up by one, one prefill counted) and, with four fed steps, reads within the
+split bar of the same tail stepped a row at a time on a second session, the row one step off the
+control; a tail one row past the N-row command's rows takes the chain, no peel counted, on the same
+bar. The forced-feed helpers it shares with the
 other resident files live in `_resident_feed.das`. Skips without the model or the armed tier.
 `test_gpu_resident_segments.das` - stocked suite, `-jit` only; the whole-model resident driver's
 SEGMENTED window (`ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-prefill-segments`, `DASLLAMA_GPU=1`) on
