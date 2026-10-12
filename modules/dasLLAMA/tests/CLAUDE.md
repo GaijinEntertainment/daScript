@@ -904,7 +904,13 @@ base and the eight-chunk split with the reduce at the same base, the header unde
 as the sentinel and every bar with its added-value poison; it skips on a device without the cm2
 tile family, the only tile the class rides. `test_vkd_f16_gemm_khr` runs the same fixture's direct
 arm through the KHR twin (the E-series projection off cm2) at three shapes, one with rows off the
-16-row fragment, wherever the device has KHR cooperative matrices at subgroup 32. `test_vkd_dn_family` holds the deltanet conv, the
+16-row fragment, wherever the device has KHR cooperative matrices at subgroup 32. the flash tile's lead arm in `test_vkd_fa_cm2` / `test_vkd_fa_khr`, `test_vkd_da_attn_b_row0` and the
+`rope_kv_b_row0_arm` of `test_vkd_rope_b_pair` dispatch the flash tile, the batched decode attention and the batched
+rope-store at a window row base past zero (`row0`, a segment's): the rows sit behind lead rows of poison in the q,
+out and projection planes, the lead rows untouched (the out plane's NaN sentinel, the q plane's poison) and the rows
+the oracle's; the three rope-store gates (`rope_kv_arm`, the Metal `rpst_flat_gate` and `rope_store_pocket_gate`)
+assert the roped q differs from its input at a rotated index, so the in-place compare has teeth;
+`test_vkd_dn_family` holds the deltanet conv, the
 fused step and the two-phase scan to CPU oracles at head sizes 64 and 128 (the step's one-part
 and two-part state columns, the scan's four- and eight-lane clusters), and the sigmoid out-gate stamps
 (`dn_step_sig_cls`, `dn_scan_p3_sig_cls`, the qwen4exp form) against the same oracles under sigmoid(z) with

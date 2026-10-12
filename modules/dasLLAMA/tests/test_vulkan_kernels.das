@@ -2964,12 +2964,16 @@ def private fa_tile_run(t : T?; khr : bool) {
         let w0 = 64      // nonzero window base: the causal bound crosses K tiles mid-window
         let scale = 0.125
         //! the sink arms (gpt-oss): the h64 stamps seeded with a per-head sink logit, whole and under a sliding window
-        for (arm in fixed_array((hs = 64, window = 0, sink = false), (hs = 128, window = 0, sink = false), (hs = 256, window = 0, sink = false),
-                (hs = 512, window = 0, sink = false), (hs = 128, window = 40, sink = false), (hs = 64, window = 0, sink = true), (hs = 64, window = 40, sink = true))) {
+        //! the lead arm: the rows sit `lead` rows into the q and out planes (`FaArgs.row0`, a segment's window row base), the lead rows poison the tile must leave
+        for (arm in fixed_array((hs = 64, window = 0, sink = false, lead = 0), (hs = 128, window = 0, sink = false, lead = 0), (hs = 256, window = 0, sink = false, lead = 0),
+                (hs = 512, window = 0, sink = false, lead = 0), (hs = 128, window = 40, sink = false, lead = 0), (hs = 64, window = 0, sink = true, lead = 0), (hs = 64, window = 40, sink = true, lead = 0),
+                (hs = 64, window = 0, sink = false, lead = 8))) {
             let hs = arm.hs
             let window = arm.window   //! a sliding layer's arm: the queries attend the `window` positions up to their own
             let sink = arm.sink
-            let stag = sink ? " sink" : ""
+            let lead = arm.lead
+            let qrows = lead + rows
+            let stag = sink ? " sink" : (lead > 0 ? " row0 {lead}" : "")
             var inscope sinkh : array<float>
             sinkh |> resize(nheads)
             for (hh in range(nheads)) {
@@ -2980,6 +2984,11 @@ def private fa_tile_run(t : T?; khr : bool) {
             let kpos = w0 + rows
             let kpad = kpos + FA_SHADOW_SLACK_ROWS
             var inscope qh <- row_fill(rows * qd, 41, 0, 0.05, 1.8, 73)
+            var inscope qfull : array<float>   //! the q plane the tile reads: `lead` rows of poison, then the rows
+            qfull |> resize(qrows * qd)
+            for (i in range(qrows * qd)) {
+                qfull[i] = i < lead * qd ? 10000.0 : qh[i - lead * qd]
+            }
             var inscope kh <- row_fill(kpos * kvd, 17, 0, 0.03, 1.4, 97)
             var inscope vh <- row_fill(kpos * kvd, 53, 0, 0.04, 1.7, 89)
             kh |> resize(kpad * kvd)
@@ -2991,15 +3000,15 @@ def private fa_tile_run(t : T?; khr : bool) {
             var inscope y_cls : array<float>
             var inscope y16_fused, y16_split : array<float16>
             with_cell_planes() $(var cp : CellPlanes) {
-                let pq = cp |> in_(qh)
+                let pq = cp |> in_(qfull)
                 let pk = cp |> in_(kh)
                 let pv = cp |> in_(vh)
                 let pk_shadow16 = cp |> out_words(int64(kpad * kvd) * 2l, NAN_SENTINEL_BITS)
                 let pv_shadow16 = cp |> out_words(int64(kpad * kvd) * 2l, NAN_SENTINEL_BITS)
-                let py = cp |> out_(rows * qd)
+                let py = cp |> out_(qrows * qd)
                 //! the compared f16 planes under a NaN in both halves: a dead leg on either side reads as a mismatch
-                let py16f = cp |> out_words(int64(rows * qd) * 2l, NAN_SENTINEL_BITS)   // the f16-out twin's plane
-                let py16s = cp |> out_words(int64(rows * qd) * 2l, NAN_SENTINEL_BITS)   // the split pair's: f32 out -> the clamp-convert
+                let py16f = cp |> out_words(int64(qrows * qd) * 2l, NAN_SENTINEL_BITS)   // the f16-out twin's plane
+                let py16s = cp |> out_words(int64(qrows * qd) * 2l, NAN_SENTINEL_BITS)   // the split pair's: f32 out -> the clamp-convert
                 let psink = cp |> in_(sinkh)
                 var sck = cp |> cls_set(fixed_array(pk, pk_shadow16), @@set_tower_clamp_cvt_cls)
                 var scv = cp |> cls_set(fixed_array(pv, pv_shadow16), @@set_tower_clamp_cvt_cls)
@@ -3009,21 +3018,31 @@ def private fa_tile_run(t : T?; khr : bool) {
                 var pcv = gk_f16_rows_args(uint(kpad * kvd))
                 let cvtwgs = int64((kpad * kvd / 4 + 255) / 256)
                 var pcf = FaArgs(rows = uint(rows), w0 = uint(w0), qd = uint(qd),
-                    kvd = uint(kvd), kv_mul = uint(kv_mul), kvbase = 0u, scale = scale, window = uint(window), sinkoff = 0u)
-                var pcy = gk_f16_rows_args(uint(rows * qd))
+                    kvd = uint(kvd), kv_mul = uint(kv_mul), kvbase = 0u, scale = scale, window = uint(window), sinkoff = 0u, row0 = uint(lead))
+                var pcy = gk_f16_rows_args(uint(qrows * qd))
                 cp |> cell_record() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
                     enc_tower_clamp_cvt_cls(raw2, h2, sck, pcv, cvtwgs)
                     enc_tower_clamp_cvt_cls(raw2, h2, scv, pcv, cvtwgs)
                     enc_fa_tile(khr, hs, false, false, sink, false, raw2, h2, sfa, pcf, nheads, rows)
                     enc_fa_tile(khr, hs, false, false, sink, true, raw2, h2, sfa16, pcf, nheads, rows)
-                    enc_tower_clamp_cvt_cls(raw2, h2, scy, pcy, int64((rows * qd / 4 + 255) / 256))   // the split pair's own convert over the f32 out: the fused twin's true peer
+                    enc_tower_clamp_cvt_cls(raw2, h2, scy, pcy, int64((qrows * qd / 4 + 255) / 256))   // the split pair's own convert over the f32 out: the fused twin's true peer
                 }
                 delete y_cls
                 delete y16_fused
                 delete y16_split
-                y_cls <- cp |> plane_run(py)
-                y16_fused <- cp |> plane_as(py16f, type<float16>, rows * qd)
-                y16_split <- cp |> plane_as(py16s, type<float16>, rows * qd)
+                var inscope y_full <- cp |> plane_run(py)
+                var inscope y16f_full <- cp |> plane_as(py16f, type<float16>, qrows * qd)
+                var inscope y16s_full <- cp |> plane_as(py16s, type<float16>, qrows * qd)
+                var lead_moved = 0
+                for (i in range(lead * qd)) {   //! the lead rows stay the out plane's NaN sentinel: the tile wrote nothing under its row base
+                    if (unsafe(reinterpret<uint>(y_full[i])) != NAN_SENTINEL_BITS) {
+                        lead_moved++
+                    }
+                }
+                t |> equal(lead_moved, 0, "{tag} hs {hs}{stag}: the {lead} lead rows under the row base stay untouched ({lead_moved} elements written)")
+                y_cls <- [for (i in range(rows * qd)); y_full[lead * qd + i]]
+                y16_fused <- [for (i in range(rows * qd)); y16f_full[lead * qd + i]]
+                y16_split <- [for (i in range(rows * qd)); y16s_full[lead * qd + i]]
             }
             // oracle mirrors the kernel's f16 grid: q pre-scales then rounds (the kernel's
             // MatrixTimesScalar-then-convert), K/V round through the shadow; softmax stays f32. The cm2 kernel's
@@ -3364,7 +3383,9 @@ def private gated_q_panel(f : DaAttnBFix) : array<float> {
 
 //! one batched decode attention dispatch through `stamp` (a DAB_*) over the fixture: q, the K and V mirrors (f16 halves on an f16
 //! stamp), the out plane under the sentinel, a workgroup a head per stamp tile of rows; the rows come back
-def private da_attn_b_run(f : DaAttnBFix; stamp : int; scale, cap : float; window : int) : array<float> {
+//! under `lead` > 0 the rows sit `lead` rows into the q and out planes (`DaAttnBArgs.row0`, a segment's window row base) behind
+//! poison rows, and the WHOLE out plane comes back - the lead rows at the NaN sentinel, then the rows
+def private da_attn_b_run(f : DaAttnBFix; stamp : int; scale, cap : float; window : int; lead : int = 0) : array<float> {
     var y : array<float>
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let f16 = dab_f16(stamp)
@@ -3372,18 +3393,22 @@ def private da_attn_b_run(f : DaAttnBFix; stamp : int; scale, cap : float; windo
         let qd = f.nheads * f.hs
         let kvd = (f.nheads / f.kv_mul) * f.hs
         let gated = !empty(f.gate)
+        let qrow = gated ? 2 * qd : qd
+        var qlead <- [for (_i in range(lead * qrow)); 10000.0]
         with_cell_planes() $(var cp : CellPlanes) {
-            let pq = gated ? in_(cp, gated_q_panel(f)) : in_(cp, f.qh)
+            var qrows <- gated ? gated_q_panel(f) : clone_to_move(f.qh)
+            qlead |> push_from(qrows)
+            let pq = cp |> in_(qlead)
             let pk = f16 ? in_plain(cp, pack_f16(f.kh)) : in_(cp, f.kh)
             let pv = f16 ? in_plain(cp, pack_f16(f.vh)) : in_(cp, f.vh)
-            let py = cp |> out_(f.npos * qd)
+            let py = cp |> out_((lead + f.npos) * qd)
             let planes = fixed_array(pq, pk, pv, py)
             let bufs = gather_planes(cp.dev, planes)
             let sizes = gather_planes(cp.bytes, planes)
             let bits = gather_planes(cp.hazard_bit, planes)
             var pc = DaAttnBArgs(npos = uint(f.npos), nh = uint(f.nheads), kvd = uint(kvd), hs = uint(f.hs), kv_mul = uint(f.kv_mul),
                 kbase = uint(f.kbase), vbase = uint(f.vbase), w0 = uint(f.w0), scale = scale, window = uint(window), cap = cap,
-                qhs = gated ? uint(2 * f.hs) : 0u, gated = gated ? 1u : 0u)
+                qhs = gated ? uint(2 * f.hs) : 0u, gated = gated ? 1u : 0u, row0 = uint(lead))
             let wgs = int64(f.nheads * ((f.npos + tile - 1) / tile))
             cp |> cell_record() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
                 if (stamp == DAB_B) {
@@ -3410,6 +3435,44 @@ def private da_attn_b_run(f : DaAttnBFix; stamp : int; scale, cap : float; windo
         }
     }
     return <- y
+}
+
+//! the batched decode attention at a row base past zero: the rows sit three rows into the q and out planes behind poison, the
+//! lead rows of the out plane stay at the sentinel and the rows read the oracle's
+[test]
+def test_vkd_da_attn_b_row0(t0 : T?) {
+    t0 |> run("da_attn_b at a row base: the lead rows untouched, the rows from row0 the CPU oracle's") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_moe_init()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            if (!ensure_da_attn_b_cls()) {
+                t |> skip("da_attn_b class declined on this device (workgroup cap)")
+                return
+            }
+            let lead = 3
+            var f <- da_attn_b_fix(13, 4, 2, 128, 32, 64, 160, 0.05, 1.8, 0.03, 1.4, false)
+            let qd = f.nheads * f.hs
+            var inscope y_full <- da_attn_b_run(f, DAB_B, 0.125, 0.0, 0, lead)
+            var inscope y_ref <- da_attn_b_ref(f, 0.125, 0, 0.0)
+            var lead_moved = 0
+            for (i in range(lead * qd)) {
+                if (unsafe(reinterpret<uint>(y_full[i])) != NAN_SENTINEL_BITS) {
+                    lead_moved++
+                }
+            }
+            t |> equal(lead_moved, 0, "the {lead} lead rows under the row base stay at the sentinel ({lead_moved} elements written)")
+            var inscope y_cls <- [for (i in range(f.npos * qd)); y_full[lead * qd + i]]
+            let bad = mismatch_approx(y_cls, y_ref)
+            t |> success(bad == 0, "da_attn_b at row0 {lead} matches the CPU oracle ({bad} of {f.npos * qd} off)")
+            y_ref[0] += 0.5
+            t |> success(mismatch_approx(y_cls, y_ref) > 0, "the bar reds a poisoned oracle element")
+            delete f
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
 }
 
 [test]
@@ -5225,6 +5288,77 @@ def private qkn_rope_n_rows(t : T?; q0h, kvh, csh, wnh, bh : array<float>; pc) {
     delete cs2h
 }
 
+//! the batched rope + K/V store at a row base past zero (`RopeKvBArgs.row0`, a segment's window row base): the positions' rows
+//! sit two rows into the q, the merged [k | v] and the cos/sin planes behind poison rows, the q rows ahead untouched and the
+//! mirrors as the one-segment arm lands them
+def private rope_kv_b_row0_arm(t : T?) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        let nh = 4
+        let nkvh = 2
+        let hs = 64
+        let half = hs / 2
+        let qd = nh * hs
+        let kvd = nkvh * hs
+        let npos = 5
+        let pos0 = 7
+        let lead = 2
+        let layerbase = 256
+        let voff = npos * kvd
+        let ppp = (nh + nkvh) * half
+        let kpair0 = nh * half
+        let mirn = layerbase + (pos0 + npos) * kvd
+        var q0h <- row_fill(npos * qd, 31, 0, 0.05, 1.6, 67)
+        var kvh <- row_fill(voff + npos * kvd, 23, 0, 0.04, 1.5, 71)
+        var csh <- row_fill(npos * hs, 13, 0, 0.045, 0.9, 41)
+        let bh : array<float>
+        var oref <- rope_kv_b_ref(q0h, kvh, bh, csh, npos, pos0, layerbase, 0, false)
+        var qlead <- [for (i in range((lead + npos) * qd)); i < lead * qd ? 10000.0 : q0h[i - lead * qd]]
+        var kvm_lead <- [for (_i in range((lead + npos) * 2 * kvd)); 10000.0]   //! the merged [k | v] rows from row `lead`
+        for (p in range(npos)) {
+            for (c in range(kvd)) {
+                kvm_lead[(lead + p) * 2 * kvd + c] = kvh[p * kvd + c]
+                kvm_lead[(lead + p) * 2 * kvd + kvd + c] = kvh[voff + p * kvd + c]
+            }
+        }
+        var cs_lead <- [for (i in range((lead + npos) * hs)); i < lead * hs ? 10000.0 : csh[i - lead * hs]]
+        let wgs = (npos * ppp + 255) / 256
+        with_cell_planes() $(var cp : CellPlanes) {
+            let pq = cp |> io_(qlead)
+            let pkv = cp |> in_(kvm_lead)
+            let pkm = mirror_plane(cp, mirn, false)
+            let pvm = mirror_plane(cp, mirn, false)
+            let pcs = cp |> in_(cs_lead)
+            let planes = fixed_array(pq, pkv, pkm, pvm, pcs, pcs)
+            var sc = cls_set(cp, planes, @@set_rope_kv_b_cls)
+            var pc = RopeKvBArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), half = uint(half), neox = 1u, kpair0 = uint(kpair0),
+                ppp = uint(ppp), layerbase = uint(layerbase), npos = uint(npos), pos0 = uint(pos0), voff = uint(kvd), kstride = uint(2 * kvd),
+                boff = 0u, hasb = 0u, row0 = uint(lead))
+            cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                enc_rope_kv_b_cls(raw, h, sc, pc, int64(wgs))
+            }
+            var inscope q_cls <- cp |> plane_run(pq)
+            var inscope m_cls <- mirror_pair(cp, pkm, pvm, mirn, false)
+            var lead_moved = 0
+            for (i in range(lead * qd)) {
+                if (q_cls[i] != 10000.0) {
+                    lead_moved++
+                }
+            }
+            t |> equal(lead_moved, 0, "rope_kv_store_b at row0 {lead}: the {lead} lead q rows stay untouched ({lead_moved} elements written)")
+            var inscope q_rows <- [for (i in range(npos * qd)); q_cls[lead * qd + i]]
+            check_rows(t, "rope_kv_store_b at row0 {lead}, q", q_rows, oref.q, BAR_APPROX_CTRL, qd, hs)
+            mirror_rows_check(t, "rope_kv_store_b at row0 {lead}", m_cls, oref.mk, oref.mv, layerbase + pos0 * kvd, npos * kvd, mirn)
+        }
+        delete qlead
+        delete kvm_lead
+        delete cs_lead
+        delete q0h
+        delete kvh
+        delete csh
+        delete oref
+    }
+}
+
 [test]
 def test_vkd_rope_b_pair(t0 : T?) {
     t0 |> run("batch rope + fused qkn-rope class kernels == the CPU oracle") <| @(t : T?) {
@@ -5234,6 +5368,7 @@ def test_vkd_rope_b_pair(t0 : T?) {
                 return
             }
             rope_kv_b_arm(t, false, true)
+            rope_kv_b_row0_arm(t)
             qkn_rope_arm(t, false, true)
         } else {
             t |> skip("dasVulkan not present")
