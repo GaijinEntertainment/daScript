@@ -1221,11 +1221,13 @@ struct Model {
     we1_fmt : array<KqFmt>
     we2_fmt : array<KqFmt>
     we3_fmt : array<KqFmt>
-    // deltanet projection tags (recurrent layers; empty = all q8). CPU rail only: detect keeps
-    // these q8 whenever Metal or the GPU dn/dense tier could claim the planes (both bind dn q8)
+    // deltanet projection tags (recurrent layers; empty = all q8) - the file's format on every
+    // load, one plane per tag; beta/alpha carry their own (q8 where they ship F32, dn_ba_f32)
     dnqkv_fmt : array<KqFmt>
     dngate_fmt : array<KqFmt>
     dnout_fmt : array<KqFmt>
+    dnbeta_fmt : array<KqFmt>
+    dnalpha_fmt : array<KqFmt>
     wcls_fmt : KqFmt = KqFmt.q8
     emb_fmt : KqFmt = KqFmt.q8
     // gemma4 E-series PLE token table (per_layer_token_embd) — gather-only (whole superblock-
@@ -1311,7 +1313,7 @@ struct Model {
     dn_dt_off : int64           // ssm_dt.bias: layers x dt_rank
     dn_a_off : int64            // ssm_a (= -exp(A_log), precomputed on disk): layers x dt_rank
     dn_norm_off : int64         // ssm_norm (gated out-norm weight, shared across heads): layers x d_state
-    // ssm_beta/ssm_alpha ride the DISK type: quantized files matmul them q8
+    // ssm_beta/ssm_alpha ride the DISK type: quantized files keep them in their tag's plane
     // (dnbeta/dnalpha_offs above); F32 files (35B-A3B) keep them fp32 in fblob and matmul fp32
     dn_ba_f32 : bool = false
     dn_betaf_off : int64        // fblob: layers x (dim x dt_rank), valid when dn_ba_f32

@@ -4077,7 +4077,7 @@ def enc_kq_site_b(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; woff, rows
     let bq = kq_quants_of(g_dev, t, fmt, woff)
     let bs = kq_scales_of(g_dev, t, fmt, woff)
     if (nrows > 8l) {
-        if (mp % 32l == 0l) {
+        if (mp % 32l == 0l && rows % 64l == 0l) {   //! the mul_mm grid is rows/64: a narrower plane (deltanet beta/alpha) takes the row forms
             enc_kq_gemm_mm_b(enc, fmt, bq.buf, bq.qoff, bs.buf, bs.soff, bs.doff, bx, by, uint64(ycol * 4l), bn, bys, mp, rows)
             return
         }

@@ -5033,7 +5033,7 @@ def private prefill_decline_caps(t : Model; npos : int64; span : bool = false) :
         }
     }
     //! non-std graphs decline; deltanet hybrids serve via dn_metal_ok (ds == 128 makes every dn GEMM width %128)
-    if ((!t.blocks.attn_is_std && !(t.config.hybrid_deltanet && dn_metal_ok(t))) ||
+    if ((!t.blocks.attn_is_std && !(t.config.hybrid_deltanet && dn_metal_ok(t) && dn_ba_metal_window_ok(t))) ||
             (!t.blocks.ffn_is_dense && (!moe_metal_ok(t) ||
              (t.config.n_ff_exp % 64l) != 0l || (t.config.dim % 64l) != 0l))) {
         return MetalPrefillDecline.graph
@@ -5855,6 +5855,30 @@ def private pf_kq_deep_stamps(fmt : KqFmt) : KqDeepStamps {
 [arch(at="../ARCHITECTURE_GPU_PREFILL.md#prefill-last-row-tail")]
 def private pf_enc_narrow_gemv(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; woff : int64; bx, by, bk, bn : MetalBuffer?; kdim, d : int64) {
     enc_site_gemv(enc, t, fmt, woff, d, kdim, bx, by, bk, bn)
+}
+
+//! one deltanet projection site of the window: a K-quant plane through its tag's mul_mm site, a q8 plane through the blob GEMM
+def private pf_enc_dn_site_mm(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; woff, rows : int64; bx, by, bk, bn : MetalBuffer?;
+                              mp, kdim, npos : int64; bxh : MetalBuffer?) {
+    if (fmt != KqFmt.q8) {
+        pf_enc_kq_site_mm(enc, t, fmt, woff, rows, bx, by, bk, bn, mp, 0ul, bxh, kdim, npos)
+        return
+    }
+    let bw = blob_of(g_dev, t, woff)
+    enc_gemm_mm(enc, bw.buf, bw.boff, bx, by, bk, bn, mp, rows, 0ul, kdim, npos, bxh)
+}
+
+//! one deltanet beta/alpha plane over the window's rows: q8 through the narrow-projection GEMV, a K-quant plane through its
+//! format's expert GEMV as a one-expert stack, every row a stream - no mul_mm stamp tiles a plane of dt_rank rows
+def private pf_enc_dn_ba_plane(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; woff : int64; bx, by, bk, bn : MetalBuffer?;
+                               dim, nvh, npos : int64) {
+    if (fmt == KqFmt.q8) {
+        let bw = blob_of(g_dev, t, woff)
+        pf_enc_dn_ba(enc, bw.buf, bw.boff, bw.buf, bx, by, 0ul, bk, bn, nvh, npos)
+        return
+    }
+    var ka = MoeGemvArgs(ndim = uint(dim), ddim = uint(nvh), eplane = 0u, xs = 0u, ss = 0u, bxs = uint(dim), bys = uint(nvh), hasb = 0u)
+    enc_moe_gemv(enc, t, fmt, woff, nvh, 1l, npos, bx, by, g_zero, ka)
 }
 
 [arch(at="../ARCHITECTURE_GPU_PREFILL.md#prefill-kq-tensor-scaffold")]
@@ -7432,10 +7456,8 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                 if (recr) {
                     if (g_pf_skip != "gemm") {
                         bxh_x = pf_hx_panel(enc, bxh_x, bxb, mp, dim, g_pf_skip == "act_cvt")
-                        let bwqkv = blob_of(g_dev, t, t.dnqkv_offs[l])
-                        enc_gemm_mm(enc, bwqkv.buf, bwqkv.boff, bxb, bdnqkv, u_dim, u_dn_cd, mp, cd_dn, 0ul, dim, npos, bxh_x)
-                        let bwz = blob_of(g_dev, t, t.dngate_offs[l])
-                        enc_gemm_mm(enc, bwz.buf, bwz.boff, bxb, bdnz, u_dim, u_dn_di, mp, di_dn, 0ul, dim, npos, bxh_x)
+                        pf_enc_dn_site_mm(enc, t, fmt_at(t.dnqkv_fmt, l), t.dnqkv_offs[l], cd_dn, bxb, bdnqkv, u_dim, u_dn_cd, mp, dim, npos, bxh_x)
+                        pf_enc_dn_site_mm(enc, t, fmt_at(t.dngate_fmt, l), t.dngate_offs[l], di_dn, bxb, bdnz, u_dim, u_dn_di, mp, dim, npos, bxh_x)
                         if (t.dn_ba_f32) {
                             //! F32-on-disk β/α (35B): fblob slabs ride the router-b f32 GEMV
                             var bw_bt = upload_region(addr < void? >(t.fblob[t.dn_betaf_off + l * dim * nvh_dn]), uint64(dim * nvh_dn * 4l))
@@ -7443,10 +7465,8 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                             var bw_al = upload_region(addr < void? >(t.fblob[t.dn_alphaf_off + l * dim * nvh_dn]), uint64(dim * nvh_dn * 4l))
                             pf_enc_slab_gemv_b(enc, bw_al, bxb, bdng, u_dim, u_dn_nvh, u_dn_np, nvh_dn, npos)
                         } else {
-                            let bwb = blob_of(g_dev, t, t.dnbeta_offs[l])
-                            pf_enc_dn_ba(enc, bwb.buf, bwb.boff, bwb.buf, bxb, bdnb, 0ul, u_dim, u_dn_nvh, nvh_dn, npos)
-                            let bwa = blob_of(g_dev, t, t.dnalpha_offs[l])
-                            pf_enc_dn_ba(enc, bwa.buf, bwa.boff, bwa.buf, bxb, bdng, 0ul, u_dim, u_dn_nvh, nvh_dn, npos)
+                            pf_enc_dn_ba_plane(enc, t, fmt_at(t.dnbeta_fmt, l), t.dnbeta_offs[l], bxb, bdnb, u_dim, u_dn_nvh, dim, nvh_dn, npos)
+                            pf_enc_dn_ba_plane(enc, t, fmt_at(t.dnalpha_fmt, l), t.dnalpha_offs[l], bxb, bdng, u_dim, u_dn_nvh, dim, nvh_dn, npos)
                         }
                     }
                     if (g_pf_skip != "attn" && g_pf_skip != "dn" && g_pf_skip != "nongemm") {
@@ -7489,8 +7509,8 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                         }
                     }
                     if (g_pf_skip != "gemm") {
-                        let bwo = blob_of(g_dev, t, t.dnout_offs[l])
-                        enc_gemm_mm(enc, bwo.buf, bwo.boff, bdno, bxb2, u_dn_di, u_dim, mp, dim, 0ul, di_dn, npos, pf_cvt_panel(enc, bdno, mp, di_dn, g_pf_skip == "act_cvt"))
+                        pf_enc_dn_site_mm(enc, t, fmt_at(t.dnout_fmt, l), t.dnout_offs[l], dim, bdno, bxb2, u_dn_di, u_dim, mp, di_dn, npos,
+                            pf_cvt_panel(enc, bdno, mp, di_dn, g_pf_skip == "act_cvt"))
                     }
                     dnli++
                 }

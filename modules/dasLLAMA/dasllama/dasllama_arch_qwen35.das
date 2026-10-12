@@ -194,8 +194,8 @@ def private dn_token_core(t : Model; var s : Session; l : int64; qkv : float con
     dn_token_epilogue(t, l, z, o)
 }
 
-//! the recurrent block's beta/alpha projections of `npos` rows: f32 rows on disk run fp32, q8 planes
-//! ride the q8 GEMM
+//! the recurrent block's beta/alpha projections of `npos` rows: f32 rows on disk run fp32, a quantized
+//! plane rides its tag's GEMM
 def private dn_beta_alpha_proj(t : Model; var s : Session; l, npos : int64) {
     let dim = t.config.dim
     let nvh = t.config.ssm_dt_rank
@@ -203,8 +203,8 @@ def private dn_beta_alpha_proj(t : Model; var s : Session; l, npos : int64) {
         mm_fblob_b(s.dn_beta_b, t, t.dn_betaf_off + l * dim * nvh, s.xb_b, dim, nvh, npos)
         mm_fblob_b(s.dn_g_b, t, t.dn_alphaf_off + l * dim * nvh, s.xb_b, dim, nvh, npos)
     } else {
-        mm_b_f(s, s.dn_beta_b, t, KqFmt.q8, t.dnbeta_offs[l], s.xb_b, dim, nvh, npos)
-        mm_b_f(s, s.dn_g_b, t, KqFmt.q8, t.dnalpha_offs[l], s.xb_b, dim, nvh, npos)
+        mm_b_f(s, s.dn_beta_b, t, fmt_at(t.dnbeta_fmt, l), t.dnbeta_offs[l], s.xb_b, dim, nvh, npos)
+        mm_b_f(s, s.dn_g_b, t, fmt_at(t.dnalpha_fmt, l), t.dnalpha_offs[l], s.xb_b, dim, nvh, npos)
     }
 }
 
@@ -335,8 +335,8 @@ def private deltanet_decode_gpu(t : Model; var s : Session; l : int64) {
         mm_fblob(s.dn_beta, t, t.dn_betaf_off + l * dim * nvh, s.xb, dim, nvh)
         mm_fblob(s.dn_g, t, t.dn_alphaf_off + l * dim * nvh, s.xb, dim, nvh)
     } else {
-        mm_f(s.dn_beta, t, KqFmt.q8, t.dnbeta_offs[l], s.xb, s.xq, s.xs, s.xbs, dim, nvh)
-        mm_f(s.dn_g, t, KqFmt.q8, t.dnalpha_offs[l], s.xb, s.xq, s.xs, s.xbs, dim, nvh)
+        mm_f(s.dn_beta, t, fmt_at(t.dnbeta_fmt, l), t.dnbeta_offs[l], s.xb, s.xq, s.xs, s.xbs, dim, nvh)
+        mm_f(s.dn_g, t, fmt_at(t.dnalpha_fmt, l), t.dnalpha_offs[l], s.xb, s.xq, s.xs, s.xbs, dim, nvh)
     }
     quantize_q8_0_into(s.xb, dim, s.xq, s.xs, 0l, 0l)   // one Q8_0 image serves the qkv AND z GEMVs
     prof_add("mm_qkv", ts_qkv)
@@ -381,8 +381,8 @@ def private deltanet_decode(t : Model; var s : Session; l : int64) {
         mm_fblob(s.dn_beta, t, t.dn_betaf_off + l * dim * nvh, s.xb, dim, nvh)
         mm_fblob(s.dn_g, t, t.dn_alphaf_off + l * dim * nvh, s.xb, dim, nvh)
     } else {
-        mm_f(s.dn_beta, t, KqFmt.q8, t.dnbeta_offs[l], s.xb, s.xq, s.xs, s.xbs, dim, nvh)
-        mm_f(s.dn_g, t, KqFmt.q8, t.dnalpha_offs[l], s.xb, s.xq, s.xs, s.xbs, dim, nvh)
+        mm_f(s.dn_beta, t, fmt_at(t.dnbeta_fmt, l), t.dnbeta_offs[l], s.xb, s.xq, s.xs, s.xbs, dim, nvh)
+        mm_f(s.dn_g, t, fmt_at(t.dnalpha_fmt, l), t.dnalpha_offs[l], s.xb, s.xq, s.xs, s.xbs, dim, nvh)
     }
     prof_add("mm_qkv", ts_qkv)
     let ts_attn = prof_ticks()

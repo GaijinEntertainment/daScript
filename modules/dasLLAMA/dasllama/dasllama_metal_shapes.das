@@ -225,11 +225,35 @@ def kv_share_ok(t : Model; l : int64) : bool {
 }
 
 // Wave D serve gate for the deltanet kernel set: fixed d_state 128 (the scan/l2/gate lane math
-// bakes 32 lanes x 4), conv taps <= 8 (hist registers). β/α projections: q8 planes ride the
-// site GEMVs; f32-on-disk (dn_ba_f32) rides the router-slab f32 GEMV off the fblob offsets.
+// bakes 32 lanes x 4), conv taps <= 8 (hist registers). Every projection plane rides its tag's
+// site GEMV; f32-on-disk β/α (dn_ba_f32) rides the router-slab f32 GEMV off the fblob offsets.
 def dn_metal_ok(t : Model) : bool {
     let c = t.config
-    return c.ssm_d_state == 128l && c.ssm_d_conv >= 2l && c.ssm_d_conv <= 8l
+    if (c.ssm_d_state != 128l || c.ssm_d_conv < 2l || c.ssm_d_conv > 8l) {
+        return false
+    }
+    for (l in range64(c.n_layers + c.n_layer_nextn)) {
+        if (layer_is_recurrent(c, l) && (!kq_fmt_one_row_gemv(fmt_at(t.dnqkv_fmt, l), c.dim) ||
+                !kq_fmt_one_row_gemv(fmt_at(t.dngate_fmt, l), c.dim) ||
+                !kq_fmt_one_row_gemv(fmt_at(t.dnout_fmt, l), c.ssm_d_inner) ||
+                !kq_fmt_one_row_gemv(fmt_at(t.dnbeta_fmt, l), c.dim) ||
+                !kq_fmt_one_row_gemv(fmt_at(t.dnalpha_fmt, l), c.dim))) {
+            return false
+        }
+    }
+    return true
+}
+
+//! the window's β/α rows: a K-quant plane rides its batched expert-form GEMV (one plane, every row a stream), so its
+//! format needs that form (`moe_fmt_metal_served`); q8 planes ride `pf_enc_dn_ba`, f32 ones the slab GEMV
+def dn_ba_metal_window_ok(t : Model) : bool {
+    let c = t.config
+    for (l in range64(c.n_layers + c.n_layer_nextn)) {
+        if (layer_is_recurrent(c, l) && (!moe_fmt_metal_served(fmt_at(t.dnbeta_fmt, l)) || !moe_fmt_metal_served(fmt_at(t.dnalpha_fmt, l)))) {
+            return false
+        }
+    }
+    return true
 }
 
 // (q8 32-blocks, kq 256-superblocks — the expert shift is index math, no base multiple)
@@ -319,7 +343,7 @@ def moe_metal_ok(t : Model) : bool {   // nolint:STYLE038 — flat per-shape ref
         if ((ege % 32l) != 0l) {
             return false
         }
-        for (l in range64(c.n_layers)) {
+        for (l in range64(c.n_layers + c.n_layer_nextn)) {
             if (t.we1_offs[l] < 0l || (t.we1_offs[l] % 128l) != 0l ||
                     t.we2_offs[l] < 0l || (t.we2_offs[l] % 128l) != 0l ||
                     t.we3_offs[l] < 0l || (t.we3_offs[l] % 128l) != 0l) {
@@ -328,7 +352,7 @@ def moe_metal_ok(t : Model) : bool {   // nolint:STYLE038 — flat per-shape ref
         }
         return true
     }
-    for (l in range64(c.n_layers)) {
+    for (l in range64(c.n_layers + c.n_layer_nextn)) {   //! the NextN head's routed stacks dispatch on the draft step like a trunk layer's
         let f1 = fmt_at(t.we1_fmt, l)
         let f2 = fmt_at(t.we2_fmt, l)
         let f3 = fmt_at(t.we3_fmt, l)

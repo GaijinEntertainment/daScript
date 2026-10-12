@@ -894,8 +894,8 @@ def private recurrent_single(var e : SingleLayerEnc; t : Model; enc : MetalCompu
     let nvh = c.ssm_dt_rank
     unsafe {
         if (g_skip != "gemv") {
-            enc_site_gemv(enc, t, KqFmt.q8, t.dnqkv_offs[l], cd, dim, r.bxb, r.bdn_qkv, r.u_dim, r.u_cd)
-            enc_site_gemv(enc, t, KqFmt.q8, t.dngate_offs[l], di, dim, r.bxb, r.bdn_z, r.u_dim, r.u_di)
+            enc_site_gemv(enc, t, fmt_at(t.dnqkv_fmt, l), t.dnqkv_offs[l], cd, dim, r.bxb, r.bdn_qkv, r.u_dim, r.u_cd)
+            enc_site_gemv(enc, t, fmt_at(t.dngate_fmt, l), t.dngate_offs[l], di, dim, r.bxb, r.bdn_z, r.u_dim, r.u_di)
             if (t.dn_ba_f32) {
                 // F32-on-disk β/α (35B): fblob slabs ride the router f32 GEMV
                 var bw_bt = upload_region(addr < void? >(t.fblob[t.dn_betaf_off + l * dim * nvh]), uint64(dim * nvh * 4l))
@@ -903,8 +903,8 @@ def private recurrent_single(var e : SingleLayerEnc; t : Model; enc : MetalCompu
                 var bw_al = upload_region(addr < void? >(t.fblob[t.dn_alphaf_off + l * dim * nvh]), uint64(dim * nvh * 4l))
                 enc_moe_router(enc, bw_al, r.bxb, r.bdn_g, r.u_dim, r.u_nvh, r.u_dim, g_one, g_zero, nvh, 1l)
             } else {
-                enc_site_gemv(enc, t, KqFmt.q8, t.dnbeta_offs[l], nvh, dim, r.bxb, r.bdn_b, r.u_dim, r.u_nvh)
-                enc_site_gemv(enc, t, KqFmt.q8, t.dnalpha_offs[l], nvh, dim, r.bxb, r.bdn_g, r.u_dim, r.u_nvh)
+                enc_site_gemv(enc, t, fmt_at(t.dnbeta_fmt, l), t.dnbeta_offs[l], nvh, dim, r.bxb, r.bdn_b, r.u_dim, r.u_nvh)
+                enc_site_gemv(enc, t, fmt_at(t.dnalpha_fmt, l), t.dnalpha_offs[l], nvh, dim, r.bxb, r.bdn_g, r.u_dim, r.u_nvh)
             }
         }
         if (g_skip != "attn") {
@@ -923,7 +923,7 @@ def private recurrent_single(var e : SingleLayerEnc; t : Model; enc : MetalCompu
             enc_dn_zgate(enc, c, r.bdn_o, r.bdn_z, bwn, dka, nvh, 1l)
         }
         if (g_skip != "gemv") {
-            enc_site_gemv(enc, t, KqFmt.q8, t.dnout_offs[l], dim, di, r.bdn_o, r.bxb2, r.u_di, r.u_dim)
+            enc_site_gemv(enc, t, fmt_at(t.dnout_fmt, l), t.dnout_offs[l], dim, di, r.bdn_o, r.bxb2, r.u_di, r.u_dim)
         }
     }
     dnli++
@@ -1918,32 +1918,46 @@ def private attention_verify(var e : VerifyLayerEnc; t : Model; enc : MetalCompu
     }
 }
 
-//! the verify rows' deltanet layer: the rows forms, the post-row0 state and history landing in
-//! the shadow region (reject flips to it), the split tape recording the pre-scan operands
-def private recurrent_verify(var e : VerifyLayerEnc; t : Model; enc : MetalComputeEncoder?; l : int64; var dnli : int64&) {
+//! the rows forms' deltanet input projections over `r.nrows` rows: qkv, z and beta/alpha, each plane through its
+//! tag's rows site (f32-on-disk beta/alpha through the router-slab f32 GEMV, one stream a row)
+def private enc_dn_proj_rows(r : StepRes; t : Model; enc : MetalComputeEncoder?; l : int64) {
     let c = t.config
     let dim = c.dim
-    let r & = unsafe(*e.r)
     let cd = dn_conv_dim(c)
     let di = c.ssm_d_inner
     let nvh = c.ssm_dt_rank
-    unsafe {
-        let bdnq = blob_of(g_dev, t, t.dnqkv_offs[l])
-        enc_gemv_rows(enc, r.nrows, bdnq.buf, bdnq.boff, r.bxb, r.bdn_qkv, r.u_dim, r.u_cd, r.u_cd, dim, cd, cd)
-        let bdng = blob_of(g_dev, t, t.dngate_offs[l])
-        enc_gemv_rows(enc, r.nrows, bdng.buf, bdng.boff, r.bxb, r.bdn_z, r.u_dim, r.u_di, r.u_di, dim, di, di)
-        if (t.dn_ba_f32) {
-            // F32-on-disk β/α: the router-slab f32 GEMV, one stream per verify row
+    let bt = rows_tier(r.nrows)
+    enc_batch_site(enc, t, bt, fmt_at(t.dnqkv_fmt, l), t.dnqkv_offs[l], cd, dim, cd, r.bxb, r.bdn_qkv, r.u_dim, r.u_cd, r.u_cd, 0l, false)
+    enc_batch_site(enc, t, bt, fmt_at(t.dngate_fmt, l), t.dngate_offs[l], di, dim, di, r.bxb, r.bdn_z, r.u_dim, r.u_di, r.u_di, 0l, false)
+    if (t.dn_ba_f32) {
+        unsafe {
             var bw_bt = upload_region(addr < void? >(t.fblob[t.dn_betaf_off + l * dim * nvh]), uint64(dim * nvh * 4l))
             enc_moe_router(enc, bw_bt, r.bxb, r.bdn_b, r.u_dim, r.u_nvh, r.u_dim, g_one, g_zero, nvh, r.nrows)
             var bw_al = upload_region(addr < void? >(t.fblob[t.dn_alphaf_off + l * dim * nvh]), uint64(dim * nvh * 4l))
             enc_moe_router(enc, bw_al, r.bxb, r.bdn_g, r.u_dim, r.u_nvh, r.u_dim, g_one, g_zero, nvh, r.nrows)
-        } else {
-            let bdnb = blob_of(g_dev, t, t.dnbeta_offs[l])
-            enc_gemv_rows(enc, r.nrows, bdnb.buf, bdnb.boff, r.bxb, r.bdn_b, r.u_dim, r.u_nvh, r.u_nvh, dim, nvh, nvh)
-            let bdna = blob_of(g_dev, t, t.dnalpha_offs[l])
-            enc_gemv_rows(enc, r.nrows, bdna.buf, bdna.boff, r.bxb, r.bdn_g, r.u_dim, r.u_nvh, r.u_nvh, dim, nvh, nvh)
         }
+    } else {
+        enc_batch_site(enc, t, bt, fmt_at(t.dnbeta_fmt, l), t.dnbeta_offs[l], nvh, dim, nvh, r.bxb, r.bdn_b, r.u_dim, r.u_nvh, r.u_nvh, 0l, false)
+        enc_batch_site(enc, t, bt, fmt_at(t.dnalpha_fmt, l), t.dnalpha_offs[l], nvh, dim, nvh, r.bxb, r.bdn_g, r.u_dim, r.u_nvh, r.u_nvh, 0l, false)
+    }
+}
+
+//! the rows forms' deltanet out projection over `r.nrows` rows, through the out plane's tag
+def private enc_dn_out_rows(r : StepRes; t : Model; enc : MetalComputeEncoder?; l : int64) {
+    let dim = t.config.dim
+    let di = t.config.ssm_d_inner
+    enc_batch_site(enc, t, rows_tier(r.nrows), fmt_at(t.dnout_fmt, l), t.dnout_offs[l], dim, di, dim, r.bdn_o, r.bxb2, r.u_di, r.u_dim, r.u_dim, 0l, false)
+}
+
+//! the verify rows' deltanet layer: the rows forms, the post-row0 state and history landing in
+//! the shadow region (reject flips to it), the split tape recording the pre-scan operands
+def private recurrent_verify(var e : VerifyLayerEnc; t : Model; enc : MetalComputeEncoder?; l : int64; var dnli : int64&) {
+    let c = t.config
+    let r & = unsafe(*e.r)
+    let cd = dn_conv_dim(c)
+    let nvh = c.ssm_dt_rank
+    unsafe {
+        enc_dn_proj_rows(r, t, enc, l)
         let sslice = uint64(dnli * nvh * c.ssm_d_state * c.ssm_d_state * 4l)
         let hslice = uint64(dnli * (c.ssm_d_conv - 1l) * cd * 4l)
         var bw_cv = upload_region(addr < void? >(t.fblob[t.dn_conv_off + l * c.ssm_d_conv * cd]), uint64(c.ssm_d_conv * cd * 4l))
@@ -1976,8 +1990,7 @@ def private recurrent_verify(var e : VerifyLayerEnc; t : Model; enc : MetalCompu
                 st, g.dn_salt + sslice, dka, c.ssm_d_state, nvh)
             enc_dn_zgate(enc, c, r.bdn_o, r.bdn_z, bwn, dka, nvh, g.nr)
         }
-        let bdno = blob_of(g_dev, t, t.dnout_offs[l])
-        enc_gemv_rows(enc, r.nrows, bdno.buf, bdno.boff, r.bdn_o, r.bxb2, r.u_di, r.u_dim, r.u_dim, di, dim, dim)
+        enc_dn_out_rows(r, t, enc, l)
     }
     dnli++
 }
@@ -3535,28 +3548,12 @@ def private attention_batch(var e : BatchLayerEnc; t : Model; enc : MetalCompute
 //! kargs picks the row's slice of the batch planes, the mirror bases pick its state
 def private recurrent_batch(var e : BatchLayerEnc; t : Model; enc : MetalComputeEncoder?; l : int64; var dnli : int64&) {
     let c = t.config
-    let dim = c.dim
     var r & = unsafe(*e.r)
     let cd = dn_conv_dim(c)
-    let di = c.ssm_d_inner
     let nvh = c.ssm_dt_rank
     unsafe {
         if (g_skip != "gemv") {
-            let bdnq = blob_of(g_dev, t, t.dnqkv_offs[l])
-            enc_gemv_rows(enc, r.nrows, bdnq.buf, bdnq.boff, r.bxb, r.bdn_qkv, r.u_dim, r.u_cd, r.u_cd, dim, cd, cd)
-            let bdng = blob_of(g_dev, t, t.dngate_offs[l])
-            enc_gemv_rows(enc, r.nrows, bdng.buf, bdng.boff, r.bxb, r.bdn_z, r.u_dim, r.u_di, r.u_di, dim, di, di)
-            if (t.dn_ba_f32) {
-                var bw_bt = upload_region(addr < void? >(t.fblob[t.dn_betaf_off + l * dim * nvh]), uint64(dim * nvh * 4l))
-                enc_moe_router(enc, bw_bt, r.bxb, r.bdn_b, r.u_dim, r.u_nvh, r.u_dim, g_one, g_zero, nvh, r.nrows)
-                var bw_al = upload_region(addr < void? >(t.fblob[t.dn_alphaf_off + l * dim * nvh]), uint64(dim * nvh * 4l))
-                enc_moe_router(enc, bw_al, r.bxb, r.bdn_g, r.u_dim, r.u_nvh, r.u_dim, g_one, g_zero, nvh, r.nrows)
-            } else {
-                let bdnb = blob_of(g_dev, t, t.dnbeta_offs[l])
-                enc_gemv_rows(enc, r.nrows, bdnb.buf, bdnb.boff, r.bxb, r.bdn_b, r.u_dim, r.u_nvh, r.u_nvh, dim, nvh, nvh)
-                let bdna = blob_of(g_dev, t, t.dnalpha_offs[l])
-                enc_gemv_rows(enc, r.nrows, bdna.buf, bdna.boff, r.bxb, r.bdn_g, r.u_dim, r.u_nvh, r.u_nvh, dim, nvh, nvh)
-            }
+            enc_dn_proj_rows(r, t, enc, l)
         }
         if (g_skip != "attn") {
             let sslice = uint64(dnli * nvh * c.ssm_d_state * c.ssm_d_state * 4l)
@@ -3579,8 +3576,7 @@ def private recurrent_batch(var e : BatchLayerEnc; t : Model; enc : MetalCompute
             }
         }
         if (g_skip != "gemv") {
-            let bdno = blob_of(g_dev, t, t.dnout_offs[l])
-            enc_gemv_rows(enc, r.nrows, bdno.buf, bdno.boff, r.bdn_o, r.bxb2, r.u_di, r.u_dim, r.u_dim, di, dim, dim)
+            enc_dn_out_rows(r, t, enc, l)
         }
     }
     dnli++

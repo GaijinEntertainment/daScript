@@ -103,7 +103,7 @@ that a question answered for one backend has an obvious address in the other. Th
   attention reads through the aliased row prefix. A MoE's shared expert rides the batch the same
   way it rides the verify rows: the gate dot as a one-row router GEMV over the rows, the gate|up
   pair and the down as rows forms over the expert panel once the routed W2 has consumed it. A
-  deltanet hybrid's recurrent layer runs its projections as rows GEMVs and then the conv, history,
+  deltanet hybrid's recurrent layer runs its projections as rows GEMVs, each plane by its tag, then the conv, history,
   norm, scan and gate a row at a time against that session's own `DnMirror` (`recurrent_batch`):
   the `DnArgs.row` field picks the row's slice of the batch planes, the mirror's live-region bases
   pick its state, and the mirrors advance when the step lands (`BatchLanding.dn_uids`); a step whose

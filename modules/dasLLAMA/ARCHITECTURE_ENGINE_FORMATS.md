@@ -155,7 +155,11 @@ conversion kind) as bytes on disk against bytes served with the delta, biggest o
 and the count of tags the row-length rule demoted to the q8 rail (each demotion logged by
 name as it is decided). The delta column is where a served form costs more than the file - a
 decoded scale row, an f32 copy of a quantized token table - and it is read as a number, not
-inferred from image sizes.
+inferred from image sizes. A hybrid's deltanet planes - qkv, z, out, beta and alpha - carry the
+file's format on every load, whatever backend is armed: one plane a tag, no q8 transcode beside
+it, the CPU chain and the Metal drivers each reading it in that format. The one exception is a
+grouped (qwen3next) file's out plane, whose input columns the load permutes across superblocks,
+so the q8 transcode is its only form.
 
 - **`dasllama_image.das`** - the prepared-model `.dlim` rail, and it is ONE rail
   (`ARCHITECTURE_IMAGE.md#there-is-one-way-to-load-a`). Nothing

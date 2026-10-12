@@ -282,16 +282,16 @@ def private layout_offsets(var t : Model) : LayoutSizes {   // nolint:STYLE037,S
             t.wo_offs |> push(kq_take(cur, fmt_at(t.wo_fmt, l), layer_qd(c, l) * dim))
         }
     }
-    if (c.recr_mask != 0ul) {  // deltanet big weights (recurrent layers only; kind-major regions; beta/alpha stay q8)
+    if (c.recr_mask != 0ul) {  // deltanet big weights (recurrent layers only; kind-major regions)
         let cd = dn_conv_dim(c)
         t.dnqkv_offs |> clear(); t.dnqkv_offs |> reserve(layers)
         for (l in range64(layers)) { t.dnqkv_offs |> push(layer_is_recurrent(c, l) ? kq_take(cur, fmt_at(t.dnqkv_fmt, l), dim * cd) : -1l) }
         t.dngate_offs |> clear(); t.dngate_offs |> reserve(layers)
         for (l in range64(layers)) { t.dngate_offs |> push(layer_is_recurrent(c, l) ? kq_take(cur, fmt_at(t.dngate_fmt, l), dim * c.ssm_d_inner) : -1l) }
         t.dnbeta_offs |> clear(); t.dnbeta_offs |> reserve(layers)
-        for (l in range64(layers)) { t.dnbeta_offs |> push(layer_is_recurrent(c, l) && !t.dn_ba_f32 ? kq_take(cur, KqFmt.q8, dim * c.ssm_dt_rank) : -1l) }
+        for (l in range64(layers)) { t.dnbeta_offs |> push(layer_is_recurrent(c, l) && !t.dn_ba_f32 ? kq_take(cur, fmt_at(t.dnbeta_fmt, l), dim * c.ssm_dt_rank) : -1l) }
         t.dnalpha_offs |> clear(); t.dnalpha_offs |> reserve(layers)
-        for (l in range64(layers)) { t.dnalpha_offs |> push(layer_is_recurrent(c, l) && !t.dn_ba_f32 ? kq_take(cur, KqFmt.q8, dim * c.ssm_dt_rank) : -1l) }
+        for (l in range64(layers)) { t.dnalpha_offs |> push(layer_is_recurrent(c, l) && !t.dn_ba_f32 ? kq_take(cur, fmt_at(t.dnalpha_fmt, l), dim * c.ssm_dt_rank) : -1l) }
         t.dnout_offs |> clear(); t.dnout_offs |> reserve(layers)
         for (l in range64(layers)) { t.dnout_offs |> push(layer_is_recurrent(c, l) ? kq_take(cur, fmt_at(t.dnout_fmt, l), c.ssm_d_inner * dim) : -1l) }
     }
@@ -1373,16 +1373,19 @@ def private load_dn_grouped(m : GGUFMeta; bytes : array<uint8> | #; var t : Mode
     let nvpk = nvh / nk
     let hv = t.config.ssm_d_inner / nvh
     let qkr = 2l * nk * t.config.ssm_d_state    // fused qkv: the q+k rows stay put, v rows permute
-    load_big(m, bytes, "blk.{l}.attn_qkv.weight", t, t.dnqkv_offs[l], dim * qkr, scratch)
+    let fqkv = fmt_at(t.dnqkv_fmt, l)
+    let fz = fmt_at(t.dngate_fmt, l)
+    let fba = fmt_at(t.dnbeta_fmt, l)
+    load_big(m, bytes, "blk.{l}.attn_qkv.weight", t, t.dnqkv_offs[l], dim * qkr, scratch, 0l, fqkv)
     for (g in range64(nk)) {
         for (j in range64(nvpk)) {
             let vg = g * nvpk + j
             let vt = j * nk + g
-            load_big(m, bytes, "blk.{l}.attn_qkv.weight", t, t.dnqkv_offs[l] + (qkr + vt * hv) * dim, hv * dim, scratch, (qkr + vg * hv) * dim)
-            load_big(m, bytes, "blk.{l}.attn_gate.weight", t, t.dngate_offs[l] + vt * hv * dim, hv * dim, scratch, vg * hv * dim)
+            load_big(m, bytes, "blk.{l}.attn_qkv.weight", t, t.dnqkv_offs[l] + (qkr + vt * hv) * dim, hv * dim, scratch, (qkr + vg * hv) * dim, fqkv)
+            load_big(m, bytes, "blk.{l}.attn_gate.weight", t, t.dngate_offs[l] + vt * hv * dim, hv * dim, scratch, vg * hv * dim, fz)
             if (!t.dn_ba_f32) {   // fused ba rows per k-head group: [beta j.. ; alpha j..]
-                load_big(m, bytes, "blk.{l}.ssm_ba.weight", t, t.dnbeta_offs[l] + vt * dim, dim, scratch, (g * 2l * nvpk + j) * dim)
-                load_big(m, bytes, "blk.{l}.ssm_ba.weight", t, t.dnalpha_offs[l] + vt * dim, dim, scratch, ((g * 2l + 1l) * nvpk + j) * dim)
+                load_big(m, bytes, "blk.{l}.ssm_ba.weight", t, t.dnbeta_offs[l] + vt * dim, dim, scratch, (g * 2l * nvpk + j) * dim, fba)
+                load_big(m, bytes, "blk.{l}.ssm_ba.weight", t, t.dnalpha_offs[l] + vt * dim, dim, scratch, ((g * 2l + 1l) * nvpk + j) * dim, fba)
             }
         }
     }
@@ -1592,22 +1595,8 @@ def private detect_kq_formats(var t : Model; m : GGUFMeta) {   // nolint:STYLE03
         t.mtp_ehproj_fmt = kq_tag(m, "blk.{t.config.n_layers}.nextn.eh_proj.weight", 2l * t.config.dim)
         any ||= t.mtp_ehproj_fmt != KqFmt.q8
     }
-    let dn_native_driver = gpu_want_dn_native() && t.config.n_expert == 0l
-    if (t.config.recr_mask != 0ul && !t.dn_grouped
-            && get_metal_mode() == MetalMode.off
-            && (dn_native_driver || !(moe_gpu_tier_installed() && (gpu_want_dense() || gpu_want_dn() || gpu_want_dnd())))) {
-        t.dnqkv_fmt |> resize(layers)
-        t.dngate_fmt |> resize(layers)
-        t.dnout_fmt |> resize(layers)
-        for (l in range64(layers)) {
-            if (layer_is_recurrent(t.config, l)) {
-                t.dnqkv_fmt[l] = kq_tag(m, "blk.{l}.attn_qkv.weight", t.config.dim)
-                t.dngate_fmt[l] = kq_tag(m, "blk.{l}.attn_gate.weight", t.config.dim)
-                t.dnout_fmt[l] = kq_tag(m, "blk.{l}.ssm_out.weight", t.config.ssm_d_inner)
-                any ||= t.dnqkv_fmt[l] != KqFmt.q8 || t.dngate_fmt[l] != KqFmt.q8 || t.dnout_fmt[l] != KqFmt.q8
-            }
-        }
-    }
+    let dn_kq = detect_dn_formats(t, m, layers)
+    any ||= dn_kq
     // E-series PLE token table: gather-only whole rows; row length must be superblock-aligned
     if (has_ple(t.config) && (t.config.n_layers * t.config.n_embd_per_layer) % 256l == 0l) {
         t.ple_emb_fmt = kq_fmt_of(gguf_tensor_type(m, "per_layer_token_embd.weight"))
@@ -1627,8 +1616,38 @@ def private detect_kq_formats(var t : Model; m : GGUFMeta) {   // nolint:STYLE03
         delete t.dnqkv_fmt
         delete t.dngate_fmt
         delete t.dnout_fmt
+        delete t.dnbeta_fmt
+        delete t.dnalpha_fmt
     }
     t.kquant_native = any
+}
+
+//! the deltanet planes' tags off the file on every load; true when any is not q8
+def private detect_dn_formats(var t : Model; m : GGUFMeta; layers : int64) : bool {
+    var any = false
+    if (t.config.recr_mask != 0ul) {
+        t.dnqkv_fmt |> resize(layers)
+        t.dngate_fmt |> resize(layers)
+        t.dnout_fmt |> resize(layers)
+        t.dnbeta_fmt |> resize(layers)
+        t.dnalpha_fmt |> resize(layers)
+        for (l in range64(layers)) {
+            if (layer_is_recurrent(t.config, l)) {
+                t.dnqkv_fmt[l] = kq_tag(m, "blk.{l}.attn_qkv.weight", t.config.dim)
+                t.dngate_fmt[l] = kq_tag(m, "blk.{l}.attn_gate.weight", t.config.dim)
+                if (!t.dn_grouped) {   // a grouped file's ssm_out permutes its input columns across superblocks: the q8 transcode is its only form
+                    t.dnout_fmt[l] = kq_tag(m, "blk.{l}.ssm_out.weight", t.config.ssm_d_inner)
+                }
+                if (!t.dn_ba_f32) {
+                    t.dnbeta_fmt[l] = kq_tag(m, t.dn_grouped ? "blk.{l}.ssm_ba.weight" : "blk.{l}.ssm_beta.weight", t.config.dim)
+                    t.dnalpha_fmt[l] = t.dn_grouped ? t.dnbeta_fmt[l] : kq_tag(m, "blk.{l}.ssm_alpha.weight", t.config.dim)
+                }
+                any ||= t.dnqkv_fmt[l] != KqFmt.q8 || t.dngate_fmt[l] != KqFmt.q8 || t.dnout_fmt[l] != KqFmt.q8
+                any ||= t.dnbeta_fmt[l] != KqFmt.q8 || t.dnalpha_fmt[l] != KqFmt.q8
+            }
+        }
+    }
+    return any
 }
 
 
@@ -2583,8 +2602,8 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
                     load_big(m, bytes, "blk.{l}.attn_qkv.weight", t, t.dnqkv_offs[l], dim * cd, scratch, 0l, fmt_at(t.dnqkv_fmt, l))
                     load_big(m, bytes, "blk.{l}.attn_gate.weight", t, t.dngate_offs[l], dim * t.config.ssm_d_inner, scratch, 0l, fmt_at(t.dngate_fmt, l))
                     if (!t.dn_ba_f32) {
-                        load_big(m, bytes, "blk.{l}.ssm_beta.weight", t, t.dnbeta_offs[l], dim * t.config.ssm_dt_rank, scratch)
-                        load_big(m, bytes, "blk.{l}.ssm_alpha.weight", t, t.dnalpha_offs[l], dim * t.config.ssm_dt_rank, scratch)
+                        load_big(m, bytes, "blk.{l}.ssm_beta.weight", t, t.dnbeta_offs[l], dim * t.config.ssm_dt_rank, scratch, 0l, fmt_at(t.dnbeta_fmt, l))
+                        load_big(m, bytes, "blk.{l}.ssm_alpha.weight", t, t.dnalpha_offs[l], dim * t.config.ssm_dt_rank, scratch, 0l, fmt_at(t.dnalpha_fmt, l))
                     }
                     load_big(m, bytes, "blk.{l}.ssm_out.weight", t, t.dnout_offs[l], t.config.ssm_d_inner * dim, scratch, 0l, fmt_at(t.dnout_fmt, l))
                 }

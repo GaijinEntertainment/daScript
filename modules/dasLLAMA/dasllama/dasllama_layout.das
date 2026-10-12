@@ -26,7 +26,7 @@ require math
 //! The pack-code version folded into every .dlim identity: bump it with ANY edit to a pack or
 //! repack walker in this file, so a cached image baked by the old code re-bakes instead of
 //! being mapped and served (an image's filename hash carries model + schema + this).
-let PACK_VERSION = 1
+let PACK_VERSION = 2
 
 // ===== metal-flavor blob transform (the blob-only .dlim redesign) =====
 
@@ -45,26 +45,26 @@ def private metal_blob_off_ok(off : int64; fmt : KqFmt) : bool {
 
 def private metal_blob_layout_ok(t : Model) : bool {
     let c = t.config
-    if (long_length(t.wq_offs) < c.n_layers) {
+    let nl = c.n_layers + c.n_layer_nextn   //! the NextN head's planes bind like a trunk layer's
+    if (long_length(t.wq_offs) < nl) {
         return false
     }
     // a pure-MoE file (qwen3moe) carries no dense FFN arrays — its expert stacks bind instead
-    let has_ffn = long_length(t.w1_offs) >= c.n_layers
-    let has_exps = (c.moe && long_length(t.we1_offs) >= c.n_layers &&
-        long_length(t.we2_offs) >= c.n_layers && long_length(t.we3_offs) >= c.n_layers)
-    let has_dn = c.recr_mask != 0ul && long_length(t.dnqkv_offs) >= c.n_layers
+    let has_ffn = long_length(t.w1_offs) >= nl
+    let has_exps = (c.moe && long_length(t.we1_offs) >= nl &&
+        long_length(t.we2_offs) >= nl && long_length(t.we3_offs) >= nl)
+    let has_dn = c.recr_mask != 0ul && long_length(t.dnqkv_offs) >= nl
     if (!has_ffn && !has_exps) {
         return false
     }
-    for (l in range64(c.n_layers)) {
-        // recurrent layers (Wave D): no attention tensors (offs -1, off_ok true); dn planes must be q8
+    for (l in range64(nl)) {
+        // recurrent layers carry no attention tensors (offs -1, off_ok true); each dn plane binds at its own format
         let dn_bad = (has_dn && layer_is_recurrent(c, l) &&
-            (!dn_layer_q8(t, l) ||
-             !metal_blob_off_ok(t.dnqkv_offs[l], KqFmt.q8) ||
-             !metal_blob_off_ok(t.dngate_offs[l], KqFmt.q8) ||
-             !metal_blob_off_ok(t.dnbeta_offs[l], KqFmt.q8) ||
-             !metal_blob_off_ok(t.dnalpha_offs[l], KqFmt.q8) ||
-             !metal_blob_off_ok(t.dnout_offs[l], KqFmt.q8)))
+            (!metal_blob_off_ok(t.dnqkv_offs[l], fmt_at(t.dnqkv_fmt, l)) ||
+             !metal_blob_off_ok(t.dngate_offs[l], fmt_at(t.dngate_fmt, l)) ||
+             !metal_blob_off_ok(t.dnbeta_offs[l], fmt_at(t.dnbeta_fmt, l)) ||
+             !metal_blob_off_ok(t.dnalpha_offs[l], fmt_at(t.dnalpha_fmt, l)) ||
+             !metal_blob_off_ok(t.dnout_offs[l], fmt_at(t.dnout_fmt, l))))
         if (dn_bad ||
                 !metal_blob_off_ok(t.wq_offs[l], fmt_at(t.wq_fmt, l)) ||
                 !metal_blob_off_ok(t.wk_offs[l], fmt_at(t.wk_fmt, l)) ||
@@ -379,8 +379,10 @@ def private collect_q8_regions(t : Model; var regs : array<StreamReg>) {
             if (fmt_at(t.dngate_fmt, l) == KqFmt.q8) {
                 push_repack(regs, 0, t.dngate_offs[l], dim, c.ssm_d_inner)
             }
-            if (t.dnbeta_offs[l] >= 0l) {   // -1 when beta/alpha ship F32 (fblob, no repack)
+            if (t.dnbeta_offs[l] >= 0l && fmt_at(t.dnbeta_fmt, l) == KqFmt.q8) {   // -1 when beta/alpha ship F32 (fblob, no repack)
                 push_repack(regs, 0, t.dnbeta_offs[l], dim, c.ssm_dt_rank)
+            }
+            if (t.dnalpha_offs[l] >= 0l && fmt_at(t.dnalpha_fmt, l) == KqFmt.q8) {
                 push_repack(regs, 0, t.dnalpha_offs[l], dim, c.ssm_dt_rank)
             }
             if (fmt_at(t.dnout_fmt, l) == KqFmt.q8) {
@@ -488,12 +490,16 @@ def private collect_kq_regions(t : Model; var regs : array<StreamReg>) {
     for (l in range64(c.n_layers + c.n_layer_nextn)) {   // + the MTP/NextN block at index n_layers
         let kv = layer_kv_dim(c, l)
         let qd = layer_qd(c, l)
-        // recurrent (deltanet) layers carry no attention projections — their kq planes are the dn triple
+        // recurrent (deltanet) layers carry no attention projections — their kq planes are the dn triple and beta/alpha
         if (layer_is_recurrent(c, l)) {
             let cd = dn_conv_dim(c)
             push_repack_kq(regs, fmt_at(t.dnqkv_fmt, l), t.dnqkv_offs[l], dim, cd)
             push_repack_kq(regs, fmt_at(t.dngate_fmt, l), t.dngate_offs[l], dim, c.ssm_d_inner)
             push_repack_kq(regs, fmt_at(t.dnout_fmt, l), t.dnout_offs[l], c.ssm_d_inner, dim)
+            if (!t.dn_ba_f32) {
+                push_repack_kq(regs, fmt_at(t.dnbeta_fmt, l), t.dnbeta_offs[l], dim, c.ssm_dt_rank)
+                push_repack_kq(regs, fmt_at(t.dnalpha_fmt, l), t.dnalpha_offs[l], dim, c.ssm_dt_rank)
+            }
         }
         if (t.wq_offs[l] >= 0l) {
             push_repack_kq(regs, fmt_at(t.wq_fmt, l), t.wq_offs[l], dim, qd * (c.q_gated ? 2l : 1l))

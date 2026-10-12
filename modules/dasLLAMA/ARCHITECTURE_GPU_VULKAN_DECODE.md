@@ -217,16 +217,16 @@ rows at ds 128, held in registers from the k.S / q.S pass through the update so 
 streams once each way with a row's loads coalesced across the columns, the out-norm's sum by a
 subgroup add, and the o row) and the out GEMV. Both heads leave the block output
 in `xb2`, so the residual add, the FFN and the next layer's norm never know which head ran. The
-deltanet qkv and z planes ride their file formats - the loader tags a dense hybrid's planes
-natively where this driver will be attempted or no GPU rail wants them (Metal off, the file not
-grouped, since a grouped file has no exact transcode, and either the whole-model driver armed on
-an expert-free model or a tier whose per-op dense and deltanet rails are unwanted; every other
-case transcodes them to q8, because Metal and the per-op rails bind deltanet q8 only), each GEMV
-dispatches per format and a superblock plane takes the Q8_K x feed. The out plane rides its
+deltanet qkv and z planes ride their file formats - the loader tags every hybrid's deltanet
+planes with the file's format on every load (a grouped file's out plane alone is the q8
+transcode: its input columns permute across superblocks), the Metal drivers read each by its tag,
+and the per-op rails, which bind a q8 triple only, leave a K-quant layer's deltanet on the CPU;
+each GEMV dispatches per format and a superblock plane takes the Q8_K x feed. The out plane rides its
 file format too: for a q8 plane the step writes the o row as Q8_0 blocks, for a superblock plane
 it writes the f32 row and the Q8_K requant - the attention head's wo twin - makes the out GEMV's
 feed, billed to the out role so the stamp count stands; the beta and alpha rows are q8 arena planes when
-the file carries them quantized, or - the F32-on-disk case - one f16 device copy of every
+the file carries them as Q8_0 (a layer whose beta/alpha planes carry any other format declines
+the driver: these GEMVs and the window's GEMMs read q8 alone), or - the F32-on-disk case - one f16 device copy of every
 recurrent layer's `[beta ; alpha]` rows that the router-form GEMV's f16 twin reads with an output
 base into the smalls. The fused add+rms+requant serves every site on every model: each site's
 stamp (`RqStamp`, picked by `rd_ensure_fused_sets` once all layers are registered) is Q8_0 or

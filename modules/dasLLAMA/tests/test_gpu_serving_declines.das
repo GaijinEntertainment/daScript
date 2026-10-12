@@ -140,6 +140,12 @@ def test_resident_layer_decline(t : T?) {
         //! an inner width off the format's block leaves the out plane untileable - the decline names it
         m.config.ssm_d_inner = 100l
         t |> success(contains(resident_layer_decline(m, 1l), "layer 1's deltanet out plane carries a format"), "an untileable out plane is named")
+        m.config.ssm_d_inner = 256l
+        m.dnbeta_fmt <- [KqFmt.q8, KqFmt.q8, KqFmt.q8]
+        m.dnalpha_fmt <- [KqFmt.q8, KqFmt.q8, KqFmt.q8]
+        t |> success(!contains(resident_layer_decline(m, 1l), "beta/alpha planes carry"), "q8 beta/alpha planes draw no format decline")
+        m.dnbeta_fmt[1] = KqFmt.iq4xs
+        t |> success(contains(resident_layer_decline(m, 1l), "layer 1's beta/alpha planes carry a format"), "a K-quant beta plane is named: the resident beta/alpha forms read q8")
         delete m
     }
     t |> run("shared K/V, a missing plane and a head size off the kernels' shape each name the layer; a differing FFN width or a sliding window is served") @(t : T?) {
@@ -268,6 +274,36 @@ def test_kq_fmt_one_row_gemv(t : T?) {
     }
 }
 
+//! the Metal deltanet gates over every recurrent plane's tag: `dn_metal_ok` admits a plane with a one-row GEMV at its
+//! width, `dn_ba_metal_window_ok` a beta/alpha plane with the expert-form GEMV the window's rows ride
+[test]
+def test_dn_metal_plane_formats(t : T?) {
+    t |> run("the deltanet gates read each recurrent plane by its tag") @(t : T?) {
+        var m <- shell(3l, 2ul)
+        m.config.dim = 256l
+        m.config.ssm_d_inner = 256l
+        m.config.ssm_d_state = 128l
+        m.config.ssm_d_conv = 4l
+        t |> success(dn_metal_ok(m) && dn_ba_metal_window_ok(m), "untagged (q8) planes serve")
+        m.dnqkv_fmt <- [KqFmt.q8, KqFmt.iq4xs, KqFmt.q8]
+        m.dngate_fmt <- [KqFmt.q8, KqFmt.iq4xs, KqFmt.q8]
+        m.dnout_fmt <- [KqFmt.q8, KqFmt.iq4xs, KqFmt.q8]
+        m.dnbeta_fmt <- [KqFmt.q8, KqFmt.iq4xs, KqFmt.q8]
+        m.dnalpha_fmt <- [KqFmt.q8, KqFmt.iq4xs, KqFmt.q8]
+        t |> success(dn_metal_ok(m) && dn_ba_metal_window_ok(m), "IQ4_XS planes serve on both")
+        m.dnbeta_fmt[1] = KqFmt.k2
+        t |> success(dn_metal_ok(m), "a Q2_K beta plane has the one-row GEMV the step reads")
+        t |> success(!dn_ba_metal_window_ok(m), "... and no expert-form GEMV for the window's rows")
+        m.dnbeta_fmt[1] = KqFmt.iq4xs
+        m.dnout_fmt[1] = KqFmt.iq3s4
+        t |> success(!dn_metal_ok(m), "an out plane in a format the Metal kernels lack declines")
+        m.dnout_fmt[1] = KqFmt.iq4xs
+        m.config.ssm_d_inner = 200l
+        t |> success(!dn_metal_ok(m), "an out plane whose width is no whole superblock declines")
+        delete m
+    }
+}
+
 [test]
 def test_moe_metal_expert_formats(t : T?) {
     t |> run("the Metal routed block admits exactly the expert plane formats it has kernels for; every other format declines") @(t : T?) {
@@ -285,6 +321,20 @@ def test_moe_metal_expert_formats(t : T?) {
         mixed.we2_fmt[1] = KqFmt.k2
         t |> success(!moe_metal_ok(mixed), "one Q2_K down plane declines a q4_K model")
         delete mixed
+    }
+    t |> run("the NextN head's routed stacks are walked like a trunk layer's") @(t : T?) {
+        var m <- moe_shell(KqFmt.k4)
+        m.config.n_layer_nextn = 1l
+        m.we1_offs |> push(0l)
+        m.we2_offs |> push(0l)
+        m.we3_offs |> push(0l)
+        m.we1_fmt |> push(KqFmt.k4)
+        m.we2_fmt |> push(KqFmt.k4)
+        m.we3_fmt |> push(KqFmt.k4)
+        t |> success(moe_metal_ok(m), "a head stack in a served format is admitted")
+        m.we2_fmt[2] = KqFmt.k2
+        t |> success(!moe_metal_ok(m), "a head down stack the routed kernels lack declines the routed block")
+        delete m
     }
     t |> run("the resident driver names a biased expert stack feeding a K-quant down plane by layer; a per-32 down plane draws no such decline") @(t : T?) {
         var kb <- moe_shell(KqFmt.k6)

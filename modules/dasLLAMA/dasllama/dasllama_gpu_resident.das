@@ -757,8 +757,8 @@ def private push_layer_planes(t : Model; var planes : array<ResidentPlane>; l : 
         planes |> push(ResidentPlane(n = dim, rows = dng.di, f = fmt_at(t.dngate_fmt, l), off = t.dngate_offs[l], role = ResidentRole.dn_z, l = l))
         planes |> push(ResidentPlane(n = dng.di, rows = dim, f = fmt_at(t.dnout_fmt, l), off = t.dnout_offs[l], role = ResidentRole.dn_out, l = l))
         if (!dng.ba_f32) {
-            planes |> push(ResidentPlane(n = dim, rows = dng.nvh, f = KqFmt.q8, off = t.dnbeta_offs[l], role = ResidentRole.dn_beta, l = l))
-            planes |> push(ResidentPlane(n = dim, rows = dng.nvh, f = KqFmt.q8, off = t.dnalpha_offs[l], role = ResidentRole.dn_alpha, l = l))
+            planes |> push(ResidentPlane(n = dim, rows = dng.nvh, f = fmt_at(t.dnbeta_fmt, l), off = t.dnbeta_offs[l], role = ResidentRole.dn_beta, l = l))
+            planes |> push(ResidentPlane(n = dim, rows = dng.nvh, f = fmt_at(t.dnalpha_fmt, l), off = t.dnalpha_offs[l], role = ResidentRole.dn_alpha, l = l))
         }
     } else {
         let qd_l = layer_qd(c, l)
@@ -1833,6 +1833,9 @@ def resident_layer_decline(t : Model; l : int64) : string {
             return "layer {l}'s deltanet out plane carries a format ({int(fout)}) the resident GEMVs do not serve at width {c.ssm_d_inner}"
         }
         if (!t.dn_ba_f32 && (t.dnbeta_offs[l] < 0l || t.dnalpha_offs[l] < 0l)) return "layer {l} lacks its beta/alpha planes"
+        if (!t.dn_ba_f32 && (fmt_at(t.dnbeta_fmt, l) != KqFmt.q8 || fmt_at(t.dnalpha_fmt, l) != KqFmt.q8)) {
+            return "layer {l}'s beta/alpha planes carry a format ({int(fmt_at(t.dnbeta_fmt, l))}/{int(fmt_at(t.dnalpha_fmt, l))}) the resident beta/alpha GEMVs and window GEMMs do not serve - they read q8 planes"
+        }
         if (!rdec_dn_installed()) return "layer {l} is recurrent and the tier installed no deltanet seats for the whole-model driver"
         return ""
     }
