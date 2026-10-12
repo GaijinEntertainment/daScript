@@ -341,7 +341,7 @@ def private dasllama_type_stanza(f : FILE const?; lab : string; tname : string; 
 }
 
 def document_module_dasllama(_root : string) {
-    var mod = find_module("dasllama")
+    var mod = [find_module("dasllama"), find_module("dasllama_core")]   //! the facade re-exports the core module, which holds the documented functions
     var groups <- array<DocGroup>(
         group_by_regex("Model loading and sessions", mod, %regex~(load_model|create_session|create_kv_pool|release_kv_pages|create_batch_workspace|setup_dasllama_jobque|with_dasllama_jobque|caps|mtp_drafter_sidecar|attach_mtp_drafter|mtp_capable)$%%),
         group_by_regex("Prefix cache", mod, %regex~(create_prefix_cache|prefix_attach|prefix_insert|prefix_checkpoint_at|prefix_match_len|prefix_release|prefix_held_groups|prefix_chain_list)$%%),
@@ -355,7 +355,7 @@ def document_module_dasllama(_root : string) {
         group_by_regex("Reasoning (thinking models)", mod, %regex~(split_reasoning|set_preserve_thinking|set_reasoning_effort|make_think_stream|think_budget_marks|think_feed|think_finish|think_drain|effective_stop_ids|turn_stop_ids|make_nothink_guard|nothink_stop_here)$%%),
         group_by_regex("Operations: prepared images and dispatch", mod, %regex~(dlim_inventory|dlim_clean|set_dispatch_worker_limit|get_dispatch_worker_limit|set_jobque_spin_us|get_jobque_spin_us|set_jobque_spin_gpu_us|get_jobque_spin_gpu_us|get_jobque_spin_in_force|set_single_thread|get_single_thread|select_matmul_backend_for_load|kernel_backend_available)$%%),
         group_by_regex("Operations: GPU tier and model slots", mod, %regex~(gpu_tier_status|set_gpu_tier_want|moe_gpu_tier_arm|moe_gpu_weight_budget|gpu_model_marks_init|gpu_slot_capture|gpu_slot_rearm|moe_gpu_model_marks_save|moe_gpu_model_marks_restore|moe_gpu_hydrate_session|moe_gpu_drop_model|set_resident_prefill_allowed|resident_prefill_allowed)$%%),
-        group_by_regex("Operations: serving from the device", mod, %regex~(create_device_session|gpu_device_sessions|gpu_dn_room|gpu_device_prefill_continues|gpu_device_prefill_window|gpu_device_kv_park|gpu_device_kv_adopt|gpu_device_session_ctx|gpu_device_session_dtype|set_gpu_resident_regions|set_gpu_ctx_max|set_gpu_ctx_strict|gpu_ctx_pins|set_gpu_kv_dtype|gpu_kv_dtype_pin|reset_gpu_kv_dtype|gpu_resident_decline|gpu_resident_experts_host|gpu_cpu_passes|device_kv_max_rows)$%%)
+        group_by_regex("Operations: serving from the device", mod, %regex~(create_device_session|gpu_device_sessions|gpu_dn_room|gpu_device_prefill_continues|gpu_device_prefill_segments|gpu_device_prefill_window|gpu_device_kv_park|gpu_device_kv_adopt|gpu_device_session_ctx|gpu_device_session_dtype|set_gpu_resident_regions|set_gpu_ctx_max|set_gpu_ctx_strict|gpu_ctx_pins|set_gpu_kv_dtype|gpu_kv_dtype_pin|reset_gpu_kv_dtype|gpu_resident_decline|gpu_resident_experts_host|gpu_cpu_passes|device_kv_max_rows)$%%)
     )
     var hook = DocsHook()
     hook.afterEnums <- @(var f : FILE const?; _was_enums : bool) {
@@ -417,7 +417,7 @@ def document_module_dasllama(_root : string) {
         dasllama_type_stanza(f, "struct-dasllama_gpu_resident-GpuModelMarks", "GpuModelMarks",
             "One model's complete per-model GPU tier state while it is NOT the installed model (a multi-model host keeps one per slot): its routing marks plus the resident driver's activation. Mint with ``gpu_model_marks_init``; ``gpu_slot_capture`` fills it after the model's load, ``moe_gpu_model_marks_save``/``_restore`` swap it in and out on a switch.")
     }
-    document("dasLLAMA LLM inference: models, sessions, generation, chat", mod, "dasllama.rst", groups, hook)
+    documents("dasLLAMA LLM inference: models, sessions, generation, chat", mod, "dasllama.rst", groups, hook)
 }
 
 // The TTS facade and its type floor share one page; the family, assembly and front-end
