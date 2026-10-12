@@ -41,3 +41,17 @@ The OpenGL loader under `gl3w/` is generated output of the gl3w generator
 It compiles against this module's copy of the Khronos `glcorearb.h` header
 (Copyright 2013-2020 The Khronos Group Inc., MIT) - the notice installs as
 `KHRONOS_GL.LICENSE`.
+
+## Input example fonts
+
+`examples/features/text_input/fonts/` contains unmodified Noto Sans 2.008 and Noto
+Sans CJK SC 2.004 under SIL OFL 1.1, plus Twemoji Mozilla 0.7.0 in COLR/CPAL format.
+Noto Sans is Copyright 2015-2021 Google LLC; Noto Sans CJK is Copyright 2014-2021
+Adobe. Their original licence files are beside the fonts.
+
+Twemoji artwork is by Twitter and contributors (https://github.com/twitter/twemoji),
+under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/). Mozilla's font tooling
+is Copyright 2016-2018 Mozilla Foundation, Apache 2.0. The upstream licence notice and
+full Apache 2.0/CC BY 4.0 texts are in the `twemoji/` subdirectory. The example displays
+attribution, and `fonts/manifest.json` records exact source URLs, versions and SHA256.
+The font files, notices and manifest travel with both native and web releases.

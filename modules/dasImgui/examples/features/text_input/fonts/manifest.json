@@ -1,0 +1,42 @@
+{
+  "fonts": [
+    {
+      "file": "noto-sans/NotoSans-Regular.ttf",
+      "version": "Noto Sans 2.008",
+      "source": "https://raw.githubusercontent.com/notofonts/noto-fonts/ffebf8c1ee449e544955a7e813c54f9b73848eac/hinted/ttf/NotoSans/NotoSans-Regular.ttf",
+      "sha256": "b85c38ecea8a7cfb39c24e395a4007474fa5a4fc864f6ee33309eb4948d232d5",
+      "bytes": 569208,
+      "license": "SIL-OFL-1.1",
+      "license_files": ["noto-sans/LICENSE"],
+      "copyright": "Copyright 2015-2021 Google LLC. All Rights Reserved.",
+      "modified": false
+    },
+    {
+      "file": "noto-cjk/NotoSansCJKsc-Regular.otf",
+      "version": "Noto Sans CJK SC 2.004",
+      "source": "https://raw.githubusercontent.com/notofonts/noto-cjk/523d033d6cb47f4a80c58a35753646f5c3608a78/Sans/OTF/SimplifiedChinese/NotoSansCJKsc-Regular.otf",
+      "sha256": "2c76254f6fc379fddfce0a7e84fb5385bb135d3e399294f6eeb6680d0365b74b",
+      "bytes": 16437364,
+      "license": "SIL-OFL-1.1",
+      "license_files": ["noto-cjk/LICENSE"],
+      "copyright": "© 2014-2021 Adobe (http://www.adobe.com/).",
+      "modified": false
+    },
+    {
+      "file": "twemoji/Twemoji.Mozilla.ttf",
+      "version": "Twemoji Mozilla 0.7.0 (COLR version 0)",
+      "source": "https://github.com/mozilla/twemoji-colr/releases/download/v0.7.0/Twemoji.Mozilla.ttf",
+      "sha256": "6d90152ee0d29e82fe2a87793af5aa4b7ad13e6538360889e141e81ed299ee8e",
+      "bytes": 1474284,
+      "license": "Apache-2.0 AND CC-BY-4.0",
+      "license_files": [
+        "twemoji/LICENSE.txt",
+        "twemoji/Apache-2.0.txt",
+        "twemoji/CC-BY-4.0.txt"
+      ],
+      "copyright": "Font tooling: Copyright 2016-2018 Mozilla Foundation. Twemoji artwork: Twitter and contributors.",
+      "modified": false
+    }
+  ],
+  "notice": "Redistributed unmodified. Twemoji attribution: https://github.com/twitter/twemoji ; artwork license https://creativecommons.org/licenses/by/4.0/ . CJK face uses Simplified Chinese glyph forms; regional variants and shaping require separate checks."
+}

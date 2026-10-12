@@ -1,0 +1,19 @@
+options gen2
+require daslib/daspkg
+
+[export]
+def package() {
+    package_name("text_input")
+    package_description("Portable CJK and emoji input inspection")
+}
+
+[export]
+def release() {
+    release_main("main.das")
+    release_include("fonts/**")
+    release_embed_file("fonts/noto-sans/NotoSans-Regular.ttf", "/text-input-fonts/noto-sans/NotoSans-Regular.ttf")
+    release_embed_file("fonts/noto-cjk/NotoSansCJKsc-Regular.otf", "/text-input-fonts/noto-cjk/NotoSansCJKsc-Regular.otf")
+    release_embed_file("fonts/twemoji/Twemoji.Mozilla.ttf", "/text-input-fonts/twemoji/Twemoji.Mozilla.ttf")
+    release_emcc_arg("-sINITIAL_MEMORY=67108864")
+    release_include_symbols()
+}
