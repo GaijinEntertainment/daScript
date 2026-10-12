@@ -450,7 +450,7 @@ def private reset_lint_cache(tool_hash : string) {
 class private LintToolHash : AstSimulateMacro {
     //! Empties the lint result cache when the ``[lint_tool_entry]`` function's semantic hash differs from the one ``lint_hash.txt`` recorded; a program without one is left alone
     def override simulate(prog : Program?; var ctx : Context?) : bool {
-        return true if (is_in_completion() || is_compiling_macros() || is_folding())
+        return true if (is_in_completion() || is_compiling_macros() || is_folding() || prog.policies.jit_enabled)
         for_each_function(prog.getThisModule, "main") $(fn) {
             for (ann in fn.annotations) {
                 reset_lint_cache("{get_function_aot_hash(fn)}") if (ann.annotation.name == "lint_tool_entry")
