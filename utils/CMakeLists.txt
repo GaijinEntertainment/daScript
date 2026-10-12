@@ -327,6 +327,7 @@ SET(DAS_UTILS_TO_TEST
     daspkg/test_release_workspace.das
     daspkg/test_package_runner_errors.das
     daslang/tests
+    dasllama-server/test_bundle_licenses.das
     watchdog/tests
 )
 
