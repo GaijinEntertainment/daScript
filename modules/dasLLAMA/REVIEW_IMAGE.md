@@ -15,9 +15,10 @@ compile catches it when they move; a bump of the version's value needs nothing t
 it belongs to the mint.** Going live is `parse_image` pointing a live carrier's planes into the
 mapped `.dlim`.
 
-**A weight carrier - anything that reads weights from a file and serves inference from them -
-whose `.dlim` is missing mints it first and is served from what was minted.** A carrier the
-image rail does not serve is listed as unserved in `ARCHITECTURE_IMAGE.md`.
+**A diff that adds a weight carrier - anything that reads weights from a file and serves
+inference from them - serves it from its `.dlim`, minted first where it is missing, or ledgers it
+as a non-image lane in `ARCHITECTURE_IMAGE.md` (the drafter's entry is
+`ARCHITECTURE_IMAGE.md#drafter-non-image-lane`) in the same change.**
 
 **A weight carrier becomes live only through `build_image` and `parse_image` in
 `dasllama/dasllama_image.das`: reading weights into a live carrier, or releasing an image

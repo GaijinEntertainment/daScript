@@ -10,9 +10,10 @@ stages through hooks - stage seats the CPU chain calls, drop hooks, reload or we
 listeners - registered by `dasllama_metal_tower_register` (Metal) or by
 `dasllama_vulkan_tower_register` and `dasllama_vulkan_tts_register` (Vulkan)
 (`ARCHITECTURE_GPU_TOWER.md#tower-reach`). A diff reaches a tower when a function it touches is,
-calls, or is reachable from one of those hooks, and reaches the Metal tower also when it touches
-`dasllama/dasllama_metal_asr_dec.das`, `dasllama/dasllama_metal_common.das`, or a kernel class
-or builder the ASR decoder uses.
+calls, or is reachable from one of those hooks, or when it touches a kernel class, a kernel
+template a class of that tower stamps, a builder or a kernel-argument struct a driver of that tower
+or its ASR decoder dispatches or fills; the Metal tower is also reached by a touch of
+`dasllama/dasllama_metal_asr_dec.das` or `dasllama/dasllama_metal_common.das`.
 
 **A non-comment diff routed here that reaches neither tower says so in the PR body.**
 
@@ -83,11 +84,12 @@ compute changes that CPU code the same way, in the same diff.**
 
 **A diff that adds or changes a family's chain in the Metal tower or in the Metal ASR-decoder
 driver (`dasllama/dasllama_metal_asr_dec.das`) leaves every stage of that family's served chain -
-the mel, the front, the blocks, the tail, the cross-KV and the decode step - on the device, for
-every model and every weight lane the family serves: a stage that runs on the CPU, or a decline
-other than the knob's, the device's or a failed command buffer's, that a stocked model or lane
-reaches, is a defect - moved to the device in the same change, or filed in `followup_metal.md`
-with the stage and the model named.**
+the mel, the front, the blocks, the tail, the cross-KV and the decode step - on the device for
+every model and every weight lane the family serves, or files the stage that stays on the CPU in
+`followup_metal.md` with the stage and the model named, in the same change.**
+
+**A decline of such a stage that a stocked model or lane reaches, other than the knob's, the
+device's or a failed command buffer's, is a defect.**
 A stage on the CPU behind a Metal chain reads as served and sets the whole chain's rate.
 
 **A diff that changes what a TTS seat's chain computes in a tower driver applies `REVIEW_TTS.md`
