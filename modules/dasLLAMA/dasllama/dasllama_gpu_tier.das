@@ -622,7 +622,7 @@ typedef RdecPrefillSegsFn = function<(x_batch : array<float>; tokens : array<int
 
 [unused_argument(x_batch, tokens, use_ids, emb_scale, cos_batch, segs, logits, experts)]
 def private rdec_unset_prefill_segs(x_batch : array<float>; tokens : array<int64>; use_ids : bool; emb_scale : float; cos_batch : array<float>; segs : array<RdecPfSeg>; var logits : array<float>; experts : RdecHostExpertsRowsFn) {
-    panic("dasLLAMA: segmented resident prefill hit without an installed GPU driver")
+    panic("dasLLAMA: segmented resident prefill hit without an installed GPU driver - require dasllama/dasllama_math_vulkan (the Vulkan tier installs it)")
 }
 
 var g_rdec_prefill_segs = @@rdec_unset_prefill_segs

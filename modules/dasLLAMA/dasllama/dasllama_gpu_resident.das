@@ -1496,7 +1496,7 @@ var private g_vulkan_prefill_peel = true   //! the short window's peel through t
 //! The short window's peel on or off (`ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-prefill-peel`); the window chain serves every window with it off
 def set_vulkan_prefill_peel_(on : bool) {
     g_vulkan_prefill_peel = on
-    to_log(LOG_INFO, "dasLLAMA: set_vulkan_prefill_peel({on}) - the short window's peel through the token commands ({on ? "on" : "off: every window takes the chain"})\n")
+    to_log(LOG_INFO, "dasLLAMA: set_vulkan_prefill_peel_({on}) - the short window's peel through the token commands ({on ? "on" : "off: every window takes the chain"})\n")
 }
 
 def vulkan_prefill_peel_() : bool => g_vulkan_prefill_peel
@@ -3734,10 +3734,10 @@ def private vulkan_resident_prefill(t : Model; var s : Session; npos, start_pos 
     return done
 }
 
-var private @scratch g_rdec_seg_x : array<float>        //! a segmented prefill's embedded rows, the segments back to back
+var private @scratch @exact_size g_rdec_seg_x : array<float>        //! a segmented prefill's embedded rows, the segments back to back
 var private @scratch g_rdec_seg_ids : array<int64>      //! ... or their ids, where the driver gathers the embedding
-var private @scratch g_rdec_seg_cos : array<float>      //! ... their rope rows
-var private @scratch g_rdec_seg_logits : array<float>   //! ... and a logits slot a segment
+var private @scratch @exact_size g_rdec_seg_cos : array<float>      //! ... their rope rows
+var private @scratch @exact_size g_rdec_seg_logits : array<float>   //! ... and a logits slot a segment
 var private @scratch g_rdec_segs : array<RdecPfSeg>
 var private @scratch g_rdec_seg_regions : array<int64>
 var private g_rdec_seg_declined : table<string>
@@ -3750,7 +3750,7 @@ def private rdec_segs_declined(why : string) {
 def private rdec_segs_admitted(segs : array<PrefillSeg>; ids : bool) : bool {
     for (sg in segs) {
         let s = sg.s
-        let why = (mtp_verify_window_active(*s) ? "a segment inside the speculative verify window" : (!g_resident_prefill_allowed && !s.device_kv) ? "a host-cached segment under the prefill pin"
+        let why = (mtp_verify_window_active(*s) ? "a segment inside the speculative verify window" : (!g_resident_prefill_allowed && !s.device_kv) ? "a host-cached segment under the prefill pin (set_resident_prefill_allowed(false))"
             : !rdec_session_codec_ok(*s) ? "a segment's session on another K/V codec than the mirror" : s.attn_uniform_end != 0l ? "a segment with a media span"
             : sg.start_pos + sg.npos > g_rdec_cap ? "a segment past the region's context" : s.embed_gpu_pending != ids ? "the segments' embed forms differ" : "")
         if (!empty(why)) {

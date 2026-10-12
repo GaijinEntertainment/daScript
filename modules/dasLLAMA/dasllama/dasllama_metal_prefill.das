@@ -4551,7 +4551,7 @@ def public set_metal_prefill_mulmm_legacy(v : bool) {
 //! family) vs the padded-tile path — `DASLLAMA_METAL_MM_TAIL`'s setter twin. Default on.
 def public set_metal_prefill_mm_tail(v : bool) {
     if (v != g_pf_env_mm_tail) {
-        to_log(LOG_WARNING, "dasLLAMA metal prefill: set_metal_prefill_mm_tail({v}) - {v ? "small remainders and K-quant sites of eight rows or fewer peel onto the GEMV forms" : "small npos % 32 remainders bill the padded tile"} (numerics move with the form)\n")
+        to_log(LOG_WARNING, "dasLLAMA metal prefill: set_metal_prefill_mm_tail({v}) - {v ? "small remainders and K-quant sites of eight rows or fewer peel onto the GEMV forms" : "small npos % 32 remainders bill the padded tile; the last layer's narrowed FFN row keeps its one-row form (DASLLAMA_METAL_LASTROW=0 for the full panel)"} (numerics move with the form)\n")
     }
     g_pf_env_mm_tail = v
 }
@@ -8521,7 +8521,7 @@ def dasllama_metal_prefill_register() {
     }
     g_pf_env_mm_tail = g_env_metal.mm_tail
     if (!g_pf_env_mm_tail) {
-        to_log(LOG_WARNING, "dasLLAMA metal prefill: DASLLAMA_METAL_MM_TAIL=0 - small npos % 32 remainders bill the padded tile (numerics move with the form)\n")
+        to_log(LOG_WARNING, "dasLLAMA metal prefill: DASLLAMA_METAL_MM_TAIL=0 - small npos % 32 remainders bill the padded tile; the last layer's narrowed FFN row keeps its one-row form (DASLLAMA_METAL_LASTROW=0 for the full panel) (numerics move with the form)\n")
     }
     g_pf_env_qkr = g_env_metal.qk_rope
     if (!g_pf_env_qkr) {

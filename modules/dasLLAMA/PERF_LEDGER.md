@@ -5362,6 +5362,16 @@ probe alone, no box profile applied; the Vulkan box ran it under `DASLLAMA_GPU=1
   attention at 2220 us a token on the base, 3780 with the planes at eight, 1274 with the wave over the command's own rows
   (the step 6232 -> 7792 -> 5295 us; prompts of 4000 to 6000 tokens, 55 to 5900 cached); the tool-call whole-call median
   0.540 -> 0.482 -> 0.385 s. The short-context bench never saw it: at 128 keys the attention is 3% of the step.
+- **The leg's lasting allocations, in bytes.** The segmented window's staging (`g_rdec_seg_x`, `g_rdec_seg_cos`,
+  `g_rdec_seg_logits`, `g_rdec_segs`, `g_rdec_seg_regions`): `rows x dim x 4` + `rows x cos_elems x 4` + `regions x vocab x 4`
+  + `segments x 32` + `segments x 8` - on Llama-3.2-3B (dim 3072, head 128, vocab 128256) a 512-row window of two segments
+  holds 6.3 MB + 0.26 MB + 1.0 MB + 80 B at two regions, 12.6 MB + 0.52 MB + 2.1 MB at four regions and a 1024-row window.
+  The grouped step's `g_rdec_bregs` / `g_rdec_grp_toks`: `rows x 8` each, 96 B at twelve rows. The window's segment tables
+  `g_pf_segs` / `g_pf_wsegs`: `segments x 32` each. The driver's logits slots `pf_logits_host`: `regions x vocab x 4` (host,
+  was `vocab x 4`) - 2.1 MB at four regions on the 3B against 0.5 MB before. The per-row planes at `RDEC_NROW_MAX` rows
+  whatever the region count, where they held one row a region: the plan charges `(vocab x 4 + heads x RDEC_ATTN_SPLIT_CAP x
+  (hs + 2) x 4) x 8` = (513 KB + 200 KB) x 8 = 5.7 MB on the 3B, against 0.7 MB a region before; the x, cos, residual and
+  logits rows the command stages scale the same way (`dasllama_vulkan_decode.das`, `vk_rdec_prepare`).
 - **The house probe on the M5's M4 arm reads the branch the same as its base** (the quick probe, 22 turns, alone
   then pair, two alternated rounds, Llama-3.2-3B Q4_K_M): alone wall 0.37 / 0.45 s on the base and 0.36 / 0.40 on
   the branch, pair 0.75 / 0.91 against 0.78 / 0.82, the pair's throughput share x0.91 / x1.00 against x0.87 / x0.93 -
