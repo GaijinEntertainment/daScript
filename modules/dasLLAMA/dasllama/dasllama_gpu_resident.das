@@ -2776,7 +2776,6 @@ def private vulkan_resident_draft(t : Model; var s : Session; token, row : int64
     return pick
 }
 
-//! the session's cache is the mirror's shape - the armed codec, unpaged - else the pass is counted and the call is the CPU's
 //! the pass a session's cache shape takes - another codec than the mirror's, or a pooled cache - counting nothing
 def private rdec_session_codec_gate(s : Session) : RdecGate {
     if (s.kv_dtype_k != g_rdec_kvdt || s.kv_dtype_v != g_rdec_kvdt) {
@@ -3771,6 +3770,8 @@ def private rdec_prefill_gate(t : Model; s : Session; npos, start_pos : int64) :
     if (!g_resident_prefill_allowed && !s.device_kv) {
         return RdecGate(passes = true, kind = RdecPass.pinned_off)
     }
+    let codec = rdec_session_codec_gate(s)
+    return codec if (codec.passes)
     if (s.attn_uniform_end != 0l) {
         return RdecGate(passes = true, kind = RdecPass.span)
     }
@@ -3789,13 +3790,8 @@ def private rdec_segs_admitted(t : Model; segs : array<PrefillSeg>; ids : bool) 
     for (sg in segs) {
         let s = sg.s
         let gate = rdec_prefill_gate(t, *s, sg.npos, sg.start_pos)
-        if (gate.passes) {
+        if (gate.passes) {   //! counted by nobody here: the one-session fallback counts the pass it takes
             rdec_segs_declined_pass(gate)
-            return false
-        }
-        let codec = rdec_session_codec_gate(*s)
-        if (codec.passes) {   //! counted by nobody here: the one-session fallback counts the pass it takes
-            rdec_segs_declined_pass(codec)
             return false
         }
         if (s.embed_gpu_pending != ids) {
@@ -3910,14 +3906,23 @@ def private rdec_segs_gather(t : Model; var segs : array<PrefillSeg>; ids : bool
     return total
 }
 
+//! the segmented window holds a model whose state, side rows, carry, host experts and staged rows are not per call
+def private rdec_segs_model_fits(t : Model) : bool {
+    let c = t.config
+    let codec_ok = g_rdec_kvdt == KVDtype.f16 || g_rdec_kvdt == KVDtype.f32
+    return codec_ok && c.recr_mask == 0ul && !has_ple(c) && c.n_layer_nextn == 0l && !c.hyper_conn && c.n_expert == 0l
+}
+
+//! A device-home scheduler's tick hands `t`'s prefilling streams to the segmented window: the armed driver has the form and the model's chain holds several sessions a window.
+def gpu_device_prefill_segments_(t : Model) : bool => g_rdec_active && rdec_prefill_segs_installed() && rdec_segs_model_fits(t)
+
 [hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-prefill-segments")]
 def private vulkan_resident_prefill_segments(t : Model; var segs : array<PrefillSeg>) : bool {
     return false if (!g_rdec_active || !rdec_prefill_segs_installed())
     let c = t.config
     let n = long_length(segs)
     return false if (n < 2l)
-    if (c.recr_mask != 0ul || has_ple(c) || c.n_layer_nextn > 0l || c.hyper_conn || c.n_expert > 0l
-            || (g_rdec_kvdt != KVDtype.f16 && g_rdec_kvdt != KVDtype.f32)) {
+    if (!rdec_segs_model_fits(t)) {
         rdec_segs_declined("the model's chain takes one session a window (recurrent, per-layer-embedding, NextN, routed, hyper-connection, or a block-codec mirror)")
         return false
     }
@@ -3989,7 +3994,6 @@ def private vulkan_resident_prefill_go(t : Model; var s : Session; npos, start_p
     if (gate.passes) {
         return rdec_pass_hydrated(t, s, gate.kind, gate.a, gate.b)
     }
-    return false if (!rdec_session_codec_ok(s))
     let c = t.config
     let r = rdec_prefill_region(t, s, start_pos)
     if (r < 0l) {

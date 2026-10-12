@@ -938,7 +938,7 @@ def private chunk_take(st : Stream; chunk, prompt_end : int64) : int64 {
 def private prefill_tick(m : Model; var sch : Scheduler; var events : array<SchedEvent>) {
     let first = next_prefilling(sch)
     return if (first < 0l)
-    if (stream_has_span_ahead(sch.streams[first]) || (sch.device_kv && !gpu_device_prefill_continues(m))) {
+    if (stream_has_span_ahead(sch.streams[first]) || (sch.device_kv && !gpu_device_prefill_segments(m))) {
         prefill_one_chunk(m, sch, events, first)
         return
     }

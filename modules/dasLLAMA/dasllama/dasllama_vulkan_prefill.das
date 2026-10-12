@@ -1414,7 +1414,10 @@ def vk_rdec_prefill_ids(tokens : array<int64>; emb_scale : float; cos_batch : ar
 [hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-prefill-segments")]
 def vk_rdec_prefill_segs(x_batch : array<float>; tokens : array<int64>; use_ids : bool; emb_scale : float; cos_batch : array<float>;
                          segs : array<RdecPfSeg>; var logits : array<float>; experts : RdecHostExpertsRowsFn) {
-    assert(g_rd != null && g_rd.ple == 0l && !empty(segs), "vk_rdec_prefill_segs: a per-layer-embedding model, or no segment")
+    assert(g_rd != null && !empty(segs), "vk_rdec_prefill_segs: no driver, or no segment")
+    let kvq = rd_kv_block_codec()
+    assert(g_rd.ple == 0l && !g_rd.moe && !g_rd.carry && !g_rd.hybrid && !kvq,
+        "vk_rdec_prefill_segs: the chain holds one session a window on a per-layer-embedding, routed, NextN, recurrent model or a block-codec mirror")
     let nox : array<float>
     vk_demotion_check("prefill")
     var npos = 0l

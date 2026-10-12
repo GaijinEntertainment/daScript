@@ -1579,8 +1579,9 @@ other resident files live in `_resident_feed.das`. Skips without the model or th
 `test_gpu_resident_segments.das` - stocked suite, `-jit` only; the whole-model resident driver's
 SEGMENTED window (`ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-prefill-segments`, `DASLLAMA_GPU=1`) on
 Llama-3.2-1B at Q8_0 (the ids form) and Q4_K_M (the x form), two mirror regions: two host-cached
-sessions' tails (23 and 31 rows after 40-row openings) as ONE window chain against the same tails as
-two one-session windows on the same driver, then eight fed steps each - every row within the resident
+sessions' tails (23 and 31 rows after 40-row openings, and again 300 and 300 - a call of two windows, segment
+A's last row landing in the first window and B's rows crossing into the second) as ONE window chain against
+the same tails as two one-session windows on the same driver, then eight fed steps each - every row within the resident
 rigs' split bar (`SPLIT_BAR_REL`) of the one-session form's with the row one step off as the control,
 both argmax streams decoded in the log - then both openings as one window from position zero, each
 session's last-row logits within the bar of its solo opening's with the other session's row as the
@@ -1695,7 +1696,9 @@ against the host-cached scheduler over four requests on two streams (`_scheduler
 with `test_scheduler.das`): token for token where the two sides run one code path - each prompt
 one window-chain call, each step the batched token command, the prefill counter pinning it -
 and for the second turn, which adopts the rows of the turn it continues and so splits its
-prefill, the adopted count alone; the three argmax requests' decode steps land their picks on the
+prefill, the adopted count alone; the device-home side's two prompts admitted together ride one segmented
+window where the model's segmented window serves (`gpu_device_prefill_segments`), the counter's rise the
+tick's witness; the three argmax requests' decode steps land their picks on the
 device (the count held equal to the rows stepped less the second turn's, which samples at top-k 1
 under a temperature and so lands logits). Every cell holds `gpu_cpu_passes_()` empty
 (the pin cell its one `busy`). The qwen2 file adds the tolerance cells, at the 6% bar of

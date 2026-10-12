@@ -1971,14 +1971,17 @@ def private rd_layer_pieces(L : RLayer; nsplit, rows : int64) : int64 {
     return min(span, wave)
 }
 
-//! whether the N-row command over `rows` splits every layer's keys into the pieces the one-row command does, so the two
-//! commands sum the keys in one order: false where the rows' workgroups over the span's pieces run past one wave of the SMs
-//! and the N-row command takes fewer pieces (`ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-decode-attn-split`)
-def vk_rdec_rows_split_alike(rows : int64) : bool {
+//! whether the N-row command over `rows` splits every layer's keys into the pieces the one-row command's form at `pos` does, so
+//! the two sum the keys in one order: false where the rows' workgroups over the pieces run past one wave of the SMs (the N-row
+//! command takes fewer) and past the wide position (the wide twin takes more; `ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-decode-attn-split`)
+def vk_rdec_rows_split_alike(rows, pos : int64) : bool {
     if (g_rd == null || !g_rd.ready) return true
+    let form = rd_form_at(pos)
+    return true if (form == RdForm.unsplit)
     for (L in g_rd.layers) {
         continue if (L.recurrent)
-        return false if (rd_layer_pieces(L, rd_split_pieces(), 1l) != rd_layer_pieces(L, rd_split_pieces(), rows))
+        let one = rd_layer_pieces(L, form == RdForm.wide ? rd_wide_pieces() : rd_split_pieces(), 1l)
+        return false if (one != rd_layer_pieces(L, rd_split_pieces(), rows))
     }
     return true
 }

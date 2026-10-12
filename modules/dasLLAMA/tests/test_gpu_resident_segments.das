@@ -13,6 +13,7 @@ require dasllama/dasllama_math
 require dasllama/dasllama_gpu_tier
 require dasllama/dasllama_gpu_resident
 require ?vulkan dasllama/dasllama_vulkan_prefill   // nolint:STYLE030,LINT019 - vk_rdec_prefill_segment_windows, read in the vulkan half
+require ?vulkan dasllama/dasllama_vulkan_common   // nolint:STYLE030,LINT019 - PF_WINDOW: the windows a long segmented call runs
 require _model_tier
 require _resident_feed
 
@@ -38,6 +39,7 @@ def private allow_cpu_prefill_intent() {
 let private OPEN_ROWS = 40l
 let private TAIL_A = 23l
 let private TAIL_B = 31l
+let private LONG_TAIL = 300l   //! two of them run past PF_WINDOW (512), so the segmented call runs two windows
 let private STEPS = 8l
 
 //! the segmented windows the Vulkan driver counted so far; 0 with no vulkan module (the cells then skip on the tier)
@@ -67,11 +69,23 @@ def private hold_rows(t : T?; what : string; got, want : array<array<float>>) {
     rows_within_control(t, what, got, want, SPLIT_BAR_REL, 1l, 1.0, $(r) => r == 0l ? "the prefill's row" : "step {r}")
 }
 
-def private segments_cell(t : T?; tr : Model) {
+//! the windows a segmented call of `rows` rows runs (`PF_WINDOW` a window); 0 with no vulkan module
+def private windows_of(rows : int64) : int64 {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        return (rows + PF_WINDOW - 1l) / PF_WINDOW
+    } else {
+        return 0l
+    }
+}
+
+//! two host-cached sessions' tails of `ta` and `tb` rows after their openings as ONE segmented call, then `STEPS` fed steps
+//! each, against the same tails as two one-session windows: a call past one window runs its segments across windows, the
+//! first segment ending in an earlier window than the last
+def private tails_as_segments(t : T?; tr : Model; ta, tb : int64; what : string) {
     var open_a <- resident_prompt(OPEN_ROWS, 0l)
     var open_b <- resident_prompt(OPEN_ROWS, 7l)
-    var tail_a <- ramp_ids(TAIL_A, 3l, 2000l, 53l, 4000l)
-    var tail_b <- ramp_ids(TAIL_B, 11l, 2000l, 53l, 4000l)
+    var tail_a <- ramp_ids(ta, 3l, 2000l, 53l, 4000l)
+    var tail_b <- ramp_ids(tb, 11l, 2000l, 53l, 4000l)
     let toks <- resident_feed(STEPS)
     var want_a <- solo_rows(tr, open_a, tail_a, toks)
     var want_b <- solo_rows(tr, open_b, tail_b, toks)
@@ -88,18 +102,26 @@ def private segments_cell(t : T?; tr : Model) {
     chunks |> push_clone(tail_b)
     eval_segments_(tr, sess, chunks)
     sess |> clear()
-    t |> equal(segment_windows() - sw0, 1l, "the two tails rode one segmented window")
-    t |> equal(moe_gpu_resident_prefills() - pf0, 2l, "the driver counted a prefill a segment")
-    t |> equal(sa.n_past, OPEN_ROWS + TAIL_A, "session A's position moved by its tail")
-    t |> equal(sb.n_past, OPEN_ROWS + TAIL_B, "session B's position moved by its tail")
+    t |> equal(segment_windows() - sw0, windows_of(ta + tb), "{what}: the two tails rode one segmented call of {windows_of(ta + tb)} windows")
+    t |> equal(moe_gpu_resident_prefills() - pf0, 2l, "{what}: the driver counted a prefill a segment")
+    t |> equal(sa.n_past, OPEN_ROWS + ta, "{what}: session A's position moved by its tail")
+    t |> equal(sb.n_past, OPEN_ROWS + tb, "{what}: session B's position moved by its tail")
     var got_a <- steps_after(tr, sa, toks)
     var got_b <- steps_after(tr, sb, toks)
-    hold_rows(t, "session A, the tail as a segment", got_a, want_a)
-    hold_rows(t, "session B, the tail as a segment", got_b, want_b)
-    log_argmax_rows(tr, "session A: solo window, then the tail as a segment", got_a, want_a)
-    log_argmax_rows(tr, "session B: solo window, then the tail as a segment", got_b, want_b)
+    hold_rows(t, "{what}: session A, the tail as a segment", got_a, want_a)
+    hold_rows(t, "{what}: session B, the tail as a segment", got_b, want_b)
+    log_argmax_rows(tr, "{what}: session A: solo window, then the tail as a segment", got_a, want_a)
+    log_argmax_rows(tr, "{what}: session B: solo window, then the tail as a segment", got_b, want_b)
     delete sa
     delete sb
+    delete open_a
+    delete open_b
+}
+
+def private segments_cell(t : T?; tr : Model) {
+    tails_as_segments(t, tr, TAIL_A, TAIL_B, "short tails")
+    var open_a <- resident_prompt(OPEN_ROWS, 0l)
+    var open_b <- resident_prompt(OPEN_ROWS, 7l)
     var ca <- create_session(tr, mirror_kv_dtype())
     var cb <- create_session(tr, mirror_kv_dtype())
     var sess0 <- [unsafe(addr(ca)), unsafe(addr(cb))]
@@ -258,6 +280,7 @@ def private segments_cells(t : T?; file : string) {
     set_resident_prefill_allowed(true)   //! the served cells read the pin's default: pinned here, put back as found
     with_dasllama_jobque_() {
         segments_cell(t, tr)
+        tails_as_segments(t, tr, LONG_TAIL, LONG_TAIL, "tails past one window")   //! two windows: segment A ends in the first, B crosses into the second
         decline_cell(t, tr)
         decline_arms_cell(t, tr)
     }

@@ -20,6 +20,7 @@ require dasllama/dasllama_gpu_resident   // set_gpu_resident_regions_, moe_gpu_r
 require ?vulkan dasllama/dasllama_vulkan_common   // PF_WINDOW, where the module exists
 require ?vulkan dasllama/dasllama_vulkan_decode   // vk_rdec_token_n_rows: the N-row command served the batched cells' rows
 require ?vulkan dasllama/dasllama_vulkan_classes
+require ?vulkan dasllama/dasllama_vulkan_prefill   // vk_rdec_prefill_segment_windows: the device-mode tick's segmented-window witness
 require _model_tier public   // models_dir() + model_available() presence/size-tier gate
 require _resident_feed   // served_every_call: the shared served witness
 
@@ -336,13 +337,22 @@ def private dn_state_home(var s : Session) : double {
 }
 
 //! two sessions over `pa` and `pb`, a region each, through STEPS batched steps against each session alone, every step through the N-row command
+//! the segmented windows the Vulkan driver counted so far; 0 with no vulkan module
+def private segment_windows_count : int64 {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        return vk_rdec_prefill_segment_windows()
+    } else {
+        return 0l
+    }
+}
+
 //! `bar`, or the split bar where a bit-for-bit claim cannot hold over `rows`: past the unsplit position the N-row command splits
 //! a layer's keys into fewer pieces than the row alone wherever its rows' workgroups over the pieces run past one wave of the
 //! card's SMs, and the two commands then sum the keys in two orders (`vk_rdec_rows_split_alike`)
-def private rows_bar(bar : LogitsBar; rows : int64) : LogitsBar {
+def private rows_bar(bar : LogitsBar; rows, pos : int64) : LogitsBar {
     static_if (typeinfo builtin_module_exists(vulkan)) {
-        if (bar == LogitsBar.bit_exact && !vk_rdec_rows_split_alike(rows)) {
-            to_log(LOG_WARNING, "the N-row command over {rows} rows splits the keys apart from the row alone on this card: the batched rows hold the split bar, not bit for bit\n")
+        if (bar == LogitsBar.bit_exact && !vk_rdec_rows_split_alike(rows, pos)) {
+            to_log(LOG_WARNING, "the N-row command over {rows} rows splits the keys apart from the row alone at {pos} positions on this card: the batched rows hold the split bar, not bit for bit\n")
             return LogitsBar.split_bar
         }
     }
@@ -351,7 +361,11 @@ def private rows_bar(bar : LogitsBar; rows : int64) : LogitsBar {
 
 def private batched_steps_body(t : T?; tr : Model; prompts, feeds : array<array<int64>>; bar0 : LogitsBar) {
     let rows = long_length(prompts)
-    let bar = rows_bar(bar0, rows)
+    var furthest = 0l
+    for (p in prompts) {
+        furthest = max(furthest, long_length(p))
+    }
+    let bar = rows_bar(bar0, rows, furthest + long_length(feeds[0]))
     let steps_alone0 = rdec_nrow_steps()
     var alone <- [for (i in range64(rows)); logits_alone(tr, prompts[i], feeds[i])]
     t |> equal(rdec_nrow_steps() - steps_alone0, 0l, "the sessions alone stepped through the one-row command: the N-row counter's control")
@@ -581,13 +595,14 @@ def cell_long_streams(t : T?; file : string; lc : LongCtx) {
                 hold_equal(t, tr, owned[i].logits, alone[i][0], "stream {i}'s {at[i]}-token prefill on the device")
             }
             var sess <- [for (i in range64(n)); unsafe(addr(owned[i]))]
+            let streams_bar = rows_bar(lc.streams_bar, n, at[n - 1l] + STEPS)
             with_batch_rows(tr, sess) $(var ws; var rows) {
                 for (st in range64(STEPS)) {
                     var toks <- [for (i in range64(n)); feeds[i][st]]
                     eval_batch(tr, ws, rows, toks)
                     delete toks
                     for (i in range64(n)) {
-                        hold_bar(t, tr, owned[i].logits, alone[i][st + 1l], alone[i][st], lc.streams_bar, "batched step {st}, stream {i} at {at[i] + st} positions")
+                        hold_bar(t, tr, owned[i].logits, alone[i][st + 1l], alone[i][st], streams_bar, "batched step {st}, stream {i} at {at[i] + st} positions")
                     }
                 }
             }
@@ -910,8 +925,14 @@ def cell_scheduler_device_mode(t : T?; file : string) {
             t |> success(!serve_four(tr, false, host).on, "the control scheduler serves host-cached sessions")
             let served1 = moe_gpu_resident_prefills()
             let picks0 = rdec_picks_served()
+            let segw0 = segment_windows_count()
             let served = serve_four(tr, true, dev)
             t |> success(served.on, "an idle scheduler switches to device-home sessions")
+            if (gpu_device_prefill_segments(tr)) {   //! the two prompts admitted together ride one segmented window: the tick's witness
+                t |> success(segment_windows_count() - segw0 >= 1l, "the device-home tick handed its prefilling streams to the segmented window ({segment_windows_count() - segw0} windows)")
+            } else {
+                t |> equal(segment_windows_count() - segw0, 0l, "a model the segmented window declines takes a stream's own call a tick")
+            }
             //! every decode step of the three argmax requests lands a pick (their first token samples off the prefill's logits inline);
             //! the sampled fourth request's steps land logits, so the count is the rows stepped less its own
             var td4 <- toks_of(dev, 4l)

@@ -3384,7 +3384,8 @@ def private gated_q_panel(f : DaAttnBFix) : array<float> {
 //! stamp), the out plane under the sentinel, a workgroup a head per stamp tile of rows; the rows come back
 //! under `lead` > 0 the rows sit `lead` rows into the q and out planes (`DaAttnBArgs.row0`, a segment's window row base) behind
 //! poison rows, and the WHOLE out plane comes back - the lead rows at the NaN sentinel, then the rows
-def private da_attn_b_run(f : DaAttnBFix; stamp : int; scale, cap : float; window : int; lead : int = 0) : array<float> {
+//! `lead` poison rows ahead of the rows and `trail` behind them in the q and out planes (a co-segment's rows, left alone)
+def private da_attn_b_run(f : DaAttnBFix; stamp : int; scale, cap : float; window : int; lead : int = 0; trail : int = 0) : array<float> {
     var y : array<float>
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let f16 = dab_f16(stamp)
@@ -3397,10 +3398,13 @@ def private da_attn_b_run(f : DaAttnBFix; stamp : int; scale, cap : float; windo
         with_cell_planes() $(var cp : CellPlanes) {
             var qrows <- gated ? gated_q_panel(f) : clone_to_move(f.qh)
             qlead |> push_from(qrows)
+            for (_i in range(trail * qrow)) {
+                qlead |> push(10000.0)
+            }
             let pq = cp |> in_(qlead)
             let pk = f16 ? in_plain(cp, pack_f16(f.kh)) : in_(cp, f.kh)
             let pv = f16 ? in_plain(cp, pack_f16(f.vh)) : in_(cp, f.vh)
-            let py = cp |> out_((lead + f.npos) * qd)
+            let py = cp |> out_((lead + f.npos + trail) * qd)
             let planes = fixed_array(pq, pk, pv, py)
             let bufs = gather_planes(cp.dev, planes)
             let sizes = gather_planes(cp.bytes, planes)
@@ -3452,6 +3456,7 @@ def test_vkd_da_attn_b_row0(t0 : T?) {
                 return
             }
             let lead = 3
+            let trail = 2   //! the rows of a segment behind this one: the tile's padded store must stop at the segment's last row
             for (stamp in fixed_array(DAB_B, DAB_BW, DAB_H128)) {
                 let tag = stamp == DAB_BW ? "da_attn_bw" : (stamp == DAB_H128 ? "da_attn_b_h128" : "da_attn_b")
                 if (stamp == DAB_BW && !ensure_da_attn_bw_cls()) {
@@ -3466,7 +3471,7 @@ def test_vkd_da_attn_b_row0(t0 : T?) {
                 let scale = wide ? 1.0 : 0.125
                 var f <- wide ? da_attn_b_fix(13, 4, 4, 512, 32, 64, 160, 0.005, 0.18, 0.003, 0.14, false) : da_attn_b_fix(13, 4, 2, 128, 32, 64, 160, 0.05, 1.8, 0.03, 1.4, false)
                 let qd = f.nheads * f.hs
-                var inscope y_full <- da_attn_b_run(f, stamp, scale, 0.0, 0, lead)
+                var inscope y_full <- da_attn_b_run(f, stamp, scale, 0.0, 0, lead, trail)
                 var inscope y_ref <- da_attn_b_ref(f, scale, 0, 0.0)
                 var lead_moved = 0
                 var lead_first = -1
@@ -3477,6 +3482,15 @@ def test_vkd_da_attn_b_row0(t0 : T?) {
                     }
                 }
                 t |> equal(lead_moved, 0, "{tag}: the {lead} lead rows under the row base stay at the sentinel ({lead_moved} elements written, the first at {lead_first})")
+                var trail_moved = 0
+                var trail_first = -1
+                for (i in range((lead + f.npos) * qd, (lead + f.npos + trail) * qd)) {
+                    if (unsafe(reinterpret<uint>(y_full[i])) != NAN_SENTINEL_BITS) {
+                        trail_first = trail_first < 0 ? i : trail_first
+                        trail_moved++
+                    }
+                }
+                t |> equal(trail_moved, 0, "{tag}: the {trail} rows past the segment stay at the sentinel ({trail_moved} elements written, the first at {trail_first})")
                 var inscope y_cls <- [for (i in range(f.npos * qd)); y_full[lead * qd + i]]
                 check_rows(t, "{tag} at row0 {lead} against the CPU oracle", y_cls, y_ref, stamp == DAB_H128 ? cm_bar(y_ref) : BAR_APPROX_CTRL, qd, f.hs)
                 delete f
@@ -5324,7 +5338,8 @@ def private rope_kv_b_row0_arm(t : T?) {
         var csh <- row_fill(npos * hs, 13, 0, 0.045, 0.9, 41)
         let bh : array<float>
         var oref <- rope_kv_b_ref(q0h, kvh, bh, csh, npos, pos0, layerbase, 0, false)
-        var qlead <- [for (i in range((lead + npos) * qd)); i < lead * qd ? 10000.0 : q0h[i - lead * qd]]
+        let trail = 2   //! a co-segment's rows behind these, which the store must leave alone
+        var qlead <- [for (i in range((lead + npos + trail) * qd)); i < lead * qd || i >= (lead + npos) * qd ? 10000.0 : q0h[i - lead * qd]]
         var kvm_lead <- [for (_i in range((lead + npos) * 2 * kvd)); 10000.0]   //! the merged [k | v] rows from row `lead`
         for (p in range(npos)) {
             for (c in range(kvd)) {
@@ -5359,6 +5374,11 @@ def private rope_kv_b_row0_arm(t : T?) {
                 }
             }
             t |> equal(lead_moved, 0, "rope_kv_store_b at row0 {lead}: the {lead} lead q rows stay untouched ({lead_moved} elements written, the first at {lead_first})")
+            var trail_moved = 0
+            for (i in range((lead + npos) * qd, (lead + npos + trail) * qd)) {
+                trail_moved += q_cls[i] != 10000.0 ? 1 : 0
+            }
+            t |> equal(trail_moved, 0, "rope_kv_store_b at row0 {lead}: the {trail} q rows past the segment stay untouched ({trail_moved} elements written)")
             var inscope q_rows <- [for (i in range(npos * qd)); q_cls[lead * qd + i]]
             t |> success(moved_off(oref.q, q0h, 3, BAR_APPROX_CTRL), "rope_kv_store_b at row0 {lead}: the roped q row differs from its input at a rotated index past the bar (the in-place compare has teeth)")
             check_rows(t, "rope_kv_store_b at row0 {lead}, q", q_rows, oref.q, BAR_APPROX_CTRL, qd, hs)

@@ -2962,8 +2962,8 @@ class AtPrep {
 // ===== prefill attention: the flash Q-tile =====
 
 struct AtAttnArgs {
-    rows : uint     // window query rows
-    w0 : uint       // window base (queries attend positions [0, w0 + row])
+    rows : uint     // the segment's query rows (the whole window on a one-session call)
+    w0 : uint       // the segment's position base (queries attend positions [0, w0 + row])
     qd : uint
     kvd : uint
     hs : uint
@@ -3286,8 +3286,8 @@ def facm2_recip(r, c : uint; v : float) : float => v == 0.0 ? 0.0 : 1.0 / v
 def facm2_sigmoid(r, c : uint; v : float) : float => sigmoid_f32(v)
 
 struct FaArgs {
-    rows : uint     // window query rows
-    w0 : uint       // window base (queries attend positions [0, w0 + row])
+    rows : uint     // the segment's query rows (the whole window on a one-session call)
+    w0 : uint       // the segment's position base (queries attend positions [0, w0 + row])
     qd : uint       // o row stride (n_heads * hs); the q row's too unless qrow says otherwise
     kvd : uint      // k/v row stride (n_kv * hs)
     kv_mul : uint   // GQA ratio (head / kv_mul = kv head)
@@ -3906,14 +3906,14 @@ def fa_stamp_enc(khr : bool; hs : int64; gated, cap, sink, f16 : bool; raw : VkC
 def private attn_softcap(s, cap : float) : float => cap != 0.0 ? softcap_exp(s, cap) : s
 
 struct DaAttnBArgs {
-    npos : uint     // window query rows
+    npos : uint     // the segment's query rows (the whole window on a one-session call)
     nh : uint
     kvd : uint
     hs : uint
     kv_mul : uint
     kbase : uint    // word offsets into the K / V mirror planes
     vbase : uint
-    w0 : uint       // window base (queries attend mirror positions [0, w0 + row])
+    w0 : uint       // the segment's position base (queries attend mirror positions [0, w0 + row])
     scale : float
     qhs : uint      // per-head q stride: hs, or 2 * hs on a gated model ([q | gate] per head)
     gated : uint    // multiply each head's output by the sigmoid of its gate half
@@ -10053,7 +10053,7 @@ struct RopeKvBArgs {
     ppp : uint       // pairs per position (hs / 2 per head, rotated or not)
     layerbase : uint // this layer's K/V mirror base
     npos : uint
-    pos0 : uint      // the window's first absolute position
+    pos0 : uint      // the segment's first absolute position (the window's row base under a block codec)
     voff : uint
     kstride : uint
     qhs : uint       // per-head q stride: hs, or 2 * hs on a gated model ([q | gate] per head, the gate half left in place)

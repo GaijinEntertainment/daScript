@@ -316,7 +316,7 @@ def select_prefill_override(name : string) : bool {
         return false
     }
     g_prefill_override = g_prefill_overrides[name]
-    g_prefill_seg_override = g_prefill_seg_overrides?[name] ?? g_prefill_seg_override
+    g_prefill_seg_override = g_prefill_seg_overrides?[name] ?? PrefillSegmentsOverrideFn()   //! an override with no segments form leaves none cached
     g_prefill_override_name = name
     return true
 }
