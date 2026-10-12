@@ -63,23 +63,23 @@ scheduler's earlier chunks (`rdec_prefill_region`: kept where the session owns t
 from the host cache where it does not). A recurrent model passes a continuation to the CPU
 loop: the chain starts the deltanet state from zero (`followup_vulkan.md` item 69).
 
-**The last layer's FFN runs on the window's last 32 rows only, on a window of one segment.** Nothing downstream of the
-final layer reads more than the last row - a segmented window's every segment wants its own last row, so it runs the FFN whole - the classifier requantizes row `wlen - 1`, the KV
-mirrors are stored before the FFN, and a later window starts from fresh embeddings - so the
-gate, up and down GEMMs, the activation and the residual step of the last layer take a region
-starting 32 rows below the window's end (`fill_arena_batch_sched`'s `row0`, `ActArgs.elem0`,
-`ArArgs.row0`). Thirty-two, not one, because the s tile - the cm2 tile with 32-row columns
-(`ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default`) - loads a whole 32-row column unclamped on its
-fast path, and the resident prefill's activation planes (`pf_xf`, `pf_hf`) carry no read slack
-past the window - unlike the MoE chain's gathered image and hidden plane, which
-`ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default` sizes with 128 rows of slack past their last region
-(`TILE_READ_SLACK`). Rows below the slice keep stale gate, up,
-hidden and residual values that nothing reads. The sliced GEMMs do not split k: the split-k
-reduce sums partial planes from row 0, so a region starting below the window's end would reduce
-the wrong rows. The slice takes the f16-fed cm2 route only (`gu6 && dn6`); the other feeds run
-the full window, and so does a window that warms the NextN head's slab, whose rows read every
-row's post-norm hidden (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm`). Only the plain residual step (`cls_ar`) and the f16 activation honor the row base: the fused
-residual twins feed the NEXT layer's projections and never run on the last layer, so they index from row 0 by design.
+**The last layer's FFN runs on the window's last 32 rows only, on a window of one segment.** Nothing
+downstream of the final layer reads more than the last row - a segmented window's every segment wants its own
+last row, so it runs the FFN whole - the classifier requantizes row `wlen - 1`, the KV mirrors are stored
+before the FFN, and a later window starts from fresh embeddings - so the gate, up and down GEMMs, the
+activation and the residual step of the last layer take a region starting 32 rows below the window's end
+(`fill_arena_batch_sched`'s `row0`, `ActArgs.elem0`, `ArArgs.row0`). Thirty-two, not one, because the s tile -
+the cm2 tile with 32-row columns (`ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default`) - loads a whole
+32-row column unclamped on its fast path, and the resident prefill's activation planes (`pf_xf`, `pf_hf`)
+carry no read slack past the window - unlike the MoE chain's gathered image and hidden plane, which
+`ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default` sizes with 128 rows of slack past their last
+region (`TILE_READ_SLACK`). Rows below the slice keep stale gate, up, hidden and residual values that nothing
+reads. The sliced GEMMs do not split k: the split-k reduce sums partial planes from row 0, so a region
+starting below the window's end would reduce the wrong rows. The slice takes the f16-fed cm2 route only (`gu6
+&& dn6`); the other feeds run the full window, and so does a window that warms the NextN head's slab, whose
+rows read every row's post-norm hidden (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm`). Only the
+plain residual step (`cls_ar`) and the f16 activation honor the row base: the fused residual twins feed the
+NEXT layer's projections and never run on the last layer, so they index from row 0 by design.
 
 **The k and v GEMMs merge into ONE dispatch when the layer's q, k and v weight planes are all
 q8 and the k and v planes sit adjacent in the arena.** The bump allocator places them
