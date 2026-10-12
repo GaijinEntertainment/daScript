@@ -222,6 +222,13 @@ add_das_target(check_ast_verify_changed
     COMMENT "Running --ast-verify-batch over the .das files changed against origin/DAS_CI_BASE_REF"
 )
 
+add_custom_target(check_line_length
+    COMMAND $<TARGET_FILE:daslang> ./utils/internal/line-length/main.das
+    DEPENDS daslang
+    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    COMMENT "Checking the line length of the lines changed against origin/master"
+)
+
 # key on the GENERATOR, not the compiler: MSVC+Ninja (release CI) is single-config, so its exes land in plain bin/
 get_property(_DAS_UTILS_MULTI_CONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
 if(_DAS_UTILS_MULTI_CONFIG)
@@ -323,6 +330,7 @@ SET(DAS_UTILS_TO_TEST
     benchctl/tests
     internal/requirefix
     internal/test-release
+    internal/line-length/test_line_length.das
     daspkg/test_daspkg.das
     daspkg/test_release_workspace.das
     daspkg/test_package_runner_errors.das
