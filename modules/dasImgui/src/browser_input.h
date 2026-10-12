@@ -11,8 +11,17 @@ EM_JS(int, das_browser_is_macos, (), {
 // modules/dasImgui/ARCHITECTURE.md#browser-composition-ordering
 EM_JS(void, das_browser_clipboard_install, (int pointer_is_64bit), {
     if (Module['dasClipboardBridge']) return;
-    const state = {active:false, enabled:true, bytes:null, error:false, composing:false, visible:false, lastCommit:null, disposed:false, editor:0};
-    state.cancel=()=>{state.composing=false;state.lastCommit=null;if(state.host)state.host.value="";};
+    const state = {active:false, enabled:true, bytes:null, error:false, composing:false, visible:false, lastCommit:null, disposed:false, editor:0, password:false};
+    state.paint=()=>{
+        const host=state.host;if(!host)return;
+        host.style.opacity=state.composing && !state.password ? '1' : '0';
+        host.style.width='1px';
+        if(state.composing){
+            const available=Math.max(1,window.innerWidth-host.getBoundingClientRect().left-4);
+            host.style.width=Math.min(available,Math.max(16,host.scrollWidth+4))+'px';
+        }
+    };
+    state.cancel=()=>{state.composing=false;state.lastCommit=null;if(state.host)state.host.value="";state.paint();};
     state.focus=()=>{
         if (!state.active || !state.enabled || !state.visible || !document.hasFocus()) return;
         const active=document.activeElement;
@@ -33,17 +42,21 @@ EM_JS(void, das_browser_clipboard_install, (int pointer_is_64bit), {
     state.replaceHost=()=>{
         if(state.disposed)return;
         const previous=state.host;
-        const style=previous ? previous.style.cssText : 'position:fixed;width:1px;height:16px;opacity:0;pointer-events:none;padding:0;border:0;resize:none';
+        const style=previous ? previous.style.cssText : 'position:fixed;width:1px;height:16px;opacity:0;pointer-events:none;padding:0;border:0;border-bottom:1px solid currentColor;resize:none;overflow:hidden;white-space:pre;font-family:system-ui,sans-serif;z-index:2147483646';
         state.cancel();state.bytes=null;
-        const host=document.createElement('textarea');state.host=host;
-        host.tabIndex=-1;host.setAttribute('aria-label','Text input');
-        host.autocomplete='off';host.spellcheck=false;host.autocapitalize='off';host.style.cssText=style;
+        const host=document.createElement(state.password ? 'input' : 'textarea');state.host=host;
+        if(state.password)host.type='password';
+        host.tabIndex=-1;host.setAttribute('aria-label',state.password ? 'Password input' : 'Text input');
+        host.autocomplete='off';host.spellcheck=false;host.autocapitalize='off';host.wrap='off';host.style.cssText=style;state.paint();
         host.addEventListener('compositionstart',()=>{
-            if(state.host!==host)return;state.composing=true;state.lastCommit=null;
+            if(state.disposed || state.host!==host || !state.active || !state.enabled || document.activeElement!==host)return;state.composing=true;state.lastCommit=null;state.paint();
+        });
+        host.addEventListener('compositionupdate',()=>{
+            queueMicrotask(()=>{if(state.host===host && state.composing)state.paint();});
         });
         host.addEventListener('compositionend',event=>{
             if(state.host!==host || !state.composing)return;
-            state.composing=false;state.commit(event.data,host);state.lastCommit=event.data || null;host.value="";
+            state.composing=false;state.commit(event.data,host);state.lastCommit=event.data || null;host.value="";state.paint();
         });
         host.addEventListener('keydown',event=>{
             if(state.host!==host)return;
@@ -53,7 +66,8 @@ EM_JS(void, das_browser_clipboard_install, (int pointer_is_64bit), {
             if(event.inputType==='insertLineBreak' || event.inputType==='insertParagraph')event.preventDefault();
         });
         host.addEventListener('input',event=>{
-            if(state.host!==host || state.composing || event.isComposing)return;
+            if(state.host!==host)return;
+            if(state.composing || event.isComposing){state.paint();return;}
             if(event.inputType==='insertFromComposition' || event.inputType==='insertCompositionText' || (state.lastCommit && event.data===state.lastCommit)){
                 state.lastCommit=null;host.value="";return;
             }
@@ -64,9 +78,15 @@ EM_JS(void, das_browser_clipboard_install, (int pointer_is_64bit), {
         document.body.appendChild(host);
         if(previous)previous.remove();
     };
+    state.syncOwner=editor=>{
+        const password=!!_das_imgui_browser_input_password();
+        if(state.editor!==editor || state.password!==password){
+            state.editor=editor;state.password=password;state.replaceHost();
+        }
+    };
     state.pointerDown=()=>{
         if(!state.composing || !state.enabled || !state.active)return;
-        const host=state.host;state.composing=false;state.commit(host.value,host);host.value="";
+        const host=state.host;state.composing=false;state.commit(host.value,host);host.value="";state.paint();
     };
     state.replaceHost();
     window.addEventListener('pointerdown',state.pointerDown,true);
@@ -88,7 +108,7 @@ EM_JS(void, das_browser_clipboard_state, (int active, int enabled, int editor), 
     const state=Module['dasClipboardBridge'];
     if (!state) return;
     state.active=!!active; state.enabled=!!enabled;
-    if(state.editor!==editor){state.editor=editor;state.replaceHost();}
+    state.syncOwner(editor);
     if (!active || !enabled) {
         state.bytes=null;state.cancel();
         if (document.activeElement===state.host) state.host.blur();
@@ -120,14 +140,20 @@ EM_JS(void, das_browser_clipboard_remove, (), {
     state.disposed=true;state.active=false;state.enabled=false;state.bytes=null;state.cancel();state.host.remove(); delete Module['dasClipboardBridge'];
 });
 
-EM_JS(void, das_browser_ime_position, (int visible, float x, float y, float height, float width, float display_height, int editor), {
+EM_JS(void, das_browser_ime_position, (int visible, float x, float y, float height, float width, float display_height, int editor, unsigned int foreground, unsigned int background), {
     const state=Module['dasClipboardBridge'];if (!state) return;
-    if(state.editor!==editor){state.editor=editor;state.replaceHost();}
+    state.syncOwner(editor);
     state.visible=!!visible;
     const canvas=Module['canvas'];const rect=canvas.getBoundingClientRect();
     state.host.style.left=(rect.left+x*rect.width/Math.max(1,width))+'px';
     state.host.style.top=(rect.top+y*rect.height/Math.max(1,display_height))+'px';
-    state.host.style.height=Math.max(1,height*rect.height/Math.max(1,display_height))+'px';
+    const lineHeight=Math.max(1,height*rect.height/Math.max(1,display_height));
+    state.host.style.height=lineHeight+'px';
+    state.host.style.fontSize=lineHeight+'px';
+    state.host.style.lineHeight=lineHeight+'px';
+    state.host.style.color='rgb('+(foreground&255)+','+((foreground>>>8)&255)+','+((foreground>>>16)&255)+')';
+    state.host.style.backgroundColor='rgb('+(background&255)+','+((background>>>8)&255)+','+((background>>>16)&255)+')';
+    state.paint();
     if (visible) state.focus();
     else {state.cancel();if(document.activeElement===state.host){state.host.blur();canvas.focus({preventScroll:true});}}
 });
@@ -146,6 +172,11 @@ EM_JS(int, das_browser_block_character, (), {
 static ImGuiContext* browser_clipboard_owner = nullptr;
 static std::string browser_clipboard_text;
 static bool browser_clipboard_enabled = true;
+extern "C" EMSCRIPTEN_KEEPALIVE int das_imgui_browser_input_password() {
+    if (!browser_clipboard_owner || ImGui::GetCurrentContext()!=browser_clipboard_owner) return 1;
+    const auto* input=ImGui::GetInputTextState(das::GetActiveID());
+    return input && (input->Flags & ImGuiInputTextFlags_Password);
+}
 extern "C" EMSCRIPTEN_KEEPALIVE void das_imgui_browser_input_text(const char* text) {
     if (text && browser_clipboard_enabled && ImGui::GetCurrentContext()==browser_clipboard_owner && ImGui::GetIO().WantTextInput)
         ImGui::GetIO().AddInputCharactersUTF8(text);
@@ -153,8 +184,11 @@ extern "C" EMSCRIPTEN_KEEPALIVE void das_imgui_browser_input_text(const char* te
 static void browser_ime_position(ImGuiContext* context, ImGuiViewport* viewport, ImGuiPlatformImeData* data) {
     if (context!=browser_clipboard_owner) return;
     const auto& io=ImGui::GetIO();
+    const auto& style=ImGui::GetStyle();
     das_browser_ime_position(data->WantTextInput, data->InputPos.x-viewport->Pos.x,
-        data->InputPos.y-viewport->Pos.y, data->InputLineHeight, io.DisplaySize.x, io.DisplaySize.y, das::GetActiveID());
+        data->InputPos.y-viewport->Pos.y, data->InputLineHeight, io.DisplaySize.x, io.DisplaySize.y, das::GetTextInputOwner(),
+        ImGui::ColorConvertFloat4ToU32(style.Colors[ImGuiCol_Text]),
+        ImGui::ColorConvertFloat4ToU32(style.Colors[ImGuiCol_FrameBg]));
 }
 static const char* browser_clipboard_get(ImGuiContext* context) {
     if (context != browser_clipboard_owner || !browser_clipboard_enabled) return nullptr;
@@ -185,7 +219,7 @@ static void browser_clipboard_install() {
 }
 static void browser_clipboard_tick() {
     if (ImGui::GetCurrentContext() == browser_clipboard_owner)
-        das_browser_clipboard_state(ImGui::GetIO().WantTextInput, browser_clipboard_enabled, das::GetActiveID());
+        das_browser_clipboard_state(ImGui::GetIO().WantTextInput, browser_clipboard_enabled, das::GetTextInputOwner());
 }
 static void browser_clipboard_shutdown() {
     if (ImGui::GetCurrentContext() != browser_clipboard_owner) return;

@@ -1,0 +1,21 @@
+{
+  "version": "17.0.0",
+  "license": "Unicode-3.0",
+  "files": [
+    {
+      "file": "CaseFolding.txt",
+      "source": "https://www.unicode.org/Public/17.0.0/ucd/CaseFolding.txt",
+      "sha256": "ff8d8fefbf123574205085d6714c36149eb946d717a0c585c27f0f4ef58c4183"
+    },
+    {
+      "file": "NormalizationTest.txt",
+      "source": "https://www.unicode.org/Public/17.0.0/ucd/NormalizationTest.txt",
+      "sha256": "5019ffd530751a741900c849c0e010332f142a3612234639bd200b82138a87db"
+    },
+    {
+      "file": "UnicodeData.txt",
+      "source": "https://www.unicode.org/Public/17.0.0/ucd/UnicodeData.txt",
+      "sha256": "2e1efc1dcb59c575eedf5ccae60f95229f706ee6d031835247d843c11d96470c"
+    }
+  ]
+}

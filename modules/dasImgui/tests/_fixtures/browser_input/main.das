@@ -23,7 +23,9 @@ def update() {
         input_text(SINGLE, (text = "Single line"))
         let single_active = IsItemActive()
         input_text_multiline(MULTI, (text = "Multiple lines", size = float2(540, 150)))
-        var state = JV((single = SINGLE.value, multi = MULTI.value, active = GetIO().WantTextInput, enabled = input_enabled, active_field = single_active ? "single" : IsItemActive() ? "multi" : ""))
+        let multi_active = IsItemActive()
+        input_text(PASSWORD, (text = "Password", flags = ImGuiInputTextFlags.Password))
+        var state = JV((single = SINGLE.value, multi = MULTI.value, password_bytes = length(PASSWORD.value), password_position = GetItemRectMin() + float2(8, 8), active = GetIO().WantTextInput, enabled = input_enabled, active_field = single_active ? "single" : multi_active ? "multi" : IsItemActive() ? "password" : ""))
         fwrite("/input-state.json", write_json_compact(state)); delete_json(state)
     }
     harness_end_frame()

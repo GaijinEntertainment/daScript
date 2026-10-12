@@ -48,6 +48,7 @@ Read live at the point of use (`env_value_of`), not loaded at context init.
 
 | Variable | Type | Default | Effect |
 |---|---|---|---|
+| `PATH` | path list | unset | Executable and Windows runtime DLL search path; standalone tests prepend the producing SDK's binary directory for their children. |
 | `HOME` | path | unset | The tune-history home (USERPROFILE on Windows when unset). |
 | `USERPROFILE` | path | unset | Windows fallback for the tune-history home. |
 | `PROCESSOR_IDENTIFIER` | text | unset | Half of the Windows tune box identity (measurements are a property of the box AND its OS). |

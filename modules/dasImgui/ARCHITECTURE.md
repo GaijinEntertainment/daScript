@@ -73,6 +73,27 @@ The browser input bridge commits pending composition text in a capture-phase
 text therefore precedes the click that can focus another editor in ImGui's input
 queue.
 
+During composition, the browser textarea paints preedit at the published caret,
+with the current ImGui text/background colors and line height. Its width grows
+within the viewport. Commit/cancel, owner replacement and disabled input hide it.
+Password fields use a native password input, keeping composition visually hidden
+and protected in the browser accessibility tree. A native query checks the current
+input flags whenever ownership synchronizes, including focus or flag changes which
+leave the caret geometry unchanged. Changing protection mode replaces the host and
+cancels its old composition.
+
+`SetTextInputCaret` publishes platform IME data and records the requesting item ID
+in context-owned hook data. A shutdown hook frees that data; only this frame or
+the previous frame can supply an owner. The browser bridge prefers an active stock
+item, otherwise the recorded custom owner. It never manufactures a persistent
+ImGui ActiveId for a custom editor: doing so blocks rich-surface mouse handling and
+ordinary controls. Component commands retain their normal shortcut routing.
+Keyboard admission checks actual item ownership instead of WantTextInput, which
+now also reflects the custom editor's own platform request. Caret publication
+continues through blink-off frames and clipped primary segments.
+The standard platform backend owns native candidate-window integration; publishing
+the caret does not implement missing Cocoa/X11 preedit support.
+
 ## 6. A texture reference crosses the native JIT by address {#texture-ref-abi}
 
 The native JIT passes a managed struct argument by address. `ImTextureRef` is a managed

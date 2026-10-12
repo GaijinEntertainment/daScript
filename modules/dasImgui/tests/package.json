@@ -1,0 +1,10 @@
+{
+  "name": "dasimgui-browser-tests",
+  "private": true,
+  "scripts": {
+    "test": "node run_browser_tests.cjs"
+  },
+  "devDependencies": {
+    "playwright": "1.62.1"
+  }
+}

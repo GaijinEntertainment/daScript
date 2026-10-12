@@ -16,6 +16,7 @@ the module and install beside these.
 | {fmt} | https://github.com/fmtlib/fmt | MIT | formatting (`3rdparty/fmt`) | `FMT.LICENSE` (`3rdparty/fmt/LICENSE`) |
 | fast_float | https://github.com/fastfloat/fast_float | MIT (elected) | float parsing (`include/fast_float`) | `FAST_FLOAT.LICENSE` (`include/fast_float/LICENSE`) |
 | Luau | https://github.com/luau-lang/luau | MIT (Lua.org copyright) | the shortest-float emitter (`src/misc/luau_float2string.cpp`) | `LUAU.LICENSE` (`src/misc/LUAU.LICENSE`) |
+| Unicode Character Database 17.0.0 | https://www.unicode.org/Public/17.0.0/ucd/ | Unicode-3.0 | canonical normalization and full case folding (`daslib/unicode_text.das`) | `UNICODE.LICENSE` (`3rdparty/unicode/LICENSE.txt`); source data and conformance corpus under `3rdparty/unicode/17.0.0/` |
 | dastest | Dmitri Granetchi | MIT | the test framework (`dastest/`) | `dastest/LICENSE`, installed with dastest |
 | das-fmt | Dmitri Granetchi | MIT | the formatter (`utils/das-fmt/`) | `utils/das-fmt/LICENSE`, installed with das-fmt |
 | OpenSSL | https://www.openssl.org | Apache-2.0 | TLS in dasHV (`modules/dasHV`) | `OPENSSL.LICENSE` (`modules/dasHV/OPENSSL.LICENSE`) |
