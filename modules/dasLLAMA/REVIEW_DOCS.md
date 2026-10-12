@@ -4,10 +4,10 @@
 doc: `ARCHITECTURE.md`. Planned work: `followup_general.md`, `followup_vulkan.md`,
 `followup_metal.md`.
 
-**A diff that adds a `followup_*.md` entry asking that one function be shortened or split (not
-merged with a twin onto one template) removes that function's STYLE037/STYLE038 suppression
-(`// nolint:`, `options _function_length` / `_cyclomatic_complexity`), or lands the shortening or
-split, in the same change.**
+**A diff that adds a `followup_*.md` entry asking that a function carrying a STYLE037/STYLE038
+suppression (`// nolint:`, `options _function_length` / `_cyclomatic_complexity`) be shortened or
+split (not merged with a twin onto one template) removes that suppression, or lands the shortening
+or split, in the same change.**
 
 **A diff that adds a STYLE037/STYLE038 suppression under this folder to a function that a
 `followup_*.md` entry asks to have shortened or split is a defect - it lands the shortening or
@@ -33,8 +33,8 @@ reproduces only on macOS; `followup_vulkan.md` for work that would change a Vulk
 or dispatch and no Metal one; `followup_general.md` for everything else, work on both backends and
 rig and instrument rows included.**
 
-**A measured figure a diff writes into an `ARCHITECTURE*.md` or a `followup_*.md` has its entry
-in `PERF_LEDGER.md`; a `followup_*.md` row that carries one cites the entry it comes from.**
+**A number a run of this repository produced, written by a diff into an `ARCHITECTURE*.md` or a
+`followup_*.md`, has its entry in `PERF_LEDGER.md`; a `followup_*.md` row that carries one cites the entry it comes from.**
 
 **A diff that adds, removes, or moves a `##` or `###` heading of an `ARCHITECTURE_*.md` companion,
 or adds or removes a companion, updates every text that lists a companion's contents - the

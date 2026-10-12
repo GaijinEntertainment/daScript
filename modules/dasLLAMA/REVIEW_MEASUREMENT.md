@@ -165,13 +165,13 @@ ledger), with the flags that run took.**
 run printed none.** A fat exe is what `daspkg release --fat <class>` builds (`DAS_TUNE_MODE=fat`,
 `ARCHITECTURE_MEASUREMENT_FAT_START.md#fat-first-start`).
 
-**A diff whose PR body, or a document it changes, states that a route the tree served before the
+**A diff whose PR body, or a line it adds or changes, states that a route the tree served before the
 diff runs faster or does less work, where a rig leg runs the changed lines, re-mints in the same
 change a board row (`performance/records/<box>.json`) from that leg and names that row in the PR
 body.** The board is the module's committed record of what serving costs; a kernel win that never
 lands there is invisible to the next regression check.
 
-**A diff whose PR body, or a document it changes, states that a route the tree served before the
+**A diff whose PR body, or a line it adds or changes, states that a route the tree served before the
 diff runs faster or does less work, where no rig leg runs the changed lines, states in its PR body
 that no rig leg runs them and names the instrument that does, with its command line.**
 

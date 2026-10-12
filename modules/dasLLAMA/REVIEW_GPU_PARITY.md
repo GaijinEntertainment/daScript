@@ -4,10 +4,11 @@
 docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`, `ARCHITECTURE_GPU_TOWER.md`.
 Planned work: `followup_metal.md`, `followup_vulkan.md`.
 
-Parity evidence is a compare in which the CPU chain (the same model's forward on the CPU kernels)
-computed at least one output row - one token's, frame's or stage's floats or ids - of one side and
-a GPU-served run - a run whose output the GPU computed - the other, whatever the diff calls it; a
-kernel-unit cell's compare - a test cell that dispatches a `[vk_dispatch]` or
+A GPU-served run is a run in which the GPU computed every output row the compare reads. Parity
+evidence is a compare with a GPU-served run on one side and, on the other, a side that is not
+GPU-served, where the CPU chain (the same model's forward on the CPU kernels) computed at least one
+row - one token's, frame's or stage's floats or ids - the compare reads, whatever the diff calls it;
+a kernel-unit cell's compare - a test cell that dispatches a `[vk_dispatch]` or
 `[metal_dispatch]` class itself - counts. Driver-against-itself evidence is a compare of the
 outputs of two GPU-served runs of one model, whichever drivers served them. A diff cites parity or driver-against-itself
 evidence when it changes what either side of a compare offered as that evidence computes, its bar

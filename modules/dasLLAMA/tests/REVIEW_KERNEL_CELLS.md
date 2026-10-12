@@ -30,8 +30,8 @@ means two sides agree or a figure is good enough - a difference between two comp
 rate, an error, or a count the run decides, within a nonzero tolerance or past a floor or ceiling;
 a guard that keeps a later index or compare well-defined (a length past the index it reads) is not
 one, a counter asserted to show a route ran is not one, and an assert a rule of this list requires
-to show a compare can fail - the in-place cell's output-differs-from-input assert among them - is a
-control, not a bound assert. A sibling stamp is another stamp derived from the same class; it
+to show a compare can fail - the in-place cell's output-differs-from-input assert among them - is
+not a bound assert, and is not the control a bound assert needs. A sibling stamp is another stamp derived from the same class; it
 stands in for a stamp only where the code a rule asks about is the class's own and neither stamp
 overrides it. A control is an extra assert
 in the same cell proving a compare can fail - a poisoned input, or a poisoned expectation (the
@@ -41,8 +41,8 @@ own reference is never its control.
 
 **A diff that changes a kernel's dispatch grid (the count its dispatch needs, or its workgroup
 size) or its kargs (the struct, any buffer binding, or the layout of a struct a bound buffer holds)
-corrects or deletes, in the same change, every gate dispatching that kernel whose count, buffer
-bindings or kargs values the change made wrong.** A gate left on the old count dispatches the wrong
+corrects or deletes, in the same change, every gate dispatching that kernel whose dispatch count,
+workgroup size, buffer bindings, kargs values or bound-struct contents the change made wrong.** A gate left on the old count dispatches the wrong
 shape with no error; a stale kargs gate reads the wrong buffer and passes on garbage that happens to
 compare.
 
@@ -56,9 +56,10 @@ every kernel-unit cell expectation over that kernel's output.** An expectation o
 no longer writes compares the sentinel to a sum.
 
 **A diff that dispatches an existing `[vk_dispatch]` or `[metal_dispatch]` class at a workgroup
-size no kernel-unit cell runs it at, or with a new grid formula (the expression that computes its
-dispatch count from the call's sizes), ships a kernel-unit cell that dispatches it at that
-workgroup size or through that formula, in the same change.**
+size no kernel-unit cell runs it at, or with a grid formula (the expression that computes its
+dispatch count from the call's sizes) no kernel-unit cell computes its count with, ships a
+kernel-unit cell that dispatches it at that workgroup size, or whose dispatch count that same
+expression computes, in the same change.**
 
 **A kernel-unit cell's compare of kernel output against its reference logs, whether it passes or
 fails, the largest difference it measured with that element's row and column; an exact compare - a
@@ -108,8 +109,7 @@ output differs from the input or that its reference - its CPU oracle, or the sec
 it compares against - differs from that input by more than the compare's bar.** An in-place kernel
 that never ran leaves the input, which can wrongly satisfy a tolerant compare.
 
-**A diff that adds or loosens, in a kernel-unit cell, a bound assert - a compare on a class or at
-a kargs value, a rate, an error, a count - ships a control for each such
+**A diff that adds or loosens, in a kernel-unit cell, a bound assert ships a control for each such
 assert, in the same change.**
 
 **A size, depth, or row count that a kernel-unit cell's name, a comment inside the cell, or an
