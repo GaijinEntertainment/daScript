@@ -36,6 +36,8 @@ class UidGen : AstVisitor {
         uid++
     }
 
+    def override canVisitWithAliasSubexpression(_expr : ExprAssume?) : bool => false
+
     [unused_argument(expr)] def override preVisitFunction(expr : FunctionPtr) {
         uid = 0 |> uint64()
     }
