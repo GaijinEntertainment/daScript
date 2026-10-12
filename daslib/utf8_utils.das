@@ -204,12 +204,12 @@ def public is_utf8_string_valid(utf8_string : string const) : bool {
 }
 
 
-def public utf8_decode(var dest_utf32_string : array<uint>&; source_utf8_string : array<uint8> const implicit) {
-    //! Converts UTF-8 string to UTF-32 and appends it to the array of codepoints (UTF-32 string)
+def public utf8_decode(var dest_utf32_string : array<uint>&; source_utf8_string : array<uint8> const implicit; skip_bom : bool = true) {
+    //! Converts UTF-8 to UTF-32 and appends codepoints. Set skip_bom=false to preserve a leading U+FEFF.
     var codepoint = 0u
     var state = 0u
     let length = length(source_utf8_string)
-    var i = contains_utf8_bom(source_utf8_string) ? 3 : 0
+    var i = skip_bom && contains_utf8_bom(source_utf8_string) ? 3 : 0
 
     while (i < length) {
         let byte = uint(source_utf8_string[i++])
@@ -223,28 +223,28 @@ def public utf8_decode(var dest_utf32_string : array<uint>&; source_utf8_string 
 }
 
 
-def public utf8_decode(source_utf8_string : array<uint8> const implicit) : array<uint> {
-    //! Converts UTF-8 string to UTF-32 and returns it as an array of codepoints (UTF-32 string)
+def public utf8_decode(source_utf8_string : array<uint8> const implicit; skip_bom : bool = true) : array<uint> {
+    //! Converts UTF-8 to a UTF-32 array. Set skip_bom=false to preserve a leading U+FEFF.
     var dest_utf32_string : array<uint>
-    dest_utf32_string |> utf8_decode(source_utf8_string)
+    dest_utf32_string |> utf8_decode(source_utf8_string, skip_bom)
     return <- dest_utf32_string
 }
 
 
-def public utf8_decode(source_utf8_string : string const) : array<uint> {
-    //! Converts UTF-8 string to UTF-32 and returns it as an array of codepoints (UTF-32 string)
+def public utf8_decode(source_utf8_string : string const; skip_bom : bool = true) : array<uint> {
+    //! Converts UTF-8 to a UTF-32 array. Set skip_bom=false to preserve a leading U+FEFF.
     var dest_utf32_string : array<uint>
     peek_data(source_utf8_string) $(arr) {
-        dest_utf32_string |> utf8_decode(arr)
+        dest_utf32_string |> utf8_decode(arr, skip_bom)
     }
     return <- dest_utf32_string
 }
 
 
-def public utf8_decode(var dest_utf32_string : array<uint>; source_utf8_string : string const) {
-    //! Converts UTF-8 string to UTF-32 and appends it to the array of codepoints (UTF-32 string)
+def public utf8_decode(var dest_utf32_string : array<uint>; source_utf8_string : string const; skip_bom : bool = true) {
+    //! Converts UTF-8 to UTF-32 and appends codepoints. Set skip_bom=false to preserve a leading U+FEFF.
     peek_data(source_utf8_string) $(arr) {
-        dest_utf32_string |> utf8_decode(arr)
+        dest_utf32_string |> utf8_decode(arr, skip_bom)
     }
 }
 

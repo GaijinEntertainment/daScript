@@ -13,5 +13,6 @@ String manipulation, formatting, encoding, and temporary string utilities.
    generated/strings_convert.rst
    generated/temp_strings.rst
    generated/utf8_utils.rst
+   generated/unicode_text.rst
    generated/base64.rst
    generated/stringify.rst

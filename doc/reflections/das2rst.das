@@ -70,6 +70,7 @@ require daslib/cpp_bind
 require daslib/decs
 require daslib/decs_boost
 require daslib/utf8_utils
+require daslib/unicode_text
 require daslib/coroutines
 require daslib/interfaces
 require daslib/faker
@@ -1144,6 +1145,15 @@ def document_module_decs_boost(_root : string) {
     document("Boost package for DECS", mod, "decs_boost.rst", groups)
 }
 
+def document_module_unicode_text(_root : string) {
+    var mod = find_module("unicode_text")
+    var groups <- array<DocGroup>(
+        group_by_regex("Normalization and case folding", mod, %regex~.*(try_unicode_nfd|try_unicode_casefold|try_unicode_caseless_key)$%%),
+        group_by_regex("Unicode data versions", mod, %regex~.*(UNICODE_TEXT_VERSION|UNICODE_CASELESS_KEY_VERSION)$%%)
+    )
+    document("Unicode normalization and canonical caseless comparison", mod, "unicode_text.rst", groups)
+}
+
 def document_module_utf8_utils(_root : string) {
     var mod = find_module("utf8_utils")
     var groups <- array<DocGroup>(
@@ -2148,6 +2158,7 @@ def main {  // nolint:STYLE038 — flat one-call-per-documented-module dispatch 
     document_module_unroll(root)
     document_module_uriparser_boost(root)
     document_module_utf8_utils(root)
+    document_module_unicode_text(root)
     document_module_validate_code(root)
     write_digest()
     }

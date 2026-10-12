@@ -144,6 +144,7 @@ One section per module: what the module is for, then its public symbols grouped 
 - [tty](#tty) - The TTY module answers whether a stream is attached to a real terminal, and how wide that terminal is.
 - [type_traits](#type_traits) - The TYPE_TRAITS module provides compile-time type introspection and manipulation.
 - [typemacro_boost](#typemacro_boost) - The TYPEMACRO_BOOST module provides infrastructure for defining type macros — custom compile-time type transformations.
+- [unicode_text](#unicode_text) - Module unicode_text
 - [unroll](#unroll) - The UNROLL module implements compile-time loop unrolling.
 - [uriparser](#uriparser) - The URIPARSER module provides URI parsing and manipulation based on the uriparser library.
 - [uriparser_boost](#uriparser_boost) - The URIPARSER_BOOST module extends URI handling with convenience functions for common operations like building URIs from components, extracting query parameters, and resolving relative paths.
@@ -7887,7 +7888,7 @@ The UTF8_UTILS module provides Unicode UTF-8 string utilities including characte
 
 - `decode_unicode_escape` - Decodes Unicode escape sequences (backslash followed by hex digits) in a string to UTF-8.
 - `utf16_to_utf32` - Converts a UTF-16 surrogate pair to a single UTF-32 codepoint.
-- `utf8_decode` - Converts UTF-8 string to UTF-32 and returns it as an array of codepoints (UTF-32 string)
+- `utf8_decode` - Converts UTF-8 to a UTF-32 array.
 - `utf8_encode` - Converts a codepoint (UTF-32 symbol) to the UTF-8 byte array
 
 ### Iteration
@@ -7908,6 +7909,22 @@ The UTF8_UTILS module provides Unicode UTF-8 string utilities including characte
 
 - `utf32_is_word_char` - ASCII `[A-Za-z0-9_]` fast path; otherwise consults a non-word range table.
 - `utf32_to_lower` - Lowercases a codepoint.
+
+## unicode_text
+
+Module unicode_text
+
+
+### Constants
+
+- `UNICODE_TEXT_VERSION` - Bundled Unicode Character Database version.
+- `UNICODE_CASELESS_KEY_VERSION` - Persisted comparison keys must record this version and be reindexed when it changes.
+
+### Normalization and case folding
+
+- `try_unicode_casefold` - Full default, locale-independent Unicode case folding.
+- `try_unicode_caseless_key` - Unicode D145 canonical caseless key: NFD(casefold(NFD(value))).
+- `try_unicode_nfd` - Canonically decompose valid UTF-8 using Unicode17.0.0.
 
 ## validate_code
 
