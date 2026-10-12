@@ -199,6 +199,7 @@ if(NOT DAS_TOOLS_DISABLED)
         JIT_FILES modules/dasLLVM/tests/llvm_tune_profiles.das modules/dasLLVM/tests/llvm_tune_scope.das)
     das_lane_dastest_target(run_tests_llvm_exe COMMENT "Testing the standalone exe"
         JIT_FILES modules/dasLLVM/tests/llvm_exe_name_lookup.das modules/dasLLVM/tests/llvm_exe_native_paths.das
+                  modules/dasLLVM/tests/llvm_exe_optional_module.das
                   modules/dasLLVM/tests/llvm_exe_shared_addr.das modules/dasLLVM/tests/llvm_exe_split_lto.das
                   modules/dasLLVM/tests/llvm_exe_thread_collect.das modules/dasLLVM/tests/llvm_exe_thread_loop_collect.das modules/dasLLVM/tests/llvm_exe_threadlock.das)
 endif()
