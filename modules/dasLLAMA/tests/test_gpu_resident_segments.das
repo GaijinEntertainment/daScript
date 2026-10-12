@@ -185,6 +185,7 @@ def private decline_cell(t : T?; tr : Model) {
     delete got
 }
 
+[cold_path]
 def private segments_cells(t : T?; file : string) {
     let path = path_join(models_dir(), file)
     return if (!resident_ready(t, path))

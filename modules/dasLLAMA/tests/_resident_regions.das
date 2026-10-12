@@ -1202,6 +1202,7 @@ def cell_regions_batched_widen(t : T?; file : string; bar : LogitsBar = LogitsBa
 //! `rows` sessions over `rows` regions - more than the N-row command steps at once - through STEPS batched steps: every
 //! row within `bar` of its session alone with the one-token-off control, each step the fewest commands of at most the
 //! rows the command steps at once (`vk_rdec_token_n_rows`), never a row at a time, and every call served
+[cold_path]
 def cell_regions_batched_groups(t : T?; file : string; rows : int64; bar : LogitsBar = LogitsBar.split_bar) {
     t |> run("{rows} sessions, a region each: a batched step over all of them runs in groups of the command's rows, and every row reads what its session reads alone") @(t : T?) {
         with_regions_rig(t, file, RegionsLoad(regions = rows)) $(tr) {

@@ -126,6 +126,7 @@ let private PEEL_OPEN = 40l
 let private PEEL_STEPS = 4l
 
 //! tails of 1, 2, 5 and 8 rows peel (a peel and a prefill counted) within the split bar of the row-at-a-time tail; one row more takes the chain
+[cold_path]
 def private llama_peel(t : T?; file : string) {
     let path = llama_model_path(t, file)
     if (empty(path)) return

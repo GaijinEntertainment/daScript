@@ -250,6 +250,7 @@ typedef PrefillSegmentsOverrideFn = function<(t : Model; var segs : array<Prefil
 var private g_prefill_overrides : table<string; PrefillOverrideFn>
 var private g_prefill_seg_overrides : table<string; PrefillSegmentsOverrideFn>
 var private g_prefill_override : PrefillOverrideFn
+var private g_prefill_seg_override : PrefillSegmentsOverrideFn   //! the active override's segments form, picked at select so the step pays no table read
 var private g_prefill_override_name = ""
 var private g_prefill_split_span : table<string; bool>
 var private g_prefill_mrope_tables : table<string; bool>
@@ -315,6 +316,7 @@ def select_prefill_override(name : string) : bool {
         return false
     }
     g_prefill_override = g_prefill_overrides[name]
+    g_prefill_seg_override = g_prefill_seg_overrides?[name] ?? g_prefill_seg_override
     g_prefill_override_name = name
     return true
 }
@@ -6306,7 +6308,7 @@ def forward_prefill(t : Model; var s : Session; tokens : array<int64>; npos, sta
     forward_prefill_warm(t, s, tokens, npos, start_pos)
 }
 
-[arch(at="../ARCHITECTURE_GPU_PREFILL_WINDOW.md#prefill-segments")]
+[no_alloc, no_env, no_io, arch(at="../ARCHITECTURE_GPU_PREFILL_WINDOW.md#prefill-segments")]
 def forward_prefill_segments(t : Model; var segs : array<PrefillSeg>; toks : array<array<int64>>) {
     for (sg in segs) {
         kv_capacity_check(t, sg.npos, sg.start_pos)
@@ -6316,7 +6318,7 @@ def forward_prefill_segments(t : Model; var segs : array<PrefillSeg>; toks : arr
     g_prefill_logits_done = false
     var done = false
     if (segs_served_by_override(segs)) {
-        done = invoke(g_prefill_seg_overrides[g_prefill_override_name], t, segs)
+        done = invoke(g_prefill_seg_override, t, segs)
     }
     if (done) {
         for (sg in segs) {

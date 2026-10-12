@@ -3744,7 +3744,7 @@ var private g_rdec_seg_declined : table<string>
 
 [cold_path]
 def private rdec_segs_declined(why : string) {
-    rdec_said_once(g_rdec_seg_declined, "segmented prefill passed a call - {why}")
+    rdec_said_once(g_rdec_seg_declined, "segmented prefill passed a call - ", why)
 }
 
 def private rdec_segs_admitted(segs : array<PrefillSeg>; ids : bool) : bool {
@@ -4004,17 +4004,20 @@ def private rdec_peel_fits(t : Model; s : Session; npos : int64) : bool {
 
 var private g_rdec_peel_declined : table<string>
 
-[cold_path]
 def private rdec_peel_declined(why : string) {
-    rdec_said_once(g_rdec_peel_declined, "the short window takes the chain, not the token command's peel - {why}")
+    rdec_said_once(g_rdec_peel_declined, "the short window takes the chain, not the token command's peel - ", why)
 }
 
-//! `line` logged once per armed model under `said`, the set the arm clears
+//! `why` logged once per armed model under `said`, the set the arm clears: the check every call pays is the lookup alone
+def private rdec_said_once(var said : table<string>; prefix, why : string) {
+    return if (key_exists(said, why))
+    rdec_say_once_now(said, prefix, why)
+}
+
 [cold_path]
-def private rdec_said_once(var said : table<string>; line : string) {
-    return if (key_exists(said, line))
-    said |> insert(line)
-    to_log(LOG_INFO, "dasLLAMA: resident {line} (said once per armed model)\n")
+def private rdec_say_once_now(var said : table<string>; prefix, why : string) {
+    said |> insert(why)
+    to_log(LOG_INFO, "dasLLAMA: resident {prefix}{why} (said once per armed model)\n")
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-prefill-peel")]

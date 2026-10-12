@@ -14,7 +14,7 @@ step runs through a function value - one a seat (a module-level variable holding
 filled through a public setter) or a kernel-backend override registration stores, after its
 declaration, for the runtime to call through - where no `[hot_path]`, contract or `[cold_path]`
 function reaches the `invoke`. An interior function is a function, not itself a region entry, that
-has at least one caller and whose every caller the runtime re-enters once per serving step
+has at least one caller under `dasllama/` and whose every such caller the runtime re-enters once per serving step
 (`ARCHITECTURE_RUNTIME.md#the-hot-path-coverage-model`).
 
 **A diff that adds a kernel dispatch, a loop or a call that the runtime re-enters once per serving

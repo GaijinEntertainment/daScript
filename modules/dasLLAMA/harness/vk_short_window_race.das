@@ -13,7 +13,7 @@ require daslib/clargs
 require daslib/strings_boost
 require daslib/strings_convert
 require dasllama/dasllama
-require dasllama/dasllama_transformer   // nolint:STYLE029 - the umbrella fires each arch [init] registration
+require dasllama/dasllama_transformer   // the umbrella fires each arch [init] registration
 require dasllama/dasllama_common        // nolint:STYLE030,LINT019 - forward_prefill, allow_cpu_prefill
 require dasllama/dasllama_math          // with_dasllama_jobque_
 require dasllama/dasllama_gpu_resident  // moe_gpu_resident_active, moe_gpu_resident_peels, the peel's lever
@@ -77,7 +77,7 @@ def private continuation(tr : Model; prompt, tail : array<int64>; peel : bool) :
     return <- (ms = ms, logits <- logits)
 }
 
-[export]
+[export, cold_path]
 def main : int {
     var args = RaceArgs()
     let rc = parse_args_with_help(args, "vk_short_window_race")
