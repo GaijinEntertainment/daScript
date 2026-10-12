@@ -963,6 +963,102 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                 delete trmg
             }
 
+            //! segs arm: two sessions' chunks as ONE window against the same chunks as two windows, on the mirror-fed form and
+            //! the panel form - the continuations' logits within the bar, eight greedy steps off each token for token, the
+            //! openings as one window from position zero the same, every window counted
+            if (arm_on(t, "segs")) {
+                set_wscale_f16(false)
+                pin_kernel_backend("portable")
+                let prev_crowns = get_metal_tensor_crowns()
+                let prev_override = active_prefill_override()
+                let prev_decode = active_decode_override()
+                let prev_min_npos = get_metal_prefill_min_npos()
+                select_prefill_override("metal")
+                select_decode_override("metal")
+                set_metal_prefill_min_npos(1l)
+                let crown_mirror = "mulmm_q8,attn_qkmm,attn_dev"
+                let longp <- encode(tr, counting_prompt(ATTN_DEV_COUNT_TO), true, false)
+                //! two prompts of different lengths and content, their rows off every lattice: 300 + 200 and 150 + 120
+                var a1 <- [for (i in range(300)); longp[i]]
+                var a2 <- [for (i in range(300, 500)); longp[i]]
+                var b1 <- [for (i in range(40, 190)); longp[i]]
+                var b2 <- [for (i in range(190, 310)); longp[i]]
+                for (fmt in ["Q8_0", "Q4_K_M", "IQ4_XS"]) {   //! q8, a K-quant, a grid format: the three the window's GEMM ladder serves apart
+                    let fpath = path_join(models_dir(), "Llama-3.2-1B-Instruct-{fmt}.gguf")
+                    continue if (!jit_model_available(t, fpath))
+                    var trsg <- blob_twin(t, fpath, 2048l)
+                    for (crown in [crown_mirror, "mulmm_q8,attn_qkmm"]) {
+                        let form = "{fmt} {crown == crown_mirror ? "mirror-fed" : "panel"}"
+                        pin_metal_tensor_crowns(crown)
+                        metal_prefill_shutdown()
+                        with_dasllama_jobque() {
+                            var ra <- two_window_greedy(trsg, a1, a2, 8l)
+                            var rb <- two_window_greedy(trsg, b1, b2, 8l)
+                            let bar_a = ATTN_DEV_BAR * logits_maxabs(ra.logits)
+                            let bar_b = ATTN_DEV_BAR * logits_maxabs(rb.logits)
+                            //! the openings alone, then both tails in one window
+                            var sa = make_run_state(trsg.config, KVDtype.f16, KVDtype.f16)
+                            var sb = make_run_state(trsg.config, KVDtype.f16, KVDtype.f16)
+                            eval_(trsg, sa, a1)
+                            eval_(trsg, sb, b1)
+                            segments_window(t, trsg, sa, sb, a2, b2, "{form}, the tails")
+                            let da = logits_maxdiff(sa.logits, ra.logits)
+                            let db = logits_maxdiff(sb.logits, rb.logits)
+                            to_log(LOG_INFO, "segs {form}: the tails as one window vs two, last-row logits max difference {da} (bar {bar_a}) and {db} (bar {bar_b})\n")
+                            t |> success(da <= bar_a, "{form}: the first segment's logits sit within the bar of its own window's ({da} of {bar_a})")
+                            t |> success(db <= bar_b, "{form}: the second segment's logits sit within the bar of its own window's ({db} of {bar_b})")
+                            let dec0 = metal_decode_stats().decodes
+                            var ga2 <- greedy_from(trsg, sa, long_length(a1) + long_length(a2), 8l)
+                            var gb2 <- greedy_from(trsg, sb, long_length(b1) + long_length(b2), 8l)
+                            t |> equal(metal_decode_stats().decodes - dec0, 16l, "{form}: the sixteen greedy steps were the device's")
+                            log_gen_texts(trsg, "segs {form} first", ra.ids, ga2)
+                            log_gen_texts(trsg, "segs {form} second", rb.ids, gb2)
+                            t |> success(ids_equal(ra.ids, ga2), "{form}: eight greedy steps off the first segment are its own window's")
+                            t |> success(ids_equal(rb.ids, gb2), "{form}: eight greedy steps off the second segment are its own window's")
+                            //! both openings as one window from position zero, the tails alone after
+                            var fa = make_run_state(trsg.config, KVDtype.f16, KVDtype.f16)
+                            var fb = make_run_state(trsg.config, KVDtype.f16, KVDtype.f16)
+                            segments_window(t, trsg, fa, fb, a1, b1, "{form}, the openings")
+                            eval_(trsg, fa, a2)
+                            eval_(trsg, fb, b2)
+                            let fda = logits_maxdiff(fa.logits, ra.logits)
+                            let fdb = logits_maxdiff(fb.logits, rb.logits)
+                            t |> success(fda <= bar_a, "{form}: the first opening as a segment leaves its tail's logits within the bar ({fda} of {bar_a})")
+                            t |> success(fdb <= bar_b, "{form}: the second opening as a segment leaves its tail's logits within the bar ({fdb} of {bar_b})")
+                            var fga <- greedy_from(trsg, fa, long_length(a1) + long_length(a2), 8l)
+                            var fgb <- greedy_from(trsg, fb, long_length(b1) + long_length(b2), 8l)
+                            t |> success(ids_equal(ra.ids, fga), "{form}: eight greedy steps after the segmented opening are the first session's own")
+                            t |> success(ids_equal(rb.ids, fgb), "{form}: eight greedy steps after the segmented opening are the second session's own")
+                            delete ra
+                            delete rb
+                            delete sa
+                            delete sb
+                            delete fa
+                            delete fb
+                            delete ga2
+                            delete gb2
+                            delete fga
+                            delete fgb
+                        }
+                    }
+                    delete trsg
+                }
+                select_decode_override(prev_decode)
+                select_prefill_override(prev_override)
+                set_metal_prefill_min_npos(prev_min_npos)
+                unpin_metal_tensor_crowns()
+                set_metal_tensor_crowns(prev_crowns)
+                metal_prefill_shutdown()
+                metal_decode_shutdown()
+                clear_kernel_backend_pin()
+                select_kernel_backend(prior_backend)
+                set_wscale_f16(prior_wscale)
+                delete a1
+                delete a2
+                delete b1
+                delete b2
+            }
+
             // span arm (metal-media): the media eval shape — causal head, non-causal embd span
             // at start_pos > 0, greedy decode. Both prefill calls must serve on the GPU (the
             // span through AttnArgs.uend), token-exact vs the all-CPU control, per KV codec.

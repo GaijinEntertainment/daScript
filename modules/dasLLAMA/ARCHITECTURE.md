@@ -88,8 +88,9 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
 - `ARCHITECTURE_GPU_PREFILL_WINDOW.md` - the Metal prefill driver's device attention pair (the
   K/V twins, the device-direct QK and AV with the tail stamp of a head off the 64 lattice, the row
   softmax written in place), the mirror-fed window and mirror adoption
-  (`ARCHITECTURE_GPU_PREFILL_WINDOW.md#prefill-kv-mirror`), the recurrent scan over half rows, and
-  how a kernel's hot loads are addressed.
+  (`ARCHITECTURE_GPU_PREFILL_WINDOW.md#prefill-kv-mirror`), the segmented window over several
+  sessions' chunks (`ARCHITECTURE_GPU_PREFILL_WINDOW.md#prefill-segments`), the recurrent scan over
+  half rows, and how a kernel's hot loads are addressed.
 - `ARCHITECTURE_GPU_VULKAN.md` - the Vulkan resident driver's prefill chain and byte stores - the
   prefill window chain, the Q8 requant byte store, the decode GEMV family's grid codebook buffer,
   the tile probe's shared descriptor set layout, the recurrent block of the prefill window, the

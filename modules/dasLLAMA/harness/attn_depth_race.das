@@ -145,24 +145,24 @@ def main {   // nolint:STYLE038 — one-shot race harness; buffers + PSOs stay l
             var t_a = -1.0lf
             var t_b = -1.0lf
             race_pair_ms(queue, 3, t_a, t_b, $(enc) {
-                enc_qk_mm_th_c_pso(enc, qk_p, bqh, bk, batt_a, ka, int64(MP), int64(NK), int64(HEADS))
+                enc_qk_mm_th_c_pso(enc, qk_p, bqh, 0ul, bk, batt_a, ka, int64(MP), int64(NK), int64(HEADS))
                 if (stage >= 1) {
                     enc_rowstat_pso(enc, rs_p, batt_a, ka, bstat_a, bsink, int64(MP), int64(HEADS))
                 }
                 if (stage >= 2) {
-                    enc_av_mm_p_c_pso(enc, av_p, batt_a, bv, bxb_a, ka, bstat_a, int64(MP), int64(HEADS), int64(HS))
+                    enc_av_mm_p_c_pso(enc, av_p, batt_a, bv, bxb_a, 0ul, ka, bstat_a, int64(MP), int64(HEADS), int64(HS))
                 }
             }, $(enc) {
                 if (stage == 3) {
                     enc_half_rows_pso(enc, tw_d, bk, bkh, tka, int64((NK * KVD + 3) / 4))
                     enc_half_rows_pso(enc, tw_d, bv, bvh, tva, int64((NK * KVD + 3) / 4))
                 }
-                enc_qk_dev128_c_pso(enc, qk_d, bqh, bkh, 0ul, batt_b, ka, int64(MP), int64(NK), int64(HEADS))
+                enc_qk_dev128_c_pso(enc, qk_d, bqh, 0ul, bkh, 0ul, batt_b, ka, int64(MP), int64(NK), int64(HEADS))
                 if (stage >= 1) {
                     enc_attn_pexp_pso(enc, px_d, batt_b, ka, bstat_b, bsink, int64(MP), int64(HEADS))
                 }
                 if (stage >= 2) {
-                    enc_av_dev128_c_pso(enc, av_d, batt_b, bvh, 0ul, bxb_b, ka, bstat_b, int64(MP), int64(HEADS), int64(HS / 64))
+                    enc_av_dev128_c_pso(enc, av_d, batt_b, bvh, 0ul, bxb_b, 0ul, ka, bstat_b, int64(MP), int64(HEADS), int64(HS / 64))
                 }
             })
             var note = ""

@@ -3206,6 +3206,7 @@ CPU large-language-model inference in pure daslang: load a GGUF model, tokenize,
 - `eval_embd_body` - Prefill `npos` rows built by `media_body_rows`: [span_lo, span_hi) a non-causal span (empty = every row causal), roped on a merged image `grid` where one is given.
 - `eval_embd_span` - `eval_embd` for a prompt carrying one NON-CAUSAL image span: rows `[span_lo, span_hi)` prefill with every query attending the whole span, the text around them causally — the gemma vision decode shape (non-causal media chunk).
 - `eval_embd_span_mrope` - `eval_embd_span`'s qwen mrope twin: the span rows rope as a `grid`-shaped merged image (position advance `max(grid.x, grid.y)`, tracked on the session for every later eval); same span mask, only the angles differ.
+- `eval_segments` - Several sessions' prompt chunks as ONE prefill: segment i runs `toks[i]` at `sessions[i]`'s position and advances it, each segment's logits landing in its own session.
 - `media_body_rows` - One prefill body's rows for `eval_embd_body` on `session`: `head` text, `n_media` media rows of width `src_w`, `tail` text.
 - `sample` - Sample the next token from `session.logits` per `params`: penalties, then temperature/top-k/top-p/min-p and a CDF draw — or greedy argmax when `params.temp <= 0` (`SamplingParams()` defaults are greedy).
 - `set_seed` - Seed the session's sampling RNG for reproducible generation.

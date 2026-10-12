@@ -205,9 +205,9 @@ def private attn_trio_gate(t : T?; var dev, queue; head_size, n_heads, n_kv_head
             uend = uint(keys.uend), ulo = uint(keys.ulo))
         let bcap0 = keys.hass != 0 ? (mc |> in_(sinks)) : (mc |> in_plain([0.0]))   // the sink plane (hass = 0: never read)
         let aran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
-            invoke(ksc.enc, enc, pso_sc, mc.buf[baq], mc.buf[bak], mc.buf[batt], ka, int64(qp), int64(nkp), int64(n_heads))
+            invoke(ksc.enc, enc, pso_sc, mc.buf[baq], 0ul, mc.buf[bak], mc.buf[batt], ka, int64(qp), int64(nkp), int64(n_heads))
             invoke(ksm.enc, enc, pso_sm, mc.buf[batt], ka, mc.buf[bstat], mc.buf[bcap0], int64(npos), int64(n_heads))   // sink identity (hass = 0)
-            invoke(kav.enc, enc, pso_av, mc.buf[batt], mc.buf[bav], mc.buf[bxb], ka, mc.buf[bstat], int64(qp), int64(n_heads), int64(head_size))
+            invoke(kav.enc, enc, pso_av, mc.buf[batt], mc.buf[bav], mc.buf[bxb], 0ul, ka, mc.buf[bstat], int64(qp), int64(n_heads), int64(head_size))
         }
         return if (!aran)
         // the f16 score slab + half staging — the envelope is the half-precision score shift

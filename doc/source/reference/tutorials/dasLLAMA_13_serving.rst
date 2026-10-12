@@ -22,13 +22,16 @@ Run it like tutorial 01 (SmolLM2-135M-Instruct works well)::
 The raw mechanism
 =================
 
-Serving B conversations means B sessions over one model, and two primitives
+Serving B conversations means B sessions over one model, and three primitives
 make that cheap. A **paged KV pool**: sessions created over
 ``create_kv_pool`` allocate fixed-size page groups on demand instead of a
-full ``seq_len`` slab each (tutorial 04 sized one such slab). And
-``eval_batch``: one decode step for *all* sessions in one pass of the
-weights — B matrix-vector products fuse into one matrix-matrix product,
-which is where the throughput comes from:
+full ``seq_len`` slab each (tutorial 04 sized one such slab).
+``eval_segments``: every stream's prompt chunk as *one* prefill, each chunk at
+its own session's position — where the serving GPU prefills, the chunks share
+one window, so two prompts' tails cost about one; elsewhere each runs as
+``eval`` would. And ``eval_batch``: one decode step for *all* sessions in one
+pass of the weights — B matrix-vector products fuse into one matrix-matrix
+product, which is where the throughput comes from:
 
 .. das-doc: given var m = Model()
 .. code-block:: das
@@ -40,6 +43,10 @@ which is where the throughput comes from:
    var s0 = create_session(m, pool)
    var s1 = create_session(m, pool)
    var rows <- [unsafe(addr(s0)), unsafe(addr(s1))]
+   var prompts : array<array<int64>>
+   prompts |> emplace(encode(m, "What is the capital of France?"))
+   prompts |> emplace(encode(m, "Name the largest planet."))
+   eval_segments(m, rows, prompts)   // ONE prefill over both prompts, each at its own stream's position
    var toks <- [sample(*rows[0], SamplingParams()), sample(*rows[1], SamplingParams())]
    eval_batch(m, ws, rows, toks)   // ONE weight pass advances every stream
    release_kv_pages(s0)            // pages go back to the pool before the session dies
@@ -75,7 +82,8 @@ reply matcher splits, one after content ends the stream:
 
 ``create_scheduler`` sizes the machine; ``submit`` queues requests;
 ``scheduler_step`` admits, runs one batched decode step over every live
-stream, then at most one bounded prefill chunk — a long prompt stalls the
+stream, then one bounded prefill call over every prefilling stream's next
+chunk (the ``eval_segments`` of the raw mechanism) — a long prompt stalls the
 others by a chunk, not by its whole length. Results come back as
 ``SchedEvent`` values:
 

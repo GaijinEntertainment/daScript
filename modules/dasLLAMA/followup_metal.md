@@ -1069,3 +1069,14 @@ projections, the recurrent layers, the 248k-row classifier and some 600 dispatch
 in flight and a four-rows-share-x form each tie or lose to the two-row template, so the 4-bit expert kernel is not
 latency-bound and is not the lever. The work: the dense-side classes by skip-control - the kq GEMV sites, the
 classifier, the deltanet recurrence - and the dispatch count a token, each against its bytes.
+
+## 53. A segment costs the window a layer's worth of dispatches, so a decoding stream's row cannot ride it
+
+`ARCHITECTURE_GPU_PREFILL_WINDOW.md#prefill-segments`: a segment adds its own attention, recurrent and K/V
+dispatches to every layer - about ten a layer, a decode step's worth of dispatch floor over a MoE's layers - which is
+what a second segment of a few rows costs over a window of one. A decoding stream's next token riding a window as a
+one-row segment therefore saves its decode step and pays it back, and the token comes off the window's kernels, which
+round apart from the decode step's at a near-tie; the scheduler keeps the step. The
+work: one dispatch a layer over every segment - a segment table the attention tiles and the scan read their row range,
+key extent and slices from, the batched decode's route-table shape lifted to tiles - so a segment costs its rows alone;
+then the rider is a one-row segment of a window that is no stall.

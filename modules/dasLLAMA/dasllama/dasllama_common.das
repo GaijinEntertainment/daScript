@@ -231,9 +231,24 @@ typedef FinalNormFn       = function<(t : Model; var s : Session; row : int64; b
 //! every row only under `Session.keep_hidden` (the Metal lastrow tail narrows). false = declined.
 typedef PrefillOverrideFn = function<(t : Model; var s : Session; npos : int64; start_pos : int64) : bool>
 
+//! One segment of a prefill over several sessions: `npos` rows of `s` from its position `start_pos`; `toki` is its chunk's
+//! index in the caller's token arrays (a one-token chunk never rides the window, so the index and the segment count part).
+struct PrefillSeg {
+    s : Session?
+    start_pos : int64
+    npos : int64
+    toki : int64
+}
+
+//! A whole-prefill override over several sessions' chunks as ONE window: on true every segment's KV cache is filled, its
+//! x_b holds its last row's residual stream (every row under `Session.keep_hidden`) and, when the override set
+//! `prefill_override_logits_done`, its logits stand. false = declined whole; the caller then runs each segment alone.
+typedef PrefillSegmentsOverrideFn = function<(t : Model; var segs : array<PrefillSeg>) : bool>
+
 // The prefill-override registry (see PrefillOverrideFn). Name-keyed like the kernel backends;
 // nothing activates by default — an empty active name keeps the CPU layer loop.
 var private g_prefill_overrides : table<string; PrefillOverrideFn>
+var private g_prefill_seg_overrides : table<string; PrefillSegmentsOverrideFn>
 var private g_prefill_override : PrefillOverrideFn
 var private g_prefill_override_name = ""
 var private g_prefill_split_span : table<string; bool>
@@ -243,6 +258,15 @@ var private g_prefill_ds_adds : table<string; bool>
 def register_prefill_override(name : string; fn : PrefillOverrideFn) {
     g_prefill_overrides[name] = fn
 }
+
+//! Registered beside the override under the same name: the window over several sessions' chunks. An override without one
+//! prefills segments one at a time.
+def register_prefill_segments_override(name : string; fn : PrefillSegmentsOverrideFn) {
+    g_prefill_seg_overrides[name] = fn
+}
+
+//! Whether the active override takes several sessions' chunks as one window.
+def active_prefill_serves_segments : bool => key_exists(g_prefill_seg_overrides, g_prefill_override_name)
 
 //! Registered beside the override: `true` = this override cannot serve a fused mid-turn span
 //! (a per-query non-causal mask), so `eval_embd_span_` keeps the three-eval splice while it
@@ -2891,6 +2915,48 @@ def eval_(t : Model; var s : Session; tokens : array<int64>) {
     if (npos <= 0l) return
     forward_batch(t, s, tokens, npos, s.n_past)
     s.n_past += npos
+}
+
+var private @scratch g_eval_segs : array<PrefillSeg>
+
+def eval_segments_(t : Model; var sessions : array<Session?>; toks : array<array<int64>>) {
+    let n = long_length(sessions)
+    if (n != long_length(toks)) {
+        panic("eval_segments: {n} sessions and {length(toks)} chunks")
+    }
+    if (n == 0l) return   //! as eval_ on no token: nothing to prefill, nothing to advance
+    for (sp, i in sessions, count()) {
+        if (sp == null) {
+            panic("eval_segments: segment {i} names no session")
+        }
+        if (empty(toks[i])) {
+            panic("eval_segments: segment {i} carries no token")
+        }
+        for (j in range(i)) {
+            if (sessions[j] == sp) {
+                panic("eval_segments: segments {j} and {i} are one session")
+            }
+        }
+    }
+    g_eval_segs |> clear()
+    for (sp, i in sessions, count()) {
+        let np = long_length(toks[i])
+        if (np == 1l) {   //! a one-token chunk keeps eval's dispatch - the decode step - and would cost the window a segment's dispatches for one row
+            eval_(t, *sp, toks[i])
+        } else {
+            g_eval_segs |> push(PrefillSeg(s = sp, start_pos = sp.n_past, npos = np, toki = int64(i)))
+        }
+    }
+    let nw = long_length(g_eval_segs)
+    if (nw == 0l) return
+    if (nw == 1l) {
+        eval_(t, *g_eval_segs[0].s, toks[g_eval_segs[0].toki])
+        return
+    }
+    forward_prefill_segments(t, g_eval_segs, toks)
+    for (sg in g_eval_segs) {
+        sg.s.n_past += sg.npos
+    }
 }
 
 // ===== Per-app runtime profile (the tune sidecar's "runtime" section) =====
@@ -6222,10 +6288,53 @@ def private embed_rows(t : Model; var s : Session; tokens : array<int64>; npos :
 // image, KV-store, and residual stay CPU. Numerics: GPU f32 tile accumulation — drift-class vs CPU flash.
 [no_alloc, no_env, no_io, arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
 def forward_prefill(t : Model; var s : Session; tokens : array<int64>; npos, start_pos : int64; skip_logits : bool = false) {
-    let c = t.config
     if (npos <= 0l) {
         return
     }
+    forward_prefill_head(t, s, tokens, npos, start_pos)
+    forward_prefill_body(t, s, npos, start_pos, skip_logits)
+    forward_prefill_warm(t, s, tokens, npos, start_pos)
+}
+
+[arch(at="../ARCHITECTURE_GPU_PREFILL_WINDOW.md#prefill-segments")]
+def forward_prefill_segments(t : Model; var segs : array<PrefillSeg>; toks : array<array<int64>>) {
+    for (sg in segs) {
+        kv_capacity_check(t, sg.npos, sg.start_pos)
+        forward_prefill_head(t, *sg.s, toks[sg.toki], sg.npos, sg.start_pos)
+        prefill_rope_tables(t, *sg.s, sg.npos, sg.start_pos)
+    }
+    g_prefill_logits_done = false
+    var done = false
+    if (active_prefill_serves_segments()) {
+        done = invoke(g_prefill_seg_overrides[g_prefill_override_name], t, segs)
+    }
+    if (done) {
+        for (sg in segs) {
+            if (!g_prefill_logits_done) {
+                prefill_cpu_logits(t, *sg.s, sg.npos, sg.start_pos, false)
+            }
+        }
+    } else {
+        for (sg in segs) {
+            forward_prefill_body(t, *sg.s, sg.npos, sg.start_pos)
+        }
+    }
+    for (sg in segs) {
+        forward_prefill_warm(t, *sg.s, toks[sg.toki], sg.npos, sg.start_pos)
+    }
+}
+
+//! the draft head's KV warms beside the trunk's on the CPU rail only: on a blob model the GPU spec loop owns the draft slab
+def private forward_prefill_warm(t : Model; var s : Session; tokens : array<int64>; npos, start_pos : int64) {
+    let c = t.config
+    if (g_mtp_spec && c.n_layer_nextn > 0l && !t.metal_blob && !g_prefill_logits_done) {
+        mtp_prefill_warm(t, s, tokens, npos, start_pos)
+    }
+}
+
+[arch(at="../ARCHITECTURE_GPU_PREFILL_WINDOW.md#prefill-segments")]
+def private forward_prefill_head(t : Model; var s : Session; tokens : array<int64>; npos, start_pos : int64) {
+    let c = t.config
     if (npos >= 32l) {
         dispatch_phase_batch()
     }
@@ -6263,25 +6372,17 @@ def forward_prefill(t : Model; var s : Session; tokens : array<int64>; npos, sta
         prof_add("ple", ts_ple)
     }
 
-    // spec on: the draft head's SEAM row (start_pos-1) must be written BEFORE the body — the body's
-    // own tail overwrites mtp_h with THIS window's last hidden. Cold/foreign handoff just skips it.
+    //! spec on: the draft head's SEAM row (start_pos-1) is written BEFORE the body, whose tail overwrites mtp_h with this window's last hidden
     if (g_mtp_spec && c.n_layer_nextn > 0l && start_pos > 0l && s.mtp_h_pos1 == start_pos) {
         let seat = mtp_seated(t, g_mtp_seam_overrides)
         let served = seat && invoke(g_mtp_seam_overrides[g_decode_override_name], t, s, tokens[0], start_pos)   // nolint:PERF026 — `seat` holds key_exists, so the index cannot insert
         if (!served && !t.metal_blob) {
             forward_mtp(t, s, tokens[0], start_pos - 1l, false)
         } elif (!served && seat) {
-            // quality-only miss: the stale seam row dents draft acceptance until the next
-            // draft rewrites it (the verify keeps outputs exact) — loud so a dip is traceable
+            //! quality-only miss: the stale seam row dents draft acceptance until the next draft rewrites it (the verify keeps outputs exact)
             g_mtp_seam_declines++
             to_log(LOG_WARNING, "dasLLAMA: MTP seam row declined at pos {start_pos} - draft acceptance may dip this window\n")   // nolint:PERF028,PERF026 - fires only on a seam decline; loud by design so a quality dip is traceable
         }
-    }
-    forward_prefill_body(t, s, npos, start_pos, skip_logits)
-    // spec on: maintain the draft head's KV alongside the trunk's — CPU rail only (on a blob
-    // model the GPU spec loop owns the draft slab; these hooks would CPU-touch blob planes)
-    if (g_mtp_spec && c.n_layer_nextn > 0l && !t.metal_blob && !g_prefill_logits_done) {
-        mtp_prefill_warm(t, s, tokens, npos, start_pos)
     }
 }
 
@@ -6537,6 +6638,14 @@ def forward_prefill_body(t : Model; var s : Session; npos, start_pos : int64; sk
 
     // final rmsnorm + classifier on the LAST position only (that's what we sample next)
     return if (stack_done && g_prefill_logits_done)   // the override already produced s.logits
+    prefill_cpu_logits(t, s, npos, start_pos, skip_logits)
+}
+
+//! The final norm and the classifier over the chunk's last row into `s.logits`, the MTP carry stashed; the CPU step an
+//! override that lands no logits leaves to the caller.
+def private prefill_cpu_logits(t : Model; var s : Session; npos, start_pos : int64; skip_logits : bool) {
+    let c = t.config
+    let dim = c.dim
     blob_only_panic(t, "prefill final-norm/classifier step")
     let ts_final = prof_ticks()
     let last = npos - 1l

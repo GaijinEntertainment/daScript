@@ -1364,15 +1364,15 @@ def private attn_qk_mm_gate(t : T?; var dev, queue; tensor : bool; heads, hs, kv
         let batt = mc |> out_words(heads * mp * np32, float16(-1000.0))   // f16 slab; the sentinel is f16-exact
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
             if (pair_mt == 128) {
-                enc_qk_dev128_c_pso(enc, pso, mc.buf[bq], mc.buf[bk], uint64(klead * kvd * 2), mc.buf[batt], ka, int64(mp), int64(np32), int64(heads))
+                enc_qk_dev128_c_pso(enc, pso, mc.buf[bq], 0ul, mc.buf[bk], uint64(klead * kvd * 2), mc.buf[batt], ka, int64(mp), int64(np32), int64(heads))
             } elif (pair) {
-                enc_qk_dev_c_pso(enc, pso, mc.buf[bq], mc.buf[bk], uint64(klead * kvd * 2), mc.buf[batt], ka, int64(mp), int64(np32), int64(heads))
+                enc_qk_dev_c_pso(enc, pso, mc.buf[bq], 0ul, mc.buf[bk], uint64(klead * kvd * 2), mc.buf[batt], ka, int64(mp), int64(np32), int64(heads))
             } elif (halfq) {
-                enc_qk_mm_th_c_pso(enc, pso, mc.buf[bq], mc.buf[bk], mc.buf[batt], ka, int64(mp), int64(np32), int64(heads))
+                enc_qk_mm_th_c_pso(enc, pso, mc.buf[bq], 0ul, mc.buf[bk], mc.buf[batt], ka, int64(mp), int64(np32), int64(heads))
             } elif (tensor) {
-                enc_qk_mm_t_c_pso(enc, pso, mc.buf[bq], mc.buf[bk], mc.buf[batt], ka, int64(mp), int64(np32), int64(heads))
+                enc_qk_mm_t_c_pso(enc, pso, mc.buf[bq], 0ul, mc.buf[bk], mc.buf[batt], ka, int64(mp), int64(np32), int64(heads))
             } else {
-                enc_qk_mm_c_pso(enc, pso, mc.buf[bq], mc.buf[bk], mc.buf[batt], ka, int64(mp), int64(np32), int64(heads))
+                enc_qk_mm_c_pso(enc, pso, mc.buf[bq], 0ul, mc.buf[bk], mc.buf[batt], ka, int64(mp), int64(np32), int64(heads))
             }
         }
         return if (!ran)
@@ -1452,7 +1452,7 @@ def private attn_av_mm_gate(t : T?; var dev, queue; tensor : bool; heads, hs, kv
         let bv = mc |> in_(vv)
         let bxb = mc |> out_words(mp * qd, -1000.0)
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
-            invoke(kav.enc, enc, pso, mc.buf[batt], mc.buf[bv], mc.buf[bxb], ka, mc.buf[bstat], int64(mp), int64(heads), int64(hs))
+            invoke(kav.enc, enc, pso, mc.buf[batt], mc.buf[bv], mc.buf[bxb], 0ul, ka, mc.buf[bstat], int64(mp), int64(heads), int64(hs))
         }
         return if (!ran)
         check_buf(t, tag, mc.buf[bxb], want, env_bar(2e-3, env), Shape(row_width = qd, head_width = hs), env)
@@ -1591,9 +1591,9 @@ def private attn_dev_pair_gate(t : T?; var dev, queue; mt, heads, hs, kv_mul, mp
         let bxb = mc |> out_words(mp * qd, -1000.0)
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
             invoke(kpx.enc, enc, pso_px, mc.buf[batt], ka, mc.buf[bstat], mc.buf[bsink], int64(mp), int64(heads))
-            invoke(kav.enc, enc, pso_av, mc.buf[batt], mc.buf[bv], uint64(vlead * kvd * 2), mc.buf[bxb], ka, mc.buf[bstat], int64(mp), int64(heads), int64(hs / 64))
+            invoke(kav.enc, enc, pso_av, mc.buf[batt], mc.buf[bv], uint64(vlead * kvd * 2), mc.buf[bxb], 0ul, ka, mc.buf[bstat], int64(mp), int64(heads), int64(hs / 64))
             if (tail) {
-                invoke(kavt.enc, enc, pso_avt, mc.buf[batt], mc.buf[bv], uint64(vlead * kvd * 2), mc.buf[bxb], ka, mc.buf[bstat], int64(mp), int64(heads), int64(hs))
+                invoke(kavt.enc, enc, pso_avt, mc.buf[batt], mc.buf[bv], uint64(vlead * kvd * 2), mc.buf[bxb], 0ul, ka, mc.buf[bstat], int64(mp), int64(heads), int64(hs))
             }
         }
         return if (!ran)

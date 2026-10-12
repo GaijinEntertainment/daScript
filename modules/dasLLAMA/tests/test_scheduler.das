@@ -9,7 +9,8 @@ require _scheduler_rig   // make_req, drain, toks_of, finished_of
 require dasllama/dasllama_batch   // batch_step_census: how the speculative ticks were served
 require dasllama/dasllama                               // facade: load/encode/generate references + engine knobs
 require dasllama/dasllama_blocks   // embed_text_rows: the media arms build rows from the prompt's own tokens
-require dasllama/dasllama_common   // layer_is_recurrent: the deltanet-on-GPU cell finds a recurrent layer to probe
+require dasllama/dasllama_common   // layer_is_recurrent: the deltanet-on-GPU cell finds a recurrent layer to probe; eval_ / forward_prefill: the one-token segment cell's two dispatches
+require _compares   // mismatch_exact
 require dasllama/dasllama_gpu_tier   // moe_gpu_dnd_on_gpu: that cell skips unless the tier serves the decode step; moe_gpu_tier_installed / gpu_want_auto
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active / moe_gpu_resident_verifies: the resident pick-ask cell's witnesses
 require daslib/jobque_boost
@@ -690,14 +691,20 @@ def test_scheduler_decode_events_precede_chunk(t : T?) {
     }
 }
 
+//! Admission beside a prefilling stream: nothing holds a request back while no checkpoint stop lies ahead of a prefilling
+//! stream (the wait for one is the Metal prefix-checkpoint cells'), the two prompts prefill as segments of the ticks'
+//! windows inside the quantum - the first stream's chunk whole, the second's rows as the quantum leaves room - and each
+//! stream reads its solo reference token for token.
 [test]
-def test_scheduler_admission_waits_for_prefill(t : T?) {
-    t |> run("a request is admitted only once no admitted stream is still prefilling (needs SmolLM2-135M)") @(t : T?) {
+def test_scheduler_admission_beside_prefill(t : T?) {
+    t |> run("a request is admitted beside a prefilling stream with no checkpoint ahead, and both read their solo references (needs SmolLM2-135M)") @(t : T?) {
         if (model_missing(t)) {
             return
         }
         with_dasllama_jobque() {
             var m <- load_capped_cpu(128l)
+            let prev_fused = get_fused_decode()
+            set_fused_decode(false)
             var prompt <- encode(m, "The quick brown fox jumps over the lazy dog while the little robot watches from a small hill near the old village bakery and counts every bird that crosses the evening sky", true, false)
             var short <- encode(m, "Once upon a time", true, false)
             let K = 8l
@@ -705,30 +712,94 @@ def test_scheduler_admission_waits_for_prefill(t : T?) {
             t |> success(np > 3l * K && long_length(short) <= K, "the long prompt spans chunks, the short one fits one ({np} and {length(short)} tokens)")
             var none : array<int64>
             let greedy = SamplingParams()
+            var refs <- [ <- ref_generate(m, prompt, greedy, 4l, none), <- ref_generate(m, short, greedy, 4l, none)]
             var sch <- create_scheduler(m, 2l, 4l, K, [idle_chunk_tokens = 0l])
             var events : array<SchedEvent>
             t |> success(submit(m, sch, make_req(1l, prompt, greedy, 4l, none)), "the long prompt queued")
             t |> success(submit(m, sch, make_req(2l, short, greedy, 4l, none)), "the short one queued behind it")
             scheduler_step(m, sch, events)
-            t |> equal(n_active(sch), 1l, "the first tick admits the first request alone")
-            t |> equal(n_queued(sch), 1l, "the second waits while the first prefills")
-            var ticks = 1
-            while (empty(toks_of(events, 1l)) && ticks < 64) {
-                scheduler_step(m, sch, events)
-                ticks ++
-            }
-            t |> success(!empty(toks_of(events, 1l)), "the first stream reached its first token in {ticks} ticks")
-            t |> equal(n_queued(sch), 1l, "the second is still queued on the tick the first token lands")
-            scheduler_step(m, sch, events)
-            t |> equal(n_active(sch), 2l, "the next tick admits it, the first now decoding")
+            t |> equal(n_active(sch), 2l, "the first tick admits both: the first stream has no checkpoint stop ahead")
             t |> equal(n_queued(sch), 0l, "the queue is empty")
+            t |> equal(sch.prefill_evals, 1l, "the first tick ran one prefill call")
+            t |> equal(sch.prefill_tokens, K, "the quantum went to the first stream's chunk whole")
             drain(m, sch, events)
             t |> equal(finished_of(events, 1l).finish, "length", "stream 1 ran to its length")
             t |> equal(finished_of(events, 2l).finish, "length", "stream 2 ran to its length")
+            t |> success(sch.prefill_evals <= (np + K - 1l) / K + 1l, "the second prompt rode the first's windows or one of its own ({sch.prefill_evals} calls for {np} + {length(short)} tokens at K={K})")
+            var g1 <- toks_of(events, 1l)
+            var g2 <- toks_of(events, 2l)
+            to_log(LOG_INFO, "beside prefill A: {g1} | solo A: {refs[0].toks}\n")
+            to_log(LOG_INFO, "beside prefill B: {g2} | solo B: {refs[1].toks}\n")
+            t |> success(ids_equal(g1, refs[0].toks), "stream 1 matches its solo reference")
+            t |> success(ids_equal(g2, refs[1].toks), "stream 2 matches its solo reference")
+            set_fused_decode(prev_fused)
+            delete g1
+            delete g2
+            delete refs
             delete events
             delete sch
             delete prompt
             delete short
+            delete m
+        }
+    }
+}
+
+var private g_probe_prefill_rows : array<int64>   //! the row counts a declining prefill override was offered, in order
+
+[unused_argument(t, s, start_pos)]
+def private probe_prefill_declines(t : Model; var s : Session; npos, start_pos : int64) : bool {
+    g_probe_prefill_rows |> push(npos)
+    return false
+}
+
+//! A one-token chunk beside a longer one keeps eval's dispatch - the decode step, which offers no prefill override its row -
+//! while the longer chunk is offered as a prefill; both chunks' logits are their own eval's, bit for bit.
+[test]
+def test_eval_segments_one_token_chunk(t : T?) {
+    t |> run("a one-token segment runs as eval does, the longer one as its own eval (needs SmolLM2-135M)") @(t : T?) {
+        if (model_missing(t)) {
+            return
+        }
+        with_dasllama_jobque() {
+            var m <- load_capped_cpu(128l)
+            var prompt <- encode(m, "The quick brown fox jumps over the lazy dog", true, false)
+            var one <- [prompt[1]]
+            var ra <- make_run_state(m.config)
+            eval_(m, ra, prompt)
+            var rb <- make_run_state(m.config)
+            eval_(m, rb, one)
+            let probe = "test-declining-prefill"
+            register_prefill_override(probe, @@probe_prefill_declines)
+            let prefill0 = active_prefill_override()
+            select_prefill_override(probe)
+            g_probe_prefill_rows |> clear()
+            var sa <- make_run_state(m.config)
+            var sb <- make_run_state(m.config)
+            var sess <- [unsafe(addr(sa)), unsafe(addr(sb))]
+            var toks : array<array<int64>>
+            toks |> resize(2)
+            toks[0] := prompt
+            toks[1] := one
+            eval_segments(m, sess, toks)
+            t |> equal(sa.n_past, long_length(prompt), "the longer segment advanced its session")
+            t |> equal(sb.n_past, 1l, "the one-token segment advanced its session")
+            t |> equal(mismatch_exact(sa.logits, ra.logits), 0, "the longer segment's logits are its own eval's, bit for bit")
+            t |> equal(mismatch_exact(sb.logits, rb.logits), 0, "the one-token segment's logits are the decode step's, bit for bit")
+            t |> equal(g_probe_prefill_rows, [long_length(prompt)], "the override was offered the longer chunk alone: the one-token chunk took the decode step ({g_probe_prefill_rows})")
+            var cb <- make_run_state(m.config)
+            forward_prefill(m, cb, one, 1l, 0l)
+            t |> equal(g_probe_prefill_rows, [long_length(prompt), 1l], "control: the same token through the prefill body is offered to the override ({g_probe_prefill_rows})")
+            select_prefill_override(prefill0)
+            sess |> clear()   //! borrowed pointers: the sessions are deleted below
+            delete toks
+            delete cb
+            delete sa
+            delete sb
+            delete ra
+            delete rb
+            delete one
+            delete prompt
             delete m
         }
     }
