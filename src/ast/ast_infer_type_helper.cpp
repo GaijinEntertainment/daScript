@@ -417,6 +417,9 @@ namespace das {
                     aT = new TypeDecl(bT, decl->at);
                 }
             }
+            if (aT && aT->isExprType()) {
+                return nullptr;
+            }
             if (aT) {
                 // a generic alias binds the WHOLE matched type - int[4] passed to auto(TT)
                 // makes TT = int[4]; use-site FA wraps then nest naturally (TT[2] = int[2][4]).
