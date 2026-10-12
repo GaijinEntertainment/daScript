@@ -5362,7 +5362,10 @@ record store carries a Vulkan row), so the pod's figures are direction-grade thr
   peel 6.5 / 6.9 / 4.5 / 7.4 ms against the chain's 13.5 / 11.7 / 13.4 / 13.5 at 1 / 2 / 4 / 8 rows, on the 1B Q8_0 2.2 / 4.1
   / 4.2 / 3.0 against 5.4 / 6.6 / 6.6 / 5.5, the forms' last-row logits at most 0.27 apart on the 3B and 0.23 on the 1B (the
   chain's tiles and the command's GEMV leaves round apart; the split bar holds them). The bed prints the slowest rep beside the
-  fastest from 0f1e793e18 on; the rows above predate that print.
+  fastest from 0f1e793e18 on; the rows above predate that print. At e38a26bb46 the same bed reads on the 3B peel 4.0 / 4.2 /
+  7.0 / 7.4 against the chain's 13.4 / 13.5 / 11.8 / 11.8, on the 1B 3.8 / 2.5 / 4.2 / 4.6 against 6.6 / 5.5 / 6.7 / 6.6, the
+  slowest rep of either form 35 to 78 ms (the first rep's compile), the logits at most 0.38 and 0.23 apart, no call passed to
+  the CPU rails: the two readings part most on the peel at one row (6.5 against 4.0), the chain within 0.3 ms.
 - **The one-row decode's attention split follows the command's rows.** `rd_layer_pieces` divided the SM wave by the per-row
   planes' height - the region count before this leg, eight after - so the one-row command split a head's keys into a quarter,
   then an eighth, of the pieces that fill the card. The instrument (`external`, outside the tree: a client replaying 22
@@ -5386,3 +5389,15 @@ record store carries a Vulkan row), so the pod's figures are direction-grade thr
   whatever the region count, where they held one row a region: the plan charges `(vocab x 4 + heads x RDEC_ATTN_SPLIT_CAP x
   (hs + 2) x 4) x 8` = (513 KB + 200 KB) x 8 = 5.7 MB on the 3B, against 0.7 MB a region before; the x, cos, residual and
   logits rows the command stages scale the same way (`dasllama_vulkan_decode.das`, `vk_rdec_prepare`).
+- **The leg's footprint on the one-region bench is the base's.** `/usr/bin/time -v` around the bench above (`--plen 0 --reps
+  2`, Llama-3.2-3B Q4_K_M, the JIT cache warm, two runs an arm): max RSS 3687160 / 3656932 KB at faf9ef95e8 against 3672036 /
+  3988724 KB at 1e2302d610 (the base's higher run the first after its rebuild - a JIT recompile; a cold tip run read 5740944 KB
+  at 294 s of user time against the warm runs' 16 s), tg128 250.3 +-0.1 against 252.2 +-0.0 tok/s (`direction-grade`, two
+  reps; the fold's 0.7% above).
+- **The segmented window's rows against the one-session window, on the 1B.** `test_gpu_resident_segments.das` at
+  a9fa027c9c under `DAS_LOG_LEVEL=info`, the split bar `SPLIT_BAR_REL` 0.06 of the row's max |logit| (bars 0.47 to 0.85): the
+  two tails as one segmented call read a widest miss of 0.18 (Q8_0) and 0.47 (Q4_K_M, session B's 31-row tail at a 0.50 bar -
+  the K-quant window's GEMM ladder at the two row counts) on the f16 mirror, 0.20 and 0.39 on the f32 mirror
+  (`DASLLAMA_VK_KV32=1`); the two openings as one window 0.07 / 0.12; the 300-row tails 0.13 / 0.26; the decline cell's two
+  sessions, prefilled on the CPU rails after the pin and held to the device-prefilled references, 0.22 / 0.20 (Q8_0) and
+  0.35 / 0.35 (Q4_K_M) against bars of 0.53 to 0.55; every control 2.5 to 8.7 bars out.
