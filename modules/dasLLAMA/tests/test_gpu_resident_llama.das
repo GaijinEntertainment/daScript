@@ -140,11 +140,11 @@ def private llama_peel(t : T?; file : string) {
         t |> success(plan.scratch_bytes >= tr.config.vocab_size * 4l * RDEC_NROW_MAX, "the plan charges the per-row planes at {RDEC_NROW_MAX} rows whatever the region count ({plan.scratch_bytes} B of scratch)")
         var opening <- resident_prompt(PEEL_OPEN)
         var feed <- resident_feed(at_once + 1l)
-        let lever = vulkan_prefill_peel_()
+        let lever = vulkan_prefill_peel()
         for (k in [1l, 2l, 5l, 8l, at_once + 1l, -8l]) {   //! -8: the eight-row tail with the peel's lever off, the chain's leg over the same rows
             let rows = abs(k)
             let peels = k > 0l && k <= at_once
-            set_vulkan_prefill_peel_(k > 0l)
+            set_vulkan_prefill_peel(k > 0l)
             var tail <- [for (i in range64(rows)); feed[i]]
             var steps <- ramp_ids(PEEL_STEPS, rows, 2500l, 71l, 4500l)
             var sa <- create_session(tr, gpu_device_session_dtype_())
@@ -176,7 +176,7 @@ def private llama_peel(t : T?; file : string) {
             delete tail
             delete steps
         }
-        set_vulkan_prefill_peel_(lever)
+        set_vulkan_prefill_peel(lever)
         delete opening
         delete feed
     }

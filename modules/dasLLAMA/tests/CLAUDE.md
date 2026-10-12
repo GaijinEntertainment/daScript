@@ -1574,7 +1574,7 @@ after a 40-row opening a tail of 1, 2, 5 and 8 rows as one call peels through th
 split bar of the same tail stepped a row at a time on a second session, the row one step off the
 control, both sides' argmax rows decoded; a tail one row past the N-row command's rows takes the
 chain, no peel counted, on the same bar, as does the eight-row tail with the peel's lever off
-(`set_vulkan_prefill_peel_`, put back as found) - the peel counter's control; the plan (`resident_plan_pick`) charges the per-row planes at `RDEC_NROW_MAX` rows. The forced-feed helpers it shares with the
+(`set_vulkan_prefill_peel`, put back as found) - the peel counter's control; the plan (`resident_plan_pick`) charges the per-row planes at `RDEC_NROW_MAX` rows. The forced-feed helpers it shares with the
 other resident files live in `_resident_feed.das`. Skips without the model or the armed tier.
 `test_gpu_resident_segments.das` - stocked suite, `-jit` only; the whole-model resident driver's
 SEGMENTED window (`ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-prefill-segments`, `DASLLAMA_GPU=1`) on

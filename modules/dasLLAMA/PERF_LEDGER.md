@@ -5357,7 +5357,7 @@ record store carries a Vulkan row), so the pod's figures are direction-grade thr
   +-8.5 - the box's own spread.
 - **A short window on the Vulkan chain costs about two decode steps whatever its row count, and the peel brings it to
   one.** The race bed `DASLLAMA_GPU=1 bin/daslang -jit modules/dasLLAMA/harness/vk_short_window_race.das -- --model <gguf>`
-  (`--rows 1,2,4,8 --reps 5 --prompt 40`: the lever `set_vulkan_prefill_peel_` flipped between the forms in one process, five
+  (`--rows 1,2,4,8 --reps 5 --prompt 40`: the lever `set_vulkan_prefill_peel` flipped between the forms in one process, five
   interleaved reps a form, the fastest kept; `ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-prefill-peel`) at 0f1e793e18 reads on the 3B
   peel 6.5 / 6.9 / 4.5 / 7.4 ms against the chain's 13.5 / 11.7 / 13.4 / 13.5 at 1 / 2 / 4 / 8 rows, on the 1B Q8_0 2.2 / 4.1
   / 4.2 / 3.0 against 5.4 / 6.6 / 6.6 / 5.5, the forms' last-row logits at most 0.27 apart on the 3B and 0.23 on the 1B (the

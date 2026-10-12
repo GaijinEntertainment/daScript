@@ -1,5 +1,5 @@
 // The Vulkan short window's race: a continuation of N rows after a prompt through the token command's peel against the
-// same rows through the window chain (the lever `set_vulkan_prefill_peel_` flipped between the forms), in one process,
+// same rows through the window chain (the lever `set_vulkan_prefill_peel` flipped between the forms), in one process,
 // interleaved, the fastest of the reps a form. Prints a row a row count with both times and the forms' last-row logits'
 // widest difference.
 //
@@ -34,7 +34,7 @@ struct RaceArgs {
 //! the continuation `tail` after `prompt` on a fresh session with the peel's lever at `peel`: the wall of the continuation's
 //! call and its last-row logits
 def private continuation(tr : Model; prompt, tail : array<int64>; peel : bool) : tuple<ms : float; logits : array<float>> {
-    set_vulkan_prefill_peel_(peel)
+    set_vulkan_prefill_peel(peel)
     var s <- create_session(tr, gpu_device_session_dtype_())
     let np = long_length(prompt)
     forward_prefill(tr, s, prompt, np, 0l)
@@ -63,7 +63,7 @@ def main : int {
         delete tr
         return 3
     }
-    let lever = vulkan_prefill_peel_()
+    let lever = vulkan_prefill_peel()
     with_dasllama_jobque_() {
         let np = int64(args.prompt)
         var all <- counting_tokens(tr, np + 64l, 1l)
@@ -99,7 +99,7 @@ def main : int {
         delete prompt
         delete all
     }
-    set_vulkan_prefill_peel_(lever)
+    set_vulkan_prefill_peel(lever)
     delete tr
     return 0
 }

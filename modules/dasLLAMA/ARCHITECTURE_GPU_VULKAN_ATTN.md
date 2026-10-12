@@ -293,7 +293,7 @@ before it land picks nobody reads. The chain costs a short continuation about tw
 row count (the race bed's rows are the `PERF_LEDGER.md` entry's); the token command reads the weights once.
 The peel fits a chain with no recurrent state, side rows, wide residual, NextN head or host experts
 (`rdec_peel_fits`, logging the property that keeps a model off it once per armed model); the rest take the
-chain, as does every window under the lever `set_vulkan_prefill_peel_(false)`, which
+chain, as does every window under the lever `set_vulkan_prefill_peel(false)`, which
 `harness/vk_short_window_race.das` races the two forms through. The rows stay on the device as the chain
 leaves them; `rdec_prefill_landed` is either form's bookkeeping; the witness is `moe_gpu_resident_peels`, a
 peel counting as a served prefill too.

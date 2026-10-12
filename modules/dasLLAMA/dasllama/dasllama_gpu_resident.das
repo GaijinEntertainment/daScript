@@ -1494,12 +1494,12 @@ def resident_prefill_allowed_() : bool => g_resident_prefill_allowed
 var private g_vulkan_prefill_peel = true   //! the short window's peel through the token commands; off = every window takes the chain (the A/B lever)
 
 //! The short window's peel on or off (`ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-prefill-peel`); the window chain serves every window with it off
-def set_vulkan_prefill_peel_(on : bool) {
+def set_vulkan_prefill_peel(on : bool) {
     g_vulkan_prefill_peel = on
-    to_log(LOG_INFO, "dasLLAMA: set_vulkan_prefill_peel_({on}) - the short window's peel through the token commands ({on ? "on" : "off: every window takes the chain"})\n")
+    to_log(LOG_INFO, "dasLLAMA: set_vulkan_prefill_peel({on}) - the short window's peel through the token commands ({on ? "on" : "off: every window takes the chain"})\n")
 }
 
-def vulkan_prefill_peel_() : bool => g_vulkan_prefill_peel
+def vulkan_prefill_peel() : bool => g_vulkan_prefill_peel
 
 // Bulk-hydrate the session's host KV from the live rows of the mirror region it owns — the rail that
 // keeps host KV authoritative at rest after device-resident prefills/decodes.

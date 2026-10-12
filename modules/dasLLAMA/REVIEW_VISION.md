@@ -35,23 +35,23 @@ template, never to another family's; a diff claiming that support while the fami
 or vocab lacks the markers is a defect.** Span markers are the template text that opens and closes
 the media rows.
 
-**Splitting a media splice's rows across more than one `forward_prefill_embd` call, or letting
-a driver chunk them by row, is a defect** - the span bounds are counted from the start of the
-call, so a boundary inside the span changes the mask. A driver declining the whole call to the
-CPU loop, or splitting command buffers per layer, is not a split, and the one call may also
-carry the surrounding head and tail tokens.
+**A media splice's rows reaching the layer stack as more than one `forward_prefill_embd` call, or
+as row chunks inside one call, is a defect; a driver declining the whole call to the CPU loop, or
+splitting its command buffers per layer, keeps the one call, as does the head and tail text riding
+it** - the span bounds are counted from the start of the call, so a boundary inside the span
+changes the mask.
 
-**A diff that adds a session kind or an admission mode to an in-process scheduler either serves
-a stream carrying decoded media on it or refuses that stream at admission - a mode that admits
-such a stream onto a path that panics later, or drops its rows, is a defect.**
+**A diff that adds or changes a scheduler path a stream carrying decoded media can reach either
+serves that stream on it or refuses it at admission - a path that admits such a stream and then
+panics, or drops its rows, is a defect.**
 
 **A media splice written, where the media rows join the prompt's tokens, as anything other than
 two token spans plus a row block is a defect, everywhere the splice appears** - the two-span form
 is what keeps BPE merges from crossing the media.
 
 **A diff that changes the media row-block shape - the encoder's embedding rows a scheduler
-request carries in `media_embd` - also updates, in the same change, every file under
-`utils/dasllama-server/` (repo root) that fills or reads a `media_embd`.**
+request carries in `media_embd` - also updates, in the same change, every file that fills or
+reads a `media_embd`.**
 
 **A family's new arm for a media kind that reaches the layer stack by any path but
 `forward_prefill_embd` is a defect, a second prefill body for it included** - write a sibling
