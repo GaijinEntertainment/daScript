@@ -461,6 +461,7 @@ def private rpst_b_gate(t : T?; var dev, queue; f16dst : bool; hs, nheads, kv_mu
             }
         }
         return if (!ran)
+        t |> success(moved_off(want_qk, qk, 3, BAR_FP), "{tag}: the roped q row differs from its input at a rotated index past the bar (the in-place compare has teeth)")
         check_buf(t, "{tag} q", mc.buf[bqk], want_qk, BAR_FP, Shape(row_width = qstride))
         if (f16dst) {
             check_buf_h(t, "{tag} karena", mc.buf[bka], want_ka, BAR_F16, FLAT_SHAPE)

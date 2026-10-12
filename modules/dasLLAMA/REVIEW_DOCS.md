@@ -5,9 +5,12 @@ doc: `ARCHITECTURE.md`. Planned work: `followup_general.md`, `followup_vulkan.md
 `followup_metal.md`.
 
 **A diff that adds a `followup_*.md` entry asking that one function be shortened or split (not
-merged with a twin onto one template), or adds a STYLE037/STYLE038 suppression (`// nolint:`,
-`options _function_length` / `_cyclomatic_complexity`) under this folder to a function such an
-entry names, drops the suppression or lands the split in the same change.**
+merged with a twin onto one template) removes that function's STYLE037/STYLE038 suppression
+(`// nolint:`, `options _function_length` / `_cyclomatic_complexity`), or lands the split, in the
+same change.**
+
+**A diff that adds a STYLE037/STYLE038 suppression under this folder to a function such an entry
+names is a defect - it lands the split instead.**
 
 **A diff that adds a file under `dasllama/` adds that file's charter line - the one line saying
 what the file holds - to an `ARCHITECTURE_*.md` companion in the same change, never to
@@ -29,14 +32,15 @@ reproduces only on macOS; `followup_vulkan.md` for work that would change a Vulk
 or dispatch and no Metal one; `followup_general.md` for everything else, work on both backends and
 rig and instrument rows included.**
 
-**A measured figure a diff records lands in `PERF_LEDGER.md`; a `followup_*.md` row that carries
-one cites the entry it comes from.**
+**A measured figure a diff writes into an `ARCHITECTURE*.md` or a `followup_*.md` has its entry
+in `PERF_LEDGER.md`; a `followup_*.md` row that carries one cites the entry it comes from.**
 
 **A diff that adds, removes, or moves a `##` or `###` heading of an `ARCHITECTURE_*.md` companion,
 or adds or removes a companion, updates every text that lists a companion's contents - the
 companion's line in `ARCHITECTURE.md`'s routing block (under `File charters` or `Mechanisms`), the
-companion's own opening, a sibling companion's routing sentence that names it - so that it names
-each added heading's subject and no removed one's, in the same change.**
+companion's own opening, any other `ARCHITECTURE*.md` sentence that routes a reader to the
+companion - so that it names each added heading's subject and no removed one's, in the same
+change.**
 
 **A diff that moves or removes a heading of an `ARCHITECTURE_*.md` companion leaves no citation
 that names the companion file alone for that heading's subject - it repoints the citation to the

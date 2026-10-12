@@ -82,9 +82,10 @@ in; the provenance it states covers every later paragraph and table of that entr
 of another run covers.
 
 **A tag (`external`, `direction-grade`, `out-of-process`, `debug-jit`) covers only the figures of
-the sentence it sits in - of the parenthesis alone, when it sits inside one beside figures. A tag
-in a figure-free sentence of a provenance line or of a `PERF_LEDGER.md` entry's opening paragraph
-covers the figures that line or paragraph covers.**
+the sentence it sits in; a tag inside a parenthesis covers the figures of that parenthesis alone,
+and a parenthesis holding a tag and no figure covers nothing. A tag in a figure-free sentence of a
+provenance line or of a `PERF_LEDGER.md` entry's opening paragraph covers the figures that line or
+paragraph covers.**
 
 **A `PERF_LEDGER.md` entry states a turn wall (the wall of one whole served request, whatever the
 modality) or a tok/s rate of the engine this repository builds only when
@@ -163,12 +164,12 @@ ledger), with the flags that run took.**
 run printed none.** A fat exe is what `daspkg release --fat <class>` builds (`DAS_TUNE_MODE=fat`,
 `ARCHITECTURE_MEASUREMENT_FAT_START.md#fat-first-start`).
 
-**A diff that claims to make a route the tree served before the diff faster, where a rig leg
+**A diff that states a route the tree served before the diff runs faster or does less work, where a rig leg
 runs the changed lines, re-mints in the same change a board row (`performance/records/<box>.json`)
 from that leg and names that row in the PR body.** The board is the module's committed record of
 what serving costs; a kernel win that never lands there is invisible to the next regression check.
 
-**A diff that claims to make a route the tree served before the diff faster, where no rig leg runs
+**A diff that states a route the tree served before the diff runs faster or does less work, where no rig leg runs
 the changed lines, states in its PR body that no rig leg runs them and names the instrument that
 does, with its command line.**
 

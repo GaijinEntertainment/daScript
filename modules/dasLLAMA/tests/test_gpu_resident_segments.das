@@ -252,11 +252,14 @@ def private segments_cells(t : T?; file : string) {
     var tr <- load_resident(path, 2l)
     return if (!resident_admitted(t, "the whole-model driver armed on {file} (the load log names any decline)", ""))
     t |> equal(tr.arch, "llama", "the file is a llama-family model")
+    let allowed = resident_prefill_allowed()
+    set_resident_prefill_allowed(true)   //! the served cells read the pin's default: pinned here, put back as found
     with_dasllama_jobque_() {
         segments_cell(t, tr)
         decline_cell(t, tr)
         decline_arms_cell(t, tr)
     }
+    set_resident_prefill_allowed(allowed)
     delete tr
 }
 

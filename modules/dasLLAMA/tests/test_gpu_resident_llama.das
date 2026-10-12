@@ -130,7 +130,7 @@ let private PEEL_STEPS = 4l
 def private llama_peel(t : T?; file : string) {
     let path = llama_model_path(t, file)
     if (empty(path)) return
-    var tr <- load_model_(path, QuantMode.q8)
+    var tr <- load_resident(path, 1l)   //! the route pinned on for the load, the levers put back
     t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the model (the load log names any decline)")
     with_dasllama_jobque_() {
         let at_once = rdec_token_n_rows()

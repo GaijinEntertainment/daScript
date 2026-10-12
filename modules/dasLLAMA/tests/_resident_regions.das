@@ -214,9 +214,6 @@ def cell_regions_wide_single_steps(t : T?; file : string) {
     }
 }
 
-//! of the last logits' max |logit|: the window chain at two window splits of one prompt reduces its attention in two orders,
-//! and the 0.5B's own device-vs-CPU rounding reads 0.30-0.50 of a 9.5-18 max logit (`test_gpu_resident_qwen2.das`'s bar)
-
 def private prose_ids(n, salt : int64) : array<int64> => <- resident_prompt(n, salt)
 
 //! the logits of `prompt`'s first `n - 1` tokens on a session of its own, gone before the caller makes the compared pair (two

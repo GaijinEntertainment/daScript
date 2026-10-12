@@ -73,6 +73,8 @@ def main : int {
             var tail <- [for (i in range64(k)); all[np + i]]
             var best_peel = 1.0e30
             var best_chain = 1.0e30
+            var worst_peel = 0.0
+            var worst_chain = 0.0
             var dmax = 0.0
             let peels0 = moe_gpu_resident_peels()
             for (_rep in range(args.reps)) {
@@ -80,13 +82,20 @@ def main : int {
                 var b <- continuation(tr, prompt, tail, false)
                 best_peel = min(best_peel, a.ms)
                 best_chain = min(best_chain, b.ms)
+                worst_peel = max(worst_peel, a.ms)
+                worst_chain = max(worst_chain, b.ms)
                 dmax = max(dmax, logits_maxdiff(a.logits, b.logits))
                 delete a
                 delete b
             }
-            print("rows={k}: peel {best_peel} ms, chain {best_chain} ms ({best_peel / best_chain * 100.0}%), peels counted {moe_gpu_resident_peels() - peels0} of {args.reps}, last-row logits max difference {dmax}\n")
+            print("rows={k}: peel {best_peel} ms (slowest {worst_peel}), chain {best_chain} ms (slowest {worst_chain}) ({best_peel / best_chain * 100.0}%), {args.reps} reps a form, peels counted {moe_gpu_resident_peels() - peels0} of {args.reps}, last-row logits max difference {dmax}\n")
             delete tail
         }
+        var passed = ""
+        for (p in gpu_cpu_passes_()) {   //! a pass would make a row device-against-CPU: the forms are the driver's own only while this reads none
+            passed += " {p.reason}:{p.count}"
+        }
+        print("calls the driver passed to the CPU rails:{empty(passed) ? " none" : passed}\n")
         delete prompt
         delete all
     }

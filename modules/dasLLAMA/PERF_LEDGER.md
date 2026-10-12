@@ -1427,7 +1427,7 @@ what it costs today and what the fix would change.
   the CPU's one-row steps at `WIDE_BAR_REL` 0.35 and `WIDE_CARRY_BAR_REL` 0.25, the other row as each
   row's control - rows 1.52 and 3.10 within 3.47 and 4.24, the carry rows 0.49 and 0.49 within 1.74 and
   1.02, the controls 12.53 and 12.06, 4.86 and 4.81 - and the rounding control against the split
-  command's own one-row steps on the same picks at `SPLIT_BAR_REL` 0.12 and `SPLIT_CARRY_BAR_REL` 0.10 -
+  command's own one-row steps on the same picks at `HC_SPLIT_BAR_REL` 0.12 and `SPLIT_CARRY_BAR_REL` 0.10 -
   rows 0.42 and 0.82 within 1.14 and 1.52, the carry rows 0.07 and 0.30 within 0.73 and 0.39, the
   controls 11.62 and 11.74, 5.10 and 5.12; 97 selects replayed, 2 of the CPU draft's own picks off the
   device's); kernel
@@ -5339,32 +5339,43 @@ probe alone, no box profile applied; the Vulkan box ran it under `DASLLAMA_GPU=1
   from 20480 and four device-home streams at 9000 to 27000 positions read bit for bit the one-call prefill and the
   sessions alone.
 
-### From the llama leg's parity gaps (2026-10-12, RunPod RTX PRO 4500 Blackwell 32 GB and Apple M5 Max)
+### From the llama leg's parity gaps (2026-10-12, RunPod RTX PRO 4500 Blackwell 32 GB - `DAS_TUNE_POLICY` unset, the x86-avx2 class profile stamped, `DASLLAMA_ALLOW_UNTUNED=1`, `DASLLAMA_COOPMAT` unset - and Apple M5 Max)
 
-- **The decode rope-and-store on one template leaves the Vulkan step where it was.** Llama-3.2-3B Q4_K_M on the pod,
-  the `-jit` bench form with the GPU profile on, two alternated rounds an arm on a warm card: tg128 227.8 / 227.6 tok/s
-  before the fold (`RopeKvStore` with its own body), 227.4 / 227.7 after (`GkRopeKvStore`'s `rope_kv_pair`, the
-  partial-rotation cover and the per-row table stride in the shared body), the rope stamp 113 -> 115 us a token over
-  28 layers; a first pair of runs separated by a rebuild read 252.0 against 250.3, the card's clock state between
-  builds, not the kernel. On the M5 the fold reads pp512 within 0.3% and tg128 rep for rep the same (205 tok/s, +-8.5
-  on both arms - the box's own spread).
-- **A short window on the Vulkan chain costs about two decode steps whatever its row count.** The probe's one-session
-  continuation after a 40-row prompt on the 3B: a window of 1 / 2 / 4 / 8 / 16 rows reads 13.4 / 13.4 / 13.4 / 11.9 /
-  11.8 ms, 32 rows 11.0, 64 rows 14.6; the same rows stepped one at a time 6.5 ms a row (a host-cached session, the
-  row read back each step). The 1B Q8_0 reads 6.5 ms a window at 1 to 16 rows against 3.8 ms a step. The peel
-  (`ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-prefill-peel`) routes a window of at most the N-row command's rows through the
-  token command. The race (`harness/vk_short_window_race.das`, the lever `set_vulkan_prefill_peel_` flipped between the
-  forms in one process, five interleaved reps a form, the fastest kept): the 3B reads peel 6.5 / 6.9 / 4.5 / 7.4 ms
-  against the chain's 13.5 / 11.7 / 13.4 / 13.5 at 1 / 2 / 4 / 8 rows, the 1B Q8_0 2.2 / 4.1 / 4.2 / 3.0 against
-  5.4 / 6.6 / 6.6 / 5.5, the forms' last-row logits at most 0.27 apart on the 3B and 0.23 on the 1B (the chain's tiles
-  and the command's GEMV leaves round apart; the split bar holds them); the probe reads the chain's 11.8 ms from 16 rows up.
-- **The one-row decode's attention split follows the command's rows, and the house replay's tool call on the pod reads
-  0.54 -> 0.39 s.** `rd_layer_pieces` divided the SM wave by the per-row planes' height - the region count before this
-  leg, eight after - so the one-row command split a head's keys into a quarter, then an eighth, of the pieces that fill the
-  card: the house probe (Llama-3.2-3B Q4_K_M, 4 regions, the GPU profile on, `DAS_LOG_LEVEL=info`) read the decode
-  attention at 2220 us a token on the base, 3780 with the planes at eight, 1274 with the wave over the command's own rows
-  (the step 6232 -> 7792 -> 5295 us; prompts of 4000 to 6000 tokens, 55 to 5900 cached); the tool-call whole-call median
-  0.540 -> 0.482 -> 0.385 s. The short-context bench never saw it: at 128 keys the attention is 3% of the step.
+Every rate here is `debug-jit`: the `-jit` script form `DASLLAMA_GPU=1 DASLLAMA_MODELS_DIR=<models> bin/daslang -jit
+modules/dasLLAMA/benchmarks/lcpp_bench.das -- -m <gguf> --for-debug-purposes`, no fat exe; the Vulkan rig has no leg (no
+record store carries a Vulkan row), so the pod's figures are direction-grade throughout.
+
+- **The decode rope-and-store on one template leaves the Vulkan step where it was** (`direction-grade`, two commits).
+  Llama-3.2-3B Q4_K_M, the bench above with `--plen 0 --reps 3` and `DASLLAMA_GPU_PROF=1 DAS_LOG_LEVEL=info`, two alternated
+  rounds an arm on a warm card: tg128 227.8 +-0.05 / 227.6 +-0.18 tok/s at 8624bce999 (`RopeKvStore` with its own body), 227.4
+  +-0.01 / 227.7 +-0.07 at 5c5d49e363 (`GkRopeKvStore`'s `rope_kv_pair`, the partial-rotation cover and the per-row table
+  stride in the shared body); the profile's rope stamp 113 -> 115 us a token over 28 layers (the `vk_rdec gpu avg/token`
+  line of the same runs). A first pair of runs separated by a rebuild had read 252.0 against 250.3 at `--reps 5` with the
+  profile off - the card's clock state between builds, not the kernel. On the M5 (`DASLLAMA_CPU_PREFILL=1`, the m5 tune
+  manifest, `--ngl 99`, `--reps 5`, three alternated pairs on worktrees of the two commits) the fold reads pp512 5541 / 5534 /
+  5507 against 5538 / 5523 / 5490 tok/s and tg128 205.3 / 204.8 / 204.6 against 205.1 / 204.7 / 204.7, every tg128 at
+  +-8.5 - the box's own spread.
+- **A short window on the Vulkan chain costs about two decode steps whatever its row count, and the peel brings it to
+  one.** The race bed `DASLLAMA_GPU=1 bin/daslang -jit modules/dasLLAMA/harness/vk_short_window_race.das -- --model <gguf>`
+  (`--rows 1,2,4,8 --reps 5 --prompt 40`: the lever `set_vulkan_prefill_peel_` flipped between the forms in one process, five
+  interleaved reps a form, the fastest kept; `ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-prefill-peel`) at 0f1e793e18 reads on the 3B
+  peel 6.5 / 6.9 / 4.5 / 7.4 ms against the chain's 13.5 / 11.7 / 13.4 / 13.5 at 1 / 2 / 4 / 8 rows, on the 1B Q8_0 2.2 / 4.1
+  / 4.2 / 3.0 against 5.4 / 6.6 / 6.6 / 5.5, the forms' last-row logits at most 0.27 apart on the 3B and 0.23 on the 1B (the
+  chain's tiles and the command's GEMV leaves round apart; the split bar holds them). The bed prints the slowest rep beside the
+  fastest from 0f1e793e18 on; the rows above predate that print.
+- **The one-row decode's attention split follows the command's rows.** `rd_layer_pieces` divided the SM wave by the per-row
+  planes' height - the region count before this leg, eight after - so the one-row command split a head's keys into a quarter,
+  then an eighth, of the pieces that fill the card. The instrument (`external`, outside the tree: a client replaying 22
+  conversation turns of 4000 to 6000 tokens, 55 to 5900 of them cached, against `DASLLAMA_GPU=1 DASLLAMA_GPU_PROF=1
+  DAS_LOG_LEVEL=info bin/daslang -jit utils/dasllama-server/main.das -- -m <3B gguf> --ctx 32768 --streams 4`; its
+  server-side `vk_rdec gpu avg/token` lines are the figures; `direction-grade`, three commits) read the decode attention at
+  2220 us a token at 1e2302d610, 3780 at 5c5d49e363 (the planes at eight) and 1274 at a343012085 (the wave over the command's
+  own rows), the step 6232 / 7792 / 5295 us. The short-context bench never sees it: at 128 keys the attention is 3% of the
+  step.
+- **The Metal side of the leg reads the same as its base on the house's shape.** The same client (`external`, outside the
+  tree, `direction-grade`) on the M5's M4 arm, Llama-3.2-3B Q4_K_M, two alternated rounds of the base tree and the branch:
+  the arms sit inside the rounds' own drift, so the probe decided nothing moved; its walls are the client's and stay
+  out of this ledger.
 - **The leg's lasting allocations, in bytes.** The segmented window's staging (`g_rdec_seg_x`, `g_rdec_seg_cos`,
   `g_rdec_seg_logits`, `g_rdec_segs`, `g_rdec_seg_regions`): `rows x dim x 4` + `rows x cos_elems x 4` + `regions x vocab x 4`
   + `segments x 32` + `segments x 8` - on Llama-3.2-3B (dim 3072, head 128, vocab 128256) a 512-row window of two segments
@@ -5375,7 +5386,3 @@ probe alone, no box profile applied; the Vulkan box ran it under `DASLLAMA_GPU=1
   whatever the region count, where they held one row a region: the plan charges `(vocab x 4 + heads x RDEC_ATTN_SPLIT_CAP x
   (hs + 2) x 4) x 8` = (513 KB + 200 KB) x 8 = 5.7 MB on the 3B, against 0.7 MB a region before; the x, cos, residual and
   logits rows the command stages scale the same way (`dasllama_vulkan_decode.das`, `vk_rdec_prepare`).
-- **The house probe on the M5's M4 arm reads the branch the same as its base** (the quick probe, 22 turns, alone
-  then pair, two alternated rounds, Llama-3.2-3B Q4_K_M): alone wall 0.37 / 0.45 s on the base and 0.36 / 0.40 on
-  the branch, pair 0.75 / 0.91 against 0.78 / 0.82, the pair's throughput share x0.91 / x1.00 against x0.87 / x0.93 -
-  the rounds drift more than the arms differ (the probe is direction-grade).

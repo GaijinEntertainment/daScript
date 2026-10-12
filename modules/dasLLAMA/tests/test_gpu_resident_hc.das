@@ -308,7 +308,7 @@ def test_gpu_resident_hc(t : T?) {
 def test_gpu_resident_hc_short_window(t : T?) {
     t |> run("Qwen3.8-Flash-Next: a two-token prompt takes the window chain, not the token command's peel") @(t : T?) {
         if (!hc_ready(t)) return
-        var tr <- load_model_(path_join(models_dir(), FN_TRUNK), QuantMode.q8)
+        var tr <- load_resident(path_join(models_dir(), FN_TRUNK), 1l)   //! the route pinned on for the load, the levers put back
         t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the trunk (the load log names any decline)")
         with_dasllama_jobque_() {
             assert_short_window_takes_chain(t, tr, "a hyper-connection chain")

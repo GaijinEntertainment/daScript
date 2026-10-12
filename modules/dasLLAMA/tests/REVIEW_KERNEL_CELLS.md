@@ -29,7 +29,8 @@ is the job of that function's cells. A branch or regime is a path only where a s
 means two sides agree or a figure is good enough - a difference between two computed sides, a
 rate, an error, or a count the run decides, within a nonzero tolerance or past a floor or ceiling;
 a guard that keeps a later index or compare well-defined (a length past the index it reads) is not
-one, and a counter asserted to show a route ran is not one. A control is an extra assert
+one, a counter asserted to show a route ran is not one, and an assert another rule of this list
+requires to show a compare can fail - the in-place assert - is a control, not one. A control is an extra assert
 in the same cell proving a compare can fail - a poisoned input, or a poisoned expectation (the
 expected value with a known amount added), that must land outside the bar, a mechanism unhooked
 whose result must miss, or a second, independent computation the result must agree with; a cell's
@@ -37,8 +38,8 @@ own reference is never its control.
 
 **A diff that changes a kernel's dispatch grid (the count its dispatch needs, or its workgroup
 size) or its kargs (the struct, any buffer binding, or the layout of a struct a bound buffer holds)
-leaves no gate dispatching that kernel whose count, binds or kargs values the change made wrong, in
-the same change.** A gate left on the old count
+rebinds or deletes, in the same change, every gate dispatching that kernel whose count, binds or
+kargs values the change made wrong.** A gate left on the old count
 dispatches the wrong shape with no error; a stale kargs gate reads the wrong buffer and passes on
 garbage that happens to compare.
 
@@ -52,12 +53,13 @@ every kernel-unit cell expectation over that kernel's output.** An expectation o
 no longer writes compares the sentinel to a sum.
 
 **A diff that dispatches an existing `[vk_dispatch]` or `[metal_dispatch]` class at a workgroup
-size or dispatch grid no kernel-unit cell runs it at ships a kernel-unit cell at that shape, in the
-same change.**
+size, or a grid formula, no kernel-unit cell runs it at ships a kernel-unit cell at that shape, in
+the same change.**
 
 **A kernel-unit cell's compare of kernel output against its reference logs, whether it passes or
-fails, the largest difference it measured with that element's row and column; an exact compare
-logs its mismatch count and first mismatching index instead.** A failure, or a pass that looks
+fails, the largest difference it measured with that element's row and column; an exact compare -
+a scan asserting that a region still holds its sentinel is one - logs its mismatch count and first
+mismatching index instead.** A failure, or a pass that looks
 wrong, must say how far and where, not only how many.
 
 **A kernel-unit cell with a kernel run whose output no CPU-oracle compare covers at that run's
@@ -75,9 +77,12 @@ path. At every value the change left where it was the kernel computes what it di
 cell that dispatches only those values passes whether the change is right or wrong.
 
 **A diff that adds a kargs field to a `[vk_dispatch]` or `[metal_dispatch]` class, or gives one a
-new meaning, so that it moves which elements a stamp reads or writes, ships a kernel-unit cell
-that dispatches the stamp at a non-default value of that field.** At the default every read and
-write sits where it did, so a cell at the default alone passes whether the offset is right or wrong.
+new meaning, so that it moves which elements a stamp reads or writes, ships, for every stamp whose
+reads or writes the field moves, a kernel-unit cell that dispatches that stamp - or a sibling stamp
+of the same template, where the moved index is the template's own expression - at a value a serving
+call in `../dasllama/` can pass other than the one at which every read and write sits where it did
+before the change.** At that value a cell passes whether the offset is right or wrong, and a stamp
+with an index expression of its own is proven by no sibling.
 
 **A diff that adds a `[vk_dispatch]` or `[metal_dispatch]` class ships a kernel-unit cell that
 dispatches it on every path its body has.** A path no cell reaches is one a merge can drop and

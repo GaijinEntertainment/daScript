@@ -2198,7 +2198,7 @@ def private rope_kv_arm(t : T?; f16, biased : bool) {
             var cls_q <- cp |> plane_run(pq)
             var m <- mirror_pair(cp, pkm, pvm, kvd, f16)
             let tag = "{f16 ? "rope_kv_f16" : "rope_kv_store"}{biased ? " with the q/k/v bias" : ""}"
-            t |> success(abs(ref.q[3] - qh[3]) > 1e-3, "{tag}: the roped q row differs from its input at a rotated index (the in-place compare has teeth)")
+            t |> success(moved_off(ref.q, qh, 3, BAR_APPROX_CTRL), "{tag}: the roped q row differs from its input at a rotated index past the bar (the in-place compare has teeth)")
             check_rows(t, "{tag}, q", cls_q, ref.q, BAR_APPROX_CTRL, qd, hs)
             mirror_rows_check(t, tag, m, ref.k, ref.v, 0, kvd, kvd)
             delete cls_q
@@ -3034,12 +3034,14 @@ def private fa_tile_run(t : T?; khr : bool) {
                 var inscope y16f_full <- cp |> plane_as(py16f, type<float16>, qrows * qd)
                 var inscope y16s_full <- cp |> plane_as(py16s, type<float16>, qrows * qd)
                 var lead_moved = 0
+                var lead_first = -1
                 for (i in range(lead * qd)) {   //! the lead rows stay the out plane's NaN sentinel: the tile wrote nothing under its row base
                     if (unsafe(reinterpret<uint>(y_full[i])) != NAN_SENTINEL_BITS) {
+                        lead_first = lead_first < 0 ? i : lead_first
                         lead_moved++
                     }
                 }
-                t |> equal(lead_moved, 0, "{tag} hs {hs}{stag}: the {lead} lead rows under the row base stay untouched ({lead_moved} elements written)")
+                t |> equal(lead_moved, 0, "{tag} hs {hs}{stag}: the {lead} lead rows under the row base stay untouched ({lead_moved} elements written, the first at {lead_first})")
                 y_cls <- [for (i in range(rows * qd)); y_full[lead * qd + i]]
                 y16_fused <- [for (i in range(rows * qd)); y16f_full[lead * qd + i]]
                 y16_split <- [for (i in range(rows * qd)); y16s_full[lead * qd + i]]
@@ -3071,10 +3073,7 @@ def private fa_tile_run(t : T?; khr : bool) {
                         cnt, 1.0, y_ref, r * qd + hh * hs, window > 0 && cnt > window ? cnt - window : 0, 0.0, sink, sinkh[hh])
                 }
             }
-            let bad = mismatch_approx(y_cls, y_ref)
-            t |> success(bad == 0, "{tag} hs {hs} window {window}{stag} matches the CPU oracle ({bad} of {rows * qd} off)")
-            y_ref[0] += 0.5
-            t |> success(mismatch_approx(y_cls, y_ref) > 0, "{tag} hs {hs} window {window}{stag}: the bar reds a poisoned oracle element")
+            check_rows(t, "{tag} hs {hs} window {window}{stag} against the CPU oracle", y_cls, y_ref, BAR_APPROX_CTRL, qd, hs)
             if (sink) {   //! the sink control: the sink-free oracle over the same rows must miss - the phantom key carries mass
                 var inscope y_nosink : array<float>
                 y_nosink |> resize(rows * qd)
@@ -3437,8 +3436,9 @@ def private da_attn_b_run(f : DaAttnBFix; stamp : int; scale, cap : float; windo
     return <- y
 }
 
-//! the batched decode attention at a row base past zero: the rows sit three rows into the q and out planes behind poison, the
-//! lead rows of the out plane stay at the sentinel and the rows read the oracle's
+//! the batched decode attention at a row base past zero on the three stamps with a row-base expression of their own - the 8-row
+//! tile, the wide-head tile and the h128 coopmat tile: the rows sit three rows into the q and out planes behind poison, the lead
+//! rows of the out plane stay at the sentinel and the rows read the oracle's
 [test]
 def test_vkd_da_attn_b_row0(t0 : T?) {
     t0 |> run("da_attn_b at a row base: the lead rows untouched, the rows from row0 the CPU oracle's") <| @(t : T?) {
@@ -3452,23 +3452,35 @@ def test_vkd_da_attn_b_row0(t0 : T?) {
                 return
             }
             let lead = 3
-            var f <- da_attn_b_fix(13, 4, 2, 128, 32, 64, 160, 0.05, 1.8, 0.03, 1.4, false)
-            let qd = f.nheads * f.hs
-            var inscope y_full <- da_attn_b_run(f, DAB_B, 0.125, 0.0, 0, lead)
-            var inscope y_ref <- da_attn_b_ref(f, 0.125, 0, 0.0)
-            var lead_moved = 0
-            for (i in range(lead * qd)) {
-                if (unsafe(reinterpret<uint>(y_full[i])) != NAN_SENTINEL_BITS) {
-                    lead_moved++
+            for (stamp in fixed_array(DAB_B, DAB_BW, DAB_H128)) {
+                let tag = stamp == DAB_BW ? "da_attn_bw" : (stamp == DAB_H128 ? "da_attn_b_h128" : "da_attn_b")
+                if (stamp == DAB_BW && !ensure_da_attn_bw_cls()) {
+                    t |> skip("{tag} declined on this device (workgroup cap)")
+                    continue
                 }
+                if (stamp == DAB_H128 && !g_gpu.has_coopmat) {
+                    t |> skip("{tag}: no coopmat on this device")
+                    continue
+                }
+                let wide = stamp == DAB_BW   //! the gemma-4 global heads' shape and score scale on the wide tile, the 128-head shape on the others
+                let scale = wide ? 1.0 : 0.125
+                var f <- wide ? da_attn_b_fix(13, 4, 4, 512, 32, 64, 160, 0.005, 0.18, 0.003, 0.14, false) : da_attn_b_fix(13, 4, 2, 128, 32, 64, 160, 0.05, 1.8, 0.03, 1.4, false)
+                let qd = f.nheads * f.hs
+                var inscope y_full <- da_attn_b_run(f, stamp, scale, 0.0, 0, lead)
+                var inscope y_ref <- da_attn_b_ref(f, scale, 0, 0.0)
+                var lead_moved = 0
+                var lead_first = -1
+                for (i in range(lead * qd)) {
+                    if (unsafe(reinterpret<uint>(y_full[i])) != NAN_SENTINEL_BITS) {
+                        lead_first = lead_first < 0 ? i : lead_first
+                        lead_moved++
+                    }
+                }
+                t |> equal(lead_moved, 0, "{tag}: the {lead} lead rows under the row base stay at the sentinel ({lead_moved} elements written, the first at {lead_first})")
+                var inscope y_cls <- [for (i in range(f.npos * qd)); y_full[lead * qd + i]]
+                check_rows(t, "{tag} at row0 {lead} against the CPU oracle", y_cls, y_ref, stamp == DAB_H128 ? cm_bar(y_ref) : BAR_APPROX_CTRL, qd, f.hs)
+                delete f
             }
-            t |> equal(lead_moved, 0, "the {lead} lead rows under the row base stay at the sentinel ({lead_moved} elements written)")
-            var inscope y_cls <- [for (i in range(f.npos * qd)); y_full[lead * qd + i]]
-            let bad = mismatch_approx(y_cls, y_ref)
-            t |> success(bad == 0, "da_attn_b at row0 {lead} matches the CPU oracle ({bad} of {f.npos * qd} off)")
-            y_ref[0] += 0.5
-            t |> success(mismatch_approx(y_cls, y_ref) > 0, "the bar reds a poisoned oracle element")
-            delete f
         } else {
             t |> skip("dasVulkan not present")
         }
@@ -5339,13 +5351,16 @@ def private rope_kv_b_row0_arm(t : T?) {
             var inscope q_cls <- cp |> plane_run(pq)
             var inscope m_cls <- mirror_pair(cp, pkm, pvm, mirn, false)
             var lead_moved = 0
+            var lead_first = -1
             for (i in range(lead * qd)) {
                 if (q_cls[i] != 10000.0) {
+                    lead_first = lead_first < 0 ? i : lead_first
                     lead_moved++
                 }
             }
-            t |> equal(lead_moved, 0, "rope_kv_store_b at row0 {lead}: the {lead} lead q rows stay untouched ({lead_moved} elements written)")
+            t |> equal(lead_moved, 0, "rope_kv_store_b at row0 {lead}: the {lead} lead q rows stay untouched ({lead_moved} elements written, the first at {lead_first})")
             var inscope q_rows <- [for (i in range(npos * qd)); q_cls[lead * qd + i]]
+            t |> success(moved_off(oref.q, q0h, 3, BAR_APPROX_CTRL), "rope_kv_store_b at row0 {lead}: the roped q row differs from its input at a rotated index past the bar (the in-place compare has teeth)")
             check_rows(t, "rope_kv_store_b at row0 {lead}, q", q_rows, oref.q, BAR_APPROX_CTRL, qd, hs)
             mirror_rows_check(t, "rope_kv_store_b at row0 {lead}", m_cls, oref.mk, oref.mv, layerbase + pos0 * kvd, npos * kvd, mirn)
         }

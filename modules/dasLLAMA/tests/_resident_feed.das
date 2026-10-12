@@ -39,7 +39,9 @@ def assert_pf_window(t : T?) {
 //! `n` ramp ids `base + ((i + salt) * stride) % span`: a prompt or a fed run no tokenizer is needed for
 def ramp_ids(n, salt, base, stride, span : int64) : array<int64> => <- [for (i in range64(n)); base + ((i + salt) * stride) % span]
 
-//! of the row's max |logit|: the resident rigs' split bar - the window's GEMMs split k by the row count, so two row counts round apart
+//! of the row's max |logit|: the resident rigs' split bar - the window's GEMMs split k by the row count and two window splits of
+//! one prompt reduce its attention in two orders, so two row counts round apart (the 0.5B's own device-vs-CPU rounding reads
+//! 0.30-0.50 of a 9.5-18 max logit, `test_gpu_resident_qwen2.das`'s bar)
 let SPLIT_BAR_REL = 0.06
 
 //! the logits now, then after each of `toks` stepped one at a time on `s` at its own position (`eval_` advancing it)
@@ -62,9 +64,12 @@ def steps_after(tr : Model; var s : Session; toks : array<int64>) : array<array<
 def assert_short_window_takes_chain(t : T?; tr : Model; why : string) {
     var prompt <- resident_prompt(2l)
     var s <- create_session(tr, mirror_kv_dtype())
+    let lever = vulkan_prefill_peel_()
+    set_vulkan_prefill_peel_(true)   //! the peel's lever at its default: the decline is the model's, not the lever's
     let peels0 = moe_gpu_resident_peels()
     let pf0 = moe_gpu_resident_prefills()
     forward_prefill(tr, s, prompt, 2l, 0l)
+    set_vulkan_prefill_peel_(lever)
     t |> equal(moe_gpu_resident_peels() - peels0, 0l, "a two-token prompt on {why} takes the chain, not the peel")
     t |> equal(moe_gpu_resident_prefills() - pf0, 1l, "... and the driver counted its prefill")
     served_every_call(t)

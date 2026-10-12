@@ -28,9 +28,9 @@ this folder, passes a loader parameter that takes a family's lane, or whose clai
 route or serving lane runs it - a lane pin, a driver hook, a CPU-vs-GPU compare - applies
 `REVIEW_LANE_PINS.md` (beside this file) too.** A lane setter picks a family's q8 or float serving
 lane (`set_<name>_q8`, `set_asr_fp32`, `set_asr_tower_fp32`, or a facade call making one); a driver
-setter is any other `../dasllama/` call writing process-global state - not a module global - that a
-later load, route choice or kernel dispatch reads; a loader's own box-profile setters are the
-loader's, not the cell's.
+setter is any other `../dasllama/` call writing state that outlives the call - a module global or
+process-global state - that a later load, route choice or kernel dispatch reads; a loader's own
+box-profile setters are the loader's, not the cell's.
 
 **A cell that feeds, preprocesses, or asserts on media bytes an encoder consumes - pixels or
 audio samples - compares an encoder's output rows against a second source, or compares ASR

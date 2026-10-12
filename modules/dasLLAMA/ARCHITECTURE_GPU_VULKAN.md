@@ -5,8 +5,9 @@ carries the prefill window chain, the Q8 requant byte store, the decode GEMV fam
 codebook buffer, the tile probe's shared descriptor set layout, the recurrent block of the
 prefill window, the roster of Vulkan capabilities the tier keys its routes on, and how the
 `[vk_dispatch]` lens derives `readonly` from a class family's accesses. The token command's
-attention key split, the attention-side planes (the q/k/v bias, the sink logits, the output bias)
-and the K/V mirror's block codecs are in `ARCHITECTURE_GPU_VULKAN_ATTN.md`. The MoE block of that window, the token
+attention key split, the attention-side planes (the q/k/v bias, the sink logits, the output bias),
+the K/V mirror's block codecs, the segmented window and the short window's peel are in
+`ARCHITECTURE_GPU_VULKAN_ATTN.md`. The MoE block of that window, the token
 command's routed twin and their gemma-4 form are in `ARCHITECTURE_GPU_VULKAN_MOE.md`. The
 cooperative-matrix tiles the chain's GEMMs run on - the cm2 decode spelling, the tile pick and
 the coopmat mode ladder, the class-pipeline build seat, the MoE expert chain on those tiles, and
