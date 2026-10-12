@@ -39,7 +39,7 @@ def private allow_cpu_prefill_intent() {
 let private OPEN_ROWS = 40l
 let private TAIL_A = 23l
 let private TAIL_B = 31l
-let private LONG_TAIL = 300l   //! two of them run past PF_WINDOW (512), so the segmented call runs two windows
+let private LONG_TAIL = 300l   //! two of them run past PF_WINDOW (512), so the segmented call runs two windows, the second holding B's rows alone
 let private STEPS = 8l
 
 //! the segmented windows the Vulkan driver counted so far; 0 with no vulkan module (the cells then skip on the tier)
@@ -69,10 +69,10 @@ def private hold_rows(t : T?; what : string; got, want : array<array<float>>) {
     rows_within_control(t, what, got, want, SPLIT_BAR_REL, 1l, 1.0, $(r) => r == 0l ? "the prefill's row" : "step {r}")
 }
 
-//! the windows a segmented call of `rows` rows runs (`PF_WINDOW` a window); 0 with no vulkan module
-def private windows_of(rows : int64) : int64 {
+//! the windows of a segmented call that hold both segments - the one the boundary between A and B falls in; 0 with no vulkan module
+def private shared_windows(ta : int64) : int64 {
     static_if (typeinfo builtin_module_exists(vulkan)) {
-        return (rows + PF_WINDOW - 1l) / PF_WINDOW
+        return ta % PF_WINDOW != 0l ? 1l : 0l
     } else {
         return 0l
     }
@@ -102,7 +102,7 @@ def private tails_as_segments(t : T?; tr : Model; ta, tb : int64; what : string)
     chunks |> push_clone(tail_b)
     eval_segments_(tr, sess, chunks)
     sess |> clear()
-    t |> equal(segment_windows() - sw0, windows_of(ta + tb), "{what}: the two tails rode one segmented call of {windows_of(ta + tb)} windows")
+    t |> equal(segment_windows() - sw0, shared_windows(ta), "{what}: the two tails rode one segmented call, {shared_windows(ta)} window holding both segments")
     t |> equal(moe_gpu_resident_prefills() - pf0, 2l, "{what}: the driver counted a prefill a segment")
     t |> equal(sa.n_past, OPEN_ROWS + ta, "{what}: session A's position moved by its tail")
     t |> equal(sb.n_past, OPEN_ROWS + tb, "{what}: session B's position moved by its tail")
@@ -352,6 +352,8 @@ def private decline_arms_cell(t : T?; tr : Model) {
         }
         delete ha
         delete hb
+        gpu_device_kv_park(da)   //! a deleted session keeps its region pinned: parked, so the next arm's sessions find both free
+        gpu_device_kv_park(db)
         delete da
         delete db
     }
@@ -362,21 +364,18 @@ def private decline_arms_cell(t : T?; tr : Model) {
         var sess <- [unsafe(addr(sa)), unsafe(addr(sb))]
         let sw0 = segment_windows()
         let pf0 = moe_gpu_resident_prefills()
-        var passes0 <- gpu_cpu_passes_()
+        let passes0 = pass_total()
         eval_segments_(tr, sess, opens)
         sess |> clear()
-        var passes1 <- gpu_cpu_passes_()
         t |> equal(segment_windows() - sw0, 0l, "a session adding deepstack slices: no segmented window on an override with no slice-add arm")
         t |> equal(moe_gpu_resident_prefills() - pf0, 1l, "... the other session's segment ran alone on the driver")
-        t |> equal(length(passes1), length(passes0), "... and the deepstack session took the CPU prefill loop with no pass counted ({passes1})")
+        t |> equal(pass_total() - passes0, 0l, "... and the deepstack session took the CPU prefill loop with no pass counted")
         sb.ds_active = false
         unsafe {
             delete sess
         }
         delete sa
         delete sb
-        delete passes0
-        delete passes1
     }
     delete opens
     delete open_a

@@ -3467,6 +3467,7 @@ def test_vkd_da_attn_b_row0(t0 : T?) {
                     t |> skip("{tag}: no coopmat on this device")
                     continue
                 }
+                verify(stamp != DAB_H128 || ensure_da_attn_b_h128_cls(), "the h128 class rail must engage on a coopmat device")
                 let wide = stamp == DAB_BW   //! the gemma-4 global heads' shape and score scale on the wide tile, the 128-head shape on the others
                 let scale = wide ? 1.0 : 0.125
                 var f <- wide ? da_attn_b_fix(13, 4, 4, 512, 32, 64, 160, 0.005, 0.18, 0.003, 0.14, false) : da_attn_b_fix(13, 4, 2, 128, 32, 64, 160, 0.05, 1.8, 0.03, 1.4, false)

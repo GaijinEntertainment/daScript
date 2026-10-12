@@ -1586,7 +1586,7 @@ rigs' split bar (`SPLIT_BAR_REL`) of the one-session form's with the row one ste
 both argmax streams decoded in the log - then both openings as one window from position zero, each
 session's last-row logits within the bar of its solo opening's with the other session's row as the
 control, the argmax rows decoded; the witnesses are the segmented-window counter
-(`vk_rdec_prefill_segment_windows`) up by one a call, the driver's prefill count up by a segment, and
+(`vk_rdec_prefill_segment_windows`) up by one a call for the window that holds both segments (the 300-row tails' second window holds B alone), the driver's prefill count up by a segment, and
 every call served; the decline cell runs two sessions' openings under the server's prefill pin
 (`set_resident_prefill_allowed(false)`, put back as found) - no segmented window, no prefill counted
 (the served cells' counter's control), the engine's one-at-a-time fallback passing each to the CPU
@@ -1705,7 +1705,7 @@ window where the model's segmented window serves (`gpu_device_prefill_segments`)
 tick's witness; the handoff cell (`cell_scheduler_device_handoff`) runs two device-home streams of 300 and 1024
 rows whose first leaves fewer rows than the quantum: where the model's window serves, the first tick carries both
 and cuts the second's prompt there (four calls counted a segment, the segmented-window counter up), where it
-declines each tick is one stream's own call (three calls, no segmented window); the three argmax requests' decode steps land their picks on the
+declines each tick is one stream's own call (three calls - two on a model whose prefill cannot continue, whose second prompt goes whole - no segmented window); the three argmax requests' decode steps land their picks on the
 device (the count held equal to the rows stepped less the second turn's, which samples at top-k 1
 under a temperature and so lands logits). Every cell holds `gpu_cpu_passes_()` empty
 (the pin cell its one `busy`). The qwen2 file adds the tolerance cells, at the 6% bar of

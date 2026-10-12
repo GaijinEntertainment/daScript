@@ -1000,8 +1000,8 @@ def cell_scheduler_device_prefill_chunks(t : T?; file : string) {
 
 //! a device-home scheduler's tick on two streams whose first has fewer rows left than the quantum: where the model's segmented
 //! window serves, the tick hands both to one window and the second stream's prompt is cut there (A 300 + B 212, B 512, B 300:
-//! four calls counted a segment); where it declines, each tick is one stream's own call (A 300, B 512, B 512: three) - the
-//! handoff never costs a declining model a window
+//! four calls counted a segment); where it declines, each tick is one stream's own call (A 300, B 512, B 512: three; A 300,
+//! B 1024: two where the model's prefill cannot continue) - the handoff never costs a declining model a window
 def cell_scheduler_device_handoff(t : T?; file : string) {
     t |> run("a device-home tick hands two streams to one segmented window where the model's window serves, and takes one stream's call where it declines") @(t : T?) {
         with_regions_rig(t, file) $(tr) {
@@ -1020,7 +1020,8 @@ def cell_scheduler_device_handoff(t : T?; file : string) {
                 t |> equal(calls, 4l, "the first tick's window carried both streams and cut the second's prompt there ({calls} calls)")
                 t |> success(segment_windows_count() - segw0 >= 1l, "... through the segmented window")
             } else {
-                t |> equal(calls, 3l, "each tick took one stream's own call, the second stream's prompt whole windows ({calls} calls)")
+                let whole = gpu_device_prefill_continues(tr) ? 2l : 1l
+                t |> equal(calls, 1l + whole, "each tick took one stream's own call, the second stream's prompt whole windows or whole where the model's prefill cannot continue ({calls} calls)")
                 t |> equal(segment_windows_count() - segw0, 0l, "... no segmented window")
             }
             t |> equal(length(toks_of(events, 1l)), 2, "the first stream ran its two tokens")

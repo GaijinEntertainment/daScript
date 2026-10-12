@@ -206,18 +206,21 @@ def served_every_call(t : T?) {
     delete passes
 }
 
-//! how many calls the driver passed to the CPU rails for `reason` (the `RdecPass` name) since the model armed
+//! how many calls the driver passed to the CPU rails for `reason` (the `RdecPass` name; "" = any reason) since the model armed
 def pass_count(reason : string) : int64 {
     var passes <- gpu_cpu_passes_()
     var n = 0l
     for (p in passes) {
-        if (p.reason == reason) {
+        if (empty(reason) || p.reason == reason) {
             n += p.count
         }
     }
     delete passes
     return n
 }
+
+//! how many calls the driver passed to the CPU rails for any reason since the model armed
+def pass_total : int64 => pass_count("")
 
 //! the driver passed calls to the CPU rails for `reason` alone since the model armed - `count` of them where past 0 - asserted
 //! under `what` with every pass logged
