@@ -169,17 +169,17 @@ only Metal fills; an override only one backend registers (`register_*("metal", .
 under the other backend's prefix that `dasllama/` engine code outside the backend's files calls; a
 function kind, argument or field annotation only one dispatch lens generates or accepts; a decode
 or prefill behavior, the precision of a step included, or a pin or knob only one backend has -
-lands one entry for it in `ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries`, even when the list
-carries one of the same class; a diff that removes one deletes its entry; in the same change.** The
+lands one entry for it, naming what keeps the other backend from it, in
+`ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries`, even when the list carries one of the same
+class; a diff that removes one deletes its entry; in the same change.** The
 same path served faster or slower is not a behavior; a pin or knob is a setter or environment
 variable that changes what a run selects or computes.
 
-**A diff that adds or extends, for one GPU backend (Metal or Vulkan), a prefill or decode form, a
-K/V cache feature or a scheduler path the backend decides, where the other backend serves the same
-model family, lands the other backend's form that serves the same calls in the same change or
-names it in the PR body; where the other backend has none and cannot hold one, the change lands
-its `ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries` entry naming what stops it.** A capability
-one backend has makes a served model's behavior depend on the box it runs on.
+**A diff that adds or extends, on one GPU backend (Metal or Vulkan), a prefill or decode path, a
+K/V cache feature or a scheduler path for a model family the other backend also serves lands the
+same capability on the other backend in the same change, wherever the other backend's API and
+device offer the operations it uses; a PR body that defers it is a defect.** A capability one
+backend has makes a served model's behavior depend on the box it runs on.
 
 **A change that can alter what a GPU decode or prefill call on a session computes or selects ships
 GPU-vs-CPU parity on one q8 model, one K-quant model, and one model of a format outside both, for
@@ -258,8 +258,8 @@ own forward-only guard never runs.
 
 **A module-level variable in a GPU driver file whose value derives from a loaded model's weights,
 or names, sizes or points at device content built from a loaded model (a served model, a draft
-or tower model, a TTS voice), and which a later call reads before that call writes it - a
-said-once reason set included, a scratch every call fills before it reads excluded - gets a
+or tower model, a TTS voice), or records which decline reasons the driver has logged for it, and
+which a later call reads before that call writes it, gets a
 model-swap discharge in the same change that adds it: a path
 the unload or reload of that model runs that returns the variable to its no-model value.** The
 discharge paths: for a Vulkan driver file, a reset `moe_gpu_model_marks_restore_` or
@@ -290,8 +290,8 @@ decided, so a mint-time read bakes a verdict the drivers do not share.
 **A diff that gives a per-format pick that maps a weight format to a Metal pipeline or
 builder - a dispatch ladder, a table row, a picker function - an arm for a weight format adds that
 format to `kq_fmt_gpu_supported`, or, for an expert plane, to `moe_fmt_metal_served` (both
-`dasllama/dasllama_metal_shapes.das`), in the same change; an arm admitting a whole class of
-formats (every superblock format) ANDs that predicate into its own.** Those predicates are what declines
+`dasllama/dasllama_metal_shapes.das`), in the same change; an arm that admits a whole class of
+formats also requires that predicate to hold in its own condition.** Those predicates are what declines
 an unserved format, so an unlisted format decodes under whatever the pick's default arm holds.
 
 **A diff that gives the Metal PLE (per-layer embedding) token-table gather a weight format makes

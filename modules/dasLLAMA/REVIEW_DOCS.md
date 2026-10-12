@@ -6,11 +6,12 @@ doc: `ARCHITECTURE.md`. Planned work: `followup_general.md`, `followup_vulkan.md
 
 **A diff that adds a `followup_*.md` entry asking that one function be shortened or split (not
 merged with a twin onto one template) removes that function's STYLE037/STYLE038 suppression
-(`// nolint:`, `options _function_length` / `_cyclomatic_complexity`), or lands the split, in the
-same change.**
+(`// nolint:`, `options _function_length` / `_cyclomatic_complexity`), or lands the shortening or
+split, in the same change.**
 
-**A diff that adds a STYLE037/STYLE038 suppression under this folder to a function such an entry
-names is a defect - it lands the split instead.**
+**A diff that adds a STYLE037/STYLE038 suppression under this folder to a function that a
+`followup_*.md` entry asks to have shortened or split is a defect - it lands the shortening or
+split instead.**
 
 **A diff that adds a file under `dasllama/` adds that file's charter line - the one line saying
 what the file holds - to an `ARCHITECTURE_*.md` companion in the same change, never to
@@ -38,8 +39,8 @@ in `PERF_LEDGER.md`; a `followup_*.md` row that carries one cites the entry it c
 **A diff that adds, removes, or moves a `##` or `###` heading of an `ARCHITECTURE_*.md` companion,
 or adds or removes a companion, updates every text that lists a companion's contents - the
 companion's line in `ARCHITECTURE.md`'s routing block (under `File charters` or `Mechanisms`), the
-companion's own opening, any other `ARCHITECTURE*.md` sentence that routes a reader to the
-companion - so that it names each added heading's subject and no removed one's, in the same
+companion's own opening, any other `ARCHITECTURE*.md` sentence that lists the companion's
+subjects - so that it names each added heading's subject and no removed one's, in the same
 change.**
 
 **A diff that moves or removes a heading of an `ARCHITECTURE_*.md` companion leaves no citation

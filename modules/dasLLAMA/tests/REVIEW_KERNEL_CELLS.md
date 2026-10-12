@@ -29,8 +29,11 @@ is the job of that function's cells. A branch or regime is a path only where a s
 means two sides agree or a figure is good enough - a difference between two computed sides, a
 rate, an error, or a count the run decides, within a nonzero tolerance or past a floor or ceiling;
 a guard that keeps a later index or compare well-defined (a length past the index it reads) is not
-one, a counter asserted to show a route ran is not one, and an assert another rule of this list
-requires to show a compare can fail - the in-place assert - is a control, not one. A control is an extra assert
+one, a counter asserted to show a route ran is not one, and an assert a rule of this list requires
+to show a compare can fail - the in-place cell's output-differs-from-input assert among them - is a
+control, not a bound assert. A sibling stamp is another stamp derived from the same class; it
+stands in for a stamp only where the code a rule asks about is the class's own and neither stamp
+overrides it. A control is an extra assert
 in the same cell proving a compare can fail - a poisoned input, or a poisoned expectation (the
 expected value with a known amount added), that must land outside the bar, a mechanism unhooked
 whose result must miss, or a second, independent computation the result must agree with; a cell's
@@ -38,10 +41,10 @@ own reference is never its control.
 
 **A diff that changes a kernel's dispatch grid (the count its dispatch needs, or its workgroup
 size) or its kargs (the struct, any buffer binding, or the layout of a struct a bound buffer holds)
-rebinds or deletes, in the same change, every gate dispatching that kernel whose count, binds or
-kargs values the change made wrong.** A gate left on the old count
-dispatches the wrong shape with no error; a stale kargs gate reads the wrong buffer and passes on
-garbage that happens to compare.
+corrects or deletes, in the same change, every gate dispatching that kernel whose count, buffer
+bindings or kargs values the change made wrong.** A gate left on the old count dispatches the wrong
+shape with no error; a stale kargs gate reads the wrong buffer and passes on garbage that happens to
+compare.
 
 **A diff that changes a Metal kernel's `@workgroup` state or the size of a stamp's `@workgroup`
 array updates, in the same change, every gate that dispatches that kernel and every gate that
@@ -53,14 +56,15 @@ every kernel-unit cell expectation over that kernel's output.** An expectation o
 no longer writes compares the sentinel to a sum.
 
 **A diff that dispatches an existing `[vk_dispatch]` or `[metal_dispatch]` class at a workgroup
-size, or a grid formula, no kernel-unit cell runs it at ships a kernel-unit cell at that shape, in
-the same change.**
+size no kernel-unit cell runs it at, or with a new grid formula (the expression that computes its
+dispatch count from the call's sizes), ships a kernel-unit cell that dispatches it at that
+workgroup size or through that formula, in the same change.**
 
 **A kernel-unit cell's compare of kernel output against its reference logs, whether it passes or
-fails, the largest difference it measured with that element's row and column; an exact compare -
-a scan asserting that a region still holds its sentinel is one - logs its mismatch count and first
-mismatching index instead.** A failure, or a pass that looks
-wrong, must say how far and where, not only how many.
+fails, the largest difference it measured with that element's row and column; an exact compare - a
+scan asserting that a region still holds its sentinel is one - logs its mismatch count and first
+mismatching index instead.** A failure, or a pass that looks wrong, must say how far and where, not
+only how many.
 
 **A kernel-unit cell with a kernel run whose output no CPU-oracle compare covers at that run's
 shapes is a defect: the compare sits in that cell, or - where the cell compares two kernel forms
@@ -71,18 +75,16 @@ shapes.** Two forms can be bit-equal and both wrong.
 selection - a branch added, or a predicate widened or narrowed, so that a different set of kargs
 values, or of sentinel values in a bound buffer, reaches a path - ships a kernel-unit cell that
 dispatches that class at a value the change moved onto or off that path, or names the existing
-cell that already does.** A cell that dispatches a sibling stamp - another stamp derived from the
-same class - counts only when no constant or method either stamp overrides appears in the moved
-path. At every value the change left where it was the kernel computes what it did before, so a
-cell that dispatches only those values passes whether the change is right or wrong.
+cell that already does.** A sibling stamp's cell counts. At every value the change left where it
+was the kernel computes what it did before, so a cell that dispatches only those values passes
+whether the change is right or wrong.
 
-**A diff that adds a kargs field to a `[vk_dispatch]` or `[metal_dispatch]` class, or gives one a
-new meaning, so that it moves which elements a stamp reads or writes, ships, for every stamp whose
-reads or writes the field moves, a kernel-unit cell that dispatches that stamp - or a sibling stamp
-of the same template, where the moved index is the template's own expression - at a value a serving
-call in `../dasllama/` can pass other than the one at which every read and write sits where it did
-before the change.** At that value a cell passes whether the offset is right or wrong, and a stamp
-with an index expression of its own is proven by no sibling.
+**A diff that adds a kargs field to a `[vk_dispatch]` or `[metal_dispatch]` class, or changes what
+an existing field means, so that a stamp reads or writes different elements, ships for each such
+stamp a kernel-unit cell that dispatches it, or a sibling stamp, with the field at a value a serving
+call in `../dasllama/` can pass and at which the elements read or written differ from the ones
+before the change.** At the value where nothing moved, a cell passes whether the new indexing is
+right or wrong.
 
 **A diff that adds a `[vk_dispatch]` or `[metal_dispatch]` class ships a kernel-unit cell that
 dispatches it on every path its body has.** A path no cell reaches is one a merge can drop and
@@ -106,8 +108,8 @@ output differs from the input or that its reference - its CPU oracle, or the sec
 it compares against - differs from that input by more than the compare's bar.** An in-place kernel
 that never ran leaves the input, which can wrongly satisfy a tolerant compare.
 
-**A diff that adds or loosens, in a kernel-unit cell, a bound assert that is not itself a control -
-a compare on a class or at a kargs value, a rate, an error, a count - ships a control for each such
+**A diff that adds or loosens, in a kernel-unit cell, a bound assert - a compare on a class or at
+a kargs value, a rate, an error, a count - ships a control for each such
 assert, in the same change.**
 
 **A size, depth, or row count that a kernel-unit cell's name, a comment inside the cell, or an

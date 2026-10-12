@@ -4,11 +4,12 @@
 docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`, `ARCHITECTURE_GPU_TOWER.md`.
 Planned work: `followup_metal.md`, `followup_vulkan.md`.
 
-Parity evidence is a compare one side of which, in any row, the CPU chain (the same model's
-forward on the CPU kernels) computed and the other side a GPU-served run - a run whose output the
-GPU computed - whatever the diff calls it; a kernel-unit cell's compare - a test cell that dispatches a `[vk_dispatch]` or
+Parity evidence is a compare in which the CPU chain (the same model's forward on the CPU kernels)
+computed at least one output row - one token's, frame's or stage's floats or ids - of one side and
+a GPU-served run - a run whose output the GPU computed - the other, whatever the diff calls it; a
+kernel-unit cell's compare - a test cell that dispatches a `[vk_dispatch]` or
 `[metal_dispatch]` class itself - counts. Driver-against-itself evidence is a compare of the
-outputs of two GPU-served sides of one model against each other. A diff cites parity or driver-against-itself
+outputs of two GPU-served runs of one model, whichever drivers served them. A diff cites parity or driver-against-itself
 evidence when it changes what either side of a compare offered as that evidence computes, its bar
 or its assert, or adds or changes a citation of such a compare in a doc, a ledger, a commit message
 or the PR description. A serving call is a decode, a prefill, or an encoder or synthesis stage a
@@ -62,10 +63,9 @@ for any other stage, the blocks and a TTS stage included), `metal_wdec_stats`' `
 **A diff that cites as parity evidence a Vulkan run of a serving call armed by anything but
 `DASLLAMA_GPU=1` is a defect; `--ngl` arms Metal alone.**
 
-**A diff that cites as parity or driver-against-itself evidence a Vulkan decode or prefill run of
-the whole-model driver or the per-op tier whose log names no serving tier for the changed path is a
-defect.** The line
-is `resident driver armed` for the whole-model driver (every layer of a step on the device); for
+**A diff that cites as parity or driver-against-itself evidence a compare either of whose Vulkan
+decode or prefill runs of the whole-model driver or the per-op tier logs no serving tier for the
+changed path is a defect.** The line is `resident driver armed` for the whole-model driver (every layer of a step on the device); for
 the per-op tier (single operations on the device, the rest on the CPU) a `GPU MoE tier:` line
 reporting a rail (one operation family the tier serves) `resident` - the rail and its layers,
 with any text after them - never one saying the rail, or any layer of it, stays on the CPU - a
@@ -95,9 +95,11 @@ that text.**
 **A diff that cites a driver-against-itself compare as parity evidence is a defect - such a
 compare is evidence for a `PERF_LEDGER.md` row.**
 
-**A diff that, in a cell or run whose compare is offered as parity evidence, other than a
-kernel-unit cell, holds a model file's serving-call output to a bar no earlier such compare held
-that file to, or changes the constant - or the statistic the constant multiplies - of such a bar,
-adds a `PERF_LEDGER.md` row in the same change naming the bar (its named constant, where it has
-one, and its value), the reading it comes from and the box that read it; a diff that renames or
-moves a bar's named constant a `PERF_LEDGER.md` row cites updates that row in the same change.**
+**A diff that holds a model file's serving-call output, in a compare offered as parity evidence,
+to a bar no earlier such compare held that file to, or changes the constant - or the statistic the
+constant multiplies - of such a bar, adds a `PERF_LEDGER.md` row in the same change naming the bar
+(its named constant, where it has one, and its value), the reading it comes from and the box that
+read it.**
+
+**A diff that renames or moves a bar's named constant updates, in the same change, every
+`PERF_LEDGER.md` row that names that constant.**
