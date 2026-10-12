@@ -1199,3 +1199,46 @@ def cell_regions_batched_widen(t : T?; file : string; bar : LogitsBar = LogitsBa
         }
     }
 }
+
+//! `rows` sessions over `rows` regions - more than the N-row command steps at once - through STEPS batched steps: every
+//! row within `bar` of its session alone with the one-token-off control, each step the fewest commands of at most the
+//! rows the command steps at once (`vk_rdec_token_n_rows`), never a row at a time, and every call served
+def cell_regions_batched_groups(t : T?; file : string; rows : int64; bar : LogitsBar = LogitsBar.split_bar) {
+    t |> run("{rows} sessions, a region each: a batched step over all of them runs in groups of the command's rows, and every row reads what its session reads alone") @(t : T?) {
+        with_regions_rig(t, file, RegionsLoad(regions = rows)) $(tr) {
+            var prompts <- [for (i in range64(rows)); ramp_ids(40l + i, i, 1000l + 100l * i, 37l + 2l * i, 5000l)]
+            var feeds <- [for (i in range64(rows)); ramp_ids(STEPS, i, 2000l, 53l, 4000l)]
+            var alone <- [for (i in range64(rows)); logits_alone(tr, prompts[i], feeds[i])]
+            var sessions : array<Session>
+            sessions |> reserve(rows)
+            for (i in range64(rows)) {
+                sessions |> emplace <| create_session(tr, mirror_kv_dtype())
+                eval(tr, sessions[i], prompts[i])
+            }
+            var sess <- [for (i in range64(rows)); unsafe(addr(sessions[i]))]
+            let at_once = rdec_token_n_rows()
+            t |> success(at_once >= 2l && at_once < rows, "the command steps {at_once} rows at once, fewer than the {rows} rows (the cell measures the groups)")
+            let steps0 = rdec_nrow_steps()
+            with_batch_rows(tr, sess) $(var ws; var sx) {
+                for (st in range64(STEPS)) {
+                    var toks <- [for (i in range64(rows)); feeds[i][st]]
+                    eval_batch(tr, ws, sx, toks)
+                    delete toks
+                    for (i in range64(rows)) {
+                        hold_bar(t, tr, sessions[i].logits, alone[i][st + 1l], alone[i][st], bar, "batched step {st}, row {i}")
+                    }
+                }
+            }
+            let groups = (rows + at_once - 1l) / at_once
+            t |> equal(rdec_nrow_steps() - steps0, STEPS * groups, "every batched step went through {groups} N-row commands")
+            served_every_call(t)
+            unsafe {
+                delete sess
+            }
+            delete sessions
+            delete alone
+            delete prompts
+            delete feeds
+        }
+    }
+}

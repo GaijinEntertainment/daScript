@@ -23,3 +23,9 @@ def test_regions_batched_steps_k(t : T?) {
 def test_regions_batched_steps_split_k(t : T?) {
     cell_regions_batched_steps_split(t, REGIONS_FILE, LogitsBar.split_bar)
 }
+
+//! twelve rows over twelve regions: past the N-row command's eight the step runs two commands of six, never a row at a time
+[test]
+def test_regions_batched_groups_k(t : T?) {
+    cell_regions_batched_groups(t, REGIONS_FILE, 12l)
+}

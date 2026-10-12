@@ -174,6 +174,14 @@ carries one of the same class; a diff that removes one deletes its entry; in the
 same path served faster or slower is not a behavior; a pin or knob is a setter or environment
 variable that changes what a run selects or computes.
 
+**A diff that adds a serving capability on one GPU home - a prefill or decode form (a segmented
+window, a batched or same-slab step, a short-window peel), a K/V cache feature (a codec, a prefix
+share, a paged adoption), or a scheduler path the backend decides - for a model family the other
+home serves lands it on that home in the same change; where that home cannot hold it, the change
+lands, instead, its `ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries` entry naming what stops the
+home and a `followup_<home>.md` row; a PR body deferring the other home is a defect.** A capability
+one home has makes a served model's behavior depend on the box it runs on.
+
 **A change that can alter what a GPU decode or prefill call on a session computes or selects ships
 GPU-vs-CPU parity on one q8 model, one K-quant model, and one model of a format outside both, for
 each of the three whose path the change reaches - or names both compares in the PR body: its emitted

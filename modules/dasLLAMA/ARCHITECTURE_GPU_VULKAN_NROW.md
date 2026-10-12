@@ -14,7 +14,10 @@ decode era, whose routed block the command's rows form mirrors, is `ARCHITECTURE
 once for the step instead of once a row.** The driver sizes every per-token plane to `RDec.nb`
 rows - one a region, or the speculative verify's rows where a NextN model asks more
 (`ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command`), `RD_NB_MAX` at most, eight, the N-column GEMV leaves' width - and
-`vk_rdec_token_n_rows` answers how many rows the armed model steps at once: `nb` over dense,
+`vk_rdec_token_n_rows` answers how many rows the armed model steps at once - a step of more rows
+than that runs them in the fewest groups of at most that many, the groups balanced so none is a
+single row (a single row is the one-row command's), every row's region bound before the first group
+runs, so a row the regions refuse declines the step before any row steps - `nb` over dense,
 MoE, per-layer-embedding, shared-KV and recurrent layers and a gated q, and none where a layer or
 the tail has no N-row form - a dense plane in a per-32 expert format (q51, iq4nl32, mx4: the formats
 with no N-column leaf, every kq leaf having one), a routed block beside a per-layer-embedding

@@ -4046,40 +4046,75 @@ def private rdec_read_row_kv(t : Model; var s : Session; pos : int64) {
     }
 }
 
-//! the step's rows through the N-row token command, one weight pass for all; false when the rows' regions do not serve
+var private @scratch g_rdec_bregs : array<int64>   //! a batched step's region a row, bound before its first group runs
+var private @scratch g_rdec_grp_toks : array<int64>
+
+//! the step's rows through the N-row token command in the fewest groups of the rows it steps at once, one weight pass a
+//! group, the groups balanced so none is a single row; every row's region bound first, so a row the regions refuse
+//! declines the step before any row steps; false where they do
 [arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
 def private rdec_batch_rows_at_once(t : Model; ws : BatchWorkspace; var sessions : array<Session?>; nrows : int64) : bool {
-    let c = t.config
-    let dim = c.dim
-    g_rdec_x_n |> grow_resize(dim * nrows)
-    g_rdec_cos_n |> grow_resize(g_rdec_cos_elems * nrows)
-    let ple_raw = rdec_ple_proj_on()
-    if (has_ple(c)) {
-        rdec_ple_side_rows(t, ws.row_tokens, nrows, ws, 0l)
-    }
-    g_rdec_lrows |> resize(nrows)
-    g_rdec_poss |> resize(nrows)
-    g_rdec_cnts |> resize(nrows)
-    g_rdec_regs |> resize(nrows)
+    let at_once = rdec_token_n_rows()
+    g_rdec_bregs |> resize(nrows)
     let ts_prep = prof_ticks()
     for (i in range64(nrows)) {
         var s & = unsafe(*sessions[i])
-        let pos = ws.positions[i]
         let r = rdec_bind_region(s)
         if (r < 0l) {
             return false
         }
         for (j in range64(i)) {
-            if (g_rdec_regs[j] == r) {   //! two rows one region: the row-at-a-time loop resyncs between them
+            if (g_rdec_bregs[j] == r) {   //! two rows one region: the row-at-a-time loop resyncs between them
                 return false
             }
         }
-        rdec_row_bind(t, s, r, pos, i, "batch")
-        copy_floats(ws.scr.x_b, i * dim, g_rdec_x_n, i * dim, dim)
-        rdec_rope_rows(t, ws.rope_positions[i], g_rdec_cos_n, i * g_rdec_cos_elems)
+        rdec_row_bind(t, s, r, ws.positions[i], i, "batch")
+        g_rdec_bregs[i] = r
+    }
+    prof_add("nrow_prep", ts_prep)
+    let groups = (nrows + at_once - 1l) / at_once
+    var row0 = 0l
+    for (g in range64(groups)) {
+        let n = (nrows - row0 + (groups - g) - 1l) / (groups - g)
+        if (n == 1l) {
+            rdec_batch_one_row(t, ws, *sessions[row0], g_rdec_bregs[row0], row0)
+        } else {
+            rdec_batch_group(t, ws, sessions, row0, n)
+        }
+        row0 += n
+    }
+    batch_decode_override_logits_done()
+    return true
+}
+
+//! rows `row0` .. `row0 + nrows` of the step through one N-row command, their regions bound
+def private rdec_batch_group(t : Model; ws : BatchWorkspace; var sessions : array<Session?>; row0, nrows : int64) {
+    let c = t.config
+    let dim = c.dim
+    let ce = g_rdec_cos_elems
+    let ts_prep = prof_ticks()
+    g_rdec_x_n |> grow_resize(dim * nrows)
+    g_rdec_cos_n |> grow_resize(ce * nrows)
+    let ple_raw = rdec_ple_proj_on()
+    if (has_ple(c)) {
+        g_rdec_grp_toks |> resize(nrows)
+        for (i in range64(nrows)) {
+            g_rdec_grp_toks[i] = ws.row_tokens[row0 + i]
+        }
+        rdec_ple_side_rows(t, g_rdec_grp_toks, nrows, ws, row0 * c.n_layers * c.n_embd_per_layer)
+    }
+    g_rdec_lrows |> resize(nrows)
+    g_rdec_poss |> resize(nrows)
+    g_rdec_cnts |> resize(nrows)
+    g_rdec_regs |> resize(nrows)
+    for (i in range64(nrows)) {
+        var s & = unsafe(*sessions[row0 + i])
+        let pos = ws.positions[row0 + i]
+        copy_floats(ws.scr.x_b, (row0 + i) * dim, g_rdec_x_n, i * dim, dim)
+        rdec_rope_rows(t, ws.rope_positions[row0 + i], g_rdec_cos_n, i * ce)
         g_rdec_poss[i] = pos
         g_rdec_cnts[i] = pos + 1l
-        g_rdec_regs[i] = r
+        g_rdec_regs[i] = g_rdec_bregs[row0 + i]
         g_rdec_lrows[i] = null
         if (!s.pick_asked) {
             g_rdec_lrows[i] = unsafe(addr(s.logits[0]))
@@ -4092,7 +4127,7 @@ def private rdec_batch_rows_at_once(t : Model; ws : BatchWorkspace; var sessions
     prof_add("nrow_gpu", ts_gpu)
     let ts_land = prof_ticks()
     for (i in range64(nrows)) {
-        var s & = unsafe(*sessions[i])
+        var s & = unsafe(*sessions[row0 + i])
         rdec_land_pick(s, g_rdec_picks[i])
         let pos = g_rdec_poss[i]
         let r = g_rdec_regs[i]
@@ -4105,54 +4140,56 @@ def private rdec_batch_rows_at_once(t : Model; ws : BatchWorkspace; var sessions
         s.rdec_host_current = !s.device_kv
     }
     prof_add("nrow_land", ts_land)
-    batch_decode_override_logits_done()
-    return true
+}
+
+//! row `i` of the step through the one-row command on its bound region `r`
+def private rdec_batch_one_row(t : Model; ws : BatchWorkspace; var s : Session; r, i : int64) {
+    let c = t.config
+    let dim = c.dim
+    let pos = ws.positions[i]
+    g_rdec_x |> grow_resize(dim)
+    g_rdec_cossin |> grow_resize(g_rdec_cos_elems)
+    g_rdec_tmp |> grow_resize(c.vocab_size)
+    rdec_select_region(r)
+    copy_floats(ws.scr.x_b, i * dim, g_rdec_x, 0l, dim)   // this row's embedded residual is already in ws.scr.x_b; its rope row for pos
+    rdec_rope_rows(t, ws.rope_positions[i], g_rdec_cossin, 0l)
+    if (has_ple(c)) {
+        rdec_batch_ple_row(t, ws, i)
+    }
+    let picked = g_rdec_experts_host ? rdec_token_split_host(t, s, pos, pos + 1l, s.pick_asked, g_rdec_tmp) : rdec_token(g_rdec_x, g_rdec_cossin, g_rdec_ple_rows, pos, pos + 1l, s.pick_asked, g_rdec_tmp)
+    rdec_stash_carry(c, s, 0l, pos + 1l)
+    if (!s.device_kv) {
+        rdec_read_row_kv(t, s, pos)
+    }
+    g_rdec_regions[r].cnt = pos + 1l
+    s.rdec_host_current = !s.device_kv
+    if (picked >= 0l) {
+        rdec_land_pick(s, picked)
+    } else {
+        copy_floats(g_rdec_tmp, 0l, s.logits, 0l, c.vocab_size)
+    }
 }
 
 def private vulkan_resident_batch_decode_go(t : Model; ws : BatchWorkspace; var sessions : array<Session?>; nrows : int64) : bool {
-    let c = t.config
-    let dim = c.dim
-    let ple = has_ple(c)
-    if (!ple) {
+    if (!has_ple(t.config)) {
         g_rdec_ple_rows |> clear()
     }
     if (dasllama_noisy()) {
         to_log(LOG_INFO, "dasLLAMA: resident batch decode engaged ({nrows} streams)\n")   // nolint:PERF026,PERF028 — noisy-gated diagnostics
     }
     // the N-row command takes a region a row: a plan short of the rows (one region under a verify-widened nb) steps them one at a time
-    if (nrows > 1l && long_length(g_rdec_regions) >= nrows && rdec_token_n_rows() >= nrows && rdec_batch_rows_at_once(t, ws, sessions, nrows)) {
+    if (nrows > 1l && long_length(g_rdec_regions) >= nrows && rdec_token_n_rows() >= 2l && rdec_batch_rows_at_once(t, ws, sessions, nrows)) {
         return true
     }
-    g_rdec_x |> grow_resize(dim)
-    g_rdec_cossin |> grow_resize(g_rdec_cos_elems)
-    g_rdec_tmp |> grow_resize(c.vocab_size)
     for (i in range64(nrows)) {
         var s & = unsafe(*sessions[i])
-        let pos = ws.positions[i]
         let r = rdec_bind_region(s)
         if (r < 0l) {
             rdec_unland_picks(sessions, i)
             return false   //! the CPU rails redo the whole step: rows already stepped here rewrite the same position, and their regions resync from the host
         }
-        rdec_row_bind(t, s, r, pos, i, "row-at-a-time")
-        // this row's embedded residual is already in ws.scr.x_b; its rope row for pos
-        copy_floats(ws.scr.x_b, i * dim, g_rdec_x, 0l, dim)
-        rdec_rope_rows(t, ws.rope_positions[i], g_rdec_cossin, 0l)
-        if (ple) {
-            rdec_batch_ple_row(t, ws, i)
-        }
-        let picked = g_rdec_experts_host ? rdec_token_split_host(t, s, pos, pos + 1l, s.pick_asked, g_rdec_tmp) : rdec_token(g_rdec_x, g_rdec_cossin, g_rdec_ple_rows, pos, pos + 1l, s.pick_asked, g_rdec_tmp)
-        rdec_stash_carry(c, s, 0l, pos + 1l)
-        if (!s.device_kv) {
-            rdec_read_row_kv(t, s, pos)
-        }
-        g_rdec_regions[r].cnt = pos + 1l
-        s.rdec_host_current = !s.device_kv
-        if (picked >= 0l) {
-            rdec_land_pick(s, picked)
-        } else {
-            copy_floats(g_rdec_tmp, 0l, s.logits, 0l, c.vocab_size)
-        }
+        rdec_row_bind(t, s, r, ws.positions[i], i, "row-at-a-time")
+        rdec_batch_one_row(t, ws, s, r, i)
     }
     batch_decode_override_logits_done()
     return true
