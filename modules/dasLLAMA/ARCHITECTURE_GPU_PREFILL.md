@@ -233,8 +233,10 @@ full-panel path only. The narrowing declines wherever another consumer reads eve
 session keeping the hidden state, a warm or MTP forward (`n_layer_nextn` present), a
 recurrent, MoE or PLE layer, a sandwich-norm or gated-query model, a deepstack-tapped layer -
 and it engages only at `npos > 1` with `dim` and the layer's hidden width both %32 and every
-FFN weight on the q8 plane (the GEMV forms it narrows onto are q8); a Q4_K_M carrier never
-takes it. `DASLLAMA_METAL_LASTROW=0` pins the full-panel tail.
+FFN weight on a plane with a one-row form: the q8 plane's GEMV, or a superblock format's
+row-batched decode form at one row (`pf_enc_narrow_gemv`; the site's K must be whole
+superblocks, so a K-quant carrier whose `dim` or hidden width is off 256 keeps the full panel).
+`DASLLAMA_METAL_LASTROW=0` pins the full-panel tail.
 A caller that reads `x_b` rows afterwards - embedding pooling, whichever rows its pooling picks, a
 plane-compare probe - sets `Session.keep_hidden` and the prefill keeps every row; the flag is
 zero-init, so narrowing is the default.

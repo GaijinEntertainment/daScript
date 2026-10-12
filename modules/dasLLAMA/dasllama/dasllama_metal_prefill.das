@@ -5852,6 +5852,22 @@ def private pf_kq_deep_stamps(fmt : KqFmt) : KqDeepStamps {
         enc_thdb = @@enc_kq_mm_k5_thdb_c, enc_thdb128 = @@enc_kq_mm_k5_thdb128_c)
 }
 
+//! the last-row tail serves a plane whose format has a one-row GEMV: q8's `enc_gemv`, or a superblock format's row-batched
+//! decode form at one row, whose K is whole superblocks
+def private pf_narrow_fmt(f : KqFmt; kdim : int64) : bool => f == KqFmt.q8 || (kq_sb(int(f)) && kdim % KQ_SB_ELEMS == 0l)
+
+//! one row of a GEMM site as a GEMV: x row 0 of `bx` (`kdim` wide) against the plane at `woff` into y row 0 of `by` (`d` rows) -
+//! q8's GEMV, or the decode's row-batched K-quant form at one row, whatever the tail peel's lever says (the peel counts nothing here)
+[arch(at="../ARCHITECTURE_GPU_PREFILL.md#prefill-last-row-tail")]
+def private pf_enc_narrow_gemv(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; woff : int64; bx, by, bk, bn : MetalBuffer?; kdim, d : int64) {
+    if (fmt == KqFmt.q8) {
+        let bw = blob_of(g_dev, t, woff)
+        enc_gemv(enc, bw.buf, bw.boff, bx, by, bk, bn, d, 0ul, 0ul)
+    } else {
+        enc_kq_site_b(enc, t, fmt, woff, d, kdim, bx, kdim, by, d, 0l, bk, bn, bn, 1l, 1l, null)
+    }
+}
+
 [arch(at="../ARCHITECTURE_GPU_PREFILL.md#prefill-kq-tensor-scaffold")]
 def private pf_enc_kq_site_mm(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; woff, rows : int64;
                               bx, by, bk, bn : MetalBuffer?; mp : int64; yoff : uint64 = 0ul; bxh : MetalBuffer? = null; kdim : int64 = 0l;
@@ -7730,8 +7746,8 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                     && !c.pre_post_norm && l >= nds && !c.q_gated
                     && c.n_layer_nextn == 0l
                     && dim % 32l == 0l && hid_l % 32l == 0l
-                    && fmt_at(t.w1_fmt, l) == KqFmt.q8 && fmt_at(t.w3_fmt, l) == KqFmt.q8
-                    && fmt_at(t.w2_fmt, l) == KqFmt.q8)
+                    && pf_narrow_fmt(fmt_at(t.w1_fmt, l), dim) && pf_narrow_fmt(fmt_at(t.w3_fmt, l), dim)
+                    && pf_narrow_fmt(fmt_at(t.w2_fmt, l), hid_l))
                 if (narrow_last) {
                     for (sg in segs) {
                         let nro = uint64((sg.row0 + sg.npos - 1l) * dim * 4l)
@@ -7740,10 +7756,8 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                             pf_enc_rms(enc, bx, nro, bw_ffn, bxb, u_dim, u_eps, 1l)
                         }
                         if (g_pf_skip != "gemm") {
-                            let bw1b = blob_of(g_dev, t, t.w1_offs[l])
-                            enc_gemv(enc, bw1b.buf, bw1b.boff, bxb, bhb, u_dim, u_hid_l, hid_l, 0ul, 0ul)
-                            let bw3b = blob_of(g_dev, t, t.w3_offs[l])
-                            enc_gemv(enc, bw3b.buf, bw3b.boff, bxb, bhb2, u_dim, u_hid_l, hid_l, 0ul, 0ul)
+                            pf_enc_narrow_gemv(enc, t, fmt_at(t.w1_fmt, l), t.w1_offs[l], bxb, bhb, u_dim, u_hid_l, dim, hid_l)
+                            pf_enc_narrow_gemv(enc, t, fmt_at(t.w3_fmt, l), t.w3_offs[l], bxb, bhb2, u_dim, u_hid_l, dim, hid_l)
                         }
                         if (g_pf_skip != "ew" && g_pf_skip != "nongemm") {
                             if (c.ffn_act != FfnAct.silu) {
@@ -7753,8 +7767,7 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                             }
                         }
                         if (g_pf_skip != "gemm") {
-                            let bw2b = blob_of(g_dev, t, t.w2_offs[l])
-                            enc_gemv(enc, bw2b.buf, bw2b.boff, bhb, bxb, u_hid_l, u_dim, dim, 0ul, 0ul)
+                            pf_enc_narrow_gemv(enc, t, fmt_at(t.w2_fmt, l), t.w2_offs[l], bhb, bxb, u_hid_l, u_dim, hid_l, dim)
                         }
                         if (g_pf_skip != "ew" && g_pf_skip != "nongemm") {
                             var bosc : MetalBuffer?
