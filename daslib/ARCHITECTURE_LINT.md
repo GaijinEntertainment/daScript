@@ -238,7 +238,9 @@ Companion to `ARCHITECTURE.md` in this folder; section numbers are unique across
   single statement has an expression form.
 - **A require counts as used when its symbols cannot be traced, not only when seen.**
   Generic instances attribute to `fromGeneric._module`; bare names in never-instantiated
-  generic bodies keep their providers alive; re-export chains are followed; a module
+  generic bodies keep their providers alive - a spelled call name against the module's
+  functions and generics, a spelled variable name against its globals, since an
+  uninferred body resolves neither; re-export chains are followed; a module
   providing any compile-time macro or lifecycle hook is used - it leaves no AST reference.
   STYLE029 fires only when exactly one re-exported module is used: two or more is an
   aggregation facade.

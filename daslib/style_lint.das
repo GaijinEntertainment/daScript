@@ -173,6 +173,7 @@ class StyleLintVisitor : AstVisitor {
     @do_not_delete this_module : Module?
     used_modules : table<string>
     unresolved_call_names : table<string>
+    unresolved_var_names : table<string>
     @do_not_delete st041_candidates : table<Variable?; St041Candidate>
 
     def report_key(at : LineInfo; code : string) : uint64 {
@@ -2243,8 +2244,21 @@ class StyleLintVisitor : AstVisitor {
         }
     }
 
+    //! A variable read in an uninstantiated generic body has no resolved Variable; its spelled name is all that ties it to a provider.
+    def st029_record_unresolved_var(expr : ExprVar?) : void {
+        if (expr.variable != null || !st029_expr_in_scope()) return
+        var nm = "{expr.name}"
+        let sep = nm |> rfind("::")
+        if (sep >= 0) {
+            nm = nm |> slice(sep + 2)
+        }
+        if (!empty(nm) && !key_exists(unresolved_var_names, nm)) {
+            unresolved_var_names |> insert(nm)
+        }
+    }
+
     def st030_exports_unresolved_name(mod : Module?) : bool {
-        if (empty(unresolved_call_names)) return false
+        if (empty(unresolved_call_names) && empty(unresolved_var_names)) return false
         var seen : table<string>
         return st030_exports_unresolved_rec(mod, seen)
     }
@@ -2261,6 +2275,13 @@ class StyleLintVisitor : AstVisitor {
         for_each_generic(mod, "") $(fn) {
             if (found) return
             if (key_exists(unresolved_call_names, "{fn.name}")) {
+                found = true
+            }
+        }
+        if (found) return true
+        for_each_global(mod) $(v) {
+            if (found) return
+            if (key_exists(unresolved_var_names, "{v.name}")) {
                 found = true
             }
         }
@@ -2955,6 +2976,7 @@ class StyleLintVisitor : AstVisitor {
     def override preVisitExprClone(expr : ExprClone?) : void { st029_record_func(expr.func) }
     def override preVisitExprVar(expr : ExprVar?) : void {
         if (expr.variable != null) st029_record_mod(expr.variable._module)
+        st029_record_unresolved_var(expr)
         if (!empty(st041_candidates) && expr.variable != null && key_exists(st041_candidates, expr.variable)) {
             st041_candidates[expr.variable].observed_refs++
         }
