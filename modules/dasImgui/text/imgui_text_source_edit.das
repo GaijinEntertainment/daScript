@@ -121,6 +121,9 @@ struct public TextEditState {
     //! `text_edit_mark_saved`); undoing back to the save point clears it.
     dirty : bool = false
     focused : bool = false
+    text_input_owner : uint
+    text_input_position : float2
+    text_input_height : float
     blink_time : float = 0.0f
     //! Bumped by edits/moves that must scroll the caret into view.
     follow_revision : int = 0
@@ -3033,13 +3036,19 @@ def private draw_edit_content(ed : TextEditState const; m : EditMetrics;
     }
 }
 
+def private edit_caret_position(ed : TextEditState const; m : EditMetrics;
+                                style : TextSourceViewStyle const; var font : ImFont?) : float2 {
+    return float2(m.origin.x + m.gutter_space
+        + text_source_range_width(ed.lines[ed.cursor_line], 0, ed.cursor_column,
+            font, m.font_size, m.cell_width, style.tab_cells), edit_row_y(m, ed.cursor_line))
+}
+
 def private draw_edit_caret(ed : TextEditState const; m : EditMetrics;
                             style : TextSourceViewStyle const;
                             var font : ImFont?; var dl : ImDrawList?) {
-    let caret_x = (m.origin.x + m.gutter_space
-        + text_source_range_width(ed.lines[ed.cursor_line], 0, ed.cursor_column,
-            font, m.font_size, m.cell_width, style.tab_cells))
-    let caret_y = edit_row_y(m, ed.cursor_line)
+    let position = edit_caret_position(ed, m, style, font)
+    let caret_x = position.x
+    let caret_y = position.y
     // overtype renders the block caret (translucent so the glyph reads)
     let caret_width = ed.overtype ? m.cell_width : max(1.0f, 1.5f * m.zoom)
     var caret_color = style.caret_color
@@ -3399,13 +3408,16 @@ struct public TextEditSegmentSpec {
     view_height : float = -1.0f
 }
 
+def private editor_keyboard_available(ed : TextEditState const) : bool {
+    let active = GetActiveID()
+    return active == 0u || active == ed.text_input_owner
+}
+
 def private drive_primary_input(var ed : TextEditState;
                                 var registry : CommandRegistry;
                                 id : string; page_rows : int;
                                 write_system_clipboard, window_focused : bool) {
-    let io & = unsafe(GetIO())
-
-    if (ed.focused && window_focused && !io.WantTextInput) {
+    if (ed.focused && window_focused && editor_keyboard_available(ed)) {
         // chars first (never binding-routed); char frames mute keypad chords
         let typed = drain_typed_chars(ed)
         // belt for Escape: closing the list never depends on chord routing
@@ -3426,6 +3438,7 @@ def private drive_primary_input(var ed : TextEditState;
     text_edit_snippet_sync(ed)
 }
 
+[arch(at="../ARCHITECTURE.md#browser-composition-ordering")]
 def public text_edit_drive_clipped(var ed : TextEditState;
                                    var registry : CommandRegistry;
                                    id : string;
@@ -3439,6 +3452,9 @@ def public text_edit_drive_clipped(var ed : TextEditState;
         || (ed.focused && !IsWindowFocused(ImGuiFocusedFlags.AnyWindow)))
     drive_primary_input(ed, registry, id, page_rows,
         write_system_clipboard, window_focused)
+    if (ed.focused && window_focused && editor_keyboard_available(ed)) {
+        SetTextInputCaret(ed.text_input_owner, ed.text_input_position, ed.text_input_height)
+    }
 }
 
 def private apply_segment_scroll(var ed : TextEditState; m : EditMetrics;
@@ -3472,6 +3488,14 @@ def private roll_segment_frame_state(var ed : TextEditState) {
     }
 }
 
+def private publish_edit_caret(var ed : TextEditState; m : EditMetrics; style : TextSourceViewStyle; var font : ImFont?; window_focused : bool) {
+    if (!ed.focused || !window_focused || !editor_keyboard_available(ed)) return
+    ed.text_input_position = edit_caret_position(ed, m, style, font)
+    ed.text_input_height = m.line_height
+    SetTextInputCaret(ed.text_input_owner, ed.text_input_position, ed.text_input_height)
+}
+
+[arch(at="../ARCHITECTURE.md#browser-composition-ordering")]
 def public text_source_edit_segment(id : string; var ed : TextEditState;
                                     var style : TextSourceViewStyle;
                                     var registry : CommandRegistry;
@@ -3494,6 +3518,7 @@ def public text_source_edit_segment(id : string; var ed : TextEditState;
         spec.view_height, spec.view_top)
     PushID(id)
     InvisibleButton("##edit", m.extent)
+    if (spec.primary) { ed.text_input_owner = GetItemID() }
     if (spec.register_alias) {
         unsafe {
             register_clickable_state_bbox(id, "##edit", "text_edit", addr(ed),
@@ -3501,7 +3526,6 @@ def public text_source_edit_segment(id : string; var ed : TextEditState;
         }
     }
     let hovered = IsItemHovered(ImGuiHoveredFlags.None)
-    // keyboard arbitration: focused WINDOW picks the editor; WantTextInput mutes
     let io & = unsafe(GetIO())
     let nav_focused = IsWindowFocused(ImGuiFocusedFlags.RootAndChildWindows)
     // nav dies entirely when the focused segment-child gets clipped out (e.g.
@@ -3514,8 +3538,8 @@ def public text_source_edit_segment(id : string; var ed : TextEditState;
         if (spec.primary) {
             ed.focused = true
         }
-    } elif (spec.primary && ed.focused && nav_focused && !io.WantTextInput
-            && !IsAnyItemActive()
+    } elif (spec.primary && ed.focused && nav_focused && editor_keyboard_available(ed)
+            && (!IsAnyItemActive() || GetActiveID() == ed.text_input_owner)
             && !ed.sibling_focus_now && !ed.sibling_focus_prev) {
         // find-bar-close reclaim; NEVER while an item holds an active press
         // (cancels earlier-submitted buttons) or while a SIBLING segment holds
@@ -3545,6 +3569,7 @@ def public text_source_edit_segment(id : string; var ed : TextEditState;
     if (spec.primary) {
         draw_edit_overlays(ed, m, style, font)
     }
+    if (spec.primary) { publish_edit_caret(ed, m, style, font, window_focused) }
     PopID()
     result.focused = ed.focused
     result.edited = ed.revision != revision_before

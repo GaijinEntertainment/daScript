@@ -45,6 +45,56 @@ namespace das {
         return ImGui::GetActiveID();
     }
 
+    struct CustomTextInputOwner {
+        ImGuiID id = 0;
+        int frame = -1;
+    };
+
+    static void DeleteTextInputOwner(ImGuiContext*, ImGuiContextHook* hook) {
+        IM_DELETE(static_cast<CustomTextInputOwner*>(hook->UserData));
+    }
+
+    static CustomTextInputOwner* TextInputOwner(ImGuiContext& context, bool create) {
+        for (auto& hook : context.Hooks) {
+            if (hook.Type == ImGuiContextHookType_Shutdown && hook.Callback == DeleteTextInputOwner)
+                return static_cast<CustomTextInputOwner*>(hook.UserData);
+        }
+        if (!create) return nullptr;
+        auto* owner = IM_NEW(CustomTextInputOwner)();
+        ImGuiContextHook hook{};
+        hook.Type = ImGuiContextHookType_Shutdown;
+        hook.Callback = DeleteTextInputOwner;
+        hook.UserData = owner;
+        ImGui::AddContextHook(&context, &hook);
+        return owner;
+    }
+
+    ImU32 GetTextInputOwner() {
+        auto* context = ImGui::GetCurrentContext();
+        if (!context) return 0;
+        if (context->ActiveId) return context->ActiveId;
+        const auto* owner = TextInputOwner(*context, false);
+        return owner && owner->frame >= context->FrameCount - 1 ? owner->id : 0;
+    }
+
+    // modules/dasImgui/ARCHITECTURE.md#browser-composition-ordering
+    void SetTextInputCaret(ImU32 owner_id, const ImVec2 & position, float line_height) {
+        auto& context = *ImGui::GetCurrentContext();
+        if (!owner_id || line_height <= 0.0f || !context.CurrentWindow)
+            return;
+        if (context.ActiveId && context.ActiveId != owner_id)
+            return;
+        auto* owner = TextInputOwner(context, true);
+        owner->id = owner_id;
+        owner->frame = context.FrameCount;
+        auto& ime = context.PlatformImeData;
+        ime.WantVisible = true;
+        ime.WantTextInput = true;
+        ime.InputPos = position;
+        ime.InputLineHeight = line_height;
+        ime.ViewportId = context.CurrentWindow->Viewport->ID;
+    }
+
     // Phase 7 docking — DockBuilder is internal API; bind a thin C++ surface so
     // boost wrappers in widgets/imgui_docking_builtin.das can seed default
     // layouts. ImGui::DockBuilderSplitNode takes ImGuiID* out params; daslang
@@ -894,6 +944,9 @@ namespace das {
         // Phase 2.1 — GetActiveID cherry-picked from imgui_internal.h.
         addExtern<DAS_BIND_FUN(das::GetActiveID)>(*this, lib, "GetActiveID",
             SideEffects::worstDefault, "das::GetActiveID");
+        addExtern<DAS_BIND_FUN(das::SetTextInputCaret), SimNode_ExtFuncCall, imguiTempFn>(*this, lib, "SetTextInputCaret",
+            SideEffects::modifyExternal, "das::SetTextInputCaret")
+                ->args({"owner_id", "position", "line_height"});
         // Phase 7 docking — DockBuilder forwarders cherry-picked from imgui_internal.h.
         addExtern<DAS_BIND_FUN(das::DockBuilderAddNode_das), SimNode_ExtFuncCall, imguiTempFn>(*this, lib, "DockBuilderAddNode",
             SideEffects::worstDefault, "das::DockBuilderAddNode_das")
