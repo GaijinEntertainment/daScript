@@ -16,6 +16,7 @@ require dasllama/dasllama_gpu_tier
 require dasllama/dasllama_config
 require dasllama/dasllama_kv_dtype   // KVDtype: the mirror codec crosses the seam as its ordinal
 require dasllama/dasllama_env   // g_env_gpu: an exported DASLLAMA_GPU answers gpu_want_auto ahead of the want state
+require dasllama/dasllama_common   // segs_served_by_override, the prefill override registry
 
 // ===== rdec doubles: record what arrives, answer distinctively =====
 
@@ -584,5 +585,37 @@ def test_kernel_dump_save(t : T?) {
         t |> success(!stat("unset.metal").is_valid, "and writes no file")
         t |> success(!kernel_dump_save(path_join(dir, "no_such_dir"), "toy.metal", "TEST_DUMP", "x"), "a directory that is not there answers false")
         delete words
+    }
+}
+
+def private seg_probe_prefill(_t : Model; var _s : Session; _npos, _start_pos : int64) : bool => false
+def private seg_probe_segments(_t : Model; var _segs : array<PrefillSeg>) : bool => false
+
+//! the segments form declines what the one-session call declines: a session roping from per-row tables or adding deepstack
+//! slices takes the window only where the active override registers that arm
+[test]
+def test_segments_served_by_override(t : T?) {
+    t |> run("a per-row-table or deepstack session keeps the segments form off an override with no such arm") @(t : T?) {
+        let found = active_prefill_override()
+        register_prefill_override("seg_probe", @@seg_probe_prefill)
+        register_prefill_segments_override("seg_probe", @@seg_probe_segments)
+        t |> success(select_prefill_override("seg_probe"), "the probe override selects")
+        var a, b : Session
+        var segs <- [PrefillSeg(s = unsafe(addr(a)), start_pos = 0l, npos = 4l, toki = 0l), PrefillSeg(s = unsafe(addr(b)), start_pos = 3l, npos = 2l, toki = 1l)]
+        t |> success(segs_served_by_override(segs), "two plain sessions take the segments form")
+        b.mrope_pos |> push(int4(1, 2, 3, 0))
+        t |> success(!segs_served_by_override(segs), "a session with a per-row rope table declines it on an override without the mrope arm")
+        b.mrope_pos |> clear()
+        a.ds_active = true
+        t |> success(!segs_served_by_override(segs), "a deepstack session declines it on an override without the slice-add arm")
+        a.ds_active = false
+        t |> success(segs_served_by_override(segs), "... and both take it again with the states cleared")
+        select_prefill_override("")
+        t |> success(!segs_served_by_override(segs), "no active override, no segments form")
+        select_prefill_override(found)
+        segs |> clear()
+        unsafe {
+            delete segs
+        }
     }
 }

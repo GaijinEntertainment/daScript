@@ -1208,7 +1208,10 @@ the resident driver on Qwen3.5-0.8B-MTP (skips without it, without the armed tie
 (the scheduler's ask, the device verify landing picks alone) and `sample_` consumes each - the
 stream token for token the plain scheduler's on the same rail, and the device verify counter up
 by the drafted rounds; a pick left unconsumed would refuse the next round's opening.
-`test_gpu_tier.das` - model-free: the tier's seat forwarders on doubles - among them the NextN
+`test_gpu_tier.das` - model-free: the segments form's media guard (`test_segments_served_by_override`: under a
+probe override registered with a segments form and neither the per-row-table nor the deepstack arm, two plain sessions
+take the form, a session with `mrope_pos` rows or `ds_active` declines it, both take it again cleared, and no active
+override means no form; the override found is put back), and the tier's seat forwarders on doubles - among them the NextN
 draft seat (`test_rdec_draft_seat`: the row, the hydrate start and the pick ask forwarded, the
 double's pick answered and the logits left alone under the ask, the unset seat declining until the
 reinstall, and the seat unset again at the cell's end so the process reads it as it found it; its

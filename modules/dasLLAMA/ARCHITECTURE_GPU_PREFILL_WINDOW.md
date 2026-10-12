@@ -130,7 +130,9 @@ facade, `forward_prefill_segments` in the engine, the Metal driver's `metal_pref
 (`forward_prefill_head`) does everything the layer stack reads of one session's chunk: the KV
 room, the scratch, the token embeddings into `x_b`, the arch's residual shape and side inputs, and
 the MTP seam row. So `forward_prefill_segments` runs every segment's head first, then offers the
-active override the window; a declined window runs each segment's body (`forward_prefill_body`)
+active override the window where its segments form serves every segment (`segs_served_by_override`:
+a session roping from per-row tables or adding deepstack slices rides the window only on an
+override registering that arm, as the one-session call decides); a declined window runs each segment's body (`forward_prefill_body`)
 as `forward_prefill` does, and every segment's warm follows. A one-token chunk never rides the
 window: `eval_segments` runs it as `eval` does - the decode step - since a segment costs the window
 a layer's worth of dispatches whatever its row count, and the decode step is what a one-token

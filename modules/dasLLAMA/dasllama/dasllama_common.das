@@ -268,6 +268,16 @@ def register_prefill_segments_override(name : string; fn : PrefillSegmentsOverri
 //! Whether the active override takes several sessions' chunks as one window.
 def active_prefill_serves_segments : bool => key_exists(g_prefill_seg_overrides, g_prefill_override_name)
 
+//! Whether the active override's segments form serves every one of `segs` - the window the one-session call would decline
+//! for a session roping from per-row tables or adding deepstack slices declines as a segment too
+def segs_served_by_override(segs : array<PrefillSeg>) : bool {
+    return false if (!active_prefill_serves_segments())
+    for (sg in segs) {
+        return false if ((!empty(sg.s.mrope_pos) && !active_prefill_serves_mrope()) || (sg.s.ds_active && !active_prefill_serves_ds()))
+    }
+    return true
+}
+
 //! Registered beside the override: `true` = this override cannot serve a fused mid-turn span
 //! (a per-query non-causal mask), so `eval_embd_span_` keeps the three-eval splice while it
 //! is active. Unregistered overrides — and the CPU layer loop — serve the fused mask.
@@ -6305,7 +6315,7 @@ def forward_prefill_segments(t : Model; var segs : array<PrefillSeg>; toks : arr
     }
     g_prefill_logits_done = false
     var done = false
-    if (active_prefill_serves_segments()) {
+    if (segs_served_by_override(segs)) {
         done = invoke(g_prefill_seg_overrides[g_prefill_override_name], t, segs)
     }
     if (done) {
