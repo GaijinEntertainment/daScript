@@ -467,7 +467,7 @@ namespace das {
     void JobQue::join() {
         {
             // Set the flag and wake every parked worker under the lock so none misses the wakeup.
-            lock_guard<mutex> lock(mFifoMutex);
+            lock_guard lock(mFifoMutex);
             mShutdown = true;
             mCond.notify_all();
             mLimitCond.notify_all();   // dormant over-limit workers wait on their own condvar
@@ -482,7 +482,7 @@ namespace das {
     }
 
     bool JobQue::isEmpty ( bool includingMainThreadJobs ) {
-        lock_guard<mutex> lock(mFifoMutex);
+        lock_guard lock(mFifoMutex);
         bool queue_is_empty = (mJobsRunning == 0) && (mFifo.size() == 0);
         if ( includingMainThreadJobs ) {
             lock_guard<mutex> mainThreadLock(mEvalMainThreadMutex);
@@ -492,7 +492,7 @@ namespace das {
     }
 
     bool JobQue::areJobsPending(JobCategory category) {
-        lock_guard<mutex> lock(mFifoMutex);
+        lock_guard lock(mFifoMutex);
         if (find_if(mFifo.begin(), mFifo.end(), [=](const JobEntry& jobEntry) {
                 return jobEntry.category == category; }) != mFifo.end()) {
             return true;
@@ -509,7 +509,7 @@ namespace das {
     }
 
     int JobQue::getNumberOfQueuedJobs() {
-        lock_guard<mutex> lock(mFifoMutex);
+        lock_guard lock(mFifoMutex);
         return int(mFifo.size());
     }
 
@@ -521,14 +521,14 @@ namespace das {
     }
 
     void JobQue::push(Job && job, JobCategory category, JobPriority priority) {
-        lock_guard<mutex> lock(mFifoMutex);
+        lock_guard lock(mFifoMutex);
         submit(das::move(job), category, priority);
         mCond.notify_one();
     }
 
     void JobQue::pushBatch(vector<Job> && jobs, JobCategory category, JobPriority priority) {
         {
-            lock_guard<mutex> lock(mFifoMutex);
+            lock_guard lock(mFifoMutex);
             for ( auto & j : jobs ) {
                 submit(das::move(j), category, priority);
             }
@@ -549,7 +549,7 @@ namespace das {
         Job job;
         size_t moreWork = 0;
         {
-            lock_guard<mutex> lock(mFifoMutex);
+            lock_guard lock(mFifoMutex);
             if ( mFifo.empty() ) return false;
             job = das::move(mFifo.front().function);
             mFifo.pop_front();
@@ -592,7 +592,7 @@ namespace das {
             // notifies; the limit is re-checked HERE on every wake, so a wake that raced a
             // lower re-parks us dormant.
             if ( limitRank >= mWorkerLimit.load(std::memory_order_relaxed) ) {
-                unique_lock<mutex> lock(mFifoMutex);
+                unique_lock lock(mFifoMutex);
                 mLimitCond.wait(lock, [&]() {
                     return mShutdown.load()
                         || limitRank < mWorkerLimit.load(std::memory_order_seq_cst);
@@ -643,7 +643,7 @@ namespace das {
                     // rest of the burst still finds it awake.
                     if ( mFifoCount.load(std::memory_order_relaxed) != 0 && mFifoMutex.try_lock() ) {
                         {
-                            lock_guard<mutex> lock(mFifoMutex, std::adopt_lock);
+                            lock_guard lock(mFifoMutex, std::adopt_lock);
                             if ( !mFifo.empty() ) {
                                 job = das::move(mFifo.front().function);
                                 mThreads[threadIndex].currentPriority = mFifo.front().priority;
@@ -666,7 +666,7 @@ namespace das {
             }
             if ( goDormant ) continue;   // top-of-loop dormant branch parks us
             if ( !gotJob ) {
-                unique_lock<mutex> lock(mFifoMutex);
+                unique_lock lock(mFifoMutex);
                 // Block until a job is available or we're shutting down. A plain wait (no periodic
                 // timeout) means idle workers stay parked instead of waking every mSleepMs to grab
                 // mFifoMutex and yield — that periodic wakeup contended on exactly the lock the
@@ -722,7 +722,7 @@ namespace das {
                 job();
             }
             {
-                unique_lock<mutex> lock(mFifoMutex);
+                unique_lock lock(mFifoMutex);
                 mThreads[threadIndex].currentPriority = JobPriority::Inactive;
                 mJobsRunning--;
             }
@@ -744,7 +744,7 @@ namespace das {
             // check and cond_wait holds mFifoMutex, so this notify can't slip into that window.
             // Lowering never notifies: workers drift out at their next spin-loop check (or
             // re-park dormant on their next wake).
-            lock_guard<mutex> guard(mFifoMutex);
+            lock_guard guard(mFifoMutex);
             mLimitCond.notify_all();
         }
     }
@@ -885,7 +885,7 @@ namespace das {
         // we see it parked and pay the wake. No mutex touched while everyone spins.
         uint32_t chainSeq = mTeamSeq.fetch_add(1, std::memory_order_seq_cst) + 1;
         if ( mParkedWorkers.load(std::memory_order_seq_cst) > 0 ) {
-            lock_guard<mutex> lock(mFifoMutex);
+            lock_guard lock(mFifoMutex);
             mCond.notify_all();
         }
         if ( mTeamProf ) tp = uint64_t(ref_time_ticks());
@@ -940,7 +940,7 @@ namespace das {
         int onThreads  = numChunks - onMainThread;
         status.Clear(onThreads);
         {
-            lock_guard<mutex> lock(mFifoMutex);
+            lock_guard lock(mFifoMutex);
             for (int ch = 0; ch < onThreads; ++ch) {
                 int i0 = from + ch * step;
                 int i1 = i0 + step;
@@ -972,17 +972,17 @@ namespace das {
             return;
         }
         deque<Job> producerFifoJobs;
-        mutex producerFifoMutex;
+        std::mutex producerFifoMutex;
         condition_variable condition;
         {
-            lock_guard<mutex> lock(mFifoMutex);
+            lock_guard lock(mFifoMutex);
             for (int ch = 0; ch < numChunks; ++ch) {
                 int i0 = from + ch * step;
                 int i1 = min(i0 + step, to);
                 submit([=, &chunk, &producerFifoJobs, &producerFifoMutex, &condition]() {
                     chunk(i0, i1);
                     {
-                        lock_guard<mutex> producerFifoLock(producerFifoMutex);
+                        lock_guard producerFifoLock(producerFifoMutex);
                         producerFifoJobs.push_back(([=]() { consume(i0, i1); }));
                         condition.notify_one();
                     }
@@ -995,7 +995,7 @@ namespace das {
             while (chunksRemaining > 0) {
                 deque<Job> consumerFifoJobs;
                 {
-                    unique_lock<mutex> producerFifoLock(producerFifoMutex);
+                    unique_lock producerFifoLock(producerFifoMutex);
                     if (condition.wait_for(producerFifoLock, std::chrono::milliseconds(mSleepMs), [&]() {return producerFifoJobs.size() > 0; })) {
                         consumerFifoJobs.swap(producerFifoJobs);
                     } else {
@@ -1075,7 +1075,7 @@ namespace das {
     }
 
     bool JobStatus::Notify() {
-        lock_guard<mutex> guard(mCompleteMutex);
+        lock_guard guard(mCompleteMutex);
         if ( mRemaining == 0 ) return false;
         --mRemaining;
         if ( mRemaining==0 ) {
@@ -1085,7 +1085,7 @@ namespace das {
     }
 
     bool JobStatus::NotifyAndRelease( LineInfo * at ) {
-        lock_guard<mutex> guard(mCompleteMutex);
+        lock_guard guard(mCompleteMutex);
         trackEvent(at, false);
         mRef--;
         if ( mRemaining == 0 ) return false;
@@ -1126,11 +1126,11 @@ namespace das {
                 // Callers destroy the JobStatus right after Wait returns (with_wait_group holds it
                 // on the stack), so take the lock once to wait the notifier out of its locked
                 // region. Uncontended in the common case — the notifier is nanoseconds from done.
-                lock_guard<mutex> guard(mCompleteMutex);
+                lock_guard guard(mCompleteMutex);
                 return;
             }
         }
-        unique_lock<mutex> lock(mCompleteMutex);
+        unique_lock lock(mCompleteMutex);
         mCond.wait(lock, [this] {
             return mRemaining==0;
         });
@@ -1153,11 +1153,11 @@ namespace das {
                 if ( std::chrono::steady_clock::now() >= deadline ) break;
             }
             if ( mRemaining.load() == 0 ) {
-                lock_guard<mutex> guard(mCompleteMutex);
+                lock_guard guard(mCompleteMutex);
                 return true;
             }
         }
-        unique_lock<mutex> lock(mCompleteMutex);
+        unique_lock lock(mCompleteMutex);
         return mCond.wait_until(lock, deadline, [this] {
             return mRemaining==0;
         });
@@ -1165,12 +1165,12 @@ namespace das {
     }
 
     bool JobStatus::isReady() {
-        lock_guard<mutex> guard(mCompleteMutex);
+        lock_guard guard(mCompleteMutex);
         return mRemaining==0;
     }
 
     void JobStatus::Clear(uint32_t count) {
-        lock_guard<mutex> guard(mCompleteMutex);
+        lock_guard guard(mCompleteMutex);
         mRemaining = count;
     }
 

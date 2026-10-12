@@ -50,7 +50,7 @@ namespace das {
     public:
         template <typename TT>
         void peek ( TT && tt ) {
-            lock_guard<mutex> guard(mCompleteMutex);
+            lock_guard guard(mCompleteMutex);
             if ( box.data ) {
                 tt(box.data, box.type, box.from);
             }
@@ -161,7 +161,7 @@ namespace das {
     public:
         template <typename TT>
         void for_each_item ( TT && tt ) {
-            lock_guard<mutex> guard(mCompleteMutex);
+            lock_guard guard(mCompleteMutex);
             for ( auto & f : pipe ) {
                 tt(f.data, f.type, f.from ? f.from : owner);
             }
@@ -176,7 +176,7 @@ namespace das {
         void gather ( TT && tt ) {
             decltype(pipe) drained;
             {
-                lock_guard<mutex> guard(mCompleteMutex);
+                lock_guard guard(mCompleteMutex);
                 drained.swap(pipe);
             }
             for ( auto & f : drained ) {
@@ -187,7 +187,7 @@ namespace das {
         void gatherEx ( Context * ctx, TT && tt ) {
             decltype(pipe) drained;
             {
-                lock_guard<mutex> guard(mCompleteMutex);
+                lock_guard guard(mCompleteMutex);
                 for ( auto f = pipe.begin(); f != pipe.end(); ) {
                     auto itOwner = f->from ? f->from : owner;
                     if ( itOwner == ctx ) {
@@ -206,14 +206,14 @@ namespace das {
         void gather_and_forward ( Channel * that, TT && tt ) {
             decltype(pipe) drained;
             {
-                lock_guard<mutex> guard(mCompleteMutex);
+                lock_guard guard(mCompleteMutex);
                 drained.swap(pipe);
             }
             for ( auto & f : drained ) {
                 tt(f.data, f.type, f.from ? f.from : owner);
             }
             {
-                lock_guard<mutex> guard2(that->mCompleteMutex);
+                lock_guard guard2(that->mCompleteMutex);
                 for ( auto & f : drained ) {
                     that->pipe.emplace_back(das::move(f));
                 }
@@ -242,7 +242,7 @@ namespace das {
     public:
         template <typename TT>
         void for_each_item ( TT && tt ) {
-            lock_guard<mutex> guard(mCompleteMutex);
+            lock_guard guard(mCompleteMutex);
             for ( auto & v : pipe ) {
                 Array arr;
                 array_mark_locked(arr, (void *)v.data(), v.size());
@@ -256,7 +256,7 @@ namespace das {
         void gather ( TT && tt ) {
             decltype(pipe) drained;
             {
-                lock_guard<mutex> guard(mCompleteMutex);
+                lock_guard guard(mCompleteMutex);
                 drained.swap(pipe);
             }
             for ( auto & v : drained ) {

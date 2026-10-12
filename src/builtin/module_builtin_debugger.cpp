@@ -915,7 +915,7 @@ namespace debugger {
     }
 
     atomic<bool>          stop_requested;
-    mutex                 debugger_mutex;
+    std::mutex            debugger_mutex;
     condition_variable    debugger_ready;
     condition_variable    debugger_stopped;
     bool                  debugger_started = false;

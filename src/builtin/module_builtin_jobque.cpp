@@ -39,12 +39,12 @@ namespace das {
     };
 
     LockBox::~LockBox() {
-        lock_guard<mutex> guard(mCompleteMutex);
+        lock_guard guard(mCompleteMutex);
         box.clear();
     }
 
     void LockBox::set ( void * data, TypeInfo * ti, Context * context ) {
-        lock_guard<mutex> guard(mCompleteMutex);
+        lock_guard guard(mCompleteMutex);
         box = Feature(data,ti,context);
         box.fOwner = this;
         box.fOwnerTrackId = mTrackId;
@@ -52,12 +52,12 @@ namespace das {
     }
 
     void LockBox::get ( const TBlock<void,void *> & blk, Context * context, LineInfoArg * at ) {
-        lock_guard<mutex> guard(mCompleteMutex);
+        lock_guard guard(mCompleteMutex);
         das_invoke<void>::invoke<void *>(context, at, blk, box.data);
     }
 
     void LockBox::fill ( void * data, TypeInfo * ti, Context * context ) {
-        lock_guard<mutex> guard(mCompleteMutex);
+        lock_guard guard(mCompleteMutex);
         box = Feature(data,ti,context);
         box.fOwner = this;
         box.fOwnerTrackId = mTrackId;
@@ -66,7 +66,7 @@ namespace das {
     }
 
     void LockBox::grab ( const TBlock<void,void *> & blk, Context * context, LineInfoArg * at ) {
-        lock_guard<mutex> guard(mCompleteMutex);
+        lock_guard guard(mCompleteMutex);
         das_invoke<void>::invoke<void *>(context, at, blk, box.data);
         box.clear();
         mRemaining = 0;
@@ -74,7 +74,7 @@ namespace das {
     }
 
     void LockBox::update ( const TBlock<void *,void *> & blk, TypeInfo * ti, Context * context, LineInfoArg * at ) {
-        lock_guard<mutex> guard(mCompleteMutex);
+        lock_guard guard(mCompleteMutex);
         void * oldData = box.data;
         box.data = das_invoke<void *>::invoke<void *>(context, at, blk, box.data);
         if ( oldData != box.data ) {
@@ -84,14 +84,14 @@ namespace das {
     }
 
     Channel::~Channel() {
-        lock_guard<mutex> guard(mCompleteMutex);
+        lock_guard guard(mCompleteMutex);
         pipe = {};
         tail.clear();
         DAS_ASSERT(mRef==0);
     }
 
     void Channel::push ( void * data, TypeInfo * ti, Context * context ) {
-        lock_guard<mutex> guard(mCompleteMutex);
+        lock_guard guard(mCompleteMutex);
         pipe.emplace_back(data, ti, context!=owner ? context : nullptr);
         pipe.back().fOwner = this;
         pipe.back().fOwnerTrackId = mTrackId;
@@ -99,7 +99,7 @@ namespace das {
     }
 
     void Channel::pushBatch ( void ** data, int count, TypeInfo * ti, Context * context ) {
-        lock_guard<mutex> guard(mCompleteMutex);
+        lock_guard guard(mCompleteMutex);
         auto pushCtx = context!=owner ? context : nullptr;
         for ( int i=0; i!=count; ++i ) {
             pipe.emplace_back(data[i], ti, pushCtx);
@@ -111,7 +111,7 @@ namespace das {
 
     // src/builtin/ARCHITECTURE_JOBQUE.md#channel-idle-wait
     void Channel::pop ( const TBlock<void,void *> & blk, Context * context, LineInfoArg * at ) {
-        unique_lock<mutex> guard(mCompleteMutex);
+        unique_lock guard(mCompleteMutex);
         mCond.wait(guard, [&]() { return mRemaining <= 0 || !pipe.empty(); });
         if ( pipe.empty() ) {
             tail.clear();
@@ -123,7 +123,7 @@ namespace das {
     }
 
     bool Channel::tryPop ( const TBlock<void,void *> & blk, Context * context, LineInfoArg * at ) {
-        lock_guard<mutex> guard(mCompleteMutex);
+        lock_guard guard(mCompleteMutex);
         if ( pipe.empty() ) {
             return false;
         }
@@ -134,7 +134,7 @@ namespace das {
     }
 
     bool Channel::popWithTimeout ( int timeoutMs, const TBlock<void,void *> & blk, Context * context, LineInfoArg * at ) {
-        unique_lock<mutex> uguard(mCompleteMutex);
+        unique_lock uguard(mCompleteMutex);
         if ( !mCond.wait_for(uguard, std::chrono::milliseconds(timeoutMs), [&]() {
             return !pipe.empty() || mRemaining <= 0;
         }) ) {
@@ -150,22 +150,22 @@ namespace das {
     }
 
     bool Channel::isEmpty() const {
-        lock_guard<mutex> guard(mCompleteMutex);
+        lock_guard guard(mCompleteMutex);
         return pipe.empty();
     }
 
     int32_t JobStatus::size() const {
-        lock_guard<mutex> guard(mCompleteMutex);
+        lock_guard guard(mCompleteMutex);
         return (int32_t) mRemaining;
     }
 
     int32_t Channel::total() const {
-        lock_guard<mutex> guard(mCompleteMutex);
+        lock_guard guard(mCompleteMutex);
         return (int32_t) pipe.size();
     }
 
     int JobStatus::append(int size) {
-        lock_guard<mutex> guard(mCompleteMutex);
+        lock_guard guard(mCompleteMutex);
         mRemaining += size;
         return mRemaining;
     }
@@ -283,13 +283,13 @@ namespace das {
     }
 
     Stream::~Stream() {
-        lock_guard<mutex> guard(mCompleteMutex);
+        lock_guard guard(mCompleteMutex);
         pipe.clear();
         DAS_ASSERT(mRef==0);
     }
 
     void Stream::push ( const uint8_t * data, uint64_t size ) {
-        lock_guard<mutex> guard(mCompleteMutex);
+        lock_guard guard(mCompleteMutex);
         pipe.emplace_back();
         auto & v = pipe.back();
         v.resize(size);
@@ -298,7 +298,7 @@ namespace das {
     }
 
     void Stream::pushBatch ( const uint8_t * const * data, const uint64_t * sizes, int64_t count ) {
-        lock_guard<mutex> guard(mCompleteMutex);
+        lock_guard guard(mCompleteMutex);
         for ( int64_t i=0; i<count; ++i ) {
             pipe.emplace_back();
             auto & v = pipe.back();
@@ -321,7 +321,7 @@ namespace das {
     void Stream::pop ( const TBlock<void, TTemporary<TArray<uint8_t> const>> & blk, Context * context, LineInfoArg * at ) {
         vector<uint8_t> item;
         {
-            unique_lock<mutex> guard(mCompleteMutex);
+            unique_lock guard(mCompleteMutex);
             mCond.wait(guard, [&]() { return mRemaining <= 0 || !pipe.empty(); });
             if ( !pipe.empty() ) {
                 item = das::move(pipe.front());
@@ -334,7 +334,7 @@ namespace das {
     bool Stream::tryPop ( const TBlock<void, TTemporary<TArray<uint8_t> const>> & blk, Context * context, LineInfoArg * at ) {
         vector<uint8_t> item;
         {
-            lock_guard<mutex> guard(mCompleteMutex);
+            lock_guard guard(mCompleteMutex);
             if ( pipe.empty() ) return false;
             item = das::move(pipe.front());
             pipe.pop_front();
@@ -346,7 +346,7 @@ namespace das {
     bool Stream::popWithTimeout ( int timeoutMs, const TBlock<void, TTemporary<TArray<uint8_t> const>> & blk, Context * context, LineInfoArg * at ) {
         vector<uint8_t> item;
         {
-            unique_lock<mutex> uguard(mCompleteMutex);
+            unique_lock uguard(mCompleteMutex);
             if ( !mCond.wait_for(uguard, std::chrono::milliseconds(timeoutMs), [&]() {
                 return !pipe.empty() || mRemaining <= 0;
             }) ) {
@@ -361,12 +361,12 @@ namespace das {
     }
 
     bool Stream::isEmpty() const {
-        lock_guard<mutex> guard(mCompleteMutex);
+        lock_guard guard(mCompleteMutex);
         return pipe.empty();
     }
 
     int Stream::total() const {
-        lock_guard<mutex> guard(mCompleteMutex);
+        lock_guard guard(mCompleteMutex);
         return (int) pipe.size();
     }
 

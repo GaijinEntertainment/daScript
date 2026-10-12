@@ -3577,18 +3577,18 @@ namespace das {
     bool WIN_EH_NO_ASAN AstSerializer::serializeScript ( ProgramPtr program ) noexcept {
         try {
             program->serialize(*this);
-            return !program->failToCompile;
         } catch ( const dasException & r ) {
             program->failToCompile = true;
             LOG(LogLevel::warning) << "das: serialize:" << r.what();
-            return false;
         } catch ( ... ) {
             // noexcept for embedders built without EH: a non-das exception (e.g.
             // std::bad_alloc deep in serialize) would std::terminate here. Contain it.
             program->failToCompile = true;
             LOG(LogLevel::warning) << "das: serialize: unknown exception\n";
-            return false;
         }
+        // a failed read stops inside a record, so nothing after it can be read; failed tells the host
+        if ( !writing && program->failToCompile ) failed = true;
+        return !program->failToCompile;
     }
 
     // Used in daNetGame currently
