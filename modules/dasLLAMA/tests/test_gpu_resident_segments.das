@@ -201,6 +201,8 @@ def private decline_arms_cell(t : T?; tr : Model) {
     {
         var da <- create_device_session(tr)
         var db <- create_device_session(tr)
+        forward_prefill(tr, da, open_a, OPEN_ROWS, 0l)   //! a device-home session pins its region on its first prefill
+        forward_prefill(tr, db, open_b, OPEN_ROWS, 0l)
         var ha <- create_session(tr, mirror_kv_dtype())
         var hb <- create_session(tr, mirror_kv_dtype())
         var sess <- [unsafe(addr(ha)), unsafe(addr(hb))]

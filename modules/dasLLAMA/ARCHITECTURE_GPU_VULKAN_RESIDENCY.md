@@ -70,7 +70,7 @@ session's whole history.** A host asks for the count before the load (`set_gpu_r
 one by default; a server's stream count), the plan sizes every region's K/V at `seq_cap`, and
 the binding cap divides by the count, since a slab's regions share its one binding. A region
 is an offset in mirror units (`rd_mir_base`: the layer's base plus the selected region's stride), folded
-on the host into the `layerbase` push constant of every kernel that stores or reads a mirror row
+on the host into the `layerbase` (`GkRopeKvArgs.mirbase` for the rope-and-store) push constant of every kernel that stores or reads a mirror row
 and into the sync, readback and hydrate offsets, so no kernel knows regions exist. The push
 constant is baked as the token command records, so the driver records one command per region
 (and one unsplit twin) and `vk_rdec_select_region` names the region the next call resolves

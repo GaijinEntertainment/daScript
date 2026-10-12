@@ -2774,13 +2774,21 @@ def private vulkan_resident_draft(t : Model; var s : Session; token, row : int64
 }
 
 //! the session's cache is the mirror's shape - the armed codec, unpaged - else the pass is counted and the call is the CPU's
-def private rdec_session_codec_ok(s : Session) : bool {
+//! the pass a session's cache shape takes - another codec than the mirror's, or a pooled cache - counting nothing
+def private rdec_session_codec_gate(s : Session) : RdecGate {
     if (s.kv_dtype_k != g_rdec_kvdt || s.kv_dtype_v != g_rdec_kvdt) {
-        rdec_pass_once(RdecPass.codec, int64(int(s.kv_dtype_k)), int64(int(s.kv_dtype_v)))
-        return false
+        return RdecGate(passes = true, kind = RdecPass.codec, a = int64(int(s.kv_dtype_k)), b = int64(int(s.kv_dtype_v)))
     }
     if (s.kv_pool != null) {
-        rdec_pass_once(RdecPass.paged, 0l, 0l)
+        return RdecGate(passes = true, kind = RdecPass.paged)
+    }
+    return RdecGate()
+}
+
+def private rdec_session_codec_ok(s : Session) : bool {
+    let gate = rdec_session_codec_gate(s)
+    if (gate.passes) {
+        rdec_pass_once(gate.kind, gate.a, gate.b)
         return false
     }
     return true
@@ -3782,8 +3790,9 @@ def private rdec_segs_admitted(t : Model; segs : array<PrefillSeg>; ids : bool) 
             rdec_segs_declined_pass(gate)
             return false
         }
-        if (!rdec_session_codec_ok(*s)) {
-            rdec_segs_declined("a segment's session on another K/V codec than the mirror")
+        let codec = rdec_session_codec_gate(*s)
+        if (codec.passes) {   //! counted by nobody here: the one-session fallback counts the pass it takes
+            rdec_segs_declined_pass(codec)
             return false
         }
         if (s.embed_gpu_pending != ids) {
@@ -3806,22 +3815,58 @@ def private rdec_segs_declined_pass_now(gate : RdecGate) {
     to_log(LOG_INFO, "dasLLAMA: resident segmented prefill passed a call - a segment the one-session call would pass: {rdec_pass_text(gate.kind, gate.a, gate.b)} (said once per armed model)\n")
 }
 
-def private rdec_segs_regions(t : Model; var segs : array<PrefillSeg>) : bool {
-    g_rdec_seg_regions |> clear()
-    g_rdec_seg_regions |> reserve(long_length(segs))
+//! why the segments cannot all bind a region of their own without a pass - "" where they can: an owner short of its start
+//! with its rows on the device alone would hydrate (the one-session call's `gap`), and the segments owning no region need as
+//! many unpinned regions as no segment of this call owns (`busy`); decided before any bind, so a declined call binds nothing
+def private rdec_segs_regions_why(segs : array<PrefillSeg>) : string {
+    var free = 0l
+    for (reg in g_rdec_regions) {
+        free += reg.pinned ? 0l : 1l
+    }
+    var need = 0l
     for (sg in segs) {
-        var s & = unsafe(*sg.s)
-        rdec_head_device_rows_stale_from(s, sg.start_pos - 1l)
-        let r = rdec_prefill_region(t, s, sg.start_pos)
-        if (r < 0l) {
-            rdec_segs_declined("a segment's session has no region to prefill in")
-            return false
+        let s = sg.s
+        if (rdec_owns(*s, s.rdec_region)) {
+            free -= g_rdec_regions[s.rdec_region].pinned ? 0l : 1l
+            if (sg.start_pos != 0l && g_rdec_regions[s.rdec_region].cnt < sg.start_pos && !s.rdec_host_current) {
+                return "a segment's region holds fewer rows than its start (the one-session call hydrates the gap)"
+            }
+        } else {
+            need++
         }
-        if (rdec_region_repeats(g_rdec_seg_regions, long_length(g_rdec_seg_regions), r)) {
-            rdec_segs_declined("the segments outnumber the regions free for them")
-            return false
+    }
+    return need > free ? "the segments outnumber the regions free for them" : ""
+}
+
+def private rdec_segs_regions(t : Model; var segs : array<PrefillSeg>) : bool {
+    let why = rdec_segs_regions_why(segs)
+    if (!empty(why)) {
+        rdec_segs_declined(why)
+        return false
+    }
+    let n = long_length(segs)
+    g_rdec_seg_regions |> clear()
+    g_rdec_seg_regions |> reserve(n)
+    g_rdec_seg_regions |> resize(n)
+    for (i in range64(n)) {
+        g_rdec_seg_regions[i] = -1l
+    }
+    for (owners in fixed_array(true, false)) {   //! the owners bind first, so a segment with no region never takes a co-segment's
+        for (sg, i in segs, count()) {
+            var s & = unsafe(*sg.s)
+            continue if (owners != rdec_owns(s, s.rdec_region))
+            rdec_head_device_rows_stale_from(s, sg.start_pos - 1l)
+            let r = rdec_prefill_region(t, s, sg.start_pos)
+            if (r < 0l) {
+                rdec_segs_declined("a segment's session has no region to prefill in")
+                return false
+            }
+            if (rdec_region_repeats(g_rdec_seg_regions, n, r)) {
+                rdec_segs_declined("the segments outnumber the regions free for them")
+                return false
+            }
+            g_rdec_seg_regions[i] = r
         }
-        g_rdec_seg_regions |> push(r)
     }
     return true
 }

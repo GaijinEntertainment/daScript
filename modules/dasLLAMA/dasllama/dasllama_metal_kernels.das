@@ -2661,9 +2661,8 @@ struct MoeGemvArgs {
     hasb : uint
 }
 
-//! the batched rope + K/V-row store's kargs (the one-row form's are `GkRopeKvArgs`): `rot` the partial-rotary width (head_size for full rope), `qstride` a row's stride in the fused QKV block
-// The head-cooperative form folds the per-head RMSNorm in, so it carries that norm's
-// weights-present flag and epsilon.
+//! the head-cooperative rope + K/V-row store's kargs (the one-row and window forms' are `GkRopeKvArgs`): it folds the per-head
+//! RMSNorm in, so it carries that norm's weights-present flag and epsilon
 struct RopeStoreHArgs {
     qd : uint
     head_size : uint

@@ -755,8 +755,8 @@ the head as one threadgroup over q8 weights (nine million parameters, one dispat
 prologue as the f32 route already folds it. The frames' K/V never return to the host, so a chunk
 whose command buffer fails reruns whole on the CPU. The codec transformer's layer
 (`pk_transformer`) and the frame loop's (`pk_fr_layer`) are two bodies of one layer: one body
-waits on a rows form of the rope-and-store (`MetalRopeStoreBKvT` with a row table is the
-candidate) and one K/V home for both loops (the codec's per-chunk rows buffers against the frames'
+waits on a rows form of the rope-and-store (`MetalRopeStoreBF16` on `GkRopeKvStore` with a row table is
+the candidate) and one K/V home for both loops (the codec's per-chunk rows buffers against the frames'
 per-voice slot).
 
 ## 31. The hyper-connection model has no board row and no stocked parity cell

@@ -51,9 +51,10 @@ walk as reference measurements of another engine's kernels.
 
 ### The Vulkan resident prefill window chain {#vk-prefill-window-chain}
 
-**A prompt longer than `PF_WINDOW` rows runs as SEQUENTIAL windows over the same activation
-buffers.** Every window's rope and attention address the KV mirror at ABSOLUTE positions, so window w attends
-everything the earlier windows stored; only the last window runs the final requant and the classifier.
+**A prompt longer than `PF_WINDOW` rows runs as SEQUENTIAL windows over the same activation buffers.**
+Every window's rope and attention address the KV mirror at ABSOLUTE positions, so window w attends everything
+the earlier windows stored; only a window holding a segment's last row - a one-session call's last window -
+runs the final requant and the classifier at that row.
 
 **A prefill from a position past zero is the same chain entered later.** The call names its
 first position (`pos0`), the windows store at and attend from `pos0 + w0`, and the rows
@@ -62,8 +63,8 @@ scheduler's earlier chunks (`rdec_prefill_region`: kept where the session owns t
 from the host cache where it does not). A recurrent model passes a continuation to the CPU
 loop: the chain starts the deltanet state from zero (`followup_vulkan.md` item 69).
 
-**The last layer's FFN runs on the window's last 32 rows only.** Nothing downstream of the
-final layer reads more than the last row - the classifier requantizes row `wlen - 1`, the KV
+**The last layer's FFN runs on the window's last 32 rows only, on a window of one segment.** Nothing downstream of the
+final layer reads more than the last row - a segmented window's every segment wants its own last row, so it runs the FFN whole - the classifier requantizes row `wlen - 1`, the KV
 mirrors are stored before the FFN, and a later window starts from fresh embeddings - so the
 gate, up and down GEMMs, the activation and the residual step of the last layer take a region
 starting 32 rows below the window's end (`fill_arena_batch_sched`'s `row0`, `ActArgs.elem0`,

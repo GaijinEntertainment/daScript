@@ -336,8 +336,22 @@ def private dn_state_home(var s : Session) : double {
 }
 
 //! two sessions over `pa` and `pb`, a region each, through STEPS batched steps against each session alone, every step through the N-row command
-def private batched_steps_body(t : T?; tr : Model; prompts, feeds : array<array<int64>>; bar : LogitsBar) {
+//! `bar`, or the split bar where a bit-for-bit claim cannot hold over `rows`: past the unsplit position the N-row command splits
+//! a layer's keys into fewer pieces than the row alone wherever its rows' workgroups over the pieces run past one wave of the
+//! card's SMs, and the two commands then sum the keys in two orders (`vk_rdec_rows_split_alike`)
+def private rows_bar(bar : LogitsBar; rows : int64) : LogitsBar {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        if (bar == LogitsBar.bit_exact && !vk_rdec_rows_split_alike(rows)) {
+            to_log(LOG_WARNING, "the N-row command over {rows} rows splits the keys apart from the row alone on this card: the batched rows hold the split bar, not bit for bit\n")
+            return LogitsBar.split_bar
+        }
+    }
+    return bar
+}
+
+def private batched_steps_body(t : T?; tr : Model; prompts, feeds : array<array<int64>>; bar0 : LogitsBar) {
     let rows = long_length(prompts)
+    let bar = rows_bar(bar0, rows)
     let steps_alone0 = rdec_nrow_steps()
     var alone <- [for (i in range64(rows)); logits_alone(tr, prompts[i], feeds[i])]
     t |> equal(rdec_nrow_steps() - steps_alone0, 0l, "the sessions alone stepped through the one-row command: the N-row counter's control")

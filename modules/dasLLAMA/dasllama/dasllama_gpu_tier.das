@@ -1609,7 +1609,7 @@ def public rdec_token_n(x : array<float>; cossin : array<float>; ple : array<flo
 def public rdec_token_n_rows() : int64 => invoke(g_rdec_token_n_rows)
 
 var private g_rdec_nrow_steps = 0l
-//! the batched steps the N-row command has served this process: a cell reads the difference across its steps
+//! the N-row commands served this process - one a group of a batched step, one a peeled window: a cell reads the difference across its steps
 def public rdec_nrow_steps() : int64 => g_rdec_nrow_steps
 
 [unused_argument(regions)]

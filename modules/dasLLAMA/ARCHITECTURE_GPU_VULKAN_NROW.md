@@ -60,8 +60,9 @@ cached count and mirror region, which ride the shared `TokMeta` block a row (`mi
 offset in mirror units; `DaAttnArgs.rowwg` and `qrow` carry the row stride into the attention, `rowwg`
 0 naming a one-row dispatch). The attention's key split is the span's, the ladder the one-row
 command takes below its wide form (`rd_split_pieces` and the layer's window cap,
-`ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-decode-attn-split`), so the rows sum as each row does alone while every
-row sits in one band - the batch's furthest row picks the form, the unsplit twin under
+`ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-decode-attn-split`, the wave cap over the command's own rows: the rows sum as
+each row does alone while the rows' workgroups over the pieces fit one wave of the SMs, `vk_rdec_rows_split_alike`)
+while every row sits in one band - a group's furthest row picks the group's form, the unsplit twin under
 `RD_UNSPLIT_POS` and the split form at every span past it (the ruler reads eight pieces slower
 than four at four rows, so the rows take no wide twin). A command is recorded once per row
 count and form - the split form and the unsplit twin on first use of the row count, the twin's
@@ -133,9 +134,9 @@ shared-KV layer's head projects q as the N-column GEMV alone: the rope and store
 pairs and no k-head groups, and the attention reads the donor layer's rows from the mirror.
 
 **The rows' logits come home a row a job-queue lane, straight off the cached mapping.**
-`rdec_nrow_steps` counts the steps the command served, so a cell holds that its batched steps
-went through the command and not the row-at-a-time loop the two silent declines (no region, two
-rows one region) fall to. `rd_land_logits_n` hands each row's copy to a lane where a queue serves (`maybe_parallel_for`,
+`rdec_nrow_steps` counts the N-row commands served - one a group of a batched step, one a peeled
+window - so a cell holds that its batched steps went through the command and not the
+row-at-a-time loop the two silent declines (no region, two rows one region) fall to. `rd_land_logits_n` hands each row's copy to a lane where a queue serves (`maybe_parallel_for`,
 the lanes idle while the device owns the step) and copies in order without one: a lane copies
 about 14 GB/s, and the earlier form - the whole plane into a scratch row on one lane, then a row
 a copy out of it - passed four rows of a 152k vocab twice over one lane (322 us a step on the
