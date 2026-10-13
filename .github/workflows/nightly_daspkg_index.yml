@@ -80,6 +80,7 @@ jobs:
     - run: |
         echo "SCCACHE_DIR=${{ runner.temp }}/sccache" >> $GITHUB_ENV
         echo "SCCACHE_GHA_ENABLED=false" >> $GITHUB_ENV
+        echo "ZERO_AR_DATE=1" >> $GITHUB_ENV
         echo "CMAKE_C_COMPILER_LAUNCHER=sccache" >> $GITHUB_ENV
         echo "CMAKE_CXX_COMPILER_LAUNCHER=sccache" >> $GITHUB_ENV
     - name: "Restore sccache objects (read-only)"
