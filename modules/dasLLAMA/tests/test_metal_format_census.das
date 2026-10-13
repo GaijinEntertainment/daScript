@@ -6,7 +6,7 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require dasllama/dasllama   // nolint:STYLE030,LINT019 - the public facade, reached inside the das_metal halves
 require dasllama/dasllama_math   // nolint:STYLE030,LINT019 - set_wscale_f16, inside the das_metal halves
-require dasllama/dasllama_gguf   // nolint:STYLE030,LINT019 - the file's own tensor types, inside the das_metal halves
+require dasllama/dasllama_kqformat   // nolint:STYLE030,LINT019 - KqFmt, inside the das_metal halves
 require _metal_blob_twin   // nolint:STYLE030,LINT019 - blob_twin and the kernel census, inside the das_metal halves
 require ?das_metal dasllama/dasllama_metal_common   // nolint:STYLE030,LINT019 - the kernel coverage census, inside the das_metal halves
 require ?das_metal dasllama/dasllama_metal_decode   // nolint:STYLE030,LINT019 - metal_decode_stats and shutdown, inside the das_metal halves
@@ -16,6 +16,7 @@ require daslib/jobque_boost
 require daslib/fio   // nolint:STYLE030,LINT019 - path_join and fmap, inside the das_metal halves
 require math
 require _model_tier
+require _format_census   // census_cell, census_sites_all: the census both homes run
 
 [init]
 def private allow_cpu_prefill_intent() {
@@ -36,89 +37,6 @@ let private HYBRID_MOE_BAR = 6.0
 //! the dense K-quant bar: twice the K-quant support-matrix row's reading against the CPU chain (1.82 of a 29-logit row)
 let private DENSE_KQ_BAR = 4.0
 let private DECODE_STEPS = 6l
-
-//! one site's tally: how many of its planes the file carries and how many the load serves in another form
-struct private SiteCensus {
-    site : string
-    planes : int
-    copies : int
-    first : string
-}
-
-def private census_plane(var c : SiteCensus; m : GGUFMeta; name : string; tag : KqFmt) {
-    return if (gguf_find_tensor(m, name) < 0)
-    c.planes++
-    let disk = gguf_tensor_type(m, name)
-    if (kq_ggml_type(tag) != disk) {
-        if (c.copies == 0) {
-            c.first = "{name}: {ggml_type_name(disk)} on disk, served as {tag}"
-        }
-        c.copies++
-    }
-}
-
-//! every site's tally over the loaded model `tr` against the file's tensor types; a tied classifier is the token table's plane
-def private format_census(tr : Model; m : GGUFMeta) : array<SiteCensus> {
-    var attn = SiteCensus(site = "attention q/k/v/o")
-    var exps = SiteCensus(site = "routed experts")
-    var shexp = SiteCensus(site = "shared expert")
-    var dn = SiteCensus(site = "deltanet qkv/gate/out")
-    var ba = SiteCensus(site = "deltanet beta/alpha")
-    var emb = SiteCensus(site = "token table")
-    var cls = SiteCensus(site = "classifier")
-    var eh = SiteCensus(site = "NextN eh_proj")
-    let c = tr.config
-    for (l in range64(c.n_layers + c.n_layer_nextn)) {
-        census_plane(attn, m, "blk.{l}.attn_q.weight", fmt_at(tr.wq_fmt, l))
-        census_plane(attn, m, "blk.{l}.attn_k.weight", fmt_at(tr.wk_fmt, l))
-        census_plane(attn, m, "blk.{l}.attn_v.weight", fmt_at(tr.wv_fmt, l))
-        census_plane(attn, m, "blk.{l}.attn_output.weight", fmt_at(tr.wo_fmt, l))
-        census_plane(exps, m, "blk.{l}.ffn_gate_exps.weight", fmt_at(tr.we1_fmt, l))
-        census_plane(exps, m, "blk.{l}.ffn_up_exps.weight", fmt_at(tr.we3_fmt, l))
-        census_plane(exps, m, "blk.{l}.ffn_down_exps.weight", fmt_at(tr.we2_fmt, l))
-        if (c.n_ff_shexp > 0l) {
-            census_plane(shexp, m, "blk.{l}.ffn_gate_shexp.weight", shexp_plane(tr, l, 1).f)
-            census_plane(shexp, m, "blk.{l}.ffn_up_shexp.weight", shexp_plane(tr, l, 3).f)
-            census_plane(shexp, m, "blk.{l}.ffn_down_shexp.weight", shexp_plane(tr, l, 2).f)
-        }
-        census_plane(dn, m, "blk.{l}.attn_qkv.weight", fmt_at(tr.dnqkv_fmt, l))
-        census_plane(dn, m, "blk.{l}.attn_gate.weight", fmt_at(tr.dngate_fmt, l))
-        census_plane(dn, m, "blk.{l}.ssm_out.weight", fmt_at(tr.dnout_fmt, l))
-        census_plane(ba, m, "blk.{l}.ssm_beta.weight", fmt_at(tr.dnbeta_fmt, l))
-        census_plane(ba, m, "blk.{l}.ssm_alpha.weight", fmt_at(tr.dnalpha_fmt, l))
-    }
-    census_plane(emb, m, "token_embd.weight", tr.emb_fmt)
-    census_plane(cls, m, c.shared_weights ? "token_embd.weight" : "output.weight", cls_fmt_of(tr))
-    census_plane(eh, m, "blk.{c.n_layers}.nextn.eh_proj.weight", tr.mtp_ehproj_fmt)
-    return <- [attn, exps, shexp, dn, ba, emb, cls, eh]
-}
-
-//! the census of `tr` asserted site by site under `tag` - every site the file carries read in its own format, the sites `want`
-//! names carried at all; the sites still on a converted copy logged as one list
-def private census_cell(t : T?; tr : Model; path, tag : string; want : array<string>) {
-    let f = fopen(path, "rb")
-    if (f == null) {
-        t |> failure("{tag}: cannot open {path}")
-        return
-    }
-    fmap(f) $(var bytes : array<uint8>#) {
-        var inscope m <- parse_gguf_meta(bytes)
-        var inscope sites <- format_census(tr, m)
-        var copies = ""
-        for (s in sites) {
-            if (want |> has_value(s.site)) {
-                t |> success(s.planes > 0, "{tag} {s.site}: the file carries the site")
-            }
-            continue if (s.planes == 0)
-            t |> success(s.copies == 0, "{tag} {s.site}: {s.copies} of {s.planes} planes read through a converted copy ({s.first})")
-            if (s.copies > 0) {
-                copies = "{copies} [{s.site}: {s.copies}/{s.planes}]"
-            }
-        }
-        to_log(LOG_INFO, "{tag}: sites still on a converted copy:{empty(copies) ? " none" : copies}\n")
-    }
-    fclose(f)
-}
 
 //! the pins a cell loads under, put back as found by `census_unpin`
 struct private CensusPins {
@@ -152,8 +70,7 @@ def test_metal_format_census_iq4xs_pure(t : T?) {
             let pins = census_pin()
             var tr <- load_model_(path, QuantMode.q8)
             tr.config.seq_len = min(tr.config.seq_len, 512l)
-            let want <- ["attention q/k/v/o", "routed experts", "shared expert", "deltanet qkv/gate/out", "deltanet beta/alpha",
-                "token table", "classifier", "NextN eh_proj"]
+            let want <- census_sites_all()
             census_cell(t, tr, path, "planar", want)
             var trg <- blob_twin(t, path, 512l)
             census_cell(t, trg, path, "blob twin", want)

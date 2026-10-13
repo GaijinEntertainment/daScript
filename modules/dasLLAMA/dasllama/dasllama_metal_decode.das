@@ -1385,6 +1385,7 @@ struct template LayerEncT {
         let nr = r.nrows
         let tk = total(self, r.u_moe_knfe, knfe)
         let td = total(self, r.u_dim, dim)
+        let mx4_hasb = c.moe_exps_bias ? 1u : 0u
         unsafe {
             var bmx = r.bxb   // expert input: plain = the rms_ffn norm-out; moe_with_dense = pre_ffn2
             if (moe_with_dense && g_skip != "ew") {
@@ -1423,11 +1424,10 @@ struct template LayerEncT {
                 }
                 if (g_skip != "moe_rt") {   // moe_rt knockout: the routed expert GEMVs only (router/select stay live)
                     if (t.experts_mx4) {
-                        // gpt-oss: mx4 expert planes + per-expert biases fold into the twins
-                        var bwb1 = upload_region(addr < void? >(t.fblob[t.web1_off + l * c.n_expert * c.n_ff_exp]), uint64(c.n_expert * c.n_ff_exp * 4l))
-                        var bwb3 = upload_region(addr < void? >(t.fblob[t.web3_off + l * c.n_expert * c.n_ff_exp]), uint64(c.n_expert * c.n_ff_exp * 4l))
-                        // gmode == 1 doubles as the has-bias flag (see enc_moe_select above)
-                        var mka = moe_args(self, r.k_dim, r.k_moe_nfe, r.k_moe_eblk, 0u, r.k_moe_gmode, false)
+                        // mx4 expert planes; a model's per-expert biases (gpt-oss) fold into the twins
+                        var bwb1 = mx4_bias_rows(t, t.web1_off, l, c.n_ff_exp)
+                        var bwb3 = mx4_bias_rows(t, t.web3_off, l, c.n_ff_exp)
+                        var mka = moe_args(self, r.k_dim, r.k_moe_nfe, r.k_moe_eblk, 0u, mx4_hasb, false)
                         enc_moe_gemv_mx4(enc, t, t.we1_offs[l], c.n_ff_exp, c.n_expert_used, nr, bmx, pan.mg,
                             r.bmoe_sel, bwb1, mka)
                         enc_moe_gemv_mx4(enc, t, t.we3_offs[l], c.n_ff_exp, c.n_expert_used, nr, bmx, pan.mu,
@@ -1452,8 +1452,8 @@ struct template LayerEncT {
             if (g_skip != "gemv") {
                 if (g_skip != "moe_rt") {
                     if (t.experts_mx4) {
-                        var bwb2 = upload_region(addr < void? >(t.fblob[t.web2_off + l * c.n_expert * dim]), uint64(c.n_expert * dim * 4l))
-                        var m2a = moe_args(self, r.k_moe_nfe, r.k_dim, r.k_moe_eblk, r.k_moe_xs_dn, r.k_moe_gmode, true)
+                        var bwb2 = mx4_bias_rows(t, t.web2_off, l, dim)
+                        var m2a = moe_args(self, r.k_moe_nfe, r.k_dim, r.k_moe_eblk, r.k_moe_xs_dn, mx4_hasb, true)
                         enc_moe_gemv_mx4(enc, t, t.we2_offs[l], dim, c.n_expert_used, nr, pan.mg, r.bmoe_dn,
                             r.bmoe_sel, bwb2, m2a)
                     } else {
@@ -3396,6 +3396,9 @@ def private batch_decode_decline(t : Model; ws : BatchWorkspace; sessions : arra
             if (!mm_tile_widths_64_ok(t) || (t.config.vocab_size % 64l) != 0l) {
                 return MetalDecodeDecline.kquant_native
             }
+        }
+        if (kq_dense_b32_any(t)) {   //! a per-32 dense plane has no row-batched GEMV: its rows would each stream the plane
+            return MetalDecodeDecline.kquant_native
         }
         for (l in range64(t.config.n_layers)) {
             let kq_qkv = fmt_at(t.wq_fmt, l) != KqFmt.q8

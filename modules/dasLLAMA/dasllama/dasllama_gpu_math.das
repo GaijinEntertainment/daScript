@@ -4,6 +4,7 @@ options gen2
 module dasllama_gpu_math shared public
 require dasllama/dasllama_lint public
 require math
+require daslib/math_bits
 
 //! ksigns_iq2xs without the table: bit 7 of the sign byte is the EVEN PARITY of the 7-bit index - five ALU ops, nothing staged.
 def ksign7(v : uint) : uint {
@@ -231,6 +232,10 @@ def tts_div(a, b : float) : float {
     let q = a * r
     return mad(mad(-q, b, a), r, q)
 }
+
+//! an MXFP4 block's E8M0 scale byte as 2^(e - 128) - half its power of two, paired with the doubled e2m1 magnitudes - built as
+//! the f32 bits, the denormal pair e < 2 included; the CPU `e8m0_half`'s value
+def e8m0_half_f32(ex : uint) : float => uint_bits_to_float(ex < 2u ? (0x00200000u << ex) : ((ex - 1u) << 23u))
 
 //! `v` stored as a half, saturated at the half's largest finite magnitude instead of overflowing to infinity
 def half_sat(v : float) : float16 => float16(clamp(v, -65504.0, 65504.0))

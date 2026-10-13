@@ -239,6 +239,8 @@ var g_pso_moe_kq_iq2xs : MetalComputePipeline?
 var g_pso_moe_kq_iq2xxs : MetalComputePipeline?
 var g_pso_moe_kq_iq4xs : MetalComputePipeline?
 var g_pso_moe_kq_q40 : MetalComputePipeline?
+var g_pso_moe_kq_iq4nl : MetalComputePipeline?
+var g_pso_moe_kq_k2 : MetalComputePipeline?
 var g_pso_moe_kq_k5 : MetalComputePipeline?
 var g_pso_moe_kq_k6 : MetalComputePipeline?
 var g_pso_moe_combine : MetalComputePipeline?  // weighted top-k reduce into the w2 write shape
@@ -248,6 +250,8 @@ var g_pso_swiglu_oai : MetalComputePipeline?   // gpt-oss clamped swiglu (stage 
 var g_pso_moe_gemv_mx4 : MetalComputePipeline?  // gpt-oss MXFP4 expert GEMV
 var g_pso_moe_gemv_q51 : MetalComputePipeline?  // Q5_1 expert GEMV (per-32 planes)
 var g_pso_moe_gemv_iq4nl32 : MetalComputePipeline?  // IQ4_NL per-32 expert GEMV
+var g_pso_kq_q51 : MetalComputePipeline?           // dense Q5_1 GEMV (per-32 planes)
+var g_pso_kq_iq4nl32 : MetalComputePipeline?       // dense IQ4_NL per-32 GEMV
 var g_mx4_vtab : MetalBuffer?                   // [16] signed doubled-e2m1 values
 var g_pso_dn_conv : MetalComputePipeline?      // deltanet (Wave D): causal conv + SiLU
 var g_pso_dn_hist : MetalComputePipeline?      // conv-history advance
@@ -369,6 +373,8 @@ var g_pso_kq_mvb2_q40 : MetalComputePipeline?
 var g_pso_kq_mvb4_q40 : MetalComputePipeline?
 var g_pso_kq_mvb8_q40 : MetalComputePipeline?
 var g_pso_kq_mm_b40 : MetalComputePipeline?
+var g_pso_kq_mm_b51 : MetalComputePipeline?
+var g_pso_kq_mm_b4n32 : MetalComputePipeline?
 var g_pso_kq_iq2s : MetalComputePipeline?
 var g_pso_kq_mvb2_iq2s : MetalComputePipeline?
 var g_pso_kq_mvb4_iq2s : MetalComputePipeline?

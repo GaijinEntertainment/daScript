@@ -3458,6 +3458,9 @@ def test_metal_prefill_kernels(t : T?) {
                 moe_gemv_gate(t, dev, queue, KqFmt.q51, 96, 24, 5, 3, 1, false)   // gate/up site (shared x)
                 moe_gemv_gate(t, dev, queue, KqFmt.q51, 64, 32, 7, 4, 1, true)    // down site (per-slot x)
                 moe_gemv_gate(t, dev, queue, KqFmt.q51, 64, 24, 5, 3, 3, true)    // batch streams, down form
+                b32_gemv_gate(t, dev, queue, KqFmt.q51, 96, 24)   // the dense site: 3 blocks a row
+                b32_gemv_gate(t, dev, queue, KqFmt.q51, 160, 7)   // 5 blocks - one lane group past the 4-block stride; a row-pair tail
+                b32_mm_gate(t, dev, queue, KqFmt.q51, 96, 128, 64)   // 3 blocks a row, 2 col tiles, 2 row tiles
                 moe_mulmm_b32_gate(t, dev, queue, KqFmt.q51, 64, 64, [32, 40, 64])    // padded tail on expert 1
                 moe_mulmm_b32_gate(t, dev, queue, KqFmt.q51, 96, 128, [8, 96])        // 2 col tiles, tiny run + multi-tile
                 moe_mulmm_b32_gate(t, dev, queue, KqFmt.q51, 64, 64, [12, 45])        // the adaptive op's 16-row walk, twice
@@ -3468,6 +3471,9 @@ def test_metal_prefill_kernels(t : T?) {
                 moe_gemv_gate(t, dev, queue, KqFmt.iq4nl32, 96, 24, 5, 3, 1, false)   // gate/up site (shared x)
                 moe_gemv_gate(t, dev, queue, KqFmt.iq4nl32, 64, 32, 7, 4, 1, true)    // down site (per-slot x)
                 moe_gemv_gate(t, dev, queue, KqFmt.iq4nl32, 64, 24, 5, 3, 3, true)    // batch streams, down form
+                b32_gemv_gate(t, dev, queue, KqFmt.iq4nl32, 96, 24)
+                b32_gemv_gate(t, dev, queue, KqFmt.iq4nl32, 160, 7)
+                b32_mm_gate(t, dev, queue, KqFmt.iq4nl32, 96, 128, 64)
                 moe_mulmm_b32_gate(t, dev, queue, KqFmt.iq4nl32, 64, 64, [32, 40, 64])
                 moe_mulmm_b32_gate(t, dev, queue, KqFmt.iq4nl32, 96, 128, [8, 96])
                 moe_mulmm_b32_gate(t, dev, queue, KqFmt.iq4nl32, 64, 64, [136, 32])
@@ -4458,6 +4464,103 @@ def private moe_gemv_gate(t : T?; var dev, queue; fmt : KqFmt; n, d, net, k, nst
         }
         return if (!ran)
         check_buf(t, tag, mc.buf[by], want, BAR_EXACT, Shape(row_width = d))
+    }
+}
+
+//! The dense per-32 GEMV (MetalKqGemvQ51 / MetalKqGemvIq4nl32) BIT-exact over `d` rows of the exact-arithmetic planes,
+//! x bound at an offset row so the @off view is exercised
+def private b32_gemv_gate(t : T?; var dev, queue; fmt : KqFmt; n, d : int) {
+    let tag = "dense gemv {fmt} n={n} d={d}"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let sq = stamp_of(@@enc_kq_q51_c)
+        let si = stamp_of(@@enc_kq_iq4nl32_c)
+        var pso = fmt == KqFmt.q51 ? mc |> keep_stamp(sq, err) : mc |> keep_stamp(si, err)
+        return if (!pso_ok(t, tag, pso, err))
+        var inscope(p0, p1, wref) <- moe_gemv_planes(fmt, d, n)
+        var inscope xv : array<float>
+        xv |> resize(2 * n)
+        for (i in range(2 * n)) {
+            xv[i] = float((i * 5) % 9 - 4)
+        }
+        var inscope want : array<float>
+        want |> resize(d)
+        for (r in range(d)) {
+            var acc = 0.0
+            for (c in range(n)) {
+                acc += wref[r * n + c] * xv[n + c]
+            }
+            want[r] = acc
+        }
+        let bw = mc |> in_plain(p0)
+        let bs = mc |> in_plain(p1)
+        let bx = mc |> in_(xv)
+        let by = mc |> out_words(d, -1000.0)
+        let bn = mc |> in_plain([uint(n)])
+        let bd = mc |> in_plain([uint(d)])
+        let xoff = uint64(n * 4)
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            if (fmt == KqFmt.q51) {
+                stamp_run(sq, pso) {
+                    invoke(sq.enc, enc, mc.buf[bw], 0ul, mc.buf[bs], 0ul, mc.buf[bx], xoff, mc.buf[by], 0ul, mc.buf[bn], mc.buf[bd], int64(d), int64(n))
+                }
+            } else {
+                stamp_run(si, pso) {
+                    invoke(si.enc, enc, mc.buf[bw], 0ul, mc.buf[bs], 0ul, mc.buf[bx], xoff, mc.buf[by], 0ul, mc.buf[bn], mc.buf[bd], int64(d), int64(n))
+                }
+            }
+        }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[by], want, BAR_EXACT, Shape(row_width = d))
+    }
+}
+
+//! The dense per-32 mul_mm (MetalKqMulMmQ51 / MetalKqMulMmIq4nl32) BIT-exact over `mp` x rows of the exact-arithmetic planes
+//! (the A tile's f16 values are dyadic and f16-exact, the x rows small ints)
+def private b32_mm_gate(t : T?; var dev, queue; fmt : KqFmt; kdim, ndim, mp : int) {
+    let tag = "dense mul_mm {fmt} k={kdim} n={ndim} mp={mp}"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let sq = stamp_of(@@enc_kq_mm_q51_c)
+        let si = stamp_of(@@enc_kq_mm_iq4nl32_c)
+        var pso = fmt == KqFmt.q51 ? mc |> keep_stamp(sq, err) : mc |> keep_stamp(si, err)
+        return if (!pso_ok(t, tag, pso, err))
+        var inscope(p0, p1, wref) <- moe_gemv_planes(fmt, ndim, kdim)
+        var inscope xv : array<float>
+        xv |> resize(mp * kdim)
+        for (i in range(mp * kdim)) {
+            xv[i] = float((i * 5) % 9 - 4)
+        }
+        var inscope want : array<float>
+        want |> resize(mp * ndim)
+        for (r in range(mp)) {
+            for (col in range(ndim)) {
+                var acc = 0.0
+                for (c in range(kdim)) {
+                    acc += wref[col * kdim + c] * xv[r * kdim + c]
+                }
+                want[r * ndim + col] = acc
+            }
+        }
+        let bw = mc |> in_plain(p0)
+        let bs = mc |> in_plain(p1)
+        let bx = mc |> in_(xv)
+        let by = mc |> out_words(mp * ndim, -1000.0)
+        let bk = mc |> in_plain([uint(kdim)])
+        let bn = mc |> in_plain([uint(ndim)])
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            if (fmt == KqFmt.q51) {
+                stamp_run(sq, pso) {
+                    invoke(sq.enc, enc, mc.buf[bs], 0ul, mc.buf[bw], 0ul, mc.buf[bx], mc.buf[by], 0ul, mc.buf[bk], mc.buf[bn], int64(mp), int64(ndim))
+                }
+            } else {
+                stamp_run(si, pso) {
+                    invoke(si.enc, enc, mc.buf[bs], 0ul, mc.buf[bw], 0ul, mc.buf[bx], mc.buf[by], 0ul, mc.buf[bk], mc.buf[bn], int64(mp), int64(ndim))
+                }
+            }
+        }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[by], want, BAR_EXACT, Shape(row_width = ndim))
     }
 }
 

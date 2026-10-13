@@ -527,7 +527,8 @@ silently, which is why the tier's gate (`kq_fmt_gpu_supported`) is closed by def
    `[metal_dispatch(stamp = "<family>:<fmt>:<form>")]` and the lens derives its names; every
    `g_pso_*` global is declared by hand in `dasllama_metal_common.das`, since the lens only
    names it. The prefill's per-format picks are tables, one row per format: `pf_kq_split_stamps`
-   (dense split), `pf_kq_deep_stamps` (k4/k5/k6), `pf_moe_split_stamps` (routed split).
+   (dense split), `pf_kq_deep_stamps` (k4/k5/k6), `pf_moe_kq_row` (every superblock format's routed
+   forms - the base and the four twins).
 4. **Ladders:** `enc_kq_gemv`, `enc_kq_gemm_mm_b` (kernels), `pf_enc_kq_site_mm`,
    `enc_site_gemv` (the classifier site prefill and decode share), `moe_site_ok` + the `sb1/2/3`
    predicates (shapes), and last the gate. The tensor side is one class: a `stage16` override on
@@ -547,15 +548,15 @@ silently, which is why the tier's gate (`kq_fmt_gpu_supported`) is closed by def
    gemv file's `KQ_HALF_FORMATS` list and the coverage census (`test_kernel_coverage.das`) name the
    stamps, and `enc_kq_mvb` asserts on a format with no row - a crowned half route on a format
    without its half stamps panics at the first dispatch.
-   **Serving an expert plane is six ladders, not one** (`followup_metal.md` sec.15 names the
-   dispatch-vs-predicate invariant): `pf_moe_split_fmt`, `pf_moe_split_stamps` (the per-format
-   row `pf_moe_split_enc` reads), `pf_moe_th_pso` and
-   `pf_moe_split_th_any` (prefill) plus the `enc_moe_gemv` arm (decode); and
-   `moe_site_ok`'s alignment arm must answer for the format exactly where `moe_fmt_metal_served`
+   **Serving an expert plane is one table row and one decode arm** (`followup_metal.md` sec.15
+   names the dispatch-vs-predicate invariant): the format's `pf_moe_kq_row` row (its simdgroup base
+   `MetalMoeMulMm<Fmt> : MetalMoeMulMmKqT`, a template-constant stamp over the dense mul_mm's
+   decode, and its four split twins) feeds every prefill pick, plus the `enc_moe_gemv` arm (decode);
+   and `moe_site_ok`'s alignment arm must answer for the format exactly where `moe_fmt_metal_served`
    does - `test_moe_metal_expert_formats` walks the whole enum and reds on any disagreement. A
-   compact-scale format (q40, iq4nl: `kq_scales_of` returns `doff` 0) binds its d plane at `soff`
-   in every one of those arms; the split formats bind it at `doff`, and copying their arm reads
-   the scale plane's tail as the d row.
+   compact-scale format (k4, k5, q40, iq4nl: `kq_scales_of` returns `doff` 0) sets the row's
+   `d_soff` and binds its d plane at `soff` in the decode arm; the split formats bind it at `doff`,
+   and copying their arm reads the scale plane's tail as the d row.
 5. **Tests:** `dequant_iq4xs_plane_superblock_at` (`dasllama_convert.das`, the split-layout
    twin the CPU row now calls), fixtures at fmt 44 in `tests/_metal_kernel_common.das`
    (`kq_fill_planes`, `kq_row_ref`), then the format's arm in every per-format stamp picker
@@ -570,15 +571,17 @@ silently, which is why the tier's gate (`kq_fmt_gpu_supported`) is closed by def
 A per-32 expert format on Metal takes q51's shape, not the kq one - no scale rebake, both planes
 bound verbatim through `<fmt>_planes_of` (`dasllama_metal_common.das`; `off % 256` keeps a 16 B
 quant / 2 B scale pair 16B-aligned, and `metal_blob_off_ok` + `moe_site_ok` say the same number):
-`MetalMoeGemv<Fmt>` in `MetalMoeGemvQ51`'s GEMV shape (8 threads a block, one float4 each; a
-codebook is staged to a `@workgroup` table as the kq iq4 GEMVs do, which makes the dispatch
-`tgmem =`), `MetalMoeMulMm<Fmt> : MetalMoeMulMmBase` (a `stage_a` override) with
+a format arm of `MetalBlk32GemvT` (8 threads a block, one float4 each; a codebook is staged to a
+`@workgroup` table as the kq iq4 GEMVs do, which makes the dispatch `tgmem =`) stamped dense and
+gathered, a per-32 arm of `MetalKqTileDecodeT.kq_decode` stamped as the dense mul_mm and the routed
+base `MetalMoeMulMm<Fmt> : MetalMoeMulMmKqT`, with
 `MetalMoeMulMm<Fmt>TensorT : MetalMoeMulMmKqTensorBase` (a `stage_block` override) and its
 `T`/`TH`/`TH128`/`THR` stamps compiled beside q51's in `pf_compile_moe_kq_twins`; the ladders are
 `enc_moe_gemv` (decode), `pf_moe_th_pso` and a `pf_enc_moe_mm` arm of its own with the
 `moe_q51_twin_fits` pick (the tensor twins walk 64-deep K, so a `kdim % 64` stack takes the base
 form) - NOT the split-format table, whose rows are kq stamps - plus `moe_fmt_metal_served`,
-`moe_site_ok` and `moe_fmt_b32` (the per-32 reduction dims in `moe_metal_ok`). Tests: a
+`moe_site_ok`, `kq_fmt_b32` (the per-32 reduction dims in `moe_metal_ok`, the dense sites' plane pair)
+and `kq_fmt_gpu_supported`. Tests: a
 `MoeGemvFmt` member, `<fmt>_test_planes` (exact arithmetic - pow2 d, int x) and the
 `moe_gemv_gate` / `moe_mulmm_b32_gate` rows in `tests/test_metal_prefill_kernels.das` (the
 stamp picker `b32_mm_stamp` is the one place the generated names are spelled), the four twin

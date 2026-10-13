@@ -55,4 +55,7 @@ The Metal GEMV families share one site abstraction: `MetalGemvSiteT` carries the
 `site_setup`, `y_rows` and the activation read - and its `GATHERED` axis selects the MoE-gathered
 site (a `MoeGemvArgs` uniform plus `sel[slot]`) over the plain `ndim`/`ddim` pair, so a format's
 dot walks one weight row against the x row at either site and a stamp carries only its own x and
-y bindings.
+y bindings. Every format's GEMV is one template on it, stamped dense and gathered: the superblock
+families, and the per-32 pair (`MetalBlk32GemvT`, q5_1 and iq4nl32 over their verbatim disk planes,
+one `Q51` constant apart) - a per-32 dense plane binds its own plane pair (`kq_fmt_b32`) where a
+superblock plane binds the split scale plane.

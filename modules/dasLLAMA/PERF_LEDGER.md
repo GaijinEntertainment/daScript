@@ -11,6 +11,15 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **MEASURED (2026-10-13) - the Metal routed base form's bars (`tests/test_metal_prefill_parity.das`,
+  `test_metal_prefill_moe_base_form`, the `moe-base` arm).** A `tests/run.das` cell; the GPU side is the Metal prefill
+  window with `DASLLAMA_METAL_TENSOR=0` (the base form `MetalMoeMulMmKqT`, every superblock and per-32 format, no tensor
+  toolchain) against the same window on the tensor twins, each leg against the CPU chain's rows; the witness is the base
+  kernel's dispatch count. Bars: `Qwen3-30B-A3B-Instruct-2507-UD-Q3_K_XL.gguf` 0.10 (read 0.042 on both legs),
+  `Qwen3-30B-A3B-Instruct-2507-UD-IQ2_XXS.gguf` 0.15 (read 0.095 on the twins, 0.046 on the base form) - the M5 Max,
+  `-jit`, one model process. The IQ2 carrier's bar sits above the twins' own reading on this file; the base form reads
+  under half of it.
+
 - **MEASURED (2026-10-10) - the house replay on the M5 Max: a reply's tail, the pair's re-prefill, the uncrowned
   sidecar.** The instrument is outside the tree (`external`, `out-of-process`): the house replay's runners,
   `BOX=m5 ./run_replay.sh <tag>` and `BOX=m5 ./run_short.sh <tag>` in the private `dasllama-bench` repository, a

@@ -330,7 +330,9 @@ def test_dn_metal_plane_formats(t : T?) {
         t |> success(dn_metal_ok(m) && dn_ba_metal_window_ok(m), "IQ4_XS planes serve on both")
         m.dnbeta_fmt[1] = KqFmt.k2
         t |> success(dn_metal_ok(m), "a Q2_K beta plane has the one-row GEMV the step reads")
-        t |> success(!dn_ba_metal_window_ok(m), "... and no expert-form GEMV for the window's rows")
+        t |> success(dn_ba_metal_window_ok(m), "... and the expert-form GEMV the window's rows read")
+        m.dnbeta_fmt[1] = KqFmt.iq3s4
+        t |> success(!dn_ba_metal_window_ok(m), "a lut-form IQ3_S beta plane has no expert-form GEMV for the window's rows")
         m.dnbeta_fmt[1] = KqFmt.iq4xs
         m.dnout_fmt[1] = KqFmt.iq3s4
         t |> success(!dn_metal_ok(m), "an out plane in a format the Metal kernels lack declines")
@@ -344,20 +346,32 @@ def test_dn_metal_plane_formats(t : T?) {
 [test]
 def test_moe_metal_expert_formats(t : T?) {
     t |> run("the Metal routed block admits exactly the expert plane formats it has kernels for; every other format declines") @(t : T?) {
-        for (f in [KqFmt.q8, KqFmt.q51, KqFmt.iq4nl32, KqFmt.k4, KqFmt.k5, KqFmt.k6, KqFmt.k3, KqFmt.q40, KqFmt.iq4xs, KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs]) {
+        for (f in [KqFmt.q8, KqFmt.q51, KqFmt.iq4nl32, KqFmt.k4, KqFmt.k5, KqFmt.k6, KqFmt.k3, KqFmt.k2, KqFmt.q40, KqFmt.iq4xs, KqFmt.iq4nl, KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs]) {
             var m <- moe_shell(f)
             t |> success(moe_metal_ok(m), "{f} expert planes are served")
             delete m
         }
-        for (f in [KqFmt.iq4nl, KqFmt.k2]) {
+        for (f in [KqFmt.iq3s4, KqFmt.mx4]) {
             var m <- moe_shell(f)
-            t |> success(!moe_metal_ok(m), "{f} expert planes decline the routed block")
+            t |> success(!moe_metal_ok(m), "{f} expert plane tags decline the routed block")
             delete m
         }
         var mixed <- moe_shell(KqFmt.k4)
-        mixed.we2_fmt[1] = KqFmt.k2
-        t |> success(!moe_metal_ok(mixed), "one Q2_K down plane declines a q4_K model")
+        mixed.we2_fmt[1] = KqFmt.iq3s4
+        t |> success(!moe_metal_ok(mixed), "one lut-form IQ3_S down plane declines a q4_K model")
         delete mixed
+    }
+    t |> run("the native-MXFP4 stacks serve under the plain routed gate as under gpt-oss's; only the repacked planes decline") @(t : T?) {
+        var m <- moe_shell(KqFmt.q8)
+        m.experts_mx4 = true
+        t |> success(moe_metal_ok(m), "mx4 stacks under a softmax / silu gate are served")
+        m.mx4_repacked = true
+        t |> success(!moe_metal_ok(m), "the CPU laneq repack has no GPU carry")
+        delete m
+        var g <- moe_shell(KqFmt.q8)
+        g.config.moe_gate = MoeGate.softmax_weight
+        t |> success(!moe_metal_ok(g), "gpt-oss's gate over q8 expert stacks has no biased Metal arm")
+        delete g
     }
     t |> run("the NextN head's routed stacks are walked like a trunk layer's") @(t : T?) {
         var m <- moe_shell(KqFmt.k4)
@@ -369,7 +383,7 @@ def test_moe_metal_expert_formats(t : T?) {
         m.we2_fmt |> push(KqFmt.k4)
         m.we3_fmt |> push(KqFmt.k4)
         t |> success(moe_metal_ok(m), "a head stack in a served format is admitted")
-        m.we2_fmt[2] = KqFmt.k2
+        m.we2_fmt[2] = KqFmt.iq3s4
         t |> success(!moe_metal_ok(m), "a head down stack the routed kernels lack declines the routed block")
         delete m
     }
@@ -386,7 +400,7 @@ def test_moe_metal_expert_formats(t : T?) {
     t |> run("the kernel roster and the site-alignment gate name ONE format set - every KqFmt reads the same on both") @(t : T?) {
         // No format the site gate admits is refused by the roster: the two lists are identical,
         // so a roster that answered true for everything is caught only by walking the WHOLE enum -
-        // iq4nl and k2 are the members that must read false on both. A format added to one
+        // iq3s4 and mx4 are the members that must read false on both. A format added to one
         // list and not the other reds here.
         for (f in type<KqFmt>) {
             t |> equal(moe_fmt_metal_served(f), moe_site_ok(f, 0l, 512l), "{f}: the roster and the site gate agree")

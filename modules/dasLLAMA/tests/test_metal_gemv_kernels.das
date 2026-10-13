@@ -314,7 +314,7 @@ def test_metal_kq_k4_pair_walk(t : T?) {
     }
 }
 
-// ===== the expert-indexed MoeGemv stamps (MetalMoeGemvK4 / K5 / K6 / K3 / Iq4xs / Iq3s / Iq3xxs / Iq2s / Iq2xs / Iq2xxs) =====
+// ===== the expert-indexed MoeGemv stamps (MetalMoeGemvK4 / K5 / K6 / K3 / K2 / Iq4xs / Iq4nl / Q40 / Iq3s / Iq3xxs / Iq2s / Iq2xs / Iq2xxs) =====
 
 //! the expert-indexed kq GEMV stamp of a format
 def private moe_gemv_stamp(f) {
@@ -328,6 +328,8 @@ def private moe_gemv_stamp(f) {
     if (f == KqFmt.iq2xs) return stamp_of(@@enc_moe_gemv_iq2xs_c)
     if (f == KqFmt.iq2xxs) return stamp_of(@@enc_moe_gemv_iq2xxs_c)
     if (f == KqFmt.iq4xs) return stamp_of(@@enc_moe_gemv_iq4xs_c)
+    if (f == KqFmt.iq4nl) return stamp_of(@@enc_moe_gemv_iq4nl_c)
+    if (f == KqFmt.k2) return stamp_of(@@enc_moe_gemv_k2_c)
     if (f != KqFmt.q40) {
         panic("moe_gemv_stamp: no expert GEMV for {f}")
     }
@@ -733,7 +735,7 @@ def test_metal_kq_gemv_kernels(t : T?) {
                     kq_mvb_gate(t, dev, queue, fmt, 8, 768, 17, 6, 22)
                 }
                 // expert-indexed: shared-x (gate/up) and per-slot (down) forms
-                for (fmt in [4, 5, 6, 3, 33, 34, 23, 24, 25, 44, 40]) {
+                for (fmt in [4, 5, 6, 3, 33, 34, 23, 24, 25, 44, 40, 45, 2]) {
                     moe_kq_gemv_gate(t, dev, queue, fmt, 512, 9, 5, 3, 2, false)
                     moe_kq_gemv_gate(t, dev, queue, fmt, 512, 9, 5, 3, 2, true)
                 }

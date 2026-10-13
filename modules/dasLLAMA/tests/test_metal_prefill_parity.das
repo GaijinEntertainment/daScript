@@ -1561,6 +1561,95 @@ def test_metal_prefill_moe_gemv_route(t : T?) {
     }
 }
 
+//! One split-format MoE carrier through the routed block's two GEMM forms: a 280-row window then a 20-row one (both past the
+//! gathered route's knee) with the tensor twins over the gather panel, then the same windows with the panel off - the gate and
+//! up sites on the simdgroup base form a box without the tensor toolchain serves - each leg's last-row logits within `bar` of
+//! the CPU chain's largest, the base kernel's census count rising on the base leg alone, and the control a window whose last
+//! token differs landing outside the bar
+[cold_path]
+def private moe_base_form_cells(t : T?; path, tag, base_kernel : string; bar : float) {   // nolint:STYLE037,STYLE038,LINT019 — one cell: load, the two legs, the knob restores
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        return if (!model_available(t, path))
+        let prior_wscale = get_wscale_f16()
+        let prior_backend = active_kernel_backend()
+        let prior_pin = kernel_backend_pin()
+        let prior_override = active_prefill_override()
+        let prior_min_npos = get_metal_prefill_min_npos()
+        let prior_mode = get_metal_mode()
+        set_wscale_f16(false)
+        set_metal_mode(MetalMode.when_available)   //! the load reads IQ3_S planes as the Metal tier's grid form, as a Metal load does
+        var tr <- load_model_(path, QuantMode.q8)
+        if (tr.config.seq_len > 2048l) {
+            tr.config.seq_len = 2048l
+        }
+        let prompt <- encode(tr, counting_prompt(ATTN_DEV_COUNT_TO), true, false)
+        var trg <- blob_twin(t, path, 2048l)
+        var inscope w1 <- [for (i in range64(280l)); prompt[i]]
+        var inscope w2 <- [for (i in range64(20l)); prompt[280l + i]]
+        var inscope w2_ctrl := w2
+        w2_ctrl[19] = prompt[300]
+        var inscope cpu <- two_window_logits(tr, w1, w2)
+        let peak = logits_maxabs(cpu)
+        t |> success(select_prefill_override("metal"), "{tag}: override registered")
+        set_metal_prefill_min_npos(1l)
+        t |> success(metal_prefill_pso_init(), "{tag}: the prefill kernels compiled - the census reads them")
+        for (leg in ["twins", "base"]) {
+            let base_leg = leg == "base"
+            let prior_gx = set_metal_moe_gather_min(base_leg ? 1000000l : 1l)
+            let served0 = metal_prefill_stats().prefills
+            let base0 = metal_kernel_coverage_of(base_kernel)
+            var inscope gpu <- two_window_logits(trg, w1, w2)
+            let served = metal_prefill_stats().prefills - served0
+            let based = metal_kernel_coverage_of(base_kernel) - base0
+            var inscope gpu_ctrl <- two_window_logits(trg, w1, w2_ctrl)
+            set_metal_moe_gather_min(prior_gx)
+            if (served == 0l) {
+                t |> skip("{tag}/{leg}: metal prefill declined (no Metal device?); the routed forms' parity skipped")
+                continue
+            }
+            t |> equal(served, 2l, "{tag}/{leg}: both windows served on the device")
+            if (base_leg) {
+                t |> success(based > 0l, "{tag}/{leg}: the gate and up sites rode the base form ({based} dispatches of {base_kernel})")
+            } else {
+                t |> equal(based, 0l, "{tag}/{leg}: with the panel built every routed site rode its tensor twin, the base form none")
+            }
+            let g = logits_maxdiff(gpu, cpu)
+            let gc = logits_maxdiff(gpu_ctrl, cpu)
+            to_log(LOG_INFO, "{tag}/{leg}: gap {g} of peak {peak} ({g / peak}); control gap {gc} ({gc / peak}); argmax pieces - GPU {escape(piece(tr, int64(max_element(gpu))))}, CPU {escape(piece(tr, int64(max_element(cpu))))}\n")
+            t |> success(g <= bar * peak, "{tag}/{leg}: last-row logits within {bar} of the CPU chain's largest ({g} of {peak})")
+            t |> success(gc > bar * peak, "{tag}/{leg}: the control window (its last token changed) lands outside the bar ({gc} of {peak})")
+        }
+        set_metal_prefill_min_npos(prior_min_npos)
+        set_metal_mode(prior_mode)
+        select_prefill_override(prior_override)
+        metal_prefill_shutdown()
+        metal_decode_shutdown()
+        if (empty(prior_pin)) {
+            clear_kernel_backend_pin()
+        } else {
+            pin_kernel_backend(prior_pin)
+        }
+        select_kernel_backend(prior_backend)
+        set_wscale_f16(prior_wscale)
+        delete tr
+        delete trg
+    } else {
+        t |> skip("das_metal is not built on this platform; the Metal prefill is not compiled")
+    }
+}
+
+[test]
+def test_metal_prefill_moe_base_form(t : T?) {
+    t |> run("the routed simdgroup base form == CPU control on a Q3_K expert stack (Qwen3-30B-A3B UD-Q3_K_XL)") <| @(t : T?) {
+        if (!family_on(t, "qwen3moe") || !arm_on(t, "moe-base")) return
+        moe_base_form_cells(t, path_join(models_dir(), "Qwen3-30B-A3B-Instruct-2507-UD-Q3_K_XL.gguf"), "moe-base/qwen3moe-k3", "metal_moe_mulmm_k3", 0.10)
+    }
+    t |> run("the routed simdgroup base form == CPU control on IQ2 expert stacks (Qwen3-30B-A3B UD-IQ2_XXS)") <| @(t : T?) {
+        if (!family_on(t, "qwen3moe") || !arm_on(t, "moe-base")) return
+        moe_base_form_cells(t, path_join(models_dir(), "Qwen3-30B-A3B-Instruct-2507-UD-IQ2_XXS.gguf"), "moe-base/qwen3moe-iq2xxs", "metal_moe_mulmm_iq2xxs", 0.15)
+    }
+}
+
 [test]
 def test_metal_prefill_kq_tail(t : T?) {
     t |> run("the dense K-quant sites' row-batched GEMV peel == CPU control (Llama-3.2-1B Q4_K_M)") <| @(t : T?) {
