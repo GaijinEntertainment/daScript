@@ -5,7 +5,7 @@ cooperative-matrix tiles the Vulkan tier's GEMMs run on and the decode GEMV fami
 quant bytes, how a tile and the served GEMM mode are picked, the class-pipeline build seat both
 shader instruments hang on, the MoE expert chain on those tiles, the KHR arm's hand-staged
 tile, and how a GEMV subgroup splits across short rows. `ARCHITECTURE_GPU_VULKAN.md` carries
-the prefill window chain that dispatches them (`ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain`) and its recurrent block (`ARCHITECTURE_GPU_VULKAN.md#vk-prefill-dn-block`),
+the prefill window chain that dispatches them (`ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain`) and its recurrent block (`ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-dn-block`),
 the Q8 requant byte store (`ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store`), the decode GEMV family's grid codebook buffer
 (`ARCHITECTURE_GPU_VULKAN.md#kq-gemv-grid-buffer`), and the tile probe's shared descriptor set layout (`ARCHITECTURE_GPU_VULKAN.md#khrx-shared-set-layout`). What a model has to
 fit on the card first is in `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`; the per-op

@@ -306,7 +306,7 @@ def test_gpu_resident_format_census_nextn(t : T?) {
 
 //! `file` on the whole-model driver: the window's token rows and every fed step's row gathered on the device off the table's
 //! plane (the tied classifier's where the table is tied), the forced feed against the CPU chain at the split bar
-def private emb_gather_cell(t : T?; file : string) {
+def private emb_gather_cell(t : T?; file : string; bar_rel : float) {
     let path = path_join(models_dir(), file)
     if (!resident_ready(t, path)) return
     var tr <- load_resident(path, 1l)
@@ -328,7 +328,7 @@ def private emb_gather_cell(t : T?; file : string) {
                 st_rows = gathered_rows() - rows0
                 served_every_call(t)
             })
-            feed_steps_within(t, tr, "{file} gather ", PROMPT, fed.gpu, fed.cpu, toks, SPLIT_BAR_REL)
+            feed_steps_within(t, tr, "{file} gather ", PROMPT, fed.gpu, fed.cpu, toks, bar_rel)
             if (emb0 != NO_CENSUS) {
                 t |> success(pf_emb >= 1l, "{file}: the window gathered its token rows off the tied {tr.emb_fmt} plane ({kernel}, {pf_emb} dispatches)")
                 t |> equal(st_rows, STEPS, "{file}: every fed step's row gathered on the device off its token id, no host row uploaded")
@@ -341,11 +341,16 @@ def private emb_gather_cell(t : T?; file : string) {
     delete tr
 }
 
+//! the Qwen3-4B Q4_K_M chain's device-vs-CPU distance: its K-quant sites read 0.38-0.62 of a 7.3-11.3 max logit (0.073 at its
+//! widest step, the argmax the CPU's at every row) - the chain's rounding: the gathered rows are the class lane decode
+//! (`test_vkd_emb_gather_family`); the one-step-off control reads 5.4 and past
+let private QWEN_KQ_BAR_REL = 0.10
+
 [test]
 def test_gpu_resident_gather_tied_qwen3(t : T?) {
     t |> run("{TIED_QWEN}: the tied K-quant table gathered on the device by the window and by every decode step") @(t : T?) {
         if (!family_on(t, "qwen3") || !arm_on(t, "vk-gather")) return
-        emb_gather_cell(t, TIED_QWEN)
+        emb_gather_cell(t, TIED_QWEN, QWEN_KQ_BAR_REL)
     }
 }
 
@@ -353,6 +358,6 @@ def test_gpu_resident_gather_tied_qwen3(t : T?) {
 def test_gpu_resident_gather_tied_llama(t : T?) {
     t |> run("{TIED_LLAMA}: the tied Q6_K table gathered on the device by the window and by every decode step") @(t : T?) {
         if (!family_on(t, "llama") || !arm_on(t, "vk-gather")) return
-        emb_gather_cell(t, TIED_LLAMA)
+        emb_gather_cell(t, TIED_LLAMA, SPLIT_BAR_REL)
     }
 }

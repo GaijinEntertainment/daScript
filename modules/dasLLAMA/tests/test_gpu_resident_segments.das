@@ -41,6 +41,10 @@ let private TAIL_A = 23l
 let private TAIL_B = 31l
 let private LONG_TAIL = 300l   //! two of them run past PF_WINDOW (512), so the segmented call runs two windows, the second holding B's rows alone
 let private STEPS = 8l
+//! the bar a segment's rows hold against its solo window: the split bar, the routed bar on a routed model - its windows' expert
+//! tiles schedule other row counts than the solo window's, and the router's near-ties part the two (the 35B reads 0.56-0.88 of a
+//! 9-12 max logit, 0.09 at its widest, the one-step-off control far past)
+var private g_seg_bar_rel = SPLIT_BAR_REL
 
 //! the segmented windows the Vulkan driver counted so far; 0 with no vulkan module (the cells then skip on the tier)
 def private segment_windows : int64 {
@@ -66,7 +70,7 @@ def private solo_rows(tr : Model; opening, tail, toks : array<int64>) : array<ar
 
 //! the two sessions' rows held to their solo forms: every row within the bar, the row one step off past it
 def private hold_rows(t : T?; what : string; got, want : array<array<float>>) {
-    rows_within_control(t, what, got, want, SPLIT_BAR_REL, 1l, 1.0, $(r) => r == 0l ? "the prefill's row" : "step {r}")
+    rows_within_control(t, what, got, want, g_seg_bar_rel, 1l, 1.0, $(r) => r == 0l ? "the prefill's row" : "step {r}")
 }
 
 //! the windows of a segmented call that hold both segments - the one the boundary between A and B falls in; 0 with no vulkan module
@@ -141,7 +145,7 @@ def private segments_cell(t : T?; tr : Model) {
     open_session(tr, ra, open_a)
     open_session(tr, rb, open_b)
     let w0 <- [ <- logits_of(ra, tr.config.vocab_size), <- logits_of(rb, tr.config.vocab_size)]
-    rows_within_control(t, "the openings as one window", g0, w0, SPLIT_BAR_REL, 1l, 1.0, $(r) => r == 0l ? "session A's last row (B's as the control)" : "session B's last row")
+    rows_within_control(t, "the openings as one window", g0, w0, g_seg_bar_rel, 1l, 1.0, $(r) => r == 0l ? "session A's last row (B's as the control)" : "session B's last row")
     log_argmax_rows(tr, "the openings as one window: the solo rows, then the segmented rows", g0, w0)
     served_every_call(t)
     delete ra
@@ -422,14 +426,18 @@ def private recurrent_segments_cells(t : T?; file : string) {
     t |> success(gpu_device_prefill_segments_(tr), "the driver's segmented window takes the recurrent model")
     let allowed = resident_prefill_allowed()
     set_resident_prefill_allowed(true)
+    g_seg_bar_rel = tr.config.n_expert > 0l ? MOE_SEG_BAR_REL : SPLIT_BAR_REL
     with_dasllama_jobque_() {
         segments_cell(t, tr)
         tails_as_segments(t, tr, 2l, TAIL_B, "a tail under the conv taps")   //! the ring's leading rows off the history segment A continues
         tails_as_segments(t, tr, LONG_TAIL, LONG_TAIL, "tails past one window")
     }
+    g_seg_bar_rel = SPLIT_BAR_REL
     set_resident_prefill_allowed(allowed)
     delete tr
 }
+
+let private MOE_SEG_BAR_REL = 0.20   //! the routed chain's bar (`_moe_resident.das`' reading)
 
 [test]
 def test_gpu_resident_segments_hybrid(t : T?) {

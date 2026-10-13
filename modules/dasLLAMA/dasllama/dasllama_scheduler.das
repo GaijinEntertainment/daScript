@@ -1181,15 +1181,14 @@ def private parked_state_at(p : ParkedKv; n : int64) : int64 {
 def private device_checkpoints_plan(var st : Stream; req : PendingReq; matched : int64) {
     return if (empty(st.session.dn_state_prefix))
     let n = long_length(st.prompt)
-    var stops : array<int64>
-    for (at in fixed_array(req.system_head_at, req.system_at, req.stable_at, req.messages_end_at)) {
-        if (at > matched && at < n && (empty(stops) || at > stops[length(stops) - 1])) {
-            stops |> push(at)
-        }
-    }
+    var stops <- [for (at in fixed_array(req.system_head_at, req.system_at, req.stable_at, req.messages_end_at)); at; where at > matched && at < n]
     var fields : int64[4]
-    for (at, i in stops, count()) {
-        fields[i] = at
+    var k = 0
+    for (at in stops) {   //! in order, each past the one before: a marker at or under the last kept one adds no stop
+        if (k == 0 || at > fields[k - 1]) {
+            fields[k] = at
+            k++
+        }
     }
     st.ckpt_head_at = fields[0]
     st.ckpt_sys_at = fields[1]

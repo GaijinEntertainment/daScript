@@ -4,7 +4,7 @@ Companion to `ARCHITECTURE_GPU_VULKAN.md`; a section is cited by its anchor. Thi
 document carries the resident driver's routed block in its two eras:
 the MoE block of the prefill window, and the whole-model driver's MoE token command, and the
 gemma-4 form both eras take. The window
-chain the prefill block runs inside (`ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain`), the recurrent block beside it (`ARCHITECTURE_GPU_VULKAN.md#vk-prefill-dn-block`), the Q8
+chain the prefill block runs inside (`ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain`), the recurrent block beside it (`ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-dn-block`), the Q8
 requant byte store (`ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store`), the decode GEMV family's grid codebook buffer (`ARCHITECTURE_GPU_VULKAN.md#kq-gemv-grid-buffer`) and the
 tile probe's shared descriptor set layout (`ARCHITECTURE_GPU_VULKAN.md#khrx-shared-set-layout`) are `ARCHITECTURE_GPU_VULKAN.md`'s. The
 token command's attention and recurrent heads this block's tail follows, and the per-op tier's

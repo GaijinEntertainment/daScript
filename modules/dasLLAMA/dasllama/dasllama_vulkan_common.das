@@ -265,14 +265,14 @@ let STREAM_RESERVE = 1_100_000_000l  // LEGACY fallback stream-slot carve — us
 // with headroom — vk_moe_dn asserts them and the engine arm fail-closes on bigger models.
 let DN_MAX_DS = 128l
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-dn-block")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-dn-block")]
 def dn_scan_wgs(nvh, ds : int64) : int64 {
     let cpg = 4l * (32l / (ds / 16l))
     return nvh * ((ds + cpg - 1l) / cpg)
 }
 
 let DN_CONV_PB = 32u   //! the conv's positions per workgroup
-[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-dn-block")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-dn-block")]
 def dn_conv_wgs(cd, npos : int64) : int64 => ((cd + 255l) / 256l) * ((npos + int64(DN_CONV_PB) - 1l) / int64(DN_CONV_PB))
 
 //! The prefill's beta/alpha tile GEMM's workgroups: 16-position tiles x 16-output groups over the 2 x nvh rows.

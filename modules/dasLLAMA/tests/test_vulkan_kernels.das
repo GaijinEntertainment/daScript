@@ -1859,7 +1859,7 @@ def test_vkd_emb_gather_family(t0 : T?) {
                     check_rows(t, "{kq_fmt_of_slot(fmt)} token-table gather against the class lane decode", y, y_ref, BAR_APPROX_CTRL, n)
                     if (kq_has_float_oracle(fmt)) {   //! the witness: a gathered row's dot with a Q8_K row against the float GEMV over the same table row
                         var inscope xq <- hashed_words(nsb * 64, 31u, 5u)
-                        var inscope xs <- row_fill(nsb * 8, 1, 0, 0.25, -0.5, 7)
+                        var inscope xs <- row_fill(nsb, 1, 0, 0.25, -0.5, 7)   //! a Q8_K row's one scale a superblock
                         for (r in range(rows)) {
                             continue if (ids[r] == EMB_ID_HOST)
                             var inscope reg <- [wblk0 + ids[r] * uint(nsb), 0u]
@@ -1867,7 +1867,7 @@ def test_vkd_emb_gather_family(t0 : T?) {
                             var dot = 0.0
                             for (e in range(n)) {
                                 let qb = int(int8((xq[e / 4] >> uint((e % 4) * 8)) & 0xFFu))
-                                dot += y[r * n + e] / escale * float(qb) * xs[e / 32]
+                                dot += y[r * n + e] / escale * float(qb) * xs[e / 256]
                             }
                             t |> success(abs(dot - want[0]) <= 1e-3 * max(1.0, abs(want[0])), "{kq_fmt_of_slot(fmt)} row {r}: the gathered row's dot {dot} is the float GEMV's {want[0]}")
                             t |> success(abs(dot + 1.0 + abs(want[0]) - want[0]) > 1e-3 * max(1.0, abs(want[0])), "{kq_fmt_of_slot(fmt)} row {r}: the dot's bar reds a value moved by more than the row's magnitude")

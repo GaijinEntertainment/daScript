@@ -523,9 +523,14 @@ def test_gpu_resident_hybrid_peel(t : T?) {
         }
         delete tr
     }
-    t |> run("Qwen3.5-0.8B-MTP: the same on the NextN-headed carrier, whose peel warms no head row") @(t : T?) {
+    t |> run("Qwen3.5-0.8B-MTP: the same on the NextN-headed carrier with speculation off, whose peel warms no head row; with it on, a short tail takes the chain, which warms the head's rows") @(t : T?) {
         with_mtp_carrier(t, 1l) $(var tr) {
+            let spec0 = get_mtp_spec()
+            set_mtp_spec(false)
             hybrid_peel(t, tr)
+            set_mtp_spec(true)
+            assert_short_window_takes_chain(t, tr, "a NextN-headed model under speculation")
+            set_mtp_spec(spec0)
         }
     }
 }
@@ -731,13 +736,27 @@ def private declined_draft(tr : Model; var s : Session; tok, row : int64) {
 }
 
 //! one speculative round's record: the draft the round verified, whether it accepted it, the position it left, the token the
-//! caller's sample_ took after it (-1 where none was taken), and the CPU draft's logits where the reference kept them
+//! caller's sample_ took after it (-1 where none was taken), the CPU draft's logits where the reference kept them, and the verify's
+//! row 0 logits where they landed
 struct private RoundRec {
     draft : int64
     hit : bool
     n_past : int64
     next : int64
     draft_logits : array<float>
+    verify0 : array<float>
+}
+
+//! a device round and the CPU round on one draft: both accepted or both rejected, at one position - or, where the accepts part, the
+//! draft a near-tie of the CPU verify row 0's argmax (the accept is that row's argmax, which the two chains round apart); false where
+//! they parted, so the rounds after are not the same round
+def private accepts_agree(t : T?; tr : Model; what : string; dev, cpu : RoundRec) : bool {
+    if (dev.hit != cpu.hit) {
+        pick_agrees(t, tr, "{what}: the draft against the CPU verify row 0 (the accepts part)", dev.draft, cpu.verify0, DN_LOGIT_BAR_REL)
+        return false
+    }
+    t |> equal(dev.n_past, cpu.n_past, "{what}: both rounds left the session at one position")
+    return true
 }
 
 //! one speculative round of `s` a token of `toks`: `ask` sets the caller's pick ask before every round; under `chain` the
@@ -765,6 +784,7 @@ def private spec_rounds(tr : Model; var s : Session; toks : array<int64>; ask : 
         s.pick_asked = false
         rec.draft = s.mtp_vbatch[1]
         rec.n_past = s.n_past
+        rec.verify0 := s.mtp_logits
         rec.next = chain ? sample_(s, SamplingParams()) : -1l
         tok = rec.next
         out |> emplace(rec)
@@ -1221,11 +1241,8 @@ def test_gpu_resident_hybrid_mtp_rounds(t : T?) {
                     to_log(LOG_INFO, "round {r}: an earlier near-tie parted the sessions - the accept and position are not compared\n")
                     continue
                 }
-                agreed = pick_agrees(t, tr, "round {r} draft", gpu[r].draft, cpu[r].draft_logits, DN_LOGIT_BAR_REL)
-                if (agreed) {
-                    t |> equal(gpu[r].hit, cpu[r].hit, "round {r}: both rounds accepted or both rejected")
-                    t |> equal(gpu[r].n_past, cpu[r].n_past, "round {r}: both rounds left the session at one position")
-                } else {
+                agreed = pick_agrees(t, tr, "round {r} draft", gpu[r].draft, cpu[r].draft_logits, DN_LOGIT_BAR_REL) && accepts_agree(t, tr, "round {r}", gpu[r], cpu[r])
+                if (!agreed) {
                     agreed_head_rows = (r == 0l ? DRAFT_PROMPT : cpu[r - 1l].n_past) - 1l
                 }
             }
@@ -1237,8 +1254,7 @@ def test_gpu_resident_hybrid_mtp_rounds(t : T?) {
             var c7 <- spec_rounds(tr, c, [toks[ROUNDS]], false, false, true)
             to_log(LOG_INFO, "round 6 (declined draft): CPU head over hydrated rows drafts {round7[0].draft} '{decode_(tr, [round7[0].draft])}' hit {round7[0].hit} at {round7[0].n_past}, the CPU round {c7[0].draft} '{decode_(tr, [c7[0].draft])}' hit {c7[0].hit} at {c7[0].n_past}\n")
             if (agreed && pick_agrees(t, tr, "round 6 draft (the CPU head over the hydrated rows)", round7[0].draft, c7[0].draft_logits, DN_LOGIT_BAR_REL)) {
-                t |> equal(round7[0].hit, c7[0].hit, "round 6: both rounds accepted or both rejected")
-                t |> equal(round7[0].n_past, c7[0].n_past, "round 6: both rounds left the session at one position")
+                accepts_agree(t, tr, "round 6", round7[0], c7[0])
             }
             poison_head_rows(tr, c, c.n_past - 1l)
             var c8 <- spec_rounds(tr, c, [toks[ROUNDS + 1l]])

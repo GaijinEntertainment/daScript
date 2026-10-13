@@ -272,7 +272,7 @@ split qk-rms + rope pair carries neither arm, so a gated or partial-rope model t
 kernel whatever the lever says (`DASLLAMA_VK_FUSE=0` pins the split pair only on a plain qk-norm
 model); the two arms need qk-norm, and a model with either but without it declines by name.
 
-**The prefill window chain carries the same three arms** (`ARCHITECTURE_GPU_VULKAN.md#vk-prefill-dn-block`): a recurrent layer's window block runs the qkv and z batch GEMMs, the beta and alpha
+**The prefill window chain carries the same three arms** (`ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-dn-block`): a recurrent layer's window block runs the qkv and z batch GEMMs, the beta and alpha
 rows into the layer's own smalls, the conv, the sequential scan over the layer's own device
 state slot (the raw o rows in the tier's workspace), the o requant and the out GEMM into the block
 output, so the window command needs no host round trip per layer. The state slots are the

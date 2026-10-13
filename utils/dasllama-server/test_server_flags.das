@@ -1,4 +1,5 @@
 options gen2
+options stack = 524288   // every dasLLAMA program root takes this budget: the slot cell's ModelSlot and the engine's frames overflow the default
 options persistent_heap
 options _dasllama_internal = true   // the K/V room seam the ctx-clamp cell doubles is the engine's, not the facade's
 

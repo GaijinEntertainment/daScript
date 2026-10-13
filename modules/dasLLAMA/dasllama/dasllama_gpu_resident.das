@@ -1537,7 +1537,7 @@ def resident_prefill_allowed_() : bool => g_resident_prefill_allowed
 
 var private g_vulkan_prefill_peel = true   //! the short window's peel through the token commands; off = every window takes the chain (the A/B lever)
 
-//! The short window's peel on or off (`ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-prefill-peel`); the window chain serves every window with it off
+//! The short window's peel on or off (`ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-peel`); the window chain serves every window with it off
 def set_vulkan_prefill_peel(on : bool) {
     g_vulkan_prefill_peel = on
     to_log(LOG_INFO, "dasLLAMA: set_vulkan_prefill_peel({on}) - the short window's peel through the token commands ({on ? "on" : "off: every window takes the chain"})\n")
@@ -2781,7 +2781,7 @@ def private rdec_carry_on(c : Config) : bool => rdec_carry_planned(c) && get_mtp
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_LANDING.md#logits-transfer-queue")]
 def private rdec_stash_carry(c : Config; var s : Session; row, pos1 : int64) {
-    return if (!rdec_carry_on(c) || s.device_kv)
+    return if (!rdec_carry_on(c))
     rdec_land_carry(row, s.mtp_h)
     s.mtp_h_pos1 = pos1
 }
@@ -4081,7 +4081,7 @@ def private rdec_segs_model_fits(t : Model) : bool {
 //! A device-home scheduler's tick hands `t`'s prefilling streams to the segmented window: the armed driver has the form and the model's chain holds several sessions a window.
 def gpu_device_prefill_segments_(t : Model) : bool => g_rdec_active && rdec_prefill_segs_installed() && rdec_segs_model_fits(t)
 
-[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-prefill-segments")]
+[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-segments")]
 def private vulkan_resident_prefill_segments(t : Model; var segs : array<PrefillSeg>) : bool {
     return false if (!g_rdec_active || !rdec_prefill_segs_installed())
     let c = t.config
@@ -4244,7 +4244,7 @@ var private g_rdec_peels = 0l
 //! How many short windows the resident driver peeled through the token commands in this process (a cell's served witness)
 def moe_gpu_resident_peels() : int64 => g_rdec_peels
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-prefill-peel")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-peel")]
 //! The property of `c`'s chain that keeps a short window off the token command's peel - its state, side rows, wide residual or
 //! carry are per call - or "" where the chain's shape fits; the host experts' arm reads the armed plan (`rdec_peel_fits`).
 def rdec_peel_shape_why(c : Config) : string {
@@ -4259,6 +4259,9 @@ def private rdec_peel_fits(t : Model; npos : int64) : bool {
     if (empty(why) && g_rdec_experts_host) {
         why = "routed experts on the host"
     }
+    if (empty(why) && rdec_head_warm_want(t)) {   //! the token commands warm no head row, and a draft would read the rows the window chain warms
+        why = "a NextN head whose prompt rows the speculative warm wants"
+    }
     return true if (empty(why))
     rdec_peel_declined(why)
     return false
@@ -4271,7 +4274,7 @@ def private rdec_peel_declined(why : string) {
 }
 
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-prefill-peel")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-peel")]
 def private rdec_prefill_peel(t : Model; var s : Session; r, npos, start_pos : int64) {
     let c = t.config
     let dim = c.dim
@@ -4710,7 +4713,7 @@ def private rdec_snap_victim(reg : RdecRegion) : int {
 //! opening (the least recently touched row gives way); false where the session holds no region, the model keeps no recurrent state
 //! or the driver keeps no checkpoints
 [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#device-home-checkpoints")]
-def gpu_device_kv_checkpoint_(var s : Session) : bool {
+def gpu_device_kv_checkpoint_(s : Session) : bool {
     return false if (!g_rdec_active || empty(s.dn_state_prefix) || !rdec_dn_snaps_installed() || s.dn_pos <= 0l)
     let r = s.rdec_region
     return false if (!rdec_owns(s, r))

@@ -772,7 +772,7 @@ def private rdec_unset_token_seq(x : array<float>; cossin : array<float>; pos, n
 var g_rdec_token_seq = @@rdec_unset_token_seq
 var g_rdec_token_seq_installed = false
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-prefill-peel")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-peel")]
 def public install_rdec_token_seq(token_seq : RdecTokenSeqFn) {
     g_rdec_token_seq = token_seq
     g_rdec_token_seq_installed = true

@@ -40,7 +40,7 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
    upstream; was 11.1 on the per-op rails). The PREFILL half followed: the window chain carries
    the recurrent block (conv + chunked scan on the layer's device state), gated attention and
    partial rotary on the batch kernels, and hands the device state to the session for the decode
-   (`ARCHITECTURE_GPU_VULKAN.md#vk-prefill-dn-block`, `ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command`; gate
+   (`ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-dn-block`, `ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command`; gate
    `tests/test_gpu_resident_hybrid.das`, one- and two-window cells). Every figure in this item:
    `benchmarks/lcpp_bench.das -m Qwen3.5-9B-MTP-UD-Q5_K_XL.gguf -r 3` (`-p 512 -n 128`) through
    `bin/Release/daslang.exe -jit` under `DASLLAMA_GPU=1 DASLLAMA_ALLOW_UNTUNED=1

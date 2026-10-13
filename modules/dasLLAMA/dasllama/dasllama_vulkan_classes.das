@@ -1346,7 +1346,7 @@ class DnBaGemm {
     @workgroup xs : float[528]                 // 16 positions x 32 k, stride 33 (bank-spread)
     @workgroup ws : float[528]                 // 16 rows x 32 k, stride 33
 
-    [spirv_kernel(local_size_x = 256, name = "dn_ba_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-dn-block")]
+    [spirv_kernel(local_size_x = 256, name = "dn_ba_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-dn-block")]
     def run {
         let tid = gl_LocalInvocationID.x
         let ne = 2u * pa.nvh
@@ -2346,7 +2346,7 @@ class DnConv {
         return smalls[pa.hist_off + hidx * pa.cd + ch]
     }
 
-    [spirv_kernel(local_size_x = 256, name = "dn_conv_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-dn-block")]
+    [spirv_kernel(local_size_x = 256, name = "dn_conv_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-dn-block")]
     def run {
         let cblocks = (pa.cd + 255u) / 256u
         let p0 = (gl_WorkGroupID.x / cblocks) * DN_CONV_PB
@@ -2732,7 +2732,7 @@ class DnScan {
         return r
     }
 
-    [spirv_kernel(local_size_x = 128, name = "dn_scan_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-dn-block")]
+    [spirv_kernel(local_size_x = 128, name = "dn_scan_cls_spv"), arch(at="../ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-dn-block")]
     def run {   // nolint:STYLE038 — the per-token recurrence over 16 register rows of one column
         let ds = pa.ds
         let lanes_per_col = ds / 16u           // 16 state rows each; ds % 16 == 0 host-side

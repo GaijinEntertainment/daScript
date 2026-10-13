@@ -58,9 +58,9 @@ def private pf_gu6(l : int64) : bool => g_env_vulkan.vk_f16_ffn && pf_f16_feed(g
 //! the down GEMM's feed: the hidden rows as f16 where the tile admits the plane and the FFN lever leaves the group on it (off it the rows quantize to the Q8 blocks the CPU chain uses)
 [arch(at="../ARCHITECTURE_RUNTIME.md#activation-scale-lattice")]
 def private pf_dn6(l : int64) : bool => g_env_vulkan.vk_f16_ffn && pf_f16_feed(g_rd.layers[l].f2)
-[arch(at="../ARCHITECTURE_RUNTIME.md#activation-scale-lattice"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-dn-block")]
+[arch(at="../ARCHITECTURE_RUNTIME.md#activation-scale-lattice"), arch(at="../ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-dn-block")]
 def private pf_dnx6(l : int64) : bool => pf_f16_feed(g_rd.layers[l].fqkv) && pf_f16_feed(g_rd.layers[l].fz)
-[arch(at="../ARCHITECTURE_RUNTIME.md#activation-scale-lattice"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-dn-block")]
+[arch(at="../ARCHITECTURE_RUNTIME.md#activation-scale-lattice"), arch(at="../ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-dn-block")]
 def private pf_dno6(l : int64) : bool => pf_f16_feed(g_rd.layers[l].fout)
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
@@ -259,7 +259,7 @@ def private pf_feed_set(f16 : bool; src : uint64; sbit : uint; f16buf, qbuf, sbu
 }
 
 //! one recurrent layer's prefill window sets; the o feed sets (`pf_dnof_set` / `pf_dnrq_set`) are shared by every recurrent layer
-[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-dn-block")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-dn-block")]
 def private pf_dn_layer_sets(l, dim, cd, di : int64) {
     var L & = unsafe(g_rd.layers[l])
     let np = g_rd.pf_np
@@ -295,7 +295,7 @@ def private pf_dn_layer_sets(l, dim, cd, di : int64) {
 }
 
 //! region `r`'s state slot and its first ring image zero-filled in every recurrent layer: a segment that starts at position zero
-[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-dn-block")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-dn-block")]
 def private pf_dn_zero_region(raw : VkCommandBuffer; var h : VkHaz; r : int64) {
     vhz_dep(raw, h, 0u, VHZ_DNST | VHZ_DNSM, true)
     for (L in g_rd.layers) {
@@ -309,9 +309,8 @@ def private pf_dn_zero_region(raw : VkCommandBuffer; var h : VkHaz; r : int64) {
 
 //! the window call's recurrent entry, a segment at a time: a segment from position zero sends its region's foreign slots home and
 //! enters on ring image 0, which its first window zero-fills; a continuation enters on its region's parity, the slots the host bound
-[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-dn-block")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-dn-block")]
 def private pf_dn_begin {
-    g_rd.pf_dn_cur |> resize(int(g_rd.regions))
     for (sg in g_pf_segs) {
         if (sg.pos0 == 0l) {
             vk_rdec_dn_flush_owners(sg.region)
@@ -369,15 +368,15 @@ def private dn_window_enc(raw : VkCommandBuffer; var h : VkHaz; var conv_set, sc
 
 //! every window part's recurrent conv, scan and ring tail over its own region's slot - the part's rows `row0` on, its history the
 //! ring image its region entered the window on, its tail the other image - then the gated out-norm over the whole window
-[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-dn-block")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-dn-block")]
 def private dn_window_parts_enc(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; wlen, cd, kd, nvh, nkh, ds, di, dconv : int64; sig : bool; eps : float) {
     let taps = dconv - 1l
     for (ws in g_pf_wsegs) {
         let st & = unsafe(L.dn[ws.region])
-        let img = st.ring_image_bytes / 4l
-        let cur = int64(g_rd.pf_dn_cur[ws.region])
+        let img = int(st.ring_image_bytes / 4l)
+        let cur = g_rd.pf_dn_cur[ws.region]
         var pcc = DnConvArgs(npos = uint(ws.npos), cd = uint(cd), kd = uint(kd), ds = uint(ds), dconv = uint(dconv),
-            hist_mode = 1u, taps_off = uint(DN_SM_TAPS), hist_off = uint(st.hist_off + cur * img),
+            hist_mode = 1u, taps_off = uint(DN_SM_TAPS), hist_off = uint(int(st.hist_off) + cur * img),
             eps = eps, qscale = 1.0 / sqrt(float(ds)), row0 = uint(ws.row0))
         enc_dn_conv_cls(raw, h, L.pf_dn_conv_set, pcc, dn_conv_wgs(cd, ws.npos))
     }
@@ -401,16 +400,16 @@ def private dn_window_parts_enc(raw : VkCommandBuffer; var h : VkHaz; var L : RL
     vhz_dep(raw, h, VHZ_DNP, VHZ_DNSM, false)
     for (ws in g_pf_wsegs) {
         let st & = unsafe(L.dn[ws.region])
-        let img = st.ring_image_bytes / 4l
-        let cur = int64(g_rd.pf_dn_cur[ws.region])
+        let img = int(st.ring_image_bytes / 4l)
+        let cur = g_rd.pf_dn_cur[ws.region]
         //! a part shorter than the taps takes the ring's leading rows off the image it entered on
-        var pct = DnTailArgs(cd = uint(cd), taps = uint(taps), row0 = uint(ws.row0 + max(ws.npos - taps, 0l)), hist_off = uint(st.hist_off + (1l - cur) * img),
-            old_rows = uint(max(taps - ws.npos, 0l)), old_off = uint(st.hist_off + cur * img))
+        var pct = DnTailArgs(cd = uint(cd), taps = uint(taps), row0 = uint(ws.row0 + max(ws.npos - taps, 0l)), hist_off = uint(int(st.hist_off) + (1 - cur) * img),
+            old_rows = uint(max(taps - ws.npos, 0l)), old_off = uint(int(st.hist_off) + cur * img))
         enc_dn_tail_cls(raw, h, L.pf_dn_tail_set, pct, (cd * taps + int64(WG_X) - 1l) / int64(WG_X))
     }
 }
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-dn-block"), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-dn-block"), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command")]
 def private rd_pf_recurrent(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : int; wlen : int64) {
     var L & = unsafe(g_rd.layers[l])
     let dim = g_rd.dim
@@ -1410,7 +1409,7 @@ def private pf_qkn_rope_enc(raw : VkCommandBuffer; var h : VkHaz; l : int64; vof
     if (L.pf_s_qkn_rope == null) {
         L.pf_s_qkn_rope = pf_qkn_rope_set(L)
     }
-    let dim = g_rd.dim
+    let dim = g_rd.dim   // nolint:LINT021 — the norm row offsets multiply 64-bit before the push-field narrow
     let hs = L.hs
     let nkvh = L.kvd / hs
     let hsmax = g_rd.head_size   // nolint:LINT021 — the q/k norm rows sit at the widest class's stride; the row offset multiplies run 64-bit before the push-field narrow
@@ -1529,7 +1528,7 @@ def vk_rdec_prefill_ids(tokens : array<int64>; emb_scale : float; cos_batch : ar
     pf_run(nox, tokens, true, emb_scale, cos_batch, nox, ple_tbl, npos, pos0, logits, experts, nosegs)
 }
 
-[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-prefill-segments")]
+[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-segments")]
 def vk_rdec_prefill_segs(x_batch : array<float>; tokens : array<int64>; use_ids : bool; emb_scale : float; cos_batch : array<float>;
                          segs : array<RdecPfSeg>; var logits : array<float>; experts : RdecHostExpertsRowsFn) {
     assert(g_rd != null && !empty(segs), "vk_rdec_prefill_segs: no driver, or no segment")
@@ -1883,7 +1882,7 @@ def vk_rdec_prefill_hc(x_batch : array<float>; cos_batch : array<float>; side : 
     pf_run_hc(x_batch, cos_batch, side, npos, pos0, logits, experts)
 }
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-tq4-basis"), arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-prefill-segments")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-tq4-basis"), arch(at="../ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-segments")]
 def private pf_attn_block(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : int; wlen, pos0w : int64; feed_fused : bool) {
     let dim = g_rd.dim
     let np = g_rd.pf_np
@@ -1949,27 +1948,27 @@ def private pf_attn_block(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : i
     if (pf_qkn_fused(l)) {
         pf_qkn_rope_enc(raw, h, l, voff, kv_merged ? 2l * kvd : kvd, qrow, qhs)
     } else {
-    if (g_rd.qk_norm) {
-        let nkvh = kvsh ? 0l : kvd / hs   //! no k/v norm groups on a shared-KV layer: nothing of its own to norm or store
-        let vgroups = vnorm && !vfk ? nkvh : 0l
-        var pcn = QkRmsArgs(hs = uint(hs), nh = uint(g_rd.n_heads), nkvh = uint(nkvh),
-            qstride = uint(qrow), kstride = uint(kv_merged ? 2l * kvd : kvd), kbase = 0u,
-            qwoff = uint(nlfin + dim + l * 2l * hsmax), kwoff = uint(nlfin + dim + (l * 2l + 1l) * hsmax),
-            eps = g_rd.eps, qhs = uint(qhs), vfk = vfk ? 1u : 0u, vnorm = vnorm ? 1u : 0u, vbase = voff)
-        enc_qk_rms_cls(raw, h, g_rd.pf_sets[b + 15], pcn, wlen * (g_rd.n_heads + nkvh + vgroups))
-        pfq_ts(raw)
-    }
-    assert(!kvq || long_length(g_pf_wsegs) == 1l, "vk prefill: a block codec's window holds one segment")
-    for (sg in g_pf_wsegs) {
-        let ropewg = (sg.npos * int64(pairs) + int64(WG_X) - 1l) / int64(WG_X)
-        var pcr = RopeKvBArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), half = uint(g_rd.layers[l].rot / 2l),
-            neox = g_rd.neox ? 1u : 0u, kpair0 = uint(qd / 2l), ppp = uint(pairs),
-            layerbase = kvq ? 0u : uint(rd_mir_base(g_rd.layers[l], sg.region)), npos = uint(sg.npos), pos0 = uint(kvq ? sg.row0 : sg.pos0),
-            voff = voff, kstride = uint(kv_merged ? 2l * kvd : kvd), qhs = uint(qhs),
-            boff = uint(g_rd.layers[l].boff), hasb = g_rd.has_bias ? 1u : 0u,
-            cstride = uint(cos_elems), cbase = uint(g_rd.layers[l].cbase), row0 = uint(sg.row0))
-        rope_kv_b_stamp_enc(rd_kv16(), raw, h, g_rd.pf_sets[b + 4], pcr, ropewg)
-    }
+        if (g_rd.qk_norm) {
+            let nkvh = kvsh ? 0l : kvd / hs   //! no k/v norm groups on a shared-KV layer: nothing of its own to norm or store
+            let vgroups = vnorm && !vfk ? nkvh : 0l
+            var pcn = QkRmsArgs(hs = uint(hs), nh = uint(g_rd.n_heads), nkvh = uint(nkvh),
+                qstride = uint(qrow), kstride = uint(kv_merged ? 2l * kvd : kvd), kbase = 0u,
+                qwoff = uint(nlfin + dim + l * 2l * hsmax), kwoff = uint(nlfin + dim + (l * 2l + 1l) * hsmax),
+                eps = g_rd.eps, qhs = uint(qhs), vfk = vfk ? 1u : 0u, vnorm = vnorm ? 1u : 0u, vbase = voff)
+            enc_qk_rms_cls(raw, h, g_rd.pf_sets[b + 15], pcn, wlen * (g_rd.n_heads + nkvh + vgroups))
+            pfq_ts(raw)
+        }
+        assert(!kvq || long_length(g_pf_wsegs) == 1l, "vk prefill: a block codec's window holds one segment")
+        for (sg in g_pf_wsegs) {
+            let ropewg = (sg.npos * int64(pairs) + int64(WG_X) - 1l) / int64(WG_X)
+            var pcr = RopeKvBArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), half = uint(g_rd.layers[l].rot / 2l),
+                neox = g_rd.neox ? 1u : 0u, kpair0 = uint(qd / 2l), ppp = uint(pairs),
+                layerbase = kvq ? 0u : uint(rd_mir_base(g_rd.layers[l], sg.region)), npos = uint(sg.npos), pos0 = uint(kvq ? sg.row0 : sg.pos0),
+                voff = voff, kstride = uint(kv_merged ? 2l * kvd : kvd), qhs = uint(qhs),
+                boff = uint(g_rd.layers[l].boff), hasb = g_rd.has_bias ? 1u : 0u,
+                cstride = uint(cos_elems), cbase = uint(g_rd.layers[l].cbase), row0 = uint(sg.row0))
+            rope_kv_b_stamp_enc(rd_kv16(), raw, h, g_rd.pf_sets[b + 4], pcr, ropewg)
+        }
     }
     if (kvq) {
         let mirb = uint(rd_mir_base(g_rd.layers[l], g_pf_wsegs[0].region))

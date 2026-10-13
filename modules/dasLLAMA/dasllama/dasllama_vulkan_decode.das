@@ -224,6 +224,7 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
         r.dn_os_dev = make_device_buf(DND_OS_BYTES * nb)
         r.dn_of_dev = make_device_buf(DND_OQ_BYTES * 4l * nb)
         r.dn_parity |> resize(regions)
+        r.pf_dn_cur |> resize(regions)
         ensure_dnd_state()   // the staging buffers the state uploads and flushes ride
     }
     // the eps/ascale pair sits past `rdec_norms_len`'s floats; the fused ar+requant reads it (its binding 4 is the scale output)
@@ -3860,7 +3861,7 @@ def private rd_snap_alloc {
     }
     g_rd.snap_row_bytes = off
     let rows = g_rd.regions * int64(RDEC_DN_SNAPS)
-    g_rd.snap_par |> resize(int(rows))
+    g_rd.snap_par |> resize(rows)
     if (off > 0l) {
         g_rd.snap_dev = make_device_buf(off * rows)
     }
@@ -4013,7 +4014,7 @@ def vk_rdec_token_n(x : array<float>; cossin : array<float>; ple : array<float>;
 //! The short window's peel on a recurrent model: `nrows` consecutive rows of the selected region from `pos` (`x`, `cossin` a row
 //! each) through the in-order rows command - every recurrent layer steps the rows one after another in the region's slot, each
 //! row's ring image the one the row before it wrote - and the last row's logits into `logits`
-[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-prefill-peel")]   //! per short window, reached through the tier's registered seat
+[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-peel")]   //! per short window, reached through the tier's registered seat
 def vk_rdec_token_seq(x : array<float>; cossin : array<float>; pos, nrows : int64; var logits : array<float>) {
     assert(g_rd != null && g_rd.ready, "vk_rdec_token_seq before prepare/set_cls")
     verify(nrows >= 2l && nrows <= g_rd.nb && long_length(logits) >= g_rd.vocab, "vk_rdec_token_seq: the row count is outside the per-row planes, or the logits row is short")

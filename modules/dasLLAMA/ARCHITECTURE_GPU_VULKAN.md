@@ -2,12 +2,11 @@
 
 Companion to `ARCHITECTURE_GPU.md`; a section is cited by its anchor. This document
 carries the prefill window chain, the Q8 requant byte store, the decode GEMV family's grid
-codebook buffer, the tile probe's shared descriptor set layout, the recurrent block of the
-prefill window, the roster of Vulkan capabilities the tier keys its routes on, and how the
+codebook buffer, the tile probe's shared descriptor set layout, the roster of Vulkan capabilities the tier keys its routes on, and how the
 `[vk_dispatch]` lens derives `readonly` from a class family's accesses. The token command's
 attention key split, the attention-side planes (the q/k/v bias, the sink logits, the output bias),
-the K/V mirror's block codecs, the segmented window and the short window's peel are in
-`ARCHITECTURE_GPU_VULKAN_ATTN.md`. The MoE block of that window, the token
+the K/V mirror's block codecs are in `ARCHITECTURE_GPU_VULKAN_ATTN.md`; the recurrent block of the window, the segmented
+window and the short window's peel are in `ARCHITECTURE_GPU_VULKAN_WINDOW.md`. The MoE block of that window, the token
 command's routed twin and their gemma-4 form are in `ARCHITECTURE_GPU_VULKAN_MOE.md`. The
 cooperative-matrix tiles the chain's GEMMs run on - the cm2 decode spelling, the tile pick and
 the coopmat mode ladder, the class-pipeline build seat, the MoE expert chain on those tiles, and
@@ -61,7 +60,7 @@ final requant and the classifier at that row.
 mirror region already holds - a chat's earlier turns, a scheduler's earlier chunks (`rdec_prefill_region`: kept
 where the session owns them, brought up from the host cache - a paged one a run at a time, `rdec_host_rows` - where it does
 not). A recurrent continuation starts from the live state at `dn_pos`: the host binds the region's state slots to the session
-as before a token (`rdec_dn_prefill_entry`) and the first window reads the ring the parity names (`#vk-prefill-dn-block`); one
+as before a token (`rdec_dn_prefill_entry`) and the first window reads the ring the parity names (`ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-dn-block`); one
 at another position passes as `rewind`, a hyper-connection model's as `continuation` (its n-gram ring has no hand-off).
 
 **The last layer's FFN runs on a one-segment window's last 32 rows only (a segmented window's every segment
@@ -81,6 +80,11 @@ other feeds run the full window, and so does a window that warms the NextN head'
 row's post-norm hidden (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-head-prompt-warm`). Only the plain residual
 step (`cls_ar`) and the f16 activation honor the row base: the fused residual twins feed the NEXT layer's
 projections and never run on the last layer, so they index from row 0 by design.
+
+**A q/k-normed layer's norm, rope and K/V store run as the token command's one fused pass (`QknRopeKvT`'s window form,
+`pf_qkn_fused`)** over a window part's rows at their positions of their region's slab; a block-codec mirror, a shared-KV layer
+and the lever `set_vulkan_prefill_qkn_fuse(false)` keep the norm pass and the rope-and-store pass. The two forms reduce the norm
+in another order, so they agree within the split bar, not bit for bit.
 
 **The k and v GEMMs merge into ONE dispatch when the layer's q, k and v weight planes are all
 q8 and the k and v planes sit adjacent in the arena.** The bump allocator places them
@@ -197,81 +201,6 @@ The `nil` arm is the ceiling arm: its weight stage writes constants, so its rate
 tile's ceiling with the weight loads removed. It still binds the weight plane and the scale
 words the shared layout declares, and its stage reads neither (`KhrPxNil`, whose `wq` field
 carries `@role = "alias"`). Those two are the probe's deliberately unread bindings.
-
-### The recurrent block of the prefill window {#vk-prefill-dn-block}
-
-**A recurrent (deltanet) layer's window block replaces the attention head; the FFN tail is
-shared.** Per window the block runs the qkv and z GEMMs into the window planes, the beta and
-alpha rows into the layer's smalls, the conv over the selected region's ring image, the sequential
-scan over that region's state slot (the slot's bases ride the pushes, the sets bind every region's
-slot), and the out GEMM into `pf_xb2`. The smalls are the layer's per-layer f32 plane: the layer's
-cold constants (conv taps, out-norm weights, the `a` and `dt` rows), the beta and alpha rows, and a
-parity ring pair per region (`ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command`). A call enters on the image the region's
-parity word names (`pf_dn_begin`; a prompt from position zero resets the word and zero-fills the slot's state and that image,
-`pf_dn_zero_region`): its first window reads that image per-channel (`DnConvArgs.hist_mode` 1), the later windows and the tail
-use the other, which the word names after the call (`pf_dn_end`) - the parity the owner handoff hands the session. The weight planes stay in their file
-formats where the loader tags them natively (`ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command`
-carries the tagging condition), so a Q5_K/Q6_K file rides the k5/k6 tiles.
-
-The block reads two activation feeds, and each one is decided on its own.
-
-- **The x feed is the layer's input rows.** The qkv and z GEMMs read it. `pf_dnx6` decides it:
-  f16 rows when both of those planes admit the coopmat tiles (`ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default`), else the quant image.
-- **The o feed is the scan's output rows.** The out GEMM reads it. `pf_dno6` decides it: f16
-  rows when the out plane admits the coopmat tiles, else a requant.
-
-A K-quant file whose out plane is Q8_0 therefore keeps its qkv and z GEMMs on the coopmat
-tiles and takes the requant on the o feed alone.
-
-When the x feed is not f16, a K-quant qkv/z pair reads the Q8_K activation form, as the
-attention head's kq planes do, and a beta or alpha plane of the other activation class re-requantizes
-the rows into its own form behind the z GEMM - one feed, two forms, as the decode step does (`ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command`).
-
-The beta and alpha rows take one of two arms. A file that carries them as f32 rows keeps the f32 rows on the
-device and reads them through a scalar tile GEMM over the `[beta ; alpha]` rows (`DnBaGemm`): one workgroup covers 16 positions by 16 output rows, one output
-per invocation, and the grid runs over both group axes, so a layer of only `2 x nvh` rows (`nvh`,
-the layer's value-head count) - 64 on the 9B - still fills the card. The plane arm is two GEMMs, each in its tag's format, and
-copies: a `[dim x nvh]` plane is one 32-row tile of the quant-fed batch class (`BATCH_TILE`, the y store guarded past `nvh`), never the
-cm2 family's 128-row tiles, so the plane reads the quant feed whatever the x feed is.
-
-The conv is channel-major: a workgroup owns 256 channels over `DN_CONV_PB` positions
-(`dn_conv_wgs` sizes the grid), every thread slides one channel's window over them with the taps
-in registers and one new row read per position, and holds its outputs in registers for the SiLU
-and the per-head L2 norm - the head's sum of squares crosses the head's lanes by shuffles and its
-32-lane blocks by one shared row, a head being `ds` consecutive channels with `ds` dividing 256. The
-position-major form it replaced (one workgroup per position, the row staged in 32 KB of shared memory)
-re-read every input row once per tap and the whole tap table once per position, all from L2.
-
-The scan is the plain per-token delta rule in upstream's shape: one column of a head's state per
-lane cluster, 16 state rows per lane in registers, four 32-lane blocks per workgroup, and every lane
-reads its own k and q elements from the conv plane a token AHEAD, into registers, while the
-current token computes (a row's loads never wait on the recurrence, whose per-token chain was
-latency-bound on them: the 9B's scan 342 -> 322 us a layer, the 0.8B's window a twentieth
-shorter) - no shared staging, no barrier between tokens. `dn_scan_wgs` sizes the grid, a workgroup covering `4 x 32 / (ds / 16)` columns
-of one head (upstream's one warp per workgroup read the 35B 6% slower here: a thousand
-one-warp workgroups each holding the gate arrays in shared memory). The head's per-token gates - the decay `exp(a * softplus(g + dt))` and `sigmoid(beta)` - are
-computed once per workgroup into shared memory before the token loop, so the recurrence reads
-two shared words a token where it paid five transcendentals and a divide per lane (a third of
-the scan's time on the Linux RTX 5080; upstream's graph hands its scan the gates pre-activated).
-The tokens loop inside the kernel; each token costs two cluster reductions inside the dependency
-chain (a sixth of the scan's time there). The conv, the scan and the requant family's K-quant
-fold map their 32-lane blocks and clusters from the invocation id, never from the subgroup id:
-every shuffle in them carries an xor mask under 32, which stays inside such a block on any
-subgroup width the tier admits (32 or more), so the kernels hold on a 64-lane device as on a
-32-lane one; only the KHR tile keys on the width itself (`ARCHITECTURE_GPU_VULKAN_GEMM.md#khr-mm-kq-tile`). The conv and smalls bindings are NonWritable, as every
-binding no kernel of a class writes is (`ARCHITECTURE_GPU_VULKAN.md#vk-readonly-lens`). The decoration is load-bearing: without it the driver orders each token's k and q
-loads behind the previous token's o store (the two buffers may alias), and the same kernel ran
-2.35x slower (19004 against 8084 us over the 0.8B's 18 layers on the Linux RTX 5080; the staged
-two-column form it replaced 8854). The raw o rows land in the per-op tier's workspace, for the
-gated out-norm's one workgroup per position.
-
-The conv history crosses windows position-major in the image the call did not enter on; the last window transposes the
-tail into the decode step's per-channel layout (`dn_tail_cls`; the handoff is stated in
-`ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command`). Every window past the first carries at least as
-many rows as the conv has taps: when a full window would leave the last window fewer rows than
-that, the earlier window takes fewer rows instead, so the last one still holds the taps. Only a
-lone first window can be shorter - the tail reads the ring's leading rows off the entry image (`DnTailArgs.old_rows`), zero
-for a prompt from position zero, the session's history for a continuation; the two images never alias.
 
 ### The device-init log names every Vulkan capability the tier keys a route on {#vk-extension-roster}
 

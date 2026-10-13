@@ -137,6 +137,9 @@ and 4, and by the kernel census the verify's rows on the fused single-pass atten
 kernel carries the model's shape (every head class of 64, 96, 128, 256 or 512 on the f16 mirrors, the
 three stamps' counts summed, no chunked dispatch) and on the chunked pair elsewhere, both counts
 logged; `mtp-count8-<tag>` = the same at depth 8, the deepest round - nine verify rows;
+`mtp-codec-<tag>` = the depth-2 counting walk on q8_0, tq4 and f32 sessions, the verify's rows storing and reading
+the session's codec (the codec's fused-attention stamps counted), speculative == plain token for token and drafts
+accepted; every arm fails, never skips, on a carrier the box holds that the Metal load or a driver declines;
 `mtp-sampled-<tag>` = the sampled accept walk - speculative free-run == plain SAMPLED free-run,
 seeded, at depth 1 and 2, temp 0.7 / top-k 1 / penalty 1.1 so every draw is the penalized argmax
 and the stream stays deterministic; on a verify tag it rides the assistant round inside the
@@ -177,7 +180,7 @@ under the same ledgered exception as the parity file's: the Metal MTP rail is wh
 flavor serves.
 
 Prefill parity: `base mm-tail s16
-kq cont attn-dev mirror segs span span-fused span-mrope span-ds dim qkv moe-gemv moe-base kq-tail` (moe-base = the routed
+kq cont attn-dev mirror mirror-codec mirror-cap segs span span-fused span-mrope span-ds dim qkv moe-gemv moe-base kq-tail` (moe-base = the routed
 block's two GEMM forms on split-format expert carriers (`test_metal_prefill_moe_base_form`, family `qwen3moe`, large
 tier: Qwen3-30B-A3B UD-Q3_K_XL and UD-IQ2_XXS, loaded under the Metal mode so IQ3_S planes read their grid form): a 280-row
 then a 20-row window on the tensor twins over the gather panel, then with the panel off - the gate and up sites on the
@@ -203,6 +206,15 @@ within the carrier's bar of the CPU chain's largest, the route's window counter 
 counter by two on the route and on the tiles leg, the same windows with the knee at 0 (the tiles) logged
 beside them and the counter unmoved, the control a window whose last token differs landing outside the bar,
 the arms' argmax pieces decoded in the log; a window the device declines skips loudly;
+mirror-codec = a q8_0, tq4 and f32 session's two windows (300 and 20 rows, Llama-3.2-1B Q8) feeding the mirror through
+the codec's store stamp - both windows counted on `metal_prefill_mirror_panel_served`, the q8_0 / tq4 store stamps counted,
+the twelve decode steps after them uploading no row (`metal_mirror_uploaded_rows`) and every one a device decode, greedy
+token for token the CPU chain on the same codec; the mirror knob off the control (no window fed, every prompt row uploaded
+by the first step, the same tokens); mirror-cap = a slice past the mirror cap serving: under a 64 MiB cap an f32 session of
+1100-odd rows (a 128 MiB slice) prefills and steps on the device token for token the CPU chain, its slice resident past
+the cap, then at the default cap Llama-3.2-3B Q8_0 at f16 over a counting prompt of 43000-odd rows (its K/V past
+4096 MiB, asserted) in 1024-row calls under the `attn_dev` crown - every call a device prefill, six device steps, the
+mirror past 4096 MiB and the continuation counting on;
 mirror = the mirror-fed window
 against the f32 panels on one blob twin under the pair's pinned crown - a 300-row window and a
 20-row continuation, the last row's logits within 0.4% of the largest and the census naming each
@@ -919,7 +931,11 @@ rope-store at a window row base past zero (`row0`, a segment's): the rows sit be
 out and projection planes, the lead rows untouched (the out plane's NaN sentinel, the q plane's poison) and the rows
 the oracle's; the three rope-store gates (`rope_kv_arm`, the Metal `rpst_flat_gate` and `rope_store_pocket_gate`)
 assert the roped q differs from its input at a rotated index, so the in-place compare has teeth;
-`test_vkd_dn_tail` holds the window chain's ring hand-off (`DnTail`) bit for bit to the per-channel CPU form at 5, 3, 2 and 1
+`test_vkd_dn_rows_base` holds the deltanet conv and scan at a row base past zero (a segmented window's part: `DnConvArgs.row0`,
+`DnScanArgs.row0`) bit for bit the same rows at row 0, the rows ahead of the base keeping their sentinel;
+`test_vkd_qkn_rope_window` holds `qkn_rope_cls`'s window form (three rows past two lead rows, the [k | v] projection rows at
+their stride, positions 7 to 9) bit for bit its token rows' form over the same rows, the q rows and both mirrors, the lead q rows
+untouched; `test_vkd_dn_tail` holds the window chain's ring hand-off (`DnTail`) bit for bit to the per-channel CPU form at 5, 3, 2 and 1
 window rows over 200 channels (the last workgroup partial): the window's last taps rows, and under the taps the leading rows off
 the entry image, the words between the two images untouched, the zero-history ring a position-zero call would write as the
 control a continuation's ring must differ from; `test_vkd_dn_family` holds the deltanet conv, the
@@ -1378,7 +1394,7 @@ against its session alone on the CPU chain. `test_gpu_resident_hybrid_mtp_carry_
 same prefill and steps with speculation off: the resident driver lands no carry (the watermark 0
 after the prefill and every step) while the same driver with it on lands one, and the spec-off
 logits sit within the deltanet bar of the spec-on run's at every row with the one-step-off control
-past it. `test_gpu_resident_hybrid_mtp_short_window` holds a two-token prompt to the window chain (the token command's peel declines a NextN-headed model: no peel counted, the prefill counted, every call served); `test_gpu_resident_hybrid_mtp_draft` holds the NextN
+past it. `test_gpu_resident_hybrid_peel` holds the short window's peel on the Q8 carrier and on the NextN-headed twin with speculation off (with it on, a two-token prompt takes the chain, which warms the head's rows): after a 40-row opening, tails of 1, 2, 5 and 8 rows as one prefill call peel through the token commands - the in-order rows command past one row, every recurrent layer stepping the rows in the region's slot - (a peel and a prefill counted, `dn_pos` at the tail's end) and with four fed steps read within the split bar of the same tail stepped a row at a time on a second session, the row one step off the control; a tail one row past the per-row planes takes the chain, no peel counted; every call served; `test_gpu_resident_hybrid_mtp_draft` holds the NextN
 draft the driver's head serves: after a 40-token resident prefill with the speculative warm on (so
 the head's host rows the draft hydrates hold history), one draft at the prompt's last row through
 the seat against the CPU `forward_mtp` on the same token, carry and row - the seat unset on the tier
@@ -1443,12 +1459,13 @@ runs six speculative rounds on
 the device (their draft and verify counters, every call served) and six on the CPU from the same
 prompt and fed tokens, every round's draft token tie-aware against the CPU round's draft logits
 (the head drafted once ahead of each CPU round from the same carry, the carry put back) and, while
-the drafts agree, the accept and position equal, all logged decoded - a near-tie that flips a draft
-parts the sessions, and the rounds after it are logged, not compared - the
+the drafts agree, the accept and position equal - or, where the accepts part, the draft a near-tie of the CPU verify row 0's
+argmax (`accepts_agree`) - all logged decoded; a near-tie that flips a draft or an accept parts the sessions, and the rounds
+after it are logged, not compared - the
 region's head rows at the session's position less one with the host's count short of them (the
 rounds' rows stay on the device), then a seventh round whose draft the unset seat declines - the
 CPU head over the head rows the pass hydrates from the device, the verify on the device - against
-the seventh CPU round (the draft tie-aware, accept and position equal), the hydrated host rows within the
+the seventh CPU round (the draft and the accept tie-aware), the hydrated host rows within the
 head-row bar with the two-bar one-down control, and an eighth declined-draft round against a CPU
 round over the head's host rows poisoned with NaN as the control (another draft, or non-finite
 rows). The gates around the round: `test_gpu_resident_hybrid_mtp_nonfinite` fills the carry with
@@ -1584,7 +1601,7 @@ also runs the batched bench row (`bench_tg_batched_rep`) with the driver homing 
 row asking more streams than the device homes refuses by name and reads 0, and a row it homes
 serves at a rate with every stream parked after it and no call passed to the CPU chain (a
 one-stream row is no batch - the step census counts it a row at a time and the row refuses); the 1B
-Q8_0 and Q4_K_M also run the short window's peel (`ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-prefill-peel`):
+Q8_0 and Q4_K_M also run the short window's peel (`ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-peel`):
 after a 40-row opening a tail of 1, 2, 5 and 8 rows as one call peels through the token commands
 (`moe_gpu_resident_peels` up by one, one prefill counted) and, with four fed steps, reads within the
 split bar of the same tail stepped a row at a time on a second session, the row one step off the
@@ -1593,7 +1610,7 @@ chain, no peel counted, on the same bar, as does the eight-row tail with the pee
 (`set_vulkan_prefill_peel`, put back as found) - the peel counter's control; the plan (`resident_plan_pick`) charges the per-row planes at `RDEC_NROW_MAX` rows. The forced-feed helpers it shares with the
 other resident files live in `_resident_feed.das`. Skips without the model or the armed tier.
 `test_gpu_resident_segments.das` - stocked suite, `-jit` only; the whole-model resident driver's
-SEGMENTED window (`ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-prefill-segments`, `DASLLAMA_GPU=1`) on
+SEGMENTED window (`ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-segments`, `DASLLAMA_GPU=1`) on
 Llama-3.2-1B at Q8_0 (the ids form) and Q4_K_M (the x form), two mirror regions: two host-cached
 sessions' tails (23 and 31 rows after 40-row openings, and again 300 and 300 - a call of two windows, segment
 A's last row landing in the first window and B's rows crossing into the second) as ONE window chain against
@@ -1615,7 +1632,10 @@ on the driver and that one taking the CPU prefill loop with no pass counted; the
 dry run - an owner's continuation beside a newcomer binds the owner first and the newcomer takes the region touched
 last (one window, the owner's rows the solo form's), three segments over two regions decline whole with no pass
 counted and each served alone, and an owner whose region holds fewer rows than its start declines whole with the
-fallback's one `gap` pass. The file never holds more live host-cached sessions than regions: a later
+fallback's one `gap` pass. The recurrent cells (`recurrent_segments_cells`) run the segments cell, a 2-row tail under the conv
+taps beside a 31-row one, and the two 300-row tails on Qwen3.5-0.8B Q8_0, its NextN-headed twin (the carry a row a segment) and,
+large tier, Qwen3.6-35B-A3B-MTP IQ4_XS (the routed block over every row of the window), each asserting the driver's segmented
+window takes the model. The file never holds more live host-cached sessions than regions: a later
 prefill would take a live session's region, which the engine leaves to the scheduler's pin. Skips
 without the model or the armed tier, and on a card whose room the plan does not fit at two regions.
 `test_batch_decode.das` - stocked suite, `-jit` only: the CPU batched stack against the
@@ -1668,7 +1688,11 @@ runs the pre-encode cell: four greedy streams through the scheduler with the bat
 pre-encoded step off (the reference, its taken count pinned at zero) and on (the taken count at
 sixteen or more; the shipped default reads off), token for token per stream, then the rail's
 retire under a parked step and the drivers' shutdown against the Metal live-object count; the
-deltanet carrier also runs the paged cell (`test_metal_paged_deltanet`): one and two greedy
+deltanet carrier also runs the greedy chain cell (`test_metal_deltanet_greedy_chain`): 24 steps with the single-row
+chain off and forced on, fed the greedy pick and then fed off the pick every third step - the chain's hits counted
+on both feeds and its misses on the off-pick one, every step a device decode, the tokens and every step's logits
+bit for bit the plain run's (a mispredicted chained step that wrote the live recurrent state would part them), and the
+paged cell (`test_metal_paged_deltanet`): one and two greedy
 streams of 40 prompt and 40 reply tokens on a scheduler of 64-row pages - the server's session
 kind, each stream's rows past one page - emit token for token what flat sessions emit (one code
 path over one set of bytes: the mirror gathers the pool's rows verbatim), each side's Metal
@@ -1709,7 +1733,8 @@ control and the pick tie-aware, six rounds drafted and verified on the device (`
 round; the per-op cell (the route off, every deltanet layer on the per-op rail's IQ4_XS stacks); the F32 beta/alpha cell
 on Qwen3.6-35B-A3B UD-IQ2_XXS. Arm `vk-gather` (families `qwen3`, `llama`): Qwen3-4B-Instruct-2507 Q4_K_M and
 Llama-3.2-3B-Instruct Q4_K_M, the tied K-quant table gathered by the window (its `kq_emb_<fmt>_cls_spv` count) and by
-every fed step off the classifier's plane, the forced feed against the CPU chain at the split bar.
+every fed step off the classifier's plane, the forced feed against the CPU chain at the split bar (Qwen3-4B's K-quant chain at
+`QWEN_KQ_BAR_REL`, its reading in the constant's `//!`).
 `test_metal_format_census.das` - stocked suite, `-jit` only: every site's tag against the file's own tensor type
 (`kq_ggml_type(tag)` against `gguf_tensor_type`; a tied classifier is the token table's plane), one soft check a site -
 attention q/k/v/o, routed experts, shared expert, deltanet qkv/gate/out, deltanet beta/alpha, token table, classifier,
@@ -1777,7 +1802,14 @@ Both the qwen2 and the hybrid file run the paged cell (`cell_scheduler_paged_res
 scheduler (64-row pages) and a flat one, the paged streams' prompts in the window chain and their steps on the device - their
 pages up a physical run at a time, the rows the device stepped hydrated into the pages before the prefix cache takes them -
 token for token the flat side's for the first three, the second turn attaching the pages (or, on the hybrid, the recurrent
-checkpoint) its first turn left, every call served. The qwen2 file also holds the guards - a third
+checkpoint) its first turn left, every call served. The hybrid file's checkpoint cell (`cell_device_checkpoint_adopt`) runs
+two requests on one 100-token system prompt, a different 30-token user turn each, through a one-stream device-home scheduler and a
+paged host-cached one, both marking the system prompt's end as their stable opening: the device-home stream's region keeps its
+recurrent state there (a checkpoint row), the second request adopts it off the parked claim (100 tokens cached, 160 computed
+across the run, the same as the host-cached run's), and both requests' tokens are the host-cached run's. The qwen3 file adds the
+window's fused q/k norm cell (`cell_window_qkn_fused`): a prompt two windows long with the fused pass and with the split pair
+(`set_vulkan_prefill_qkn_fuse`, put back), the census counting the fused pass on the one and the norm pass on the other, the
+prompt's logits and eight fed steps within the split bar with the row one step off the control. The qwen2 file also holds the guards - a third
 device-home session over two regions panics with its `busy` counted and the owners step on
 untouched - the driver's reports (every pass reason reads in words of its own, the plan's K/V
 scales with the region count and a count under one plans one, the tier status counts both
