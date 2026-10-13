@@ -1532,13 +1532,6 @@ def private kq_fmt_of(gt : int) : KqFmt {
     return KqFmt.q8
 }
 
-//! the PLE token table's tag: its disk format where that is a superblock member (the PLE gather walks superblock rows), else
-//! the q8 rail - a per-32 PLE table (Q5_0, Q5_1) has no gather of its own
-def private ple_fmt_of(gt : int) : KqFmt {
-    let f = kq_fmt_of(gt)
-    return kq_sb(f) ? f : KqFmt.q8
-}
-
 
 //! One weight's plane tag off its disk type, every site alike - the dense planes, the expert stacks and the table planes (the
 //! token table, the classifier, the eh_proj, the deltanet and shared-expert planes, a fused slice): `kq_fmt_row_ok`'s form,
@@ -1651,8 +1644,8 @@ def private detect_kq_formats(var t : Model; m : GGUFMeta) {   // nolint:STYLE03
     any ||= dn_kq
     // E-series PLE token table: gather-only whole rows; row length must be superblock-aligned
     if (has_ple(t.config) && (t.config.n_layers * t.config.n_embd_per_layer) % 256l == 0l) {
-        t.ple_emb_fmt = ple_fmt_of(gguf_tensor_type(m, "per_layer_token_embd.weight"))
-        any ||= t.ple_emb_fmt != KqFmt.q8
+        t.ple_emb_fmt = kq_fmt_of(gguf_tensor_type(m, "per_layer_token_embd.weight"))
+        any ||=t.ple_emb_fmt != KqFmt.q8
     }
     if (!any) {   // nothing K-quant in the file: drop the tags so fmt_at short-circuits on empty
         delete t.wq_fmt
@@ -2409,7 +2402,7 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
         // (detect_kq_formats runs only on the q8 rail); same superblock-alignment gate
         if (t.quant != QuantMode.q8 && has_ple(t.config)
                 && (t.config.n_layers * t.config.n_embd_per_layer) % 256l == 0l) {
-            t.ple_emb_fmt = ple_fmt_of(gguf_tensor_type(m, "per_layer_token_embd.weight"))
+            t.ple_emb_fmt = kq_fmt_of(gguf_tensor_type(m, "per_layer_token_embd.weight"))
         }
         // logit soft-caps from metadata when present (gemma2: 50/30, gemma4: final 30 only);
         // configure()'s values stay as the fallback for files without the keys

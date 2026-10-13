@@ -174,8 +174,9 @@ scale landing of `stream_job_transcode` (`dasllama_load.das`); the quant-plane n
 `tests/test_model_image.das`. The tag rule is `kq_fmt_row_ok` (`dasllama_common.das`; the expert
 twin `kq_fmt_expert_ok` is the same rule), one rule for every site through `kq_tag`, and
 `note_demotion` counts a q8 fall alone, so the load report reads no demotion for a plane the
-per-32 twin took. `kq_fmt_of` also tags the PLE token table, whose gather walks superblock rows:
-`ple_fmt_of` keeps a per-32 member off that site, so a new `kq_fmt_of` arm needs no PLE arm.
+per-32 twin took. `kq_fmt_of` also tags the PLE token table, so a per-32 member reaching
+`kq_fmt_of` brings the PLE gather's arms with it on every home (`ple_gather_row` on the CPU, the
+Metal PLE gather twins, the Vulkan `EMB` leaf the resident plan seats the table under).
 
 ## 4. CPU kernels - `dasllama_math_default.das`, `dasllama_math_gen.das`, `dasllama_math.das`, `dasllama_repack.das`
 

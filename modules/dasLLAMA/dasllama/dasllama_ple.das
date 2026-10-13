@@ -56,20 +56,47 @@ def ple_check_table(t : Model; origin : string) {
         have = t.metal_blob ? (long_length(t.mblob) / 34l) * 32l : long_length(t.qblob)
     } elif (kq_sb(t.ple_emb_fmt)) {
         have = (long_length(t.kq[int(t.ple_emb_fmt)].q) / kq_qsb(t.ple_emb_fmt)) * 256l
+    } elif (kq_dense_b32(t.ple_emb_fmt)) {
+        ple_b32_planes(t, t.ple_emb_fmt) $(kq, _ks) {
+            have = (long_length(kq) / kq_qsb(t.ple_emb_fmt)) * KQ_B32_ELEMS
+        }
     }
     if (have < need) {
         panic("dasLLAMA: the PLE token table is not resident ({origin}): fmt {t.ple_emb_fmt} plane holds {have} of {need} elements - regenerate this carrier (it predates the pinned-table rail)")
     }
 }
 
-// One PLE token row (all = layers*ple elements, superblock-aligned by the detect gate) off the
-// gather's storage: native disk-order K-quant planes (the table is excluded from the grp repack)
-// or the q8 linear region on fallback loads.
-def private ple_gather_row(t : Model; row : int64; var dst : array<float>; doff : int64) {
+//! the per-32 plane pair of `fmt` the PLE table sits in, handed to `blk`
+def private ple_b32_planes(t : Model; fmt : KqFmt; blk : block<(kq, ks : array<uint8>) : void>) {
+    if (fmt == KqFmt.q51) {
+        invoke(blk, t.q51q, t.q51s)
+    } elif (fmt == KqFmt.iq4nl32) {
+        invoke(blk, t.iq4nl32q, t.iq4nl32s)
+    } elif (fmt == KqFmt.q4032) {
+        invoke(blk, t.q4032q, t.q4032s)
+    } elif (fmt == KqFmt.q5032) {
+        invoke(blk, t.q5032q, t.q5032s)
+    } else {
+        panic("ple_b32_planes: '{fmt}' has no per-32 plane pair")
+    }
+}
+
+//! One PLE token row (all = layers*ple elements, superblock-aligned by the detect gate) off the gather's storage: native
+//! disk-order K-quant or per-32 planes (the table is excluded from the grp repack) or the q8 linear region on fallback loads -
+//! the CPU gather the device gathers are held to
+def ple_gather_row(t : Model; row : int64; var dst : array<float>; doff : int64) {
     let all = t.config.n_layers * t.config.n_embd_per_layer
     let eloff = t.ple_emb_off + row * all
     if (t.ple_emb_fmt == KqFmt.q8) {
         dequant_q8_row(t, eloff, all, unsafe(addr(dst[doff])))
+        return
+    }
+    if (kq_dense_b32(t.ple_emb_fmt)) {
+        ple_b32_planes(t, t.ple_emb_fmt) $(kq, ks) {
+            for (blk in range64(all / KQ_B32_ELEMS)) {
+                dequant_b32_plane_block(t.ple_emb_fmt, kq, ks, eloff / KQ_B32_ELEMS + blk, dst, doff + blk * KQ_B32_ELEMS)
+            }
+        }
         return
     }
     var kqp, ksp : array<uint8> const?

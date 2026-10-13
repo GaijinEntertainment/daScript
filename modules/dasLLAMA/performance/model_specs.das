@@ -528,6 +528,17 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             // PLE + cross-layer KV sharing as the E4B, plus per-layer FFN width (the elastic
             // MatFormer sub-model); dense, so the full 40 hold
             parity <- ev_gemma4_dense()),
+        // the per-32 and q40 PLE table carriers: the Q8_0 file with the token table requantized, which carries the PLE table
+        // with it - Q5_0 serves as q5032 planes, Q5_1 as q51, Q4_0 as q40 (8960-wide rows, on the 256 lattice)
+        ModelSpec(file = "gemma-4-E2B-it-emb-Q5_0-local.gguf", bytes = 3935698368l,
+            sha256 = "4aaa69c00d95deff67463c265a89e6e973ab754cff2ad606c77bb94dc6b53cfe",
+            recipe = "llama-quantize --allow-requantize --token-embedding-type q5_0 gemma-4-E2B-it-Q8_0.gguf gemma-4-E2B-it-emb-Q5_0-local.gguf Q8_0"),
+        ModelSpec(file = "gemma-4-E2B-it-emb-Q5_1-local.gguf", bytes = 4107664832l,
+            sha256 = "5514e9f362ff930d87c2d35c62dfc72df7d226ad20fd39cb53b2773ebbe91052",
+            recipe = "llama-quantize --allow-requantize --token-embedding-type q5_1 gemma-4-E2B-it-Q8_0.gguf gemma-4-E2B-it-emb-Q5_1-local.gguf Q8_0"),
+        ModelSpec(file = "gemma-4-E2B-it-emb-Q4_0-local.gguf", bytes = 3591765440l,
+            sha256 = "bec56582221c7025f8310b9fa6c258a651a4bd92f029afc77b9e5f20f80c3988",
+            recipe = "llama-quantize --allow-requantize --token-embedding-type q4_0 gemma-4-E2B-it-Q8_0.gguf gemma-4-E2B-it-emb-Q4_0-local.gguf Q8_0"),
         // the resident gates' large-tier carriers (tests/test_gpu_resident_gemma4_12b_q8 / _26b / _31b): provenance rows,
         // not board rows - resolve/main floats, so the bytes and sha256 pin the file
         ModelSpec(file = "gemma-4-12B-it-Q8_0.gguf",
