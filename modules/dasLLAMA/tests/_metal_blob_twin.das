@@ -19,6 +19,17 @@ def metal_kernel_count(name : string) : int64 {
     }
 }
 
+//! the same count for a kernel a lever may never have compiled (a tensor twin under the dev-W panel lever): 0 where no
+//! compiled kernel carries the name, never a panic
+def metal_kernel_count_compiled(name : string) : int64 {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        var inscope cov <- metal_kernel_coverage()
+        return cov?[name] ?? 0l
+    } else {
+        return 0l
+    }
+}
+
 //! `body` under the fused single-pass attention's knob pinned to `on`, the knob put back after: a census that reads the
 //! fused form pins the knob, never inherits it. The body may move the knob itself (the knob-off control leg).
 def with_metal_attn_d(on : bool; body : block<void>) {

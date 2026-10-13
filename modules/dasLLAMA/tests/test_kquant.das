@@ -1311,7 +1311,7 @@ def private q40_repacked_cell(t : T?; tr : Model; path : string) {
     t |> success(tr.emb_fmt == KqFmt.k6 && cls_kq(tr), "the Q6_K token_embd serves as the tied kq classifier")
     t |> success(fmt_at(tr.we1_fmt, 0l) == KqFmt.q40 && fmt_at(tr.we3_fmt, 0l) == KqFmt.q40,
         "the fused ffn_gate_up_exps split keeps both halves on the q40 plane")
-    t |> success(fmt_at(tr.we2_fmt, 0l) == KqFmt.q8, "the 704-wide down stacks demote to the q8 rail")
+    t |> success(fmt_at(tr.we2_fmt, 0l) == KqFmt.q4032, "the 704-wide down stacks keep their Q4_0 bytes on the q4032 per-32 planes")
     if (!tr.kq_repacked) {
         t |> skip("this box's backend carries no kq slots - the planes stay disk-order (test_kq_load_layout covers that)")
         return
