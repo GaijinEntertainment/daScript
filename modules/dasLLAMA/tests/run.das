@@ -314,7 +314,9 @@ def area_tests(area : string) : array<string> {
     } elif (area == "infra") {
         return <- [ "failed_dasllama_lint_require.das", "failed_dasllama_lint_sidedoor.das", "test_bench_records_schema.das", "test_bench_rows.das",
                     "test_box_ident.das", "test_box_profile.das", "test_compares.das", "test_dasllama_lint_contracts.das",
-                    "test_dasllama_core.das", "test_dasllama_lib.das", "test_dasllama_lint_escape.das", "test_dlim_wipe.das", "test_env_registry.das",
+                    "test_dasllama_core.das", "test_dasllama_lib.das",
+                    "test_dasllama_lint_escape.das", "test_dlim_wipe.das",
+                    "test_env_registry.das",
                     "test_exchange_schema.das", "test_exe_smoke.das", "test_facade_docs.das", "test_fat_hook_umbrella.das", "test_fat_start.das", "test_gen_records_args.das",
                     "test_model_specs.das", "test_program_roots.das", "test_run_suites.das", "test_run_summary.das", "test_served_bench.das",
                     "test_site_records.das", "test_sizing_helpers.das", "test_tok_seed.das", "test_tune_interrupt.das", "test_vk_spv_diff.das" ]
@@ -388,7 +390,10 @@ let MODULE_AREAS <- {
     "dasllama_metal_prefill" => "llm,tts,audio,vision",   // its rope serves the Pocket codec transformer, its attention pair and FastConformer kernels the audio towers, its half convert the vision tower
     "dasllama_moe" => "llm", "dasllama_mtp_gemma" => "llm",
     "dasllama_parity" => "llm", "dasllama_ple" => "llm", "dasllama_prefix" => "llm", "dasllama_pretok" => "llm",
-    "dasllama_rope" => "llm,tts,vision,audio",   // the TTS slab builds its rope tables through it; every gguf load picks its factor tensor through it, and the vision and audio tests load decoders
+    // the TTS slab builds its rope tables through it; every gguf load
+    // picks its factor tensor through it, and the vision and audio
+    // tests load decoders
+    "dasllama_rope" => "llm,tts,vision,audio",
     "dasllama_sampling" => "llm,vision,audio", "dasllama_scheduler" => "llm",
     "dasllama_spm" => "llm,tts",   // the unigram arm is the Pocket tokenizer (test_tts_pocket)
     "dasllama_bench" => "llm,infra",   // the rows serve lcpp_bench (llm) and the server's /bench (infra's tooling)

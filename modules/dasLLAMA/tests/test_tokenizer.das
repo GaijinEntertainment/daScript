@@ -120,7 +120,8 @@ def test_tokenizer_llama_spm(t : T?) {
     corpus_case(t, "llama-2 SentencePiece vs the llama.cpp corpus", "ggml-vocab-llama-spm.gguf")
 }
 
-//! a hand-built SentencePiece tokenizer over `pieces`, every score 0, its derived tables built
+//! a hand-built SentencePiece tokenizer over `pieces`, every score 0,
+//! its derived tables built
 def private spm_vocab(var pieces : array<string>) : SpmTokenizer {
     var tk = SpmTokenizer()
     tk.vocab <- pieces
@@ -132,7 +133,8 @@ def private spm_vocab(var pieces : array<string>) : SpmTokenizer {
     return <- tk
 }
 
-//! unk, bos, eos, `n_control` control tokens, the 256 byte pieces, then the text pieces
+//! unk, bos, eos, `n_control` control tokens, the 256 byte pieces,
+//! then the text pieces
 def private spm_vocab_with_bytes(n_control : int) : SpmTokenizer {
     var pieces <- ["<unk>", "<s>", "</s>"]
     pieces |> reserve(3 + n_control + 256 + 3)
@@ -146,21 +148,27 @@ def private spm_vocab_with_bytes(n_control : int) : SpmTokenizer {
     return <- spm_vocab(pieces)
 }
 
-def private pieces_of(tk : SpmTokenizer; ids : array<int64>) : array<string> => <- [for (id in ids); tk.vocab[id]]
+def private pieces_of(tk : SpmTokenizer; ids : array<int64>) : array<string> =>
+    <- [for (id in ids); tk.vocab[id]]
 
 [test]
 def test_tokenizer_spm_byte_pieces_by_name(t : T?) {
-    t |> run("a byte with no piece of its own encodes as its <0xXX> piece wherever the vocabulary keeps the byte pieces") @(t : T?) {
-        // Mistral v0.3's layout: control tokens ahead of the byte pieces, so 3 + the byte is a control token
+    t |> run("a byte with no piece encodes as its <0xXX> piece in either layout") @(t : T?) {
+        // Mistral v0.3's layout: control tokens ahead of the byte
+        // pieces, so 3 + the byte is a control token
         var control_first <- spm_vocab_with_bytes(16)
-        t |> equal("[control_10]", control_first.vocab[13], "3 + the newline byte is a control token in this layout")
-        t |> equal(control_first.lookup["<0x0A>"], control_first.byte_piece_id[10], "the byte table finds the newline's piece by name")
+        t |> equal("[control_10]", control_first.vocab[13],
+                   "3 + the newline byte is a control token in this layout")
+        t |> equal(control_first.lookup["<0x0A>"], control_first.byte_piece_id[10],
+                   "the byte table finds the newline's piece by name")
         var ids <- encode(control_first, "a\nb", false, false)
-        t |> equal([" ", "a", "<0x0A>", "b"], pieces_of(control_first, ids), "the dummy prefix, a, the newline's byte piece, b")
+        t |> equal([" ", "a", "<0x0A>", "b"], pieces_of(control_first, ids),
+                   "the dummy prefix, a, the newline's byte piece, b")
         t |> success(find_index(ids, 13l) < 0, "no control token among the ids ({ids})")
         // the Llama-2 layout, byte pieces right after eos: the same pieces
         var bytes_first <- spm_vocab_with_bytes(0)
-        t |> equal(13l, bytes_first.byte_piece_id[10], "the byte table reads 3 + the byte where the layout puts it there")
+        t |> equal(13l, bytes_first.byte_piece_id[10],
+                   "the byte table reads 3 + the byte where the layout puts it there")
         var ids2 <- encode(bytes_first, "a\nb", false, false)
         t |> equal([" ", "a", "<0x0A>", "b"], pieces_of(bytes_first, ids2))
         delete ids2
@@ -181,7 +189,8 @@ def test_tokenizer_spm_byte_pieces_by_name(t : T?) {
         } recover {
             panicked = true
         }
-        t |> success(panicked, "a byte with no piece and no byte piece is a panic, never a made-up id")
+        t |> success(panicked,
+                     "a byte with no piece and no byte piece is a panic, never a made-up id")
         delete ids
         delete tk
     }
@@ -189,7 +198,7 @@ def test_tokenizer_spm_byte_pieces_by_name(t : T?) {
 
 [test]
 def test_tokenizer_mistral_v03_byte_pieces(t : T?) {
-    t |> run("Mistral-7B-Instruct-v0.3: the byte pieces sit past 768 control tokens, and a newline is the one llama-tokenize reads") @(t : T?) {
+    t |> run("Mistral v0.3: byte pieces past 768 control tokens, llama-tokenize's ids") @(t : T?) {
         let path = path_join(models_dir(), "Mistral-7B-Instruct-v0.3-Q8_0.gguf")
         if (!stat(path).is_valid) {
             t |> skip("{path} not present")
@@ -197,12 +206,16 @@ def test_tokenizer_mistral_v03_byte_pieces(t : T?) {
         }
         var tk <- load_tokenizer_auto(path)
         t |> equal(781l, tk.spm.byte_piece_id[10], "<0x0A> is piece 781 in this vocabulary")
-        t |> equal("[control_11]", tk.spm.vocab[13], "... and 13, the Llama-2 layout's newline, is a control token")
+        t |> equal("[control_11]", tk.spm.vocab[13],
+                   "... and 13, the Llama-2 layout's newline, is a control token")
         // llama-tokenize --no-bos --ids on the same file
         var ids <- encode(tk, "Newlines\nand\r\nmixed\n\n\nruns\n", false)
-        t |> success(ids_equal(ids, [2218l, 8831l, 781l, 1159l, 29569l, 781l, 29487l, 3930l, 781l, 781l, 781l, 3988l, 29481l, 781l]), "the newline sample as llama-tokenize reads it: got {ids}")
+        t |> success(ids_equal(ids, [2218l, 8831l, 781l, 1159l, 29569l, 781l, 29487l, 3930l,
+                                     781l, 781l, 781l, 3988l, 29481l, 781l]),
+                     "the newline sample as llama-tokenize reads it: got {ids}")
         var tabs <- encode(tk, "Tabs\tand", false)
-        t |> success(ids_equal(tabs, [1088l, 5505l, 780l, 1159l]), "a tab is <0x09> at 780: got {tabs}")
+        t |> success(ids_equal(tabs, [1088l, 5505l, 780l, 1159l]),
+                     "a tab is <0x09> at 780: got {tabs}")
         t |> equal("Tabs\tand", decode(tk, tabs), "and decodes back")
         delete tabs
         delete ids

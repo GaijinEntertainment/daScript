@@ -28,13 +28,15 @@ def private rope_freq_j(j, head_size : int64; theta : float; ffp : float const?)
     return freq
 }
 
-//! the per-pair factor tensors a GGUF can ship: LongRoPE's two sets (Phi-3) and the lone NTK-by-parts set (Llama-3.1)
+//! the per-pair factor tensors a GGUF can ship: LongRoPE's two sets
+//! (Phi-3) and the lone NTK-by-parts set (Llama-3.1)
 let ROPE_FACTORS_SHORT = "rope_factors_short.weight"
 let ROPE_FACTORS_LONG = "rope_factors_long.weight"
 let ROPE_FREQS = "rope_freqs.weight"
 
-//! The per-pair factor tensor a file's rope reads, by the tensors it ships and the context it serves; "" for none.
-//! `orig_ctx` 0 = the file names no original context, which keeps the short set.
+//! The per-pair factor tensor a file's rope reads, by the tensors it
+//! ships and the context it serves; "" for none. `orig_ctx` 0 = the
+//! file names no original context, which keeps the short set.
 [arch(at="../ARCHITECTURE_ENGINE.md#rope-scaling-bake")]
 def rope_factor_tensor(has_short, has_long, has_freqs : bool; seq_len, orig_ctx : int64) : string {
     if (has_long && ((orig_ctx > 0l && seq_len > orig_ctx) || !has_short)) {

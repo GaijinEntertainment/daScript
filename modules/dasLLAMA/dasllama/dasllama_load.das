@@ -2251,7 +2251,8 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
         // RMSNorm epsilon from metadata (Llama 1e-5; Qwen2 / Gemma2 1e-6); default matches Llama
         let epskey = "{arch}.attention.layer_norm_rms_epsilon"
         t.config.norm_eps = gguf_has(m, epskey) ? gguf_f32(m, bytes, epskey) : 1.0e-5
-        // per-pair RoPE divisors (head_size/2 values): Llama-3.1's rope_freqs or Phi3 LongRoPE's short/long sets
+        // per-pair RoPE divisors (head_size/2 values): Llama-3.1's
+        // rope_freqs or Phi3 LongRoPE's short/long sets
         let okey = "{arch}.rope.scaling.original_context_length"
         let orig_ctx = gguf_int_or(m, bytes, okey, 0l)
         let rf_name = rope_factor_tensor(gguf_find_tensor(m, ROPE_FACTORS_SHORT) >= 0,
@@ -2261,7 +2262,8 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
             let nff = t.config.head_size / 2l
             t.rope_freqs |> resize(nff)
             gguf_read_tensor_f32(m, bytes, rf_name, t.rope_freqs, 0l, nff)
-            to_log(LOG_INFO, "dasLLAMA: rope factors {rf_name} ({seq_len} positions over an original {orig_ctx})\n")
+            let span = "{seq_len} positions over an original {orig_ctx}"
+            to_log(LOG_INFO, "dasLLAMA: rope factors {rf_name} ({span})\n")
             // the _part leaves take a factor pointer, but no partial-rope model ships factors —
             // the untested combination stays fail-closed (std paths pass has_ff=false when partial)
             if (t.config.rope_dim > 0l && t.config.rope_dim != t.config.head_size) {
@@ -2288,7 +2290,8 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
             if (gguf_has(m, lmkey) && gguf_f32(m, bytes, lmkey) != 0.0) {
                 panic("dasLLAMA: {arch} YaRN yarn_log_multiplier != 0 is not supported")
             }
-            let yorig = rope_ov.orig_ctx > 0l ? rope_ov.orig_ctx : (orig_ctx > 0l ? orig_ctx : seq_len)
+            let file_orig = orig_ctx > 0l ? orig_ctx : seq_len
+            let yorig = rope_ov.orig_ctx > 0l ? rope_ov.orig_ctx : file_orig
             // NTK-by-parts correction band (beta_fast/slow from the override, the metadata, or 32/1)
             let bfkey = "{arch}.rope.scaling.yarn_beta_fast"
             let bskey = "{arch}.rope.scaling.yarn_beta_slow"

@@ -27,7 +27,9 @@ struct SpmTokenizer {
     // The encode init loop's no-allocation probe: byte-packed keys equal string equality exactly
     // (per-cpt slice + string-keyed lookup strlens the whole source per call — O(n^2) loops)
     bkey_id : table<uint; int64>
-    byte_piece_id : array<int64>   //! DERIVED: byte value -> the id of its "<0xXX>" piece, -1 where the vocabulary has none
+    //! DERIVED: byte value -> the id of its "<0xXX>" piece, -1 where
+    //! the vocabulary has none
+    byte_piece_id : array<int64>
     max_token_length : int
     add_space_prefix : bool = true // SPM add_dummy_prefix: prepend a ▁ to non-empty text (Gemma sets it false)
     bos_id : int64 = 1l            // BOS token id from GGUF metadata (Llama-2/TinyLlama 1, Gemma 2); default = llama2.c
@@ -273,9 +275,9 @@ def encode(tk : SpmTokenizer; text : string; bos, eos : bool) : array<int64> {
     if (tk.add_space_prefix && !empty(text)) {
         tokens |> push(tk.lookup?[" "] ?? -1l)
     }
-    // split into UTF-8 codepoints; each window's raw bytes pack into the uint bkey_id probe —
-    // byte-equality semantics, zero allocation (a slice + string-keyed lookup here strlens the
-    // whole source per call, O(n^2) over the text) — or byte fallback, each byte its "<0xXX>" piece
+    // UTF-8 codepoint windows packed into the uint bkey_id probe: byte
+    // equality, no allocation (a slice + string lookup strlens the
+    // whole source per call, O(n^2)); else each byte its "<0xXX>" piece
     peek_data(text) $(d : array<uint8> const#) {
         var i = 0
         while (i < length(d)) {
@@ -292,7 +294,9 @@ def encode(tk : SpmTokenizer; text : string; bos, eos : bool) : array<int64> {
                 for (b in range(i, j)) {
                     let bid = tk.byte_piece_id[int(d[b])]
                     if (bid < 0l) {
-                        panic("dasLLAMA spm: byte {int(d[b])} of '{text}' is no piece and the vocabulary has no {byte_token_name(int(d[b]))} byte piece")
+                        let byte_name = byte_token_name(int(d[b]))
+                        panic("dasLLAMA spm: byte {int(d[b])} of '{text}' is no piece " +
+                              "and the vocabulary has no {byte_name} byte piece")
                     }
                     tokens |> push(bid)
                 }

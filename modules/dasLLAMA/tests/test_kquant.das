@@ -1349,14 +1349,17 @@ def test_kq_fused_qkv_slices(t : T?) {
 
 [test]
 def test_kq_phi3_longrope_factors(t : T?) {
-    t |> run("phi3 LongRoPE: the long factor set serves the file's context past the original 4096 (Phi-3.5 Q4_K_M)") @(t : T?) {
+    t |> run("phi3 LongRoPE: the long set serves a context past the original 4096") @(t : T?) {
         load_kq_native(t, "Phi-3.5-mini-instruct-Q4_K_M.gguf", true, false) $(tr; path) {
             var gt = 0
             var long_f <- read_prefix(path, "rope_factors_long.weight", 48l, gt)
             var short_f <- read_prefix(path, "rope_factors_short.weight", 48l, gt)
-            t |> success(tr.config.seq_len > 4096l, "the file's context ({tr.config.seq_len}) runs past the original 4096")
-            t |> equal(48l, long_length(tr.rope_freqs), "one factor per rotation pair of the 96-wide head")
-            check(t, "the model's factors are the file's long set", tr.rope_freqs, long_f, BAR_EXACT, FLAT_SHAPE)
+            t |> success(tr.config.seq_len > 4096l,
+                         "the file's context ({tr.config.seq_len}) runs past the original 4096")
+            t |> equal(48l, long_length(tr.rope_freqs),
+                       "one factor per rotation pair of the 96-wide head")
+            check(t, "the model's factors are the file's long set",
+                  tr.rope_freqs, long_f, BAR_EXACT, FLAT_SHAPE)
             var apart = 0
             for (a, b in tr.rope_freqs, short_f) {
                 apart += a != b ? 1 : 0
