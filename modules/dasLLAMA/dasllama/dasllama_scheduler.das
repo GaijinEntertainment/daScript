@@ -730,6 +730,7 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
         if (sch.device_kv) {
             st.session <- create_device_session(m, gpu_device_session_dtype())
             let matched = parked_attach(sch, st.session, st.prompt)   // a model whose prefill cannot continue parks nothing, so nothing matches
+            device_checkpoints_plan(st, sch.queue[0], matched)
             st.n_prefilled = matched
             st.n_cached = matched
             sch.cached_tokens += matched
@@ -918,6 +919,7 @@ def private next_prefilling(sch : Scheduler) : int64 {
 //! that is no tail: a request admitted now would prefill the opening that stop is about to leave for it, so admission
 //! waits; a stream past its shared stops, with only its own conversation's stops ahead, or with none, holds nothing back
 def private any_prefilling_before_a_shared_checkpoint(sch : Scheduler) : bool {
+    return false if (sch.device_kv)   //! a live device-home stream's checkpoint is its own region's: no request adopts it before the stream parks
     for (st in sch.streams) {
         continue if (st.state != StreamState.prefilling)
         return true if (st.ckpt_head_at > st.n_prefilled || st.ckpt_sys_at > st.n_prefilled || (!st.ckpt_at_tail && st.ckpt_at > st.n_prefilled))
@@ -978,7 +980,10 @@ def private prefill_tick(m : Model; var sch : Scheduler; var events : array<Sche
 def private note_prefilled(m : Model; var sch : Scheduler; var events : array<SchedEvent>; i, take : int64) {
     sch.streams[i].n_prefilled += take
     sch.prefill_tokens += take
-    if (at_checkpoint(sch.streams[i])) {
+    if (at_checkpoint(sch.streams[i]) && sch.streams[i].session.device_kv) {
+        let kept = gpu_device_kv_checkpoint(sch.streams[i].session)
+        to_log(LOG_INFO, "[stream {sch.streams[i].id}] device checkpoint at {sch.streams[i].n_prefilled} tok: {kept ? "the region keeps the recurrent state here" : "not kept"}\n")
+    } elif (at_checkpoint(sch.streams[i])) {
         let tail = (sch.streams[i].ckpt_at_tail && sch.streams[i].n_prefilled == sch.streams[i].ckpt_at) || sch.streams[i].n_prefilled == sch.streams[i].ckpt_end_at
         moe_gpu_hydrate_session(m, sch.streams[i].session)   //! the pages the checkpoint holds come down from a GPU driver's copy first
         prefix_insert(sch.prefix, sch.pool, sch.streams[i].session, sch.streams[i].prompt, "", !tail)
@@ -1140,8 +1145,8 @@ def private parked_attach(var sch : Scheduler; var session : Session; prompt : a
         while (n < cap && p.tokens[n] == prompt[n]) {
             n ++
         }
-        if (p.whole && n < long_length(p.tokens)) {
-            n = 0l
+        if (p.whole) {
+            n = parked_state_at(p, n)
         }
         if (n > best_len) {
             best = pi
@@ -1154,6 +1159,43 @@ def private parked_attach(var sch : Scheduler; var session : Session; prompt : a
     let adopted = gpu_device_kv_adopt(session, sch.parked[best].claim, best_len)
     drop_parked(sch, best)
     return adopted ? best_len : 0l
+}
+
+//! the longest opening of a recurrent claim `p` within `n` shared tokens at which a state stands: all of its tokens, else its
+//! longest checkpoint under `n`; 0 where none does
+def private parked_state_at(p : ParkedKv; n : int64) : int64 {
+    return n if (n == long_length(p.tokens))
+    var best = 0l
+    var ckpts <- gpu_device_kv_checkpoints(p.claim)
+    for (c in ckpts) {
+        if (c <= n && c > best) {
+            best = c
+        }
+    }
+    delete ckpts
+    return best
+}
+
+//! a device-home recurrent stream's checkpoint stops: the request's openings, its last message's start and end, each past the
+//! adopted rows and short of the prompt's end, in order - its region keeps the state at each for a later request that shares it
+def private device_checkpoints_plan(var st : Stream; req : PendingReq; matched : int64) {
+    return if (empty(st.session.dn_state_prefix))
+    let n = long_length(st.prompt)
+    var stops : array<int64>
+    for (at in fixed_array(req.system_head_at, req.system_at, req.stable_at, req.messages_end_at)) {
+        if (at > matched && at < n && (empty(stops) || at > stops[length(stops) - 1])) {
+            stops |> push(at)
+        }
+    }
+    var fields : int64[4]
+    for (at, i in stops, count()) {
+        fields[i] = at
+    }
+    st.ckpt_head_at = fields[0]
+    st.ckpt_sys_at = fields[1]
+    st.ckpt_at = fields[2]
+    st.ckpt_end_at = fields[3]
+    delete stops
 }
 
 //! `erase` moves the entries after it down and finalizes nothing, so the entry's token list goes first

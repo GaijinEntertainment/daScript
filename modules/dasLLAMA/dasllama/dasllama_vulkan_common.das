@@ -2282,6 +2282,7 @@ struct RLayer {
     qkv_merged : bool
     s_qkn : VkDescriptorSet         // per-head q/k rmsnorm class set (qk_norm models only)
     s_qkn_rope : VkDescriptorSet    // the fused qk-rmsnorm + rope + KV store (qk_norm models only; per-token words ride the shared TokMeta)
+    pf_s_qkn_rope : VkDescriptorSet //! the window's form of it over the prefill planes, made on the first window that takes it
     s_rope : VkDescriptorSet        // rope + KV store class set
     s_kv_store : VkDescriptorSet    //! a block codec's store of the staged rows into the mirror
     s_unrot : VkDescriptorSet       //! tq4: the attention rows out of the rotated basis
@@ -2352,6 +2353,7 @@ struct RLayer {
     m_dnqkv, m_dnz, m_dnout, m_dnbeta, m_dnalpha : HostBuf
     dn : array<DnStep>
     roll_off : int64                //! this layer's byte offset in a rollback scratch row (`RDec.roll_dev`): its slot state, then its ring pair
+    snap_off : int64                //! ... and in a checkpoint row (`RDec.snap_dev`), the same shape
     // the prefill window chain's per-recurrent-layer sets (built by pf_setup; the smalls/state differ per layer)
     pf_dn_conv_set : VkDescriptorSet       // pf_dnqkv -> pf_dnconv, this layer's smalls (taps + hist)
     pf_dn_scan_set : VkDescriptorSet       // pf_dnconv + this layer's state + smalls -> the o rows (the sequential scan)
@@ -2478,7 +2480,7 @@ struct RDec {
     dn_oq_dev, dn_os_dev : uint64 // the step's Q8_0 o row - the out GEMV's activation image
     dn_of_dev : uint64            // the step's f32 o row for a K-quant out plane - the Q8_K requant's source
     dn_parity : array<int>
-    pf_dn_par : int               //! the window call's entry parity: its first window reads that ring image, the call's tail lands in the other
+    pf_dn_cur : array<int>        //! a window call's ring image per region: the next window of the region's segment reads it, its tail lands in the other
     norms_dev : uint64           // rms_att[l]/rms_ffn[l] interleaved + final, uploaded once
     bias_dev : uint64             // the q/k/v projection biases, per layer [q | k | v] (qwen2; 0 = the model has none)
     bias_bytes : int64
@@ -2529,6 +2531,9 @@ struct RDec {
     roll_dev : uint64             //! the verify's rollback scratch: a row per verify row the round can reject past (`roll_rows` = `verify_rows` - 1), each row every recurrent layer's slot state and ring pair in layer order (`RLayer.roll_off`); 0 = none
     roll_rows : int64
     roll_row_bytes : int64
+    snap_dev : uint64             //! the regions' recurrent checkpoints: `RDEC_DN_SNAPS` rows a region, a row every recurrent layer's slot state and ring pair (`RLayer.snap_off`); 0 until the first save
+    snap_row_bytes : int64
+    snap_par : array<int>         //! a checkpoint row's ring parity, the region's when it was saved
     roll_region : int64 = -1l     //! ... the region whose slots the last verify copied (-1 = none to roll back), and that verify's rows
     roll_vrows : int64
     pick_part_max_dev, pick_part_id_dev : uint64   //! the first pass's partials: a (max, id) a (row, chunk)
@@ -2565,6 +2570,9 @@ struct RDec {
     cmd_n : array<VkCommandBuffer>   //! the N-row token commands by row count (index 0 unused): every row reads its own TokMeta entry, so one command serves any region mix
     cmd_n_unsplit : array<VkCommandBuffer>   //! ... and their unsplit attention twins, submitted while every row sits under RD_UNSPLIT_POS; the rows take no wide form (ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-decode-attn-split)
     tok_n_recorded : array<bool>
+    cmd_seq : array<VkCommandBuffer>   //! the in-order rows commands by row count: one region's consecutive rows, a recurrent layer stepping them one after another in its slot (the short window's peel)
+    cmd_seq_unsplit : array<VkCommandBuffer>
+    tok_seq_recorded : array<bool>
     cos_host : HostBuf            // this token's rope row, copied to cos_dev in-cmd
     // the per-layer-embedding side input (gemma-4 E-series; ple = 0 elsewhere): this token's [layers x ple]
     // row copied to ple_dev in-cmd, the gate GEMV's [ple] output, and the window chain's position-major rows
@@ -2814,6 +2822,7 @@ def rd_invalidate_token {
     fill(g_rd.seg_recorded, false)
     fill(g_rd.tok_wide_recorded, false)
     fill(g_rd.tok_n_recorded, false)
+    fill(g_rd.tok_seq_recorded, false)
     fill(g_rd.head_draft_recorded, false)
     fill(g_rd.v_recorded, false)
 }

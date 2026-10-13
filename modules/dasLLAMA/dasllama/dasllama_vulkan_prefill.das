@@ -294,34 +294,57 @@ def private pf_dn_layer_sets(l, dim, cd, di : int64) {
     }
 }
 
+//! region `r`'s state slot and its first ring image zero-filled in every recurrent layer: a segment that starts at position zero
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-dn-block")]
-def private pf_dn_zero_region(raw : VkCommandBuffer; var h : VkHaz) {
+def private pf_dn_zero_region(raw : VkCommandBuffer; var h : VkHaz; r : int64) {
     vhz_dep(raw, h, 0u, VHZ_DNST | VHZ_DNSM, true)
     for (L in g_rd.layers) {
         if (L.recurrent) {
-            let st & = unsafe(L.dn[g_rd.region])
+            let st & = unsafe(L.dn[r])
             cmd_fill_zero(raw, st.state_dev, st.state_byte_off, st.slot_state_bytes)
             cmd_fill_zero(raw, st.smalls_dev, st.hist_off * 4l, st.ring_image_bytes)
         }
     }
 }
 
-//! the window call's recurrent entry: a prompt from position zero sends the region's foreign slots home and starts at ring image
-//! 0, which the first window zero-fills; a continuation starts from the slots the host bound to the session, at the region's parity
+//! the window call's recurrent entry, a segment at a time: a segment from position zero sends its region's foreign slots home and
+//! enters on ring image 0, which its first window zero-fills; a continuation enters on its region's parity, the slots the host bound
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-dn-block")]
-def private pf_dn_begin(pos0 : int64) {
-    if (pos0 == 0l) {
-        vk_rdec_dn_flush_owners()
-        g_rd.dn_parity[g_rd.region] = 0
+def private pf_dn_begin {
+    g_rd.pf_dn_cur |> resize(int(g_rd.regions))
+    for (sg in g_pf_segs) {
+        if (sg.pos0 == 0l) {
+            vk_rdec_dn_flush_owners(sg.region)
+            g_rd.dn_parity[sg.region] = 0
+        }
+        g_rd.pf_dn_cur[sg.region] = g_rd.dn_parity[sg.region]
     }
-    g_rd.pf_dn_par = g_rd.dn_parity[g_rd.region]
 }
 
-//! the call's tail landed in the image its entry did not read: the region's parity names it
+//! the window's parts that open their segment at position zero start their regions' state and ring from zero
+def private pf_dn_zero_fresh(raw : VkCommandBuffer; var h : VkHaz) {
+    for (ws in g_pf_wsegs) {
+        if (ws.pos0 == 0l) {
+            pf_dn_zero_region(raw, h, ws.region)
+        }
+    }
+}
+
+//! a window's parts each wrote their tail into the image they did not read: their regions read that one next
+def private pf_dn_window_done {
+    for (ws in g_pf_wsegs) {
+        g_rd.pf_dn_cur[ws.region] = 1 - g_rd.pf_dn_cur[ws.region]
+    }
+}
+
+//! the call's segments' regions name the image their last window's tail landed in
 def private pf_dn_end {
-    g_rd.dn_parity[g_rd.region] = 1 - g_rd.pf_dn_par
+    for (sg in g_pf_segs) {
+        g_rd.dn_parity[sg.region] = g_rd.pf_dn_cur[sg.region]
+    }
 }
 
+//! the per-op tier's window over one state: the conv over the history in the layout `hist_mode` names, the scan, the gated out-norm
 def private dn_window_enc(raw : VkCommandBuffer; var h : VkHaz; var conv_set, scan_set, p3_set : VkDescriptorSet; rows, cd, kd, nvh, nkh, ds, di, dconv : int64;
                           hist_mode, hist_off, state_base : uint; sig : bool; eps : float) {
     var pcc = DnConvArgs(npos = uint(rows), cd = uint(cd), kd = uint(kd), ds = uint(ds), dconv = uint(dconv),
@@ -344,8 +367,51 @@ def private dn_window_enc(raw : VkCommandBuffer; var h : VkHaz; var conv_set, sc
     pfq_ts(raw)
 }
 
+//! every window part's recurrent conv, scan and ring tail over its own region's slot - the part's rows `row0` on, its history the
+//! ring image its region entered the window on, its tail the other image - then the gated out-norm over the whole window
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-dn-block")]
+def private dn_window_parts_enc(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; wlen, cd, kd, nvh, nkh, ds, di, dconv : int64; sig : bool; eps : float) {
+    let taps = dconv - 1l
+    for (ws in g_pf_wsegs) {
+        let st & = unsafe(L.dn[ws.region])
+        let img = st.ring_image_bytes / 4l
+        let cur = int64(g_rd.pf_dn_cur[ws.region])
+        var pcc = DnConvArgs(npos = uint(ws.npos), cd = uint(cd), kd = uint(kd), ds = uint(ds), dconv = uint(dconv),
+            hist_mode = 1u, taps_off = uint(DN_SM_TAPS), hist_off = uint(st.hist_off + cur * img),
+            eps = eps, qscale = 1.0 / sqrt(float(ds)), row0 = uint(ws.row0))
+        enc_dn_conv_cls(raw, h, L.pf_dn_conv_set, pcc, dn_conv_wgs(cd, ws.npos))
+    }
+    pfq_ts(raw)
+    for (ws in g_pf_wsegs) {
+        let st & = unsafe(L.dn[ws.region])
+        var pcs = DnScanArgs(npos = uint(ws.npos), cd = uint(cd), kd = uint(kd), nvh = uint(nvh), nkh = uint(nkh), ds = uint(ds),
+            beta_off = uint(DN_SM_BETA), g_off = uint(DN_SM_G), a_off = uint(DN_SM_A), dt_off = uint(DN_SM_DT),
+            o_off = uint(DN_O_OFF), di = uint(di), region_state_base = uint(st.state_byte_off / 4l), row0 = uint(ws.row0))
+        enc_dn_scan_cls(raw, h, L.pf_dn_scan_set, pcs, dn_scan_wgs(nvh, ds))
+    }
+    pfq_ts(raw)
+    var pc3 = DnScanP3Args(npos = uint(wlen), nvh = uint(nvh), di = uint(di), ds = uint(ds), o_off = uint(DN_O_OFF),
+        wnorm_off = uint(DN_SM_WNORM), eps = eps)
+    if (sig) {
+        enc_dn_scan_p3_sig_cls(raw, h, L.pf_dn_scan_p3_set, pc3, wlen)
+    } else {
+        enc_dn_scan_p3_cls(raw, h, L.pf_dn_scan_p3_set, pc3, wlen)
+    }
+    pfq_ts(raw)
+    vhz_dep(raw, h, VHZ_DNP, VHZ_DNSM, false)
+    for (ws in g_pf_wsegs) {
+        let st & = unsafe(L.dn[ws.region])
+        let img = st.ring_image_bytes / 4l
+        let cur = int64(g_rd.pf_dn_cur[ws.region])
+        //! a part shorter than the taps takes the ring's leading rows off the image it entered on
+        var pct = DnTailArgs(cd = uint(cd), taps = uint(taps), row0 = uint(ws.row0 + max(ws.npos - taps, 0l)), hist_off = uint(st.hist_off + (1l - cur) * img),
+            old_rows = uint(max(taps - ws.npos, 0l)), old_off = uint(st.hist_off + cur * img))
+        enc_dn_tail_cls(raw, h, L.pf_dn_tail_set, pct, (cd * taps + int64(WG_X) - 1l) / int64(WG_X))
+    }
+}
+
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-dn-block"), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command")]
-def private rd_pf_recurrent(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : int; wlen : int64; first, last : bool) {
+def private rd_pf_recurrent(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : int; wlen : int64) {
     var L & = unsafe(g_rd.layers[l])
     let dim = g_rd.dim
     let cd = g_rd.dn_cd
@@ -353,16 +419,10 @@ def private rd_pf_recurrent(raw : VkCommandBuffer; var h : VkHaz; l : int64; b :
     let nvh = g_rd.dn_nvh
     let ds = g_rd.dn_ds
     let dconv = g_rd.dn_dconv
-    let taps = dconv - 1l
     let np = g_rd.pf_np
     let eps = g_rd.eps
     let x6 = pf_dnx6(l)
     let xq8k = !x6 && kq_sb(L.fqkv)
-    let st & = unsafe(L.dn[g_rd.region])
-    let img = int(st.ring_image_bytes / 4l)
-    let par = g_rd.pf_dn_par
-    let hist_in = uint(int(st.hist_off) + par * img)          //! the call's entry image, per-channel: the first window's history
-    let hist_out = uint(int(st.hist_off) + (1 - par) * img)  //! the other image: the later windows' position-major history, then the call's tail
     if (x6) {
         var pcc0 = gk_f16_rows_args(uint(wlen * dim))
         enc_tower_clamp_cvt_cls(raw, h, L.pf_dn_cvt_set, pcc0, (wlen * dim / 4l + 255l) / 256l)
@@ -394,7 +454,7 @@ def private rd_pf_recurrent(raw : VkCommandBuffer; var h : VkHaz; l : int64; b :
         pf_gemm_enc(raw, h, b + 3, L.fbeta, pb.wq, pb.ws, g_rd.pf_xq, g_rd.pf_xs, g_rd.pf_dnbg,
             pb.wqb, pb.wsb, np * dim, np * (dim / 32l) * 4l, np * nvh * 4l, VHZ_XQ, VHZ_DNBG, dim, nvh, L.bbeta, wlen, false)
         vhz_dep(raw, h, VHZ_DNBG, VHZ_DNSM, true)
-        cmd_copy_range(raw, g_rd.pf_dnbg, 0l, st.smalls_dev, DN_SM_BETA * 4l, wlen * nvh * 4l)
+        cmd_copy_range(raw, g_rd.pf_dnbg, 0l, L.dn[0].smalls_dev, DN_SM_BETA * 4l, wlen * nvh * 4l)
         if (kq_sb(L.falpha) != kq_sb(L.fbeta)) {
             rq_enc(raw, h, g_rd.pf_sets[b + 0], kq_sb(L.falpha), 0l, wlen * dim)
         }
@@ -402,20 +462,9 @@ def private rd_pf_recurrent(raw : VkCommandBuffer; var h : VkHaz; l : int64; b :
         pf_gemm_enc(raw, h, b + 9, L.falpha, pa.wq, pa.ws, g_rd.pf_xq, g_rd.pf_xs, g_rd.pf_dnbg,
             pa.wqb, pa.wsb, np * dim, np * (dim / 32l) * 4l, np * nvh * 4l, VHZ_XQ, VHZ_DNBG, dim, nvh, L.balpha, wlen, false)
         vhz_dep(raw, h, VHZ_DNBG, VHZ_DNSM, true)
-        cmd_copy_range(raw, g_rd.pf_dnbg, 0l, st.smalls_dev, DN_SM_G * 4l, wlen * nvh * 4l)
+        cmd_copy_range(raw, g_rd.pf_dnbg, 0l, L.dn[0].smalls_dev, DN_SM_G * 4l, wlen * nvh * 4l)
     }
-    dn_window_enc(raw, h, L.pf_dn_conv_set, L.pf_dn_scan_set, L.pf_dn_scan_p3_set, wlen, cd, g_rd.dn_kd, nvh, g_rd.dn_nkh, ds, di, dconv,
-        first ? 1u : 2u, first ? hist_in : hist_out, uint(st.state_byte_off / 4l), g_rd.dn_zsig, eps)
-    if (last) {
-        //! a window shorter than the taps is the call's only window: the ring's leading rows come from the entry image
-        var pct = DnTailArgs(cd = uint(cd), taps = uint(taps), row0 = uint(max(wlen - taps, 0l)), hist_off = hist_out,
-            old_rows = uint(max(taps - wlen, 0l)), old_off = hist_in)
-        vhz_dep(raw, h, VHZ_DNP, VHZ_DNSM, false)
-        enc_dn_tail_cls(raw, h, L.pf_dn_tail_set, pct, (cd * taps + int64(WG_X) - 1l) / int64(WG_X))
-    } else {
-        vhz_dep(raw, h, VHZ_DNP, VHZ_DNSM, true)
-        cmd_copy_range(raw, g_rd.pf_dnqkv, (wlen - taps) * cd * 4l, st.smalls_dev, int64(hist_out) * 4l, taps * cd * 4l)
-    }
+    dn_window_parts_enc(raw, h, L, wlen, cd, g_rd.dn_kd, nvh, g_rd.dn_nkh, ds, di, dconv, g_rd.dn_zsig, eps)
     pfq_ts(raw)
     let o6 = pf_dno6(l)
     pf_feed_enc(raw, h, o6 ? g_rd.pf_dnof_set : g_rd.pf_dnrq_set, o6, kq_sb(L.fout), DN_O_OFF, wlen * di)
@@ -1338,6 +1387,66 @@ def private pf_rope_kv_set(cos : uint64; L : RLayer) : VkDescriptorSet {
     return rope_kv_b_stamp_set(rd_kv16(), rbufs, rsizes, rgbits)
 }
 
+var private g_pf_qkn_fuse = true
+
+//! The window's q/k norm, rope and K/V store as the token command's one fused pass (on), or the norm pass and the rope-and-store
+//! pass (off: the A/B lever's split arm)
+def set_vulkan_prefill_qkn_fuse(on : bool) {
+    g_pf_qkn_fuse = on
+}
+
+def vulkan_prefill_qkn_fuse : bool => g_pf_qkn_fuse
+
+//! layer `l`'s window takes the fused pass: a q/k-normed layer of its own K/V over a float mirror, under the fuse lever
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
+def private pf_qkn_fused(l : int64) : bool
+    => g_pf_qkn_fuse && g_env_vulkan.vk_fuse && g_rd.qk_norm && !rd_kv_block_codec() && !g_rd.layers[l].kv_shared
+
+//! the fused pass over every window part: a part's rows at their positions in their region's slab, `voff` the v rows' base in the
+//! projection plane, the k and v rows `kvrow` apart
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
+def private pf_qkn_rope_enc(raw : VkCommandBuffer; var h : VkHaz; l : int64; voff : uint; kvrow, qrow : int64; qhs : int) {
+    var L & = unsafe(g_rd.layers[l])
+    if (L.pf_s_qkn_rope == null) {
+        L.pf_s_qkn_rope = pf_qkn_rope_set(L)
+    }
+    let dim = g_rd.dim
+    let hs = L.hs
+    let nkvh = L.kvd / hs
+    let hsmax = g_rd.head_size   // nolint:LINT021 — the q/k norm rows sit at the widest class's stride; the row offset multiplies run 64-bit before the push-field narrow
+    let nlfin = rd_norm_final()   // nolint:LINT021 — the norm row offsets multiply 64-bit before the push-field narrow
+    for (sg in g_pf_wsegs) {
+        var pcf = QknRopeArgs(qd = uint(L.qd), kvd = uint(L.kvd), hs = uint(hs), half = uint(L.rot / 2l),
+            neox = g_rd.neox ? 1u : 0u, nh = uint(g_rd.n_heads), layerbase = uint(rd_mir_base(L, sg.region)),
+            qwoff = uint(nlfin + dim + l * 2l * hsmax), kwoff = uint(nlfin + dim + (l * 2l + 1l) * hsmax),
+            eps = g_rd.eps, qstride = uint(qhs), boff = uint(L.boff), hasb = g_rd.has_bias ? 1u : 0u, cbase = uint(L.cbase),
+            vfk = L.vfk ? 1u : 0u, vnorm = L.vnorm ? 1u : 0u, rowwg = uint(g_rd.n_heads + nkvh), kvrow = uint(kvrow), qrow = uint(qrow),
+            cosrow = uint(g_rd.cos_elems), win = 1u, pos0 = uint(sg.pos0), row0 = uint(sg.row0), kbase = 0u, vbase = voff)
+        if (rd_kv16()) {
+            enc_qkn_rope_f16_cls(raw, h, L.pf_s_qkn_rope, pcf, (g_rd.n_heads + nkvh) * sg.npos)
+        } else {
+            enc_qkn_rope_cls(raw, h, L.pf_s_qkn_rope, pcf, (g_rd.n_heads + nkvh) * sg.npos)
+        }
+    }
+    pfq_ts(raw)   //! the norm's stamp carries the pass; the rope's lands empty so the profile's roles stay in place
+}
+
+//! the fused pass's set over the window's planes: the q rows, the projection rows, the layer's slab, the rope rows, the norm rows,
+//! the token block (bound, unread by the window form) and the bias rows
+def private pf_qkn_rope_set(L : RLayer) : VkDescriptorSet {
+    let np = g_rd.pf_np
+    let kvd = g_rd.kv_dim
+    let qrow = g_rd.q_gated ? 2l * g_rd.qd : g_rd.qd
+    let slab = rd_slab(L)
+    let bias_buf = g_rd.has_bias ? g_rd.bias_dev : g_rd.norms_dev
+    let bias_bytes = g_rd.has_bias ? g_rd.bias_bytes : g_rd.norms_bytes
+    let bufs = fixed_array(g_rd.pf_q, g_rd.pf_kv, slab.k, slab.v, g_rd.pf_cos, g_rd.norms_dev, g_rd.tok_meta.buf, bias_buf)
+    let sizes = fixed_array(np * qrow * 4l, np * 2l * kvd * 4l, rd_mir_bytes(), rd_mir_bytes(), np * g_rd.cos_elems * 4l, g_rd.norms_bytes,
+        TOK_META_BYTES * g_rd.nb, bias_bytes)
+    let bits = fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, VHZ_MIR, VHZ_MIR, VHZ_COS, 0u, 0u, 0u)
+    return rd_kv16() ? set_qkn_rope_f16_cls(bufs, sizes, bits) : set_qkn_rope_cls(bufs, sizes, bits)
+}
+
 def private pf_qk_rms_set : VkDescriptorSet {
     let np = g_rd.pf_np
     let qrow = g_rd.q_gated ? 2l * g_rd.qd : g_rd.qd
@@ -1425,8 +1534,8 @@ def vk_rdec_prefill_segs(x_batch : array<float>; tokens : array<int64>; use_ids 
                          segs : array<RdecPfSeg>; var logits : array<float>; experts : RdecHostExpertsRowsFn) {
     assert(g_rd != null && !empty(segs), "vk_rdec_prefill_segs: no driver, or no segment")
     let kvq = rd_kv_block_codec()
-    assert(g_rd.ple == 0l && !g_rd.moe && !g_rd.carry && !g_rd.hybrid && !kvq,
-        "vk_rdec_prefill_segs: the chain holds one session a window on a per-layer-embedding, routed, NextN, recurrent model or a block-codec mirror")
+    assert(g_rd.ple == 0l && !g_rd.hc && !g_rd.experts_host && !kvq,
+        "vk_rdec_prefill_segs: the chain holds one session a window on a per-layer-embedding or hyper-connection model, routed experts on the host, or a block-codec mirror")
     let nox : array<float>
     vk_demotion_check("prefill")
     var npos = 0l
@@ -1669,8 +1778,10 @@ def private pf_run_hc(x_batch : array<float>; cos_batch : array<float>; side : a
         pf_hc_setup()
     }
     rd_carry_sync()
+    g_pf_segs |> clear()
+    g_pf_segs |> push(RdecPfSeg(row0 = 0l, npos = npos, pos0 = pos0, region = g_rd.region))
     if (g_rd.hybrid) {
-        pf_dn_begin(pos0)
+        pf_dn_begin()
     }
     let dim = g_rd.dim
     let hc = g_rd.hc_n
@@ -1688,6 +1799,7 @@ def private pf_run_hc(x_batch : array<float>; cos_batch : array<float>; side : a
             let wlen = pf_window_len(npos, w0)
             let last = w0 + wlen >= npos
             let pos0w = pos0 + w0
+            pf_window_segs(w0, wlen)
             rd_tok_row(pos0w, wlen)
             upload_region_at(g_rd.pf_x, 0l, addr<uint8 const?>(x_batch[int(w0 * dim)]), wlen * dim * 4l)
             upload_region_at(g_rd.pf_cos, 0l, addr<uint8 const?>(cos_batch[int(w0 * cos_elems)]), wlen * cos_elems * 4l)
@@ -1700,8 +1812,8 @@ def private pf_run_hc(x_batch : array<float>; cos_batch : array<float>; side : a
             var seg = 0l
             var raw = g_rd.pf_seg[seg]
             var h = cmd_open(raw, true)
-            if (pos0w == 0l && g_rd.hybrid) {
-                pf_dn_zero_region(raw, h)
+            if (g_rd.hybrid) {
+                pf_dn_zero_fresh(raw, h)
             }
             var pcinit = HcInitArgs(dim = uint(dim), hc = uint(hc), rows = uint(wlen))
             enc_hc_init_cls(raw, h, g_rd.pf_s_hc_init, pcinit, (wlen * hcd + 255l) / 256l)
@@ -1716,7 +1828,7 @@ def private pf_run_hc(x_batch : array<float>; cos_batch : array<float>; side : a
                 }
                 pf_hc_mix(raw, h, 2l * l, wlen, false)
                 if (L.recurrent) {
-                    rd_pf_recurrent(raw, h, l, b, wlen, w0 == 0l, last)
+                    rd_pf_recurrent(raw, h, l, b, wlen)
                 } else {
                     pf_attn_block(raw, h, l, b, wlen, pos0w, false)
                 }
@@ -1748,6 +1860,9 @@ def private pf_run_hc(x_batch : array<float>; cos_batch : array<float>; side : a
             }
             if (warm) {
                 pf_hc_head_warm(raw, h, w0, wlen, pos0)
+            }
+            if (g_rd.hybrid) {
+                pf_dn_window_done()
             }
             cmd_close(raw)
             verify(seg + 1l == long_length(g_rd.pf_seg), "vk prefill: the window's segments must be the routed layers plus one")
@@ -1831,6 +1946,9 @@ def private pf_attn_block(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : i
         }
     }
     let voff = uint(kv_merged ? kvd : wlen * kvd)   // the v rows' base in pf_kv, kstride apart
+    if (pf_qkn_fused(l)) {
+        pf_qkn_rope_enc(raw, h, l, voff, kv_merged ? 2l * kvd : kvd, qrow, qhs)
+    } else {
     if (g_rd.qk_norm) {
         let nkvh = kvsh ? 0l : kvd / hs   //! no k/v norm groups on a shared-KV layer: nothing of its own to norm or store
         let vgroups = vnorm && !vfk ? nkvh : 0l
@@ -1851,6 +1969,7 @@ def private pf_attn_block(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : i
             boff = uint(g_rd.layers[l].boff), hasb = g_rd.has_bias ? 1u : 0u,
             cstride = uint(cos_elems), cbase = uint(g_rd.layers[l].cbase), row0 = uint(sg.row0))
         rope_kv_b_stamp_enc(rd_kv16(), raw, h, g_rd.pf_sets[b + 4], pcr, ropewg)
+    }
     }
     if (kvq) {
         let mirb = uint(rd_mir_base(g_rd.layers[l], g_pf_wsegs[0].region))
@@ -1942,19 +2061,20 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
         g_pf_segs |> push_clone_from(segs)
     }
     let nseg = long_length(g_pf_segs)
-    assert(nseg <= g_rd.regions && long_length(logits) >= nseg * g_rd.vocab, "vk prefill: the segments outnumber the regions, or the logits are short of a slot a segment")
+    assert(nseg <= g_rd.regions && long_length(logits) >= nseg * g_rd.vocab && (!g_rd.carry_live || nseg <= g_rd.nb),
+        "vk prefill: the segments outnumber the regions or the carry's rows, or the logits are short of a slot a segment")
     let ple_tbl = use_ids && ple_raw   //! the side rows gather on device from the token table
     assert(g_rd.ple == 0l || ple_tbl || long_length(ple_rows) >= npos * g_rd.n_layers * g_rd.ple, "vk prefill: the per-layer-embedding rows are short of the prompt")
     pf_setup()
     rd_carry_sync()
     if (g_rd.hybrid) {
-        pf_dn_begin(pos0)
+        pf_dn_begin()
     }
     let dim = g_rd.dim
     let nlfin = rd_norm_final()
     let cos_elems = g_rd.cos_elems
     g_rd.pf_head_rows = 0l
-    let warm = g_rd.pf_head_ask && g_rd.head_on && g_rd.carry_live && (g_rd.pf_head_ready || (!g_rd.pf_head_declined && pf_head_setup()))
+    let warm = nseg == 1l && g_rd.pf_head_ask && g_rd.head_on && g_rd.carry_live && (g_rd.pf_head_ready || (!g_rd.pf_head_declined && pf_head_setup()))   //! a segmented window warms no head row
     unsafe {
         var w0 = 0l
         var last_wlen = 0l
@@ -1995,8 +2115,8 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
             var h = cmd_open(raw, true)
             pfq_begin(raw)
             pfq_ts(raw)   // q0: submit start
-            if (pos0 + w0 == 0l && g_rd.hybrid) {
-                pf_dn_zero_region(raw, h)
+            if (g_rd.hybrid) {
+                pf_dn_zero_fresh(raw, h)
             }
             pfq_ts(raw)   // q1: kept for the role-aggregation stamp shape (params ride push now)
             if (use_ids) {
@@ -2046,7 +2166,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 let guk = kq_sb(g_rd.layers[l].f1) && !gu6
                 let dnk = kq_sb(g_rd.layers[l].f2) && !dn6
                 if (g_rd.layers[l].recurrent) {
-                    rd_pf_recurrent(raw, h, l, b, wlen, w0 == 0l, last)
+                    rd_pf_recurrent(raw, h, l, b, wlen)
                 } else {
                 pf_attn_block(raw, h, l, b, wlen, pos0 + w0, l > 0l && pf_qkv_feed_fused(l))
                 }
@@ -2120,9 +2240,9 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 pf_cls_enc(raw, h)   // the epilogue bills to the classifier's stamp
                 vhz_dep(raw, h, VHZ_LOG, 0u, true)
                 cmd_copy_range(raw, g_rd.logits_dev, 0l, g_rd.pf_logits_host.buf, slot * g_rd.vocab * 4l, g_rd.vocab * 4l)
-                if (g_rd.carry_live && slot == 0l) {   //! the carry lands for the one-session call alone: a segmented window declines a carrying model
+                if (g_rd.carry_live) {   //! a segment's carry lands at its slot's row
                     vhz_dep(raw, h, VHZ_XB, 0u, true)
-                    cmd_copy_range(raw, g_rd.pf_xb, row * dim * 4l, g_rd.hid_host.buf, 0l, dim * 4l)
+                    cmd_copy_range(raw, g_rd.pf_xb, row * dim * 4l, g_rd.hid_host.buf, slot * dim * 4l, dim * 4l)
                 }
             }
             if (ends > 0l) {
@@ -2131,6 +2251,9 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
             assert(!last || ends > 0l, "vk prefill: the last window ends no segment")
             if (warm) {
                 pf_head_warm(raw, h, w0, wlen, pos0)
+            }
+            if (g_rd.hybrid) {
+                pf_dn_window_done()
             }
             if (vk_prof()) {
                 to_log(LOG_INFO, "vk_rdpf hz: {h.disp} nodes, {h.barriers} barriers\n")   // nolint:PERF026,PERF028 — vk_prof()-gated report leg

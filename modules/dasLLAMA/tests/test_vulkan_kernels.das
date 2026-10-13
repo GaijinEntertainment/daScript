@@ -5498,6 +5498,108 @@ def private rope_kv_b_row0_arm(t : T?) {
     }
 }
 
+//! one window-form `qkn_rope_cls` dispatch: `nr` rows from row `row0` of planes `rows` deep, their k and v rows `kvrow` apart in the
+//! projection plane (`kv`, the v rows at `vbase`), at positions from `pos0`; the q plane in place, then the K and V mirrors
+def private qkn_window_run(q, kv, cs, wn : array<float>; pc : QknRopeArgs; nr, mirn : int) : tuple<q : array<float>; m : array<float>> {
+    var out : tuple<q : array<float>; m : array<float>>
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        with_cell_planes() $(var cp : CellPlanes) {
+            let pq = cp |> io_(q)
+            let pkv = cp |> in_(kv)
+            let pkm = cp |> out_(mirn)
+            let pvm = cp |> out_(mirn)
+            let pcs = cp |> in_(cs)
+            let pwn = cp |> in_(wn)
+            let ptok = cp |> in_plain([TokMeta(pos = 0u), TokMeta(pos = 1u), TokMeta(pos = 2u)])
+            var sc = cp |> cls_set(fixed_array(pq, pkv, pkm, pvm, pcs, pwn, ptok, pcs), @@set_qkn_rope_cls)
+            var pcv = pc
+            cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                enc_qkn_rope_cls(raw, h, sc, pcv, int64(nr) * int64(pc.rowwg))
+            }
+            out.q <- cp |> plane_run(pq)
+            out.m <- mirror_pair(cp, pkm, pvm, mirn, false)
+        }
+    }
+    return <- out
+}
+
+// the window's fused q/k norm, rope and K/V store: `qkn_rope_cls`'s window form over three rows past two lead rows of planes laid
+// as the window lays them - q rows, the [k | v] projection rows, the rope rows - at positions 7 to 9 of the mirror, bit for bit
+// the token rows' form over the same rows laid as the token command lays them ([q | k | v] a row, the positions off the token block)
+[test]
+def test_vkd_qkn_rope_window(t0 : T?) {
+    t0 |> run("qkn_rope_cls's window form == its token rows' form over the same three rows, bit for bit, the lead rows untouched") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!ensure_qkn_rope_cls()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            let nh = 4
+            let nkvh = 2
+            let hs = 64
+            let qd = nh * hs
+            let kvd = nkvh * hs
+            let lead = 2
+            let nr = 3
+            let pos0 = 7
+            let mirn = (pos0 + nr + 2) * kvd
+            var q5 <- row_fill((lead + nr) * qd, 31, 0, 0.05, 1.6, 67)
+            var kv5 <- row_fill((lead + nr) * 2 * kvd, 23, 0, 0.04, 1.5, 71)
+            var cs5 <- row_fill((lead + nr) * hs, 13, 0, 0.045, 0.9, 41)
+            var wnh <- [for (i in range(2 * hs)); 0.75 + float(i % 11) * 0.05]
+            let base = QknRopeArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), half = uint(hs / 2), neox = 1u, nh = uint(nh),
+                qwoff = 0u, kwoff = uint(hs), eps = 0.00001, rowwg = uint(nh + nkvh), qrow = uint(qd), cosrow = uint(hs))
+            var pw = base
+            pw.win = 1u
+            pw.pos0 = uint(pos0)
+            pw.row0 = uint(lead)
+            pw.kvrow = uint(2 * kvd)
+            pw.kbase = 0u
+            pw.vbase = uint(kvd)
+            var win <- qkn_window_run(q5, kv5, cs5, wnh, pw, nr, mirn)
+            //! the token rows' form: the three rows alone, each projection row [q | k | v], positions off the token block from 7
+            var q3 <- [for (i in range(nr * qd)); q5[lead * qd + i]]
+            var kv3 : array<float>
+            kv3 |> resize(nr * (qd + 2 * kvd))
+            var cs3 <- [for (i in range(nr * hs)); cs5[lead * hs + i]]
+            for (r in range(nr)) {
+                for (i in range(2 * kvd)) {
+                    kv3[r * (qd + 2 * kvd) + qd + i] = kv5[(lead + r) * 2 * kvd + i]
+                }
+            }
+            var pt = base
+            pt.kvrow = uint(qd + 2 * kvd)
+            pt.layerbase = uint(pos0 * kvd)
+            var tok <- qkn_window_run(q3, kv3, cs3, wnh, pt, nr, mirn)
+            var win_rows <- [for (i in range(nr * qd)); win.q[lead * qd + i]]
+            check_exact(t, "the window form's q rows against the token rows' form", win_rows, tok.q)
+            var mw <- [for (i in range(2 * nr * kvd)); win.m[(i / (nr * kvd)) * mirn + pos0 * kvd + i % (nr * kvd)]]
+            var mt <- [for (i in range(2 * nr * kvd)); tok.m[(i / (nr * kvd)) * mirn + pos0 * kvd + i % (nr * kvd)]]
+            check_exact(t, "the window form's K and V mirror rows against the token rows' form", mw, mt)
+            delete mw
+            delete mt
+            var kept = 0
+            for (i in range(lead * qd)) {
+                kept += win.q[i] == q5[i] ? 1 : 0
+            }
+            t |> equal(kept, lead * qd, "the q rows ahead of the window's row base are untouched")
+            t |> success(mismatch_exact(win_rows, [for (i in range(nr * qd)); q5[lead * qd + i]]) > 0, "the window form roped its q rows in place")
+            delete win_rows
+            delete win
+            delete tok
+            delete q3
+            delete kv3
+            delete cs3
+            delete q5
+            delete kv5
+            delete cs5
+            delete wnh
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
 [test]
 def test_vkd_rope_b_pair(t0 : T?) {
     t0 |> run("batch rope + fused qkn-rope class kernels == the CPU oracle") <| @(t : T?) {
@@ -6308,6 +6410,115 @@ def test_vkd_dn_tail(t0 : T?) {
                 delete smalls
                 delete src
             }
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+//! the window rows `[lead, lead + npos)` of `rows` a row of `w` floats each, the `lead` rows ahead of them garbage that a kernel
+//! reading them would carry into its output
+def private dn_rows_at(rows : array<float>; lead, w : int) : array<float> {
+    var out <- row_fill(lead * w, 31, 0, 7.0, 3.0, 13)
+    out |> push_from(rows)
+    return <- out
+}
+
+// a segmented window's recurrent parts: the conv and the scan dispatched at a row base past zero read and write the part's rows
+// alone - its src and conv rows, its beta / g rows, its o rows - bit for bit the same rows dispatched at row 0
+[test]
+def test_vkd_dn_rows_base(t0 : T?) {
+    t0 |> run("dn_conv and dn_scan at a row base past zero == the same rows at row 0, bit for bit, the rows ahead of the base untouched") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!dn_cells_gate(t)) return
+            verify(ensure_dn_conv_cls() && ensure_dn_scan_cls(), "the dn class rails must engage on a device over the shared cap")
+            let ds = 128
+            let nkh = 2
+            let nvh = 4
+            let kd = nkh * ds
+            let cd = 2 * kd + nvh * ds
+            let di = nvh * ds
+            let dconv = 4
+            let taps = dconv - 1
+            let npos = 21
+            let lead = 9
+            let eps = 0.00001
+            let taps_off = 16
+            let hist_off = taps_off + cd * dconv
+            var inscope srch <- row_fill(npos * cd, 19, 0, 0.03, 1.1, 79)
+            var inscope srcl <- dn_rows_at(srch, lead, cd)
+            var inscope smh <- row_fill(hist_off + cd * taps, 11, 0, 0.02, 0.35, 37)
+            var inscope convs : array<array<float>>
+            for (base in fixed_array(0, lead)) {
+                with_cell_planes() $(var cp : CellPlanes) {
+                    let psrc = cp |> in_(base == 0 ? srch : srcl)
+                    let psm = cp |> in_(smh)
+                    let po = cp |> out_((base + npos) * cd)
+                    var sc = cp |> cls_set(fixed_array(psrc, po, psm), @@set_dn_conv_cls)
+                    var pc = DnConvArgs(npos = uint(npos), cd = uint(cd), kd = uint(kd), ds = uint(ds), dconv = uint(dconv), hist_mode = 1u,
+                        taps_off = uint(taps_off), hist_off = uint(hist_off), eps = eps, qscale = 1.25, row0 = uint(base))
+                    cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                        enc_dn_conv_cls(raw, h, sc, pc, dn_conv_wgs(int64(cd), int64(npos)))
+                    }
+                    var inscope o <- cp |> plane_run(po)
+                    var lead_kept = 0
+                    for (i in range(base * cd)) {
+                        lead_kept += float_bits_to_uint(o[i]) == NAN_SENTINEL_BITS ? 1 : 0
+                    }
+                    t |> equal(lead_kept, base * cd, "dn_conv at row base {base}: the rows ahead of the base keep their sentinel")
+                    convs |> emplace <| [for (i in range(npos * cd)); o[base * cd + i]]
+                }
+            }
+            check_exact(t, "dn_conv at row base {lead} against row 0", convs[1], convs[0])
+            //! the scan over the conv rows, with the beta / g rows and the o rows at the same base
+            let beta_off = 16
+            let g_off = beta_off + (lead + npos) * nvh
+            let a_off = g_off + (lead + npos) * nvh
+            let dt_off = a_off + nvh
+            var inscope bg <- row_fill((lead + npos) * nvh, 17, 0, 0.03, 0.6, 43)
+            var inscope scans : array<array<float>>
+            for (base in fixed_array(0, lead)) {
+                var inscope smv : array<float>
+                smv |> resize(dt_off + nvh)
+                for (i in range(npos * nvh)) {
+                    smv[beta_off + (base + i / nvh) * nvh + i % nvh] = bg[lead * nvh + i]
+                    smv[g_off + (base + i / nvh) * nvh + i % nvh] = bg[i]
+                }
+                for (i in range(nvh)) {
+                    smv[a_off + i] = -0.4 - float(i) * 0.1
+                    smv[dt_off + i] = 0.05 * float(i)
+                }
+                var inscope convh : array<float>
+                convh |> resize((base + npos) * cd)
+                for (i in range(npos * cd)) {   //! unit-scale rows, the conv stage's L2-normed shape
+                    convh[base * cd + i] = (float((i * 19) % 79) * 0.025 - 0.9) * 0.15
+                }
+                var inscope sth <- row_fill(nvh * ds * ds, 13, 0, 0.02, 0.5, 53)
+                with_cell_planes() $(var cp : CellPlanes) {
+                    let pconv = cp |> in_(convh)
+                    let pst = cp |> io_(sth)
+                    let psm = cp |> in_(smv)
+                    let po = cp |> out_((base + npos) * di)
+                    var sc = cp |> cls_set(fixed_array(pconv, pst, psm, po), @@set_dn_scan_cls)
+                    var pcs = DnScanArgs(npos = uint(npos), cd = uint(cd), kd = uint(kd), nvh = uint(nvh), nkh = uint(nkh), ds = uint(ds),
+                        beta_off = uint(beta_off), g_off = uint(g_off), a_off = uint(a_off), dt_off = uint(dt_off), o_off = 0u,
+                        di = uint(di), row0 = uint(base))
+                    cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                        enc_dn_scan_cls(raw, h, sc, pcs, dn_scan_wgs(int64(nvh), int64(ds)))
+                    }
+                    var inscope o <- cp |> plane_run(po)
+                    var inscope st_got <- cp |> plane_run(pst)
+                    var lead_kept = 0
+                    for (i in range(base * di)) {
+                        lead_kept += float_bits_to_uint(o[i]) == NAN_SENTINEL_BITS ? 1 : 0
+                    }
+                    t |> equal(lead_kept, base * di, "dn_scan at row base {base}: the o rows ahead of the base keep their sentinel")
+                    var got <- [for (i in range(npos * di)); o[base * di + i]]
+                    got |> push_from(st_got)
+                    scans |> emplace(got)
+                }
+            }
+            check_exact(t, "dn_scan at row base {lead} against row 0 (the o rows, then the state)", scans[1], scans[0])
         } else {
             t |> skip("dasVulkan not present")
         }

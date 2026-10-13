@@ -6045,11 +6045,7 @@ def private pf_enc_moe_route(enc : MetalComputeEncoder?; t : Model; l : int64;
         enc_moe_router_b(enc, bw_rt, bx, blg, bdim, bne, bdim, brb, bhasb, bnp, c.n_expert, npos)   //! bxs = bdim: per-position x stride = dim
     }
     return if (g_pf_skip == "moe_only_router")   //! attribution: router GEMV alone, no select/CSR
-    if (c.n_expert > 256l) {
-        enc_moe_select_512(enc, blg, bsel, bsel, bne, bnk, bgm, npos)
-    } else {
-        enc_moe_select(enc, blg, bsel, bsel, bne, bnk, bgm, npos)
-    }
+    enc_moe_select_rows(enc, c, blg, bsel, bne, bnk, bgm, npos)
     return if (g_pf_skip == "moe_only_sel" || !bucket)   //! attribution: router + select, no CSR; the gathered route reads the selection alone
     pf_enc_moe_count(enc, bsel, bcnt, btot, bnk, c.n_expert)
     pf_enc_moe_bucket(enc, bsel, bbase, bbkt, binv, btot, bnk, bcnt, bne, c.n_expert + 1l)   // basep[ne] = the padded total
@@ -6714,9 +6710,6 @@ struct PfSeg {
     mir_koff : uint64
     mir_voff : uint64
     mir_cap : int64
-    dn_buf : MetalBuffer?
-    dn_state_base : uint64
-    dn_conv_base : uint64
     ple_ring_base : uint64
     u_kv : MetalBuffer?   //!< the chunk's K or V elements, the base class
     u_kv_sw : MetalBuffer?
@@ -6857,19 +6850,22 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
     let half = (c.rope_dim > 0l ? c.rope_dim : head_size) / 2l   //! partial rope: table rows are rope_dim/2 wide
     //! the recurrent-state mirrors sync BEFORE encoding - a cold mid-stream window has no repair path
     let dn = c.recr_mask != 0ul
+    var dn_tab : tuple<buf : MetalBuffer?; bytes : uint64>
+    var dn_npmax = 0l
     if (dn) {
         dn_mirror_room(nseg)
+        dn_grp_clear()
         for (sg in segs) {
             var dm = dn_mirror_prepare(*sg.s, sg.start_pos, dn_mirror_regions(t))
             if (!dm.ok) {
                 decline(MetalPrefillDecline.dn_state)
                 return false
             }
-            sg.dn_buf = dm.buf
-            sg.dn_state_base = dm.state_off
-            sg.dn_conv_base = dm.conv_off
+            dn_grp_push(sg.row0, sg.npos, dm.state_off, dm.state_off, dm.conv_off, dm.conv_off)
+            dn_npmax = max(dn_npmax, sg.npos)
             sg.ple_ring_base = dm.ple_off
         }
+        dn_tab = dn_grp_upload()
     }
     let hs_sw = c.head_size_swa > 0l ? c.head_size_swa : head_size
     let kvh_sw = c.n_kv_heads_swa > 0l ? c.n_kv_heads_swa : c.n_kv_heads
@@ -7426,6 +7422,7 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                 }
             }
             unsafe {
+                let head_kv = warm && l == c.n_layers   //! the draft head's prompt warm: its K/V rows are all a later round reads
                 //! a hyper-connection model carries no per-layer norm rows: its mixers stand at both seams
                 var bw_att = hcs.on ? null : upload_region(addr < void? >(t.fblob[t.rms_att_off + l * dim]), uint64(dim * 4l))
                 var bw_ffn = hcs.on ? null : upload_region(addr < void? >(t.fblob[t.rms_ffn_off + l * dim]), uint64(dim * 4l))
@@ -7448,7 +7445,7 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                 var bxh_x : MetalBuffer?
                 if (hcs.on) {   //! the side input at its layer, then the attention site's mixer opens the layer into bxb
                     if (pls.on && l == c.ple_layer) {
-                        pf_ple_side(enc, t, hcs, pls, u_dim, segs[0].start_pos, segs[0].dn_buf, segs[0].ple_ring_base)
+                        pf_ple_side(enc, t, hcs, pls, u_dim, segs[0].start_pos, dn_pool_buffer(), segs[0].ple_ring_base)
                     }
                     pf_hc_mix_site(enc, t, hcs, l, false, bxb, hcs.binj_a, u_dim, u_eps)
                 } elif (g_pf_skip != "ew" && g_pf_skip != "nongemm") {
@@ -7476,43 +7473,17 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                         }
                     }
                     if (g_pf_skip != "attn" && g_pf_skip != "dn" && g_pf_skip != "nongemm") {
-                        let sslice = uint64(dnli * nvh_dn * c.ssm_d_state * c.ssm_d_state * 4l)
-                        let hslice = uint64(dnli * (c.ssm_d_conv - 1l) * cd_dn * 4l)
-                        var bw_cv = upload_region(addr < void? >(t.fblob[t.dn_conv_off + l * c.ssm_d_conv * cd_dn]), uint64(c.ssm_d_conv * cd_dn * 4l))
-                        var baa = upload_region(addr < void? >(t.fblob[t.dn_a_off + l * nvh_dn]), uint64(nvh_dn * 4l))
-                        var bdt = upload_region(addr < void? >(t.fblob[t.dn_dt_off + l * nvh_dn]), uint64(nvh_dn * 4l))
-                        var bwn = upload_region(addr < void? >(t.fblob[t.dn_norm_off + l * c.ssm_d_state]), uint64(c.ssm_d_state * 4l))
-                        var dka_w = dn_args(c, npos, false)
-                        for (sg in segs) {
-                            var dka = dn_args(c, sg.npos, false)
-                            dka.row = uint(sg.row0)
-                            let hoff = sg.dn_conv_base + hslice
-                            enc_dn_conv(enc, bdnqkv, sg.dn_buf, hoff, bw_cv, bdncv, dka, cd_dn, sg.npos)
-                            enc_dn_conv_hist(enc, bdnqkv, sg.dn_buf, hoff, sg.dn_buf, hoff, dka, cd_dn)
-                        }
-                        enc_dn_l2norm(enc, bdncv, dka_w, 2l * c.ssm_n_group, npos)
+                        let d = DnStages(qkv = bdnqkv, cv = bdncv, cvh = bdncvh, b = bdnb, g = bdng, o = bdno, z = bdnz,
+                            grp = dn_tab.buf, ng = nseg, npmax = dn_npmax, rows = npos)
+                        enc_dn_front(enc, t, l, dnli, d)
                         if (bdncvh != null) {
                             //! the walk reads halves: the conv rows convert once, the gates prepare once
+                            var baa = upload_region(addr < void? >(t.fblob[t.dn_a_off + l * nvh_dn]), uint64(nvh_dn * 4l))
+                            var bdt = upload_region(addr < void? >(t.fblob[t.dn_dt_off + l * nvh_dn]), uint64(nvh_dn * 4l))
                             tw_half(enc, bdncv, bdncvh, npos * cd_dn)
-                            enc_dn_prep(enc, bdnb, bdng, baa, bdt, dka_w, (npos * nvh_dn + 63l) / 64l * 64l)
+                            enc_dn_prep(enc, bdnb, bdng, baa, bdt, dn_args(c, npos, false), (npos * nvh_dn + 63l) / 64l * 64l)
                         }
-                        for (sg in segs) {
-                            var dka = dn_args(c, sg.npos, false)
-                            dka.row = uint(sg.row0)
-                            let soff = sg.dn_state_base + sslice
-                            if (bdncvh != null) {
-                                enc_dn_scan_h(enc, bdncvh, sg.dn_buf, soff, bdnb, bdng, baa, bdt, bdno,
-                                    sg.dn_buf, soff, dka, c.ssm_d_state, nvh_dn)
-                            } else {
-                                enc_dn_scan(enc, bdncv, sg.dn_buf, soff, bdnb, bdng, baa, bdt, bdno,
-                                    sg.dn_buf, soff, dka, c.ssm_d_state, nvh_dn)
-                            }
-                        }
-                        if (c.dn_z_sigmoid) {
-                            enc_dn_gate_sig(enc, bdno, bdnz, bwn, dka_w, nvh_dn, npos)
-                        } else {
-                            enc_dn_gate(enc, bdno, bdnz, bwn, dka_w, nvh_dn, npos)
-                        }
+                        enc_dn_back(enc, t, l, dnli, d)
                     }
                     if (g_pf_skip != "gemm") {
                         pf_enc_site_mm(enc, t, fmt_at(t.dnout_fmt, l), t.dnout_offs[l], dim, bdno, bxb2, u_dn_di, u_dim, mp, di_dn, npos,
@@ -7527,7 +7498,8 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                     let fk = fmt_at(t.wk_fmt, l)
                     let fv = has_wv ? fmt_at(t.wv_fmt, l) : KqFmt.q8
                     if (fq != KqFmt.q8 || fk != KqFmt.q8 || fv != KqFmt.q8) {
-                        if (c.q_gated) {
+                        if (head_kv) {
+                        } elif (c.q_gated) {
                             //! 2x-wide packed [q|gate] projection, deinterleaved into the q panel + gate rows
                             if (fq != KqFmt.q8) {
                                 pf_enc_kq_site_mm(enc, t, fq, t.wq_offs[l], 2l * qd_l, bxb, bdnqg, u_dim, u_dn_qd2, mp, 0ul, bxh_x, dim, npos)
@@ -7561,7 +7533,8 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                         }
                     } else {
                         let bwqb = blob_of(g_dev, t, t.wq_offs[l])
-                        if (c.q_gated) {
+                        if (head_kv) {
+                        } elif (c.q_gated) {
                             //! 2x-wide packed [q|gate] projection, deinterleaved into the q panel + gate rows
                             enc_gemm_mm(enc, bwqb.buf, bwqb.boff, bxb, bdnqg, u_dim, u_dn_qd2, mp, 2l * qd_l, 0ul, dim, npos, bxh_x)
                             enc_dn_deint(enc, bdnqg, bq, bdngate,
@@ -7619,7 +7592,8 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                         hscale = mirk ? scale_l : 1.0)
                     bqh_q = (mirk || mp >= CVT_MIN_ROWS) ? pf_twin_panel(mp, qd_l) : null
                     bqh_q_live = true
-                    if (bqh_q != null && g_pf_skip != "act_cvt") {
+                    if (head_kv) {
+                    } elif (bqh_q != null && g_pf_skip != "act_cvt") {
                         enc_qk_rope_hx(enc, bq, 0ul, bqw, bcos_l, bsin_l, qka, bqh_q, n_heads, mp, hs_l / 2l)
                     } else {
                         enc_qk_rope(enc, bq, 0ul, bqw, bcos_l, bsin_l, qka, n_heads, npos, hs_l / 2l)
@@ -7636,7 +7610,9 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                     var bqw = upload_region(addr < void? >(t.fblob[t.rms_q_offs[l]]), uint64(hs_l * 4l))
                     var qka = QkNormArgs(nq = uint(n_heads), koffe = uint(qd_l), rstride = uint(qd_l),
                         hs = uint(hs_l), woffe = uint(hs_l), eps = c.norm_eps, soffe = uint(qd_l))
-                    enc_qk_norm(enc, bq, 0ul, bqw, qka, n_heads, npos, hs_l)
+                    if (!head_kv) {
+                        enc_qk_norm(enc, bq, 0ul, bqw, qka, n_heads, npos, hs_l)
+                    }
                     if (!kvsh) {
                         var bkw = upload_region(addr < void? >(t.fblob[t.rms_k_offs[l]]), uint64(hs_l * 4l))
                         var kka = QkNormArgs(nq = 0u, koffe = 0u, rstride = uint(kvd_l),
@@ -7648,7 +7624,9 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                     //! sliding layers rope with the swa row pair, whose rows are the class's own hs/2 wide
                     var bcos_l = lsl && dual_rope ? bcos_swa : bcos
                     var bsin_l = lsl && dual_rope ? bsin_swa : bsin
-                    enc_rope(enc, bq, 0ul, bcos_l, bsin_l, u_qd_l, u_hs_l, u_npairs_q_l, u_neox, u_rot, null, npos * qd_l / 2l)
+                    if (!head_kv) {
+                        enc_rope(enc, bq, 0ul, bcos_l, bsin_l, u_qd_l, u_hs_l, u_npairs_q_l, u_neox, u_rot, null, npos * qd_l / 2l)
+                    }
                     if (!kvsh) {
                         enc_rope(enc, bks[l], koff, bcos_l, bsin_l, u_kvd_l, u_hs_l, u_npairs_k_l, u_neox, u_rot, null, npos * kvd_l / 2l)
                     }
@@ -7670,6 +7648,9 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                         enc_kv_twin(enc, pan.k, pan.v, g_arena, g_arena, 1.0, (sg.nk - mir_row0) * kvd_l,
                             (sg.mir_koff + lb + rows_off) / 2ul, (sg.mir_voff + lb + rows_off) / 2ul, uint64(src_row * kvd_l))
                     }
+                }
+                if (head_kv) {
+                    continue
                 }
                 if (!recr && g_pf_skip != "attn" && g_pf_skip != "nongemm") {
                     var bqh_l : MetalBuffer?
@@ -8273,6 +8254,7 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
         pool_release(g_pf_upool, u_dn_di, 4ul)
         pool_release(g_pf_upool, u_dn_nvh, 4ul)
         pool_release(g_pf_upool, u_dn_np, 4ul)
+        pool_release(g_upool, dn_tab.buf, dn_tab.bytes)
     }
     if (c.q_gated) {
         pool_release(g_pf_pool, bdnqg, bytes_dn_qg)

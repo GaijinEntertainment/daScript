@@ -46,6 +46,7 @@ enum MetalDecodeDecline {
                         // load_model under metal mode transforms/maps the metal flavor)
     dn_state            // deltanet recurrent state not GPU-resident for this position (state is
                         // forward-only and NOT re-derivable — no watermark repair exists)
+    b32_rows            // a per-32 dense plane (q51, iq4nl32) has no row-batched GEMV: each batched row would stream it
 }
 
 // The tower/embedder driver's decline set — same contract as the prefill/decode enums: FIRST
@@ -307,7 +308,7 @@ def kq_fmt_b32(f : KqFmt) : bool => f == KqFmt.q51 || f == KqFmt.iq4nl32
 def moe_metal_ok(t : Model) : bool {   // nolint:STYLE038 — flat per-shape refusal ladder; every arm is one reason
     let c = t.config
     if (!c.moe || c.n_layer_dense_lead > 0l || c.moe_exp_probs ||
-            (c.expert_weights_scale != 0.0 && c.expert_weights_scale != 1.0) || (t.experts_mx4 && t.mx4_repacked)) {
+            (t.experts_mx4 && t.mx4_repacked)) {
         return false
     }
     if (t.experts_mx4 && c.moe_gate == MoeGate.softmax_weight) {

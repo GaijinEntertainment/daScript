@@ -60,3 +60,8 @@ def test_device_kv_park_adopt_hybrid(t : T?) {
 def test_scheduler_paged_resident(t : T?) {
     cell_scheduler_paged_resident(t, REGIONS_FILE)
 }
+
+[test]
+def test_device_checkpoint_adopt_hybrid(t : T?) {
+    cell_device_checkpoint_adopt(t, REGIONS_FILE)
+}

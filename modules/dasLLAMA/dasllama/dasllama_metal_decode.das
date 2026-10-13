@@ -322,16 +322,18 @@ struct private StepRes {
     bytes_ple_in : uint64
     // deltanet (Wave D) — recurrent-layer scratch + the gated-attention twins; dn steps only
     dn : bool
-    bdn_state : MetalBuffer?   // the session's DnMirror buffer (mirror-owned, never released here)
-    dn_state_base : uint64     // live region's state base inside bdn_state
-    dn_conv_base : uint64      // live region's conv-history base inside bdn_state
-    dn_state_alt : uint64      // shadow region bases — the MTP verify's dual-store targets
-    dn_conv_alt : uint64
+    bdn_state : MetalBuffer?   // the DnMirror pool (mirror-owned, never released here)
     bdn_qkv : MetalBuffer?     // [cd] fused qkv projection row
     bdn_cv : MetalBuffer?      // [cd] conv output (l2-normed in place)
     bdn_z : MetalBuffer?       // [di] z gate row
-    bdn_b : MetalBuffer?       // [nvh] raw beta projections
+    bdn_b : MetalBuffer?       // [nvh] raw beta projections; [2 nvh] beta then alpha a row under `dn_ba_rows`
     bdn_g : MetalBuffer?       // [nvh] raw alpha projections
+    dn_ba_rows : bool          //! the F32 beta/alpha planes ran as one GEMV into `bdn_b`
+    u_nvh2 : MetalBuffer?      //! 2 nvh - the [beta; alpha] GEMV's row count
+    bdn_grp : MetalBuffer?     //! the recurrent stages' group table (`dn_grp_push`)
+    bytes_dn_grp : uint64
+    dn_ng : int64
+    dn_npmax : int64
     bdn_o : MetalBuffer?       // [di] delta-rule output (gated in place)
     dn_split : bool
     btape : MetalBuffer?
@@ -550,11 +552,13 @@ def private acquire_step(t : Model; s : Session; pos : int64; koff, voff : uint6
         r.bdn_cv = pool_acquire(g_pool, g_dev, r.bytes_dn_cd)
         r.bdn_z = pool_acquire(g_pool, g_dev, r.bytes_dn_di)
         r.bdn_o = pool_acquire(g_pool, g_dev, r.bytes_dn_di)
-        r.bdn_b = pool_acquire(g_pool, g_dev, r.bytes_dn_h)
+        r.bdn_b = pool_acquire(g_pool, g_dev, 2ul * r.bytes_dn_h)
         r.bdn_g = pool_acquire(g_pool, g_dev, r.bytes_dn_h)
         r.u_cd = uniform_u32(uint(cd))
         r.u_nvh = uniform_u32(uint(c.ssm_dt_rank))
         r.u_di = uniform_u32(uint(di))
+        r.dn_ba_rows = t.dn_ba_f32
+        r.u_nvh2 = uniform_u32(uint(2l * c.ssm_dt_rank))
     }
     if (c.q_gated) {
         r.bdn_qg = pool_acquire(g_pool, g_dev, 2ul * r.bytes_q)
@@ -884,17 +888,38 @@ def private w13_fused_single(var e : SingleLayerEnc; t : Model; enc : MetalCompu
     return true
 }
 
-//! the single row's deltanet layer: projections -> conv+SiLU -> q/k L2 -> delta rule -> gated
-//! out-norm -> out-proj, state and history in place
-//! the deltanet output gate over nrows rows: the family's z activation - sigmoid (qwen4exp) or silu
-def private enc_dn_zgate(enc : MetalComputeEncoder?; c : Config; bo, bz, bwn : MetalBuffer?; var dka : DnArgs; nvh, nrows : int64) {
-    if (c.dn_z_sigmoid) {
-        enc_dn_gate_sig(enc, bo, bz, bwn, dka, nvh, nrows)
-    } else {
-        enc_dn_gate(enc, bo, bz, bwn, dka, nvh, nrows)
+//! the step's recurrent planes over its groups (`r.bdn_grp`): the single row's one, the batch's row a session, the verify's
+//! group a stream
+def private dn_stages_of(var r : StepRes; split : bool) : DnStages {
+    return DnStages(qkv = r.bdn_qkv, cv = r.bdn_cv, b = r.bdn_b, g = r.dn_ba_rows ? r.bdn_b : r.bdn_g, o = r.bdn_o, z = r.bdn_z,
+        grp = r.bdn_grp, ng = r.dn_ng, npmax = r.dn_npmax, rows = r.nrows, split = split, ba_rows = r.dn_ba_rows)
+}
+
+//! F32-on-disk beta/alpha (the 35B): both planes as ONE router f32 GEMV over [beta; alpha], each row's 2 nvh outputs
+//! beta first into `by`
+[arch(at="../ARCHITECTURE_GPU_MTP.md#dn-group-stages")]
+def private enc_dn_ba_f32(enc : MetalComputeEncoder?; t : Model; l : int64; bx, by, u_dim, u_nvh2 : MetalBuffer?; nrows : int64) {
+    let dim = t.config.dim
+    let nvh = t.config.ssm_dt_rank
+    let pb = uint64(dim * nvh * 4l)
+    unsafe {
+        var bw = upload_region_cat3(addr < void? >(t.fblob[t.dn_betaf_off + l * dim * nvh]), pb,
+            addr < void? >(t.fblob[t.dn_alphaf_off + l * dim * nvh]), pb, null, 0ul)
+        enc_moe_router(enc, bw, bx, by, u_dim, u_nvh2, u_dim, g_one, g_zero, 2l * nvh, nrows)
     }
 }
 
+//! the step's group table from the words in `w`, released with the step
+def private dn_grp_take(var r : StepRes; ng, npmax : int64) {
+    var tb = dn_grp_upload()
+    r.bdn_grp = tb.buf
+    r.bytes_dn_grp = tb.bytes
+    r.dn_ng = ng
+    r.dn_npmax = npmax
+}
+
+//! the single row's deltanet layer: projections -> conv+SiLU -> q/k L2 -> delta rule -> gated
+//! out-norm -> out-proj, state and history in place
 def private recurrent_single(var e : SingleLayerEnc; t : Model; enc : MetalComputeEncoder?; l : int64; var dnli : int64&) {
     let c = t.config
     let dim = c.dim
@@ -902,39 +927,23 @@ def private recurrent_single(var e : SingleLayerEnc; t : Model; enc : MetalCompu
     let cd = dn_conv_dim(c)
     let di = c.ssm_d_inner
     let nvh = c.ssm_dt_rank
-    unsafe {
-        if (g_skip != "gemv") {
-            enc_site_gemv(enc, t, fmt_at(t.dnqkv_fmt, l), t.dnqkv_offs[l], cd, dim, r.bxb, r.bdn_qkv, r.u_dim, r.u_cd)
-            enc_site_gemv(enc, t, fmt_at(t.dngate_fmt, l), t.dngate_offs[l], di, dim, r.bxb, r.bdn_z, r.u_dim, r.u_di)
-            if (t.dn_ba_f32) {
-                // F32-on-disk β/α (35B): fblob slabs ride the router f32 GEMV
-                var bw_bt = upload_region(addr < void? >(t.fblob[t.dn_betaf_off + l * dim * nvh]), uint64(dim * nvh * 4l))
-                enc_moe_router(enc, bw_bt, r.bxb, r.bdn_b, r.u_dim, r.u_nvh, r.u_dim, g_one, g_zero, nvh, 1l)
-                var bw_al = upload_region(addr < void? >(t.fblob[t.dn_alphaf_off + l * dim * nvh]), uint64(dim * nvh * 4l))
-                enc_moe_router(enc, bw_al, r.bxb, r.bdn_g, r.u_dim, r.u_nvh, r.u_dim, g_one, g_zero, nvh, 1l)
-            } else {
-                enc_site_gemv(enc, t, fmt_at(t.dnbeta_fmt, l), t.dnbeta_offs[l], nvh, dim, r.bxb, r.bdn_b, r.u_dim, r.u_nvh)
-                enc_site_gemv(enc, t, fmt_at(t.dnalpha_fmt, l), t.dnalpha_offs[l], nvh, dim, r.bxb, r.bdn_g, r.u_dim, r.u_nvh)
-            }
+    if (g_skip != "gemv") {
+        enc_site_gemv(enc, t, fmt_at(t.dnqkv_fmt, l), t.dnqkv_offs[l], cd, dim, r.bxb, r.bdn_qkv, r.u_dim, r.u_cd)
+        enc_site_gemv(enc, t, fmt_at(t.dngate_fmt, l), t.dngate_offs[l], di, dim, r.bxb, r.bdn_z, r.u_dim, r.u_di)
+        if (t.dn_ba_f32) {
+            enc_dn_ba_f32(enc, t, l, r.bxb, r.bdn_b, r.u_dim, r.u_nvh2, 1l)
+        } else {
+            enc_site_gemv(enc, t, fmt_at(t.dnbeta_fmt, l), t.dnbeta_offs[l], nvh, dim, r.bxb, r.bdn_b, r.u_dim, r.u_nvh)
+            enc_site_gemv(enc, t, fmt_at(t.dnalpha_fmt, l), t.dnalpha_offs[l], nvh, dim, r.bxb, r.bdn_g, r.u_dim, r.u_nvh)
         }
-        if (g_skip != "attn") {
-            let soff = r.dn_state_base + uint64(dnli * nvh * c.ssm_d_state * c.ssm_d_state * 4l)
-            let hoff = r.dn_conv_base + uint64(dnli * (c.ssm_d_conv - 1l) * cd * 4l)
-            var bw_cv = upload_region(addr < void? >(t.fblob[t.dn_conv_off + l * c.ssm_d_conv * cd]), uint64(c.ssm_d_conv * cd * 4l))
-            var dka = dn_args(c, 1l, false)
-            enc_dn_conv(enc, r.bdn_qkv, r.bdn_state, hoff, bw_cv, r.bdn_cv, dka, cd, 1l)
-            enc_dn_conv_hist(enc, r.bdn_qkv, r.bdn_state, hoff, r.bdn_state, hoff, dka, cd)
-            enc_dn_l2norm(enc, r.bdn_cv, dka, 2l * c.ssm_n_group, 1l)
-            var baa = upload_region(addr < void? >(t.fblob[t.dn_a_off + l * nvh]), uint64(nvh * 4l))
-            var bdt = upload_region(addr < void? >(t.fblob[t.dn_dt_off + l * nvh]), uint64(nvh * 4l))
-            enc_dn_scan(enc, r.bdn_cv, r.bdn_state, soff, r.bdn_b, r.bdn_g, baa, bdt, r.bdn_o,
-                r.bdn_state, soff, dka, c.ssm_d_state, nvh)
-            var bwn = upload_region(addr < void? >(t.fblob[t.dn_norm_off + l * c.ssm_d_state]), uint64(c.ssm_d_state * 4l))
-            enc_dn_zgate(enc, c, r.bdn_o, r.bdn_z, bwn, dka, nvh, 1l)
-        }
-        if (g_skip != "gemv") {
-            enc_site_gemv(enc, t, fmt_at(t.dnout_fmt, l), t.dnout_offs[l], dim, di, r.bdn_o, r.bxb2, r.u_di, r.u_dim)
-        }
+    }
+    if (g_skip != "attn") {
+        let d = dn_stages_of(r, false)
+        enc_dn_front(enc, t, l, dnli, d)
+        enc_dn_back(enc, t, l, dnli, d)
+    }
+    if (g_skip != "gemv") {
+        enc_site_gemv(enc, t, fmt_at(t.dnout_fmt, l), t.dnout_offs[l], dim, di, r.bdn_o, r.bxb2, r.u_di, r.u_dim)
     }
     dnli++
 }
@@ -1062,10 +1071,10 @@ def private ple_side_step(r : StepRes; t : Model; enc : MetalComputeEncoder?) {
                     let vb = uint64(i) * uint64(c.dim * 4l)
                     let pos_i = g_b_rte[i * 4l + 3l] - 1u   // the route table's cnt is the row's position + 1
                     var gka = PleGateArgs(dim = uint(c.dim), hc = uint(c.hc_count), eps = c.norm_eps, pos0 = pos_i, rows = uint(rows), direct = 0u)
-                    enc_ple_gate(enc, r.bhc, rb, r.bple_key, rb, r.bple_val, vb, bwk, bwq, bwc, r.bple_gated, rb, g_b_dn_bufs[i], g_b_ple_bases[i], gka, c.hc_count)
+                    enc_ple_gate(enc, r.bhc, rb, r.bple_key, rb, r.bple_val, vb, bwk, bwq, bwc, r.bple_gated, rb, dn_pool_buffer(), g_b_ple_bases[i], gka, c.hc_count)
                     var cka = PleConvArgs(dim = uint(c.dim), hc = uint(c.hc_count), kern = uint(c.ple_conv_kernel),
                         dil = uint(c.ple_ngram_size), rows = uint(rows), pos0 = pos_i, nrows = 1u, direct = 0u)
-                    enc_ple_conv(enc, r.bhc, rb, r.bple_gated, rb, g_b_dn_bufs[i], g_b_ple_bases[i], g_b_dn_bufs[i], g_b_ple_bases[i], bwt, cka, hcd)
+                    enc_ple_conv(enc, r.bhc, rb, r.bple_gated, rb, dn_pool_buffer(), g_b_ple_bases[i], dn_pool_buffer(), g_b_ple_bases[i], bwt, cka, hcd)
                 }
             } else {
                 for (g in g_v_groups) {   // the panel form: slot p aliases row p-1's oldest tap, so no row lands in the ring before every conv read (commit_ple_rows)
@@ -1075,7 +1084,7 @@ def private ple_side_step(r : StepRes; t : Model; enc : MetalComputeEncoder?) {
                     enc_ple_gate(enc, r.bhc, rb, r.bple_key, rb, r.bple_val, vb, bwk, bwq, bwc, r.bple_gated, rb, r.bple_cin, rb, gka, g.nr * c.hc_count)
                     var cka = PleConvArgs(dim = uint(c.dim), hc = uint(c.hc_count), kern = uint(c.ple_conv_kernel),
                         dil = uint(c.ple_ngram_size), rows = uint(rows), pos0 = uint(g.pos), nrows = uint(g.nr), direct = 1u)
-                    enc_ple_conv(enc, r.bhc, rb, r.bple_gated, rb, r.bple_cin, rb, g.dn_buf, g.ple_base, bwt, cka, g.nr * hcd)
+                    enc_ple_conv(enc, r.bhc, rb, r.bple_gated, rb, r.bple_cin, rb, dn_pool_buffer(), g.ple_base, bwt, cka, g.nr * hcd)
                 }
             }
         }
@@ -1109,7 +1118,7 @@ def private commit_ple_rows(t : Model; var r : StepRes; gi, n : int64) {
     var cb = metal_new_command_buffer_unretained(g_queue)
     var enc = metal_new_compute_encoder(cb)
     for (p in range64(n)) {
-        enc_copy_row(enc, r.bple_cin, uint64(g.row0 + p) * r.bytes_hcd, g.dn_buf, g.ple_base + uint64(((g.pos + p) % rows) * hcd * 4l), r.u_hcd, hcd)
+        enc_copy_row(enc, r.bple_cin, uint64(g.row0 + p) * r.bytes_hcd, dn_pool_buffer(), g.ple_base + uint64(((g.pos + p) % rows) * hcd * 4l), r.u_hcd, hcd)
     }
     metal_end_encoding(enc)
     metal_release(enc)
@@ -1408,11 +1417,7 @@ struct template LayerEncT {
                 } else {
                     enc_moe_router(enc, bw_rt, r.bxb, r.bmoe_lg, r.u_dim, r.u_moe_ne, r.u_dim, brb, bhrb, c.n_expert, nr)
                 }
-                if (c.n_expert > 256l) {
-                    enc_moe_select_512(enc, r.bmoe_lg, r.bmoe_sel, r.bmoe_sel, r.u_moe_ne, r.u_moe_k, r.u_moe_gmode, nr)
-                } else {
-                    enc_moe_select(enc, r.bmoe_lg, r.bmoe_sel, r.bmoe_sel, r.u_moe_ne, r.u_moe_k, r.u_moe_gmode, nr)
-                }
+                enc_moe_select_rows(enc, c, r.bmoe_lg, r.bmoe_sel, r.u_moe_ne, r.u_moe_k, r.u_moe_gmode, nr)
                 if (moe_with_dense) {
                     var bw_ds = upload_region(addr < void? >(t.fblob[t.moe_down_scale_off + l * c.n_expert]), uint64(c.n_expert * 4l))
                     enc_moe_wscale(enc, r.bmoe_sel, r.bmoe_sel, bw_ds, r.u_moe_k, nr)
@@ -1711,7 +1716,6 @@ struct private MtpVerifyGroup {
     koff : uint64
     voff : uint64
     cap : int64
-    dn_buf : MetalBuffer?
     dn_sbase : uint64
     dn_cbase : uint64
     dn_salt : uint64
@@ -1927,12 +1931,7 @@ def private enc_dn_proj_rows(r : StepRes; t : Model; enc : MetalComputeEncoder?;
     enc_batch_site(enc, t, bt, fmt_at(t.dnqkv_fmt, l), t.dnqkv_offs[l], cd, dim, cd, r.bxb, r.bdn_qkv, r.u_dim, r.u_cd, r.u_cd, 0l, false)
     enc_batch_site(enc, t, bt, fmt_at(t.dngate_fmt, l), t.dngate_offs[l], di, dim, di, r.bxb, r.bdn_z, r.u_dim, r.u_di, r.u_di, 0l, false)
     if (t.dn_ba_f32) {
-        unsafe {
-            var bw_bt = upload_region(addr < void? >(t.fblob[t.dn_betaf_off + l * dim * nvh]), uint64(dim * nvh * 4l))
-            enc_moe_router(enc, bw_bt, r.bxb, r.bdn_b, r.u_dim, r.u_nvh, r.u_dim, g_one, g_zero, nvh, r.nrows)
-            var bw_al = upload_region(addr < void? >(t.fblob[t.dn_alphaf_off + l * dim * nvh]), uint64(dim * nvh * 4l))
-            enc_moe_router(enc, bw_al, r.bxb, r.bdn_g, r.u_dim, r.u_nvh, r.u_dim, g_one, g_zero, nvh, r.nrows)
-        }
+        enc_dn_ba_f32(enc, t, l, r.bxb, r.bdn_b, r.u_dim, r.u_nvh2, r.nrows)
     } else {
         enc_batch_site(enc, t, bt, fmt_at(t.dnbeta_fmt, l), t.dnbeta_offs[l], nvh, dim, nvh, r.bxb, r.bdn_b, r.u_dim, r.u_nvh, r.u_nvh, 0l, false)
         enc_batch_site(enc, t, bt, fmt_at(t.dnalpha_fmt, l), t.dnalpha_offs[l], nvh, dim, nvh, r.bxb, r.bdn_g, r.u_dim, r.u_nvh, r.u_nvh, 0l, false)
@@ -1989,46 +1988,43 @@ def private enc_dn_out_rows(r : StepRes; t : Model; enc : MetalComputeEncoder?; 
 //! the shadow region (reject flips to it), the split tape recording the pre-scan operands
 def private recurrent_verify(var e : VerifyLayerEnc; t : Model; enc : MetalComputeEncoder?; l : int64; var dnli : int64&) {
     let c = t.config
-    let r & = unsafe(*e.r)
+    var r & = unsafe(*e.r)
     let cd = dn_conv_dim(c)
     let nvh = c.ssm_dt_rank
-    unsafe {
-        enc_dn_proj_rows(r, t, enc, l)
-        let sslice = uint64(dnli * nvh * c.ssm_d_state * c.ssm_d_state * 4l)
-        let hslice = uint64(dnli * (c.ssm_d_conv - 1l) * cd * 4l)
-        var bw_cv = upload_region(addr < void? >(t.fblob[t.dn_conv_off + l * c.ssm_d_conv * cd]), uint64(c.ssm_d_conv * cd * 4l))
-        var baa = upload_region(addr < void? >(t.fblob[t.dn_a_off + l * nvh]), uint64(nvh * 4l))
-        var bdt = upload_region(addr < void? >(t.fblob[t.dn_dt_off + l * nvh]), uint64(nvh * 4l))
-        var bwn = upload_region(addr < void? >(t.fblob[t.dn_norm_off + l * c.ssm_d_state]), uint64(c.ssm_d_state * 4l))
-        // each group's rows scan against that stream's own mirror: the row index picks its slice of the planes
+    var d = dn_stages_of(r, r.dn_split)
+    d.mid = !r.dn_split
+    enc_dn_proj_rows(r, t, enc, l)
+    enc_dn_front(enc, t, l, dnli, d)
+    if (r.dn_split) {
         for (g in g_v_groups) {
-            var dka = dn_args(c, g.nr, !r.dn_split)
-            if (r.dn_split) {
-                dka.split = 1u
-            }
-            dka.row = uint(g.row0)
-            var st = g.dn_buf
-            let soff = g.dn_sbase + sslice
-            let hoff = g.dn_cbase + hslice
-            enc_dn_conv(enc, r.bdn_qkv, st, hoff, bw_cv, r.bdn_cv, dka, cd, g.nr)
-            enc_dn_conv_hist(enc, r.bdn_qkv, st, hoff, st, g.dn_calt + hslice, dka, cd)
-            enc_dn_l2norm(enc, r.bdn_cv, dka, 2l * c.ssm_n_group, g.nr)
-            if (r.dn_split) {
-                let tb = g.tape_base + r.tape_slot * uint64(dnli)
-                let cvb = uint64(g.nr * cd * 4l)
-                let nvb = uint64(g.nr * nvh * 4l)
-                enc_copy_row(enc, r.bdn_cv, uint64(g.row0 * cd * 4l), r.btape, tb, r.u_tcd, g.nr * cd)
-                enc_copy_row(enc, r.bdn_qkv, uint64(g.row0 * cd * 4l), r.btape, tb + cvb, r.u_tcd, g.nr * cd)
-                enc_copy_row(enc, r.bdn_b, uint64(g.row0 * nvh * 4l), r.btape, tb + 2ul * cvb, r.u_tnvh, g.nr * nvh)
-                enc_copy_row(enc, r.bdn_g, uint64(g.row0 * nvh * 4l), r.btape, tb + 2ul * cvb + nvb, r.u_tnvh, g.nr * nvh)
-            }
-            enc_dn_scan(enc, r.bdn_cv, st, soff, r.bdn_b, r.bdn_g, baa, bdt, r.bdn_o,
-                st, g.dn_salt + sslice, dka, c.ssm_d_state, nvh)
-            enc_dn_zgate(enc, c, r.bdn_o, r.bdn_z, bwn, dka, nvh, g.nr)
+            let tb = g.tape_base + r.tape_slot * uint64(dnli)
+            let cvb = uint64(g.nr * cd * 4l)
+            enc_copy_row(enc, r.bdn_cv, uint64(g.row0 * cd * 4l), r.btape, tb, r.u_tcd, g.nr * cd)
+            enc_copy_row(enc, r.bdn_qkv, uint64(g.row0 * cd * 4l), r.btape, tb + cvb, r.u_tcd, g.nr * cd)
+            enc_dn_tape_ba(r, enc, nvh, g.row0, g.nr, tb + 2ul * cvb, false)
         }
-        enc_dn_out_rows(r, t, enc, l)
     }
+    enc_dn_back(enc, t, l, dnli, d)
+    enc_dn_out_rows(r, t, enc, l)
     dnli++
+}
+
+//! a group's `nr` beta and alpha rows from row `row0` against its tape slot at `tb`, as two copies of `nr * nvh` floats: the
+//! [beta; alpha] rows' span in halves under `dn_ba_rows`, else a plane each; `back` copies the tape into the planes' first rows
+def private enc_dn_tape_ba(var r : StepRes; enc : MetalComputeEncoder?; nvh, row0, nr : int64; tb : uint64; back : bool) {
+    let n = nr * nvh
+    let nvb = uint64(n * 4l)
+    let rows_b = r.dn_ba_rows ? 2l : 1l
+    let o0 = back ? 0ul : uint64(row0 * rows_b * nvh * 4l)
+    let o1 = r.dn_ba_rows ? o0 + nvb : o0
+    var b1 = r.dn_ba_rows ? r.bdn_b : r.bdn_g
+    if (back) {
+        enc_copy_row(enc, r.btape, tb, r.bdn_b, o0, r.u_tnvh, n)
+        enc_copy_row(enc, r.btape, tb + nvb, b1, o1, r.u_tnvh, n)
+    } else {
+        enc_copy_row(enc, r.bdn_b, o0, r.btape, tb, r.u_tnvh, n)
+        enc_copy_row(enc, b1, o1, r.btape, tb + nvb, r.u_tnvh, n)
+    }
 }
 
 //! the MTP verify's layer encoder: k+1 rows over the same slab through the route table
@@ -2246,37 +2242,36 @@ def private encode_dn_replay(t : Model; var r : StepRes; gi : int64; nrun : int6
     var g & = unsafe(g_v_groups[gi])
     var cb = metal_new_command_buffer_unretained(g_queue)
     var enc = metal_new_compute_encoder(cb)
-    var dka = dn_args(c, nrun, false)   //! the group's taped rows come back at row 0 of the planes: one group replays at a time
-    dka.split = 1u
+    //! the group's taped rows come back at row 0 of the planes: one group replays at a time
+    dn_grp_clear()
+    dn_grp_push(0l, nrun, g.dn_sbase, g.dn_salt, g.dn_cbase, g.dn_calt)
+    var tab = dn_grp_upload()
+    var d = dn_stages_of(r, true)
+    d.z = null
+    d.grp = tab.buf
+    d.ng = 1l
+    d.npmax = nrun
+    d.rows = nrun
     var dnli = 0l
-    unsafe {
-        let cvb = uint64(g.nr * cd * 4l)
-        let nvb = uint64(g.nr * nvh * 4l)
-        for (l in range64(c.n_layers)) {
-            if (!layer_is_recurrent(c, l)) {
-                continue
-            }
-            let sslice = uint64(dnli * nvh * c.ssm_d_state * c.ssm_d_state * 4l)
-            let hslice = uint64(dnli * (c.ssm_d_conv - 1l) * cd * 4l)
-            let tb = g.tape_base + r.tape_slot * uint64(dnli)
-            enc_copy_row(enc, r.btape, tb, r.bdn_cv, 0ul, r.u_tcd, g.nr * cd)
-            enc_copy_row(enc, r.btape, tb + cvb, r.bdn_qkv, 0ul, r.u_tcd, g.nr * cd)
-            enc_copy_row(enc, r.btape, tb + 2ul * cvb, r.bdn_b, 0ul, r.u_tnvh, g.nr * nvh)
-            enc_copy_row(enc, r.btape, tb + 2ul * cvb + nvb, r.bdn_g, 0ul, r.u_tnvh, g.nr * nvh)
-            var st = g.dn_buf
-            enc_dn_conv_hist(enc, r.bdn_qkv, st, g.dn_cbase + hslice, st, g.dn_calt + hslice, dka, cd)
-            var baa = upload_region(addr < void? >(t.fblob[t.dn_a_off + l * nvh]), uint64(nvh * 4l))
-            var bdt = upload_region(addr < void? >(t.fblob[t.dn_dt_off + l * nvh]), uint64(nvh * 4l))
-            enc_dn_scan(enc, r.bdn_cv, st, g.dn_sbase + sslice, r.bdn_b, r.bdn_g, baa, bdt, r.bdn_o,
-                st, g.dn_salt + sslice, dka, c.ssm_d_state, nvh)
-            dnli++
+    let cvb = uint64(g.nr * cd * 4l)
+    for (l in range64(c.n_layers)) {
+        if (!layer_is_recurrent(c, l)) {
+            continue
         }
+        let tb = g.tape_base + r.tape_slot * uint64(dnli)
+        enc_copy_row(enc, r.btape, tb, r.bdn_cv, 0ul, r.u_tcd, g.nr * cd)
+        enc_copy_row(enc, r.btape, tb + cvb, r.bdn_qkv, 0ul, r.u_tcd, g.nr * cd)
+        enc_dn_tape_ba(r, enc, nvh, 0l, g.nr, tb + 2ul * cvb, true)
+        enc_dn_hist(enc, c, dnli, d)
+        enc_dn_back(enc, t, l, dnli, d)
+        dnli++
     }
     metal_end_encoding(enc)
     metal_release(enc)
     metal_commit(cb)
     metal_wait_until_completed(cb)
     metal_release(cb)
+    pool_release(g_upool, tab.buf, tab.bytes)
 }
 
 //! one stream's cold gates before a round: the model, the position, the verify shape, the resident
@@ -2287,7 +2282,7 @@ def private mtp_round_cold(t : Model; s : Session; pos, k : int64) : bool {
         s.mtp_h_pos1 != pos || pos + k + 1l > c.seq_len || !metal_mtp_verify_ok(t, s))
     if (!cold && c.recr_mask != 0ul) {
         // the verify scans the decode DnMirror's live region — it must be resident and current
-        cold = !key_exists(g_dn_mirrors, s.uid) || g_dn_mirrors[s.uid].pos != pos
+        cold = !dn_mirror_at(s.uid, pos)
     }
     if (!cold) {
         if (!key_exists(g_mirrors, s.uid)) {
@@ -2620,19 +2615,26 @@ def metal_mtp_spec_rounds(t : Model; var sessions : array<Session?>; toks : arra
         r.btape = pool_acquire(g_pool, g_dev, r.tape_slot * uint64(r.n_dn_taped) * uint64(ng))
         r.u_tcd = uniform_u32(uint(nr * cd))
         r.u_tnvh = uniform_u32(uint(nr * nvh))
+        dn_mirror_room(ng)
         for (gi in range64(ng)) {
             var dm = dn_mirror_prepare(*g_v_groups[gi].s, g_v_groups[gi].pos, dn_mirror_regions(t))
             if (!dm.ok) {
                 refused = true
                 break
             }
-            g_v_groups[gi].dn_buf = dm.buf
             g_v_groups[gi].dn_sbase = dm.state_off
             g_v_groups[gi].dn_cbase = dm.conv_off
             g_v_groups[gi].dn_salt = dm.state_alt
             g_v_groups[gi].dn_calt = dm.conv_alt
             g_v_groups[gi].ple_base = dm.ple_off
             g_v_groups[gi].tape_base = uint64(gi) * r.tape_slot * uint64(r.n_dn_taped)
+        }
+        if (!refused) {
+            dn_grp_clear()
+            for (g in g_v_groups) {
+                dn_grp_push(g.row0, g.nr, g.dn_sbase, g.dn_salt, g.dn_cbase, g.dn_calt)
+            }
+            dn_grp_take(r, ng, nr)
         }
     }
     if (refused) {
@@ -2696,10 +2698,9 @@ def metal_mtp_spec_rounds(t : Model; var sessions : array<Session?>; toks : arra
         for (gi in range64(ng)) {
             var g & = unsafe(g_v_groups[gi])
             var s & = unsafe(*g.s)
-            if (c.recr_mask != 0ul && key_exists(g_dn_mirrors, s.uid)) {
+            if (c.recr_mask != 0ul) {
                 // verify dispatch failed mid-scan — the mirror state is unreliable and not re-derivable
-                dn_mirror_release(g_dn_mirrors[s.uid])
-                g_dn_mirrors |> erase(s.uid)
+                dn_mirror_drop(s.uid)
             }
             mtp_round_plain(t, s, g.tok, g.pos)
         }
@@ -3078,11 +3079,16 @@ def private release_step(var r : StepRes) {   // nolint:STYLE037,STYLE038 — fl
         pool_release(g_pool, r.bdn_cv, r.bytes_dn_cd)
         pool_release(g_pool, r.bdn_z, r.bytes_dn_di)
         pool_release(g_pool, r.bdn_o, r.bytes_dn_di)
-        pool_release(g_pool, r.bdn_b, r.bytes_dn_h)
+        pool_release(g_pool, r.bdn_b, 2ul * r.bytes_dn_h)
         pool_release(g_pool, r.bdn_g, r.bytes_dn_h)
         pool_release(g_upool, r.u_cd, 4ul)
         pool_release(g_upool, r.u_nvh, 4ul)
+        pool_release(g_upool, r.u_nvh2, 4ul)
         pool_release(g_upool, r.u_di, 4ul)
+        if (r.bdn_grp != null) {
+            pool_release(g_upool, r.bdn_grp, r.bytes_dn_grp)
+            r.bdn_grp = null
+        }
         r.bdn_state = null   // mirror-owned
     }
     if (r.bdn_qg != null) {
@@ -3218,9 +3224,10 @@ def private metal_decode_slow(t : Model; var s : Session; token, pos : int64) : 
             return false
         }
         r.bdn_state = dm.buf
-        r.dn_state_base = dm.state_off
-        r.dn_conv_base = dm.conv_off
         r.ple_ring_base = dm.ple_off
+        dn_grp_clear()
+        dn_grp_push(0l, 1l, dm.state_off, dm.state_off, dm.conv_off, dm.conv_off)
+        dn_grp_take(r, 1l, 1l)
     }
     poke_step(s, r, token)
     g_us_setup += int64(get_time_usec(ts_all))
@@ -3379,39 +3386,18 @@ var private @scratch g_b_rte : array<uint>
 var private @scratch g_b_koffs : array<uint64>
 var private @scratch g_b_voffs : array<uint64>
 var private @scratch g_b_caps : array<int64>
-// the step being built: each recurrent row's DnMirror buffer (mirror-owned) and its live region's bases
-var private @scratch g_b_dn_bufs : array<MetalBuffer?>
-var private @scratch g_b_dn_sbases : array<uint64>
-var private @scratch g_b_dn_cbases : array<uint64>
+// the step being built: each recurrent group's live state base, and the group count (a row a session, or the same-slab rows as one)
+var private @scratch g_b_dn_soffs : array<uint64>
+var private g_b_dn_ng = 0l
 var private @scratch g_b_ple_bases : array<uint64>   //! each row's n-gram conv ring inside its session's mirror (qwen4exp)
 
 // the model half is decode_shape_decline; per batch: uniform f16/f32 KV, every row within the
 // attention depth cap with a real uid, per-row rope rows built, and dim within the add+rms row
 // slabs (GEMM path caps at 3072, fixed-B GEMV at ADD_RMS_MAX_DIM — B >= 5 on a wider model declines)
 def private batch_decode_decline(t : Model; ws : BatchWorkspace; sessions : array<Session?>; nrows : int64) : MetalDecodeDecline {
-    // kquant batch: B <= 8 rides per-stream plane GEMVs; each fused site must be format-uniform per layer (a mixed qkv/w13 site has no batched form)
-    if (t.kquant_native) {
-        if (nrows > 8l) {
-            // B >= 9 rides the kq mul_mm twins — needs %64 GEMM shapes on BOTH attention classes (+ vocab %64 for the batched kq classifier, which the shared tile gate does not cover)
-            if (!mm_tile_widths_64_ok(t) || (t.config.vocab_size % 64l) != 0l) {
-                return MetalDecodeDecline.kquant_native
-            }
-        }
-        if (kq_dense_b32_any(t)) {   //! a per-32 dense plane has no row-batched GEMV: its rows would each stream the plane
-            return MetalDecodeDecline.kquant_native
-        }
-        for (l in range64(t.config.n_layers)) {
-            let kq_qkv = fmt_at(t.wq_fmt, l) != KqFmt.q8
-            // no-wv layers (gemma4 global: V = the K projection) have no attn_v format to match
-            if ((fmt_at(t.wk_fmt, l) != KqFmt.q8) != kq_qkv ||
-                    (t.wv_offs[l] >= 0l && (fmt_at(t.wv_fmt, l) != KqFmt.q8) != kq_qkv)) {
-                return MetalDecodeDecline.kquant_native
-            }
-            let kq_w13 = fmt_at(t.w1_fmt, l) != KqFmt.q8
-            if ((fmt_at(t.w3_fmt, l) != KqFmt.q8) != kq_w13) {
-                return MetalDecodeDecline.kquant_native
-            }
-        }
+    // the batched sites dispatch per tensor by tag, a mixed layer included (`ARCHITECTURE_GPU_MTP.md#mtp-joint-verify`)
+    if (t.kquant_native && kq_dense_b32_any(t)) {   //! a per-32 dense plane has no row-batched GEMV: its rows would each stream the plane
+        return MetalDecodeDecline.b32_rows
     }
     // the deltanet hybrids ride the recurrent rows form where the single row does (decode_shape_decline's graph clause); a MoE's shared expert rides the rows form
     let shape = decode_shape_decline(t, BATCH_NEEDS_OK, true, true, true, allow_hc = !batch_same_slab())   //! MoE, the E-series' shared-KV layers (Q-only rows), its two FFN widths and the hyper-connection rows (one session a row) all have batch forms
@@ -3576,41 +3562,21 @@ def private attention_batch(var e : BatchLayerEnc; t : Model; enc : MetalCompute
     }
 }
 
-//! the batch rows' recurrent layer: the projections as rows GEMVs (one weight pass), then the
-//! conv, scan and gate a row at a time against that session's own state - the row index in the
-//! kargs picks the row's slice of the batch planes, the mirror bases pick its state
+//! the batch rows' recurrent layer: the projections as rows GEMVs (one weight pass), then each stage
+//! once over every group - a row a session against that session's own state, or the same-slab
+//! rows as one group walking its session's state row after row
 def private recurrent_batch(var e : BatchLayerEnc; t : Model; enc : MetalComputeEncoder?; l : int64; var dnli : int64&) {
-    let c = t.config
     var r & = unsafe(*e.r)
-    let cd = dn_conv_dim(c)
-    let nvh = c.ssm_dt_rank
-    unsafe {
-        if (g_skip != "gemv") {
-            enc_dn_proj_rows(r, t, enc, l)
-        }
-        if (g_skip != "attn") {
-            let sslice = uint64(dnli * nvh * c.ssm_d_state * c.ssm_d_state * 4l)
-            let hslice = uint64(dnli * (c.ssm_d_conv - 1l) * cd * 4l)
-            var bw_cv = upload_region(addr < void? >(t.fblob[t.dn_conv_off + l * c.ssm_d_conv * cd]), uint64(c.ssm_d_conv * cd * 4l))
-            var baa = upload_region(addr < void? >(t.fblob[t.dn_a_off + l * nvh]), uint64(nvh * 4l))
-            var bdt = upload_region(addr < void? >(t.fblob[t.dn_dt_off + l * nvh]), uint64(nvh * 4l))
-            var bwn = upload_region(addr < void? >(t.fblob[t.dn_norm_off + l * c.ssm_d_state]), uint64(c.ssm_d_state * 4l))
-            for (i in range64(r.nrows)) {
-                var dka = dn_args(c, 1l, false)
-                dka.row = uint(i)
-                var st = g_b_dn_bufs[i]
-                let soff = g_b_dn_sbases[i] + sslice
-                let hoff = g_b_dn_cbases[i] + hslice
-                enc_dn_conv(enc, r.bdn_qkv, st, hoff, bw_cv, r.bdn_cv, dka, cd, 1l)
-                enc_dn_conv_hist(enc, r.bdn_qkv, st, hoff, st, hoff, dka, cd)
-                enc_dn_l2norm(enc, r.bdn_cv, dka, 2l * c.ssm_n_group, 1l)
-                enc_dn_scan(enc, r.bdn_cv, st, soff, r.bdn_b, r.bdn_g, baa, bdt, r.bdn_o, st, soff, dka, c.ssm_d_state, nvh)
-                enc_dn_zgate(enc, c, r.bdn_o, r.bdn_z, bwn, dka, nvh, 1l)
-            }
-        }
-        if (g_skip != "gemv") {
-            enc_dn_out_rows(r, t, enc, l)
-        }
+    if (g_skip != "gemv") {
+        enc_dn_proj_rows(r, t, enc, l)
+    }
+    if (g_skip != "attn") {
+        let d = dn_stages_of(r, false)
+        enc_dn_front(enc, t, l, dnli, d)
+        enc_dn_back(enc, t, l, dnli, d)
+    }
+    if (g_skip != "gemv") {
+        enc_dn_out_rows(r, t, enc, l)
     }
     dnli++
 }
@@ -3664,31 +3630,14 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
         finish_pending_step()
     }
     // the recurrent rows' state: each session's DnMirror at its own position - a cold mirror syncs
-    // from the CPU prefix under the previous step's completion, a session with neither declines the step
-    let dn = t.config.recr_mask != 0ul
-    g_b_dn_bufs |> clear()
-    g_b_dn_sbases |> clear()
-    g_b_dn_cbases |> clear()
-    g_b_ple_bases |> clear()
-    if (dn) {
+    // from the CPU prefix under the previous step's completion, a session with neither declines the step;
+    // the same-slab rows are one session's consecutive positions, one group over its one mirror
+    if (t.config.recr_mask != 0ul) {
         finish_pending_step()
-        dn_mirror_room(nrows)
-        g_b_dn_bufs |> reserve(nrows)
-        g_b_dn_sbases |> reserve(nrows)
-        g_b_dn_cbases |> reserve(nrows)
-        g_b_ple_bases |> reserve(nrows)
-        for (i in range64(nrows)) {
-            var sp = sessions[i]
-            var dm = dn_mirror_prepare(*sp, ws.positions[i], dn_mirror_regions(t))
-            if (!dm.ok) {
-                g_land_err = false
-                batch_decline(MetalDecodeDecline.dn_state)
-                return false
-            }
-            g_b_dn_bufs |> push(dm.buf)
-            g_b_dn_sbases |> push(dm.state_off)
-            g_b_dn_cbases |> push(dm.conv_off)
-            g_b_ple_bases |> push(dm.ple_off)
+        if (!batch_dn_rows(t, ws, sessions, nrows, 0l)) {
+            g_land_err = false
+            batch_decline(MetalDecodeDecline.dn_state)
+            return false
         }
     }
     let ts_all = ref_time_ticks()
@@ -3707,6 +3656,29 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
         L.xb_bytes = nrows * L.dim * 4l
     }
     return batch_step_land(t, ws, sessions, nrows, L)
+}
+
+//! The recurrent rows' group table words at `positions + poff`: a row a session against its own mirror, or the same-slab
+//! rows as one group over their one session's (`ARCHITECTURE_GPU_MTP.md#dn-group-stages`); false = a row with no state
+def private batch_dn_rows(t : Model; ws : BatchWorkspace; var sessions : array<Session?>; nrows, poff : int64) : bool {
+    let same = batch_same_slab()
+    let ng = same ? 1l : nrows
+    dn_grp_clear()
+    g_b_ple_bases |> clear()
+    g_b_dn_soffs |> clear()
+    dn_mirror_room(ng)
+    g_b_ple_bases |> reserve(ng)
+    g_b_dn_soffs |> reserve(ng)
+    for (i in range64(ng)) {
+        var sp = sessions[i]
+        var dm = dn_mirror_prepare(*sp, ws.positions[i] + poff, dn_mirror_regions(t))
+        return false if (!dm.ok)
+        dn_grp_push(i, same ? nrows : 1l, dm.state_off, dm.state_off, dm.conv_off, dm.conv_off)
+        g_b_ple_bases |> push(dm.ple_off)
+        g_b_dn_soffs |> push(dm.state_off)
+    }
+    g_b_dn_ng = ng
+    return true
 }
 
 def private batch_step_land(t : Model; ws : BatchWorkspace; var sessions : array<Session?>; nrows : int64; var L : BatchLanding&) : bool {
@@ -3864,11 +3836,16 @@ def public metal_batch_pre_enabled() : bool {
 
 [arch(at="../ARCHITECTURE_GPU_MTP_DECODE.md#batch-pre-encode")]
 def private batch_pre_encode_next(t : Model; ws : BatchWorkspace; var sessions : array<Session?>; nrows : int64; L : BatchLanding) {
-    return if (!g_b_pre || !L.gpu_logits || L.sameslab || t.config.recr_mask != 0ul || !empty(g_skip))
+    return if (!g_b_pre || !L.gpu_logits || L.sameslab || t.config.hyper_conn || !empty(g_skip))
     for (i in range64(nrows)) {
         return if (ws.positions[i] + 2l > t.config.seq_len)
     }
     return if (!rows_mirror_ready(ws, sessions, nrows, 1l))
+    //! a recurrent row's mirror stands at its next position from the commit-time mark: the prepare touches no state
+    for (i in range64(nrows)) {
+        return if (t.config.recr_mask != 0ul && dn_mirror_live_off(sessions[i].uid, ws.positions[i] + 1l) == ~0ul)
+    }
+    return if (t.config.recr_mask != 0ul && !batch_dn_rows(t, ws, sessions, nrows, 1l))
     let ts_all = ref_time_ticks()
     let rp = batch_rows_prepare(t, ws, sessions, nrows, 1l)
     return if (!rp.ok)
@@ -3887,6 +3864,12 @@ def private batch_pre_matches(t : Model; ws : BatchWorkspace; var sessions : arr
         P.dim != c.dim || P.layers != c.n_layers || P.seq != c.seq_len || P.vocab != c.vocab_size)
     for (i in range64(nrows)) {
         return false if (P.uids[i] != sessions[i].uid || P.positions[i] != ws.positions[i])
+    }
+    if (c.recr_mask != 0ul) {   //! the pool has not moved and every row's state still sits where the step was encoded
+        return false if (P.dn_epoch != g_dn_pool_epoch)
+        for (i in range64(nrows)) {
+            return false if (dn_mirror_live_off(sessions[i].uid, ws.positions[i]) != P.dn_soffs[i])
+        }
     }
     return false if (!rows_mirror_ready(ws, sessions, nrows, 0l))   // a prepare off the fast path would touch the arena under the pending step
     for (i in range64(nrows)) {
@@ -4060,11 +4043,16 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
     var bdn_cv = dn ? pool_acquire(g_pool, g_dev, bytes_dn_cd) : null
     var bdn_z = dn ? pool_acquire(g_pool, g_dev, bytes_dn_di) : null
     var bdn_o = dn ? pool_acquire(g_pool, g_dev, bytes_dn_di) : null
-    var bdn_b = dn ? pool_acquire(g_pool, g_dev, bytes_dn_h) : null
+    var bdn_b = dn ? pool_acquire(g_pool, g_dev, 2ul * bytes_dn_h) : null
     var bdn_g = dn ? pool_acquire(g_pool, g_dev, bytes_dn_h) : null
     var u_cd = dn ? uniform_u32(uint(cd)) : null
     var u_nvh = dn ? uniform_u32(uint(nvh)) : null
+    var u_nvh2 = dn ? uniform_u32(uint(2l * nvh)) : null
     var u_di = dn ? uniform_u32(uint(di)) : null
+    var dn_tab : tuple<buf : MetalBuffer?; bytes : uint64>
+    if (dn) {
+        dn_tab = dn_grp_upload()
+    }
     let bytes_qg = uint64(mr * qd * 4l)
     var bdn_qg = c.q_gated ? pool_acquire(g_pool, g_dev, 2ul * bytes_qg) : null
     var bdn_gate = c.q_gated ? pool_acquire(g_pool, g_dev, bytes_qg) : null
@@ -4253,7 +4241,8 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
         u_hcd = u_hcd, u_hc = u_hc, u_lr = u_lr, u_hc_rows = u_hc_rows, u_lr_tot = u_lr_tot, u_hcd_tot = u_hcd_tot,
         bple_emb = bple_emb, bple_key = bple_key, bple_gated = bple_gated, bple_val = bple_val, u_ple_in = u_ple_in,
         dn = dn, bdn_qkv = bdn_qkv, bdn_cv = bdn_cv, bdn_z = bdn_z, bdn_o = bdn_o, bdn_b = bdn_b, bdn_g = bdn_g,
-        u_cd = u_cd, u_nvh = u_nvh, u_di = u_di,
+        u_cd = u_cd, u_nvh = u_nvh, u_nvh2 = u_nvh2, u_di = u_di, dn_ba_rows = dn && t.dn_ba_f32,
+        bdn_grp = dn_tab.buf, dn_ng = g_b_dn_ng, dn_npmax = same ? nrows : 1l,
         bdn_qg = bdn_qg, bdn_gate = bdn_gate, u_dn_qd2 = u_dn_qd2, u_total_qd = u_total_qd,
         bx = bx, bxb = bxb, bxb2 = bxb2, bqkv = bqkv, bh12 = bhb, bh12b = bhb2, bpart = bpart,
         bxh = bxh, bfgh = bfgh, bytes_xh = bytes_xh, bytes_fgh = bytes_fgh, xh_ok = xh0,
@@ -4454,17 +4443,22 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
         L.pooled |> push((buf = bdn_cv, size = bytes_dn_cd))
         L.pooled |> push((buf = bdn_z, size = bytes_dn_di))
         L.pooled |> push((buf = bdn_o, size = bytes_dn_di))
-        L.pooled |> push((buf = bdn_b, size = bytes_dn_h))
+        L.pooled |> push((buf = bdn_b, size = 2ul * bytes_dn_h))
         L.pooled |> push((buf = bdn_g, size = bytes_dn_h))
         L.upooled |> push((buf = u_cd, size = 4ul))   // nolint:STYLE012
         L.upooled |> push((buf = u_nvh, size = 4ul))
+        L.upooled |> push((buf = u_nvh2, size = 4ul))
         L.upooled |> push((buf = u_di, size = 4ul))
+        L.upooled |> push((buf = dn_tab.buf, size = dn_tab.bytes))
         L.dn_uids |> reserve(nrows)
         L.dn_pos |> reserve(nrows)
         for (i in range64(nrows)) {
             L.dn_uids |> push(sessions[i].uid)
             L.dn_pos |> push(ws.positions[i] + poff)
         }
+        L.dn_soffs |> clear()
+        L.dn_soffs |> push_from(g_b_dn_soffs)
+        L.dn_epoch = g_dn_pool_epoch
     }
     if (hc) {
         L.pooled |> push((buf = bhc, size = rows_hc * bytes_hcd))   // nolint:STYLE012

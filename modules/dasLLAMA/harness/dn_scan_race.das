@@ -49,7 +49,9 @@ def main {
         var baa = race_buf(dev, uint64(NVH * 4), unsafe(addr<void?>(raw[0])))
         var bo = race_buf(dev, uint64(NPOS * DI * 4), null)
         var ka = DnArgs(cd = uint(CD), dconv = 4u, npos = uint(NPOS), kd = uint(KD), ds = uint(DS), nvh = uint(NVH),
-            nkh = uint(NKH), di = uint(DI), eps = 1e-6, qscale = 1.0, mid = 0u, split = 0u, row = 0u)
+            nkh = uint(NKH), di = uint(DI), eps = 1e-6, qscale = 1.0, mid = 0u, split = 0u, row = 0u, bstr = uint(NVH))
+        var grp <- [0u, uint(NPOS), 0u, 0u, 0u, 0u, 0u, 0u]
+        var bgrp = race_buf(dev, 32ul, unsafe(addr<void?>(grp[0])))
         for (sgs in [4, 2, 1]) {
             var t_f = -1.0lf
             var t_h = -1.0lf
@@ -66,7 +68,8 @@ def main {
                     kn_buffer(enc, baa, 0ul, 5)
                     kn_buffer(enc, bo, 0ul, 6)
                     kn_buffer(enc, bstm, 0ul, 7)
-                    kn_kargs(enc, ka, 8)
+                    kn_buffer(enc, bgrp, 0ul, 8)
+                    kn_kargs(enc, ka, 9)
                     kn_dispatch(enc, grid, tg)
                 }
             }, $(enc) {
@@ -80,7 +83,8 @@ def main {
                     kn_buffer(enc, baa, 0ul, 5)
                     kn_buffer(enc, bo, 0ul, 6)
                     kn_buffer(enc, bstm, 0ul, 7)
-                    kn_kargs(enc, ka, 8)
+                    kn_buffer(enc, bgrp, 0ul, 8)
+                    kn_kargs(enc, ka, 9)
                     kn_dispatch(enc, grid, tg)
                 }
             })
@@ -90,7 +94,8 @@ def main {
         delete cvh
         delete raw
         delete prep
-        for (b in [bcv, bcvh, bst, bstm, braw, bprep, baa, bo]) {
+        delete grp
+        for (b in [bcv, bcvh, bst, bstm, braw, bprep, baa, bo, bgrp]) {
             metal_release(b)
         }
         metal_release(p_f)

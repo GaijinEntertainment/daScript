@@ -762,6 +762,47 @@ def public install_rdec_rollback(rollback : RdecRollbackFn) {
 def public rdec_rollback_installed() : bool => g_rdec_rollback_installed
 def public rdec_rollback(a : int64) : bool => invoke(g_rdec_rollback, a)
 
+//! the short window's peel on a recurrent model: `nrows` consecutive rows of the selected region from `pos` through the in-order rows
+//! command, the last row's logits into `logits`
+typedef RdecTokenSeqFn = function<(x : array<float>; cossin : array<float>; pos, nrows : int64; var logits : array<float>) : void>
+[unused_argument(x, cossin, pos, nrows, logits)]
+def private rdec_unset_token_seq(x : array<float>; cossin : array<float>; pos, nrows : int64; var logits : array<float>) {
+    panic("dasLLAMA: the resident in-order rows command hit without an installed seat")
+}
+var g_rdec_token_seq = @@rdec_unset_token_seq
+var g_rdec_token_seq_installed = false
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-prefill-peel")]
+def public install_rdec_token_seq(token_seq : RdecTokenSeqFn) {
+    g_rdec_token_seq = token_seq
+    g_rdec_token_seq_installed = true
+}
+
+def public rdec_token_seq_installed() : bool => g_rdec_token_seq_installed
+def public rdec_token_seq(x : array<float>; cossin : array<float>; pos, nrows : int64; var logits : array<float>) { invoke(g_rdec_token_seq, x, cossin, pos, nrows, logits) }
+
+//! A region's recurrent checkpoints: `save` copies every recurrent layer's state slot and ring pair of the selected region into its
+//! checkpoint row `slot` (one of `RDEC_DN_SNAPS`), `load` copies row `slot` back into the slots and the region's ring parity with it;
+//! false where the driver holds no such row
+let public RDEC_DN_SNAPS = 4   //! the checkpoint rows a mirror region keeps (an LRU), each a whole recurrent state
+typedef RdecDnSnapFn = function<(slot : int64) : bool>
+[unused_argument(slot)]
+def private rdec_unset_dn_snap(slot : int64) : bool => false
+var g_rdec_dn_snap_save = @@rdec_unset_dn_snap
+var g_rdec_dn_snap_load = @@rdec_unset_dn_snap
+var g_rdec_dn_snaps_installed = false
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#device-home-checkpoints")]
+def public install_rdec_dn_snaps(save, load : RdecDnSnapFn) {
+    g_rdec_dn_snap_save = save
+    g_rdec_dn_snap_load = load
+    g_rdec_dn_snaps_installed = true
+}
+
+def public rdec_dn_snaps_installed() : bool => g_rdec_dn_snaps_installed
+def public rdec_dn_snap_save(slot : int64) : bool => invoke(g_rdec_dn_snap_save, slot)
+def public rdec_dn_snap_load(slot : int64) : bool => invoke(g_rdec_dn_snap_load, slot)
+
 //! the NextN head's prompt warm on the window chain: `ask` names whether the next chain warms the head's slab over the prompt rows
 //! it serves, `rows` answers how many head rows the last chain wrote (0 = none); the head's rows move through the K/V row seats at layer `n_layers`
 typedef RdecHeadWarmAskFn = function<(on : bool) : void>

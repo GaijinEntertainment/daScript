@@ -105,7 +105,7 @@ session's prefill may start past zero: everywhere but a recurrent hyper-connecti
 n-gram ring has no continuation hand-off to the window chain. A recurrent session's state parks
 beside its rows: the region's state slots keep the state at the parked position
 (`RdecRegion.dn_pos`), and an adopter takes exactly that many rows, binding the slots as they
-stand with nothing crossing the bus - the state exists at that one position.
+stand with nothing crossing the bus - or, past a shorter shared opening, the region's checkpoint row at it.
 
 **The scheduler's device mode is that contract over streams.** `set_device_kv` switches an
 idle `Scheduler` (one batched step takes one kind of session): admitted streams are
@@ -114,8 +114,8 @@ a media request is refused at `submit` (a device-home session serves no media sp
 and a reaped stream parks its claim under the token list its rows hold - one parked claim a
 stream slot - so the next request adopts the longest opening it shares, short of its last
 token: a conversation's next turn prefills its new suffix alone, with no copy. A recurrent
-model's parked claim is adopted only by a request that opens with every token the claim holds -
-the conversation's next turn - since its state stands at no shorter opening. `dasllama-server` turns the mode on
+model's parked claim is adopted at every token it holds or at the longest checkpoint the request
+shares (`#device-home-checkpoints`), since its state stands at those positions alone. `dasllama-server` turns the mode on
 per slot before each step (`sync_slot_device_kv`) while the slot is served whole from the device,
 has a region per stream and no media tower or self-speculation, and sizes the slot's context
 to a region's. `tests/_resident_regions.das` holds the sessions, the pin, the park and the
@@ -189,6 +189,22 @@ a gather reads a table off one block base; the side-row gather is `EmbGather` at
 layers*ple, scaled by sqrt(ple). With the side table placed the ids prefill serves a
 per-layer-embedding model too - the embed and the side rows gathered on device, no host row upload -
 and the token command reads the row the host's pre-step embedded, in place (`EMB_ID_HOST`).
+
+### A device-home recurrent stream keeps its state at its checkpoints on the device {#device-home-checkpoints}
+
+**A recurrent state exists at one position, so a region keeps copies of it at the positions a later request can share.** A
+region carries `RDEC_DN_SNAPS` (4) checkpoint rows beside its state slots, each in the rollback row's shape - every recurrent
+layer's slot state (`nvh x ds x ds` floats) and its ring pair (`2 x cd x (dconv - 1)` floats) - with the region's ring parity
+(`RDec.snap_dev`, made at the first save). The plan charges them (`rdec_dn_snap_bytes`): on the 35B (30 recurrent layers, 32
+value heads of 128, a 8192-channel conv of 3 taps) a row is 2.19 MiB a layer, 65.6 MiB in all, 262 MiB a region. The scheduler's
+device mode stops a recurrent stream's prefill at the request's openings and its last message's start and end
+(`device_checkpoints_plan`, the markers the host prefix cache keeps checkpoints at) and saves the state there
+(`gpu_device_kv_checkpoint`: an empty row, else the least recently touched); the finished turn's state is the parked claim's
+own (`RdecRegion.dn_pos`). An adopter of a parked claim takes the longest of those positions its prompt contains
+(`parked_state_at`): the end state stands in the slots, a checkpoint row loads into them (`rdec_dn_snap_load`), and the rows
+the claim held past it are rewritten by the adopter's prefill. The checkpoints at or under the adopted position stay the new
+claim's - the same tokens put them there - so a third request on the same opening adopts them off the second's claim. Nothing
+crosses the bus: a save and a load are device copies.
 
 ### The token rows gather on the device off the table's own plane {#vk-token-gather}
 

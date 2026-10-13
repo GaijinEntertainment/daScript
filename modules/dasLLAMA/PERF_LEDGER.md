@@ -564,7 +564,7 @@ what it costs today and what the fix would change.
     ratio against the single-row driver's step. The verify's 22.2 ms of GPU is that two-row step plus the
     draft layer, two classifier passes and the draft-slab re-warm; two rows route to two expert sets, so the
     step streams their union. At 1.76 tokens a round over a 1.45x step the depth-1 ceiling here is 1.21x.
-  - The same-slab probe declines at two rows on this hybrid (`followup_metal.md` 43), so the two-row figure is
+  - The same-slab probe declined at two rows on this hybrid when this entry was read (the batch rail serves the hybrid same-slab verify now), so the two-row figure is
     the two-session batch step, not the verify itself.
 - **MEASURED (2026-10-05, `direction-grade`) - Axpy and Concat as kernels both GPU homes stamp read as before on
   both.** The two kernels moved to one class template each (`dasllama_gpu_kernels_common.das`); on Metal their

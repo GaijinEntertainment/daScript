@@ -459,11 +459,73 @@ def private dn_row_within(t : T?; what : string; gpu, cpu, off : array<float>) {
     row_within_ctrl(t, what, gpu, cpu, off, DN_LOGIT_BAR_REL, "(the CPU row one away as the control)")
 }
 
+let private PEEL_OPEN = 40l
+
+//! after a `PEEL_OPEN`-row opening, tails of 1, 2, 5 and 8 rows as one prefill call peel through the token commands - the in-order
+//! rows command past one row, every recurrent layer stepping the rows one after another in the region's slot - (a peel and a
+//! prefill counted, the recurrent state at the tail's end), and four fed steps read within the split bar of the same tail stepped
+//! a row at a time on a second session, the row one step off the control; one row past the per-row planes takes the chain
+def private hybrid_peel(t : T?; var tr : Model) {
+    let at_once = rdec_token_n_rows()
+    t |> success(at_once >= 8l, "the token commands step eight rows or more at once on the hybrid ({at_once})")
+    var opening <- resident_prompt(PEEL_OPEN)
+    var feed <- resident_feed(at_once + 1l)
+    let lever = vulkan_prefill_peel()
+    set_vulkan_prefill_peel(true)
+    for (rows in [1l, 2l, 5l, 8l, at_once + 1l]) {
+        let peels = rows <= at_once
+        var tail <- [for (i in range64(rows)); feed[i]]
+        var steps <- ramp_ids(4l, rows, 2500l, 71l, 4500l)
+        var sa <- create_session(tr, mirror_kv_dtype())
+        eval(tr, sa, opening)
+        let peels0 = moe_gpu_resident_peels()
+        let pf0 = moe_gpu_resident_prefills()
+        forward_prefill(tr, sa, tail, rows, PEEL_OPEN)
+        t |> equal(moe_gpu_resident_peels() - peels0, peels ? 1l : 0l, "a tail of {rows} rows {peels ? "peels through the token commands" : "takes the window chain"}")
+        t |> equal(moe_gpu_resident_prefills() - pf0, 1l, "the tail of {rows} counted one served prefill")
+        t |> equal(sa.dn_pos, PEEL_OPEN + rows, "the recurrent state stands at the tail's end")
+        sa.n_past = PEEL_OPEN + rows
+        var got <- steps_after(tr, sa, steps)
+        var sb <- create_session(tr, mirror_kv_dtype())
+        eval(tr, sb, opening)
+        var inscope one : array<int64>
+        one |> resize(1)
+        for (i in range64(rows)) {
+            one[0] = tail[i]
+            eval_(tr, sb, one)
+        }
+        var want <- steps_after(tr, sb, steps)
+        let what = "a tail of {rows} rows"
+        rows_within_control(t, what, got, want, SPLIT_BAR_REL, 1l, 1.0, $(r) => r == 0l ? "the tail's last row" : "step {r}")
+        log_argmax_rows(tr, "{what}: the row-at-a-time rows, then the tail's", got, want)
+        served_every_call(t)
+        delete sa
+        delete sb
+        delete got
+        delete want
+        delete tail
+        delete steps
+    }
+    set_vulkan_prefill_peel(lever)
+    delete opening
+    delete feed
+}
+
 [test]
-def test_gpu_resident_hybrid_mtp_short_window(t : T?) {
-    t |> run("Qwen3.5-0.8B-MTP: a two-token prompt takes the window chain - the token command's peel declines a NextN-headed model") @(t : T?) {
+def test_gpu_resident_hybrid_peel(t : T?) {
+    t |> run("Qwen3.5-0.8B: a short tail peels through the token commands, the recurrent rows in order in the region's slot, and reads what the one-row steps read") @(t : T?) {
+        let path = path_join(models_dir(), "Qwen3.5-0.8B-Q8_0.gguf")
+        if (!resident_ready(t, path)) return
+        var tr <- load_resident(path, 1l)
+        t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the hybrid (the load log names any decline)")
+        with_dasllama_jobque_() {
+            hybrid_peel(t, tr)
+        }
+        delete tr
+    }
+    t |> run("Qwen3.5-0.8B-MTP: the same on the NextN-headed carrier, whose peel warms no head row") @(t : T?) {
         with_mtp_carrier(t, 1l) $(var tr) {
-            assert_short_window_takes_chain(t, tr, "a NextN-headed model")
+            hybrid_peel(t, tr)
         }
     }
 }

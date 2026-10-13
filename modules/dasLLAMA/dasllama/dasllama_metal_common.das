@@ -1534,24 +1534,37 @@ def mirror_prepare_rows(t : Model; var s : Session; pos, needed : int64) : tuple
 
 
 // ===== deltanet recurrent-state mirrors (Wave D) — per-session GPU S + conv state =====
-// Forward-only, NOT re-derivable: pos 0 zeroes, s.dn_pos == pos syncs from CPU, else decline;
-// own buffers (KV-arena rebuild re-uploads from CPU — impossible for state); layout == Session's.
+// Forward-only, NOT re-derivable: pos 0 zeroes, s.dn_pos == pos syncs from CPU, an evicted session's stash restores, else decline;
+// every mirror is a slot of one pool buffer (the KV arena's rebuild re-uploads from CPU — impossible for state); layout == Session's.
 
+[arch(at="../ARCHITECTURE_GPU_MTP.md#dn-mirror-pool")]
 struct DnMirror {
     uid : uint64
-    @do_not_delete buf : MetalBuffer?   // regions x [state planes f32][conv planes f32]
+    slot : int64                        //! the mirror's slot in the pool
     conv_off : uint64                   // byte offset of the conv-history region within a region
     region_bytes : uint64
     regions : int64                     // 2 for MTP-verify dual-store (cur flips on reject), else 1
     cur : int64                         // live region index
-    bytes : uint64                      // regions * region_bytes
+    bytes : uint64                      // the slot: regions * region_bytes + the n-gram ring
     pos : int64                         // next position the GPU state expects (forward-only)
     tick : int64
 }
 var @scratch g_dn_mirrors : table<uint64; DnMirror>   // per-session; hot [] after key_exists is a hit
-let DN_MIRRORS_MAX = 4      // per-session state is big (35B: ~60MB) — oldest evicts; a returning
-                            // evicted session declines unless it restarts at pos 0 or off CPU state
+let DN_MIRRORS_MAX = 4      // per-session state is big (35B: ~60MB) — the least recent mirror evicts into its stash
 var private g_dn_mirrors_max = int64(DN_MIRRORS_MAX)   // grows to the widest batch served (dn_mirror_room)
+var private g_dn_pool : MetalBuffer?   //! every mirror's slot, back to back
+var private g_dn_pool_slots = 0l
+var private g_dn_slot_bytes = 0ul
+var g_dn_pool_epoch = 0l   //! bumps when the pool moves - a step encoded over the old buffer is stale
+
+//! An evicted mirror's live region and n-gram ring on the host, at the position it expects next.
+struct private DnStash {
+    pos : int64
+    tick : int64
+    bytes : array<uint8>
+}
+var private @scratch g_dn_stash : table<uint64; DnStash>
+var private g_dn_restores = 0l
 
 [arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
 def dn_mirror_room(n : int64) {
@@ -1561,9 +1574,105 @@ def dn_mirror_room(n : int64) {
 // MTP-capable models verify at B=2 with dual-store — their mirrors carry the shadow region
 def dn_mirror_regions(t : Model) : int64 => t.config.n_layer_nextn > 0l ? 2l : 1l
 
-def dn_mirror_release(mr : DnMirror) {
-    if (mr.buf != null) {
-        metal_release(mr.buf)
+//! the pool every mirror's offsets index; it moves only inside `dn_mirror_prepare`
+def dn_pool_buffer() : MetalBuffer? => g_dn_pool
+
+//! the evicted mirrors a later prepare rebuilt on the device from their stash
+def dn_mirror_restores() : int64 => g_dn_restores
+
+def private dn_slot_base(mr : DnMirror) : uint64 => uint64(mr.slot) * g_dn_slot_bytes
+
+def private dn_slot_dev(mr : DnMirror) : uint8? {
+    unsafe {
+        return reinterpret<uint8?>(metal_buffer_contents(g_dn_pool)) + dn_slot_base(mr)
+    }
+}
+
+//! Drops `uid`'s mirror and its stash: its slot is free for the next session.
+def dn_mirror_drop(uid : uint64) {
+    g_dn_mirrors |> erase(uid)
+    g_dn_stash |> erase(uid)
+}
+
+//! The pool at `slots` slots of `slot_bytes` - the slots it held keep their bytes; a new slot size drops every mirror.
+[cold_path]   // the pool moves when the cap grows or the model changes
+def private dn_pool_fit(slots : int64; slot_bytes : uint64) {
+    if (g_dn_pool != null && g_dn_slot_bytes == slot_bytes && g_dn_pool_slots >= slots) {
+        return
+    }
+    finish_pending_step()
+    var nb = metal_new_buffer(g_dev, uint64(slots) * slot_bytes)
+    if (g_dn_pool != null) {
+        if (g_dn_slot_bytes == slot_bytes) {
+            unsafe(memcpy(metal_buffer_contents(nb), metal_buffer_contents(g_dn_pool), int64(uint64(g_dn_pool_slots) * slot_bytes)))
+        } else {
+            delete g_dn_mirrors
+            delete g_dn_stash
+        }
+        metal_release(g_dn_pool)
+    }
+    g_dn_pool = nb
+    g_dn_pool_slots = slots
+    g_dn_slot_bytes = slot_bytes
+    g_dn_pool_epoch++
+}
+
+//! A free slot of `slot_bytes`, the pool grown when every slot holds a mirror.
+def private dn_slot_alloc(slot_bytes : uint64) : int64 {
+    if (g_dn_pool == null || g_dn_slot_bytes != slot_bytes) {
+        dn_pool_fit(1l, slot_bytes)
+    }
+    for (slot in range64(g_dn_pool_slots)) {
+        var used = false
+        for (mr in values(g_dn_mirrors)) {
+            used = used || mr.slot == slot
+        }
+        return slot if (!used)
+    }
+    let slot = g_dn_pool_slots
+    dn_pool_fit(clamp(2l * g_dn_pool_slots, slot + 1l, max(slot + 1l, g_dn_mirrors_max)), slot_bytes)
+    return slot
+}
+
+//! The least recent mirror leaves the pool for the host: its live region and ring land in its stash.
+[cold_path]   // past the cap alone
+def private dn_mirror_evict(victim : uint64) {
+    let mr = g_dn_mirrors[victim]
+    if (mr.pos > 0l) {
+        let rb = mr.region_bytes
+        let ring = mr.bytes - rb * uint64(mr.regions)
+        var st = DnStash(pos = mr.pos, tick = mr.tick)
+        st.bytes |> reserve(int64(rb + ring))
+        st.bytes |> resize(int64(rb + ring))
+        unsafe {
+            let dev = dn_slot_dev(mr)
+            memcpy(addr<void?>(st.bytes[0]), reinterpret<void?>(dev + uint64(mr.cur) * rb), int64(rb))
+            if (ring > 0ul) {
+                memcpy(addr<void?>(st.bytes[int64(rb)]), reinterpret<void?>(dev + rb * uint64(mr.regions)), int64(ring))
+            }
+        }
+        g_dn_stash |> emplace(victim, st)
+        while (long_length(g_dn_stash) > g_dn_mirrors_max) {
+            g_dn_stash |> erase(lru_victim(g_dn_stash, victim, false))
+        }
+    }
+    g_dn_mirrors |> erase(victim)
+}
+
+//! `uid`'s mirror is resident at `pos`, or its stash stands there to rebuild it
+def dn_mirror_at(uid : uint64; pos : int64) : bool => (key_exists(g_dn_mirrors, uid) && g_dn_mirrors[uid].pos == pos) || (key_exists(g_dn_stash, uid) && g_dn_stash[uid].pos == pos)
+
+//! `uid`'s live state base in the pool while its mirror stands resident at `pos`, else ~0
+def dn_mirror_live_off(uid : uint64; pos : int64) : uint64 {
+    return ~0ul if (!key_exists(g_dn_mirrors, uid) || g_dn_mirrors[uid].pos != pos)
+    let mr = g_dn_mirrors[uid]
+    return dn_slot_base(mr) + uint64(mr.cur) * mr.region_bytes
+}
+
+//! Test seam: `uid`'s mirror evicts as the LRU would evict it.
+def dn_mirror_evict_now(uid : uint64) {
+    if (key_exists(g_dn_mirrors, uid)) {
+        dn_mirror_evict(uid)
     }
 }
 
@@ -1572,7 +1681,7 @@ def dn_mirror_release(mr : DnMirror) {
 def private dn_mirror_copy(var s : Session; mr : DnMirror; region : int64; to_host : bool) {
     let base = uint64(region) * mr.region_bytes
     unsafe {
-        var dev = reinterpret<uint8?>(metal_buffer_contents(mr.buf))
+        var dev = dn_slot_dev(mr)
         var spans = fixed_array(
             (host = addr<void?>(s.dn_state[0]), dev = reinterpret<void?>(dev + base), bytes = long_length(s.dn_state) * 4l),
             (host = addr<void?>(s.dn_conv_state[0]), dev = reinterpret<void?>(dev + base + mr.conv_off), bytes = long_length(s.dn_conv_state) * 4l),
@@ -1601,29 +1710,41 @@ def dn_mirror_prepare(var s : Session; pos : int64; regions : int64) : tuple<ok 
     if (sbytes == 0ul) {
         return (ok = false, buf = null, state_off = 0ul, conv_off = 0ul, state_alt = 0ul, conv_alt = 0ul, ple_off = 0ul)
     }
-    if (key_exists(g_dn_mirrors, s.uid) && g_dn_mirrors[s.uid].bytes != total) {
-        dn_mirror_release(g_dn_mirrors[s.uid])
-        g_dn_mirrors |> erase(s.uid)
+    if (g_dn_pool != null && g_dn_slot_bytes != total) {
+        dn_pool_fit(1l, total)
     }
     let have = key_exists(g_dn_mirrors, s.uid)
     let cpu_prefix = s.dn_pos == pos
-    if (!have && pos != 0l && !cpu_prefix) {
+    let stashed = !have && pos != 0l && key_exists(g_dn_stash, s.uid) && g_dn_stash[s.uid].pos == pos
+    if (!have && pos != 0l && !cpu_prefix && !stashed) {
         return (ok = false, buf = null, state_off = 0ul, conv_off = 0ul, state_alt = 0ul, conv_alt = 0ul, ple_off = 0ul)
     }
     if (!have) {
         while (long_length(g_dn_mirrors) >= g_dn_mirrors_max) {
-            let victim = lru_victim(g_dn_mirrors, 0ul, false)
-            dn_mirror_release(g_dn_mirrors[victim])
-            g_dn_mirrors |> erase(victim)
+            dn_mirror_evict(lru_victim(g_dn_mirrors, 0ul, false))
         }
-        g_dn_mirrors[s.uid] = DnMirror(uid = s.uid, buf = metal_new_buffer(g_dev, total),
+        let slot = dn_slot_alloc(total)
+        g_dn_mirrors[s.uid] = DnMirror(uid = s.uid, slot = slot,
             conv_off = sbytes, region_bytes = rb, regions = regions, cur = 0l, bytes = total, pos = -1l)
+        if (stashed) {
+            let mr = g_dn_mirrors[s.uid]
+            unsafe {
+                let dev = dn_slot_dev(mr)
+                memcpy(reinterpret<void?>(dev), addr<void?>(g_dn_stash[s.uid].bytes[0]), int64(rb))
+                if (pbytes > 0ul) {
+                    memcpy(reinterpret<void?>(dev + rb * uint64(regions)), addr<void?>(g_dn_stash[s.uid].bytes[int64(rb)]), int64(pbytes))
+                }
+            }
+            g_dn_mirrors[s.uid].pos = pos
+            g_dn_restores++
+        }
     }
+    g_dn_stash |> erase(s.uid)
     if (pos == 0l) {
         // fresh conversation: zero every region (dn_reset's GPU half). Safe on unified memory —
         // no step of this session is in flight at pos 0 (spec is clipped for recurrent models)
         unsafe {
-            memset8(metal_buffer_contents(g_dn_mirrors[s.uid].buf), uint8(0), int(total))
+            memset8(dn_slot_dev(g_dn_mirrors[s.uid]), uint8(0), int(total))
         }
         g_dn_mirrors[s.uid].cur = 0l
         g_dn_mirrors[s.uid].pos = 0l
@@ -1638,17 +1759,31 @@ def dn_mirror_prepare(var s : Session; pos : int64; regions : int64) : tuple<ok 
     }
     g_tick++
     g_dn_mirrors[s.uid].tick = g_tick
-    var mr = g_dn_mirrors[s.uid]   // cheap copy — one lookup per statement (table re-hash safety)
-    let base = uint64(mr.cur) * mr.region_bytes
-    let alt = mr.regions == 2l ? uint64(mr.cur ^ 1l) * mr.region_bytes : base
-    return (ok = true, buf = mr.buf, state_off = base, conv_off = base + mr.conv_off,
-        state_alt = alt, conv_alt = alt + mr.conv_off, ple_off = mr.region_bytes * uint64(mr.regions))
+    let mr = g_dn_mirrors[s.uid]   // cheap copy — one lookup per statement (table re-hash safety)
+    let sb = dn_slot_base(mr)
+    let base = sb + uint64(mr.cur) * mr.region_bytes
+    let alt = mr.regions == 2l ? sb + uint64(mr.cur ^ 1l) * mr.region_bytes : base
+    return (ok = true, buf = g_dn_pool, state_off = base, conv_off = base + mr.conv_off,
+        state_alt = alt, conv_alt = alt + mr.conv_off, ple_off = sb + mr.region_bytes * uint64(mr.regions))
 }
 
 //! the mirror's live region into the session's host arrays, `dn_pos` the mirror's position: the host
-//! copy is what a snapshot reads, and the Metal drivers leave it where the session started
+//! copy is what a snapshot reads, and the Metal drivers leave it where the session started; an
+//! evicted session's stash lands there the same way
 def private dn_mirror_to_host(var s : Session) {
     if (!key_exists(g_dn_mirrors, s.uid)) {
+        if (key_exists(g_dn_stash, s.uid) && g_dn_stash[s.uid].pos != s.dn_pos) {
+            let sbytes = long_length(s.dn_state) * 4l
+            let cbytes = long_length(s.dn_conv_state) * 4l
+            unsafe {
+                memcpy(addr<void?>(s.dn_state[0]), addr<void?>(g_dn_stash[s.uid].bytes[0]), sbytes)
+                memcpy(addr<void?>(s.dn_conv_state[0]), addr<void?>(g_dn_stash[s.uid].bytes[sbytes]), cbytes)
+                if (!empty(s.ple_conv_hist)) {
+                    memcpy(addr<void?>(s.ple_conv_hist[0]), addr<void?>(g_dn_stash[s.uid].bytes[sbytes + cbytes]), long_length(s.ple_conv_hist) * 4l)
+                }
+            }
+            s.dn_pos = g_dn_stash[s.uid].pos
+        }
         return
     }
     let mr = g_dn_mirrors[s.uid]
@@ -1667,7 +1802,8 @@ def private dn_mirror_host_sync_register {
 // the step served and its command buffer completed — the GPU state now holds position pos's update
 def dn_mirror_advance(uid : uint64; pos : int64) {
     if (key_exists(g_dn_mirrors, uid)) {
-        g_dn_mirrors[uid].pos = pos + 1l
+        let p0 = g_dn_mirrors[uid].pos
+        g_dn_mirrors[uid].pos = max(p0, pos + 1l)
     }
 }
 
@@ -2215,8 +2351,10 @@ struct BatchLanding {
     xb_bytes : int64
     @scratch sessions : array<Session?>
     @scratch positions : array<int64>
-    @scratch dn_uids : array<uint64>   //!< the recurrent rows: each session's DnMirror advances when the step lands
+    @scratch dn_uids : array<uint64>   //!< the recurrent rows: each session's DnMirror advances when the step commits
     @scratch dn_pos : array<int64>
+    @scratch dn_soffs : array<uint64>   //!< each recurrent row's live state base in the pool the step was encoded over
+    dn_epoch : int64                    //!< the pool generation those bases index
     @scratch koffs : array<uint64>
     @scratch voffs : array<uint64>
     @scratch caps : array<int64>
@@ -2286,6 +2424,7 @@ def release_landing(var L : BatchLanding&) {
     L.ncbufs |> clear()   // the nc cache owns these
     L.dn_uids |> clear()
     L.dn_pos |> clear()
+    L.dn_soffs |> clear()
     L.active = false
     L.pre_valid = false
 }
@@ -2308,6 +2447,9 @@ def mark_rows_committed(L : BatchLanding) {
             let wm0 = g_mirrors[sp.uid].watermark
             g_mirrors[sp.uid].watermark = max(wm0, L.positions[i] + 1l)
         }
+    }
+    for (u, p in L.dn_uids, L.dn_pos) {   //! the recurrent mirrors move with the K/V watermark: queue order writes the state first
+        dn_mirror_advance(u, p)
     }
 }
 
@@ -2453,6 +2595,9 @@ def finish_pending_step {   // nolint:STYLE038 — the pipeline join: wait/error
                 g_mirrors[sp.uid].watermark = 0l
             }
         }
+        for (u in L.dn_uids) {   //! a failed step leaves the recurrent state neither live nor re-derivable
+            dn_mirror_drop(u)
+        }
         g_land_err = true
         batch_decline(MetalDecodeDecline.gpu_error)
     }
@@ -2583,10 +2728,14 @@ def metal_common_release {
         mirror_release(mr)
     }
     delete g_mirrors
-    for (dmr in values(g_dn_mirrors)) {
-        dn_mirror_release(dmr)
-    }
     delete g_dn_mirrors
+    delete g_dn_stash
+    if (g_dn_pool != null) {
+        metal_release(g_dn_pool)
+        g_dn_pool = null
+    }
+    g_dn_pool_slots = 0l
+    g_dn_slot_bytes = 0ul
     g_mirror_bytes = 0ul
     if (g_arena != null) {
         metal_release(g_arena)

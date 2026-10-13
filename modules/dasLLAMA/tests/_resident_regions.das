@@ -306,6 +306,54 @@ def cell_prefill_continues_on_the_device(t : T?; file : string) {
     }
 }
 
+//! the window's fused q/k norm, rope and K/V store against its split pair (`set_vulkan_prefill_qkn_fuse`, put back as found): one
+//! prompt two windows long on each form, the prompt's logits and the fed steps within the split bar with the row one step off as the
+//! control, the census counting the fused pass's stamp on the fused form and the norm pass's on the split one
+def cell_window_qkn_fused(t : T?; file : string) {
+    t |> run("the window's q/k norm, rope and store as one fused pass reads within the split bar of the split pair") @(t : T?) {
+        with_regions_rig(t, file) $(tr) {
+            static_if (typeinfo builtin_module_exists(vulkan)) {
+                t |> success(tr.config.qk_norm, "the carrier norms its q and k heads")
+                var prompt <- prose_ids(PF_WINDOW_ROWS + 88l, 0l)
+                var feed <- feed_a()
+                let lever = vulkan_prefill_qkn_fuse()
+                var rows : array<array<array<float>>>
+                var fused_counts, split_counts : int64[2]
+                for (fused in fixed_array(true, false)) {
+                    set_vulkan_prefill_qkn_fuse(fused)
+                    let qkr0 = census("qkn_rope_cls_spv") + census("qkn_rope_f16_cls_spv")
+                    let rms0 = census("qk_rms_cls_spv")
+                    var s <- create_session(tr, mirror_kv_dtype())
+                    forward_prefill(tr, s, prompt, long_length(prompt), 0l)
+                    let counts = fixed_array(census("qkn_rope_cls_spv") + census("qkn_rope_f16_cls_spv") - qkr0, census("qk_rms_cls_spv") - rms0)
+                    if (fused) {
+                        fused_counts = counts
+                    } else {
+                        split_counts = counts
+                    }
+                    s.n_past = long_length(prompt)
+                    var r <- steps_after(tr, s, feed)   //! the prompt's logits, then each fed step's
+                    rows |> emplace(r)
+                    delete s
+                }
+                set_vulkan_prefill_qkn_fuse(lever)
+                to_log(LOG_INFO, "window qkn: fused form {fused_counts[0]} fused passes and {fused_counts[1]} norm passes, split form {split_counts[0]} and {split_counts[1]}\n")
+                t |> success(fused_counts[0] > 0l && fused_counts[1] == 0l, "the fused form's prefill ran the fused pass and no norm pass ({fused_counts[0]}, {fused_counts[1]})")
+                t |> success(split_counts[0] == 0l && split_counts[1] > 0l, "the split form's prefill ran the norm pass and no fused pass ({split_counts[0]}, {split_counts[1]})")
+                for (st in range(length(rows[0]))) {   //! the two passes reduce the norm in another order: the split bar, the row one step off its control
+                    hold_within(t, tr, rows[0][st], rows[1][st], rows[1][st > 0 ? st - 1 : 1], st == 0 ? "the prompt's logits, fused against split" : "step {st - 1}, fused against split")
+                }
+                served_every_call(t)
+                delete rows
+                delete prompt
+                delete feed
+            } else {
+                t |> skip("dasVulkan not present")
+            }
+        }
+    }
+}
+
 //! the bar a batched row holds against its session alone: bit for bit, or a bar with the one-token-off control - the split
 //! bar on a K-quant dense carrier (its N-row Q8_K sites round apart from the one-row command's, `../followup_vulkan.md`
 //! item 75), the wide bar on a K-quant MoE carrier (the readings each bar was set from: `../PERF_LEDGER.md`, the batched-decode
@@ -1046,6 +1094,63 @@ def cell_scheduler_paged_resident(t : T?; file : string) {
             served_every_call(t)
             delete flat
             delete paged
+        }
+    }
+}
+
+//! two requests on one system prompt, one after the other, on a one-stream scheduler - device-home, or paged host-cached (64-row
+//! pages) - every prefill chunk a window, both requests marking the system prompt's end as their stable opening
+def private serve_shared_opening(m : Model; device : bool; system, u1, u2 : array<int64>; var events : array<SchedEvent>) : tuple<cached : int64; computed : int64> {
+    var sch <- create_scheduler(m, 1l, 4l, PF_WINDOW_ROWS, device ? 0l : 64l, 8l, mirror_kv_dtype())
+    set_device_kv(sch, device)
+    for (id in [1l, 2l]) {
+        var prompt := system
+        prompt |> push_from(id == 1l ? u1 : u2)
+        var req <- make_req(id, prompt, 8l)
+        req.system_at = long_length(system)
+        req.stable_at = long_length(system)
+        submit(m, sch, req)
+        drain(m, sch, events)
+        delete prompt
+    }
+    let out = (cached = sch.cached_tokens, computed = sch.prefill_tokens)
+    set_device_kv(sch, false)
+    delete sch
+    return out
+}
+
+//! a device-home recurrent stream keeps its state at the system prompt's end beside its rows: a second request on the same system
+//! prompt with another user turn adopts that checkpoint off the parked claim and prefills its own turn alone, token for token what
+//! the host-cached paged scheduler - whose prefix cache keeps the same checkpoint - emits
+def cell_device_checkpoint_adopt(t : T?; file : string) {
+    t |> run("a device-home recurrent stream's checkpoint at the system prompt's end serves the next request on that system prompt, token for token the host-cached prefix cache's run") @(t : T?) {
+        with_regions_rig(t, file) $(tr) {
+            var system <- prose_ids(100l, 3l)
+            var u1 <- prose_ids(30l, 17l)
+            var u2 <- prose_ids(30l, 29l)
+            var host, dev : array<SchedEvent>
+            let h = serve_shared_opening(tr, false, system, u1, u2, host)
+            let d = serve_shared_opening(tr, true, system, u1, u2, dev)
+            t |> equal(cached_of(dev, 2l), 100l, "the second request adopted the system prompt's checkpoint off the parked claim")
+            t |> equal(d.cached, 100l, "the device-home run's cache: the system prompt once ({d.cached} tokens)")
+            t |> equal(d.computed, 130l + 30l, "the device-home run computed the first prompt and the second's user turn alone ({d.computed} tokens)")
+            t |> equal(cached_of(host, 2l), 100l, "the host-cached run attached the same checkpoint")
+            t |> equal(h.computed, d.computed, "both runs computed the same tokens")
+            for (id in [1l, 2l]) {
+                var th <- toks_of(host, id)
+                var td <- toks_of(dev, id)
+                log_gen_texts(tr, "request {id} (CPU = host-cached paged, GPU = device-home)", th, td)
+                t |> equal(length(td), 8, "request {id} ran its eight tokens")
+                t |> success(ids_equal(th, td), "request {id}: device-home {td} against host-cached {th}")
+                delete th
+                delete td
+            }
+            served_every_call(t)
+            delete host
+            delete dev
+            delete system
+            delete u1
+            delete u2
         }
     }
 }

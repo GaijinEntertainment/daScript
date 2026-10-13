@@ -3,8 +3,8 @@
 Companion to `ARCHITECTURE_GPU_PREFILL.md`; a section is cited by its anchor. This
 document carries the routed block of the Metal prefill driver: the atomics-free
 bucket rail, the tensor-twin scaffold the gathered expert sites ride, the split-format
-expert twins, the K-quant twins' own crowns and the knee that picks them on an uncrowned box, and
-the short window's gathered expert route. The GEMM form ladder those sites pick from (`ARCHITECTURE_GPU_PREFILL.md#prefill-gemm-ladder`), the dev-W panel knee map
+expert twins, the K-quant twins' own crowns and the knee that picks them on an uncrowned box,
+the short window's gathered expert route, and the routed weights' global scale every row shape applies. The GEMM form ladder those sites pick from (`ARCHITECTURE_GPU_PREFILL.md#prefill-gemm-ladder`), the dev-W panel knee map
 (`ARCHITECTURE_GPU_PREFILL.md#devw-panel-knees`) and the dense-KQ tensor mul_mm scaffold the split-format twins derive from (`ARCHITECTURE_GPU_PREFILL.md#prefill-kq-tensor-scaffold`)
 stay in `ARCHITECTURE_GPU_PREFILL.md`.
 
@@ -172,3 +172,12 @@ The gathered q8 form carries its scale and quant pointers across k-blocks; the s
 form measures slower (`benchmarks/matmul/bench_metal_moe_lab.das`, gmm8 section). The gathered
 Q6_K is the opposite: a superblock-scalar cache measures slower per mm than reloading per
 k-block (same lab, gmm6 section), so its stage is stateless.
+
+### The routed weights' global scale {#moe-wscale}
+
+**A model's `expert_weights_scale` (0 and 1 mean none) multiplies every picked weight after the
+select, on every Metal row shape.** `enc_moe_select_rows` runs the select stamp, then `MetalMoeWScale`
+- the per-expert scale fold gemma-4 runs over its down scales - over a row holding the scale once an
+expert, the CPU `moe_select_core`'s order (renorm, then the scale). The decode, the batch and verify
+rows and the prefill window's route all select through it; the row is a driver buffer rebuilt when
+the scale or the expert count moves and dropped with the weights epoch.

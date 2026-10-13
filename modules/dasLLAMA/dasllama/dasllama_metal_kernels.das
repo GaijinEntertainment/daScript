@@ -2962,7 +2962,11 @@ struct DnArgs {
     qscale : float
     mid : uint
     split : uint
-    row : uint   // the first row of the [npos x ...] planes this dispatch reads and writes - a batched step dispatches each session's row against its own state
+    row : uint   // the first row of the [npos x ...] planes the row-wise stages (L2, prep, gate) read and write
+    sslice : uint   //! the layer's state plane, floats past a group's region base
+    cslice : uint   //! the layer's history plane, floats past a group's region base
+    bstr : uint     //! the scan's beta and alpha row stride: nvh, or 2 nvh where one GEMV wrote [beta; alpha] a row
+    goff : uint     //! the alpha rows' first float in their plane: 0, or nvh past beta in the [beta; alpha] rows
 }
 
 // The fused q8 QKV-GEMV + rope + KV-store twins share one kargs — f16 and f32 mirrors differ
@@ -3002,7 +3006,8 @@ def dn_args(c : Config; npos : int64; mid : bool) : DnArgs {
     return DnArgs(cd = uint(dn_conv_dim(c)), dconv = uint(c.ssm_d_conv), npos = uint(npos),
         kd = uint(dn_key_dim(c)), ds = uint(c.ssm_d_state), nvh = uint(c.ssm_dt_rank),
         nkh = uint(c.ssm_n_group), di = uint(c.ssm_d_inner), eps = c.norm_eps,
-        qscale = 1.0 / sqrt(float(c.ssm_d_state)), mid = mid ? 1u : 0u, split = 0u, row = 0u)
+        qscale = 1.0 / sqrt(float(c.ssm_d_state)), mid = mid ? 1u : 0u, split = 0u, row = 0u, sslice = 0u, cslice = 0u,
+        bstr = uint(c.ssm_dt_rank), goff = 0u)
 }
 
 // ===== the split-K "D" attention family: the stages that do not depend on the K/V codec =====
@@ -6948,6 +6953,53 @@ class MetalMoeWScale {
     }
 }
 
+var private g_wscale_row : MetalBuffer?   //! the model's `expert_weights_scale` once an expert, the scale row `MetalMoeWScale` multiplies by
+var private g_wscale_val = 0.0
+var private g_wscale_ne = 0l
+
+def private wscale_row_drop {
+    if (g_wscale_row != null) {
+        metal_release(g_wscale_row)
+        g_wscale_row = null
+    }
+    g_wscale_ne = 0l
+}
+
+[init]
+def private wscale_row_register {
+    register_reload_prep(@@wscale_row_drop)
+}
+
+//! the routed selection of `nrows` rows: the top-k select (the 512-deep stamp past 256 experts), then a global
+//! `expert_weights_scale` other than 0 or 1 on every picked weight - the CPU `moe_select_core`'s order
+[arch(at="../ARCHITECTURE_GPU_PREFILL_MOE.md#moe-wscale")]
+def enc_moe_select_rows(enc : MetalComputeEncoder?; c : Config; blg, bsel, bne, bnk, bgm : MetalBuffer?; nrows : int64) {
+    if (c.n_expert > 256l) {
+        enc_moe_select_512(enc, blg, bsel, bsel, bne, bnk, bgm, nrows)
+    } else {
+        enc_moe_select(enc, blg, bsel, bsel, bne, bnk, bgm, nrows)
+    }
+    let ws = c.expert_weights_scale
+    if (ws != 0.0 && ws != 1.0) {
+        if (g_wscale_row == null || g_wscale_val != ws || g_wscale_ne != c.n_expert) {
+            wscale_row_build(ws, c.n_expert)
+        }
+        enc_moe_wscale(enc, bsel, bsel, g_wscale_row, bnk, nrows)
+    }
+}
+
+[cold_path]   // once a model
+def private wscale_row_build(ws : float; ne : int64) {
+    wscale_row_drop()
+    g_wscale_row = metal_new_buffer(g_dev, uint64(ne * 4l))
+    var row = unsafe(reinterpret<float?>(metal_buffer_contents(g_wscale_row)))
+    for (e in range64(ne)) {
+        unsafe(row[e]) = ws
+    }
+    g_wscale_val = ws
+    g_wscale_ne = ne
+}
+
 //! The q8 dot's inner forms (four quants against a float4, a block's eight against two), spelled once: this sum order is the one every q8 kernel's parity holds.
 def private q8_quad_dot(qv : array<int8>; qb : uint; x0 : float4) : float =>
     float(qv[qb]) * x0.x + float(qv[qb + 1u]) * x0.y + float(qv[qb + 2u]) * x0.z + float(qv[qb + 3u]) * x0.w
@@ -10651,15 +10703,16 @@ class MetalSoftcapRow {
 }
 
 // Causal depthwise conv over the fused [q;k;v] rows + SiLU (dn_conv_step's batch form): one
-// thread per (channel, position); positions reaching before the window read the channel-major
-// history taps (the CPU dn_conv_state layout). Never writes history — MetalDnConvHist advances.
-[metal_dispatch(name = "enc_dn_conv", pso = "g_pso_dn_conv", tg = 256, grid = "cd/256, npos", params = "cd : int64, npos : int64")]
+// thread per (channel, position, group); positions reaching before a group's rows read its
+// channel-major history taps (the CPU dn_conv_state layout). Never writes history — MetalDnConvHist advances.
+[metal_dispatch(name = "enc_dn_conv", pso = "g_pso_dn_conv", tg = 256, grid = "cd/256, npos, ng", params = "cd : int64, npos : int64, ng : int64")]
 class MetalDnConv {
-    @ssbo @binding = 0 x : array<float>     // [npos x cd] fused qkv projection rows
-    @ssbo @binding = 1 @off = "hoff" hist : array<float>  // [cd x taps] channel-major history (layer slice)
+    @ssbo @binding = 0 x : array<float>     // [rows x cd] fused qkv projection rows
+    @ssbo @binding = 1 hist : array<float>  // the mirror pool: [cd x taps] channel-major history at each group's base
     @ssbo @binding = 2 @role = "weight" w : array<float>     // [cd x dconv] conv taps (raw fblob layout)
-    @ssbo @binding = 3 y : array<float>     // [npos x cd] conv output, silu'd
-    @uniform @binding = 4 ka : DnArgs
+    @ssbo @binding = 3 y : array<float>     // [rows x cd] conv output, silu'd
+    @ssbo @binding = 4 grp : array<uint>    // the group table, eight words a group (dn_grp_push)
+    @uniform @binding = 5 ka : DnArgs
 
     [metal_kernel(name="metal_dn_conv_msl")]
     def metal_dn_conv {
@@ -10667,64 +10720,72 @@ class MetalDnConv {
         let dconv = ka.dconv
         let ch = gl_GlobalInvocationID.x
         let p = gl_GlobalInvocationID.y
-        if (ch >= cd) {
+        let ge = gl_WorkGroupID.z * 8u
+        if (ch >= cd || p >= grp[ge + 1u]) {
             return
         }
+        let row0 = grp[ge]
+        let hb = grp[ge + 4u] + ka.cslice
         let taps = dconv - 1u
         var acc = 0.0
         var k = 0u
         while (k < dconv) {
             let sp = int(p + k) - int(taps)
-            let xv = sp >= 0 ? x[(ka.row + uint(sp)) * cd + ch] : hist[ch * taps + (p + k)]
+            let xv = sp >= 0 ? x[(row0 + uint(sp)) * cd + ch] : hist[hb + ch * taps + (p + k)]
             acc += xv * w[ch * dconv + k]
             k++
         }
-        y[(ka.row + p) * cd + ch] = silu_f32(acc)
+        y[(row0 + p) * cd + ch] = silu_f32(acc)
     }
 }
 
-// Advance the channel-major conv history past an npos window: the new taps are the window's
-// last `taps` input rows, shifted in from the old history when npos < taps (straddle). Reads
+// Advance each group's channel-major conv history past its rows: the new taps are its last
+// `taps` input rows, shifted in from the old history when the rows are fewer (straddle). Reads
 // land in registers before any write, so the in-place buffer update is safe per channel.
-[metal_dispatch(name = "enc_dn_conv_hist", pso = "g_pso_dn_hist", tg = 256, grid = "cd/256", params = "cd : int64")]
+[metal_dispatch(name = "enc_dn_conv_hist", pso = "g_pso_dn_hist", tg = 256, grid = "cd/256, ng", params = "cd : int64, ng : int64")]
 class MetalDnConvHist {
-    @ssbo @binding = 0 x : array<float>     // [npos x cd] the window's fused qkv rows
-    @ssbo @binding = 1 @off = "hoff" hist : array<float>  // [cd x taps] channel-major history (layer slice)
-    @ssbo @binding = 2 @role = "alias" @off = "hmoff" histm : array<float> // dual-store: the npos-1 window's history (verify shadow region)
-    @uniform @binding = 3 ka : DnArgs
+    @ssbo @binding = 0 x : array<float>     // [rows x cd] the fused qkv rows
+    @ssbo @binding = 1 hist : array<float>  // the mirror pool: each group's live history
+    @ssbo @binding = 2 @role = "alias" histm : array<float> // dual-store: the history one row short of the group's (verify shadow region)
+    @ssbo @binding = 3 grp : array<uint>    // the group table, eight words a group (dn_grp_push)
+    @uniform @binding = 4 ka : DnArgs
 
     [metal_kernel(name="metal_dn_conv_hist_msl")]
     def metal_dn_conv_hist {
         let cd = ka.cd
         let dconv = ka.dconv
-        let npos = ka.npos
         let mid = ka.mid
         let ch = gl_GlobalInvocationID.x
+        let ge = gl_WorkGroupID.y * 8u
         if (ch >= cd) {
             return
         }
+        let row0 = grp[ge]
+        let npos = grp[ge + 1u]
+        let hb = grp[ge + 4u] + ka.cslice
+        let hmb = grp[ge + 5u] + ka.cslice
         let taps = dconv - 1u
         var nh : float[8]                   // dconv <= 8 by the serve gate
         var k = 0u
         while (k < taps) {
             let src = int(npos + k) - int(taps)
-            nh[k] = src >= 0 ? x[(ka.row + uint(src)) * cd + ch] : hist[ch * taps + uint(src + int(taps))]
+            nh[k] = src >= 0 ? x[(row0 + uint(src)) * cd + ch] : hist[hb + ch * taps + uint(src + int(taps))]
             k++
         }
         if (mid != 0u) {                    // every hist read precedes the in-place write below
             k = 0u
             while (k < taps) {
                 let src = int(npos - 1u + k) - int(taps)
-                histm[ch * taps + k] = src >= 0 ? x[(ka.row + uint(src)) * cd + ch] : hist[ch * taps + uint(src + int(taps))]
+                histm[hmb + ch * taps + k] = src >= 0 ? x[(row0 + uint(src)) * cd + ch] : hist[hb + ch * taps + uint(src + int(taps))]
                 k++
             }
         }
         k = 0u
         while (k < taps) {
             if (ka.split != 0u) {
-                histm[ch * taps + k] = nh[k]
+                histm[hmb + ch * taps + k] = nh[k]
             } else {
-                hist[ch * taps + k] = nh[k]
+                hist[hb + ch * taps + k] = nh[k]
             }
             k++
         }
@@ -10772,31 +10833,35 @@ class MetalDnL2Norm {
 [ |> template_struct_instance]
 class template MetalDnScanT {
     @template_constant PREP : bool = false   //! braw / graw hold beta and the decay (MetalDnPrep wrote them), not the raw projections
-    @ssbo @binding = 0 cv : array<CT>       // [npos x cd] conv rows: q at 0 / k at kd / v at 2kd
-    @ssbo @binding = 1 @off = "stoff" st : array<float>    // state layer slice [nvh x ds x ds] row-major (i·ds + j)
-    @ssbo @binding = 2 braw : array<float>  // [npos x nvh] raw beta projections
-    @ssbo @binding = 3 graw : array<float>  // [npos x nvh] raw alpha projections
+    @ssbo @binding = 0 cv : array<CT>       // [rows x cd] conv rows: q at 0 / k at kd / v at 2kd
+    @ssbo @binding = 1 st : array<float>    // the mirror pool: each group's state layer [nvh x ds x ds] row-major (i·ds + j)
+    @ssbo @binding = 2 braw : array<float>  // [rows x nvh] raw beta projections
+    @ssbo @binding = 3 graw : array<float>  // [rows x nvh] raw alpha projections
     @ssbo @binding = 4 @role = "weight" aa : array<float>    // [nvh] ssm_a = -exp(A_log) (fblob row)
     @ssbo @binding = 5 @role = "weight" dtb : array<float>   // [nvh] dt_bias (fblob row)
-    @ssbo @binding = 6 o : array<float>     // [npos x di] delta-rule output rows
-    @ssbo @binding = 7 @role = "alias" @off = "stmoff" stm : array<float>  // dual-store: post-token-(npos-2) state (verify shadow region)
-    @uniform @binding = 8 ka : DnArgs
+    @ssbo @binding = 6 o : array<float>     // [rows x di] delta-rule output rows
+    @ssbo @binding = 7 @role = "alias" stm : array<float>  // dual-store: the state one row short of the group's (verify shadow region)
+    @ssbo @binding = 8 grp : array<uint>    // the group table, eight words a group (dn_grp_push)
+    @uniform @binding = 9 ka : DnArgs
 
     [metal_kernel, arch(at="../ARCHITECTURE_GPU_PREFILL_WINDOW.md#prefill-dn-scan")]
     def metal_dn_scan {   // nolint:STYLE038 — MSL kernel body; the walk's state is register-resident across the whole loop
         let cd = ka.cd
         let kd = ka.kd
         let ds = ka.ds
-        let nvh = ka.nvh
         let nkh = ka.nkh
         let di = ka.di
-        let npos = ka.npos
         let mid = ka.mid
         let sg = gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID
         let h = gl_WorkGroupID.y
+        let ge = gl_WorkGroupID.z * 8u
         if (sg * 8u >= ds) {
             return
         }
+        let row0 = grp[ge]
+        let npos = grp[ge + 1u]
+        let sb = grp[ge + 2u] + ka.sslice
+        let smb = grp[ge + 3u] + ka.sslice
         let lane = gl_SubgroupInvocationID
         let j = sg * 8u + lane / 4u
         let r = lane & 3u
@@ -10809,17 +10874,17 @@ class template MetalDnScanT {
         let s0 = h * ds * ds + (r * 32u) * ds + j
         var ls : float[32]
         for [unroll_full] (e in range(32)) {
-            ls[e] = st[s0 + uint(e) * ds]
+            ls[e] = st[sb + s0 + uint(e) * ds]
         }
         var p = 0u
         while (p < npos) {
-            var dec = graw[(ka.row + p) * nvh + h]
-            var beta = braw[(ka.row + p) * nvh + h]
+            var dec = graw[ka.goff + (row0 + p) * ka.bstr + h]
+            var beta = braw[(row0 + p) * ka.bstr + h]
             static_if (!PREP) {
                 dec = dn_decay(a_h, dec + dt_h)
                 beta = sigmoid_f32(beta)
             }
-            let cb = (ka.row + p) * cd
+            let cb = (row0 + p) * cd
             let kp = unsafe(addr(cv[cb + koff]))
             let qp = unsafe(addr(cv[cb + qoff]))
             var part : float[8]
@@ -10847,32 +10912,32 @@ class template MetalDnScanT {
             yy += simd_shuffle_xor(yy, 1u)
             yy += simd_shuffle_xor(yy, 2u)
             if (r == 0u) {
-                o[(ka.row + p) * di + h * ds + j] = yy
+                o[(row0 + p) * di + h * ds + j] = yy
             }
             if (mid != 0u && p + 2u == npos) {
                 for [unroll_full] (e in range(32)) {
-                    stm[s0 + uint(e) * ds] = ls[e]
+                    stm[smb + s0 + uint(e) * ds] = ls[e]
                 }
             }
             p++
         }
         for [unroll_full] (e in range(32)) {
             if (ka.split != 0u) {
-                stm[s0 + uint(e) * ds] = ls[e]
+                stm[smb + s0 + uint(e) * ds] = ls[e]
             } else {
-                st[s0 + uint(e) * ds] = ls[e]
+                st[sb + s0 + uint(e) * ds] = ls[e]
             }
         }
     }
 }
 
-[metal_dispatch(name = "enc_dn_scan", pso = "g_pso_dn_scan", tg = 64, grid = "ds/16, nvh", params = "ds : int64, nvh : int64", requires = "ds % 32")]
+[metal_dispatch(name = "enc_dn_scan", pso = "g_pso_dn_scan", tg = 64, grid = "ds/16, nvh, ng", params = "ds : int64, nvh : int64, ng : int64", requires = "ds % 32")]
 class MetalDnScan : MetalDnScanT {
     typedef CT = float
 }
 
 //! the prefill window's stamp: half conv rows, the gates prepared
-[metal_dispatch(name = "enc_dn_scan_h", pso = "g_pso_dn_scan_h", tg = 64, grid = "ds/16, nvh", params = "ds : int64, nvh : int64", requires = "ds % 32")]
+[metal_dispatch(name = "enc_dn_scan_h", pso = "g_pso_dn_scan_h", tg = 64, grid = "ds/16, nvh, ng", params = "ds : int64, nvh : int64, ng : int64", requires = "ds % 32")]
 class MetalDnScanH : MetalDnScanT {
     typedef CT = float16
     override PREP = true
@@ -10954,6 +11019,117 @@ class MetalDnGate : MetalDnGateT {
 [metal_dispatch(name = "enc_dn_gate_sig", pso = "g_pso_dn_gate_sig", tg = 256, grid = "nvh/8, npos", params = "nvh : int64, npos : int64")]
 class MetalDnGateSig : MetalDnGateT {
     override SIG = true
+}
+
+//! the deltanet output gate over `rows` rows: the family's z activation - sigmoid (qwen4exp) or silu
+def enc_dn_zgate(enc : MetalComputeEncoder?; c : Config; bo, bz, bwn : MetalBuffer?; var dka : DnArgs; nvh, rows : int64) {
+    if (c.dn_z_sigmoid) {
+        enc_dn_gate_sig(enc, bo, bz, bwn, dka, nvh, rows)
+    } else {
+        enc_dn_gate(enc, bo, bz, bwn, dka, nvh, rows)
+    }
+}
+
+//! One recurrent layer's planes over every group of rows - a group is one session's rows against its mirror's slot, rows
+//! back to back in the planes - with the group table and the shapes the stages dispatch over
+struct DnStages {
+    qkv : MetalBuffer?   //! [rows x cd] the projections
+    cv : MetalBuffer?    //! [rows x cd] the conv rows, normed in place
+    cvh : MetalBuffer?   //! the conv rows as halves over prepared gates (the prefill window); null = the f32 scan
+    b : MetalBuffer?
+    g : MetalBuffer?
+    o : MetalBuffer?
+    z : MetalBuffer?     //! the gate rows; null = no gate (the replay)
+    grp : MetalBuffer?
+    ng : int64
+    npmax : int64        //! the most rows one group carries
+    rows : int64
+    mid : bool
+    split : bool
+    ba_rows : bool       //! `b` holds each row's [beta; alpha] and `g` is `b` (one GEMV wrote both)
+}
+
+//! one group's eight words in the table the recurrent stages read: its first row, its rows, then its live state, shadow
+//! state, live history and shadow history bases (floats into the bound mirror pool, from these byte offsets), two pad words
+var private @scratch g_dn_grp_w : array<uint>
+
+//! a fresh group table: the words `dn_grp_push` appends and `dn_grp_upload` hands to a buffer
+def dn_grp_clear {
+    g_dn_grp_w |> clear()
+}
+
+def dn_grp_push(row0, npos : int64; soff, salt, coff, calt : uint64) {
+    g_dn_grp_w |> push(uint(row0))
+    g_dn_grp_w |> push(uint(npos))
+    g_dn_grp_w |> push(uint(soff / 4ul))
+    g_dn_grp_w |> push(uint(salt / 4ul))
+    g_dn_grp_w |> push(uint(coff / 4ul))
+    g_dn_grp_w |> push(uint(calt / 4ul))
+    g_dn_grp_w |> push(0u)
+    g_dn_grp_w |> push(0u)
+}
+
+//! the table as a pooled buffer; the caller hands it back to `g_upool` at its byte size once the step completes
+def dn_grp_upload() : tuple<buf : MetalBuffer?; bytes : uint64> {
+    let bytes = uint64(long_length(g_dn_grp_w) * 4l)
+    var b = pool_acquire_untracked(g_upool, g_dev, bytes)
+    unsafe {
+        memcpy(metal_buffer_contents(b), addr<void?>(g_dn_grp_w[0]), int64(bytes))
+    }
+    return (buf = b, bytes = bytes)
+}
+
+def private dn_stage_args(c : Config; d : DnStages; dnli : int64) : DnArgs {
+    var ka = dn_args(c, d.rows, d.mid)
+    ka.split = d.split ? 1u : 0u
+    ka.sslice = uint(dnli * c.ssm_dt_rank * c.ssm_d_state * c.ssm_d_state)
+    ka.cslice = uint(dnli * (c.ssm_d_conv - 1l) * dn_conv_dim(c))
+    if (d.ba_rows) {
+        ka.bstr = uint(2l * c.ssm_dt_rank)
+        ka.goff = uint(c.ssm_dt_rank)
+    }
+    return ka
+}
+
+//! the history advance of every group past its rows
+def enc_dn_hist(enc : MetalComputeEncoder?; c : Config; dnli : int64; d : DnStages) {
+    var ka = dn_stage_args(c, d, dnli)
+    let pool = dn_pool_buffer()
+    enc_dn_conv_hist(enc, d.qkv, pool, pool, d.grp, ka, dn_conv_dim(c), d.ng)
+}
+
+//! Layer `l`'s conv, history advance and q/k L2 over every group's rows: one dispatch a stage.
+[arch(at="../ARCHITECTURE_GPU_MTP.md#dn-group-stages")]
+def enc_dn_front(enc : MetalComputeEncoder?; t : Model; l, dnli : int64; d : DnStages) {
+    let c = t.config
+    let cd = dn_conv_dim(c)
+    var ka = dn_stage_args(c, d, dnli)
+    var bw_cv = upload_region(unsafe(addr < void? >(t.fblob[t.dn_conv_off + l * c.ssm_d_conv * cd])), uint64(c.ssm_d_conv * cd * 4l))
+    enc_dn_conv(enc, d.qkv, dn_pool_buffer(), bw_cv, d.cv, d.grp, ka, cd, d.npmax, d.ng)
+    enc_dn_hist(enc, c, dnli, d)
+    enc_dn_l2norm(enc, d.cv, ka, 2l * c.ssm_n_group, d.rows)
+}
+
+//! Layer `l`'s delta-rule scan of every group against its state and the gated out-norm over every row: one dispatch a stage.
+[arch(at="../ARCHITECTURE_GPU_MTP.md#dn-group-stages")]
+def enc_dn_back(enc : MetalComputeEncoder?; t : Model; l, dnli : int64; d : DnStages) {
+    let c = t.config
+    let nvh = c.ssm_dt_rank
+    var ka = dn_stage_args(c, d, dnli)
+    let pool = dn_pool_buffer()
+    unsafe {
+        var baa = upload_region(addr < void? >(t.fblob[t.dn_a_off + l * nvh]), uint64(nvh * 4l))
+        var bdt = upload_region(addr < void? >(t.fblob[t.dn_dt_off + l * nvh]), uint64(nvh * 4l))
+        if (d.cvh != null) {
+            enc_dn_scan_h(enc, d.cvh, pool, d.b, d.g, baa, bdt, d.o, pool, d.grp, ka, c.ssm_d_state, nvh, d.ng)
+        } else {
+            enc_dn_scan(enc, d.cv, pool, d.b, d.g, baa, bdt, d.o, pool, d.grp, ka, c.ssm_d_state, nvh, d.ng)
+        }
+        if (d.z != null) {
+            var bwn = upload_region(addr < void? >(t.fblob[t.dn_norm_off + l * c.ssm_d_state]), uint64(c.ssm_d_state * 4l))
+            enc_dn_zgate(enc, c, d.o, d.z, bwn, ka, nvh, d.rows)
+        }
+    }
 }
 
 // Deinterleave the 2x-wide gated-attention Q projection (head h's q at 2h·hs, its gate at

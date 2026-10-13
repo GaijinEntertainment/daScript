@@ -890,7 +890,16 @@ def private rdec_scratch_bytes(t : Model) : int64 {
     let nb = RDEC_NROW_MAX
     let pieces = hs > 0l ? (qd / hs) * RDEC_ATTN_SPLIT_CAP * (hs + 2l) * 4l : 0l
     return RDEC_PF_ROWS * (16l * c.dim + 2l * wide + 10l * qd + 12l * kvd
-        + 8l * hid + 4l * resident_cos_elems(c) + 4l * hs) + (c.vocab_size * 4l + pieces) * nb + RDEC_MISC_BYTES + moe + rdec_rollback_bytes(t)
+        + 8l * hid + 4l * resident_cos_elems(c) + 4l * hs) + (c.vocab_size * 4l + pieces) * nb + RDEC_MISC_BYTES + moe + rdec_rollback_bytes(t) + rdec_dn_snap_bytes(t)
+}
+
+//! the regions' recurrent checkpoints: `RDEC_DN_SNAPS` rows a region, a row every recurrent layer's state and ring pair
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#device-home-checkpoints")]
+def rdec_dn_snap_bytes(t : Model) : int64 {
+    let c = t.config
+    return 0l if (c.recr_mask == 0ul || !rdec_dn_snaps_installed())
+    let dng = rdec_dn_geom(t)
+    return g_rdec_regions_want * int64(RDEC_DN_SNAPS) * resident_recurrent_layers(c) * (dng.nvh * dng.ds * dng.ds + 2l * dng.cd * (dng.dconv - 1l)) * 4l
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-rollback")]
@@ -1461,6 +1470,8 @@ struct RdecRegion {
     head_cnt : int64   //!< the NextN head's K/V rows the device holds: a draft brings the host's rows past them up first
     head_host : int64   //!< the head's rows the owner's host cache holds as the session's: the device's rows above them come down on a pass
     dn_pos : int64      //!< a parked claim's recurrent position: the region's state slots hold that position's state, which only an adopter of exactly that many rows takes
+    snap_pos : int64[RDEC_DN_SNAPS]    //!< the positions the region's checkpoint rows hold the claim's recurrent state at (0 = an empty row)
+    snap_used : int64[RDEC_DN_SNAPS]   //!< each row's last save or load: a new checkpoint takes the row least recently touched
 }
 
 var private g_rdec_regions : array<RdecRegion>
@@ -1504,6 +1515,9 @@ def private rdec_owns(s : Session; r : int64) : bool
 def private rdec_claim(var s : Session; r, cnt : int64) {
     g_rdec_regions[r].cnt = cnt
     g_rdec_regions[r].dn_pos = 0l
+    for (i in range(RDEC_DN_SNAPS)) {
+        g_rdec_regions[r].snap_pos[i] = 0l
+    }
     g_rdec_regions[r].head_cnt = 0l
     g_rdec_regions[r].head_host = 0l
     g_rdec_regions[r].gen = ++g_rdec_gen_seq
@@ -2717,13 +2731,14 @@ def private rdec_take_mirror(t : Model; var s : Session; r, pos : int64) {
     s.rdec_host_current = true   // the host still holds everything the mirror does
 }
 
-//! a prefill's recurrent state before its window chain: a prompt from position zero starts from zero (the chain zero-fills the
-//! slots), a continuation's live state at `dn_pos` goes into the selected region's slots (the owner's are in place already)
+//! a prefill's recurrent state into the selected region's slots before its window chain or its peel: zero for a prompt from position
+//! zero, the live state at `dn_pos` for a continuation (the owner's are in place already)
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
-def private rdec_dn_prefill_entry(var s : Session; c : Config; start_pos : int64) {
+def private rdec_dn_prefill_entry(var s : Session; c : Config; start_pos : int64; peel : bool) {
     if (start_pos == 0l) {
         dn_reset(s)
-    } else {
+    }
+    if (start_pos != 0l || peel) {   //! the chain zero-fills a fresh prompt's slots itself; the peel steps from whatever they hold
         rdec_dn_own_all(s, c.n_layers)
     }
 }
@@ -4011,6 +4026,9 @@ def private rdec_segs_regions(t : Model; var segs : array<PrefillSeg>) : bool {
                 return false
             }
             g_rdec_seg_regions[i] = r
+            if (t.config.recr_mask != 0ul) {   //! the region just bound is the selected one: the segment's state goes into its slots
+                rdec_dn_prefill_entry(s, t.config, sg.start_pos, false)
+            }
         }
     }
     return true
@@ -4052,11 +4070,12 @@ def private rdec_segs_gather(t : Model; var segs : array<PrefillSeg>; ids : bool
     return total
 }
 
-//! the segmented window holds a model whose state, side rows, carry, host experts and staged rows are not per call
+//! the segmented window holds a model whose side rows, wide residual, host experts and staged rows are not per call - a recurrent
+//! segment steps its own region's state, a routed block routes every row of the window, a NextN carry lands a row a segment
 def private rdec_segs_model_fits(t : Model) : bool {
     let c = t.config
     let codec_ok = g_rdec_kvdt == KVDtype.f16 || g_rdec_kvdt == KVDtype.f32
-    return codec_ok && c.recr_mask == 0ul && !has_ple(c) && c.n_layer_nextn == 0l && !c.hyper_conn && c.n_expert == 0l
+    return codec_ok && !has_ple(c) && !c.hyper_conn && !g_rdec_experts_host
 }
 
 //! A device-home scheduler's tick hands `t`'s prefilling streams to the segmented window: the armed driver has the form and the model's chain holds several sessions a window.
@@ -4069,7 +4088,7 @@ def private vulkan_resident_prefill_segments(t : Model; var segs : array<Prefill
     let n = long_length(segs)
     return false if (n < 2l)
     if (!rdec_segs_model_fits(t)) {
-        rdec_segs_declined("the model's chain takes one session a window (recurrent, per-layer-embedding, NextN, routed, hyper-connection, or a block-codec mirror)")
+        rdec_segs_declined("the model's chain takes one session a window (per-layer-embedding, hyper-connection, routed experts on the host, or a block-codec mirror)")
         return false
     }
     let ids = segs[0].s.embed_gpu_pending
@@ -4085,7 +4104,8 @@ def private vulkan_resident_prefill_segments(t : Model; var segs : array<Prefill
         copy_floats(g_rdec_seg_logits, int64(i) * vocab, s.logits, 0l, vocab)
         s.embed_gpu_pending = false
         s.ple_gpu_pending = false
-        rdec_prefill_landed(t, s, g_rdec_seg_regions[i], sg.npos, sg.start_pos, 0l)
+        rdec_select_region(g_rdec_seg_regions[i])
+        rdec_prefill_landed(t, s, g_rdec_seg_regions[i], sg.npos, sg.start_pos, int64(i), false)   //! a segmented window warms no head row
     }
     if (g_env_gpu.gpu_prof) {
         to_log(LOG_INFO, "dasLLAMA: resident segmented prefill host: {n} segments, {total} rows, the driver's run {get_time_usec(ts_run)} us\n")   // nolint:PERF026,PERF028 — the profile flag's report leg
@@ -4151,16 +4171,17 @@ def private vulkan_resident_prefill_go(t : Model; var s : Session; npos, start_p
     if (r < 0l) {
         return false
     }
+    let peel = rdec_peel_fits(t, npos)
     if (c.recr_mask != 0ul) {
-        rdec_dn_prefill_entry(s, c, start_pos)
+        rdec_dn_prefill_entry(s, c, start_pos, peel)
     }
-    if (rdec_peel_fits(t, npos)) {
+    if (peel) {
         let ts_peel = ref_time_ticks()
         rdec_prefill_peel(t, s, r, npos, start_pos)
         if (g_env_gpu.gpu_prof) {
             to_log(LOG_INFO, "dasLLAMA: resident prefill peeled {npos} rows through the token command in {get_time_usec(ts_peel)} us\n")   // nolint:PERF026,PERF028 — the profile flag's report leg
         }
-        rdec_prefill_landed(t, s, r, npos, start_pos, npos - 1l)
+        rdec_prefill_landed(t, s, r, npos, start_pos, npos - 1l, false)
         return true
     }
     let ce = g_rdec_cos_elems
@@ -4196,7 +4217,7 @@ def private vulkan_resident_prefill_go(t : Model; var s : Session; npos, start_p
     return true
 }
 
-def private rdec_prefill_landed(t : Model; var s : Session; r, npos, start_pos, carry_row : int64) {
+def private rdec_prefill_landed(t : Model; var s : Session; r, npos, start_pos, carry_row : int64; warmed : bool = true) {
     let c = t.config
     rdec_stash_carry(c, s, carry_row, start_pos + npos)
     if (c.recr_mask != 0ul) {
@@ -4208,7 +4229,11 @@ def private rdec_prefill_landed(t : Model; var s : Session; r, npos, start_pos, 
     } else {
         g_rdec_regions[r].cnt = start_pos + npos
     }
-    rdec_prefill_head_rows(t, s, r, npos, start_pos)   // after the claim: a fresh prompt's claim zeroes the head rows it would otherwise count
+    if (warmed) {
+        rdec_prefill_head_rows(t, s, r, npos, start_pos)   // after the claim: a fresh prompt's claim zeroes the head rows it would otherwise count
+    } elif (t.config.n_layer_nextn > 0l) {
+        rdec_head_rows_cut(s, start_pos)   //! the peel warms no head row: the head's rows past the window's start stand for nobody
+    }
     s.rdec_host_current = false
     g_rdec_prefills++
     prefill_override_logits_done()
@@ -4223,10 +4248,9 @@ def moe_gpu_resident_peels() : int64 => g_rdec_peels
 //! The property of `c`'s chain that keeps a short window off the token command's peel - its state, side rows, wide residual or
 //! carry are per call - or "" where the chain's shape fits; the host experts' arm reads the armed plan (`rdec_peel_fits`).
 def rdec_peel_shape_why(c : Config) : string {
-    if (c.n_layer_nextn > 0l) return "a NextN-headed model"
     if (c.hyper_conn) return "a hyper-connection chain"
     if (has_ple(c)) return "a per-layer-embedding model"
-    return c.recr_mask != 0ul ? "a recurrent model" : ""
+    return c.recr_mask != 0ul && !rdec_token_seq_installed() ? "a recurrent model (no in-order rows command installed)" : ""
 }
 
 def private rdec_peel_fits(t : Model; npos : int64) : bool {
@@ -4265,6 +4289,8 @@ def private rdec_prefill_peel(t : Model; var s : Session; r, npos, start_pos : i
     rdec_select_region(r)
     if (npos == 1l) {
         rdec_token(g_rdec_x_n, g_rdec_cos_n, g_rdec_ple_rows, -1l, start_pos, start_pos + 1l, false, s.logits)
+    } elif (c.recr_mask != 0ul) {   //! one region's rows: a recurrent layer steps them in order in its slot
+        rdec_token_seq(g_rdec_x_n, g_rdec_cos_n, start_pos, npos, s.logits)
     } else {
         rdec_rows_planes(npos)
         for (i in range64(npos)) {   //! a row before the last lands its pick alone, which nobody reads
@@ -4622,29 +4648,95 @@ def gpu_device_kv_park_(var s : Session) : int64 {
 }
 
 //! Hand the rows `[0, npos)` a kept `claim` holds to the fresh device-home session `s` under a claim of its own; false when the region was
-//! taken or holds fewer rows, and on a recurrent model unless `npos` is the position the region's state slots stand at.
-[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
+//! taken or holds fewer rows, and on a recurrent model unless the region's slots or one of its checkpoint rows stand at `npos` - the
+//! checkpoints at or under `npos` stay the new claim's, its prefix being the same tokens
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#device-home-checkpoints")]
 def gpu_device_kv_adopt_(var s : Session; claim, npos : int64) : bool {
     if (!g_rdec_active || claim == 0l) {
         return false
     }
     for (r in range64(long_length(g_rdec_regions))) {
         continue if (g_rdec_regions[r].gen != claim)
-        let dn_pos = g_rdec_regions[r].dn_pos
-        if (g_rdec_regions[r].cnt < npos || (!empty(s.dn_state_prefix) && npos != dn_pos)) {
+        let reg = g_rdec_regions[r]
+        let recurrent = !empty(s.dn_state_prefix)
+        let snap = recurrent && npos != reg.dn_pos ? rdec_snap_at(reg, npos) : -1
+        if (reg.cnt < npos || (recurrent && npos != reg.dn_pos && snap < 0)) {
             return false
         }
         rdec_claim(s, r, npos)
+        for (i in range(RDEC_DN_SNAPS)) {
+            if (reg.snap_pos[i] <= npos) {
+                g_rdec_regions[r].snap_pos[i] = reg.snap_pos[i]
+                g_rdec_regions[r].snap_used[i] = reg.snap_used[i]
+            }
+        }
         s.rdec_host_current = false
         s.n_past = npos
-        if (!empty(s.dn_state_prefix)) {   //! the slots hold the parked state: the session takes them as they stand, nothing crosses the bus
+        if (recurrent) {   //! the slots take the parked state, or the checkpoint row's, on the device: nothing crosses the bus
             rdec_select_region(r)
+            if (snap >= 0) {
+                verify(rdec_dn_snap_load(int64(snap)), "dasLLAMA resident adopt: the driver lost a checkpoint row it recorded - engine bug")
+                g_rdec_regions[r].snap_used[snap] = ++g_rdec_tick
+            }
             s.dn_pos = npos
             rdec_dn_own_all(s, long_length(s.dn_state_prefix), true)
         }
         return true
     }
     return false
+}
+
+//! the checkpoint row of `reg` that holds position `pos`, -1 where none does
+def private rdec_snap_at(reg : RdecRegion; pos : int64) : int {
+    for (i in range(RDEC_DN_SNAPS)) {
+        return i if (pos > 0l && reg.snap_pos[i] == pos)
+    }
+    return -1
+}
+
+//! the row a new checkpoint of `reg` takes: an empty one, else the least recently touched
+def private rdec_snap_victim(reg : RdecRegion) : int {
+    var slot = 0
+    for (i in range(RDEC_DN_SNAPS)) {
+        return i if (reg.snap_pos[i] == 0l)
+        if (reg.snap_used[i] < reg.snap_used[slot]) {
+            slot = i
+        }
+    }
+    return slot
+}
+
+//! A device-home recurrent session's state at its position kept in its region beside the rows, for a later adopter of exactly that
+//! opening (the least recently touched row gives way); false where the session holds no region, the model keeps no recurrent state
+//! or the driver keeps no checkpoints
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#device-home-checkpoints")]
+def gpu_device_kv_checkpoint_(var s : Session) : bool {
+    return false if (!g_rdec_active || empty(s.dn_state_prefix) || !rdec_dn_snaps_installed() || s.dn_pos <= 0l)
+    let r = s.rdec_region
+    return false if (!rdec_owns(s, r))
+    var slot = rdec_snap_at(g_rdec_regions[r], s.dn_pos)
+    if (slot < 0) {
+        slot = rdec_snap_victim(g_rdec_regions[r])
+    }
+    rdec_select_region(r)
+    return false if (!rdec_dn_snap_save(int64(slot)))
+    g_rdec_regions[r].snap_pos[slot] = s.dn_pos
+    g_rdec_regions[r].snap_used[slot] = ++g_rdec_tick
+    return true
+}
+
+//! The positions the checkpoint rows of the region `claim` names hold (empty where the claim is dead)
+def gpu_device_kv_checkpoints_(claim : int64) : array<int64> {
+    var out : array<int64>
+    for (reg in g_rdec_regions) {
+        continue if (claim == 0l || reg.gen != claim)
+        for (p in reg.snap_pos) {
+            if (p > 0l) {
+                out |> push(p)
+            }
+        }
+    }
+    return <- out
 }
 
 //! The position a parked `claim`'s recurrent state stands at - the one row count its adopter may take; 0 where the claim is dead or the model keeps no recurrent state.

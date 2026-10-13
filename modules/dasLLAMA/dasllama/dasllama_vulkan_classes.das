@@ -2323,6 +2323,7 @@ struct DnConvArgs {
     hist_off : uint
     eps : float
     qscale : float
+    row0 : uint       //! the dispatch's first row in `src` and `outr`: a segmented window convolves a segment's rows over its own region's history
 }
 
 [vk_dispatch(name = "dn_conv_cls", grid = "wgs", params = "wgs : int64")]
@@ -2336,7 +2337,7 @@ class DnConv {
     //! channel ch's input at window row sp: a window row, or the history row sp + taps below the window in the layout hist_mode names
     def xrow(sp : int; ch, taps : uint) : float {
         if (sp >= 0) {
-            return src[uint(sp) * pa.cd + ch]
+            return src[(pa.row0 + uint(sp)) * pa.cd + ch]
         }
         let hidx = uint(max(sp + int(taps), 0))
         if (pa.hist_mode == 1u) {
@@ -2406,7 +2407,7 @@ class DnConv {
             }
             let sc = normed ? (1.0 / max(sqrt(tot), pa.eps)) * qs : 1.0
             if (live && p < pa.npos) {
-                outr[p * pa.cd + ch] = y[i] * sc
+                outr[(pa.row0 + p) * pa.cd + ch] = y[i] * sc
             }
         }
     }
@@ -2704,6 +2705,7 @@ struct DnScanArgs {
     o_off : uint      // the raw o rows' base in orows (position-major, di wide)
     di : uint
     region_state_base : uint
+    row0 : uint       //! the dispatch's first row in the conv rows, the beta / g rows and the o rows: a segmented window scans a segment's rows over its own region's state
 }
 
 [vk_dispatch(name = "dn_scan_cls", grid = "wgs", params = "wgs : int64")]
@@ -2743,16 +2745,17 @@ class DnScan {
         let col = (gl_WorkGroupID.x % cgroups) * cols_per_group + (gl_LocalInvocationID.x >> 5u) * cols_per_block + sl / lanes_per_col
         let live = col < ds                    // a whole cluster shares col, so its shuffles stay uniform
         let kh = h % pa.nkh
-        let q_elem0 = kh * ds + lane
-        let k_elem0 = pa.kd + kh * ds + lane
-        let voff = 2u * pa.kd + h * ds + (live ? col : 0u)   // an idle lane reads column 0: past the last head its own column is past the plane
+        let cbase = pa.row0 * pa.cd
+        let q_elem0 = cbase + kh * ds + lane
+        let k_elem0 = cbase + pa.kd + kh * ds + lane
+        let voff = cbase + 2u * pa.kd + h * ds + (live ? col : 0u)   // an idle lane reads column 0: past the last head its own column is past the plane
         let aa = smalls[pa.a_off + h]
         let dtb = smalls[pa.dt_off + h]
         var ti = gl_LocalInvocationID.x
         while (ti < pa.npos) {
-            let graw = smalls[pa.g_off + ti * pa.nvh + h] + dtb
+            let graw = smalls[pa.g_off + (pa.row0 + ti) * pa.nvh + h] + dtb
             egs[ti] = dn_decay(aa, graw)
-            bts[ti] = sigmoid_f32(smalls[pa.beta_off + ti * pa.nvh + h])
+            bts[ti] = sigmoid_f32(smalls[pa.beta_off + (pa.row0 + ti) * pa.nvh + h])
             ti += 128u
         }
         barrier()
@@ -2808,7 +2811,7 @@ class DnScan {
             }
             o = cluster_add(o, lanes_per_col)
             if (live && lane == 0u) {
-                orows[pa.o_off + t * pa.di + h * ds + col] = o
+                orows[pa.o_off + (pa.row0 + t) * pa.di + h * ds + col] = o
             }
             t++
         }
@@ -10184,6 +10187,12 @@ struct QknRopeArgs {
     kvrow : uint    //! a row's stride in the projection plane
     qrow : uint     //! a row's stride in qrows
     cosrow : uint   //! a row's stride in the cos/sin plane
+    win : uint      //! the window form: row r sits at position `pos0 + r` in the mirror at `layerbase`, its rows `row0 + r` of the planes, its k
+                    //! row at `kbase` and its v row at `vbase` past the row's start in `kvsrc` (`kvrow` apart); 0 = the token rows' form off `tok`
+    pos0 : uint
+    row0 : uint
+    kbase : uint
+    vbase : uint
 }
 
 // A head past 256 (gemma-4's global layers, 512) gives each thread a second element at tid + 256.
@@ -10232,12 +10241,16 @@ class template QknRopeKvT : WgReduceBase {
         let t1 = tid + 256u
         let two = t1 < pa.hs   // the wide head's second element
         let qstride = pa.qstride == 0u ? pa.hs : pa.qstride
-        let qb = rowi * pa.qrow + h * qstride
-        let kvb = rowi * pa.kvrow
-        let sbase = is_k ? kvb + pa.qd + h * pa.hs : qb
+        let prow = pa.win != 0u ? pa.row0 + rowi : rowi
+        let qb = prow * pa.qrow + h * qstride
+        let kvb = prow * pa.kvrow
+        let sbase = is_k ? kvb + (pa.win != 0u ? pa.kbase : pa.qd) + h * pa.hs : qb
         let bbase = is_k ? pa.qd + h * pa.hs : h * pa.hs
-        let cb = rowi * pa.cosrow + pa.cbase
-        let mrow = pa.layerbase + tok[rowi].mirbase + tok[rowi].pos * pa.kvd
+        let cb = prow * pa.cosrow + pa.cbase
+        var mrow = pa.layerbase + (pa.pos0 + rowi) * pa.kvd
+        if (pa.win == 0u) {   //! the token rows' block is read on that form alone: a window's rows run past its extent
+            mrow = pa.layerbase + tok[rowi].mirbase + tok[rowi].pos * pa.kvd
+        }
         var v = 0.0
         var v1 = 0.0
         if (tid < pa.hs) {
@@ -10290,7 +10303,7 @@ class template QknRopeKvT : WgReduceBase {
                 w1 = v1 * inv
             } else {
                 let vb = pa.qd + pa.kvd + h * pa.hs   //! the V head's offset in the projection row and in the layer's bias block: the row stride joins the first alone
-                let vi = kvb + vb
+                let vi = pa.win != 0u ? pa.vbase + kvb + h * pa.hs : kvb + vb
                 if (tid < pa.hs) {
                     w0 = kvsrc[vi + tid] + (pa.hasb != 0u ? bias[pa.boff + vb + tid] : 0.0)
                 }

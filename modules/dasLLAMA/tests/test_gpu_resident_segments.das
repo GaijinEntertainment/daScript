@@ -410,3 +410,38 @@ def test_gpu_resident_segments_llama_1b_q8(t : T?) {
 def test_gpu_resident_segments_llama_1b_k(t : T?) {
     segments_cells(t, "Llama-3.2-1B-Instruct-Q4_K_M.gguf")
 }
+
+//! the segmented window on a recurrent model: each segment's recurrent rows conv and scan over its own region's slot, a tail
+//! shorter than the conv taps among them; a NextN carrier's carry lands a row a segment, a routed model routes every row
+def private recurrent_segments_cells(t : T?; file : string) {
+    let path = path_join(models_dir(), file)
+    return if (!resident_ready(t, path))
+    var tr <- load_resident(path, 2l)
+    return if (!resident_admitted(t, "the whole-model driver armed on {file} (the load log names any decline)", ""))
+    t |> success(tr.config.recr_mask != 0ul, "the file is a recurrent hybrid")
+    t |> success(gpu_device_prefill_segments_(tr), "the driver's segmented window takes the recurrent model")
+    let allowed = resident_prefill_allowed()
+    set_resident_prefill_allowed(true)
+    with_dasllama_jobque_() {
+        segments_cell(t, tr)
+        tails_as_segments(t, tr, 2l, TAIL_B, "a tail under the conv taps")   //! the ring's leading rows off the history segment A continues
+        tails_as_segments(t, tr, LONG_TAIL, LONG_TAIL, "tails past one window")
+    }
+    set_resident_prefill_allowed(allowed)
+    delete tr
+}
+
+[test]
+def test_gpu_resident_segments_hybrid(t : T?) {
+    recurrent_segments_cells(t, "Qwen3.5-0.8B-Q8_0.gguf")
+}
+
+[test]
+def test_gpu_resident_segments_hybrid_mtp(t : T?) {
+    recurrent_segments_cells(t, "Qwen3.5-0.8B-MTP-Q8_0.gguf")
+}
+
+[test]
+def test_gpu_resident_segments_hybrid_moe(t : T?) {
+    recurrent_segments_cells(t, "Qwen3.6-35B-A3B-MTP-IQ4_XS-pure.gguf")   //! large tier: the routed block over every row of the window
+}

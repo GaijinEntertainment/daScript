@@ -3445,6 +3445,7 @@ def test_metal_prefill_kernels(t : T?) {
                 moe_select_gate(t, dev, queue, 300, 8, 2, true)    // past 256 with pad lanes and exact ties, two stream rows
                 moe_select_gate(t, dev, queue, 128, 8, 3, false)   // batch: one stream row per tg
                 moe_select_gate(t, dev, queue, 32, 4, 1, false, 1)  // gpt-oss softmax_weight mode
+                moe_select_gate(t, dev, queue, 128, 8, 3, false, 0, 2.5)   // a global expert_weights_scale behind the select
                 moe_router_gate(t, dev, queue, 64, 128, 1, false)
                 moe_gemv_gate(t, dev, queue, KqFmt.q8, 96, 24, 5, 3, 1, false)   // shared x (the gate/up sites)
                 moe_gemv_gate(t, dev, queue, KqFmt.q8, 64, 32, 7, 4, 1, true)    // per-slot x rows (the down site)
@@ -3491,6 +3492,7 @@ def test_metal_prefill_kernels(t : T?) {
                 dn_chain_gate(t, dev, queue, 2, 4, 4, 5)
                 dn_chain_gate(t, dev, queue, 2, 4, 4, 2)
                 dn_chain_gate(t, dev, queue, 4, 4, 4, 3)
+                dn_groups_gate(t, dev, queue)
                 dn_scan_half_gate(t, dev, queue, 2, 4, 5)
                 dn_scan_half_gate(t, dev, queue, 4, 4, 1)
                 dn_scan_half_gate(t, dev, queue, 2, 2, 37)   // npos x nvh off the prepare pass's 64-wide groups
@@ -4293,13 +4295,18 @@ def private moe_select_bad(bsel; widx : array<uint>; ww : array<float>; nst, k :
 // one stream row per threadgroup ([k idx u32][k w f32] per row). idx must match EXACTLY — ties
 // are exact-equal logits, so both sides agree by the lowest-index rule; w compares within the
 // shared fp tolerance (hardware exp vs the CPU's exp).
-def private moe_select_gate(t : T?; var dev, queue; ne, k, nst : int; ties : bool; gmode : int = 0) {
-    let tag = "moe select ne={ne} k={k} nst={nst}"
+//! `wscale` other than 1 runs `MetalMoeWScale` over a row of that scale behind the select - the global
+//! `expert_weights_scale` arm of `enc_moe_select_rows` - against the host select at the same scale
+def private moe_select_gate(t : T?; var dev, queue; ne, k, nst : int; ties : bool; gmode : int = 0; wscale : float = 1.0) {
+    let tag = "moe select ne={ne} k={k} nst={nst} wscale={wscale}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
         let st = ne > 256 ? stamp_of(@@enc_moe_select_512) : stamp_of(@@enc_moe_select)
+        let sws = stamp_of(@@enc_moe_wscale)
         var pso = mc |> keep_stamp(st, err)
         return if (!pso_ok(t, "moe select", pso, err))
+        var pso_ws = mc |> keep_stamp(sws, err)
+        return if (!pso_ok(t, "moe wscale", pso_ws, err))
         var inscope lg : array<float>
         lg |> resize(nst * ne)
         for (i in range(nst * ne)) {
@@ -4318,7 +4325,7 @@ def private moe_select_gate(t : T?; var dev, queue; ne, k, nst : int; ties : boo
         ww |> resize(nst * k)
         for (s in range(nst)) {
             unsafe {
-                moe_select_core(gmode == 0 ? MoeGate.softmax : MoeGate.softmax_weight, int64(ne), int64(k), gmode == 0, 1.0,
+                moe_select_core(gmode == 0 ? MoeGate.softmax : MoeGate.softmax_weight, int64(ne), int64(k), gmode == 0, wscale,
                     addr(lgc[s * ne]), addr(sidx[0]), addr(ww[0]), int64(s * k))
             }
         }
@@ -4328,9 +4335,16 @@ def private moe_select_gate(t : T?; var dev, queue; ne, k, nst : int; ties : boo
         let bne = mc |> in_plain([uint(ne)])
         let bnk = mc |> in_plain([uint(k)])
         let bgm = mc |> in_plain([uint(gmode)])
+        var inscope wrow <- [for (_e in range(ne)); wscale]
+        let bws = mc |> in_(wrow)
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
             stamp_run(st, pso) {   // sel twice: the idx view and the float w view - row layout is in-kernel
                 invoke(st.enc, enc, mc.buf[blg], mc.buf[bsel], mc.buf[bsel], mc.buf[bne], mc.buf[bnk], mc.buf[bgm], int64(nst))
+            }
+            if (wscale != 1.0) {
+                stamp_run(sws, pso_ws) {
+                    invoke(sws.enc, enc, mc.buf[bsel], mc.buf[bsel], mc.buf[bws], mc.buf[bnk], int64(nst))
+                }
             }
         }
         return if (!ran)
@@ -4346,6 +4360,10 @@ def private moe_select_gate(t : T?; var dev, queue; ne, k, nst : int; ties : boo
         pww[0] += abs(ww[0]) * 0.1 + 1.0
         let badp = moe_select_bad(mc.buf[bsel], pidx, pww, nst, k)
         t |> success(badp.idx + badp.w > 0, "moe select ne={ne} k={k}: poison control reds")
+        if (wscale != 1.0) {
+            var inscope wun <- [for (v in ww); v / wscale]
+            t |> success(moe_select_bad(mc.buf[bsel], widx, wun, nst, k).w > 0, "{tag}: the unscaled weights miss the device's")
+        }
     }
 }
 
@@ -4959,7 +4977,11 @@ def private dn_scan_half_gate(t : T?; var dev, queue; nkh, nvh, npos : int) {
         var inscope(bwant, gwant, owant, stw, stmid) <- dn_rule_oracle(cv, braw, graw, aa, dtb, st0, nkh, nvh, npos, ds)
         var inscope cvh <- [for (v in cv); float16(v)]
         var ka = DnArgs(cd = uint(cd), dconv = 4u, npos = uint(npos), kd = uint(kd), ds = uint(ds),
-            nvh = uint(nvh), nkh = uint(nkh), di = uint(di), eps = EPS, qscale = 1.0)
+            nvh = uint(nvh), nkh = uint(nkh), di = uint(di), eps = EPS, qscale = 1.0, bstr = uint(nvh))
+        var inscope grp0 <- [0u, uint(npos), 0u, 0u, 0u, 0u, 0u, 0u]
+        var inscope grp1 <- [1u, uint(npos), 0u, 0u, 0u, 0u, 0u, 0u]
+        let bgrp = mc |> in_plain(grp0)
+        let bgrp1 = mc |> in_plain(grp1)
         let bcv = mc |> in_plain(cvh)
         let bst = mc |> io_(st0)
         let bbr = mc |> io_(braw)
@@ -4972,7 +4994,7 @@ def private dn_scan_half_gate(t : T?; var dev, queue; nkh, nvh, npos : int) {
                 invoke(sprep.enc, enc, mc.buf[bbr], mc.buf[bgr], mc.buf[baa], mc.buf[bdt], ka, int64((npos * nvh + 63) / 64 * 64))
             }
             stamp_run(sscan, pso_scan) {
-                invoke(sscan.enc, enc, mc.buf[bcv], mc.buf[bst], 0ul, mc.buf[bbr], mc.buf[bgr], mc.buf[baa], mc.buf[bdt], mc.buf[bo], mc.buf[bst], 0ul, ka, int64(ds), int64(nvh))
+                invoke(sscan.enc, enc, mc.buf[bcv], mc.buf[bst], mc.buf[bbr], mc.buf[bgr], mc.buf[baa], mc.buf[bdt], mc.buf[bo], mc.buf[bst], mc.buf[bgrp], ka, int64(ds), int64(nvh), 1l)
             }
         }
         return if (!ran)
@@ -4996,7 +5018,7 @@ def private dn_scan_half_gate(t : T?; var dev, queue; nkh, nvh, npos : int) {
                     invoke(sprep.enc, enc, mc.buf[bbr], mc.buf[bgr], mc.buf[baa], mc.buf[bdt], kmid, prep_total)
                 }
                 stamp_run(sscan, pso_scan) {
-                    invoke(sscan.enc, enc, mc.buf[bcv], mc.buf[bst], 0ul, mc.buf[bbr], mc.buf[bgr], mc.buf[baa], mc.buf[bdt], mc.buf[bo], mc.buf[bstm], 0ul, kmid, int64(ds), int64(nvh))
+                    invoke(sscan.enc, enc, mc.buf[bcv], mc.buf[bst], mc.buf[bbr], mc.buf[bgr], mc.buf[baa], mc.buf[bdt], mc.buf[bo], mc.buf[bstm], mc.buf[bgrp], kmid, int64(ds), int64(nvh), 1l)
                 }
             }
             check_buf(t, "{tag} mid out", mc.buf[bo], owant, BAR_FP, Shape(row_width = di, head_width = ds))
@@ -5015,7 +5037,7 @@ def private dn_scan_half_gate(t : T?; var dev, queue; nkh, nvh, npos : int) {
                 invoke(sprep.enc, enc, mc.buf[bbr], mc.buf[bgr], mc.buf[baa], mc.buf[bdt], ksplit, prep_total)
             }
             stamp_run(sscan, pso_scan) {
-                invoke(sscan.enc, enc, mc.buf[bcv], mc.buf[bst], 0ul, mc.buf[bbr], mc.buf[bgr], mc.buf[baa], mc.buf[bdt], mc.buf[bo], mc.buf[bstm], 0ul, ksplit, int64(ds), int64(nvh))
+                invoke(sscan.enc, enc, mc.buf[bcv], mc.buf[bst], mc.buf[bbr], mc.buf[bgr], mc.buf[baa], mc.buf[bdt], mc.buf[bo], mc.buf[bstm], mc.buf[bgrp], ksplit, int64(ds), int64(nvh), 1l)
             }
         }
         check_buf(t, "{tag} split out", mc.buf[bo], owant, BAR_FP, Shape(row_width = di, head_width = ds))
@@ -5037,7 +5059,7 @@ def private dn_scan_half_gate(t : T?; var dev, queue; nkh, nvh, npos : int) {
                 invoke(sprep.enc, enc, mc.buf[bbr1], mc.buf[bgr1], mc.buf[baa], mc.buf[bdt], krow, prep_total)
             }
             stamp_run(sscan, pso_scan) {
-                invoke(sscan.enc, enc, mc.buf[bcv1], mc.buf[bst], 0ul, mc.buf[bbr1], mc.buf[bgr1], mc.buf[baa], mc.buf[bdt], mc.buf[bo1], mc.buf[bst], 0ul, krow, int64(ds), int64(nvh))
+                invoke(sscan.enc, enc, mc.buf[bcv1], mc.buf[bst], mc.buf[bbr1], mc.buf[bgr1], mc.buf[baa], mc.buf[bdt], mc.buf[bo1], mc.buf[bst], mc.buf[bgrp1], krow, int64(ds), int64(nvh), 1l)
             }
         }
         check_buf(t, "{tag} row: beta, the row before the offset as it was", mc.buf[bbr1], bwant1, BAR_FP, Shape(row_width = nvh))
@@ -5057,10 +5079,150 @@ def private dn_scan_half_gate(t : T?; var dev, queue; nkh, nvh, npos : int) {
                 invoke(sprep.enc, enc, mc.buf[bbr], mc.buf[bgr], mc.buf[baa], mc.buf[bdt], ka, int64((npos * nvh + 63) / 64 * 64))
             }
             stamp_run(sscan, pso_scan) {
-                invoke(sscan.enc, enc, mc.buf[bcv], mc.buf[bst], 0ul, mc.buf[bbr], mc.buf[bgr], mc.buf[baa], mc.buf[bdt], mc.buf[bo], mc.buf[bst], 0ul, ka, int64(ds), int64(nvh))
+                invoke(sscan.enc, enc, mc.buf[bcv], mc.buf[bst], mc.buf[bbr], mc.buf[bgr], mc.buf[baa], mc.buf[bdt], mc.buf[bo], mc.buf[bst], mc.buf[bgrp], ka, int64(ds), int64(nvh), 1l)
             }
         }
         t |> success(mc |> rerun_mismatches(bo, owant, 1e-4, 0.0, "{tag} CONTROL(expected-red)") > 0, "{tag} control: gates prepared twice over a moved state must miss")
+    }
+}
+
+//! the conv rows and history of one group against its own history taps, then the q/k L2 and q pre-scale
+def private dn_group_conv_oracle(xq, hist, cw : array<float>; row0, npos, cd, kd, nkh, ds, dconv : int; qscale : float) : tuple<cv : array<float>; h : array<float>> {
+    let taps = dconv - 1
+    var cv, hw : array<float>
+    cv |> resize(npos * cd)
+    hw |> resize(cd * taps)
+    for (p in range(npos)) {
+        for (ch in range(cd)) {
+            var acc = 0.0
+            for (k in range(dconv)) {
+                let sp = p + k - taps
+                let xv = sp >= 0 ? xq[(row0 + sp) * cd + ch] : hist[ch * taps + p + k]
+                acc += xv * cw[ch * dconv + k]
+            }
+            cv[p * cd + ch] = acc / (1.0 + exp(-acc))
+        }
+        l2_norm_rows(unsafe(addr(cv[p * cd])), int64(2 * nkh), int64(ds), EPS)
+        for (j in range(kd)) {
+            cv[p * cd + j] *= qscale
+        }
+    }
+    for (ch in range(cd)) {
+        for (k in range(taps)) {
+            let src = npos - taps + k
+            hw[ch * taps + k] = src >= 0 ? xq[(row0 + src) * cd + ch] : hist[ch * taps + src + taps]
+        }
+    }
+    return <- (cv = cv, h = hw)
+}
+
+//! Two groups of rows (two and three) against two states at their own bases in ONE pool buffer, each stage one dispatch
+//! over both groups (`ARCHITECTURE_GPU_MTP.md#dn-group-stages`), beta and alpha as one [beta; alpha] plane a row: each group's
+//! conv rows, history, scan output and state against its own sequential oracle; the second group's output against the oracle
+//! run from the first group's state is the control that must miss
+def private dn_groups_gate(t : T?; var dev, queue) {
+    let nkh = 2
+    let nvh = 4
+    let ds = 128
+    let dconv = 4
+    let kd = nkh * ds
+    let di = nvh * ds
+    let cd = 2 * kd + di
+    let taps = dconv - 1
+    let qscale = 1.0 / sqrt(float(ds))
+    let rows = 5
+    let ssz = nvh * ds * ds
+    let hsz = cd * taps
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let sconv = stamp_of(@@enc_dn_conv)
+        let shist = stamp_of(@@enc_dn_conv_hist)
+        let sl2 = stamp_of(@@enc_dn_l2norm)
+        let sscan = stamp_of(@@enc_dn_scan)
+        var pso_conv = mc |> keep_stamp(sconv, err)
+        let conv_ok = pso_ok(t, "dn groups conv", pso_conv, err)
+        var pso_hist = mc |> keep_stamp(shist, err)
+        let hist_ok = pso_ok(t, "dn groups hist", pso_hist, err)
+        var pso_l2 = mc |> keep_stamp(sl2, err)
+        let l2_ok = pso_ok(t, "dn groups l2", pso_l2, err)
+        var pso_scan = mc |> keep_stamp(sscan, err)
+        return if (!pso_ok(t, "dn groups scan", pso_scan, err) || !conv_ok || !hist_ok || !l2_ok)
+        var inscope xq <- [for (k in range(rows * cd)); 0.03 * float(k % 53) - 0.8]
+        var inscope cw <- [for (k in range(cd * dconv)); 0.04 * float(k % 23) - 0.4]
+        var inscope ba <- [for (k in range(rows * 2 * nvh)); (k / nvh) % 2 == 0 ? 0.3 * float(k % 11) - 1.5 : 0.2 * float(k % 13) - 1.0]
+        var inscope aa <- [for (k in range(nvh)); -(0.4 + 0.15 * float(k))]
+        var inscope dtb <- [for (k in range(nvh)); 0.1 * float(k) - 0.2]
+        //! the pool: [state A | history A | state B | history B]
+        var inscope pool <- [for (k in range(2 * (ssz + hsz))); k < ssz + hsz ? 0.01 * float(k % 37) - 0.18 : 0.02 * float(k % 29) - 0.25]
+        let sa = 0
+        let ha = ssz
+        let sb = ssz + hsz
+        let hb = 2 * ssz + hsz
+        var inscope grp <- [0u, 2u, uint(sa), uint(sa), uint(ha), uint(ha), 0u, 0u,
+                            2u, 3u, uint(sb), uint(sb), uint(hb), uint(hb), 0u, 0u]
+        var ka = DnArgs(cd = uint(cd), dconv = uint(dconv), npos = uint(rows), kd = uint(kd), ds = uint(ds), nvh = uint(nvh),
+            nkh = uint(nkh), di = uint(di), eps = EPS, qscale = qscale, bstr = uint(2 * nvh), goff = uint(nvh))
+        let bx = mc |> in_(xq)
+        let bw = mc |> in_(cw)
+        let bpool = mc |> io_(pool)
+        let bgrp = mc |> in_plain(grp)
+        let bba = mc |> in_(ba)
+        let baa = mc |> in_(aa)
+        let bdt = mc |> in_(dtb)
+        let by = mc |> out_(rows * cd)
+        let bo = mc |> out_(rows * di)
+        let ran = mc |> cell_record(t, "dn groups") $(enc : MetalComputeEncoder?) {
+            stamp_run(sconv, pso_conv) {
+                invoke(sconv.enc, enc, mc.buf[bx], mc.buf[bpool], mc.buf[bw], mc.buf[by], mc.buf[bgrp], ka, int64(cd), 3l, 2l)
+            }
+            stamp_run(shist, pso_hist) {
+                invoke(shist.enc, enc, mc.buf[bx], mc.buf[bpool], mc.buf[bpool], mc.buf[bgrp], ka, int64(cd), 2l)
+            }
+            stamp_run(sl2, pso_l2) {
+                invoke(sl2.enc, enc, mc.buf[by], ka, int64(2 * nkh), int64(rows))
+            }
+            stamp_run(sscan, pso_scan) {
+                invoke(sscan.enc, enc, mc.buf[by], mc.buf[bpool], mc.buf[bba], mc.buf[bba], mc.buf[baa], mc.buf[bdt], mc.buf[bo], mc.buf[bpool], mc.buf[bgrp], ka, int64(ds), int64(nvh), 2l)
+            }
+        }
+        return if (!ran)
+        var inscope cvw, ow, poolw : array<float>
+        poolw := pool
+        var inscope wrong : array<float>
+        for (gi in range(2)) {
+            let row0 = gi == 0 ? 0 : 2
+            let np = gi == 0 ? 2 : 3
+            let so = gi == 0 ? sa : sb
+            let ho = gi == 0 ? ha : hb
+            var inscope hist0 <- [for (k in range(hsz)); pool[ho + k]]
+            var inscope st0 <- [for (k in range(ssz)); pool[so + k]]
+            var inscope(cv, hw) <- dn_group_conv_oracle(xq, hist0, cw, row0, np, cd, kd, nkh, ds, dconv, qscale)
+            var inscope braw <- [for (k in range(np * nvh)); ba[(row0 + k / nvh) * 2 * nvh + k % nvh]]
+            var inscope graw <- [for (k in range(np * nvh)); ba[(row0 + k / nvh) * 2 * nvh + nvh + k % nvh]]
+            var inscope(_, _, o, st, _) <- dn_rule_oracle(cv, braw, graw, aa, dtb, st0, nkh, nvh, np, ds)
+            cvw |> push_from(cv)
+            ow |> push_from(o)
+            for (k in range(ssz)) {
+                poolw[so + k] = st[k]
+            }
+            for (k in range(hsz)) {
+                poolw[ho + k] = hw[k]
+            }
+            if (gi == 1) {
+                var inscope sta <- [for (k in range(ssz)); pool[sa + k]]
+                var inscope(_, _, ox, _, _) <- dn_rule_oracle(cv, braw, graw, aa, dtb, sta, nkh, nvh, np, ds)
+                wrong := ox
+            }
+        }
+        check_buf(t, "dn groups conv rows", mc.buf[by], cvw, BAR_FP, Shape(row_width = cd, head_width = ds))
+        check_buf(t, "dn groups out", mc.buf[bo], ow, BAR_FP, Shape(row_width = di, head_width = ds))
+        check_buf(t, "dn groups pool: both states and histories", mc.buf[bpool], poolw, BAR_FP, Shape(row_width = ds))
+        var inscope og <- mc |> plane_run(bo)
+        var off = 0
+        for (k in range(3 * di)) {
+            off += abs(og[2 * di + k] - wrong[k]) > 1e-3 ? 1 : 0
+        }
+        t |> success(off > 0, "dn groups control: the second group's output against the first group's state misses ({off} elements off)")
     }
 }
 
@@ -5172,17 +5334,19 @@ def private dn_chain_gate(t : T?; var dev, queue; nkh, nvh, dconv, npos : int) {
         // mid = npos >= 2 arms the dual-store shadow writes in hist and scan
         var ka = DnArgs(cd = uint(cd), dconv = uint(dconv), npos = uint(npos), kd = uint(kd),
             ds = uint(ds), nvh = uint(nvh), nkh = uint(nkh), di = uint(di), eps = EPS,
-            qscale = qscale, mid = npos >= 2 ? 1u : 0u)
+            qscale = qscale, mid = npos >= 2 ? 1u : 0u, bstr = uint(nvh))
+        var inscope grp0 <- [0u, uint(npos), 0u, 0u, 0u, 0u, 0u, 0u]
+        let bgrp = mc |> in_plain(grp0)
         mc |> cell_record(t, "dn conv npos={npos}") $(enc : MetalComputeEncoder?) {
             stamp_run(sconv, pso_conv) {
-                invoke(sconv.enc, enc, mc.buf[bx], mc.buf[bh], 0ul, mc.buf[bw], mc.buf[by], ka, int64(cd), int64(npos))
+                invoke(sconv.enc, enc, mc.buf[bx], mc.buf[bh], mc.buf[bw], mc.buf[by], mc.buf[bgrp], ka, int64(cd), int64(npos), 1l)
             }
         }
         check_buf(t, "dn conv npos={npos}", mc.buf[by], cv, BAR_FP, Shape(row_width = cd))
         let bhm = npos >= 2 ? (mc |> out_words(cd * taps, -1000.0)) : bh
         mc |> cell_record(t, "dn hist npos={npos}") $(enc : MetalComputeEncoder?) {
             stamp_run(shist, pso_hist) {
-                invoke(shist.enc, enc, mc.buf[bx], mc.buf[bh], 0ul, mc.buf[bhm], 0ul, ka, int64(cd))
+                invoke(shist.enc, enc, mc.buf[bx], mc.buf[bh], mc.buf[bhm], mc.buf[bgrp], ka, int64(cd), 1l)
             }
         }
         check_buf(t, "dn hist npos={npos}", mc.buf[bh], hwant, BAR_FP, Shape(row_width = taps))
@@ -5215,7 +5379,7 @@ def private dn_chain_gate(t : T?; var dev, queue; nkh, nvh, dconv, npos : int) {
         let bstm = npos >= 2 ? (mc |> out_words(nvh * ds * ds, -1000.0)) : bst
         mc |> cell_record(t, "dn scan npos={npos} nkh={nkh} nvh={nvh}") $(enc : MetalComputeEncoder?) {
             stamp_run(sscan, pso_scan) {
-                invoke(sscan.enc, enc, mc.buf[by], mc.buf[bst], 0ul, mc.buf[bbr], mc.buf[bgr], mc.buf[baa], mc.buf[bdt], mc.buf[bo], mc.buf[bstm], 0ul, ka, int64(ds), int64(nvh))
+                invoke(sscan.enc, enc, mc.buf[by], mc.buf[bst], mc.buf[bbr], mc.buf[bgr], mc.buf[baa], mc.buf[bdt], mc.buf[bo], mc.buf[bstm], mc.buf[bgrp], ka, int64(ds), int64(nvh), 1l)
             }
         }
         check_buf(t, "dn scan npos={npos} out", mc.buf[bo], owant, BAR_FP, Shape(row_width = di, head_width = ds))

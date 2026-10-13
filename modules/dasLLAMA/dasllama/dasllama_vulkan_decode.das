@@ -254,6 +254,9 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     r.tok_n_recorded |> resize(nb + 1l)
     alloc_cmds(r.cmd_n, nb + 1l, true)
     alloc_cmds(r.cmd_n_unsplit, nb + 1l, r.unsplit_on)
+    r.tok_seq_recorded |> resize(nb + 1l)
+    alloc_cmds(r.cmd_seq, nb + 1l, true)
+    alloc_cmds(r.cmd_seq_unsplit, nb + 1l, r.unsplit_on)
     r.kv_readback = make_host_buf(2l * kv_dim * 4l * KV_READBACK_ROWS, false, [cached = true])
     ensure_ffn_state()   // hq_dev/hs_dev for the FFN act+requant
     r.tok_recorded |> resize(regions)
@@ -1684,7 +1687,7 @@ def private rd_encode_hc_layer(raw : VkCommandBuffer; var h : VkHaz; var L : RLa
     rd_encode_hc_mix(raw, h, 2l * l, false, nrows)
     rq_enc(raw, h, L.s_quant_xb, L.recurrent ? L.fqkv : L.fq, dim * nrows)
     if (L.recurrent) {
-        rd_encode_dn_head(raw, h, L, nrows, ncols, seq)
+        rd_encode_dn_head(raw, h, L, nrows, ncols, seq, seq)
     } else {
         rd_encode_attn_head(raw, h, L, l, fuse_qkr, nlfin, rd_layer_pieces(L, rd_split_pieces(), nrows), nrows, ncols, 0)
     }
@@ -2393,7 +2396,7 @@ def private rd_gemv(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var s : VkD
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command"), arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command"), arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command")]
-def private rd_encode_dn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; nrows : int64; ncols : uint; seq : bool) {
+def private rd_encode_dn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; nrows : int64; ncols : uint; seq, roll : bool) {
     let dim = g_rd.dim
     let cd = g_rd.dn_cd
     let di = g_rd.dn_di
@@ -2430,7 +2433,7 @@ def private rd_encode_dn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RLay
             pcd.row0 = uint(i)
             rd_enc_dn_step(raw, h, L, pcd, nvh)
             rd_ts(raw, "d:dn_seq")
-            if (i + 1l < nrows && g_rd.roll_dev != 0ul) {
+            if (roll && i + 1l < nrows && g_rd.roll_dev != 0ul) {
                 rd_encode_roll_copy(raw, h, L, i)
                 rd_ts(raw, "d:roll")
             }
@@ -2680,7 +2683,7 @@ def rd_ar_comb_args(L : RLayer; l, woff : int64) : ArArgs {
 
 //! every form stamps its dispatches into the recorder's working list; the caller moves it into the form's own slot
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command"), arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command"), arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command")]   // recording leg (also the rerecord A/B probe) — not the steady-state token path
-def private rd_encode_token(var first_seg_raw : VkCommandBuffer; nrows, nsplit : int64; verify : bool = false; split_seg_base : int64 = -1l) {
+def private rd_encode_token(var first_seg_raw : VkCommandBuffer; nrows, nsplit : int64; verify : bool = false; split_seg_base : int64 = -1l; seq : bool = false) {
     let dim = g_rd.dim
     let nlfin = rd_norm_final()   // rms_final offset in the norms buffer
     let one = nrows == 1l
@@ -2745,7 +2748,7 @@ def private rd_encode_token(var first_seg_raw : VkCommandBuffer; nrows, nsplit :
                 rd_ts(raw, "{hpfx}rq_x")
             }
             if (L.recurrent) {
-                rd_encode_dn_head(raw, h, L, nrows, ncols, verify)
+                rd_encode_dn_head(raw, h, L, nrows, ncols, verify || seq, verify)
             } else {
                 rd_encode_attn_head(raw, h, L, l, fuse_qkr, nlfin, rd_layer_pieces(L, nsplit, nrows), nrows, ncols, nrow_bx)
             }
@@ -3267,9 +3270,9 @@ def private rd_ensure_n_sets {
 }
 
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
-def private rd_record_n_form(var raw : VkCommandBuffer; nrows, nsplit : int64; form : RdForm) {
+def private rd_record_n_form(var raw : VkCommandBuffer; nrows, nsplit : int64; form : RdForm; seq : bool = false) {
     rd_with_form_stamps() {
-        rd_encode_token(raw, nrows, nsplit)
+        rd_encode_token(raw, nrows, nsplit, false, -1l, seq)
         if (form == RdForm.split) {
             rd_take_stamps(g_rdq_nrow, g_pfq_n)
         } else {
@@ -3845,6 +3848,68 @@ def vk_rdec_rollback(a : int64) : bool {
     return true
 }
 
+//! the checkpoint rows, made at the first save: every region's `RDEC_DN_SNAPS` rows, each in the rollback row's shape
+[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#device-home-checkpoints")]
+def private rd_snap_alloc {
+    var off = 0l
+    for (l in range64(long_length(g_rd.layers))) {
+        var L & = unsafe(g_rd.layers[l])
+        continue if (!L.recurrent)
+        L.snap_off = off
+        off += L.dn[0].slot_state_bytes + 2l * L.dn[0].ring_image_bytes
+    }
+    g_rd.snap_row_bytes = off
+    let rows = g_rd.regions * int64(RDEC_DN_SNAPS)
+    g_rd.snap_par |> resize(int(rows))
+    if (off > 0l) {
+        g_rd.snap_dev = make_device_buf(off * rows)
+    }
+}
+
+//! the selected region's recurrent state - every slot and ring pair - into its checkpoint row `slot`, the region's parity beside it
+[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#device-home-checkpoints")]   //! once per checkpoint stop, reached through the tier's registered seat
+def vk_rdec_dn_snap_save(slot : int64) : bool {
+    return false if (g_rd == null || !g_rd.ready || !g_rd.hybrid || slot < 0l || slot >= int64(RDEC_DN_SNAPS))
+    if (g_rd.snap_dev == 0ul) {
+        rd_snap_alloc()
+    }
+    return false if (g_rd.snap_dev == 0ul)
+    let r = g_rd.region
+    let row = r * int64(RDEC_DN_SNAPS) + slot
+    let dst = row * g_rd.snap_row_bytes
+    batch_cmd_one_shot() $(raw : VkCommandBuffer) {
+        for (L in g_rd.layers) {
+            continue if (!L.recurrent)
+            let st & = unsafe(L.dn[r])
+            cmd_copy_range(raw, st.state_dev, st.state_byte_off, g_rd.snap_dev, dst + L.snap_off, st.slot_state_bytes)
+            cmd_copy_range(raw, st.smalls_dev, st.hist_off * 4l, g_rd.snap_dev, dst + L.snap_off + st.slot_state_bytes, 2l * st.ring_image_bytes)
+        }
+    }
+    g_rd.snap_par[row] = g_rd.dn_parity[r]
+    return true
+}
+
+//! checkpoint row `slot` back into the selected region's slots and ring pairs, the region's parity the row's
+[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#device-home-checkpoints")]   //! once per adoption, reached through the tier's registered seat
+def vk_rdec_dn_snap_load(slot : int64) : bool {
+    return false if (g_rd == null || !g_rd.ready || !g_rd.hybrid || g_rd.snap_dev == 0ul || slot < 0l || slot >= int64(RDEC_DN_SNAPS))
+    let r = g_rd.region
+    let row = r * int64(RDEC_DN_SNAPS) + slot
+    let src = row * g_rd.snap_row_bytes
+    batch_cmd_one_shot() $(raw : VkCommandBuffer) {
+        for (L in g_rd.layers) {
+            continue if (!L.recurrent)
+            let st & = unsafe(L.dn[r])
+            cmd_copy_range(raw, g_rd.snap_dev, src + L.snap_off, st.state_dev, st.state_byte_off, st.slot_state_bytes)
+            cmd_copy_range(raw, g_rd.snap_dev, src + L.snap_off + st.slot_state_bytes, st.smalls_dev, st.hist_off * 4l, 2l * st.ring_image_bytes)
+        }
+    }
+    if (g_rd.dn_parity[r] != g_rd.snap_par[row]) {
+        rd_dn_advance_parity(r)
+    }
+    return true
+}
+
 //! the N-row landing: each row's logits at its pointer, or - where the pointer is null - its pick into `picks` (-1 on a landed row)
 [arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
 def private rd_land_rows_n(lrows : array<float?>; var picks : array<int64>; nrows : int64) {
@@ -3944,6 +4009,56 @@ def vk_rdec_token_n(x : array<float>; cossin : array<float>; ple : array<float>;
         }
     }
 }
+
+//! The short window's peel on a recurrent model: `nrows` consecutive rows of the selected region from `pos` (`x`, `cossin` a row
+//! each) through the in-order rows command - every recurrent layer steps the rows one after another in the region's slot, each
+//! row's ring image the one the row before it wrote - and the last row's logits into `logits`
+[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-prefill-peel")]   //! per short window, reached through the tier's registered seat
+def vk_rdec_token_seq(x : array<float>; cossin : array<float>; pos, nrows : int64; var logits : array<float>) {
+    assert(g_rd != null && g_rd.ready, "vk_rdec_token_seq before prepare/set_cls")
+    verify(nrows >= 2l && nrows <= g_rd.nb && long_length(logits) >= g_rd.vocab, "vk_rdec_token_seq: the row count is outside the per-row planes, or the logits row is short")
+    rd_carry_sync()
+    let nsplit = rd_split_pieces()
+    if (!g_rd.tok_seq_recorded[nrows]) {
+        rd_fill_gemv_regions_all()
+        rd_ensure_n_sets()
+        rd_record_n_form(g_rd.cmd_seq[nrows], nrows, nsplit, RdForm.split, true)
+        if (g_rd.unsplit_on) {
+            rd_record_n_form(g_rd.cmd_seq_unsplit[nrows], nrows, 1l, RdForm.unsplit, true)
+        }
+        g_rd.tok_seq_recorded[nrows] = true
+    }
+    let r = g_rd.region
+    let unsplit = g_rd.unsplit_on && pos + nrows - 1l < RD_UNSPLIT_POS
+    let par = g_rd.hybrid ? g_rd.dn_parity[r] : 0
+    unsafe {
+        memcpy(g_rd.x_host.mapped, addr<void?>(x[0]), g_rd.dim * 4l * nrows)
+        memcpy(g_rd.cos_host.mapped, addr<void?>(cossin[0]), g_rd.cos_elems * 4l * nrows)
+        var tm = reinterpret<TokMeta?>(g_rd.tok_meta.mapped)
+        for (i in range64(nrows)) {
+            tm[i] = TokMeta(pos = uint(pos + i), cnt = uint(pos + i + 1l), parity = g_rd.hybrid ? uint(par ^ int(i & 1l)) : 0u,
+                mirbase = uint(r * g_rd.mir_units), dnslot = uint(r))
+        }
+    }
+    g_rd_seq_lrows |> resize(nrows)
+    g_rd_seq_picks |> resize(nrows)
+    for (i in range64(nrows)) {
+        g_rd_seq_lrows[i] = i == nrows - 1l ? unsafe(addr(logits[0])) : null
+    }
+    var cmd = unsplit ? g_rd.cmd_seq_unsplit[nrows] : g_rd.cmd_seq[nrows]
+    rd_submit_wait(cmd, nrows, false, vk_prof())
+    rd_land_rows_n(g_rd_seq_lrows, g_rd_seq_picks, nrows)
+    g_rd.tokens_served += nrows
+    g_rd.pf_head_rows = 0l   //! the in-order rows warm no head row: the head's rows the chain counted are another call's
+    if (g_rd.hybrid) {
+        for (_i in range64(nrows)) {
+            rd_dn_advance_parity(r)
+        }
+    }
+}
+
+var private @scratch g_rd_seq_lrows : array<float?>
+var private @scratch g_rd_seq_picks : array<int64>
 
 //! layer `l`'s mirror rows [row0, row0 + nrows) up from the host cache `kp` / `vp` (from row 0), `l == n_layers` the NextN head; the
 //! session codec matches the mirror codec (the arm gate), so the rows byte-copy
@@ -4208,10 +4323,10 @@ def private dnd_flush_down(st : DnStep) {
 }
 
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#dn-step-owner")]   // once per prompt, before its first window records
-def vk_rdec_dn_flush_owners {
+def vk_rdec_dn_flush_owners(r : int64) {
     for (L in g_rd.layers) {
-        continue if (!L.recurrent || !L.dn[g_rd.region].valid)
-        dnd_send_home(L.dn[g_rd.region])
+        continue if (!L.recurrent || !L.dn[r].valid)
+        dnd_send_home(L.dn[r])
     }
 }
 

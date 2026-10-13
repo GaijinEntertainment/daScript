@@ -425,6 +425,18 @@ def test_moe_metal_expert_count(t : T?) {
 }
 
 [test]
+def test_moe_metal_expert_weights_scale(t : T?) {
+    t |> run("a global expert_weights_scale serves on Metal: the select's scale pass carries it") @(t : T?) {
+        var m <- moe_shell(KqFmt.k4)
+        m.config.expert_weights_scale = 2.5
+        t |> success(moe_metal_ok(m), "a scale of 2.5 serves (MetalMoeWScale over the scale row behind the select)")
+        m.config.n_expert = 513l
+        t |> success(!moe_metal_ok(m), "the control: the same shell past the select stamps' reach still declines")
+        delete m
+    }
+}
+
+[test]
 def test_decode_shape_dense_width(t : T?) {
     t |> run("the decode shape gate reads the dense FFN width only where a dense FFN dispatches") @(t : T?) {
         let saved_rope = get_rope_table_mode()

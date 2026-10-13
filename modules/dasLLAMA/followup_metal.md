@@ -713,18 +713,6 @@ q8 rail measured negative, but against a 1.6x weight stream the K-quant arithmet
 Every other dense K-quant board file (12B 1.00, the two 27Bs 1.07 and 1.09) clears the bar on its
 flat lead alone.
 
-## 25. The Qwen3.8-27B no-head verify cell panics through the CPU decode stack
-
-`tests/test_metal_mtp_parity.das`'s `test_metal_verify_qwen38_27b` (large tier) pins the
-batch-rail same-slab verify to decline a recurrent session's rows as `dn_state`; on the M5 the
-B=2 arm serves (maxd 2.3e-4, no flips) and two later arms die in
-`dasllama_common.das`'s "CPU decode stack on a blob-only metal-flavor model" panic - the
-verify declines, and the fallback lands on a stack the blob twin cannot run. Red at master
-ce42fb986 and on every branch since; the stocked suite never reaches it (the mtp suite is not
-in `stocked`). The work: decide whether the batch driver now serves the hybrid's verify rows -
-then the pin flips to must-serve - or make the decline return a plain GPU step instead of the
-CPU stack.
-
 ## 27. The StyleTTS2 chain's remaining cost and precision
 
 The chain (`ARCHITECTURE_GPU_TOWER.md#tower-tts-chain`) serves the whole synthesis; the measured record
@@ -768,20 +756,6 @@ blob twin does not fit the 128 GB box. The work: a parity cell of the `harness/p
 form on the blob-only load (one model, the spec's pinned ids as the oracle - `test_parity_pregate`'s
 shape) under `DASLLAMA_PARITY_FULL=1`, and the sweep's rows (sec.7): pp512 and tg128 against
 llama.cpp on the M5 Max at or above 0.9, the box crowns applied.
-
-## 33. A prefill mints a recurrent mirror under the cap and evicts a live session's
-
-`dn_mirror_prepare` mints a session's `DnMirror` at its first served step under `g_dn_mirrors_max`
-(`DN_MIRRORS_MAX`, 4), evicting the least-recent mirror when the table is full; only the batch step
-grows the cap (`dn_mirror_room(nrows)`) and it grows it after the rows' prefills already ran. A
-fifth session's prefill therefore evicts a live session's mirror, and that session's next decode
-declines `dn_state` - its CPU state stopped at the prefill, so the CPU-prefix resync cannot
-rebuild it - and on a blob-only load the CPU fallback has no planar weights to run, so the step
-panics. The batch probe and `dff_pair` size the room before their prefills; the server's admission
-does not. The work: grow the room at admission (the server's stream count plus the reference
-rows), or let the mint evict only a mirror whose session is retired and decline the mint
-otherwise, and a cell that admits `DN_MIRRORS_MAX + 1` sessions through prefill and steps the
-first one.
 
 ## 32. Flash-Next's verify row 0 reads 0.89 logits off the plain step at one prose position
 
@@ -957,16 +931,6 @@ same record in `dasllama_vulkan_asr_dec.das`). A transcription makes a fresh sta
 window was dropped never returns: eight bytes a transcription, for as long as the server runs. The work: the
 pending mark on the state itself (a flag beside `DecoderState.gpu_uid`, the driver's one pending id beside
 it), so nothing outlives the state; both drivers in one change, the Vulkan one on a Vulkan box.
-
-## 43. The same-slab row probe cannot read a recurrent model's verify past one row
-
-`harness/batch_rows_probe.das --sameslab` sends its rows through the generic batch driver, whose row
-preparation asks the recurrent-state mirror for consecutive positions of one session and declines
-(`dn_state`); the verify the speculative round runs serves those rows through its shadow replay
-(`ARCHITECTURE_GPU_MTP.md#mtp-dn-shadow-replay`). On a DeltaNet hybrid the one-row same-slab step reads and
-every higher count declines, so the verify's per-row cost there has no probe (the two-session batch step
-stands in, `PERF_LEDGER.md`'s 2026-10-05 depth-1 NextN entry). The work: route the probe's same-slab rows through the
-verify entry the round uses, or give the batch driver the shadow replay.
 
 ## 44. A one-row rows-form step drafts differently from the two-row form
 

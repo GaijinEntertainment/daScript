@@ -57,6 +57,53 @@ def private gpu_prefill(trg : Model; var s : Session; prompt : array<int64>) {  
     }
 }
 
+//! every kernel's dispatches over one Metal prefill of `prompt` on a fresh session, with the draft head's warm on or off
+def private prefill_census(trg : Model; prompt : array<int64>; warm : bool) : table<string; int64> {   // nolint:LINT012,LINT019 — the body is the das_metal half
+    var cov : table<string; int64>
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        let prior = get_mtp_spec()
+        set_mtp_spec(warm)
+        var s = make_run_state(trg.config, KVDtype.f16, KVDtype.f16)
+        metal_kernel_coverage_reset()
+        gpu_prefill(trg, s, prompt)
+        cov <- metal_kernel_coverage()
+        set_mtp_spec(prior)
+        delete s
+    }
+    return <- cov
+}
+
+//! The draft head's prompt warm runs its K/V alone (`ARCHITECTURE_GPU_MTP.md#mtp-verify-draft-warm`): against the same
+//! prefill with the warm off, the warm adds no attention, no routed or shared-expert dispatch and no FFN GEMM - only the
+//! head's projections, norms and rope-and-store (a hyper-connection head's mixers too) - while the rope count rising is the
+//! control that the warm ran at all
+def private warm_cell(t : T?; trg : Model; tag : string; prompt : array<int64>) {
+    var inscope off <- prefill_census(trg, prompt, false)
+    var inscope on <- prefill_census(trg, prompt, true)
+    var moved : array<string>
+    var heavy = 0l
+    var rope = 0l
+    for (k, n in keys(on), values(on)) {
+        let d = n - (off?[k] ?? 0l)
+        continue if (d == 0l)
+        moved |> push("{k}+{d}")
+        let lk = to_lower(k)
+        let qk = find(lk, "qk_") >= 0 && find(lk, "rope") < 0
+        let routed = find(lk, "moe") >= 0 && find(lk, "router") < 0   //! a hyper-connection mixer's scatter logits ride the router GEMV
+        if (qk || routed || find(lk, "attn") >= 0 || find(lk, "_av") >= 0 || find(lk, "swiglu") >= 0
+                || find(lk, "rowstat") >= 0 || find(lk, "pexp") >= 0) {
+            heavy += d
+        }
+        if (find(lk, "rope") >= 0) {
+            rope += d
+        }
+    }
+    to_log(LOG_INFO, "metal warm census {tag}: the warm's extra dispatches {moved}\n")
+    t |> success(rope > 0l, "{tag} warm: the head's K rows were roped and stored ({rope} extra rope dispatches)")
+    t |> equal(heavy, 0l, "{tag} warm: no attention, routed, shared-expert or FFN activation dispatch for the head ({moved})")
+    delete moved
+}
+
 def private gpu_prefill_pair(trg : Model; var sa, sb : Session; prompt : array<int64>) {
     gpu_prefill(trg, sa, prompt)
     gpu_prefill(trg, sb, prompt)
@@ -557,9 +604,7 @@ def private dff_cell(t : T?; tr, trg : Model; tag : string; prose_a, prose_b : a
     }
 }
 
-//! the same-slab verify lands GPU logits only on head-less models (the batch driver's gpu_logits gate
-//! excludes NextN carriers - their round has its own verify), so a NextN fixture's decline is a skip;
-//! `must_serve` marks a head-less carrier the rail is contracted to serve - a decline there is a failure
+//! `must_serve` marks a carrier the rail is contracted to serve - a decline there is a failure, elsewhere a skip
 def private vff_cell(t : T?; tr, trg : Model; tag : string; prompt : array<int64>; tol : float; nr : int64 = 4l; must_serve : bool = false;
                      expect_decline : string = "") {
     var st = RowStats()
@@ -696,7 +741,11 @@ def private run_arms(t : T?; tr, trg : Model; tag : string; prose_a, prose_b, co
 
         // the batch-rail same-slab verify (the gemma drafter's verify) vs plain steps, GPU-vs-GPU
         if (arm_on(t, "mtp-vff-{tag}")) {
-            vff_cell(t, tr, trg, tag, prose_a, FF_TOL)
+            vff_cell(t, tr, trg, tag, prose_a, FF_TOL, 4l, true)
+        }
+
+        if (arm_on(t, "mtp-warm-{tag}")) {
+            warm_cell(t, trg, tag, prose_a)
         }
 
         // depth N under forced reject: every round verifies k+1 rows and replays row 0 from the
@@ -981,14 +1030,13 @@ def test_metal_verify_gemma12(t : T?) {
     }
 }
 
-// the hybrid carrier (qwen35: deltanet layers, the 2x-wide gated Q), HEAD-LESS so the batch rail's GPU
-// logits gate admits it: the batch driver serves a hybrid's rows against one DnMirror per row, and a
-// same-slab verify is one session at k+1 positions - the second row finds no mirror at its position,
-// so the rail must decline dn_state by name (served, it would run the recurrent state twice per step)
+// the hybrid carrier (qwen35: deltanet layers, the 2x-wide gated Q), head-less: a same-slab verify is one
+// session at k+1 positions, so its recurrent rows are one group walking that session's mirror row after
+// row (`ARCHITECTURE_GPU_MTP.md#dn-group-stages`) - the rail must serve them
 [test]
 def test_metal_verify_qwen38_27b(t : T?) {
-    t |> run("batch-rail same-slab verify declines a recurrent session's rows as dn_state - Qwen3.8-27B-Q4_K_M, no head (deltanet + gated Q, large tier)") <| @(t : T?) {
-        run_verify_fixture(t, "Qwen3.8-27B-Q4_K_M.gguf", "q38", 2.0, false, "dn_state")
+    t |> run("batch-rail same-slab verify serves a recurrent session's rows as one group - Qwen3.8-27B-Q4_K_M, no head (deltanet + gated Q, large tier)") <| @(t : T?) {
+        run_verify_fixture(t, "Qwen3.8-27B-Q4_K_M.gguf", "q38", 2.0, true)
     }
 }
 

@@ -453,6 +453,16 @@ def test_metal_batched_row_mtp_joint_staggered(t : T?) {
     }
 }
 
+//! the recurrent scan's dispatches on both stamps since the census reset; 0 before the drivers compiled them
+def private dn_scan_dispatches() : int64 {   // nolint:LINT012,LINT019 — the body is the das_metal half
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        var inscope cov <- metal_kernel_coverage()
+        return (cov?["MetalDnScan_metal_dn_scan"] ?? 0l) + (cov?["MetalDnScanH_metal_dn_scan"] ?? 0l)
+    } else {
+        return 0l
+    }
+}
+
 [test]
 def test_metal_batched_row_deltanet(t : T?) {
     t |> run("the batched row serves a deltanet hybrid through the batched driver's recurrent rows form (Qwen3.5-0.8B Q8)") <| @(t : T?) {
@@ -465,12 +475,22 @@ def test_metal_batched_row_deltanet(t : T?) {
             var tr <- blob_twin(t, path, 256l)
             with_dasllama_jobque_() {
                 let census0 = batch_step_census()
+                let scans0 = dn_scan_dispatches()
+                let calls0 = metal_decode_stats().decodes + metal_prefill_stats().prefills
                 let served = bench_tg_batched_rep(tr, 4l, 32l, 8l, 1l)
                 t |> equal(served.why, "", "the row is served: {served.why}")
                 t |> success(served.tps > 0.0lf, "... at a rate ({served.tps:.1f} tok/s summed over 4 streams)")
                 let census1 = batch_step_census()
                 t |> success(census1.device - census0.device >= 8l, "the timed steps went through the device batched driver ({census1.device - census0.device} device steps)")
                 t |> equal(census1.cpu_stack, census0.cpu_stack, "the hybrid never reached the CPU batched stack")
+                //! the recurrent stages run once a layer a step over every row (`ARCHITECTURE_GPU_MTP.md#dn-group-stages`): a
+                //! row-at-a-time step would scan four times a layer
+                var nrec = 0l
+                for (l in range64(tr.config.n_layers)) {
+                    nrec += layer_is_recurrent(tr.config, l) ? 1l : 0l
+                }
+                let calls = census1.device - census0.device + metal_decode_stats().decodes + metal_prefill_stats().prefills - calls0
+                t |> equal(dn_scan_dispatches() - scans0, calls * nrec, "one scan dispatch a recurrent layer a device call ({calls} calls, {nrec} recurrent layers)")
                 // nine streams: more rows than the mirror cache's resting size
                 let wide = bench_tg_batched_rep(tr, 9l, 32l, 8l, 2l)
                 t |> equal(wide.why, "", "the nine-stream row is served: {wide.why}")
@@ -609,6 +629,53 @@ def test_metal_segments_deltanet(t : T?) {
                 delete a2
                 delete b1
                 delete b2
+            }
+            set_metal_mode(prior_mode)
+            delete tr
+        } else {
+            t |> skip("dasMetal not built")
+        }
+    }
+}
+
+//! A recurrent mirror evicted between two steps leaves its live state in a host stash, and the session's next step
+//! rebuilds the device state from it (`ARCHITECTURE_GPU_MTP.md#dn-mirror-pool`): on a blob-only load there is no CPU
+//! chain to fall to, so the steps after the eviction must serve on the device and read what an unevicted session reads.
+[test]
+def test_metal_deltanet_evicted_mirror(t : T?) {
+    t |> run("a deltanet session whose mirror is evicted mid-stream steps on the device from its stash, token for token the unevicted session (Qwen3.5-0.8B Q8)") <| @(t : T?) {
+        if (!family_on(t, "qwen35")) return
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            let path = path_join(models_dir(), "Qwen3.5-0.8B-Q8_0.gguf")
+            return if (!jit_model_available(t, path))
+            let prior_mode = get_metal_mode()
+            set_metal_mode(MetalMode.when_available)
+            var tr <- blob_twin(t, path, 256l)
+            with_dasllama_jobque_() {
+                let pa <- encode(tr, "The quick brown fox jumps over the lazy dog while the farmer counts his sheep one by one, and then the", true, false)
+                let np = long_length(pa)
+                var sa = make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
+                var sb = make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
+                eval_(tr, sa, pa)
+                eval_(tr, sb, pa)
+                var ref <- greedy_from(tr, sa, np, 12l)
+                var head <- greedy_from(tr, sb, np, 4l)
+                let rest0 = dn_mirror_restores()
+                let dec0 = metal_decode_stats().decodes
+                dn_mirror_evict_now(sb.uid)
+                var tail <- greedy_from(tr, sb, np + 4l, 8l)
+                t |> equal(dn_mirror_restores() - rest0, 1l, "the step after the eviction rebuilt the mirror from the stash")
+                t |> equal(metal_decode_stats().decodes - dec0, 8l, "every step after the eviction was the device's")
+                var got <- [for (i in range64(12l)); i < 4l ? head[i] : tail[i - 4l]]
+                to_log(LOG_INFO, "unevicted: {eyeball_text(tr, ref)}\n")
+                to_log(LOG_INFO, "evicted:   {eyeball_text(tr, got)}\n")
+                t |> success(ids_equal(ref, got), "the evicted session's 12 greedy steps are the unevicted session's")
+                delete ref
+                delete head
+                delete tail
+                delete got
+                delete sa
+                delete sb
             }
             set_metal_mode(prior_mode)
             delete tr
@@ -951,69 +1018,85 @@ def test_metal_prefix_checkpoint_next_turn(t : T?) {
     }
 }
 
+//! four greedy streams through the scheduler with the pre-encode rail off, then on: token for token, the on arm's steps
+//! committed from the step pre-encoded under the one before
+def private pre_encode_cell(t : T?; file : string) {   // nolint:LINT012,LINT019 — the body is the das_metal half
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        let path = path_join(models_dir(), file)
+        return if (!jit_model_available(t, path))
+        let prior_mode = get_metal_mode()
+        set_metal_mode(MetalMode.when_available)
+        var tr <- blob_twin(t, path, 256l)
+        with_dasllama_jobque_() {
+            let prior_pre = metal_batch_pre_enabled()
+            if (!env_is_set("DASLLAMA_METAL_BATCH_PRE")) {
+                t |> success(!prior_pre, "the pre-encode rail ships off")
+            }
+            var prompts <- [ <- encode(tr, "Count from one to twenty: one, two, three,", true, false),
+                             <- encode(tr, "The letters of the alphabet in order: a, b, c, d,", true, false),
+                             <- encode(tr, "List the days of the week: Monday, Tuesday,", true, false),
+                             <- encode(tr, "The planets of the solar system, from the sun outward: Mercury, Venus,", true, false)]
+            var none : array<int64>
+            let greedy = SamplingParams()
+            var refs : array<array<int64>>
+            for (arm in range(2)) {
+                let pre = arm == 1
+                set_metal_batch_pre(pre)
+                let taken0 = metal_batch_pre_taken()
+                var sch <- create_scheduler(tr, 4l, 4l, 64l, 0l, 0l, KVDtype.f16, false)
+                var events : array<SchedEvent>
+                for (pi in range64(4l)) {
+                    t |> success(submit(tr, sch, make_req(pi + 1l, prompts[pi], greedy, 24l, none)), "stream {pi + 1l} queued (pre {pre})")
+                }
+                drain(tr, sch, events)
+                let taken = metal_batch_pre_taken() - taken0
+                if (!pre) {
+                    t |> equal(taken, 0l, "rail off: no step committed from a pre-encode")
+                    for (pi in range64(4l)) {
+                        refs |> emplace(toks_of(events, pi + 1l))
+                    }
+                } else {
+                    t |> success(taken >= 16l, "rail on: {taken} steps committed the step pre-encoded by the call before them")
+                    for (pi in range64(4l)) {
+                        var got <- toks_of(events, pi + 1l)
+                        log_gen_texts(tr, "stream {pi} (encoded at call, pre-encoded)", refs[pi], got)
+                        t |> success(ids_equal(got, refs[pi]), "stream {pi}: the pre-encoded steps emit the reference tokens")
+                        delete got
+                    }
+                }
+                delete sch
+                delete events
+            }
+            //! the rail's retire under a PARKED step: the on arm leaves the next step pre-encoded; the lever's off retires it, the drivers' shutdown drops the rest, and the live-object count reads what either left behind
+            set_metal_batch_pre(false)
+            metal_decode_shutdown()
+            metal_prefill_shutdown()
+            t |> equal(metal_live_object_count(), 0l, "no leaked Metal objects after the parked pre-encoded step's retire and the drivers' shutdown")
+            set_metal_batch_pre(prior_pre)
+            delete refs
+            delete prompts
+        }
+        set_metal_mode(prior_mode)
+        delete tr
+    } else {
+        t |> skip("dasMetal not built")
+    }
+}
+
 [test]
 def test_metal_batched_row_pre_encode(t : T?) {
     t |> run("four greedy streams emit the same tokens whether each batched step is encoded at its call or pre-encoded under the step before it (Llama-3.2-1B Q8)") <| @(t : T?) {
         if (!family_on(t, "llama")) return
-        static_if (typeinfo builtin_module_exists(das_metal)) {
-            let path = path_join(models_dir(), "Llama-3.2-1B-Instruct-Q8_0.gguf")
-            return if (!jit_model_available(t, path))
-            let prior_mode = get_metal_mode()
-            set_metal_mode(MetalMode.when_available)
-            var tr <- blob_twin(t, path, 256l)
-            with_dasllama_jobque_() {
-                let prior_pre = metal_batch_pre_enabled()
-                if (!env_is_set("DASLLAMA_METAL_BATCH_PRE")) {
-                    t |> success(!prior_pre, "the pre-encode rail ships off")
-                }
-                var prompts <- [ <- encode(tr, "Count from one to twenty: one, two, three,", true, false),
-                                 <- encode(tr, "The letters of the alphabet in order: a, b, c, d,", true, false),
-                                 <- encode(tr, "List the days of the week: Monday, Tuesday,", true, false),
-                                 <- encode(tr, "The planets of the solar system, from the sun outward: Mercury, Venus,", true, false)]
-                var none : array<int64>
-                let greedy = SamplingParams()
-                var refs : array<array<int64>>
-                for (arm in range(2)) {
-                    let pre = arm == 1
-                    set_metal_batch_pre(pre)
-                    let taken0 = metal_batch_pre_taken()
-                    var sch <- create_scheduler(tr, 4l, 4l, 64l, 0l, 0l, KVDtype.f16, false)
-                    var events : array<SchedEvent>
-                    for (pi in range64(4l)) {
-                        t |> success(submit(tr, sch, make_req(pi + 1l, prompts[pi], greedy, 24l, none)), "stream {pi + 1l} queued (pre {pre})")
-                    }
-                    drain(tr, sch, events)
-                    let taken = metal_batch_pre_taken() - taken0
-                    if (!pre) {
-                        t |> equal(taken, 0l, "rail off: no step committed from a pre-encode")
-                        for (pi in range64(4l)) {
-                            refs |> emplace(toks_of(events, pi + 1l))
-                        }
-                    } else {
-                        t |> success(taken >= 16l, "rail on: {taken} steps committed the step pre-encoded by the call before them")
-                        for (pi in range64(4l)) {
-                            var got <- toks_of(events, pi + 1l)
-                            log_gen_texts(tr, "stream {pi} (encoded at call, pre-encoded)", refs[pi], got)
-                            t |> success(ids_equal(got, refs[pi]), "stream {pi}: the pre-encoded steps emit the reference tokens")
-                            delete got
-                        }
-                    }
-                    delete sch
-                    delete events
-                }
-                //! the rail's retire under a PARKED step: the on arm leaves the next step pre-encoded; the lever's off retires it, the drivers' shutdown drops the rest, and the live-object count reads what either left behind
-                set_metal_batch_pre(false)
-                metal_decode_shutdown()
-                metal_prefill_shutdown()
-                t |> equal(metal_live_object_count(), 0l, "no leaked Metal objects after the parked pre-encoded step's retire and the drivers' shutdown")
-                set_metal_batch_pre(prior_pre)
-                delete refs
-                delete prompts
-            }
-            set_metal_mode(prior_mode)
-            delete tr
-        } else {
-            t |> skip("dasMetal not built")
-        }
+        pre_encode_cell(t, "Llama-3.2-1B-Instruct-Q8_0.gguf")
+    }
+}
+
+//! the recurrent rows ride the rail too: their mirrors move at commit, the pre-encoded step's group table names each row's
+//! state where the pool held it, and a moved pool or state retires the step unrun
+[test]
+def test_metal_batched_row_pre_encode_deltanet(t : T?) {
+    t |> run("four greedy streams on a deltanet hybrid emit the same tokens with the batched step pre-encoded under the one before (Qwen3.5-0.8B Q8)") <| @(t : T?) {
+        if (!family_on(t, "qwen35")) return
+        pre_encode_cell(t, "Qwen3.5-0.8B-Q8_0.gguf")
     }
 }

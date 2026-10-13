@@ -192,8 +192,12 @@ slice still where the row table names it, and every row's zero-copy logits wrap 
 was encoded - pokes the token-dependent inputs the caller's CPU pre-step produced - the rows'
 embeds, their rope rows, the E-series' per-layer side rows - commits the command buffers in order
 and lands the step like a freshly built one; a step that does not match is retired unrun. The
-same-slab verify, the recurrent rows (their state buffer is one per session) and a knockout run
-stay on the build-at-call path. The single-row driver, the speculative round's draft and verify
+same-slab verify, a hyper-connection model's rows and a knockout run stay on the build-at-call path.
+A recurrent row's mirror moves with the K/V watermark at commit (`mark_rows_committed`), so the
+pre-encoded step's group table names each row's state where it will stand
+(`ARCHITECTURE_GPU_MTP.md#dn-group-stages`); the match also holds the pool's generation and every
+row's live state base, and a failed step drops its rows' mirrors, whose state is then neither live
+nor re-derivable. The single-row driver, the speculative round's draft and verify
 steps, a knob setter that changes what a step encodes, a dispatch failure's CPU rerun and
 `metal_decode_flush` all retire the pre-encoded step: each advances the rows past the positions it
 was built for or moves the slices under it. The rail ships off - `DASLLAMA_METAL_BATCH_PRE=1` arms
