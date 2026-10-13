@@ -500,6 +500,7 @@ def match_alternatives(var wth : ExprOp2?; var to : MatchTo; matcher : block<(si
         for (k in keys(sideTo.by_ref)) {
             to.by_ref |> insert(k)
         }
+        to.prefix |> push_from(sideTo.prefix)
         if (si == 0) {
             firstDecl := sideTo.declarations
         } elif (!same_names(firstDecl, sideTo.declarations, wth, to) || !same_names(sideTo.declarations, firstDecl, wth, to)) {
@@ -689,6 +690,171 @@ def match_const(what : TypeDeclPtr; wth : Expression?; access : Expression?; var
 }
 
 [macro_function]
+class private PlaceholderFinder : AstVisitor {
+    found : bool
+    def override preVisitExprVar(expr : ExprVar?) : void {
+        found ||= expr.name == "_"
+    }
+}
+
+[macro_function]
+def private mentions_placeholder(e : Expression?) : bool {
+    //! The expression reads ``_`` somewhere inside it.
+    var finder = new PlaceholderFinder()
+    make_visitor(*finder) $(adapter) {
+        visit(e, adapter)
+    }
+    let found = finder.found
+    unsafe {
+        delete finder
+    }
+    return found
+}
+
+[macro_function]
+def private is_probed_view(var pat : Expression?) : bool {
+    //! A view ``(f(_) => pattern)`` after ``add_probes`` added its probe.
+    var p = peel_r2v(pat)
+    return false if (!(p is ExprMakeTuple) || length((p as ExprMakeTuple).values) != 3)
+    return peel_r2v((p as ExprMakeTuple).values[2]).genFlags.generated
+}
+
+[macro_function]
+def private is_pattern_call(head : Expression?) : bool {
+    //! A pattern spelled as a call, like the first element of
+    //! ``(({ "k" => _ }), 1)``, ``([_, 2], 1)``
+    //! or ``(match_type(type<int>, _), 1)``: a tuple element, not a view.
+    return (is_call_to(head, "match_expr", "match") || is_call_to(head, "match_type", "match")
+        || is_call_to(head, "to_table_move", "builtin")
+        || is_call_to(head, "to_array_move", "builtin"))
+}
+
+[macro_function]
+def private is_view(var pat : Expression?) : bool {
+    //! ``(f(_) => pattern)``: a pair whose first element is a call, an
+    //! index or a field read that reads ``_``. After ``add_probes`` the
+    //! view has its probe as a third element.
+    var p = peel_r2v(pat)
+    return false if (p == null || !(is_arrow_arm(p) || is_probed_view(p)))
+    let head = peel_r2v((p as ExprMakeTuple).values[0])
+    let reads = (head is ExprCall || head is ExprAt || head is ExprSafeAt
+        || head is ExprField || head is ExprSafeField)
+    return reads && !is_pattern_call(head) && mentions_placeholder(head)
+}
+
+[macro_function]
+class private ProbeAttacher {
+    //! Before type inference, gives every view of an arm a probe: its
+    //! call with ``_`` replaced by the path to the value it reads.
+    //! The probe never runs; its type becomes the view's result type.
+    def attach(var pat : Expression?; path : Expression?) : void {
+        if (is_view(pat)) {
+            view(pat as ExprMakeTuple, path)
+        } elif (pat is ExprOp2) {
+            var op2 = pat as ExprOp2
+            attach(op2.left, path)
+            attach(op2.right, path) if (op2.op == "|" || op2.op == "||" || op2.op == "&")
+        } elif (pat is ExprMakeStruct) {
+            fields(pat as ExprMakeStruct, path)
+        } else {
+            parts(pat, path)
+        }
+    }
+    def view(var view : ExprMakeTuple?; path : Expression?) : void {
+        if (length(view.values) == 2) {
+            var probe = clone_expression(view.values[0])
+            probe = apply_template(probe) $(rules) {
+                rules |> replaceVariable("_") <| clone_expression(path)
+            }
+            probe.genFlags.generated = true
+            view.values |> emplace(probe)
+        }
+        attach(view.values[1], view.values[2])
+    }
+    def fields(var mks : ExprMakeStruct?; path : Expression?) : void {
+        let is_struct = names_structure(mks.makeType)
+        for (st in mks.structs) {
+            for (mf in *st) {
+                let name = string(mf.name)
+                attach(mf.value, is_struct ? field_of(path, name) : alternative_of(path, name))
+            }
+        }
+    }
+    def parts(var pat : Expression?; path : Expression?) : void {
+        if (pat is ExprMakeVariant) {
+            for (mf in (pat as ExprMakeVariant).variants) {
+                attach(mf.value, alternative_of(path, string(mf.name)))
+            }
+        } elif (pat is ExprAsVariant) {
+            var asv = pat as ExprAsVariant
+            attach(asv.value, alternative_of(path, string(asv.name)))
+        } elif (pat is ExprCall && length((pat as ExprCall).arguments) == 1) {
+            var call = pat as ExprCall
+            attach(call.arguments[0], alternative_of(path, string(call.name)))
+        } elif (pat is ExprMakeTuple) {
+            for (v, i in (pat as ExprMakeTuple).values, count()) {
+                break if (is_rest(v))
+                attach(v, field_of(path, "_{i}"))
+            }
+        }
+    }
+    def field_of(path : Expression?; name : string) : Expression? => new ExprField(
+        at = path.at, value = clone_expression(path), name := name)
+    def alternative_of(path : Expression?; name : string) : Expression? => new ExprAsVariant(
+        at = path.at, value = clone_expression(path), name := name)
+    def names_structure(t : TypeDeclPtr) : bool {
+        //! Before type inference ``Point(x = 1)`` and ``IntOrStr(s = "a")``
+        //! are the same node. True when ``t`` names a structure of the
+        //! program, false for a variant.
+        return false if (t == null)
+        return true if (t.baseType == Type.tStructure)
+        return false if (t.baseType != Type.alias)
+        return compiling_program() |> find_unique_structure(string(t.alias)) != null
+    }
+}
+
+[macro_function]
+def add_probes(var pattern : Expression?; expr : ExprCallMacro?) : void {
+    //! Adds probes to the views of one arm. With one matched value,
+    //! ``_`` is that value; with ``match (a, b)``, it is the value of
+    //! the view's column.
+    var attacher = new ProbeAttacher()
+    let nsubjects = length(expr.arguments) - 1
+    if (nsubjects == 1) {
+        attacher->attach(pattern, expr.arguments[0])
+    } elif (pattern is ExprMakeTuple && length((pattern as ExprMakeTuple).values) == nsubjects) {
+        for (v, i in (pattern as ExprMakeTuple).values, count()) {
+            attacher->attach(v, expr.arguments[i])
+        }
+    }
+}
+
+[macro_function]
+def match_view(what : TypeDeclPtr; var wth : ExprMakeTuple?; access : Expression?;
+               var to : MatchTo) {
+    //! ``(f(_) => pattern)`` matches ``pattern`` against ``f(value)``;
+    //! the call runs each time an arm tests the view.
+    let head = wth.values[0]
+    let view = describe_pattern(head)
+    if (length(wth.values) < 3) {
+        to.errors |> match_error("`{view}` can't be a view here; bind it and use a guard", head.at)
+        to.hard = true
+        return false
+    }
+    let rtype = wth.values[2]._type
+    if (rtype == null) {
+        to.errors |> match_error("`{view}` does not compile for `{describe(what)}`", head.at)
+        to.hard = true
+        return false
+    }
+    var compute = clone_expression(head)
+    compute = apply_template(compute) $(rules) {
+        rules |> replaceVariable("_") <| clone_expression(access)
+    }
+    return match_any(rtype, wth.values[1], compute, to)
+}
+
+[macro_function]
 def match_any(what : TypeDeclPtr; wth : Expression?; access : Expression?; var to : MatchTo) {   // nolint:STYLE037 - exact-type `is` ladder over TypeDecl shapes
     //! Matches one pattern against ``access`` of type ``what``: hands the pattern to the match_* for its shape, which adds the runtime tests to ``to.conditions`` and the bound names to ``to.declarations``.
     if (LOG_MATCH) {
@@ -705,6 +871,8 @@ def match_any(what : TypeDeclPtr; wth : Expression?; access : Expression?; var t
         return true
     } elif (wth is ExprMakeStruct) {
         return match_struct(what, wth as ExprMakeStruct, access, to)
+    } elif (to.bind_names && wth is ExprMakeTuple && is_view(wth as ExprMakeTuple)) {
+        return match_view(what, wth as ExprMakeTuple, access, to)
     } elif (wth is ExprMakeTuple) {
         return match_tuple(what, wth as ExprMakeTuple, access, to)
     } elif (wth is ExprMakeArray) {
@@ -839,7 +1007,9 @@ def prepare_call_pattern(var call : ExprCall?; bind_bare : bool) : array<string>
 [macro_function]
 def prepare_sub_patterns(var pat : Expression?; bind_bare : bool) : array<string> {
     var names : array<string>
-    if (pat is ExprMakeTuple) {
+    if (bind_bare && is_view(pat)) {
+        names <- prepare_pattern((pat as ExprMakeTuple).values[1], bind_bare)
+    } elif (pat is ExprMakeTuple) {
         for (v in (pat as ExprMakeTuple).values) {
             names |> push_from(prepare_pattern(v, bind_bare))
         }
@@ -1178,6 +1348,7 @@ class MatchMacro : AstCallMacro {
                 hide_bound_names(ee, (ee as ExprIfThenElse).cond, false)
             } elif (is_arrow_arm(ee)) {
                 hide_bound_names(ee, (ee as ExprMakeTuple).values[0], true)
+                add_probes((ee as ExprMakeTuple).values[0], expr)
             }
         }
     }

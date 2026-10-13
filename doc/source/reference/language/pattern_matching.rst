@@ -380,6 +380,51 @@ The number of explicit elements in the pattern is checked against the array leng
         }
     }
 
+View Patterns
+-------------
+
+``(f(_) => pattern)`` computes ``f`` from the value being matched - ``_`` stands for it - and matches
+``pattern`` against the result, as Haskell's view patterns and F#'s active patterns do. The left
+side is a call, an index or a field read that mentions ``_``; other names in it are values in scope.
+The call runs each time an arm tests the view, so it must be a pure function: no side effects, and
+the same result for the same value. Its result is matched as the type the call returns, so any
+pattern applies to it - a constant, a range, a struct, a variant alternative:
+
+.. code-block:: das
+
+    variant Token {
+        num : int
+        word : string
+    }
+
+    def token ( s : string ) : Token {
+        let n = try_to_int(s)
+        return is_ok(n) ? Token(num = unwrap(n)) : Token(word = s)
+    }
+
+    def command ( s : string ) {
+        return match ( s ) {
+            (token(_) => num(n)) && n < 0 => "negative {n}"
+            (token(_) => num(n)) => "number {n}"
+            (token(_) => word("quit")) => "bye"
+            (token(_) => word(w)) => "word {w}"
+            _ => "other"
+        }
+    }
+
+A view works inside a tuple, a struct field or an alternative too:
+
+.. code-block:: das
+
+    def bag_kind ( b : Bag ) {
+        return match ( b ) {
+            Bag(items = (length(_) => n) && n > 3) => "long {n}"
+            _ => "other"
+        }
+    }
+
+A view covers nothing for exhaustiveness, so a match with views ends with a ``_`` arm.
+
 Table Matching
 --------------
 
