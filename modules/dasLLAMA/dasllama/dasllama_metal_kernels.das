@@ -3540,7 +3540,7 @@ class MetalRopeStoreBQ8 : MetalRopeStoreQ8Base {
     @ssbo @binding = 4 @role = "write" vqb : array<int8>
     @ssbo @binding = 5 @role = "weight" tcos : array<float>  // [B x head_size/2] per-row rope rows
     @ssbo @binding = 6 @role = "weight" tsin : array<float>
-    @ssbo @binding = 7 @role = "read" rt : array<uint4>    // per-row (k base BYTES, v base BYTES, cap_rows, cnt)
+    @ssbo @binding = 7 @role = "read" @off = "rtoff" rt : array<uint4>    // per-row (k base BYTES, v base BYTES, cap_rows, cnt)
     @ssbo @binding = 8 @role = "weight" bias : array<float> // [qd | kvd | kvd] QKV bias (dummy-bound when has_bias == 0)
     @uniform @binding = 9 ka : RopeStoreBQ8Args
 
@@ -3605,7 +3605,7 @@ class MetalRopeStoreBTq4 : MetalRopeStoreTq4Base {
     @ssbo @binding = 5 @role = "weight" tcos : array<float>  // [B x head_size/2] per-row rope rows
     @ssbo @binding = 6 @role = "weight" tsin : array<float>
     @ssbo @binding = 7 @role = "weight" signs : array<float>
-    @ssbo @binding = 8 @role = "read" rt : array<uint4>    // per-row (k base BYTES, v base BYTES, cap_rows, cnt)
+    @ssbo @binding = 8 @role = "read" @off = "rtoff" rt : array<uint4>    // per-row (k base BYTES, v base BYTES, cap_rows, cnt)
     @ssbo @binding = 9 @role = "weight" bias : array<float> // [qd | kvd | kvd] QKV bias (dummy-bound when has_bias == 0)
     @uniform @binding = 10 ka : RopeStoreBTq4Args
 
@@ -3659,6 +3659,95 @@ class MetalRopeStoreBTq4 : MetalRopeStoreTq4Base {
         } else {
             let vb0b = rrow.y + lay * rrow.z + (rrow.w - 1u) * rowb
             tq4_store(vsh, vqb, d, qv, qother, vb0b, blk, lid, sl)
+        }
+    }
+}
+
+struct KvRowsArgs {
+    rows : uint    //!< the window rows a dispatch stores
+    nblk : uint    //!< a K or V row's 32-blocks
+    hs : uint      //!< a head's elements (the tq4 rotation's span)
+}
+
+//! A prefill window's roped K and V panel rows into a q8_0 mirror slab, a thread a 32-block: `quantize_q8kv_row`'s scale and
+//! rounding through the store shell the rope-store stamps share, the rope already done
+[metal_dispatch(name = "enc_kv_rows_q8", pso = "g_pso_kv_rows_q8", tg = 64, grid = "nthreads/64", params = "nthreads : int64")]
+class MetalKvRowsQ8 : MetalRopeStoreQ8Base {
+    @ssbo @binding = 0 @role = "read" @off = "koff" ks : array<float>
+    @ssbo @binding = 1 @role = "read" @off = "voff" vs : array<float>
+    @ssbo @binding = 2 @role = "write" @off = "mkoff" ksh : array<float16>
+    @ssbo @binding = 3 @role = "alias" @off = "mkoff" kqb : array<int8>
+    @ssbo @binding = 4 @role = "write" @off = "mvoff" vsh : array<float16>
+    @ssbo @binding = 5 @role = "alias" @off = "mvoff" vqb : array<int8>
+    @uniform @binding = 6 ka : KvRowsArgs
+
+    [metal_kernel(name = "metal_kv_rows_q8_msl"), arch(at = "../ARCHITECTURE_GPU_PREFILL_WINDOW.md#prefill-kv-mirror")]
+    def metal_kv_rows_q8 {
+        let nblk = ka.nblk
+        let total = ka.rows * nblk
+        let gid = gl_GlobalInvocationID.x
+        if (gid >= 2u * total) {
+            return
+        }
+        let isV = gid >= total
+        let bi = isV ? gid - total : gid
+        let row = bi / nblk
+        let blk = bi % nblk
+        let base = bi * 32u
+        var vals : float[32]
+        var e = 0u
+        while (e < 32u) {
+            vals[e] = isV ? vs[base + e] : ks[base + e]
+            e++
+        }
+        var d = 0.0
+        var id = 0.0
+        q8_scale(vals, d, id)
+        if (isV) {
+            q8_store(vsh, vqb, vals, d, id, row * nblk * 17u, row * nblk * 34u, blk)
+        } else {
+            q8_store(ksh, kqb, vals, d, id, row * nblk * 17u, row * nblk * 34u, blk)
+        }
+    }
+}
+
+//! A prefill window's roped K and V panel rows into a tq4 mirror slab, a threadgroup a (head, row): the head rotated by the
+//! signed FWHT, then quantized - `fwht_signs_row` and `quantize_tq4kv_row` through the store shell the rope-store stamps share
+[metal_dispatch(name = "enc_kv_rows_tq4", pso = "g_pso_kv_rows_tq4", tgmem = "metal_kv_rows_tq4_msl_tgmem", tg = "head_size", grid = "ntg, rows", params = "ntg : int64, rows : int64, head_size : int64")]
+class MetalKvRowsTq4 : MetalRopeStoreTq4Base {
+    @ssbo @binding = 0 @role = "read" @off = "koff" ks : array<float>
+    @ssbo @binding = 1 @role = "read" @off = "voff" vs : array<float>
+    @ssbo @binding = 2 @role = "write" @off = "mkoff" ksh : array<float16>
+    @ssbo @binding = 3 @role = "alias" @off = "mkoff" kqb : array<uint8>
+    @ssbo @binding = 4 @role = "write" @off = "mvoff" vsh : array<float16>
+    @ssbo @binding = 5 @role = "alias" @off = "mvoff" vqb : array<uint8>
+    @ssbo @binding = 6 @role = "weight" signs : array<float>
+    @uniform @binding = 7 ka : KvRowsArgs
+
+    [metal_kernel(name = "metal_kv_rows_tq4_msl"), arch(at = "../ARCHITECTURE_GPU_PREFILL_WINDOW.md#prefill-kv-mirror")]
+    def metal_kv_rows_tq4 {
+        let hs = ka.hs
+        let kvd = ka.nblk * 32u
+        let nkvh = kvd / hs
+        let tgid = gl_WorkGroupID.x
+        let row = gl_WorkGroupID.y
+        let lid = gl_LocalInvocationID.x
+        let isV = tgid >= nkvh
+        let hh = isV ? tgid - nkvh : tgid
+        let at = row * kvd + hh * hs + lid
+        var v = isV ? vs[at] : ks[at]
+        tq4_fwht_signs_row(v, signs, lid, hs)
+        let sl = gl_SubgroupInvocationID
+        var d = 0.0
+        var qv = 0
+        var qother = 0
+        tq4_quant(v, d, qv, qother, sl)
+        let blk = hh * (hs / 32u) + lid / 32u
+        let b0b = row * ka.nblk * 18u
+        if (isV) {
+            tq4_store(vsh, vqb, d, qv, qother, b0b, blk, lid, sl)
+        } else {
+            tq4_store(ksh, kqb, d, qv, qother, b0b, blk, lid, sl)
         }
     }
 }
@@ -4062,6 +4151,8 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_rpstb32 = compile_stamp(MetalRopeStoreBF32_metal_rope_store_b_msl, ok)
     g_pso_rpstb_q8 = compile_stamp(metal_rope_store_b_q8_msl, ok)
     g_pso_rpstb_tq4 = compile_stamp(metal_rope_store_b_tq4_msl, ok)
+    g_pso_kv_rows_q8 = compile_stamp(metal_kv_rows_q8_msl, ok)
+    g_pso_kv_rows_tq4 = compile_stamp(metal_kv_rows_tq4_msl, ok)
     if (!ok) {
         // no steps are in flight at init time — releasing PSOs + shared state suffices
         metal_kernels_release()
@@ -4654,6 +4745,46 @@ def mx4_bias_rows(t : Model; off, l, n : int64) : MetalBuffer? {
     return upload_region(unsafe(addr<void?>(t.fblob[off + l * t.config.n_expert * n])), uint64(t.config.n_expert * n * 4l))
 }
 
+//! one routed site of layer `l` over `nrows` rows' selections in `bsel`: the stack's plane by its format, an mx4 stack with its
+//! bias rows at `boff`; `ka` is the site's shape, its plane stride set here from the stack's format
+def private enc_moe_site(enc : MetalComputeEncoder?; t : Model; l, stack_off, boff, rows, nrows : int64; fmt : KqFmt;
+                         bx, by, bsel : MetalBuffer?; ka : MoeGemvArgs; yoff : uint64) {
+    var a = ka
+    let ege = uint(t.config.dim * t.config.n_ff_exp)
+    a.eplane = ege / (!t.experts_mx4 && kq_sb(fmt) ? 256u : 32u)
+    if (t.experts_mx4) {
+        enc_moe_gemv_mx4(enc, t, stack_off, rows, t.config.n_expert_used, nrows, bx, by, bsel, mx4_bias_rows(t, boff, l, rows), a, yoff)
+    } else {
+        a.hasb = 0u
+        enc_moe_gemv(enc, t, fmt, stack_off, rows, t.config.n_expert_used, nrows, bx, by, bsel, a, yoff)
+    }
+}
+
+//! layer `l`'s routed gate and up GEMVs over `nrows` rows' selections: gate into `bg`, up into `bu` at byte `uoff` - the
+//! decode's routed block and the prefill window's gathered route both
+def enc_moe_gate_up(enc : MetalComputeEncoder?; t : Model; l, nrows : int64; bx, bg, bu, bsel : MetalBuffer?; uoff : uint64; ka : MoeGemvArgs) {
+    let nfe = t.config.n_ff_exp
+    enc_moe_site(enc, t, l, t.we1_offs[l], t.web1_off, nfe, nrows, fmt_at(t.we1_fmt, l), bx, bg, bsel, ka, 0ul)
+    enc_moe_site(enc, t, l, t.we3_offs[l], t.web3_off, nfe, nrows, fmt_at(t.we3_fmt, l), bx, bu, bsel, ka, uoff)
+}
+
+//! layer `l`'s routed down GEMV over `nrows` rows' selections, the activated rows in `bg` into `bdn`
+def enc_moe_down(enc : MetalComputeEncoder?; t : Model; l, nrows : int64; bg, bdn, bsel : MetalBuffer?; ka : MoeGemvArgs) {
+    enc_moe_site(enc, t, l, t.we2_offs[l], t.web2_off, t.config.dim, nrows, fmt_at(t.we2_fmt, l), bg, bdn, bsel, ka, 0ul)
+}
+
+//! the routed block's activation over `n` live elements (`btot` holds the count): gate rows in `bg`, up rows in `bu` at byte
+//! `uoff` - gpt-oss's clamped swiglu, gemma-4's geglu, silu otherwise
+def enc_moe_act(enc : MetalComputeEncoder?; c : Config; bg, bu : MetalBuffer?; uoff : uint64; btot : MetalBuffer?; n : int64) {
+    if (c.ffn_act == FfnAct.swiglu_oai) {
+        enc_swiglu_oai(enc, bg, 0ul, bu, uoff, btot, n)
+    } elif (c.moe_dense_shexp) {
+        enc_geglu(enc, bg, 0ul, bu, uoff, btot, n)
+    } else {
+        enc_swiglu(enc, bg, 0ul, bu, uoff, btot, n)
+    }
+}
+
 // fused add + rms when dim fits the kernel's row slab, the unfused pair otherwise
 def enc_add_rms_site(enc : MetalComputeEncoder?; bx, ba, bw, by, bdim, beps : MetalBuffer?; dim : int64; bascale : MetalBuffer? = null) {
     if (dim <= ADD_RMS_MAX_DIM) {
@@ -4945,15 +5076,15 @@ def enc_rope_store_b(enc : MetalComputeEncoder?; f16 : bool; bqkv, bcos, bsin, b
 }
 
 // tq4-mirror batched rope+store: one threadgroup per (head, batch row), arena bound four ways
-def enc_rope_store_b_tq4(enc : MetalComputeEncoder?; bqkv, bcos, bsin, brt, bbias : MetalBuffer?; var ka : RopeStoreBTq4Args; ntg, nrows, head_size : int64) {
-    enc_rpstb_tq4_c(enc, bqkv, g_arena, g_arena, g_arena, g_arena, bcos, bsin, signs_buffer(), brt, bbias,
+def enc_rope_store_b_tq4(enc : MetalComputeEncoder?; bqkv, bcos, bsin, brt, bbias : MetalBuffer?; var ka : RopeStoreBTq4Args; ntg, nrows, head_size : int64; rtoff : uint64 = 0ul) {
+    enc_rpstb_tq4_c(enc, bqkv, g_arena, g_arena, g_arena, g_arena, bcos, bsin, signs_buffer(), brt, rtoff, bbias,
         ka, ntg, nrows, head_size)
 }
 
 // q8_0-mirror batched rope+store: arena bound four ways (K/V x scale/byte views); grid covers
 // the q pairs + one thread per K/V 32-block, one grid row per batch row
-def enc_rope_store_b_q8(enc : MetalComputeEncoder?; bqkv, bcos, bsin, brt, bbias : MetalBuffer?; var ka : RopeStoreBQ8Args; nthreads, nrows : int64) {
-    enc_rpstb_q8_c(enc, bqkv, g_arena, g_arena, g_arena, g_arena, bcos, bsin, brt, bbias, ka, nthreads, nrows)
+def enc_rope_store_b_q8(enc : MetalComputeEncoder?; bqkv, bcos, bsin, brt, bbias : MetalBuffer?; var ka : RopeStoreBQ8Args; nthreads, nrows : int64; rtoff : uint64 = 0ul) {
+    enc_rpstb_q8_c(enc, bqkv, g_arena, g_arena, g_arena, g_arena, bcos, bsin, brt, rtoff, bbias, ka, nthreads, nrows)
 }
 
 def enc_add_rms_b(enc : MetalComputeEncoder?; bx, ba, bw, by, bdim, beps : MetalBuffer?; nrows : int64; bascale : MetalBuffer? = null) {
@@ -5029,6 +5160,7 @@ def metal_kernels_release {
     release_handles(g_pso_attndw16, g_pso_attndw32, g_pso_attndx16, g_pso_attndx32)
     release_handles(g_pso_attndw_q8, g_pso_attndw_tq4, g_pso_attndx_q8, g_pso_attndx_tq4)
     release_handles(g_pso_rpstb32, g_pso_rpstb_q8, g_pso_rpstb_tq4)
+    release_handles(g_pso_kv_rows_q8, g_pso_kv_rows_tq4)
 }
 
 
@@ -11426,6 +11558,28 @@ class MetalPleConv {
             k++
         }
         res[gid] += gated[gid] + acc / (1.0 + exp(-acc))
+    }
+}
+
+//! The n-gram side input's gate and dilated conv over `nrows` rows from `pos0`, the decode's three row shapes' and the prefill
+//! window's: the ring form (`direct` off, `bcin` the ring) writes each row's conv input into the ring and reads every tap there,
+//! the panel form writes them into `bcin` and reads the window's own taps there, the earlier ones off the ring at `bring`
+def enc_ple_side_rows(enc : MetalComputeEncoder?; t : Model; bhc : MetalBuffer?; hoff : uint64; bkey : MetalBuffer?; koff : uint64;
+                      bval : MetalBuffer?; voff : uint64; bgated : MetalBuffer?; goff : uint64; bcin : MetalBuffer?; coff : uint64;
+                      bring : MetalBuffer?; roff : uint64; pos0, nrows : int64; direct : bool) {
+    let c = t.config
+    let hcd = hc_dim(c)
+    let rows = uint(ple_hist_rows(c))
+    unsafe {
+        var bwk = upload_region(addr < void? >(t.fblob[t.ple_nkey_off]), uint64(hcd * 4l))
+        var bwq = upload_region(addr < void? >(t.fblob[t.ple_nquery_off]), uint64(hcd * 4l))
+        var bwc = upload_region(addr < void? >(t.fblob[t.ple_nconv_off]), uint64(hcd * 4l))
+        var bwt = upload_region(addr < void? >(t.fblob[t.ple_conv_off]), uint64(hcd * c.ple_conv_kernel * 4l))
+        var gka = PleGateArgs(dim = uint(c.dim), hc = uint(c.hc_count), eps = c.norm_eps, pos0 = uint(pos0), rows = rows, direct = direct ? 1u : 0u)
+        enc_ple_gate(enc, bhc, hoff, bkey, koff, bval, voff, bwk, bwq, bwc, bgated, goff, bcin, coff, gka, nrows * c.hc_count)
+        var cka = PleConvArgs(dim = uint(c.dim), hc = uint(c.hc_count), kern = uint(c.ple_conv_kernel), dil = uint(c.ple_ngram_size),
+            rows = rows, pos0 = uint(pos0), nrows = uint(nrows), direct = direct ? 1u : 0u)
+        enc_ple_conv(enc, bhc, hoff, bgated, goff, bcin, coff, bring, roff, bwt, cka, nrows * hcd)
     }
 }
 

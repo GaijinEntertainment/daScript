@@ -140,11 +140,10 @@ commit turnaround does not. `finish_step` then compares the GPU's pick with the 
 miss waits the chained step out, discards it, and reruns the step through the slow path, so a miss
 costs about two steps (30 ms against a 15 ms step on gemma-4-12B, M5 Max; every figure in this
 section is `harness/batch_rows_probe.das` with `--feed text|greedy|second:K --spec -1|0|1`,
-`-jit`) where a hit saves the turnaround, about 2% of a step. The adaptive mode
-(`DASLLAMA_METAL_SPEC` -1) backs off exponentially after a miss and re-arms on the next hit; under
-a sampler that agrees with the argmax two steps in three it still costs 63% of the step (26.0
-against 15.9 ms), because the
-re-arm attempts far more often than a 2% upside pays for. So the sampler decides: `sample_` marks
+`-jit`) where a hit saves the turnaround, about 2% of a step. The adaptive mode (`DASLLAMA_METAL_SPEC` -1)
+backs off exponentially after a miss and re-arms on the next hit; under a sampler that agrees with the argmax
+two steps in three it still costs 63% of the step (26.0 against 15.9 ms), because the re-arm attempts far
+more often than a 2% upside pays for. So the sampler decides: `sample_` marks
 the session `sampled` whenever its pick can differ from the raw argmax - a temperature above zero,
 or a penalty at temp 0 (`sampler_is_argmax` is the negation) - and the driver never chains such a
 session, because the chain predicts the raw argmax the penalty then rejects. Only a bare argmax
@@ -155,7 +154,9 @@ linear copy (`MetalEmbedQ8`), the table's K-quant plane in its own format, tied 
 `MetalRowGather` under the embed scale, the plane wrapped zero-copy through `plane_of`). The same
 gather opens every unchained single-row step, off the token `forward()` pokes, and the MTP round's
 depth-1 chain takes any table whose gather reads an offset token list (`emb_dev_gather_at_ok`: the
-q8 copy and the K-quant planes). A recurrent model never chains (`spec_cls_capable`).
+q8 copy and the K-quant planes). A recurrent model chains on its mirror's three regions: a chained step reads the region
+the step in flight writes and writes the next, so a miss lands the region it read live again (`dn_mirror_land`) and the
+rerun steps from the state the chain never touched; an n-gram ring has one copy, so its models never chain.
 
 **The step wait spins on the GPU end time, then blocks.** `finish_step` polls the command
 buffer's `GPUEndTime` until it is set and only then enters `waitUntilCompleted`, because a
@@ -170,9 +171,9 @@ the spin costs a core's idle and buys the wake's latency. `DASLLAMA_METAL_WAIT_S
 blocking wait alone, the A/B rail. The spin is capped at 200 ms so a stalled step still reaches
 the blocking wait that reports it.
 
-The GPU argmax reproduces the CPU sampler's tie-break exactly: a lane keeps the earliest of equal
-values (strict `>`), and the cross-lane fold takes the lower index on a tie, so the lowest index
-wins - what lets the chain predict a bare-argmax sampler's pick bit for bit.
+The GPU argmax reproduces the CPU sampler's tie-break exactly: a lane keeps the earliest of equal values
+(strict `>`), and the cross-lane fold takes the lower index on a tie, so the lowest index wins - what lets
+the chain predict a bare-argmax sampler's pick bit for bit.
 
 ### The batch driver's pre-encoded step {#batch-pre-encode}
 

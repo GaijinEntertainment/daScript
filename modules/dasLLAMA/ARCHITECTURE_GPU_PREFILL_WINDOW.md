@@ -3,7 +3,7 @@
 Companion to `ARCHITECTURE_GPU_PREFILL.md`; a section is cited by its anchor. This document
 carries the third form of the prefill attention - the pair of device-direct tensor GEMMs around a
 row softmax written in place - the mirror-fed window that pair reads its keys from and the
-adoption of a released session's mirror, the segmented window that holds several sessions' chunks,
+adoption of a released session's mirror, the mirror arena's growth and reach, the segmented window that holds several sessions' chunks,
 the recurrent scan over half rows, and how a kernel's hot loads are addressed. The score slab the attention pair shares with the other two forms, and their
 kernels, stay in `ARCHITECTURE_GPU_PREFILL.md#prefill-attn-slab`.
 
@@ -105,6 +105,18 @@ window's end; a window that fails leaves it at zero, since the panel wrote every
 the first decode step after a window uploads the whole context's rows into the mirror, a cost
 that grows with the context and that the client reads as a slow second token.
 
+**A q8_0, tq4 or f32 session's window feeds its mirror through the codec's store.** The window's
+attention reads the f32 panels as it does for any codec; after each layer's rope its own rows - not
+the gathered ones, which the mirror already holds byte for byte - go from the panel into the mirror's
+slab at the window's first row, prepared there (`mirror_prepare_rows` at the window's position): a
+q8_0 slab through `MetalKvRowsQ8`, a thread a 32-block on the decode's q8 store shell
+(`quantize_q8kv_row`'s scale and rounding), a tq4 slab through `MetalKvRowsTq4`, a threadgroup a
+(head, row) rotating the head by the signed transform and quantizing it on the decode's tq4 shell, an
+f32 slab a row copy (`pf_enc_kv_feed`). The rows are the bytes the CPU codec store writes, so the host
+store takes them from the mirror byte for byte, the watermark moves to the window's end, and a window
+that fails leaves it at the window's first row. A tq4 head is a power of two of 32 to 512 elements -
+the rotation's span inside one threadgroup (`pf_kv_feed_codec_ok`).
+
 A prepare that moves an arena slice or uploads rows first retires every step encoded ahead
 (`mirror_quiesce`); one that finds the mirror standing at the window's first row
 (`mirror_stands`) leaves them. The panel form's prepare at row zero on a standing mirror moves
@@ -120,6 +132,26 @@ own block table, the watermark at their end (`mirror_adopt`). A stamp is process
 each time a group is allocated, so a group freed and taken again matches nothing. The pages a
 prefix-cache hit attaches are a finished stream's, so the rows a warm turn skips on the host it
 skips on the device too; `DASLLAMA_METAL_MIRROR_ADOPT=0` uploads them.
+
+### The mirror arena and its reach {#kv-mirror-arena}
+
+Every session's KV mirror is a slice of one device buffer, the arena, which grows by a release-all
+rebuild. The cap (`DASLLAMA_METAL_KV_MIRROR_MB`, `set_metal_decode_mirror_cap_mb`, 64 MiB at least)
+bounds that growth for every session together and is the size idle mirrors evict down to; a live
+session's own slice past the cap still gets room, the arena grown to that slice with every other
+mirror evicted (`mirror_ceiling_for`). The device's largest buffer bounds both, since the arena is one
+buffer. A slice is the session's rows rounded up to a power of two, never past its context, so a
+session's context in unified memory is what sizes its mirror; a batch step's or a segmented window's
+reservation asks the cap, or its largest slice where that passes the cap.
+
+**The forms that address the arena from its start reach 2^32 units.** A route table - the batch
+step's, the verify's and the single row's fused attention - carries each slice's base in elements
+under a scalar codec and in bytes under a block codec, and the window's half-row conversion carries
+the mirror row's element index in halves. A slice past that reach takes the forms that bind the arena
+at a 64-bit offset instead: the single row's chunked attention for the fused one, the window's panels
+without the mirror feed (the decode then uploads the rows) for the f16 forms; a batch step's slice past
+it retries on an empty arena, whose first slices land low, and a speculative round past it is cold
+(`mirror_in_reach`, `mirror_slice_in_reach`).
 
 ### The segmented window {#prefill-segments}
 

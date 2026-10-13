@@ -136,7 +136,7 @@ struct KVMirror {
 var @scratch g_mirrors : table<uint64; KVMirror>   // per-session mirrors; hot [] after key_exists is a hit
 var g_mirror_bytes = 0ul
 var g_tick = 0l
-var g_mirror_cap_mb = -1   // <0 = unset: DASLLAMA_METAL_KV_MIRROR_MB (default 4096) reads at use
+var g_mirror_cap_mb = -1   // <0 = unset: DASLLAMA_METAL_KV_MIRROR_MB reads at use
                            // — a CEILING (M2.7): the arena starts at 256MB and grows on demand
 
 // the mirror arena: one buffer, first-fit free-list suballocation (slices are per-session and
@@ -479,6 +479,8 @@ var g_pso_rpstb16 : MetalComputePipeline?
 var g_pso_rpstb32 : MetalComputePipeline?
 var g_pso_rpstb_q8 : MetalComputePipeline?
 var g_pso_rpstb_tq4 : MetalComputePipeline?
+var g_pso_kv_rows_q8 : MetalComputePipeline?    //! the prefill window's K/V rows into a q8_0 mirror
+var g_pso_kv_rows_tq4 : MetalComputePipeline?   //! the same into a tq4 mirror
 // uids a batch step is actively encoding against — eviction must never free a batch row's slice
 // out from under the step being assembled (the single path's `keep` protects only one uid)
 var g_pin : table<uint64>
@@ -521,9 +523,9 @@ def arena_free_slice(off : uint64; size : uint64) {
     }
 }
 
-//! The KV-mirror cap (M2.7): the arena's grow-on-demand CEILING (clamps to 64..4096MB) AND the
-//! RAW resident-bytes target for LRU eviction (tiny values = legitimate evict-aggressively policy).
-//! Negative restores the env default (`DASLLAMA_METAL_KV_MIRROR_MB`, else 4096).
+//! The KV-mirror cap in MiB: the arena's growth bound for every session together (64 at least, the device's largest buffer at
+//! most; a live session's own slice past it still gets room) AND the raw resident-bytes target idle mirrors evict down to (a
+//! tiny value is a legitimate evict-aggressively policy). Negative restores the env default (`DASLLAMA_METAL_KV_MIRROR_MB`).
 def public set_metal_decode_mirror_cap_mb(v : int) {
     g_mirror_cap_mb = v
 }
@@ -1223,9 +1225,30 @@ def private mirror_slice_shape(t : Model; s : Session; needed : int64) : tuple<c
             vbytes = uint64(cap * kv_row_bytes(s.kv_dtype_v, total)))
 }
 
+//! the device's largest buffer - the arena is one buffer, so neither a slice nor the arena grows past it
+def private mirror_device_max_bytes : uint64 => g_dev != null ? metal_max_buffer_length(g_dev) : 0xFFFFFFFFFFFFFFFFul
+
+//! the cap: the arena's growth bound for every session together and the bytes idle mirrors evict down to (64 MiB at least)
+[arch(at="../ARCHITECTURE_GPU_PREFILL_WINDOW.md#kv-mirror-arena")]
 def private mirror_ceiling_bytes : uint64 {
-    let ceil_mb = uint64(clamp(g_mirror_cap_mb >= 0 ? g_mirror_cap_mb : g_mirror_cap_env, 64, 4096))
-    return ceil_mb * 1024ul * 1024ul
+    let ceil_mb = uint64(max(g_mirror_cap_mb >= 0 ? g_mirror_cap_mb : g_mirror_cap_env, 64))
+    return min(ceil_mb * 1024ul * 1024ul, mirror_device_max_bytes())
+}
+
+//! the arena's growth bound for a demand whose largest slice is `slice_bytes`: the cap, or that slice where it alone passes the cap
+[arch(at="../ARCHITECTURE_GPU_PREFILL_WINDOW.md#kv-mirror-arena")]
+def private mirror_ceiling_for(slice_bytes : uint64) : uint64 => clamp(slice_bytes, mirror_ceiling_bytes(), mirror_device_max_bytes())
+
+//! a slice ending at byte `end` lies inside the 32-bit reach of the forms that address the arena from its start - the route
+//! tables count elements under a scalar codec and bytes under a block codec
+[arch(at="../ARCHITECTURE_GPU_PREFILL_WINDOW.md#kv-mirror-arena")]
+def mirror_in_reach(dt : KVDtype; end : uint64) : bool => end / uint64(kv_block_codec(dt) ? 1l : kv_row_bytes(dt, 1l)) <= 0xFFFFFFFFul
+
+//! `uid`'s whole slice lies inside the route tables' reach
+def mirror_slice_in_reach(uid : uint64) : bool {
+    return false if (!key_exists(g_mirrors, uid))
+    let mr = g_mirrors[uid]
+    return mirror_in_reach(mr.kdt, mr.koff + mr.bytes)
 }
 
 // release-all rebuild at `want` (clamped to the ceiling): every mirror re-uploads via its
@@ -1260,11 +1283,10 @@ def mirror_arena_demand(t : Model; s : Session; pos : int64) : uint64 {
     return shp.kbytes + shp.vbytes
 }
 
-// grow the arena until it can hold `total` bytes of slices — the batch driver reserves its
-// WHOLE step's demand through this before pinning any row (growth is a release-all rebuild,
-// forbidden under pins). false = total exceeds the ceiling (a genuine capability limit).
-def mirror_reserve(total : uint64) : bool {
-    let ceil_bytes = mirror_ceiling_bytes()
+//! grow the arena until it can hold `total` bytes of slices, `largest` the biggest of them - the batch driver reserves its whole
+//! step's demand through this before pinning any row (growth is a release-all rebuild, forbidden under pins); false = past the ceiling
+def mirror_reserve(total, largest : uint64) : bool {
+    let ceil_bytes = mirror_ceiling_for(largest)
     if (total > ceil_bytes) {
         return false
     }
@@ -1293,8 +1315,8 @@ def mirror_reserve(total : uint64) : bool {
 // per-session prepares can't pack a step that DOES fit capacity-wise (exact-fit demand around
 // older residents can strand contiguity). Callers unpin first; false = past the ceiling.
 [cold_path]   // arena defrag = the occasional rebuild leg
-def mirror_defrag(total : uint64) : bool {
-    let ceil_bytes = mirror_ceiling_bytes()
+def mirror_defrag(total, largest : uint64) : bool {
+    let ceil_bytes = mirror_ceiling_for(largest)
     if (total > ceil_bytes || !empty(g_pin) || g_arena == null) {
         return false
     }
@@ -1450,20 +1472,19 @@ def mirror_prepare_rows(t : Model; var s : Session; pos, needed : int64) : tuple
         }
     }
     if (!key_exists(g_mirrors, s.uid)) {
-        // the mirror cap is a CEILING (M2.7): grows on demand to clamp(cap, 64, 4096)MB — 4096 is a
-        // HARD max (the batch row table's uint32 arena offsets need arena size <= 2^32). Growth
-        // releases every mirror and rebuilds (re-mirror cost only); never runs while pins are held.
-        let ceil_bytes = mirror_ceiling_bytes()
+        //! the arena grows on demand to the ceiling - room for this slice where the slice alone passes the cap; growth releases
+        //! every mirror and rebuilds (re-mirror cost only) and never runs while pins are held
+        let shp = mirror_slice_shape(t, s, needed)
+        let cap = shp.cap
+        let kbytes = shp.kbytes
+        let vbytes = shp.vbytes
+        let ceil_bytes = mirror_ceiling_for(kbytes + vbytes)
         if (g_arena == null) {
             g_arena_bytes = min(256ul * 1024ul * 1024ul, ceil_bytes)
             g_arena = metal_new_buffer(g_dev, g_arena_bytes)
             g_arena_free |> clear()
             g_arena_free |> push((off = 0ul, size = g_arena_bytes))
         }
-        let shp = mirror_slice_shape(t, s, needed)
-        let cap = shp.cap
-        let kbytes = shp.kbytes
-        let vbytes = shp.vbytes
         var off = arena_alloc(kbytes + vbytes)
         while (off < 0l) {   // arena full — evict LRU until the slice fits (or nothing evictable)
             let victim = lru_victim(g_mirrors, s.uid, true)
@@ -1571,8 +1592,34 @@ def dn_mirror_room(n : int64) {
     g_dn_mirrors_max = max(g_dn_mirrors_max, n)
 }
 
-// MTP-capable models verify at B=2 with dual-store — their mirrors carry the shadow region
-def dn_mirror_regions(t : Model) : int64 => t.config.n_layer_nextn > 0l ? 2l : 1l
+//! every mirror carries three regions: a step that must not touch the live state - a verify's shadow, the greedy chain's next
+//! step - reads one and writes the next, and the chain's second step in flight writes a third while the first is unverified
+let DN_REGIONS = 3l
+
+//! the region a step reading `region` writes
+def dn_region_next(region : int64) : int64 => (region + 1l) % DN_REGIONS
+
+//! the region `uid`'s mirror holds live, and its state and history bases in the pool for region `region`
+def dn_mirror_region_offs(uid : uint64; region : int64) : tuple<state_off : uint64; conv_off : uint64> {
+    let mr = g_dn_mirrors[uid]
+    let base = dn_slot_base(mr) + uint64(region) * mr.region_bytes
+    return (state_off = base, conv_off = base + mr.conv_off)
+}
+
+//! `uid`'s live region, while its mirror is resident at `pos` with both regions; -1 otherwise
+def dn_mirror_cur_at(uid : uint64; pos : int64) : int64 {
+    return -1l if (!key_exists(g_dn_mirrors, uid))
+    let mr = g_dn_mirrors[uid]
+    return mr.pos == pos && mr.regions == DN_REGIONS ? mr.cur : -1l
+}
+
+//! the step that wrote region `region` landed: the region is live, the mirror at `pos`
+def dn_mirror_land(uid : uint64; region : int64; pos : int64) {
+    if (key_exists(g_dn_mirrors, uid)) {
+        g_dn_mirrors[uid].cur = region
+        g_dn_mirrors[uid].pos = pos
+    }
+}
 
 //! the pool every mirror's offsets index; it moves only inside `dn_mirror_prepare`
 def dn_pool_buffer() : MetalBuffer? => g_dn_pool
@@ -1588,6 +1635,12 @@ def private dn_slot_dev(mr : DnMirror) : uint8? {
     }
 }
 
+//! every step that may still write a recurrent slot landed or retired - the pool moving, a slot changing hands, the host writing one
+[cold_path]
+def private dn_mirror_quiesce {
+    mirror_quiesce()
+}
+
 //! Drops `uid`'s mirror and its stash: its slot is free for the next session.
 def dn_mirror_drop(uid : uint64) {
     g_dn_mirrors |> erase(uid)
@@ -1600,7 +1653,7 @@ def private dn_pool_fit(slots : int64; slot_bytes : uint64) {
     if (g_dn_pool != null && g_dn_slot_bytes == slot_bytes && g_dn_pool_slots >= slots) {
         return
     }
-    finish_pending_step()
+    dn_mirror_quiesce()   //! no step encoded ahead may write the pool that moves
     var nb = metal_new_buffer(g_dev, uint64(slots) * slot_bytes)
     if (g_dn_pool != null) {
         if (g_dn_slot_bytes == slot_bytes) {
@@ -1672,6 +1725,7 @@ def dn_mirror_live_off(uid : uint64; pos : int64) : uint64 {
 //! Test seam: `uid`'s mirror evicts as the LRU would evict it.
 def dn_mirror_evict_now(uid : uint64) {
     if (key_exists(g_dn_mirrors, uid)) {
+        dn_mirror_quiesce()
         dn_mirror_evict(uid)
     }
 }
@@ -1701,7 +1755,8 @@ def private dn_mirror_copy(var s : Session; mr : DnMirror; region : int64; to_ho
 //! A region is [state planes][conv planes]; the n-gram PLE conv ring sits ONCE past every region - it rides
 //! the recurrent mirror because it is the same kind of state (forward-only, per session, synced from the CPU
 //! prefix), but the verify's shadow flip must never retire it: its rows land only for committed positions
-def dn_mirror_prepare(var s : Session; pos : int64; regions : int64) : tuple<ok : bool; buf : MetalBuffer?; state_off : uint64; conv_off : uint64; state_alt : uint64; conv_alt : uint64; ple_off : uint64> {
+def dn_mirror_prepare(var s : Session; pos : int64) : tuple<ok : bool; buf : MetalBuffer?; state_off : uint64; conv_off : uint64; state_alt : uint64; conv_alt : uint64; ple_off : uint64> {
+    let regions = DN_REGIONS
     let sbytes = uint64(long_length(s.dn_state)) * 4ul
     let cbytes = uint64(long_length(s.dn_conv_state)) * 4ul
     let pbytes = uint64(long_length(s.ple_conv_hist)) * 4ul
@@ -1720,6 +1775,9 @@ def dn_mirror_prepare(var s : Session; pos : int64; regions : int64) : tuple<ok 
         return (ok = false, buf = null, state_off = 0ul, conv_off = 0ul, state_alt = 0ul, conv_alt = 0ul, ple_off = 0ul)
     }
     if (!have) {
+        if (long_length(g_dn_mirrors) >= g_dn_mirrors_max) {
+            dn_mirror_quiesce()   //! a step encoded ahead may still write the slot the eviction hands to this session
+        }
         while (long_length(g_dn_mirrors) >= g_dn_mirrors_max) {
             dn_mirror_evict(lru_victim(g_dn_mirrors, 0ul, false))
         }
@@ -1740,6 +1798,9 @@ def dn_mirror_prepare(var s : Session; pos : int64; regions : int64) : tuple<ok 
         }
     }
     g_dn_stash |> erase(s.uid)
+    if (pos == 0l || g_dn_mirrors[s.uid].pos != pos) {
+        dn_mirror_quiesce()   //! the host writes the slot below: no step encoded ahead may still write any region
+    }
     if (pos == 0l) {
         // fresh conversation: zero every region (dn_reset's GPU half). Safe on unified memory —
         // no step of this session is in flight at pos 0 (spec is clipped for recurrent models)
@@ -1762,7 +1823,7 @@ def dn_mirror_prepare(var s : Session; pos : int64; regions : int64) : tuple<ok 
     let mr = g_dn_mirrors[s.uid]   // cheap copy — one lookup per statement (table re-hash safety)
     let sb = dn_slot_base(mr)
     let base = sb + uint64(mr.cur) * mr.region_bytes
-    let alt = mr.regions == 2l ? sb + uint64(mr.cur ^ 1l) * mr.region_bytes : base
+    let alt = sb + uint64(dn_region_next(mr.cur)) * mr.region_bytes
     return (ok = true, buf = g_dn_pool, state_off = base, conv_off = base + mr.conv_off,
         state_alt = alt, conv_alt = alt + mr.conv_off, ple_off = sb + mr.region_bytes * uint64(mr.regions))
 }
@@ -1809,8 +1870,9 @@ def dn_mirror_advance(uid : uint64; pos : int64) {
 
 // MTP verify reject: the shadow region holds the post-row0 state — make it live (zero copies)
 def dn_mirror_flip(uid : uint64; pos : int64) {
-    if (key_exists(g_dn_mirrors, uid) && g_dn_mirrors[uid].regions == 2l) {
-        g_dn_mirrors[uid].cur ^= 1l
+    if (key_exists(g_dn_mirrors, uid)) {
+        let cur = g_dn_mirrors[uid].cur
+        g_dn_mirrors[uid].cur = dn_region_next(cur)
         g_dn_mirrors[uid].pos = pos
     }
 }

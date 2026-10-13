@@ -403,8 +403,7 @@ let DECODE_NEEDS_OK = (MetalNeed.neox | MetalNeed.qkv_bias | MetalNeed.qk_norm |
     MetalNeed.v_norm | MetalNeed.attn_scale | MetalNeed.out_scale |
     MetalNeed.sinks | MetalNeed.out_bias | MetalNeed.partial_rope | MetalNeed.q_gated |
     MetalNeed.ple)
-// q_gated/partial_rope only occur on hybrid models (attn_is_std false), which batch graph-declines;
-// the batch serves every feature the single row does - the E-series PLE branch rides the rows form
+//! the batch serves every feature the single row does - the hybrid's gated q and partial rope, the E-series PLE branch, all on the rows form
 let BATCH_NEEDS_OK = DECODE_NEEDS_OK
 
 //! a routed model with no dense lead and no dense shared branch dispatches none, so its file's dense width gates nothing

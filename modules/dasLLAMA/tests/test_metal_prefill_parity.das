@@ -62,6 +62,30 @@ def private two_window_logits(trp : Model; w1, w2 : array<int64>; step_tok : int
     return <- out
 }
 
+let private CODEC_FEED_STEPS = 12   //! the greedy steps after a codec session's two windows
+let private LONG_COUNT_TO = 11000   //! a counting prompt whose f16 K/V passes 4096 MiB on Llama-3.2-3B (112 KiB a row)
+let private LONG_WINDOW = 1024l      //! the long prompt's window
+let private LONG_STEPS = 6          //! the greedy steps over that context
+
+//! two prefill windows then `n` greedy steps on one session of codec `kdt`: the tokens the steps pick
+def private codec_two_window_greedy(trp : Model; w1, w2 : array<int64>; kdt : KVDtype; n : int) : array<int64> {
+    var ids : array<int64>
+    with_dasllama_jobque() {
+        var s = make_run_state(trp.config, kdt, kdt)
+        eval_(trp, s, w1)
+        eval_(trp, s, w2)
+        var one <- [0l]
+        for (_i in range(n)) {
+            one[0] = argmax_of(s.logits, trp.config.vocab_size)
+            ids |> push(one[0])
+            eval_(trp, s, one)
+        }
+        delete one
+        delete s
+    }
+    return <- ids
+}
+
 struct private AdoptRun {
     logits : array<float>
     matched : int64
@@ -961,6 +985,165 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                 delete w2_off
                 delete whole
                 delete trmg
+            }
+
+            //! mirror-codec arm: a q8_0, tq4 and f32 session's windows feed the mirror through the codec's store stamp - both
+            //! windows counted on the panel form into the mirror, the store stamp dispatched, the decode steps after them
+            //! uploading no row and greedy token for token the CPU chain's on the same codec; the knob off the control (no
+            //! window into the mirror, every prompt row uploaded by the first step, the tokens the same)
+            if (arm_on(t, "mirror-codec")) {
+                set_wscale_f16(false)
+                pin_kernel_backend("portable")
+                var trcg <- blob_twin(t, path, 2048l)
+                let longp <- encode(tr, counting_prompt(ATTN_DEV_COUNT_TO), true, false)
+                var w1 <- [for (i in range(ATTN_DEV_W1)); longp[i]]
+                var w2 <- [for (i in range(ATTN_DEV_W1, ATTN_DEV_W1 + 20)); longp[i]]
+                let prev_override = active_prefill_override()
+                let prev_decode = active_decode_override()
+                let prev_min_npos = get_metal_prefill_min_npos()
+                let prev_mirror = get_metal_prefill_mirror()
+                for (kdt in [KVDtype.q8_0, KVDtype.tq4, KVDtype.f32]) {
+                    select_prefill_override("")
+                    select_decode_override("")
+                    var inscope cpu <- codec_two_window_greedy(tr, w1, w2, kdt, CODEC_FEED_STEPS)
+                    select_prefill_override("metal")
+                    select_decode_override("metal")
+                    set_metal_prefill_min_npos(1l)
+                    set_metal_prefill_mirror(true)
+                    metal_kernel_coverage_reset()
+                    let fed0 = metal_prefill_mirror_panel_served()
+                    let up0 = metal_mirror_uploaded_rows()
+                    let dec0 = metal_decode_stats().decodes
+                    var inscope gpu <- codec_two_window_greedy(trcg, w1, w2, kdt, CODEC_FEED_STEPS)
+                    let fed = metal_prefill_mirror_panel_served() - fed0
+                    let up = metal_mirror_uploaded_rows() - up0
+                    let dec = metal_decode_stats().decodes - dec0
+                    let stores = metal_kernel_count("metal_kv_rows_q8") + metal_kernel_count("metal_kv_rows_tq4")
+                    set_metal_prefill_mirror(false)
+                    let fed1 = metal_prefill_mirror_panel_served()
+                    let up1 = metal_mirror_uploaded_rows()
+                    var inscope gpu_off <- codec_two_window_greedy(trcg, w1, w2, kdt, CODEC_FEED_STEPS)
+                    let fed_off = metal_prefill_mirror_panel_served() - fed1
+                    let up_off = metal_mirror_uploaded_rows() - up1
+                    log_gen_texts(tr, "mirror-codec {kdt}", cpu, gpu)
+                    t |> equal(fed, 2l, "{kdt}: both windows fed the mirror through the codec's store")
+                    t |> equal(up, 0l, "{kdt}: the decode steps after the windows upload no row")
+                    t |> equal(dec, int64(CODEC_FEED_STEPS), "{kdt}: every step a device decode")
+                    if (kdt == KVDtype.f32) {
+                        t |> equal(stores, 0l, "{kdt}: the rows copy across, no quantizing store")
+                    } else {
+                        t |> success(stores > 0l, "{kdt}: the quantizing store stamp ran ({stores} dispatches)")
+                    }
+                    t |> success(ids_equal(cpu, gpu), "{kdt}: the device's greedy tokens are the CPU chain's on the same codec")
+                    t |> equal(fed_off, 0l, "{kdt} control: the knob off feeds no window into the mirror")
+                    t |> equal(up_off, int64(ATTN_DEV_W1 + 20), "{kdt} control: the first decode step uploads every prompt row")
+                    t |> success(ids_equal(cpu, gpu_off), "{kdt} control: the knob off reads the same tokens")
+                }
+                select_decode_override(prev_decode)
+                select_prefill_override(prev_override)
+                set_metal_prefill_min_npos(prev_min_npos)
+                set_metal_prefill_mirror(prev_mirror)
+                metal_prefill_shutdown()
+                metal_decode_shutdown()
+                clear_kernel_backend_pin()
+                select_kernel_backend(prior_backend)
+                set_wscale_f16(prior_wscale)
+                delete w1
+                delete w2
+                delete trcg
+            }
+
+            //! mirror-cap arm: a session's mirror slice past the cap still serves. Under a 64 MiB cap an f32 session of 1100-odd rows
+            //! (a 128 MiB slice) prefills and steps on the device, greedy token for token the CPU chain, its slice resident past
+            //! the cap; then, at the default cap, an f16 session past 4096 MiB of K/V - a counting prompt of 40000-odd rows on
+            //! Llama-3.2-3B, in window-sized calls - prefills and steps on the device, every call served and the count continued
+            if (arm_on(t, "mirror-cap")) {
+                set_wscale_f16(false)
+                pin_kernel_backend("portable")
+                let prev_override = active_prefill_override()
+                let prev_decode = active_decode_override()
+                let prev_min_npos = get_metal_prefill_min_npos()
+                let prev_cap = get_metal_decode_mirror_cap_mb()
+                let row_bytes = kv_row_bytes(KVDtype.f32, kv_row_total(tr)) * 2l
+                var trcg <- blob_twin(t, path, 2048l)
+                let midp <- encode(tr, counting_prompt(420), true, false)
+                var w1 <- [for (i in range64(long_length(midp) - 20l)); midp[i]]
+                var w2 <- [for (i in range64(long_length(midp) - 20l, long_length(midp))); midp[i]]
+                select_prefill_override("")
+                select_decode_override("")
+                var inscope cpu <- codec_two_window_greedy(tr, w1, w2, KVDtype.f32, CODEC_FEED_STEPS)
+                metal_decode_shutdown()
+                set_metal_decode_mirror_cap_mb(64)
+                select_prefill_override("metal")
+                select_decode_override("metal")
+                set_metal_prefill_min_npos(1l)
+                let dec0 = metal_decode_stats().decodes
+                var inscope gpu <- codec_two_window_greedy(trcg, w1, w2, KVDtype.f32, CODEC_FEED_STEPS)
+                let mir = metal_decode_mirror_stats()
+                log_gen_texts(tr, "mirror-cap 64 MiB", cpu, gpu)
+                t |> success(long_length(midp) * row_bytes > 64l * 1024l * 1024l, "the session's rows pass the 64 MiB cap ({long_length(midp)} rows of {row_bytes} bytes)")
+                t |> success(mir.bytes > 64ul * 1024ul * 1024ul, "the slice stands resident past the cap ({mir.bytes} bytes)")
+                t |> equal(metal_decode_stats().decodes - dec0, int64(CODEC_FEED_STEPS), "every step past the cap is the device's")
+                t |> success(ids_equal(cpu, gpu), "past the cap the device's greedy tokens are the CPU chain's")
+                set_metal_decode_mirror_cap_mb(prev_cap)
+                metal_decode_shutdown()
+                metal_prefill_shutdown()
+                delete w1
+                delete w2
+                delete trcg
+                let lpath = path_join(models_dir(), "Llama-3.2-3B-Instruct-Q8_0.gguf")
+                if (jit_model_available(t, lpath)) {
+                    //! the 3B's f16 K/V is 112 KiB a row: 37450 rows pass 4096 MiB inside its context, on the mirror-fed form
+                    let prev_crowns = get_metal_tensor_crowns()
+                    pin_metal_tensor_crowns("mulmm_q8,attn_qkmm,attn_dev")
+                    metal_prefill_shutdown()
+                    var trlg <- blob_twin(t, lpath, 131072l)
+                    let lrow = kv_row_bytes(KVDtype.f16, kv_row_total(trlg)) * 2l
+                    let last = LONG_COUNT_TO
+                    let longp <- encode(trlg, counting_prompt(last), true, false)
+                    let np = long_length(longp)
+                    t |> success(np * lrow > 4096l * 1024l * 1024l, "the prompt's K/V passes 4096 MiB ({np} rows of {lrow} bytes, {np * lrow / (1024l * 1024l)} MiB)")
+                    let pf0 = metal_prefill_stats().prefills
+                    let ldec0 = metal_decode_stats().decodes
+                    var ids : array<int64>
+                    with_dasllama_jobque() {
+                        var s = make_run_state(trlg.config, KVDtype.f16, KVDtype.f16)
+                        var at = 0l
+                        while (at < np) {   //! the prompt in the server's window-sized calls
+                            let n = min(LONG_WINDOW, np - at)
+                            var chunk <- [for (i in range64(at, at + n)); longp[i]]
+                            eval_(trlg, s, chunk)
+                            delete chunk
+                            at += n
+                        }
+                        var one <- [0l]
+                        for (_i in range(LONG_STEPS)) {
+                            one[0] = argmax_of(s.logits, trlg.config.vocab_size)
+                            ids |> push(one[0])
+                            eval_(trlg, s, one)
+                        }
+                        delete one
+                        delete s
+                    }
+                    let lmir = metal_decode_mirror_stats()
+                    let text = decode_(trlg, ids)
+                    to_log(LOG_INFO, "mirror-cap long: {np} rows, mirror {int64(lmir.bytes / (1024ul * 1024ul))} MiB, continuation '{text}'\n")
+                    t |> equal(metal_prefill_stats().prefills - pf0, (np + LONG_WINDOW - 1l) / LONG_WINDOW, "every window of the long prompt prefilled on the device")
+                    t |> equal(metal_decode_stats().decodes - ldec0, int64(LONG_STEPS), "every step over the long context is the device's")
+                    t |> success(lmir.bytes > 4096ul * 1024ul * 1024ul, "the mirror holds the session's slice past 4096 MiB ({lmir.bytes} bytes)")
+                    t |> success(starts_with(text, " {last + 1},"), "the continuation counts on from {last} ('{text}')")
+                    unpin_metal_tensor_crowns()
+                    set_metal_tensor_crowns(prev_crowns)
+                    delete trlg
+                }
+                select_decode_override(prev_decode)
+                select_prefill_override(prev_override)
+                set_metal_prefill_min_npos(prev_min_npos)
+                metal_prefill_shutdown()
+                metal_decode_shutdown()
+                clear_kernel_backend_pin()
+                select_kernel_backend(prior_backend)
+                set_wscale_f16(prior_wscale)
             }
 
             //! segs arm: two sessions' chunks as ONE window against the same chunks as two windows, on the mirror-fed form and

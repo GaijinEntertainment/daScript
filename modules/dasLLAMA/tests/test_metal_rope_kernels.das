@@ -500,7 +500,7 @@ def private rpst_bq8_gate(t : T?; var dev, queue; hs, nheads, kv_mul, nb : int; 
         bias |> resize(qd + 2 * kvd)
         tcos |> resize(nb * half)
         tsin |> resize(nb * half)
-        rt |> resize(nb)
+        rt |> resize(nb + 1)
         for (k in range(nb * qstride)) {
             qk[k] = 0.19 * float(k % 59) - 3.1
         }
@@ -511,8 +511,9 @@ def private rpst_bq8_gate(t : T?; var dev, queue; hs, nheads, kv_mul, nb : int; 
             tcos[k] = cos(0.009 * float((k * 13) % 89))
             tsin[k] = sin(0.009 * float((k * 13) % 89))
         }
+        rt[0] = uint4(0u, 0u, 0u, 1u)   //! a foreign lead row: the table binds one row past it, and a kernel reading from its start lands every row a slot off and one at arena byte 0
         for (r in range(nb)) {
-            rt[r] = uint4(uint(r * 1024), uint(16384 + r * 1024), uint(laystride), uint(r + 1))
+            rt[r + 1] = uint4(uint(r * 1024), uint(16384 + r * 1024), uint(laystride), uint(r + 1))
         }
         var inscope want_qk := qk
         var inscope want_a : array<uint8>
@@ -537,8 +538,8 @@ def private rpst_bq8_gate(t : T?; var dev, queue; hs, nheads, kv_mul, nb : int; 
                 }
                 rope_tab_ref(want_qk, qb, hs, rot, qd, neox, tcos, tsin, r * half)
                 rope_tab_ref(krow, 0, hs, rot, kvd, neox, tcos, tsin, r * half)
-                let kb0b = int(rt[r].x) + lay * laystride + (int(rt[r].w) - 1) * rowb
-                let vb0b = int(rt[r].y) + lay * laystride + (int(rt[r].w) - 1) * rowb
+                let kb0b = int(rt[r + 1].x) + lay * laystride + (int(rt[r + 1].w) - 1) * rowb
+                let vb0b = int(rt[r + 1].y) + lay * laystride + (int(rt[r + 1].w) - 1) * rowb
                 quantize_q8kv_row(addr(want_a[kb0b]), addr<float const?>(krow[0]), int64(kvd))
                 quantize_q8kv_row(addr(want_a[vb0b]), addr<float const?>(vrow[0]), int64(kvd))
             }
@@ -553,7 +554,7 @@ def private rpst_bq8_gate(t : T?; var dev, queue; hs, nheads, kv_mul, nb : int; 
             npairs_q = uint(npairs_q), qstride = uint(qstride), neox = neox ? 1u : 0u, has_bias = hasbias ? 1u : 0u, rot = uint(rot))
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
             stamp_run(st, pso) {
-                invoke(st.enc, enc, mc.buf[bqk], mc.buf[barena], mc.buf[barena], mc.buf[barena], mc.buf[barena], mc.buf[btc], mc.buf[bts], mc.buf[brt], mc.buf[bbias], ka, int64(nthreads), int64(nb))
+                invoke(st.enc, enc, mc.buf[bqk], mc.buf[barena], mc.buf[barena], mc.buf[barena], mc.buf[barena], mc.buf[btc], mc.buf[bts], mc.buf[brt], 16ul, mc.buf[bbias], ka, int64(nthreads), int64(nb))
             }
         }
         return if (!ran)
@@ -587,7 +588,7 @@ def private rpst_btq4_gate(t : T?; var dev, queue; hs, nheads, kv_mul, nb : int;
         tcos |> resize(nb * half)
         tsin |> resize(nb * half)
         tq4_fill_signs(signs, int64(hs))
-        rt |> resize(nb)
+        rt |> resize(nb + 1)
         for (k in range(nb * qstride)) {
             qk[k] = 0.21 * float(k % 61) - 3.3
         }
@@ -598,8 +599,9 @@ def private rpst_btq4_gate(t : T?; var dev, queue; hs, nheads, kv_mul, nb : int;
             tcos[k] = cos(0.007 * float((k * 17) % 101))
             tsin[k] = sin(0.007 * float((k * 17) % 101))
         }
+        rt[0] = uint4(0u, 0u, 0u, 1u)   //! a foreign lead row: the table binds one row past it, and a kernel reading from its start lands every row a slot off and one at arena byte 0
         for (r in range(nb)) {
-            rt[r] = uint4(uint(r * 1024), uint(16384 + r * 1024), uint(laystride), uint(r + 1))
+            rt[r + 1] = uint4(uint(r * 1024), uint(16384 + r * 1024), uint(laystride), uint(r + 1))
         }
         var inscope want_qk := qk
         var inscope want_a : array<uint8>
@@ -631,8 +633,8 @@ def private rpst_btq4_gate(t : T?; var dev, queue; hs, nheads, kv_mul, nb : int;
                     fwht_signs_row(addr(krow[h * hs]), addr<float const?>(signs[0]), int64(hs))
                     fwht_signs_row(addr(vrow[h * hs]), addr<float const?>(signs[0]), int64(hs))
                 }
-                let kb0b = int(rt[r].x) + lay * laystride + (int(rt[r].w) - 1) * rowb
-                let vb0b = int(rt[r].y) + lay * laystride + (int(rt[r].w) - 1) * rowb
+                let kb0b = int(rt[r + 1].x) + lay * laystride + (int(rt[r + 1].w) - 1) * rowb
+                let vb0b = int(rt[r + 1].y) + lay * laystride + (int(rt[r + 1].w) - 1) * rowb
                 quantize_tq4kv_row(addr(want_a[kb0b]), addr<float const?>(krow[0]), int64(kvd))
                 quantize_tq4kv_row(addr(want_a[vb0b]), addr<float const?>(vrow[0]), int64(kvd))
             }
@@ -649,7 +651,7 @@ def private rpst_btq4_gate(t : T?; var dev, queue; hs, nheads, kv_mul, nb : int;
         let ntg = nheads + 2 * nkvh
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
             stamp_run(st, pso) {
-                invoke(st.enc, enc, mc.buf[bqk], mc.buf[barena], mc.buf[barena], mc.buf[barena], mc.buf[barena], mc.buf[btc], mc.buf[bts], mc.buf[bsg], mc.buf[brt], mc.buf[bbias], ka, int64(ntg), int64(nb), int64(hs))
+                invoke(st.enc, enc, mc.buf[bqk], mc.buf[barena], mc.buf[barena], mc.buf[barena], mc.buf[barena], mc.buf[btc], mc.buf[bts], mc.buf[bsg], mc.buf[brt], 16ul, mc.buf[bbias], ka, int64(ntg), int64(nb), int64(hs))
             }
         }
         return if (!ran)

@@ -232,6 +232,11 @@ beside others - the joint invariance cell's claim - at the two-row tile's cost. 
 mirror cannot take the row (its watermark or capacity short) declines the whole rows step and
 every warm stream plain-steps.
 
+The verify serves every mirror codec the decode does: its rows rope and store into the session's codec and its
+attention reads it, the codec's batch stamps over the per-layer route table (`rtoff`; a block codec's bases in bytes),
+and a tq4 verify's attention output un-rotates before wo as a step's does. The NextN round and the assistant round
+share one accept walk and one commit (`mtp_accept_walk`, `mtp_round_commit`).
+
 The batch driver's weight sites dispatch a tensor at a time by its own tag, so a layer mixing q8 and
 K-quant planes serves. The planes a batched step reads more than once: past eight rows, a K-quant
 plane whose shape misses the mul_mm tile (rows a multiple of 64 over the panel's 32-row pad) takes
@@ -269,9 +274,12 @@ concatenated, each row's [beta; alpha] landing in one plane the scan reads at a 
 ### The recurrent mirrors are slots of one pool {#dn-mirror-pool}
 
 **Every session's `DnMirror` is a slot of one device buffer, so one dispatch binds every group's
-state.** A slot holds the regions (the live one and, on a NextN carrier, the verify's shadow) and the
-n-gram ring; the pool grows by doubling to the mirror cap (`dn_mirror_room`) after the pending step
-lands, copying the slots it held, and a slot size that changes (another model) drops every mirror.
+state.** A slot holds three regions and the n-gram ring: the live region, and the next one a step that
+must leave the live state whole writes - a verify's shadow, the greedy chain's step - with a third for the
+chained step behind it (`DN_REGIONS`, `dn_region_next`). The pool grows by doubling to the mirror cap
+(`dn_mirror_room`) once every step that may still write a slot has landed or retired (`mirror_quiesce`, which an
+eviction and a host write into a slot run too), copying the slots it held, and a slot size that changes
+(another model) drops every mirror.
 The cap is an LRU over the slots: the least recent mirror evicts into a host stash of its live
 region and ring at the position it expects, and that session's next prepare at that position
 rebuilds the slot from the stash (`dn_mirror_restores` counts them) - the state is forward-only and

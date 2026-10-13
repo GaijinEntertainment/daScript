@@ -34,7 +34,6 @@ struct GemmaDrafterGpu {
     bhn : MetalBuffer?         // [dim] output-norm hidden
     blog : MetalBuffer?        // [vocab] logits
     bhnext : MetalBuffer?      // [tdim] post_projection hidden = the next step's h
-    btok : MetalBuffer?        // [1] token in (the oracle's single step)
     btok_out : MetalBuffer?    // [1] argmax out
     bvtok : MetalBuffer?       //! [MTP_MAX_ROWS] the round's token list
     u_one1 : MetalBuffer?      // uniform 1: the one-token copies
@@ -75,7 +74,7 @@ def private ubuf_f32(v : float) : MetalBuffer? => scalar_buffer(metal_new_buffer
 
 def private gemma_gpu_release(var g : GemmaDrafterGpu) {
     release_handles(g.bx, g.bxin, g.bxn, g.bo, g.bq, g.battn)
-    release_handles(g.bg, g.bu, g.bhn, g.blog, g.bhnext, g.btok)
+    release_handles(g.bg, g.bu, g.bhn, g.blog, g.bhnext)
     release_handles(g.btok_out, g.bvtok, g.u_one1, g.bpart, g.bcos, g.bsin)
     release_handles(g.bcos_sw, g.bsin_sw, g.u_dim, g.u_tdim, g.u_cat, g.u_hidden)
     release_handles(g.u_vocab, g.u_eps, g.u_escale)
@@ -110,7 +109,6 @@ def private gemma_gpu_init(dr : GemmaDrafter; escale : float; var g : GemmaDraft
     g.bhn = metal_new_buffer(g_dev, uint64(dr.dim) * f4)
     g.blog = metal_new_buffer(g_dev, uint64(dr.vocab) * f4)
     g.bhnext = metal_new_buffer(g_dev, uint64(dr.tdim) * f4)
-    g.btok = metal_new_buffer(g_dev, 64ul)
     g.btok_out = metal_new_buffer(g_dev, 64ul)
     g.bvtok = metal_new_buffer(g_dev, 64ul)
     g.u_one1 = ubuf_u32(1u)
@@ -292,33 +290,17 @@ def private encode_gemma_layer(t : Model; s : Session; enc : MetalComputeEncoder
 }
 
 //! One drafter step on the GPU: (tok, h) at the constant anchor -> the draft token and the next
-//! step's h (post_projection of the output-normed hidden). Synchronous - one command buffer.
+//! step's h (post_projection of the output-normed hidden). Synchronous - one command buffer, the chain of one step.
 def public gemma_draft_step_gpu(t : Model; s : Session; tok, anchor : int64; h : array<float>; var out_tok : int64&; var h_next : array<float>) : bool {
     let dr & = g_gemma_drafter
     var g & = g_gemma_gpu
-    let mr = g_mirrors[s.uid]
-    gemma_rope_rows(t, g, anchor)
-    var cb = metal_new_command_buffer_unretained(g_queue)
-    var enc = metal_new_compute_encoder(cb)
-    gr_arm(false)
-    unsafe {
-        var tp = reinterpret<uint?>(metal_buffer_contents(g.btok))
-        tp[0] = uint(tok)
-        var bxp = reinterpret<uint8?>(metal_buffer_contents(g.bx))
-        memcpy(reinterpret<void?>(bxp + dr.tdim * 4l), addr < void? >(h[0]), uint64(dr.tdim) * 4ul)
-        let temb = blob_of(g_dev, t, t.emb_q8_off)   // the target's q8 token table (the decode's own embed source)
-        enc_embed(enc, temb.buf, temb.boff, g.btok, g.bx, g.u_tdim, g.u_escale, dr.tdim)
-        encode_gemma_draft(t, s, enc, g, anchor, mr)
-    }
-    metal_end_encoding(enc)
-    metal_release(enc)
-    metal_commit(cb)
+    var cb = encode_gemma_chain(t, s, g, tok, h, anchor, 1l)
     metal_wait_until_completed(cb)
     let ok = !metal_command_buffer_failed(cb)
     if (ok) {
         unsafe {
-            let tp = reinterpret<uint?>(metal_buffer_contents(g.btok_out))
-            out_tok = int64(tp[0])
+            let tp = reinterpret<uint?>(metal_buffer_contents(g.bvtok))
+            out_tok = int64(tp[1])
             memcpy(addr < void? >(h_next[0]), metal_buffer_contents(g.bhnext), uint64(dr.tdim) * 4ul)
         }
     } else {
@@ -357,10 +339,11 @@ def private encode_gemma_draft(t : Model; s : Session; enc : MetalComputeEncoder
     enc_gemv(enc, g.bblob, uint64(dr.post_proj_off), g.bhn, g.bhnext, g.u_dim, g.u_tdim, dr.tdim)
 }
 
+//! The drafter's `k` chained steps at the constant anchor in ONE committed command buffer: step i embeds `bvtok[i]` (`seed` at 0)
+//! beside `h` at step 0 and the step before's post-projection after it, its argmax landing in `bvtok[i + 1]`; the caller waits
 [arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-round-one-join")]
-def private gemma_draft_chain_gpu(t : Model; s : Session; seed, anchor, k : int64) : bool {
+def private encode_gemma_chain(t : Model; s : Session; var g : GemmaDrafterGpu; seed : int64; h : array<float>; anchor, k : int64) : MetalCommandBuffer? {
     let dr & = g_gemma_drafter
-    var g & = g_gemma_gpu
     let mr = g_mirrors[s.uid]
     gemma_rope_rows(t, g, anchor)
     var cb = metal_new_command_buffer_unretained(g_queue)
@@ -370,8 +353,8 @@ def private gemma_draft_chain_gpu(t : Model; s : Session; seed, anchor, k : int6
         var tp = reinterpret<uint?>(metal_buffer_contents(g.bvtok))
         tp[0] = uint(seed)
         var bxp = reinterpret<uint8?>(metal_buffer_contents(g.bx))
-        memcpy(reinterpret<void?>(bxp + dr.tdim * 4l), addr < void? >(s.mtp_h[0]), uint64(dr.tdim) * 4ul)
-        let temb = blob_of(g_dev, t, t.emb_q8_off)
+        memcpy(reinterpret<void?>(bxp + dr.tdim * 4l), addr < void? >(h[0]), uint64(dr.tdim) * 4ul)
+        let temb = blob_of(g_dev, t, t.emb_q8_off)   // the target's q8 token table (the decode's own embed source)
         for (i in range64(k)) {
             if (i > 0l) {
                 enc_copy_row(enc, g.bhnext, 0ul, g.bx, uint64(dr.tdim * 4l), g.u_tdim, dr.tdim)
@@ -384,6 +367,12 @@ def private gemma_draft_chain_gpu(t : Model; s : Session; seed, anchor, k : int6
     metal_end_encoding(enc)
     metal_release(enc)
     metal_commit(cb)
+    return cb
+}
+
+[arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-round-one-join")]
+def private gemma_draft_chain_gpu(t : Model; s : Session; seed, anchor, k : int64) : bool {
+    var cb = encode_gemma_chain(t, s, g_gemma_gpu, seed, s.mtp_h, anchor, k)
     let ok = !metal_command_buffer_failed(cb)
     metal_release(cb)
     return ok
@@ -458,17 +447,6 @@ def private gemma_draft_step(t : Model; var s : Session; tok, anchor : int64; h 
 }
 
 
-def private gemma_accept_walk(var s : Session; drafted, vocab : int64) : int64 {
-    if (mtp_walk_samples(s)) {
-        return mtp_walk_sampled(s, drafted, vocab)
-    }
-    var a = 0l
-    while (a < drafted && sameslab_argmax(a) == s.mtp_vbatch[a + 1l]) {
-        a++
-    }
-    return a
-}
-
 // a round that cannot speculate takes one plain GPU step (output-invariant either way)
 def private gemma_plain_step(t : Model; var s : Session; tok, pos : int64) : int64 {
     let tc = ref_time_ticks()
@@ -541,21 +519,16 @@ def public gemma_mtp_spec_round(t : Model; var s : Session; tok : int64; k_req :
     }
     g_gemma_drafted += drafted
     g_gemma_rounds++
-    let a = gemma_accept_walk(s, drafted, c.vocab_size)
+    let a = mtp_accept_walk(s, drafted, c.vocab_size) $(row) => sameslab_argmax(row)
     if (g_gemma_trace) {
         mtp_round_trace("gemma", s, pos, drafted, drafted, a, c.vocab_size)
     }
     unsafe {
-        memcpy(addr < void? >(s.logits[0]), addr < void? >(s.mtp_logits_b[a * c.vocab_size]), uint64(c.vocab_size) * 4ul)
         memcpy(addr < void? >(s.mtp_h[0]), addr < void? >(s.mtp_hrows[a * c.dim]), uint64(c.dim) * 4ul)
     }
-    s.mtp_h_pos1 = pos + a + 1l
-    g_mirrors[s.uid].watermark = pos + a + 1l
-    s.mtp_accepted += a
     s.mtp_drafted += drafted
-    mtp_pos_note(drafted, a)
+    mtp_round_commit(s, pos, drafted, a)
     g_gemma_accepted += a
-    s.n_past = pos + a + 1l
     g_gemma_us_verify += int64(get_time_usec(tv))
     prof_add("mtp.walk", ts_walk)
     return a

@@ -685,6 +685,81 @@ def test_metal_deltanet_evicted_mirror(t : T?) {
     }
 }
 
+//! `n` steps on `s` from `pos` fed the greedy pick except at every `miss_every`-th step (0 = none), which feeds the pick's
+//! next id instead: the fed tokens, and every step's logits concatenated
+def private fed_steps(tr : Model; var s : Session; pos, n, miss_every : int64; var logits : array<float>) : array<int64> {
+    var ids : array<int64>
+    ids |> reserve(n)
+    for (i in range64(n)) {
+        let pick = argmax(s, tr.config.vocab_size)
+        let next = miss_every > 0l && (i + 1l) % miss_every == 0l ? (pick + 1l) % tr.config.vocab_size : pick
+        ids |> push(next)
+        forward(tr, s, next, pos + i)
+        logits |> push_from(s.logits)
+    }
+    return <- ids
+}
+
+//! The single row's greedy chain on a recurrent hybrid: the chained step reads the recurrent region the step in flight writes and
+//! writes the other, so a step the chain mispredicted leaves the live state whole (`ARCHITECTURE_GPU_MTP_DECODE.md#greedy-chain`)
+[test]
+def test_metal_deltanet_greedy_chain(t : T?) {
+    t |> run("the greedy chain serves a deltanet hybrid: chained steps token for token the plain steps, and a mispredicted step's rerun reads the state the chain did not touch (Qwen3.5-0.8B Q8)") <| @(t : T?) {
+        if (!family_on(t, "qwen35")) return
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            let path = path_join(models_dir(), "Qwen3.5-0.8B-Q8_0.gguf")
+            return if (!jit_model_available(t, path))
+            let prior_mode = get_metal_mode()
+            let prior_spec = metal_decode_spec_mode()
+            set_metal_mode(MetalMode.when_available)
+            var tr <- blob_twin(t, path, 256l)
+            with_dasllama_jobque_() {
+                let pa <- encode(tr, "The quick brown fox jumps over the lazy dog while the farmer counts his sheep one by one, and then the", true, false)
+                let np = long_length(pa)
+                for (miss_every in [0l, 3l]) {
+                    var inscope plain_l, chain_l : array<float>
+                    set_metal_decode_speculate(0)
+                    var sa = make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
+                    eval_(tr, sa, pa)
+                    var plain <- fed_steps(tr, sa, np, CHAIN_STEPS, miss_every, plain_l)
+                    set_metal_decode_speculate(1)
+                    let sp0 = metal_decode_spec_stats()
+                    let dec0 = metal_decode_stats().decodes
+                    var sb = make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
+                    eval_(tr, sb, pa)
+                    var chain <- fed_steps(tr, sb, np, CHAIN_STEPS, miss_every, chain_l)
+                    let sp1 = metal_decode_spec_stats()
+                    let hits = sp1.hits - sp0.hits
+                    let misses = sp1.misses - sp0.misses
+                    let tag = miss_every == 0l ? "greedy" : "fed off the pick every {miss_every} steps"
+                    to_log(LOG_INFO, "chain {tag}: plain {eyeball_text(tr, plain)}\n")
+                    to_log(LOG_INFO, "chain {tag}: chain {eyeball_text(tr, chain)}\n")
+                    t |> equal(metal_decode_stats().decodes - dec0, CHAIN_STEPS, "{tag}: every step the device's")
+                    t |> success(hits > 0l, "{tag}: the chain served steps on the hybrid ({hits} hits, {misses} misses)")
+                    if (miss_every > 0l) {
+                        t |> success(misses > 0l, "{tag}: the off-pick feeds mispredicted chained steps ({misses})")
+                    } else {
+                        t |> equal(misses, 0l, "{tag}: a greedy feed mispredicts nothing")
+                    }
+                    t |> success(ids_equal(plain, chain), "{tag}: the chained run's tokens are the plain run's")
+                    t |> equal(logits_maxdiff(plain_l, chain_l), 0.0, "{tag}: every step's logits are the plain step's to the bit")
+                    delete plain
+                    delete chain
+                    delete sa
+                    delete sb
+                }
+            }
+            set_metal_decode_speculate(prior_spec)
+            set_metal_mode(prior_mode)
+            delete tr
+        } else {
+            t |> skip("dasMetal not built")
+        }
+    }
+}
+
+let CHAIN_STEPS = 24l   //! the steps a chain cell feeds
+
 let PAGED_MTP_NEW = 150l   //! past two 64-row pages, so rounds land on a page's last row
 
 //! A round verifies the row past its token, so a round at a page's last row writes the next page's first.
