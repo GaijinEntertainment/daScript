@@ -154,7 +154,12 @@ divisors over the NTK-by-parts band (`yarn_rope_freqs`) and multiplies the `1 + 
 magnitude into `Config.rope_mscale`. Every rope consumer - the CPU leaves, the cos/sin tables
 the GPU drivers read - takes those fields and never the metadata, and both run over the ROTATED
 span, so a partial-rotary head (`rope_dim` under `head_size`) takes the band and the factors
-like a full one. A serving override (`set_rope_scaling_override`, seeded from
+like a full one. A Phi-3 file ships two LongRoPE factor sets; the loader reads into `rope_freqs`
+the one `rope_factor_tensor` names - the long set when the file's context (`Config.seq_len`, the
+context a session is sized to) runs past `rope.scaling.original_context_length`, else the short
+set - which is llama.cpp's rule with its context set to the file's length. The reference switches
+by each call's sequence length; one Model-level set cannot, so a short session on a 128k file runs
+the long set, as llama.cpp does at that context. A serving override (`set_rope_scaling_override`, seeded from
 `DASLLAMA_ROPE_SCALING` / `ROPE_SCALE` / `YARN_ORIG_CTX`, the tools' `--rope-scaling` flags and
 the server's config keys) replaces the file's keys at the same fold, because the Qwen files ship
 none and enable YaRN as a setting. The fold is image BYTES, so `DlimCpuConfig.rope_override`

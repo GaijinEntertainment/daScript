@@ -2233,7 +2233,10 @@ time, and the key-radix and lattice-predicate cells.
 type and, nested once per side, the sixteen K x V pairs each carry the same address.
 `test_kquant.das` - model-free: the K-quant and grid plane dequants and dots against in-test
 references, including the iq4nl plane dequant on a jobque team lane reading the same values as the
-main thread (its codebook read is fork-safe); and `test_q8_plane_row_f32` - rows quantized with
+main thread (its codebook read is fork-safe); `test_kq_phi3_longrope_factors` - the model-gated
+LongRoPE cell on Phi-3.5 Q4_K_M: the loaded model's `rope_freqs` are the file's
+`rope_factors_long` set bit for bit (the file's 131072 context runs past its original 4096) and
+not its short set, the rule itself (`rope_factor_tensor`) model-free in `test_rope.das`; and `test_q8_plane_row_f32` - rows quantized with
 `quantize_q8_0_into` and repacked at (mr, kgroup, wbias) = (4, 8, 128) and (16, 8, 0), with and
 without a row tail, read back through `q8_plane_row_f32` as q times the block's f32 scale bit for
 bit (control: the product with the scale rounded to f16 must miss on at least one element).

@@ -388,7 +388,7 @@ let MODULE_AREAS <- {
     "dasllama_metal_prefill" => "llm,tts,audio,vision",   // its rope serves the Pocket codec transformer, its attention pair and FastConformer kernels the audio towers, its half convert the vision tower
     "dasllama_moe" => "llm", "dasllama_mtp_gemma" => "llm",
     "dasllama_parity" => "llm", "dasllama_ple" => "llm", "dasllama_prefix" => "llm", "dasllama_pretok" => "llm",
-    "dasllama_rope" => "llm,tts",   // the TTS slab builds its rope tables through it
+    "dasllama_rope" => "llm,tts,vision,audio",   // the TTS slab builds its rope tables through it; every gguf load picks its factor tensor through it, and the vision and audio tests load decoders
     "dasllama_sampling" => "llm,vision,audio", "dasllama_scheduler" => "llm",
     "dasllama_spm" => "llm,tts",   // the unigram arm is the Pocket tokenizer (test_tts_pocket)
     "dasllama_bench" => "llm,infra",   // the rows serve lcpp_bench (llm) and the server's /bench (infra's tooling)
