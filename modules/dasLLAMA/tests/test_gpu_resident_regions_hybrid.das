@@ -21,6 +21,11 @@ def test_regions_interleaved_single_steps(t : T?) {
 }
 
 [test]
+def test_region_taken_after_decode_hybrid(t : T?) {
+    cell_region_taken_after_decode(t, REGIONS_FILE)
+}
+
+[test]
 def test_regions_batched_steps(t : T?) {
     cell_regions_batched_steps(t, REGIONS_FILE)   // the N-row command's recurrent form: each row's deltanet step in its region's state slot, the gated q over the rows
 }

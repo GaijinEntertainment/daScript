@@ -127,9 +127,10 @@ struct RdecDnGeom {
     ba_f32 : bool
     zsig : bool    //! the out-gate is sigmoid(z) (qwen4exp) instead of silu(z): the step and scan kernels' `ZSIG` stamps serve
 }
-let public RDEC_NROW_MAX = 8l   //! the rows the N-row token command steps at once, the per-row planes' height: the N-column GEMV leaves' width, and the short window's peel
+let public RDEC_NROW_MAX = 16l   //! the rows the N-row token command steps at once, the per-row planes' height: two of the N-column GEMV leaves' eight-column tiles, the depth-8 verify's nine rows and the short window's peel
 let public RDEC_CODEC_BYTE_SPAN = 4_294_967_296l   //! one side of a block-codec K/V mirror, at most: its kernels address a block by a 32-bit byte offset
-let public RDEC_ROUTED_SLOTS = 64l   //! the routed slots a decode step stages: every row's k picks fit in them, and the hot expert pool takes no more picks a step
+let public RDEC_EXPERTS_MAX = 512l   //! the experts a routed layer's select and bucket schedule reach on the device: a workgroup of 256 threads two logits deep, or of 512
+let public RDEC_ROUTED_SLOTS = 128l   //! the routed slots a decode step stages: every row's k picks fit in them (the depth-8 verify's nine rows at eight picks), and the hot expert pool takes no more picks a step
 let public RDEC_NORM_ROWS = 10l   //! rms_att, rms_ffn, post-attention, post-FFN, the per-layer-embedding post norm, then the gemma-4 MoE layer's router scale, routed pre norm, dense post norm and routed post norm, then the attention output bias row (gpt-oss) - zero rows where a model lacks them
 let public RDEC_HEAD_NORM_ROWS = 5l   //! the NextN draft head's block: its attention norm, its FFN norm, the embed norm, the carry norm, the head norm (the final norm's row where the file ships none)
 let public RDEC_HEAD_ATT = 0l
@@ -781,6 +782,36 @@ def public install_rdec_token_seq(token_seq : RdecTokenSeqFn) {
 def public rdec_token_seq_installed() : bool => g_rdec_token_seq_installed
 def public rdec_token_seq(x : array<float>; cossin : array<float>; pos, nrows : int64; var logits : array<float>) { invoke(g_rdec_token_seq, x, cossin, pos, nrows, logits) }
 
+//! The one-row command's greedy chain: `wanted` answers whether the armed model's next one-row step may chain, `ask` asks the
+//! step about to run to chain the next one, the next position's rope row beside it
+typedef RdecChainWantedFn = function<() : bool>
+typedef RdecChainAskFn = function<(cos_next : array<float>) : void>
+def private rdec_unset_chain_wanted() : bool => false
+[unused_argument(cos_next)]
+def private rdec_unset_chain_ask(cos_next : array<float>) {
+    panic("dasLLAMA: the resident greedy chain asked without an installed seat")
+}
+var g_rdec_chain_wanted = @@rdec_unset_chain_wanted
+var g_rdec_chain_ask = @@rdec_unset_chain_ask
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_LANDING.md#vk-greedy-chain")]
+def public install_rdec_chain(wanted : RdecChainWantedFn; ask : RdecChainAskFn) {
+    g_rdec_chain_wanted = wanted
+    g_rdec_chain_ask = ask
+}
+
+def public rdec_chain_wanted() : bool => invoke(g_rdec_chain_wanted)
+def public rdec_chain_ask(cos_next : array<float>) { invoke(g_rdec_chain_ask, cos_next) }
+
+var private g_rdec_chain_charged = false   //! the chain is asked: the plan charges its snapshot
+
+//! the backend's word that the chain is asked, read by the next plan
+def public set_rdec_chain_charged(on : bool) {
+    g_rdec_chain_charged = on
+}
+
+def public rdec_chain_charged() : bool => g_rdec_chain_charged
+
 //! A region's recurrent checkpoints: `save` copies every recurrent layer's state slot and ring pair of the selected region into its
 //! checkpoint row `slot` (one of `RDEC_DN_SNAPS`), `load` copies row `slot` back into the slots and the region's ring parity with it;
 //! false where the driver holds no such row
@@ -950,6 +981,36 @@ def public set_moe_gpu_dense_off(fmt : int; woff : int64) {
 
 def public moe_gpu_dense_on_gpu(fmt : int; woff : int64) : bool =>
     g_moe_gpu_installed && g_moe_gpu_dense_route && key_exists(g_installed_marks.dense_offs, woff * 8l + int64(fmt))
+
+var private g_dense_ffn_rows = 0l   //! the dense FFN rows the per-op FFN rail ran on the device, process-wide
+
+//! the dense FFN rows the per-op FFN rail ran on the device so far (a layer's row a step)
+def public moe_gpu_dense_ffn_rows() : int64 => g_dense_ffn_rows
+
+//! count `rows` dense FFN rows the per-op FFN rail ran as three dense GEMMs (a gate and up of two activation forms)
+def public moe_gpu_dense_ffn_note(rows : int64) {
+    g_dense_ffn_rows += rows
+}
+
+//! a dense FFN's gate, up and down planes all sit on the dense rail: its decode row runs on the device (`matmul_gpu_dense_ffn`)
+[arch(at="../ARCHITECTURE_GPU_VULKAN_PEROP.md#perop-dense-ffn")]
+def public moe_gpu_dense_ffn_on_gpu(f1, f3, f2 : int; w1, w3, w2 : int64) : bool =>
+    moe_gpu_dense_on_gpu(f1, w1) && moe_gpu_dense_on_gpu(f3, w3) && moe_gpu_dense_on_gpu(f2, w2)
+
+//! one dense FFN row on the GPU tier over the dense rail's planes: the gate and up GEMVs off `w1` / `w3` against the quantized
+//! row (`xq` / `xs`, the gate plane's activation form), the act and its requant, the down GEMV off `w2` into `y` - the routed
+//! decode chain at one region of one row
+[arch(at="../ARCHITECTURE_GPU_VULKAN_PEROP.md#perop-dense-ffn")]
+def public matmul_gpu_dense_ffn(var y : array<float>; w1, w3, w2 : int64; xq : array<int8>; xs : array<float>; n, nfe : int64; f1, f3, f2 : int; is_gelu : bool) {
+    g_dense_ffn_rows++
+    let o1 = fixed_array(w1, 0l, 1l)
+    let o3 = fixed_array(w3, 0l, 1l)
+    let o2 = fixed_array(w2, 0l, 1l)
+    unsafe {
+        invoke(g_moe_gpu_ffn, addr(y[0]), addr(o1[0]), addr(o3[0]), addr(o2[0]), 1l,
+            addr<int8 const?>(xq[0]), addr<float const?>(xs[0]), null, null, n, nfe, 1l, 0l, f1, f3, f2, is_gelu)
+    }
+}
 
 //! Runtime routing gate over the dense marks: uploads stay resident, only the funnels' routing
 //! flips. The in-process A/B lever — both arms share one process, one residency, one budget
@@ -1139,6 +1200,82 @@ def public set_moe_gpu_heat_hooks(query : MoeGpuHeatQueryFn; advise : MoeGpuHeat
 
 def public moe_gpu_heat_on : bool => g_moe_gpu_heat_installed && g_moe_gpu_heat_route
 
+// ===== the routed experts' form: the activation and the per-expert bias rows the expert chain serves =====
+
+//! The form the next routed expert-chain calls take past the plain SwiGLU / GeGLU: gpt-oss's clamped swiglu, and each expert's
+//! gate and up bias rows joining before the activation; a region's expert is `(offs1[3r] - e_base) / e_stride`
+struct MoeGpuFfnForm {
+    oai : bool
+    bias_off : int64 = -1l   //! this layer's row base in the tier's gate / up bias planes (`moe_gpu_upload_ffn_bias`); -1 = unbiased
+    e_base : int64           //! the layer's gate plane offset
+    e_stride : int64         //! the elements of one expert's gate rows
+}
+
+var private g_ffn_form = MoeGpuFfnForm()
+
+//! the routed form the next expert-chain calls serve; `clear_moe_gpu_ffn_form` puts the plain form back
+def public set_moe_gpu_ffn_form(f : MoeGpuFfnForm) {
+    g_ffn_form = f
+}
+
+def public clear_moe_gpu_ffn_form() {
+    g_ffn_form = MoeGpuFfnForm()
+}
+
+def public moe_gpu_ffn_form() : MoeGpuFfnForm => g_ffn_form
+
+var private @scratch g_ffn_experts : array<int64>
+
+//! the expert of each region of the next biased chain call, where the regions' offsets do not name it (the heat pool's slots); an
+//! empty list reads the expert off the region's offset (`MoeGpuFfnForm.e_base` / `e_stride`)
+def public set_moe_gpu_ffn_experts(e : array<int64>) {
+    g_ffn_experts |> resize(long_length(e))
+    for (src, dst in e, g_ffn_experts) {
+        dst = src
+    }
+}
+
+def public clear_moe_gpu_ffn_experts() {
+    g_ffn_experts |> clear()
+}
+
+//! region r's expert off the list `set_moe_gpu_ffn_experts` set; -1 where the list holds none
+def public moe_gpu_ffn_expert(r : int64) : int64 => r < long_length(g_ffn_experts) ? g_ffn_experts[r] : -1l
+
+//! The second activation image of the next expert-chain or deltanet-chain call: the up plane's (the z plane's) own form where its
+//! pair with the gate (the qkv) plane takes two activation classes; `on` false = one image feeds both
+struct MoeGpuImage2 {
+    on : bool
+    xq : int8 const?
+    xs : float const?
+}
+
+var private g_image2 = MoeGpuImage2()
+
+def public set_moe_gpu_image2(xq : array<int8>; xs : array<float>) {
+    g_image2 = MoeGpuImage2(on = true, xq = unsafe(addr<int8 const?>(xq[0])), xs = unsafe(addr<float const?>(xs[0])))
+}
+
+def public clear_moe_gpu_image2() {
+    g_image2 = MoeGpuImage2()
+}
+
+def public moe_gpu_image2() : MoeGpuImage2 => g_image2
+
+//! the routed experts' gate and up bias planes, every routed layer's [n_expert x n_ff_exp] rows in layer order; false = refused
+typedef MoeGpuFfnBiasFn = function<(gb : array<float>; ub : array<float>) : bool>
+
+[unused_argument(gb, ub)]
+def private moe_gpu_unset_ffn_bias(gb : array<float>; ub : array<float>) : bool => false
+var g_moe_gpu_ffn_bias = @@moe_gpu_unset_ffn_bias
+
+//! Install the tier's routed bias seat (beside install_moe_gpu_tier): a tier without it keeps a biased model's experts on the CPU
+def public set_moe_gpu_ffn_bias_hook(up : MoeGpuFfnBiasFn) {
+    g_moe_gpu_ffn_bias = up
+}
+
+def public moe_gpu_upload_ffn_bias(gb : array<float>; ub : array<float>) : bool => invoke(g_moe_gpu_ffn_bias, gb, ub)
+
 // ===== the f16-fed (cm2) expert chain: an optional seat beside the FFN hook =====
 
 [unused_argument(goutp, offs1, offs3, offs2, nregions, xp, wp, invp, n, nfe, nrows, npos, f1, f3, f2, is_gelu)]
@@ -1222,10 +1359,25 @@ def public vk_rdec_rerecord_on : bool => g_vk_rdec_rerecord
 var g_moe_gpu_shexp_route = true
 var private g_moe_gpu_shexp_said : table<string>   // the prefill's shared-expert decline reasons said for this model
 
-//! Loader contract: mark one layer's shared-expert triple resident on the tier. Reset per load.
-def public set_moe_gpu_shexp_layer(l : int64) {
-    g_installed_marks.shexp_layers |> insert(l)
+//! The planes the tier holds for one layer's shared-expert triple: each one's format and its offset in that format's plane
+//! space - the file's own planes
+struct ShexpGpuPlanes {
+    f1 : int
+    f3 : int
+    f2 : int
+    o1 : int64
+    o3 : int64
+    o2 : int64
 }
+
+//! Loader contract: mark one layer's shared-expert triple resident on the tier, its planes `p`. Reset per load.
+def public set_moe_gpu_shexp_layer(l : int64; p : ShexpGpuPlanes) {
+    g_installed_marks.shexp_layers |> insert(l)
+    g_installed_marks.shexp_planes |> insert(l, p)
+}
+
+//! The planes the tier holds for layer `l`'s shared-expert triple (`set_moe_gpu_shexp_layer`); a layer with no mark reads none
+def public moe_gpu_shexp_planes(l : int64) : ShexpGpuPlanes => g_installed_marks.shexp_planes?[l] ?? ShexpGpuPlanes(o1 = -1l, o3 = -1l, o2 = -1l)
 
 def public moe_gpu_shexp_on_gpu(l : int64) : bool =>
     g_moe_gpu_installed && g_moe_gpu_shexp_route && key_exists(g_installed_marks.shexp_layers, l)
@@ -1303,6 +1455,7 @@ struct MoeGpuMarks {
     dn_layers : table<int64; int64>
     attn_layers : table<int64>
     shexp_layers : table<int64>
+    shexp_planes : table<int64; ShexpGpuPlanes>
     qkv_layers : table<int64>
     unsupported : string
 }
@@ -1522,6 +1675,22 @@ def public gpu_want_dense_shexp : bool
 //! independent control rather than one DENSE gate.
 def public gpu_want_dense_attn : bool
     => g_env_gpu.gpu_dense_attn
+
+//! The dense rail's FFN half (each dense layer's w1/w3/w2 triple, the decode row's FFN on the device). Opt-IN
+//! (``DASLLAMA_GPU_DENSE_FFN=1``): the triples are most of a dense model's bytes, placed ahead of the rails the walk reaches after them
+[arch(at="../ARCHITECTURE_GPU_VULKAN_PEROP.md#perop-dense-ffn")]
+def public gpu_want_dense_ffn : bool
+    => g_dense_ffn_pin >= 0 ? g_dense_ffn_pin == 1 : g_env_gpu.gpu_dense_ffn
+
+var private g_dense_ffn_pin = -1   //! `set_gpu_want_dense_ffn`'s pin: -1 reads the environment
+
+//! the in-process twin of ``DASLLAMA_GPU_DENSE_FFN``, read by the next load's walk; -1 lifts the pin
+def public set_gpu_want_dense_ffn(pin : int) {
+    g_dense_ffn_pin = pin
+}
+
+//! the pin `set_gpu_want_dense_ffn` holds, -1 where none
+def public gpu_dense_ffn_pin() : int => g_dense_ffn_pin
 
 //! The streamed-layer split want (``DASLLAMA_GPU_MOE_SPLIT``): it decides the stream slot count
 //! the carve reserves, so the image identity carries it.
@@ -1861,9 +2030,12 @@ struct MoeSpanDec {
     f2 : array<int>
     nsh : int64                  //! the shared expert's width (0 = the model has none)
     sh_gated : bool              //! the shared expert's row scales by sigmoid(gate . xb)
-    wsh1 : array<int64>          //! the shared expert's q8 gate plane offset per layer
+    wsh1 : array<int64>          //! the shared expert's gate plane offset per layer, in its format's plane space (`moe_gpu_shexp_planes`)
     wsh3 : array<int64>          //! ... its up plane
     wsh2 : array<int64>          //! ... its down plane
+    fsh1 : array<int>            //! the shared expert's gate plane format slot per layer
+    fsh3 : array<int>            //! ... its up plane's
+    fsh2 : array<int>            //! ... its down plane's
     shgate : float const?        //! [nl x dim] f32 gate rows, layer-major (null when ungated or absent)
     rmsq : array<float const?>   // the qk-norm rows (null when off)
     rmsk : array<float const?>

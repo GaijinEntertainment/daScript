@@ -46,6 +46,7 @@ def private vk_dlim_wants_fill(var v : DlimVulkanConfig) {
     v.dense = gpu_want_dense()
     v.dense_attn = gpu_want_dense_attn()
     v.dense_shexp = gpu_want_dense_shexp()
+    v.dense_ffn = gpu_want_dense_ffn()
     v.trim = vulkan_trim()
     v.split = gpu_want_moe_split()
     v.dn_native = gpu_want_dn_native()
@@ -73,7 +74,7 @@ def vulkan_dry_bake_arm(v : DlimVulkanConfig) : bool {
     return true
 }
 
-// the tier's whole hook set - the dry bake and the live arm install the same seven seats
+// the tier's whole hook set - the dry bake and the live arm install the same seats
 def install_vk_moe_hooks {
     install_moe_gpu_tier(@@vk_moe_ffn, @@vk_moe_upload_stack, @@vk_moe_cls, @@vk_moe_dense, @@vk_moe_drop_stacks, @@vk_moe_dn, @@vk_moe_attn)
     set_moe_gpu_ffn_xf_hooks(@@vk_moe_ffn_xf, @@vk_moe_ffn_xf_ok)
@@ -81,6 +82,7 @@ def install_vk_moe_hooks {
     set_moe_gpu_attn_dec_hooks(@@vk_moe_attn_dec, @@vk_moe_attn_dec_ok, @@vk_moe_attn_dec_claim, @@vk_moe_attn_dec_hydrate)
     set_moe_gpu_ffn_tail_hooks(@@vk_moe_ffn_tail, @@vk_moe_ffn_tail_pending)
     set_moe_gpu_span_dec_hook(@@vk_moe_span_dec)
+    set_moe_gpu_ffn_bias_hook(@@vk_moe_upload_ffn_bias)
     install_moe_gpu_os_memory(@@vk_os_memory_now)
     install_rdec_note_weight_bytes(@@vk_rdec_note_weight_bytes)
     install_moe_gpu_resident_bias(@@vk_rdec_upload_bias)
@@ -388,6 +390,8 @@ def dasllama_math_vulkan_register() {
     install_rdec_rollback(@@vk_rdec_rollback)
     install_rdec_dn_snaps(@@vk_rdec_dn_snap_save, @@vk_rdec_dn_snap_load)
     install_rdec_token_seq(@@vk_rdec_token_seq)
+    install_rdec_chain(@@vk_rdec_chain_wanted, @@vk_rdec_chain_ask)
+    set_rdec_chain_charged(vk_rdec_chain_mode() != 0)
     install_rdec_head_warm(@@vk_rdec_head_warm_ask, @@vk_rdec_head_warm_rows)
     install_moe_gpu_resident_dn(@@vk_rdec_set_dn_layer, @@vk_rdec_upload_dn_ba, @@vk_rdec_dn_own, @@vk_rdec_prefill_dn_own)
     install_moe_gpu_resident_moe(@@vk_rdec_moe_ok, @@vk_rdec_prepare_moe, @@vk_rdec_set_moe_layer, @@vk_rdec_set_moe_experts)

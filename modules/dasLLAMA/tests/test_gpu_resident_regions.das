@@ -18,6 +18,11 @@ def test_regions_interleaved_single_steps(t : T?) {
 }
 
 [test]
+def test_region_taken_after_decode(t : T?) {
+    cell_region_taken_after_decode(t, REGIONS_FILE)
+}
+
+[test]
 def test_prefill_continues_on_the_device(t : T?) {
     cell_prefill_continues_on_the_device(t, REGIONS_FILE)
 }

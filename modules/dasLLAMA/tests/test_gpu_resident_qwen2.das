@@ -46,14 +46,19 @@ let private CODEC_PAIR_REL = 0.8    //! the two codec chains' distance from each
 let private ROWS_BARS = StoredRowsBars(k = 0.02, v_step = 0.05, v_prefill_of_ctrl = 0.6)
 
 [cold_path]
-def private qwen2_forced_feed(t : T?; n : int64) {
-    let path = path_join(models_dir(), CARRIER)
+def private qwen2_forced_feed(t : T?; n : int64; file : string = CARRIER; dense : KqFmt = KqFmt.q8) {
+    let path = path_join(models_dir(), file)
     if (!resident_ready(t, path)) return
     var tr <- load_model_(path, QuantMode.q8)
     t |> success(tr.config.attn_qkv_bias, "the qwen2 carries the q/k/v projection bias the arm exists for")
     t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the biased model (the load log names any decline)")
+    if (dense != KqFmt.q8) {
+        dense_planes_tagged(t, tr, path, dense)
+    }
     with_dasllama_jobque_() {
-        forced_feed_over(t, tr, "", n, 8l, LOGIT_BAR_REL) $ {}
+        forced_feed_over(t, tr, "{file} ", n, 8l, LOGIT_BAR_REL) $ {
+            served_every_call(t)
+        }
     }
     delete tr
 }
@@ -67,6 +72,21 @@ def test_gpu_resident_qwen2_bias(t : T?) {
     t |> run("Qwen2.5-0.5B: the same across two windows") @(t : T?) {
         assert_pf_window(t)
         qwen2_forced_feed(t, PF_WINDOW_ROWS + 88l)
+    }
+}
+
+//! the IQ4_NL mint (`-local`, the catalog row's recipe): its 896-wide rows sit off the superblock lattice, so every dense plane
+//! serves off the per-32 iq4nl32 planes - the window's GEMMs on the s tile on the f16 feed and the per-32 batch tile off it, the
+//! steps on the per-32 GEMVs; the token table demotes to q8
+[test]
+def test_gpu_resident_qwen2_iq4nl32(t : T?) {
+    let file = "Qwen2.5-0.5B-Instruct-IQ4_NL-local.gguf"
+    t |> run("{file}: the dense iq4nl32 planes, resident prefill + decode vs the CPU chain, one window") @(t : T?) {
+        qwen2_forced_feed(t, 40l, file, KqFmt.iq4nl32)
+    }
+    t |> run("{file}: the same across two windows") @(t : T?) {
+        assert_pf_window(t)
+        qwen2_forced_feed(t, PF_WINDOW_ROWS + 88l, file, KqFmt.iq4nl32)
     }
 }
 

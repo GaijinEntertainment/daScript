@@ -92,7 +92,7 @@ back-to-back unless a slab boundary intervenes, so the merged form asks only tho
 questions and dispatches at `d = 2 * kvd`: one dispatch instead of two plus a copy, which
 doubles the otherwise starved k/v grid and deletes the v copy. Consumers read the merged output
 through a `kstride` field - the projection-row stride, `2 * kvd` merged against the split
-path's `kvd` - on `RopeKvBArgs` and on `QkRmsArgs`, and through `RopeKvBArgs.voff`, the v
+path's `kvd` - on `RopeKvBArgs` and on `GkQkRmsArgs`, and through `RopeKvBArgs.voff`, the v
 rows' base inside that buffer - `kvd` merged against the split path's `npos * kvd`. It is a
 record-cost win, not a GPU one.
 
@@ -153,6 +153,17 @@ planes and the driver's prepare zero-fills both mirrors whole: the fragment read
 **A hybrid's gated attention rides the batch kernels through a per-head q stride** (`qhs = 2 x hs`):
 the q GEMM writes `[q | gate]` per head, qk-rms and rope read q head-strided in place, the mirror
 attention gates on the sigmoid of the gate half (tq4's un-rotation in its place), a partial-rope model rotates a head's first `rot` elements, and at head size 256 the gated twins take the h256 cm2 flash stamps (Br 64, Bc 32), q at the head's q stride, the normalized output gated before the store.
+
+### A per-32 plane's window GEMM is the s tile or the per-32 batch tile {#vk-b32-window-gemm}
+
+A dense plane in a per-32 format (q51, iq4nl32; mx4 takes the same arms where it tags one) has no l or m cm2 column, so a
+window GEMM over it on the f16 feed takes the s tile alone - its format's `<Fmt>Cm2SBatch`, the column the expert schedule's
+32-row pieces run on - with no k split (`pf_split_pick`), and the KHR tile in KHR mode. Off the f16 feed - an sdot4, f16 or
+int8 card, or a group the FFN lever keeps on the Q8 feed - the rows quantize to Q8_0 blocks and the GEMM is the per-32 batch
+tile (`Blk32BatchT`: `Q8Batch`'s 32x32 sdot4 tile and stage, each staged half block the GEMV's byte lanes, `blk32_*_quad`,
+and the block's scale pair beside it), which the kq batch rail dispatches by format (`kq_batch_cls_enc_for`). The decode
+steps read the same planes through the per-32 GEMVs and their N-column leaves, so every site of such a model serves the
+plane's own bytes.
 
 ### The Q8 requant writers store one quant per byte {#q8-requant-byte-store}
 

@@ -19,6 +19,7 @@ require daslib/strings_boost   // join: the decoded stream logs beside the token
 require math
 require strings
 require _model_tier
+require _resident_feed   // census, pass_total: the deltanet-on-GPU cell's device witnesses
 
 // Unit gates for the continuous-batching scheduler — all through the SchedEvent seam, zero HTTP:
 // scheduler ≡ generate bit-exact (1 stream), chunk-size invariance under classic prefill, staggered
@@ -100,7 +101,7 @@ def private text_of(pieces : array<string>) : string {
 
 [test]
 def test_scheduler_batching_deltanet_gpu(t : T?) {
-    t |> run("two interleaved deltanet streams on the GPU tier match their solo references (needs Qwen3.5-0.8B-Q8_0, DASLLAMA_GPU=1)") @(t : T?) {
+    t |> run("two interleaved deltanet streams on the GPU tier match their solo references, their deltanet steps counted on the device (needs Qwen3.5-0.8B-Q8_0, DASLLAMA_GPU=1)") @(t : T?) {
         return if (!jit_only(t))
         if (!stat(DN_MODEL_PATH).is_valid) {
             t |> skip("{DN_MODEL_PATH} not present")
@@ -111,12 +112,18 @@ def test_scheduler_batching_deltanet_gpu(t : T?) {
             m.config.seq_len = min(m.config.seq_len, 256l)
             let prev_dnd_route = moe_gpu_dnd_route()
             set_moe_gpu_dnd_route(true)   // the claim is about the tier's decode step: pin its route on, whatever an earlier cell left
-            if (!has_gpu_dn_layer(m.config)) {
+            if (!moe_gpu_resident_active() && !has_gpu_dn_layer(m.config)) {
                 t |> skip("the GPU tier's deltanet decode step is not armed - needs DASLLAMA_GPU=1 on a device that serves it")
                 set_moe_gpu_dnd_route(prev_dnd_route)
                 delete m
                 return
             }
+            var nrec = 0l
+            for (l in range64(m.config.n_layers)) {
+                nrec += layer_is_recurrent(m.config, l) ? 1l : 0l
+            }
+            let step0 = census("dn_step_cls_spv")   //! the device's fused deltanet step: recorded per layer by the per-op step and by the driver's token commands
+            let passes0 = pass_total()
             let greedy = SamplingParams()
             var none : array<int64>
             var pa <- encode(m, "Count from one to ten in words.", true, false)
@@ -137,7 +144,7 @@ def test_scheduler_batching_deltanet_gpu(t : T?) {
             var events : array<SchedEvent>
             t |> success(submit(m, sch, make_req(20l, pa, greedy, 8l, none)), "stream A queued")
             t |> success(submit(m, sch, make_req(21l, pb, greedy, 8l, none)), "stream B queued")
-            drain(m, sch, events)
+            drain(m, sch, events)   //! two host-cached streams over the load's one region: each takes it from the other, the other's device-only rows saved first
             var ga <- toks_of(events, 20l)
             var gb <- toks_of(events, 21l)
             to_log(LOG_INFO, "two-stream A: \"{text_of(pieces_of(events, 20l))}\" | solo A: \"{text_of(refs[0].pieces)}\"\n")
@@ -145,6 +152,11 @@ def test_scheduler_batching_deltanet_gpu(t : T?) {
             t |> success(ids_equal(ga, refs[0].toks), "stream A, decoded turn about with B, matches its solo reference ({ga} vs {refs[0].toks})")
             t |> success(ids_equal(gb, refs[1].toks), "stream B, decoded turn about with A, matches its solo reference ({gb} vs {refs[1].toks})")
             t |> success(sch.sum_batch >= 2l * 2l, "the two streams shared decode steps (sum batch {sch.sum_batch})")
+            if (step0 != NO_CENSUS) {
+                let stepped = census("dn_step_cls_spv") - step0
+                t |> success(stepped >= nrec, "the streams' deltanet steps ran on the device: {stepped} fused-step dispatches recorded over {nrec} recurrent layers")
+            }
+            t |> equal(pass_total() - passes0, 0l, "no call passed to the CPU rails")
             delete sa
             delete sb
             delete events1

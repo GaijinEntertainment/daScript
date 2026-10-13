@@ -1631,11 +1631,11 @@ module) is independent and can land any time - it is pure structure.
     file compares against the fused one-row command the server runs.
 
 84. **The workgroup argmax fold has two kernel-side spellings.** `ClsArgmaxBase.fold`
-    (`dasllama_vulkan_classes.das`) and the k-loop's inner fold of `TopKCore.select_row` are the
+    (`dasllama_vulkan_classes.das`) and the k-loop's inner fold of `GkTopKRow.select_row` are the
     same six lines - `subgroupMax`, the lowest id at the max through `subgroupMin`, a per-subgroup
     staging pair, a barrier, the walk over `gl_NumSubgroups` - differing on where the candidate id
     comes from and who reads the answer. The work: one base with `fold(m, mi) : (value, id)`, the
-    staging width a template constant, `TopKCore` calling it with its thread id and keeping its
+    staging width a template constant, `GkTopKRow` calling it with its thread id and keeping its
     publish-and-mask loop; the top-k cells and the argmax cell hold both bit for bit.
 
 85. **The recorded forms' profile-name triples are three copies of one bookkeeping.**
@@ -1969,7 +1969,7 @@ module) is independent and can land any time - it is pure structure.
     `DASLLAMA_VK_KV32=1`. What is still owed, in Metal's shape (`ARCHITECTURE_GPU_MTP.md`) on the
     resident driver: the Vulkan round seat (`register_mtp_round_override("vulkan", ...)`) - a
     round at depth k > 1 (the verify's per-row planes and the rollback scratch already hold the
-    box knob's depth plus one, eight rows at most, and the scratch's rows serve a reject to any
+    box knob's depth plus one, sixteen rows at most, and the scratch's rows serve a reject to any
     `a < k`) and the joint verify across streams - then the gemma assistant drafter. Carriers: Qwen3.5-0.8B-MTP first,
     Qwen3.8-27B with its split Q8_0 head for the rate (Metal reads 1.23x at depth 1, 1.31x at
     depth 3 on the M5 Max), gemma-4-26B with the assistant drafter as the second round kind; the
@@ -2173,3 +2173,13 @@ module) is independent and can land any time - it is pure structure.
     (`DASLLAMA_GPU_PROF=1`) over two consecutive encodes, read role by role, to name the stage that
     doubles - the deepstack mergers, the split-k down planes or the Q8_0 feed are the stages the other
     chains do not run.
+
+147. **The per-op tier serves no attention sink.** On gpt-oss the per-op attention block declines a
+    layer that carries sinks (`attn_dec_shape_ok`'s `attn_sinks` clause; gpt-oss's sliding layers decline
+    there too), so every attention layer runs on the CPU under the per-op tier, and the decode span, the
+    tail fusion and the f16-fed expert chain stand aside on the model
+    (`ARCHITECTURE_GPU_VULKAN_PEROP.md#perop-routed-form`). The device has the sink kernels - the
+    resident driver's token command and flash tiles carry them (`vk_rdec_upload_sinks`). Done = the
+    per-op block binds the sink rows and the sliding window and serves gpt-oss's attention layers, and the span, the tail
+    fusion and the f16 chain take the routed form, each held by a cell against the CPU chain; this is
+    the gpt-oss leg's.

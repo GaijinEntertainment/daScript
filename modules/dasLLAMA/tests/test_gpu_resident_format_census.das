@@ -8,7 +8,9 @@ require dasllama/dasllama   // load_model_, create_session, moe_gpu_drop_model
 require daslib/fio   // path_join
 require dasllama/dasllama_math   // with_dasllama_jobque_ (the engine-standard jobque config)
 require dasllama/dasllama_gpu_tier   // moe_gpu_dn_on_gpu, set_gpu_resident_route: the per-op rail's marks and the route lever
-require dasllama/dasllama_gpu_resident   // resident_layer_decline, perop_dn_decline
+require dasllama/dasllama_gpu_resident   // resident_layer_decline, perop_dn_decline, perop_shexp_native
+require dasllama/dasllama_blocks   // shexp_gpu_prefill_layers, span_tokens: the per-op shared expert's device witnesses
+require dasllama/dasllama_moe   // shexp_gpu_decode_rows
 require _moe_resident   // MoeFixture, moe_fixture_admitted, MOE_LOGIT_BAR_REL
 require _format_census
 require ?vulkan dasllama/dasllama_vulkan_decode   // vk_rdec_token_gathered: the token command's rows gathered off their ids, where the module exists
@@ -52,7 +54,7 @@ def private gathered_rows() : int64 {
 }
 
 //! the census name of the token-table gather's stamp for a table in `f`
-def private emb_kernel(f : KqFmt) : string => f == KqFmt.q8 ? "emb_gather_cls_spv" : "kq_emb_{f}_cls_spv"
+def private emb_kernel(f : KqFmt) : string => f == KqFmt.q8 ? "emb_gather_cls_spv" : (kq_block32(f) ? "{f}_emb_cls_spv" : "kq_emb_{f}_cls_spv")
 
 //! one speculative round's outcome on a session: its accept, its draft and the position it left
 struct private Round {
@@ -161,6 +163,16 @@ def test_gpu_resident_format_census_perop(t : T?) {
             marked += moe_gpu_dn_on_gpu(l) ? 1l : 0l
         }
         t |> equal(marked, nrec, "the per-op deltanet rail holds every recurrent layer on the device ({marked} of {nrec}) - none left on the CPU rail")
+        var shexp_native = 0l
+        for (l in range64(tr.config.n_layers)) {
+            shexp_native += moe_gpu_shexp_on_gpu(l) && perop_shexp_native(tr, l) ? 1l : 0l
+        }
+        t |> equal(shexp_native, tr.config.n_layers, "the per-op rail holds every layer's shared expert in the file's own format ({shexp_native} of {tr.config.n_layers}) - no q8 transcode")
+        let sh_pf0 = shexp_gpu_prefill_layers()
+        let sh_ovl0 = shexp_gpu_decode_rows()
+        let sh_gemm0 = shexp_gpu_gemm_rows()
+        let sh_aft0 = shexp_gpu_after_rows()
+        let sh_dec0 = sh_ovl0 + sh_aft0 + shexp_gpu_gemm_rows() + span_tokens()
         with_dasllama_jobque_() {
             var prompt <- resident_prompt(PROMPT)
             var toks <- resident_feed(STEPS)
@@ -181,12 +193,75 @@ def test_gpu_resident_format_census_perop(t : T?) {
                 t |> success(tile >= 3l * nrec, "its qkv, z and out GEMMs read the IQ4_XS stacks ({tile} dispatches, {3l * nrec} planes)")
                 t |> success(step >= nrec, "the per-op decode step recorded every recurrent layer's chain ({step} of {nrec})")
             }
+            t |> success(shexp_gpu_prefill_layers() - sh_pf0 >= tr.config.n_layers, "the window ran every layer's shared expert on the device over its own planes ({shexp_gpu_prefill_layers() - sh_pf0} layers)")
+            let sh_dec = shexp_gpu_decode_rows() + shexp_gpu_after_rows() + shexp_gpu_gemm_rows() + span_tokens() - sh_dec0
+            t |> success(sh_dec >= STEPS, "every fed step ran the shared expert on the device - the span or the per-layer chain ({sh_dec} rows)")
+            to_log(LOG_INFO, "per-op shared expert rows: overlapped chain {shexp_gpu_decode_rows() - sh_ovl0}, after the routed chain {shexp_gpu_after_rows() - sh_aft0}, dense GEMMs {shexp_gpu_gemm_rows() - sh_gemm0}\n")
+            t |> equal(shexp_gpu_gemm_rows() - sh_gemm0, 0l, "one activation form a layer: no layer took the dense GEMMs - the overlapped chain or the span serves every one")
             delete gpu
             delete cpu
             delete prompt
             delete toks
         }
         delete tr
+    }
+}
+
+//! the per-op FFN rail's carriers: a q8, a K-quant (Q8_K feed) and a per-32 (q51) dense FFN
+let private PEROP_FFN = fixed_array("Llama-3.2-1B-Instruct-Q8_0.gguf", "Llama-3.2-1B-Instruct-Q4_K_M.gguf", "Llama-3.2-1B-Instruct-Q5_1-local.gguf")
+let private PEROP_FFN_BAR = 0.06   //! of the step's max |logit|: the llama resident file's bar
+
+//! `path` loaded with the whole-model route off and the per-op FFN rail pinned to `ffn` (0 or 1), both levers put back
+def private load_perop(path : string; ffn : int) : Model {
+    let route = gpu_resident_route_lever()
+    let pin = gpu_dense_ffn_pin()
+    set_gpu_resident_route(false)
+    set_gpu_want_dense_ffn(ffn)
+    var tr <- load_model_(path, QuantMode.q8)
+    set_gpu_want_dense_ffn(pin)
+    set_gpu_resident_route(route)
+    return <- tr
+}
+
+[test]
+def test_gpu_perop_dense_ffn(t : T?) {
+    for (file in PEROP_FFN) {
+        t |> run("{file} with the whole-model route off: the per-op FFN rail runs every layer's FFN row on the device, the steps against the CPU chain") @(t : T?) {
+            if (!family_on(t, "llama") || !arm_on(t, "vk-perop-ffn")) return
+            let path = path_join(models_dir(), file)
+            if (!resident_ready(t, path)) return
+            with_dasllama_jobque_() {
+                var prompt <- resident_prompt(PROMPT)
+                var toks <- resident_feed(STEPS)
+                var off <- load_perop(path, 0)
+                let off0 = moe_gpu_dense_ffn_rows()
+                var so <- create_session(off, mirror_kv_dtype())
+                var ctl <- feed_logits(off, so, prompt, toks)
+                t |> equal(moe_gpu_dense_ffn_rows() - off0, 0l, "with the rail off no FFN row runs on the device (the counter's control)")
+                delete so
+                delete ctl
+                delete off
+                var tr <- load_perop(path, 1)
+                t |> success(!moe_gpu_resident_active(), "the whole-model route is off: the per-op rails serve")
+                for (l in range64(tr.config.n_layers)) {
+                    t |> equal(perop_dense_ffn_decline(tr, l), "", "layer {l}'s FFN triple is the per-op rail's formats")
+                }
+                let rows0 = moe_gpu_dense_ffn_rows()
+                var sg <- create_session(tr, mirror_kv_dtype())
+                var gpu <- feed_logits(tr, sg, prompt, toks)
+                let rows = moe_gpu_dense_ffn_rows() - rows0
+                delete sg
+                moe_gpu_drop_model()
+                var cpu <- feed_alone(tr, mirror_kv_dtype(), prompt, toks)
+                feed_steps_within(t, tr, "{file} per-op FFN ", PROMPT, gpu, cpu, toks, PEROP_FFN_BAR, "per-op")
+                t |> equal(rows, STEPS * tr.config.n_layers, "every fed step ran each layer's FFN row on the device ({rows} rows)")
+                delete gpu
+                delete cpu
+                delete tr
+                delete prompt
+                delete toks
+            }
+        }
     }
 }
 
@@ -351,6 +426,45 @@ def test_gpu_resident_gather_tied_qwen3(t : T?) {
     t |> run("{TIED_QWEN}: the tied K-quant table gathered on the device by the window and by every decode step") @(t : T?) {
         if (!family_on(t, "qwen3") || !arm_on(t, "vk-gather")) return
         emb_gather_cell(t, TIED_QWEN, QWEN_KQ_BAR_REL)
+    }
+}
+
+//! the per-32 table carriers' bar: the 0.5B qwen2 file's forced-feed reading (test_gpu_resident_qwen2.das' LOGIT_BAR_REL)
+let private PER32_TABLE_BAR_REL = 0.06
+
+//! a per-32 carrier on the whole-model driver: every site the file carries read in its own format (the census), the tied per-32
+//! table gathered on the device by the window and every step, the forced feed against the CPU chain
+def private per32_table_cell(t : T?; file : string; bar_rel : float) {
+    let path = path_join(models_dir(), file)
+    if (!resident_ready(t, path)) return
+    {
+        var tr <- load_model_(path, QuantMode.q8)
+        t |> success(kq_block32(cls_fmt_of(tr)) && emb_kq(tr), "{file}: the tied table loads in its per-32 form ({tr.emb_fmt})")
+        census_cell(t, tr, path, "vulkan load", ["attention q/k/v/o", "token table", "classifier"])
+        delete tr
+    }
+    emb_gather_cell(t, file, bar_rel)
+}
+
+[test]
+def test_gpu_resident_per32_tables(t : T?) {
+    for (spec in [(file = "Qwen2.5-0.5B-Instruct-IQ4_NL-pure-local.gguf", arm = "vk-per32-iq4nl32"),
+                  (file = "Qwen2.5-0.5B-Instruct-Q4_0-local.gguf", arm = "vk-per32-q4032")]) {
+        t |> run("{spec.file}: the per-32 token table and classifier on the device, census and forced feed") @(t : T?) {
+            if (!family_on(t, "qwen2") || !arm_on(t, spec.arm)) return
+            per32_table_cell(t, spec.file, PER32_TABLE_BAR_REL)
+        }
+    }
+    t |> run("Qwen3.5-0.8B-MTP-Q5_1-local.gguf: the q51 table, classifier, deltanet planes and eh_proj on the device") @(t : T?) {
+        if (!family_on(t, "qwen35") || !arm_on(t, "vk-per32-q51")) return
+        let path = path_join(models_dir(), "Qwen3.5-0.8B-MTP-Q5_1-local.gguf")
+        if (!resident_ready(t, path)) return
+        var tr <- load_model_(path, QuantMode.q8)
+        census_cell(t, tr, path, "vulkan load", ["deltanet qkv/gate/out", "deltanet beta/alpha", "token table", "classifier", "NextN eh_proj"])
+        t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the per-32 hybrid (the load log names any decline)")
+        t |> success(rdec_verify_rows() >= 2l, "the NextN head - its q51 eh_proj among its planes - rides the driver (the load log names any decline)")
+        delete tr
+        emb_gather_cell(t, "Qwen3.5-0.8B-MTP-Q5_1-local.gguf", 0.06)
     }
 }
 

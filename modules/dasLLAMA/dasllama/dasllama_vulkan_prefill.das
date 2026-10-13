@@ -18,6 +18,7 @@ require dasllama/dasllama_gpu_tier   // moe_gpu_stream_need — the stream-slot 
 require vulkan
 require vulkan/vulkan_boost
 require dasllama/dasllama_math
+require dasllama/dasllama_gpu_math   // ACT_*, act_code: the act word the act classes read
 require math
 
 // The Vulkan PREFILL + batch driver (dasllama_metal_prefill's twin): the resident batched
@@ -139,10 +140,10 @@ def private pf_cls_enc(raw : VkCommandBuffer; var h : VkHaz) {
     }
 }
 
-//! A cm2 role's tile column and split pick; a region starting above row 0 never splits
-[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
+//! A cm2 role's tile column and split pick; a region starting above row 0, and a per-32 plane, never splits
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-b32-window-gemm")]
 def pf_split_pick(fmt : int; d, rows, n, row0, sib_tiles : int64) : tuple<tc : int64; nsplit : int64; ksplit : int64> {
-    if (row0 != 0l) {
+    if (row0 != 0l || cm2_b32_routed(fmt)) {
         return (tc = batch_tile_edges(fmt, d, rows, true).tc, nsplit = 1l, ksplit = 0l)
     }
     return cm2_gemm_pick(d, rows, n, sib_tiles, g_rd.pf_splitk_bytes)
@@ -195,7 +196,7 @@ def private pf_gemm_enc(raw : VkCommandBuffer; var h : VkHaz; idx : int; fmt : i
             }
             splitk_reduce_enc(raw, h, rset, rows * d, nsplit)
         }
-    } elif (kq_sb(fmt)) {
+    } elif (kq_sb(fmt) || cm2_b32_routed(fmt)) {
         // the role's format is static, so the slot never collides with the q8 router's variants
         let q40cm = fmt == int(KqFmt.q40) && g_gpu.coopmat_mode == COOPMAT_F16
         var kset = cached(g_rd.pf_cls_gemm, idx * 16 + 6) $ {
@@ -346,7 +347,7 @@ def private pf_dn_end {
 //! the per-op tier's window over one state: the conv over the history in the layout `hist_mode` names, the scan, the gated out-norm
 def private dn_window_enc(raw : VkCommandBuffer; var h : VkHaz; var conv_set, scan_set, p3_set : VkDescriptorSet; rows, cd, kd, nvh, nkh, ds, di, dconv : int64;
                           hist_mode, hist_off, state_base : uint; sig : bool; eps : float) {
-    var pcc = DnConvArgs(npos = uint(rows), cd = uint(cd), kd = uint(kd), ds = uint(ds), dconv = uint(dconv),
+    var pcc = GkDnConvArgs(npos = uint(rows), cd = uint(cd), kd = uint(kd), ds = uint(ds), dconv = uint(dconv),
         hist_mode = hist_mode, taps_off = uint(DN_SM_TAPS), hist_off = hist_off,
         eps = eps, qscale = 1.0 / sqrt(float(ds)))
     enc_dn_conv_cls(raw, h, conv_set, pcc, dn_conv_wgs(cd, rows))
@@ -356,7 +357,7 @@ def private dn_window_enc(raw : VkCommandBuffer; var h : VkHaz; var conv_set, sc
         o_off = uint(DN_O_OFF), di = uint(di), region_state_base = state_base)
     enc_dn_scan_cls(raw, h, scan_set, pcs, dn_scan_wgs(nvh, ds))
     pfq_ts(raw)
-    var pc3 = DnScanP3Args(npos = uint(rows), nvh = uint(nvh), di = uint(di), ds = uint(ds), o_off = uint(DN_O_OFF),
+    var pc3 = GkDnGateArgs(nvh = uint(nvh), di = uint(di), ds = uint(ds), o_off = uint(DN_O_OFF),
         wnorm_off = uint(DN_SM_WNORM), eps = eps)
     if (sig) {
         enc_dn_scan_p3_sig_cls(raw, h, p3_set, pc3, rows)
@@ -375,7 +376,7 @@ def private dn_window_parts_enc(raw : VkCommandBuffer; var h : VkHaz; var L : RL
         let st & = unsafe(L.dn[ws.region])
         let img = int(st.ring_image_bytes / 4l)
         let cur = g_rd.pf_dn_cur[ws.region]
-        var pcc = DnConvArgs(npos = uint(ws.npos), cd = uint(cd), kd = uint(kd), ds = uint(ds), dconv = uint(dconv),
+        var pcc = GkDnConvArgs(npos = uint(ws.npos), cd = uint(cd), kd = uint(kd), ds = uint(ds), dconv = uint(dconv),
             hist_mode = 1u, taps_off = uint(DN_SM_TAPS), hist_off = uint(int(st.hist_off) + cur * img),
             eps = eps, qscale = 1.0 / sqrt(float(ds)), row0 = uint(ws.row0))
         enc_dn_conv_cls(raw, h, L.pf_dn_conv_set, pcc, dn_conv_wgs(cd, ws.npos))
@@ -389,7 +390,7 @@ def private dn_window_parts_enc(raw : VkCommandBuffer; var h : VkHaz; var L : RL
         enc_dn_scan_cls(raw, h, L.pf_dn_scan_set, pcs, dn_scan_wgs(nvh, ds))
     }
     pfq_ts(raw)
-    var pc3 = DnScanP3Args(npos = uint(wlen), nvh = uint(nvh), di = uint(di), ds = uint(ds), o_off = uint(DN_O_OFF),
+    var pc3 = GkDnGateArgs(nvh = uint(nvh), di = uint(di), ds = uint(ds), o_off = uint(DN_O_OFF),
         wnorm_off = uint(DN_SM_WNORM), eps = eps)
     if (sig) {
         enc_dn_scan_p3_sig_cls(raw, h, L.pf_dn_scan_p3_set, pc3, wlen)
@@ -497,21 +498,53 @@ def private pf_moe_tail_text(acc : double[26]; m0 : int; shexp, g4 : bool) : str
 }
 
 let private PF_MOE_ROLES = 8l   //! router topk sched gather e_gate e_up e_act e_down (the combine rides the layer's ar2 stamp)
-let private PF_MOE_MAP_OFF = 2_048l   //! the schedules' first per-wg map word offset: 4-word records for up to 256 experts, the s pieces' then the m pieces'
+let private PF_MOE_MAP_OFF = 8l * TOPK_EXPERTS_MAX   //! the schedules' first per-wg map word offset: 4-word records for every expert the select reaches, the s pieces' then the m pieces'
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block")]
 def vk_rdec_moe_ok(f1, f3, f2 : int) : bool {
     if (!vk_moe_init()) {
         return false
     }
-    let tiles = (g_gpu.coopmat_mode == COOPMAT_CM2 && g_gpu.has_coopmat2) || (g_gpu.coopmat_mode == COOPMAT_MM && khr_kq_tile_on())
-    return tiles && pf_f16_feed(f1) && pf_f16_feed(f3) && pf_f16_feed(f2)
+    if (pf_moe_tiles()) {
+        return pf_f16_feed(f1) && pf_f16_feed(f3) && pf_f16_feed(f2)
+    }
+    return pf_q8_tile_ok(f1) && pf_q8_tile_ok(f3) && pf_q8_tile_ok(f2)   //! the Q8-fed chain
+}
+
+//! the routed block's f16-fed tiles serve on this device: the cm2 tiles on a coopmat2 device in cm2 mode, the KHR tile in mm mode
+def private pf_moe_tiles : bool => (g_gpu.coopmat_mode == COOPMAT_CM2 && g_gpu.has_coopmat2) || (g_gpu.coopmat_mode == COOPMAT_MM && khr_kq_tile_on())
+
+//! an expert plane format the Q8-fed chain's sdot4 tiles serve: q8 (`Q8Batch`), a superblock format (the kq batch leaves) and a
+//! per-32 format (`Blk32BatchT`)
+[arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-moe-q8-chain")]
+def private pf_q8_tile_ok(f : int) : bool => f == int(KqFmt.q8) || kq_sb(f) || cm2_b32_routed(f)
+
+//! the Q8-fed chain's expert tile set over [w, ws, schedule, xq, xs, y]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-moe-q8-chain")]
+def private pf_q8_tile_set(fmt : int; bufs : uint64 const[6]; sizes : int64 const[6]; gbits : uint const[6]) : VkDescriptorSet {
+    if (fmt == int(KqFmt.q8)) {
+        return set_q8_batch_cls(bufs, sizes, gbits)
+    }
+    return kq_batch_cls_set_for(fmt, false, bufs, sizes, gbits)
+}
+
+//! ... and its dispatch
+def private pf_q8_tile_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : BatchArgs; groups : int64) {
+    if (fmt == int(KqFmt.q8)) {
+        enc_q8_batch_cls(raw, h, set_, pc, groups)
+    } else {
+        kq_batch_cls_enc_for(fmt, false, raw, h, set_, pc, groups)
+    }
 }
 
 //! the expert tiles' dispatch bounds for a window of `nk` slot rows: the s dispatch takes at most
 //! one tile per expert (a bucket within the s column, or the remainder past whole m columns), the
 //! m dispatch every expert's whole columns plus a partial one
 def private pf_moe_bounds(nk : int64) : tuple<gu : int64; dn : int64; mgu : int64; mdn : int64> {
+    if (g_rd.pf_moe_q8) {   //! s pieces alone, a 32-row tile a piece over 32-column tiles: every expert's rows plus one partial tile
+        let rt = nk / int64(SCHED_S_ROWS) + g_rd.ne
+        return (gu = rt * ((g_rd.nfe + 31l) / 32l), dn = rt * ((g_rd.dim + 31l) / 32l), mgu = 0l, mdn = 0l)
+    }
     let wt_gu = (g_rd.nfe + 127l) / 128l
     let wt_dn = (g_rd.dim + 127l) / 128l
     let rt_m = nk / int64(SCHED_M_ROWS) + g_rd.ne
@@ -539,11 +572,16 @@ def private pf_moe_setup {
         upload_fill(g_rd.pf_ones_dev, 0l, np * 4l, F32_ONE_WORD)
         return if (!any_dev)
     }
-    verify(ensure_router_gemm_cls() && ensure_topk_rows_cls() && ensure_moe_sched_cls() && ensure_moe_gather_f16_cls()
-        && ensure_actf16_cls() && ensure_cls_ar_comb() && ensure_cls_ar_comb_f16_b() && (!g_rd.exps_bias || ensure_actf16_b_cls()),
+    g_rd.pf_moe_q8 = !pf_moe_tiles()
+    let q8c = g_rd.pf_moe_q8
+    verify(ensure_router_gemm_cls() && topk_rows_ensure(g_rd.ne) && moe_sched_ensure(g_rd.ne) && ensure_cls_ar_comb() && ensure_cls_ar_comb_f16_b()
+        && (q8c ? (ensure_moe_gather_f32_cls() && ensure_cls_dn_rq() && ensure_cls_q8k_rq() && ensure_q8_actrq_cls() && ensure_q8k_actrq_cls()
+            && ensure_q8_batch_cls() && (!g_rd.exps_bias || ensure_q8_actrq_b_cls()))
+            : (ensure_moe_gather_f16_cls() && ensure_actf16_cls() && (!g_rd.exps_bias || ensure_actf16_b_cls()))),
         "vk prefill: the MoE block's class rails must engage on a live device")
     let bounds = pf_moe_bounds(nk)
     assert((PF_MOE_MAP_OFF + max(bounds.gu + bounds.mgu, bounds.dn + bounds.mdn)) * 4l <= BATCH_META_BYTES, "dasLLAMA vulkan tier: the MoE block's schedule exceeds its plane")
+    assert(max(bounds.gu, bounds.dn) <= 65535l, "dasLLAMA vulkan tier: the MoE block's s dispatch outgrows the schedule's 16-bit workgroup count")
     if (!g_rd.experts_host) {
         g_rd.pf_mlog = make_device_buf(np * g_rd.ner * 4l)
     }
@@ -554,12 +592,20 @@ def private pf_moe_setup {
     g_rd.pf_msch1 = make_device_buf(BATCH_META_BYTES)
     g_rd.pf_msch3 = make_device_buf(BATCH_META_BYTES)
     g_rd.pf_msch2 = make_device_buf(BATCH_META_BYTES)
-    g_rd.pf_mxg = make_device_buf((nk + TILE_READ_SLACK) * dim * 2l)
+    if (!q8c) {
+        g_rd.pf_mxg = make_device_buf((nk + TILE_READ_SLACK) * dim * 2l)
+        g_rd.pf_mhf = make_device_buf((nk + TILE_READ_SLACK) * nfe * 2l)
+    }
     g_rd.pf_my1 = make_device_buf(nk * nfe * 4l)
     g_rd.pf_my2 = make_device_buf(nk * nfe * 4l)
-    g_rd.pf_mhf = make_device_buf((nk + TILE_READ_SLACK) * nfe * 2l)
     g_rd.pf_mdn = make_device_buf(nk * dim * 4l)
     g_rd.pf_midx_host = make_host_buf(nk * 4l, false, [cached = true])
+    if (q8c) {
+        g_rd.pf_mxg32 = make_device_buf(nk * dim * 4l)
+        g_rd.pf_mgq = make_device_buf((nk + TILE_READ_SLACK) * dim)
+        g_rd.pf_mgs = make_device_buf((nk + TILE_READ_SLACK) * (dim / 32l) * 4l)
+        assert(nk * nfe <= BATCH_HQ_BYTES, "dasLLAMA vulkan tier: the Q8-fed chain's hidden rows exceed the act's quant plane")
+    }
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block"), arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command"), arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-window-chain")]
@@ -593,8 +639,12 @@ def private pf_moe_layer_sets(l : int64) {
     let pe1 = arena_planes(L.fe1, L.be1)
     let pe3 = arena_planes(L.fe3, L.be3)
     let pe2 = arena_planes(L.fe2, L.be2)
-    verify(cm2_cls_ensure(L.fe1, tcs) && cm2_cls_ensure(L.fe3, tcs) && cm2_cls_ensure(L.fe2, tcs)
-        && cm2_cls_ensure(L.fe1, tce) && cm2_cls_ensure(L.fe3, tce) && cm2_cls_ensure(L.fe2, tce), "vk prefill: the expert tile class rails must engage")
+    if (g_rd.pf_moe_q8) {
+        pf_moe_q8_layer_sets(l, pe1, pe3, pe2)
+    } else {
+        verify(cm2_cls_ensure(L.fe1, tcs) && cm2_cls_ensure(L.fe3, tcs) && cm2_cls_ensure(L.fe2, tcs)
+            && cm2_cls_ensure(L.fe1, tce) && cm2_cls_ensure(L.fe3, tce) && cm2_cls_ensure(L.fe2, tce), "vk prefill: the expert tile class rails must engage")
+    }
     if (pf_f16g_on()) {
         verify(f16_gemm_ensure(false) && ensure_splitk_reduce_cls() && ensure_tower_clamp_cvt_cls(), "vk prefill: the router's f16 GEMM rails must engage")
         L.pf_router_cvt_set = set_tower_clamp_cvt_cls(fixed_array(g_rd.pf_xb, g_rd.pf_xf),
@@ -609,27 +659,29 @@ def private pf_moe_layer_sets(l : int64) {
     L.pf_sched_set = set_moe_sched_cls(fixed_array(g_rd.pf_midx, g_rd.pf_minv, g_rd.pf_msch1, g_rd.pf_msch3, g_rd.pf_msch2, g_rd.pf_bex),
         fixed_array(nk * 4l, nk * 4l, BATCH_META_BYTES, BATCH_META_BYTES, BATCH_META_BYTES, nk * 4l),
         fixed_array(VHZ_MRT, VHZ_MRT, VHZ_MRT, VHZ_MRT, VHZ_MRT, VHZ_MRT))
-    L.pf_gather_set = set_moe_gather_f16_cls(fixed_array(g_rd.pf_xb, g_rd.pf_minv, g_rd.pf_mxg),
-        fixed_array(np * dim * 4l, nk * 4l, xg_bytes), fixed_array(VHZ_XB, VHZ_MRT, VHZ_MXG))
-    L.pf_e1_set = cm2_cls_set(L.fe1, tcs, fixed_array(pe1.wq, pe1.ws, g_rd.pf_msch1, g_rd.pf_mxg, g_rd.pf_my1),
-        fixed_array(pe1.wqb, pe1.wsb, BATCH_META_BYTES, xg_bytes, y_bytes), fixed_array(0u, 0u, VHZ_MRT, VHZ_MXG, VHZ_GATE))
-    L.pf_e1m_set = cm2_cls_set(L.fe1, tce, fixed_array(pe1.wq, pe1.ws, g_rd.pf_msch1, g_rd.pf_mxg, g_rd.pf_my1),
-        fixed_array(pe1.wqb, pe1.wsb, BATCH_META_BYTES, xg_bytes, y_bytes), fixed_array(0u, 0u, VHZ_MRT, VHZ_MXG, VHZ_GATE_M))
-    L.pf_e3_set = cm2_cls_set(L.fe3, tcs, fixed_array(pe3.wq, pe3.ws, g_rd.pf_msch3, g_rd.pf_mxg, g_rd.pf_my2),
-        fixed_array(pe3.wqb, pe3.wsb, BATCH_META_BYTES, xg_bytes, y_bytes), fixed_array(0u, 0u, VHZ_MRT, VHZ_MXG, VHZ_UP))
-    L.pf_e3m_set = cm2_cls_set(L.fe3, tce, fixed_array(pe3.wq, pe3.ws, g_rd.pf_msch3, g_rd.pf_mxg, g_rd.pf_my2),
-        fixed_array(pe3.wqb, pe3.wsb, BATCH_META_BYTES, xg_bytes, y_bytes), fixed_array(0u, 0u, VHZ_MRT, VHZ_MXG, VHZ_UP_M))
-    if (g_rd.exps_bias) {   //! the biased act: each bucket row's expert (the schedule's map) names its gate and up bias rows
-        L.pf_eact_set = set_actf16_b_cls(fixed_array(g_rd.pf_my1, g_rd.pf_my2, g_rd.pf_mhf, g_rd.moe_gb_dev, g_rd.moe_ub_dev, g_rd.pf_bex),
-            fixed_array(y_bytes, y_bytes, hf_bytes, g_rd.moe_gub_bytes, g_rd.moe_gub_bytes, nk * 4l), fixed_array(VHZ_GATE | VHZ_GATE_M, VHZ_UP | VHZ_UP_M, VHZ_HQ, 0u, 0u, VHZ_MRT))
-    } else {
-        L.pf_eact_set = set_actf16_cls(fixed_array(g_rd.pf_my1, g_rd.pf_my2, g_rd.pf_mhf),
-            fixed_array(y_bytes, y_bytes, hf_bytes), fixed_array(VHZ_GATE | VHZ_GATE_M, VHZ_UP | VHZ_UP_M, VHZ_HQ))
+    if (!g_rd.pf_moe_q8) {
+        L.pf_gather_set = set_moe_gather_f16_cls(fixed_array(g_rd.pf_xb, g_rd.pf_minv, g_rd.pf_mxg),
+            fixed_array(np * dim * 4l, nk * 4l, xg_bytes), fixed_array(VHZ_XB, VHZ_MRT, VHZ_MXG))
+        L.pf_e1_set = cm2_cls_set(L.fe1, tcs, fixed_array(pe1.wq, pe1.ws, g_rd.pf_msch1, g_rd.pf_mxg, g_rd.pf_my1),
+            fixed_array(pe1.wqb, pe1.wsb, BATCH_META_BYTES, xg_bytes, y_bytes), fixed_array(0u, 0u, VHZ_MRT, VHZ_MXG, VHZ_GATE))
+        L.pf_e1m_set = cm2_cls_set(L.fe1, tce, fixed_array(pe1.wq, pe1.ws, g_rd.pf_msch1, g_rd.pf_mxg, g_rd.pf_my1),
+            fixed_array(pe1.wqb, pe1.wsb, BATCH_META_BYTES, xg_bytes, y_bytes), fixed_array(0u, 0u, VHZ_MRT, VHZ_MXG, VHZ_GATE_M))
+        L.pf_e3_set = cm2_cls_set(L.fe3, tcs, fixed_array(pe3.wq, pe3.ws, g_rd.pf_msch3, g_rd.pf_mxg, g_rd.pf_my2),
+            fixed_array(pe3.wqb, pe3.wsb, BATCH_META_BYTES, xg_bytes, y_bytes), fixed_array(0u, 0u, VHZ_MRT, VHZ_MXG, VHZ_UP))
+        L.pf_e3m_set = cm2_cls_set(L.fe3, tce, fixed_array(pe3.wq, pe3.ws, g_rd.pf_msch3, g_rd.pf_mxg, g_rd.pf_my2),
+            fixed_array(pe3.wqb, pe3.wsb, BATCH_META_BYTES, xg_bytes, y_bytes), fixed_array(0u, 0u, VHZ_MRT, VHZ_MXG, VHZ_UP_M))
+        if (g_rd.exps_bias) {   //! the biased act: each bucket row's expert (the schedule's map) names its gate and up bias rows
+            L.pf_eact_set = set_actf16_b_cls(fixed_array(g_rd.pf_my1, g_rd.pf_my2, g_rd.pf_mhf, g_rd.moe_gb_dev, g_rd.moe_ub_dev, g_rd.pf_bex),
+                fixed_array(y_bytes, y_bytes, hf_bytes, g_rd.moe_gub_bytes, g_rd.moe_gub_bytes, nk * 4l), fixed_array(VHZ_GATE | VHZ_GATE_M, VHZ_UP | VHZ_UP_M, VHZ_HQ, 0u, 0u, VHZ_MRT))
+        } else {
+            L.pf_eact_set = set_actf16_cls(fixed_array(g_rd.pf_my1, g_rd.pf_my2, g_rd.pf_mhf),
+                fixed_array(y_bytes, y_bytes, hf_bytes), fixed_array(VHZ_GATE | VHZ_GATE_M, VHZ_UP | VHZ_UP_M, VHZ_HQ))
+        }
+        L.pf_e2_set = cm2_cls_set(L.fe2, tcs, fixed_array(pe2.wq, pe2.ws, g_rd.pf_msch2, g_rd.pf_mhf, g_rd.pf_mdn),
+            fixed_array(pe2.wqb, pe2.wsb, BATCH_META_BYTES, hf_bytes, dn_bytes), fixed_array(0u, 0u, VHZ_MRT, VHZ_HQ, VHZ_MDN))
+        L.pf_e2m_set = cm2_cls_set(L.fe2, tce, fixed_array(pe2.wq, pe2.ws, g_rd.pf_msch2, g_rd.pf_mhf, g_rd.pf_mdn),
+            fixed_array(pe2.wqb, pe2.wsb, BATCH_META_BYTES, hf_bytes, dn_bytes), fixed_array(0u, 0u, VHZ_MRT, VHZ_HQ, VHZ_MDN_M))
     }
-    L.pf_e2_set = cm2_cls_set(L.fe2, tcs, fixed_array(pe2.wq, pe2.ws, g_rd.pf_msch2, g_rd.pf_mhf, g_rd.pf_mdn),
-        fixed_array(pe2.wqb, pe2.wsb, BATCH_META_BYTES, hf_bytes, dn_bytes), fixed_array(0u, 0u, VHZ_MRT, VHZ_HQ, VHZ_MDN))
-    L.pf_e2m_set = cm2_cls_set(L.fe2, tce, fixed_array(pe2.wq, pe2.ws, g_rd.pf_msch2, g_rd.pf_mhf, g_rd.pf_mdn),
-        fixed_array(pe2.wqb, pe2.wsb, BATCH_META_BYTES, hf_bytes, dn_bytes), fixed_array(0u, 0u, VHZ_MRT, VHZ_HQ, VHZ_MDN_M))
     if (L.moe_g4) {
         verify(ensure_cls_ar_comb_g4() && ensure_cls_ar_comb_g4_f16_b(), "vk prefill: the gemma-4 combine class rails must engage on a live device")
         L.pf_arcomb_set = set_cls_ar_comb_g4(fixed_array(g_rd.pf_x, g_rd.pf_ffnout, g_rd.norms_dev, g_rd.pf_xb, g_rd.pf_minv, g_rd.pf_mw, g_rd.pf_mdn),
@@ -646,6 +698,41 @@ def private pf_moe_layer_sets(l : int64) {
     L.pf_arcomb_f16_set = set_cls_ar_comb_f16_b(fixed_array(g_rd.pf_x, g_rd.pf_ffnout, g_rd.norms_dev, g_rd.pf_xf, g_rd.pf_minv, g_rd.pf_mw, g_rd.pf_mdn, g_rd.pf_mlog, g_rd.moe_db_dev, g_rd.pf_midx),
         fixed_array(np * dim * 4l, np * dim * 4l, g_rd.norms_bytes, np * dim * 2l, nk * 4l, nk * 4l, dn_bytes, np * ner * 4l, g_rd.moe_db_bytes, nk * 4l),
         fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XQ, VHZ_MRT, VHZ_MRT, VHZ_MDN | VHZ_MDN_M, VHZ_MRT, 0u, VHZ_MRT))
+}
+
+//! the Q8-fed chain's sets for MoE layer `l`: the f32 gather, its requant into the gate plane's feed, the three expert tiles over
+//! the quantized rows, and the act + requant of the hidden rows into the down plane's feed
+[arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-moe-q8-chain")]
+def private pf_moe_q8_layer_sets(l : int64; pe1, pe3, pe2 : tuple<wq : uint64; ws : uint64; wqb : int64; wsb : int64>) {
+    var L & = unsafe(g_rd.layers[l])
+    let np = g_rd.pf_np
+    let dim = g_rd.dim
+    let nfe = g_rd.nfe
+    let nk = g_rd.pf_nk
+    let gq = (nk + TILE_READ_SLACK) * dim
+    let gs = (nk + TILE_READ_SLACK) * (dim / 32l) * 4l
+    let y_bytes = nk * nfe * 4l
+    verify(kq_batch_cls_ensure(L.fe1, false) || L.fe1 == int(KqFmt.q8), "vk prefill: the Q8-fed chain's gate tile must engage")
+    verify(kq_batch_cls_ensure(L.fe3, false) || L.fe3 == int(KqFmt.q8), "vk prefill: the Q8-fed chain's up tile must engage")
+    verify(kq_batch_cls_ensure(L.fe2, false) || L.fe2 == int(KqFmt.q8), "vk prefill: the Q8-fed chain's down tile must engage")
+    L.pf_gather_set = set_moe_gather_f32_cls(fixed_array(g_rd.pf_xb, g_rd.pf_minv, g_rd.pf_mxg32),
+        fixed_array(np * dim * 4l, nk * 4l, nk * dim * 4l), fixed_array(VHZ_XB, VHZ_MRT, VHZ_MXG))
+    L.pf_grq_set = set_rq_cls(fixed_array(g_rd.pf_mxg32, g_rd.pf_mgq, g_rd.pf_mgs), fixed_array(nk * dim * 4l, gq, gs),
+        fixed_array(VHZ_MXG, VHZ_MXG, VHZ_MXG))
+    L.pf_e1_set = pf_q8_tile_set(L.fe1, fixed_array(pe1.wq, pe1.ws, g_rd.pf_msch1, g_rd.pf_mgq, g_rd.pf_mgs, g_rd.pf_my1),
+        fixed_array(pe1.wqb, pe1.wsb, BATCH_META_BYTES, gq, gs, y_bytes), fixed_array(0u, 0u, VHZ_MRT, VHZ_MXG, VHZ_MXG, VHZ_GATE))
+    L.pf_e3_set = pf_q8_tile_set(L.fe3, fixed_array(pe3.wq, pe3.ws, g_rd.pf_msch3, g_rd.pf_mgq, g_rd.pf_mgs, g_rd.pf_my2),
+        fixed_array(pe3.wqb, pe3.wsb, BATCH_META_BYTES, gq, gs, y_bytes), fixed_array(0u, 0u, VHZ_MRT, VHZ_MXG, VHZ_MXG, VHZ_UP))
+    if (g_rd.exps_bias) {   //! the biased act: each bucket row's expert (the schedule's map) names its gate and up bias rows
+        L.pf_eact_set = set_q8_actrq_b_cls(fixed_array(g_rd.pf_my1, g_rd.pf_my2, g_gpu.hq_dev, g_gpu.hs_dev, g_rd.moe_gb_dev, g_rd.moe_ub_dev, g_rd.pf_bex),
+            fixed_array(y_bytes, y_bytes, BATCH_HQ_BYTES, BATCH_HS_BYTES, g_rd.moe_gub_bytes, g_rd.moe_gub_bytes, nk * 4l),
+            fixed_array(VHZ_GATE, VHZ_UP, VHZ_HQ, VHZ_HQ, 0u, 0u, VHZ_MRT))
+    } else {
+        L.pf_eact_set = set_actrq_cls(fixed_array(g_rd.pf_my1, g_rd.pf_my2, g_gpu.hq_dev, g_gpu.hs_dev),
+            fixed_array(y_bytes, y_bytes, BATCH_HQ_BYTES, BATCH_HS_BYTES), fixed_array(VHZ_GATE, VHZ_UP, VHZ_HQ, VHZ_HQ))
+    }
+    L.pf_e2_set = pf_q8_tile_set(L.fe2, fixed_array(pe2.wq, pe2.ws, g_rd.pf_msch2, g_gpu.hq_dev, g_gpu.hs_dev, g_rd.pf_mdn),
+        fixed_array(pe2.wqb, pe2.wsb, BATCH_META_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES, nk * dim * 4l), fixed_array(0u, 0u, VHZ_MRT, VHZ_HQ, VHZ_HQ, VHZ_MDN))
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block"), arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-window-chain")]
@@ -694,20 +781,49 @@ def private pf_host_cut(var raw : VkCommandBuffer&; var next : VkCommandBuffer; 
     cmd_copy_range(raw, g_rd.pf_hacc_host.buf, row0 * dim * 4l, g_rd.pf_hacc_dev, row0 * dim * 4l, (wlen - row0) * dim * 4l)
 }
 
+//! the Q8-fed chain's expert GEMMs over the gathered rows: their requant to the gate plane's feed, the gate and up tiles, the
+//! act + requant to the down plane's feed, the down tile into the routed rows the combine reads
+[arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-moe-q8-chain")]
+def private pf_moe_q8_experts(raw : VkCommandBuffer; var h : VkHaz; l, nk : int64; bounds : tuple<gu : int64; dn : int64; mgu : int64; mdn : int64>) {
+    var L & = unsafe(g_rd.layers[l])
+    let dim = g_rd.dim
+    let nfe = g_rd.nfe
+    let ne = uint(g_rd.ne)
+    rq_enc(raw, h, L.pf_grq_set, kq_sb(L.fe1), 0l, nk * dim)
+    pfq_ts(raw)
+    var pc1 = BatchArgs(n = uint(dim), d = uint(nfe), map_off = uint(PF_MOE_MAP_OFF), ksplit = 0u)
+    pf_q8_tile_enc(L.fe1, raw, h, L.pf_e1_set, pc1, bounds.gu)
+    pfq_ts(raw)
+    pf_q8_tile_enc(L.fe3, raw, h, L.pf_e3_set, pc1, bounds.gu)
+    pfq_ts(raw)
+    var pca = ActArgs(nelem = uint(nk * nfe), act = act_code(g_rd.act_oai, g_rd.is_gelu), bias_on = g_rd.exps_bias ? 1u : 0u,
+        gboff = uint(L.router_slot) * ne * uint(nfe), uboff = uint(L.router_slot) * ne * uint(nfe), brow = uint(nfe))
+    if (g_rd.exps_bias) {
+        pca.nblk = uint(nk * nfe / 32l)
+        enc_q8_actrq_b_cls(raw, h, L.pf_eact_set, pca, rq_wgs(false, nk * nfe))
+    } else {
+        actrq_enc(raw, h, L.pf_eact_set, kq_sb(L.fe2), pca, nk * nfe)
+    }
+    pfq_ts(raw)
+    var pc2 = BatchArgs(n = uint(nfe), d = uint(dim), map_off = uint(PF_MOE_MAP_OFF), ksplit = 0u)
+    pf_q8_tile_enc(L.fe2, raw, h, L.pf_e2_set, pc2, bounds.dn)
+    pfq_ts(raw)
+}
+
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block")]
 def private pf_moe_block(raw : VkCommandBuffer; var h : VkHaz; l, wlen : int64) {
     var L & = unsafe(g_rd.layers[l])
     let dim = g_rd.dim   // nolint:LINT021 — the push words take the int64 geometry narrowed
-    let ne = g_rd.ne   // nolint:LINT021 — the push words take the int64 geometry narrowed
+    let ne = g_rd.ne
     let k = g_rd.k
     let nfe = g_rd.nfe
     let ner = uint(g_rd.ner)
     let nk = wlen * k
     let addrms_set = int(l * PF_ROLES) + 8
     pf_moe_router(raw, h, l, wlen)
-    var pct = TopkArgs(ne = uint(ne), k = uint(k), norm = g_rd.norm_topk ? 1u : 0u, lstride = ner, wscale = g_rd.wscale,
-        dsoff = L.moe_g4 ? uint(L.router_slot * ne) : NO_DSCALE, rbias_on = g_rd.router_bias ? 1u : 0u, rboff = uint(L.router_slot * ne))
-    enc_topk_rows_cls(raw, h, L.pf_topk_set, pct, wlen)
+    var pct = GkTopKArgs(ne = uint(ne), k = uint(k), norm = g_rd.norm_topk ? 1u : 0u, lstride = ner, wscale = g_rd.wscale,
+        dsoff = L.moe_g4 ? uint(L.router_slot * ne) : GK_NO_DSCALE, rbias_on = g_rd.router_bias ? 1u : 0u, rboff = uint(L.router_slot * ne))
+    topk_rows_enc(ne, raw, h, L.pf_topk_set, pct, wlen)
     pfq_ts(raw)
     if (L.moe_g4) {   //! the routed feed: x under the routed branch's pre norm, the rows the gather reads
         var pcn = ArArgs(dim = uint(dim), add_on = 0u, woff = uint(rd_norm_off(l, RD_NORM_PRE_FFN2)), eps = g_rd.eps, ascale = 1.0)
@@ -719,15 +835,23 @@ def private pf_moe_block(raw : VkCommandBuffer; var h : VkHaz; l, wlen : int64) 
     let tce = CM2_TC_E
     let map_m_gu = uint(PF_MOE_MAP_OFF + bounds.gu)   //! the m dispatch's maps follow the s dispatch's
     let map_m_dn = uint(PF_MOE_MAP_OFF + bounds.dn)
-    var pcs = SchedArgs(nk = uint(nk), ne = uint(ne), wt_gu = uint((nfe + 127l) / 128l), wt_dn = uint((dim + 127l) / 128l),
+    let wcol = g_rd.pf_moe_q8 ? 32u : 128u   //! the expert tiles' output columns: the sdot4 tile's 32, the cm2 and KHR tiles' 128
+    var pcs = SchedArgs(nk = uint(nk), ne = uint(ne), wt_gu = (uint(nfe) + wcol - 1u) / wcol, wt_dn = (uint(dim) + wcol - 1u) / wcol,
+        s_only = g_rd.pf_moe_q8 ? 1u : 0u,
         map_off = uint(PF_MOE_MAP_OFF), map_off_mgu = map_m_gu, map_off_mdn = map_m_dn,
         bound_gu = uint(bounds.gu), bound_dn = uint(bounds.dn), bound_mgu = uint(bounds.mgu), bound_mdn = uint(bounds.mdn),
         base1 = uint(arena_local_blk(L.be1)), stride1 = uint(nfe * dim / kq_unit(L.fe1)),
         base3 = uint(arena_local_blk(L.be3)), stride3 = uint(nfe * dim / kq_unit(L.fe3)),
         base2 = uint(arena_local_blk(L.be2)), stride2 = uint(nfe * dim / kq_unit(L.fe2)))
-    enc_moe_sched_cls(raw, h, L.pf_sched_set, pcs, 1l)
+    moe_sched_enc(ne, raw, h, L.pf_sched_set, pcs)
     pfq_ts(raw)
     var pcg = GatherArgs(n = uint(dim), k = uint(k), r0 = 0u, r1 = uint(nk))
+    if (g_rd.pf_moe_q8) {
+        enc_moe_gather_f32_cls(raw, h, L.pf_gather_set, pcg, nk)
+        pfq_ts(raw)
+        pf_moe_q8_experts(raw, h, l, nk, bounds)
+        return
+    }
     enc_moe_gather_f16_cls(raw, h, L.pf_gather_set, pcg, nk)
     pfq_ts(raw)
     var pc1 = BatchArgs(n = uint(dim), d = uint(nfe), map_off = uint(PF_MOE_MAP_OFF), ksplit = 0u)
@@ -1183,12 +1307,15 @@ def private pf_head_setup : bool {
     let e6 = pf_f16_feed(g_rd.head_eh_fmt)
     if (q6 && g_rd.pf_xf == 0ul) return pf_head_decline("the head's q/k/v planes take the f16 feed and the chain carries no f16 feed plane")
     if (!e6 && kq_sb(g_rd.head_eh_fmt) && !ensure_cls_q8k_rq()) return pf_head_decline("the eh_proj plane's Q8_K feed has no requant class")
+    if (!ensure_cat2_cls()) return pf_head_decline("the head rows' cat class did not build")
     let catb = np * 2l * dim * 4l
     if (!vk_range_ok(catb)) return pf_head_decline("the head rows' cat plane ({catb} bytes over the {np}-row window, the widest of the head's planes) passes the device's storage range {vk_max_storage_range()}")
     g_rd.head_pf_wemb = make_device_buf(np * dim * 4l)
     g_rd.head_pf_hsrc = make_device_buf(np * dim * 4l)
     g_rd.head_pf_hcos = make_device_buf(np * g_rd.cos_elems * 4l)
     g_rd.pf_sets[hb + 8] = pf_head_cat_set(1l)
+    g_rd.head_pf_s_cat2 = set_cat2_cls(fixed_array(g_rd.head_pf_cat, g_rd.pf_xb2, g_rd.pf_ffnout), fixed_array(catb, np * dim * 4l, np * dim * 4l),
+        fixed_array(VHZ_ATT, VHZ_XB2, VHZ_FFO))
     let normbytes = g_rd.norms_bytes
     let xb = np * dim * 4l
     g_rd.pf_sets[hb + 6] = set_cls_ar(fixed_array(g_rd.head_pf_wemb, g_rd.head_pf_wemb, g_rd.norms_dev, g_rd.pf_xb2),
@@ -1214,6 +1341,8 @@ def private pf_hc_head_setup : bool {
     let catb = np * hc * 2l * dim * 4l
     if (!vk_range_ok(catb)) return pf_head_decline("the hc head rows' cat plane ({catb} bytes: {hc} streams a row over the {np}-row window) passes the device's storage range {vk_max_storage_range()}")
     g_rd.pf_sets[hb + 8] = pf_head_cat_set(hc)
+    g_rd.head_pf_s_cat2_hc = set_cat2_cls(fixed_array(g_rd.head_pf_cat, g_rd.pf_xb2, g_rd.pf_hcxn), fixed_array(catb, np * dim * 4l, np * hcd * 4l),
+        fixed_array(VHZ_ATT, VHZ_XB2, VHZ_XB2))
     g_rd.head_pf_hsrc_w = make_device_buf(np * hcd * 4l)
     g_rd.head_pf_wsm = make_device_buf(np * hcd * 4l)
     g_rd.head_pf_s_hnorm = set_hc_norm_cls(fixed_array(g_rd.head_pf_hsrc_w, g_rd.pf_hcxn, g_rd.hcn_dev),
@@ -1234,22 +1363,20 @@ def private pf_hc_head_warm(raw : VkCommandBuffer; var h : VkHaz; w0, wlen, pos0
     let wrowb = hcd * 4l
     let prev_row = w0 > 0l ? 1l : 0l
     let nh = wlen - 1l + prev_row
-    let src_row0 = 1l - prev_row
+    let src_row0 = uint(1l - prev_row)
     var L & = unsafe(g_rd.head)
     let hb = pf_head_block()
     let hbn = uint(g_rd.head_norm_base)
     if (nh > 0l) {
         vhz_dep(raw, h, VHZ_X, VHZ_GATE, true)
         cmd_copy_range(raw, g_rd.pf_hcres, 0l, g_rd.head_pf_hsrc_w, wrowb, (wlen - 1l) * wrowb)
-        var pcn = HcNormArgs(dim = uint(dim), hc = uint(hc), woff = uint(g_rd.hc_hnorm_row * hcd), row0 = uint(src_row0), eps = g_rd.eps)
+        var pcn = GkHcNormArgs(dim = uint(dim), hc = uint(hc), woff = uint(g_rd.hc_hnorm_row * hcd), row0 = src_row0, eps = g_rd.eps)
         enc_hc_norm_cls(raw, h, g_rd.head_pf_s_hnorm, pcn, nh * hc)
-        var pce = ArArgs(dim = uint(dim), add_on = 0u, woff = hbn + uint(RDEC_HEAD_ENORM * dim), eps = g_rd.eps, ascale = 1.0, row0 = uint(src_row0))
+        var pce = ArArgs(dim = uint(dim), add_on = 0u, woff = hbn + uint(RDEC_HEAD_ENORM * dim), eps = g_rd.eps, ascale = 1.0, row0 = src_row0)
         enc_cls_ar(raw, h, g_rd.head_pf_s_enorm, pce, nh)
-        vhz_dep(raw, h, VHZ_XB2, VHZ_ATT, true)
-        for (c in range64(hc)) {
-            cmd_copy_rows(raw, g_rd.pf_xb2, src_row0 * rowb, rowb, g_rd.head_pf_cat, c * nh * 2l * rowb, 2l * rowb, rowb, nh)
-            cmd_copy_rows(raw, g_rd.pf_hcxn, (src_row0 * hc + c) * rowb, wrowb, g_rd.head_pf_cat, c * nh * 2l * rowb + rowb, 2l * rowb, rowb, nh)
-        }
+        var pcc = GkCat2Args(d = uint(dim), rows = uint(nh * hc), rep = uint(hc), smaj = 1u, np = uint(nh), a0 = src_row0,
+            b0 = src_row0 * uint(hc))
+        enc_cat2_cls(raw, h, g_rd.head_pf_s_cat2_hc, pcc, (nh * hc * dim + 255l) / 256l)
         pf_head_eh_enc(raw, h, nh, hc, g_rd.head_pf_wsm, np * hcd * 4l)
     }
     //! the next window's prev_row row lands in slot 0 only after the norm above read the previous one there
@@ -1295,7 +1422,7 @@ def private pf_head_kv_store(raw : VkCommandBuffer; var h : VkHaz; L : RLayer; n
         let hsmax = g_rd.head_size   // nolint:LINT021 — the q/k norm rows sit at the widest class's stride; the row offset multiplies run 64-bit before the push-field narrow
         let qkw = rd_norm_final() + dim   // nolint:LINT021 — the head's q/k slot sits at index n_layers; the row offset multiplies run 64-bit before the push-field narrow
         //! the warm projects no q row, so the norm takes the k (and v) groups alone: no q group is dispatched
-        var pcn = QkRmsArgs(hs = uint(hs), nh = 0u, nkvh = uint(nkvh), qstride = uint(g_rd.q_gated ? 2 * qd : qd), kstride = uint(kvd), kbase = 0u,
+        var pcn = GkQkRmsArgs(hs = uint(hs), nh = 0u, nkvh = uint(nkvh), qstride = uint(g_rd.q_gated ? 2 * qd : qd), kstride = uint(kvd), kbase = 0u,
             qwoff = uint(qkw + g_rd.n_layers * 2l * hsmax), kwoff = uint(qkw + (g_rd.n_layers * 2l + 1l) * hsmax),
             eps = g_rd.eps, qhs = uint(qhs), vfk = L.vfk ? 1u : 0u, vnorm = L.vnorm ? 1u : 0u, vbase = voff)
         enc_qk_rms_cls(raw, h, g_rd.pf_sets[hb + 15], pcn, nh * (nkvh + vgroups))
@@ -1324,21 +1451,20 @@ def private pf_head_warm(raw : VkCommandBuffer; var h : VkHaz; w0, wlen, pos0 : 
     let carry = w0 > 0l ? 1l : 0l
     let nh = wlen - 1l + carry
     return if (nh <= 0l)
-    let src_row0 = 1l - carry   // head row j reads the window's row j + 1 - carry of the shifted planes
+    let src_row0 = uint(1l - carry)   // head row j reads the window's row j + 1 - carry of the shifted planes
     var L & = unsafe(g_rd.head)
     let hb = pf_head_block()
     let hbn = uint(g_rd.head_norm_base)
     vhz_dep(raw, h, VHZ_XB, VHZ_GATE, true)
     cmd_copy_range(raw, g_rd.pf_xb, 0l, g_rd.head_pf_hsrc, rowb, (wlen - 1l) * rowb)
-    var pch = ArArgs(dim = uint(dim), add_on = 0u, woff = hbn + uint(RDEC_HEAD_HNORM * dim), eps = g_rd.eps, ascale = 1.0, row0 = uint(src_row0))
+    var pch = ArArgs(dim = uint(dim), add_on = 0u, woff = hbn + uint(RDEC_HEAD_HNORM * dim), eps = g_rd.eps, ascale = 1.0, row0 = src_row0)
     enc_cls_ar(raw, h, g_rd.pf_sets[hb + 7], pch, nh)
     vhz_dep(raw, h, VHZ_XB, VHZ_GATE, true)
     cmd_copy_range(raw, g_rd.pf_xb, (wlen - 1l) * rowb, g_rd.head_pf_hsrc, 0l, rowb)
-    var pce = ArArgs(dim = uint(dim), add_on = 0u, woff = hbn + uint(RDEC_HEAD_ENORM * dim), eps = g_rd.eps, ascale = 1.0, row0 = uint(src_row0))
+    var pce = ArArgs(dim = uint(dim), add_on = 0u, woff = hbn + uint(RDEC_HEAD_ENORM * dim), eps = g_rd.eps, ascale = 1.0, row0 = src_row0)
     enc_cls_ar(raw, h, g_rd.pf_sets[hb + 6], pce, nh)
-    vhz_dep(raw, h, VHZ_XB2 | VHZ_FFO, VHZ_ATT, true)
-    cmd_copy_rows(raw, g_rd.pf_xb2, src_row0 * rowb, rowb, g_rd.head_pf_cat, 0l, 2l * rowb, rowb, nh)
-    cmd_copy_rows(raw, g_rd.pf_ffnout, src_row0 * rowb, rowb, g_rd.head_pf_cat, rowb, 2l * rowb, rowb, nh)
+    var pcc = GkCat2Args(d = uint(dim), rows = uint(nh), a0 = src_row0, b0 = src_row0)
+    enc_cat2_cls(raw, h, g_rd.head_pf_s_cat2, pcc, (nh * dim + 255l) / 256l)
     pf_head_eh_enc(raw, h, nh, 1l, g_rd.pf_x, np * dim * 4l)
     var pca = ArArgs(dim = uint(dim), add_on = 0u, woff = hbn + uint(RDEC_HEAD_ATT * dim), eps = g_rd.eps, ascale = 1.0)
     enc_cls_ar(raw, h, g_rd.pf_sets[pf_prologue_block()], pca, nh)
@@ -1415,7 +1541,7 @@ def private pf_qkn_rope_enc(raw : VkCommandBuffer; var h : VkHaz; l : int64; vof
     let hsmax = g_rd.head_size   // nolint:LINT021 — the q/k norm rows sit at the widest class's stride; the row offset multiplies run 64-bit before the push-field narrow
     let nlfin = rd_norm_final()   // nolint:LINT021 — the norm row offsets multiply 64-bit before the push-field narrow
     for (sg in g_pf_wsegs) {
-        var pcf = QknRopeArgs(qd = uint(L.qd), kvd = uint(L.kvd), hs = uint(hs), half = uint(L.rot / 2l),
+        var pcf = GkQknRopeArgs(qd = uint(L.qd), kvd = uint(L.kvd), hs = uint(hs), half = uint(L.rot / 2l),
             neox = g_rd.neox ? 1u : 0u, nh = uint(g_rd.n_heads), layerbase = uint(rd_mir_base(L, sg.region)),
             qwoff = uint(nlfin + dim + l * 2l * hsmax), kwoff = uint(nlfin + dim + (l * 2l + 1l) * hsmax),
             eps = g_rd.eps, qstride = uint(qhs), boff = uint(L.boff), hasb = g_rd.has_bias ? 1u : 0u, cbase = uint(L.cbase),
@@ -1468,6 +1594,7 @@ def vk_rdec_head_warm_rows : int64 => g_rd != null ? g_rd.pf_head_rows : 0l
 //! (cos_batch, [npos x hs]) -> the last row's logits, filling the selected mirror region at positions [pos0, pos0 + npos).
 [hot_path]   // the per-window resident prefill — encode + one submit per window
 def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; ple_rows : array<float>; ple_raw : bool; npos, pos0 : int64; var logits : array<float>; experts : RdecHostExpertsRowsFn) {
+    rd_chain_settle()
     let noids : array<int64>
     vk_demotion_check("prefill")
     assert(!ple_raw || g_rd.ple_gpu, "vk_rdec_prefill: raw per-layer-embedding rows without the projection on device")
@@ -1519,6 +1646,7 @@ def vk_rdec_set_ple_proj(w : array<float>; pnorm : array<float>; all : int64) : 
 
 [hot_path, arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
 def vk_rdec_prefill_ids(tokens : array<int64>; emb_scale : float; cos_batch : array<float>; npos, pos0 : int64; var logits : array<float>; experts : RdecHostExpertsRowsFn) {
+    rd_chain_settle()
     verify(g_rd != null && rd_emb_on(), "vk_rdec_prefill_ids without a placed token table")
     let nox : array<float>
     vk_demotion_check("prefill")
@@ -1531,6 +1659,7 @@ def vk_rdec_prefill_ids(tokens : array<int64>; emb_scale : float; cos_batch : ar
 [hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-segments")]
 def vk_rdec_prefill_segs(x_batch : array<float>; tokens : array<int64>; use_ids : bool; emb_scale : float; cos_batch : array<float>;
                          segs : array<RdecPfSeg>; var logits : array<float>; experts : RdecHostExpertsRowsFn) {
+    rd_chain_settle()
     assert(g_rd != null && !empty(segs), "vk_rdec_prefill_segs: no driver, or no segment")
     let kvq = rd_kv_block_codec()
     assert(g_rd.ple == 0l && !g_rd.hc && !g_rd.experts_host && !kvq,
@@ -1550,6 +1679,7 @@ def vk_rdec_prefill_segment_windows : int64 => g_rd != null ? g_rd.pf_seg_window
 //! After a resident prefill, hand recurrent layer `l`'s device slot to the session `stp`/`histp` name (valid, dirty, bound)
 [arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command")]
 def vk_rdec_prefill_dn_own(l : int64; stp : float?; histp : float?) {
+    rd_chain_settle()
     if (g_gpu != null && g_gpu.dry) {
         return
     }
@@ -1711,7 +1841,7 @@ def private pf_hc_mix(raw : VkCommandBuffer; var h : VkHaz; site, wlen : int64; 
     let lr = g_rd.hc_lr
     let rows = head ? 1l : wlen
     let S & = unsafe(g_rd.hc_sites[site])
-    var pcn = HcNormArgs(dim = uint(dim), hc = uint(hc), woff = uint(site * hcd), row0 = uint(head ? wlen - 1l : 0l), eps = g_rd.eps)
+    var pcn = GkHcNormArgs(dim = uint(dim), hc = uint(hc), woff = uint(site * hcd), row0 = uint(head ? wlen - 1l : 0l), eps = g_rd.eps)
     enc_hc_norm_cls(raw, h, g_rd.pf_s_hc_norm, pcn, rows * hc)
     if (!head) {
         router_gemm_enc(raw, h, g_rd.pf_s_hc_inj, rows, hc, hcd, site * hc * hcd)
@@ -1726,7 +1856,7 @@ def private pf_hc_mix(raw : VkCommandBuffer; var h : VkHaz; site, wlen : int64; 
     let pu = arena_planes(q8, S.bup)
     pf_gemm_enc(raw, h, g_rd.pf_hc_meta0 + int(site * 2l + 1l), q8, pu.wq, pu.ws, g_gpu.hq_dev, g_gpu.hs_dev, g_rd.pf_hcup,
         pu.wqb, pu.wsb, BATCH_HQ_BYTES, BATCH_HS_BYTES, np * hcd * 4l, VHZ_HQ, VHZ_UP, lr, hcd, S.bup, rows, false, 0l, 0l, false)
-    var pcm = HcMixArgs(dim = uint(dim), hc = uint(hc), rows = uint(rows))
+    var pcm = GkHcMixArgs(dim = uint(dim), hc = uint(hc), rows = uint(rows))
     enc_hc_mix_cls(raw, h, g_rd.pf_s_hc_mix, pcm, (rows * dim + 255l) / 256l)
 }
 
@@ -1735,7 +1865,7 @@ def private pf_hc_scatter(raw : VkCommandBuffer; var h : VkHaz; L : RLayer; wlen
     let hcd = g_rd.hc_n * g_rd.dim
     let moe = ffn && L.moe
     let rows = wlen - row0
-    var pcc = HcCombArgs(dim = uint(g_rd.dim), hc = uint(g_rd.hc_n), moe_on = moe ? 1u : 0u, sh_on = (moe && has_dense_triple(L)) ? 1u : 0u,
+    var pcc = GkHcCombArgs(dim = uint(g_rd.dim), hc = uint(g_rd.hc_n), moe_on = moe ? 1u : 0u, sh_on = (moe && has_dense_triple(L)) ? 1u : 0u,
         gated = (moe && g_rd.sh_gated) ? 1u : 0u, rows = uint(rows), row0 = uint(row0), lstride = uint(g_rd.ner))
     enc_hc_comb_cls(raw, h, ffn ? g_rd.pf_s_hc_comb_f : g_rd.pf_s_hc_comb_a, pcc, (rows * hcd + 255l) / 256l)
 }
@@ -1757,9 +1887,9 @@ def private pf_hc_side(raw : VkCommandBuffer; var h : VkHaz; wlen, pos0w : int64
     let pv = arena_planes(q8, g_rd.ple_bval)
     pf_gemm_enc(raw, h, mk + 1, q8, pv.wq, pv.ws, g_rd.pf_hcembq, g_rd.pf_hcembs, g_rd.pf_pleval,
         pv.wqb, pv.wsb, np * ind, np * (ind / Q8_BLOCK_ELEMS) * 4l, np * dim * 4l, VHZ_XQ, VHZ_ATT, ind, dim, g_rd.ple_bval, wlen, false, 0l, 0l, false)
-    var pcg = PleGateArgs(dim = uint(dim), hc = uint(hc), nrows = uint(nrows), rows = uint(wlen), pos0 = uint(pos0w), eps = g_rd.eps, inv_sq = 1.0 / sqrt(float(dim)))
+    var pcg = GkPleGateArgs(dim = uint(dim), hc = uint(hc), nrows = uint(nrows), rows = uint(wlen), pos0 = uint(pos0w), eps = g_rd.eps, inv_sq = 1.0 / sqrt(float(dim)))
     enc_ple_gate_cls(raw, h, g_rd.pf_s_ple_gate, pcg, wlen * hc)
-    var pcc = PleConvArgs(dim = uint(dim), hc = uint(hc), kern = uint(g_rd.ngram_kern), dil = uint(g_rd.ngram_dil), rows = uint(wlen), pos0 = uint(pos0w))
+    var pcc = GkPleConvArgs(dim = uint(dim), hc = uint(hc), kern = uint(g_rd.ngram_kern), dil = uint(g_rd.ngram_dil), rows = uint(wlen), pos0 = uint(pos0w))
     enc_ple_conv_cls(raw, h, g_rd.pf_s_ple_conv, pcc, (wlen * hcd + 255l) / 256l)
     let m = min(wlen, nrows)
     vhz_dep(raw, h, VHZ_DNSM, VHZ_DNSM, true)
@@ -1814,7 +1944,7 @@ def private pf_run_hc(x_batch : array<float>; cos_batch : array<float>; side : a
             if (g_rd.hybrid) {
                 pf_dn_zero_fresh(raw, h)
             }
-            var pcinit = HcInitArgs(dim = uint(dim), hc = uint(hc), rows = uint(wlen))
+            var pcinit = GkHcInitArgs(dim = uint(dim), hc = uint(hc), rows = uint(wlen))
             enc_hc_init_cls(raw, h, g_rd.pf_s_hc_init, pcinit, (wlen * hcd + 255l) / 256l)
             for (l in range64(g_rd.n_layers)) {
                 var L & = g_rd.layers[l]
@@ -1951,7 +2081,7 @@ def private pf_attn_block(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : i
         if (g_rd.qk_norm) {
             let nkvh = kvsh ? 0l : kvd / hs   //! no k/v norm groups on a shared-KV layer: nothing of its own to norm or store
             let vgroups = vnorm && !vfk ? nkvh : 0l
-            var pcn = QkRmsArgs(hs = uint(hs), nh = uint(g_rd.n_heads), nkvh = uint(nkvh),
+            var pcn = GkQkRmsArgs(hs = uint(hs), nh = uint(g_rd.n_heads), nkvh = uint(nkvh),
                 qstride = uint(qrow), kstride = uint(kv_merged ? 2l * kvd : kvd), kbase = 0u,
                 qwoff = uint(nlfin + dim + l * 2l * hsmax), kwoff = uint(nlfin + dim + (l * 2l + 1l) * hsmax),
                 eps = g_rd.eps, qhs = uint(qhs), vfk = vfk ? 1u : 0u, vnorm = vnorm ? 1u : 0u, vbase = voff)
@@ -2646,8 +2776,18 @@ def private ensure_batch_set(si : int; ybuf, xqbuf, xsbuf : uint64; xqbytes, xsb
 }
 
 def private ensure_batch_sets3(s1, s3, s2 : int) {
+    ensure_batch_sets3_x2(s1, s3, s2, false)
+}
+
+//! the triple's batch bindings, the second stack (up / z) over the second activation image where `x2`
+def private ensure_batch_sets3_x2(s1, s3, s2 : int; x2 : bool) {
     ensure_batch_set(s1, g_gpu.batch_y1_dev, g_gpu.batch_xq_dev, g_gpu.batch_xs_dev, BATCH_XQ_BYTES, BATCH_XS_BYTES, VHB_ACT, VHB_Y1)
-    ensure_batch_set(s3, g_gpu.batch_y2_dev, g_gpu.batch_xq_dev, g_gpu.batch_xs_dev, BATCH_XQ_BYTES, BATCH_XS_BYTES, VHB_ACT, VHB_Y2)
+    if (x2) {
+        ensure_batch_x2()
+        ensure_batch_set(s3, g_gpu.batch_y2_dev, g_gpu.batch_xq2_dev, g_gpu.batch_xs2_dev, BATCH_XQ_BYTES, BATCH_XS_BYTES, VHB_ACT, VHB_Y2)
+    } else {
+        ensure_batch_set(s3, g_gpu.batch_y2_dev, g_gpu.batch_xq_dev, g_gpu.batch_xs_dev, BATCH_XQ_BYTES, BATCH_XS_BYTES, VHB_ACT, VHB_Y2)
+    }
     ensure_batch_set(s2, g_gpu.batch_y1_dev, g_gpu.hq_dev, g_gpu.hs_dev, BATCH_HQ_BYTES, BATCH_HS_BYTES, VHB_HQ, VHB_Y1)
 }
 
@@ -2683,6 +2823,34 @@ def private upload_batch_acts(xqp : int8 const?; xsp : float const?; r0, rows, n
 def private cmd_copy_batch_acts(raw : VkCommandBuffer; xq_bytes, xs_bytes : int64) {
     cmd_copy_range(raw, g_gpu.staging.buf, 0l, g_gpu.batch_xq_dev, 0l, xq_bytes)
     cmd_copy_range(raw, g_gpu.staging.buf, BATCH_XQ_BYTES, g_gpu.batch_xs_dev, 0l, xs_bytes)
+}
+
+//! the second activation image's device planes and host staging (`moe_gpu_image2`), made at its first use
+def private ensure_batch_x2 {
+    if (g_gpu.batch_x2_ready) {
+        return
+    }
+    g_gpu.batch_xq2_dev = make_device_buf(BATCH_XQ_BYTES)
+    g_gpu.batch_xs2_dev = make_device_buf(BATCH_XS_BYTES)
+    g_gpu.batch_x2_stage = make_host_buf(BATCH_XQ_BYTES + BATCH_XS_BYTES, false)
+    g_gpu.resident_bytes += BATCH_XQ_BYTES + BATCH_XS_BYTES
+    g_gpu.batch_x2_ready = true
+}
+
+//! the second image's rows [r0, r0+rows) staged like `upload_batch_acts`'s
+def private upload_batch_acts2(xqp : int8 const?; xsp : float const?; r0, rows, n, xunit : int64) {
+    unsafe {
+        var sp = reinterpret<uint8?>(g_gpu.batch_x2_stage.mapped)
+        par_memcpy(g_gpu.batch_x2_stage.mapped, reinterpret<void?>(xqp + r0 * n), rows * n)
+        par_memcpy(reinterpret<void?>(sp + BATCH_XQ_BYTES), reinterpret<void?>(xsp + r0 * (n / xunit)), rows * (n / xunit) * 4l)
+    }
+}
+
+//! the second image's chain-head copies, `xq_bytes` / `xs_bytes` of them; none at 0
+def private cmd_copy_batch_acts2(raw : VkCommandBuffer; xq_bytes, xs_bytes : int64) {
+    return if (xq_bytes == 0l)
+    cmd_copy_range(raw, g_gpu.batch_x2_stage.buf, 0l, g_gpu.batch_xq2_dev, 0l, xq_bytes)
+    cmd_copy_range(raw, g_gpu.batch_x2_stage.buf, BATCH_XQ_BYTES, g_gpu.batch_xs2_dev, 0l, xs_bytes)
 }
 
 // build the chunk's schedule: regions clipped to the row window [r0, r1) (row0 re-based to the
@@ -2785,7 +2953,7 @@ def private stack_batch_enc(raw : VkCommandBuffer; var h : VkHaz; si : int; nwg 
         if (fmt == int(KqFmt.q8)) {
             verify(q8_batch_cls_ensure(v), "vk batch: the q8 batch class rail must engage")
             st.batch_cls_sets[v] = q8_batch_cls_set(v, bufs, sizes, gbits)
-        } elif (q40cm || kq_sb(fmt)) {
+        } elif (q40cm || kq_sb(fmt) || cm2_b32_routed(fmt)) {
             verify(kq_batch_cls_ensure(fmt, q40cm), "vk batch: the kq batch class rail must engage")
             st.batch_cls_sets[v] = kq_batch_cls_set_for(fmt, q40cm, bufs, sizes, gbits)
         } else {
@@ -2796,7 +2964,7 @@ def private stack_batch_enc(raw : VkCommandBuffer; var h : VkHaz; si : int; nwg 
     var pc = BatchArgs(n = uint(n), d = uint(d), map_off = uint(st.batch_map_off))
     if (fmt == int(KqFmt.q8)) {
         q8_batch_cls_enc(v, raw, h, st.batch_cls_sets[v], pc, int64(nwg))
-    } elif (q40cm || kq_sb(fmt)) {
+    } elif (q40cm || kq_sb(fmt) || cm2_b32_routed(fmt)) {
         kq_batch_cls_enc_for(fmt, q40cm, raw, h, st.batch_cls_sets[v], pc, int64(nwg))
     } else {
         panic("dasLLAMA vulkan tier: no batch class for stack format {fmt}")
@@ -2807,9 +2975,10 @@ def private cmd_copy_batch_meta(raw : VkCommandBuffer; si : int) {
     cmd_copy_whole(raw, g_gpu.stacks[si].batch_meta.buf, g_gpu.stacks[si].batch_meta_dev, BATCH_META_BYTES)
 }
 
-def private batch_acts_head(raw : VkCommandBuffer; var h : VkHaz; axq_bytes, axs_bytes : int64) {
+def private batch_acts_head(raw : VkCommandBuffer; var h : VkHaz; axq_bytes, axs_bytes : int64; x2q_bytes : int64 = 0l; x2s_bytes : int64 = 0l) {
     vhz_dep(raw, h, 0u, VHB_ACT, true)
     cmd_copy_batch_acts(raw, axq_bytes, axs_bytes)
+    cmd_copy_batch_acts2(raw, x2q_bytes, x2s_bytes)
     vhz_dep(raw, h, 0u, VHB_META, true)
 }
 
@@ -2825,10 +2994,11 @@ def private record_ffn_batch_cmd(s1, s3, s2 : int; nwg_gu, nwg_dn : uint; rows, 
                                  axq_bytes, axs_bytes : int64; is_gelu : bool;
                                  comb_npos : uint = 0u; comb_first : bool = false; comb_last : bool = false;
                                  comb_wi_bytes : int64 = 0l; comb_y_bytes : int64 = 0l;
-                                 comb_n : int64 = 0l; comb_k : int64 = 0l; comb_r0 : int64 = 0l; comb_r1 : int64 = 0l) {
+                                 comb_n : int64 = 0l; comb_k : int64 = 0l; comb_r0 : int64 = 0l; comb_r1 : int64 = 0l;
+                                 x2q_bytes : int64 = 0l; x2s_bytes : int64 = 0l) {
     let raw = g_gpu.batch_cmd
     var h = cmd_open(raw, true)
-    batch_acts_head(raw, h, axq_bytes, axs_bytes)
+    batch_acts_head(raw, h, axq_bytes, axs_bytes, x2q_bytes, x2s_bytes)
     cmd_copy_batch_meta(raw, s1)
     cmd_copy_batch_meta(raw, s3)
     cmd_copy_batch_meta(raw, s2)
@@ -2840,11 +3010,11 @@ def private record_ffn_batch_cmd(s1, s3, s2 : int; nwg_gu, nwg_dn : uint; rows, 
     stack_batch_enc(raw, h, s1, nwg_gu, n, nfe)
     stack_batch_enc(raw, h, s3, nwg_gu, n, nfe)
     // the mid-step form follows the DOWN stack — its GEMM is the consumer of the hidden plane
-    var pca = ActArgs(nelem = uint(rows * nfe), act = is_gelu ? ACT_GELU : ACT_SILU)
-    actrq_enc(raw, h, g_gpu.batch_actrq_set, kq_sb(g_gpu.stacks[s2].fmt), pca, rows * nfe)
+    var pca = ffn_form_act(rows * nfe, nfe, is_gelu)
+    ffn_actrq_enc(raw, h, g_gpu.batch_actrq_set, g_gpu.batch_actrq_b_set, kq_sb(g_gpu.stacks[s2].fmt), pca, rows * nfe)
     stack_batch_enc(raw, h, s2, nwg_dn, nfe, n)
     if (comb_npos > 0u) {
-        var pcc = CombineArgs(n = uint(comb_n), k = uint(comb_k), r0 = uint(comb_r0), r1 = uint(comb_r1))
+        var pcc = GkMoeCombArgs(n = uint(comb_n), k = uint(comb_k), r0 = uint(comb_r0), r1 = uint(comb_r1))
         enc_combine_cls(raw, h, g_gpu.comb_set, pcc, int64(comb_npos))
         if (comb_last) {
             vhz_dep(raw, h, VHB_CY, 0u, true)
@@ -2860,15 +3030,16 @@ def private record_ffn_batch_cmd(s1, s3, s2 : int; nwg_gu, nwg_dn : uint; rows, 
 // kernel folds each chunk's down rows into comb_y_dev, read back once after the last chunk.
 def vk_moe_ffn_batch(var goutp : float?; offs1 : int64 const?; offs3 : int64 const?; offs2 : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; wp : float const?; invp : uint const?; n, nfe, nrows, npos : int64; f1, f3, f2 : int; is_gelu : bool) {
     let (s1, s3, s2) = ffn_stacks(offs1, offs3, offs2, f1, f3, f2)
-    // gate/up share one activation image (forms must agree); down's intermediate is its own unit
-    let kq_in = !kq_block32(f1)
-    verify(!kq_block32(f3) == kq_in,
-        "dasLLAMA vulkan tier: gate/up form mismatch - they share one activation image")
+    // gate/up share one activation image unless the call carries the up plane's own (`moe_gpu_image2`); down's is its own unit
+    let i2 = moe_gpu_image2()
+    verify(i2.on || kq_block32(f3) == kq_block32(f1),
+        "dasLLAMA vulkan tier: gate/up form mismatch with no second image")
     let xunit_in = kq_unit(f1)
+    let xunit_up = kq_unit(f3)
     let xunit_mid = kq_unit(f2)
     ensure_batch_state()
     ensure_batch_acts_cls()
-    ensure_batch_sets3(s1, s3, s2)
+    ensure_batch_sets3_x2(s1, s3, s2, i2.on)
     let comb = npos > 0l
     var comb_k = 0l
     if (comb) {
@@ -2883,7 +3054,7 @@ def vk_moe_ffn_batch(var goutp : float?; offs1 : int64 const?; offs3 : int64 con
             par_memcpy(reinterpret<void?>(cp + COMB_WI_BYTES), reinterpret<void?>(invp), nrows * 4l)
         }
     }
-    let chunk = ffn_chunk_rows(n, nfe, xunit_in, xunit_mid)
+    let chunk = ffn_chunk_rows(n, nfe, min(xunit_in, xunit_up), xunit_mid)
     var r0 = 0l
     while (r0 < nrows) {
         let r1 = min(r0 + chunk, nrows)
@@ -2895,11 +3066,22 @@ def vk_moe_ffn_batch(var goutp : float?; offs1 : int64 const?; offs3 : int64 con
         let nwg2 = fill_batch_meta(s2, offs2, nregions, nfe, n, r0, r1)
         let ts1 = ref_time_ticks()
         upload_batch_acts(xqp, xsp, r0, rows, n, xunit_in)
+        if (i2.on) {
+            upload_batch_acts2(i2.xq, i2.xs, r0, rows, n, xunit_up)
+        }
+        if (moe_gpu_ffn_form().bias_off >= 0l) {
+            ffn_rex_fill(offs1, nregions, r0, r1)
+            if (!g_gpu.batch_actrq_b_ready) {
+                g_gpu.batch_actrq_b_set = ffn_actrq_b_set(g_gpu.batch_y1_dev, g_gpu.batch_y2_dev, BATCH_Y_BYTES, VHB_Y1, VHB_Y2, VHB_HQ)
+                g_gpu.batch_actrq_b_ready = true
+            }
+        }
         let ts2 = ref_time_ticks()
         record_ffn_batch_cmd(s1, s3, s2, nwg1, nwg2, rows, n, nfe, rows * n * 4l, rows * n, rows * (n / xunit_in) * 4l, is_gelu,
             [comb_npos = comb ? uint(npos) : 0u, comb_first = r0 == 0l, comb_last = r1 == nrows,
              comb_wi_bytes = nrows * 4l, comb_y_bytes = npos * n * 4l,
-             comb_n = comb ? n : 0l, comb_k = comb_k, comb_r0 = r0, comb_r1 = r1])
+             comb_n = comb ? n : 0l, comb_k = comb_k, comb_r0 = r0, comb_r1 = r1,
+             x2q_bytes = i2.on ? rows * n : 0l, x2s_bytes = i2.on ? rows * (n / xunit_up) * 4l : 0l])
         let ts3 = ref_time_ticks()
         submit_wait(g_gpu.batch_cmd)
         let ts4 = ref_time_ticks()
@@ -2997,12 +3179,12 @@ def private ensure_dn_cls_sets {
 // the state uploads on the first window and reads back on the last
 def private record_dn_cmd(s_qkv, s_z, s_o : int; nwg_qkv, nwg_z, nwg_out : uint;
                           rows, cd, kd, di, dim, taps, nvh, nkh, ds : int64;
-                          axq_bytes, axs_bytes : int64; first, last, o_kq : bool; eps : float) {
+                          axq_bytes, axs_bytes : int64; first, last, o_kq : bool; eps : float; x2q_bytes : int64 = 0l; x2s_bytes : int64 = 0l) {
     let raw = g_gpu.batch_cmd
     var h = cmd_open(raw, true)
     pfq_begin(raw)
     pfq_ts(raw)   // q0: submit start
-    batch_acts_head(raw, h, axq_bytes, axs_bytes)
+    batch_acts_head(raw, h, axq_bytes, axs_bytes, x2q_bytes, x2s_bytes)
     cmd_copy_batch_meta(raw, s_qkv)
     cmd_copy_batch_meta(raw, s_z)
     cmd_copy_batch_meta(raw, s_o)
@@ -3050,8 +3232,11 @@ def vk_moe_dn(var yp : float?; woq, woz, woo : int64; fq, fz, fo : int;
     let s_qkv = find_stack(woq, fq, "dn qkv")
     let s_z = find_stack(woz, fz, "dn z-gate")
     let s_o = find_stack(woo, fo, "dn out")
-    verify(kq_sb(fq) == kq_sb(fz), "dasLLAMA vulkan tier: the deltanet qkv and z stacks mix activation forms - they share one image")
+    //! the z plane reads the qkv plane's image unless the call carries its own (`moe_gpu_image2`)
+    let i2 = moe_gpu_image2()
+    verify(i2.on || kq_sb(fq) == kq_sb(fz), "dasLLAMA vulkan tier: the deltanet qkv and z stacks mix activation forms with no second image")
     let xunit = kq_unit(fq)
+    let zunit = kq_unit(fz)
     let taps = dconv - 1l
     if (npos == 1l) {   // the decode step — device-resident state, one pre-recorded submit
         vk_moe_dn_step(yp, s_qkv, s_z, s_o, woq, woz, woo, xqp, xsp, bp, gp,
@@ -3065,16 +3250,10 @@ def vk_moe_dn(var yp : float?; woq, woz, woo : int64; fq, fz, fo : int;
     ensure_batch_state()
     ensure_dn_state()
     ensure_dn_cls_sets()
-    ensure_batch_sets3(s_qkv, s_z, s_o)
+    ensure_batch_sets3_x2(s_qkv, s_z, s_o, i2.on)
+    dn_stage_colds(convw, wnormp, ap, dtp, cd, dconv, nvh, ds, eps)
     unsafe {
-        var sp = reinterpret<float?>(g_gpu.dn_smalls.mapped)
-        sp[0] = eps
-        sp[1] = 1.0 / sqrt(float(ds))
-        memcpy(reinterpret<void?>(sp + DN_SM_TAPS), reinterpret<void?>(convw), cd * dconv * 4l)
-        memcpy(reinterpret<void?>(sp + DN_SM_WNORM), reinterpret<void?>(wnormp), ds * 4l)
-        memcpy(reinterpret<void?>(sp + DN_SM_A), reinterpret<void?>(ap), nvh * 4l)
-        memcpy(reinterpret<void?>(sp + DN_SM_DT), reinterpret<void?>(dtp), nvh * 4l)
-        memcpy(reinterpret<void?>(sp + DN_SM_HIST), reinterpret<void?>(histp), cd * taps * 4l)
+        memcpy(reinterpret<void?>(reinterpret<float?>(g_gpu.dn_smalls.mapped) + DN_SM_HIST), reinterpret<void?>(histp), cd * taps * 4l)
         memcpy(g_gpu.dn_state_stage.mapped, reinterpret<void?>(stp), nvh * ds * ds * 4l)
     }
     var qkv_region = fixed_array(woq, 0l, 0l)
@@ -3096,6 +3275,9 @@ def vk_moe_dn(var yp : float?; woq, woz, woo : int64; fq, fz, fo : int;
             nwg_out = fill_batch_meta(s_o, addr(o_region[0]), 1l, di, dim, 0l, rows)
         }
         upload_batch_acts(xqp, xsp, r0, rows, dim, xunit)
+        if (i2.on) {
+            upload_batch_acts2(i2.xq, i2.xs, r0, rows, dim, zunit)
+        }
         unsafe {
             var sp = reinterpret<float?>(g_gpu.dn_smalls.mapped)
             par_memcpy(reinterpret<void?>(sp + DN_SM_BETA), reinterpret<void?>(bp + r0 * nvh), rows * nvh * 4l)
@@ -3103,7 +3285,8 @@ def vk_moe_dn(var yp : float?; woq, woz, woo : int64; fq, fz, fo : int;
         }
         let ts1 = ref_time_ticks()
         record_dn_cmd(s_qkv, s_z, s_o, nwg_qkv, nwg_z, nwg_out, rows, cd, kd, di, dim, taps, nvh, nkh, ds,
-            rows * dim, rows * (dim / xunit) * 4l, r0 == 0l, r0 + rows == npos, kq_sb(fo), eps)
+            rows * dim, rows * (dim / xunit) * 4l, r0 == 0l, r0 + rows == npos, kq_sb(fo), eps,
+            i2.on ? rows * dim : 0l, i2.on ? rows * (dim / zunit) * 4l : 0l)
         submit_wait(g_gpu.batch_cmd)
         let ts2 = ref_time_ticks()
         unsafe {
@@ -3638,7 +3821,7 @@ def private record_ffn_cm2_cmd(s1, s3, s2 : int; nwg_gu, nwg_dn : uint; rows, n,
     var pca = ActArgs(nelem = uint(rows * nfe), act = is_gelu ? ACT_GELU : ACT_SILU, nblk = uint(rows * nfe / 32l))
     enc_actf16_cls(raw, h, g_gpu.batch_actf16_set, pca, (rows * nfe / 4l + 255l) / 256l)
     stack_batch_enc_cm2(raw, h, s2, nwg_dn, nfe, n)
-    var pcc = CombineArgs(n = uint(n), k = k, r0 = uint(r0), r1 = uint(r1))
+    var pcc = GkMoeCombArgs(n = uint(n), k = k, r0 = uint(r0), r1 = uint(r1))
     enc_combine_cls(raw, h, g_gpu.comb_set, pcc, npos)
     if (r1 == nk) {
         vhz_dep(raw, h, VHB_CY, 0u, true)

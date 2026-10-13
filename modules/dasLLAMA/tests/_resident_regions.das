@@ -19,6 +19,7 @@ require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed / gpu_want_auto: 
 require dasllama/dasllama_gpu_resident   // set_gpu_resident_regions_, moe_gpu_resident_active
 require ?vulkan dasllama/dasllama_vulkan_common   // PF_WINDOW, where the module exists
 require ?vulkan dasllama/dasllama_vulkan_decode   // vk_rdec_token_n_rows: the N-row command served the batched cells' rows
+require ?vulkan dasllama/dasllama_vulkan_classes   // GEMV_COL_TILE: the groups cell's column tiles
 require ?vulkan dasllama/dasllama_vulkan_classes
 require ?vulkan dasllama/dasllama_vulkan_prefill   // vk_rdec_prefill_segment_windows: the device-mode tick's segmented-window witness
 require _model_tier public   // models_dir() + model_available() presence/size-tier gate
@@ -196,6 +197,43 @@ def cell_regions_interleaved_single_steps(t : T?; file : string) {
     }
 }
 
+//! two host-cached sessions over ONE region: A prefills and takes a one-row step (rows on the device alone), B prefills and takes
+//! the region, then the two step in turn, each taking it back - every row bit for bit what the session reads alone, the driver's
+//! saved-claim counter up (A's rows read off the device before B's prefill overwrote them) and every call served
+def cell_region_taken_after_decode(t : T?; file : string) {
+    t |> run("two host-cached sessions over one region: the session that loses it keeps its device-only rows") @(t : T?) {
+        with_regions_rig(t, file, RegionsLoad(regions = 1l)) $(tr) {
+            var pa <- prompt_a()
+            var pb <- prompt_b()
+            var al <- alone_runs(tr, pa, pb)
+            let na = long_length(pa)
+            let nb = long_length(pb)
+            let stashes0 = moe_gpu_resident_stashes()
+            var sa <- create_session(tr, mirror_kv_dtype())
+            var sb <- create_session(tr, mirror_kv_dtype())
+            forward_prefill(tr, sa, pa, na, 0l)
+            hold_equal(t, tr, sa.logits, al.ra[0], "session A's prefill")
+            forward(tr, sa, al.fa[0], na)
+            hold_equal(t, tr, sa.logits, al.ra[1], "session A step 0, its rows on the device alone")
+            forward_prefill(tr, sb, pb, nb, 0l)
+            hold_equal(t, tr, sb.logits, al.rb[0], "session B's prefill, taking A's region")
+            t |> success(moe_gpu_resident_stashes() > stashes0, "A's rows were saved as B took the region ({moe_gpu_resident_stashes() - stashes0} saves)")
+            for (st in range64(STEPS - 1l)) {
+                forward(tr, sa, al.fa[st + 1l], na + st + 1l)
+                hold_equal(t, tr, sa.logits, al.ra[st + 2l], "session A step {st + 1l}, the region taken back")
+                forward(tr, sb, al.fb[st], nb + st)
+                hold_equal(t, tr, sb.logits, al.rb[st + 1l], "session B step {st}, the region taken back")
+            }
+            served_every_call(t)
+            delete sa
+            delete sb
+            delete al
+            delete pa
+            delete pb
+        }
+    }
+}
+
 let private WIDE_ROWS = 3072l   //! the token command's RD_WIDE_POS, asserted equal by the wide cell: its prompts run past it
 
 //! the same past the wide position: both prompts run longer than RD_WIDE_POS, so the one-row steps take the token command's
@@ -230,7 +268,7 @@ def private short_control(tr : Model; prompt : array<int64>; n : int64) : array<
 }
 
 //! `prompt` prefilled in one call against the same prompt prefilled as [0, cut) then [cut, n), then four fed steps on both
-def private continue_at(t : T?; tr : Model; n, cut : int64) {
+def private continue_at(t : T?; tr : Model; n, cut : int64; rel : float) {
     var prompt <- prose_ids(n, 0l)
     var head <- [for (i in range64(cut)); prompt[i]]
     var tail <- [for (i in range64(n - cut)); prompt[cut + i]]
@@ -246,13 +284,13 @@ def private continue_at(t : T?; tr : Model; n, cut : int64) {
     if (!empty(split.dn_state_prefix)) {
         t |> equal(split.dn_pos, n, "{n} tokens cut at {cut}: the recurrent state stands at the prompt's end after the continuation")
     }
-    hold_within(t, tr, split.logits, whole.logits, short_logits, "{n} tokens cut at {cut}: the continued prefill against the one-call prefill")
+    hold_within(t, tr, split.logits, whole.logits, short_logits, "{n} tokens cut at {cut}: the continued prefill against the one-call prefill", rel)
     delete short_logits
     for (st in range64(4l)) {
         var before <- logits_of(whole, tr.config.vocab_size)
         forward(tr, whole, feed[st], n + st)
         forward(tr, split, feed[st], n + st)
-        hold_within(t, tr, split.logits, whole.logits, before, "{n} tokens cut at {cut}, step {st}: decoding over the continued rows")
+        hold_within(t, tr, split.logits, whole.logits, before, "{n} tokens cut at {cut}, step {st}: decoding over the continued rows", rel)
         delete before
     }
     delete whole
@@ -263,14 +301,20 @@ def private continue_at(t : T?; tr : Model; n, cut : int64) {
     delete feed
 }
 
+//! `rel`: the bar the continued rows hold against the one-call rows - the split bar, the routed chain's on a routed model (its
+//! windows' expert tiles schedule other row counts, and the router's near-ties part the two)
 def cell_prefill_continues_on_the_device(t : T?; file : string) {
+    cell_prefill_continues_on_the_device(t, file, SPLIT_BAR_REL)
+}
+
+def cell_prefill_continues_on_the_device(t : T?; file : string; rel : float) {
     t |> run("a prefill from a position past zero runs the window chain over the region's rows") @(t : T?) {
         with_regions_rig(t, file) $(tr) {
             assert_pf_window(t)
-            continue_at(t, tr, 57l, 40l)     // a short tail inside the first window
-            continue_at(t, tr, PF_WINDOW_ROWS + 88l, PF_WINDOW_ROWS)   // the cut on the window boundary
-            continue_at(t, tr, PF_WINDOW_ROWS + 388l, 300l)   // the tail runs a whole window from an unaligned start, then a remainder
-            continue_at(t, tr, 42l, 40l)   // a tail shorter than a recurrent layer's conv taps: the ring's leading rows come from the history it continues
+            continue_at(t, tr, 57l, 40l, rel)     // a short tail inside the first window
+            continue_at(t, tr, PF_WINDOW_ROWS + 88l, PF_WINDOW_ROWS, rel)   // the cut on the window boundary
+            continue_at(t, tr, PF_WINDOW_ROWS + 388l, 300l, rel)   // the tail runs a whole window from an unaligned start, then a remainder
+            continue_at(t, tr, 42l, 40l, rel)   // a tail shorter than a recurrent layer's conv taps: the ring's leading rows come from the history it continues
             served_every_call(t)
         }
     }
@@ -294,7 +338,7 @@ def cell_prefill_continues_on_the_device(t : T?; file : string) {
             }
             var before <- logits_of(steps, tr.config.vocab_size)
             forward(tr, steps, turn2[19], 40l + STEPS + 19l)
-            hold_within(t, tr, chat.logits, steps.logits, before, "the second turn through the window chain against the same tokens stepped one by one")
+            hold_within(t, tr, chat.logits, steps.logits, before, "the second turn through the window chain against the same tokens stepped one by one", rel)
             delete before
             served_every_call(t)
             delete chat
@@ -559,7 +603,7 @@ def cell_long_continuation(t : T?; file : string; lc : LongCtx) {
     t |> run("a {lc.split_n}-token prompt cut at {lc.split_cut}: the continued prefill and the steps over it against the one-call prefill") @(t : T?) {
         with_regions_rig(t, file, long_load(lc)) $(tr) {
             assert_pf_window(t)
-            continue_at(t, tr, lc.split_n, lc.split_cut)
+            continue_at(t, tr, lc.split_n, lc.split_cut, SPLIT_BAR_REL)
             served_every_call(t)
         }
     }
@@ -1480,15 +1524,16 @@ def cell_regions_batched_widen(t : T?; file : string; bar : LogitsBar = LogitsBa
     }
 }
 
-//! `rows` sessions over `rows` regions - more than the N-row command steps at once - through STEPS batched steps: the
-//! two-row cell's body over `rows` rows, each step the fewest commands of at most the rows the command steps at once
-//! (`vk_rdec_token_n_rows`), never a row at a time
+//! `rows` sessions over `rows` regions - more than the N-column leaves' eight-column tile, or more than the N-row command
+//! steps at once - through STEPS batched steps: the two-row cell's body over `rows` rows, each step the fewest commands of
+//! at most the rows the command steps at once (`vk_rdec_token_n_rows`), its GEMVs in tiles of eight columns, never a row at a time
 def cell_regions_batched_groups(t : T?; file : string; rows : int64; bar : LogitsBar = LogitsBar.split_bar) {
-    t |> run("{rows} sessions, a region each: a batched step over all of them runs in groups of the command's rows, and every row reads what its session reads alone") @(t : T?) {
+    t |> run("{rows} sessions, a region each: a batched step over all of them runs in groups of the command's rows, its GEMVs in column tiles, and every row reads what its session reads alone") @(t : T?) {
         with_regions_rig(t, file, RegionsLoad(regions = rows)) $(tr) {
             static_if (typeinfo builtin_module_exists(vulkan)) {
                 let at_once = vk_rdec_token_n_rows()
-                t |> success(at_once >= 2l && at_once < rows, "the command steps {at_once} rows at once, fewer than the {rows} rows (the cell measures the groups)")
+                t |> success(at_once >= 2l && (at_once < rows || min(rows, at_once) > int64(GEMV_COL_TILE)),
+                    "the command steps {at_once} rows at once against the {rows} rows: the cell measures the groups or the column tiles past {GEMV_COL_TILE}")
             }
             var prompts <- [for (i in range64(rows)); ramp_ids(40l + i, i, 1000l + 100l * i, 37l + 2l * i, 5000l)]
             var feeds <- [for (i in range64(rows)); ramp_ids(STEPS, i, 2000l, 53l, 4000l)]

@@ -537,14 +537,18 @@ picks up its earlier rows from the region they were left in. ``/v1/stats``
 counts every call the device handed back to the CPU (``gpu_cpu_passes``); a
 slot served this way keeps it empty. The control page's model card says which
 of these a slot got (``served``) and why it got less when it did
-(``served_note``). A recurrent (deltanet) model serves the same way with two
-differences: a prompt prefills in one piece, and a next turn re-prefills its
-whole transcript. A slot with a vision or audio tower keeps host-cached
+(``served_note``). A recurrent (deltanet) model serves the same way, its
+recurrent state kept in the stream's region beside its rows; a recurrent model
+with hyper-connections (Qwen3.8-Flash-Next) differs in two ways: a prompt
+prefills in one piece, and a next turn re-prefills its whole transcript. A slot with a vision or audio tower keeps host-cached
 sessions, and so does a self-speculative slot where any seat of the round (the
 draft head, its verify, a rejected round's rollback) stays on the host. Beneath the driver the per-op rails arm as the
 fallback for a model that does not fit: expert stacks sized automatically
-(resident layers fill the VRAM budget, the rest stream) plus the deltanet,
-attention and dense rails. The config keys ``gpu_layers`` / ``gpu_stream`` are
+(resident layers fill the VRAM budget, the rest stream) plus the deltanet
+rail (each deltanet plane in its own format), the attention rail, the dense
+layers' attention projections and the shared expert, each over its own planes;
+a dense layer's FFN stays on the CPU unless
+``DASLLAMA_GPU_DENSE_FFN=1`` arms the per-op FFN rail. The config keys ``gpu_layers`` / ``gpu_stream`` are
 ``0`` = auto; ``gpu_dn`` / ``gpu_attn`` / ``gpu_dense`` / ``gpu_vram_mb``
 override the rest, and the ``DASLLAMA_GPU_*`` environment variables override
 everything.

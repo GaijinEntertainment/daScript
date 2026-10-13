@@ -284,8 +284,6 @@ def vk_plan_arena_only(t : Model) : bool {
     return arena
 }
 
-//! an expert stack's device format tag: the native-MXFP4 planes carry no per-tensor tag (the loader keeps `experts_mx4`), so the tag is mx4 for every routed stack of such a model
-def private rdec_efmt(t : Model; tags : array<KqFmt>; l : int64) : KqFmt => t.experts_mx4 ? KqFmt.mx4 : fmt_at(tags, l)
 
 //! The emb/cls region packed into `t.embq` / `t.embs` off `src`'s planes, whose offset 0 is `t`'s element `rebase` (0 when
 //! `src` is `t` itself, a job's `woff` for the job view the streaming mint feeds it): q8 as mblob-style 34B interleaved
@@ -310,8 +308,8 @@ def trim_pack_emb(src : Model; var t : Model; rebase : int64) : bool {
         }
     } elif (emb_kq(t)) {
         let f = r.f
-        if (!kq_sb(f)) {
-            to_log(LOG_WARNING, "dasLLAMA trim: emb fmt '{f}' has no kq plane pair - declining\n")
+        if (!kq_sb(f) && !kq_dense_b32(f)) {
+            to_log(LOG_WARNING, "dasLLAMA trim: emb fmt '{f}' has no plane pair - declining\n")
             return false
         }
         let nsb = r.n / kq_elems(f)
@@ -321,8 +319,12 @@ def trim_pack_emb(src : Model; var t : Model; rebase : int64) : bool {
         t.embq |> reserve_resize(nsb * qsb)
         t.embs |> reserve_resize(nsb * ssb)
         unsafe {
-            memcpy(addr<void?>(t.embq[0]), addr<void?>(src.kq[int(f)].q[sb0 * qsb]), nsb * qsb)
-            memcpy(addr<void?>(t.embs[0]), addr<void?>(src.kq[int(f)].s[sb0 * ssb]), nsb * ssb)
+            let qp = kq_sb(f) ? addr<void?>(src.kq[int(f)].q[sb0 * qsb]) : (f == KqFmt.q51 ? addr<void?>(src.q51q[sb0 * qsb])
+                : (f == KqFmt.iq4nl32 ? addr<void?>(src.iq4nl32q[sb0 * qsb]) : addr<void?>(src.q4032q[sb0 * qsb])))
+            let sp = kq_sb(f) ? addr<void?>(src.kq[int(f)].s[sb0 * ssb]) : (f == KqFmt.q51 ? addr<void?>(src.q51s[sb0 * ssb])
+                : (f == KqFmt.iq4nl32 ? addr<void?>(src.iq4nl32s[sb0 * ssb]) : addr<void?>(src.q4032s[sb0 * ssb])))
+            memcpy(addr<void?>(t.embq[0]), qp, nsb * qsb)
+            memcpy(addr<void?>(t.embs[0]), sp, nsb * ssb)
         }
     }
     return true
@@ -340,7 +342,7 @@ def trim_emb_bytes(t : Model) : int64 {
     if (t.emb_q8) {
         return (r.n / Q8_BLOCK_ELEMS) * (Q8_QPB + Q8_SPB)
     }
-    if (emb_kq(t) && kq_sb(r.f)) {
+    if (emb_kq(t) && (kq_sb(r.f) || kq_dense_b32(r.f))) {
         return (r.n / kq_elems(r.f)) * (kq_qsb(r.f) + kq_ssb(r.f))
     }
     return 0l
@@ -387,6 +389,8 @@ def kq_plane_pair(var t : Model; f : KqFmt; blk : block<(var q : array<uint8>; v
         invoke(blk, t.q51q, t.q51s)
     } elif (f == KqFmt.iq4nl32) {
         invoke(blk, t.iq4nl32q, t.iq4nl32s)
+    } elif (f == KqFmt.q4032) {
+        invoke(blk, t.q4032q, t.q4032s)
     } elif (f == KqFmt.mx4) {
         invoke(blk, t.mxq, t.mxs)
     } else {
@@ -400,6 +404,7 @@ def kq_plane_pair_names(f : KqFmt) : tuple<q : string; s : string> {
     if (kq_sb(f)) return (q = kq_plane_name(f, "q"), s = kq_plane_name(f, "s"))
     if (f == KqFmt.q51) return (q = "q51q", s = "q51s")
     if (f == KqFmt.iq4nl32) return (q = "iq4nl32q", s = "iq4nl32s")
+    if (f == KqFmt.q4032) return (q = "q4032q", s = "q4032s")
     if (f == KqFmt.mx4) return (q = "mxq", s = "mxs")
     return (q = "", s = "")
 }
@@ -409,6 +414,24 @@ def kq_plane_pair_names(f : KqFmt) : tuple<q : string; s : string> {
 
 // a plane the dense rail can serve: a format the tier has kernels for, repacked if native-kq
 def private dense_plane_ok(t : Model; f : KqFmt) : bool => (f == KqFmt.q8 || kq_sb(f)) && kq_servable(t, f)
+
+//! a plane the whole-model driver's GEMVs and tiles serve: the dense rail's, or a per-32 plane (its own GEMV and batch stamps)
+def private resident_plane_ok(t : Model; f : KqFmt) : bool => dense_plane_ok(t, f) || kq_dense_b32(f)
+
+//! the planes the per-op rail reads for layer `l`'s shared expert: the planes the load kept (`shexp_plane`) - the expert chain and the
+//! dense GEMM serve every `KqFmt` member, and a gate and up of two activation forms each take their own image (`shexp_gpu_gemms`)
+def private perop_shexp_planes(t : Model; l : int64) : ShexpGpuPlanes {
+    let g = shexp_plane(t, l, 1)
+    let u = shexp_plane(t, l, 3)
+    let d = shexp_plane(t, l, 2)
+    return ShexpGpuPlanes(f1 = int(g.f), f3 = int(u.f), f2 = int(d.f), o1 = g.off, o3 = u.off, o2 = d.off)
+}
+
+//! the per-op rail's shared-expert planes on layer `l` are the load's own (`perop_shexp_planes`) and in the file's format: a cell's census
+def perop_shexp_native(t : Model; l : int64) : bool {
+    let p = perop_shexp_planes(t, l)
+    return p.f1 == int(shexp_plane(t, l, 1).f) && p.f3 == int(shexp_plane(t, l, 3).f) && p.f2 == int(shexp_plane(t, l, 2).f)
+}
 
 // layer l carries a parallel-dense shared expert whose whole w1/w3/w2 triple the tier can serve
 def private dense_shexp_uploadable(t : Model; l : int64) : bool {
@@ -465,13 +488,36 @@ def private resident_expert_ups(t : Model; l : int64) : array<PlaneUp> {
     return <- ups
 }
 
-//! true, logged as the stop of the per-op `walk`, when layer l's expert formats are not the tier's: gate and up share one activation image, down is free
+//! the routed experts' gate and up bias rows of every layer on the tier, for the per-op chain's biased act (its form's row base a
+//! layer is `l x n_expert x n_ff_exp`); false, said once, where the tier refused them - the routed walks then place no stack
+def private perop_upload_expert_bias(t : Model) : bool {
+    let c = t.config
+    let rows = c.n_layers * c.n_expert * c.n_ff_exp
+    var inscope gb <- fblob_rows(t, t.web1_off, rows)
+    var inscope ub <- fblob_rows(t, t.web3_off, rows)
+    let ok = moe_gpu_upload_ffn_bias(gb, ub)
+    if (!ok) {
+        to_log(LOG_WARNING, "dasLLAMA: GPU MoE tier: the routed experts' bias rows were refused - every routed layer stays on the CPU\n")
+    }
+    return ok
+}
+
+//! why the per-op expert chain cannot take layer l's routed stacks; "" when it can: the biased act stores the down's Q8_0 feed alone
+//! (a gate and up of two activation forms each read their own image)
+def tier_expert_decline(t : Model; l : int64) : string {
+    let f1 = expert_fmt(t, t.we1_fmt, l)
+    let f3 = expert_fmt(t, t.we3_fmt, l)
+    let f2 = expert_fmt(t, t.we2_fmt, l)
+    if (!expert_chain_fmt_ok(f1) || !expert_chain_fmt_ok(f3) || !expert_chain_fmt_ok(f2)) return "gate/up/down formats {int(f1)}/{int(f3)}/{int(f2)} outside the expert chain"
+    if (t.config.moe_exps_bias && kq_sb(f2)) return "the biased act has no Q8_K form for the down format {int(f2)}"
+    return ""
+}
+
+//! true, logged as the stop of the per-op `walk`, when layer l's expert stacks are not the chain's (`tier_expert_decline`)
 def private tier_expert_walk_stops(t : Model; l : int64; walk : string) : bool {
-    let f1 = rdec_efmt(t, t.we1_fmt, l)
-    let f3 = rdec_efmt(t, t.we3_fmt, l)
-    let f2 = rdec_efmt(t, t.we2_fmt, l)
-    return false if ((f1 == KqFmt.q8) == (f3 == KqFmt.q8) && (f1 == KqFmt.q8 || (kq_sb(f1) && kq_sb(f3))) && (f2 == KqFmt.q8 || kq_sb(f2)))
-    to_log(LOG_INFO, "dasLLAMA: GPU MoE tier: the {walk} walk stopped at layer {l} - gate/up/down formats {int(f1)}/{int(f3)}/{int(f2)} cannot share the tier's activation image; layers 0..{l} stay on the CPU\n")
+    let why = tier_expert_decline(t, l)
+    return false if (empty(why))
+    to_log(LOG_INFO, "dasLLAMA: GPU MoE tier: the {walk} walk stopped at layer {l} - {why}; layers 0..{l} stay on the CPU\n")
     return true
 }
 
@@ -496,8 +542,8 @@ def private gather_upload_group(t : Model; ups : array<PlaneUp>; mr, kgroup, wbi
 [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#vk-token-gather")]
 def private resident_emb_gather_want(c : Config) : bool => g_env_vulkan.vk_gpu_embed && rdec_prefill_ids_installed() && !c.hyper_conn
 
-//! the format a device gather serves a token table in: q8 or a superblock format
-def private resident_emb_fmt_ok(f : KqFmt) : bool => f == KqFmt.q8 || kq_sb(f)
+//! the format a device gather serves a token table in: q8, a superblock format or a per-32 one
+def private resident_emb_fmt_ok(f : KqFmt) : bool => f == KqFmt.q8 || kq_sb(f) || kq_dense_b32(f)
 
 //! an untied token table's own plane the gather places: its q8 copy or its K-quant plane, in its format at its offset; `on` false
 //! where the table is tied (the classifier's plane serves the gather), has no such plane (an fp32 table: the host embeds), its
@@ -568,14 +614,14 @@ def private resident_hidden(t : Model) : int64 {
 //! layer l's routed expert stack of `kind` (1 gate, 3 up, 2 down): its format, its offset, and one expert's row length and rows
 def private resident_expert_plane(t : Model; l : int64; kind : int) : tuple<f : KqFmt; off : int64; n : int64; rows : int64> {
     let c = t.config
-    if (kind == 1) return (f = rdec_efmt(t, t.we1_fmt, l), off = t.we1_offs[l], n = c.dim, rows = c.n_ff_exp)
-    if (kind == 3) return (f = rdec_efmt(t, t.we3_fmt, l), off = t.we3_offs[l], n = c.dim, rows = c.n_ff_exp)
-    return (f = rdec_efmt(t, t.we2_fmt, l), off = t.we2_offs[l], n = c.n_ff_exp, rows = c.dim)
+    if (kind == 1) return (f = expert_fmt(t, t.we1_fmt, l), off = t.we1_offs[l], n = c.dim, rows = c.n_ff_exp)
+    if (kind == 3) return (f = expert_fmt(t, t.we3_fmt, l), off = t.we3_offs[l], n = c.dim, rows = c.n_ff_exp)
+    return (f = expert_fmt(t, t.we2_fmt, l), off = t.we2_offs[l], n = c.n_ff_exp, rows = c.dim)
 }
 
 //! the gate, up and down formats of layer l's routed experts, as the seats take them
 def private resident_expert_fmts(t : Model; l : int64) : tuple<f1 : int; f3 : int; f2 : int> =>
-    (f1 = int(rdec_efmt(t, t.we1_fmt, l)), f3 = int(rdec_efmt(t, t.we3_fmt, l)), f2 = int(rdec_efmt(t, t.we2_fmt, l)))
+    (f1 = int(expert_fmt(t, t.we1_fmt, l)), f3 = int(expert_fmt(t, t.we3_fmt, l)), f2 = int(expert_fmt(t, t.we2_fmt, l)))
 
 //! what the upload registers a planned plane as; `ResidentPlane.l` names its layer, mixer site or the NextN head (n_layers)
 enum ResidentRole {
@@ -696,7 +742,7 @@ def private resident_head_decline(t : Model) : string {
     if (!rdec_draft_installed()) return "the tier installed no draft seat"
     if (!rdec_carry_installed()) return "the tier installed no carry landing (the draft's hidden rides it)"
     if (t.mtp_ehproj_off < 0l) return "no eh_proj plane"
-    if (!dense_plane_ok(t, t.mtp_ehproj_fmt) || !kq_rows_ok(2l * c.dim, t.mtp_ehproj_fmt)) return "the eh_proj plane's format {t.mtp_ehproj_fmt} has no resident GEMV at width {2l * c.dim}"
+    if (!resident_plane_ok(t, t.mtp_ehproj_fmt) || !kq_rows_ok(2l * c.dim, t.mtp_ehproj_fmt)) return "the eh_proj plane's format {t.mtp_ehproj_fmt} has no resident GEMV at width {2l * c.dim}"
     let why = resident_layer_decline(t, l)
     if (!empty(why)) return why
     if (t.kv_src[l] != l || resident_v_from_k(c, l)) return "it reads another layer's K/V or takes V off its k row"
@@ -711,7 +757,7 @@ def private resident_head_decline(t : Model) : string {
     if (!empty(feats)) return "the draft command has no step for: {feats}"
     let lf = resident_head_fmts(t)
     for (f in [lf.fq, lf.fk, lf.fv, lf.fo, lf.f1, lf.f3, lf.f2]) {
-        if (!dense_plane_ok(t, f)) return "a plane in format {f} the resident GEMVs do not serve"
+        if (!resident_plane_ok(t, f)) return "a plane in format {f} the resident GEMVs do not serve"
     }
     let cq = rdec_quant_class(lf.fq)
     if (cq != rdec_quant_class(lf.fk) || cq != rdec_quant_class(lf.fv) || rdec_quant_class(lf.f1) != rdec_quant_class(lf.f3)) return "its planes mix activation-quant forms"
@@ -890,7 +936,16 @@ def private rdec_scratch_bytes(t : Model) : int64 {
     let nb = RDEC_NROW_MAX
     let pieces = hs > 0l ? (qd / hs) * RDEC_ATTN_SPLIT_CAP * (hs + 2l) * 4l : 0l
     return RDEC_PF_ROWS * (16l * c.dim + 2l * wide + 10l * qd + 12l * kvd
-        + 8l * hid + 4l * resident_cos_elems(c) + 4l * hs) + (c.vocab_size * 4l + pieces) * nb + RDEC_MISC_BYTES + moe + rdec_rollback_bytes(t) + rdec_dn_snap_bytes(t)
+        + 8l * hid + 4l * resident_cos_elems(c) + 4l * hs) + (c.vocab_size * 4l + pieces) * nb + RDEC_MISC_BYTES + moe + rdec_rollback_bytes(t) + rdec_dn_snap_bytes(t) + rdec_chain_snap_bytes(t)
+}
+
+//! the greedy chain's snapshot: one region's recurrent states, charged where the chain is asked at the plan
+[arch(at="../ARCHITECTURE_GPU_VULKAN_LANDING.md#vk-greedy-chain")]
+def private rdec_chain_snap_bytes(t : Model) : int64 {
+    let c = t.config
+    return 0l if (c.recr_mask == 0ul || !rdec_chain_charged())
+    let dng = rdec_dn_geom(t)
+    return resident_recurrent_layers(c) * dng.nvh * dng.ds * dng.ds * 4l
 }
 
 //! the regions' recurrent checkpoints: `RDEC_DN_SNAPS` rows a region, a row every recurrent layer's state and ring pair
@@ -1472,6 +1527,23 @@ struct RdecRegion {
     dn_pos : int64      //!< a parked claim's recurrent position: the region's state slots hold that position's state, which only an adopter of exactly that many rows takes
     snap_pos : int64[RDEC_DN_SNAPS]    //!< the positions the region's checkpoint rows hold the claim's recurrent state at (0 = an empty row)
     snap_used : int64[RDEC_DN_SNAPS]   //!< each row's last save or load: a new checkpoint takes the row least recently touched
+    host_behind : bool   //!< a host-cached owner's cache lacks rows the region holds: whoever takes the region saves them first (`rdec_stash_region`)
+    owner_uid : uint64   //!< the claiming session's uid: a saved claim dies with its session
+}
+
+//! a host-cached claim's rows saved as the region changed hands, kept until the session comes back for them
+struct private RdecStashSpan {
+    l : int64
+    lo : int64
+    hi : int64
+    rowb : int64
+    k : array<uint8>
+    v : array<uint8>
+}
+
+struct private RdecStash {
+    uid : uint64
+    spans : array<RdecStashSpan>
 }
 
 var private g_rdec_regions : array<RdecRegion>
@@ -1487,10 +1559,16 @@ def set_gpu_resident_regions_(n : int64) {
 def gpu_resident_regions_want() : int64 => g_rdec_regions_want
 
 //! The mirror region `s` prefills and decodes in, or -1 when every region holds a live device-home session and the call must pass.
-def private rdec_bind_region(var s : Session) : int64 {
+//! A session that lost its region gets its saved rows back first; a region another host-cached session holds rows in that its
+//! cache lacks has them saved before it changes hands.
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-pass-hydrate")]
+def private rdec_bind_region(t : Model; var s : Session) : int64 {
     var r = s.rdec_region
     let n = long_length(g_rdec_regions)
-    if (!rdec_owns(s, r)) {
+    if (rdec_owns(s, r)) {
+        g_rdec_stash |> erase(s.rdec_gen)   //! the claim it saved went stale as the owner stepped on
+    } else {
+        rdec_unstash(t, s)
         r = -1l
         for (i in range64(n)) {
             continue if (g_rdec_regions[i].pinned)
@@ -1501,6 +1579,9 @@ def private rdec_bind_region(var s : Session) : int64 {
         if (r < 0l) {
             rdec_pass_once(RdecPass.busy, n, 0l)
             return -1l
+        }
+        if (rdec_region_device_only(g_rdec_regions[r])) {
+            rdec_stash_region(t, r)
         }
         s.rdec_region = r
     }
@@ -1522,8 +1603,91 @@ def private rdec_claim(var s : Session; r, cnt : int64) {
     g_rdec_regions[r].head_host = 0l
     g_rdec_regions[r].gen = ++g_rdec_gen_seq
     g_rdec_regions[r].pinned = s.device_kv
+    g_rdec_regions[r].host_behind = false
+    g_rdec_regions[r].owner_uid = s.uid
     s.rdec_gen = g_rdec_gen_seq
     s.rdec_region = r
+}
+
+//! `s`'s cache holds every row its region does (`current`), or lacks some; the region carries the answer for whoever takes it
+def private rdec_host_mark(var s : Session; current : bool) {
+    s.rdec_host_current = current
+    if (rdec_owns(s, s.rdec_region)) {
+        g_rdec_regions[s.rdec_region].host_behind = !current && !s.device_kv
+    }
+}
+
+var private g_rdec_stash : table<int64; RdecStash>   //! the claims saved as their region changed hands, by generation
+var private g_rdec_stashes = 0l   //! claims saved so far
+
+//! The claims the driver saved as their regions changed hands, since the process started: a host-cached session's rows its cache
+//! lacked, read off the device before another session took the region
+def moe_gpu_resident_stashes() : int64 => g_rdec_stashes
+
+//! whether region `reg` holds rows its host-cached owner's cache lacks: the trunk's while the cache is behind, the head's past its count
+def private rdec_region_device_only(reg : RdecRegion) : bool
+    => !reg.pinned && reg.gen != 0l && ((reg.host_behind && reg.cnt > 0l) || reg.head_host < reg.head_cnt)
+
+//! layer `l`'s rows [lo, hi) of the selected region read off the device
+def private rdec_stash_span(c : Config; l, lo, hi : int64) : RdecStashSpan {
+    let rowb = kv_row_bytes(g_rdec_kvdt, layer_kv_dim(c, l))
+    var sp = RdecStashSpan(l = l, lo = lo, hi = hi, rowb = rowb)
+    let bytes = (hi - lo) * rowb
+    sp.k |> reserve_resize(bytes)
+    sp.v |> reserve_resize(bytes)
+    unsafe {   //! the readback writes row `row0` at `kp + row0 * rowb`: the planes stand in from row `lo`
+        rdec_kv_read(l, lo, hi - lo, addr(sp.k[0]) + (-lo * rowb), addr(sp.v[0]) + (-lo * rowb))
+    }
+    return <- sp
+}
+
+//! region `r`'s claim saved before another session takes it: every layer's rows its owner's cache lacks
+[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-pass-hydrate")]
+def private rdec_stash_region(t : Model; r : int64) {
+    let c = t.config
+    let reg = g_rdec_regions[r]
+    var st = RdecStash(uid = reg.owner_uid)
+    rdec_select_region(r)
+    if (reg.host_behind && reg.cnt > 0l) {
+        for (l in range64(c.n_layers)) {
+            continue if (!layer_owns_kv(t, l))
+            st.spans |> emplace <| rdec_stash_span(c, l, 0l, reg.cnt)
+        }
+    }
+    if (reg.head_host < reg.head_cnt) {
+        st.spans |> emplace <| rdec_stash_span(c, c.n_layers, reg.head_host, reg.head_cnt)
+    }
+    g_rdec_stash |> emplace(reg.gen, st)
+    g_rdec_stashes++
+}
+
+//! the rows `s`'s claim had saved, written into its cache: the cache then holds everything its lost region did
+[cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-pass-hydrate")]
+def private rdec_unstash(t : Model; var s : Session) {
+    return if (s.rdec_gen == 0l || !key_exists(g_rdec_stash, s.rdec_gen))
+    let c = t.config
+    g_rdec_stash |> get(s.rdec_gen) $(st) {
+        for (sp in st.spans) {
+            rdec_host_runs(s, c, sp.l, sp.lo, sp.hi) $(row0, nrows : int64; var kp, vp : uint8?) {
+                let off = (row0 - sp.lo) * sp.rowb
+                unsafe {
+                    memcpy(kp + row0 * sp.rowb, addr(sp.k[off]), nrows * sp.rowb)
+                    memcpy(vp + row0 * sp.rowb, addr(sp.v[off]), nrows * sp.rowb)
+                }
+            }
+        }
+    }
+    g_rdec_stash |> erase(s.rdec_gen)
+    s.rdec_host_current = true
+}
+
+//! a released session's saved claim goes with it
+def private rdec_stash_release(uid : uint64) {
+    var gone <- [for (k, v in keys(g_rdec_stash), values(g_rdec_stash)); k; where v.uid == uid]
+    for (k in gone) {
+        g_rdec_stash |> erase(k)
+    }
+    delete gone
 }
 var private g_rdec_kvdt = KVDtype.f16   // the ARMED mirror codec — sessions must match to be served
 var private g_resident_prefill_allowed = true   // multi-stream schedulers pin this off (see set_resident_prefill_allowed_)
@@ -1557,7 +1721,7 @@ def private rdec_hydrate_host(t : Model; var s : Session) {
             continue if (!layer_owns_kv(t, l))   // a shared-KV layer reads its donor's slab, gathered once through the donor
             rdec_host_rows(s, c, l, 0l, cnt, false)
         }
-        s.rdec_host_current = true
+        rdec_host_mark(s, true)
         to_log(LOG_INFO, "dasLLAMA: resident KV hydrated to host ({cnt} positions x {c.n_layers} layers)\n")
     }
     if (s.ple_ring_device) {   //! the n-gram conv ring the device advanced comes home before the CPU rails read it
@@ -1786,7 +1950,7 @@ def private resident_arm_emb(t : Model; plan : ResidentPlan; ple_tbl_placed : bo
 // a plane's activation-quant form: 0 = Q8_0 per-32, 1 = Q8_K superblock
 def private rdec_quant_class(f : KqFmt) : int => kq_sb(f) ? 1 : 0
 
-def private rdec_dn_fmt_ok(f : KqFmt; n : int64) : bool => (f == KqFmt.q8 || kq_sb(f)) && kq_rows_ok(n, f)
+def private rdec_dn_fmt_ok(f : KqFmt; n : int64) : bool => (f == KqFmt.q8 || kq_sb(f) || kq_dense_b32(f)) && kq_rows_ok(n, f)
 
 def private resident_layer_fmts(t : Model; l : int64) : tuple<fq : KqFmt; fk : KqFmt; fv : KqFmt; fo : KqFmt; f1 : KqFmt; f3 : KqFmt; f2 : KqFmt> {
     return (fq = fmt_at(t.wq_fmt, l), fk = fmt_at(t.wk_fmt, l), fv = fmt_at(t.wv_fmt, l),
@@ -1844,7 +2008,7 @@ def resident_unserved_features(c : Config) : string {
         let host = resident_host_experts(c)
         name_list_add(names, c.moe_gate != MoeGate.softmax && c.moe_gate != MoeGate.softmax_weight, "a {c.moe_gate} router")
         name_list_add(names, c.moe_exp_probs, "an expert selection bias")
-        name_list_add(names, !host && c.n_expert > 256l, "{c.n_expert} experts (the select kernels reach 256)")
+        name_list_add(names, !host && c.n_expert > RDEC_EXPERTS_MAX, "{c.n_expert} experts (the select kernels reach {RDEC_EXPERTS_MAX})")
         name_list_add(names, c.n_expert_used > 64l, "{c.n_expert_used} routed experts (the slot metas hold 64)")
     }
     name_list_add(names, c.hyper_conn && !rdec_hc_installed(), "hyper-connection residual (qwen4exp) - the tier installed no hyper-connection seats")
@@ -1861,7 +2025,7 @@ def private resident_shexp_decline(t : Model; l : int64) : string {
         if (l >= long_length(t.w1_offs) || t.w1_offs[l] < 0l || t.w3_offs[l] < 0l || t.w2_offs[l] < 0l) {
             return "layer {l} lacks its dense shared expert's planes"
         }
-        if (!dense_plane_ok(t, lf.f1) || !dense_plane_ok(t, lf.f3) || !dense_plane_ok(t, lf.f2)) {
+        if (!resident_plane_ok(t, lf.f1) || !resident_plane_ok(t, lf.f3) || !resident_plane_ok(t, lf.f2)) {
             return "layer {l}'s dense shared expert carries a format ({int(lf.f1)}/{int(lf.f3)}/{int(lf.f2)}) the dense rail does not serve"
         }
         if (rdec_quant_class(lf.f1) != rdec_quant_class(lf.f3)) {
@@ -1873,7 +2037,7 @@ def private resident_shexp_decline(t : Model; l : int64) : string {
     let s1 = shexp_plane(t, l, 1).f
     let s3 = shexp_plane(t, l, 3).f
     let s2 = shexp_plane(t, l, 2).f
-    if (!dense_plane_ok(t, s1) || !dense_plane_ok(t, s3) || !dense_plane_ok(t, s2)) {
+    if (!resident_plane_ok(t, s1) || !resident_plane_ok(t, s3) || !resident_plane_ok(t, s2)) {
         return "layer {l}'s shared expert carries a format ({int(s1)}/{int(s3)}/{int(s2)}) the dense rail does not serve"
     }
     if (rdec_quant_class(s1) != rdec_quant_class(s3)) {
@@ -1891,15 +2055,15 @@ def private resident_shexp_decline(t : Model; l : int64) : string {
 def resident_layer_decline(t : Model; l : int64) : string {
     let c = t.config
     if (layer_is_moe(t, l)) {
-        let fe1 = rdec_efmt(t, t.we1_fmt, l)
-        let fe3 = rdec_efmt(t, t.we3_fmt, l)
-        let fe2 = rdec_efmt(t, t.we2_fmt, l)
+        let fe1 = expert_fmt(t, t.we1_fmt, l)
+        let fe3 = expert_fmt(t, t.we3_fmt, l)
+        let fe2 = expert_fmt(t, t.we2_fmt, l)
         if (!resident_host_experts(c)) {   //! the host's routed chain reads the CPU planes in any format
             if (c.moe_exps_bias && kq_sb(fe2)) {
                 return "layer {l}'s biased expert stacks feed a K-quant down plane ({int(fe2)}) - the biased act has no Q8_K form"
             }
             if (!rdec_moe_ok(int(fe1), int(fe3), int(fe2))) {
-                return "layer {l}'s expert formats {int(fe1)}/{int(fe3)}/{int(fe2)} are outside the resident MoE block's tile family (the f16-fed cm2 tiles, or the KHR tile in mm mode)"
+                return "layer {l}'s expert formats {int(fe1)}/{int(fe3)}/{int(fe2)} are outside the resident MoE block's tile families (the f16-fed cm2 or KHR tiles, the Q8-fed batch tiles)"
             }
             if (kq_sb(fe1) != kq_sb(fe3)) {
                 return "layer {l}'s expert gate and up stacks mix activation-quant forms ({int(fe1)}/{int(fe3)}) - one feed serves both"
@@ -2215,9 +2379,9 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
                 fb = place_ffn(t, planes, cur, l, mr, kg, wb)
                 if (fb.b1 < 0l) return rdec_decline("arena placement failed at layer {l} (the shared expert)")
             } else {
-                lf.f1 = rdec_efmt(t, t.we1_fmt, l)
-                lf.f3 = rdec_efmt(t, t.we3_fmt, l)
-                lf.f2 = rdec_efmt(t, t.we2_fmt, l)
+                lf.f1 = expert_fmt(t, t.we1_fmt, l)
+                lf.f3 = expert_fmt(t, t.we3_fmt, l)
+                lf.f2 = expert_fmt(t, t.we2_fmt, l)
             }
         } else {
             fb = place_ffn(t, planes, cur, l, mr, kg, wb)
@@ -2585,6 +2749,7 @@ var private @scratch g_rdec_regs : array<int64>
 // per-token scratch rows (capacity-retained; the driver is single-resident by the arbiter)
 var private @scratch @exact_size g_rdec_x : array<float>
 var private @scratch @exact_size g_rdec_cossin : array<float>
+var private @scratch @exact_size g_rdec_cossin_next : array<float>   //! the next position's rope row a chained step stages
 var private @scratch @exact_size g_rdec_tmp : array<float>
 
 // why a resident override handed a call back to the CPU rails; each kind is said once per armed model
@@ -2684,11 +2849,19 @@ var private @scratch g_rdec_runs : array<KVRun>
 //! layer `l`'s positions [lo, hi) between `s`'s host cache and the selected region: up (`up`) or down - a paged cache a physical run at a time
 [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-pass-hydrate")]
 def private rdec_host_rows(var s : Session; c : Config; l, lo, hi : int64; up : bool) {
+    rdec_host_runs(s, c, l, lo, hi) $(row0, nrows : int64; var kp, vp : uint8?) {
+        rdec_host_span(l, row0, nrows, kp, vp, up)
+    }
+}
+
+//! layer `l`'s positions [lo, hi) of `s`'s host cache as `span` runs: a flat cache's one run, a paged cache's a physical run at a
+//! time, each handed its first position, its row count and the K and V bases row `row0` sits `row0` rows past
+def private rdec_host_runs(var s : Session; c : Config; l, lo, hi : int64; span : block<(row0, nrows : int64; var kp, vp : uint8?) : void>) {
     return if (hi <= lo)
     var kp = kv_layer_kbase(s, l, c.seq_len)
     var vp = kv_layer_vbase(s, l, c.seq_len)
     if (s.kv_pool == null) {
-        rdec_host_span(l, lo, hi - lo, kp, vp, up)
+        invoke(span, lo, hi - lo, kp, vp)
         return
     }
     let b = s.kv_pool.blob_of[l]
@@ -2700,7 +2873,7 @@ def private rdec_host_rows(var s : Session; c : Config; l, lo, hi : int64; up : 
     for (i in range64(n)) {
         let run = g_rdec_runs[i]
         unsafe {   //! the mirror addresses a span by its first position: a run's host rows sit `row0 - j0` rows off that position's
-            rdec_host_span(l, run.j0, run.j1 - run.j0, kp + (run.row0 - run.j0) * kb, vp + (run.row0 - run.j0) * vb, up)
+            invoke(span, run.j0, run.j1 - run.j0, kp + (run.row0 - run.j0) * kb, vp + (run.row0 - run.j0) * vb)
         }
     }
 }
@@ -2728,7 +2901,7 @@ def private rdec_take_mirror(t : Model; var s : Session; r, pos : int64) {
         rdec_host_rows(s, c, l, 0l, pos, true)
     }
     rdec_claim(s, r, pos)
-    s.rdec_host_current = true   // the host still holds everything the mirror does
+    rdec_host_mark(s, true)   // the host still holds everything the mirror does
 }
 
 //! a prefill's recurrent state into the selected region's slots before its window chain or its peel: zero for a prompt from position
@@ -3132,7 +3305,7 @@ def private vulkan_resident_verify_go(t : Model; var s : Session; toks : array<i
     s.mtp_h_pos1 = pos + n
     g_rdec_regions[r].cnt = pos + n
     rdec_head_device_wrote(r, pos - 1l, pos + n - 1l)
-    s.rdec_host_current = false   // the mirror advanced past any earlier hydration
+    rdec_host_mark(s, false)   // the mirror advanced past any earlier hydration
     g_rdec_verifies++
     return true
 }
@@ -3186,7 +3359,7 @@ def private vulkan_resident_decode_go(t : Model; var s : Session; token, pos : i
         return rdec_pass_hydrated(t, s, RdecPass.cap, pos, g_rdec_cap)
     }
     let c = t.config
-    let r = rdec_bind_region(s)
+    let r = rdec_bind_region(t, s)
     if (r < 0l) {
         return false
     }
@@ -3231,11 +3404,16 @@ def private vulkan_resident_decode_go(t : Model; var s : Session; token, pos : i
         rdec_land_pick(s, rdec_token(g_rdec_x, g_rdec_cossin, g_rdec_ple_rows, gathered ? token : -1l, pos, cnt, s.pick_asked, s.logits))
         s.ple_gpu_pending = false
     } else {
+        if (gathered && !s.sampled && pos + 2l <= g_rdec_cap && rdec_chain_wanted()) {
+            g_rdec_cossin_next |> grow_resize(g_rdec_cos_elems)
+            rdec_rope_rows(t, pos + 1l + s.rope_pos_delta, g_rdec_cossin_next, 0l)
+            rdec_chain_ask(g_rdec_cossin_next)
+        }
         rdec_land_pick(s, rdec_token(g_rdec_x, g_rdec_cossin, s.ple_inp, gathered ? token : -1l, pos, cnt, s.pick_asked, s.logits))   //! forward() ran the PLE pre-step into s.ple_inp before the override; empty elsewhere
     }
     rdec_stash_carry(c, s, 0l, pos + 1l)
     g_rdec_regions[r].cnt = pos + 1l
-    s.rdec_host_current = false   // the mirror advanced past any earlier hydration
+    rdec_host_mark(s, false)   // the mirror advanced past any earlier hydration
     decode_override_logits_done()   // logits produced on device
     return true
 }
@@ -4129,7 +4307,9 @@ def private vulkan_resident_seam(t : Model; var s : Session; token, pos : int64)
 //! Always false, the override's answer: the CPU rails take the call, so the session's device-only rows come down first.
 [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-pass-hydrate")]
 def private rdec_pass_hydrated(t : Model; var s : Session; kind : RdecPass; a, b : int64) : bool {
-    if (rdec_has_device_only_rows(s)) {
+    if (!rdec_owns(s, s.rdec_region)) {
+        rdec_unstash(t, s)   //! a claim lost to another session: its saved rows are what the CPU rails read
+    } elif (rdec_has_device_only_rows(s)) {
         rdec_hydrate_host(t, s)
     }
     rdec_pass_once(kind, a, b)
@@ -4139,7 +4319,7 @@ def private rdec_pass_hydrated(t : Model; var s : Session; kind : RdecPass; a, b
 //! The region a prefill of `s` from `start_pos` lands in, or -1 where the call passes.
 [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
 def private rdec_prefill_region(t : Model; var s : Session; start_pos : int64) : int64 {
-    let r = rdec_bind_region(s)
+    let r = rdec_bind_region(t, s)
     if (start_pos == 0l || r < 0l) {
         return r
     }
@@ -4234,7 +4414,7 @@ def private rdec_prefill_landed(t : Model; var s : Session; r, npos, start_pos, 
     } elif (t.config.n_layer_nextn > 0l) {
         rdec_head_rows_cut(s, start_pos)   //! the peel warms no head row: the head's rows past the window's start stand for nobody
     }
-    s.rdec_host_current = false
+    rdec_host_mark(s, false)
     g_rdec_prefills++
     prefill_override_logits_done()
 }
@@ -4397,7 +4577,7 @@ def private rdec_batch_rows_at_once(t : Model; ws : BatchWorkspace; var sessions
     let ts_prep = prof_ticks()
     for (i in range64(nrows)) {
         var s & = unsafe(*sessions[i])
-        let r = rdec_bind_region(s)
+        let r = rdec_bind_region(t, s)
         if (r < 0l || rdec_region_repeats(g_rdec_bregs, i, r)) {   //! no region, or two rows one region: the row-at-a-time loop resyncs between them
             return false
         }
@@ -4476,7 +4656,7 @@ def private rdec_batch_group(t : Model; ws : BatchWorkspace; var sessions : arra
             rdec_read_row_kv(t, s, pos)
         }
         g_rdec_regions[r].cnt = pos + 1l
-        s.rdec_host_current = !s.device_kv
+        rdec_host_mark(s, !s.device_kv)
     }
     prof_add("nrow_land", ts_land)
 }
@@ -4502,7 +4682,7 @@ def private rdec_batch_one_row(t : Model; ws : BatchWorkspace; var s : Session; 
         rdec_read_row_kv(t, s, pos)
     }
     g_rdec_regions[r].cnt = pos + 1l
-    s.rdec_host_current = !s.device_kv
+    rdec_host_mark(s, !s.device_kv)
     if (picked >= 0l) {
         rdec_land_pick(s, picked)
     } else {
@@ -4523,7 +4703,7 @@ def private vulkan_resident_batch_decode_go(t : Model; ws : BatchWorkspace; var 
     }
     for (i in range64(nrows)) {
         var s & = unsafe(*sessions[i])
-        let r = rdec_bind_region(s)
+        let r = rdec_bind_region(t, s)
         if (r < 0l) {
             rdec_unland_picks(sessions, i)
             return false   //! the CPU rails redo the whole step: rows already stepped here rewrite the same position, and their regions resync from the host
@@ -4552,6 +4732,7 @@ def private vulkan_embed_decode_gate(t : Model; s : Session; npos, pos : int64) 
 def resident_driver_register() {
     register_embed_gpu_gate(@@vulkan_embed_gpu_gate)
     register_embed_dev_gates("vulkan", default<EmbedGpuGateFn>, @@vulkan_embed_decode_gate)   //! the prefill keeps the installed seat above
+    register_session_release_listener(@@rdec_stash_release)
     register_decode_override("vulkan", @@vulkan_resident_decode)
     register_batch_decode_override("vulkan", @@vulkan_resident_batch_decode)
     register_prefill_override("vulkan", @@vulkan_resident_prefill)
@@ -4673,7 +4854,7 @@ def gpu_device_kv_adopt_(var s : Session; claim, npos : int64) : bool {
                 g_rdec_regions[r].snap_used[i] = reg.snap_used[i]
             }
         }
-        s.rdec_host_current = false
+        rdec_host_mark(s, false)
         s.n_past = npos
         if (recurrent) {   //! the slots take the parked state, or the checkpoint row's, on the device: nothing crosses the bus
             rdec_select_region(r)
@@ -4890,7 +5071,6 @@ def perop_dn_decline(t : Model; l : int64) : string {
     if (!rdec_dn_fmt_ok(fqkv, c.dim) || !rdec_dn_fmt_ok(fz, c.dim) || !rdec_dn_fmt_ok(fout, c.ssm_d_inner)) {
         return "deltanet plane formats {int(fqkv)}/{int(fz)}/{int(fout)} outside the chain's tiles and GEMVs"
     }
-    if (kq_sb(fqkv) != kq_sb(fz)) return "deltanet qkv/z formats {int(fqkv)}/{int(fz)} mix activation forms - one image feeds both"
     return ""
 }
 
@@ -4926,8 +5106,30 @@ def attn_chain_unserved_features(c : Config) : string {
     return names
 }
 
+//! a plane the per-op FFN rail places: the dense rail's formats, and the per-32 planes its decode GEMVs read
+def private perop_ffn_plane_ok(t : Model; f : KqFmt) : bool => resident_plane_ok(t, f)
+
+//! why the per-op FFN rail cannot take layer `l`'s dense w1/w3/w2 triple; "" when it can
+[arch(at="../ARCHITECTURE_GPU_VULKAN_PEROP.md#perop-dense-ffn")]
+def perop_dense_ffn_decline(t : Model; l : int64) : string {
+    let c = t.config
+    if (l >= long_length(t.w1_offs) || t.w1_offs[l] < 0l || t.w3_offs[l] < 0l || t.w2_offs[l] < 0l) return "no dense FFN planes"
+    if (c.ffn_act == FfnAct.swiglu_oai) return "the clamped swiglu"
+    let f1 = fmt_at(t.w1_fmt, l)
+    let f3 = fmt_at(t.w3_fmt, l)
+    let f2 = fmt_at(t.w2_fmt, l)
+    if (!perop_ffn_plane_ok(t, f1) || !perop_ffn_plane_ok(t, f3) || !perop_ffn_plane_ok(t, f2)) {
+        return "FFN formats {int(f1)}/{int(f3)}/{int(f2)} not tier-servable"
+    }
+    if (!kq_rows_ok(layer_hidden(t, l), f2)) return "FFN width {layer_hidden(t, l)} is not a block multiple of the down plane's format {int(f2)}"
+    return ""
+}
+
 [cold_path]
 def private dense_ffn_cpu_say(t : Model) {
+    if (gpu_want_dense() && gpu_want_dense_ffn()) {
+        return
+    }
     let c = t.config
     var bytes = 0l
     for (l in range64(c.n_layers)) {
@@ -4937,7 +5139,7 @@ def private dense_ffn_cpu_say(t : Model) {
         bytes += moe_gpu_plane_bytes(c.dim, hid, int(fmt_at(t.w3_fmt, l)))
         bytes += moe_gpu_plane_bytes(hid, c.dim, int(fmt_at(t.w2_fmt, l)))
     }
-    to_log(LOG_WARNING, "dasLLAMA: GPU MoE tier: the dense FFN of {c.n_layers} layers ({bytes >> 20l} MB) stays on the CPU - the per-op tier has no dense-FFN rail, only the whole-model resident driver serves it\n")
+    to_log(LOG_WARNING, "dasLLAMA: GPU MoE tier: the dense FFN of {c.n_layers} layers ({bytes >> 20l} MB) stays on the CPU - the per-op tier's FFN rail is opt-in (DASLLAMA_GPU_DENSE=1 DASLLAMA_GPU_DENSE_FFN=1)\n")
 }
 
 // Upload the offloaded layers' expert stacks to the GPU tier from the PREPARED planes. Called at
@@ -4986,9 +5188,9 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
             continue if (!layer_is_moe(t, sl))
             let sne = t.config.n_expert
             let snfe = t.config.n_ff_exp
-            sgu = max(sgu, moe_gpu_plane_bytes(t.config.dim, sne * snfe, int(rdec_efmt(t, t.we1_fmt, sl))))
-            sgu = max(sgu, moe_gpu_plane_bytes(t.config.dim, sne * snfe, int(rdec_efmt(t, t.we3_fmt, sl))))
-            sdn = max(sdn, moe_gpu_plane_bytes(snfe, sne * t.config.dim, int(rdec_efmt(t, t.we2_fmt, sl))))
+            sgu = max(sgu, moe_gpu_plane_bytes(t.config.dim, sne * snfe, int(expert_fmt(t, t.we1_fmt, sl))))
+            sgu = max(sgu, moe_gpu_plane_bytes(t.config.dim, sne * snfe, int(expert_fmt(t, t.we3_fmt, sl))))
+            sdn = max(sdn, moe_gpu_plane_bytes(snfe, sne * t.config.dim, int(expert_fmt(t, t.we2_fmt, sl))))
         }
         set_moe_gpu_stream_need(sgu > 0l ? 2l * sgu + sdn : 0l)
     }
@@ -5020,15 +5222,8 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
     // capability guard: the tier needs q8 serving mode — record WHY for the status surface when it
     // is armed but this model cannot ride it. Dense archs pass: every non-expert rail (cls, dense
     // planes, attn quads, qkv) keys on wq/wk/wv/wo/wcls offsets and never on experts.
-    var reason = ""
     if (t.quant != QuantMode.q8) {
-        reason = "GPU tier needs q8 serving mode"
-    } elif (t.experts_mx4) {
-        reason = "mx4 expert planes are not tier-servable"
-    } elif (t.config.moe_exps_bias) {
-        reason = "biased expert stacks are not tier-servable"
-    }
-    if (!empty(reason)) {
+        let reason = "GPU tier needs q8 serving mode"
         set_moe_gpu_model_support(reason)
         to_log(LOG_WARNING, "dasLLAMA: GPU tier armed but idle - {reason}\n")
         return
@@ -5092,6 +5287,17 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
                     uploads |> push((f = fo, woff = t.wo_offs[l], n = qd, rows = dim))
                 }
             }
+            if (gpu_want_dense_ffn() && !layer_is_moe(t, l) && !t.config.moe_dense_shexp) {
+                let ffn_why = perop_dense_ffn_decline(t, l)
+                if (!empty(ffn_why)) {
+                    walk_skip(dense_skips, l, ffn_why)
+                } else {
+                    let hid = layer_hidden(t, l)
+                    uploads |> push((f = fmt_at(t.w1_fmt, l), woff = t.w1_offs[l], n = dim, rows = hid))
+                    uploads |> push((f = fmt_at(t.w3_fmt, l), woff = t.w3_offs[l], n = dim, rows = hid))
+                    uploads |> push((f = fmt_at(t.w2_fmt, l), woff = t.w2_offs[l], n = hid, rows = dim))
+                }
+            }
             // gemma-4's parallel dense shared expert triple — opt-in, measured a wash (see the gate's doc)
             if (dense_shexp_uploadable(t, l)) {
                 let hid = empty(t.ffn_w) ? t.config.hidden_dim : t.ffn_w[l]
@@ -5117,22 +5323,20 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
         walk_say(dense_skips, "dense rail")
     }
     // shared-expert triples — on with the tier (DASLLAMA_GPU_SHEXP overrides). Dense (every token,
-    // every layer, one fixed weight set) so residency carries no miss term; q8 only (the repack
-    // registers them fmt 0).
+    // every layer, one fixed weight set) so residency carries no miss term
     vulkan_bake_role(VkBakeRole.shexp)
     if (gpu_want_shexp() && t.config.n_ff_shexp > 0l && !t.config.moe_dense_shexp) {
         let nsh = t.config.n_ff_shexp
-        let she = dim * nsh
         var sh_marked = 0l
         for (l in range64(layers)) {
-            var inscope ups <- [plane_up(KqFmt.q8, t.wsh1_off + l * she, dim, nsh),
-                        plane_up(KqFmt.q8, t.wsh3_off + l * she, dim, nsh),
-                        plane_up(KqFmt.q8, t.wsh2_off + l * she, nsh, dim)]
+            let p = perop_shexp_planes(t, l)
+            var inscope ups <- [plane_up(kq_fmt_of_slot(p.f1), p.o1, dim, nsh), plane_up(kq_fmt_of_slot(p.f3), p.o3, dim, nsh),
+                                plane_up(kq_fmt_of_slot(p.f2), p.o2, nsh, dim)]
             let ok = gather_upload_group(t, ups, mr, kgroup, wbias, wq, ws)
             delete ups
             break if (!ok)
             //! the shexp mark, not set_moe_gpu_dense_off: the shared triple rides the expert chain, not the dense rail
-            set_moe_gpu_shexp_layer(l)
+            set_moe_gpu_shexp_layer(l, p)
             sh_marked++
         }
         if (sh_marked > 0l) {
@@ -5292,7 +5496,8 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
         walk_say(qkv_skips, "q/k/v rail")
     }
     vulkan_bake_role(VkBakeRole.expert)
-    for (i in range64(want)) {
+    let ebias_ok = !has_experts || !t.config.moe_exps_bias || perop_upload_expert_bias(t)
+    for (i in range64(ebias_ok ? want : 0l)) {
         let l = layers - 1l - i
         // The Q4_K_M MoE recipe bumps ffn_down_exps to Q5_0/Q8_0, so k4/k4/q8 is the COMMON shape (glm4moe,
         // gemma). The walk stops on refusal so the resident set stays contiguous from the end.
@@ -5308,7 +5513,7 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
     // prefill. CPU planes stay (decode runs them); the walk is contiguous descending.
     vulkan_bake_role(VkBakeRole.expert_stream)
     var sfrom = from_l
-    for (i in range64(has_experts ? max(nstream, 0l) : 0l)) {
+    for (i in range64(has_experts && ebias_ok ? max(nstream, 0l) : 0l)) {
         let l = from_l - 1l - i
         break if (l < t.config.n_layer_dense_lead || t.we1_offs[l] < 0l || tier_expert_walk_stops(t, l, "streamed"))
         var inscope ups <- resident_expert_ups(t, l)

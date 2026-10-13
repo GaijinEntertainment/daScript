@@ -34,10 +34,10 @@ causal conv's silu plus the gated value in the streams (`PleConv`). The ring is 
 `pos % rows` off the row's `TokMeta`. The deltanet heads take the sigmoid out-gate through the step and
 scan kernels' `ZSIG` stamps (`dn_step_sig_cls`, `dn_scan_p3_sig_cls`), picked by `RdecDnGeom.zsig`.
 
-**The routed experts serve on the host, and the token command splits at every routed block.** The
-model's expert stacks (55 GiB on the carrier) never fit the card beside its other planes, and their
-formats sit outside the device tile family, so the plan leaves them out (`resident_host_experts`), the
-layers register with no expert planes (`RLayer.experts_host`) and the routed block on the device is the
+**The routed experts serve on the host, and the token command splits at every routed block.** The plan
+leaves a hyper-connection MoE's expert stacks out by construction, not by a fit decision:
+`resident_host_experts` is the model's shape alone (hyper-connections, routed experts, the hc chain
+installed), so the stacks sum on the host on any card, whatever room it has. The plain MoE's fit decision is the host-layer form below. The layers register with no expert planes (`RLayer.experts_host`) and the routed block on the device is the
 router GEMV alone. The command is recorded once per region as `nseg` = routed layers + 1 segments
 (`RDec.cmd_seg`, `rd_record_segments`): a segment ends after a routed layer's router by landing the
 FFN-mixed row and the router logits in host memory (`hx_host`, `hlog_host`); the host selects the top-k

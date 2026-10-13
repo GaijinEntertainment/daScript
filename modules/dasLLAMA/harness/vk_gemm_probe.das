@@ -629,7 +629,7 @@ def private run_dec_small_kernels() {   // nolint:STYLE038 — one linear measur
         }
         //! the decode's F32 [beta ; alpha] rows (`rd_encode_dn_head`, `dn_ba_f32`): the router GEMV's f32 stamp over both halves, split at the first
         var s = set_router_gemv_cls(fixed_array(wd, xd, od, xd), fixed_array(w_bytes, x_bytes, o_bytes, x_bytes), fixed_array(0u, 1u, 2u, 0u))
-        var pc = RouterArgs(ne = uint(ne), dim = uint(dim), woff = 0u, obase = 16u, ne_split = uint(ne / 2), obase_split = uint(16 + ne), ncols = 1u)
+        var pc = GkRouterArgs(ne = uint(ne), dim = uint(dim), woff = 0u, obase = 16u, ne_split = uint(ne / 2), obase_split = uint(16 + ne), ncols = 1u)
         let us = timed_chain() $(raw; var hz) {
             for (_k in range(DISPATCHES)) {
                 enc_router_gemv_cls(raw, hz, s, pc, int64(ne))

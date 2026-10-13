@@ -549,16 +549,19 @@ by the stream count allows, and the load log says why. A request that fills the 
 `length` stop. `/v1/stats` counts every call the device handed
 back to the CPU (`gpu_cpu_passes`); a slot served this way keeps it empty. The control page's
 model card says which of these a slot got (`served`), why it got less when it did
-(`served_note`), and the passes by reason once any fired. A recurrent (deltanet)
-model is served the same way with two differences: a prompt prefills in one piece, and a next
+(`served_note`), and the passes by reason once any fired. A recurrent (deltanet) model is served the
+same way, its recurrent state kept in the stream's region beside its rows; a recurrent model with
+hyper-connections (Qwen3.8-Flash-Next) differs in two ways: a prompt prefills in one piece, and a next
 turn re-prefills its whole transcript. A slot with a vision or audio tower keeps host-cached sessions, and shows its passes there; a
 self-speculative slot does too where any seat of the round (the draft head, its verify, a rejected
 round's rollback) stays on the host. The want that asks for the driver
 sets `resident` outright rather than riding `auto_tier`, and spells every rail out one by one, so
 an explicit `gpu_dn = false` still turns that rail off. The per-op rails arm beneath the driver as the
 fallback for a model that does not fit: expert stacks sized
-**automatically** (resident layers fill the VRAM budget, the rest stream) plus DN + ATTN + dense +
-the resident shared expert. `gpu_layers` / `gpu_stream` are `0` = auto by default; set either to a
+**automatically** (resident layers fill the VRAM budget, the rest stream) plus DN (each deltanet plane in
+its own format) + ATTN + the dense layers' attention projections + the resident shared expert (its own planes).
+A dense layer's FFN stays on the CPU unless
+`DASLLAMA_GPU_DENSE_FFN=1` arms the per-op FFN rail. `gpu_layers` / `gpu_stream` are `0` = auto by default; set either to a
 positive value to pin it exactly, and `gpu_dn` / `gpu_attn` / `gpu_dense` / `gpu_vram_mb` override
 the rest. The `DASLLAMA_GPU_*` env vars still override everything (they remain the A/B levers), and
 `DASLLAMA_GPU=1` requests the same auto shape without a config file.

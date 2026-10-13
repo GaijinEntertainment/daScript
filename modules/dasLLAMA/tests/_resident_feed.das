@@ -16,7 +16,12 @@ require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active / moe_gpu_re
 require dasllama/dasllama_gpu_tier   // gpu_cpu_passes_: the calls the driver handed to the CPU rails, by reason
 require dasllama/dasllama_kv_dtype   // kv_row_bytes / kv_layer_kbase: the head's K row
 require ?vulkan dasllama/dasllama_vulkan_common   // the resolved coopmat mode, where the module exists
+require ?vulkan dasllama/dasllama_vulkan_decode   // the greedy chain's mode pin and its hits and misses
+require dasllama/dasllama_math   // with_dasllama_jobque_
 require _model_tier   // logits_maxdiff, mirror_kv_dtype, live_maxabs, SUPPRESSED_LOGIT
+require _format_census   // census_plane, SiteCensus: a plane's tag against the file's tensor type
+require dasllama/dasllama_gguf   // parse_gguf_meta
+require daslib/fio   // fopen, fmap
 
 //! the served tile arm, so a red names which prefill tile it came from
 def tile_arm_tag() : string {
@@ -159,6 +164,33 @@ def resident_admitted(t : T?; armed, note : string) : bool {
     t |> success(moe_gpu_resident_active(), armed)
     mirror_codec_held(t)
     return true
+}
+
+//! holds that every layer's dense q/k/v/o and FFN planes read the file's own format (`census_plane` against `path`'s tensor
+//! types: no q8 copy serves any of them) and that every layer carries tag `f` on at least one of them
+def dense_planes_tagged(t : T?; tr : Model; path : string; f : KqFmt) {
+    let fh = fopen(path, "rb")
+    if (fh == null) {
+        t |> failure("cannot open {path}")
+        return
+    }
+    fmap(fh) $(var bytes : array<uint8>#) {
+        var inscope m <- parse_gguf_meta(bytes)
+        var dense = SiteCensus(site = "dense planes")
+        var bare = 0
+        let names = fixed_array("attn_q", "attn_k", "attn_v", "attn_output", "ffn_gate", "ffn_up", "ffn_down")
+        for (l in range64(tr.config.n_layers)) {
+            let tags = fixed_array(fmt_at(tr.wq_fmt, l), fmt_at(tr.wk_fmt, l), fmt_at(tr.wv_fmt, l), fmt_at(tr.wo_fmt, l), fmt_at(tr.w1_fmt, l),
+                fmt_at(tr.w3_fmt, l), fmt_at(tr.w2_fmt, l))
+            for (i in range(7)) {
+                census_plane(dense, m, "blk.{l}.{names[i]}.weight", tags[i])
+            }
+            bare += tags |> has_value(f) ? 0 : 1
+        }
+        t |> equal(dense.copies, 0, "every dense plane of the {tr.config.n_layers} layers reads the file's own format ({dense.first})")
+        t |> equal(bare, 0, "every layer carries the {f} tag on a dense plane")
+    }
+    fclose(fh)
 }
 
 let NO_CENSUS = -1l   //! the census count with no vulkan module: a census witness stands down
@@ -515,4 +547,139 @@ def bytes_differing(a, b : array<uint8>; a_at, b_at, n : int64) : float {
     delete sa
     delete sb
     return float(differing) / float(n)
+}
+
+let CHAIN_STEPS = 24l   //! the greedy chain cell's fed steps a walk
+
+//! one walk of `steps` steps after `prompt` on a fresh session under the greedy chain's mode `mode`: each step fed the last
+//! step's argmax, every `off_every`-th one a token off it (0 = never); the fed tokens and every step's logits
+struct ChainWalk {
+    toks : array<int64>
+    rows : array<array<float>>
+}
+
+def chain_walk(tr : Model; prompt : array<int64>; steps, off_every : int64; mode : int) : ChainWalk {
+    var w : ChainWalk
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        let pin = vk_rdec_chain_pin()
+        vk_rdec_chain_mode_set(mode)
+        var s <- create_session(tr, mirror_kv_dtype())
+        eval(tr, s, prompt)
+        let vocab = tr.config.vocab_size
+        var first <- logits_of(s, vocab)
+        var tok = argmax_of(first)
+        delete first
+        var one : array<int64>
+        one |> resize(1)
+        w.toks |> reserve(steps)
+        w.rows |> reserve(steps)
+        for (i in range64(steps)) {
+            if (off_every > 0l && i % off_every == off_every - 1l) {
+                tok = (tok + 1l) % vocab
+            }
+            w.toks |> push(tok)
+            one[0] = tok
+            eval_(tr, s, one)
+            var row <- logits_of(s, vocab)
+            tok = argmax_of(row)
+            w.rows |> emplace(row)
+        }
+        delete one
+        delete s
+        vk_rdec_chain_mode_set(pin)
+    }
+    return <- w
+}
+
+//! the greedy chain (`../ARCHITECTURE_GPU_VULKAN_LANDING.md#vk-greedy-chain`) on the carrier at `path`: a walk fed the argmax and
+//! one fed a token off it every third step, each with the chain off and forced on - the chained walk's tokens and every step's
+//! logits bit for bit the plain walk's, every step after the first a hit on the argmax walk, and on the other every off-pick
+//! step a miss (its state put back) and every other step a hit
+def greedy_chain_cell(t : T?; path : string) {
+    if (!resident_ready(t, path)) return
+    var tr <- load_resident(path, 1l)
+    t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the model (the load log names any decline)")
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        with_dasllama_jobque_() {
+            var prompt <- resident_prompt(40l)
+            for (off in fixed_array(0l, 3l)) {
+                var plain <- chain_walk(tr, prompt, CHAIN_STEPS, off, 0)
+                let st0 = vk_rdec_chain_stats()
+                var chained <- chain_walk(tr, prompt, CHAIN_STEPS, off, 1)
+                let st1 = vk_rdec_chain_stats()
+                let hits = st1.hits - st0.hits
+                let misses = st1.misses - st0.misses
+                let offs = off > 0l ? CHAIN_STEPS / off : 0l
+                let what = off > 0l ? "the walk fed off the pick every {off}rd step" : "the argmax walk"
+                to_log(LOG_INFO, "{path} {what}: {hits} chained steps taken, {misses} discarded\n")
+                var differ = 0
+                for (i in range64(CHAIN_STEPS)) {
+                    differ += chained.toks[i] != plain.toks[i] ? 1 : 0
+                    t |> equal(logits_maxdiff(chained.rows[i], plain.rows[i]), 0.0, "{what}, step {i}: the chained run's logits are the plain run's bit for bit")
+                }
+                t |> equal(differ, 0, "{what}: the chained run's tokens are the plain run's")
+                t |> equal(misses, offs, "{what}: every off-pick step discarded its chained step, and no other did")
+                t |> equal(hits, CHAIN_STEPS - 1l - offs, "{what}: every other step after the first took its chained step")
+                served_every_call(t)
+                delete plain
+                delete chained
+            }
+            delete prompt
+        }
+    } else {
+        t |> skip("no dasVulkan module: the greedy chain is the Vulkan driver's")
+    }
+    delete tr
+}
+
+let private PEEL_OPEN = 40l
+
+//! after a `PEEL_OPEN`-row opening, tails of 1, 2, 5 and 8 rows as one prefill call peel through the token commands - the in-order
+//! rows command past one row, every recurrent layer stepping the rows one after another in the region's slot - (a peel and a
+//! prefill counted, the recurrent state at the tail's end), and four fed steps read within `rel` of the same tail stepped a row
+//! at a time on a second session, the row one step off the control; one row past the per-row planes takes the chain
+def recurrent_peel_cell(t : T?; var tr : Model; rel : float) {
+    let at_once = rdec_token_n_rows()
+    t |> success(at_once >= 8l, "the token commands step eight rows or more at once on the hybrid ({at_once})")
+    var opening <- resident_prompt(PEEL_OPEN)
+    var feed <- resident_feed(at_once + 1l)
+    let lever = vulkan_prefill_peel()
+    set_vulkan_prefill_peel(true)
+    for (rows in [1l, 2l, 5l, 8l, at_once + 1l]) {
+        let peels = rows <= at_once
+        var tail <- [for (i in range64(rows)); feed[i]]
+        var steps <- ramp_ids(4l, rows, 2500l, 71l, 4500l)
+        var sa <- create_session(tr, mirror_kv_dtype())
+        eval(tr, sa, opening)
+        let peels0 = moe_gpu_resident_peels()
+        let pf0 = moe_gpu_resident_prefills()
+        forward_prefill(tr, sa, tail, rows, PEEL_OPEN)
+        t |> equal(moe_gpu_resident_peels() - peels0, peels ? 1l : 0l, "a tail of {rows} rows {peels ? "peels through the token commands" : "takes the window chain"}")
+        t |> equal(moe_gpu_resident_prefills() - pf0, 1l, "the tail of {rows} counted one served prefill")
+        t |> equal(sa.dn_pos, PEEL_OPEN + rows, "the recurrent state stands at the tail's end")
+        sa.n_past = PEEL_OPEN + rows
+        var got <- steps_after(tr, sa, steps)
+        var sb <- create_session(tr, mirror_kv_dtype())
+        eval(tr, sb, opening)
+        var inscope one : array<int64>
+        one |> resize(1)
+        for (i in range64(rows)) {
+            one[0] = tail[i]
+            eval_(tr, sb, one)
+        }
+        var want <- steps_after(tr, sb, steps)
+        let what = "a tail of {rows} rows"
+        rows_within_control(t, what, got, want, rel, 1l, 1.0, $(r) => r == 0l ? "the tail's last row" : "step {r}")
+        log_argmax_rows(tr, "{what}: the row-at-a-time rows, then the tail's", got, want)
+        served_every_call(t)
+        delete sa
+        delete sb
+        delete got
+        delete want
+        delete tail
+        delete steps
+    }
+    set_vulkan_prefill_peel(lever)
+    delete opening
+    delete feed
 }

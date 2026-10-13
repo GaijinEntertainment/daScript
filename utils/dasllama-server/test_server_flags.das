@@ -290,58 +290,80 @@ def test_roster_from_flags(t : T?) {
     }
 }
 
-//! A speculating Vulkan slot over a NextN-headed model: its stream homed on the device where every seat of the round runs there,
-//! and the drafted steps counted by the device's own draft and verify counters - not the slot's predicate alone. Needs
-//! Qwen3.5-0.8B-MTP under DASLLAMA_GPU=1 and the JIT; skips without them.
+let private SLOT_PAGE_ROWS = 64l   //! the server's default paged sessions (`--flat` off): the slot's scheduler as `main.das` builds it
+
+//! A Vulkan slot over a NextN-headed model on the server's defaults - one stream, paged sessions, `mtp` unset: the auto-arm
+//! turns speculation on, its stream homes on the device where every seat of the round runs there, and the drafted steps are
+//! counted by the device's own draft and verify counters with no call passed to the CPU rails - not the slot's predicate
+//! alone. Needs the file under DASLLAMA_GPU=1 and the JIT; skips without them, and where the driver sums the routed experts
+//! on the host (a card that does not hold the experts whole), where the auto-arm stays off by rule.
+def private slot_mtp_device_home(t : T?; file : string) {
+    let path = path_join(models_dir(), file)
+    return if (model_missing(t, path))
+    if (!moe_gpu_tier_installed() || !gpu_want_auto()) {
+        t |> skip("the GPU tier is not armed - needs DASLLAMA_GPU=1 on a device that serves the whole-model driver")
+        return
+    }
+    if (resident_mirror_dtype() != KVDtype.f16) {
+        t |> skip("the slot's sessions are f16; under DASLLAMA_VK_KV32=1 the mirror is f32 and every call passes as codec")
+        return
+    }
+    with_dasllama_jobque() {
+        var s = ModelSlot()
+        s.model <- load_model_(path, QuantMode.q8)
+        s.model.config.seq_len = min(s.model.config.seq_len, 512l)
+        t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the NextN-headed model (the load log names any decline)")
+        if (moe_gpu_resident_active() && gpu_resident_experts_host()) {
+            t |> skip("the driver sums the routed experts on the host on this card: the auto-arm leaves the round off there")
+            delete s.model
+            return
+        }
+        s.backend_effective = "gpu:resident"
+        s.gpu_regions = gpu_device_sessions()
+        let spec = mtp_auto_arms(1l, false, s.backend_effective, gpu_resident_experts_host())
+        t |> success(spec, "the unset mtp arms one stream whose decode the whole-model driver serves")
+        s.sched <- create_scheduler(s.model, 1l, 4l, 64l, SLOT_PAGE_ROWS, (s.model.config.seq_len + SLOT_PAGE_ROWS - 1l) / SLOT_PAGE_ROWS,
+                                    KVDtype.f16, spec)
+        t |> success(s.sched.mtp && s.sched.paged, "the slot speculates on the server's paged sessions")
+        t |> success(slot_wants_device_kv(s), "the speculating slot homes its stream on the device: the draft head, its verify and its rollback run there")
+        t |> success(set_device_kv(s.sched, slot_wants_device_kv(s)), "the scheduler admits device-home sessions")
+        t |> equal(slot_served(s, s.sched.device_kv, true), "GPU: the whole model and every stream's cache on the card", "the model card names where the stream's cache lives")
+        let prev = get_mtp_spec()
+        set_mtp_spec(true)
+        let drafts0 = moe_gpu_resident_drafts()
+        let verifies0 = moe_gpu_resident_verifies()
+        var req <- PendingReq(id = 1l, params = SamplingParams(), max_new = 24l)
+        req.prompt <- encode(s.model, "Count from one to twenty: one, two, three,", true, false)
+        t |> success(submit(s.model, s.sched, req), "the stream queued")
+        var events : array<SchedEvent>
+        var steps = 0
+        while (scheduler_step(s.model, s.sched, events) && steps < 4096) {
+            steps++
+        }
+        set_mtp_spec(prev)
+        t |> success(s.sched.mtp_drafted > 0l, "the slot's ticks drafted ({s.sched.mtp_drafted} drafts, {s.sched.mtp_accepted} accepted)")
+        t |> equal(moe_gpu_resident_drafts() - drafts0, s.sched.mtp_drafted, "every drafted step's draft ran on the device's NextN head")
+        t |> equal(moe_gpu_resident_verifies() - verifies0, s.sched.mtp_drafted, "every drafted step's verify ran on the device")
+        var passes <- gpu_cpu_passes_()
+        t |> equal(length(passes), 0, "no call passed to the CPU rails: {passes}")
+        delete passes
+        set_device_kv(s.sched, false)
+        delete events
+        delete s.sched
+        delete s.model
+    }
+}
+
 [test]
 def test_slot_mtp_device_home(t : T?) {
-    t |> run("a speculating Vulkan slot homes its stream on the device, and its drafted steps run there") @(t : T?) {
-        let path = path_join(models_dir(), "Qwen3.5-0.8B-MTP-Q8_0.gguf")
-        return if (model_missing(t, path))
-        if (!jit_enabled()) {
-            t |> skip("the slot's decode is minutes interpreted - run under -jit")
-            return
-        }
-        if (!moe_gpu_tier_installed() || !gpu_want_auto()) {
-            t |> skip("the GPU tier is not armed - needs DASLLAMA_GPU=1 on a device that serves the whole-model driver")
-            return
-        }
-        if (resident_mirror_dtype() != KVDtype.f16) {
-            t |> skip("the slot's sessions are f16; under DASLLAMA_VK_KV32=1 the mirror is f32 and every call passes as codec")
-            return
-        }
-        with_dasllama_jobque() {
-            var s = ModelSlot()
-            s.model <- load_model_(path, QuantMode.q8)
-            s.model.config.seq_len = min(s.model.config.seq_len, 512l)
-            t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the NextN-headed hybrid (the load log names any decline)")
-            s.backend_effective = "gpu:resident"
-            s.gpu_regions = gpu_device_sessions()
-            s.sched <- create_scheduler(s.model, 1l, 4l, 64l, 0l, 0l, KVDtype.f16, true)
-            t |> success(s.sched.mtp, "the slot speculates")
-            t |> success(slot_wants_device_kv(s), "the speculating slot homes its stream on the device: the draft head, its verify and its rollback run there")
-            t |> success(set_device_kv(s.sched, slot_wants_device_kv(s)), "the scheduler admits device-home sessions")
-            t |> equal(slot_served(s, s.sched.device_kv, true), "GPU: the whole model and every stream's cache on the card", "the model card names where the stream's cache lives")
-            let prev = get_mtp_spec()
-            set_mtp_spec(true)
-            let drafts0 = moe_gpu_resident_drafts()
-            let verifies0 = moe_gpu_resident_verifies()
-            var req <- PendingReq(id = 1l, params = SamplingParams(), max_new = 24l)
-            req.prompt <- encode(s.model, "Count from one to twenty: one, two, three,", true, false)
-            t |> success(submit(s.model, s.sched, req), "the stream queued")
-            var events : array<SchedEvent>
-            var steps = 0
-            while (scheduler_step(s.model, s.sched, events) && steps < 4096) {
-                steps++
-            }
-            set_mtp_spec(prev)
-            t |> success(s.sched.mtp_drafted > 0l, "the slot's ticks drafted ({s.sched.mtp_drafted} drafts, {s.sched.mtp_accepted} accepted)")
-            t |> equal(moe_gpu_resident_drafts() - drafts0, s.sched.mtp_drafted, "every drafted step's draft ran on the device's NextN head")
-            t |> equal(moe_gpu_resident_verifies() - verifies0, s.sched.mtp_drafted, "every drafted step's verify ran on the device")
-            set_device_kv(s.sched, false)
-            delete events
-            delete s.sched
-            delete s.model
-        }
+    t |> run("a Vulkan slot on the server's defaults over Qwen3.5-0.8B-MTP: the auto-arm speculates, the stream homes on the device, and its drafted steps run there") @(t : T?) {
+        slot_mtp_device_home(t, "Qwen3.5-0.8B-MTP-Q8_0.gguf")
+    }
+}
+
+[test]
+def test_slot_mtp_device_home_moe(t : T?) {
+    t |> run("the same over Qwen3.6-35B-A3B-MTP-IQ4_XS-pure: the routed NextN head drafts and verifies on the device") @(t : T?) {
+        slot_mtp_device_home(t, "Qwen3.6-35B-A3B-MTP-IQ4_XS-pure.gguf")
     }
 }

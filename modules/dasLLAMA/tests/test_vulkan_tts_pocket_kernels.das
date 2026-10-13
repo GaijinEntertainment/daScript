@@ -379,7 +379,7 @@ def private pk_gemv_device(f : PkGemvFix) : PkGemvRows {
             var s_gate = cp |> cls_set(fixed_array(wp, xp, gatep, mp), @@set_tts_pk_gemv_gate_cls)
             var s_add = cp |> cls_set(fixed_array(wp, xp, addp), @@set_tts_pk_gemv_add_silu_cls)
             var s_tail = cp |> cls_set(fixed_array(wp, xp, tailp, mp, x0p, latp), @@set_tts_pk_gemv_tail_cls)
-            var pa = TtsPkGemvArgs(nin = uint(PG_NIN), nout = uint(nout), stride = uint(PG_STRIDE), eps = PG_EPS, woff = uint(f.woff),
+            var pa = GkPkGemvArgs(nin = uint(PG_NIN), nout = uint(nout), stride = uint(PG_STRIDE), eps = PG_EPS, woff = uint(f.woff),
                 boff = uint(f.boff), xoff = uint(PG_XOFF), yoff = uint(PG_YOFF), moff = uint(PG_MOFF), lwoff = uint(f.lwoff),
                 lboff = uint(f.lboff), aoff = uint(f.aoff), x0off = uint(PG_X0OFF), loff = uint(PG_LOFF))
             let rows = int64(nout)
@@ -599,7 +599,7 @@ def test_vkt_pk_gemv_fused(t0 : T?) {
                 var s_as = cp |> cls_set(fixed_array(wp, xp, yasp), @@set_tts_pk_gemv_add_scale_cls)
                 var s_a = cp |> cls_set(fixed_array(wp, xp, yap), @@set_tts_pk_gemv_add_cls)
                 var s_g = cp |> cls_set(fixed_array(wp, xp, ygp), @@set_tts_pk_gemv_ln_gelu_cls)
-                var pq = TtsPkGemvArgs(nin = uint(d), nout = uint(3 * d), stride = uint(PF_STRIDE), eps = PG_EPS, woff = uint(f.woff_q), boff = uint(f.boff_q),
+                var pq = GkPkGemvArgs(nin = uint(d), nout = uint(3 * d), stride = uint(PF_STRIDE), eps = PG_EPS, woff = uint(f.woff_q), boff = uint(f.boff_q),
                     xoff = uint(PF_XOFF), yoff = uint(PF_YOFF), moff = 0u, lwoff = uint(f.lwoff), lboff = uint(f.lboff), aoff = uint(f.aoff), x0off = 0u, loff = 0u,
                     span = uint(d), dh = uint(PF_DH), p = uint(PF_P), coff = uint(f.coff), soff = uint(f.soff))
                 var ps = pq

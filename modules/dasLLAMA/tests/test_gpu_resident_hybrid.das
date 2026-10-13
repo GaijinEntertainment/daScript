@@ -184,6 +184,13 @@ def test_gpu_resident_hybrid_short_windows(t : T?) {
 }
 
 [test]
+def test_gpu_resident_hybrid_greedy_chain(t : T?) {
+    t |> run("Qwen3.5-0.8B: the greedy chain's steps are the plain steps bit for bit, hits on the pick and misses off it") @(t : T?) {
+        greedy_chain_cell(t, path_join(models_dir(), "Qwen3.5-0.8B-Q8_0.gguf"))
+    }
+}
+
+[test]
 def test_gpu_resident_hybrid_kq(t : T?) {
     t |> run("Qwen3.5-0.8B-Q4_K_M: K-quant deltanet planes on the resident driver vs the CPU chain, one window") @(t : T?) {
         hybrid_forced_feed(t, 40l, "Qwen3.5-0.8B-Q4_K_M.gguf", HybridPlanes.kq)
@@ -316,6 +323,64 @@ def private with_mtp_carrier(t : T?; regions : int64; head_off : bool; body : bl
 
 def private with_mtp_carrier(t : T?; regions : int64; body : block<(var tr : Model) : void>) {
     with_mtp_carrier(t, regions, false, body)
+}
+
+//! the greedy walk of `reply` tokens over the counting prompt on the carrier loaded with the driver prepared for depth `prep`:
+//! the rows the driver prepared, the walk's tokens and the plain decode's, its drafts, and the device verifies and
+//! `verify_rows` passes it took; the depth knob cleared after
+struct private DeepWalk {
+    ids : array<int64>
+    plain : array<int64>
+    drafted : int64
+    verifies : int64
+    verify_rows_passes : int64
+    prepared_rows : int64
+}
+
+def private deep_walk(t : T?; prep, reply : int64) : DeepWalk {
+    var r : DeepWalk
+    set_mtp_depth(prep)
+    var tr <- load_mtp_carrier(t, 1l)
+    r.prepared_rows = rdec_verify_rows()
+    with_dasllama_jobque_() {
+        var prompt <- encode(tr, "Count from one to twenty: one, two, three,", true, false)
+        let total = long_length(prompt) - 1l + reply
+        let verifies0 = moe_gpu_resident_verifies()
+        let rows0 = pass_count("verify_rows")
+        var s <- create_session(tr, mirror_kv_dtype())
+        var na = 0l
+        r.ids <- generate_mtp_greedy(tr, s, prompt, total, r.drafted, na)
+        delete s
+        r.verifies = moe_gpu_resident_verifies() - verifies0
+        r.verify_rows_passes = pass_count("verify_rows") - rows0
+        var p <- create_session(tr, mirror_kv_dtype())
+        r.plain <- generate(tr, p, prompt, int(total))
+        delete p
+        log_gen_texts(tr, "the walk on a driver prepared for depth {prep}: plain, speculative", r.plain, r.ids)
+        delete prompt
+    }
+    clear_mtp_depth()
+    delete tr
+    return <- r
+}
+
+//! the -MTP- carrier loaded under the depth-8 knob: the driver prepares the nine verify rows past the leaves' eight columns,
+//! and the greedy walk on it emits the plain decode, every round's verify on the device and none passed as `verify_rows`;
+//! loaded at depth 1 the driver prepares two rows (the control)
+[test]
+def test_gpu_resident_hybrid_mtp_depth8(t : T?) {
+    t |> run("Qwen3.5-0.8B-MTP under the depth-8 knob: the driver prepares nine verify rows, and its walk serves on the device") @(t : T?) {
+        if (!mtp_carry_ready(t)) return
+        var deep <- deep_walk(t, 8l, 32l)
+        t |> equal(deep.prepared_rows, 9l, "the driver was prepared for the depth-8 verify's nine rows")
+        t |> success(ids_equal(deep.ids, deep.plain), "the walk emits the plain greedy decode token for token")
+        t |> success(deep.drafted > 0l && deep.verifies > 0l, "the walk drafted ({deep.drafted}) and verified on the device ({deep.verifies} verifies)")
+        t |> equal(deep.verify_rows_passes, 0l, "no verify passed to the CPU as verify_rows")
+        var ctrl <- deep_walk(t, 1l, 4l)
+        t |> equal(ctrl.prepared_rows, 2l, "control: the driver prepared for depth 1 holds two verify rows")
+        delete ctrl
+        delete deep
+    }
 }
 
 //! `body` on the one-region carrier and a fresh session holding `resident_prompt(DRAFT_PROMPT)` through `prefill_warm`, the
@@ -459,58 +524,6 @@ def private dn_row_within(t : T?; what : string; gpu, cpu, off : array<float>) {
     row_within_ctrl(t, what, gpu, cpu, off, DN_LOGIT_BAR_REL, "(the CPU row one away as the control)")
 }
 
-let private PEEL_OPEN = 40l
-
-//! after a `PEEL_OPEN`-row opening, tails of 1, 2, 5 and 8 rows as one prefill call peel through the token commands - the in-order
-//! rows command past one row, every recurrent layer stepping the rows one after another in the region's slot - (a peel and a
-//! prefill counted, the recurrent state at the tail's end), and four fed steps read within the split bar of the same tail stepped
-//! a row at a time on a second session, the row one step off the control; one row past the per-row planes takes the chain
-def private hybrid_peel(t : T?; var tr : Model) {
-    let at_once = rdec_token_n_rows()
-    t |> success(at_once >= 8l, "the token commands step eight rows or more at once on the hybrid ({at_once})")
-    var opening <- resident_prompt(PEEL_OPEN)
-    var feed <- resident_feed(at_once + 1l)
-    let lever = vulkan_prefill_peel()
-    set_vulkan_prefill_peel(true)
-    for (rows in [1l, 2l, 5l, 8l, at_once + 1l]) {
-        let peels = rows <= at_once
-        var tail <- [for (i in range64(rows)); feed[i]]
-        var steps <- ramp_ids(4l, rows, 2500l, 71l, 4500l)
-        var sa <- create_session(tr, mirror_kv_dtype())
-        eval(tr, sa, opening)
-        let peels0 = moe_gpu_resident_peels()
-        let pf0 = moe_gpu_resident_prefills()
-        forward_prefill(tr, sa, tail, rows, PEEL_OPEN)
-        t |> equal(moe_gpu_resident_peels() - peels0, peels ? 1l : 0l, "a tail of {rows} rows {peels ? "peels through the token commands" : "takes the window chain"}")
-        t |> equal(moe_gpu_resident_prefills() - pf0, 1l, "the tail of {rows} counted one served prefill")
-        t |> equal(sa.dn_pos, PEEL_OPEN + rows, "the recurrent state stands at the tail's end")
-        sa.n_past = PEEL_OPEN + rows
-        var got <- steps_after(tr, sa, steps)
-        var sb <- create_session(tr, mirror_kv_dtype())
-        eval(tr, sb, opening)
-        var inscope one : array<int64>
-        one |> resize(1)
-        for (i in range64(rows)) {
-            one[0] = tail[i]
-            eval_(tr, sb, one)
-        }
-        var want <- steps_after(tr, sb, steps)
-        let what = "a tail of {rows} rows"
-        rows_within_control(t, what, got, want, SPLIT_BAR_REL, 1l, 1.0, $(r) => r == 0l ? "the tail's last row" : "step {r}")
-        log_argmax_rows(tr, "{what}: the row-at-a-time rows, then the tail's", got, want)
-        served_every_call(t)
-        delete sa
-        delete sb
-        delete got
-        delete want
-        delete tail
-        delete steps
-    }
-    set_vulkan_prefill_peel(lever)
-    delete opening
-    delete feed
-}
-
 [test]
 def test_gpu_resident_hybrid_peel(t : T?) {
     t |> run("Qwen3.5-0.8B: a short tail peels through the token commands, the recurrent rows in order in the region's slot, and reads what the one-row steps read") @(t : T?) {
@@ -519,7 +532,7 @@ def test_gpu_resident_hybrid_peel(t : T?) {
         var tr <- load_resident(path, 1l)
         t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the hybrid (the load log names any decline)")
         with_dasllama_jobque_() {
-            hybrid_peel(t, tr)
+            recurrent_peel_cell(t, tr, SPLIT_BAR_REL)
         }
         delete tr
     }
@@ -527,7 +540,7 @@ def test_gpu_resident_hybrid_peel(t : T?) {
         with_mtp_carrier(t, 1l) $(var tr) {
             let spec0 = get_mtp_spec()
             set_mtp_spec(false)
-            hybrid_peel(t, tr)
+            recurrent_peel_cell(t, tr, SPLIT_BAR_REL)
             set_mtp_spec(true)
             assert_short_window_takes_chain(t, tr, "a NextN-headed model under speculation")
             set_mtp_spec(spec0)

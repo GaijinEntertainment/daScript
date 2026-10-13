@@ -222,7 +222,8 @@ one token id.** Which gather a table takes is its disk type's:
 A `KqEmb<Fmt>` leaf is the format's own decode GEMV leaf stamped under `KqGemvLeafT`'s `EMB`: a
 thread a 32-block, element k the int8 lane `blk_decode` leaves and the term pair `blk_fold` reads (the
 per-format arithmetic is the GEMV's own, never re-spelled), the grid formats staging their codebook as
-the GEMV does. The per-32 forms (q51, iq4nl32, mx4) never tag a dense table (`kq_fmt_row_ok`).
+the GEMV does. A per-32 table (q51, iq4nl32, q4032) is the `Blk32GemvRunT` family's `EMB` leaf
+(`Q51Emb`, `Iq4nl32Emb`, `Q4032Emb`), its block decode the GEMV's own; mx4 never tags a table.
 `resident_arm_emb` hands the plane to the tier (`rdec_set_emb` for a quantized plane in the arena,
 `rdec_upload_emb_f32` for the f32 rows) and logs why the host embeds where it does: a Q4_1/Q5_0 table,
 a prepared image (it does not carry `emb_f32_exact`), a plane past the room or the cap, a trimmed
@@ -288,8 +289,11 @@ prefilled, and a decode past the region's rows reads them beside the CPU-served 
 device-home session has no host cache to fill, so its pass panics with the reason. The pass
 still answers false, and the CPU rails serve the call.
 
+A region another host-cached session takes may hold rows its owner's cache lacks (a window prefill, a one-row step): the taker saves them first (`rdec_bind_region` reads the region's `host_behind` and head counts, `rdec_stash_region` the rows), and the
+owner, back for a bind or a pass, writes them into its cache before anything reads it (`rdec_unstash`); the owner's own bind drops a save its steps outdated, and a released session's save goes with it.
+
 Every row that moves between a host cache and the mirror - up for a take, down for a hydrate, a
-batched row's write-back, the NextN head's rows - moves through `rdec_host_rows`: a flat cache as
+batched row's write-back, the NextN head's rows, a saved claim - moves through `rdec_host_runs`: a flat cache as
 one span, a paged cache a physical run at a time (`kv_runs`), the mirror addressed by position
 either way, so a paged session is served like a flat one. A scheduler hydrates a paged stream
 before the prefix cache reads its pages - its donation, a recurrent checkpoint - since the rows a

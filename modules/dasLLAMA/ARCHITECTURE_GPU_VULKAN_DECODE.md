@@ -143,15 +143,15 @@ f16-min) and scaled. Only that arm rides - sigmoid gates, router biases, gemma4'
 shared expert with its sandwich norms, post-norms and biased experts decline to the per-layer
 path (`span_model_ok`).
 
-**A qwen2moe-class shared expert rides inside the span beside the routed slots.** Its q8 triple
-is resident under the shexp mark (the span's serve gate asks per layer), its feed is the same
-normed row requantized into its own stacks' images, its metas are one fixed region the host
+**A qwen2moe-class shared expert rides inside the span beside the routed slots.** Its triple is
+resident under the shexp mark in the file's own formats (`moe_gpu_shexp_planes`); a gate and up of
+two activation classes stop the span and run as three dense GEMMs, each fed its own image of the row
+(`shexp_gpu_gemms`), the span's serve gate asks per layer, its feed is the same normed row requantized
+into its own stacks' images by its gate's format, its metas are one fixed region the host
 writes once (the top-k never touches them), its gate logit is one more `RouterGemv` row over the
 layer's gate vector landing past the router's logits, and one combine (`DecCombineSh`) adds
-the routed slots and `sigmoid(gate)` times the shared down row onto the residual; an ungated
-shared expert (glm4moe) adds at weight one. Before this the span declined every shared-expert
-model to the per-layer path, and there the resident layer's shared expert ran on the CPU
-(`sh_gpu` in `dasllama_moe.das` serves the shexp rail only beside CPU experts).
+the routed slots and `sigmoid(gate)` times the shared down row onto the residual; an ungated shared expert (glm4moe) adds at
+weight one; off the span its chain overlaps CPU experts and follows device ones or the heat pool's hits (`shexp_gpu_after_rows`).
 
 **The span declines whole, per token, never per layer.** `span_first_layer` walks the layers
 downward through the block's serve gate (so a hydrate a layer needs runs first) and stops at
