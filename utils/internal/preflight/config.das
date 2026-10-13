@@ -150,6 +150,26 @@ def public count_fixed_files(out : string) : int {
     return n
 }
 
+//! The line-length tool's argv: the gate's base ref rides as given
+def public line_length_argv(daslang, base : string) : array<string> =>
+    <- [daslang, "utils/internal/line-length/main.das", "--", "--base", base]
+
+//! The lint gate's line for a failed line-length run; "" on rc 0
+def public line_length_fail_detail(rc : int; base : string) : string {
+    return "" if (rc == 0)
+    return "line-length check vs {base} failed - wrap the lines it lists, or fix the base it names"
+}
+
+//! The lint gate's pass line: rails clean, --fix edits, line lengths
+def public lint_pass_detail(file_count, fixed : int) : string {
+    let length_note = "added lines within CI's length limits"
+    if (fixed != 0) {
+        return ("{file_count} file(s) clean on both rails after --fix rewrote {fixed} of them - " +
+                "review and commit those edits; {length_note}")
+    }
+    return "{file_count} file(s) clean on both rails (host, linux-mirror), {length_note}"
+}
+
 //! The files dastest's closing FAILURES block names, comma-joined, at most five.
 def public failed_files_block(out : string) : string {
     var files : array<string>

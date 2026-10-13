@@ -594,11 +594,18 @@ def gate_format(ctx : PreflightCtx) : GateResult {
 // outside the PR — staleness belongs to the nightly whole-tree -j 1 pass.
 def gate_lint(ctx : PreflightCtx) : GateResult {
     let t0 = ref_time_ticks()
+    let line_check = run_argv(line_length_argv(ctx.daslang, ctx.base))
+    let line_fail = line_length_fail_detail(line_check.rc, ctx.base)
+    if (!empty(line_fail)) {
+        return GateResult(name = "lint", status = GateStatus.Fail, seconds = seconds_since(t0),
+            detail = line_fail, output = line_check.out)
+    }
     // a C/C++ positional compiles nothing; it arms its folder's [arch] pass, whose pointers it may carry
     var files <- lint_gate_files(ctx.changed_das, ctx.changed_md, ctx.changed_cpp, ctx.changed_cxx_other)
     if (empty(files)) {
         return GateResult(name = "lint", status = GateStatus.Skip, seconds = seconds_since(t0),
-            detail = "no .das, .md or C/C++ files changed vs {ctx.base} outside tree-sitter-daslang/")
+            detail = ("no .das, .md or C/C++ files changed vs {ctx.base} outside " +
+                      "tree-sitter-daslang/; added lines within CI's length limits"))
     }
     var host_args <- [ctx.daslang, "utils/lint/main.das", "--"]
     host_args |> push_from(files)
@@ -624,9 +631,7 @@ def gate_lint(ctx : PreflightCtx) : GateResult {
             detail = "LINUX-lane lint warnings (host pass was clean — a platform static_if half hides the symbol here; nolint:...,LINT019 both-worlds spelling, see skills/internal/preflight.md)", output = mirror.out)
     }
     return GateResult(name = "lint", status = GateStatus.Pass, seconds = seconds_since(t0),
-        detail = fixed == 0 ? "{length(files)} file(s) clean on both rails (host, linux-mirror)"
-            : "{length(files)} file(s) clean on both rails after --fix rewrote {fixed} of them - review and commit those edits",
-        output = fixed == 0 ? "" : host.out)
+        detail = lint_pass_detail(length(files), fixed), output = fixed == 0 ? "" : host.out)
 }
 
 // ===== ast-verify on changed .das (mirrors extended_checks "Run ast-verify on changed .das files") =====
@@ -1599,7 +1604,9 @@ def gate_table() : array<GateInfo> {
     return <- [
         GateInfo(name = "untracked", tier = "fast", doc = "no untracked files at PR time — commit, delete, or ignore each"),
         GateInfo(name = "format", tier = "fast", doc = "formatter --verify on tracked .das (mirrors CI)"),
-        GateInfo(name = "lint", tier = "fast", doc = "lint changed .das and .md on two rails (host, linux-mirror), zero warnings"),
+        GateInfo(name = "lint", tier = "fast",
+                 doc = "lint changed .das and .md on two rails (host, linux-mirror), zero warnings;"
+                     + " added .das lines within CI's length limits (code 100, comments 70)"),
         GateInfo(name = "hash-refs", tier = "fast", doc = "no bare #N in branch commit messages that GitHub would mislink - ledger cites spell out or backtick"),
         GateInfo(name = "review-md", tier = "fast", doc = "REVIEW.das gates of every folder the diff touches (utils/internal/review-md; CI's extended_checks step runs every gate)"),
         GateInfo(name = "review-md-tests", tier = "fast", doc = "the review-md discovery suites (walker fixtures, make-pr gate tests, preflight's own) when the diff touches a REVIEW.das or those tools (mirrors CI's extended_checks step)"),
