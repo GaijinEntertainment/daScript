@@ -423,3 +423,29 @@ def test_rope_gen_mscale(t : T?) {
         delete s2
     }
 }
+
+[test]
+def test_rope_factor_tensor(t : T?) {
+    t |> run("the factor tensor follows the file's tensors and its context") @(t : T?) {
+        // Phi-3.5: two LongRoPE sets, the long one past the original
+        // 4096, the short one within it
+        let short_set = "rope_factors_short.weight"
+        let long_set = "rope_factors_long.weight"
+        t |> equal(long_set, rope_factor_tensor(true, true, false, 131072l, 4096l),
+                   "a 128k file past its 4096 original")
+        t |> equal(short_set, rope_factor_tensor(true, true, false, 4096l, 4096l),
+                   "at the original context")
+        t |> equal(short_set, rope_factor_tensor(true, true, false, 2048l, 4096l), "under it")
+        t |> equal(short_set, rope_factor_tensor(true, true, false, 131072l, 0l),
+                   "a file that names no original context keeps the short set")
+        // one set alone serves at any context
+        t |> equal(short_set, rope_factor_tensor(true, false, false, 131072l, 4096l),
+                   "the short set alone")
+        t |> equal(long_set, rope_factor_tensor(false, true, false, 4096l, 4096l),
+                   "the long set alone")
+        // Llama-3.1's one rope_freqs, and a file with no factors
+        t |> equal("rope_freqs.weight", rope_factor_tensor(false, false, true, 131072l, 8192l),
+                   "a lone rope_freqs")
+        t |> equal("", rope_factor_tensor(false, false, false, 131072l, 8192l), "none")
+    }
+}

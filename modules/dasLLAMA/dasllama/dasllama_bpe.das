@@ -307,6 +307,10 @@ def init_byte_token_names() {
     }
 }
 
+//! The "<0xXX>" spelling of a byte's fallback piece - the inverse of
+//! byte_token_val, shared with the SPM backend.
+def byte_token_name(b : int) : string => BYTE_TOKEN_NAME[b]
+
 // An unresolved symbol falls back to per-byte <0xXX> tokens — raw-UTF-8 BPE has no GPT-2
 // byte alphabet to land on.
 def private emit_byte_fallback(tk : BpeTokenizer; s : string; var ids : array<int64>) {

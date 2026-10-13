@@ -1348,6 +1348,30 @@ def test_kq_fused_qkv_slices(t : T?) {
 }
 
 [test]
+def test_kq_phi3_longrope_factors(t : T?) {
+    t |> run("phi3 LongRoPE: the long set serves a context past the original 4096") @(t : T?) {
+        load_kq_native(t, "Phi-3.5-mini-instruct-Q4_K_M.gguf", true, false) $(tr; path) {
+            var gt = 0
+            var long_f <- read_prefix(path, "rope_factors_long.weight", 48l, gt)
+            var short_f <- read_prefix(path, "rope_factors_short.weight", 48l, gt)
+            t |> success(tr.config.seq_len > 4096l,
+                         "the file's context ({tr.config.seq_len}) runs past the original 4096")
+            t |> equal(48l, long_length(tr.rope_freqs),
+                       "one factor per rotation pair of the 96-wide head")
+            check(t, "the model's factors are the file's long set",
+                  tr.rope_freqs, long_f, BAR_EXACT, FLAT_SHAPE)
+            var apart = 0
+            for (a, b in tr.rope_freqs, short_f) {
+                apart += a != b ? 1 : 0
+            }
+            t |> success(apart > 0, "... which the short set is not ({apart} of 48 pairs differ)")
+            delete short_f
+            delete long_f
+        }
+    }
+}
+
+[test]
 def test_kq_ple_table(t : T?) {
     // E-series PLE token table (family c): gather-only tensor rides native kq planes — the tag
     // must take (a silent q8 fallback also passes parity, so pin it here) and whole-row plane

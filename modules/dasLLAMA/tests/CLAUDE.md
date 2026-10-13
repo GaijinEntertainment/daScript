@@ -2124,7 +2124,13 @@ corpora under the models dir, machine-local): the seven vocab families' `.inp`/`
 through `load_tokenizer_auto` -> `encode` / `decode`, ids exact and the decode round-trip
 lossless; reports SKIPPED where the vocab is not stocked. One cell is model-free: the BPE
 `add_bos` default a GGUF without the key takes (upstream's per-pre table), then the qwen35 vocab
-reading `add_bos == false` where that fixture is stocked.
+reading `add_bos == false` where that fixture is stocked. The SentencePiece byte-fallback cells:
+model-free, a hand-built vocabulary with control tokens ahead of its byte pieces (Mistral v0.3's
+layout, where 3 + the byte is a control token) encodes a newline as its `<0x0A>` piece and no
+control id, the Llama-2 layout (byte pieces right after eos) reads the same pieces, and a
+vocabulary with no byte pieces panics on a byte it cannot spell; model-gated, Mistral-7B-Instruct-v0.3
+Q8_0 reads `<0x0A>` at 781 with 13 a control token, and the newline and tab samples encode to
+`llama-tokenize --no-bos`'s ids and decode back.
 `test_embeddings.das` - stocked suite, `-jit` only; the embeddings read per model: on
 Qwen3-Embedding-0.6B Q8_0 (small tier) the file's `pooling_type` reads last-token and its
 `add_eos_token` on, `encode` ends a text with the EOS, and the model card's own example - two
@@ -2227,7 +2233,10 @@ time, and the key-radix and lattice-predicate cells.
 type and, nested once per side, the sixteen K x V pairs each carry the same address.
 `test_kquant.das` - model-free: the K-quant and grid plane dequants and dots against in-test
 references, including the iq4nl plane dequant on a jobque team lane reading the same values as the
-main thread (its codebook read is fork-safe); and `test_q8_plane_row_f32` - rows quantized with
+main thread (its codebook read is fork-safe); `test_kq_phi3_longrope_factors` - the model-gated
+LongRoPE cell on Phi-3.5 Q4_K_M: the loaded model's `rope_freqs` are the file's
+`rope_factors_long` set bit for bit (the file's 131072 context runs past its original 4096) and
+not its short set, the rule itself (`rope_factor_tensor`) model-free in `test_rope.das`; and `test_q8_plane_row_f32` - rows quantized with
 `quantize_q8_0_into` and repacked at (mr, kgroup, wbias) = (4, 8, 128) and (16, 8, 0), with and
 without a row tail, read back through `q8_plane_row_f32` as q times the block's f32 scale bit for
 bit (control: the product with the scale rounded to f16 must miss on at least one element).

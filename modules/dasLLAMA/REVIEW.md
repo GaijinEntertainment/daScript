@@ -5,8 +5,9 @@ docs: `ARCHITECTURE.md`, `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_MEASUREMENT.md`
 `followup_general.md`, `followup_vulkan.md`, `followup_metal.md`; the measured record: `PERF_LEDGER.md`.
 
 **A change to the tokenizer - `dasllama/dasllama_tokenizer.das`, `dasllama/dasllama_spm.das`,
-`dasllama/dasllama_bpe.das` or `dasllama/dasllama_pretok.das` - or to a special-token or template
-string passed to their lookups, wherever it sits, applies `REVIEW_TOKENIZER.md` (beside this file) too.**
+`dasllama/dasllama_bpe.das` or `dasllama/dasllama_pretok.das` - or to a string any `special_id`
+overload receives, wherever that string is written, applies `REVIEW_TOKENIZER.md` (beside this
+file) too.** This trigger and `REVIEW_TOKENIZER.md`'s matching trigger change together.
 
 **A diff that touches a `followup_*.md` or an `ARCHITECTURE*.md` under this folder, adds a file
 under `dasllama/`, or adds a STYLE037/STYLE038 suppression anywhere under this folder applies

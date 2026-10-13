@@ -11,9 +11,13 @@ require daslib/strings_boost
 //     invisible, so that pattern is rejected outright;
 //  2. facade stubs and the engine's trailing-underscore spellings stay 1:1 — adding `foo_` to
 //     the engine without a documented `foo` stub (or vice versa) fails here;
-//  3. the examples stay facade-only: their one dasllama require is dasllama/dasllama.
+//  3. the examples stay facade-only: their one dasllama require is
+//     the facade, dasllama/dasllama_core (run.das and chat.das decode
+//     no audio or image file, so they take the engine without the
+//     file decoders dasllama/dasllama.das adds).
 
-let FACADE = "modules/dasLLAMA/dasllama/dasllama.das"
+let FACADE = "modules/dasLLAMA/dasllama/dasllama_core.das"
+let FACADE_REQUIRE = "dasllama/dasllama_core"
 let ENGINE_FILES = [
     "modules/dasLLAMA/dasllama/dasllama_common.das",
     "modules/dasLLAMA/dasllama/dasllama_load.das",      // load_model_ (the common split moved it)
@@ -125,7 +129,7 @@ def test_examples_are_facade_only(t : T?) {
                 }
             }
             t |> equal(length(dasllama_requires), 1)
-            t |> equal(dasllama_requires[0], "dasllama/dasllama")
+            t |> equal(dasllama_requires[0], FACADE_REQUIRE)
         }
     }
 }
