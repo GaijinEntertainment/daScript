@@ -243,8 +243,8 @@ def private encode_gemma_layer(t : Model; s : Session; enc : MetalComputeEncoder
         enc_rms(enc, g.bxin, 0ul, bw_an, g.bxn, g.u_dim, g.u_eps)
         enc_gemv(enc, g.bblob, uint64(dr.wq_offs[l]), g.bxn, g.bq, g.u_dim, g.u_qd[l], qd)
         var bw_qn = upload_region(addr < void? >(dr.fblob[dr.q_norm_offs[l]]), uint64(hs) * 4ul)
-        var qka = QkNormArgs(nq = uint(dr.n_heads), koffe = 0u, rstride = uint(qd), hs = uint(hs), woffe = 0u, eps = dr.eps, soffe = 0u)
-        enc_qk_norm(enc, g.bq, 0ul, bw_qn, qka, dr.n_heads, 1l, hs)
+        var qka = qk_norm_args(uint(dr.n_heads), 0u, uint(hs), uint(qd), 0u, 0u, 0u, dr.eps)
+        enc_qk_norm(enc, g.bq, g.bq, bw_qn, qka, dr.n_heads, 1l)
         // rope on Q only: every pair is a Q pair, so the fused store's K/V lanes never run
         var rka = gk_rope_kv_args(qd, 0l, hs, qd / 2l, qd / 2l, c.rope_neox, false, hs)
         enc_rope_store(enc, true, g.bq, 0ul, g_arena, g_arena, 0ul, 0ul, sl ? g.bcos_sw : g.bcos, sl ? g.bsin_sw : g.bsin, 0ul, g_one, rka, qd / 2l)

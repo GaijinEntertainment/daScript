@@ -1847,4 +1847,12 @@ def test_metal_prefill_kq_tail(t : T?) {
         if (!family_on(t, "qwen3") || !arm_on(t, "kq-tail")) return
         short_window_cells(t, path_join(models_dir(), "Qwen3-4B-Instruct-2507-Q4_K_M.gguf"), "kq-tail/qwen3-k4", 0.08, ShortForm.kq_tail)
     }
+    t |> run("the dense per-32 sites' small-batch peel == CPU control (Llama-3.2-1B Q5_1)") <| @(t : T?) {
+        if (!family_on(t, "llama") || !arm_on(t, "kq-tail")) return
+        short_window_cells(t, path_join(models_dir(), "Llama-3.2-1B-Instruct-Q5_1-local.gguf"), "kq-tail/llama-q51", 0.08, ShortForm.kq_tail)
+    }
+    t |> run("the dense per-32 sites' small-batch peel == CPU control (Qwen2.5-0.5B IQ4_NL)") <| @(t : T?) {
+        if (!family_on(t, "qwen2") || !arm_on(t, "kq-tail")) return
+        short_window_cells(t, path_join(models_dir(), "Qwen2.5-0.5B-Instruct-IQ4_NL-local.gguf"), "kq-tail/qwen2-iq4nl32", 0.08, ShortForm.kq_tail)
+    }
 }

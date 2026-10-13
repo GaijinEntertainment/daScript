@@ -92,13 +92,14 @@ the kernel cells hold every format's route at every row count (`test_metal_kq_ha
 the rows parity cell holds k4 and k6 token for token (`test_metal_decode_parity.das`, the
 `batchB8-kq` arm's half-x leg).
 
-Past eight rows the form is the panel's. The kq mul_mm twins dispatch `mp / 32` threadgroups
-along M, so `enc_kq_site_b` takes them only over a panel padded to that tile (`mp` a multiple of
-32) - the batch driver's at nine rows and up. The verify's panel is padded to the GEMV forms'
-4-row tile (`ARCHITECTURE_GPU_MTP_DECODE.md#verify-row-pad`), so its nine rows (`MTP_MAX_ROWS`, depth 8) ride the small-batch forms: the
-first eight as the eight-row dispatch, each row past eight as a single pass at its own x and y row
-offsets. An unpadded nine-row panel handed to the mul_mm dispatches no threadgroup at all; the
-twins' `mp % 32` contract names that site instead of leaving the output unwritten.
+Past eight rows the form is the panel's. The kq mul_mm twins dispatch `mp / 32` threadgroups along M, so `enc_kq_site_b` takes
+them only over a panel padded to that tile (`mp` a multiple of 32) - the batch driver's at nine rows and up. The verify's panel
+is padded to the GEMV forms' 4-row tile (`#verify-row-pad`), so its nine rows (`MTP_MAX_ROWS`, depth 8) ride the small-batch
+forms in ONE dispatch: the eight- and four-column forms carry a column-group grid axis (`ceil(rows / 8)`, `ceil(rows / 4)`
+groups), the eight-column form restaging its last live row in a group's columns past the live rows, so its x needs no pad
+(`metal_kq_mvb_wide_count` counts the dispatches past eight rows); a box crowned to single passes keeps them past eight rows
+too. An unpadded nine-row panel handed to the mul_mm dispatches no threadgroup at all; the twins' `mp % 32` contract names
+that site instead of leaving the output unwritten.
 
 ### The verify's row buffers are padded to the GEMV form's row tile {#verify-row-pad}
 
@@ -151,12 +152,11 @@ sampler (temp 0, penalties off) and a caller feeding the argmax directly keep th
 The winner's embed gather reads the table the host's `embed_row` would (`enc_embed_dev`): the Q8
 linear copy (`MetalEmbedQ8`), the table's K-quant plane in its own format, tied or untied (the
 `MetalEmbedKqT` stamp of that format), or the fp32 token table in fblob (one row through
-`MetalRowGather` under the embed scale, the plane wrapped zero-copy through `plane_of`). The same
-gather opens every unchained single-row step, off the token `forward()` pokes, and the MTP round's
-depth-1 chain takes any table whose gather reads an offset token list (`emb_dev_gather_at_ok`: the
-q8 copy and the K-quant planes). A recurrent model chains on its mirror's three regions: a chained step reads the region
-the step in flight writes and writes the next, so a miss lands the region it read live again (`dn_mirror_land`) and the
-rerun steps from the state the chain never touched; an n-gram ring has one copy, so its models never chain.
+`MetalRowGather` under the embed scale, the plane wrapped zero-copy through `plane_of`). The same gather opens every unchained
+single-row step, off the token `forward()` pokes, and the MTP round's depth-1 chain takes every table
+(`ARCHITECTURE_GPU_MTP.md#mtp-nextn-chain`). A recurrent model chains on its mirror's three regions: a chained step reads the
+region the step in flight writes and writes the next, so a miss lands the region it read live again (`dn_mirror_land`) and
+the rerun steps from the state the chain never touched; an n-gram ring has one copy, so its models never chain.
 
 **The step wait spins on the GPU end time, then blocks.** `finish_step` polls the command
 buffer's `GPUEndTime` until it is set and only then enters `waitUntilCompleted`, because a

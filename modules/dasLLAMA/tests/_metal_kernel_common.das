@@ -185,9 +185,8 @@ def with_metal_cell(var dev : MetalDevice?; var queue : MetalCommandQueue?; blk 
 }
 
 //! a `stamp_of`'s pipeline compiled on the cell's device and released with its planes; null with `err` where the compile failed
-def keep_stamp(var mc : MetalCell; st : auto(ST); var err : string&) : MetalComputePipeline? {
-    return mc |> keep_pso(invoke(st.make, mc.dev, err))
-}
+def keep_stamp(var mc : MetalCell; st : auto(ST); var err : string&) : MetalComputePipeline? =>
+    mc |> keep_pso(invoke(st.make, mc.dev, err))
 
 //! `pso` - `st`'s own pipeline - in the pipeline global `st`'s builder reads for the length of `blk`, and the global's own
 //! value back after: a dispatch through `st.enc` inside `blk` runs the gate's pipeline with the builder's binds and grid
@@ -511,10 +510,10 @@ def kq_fill_planes(fmt, nsb : int; var kq : array<uint8>; var ks : array<uint8>)
             ks[b * 2] = uint8(dbits & 0xFFu)
             ks[b * 2 + 1] = uint8(dbits >> 8u)
         }
-    } elif (fmt == 6 || fmt == 44 || fmt == 3 || fmt == 33 || fmt == 34 || fmt == 23 || fmt == 24 || fmt == 25) {
+    } elif (fmt == 6 || fmt == 44 || fmt == 35 || fmt == 3 || fmt == 33 || fmt == 34 || fmt == 23 || fmt == 24 || fmt == 25) {
         ks |> resize(nsb * 18)
         for (i in range(nsb * 16)) {
-            ks[i] = fmt == 6 || fmt == 3 || fmt == 23 || fmt == 24 || fmt == 25 ? kq_hash_byte(i * 7 + 13) : uint8(i % 16 < 8 ? int(kq_hash_byte(i * 7 + 13)) % 63 - 31 : 0)   // 44/33: signed strip bytes + zero pad; 23: 16 unsigned strips
+            ks[i] = fmt == 6 || fmt == 3 || fmt == 23 || fmt == 24 || fmt == 25 ? kq_hash_byte(i * 7 + 13) : uint8(i % 16 < 8 ? int(kq_hash_byte(i * 7 + 13)) % 63 - 31 : 0)   // 44/35/33: signed strip bytes + zero pad; 23: 16 unsigned strips
         }
         for (b in range(nsb)) {
             let dbits = f32_to_f16(KQ_SAFE_SCALES[b % 8])
@@ -570,9 +569,8 @@ def q8_x_fill(nn : int; var xf : array<float>) {
 
 //! the byte offset a GEMV stamp binds a split-scale plane's f16 d tail at: past the `nsb` 16-byte strip rows on the formats
 //! that split their scales (k6, k3, k2, iq4xs and the grid formats), 0 on the ones whose d rides the superblock row
-def kq_split_doff(fmt, nsb : int) : uint64 {
-    return fmt == 6 || fmt == 44 || fmt == 3 || fmt == 33 || fmt == 34 || fmt == 2 || fmt == 23 || fmt == 24 || fmt == 25 ? uint64(nsb * 16) : 0ul
-}
+def kq_split_doff(fmt, nsb : int) : uint64 =>
+    fmt == 6 || fmt == 44 || fmt == 35 || fmt == 3 || fmt == 33 || fmt == 34 || fmt == 2 || fmt == 23 || fmt == 24 || fmt == 25 ? uint64(nsb * 16) : 0ul
 
 //! One row's reference dequant (nb superblocks from sb_base) off split-scale planes, through the engine's own plane-row dequant.
 def kq_row_ref(fmt, sb_base, nb, nsb_total : int; kq, ks : array<uint8>; var wrow : array<float>) {

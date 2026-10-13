@@ -160,10 +160,9 @@ stamp for the iquant scaffold before assuming the k6 result transfers; the arc-e
 soft spot is the deep-K w2 column (k6 0.91x / iq3s 0.88x / iq3xxs 0.92x vs llama.cpp on m5),
 which is exactly the column a tall stamp serves.
 
-## 7. The Qwen Metal sweep - every Qwen text file the M5 stocks, one at a time
+## 7. The Qwen Metal sweep - the M5's Qwen text files, one at a time
 
-The Vulkan tier went through every Qwen the zen2 box stocks; Metal never had that pass. This
-is it: smallest file first, one file per run, each file gating on two things before the next
+The Metal Qwen pass: smallest file first, one file per run, each file gating on two things before the next
 starts - the counting fixture matches (the parity pregate, 8/8 opening tokens) and both pp512
 and tg128 read at or above 0.9 of llama.cpp. A file under either bar stops the sweep until it
 is fixed; the fix lands as its own row above or its own PR, and the file re-runs. A Vulkan fix
@@ -1051,3 +1050,11 @@ round apart from the decode step's at a near-tie; the scheduler keeps the step. 
 work: one dispatch a layer over every segment - a segment table the attention tiles and the scan read their row range,
 key extent and slices from, the batched decode's route-table shape lifted to tiles - so a segment costs its rows alone;
 then the rider is a one-row segment of a window that is no stall.
+
+## 54. The dense K-quant sites' own-bytes tile forms trail the f16 panel from 512 rows
+
+`ARCHITECTURE_GPU_PREFILL.md#devw-panel-knees`: a K-quant site reads its own bytes (the twins, the tall stamp, the base
+tile), and the f16 panel the lever builds - a converted copy - leads it by 27-39% on Llama-3.2-3B Q4_K_M and 39-67% on
+Llama-3.2-1B IQ4_XS at 512-2048 rows (the own bytes ahead at 128 rows; a Q8_0 site's mul_mm forms trail the panel by
+3-7% at 2048 rows alone). The work: the tile forms' decode and staging on the K-quant planes, raced against the panel
+at the same window, until the own bytes hold the panel's time from 512 rows up.

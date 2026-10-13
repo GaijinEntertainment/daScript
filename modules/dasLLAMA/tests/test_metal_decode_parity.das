@@ -689,6 +689,18 @@ def test_metal_batch_decode_parity(t : T?) {   // nolint:STYLE038 — flat arm l
                     let gpuk12 <- batch_greedy(trkb, trkbg, promptsk12, 10, KVDtype.f16, true, -1, 0)
                     t |> success(metal_batch_decode_stats().steps - before > 0l, "B=12 kq arm served on the GPU")
                     t |> success(streams_match(cpuk12, gpuk12), "B=12 kq batched greedy streams match the CPU control (kq mul_mm)")
+                    //! B=9: the first row count past the small-batch forms' eight, the same mul_mm route
+                    var promptsk9 : array<array<int64>>
+                    promptsk9 |> reserve(9)
+                    for (i in range(9)) {
+                        promptsk9 |> emplace <| encode(trkb, counting_prompt(2 + i, 36 + 2 * i), true, false)
+                    }
+                    let cpuk9 <- batch_greedy(trkb, trkbg, promptsk9, 10, KVDtype.f16, false, -1, 0)
+                    before = metal_batch_decode_stats().steps
+                    let gpuk9 <- batch_greedy(trkb, trkbg, promptsk9, 10, KVDtype.f16, true, -1, 0)
+                    t |> success(metal_batch_decode_stats().steps - before >= 10l, "B=9 kq arm served on the GPU, every step batched")
+                    t |> success(streams_match(cpuk9, gpuk9), "B=9 kq batched greedy streams match the CPU control")
+                    delete promptsk9
                     // the half-x leg: under the kq_rows_half_k4 and kq_rows_half_k6 crowns the K-quant sites of two to
                     // eight rows read the f16 twin the norms and the activation store beside their rows - B=2 / B=3 / B=8
                     // take k4's two-, four- and eight-column wide forms and k6's small-batch half stamps, token for token
@@ -828,6 +840,131 @@ def test_metal_batch_decode_parity(t : T?) {   // nolint:STYLE038 — flat arm l
             delete trg
         } else {
             feint("das_metal is not built on this platform; nothing to compare\n")
+        }
+    }
+}
+
+//! the mixed twin: K-quant deltanet qkv / gate planes beside a Q8_0 out plane, every batched site dispatching by its own tag
+[test]
+def test_metal_batch_mixed_sites(t : T?) {
+    t |> run("GPU batched decode on a layer mixing q8 and K-quant planes == the GPU single-row step (Qwen3.5-0.8B-Q4_K_M-q8out)") <| @(t : T?) {
+        if (!family_on(t, "qwen35")) return
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            return if (!jit_only(t) || !arm_on(t, "batch-mixed"))
+            let path = path_join(models_dir(), "Qwen3.5-0.8B-Q4_K_M-q8out.gguf")
+            return if (!model_available(t, path))
+            let prior_wscale = get_wscale_f16()
+            let prior_backend = active_kernel_backend()
+            set_wscale_f16(false)
+            pin_kernel_backend("portable")
+            var tr <- load_model_(path, QuantMode.q8)
+            tr.config.seq_len = min(tr.config.seq_len, 512l)
+            var mixed = false
+            for (l in range64(tr.config.n_layers)) {
+                if (layer_is_recurrent(tr.config, l) && fmt_at(tr.dnout_fmt, l) == KqFmt.q8 && fmt_at(tr.dnqkv_fmt, l) != KqFmt.q8) {
+                    mixed = true
+                }
+            }
+            t |> success(mixed, "a recurrent layer reads a Q8_0 out plane beside a K-quant qkv plane")
+            var trg <- blob_twin(t, path, 512l)
+            for (nb in [3, 9, 12]) {   //! nine and twelve rows ride the GEMM tier, whose M pad the recurrent row planes hold
+                var inscope prompts : array<array<int64>>
+                prompts |> reserve(nb)
+                for (i in range(nb)) {
+                    prompts |> emplace <| encode(tr, counting_prompt(1 + i, 30 + 3 * i), true, false)
+                }
+                let b0 = metal_batch_decode_stats()
+                var inscope batched <- batch_greedy(tr, trg, prompts, 12, KVDtype.f16, true, -1, 0)
+                let b1 = metal_batch_decode_stats()
+                var inscope single <- batch_greedy(tr, trg, prompts, 12, KVDtype.f16, true, -1, 1)
+                t |> equal(b1.steps - b0.steps, 12l, "B={nb}: every step was the batched driver's ({b1.steps - b0.steps} of 12)")
+                t |> equal(b1.declines, b0.declines, "B={nb}: the batch declined no step")
+                t |> success(streams_match(single, batched), "B={nb}: the batched streams are the single-row step's token for token")
+                log_gen_texts(tr, "mixed B={nb} stream 0", single[0], batched[0])
+            }
+            metal_decode_shutdown()
+            metal_prefill_shutdown()
+            delete trg
+            delete tr
+            clear_kernel_backend_pin()
+            select_kernel_backend(prior_backend)
+            set_wscale_f16(prior_wscale)
+            t |> equal(metal_live_object_count(), 0l, "no leaked Metal objects after shutdown")
+        } else {
+            t |> skip("dasMetal not built")
+        }
+    }
+}
+
+//! one tag array's per-32 planes (q51, iq4nl32)
+def private per32_in(a : array<KqFmt>) : int64 => long_length([for (f in a); f; where f == KqFmt.q51 || f == KqFmt.iq4nl32])
+
+//! a dense model's planes tagged with a per-32 format
+def private per32_planes(m : Model) : int64 {
+    return (per32_in(m.wq_fmt) + per32_in(m.wk_fmt) + per32_in(m.wv_fmt) + per32_in(m.wo_fmt) + per32_in(m.w1_fmt) + per32_in(m.w2_fmt)
+        + per32_in(m.w3_fmt))
+}
+
+//! the per-32 dense planes on the batched driver: two to eight rows on the small-batch form, nine and twelve on the mul_mm tile -
+//! every step the batched driver's with no decline, every small-batch dispatch carrying every row (none a row at a time), and
+//! the streams the GPU single-row step's token for token
+[test]
+def test_metal_batch_per32_sites(t : T?) {
+    for (spec in [(file = "Llama-3.2-1B-Instruct-Q5_1-local.gguf", fam = "llama"), (file = "Qwen2.5-0.5B-Instruct-IQ4_NL-local.gguf", fam = "qwen2")]) {
+        t |> run("GPU batched decode on per-32 dense planes == the GPU single-row step ({spec.file})") <| @(t : T?) {
+            if (!family_on(t, spec.fam)) return
+            static_if (typeinfo builtin_module_exists(das_metal)) {
+                return if (!jit_only(t) || !arm_on(t, "batch-per32"))
+                let path = path_join(models_dir(), spec.file)
+                return if (!model_available(t, path))
+                let prior_wscale = get_wscale_f16()
+                let prior_backend = active_kernel_backend()
+                set_wscale_f16(false)
+                pin_kernel_backend("portable")
+                var tr <- load_model_(path, QuantMode.q8)
+                tr.config.seq_len = min(tr.config.seq_len, 512l)
+                let np32 = per32_planes(tr)
+                t |> success(np32 > 0l, "{spec.file}: the dense planes load on their per-32 planes ({np32} planes)")
+                var trg <- blob_twin(t, path, 512l)
+                for (nb in [2, 3, 5, 8, 9, 12]) {
+                    var inscope prompts : array<array<int64>>
+                    prompts |> reserve(nb)
+                    for (i in range(nb)) {
+                        prompts |> emplace <| encode(tr, counting_prompt(1 + i, 30 + 3 * i), true, false)
+                    }
+                    let b0 = metal_batch_decode_stats()
+                    let m0 = metal_b32_mvb_stats()
+                    let ks0 = metal_b32_ks_count()
+                    var inscope batched <- batch_greedy(tr, trg, prompts, 12, KVDtype.f16, true, -1, 0)
+                    let b1 = metal_batch_decode_stats()
+                    let m1 = metal_b32_mvb_stats()
+                    let ks = metal_b32_ks_count() - ks0
+                    var inscope single <- batch_greedy(tr, trg, prompts, 12, KVDtype.f16, true, -1, 1)
+                    let disp = m1.dispatches - m0.dispatches
+                    let rows = m1.rows - m0.rows
+                    t |> equal(b1.steps - b0.steps, 12l, "B={nb}: every step was the batched driver's ({b1.steps - b0.steps} of 12)")
+                    t |> equal(b1.declines, b0.declines, "B={nb}: the batch declined no step")
+                    t |> equal(rows, disp * int64(nb), "B={nb}: every small-batch dispatch carried all {nb} rows ({disp} dispatches, {rows} rows)")
+                    if (nb <= 8) {
+                        t |> success(disp >= 12l * np32, "B={nb}: the per-32 sites rode the small-batch form ({disp} dispatches, {12l * np32} planes x steps)")
+                        t |> success(ks > 0l, "B={nb}: the narrow per-32 planes rode the K-split stamps ({ks} dispatches)")
+                    } else {
+                        t |> equal(disp, 0l, "B={nb}: past eight rows the per-32 sites ride the mul_mm tile")
+                    }
+                    t |> success(streams_match(single, batched), "B={nb}: the batched streams are the single-row step's token for token")
+                    log_gen_texts(tr, "per-32 B={nb} stream 0", single[0], batched[0])
+                }
+                metal_decode_shutdown()
+                metal_prefill_shutdown()
+                delete trg
+                delete tr
+                clear_kernel_backend_pin()
+                select_kernel_backend(prior_backend)
+                set_wscale_f16(prior_wscale)
+                t |> equal(metal_live_object_count(), 0l, "no leaked Metal objects after shutdown")
+            } else {
+                t |> skip("dasMetal not built")
+            }
         }
     }
 }

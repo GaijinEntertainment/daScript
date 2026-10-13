@@ -199,7 +199,10 @@ var g_pso_attnp_q8 : MetalComputePipeline?
 var g_pso_attnp_tq4 : MetalComputePipeline?
 var g_pso_attncomb : MetalComputePipeline?
 var g_pso_rpst16 : MetalComputePipeline?
-var g_pso_rpst_h16 : MetalComputePipeline?  // head-cooperative fused bias+norm+rope+store (QK-norm models)
+var g_pso_qkn16 : MetalComputePipeline?    //! the fused q/k norm + rope + store (`GkQknRopeKv`): f16 / f32 mirrors, one row and rows
+var g_pso_qkn32 : MetalComputePipeline?
+var g_pso_qknb16 : MetalComputePipeline?
+var g_pso_qknb32 : MetalComputePipeline?
 var g_pso_rpst32 : MetalComputePipeline?
 var g_pso_rpst_q8 : MetalComputePipeline?   // per-32-block quantizing store
 var g_pso_rpst_tq4 : MetalComputePipeline?  // threadgroup-per-head FWHT + quantizing store
@@ -216,6 +219,7 @@ var g_pso_emb_kq_k4 : MetalComputePipeline?     //! the token-table gather, one 
 var g_pso_emb_kq_k5 : MetalComputePipeline?
 var g_pso_emb_kq_k6 : MetalComputePipeline?
 var g_pso_emb_kq_iq4xs : MetalComputePipeline?
+var g_pso_emb_kq_iq3s4 : MetalComputePipeline?
 var g_pso_emb_kq_iq4nl : MetalComputePipeline?
 var g_pso_emb_kq_q40 : MetalComputePipeline?
 var g_pso_emb_kq_k3 : MetalComputePipeline?
@@ -225,6 +229,9 @@ var g_pso_emb_kq_iq3xxs : MetalComputePipeline?
 var g_pso_emb_kq_iq2s : MetalComputePipeline?
 var g_pso_emb_kq_iq2xs : MetalComputePipeline?
 var g_pso_emb_kq_iq2xxs : MetalComputePipeline?
+var g_pso_emb_b32_q51 : MetalComputePipeline?       //! the per-32 token-table gathers
+var g_pso_emb_b32_iq4nl32 : MetalComputePipeline?
+var g_pso_emb_b32_q4032 : MetalComputePipeline?
 var g_pso_moe_router : MetalComputePipeline?   // MoE (Wave C): router GEMV over the fp32 slab
 var g_pso_moe_select : MetalComputePipeline?   // softmax + top-k + renorm (one simdgroup)
 var g_pso_moe_select_512 : MetalComputePipeline?   // the 16-deep ladder past 256 experts
@@ -238,12 +245,14 @@ var g_pso_moe_kq_iq2s : MetalComputePipeline?
 var g_pso_moe_kq_iq2xs : MetalComputePipeline?
 var g_pso_moe_kq_iq2xxs : MetalComputePipeline?
 var g_pso_moe_kq_iq4xs : MetalComputePipeline?
+var g_pso_moe_kq_iq3s4 : MetalComputePipeline?
 var g_pso_moe_kq_q40 : MetalComputePipeline?
 var g_pso_moe_kq_iq4nl : MetalComputePipeline?
 var g_pso_moe_kq_k2 : MetalComputePipeline?
 var g_pso_moe_kq_k5 : MetalComputePipeline?
 var g_pso_moe_kq_k6 : MetalComputePipeline?
 var g_pso_moe_combine : MetalComputePipeline?  // weighted top-k reduce into the w2 write shape
+var g_pso_moe_combine_sh : MetalComputePipeline?   //! ... with the gated shared expert's rows added
 var g_pso_g4rnorm : MetalComputePipeline?      // gemma4 MoE router-input norm (stage 3)
 var g_pso_moe_wscale : MetalComputePipeline?   // gemma4 per-expert down-scale fold
 var g_pso_swiglu_oai : MetalComputePipeline?   // gpt-oss clamped swiglu (stage 4)
@@ -252,8 +261,34 @@ var g_pso_moe_gemv_q51 : MetalComputePipeline?  // Q5_1 expert GEMV (per-32 plan
 var g_pso_moe_gemv_iq4nl32 : MetalComputePipeline?  // IQ4_NL per-32 expert GEMV
 var g_pso_kq_q51 : MetalComputePipeline?           // dense Q5_1 GEMV (per-32 planes)
 var g_pso_kq_iq4nl32 : MetalComputePipeline?       // dense IQ4_NL per-32 GEMV
+var g_pso_b32_mvb2_q51 : MetalComputePipeline?     //! the per-32 small-batch forms, two / four / eight x columns a group
+var g_pso_b32_mvb4_q51 : MetalComputePipeline?
+var g_pso_b32_mvb8_q51 : MetalComputePipeline?
+var g_pso_b32_mvb2_iq4nl32 : MetalComputePipeline?
+var g_pso_b32_mvb4_iq4nl32 : MetalComputePipeline?
+var g_pso_b32_mvb8_iq4nl32 : MetalComputePipeline?
+var g_pso_kq_q51_ks : MetalComputePipeline?        //! the narrow-plane per-32 stamps: one row a threadgroup, K split four ways
+var g_pso_kq_iq4nl32_ks : MetalComputePipeline?
+var g_pso_b32_mvb2_q51_ks : MetalComputePipeline?
+var g_pso_b32_mvb4_q51_ks : MetalComputePipeline?
+var g_pso_b32_mvb8_q51_ks : MetalComputePipeline?
+var g_pso_b32_mvb2_iq4nl32_ks : MetalComputePipeline?
+var g_pso_b32_mvb4_iq4nl32_ks : MetalComputePipeline?
+var g_pso_b32_mvb8_iq4nl32_ks : MetalComputePipeline?
+var g_pso_moe_gemv_q4032 : MetalComputePipeline?   //! the q4032 stamps: the iq4nl32 set under the linear code
+var g_pso_kq_q4032 : MetalComputePipeline?
+var g_pso_kq_q4032_ks : MetalComputePipeline?
+var g_pso_b32_mvb2_q4032 : MetalComputePipeline?
+var g_pso_b32_mvb4_q4032 : MetalComputePipeline?
+var g_pso_b32_mvb8_q4032 : MetalComputePipeline?
+var g_pso_b32_mvb2_q4032_ks : MetalComputePipeline?
+var g_pso_b32_mvb4_q4032_ks : MetalComputePipeline?
+var g_pso_b32_mvb8_q4032_ks : MetalComputePipeline?
+var g_pso_kq_mm_b4032 : MetalComputePipeline?
 var g_mx4_vtab : MetalBuffer?                   // [16] signed doubled-e2m1 values
 var g_pso_dn_conv : MetalComputePipeline?      // deltanet (Wave D): causal conv + SiLU
+var g_pso_dn_conv_n : MetalComputePipeline?    //! ... and the q/k L2 norm in one pass (`GkDnConv`)
+var g_pso_dn_conv_n4 : MetalComputePipeline?
 var g_pso_dn_hist : MetalComputePipeline?      // conv-history advance
 var g_pso_st2_im2col : MetalComputePipeline?
 var g_pso_st2_conv_mm : MetalComputePipeline?
@@ -317,12 +352,12 @@ var g_pso_dn_deint : MetalComputePipeline?     // 2x-wide [q|gate] deinterleave
 var g_pso_hc_norm : MetalComputePipeline?      // hyper-connections: the grouped stream norm
 var g_pso_hc_lo : MetalComputePipeline?        // ... silu(lo / hc) on the low-rank row
 var g_pso_hc_init : MetalComputePipeline?      // ... the wide residual rows as hc copies of the embed rows
+var g_pso_cat2 : MetalComputePipeline?         //! the MTP head's [a ; b] eh_proj input rows
 var g_pso_hc_mix : MetalComputePipeline?       // ... the sigmoid-gated stream mean
 var g_pso_hc_combine : MetalComputePipeline?   // ... the scatter of a block output into the streams
 var g_pso_ple_gate : MetalComputePipeline?     // the n-gram side input's per-stream gate + conv-input row
 var g_pso_ple_conv : MetalComputePipeline?     // ... its dilated causal conv + residual add
 var g_pso_sigmul : MetalComputePipeline?       // x ⊙ σ(g) — the gated-attention out-gate
-var g_pso_axpy_sig : MetalComputePipeline?     // y += x ⊙ σ(g[row]) — the shexp combine (stage 3)
 var g_pso_qkvrs16 : MetalComputePipeline?   // fused QKV+rope+store (s16 path)
 var g_pso_qkvrs32 : MetalComputePipeline?
 var g_pso_w13sw : MetalComputePipeline?
@@ -332,6 +367,11 @@ var g_pso_kq_k5 : MetalComputePipeline?
 var g_pso_kq_k5c : MetalComputePipeline?   // the select-form nr0=1 twin — n < 3072 / small-d sites
 var g_pso_kq_k6 : MetalComputePipeline?
 var g_pso_kq_iq4xs : MetalComputePipeline?
+var g_pso_kq_iq3s4 : MetalComputePipeline?
+var g_pso_kq_mvb2_iq3s4 : MetalComputePipeline?
+var g_pso_kq_mvb4_iq3s4 : MetalComputePipeline?
+var g_pso_kq_mvb8_iq3s4 : MetalComputePipeline?
+var g_pso_kq_mm_b35 : MetalComputePipeline?   //!< the iq3s4 base mul_mm (the iq4xs walk over the odd codebook)
 var g_pso_kq_k3 : MetalComputePipeline?
 var g_pso_kq_mvb2_k4 : MetalComputePipeline?   // batch B=2..8: the kq ext small-batch mv twins
 var g_pso_kq_mvb2_k4r2 : MetalComputePipeline?   // the k4 twin's two-row register tile (the `kq_mvb2_k4_r2` crown)
@@ -1179,6 +1219,25 @@ def iq4nl32_planes_of(dev : MetalDevice?; t : Model; off : int64) : tuple<qbuf :
     }
 }
 
+//! One q4032 tensor's plane pair bind: iq4nl32's form over the q4032 planes
+def q4032_planes_of(dev : MetalDevice?; t : Model; off : int64) : tuple<qbuf : MetalBuffer?; qoff : uint64; sbuf : MetalBuffer?; soff : uint64> {
+    assert(t.metal_blob)
+    let b0 = off / 32l
+    unsafe {
+        return (qbuf = plane_buffer(dev, addr < void? >(t.q4032q[0]), uint64(long_length(t.q4032q)), t.image_map != null),
+                qoff = uint64(b0 * Q4032_QB),
+                sbuf = plane_buffer(dev, addr < void? >(t.q4032s[0]), uint64(long_length(t.q4032s)), t.image_map != null),
+                soff = uint64(b0 * Q4032_SB))
+    }
+}
+
+//! a per-32 tensor's plane pair bind, by its format
+def b32_planes_of(dev : MetalDevice?; t : Model; fmt : KqFmt; off : int64) : tuple<qbuf : MetalBuffer?; qoff : uint64; sbuf : MetalBuffer?; soff : uint64> {
+    if (fmt == KqFmt.q51) return q51_planes_of(dev, t, off)
+    if (fmt == KqFmt.iq4nl32) return iq4nl32_planes_of(dev, t, off)
+    return q4032_planes_of(dev, t, off)
+}
+
 //! A 4-byte buffer holding one scalar - the caller says where the bytes come from.
 def scalar_buffer(var buf : MetalBuffer?; v : auto(TT)) : MetalBuffer? {
     unsafe {
@@ -1581,7 +1640,6 @@ var g_dn_pool_epoch = 0l   //! bumps when the pool moves - a step encoded over t
 //! An evicted mirror's live region and n-gram ring on the host, at the position it expects next.
 struct private DnStash {
     pos : int64
-    tick : int64
     bytes : array<uint8>
 }
 var private @scratch g_dn_stash : table<uint64; DnStash>
@@ -1626,6 +1684,12 @@ def dn_pool_buffer() : MetalBuffer? => g_dn_pool
 
 //! the evicted mirrors a later prepare rebuilt on the device from their stash
 def dn_mirror_restores() : int64 => g_dn_restores
+
+//! `uid`'s recurrent state is held for it on the device or in its stash
+def dn_mirror_holds(uid : uint64) : bool => key_exists(g_dn_mirrors, uid) || key_exists(g_dn_stash, uid)
+
+//! the mirrors resident at once before the least recent evicts
+def dn_mirrors_cap() : int64 => g_dn_mirrors_max
 
 def private dn_slot_base(mr : DnMirror) : uint64 => uint64(mr.slot) * g_dn_slot_bytes
 
@@ -1694,7 +1758,7 @@ def private dn_mirror_evict(victim : uint64) {
     if (mr.pos > 0l) {
         let rb = mr.region_bytes
         let ring = mr.bytes - rb * uint64(mr.regions)
-        var st = DnStash(pos = mr.pos, tick = mr.tick)
+        var st = DnStash(pos = mr.pos)
         st.bytes |> reserve(int64(rb + ring))
         st.bytes |> resize(int64(rb + ring))
         unsafe {
@@ -1705,9 +1769,6 @@ def private dn_mirror_evict(victim : uint64) {
             }
         }
         g_dn_stash |> emplace(victim, st)
-        while (long_length(g_dn_stash) > g_dn_mirrors_max) {
-            g_dn_stash |> erase(lru_victim(g_dn_stash, victim, false))
-        }
     }
     g_dn_mirrors |> erase(victim)
 }
@@ -1855,9 +1916,19 @@ def private dn_mirror_to_host(var s : Session) {
     s.dn_pos = mr.pos
 }
 
+//! A released session's mirror and stash leave: no step reads them again, and the slot is the next session's.
+[cold_path]   // a session's release
+def private dn_mirror_released(uid : uint64) {
+    if (key_exists(g_dn_mirrors, uid)) {
+        dn_mirror_quiesce()   //! a step encoded ahead may still write the slot the next session takes
+    }
+    dn_mirror_drop(uid)
+}
+
 [init]
 def private dn_mirror_host_sync_register {
     register_dn_host_sync(@@dn_mirror_to_host)
+    register_session_release_listener(@@dn_mirror_released)
 }
 
 // the step served and its command buffer completed — the GPU state now holds position pos's update
@@ -2855,6 +2926,11 @@ def public iq4_lut(q : uint) : float {
     let w = q < 8u ? (q < 4u ? 3215825025u : 4142587343u) : (q < 12u ? 639175937u : 1901675829u)
     return float((int((w >> ((q & 3u) * 8u)) & 255u) ^ 128) - 128)
 }
+
+//! The iq3s4 codebook (the odd values an IQ3_S weight takes, `iq3s4_lut` of dasllama_kqformat) by arithmetic, 2q - 15 - the
+//! iq4 family's IQODD stamps read it in iq4_lut's place.
+[arch(at = "../ARCHITECTURE_GPU_QUANT_PLANES.md#metal-kq-split-scale-plane")]
+def public iq3s4_val(q : uint) : float => float(2 * int(q) - 15)
 
 // ===== Metal-4 tensor twin race scaffolding (shared by the per-module race sections) =====
 

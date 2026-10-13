@@ -685,6 +685,80 @@ def test_metal_deltanet_evicted_mirror(t : T?) {
     }
 }
 
+//! A released session's recurrent mirror and stash leave the pool (`ARCHITECTURE_GPU_MTP.md#dn-mirror-pool`), and a live
+//! session's evicted state stays in its stash however many sessions step in turn: on a blob-only load a lost state has no
+//! CPU chain to fall to, so a dropped live entry would decline `dn_state` and panic.
+[test]
+def test_metal_deltanet_released_sessions(t : T?) {
+    t |> run("after as many sessions were released, more than twice the mirror cap's deltanet sessions stepping in turn serve every step on the device, each token for token itself alone (Qwen3.5-0.8B Q8)") <| @(t : T?) {
+        if (!family_on(t, "qwen35")) return
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            let path = path_join(models_dir(), "Qwen3.5-0.8B-Q8_0.gguf")
+            return if (!jit_model_available(t, path))
+            let prior_mode = get_metal_mode()
+            set_metal_mode(MetalMode.when_available)
+            var tr <- blob_twin(t, path, 256l)
+            with_dasllama_jobque_() {
+                let n = 2l * dn_mirrors_cap() + 1l
+                let steps = 6l
+                var prompts : array<array<int64>>
+                prompts |> reserve(n)
+                for (i in range64(n)) {
+                    var p <- encode(tr, "Session {i} counts slowly: {i}, {i + 1l}, {i + 2l}, {i + 3l}, and then", true, false)
+                    prompts |> emplace(p)
+                }
+                var refs : array<array<int64>>
+                refs |> reserve(n)
+                for (i in range64(n)) {
+                    var s = make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
+                    eval_(tr, s, prompts[i])
+                    var r <- greedy_from(tr, s, long_length(prompts[i]), steps)
+                    refs |> emplace(r)
+                    let uid = s.uid
+                    t |> success(dn_mirror_holds(uid), "session {i}'s state is held while it lives")
+                    delete s
+                    t |> success(!dn_mirror_holds(uid), "session {i}'s mirror and stash left with its release")
+                }
+                var inscope live : array<Session>
+                live |> reserve(n)
+                for (i in range64(n)) {
+                    var s = make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
+                    eval_(tr, s, prompts[i])
+                    live |> emplace(s)
+                }
+                var got : array<array<int64>>
+                got |> resize(n)
+                let rest0 = dn_mirror_restores()
+                let dec0 = metal_decode_stats().decodes
+                for (k in range64(steps)) {
+                    for (i in range64(n)) {
+                        let next = argmax(live[i], tr.config.vocab_size)
+                        got[i] |> push(next)
+                        forward(tr, live[i], next, long_length(prompts[i]) + k)
+                    }
+                }
+                t |> equal(metal_decode_stats().decodes - dec0, n * steps, "every step of {n} sessions in turn was the device's")
+                t |> success(dn_mirror_restores() - rest0 >= n * (steps - 1l), "the sessions past the cap rebuilt their mirrors from their stashes")
+                for (i in range64(n)) {
+                    to_log(LOG_INFO, "session {i} alone:   {eyeball_text(tr, refs[i])}\n")
+                    to_log(LOG_INFO, "session {i} in turn: {eyeball_text(tr, got[i])}\n")
+                    t |> success(ids_equal(refs[i], got[i]), "session {i}'s {steps} steps in turn are its steps alone")
+                }
+                let uid0 = live[0].uid
+                delete live
+                t |> success(!dn_mirror_holds(uid0), "the live sessions' states left with their release")
+                delete prompts
+                delete refs
+                delete got
+            }
+            set_metal_mode(prior_mode)
+            delete tr
+        } else {
+            t |> skip("dasMetal not built")
+        }
+    }
+}
+
 //! `n` steps on `s` from `pos` fed the greedy pick except at every `miss_every`-th step (0 = none), which feeds the pick's
 //! next id instead: the fed tokens, and every step's logits concatenated
 def private fed_steps(tr : Model; var s : Session; pos, n, miss_every : int64; var logits : array<float>) : array<int64> {

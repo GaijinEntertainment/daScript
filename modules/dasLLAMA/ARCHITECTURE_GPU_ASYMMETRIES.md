@@ -21,9 +21,9 @@ asymmetries a stamp family ledgers - stays in `ARCHITECTURE_GPU.md#gpu-backends`
   entry, not as a new entry here. The one seat outside that rule is the deltanet mirror room seat, its own entry
   here.
 - **The split token command with the routed experts on the host is Vulkan-only**
-  (`vk_rdec_token_split`, `ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command`): a hyper-connection MoE's expert
-  stacks never fit a discrete card beside its other planes, so the Vulkan whole-model driver cuts its
-  command at every routed block and the host sums the experts between the segments; Metal serves the
+  (`vk_rdec_token_split`, `ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command`): the Vulkan whole-model driver
+  leaves a hyper-connection MoE's expert stacks on the host by construction (`resident_host_experts`, the
+  model's shape, not the card's room), so it cuts its command at every routed block and the host sums the experts between the segments; Metal serves the
   same model whole from unified memory and its drivers split nothing.
 - **The hot expert pool is Vulkan-only** (`ARCHITECTURE_GPU_VULKAN_HC.md#hc-hot-pool`, the tier's four hot
   seats, `DASLLAMA_GPU_HEAT`): where routed experts live on the host the Vulkan driver keeps the hottest in
@@ -137,7 +137,8 @@ asymmetries a stamp family ledgers - stays in `ARCHITECTURE_GPU.md#gpu-backends`
   every decline says its reason: the whole-model driver's gates speak through one
   `resident driver declined - <reason>; the per-op rails serve` line, each per-op rail walk
   reports the layers it left on the CPU with the first layer's reason and its VRAM-budget stop,
-  a dense model's FFN gets its own line (the per-op tier has no dense-FFN rail), and the
+  a dense model's FFN gets its own line (the per-op tier's dense-FFN rail is opt-in, `DASLLAMA_GPU_DENSE_FFN`,
+  `ARCHITECTURE_GPU_VULKAN_PEROP.md`), and the
   per-call resident overrides say each pass-to-CPU reason once per armed model
   (`rdec_pass_once`) and count every pass by reason in the tier (`gpu_cpu_passes`, zeroed as a
   model arms), which the server's `/v1/stats` carries as `gpu_cpu_passes`. The gap is `followup_vulkan.md` item 1, not a precedent to copy.
@@ -174,5 +175,7 @@ asymmetries a stamp family ledgers - stays in `ARCHITECTURE_GPU.md#gpu-backends`
 - **The short window's gathered expert route and its knee are Metal-only** (`set_metal_moe_gemv_max`, the
   sidecar's `metal_moe_gemv_max`, `ARCHITECTURE_GPU_PREFILL_MOE.md#prefill-moe-gemv-route`): the Metal prefill
   serves a routed block of few tokens through the decode step's gathered GEMVs instead of its bucketed tiles; the
-  Vulkan window chain's routed block rides the cm2 expert chain over a device-side gather at every window size
-  (`ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-expert-chain`) and has no tile-per-expert form to route away from.
+  Vulkan window chain's routed block rides its expert tiles over a device-side gather at every window size - the
+  cm2 expert chain (`ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-expert-chain`), the KHR tile
+  (`ARCHITECTURE_GPU_VULKAN_GEMM.md#khr-mm-kq-tile`) or, on a device with neither, the Q8-fed chain's batch tiles
+  (`ARCHITECTURE_GPU_VULKAN_MOE.md#vk-moe-q8-chain`) - and has no tile-per-expert form to route away from.

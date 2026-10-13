@@ -300,7 +300,6 @@ struct private StepRes {
     u_hcd : MetalBuffer?       // hc x dim
     u_hc : MetalBuffer?        // hc
     u_lr : MetalBuffer?        // low_rank
-    u_hc_rows : MetalBuffer?   // nrows (the hc kernels' row count; the single row's is u_one32)
     u_lr_tot : MetalBuffer?    // nrows x low_rank
     u_hcd_tot : MetalBuffer?   // nrows x hc x dim
     bytes_hcd : uint64         // one wide row
@@ -501,7 +500,7 @@ def private acquire_step(t : Model; s : Session; pos : int64; koff, voff : uint6
     }
     if (moe) {
         let ege = uint(dim * c.n_ff_exp)
-        r.bytes_moe_lg = uint64(mp * c.n_expert * 4l)
+        r.bytes_moe_lg = uint64(mp * (c.n_expert + 1l) * 4l)   //! a row's logits and the shared expert's gate logit past them
         r.bytes_moe_sel = uint64(mp) * 128ul
         r.bytes_moe_dn = uint64(mp * c.n_expert_used * dim * 4l)
         r.bmoe_lg = pool_acquire(g_pool, g_dev, r.bytes_moe_lg)
@@ -587,7 +586,6 @@ def private acquire_step(t : Model; s : Session; pos : int64; koff, voff : uint6
         r.u_hcd = uniform_u32(uint(hcd))
         r.u_hc = uniform_u32(uint(c.hc_count))
         r.u_lr = uniform_u32(uint(c.hc_low_rank))
-        r.u_hc_rows = uniform_u32(uint(nrows))
         r.u_lr_tot = uniform_u32(uint(nrows * c.hc_low_rank))
         r.u_hcd_tot = uniform_u32(uint(nrows * hcd))
         if (draft || nrows > 1l) {   // the draft head's wide carry rows, the trunk rows the commit lands, the per-stream cat rows
@@ -769,6 +767,31 @@ def private add_single(var e : SingleLayerEnc; enc : MetalComputeEncoder?; bg : 
 [unused_argument(e, down)]
 def private moe_args_single(var e : SingleLayerEnc; ndim, ddim, eplane, xs, hasb : uint; down : bool) : MoeGemvArgs => MoeGemvArgs(ndim = ndim, ddim = ddim, eplane = eplane, xs = xs, ss = 0u, bxs = 0u, bys = 0u, hasb = hasb)
 
+//! whether a layer's q/k norm, rope and K/V store run as the one fused pass (`GkQknRopeKv`): a q/k-norm model on a scalar mirror
+def private qkn_fused(c : Config; kdt : KVDtype) : bool => c.qk_norm && (kdt == KVDtype.f16 || kdt == KVDtype.f32)
+
+//! whether a gated layer's q stays in its [q | gate] rows (`bdn_qg`, a head 2 hs apart): the rope and the attention read it there
+//! and the attention's store (tq4: the un-rotation) gates; a codec past the fused and the block-codec ropes keeps the deinterleave
+def private qg_direct(c : Config; kdt : KVDtype) : bool => c.q_gated && (kdt == KVDtype.q8_0 || kdt == KVDtype.tq4 || qkn_fused(c, kdt))
+
+//! the fused pass's args for layer l: its rows `qkvd` apart in the [q | k | v] buffer, the cos and sin rows `cosrow` apart, `lay`
+//! the per-layer stride the route table's layer index steps; the V row the k row's under v-norm with no v plane, else its own
+def private qkn_args(t : Model; l, qd, kv_dim, head_size, rot : int64; neox, hasb : bool; eps : float; qkvd, cosrow, lay : int64) : GkQknRopeArgs {
+    let c = t.config
+    let nowv = t.wv_offs[l] < 0l
+    return GkQknRopeArgs(qd = uint(qd), kvd = uint(kv_dim), hs = uint(head_size), half = uint(rot / 2l), neox = neox ? 1u : 0u,
+        nh = uint(qd / head_size), layerbase = uint(lay), kwoff = uint(head_size), eps = eps, hasb = hasb ? 1u : 0u,
+        vfk = c.v_norm && nowv ? 1u : 0u, vnorm = c.v_norm && !nowv ? 1u : 0u, kvrow = uint(qkvd), qrow = uint(qkvd), cosrow = uint(cosrow))
+}
+
+//! layer l's [q norm | k norm] weight rows
+def private qkn_weights(t : Model; l, head_size : int64) : MetalBuffer? {
+    unsafe {
+        return upload_region_cat3(addr < void? >(t.fblob[t.rms_q_offs[l]]), uint64(head_size * 4l),
+            addr < void? >(t.fblob[t.rms_k_offs[l]]), uint64(head_size * 4l), null, 0ul)
+    }
+}
+
 //! the single row's rope + KV store: the codec's form over the mirror's byte offsets
 def private rope_store_single(var e : SingleLayerEnc; t : Model; enc : MetalComputeEncoder?; l : int64; het, kvsh : bool;
                               bbias, bcos_l, bsin_l : MetalBuffer?; lkoff, lvoff : uint64; rowb, qd, kv_dim, head_size, n_heads : int64) {
@@ -784,33 +807,29 @@ def private rope_store_single(var e : SingleLayerEnc; t : Model; enc : MetalComp
     let pos = r.pos
     // shared-KV layers dispatch the Q rows only — no K rope, no mirror row store
     let rs_rot = r.k_rot != 0u ? r.k_rot : k_hs_l   // 0 = full rope, i.e. this layer's head size
+    let gd = qg_direct(c, r.kdt)
+    let bq = gd ? r.bdn_qg : null
+    let qhs = gd ? 2u * k_hs_l : 0u
     unsafe {
         if (r.kdt == KVDtype.q8_0) {
             var qka = RopeStoreQ8Args(qd = k_qd_l, head_size = k_hs_l, npairs_q = k_npq_l,
-                nblk = k_nblk_l, neox = r.k_neox, has_bias = r.k_hasb, rot = rs_rot)
+                nblk = k_nblk_l, neox = r.k_neox, has_bias = r.k_hasb, rot = rs_rot, qhs = qhs)
             enc_rope_store_q8(enc, r.bqkv, uint64((qd + kv_dim) * 4l), g_arena, g_arena,
                 lkoff + uint64(pos * rowb), lvoff + uint64(pos * rowb),
                 bcos_l, bsin_l, bbias, qka,
-                kvsh ? qd / 2l : qd / 2l + 2l * (kv_dim / 32l))
+                kvsh ? qd / 2l : qd / 2l + 2l * (kv_dim / 32l), bq)
         } elif (r.kdt == KVDtype.tq4) {
             var tka = RopeStoreTq4Args(qd = k_qd_l, head_size = k_hs_l, nheads = r.k_nh,
-                kv_mul = k_kvm_l, neox = r.k_neox, has_bias = r.k_hasb, rot = rs_rot)
+                kv_mul = k_kvm_l, neox = r.k_neox, has_bias = r.k_hasb, rot = rs_rot, qhs = qhs)
             enc_rope_store_tq4(enc, r.bqkv, uint64((qd + kv_dim) * 4l), g_arena, g_arena,
                 lkoff + uint64(pos * rowb), lvoff + uint64(pos * rowb),
                 bcos_l, bsin_l, bbias, tka,
-                kvsh ? n_heads : n_heads + 2l * (kv_dim / head_size), head_size)
-        } elif (c.qk_norm && f16v) {
-            // QK-norm x f16 mirror: bias + per-head RMS + rope + store fold into ONE head-cooperative dispatch
-            var bqkw = upload_region_cat3(
-                addr < void? >(t.fblob[t.rms_q_offs[l]]), uint64(head_size * 4l),
-                addr < void? >(t.fblob[t.rms_k_offs[l]]), uint64(head_size * 4l), null, 0ul)
-            var hka = RopeStoreHArgs(qd = k_qd_l, head_size = k_hs_l, nheads = r.k_nh,
-                kv_mul = k_kvm_l, neox = r.k_neox, has_bias = r.k_hasb,
-                has_norm = r.k_hasn, eps = r.k_eps, rot = rs_rot)
-            enc_rope_store_h16(enc, r.bqkv, uint64((qd + kv_dim) * 4l), g_arena, g_arena,
-                lkoff + uint64(pos * rowb), lvoff + uint64(pos * rowb),
-                bcos_l, bsin_l, bqkw, bbias, hka,
-                kvsh ? n_heads : n_heads + 2l * (kv_dim / head_size), head_size)
+                kvsh ? n_heads : n_heads + 2l * (kv_dim / head_size), head_size, bq)
+        } elif (qkn_fused(c, r.kdt)) {
+            var qka = qkn_args(t, l, qd, kv_dim, head_size, int64(rs_rot), r.k_neox != 0u, r.k_hasb != 0u, r.k_eps, 0l, 0l, 0l)
+            qka.qstride = qhs
+            enc_qkn_rope(enc, f16v, r.bqkv, g_arena, g_arena, lkoff + uint64(pos * rowb), lvoff + uint64(pos * rowb),
+                bcos_l, bsin_l, 0ul, qkn_weights(t, l, head_size), bbias, qka, kvsh ? n_heads : n_heads + kv_dim / head_size, bq)
         } else {
             var rka = gk_rope_kv_args(int64(k_qd_l), kv_dim, int64(k_hs_l), int64(k_npq_l), int64(k_npall_l), r.k_neox != 0u, r.k_hasb != 0u, int64(rs_rot))
             enc_rope_store(enc, f16v, r.bqkv, uint64((qd + kv_dim) * 4l), g_arena, g_arena,
@@ -838,12 +857,14 @@ def private encode_attn_d(t : Model; r : StepRes; enc : MetalComputeEncoder?; l,
     let kvd = uint(layer_kv_dim(c, l))
     let lay = route_per_layer ? 0u : uint(blockc ? kv_row_bytes(r.kdt, t.kv_row_prefix[l]) : t.kv_row_prefix[l])
     //! the layer's own head class: `head_size` and the K/V row are its, so its heads a K/V head and its score scale follow
+    let gd = qg_direct(c, r.kdt)
     var dka = SqAttnDArgs(lay = lay, kstride = blockc ? kvd / 32u : kvd, nheads = uint(n_heads),
         kv_mul = uint(n_heads * head_size) / kvd, hs = uint(head_size),
         scale = c.attn_scale > 0.0 ? c.attn_scale : 1.0 / sqrt(float(head_size)),
-        qstride = uint(n_heads * head_size) + 2u * kvd, nsgs = uint(r.d_nsgs),
-        window = window, softcap = c.attn_logit_softcap)
-    enc_attn_d(enc, r.kdt, r.bqkv, r.bpart, r.brt, dka, r.d_nsgs, r.nrows, n_heads, rtoff)
+        qstride = gd ? uint(2l * n_heads * head_size) : uint(n_heads * head_size) + 2u * kvd, nsgs = uint(r.d_nsgs),
+        window = window, softcap = c.attn_logit_softcap, qhs = gd ? uint(2l * head_size) : 0u,
+        gated = gd && r.kdt != KVDtype.tq4 ? 1u : 0u)
+    enc_attn_d(enc, r.kdt, gd ? r.bdn_qg : r.bqkv, r.bpart, r.brt, dka, r.d_nsgs, r.nrows, n_heads, rtoff)
     let halves = attn_d_halves(head_size)   // the wide head's partials are two or four heads of 128 to the combine
     var cka = SqAttnCombDArgs(nchmax = uint(r.d_nsgs), nheads = uint(n_heads * halves), hs = uint(head_size / halves),
         hass = bsnk != null ? 1u : 0u, hdiv = uint(halves))
@@ -863,21 +884,25 @@ def private attention_single(var e : SingleLayerEnc; t : Model; enc : MetalCompu
     let scale_u = het ? r.k_scale_sw : r.k_scale
     let hs_u = het ? r.k_hs_sw : r.k_hs
     let hass_u = c.attn_sinks ? 1u : 0u
+    let gd = qg_direct(c, r.kdt)
+    let bq = gd ? r.bdn_qg : r.bqkv
+    let qhs_u = gd ? 2u * hs_u : 0u
+    let gated_u = gd && r.kdt != KVDtype.tq4 ? 1u : 0u   //! tq4 gates after its un-rotation
     if (r.attn_d) {
         encode_attn_d(t, r, enc, l, head_size, n_heads, lsl ? uint(c.sliding_window) : 0u, bsnk)
     } elif (r.chunked) {
         var pka = SqAttnPartArgs(cnt = cnt, kstride = kstride_l, nheads = uint(n_heads),
             kv_mul = kvm_u, hs = hs_u, scale = scale_u, nchunks = uint(nchunks),
-            softcap = c.attn_logit_softcap, window = lsl ? uint(c.sliding_window) : 0u)
-        enc_attn_part(enc, r.kdt, g_arena, g_arena, lkoff, lvoff, r.bqkv, r.bpart, pka, n_heads * nchunks, head_size)
+            softcap = c.attn_logit_softcap, window = lsl ? uint(c.sliding_window) : 0u, qhs = qhs_u, gated = gated_u)
+        enc_attn_part(enc, r.kdt, g_arena, g_arena, lkoff, lvoff, bq, r.bpart, pka, n_heads * nchunks, head_size)
         var cka = SqAttnCombArgs(nch = uint(nchunks), nheads = uint(n_heads), hs = hs_u,
             chlo = lsl ? r.k_chlo : 0u, hass = hass_u)
         enc_attn_comb(enc, r.bpart, r.bxb, cka, n_heads, head_size, bsnk)
     } else {
         var ska = SqAttnArgs(cnt = cnt, kstride = kstride_l, nheads = uint(n_heads),
             kv_mul = kvm_u, hs = hs_u, scale = scale_u,
-            softcap = c.attn_logit_softcap, hass = hass_u)
-        enc_attn(enc, r.kdt, g_arena, g_arena, lkoff, lvoff, r.bqkv, r.bxb, ska, n_heads, head_size, bsnk)
+            softcap = c.attn_logit_softcap, hass = hass_u, qhs = qhs_u, gated = gated_u)
+        enc_attn(enc, r.kdt, g_arena, g_arena, lkoff, lvoff, bq, r.bxb, ska, n_heads, head_size, bsnk)
     }
 }
 
@@ -900,14 +925,15 @@ def private dn_stages_of(var r : StepRes; split : bool) : DnStages {
 //! F32-on-disk beta/alpha (the 35B): both planes as ONE router f32 GEMV over [beta; alpha], each row's 2 nvh outputs
 //! beta first into `by`
 [arch(at="../ARCHITECTURE_GPU_MTP.md#dn-group-stages")]
-def private enc_dn_ba_f32(enc : MetalComputeEncoder?; t : Model; l : int64; bx, by, u_dim, u_nvh2 : MetalBuffer?; nrows : int64) {
+def private enc_dn_ba_f32(enc : MetalComputeEncoder?; t : Model; l : int64; bx, by : MetalBuffer?; nrows : int64) {
     let dim = t.config.dim
     let nvh = t.config.ssm_dt_rank
     let pb = uint64(dim * nvh * 4l)
     unsafe {
         var bw = upload_region_cat3(addr < void? >(t.fblob[t.dn_betaf_off + l * dim * nvh]), pb,
             addr < void? >(t.fblob[t.dn_alphaf_off + l * dim * nvh]), pb, null, 0ul)
-        enc_moe_router(enc, bw, bx, by, u_dim, u_nvh2, u_dim, g_one, g_zero, 2l * nvh, nrows)
+        var ka = moe_router_args(2l * nvh, dim, nrows)
+        enc_moe_router(enc, bw, bx, by, g_one, ka, 2l * nvh, nrows)
     }
 }
 
@@ -923,29 +949,24 @@ def private dn_grp_take(var r : StepRes; ng, npmax : int64) {
 //! the single row's deltanet layer: projections -> conv+SiLU -> q/k L2 -> delta rule -> gated
 //! out-norm -> out-proj; the state and history in place, or a chained step's into the region its group names to write
 def private recurrent_single(var e : SingleLayerEnc; t : Model; enc : MetalComputeEncoder?; l : int64; var dnli : int64&) {
-    let c = t.config
-    let dim = c.dim
     var r & = unsafe(*e.r)
-    let cd = dn_conv_dim(c)
-    let di = c.ssm_d_inner
-    let nvh = c.ssm_dt_rank
+    recurrent_layer(r, t, enc, l, dnli, true, r.dn_split)
+}
+
+//! the step's deltanet layer over its rows: the projections (the single row's GEMVs where `single`, else the rows sites), conv + SiLU,
+//! q/k L2, the delta rule and the gated out-norm, the out projection; the state and history in place, or where a split step's group
+//! names its region
+def private recurrent_layer(var r : StepRes; t : Model; enc : MetalComputeEncoder?; l : int64; var dnli : int64&; single, split : bool) {
     if (g_skip != "gemv") {
-        enc_site_gemv(enc, t, fmt_at(t.dnqkv_fmt, l), t.dnqkv_offs[l], cd, dim, r.bxb, r.bdn_qkv, r.u_dim, r.u_cd)
-        enc_site_gemv(enc, t, fmt_at(t.dngate_fmt, l), t.dngate_offs[l], di, dim, r.bxb, r.bdn_z, r.u_dim, r.u_di)
-        if (t.dn_ba_f32) {
-            enc_dn_ba_f32(enc, t, l, r.bxb, r.bdn_b, r.u_dim, r.u_nvh2, 1l)
-        } else {
-            enc_site_gemv(enc, t, fmt_at(t.dnbeta_fmt, l), t.dnbeta_offs[l], nvh, dim, r.bxb, r.bdn_b, r.u_dim, r.u_nvh)
-            enc_site_gemv(enc, t, fmt_at(t.dnalpha_fmt, l), t.dnalpha_offs[l], nvh, dim, r.bxb, r.bdn_g, r.u_dim, r.u_nvh)
-        }
+        enc_dn_proj_rows(r, t, enc, l, single)
     }
     if (g_skip != "attn") {
-        let d = dn_stages_of(r, r.dn_split)
+        let d = dn_stages_of(r, split)
         enc_dn_front(enc, t, l, dnli, d)
         enc_dn_back(enc, t, l, dnli, d)
     }
     if (g_skip != "gemv") {
-        enc_site_gemv(enc, t, fmt_at(t.dnout_fmt, l), t.dnout_offs[l], dim, di, r.bdn_o, r.bxb2, r.u_di, r.u_dim)
+        enc_dn_out_rows(r, t, enc, l, single)
     }
     dnli++
 }
@@ -958,6 +979,24 @@ def private hc_mix_step(r : StepRes; t : Model; enc : MetalComputeEncoder?; norm
     hc_mix_rows(r, t, enc, r.bhc, norm_off, down_off, up_off, inject_off, by, binj)
 }
 
+//! a site's `n` x `d` plane over `nr` rows of `bx` into `by`: the single row's GEMV where `single`, else the rows GEMM site
+def private site_rows(enc : MetalComputeEncoder?; t : Model; single : bool; fmt : KqFmt; off, n, d : int64; bx, by, u_d, u_n : MetalBuffer?; nr : int64) {
+    if (single) {
+        enc_site_gemv(enc, t, fmt, off, n, d, bx, by, u_d, u_n)
+    } else {
+        enc_batch_site(enc, t, rows_tier(nr), fmt, off, n, d, n, bx, by, u_d, u_n, u_n, 0l, false)
+    }
+}
+
+//! the rms norm of `nr` rows of `bx` under the weight row `bw` into `by`: the one-row form where `single`
+def private norm_rows(enc : MetalComputeEncoder?; single : bool; bx, bw, by, u_dim, u_eps : MetalBuffer?; nr : int64) {
+    if (single) {
+        enc_rms(enc, bx, 0ul, bw, by, u_dim, u_eps)
+    } else {
+        enc_rms_b(enc, bx, 0ul, bw, by, u_dim, u_eps, nr)
+    }
+}
+
 //! The mixer over `bres`'s nrows wide rows (the step's row count): the single row takes the GEMVs,
 //! the MTP rows the rows GEMM site
 def private hc_mix_rows(r : StepRes; t : Model; enc : MetalComputeEncoder?; bres : MetalBuffer?; norm_off, down_off, up_off, inject_off : int64; by, binj : MetalBuffer?) {
@@ -968,31 +1007,24 @@ def private hc_mix_rows(r : StepRes; t : Model; enc : MetalComputeEncoder?; bres
     unsafe {
         if (g_skip != "ew") {
             var bw_n = upload_region(addr < void? >(t.fblob[norm_off]), uint64(hcd * 4l))
-            enc_hc_norm(enc, bres, bw_n, r.bhc_xn, r.u_dim, r.u_eps, r.u_hc, nr * c.hc_count)
+            enc_hc_norm(enc, bres, r.bhc_xn, bw_n, hc_norm_args(c), nr * c.hc_count)
         }
         if (g_skip != "gemv") {
             if (binj != null) {
                 var bw_i = upload_region(addr < void? >(t.fblob[inject_off]), uint64(c.hc_count * hcd * 4l))
-                enc_moe_router(enc, bw_i, r.bhc_xn, binj, r.u_hcd, r.u_hc, r.u_hcd, g_one, g_zero, c.hc_count, nr)
+                var ika = moe_router_args(c.hc_count, hcd, nr)
+                enc_moe_router(enc, bw_i, r.bhc_xn, binj, g_one, ika, c.hc_count, nr)
             }
-            if (nr == 1l) {
-                enc_site_gemv(enc, t, KqFmt.q8, down_off, lr, hcd, r.bhc_xn, r.bhc_lo, r.u_hcd, r.u_lr)
-            } else {
-                enc_batch_site(enc, t, rows_tier(nr), KqFmt.q8, down_off, lr, hcd, lr, r.bhc_xn, r.bhc_lo, r.u_hcd, r.u_lr, r.u_lr, 0l, false)
-            }
+            site_rows(enc, t, nr == 1l, KqFmt.q8, down_off, lr, hcd, r.bhc_xn, r.bhc_lo, r.u_hcd, r.u_lr, nr)
         }
         if (g_skip != "ew") {
             enc_hc_lo(enc, r.bhc_lo, 0ul, r.u_lr_tot, r.u_hc, nr * lr)
         }
         if (g_skip != "gemv") {
-            if (nr == 1l) {
-                enc_site_gemv(enc, t, KqFmt.q8, up_off, hcd, lr, r.bhc_lo, r.bhc_gate, r.u_lr, r.u_hcd)
-            } else {
-                enc_batch_site(enc, t, rows_tier(nr), KqFmt.q8, up_off, hcd, lr, hcd, r.bhc_lo, r.bhc_gate, r.u_lr, r.u_hcd, r.u_hcd, 0l, false)
-            }
+            site_rows(enc, t, nr == 1l, KqFmt.q8, up_off, hcd, lr, r.bhc_lo, r.bhc_gate, r.u_lr, r.u_hcd, nr)
         }
         if (g_skip != "ew") {
-            enc_hc_mix(enc, r.bhc_xn, r.bhc_gate, by, r.u_dim, r.u_hc, r.u_hc_rows, nr * c.dim)
+            enc_hc_mix(enc, r.bhc_xn, r.bhc_gate, by, hc_mix_args(c, nr), nr * c.dim)
         }
     }
 }
@@ -1008,7 +1040,7 @@ def private hc_mix_site(r : StepRes; t : Model; enc : MetalComputeEncoder?; l : 
 //! A block's output scattered into the streams under the site's logits
 def private hc_combine_step(r : StepRes; t : Model; enc : MetalComputeEncoder?; bout, binj : MetalBuffer?) {
     if (g_skip != "ew") {
-        enc_hc_combine(enc, r.bhc, bout, binj, r.u_dim, r.u_hc, r.u_hc_rows, r.nrows * hc_dim(t.config))
+        enc_hc_combine(enc, r.bhc, bout, binj, hc_comb_args(t.config, r.nrows), r.nrows * hc_dim(t.config))
     }
 }
 
@@ -1024,14 +1056,8 @@ def private hc_draft_prelude(t : Model; var r : StepRes; enc : MetalComputeEncod
         var bw_en = upload_region(addr < void? >(t.fblob[t.mtp_enorm_off]), rowb)
         enc_rms_b(enc, embed, 0ul, bw_en, r.bh12, r.u_dim, r.u_eps, nr)
         var bw_hn = upload_region(addr < void? >(t.fblob[t.mtp_hnorm_off]), r.bytes_hcd)
-        enc_hc_norm(enc, r.bhc_carry, bw_hn, r.bhc_xn, r.u_dim, r.u_eps, r.u_hc, nr * nh)
-        for (i in range64(nr)) {
-            for (ch in range64(nh)) {
-                let crow = uint64(i * nh + ch)
-                enc_copy_row(enc, r.bh12, uint64(i) * rowb, r.bhc_cat, crow * 2ul * rowb, r.u_dim, dim)
-                enc_copy_row(enc, r.bhc_xn, crow * rowb, r.bhc_cat, crow * 2ul * rowb + rowb, r.u_dim, dim)
-            }
-        }
+        enc_hc_norm(enc, r.bhc_carry, r.bhc_xn, bw_hn, hc_norm_args(c), nr * nh)
+        enc_cat2(enc, r.bhc_cat, r.bh12, r.bhc_xn, cat2_args(dim, nr * nh, nh), nr * nh * dim)
         enc_batch_site(enc, t, rows_tier(nr * nh), t.mtp_ehproj_fmt, t.mtp_ehproj_off, dim, 2l * dim, dim,
             r.bhc_cat, r.bhc, r.u_dim2, r.u_dim, r.u_dim, 0l, false)
     }
@@ -1200,10 +1226,12 @@ struct template LayerEncT {
                         bcos_l, bsin_l, bbias, fka, qkvd)
                 } else {
                     if (c.q_gated) {
-                        // 2x-wide packed [q|gate] projection, deinterleaved into the qkv q segment + gate rows
+                        // 2x-wide packed [q|gate] projection; deinterleaved into the qkv q segment + gate rows only off the direct rail
                         site(self, t, enc, SiteKind.qkv, fq, t.wq_offs[l], 2l * qd, dim, 2l * qd, r.bxb, r.bdn_qg, r.u_dim, r.u_dn_qd2, r.u_dn_qd2, 0l)
-                        enc_dn_deint(enc, r.bdn_qg, r.bqkv, r.bdn_gate,
-                            DnDeintArgs(hs = k_hs_l, qd = k_qd_l, qs = uint(qkvd)), qd, r.nrows)
+                        if (!qg_direct(c, r.kdt)) {
+                            enc_dn_deint(enc, r.bdn_qg, r.bqkv, r.bdn_gate,
+                                DnDeintArgs(hs = k_hs_l, qd = k_qd_l, qs = uint(qkvd)), qd, r.nrows)
+                        }
                     } else {
                         site(self, t, enc, SiteKind.qkv, fq, t.wq_offs[l], qd, dim, qkvd, r.bxb, r.bqkv, r.u_dim, u_qd_l, u_qkvd_l, 0l)
                     }
@@ -1222,23 +1250,28 @@ struct template LayerEncT {
                         enc_copy_row(enc, r.bqkv, uint64((i * qkvd + qd) * 4l), r.bqkv, uint64((i * qkvd + qd + kv_dim) * 4l), u_kvd_l, kv_dim)
                     }
                 }
-                if (c.v_norm) {
+                if (c.v_norm && !qkn_fused(c, r.kdt)) {
                     // MAX-width upload: the region cache is address-keyed and both classes read this one plane — a narrower first upload starved the hs-512 class (Metal OOB reads are ZEROS)
                     var bones = upload_region(addr < void? >(t.fblob[t.rms_ones_off]), uint64(max_head_size(c) * 4l))
-                    var vka = QkNormArgs(nq = 0u, koffe = k_voffe_l, rstride = k_qkvd_l,
-                        hs = k_hs_l, woffe = 0u, eps = r.k_eps,
-                        soffe = t.wv_offs[l] < 0l ? k_qd_l : k_voffe_l)
-                    enc_qk_norm(enc, r.bqkv, 0ul, bones, vka, kv_dim / head_size, r.nrows, head_size)
+                    var vka = qk_norm_args(0u, uint(kv_dim / head_size), k_hs_l, k_qkvd_l, t.wv_offs[l] < 0l ? k_qd_l : k_voffe_l, k_voffe_l, 0u, r.k_eps)
+                    enc_qk_norm(enc, r.bqkv, r.bqkv, bones, vka, kv_dim / head_size, r.nrows)
                 }
             }
-            if (!recr && c.qk_norm && g_skip != "ew" && !(SINGLE && f16v)) {
-                // per-head QK RMSNorm before rope (qwen3) — the single row's f16 mirror rides the fused H-form rope-store instead of this prepass
+            if (!recr && c.qk_norm && g_skip != "ew" && !qkn_fused(c, r.kdt)) {
+                // per-head QK RMSNorm before the block codecs' rope-store
                 var bqkw = upload_region_cat3(
                     addr < void? >(t.fblob[t.rms_q_offs[l]]), uint64(head_size * 4l),
                     addr < void? >(t.fblob[t.rms_k_offs[l]]), uint64(head_size * 4l), null, 0ul)
-                var qka = QkNormArgs(nq = r.k_nh, koffe = k_qd_l, rstride = k_qkvd_l,
-                    hs = k_hs_l, woffe = k_hs_l, eps = r.k_eps, soffe = k_qd_l)
-                enc_qk_norm(enc, r.bqkv, 0ul, bqkw, qka, kvsh ? n_heads : n_heads + kv_dim / head_size, r.nrows, head_size)
+                let nkn = kvsh ? 0l : kv_dim / head_size
+                var qka = qk_norm_args(r.k_nh, uint(nkn), k_hs_l, k_qkvd_l, k_qd_l, k_qd_l, k_hs_l, r.k_eps)
+                var bqn = r.bqkv
+                if (qg_direct(c, r.kdt)) {   //! the q heads norm in their [q | gate] rows
+                    bqn = r.bdn_qg
+                    qka.qstride = uint(2l * qd)
+                    qka.qbase = 0u
+                    qka.qhs = 2u * k_hs_l
+                }
+                enc_qk_norm(enc, bqn, r.bqkv, bqkw, qka, n_heads + nkn, r.nrows)
             }
             if (!recr && g_skip != "ew" && !fused_qkv) {
                 rope_store(self, t, enc, l, het, kvsh, bbias, bcos_l, bsin_l, lkoff, lvoff, rowb, qd, kv_dim, head_size, n_heads)
@@ -1252,11 +1285,12 @@ struct template LayerEncT {
                 r.xh_ok = false   //! the attention output lands in bxb with no twin
                 attention(self, t, enc, l, lsl, het, bsnk, lkoff, lvoff, nchunks, head_size, n_heads)
                 if (r.kdt == KVDtype.tq4) {
-                    // the attention out is rotated-basis per head — un-rotate before the wo projection
-                    enc_fwht_unsign(enc, r.bxb, u_hs_l, u_qd_l, n_heads, r.nrows, head_size)
+                    // the attention out is rotated-basis per head — un-rotate before the wo projection, a gated head's gate after it
+                    let gd = qg_direct(c, r.kdt)
+                    enc_fwht_unsign(enc, r.bxb, u_hs_l, u_qd_l, n_heads, r.nrows, head_size, gd ? r.bdn_qg : null, gd ? r.u_dn_qd2 : null)
                 }
             }
-            if (!recr && c.q_gated && g_skip != "ew") {
+            if (!recr && c.q_gated && !qg_direct(c, r.kdt) && g_skip != "ew") {
                 // gated-attention epilogue: out ⊙ σ(gate) between the attention output and wo (the CPU order)
                 let tq = total(self, u_qd_l, qd)
                 enc_sigmul(enc, r.bxb, 0ul, r.bdn_gate, 0ul, tq.b, tq.n)
@@ -1371,8 +1405,9 @@ struct template LayerEncT {
         let dim = c.dim
         let nr = r.nrows
         let tk = total(self, r.u_moe_knfe, knfe)
-        let td = total(self, r.u_dim, dim)
         let mx4_hasb = c.moe_exps_bias ? 1u : 0u
+        let shg = r.u_moe_nsh != null   //! the shared expert's gate logit rides the router as its row ne
+        let ner = c.n_expert + (shg ? 1l : 0l)
         unsafe {
             var bmx = r.bxb   // expert input: plain = the rms_ffn norm-out; moe_with_dense = pre_ffn2
             if (moe_with_dense && g_skip != "ew") {
@@ -1381,29 +1416,26 @@ struct template LayerEncT {
                 bmx = pan.moe_in
             }
             if (g_skip != "gemv") {
-                var bw_rt = upload_region(addr < void? >(t.fblob[t.router_off + l * c.n_expert * dim]), uint64(c.n_expert * dim * 4l))
+                let rows_bytes = uint64(c.n_expert * dim * 4l)
+                var bw_rt = (shg ? upload_region_cat3(addr < void? >(t.fblob[t.router_off + l * c.n_expert * dim]), rows_bytes,
+                        addr < void? >(t.fblob[t.shexp_gate_off + l * dim]), uint64(dim * 4l), null, 0ul)
+                    : upload_region(addr < void? >(t.fblob[t.router_off + l * c.n_expert * dim]), rows_bytes))
                 var brb : MetalBuffer? = g_one
-                var bhrb = r.u_zero32
                 if (c.moe_router_bias) {
                     brb = upload_region(addr < void? >(t.fblob[t.router_b_off + l * c.n_expert]), uint64(c.n_expert * 4l))
-                    bhrb = r.u_moe_gmode   // gpt-oss: gmode == 1 doubles as the has-bias flag
                 }
+                var rka = moe_router_args(ner, dim, nr, 0l, c.moe_router_bias)
                 if (moe_with_dense) {
                     var bw_rs = upload_region(addr < void? >(t.fblob[t.moe_router_scale_off + l * dim]), uint64(dim * 4l))
                     enc_g4_router_norm(enc, r.bx, bw_rs, r.bmoe_rt, r.u_dim, r.u_eps, r.u_moe_invd, nr)
-                    enc_moe_router(enc, bw_rt, r.bmoe_rt, r.bmoe_lg, r.u_dim, r.u_moe_ne, r.u_dim, brb, bhrb, c.n_expert, nr)
+                    enc_moe_router(enc, bw_rt, r.bmoe_rt, r.bmoe_lg, brb, rka, ner, nr)
                 } else {
-                    enc_moe_router(enc, bw_rt, r.bxb, r.bmoe_lg, r.u_dim, r.u_moe_ne, r.u_dim, brb, bhrb, c.n_expert, nr)
+                    enc_moe_router(enc, bw_rt, r.bxb, r.bmoe_lg, brb, rka, ner, nr)
                 }
-                enc_moe_select_rows(enc, c, r.bmoe_lg, r.bmoe_sel, r.u_moe_ne, r.u_moe_k, r.u_moe_gmode, nr)
+                enc_moe_select_rows(enc, c, r.bmoe_lg, r.bmoe_sel, r.u_moe_k, nr, ner)
                 if (moe_with_dense) {
                     var bw_ds = upload_region(addr < void? >(t.fblob[t.moe_down_scale_off + l * c.n_expert]), uint64(c.n_expert * 4l))
                     enc_moe_wscale(enc, r.bmoe_sel, r.bmoe_sel, bw_ds, r.u_moe_k, nr)
-                }
-                if (r.u_moe_nsh != null) {
-                    // shexp raw gate dot (σ in the combine) — bmoe_lg[0] is free once select consumed it
-                    var bw_shg = upload_region(addr < void? >(t.fblob[t.shexp_gate_off + l * dim]), uint64(dim * 4l))
-                    enc_moe_router(enc, bw_shg, r.bxb, r.bmoe_lg, r.u_dim, r.u_one32, r.u_dim, g_one, g_zero, 1l, nr)
                 }
                 if (g_skip != "moe_rt") {   // moe_rt knockout: the routed expert GEMVs only (router/select stay live)
                     enc_moe_gate_up(enc, t, l, nr, bmx, pan.mg, pan.mu, r.bmoe_sel, uint64(pan.mu_col * 4l),
@@ -1421,10 +1453,10 @@ struct template LayerEncT {
                     // shexp reads bxb BEFORE combine overwrites it; own bh12s panel = schedulable under the routed chain
                     enc_shexp(*r, t, enc, l, SINGLE)   //! the single-row driver's form owns bh12s; a rows driver at one row keeps its rows form
                 }
-                enc_moe_combine(enc, r.bmoe_dn, r.bmoe_sel, moe_with_dense ? r.bmoe_rt : r.bxb, r.u_dim, r.u_moe_k, dim, nr)
-                if (r.u_moe_nsh != null && g_skip != "ew") {
-                    // routed sum lands in bxb first — the shexp branch adds σ(gate)-scaled on top
-                    enc_axpy_sig(enc, r.bxb, r.bxb2, r.bmoe_lg, td.b, r.u_dim, td.n)
+                if (shg && g_skip != "ew") {   //! the routed sum and the shared expert's rows under their gate's sigmoid, one pass
+                    enc_moe_combine_sh(enc, r.bxb, r.bmoe_sel, r.bmoe_dn, r.bxb2, r.bmoe_lg, moe_comb_args(dim, c.n_expert_used, ner, c.n_expert), dim, nr)
+                } else {
+                    enc_moe_combine(enc, moe_with_dense ? r.bmoe_rt : r.bxb, r.bmoe_sel, r.bmoe_dn, moe_comb_args(dim, c.n_expert_used), dim, nr)
                 }
             }
             if (!moe_with_dense) {
@@ -1505,26 +1537,8 @@ def private encode_layer(t : Model; var r : StepRes; enc : MetalComputeEncoder?;
 def private encode_cls_tail(t : Model; var r : StepRes; enc : MetalComputeEncoder?; norm_off : int64;
                             hc_norm_off : int64 = -1l; hc_down_off : int64 = -1l; hc_up_off : int64 = -1l) {
     let c = t.config
-    let dim = c.dim
-    // final rmsnorm (one row; a hyper-connection model's head mixer stands in) + classifier GEMV — the caller samples straight from s.logits
-    if (r.hc) {
-        hc_mix_step(r, t, enc, hc_norm_off >= 0l ? hc_norm_off : t.hc_head_norm_off,
-            hc_down_off >= 0l ? hc_down_off : t.hc_head_down_off, hc_up_off >= 0l ? hc_up_off : t.hc_head_up_off, -1l, r.bxf, null)
-    } else {
-        var bwfin = upload_region(unsafe(addr < void? >(t.fblob[norm_off])), uint64(dim * 4l))
-        enc_rms(enc, r.bx, 0ul, bwfin, r.bxf, r.u_dim, r.u_eps)
-    }
-    let cls_fmt = cls_fmt_of(t)
     var bcls = r.bnc != null ? r.bnc : r.blog
-    enc_site_gemv(enc, t, cls_fmt, t.wcls_off, c.vocab_size, dim, r.bxf, bcls, r.u_dim, r.u_vocab)
-    if (r.u_flcap != null) {
-        // final-logit soft cap (gemma2/gemma4): cap*tanh in place — monotonic, so the spec argmax is unaffected
-        enc_softcap_row(enc, bcls, 0ul, r.u_vocab, r.u_flcap, c.vocab_size)
-    }
-    if (r.bsupp != null) {
-        // gemma4 suppressed ids pin to -1e30 AFTER the cap (the CPU order) — the spec argmax reads pinned logits
-        enc_suppress_row(enc, bcls, 0ul, r.bsupp, r.u_nsupp, int64(r.bytes_supp / 4ul))
-    }
+    enc_cls_tail_rows(t, r, enc, norm_off, bcls, 1l, hc_norm_off, hc_down_off, hc_up_off, true)
     if (r.bnc != null && r.blog != null) {
         // spec-capable step: mirror zero-copy logits into pooled staging — the next step's speculative argmax reads that, never session memory
         enc_copy_row(enc, r.bnc, 0ul, r.blog, 0ul, r.u_vocab, c.vocab_size)
@@ -1536,28 +1550,13 @@ def private encode_cls_tail(t : Model; var r : StepRes; enc : MetalComputeEncode
 // The caller poked bx = raw embed row, bxb2 = mtp_h, bcos/bsin = the DRAFT row's rope table
 def private encode_draft_step(t : Model; var r : StepRes; with_cls : bool = true) {
     let c = t.config
-    let dim = c.dim
     var cb = metal_new_command_buffer_unretained(g_queue)
     let conc = decode_concurrent() && empty(g_skip)
     var enc = conc ? metal_new_compute_encoder_concurrent(cb) : metal_new_compute_encoder(cb)
     gr_arm(conc)   // the draft step rides the same capture rail as the main step
     let hz_d0 = conc ? metal_dispatch_calls() : 0l
     let hz_g0 = g_hz_gated
-    if (r.hc) {   // the poked wide carry sits in bhc_carry; the prelude lands the draft's wide residual in bhc
-        hc_draft_prelude(t, r, enc, r.bx, 1l)
-    } else {
-        unsafe {
-            var bw_en = upload_region(addr < void? >(t.fblob[t.mtp_enorm_off]), uint64(dim * 4l))
-            enc_rms(enc, r.bx, 0ul, bw_en, r.bxb, r.u_dim, r.u_eps)
-            enc_copy_row(enc, r.bxb, 0ul, r.bcat, 0ul, r.u_dim, dim)
-            var bw_hn = upload_region(addr < void? >(t.fblob[t.mtp_hnorm_off]), uint64(dim * 4l))
-            enc_rms(enc, r.bxb2, 0ul, bw_hn, r.bxb, r.u_dim, r.u_eps)
-            enc_copy_row(enc, r.bxb, 0ul, r.bcat, uint64(dim * 4l), r.u_dim, dim)
-            enc_site_gemv(enc, t, t.mtp_ehproj_fmt, t.mtp_ehproj_off, dim, 2l * dim, r.bcat, r.bx, r.u_dim2, r.u_dim)
-            var bw_att = upload_region(addr < void? >(t.fblob[t.rms_att_off + c.n_layers * dim]), uint64(dim * 4l))
-            enc_rms(enc, r.bx, 0ul, bw_att, r.bxb, r.u_dim, r.u_eps)
-        }
-    }
+    enc_draft_head_rows(t, r, enc, r.bx, 1l, true)   //! a hyper-connection carry sits poked in bhc_carry, the prelude landing the wide residual in bhc
     var dn0 = 0l
     encode_layer(t, r, enc, c.n_layers, dn0)
     if (with_cls) {
@@ -1678,6 +1677,11 @@ struct private MtpVerifyGroup {
 var private @scratch g_v_groups : array<MtpVerifyGroup>   //! the verify being encoded: the layer encoders read the rows' groups here
 var private g_chain_on = false   //! the chained draft rides ahead of the verify on its encoder: one command buffer, one join
 var private g_chain_rd : StepRes   //! the round's chained draft step; its btok row gi is group gi's winner, embedded as the verify's row 1
+var private g_chain_rounds = 0l   //! rounds whose draft and verify ran as one command buffer since load
+
+//! the speculative rounds whose depth-1 draft rode ahead of the verify in one command buffer since load - the chain's witness
+[arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-nextn-chain")]
+def public metal_mtp_chained_rounds() : int64 => g_chain_rounds
 
 //! the chained draft's winner buffer: one uint a row, never under the spec step's 64 bytes
 def private chain_btok_bytes(nrows : int64) : uint64 => uint64(max(nrows, 16l) * 4l)
@@ -1829,21 +1833,33 @@ def private w13_fused_verify(var e : VerifyLayerEnc; t : Model; enc : MetalCompu
 
 //! the verify rows' rope + KV store: the codec's batch form over the route table (rtoff picks the layer's rows, whose bases are
 //! the layer's own, so `lay` is 0), the base geometry
-[unused_argument(t, het, kvsh, lkoff, lvoff, rowb)]
+[unused_argument(het, kvsh, lkoff, lvoff, rowb)]
 def private rope_store_verify(var e : VerifyLayerEnc; t : Model; enc : MetalComputeEncoder?; l : int64; het, kvsh : bool;
                               bbias, bcos_l, bsin_l : MetalBuffer?; lkoff, lvoff : uint64; rowb, qd, kv_dim, head_size, n_heads : int64) {
     let r & = unsafe(*e.r)
     let qkvd = uint(qd + 2l * kv_dim)
     let rtoff = uint64(l * 16l * r.nrows)
     let vrot = int64(r.k_rot != 0u ? r.k_rot : r.k_hs)
+    let gd = qg_direct(t.config, r.kdt)
+    let bq = gd ? r.bdn_qg : null
+    let qhs = gd ? uint(2l * head_size) : 0u
+    let qrow = gd ? uint(2l * qd) : 0u
     if (r.kdt == KVDtype.tq4) {
         var tka = RopeStoreBTq4Args(lay = 0u, qd = uint(qd), head_size = uint(head_size), nheads = uint(n_heads), kv_mul = r.k_kvm,
-            qstride = qkvd, neox = r.k_neox, has_bias = r.k_hasb, rot = uint(vrot))
-        enc_rope_store_b_tq4(enc, r.bqkv, bcos_l, bsin_l, r.brt, bbias, tka, n_heads + 2l * (kv_dim / head_size), r.nrows, head_size, rtoff)
+            qstride = qkvd, neox = r.k_neox, has_bias = r.k_hasb, rot = uint(vrot), qhs = qhs, qrow = qrow)
+        enc_rope_store_b_tq4(enc, r.bqkv, bcos_l, bsin_l, r.brt, bbias, tka, n_heads + 2l * (kv_dim / head_size), r.nrows, head_size, rtoff, bq)
     } elif (r.kdt == KVDtype.q8_0) {
         var qka = RopeStoreBQ8Args(lay = 0u, nblk = uint(kv_dim / 32l), qd = uint(qd), head_size = uint(head_size), npairs_q = uint(qd / 2l),
-            qstride = qkvd, neox = r.k_neox, has_bias = r.k_hasb, rot = uint(vrot))
-        enc_rope_store_b_q8(enc, r.bqkv, bcos_l, bsin_l, r.brt, bbias, qka, qd / 2l + 2l * (kv_dim / 32l), r.nrows, rtoff)
+            qstride = qkvd, neox = r.k_neox, has_bias = r.k_hasb, rot = uint(vrot), qhs = qhs, qrow = qrow)
+        enc_rope_store_b_q8(enc, r.bqkv, bcos_l, bsin_l, r.brt, bbias, qka, qd / 2l + 2l * (kv_dim / 32l), r.nrows, rtoff, bq)
+    } elif (qkn_fused(t.config, r.kdt)) {
+        var nka = qkn_args(t, l, qd, kv_dim, head_size, vrot, r.k_neox != 0u, r.k_hasb != 0u, r.k_eps, int64(qkvd), vrot / 2l, 0l)
+        if (gd) {
+            nka.qstride = qhs
+            nka.qrow = qrow
+        }
+        enc_qkn_rope_b(enc, r.kdt == KVDtype.f16, r.bqkv, bcos_l, bsin_l, r.brt, qkn_weights(t, l, head_size), bbias, nka,
+            n_heads + 2l * (kv_dim / head_size), r.nrows, rtoff, bq)
     } else {
         var vrka = gk_rope_kv_args(int64(r.k_qd), int64(r.k_kvd), int64(r.k_hs), int64(r.k_npq), int64(r.k_npall), r.k_neox != 0u, r.k_hasb != 0u, vrot,
             0l, 0l, r.nrows, int64(qkvd), int64(qkvd), vrot / 2l, 0l)
@@ -1863,40 +1879,45 @@ def private attention_verify(var e : VerifyLayerEnc; t : Model; enc : MetalCompu
     let qkvd = uint(n_heads * head_size) + 2u * kv_dim
     let rtoff = uint64(l * 16l * r.nrows)
     let vscale = c.attn_scale > 0.0 ? c.attn_scale : 1.0 / sqrt(float(head_size))
+    let gd = qg_direct(c, r.kdt)
+    let bq = gd ? r.bdn_qg : r.bqkv
+    let qstride = gd ? uint(2l * n_heads * head_size) : qkvd
+    let qhs = gd ? uint(2l * head_size) : 0u
+    let gated = gd && r.kdt != KVDtype.tq4 ? 1u : 0u
     if (r.attn_d) {
         encode_attn_d(t, r, enc, l, head_size, n_heads, 0u, null, rtoff, true)
     } elif (r.chunked) {
         var pka = SqAttnPartBArgs(lay = 0u, kstride = kstride, nheads = uint(n_heads),
             kv_mul = uint(n_heads / c.n_kv_heads), hs = uint(head_size), scale = vscale,
-            qstride = qkvd, nchmax = uint(nchunks), softcap = c.attn_logit_softcap, window = 0u)
-        enc_attn_part_b(enc, r.kdt, r.bqkv, r.bpart, r.brt, pka, r.nrows, nchunks, n_heads, head_size, [rtoff = rtoff])
+            qstride = qstride, nchmax = uint(nchunks), softcap = c.attn_logit_softcap, window = 0u, qhs = qhs, gated = gated)
+        enc_attn_part_b(enc, r.kdt, bq, r.bpart, r.brt, pka, r.nrows, nchunks, n_heads, head_size, [rtoff = rtoff])
         var cka = SqAttnCombArgs(nch = uint(nchunks), nheads = uint(n_heads),
             hs = uint(head_size), window = 0u, hass = 0u)
         enc_attn_comb_b(enc, r.bpart, r.bxb, cka, r.brt, rtoff, null, n_heads * r.nrows, head_size)
     } else {
         var bka = SqAttnBArgs(lay = 0u, kstride = kstride, nheads = uint(n_heads),
             kv_mul = uint(n_heads / c.n_kv_heads), hs = uint(head_size), scale = vscale,
-            qstride = qkvd, softcap = c.attn_logit_softcap, hass = 0u)
-        enc_attn_b(enc, r.kdt, r.bqkv, r.bxb, r.brt, bka, r.nrows, n_heads, head_size, [rtoff = rtoff])
+            qstride = qstride, softcap = c.attn_logit_softcap, hass = 0u, qhs = qhs, gated = gated)
+        enc_attn_b(enc, r.kdt, bq, r.bxb, r.brt, bka, r.nrows, n_heads, head_size, [rtoff = rtoff])
     }
 }
 
 //! the rows forms' deltanet input projections over `r.nrows` rows: qkv, z and beta/alpha, each plane through its
 //! tag's rows site (f32-on-disk beta/alpha through the router-slab f32 GEMV, one stream a row)
-def private enc_dn_proj_rows(r : StepRes; t : Model; enc : MetalComputeEncoder?; l : int64) {
+def private enc_dn_proj_rows(r : StepRes; t : Model; enc : MetalComputeEncoder?; l : int64; single : bool = false) {
     let c = t.config
     let dim = c.dim
     let cd = dn_conv_dim(c)
     let di = c.ssm_d_inner
     let nvh = c.ssm_dt_rank
-    let bt = rows_tier(r.nrows)
-    enc_batch_site(enc, t, bt, fmt_at(t.dnqkv_fmt, l), t.dnqkv_offs[l], cd, dim, cd, r.bxb, r.bdn_qkv, r.u_dim, r.u_cd, r.u_cd, 0l, false)
-    enc_batch_site(enc, t, bt, fmt_at(t.dngate_fmt, l), t.dngate_offs[l], di, dim, di, r.bxb, r.bdn_z, r.u_dim, r.u_di, r.u_di, 0l, false)
+    let nr = r.nrows
+    site_rows(enc, t, single, fmt_at(t.dnqkv_fmt, l), t.dnqkv_offs[l], cd, dim, r.bxb, r.bdn_qkv, r.u_dim, r.u_cd, nr)
+    site_rows(enc, t, single, fmt_at(t.dngate_fmt, l), t.dngate_offs[l], di, dim, r.bxb, r.bdn_z, r.u_dim, r.u_di, nr)
     if (t.dn_ba_f32) {
-        enc_dn_ba_f32(enc, t, l, r.bxb, r.bdn_b, r.u_dim, r.u_nvh2, r.nrows)
+        enc_dn_ba_f32(enc, t, l, r.bxb, r.bdn_b, nr)
     } else {
-        enc_batch_site(enc, t, bt, fmt_at(t.dnbeta_fmt, l), t.dnbeta_offs[l], nvh, dim, nvh, r.bxb, r.bdn_b, r.u_dim, r.u_nvh, r.u_nvh, 0l, false)
-        enc_batch_site(enc, t, bt, fmt_at(t.dnalpha_fmt, l), t.dnalpha_offs[l], nvh, dim, nvh, r.bxb, r.bdn_g, r.u_dim, r.u_nvh, r.u_nvh, 0l, false)
+        site_rows(enc, t, single, fmt_at(t.dnbeta_fmt, l), t.dnbeta_offs[l], nvh, dim, r.bxb, r.bdn_b, r.u_dim, r.u_nvh, nr)
+        site_rows(enc, t, single, fmt_at(t.dnalpha_fmt, l), t.dnalpha_offs[l], nvh, dim, r.bxb, r.bdn_g, r.u_dim, r.u_nvh, nr)
     }
 }
 
@@ -1940,10 +1961,10 @@ def private enc_shexp_site(r : StepRes; t : Model; enc : MetalComputeEncoder?; s
 }
 
 //! the rows forms' deltanet out projection over `r.nrows` rows, through the out plane's tag
-def private enc_dn_out_rows(r : StepRes; t : Model; enc : MetalComputeEncoder?; l : int64) {
+def private enc_dn_out_rows(r : StepRes; t : Model; enc : MetalComputeEncoder?; l : int64; single : bool = false) {
     let dim = t.config.dim
     let di = t.config.ssm_d_inner
-    enc_batch_site(enc, t, rows_tier(r.nrows), fmt_at(t.dnout_fmt, l), t.dnout_offs[l], dim, di, dim, r.bdn_o, r.bxb2, r.u_di, r.u_dim, r.u_dim, 0l, false)
+    site_rows(enc, t, single, fmt_at(t.dnout_fmt, l), t.dnout_offs[l], dim, di, r.bdn_o, r.bxb2, r.u_di, r.u_dim, r.nrows)
 }
 
 //! the verify rows' deltanet layer: the rows forms, the post-row0 state and history landing in
@@ -2054,7 +2075,7 @@ def private encode_verify_step(t : Model; var r : StepRes) {
         }
     }
     if (r.hc) {   // the rows' embeds open the wide residual rows; the mixers stand at the seams
-        enc_hc_init(enc, r.bx, r.bhc, r.u_dim, r.u_hc, r.u_hcd_tot, nr * hc_dim(c))
+        enc_hc_init(enc, r.bx, r.bhc, hc_init_args(c, nr), nr * hc_dim(c))
     } else {
         var bw_att0 = upload_region(unsafe(addr < void? >(t.fblob[t.rms_att_off])), uint64(dim * 4l))
         if (r.bxh != null) {
@@ -2108,27 +2129,22 @@ def private encode_verify_step(t : Model; var r : StepRes) {
 //! the draft head's rows prelude: [enorm(embed) ; hnorm(carry)] -> eh_proj -> the trunk-shaped block's
 //! attention norm. `embed` holds the rows' raw embeds, bxb2 their carry hiddens; bx and bxb leave with the
 //! projected rows and their norm
-def private enc_draft_head_rows(t : Model; var r : StepRes; enc : MetalComputeEncoder?; embed : MetalBuffer?; nr : int64) {
+def private enc_draft_head_rows(t : Model; var r : StepRes; enc : MetalComputeEncoder?; embed : MetalBuffer?; nr : int64; single : bool = false) {
     let c = t.config
     let dim = c.dim
-    let rowb = uint64(dim * 4l)
     if (r.hc) {   // the carries sit in bhc_carry as wide rows; the prelude lands the draft's wide rows in bhc
         hc_draft_prelude(t, r, enc, embed, nr)
         return
     }
     unsafe {
         var bw_en = upload_region(addr < void? >(t.fblob[t.mtp_enorm_off]), uint64(dim * 4l))
-        enc_rms_b(enc, embed, 0ul, bw_en, r.bh12, r.u_dim, r.u_eps, nr)
+        norm_rows(enc, single, embed, bw_en, r.bh12, r.u_dim, r.u_eps, nr)
         var bw_hn = upload_region(addr < void? >(t.fblob[t.mtp_hnorm_off]), uint64(dim * 4l))
-        enc_rms_b(enc, r.bxb2, 0ul, bw_hn, r.bxb, r.u_dim, r.u_eps, nr)
-        for (i in range64(nr)) {
-            enc_copy_row(enc, r.bh12, uint64(i) * rowb, r.bcat, uint64(2l * i) * rowb, r.u_dim, dim)
-            enc_copy_row(enc, r.bxb, uint64(i) * rowb, r.bcat, uint64(2l * i + 1l) * rowb, r.u_dim, dim)
-        }
-        enc_batch_site(enc, t, rows_tier(nr), t.mtp_ehproj_fmt, t.mtp_ehproj_off, dim, 2l * dim, dim,
-            r.bcat, r.bx, r.u_dim2, r.u_dim, r.u_dim, 0l, false)
+        norm_rows(enc, single, r.bxb2, bw_hn, r.bxb, r.u_dim, r.u_eps, nr)
+        enc_cat2(enc, r.bcat, r.bh12, r.bxb, cat2_args(dim, nr), nr * dim)
+        site_rows(enc, t, single, t.mtp_ehproj_fmt, t.mtp_ehproj_off, dim, 2l * dim, r.bcat, r.bx, r.u_dim2, r.u_dim, nr)
         var bw_att = upload_region(addr < void? >(t.fblob[t.rms_att_off + c.n_layers * dim]), uint64(dim * 4l))
-        enc_rms_b(enc, r.bx, 0ul, bw_att, r.bxb, r.u_dim, r.u_eps, nr)
+        norm_rows(enc, single, r.bx, bw_att, r.bxb, r.u_dim, r.u_eps, nr)
     }
     r.xh_ok = false   //! the head's norm wrote bxb with no twin: the MTP layer's sites read the f32 rows
 }
@@ -2136,7 +2152,7 @@ def private enc_draft_head_rows(t : Model; var r : StepRes; enc : MetalComputeEn
 //! the rows classifier tail: the final norm at `norm_off` over bx, the classifier GEMM into `bcls`, then
 //! per row the final-logit soft cap and the suppressed ids in the CPU order
 def private enc_cls_tail_rows(t : Model; var r : StepRes; enc : MetalComputeEncoder?; norm_off : int64; bcls : MetalBuffer?; nr : int64;
-                              hc_norm_off : int64 = -1l; hc_down_off : int64 = -1l; hc_up_off : int64 = -1l) {
+                              hc_norm_off : int64 = -1l; hc_down_off : int64 = -1l; hc_up_off : int64 = -1l; single : bool = false) {
     let c = t.config
     let dim = c.dim
     if (r.hc) {   // the head mixer over every wide row stands where the final norm would (the trunk's, or the draft head's own)
@@ -2144,11 +2160,9 @@ def private enc_cls_tail_rows(t : Model; var r : StepRes; enc : MetalComputeEnco
             hc_down_off >= 0l ? hc_down_off : t.hc_head_down_off, hc_up_off >= 0l ? hc_up_off : t.hc_head_up_off, -1l, r.bxf, null)
     } else {
         var bwfin = upload_region(unsafe(addr < void? >(t.fblob[norm_off])), uint64(dim * 4l))
-        enc_rms_b(enc, r.bx, 0ul, bwfin, r.bxf, r.u_dim, r.u_eps, nr)
+        norm_rows(enc, single, r.bx, bwfin, r.bxf, r.u_dim, r.u_eps, nr)
     }
-    let cls_fmt = cls_fmt_of(t)
-    enc_batch_site(enc, t, rows_tier(nr), cls_fmt, t.wcls_off, c.vocab_size, dim, c.vocab_size,
-        r.bxf, bcls, r.u_dim, r.u_vocab, r.u_vocab, 0l, false)
+    site_rows(enc, t, single, cls_fmt_of(t), t.wcls_off, c.vocab_size, dim, r.bxf, bcls, r.u_dim, r.u_vocab, nr)
     let vb = uint64(c.vocab_size * 4l)
     for (i in range64(nr)) {
         if (r.u_flcap != null) {
@@ -2537,8 +2551,10 @@ def metal_mtp_spec_rounds(t : Model; var sessions : array<Session?>; toks : arra
             row0 = long_length(g_v_groups), koff = mr.koff, voff = mr.voff, cap = mr.cap_rows))
     }
     var drafted = long_length(g_v_groups) > 0l
-    //! depth 1 chains on any table the device gathers off an offset token list; a PLE n-gram model's rows gather reads the host's tokens before the join, so it keeps the host chain
-    let chain = drafted && k == 1l && emb_dev_gather_at_ok(t) && !has_ple_ngram(c)
+    //! depth 1 chains on any table the device gathers - off an offset token list for several groups, off the list's head for one (the fp32
+    //! table's gather); a PLE n-gram model's rows gather reads the host's tokens before the join, so it keeps the host chain
+    let gather_ok = long_length(g_v_groups) == 1l ? emb_dev_gather_ok(t) : emb_dev_gather_at_ok(t)
+    let chain = drafted && k == 1l && gather_ok && !has_ple_ngram(c)
     g_chain_on = false
     if (chain) {
         drafted = mtp_draft_rows(t, 0l, true)
@@ -2679,6 +2695,7 @@ def metal_mtp_spec_rounds(t : Model; var sessions : array<Session?>; toks : arra
     if (chain) {
         if (vok) {
             chain_draft_land(t, 1l)
+            g_chain_rounds++
         } else {   //! a failed command buffer leaves the winners and the draft's slab row undefined: nothing of the parked step lands
             chain_draft_drop()
         }
@@ -3094,7 +3111,6 @@ def private release_step(var r : StepRes) {   // nolint:STYLE037,STYLE038 — fl
         pool_release(g_upool, r.u_hcd, 4ul)
         pool_release(g_upool, r.u_hc, 4ul)
         pool_release(g_upool, r.u_lr, 4ul)
-        pool_release(g_upool, r.u_hc_rows, 4ul)
         pool_release(g_upool, r.u_lr_tot, 4ul)
         pool_release(g_upool, r.u_hcd_tot, 4ul)
     }
@@ -3396,11 +3412,8 @@ var private @scratch g_b_ple_bases : array<uint64>   //! each row's n-gram conv 
 // attention depth cap with a real uid, per-row rope rows built, and dim within the add+rms row
 // slabs (GEMM path caps at 3072, fixed-B GEMV at ADD_RMS_MAX_DIM — B >= 5 on a wider model declines)
 def private batch_decode_decline(t : Model; ws : BatchWorkspace; sessions : array<Session?>; nrows : int64) : MetalDecodeDecline {
-    // the batched sites dispatch per tensor by tag, a mixed layer included (`ARCHITECTURE_GPU_MTP.md#mtp-joint-verify`)
-    if (t.kquant_native && kq_dense_b32_any(t)) {   //! a per-32 dense plane has no row-batched GEMV: its rows would each stream the plane
-        return MetalDecodeDecline.b32_rows
-    }
-    // the deltanet hybrids ride the recurrent rows form where the single row does (decode_shape_decline's graph clause); a MoE's shared expert rides the rows form
+    //! the batched sites dispatch per tensor by tag, a mixed layer included (`ARCHITECTURE_GPU_MTP.md#mtp-joint-verify`);
+    //! the deltanet hybrids ride the recurrent rows form where the single row does (decode_shape_decline's graph clause); a MoE's shared expert rides the rows form
     let shape = decode_shape_decline(t, BATCH_NEEDS_OK, true, true, true, allow_hc = !batch_same_slab())   //! MoE, the E-series' shared-KV layers (Q-only rows), its two FFN widths and the hyper-connection rows (one session a row) all have batch forms
     if (shape != MetalDecodeDecline.none) {
         return shape
@@ -3507,18 +3520,30 @@ def private rope_store_batch(var e : BatchLayerEnc; t : Model; enc : MetalComput
     // 0 = full rope; a partial carrier (qwen35: rope 64 of head 256) rotates rot/2 pairs, the rest identity
     let rot_l = r.k_rot != 0u ? r.k_rot : uint(head_size)
     // a shared-KV layer (E-series) dispatches its Q rows only: no K rope, no row store into the source slab it reads
+    let gd = qg_direct(t.config, r.kdt)
+    let bq = gd ? r.bdn_qg : null
+    let qhs = gd ? uint(2l * head_size) : 0u
+    let qrow = gd ? uint(2l * qd) : 0u
     if (r.kdt == KVDtype.tq4) {
         var tka = RopeStoreBTq4Args(lay = lay_l, qd = uint(qd), head_size = uint(head_size),
             nheads = uint(n_heads), kv_mul = kvm_l, qstride = qkvd,
-            neox = r.k_neox, has_bias = r.k_hasb, rot = rot_l)
+            neox = r.k_neox, has_bias = r.k_hasb, rot = rot_l, qhs = qhs, qrow = qrow)
         enc_rope_store_b_tq4(enc, r.bqkv, bcos_l, bsin_l, r.brt, bbias, tka,
-            kvsh ? n_heads : n_heads + 2l * (kv_dim / head_size), r.nrows, head_size)
+            kvsh ? n_heads : n_heads + 2l * (kv_dim / head_size), r.nrows, head_size, 0ul, bq)
     } elif (blockc) {
         var qka = RopeStoreBQ8Args(lay = lay_l, nblk = uint(kv_dim / 32l), qd = uint(qd),
             head_size = uint(head_size), npairs_q = uint(qd / 2l), qstride = qkvd,
-            neox = r.k_neox, has_bias = r.k_hasb, rot = rot_l)
+            neox = r.k_neox, has_bias = r.k_hasb, rot = rot_l, qhs = qhs, qrow = qrow)
         enc_rope_store_b_q8(enc, r.bqkv, bcos_l, bsin_l, r.brt, bbias, qka,
-            kvsh ? qd / 2l : qd / 2l + 2l * (kv_dim / 32l), r.nrows)
+            kvsh ? qd / 2l : qd / 2l + 2l * (kv_dim / 32l), r.nrows, 0ul, bq)
+    } elif (qkn_fused(t.config, r.kdt)) {
+        var nka = qkn_args(t, l, qd, kv_dim, head_size, int64(rot_l), r.k_neox != 0u, r.k_hasb != 0u, r.k_eps, int64(qkvd), int64(rot_l) / 2l, int64(lay_l))
+        if (gd) {
+            nka.qstride = qhs
+            nka.qrow = qrow
+        }
+        enc_qkn_rope_b(enc, r.kdt == KVDtype.f16, r.bqkv, bcos_l, bsin_l, r.brt, qkn_weights(t, l, head_size), bbias, nka,
+            kvsh ? n_heads : n_heads + 2l * (kv_dim / head_size), r.nrows, 0ul, bq)
     } else {
         let npairs = kvsh ? qd / 2l : (qd + kv_dim) / 2l
         var rka = gk_rope_kv_args(qd, kv_dim, head_size, qd / 2l, npairs, r.k_neox != 0u, r.k_hasb != 0u, int64(rot_l),
@@ -3544,22 +3569,27 @@ def private attention_batch(var e : BatchLayerEnc; t : Model; enc : MetalCompute
     let scale_l = het ? r.k_scale_sw : r.k_scale
     let window_l = lsl && c.sliding_window > 0l ? uint(c.sliding_window) : 0u
     let hass_u = c.attn_sinks ? 1u : 0u
+    let gd = qg_direct(c, r.kdt)
+    let bq = gd ? r.bdn_qg : r.bqkv
+    let qstride = gd ? uint(2l * n_heads * head_size) : qkvd
+    let qhs = gd ? uint(2l * head_size) : 0u
+    let gated = gd && r.kdt != KVDtype.tq4 ? 1u : 0u
     if (r.attn_d) {
         encode_attn_d(t, r, enc, l, head_size, n_heads, window_l, bsnk)
     } elif (r.chunked) {
         // each row derives wstart from its own cnt; the comb skips that row's below-window chunks
         var pka = SqAttnPartBArgs(lay = lay_l, kstride = kstride_l, nheads = uint(n_heads),
-            kv_mul = kvm_l, hs = uint(head_size), scale = scale_l, qstride = qkvd,
-            nchmax = uint(r.nchmax), softcap = c.attn_logit_softcap, window = window_l)
-        enc_attn_part_b(enc, r.kdt, r.bqkv, r.bpart, r.brt, pka, r.nrows, r.nchmax, n_heads, head_size)
+            kv_mul = kvm_l, hs = uint(head_size), scale = scale_l, qstride = qstride,
+            nchmax = uint(r.nchmax), softcap = c.attn_logit_softcap, window = window_l, qhs = qhs, gated = gated)
+        enc_attn_part_b(enc, r.kdt, bq, r.bpart, r.brt, pka, r.nrows, r.nchmax, n_heads, head_size)
         var cka = SqAttnCombArgs(nch = uint(r.nchmax), nheads = uint(n_heads),
             hs = uint(head_size), window = window_l, hass = hass_u)
         enc_attn_comb_b(enc, r.bpart, r.bxb, cka, r.brt, 0ul, bsnk, n_heads * r.nrows, head_size)
     } else {
         var bka = SqAttnBArgs(lay = lay_l, kstride = kstride_l, nheads = uint(n_heads),
-            kv_mul = kvm_l, hs = uint(head_size), scale = scale_l, qstride = qkvd,
-            softcap = c.attn_logit_softcap, hass = hass_u)
-        enc_attn_b(enc, r.kdt, r.bqkv, r.bxb, r.brt, bka, r.nrows, n_heads, head_size, bsnk)
+            kv_mul = kvm_l, hs = uint(head_size), scale = scale_l, qstride = qstride,
+            softcap = c.attn_logit_softcap, hass = hass_u, qhs = qhs, gated = gated)
+        enc_attn_b(enc, r.kdt, bq, r.bxb, r.brt, bka, r.nrows, n_heads, head_size, bsnk)
     }
 }
 
@@ -3568,18 +3598,7 @@ def private attention_batch(var e : BatchLayerEnc; t : Model; enc : MetalCompute
 //! rows as one group walking its session's state row after row
 def private recurrent_batch(var e : BatchLayerEnc; t : Model; enc : MetalComputeEncoder?; l : int64; var dnli : int64&) {
     var r & = unsafe(*e.r)
-    if (g_skip != "gemv") {
-        enc_dn_proj_rows(r, t, enc, l)
-    }
-    if (g_skip != "attn") {
-        let d = dn_stages_of(r, false)
-        enc_dn_front(enc, t, l, dnli, d)
-        enc_dn_back(enc, t, l, dnli, d)
-    }
-    if (g_skip != "gemv") {
-        enc_dn_out_rows(r, t, enc, l)
-    }
-    dnli++
+    recurrent_layer(r, t, enc, l, dnli, false, false)
 }
 
 //! the batch step's layer encoder: B rows through the route table on the batch kernel family
@@ -3990,7 +4009,7 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
     let bytes_xb = uint64(mp * max(dim, qd_mx) * 4l)   // dim-wide norm outs AND the qd-wide attention out
     let bytes_qkv = uint64(mp * qkvd_mx * 4l)
     let nsh = moe ? c.n_ff_shexp : 0l
-    let bytes_h = uint64(max(max(mp * hid_mx, mr * knfe), mr * 2l * nsh) * 4l)   //! the wider FFN width, the PLE gate rows (ple <= hidden) and the shared expert's gate|up pair all fit
+    let bytes_h = uint64(max(max(mp * hid_mx, mr * knfe), max(mr, mp) * 2l * nsh) * 4l)   //! the wider FFN width, the PLE gate rows (ple <= hidden) and the shared expert's gate|up pair all fit
     let bytes_tab = uint64(nrows * ((c.rope_dim > 0l ? c.rope_dim : head_size) / 2l) * 4l)   //! the rows are built at the ROTATED width (a partial carrier: rope_dim/2) - the copy below reads exactly them
     let bytes_tab_sw = uint64(nrows * half_sw * 4l)   // the swa pair's rows are ITS class's hs/2
     let bytes_rt = uint64(nrows * 16l)
@@ -4022,7 +4041,7 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
     }
     var bpsk = bytes_sk > 0ul ? pool_acquire(g_pool, g_dev, bytes_sk) : null
     var bt = BatchTier(use_mm = use_mm, use_gemm = use_gemm, mp = mp, nrows = nrows, bpsk = bpsk)
-    let bytes_mlg = uint64(mr * c.n_expert * 4l)
+    let bytes_mlg = uint64(mr * (c.n_expert + 1l) * 4l)
     let bytes_msel = uint64(mr * 2l * c.n_expert_used * 4l)
     let bytes_mdn = uint64(mr * c.n_expert_used * dim * 4l)
     var bmlg = moe ? pool_acquire(g_pool, g_dev, bytes_mlg) : null
@@ -4038,9 +4057,10 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
     let cd = dn ? dn_conv_dim(c) : 0l
     let di = dn ? c.ssm_d_inner : 0l
     let nvh = dn ? c.ssm_dt_rank : 0l
-    let bytes_dn_cd = uint64(mr * cd * 4l)
-    let bytes_dn_di = uint64(mr * di * 4l)
-    let bytes_dn_h = uint64(mr * nvh * 4l)
+    let mdn = max(mr, mp)   //! the recurrent projections are weight sites: the GEMM tier writes its whole M pad into them
+    let bytes_dn_cd = uint64(mdn * cd * 4l)
+    let bytes_dn_di = uint64(mdn * di * 4l)
+    let bytes_dn_h = uint64(mdn * nvh * 4l)
     var bdn_qkv = dn ? pool_acquire(g_pool, g_dev, bytes_dn_cd) : null
     var bdn_cv = dn ? pool_acquire(g_pool, g_dev, bytes_dn_cd) : null
     var bdn_z = dn ? pool_acquire(g_pool, g_dev, bytes_dn_di) : null
@@ -4077,7 +4097,6 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
     var u_hcd = hc ? uniform_u32(uint(hcd)) : null
     var u_hc = hc ? uniform_u32(uint(c.hc_count)) : null
     var u_lr = hc ? uniform_u32(uint(c.hc_low_rank)) : null
-    var u_hc_rows = hc ? uniform_u32(uint(nrows)) : null
     var u_lr_tot = hc ? uniform_u32(uint(nrows * c.hc_low_rank)) : null
     var u_hcd_tot = hc ? uniform_u32(uint(nrows * hcd)) : null
     let ind = png ? ple_in_dim(c) : 0l
@@ -4223,7 +4242,7 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
     var xh0 = false
     if (g_skip != "ew") {
         if (hc) {
-            enc_hc_init(enc, bx, bhc, u_dim, u_hc, u_hcd_tot, nrows * hcd)
+            enc_hc_init(enc, bx, bhc, hc_init_args(c, nrows), nrows * hcd)
         } else {
             var bw_att0 = upload_region(unsafe(addr < void? >(t.fblob[t.rms_att_off])), uint64(dim * 4l))
             if (bxh != null) {
@@ -4240,7 +4259,7 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
         ple = plef, bple = bple, u_ple = u_ple, u_ple_tot = u_ple_tot, bytes_ple = bytes_ple,
         hc = hc, png = png, batch_rows = true, bytes_hcd = bytes_hcd, bytes_lr = bytes_lr, bytes_hc = bytes_hc, bytes_ple_in = bytes_ple_in,
         bhc = bhc, bhc_xn = bhc_xn, bhc_gate = bhc_gate, bhc_lo = bhc_lo, bhc_inj_a = bhc_inj_a, bhc_inj_f = bhc_inj_f,
-        u_hcd = u_hcd, u_hc = u_hc, u_lr = u_lr, u_hc_rows = u_hc_rows, u_lr_tot = u_lr_tot, u_hcd_tot = u_hcd_tot,
+        u_hcd = u_hcd, u_hc = u_hc, u_lr = u_lr, u_lr_tot = u_lr_tot, u_hcd_tot = u_hcd_tot,
         bple_emb = bple_emb, bple_key = bple_key, bple_gated = bple_gated, bple_val = bple_val, u_ple_in = u_ple_in,
         dn = dn, bdn_qkv = bdn_qkv, bdn_cv = bdn_cv, bdn_z = bdn_z, bdn_o = bdn_o, bdn_b = bdn_b, bdn_g = bdn_g,
         u_cd = u_cd, u_nvh = u_nvh, u_nvh2 = u_nvh2, u_di = u_di, dn_ba_rows = dn && t.dn_ba_f32,
@@ -4472,7 +4491,6 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
         L.upooled |> push((buf = u_hcd, size = 4ul))   // nolint:STYLE012
         L.upooled |> push((buf = u_hc, size = 4ul))
         L.upooled |> push((buf = u_lr, size = 4ul))
-        L.upooled |> push((buf = u_hc_rows, size = 4ul))
         L.upooled |> push((buf = u_lr_tot, size = 4ul))
         L.upooled |> push((buf = u_hcd_tot, size = 4ul))
     }

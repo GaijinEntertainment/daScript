@@ -78,8 +78,8 @@ def private codec_rows(codec : string; seed, cnt : int; var slab : array<uint8>;
 }
 
 // the single-threadgroup codec twins: one dispatch, the whole context in one pass
-def private sq_codec_single_gate(t : T?; var dev, queue; codec : string; cnt : int; softcap : float; hass : bool) {
-    let tag = "sq_attn_{codec} cnt={cnt} softcap={softcap} sink={hass}"
+def private sq_codec_single_gate(t : T?; var dev, queue; codec : string; cnt : int; softcap : float; hass : bool; gated : bool = false) {
+    let tag = "sq_attn_{codec} cnt={cnt} softcap={softcap} sink={hass} gated={gated}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
         let quant = codec != "f32"
@@ -107,12 +107,12 @@ def private sq_codec_single_gate(t : T?; var dev, queue; codec : string; cnt : i
         oracle_all(kdeq, vdeq, 0, q, 0, cnt, scale, softcap, hass, sink_v, 0, want, 0)
         let bk = codec == "f32" ? (mc |> in_(kdeq)) : (mc |> in_plain(kslab))
         let bv = codec == "f32" ? (mc |> in_(vdeq)) : (mc |> in_plain(vslab))
-        let bq = mc |> in_(q)
+        let bq = gated ? (mc |> in_(gated_batch(t, tag, q, 1, QD, QD, HS, QD, want))) : (mc |> in_(q))
         let by = mc |> out_words(QD, -1000.0)
         let bsink = mc |> in_(plane_of(N_HEADS, sink_v))
         var ka = SqAttnArgs(cnt = uint(cnt), kstride = uint(codec == "f32" ? KV_DIM : NBLK),
             nheads = uint(N_HEADS), kv_mul = uint(KV_MUL), hs = uint(HS), scale = scale,
-            softcap = softcap, hass = hass ? 1u : 0u)
+            softcap = softcap, hass = hass ? 1u : 0u, qhs = gated ? uint(2 * HS) : 0u, gated = gated ? 1u : 0u)
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
             let (k, v, qp, y, s) = (mc.buf[bk], mc.buf[bv], mc.buf[bq], mc.buf[by], mc.buf[bsink])
             if (quant) {
@@ -132,8 +132,8 @@ def private sq_codec_single_gate(t : T?; var dev, queue; codec : string; cnt : i
 
 // the split-K pair: codec part kernel writes unnormalized chunk partials, the dtype-agnostic
 // comb rescales across chunks; window > 0 also exercises the chunk mask + the chlo skip
-def private sq_codec_part_gate(t : T?; var dev, queue; codec : string; cnt, window : int) {
-    let tag = "sq_attn_part_{codec} cnt={cnt} window={window}"
+def private sq_codec_part_gate(t : T?; var dev, queue; codec : string; cnt, window : int; gated : bool = false) {
+    let tag = "sq_attn_part_{codec} cnt={cnt} window={window} gated={gated}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
         let quant = codec != "f32"
@@ -158,13 +158,13 @@ def private sq_codec_part_gate(t : T?; var dev, queue; codec : string; cnt, wind
         oracle_all(kdeq, vdeq, 0, q, 0, cnt, scale, 0.0, false, 0.0, window, want, 0)
         let bk = codec == "f32" ? (mc |> in_(kdeq)) : (mc |> in_plain(kslab))
         let bv = codec == "f32" ? (mc |> in_(vdeq)) : (mc |> in_plain(vslab))
-        let bq = mc |> in_(q)
+        let bq = gated ? (mc |> in_(gated_batch(t, tag, q, 1, QD, QD, HS, QD, want))) : (mc |> in_(q))
         let bpart = mc |> out_words(N_HEADS * nchunks * (HS + 2), -1000.0)
         let by = mc |> out_words(QD, -1000.0)
         let bsink = mc |> in_(plane_of(N_HEADS, 0.0))
         var kap = SqAttnPartArgs(cnt = uint(cnt), kstride = uint(codec == "f32" ? KV_DIM : NBLK),
             nheads = uint(N_HEADS), kv_mul = uint(KV_MUL), hs = uint(HS), scale = scale,
-            nchunks = uint(nchunks), softcap = 0.0, window = uint(window))
+            nchunks = uint(nchunks), softcap = 0.0, window = uint(window), qhs = gated ? uint(2 * HS) : 0u, gated = gated ? 1u : 0u)
         var kac = SqAttnCombArgs(nch = uint(nchunks), nheads = uint(N_HEADS), hs = uint(HS),
             chlo = uint(chlo), hass = 0u)
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
@@ -324,8 +324,22 @@ def private kv_planes(var mc; codec : string; fx : BatchAttnFix) : int2 {
     return int2(mc |> in_(fx.kf), mc |> in_(fx.vf))
 }
 
-def private sq_b_gate(t : T?; var dev, queue; codec : string; cnts : array<int>; softcap : float; hass : bool) {
-    let tag = "sq_attn_b_{codec} B={length(cnts)} softcap={softcap} sink={hass}"
+//! the gated arm over `nrows` query rows `qstride` apart: their `qd` q elements as a [q | gate] plane, rows 2 qd apart, and
+//! the oracle rows (`wstride` apart) under the same gates, the gate asserted to move them past the bar
+def private gated_batch(t : T?; tag : string; q : array<float>; nrows, qstride, qd, hs, wstride : int; var want : array<float>) : array<float> {
+    var inscope qs <- [for (k in range(nrows * qd)); q[(k / qd) * qstride + k % qd]]
+    var inscope gate <- attn_gate_row(nrows * qd)
+    var inscope gw <- gated_rows([for (k in range(nrows * qd)); want[(k / qd) * wstride + k % qd]], gate)
+    var inscope ungated := want
+    for (k in range(nrows * qd)) {
+        want[(k / qd) * wstride + k % qd] = gw[k]
+    }
+    t |> success(check_count(want, ungated, BAR_ATTN) * 2 > nrows * qd, "{tag}: the gate moves most of the rows past the bar (the gated compare has teeth)")
+    return <- q_gate_plane(qs, gate, hs)
+}
+
+def private sq_b_gate(t : T?; var dev, queue; codec : string; cnts : array<int>; softcap : float; hass : bool; gated : bool = false) {
+    let tag = "sq_attn_b_{codec} B={length(cnts)} softcap={softcap} sink={hass} gated={gated}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
         let quant = codec == "q8" || codec == "tq4"
@@ -347,13 +361,13 @@ def private sq_b_gate(t : T?; var dev, queue; codec : string; cnts : array<int>;
         let scale = 1.0 / sqrt(float(HS))
         var inscope want <- batch_want(fx, cnts, qstride, scale, softcap, hass, sink_v, 0)
         let kv = mc |> kv_planes(codec, fx)
-        let bq = mc |> in_(fx.q)
+        let bq = gated ? (mc |> in_(gated_batch(t, tag, fx.q, nb2, qstride, QD, HS, QD, want))) : (mc |> in_(fx.q))
         let by = mc |> out_words(nb2 * QD, -1000.0)
         let brt = mc |> in_plain(fx.rt)
         let bsink = mc |> in_(plane_of(N_HEADS, sink_v))
         var ka = SqAttnBArgs(lay = uint(B_LAY), kstride = uint(quant ? NBLK : KV_DIM), nheads = uint(N_HEADS),
-            kv_mul = uint(KV_MUL), hs = uint(HS), scale = scale, qstride = uint(qstride),
-            softcap = softcap, hass = hass ? 1u : 0u)
+            kv_mul = uint(KV_MUL), hs = uint(HS), scale = scale, qstride = uint(gated ? 2 * QD : qstride),
+            softcap = softcap, hass = hass ? 1u : 0u, qhs = gated ? uint(2 * HS) : 0u, gated = gated ? 1u : 0u)
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
             let (k, v, q, y, rt, s) = (mc.buf[kv.x], mc.buf[kv.y], mc.buf[bq], mc.buf[by], mc.buf[brt], mc.buf[bsink])
             let wgs = int64(N_HEADS * nb2)
@@ -372,8 +386,8 @@ def private sq_b_gate(t : T?; var dev, queue; codec : string; cnts : array<int>;
     }
 }
 
-def private sq_partb_gate(t : T?; var dev, queue; codec : string; cnts : array<int>; window : int; hass : bool) {
-    let tag = "sq_attn_part_b_{codec} B={length(cnts)} window={window} sink={hass}"
+def private sq_partb_gate(t : T?; var dev, queue; codec : string; cnts : array<int>; window : int; hass : bool; gated : bool = false) {
+    let tag = "sq_attn_part_b_{codec} B={length(cnts)} window={window} sink={hass} gated={gated}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
         let quant = codec == "q8" || codec == "tq4"
@@ -397,14 +411,14 @@ def private sq_partb_gate(t : T?; var dev, queue; codec : string; cnts : array<i
         let scale = 1.0 / sqrt(float(HS))
         var inscope want <- batch_want(fx, cnts, qstride, scale, 0.0, hass, sink_v, window)
         let kv = mc |> kv_planes(codec, fx)
-        let bq = mc |> in_(fx.q)
+        let bq = gated ? (mc |> in_(gated_batch(t, tag, fx.q, nb2, qstride, QD, HS, QD, want))) : (mc |> in_(fx.q))
         let bpart = mc |> out_words(nb2 * N_HEADS * nchmax * (HS + 2), -1000.0)
         let by = mc |> out_words(nb2 * QD, -1000.0)
         let brt = mc |> in_plain(fx.rt)
         let bsink = mc |> in_(plane_of(N_HEADS, sink_v))
         var kap = SqAttnPartBArgs(lay = uint(B_LAY), kstride = uint(quant ? NBLK : KV_DIM), nheads = uint(N_HEADS),
-            kv_mul = uint(KV_MUL), hs = uint(HS), scale = scale, qstride = uint(qstride),
-            nchmax = uint(nchmax), softcap = 0.0, window = uint(window))
+            kv_mul = uint(KV_MUL), hs = uint(HS), scale = scale, qstride = uint(gated ? 2 * QD : qstride),
+            nchmax = uint(nchmax), softcap = 0.0, window = uint(window), qhs = gated ? uint(2 * HS) : 0u, gated = gated ? 1u : 0u)
         var kac = SqAttnCombArgs(nch = uint(nchmax), nheads = uint(N_HEADS), hs = uint(HS),
             window = uint(window), hass = hass ? 1u : 0u)
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
@@ -445,7 +459,7 @@ let private D_CAP = 0.05   //! a logit cap inside the fixture's score range: an 
 //! `window` keys of sliding span (0 = the whole context) and, under `sinks`, a sink logit a head that differs head to head.
 //! `softcap` > 0 caps every logit; the ragged counts leave lanes past a slice's rows, which must still weigh nothing under it.
 def private sq_d_gate(t : T?; var dev, queue; codec : string; cnts : array<int>; nsgs : int; hs : int = D_HS; lead : int = 0;
-                      window : int = 0; sinks : bool = false; softcap : float = 0.0) {
+                      window : int = 0; sinks : bool = false; softcap : float = 0.0; gated : bool = false) {
     let halves = hs > D_HS ? hs / D_HS : 1
     let wide = halves > 1
     let rowx = wide ? halves : (D_HS % hs == 0 ? 1 : 3)   //! fixture rows read as ONE kernel row: a wide head's halves, three for a head of 96 (four K/V heads of 96)
@@ -453,7 +467,7 @@ def private sq_d_gate(t : T?; var dev, queue; codec : string; cnts : array<int>;
     let kvmul = wide ? 1 : D_KVMUL
     let nheads = wide ? 1 : (kvdim / hs) * kvmul   //! a narrower head keeps the slab's bytes: more heads over the same rows
     let qd_row = max(QD, nheads * hs)
-    let tag = "sq_attn_d_{codec} B={length(cnts)} nsgs={nsgs} hs={hs} lead={lead} window={window} sinks={sinks} cap={softcap}"
+    let tag = "sq_attn_d_{codec} B={length(cnts)} nsgs={nsgs} hs={hs} lead={lead} window={window} sinks={sinks} cap={softcap} gated={gated}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
         let quant = codec == "q8" || codec == "tq4"
@@ -486,7 +500,8 @@ def private sq_d_gate(t : T?; var dev, queue; codec : string; cnts : array<int>;
         }
         let bsink = mc |> in_(snk)
         let kv = mc |> kv_planes(codec, fx)
-        let bq = mc |> in_(fx.q)
+        let qd = nheads * hs
+        let bq = gated ? (mc |> in_(gated_batch(t, tag, fx.q, nb2, qstride, qd, hs, qd_row, want))) : (mc |> in_(fx.q))
         let bpart = mc |> out_words(nb2 * nheads * halves * nsgs * (hs / halves + 4), -1000.0)
         let by = mc |> out_words(nb2 * qd_row, -1000.0)
         var inscope routes <- [for (_ in range(lead)); uint4(fx.rt[0].x, fx.rt[0].y, fx.rt[0].z, 1u)]
@@ -494,8 +509,8 @@ def private sq_d_gate(t : T?; var dev, queue; codec : string; cnts : array<int>;
         let brt = mc |> in_plain(routes)
         let rtoff = uint64(lead * 16)
         var kad = SqAttnDArgs(lay = uint(B_LAY), kstride = uint(quant ? NBLK * rowx : kvdim), nheads = uint(nheads),
-            kv_mul = uint(kvmul), hs = uint(hs), scale = scale, qstride = uint(qstride), nsgs = uint(nsgs), window = uint(window),
-            softcap = softcap)
+            kv_mul = uint(kvmul), hs = uint(hs), scale = scale, qstride = uint(gated ? 2 * qd : qstride), nsgs = uint(nsgs), window = uint(window),
+            softcap = softcap, qhs = gated ? uint(2 * hs) : 0u, gated = gated ? 1u : 0u)
         var kac = SqAttnCombDArgs(nchmax = uint(nsgs), nheads = uint(nheads * halves), hs = uint(hs / halves),
             hass = sinks ? 1u : 0u, hdiv = uint(halves))
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
@@ -595,6 +610,20 @@ def test_metal_attn_codec_kernels(t : T?) {
                 sq_d_gate(t, dev, queue, "f32", [60, 198], 3, hs = 96, lead = 1, window = 20, sinks = true, softcap = D_CAP)
                 sq_d_gate(t, dev, queue, "q8", [21, 63, 198], 3, hs = 96)
                 sq_d_gate(t, dev, queue, "tq4", [60, 198], 2, hs = 96, window = 30, sinks = true)
+                //! a gated model's q (qwen35): the head read at its [q | gate] stride, the out under the gate's sigmoid, on every form
+                sq_codec_single_gate(t, dev, queue, "f32", 40, 0.0, false, true)
+                sq_codec_single_gate(t, dev, queue, "q8", 40, 0.0, true, true)
+                sq_codec_part_gate(t, dev, queue, "f32", 100, 48, true)
+                sq_codec_part_gate(t, dev, queue, "q8", 200, 80, true)
+                sq_b_gate(t, dev, queue, "f16", [21, 64, 127], 0.0, false, true)
+                sq_b_gate(t, dev, queue, "q8", [30, 90], 0.0, true, true)
+                sq_partb_gate(t, dev, queue, "f16", [30, 100, 200], 80, false, true)
+                sq_partb_gate(t, dev, queue, "q8", [30, 100, 200], 0, true, true)
+                sq_d_gate(t, dev, queue, "f16", [21, 64, 200], 3, gated = true)
+                sq_d_gate(t, dev, queue, "q8", [21, 64, 200], 3, lead = 2, gated = true)
+                sq_d_gate(t, dev, queue, "f16", [42, 128, 200], 3, hs = 256, gated = true)
+                sq_d_gate(t, dev, queue, "q8", [42, 128, 200], 2, hs = 256, window = 30, sinks = true, gated = true)
+                sq_d_gate(t, dev, queue, "f32", [160, 132], 2, hs = 512, gated = true)
             }
         } else {
             t |> skip("das_metal is not built on this platform; attention codec kernel checks skipped")

@@ -23,6 +23,7 @@ require daslib/strings_boost   // nolint:STYLE030,LINT019 — split, the crown l
 require _model_tier
 require ../performance/model_specs.das   // nolint:STYLE030,LINT019 — counting_prompt, read only inside the das_metal static_if halves
 require _metal_blob_twin   // metal_kernel_count - the census reader
+require _format_census   // nolint:STYLE030,LINT019 - census_cell, read only inside the das_metal static_if halves
 
 [init]
 def private allow_cpu_prefill_intent() {
@@ -303,14 +304,34 @@ def private count_cell(t : T?; tr, trg : Model; tag : string; count : array<int6
     var drafted = 0l
     var parked = 0l
     mtp_pos_reset()
+    var chained0, wide0 : int64   //! the das_metal half reads both counters before the run
     static_if (typeinfo builtin_module_exists(das_metal)) {
         metal_kernel_coverage_reset()
+        chained0 = metal_mtp_chained_rounds()
+        wide0 = metal_kq_mvb_wide_count()
     }
     var served = 0l
     with_metal_attn_d(true) $ {
         served = free_run_pair(tr, trg, count, COUNT_STEPS, plain, spec, depth, drafted, parked, sampled, kdt)
     }
     let kind = sampled ? "sampled" : "counting"
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        if (served > 0l) {
+            let chained = metal_mtp_chained_rounds() - chained0
+            let wide = metal_kq_mvb_wide_count() - wide0
+            if (depth == 1l) {
+                //! a depth-1 round chains on any table the device gathers, the n-gram side input's model the control that never does
+                let chains = emb_dev_gather_ok(trg) && !has_ple_ngram(trg.config)
+                t |> equal(chained, chains ? drafted : 0l, "{tag} {kind} k1: every drafted round {chains ? "rode" : "kept off"} one command buffer (table {trg.emb_fmt}, {chained} chained of {drafted} rounds)")
+            }
+            if (depth == 8l) {
+                //! nine verify rows on a superblock plane are one small-batch dispatch; a carrier with none dispatches none
+                let kq = has_sb_rows_planes(tr)
+                to_log(LOG_INFO, "{tag} {kind} k8: {wide} K-quant dispatches past eight rows (superblock rows planes: {kq})\n")
+                t |> success(kq ? wide > 0l : wide == 0l, "{tag} {kind} k8: the verify's nine rows on superblock planes rode one dispatch a site ({wide} past-eight dispatches)")
+            }
+        }
+    }
     if (served == 0l) {
         t |> failure("{tag} {kind} k{depth}: the metal decode declined a served carrier's steps")
     } else {
@@ -348,6 +369,18 @@ def private has_kq_rows_planes(t : Model) : bool {
             if (f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.k6) {
                 return true
             }
+        }
+    }
+    return false
+}
+
+//! whether any layer's rows site - q, k, v, o, the dense FFN triple or the deltanet triple - reads a superblock plane, the
+//! planes the K-quant small-batch forms serve
+def private has_sb_rows_planes(t : Model) : bool {
+    for (l in range64(long_length(t.wq_offs))) {
+        for (f in [fmt_at(t.wq_fmt, l), fmt_at(t.wk_fmt, l), fmt_at(t.wv_fmt, l), fmt_at(t.wo_fmt, l), fmt_at(t.w1_fmt, l), fmt_at(t.w3_fmt, l),
+                fmt_at(t.w2_fmt, l), fmt_at(t.dnqkv_fmt, l), fmt_at(t.dngate_fmt, l), fmt_at(t.dnout_fmt, l)]) {
+            return true if (kq_sb(f))
         }
     }
     return false
@@ -697,6 +730,10 @@ def private run_fixture(t : T?; file, tag : string) {   // nolint:LINT012,LINT01
             delete trg
             return
         }
+        if (arm_on(t, "mtp-census-{tag}")) {
+            var inscope any_sites : array<string>
+            census_cell(t, trg, path, "{tag} served twin", any_sites)   //! the file's formats are the ones the rail serves: every site in its own
+        }
         var prose_a <- encode(tr, PROSE_A, true, false)
         var prose_b <- encode(tr, PROSE_B, true, false)
         var count <- encode(tr, counting_prompt(1, 40), true, false)
@@ -819,6 +856,14 @@ def test_metal_mtp_parity_27b(t : T?) {
 def test_metal_mtp_parity_35b(t : T?) {
     t |> run("metal MTP rail vs plain GPU decode - Qwen3.6-35B-A3B-MTP-UD-Q4_K_M (large tier)") <| @(t : T?) {
         run_fixture(t, "Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf", "35b")
+    }
+}
+
+//! the format census's carrier: every big plane IQ4_XS on disk, the routed NextN head's eh_proj and expert stacks among them
+[test]
+def test_metal_mtp_parity_35b_iq4xs(t : T?) {
+    t |> run("metal MTP rail vs plain GPU decode - Qwen3.6-35B-A3B-MTP-IQ4_XS-pure (large tier)") <| @(t : T?) {
+        run_fixture(t, "Qwen3.6-35B-A3B-MTP-IQ4_XS-pure.gguf", "35b-iq4xs")
     }
 }
 

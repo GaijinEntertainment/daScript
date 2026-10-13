@@ -17,6 +17,9 @@ require daslib/jobque_boost
 require daslib/fio   // nolint:STYLE030,LINT019 — used only inside the Apple static_if half
 require math   // nolint:STYLE030,LINT019 - used only inside the Apple static_if half
 require _model_tier
+require _format_census   // census_cell: the qwen35 rows' every site in its own format
+require dasllama/dasllama_image   // nolint:STYLE030,LINT019 - load_model_cached, the qwen4exp row's served image, inside the das_metal half
+require dasllama/dasllama_gguf   // nolint:STYLE030,LINT019 - set_mtp_head_path, the qwen4exp row's split head, inside the das_metal half
 require ../performance/model_specs.das   // nolint:STYLE030,LINT019 — counting_prompt, read only inside the Apple static_if halves
 
 // The (weights x wscale x kv-dtype x path) SUPPORT MATRIX for the Metal drivers (format-matrix
@@ -62,7 +65,8 @@ require ../performance/model_specs.das   // nolint:STYLE030,LINT019 — counting
 // exists to validate against, so its real-model row waits on a fixture. qwen3moe +
 // gemma4moe-26B + gptoss (wave C): GPU MoE routing — expert-indexed GEMV twins (decode/batch)
 // + CSR-gathered mul_mm prefill; gemma4's parallel-dense form; gpt-oss mx4 experts + sinks +
-// softmax_weight + biases + swiglu_oai. qwen2moe (sigmoid shexp) parked. deltanet = wave D.
+// softmax_weight + biases + swiglu_oai. qwen2moe (sigmoid shexp) and the deltanet hybrids
+// (qwen35, qwen35moe) serve all three paths too.
 
 [unused_argument(t, tr, kdt, tag, exp_pf, exp_dec, exp_bat)]   // off-Apple the gated body is empty
 def private matrix_cell(t : T?; tr : Model; kdt : KVDtype; tag : string;
@@ -694,6 +698,8 @@ def private qwen35_row(t : T?; path, family, tag : string; expect_needs : uint; 
         t |> success((uint(derived) & expect_needs) == expect_needs,
             "{tag}: metal_needs derives {expected} (got {derived})")
         var trg <- blob_twin(t, path, 512l)
+        var inscope any_sites : array<string>
+        census_cell(t, trg, path, "{tag} blob twin", any_sites)   //! every site the file carries read in its own format on the Metal twin
         let c = trg.config
         let vocab = c.vocab_size
         let pf0 = metal_prefill_stats().prefills
@@ -793,6 +799,66 @@ def private qwen35_row(t : T?; path, family, tag : string; expect_needs : uint; 
         }
         delete trg
         delete tr
+    }
+}
+
+//! qwen4exp (Qwen3.8-Flash-Next): the hyper-connection hybrid MoE with the n-gram side input, served-only - the planar file and
+//! its image do not fit the box together, so the CPU truth is the file's frozen counting fixture (`../performance/model_specs.das`,
+//! the upstream oracle's ids the CPU chain matches). The served image (the trunk with its split head, speculation off) prefills
+//! the prompt and decodes the fixture's tokens on the Metal drivers, token for token the fixture, the prefill and every decode
+//! step counted by the drivers with no decline.
+[unused_argument(t, file, head)]   // off-Apple the gated body is empty
+def private qwen4exp_row(t : T?; file, head : string) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        let path = path_join(models_dir(), file)
+        let hpath = path_join(models_dir(), head)
+        if (!family_on(t, "qwen4exp") || !arm_on(t, "fam-qwen4exp") || !model_available(t, path) || !model_available(t, hpath)) {
+            return
+        }
+        let spec0 = get_mtp_spec()
+        set_mtp_spec(false)
+        let mode0 = get_metal_mode()
+        set_metal_mode(MetalMode.required)
+        set_mtp_head_path(hpath)
+        var trg <- load_model_cached(path, QuantMode.q8)
+        clear_mtp_head_path()
+        set_metal_mode(mode0)
+        trg.config.seq_len = min(trg.config.seq_len, 512l)
+        t |> success(trg.metal_blob && trg.config.hyper_conn, "qwen4exp: the served image is the metal-blob hyper-connection carrier")
+        let fx <- spec_by_file(file).parity
+        t |> success(!empty(fx.gen), "qwen4exp: the file carries its frozen counting fixture")
+        let n_prompt = length(fx.prompt)
+        let pf0 = metal_prefill_stats().prefills
+        let de0 = metal_decode_stats().decodes
+        var inscope pdecl0 <- metal_prefill_declines()
+        var inscope ddecl0 <- metal_decode_declines()
+        var got : array<int64>
+        with_dasllama_jobque() {
+            t |> success(select_prefill_override("metal"), "qwen4exp: prefill override registered")
+            t |> success(select_decode_override("metal"), "qwen4exp: decode override registered")
+            set_metal_prefill_min_npos(1l)
+            var s = make_run_state(trg.config, KVDtype.f16, KVDtype.f16)
+            var inscope ids <- generate(trg, s, fx.prompt, n_prompt - 1 + length(fx.gen))
+            delete got
+            got <- [for (i in range(n_prompt - 1, length(ids))); ids[i]]
+            delete s
+            set_metal_prefill_min_npos(64l)
+            select_decode_override("")
+            select_prefill_override("")
+        }
+        log_gen_texts(trg, "qwen4exp", fx.gen, got)
+        t |> success(ids_equal(fx.gen, got), "qwen4exp: the Metal prefill and decode continue the counting prompt token for token the CPU truth ({length(got)} tokens)")
+        t |> equal(metal_prefill_stats().prefills - pf0, 1l, "qwen4exp prefill: the Metal driver served the prompt")
+        t |> success(metal_decode_stats().decodes - de0 >= int64(length(fx.gen) - 1), "qwen4exp decode: the Metal driver served every step ({metal_decode_stats().decodes - de0})")
+        var inscope pdecl1 <- metal_prefill_declines()
+        var inscope ddecl1 <- metal_decode_declines()
+        t |> equal("{pdecl1}", "{pdecl0}", "qwen4exp prefill: no decline")
+        t |> equal("{ddecl1}", "{ddecl0}", "qwen4exp decode: no decline")
+        delete got
+        metal_decode_shutdown()
+        metal_prefill_shutdown()
+        delete trg
+        set_mtp_spec(spec0)
     }
 }
 
@@ -1905,8 +1971,12 @@ def test_metal_family_matrix(t : T?) {
                 "qwen35moe-35b/k4/f16", uint(MetalNeed.neox | MetalNeed.qk_norm | MetalNeed.qd_neq_dim |
                     MetalNeed.partial_rope | MetalNeed.q_gated), 6.0)
             // qwen2moe (Wave D ride-along): softmax-no-renorm select + sigmoid shexp on std
-            // attention; batch declines by design. 15GB — DASLLAMA_PARITY_FULL-gated.
+            // attention; prefill, decode and the batched step serve. 15GB — DASLLAMA_PARITY_FULL-gated.
             qwen2moe_row(t, path_join(models_dir(), "Qwen1.5-MoE-A2.7B-Chat.Q8_0.gguf"))
+            // qwen4exp (Qwen3.8-Flash-Next UD-IQ4_XS, three shards and its split head, 97 GB): served-only against the
+            // file's frozen counting fixture - DASLLAMA_PARITY_FULL-gated
+            qwen4exp_row(t, "Qwen3.8-Flash-Next-GGUF/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf",
+                "Qwen3.8-Flash-Next-GGUF/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf")
             // the Metal-4 tensor twins, forced into service on small carriers (--arm tensor):
             // q8 drives the mulmm/attn twins, the K-quant row drives the kq mulmm twins
             tensor_twin_row(t, path_join(models_dir(), "Llama-3.2-1B-Instruct-Q8_0.gguf"), "tensor-twins/q8")

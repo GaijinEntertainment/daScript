@@ -101,12 +101,15 @@ watermark only has to cover the base, since a draft at `pos + i` reads exactly t
 chain wrote above it, while the slab capacity must still cover the row being written. Gating on the
 drafted position refuses every round past the first draft.
 
-**A depth-1 round on a Q8_0 embedding table is one command buffer.** The rows step's draft is
+**A depth-1 round on any table the device gathers is one command buffer.** The rows step's draft is
 parked (`g_chain_rd`) and encoded ahead of the verify on the verify's own serial encoder, with
 `enc_argmax_rows` landing every row's winner in the step's `btok`; the verify then embeds each
 group's row 1 from that slot on the device (`enc_embed`, into its rows and the head's cat image)
 and the host reads the winners into `mtp_vbatch` only after the verify's join - one commit, one
-join, no readback between the draft and the verify. The draft body reads the groups in the draft
+join, no readback between the draft and the verify (`metal_mtp_chained_rounds` counts the rounds).
+The gather reads group gi's winner at its offset in that slot: the q8 copy's and the K-quant planes'
+stamps take any offset, the fp32 table's (an F32/F16/BF16 table) reads the slot's head, so a round of
+one group chains on every table and a round of several on the first two. The draft body reads the groups in the draft
 layout (one row a group at the seam), so the encoder sets that layout around it and restores the
 verify layout, in which a group's row count is its own `nr`, not the step's total
 (`set_groups_layout` writes both). The landing after the join still writes the seam row's draft
@@ -241,7 +244,7 @@ The batch driver's weight sites dispatch a tensor at a time by its own tag, so a
 K-quant planes serves. The planes a batched step reads more than once: past eight rows, a K-quant
 plane whose shape misses the mul_mm tile (rows a multiple of 64 over the panel's 32-row pad) takes
 the eight-row form and one pass a row past it, as the deepest verify does; a per-32 dense plane
-(q51, iq4nl32) has no rows form, so the batch declines it as `b32_rows`.
+(q51, iq4nl32) rides its small-batch form (`ARCHITECTURE_GPU_QUANT_PLANES.md#metal-b32-small-batch`).
 
 ### The verify encodes on the serial encoder {#verify-serial-encoder}
 
@@ -283,6 +286,9 @@ eviction and a host write into a slot run too), copying the slots it held, and a
 The cap is an LRU over the slots: the least recent mirror evicts into a host stash of its live
 region and ring at the position it expects, and that session's next prepare at that position
 rebuilds the slot from the stash (`dn_mirror_restores` counts them) - the state is forward-only and
-a blob-only load has no CPU chain to rebuild it, so an eviction never loses it. The stash keeps as
-many sessions as the cap, the least recent dropped past it; a snapshot of an evicted session reads
-the stash into the host arrays.
+a blob-only load has no CPU chain to rebuild it, so an eviction keeps it. The stash has no cap: an entry
+leaves with its rebuild or with its session, whose `delete` - the facade's and the scheduler's stream release alike -
+runs `SessionOwner`'s finalizer, which tells every `register_session_release_listener` subscriber the uid is gone, and
+the Metal driver drops that uid's mirror and stash (`dn_mirror_released`). So every entry is a live session's and no
+live session's state is ever dropped, however many sessions step in turn; a session never deleted keeps its entry. A
+snapshot of an evicted session reads the stash into the host arrays.

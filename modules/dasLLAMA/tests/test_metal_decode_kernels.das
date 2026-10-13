@@ -54,8 +54,15 @@ def private oracle_all(cnt : int; scale, softcap : float; hass : bool; sink : fl
     return <- want
 }
 
+//! the gated arm's expectation: `want` under the gates, which must move most of it past the bar
+def private gate_want(t : T?; tag : string; var want : array<float>; gate : array<float>) {
+    var inscope ungated := want
+    gate_rows(want, gate)
+    t |> success(check_count(want, ungated, BAR_ATTN) * 2 > length(want), "decode {tag}: the gate moves most of the row past the bar (the gated compare has teeth)")
+}
+
 // the single-threadgroup form: one dispatch, the whole context in one pass
-def private sq_single_gate(t : T?; var dev, queue; tag : string; cnt : int; softcap : float; hass : bool) {
+def private sq_single_gate(t : T?; var dev, queue; tag : string; cnt : int; softcap : float; hass : bool; gated : bool = false) {
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
         let st = stamp_of(@@enc_attn16_c)
@@ -64,14 +71,15 @@ def private sq_single_gate(t : T?; var dev, queue; tag : string; cnt : int; soft
         let scale = 1.0 / sqrt(float(HS))
         let sink_v = 0.375
         var inscope kc <- kv_f16(cnt)
+        var inscope gate <- attn_gate_row(QD)
         let bk = mc |> in_plain(kc)
         let bv = mc |> in_plain(kc)            // V reads the same slab — the oracle mirrors that
-        let bq = mc |> in_(attn_q_row(QD))
+        let bq = gated ? (mc |> in_(q_gate_plane(attn_q_row(QD), gate, HS))) : (mc |> in_(attn_q_row(QD)))
         let by = mc |> out_words(QD, -1000.0)
         let bsink = mc |> in_(plane_of(N_HEADS, sink_v))
         var ka = SqAttnArgs(cnt = uint(cnt), kstride = uint(KV_DIM), nheads = uint(N_HEADS),
             kv_mul = uint(KV_MUL), hs = uint(HS), scale = scale, softcap = softcap,
-            hass = hass ? 1u : 0u)
+            hass = hass ? 1u : 0u, qhs = gated ? uint(2 * HS) : 0u, gated = gated ? 1u : 0u)
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
             stamp_run(st, pso) {
                 invoke(st.enc, enc, mc.buf[bk], 0ul, mc.buf[bv], 0ul, mc.buf[bq], mc.buf[by], ka, mc.buf[bsink], int64(N_HEADS), int64(HS))
@@ -79,13 +87,16 @@ def private sq_single_gate(t : T?; var dev, queue; tag : string; cnt : int; soft
         }
         return if (!ran)
         var inscope want <- oracle_all(cnt, scale, softcap, hass, sink_v, 0)
+        if (gated) {
+            gate_want(t, tag, want, gate)
+        }
         check_buf(t, "decode {tag}", mc.buf[by], want, BAR_ATTN, Shape(row_width = HS))
     }
 }
 
 // the split-K pair: one threadgroup per (head, chunk) writes an unnormalized partial, the comb
 // kernel rescales across chunks. `window` > 0 also exercises the chunk mask + the chlo skip.
-def private sq_part_gate(t : T?; var dev, queue; tag : string; cnt, window : int) {
+def private sq_part_gate(t : T?; var dev, queue; tag : string; cnt, window : int; gated : bool = false) {
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
         let sp = stamp_of(@@enc_attnp16_c)
@@ -99,15 +110,16 @@ def private sq_part_gate(t : T?; var dev, queue; tag : string; cnt, window : int
         let wstart = window > 0 && cnt > window ? cnt - window : 0
         let chlo = wstart / CHUNK             // the driver's first live chunk
         var inscope kc <- kv_f16(cnt)
+        var inscope gate <- attn_gate_row(QD)
         let bk = mc |> in_plain(kc)
         let bv = mc |> in_plain(kc)
-        let bq = mc |> in_(attn_q_row(QD))
+        let bq = gated ? (mc |> in_(q_gate_plane(attn_q_row(QD), gate, HS))) : (mc |> in_(attn_q_row(QD)))
         let bpart = mc |> out_words(N_HEADS * nchunks * (HS + 2), -1000.0)
         let by = mc |> out_words(QD, -1000.0)
         let bsink = mc |> in_(plane_of(N_HEADS, 0.0))
         var kap = SqAttnPartArgs(cnt = uint(cnt), kstride = uint(KV_DIM), nheads = uint(N_HEADS),
             kv_mul = uint(KV_MUL), hs = uint(HS), scale = scale, nchunks = uint(nchunks),
-            softcap = 0.0, window = uint(window))
+            softcap = 0.0, window = uint(window), qhs = gated ? uint(2 * HS) : 0u, gated = gated ? 1u : 0u)
         var kac = SqAttnCombArgs(nch = uint(nchunks), nheads = uint(N_HEADS), hs = uint(HS),
             chlo = uint(chlo), hass = 0u)
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
@@ -120,6 +132,9 @@ def private sq_part_gate(t : T?; var dev, queue; tag : string; cnt, window : int
         }
         return if (!ran)
         var inscope want <- oracle_all(cnt, scale, 0.0, false, 0.0, window)
+        if (gated) {
+            gate_want(t, tag, want, gate)
+        }
         check_buf(t, "decode {tag}", mc.buf[by], want, BAR_ATTN, Shape(row_width = HS))
     }
 }
@@ -134,6 +149,8 @@ def test_metal_sq_attn_kernels(t : T?) {
                 sq_single_gate(t, dev, queue, "sink", 40, 0.0, true)
                 sq_part_gate(t, dev, queue, "splitk", 100, 0)
                 sq_part_gate(t, dev, queue, "window", 100, 48)
+                sq_single_gate(t, dev, queue, "gated sink", 40, 0.0, true, true)
+                sq_part_gate(t, dev, queue, "gated window", 100, 48, true)
             }
         } else {
             t |> skip("das_metal is not built on this platform; attention kernel checks skipped")

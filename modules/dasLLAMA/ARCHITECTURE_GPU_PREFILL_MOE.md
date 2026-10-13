@@ -20,12 +20,13 @@ that parks each routed expert's rows and reduces them in entry order. The select
 GPU-side by the kernels; nothing reads back to the CPU, so encode-ahead and speculation stay
 compatible.
 
-The router's logits are one half x half GEMM (`pf_enc_router_mm`): the routed rows' half twin
-against a half panel of the layer's router rows, a megabyte a layer kept for the weights' life. At
-2048 positions and 256 experts it runs thirteen times the batched slab GEMV's rate
-(`harness/router_race.das`). The GEMV serves a router with a bias, an expert count off the 64-wide
-tile, and a window with no twin. The GEMM's operands are halves, so its logits sit 3e-4 of their
-largest from the GEMV's, and a near-tie between two experts can fall either way.
+The router's logits are one f32 tile GEMM (`pf_enc_router_mm`, the `MetalF32ExactMm` stamp): the
+routed rows against the layer's router rows in their own F32 bytes, staged as floats - no half copy
+of the plane, no rounding of either operand. At 2048 positions and 256 experts over 2048 it costs
+0.174 ms against the batched slab GEMV's 0.646 (M5 Max), its logits 8e-6 of a 4.2 logit from the
+double dot (the GEMV's 8e-7); a half panel ran 0.049 ms at 1.4e-3, which is a converted copy of the
+plane. The GEMV serves a router with a bias, an expert count off the 64-wide tile, a width off 32
+and an unpadded window.
 
 Pad rows inside each expert's padded bucket carry a stamped sentinel and the reduce never
 references them; rows past the last expert's stamped tail are unstamped stale pool bytes, which

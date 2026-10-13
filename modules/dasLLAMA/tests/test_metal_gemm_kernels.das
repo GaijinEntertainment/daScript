@@ -46,6 +46,7 @@ def private kq_mm_stamp(f) {   //! generic, as the gates are: the Apple half alo
     if (f == KqFmt.iq3s) return stamp_of(@@enc_kq_mm_iq3s_c)
     if (f == KqFmt.k3) return stamp_of(@@enc_kq_mm_k3_c)
     if (f == KqFmt.iq4xs) return stamp_of(@@enc_kq_mm_iq4xs_c)
+    if (f == KqFmt.iq3s4) return stamp_of(@@enc_kq_mm_iq3s4_c)
     if (f == KqFmt.k4) return stamp_of(@@enc_kq_mm_k4_c)
     if (f == KqFmt.k5) return stamp_of(@@enc_kq_mm_k5_c)
     return stamp_of(@@enc_kq_mm_k6_c)
@@ -72,6 +73,7 @@ def private kq_mm_tensor_kernel(f; halfx : bool) {
     if (f == KqFmt.iq3s) return halfx ? kernel_of(@@enc_kq_mm_iq3s_th_c) : kernel_of(@@enc_kq_mm_iq3s_t_c)
     if (f == KqFmt.k3) return halfx ? kernel_of(@@enc_kq_mm_k3_th_c) : kernel_of(@@enc_kq_mm_k3_t_c)
     if (f == KqFmt.iq4xs) return halfx ? kernel_of(@@enc_kq_mm_iq4xs_th_c) : kernel_of(@@enc_kq_mm_iq4xs_t_c)
+    if (f == KqFmt.iq3s4) return halfx ? kernel_of(@@enc_kq_mm_iq3s4_th_c) : kernel_of(@@enc_kq_mm_iq3s4_t_c)
     if (f == KqFmt.k4) return halfx ? kernel_of(@@enc_kq_mm_k4_th_c) : kernel_of(@@enc_kq_mm_k4_t_c)
     if (f == KqFmt.k5) return halfx ? kernel_of(@@enc_kq_mm_k5_th_c) : kernel_of(@@enc_kq_mm_k5_t_c)
     return halfx ? kernel_of(@@enc_kq_mm_k6_th_c) : kernel_of(@@enc_kq_mm_k6_t_c)
@@ -627,6 +629,53 @@ def private f32_mulmm_gate(t : T?; var dev, queue; exact : bool; m, mp, kdim, nd
     }
 }
 
+//! The prefill router's tile (`pf_enc_router_mm`): `MetalF32ExactMm` over f32 router rows and f32 routed rows, off the f16
+//! lattice, at the f32 bar against the dot in double - the router rows' own bytes, no half rounding of either operand. The
+//! half-staged f32 stamp over the same operands is the control that must miss the bar (a half panel of the plane lands there).
+def private router_f32_gate(t : T?; var dev, queue; m, mp, kdim, ne : int) {
+    let tag = "router f32 tile m={m}/{mp} k={kdim} ne={ne}"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let sx = stamp_of(@@enc_f32_exact_mm)
+        let sh = stamp_of(@@enc_f32_mm)
+        var pso_x = mc |> keep_stamp(sx, err)
+        return if (!pso_ok(t, tag, pso_x, err))
+        var pso_h = mc |> keep_stamp(sh, err)
+        return if (!pso_ok(t, tag, pso_h, err))
+        var inscope w : array<float>
+        w |> resize(ne * kdim)
+        var inscope xf : array<float>
+        xf |> resize(mp * kdim)
+        for (i in range(ne * kdim)) {
+            w[i] = 0.0371 * float((i * 7 + 3) % 29) - 0.517 + 1.3e-4 * float(i % 11)
+        }
+        for (i in range(m * kdim)) {
+            xf[i] = 0.093 * float((i * 5 + 1) % 41) - 1.87 + 2.1e-4 * float(i % 13)
+        }
+        var inscope ref <- strided_ref(dense_ref_rows(w, xf, m, kdim, ne), ne, ne, mp, 0.0)
+        let bw = mc |> in_(w)
+        let bx = mc |> in_(xf)
+        let by = mc |> out_words(mp * ne, -1000.0)
+        let byh = mc |> out_words(mp * ne, -1000.0)
+        let bk = mc |> in_plain([uint(kdim)])
+        let bn = mc |> in_plain([uint(ne)])
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(sx, pso_x) {
+                invoke(sx.enc, enc, mc.buf[bw], 0ul, mc.buf[bx], mc.buf[by], 0ul, mc.buf[bk], mc.buf[bn], int64(mp), int64(ne))
+            }
+            stamp_run(sh, pso_h) {
+                invoke(sh.enc, enc, mc.buf[bw], 0ul, mc.buf[bx], mc.buf[byh], 0ul, mc.buf[bk], mc.buf[bn], int64(mp), int64(ne))
+            }
+        }
+        return if (!ran)
+        let bar = Bar(kind = BarKind.envelope, rel = 2e-6, abs_floor = 1e-5, poison = ref.env[0] * 0.1 + 1.0, poison_at = 0)
+        check_buf(t, tag, mc.buf[by], ref.want, bar, Shape(row_width = ne), ref.env)
+        var inscope gh <- plane_run(mc, byh)
+        let miss = check_count(gh, ref.want, bar, ref.env)
+        t |> success(miss > 0, "{tag}: the half-staged stamp over the same f32 rows misses the f32 bar ({miss} elements outside)")
+    }
+}
+
 def private bf16_mulmm_gate(t : T?; var dev, queue; tensor : bool; m, kdim, ndim : int; halfx : bool = false; mt : int = 32) {
     let tag = "bf16_mulmm{tensor ? "_t" : ""}{halfx ? " halfx" : ""} mt{mt} m={m} k={kdim} n={ndim}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
@@ -974,6 +1023,7 @@ def private moe_kq_base(f) {   //! generic, as the gates are: the Apple half alo
     if (f == KqFmt.k3) return kernel_of(@@pf_enc_moe_mm_k3_c)
     if (f == KqFmt.k2) return kernel_of(@@pf_enc_moe_mm_k2_c)
     if (f == KqFmt.iq4xs) return kernel_of(@@pf_enc_moe_mm_iq4xs_c)
+    if (f == KqFmt.iq3s4) return kernel_of(@@pf_enc_moe_mm_iq3s4_c)
     if (f == KqFmt.iq4nl) return kernel_of(@@pf_enc_moe_mm_iq4nl_c)
     if (f == KqFmt.q40) return kernel_of(@@pf_enc_moe_mm_q40_c)
     if (f == KqFmt.iq3s) return kernel_of(@@pf_enc_moe_mm_iq3s_c)
@@ -996,6 +1046,7 @@ def private moe_split_twin(f; form : MoeSplitForm) {   //! generic, as the gates
     if (f == KqFmt.k2) return moe_form(form, kernel_of(@@pf_enc_moe_mm_k2_th_c), kernel_of(@@pf_enc_moe_mm_k2_th128_c), kernel_of(@@pf_enc_moe_mm_k2_thr_c))
     if (f == KqFmt.iq4nl) return moe_form(form, kernel_of(@@pf_enc_moe_mm_iq4nl_th_c), kernel_of(@@pf_enc_moe_mm_iq4nl_th128_c), kernel_of(@@pf_enc_moe_mm_iq4nl_thr_c))
     if (f == KqFmt.iq4xs) return moe_form(form, kernel_of(@@pf_enc_moe_mm_iq4xs_th_c), kernel_of(@@pf_enc_moe_mm_iq4xs_th128_c), kernel_of(@@pf_enc_moe_mm_iq4xs_thr_c))
+    if (f == KqFmt.iq3s4) return moe_form(form, kernel_of(@@pf_enc_moe_mm_iq3s4_th_c), kernel_of(@@pf_enc_moe_mm_iq3s4_th128_c), kernel_of(@@pf_enc_moe_mm_iq3s4_thr_c))
     if (f == KqFmt.q40) return moe_form(form, kernel_of(@@pf_enc_moe_mm_q40_th_c), kernel_of(@@pf_enc_moe_mm_q40_th128_c), kernel_of(@@pf_enc_moe_mm_q40_thr_c))
     if (f == KqFmt.iq3s) return moe_form(form, kernel_of(@@pf_enc_moe_mm_iq3s_th_c), kernel_of(@@pf_enc_moe_mm_iq3s_th128_c), kernel_of(@@pf_enc_moe_mm_iq3s_thr_c))
     if (f == KqFmt.iq3xxs) return moe_form(form, kernel_of(@@pf_enc_moe_mm_iq3xxs_th_c), kernel_of(@@pf_enc_moe_mm_iq3xxs_th128_c), kernel_of(@@pf_enc_moe_mm_iq3xxs_thr_c))
@@ -1602,6 +1653,8 @@ def test_metal_gemm_kernels(t : T?) {
                 kq_mulmm_gate(t, dev, queue, 4, false, 32, 256, 128)   // second shape: 2 col tiles
                 kq_mulmm_gate(t, dev, queue, 44, false, 64, 512, 64)
                 kq_mulmm_gate(t, dev, queue, 44, false, 32, 256, 128)
+                kq_mulmm_gate(t, dev, queue, 35, false, 64, 512, 64)
+                kq_mulmm_gate(t, dev, queue, 35, false, 32, 256, 128)
                 kq_mulmm_gate(t, dev, queue, 3, false, 64, 512, 64)
                 kq_mulmm_gate(t, dev, queue, 3, false, 32, 256, 128)
                 kq_mulmm_gate(t, dev, queue, 33, false, 64, 512, 64)
@@ -1627,7 +1680,7 @@ def test_metal_gemm_kernels(t : T?) {
                 kq_mulmm_gate(t, dev, queue, 25, false, 64, 512, 64)
                 kq_mulmm_gate(t, dev, queue, 25, false, 32, 256, 128)
                 // the iquant tensor twins (T + TH stamps; twins skip without Metal-4)
-                for (fmt in [44, 45, 40, 3, 33, 34, 2, 23, 24, 25]) {
+                for (fmt in [44, 35, 45, 40, 3, 33, 34, 2, 23, 24, 25]) {
                     kq_mulmm_gate(t, dev, queue, fmt, true, 64, 512, 64)
                     kq_mulmm_gate(t, dev, queue, fmt, true, 64, 512, 64, halfx = true)
                 }
@@ -1668,6 +1721,8 @@ def test_metal_gemm_kernels(t : T?) {
                 f32_mulmm_gate(t, dev, queue, true, 1504, 1504, 1280, 1280)  // whisper-large T=1500 tile count
                 f32_mulmm_gate(t, dev, queue, false, 64, 64, 6912, 3840)   // gemma4uv patch GEMM - longest dot
                 f32_mulmm_gate(t, dev, queue, false, 100, 128, 3840, 3840) // gemma4uv proj + M-pad rows pinned 0
+                router_f32_gate(t, dev, queue, 40, 64, 2048, 256)          // the 35B-A3B router: 256 experts over 2048, a 40-row window
+                router_f32_gate(t, dev, queue, 96, 96, 512, 64)            // the 64-wide tile's lower bound, no pad rows
                 // the batched-decode q8 GEMM family: dense + fused-QKV ys stride, both twins
                 q8_gemm_b_gate(t, dev, queue, false, 64, 128, 64, 64)
                 q8_gemm_b_gate(t, dev, queue, false, 64, 128, 64, 128)
@@ -1680,7 +1735,7 @@ def test_metal_gemm_kernels(t : T?) {
                 q8_gemm64_b_gate(t, dev, queue, true, 64, 128, 128)
                 // the MoE gathered mul_mm family: kq trio + q8/mx4 with their tensor twins
                 // (a zero-count expert rides the first arm; twins are contiguous-only by design)
-                for (fmt in [4, 5, 6, 3, 2, 44, 45, 40, 33, 34, 23, 24, 25]) {
+                for (fmt in [4, 5, 6, 3, 2, 44, 35, 45, 40, 33, 34, 23, 24, 25]) {
                     moe_mulmm_kq_gate(t, dev, queue, fmt, 256, 64, [32, 0, 40, 8], true)   // the in-kernel gather; a zero-count expert
                     moe_mulmm_kq_gate(t, dev, queue, fmt, 256, 128, [8, 33], false)   // 2 col tiles + contiguous
                     moe_mulmm_split_gate(t, dev, queue, fmt, 256, 128, [8, 33])
