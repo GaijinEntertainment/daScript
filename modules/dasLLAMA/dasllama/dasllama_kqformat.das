@@ -23,7 +23,8 @@ require daslib/strings_boost
 //! k4/k5/k6/q40/iq4xs/k3/iq3s/iq3xxs/iq4nl/k2/iq2s/iq2xs/iq2xxs = superblock plane pairs (mixed PER TENSOR); q51 = native Q5_1 per-32
 //! planes; mx4 = the native MXFP4 expert planes (`Model.mxq` / `mxs` under `experts_mx4` - the GPU tiers' stack tag, never a
 //! per-tensor tag the loader writes); iq4nl32 = native IQ4_NL per-32 planes (the expert stacks whose rows are no superblock
-//! multiple - iq4nl's disk blocks with q51's plane form). New members append — the int value is the device stack tag and the image plane id.
+//! multiple - iq4nl's disk blocks with q51's plane form); q4032 = native Q4_0 per-32 planes (a Q4_0 plane whose rows are off the
+//! 256 lattice - iq4nl32's plane form under the linear codebook). New members append — the int value is the device stack tag and the image plane id.
 enum KqFmt : uint8 {
     q8
     k4
@@ -43,6 +44,7 @@ enum KqFmt : uint8 {
     mx4
     iq4nl32
     iq3s4
+    q4032
 }
 
 //! One empty tag type per KqFmt member - the overload key of every per-format function family
@@ -66,6 +68,7 @@ struct KqTag_iq2xxs {}
 struct KqTag_mx4 {}
 struct KqTag_iq4nl32 {}
 struct KqTag_iq3s4 {}
+struct KqTag_q4032 {}
 
 [call_macro(name = "kq_fmt_stamp")]
 class KqFmtStamp : AstCallMacro {
@@ -153,7 +156,7 @@ def kq_cm2e_aliases_m(fmt_name : string) : bool => word_in(KQ_CM2E_ALIASES_M, fm
 //! the stem of a format's stamp functions in a stamp family - `batch` (the batch tiles) or `gemv` (the decode GEMVs):
 //! `<verb>_<stem>_<tail>`, the stem `<fmt>_<family>` on q8 and the per-32 formats, `kq_<family>_<fmt>` on a kq format
 def kq_tile_stem(fmt_name : string; family : string = "batch") : string =>
-    fmt_name == "q8" || fmt_name == "q51" || fmt_name == "mx4" || fmt_name == "iq4nl32" ? "{fmt_name}_{family}" : "kq_{family}_{fmt_name}"
+    fmt_name == "q8" || fmt_name == "q51" || fmt_name == "mx4" || fmt_name == "iq4nl32" || fmt_name == "q4032" ? "{fmt_name}_{family}" : "kq_{family}_{fmt_name}"
 
 //! a `<prefix><verb>[_<tail>]` placeholder -> `<verb>_<stem>_<tail>`, the tail the placeholder's or, where it names none, `arm_tail`
 def private stamp_target(placeholder, prefix, stem, arm_tail : string) : string {
@@ -381,6 +384,16 @@ let KQ_SB_ELEMS = 256l
 let KQ_B32_ELEMS = 32l
 let KQ_B32_ELEMS_U = 32u   //! the Q8_0 block width as a kernel body reads it (a module `let` is a stamp; the int64 form is the host's)
 
+//! the per-32 formats' device planes (q51, iq4nl32, mx4): a block's quant words in the quant plane - the 16 nibble bytes, and on
+//! q51 the qh word after them - and its scale bytes in the scale plane (q51's d | m halves, iq4nl32's d half, mx4's E8M0 byte);
+//! a block's disk bytes are the two together, which `test_kqformat.das` pins against each row
+let KQ_B32_QWORDS = 4u
+let KQ_Q51_QWORDS = 5u
+let KQ_Q51_SBYTES = 4u
+let KQ_IQ4NL32_SBYTES = 2u
+let KQ_Q4032_SBYTES = 2u
+let KQ_MX4_SBYTES = 1u
+
 //! The descriptor row of a format - a new format is one row here plus its planes; every
 //! per-format accessor below is a field of this row.
 def kq_desc(f : KqFmt) : KqDesc {
@@ -435,6 +448,9 @@ def kq_desc(f : KqFmt) : KqDesc {
     if (f == KqFmt.iq3s4) {
         return KqDesc(fmt = f, qsb = IQ4XS_QSB, ssb = IQ3S_SSB, elems = KQ_SB_ELEMS, disk_bytes = 110l, ggml_type = GGML_TYPE_IQ3_S, schema_id = 35, stream_code = 35)
     }
+    if (f == KqFmt.q4032) {
+        return KqDesc(fmt = f, qsb = Q4032_QB, ssb = Q4032_SB, elems = KQ_B32_ELEMS, disk_bytes = 18l, ggml_type = GGML_TYPE_Q4_0, schema_id = -1, stream_code = Q4032_STREAM_TAG)
+    }
     return KqDesc(fmt = KqFmt.q8, qsb = 0l, ssb = 0l, elems = KQ_B32_ELEMS, disk_bytes = 34l, ggml_type = GGML_TYPE_Q8_0, schema_id = -1, stream_code = 0)
 }
 
@@ -481,7 +497,7 @@ def kq_blocks_for(n, rows : int64; fmt : int) : int64 {
 }
 
 //! the KqFmt slot count of a per-format table (int(KqFmt) indexes it; members append, so the last is the bound)
-let KQ_FMT_COUNT = int(KqFmt.iq3s4) + 1
+let KQ_FMT_COUNT = int(KqFmt.q4032) + 1
 
 //! the format an `int(KqFmt)` slot names - the per-format slot the GPU drivers and the image's plane tables index by; the caller holds the slot inside the enum's range
 def kq_fmt_of_slot(slot : int) : KqFmt => unsafe(reinterpret<KqFmt>(uint8(slot)))
@@ -543,6 +559,8 @@ let MX4_QB = 16l    // MXFP4 quant plane PER 32-BLOCK: 16 nibble bytes (element 
 let MX4_SB = 1l     // MXFP4 scale plane PER 32-BLOCK: one E8M0 byte
 let IQ4NL32_QB = 16l   // IQ4_NL quant plane PER 32-BLOCK: 16 nibble bytes (element j low, j + 16 high), the disk order
 let IQ4NL32_SB = 2l    // IQ4_NL scale plane PER 32-BLOCK: f16 d
+let Q4032_QB = 16l     // Q4_0 quant plane PER 32-BLOCK: 16 nibble bytes (element j low, j + 16 high), the disk order
+let Q4032_SB = 2l      // Q4_0 scale plane PER 32-BLOCK: f16 d
 let IQ4XS_QSB = 128l   // IQ4_XS quant plane: 128 nibble bytes, the disk k/k+16 pairing (q40 tiling)
 let IQ4XS_SSB = 20l    // IQ4_XS scale plane: f16 d, 2 pad, 8 x int8 (ls - 32), 8 pad — the k4 decoded-row shape
 let K3_QSB = 96l    // Q3_K quant plane: 64 qs bytes (four 2-bit lanes each) + 32 hmask bytes, verbatim disk order
@@ -577,6 +595,13 @@ def iq3s4_lut() : int8[16] => fixed_array<int8>(-15, -13, -11, -9, -7, -5, -3, -
 
 //! iq3s4_lut's main-context copy (tests, oracles, the emitter's constant bake).
 let IQ3S4_LUT = iq3s4_lut()
+
+//! The Q4_0 nibble read as a codebook (weight = d x (q - 8)): the q4032 planes are iq4nl32's block form, so every per-32 codebook
+//! kernel serves them under this table - exact, the levels are int8
+def q40_lut() : int8[16] => fixed_array<int8>(-8, -7, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7)
+
+//! q40_lut's main-context copy (tests, oracles).
+let Q40_LUT = q40_lut()
 
 //! The MXFP4 nibble codebook: the e2m1 values DOUBLED (nibble -> +-{0, .5, 1, 1.5, 2, 3, 4, 6} x 2, OCP MX
 //! spec) as int8; the halved E8M0 scale (`e8m0_half`) compensates the doubling.
@@ -1312,6 +1337,9 @@ let MX4_STREAM_TAG = 39
 
 //! iq4nl32's stream tag: a code no kernel id claims (iq4nl's 45 is the superblock rail's)
 let IQ4NL32_STREAM_TAG = 46
+
+//! q4032's stream tag: the next code no kernel id claims
+let Q4032_STREAM_TAG = 47
 
 def kq_stream_code(f : KqFmt) : int => kq_desc(f).stream_code
 

@@ -673,7 +673,7 @@ def private span_first_layer(t : Model; var s : Session; pos : int64) : int64 {
     while (l0 > 0l) {
         let l = l0 - 1l
         if (l < c.n_layer_dense_lead || !moe_gpu_layer_on_gpu(l) || kq_sb(fmt_at(t.we1_fmt, l)) != kq_sb(fmt_at(t.we3_fmt, l))
-                || (c.n_ff_shexp > 0l && !moe_gpu_shexp_on_gpu(l)) || !attn_dec_gpu_serves(t, s, l, pos)) {
+                || (c.n_ff_shexp > 0l && (!moe_gpu_shexp_on_gpu(l) || shexp_gpu_mixed_forms(l))) || !attn_dec_gpu_serves(t, s, l, pos)) {
             break
         }
         l0 = l
@@ -717,6 +717,9 @@ def private span_fill_layers(t : Model; var a : MoeSpanDec; l0, nl : int64) {
     a.wsh3 |> resize(nl)
     a.wsh2 |> reserve(nl)
     a.wsh2 |> resize(nl)
+    a.fsh1 |> resize(nl)
+    a.fsh3 |> resize(nl)
+    a.fsh2 |> resize(nl)
     a.rmsq |> resize(nl)
     a.rmsk |> resize(nl)
     a.bq |> reserve(nl)
@@ -742,10 +745,13 @@ def private span_fill_layers(t : Model; var a : MoeSpanDec; l0, nl : int64) {
             a.f1[li] = int(fmt_at(t.we1_fmt, l))
             a.f3[li] = int(fmt_at(t.we3_fmt, l))
             a.f2[li] = int(fmt_at(t.we2_fmt, l))
-            let she = dim * c.n_ff_shexp
-            a.wsh1[li] = c.n_ff_shexp > 0l ? t.wsh1_off + l * she : -1l
-            a.wsh3[li] = c.n_ff_shexp > 0l ? t.wsh3_off + l * she : -1l
-            a.wsh2[li] = c.n_ff_shexp > 0l ? t.wsh2_off + l * she : -1l
+            let sp = moe_gpu_shexp_planes(l)   //! the planes the tier holds for the layer's shared expert (none where it has none)
+            a.wsh1[li] = c.n_ff_shexp > 0l ? sp.o1 : -1l
+            a.wsh3[li] = c.n_ff_shexp > 0l ? sp.o3 : -1l
+            a.wsh2[li] = c.n_ff_shexp > 0l ? sp.o2 : -1l
+            a.fsh1[li] = sp.f1
+            a.fsh3[li] = sp.f3
+            a.fsh2[li] = sp.f2
             a.rmsq[li] = c.qk_norm ? addr<float const?>(t.fblob[t.rms_q_offs[l]]) : null
             a.rmsk[li] = c.qk_norm ? addr<float const?>(t.fblob[t.rms_k_offs[l]]) : null
             a.bq[li] = c.attn_qkv_bias ? addr<float const?>(t.bq[l * a.qd]) : null
@@ -1794,6 +1800,79 @@ def moe_routed_rows_sum(t : Model; var s : Session; l, npos : int64; skip_gpu_ex
     prof_add("moe_reduce", ts_red)
 }
 
+//! `y` = one shared-expert plane over `npos` rows: the Q8_0-form image (`xq` / `xs`) or the Q8_K-form one (`s.kxqb` / `s.kxsb` /
+//! `s.kxbsb`), whichever the plane's format reads
+def private shexp_plane_rows(t : Model; var s : Session; var y : array<float>; p : tuple<f : KqFmt; off : int64>; xq : array<int8>; xs : array<float>; n, d, npos : int64) {
+    if (fmt_reads_q8k(p.f)) {
+        mm_b_f_pre(y, t, p.f, p.off, s.kxqb, s.kxsb, s.kxbsb, n, d, npos)
+    } else {
+        mm_b_f_pre(y, t, p.f, p.off, xq, xs, s.kxbsb, n, d, npos)
+    }
+}
+
+//! the Q8_K-form image of `npos` rows of `x` (n wide) into `s.kxqb` / `s.kxsb` / `s.kxbsb`, where one of the planes reads it
+def private shexp_q8k_rows(var s : Session; x : array<float>; n, npos : int64; want : bool) {
+    if (want) {
+        ensure_length(s.kxqb, npos * n)
+        ensure_length(s.kxsb, npos * n / 256l)
+        ensure_length(s.kxbsb, npos * n / 16l)
+        requant_rows_q8k_bs(x, n, npos, s.kxqb, s.kxsb, s.kxbsb)
+    }
+}
+
+//! layer `l`'s shared expert over every prefill row off its own planes - each in the file's format (`shexp_plane`) - into
+//! `s.moe_gout`
+[arch(at="../ARCHITECTURE_ENGINE_FORMATS.md#kq-token-table")]
+def private shexp_prefill_planes(t : Model; var s : Session; l, npos : int64) {
+    let c = t.config
+    let dim = c.dim
+    let nsh = c.n_ff_shexp
+    let p1 = shexp_plane(t, l, 1)
+    let p3 = shexp_plane(t, l, 3)
+    let p2 = shexp_plane(t, l, 2)
+    shexp_q8k_rows(s, s.xb_b, dim, npos, fmt_reads_q8k(p1.f) || fmt_reads_q8k(p3.f))
+    shexp_plane_rows(t, s, s.moe_ghb, p1, s.xqb, s.xsb, dim, nsh, npos)
+    shexp_plane_rows(t, s, s.moe_ghb2, p3, s.xqb, s.xsb, dim, nsh, npos)
+    let ts_act2 = prof_ticks()
+    gate_batch(s.moe_ghb, s.moe_ghb2, c.ffn_act, nsh, npos)
+    prof_add("act", ts_act2)
+    requant_rows_q8(s.moe_ghb, nsh, npos, s.moe_hq, s.moe_hs)
+    shexp_q8k_rows(s, s.moe_ghb, nsh, npos, fmt_reads_q8k(p2.f))
+    shexp_plane_rows(t, s, s.moe_gout, p2, s.moe_hq, s.moe_hs, nsh, dim, npos)
+}
+
+var private @scratch g_up_bq : array<int8>   //! the up stacks' own bucket-row image where a gate and up take two activation forms
+var private @scratch g_up_bs : array<float>
+
+//! the bucket rows' image off one form's quantized rows (`unit` elements a scale): bucket row r reads position bkt[r] / k
+def private moe_gather_image(bkt : array<int64>; xq : array<int8>; xs : array<float>; nk, dim, k, unit : int64; var gq : array<int8>; var gs : array<float>) {
+    let nb = dim / unit
+    gq |> grow_resize(nk * dim)
+    gs |> grow_resize(nk * nb)
+    for (r in range64(nk)) {
+        let p = bkt[r] / k
+        unsafe {
+            memcpy(addr(gq[r * dim]), addr(xq[p * dim]), dim)
+            memcpy(addr(gs[r * nb]), addr(xs[p * nb]), nb * 4l)
+        }
+    }
+}
+
+//! the device combine's rows plus each position's routed down biases under its weights: the expert chain's down GEMM adds none
+def private moe_prefill_down_bias(t : Model; var s : Session; l, npos : int64) {
+    let c = t.config
+    let k = c.n_expert_used
+    let dim = c.dim
+    for (p in range64(npos)) {
+        for (j in range64(k)) {
+            let e = l * c.n_expert + s.moe_idx_b[p * k + j]
+            unsafe {
+                axpy(addr(s.moe_eout[p * dim]), addr<float const?>(t.fblob[t.web2_off + e * dim]), s.moe_w_b[p * k + j], dim)
+            }
+        }
+    }
+}
+
 [arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#streamed-layer-split"), arch(at="../ARCHITECTURE_RUNTIME.md#moe-region-split")]
 def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos : int64) { // nolint:STYLE037,STYLE038 — the grouped MoE prefill is one bucketed pipeline over experts; each stage feeds the next through shared scratch
     let c = t.config
@@ -1815,11 +1894,16 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
         && (kq_sb(f2) ? sb_fusable : f2 == KqFmt.q51)
         && (kq_sb(f3) ? sb_fusable : f3 == KqFmt.q51))
     // GPU MoE tier: offloaded layers run the whole expert FFN chain device-side; tiny batches stay CPU (GPU submit cost > the GEMM)
-    let fused_gpu = (!c.moe_exps_bias && !t.experts_mx4 && c.ffn_act != FfnAct.swiglu_oai
+    let ef1 = expert_fmt(t, t.we1_fmt, l)
+    let ef3 = expert_fmt(t, t.we3_fmt, l)
+    let ef2 = expert_fmt(t, t.we2_fmt, l)
+    //! gpt-oss's routed form (the clamped swiglu, the per-expert biases) rides the Q8-fed chain with the device combine
+    let routed_plain = !c.moe_exps_bias && c.ffn_act != FfnAct.swiglu_oai
+    let fused_gpu = ((routed_plain || gpu_combine_on())
         && (moe_gpu_layer_on_gpu(l) || moe_gpu_layer_streamed(l)) && g_moe_fused_expert_gemms && npos >= 32l && gpu_prefill_route_on())
     // device-side combine rides fused_gpu; DASLLAMA_GPU_COMBINE=0 falls back to park + CPU reduce
     let gpu_comb = fused_gpu && gpu_combine_on()
-    let gpu_xf = gpu_comb && moe_gpu_ffn_xf_ok(npos, dim, int(f1), int(f3), int(f2))
+    let gpu_xf = gpu_comb && routed_plain && moe_gpu_ffn_xf_ok(npos, dim, int(ef1), int(ef3), int(ef2))
     var split_gpu_regions = 0l
     let fused = (t.experts_mx4 && g_active_mx4_native_batch && g_moe_fused_expert_gemms) || fused_kq || fused_gpu
     moe_prefill_scratch(t, s, npos, fused ? nk : npos, kq_layer)
@@ -1870,11 +1954,19 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
     prof_add("moe_route", ts_select)
 
     // 2. quantize every normed activation row ONCE; kq v2 gate/up gathers off Q8_K, q8 stacks off Q8_0
-    let moe_kform = kq_layer && moe_pair_kform(f1, f3)
+    let mixed_gpu = kq_layer && kq_sb(f1) != kq_sb(f3) && fused_gpu   //! the f16-fed chain reads no image; the Q8-fed one two
+    let two_forms = mixed_gpu && !gpu_xf   //! a gate and up of two forms ride the device chain alone, each stack fed its own image (`moe_gpu_image2`)
+    let moe_kform = mixed_gpu ? kq_sb(f1) : kq_layer && moe_pair_kform(f1, f3)
     if (gpu_xf) {
         if (nsh > 0l) {   // the shared expert's GEMM reads the Q8_0 image whatever the routed feed is
             requant_rows_q8(s.xb_b, dim, npos, s.xqb, s.xsb)
         }
+    } elif (two_forms) {
+        s.kxqb |> resize(npos * dim)
+        s.kxsb |> resize(npos * dim / 256l)
+        s.kxbsb |> resize(npos * dim / 16l)
+        requant_rows_q8k_bs(s.xb_b, dim, npos, s.kxqb, s.kxsb, s.kxbsb)
+        requant_rows_q8(s.xb_b, dim, npos, s.xqb, s.xsb)
     } elif (moe_kform) {
         s.kxqb |> resize(npos * dim)
         s.kxsb |> resize(npos * dim / 256l)
@@ -1896,33 +1988,43 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
     if (sh_gpu) {
         trace_tag(TRACE_TAG_SHEXP)
         let ts_shg = prof_ticks()
-        let she = dim * nsh
-        let q8 = int(KqFmt.q8)
+        let p = moe_gpu_shexp_planes(l)   //! the planes the tier holds: the file's own, the gate and up on one activation class
         s.moe_shout |> grow_resize(npos * dim)
         s.moe_offs1 |> clear()
-        s.moe_offs1 |> push(t.wsh1_off + l * she)   // nolint:STYLE012 — one region into reused scratch
+        s.moe_offs1 |> push(p.o1)   // nolint:STYLE012 — one region into reused scratch
         s.moe_offs1 |> push(0l)
         s.moe_offs1 |> push(npos)
         s.moe_offs3 |> clear()
-        s.moe_offs3 |> push(t.wsh3_off + l * she)   // nolint:STYLE012 — one region into reused scratch
+        s.moe_offs3 |> push(p.o3)   // nolint:STYLE012 — one region into reused scratch
         s.moe_offs3 |> push(0l)
         s.moe_offs3 |> push(npos)
         s.moe_offs2 |> clear()
-        s.moe_offs2 |> push(t.wsh2_off + l * she)   // nolint:STYLE012 — one region into reused scratch
+        s.moe_offs2 |> push(p.o2)   // nolint:STYLE012 — one region into reused scratch
         s.moe_offs2 |> push(0l)
         s.moe_offs2 |> push(npos)
-        if (gpu_combine_on() && moe_gpu_ffn_xf_ok(npos, dim, q8, q8, q8)) {
+        if (gpu_combine_on() && moe_gpu_ffn_xf_ok(npos, dim, p.f1, p.f3, p.f2)) {
             s.moe_sh_inv |> resize(npos)
             s.moe_sh_w |> resize(npos)
-            for (p in range64(npos)) {
-                s.moe_sh_inv[p] = uint(p)
-                s.moe_sh_w[p] = 1.0
+            for (r in range64(npos)) {
+                s.moe_sh_inv[r] = uint(r)
+                s.moe_sh_w[r] = 1.0
             }
             matmul_moe_gpu_ffn_combined_xf(s.moe_shout, s.moe_offs1, s.moe_offs3, s.moe_offs2, 1l,
-                s.xb_b, s.moe_sh_w, s.moe_sh_inv, dim, nsh, npos, npos, q8, q8, q8, c.ffn_act == FfnAct.gelu)
+                s.xb_b, s.moe_sh_w, s.moe_sh_inv, dim, nsh, npos, npos, p.f1, p.f3, p.f2, c.ffn_act == FfnAct.gelu)
+        } elif (shexp_gpu_mixed_forms(l)) {   //! a gate and up of two activation forms: each GEMM fed its own image
+            shexp_gpu_gemms(t, l, npos, s.xb_b, s.moe_shout)
+        } elif (kq_sb(p.f1)) {   //! a superblock gate and up read the rows' Q8_K image, made here where the routed feed made none
+            if (gpu_xf || !moe_kform) {
+                s.kxqb |> resize(npos * dim)
+                s.kxsb |> resize(npos * dim / 256l)
+                s.kxbsb |> resize(npos * dim / 16l)
+                requant_rows_q8k_bs(s.xb_b, dim, npos, s.kxqb, s.kxsb, s.kxbsb)
+            }
+            matmul_moe_gpu_ffn(s.moe_shout, s.moe_offs1, s.moe_offs3, s.moe_offs2, 1l,
+                s.kxqb, s.kxsb, dim, nsh, npos, p.f1, p.f3, p.f2, c.ffn_act == FfnAct.gelu)
         } else {
             matmul_moe_gpu_ffn(s.moe_shout, s.moe_offs1, s.moe_offs3, s.moe_offs2, 1l,
-                s.xqb, s.xsb, dim, nsh, npos, q8, q8, q8, c.ffn_act == FfnAct.gelu)
+                s.xqb, s.xsb, dim, nsh, npos, p.f1, p.f3, p.f2, c.ffn_act == FfnAct.gelu)
         }
         prof_add("shexp_gpu", ts_shg)
         g_shexp_gpu_layers++
@@ -1934,6 +2036,14 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
         let ts_gather = prof_ticks()
         if (!gpu_xf) {
             moe_gather_rows(s, 0l, nk, dim, k, moe_kform && !fused_gpu, moe_kform)
+        }
+        if (two_forms) {   //! the up stacks' own image: the bucket rows off the other form's quantized rows
+            if (moe_kform) {
+                moe_gather_image(s.moe_bkt, s.xqb, s.xsb, nk, dim, k, 32l, g_up_bq, g_up_bs)
+            } else {
+                moe_gather_image(s.moe_bkt, s.kxqb, s.kxsb, nk, dim, k, 256l, g_up_bq, g_up_bs)
+            }
+            set_moe_gpu_image2(g_up_bq, g_up_bs)
         }
         prof_add("moe_gather", ts_gather)
         let split_cap = !gpu_comb && !fused_gpu ? 32l : 0l
@@ -2021,19 +2131,31 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
                 prof_add("split_wait", ts_join)   // GPU residue after the CPU tail - 0 = fully hidden
             } elif (gpu_xf) {
                 matmul_moe_gpu_ffn_combined_xf(s.moe_eout, s.moe_offs1, s.moe_offs3, s.moe_offs2, nreg,
-                    s.xb_b, s.moe_w_b, s.moe_inv, dim, nfe, nk, npos, int(f1), int(f3), int(f2), c.ffn_act == FfnAct.gelu)
+                    s.xb_b, s.moe_w_b, s.moe_inv, dim, nfe, nk, npos, int(ef1), int(ef3), int(ef2), c.ffn_act == FfnAct.gelu)
                 prof_add("moe_gpu", ts_g1)
             } else {
+                if (!routed_plain) {
+                    set_moe_gpu_ffn_form(moe_routed_form(t, l))
+                }
                 matmul_moe_gpu_ffn_combined(s.moe_eout, s.moe_offs1, s.moe_offs3, s.moe_offs2, nreg,
-                    s.moe_gxq, s.moe_gxs, s.moe_w_b, s.moe_inv, dim, nfe, nk, npos, int(f1), int(f3), int(f2), c.ffn_act == FfnAct.gelu)
+                    s.moe_gxq, s.moe_gxs, s.moe_w_b, s.moe_inv, dim, nfe, nk, npos, int(ef1), int(ef3), int(ef2), c.ffn_act == FfnAct.gelu)
+                if (!routed_plain) {
+                    clear_moe_gpu_ffn_form()
+                }
+                if (c.moe_exps_bias) {
+                    moe_prefill_down_bias(t, s, l, npos)
+                }
                 prof_add("moe_gpu", ts_g1)
             }
         } elif (fused_gpu) {   // combine off: per-row gout + the park/CPU-reduce path below
             matmul_moe_gpu_ffn(s.moe_gout, s.moe_offs1, s.moe_offs3, s.moe_offs2, nreg,
-                s.moe_gxq, s.moe_gxs, dim, nfe, nk, int(f1), int(f3), int(f2), c.ffn_act == FfnAct.gelu)
+                s.moe_gxq, s.moe_gxs, dim, nfe, nk, int(ef1), int(ef3), int(ef2), c.ffn_act == FfnAct.gelu)
             prof_add("moe_gpu", ts_g1)
         } else {
             moe_prefill_fused_cpu(t, s, l, nreg, nk, ts_g1)
+        }
+        if (two_forms) {
+            clear_moe_gpu_image2()
         }
         // threaded bucket scatter: serial was an ~8ms ALL-LANE hole here (~67MB traffic at pp512/30B)
         if (!gpu_comb) {
@@ -2048,7 +2170,10 @@ def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos 
     }
 
     // 4. shared expert for ALL positions — a plain dense batched FFN off the whole-batch image
-    if (nsh > 0l && !sh_gpu) {
+    if (nsh > 0l && !sh_gpu && shexp_tagged(t, l)) {
+        trace_tag(TRACE_TAG_SHEXP)
+        shexp_prefill_planes(t, s, l, npos)
+    } elif (nsh > 0l && !sh_gpu) {
         trace_tag(TRACE_TAG_SHEXP)
         let she = dim * nsh
         mm_b_q8_pre(s.moe_ghb, t, t.wsh1_off + l * she, s.xqb, s.xsb, dim, nsh, npos)
@@ -2528,6 +2653,13 @@ def ffn_moe_decode(t : Model; var s : Session; l : int64) {
     prof_add("act_resid", ts_resid)
 }
 // ===== dense FFN block kernels (decode) =====
+//! layer `l`'s dense FFN triple sits on the per-op tier's FFN rail: its decode row runs on the device
+[arch(at="../ARCHITECTURE_GPU_VULKAN_PEROP.md#perop-dense-ffn")]
+def private dense_ffn_gpu(t : Model; l : int64) : bool {
+    return (moe_gpu_tier_installed() && long_length(t.w1_offs) > l
+        && moe_gpu_dense_ffn_on_gpu(int(fmt_at(t.w1_fmt, l)), int(fmt_at(t.w3_fmt, l)), int(fmt_at(t.w2_fmt, l)), t.w1_offs[l], t.w3_offs[l], t.w2_offs[l]))
+}
+
 def dense_ffn_inplace(t : Model; var s : Session; l : int64) {
     let c = t.config
     let dim = c.dim
@@ -2536,12 +2668,27 @@ def dense_ffn_inplace(t : Model; var s : Session; l : int64) {
     let f1 = fmt_at(t.w1_fmt, l)
     let f2 = fmt_at(t.w2_fmt, l)
     let f3 = fmt_at(t.w3_fmt, l)
+    if (dense_ffn_gpu(t, l)) {
+        let gelu = c.ffn_act == FfnAct.gelu
+        if (kq_sb(f1) != kq_sb(f3)) {   //! a gate and up of two activation forms: each GEMM over its own image (`x` is read before `y` is written)
+            ffn_gpu_gemms(t.w1_offs[l], t.w3_offs[l], t.w2_offs[l], int(f1), int(f3), int(f2), c.ffn_act, dim, hidden, 1l, s.xb, s.xb)
+            moe_gpu_dense_ffn_note(1l)
+        } elif (fmt_reads_q8k(f1)) {
+            quantize_q8_k_into(s.xb, dim, s.kxq, s.kxs, s.kxbs, 0l, 0l, 0l)
+            matmul_gpu_dense_ffn(s.xb, t.w1_offs[l], t.w3_offs[l], t.w2_offs[l], s.kxq, s.kxs, dim, hidden, int(f1), int(f3), int(f2), gelu)
+        } else {
+            quantize_q8_0_into(s.xb, dim, s.xq, s.xs, 0l, 0l)
+            matmul_gpu_dense_ffn(s.xb, t.w1_offs[l], t.w3_offs[l], t.w2_offs[l], s.xq, s.xs, dim, hidden, int(f1), int(f3), int(f2), gelu)
+        }
+        prof_add("ffn_gpu", ts_ffn)
+        return
+    }
     if (f1 != KqFmt.q8 || f2 != KqFmt.q8 || f3 != KqFmt.q8) {
         // K-quant FFN (formats mix, e.g. Q4_K_M keeps ffn_down at Q6_K): one bs-quantize serves every format
-        if (f1 == KqFmt.q8 || f3 == KqFmt.q8) {
+        if (!fmt_reads_q8k(f1) || !fmt_reads_q8k(f3)) {
             quantize_q8_0_into(s.xb, dim, s.xq, s.xs, 0l, 0l)
         }
-        if (f1 != KqFmt.q8 || f3 != KqFmt.q8) {   // kq v2: every kq format reads the Q8_K form
+        if (fmt_reads_q8k(f1) || fmt_reads_q8k(f3)) {   // kq v2: every kq format reads the Q8_K form
             quantize_q8_k_into(s.xb, dim, s.kxq, s.kxs, s.kxbs, 0l, 0l, 0l)
         }
         mm_pre_f(s.hb, t, f1, t.w1_offs[l], s.xq, s.xs, s.kxq, s.kxs, s.kxbs, dim, hidden)
@@ -2551,7 +2698,7 @@ def dense_ffn_inplace(t : Model; var s : Session; l : int64) {
         gate_batch(s.hb, s.hb2, c.ffn_act, hidden, 1l)
         prof_add("act", ts_act)
         let ts_down = prof_ticks()
-        if (f2 == KqFmt.q8) {
+        if (!fmt_reads_q8k(f2)) {
             quantize_q8_0_into(s.hb, hidden, s.xq, s.xs, 0l, 0l)
         } else {   // kq v2
             quantize_q8_k_into(s.hb, hidden, s.kxq, s.kxs, s.kxbs, 0l, 0l, 0l)
@@ -2592,7 +2739,7 @@ def dense_ffn_inplace(t : Model; var s : Session; l : int64) {
 
 [no_alloc, no_env, no_io]
 def ffn_dense_decode(t : Model; var s : Session; l : int64) {
-    if (fused_ffn_ok(t, l)) {
+    if (fused_ffn_ok(t, l) && !dense_ffn_gpu(t, l)) {
         ffn_chain_decode(t, s, l)
         return
     }

@@ -40,7 +40,7 @@ require dasllama/dasllama_gemm_schema   // the q8 block geometry the mint's zero
 // WhisperModel.enc) contribute their planes under dotted names ("enc.fblob"); string-array
 // fields ride the meta blob via serialize_strings — raw string pointers can't be planes.
 
-let IMAGE_VERSION = 47   // the untied K-quant token table's plane offset, the tied table's q8 classifier copy and the float table's exact bit ride the meta
+let IMAGE_VERSION = 48   // the q4032 plane pair rides the image, the per-32 table planes keep their tags, the shared expert keeps its planes on every load
 
 //! The metal (blob-only) flavor's identity tag: q8 planes ride the 34B block_q8_0 blob and the
 //! kq scale planes their GPU forms (convert_model_to_metal_blob) — flavors are per-config and
@@ -101,14 +101,14 @@ def private lane_sanitize(s : string) : string {
 [arch(at = "../ARCHITECTURE_IMAGE.md#image-lane-name")]
 def image_lane_name(tag : string = ""; quant : string = "q8"; with_head : bool = false) : string {
     var lane = ""
+    let serve = iq3s_serve_mode()
+    let serve_fold = serve == "lut" || serve == "grid" ? "-{serve}" : ""
     if (tag == "") {
-        lane = "cpu-{image_cpu_class()}"
-        let serve = g_env_engine.iq3s_serve
-        if (serve == "lut" || serve == "grid") {
-            lane = "{lane}-{serve}"
-        }
+        lane = "cpu-{image_cpu_class()}{serve_fold}"
     } elif (tag |> starts_with("vulkan")) {
         lane = "vulkan"
+    } elif (tag == METAL_IMAGE_TAG) {
+        lane = "{tag}{serve_fold}{metal_devw_panels() ? "-devw" : ""}"   //! the dev-W panels ride the image only under their lever
     } else {
         lane = tag
     }
@@ -1229,6 +1229,7 @@ def private streamed_q_planes() : array<string> {
     names |> push("mblob")
     names |> push("q51q")
     names |> push("iq4nl32q")
+    names |> push("q4032q")
     return <- names
 }
 
@@ -1361,7 +1362,7 @@ def private vk_mint_zero_view(f : KqFmt; woff, n : int64) {
 def private vk_mint_extra_bytes(t : Model; jobs : array<FillJob>) : uint64 {
     var planar = 0l
     if (empty(jobs)) {   // no streaming plan: the quant halves are whole in RAM
-        planar += long_length(t.qblob) + long_length(t.q51q) + long_length(t.iq4nl32q) + long_length(t.mxq)
+        planar += long_length(t.qblob) + long_length(t.q51q) + long_length(t.iq4nl32q) + long_length(t.q4032q) + long_length(t.mxq)
         for (p in t.kq) {
             planar += long_length(p.q)
         }
@@ -1370,7 +1371,7 @@ def private vk_mint_extra_bytes(t : Model; jobs : array<FillJob>) : uint64 {
             planar += max(stream_plane_bytes(t, jobs, fname), 0l)
         }
     }
-    planar += long_length(t.qscales) * 4l + long_length(t.qscales16) * 2l + long_length(t.q51s) + long_length(t.iq4nl32s) + long_length(t.mxs)
+    planar += long_length(t.qscales) * 4l + long_length(t.qscales16) * 2l + long_length(t.q51s) + long_length(t.iq4nl32s) + long_length(t.q4032s) + long_length(t.mxs)
     for (p in t.kq) {
         planar += long_length(p.s)
     }
@@ -1485,7 +1486,7 @@ struct private StreamSave {
 //! The two streaming sinks' prologue. The baked dev-W panels' tables fill BEFORE the build (they serialize as
 //! regular planes); the panel plane itself streams from the gguf mapping at its field's turn
 def private stream_save_prologue(var t : Model; jobs : array<FillJob>; tag : string) : StreamSave {
-    let devw_bytes = t.metal_blob ? devw_bake_tables(t, jobs) : 0l
+    let devw_bytes = t.metal_blob && metal_devw_panels() ? devw_bake_tables(t, jobs) : 0l
     let vk_mint = vk_mint_arm_walk(tag)
     let vk_extra = vk_mint ? vk_mint_extra_bytes(t, jobs) : 0ul
     let planar_extra = vk_mint && t.planes_trimmed ? 0ul : stream_extra_bytes(t, jobs)   // a trimmed lane writes no streamed family

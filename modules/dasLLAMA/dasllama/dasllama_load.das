@@ -42,6 +42,7 @@ struct private LayoutSizes {
     @safe_when_uninitialized kq_n : int64[KQ_FMT_COUNT]   // element count per lattice plane pair, by int(KqFmt) (0 unless kquant_native)
     q51_n : int64
     iq4nl32_n : int64
+    q4032_n : int64
     pleq8_n : int64   // the dedicated q8 plane holding ONLY the PLE table (fp32/q4 serving)
 }
 
@@ -52,6 +53,7 @@ struct private KqCursors {
     @safe_when_uninitialized kq : int64[KQ_FMT_COUNT]   // the lattice planes, by int(KqFmt)
     q51 : int64
     iq4nl32 : int64
+    q4032 : int64
 }
 
 def private kq_take(var cur : KqCursors; f : KqFmt; n : int64) : int64 {
@@ -68,6 +70,11 @@ def private kq_take(var cur : KqCursors; f : KqFmt; n : int64) : int64 {
     if (f == KqFmt.iq4nl32) {
         let o = cur.iq4nl32
         cur.iq4nl32 += n
+        return o
+    }
+    if (f == KqFmt.q4032) {
+        let o = cur.q4032
+        cur.q4032 += n
         return o
     }
     let o = cur.wo
@@ -315,12 +322,13 @@ def private layout_offsets(var t : Model) : LayoutSizes {   // nolint:STYLE037,S
         }
         if (c.n_ff_shexp > 0l) {
             let she = dim * c.n_ff_shexp
+            let tq = shexp_reads_transcode(t) ? layers * she : 0l   //! no plane on q8: the transcode takes no room
             t.wsh1_off = cur.wo
-            cur.wo += layers * she
+            cur.wo += tq
             t.wsh2_off = cur.wo
-            cur.wo += layers * she
+            cur.wo += tq
             t.wsh3_off = cur.wo
-            cur.wo += layers * she
+            cur.wo += tq
             //! the K-quant plane offsets beside the transcode's, where the tags kept the file's format
             t.wshk1_offs |> clear(); t.wshk1_offs |> reserve(layers)
             for (l in range64(layers)) { t.wshk1_offs |> push(fmt_at(t.wsh1_fmt, l) == KqFmt.q8 ? -1l : kq_take(cur, fmt_at(t.wsh1_fmt, l), she)) }
@@ -447,7 +455,7 @@ def private layout_offsets(var t : Model) : LayoutSizes {   // nolint:STYLE037,S
             cur.wo += c.hc_low_rank * hcd
         }
     }
-    return LayoutSizes(fblob_n = fo, wblob_n = cur.wo, mx_n = mx, bf16_n = bf16, kq_n = cur.kq, q51_n = cur.q51, iq4nl32_n = cur.iq4nl32, pleq8_n = pleq8)
+    return LayoutSizes(fblob_n = fo, wblob_n = cur.wo, mx_n = mx, bf16_n = bf16, kq_n = cur.kq, q51_n = cur.q51, iq4nl32_n = cur.iq4nl32, q4032_n = cur.q4032, pleq8_n = pleq8)
 }
 
 
@@ -725,6 +733,7 @@ var private g_stream_collect_q8 = @@stream_no_collect
 var private g_stream_collect_kq = @@stream_no_collect
 var private g_stream_collect_q51 = @@stream_no_collect
 var private g_stream_collect_iq4nl32 = @@stream_no_collect
+var private g_stream_collect_q4032 = @@stream_no_collect
 var private g_stream_repack = @@stream_no_repack
 var private g_blob_eligible : BlobEligibleFn
 
@@ -743,6 +752,11 @@ def register_stream_layout(cq8, ckq, cq51, ciq4nl32 : StreamCollectFn; rr : Stre
     g_blob_hooks_set = true
 }
 
+//! the q4032 planes' region collector, registered beside the four
+def register_stream_layout_q4032(cq4032 : StreamCollectFn) {
+    g_stream_collect_q4032 = cq4032
+}
+
 def register_devw_kq_mirror(f : DevwKqMirrorFn) {
     g_devw_kq_mirror = f
 }
@@ -753,7 +767,7 @@ def blob_stream_eligible(t : Model) : bool => g_blob_hooks_set && invoke(g_blob_
 
 //! Every Model plane field a blob build puts in its device form, in Model.blob_scaled bit order.
 let BLOB_SCALE_PLANES = fixed_array("k4s", "k5s", "k6s", "iq4xss", "k3s", "iq3ss", "iq3xxss",
-                                    "k2s", "iq2ss", "iq2xss", "iq2xxss")
+                                    "k2s", "iq2ss", "iq2xss", "iq2xxss", "iq3s4s")
 
 //! Put one kq scale plane into its device form during a blob build (see metal_blob_scale_plane),
 //! at most once per carrier: the transform rewrites the plane IN PLACE, and a writer that dies
@@ -799,13 +813,16 @@ def stream_collect_regions(t : Model; var regs : array<StreamReg>) {
     if (active_iq4nl32_layout_mr() > 1l) {
         invoke(g_stream_collect_iq4nl32, t, regs)
     }
+    if (active_q4032_layout_mr() > 1l) {
+        invoke(g_stream_collect_q4032, t, regs)
+    }
     if (t.kquant_native && kernel_backend_has_kq()) {
         invoke(g_stream_collect_kq, t, regs)
     }
 }
 
 //! the per-32 formats with a plane pair of their own beside the lattice table
-def kq_b32_planes(fmt : KqFmt) : bool => fmt == KqFmt.q51 || fmt == KqFmt.iq4nl32
+def kq_b32_planes(fmt : KqFmt) : bool => kq_dense_b32(fmt)
 
 // the streamed destination field of a job (Model plane field name), "" = not streamed
 def stream_field_of(t : Model; fmt : KqFmt) : string {
@@ -815,6 +832,8 @@ def stream_field_of(t : Model; fmt : KqFmt) : string {
         return "q51q"
     } elif (fmt == KqFmt.iq4nl32) {
         return "iq4nl32q"
+    } elif (fmt == KqFmt.q4032) {
+        return "q4032q"
     } elif (t.quant == QuantMode.q8) {
         // the blob flavor carries q8 as gguf-native 34B blocks in ONE plane, never the split pair
         return t.metal_blob ? "mblob" : "qblob"
@@ -919,6 +938,8 @@ def private stream_job_transcode(m : GGUFMeta; bytes : array<uint8> | #; var dst
             memcpy(addr<void?>(dst.q51s[(soff / KQ_B32_ELEMS) * Q51_SB]), addr<void?>(tmp.s[0]), sh.sb)
         } elif (j.fmt == KqFmt.iq4nl32) {
             memcpy(addr<void?>(dst.iq4nl32s[(soff / KQ_B32_ELEMS) * IQ4NL32_SB]), addr<void?>(tmp.s[0]), sh.sb)
+        } elif (j.fmt == KqFmt.q4032) {
+            memcpy(addr<void?>(dst.q4032s[(soff / KQ_B32_ELEMS) * Q4032_SB]), addr<void?>(tmp.s[0]), sh.sb)
         } elif (sh.sb == 0l && j.n > 0l && !dst.metal_blob) {
             memcpy(addr<void?>(dst.qscales[soff / Q8_BLOCK_ELEMS]), addr<void?>(tmp.sf[0]), (j.n / Q8_BLOCK_ELEMS) * 4l)
         }
@@ -1058,6 +1079,9 @@ def stream_job_view(m : GGUFMeta; bytes : array<uint8> | #; t : Model; jobs : ar
     } elif (f == KqFmt.iq4nl32) {
         sv.iq4nl32q |> grow_resize(qb)
         sv.iq4nl32s |> grow_resize(sb)
+    } elif (f == KqFmt.q4032) {
+        sv.q4032q |> grow_resize(qb)
+        sv.q4032s |> grow_resize(sb)
     } else {
         sv.qblob |> grow_resize(qb)
         sv.qscales |> grow_resize(sb)
@@ -1075,6 +1099,8 @@ def stream_job_view(m : GGUFMeta; bytes : array<uint8> | #; t : Model; jobs : ar
                 memcpy(addr<void?>(sv.q51q[qoff]), addr<void?>(tmp.q[0]), sh.qb)
             } elif (f == KqFmt.iq4nl32) {
                 memcpy(addr<void?>(sv.iq4nl32q[qoff]), addr<void?>(tmp.q[0]), sh.qb)
+            } elif (f == KqFmt.q4032) {
+                memcpy(addr<void?>(sv.q4032q[qoff]), addr<void?>(tmp.q[0]), sh.qb)
             } else {
                 memcpy(addr<void?>(sv.qblob[qoff]), addr<void?>(tmp.q8[0]), sh.qb)
             }
@@ -1337,6 +1363,8 @@ def private load_big(m : GGUFMeta; bytes : array<uint8> | #; name : string; var 
         kind = transcode_kq_tensor(m, bytes, name, fmt, t.q51q, t.q51s, woff, n, src_off, scratch)
     } elif (fmt == KqFmt.iq4nl32) {
         kind = transcode_kq_tensor(m, bytes, name, fmt, t.iq4nl32q, t.iq4nl32s, woff, n, src_off, scratch)
+    } elif (fmt == KqFmt.q4032) {
+        kind = transcode_kq_tensor(m, bytes, name, fmt, t.q4032q, t.q4032s, woff, n, src_off, scratch)
     } elif (t.quant == QuantMode.q8) {
         kind = transcode_q8_tensor(m, bytes, name, t.qblob, t.qscales, woff, woff / 32l, n, src_off, scratch)
     } elif (t.quant == QuantMode.q4_0) {
@@ -1450,9 +1478,9 @@ def private log_load_report(t : Model) {
     to_log(LOG_INFO, "dasLLAMA noisy: backend '{active_kernel_backend()}' | kquant_native {get_kquant_native()} q40_native {get_kq_q40_native()} q50_native {get_kq_q50_native()}\n")
     // the tier arms at [init], before a --noisy CLI flag can land — restate it here so the flag alone suffices
     to_log(LOG_INFO, "dasLLAMA noisy: GPU tier installed {moe_gpu_tier_installed()} | want auto {gpu_want_auto()}, moe layers {gpu_want_moe_layers()}, stream {gpu_want_moe_stream()}\n")
-    to_log(LOG_INFO, "dasLLAMA noisy: format tags - q8 {tally_fmt(t, KqFmt.q8)}, k4 {tally_fmt(t, KqFmt.k4)}, k5 {tally_fmt(t, KqFmt.k5)}, k6 {tally_fmt(t, KqFmt.k6)}, q40 {tally_fmt(t, KqFmt.q40)}, q51 {tally_fmt(t, KqFmt.q51)}, iq4xs {tally_fmt(t, KqFmt.iq4xs)}, k3 {tally_fmt(t, KqFmt.k3)}, iq3s {tally_fmt(t, KqFmt.iq3s)}, iq3xxs {tally_fmt(t, KqFmt.iq3xxs)}, iq4nl {tally_fmt(t, KqFmt.iq4nl)}, k2 {tally_fmt(t, KqFmt.k2)}, iq2s {tally_fmt(t, KqFmt.iq2s)}, iq2xs {tally_fmt(t, KqFmt.iq2xs)}, iq2xxs {tally_fmt(t, KqFmt.iq2xxs)}\n")
+    to_log(LOG_INFO, "dasLLAMA noisy: format tags - q8 {tally_fmt(t, KqFmt.q8)}, k4 {tally_fmt(t, KqFmt.k4)}, k5 {tally_fmt(t, KqFmt.k5)}, k6 {tally_fmt(t, KqFmt.k6)}, q40 {tally_fmt(t, KqFmt.q40)}, q51 {tally_fmt(t, KqFmt.q51)}, iq4xs {tally_fmt(t, KqFmt.iq4xs)}, k3 {tally_fmt(t, KqFmt.k3)}, iq3s {tally_fmt(t, KqFmt.iq3s)}, iq3xxs {tally_fmt(t, KqFmt.iq3xxs)}, iq4nl {tally_fmt(t, KqFmt.iq4nl)}, k2 {tally_fmt(t, KqFmt.k2)}, iq2s {tally_fmt(t, KqFmt.iq2s)}, iq2xs {tally_fmt(t, KqFmt.iq2xs)}, iq2xxs {tally_fmt(t, KqFmt.iq2xxs)}, iq4nl32 {tally_fmt(t, KqFmt.iq4nl32)}, q4032 {tally_fmt(t, KqFmt.q4032)}\n")
     let planes <- [for (f in type<KqFmt>); "{f} {float(long_length(t.kq[int(f)].q) + long_length(t.kq[int(f)].s)) / mb}"; where kq_sb(f)]
-    to_log(LOG_INFO, "dasLLAMA noisy: plane MB - q8 {float(long_length(t.qblob)) / mb} (+scales {float(long_length(t.qscales) * 4l) / mb}), {join(planes, ", ")}, q51 {float(long_length(t.q51q) + long_length(t.q51s)) / mb}, iq4nl32 {float(long_length(t.iq4nl32q) + long_length(t.iq4nl32s)) / mb}, f32 {float(long_length(t.wblob) * 4l) / mb}\n")
+    to_log(LOG_INFO, "dasLLAMA noisy: plane MB - q8 {float(long_length(t.qblob)) / mb} (+scales {float(long_length(t.qscales) * 4l) / mb}), {join(planes, ", ")}, q51 {float(long_length(t.q51q) + long_length(t.q51s)) / mb}, iq4nl32 {float(long_length(t.iq4nl32q) + long_length(t.iq4nl32s)) / mb}, q4032 {float(long_length(t.q4032q) + long_length(t.q4032s)) / mb}, f32 {float(long_length(t.wblob) * 4l) / mb}\n")
 }
 
 // GGML disk type -> plane format tag (non-K-quant types ride the classic q8 path)
@@ -1486,19 +1514,14 @@ def private kq_fmt_of(gt : int) : KqFmt {
 }
 
 
-//! One weight's plane tag off its disk type: the K-quant form when the dense rails serve it at
-//! this row length, else the q8 rail - a demotion is logged and counted for the load report.
+//! One weight's plane tag off its disk type, every site alike - the dense planes, the expert stacks and the table planes (the
+//! token table, the classifier, the eh_proj, the deltanet and shared-expert planes, a fused slice): `kq_fmt_row_ok`'s form,
+//! a per-32 one off the 256 lattice, else the q8 rail - a demotion is logged and counted for the load report.
+[arch(at="../ARCHITECTURE_ENGINE_FORMATS.md#per-32-tables")]
 def private kq_tag(m : GGUFMeta; name : string; rows : int64) : KqFmt {
     let disk_fmt = kq_fmt_of(gguf_tensor_type(m, name))
-    let why = disk_fmt == KqFmt.q51 ? "the dense rails carry no q51 form" : "a {rows}-wide row is no multiple of 256"
+    let why = kq_block32(disk_fmt) || disk_fmt == KqFmt.iq4nl ? "a {rows}-wide row is no multiple of 32" : "a {rows}-wide row is no multiple of 256"
     return note_demotion(name, disk_fmt, kq_fmt_row_ok(disk_fmt, rows), why)
-}
-
-//! The expert-stack twin of kq_tag (q51 serves natively off per-32 planes there).
-def private kq_tag_expert(m : GGUFMeta; name : string; rows : int64) : KqFmt {
-    let disk_fmt = kq_fmt_of(gguf_tensor_type(m, name))
-    let why = disk_fmt == KqFmt.q51 || disk_fmt == KqFmt.iq4nl ? "a {rows}-wide row is no multiple of 32" : "a {rows}-wide row is no multiple of 256"
-    return note_demotion(name, disk_fmt, kq_fmt_expert_ok(disk_fmt, rows), why)
 }
 
 //! A tag that is not the disk format is a demotion to the q8 rail (logged, counted) - unless it
@@ -1561,19 +1584,19 @@ def private detect_kq_formats(var t : Model; m : GGUFMeta) {   // nolint:STYLE03
         let fused_gu = t.config.moe_dense_shexp   // gemma4: experts ship fused as ffn_gate_up_exps
         for (l in range64(layers)) {
             if (fused_gu) {
-                let f = kq_tag_expert(m, "blk.{l}.ffn_gate_up_exps.weight", t.config.dim)
+                let f = kq_tag(m, "blk.{l}.ffn_gate_up_exps.weight", t.config.dim)
                 t.we1_fmt[l] = f
                 t.we3_fmt[l] = f
             } else {
-                t.we1_fmt[l] = kq_tag_expert(m, "blk.{l}.ffn_gate_exps.weight", t.config.dim)
-                t.we3_fmt[l] = kq_tag_expert(m, "blk.{l}.ffn_up_exps.weight", t.config.dim)
+                t.we1_fmt[l] = kq_tag(m, "blk.{l}.ffn_gate_exps.weight", t.config.dim)
+                t.we3_fmt[l] = kq_tag(m, "blk.{l}.ffn_up_exps.weight", t.config.dim)
             }
-            t.we2_fmt[l] = kq_tag_expert(m, "blk.{l}.ffn_down_exps.weight", t.config.n_ff_exp)
+            t.we2_fmt[l] = kq_tag(m, "blk.{l}.ffn_down_exps.weight", t.config.n_ff_exp)
             any ||= t.we1_fmt[l] != KqFmt.q8 || t.we2_fmt[l] != KqFmt.q8 || t.we3_fmt[l] != KqFmt.q8
         }
     }
-    //! the shared expert's tags: its planes in the file's format ride beside the q8 transcode the CPU chain reads, on a load a device reads them on
-    if (device_reads_side_planes() && t.config.n_expert > 0l && t.config.n_ff_shexp > 0l && (t.config.dim * t.config.n_ff_shexp) % 256l == 0l) {
+    //! the shared expert's tags: its planes in the file's format, on every load - the CPU chain and the devices read them (`shexp_plane`)
+    if (t.config.n_expert > 0l && t.config.n_ff_shexp > 0l) {
         t.wsh1_fmt |> reserve(layers)
         t.wsh1_fmt |> resize(layers)
         t.wsh2_fmt |> reserve(layers)
@@ -2446,6 +2469,7 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
             }
             g_stream_plane_total["q51q"] = (sz.q51_n / 32l) * Q51_QB
             g_stream_plane_total["iq4nl32q"] = (sz.iq4nl32_n / 32l) * IQ4NL32_QB
+            g_stream_plane_total["q4032q"] = (sz.q4032_n / 32l) * Q4032_QB
             let wb = mode == QuantMode.q8 ? sz.wblob_n : 0l
             g_stream_plane_total[t.metal_blob ? "mblob" : "qblob"] = (t.metal_blob
                 ? (wb / Q8_BLOCK_ELEMS) * (Q8_QPB + Q8_SPB) : wb)
@@ -2474,6 +2498,14 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
             }
             t.iq4nl32s |> reserve((sz.iq4nl32_n / 32l) * IQ4NL32_SB)
             t.iq4nl32s |> resize((sz.iq4nl32_n / 32l) * IQ4NL32_SB)
+        }
+        if (sz.q4032_n > 0l) {
+            if (!stream_q) {
+                t.q4032q |> reserve((sz.q4032_n / 32l) * Q4032_QB)
+                t.q4032q |> resize((sz.q4032_n / 32l) * Q4032_QB)
+            }
+            t.q4032s |> reserve((sz.q4032_n / 32l) * Q4032_SB)
+            t.q4032s |> resize((sz.q4032_n / 32l) * Q4032_SB)
         }
         if (mode == QuantMode.q8) {
             if (!stream_q) {
@@ -2687,9 +2719,15 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
                     if (t.config.moe_shexp_gated) {   // glm4moe's shared expert is ungated — no gate vector on disk
                         gguf_read_tensor_f32(m, bytes, "blk.{l}.ffn_gate_inp_shexp.weight", t.fblob, t.shexp_gate_off + l * dim, dim)
                     }
-                    load_big(m, bytes, "blk.{l}.ffn_gate_shexp.weight", t, t.wsh1_off + l * she, she, scratch)
-                    load_big(m, bytes, "blk.{l}.ffn_down_shexp.weight", t, t.wsh2_off + l * she, she, scratch)
-                    load_big(m, bytes, "blk.{l}.ffn_up_shexp.weight", t, t.wsh3_off + l * she, she, scratch)
+                    if (shexp_plane_q8(t, l, 1)) {   //! the q8 transcode of the planes whose tags left them on q8 alone
+                        load_big(m, bytes, "blk.{l}.ffn_gate_shexp.weight", t, t.wsh1_off + l * she, she, scratch)
+                    }
+                    if (shexp_plane_q8(t, l, 2)) {
+                        load_big(m, bytes, "blk.{l}.ffn_down_shexp.weight", t, t.wsh2_off + l * she, she, scratch)
+                    }
+                    if (shexp_plane_q8(t, l, 3)) {
+                        load_big(m, bytes, "blk.{l}.ffn_up_shexp.weight", t, t.wsh3_off + l * she, she, scratch)
+                    }
                     if (l < long_length(t.wshk1_offs)) {   //! the same planes again in the file's K-quant form, beside the transcode above
                         if (t.wshk1_offs[l] >= 0l) {
                             load_big(m, bytes, "blk.{l}.ffn_gate_shexp.weight", t, t.wshk1_offs[l], she, scratch, 0l, fmt_at(t.wsh1_fmt, l))
@@ -2890,6 +2928,9 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
                 if (active_iq4nl32_layout_mr() > 1l) {
                     layout_repack_iq4nl32(t)
                 }
+                if (active_q4032_layout_mr() > 1l) {
+                    layout_repack_q4032(t)
+                }
                 if (t.kquant_native && kernel_backend_has_kq()) {
                     layout_repack_kq(t)
                     t.kq_repacked = true
@@ -2989,6 +3030,9 @@ def private restore_load_fn_defaults {
     }
     if (g_stream_collect_iq4nl32 == null) {
         g_stream_collect_iq4nl32 = @@stream_no_collect
+    }
+    if (g_stream_collect_q4032 == null) {
+        g_stream_collect_q4032 = @@stream_no_collect
     }
     if (g_stream_repack == null) {
         g_stream_repack = @@stream_no_repack

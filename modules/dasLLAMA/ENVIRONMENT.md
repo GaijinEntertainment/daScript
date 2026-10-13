@@ -28,7 +28,7 @@ Read by the inference engine itself, so these affect any program that loads a mo
 | `DASLLAMA_YARN_BETA_FAST` | number | 0 | YaRN: the low correction dim beta_fast; 0 = the file's, else 32. |
 | `DASLLAMA_YARN_BETA_SLOW` | number | 0 | YaRN: the high correction dim beta_slow; 0 = the file's, else 1. |
 | `DASLLAMA_PIN_BACKEND` | text | unset | Pin the matmul backend by name, bypassing the measured auto-selection. |
-| `DASLLAMA_IQ3S_SERVE` | text | auto | How an IQ3_S weight is served: grid = the disk form (the 3.44-bit grid planes, decoded by a gather), lut = the iq3s4 form (a 4-bit codebook index a superblock, decoded by the LUT kernels - exact, 17% more bytes, the CPU decode several times faster), auto = lut wherever the serving rails decode it (the CPU rails and the Vulkan tier), grid under the Metal tier (it gathers the grid and carries no iq3s4 kernel). |
+| `DASLLAMA_IQ3S_SERVE` | text | auto | How an IQ3_S weight is served: grid = the disk form (the 3.44-bit grid planes, decoded by a gather), lut = the iq3s4 form (a 4-bit codebook index a superblock, decoded by the LUT kernels - exact, 17% more bytes, the CPU decode several times faster), auto = lut on the CPU rails and the Vulkan tier, grid under the Metal tier (every home serves both forms at every site). |
 | `DASLLAMA_PIN_BATCH_BACKEND` | text | unset | Pin the batched (prefill) matmul backend independently of the decode one. |
 | `DASLLAMA_EXPERT_REUSE` | flag | off | Arm the MoE expert-reuse counter (probes and servers; benches use set_expert_reuse instead). |
 | `DASLLAMA_NOISY` | flag | off | Print engine diagnostics (tier selection, upload plan, arm/decline reasons). |
@@ -55,6 +55,7 @@ Read by the inference engine itself, so these affect any program that loads a mo
 | `DASLLAMA_GPU_DENSE` | flag | follows DASLLAMA_GPU | Dense-weight rail on the GPU. |
 | `DASLLAMA_GPU_DENSE_ATTN` | flag | on | The dense rail's attention half (per-layer q/o pairs); opt-OUT, measured a loss on gemma-4. |
 | `DASLLAMA_GPU_DENSE_SHEXP` | flag | off | The dense rail's gemma-4 shared-expert w1/w3/w2 triple; opt-IN, measured a wash-to-loss. |
+| `DASLLAMA_GPU_DENSE_FFN` | flag | off | The dense rail's FFN half (each dense layer's w1/w3/w2 triple, the decode row's FFN on the device); opt-IN. |
 | `DASLLAMA_GPU_SHEXP` | flag | follows DASLLAMA_GPU | Shared-expert rail on the GPU. |
 | `DASLLAMA_GPU_QKV` | flag | off | Fused QKV rail on the GPU; stays off under DASLLAMA_GPU (measured a wash). |
 | `DASLLAMA_GPU_CLS` | flag | on | Keep the classifier plane on the GPU - the best ms-per-GB region; 0 is the CPU A/B lever. |
@@ -144,6 +145,7 @@ Vulkan GPU backend. Present only where the dasVulkan package is installed.
 | `DASLLAMA_COOPMAT` | text | auto | Cooperative-matrix mode (auto = cm2 where the device has NV_cooperative_matrix2, else mm, else sdot4); the flash-attention twin needs it even when the GEMM runs sdot4. |
 | `DASLLAMA_MM_SMALL` | text | 32 | Small-batch tier: 32 = sdot4 (default, beats both coopmat tiles below the crossover), 64 = coopmat M, 128 = always-L. |
 | `DASLLAMA_MM_SMALLD` | number | 64 | Small-d cutoff routing narrow roles (k/v) to the small tier; widening measured worse, so this is an instrument. |
+| `DASLLAMA_VK_CHAIN` | number | 0 (off) | The whole-model driver's greedy chain (the next one-row step submitted behind the running one on the device's own pick): 0 off, 1 every greedy step, -1 adaptive (backs off after a miss). A sampled session never chains. |
 | `DASLLAMA_VK_FUSE` | flag | on | Fused add+rms+requant on every site of the decode token command and the prefill's batch pairs, plus the fused qk-norm+rope; 0 pins the split dispatches for a same-build A/B. |
 | `DASLLAMA_VK_F16_FFN` | flag | on | The resident prefill's FFN GEMMs (gate, up, down) take the f16 activation feed where the tile family admits it; 0 pins the FFN group to the Q8 activation blocks the CPU chain quantizes, while the attention group keeps its own pick - the A/B rail that takes the feed's rounding out of a resident-vs-CPU compare (gemma's logits move with it). |
 | `DASLLAMA_VK_XFERQ` | flag | on | Stream expert uploads on the dedicated transfer queue, overlapped via a timeline semaphore, and land the resident token command's logits there behind a compute-timeline wait; 0 keeps the single-queue rail, where the token command copies its own logits under its fence. |

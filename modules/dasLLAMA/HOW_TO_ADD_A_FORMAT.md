@@ -19,11 +19,12 @@ Three questions decide which existing family the format rides; answer them from
 1. **Block geometry.** 256-weight superblock (every K-quant, every i-quant) or 32-weight block
    (`Q4_0`, `Q5_1`, `IQ4_NL`)? A superblock format joins the `kq_sb` lattice (Q8_K activations,
    `% 256` rows, the grp<mr> repack, the stamped kq kernels); a 32-block format rides per-32
-   planes like `q51` and `iq4nl32` (`ARCHITECTURE_ENGINE_FORMATS.md#per-32-rail`).
+   planes like `q51`, `iq4nl32` and `q4032` (`ARCHITECTURE_ENGINE_FORMATS.md#per-32-rail`).
    `ARCHITECTURE_ENGINE_FORMATS.md#formats-and-data-movement` owns the lattice split. A disk type may ride BOTH: IQ4_NL is `iq4nl` (a superblock member, eight
-   32-blocks a superblock) on a `% 256` row and `iq4nl32` on an expert stack whose rows are off the
-   256 lattice and on the 32 lattice (`kq_fmt_expert_ok`) - the per-32 twin exists for the expert
-   stacks alone, a dense plane off the lattice still demotes to q8.
+   32-blocks a superblock) on a `% 256` row and `iq4nl32` on any plane - dense, expert or table -
+   whose rows are off the 256 lattice and on the 32 lattice (`kq_fmt_row_ok`); Q4_0 is `q40` and
+   `q4032` the same way. A per-32 member serves at every site on every home
+   (`ARCHITECTURE_ENGINE_FORMATS.md#per-32-tables`), so it brings the table sites' arms with it.
 2. **Weight reconstruction.** Shift/mask nibbles (`q4_0`, K-quants), a 16-entry codebook on the
    nibble (`IQ4_XS`, `IQ4_NL`), or a grid gather (`IQ2_*`, `IQ3_*`)? Shift/mask and codebook
    formats keep the k4 nibble tiling and add an unpack step; grid formats decode to bytes first
@@ -50,9 +51,9 @@ superblock, dequants bit-identical, over LCG-perturbed source bytes); `kq_fmt_of
 resolved value is a `DlimCpuConfig` field (it changes plane bytes, so it is image identity - the
 struct's header rule); and a GPU tier either decodes the served form or stays on the native one,
 decided per tier. A tier that decodes it takes the whole of sec.6 for the member (iq3s4 on
-Vulkan: the borrowed shape's stamps with its own codebook and scale word, a census row and a
-kernel cell per stamp). A tier that does not leaves the member off its roster (Metal's
-`moe_fmt_metal_served`) and the knob's `auto` serves the native form under it. A tier never
+Vulkan and Metal: the borrowed shape's stamps with its own codebook - Metal's iq4 family under
+`IQODD` - a census row and a kernel cell per stamp). A tier that does not leaves the member off
+its roster and the knob's `auto` serves the native form under it. A tier never
 half-joins: a member on some of a tier's ladders and on the skip list of the others serves a
 load that passes admission and then has no kernel. The kernels are the shape it borrows (iq3s4: the iq4xs
 LUT kernels over its own codebook, sec.4/5), and the tune family is its own (`<fmt>q8_tile_gen`
@@ -169,8 +170,9 @@ scale landing of `stream_job_transcode` (`dasllama_load.das`); the quant-plane n
 `streamed_q_planes` and the scale planes summed in `vk_mint_extra_bytes`
 (`dasllama_image.das`); `DlimCpuConfig.<fmt>_mr` in the identity string
 (`dasllama_config.das`); `IMAGE_VERSION`; and the `ImgTableProbe` pair + slot cell in
-`tests/test_model_image.das`. The expert tag rule is `kq_fmt_expert_ok` (`dasllama_common.das`),
-and `note_demotion` counts a q8 fall alone, so the load report reads no demotion for a stack the
+`tests/test_model_image.das`. The tag rule is `kq_fmt_row_ok` (`dasllama_common.das`; the expert
+twin `kq_fmt_expert_ok` is the same rule), one rule for every site through `kq_tag`, and
+`note_demotion` counts a q8 fall alone, so the load report reads no demotion for a plane the
 per-32 twin took.
 
 ## 4. CPU kernels - `dasllama_math_default.das`, `dasllama_math_gen.das`, `dasllama_math.das`, `dasllama_repack.das`

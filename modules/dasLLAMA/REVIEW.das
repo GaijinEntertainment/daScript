@@ -232,7 +232,16 @@ var private FASTMATH_OFF_EXEMPT <- {
     "metal_st2_src_cumsum_torch_msl" => "st2_source_gate",
     "metal_st2_src_cumsum_onnx_msl" => "st2_source_gate",
     "metal_st2_src_sines_torch_msl" => "st2_source_gate",
-    "metal_st2_src_sines_onnx_msl" => "st2_source_gate"
+    "metal_st2_src_sines_onnx_msl" => "st2_source_gate",
+    //! the per-32 GEMV and its small-batch form (an unnamed kernel keys by its method): under fast math the two sum a
+    //! column's dot apart, and `b32_mvb_gate` in tests/test_metal_prefill_kernels.das reds its bit-for-bit compare
+    "metal_kq_gemv_q51_msl" => "b32_mvb_gate",
+    "metal_kq_gemv_iq4nl32_msl" => "b32_mvb_gate",
+    "metal_kq_gemv_q51_ks_msl" => "b32_mvb_gate",
+    "metal_kq_gemv_iq4nl32_ks_msl" => "b32_mvb_gate",
+    "metal_kq_gemv_q4032_msl" => "b32_mvb_gate",
+    "metal_kq_gemv_q4032_ks_msl" => "b32_mvb_gate",
+    "metal_b32_mvb" => "b32_mvb_gate"
 }
 
 //! The `name="..."` a [metal_kernel] line declares, or "" where the line carries none.
@@ -251,10 +260,16 @@ def private check_fastmath_default {
     collect_das_files("modules/dasLLAMA/dasllama", files)
     for (p in files) {
         var line_no = 0
-        for (line in split(fread(p), "\n")) {
+        var inscope lines <- split(fread(p), "\n")
+        for (line in lines) {
             line_no++
             continue if ((find(line, "fastmath=false") < 0 && find(line, "fastmath = false") < 0) || (strip(line) |> starts_with("//")))
-            if (!key_exists(FASTMATH_OFF_EXEMPT, metal_kernel_name(line))) {
+            var key = metal_kernel_name(line)
+            if (empty(key) && line_no < length(lines)) {   //! an unnamed kernel: the method the next line declares
+                let next = strip(lines[line_no])
+                key = next |> starts_with("def ") ? strip(slice(next, 4, find(next, " ", 4) < 0 ? length(next) : find(next, " ", 4))) : ""
+            }
+            if (!key_exists(FASTMATH_OFF_EXEMPT, key)) {
                 gate_finding(p, line_no,
                     "kernel declares fastmath=false without an exemption row naming the test that fails under fastmath - fastmath is the default; the opt-out ships its demonstrated breakage")
             }
@@ -816,7 +831,7 @@ let private TTS_BLOCKS_FILE = "modules/dasLLAMA/dasllama/dasllama_tts_blocks.das
 // the TTS block file's *_prepare mints, the layout helpers and the layout constants' declaration
 // lines, hashed in file order. A closure change with IMAGE_VERSION unmoved is red; the finding prints the
 // value to re-stamp with.
-let private IMAGE_LAYOUT_STAMP_VERSION = 47
+let private IMAGE_LAYOUT_STAMP_VERSION = 48
 let private IMAGE_LAYOUT_STAMP_HASH = 0x66397501edef99d1ul
 
 // The helpers that decide WHERE bytes land: the page pad, the plane and total sizing, the
@@ -1151,13 +1166,13 @@ def private cm2_template_chain_lines(name : string) : array<string> {
 //! one class ladder trio every format template on the cm2 base joins
 struct private LadderTrio {
     suffix : string     //! the stamp's class suffix: `<Fmt>` + suffix
-    tail : string       //! the dispatch name's tail: `kq_batch_<fmt>_` + tail; a per-32 format (q8, q51, mx4, iq4nl32) spells `<fmt>_batch_` + tail
+    tail : string       //! the dispatch name's tail: `kq_batch_<fmt>_` + tail; a per-32 format (q8, q51, mx4, iq4nl32, q4032) spells `<fmt>_batch_` + tail
     ladder : string     //! a ladder trio of this tile's own beside the engine's `cm2_cls_*` (the kernel cells' `khr_cls_`), "" where there is none
     why : string        //! what a missing arm does at run time
 }
 
 def private cm2_dispatch_name(fmt, tail : string) : string =>
-    fmt == "q8" || fmt == "q51" || fmt == "mx4" || fmt == "iq4nl32" ? "{fmt}_batch_{tail}" : "kq_batch_{fmt}_{tail}"
+    fmt == "q8" || fmt == "q51" || fmt == "mx4" || fmt == "iq4nl32" || fmt == "q4032" ? "{fmt}_batch_{tail}" : "kq_batch_{fmt}_{tail}"
 
 //! the words of a `let [private] NAME = "..."` line in `path`, or none with a finding: a roster the gate reads where the code reads it
 def private let_words(path, name : string) : array<string> {
@@ -1690,7 +1705,7 @@ let private GEMM_GEN_FILES = [
     "modules/dasLLAMA/dasllama/dasllama_gemm_gen.das",
     "modules/dasLLAMA/dasllama/dasllama_gemm_schema.das"
 ]
-let private GEMM_GEN_STAMP_HASH = 0x90ebe425c98c9c04ul
+let private GEMM_GEN_STAMP_HASH = 0x8a469988a72ad8ddul
 
 [arch(at = "ARCHITECTURE_ENGINE_FORMATS.md#cpu-kernel-tiers")]
 def private check_gemm_gen_stamp {

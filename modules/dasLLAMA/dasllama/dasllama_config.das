@@ -29,6 +29,7 @@ struct public DlimCpuConfig {
     kq_mr : array<int64>   //!< the lattice planes' repack interleaves, by int(KqFmt) (0 off the lattice)
     q51_mr : int64
     iq4nl32_mr : int64
+    q4032_mr : int64
     wscale_f16 : bool
     kquant_native : bool
     kq_q40_native : bool
@@ -55,6 +56,7 @@ struct public DlimVulkanConfig {
     dense : bool
     dense_attn : bool
     dense_shexp : bool
+    dense_ffn : bool   //!< the dense rail's FFN triples, opt-in: the tag spells it only when on, so the images minted without it keep their identity
     trim : bool   //!< P3: big CPU weight families dropped from the image (GPU-resident consumers only)
     split : bool   //!< the streamed-layer split want: one stream slot instead of two under cm2, so the carve - and the walk - differ
     dn_native : bool   //!< the whole-model driver is attempted, so the walk bakes its arena placement in place of the per-op rails' (the two walks lay different images)
@@ -156,7 +158,7 @@ def public dlim_identity(c : DlimConfiguration; image_version : int; tag : strin
     return ("v{image_version}{pk}|{c.quant}|{c.cpu.backend}|{c.cpu.wscale_f16 ? "s16" : "s32"}"
         + "|q8 mr{c.cpu.q8_mr} b{c.cpu.q8_wbias} g{c.cpu.q8_kgroup}"
         + "|kq {kq_mr_identity(c.cpu)}"
-        + "|q51 mr{c.cpu.q51_mr}|iq4nl32 mr{c.cpu.iq4nl32_mr}"
+        + "|q51 mr{c.cpu.q51_mr}|iq4nl32 mr{c.cpu.iq4nl32_mr} q4032 mr{c.cpu.q4032_mr}"
         + "|nat {c.cpu.kquant_native ? 1 : 0}{c.cpu.kq_q40_native ? 1 : 0}{c.cpu.kq_q50_native ? 1 : 0}{c.cpu.kq_q51_native ? 1 : 0}{c.cpu.iq3s_lut ? 1 : 0}"
         + (c.cpu.rope_override != "" ? " rope {c.cpu.rope_override}" : "")
         + (tag != "" ? "|{tag}" : ""))
@@ -168,7 +170,7 @@ def public dlim_vulkan_tag(v : DlimVulkanConfig) : string {
     return ("vulkan|m{v.coopmat_mode} b{v.vram_mb}"
         + " l{v.moe_layers} s{v.moe_stream}"
         + " r{v.dn ? 1 : 0}{v.attn ? 1 : 0}{v.dnd ? 1 : 0}{v.shexp ? 1 : 0}{v.qkv ? 1 : 0}{v.cls ? 1 : 0}"
-        + "{v.dense ? 1 : 0}{v.dense_attn ? 1 : 0}{v.dense_shexp ? 1 : 0}{v.split ? 1 : 0}{v.dn_native ? 1 : 0}{v.trim ? " T" : ""}")
+        + "{v.dense ? 1 : 0}{v.dense_attn ? 1 : 0}{v.dense_shexp ? 1 : 0}{v.split ? 1 : 0}{v.dn_native ? 1 : 0}{v.trim ? " T" : ""}{v.dense_ffn ? " F" : ""}")
 }
 
 //! Round-trip: the JSON embedded in the image meta and consumed by `dasllama-convert --config`.

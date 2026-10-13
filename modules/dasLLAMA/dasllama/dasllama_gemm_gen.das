@@ -336,6 +336,7 @@ struct private TileEmit {
                                          // per-block f16 d/m scale pairs + xbs min-term)
     iq4nl32 : bool                       // block emitter: the mx4 LUT-dequant over the per-32 IQ4_NL
                                          // planes (16 nibble bytes, one f16 d a block, the iq4nl codebook)
+    q40 : bool                           // with iq4nl32: q4032's linear q - 8 code over the same planes
     kq : int                             // the gemm_schema kq id (0 = not kq): the
                                          // block unit is a 256-weight superblock over the grp<mr>
                                          // kq planes; dots run unsigned-q (kq_dot_lane)
@@ -2456,7 +2457,7 @@ def private setup_tile_emit(var te : TileEmit; var gc : LlvmCodeCtx; p : TilePer
     }
     if (needMx4) {
         // the nibble codebook as a constant vector (mx4: doubled e2m1; kq 44 / 45 / iq4nl32: kvalues_iq4nl; kq 35: the iq3s4 odd values) - no runtime table pointer; broadcast per 16-byte lane on x64
-        let lut = te.kq == 44 || te.kq == 45 || te.iq4nl32 ? iq4nl_lut() : (te.kq == 35 ? iq3s4_lut() : mx4_lut())
+        let lut = te.q40 ? q40_lut() : (te.kq == 44 || te.kq == 45 || te.iq4nl32 ? iq4nl_lut() : (te.kq == 35 ? iq3s4_lut() : mx4_lut()))
         te.lut = codebook_lut(te, lut, te.dotKind == DOT_SDOT ? 1 : te.width / 128)
     }
     return true
@@ -3235,14 +3236,15 @@ def private plane_row_strides(var gc : LlvmCodeCtx; nb : LLVMOpaqueValue?; qbyte
 // iq4nl32 16/2). The block dots ride the lane lattices, so every leg (sdot/maddubs/vpdpbusd) emits.
 def private q51_gemv_gen(var gc : LlvmCodeCtx) : bool => b32_gemv_gen_impl(gc, false)
 def private iq4nl32_gemv_gen(var gc : LlvmCodeCtx) : bool => b32_gemv_gen_impl(gc, true)
+def private q4032_gemv_gen(var gc : LlvmCodeCtx) : bool => b32_gemv_gen_impl(gc, true, true)
 
-def private b32_gemv_gen_impl(var gc : LlvmCodeCtx; iq4nl32 : bool) : bool {
+def private b32_gemv_gen_impl(var gc : LlvmCodeCtx; iq4nl32 : bool; q40 : bool = false) : bool {
     if (!is_kq_gemv_signature(gc.fn)) return false
     let p0 = parse_perm(gc)
     if (perm_declines(gc, p0)) return false
     let p = companion_perm(p0)
 
-    var te = TileEmit(q51 = !iq4nl32, iq4nl32 = iq4nl32)
+    var te = TileEmit(q51 = !iq4nl32, iq4nl32 = iq4nl32, q40 = q40)
     if (!setup_tile_emit(te, gc, p, iq4nl32)) return false
     let qbytes = iq4nl32 ? 16l : 20l
     let sbytes = iq4nl32 ? 2l : 4l
@@ -3726,14 +3728,15 @@ def private emit_kq_vector_tile(var gc : LlvmCodeCtx; p : TilePerm; fmt : int) :
 // body reads no asum).
 def private q51_tile_gen(var gc : LlvmCodeCtx) : bool => b32_tile_gen_impl(gc, false)
 def private iq4nl32_tile_gen(var gc : LlvmCodeCtx) : bool => b32_tile_gen_impl(gc, true)
+def private q4032_tile_gen(var gc : LlvmCodeCtx) : bool => b32_tile_gen_impl(gc, true, true)
 
-def private b32_tile_gen_impl(var gc : LlvmCodeCtx; iq4nl32 : bool) : bool {
+def private b32_tile_gen_impl(var gc : LlvmCodeCtx; iq4nl32 : bool; q40 : bool = false) : bool {
     if (!is_tile_signature(gc.fn)) return false
     let p0 = parse_perm(gc)
     if (perm_declines(gc, p0)) return false
     let p = companion_perm(p0)
 
-    var te = TileEmit(q51 = !iq4nl32, iq4nl32 = iq4nl32)
+    var te = TileEmit(q51 = !iq4nl32, iq4nl32 = iq4nl32, q40 = q40)
     if (!setup_tile_emit(te, gc, p, iq4nl32)) return false
     return emit_tile_walk(gc, te, p.nrsplit, 1, 32, "nb", 32)
 }
@@ -3767,6 +3770,8 @@ def public register_dasllama_gemm_generators {
     register_llvm_code_generator("dasllama_gemm_gen::q51_tile", @@q51_tile_gen)
     register_llvm_code_generator("dasllama_gemm_gen::iq4nl32_gemv", @@iq4nl32_gemv_gen)
     register_llvm_code_generator("dasllama_gemm_gen::iq4nl32_tile", @@iq4nl32_tile_gen)
+    register_llvm_code_generator("dasllama_gemm_gen::q4032_gemv", @@q4032_gemv_gen)
+    register_llvm_code_generator("dasllama_gemm_gen::q4032_tile", @@q4032_tile_gen)
     register_llvm_code_generator("dasllama_gemm_gen::q8q8_witness", @@witness_gen)
     register_llvm_code_generator("dasllama_gemm_gen::kq_amx_cfg", @@cfg_gen)
     register_llvm_code_generator("dasllama_gemm_gen::kq_witness", @@witness_gen)

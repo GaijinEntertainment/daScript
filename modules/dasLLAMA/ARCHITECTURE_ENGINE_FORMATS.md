@@ -111,16 +111,43 @@ Every materialized cos/sin table is the same fill; the position source is what d
 
 ### The per-32 rail is one kernel body over a format tag {#per-32-rail}
 
-The per-32 formats (`q51`, `iq4nl32`) sit off the superblock lattice: 32-weight blocks, Q8_0-form
+The per-32 formats (`q51`, `iq4nl32`, `q4032`) sit off the superblock lattice: 32-weight blocks, Q8_0-form
 activations, dedicated `Model` plane pairs (`ARCHITECTURE_IMAGE.md#image-kq-table-sb-only`), and in
 `dasllama_math.das` one body per kernel shape (`b32_batch_kernel`, `b32_groupn_kernel`,
 `b32_batch_groupn_kernel`) generic over the `KqTag_<fmt>` it takes last - the tag picks the
 strides, the row expand, the grp scale gather and the expanded-row dot. `iq4nl32` is the IQ4_NL
-disk block served per-32: `kq_fmt_expert_ok` chooses it for an expert stack whose rows are off
-the 256 lattice and on the 32 lattice (the superblock member `iq4nl` serves a `% 256` row), and a
-dense plane off the lattice still demotes to q8. The codebook levels are int8, so the q8 rail's
-requant of an IQ4_NL block is value-exact and the per-32 form's gain is bytes - 18 a block
-against 34 - not precision.
+disk block served per-32 and `q4032` the Q4_0 one: `kq_fmt_row_ok` chooses each for a plane whose
+rows are off the 256 lattice and on the 32 lattice (the superblock members `iq4nl` and `q40` serve a
+`% 256` row), and `q51` keeps its tag on any 32-multiple row. Every site takes that one rule -
+dense, expert and table planes alike (`#per-32-tables`). The codebook levels are int8, so a q8
+requant of an IQ4_NL or Q4_0 block would be value-exact: the per-32 form's gain is bytes - 18 a
+block against 34 - not precision.
+
+### The table planes serve per-32 like the dense ones {#per-32-tables}
+
+`kq_tag` is one rule for every site: the disk type's member, kept where `kq_fmt_row_ok` admits the
+row, else q8 with the demotion logged. So the token table, the classifier, the NextN eh_proj, the
+deltanet five and the shared expert's triple carry a per-32 tag on the same terms as a dense
+plane, and each home reads it in that form: the CPU through `embed_b32_row` and the per-32 arms of
+`mm_f` / `mm_b_f` (`mm_cls` included); Vulkan through the `Blk32GemvRunT` leaves - the token gather
+is its `EMB` axis, the classifier and the per-op sites `resident_plane_ok`; Metal through the
+`MetalBlk32GemvT` stamps and the `MetalEmbedB32T` gather. A tied per-32 table is the classifier's
+plane at `wcls_off`; an untied one sits past it at `emb_kq_off`.
+
+A Q5_0 row off the 256 lattice is the one disk type with no per-32 member: it rides q8, the
+demotion logged by name at the load and counted in its report.
+
+`q4032` is the member a Q4_0 row off the 256 lattice serves as:
+
+| | q4032 |
+|---|---|
+| disk type | GGML Q4_0, 18 bytes a 32-block (f16 d, 16 nibble bytes) |
+| planes | `q4032q` 16 nibble bytes a block (`Q4032_QB`), `q4032s` the f16 d (`Q4032_SB`) - iq4nl32's split |
+| code | `q - 8` (`q40_lut`, -8..7), the linear twin of iq4nl32's codebook |
+| CPU | the `q4032q8_tile_gen` `[tune]` family (iq4nl32's permutations and fallback, its own layout and GEMV companions, the generator's `q40` code), the portable per-32 bodies the hand tiers' slots and the controls |
+| Vulkan | the Blk32 leaves (`q40_signed_word`), the cm2 S/E stamps and the KHR tile (`Q4032Cm2T`), the `EMB` gather |
+| Metal | iq4nl32's stamps under `Q40L`: the GEMV and its K-split, the small-batch forms, `mul_mm`, the routed GEMV and tiles, the gather |
+| ids | enum 18, stream tag `Q4032_STREAM_TAG`, no gemm schema |
 
 ### A served form is a second member over the same disk type {#served-form}
 
@@ -133,14 +160,17 @@ one table lookup a nibble in place of the grid gather, which is where the IQ3_S 
 its time. The member's descriptor row names the source type (`GGML_TYPE_IQ3_S`, 110 disk bytes)
 with its own schema and stream ids, so the image and the stream rail carry it like any lattice
 member. The choice is `kq_fmt_of`'s at the load (`iq3s_serve_lut`, the `DASLLAMA_IQ3S_SERVE`
-knob: `grid`, `lut`, `auto` = lut wherever the serving rails decode it), and it is an image
-identity bit (`DlimCpuConfig.iq3s_lut`), because it changes plane bytes. The Vulkan tier decodes
-it on every ladder: the device row is iq4xs's quant plane under iq3s's scale word, the codebook is
-arithmetic (`2q - 15`, no table bound), and the stamps are the iq4xs kernels with the odd
-codebook and the grid scale switched in. So a host that sums routed experts beside a Vulkan
-device reads the fast planes, and the device reads the same bytes. The Metal tier keeps the grid
-form: its gather is a device read and no Metal kernel decodes `iq3s4`, so the member sits off the
-Metal roster and a load the Metal tier targets serves `iq3s`.
+knob or a process pin, `set_iq3s_serve_pin`: `grid`, `lut`, `auto` = lut on the CPU rails and the
+Vulkan tier, the grid under the Metal tier), and it is an image identity bit
+(`DlimCpuConfig.iq3s_lut`), because it changes plane bytes. Both GPU tiers decode it on every
+ladder, the codebook arithmetic (`2q - 15`, no table bound) and the stamps the iq4xs kernels with
+the odd codebook switched in: on Vulkan the device row is iq4xs's quant plane under iq3s's scale
+word; on Metal the blob's split scale plane carries the eight `1 + 2s` strip bytes and the f16 d
+exactly as iq4xs's carries its signed sub-scales (`ARCHITECTURE_GPU_QUANT_PLANES.md#metal-kq-split-scale-plane`),
+so every iq4 family stamp under `IQODD` reads it - the GEMV, the small-batch forms, the base and
+tensor tiles, the routed GEMV and tiles, the token gather. So a host that sums routed experts
+beside a Vulkan device reads the fast planes, and the device reads the same bytes; under Metal
+`auto` keeps the grid, which streams 17% fewer bytes a superblock.
 
 ### The load and image rail {#the-load-and-image-rail}
 
@@ -181,16 +211,18 @@ trunk-only and trunk+head images never collide and one image file serves both tr
 The token table is one plane in the file's format wherever its tag is a `KqFmt` member
 (`emb_kq`): tied, the classifier's plane at `wcls_off`; untied, its own plane at `emb_kq_off`,
 repacked with its format's plane like every region of it. No fp32 table rides beside it, and the
-CPU's `embed_row` and the devices' row gathers read that plane. An untied table keeps its plane on
-every load but one with the Vulkan tier armed, whose driver reads an untied table as the fp32
-rows or the q8 copy. A table whose disk type no member carries (F16, BF16, Q4_1, Q5_0) keeps its
+CPU's `embed_row` and the devices' row gathers read that plane, tied or untied: the Vulkan
+window and token commands gather an untied table's rows on the device off its plane as the Metal
+drivers do. A table whose disk type no member carries (F16, BF16, Q4_1, Q5_0) keeps its
 exact fp32 rows; tied, a load under a Metal mode adds a q8 transcode of it at `wcls_off`
 (`cls_q8_copy`) - a converted copy, logged at the load - for the device classifier, while the
 embed and the CPU classifier read the fp32 rows. The shared expert's gate, up and down planes
-(the NextN head's triple included) keep the file's format beside the q8 transcode on a load a
-device reads them on (a Metal mode or an armed GPU tier: `wsh*_fmt` / `wshk*_offs`,
-`shexp_plane` picks the plane by its tag). The transcode stays on every load, because the CPU
-chain's shared-expert sites (`dasllama_moe.das`, `dasllama_blocks.das`) read q8 alone.
+(the NextN head's triple included) keep the file's format on every load (`wsh*_fmt` /
+`wshk*_offs`; `shexp_plane` picks the plane by its tag), and every home reads that plane: the CPU
+chain's shared-expert sites (`dasllama_moe.das`, `dasllama_blocks.das`) take `shexp_tagged` to the
+format's arm. The q8 transcode holds the planes a tag left on q8 alone: the layout allots it only
+where some routed layer's plane reads it (`shexp_reads_transcode`), and the load fills and the
+repack walks that plane's region alone (`shexp_plane_q8`).
 
 ### CPU kernel tiers {#cpu-kernel-tiers}
 

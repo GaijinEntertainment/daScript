@@ -134,26 +134,58 @@ def private dn_shell() : Model {
 
 [test]
 def test_dn_plane_format_declines(t : T?) {
-    t |> run("the whole-model driver reads q8 and superblock beta/alpha planes by tag and names a per-32 one") @(t : T?) {
+    t |> run("the whole-model driver reads q8, superblock and per-32 beta/alpha planes by tag and names an mx4 one") @(t : T?) {
         var m <- dn_shell()
         t |> success(!contains(resident_layer_decline(m, 1l), "beta/alpha planes carry"), "q8 beta/alpha planes draw no format decline")
         m.dnbeta_fmt[1] = KqFmt.iq4xs
         m.dnalpha_fmt[1] = KqFmt.k4
         let sk = resident_layer_decline(m, 1l)
         t |> success(!contains(sk, "beta/alpha planes carry"), "K-quant beta/alpha planes draw no format decline - the resident GEMVs and tiles read them by tag: '{sk}'")
-        m.dnbeta_fmt[1] = KqFmt.q51
-        t |> success(contains(resident_layer_decline(m, 1l), "layer 1's beta/alpha planes carry a format"), "a per-32 beta plane past q8 is named: no resident GEMV or tile reads it")
+        for (f in [KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032]) {
+            m.dnbeta_fmt[1] = f
+            m.dnalpha_fmt[1] = f
+            let sp = resident_layer_decline(m, 1l)
+            t |> success(!contains(sp, "beta/alpha planes carry"), "{f} beta/alpha planes draw no format decline - the per-32 GEMVs and tiles read them: '{sp}'")
+        }
+        m.dnbeta_fmt[1] = KqFmt.mx4
+        t |> success(contains(resident_layer_decline(m, 1l), "layer 1's beta/alpha planes carry a format"), "an mx4 beta plane is named: no resident GEMV or tile reads it (the control)")
         delete m
     }
-    t |> run("the per-op deltanet chain takes superblock planes by tag; mixed qkv/z classes, a per-32 plane and a missing triple are named") @(t : T?) {
+    t |> run("the per-op deltanet chain takes superblock and per-32 planes by tag and qkv/z planes of two classes; an mx4 plane and a missing triple are named") @(t : T?) {
         var m <- dn_shell()
         t |> equal(perop_dn_decline(m, 1l), "", "the per-op deltanet chain takes K-quant qkv/z/out planes by tag")
         m.dngate_fmt[1] = KqFmt.q8
-        t |> success(contains(perop_dn_decline(m, 1l), "mix activation forms"), "a K-quant qkv beside a q8 z is named: one image feeds both")
+        t |> equal(perop_dn_decline(m, 1l), "", "a K-quant qkv beside a q8 z rides the chain: the z plane reads its own image")
         m.dngate_fmt[1] = KqFmt.k4
-        m.dnout_fmt[1] = KqFmt.q51
-        t |> success(contains(perop_dn_decline(m, 1l), "outside the chain"), "a per-32 out plane past q8 is named")
+        for (f in [KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032]) {
+            m.dnout_fmt[1] = f
+            t |> success(!contains(perop_dn_decline(m, 1l), "outside the chain"), "a {f} out plane rides the chain's per-32 GEMVs")
+        }
+        m.dnout_fmt[1] = KqFmt.mx4
+        t |> success(contains(perop_dn_decline(m, 1l), "outside the chain"), "an mx4 out plane is named (the control)")
         t |> success(contains(perop_dn_decline(m, 0l), "no deltanet planes"), "a layer without the triple is named")
+        delete m
+    }
+}
+
+[test]
+def test_perop_dense_ffn_mixed_forms(t : T?) {
+    t |> run("the per-op FFN rail takes a gate and up of two activation forms - each GEMM over its own image; an unservable plane is named") @(t : T?) {
+        var m = Model()
+        m.config.dim = 256l
+        m.config.hidden_dim = 512l
+        m.kq_repacked = true
+        m.w1_offs <- [0l]
+        m.w3_offs <- [0l]
+        m.w2_offs <- [0l]
+        m.w1_fmt <- [KqFmt.q51]
+        m.w3_fmt <- [KqFmt.k4]
+        m.w2_fmt <- [KqFmt.k6]
+        t |> equal(perop_dense_ffn_decline(m, 0l), "", "a per-32 gate beside a K-quant up rides the rail")
+        m.w1_fmt[0] = KqFmt.k4
+        t |> equal(perop_dense_ffn_decline(m, 0l), "", "one activation form rides the rail")
+        m.w3_fmt[0] = KqFmt.mx4
+        t |> success(contains(perop_dense_ffn_decline(m, 0l), "not tier-servable"), "an mx4 up plane is named (the control)")
         delete m
     }
 }
@@ -251,10 +283,13 @@ def test_resident_unserved_moe_features(t : T?) {
         t |> success(!contains(s, "router bias") && contains(s, "an expert selection bias"), "the router bias is served (the select adds it), the expert selection bias named: {s}")
         c.moe_router_bias = false
         c.moe_exp_probs = false
-        c.n_expert = 300l
+        c.n_expert = 512l
+        c.n_expert_used = 10l
+        t |> equal(resident_unserved_features(c), "", "512 experts at ten picks (Qwen3-Next, Qwen3.5-397B) are inside the select's reach: the driver admits them")
+        c.n_expert = 513l
         c.n_expert_used = 70l
         let g = resident_unserved_features(c)
-        t |> success(contains(g, "300 experts") && contains(g, "70 routed experts"), "the kernels' reach named with the counts: {g}")
+        t |> success(contains(g, "513 experts") && contains(g, "70 routed experts"), "the kernels' reach named with the counts, one expert past it the control: {g}")
         c.n_expert = 60l
         c.n_expert_used = 4l
         c.moe_exps_bias = true
@@ -297,16 +332,19 @@ def private moe_shell(fmt : KqFmt) : Model {
 }
 
 //! the Metal prefill's one-row GEMV predicate (`kq_fmt_one_row_gemv`): q8 at any width, a served superblock format at a
-//! whole-superblock width and not at a partial one, and a superblock format the Metal kernels do not serve at no width
+//! whole-superblock width and not at a partial one, a per-32 plane at whole 32-blocks, and an mx4 plane at no width
 [test]
 def test_kq_fmt_one_row_gemv(t : T?) {
-    t |> run("the last-layer narrowing admits q8 at any width and a served superblock format at whole superblocks alone") @(t : T?) {
+    t |> run("the last-layer narrowing admits q8 at any width, a served superblock format at whole superblocks and a per-32 plane at whole blocks") @(t : T?) {
         t |> success(kq_fmt_one_row_gemv(KqFmt.q8, 100l), "q8 has a one-row GEMV at any width")
         t |> success(kq_fmt_one_row_gemv(KqFmt.k4, 8192l), "a served K-quant at whole superblocks")
         t |> success(!kq_fmt_one_row_gemv(KqFmt.k4, 8191l), "... and not at a partial superblock")
-        t |> success(!kq_fmt_one_row_gemv(KqFmt.iq3s4, 8192l), "a superblock format the Metal kernels do not serve has none")
-        t |> success(!kq_fmt_one_row_gemv(KqFmt.q51, 8192l), "a per-32 format is no superblock format")
-        t |> success(!kq_fmt_one_row_gemv(KqFmt.iq4nl32, 8192l), "... nor the per-32 IQ4_NL plane")
+        t |> success(kq_fmt_one_row_gemv(KqFmt.iq3s4, 8192l), "the lut-form IQ3_S rides the iq4 family's form")
+        t |> success(!kq_fmt_one_row_gemv(KqFmt.mx4, 8192l), "an mx4 plane has none")
+        t |> success(kq_fmt_one_row_gemv(KqFmt.q51, 896l), "a per-32 Q5_1 plane has its GEMV at whole 32-blocks")
+        t |> success(kq_fmt_one_row_gemv(KqFmt.iq4nl32, 896l), "... and the per-32 IQ4_NL plane")
+        t |> success(kq_fmt_one_row_gemv(KqFmt.q4032, 896l), "... and the per-32 Q4_0 plane off the 256 lattice")
+        t |> success(!kq_fmt_one_row_gemv(KqFmt.q51, 900l), "... and not at a partial block")
         t |> success(kq_fmt_one_row_gemv(KqFmt.q40, 8192l), "Q4_0 repacks to whole superblocks, so it has the form")
     }
 }
@@ -332,9 +370,19 @@ def test_dn_metal_plane_formats(t : T?) {
         t |> success(dn_metal_ok(m), "a Q2_K beta plane has the one-row GEMV the step reads")
         t |> success(dn_ba_metal_window_ok(m), "... and the expert-form GEMV the window's rows read")
         m.dnbeta_fmt[1] = KqFmt.iq3s4
-        t |> success(!dn_ba_metal_window_ok(m), "a lut-form IQ3_S beta plane has no expert-form GEMV for the window's rows")
+        t |> success(dn_metal_ok(m) && dn_ba_metal_window_ok(m), "a lut-form IQ3_S beta plane has both forms")
+        for (f in [KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032]) {
+            m.dnbeta_fmt[1] = f
+            m.dnalpha_fmt[1] = f
+            m.dnout_fmt[1] = f
+            t |> success(dn_metal_ok(m) && dn_ba_metal_window_ok(m), "{f} beta/alpha/out planes have the per-32 GEMV and expert form")
+        }
+        m.dnalpha_fmt[1] = KqFmt.iq4xs
+        m.dnout_fmt[1] = KqFmt.iq4xs
+        m.dnbeta_fmt[1] = KqFmt.mx4
+        t |> success(!dn_ba_metal_window_ok(m), "an mx4-tagged beta plane has no expert-form GEMV for the window's rows")
         m.dnbeta_fmt[1] = KqFmt.iq4xs
-        m.dnout_fmt[1] = KqFmt.iq3s4
+        m.dnout_fmt[1] = KqFmt.mx4
         t |> success(!dn_metal_ok(m), "an out plane in a format the Metal kernels lack declines")
         m.dnout_fmt[1] = KqFmt.iq4xs
         m.config.ssm_d_inner = 200l
@@ -346,19 +394,19 @@ def test_dn_metal_plane_formats(t : T?) {
 [test]
 def test_moe_metal_expert_formats(t : T?) {
     t |> run("the Metal routed block admits exactly the expert plane formats it has kernels for; every other format declines") @(t : T?) {
-        for (f in [KqFmt.q8, KqFmt.q51, KqFmt.iq4nl32, KqFmt.k4, KqFmt.k5, KqFmt.k6, KqFmt.k3, KqFmt.k2, KqFmt.q40, KqFmt.iq4xs, KqFmt.iq4nl, KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs]) {
+        for (f in [KqFmt.q8, KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.k4, KqFmt.k5, KqFmt.k6, KqFmt.k3, KqFmt.k2, KqFmt.q40, KqFmt.iq4xs, KqFmt.iq4nl, KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs, KqFmt.iq3s4]) {
             var m <- moe_shell(f)
             t |> success(moe_metal_ok(m), "{f} expert planes are served")
             delete m
         }
-        for (f in [KqFmt.iq3s4, KqFmt.mx4]) {
-            var m <- moe_shell(f)
-            t |> success(!moe_metal_ok(m), "{f} expert plane tags decline the routed block")
-            delete m
-        }
+        var mx <- moe_shell(KqFmt.mx4)
+        t |> success(!moe_metal_ok(mx), "an mx4 expert plane tag declines the routed block (the mx4 stacks key off `experts_mx4`)")
+        delete mx
         var mixed <- moe_shell(KqFmt.k4)
+        mixed.we2_fmt[1] = KqFmt.mx4
+        t |> success(!moe_metal_ok(mixed), "one mx4-tagged down plane declines a q4_K model")
         mixed.we2_fmt[1] = KqFmt.iq3s4
-        t |> success(!moe_metal_ok(mixed), "one lut-form IQ3_S down plane declines a q4_K model")
+        t |> success(moe_metal_ok(mixed), "a lut-form IQ3_S down plane beside q4_K stacks is served")
         delete mixed
     }
     t |> run("the native-MXFP4 stacks serve under the plain routed gate as under gpt-oss's; only the repacked planes decline") @(t : T?) {
@@ -383,7 +431,7 @@ def test_moe_metal_expert_formats(t : T?) {
         m.we2_fmt |> push(KqFmt.k4)
         m.we3_fmt |> push(KqFmt.k4)
         t |> success(moe_metal_ok(m), "a head stack in a served format is admitted")
-        m.we2_fmt[2] = KqFmt.iq3s4
+        m.we2_fmt[2] = KqFmt.mx4
         t |> success(!moe_metal_ok(m), "a head down stack the routed kernels lack declines the routed block")
         delete m
     }
@@ -400,7 +448,7 @@ def test_moe_metal_expert_formats(t : T?) {
     t |> run("the kernel roster and the site-alignment gate name ONE format set - every KqFmt reads the same on both") @(t : T?) {
         // No format the site gate admits is refused by the roster: the two lists are identical,
         // so a roster that answered true for everything is caught only by walking the WHOLE enum -
-        // iq3s4 and mx4 are the members that must read false on both. A format added to one
+        // mx4 is the member that must read false on both. A format added to one
         // list and not the other reds here.
         for (f in type<KqFmt>) {
             t |> equal(moe_fmt_metal_served(f), moe_site_ok(f, 0l, 512l), "{f}: the roster and the site gate agree")
@@ -857,12 +905,13 @@ def test_resident_arm_floor(t : T?) {
 
 [test]
 def test_routed_slots_fit(t : T?) {
-    t |> run("the routed planes' slot cap: every row's picks fit the 64 slots or the N-row command declines the model") @(t : T?) {
+    t |> run("the routed planes' slot cap: every row's picks fit the 128 slots or the N-row command declines the model") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            t |> success(rd_routed_slots_fit(8l, 8l), "eight rows of eight picks fill the slots")
-            t |> success(!rd_routed_slots_fit(8l, 9l), "eight rows of nine picks pass them")
-            t |> success(rd_routed_slots_fit(2l, 32l), "two rows of thirty-two picks fit")
-            t |> success(!rd_routed_slots_fit(3l, 32l), "three rows of thirty-two pass them")
+            t |> success(rd_routed_slots_fit(16l, 8l), "sixteen rows of eight picks fill the slots")
+            t |> success(!rd_routed_slots_fit(16l, 9l), "sixteen rows of nine picks pass them")
+            t |> success(rd_routed_slots_fit(12l, 10l), "twelve rows of ten picks fit (the 512-expert trunk's twelve-row step)")
+            t |> success(rd_routed_slots_fit(4l, 32l), "four rows of thirty-two picks fit")
+            t |> success(!rd_routed_slots_fit(5l, 32l), "five rows of thirty-two pass them")
         } else {
             t |> skip("dasVulkan not present")
         }

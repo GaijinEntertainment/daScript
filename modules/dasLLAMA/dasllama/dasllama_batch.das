@@ -413,7 +413,7 @@ def eval_batch_(t : Model; var ws : BatchWorkspace; var sessions : array<Session
             // tied weights (fp32/q4_0 loads): the classifier IS the fp32 embedding table
             mm_fblob_b(ws.logits_b, t, t.tok_emb_off, ws.scr.xb_b, dim, vocab, nrows)
         } elif (cls_fmt != KqFmt.q8) {
-            mm_b_kq(ws.scr, ws.logits_b, t, cls_fmt, t.wcls_off, ws.scr.xb_b, dim, vocab, nrows)
+            mm_b_f(ws.scr, ws.logits_b, t, cls_fmt, t.wcls_off, ws.scr.xb_b, dim, vocab, nrows)
         } else {
             mm_b(ws.logits_b, t, t.wcls_off, ws.scr.xb_b, ws.scr.xqb, ws.scr.xsb, dim, vocab, nrows)
         }

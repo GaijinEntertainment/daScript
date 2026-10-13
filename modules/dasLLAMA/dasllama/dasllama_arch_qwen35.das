@@ -340,13 +340,23 @@ def private deltanet_decode_gpu(t : Model; var s : Session; l : int64) {
     }
     let fq = fmt_at(t.dnqkv_fmt, l)
     let kq_x = kq_sb(fq)
-    if (kq_x) {   // one image in the qkv/z planes' class serves both GEMVs: Q8_K for a superblock format
+    //! the qkv plane's image - Q8_K for a superblock format, else Q8_0 - and, where the z plane takes the other class, both
+    let two = kq_x != kq_sb(fmt_at(t.dngate_fmt, l))
+    if (kq_x || two) {
         s.kxqb |> resize(dim)
         s.kxsb |> resize(dim / 256l)
         s.kxbsb |> resize(dim / 16l)
         requant_rows_q8k_bs(s.xb, dim, 1l, s.kxqb, s.kxsb, s.kxbsb)
-    } else {
+    }
+    if (!kq_x || two) {
         quantize_q8_0_into(s.xb, dim, s.xq, s.xs, 0l, 0l)
+    }
+    if (two) {
+        if (kq_x) {
+            set_moe_gpu_image2(s.xq, s.xs)
+        } else {
+            set_moe_gpu_image2(s.kxqb, s.kxsb)
+        }
     }
     prof_add("mm_qkv", ts_qkv)
     let ts_gpu = prof_ticks()
@@ -363,6 +373,7 @@ def private deltanet_decode_gpu(t : Model; var s : Session; l : int64) {
             addr < float const? >(s.dn_conv_state[s.dn_conv_prefix[l]]),
             1l, dim, cd, kd, di, nvh, nkh, ds, dconv, c.norm_eps)
     }
+    clear_moe_gpu_image2()
     prof_add("dn_gpu", ts_gpu)
     let ts_resid = prof_ticks()
     block_resid(t, s, s.xb2)
@@ -874,13 +885,23 @@ def private deltanet_prefill_gpu(t : Model; var s : Session; l : int64; npos : i
     dn_beta_alpha_proj(t, s, l, npos)   // raw beta/alpha rows - the transforms run in-kernel
     let fq = fmt_at(t.dnqkv_fmt, l)
     let kq_x = kq_sb(fq)
-    if (kq_x) {   // one image in the qkv/z planes' class serves both GEMMs: Q8_K for a superblock format
+    //! the qkv plane's image - Q8_K for a superblock format, else Q8_0 - and, where the z plane takes the other class, both
+    let two = kq_x != kq_sb(fmt_at(t.dngate_fmt, l))
+    if (kq_x || two) {
         s.kxqb |> resize(npos * dim)
         s.kxsb |> resize(npos * dim / 256l)
         s.kxbsb |> resize(npos * dim / 16l)
         requant_rows_q8k_bs(s.xb_b, dim, npos, s.kxqb, s.kxsb, s.kxbsb)
-    } else {
+    }
+    if (!kq_x || two) {
         requant_rows_q8(s.xb_b, dim, npos, s.xqb, s.xsb)
+    }
+    if (two) {
+        if (kq_x) {
+            set_moe_gpu_image2(s.xqb, s.xsb)
+        } else {
+            set_moe_gpu_image2(s.kxqb, s.kxsb)
+        }
     }
     prof_add("dn_mm_in", ts_in)
     let ts_gpu = prof_ticks()
@@ -897,6 +918,7 @@ def private deltanet_prefill_gpu(t : Model; var s : Session; l : int64; npos : i
             addr<float const?>(s.dn_conv_state[s.dn_conv_prefix[l]]),
             npos, dim, cd, kd, di, nvh, nkh, ds, dconv, c.norm_eps)
     }
+    clear_moe_gpu_image2()
     prof_add("dn_gpu", ts_gpu)
     let ts_resid = prof_ticks()
     unsafe {   // conv-history advance from the tail rows (channel-major — the decode layout)

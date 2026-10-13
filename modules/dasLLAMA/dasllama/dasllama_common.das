@@ -792,7 +792,20 @@ var private g_layout_gather_kq : GatherStackKqFn
 var private g_layout_gather_q51 : GatherStackB32Fn
 var private g_layout_gather_iq4nl32 : GatherStackB32Fn
 var private g_layout_gather_mx4 : GatherStackB32Fn
+var private g_layout_gather_q4032 : GatherStackB32Fn
+var private g_layout_repack_q4032 : ModelRepackFn
 var private g_layout_hooks_set = false
+
+//! the q4032 planes' repack and gather: iq4nl32's pair over the q4032 planes
+def register_model_layout_q4032(rq : ModelRepackFn; gs : GatherStackB32Fn) {
+    g_layout_repack_q4032 = rq
+    g_layout_gather_q4032 = gs
+}
+
+def layout_repack_q4032(var t : Model) {
+    layout_hooks_check()
+    invoke(g_layout_repack_q4032, t)
+}
 
 def register_model_layout(rq8, rkq, rmx4, rq51, riq4nl32 : ModelRepackFn; gs : GatherStackFn; gskq : GatherStackKqFn; gsq51, gsiq4nl32, gsmx4 : GatherStackB32Fn) {
     g_layout_repack_q8 = rq8
@@ -820,6 +833,10 @@ def layout_gather_dispatch(src : Model; f : KqFmt; woff, n, rows, slice_rows, mr
     } elif (f == KqFmt.iq4nl32) {
         let qmr = active_iq4nl32_layout_mr()   // the iq4nl32 expert stacks sit in the active backend's grp<mr> layout, disk order at mr 1
         layout_gather_stack_iq4nl32(src, woff, n, rows, srows, qmr > 1l, qmr, wq, ws)
+    } elif (f == KqFmt.q4032) {
+        layout_hooks_check()
+        let qmr = active_q4032_layout_mr()   // the q4032 stacks sit in the active backend's grp<mr> layout, disk order at mr 1
+        invoke(g_layout_gather_q4032, src, woff, n, rows, srows, qmr > 1l, qmr, wq, ws)
     } elif (f == KqFmt.mx4) {
         // the mx4 stacks ride the Q8 layout's grp<mr> interleave when the CPU repacked them (repack_mx4_stacks under the q8q8 perm), disk order otherwise
         layout_gather_stack_mx4(src, woff, n, rows, srows, src.mx4_repacked, active_q8_layout_mr(), wq, ws)
@@ -1231,6 +1248,9 @@ struct Model {
     // the iq4nl32 tier's plane pair, per 32-BLOCK: 16B nibbles / 2B f16 d
     iq4nl32q : array<uint8>
     iq4nl32s : array<uint8>
+    // the q4032 tier's plane pair, per 32-BLOCK: 16B nibbles / 2B f16 d (iq4nl32's form, the Q4_0 code)
+    q4032q : array<uint8>
+    q4032s : array<uint8>
     kquant_native : bool = false
     // kq stage 4: the kq planes were repacked at load into the active backend's grp<mr> layout.
     // From then on every kq matmul MUST run the backend slots — disk-order portable kernels would
@@ -1534,6 +1554,7 @@ def model_weights_bytes(t : Model) : int64 {
         + kqb.q + kqb.s
         + long_length(t.q51q) + long_length(t.q51s)
         + long_length(t.iq4nl32q) + long_length(t.iq4nl32s)
+        + long_length(t.q4032q) + long_length(t.q4032s)
         + long_length(t.mblob) + long_length(t.vkblob)
         + long_length(t.embq) + long_length(t.embs))
 }
@@ -1683,6 +1704,24 @@ def shexp_plane(t : Model; l : int64; kind : int) : tuple<f : KqFmt; off : int64
     }
     return (f = fmt_at(t.wsh2_fmt, l), off = t.wshk2_offs[l]) if (l < long_length(t.wshk2_offs) && t.wshk2_offs[l] >= 0l)
     return (f = KqFmt.q8, off = t.wsh2_off + l * she)
+}
+
+//! layer l's shared expert keeps a plane in the file's format: the CPU chain reads its own planes, never the q8 transcode
+def shexp_tagged(t : Model; l : int64) : bool => shexp_plane(t, l, 1).f != KqFmt.q8 || shexp_plane(t, l, 3).f != KqFmt.q8 || shexp_plane(t, l, 2).f != KqFmt.q8
+
+//! a shared-expert plane of some routed layer keeps a q8 tag, so it reads the q8 transcode (the dense lead carries no triple)
+def shexp_plane_q8(t : Model; l : int64; kind : int) : bool {
+    let a = kind == 1 ? fmt_at(t.wsh1_fmt, l) : (kind == 3 ? fmt_at(t.wsh3_fmt, l) : fmt_at(t.wsh2_fmt, l))
+    return l >= t.config.n_layer_dense_lead && a == KqFmt.q8
+}
+
+//! the layout allots the shared expert's q8 transcode only where some plane reads it
+def shexp_reads_transcode(t : Model) : bool {
+    let c = t.config
+    for (l in range64(c.n_layer_dense_lead, c.n_layers + c.n_layer_nextn)) {
+        return true if (shexp_plane_q8(t, l, 1) || shexp_plane_q8(t, l, 2) || shexp_plane_q8(t, l, 3))
+    }
+    return false
 }
 
 // Exact reserve then size — no pow2 slack, and the reserved resize never trips max_unreserved_size.
@@ -2055,11 +2094,36 @@ def public set_kq_q51_native(on : bool) {
 }
 def public get_kq_q51_native() : bool => g_kq_q51_native
 
+var private g_iq3s_serve_pin = ""   //! a process pin over DASLLAMA_IQ3S_SERVE for later loads; "" reads the knob
+
+//! Pin the IQ3_S served form later loads take - "lut", "grid", "auto", or "" to read DASLLAMA_IQ3S_SERVE again - a cell's lane pin
+//! (put back through `get_iq3s_serve_pin`)
+def public set_iq3s_serve_pin(mode : string) {
+    g_iq3s_serve_pin = mode
+}
+
+def public get_iq3s_serve_pin() : string => g_iq3s_serve_pin
+
+//! The IQ3_S serve mode a load reads: the pin, else DASLLAMA_IQ3S_SERVE
+def public iq3s_serve_mode() : string => empty(g_iq3s_serve_pin) ? g_env_engine.iq3s_serve : g_iq3s_serve_pin
+
+var private g_metal_devw_panels = false
+
+//! A/B seat: the Metal prefill's dev-W f16 panels - a converted copy of a dense Q8_0 or K-quant site's plane - against the
+//! site's own-bytes forms. A metal image bakes the panels only under it, and its lane folds it. Default off.
+[arch(at="../ARCHITECTURE_GPU_PREFILL.md#devw-panel-knees")]
+def public set_metal_devw_panels(v : bool) {
+    g_metal_devw_panels = v
+    to_log(LOG_WARNING, "dasLLAMA: set_metal_devw_panels({v}) - the dense Q8_0 and K-quant prefill sites {v ? "read an f16 converted copy of their planes" : "read their own bytes"}\n")
+}
+
+def public metal_devw_panels() : bool => g_metal_devw_panels
+
 //! Whether an IQ3_S weight loads as the iq3s4 served form (DASLLAMA_IQ3S_SERVE): `lut` / `grid` decide
-//! outright; `auto` = the LUT form wherever the rails that serve the load decode it - the CPU rails and the
-//! Vulkan tier do, the Metal tier gathers the grid and carries no iq3s4 kernel
+//! outright, every home serving both forms at every site; `auto` = each home's form - the LUT form on the CPU
+//! rails and the Vulkan tier, the disk grid under the Metal tier
 def public iq3s_serve_lut() : bool {
-    let mode = g_env_engine.iq3s_serve
+    let mode = iq3s_serve_mode()
     if (mode == "lut") {
         return true
     }
@@ -2142,6 +2206,7 @@ def private dlim_cpu_source_impl(var c : DlimCpuConfig) {
     }
     c.q51_mr = active_q51_layout_mr()
     c.iq4nl32_mr = active_iq4nl32_layout_mr()
+    c.q4032_mr = active_q4032_layout_mr()
     // OUTCOME, not request: a backend without s16 twins keeps f32 scale planes (wscale_convert_f16)
     c.wscale_f16 = g_wscale_f16 && kernel_backend_has_wscale16()
     c.kquant_native = g_kquant_native
@@ -2177,21 +2242,17 @@ def kq_planes_of(t : Model; fmt : KqFmt; var kq : array<uint8> const?&; var ks :
     }
 }
 
-// Dense-position demotion: q40/iq4nl/k5-from-Q5_0 need % 256 rows (superblock walkers over
-// 32-block disk formats); q51 always demotes — dense positions have no q51 dispatch (v1 is expert stacks — kq_fmt_expert_ok).
+// A weight plane's tag rule: q51 serves off its per-32 planes, and an IQ4_NL plane off the superblock lattice takes the
+// per-32 iq4nl32 planes (Qwen2.5-0.5B's 896-wide rows, Qwen3.8-Flash-Next's 640-wide down stacks); q40 and k5-from-Q5_0
+// keep the % 256 rule (superblock walkers over 32-block disk formats). The dense layer planes and the expert stacks share it.
 def kq_fmt_row_ok(f : KqFmt; n : int64) : KqFmt {
-    if (f == KqFmt.q51) return KqFmt.q8
-    return (f == KqFmt.q40 || f == KqFmt.iq4nl || f == KqFmt.k5) && n % 256l != 0l ? KqFmt.q8 : f
-}
-
-// Expert-stack tag rule: q51 serves natively off per-32 planes (its whole reason to exist — the
-// 26B-A4B down stacks are 704-wide), and an IQ4_NL stack off the superblock lattice takes the
-// per-32 iq4nl32 planes (Qwen3.8-Flash-Next's 640-wide down stacks); the superblock formats keep the % 256 rule.
-def kq_fmt_expert_ok(f : KqFmt; n : int64) : KqFmt {
     if (f == KqFmt.q51) return n % 32l == 0l ? f : KqFmt.q8
     if (f == KqFmt.iq4nl && n % 256l != 0l) return n % 32l == 0l ? KqFmt.iq4nl32 : KqFmt.q8
-    return kq_fmt_row_ok(f, n)
+    if (f == KqFmt.q40 && n % 256l != 0l) return n % 32l == 0l ? KqFmt.q4032 : KqFmt.q8
+    return f == KqFmt.k5 && n % 256l != 0l ? KqFmt.q8 : f
 }
+
+def kq_fmt_expert_ok(f : KqFmt; n : int64) : KqFmt => kq_fmt_row_ok(f, n)
 
 // Any K-quant-tagged expert stack in layer `l`? (The MoE dispatch and prefill gates branch on this.)
 def moe_layer_kq(t : Model; l : int64) : bool =>
@@ -2318,8 +2379,8 @@ def footprint(t : Model) : MemFootprint {
     let mx4 = long_length(t.mxq)                  // uint8 (two nibbles) -> 1 byte each
     let mx4s = long_length(t.mxs)                 // raw E8M0 -> 1 byte per 32-block
     let kqb = kq_plane_bytes(t)
-    let kq = kqb.q + long_length(t.q51q) + long_length(t.iq4nl32q)
-    let kqs = kqb.s + long_length(t.q51s) + long_length(t.iq4nl32s)
+    let kq = kqb.q + long_length(t.q51q) + long_length(t.iq4nl32q) + long_length(t.q4032q)
+    let kqs = kqb.s + long_length(t.q51s) + long_length(t.iq4nl32s) + long_length(t.q4032s)
     return MemFootprint(aux_fp32_bytes = aux, weight_fp32_bytes = wf, q8_bytes = q8, q8_scale_bytes = q8s,
                         q4_bytes = q4, q4_scale_bytes = q4s, mx4_bytes = mx4, mx4_scale_bytes = mx4s,
                         kq_bytes = kq, kq_scale_bytes = kqs,
@@ -2419,6 +2480,28 @@ def finalize(var o : DnOwner) {
     moe_gpu_dn_release(o.state_lo, o.state_hi)
 }
 
+var private g_session_release_listeners : array<function<(uid : uint64) : void>>
+
+//! Subscribe to a session's release: `delete` of the Session - the facade's and the scheduler's stream release alike.
+def public register_session_release_listener(f : function<(uid : uint64) : void>) {
+    g_session_release_listeners |> push(f)
+}
+
+//! A Session's uid as the device mirrors key it; the finalizer tells every listener the session is gone.
+struct SessionOwner {
+    uid : uint64
+}
+
+[arch(at="../ARCHITECTURE_GPU_MTP.md#dn-mirror-pool")]
+def finalize(var o : SessionOwner) {
+    if (o.uid != 0ul) {
+        for (f in g_session_release_listeners) {
+            invoke(f, o.uid)
+        }
+        o.uid = 0ul
+    }
+}
+
 //! A session's forward-only state at one position: the recurrent layers' conv history and S, and
 //! the n-gram side input's ring and window. With the K/V rows below `pos` it continues a prompt.
 struct DnSnapshot {
@@ -2436,6 +2519,7 @@ struct Session {
     // context, assigned once in make_run_state. Address keying is unsound — schedulers churn
     // same-geometry sessions (ABA) and Stream erase memmoves Sessions. 0 = never assigned.
     uid : uint64
+    owner : SessionOwner      //! `uid` again: its finalizer, first of the fields, releases what the drivers key on it
     n_past : int64            // absolute position of the next token to eval (0 at session start); advanced by eval()
     // batched-prefill mask override: 0 = causal; > 0 = queries at [attn_uniform_lo, attn_uniform_end)
     // attend [the sliding-window floor, attn_uniform_end) — the non-causal image span (gemma vision);
@@ -2778,6 +2862,7 @@ def make_run_state(c : Config; kdt : KVDtype = KVDtype.f32; vdt : KVDtype = KVDt
     var s : Session
     g_session_uid++
     s.uid = g_session_uid
+    s.owner.uid = g_session_uid
     // qd = n_heads * head_size, the query/attention-output width. == dim for the llama family, but
     // Gemma2 has qd (2048) != dim (2304), so q and xb size to max(dim, qd). Heterogeneous arches
     // (gemma4) size to the larger layer class; the KV cache packs each layer's own kv_dim.
@@ -4248,10 +4333,12 @@ def mm_qkv(var s : Session; t : Model; l : int64) {
         }
     } elif (fq != KqFmt.q8 || fk != KqFmt.q8 || fv != KqFmt.q8) {
         // K-quant projections (formats can MIX per layer, e.g. Q4_K_M keeps attn_v at Q6_K)
-        if (fq == KqFmt.q8 || fk == KqFmt.q8 || fv == KqFmt.q8) {
+        if (!fmt_reads_q8k(fq) || !fmt_reads_q8k(fk) || !fmt_reads_q8k(fv)) {
             quantize_q8_0_into(s.xb, dim, s.xq, s.xs, 0l, 0l)
         }
-        quantize_q8_k_into(s.xb, dim, s.kxq, s.kxs, s.kxbs, 0l, 0l, 0l)   // kq v2: every kq format
+        if (fmt_reads_q8k(fq) || fmt_reads_q8k(fk) || fmt_reads_q8k(fv)) {
+            quantize_q8_k_into(s.xb, dim, s.kxq, s.kxs, s.kxbs, 0l, 0l, 0l)   // kq v2: every kq format
+        }
         mm_pre_f(s.q, t, fq, qoff, s.xq, s.xs, s.kxq, s.kxs, s.kxbs, dim, qd)
         mm_pre_f(s.k, t, fk, koff, s.xq, s.xs, s.kxq, s.kxs, s.kxbs, dim, kv)
         mm_pre_f(s.v, t, fv, voff, s.xq, s.xs, s.kxq, s.kxs, s.kxbs, dim, kv)
@@ -4343,6 +4430,22 @@ def mm_b_iq4nl32_pre(var y : array<float>; t : Model; woff : int64; xqb : array<
 
 def mm_b_iq4nl32_groupn(var y : array<float>; t : Model; offs : array<int64>; nregions : int64; xq : array<int8>; xs : array<float>; n, d : int64) {
     matmul_iq4nl32q8_batch_groupn(y, t.iq4nl32q, t.iq4nl32s, offs, nregions, xq, xs, n, d)
+}
+
+// ===== native q4032 dispatch (Q8_0-form activations, iq4nl32's shapes over the per-32 Q4_0 planes) =====
+
+def mm_at_q4032_groupn(var y : array<float>; t : Model; offs : array<int64>; nregions : int64; xq : array<int8>; xs : array<float>; n, d : int64) {
+    matmul_q4032q8_groupn(y, t.q4032q, t.q4032s, offs, nregions, xq, xs, n, d)
+}
+
+def mm_b_q4032_pre(var y : array<float>; t : Model; woff : int64; xqb : array<int8>; xsb : array<float>; n, d, npos : int64) {
+    let ts_gemm = prof_ticks()
+    matmul_q4032q8_batch(y, t.q4032q, t.q4032s, woff, xqb, xsb, n, d, npos)
+    prof_add("mm_gemm", ts_gemm)
+}
+
+def mm_b_q4032_groupn(var y : array<float>; t : Model; offs : array<int64>; nregions : int64; xq : array<int8>; xs : array<float>; n, d : int64) {
+    matmul_q4032q8_batch_groupn(y, t.q4032q, t.q4032s, offs, nregions, xq, xs, n, d)
 }
 
 // ===== native K-quant dispatch (kquant_native; fmt != q8 tags) =====
@@ -4460,30 +4563,91 @@ def moe_pair_kform(f1, f3 : KqFmt) : bool {
     return k1
 }
 
-// Format router: q8-tagged weights take the classic mm; kq tags take the plane GEMV.
+//! a dense plane in a per-32 format the CPU serves off its own planes: Q5_1 and the per-32 IQ4_NL (the expert kernels' forms)
+def kq_dense_b32(fmt : KqFmt) : bool => fmt == KqFmt.q51 || fmt == KqFmt.iq4nl32 || fmt == KqFmt.q4032
+
+//! the grp<mr> interleave a per-32 plane pair sits in: the active layout the load's repack laid (`layout_repack_q51` and its
+//! twin, `mr > 1` alone), disk order on a Metal blob, which no CPU repack touches
+def b32_active_mr(t : Model; fmt : KqFmt) : int64 {
+    return 1l if (t.metal_blob)
+    return fmt == KqFmt.q51 ? active_q51_layout_mr() : (fmt == KqFmt.iq4nl32 ? active_iq4nl32_layout_mr() : active_q4032_layout_mr())
+}
+
+//! the per-32 token table's grp<mr>, read on the calling thread: the active layout is a module global, which a job lane's
+//! context holds at its own value, so a parallel embed reads it once outside the lanes (1 where the table is not per-32)
+def embed_b32_mr(t : Model) : int64 => emb_kq(t) && kq_dense_b32(t.emb_fmt) ? b32_active_mr(t, t.emb_fmt) : 1l
+
+//! row `token` of a per-32 token table at interleave `mr`, dequantized into dst: the table's plane pair (the trimmed lane's
+//! packed region, rebased to 0)
+def private embed_b32_row(t : Model; fmt : KqFmt; token : int64; var dst : float?; mr : int64) {
+    let dim = t.config.dim
+    var qbuf : uint8[20]   //! one block's bytes off a grp row: the widest per-32 block, q51's nibbles and qh word
+    var sbuf : uint8[4]    //! ... and its d | m halves
+    unsafe {
+        var row <- temp_array(dst, dim, type<float>)
+        var tq <- temp_array(addr(qbuf[0]), int(kq_qsb(fmt)), type<uint8>)
+        var ts <- temp_array(addr(sbuf[0]), int(kq_ssb(fmt)), type<uint8>)
+        let blk0 = t.planes_trimmed ? 0l : emb_kq_plane_off(t) / KQ_B32_ELEMS
+        if (t.planes_trimmed) {
+            b32_plane_row_f32(fmt, t.embq, t.embs, dim, t.config.vocab_size, mr, token, row, 0l, blk0, tq, ts)
+        } elif (fmt == KqFmt.q51) {
+            b32_plane_row_f32(fmt, t.q51q, t.q51s, dim, t.config.vocab_size, mr, token, row, 0l, blk0, tq, ts)
+        } elif (fmt == KqFmt.iq4nl32) {
+            b32_plane_row_f32(fmt, t.iq4nl32q, t.iq4nl32s, dim, t.config.vocab_size, mr, token, row, 0l, blk0, tq, ts)
+        } else {
+            b32_plane_row_f32(fmt, t.q4032q, t.q4032s, dim, t.config.vocab_size, mr, token, row, 0l, blk0, tq, ts)
+        }
+    }
+}
+
+//! `npos` Q8_0-form activation rows against a per-32 dense plane at `woff`: the expert kernels' batch form, one region
+def private mm_b32_pre(var y : array<float>; t : Model; fmt : KqFmt; woff : int64; xq : array<int8>; xs : array<float>; n, d, npos : int64) {
+    if (fmt == KqFmt.q51) {
+        mm_b_q51_pre(y, t, woff, xq, xs, n, d, npos)
+    } elif (fmt == KqFmt.iq4nl32) {
+        mm_b_iq4nl32_pre(y, t, woff, xq, xs, n, d, npos)
+    } else {
+        mm_b_q4032_pre(y, t, woff, xq, xs, n, d, npos)
+    }
+}
+
+// Format router: q8-tagged weights take the classic mm; kq tags take the plane GEMV; a per-32 plane
+// quantizes x to Q8_0 and takes its own format's kernel.
 def mm_f(var y : array<float>; t : Model; fmt : KqFmt; woff : int64; x : array<float>; var xq : array<int8>; var xs : array<float>; var xbs : array<int>; n, d : int64) {
     if (fmt == KqFmt.q8) {
         mm(y, t, woff, x, xq, xs, n, d)
+    } elif (kq_dense_b32(fmt)) {
+        quantize_q8_0_into(x, n, xq, xs, 0l, 0l)
+        mm_b32_pre(y, t, fmt, woff, xq, xs, n, d, 1l)
     } else {
         mm_kq(y, t, fmt, woff, x, xq, xs, xbs, n, d)
     }
 }
 
-// Pre-quantized format router: q8-tagged weights consume the Q8_0-form scratch (xq/xs);
-// kq-tagged weights the Q8_K-form scratch (kxq/kxs/kxbs — kq v2, all three formats).
+// Pre-quantized format router: q8-tagged and per-32 weights consume the Q8_0-form scratch (xq/xs);
+// kq-tagged weights the Q8_K-form scratch (kxq/kxs/kxbs — kq v2). A caller fills each form a plane
+// it dispatches reads (`fmt_reads_q8k`).
 def mm_pre_f(var y : array<float>; t : Model; fmt : KqFmt; woff : int64; xq : array<int8>; xs : array<float>; kxq : array<int8>; kxs : array<float>; kxbs : array<int>; n, d : int64) {
     if (fmt == KqFmt.q8) {
         mm_at_q8_pre(y, t, woff, xq, xs, n, d)
+    } elif (kq_dense_b32(fmt)) {
+        mm_b32_pre(y, t, fmt, woff, xq, xs, n, d, 1l)
     } else {
         mm_at_kq_pre(y, t, fmt, woff, kxq, kxs, kxbs, n, d)
     }
 }
 
+//! the plane reads the Q8_K-form activation (a superblock format), else the Q8_0 form (q8 and the per-32 formats)
+def fmt_reads_q8k(fmt : KqFmt) : bool => kq_sb(fmt)
+
 // Batched format router: q8 weights ride the batch tile; kq weights take the native kq tile
-// (repacked loads) or the serial-per-position fallback (see mm_b_kq).
+// (repacked loads) or the serial-per-position fallback (see mm_b_kq); a per-32 plane its own batch kernel.
 def mm_b_f(var s : Session; var y : array<float>; t : Model; fmt : KqFmt; woff : int64; x : array<float>; n, d, npos : int64) {
     if (fmt == KqFmt.q8) {
         mm_b(y, t, woff, x, s.xqb, s.xsb, n, d, npos)
+    } elif (kq_dense_b32(fmt)) {
+        requant_rows_q8(x, n, npos, s.xqb, s.xsb)
+        mm_b32_pre(y, t, fmt, woff, s.xqb, s.xsb, n, d, npos)
     } else {
         mm_b_kq(s, y, t, fmt, woff, x, n, d, npos)
     }
@@ -4502,6 +4666,8 @@ def mm_at_f_groupn(var y : array<float>; t : Model; fmt : KqFmt; offs, boffs : a
         mm_at_q51_groupn(y, t, offs, nregions, xq, xs, n, d)
     } elif (fmt == KqFmt.iq4nl32) {
         mm_at_iq4nl32_groupn(y, t, offs, nregions, xq, xs, n, d)
+    } elif (fmt == KqFmt.q4032) {
+        mm_at_q4032_groupn(y, t, offs, nregions, xq, xs, n, d)
     } elif (t.experts_mx4) {
         if (biased) {
             mm_at_mx4_groupn(y, t, offs, boffs, nregions, xq, xs, n, d)
@@ -4526,6 +4692,8 @@ def mm_b_f_groupn(var y : array<float>; t : Model; fmt : KqFmt; offs, boffs : ar
         mm_b_q51_groupn(y, t, offs, nregions, xq, xs, n, d)
     } elif (fmt == KqFmt.iq4nl32) {
         mm_b_iq4nl32_groupn(y, t, offs, nregions, xq, xs, n, d)
+    } elif (fmt == KqFmt.q4032) {
+        mm_b_q4032_groupn(y, t, offs, nregions, xq, xs, n, d)
     } elif (t.experts_mx4) {
         if (biased) {
             matmul_mx4q8_batch_groupn(y, t.mxq, t.mxs, offs, nregions, xq, xs, t.fblob, boffs, n, d)
@@ -4547,6 +4715,8 @@ def mm_b_f_pre(var y : array<float>; t : Model; fmt : KqFmt; woff : int64; xq : 
         mm_b_q51_pre(y, t, woff, xq, xs, n, d, npos)
     } elif (fmt == KqFmt.iq4nl32) {
         mm_b_iq4nl32_pre(y, t, woff, xq, xs, n, d, npos)
+    } elif (fmt == KqFmt.q4032) {
+        mm_b_q4032_pre(y, t, woff, xq, xs, n, d, npos)
     } elif (t.experts_mx4) {
         if (!g_active_mx4_native_batch) {
             panic("mm_b_f_pre: the active backend has no native mx4 batch kernel - expand the region to Q8 at the site")
@@ -4857,6 +5027,11 @@ def private dequant_embq_row(t : Model; off, n : int64; var dst : float?) {
 // linear Q8 copy at emb_q8_off (embq when trimmed), or (emb_kq) from the table's K-quant plane at
 // emb_kq_plane_off (embq/embs when trimmed). Rows are whole superblocks (the K-quant row invariant).
 def embed_row(t : Model; token : int64; var dst : float?) {
+    embed_row(t, token, dst, embed_b32_mr(t))
+}
+
+//! `embed_row` with a per-32 table's interleave read by the caller (`embed_b32_mr`): the form a job lane calls
+def embed_row(t : Model; token : int64; var dst : float?; b32mr : int64) {
     let dim = t.config.dim
     if (t.emb_q8) {
         if (t.planes_trimmed) {
@@ -4864,6 +5039,8 @@ def embed_row(t : Model; token : int64; var dst : float?) {
         } else {
             dequant_q8_row(t, t.emb_q8_off + token * dim, dim, dst)
         }
+    } elif (emb_kq(t) && kq_dense_b32(t.emb_fmt)) {
+        embed_b32_row(t, t.emb_fmt, token, dst, b32mr)
     } elif (emb_kq(t)) {
         // trimmed: embq/embs hold the region's pair verbatim, rebased to 0; else the pair sits at its plane offset, split-scale when metal_blob
         let fmt = t.emb_fmt
@@ -4891,18 +5068,18 @@ def private mm_cls(var y : array<float>; t : Model; x : array<float>; var xq : a
         panic("dasLLAMA: planes_trimmed image - the classifier must serve on the GPU (rebake without trim, or arm the tier as the image's config says)")
     }
     if (moe_gpu_cls_on_gpu(t.wcls_off)) {
-        if (cls_fmt == KqFmt.q8) {
-            quantize_q8_0_into(x, n, xq, xs, 0l, 0l)
-        } else {
+        if (fmt_reads_q8k(cls_fmt)) {
             quantize_q8_k_into(x, n, xq, xs, xbs, 0l, 0l, 0l)
+        } else {
+            quantize_q8_0_into(x, n, xq, xs, 0l, 0l)
         }
         matmul_moe_gpu_cls(y, t.wcls_off, xq, xs, n, d, int(cls_fmt))
     } elif (tied_f32) {
         // tied weights (fp32/q4_0 loads): the classifier IS the fp32 embedding table
         mm_fblob(y, t, t.tok_emb_off, x, n, d)
     } elif (cls_fmt != KqFmt.q8) {
-        // K-quant classifier (tied plane copy or untied kq output.weight)
-        mm_kq(y, t, cls_fmt, t.wcls_off, x, xq, xs, xbs, n, d)
+        // a K-quant or per-32 classifier (the tied table's plane or the untied output plane), off its own planes
+        mm_f(y, t, cls_fmt, t.wcls_off, x, xq, xs, xbs, n, d)
     } else {
         // untied — or the tied classifier's Q8 transcode (the exact quants the reference matmuls)
         mm(y, t, t.wcls_off, x, xq, xs, n, d)
@@ -5296,11 +5473,7 @@ def private forward_mtp_cpu(t : Model; var s : Session; token, pos : int64; want
         rms_at(s.xb, t, t.mtp_hnorm_off, s.mtp_h, dim)
         copy_floats(s.xb, 0l, s.mtp_cat, dim, dim)
         // eh_proj: 2*dim -> dim into the residual stream (xq/xs cover 2*dim — sized max(xdim, ffw))
-        if (t.mtp_ehproj_fmt != KqFmt.q8) {
-            mm_kq(s.x, t, t.mtp_ehproj_fmt, t.mtp_ehproj_off, s.mtp_cat, s.xq, s.xs, s.xbs, 2l * dim, dim)
-        } else {
-            mm(s.x, t, t.mtp_ehproj_off, s.mtp_cat, s.xq, s.xs, 2l * dim, dim)
-        }
+        mm_f(s.x, t, t.mtp_ehproj_fmt, t.mtp_ehproj_off, s.mtp_cat, s.xq, s.xs, s.xbs, 2l * dim, dim)
     }
     // this row's RoPE table (partial rotary span, like forward)
     if (g_use_rope_table) {
@@ -6360,11 +6533,12 @@ def private embed_rows(t : Model; var s : Session; tokens : array<int64>; npos :
     let tp = unsafe(addr(t))
     let tkp = unsafe(addr(tokens[0]))
     var xp = unsafe(addr(s.x_b[0]))
+    let b32mr = embed_b32_mr(t)
     maybe_parallel_for(dim * npos >= g_embed_par_threshold, 0, int(npos), get_dispatch_lanes()) $(rb, re) {
         unsafe {
             for (p in range(rb, re)) {
                 var dp = xp + int64(p) * dim
-                embed_row(*tp, tkp[p], dp)
+                embed_row(*tp, tkp[p], dp, b32mr)
             }
         }
     }

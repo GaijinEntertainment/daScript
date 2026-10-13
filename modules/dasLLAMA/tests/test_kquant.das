@@ -8,6 +8,7 @@ require dastest/testing_boost public
 require dasllama/dasllama_gemm_schema   // vbmi_pack_word / vbmi_alphabet / pm1_of - the lattice's pure table builders
 require dasllama/dasllama_layout   // moe_gpu_gather_stack_kq - the device-plane gather oracle
 require _model_tier
+require _format_census   // census_cell - the per-32 table carriers' sites
 require _kq_fixtures   // the synthetic superblocks and plane regions; dot_kq and the kernel stamps on the run-time format
 require dasllama/dasllama_gguf
 require dasllama/dasllama_common   // dequant_kq_plane_sb - the carrier-form dispatcher
@@ -325,6 +326,21 @@ def private p32_dot_e(qe : int8 const?; ws : uint8 const?; xq : int8 const?; xs 
 def private p32_dot_e(qe : int8 const?; ws : uint8 const?; xq : int8 const?; xs : float const?; n : int64; _f : KqTag_iq4nl32) : float => dot_iq4nl32e(qe, ws, xq, xs, n)
 def private p32_gather(m : Model; n, d : int64; repacked : bool; mr : int64; var wq, ws : array<uint8>; _f : KqTag_q51) => moe_gpu_gather_stack_q51(m, 0l, n, d, d, repacked, mr, wq, ws)
 def private p32_gather(m : Model; n, d : int64; repacked : bool; mr : int64; var wq, ws : array<uint8>; _f : KqTag_iq4nl32) => moe_gpu_gather_stack_iq4nl32(m, 0l, n, d, d, repacked, mr, wq, ws)
+//! q4032: the Q4_0 block is iq4nl32's byte form (an f16 d, 16 nibble bytes), so the hand-packed blocks are iq4nl32's read under q - 8
+def private p32_fmt(_f : KqTag_q4032) : KqFmt => KqFmt.q4032
+def private p32_n(_f : KqTag_q4032) : int64 => 1408l   // the Qwen1.5-MoE expert down row: % 32, NOT % 256
+def private p32_block(blk : int; _f : KqTag_q4032) : array<uint8> => build_iq4nl32_block(blk)
+def private p32_dequant(kq : array<uint8>; ko : int64; ks : array<uint8>; so : int64; var w : array<float>; wo : int64; _f : KqTag_q4032) => dequant_q4032_plane_block(kq, ko, ks, so, w, wo)
+def private p32_dot(wq : uint8 const?; ws : uint8 const?; xq : int8 const?; xs : float const?; n : int64; _f : KqTag_q4032) : float => dot_q4032q8_scalar(wq, ws, xq, xs, n)
+def private p32_groupn(var y : array<float>; kq, ks : array<uint8>; offs : array<int64>; nreg : int64; xq : array<int8>; xs : array<float>; n, d : int64; _f : KqTag_q4032) => matmul_q4032q8_groupn(y, kq, ks, offs, nreg, xq, xs, n, d)
+def private p32_batch(var y : array<float>; kq, ks : array<uint8>; woff : int64; xq : array<int8>; xs : array<float>; n, d, ntok : int64; _f : KqTag_q4032) => matmul_q4032q8_batch(y, kq, ks, woff, xq, xs, n, d, ntok)
+def private p32_batch_groupn(var y : array<float>; kq, ks : array<uint8>; offs : array<int64>; nreg : int64; xq : array<int8>; xs : array<float>; n, d : int64; _f : KqTag_q4032) => matmul_q4032q8_batch_groupn(y, kq, ks, offs, nreg, xq, xs, n, d)
+def private p32_grp_row_dot(qg : uint8 const?; sg : uint8 const?; r, mr : int64; xq : int8 const?; xs : float const?; _xbs : int const?; n : int64; _f : KqTag_q4032) : float => q4032_grp_row_dot(qg, sg, r, mr, xq, xs, n)
+def private p32_expand_grp_row(gq : uint8 const?; r, mr : int64; var qe : int8?; nb : int64; _f : KqTag_q4032) => expand_q4032_grp_row(gq, r, mr, qe, nb)
+def private p32_grp_scales(gs : uint8 const?; r, mr : int64; var ss : uint8?; nb : int64; _f : KqTag_q4032) => gather_iq4nl32_grp_scales(gs, r, mr, ss, nb)
+def private p32_expand_row(wq : uint8 const?; var qe : int8?; nb : int64; _f : KqTag_q4032) => expand_q4032_row(wq, qe, nb)
+def private p32_dot_e(qe : int8 const?; ws : uint8 const?; xq : int8 const?; xs : float const?; n : int64; _f : KqTag_q4032) : float => dot_iq4nl32e(qe, ws, xq, xs, n)
+def private p32_gather(m : Model; n, d : int64; repacked : bool; mr : int64; var wq, ws : array<uint8>; _f : KqTag_q4032) => moe_gpu_gather_stack_q4032(m, 0l, n, d, d, repacked, mr, wq, ws)
 
 //! `m`'s per-32 plane pair of the tag's format set to `kq` / `ks`
 def private p32_put_planes(var m : Model; kq, ks : array<uint8>; _f : KqTag_q51) {
@@ -337,6 +353,11 @@ def private p32_put_planes(var m : Model; kq, ks : array<uint8>; _f : KqTag_iq4n
     m.iq4nl32s := ks
 }
 
+def private p32_put_planes(var m : Model; kq, ks : array<uint8>; _f : KqTag_q4032) {
+    m.q4032q := kq
+    m.q4032s := ks
+}
+
 //! `m`'s per-32 plane pair of the tag's format repacked grp<mr> in place
 def private p32_repack_model(var m : Model; n, d, mr : int64; _f : KqTag_q51) {
     unsafe {
@@ -347,6 +368,12 @@ def private p32_repack_model(var m : Model; n, d, mr : int64; _f : KqTag_q51) {
 def private p32_repack_model(var m : Model; n, d, mr : int64; _f : KqTag_iq4nl32) {
     unsafe {
         repack_kq_grp(KqFmt.iq4nl32, addr(m.iq4nl32q[0]), addr(m.iq4nl32s[0]), n, d, mr)
+    }
+}
+
+def private p32_repack_model(var m : Model; n, d, mr : int64; _f : KqTag_q4032) {
+    unsafe {
+        repack_kq_grp(KqFmt.q4032, addr(m.q4032q[0]), addr(m.q4032s[0]), n, d, mr)
     }
 }
 
@@ -578,6 +605,61 @@ def private p32_cells(t : T?; f : auto(TT)) {
     t |> run("{kf} batch + batch-groupn bit-match scalar row dots") @(t : T?) {
         p32_batch_gate(t, f)
     }
+    t |> run("the dense routers over a {kf} plane (mm_f, mm_pre_f, mm_b_f) bit-match the scalar row dots") @(t : T?) {
+        p32_dense_gate(t, f)
+    }
+}
+
+//! the dense routers a {q51, iq4nl32}-tagged attention or FFN plane takes on the CPU, over a Model shell's planes at a
+//! non-zero offset (region 1 of two): `mm_f` and `mm_pre_f` on one row, `mm_b_f` on three, each against the scalar row
+//! dots of the same Q8_0 activation rows the routers quantize; the activation is the routers' own, so the bar is exact
+def private p32_dense_gate(t : T?; f : auto(TT)) {
+    let n = p32_n(f)
+    let kf = p32_fmt(f)
+    let d = 8l
+    let npos = 3l
+    var inscope kq, ks : array<uint8>
+    p32_fill_planes(kq, ks, 2l * d, n, f)
+    var m = Model()
+    p32_put_planes(m, kq, ks, f)
+    m.quant = QuantMode.q8
+    var inscope x : array<float>
+    x |> resize(npos * n)
+    for (i in range64(npos * n)) {
+        x[i] = 1.3 * sin(float(i) * 0.19) + 0.2 * cos(float(i) * 0.057)
+    }
+    var inscope xq : array<int8>
+    var inscope xs : array<float>
+    xq |> resize(npos * n)
+    xs |> resize(npos * n / 32l)
+    requant_rows_q8(x, n, npos, xq, xs, false)
+    var inscope want <- p32_row_dots(kq, ks, xq, xs, n, npos * d, $(i) => d + i % d, $(i) => i / d, f)
+    var inscope want0 <- copy_span(want, 0l, d)
+    var inscope row0 <- copy_span(x, 0l, n)
+    var inscope sq : array<int8>
+    var inscope ss : array<float>
+    var inscope sbs : array<int>
+    sq |> resize(n)
+    ss |> resize(n / 32l)
+    var inscope y1 <- nan_plane(int(d))
+    mm_f(y1, m, kf, d * n, row0, sq, ss, sbs, n, d)
+    check(t, "mm_f over the {kf} plane against the scalar row dots", y1, want0, BAR_EXACT, Shape(row_width = int(d)))
+    var inscope xq0 <- copy_span(xq, 0l, n)
+    var inscope xs0 <- copy_span(xs, 0l, n / 32l)
+    var inscope kxq : array<int8>
+    var inscope kxs : array<float>
+    var inscope kxbs : array<int>
+    var inscope y2 <- nan_plane(int(d))
+    mm_pre_f(y2, m, kf, d * n, xq0, xs0, kxq, kxs, kxbs, n, d)
+    check(t, "mm_pre_f over the {kf} plane against the scalar row dots", y2, want0, BAR_EXACT, Shape(row_width = int(d)))
+    var s = Session()
+    s.xqb |> resize(npos * n)
+    s.xsb |> resize(npos * n / 32l)
+    var inscope y3 <- nan_plane(int(npos * d))
+    mm_b_f(s, y3, m, kf, d * n, x, n, d, npos)
+    check(t, "mm_b_f over the {kf} plane against the scalar row dots", y3, want, BAR_EXACT, Shape(row_width = int(d)))
+    delete s
+    delete m
 }
 
 [test]
@@ -588,6 +670,11 @@ def test_q51_kernels(t : T?) {
 [test]
 def test_iq4nl32_kernels(t : T?) {
     p32_cells(t, KqTag_iq4nl32())
+}
+
+[test]
+def test_q4032_kernels(t : T?) {
+    p32_cells(t, KqTag_q4032())
 }
 
 //! the disk-order row dequant of `rows` rows of `n` elements off format-`kf` planes: the gates' reference weights
@@ -1394,6 +1481,120 @@ def test_kq_ple_table(t : T?) {
             delete have
         }
     }
+}
+
+//! the per-32 table carriers on the CPU rails (the `-local` mints of `../performance/model_specs.das`): every table site native
+//! (the census), the token table's rows through `embed_row` bit for bit the file's own dequant, the classifier rows - and the
+//! NextN eh_proj's on the hybrid - through the format router against the file rows' dot with the Q8_0 activation's dequant
+[test]
+def test_per32_tables_cpu(t : T?) {
+    for (spec in [(file = "Qwen2.5-0.5B-Instruct-Q4_0-local.gguf", fmt = KqFmt.q4032, eh = false),
+                  (file = "Qwen2.5-0.5B-Instruct-IQ4_NL-pure-local.gguf", fmt = KqFmt.iq4nl32, eh = false),
+                  (file = "Qwen3.5-0.8B-MTP-Q5_1-local.gguf", fmt = KqFmt.q51, eh = true)]) {
+        t |> run("{spec.file}: the per-32 token table, classifier and eh_proj serve their own bytes on the CPU") @(t : T?) {
+            load_kq_native(t, spec.file, false, true) $(tr; path) {
+                var want <- ["token table", "classifier"]
+                if (spec.eh) {
+                    want |> push("NextN eh_proj")
+                }
+                census_cell(t, tr, path, "cpu load", want)
+                t |> equal(tr.emb_fmt, spec.fmt, "the token table loads in its per-32 form")
+                let dim = tr.config.dim
+                let vocab = tr.config.vocab_size
+                var row : array<float>
+                row |> resize(dim)
+                for (tok in [0l, 1l, 4097l, vocab - 1l]) {
+                    embed_row(tr, tok, unsafe(addr(row[0])))
+                    var gt = 0
+                    var fdq <- read_prefix(path, "token_embd.weight", dim, gt, tok * dim)
+                    check(t, "token {tok}: embed_row against the file dequant", row, fdq, BAR_EXACT, FLAT_SHAPE)
+                    delete fdq
+                }
+                per32_lane_embed(t, tr)
+                per32_site_rows(t, tr, path, "classifier", "token_embd.weight", cls_fmt_of(tr), tr.wcls_off, dim, vocab)
+                if (spec.eh) {
+                    per32_site_rows(t, tr, path, "eh_proj", "blk.{tr.config.n_layers}.nextn.eh_proj.weight", tr.mtp_ehproj_fmt, tr.mtp_ehproj_off, 2l * dim, dim)
+                }
+                delete row
+            }
+        }
+    }
+}
+
+//! a per-32 table's rows embedded on job lanes, the interleave read on the calling thread (`embed_b32_mr`), bit for bit the rows
+//! the calling thread embeds; where the table sits in a grp<mr> interleave, rows read at disk order miss (the control)
+def private per32_lane_embed(t : T?; tr : Model) {
+    let dim = tr.config.dim
+    let n = 64
+    let mr = embed_b32_mr(tr)
+    var want, got, flat : array<float>
+    want |> resize(int64(n) * dim)
+    got |> resize(int64(n) * dim)
+    flat |> resize(int64(n) * dim)
+    unsafe {
+        for (p in range(n)) {
+            embed_row(tr, int64(p * 37 + 5), addr(want[int64(p) * dim]))
+            embed_row(tr, int64(p * 37 + 5), addr(flat[int64(p) * dim]), 1l)
+        }
+    }
+    let tp = unsafe(addr(tr))
+    var gp = unsafe(addr(got[0]))
+    with_dasllama_jobque_() {
+        parallel_for(0, n, 8) $(rb, re, wg) {
+            for (p in range(rb, re)) {
+                embed_row(*tp, int64(p * 37 + 5), unsafe(gp + int64(p) * dim), mr)
+            }
+            notify_and_release(wg)
+        }
+    }
+    check(t, "{n} rows embedded on job lanes against the calling thread's (grp<{mr}>)", got, want, BAR_EXACT, FLAT_SHAPE)
+    if (mr > 1l) {
+        t |> success(check_count(flat, want, BAR_EXACT) > 0, "the rows read at disk order miss the grp<{mr}> table (the control)")
+    }
+    delete want
+    delete got
+    delete flat
+}
+
+//! a per-32 site's rows through `mm_f` (one Q8_0 activation row) against the double dot of the file's dequantized rows with the
+//! activation's dequant, at sampled rows; the bar is f32 reassociation, the control a row's neighbour
+def private per32_site_rows(t : T?; tr : Model; path, site, name : string; fmt : KqFmt; woff, n, d : int64) {
+    t |> success(kq_block32(fmt), "{site}: the plane serves its per-32 form ({fmt})")
+    var x, y, xs : array<float>
+    var xq : array<int8>
+    var xbs : array<int>
+    x |> resize(n)
+    for (i in range64(n)) {
+        x[i] = float((i * 37l) % 101l - 50l) * 0.013
+    }
+    xq |> resize(n)
+    xs |> resize(n / 32l)
+    xbs |> resize(n / 16l)
+    y |> resize(d)
+    mm_f(y, tr, fmt, woff, x, xq, xs, xbs, n, d)
+    quantize_q8_0_into(x, n, xq, xs, 0l, 0l)
+    for (r in [0l, 7l, d / 2l + 3l, d - 1l]) {
+        var gt = 0
+        var fdq <- read_prefix(path, name, n, gt, r * n)
+        var ref = 0.0lf
+        var mag = 0.0lf
+        for (k in range64(n)) {
+            let p = double(fdq[k]) * double(float(xq[k]) * xs[k / 32l])
+            ref += p
+            mag += abs(p)
+        }
+        let bar = 1.0e-5lf * mag + 1.0e-6lf
+        t |> success(abs(double(y[r]) - ref) <= bar, "{site} row {r}: {y[r]} within {bar} of the file rows' dot {ref}")
+        if (r + 1l < d) {
+            t |> success(abs(double(y[r + 1l]) - ref) > bar || abs(ref) < bar, "{site} row {r}: the next row's output lands outside the bar (the control)")
+        }
+        delete fdq
+    }
+    delete x
+    delete y
+    delete xs
+    delete xq
+    delete xbs
 }
 
 // Dequant `n` elements of `name` from element `first` into fp32; reports the on-disk type via `gt`.

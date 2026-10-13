@@ -772,7 +772,7 @@ struct B32Fixture {
 
 //! the format's scalar disk-order dot - the oracle every per-32 variant is held to
 def b32_scalar_dot(fmt : KqFmt; wq : uint8 const?; ws : uint8 const?; xq : int8 const?; xs : float const?; n : int64) : float =>
-    fmt == KqFmt.q51 ? dot_q51q8_scalar(wq, ws, xq, xs, n) : dot_iq4nl32q8_scalar(wq, ws, xq, xs, n)
+    fmt == KqFmt.q51 ? dot_q51q8_scalar(wq, ws, xq, xs, n) : (fmt == KqFmt.q4032 ? dot_q4032q8_scalar(wq, ws, xq, xs, n) : dot_iq4nl32q8_scalar(wq, ws, xq, xs, n))
 
 def build_b32_fixture(fmt : KqFmt; n, d : int64) : B32Fixture {
     var fx = B32Fixture(fmt = fmt, n = n, d = d, nb = n / 32l, qb = kq_qsb(fmt), sb = kq_ssb(fmt))
@@ -836,7 +836,7 @@ def close_to_b32_ref(fx : B32Fixture; y : array<float>; mr : int64; var maxdiff 
 // the declined-to-reference kernel then walks at the companion mr — the zen2 maxdiff-120 trap.
 def private b32_layout_mrs(fmt : KqFmt) : table<string; int> {
     var mrs : table<string; int>
-    var lvs <- fmt == KqFmt.q51 ? q51q8_layout_gen_variants() : iq4nl32q8_layout_gen_variants()
+    var lvs <- fmt == KqFmt.q51 ? q51q8_layout_gen_variants() : (fmt == KqFmt.q4032 ? q4032q8_layout_gen_variants() : iq4nl32q8_layout_gen_variants())
     for (v in lvs) {
         mrs[v._0] = invoke(v._1)
     }
@@ -845,18 +845,19 @@ def private b32_layout_mrs(fmt : KqFmt) : table<string; int> {
 }
 
 //! the per-32 family's manifest key - the TILE stamp (the gemv and layout companions follow it)
-def b32_tile_entry(fmt : KqFmt) : string => fmt == KqFmt.q51 ? "q51q8_tile_gen" : "iq4nl32q8_tile_gen"
+def b32_tile_entry(fmt : KqFmt) : string => fmt == KqFmt.q51 ? "q51q8_tile_gen" : (fmt == KqFmt.q4032 ? "q4032q8_tile_gen" : "iq4nl32q8_tile_gen")
 
 // A per-32 family's tune pass: gate every variant against the scalar disk oracle on repacked
 // planes, iso-bench the streamed decode shape, return the best suffix ("" = a gate failed).
 def b32_tune_family(fmt : KqFmt; var rows_out : table<string; JsonValue?>) : string {
     let entry = b32_tile_entry(fmt)
-    let n = fmt == KqFmt.q51 ? 704l : 640l   //! the expert width each rail exists for: the 26B-A4B's q51 down, Flash-Next's iq4nl32 down
+    //! the expert width each rail exists for: the 26B-A4B's q51 down, Flash-Next's iq4nl32 down, Qwen1.5-MoE's q4032 down
+    let n = fmt == KqFmt.q51 ? 704l : (fmt == KqFmt.q4032 ? 1408l : 640l)
     var sfx <- build_b32_fixture(fmt, n, 32768l)   // streamed: the expert-down K at DRAM scale
     var hfx <- build_b32_fixture(fmt, n, 2816l)    // hot: one expert's down stack
-    var tvs <- fmt == KqFmt.q51 ? q51q8_gemv_gen_variants() : iq4nl32q8_gemv_gen_variants()
+    var tvs <- fmt == KqFmt.q51 ? q51q8_gemv_gen_variants() : (fmt == KqFmt.q4032 ? q4032q8_gemv_gen_variants() : iq4nl32q8_gemv_gen_variants())
     var mrs <- b32_layout_mrs(fmt)
-    let mr0 = fmt == KqFmt.q51 ? q51q8_layout_gen() : iq4nl32q8_layout_gen()
+    let mr0 = fmt == KqFmt.q51 ? q51q8_layout_gen() : (fmt == KqFmt.q4032 ? q4032q8_layout_gen() : iq4nl32q8_layout_gen())
     var best = ""
     var bestDt = 2147483647
     var names : array<string>
@@ -1714,7 +1715,7 @@ def tune_mode_run : bool { // nolint:STYLE037,STYLE038 — flat family-by-family
     var kids <- kq_family_ids()
     var kqSel <- [for (fmt in kids); fmt; where tune_family_selected(kq_tile_entry(fmt))]
     let wantQ8 = tune_family_selected("q8q8_tile_gen")
-    let b32All = fixed_array(KqFmt.q51, KqFmt.iq4nl32)
+    let b32All = fixed_array(KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032)
     var b32Sel <- [for (f in b32All); f; where tune_family_selected(b32_tile_entry(f))]
     let familyTotal = 1 + length(kids) + length(b32All)   // q8q8, the kq families, the per-32 families
     delete kids

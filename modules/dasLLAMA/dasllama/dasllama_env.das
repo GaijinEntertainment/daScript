@@ -65,7 +65,7 @@ struct public EngineEnv {
     @clarg_doc = "Pin the matmul backend by name, bypassing the measured auto-selection."
     pin_backend : string = ""
 
-    @clarg_doc = "How an IQ3_S weight is served: grid = the disk form (the 3.44-bit grid planes, decoded by a gather), lut = the iq3s4 form (a 4-bit codebook index a superblock, decoded by the LUT kernels - exact, 17% more bytes, the CPU decode several times faster), auto = lut wherever the serving rails decode it (the CPU rails and the Vulkan tier), grid under the Metal tier (it gathers the grid and carries no iq3s4 kernel)."
+    @clarg_doc = "How an IQ3_S weight is served: grid = the disk form (the 3.44-bit grid planes, decoded by a gather), lut = the iq3s4 form (a 4-bit codebook index a superblock, decoded by the LUT kernels - exact, 17% more bytes, the CPU decode several times faster), auto = lut on the CPU rails and the Vulkan tier, grid under the Metal tier (every home serves both forms at every site)."
     iq3s_serve : string = "auto"
 
     @clarg_doc = "Pin the batched (prefill) matmul backend independently of the decode one."
@@ -161,6 +161,9 @@ struct public GpuTierEnv {
 
     @clarg_doc = "The dense rail's gemma-4 shared-expert w1/w3/w2 triple; opt-IN, measured a wash-to-loss."
     gpu_dense_shexp : bool = false
+
+    @clarg_doc = "The dense rail's FFN half (each dense layer's w1/w3/w2 triple, the decode row's FFN on the device); opt-IN."
+    gpu_dense_ffn : bool = false
 
     @clarg_default_doc = "follows DASLLAMA_GPU"
     @clarg_doc = "Shared-expert rail on the GPU."
@@ -396,6 +399,9 @@ struct public VulkanEnv {
 
     @clarg_doc = "Fused add+rms+requant on every site of the decode token command and the prefill's batch pairs, plus the fused qk-norm+rope; 0 pins the split dispatches for a same-build A/B."
     vk_fuse : bool = true
+
+    @clarg_doc = "The whole-model driver's greedy chain: the next one-row step submitted behind the running one on the device's own pick; 0 off, 1 every greedy step, -1 adaptive (backs off after a miss). A sampled session never chains."
+    vk_chain : int = 0
 
     @clarg_doc = "The resident prefill's FFN GEMMs (gate, up, down) take the f16 activation feed where the tile family admits it; 0 pins the FFN group to the Q8 activation blocks the CPU chain quantizes, while the attention group keeps its own pick - the A/B rail that takes the feed's rounding out of a resident-vs-CPU compare (gemma's logits move with it)."
     vk_f16_ffn : bool = true

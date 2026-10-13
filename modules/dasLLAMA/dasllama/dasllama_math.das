@@ -1142,6 +1142,12 @@ struct KernelBackend {
     iq4nl32_batch_groupn : MatmulQ51Q8BatchGroupNFn = @@iq4nl32q8_batch_groupn_kernel
     repack_iq4nl32 : RepackQ51Fn = @@repack_iq4nl32_identity
     iq4nl32_layout : function<() : int> = @@q51_layout_grp1
+    // the q4032 slots: iq4nl32's shapes under q4_0's linear code
+    q4032_batch : MatmulQ51Q8BatchFn = @@q4032q8_batch_kernel
+    groupn_q4032 : MatmulQ51GroupNFn = @@q4032q8_groupn_kernel
+    q4032_batch_groupn : MatmulQ51Q8BatchGroupNFn = @@q4032q8_batch_groupn_kernel
+    repack_q4032 : RepackQ51Fn = @@repack_q4032_identity
+    q4032_layout : function<() : int> = @@q51_layout_grp1
     // Optional row-range GEMV core (see MatmulQ8Q8RowsFn) — backends without one keep the panic
     // stub, and the fused multi-stage decode falls back to the per-op dispatch path.
     mm_rows : MatmulQ8Q8RowsFn = @@q8q8_unset_rows
@@ -1259,6 +1265,7 @@ var g_repack_q8q8 = @@repack_q8q8_identity   // no-op until a repack backend is 
 var g_repack_mx4 = @@repack_mx4_identity     // no-op until a repack backend is selected
 var g_repack_q51 = @@repack_q51_identity     // no-op until a repack backend is selected
 var g_repack_iq4nl32 = @@repack_iq4nl32_identity   // no-op until a repack backend is selected
+var g_repack_q4032 = @@repack_q4032_identity       // no-op until a repack backend is selected
 var g_repack_kq = @@repack_kq_identity       // no-op until a kq-capable backend is selected
 
 var g_kernel_backends : table<string; KernelBackend>
@@ -1271,6 +1278,7 @@ var g_active_q8_layout_mr = 4l                // see KernelBackend.q8_layout (ac
 var g_active_kq_layout = @@kq_layout_grp4_fmt // see KernelBackend.kq_layout (activation-time cache)
 var g_active_q51_layout_mr = 1l               // see KernelBackend.q51_layout (activation-time cache)
 var g_active_iq4nl32_layout_mr = 1l           // see KernelBackend.iq4nl32_layout (activation-time cache)
+var g_active_q4032_layout_mr = 1l             // see KernelBackend.q4032_layout (activation-time cache)
 var g_active_q8_wbias = 0l                    // see KernelBackend.q8_wbias (activation-time cache)
 var g_active_q8_kgroup = 4l                   // see KernelBackend.q8_kgroup (activation-time cache)
 var g_backend_pin = ""              // A/B: force this backend by name; "" = auto-select
@@ -1297,13 +1305,22 @@ def repack_q51_identity(var qp : uint8?; var sp : uint8?; n, d : int64) {}
 [unused_argument(qp, sp, n, d)]
 def repack_iq4nl32_identity(var qp : uint8?; var sp : uint8?; n, d : int64) {}
 
+//! Default q4032 repack: no-op — the planes stay disk-order for the portable kernels.
+[unused_argument(qp, sp, n, d)]
+def repack_q4032_identity(var qp : uint8?; var sp : uint8?; n, d : int64) {}
+
 //! IQ4_NL·Q8 dot, scalar reference form — THE iq4nl32 float-order contract every iq4nl32 kernel
 //! reproduces: per 32-block isum = Σ lut[q]·a (elem k off byte k's low nibble, k + 16 off its high);
 //! f += d·isum·xs[b]. The codebook is signed, so no activation sum enters.
+def dot_iq4nl32q8_scalar(wq : uint8 const?; ws : uint8 const?; xq : int8 const?; xs : float const?; n : int64) : float => dot_nl32q8_scalar(wq, ws, xq, xs, n, iq4nl_lut())
+
+//! the q4032 twin: the same contract under the linear table (`q40_lut`: lut[q] = q - 8)
+def dot_q4032q8_scalar(wq : uint8 const?; ws : uint8 const?; xq : int8 const?; xs : float const?; n : int64) : float => dot_nl32q8_scalar(wq, ws, xq, xs, n, q40_lut())
+
+//! the per-32 codebook planes' scalar dot (iq4nl32's block form) under the 16-entry table `lut`
 [hint(unsafe_range_check, noalias = wq, noalias = ws, noalias = xq, noalias = xs)]
-def dot_iq4nl32q8_scalar(wq : uint8 const?; ws : uint8 const?; xq : int8 const?; xs : float const?; n : int64) : float {
+def private dot_nl32q8_scalar(wq : uint8 const?; ws : uint8 const?; xq : int8 const?; xs : float const?; n : int64; lut : int8[16]) : float {
     let nb = n / 32l
-    let lut = iq4nl_lut()
     var f = 0.0
     unsafe {
         for (bi in range64(nb)) {
@@ -1323,9 +1340,18 @@ def dot_iq4nl32q8_scalar(wq : uint8 const?; ws : uint8 const?; xq : int8 const?;
 
 //! Expand one iq4nl32 plane row through the codebook to int8 bytes in `qe` (n bytes) — the
 //! expanded row the fast kernels MAC over, exact (every codebook level is an int8).
-[hint(unsafe_range_check, noalias = wq, noalias = qe)]
 def expand_iq4nl32_row(wq : uint8 const?; var qe : int8?; nb : int64) {
-    let lut = iq4nl_lut()
+    expand_nl32_row(wq, qe, nb, iq4nl_lut())
+}
+
+//! the q4032 twin: the row through the linear table
+def expand_q4032_row(wq : uint8 const?; var qe : int8?; nb : int64) {
+    expand_nl32_row(wq, qe, nb, q40_lut())
+}
+
+//! one per-32 codebook plane row (iq4nl32's block form) through the table `lut` to int8 bytes
+[hint(unsafe_range_check, noalias = wq, noalias = qe)]
+def private expand_nl32_row(wq : uint8 const?; var qe : int8?; nb : int64; lut : int8[16]) {
     unsafe {
         for (bi in range64(nb)) {
             let wb = bi * IQ4NL32_QB
@@ -1363,7 +1389,11 @@ def dot_iq4nl32e(qe : int8 const?; ws : uint8 const?; xq : int8 const?; xs : flo
 //! expand_iq4nl32_row's grp<mr> twin: row r of one mr-row group off the interleaved plane (the
 //! nibble dwords at j·4·mr + r·4 - mx4's column order). Bit-identical expansion.
 def expand_iq4nl32_grp_row(gq : uint8 const?; r, mr : int64; var qe : int8?; nb : int64) {
-    let lut = iq4nl_lut()
+    expand_nl32_grp_row(gq, r, mr, qe, nb, iq4nl_lut())
+}
+
+//! one grp<mr> row of a per-32 codebook plane through the table `lut`
+def private expand_nl32_grp_row(gq : uint8 const?; r, mr : int64; var qe : int8?; nb : int64; lut : int8[16]) {
     unsafe {
         for (bi in range64(nb)) {
             let base = bi * IQ4NL32_QB * mr
@@ -1394,10 +1424,30 @@ def gather_iq4nl32_grp_scales(gs : uint8 const?; r, mr : int64; var ss : uint8?;
 
 def private b32_qb(_f : KqTag_q51) : int64 => Q51_QB
 def private b32_qb(_f : KqTag_iq4nl32) : int64 => IQ4NL32_QB
+def private b32_qb(_f : KqTag_q4032) : int64 => Q4032_QB
 def private b32_sb(_f : KqTag_q51) : int64 => Q51_SB
 def private b32_sb(_f : KqTag_iq4nl32) : int64 => IQ4NL32_SB
+def private b32_sb(_f : KqTag_q4032) : int64 => Q4032_SB
 def private b32_layout_mr(_f : KqTag_q51) : int64 => active_q51_layout_mr()
 def private b32_layout_mr(_f : KqTag_iq4nl32) : int64 => active_iq4nl32_layout_mr()
+def private b32_layout_mr(_f : KqTag_q4032) : int64 => active_q4032_layout_mr()
+
+def private b32_expand_row(wq : uint8 const?; var qe : int8?; nb : int64; _f : KqTag_q4032) {
+    expand_q4032_row(wq, qe, nb)
+}
+def private b32_expand_grp_row(gq : uint8 const?; r, mr : int64; var qe : int8?; nb : int64; _f : KqTag_q4032) {
+    expand_q4032_grp_row(gq, r, mr, qe, nb)
+}
+
+//! expand_iq4nl32_grp_row's q4032 twin: row r of one mr-row group under the linear q - 8 code
+def expand_q4032_grp_row(gq : uint8 const?; r, mr : int64; var qe : int8?; nb : int64) {
+    expand_nl32_grp_row(gq, r, mr, qe, nb, q40_lut())
+}
+def private b32_gather_grp_scales(gs : uint8 const?; r, mr : int64; var ss : uint8?; nb : int64; _f : KqTag_q4032) {
+    gather_iq4nl32_grp_scales(gs, r, mr, ss, nb)
+}
+//! the q4032 MAC is iq4nl32's: the expanded row's int8 levels under the block's f16 d
+def private b32_dot_e(qe : int8 const?; ws : uint8 const?; xq : int8 const?; xs : float const?; n : int64; _f : KqTag_q4032) : float => dot_iq4nl32e(qe, ws, xq, xs, n)
 
 def private b32_expand_row(wq : uint8 const?; var qe : int8?; nb : int64; _f : KqTag_q51) {
     expand_q51_row(wq, qe, nb)
@@ -1548,6 +1598,51 @@ def iq4nl32q8_groupn_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const
 
 def iq4nl32q8_batch_groupn_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; n, d : int64) {
     b32_batch_groupn_kernel(yp, wq, ws, offs, nregions, xqp, xsp, n, d, KqTag_iq4nl32())
+}
+
+//! The active backend's q4032 plane interleave — 1 (disk order) on every hand tier; the stamped mr on a gen backend that
+//! carries the q4032 family.
+def active_q4032_layout_mr() : int64 => g_bake_cpu_override ? g_bake_cpu.q4032_mr : g_active_q4032_layout_mr
+
+def q4032q8_batch_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const?; xqp : int8 const?; xsp : float const?; n, d, ntok : int64) {
+    b32_batch_kernel(yp, wq, ws, xqp, xsp, n, d, ntok, KqTag_q4032())
+}
+
+def q4032q8_groupn_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; n, d : int64) {
+    b32_groupn_kernel(yp, wq, ws, offs, nregions, xqp, xsp, n, d, KqTag_q4032())
+}
+
+def q4032q8_batch_groupn_kernel(var yp : float?; wq : uint8 const?; ws : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; n, d : int64) {
+    b32_batch_groupn_kernel(yp, wq, ws, offs, nregions, xqp, xsp, n, d, KqTag_q4032())
+}
+
+//! the q4032 kernel slots: the portable per-32 kernels until a backend's activation installs its own (`KernelBackend.q4032_*`)
+var g_mm_q4032q8_batch = @@q4032q8_batch_kernel
+var g_mm_q4032q8_groupn = @@q4032q8_groupn_kernel
+var g_mm_q4032q8_batch_groupn = @@q4032q8_batch_groupn_kernel
+
+//! The q4032 twins of the three per-32 wrappers over the q4032 planes (quants at (woff/32)*16, d at (woff/32)*2)
+def matmul_q4032q8_batch(var y : array<float>; wq : array<uint8>; ws : array<uint8>; woff : int64; xq : array<int8>; xs : array<float>; n, d, ntok : int64) {
+    unsafe {
+        invoke(g_mm_q4032q8_batch, addr(y[0]), addr<uint8 const?>(wq[(woff / 32l) * Q4032_QB]), addr<uint8 const?>(ws[(woff / 32l) * Q4032_SB]),
+            addr<int8 const?>(xq[0]), addr<float const?>(xs[0]), n, d, ntok)
+    }
+}
+
+def matmul_q4032q8_groupn(var y : array<float>; wq : array<uint8> | #; ws : array<uint8> | #; offs : array<int64>; nregions : int64;
+                          xq : array<int8>; xs : array<float>; n, d : int64) {
+    unsafe {
+        invoke(g_mm_q4032q8_groupn, addr(y[0]), addr<uint8 const?>(wq[0]), addr<uint8 const?>(ws[0]), addr<int64 const?>(offs[0]), nregions,
+            addr<int8 const?>(xq[0]), addr<float const?>(xs[0]), n, d)
+    }
+}
+
+def matmul_q4032q8_batch_groupn(var y : array<float>; wq : array<uint8> | #; ws : array<uint8> | #; offs : array<int64>; nregions : int64;
+                                xq : array<int8>; xs : array<float>; n, d : int64) {
+    unsafe {
+        invoke(g_mm_q4032q8_batch_groupn, addr(y[0]), addr<uint8 const?>(wq[0]), addr<uint8 const?>(ws[0]), addr<int64 const?>(offs[0]), nregions,
+            addr<int8 const?>(xq[0]), addr<float const?>(xs[0]), n, d)
+    }
 }
 
 //! Q5_1·Q8 dot, scalar reference form — THE q51 float-order contract every q51 kernel
@@ -1782,6 +1877,16 @@ def set_bake_iq4nl32_repack(f : RepackQ51Fn) {
 def active_repack_iq4nl32() : RepackQ51Fn =>
     g_bake_cpu_override && g_bake_cpu.iq4nl32_mr > 1l ? g_bake_iq4nl32_repack : g_repack_iq4nl32
 
+var private g_bake_q4032_repack = @@repack_q4032_identity
+
+def set_bake_q4032_repack(f : RepackQ51Fn) {
+    g_bake_q4032_repack = f
+}
+
+//! The q4032 repack the LOAD path invokes — active_repack_iq4nl32's twin over the q4032 planes.
+def active_repack_q4032() : RepackQ51Fn =>
+    g_bake_cpu_override && g_bake_cpu.q4032_mr > 1l ? g_bake_q4032_repack : g_repack_q4032
+
 // The bake twins (registered by math_gen like set_bake_q51_repack): override-getter bodies that
 // only ever run inline on the converter main thread. The REGISTERED slots stay global-free —
 // the eager loader fans them across pool lanes, whose contexts can't read this module's globals.
@@ -1903,6 +2008,9 @@ def private activate(be : KernelBackend) {
     g_mm_iq4nl32q8_batch = be.iq4nl32_batch
     g_mm_iq4nl32q8_groupn = be.groupn_iq4nl32
     g_mm_iq4nl32q8_batch_groupn = be.iq4nl32_batch_groupn
+    g_mm_q4032q8_batch = be.q4032_batch
+    g_mm_q4032q8_groupn = be.groupn_q4032
+    g_mm_q4032q8_batch_groupn = be.q4032_batch_groupn
     g_mm_q8q8_rows = be.mm_rows
     g_active_has_rows = !(be.mm_rows == @@q8q8_unset_rows)
     g_mm_mx4q8_rows = be.mx4_rows
@@ -1940,6 +2048,7 @@ def private activate(be : KernelBackend) {
     g_repack_mx4 = be.repack_mx4
     g_repack_q51 = be.repack_q51
     g_repack_iq4nl32 = be.repack_iq4nl32
+    g_repack_q4032 = be.repack_q4032
     g_repack_kq = be.repack_kq
     g_active_backend = be.name
     g_active_needs_repack = be.needs_repack
@@ -1949,6 +2058,7 @@ def private activate(be : KernelBackend) {
     g_active_kq_layout = be.kq_layout
     g_active_q51_layout_mr = int64(invoke(be.q51_layout))
     g_active_iq4nl32_layout_mr = int64(invoke(be.iq4nl32_layout))
+    g_active_q4032_layout_mr = int64(invoke(be.q4032_layout))
     g_active_q8_wbias = int64(invoke(be.q8_wbias))
     g_active_q8_kgroup = int64(invoke(be.q8_kgroup))
     g_active_batch_backend = be.name
@@ -2417,10 +2527,7 @@ def matmul_q8q8_groupn(var y : array<float>; wq : array<int8> | #; ws : array<ui
 
 //! E8M0 scale byte -> fp32 * 0.5 = 2^(e-128), pairing with the DOUBLED e2m1 nibble values in
 //! mxfp4_fill_lut. e < 2 lands in fp32-denormal territory -> precomputed bit patterns.
-def e8m0_half(e : uint) : float {
-    let bits = e < 2u ? (0x00200000u << e) : ((e - 1u) << 23u)
-    return unsafe(reinterpret<float>(bits))
-}
+def e8m0_half(e : uint) : float => e8m0_half_f32(e)
 
 //! Fill a 16-byte LUT with the MXFP4 codebook (`mx4_lut`) — the table `tbl16_lo`/`tbl16_hi` and the
 //! scalar kernels index.
@@ -3487,6 +3594,15 @@ def private restore_math_fn_defaults { // nolint:STYLE037,STYLE038 — flat seam
     if (g_mm_iq4nl32q8_batch_groupn == null) {
         g_mm_iq4nl32q8_batch_groupn = @@iq4nl32q8_batch_groupn_kernel
     }
+    if (g_mm_q4032q8_batch == null) {
+        g_mm_q4032q8_batch = @@q4032q8_batch_kernel
+    }
+    if (g_mm_q4032q8_groupn == null) {
+        g_mm_q4032q8_groupn = @@q4032q8_groupn_kernel
+    }
+    if (g_mm_q4032q8_batch_groupn == null) {
+        g_mm_q4032q8_batch_groupn = @@q4032q8_batch_groupn_kernel
+    }
     if (g_mm_q8q8_rows == null) {
         g_mm_q8q8_rows = @@q8q8_unset_rows
     }
@@ -3570,6 +3686,12 @@ def private restore_math_fn_defaults { // nolint:STYLE037,STYLE038 — flat seam
     }
     if (g_repack_iq4nl32 == null) {
         g_repack_iq4nl32 = @@repack_iq4nl32_identity
+    }
+    if (g_bake_q4032_repack == null) {
+        g_bake_q4032_repack = @@repack_q4032_identity
+    }
+    if (g_repack_q4032 == null) {
+        g_repack_q4032 = @@repack_q4032_identity
     }
     if (g_bake_q8q8_repack == null) {
         g_bake_q8q8_repack = @@repack_q8q8_identity

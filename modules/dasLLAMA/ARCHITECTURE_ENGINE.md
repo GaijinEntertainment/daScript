@@ -60,7 +60,9 @@ the module declares every such buffer `@exact_size` and sizes it through a reser
   `REVIEW.das`'s `check_fastmath_default` licensed set names each kernel that opts out of fastmath
   against the test that reds under it - the StyleTTS2 harmonic-source stamps, a resample law each
   (`metal_st2_src_low_torch_msl` / `_onnx_msl`, `metal_st2_src_cumsum_torch_msl` / `_onnx_msl`,
-  `metal_st2_src_sines_torch_msl` / `_onnx_msl`, gated by `st2_source_gate`) - and an entrant
+  `metal_st2_src_sines_torch_msl` / `_onnx_msl`, gated by `st2_source_gate`) and the per-32 GEMV with its small-batch
+  form (`metal_kq_gemv_q51_msl`, `metal_kq_gemv_iq4nl32_msl`, their `_ks_msl` K-split stamps, `metal_b32_mvb` - an unnamed kernel keys by its method -
+  gated by `b32_mvb_gate`, whose bit-for-bit compare fast math breaks) - and an entrant
   ships its failing-under-fastmath test with the kernel.
 - **`dasllama_transformer.das`** - the block-composition seam, and the require umbrella: the
   `[init]`-only side-effect requires (arch registrations, GPU tiers, and any module that

@@ -850,7 +850,7 @@ def gpu_resident_mtp_device_home(model : Model) : bool {
 
 def gpu_device_prefill_continues(model : Model) : bool {
     //! A device-home session of ``model`` prefills from a position past zero - a prompt in chunks,
-    //! a turn over the turns before it. False for a recurrent model: prefill each prompt whole,
+    //! a turn over the turns before it. False for a recurrent hyper-connection model: prefill each prompt whole,
     //! from position zero, and adopt no earlier rows.
     return gpu_device_prefill_continues_(model)
 }
