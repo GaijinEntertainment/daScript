@@ -141,7 +141,7 @@ def test_dn_plane_format_declines(t : T?) {
         m.dnalpha_fmt[1] = KqFmt.k4
         let sk = resident_layer_decline(m, 1l)
         t |> success(!contains(sk, "beta/alpha planes carry"), "K-quant beta/alpha planes draw no format decline - the resident GEMVs and tiles read them by tag: '{sk}'")
-        for (f in [KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032]) {
+        for (f in [KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q5032]) {
             m.dnbeta_fmt[1] = f
             m.dnalpha_fmt[1] = f
             let sp = resident_layer_decline(m, 1l)
@@ -157,7 +157,7 @@ def test_dn_plane_format_declines(t : T?) {
         m.dngate_fmt[1] = KqFmt.q8
         t |> equal(perop_dn_decline(m, 1l), "", "a K-quant qkv beside a q8 z rides the chain: the z plane reads its own image")
         m.dngate_fmt[1] = KqFmt.k4
-        for (f in [KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032]) {
+        for (f in [KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q5032]) {
             m.dnout_fmt[1] = f
             t |> success(!contains(perop_dn_decline(m, 1l), "outside the chain"), "a {f} out plane rides the chain's per-32 GEMVs")
         }
@@ -344,6 +344,7 @@ def test_kq_fmt_one_row_gemv(t : T?) {
         t |> success(kq_fmt_one_row_gemv(KqFmt.q51, 896l), "a per-32 Q5_1 plane has its GEMV at whole 32-blocks")
         t |> success(kq_fmt_one_row_gemv(KqFmt.iq4nl32, 896l), "... and the per-32 IQ4_NL plane")
         t |> success(kq_fmt_one_row_gemv(KqFmt.q4032, 896l), "... and the per-32 Q4_0 plane off the 256 lattice")
+        t |> success(kq_fmt_one_row_gemv(KqFmt.q5032, 896l), "... and the per-32 Q5_0 plane")
         t |> success(!kq_fmt_one_row_gemv(KqFmt.q51, 900l), "... and not at a partial block")
         t |> success(kq_fmt_one_row_gemv(KqFmt.q40, 8192l), "Q4_0 repacks to whole superblocks, so it has the form")
     }
@@ -371,7 +372,7 @@ def test_dn_metal_plane_formats(t : T?) {
         t |> success(dn_ba_metal_window_ok(m), "... and the expert-form GEMV the window's rows read")
         m.dnbeta_fmt[1] = KqFmt.iq3s4
         t |> success(dn_metal_ok(m) && dn_ba_metal_window_ok(m), "a lut-form IQ3_S beta plane has both forms")
-        for (f in [KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032]) {
+        for (f in [KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q5032]) {
             m.dnbeta_fmt[1] = f
             m.dnalpha_fmt[1] = f
             m.dnout_fmt[1] = f
@@ -394,7 +395,7 @@ def test_dn_metal_plane_formats(t : T?) {
 [test]
 def test_moe_metal_expert_formats(t : T?) {
     t |> run("the Metal routed block admits exactly the expert plane formats it has kernels for; every other format declines") @(t : T?) {
-        for (f in [KqFmt.q8, KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.k4, KqFmt.k5, KqFmt.k6, KqFmt.k3, KqFmt.k2, KqFmt.q40, KqFmt.iq4xs, KqFmt.iq4nl, KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs, KqFmt.iq3s4]) {
+        for (f in [KqFmt.q8, KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q5032, KqFmt.k4, KqFmt.k5, KqFmt.k6, KqFmt.k3, KqFmt.k2, KqFmt.q40, KqFmt.iq4xs, KqFmt.iq4nl, KqFmt.iq3s, KqFmt.iq3xxs, KqFmt.iq2s, KqFmt.iq2xs, KqFmt.iq2xxs, KqFmt.iq3s4]) {
             var m <- moe_shell(f)
             t |> success(moe_metal_ok(m), "{f} expert planes are served")
             delete m

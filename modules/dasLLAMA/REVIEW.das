@@ -241,6 +241,8 @@ var private FASTMATH_OFF_EXEMPT <- {
     "metal_kq_gemv_iq4nl32_ks_msl" => "b32_mvb_gate",
     "metal_kq_gemv_q4032_msl" => "b32_mvb_gate",
     "metal_kq_gemv_q4032_ks_msl" => "b32_mvb_gate",
+    "metal_kq_gemv_q5032_msl" => "b32_mvb_gate",
+    "metal_kq_gemv_q5032_ks_msl" => "b32_mvb_gate",
     "metal_b32_mvb" => "b32_mvb_gate"
 }
 
@@ -831,7 +833,7 @@ let private TTS_BLOCKS_FILE = "modules/dasLLAMA/dasllama/dasllama_tts_blocks.das
 // the TTS block file's *_prepare mints, the layout helpers and the layout constants' declaration
 // lines, hashed in file order. A closure change with IMAGE_VERSION unmoved is red; the finding prints the
 // value to re-stamp with.
-let private IMAGE_LAYOUT_STAMP_VERSION = 48
+let private IMAGE_LAYOUT_STAMP_VERSION = 49
 let private IMAGE_LAYOUT_STAMP_HASH = 0x66397501edef99d1ul
 
 // The helpers that decide WHERE bytes land: the page pad, the plane and total sizing, the
@@ -1166,13 +1168,13 @@ def private cm2_template_chain_lines(name : string) : array<string> {
 //! one class ladder trio every format template on the cm2 base joins
 struct private LadderTrio {
     suffix : string     //! the stamp's class suffix: `<Fmt>` + suffix
-    tail : string       //! the dispatch name's tail: `kq_batch_<fmt>_` + tail; a per-32 format (q8, q51, mx4, iq4nl32, q4032) spells `<fmt>_batch_` + tail
+    tail : string       //! the dispatch name's tail: `kq_batch_<fmt>_` + tail; a per-32 format (q8, q51, mx4, iq4nl32, q4032, q5032) spells `<fmt>_batch_` + tail
     ladder : string     //! a ladder trio of this tile's own beside the engine's `cm2_cls_*` (the kernel cells' `khr_cls_`), "" where there is none
     why : string        //! what a missing arm does at run time
 }
 
 def private cm2_dispatch_name(fmt, tail : string) : string =>
-    fmt == "q8" || fmt == "q51" || fmt == "mx4" || fmt == "iq4nl32" || fmt == "q4032" ? "{fmt}_batch_{tail}" : "kq_batch_{fmt}_{tail}"
+    fmt == "q8" || fmt == "q51" || fmt == "mx4" || fmt == "iq4nl32" || fmt == "q4032" || fmt == "q5032" ? "{fmt}_batch_{tail}" : "kq_batch_{fmt}_{tail}"
 
 //! the words of a `let [private] NAME = "..."` line in `path`, or none with a finding: a roster the gate reads where the code reads it
 def private let_words(path, name : string) : array<string> {
@@ -1705,7 +1707,7 @@ let private GEMM_GEN_FILES = [
     "modules/dasLLAMA/dasllama/dasllama_gemm_gen.das",
     "modules/dasLLAMA/dasllama/dasllama_gemm_schema.das"
 ]
-let private GEMM_GEN_STAMP_HASH = 0x8a469988a72ad8ddul
+let private GEMM_GEN_STAMP_HASH = 0xdb041a4703522c9aul
 
 [arch(at = "ARCHITECTURE_ENGINE_FORMATS.md#cpu-kernel-tiers")]
 def private check_gemm_gen_stamp {

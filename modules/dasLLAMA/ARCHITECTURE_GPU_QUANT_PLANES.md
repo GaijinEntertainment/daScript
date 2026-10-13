@@ -58,9 +58,10 @@ The Metal GEMV families share one site abstraction: `MetalGemvSiteT` carries the
 site (a `MoeGemvArgs` uniform plus `sel[slot]`) over the plain `ndim`/`ddim` pair, so a format's
 dot walks one weight row against the x row at either site and a stamp carries only its own x and
 y bindings. Every format's GEMV is one template on it, stamped dense and gathered: the superblock
-families, and the per-32 trio (`MetalBlk32GemvT`, q5_1, iq4nl32 and q4032 over their verbatim disk
+families, and the per-32 set (`MetalBlk32GemvT`, q5_1, iq4nl32, q4032 and q5032 over their verbatim disk
 planes: the `Q51` constant picks q5_1's block, and under the codebook block the `Q40L` constant swaps
-iq4nl32's table for q4_0's linear `q - 8`) - a per-32 plane binds its own plane pair (`kq_fmt_b32`,
+iq4nl32's table for q4_0's linear `q - 8`, the `Q50` constant for q5_0's 32-entry `q - 16` over the
+five-word block) - a per-32 plane binds its own plane pair (`kq_fmt_b32`,
 `b32_planes_of`) where a superblock plane binds the split scale plane.
 
 ### The per-32 small-batch form {#metal-b32-small-batch}

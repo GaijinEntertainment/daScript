@@ -213,6 +213,7 @@ def private fmt_tile_rows() : array<FmtTile> {
             FmtTile(fmt = KqFmt.q51, n = 704, blk_k = 32, wq_words = 5, wq_seed = 37u, form = ScaleForm.q51_dm, xf_add = 5u, per32 = true, oracle = @@q51f16_gemm_oracle),         //! the 26B-A4B's expert width: 22 blocks, two unrolled 256-passes and a 192 tail
             FmtTile(fmt = KqFmt.iq4nl32, n = 640, blk_k = 32, wq_words = 4, wq_seed = 41u, form = ScaleForm.iq4nl32_d, xf_add = 5u, per32 = true, oracle = @@iq4nl32f16_gemm_oracle, control = @@q4032f16_gemm_oracle),   //! Qwen3.8-Flash-Next's expert width: 20 blocks, two unrolled 256-passes and a 128 tail
             FmtTile(fmt = KqFmt.q4032, n = 896, blk_k = 32, wq_words = 4, wq_seed = 43u, form = ScaleForm.iq4nl32_d, xf_add = 5u, per32 = true, oracle = @@q4032f16_gemm_oracle, control = @@iq4nl32f16_gemm_oracle),   //! Qwen2.5-0.5B's width: 28 blocks, three unrolled 256-passes and a 128 tail
+            FmtTile(fmt = KqFmt.q5032, n = 1408, blk_k = 32, wq_words = 5, wq_seed = 47u, form = ScaleForm.iq4nl32_d, xf_add = 5u, per32 = true, oracle = @@q5032f16_gemm_oracle, control = @@q5032_noqh_f16_gemm_oracle),   //! Qwen1.5-MoE's expert down width: 44 blocks, five unrolled 256-passes and a 128 tail
             FmtTile(fmt = KqFmt.mx4, n = 704, blk_k = 32, wq_words = 4, wq_seed = 53u, form = ScaleForm.mx4_e8m0, xf_add = 5u, per32 = true, oracle = @@mx4f16_gemm_oracle)            //! 22 blocks: eleven 64-deep k steps, two unrolled 256-passes and a 192 tail
         ]
     }
@@ -1883,13 +1884,13 @@ def test_vkd_emb_gather_family(t0 : T?) {
     }
 }
 
-//! the per-32 token-table gathers (`<Fmt>Emb`, `Blk32GemvRunT` under `EMB`) for q51, iq4nl32 and q4032: the same four rows
+//! the per-32 token-table gathers (`<Fmt>Emb`, `Blk32GemvRunT` under `EMB`) for q51, iq4nl32, q4032 and q5032: the same four rows
 //! against the engine's per-32 plane dequant (`dequant_b32_plane_block`) over the cell's own plane bytes, under the embed scale
 [test]
 def test_vkd_emb_gather_b32(t0 : T?) {
-    t0 |> run("the per-32 token-table gathers == the engine's plane dequant, for q51, iq4nl32 and q4032") <| @(t : T?) {
+    t0 |> run("the per-32 token-table gathers == the engine's plane dequant, for q51, iq4nl32, q4032 and q5032") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!emb_cls_ensure(int(KqFmt.q51)) || !emb_cls_ensure(int(KqFmt.iq4nl32)) || !emb_cls_ensure(int(KqFmt.q4032))) {
+            if (!emb_cls_ensure(int(KqFmt.q51)) || !emb_cls_ensure(int(KqFmt.iq4nl32)) || !emb_cls_ensure(int(KqFmt.q4032)) || !emb_cls_ensure(int(KqFmt.q5032))) {
                 t |> skip("no Vulkan device, or a per-32 gather pipeline failed to build")
                 return
             }
@@ -1901,7 +1902,7 @@ def test_vkd_emb_gather_b32(t0 : T?) {
             var inscope ids <- [3u, 0u, EMB_ID_HOST, 4u]
             let rows = length(ids)
             var inscope xh <- row_fill(rows * n, 7, 3, 0.01, -0.5)
-            for (f in [KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032]) {
+            for (f in [KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q5032]) {
                 let totblk = (vocab + lead) * nb
                 let qwords = int(kq_qsb(f) / 4l)
                 var inscope wq <- hashed_words(totblk * qwords, 1u, uint(f) * 9973u)
@@ -2549,12 +2550,12 @@ def test_vkd_blk32_batch_family(t0 : T?) {
             let cnt1 = 20
             let rows = cnt0 + cnt1
             let totblk = 2 * d * nbb
-            for (f in [KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.mx4]) {
+            for (f in [KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q5032, KqFmt.mx4]) {
                 let fmt = int(f)
                 verify(kq_batch_cls_ensure(fmt, false), "the per-32 batch class rail must engage")
                 var wsh <- blk32_scale_plane(f, totblk)
                 let ws_bytes = long_length(wsh) * 4l
-                var p <- Sdot4Planes(wqh <- hashed_words(totblk * int(f == KqFmt.q51 ? KQ_Q51_QWORDS : KQ_B32_QWORDS), 1u, uint(fmt) * 131u), wsh <- wsh,
+                var p <- Sdot4Planes(wqh <- hashed_words(totblk * int(kq_qsb(f) / 4l), 1u, uint(fmt) * 131u), wsh <- wsh,
                     ws_bytes = ws_bytes, xqh <- hashed_words(rows * nbb * 8, 7u, 2u), xsh <- row_fill(rows * nbb, 1, 0, 0.05, -0.3, 11))
                 var r <- sdot4_tile_run(n, d, cnt0, cnt1, 32, d * nbb, p) $(bufs : uint64[6]; sizes : int64[6]; bits : uint[6]; raw2 : VkCommandBuffer; var h2 : VkHaz; wgs : int64) {
                     var sc = kq_batch_cls_set_for(fmt, false, bufs, sizes, bits)
@@ -2831,6 +2832,13 @@ def test_vkd_iq4nl32_cm2_batch(t0 : T?) {
 def test_vkd_q4032_cm2_batch(t0 : T?) {
     t0 |> run("cm2 Q4_0 per-32 s and e tiles == the CPU oracle (iq4nl32's plane form: d * (nibble - 8) off a half-word d)") <| @(t : T?) {
         fmt_tile_cell(t, KqFmt.q4032)
+    }
+}
+
+[test]
+def test_vkd_q5032_cm2_batch(t0 : T?) {
+    t0 |> run("cm2 Q5_0 per-32 s and e tiles == the CPU oracle (q51's quant form under a half-word d: d * (q - 16), the qh bit as q's fifth)") <| @(t : T?) {
+        fmt_tile_cell(t, KqFmt.q5032)
     }
 }
 
@@ -4130,6 +4138,44 @@ def test_vkd_q4032_gemv(t0 : T?) {
 }
 
 [test]
+def test_vkd_q5032_gemv(t0 : T?) {
+    t0 |> run("q5032 GEMV class kernel == the scalar dot's float order (q51's blocks re-centred to q - 16 under a half-word d; 896 and 1408 wide)") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!ensure_q5032_gemv_cls()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            per32_gemv_cell(t, KqFmt.q5032, [896, 1408], int(KQ_Q5032_QWORDS), 73u, 31u, 5u, @@q5032_gemv_row_oracle) $(totblk : int) {
+                return <- iq4nl32_scale_words(totblk, 0.002)
+            }
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+//! the q5032 scalar dot (the GEMV cells' row oracle) against the plane bytes' own decode (`dequant_q5032_plane_block`, f64
+//! sums): the class oracle and the kernel share the dot, so the plane's bit layout is pinned by a witness neither reads
+[test]
+def test_vkd_q5032_float_witness(t0 : T?) {
+    t0 |> run("q5032: the scalar dot == the plane-dequant float witness over hashed planes, and a dropped qh bit reads apart") <| @(t : T?) {
+        let nb = 44
+        var inscope wq <- hashed_words(nb * int(KQ_Q5032_QWORDS), 1u, 73u)
+        var inscope ws <- iq4nl32_scale_words(nb, 0.002)
+        var inscope xq <- hashed_words(nb * 8, 31u, 5u)
+        var inscope xs <- [for (b in range(nb)); 0.05 + 0.01 * float(b % 5)]
+        let dot = q5032_gemv_row_oracle(wq, ws, xq, xs, 0, nb)
+        let wit = q5032_gemv_float_oracle(wq, ws, xq, xs, 0, nb)
+        t |> success(abs(dot - wit) <= 1.0e-4 * max(1.0, abs(wit)), "the scalar dot {dot} matches the plane-dequant witness {wit}")
+        for (b in range(nb)) {
+            wq[b * int(KQ_Q5032_QWORDS) + int(KQ_B32_QWORDS)] = 0u
+        }
+        let dropped = q5032_gemv_float_oracle(wq, ws, xq, xs, 0, nb)
+        t |> success(abs(dropped - wit) > 1.0e-3 * max(1.0, abs(wit)), "the control: the planes with their qh words zeroed read apart ({dropped} vs {wit})")
+    }
+}
+
+[test]
 def test_vkd_mx4_gemv(t0 : T?) {
     t0 |> run("mx4 GEMV class kernel == the scalar dot's float order (one lane a block over Q8_0 activations; 704 and 2880 wide)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -5037,7 +5083,7 @@ def test_vkd_q8_gemv_pair(t0 : T?) {
 def private blk32_scale_plane(f : KqFmt; totblk : int) : array<uint> {
     if (f == KqFmt.q51) {
         return <- [for (b in range(totblk)); packHalf2x16(float2(0.002 * float(1 + b % 7), 0.001 * float(b % 5) - 0.002))]
-    } elif (f == KqFmt.iq4nl32 || f == KqFmt.q4032) {
+    } elif (f == KqFmt.iq4nl32 || f == KqFmt.q4032 || f == KqFmt.q5032) {
         return <- iq4nl32_scale_words(totblk, 0.002)
     }
     return <- mx4_scale_words(totblk)
@@ -5056,7 +5102,8 @@ def private blk32_ncol_oracle(f : KqFmt; wqh, wsh, xqh : array<uint>; xsh : arra
             y_ref[c * d + row] = (f == KqFmt.q51 ? q51_gemv_row_oracle(wqh, wsh, xq_c, xs_c, row * nb, nb)
                 : (f == KqFmt.iq4nl32 ? iq4nl32_gemv_row_oracle(wqh, wsh, xq_c, xs_c, row * nb, nb)
                 : (f == KqFmt.q4032 ? q4032_gemv_row_oracle(wqh, wsh, xq_c, xs_c, row * nb, nb)
-                : mx4_gemv_row_oracle(wqh, wsh, xq_c, xs_c, row * nb, nb))))
+                : (f == KqFmt.q5032 ? q5032_gemv_row_oracle(wqh, wsh, xq_c, xs_c, row * nb, nb)
+                : mx4_gemv_row_oracle(wqh, wsh, xq_c, xs_c, row * nb, nb)))))
         }
     }
     return <- y_ref
@@ -5082,7 +5129,7 @@ def private gemv_ncol_arm(t : T?; f : KqFmt; n, d : int) {
         if (q8) {
             q8_plane(d * xblk, 1u, uint(fmt) * 77777u, 1u, uint(fmt) * 13u, wqh, wsh)
         } elif (blk32) {
-            wqh |> push_from(hashed_words(d * xblk * int(f == KqFmt.q51 ? KQ_Q51_QWORDS : KQ_B32_QWORDS), 1u, uint(fmt) * 77777u))
+            wqh |> push_from(hashed_words(d * xblk * int(kq_qsb(f) / 4l), 1u, uint(fmt) * 77777u))
             wsh |> push_from(blk32_scale_plane(f, d * xblk))
         } else {
             wqh |> push_from(hashed_words(d * xblk * int(kq_qsb(f) / 4l), 1u, uint(fmt) * 77777u))

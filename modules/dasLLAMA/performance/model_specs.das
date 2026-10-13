@@ -370,11 +370,15 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         ModelSpec(file = "Qwen2.5-0.5B-Instruct-IQ4_NL-local.gguf",
             recipe = "llama-quantize --allow-requantize Qwen2.5-0.5B-Instruct-Q8_0.gguf Qwen2.5-0.5B-Instruct-IQ4_NL-local.gguf IQ4_NL"),
         // the per-32 table carriers, every tensor in the file's format (`--pure`): the IQ4_NL token table and
-        // classifier gather and serve as iq4nl32 planes, the Q4_0 ones as q4032 (896 is off the 256 lattice)
+        // classifier gather and serve as iq4nl32 planes, the Q4_0 ones as q4032 (896 is off the 256 lattice), the Q5_0 ones and
+        // every Q5_0 plane as q5032
         ModelSpec(file = "Qwen2.5-0.5B-Instruct-IQ4_NL-pure-local.gguf",
             recipe = "llama-quantize --allow-requantize --pure --token-embedding-type iq4_nl --output-tensor-type iq4_nl Qwen2.5-0.5B-Instruct-Q8_0.gguf Qwen2.5-0.5B-Instruct-IQ4_NL-pure-local.gguf IQ4_NL"),
         ModelSpec(file = "Qwen2.5-0.5B-Instruct-Q4_0-local.gguf",
             recipe = "llama-quantize --allow-requantize --pure --token-embedding-type q4_0 --output-tensor-type q4_0 Qwen2.5-0.5B-Instruct-Q8_0.gguf Qwen2.5-0.5B-Instruct-Q4_0-local.gguf Q4_0"),
+        ModelSpec(file = "Qwen2.5-0.5B-Instruct-Q5_0-pure-local.gguf", bytes = 345833024l,
+            sha256 = "a9d3131babde9926f9513dfe110890416d3f997e9c01aa634a111f281176fe39",
+            recipe = "llama-quantize --allow-requantize --pure --token-embedding-type q5_0 --output-tensor-type q5_0 Qwen2.5-0.5B-Instruct-Q8_0.gguf Qwen2.5-0.5B-Instruct-Q5_0-pure-local.gguf Q5_0"),
         ModelSpec(file = "Qwen3-0.6B-Q8_0.gguf", display = "Qwen3-0.6B",
             parity <- ev_qwen_count()),   // the QK-norm arch (per-head Q/K RMSNorm before RoPE)
         ModelSpec(file = "Qwen3.5-0.8B-Q8_0.gguf", display = "Qwen3.5-0.8B",
@@ -555,6 +559,10 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             recipe = "llama-quantize --allow-requantize --pure --token-embedding-type q5_1 --output-tensor-type q5_1 Qwen1.5-MoE-A2.7B-Chat.Q8_0.gguf Qwen1.5-MoE-A2.7B-Chat-Q5_1-local.gguf Q5_1"),
         ModelSpec(file = "Qwen1.5-MoE-A2.7B-Chat-Q4_0-local.gguf",
             recipe = "llama-quantize --allow-requantize --pure --token-embedding-type q4_0 --output-tensor-type q4_0 Qwen1.5-MoE-A2.7B-Chat.Q8_0.gguf Qwen1.5-MoE-A2.7B-Chat-Q4_0-local.gguf Q4_0"),
+        // the q5032 expert carrier: every plane Q5_0, the routed and shared stacks among them
+        ModelSpec(file = "Qwen1.5-MoE-A2.7B-Chat-Q5_0-pure-local.gguf", bytes = 9858808544l,
+            sha256 = "700d2386a8ef18bdb1e5f65df612a3014d10723e6e50f74af19251b87e4b8224",
+            recipe = "llama-quantize --allow-requantize --pure --token-embedding-type q5_0 --output-tensor-type q5_0 Qwen1.5-MoE-A2.7B-Chat.Q8_0.gguf Qwen1.5-MoE-A2.7B-Chat-Q5_0-pure-local.gguf Q5_0"),
         // the qwen vision pairs (the qwen3vl arc): parity-less provenance carriers —
         // test_vision_chat's deepstack/qwen25o legs and the qwen tier-1 suites are their coverage
         ModelSpec(file = "Qwen3VL-4B-Instruct-Q8_0.gguf", display = "Qwen3-VL-4B", official = true,

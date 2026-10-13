@@ -127,7 +127,7 @@ def khr_kq_tile_on : bool => g_gpu.has_coopmat && g_gpu.subgroup_size == 32l
 def cm2_fa_on : bool => g_gpu.has_coopmat2_fa && g_gpu.coopmat_mode == COOPMAT_CM2
 
 //! the per-32 formats that serve as routed expert planes only: their one cm2 column is the s tile
-def cm2_b32_routed(fmt : int) : bool => fmt == int(KqFmt.q51) || fmt == int(KqFmt.mx4) || fmt == int(KqFmt.iq4nl32) || fmt == int(KqFmt.q4032)
+def cm2_b32_routed(fmt : int) : bool => fmt == int(KqFmt.q51) || fmt == int(KqFmt.mx4) || fmt == int(KqFmt.iq4nl32) || fmt == int(KqFmt.q4032) || fmt == int(KqFmt.q5032)
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
 def cm2_tile_cols(d, cnt : int64) : int64 {
@@ -2135,6 +2135,9 @@ def arena_block_bytes(fmt : int) : tuple<wq : int64; ws : int64> {
     }
     if (fmt == int(KqFmt.q4032)) {
         return (wq = Q4032_QB, ws = Q4032_SB)   // the q4032q / q4032s planes verbatim, iq4nl32's block form
+    }
+    if (fmt == int(KqFmt.q5032)) {
+        return (wq = Q5032_QB, ws = Q5032_SB)   // the q5032q / q5032s planes verbatim: q51's quant form, one f16 d
     }
     return (wq = kq_qsb(vk_kq_schema_id(fmt)), ws = kq_dev_ssb_i(fmt))
 }

@@ -39,9 +39,11 @@ def test_gpu_resident_moe(t : T?) {
 }
 
 //! the per-32 mints of the Q8_0 carrier (`--pure`, their recipe rows in ../performance/model_specs.das): the Q5_1 file's every
-//! plane q51 - the shared expert and the 1408-wide routed rows among them - and the Q4_0 file's 1408-wide routed down rows q4032
+//! plane q51 - the shared expert and the 1408-wide routed rows among them - the Q4_0 file's 1408-wide routed down rows q4032, and
+//! the Q5_0 file's every plane q5032 - the routed and shared expert stacks among them
 let private PER32_Q51 = MoeFixture(file = "Qwen1.5-MoE-A2.7B-Chat-Q5_1-local.gguf", shexp = true, bar_rel = MOE_LOGIT_BAR_REL, census = true)
 let private PER32_Q4032 = MoeFixture(file = "Qwen1.5-MoE-A2.7B-Chat-Q4_0-local.gguf", shexp = true, bar_rel = MOE_LOGIT_BAR_REL, census = true)
+let private PER32_Q5032 = MoeFixture(file = "Qwen1.5-MoE-A2.7B-Chat-Q5_0-pure-local.gguf", shexp = true, bar_rel = MOE_LOGIT_BAR_REL, census = true)
 
 [test]
 def test_gpu_resident_moe_per32(t : T?) {
@@ -52,6 +54,10 @@ def test_gpu_resident_moe_per32(t : T?) {
     t |> run("Qwen1.5-MoE-A2.7B-Q4_0: the q4032 routed down stacks on the device, every site in its own format, one window") @(t : T?) {
         if (!family_on(t, "qwen2moe") || !arm_on(t, "vk-per32-moe")) return
         moe_forced_feed(t, 40l, PER32_Q4032)
+    }
+    t |> run("Qwen1.5-MoE-A2.7B-Q5_0: the q5032 shared expert and routed stacks on the device, every site in its own format, one window") @(t : T?) {
+        if (!family_on(t, "qwen2moe") || !arm_on(t, "vk-per32-moe")) return
+        moe_forced_feed(t, 40l, PER32_Q5032)
     }
 }
 

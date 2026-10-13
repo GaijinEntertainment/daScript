@@ -807,6 +807,20 @@ def layout_repack_q4032(var t : Model) {
     invoke(g_layout_repack_q4032, t)
 }
 
+var private g_layout_gather_q5032 : GatherStackB32Fn
+var private g_layout_repack_q5032 : ModelRepackFn
+
+//! the q5032 planes' repack and gather: q51's pair shape over the q5032 planes
+def register_model_layout_q5032(rq : ModelRepackFn; gs : GatherStackB32Fn) {
+    g_layout_repack_q5032 = rq
+    g_layout_gather_q5032 = gs
+}
+
+def layout_repack_q5032(var t : Model) {
+    layout_hooks_check()
+    invoke(g_layout_repack_q5032, t)
+}
+
 def register_model_layout(rq8, rkq, rmx4, rq51, riq4nl32 : ModelRepackFn; gs : GatherStackFn; gskq : GatherStackKqFn; gsq51, gsiq4nl32, gsmx4 : GatherStackB32Fn) {
     g_layout_repack_q8 = rq8
     g_layout_repack_kq = rkq
@@ -837,6 +851,10 @@ def layout_gather_dispatch(src : Model; f : KqFmt; woff, n, rows, slice_rows, mr
         layout_hooks_check()
         let qmr = active_q4032_layout_mr()   // the q4032 stacks sit in the active backend's grp<mr> layout, disk order at mr 1
         invoke(g_layout_gather_q4032, src, woff, n, rows, srows, qmr > 1l, qmr, wq, ws)
+    } elif (f == KqFmt.q5032) {
+        layout_hooks_check()
+        let qmr = active_q5032_layout_mr()   // the q5032 stacks sit in the active backend's grp<mr> layout, disk order at mr 1
+        invoke(g_layout_gather_q5032, src, woff, n, rows, srows, qmr > 1l, qmr, wq, ws)
     } elif (f == KqFmt.mx4) {
         // the mx4 stacks ride the Q8 layout's grp<mr> interleave when the CPU repacked them (repack_mx4_stacks under the q8q8 perm), disk order otherwise
         layout_gather_stack_mx4(src, woff, n, rows, srows, src.mx4_repacked, active_q8_layout_mr(), wq, ws)
@@ -1251,6 +1269,9 @@ struct Model {
     // the q4032 tier's plane pair, per 32-BLOCK: 16B nibbles / 2B f16 d (iq4nl32's form, the Q4_0 code)
     q4032q : array<uint8>
     q4032s : array<uint8>
+    // the q5032 tier's plane pair, per 32-BLOCK: 20B nibbles + qh (q51's quant form) / 2B f16 d, the Q5_0 code
+    q5032q : array<uint8>
+    q5032s : array<uint8>
     kquant_native : bool = false
     // kq stage 4: the kq planes were repacked at load into the active backend's grp<mr> layout.
     // From then on every kq matmul MUST run the backend slots — disk-order portable kernels would
@@ -1344,10 +1365,10 @@ struct Model {
     emb_q8 : bool = false
     emb_q8_off : int64
     emb_kq_off : int64 = -1l   //! an untied K-quant token table's offset in emb_fmt's planes (the tied table is the classifier's plane at wcls_off)
-    //! a tied table whose disk type no KqFmt carries (F16, BF16, Q4_1, Q5_0): the fp32 rows serve the embed and the CPU classifier, and a
+    //! a tied table whose disk type no KqFmt carries (F16, BF16, Q4_1): the fp32 rows serve the embed and the CPU classifier, and a
     //! q8 transcode at wcls_off - a converted copy - serves the device classifier (loads under a Metal mode)
     cls_q8_copy : bool = false
-    //! the fp32 table holds the file's own values: F32 on disk, or F16/BF16 widened without loss (a Q4_1/Q5_0 table's fp32 rows are a
+    //! the fp32 table holds the file's own values: F32 on disk, or F16/BF16 widened without loss (a Q4_1 table's fp32 rows are a
     //! dequant, a converted copy); the Vulkan gather's f32 seat serves this table alone
     emb_f32_exact : bool = false
     quant : QuantMode
@@ -1555,6 +1576,7 @@ def model_weights_bytes(t : Model) : int64 {
         + long_length(t.q51q) + long_length(t.q51s)
         + long_length(t.iq4nl32q) + long_length(t.iq4nl32s)
         + long_length(t.q4032q) + long_length(t.q4032s)
+        + long_length(t.q5032q) + long_length(t.q5032s)
         + long_length(t.mblob) + long_length(t.vkblob)
         + long_length(t.embq) + long_length(t.embs))
 }
@@ -1997,7 +2019,6 @@ def apply_box_profile_runtime_at(ppath : string) {   // nolint:STYLE038 — a fl
     apply_i64_knob(rt, "wscale_f16") $(v) { set_wscale_f16(v != 0l) }
     apply_i64_knob(rt, "kquant_native") $(v) { set_kquant_native(v != 0l) }
     apply_i64_knob(rt, "kq_q40_native") $(v) { set_kq_q40_native(v != 0l) }
-    apply_i64_knob(rt, "kq_q50_native") $(v) { set_kq_q50_native(v != 0l) }
     apply_i64_knob(rt, "noisy") $(v) { set_dasllama_noisy(v != 0l) }
     apply_i64_knob(rt, "gemv_lane_cap") $(v) {
         if (v != 0l || !is_slow_tier_compute()) {
@@ -2070,18 +2091,6 @@ def public set_kq_q40_native(on : bool) {
     g_kq_q40_native = on
 }
 def public get_kq_q40_native() : bool => g_kq_q40_native
-
-// Q5_0 -> k5 re-encode knob. Unlike the other tags this one is NOT a relabel: Q5_0 has no exact
-// Q5_K embedding, so the load re-quantizes (measured +0.031 rel-rmse on GLM's ffn_down) to buy
-// 9.0 -> 5.625 bits. OFF keeps the bit-exact Q5_0 -> Q8 path — the A/B rail, and the quality out.
-var private g_kq_q50_native = false
-
-//! Enable/disable re-encoding Q5_0 tensors into the k5 plane for subsequent loads. LOSSY by
-//! construction (see g_kq_q50_native); default OFF. Requires kquant_native.
-def public set_kq_q50_native(on : bool) {
-    g_kq_q50_native = on
-}
-def public get_kq_q50_native() : bool => g_kq_q50_native
 
 // The q51 tier's bring-up knob: OFF keeps Q5_1 tensors on the q8-requant fallback (~1.4x expert
 // memory, exact) — the zero-risk A/B rail while the tier proves out.
@@ -2208,11 +2217,11 @@ def private dlim_cpu_source_impl(var c : DlimCpuConfig) {
     c.q51_mr = active_q51_layout_mr()
     c.iq4nl32_mr = active_iq4nl32_layout_mr()
     c.q4032_mr = active_q4032_layout_mr()
+    c.q5032_mr = active_q5032_layout_mr()
     // OUTCOME, not request: a backend without s16 twins keeps f32 scale planes (wscale_convert_f16)
     c.wscale_f16 = g_wscale_f16 && kernel_backend_has_wscale16()
     c.kquant_native = g_kquant_native
     c.kq_q40_native = g_kq_q40_native
-    c.kq_q50_native = g_kq_q50_native
     c.kq_q51_native = g_kq_q51_native
     c.iq3s_lut = iq3s_serve_lut()
     c.rope_override = rope_override_spelling()
@@ -2243,11 +2252,11 @@ def kq_planes_of(t : Model; fmt : KqFmt; var kq : array<uint8> const?&; var ks :
     }
 }
 
-// A weight plane's tag rule: q51 serves off its per-32 planes, and an IQ4_NL plane off the superblock lattice takes the
-// per-32 iq4nl32 planes (Qwen2.5-0.5B's 896-wide rows, Qwen3.8-Flash-Next's 640-wide down stacks); q40 and k5-from-Q5_0
-// keep the % 256 rule (superblock walkers over 32-block disk formats). The dense layer planes and the expert stacks share it.
+// A weight plane's tag rule: q51 and q5032 serve off their per-32 planes on any 32-multiple row, and an IQ4_NL plane off the
+// superblock lattice takes the per-32 iq4nl32 planes (Qwen2.5-0.5B's 896-wide rows, Qwen3.8-Flash-Next's 640-wide down
+// stacks), a Q4_0 one the q4032 planes; k5 keeps the % 256 rule. The dense layer planes and the expert stacks share it.
 def kq_fmt_row_ok(f : KqFmt; n : int64) : KqFmt {
-    if (f == KqFmt.q51) return n % 32l == 0l ? f : KqFmt.q8
+    if (f == KqFmt.q51 || f == KqFmt.q5032) return n % 32l == 0l ? f : KqFmt.q8
     if (f == KqFmt.iq4nl && n % 256l != 0l) return n % 32l == 0l ? KqFmt.iq4nl32 : KqFmt.q8
     if (f == KqFmt.q40 && n % 256l != 0l) return n % 32l == 0l ? KqFmt.q4032 : KqFmt.q8
     return f == KqFmt.k5 && n % 256l != 0l ? KqFmt.q8 : f
@@ -2380,8 +2389,8 @@ def footprint(t : Model) : MemFootprint {
     let mx4 = long_length(t.mxq)                  // uint8 (two nibbles) -> 1 byte each
     let mx4s = long_length(t.mxs)                 // raw E8M0 -> 1 byte per 32-block
     let kqb = kq_plane_bytes(t)
-    let kq = kqb.q + long_length(t.q51q) + long_length(t.iq4nl32q) + long_length(t.q4032q)
-    let kqs = kqb.s + long_length(t.q51s) + long_length(t.iq4nl32s) + long_length(t.q4032s)
+    let kq = kqb.q + long_length(t.q51q) + long_length(t.iq4nl32q) + long_length(t.q4032q) + long_length(t.q5032q)
+    let kqs = kqb.s + long_length(t.q51s) + long_length(t.iq4nl32s) + long_length(t.q4032s) + long_length(t.q5032s)
     return MemFootprint(aux_fp32_bytes = aux, weight_fp32_bytes = wf, q8_bytes = q8, q8_scale_bytes = q8s,
                         q4_bytes = q4, q4_scale_bytes = q4s, mx4_bytes = mx4, mx4_scale_bytes = mx4s,
                         kq_bytes = kq, kq_scale_bytes = kqs,
@@ -4449,6 +4458,22 @@ def mm_b_q4032_groupn(var y : array<float>; t : Model; offs : array<int64>; nreg
     matmul_q4032q8_batch_groupn(y, t.q4032q, t.q4032s, offs, nregions, xq, xs, n, d)
 }
 
+// ===== native q5032 dispatch (Q8_0-form activations, the per-32 shapes over the Q5_0 planes) =====
+
+def mm_at_q5032_groupn(var y : array<float>; t : Model; offs : array<int64>; nregions : int64; xq : array<int8>; xs : array<float>; n, d : int64) {
+    matmul_q5032q8_groupn(y, t.q5032q, t.q5032s, offs, nregions, xq, xs, n, d)
+}
+
+def mm_b_q5032_pre(var y : array<float>; t : Model; woff : int64; xqb : array<int8>; xsb : array<float>; n, d, npos : int64) {
+    let ts_gemm = prof_ticks()
+    matmul_q5032q8_batch(y, t.q5032q, t.q5032s, woff, xqb, xsb, n, d, npos)
+    prof_add("mm_gemm", ts_gemm)
+}
+
+def mm_b_q5032_groupn(var y : array<float>; t : Model; offs : array<int64>; nregions : int64; xq : array<int8>; xs : array<float>; n, d : int64) {
+    matmul_q5032q8_batch_groupn(y, t.q5032q, t.q5032s, offs, nregions, xq, xs, n, d)
+}
+
 // ===== native K-quant dispatch (kquant_native; fmt != q8 tags) =====
 
 // KqFmt -> the kernel-layer format id (matmul_kq*/kq_rows_fn/kq_qsb take the int form). q8 maps
@@ -4564,14 +4589,16 @@ def moe_pair_kform(f1, f3 : KqFmt) : bool {
     return k1
 }
 
-//! a dense plane in a per-32 format the CPU serves off its own planes: Q5_1 and the per-32 IQ4_NL (the expert kernels' forms)
-def kq_dense_b32(fmt : KqFmt) : bool => fmt == KqFmt.q51 || fmt == KqFmt.iq4nl32 || fmt == KqFmt.q4032
+//! a dense plane in a per-32 format the CPU serves off its own planes: Q5_1, Q5_0 and the per-32 IQ4_NL and Q4_0 (the expert
+//! kernels' forms)
+def kq_dense_b32(fmt : KqFmt) : bool => fmt == KqFmt.q51 || fmt == KqFmt.iq4nl32 || fmt == KqFmt.q4032 || fmt == KqFmt.q5032
 
 //! the grp<mr> interleave a per-32 plane pair sits in: the active layout the load's repack laid (`layout_repack_q51` and its
 //! twin, `mr > 1` alone), disk order on a Metal blob, which no CPU repack touches
 def b32_active_mr(t : Model; fmt : KqFmt) : int64 {
     return 1l if (t.metal_blob)
-    return fmt == KqFmt.q51 ? active_q51_layout_mr() : (fmt == KqFmt.iq4nl32 ? active_iq4nl32_layout_mr() : active_q4032_layout_mr())
+    return fmt == KqFmt.q51 ? active_q51_layout_mr() : (fmt == KqFmt.iq4nl32 ? active_iq4nl32_layout_mr()
+        : (fmt == KqFmt.q5032 ? active_q5032_layout_mr() : active_q4032_layout_mr()))
 }
 
 //! the per-32 token table's grp<mr>, read on the calling thread: the active layout is a module global, which a job lane's
@@ -4595,6 +4622,8 @@ def private embed_b32_row(t : Model; fmt : KqFmt; token : int64; var dst : float
             b32_plane_row_f32(fmt, t.q51q, t.q51s, dim, t.config.vocab_size, mr, token, row, 0l, blk0, tq, ts)
         } elif (fmt == KqFmt.iq4nl32) {
             b32_plane_row_f32(fmt, t.iq4nl32q, t.iq4nl32s, dim, t.config.vocab_size, mr, token, row, 0l, blk0, tq, ts)
+        } elif (fmt == KqFmt.q5032) {
+            b32_plane_row_f32(fmt, t.q5032q, t.q5032s, dim, t.config.vocab_size, mr, token, row, 0l, blk0, tq, ts)
         } else {
             b32_plane_row_f32(fmt, t.q4032q, t.q4032s, dim, t.config.vocab_size, mr, token, row, 0l, blk0, tq, ts)
         }
@@ -4607,6 +4636,8 @@ def private mm_b32_pre(var y : array<float>; t : Model; fmt : KqFmt; woff : int6
         mm_b_q51_pre(y, t, woff, xq, xs, n, d, npos)
     } elif (fmt == KqFmt.iq4nl32) {
         mm_b_iq4nl32_pre(y, t, woff, xq, xs, n, d, npos)
+    } elif (fmt == KqFmt.q5032) {
+        mm_b_q5032_pre(y, t, woff, xq, xs, n, d, npos)
     } else {
         mm_b_q4032_pre(y, t, woff, xq, xs, n, d, npos)
     }
@@ -4669,6 +4700,8 @@ def mm_at_f_groupn(var y : array<float>; t : Model; fmt : KqFmt; offs, boffs : a
         mm_at_iq4nl32_groupn(y, t, offs, nregions, xq, xs, n, d)
     } elif (fmt == KqFmt.q4032) {
         mm_at_q4032_groupn(y, t, offs, nregions, xq, xs, n, d)
+    } elif (fmt == KqFmt.q5032) {
+        mm_at_q5032_groupn(y, t, offs, nregions, xq, xs, n, d)
     } elif (t.experts_mx4) {
         if (biased) {
             mm_at_mx4_groupn(y, t, offs, boffs, nregions, xq, xs, n, d)
@@ -4695,6 +4728,8 @@ def mm_b_f_groupn(var y : array<float>; t : Model; fmt : KqFmt; offs, boffs : ar
         mm_b_iq4nl32_groupn(y, t, offs, nregions, xq, xs, n, d)
     } elif (fmt == KqFmt.q4032) {
         mm_b_q4032_groupn(y, t, offs, nregions, xq, xs, n, d)
+    } elif (fmt == KqFmt.q5032) {
+        mm_b_q5032_groupn(y, t, offs, nregions, xq, xs, n, d)
     } elif (t.experts_mx4) {
         if (biased) {
             matmul_mx4q8_batch_groupn(y, t.mxq, t.mxs, offs, nregions, xq, xs, t.fblob, boffs, n, d)
@@ -4718,6 +4753,8 @@ def mm_b_f_pre(var y : array<float>; t : Model; fmt : KqFmt; woff : int64; xq : 
         mm_b_iq4nl32_pre(y, t, woff, xq, xs, n, d, npos)
     } elif (fmt == KqFmt.q4032) {
         mm_b_q4032_pre(y, t, woff, xq, xs, n, d, npos)
+    } elif (fmt == KqFmt.q5032) {
+        mm_b_q5032_pre(y, t, woff, xq, xs, n, d, npos)
     } elif (t.experts_mx4) {
         if (!g_active_mx4_native_batch) {
             panic("mm_b_f_pre: the active backend has no native mx4 batch kernel - expand the region to Q8 at the site")

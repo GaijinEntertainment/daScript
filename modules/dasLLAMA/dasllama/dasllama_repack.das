@@ -216,6 +216,11 @@ def repack_grp(var qp : uint8?; var sp : uint8?; n, d, mr : int64; _f : KqTag_q4
     repack_unit_form(qp, sp, n / KQ_B32_ELEMS, d, mr, Q4032_QB, Q4032_SB, verbatim_unit_field(Q4032_SB, 1l))
 }
 
+//! the q5032 planes repack as q51's quant form (five four-byte columns, the qh dword last) under iq4nl32's 2-byte f16 d
+def repack_grp(var qp : uint8?; var sp : uint8?; n, d, mr : int64; _f : KqTag_q5032) {
+    repack_unit_form(qp, sp, n / KQ_B32_ELEMS, d, mr, Q5032_QB, Q5032_SB, verbatim_unit_field(Q5032_SB, 1l))
+}
+
 //! the k4/k5 scale row: d and dmin verbatim, then the 12 packed 6-bit sc/mn bytes DECODED into the two 8-strip fields
 def private repack_k45_scales(var ks : uint8?; tsp : uint8 const?; nsb, d, mr : int64) {
     repack_fields(ks, tsp, nsb, K4_SSB, d, mr, [RepackField(src = 0l, width = 2l, count = 1l), RepackField(src = 2l, width = 2l, count = 1l)])

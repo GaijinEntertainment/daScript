@@ -40,7 +40,7 @@ require dasllama/dasllama_gemm_schema   // the q8 block geometry the mint's zero
 // WhisperModel.enc) contribute their planes under dotted names ("enc.fblob"); string-array
 // fields ride the meta blob via serialize_strings — raw string pointers can't be planes.
 
-let IMAGE_VERSION = 48   // the q4032 plane pair rides the image, the per-32 table planes keep their tags, the shared expert keeps its planes on every load
+let IMAGE_VERSION = 49   // the q5032 plane pair rides the image and a Q5_0 plane keeps its bytes at every site
 
 //! The metal (blob-only) flavor's identity tag: q8 planes ride the 34B block_q8_0 blob and the
 //! kq scale planes their GPU forms (convert_model_to_metal_blob) — flavors are per-config and
@@ -1230,6 +1230,7 @@ def private streamed_q_planes() : array<string> {
     names |> push("q51q")
     names |> push("iq4nl32q")
     names |> push("q4032q")
+    names |> push("q5032q")
     return <- names
 }
 
@@ -1362,7 +1363,7 @@ def private vk_mint_zero_view(f : KqFmt; woff, n : int64) {
 def private vk_mint_extra_bytes(t : Model; jobs : array<FillJob>) : uint64 {
     var planar = 0l
     if (empty(jobs)) {   // no streaming plan: the quant halves are whole in RAM
-        planar += long_length(t.qblob) + long_length(t.q51q) + long_length(t.iq4nl32q) + long_length(t.q4032q) + long_length(t.mxq)
+        planar += long_length(t.qblob) + long_length(t.q51q) + long_length(t.iq4nl32q) + long_length(t.q4032q) + long_length(t.q5032q) + long_length(t.mxq)
         for (p in t.kq) {
             planar += long_length(p.q)
         }
@@ -1371,7 +1372,7 @@ def private vk_mint_extra_bytes(t : Model; jobs : array<FillJob>) : uint64 {
             planar += max(stream_plane_bytes(t, jobs, fname), 0l)
         }
     }
-    planar += long_length(t.qscales) * 4l + long_length(t.qscales16) * 2l + long_length(t.q51s) + long_length(t.iq4nl32s) + long_length(t.q4032s) + long_length(t.mxs)
+    planar += long_length(t.qscales) * 4l + long_length(t.qscales16) * 2l + long_length(t.q51s) + long_length(t.iq4nl32s) + long_length(t.q4032s) + long_length(t.q5032s) + long_length(t.mxs)
     for (p in t.kq) {
         planar += long_length(p.s)
     }

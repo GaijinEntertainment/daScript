@@ -23,7 +23,8 @@ Three questions decide which existing family the format rides; answer them from
    `ARCHITECTURE_ENGINE_FORMATS.md#formats-and-data-movement` owns the lattice split. A disk type may ride BOTH: IQ4_NL is `iq4nl` (a superblock member, eight
    32-blocks a superblock) on a `% 256` row and `iq4nl32` on any plane - dense, expert or table -
    whose rows are off the 256 lattice and on the 32 lattice (`kq_fmt_row_ok`); Q4_0 is `q40` and
-   `q4032` the same way. A per-32 member serves at every site on every home
+   `q4032` the same way. A disk type with no superblock member rides its per-32 member on every
+   row (Q5_1 as `q51`, Q5_0 as `q5032`). A per-32 member serves at every site on every home
    (`ARCHITECTURE_ENGINE_FORMATS.md#per-32-tables`), so it brings the table sites' arms with it.
 2. **Weight reconstruction.** Shift/mask nibbles (`q4_0`, K-quants), a 16-entry codebook on the
    nibble (`IQ4_XS`, `IQ4_NL`), or a grid gather (`IQ2_*`, `IQ3_*`)? Shift/mask and codebook
@@ -173,7 +174,8 @@ scale landing of `stream_job_transcode` (`dasllama_load.das`); the quant-plane n
 `tests/test_model_image.das`. The tag rule is `kq_fmt_row_ok` (`dasllama_common.das`; the expert
 twin `kq_fmt_expert_ok` is the same rule), one rule for every site through `kq_tag`, and
 `note_demotion` counts a q8 fall alone, so the load report reads no demotion for a plane the
-per-32 twin took.
+per-32 twin took. `kq_fmt_of` also tags the PLE token table, whose gather walks superblock rows:
+`ple_fmt_of` keeps a per-32 member off that site, so a new `kq_fmt_of` arm needs no PLE arm.
 
 ## 4. CPU kernels - `dasllama_math_default.das`, `dasllama_math_gen.das`, `dasllama_math.das`, `dasllama_repack.das`
 

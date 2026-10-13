@@ -30,10 +30,10 @@ struct public DlimCpuConfig {
     q51_mr : int64
     iq4nl32_mr : int64
     q4032_mr : int64
+    q5032_mr : int64
     wscale_f16 : bool
     kquant_native : bool
     kq_q40_native : bool
-    kq_q50_native : bool
     kq_q51_native : bool
     iq3s_lut : bool   //! the IQ3_S weights serve as iq3s4 planes (DASLLAMA_IQ3S_SERVE resolved at the load)
     rope_override : string   //! the rope-scaling override baked into the rope tables ("" = the file's keys; rope_override_spelling)
@@ -158,8 +158,8 @@ def public dlim_identity(c : DlimConfiguration; image_version : int; tag : strin
     return ("v{image_version}{pk}|{c.quant}|{c.cpu.backend}|{c.cpu.wscale_f16 ? "s16" : "s32"}"
         + "|q8 mr{c.cpu.q8_mr} b{c.cpu.q8_wbias} g{c.cpu.q8_kgroup}"
         + "|kq {kq_mr_identity(c.cpu)}"
-        + "|q51 mr{c.cpu.q51_mr}|iq4nl32 mr{c.cpu.iq4nl32_mr} q4032 mr{c.cpu.q4032_mr}"
-        + "|nat {c.cpu.kquant_native ? 1 : 0}{c.cpu.kq_q40_native ? 1 : 0}{c.cpu.kq_q50_native ? 1 : 0}{c.cpu.kq_q51_native ? 1 : 0}{c.cpu.iq3s_lut ? 1 : 0}"
+        + "|q51 mr{c.cpu.q51_mr}|iq4nl32 mr{c.cpu.iq4nl32_mr} q4032 mr{c.cpu.q4032_mr} q5032 mr{c.cpu.q5032_mr}"
+        + "|nat {c.cpu.kquant_native ? 1 : 0}{c.cpu.kq_q40_native ? 1 : 0}{c.cpu.kq_q51_native ? 1 : 0}{c.cpu.iq3s_lut ? 1 : 0}"
         + (c.cpu.rope_override != "" ? " rope {c.cpu.rope_override}" : "")
         + (tag != "" ? "|{tag}" : ""))
 }

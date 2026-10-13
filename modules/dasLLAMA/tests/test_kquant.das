@@ -99,12 +99,9 @@ def private plane_row(kf : KqFmt; blkb : array<uint8>) : PlaneRow {
     p.kq |> resize(kq_qsb(kf))
     p.ks |> resize(kq_ssb(kf))
     kq_transcode_superblock(kf, blkb, 0l, p.kq, 0l, p.ks, 0l)
-    let per32 = kf == KqFmt.q51 || kf == KqFmt.iq4nl32
-    p.w <- nan_plane(per32 ? 32 : 256)
-    if (kf == KqFmt.q51) {
-        dequant_q51_plane_block(p.kq, 0l, p.ks, 0l, p.w, 0l)
-    } elif (kf == KqFmt.iq4nl32) {
-        dequant_iq4nl32_plane_block(p.kq, 0l, p.ks, 0l, p.w, 0l)
+    p.w <- nan_plane(kq_block32(kf) ? 32 : 256)
+    if (kq_block32(kf)) {
+        dequant_b32_plane_block(kf, p.kq, p.ks, 0l, p.w, 0l)
     } else {
         dequant_kq_plane_sb(kf, p.kq, p.ks, 0l, false, p.w, 0l)
     }
@@ -294,6 +291,15 @@ def private lattice_plane_cells(t : T?) {
             check(t, "iq4nl32 block {blk} plane against the hand-packed values", p.w, want, BAR_EXACT, FLAT_SHAPE)
         }
     }
+    t |> run("q5032 planes unpack the hand-packed Q5_0 blocks to d x (q - 16) exactly") @(t : T?) {
+        for (blk in range(4)) {
+            var inscope p <- plane_row(KqFmt.q5032, build_q50_block(blk))
+            var inscope want <- formula_row(32) $(k) => float(q5_pat(k + blk) - 16) * q51_d(blk)
+            check(t, "q5032 block {blk} plane against the hand-packed values", p.w, want, BAR_EXACT, FLAT_SHAPE)
+            var inscope off <- formula_row(32) $(k) => float(q5_pat(k + blk)) * q51_d(blk)
+            t |> success(mismatch_exact(p.w, off) > 0, "control: the unsigned level (no - 16) must miss the plane dequant")
+        }
+    }
 }
 
 // the per-32 gates (q51, iq4nl32 - not the superblock lattice): one gate a stage over the format's tag, the overloads below its per-format calls
@@ -341,6 +347,21 @@ def private p32_grp_scales(gs : uint8 const?; r, mr : int64; var ss : uint8?; nb
 def private p32_expand_row(wq : uint8 const?; var qe : int8?; nb : int64; _f : KqTag_q4032) => expand_q4032_row(wq, qe, nb)
 def private p32_dot_e(qe : int8 const?; ws : uint8 const?; xq : int8 const?; xs : float const?; n : int64; _f : KqTag_q4032) : float => dot_iq4nl32e(qe, ws, xq, xs, n)
 def private p32_gather(m : Model; n, d : int64; repacked : bool; mr : int64; var wq, ws : array<uint8>; _f : KqTag_q4032) => moe_gpu_gather_stack_q4032(m, 0l, n, d, d, repacked, mr, wq, ws)
+//! q5032: the Q5_0 block - q51's quant form under one f16 d, the signed q - 16 level
+def private p32_fmt(_f : KqTag_q5032) : KqFmt => KqFmt.q5032
+def private p32_n(_f : KqTag_q5032) : int64 => 1408l   // the Qwen1.5-MoE expert down row: % 32, NOT % 256
+def private p32_block(blk : int; _f : KqTag_q5032) : array<uint8> => build_q50_block(blk)
+def private p32_dequant(kq : array<uint8>; ko : int64; ks : array<uint8>; so : int64; var w : array<float>; wo : int64; _f : KqTag_q5032) => dequant_q5032_plane_block(kq, ko, ks, so, w, wo)
+def private p32_dot(wq : uint8 const?; ws : uint8 const?; xq : int8 const?; xs : float const?; n : int64; _f : KqTag_q5032) : float => dot_q5032q8_scalar(wq, ws, xq, xs, n)
+def private p32_groupn(var y : array<float>; kq, ks : array<uint8>; offs : array<int64>; nreg : int64; xq : array<int8>; xs : array<float>; n, d : int64; _f : KqTag_q5032) => matmul_q5032q8_groupn(y, kq, ks, offs, nreg, xq, xs, n, d)
+def private p32_batch(var y : array<float>; kq, ks : array<uint8>; woff : int64; xq : array<int8>; xs : array<float>; n, d, ntok : int64; _f : KqTag_q5032) => matmul_q5032q8_batch(y, kq, ks, woff, xq, xs, n, d, ntok)
+def private p32_batch_groupn(var y : array<float>; kq, ks : array<uint8>; offs : array<int64>; nreg : int64; xq : array<int8>; xs : array<float>; n, d : int64; _f : KqTag_q5032) => matmul_q5032q8_batch_groupn(y, kq, ks, offs, nreg, xq, xs, n, d)
+def private p32_grp_row_dot(qg : uint8 const?; sg : uint8 const?; r, mr : int64; xq : int8 const?; xs : float const?; _xbs : int const?; n : int64; _f : KqTag_q5032) : float => q5032_grp_row_dot(qg, sg, r, mr, xq, xs, n)
+def private p32_expand_grp_row(gq : uint8 const?; r, mr : int64; var qe : int8?; nb : int64; _f : KqTag_q5032) => expand_q5032_grp_row(gq, r, mr, qe, nb)
+def private p32_grp_scales(gs : uint8 const?; r, mr : int64; var ss : uint8?; nb : int64; _f : KqTag_q5032) => gather_iq4nl32_grp_scales(gs, r, mr, ss, nb)
+def private p32_expand_row(wq : uint8 const?; var qe : int8?; nb : int64; _f : KqTag_q5032) => expand_q5032_row(wq, qe, nb)
+def private p32_dot_e(qe : int8 const?; ws : uint8 const?; xq : int8 const?; xs : float const?; n : int64; _f : KqTag_q5032) : float => dot_iq4nl32e(qe, ws, xq, xs, n)
+def private p32_gather(m : Model; n, d : int64; repacked : bool; mr : int64; var wq, ws : array<uint8>; _f : KqTag_q5032) => moe_gpu_gather_stack_q5032(m, 0l, n, d, d, repacked, mr, wq, ws)
 
 //! `m`'s per-32 plane pair of the tag's format set to `kq` / `ks`
 def private p32_put_planes(var m : Model; kq, ks : array<uint8>; _f : KqTag_q51) {
@@ -356,6 +377,11 @@ def private p32_put_planes(var m : Model; kq, ks : array<uint8>; _f : KqTag_iq4n
 def private p32_put_planes(var m : Model; kq, ks : array<uint8>; _f : KqTag_q4032) {
     m.q4032q := kq
     m.q4032s := ks
+}
+
+def private p32_put_planes(var m : Model; kq, ks : array<uint8>; _f : KqTag_q5032) {
+    m.q5032q := kq
+    m.q5032s := ks
 }
 
 //! `m`'s per-32 plane pair of the tag's format repacked grp<mr> in place
@@ -374,6 +400,12 @@ def private p32_repack_model(var m : Model; n, d, mr : int64; _f : KqTag_iq4nl32
 def private p32_repack_model(var m : Model; n, d, mr : int64; _f : KqTag_q4032) {
     unsafe {
         repack_kq_grp(KqFmt.q4032, addr(m.q4032q[0]), addr(m.q4032s[0]), n, d, mr)
+    }
+}
+
+def private p32_repack_model(var m : Model; n, d, mr : int64; _f : KqTag_q5032) {
+    unsafe {
+        repack_kq_grp(KqFmt.q5032, addr(m.q5032q[0]), addr(m.q5032s[0]), n, d, mr)
     }
 }
 
@@ -675,6 +707,11 @@ def test_iq4nl32_kernels(t : T?) {
 [test]
 def test_q4032_kernels(t : T?) {
     p32_cells(t, KqTag_q4032())
+}
+
+[test]
+def test_q5032_kernels(t : T?) {
+    p32_cells(t, KqTag_q5032())
 }
 
 //! the disk-order row dequant of `rows` rows of `n` elements off format-`kf` planes: the gates' reference weights
@@ -1489,6 +1526,7 @@ def test_kq_ple_table(t : T?) {
 [test]
 def test_per32_tables_cpu(t : T?) {
     for (spec in [(file = "Qwen2.5-0.5B-Instruct-Q4_0-local.gguf", fmt = KqFmt.q4032, eh = false),
+                  (file = "Qwen2.5-0.5B-Instruct-Q5_0-pure-local.gguf", fmt = KqFmt.q5032, eh = false),
                   (file = "Qwen2.5-0.5B-Instruct-IQ4_NL-pure-local.gguf", fmt = KqFmt.iq4nl32, eh = false),
                   (file = "Qwen3.5-0.8B-MTP-Q5_1-local.gguf", fmt = KqFmt.q51, eh = true)]) {
         t |> run("{spec.file}: the per-32 token table, classifier and eh_proj serve their own bytes on the CPU") @(t : T?) {

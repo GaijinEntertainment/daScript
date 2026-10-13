@@ -53,6 +53,7 @@ def test_kqfmt_enum_values(t : T?) {
         t |> equal(int(KqFmt.iq4nl32), 16)
         t |> equal(int(KqFmt.iq3s4), 17)
         t |> equal(int(KqFmt.q4032), 18)
+        t |> equal(int(KqFmt.q5032), 19)
     }
 }
 
@@ -99,6 +100,12 @@ def test_kqfmt_predicates(t : T?) {
         t |> equal(kq_elems(KqFmt.q4032), 32l)
         t |> equal(kq_ggml_type(KqFmt.q4032), GGML_TYPE_Q4_0)   // Q4_0's disk blocks, iq4nl32's plane form
         t |> equal(kq_desc(KqFmt.q4032).schema_id, -1)          // no kq kernel takes it by id
+        t |> success(!kq_sb(KqFmt.q5032) && kq_block32(KqFmt.q5032) && kq_block32(int(KqFmt.q5032)), "q5032 is a per-32 format on both predicates")
+        t |> equal(kq_qsb(KqFmt.q5032), 20l)   // per 32-BLOCK: the 16 nibble bytes and the qh word
+        t |> equal(kq_ssb(KqFmt.q5032), 2l)    // per 32-BLOCK: f16 d
+        t |> equal(kq_elems(KqFmt.q5032), 32l)
+        t |> equal(kq_ggml_type(KqFmt.q5032), GGML_TYPE_Q5_0)   // Q5_0's disk blocks, q51's quant plane form
+        t |> equal(kq_desc(KqFmt.q5032).schema_id, -1)          // no kq kernel takes it by id
         for (q in range(16)) {
             t |> equal(int(Q40_LUT[q]), q - 8, "the linear codebook's level {q}")
         }
@@ -306,6 +313,7 @@ def test_kqfmt_elems_and_stream(t : T?) {
         t |> equal(kq_stream_code(KqFmt.iq4nl32), 46)
         t |> equal(kq_stream_code(KqFmt.iq3s4), 35)
         t |> equal(kq_stream_code(KqFmt.q4032), 47)
+        t |> equal(kq_stream_code(KqFmt.q5032), 48)
     }
 }
 
@@ -345,13 +353,14 @@ def test_b32_plane_words(t : T?) {
         t |> equal(int64(KQ_B32_QWORDS * 4u + KQ_IQ4NL32_SBYTES), kq_desc(KqFmt.iq4nl32).disk_bytes, "iq4nl32: four nibble words and the d half")
         t |> equal(int64(KQ_B32_QWORDS * 4u + KQ_MX4_SBYTES), kq_desc(KqFmt.mx4).disk_bytes, "mx4: four nibble words and the E8M0 byte")
         t |> equal(int64(KQ_B32_QWORDS * 4u + KQ_Q4032_SBYTES), kq_desc(KqFmt.q4032).disk_bytes, "q4032: four nibble words and the d half")
+        t |> equal(int64(KQ_Q5032_QWORDS * 4u + KQ_Q5032_SBYTES), kq_desc(KqFmt.q5032).disk_bytes, "q5032: five quant words (the nibbles, the qh word) and the d half")
     }
 }
 
 [test]
 def test_kq_fmt_row_demotion(t : T?) {
     t |> run("the 32-block disk formats take their per-32 planes on rows the superblock walkers cannot tile") <| @(t : T?) {
-        // 704 = 22 blocks of 32, not a 256-multiple: q40 and iq4nl to their per-32 planes, Q5_0-born k5 to q8
+        // 704 = 22 blocks of 32, not a 256-multiple: q40 and iq4nl to their per-32 planes, k5 to q8
         t |> equal(kq_fmt_row_ok(KqFmt.q40, 704l), KqFmt.q4032)
         t |> equal(kq_fmt_row_ok(KqFmt.q40, 650l), KqFmt.q8)              // off the 32 lattice too: the q8 rail
         t |> equal(kq_fmt_row_ok(KqFmt.iq4nl, 704l), KqFmt.iq4nl32)
@@ -371,6 +380,12 @@ def test_kq_fmt_row_demotion(t : T?) {
         t |> equal(kq_fmt_row_ok(KqFmt.q40, 896l), KqFmt.q4032)
         t |> equal(kq_fmt_row_ok(KqFmt.q51, 2048l), KqFmt.q51)           // a q51 plane - dense or table - serves off its per-32 planes
         t |> equal(kq_fmt_row_ok(KqFmt.q51, 650l), KqFmt.q8)
+    }
+    t |> run("a Q5_0 plane keeps its q5032 tag on any 32-multiple row, on or off the superblock lattice") <| @(t : T?) {
+        t |> equal(kq_fmt_row_ok(KqFmt.q5032, 896l), KqFmt.q5032)        // Qwen2.5-0.5B's dense rows and table
+        t |> equal(kq_fmt_row_ok(KqFmt.q5032, 4864l), KqFmt.q5032)       // its FFN down: 19 superblocks, no k5 re-encode
+        t |> equal(kq_fmt_expert_ok(KqFmt.q5032, 1408l), KqFmt.q5032)    // Qwen1.5-MoE's expert downs
+        t |> equal(kq_fmt_row_ok(KqFmt.q5032, 650l), KqFmt.q8)           // off the 32 lattice: the q8 rail
     }
 }
 
@@ -423,5 +438,7 @@ def test_metal_b32_block_constants(t : T?) {
         t |> equal(kq_ssb(KqFmt.q51), 2l * 2l, "SH = 2 on q51: f16 d then f16 m")
         t |> equal(kq_qsb(KqFmt.q4032), 4l * 4l, "QW = 4 on q4032: iq4nl32's 16 nibble bytes")
         t |> equal(kq_ssb(KqFmt.q4032), 1l * 2l, "SH = 1 on q4032: its f16 d")
+        t |> equal(kq_qsb(KqFmt.q5032), 5l * 4l, "B32W = 5 (MetalKqTileDecodeT's q5032 stamps) and QW = 5 (MetalEmbedB32Q5032, MetalMoeMulMmQ51TensorT): KQ_Q5032_QWORDS words a block")
+        t |> equal(kq_ssb(KqFmt.q5032), 1l * 2l, "SH = 1 on q5032: its f16 d")
     }
 }

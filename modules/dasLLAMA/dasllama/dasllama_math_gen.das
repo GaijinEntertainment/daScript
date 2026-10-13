@@ -399,6 +399,7 @@ def private kq_tileform(_f : KqTag_q8) : int => 0
 def private kq_tileform(_f : KqTag_q51) : int => 0
 def private kq_tileform(_f : KqTag_iq4nl32) : int => 0
 def private kq_tileform(_f : KqTag_q4032) : int => 0
+def private kq_tileform(_f : KqTag_q5032) : int => 0
 def private kq_tileform(_f : KqTag_mx4) : int => 0
 def private kq_tileform(_f : KqTag_k4) : int => k4q8_tileform_gen()
 def private kq_tileform(_f : KqTag_k5) : int => k5q8_tileform_gen()
@@ -432,6 +433,8 @@ def private kq_amx_arm(_f : KqTag_q51) {}
 def private kq_amx_arm(_f : KqTag_iq4nl32) {}
 
 def private kq_amx_arm(_f : KqTag_q4032) {}
+
+def private kq_amx_arm(_f : KqTag_q5032) {}
 
 def private kq_amx_arm(_f : KqTag_mx4) {}
 
@@ -1775,7 +1778,82 @@ def q4032q8_tile_gen(var yp : float?; qgp : uint8 const?; sgp : uint8 const?; xq
     }
 }
 
-// ===== the per-32 gen-tier kernel shapes, one body over the format tag (q51, iq4nl32, q4032) =====
+// ===== the q5032 family (tile + GEMV over q51's quant plane shape under one f16 d, the signed q - 16 code) =====
+
+//! The q5032 layout companion: reference body = 1 (grp1 IS the disk order), the q51 rule.
+def q5032q8_layout_gen() : int => 1
+
+def private repack_q5032_gen(var qp : uint8?; var sp : uint8?; n, d : int64) {
+    repack_kq_grp(KqFmt.q5032, qp, sp, n, d, int64(q5032q8_layout_gen()))
+}
+
+def private repack_q5032_bake(var qp : uint8?; var sp : uint8?; n, d : int64) {
+    repack_kq_grp(KqFmt.q5032, qp, sp, n, d, active_q5032_layout_mr())
+}
+
+//! One row's dot off the grp<mr> q5032 planes, scalar — the q5032 stub's reference body and the tests' repack oracle: q51's
+//! quant interleave (nibble dwords, then the qh section at 16·mr), iq4nl32's 2-byte d interleave, dot_q5032q8_scalar's fold.
+def q5032_grp_row_dot(qg : uint8 const?; sg : uint8 const?; r, mr : int64; xqp : int8 const?; xsp : float const?; n : int64) : float {
+    let nb = n / 32l
+    var f = 0.0
+    unsafe {
+        for (bi in range64(nb)) {
+            let qb = bi * Q5032_QB * mr
+            let hp = qg + qb + 16l * mr + r * 4l
+            let qh = uint(hp[0]) | (uint(hp[1]) << 8u) | (uint(hp[2]) << 16u) | (uint(hp[3]) << 24u)
+            var isum = 0
+            for (j in range64(16l)) {
+                let b = int(qg[qb + (j / 4l) * 4l * mr + r * 4l + j % 4l])
+                let h0 = (int(qh >> uint(j)) & 1) << 4
+                let h1 = (int(qh >> uint(j + 16l)) & 1) << 4
+                isum += (((b & 15) | h0) - 16) * int(xqp[bi * 32l + j]) + (((b >> 4) | h1) - 16) * int(xqp[bi * 32l + j + 16l])
+            }
+            let sb = bi * Q5032_SB * mr + r * Q5032_SB
+            let d = f16_to_f32(uint(sg[sb]) | (uint(sg[sb + 1l]) << 8u))
+            f += d * float(isum) * xsp[bi]
+        }
+    }
+    return f
+}
+
+//! The q5032 GEMV kernel: rows [rb, re) of one plane-region pair off the grp<mr> planes; `xbsp` rides the shared per-32 GEMV
+//! contract and is unread (the q - 16 level is signed, so no activation sum enters).
+[hint(unsafe_range_check, noalias = qgp, noalias = sgp, noalias = xqp, noalias = xsp, noalias = xbsp), unused_argument(xbsp)]
+def q5032q8_gemv_gen(var yp : float?; qgp : uint8 const?; sgp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64) : void {
+    let mr = int64(q5032q8_layout_gen())
+    let nb = n / 32l
+    unsafe {
+        for (i in range64(rb, re)) {
+            let g = i / mr
+            yp[i] = q5032_grp_row_dot(qgp + g * mr * nb * Q5032_QB, sgp + g * mr * nb * Q5032_SB, i % mr, mr, xqp, xsp, n)
+        }
+    }
+}
+
+//! The q5032 TILE kernel (the family anchor): q51's permutations and fallback, 4 tokens x mr rows a call off the group's
+//! packed grp<mr> plane pair. Bit-exact vs 4 per-token GEMVs.
+[tune_perm(mr = 8),
+ tune_perm(dot = "maddubs", width = 256, mr = 8, requires = "avx2"),
+ tune_perm(dot = "vpdpbusd", width = 256, mr = 8, requires = "avxvnni|avx512vnni"),
+ tune_perm(dot = "vpdpbusd", width = 512, mr = 16, requires = "avx512vnni,avx512bw"),
+ tune_perm(dot = "vpdpbusd", width = 256, mr = 16, requires = "avx512vnni,avx512bw"),
+ tune_companion(fn = "q5032q8_gemv_gen", gen = "dasllama_gemm_gen::q5032_gemv"),
+ tune_companion(fn = "q5032q8_layout_gen", gen = "dasllama_gemm_gen::q8q8_layout"),
+ tune(gen = "dasllama_gemm_gen::q5032_tile",
+      fallback = "dot_vpdpbusd_width512_mr16;dot_vpdpbusd_width256_mr8;dot_maddubs_width256_mr8;mr8"),
+ hint(unsafe_range_check, noalias = qgp, noalias = sgp, noalias = xqp, noalias = xsp, noalias = xbsp), unused_argument(xbsp)]
+def q5032q8_tile_gen(var yp : float?; qgp : uint8 const?; sgp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d, g, t0 : int64) : void {
+    let mr = int64(q5032q8_layout_gen())
+    unsafe {
+        for (t in range64(4l)) {
+            for (r in range64(mr)) {
+                yp[(t0 + t) * d + g * mr + r] = q5032_grp_row_dot(qgp, sgp, r, mr, xqp + (t0 + t) * n, xsp + (t0 + t) * (n / 32l), n)
+            }
+        }
+    }
+}
+
+// ===== the per-32 gen-tier kernel shapes, one body over the format tag (q51, iq4nl32, q4032, q5032) =====
 // The tag picks the strides, the layout companion, the tile and GEMV stamps, the scalar tail dot,
 // and whether the fold reads the per-32 activation sums; the walks are written once.
 
@@ -1813,6 +1891,17 @@ def private b32g_gemv(var yp : float?; qp : uint8 const?; sp : uint8 const?; xqp
     q4032q8_gemv_gen(yp, qp, sp, xqp, xsp, xbsp, n, rb, re)
 }
 def private b32g_scalar(wq : uint8 const?; ws : uint8 const?; xq : int8 const?; xs : float const?; n : int64; _f : KqTag_q4032) : float => dot_q4032q8_scalar(wq, ws, xq, xs, n)
+def private b32g_qb(_f : KqTag_q5032) : int64 => Q5032_QB
+def private b32g_sb(_f : KqTag_q5032) : int64 => Q5032_SB
+def private b32g_layout(_f : KqTag_q5032) : int64 => int64(q5032q8_layout_gen())
+def private b32g_bsum(_f : KqTag_q5032) : bool => false
+def private b32g_tile(var yp : float?; qg : uint8 const?; sg : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, d, g, tk : int64; _f : KqTag_q5032) {
+    q5032q8_tile_gen(yp, qg, sg, xqp, xsp, xbsp, n, d, g, tk)
+}
+def private b32g_gemv(var yp : float?; qp : uint8 const?; sp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; n, rb, re : int64; _f : KqTag_q5032) {
+    q5032q8_gemv_gen(yp, qp, sp, xqp, xsp, xbsp, n, rb, re)
+}
+def private b32g_scalar(wq : uint8 const?; ws : uint8 const?; xq : int8 const?; xs : float const?; n : int64; _f : KqTag_q5032) : float => dot_q5032q8_scalar(wq, ws, xq, xs, n)
 
 
 //! the per-32 activation sums of token rows [row0, row0 + cnt) into `bsp` (row-major, nb a row) - the q51 fold's asum plane
@@ -1896,6 +1985,10 @@ def private iq4nl32q8_groupn_gen(var yp : float?; wq : uint8 const?; ws : uint8 
 
 def private q4032q8_groupn_gen(var yp : float?; wq : uint8 const?; ws : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; n, d : int64) {
     b32g_groupn(yp, wq, ws, offs, nregions, xqp, xsp, n, d, KqTag_q4032())
+}
+
+def private q5032q8_groupn_gen(var yp : float?; wq : uint8 const?; ws : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; n, d : int64) {
+    b32g_groupn(yp, wq, ws, offs, nregions, xqp, xsp, n, d, KqTag_q5032())
 }
 
 
@@ -2582,6 +2675,10 @@ def kq_gemv_gen(var _yp : float?; _kqp : uint8 const?; _ksp : uint8 const?; _xqp
     panic("q4032 has no kq gemv stamp")
 }
 
+def kq_gemv_gen(var _yp : float?; _kqp : uint8 const?; _ksp : uint8 const?; _xqp : int8 const?; _xsp : float const?; _xbsp : int const?; _n, _rb, _re : int64; _f : KqTag_q5032) {
+    panic("q5032 has no kq gemv stamp")
+}
+
 def kq_gemv_gen(var _yp : float?; _kqp : uint8 const?; _ksp : uint8 const?; _xqp : int8 const?; _xsp : float const?; _xbsp : int const?; _n, _rb, _re : int64; _f : KqTag_mx4) {
     panic("mx4 has no kq gemv stamp")
 }
@@ -2659,6 +2756,10 @@ def kq_tile_gen(var _yp : float?; _kqg : uint8 const?; _ksg : uint8 const?; _xqp
     panic("q4032 has no kq tile stamp")
 }
 
+def kq_tile_gen(var _yp : float?; _kqg : uint8 const?; _ksg : uint8 const?; _xqp : int8 const?; _xsp : float const?; _xbsp : int const?; _n, _d, _g, _tk : int64; _f : KqTag_q5032) {
+    panic("q5032 has no kq tile stamp")
+}
+
 def kq_tile_gen(var _yp : float?; _kqg : uint8 const?; _ksg : uint8 const?; _xqp : int8 const?; _xsp : float const?; _xbsp : int const?; _n, _d, _g, _tk : int64; _f : KqTag_mx4) {
     panic("mx4 has no kq tile stamp")
 }
@@ -2732,6 +2833,10 @@ def private kq_tile4_gen(var _yp : float?; _kqg : uint8 const?; _ksg : uint8 con
 
 def private kq_tile4_gen(var _yp : float?; _kqg : uint8 const?; _ksg : uint8 const?; _xqp : int8 const?; _xsp : float const?; _xbsp : int const?; _n, _d, _g, _tk : int64; _f : KqTag_q4032) {
     panic("q4032 has no kq tile4 stamp")
+}
+
+def private kq_tile4_gen(var _yp : float?; _kqg : uint8 const?; _ksg : uint8 const?; _xqp : int8 const?; _xsp : float const?; _xbsp : int const?; _n, _d, _g, _tk : int64; _f : KqTag_q5032) {
+    panic("q5032 has no kq tile4 stamp")
 }
 
 def private kq_tile4_gen(var _yp : float?; _kqg : uint8 const?; _ksg : uint8 const?; _xqp : int8 const?; _xsp : float const?; _xbsp : int const?; _n, _d, _g, _tk : int64; _f : KqTag_mx4) {
@@ -2891,6 +2996,10 @@ def private kq_panel_gen(_kqg : uint8 const?; _ksg : uint8 const?; _mr, _nsb, _n
     panic("q4032 has no bf16 panel")
 }
 
+def private kq_panel_gen(_kqg : uint8 const?; _ksg : uint8 const?; _mr, _nsb, _n, _ngr : int64; var _dst : uint16?; _f : KqTag_q5032) {
+    panic("q5032 has no bf16 panel")
+}
+
 def private kq_panel_gen(_kqg : uint8 const?; _ksg : uint8 const?; _mr, _nsb, _n, _ngr : int64; var _dst : uint16?; _f : KqTag_mx4) {
     panic("mx4 has no bf16 panel")
 }
@@ -2975,6 +3084,8 @@ def kq_registries(_f : KqTag_q51) : KqRegistries => <- KqRegistries()
 def kq_registries(_f : KqTag_iq4nl32) : KqRegistries => <- KqRegistries()
 
 def kq_registries(_f : KqTag_q4032) : KqRegistries => <- KqRegistries()
+
+def kq_registries(_f : KqTag_q5032) : KqRegistries => <- KqRegistries()
 
 def kq_registries(_f : KqTag_mx4) : KqRegistries => <- KqRegistries()
 
@@ -3179,7 +3290,7 @@ def private kq_batch_cell_bf16(fmt : int; var myp : float?; kqp : uint8 const?; 
 }
 
 //! one (group range x token range) cell of the superblock walk; `scp` is this dispatch slot's panel (`kq_walk_panel_bytes`)
-def private kq_batch_cell_gen(fmt : int; var myp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; xbp : uint8 const?; n, d, mr, TB : int64; ub, ue : int; tb0, tend : int64; below_amx_step : bool; var scp : uint8?) {
+def private kq_batch_cell_gen(fmt : int; var myp : float?; kqp : uint8 const?; ksp : uint8 const?; xqp : int8 const?; xsp : float const?; xbsp : int const?; xbp : uint8 const?; n, d, mr, TB : int64; ub, ue : int; tb0, tend : int64; below_amx_step : bool; var scp : uint8?) { // nolint:STYLE037 — kq_fmt_stamp's generated arms, one a format
     let form = kq_tileform_of(fmt)
     if (form > 0 && !below_amx_step) {
         kq_batch_cell_bf16(fmt, myp, kqp, ksp, xqp, xsp, xbsp, xbp, n, d, mr, TB, ub, ue, tb0, tend, int64(form), unsafe(reinterpret<uint16?>(scp)))
@@ -3472,6 +3583,14 @@ def private q4032q8_batch_groupn_gen(var yp : float?; wq : uint8 const?; ws : ui
     b32g_batch_groupn(yp, wq, ws, offs, nregions, xqp, xsp, n, d, KqTag_q4032())
 }
 
+def private q5032q8_batch_kernel_gen(var yp : float?; wq : uint8 const?; ws : uint8 const?; xqp : int8 const?; xsp : float const?; n, d, ntok : int64) {
+    b32g_batch(yp, wq, ws, xqp, xsp, n, d, ntok, KqTag_q5032())
+}
+
+def private q5032q8_batch_groupn_gen(var yp : float?; wq : uint8 const?; ws : uint8 const?; offs : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; n, d : int64) {
+    b32g_batch_groupn(yp, wq, ws, offs, nregions, xqp, xsp, n, d, KqTag_q5032())
+}
+
 // kq_groupn slot: region-list kq GEMV, the kq twin of q8q8_groupn_gen — region-contiguous group
 // spans through the format's rows core, row tails disk-order per region. Not `private`: the
 // groupn bit-exactness gate in test_kquant drives it directly.
@@ -3525,6 +3644,7 @@ def dasllama_math_gen_register() {
     set_bake_q51_repack(@@repack_q51_bake)
     set_bake_iq4nl32_repack(@@repack_iq4nl32_bake)
     set_bake_q4032_repack(@@repack_q4032_bake)
+    set_bake_q5032_repack(@@repack_q5032_bake)
     set_bake_q8q8_repack(@@repack_q8q8_bake)
     set_bake_mx4_repack(@@repack_mx4_bake)
     set_bake_kq_repack(@@repack_kq_bake)
@@ -3573,6 +3693,9 @@ def private gen_backend(name : string) : KernelBackend {
             groupn_q4032 = @@q4032q8_groupn_gen, repack_q4032 = @@repack_q4032_gen,
             q4032_layout = @@q4032q8_layout_gen,
             q4032_batch = @@q4032q8_batch_kernel_gen, q4032_batch_groupn = @@q4032q8_batch_groupn_gen,
+            groupn_q5032 = @@q5032q8_groupn_gen, repack_q5032 = @@repack_q5032_gen,
+            q5032_layout = @@q5032q8_layout_gen,
+            q5032_batch = @@q5032q8_batch_kernel_gen, q5032_batch_groupn = @@q5032q8_batch_groupn_gen,
             needs_repack = true, mx4_expand_interleaved = true, priority = 25,
             q8_layout = @@q8q8_layout_gen, kq_layout = @@kq_layout_fmt_gen, q8_wbias = @@q8q8_wbias_gen,
             q8_kgroup = @@q8q8_kgroup_gen)

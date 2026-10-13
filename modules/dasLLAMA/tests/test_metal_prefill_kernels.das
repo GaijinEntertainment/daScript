@@ -3490,7 +3490,7 @@ def test_metal_prefill_kernels(t : T?) {
                 moe_gemv_gate(t, dev, queue, KqFmt.q51, 64, 24, 5, 3, 3, true)    // batch streams, down form
                 b32_gemv_gate(t, dev, queue, KqFmt.q51, 96, 24)   // the dense site: 3 blocks a row
                 b32_gemv_gate(t, dev, queue, KqFmt.q51, 160, 7)   // 5 blocks - one lane group past the 4-block stride; a row-pair tail
-                for (fb in [KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032]) {   //! the small-batch stamps bit for bit the GEMV, a row at a time
+                for (fb in [KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q5032]) {   //! the small-batch stamps bit for bit the GEMV, a row at a time
                     for (ks in [false, true]) {   //! the two-row stamps and the K-split narrow-plane ones
                         b32_mvb_gate(t, dev, queue, fb, 96, 24, 2, 2, 24, ks)
                         b32_mvb_gate(t, dev, queue, fb, 160, 7, 3, 4, 9, ks)    // a row-pair tail, y rows past d, one pad column
@@ -3503,7 +3503,7 @@ def test_metal_prefill_kernels(t : T?) {
                         b32_mvb_gate(t, dev, queue, fb, 2048, 12, 2, 2, 12, ks)   // 64 blocks: every K-split simdgroup walks four strides
                     }
                 }
-                for (fr in [KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.mx4]) {   //! a batched step's routed rows are the one-row step's
+                for (fr in [KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q5032, KqFmt.mx4]) {   //! a batched step's routed rows are the one-row step's
                     moe_b32_rows_gate(t, dev, queue, fr, 96, 24, 5, 3, 4)
                     moe_b32_rows_gate(t, dev, queue, fr, 160, 12, 6, 2, 3)
                 }
@@ -3534,6 +3534,16 @@ def test_metal_prefill_kernels(t : T?) {
                 moe_mulmm_b32_gate(t, dev, queue, KqFmt.q4032, 64, 64, [32, 40, 64])
                 moe_mulmm_b32_gate(t, dev, queue, KqFmt.q4032, 96, 128, [8, 96])
                 moe_mulmm_b32_gate(t, dev, queue, KqFmt.q4032, 64, 64, [136, 32])
+                // q5032: q51's quant block under one d, the signed code q - 16
+                moe_gemv_gate(t, dev, queue, KqFmt.q5032, 96, 24, 5, 3, 1, false)
+                moe_gemv_gate(t, dev, queue, KqFmt.q5032, 64, 32, 7, 4, 1, true)
+                moe_gemv_gate(t, dev, queue, KqFmt.q5032, 64, 24, 5, 3, 3, true)
+                b32_gemv_gate(t, dev, queue, KqFmt.q5032, 96, 24)
+                b32_gemv_gate(t, dev, queue, KqFmt.q5032, 160, 7)
+                b32_mm_gate(t, dev, queue, KqFmt.q5032, 96, 128, 64)
+                moe_mulmm_b32_gate(t, dev, queue, KqFmt.q5032, 64, 64, [32, 40, 64])
+                moe_mulmm_b32_gate(t, dev, queue, KqFmt.q5032, 96, 128, [8, 96])
+                moe_mulmm_b32_gate(t, dev, queue, KqFmt.q5032, 64, 64, [136, 32])
 
                 // ===== mx4 expert GEMV (reworked to the q51 shape — gpt-oss's decode kernel) =====
                 moe_gemv_gate(t, dev, queue, KqFmt.mx4, 96, 24, 5, 3, 1, false)          // gate/up (shared x)
@@ -4452,6 +4462,8 @@ def private moe_gemv_planes(fmt : KqFmt; rows, n) : tuple<p0 : array<uint8>; p1 
         iq4nl32_test_planes(rows, n, p0, p1, wref, iq4nl_lut())
     } elif (fmt == KqFmt.q4032) {
         iq4nl32_test_planes(rows, n, p0, p1, wref, q40_lut())
+    } elif (fmt == KqFmt.q5032) {
+        q5032_test_planes(rows, n, p0, p1, wref)
     } else {
         let nb = n / 32
         p0 |> resize(rows * nb * 16)
@@ -4480,9 +4492,9 @@ def private moe_gemv_gate(t : T?; var dev, queue; fmt : KqFmt; n, d, net, k, nst
         var err : string
         let sq8 = stamp_of(@@enc_moe_gemv_q8_c)
         let sq51 = stamp_of(@@enc_moe_gemv_q51_c)
-        let siq = fmt == KqFmt.q4032 ? stamp_of(@@enc_moe_gemv_q4032_c) : stamp_of(@@enc_moe_gemv_iq4nl32_c)
+        let siq = b32_moe_gemv_stamp(fmt)
         let smx = stamp_of(@@enc_moe_gemv_mx4_c)
-        let nl = fmt == KqFmt.iq4nl32 || fmt == KqFmt.q4032
+        let nl = fmt == KqFmt.iq4nl32 || fmt == KqFmt.q4032 || fmt == KqFmt.q5032
         var pso = (fmt == KqFmt.q8 ? mc |> keep_stamp(sq8, err) : (fmt == KqFmt.q51 ? mc |> keep_stamp(sq51, err)
             : (nl ? mc |> keep_stamp(siq, err) : mc |> keep_stamp(smx, err))))
         return if (!pso_ok(t, tag, pso, err))
@@ -4564,7 +4576,7 @@ def private b32_gemv_gate(t : T?; var dev, queue; fmt : KqFmt; n, d : int) {
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
         let sq = stamp_of(@@enc_kq_q51_c)
-        let si = fmt == KqFmt.q4032 ? stamp_of(@@enc_kq_q4032_c) : stamp_of(@@enc_kq_iq4nl32_c)
+        let si = b32_gemv_stamp(fmt, false)
         var pso = fmt == KqFmt.q51 ? mc |> keep_stamp(sq, err) : mc |> keep_stamp(si, err)
         return if (!pso_ok(t, tag, pso, err))
         var inscope(p0, p1, wref) <- moe_gemv_planes(fmt, d, n)
@@ -4617,6 +4629,11 @@ def private b32_mvb_stamp(f; w : int; ks : bool) {   //! generic, as the gates a
         if (w == 4) return ks ? stamp_of(@@enc_b32_mvb4_q4032_ks_c) : stamp_of(@@enc_b32_mvb4_q4032_c)
         return ks ? stamp_of(@@enc_b32_mvb8_q4032_ks_c) : stamp_of(@@enc_b32_mvb8_q4032_c)
     }
+    if (f == KqFmt.q5032) {
+        if (w == 2) return ks ? stamp_of(@@enc_b32_mvb2_q5032_ks_c) : stamp_of(@@enc_b32_mvb2_q5032_c)
+        if (w == 4) return ks ? stamp_of(@@enc_b32_mvb4_q5032_ks_c) : stamp_of(@@enc_b32_mvb4_q5032_c)
+        return ks ? stamp_of(@@enc_b32_mvb8_q5032_ks_c) : stamp_of(@@enc_b32_mvb8_q5032_c)
+    }
     if (w == 2) return ks ? stamp_of(@@enc_b32_mvb2_iq4nl32_ks_c) : stamp_of(@@enc_b32_mvb2_iq4nl32_c)
     if (w == 4) return ks ? stamp_of(@@enc_b32_mvb4_iq4nl32_ks_c) : stamp_of(@@enc_b32_mvb4_iq4nl32_c)
     return ks ? stamp_of(@@enc_b32_mvb8_iq4nl32_ks_c) : stamp_of(@@enc_b32_mvb8_iq4nl32_c)
@@ -4630,7 +4647,21 @@ def private b32_gemv_stamp(f; ks : bool) {
     if (f == KqFmt.q4032) {
         return ks ? stamp_of(@@enc_kq_q4032_ks_c) : stamp_of(@@enc_kq_q4032_c)
     }
+    if (f == KqFmt.q5032) {
+        return ks ? stamp_of(@@enc_kq_q5032_ks_c) : stamp_of(@@enc_kq_q5032_c)
+    }
     return ks ? stamp_of(@@enc_kq_iq4nl32_ks_c) : stamp_of(@@enc_kq_iq4nl32_c)
+}
+
+//! the routed GEMV stamp of a per-32 format on the codebook bind (iq4nl32, q4032, q5032)
+def private b32_moe_gemv_stamp(f) {   //! generic, as the gates are: the Apple half alone instantiates it
+    if (f == KqFmt.q4032) {
+        return stamp_of(@@enc_moe_gemv_q4032_c)
+    }
+    if (f == KqFmt.q5032) {
+        return stamp_of(@@enc_moe_gemv_q5032_c)
+    }
+    return stamp_of(@@enc_moe_gemv_iq4nl32_c)
 }
 
 //! x rows off the dyadic lattice: a reordered sum rounds apart, so a bit-for-bit compare sees it
@@ -4692,9 +4723,9 @@ def private moe_b32_rows_gate(t : T?; var dev, queue; fmt : KqFmt; n, d, net, k,
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
         let sq51 = stamp_of(@@enc_moe_gemv_q51_c)
-        let siq = fmt == KqFmt.q4032 ? stamp_of(@@enc_moe_gemv_q4032_c) : stamp_of(@@enc_moe_gemv_iq4nl32_c)
+        let siq = b32_moe_gemv_stamp(fmt)
         let smx = stamp_of(@@enc_moe_gemv_mx4_c)
-        let nl = fmt == KqFmt.iq4nl32 || fmt == KqFmt.q4032
+        let nl = fmt == KqFmt.iq4nl32 || fmt == KqFmt.q4032 || fmt == KqFmt.q5032
         var pso = fmt == KqFmt.q51 ? mc |> keep_stamp(sq51, err) : (nl ? mc |> keep_stamp(siq, err) : mc |> keep_stamp(smx, err))
         return if (!pso_ok(t, tag, pso, err))
         let nb = n / 32
@@ -4760,7 +4791,7 @@ def private b32_mm_gate(t : T?; var dev, queue; fmt : KqFmt; kdim, ndim, mp : in
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
         let sq = stamp_of(@@enc_kq_mm_q51_c)
-        let si = fmt == KqFmt.q4032 ? stamp_of(@@enc_kq_mm_q4032_c) : stamp_of(@@enc_kq_mm_iq4nl32_c)
+        let si = fmt == KqFmt.q4032 ? stamp_of(@@enc_kq_mm_q4032_c) : (fmt == KqFmt.q5032 ? stamp_of(@@enc_kq_mm_q5032_c) : stamp_of(@@enc_kq_mm_iq4nl32_c))
         var pso = fmt == KqFmt.q51 ? mc |> keep_stamp(sq, err) : mc |> keep_stamp(si, err)
         return if (!pso_ok(t, tag, pso, err))
         var inscope(p0, p1, wref) <- moe_gemv_planes(fmt, ndim, kdim)
@@ -4840,6 +4871,40 @@ def private q51_test_planes(rows, n : int; var qp : array<uint8>; var sp : array
     }
 }
 
+// Build q5032 plane pairs for `rows` rows of n elements: q51's quant form (patterned 5-bit codes, every one of the 32 reached)
+// under a pow2 f16 d - d * (q - 16) is f16-exact, so the CPU float reference is BIT-exact under any GPU reduction order.
+def private q5032_test_planes(rows, n : int; var qp : array<uint8>; var sp : array<uint8>; var wref : array<float>) {
+    let nb = n / 32
+    let qb = int(Q5032_QB)
+    let sb = int(Q5032_SB)
+    let dlut = fixed_array(0.25, 0.5, 1.0, 2.0)
+    qp |> resize(rows * nb * qb)
+    sp |> resize(rows * nb * sb)
+    wref |> resize(rows * n)
+    for (b in range(rows * nb)) {
+        let d = dlut[(b / 3) % 4]
+        let dbits = f32_to_f16(d)
+        sp[b * sb] = uint8(dbits & 0xFF)
+        sp[b * sb + 1] = uint8(dbits >> 8u)
+        var qh = 0u
+        for (i in range(32)) {
+            let q = (b * 11 + i * 7 + i / 3) % 32
+            wref[b * 32 + i] = d * float(q - 16)
+            if ((q & 16) != 0) {
+                qh |= 1u << uint(i)
+            }
+            if (i < 16) {
+                qp[b * qb + i] = uint8(q & 15)
+            } else {
+                qp[b * qb + i - 16] = uint8(uint(qp[b * qb + i - 16]) | (uint(q & 15) << 4u))
+            }
+        }
+        for (i in range(4)) {
+            qp[b * qb + 16 + i] = uint8(qh >> uint(i * 8))
+        }
+    }
+}
+
 // Build iq4nl32-form plane pairs for `rows` rows of n elements under the codebook `lut` (iq4nl's, or q4032's linear one):
 // patterned nibbles (position-dependent, every codebook slot reached), pow2 f16 d - d*LUT[q] is an f16-exact value, so the
 // CPU float reference is BIT-exact under any GPU reduction order.
@@ -4875,6 +4940,10 @@ def private b32_mm_kernels(f) {   //! generic, as the gates are: the Apple half 
     if (f == KqFmt.q4032) {
         return (base = kernel_of(@@pf_enc_moe_mm_q4032_c), t = kernel_of(@@pf_enc_moe_mm_q4032_t_c), th = kernel_of(@@pf_enc_moe_mm_q4032_th_c),
             th128 = kernel_of(@@pf_enc_moe_mm_q4032_th128_c), thr = kernel_of(@@pf_enc_moe_mm_q4032_thr_c))
+    }
+    if (f == KqFmt.q5032) {
+        return (base = kernel_of(@@pf_enc_moe_mm_q5032_c), t = kernel_of(@@pf_enc_moe_mm_q5032_t_c), th = kernel_of(@@pf_enc_moe_mm_q5032_th_c),
+            th128 = kernel_of(@@pf_enc_moe_mm_q5032_th128_c), thr = kernel_of(@@pf_enc_moe_mm_q5032_thr_c))
     }
     if (f != KqFmt.iq4nl32) {
         panic("b32_mm_kernels: {f} is not a per-32 expert mul_mm format")

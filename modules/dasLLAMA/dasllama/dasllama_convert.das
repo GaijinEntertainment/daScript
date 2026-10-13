@@ -1156,6 +1156,30 @@ def kq_transcode_p(src : uint8 const?; var kq : uint8?; var ks : uint8?; _f : Kq
     kq_transcode_p(src, kq, ks, KqTag_iq4nl32())
 }
 
+//! Transcode one Q5_0 disk block (22 bytes at `src`: d f16, qh u32, 16 nibble bytes) into the q5032 planes - verbatim splits,
+//! exact: the 2 scale bytes to ks, the nibbles then qh to kq (q51's quant form).
+def kq_transcode_p(src : uint8 const?; var kq : uint8?; var ks : uint8?; _f : KqTag_q5032) {
+    unsafe {
+        bcopy(ks, src, 2l)
+        bcopy(kq, src + 6l, 16l)
+        bcopy(kq + 16l, src + 2l, 4l)
+    }
+}
+
+//! Reference dequant of one q5032-plane 32-block: w = d * (q - 16) with q = nibble | qh_bit << 4 (elem k reads qh bit k, elem
+//! k + 16 bit k + 16), `dequantize_row_q5_0`'s order.
+def dequant_q5032_plane_block(kq : array<uint8> | #; kqo : int64; ks : array<uint8> | #; kso : int64; var dst : array<float> | #; doff : int64) {
+    let d = f16_to_f32(rd_u16(ks, kso))
+    let qh = rd_u32(kq, kqo + 16l)
+    for (k in range64(16l)) {
+        let b = int(kq[kqo + k])
+        let h0 = (int(qh >> uint(k)) & 1) << 4
+        let h1 = (int(qh >> uint(k + 16l)) & 1) << 4
+        dst[doff + k] = float(((b & 15) | h0) - 16) * d
+        dst[doff + k + 16l] = float(((b >> 4) | h1) - 16) * d
+    }
+}
+
 //! Reference dequant of one q4032-plane 32-block: w = d * (q - 8), `dequantize_row_q4_0`'s order - the codebook block under
 //! the linear table.
 def dequant_q4032_plane_block(kq : array<uint8> | #; kqo : int64; ks : array<uint8> | #; kso : int64; var dst : array<float> | #; doff : int64) {
@@ -1201,6 +1225,8 @@ def dequant_b32_plane_block(f : KqFmt; kq : array<uint8> | #; ks : array<uint8> 
         dequant_iq4nl32_plane_block(kq, bi * IQ4NL32_QB, ks, bi * IQ4NL32_SB, dst, doff)
     } elif (f == KqFmt.q4032) {
         dequant_q4032_plane_block(kq, bi * Q4032_QB, ks, bi * Q4032_SB, dst, doff)
+    } elif (f == KqFmt.q5032) {
+        dequant_q5032_plane_block(kq, bi * Q5032_QB, ks, bi * Q5032_SB, dst, doff)
     } else {
         panic("dequant_b32_plane_block: '{f}' has no per-32 plane pair")
     }

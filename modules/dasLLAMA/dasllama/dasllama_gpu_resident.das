@@ -320,9 +320,11 @@ def trim_pack_emb(src : Model; var t : Model; rebase : int64) : bool {
         t.embs |> reserve_resize(nsb * ssb)
         unsafe {
             let qp = kq_sb(f) ? addr<void?>(src.kq[int(f)].q[sb0 * qsb]) : (f == KqFmt.q51 ? addr<void?>(src.q51q[sb0 * qsb])
-                : (f == KqFmt.iq4nl32 ? addr<void?>(src.iq4nl32q[sb0 * qsb]) : addr<void?>(src.q4032q[sb0 * qsb])))
+                : (f == KqFmt.iq4nl32 ? addr<void?>(src.iq4nl32q[sb0 * qsb])
+                : (f == KqFmt.q5032 ? addr<void?>(src.q5032q[sb0 * qsb]) : addr<void?>(src.q4032q[sb0 * qsb]))))
             let sp = kq_sb(f) ? addr<void?>(src.kq[int(f)].s[sb0 * ssb]) : (f == KqFmt.q51 ? addr<void?>(src.q51s[sb0 * ssb])
-                : (f == KqFmt.iq4nl32 ? addr<void?>(src.iq4nl32s[sb0 * ssb]) : addr<void?>(src.q4032s[sb0 * ssb])))
+                : (f == KqFmt.iq4nl32 ? addr<void?>(src.iq4nl32s[sb0 * ssb])
+                : (f == KqFmt.q5032 ? addr<void?>(src.q5032s[sb0 * ssb]) : addr<void?>(src.q4032s[sb0 * ssb]))))
             memcpy(addr<void?>(t.embq[0]), qp, nsb * qsb)
             memcpy(addr<void?>(t.embs[0]), sp, nsb * ssb)
         }
@@ -391,6 +393,8 @@ def kq_plane_pair(var t : Model; f : KqFmt; blk : block<(var q : array<uint8>; v
         invoke(blk, t.iq4nl32q, t.iq4nl32s)
     } elif (f == KqFmt.q4032) {
         invoke(blk, t.q4032q, t.q4032s)
+    } elif (f == KqFmt.q5032) {
+        invoke(blk, t.q5032q, t.q5032s)
     } elif (f == KqFmt.mx4) {
         invoke(blk, t.mxq, t.mxs)
     } else {
@@ -405,6 +409,7 @@ def kq_plane_pair_names(f : KqFmt) : tuple<q : string; s : string> {
     if (f == KqFmt.q51) return (q = "q51q", s = "q51s")
     if (f == KqFmt.iq4nl32) return (q = "iq4nl32q", s = "iq4nl32s")
     if (f == KqFmt.q4032) return (q = "q4032q", s = "q4032s")
+    if (f == KqFmt.q5032) return (q = "q5032q", s = "q5032s")
     if (f == KqFmt.mx4) return (q = "mxq", s = "mxs")
     return (q = "", s = "")
 }
@@ -557,7 +562,7 @@ def private resident_emb_plane(t : Model) : tuple<on : bool; f : KqFmt; off : in
 }
 
 //! the table is fp32 rows holding the file's own values (F32 on disk, or F16/BF16 widened without loss), tied or untied: the f32
-//! gather's table; a Q4_1/Q5_0 table's fp32 rows are a dequant and stay the host's
+//! gather's table; a Q4_1 table's fp32 rows are a dequant and stay the host's
 [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#vk-token-gather")]
 def private resident_emb_f32_want(t : Model) : bool => t.tok_emb_off >= 0l && t.emb_f32_exact && !t.planes_trimmed
 
@@ -1931,7 +1936,7 @@ def private resident_arm_emb(t : Model; plan : ResidentPlan; ple_tbl_placed : bo
         }
     } elif (!tied && !emb.on) {
         why = (t.planes_trimmed ? "the image trimmed the table's plane"
-            : "the table's fp32 rows carry no exact mark (`emb_f32_exact`: a Q4_1/Q5_0 dequant, a converted copy the host keeps, or a prepared image, which does not carry the mark)")
+            : "the table's fp32 rows carry no exact mark (`emb_f32_exact`: a Q4_1 dequant, a converted copy the host keeps, or a prepared image, which does not carry the mark)")
     } elif (!tied && plan.emb_bytes == 0l) {
         why = "the table's own plane does not fit the room left past the weights and the K/V at this context"
     } elif (!tied && bemb < 0l) {
@@ -5499,7 +5504,7 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
     let ebias_ok = !has_experts || !t.config.moe_exps_bias || perop_upload_expert_bias(t)
     for (i in range64(ebias_ok ? want : 0l)) {
         let l = layers - 1l - i
-        // The Q4_K_M MoE recipe bumps ffn_down_exps to Q5_0/Q8_0, so k4/k4/q8 is the COMMON shape (glm4moe,
+        // The Q4_K_M MoE recipe bumps ffn_down_exps to Q5_0/Q8_0, so k4/k4/q5032 and k4/k4/q8 are the COMMON shapes (glm4moe,
         // gemma). The walk stops on refusal so the resident set stays contiguous from the end.
         break if (l < t.config.n_layer_dense_lead || t.we1_offs[l] < 0l || tier_expert_walk_stops(t, l, "expert"))
         var inscope ups <- resident_expert_ups(t, l)

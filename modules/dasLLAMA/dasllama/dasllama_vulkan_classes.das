@@ -1542,7 +1542,7 @@ let SCHED_M_ROWS = 128u   //! the m column: whole columns over a big bucket, the
 let CM2_TC_E = -1l        //! the class ladders' `tc` key for the expert schedule's e column: a sentinel no column width can be (the dense m stamp already keys by its 128 rows)
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#khr-mm-kq-tile")]
-def khr_cls_ensure(fmt : int) : bool {
+def khr_cls_ensure(fmt : int) : bool {   // nolint:STYLE037 — kq_tile_stamp's generated arms, one a format's stamp
     var r = false
     kq_tile_stamp(fmt) <| $() {
         r = tile_ensure_khr_cls()
@@ -1551,7 +1551,7 @@ def khr_cls_ensure(fmt : int) : bool {
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#khr-mm-kq-tile")]
-def khr_cls_set(fmt : int; bufs : uint64 const[5]; sizes : int64 const[5]; gbits : uint const[5]) : VkDescriptorSet {
+def khr_cls_set(fmt : int; bufs : uint64 const[5]; sizes : int64 const[5]; gbits : uint const[5]) : VkDescriptorSet {   // nolint:STYLE037 — kq_tile_stamp's generated arms, one a format's stamp
     var r : VkDescriptorSet
     kq_tile_stamp(fmt) <| $() {
         r = tile_set_khr_cls(bufs, sizes, gbits)
@@ -1560,7 +1560,7 @@ def khr_cls_set(fmt : int; bufs : uint64 const[5]; sizes : int64 const[5]; gbits
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#khr-mm-kq-tile")]
-def khr_cls_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : BatchArgs; groups : int64) {
+def khr_cls_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : BatchArgs; groups : int64) {   // nolint:STYLE037 — kq_tile_stamp's generated arms, one a format's stamp
     kq_tile_stamp(fmt) <| $() {
         tile_enc_khr_cls(raw, h, s, pc, groups)
     }
@@ -1574,7 +1574,7 @@ def private cm2_b32_require_s_column(fmt : int; tc : int64) {
 
 let private CM2_TILE_TAILS = "khr_cls cm2e_cls cm2l_cls cm2m_cls cm2s_cls"   //! the cm2 class ladders' tiles, by `cm2_tile_tail`
 //! the (format, tile) pairs no stamp serves: a per-32 expert plane has no dense l or m column
-let private CM2_TILE_NONE = "q51/cm2l_cls q51/cm2m_cls mx4/cm2l_cls mx4/cm2m_cls iq4nl32/cm2l_cls iq4nl32/cm2m_cls q4032/cm2l_cls q4032/cm2m_cls"
+let private CM2_TILE_NONE = "q51/cm2l_cls q51/cm2m_cls mx4/cm2l_cls mx4/cm2m_cls iq4nl32/cm2l_cls iq4nl32/cm2m_cls q4032/cm2l_cls q4032/cm2m_cls q5032/cm2l_cls q5032/cm2m_cls"
 
 //! the tile a cm2 class pick takes, its ordinal in CM2_TILE_TAILS: the KHR tile on a KHR-mode card, the e column for the expert
 //! schedule's m pieces, the s column on a per-32 expert plane, else the dense column of `tc`
@@ -6975,6 +6975,61 @@ class template Q4032Cm2T : KqCm2BatchT {
     }
 }
 
+//! Q5_0 per-32 on the cm2 tile: q51's quant form (`VkQ51Blk`, four nibble words then the qh word) under one f16 d a block, two
+//! blocks a word (q4032's scale plane), w = d * (q - 16) with q = nibble | qh bit << 4
+[ |> template_struct_instance]
+class template Q5032Cm2T : KqCm2BatchT {
+    typedef BLK = VkQ51Blk
+    typedef ST = uint
+    override BLKW = 32u
+    override DECV4 = true
+
+    def override khr_stage16(blk, e0, sbase : uint) : void {
+        static_if (KHR) {   //! the 20-byte block off its words: four nibble words then the qh word, the low or high nibbles by e0
+            let sh = (e0 >> 4u) * 4u
+            let d = q40_d_of(ws[blk >> 1u], blk)
+            let qh = wqw[blk * KQ_Q5032_QWORDS + KQ_B32_QWORDS] >> e0
+            for [unroll_full] (c in range(4)) {
+                let w = wqw[blk * KQ_Q5032_QWORDS + uint(c)] >> sh
+                let hb = qh >> (uint(c) * 4u)
+                let q0 = int((w & 0xFu) | ((hb & 1u) << 4u)) - 16
+                let q1 = int(((w >> 8u) & 0xFu) | (((hb >> 1u) & 1u) << 4u)) - 16
+                let q2 = int(((w >> 16u) & 0xFu) | (((hb >> 2u) & 1u) << 4u)) - 16
+                let q3 = int(((w >> 24u) & 0xFu) | (((hb >> 3u) & 1u) << 4u)) - 16
+                khr_put4(sbase + uint(c) * 2u, float4(d * float(q0), d * float(q1), d * float(q2), d * float(q3)))
+            }
+        }
+    }
+
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
+    def decode(blk : VkQ51Blk; bc, cib : uint2) : float16 {
+        let e = cib.y
+        let j = e & 15u
+        let by = ((uint(int(blk.qs[int(j >> 1u)])) & 0xFFFFu) >> ((j & 1u) * 8u)) & 0xFFu
+        let qh = (uint(int(blk.qs[8])) & 0xFFFFu) | ((uint(int(blk.qs[9])) & 0xFFFFu) << 16u)
+        let q = ((by >> ((e >> 4u) * 4u)) & 0xFu) | (((qh >> e) & 1u) << 4u)
+        let idx = wg_blk0 + bc.x * (pa.n >> 5u) + bc.y
+        let d = q40_d_of(ws[idx >> 1u], idx)
+        return float16(d * float(int(q) - 16))
+    }
+
+    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
+    def decode_v4(blk : VkQ51Blk; bc, cib : uint2) : half4 {
+        let e = cib.y
+        let li = int((e & 15u) >> 1u)
+        let l0 = uint(int(blk.qs[li])) & 0xFFFFu
+        let l1 = uint(int(blk.qs[li + 1])) & 0xFFFFu
+        let sh = (e >> 4u) * 4u
+        let qh = ((uint(int(blk.qs[8])) & 0xFFFFu) | ((uint(int(blk.qs[9])) & 0xFFFFu) << 16u)) >> e
+        let idx = wg_blk0 + bc.x * (pa.n >> 5u) + bc.y
+        let d = q40_d_of(ws[idx >> 1u], idx)
+        return half4(float4(d * float(int(((l0 >> sh) & 0xFu) | ((qh & 1u) << 4u)) - 16),
+            d * float(int(((l0 >> (sh + 8u)) & 0xFu) | (((qh >> 1u) & 1u) << 4u)) - 16),
+            d * float(int(((l1 >> sh) & 0xFu) | (((qh >> 2u) & 1u) << 4u)) - 16),
+            d * float(int(((l1 >> (sh + 8u)) & 0xFu) | (((qh >> 3u) & 1u) << 4u)) - 16)))
+    }
+}
+
 [ |> template_struct_instance]
 class template Mx4Cm2T : KqCm2BatchT {
     typedef BLK = VkMx4Blk
@@ -7584,6 +7639,17 @@ class Q4032Cm2SBatch : Q4032Cm2T {
     typedef ACCW = coopmatWgAcc_f32_128x32
 }
 
+//! the q5032 rail's s column: q4032's shape (the window's dense planes and the expert schedule's 32-row pieces)
+[vk_dispatch(name = "q5032_batch_cm2s_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Q5032Cm2SBatch : Q5032Cm2T {
+    override BN = 32u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x32
+    typedef ACC = coopmatWgAcc_f16_128x32
+    typedef ACCW = coopmatWgAcc_f32_128x32
+}
+
 //! the mx4 rail's s column: the expert schedule's 32-row pieces (gpt-oss's routed stacks; a dense mx4 plane never exists)
 [vk_dispatch(name = "mx4_batch_cm2s_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Mx4Cm2SBatch : Mx4Cm2T {
@@ -8017,6 +8083,16 @@ class Q4032Cm2EBatch : Q4032Cm2T {
     typedef ACCW = coopmatWgAcc_f32_128x128
 }
 
+[vk_dispatch(name = "q5032_batch_cm2e_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Q5032Cm2EBatch : Q5032Cm2T {
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+}
+
 [vk_dispatch(name = "iq4nl32_batch_cm2e_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Iq4nl32Cm2EBatch : Iq4nl32Cm2T {
     override BN = 128u
@@ -8145,6 +8221,17 @@ class Iq4nl32KhrBatch : Iq4nl32Cm2T {
 
 [vk_dispatch(name = "q4032_batch_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class Q4032KhrBatch : Q4032Cm2T {
+    override KHR = true
+    override BN = 128u
+    override STILE = true
+    typedef AT = coopmatWgA_f16_128x64
+    typedef BT = coopmatWgB_f16_64x128
+    typedef ACC = coopmatWgAcc_f16_128x128
+    typedef ACCW = coopmatWgAcc_f32_128x128
+}
+
+[vk_dispatch(name = "q5032_batch_khr_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class Q5032KhrBatch : Q5032Cm2T {
     override KHR = true
     override BN = 128u
     override STILE = true
@@ -10707,6 +10794,20 @@ def blk32_q40_quad(w : uint4; sh : uint) : uint4 {
         q40_signed_word((w.w >> sh) & KQC_LOW))
 }
 
+//! four Q5_0 codes `q` (0..31 a byte) as signed int8 lanes `q - 16`: `q ^ 16` is the low bits, and a lane under 16 sets its top three
+[spirv_inline]
+def q50_signed_word(q : uint) : uint {
+    let x = q ^ 0x10101010u
+    return x | ((x & 0x10101010u) * 14u)
+}
+
+//! ... Q5_0's codes (q - 16): Q5_1's nibbles with the qh word's fifth bits, re-centred
+[spirv_inline]
+def blk32_q50_quad(w : uint4; qh, sh : uint) : uint4 {
+    let q = blk32_q51_quad(w, qh, sh)
+    return uint4(q50_signed_word(q.x), q50_signed_word(q.y), q50_signed_word(q.z), q50_signed_word(q.w))
+}
+
 //! ... the raw nibble codes (MXFP4's: `mx4_sdot` decodes them against x)
 [spirv_inline]
 def blk32_nib_quad(w : uint4; sh : uint) : uint4 => uint4((w.x >> sh) & KQC_LOW, (w.y >> sh) & KQC_LOW, (w.z >> sh) & KQC_LOW, (w.w >> sh) & KQC_LOW)
@@ -10721,6 +10822,8 @@ def blk32_qwords(fmt : KqTag_iq4nl32) : uint => KQ_B32_QWORDS
 def blk32_qwords(fmt : KqTag_mx4) : uint => KQ_B32_QWORDS
 [template(fmt), spirv_inline, unused_argument(fmt)]
 def blk32_qwords(fmt : KqTag_q4032) : uint => KQ_B32_QWORDS
+[template(fmt), spirv_inline, unused_argument(fmt)]
+def blk32_qwords(fmt : KqTag_q5032) : uint => KQ_Q5032_QWORDS
 
 //! ... the quant word a block's decode reads past its four nibble words - Q5_1's qh word, the first nibble word elsewhere (read
 //! again and unused, so no load passes the block)
@@ -10732,6 +10835,8 @@ def blk32_qh_off(fmt : KqTag_iq4nl32) : uint => 0u
 def blk32_qh_off(fmt : KqTag_mx4) : uint => 0u
 [template(fmt), spirv_inline, unused_argument(fmt)]
 def blk32_qh_off(fmt : KqTag_q4032) : uint => 0u
+[template(fmt), spirv_inline, unused_argument(fmt)]
+def blk32_qh_off(fmt : KqTag_q5032) : uint => KQ_B32_QWORDS
 
 //! ... the block's half `sh` as byte lanes off its four nibble words `w` and, on Q5_1, its qh word
 [template(fmt), spirv_inline, unused_argument(fmt)]
@@ -10742,6 +10847,8 @@ def blk32_quad(fmt : KqTag_iq4nl32; w : uint4; qh, sh : uint) : uint4 => blk32_i
 def blk32_quad(fmt : KqTag_mx4; w : uint4; qh, sh : uint) : uint4 => blk32_nib_quad(w, sh)
 [template(fmt), spirv_inline, unused_argument(fmt, qh)]
 def blk32_quad(fmt : KqTag_q4032; w : uint4; qh, sh : uint) : uint4 => blk32_q40_quad(w, sh)
+[template(fmt), spirv_inline, unused_argument(fmt)]
+def blk32_quad(fmt : KqTag_q5032; w : uint4; qh, sh : uint) : uint4 => blk32_q50_quad(w, qh, sh)
 
 //! ... the scale plane's word holding block `wb`'s scale
 [template(fmt), spirv_inline, unused_argument(fmt)]
@@ -10752,6 +10859,8 @@ def blk32_sword(fmt : KqTag_iq4nl32; wb : uint) : uint => wb / (4u / KQ_IQ4NL32_
 def blk32_sword(fmt : KqTag_mx4; wb : uint) : uint => wb / (4u / KQ_MX4_SBYTES)
 [template(fmt), spirv_inline, unused_argument(fmt)]
 def blk32_sword(fmt : KqTag_q4032; wb : uint) : uint => wb / (4u / KQ_Q4032_SBYTES)
+[template(fmt), spirv_inline, unused_argument(fmt)]
+def blk32_sword(fmt : KqTag_q5032; wb : uint) : uint => wb / (4u / KQ_Q5032_SBYTES)
 
 //! ... the block's scale pair off the scale word `sw` holding it: Q5_1 (d, m), IQ4_NL (d, -), MXFP4 (the halved E8M0, -)
 [template(fmt), spirv_inline, unused_argument(fmt, wb)]
@@ -10760,6 +10869,8 @@ def blk32_scale(fmt : KqTag_q51; sw, wb : uint) : float2 => unpackHalf2x16(sw)
 def blk32_scale(fmt : KqTag_iq4nl32; sw, wb : uint) : float2 => float2(q40_d_of(sw, wb), 0.0)
 [template(fmt), spirv_inline, unused_argument(fmt)]
 def blk32_scale(fmt : KqTag_q4032; sw, wb : uint) : float2 => float2(q40_d_of(sw, wb), 0.0)
+[template(fmt), spirv_inline, unused_argument(fmt)]
+def blk32_scale(fmt : KqTag_q5032; sw, wb : uint) : float2 => float2(q40_d_of(sw, wb), 0.0)
 [template(fmt), spirv_inline, unused_argument(fmt)]
 def blk32_scale(fmt : KqTag_mx4; sw, wb : uint) : float2 {
     let per = 4u / KQ_MX4_SBYTES
@@ -11028,6 +11139,23 @@ class Q4032GemvN : Blk32GemvRunT {
     override NCOL = true
 }
 
+[vk_dispatch(name = "q5032_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class Q5032Gemv : Blk32GemvRunT {
+    typedef FMT = KqTag_q5032
+}
+
+[vk_dispatch(name = "q5032_emb_cls", kernel = "run", family = "b32_emb_cls", grid = "wgs", params = "wgs : int64")]
+class Q5032Emb : Blk32GemvRunT {
+    typedef FMT = KqTag_q5032
+    override EMB = true
+}
+
+[vk_dispatch(name = "q5032_gemv_n_cls", kernel = "run", family = "q5032_gemv_cls", grid = "wgs", params = "wgs : int64")]
+class Q5032GemvN : Blk32GemvRunT {
+    typedef FMT = KqTag_q5032
+    override NCOL = true
+}
+
 //! the sdot4 of four MXFP4 nibbles (one per byte of `nib`) against four Q8_0 activation bytes: the doubled magnitudes, the sign applied by subtracting the negative bytes twice
 def mx4_sdot(nib, x : uint) : int {
     let mag2 = mx4_mag2x4(nib)
@@ -11190,6 +11318,11 @@ class Iq4nl32Batch : Blk32BatchT {
 [vk_dispatch(name = "q4032_batch_cls", kernel = "run", family = "blk32_batch_cls", grid = "wgs", params = "wgs : int64")]
 class Q4032Batch : Blk32BatchT {
     typedef FMT = KqTag_q4032
+}
+
+[vk_dispatch(name = "q5032_batch_cls", kernel = "run", family = "blk32_batch_cls", grid = "wgs", params = "wgs : int64")]
+class Q5032Batch : Blk32BatchT {
+    typedef FMT = KqTag_q5032
 }
 
 [vk_dispatch(name = "mx4_batch_cls", kernel = "run", family = "blk32_batch_cls", grid = "wgs", params = "wgs : int64")]
@@ -11580,7 +11713,7 @@ def q8_batch_cls_enc(v : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : V
 // The family shares one set layout ("kq_batch_cls"); the q40 f16-MMA twin (coopmat_mode 1 —
 // no s8-native for nibbles) carries its own. The stack and resident-prefill encoders share it.
 
-def kq_batch_cls_ensure(fmt : int; q40cm : bool) : bool {
+def kq_batch_cls_ensure(fmt : int; q40cm : bool) : bool {   // nolint:STYLE037 — kq_tile_stamp's generated arms, one a format's stamp
     if (q40cm) return ensure_kq_batch_q40_cmf16_cls()
     var r = false
     kq_tile_stamp(fmt, "q8") <| $() {
@@ -11602,7 +11735,7 @@ def kq_batch_cls_set_for(fmt : int; q40cm : bool; bufs : uint64 const[6]; sizes 
     return set_kq_batch_cls(bufs, sizes, gbits)
 }
 
-def kq_batch_cls_enc_for(fmt : int; q40cm : bool; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : BatchArgs; wgs : int64) {
+def kq_batch_cls_enc_for(fmt : int; q40cm : bool; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : BatchArgs; wgs : int64) {   // nolint:STYLE037 — kq_tile_stamp's generated arms, one a format's stamp
     if (q40cm) {
         enc_kq_batch_q40_cmf16_cls(raw, h, set_, pc, wgs)
         return
@@ -11616,7 +11749,7 @@ def kq_batch_cls_enc_for(fmt : int; q40cm : bool; raw : VkCommandBuffer; var h :
 // The drivers' format pick as ensure/set/enc: every decode GEMV class
 // shares the 6-buffer shape (wq, ws, regions, xq, xs, y) and GemvArgs.
 
-def gemv_cls_ensure(fmt : int) : bool {
+def gemv_cls_ensure(fmt : int) : bool {   // nolint:STYLE037 — kq_tile_stamp's generated arms, one a format's stamp
     var r = false
     kq_tile_stamp(fmt, "", "gemv") <| $() {
         r = tile_ensure_cls()
@@ -11635,6 +11768,8 @@ def gemv_cls_set(fmt : int; bufs : uint64 const[6]; sizes : int64 const[6]; gbit
         return set_iq4nl32_gemv_cls(bufs, sizes, gbits)
     } elif (fmt == int(KqFmt.q4032)) {
         return set_q4032_gemv_cls(bufs, sizes, gbits)
+    } elif (fmt == int(KqFmt.q5032)) {
+        return set_q5032_gemv_cls(bufs, sizes, gbits)
     } elif (kq_sb(fmt)) {
         // the family shares one layout — one set serves every kq format
         return set_kq_gemv_cls(fixed_array(bufs[0], bufs[1], bufs[2], bufs[3], bufs[4], bufs[5], kq_grid_dev()),
@@ -11653,7 +11788,7 @@ def gemv_planes_set(fmt : int; p : tuple<wq : uint64; ws : uint64; wqb : int64; 
         fixed_array(0u, 0u, meta_bit, xbit, xbit, ybit))
 }
 
-def gemv_cls_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : GemvArgs; wgs : int64) {
+def gemv_cls_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : GemvArgs; wgs : int64) {   // nolint:STYLE037 — kq_tile_stamp's generated arms, one a format's stamp
     kq_tile_stamp(fmt, "", "gemv") <| $() {
         tile_enc_cls(raw, h, set_, pc, wgs)
     }
@@ -11774,7 +11909,7 @@ def private q8_gemv_n_enc(raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDes
     }
 }
 
-def gemv_cls_enc_n(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : GemvArgs; wgs : int64) {
+def gemv_cls_enc_n(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : GemvArgs; wgs : int64) {   // nolint:STYLE037 — kq_tile_stamp's generated arms, one a format's stamp
     if (fmt == int(KqFmt.q8)) {
         q8_gemv_n_enc(raw, h, set_, pc, wgs)
         return
@@ -12360,7 +12495,7 @@ let private EMB_NO_KQ_LEAF = "q8 mx4"
 def emb_cls_fmt_ok(fmt : int) : bool => fmt == int(KqFmt.q8) || (fmt != int(KqFmt.mx4) && fmt >= 0 && fmt < KQ_FMT_COUNT)
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#vk-token-gather")]
-def emb_cls_ensure(fmt : int) : bool {
+def emb_cls_ensure(fmt : int) : bool {   // nolint:STYLE037 — kq_tile_stamp's generated arms, one a format's stamp
     return ensure_emb_gather_cls() if (fmt == int(KqFmt.q8))
     return false if (!emb_cls_fmt_ok(fmt))
     var r = false

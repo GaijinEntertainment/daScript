@@ -248,7 +248,9 @@ def private embed_b32_gate(t : T?; var dev, queue; f : KqFmt; dim, vocab, lead :
         let sq = stamp_of(@@enc_embed_b32_q51)
         let si = stamp_of(@@enc_embed_b32_iq4nl32)
         let s4 = stamp_of(@@enc_embed_b32_q4032)
-        var pso = f == KqFmt.q51 ? mc |> keep_stamp(sq, err) : (f == KqFmt.iq4nl32 ? mc |> keep_stamp(si, err) : mc |> keep_stamp(s4, err))
+        let s5 = stamp_of(@@enc_embed_b32_q5032)
+        var pso = f == KqFmt.q51 ? mc |> keep_stamp(sq, err) : (f == KqFmt.iq4nl32 ? mc |> keep_stamp(si, err)
+            : (f == KqFmt.q5032 ? mc |> keep_stamp(s5, err) : mc |> keep_stamp(s4, err)))
         return if (!pso_ok(t, tag, pso, err))
         let nb = dim / int(KQ_B32_ELEMS)
         let nblk = lead + vocab * nb
@@ -300,6 +302,10 @@ def private embed_b32_gate(t : T?; var dev, queue; f : KqFmt; dim, vocab, lead :
             } elif (f == KqFmt.iq4nl32) {
                 stamp_run(si, pso) {
                     invoke(si.enc, enc, mc.buf[bks], soff, mc.buf[bkq], qoff, mc.buf[btok], 4ul, mc.buf[bxo], uint64(dim * 4), ka, int64(dim / 16), 3l)
+                }
+            } elif (f == KqFmt.q5032) {
+                stamp_run(s5, pso) {
+                    invoke(s5.enc, enc, mc.buf[bks], soff, mc.buf[bkq], qoff, mc.buf[btok], 4ul, mc.buf[bxo], uint64(dim * 4), ka, int64(dim / 16), 3l)
                 }
             } else {
                 stamp_run(s4, pso) {
@@ -1935,7 +1941,7 @@ def test_metal_misc_kernels(t : T?) {
                 argmax_rows_gate(t, dev, queue, 5, 5000)        // the same-slab verify's per-row accept walk
                 argmax_rows_gate(t, dev, queue, 9, 700)         // MTP_MAX_ROWS rows, n below one threadgroup
                 embed_q8_gate(t, dev, queue, 512, 3, 2)
-                for (f in [KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032]) {
+                for (f in [KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q5032]) {
                     embed_b32_gate(t, dev, queue, f, 96, 5, 0)
                     embed_b32_gate(t, dev, queue, f, 2048, 7, 7 * 64)   //! past a whole other table's blocks: an untied table's offset
                 }

@@ -232,6 +232,7 @@ var g_pso_emb_kq_iq2xxs : MetalComputePipeline?
 var g_pso_emb_b32_q51 : MetalComputePipeline?       //! the per-32 token-table gathers
 var g_pso_emb_b32_iq4nl32 : MetalComputePipeline?
 var g_pso_emb_b32_q4032 : MetalComputePipeline?
+var g_pso_emb_b32_q5032 : MetalComputePipeline?
 var g_pso_moe_router : MetalComputePipeline?   // MoE (Wave C): router GEMV over the fp32 slab
 var g_pso_moe_select : MetalComputePipeline?   // softmax + top-k + renorm (one simdgroup)
 var g_pso_moe_select_512 : MetalComputePipeline?   // the 16-deep ladder past 256 experts
@@ -285,6 +286,16 @@ var g_pso_b32_mvb2_q4032_ks : MetalComputePipeline?
 var g_pso_b32_mvb4_q4032_ks : MetalComputePipeline?
 var g_pso_b32_mvb8_q4032_ks : MetalComputePipeline?
 var g_pso_kq_mm_b4032 : MetalComputePipeline?
+var g_pso_moe_gemv_q5032 : MetalComputePipeline?   //! the q5032 stamps: the codebook set over q51's quant block, the code q - 16
+var g_pso_kq_q5032 : MetalComputePipeline?
+var g_pso_kq_q5032_ks : MetalComputePipeline?
+var g_pso_b32_mvb2_q5032 : MetalComputePipeline?
+var g_pso_b32_mvb4_q5032 : MetalComputePipeline?
+var g_pso_b32_mvb8_q5032 : MetalComputePipeline?
+var g_pso_b32_mvb2_q5032_ks : MetalComputePipeline?
+var g_pso_b32_mvb4_q5032_ks : MetalComputePipeline?
+var g_pso_b32_mvb8_q5032_ks : MetalComputePipeline?
+var g_pso_kq_mm_b5032 : MetalComputePipeline?
 var g_mx4_vtab : MetalBuffer?                   // [16] signed doubled-e2m1 values
 var g_pso_dn_conv : MetalComputePipeline?      // deltanet (Wave D): causal conv + SiLU
 var g_pso_dn_conv_n : MetalComputePipeline?    //! ... and the q/k L2 norm in one pass (`GkDnConv`)
@@ -1231,10 +1242,24 @@ def q4032_planes_of(dev : MetalDevice?; t : Model; off : int64) : tuple<qbuf : M
     }
 }
 
+//! One q5032 tensor's plane pair bind: q51's 20B quant blocks at (off/32)*20 and the f16 d plane at (off/32)*2 - verbatim disk
+//! splits, never rebaked. off % 256 keeps both binds 16B-aligned.
+def q5032_planes_of(dev : MetalDevice?; t : Model; off : int64) : tuple<qbuf : MetalBuffer?; qoff : uint64; sbuf : MetalBuffer?; soff : uint64> {
+    assert(t.metal_blob)
+    let b0 = off / 32l
+    unsafe {
+        return (qbuf = plane_buffer(dev, addr < void? >(t.q5032q[0]), uint64(long_length(t.q5032q)), t.image_map != null),
+                qoff = uint64(b0 * Q5032_QB),
+                sbuf = plane_buffer(dev, addr < void? >(t.q5032s[0]), uint64(long_length(t.q5032s)), t.image_map != null),
+                soff = uint64(b0 * Q5032_SB))
+    }
+}
+
 //! a per-32 tensor's plane pair bind, by its format
 def b32_planes_of(dev : MetalDevice?; t : Model; fmt : KqFmt; off : int64) : tuple<qbuf : MetalBuffer?; qoff : uint64; sbuf : MetalBuffer?; soff : uint64> {
     if (fmt == KqFmt.q51) return q51_planes_of(dev, t, off)
     if (fmt == KqFmt.iq4nl32) return iq4nl32_planes_of(dev, t, off)
+    if (fmt == KqFmt.q5032) return q5032_planes_of(dev, t, off)
     return q4032_planes_of(dev, t, off)
 }
 

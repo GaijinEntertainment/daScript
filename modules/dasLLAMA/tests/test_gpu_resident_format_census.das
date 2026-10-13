@@ -449,7 +449,8 @@ def private per32_table_cell(t : T?; file : string; bar_rel : float) {
 [test]
 def test_gpu_resident_per32_tables(t : T?) {
     for (spec in [(file = "Qwen2.5-0.5B-Instruct-IQ4_NL-pure-local.gguf", arm = "vk-per32-iq4nl32"),
-                  (file = "Qwen2.5-0.5B-Instruct-Q4_0-local.gguf", arm = "vk-per32-q4032")]) {
+                  (file = "Qwen2.5-0.5B-Instruct-Q4_0-local.gguf", arm = "vk-per32-q4032"),
+                  (file = "Qwen2.5-0.5B-Instruct-Q5_0-pure-local.gguf", arm = "vk-per32-q5032")]) {
         t |> run("{spec.file}: the per-32 token table and classifier on the device, census and forced feed") @(t : T?) {
             if (!family_on(t, "qwen2") || !arm_on(t, spec.arm)) return
             per32_table_cell(t, spec.file, PER32_TABLE_BAR_REL)

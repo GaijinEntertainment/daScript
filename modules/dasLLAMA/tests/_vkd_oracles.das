@@ -334,7 +334,8 @@ def blk32_gemm_oracle(f : KqFmt; wq, ws, xq : array<uint>; xs : array<float>; re
         let wb0 = wblk0 + c * nb
         return (f == KqFmt.q51 ? q51_gemv_row_oracle(wq, ws, xq_r, xs_r, wb0, nb)
             : (f == KqFmt.iq4nl32 ? iq4nl32_gemv_row_oracle(wq, ws, xq_r, xs_r, wb0, nb)
-            : (f == KqFmt.q4032 ? q4032_gemv_row_oracle(wq, ws, xq_r, xs_r, wb0, nb) : mx4_gemv_row_oracle(wq, ws, xq_r, xs_r, wb0, nb))))
+            : (f == KqFmt.q4032 ? q4032_gemv_row_oracle(wq, ws, xq_r, xs_r, wb0, nb)
+            : (f == KqFmt.q5032 ? q5032_gemv_row_oracle(wq, ws, xq_r, xs_r, wb0, nb) : mx4_gemv_row_oracle(wq, ws, xq_r, xs_r, wb0, nb)))))
     }
 }
 
@@ -891,6 +892,32 @@ def q4032f16_gemm_oracle(wq : array<uint>; wsw : array<uint>; xf : array<uint>;
     nl32f16_gemm_oracle(wq, wsw, xf, recs, nrec, n, d, y, q40_lut())
 }
 
+//! Q5_0 per-32 x f16 GEMM oracle (the q5032 s and e stamps' shape): per weight d * (q - 16) off the per-32 plane - q the nibble
+//! (byte j: element j low, j + 16 high) with the qh word's bit e as its fifth, d the block's f16 half of its scale word (two
+//! blocks a word) - rounded f16 as the decode rounds, f16 activations, block order - approx bars
+def q5032f16_gemm_oracle(wq : array<uint>; wsw : array<uint>; xf : array<uint>;
+                         recs : array<uint>; nrec, n, d : int; var y : array<float>) {
+    q50f16_gemm_oracle(wq, wsw, xf, recs, nrec, n, d, y, true)
+}
+
+//! the q5032 cell's control: the same planes with the qh word unread - a decode that drops the fifth bit reads apart from the oracle
+def q5032_noqh_f16_gemm_oracle(wq : array<uint>; wsw : array<uint>; xf : array<uint>;
+                               recs : array<uint>; nrec, n, d : int; var y : array<float>) {
+    q50f16_gemm_oracle(wq, wsw, xf, recs, nrec, n, d, y, false)
+}
+
+def private q50f16_gemm_oracle(wq : array<uint>; wsw : array<uint>; xf : array<uint>;
+                               recs : array<uint>; nrec, n, d : int; var y : array<float>; read_qh : bool) {
+    f16_gemm_walk(xf, recs, nrec, n, d, 32, y) $(wb, e : int) : float {
+        let dp = unpackHalf2x16(wsw[wb / 2])
+        let dv = wb % 2 == 0 ? dp.x : dp.y
+        let qh = read_qh ? wq[wb * int(KQ_Q5032_QWORDS) + int(KQ_B32_QWORDS)] : 0u
+        let by = byte_u8(wq, wb * int(Q5032_QB) + e % 16)
+        let q = ((by >> ((e / 16) * 4)) & 0xF) | (int((qh >> uint(e)) & 1u) << 4)
+        return float(float16(dv * float(q - 16)))
+    }
+}
+
 def private nl32f16_gemm_oracle(wq : array<uint>; wsw : array<uint>; xf : array<uint>;
                                 recs : array<uint>; nrec, n, d : int; var y : array<float>; lut : int8[16]) {
     f16_gemm_walk(xf, recs, nrec, n, d, 32, y) $(wb, e : int) : float {
@@ -1022,6 +1049,36 @@ def q4032_gemv_row_oracle(wq, ws, xq : array<uint>; xs : array<float>; wb0, nb :
         return dot_q4032q8_scalar(addr<uint8 const?>(wq[wb0 * int(KQ_B32_QWORDS)]), addr<uint8 const?>(ws[wb0 / 2]) + int64(wb0 % 2) * int64(KQ_Q4032_SBYTES),
             addr<int8 const?>(xq[0]), addr(xs[0]), int64(nb) * 32l)
     }
+}
+
+//! the q5032 GEMV cell's oracle: the engine's scalar dot over the plane words from block `wb0` (q51's 20-byte blocks, the f16 d
+//! half-word) - the CPU rail's float order, the kernel held to it
+def q5032_gemv_row_oracle(wq, ws, xq : array<uint>; xs : array<float>; wb0, nb : int) : float {
+    unsafe {
+        return dot_q5032q8_scalar(addr<uint8 const?>(wq[wb0 * int(KQ_Q5032_QWORDS)]), addr<uint8 const?>(ws[wb0 / 2]) + int64(wb0 % 2) * int64(KQ_Q5032_SBYTES),
+            addr<int8 const?>(xq[0]), addr(xs[0]), int64(nb) * 32l)
+    }
+}
+
+//! the q5032 plane bytes' float witness: block-by-block `dequant_q5032_plane_block` dotted with the dequantized Q8_0 row in f64 -
+//! the plane decode straight off the bytes, independent of the scalar dot the class oracle and the kernel share
+def q5032_gemv_float_oracle(wq, ws, xq : array<uint>; xs : array<float>; wb0, nb : int) : float {
+    let qbn = int(Q5032_QB)
+    let sbn = int(Q5032_SB)
+    var inscope w : array<float>
+    w |> resize(32)
+    var acc = 0.0lf
+    for (b in range(nb)) {
+        let wb = wb0 + b
+        var inscope qb <- [for (i in range(qbn)); uint8(byte_u8(wq, wb * qbn + i))]
+        var inscope sb <- [for (i in range(sbn)); uint8(byte_u8(ws, wb * sbn + i))]
+        dequant_q5032_plane_block(qb, 0l, sb, 0l, w, 0l)
+        for (k in range(32)) {
+            let xv = (byte_u8(xq, b * 32 + k) ^ 0x80) - 0x80
+            acc += double(w[k]) * double(xv) * double(xs[b])
+        }
+    }
+    return float(acc)
 }
 
 //! the mx4 GEMV cell's oracle: the engine's scalar dot over the plane bytes from block `wb0` (its 16 nibble bytes, its E8M0

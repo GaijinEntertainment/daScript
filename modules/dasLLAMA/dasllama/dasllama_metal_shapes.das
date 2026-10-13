@@ -285,7 +285,7 @@ def moe_site_ok(fmt : KqFmt; off, ege : int64) : bool {
     if (fmt == KqFmt.q51) {   // per-32 planes: off % 128 keeps the 20B/4B binds 16B-aligned
         return off >= 0l && (off % 128l) == 0l && (ege % 32l) == 0l
     }
-    if (fmt == KqFmt.iq4nl32 || fmt == KqFmt.q4032) {   // per-32 planes: off % 256 keeps the 16B/2B binds 16B-aligned
+    if (fmt == KqFmt.iq4nl32 || fmt == KqFmt.q4032 || fmt == KqFmt.q5032) {   // per-32 planes: off % 256 keeps the 16B (20B on q5032) / 2B binds 16B-aligned
         return off >= 0l && (off % 256l) == 0l && (ege % 32l) == 0l
     }
     return false
@@ -294,14 +294,14 @@ def moe_site_ok(fmt : KqFmt; off, ege : int64) : bool {
 //! the expert plane formats the Metal routed block has kernels for at decode and prefill (the mx4 planes key off
 //! `experts_mx4`, a stack property, and ride their own arm); any other tag declines `graph`
 def moe_fmt_metal_served(f : KqFmt) : bool {
-    return (f == KqFmt.q8 || f == KqFmt.q51 || f == KqFmt.iq4nl32 || f == KqFmt.q4032 || f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.k6 || f == KqFmt.k3 || f == KqFmt.q40
+    return (f == KqFmt.q8 || f == KqFmt.q51 || f == KqFmt.iq4nl32 || f == KqFmt.q4032 || f == KqFmt.q5032 || f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.k6 || f == KqFmt.k3 || f == KqFmt.q40
         || f == KqFmt.iq4xs || f == KqFmt.iq3s || f == KqFmt.iq3xxs || f == KqFmt.iq2s || f == KqFmt.iq2xs || f == KqFmt.iq2xxs
         || f == KqFmt.k2 || f == KqFmt.iq4nl || f == KqFmt.iq3s4)
 }
 
 //! the per-32 plane formats with their own Metal kernels over their own plane pair (`q51_planes_of` / `iq4nl32_planes_of`) -
 //! the 32-block reduction, never the superblock plane binds
-def kq_fmt_b32(f : KqFmt) : bool => f == KqFmt.q51 || f == KqFmt.iq4nl32 || f == KqFmt.q4032
+def kq_fmt_b32(f : KqFmt) : bool => f == KqFmt.q51 || f == KqFmt.iq4nl32 || f == KqFmt.q4032 || f == KqFmt.q5032
 
 // The MoE serve gate: plain routed FFN (qwen3moe), the sigmoid-gated shared expert (qwen35moe), gemma4's dense-shared branch,
 // gpt-oss's gate (softmax_weight, biases) over mx4 experts; no dense lead or selection bias. The stack format is its own axis:

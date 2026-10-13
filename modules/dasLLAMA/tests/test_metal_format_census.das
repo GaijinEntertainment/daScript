@@ -238,10 +238,11 @@ def test_metal_format_census_iq3s4(t : T?) {
     }
 }
 
-//! a model's per-32 dense planes (q51, iq4nl32, q4032)
-def private per32_planes(m : Model) : int64 => planes_tagged(m, KqFmt.q51) + planes_tagged(m, KqFmt.iq4nl32) + planes_tagged(m, KqFmt.q4032)
+//! a model's per-32 dense planes (q51, iq4nl32, q4032, q5032)
+def private per32_planes(m : Model) : int64 => (planes_tagged(m, KqFmt.q51) + planes_tagged(m, KqFmt.iq4nl32) + planes_tagged(m, KqFmt.q4032)
+    + planes_tagged(m, KqFmt.q5032))
 
-let private PER32_STEMS = fixed_array("Q51", "Iq4nl32", "Q4032")
+let private PER32_STEMS = fixed_array("Q51", "Iq4nl32", "Q4032", "Q5032")
 
 //! the window's per-32 GEMM, small-batch and GEMV dispatches (the kernel coverage census since its last reset)
 def private per32_window_dispatches() : int64 {
@@ -260,7 +261,7 @@ def private per32_window_dispatches() : int64 {
 //! the per-32 one-row GEMV dispatches, the two-row stamps and the K-split ones
 def private per32_gemv_dispatches() : int64 {
     var n = 0l
-    for (f in ["q51", "iq4nl32", "q4032"]) {
+    for (f in ["q51", "iq4nl32", "q4032", "q5032"]) {
         n += metal_kernel_count("metal_kq_gemv_{f}") + metal_kernel_count("metal_kq_gemv_{f}_ks")
     }
     return n
@@ -285,6 +286,7 @@ def test_metal_format_census_per32(t : T?) {
                   (file = "Qwen2.5-0.5B-Instruct-IQ4_NL-local.gguf", fam = "qwen2", arm = "census-iq4nl32", emb = "metal_embed_q8", hy = false),
                   (file = "Qwen2.5-0.5B-Instruct-IQ4_NL-pure-local.gguf", fam = "qwen2", arm = "census-iq4nl32-table", emb = "MetalEmbedB32Iq4nl32_metal_embed_b32", hy = false),
                   (file = "Qwen2.5-0.5B-Instruct-Q4_0-local.gguf", fam = "qwen2", arm = "census-q4032", emb = "MetalEmbedB32Q4032_metal_embed_b32", hy = false),
+                  (file = "Qwen2.5-0.5B-Instruct-Q5_0-pure-local.gguf", fam = "qwen2", arm = "census-q5032", emb = "MetalEmbedB32Q5032_metal_embed_b32", hy = false),
                   (file = "Qwen3.5-0.8B-MTP-Q5_1-local.gguf", fam = "qwen35", arm = "census-q51-table", emb = "MetalEmbedB32Q51_metal_embed_b32", hy = true)]) {
         t |> run("{spec.file}: the per-32 planes serve their own bytes on Metal - census, window and steps") <| @(t : T?) {
             if (!family_on(t, spec.fam) || !arm_on(t, spec.arm)) return
@@ -295,7 +297,7 @@ def test_metal_format_census_per32(t : T?) {
                 var tr <- load_model_(path, QuantMode.q8)
                 tr.config.seq_len = min(tr.config.seq_len, 512l)
                 let np32 = per32_planes(tr)
-                t |> success(np32 > 0l, "{spec.arm}: the dense planes load as q51 / iq4nl32 / q4032 ({np32} planes)")
+                t |> success(np32 > 0l, "{spec.arm}: the dense planes load as q51 / iq4nl32 / q4032 / q5032 ({np32} planes)")
                 let want <- per32_census_sites(spec.hy)
                 census_cell(t, tr, path, "planar", want)
                 var trg <- blob_twin(t, path, 512l)
@@ -305,7 +307,8 @@ def test_metal_format_census_per32(t : T?) {
                     t |> success(w >= np32, "{spec.arm}: the window's per-32 sites rode the per-32 stamps ({w} dispatches, {np32} planes)")
                 }
                 let gv = per32_gemv_dispatches()
-                t |> success(metal_kernel_count("metal_kq_gemv_q51_ks") + metal_kernel_count("metal_kq_gemv_iq4nl32_ks") + metal_kernel_count("metal_kq_gemv_q4032_ks") > 0l,
+                t |> success(metal_kernel_count("metal_kq_gemv_q51_ks") + metal_kernel_count("metal_kq_gemv_iq4nl32_ks") + metal_kernel_count("metal_kq_gemv_q4032_ks")
+                        + metal_kernel_count("metal_kq_gemv_q5032_ks") > 0l,
                     "{spec.arm}: the narrow planes rode the K-split GEMV")
                 t |> success(gv >= DECODE_STEPS * np32, "{spec.arm}: the steps read every per-32 plane through its GEMV ({gv} dispatches, {DECODE_STEPS * np32} planes)")
                 metal_decode_shutdown()
@@ -326,12 +329,14 @@ def test_metal_format_census_per32(t : T?) {
 let private PLAIN_MOE_BAR = 2.0
 
 //! the per-32 MoE carriers (large tier): the Q5_1 mint's every site - the shared expert and the 1408-wide routed stacks among them
-//! - as q51, the Q4_0 mint's 1408-wide routed down stacks as q4032, each site's census asserted native, the window and the steps on
-//! the device against the CPU chain
+//! - as q51, the Q4_0 mint's 1408-wide routed down stacks as q4032, the Q5_0 `--pure` mint's every site - the routed and shared
+//! expert stacks and the token table among them - as q5032, each site's census asserted native, the window and the steps on the
+//! device against the CPU chain
 [test]
 def test_metal_format_census_per32_moe(t : T?) {
     for (spec in [(file = "Qwen1.5-MoE-A2.7B-Chat-Q5_1-local.gguf", arm = "census-moe-q51", emb = "MetalEmbedB32Q51_metal_embed_b32", f = KqFmt.q51),
-                  (file = "Qwen1.5-MoE-A2.7B-Chat-Q4_0-local.gguf", arm = "census-moe-q4032", emb = "MetalEmbedQ40_metal_embed_kq", f = KqFmt.q4032)]) {
+                  (file = "Qwen1.5-MoE-A2.7B-Chat-Q4_0-local.gguf", arm = "census-moe-q4032", emb = "MetalEmbedQ40_metal_embed_kq", f = KqFmt.q4032),
+                  (file = "Qwen1.5-MoE-A2.7B-Chat-Q5_0-pure-local.gguf", arm = "census-moe-q5032", emb = "MetalEmbedB32Q5032_metal_embed_b32", f = KqFmt.q5032)]) {
         t |> run("{spec.file}: the per-32 shared expert and routed stacks serve their own bytes on Metal - census, window and steps") <| @(t : T?) {
             if (!family_on(t, "qwen2moe") || !arm_on(t, spec.arm)) return
             static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -346,9 +351,9 @@ def test_metal_format_census_per32_moe(t : T?) {
                 census_cell(t, tr, path, "planar", want)
                 var trg <- blob_twin(t, path, 512l)
                 census_cell(t, trg, path, "blob twin", want)
-                let stem = spec.f == KqFmt.q51 ? "q51" : "q4032"
-                let cls = spec.f == KqFmt.q51 ? "Q51" : "Q4032"
-                let tbody = spec.f == KqFmt.q51 ? "metal_moe_mulmm_q51_t" : "metal_moe_mulmm_iq4nl32_t"
+                let stem = "{spec.f}"
+                let cls = spec.f == KqFmt.q51 ? "Q51" : (spec.f == KqFmt.q4032 ? "Q4032" : "Q5032")
+                let tbody = spec.f == KqFmt.q4032 ? "metal_moe_mulmm_iq4nl32_t" : "metal_moe_mulmm_q51_t"   //! q5032's twins stage on q51's body
                 window_and_steps_cell(t, tr, trg, PLAIN_MOE_BAR, spec.emb, spec.arm) $ {
                     var mm = metal_kernel_count("metal_moe_mulmm_{stem}") + metal_kernel_count("metal_moe_gemv_{stem}")
                     for (v in ["T", "TH", "TH128", "THR"]) {
