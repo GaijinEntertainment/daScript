@@ -8,6 +8,8 @@ cmake_minimum_required(VERSION 3.12)
 #   base/hlog.c - logger_set_file closes the open log file, so a later hlog_set_file switches files
 #                 instead of writing to the old one until the date changes (ithewei/libhv#892).
 #                 logger_enable_fsync uses the logger mutex shared by all serving threads.
+#   base/htime.c - hv_compile_datetime reads a fixed date under HV_REPRODUCIBLE_BUILD, so the build
+#                  is byte-reproducible; without it, __DATE__/__TIME__ as before.
 #
 # Usage: cmake -DLIBHV_SRC_DIR=<libhv source dir> -P patch_libhv.cmake
 
@@ -99,6 +101,21 @@ void logger_enable_fsync(logger_t* logger, int on) {
     logger->enable_fsync = on;
     hmutex_unlock(&logger->mutex_);
 }
+]=])
+das_hv_patch_end()
+
+das_hv_patch_begin("base/htime.c")
+das_hv_hunk([=[
+    sscanf(__DATE__, "%s %d %d", month, &dt.day, &dt.year);
+    sscanf(__TIME__, "%d:%d:%d", &dt.hour, &dt.min, &dt.sec);
+]=] [=[
+#ifdef HV_REPRODUCIBLE_BUILD
+    sscanf("Jan 1 1970", "%s %d %d", month, &dt.day, &dt.year);
+    sscanf("00:00:00", "%d:%d:%d", &dt.hour, &dt.min, &dt.sec);
+#else
+    sscanf(__DATE__, "%s %d %d", month, &dt.day, &dt.year);
+    sscanf(__TIME__, "%d:%d:%d", &dt.hour, &dt.min, &dt.sec);
+#endif
 ]=])
 das_hv_patch_end()
 

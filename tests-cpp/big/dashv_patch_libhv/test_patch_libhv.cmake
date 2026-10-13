@@ -92,5 +92,11 @@ if(queued_stop EQUAL -1)
     fail("HTTP server shutdown must dispatch stop on the loop owner")
 endif()
 
+file(READ "${fresh}/base/htime.c" compile_date)
+string(FIND "${compile_date}" "#ifdef HV_REPRODUCIBLE_BUILD" reproducible)
+if(reproducible EQUAL -1)
+    fail("hv_compile_datetime must not read __DATE__/__TIME__ under HV_REPRODUCIBLE_BUILD")
+endif()
+
 file(REMOVE_RECURSE "${WORK_DIR}")
 message(STATUS "test_patch_libhv: all cases passed")

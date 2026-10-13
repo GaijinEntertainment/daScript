@@ -176,6 +176,7 @@ jobs:
     - run: |
         echo "SCCACHE_DIR=${{ runner.temp }}/sccache" >> $GITHUB_ENV
         echo "SCCACHE_GHA_ENABLED=false" >> $GITHUB_ENV
+        echo "ZERO_AR_DATE=1" >> $GITHUB_ENV
         # SCCACHE_CACHE_SIZE bounds the slot: the default is 10G, so an unbounded
         # slot grows until it evicts other caches in the repository. A Release
         # build of daslang + daslang_static + the sequence smoke's module targets

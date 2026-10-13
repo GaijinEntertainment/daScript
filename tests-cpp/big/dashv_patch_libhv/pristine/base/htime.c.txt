@@ -1,0 +1,8 @@
+datetime_t hv_compile_datetime() {
+    datetime_t dt;
+    char month[32];
+    sscanf(__DATE__, "%s %d %d", month, &dt.day, &dt.year);
+    sscanf(__TIME__, "%d:%d:%d", &dt.hour, &dt.min, &dt.sec);
+    dt.month = month_atoi(month);
+    return dt;
+}

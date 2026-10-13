@@ -41,7 +41,7 @@ IF ((NOT DAS_HV_INCLUDED) AND ((NOT ${DAS_HV_DISABLED}) OR (NOT DEFINED DAS_HV_D
 	# wasm cross-compile host) leaves libhv on clang's default libstdc++, and the resulting
 	# dasModuleHV.shared_module carries undefined std::__cxx11 symbols that fail to dlopen
 	# under the libc++ daslang (surfaces as a misleading error[20605] missing prereq 'dashv').
-	SET(_HV_C_FLAGS "${CMAKE_C_FLAGS}")
+	SET(_HV_C_FLAGS "${CMAKE_C_FLAGS} -DHV_REPRODUCIBLE_BUILD")
 	SET(_HV_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
 	# libhv's parse_json() (http/http_content.cpp) wraps nlohmann::json::parse in
 	# try/catch, so libhv MUST build with C++ exceptions. daslang strips /EHsc from
