@@ -238,6 +238,9 @@ FILE(GLOB AOT_WITH_BOOST_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS 
 # Exclude failed_* expected-failure compile tests — they're not AOT-able.
 list(FILTER AOT_WITH_BOOST_FILES EXCLUDE REGEX "/failed_")
 
+FILE(GLOB AOT_MATCH_FILES RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS "tests/match/*.das")
+list(FILTER AOT_MATCH_FILES EXCLUDE REGEX "/failed_")
+
 # Macro_boost test module files (probe call_macro required transitively by tests)
 SET(AOT_MACRO_BOOST_MODULE_FILES
     tests/macro_boost/_has_sideeffects_probe.das
