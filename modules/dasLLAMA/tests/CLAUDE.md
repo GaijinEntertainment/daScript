@@ -1930,10 +1930,12 @@ qwen35moe files run the pool cell (`cell_device_pool`, `ARCHITECTURE_ENGINE_SERV
 another on a two-stream scheduler over three 100-token system prompts - more openings than the two regions hold - the fourth on
 the first's system prompt after two other streams took both regions, the fifth the second conversation's next turn after its
 region went to the fourth: on the paged device-home scheduler the fourth takes its system prompt (100 tokens) and the fifth the
-whole earlier turn (138) up from the host pool, two imports counted (`gpu_device_kv_pool_moves`), every request token for token
-the host-cached paged scheduler's, whose prefix cache keeps the same openings; the flat device-home scheduler, which keeps no
-pool, is the control - both prefill whole; and on a recurrent model a pool capped at four checkpoints keeps the system prompts
-(openings) over the finished turns (tails), so the fifth request finds its system prompt alone. The qwen3 file adds the
+whole earlier turn (138) up from the host pool, two imports counted (`gpu_device_kv_pool_moves`), and exactly the copies the card
+was about to lose went down - each system prompt as its stream parked (a recurrent model), each finished turn as its region went
+to another stream, the last two turns not at all (6 copies on a recurrent model, 3 on a dense one) - every request token for
+token the host-cached paged scheduler's, whose prefix cache keeps the same openings; the flat device-home scheduler, which keeps
+no pool, is the control - both prefill whole; and on a recurrent model a pool capped at four checkpoints keeps the system prompts
+(openings) over the finished turns (tails), dropping the two oldest tails, so the fifth request finds its system prompt alone. The qwen3 file adds the
 window's fused q/k norm cell (`cell_window_qkn_fused`): a prompt two windows long with the fused pass and with the split pair
 (`set_vulkan_prefill_qkn_fuse`, put back), the census counting the fused pass on the one and the norm pass on the other, the
 prompt's logits and eight fed steps within the split bar with the row one step off the control. The qwen2 file also holds the guards - a third

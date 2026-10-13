@@ -4349,6 +4349,85 @@ def vk_rdec_kv_read(l, row0, nrows : int64; var kp : uint8?; var vp : uint8?) {
     free_transient_cmd(raw)
 }
 
+let private POOL_XFER_CAP = 256l * 1024l * 1024l   //! the pool staging's ceiling: a move past it runs in batches of this size
+
+//! The selected region's mirror rows of every span moved to (`up` = false) or from the host in one submit a batch of up to
+//! `POOL_XFER_CAP` bytes, where a span a call would move as a submit each (`vk_rdec_kv_read`): a pooled opening is many short page runs
+[cold_path, arch(at="../ARCHITECTURE_ENGINE_SERVING.md#device-home-pool")]   //! once per pool move, reached through the tier's registered seat
+def vk_rdec_kv_xfer(spans : array<RdecKvSpan>; up : bool) : bool {
+    rd_chain_settle()
+    return false if (g_rd == null || !g_rd.ready)
+    var i = 0
+    while (i < length(spans)) {
+        var j = i
+        var bytes = 0l
+        while (j < length(spans)) {
+            let L & = unsafe(spans[j].l == g_rd.n_layers ? g_rd.head : g_rd.layers[spans[j].l])
+            let b = L.mir_idx < 0l ? 0l : 2l * spans[j].nrows * rd_kv_row_units(L.kvd) * kv_unit_bytes(g_rd.kv_dt)
+            break if (j > i && bytes + b > POOL_XFER_CAP)
+            bytes += b
+            j ++
+        }
+        if (g_rd.pool_xfer.bytes < bytes) {
+            if (g_rd.pool_xfer.bytes > 0l) {
+                destroy_host_buf(g_rd.pool_xfer)
+            }
+            g_rd.pool_xfer = make_host_buf(bytes, false, [cached = true])
+        }
+        pool_xfer_batch(spans, i, j, up)
+        i = j
+    }
+    return true
+}
+
+//! spans `[i, j)` through the staging in one submit: host rows into it before the copies up, out of it after the copies down
+def private pool_xfer_batch(spans : array<RdecKvSpan>; i, j : int; up : bool) {
+    let base = unsafe(reinterpret<uint8?>(g_rd.pool_xfer.mapped))
+    if (up) {
+        pool_xfer_walk(spans, i, j) $(sp : RdecKvSpan; off, bytes, rowb : int64) {
+            unsafe {
+                memcpy(reinterpret<void?>(base + off), reinterpret<void?>(sp.kp + sp.row0 * rowb), bytes)
+                memcpy(reinterpret<void?>(base + off + bytes), reinterpret<void?>(sp.vp + sp.row0 * rowb), bytes)
+            }
+        }
+    }
+    batch_cmd_one_shot() $(raw : VkCommandBuffer) {
+        pool_xfer_walk(spans, i, j) $(sp : RdecKvSpan; off, bytes, rowb : int64) {
+            let L & = unsafe(sp.l == g_rd.n_layers ? g_rd.head : g_rd.layers[sp.l])
+            let slab = rd_slab(L)
+            let at = rd_mir_base(L) * kv_unit_bytes(g_rd.kv_dt) + sp.row0 * rowb
+            if (up) {
+                cmd_copy_range(raw, g_rd.pool_xfer.buf, off, slab.k, at, bytes)
+                cmd_copy_range(raw, g_rd.pool_xfer.buf, off + bytes, slab.v, at, bytes)
+            } else {
+                cmd_copy_range(raw, slab.k, at, g_rd.pool_xfer.buf, off, bytes)
+                cmd_copy_range(raw, slab.v, at, g_rd.pool_xfer.buf, off + bytes, bytes)
+            }
+        }
+    }
+    if (!up) {
+        pool_xfer_walk(spans, i, j) $(sp : RdecKvSpan; off, bytes, rowb : int64) {
+            unsafe {
+                memcpy(reinterpret<void?>(sp.kp + sp.row0 * rowb), reinterpret<void?>(base + off), bytes)
+                memcpy(reinterpret<void?>(sp.vp + sp.row0 * rowb), reinterpret<void?>(base + off + bytes), bytes)
+            }
+        }
+    }
+}
+
+//! each span of `[i, j)` with a mirror slab, its staging offset, its K side's bytes and its row's bytes
+def private pool_xfer_walk(spans : array<RdecKvSpan>; i, j : int; blk : block<(sp : RdecKvSpan; off, bytes, rowb : int64) : void>) {
+    var off = 0l
+    for (k in range(i, j)) {
+        let L & = unsafe(spans[k].l == g_rd.n_layers ? g_rd.head : g_rd.layers[spans[k].l])
+        continue if (L.mir_idx < 0l)
+        let rowb = rd_kv_row_units(L.kvd) * kv_unit_bytes(g_rd.kv_dt)
+        let bytes = spans[k].nrows * rowb
+        invoke(blk, spans[k], off, bytes, rowb)
+        off += 2l * bytes
+    }
+}
+
 // ===== deltanet decode step (npos == 1 through the same MoeGpuDnFn) =====
 // One pre-recorded submit per layer per token: qkv+z GEMVs into a SHARED y buffer -> the fused
 // step kernel -> out GEMV -> y DMA. State/ring stay device-resident; flush/invalidate = the seams.
@@ -4572,6 +4651,57 @@ def private dnd_flush_down(st : DnStep) {
         memcpy(reinterpret<void?>(st.owner_state_addr), g_gpu.dn_state_host.mapped, st.slot_state_bytes)
         memcpy(reinterpret<void?>(st.owner_hist_addr), g_gpu.dn_tail_host.mapped, st.ring_image_bytes)
     }
+}
+
+//! A copy of every listed recurrent layer's state and ring in the selected region - its live slots (`slot` -1), its slots as a
+//! parked claim left them, its owner gone (-2), or its checkpoint row `slot` at the row's parity - through the pool staging in one submit, the region left as it stands, the slots' owner,
+//! validity and dirt with it: the host pool's copy of a device-home stream's state. False where a slot or the row holds none.
+[cold_path, arch(at="../ARCHITECTURE_ENGINE_SERVING.md#device-home-pool")]   //! once per pooled checkpoint, reached through the tier's registered seat
+def vk_rdec_dn_peek(slot : int64; dsts : array<RdecDnDst>) : bool {
+    rd_chain_settle()
+    return false if (g_rd == null || !g_rd.ready || !g_rd.hybrid || slot >= int64(RDEC_DN_SNAPS) || (slot >= 0l && g_rd.snap_dev == 0ul))
+    let row = g_rd.region * int64(RDEC_DN_SNAPS) + slot
+    var bytes = 0l
+    for (d in dsts) {
+        return false if (d.l < 0l || d.l >= long_length(g_rd.layers) || !g_rd.layers[d.l].recurrent || (slot == -1l && !g_rd.layers[d.l].dn[g_rd.region].valid))
+        let st & = unsafe(g_rd.layers[d.l].dn[g_rd.region])
+        bytes += st.slot_state_bytes + st.ring_image_bytes
+    }
+    if (g_rd.pool_xfer.bytes < bytes) {
+        if (g_rd.pool_xfer.bytes > 0l) {
+            destroy_host_buf(g_rd.pool_xfer)
+        }
+        g_rd.pool_xfer = make_host_buf(bytes, false, [cached = true])
+    }
+    batch_cmd_one_shot() $(raw : VkCommandBuffer) {
+        var off = 0l
+        for (d in dsts) {
+            let L & = unsafe(g_rd.layers[d.l])
+            let st & = unsafe(L.dn[g_rd.region])
+            if (slot < 0l) {
+                cmd_copy_range(raw, st.state_dev, st.state_byte_off, g_rd.pool_xfer.buf, off, st.slot_state_bytes)
+                cmd_copy_range(raw, st.smalls_dev, st.hist_off * 4l + int64(st.parity) * st.ring_image_bytes,
+                    g_rd.pool_xfer.buf, off + st.slot_state_bytes, st.ring_image_bytes)
+            } else {
+                let src = row * g_rd.snap_row_bytes + L.snap_off
+                cmd_copy_range(raw, g_rd.snap_dev, src, g_rd.pool_xfer.buf, off, st.slot_state_bytes)
+                cmd_copy_range(raw, g_rd.snap_dev, src + st.slot_state_bytes + int64(g_rd.snap_par[row]) * st.ring_image_bytes,
+                    g_rd.pool_xfer.buf, off + st.slot_state_bytes, st.ring_image_bytes)
+            }
+            off += st.slot_state_bytes + st.ring_image_bytes
+        }
+    }
+    var off = 0l
+    let base = unsafe(reinterpret<uint8?>(g_rd.pool_xfer.mapped))
+    for (d in dsts) {
+        let st & = unsafe(g_rd.layers[d.l].dn[g_rd.region])
+        unsafe {
+            memcpy(reinterpret<void?>(d.stp), reinterpret<void?>(base + off), st.slot_state_bytes)
+            memcpy(reinterpret<void?>(d.histp), reinterpret<void?>(base + off + st.slot_state_bytes), st.ring_image_bytes)
+        }
+        off += st.slot_state_bytes + st.ring_image_bytes
+    }
+    return true
 }
 
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#dn-step-owner")]   // once per prompt, before its first window records

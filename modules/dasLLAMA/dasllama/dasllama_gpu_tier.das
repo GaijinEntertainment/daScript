@@ -831,6 +831,47 @@ def public install_rdec_dn_snaps(save, load : RdecDnSnapFn) {
 }
 
 def public rdec_dn_snaps_installed() : bool => g_rdec_dn_snaps_installed
+
+//! Where a recurrent layer's state and ring land on the host
+struct public RdecDnDst {
+    l : int64
+    stp : float?
+    histp : float?
+}
+
+//! A copy of every listed recurrent layer's state and ring in the selected region - its live slots (`slot` -1), its slots as a parked
+//! claim left them (-2), or its checkpoint row `slot` - in one submit, the region left as it stands; false where they hold none
+typedef RdecDnPeekFn = function<(slot : int64; dsts : array<RdecDnDst>) : bool>
+[unused_argument(slot, dsts)]
+def private rdec_unset_dn_peek(slot : int64; dsts : array<RdecDnDst>) : bool => false
+var g_rdec_dn_peek = @@rdec_unset_dn_peek
+
+def public install_rdec_dn_peek(peek : RdecDnPeekFn) {
+    g_rdec_dn_peek = peek
+}
+
+def public rdec_dn_peek(slot : int64; dsts : array<RdecDnDst>) : bool => invoke(g_rdec_dn_peek, slot, dsts)
+
+//! One run of a layer's rows between a host cache and the selected region: row `row0` of the run sits `row0` rows past `kp` / `vp`
+struct public RdecKvSpan {
+    l : int64
+    row0 : int64
+    nrows : int64
+    kp : uint8?
+    vp : uint8?
+}
+
+//! Every span moved up (`up`) or down in as few submits as the driver's staging allows; false where no driver serves the batch
+typedef RdecKvXferFn = function<(spans : array<RdecKvSpan>; up : bool) : bool>
+[unused_argument(spans, up)]
+def private rdec_unset_kv_xfer(spans : array<RdecKvSpan>; up : bool) : bool => false
+var g_rdec_kv_xfer = @@rdec_unset_kv_xfer
+
+def public install_rdec_kv_xfer(xfer : RdecKvXferFn) {
+    g_rdec_kv_xfer = xfer
+}
+
+def public rdec_kv_xfer(spans : array<RdecKvSpan>; up : bool) : bool => invoke(g_rdec_kv_xfer, spans, up)
 def public rdec_dn_snap_save(slot : int64) : bool => invoke(g_rdec_dn_snap_save, slot)
 def public rdec_dn_snap_load(slot : int64) : bool => invoke(g_rdec_dn_snap_load, slot)
 

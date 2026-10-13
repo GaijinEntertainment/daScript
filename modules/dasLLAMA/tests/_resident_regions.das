@@ -1263,7 +1263,7 @@ def cell_device_pool(t : T?; file : string) {
             t |> equal(cached_of(pooled, 4l), 100l, "the fourth request took the first system prompt up from the pool: the region that held it went to the third request")
             t |> equal(cached_of(pooled, 5l), history, "the fifth took the second conversation's finished turn up ({history} tokens): its region went to the fourth")
             t |> equal(p.imports, 2l, "two openings came up from the pool")
-            t |> success(p.exports >= (recurrent ? 8l : 5l), "every finished turn went down, and on a recurrent model every new system prompt's checkpoint ({p.exports} copies)")
+            t |> equal(p.exports, recurrent ? 6l : 3l, "each finished turn went down as its region went to another stream, and on a recurrent model each new system prompt's checkpoint as its stream parked; the last two turns stay the regions' ({p.exports} copies)")
             t |> equal(cached_of(flat, 4l), 0l, "control: with no pool the fourth request prefills whole - its opening's region is gone")
             t |> equal(cached_of(flat, 5l), 0l, "and so does the fifth")
             t |> equal(f.imports, 0l, "the flat scheduler keeps no pool")
@@ -1280,7 +1280,7 @@ def cell_device_pool(t : T?; file : string) {
                 let c = serve_pooled(tr, true, 64l, 4l, capped)
                 t |> equal(cached_of(capped, 4l), 100l, "four checkpoints: the system prompts are openings, kept over the tails")
                 t |> equal(cached_of(capped, 5l), 100l, "the second conversation's turn - a tail - went first, so the fifth request finds its system prompt alone")
-                t |> success(c.states <= 4 && c.evicted >= 3l, "the pool held four checkpoints, dropping {c.evicted}")
+                t |> success(c.states == 4 && c.evicted == 2l, "the pool held four checkpoints, dropping the two oldest tails ({c.states} standing, {c.evicted} dropped)")
                 var tc <- toks_of(capped, 5l)
                 t |> equal(length(tc), 8, "the fifth request ran its eight tokens")
                 delete tc

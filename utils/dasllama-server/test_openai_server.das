@@ -1190,6 +1190,12 @@ def test_prefix_state_budget(t : T?) {
         t |> equal(4096l, prefix_state_budget_mb(0l, 0l), "RAM unknown")
         t |> equal(512l, prefix_state_budget_mb(512l, 64l), "an explicit budget stands")
     }
+    t |> run("a container's memory limit is the box's RAM where it is the smaller: the cgroup's byte count read, no limit read as none") @(t : T?) {
+        t |> equal(58, ram_gb_from_cgroup("61999996928\n"), "a 62 GB-byte container limit (v2 memory.max)")
+        t |> equal(0, ram_gb_from_cgroup("max\n"), "v2 with no limit")
+        t |> equal(0, ram_gb_from_cgroup("9223372036854771712\n"), "v1 with no limit: the page-rounded largest count")
+        t |> equal(0, ram_gb_from_cgroup(""), "no cgroup file")
+    }
 }
 
 let TEST_PORT_BENCH = 18140   // 18097/18098/18099/18101/18102/18120/18121/18131/18135-18139 are the other server suites'

@@ -4949,6 +4949,7 @@ struct RdecPoolMoves {
     imports : int64
     rows_up : int64
     up_us : int64
+    state_us : int64   //! the states copied off the slots (`gpu_device_kv_snapshot_`)
 }
 
 var private g_rdec_pool_moves : RdecPoolMoves
@@ -4963,23 +4964,133 @@ def gpu_device_kv_pool_armed_() : bool => g_env_engine.device_pool
 //! which grow to `hi`: the pool's copy of an opening the session's region may lose. False where `s` holds no region with those
 //! rows, or the host pages are not the mirror's codec.
 [arch(at="../ARCHITECTURE_ENGINE_SERVING.md#device-home-pool")]
-def gpu_device_kv_export_(t : Model; s : Session; var host : Session; lo, hi : int64) : bool {
-    return false if (!g_rdec_active || !s.device_kv || host.kv_pool == null || host.kv_pool.kdt != g_rdec_kvdt || host.kv_pool.vdt != g_rdec_kvdt)
-    let r = s.rdec_region
-    return false if (!rdec_owns(s, r) || g_rdec_regions[r].cnt < hi)
+def gpu_device_kv_export_(t : Model; claim : int64; var host : Session; lo, hi : int64) : bool {
+    return false if (!g_rdec_active || host.kv_pool == null || host.kv_pool.kdt != g_rdec_kvdt || host.kv_pool.vdt != g_rdec_kvdt)
+    let r = rdec_region_of(claim)
+    return false if (r < 0l || g_rdec_regions[r].cnt < hi)
     let t0 = ref_time_ticks()
     kv_ensure(host, hi)
     rdec_select_region(r)
-    let c = t.config
-    for (l in range64(c.n_layers)) {
-        continue if (!layer_owns_kv(t, l))
-        rdec_host_rows(host, c, l, lo, hi, false)
-    }
+    rdec_pool_rows(t, host, lo, hi, false)
     host.n_past = hi
     g_rdec_pool_moves.exports ++
     g_rdec_pool_moves.rows_down += max(hi - lo, 0l)
     g_rdec_pool_moves.down_us += int64(get_time_usec(t0))
     return true
+}
+
+//! the region a live or parked `claim` names, -1 where another session took it
+def private rdec_region_of(claim : int64) : int64 {
+    for (r in range64(long_length(g_rdec_regions))) {
+        return r if (claim != 0l && g_rdec_regions[r].gen == claim)
+    }
+    return -1l
+}
+
+//! The claim a device-home session holds its region under (0 = none): what the pool's moves name it by
+def gpu_device_kv_claim_(s : Session) : int64 => rdec_owns(s, s.rdec_region) ? s.rdec_gen : 0l
+
+//! The claims whose regions the next `n` fresh device-home sessions bind - the least recently used regions no live session holds,
+//! in that order - and so lose; a region that holds no claim adds none
+def gpu_device_kv_victim_claims_(n : int) : array<int64> {
+    var free <- [for (r in range64(long_length(g_rdec_regions))); r; where !g_rdec_regions[r].pinned]
+    sort(free) $(a, b) => g_rdec_regions[a].used < g_rdec_regions[b].used
+    var out <- [for (r, k in free, count()); g_rdec_regions[r].gen; where k < n && g_rdec_regions[r].gen != 0l]
+    delete free
+    return <- out
+}
+
+//! The recurrent state a parked `claim` keeps at position `at` - the region's slots where its state stands there, else the checkpoint
+//! row at `at` - copied into a snapshot shaped as `like` (any session of the model), the region left as it stands; a snapshot at
+//! position -1 where the claim is gone or holds no state at `at`
+[arch(at="../ARCHITECTURE_ENGINE_SERVING.md#device-home-pool")]
+def gpu_device_kv_parked_snapshot_(claim, at : int64; like : Session) : DnSnapshot {
+    let r = rdec_region_of(claim)
+    return <- DnSnapshot(pos = -1l) if (!g_rdec_active || r < 0l || g_rdec_regions[r].pinned || at <= 0l || !empty(like.ple_conv_hist))
+    let slot = at == g_rdec_regions[r].dn_pos ? -2 : rdec_snap_at(g_rdec_regions[r], at)
+    return <- DnSnapshot(pos = -1l) if (slot == -1)
+    let t0 = ref_time_ticks()
+    rdec_select_region(r)
+    var snap <- rdec_peek_snapshot(like, slot)
+    if (snap.pos == 0l) {
+        snap.pos = at
+        g_rdec_pool_moves.state_us += int64(get_time_usec(t0))
+    }
+    return <- snap
+}
+
+//! the selected region's recurrent state - its live slots (`slot` -1), its slots as a parked claim left them (-2), or checkpoint
+//! row `slot` - into a fresh snapshot shaped as `like`, position 0 (the caller names it); position -1 where the driver holds none
+def private rdec_peek_snapshot(like : Session; slot : int) : DnSnapshot {
+    var snap : DnSnapshot
+    snap.state |> reserve(long_length(like.dn_state))
+    snap.state |> resize_no_init(long_length(like.dn_state))   //! every float is the peek's
+    snap.conv |> reserve(long_length(like.dn_conv_state))
+    snap.conv |> resize_no_init(long_length(like.dn_conv_state))
+    g_rdec_pool_dsts |> clear()
+    for (l in range64(long_length(like.dn_state_prefix))) {
+        continue if (like.dn_state_prefix[l] < 0l)
+        unsafe {
+            g_rdec_pool_dsts |> push(RdecDnDst(l = l, stp = addr(snap.state[like.dn_state_prefix[l]]), histp = addr(snap.conv[like.dn_conv_prefix[l]])))
+        }
+    }
+    let held = rdec_dn_peek(int64(slot), g_rdec_pool_dsts)
+    g_rdec_pool_dsts |> clear()
+    if (!held) {
+        delete snap
+        return <- DnSnapshot(pos = -1l)
+    }
+    return <- snap
+}
+
+var private @scratch g_rdec_pool_spans : array<RdecKvSpan>
+var private @scratch g_rdec_pool_dsts : array<RdecDnDst>
+
+//! positions [lo, hi) of every K/V-owning layer between `host`'s pages and the selected region, every page run in one batch where
+//! the driver stages one (`rdec_kv_xfer`), else a run at a time
+def private rdec_pool_rows(t : Model; var host : Session; lo, hi : int64; up : bool) {
+    let c = t.config
+    g_rdec_pool_spans |> clear()
+    for (l in range64(c.n_layers)) {
+        continue if (!layer_owns_kv(t, l))
+        rdec_host_runs(host, c, l, lo, hi) $(row0, nrows : int64; var kp, vp : uint8?) {
+            g_rdec_pool_spans |> push(RdecKvSpan(l = l, row0 = row0, nrows = nrows, kp = kp, vp = vp))
+        }
+    }
+    if (!rdec_kv_xfer(g_rdec_pool_spans, up)) {
+        for (sp in g_rdec_pool_spans) {
+            rdec_host_span(sp.l, sp.row0, sp.nrows, sp.kp, sp.vp, up)
+        }
+    }
+    g_rdec_pool_spans |> clear()
+}
+
+//! The recurrent state a live device-home session `s` held at `at` - its slots where it stands there, else its stop's checkpoint row
+//! - copied off with the region left as it stands; a session the driver does not hold flushes (`dn_snapshot_take`); position -1 where
+//! neither holds `at`
+[arch(at="../ARCHITECTURE_ENGINE_SERVING.md#device-home-pool")]
+def gpu_device_kv_snapshot_(var s : Session; at : int64) : DnSnapshot {
+    let t0 = ref_time_ticks()
+    let owned = g_rdec_active && s.device_kv && rdec_owns(s, s.rdec_region) && empty(s.ple_conv_hist)
+    let slot = !owned || at == s.dn_pos ? -1 : rdec_snap_at(g_rdec_regions[s.rdec_region], at)
+    var snap : DnSnapshot
+    if (owned && (at == s.dn_pos || slot >= 0)) {
+        rdec_select_region(s.rdec_region)
+        snap <- rdec_peek_snapshot(s, slot)
+    } else {
+        snap.pos = -1l
+    }
+    if (snap.pos < 0l) {
+        delete snap
+        return <- at == s.dn_pos ? dn_snapshot_take(s) : DnSnapshot(pos = -1l)
+    }
+    snap.ple_prev := s.ple_prev
+    snap.pos = at
+    if (s.mtp_h_pos1 == at && at > 0l) {
+        snap.mtp_h := s.mtp_h
+    }
+    g_rdec_pool_moves.state_us += int64(get_time_usec(t0))
+    return <- snap
 }
 
 //! The first `npos` rows of the paged host session `host` taken up into a region for the fresh device-home session `s`, under a
@@ -4992,11 +5103,7 @@ def gpu_device_kv_import_(t : Model; var s : Session; var host : Session; npos :
     let t0 = ref_time_ticks()
     let r = rdec_bind_region(t, s)
     return false if (r < 0l)
-    let c = t.config
-    for (l in range64(c.n_layers)) {
-        continue if (!layer_owns_kv(t, l))
-        rdec_host_rows(host, c, l, 0l, npos, true)
-    }
+    rdec_pool_rows(t, host, 0l, npos, true)
     rdec_claim(s, r, npos)
     rdec_host_mark(s, false)
     s.n_past = npos

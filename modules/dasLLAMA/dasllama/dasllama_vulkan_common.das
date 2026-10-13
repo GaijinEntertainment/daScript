@@ -2636,6 +2636,7 @@ struct RDec {
     pick_part_max_dev, pick_part_id_dev : uint64   //! the first pass's partials: a (max, id) a (row, chunk)
     s_pick_part, s_pick_fin : VkDescriptorSet
     kv_readback : HostBuf         // per-layer K/V row -> CPU cache writeback
+    pool_xfer : HostBuf           //! the host pool's staging: a move's every span in one submit (`vk_rdec_kv_xfer`), made at the first move, grown to the largest
     cls_regions_dev : uint64      // the classifier class-GEMV's one-pair regions buffer (device —
                                   // vocab-row dispatches read it from ~150K subgroups)
     cls_set : VkDescriptorSet

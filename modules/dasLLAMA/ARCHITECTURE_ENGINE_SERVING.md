@@ -148,15 +148,27 @@ the faster tier. The pool closes that: a paged scheduler in device mode keeps th
 its host-cached streams use, and a device-home stream's openings enter it as copies. Live streams stay device-home - nothing
 crosses the bus per token; the pool holds the parked and the evicted state.
 
-- **Down.** At each checkpoint stop (`note_prefilled`) the stream's rows up to the stop and its recurrent state there go into
-  the cache as a checkpoint - an opening at or under the request's shared opening (`Stream.ckpt_shared_to`: the system text's
-  head, the system opening), a tail past it - and at the park the finished turn goes in as a tail, its pages on a dense model
-  (`pool_export`). The rows come down into a carrier session's pages (`Scheduler.pool_host`, a paged session of the pool that
-  holds pages only while a move runs) through `gpu_device_kv_export`, the hydrate rail a run at a time; only the rows past the
-  pages the cache already holds of the same tokens are read (`prefix_share_pages`: a checkpoint's whole pages under the longest
-  opening it shares, or the page chain's), so a conversation's later stops cost their own rows and the shared system prompt's
-  pages are held once. The state is the stream's own, flushed off its region's slots (`dn_snapshot_take`), and enters through
-  `prefix_insert_snapshot`. A checkpoint the cache already holds is touched instead (`prefix_state_touch`), so nothing is read.
+- **Down.** A copy is made when the card is about to lose the state, not before: nothing crosses the bus before a stream's
+  first token, and a conversation that goes on in its own region copies nothing. Each checkpoint stop the region keeps
+  (`gpu_device_kv_checkpoint`, a device copy into a checkpoint row) is recorded on the stream (`Stream.pool_stops`) - an opening
+  at or under the request's shared opening (`Stream.ckpt_shared_to`: the system text's head, the system opening), a tail past
+  it. At the park the openings go into the cache (`pool_export_live`; every request on a system prompt leaves one, so after
+  the first it is a touch), and the tails - the conversation's own stops and its finished turn, a dense model's rows - stay
+  listed on the parked claim (`ParkedKv.tails`). They go into the cache when the region is about to change hands
+  (`flush_parked`, `pool_export_parked`, read off the parked region's slots and rows): before an adopter rewrites the claim's
+  rows past the opening it takes, before a fresh or pooled session binds the least recently used regions
+  (`flush_victims`, `gpu_device_kv_victim_claims`: one region for each stream admitted but not yet in one), and before a claim
+  drops out of the parked list. A tail a later stop of the same conversation overwrites in the region's checkpoint rows is not
+  copied: the conversation's newer tail extends it. The rows come down into a carrier session's pages (`Scheduler.pool_host`, a paged session of the pool that
+  holds pages only while a move runs) through `gpu_device_kv_export`, every page run of every layer in one submit through the
+  driver's staging (`rdec_kv_xfer`; run by run, a submit each, the 35B's pooled opening is a few hundred submits); only the rows
+  past the pages the cache already holds of the same tokens are read (`prefix_share_pages`: a checkpoint's whole pages under the
+  longest opening it shares, or the page chain's), so a conversation's later stops cost their own rows and the shared system
+  prompt's pages are held once. The state is copied off the region - the slots where it stands at the position, else the
+  checkpoint row its stop saved - in one submit, the region left as it stands (`gpu_device_kv_snapshot`,
+  `gpu_device_kv_parked_snapshot`, `rdec_dn_peek`: a flush would hand a live stream's slots back and its next chunk would take
+  them up again), and enters through `prefix_insert_snapshot`. A checkpoint the cache already holds is touched instead
+  (`prefix_state_touch`), so nothing is read.
 - **Up.** At admission (`device_attach`) the parked claim sharing the longest opening is weighed against the cache's longest
   (`prefix_state_match_len`, `prefix_match_len`); the device's is taken where it is as long - it costs no copy - and the pool's
   where it is longer: `prefix_attach_state_split` shares the checkpoint's pages into the carrier and restores its state into
@@ -165,7 +177,9 @@ crosses the bus per token; the pool holds the parked and the evicted state.
   dense model attaches pages the usual way (`prefix_attach`) into the carrier.
 - **Budget.** The pool is the host cache, so its bounds are `--prefix-state-mb` and `--prefix-states` with their accounting -
   every snapshot plus each held page once - and their order: tails used longest ago first, openings only when no tail stands
-  (`#prefix-recurrent-checkpoints`). A dense model's pages fall under `prefix_groups`.
+  (`#prefix-recurrent-checkpoints`). A dense model's pages fall under `prefix_groups`. The server's quarter of RAM is the
+  RAM the process may hold: under a container's memory limit (the cgroup's `memory.max`, v1's `memory.limit_in_bytes`) that
+  limit, not the host's total, since a pool sized past it makes every new snapshot's pages wait on the container's reclaim.
 - **Where it stands aside.** The pool serves a paged scheduler whose pool codec is the mirror's (the rows move as bytes), with
   no draft head (the head's rows ride no export) and no n-gram side input (its ring can sit on the device), on a model whose
   device prefill continues past zero (`device_pool_on`). `DASLLAMA_DEVICE_POOL=0` keeps the card's claims and rows alone - the
