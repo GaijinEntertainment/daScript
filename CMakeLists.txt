@@ -2526,13 +2526,10 @@ if(TARGET daslang)
     endforeach()
     list(TRANSFORM _das_test_binaries REPLACE "^(.+)$" "$<TARGET_FILE:\\1>" OUTPUT_VARIABLE _das_test_binary_files)
     set(_identity ${DAS_LANE_STAMP_DIR}/binary_identity.txt)
-    set(_same_binaries ${CMAKE_COMMAND} -E compare_files ${_identity} ${DAS_TEST_CACHE_DIR}/binary_identity.txt)
-    if(NOT DAS_TEST_RESULT_CACHE)
-        set(_same_binaries ${CMAKE_COMMAND} -E false)
-    endif()
     add_custom_target(dastest_cache_guard
         COMMAND ${CMAKE_COMMAND} -E sha256sum ${_das_test_binary_files} > ${_identity}
-        COMMAND ${_same_binaries} || ${CMAKE_COMMAND} -E rm -rf ${DAS_TEST_CACHE_DIR}
+        COMMAND ${CMAKE_COMMAND} -DNEW=${_identity} -DDIR=${DAS_TEST_CACHE_DIR} -DENABLED=${DAS_TEST_RESULT_CACHE}
+                -P ${PROJECT_SOURCE_DIR}/cmake/dastest_cache_guard.cmake
         COMMAND ${CMAKE_COMMAND} -E make_directory ${DAS_TEST_CACHE_DIR}
         COMMAND ${CMAKE_COMMAND} -E copy ${_identity} ${DAS_TEST_CACHE_DIR})
     add_dependencies(dastest_cache_guard ${_das_test_binaries})
