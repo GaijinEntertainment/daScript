@@ -157,6 +157,7 @@ struct EmitCtx {
     decode_methods : table<uint64; FunctionPtr> // intptr(ExprField of coopmatLoadTensorDecode's self.<method> argument) -> the devirtualized decode Function, resolved at discovery
     callback_funcs : table<uint64; CallbackFn>  // intptr(Function) -> registered [spirv_combine] / [spirv_per_element] function (referenced via @@ from coopmatReduce / coopmatPerElement)
     callback_order : array<uint64>              // callback_funcs keys in stable emission order (first-reference order)
+    inline_ret     : array<uint>                //!< the [spirv_inline] bodies being visited in place, innermost last: each slot takes its tail return's value id
 }
 
 // A user-defined daslang function called from a shader: emitted as its own OpFunction. Ids are
@@ -172,6 +173,7 @@ struct UserFunc {
                             // members are module-scope OpVariables, so the body needs no receiver
     block_arg : int = -1    //!< a directly called [spirv_decode] method whose block argument is a plane element: the das index of that parameter (its uint INDEX travels, the body chains through the plane); -1 = the value form
     block_ssbo : uint64     //!< intptr(Variable) of the plane the element form indexes
+    inline_body : bool      //!< a [spirv_inline] function: every call site visits its body in place, no OpFunction
 }
 
 // Per ref-argument copy-in/copy-out scratch: a Function-storage OpVariable hoisted into the calling
@@ -4522,6 +4524,12 @@ class SpirvEmit : AstVisitor {
             errs |> push("return inside a `for [unroll_full]` body: the loop is unrolled at emission and a return in one copy leaves the copies after it unreachable - restructure the body or take [unroll]")
             return expr
         }
+        if (!empty(ctx.inline_ret)) {   //! a [spirv_inline] body's tail return: its value is the call's, no terminator
+            if (expr.subexpr != null) {
+                ctx.inline_ret[length(ctx.inline_ret) - 1] = value_of(expr.subexpr)
+            }
+            return expr
+        }
         if (expr.subexpr != null) {
             let v = value_of(expr.subexpr)
             if (v != 0u) {
@@ -4746,6 +4754,10 @@ class SpirvEmit : AstVisitor {
     // args[i] with f.arguments[i-1] (and the callee's self was dropped at registration).
     [arch(at="../ARCHITECTURE_COOPMAT.md#direct-decode-call")]
     def emit_call_core(var bm : SpirvModule; uf : UserFunc; arguments : dasvector`ptr`Expression; skip, fshift : int; resKey : uint64) {
+        if (uf.inline_body) {
+            emit_inline_call(uf, arguments, skip, fshift, resKey)
+            return
+        }
         let f = uf.fn
         let res = alloc_id(bm)
         var ops <- [uf.ret_type, res, uf.fn_id]
@@ -4814,6 +4826,55 @@ class SpirvEmit : AstVisitor {
         delete ref_temps
         if (!uf.is_void) {
             e2id[resKey] = res
+        }
+    }
+
+    //! a [spirv_inline] call: the callee's parameters bound to the call's values and lvalues, its body visited here
+    [arch(at="../ARCHITECTURE.md#emit-time-inline")]
+    def emit_inline_call(uf : UserFunc; arguments : dasvector`ptr`Expression; skip, fshift : int; resKey : uint64) {
+        let f = unsafe(reinterpret<FunctionPtr>(uf.fn))
+        if (!inline_returns_at_tail(f)) {
+            errs |> push("[spirv_inline] '{f.name}': an inlined function returns only from its last statement")
+            return
+        }
+        for (arg, i in arguments, count()) {
+            if (i < skip) {
+                continue
+            }
+            let fi = i - fshift
+            if (fi >= length(f.arguments)) {
+                continue
+            }
+            let pv = f.arguments[fi]
+            if (fi == uf.block_arg || spills_struct_param(*m, pv._type)) {
+                errs |> push("[spirv_inline] '{f.name}': parameter '{pv.name}' takes a plane element or a struct with array members, which only a called OpFunction binds")
+                return
+            }
+            if (is_out_param(pv._type)) {
+                let p = ptr_of(arg)
+                if (p.id == 0u) return
+                ctx.local_vars[intptr(pv)] = LocalVar(ptr_id = p.id, value_type = p.pty, storage = root_storage_of(arg))
+            } else {
+                let v = value_of(arg)
+                if (v == 0u) return
+                ctx.locals[intptr(pv)] = v
+            }
+        }
+        let prev_self = ctx.self_arg
+        if (uf.is_method && !empty(f.arguments)) {
+            ctx.self_arg = intptr(f.arguments[0])
+        }
+        ctx.inline_ret |> push(0u)
+        var bm & = unsafe(*m)
+        var errors : array<string>
+        drive_emit(bm, *ctx, f, errors)
+        errs |> push_from(errors)
+        delete errors
+        let rv = ctx.inline_ret[length(ctx.inline_ret) - 1]
+        ctx.inline_ret |> pop()
+        ctx.self_arg = prev_self
+        if (!uf.is_void && rv != 0u) {
+            e2id[resKey] = rv
         }
     }
 
@@ -7377,7 +7438,8 @@ def private register_user_func(var m : SpirvModule; var ctx : EmitCtx; f : Funct
             ptypes |> push(vt)
         }
     }
-    if (uf.valid) {
+    uf.inline_body = function_has_annotation(f, "spirv_inline")
+    if (uf.valid && !uf.inline_body) {
         uf.fn_id = alloc_id(m)
         uf.type_id = type_function(m, uf.ret_type, ptypes)
     }
@@ -8095,6 +8157,87 @@ def private alloc_call_temps(var m : SpirvModule; var ctx : EmitCtx; f : Functio
     }
 }
 
+class SpirvReturnCount : AstVisitor {
+    adapter : VisitorAdapter?
+    n : int
+    def override preVisitExprReturn(expr : ExprReturn?) : void {
+        n++
+    }
+}
+
+//! whether a body ends on a return, through its trailing blocks and the method form's with(self)
+def private ends_on_return(e : ExpressionPtr) : bool {
+    let blk = e ?as ExprBlock
+    if (blk != null) return !empty(blk.list) && ends_on_return(blk.list[length(blk.list) - 1])
+    let wth = e ?as ExprWith
+    if (wth != null) return ends_on_return(wth.body)
+    return e is ExprReturn
+}
+
+//! a [spirv_inline] body returns at most once, from its last statement: the inlined body falls through to the call's result
+def private inline_returns_at_tail(f : FunctionPtr) : bool {
+    var v = new SpirvReturnCount()
+    make_visitor(*v) $(mv_adapter) {
+        v.adapter = mv_adapter
+        visit(f.body, v.adapter)
+    }
+    let n = v.n
+    unsafe {
+        delete v
+    }
+    return n == 0 || (n == 1 && ends_on_return(f.body))
+}
+
+//! the [spirv_inline] functions a body calls, by their user_funcs key
+class SpirvInlineScan : AstVisitor {
+    adapter : VisitorAdapter?
+    @do_not_delete ctx : EmitCtx?
+    found : array<uint64>
+    def note(k : uint64) {
+        if (k != 0ul && (ctx.user_funcs?[k] ?? UserFunc()).inline_body) {
+            found |> push(k)
+        }
+    }
+    def override preVisitExprCall(expr : ExprCall?) : void {
+        note(intptr(expr.func))
+    }
+    def override preVisitExprInvoke(expr : ExprInvoke?) : void {
+        note(ctx.invoke_targets?[intptr(expr)] ?? 0ul)
+    }
+}
+
+//! the entry block's locals and call temps of every [spirv_inline] body `f` reaches, each body once
+[arch(at="../ARCHITECTURE.md#emit-time-inline")]
+def private collect_inline_locals(var m : SpirvModule; var ctx : EmitCtx; f : FunctionPtr; var seen : table<uint64>; var errors : array<string>) {
+    var v = new SpirvInlineScan(ctx = unsafe(addr(ctx)))
+    make_visitor(*v) $(mv_adapter) {
+        v.adapter = mv_adapter
+        visit(f.body, v.adapter)
+    }
+    var found <- v.found
+    unsafe {
+        delete v
+    }
+    for (k in found) {
+        continue if (key_exists(seen, k))
+        seen |> insert(k)
+        let cf = unsafe(reinterpret<FunctionPtr>((ctx.user_funcs?[k] ?? UserFunc()).fn))
+        collect_locals(m, ctx, cf.body, errors)
+        alloc_call_temps(m, ctx, cf, errors)
+        collect_inline_locals(m, ctx, cf, seen, errors)
+    }
+    delete found
+}
+
+//! the prepass a function's entry block owes: its own locals and call temps, then those of the [spirv_inline] bodies it reaches
+def private collect_entry_locals(var m : SpirvModule; var ctx : EmitCtx; f : FunctionPtr; var errors : array<string>) {
+    collect_locals(m, ctx, f.body, errors)
+    alloc_call_temps(m, ctx, f, errors)
+    var seen : table<uint64>
+    collect_inline_locals(m, ctx, f, seen, errors)
+    delete seen
+}
+
 [arch(at="../ARCHITECTURE_COOPMAT.md#direct-decode-call")]
 def private spills_struct_param(var m : SpirvModule; at : TypeDecl?) : bool {
     if (at == null || at.baseType != Type.tStructure || at.structType == null
@@ -8168,8 +8311,7 @@ def private emit_user_function(var m : SpirvModule; var ctx : EmitCtx; uf : User
         ctx.local_vars |> insert(s.arg, LocalVar(ptr_id = vid, value_type = s.value_type))
         spill_vars |> push(vid)
     }
-    collect_locals(m, ctx, f.body, errors)
-    alloc_call_temps(m, ctx, f, errors)
+    collect_entry_locals(m, ctx, f, errors)
     for (s, si in spills, count()) {
         emit(m, SEC_FUNCS, SpvOp.Store, spill_vars[si], s.param_id)
     }
@@ -8386,8 +8528,7 @@ def generate_spirv(fn : FunctionPtr; var errors : array<string>; stage : ShaderS
     ctx.terminated = false
 
     // Function-storage OpVariables must lead the entry block, before any body code.
-    collect_locals(m, ctx, fn.body, errors)
-    alloc_call_temps(m, ctx, fn, errors)
+    collect_entry_locals(m, ctx, fn, errors)
     // Body codegen: the SpirvEmit AstVisitor walks fn.body, emitting into m.
     drive_emit(m, ctx, fn, errors)
 
@@ -8399,7 +8540,7 @@ def generate_spirv(fn : FunctionPtr; var errors : array<string>; stage : ShaderS
     // user-defined shader functions, in stable registration order, after the entry point
     for (key in ctx.user_order) {
         let uf = ctx.user_funcs?[key] ?? UserFunc()
-        if (uf.valid) {
+        if (uf.valid && !uf.inline_body) {
             emit_user_function(m, ctx, uf, errors)
         }
     }

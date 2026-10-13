@@ -300,6 +300,11 @@ class SpirvCombineAnnotation : AstFunctionAnnotation {
     }
 }
 
+//! [spirv_inline] - a shader helper the emitter inlines at every call site instead of emitting an OpFunction; a marker the
+//! emitter reads, the CPU body untouched
+[function_macro(name="spirv_inline")]
+class SpirvInlineAnnotation : AstFunctionAnnotation {}
+
 [function_macro(name="spirv_per_element")]
 class SpirvPerElementAnnotation : AstFunctionAnnotation {
     def override apply(var func : FunctionPtr; var group : ModuleGroup; var args : AnnotationArgumentList; var errors : das_string) : bool {

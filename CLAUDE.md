@@ -250,6 +250,9 @@ diagnostic in any tier.
   the environment goes through `try_to_int` / `try_to_float` - they live in
   `daslib/strings_convert` (`require` it; the `strings` module has no `try_*` form) and return
   `Result<T; ConversionError>`, so an out-of-range parse is distinguishable from a valid `0`.
+- **An early `return <- f(out)` in a function that also ends `return <- out` returns an EMPTY
+  array** (interpreter and `-jit` alike). Give the function one return of the local: transform
+  `out` in place on that branch, then `return <- out`.
 - **`<-` into a table slot ZEROES the source.** Registering one value under two keys takes a
   fresh clone per registration, not the same variable passed twice.
 - **`new WithCtor(field = v)` skips the user constructor** - it is plain field-init, so
