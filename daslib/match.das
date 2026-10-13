@@ -45,11 +45,20 @@ struct MatchTo {
     declarations : table<string; Expression?>        //! captured variables (name → access expression)
     prefix       : array<Expression?>             //! prefix statements (e.g. temporaries for match_copy)
     errors       : array<MatchError>                //! errors encountered during pattern analysis
-    failed       : bool                             //! true if a hard error occurred (unresolved types etc.)
+    //! true if a hard error occurred (unresolved types etc.)
+    hard         : bool
     bind_names   : bool                             //! a `=>` arm, where a bare `x` in the pattern binds; an `if (pattern)` arm binds only `$v(x)`
     by_ref       : table<string>                    //! bound names the body reads through the access itself, not a `let` copy: pointers and types that can't be copied
     forced       : table<uint64; int>               //! alternation node -> the one side to match (an arm split per alternative)
     @do_not_delete split : ExprOp2?                 //! alternation whose sides bind the same names at different places
+}
+
+struct MatchFailure {
+    //! Why one arm's pattern does not match.
+    //! Errors to report; empty when the pattern does not fit the type.
+    errors : array<MatchError>
+    //! True if a hard error occurred (unresolved types etc.).
+    hard : bool
 }
 
 [macro_function, unused_argument(msg)]
@@ -389,7 +398,7 @@ def match_type(what : TypeDeclPtr; wthmt : ExprCall?; access : Expression?; var 
     assume mtype = wthmt.arguments[0]._type
     if (mtype == null) {
         to.errors |> match_error("unresolved type", wthmt.arguments[0].at)
-        to.failed = true
+        to.hard = true
         return false
     }
     if (is_same_type(what, mtype, RefMatters.no, ConstMatters.no, TemporaryMatters.no)) {
@@ -476,7 +485,7 @@ def match_alternatives(var wth : ExprOp2?; var to : MatchTo; matcher : block<(si
         sideTo.forced := to.forced
         if (!invoke(matcher, side, sideTo)) {
             to.errors |> push_from(sideTo.errors)
-            to.failed ||= sideTo.failed
+            to.hard ||= sideTo.hard
             to.split = sideTo.split
             return false
         }
@@ -646,7 +655,7 @@ def private add_condition(var r : Result<Expression?; string>; wth : Expression?
     //! A leaf pattern's condition joins the arm; its error is reported instead - a hard one when the pattern itself did not compile.
     if (is_err(r)) {
         to.errors |> match_error(unwrap_err(r), wth.at)
-        to.failed ||= wth._type == null
+        to.hard ||= wth._type == null
         return false
     }
     to.conditions |> push(move_unwrap(r))
@@ -746,7 +755,7 @@ def match_any(what : TypeDeclPtr; wth : Expression?; access : Expression?; var t
         return true
     } else {
         to.errors |> match_error("unsupported match syntax {wth.__rtti} in {describe(wth)}", wth.at)
-        to.failed = true
+        to.hard = true
         return false
     }
 }
@@ -1105,7 +1114,8 @@ def private drop_last_condition(var chain : Expression?) : Expression? {
 }
 
 [macro_function]
-def private match_arm(var types : array<TypeDeclPtr>; var accesses : array<Expression?>; pattern : Expression?; bind_names : bool) : Result<array<MatchTo>; MatchTo> {
+def private match_arm(var types : array<TypeDeclPtr>; var accesses : array<Expression?>;
+                      pattern : Expression?; bind_names : bool) {
     //! Matches one arm's pattern: one result per side of an alternation whose sides bind the same names at different places, in order - or why it does not match.
     var results : array<MatchTo>
     var stack : array<table<uint64; int>>
@@ -1127,18 +1137,20 @@ def private match_arm(var types : array<TypeDeclPtr>; var accesses : array<Expre
                 stack |> emplace(choice)
             }
         } else {
-            return <- move_err(to, type<array<MatchTo>>)
+            return <- move_err(MatchFailure(errors <- to.errors, hard = to.hard),
+                               type<array<MatchTo>>)
         }
     }
-    return <- move_ok(results, type<MatchTo>)
+    return <- move_ok(results, type<MatchFailure>)
 }
 
 [macro_function]
-def private report_match_failure(prog : ProgramPtr; to : MatchTo; pattern : Expression?; typ : TypeDeclPtr) : void {
-    for (e in to.errors) {
+def private report_match_failure(prog : ProgramPtr; failure : MatchFailure; pattern : Expression?;
+                                 typ : TypeDeclPtr) : void {
+    for (e in failure.errors) {
         macro_error(prog, *e.at, e.msg)
     }
-    if (empty(to.errors)) {
+    if (empty(failure.errors)) {
         macro_error(prog, pattern.at, "pattern `{describe_pattern(pattern)}` does not match `{describe(typ)}`")
     }
 }
@@ -1280,7 +1292,7 @@ class MatchMacro : AstCallMacro {
                     continue
                 }
                 let failure <- move_unwrap_err(arm_match)
-                if (report_match_errors || failure.failed) {
+                if (report_match_errors || failure.hard) {
                     any_errors = true
                     report_match_failure(prog, failure, pattern, what._type)
                     break
