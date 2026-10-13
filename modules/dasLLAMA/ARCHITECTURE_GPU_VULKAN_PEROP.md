@@ -27,8 +27,9 @@ per-layer chain and the prefill's Q8-fed chain with the device combine serve its
 
 Under the per-op tier (the whole-model route off, or a model the driver declines) the dense rail's walk places each
 dense layer's w1/w3/w2 triple beside the attention q/o pair when its FFN half is asked for (`gpu_want_dense_ffn`,
-``DASLLAMA_GPU_DENSE_FFN=1``, opt-in: the triples are most of a dense model's bytes, and the walk places them ahead of the
-rails it reaches after them). The walk takes a layer whose planes are q8, a repacked superblock format or a per-32 format
+``DASLLAMA_GPU_DENSE_FFN``, on: the triples are most of a dense model's bytes, and the walk places them ahead of the
+rails it reaches after them; ``=0`` keeps the FFN on the CPU, the arm that reads a dense model's served rate at 17 against the
+rail's 29 tok/s on Llama-3.2-3B over the pod's card, `PERF_LEDGER.md`). The walk takes a layer whose planes are q8, a repacked superblock format or a per-32 format
 (q51, iq4nl32), and whose FFN width is a block multiple of the down plane's format (`perop_dense_ffn_decline`); a routed
 layer and gemma-4's dense shared expert keep their own rails. A decode step's FFN on such a layer (`dense_ffn_inplace`)
 quantizes the normed row to the gate plane's form - Q8_K for a superblock format, else Q8_0 - and runs the routed decode

@@ -547,8 +547,7 @@ fallback for a model that does not fit: expert stacks sized automatically
 (resident layers fill the VRAM budget, the rest stream) plus the deltanet
 rail (each deltanet plane in its own format), the attention rail, the dense
 layers' attention projections and the shared expert, each over its own planes;
-a dense layer's FFN stays on the CPU unless
-``DASLLAMA_GPU_DENSE_FFN=1`` arms the per-op FFN rail. The config keys ``gpu_layers`` / ``gpu_stream`` are
+a dense layer's FFN rides the per-op FFN rail (``DASLLAMA_GPU_DENSE_FFN=0`` keeps it on the CPU). The config keys ``gpu_layers`` / ``gpu_stream`` are
 ``0`` = auto; ``gpu_dn`` / ``gpu_attn`` / ``gpu_dense`` / ``gpu_vram_mb``
 override the rest, and the ``DASLLAMA_GPU_*`` environment variables override
 everything.

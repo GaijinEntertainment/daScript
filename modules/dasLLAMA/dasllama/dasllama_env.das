@@ -162,8 +162,8 @@ struct public GpuTierEnv {
     @clarg_doc = "The dense rail's gemma-4 shared-expert w1/w3/w2 triple; opt-IN, measured a wash-to-loss."
     gpu_dense_shexp : bool = false
 
-    @clarg_doc = "The dense rail's FFN half (each dense layer's w1/w3/w2 triple, the decode row's FFN on the device); opt-IN."
-    gpu_dense_ffn : bool = false
+    @clarg_doc = "The dense rail's FFN half (each dense layer's w1/w3/w2 triple, the decode row's FFN on the device); 0 keeps a dense layer's FFN on the CPU (the A/B rail)."
+    gpu_dense_ffn : bool = true
 
     @clarg_default_doc = "follows DASLLAMA_GPU"
     @clarg_doc = "Shared-expert rail on the GPU."

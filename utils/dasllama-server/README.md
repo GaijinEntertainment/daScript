@@ -560,8 +560,7 @@ an explicit `gpu_dn = false` still turns that rail off. The per-op rails arm ben
 fallback for a model that does not fit: expert stacks sized
 **automatically** (resident layers fill the VRAM budget, the rest stream) plus DN (each deltanet plane in
 its own format) + ATTN + the dense layers' attention projections + the resident shared expert (its own planes).
-A dense layer's FFN stays on the CPU unless
-`DASLLAMA_GPU_DENSE_FFN=1` arms the per-op FFN rail. `gpu_layers` / `gpu_stream` are `0` = auto by default; set either to a
+A dense layer's FFN rides the per-op FFN rail (`DASLLAMA_GPU_DENSE_FFN=0` keeps it on the CPU). `gpu_layers` / `gpu_stream` are `0` = auto by default; set either to a
 positive value to pin it exactly, and `gpu_dn` / `gpu_attn` / `gpu_dense` / `gpu_vram_mb` override
 the rest. The `DASLLAMA_GPU_*` env vars still override everything (they remain the A/B levers), and
 `DASLLAMA_GPU=1` requests the same auto shape without a config file.

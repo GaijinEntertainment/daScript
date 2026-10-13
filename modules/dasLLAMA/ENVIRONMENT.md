@@ -55,7 +55,7 @@ Read by the inference engine itself, so these affect any program that loads a mo
 | `DASLLAMA_GPU_DENSE` | flag | follows DASLLAMA_GPU | Dense-weight rail on the GPU. |
 | `DASLLAMA_GPU_DENSE_ATTN` | flag | on | The dense rail's attention half (per-layer q/o pairs); opt-OUT, measured a loss on gemma-4. |
 | `DASLLAMA_GPU_DENSE_SHEXP` | flag | off | The dense rail's gemma-4 shared-expert w1/w3/w2 triple; opt-IN, measured a wash-to-loss. |
-| `DASLLAMA_GPU_DENSE_FFN` | flag | off | The dense rail's FFN half (each dense layer's w1/w3/w2 triple, the decode row's FFN on the device); opt-IN. |
+| `DASLLAMA_GPU_DENSE_FFN` | flag | on | The dense rail's FFN half (each dense layer's w1/w3/w2 triple, the decode row's FFN on the device); 0 keeps a dense layer's FFN on the CPU (the A/B rail). |
 | `DASLLAMA_GPU_SHEXP` | flag | follows DASLLAMA_GPU | Shared-expert rail on the GPU. |
 | `DASLLAMA_GPU_QKV` | flag | off | Fused QKV rail on the GPU; stays off under DASLLAMA_GPU (measured a wash). |
 | `DASLLAMA_GPU_CLS` | flag | on | Keep the classifier plane on the GPU - the best ms-per-GB region; 0 is the CPU A/B lever. |
