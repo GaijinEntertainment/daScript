@@ -532,6 +532,45 @@ class MetalPleGatherQ40 : MetalPleGatherKqT {
     override KSC = false
 }
 
+//! the per-32 tables' gather: the 32-block plane pair bound verbatim at the table (`b32_planes_of`), element e of a block off
+//! byte e % 16's nibble (low half below 16) and the qh word's bit e - q51's d x q + m, q5032's (q - 16) x d
+[ |> template_struct_instance]
+class template MetalPleGatherB32T : MetalPleGatherBaseT {
+    @template_constant PW : uint = 5u      //!< quant words a block: the four nibble words and the qh word
+    @template_constant PS : uint = 2u      //!< scale halves a block: q51's d | m, q5032's d
+    @template_constant P50 : bool = false  //!< q5032: the signed level q - 16 under the one d
+
+    def override decode_el(el : uint; var v : float&) {
+        let blk = el / 32u
+        let e = el % 32u
+        let u = kqu[blk * PW + (e % 16u) / 4u]
+        let hu = kqu[blk * PW + 4u]
+        let q = ((u >> (8u * (e % 4u) + (e / 16u) * 4u)) & 15u) | (((hu >> e) & 1u) << 4u)
+        static_if (P50) {
+            v = (float(q) - 16.0) * float(ksh[blk * PS])
+        } else {
+            v = float(ksh[blk * PS]) * float(q) + float(ksh[blk * PS + 1u])
+        }
+    }
+
+    [metal_kernel]
+    def metal_ple_gather_b32 {
+        gather_body()
+    }
+}
+
+[metal_dispatch(name = "pf_enc_ple_gather_q51", pso = "g_pf_pso_ple_gather_q51", tg = "ple", grid = "nlayers, npos", params = "nlayers : int64, npos : int64, ple : int64")]
+class MetalPleGatherQ51 : MetalPleGatherB32T {
+    override KSC = false
+}
+
+[metal_dispatch(name = "pf_enc_ple_gather_q5032", pso = "g_pf_pso_ple_gather_q5032", tg = "ple", grid = "nlayers, npos", params = "nlayers : int64, npos : int64, ple : int64")]
+class MetalPleGatherQ5032 : MetalPleGatherB32T {
+    override KSC = false
+    override PS = 1u
+    override P50 = true
+}
+
 [metal_dispatch(name = "pf_enc_ple_finish", pso = "g_pf_pso_ple_finish", tgmem = "metal_ple_finish_msl_tgmem", tg = "ple", grid = "nlayers, npos", params = "nlayers : int64, npos : int64, ple : int64")]
 class MetalPleFinish : MetalTgReduceBase {
     @ssbo @binding = 0 @role = "read" proj : array<float>  //!< [mp x n_layers*ple] position-major model_proj·embd
@@ -4596,6 +4635,8 @@ var private g_pf_pso_ple_gather : MetalComputePipeline?   //!< PLE pre-step: q8 
 var private g_pf_pso_ple_gather_k4 : MetalComputePipeline?   //!< PLE pre-step: k4 token-row gather
 var private g_pf_pso_ple_gather_k5 : MetalComputePipeline?   //!< PLE pre-step: k5 token-row gather
 var private g_pf_pso_ple_gather_q40 : MetalComputePipeline?  //!< PLE pre-step: q40 token-row gather
+var private g_pf_pso_ple_gather_q51 : MetalComputePipeline?  //!< PLE pre-step: per-32 q51 token-row gather
+var private g_pf_pso_ple_gather_q5032 : MetalComputePipeline?  //!< PLE pre-step: per-32 q5032 token-row gather
 var private g_pf_pso_ple_finish : MetalComputePipeline?   //!< PLE pre-step: rms + combine, in place
 var private g_pf_pso_qkmm : MetalComputePipeline?
 var private g_pf_pso_avmm : MetalComputePipeline?
@@ -4874,7 +4915,8 @@ def public metal_prefill_shutdown {
     release_handles(g_pf_pso_g4a_attn, g_pf_pso_g4a_glu, g_pf_pso_g4a_dw, g_pf_pso_g4a_axpy)
     release_handles(g_pf_pso_g4a_mag, g_pf_pso_g4a_logmel, g_pf_pso_g4a_lnrelu)
     release_handles(g_pf_pso_q3a_shuffle, g_pf_pso_q3a_pow, g_pf_pso_q3a_logmel_t)
-    release_handles(g_pf_pso_ple_gather, g_pf_pso_ple_gather_k4, g_pf_pso_ple_gather_k5, g_pf_pso_ple_gather_q40, g_pf_pso_ple_finish)
+    release_handles(g_pf_pso_ple_gather, g_pf_pso_ple_gather_k4, g_pf_pso_ple_gather_k5, g_pf_pso_ple_gather_q40, g_pf_pso_ple_gather_q51,
+        g_pf_pso_ple_gather_q5032, g_pf_pso_ple_finish)
     g_pf_inited = false
     g_pf_failed = false
 }
@@ -5027,6 +5069,8 @@ def private metal_prefill_init : bool {   // nolint:STYLE038 — flat one-compil
     g_pf_pso_ple_gather_k4 = compile_stamp(MetalPleGatherK4_metal_ple_gather_kq_msl, ok)
     g_pf_pso_ple_gather_k5 = compile_stamp(MetalPleGatherK5_metal_ple_gather_kq_msl, ok)
     g_pf_pso_ple_gather_q40 = compile_stamp(MetalPleGatherQ40_metal_ple_gather_kq_msl, ok)
+    g_pf_pso_ple_gather_q51 = compile_stamp(MetalPleGatherQ51_metal_ple_gather_b32_msl, ok)
+    g_pf_pso_ple_gather_q5032 = compile_stamp(MetalPleGatherQ5032_metal_ple_gather_b32_msl, ok)
     g_pf_pso_ple_finish = compile_stamp(metal_ple_finish_msl, ok)
     var perr : string
     var probe = pso_from_source(g_dev, MetalHalfMulMmTH_metal_half_mulmm_th_msl, MetalHalfMulMmTH_metal_half_mulmm_th_msl_entry, MetalHalfMulMmTH_metal_half_mulmm_th_msl_fastmath, perr)
@@ -6704,6 +6748,8 @@ def private ple_gather_pso_of(fmt : KqFmt) : MetalComputePipeline? {
     if (fmt == KqFmt.k4) return g_pf_pso_ple_gather_k4
     if (fmt == KqFmt.k5) return g_pf_pso_ple_gather_k5
     if (fmt == KqFmt.q40) return g_pf_pso_ple_gather_q40
+    if (fmt == KqFmt.q51) return g_pf_pso_ple_gather_q51
+    if (fmt == KqFmt.q5032) return g_pf_pso_ple_gather_q5032
     return null
 }
 
@@ -6713,6 +6759,17 @@ def private pf_enc_ple_gather_fmt(enc : MetalComputeEncoder?; t : Model; btok, b
     if (fmt == KqFmt.q8) {
         let bemb = blob_of(g_dev, t, t.ple_emb_off)
         pf_enc_ple_gather(enc, bemb.buf, bemb.boff, bemb.buf, btok, by, ka, nlayers, npos, ple)
+        return
+    }
+    if (kq_fmt_b32(fmt)) {   //! the per-32 pair bound verbatim at the table, the 32-block index relative to it
+        let bp = b32_planes_of(g_dev, t, fmt, t.ple_emb_off)
+        if (fmt == KqFmt.q51) {
+            pf_enc_ple_gather_q51(enc, bp.sbuf, bp.soff, btok, by, ka, bp.qbuf, bp.qoff, nlayers, npos, ple)
+        } elif (fmt == KqFmt.q5032) {
+            pf_enc_ple_gather_q5032(enc, bp.sbuf, bp.soff, btok, by, ka, bp.qbuf, bp.qoff, nlayers, npos, ple)
+        } else {
+            panic("metal ple prefill: per-32 table format {fmt} has no gather twin - ple_gather_pso_of admitted it")
+        }
         return
     }
     let bq = kq_quants_of(g_dev, t, fmt, t.ple_emb_off)
@@ -6736,7 +6793,8 @@ def private metal_ple_pre_gpu_gate(t : Model; s : Session; npos, start_pos : int
     }
     let ple = t.config.n_embd_per_layer
     let all = t.config.n_layers * ple
-    //! the kq planes bind at the table's base, so base and row stride must both be whole superblocks - that is what makes the kernel's el/256 its plane superblock
+    //! the kq planes bind at the table's base, so base and row stride must both be whole superblocks - that is what makes the kernel's el/256 its plane superblock;
+    //! a per-32 pair binds AT the table, and off % 256 keeps its quant and scale binds 16B-aligned
     let kq_aligned = t.ple_emb_fmt == KqFmt.q8 || (all % 256l == 0l && t.ple_emb_off % 256l == 0l)
     if (ple % 32l != 0l || ple > 1024l || all % 64l != 0l || !kq_aligned ||
             prefill_decline_caps(t, npos) != MetalPrefillDecline.none) {

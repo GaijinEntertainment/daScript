@@ -3591,6 +3591,9 @@ def test_metal_prefill_kernels(t : T?) {
                 ple_gather_gate(t, dev, queue, 4, 100, 3, 256, 5, 7)
                 ple_gather_gate(t, dev, queue, 5, 100, 3, 256, 5, 7)
                 ple_gather_gate(t, dev, queue, 40, 100, 3, 256, 5, 7)
+                // the per-32 table twins bound at the table past 8 blocks of another table (off % 256, as the gate admits)
+                ple_gather_b32_gate(t, dev, queue, KqFmt.q51, 100, 3, 256, 5, 8)
+                ple_gather_b32_gate(t, dev, queue, KqFmt.q5032, 100, 3, 256, 5, 8)
                 ple_finish_gate(t, dev, queue, 3, 64, 5)
                 add_bias_rows_gate(t, dev, queue, 7, 96)
                 cat2_gate(t, dev, queue, 5, 48, 1, 0, 0, 0, 0)
@@ -4083,6 +4086,76 @@ def private ple_gather_gate(t : T?; var dev, queue; fmt, vocab, nlayers, ple, np
         }
         return if (!ran)
         check_buf(t, tag, mc.buf[by], want, lead_poisoned(Bar(rel = 1e-4), want), Shape(row_width = ple))
+    }
+}
+
+//! PLE stage 1 on a per-32 table (q51, q5032): the plane pair bound AT the table (`blk0` blocks of another table before it), each
+//! token row against `dequant_b32_plane_block` of its blocks x sqrt(ple), bit for bit (the fixtures' values are dyadic); the
+//! lead element poisoned is the control, and the fixture's qh word must move the reference (a qh-blind gather would miss)
+def private ple_gather_b32_gate(t : T?; var dev, queue; f : KqFmt; vocab, nlayers, ple, npos, blk0 : int) {
+    let tag = "ple_gather_b32 f={f} v={vocab} nl={nlayers} ple={ple} np={npos} blk0={blk0}"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        var pso = mc |> keep_pso(invoke(f == KqFmt.q51 ? kernel_of(@@pf_enc_ple_gather_q51).make : kernel_of(@@pf_enc_ple_gather_q5032).make, dev, err))
+        return if (!pso_ok(t, tag, pso, err))
+        let rowlen = nlayers * ple
+        let rowblk = rowlen / 32
+        let nblk = blk0 + vocab * rowblk
+        var inscope qp, sp : array<uint8>
+        var inscope wref : array<float>
+        if (f == KqFmt.q51) {
+            q51_test_planes(1, nblk * 32, qp, sp, wref)
+        } else {
+            q5032_test_planes(1, nblk * 32, qp, sp, wref)
+        }
+        var inscope tok : array<uint>
+        tok |> resize(npos)
+        for (p in range(npos)) {
+            tok[p] = uint((p * 23 + 5) % vocab)
+        }
+        let sc0 = sqrt(float(ple))
+        var inscope wrow, want, noqh : array<float>
+        wrow |> resize(rowlen)
+        want |> resize(nlayers * npos * ple)
+        noqh |> resize(rowlen)
+        var qhmoves = false
+        for (p in range(npos)) {
+            let b0 = blk0 + int(tok[p]) * rowblk
+            for (b in range(rowblk)) {
+                dequant_b32_plane_block(f, qp, sp, int64(b0 + b), wrow, int64(b * 32))
+            }
+            for (l in range(nlayers)) {
+                for (i in range(ple)) {
+                    want[(l * npos + p) * ple + i] = wrow[l * ple + i] * sc0
+                }
+            }
+            var inscope qz := qp
+            for (b in range(rowblk)) {
+                for (k in range(4)) {
+                    qz[(b0 + b) * int(kq_qsb(f)) + 16 + k] = uint8(0)
+                }
+                dequant_b32_plane_block(f, qz, sp, int64(b0 + b), noqh, int64(b * 32))
+            }
+            qhmoves ||= mismatch_exact(noqh, wrow) > 0
+        }
+        t |> success(qhmoves, "{tag}: the qh word moves the reference rows (the gather's fifth bit is under test)")
+        var ka = PleArgs(npos = uint(npos), ple = uint(ple), nlayers = uint(nlayers), sc0 = sc0,
+            inv_sd = 1.0, eps = 1.0e-6, inv_s2 = 1.0)
+        let bkq = mc |> in_plain(qp)
+        let bks = mc |> in_plain(sp)
+        let btok = mc |> in_plain(tok)
+        let by = mc |> out_words(nlayers * npos * ple, -1000.0)
+        let soff = uint64(int64(blk0) * kq_ssb(f))
+        let qoff = uint64(int64(blk0) * kq_qsb(f))
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            if (f == KqFmt.q51) {
+                pf_enc_ple_gather_q51_pso(enc, pso, mc.buf[bks], soff, mc.buf[btok], mc.buf[by], ka, mc.buf[bkq], qoff, int64(nlayers), int64(npos), int64(ple))
+            } else {
+                pf_enc_ple_gather_q5032_pso(enc, pso, mc.buf[bks], soff, mc.buf[btok], mc.buf[by], ka, mc.buf[bkq], qoff, int64(nlayers), int64(npos), int64(ple))
+            }
+        }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[by], want, lead_poisoned(BAR_EXACT, want), Shape(row_width = ple))
     }
 }
 

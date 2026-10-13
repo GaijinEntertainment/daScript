@@ -440,5 +440,8 @@ def test_metal_b32_block_constants(t : T?) {
         t |> equal(kq_ssb(KqFmt.q4032), 1l * 2l, "SH = 1 on q4032: its f16 d")
         t |> equal(kq_qsb(KqFmt.q5032), 5l * 4l, "B32W = 5 (MetalKqTileDecodeT's q5032 stamps) and QW = 5 (MetalEmbedB32Q5032, MetalMoeMulMmQ51TensorT): KQ_Q5032_QWORDS words a block")
         t |> equal(kq_ssb(KqFmt.q5032), 1l * 2l, "SH = 1 on q5032: its f16 d")
+        t |> equal(kq_qsb(KqFmt.q5032), int64(5u * 4u), "PW = 5 (MetalPleGatherB32T): q51's and q5032's quant words a block")
+        t |> equal(kq_ssb(KqFmt.q51), 2l * 2l, "PS = 2 on MetalPleGatherQ51: d | m")
+        t |> equal(kq_ssb(KqFmt.q5032), 1l * 2l, "PS = 1 on MetalPleGatherQ5032: its d")
     }
 }
