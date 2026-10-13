@@ -2124,7 +2124,13 @@ corpora under the models dir, machine-local): the seven vocab families' `.inp`/`
 through `load_tokenizer_auto` -> `encode` / `decode`, ids exact and the decode round-trip
 lossless; reports SKIPPED where the vocab is not stocked. One cell is model-free: the BPE
 `add_bos` default a GGUF without the key takes (upstream's per-pre table), then the qwen35 vocab
-reading `add_bos == false` where that fixture is stocked.
+reading `add_bos == false` where that fixture is stocked. The SentencePiece byte-fallback cells:
+model-free, a hand-built vocabulary with control tokens ahead of its byte pieces (Mistral v0.3's
+layout, where 3 + the byte is a control token) encodes a newline as its `<0x0A>` piece and no
+control id, the Llama-2 layout (byte pieces right after eos) reads the same pieces, and a
+vocabulary with no byte pieces panics on a byte it cannot spell; model-gated, Mistral-7B-Instruct-v0.3
+Q8_0 reads `<0x0A>` at 781 with 13 a control token, and the newline and tab samples encode to
+`llama-tokenize --no-bos`'s ids and decode back.
 `test_embeddings.das` - stocked suite, `-jit` only; the embeddings read per model: on
 Qwen3-Embedding-0.6B Q8_0 (small tier) the file's `pooling_type` reads last-token and its
 `add_eos_token` on, `encode` ends a text with the EOS, and the model card's own example - two

@@ -27,6 +27,7 @@ struct SpmTokenizer {
     // The encode init loop's no-allocation probe: byte-packed keys equal string equality exactly
     // (per-cpt slice + string-keyed lookup strlens the whole source per call — O(n^2) loops)
     bkey_id : table<uint; int64>
+    byte_piece_id : array<int64>   //! DERIVED: byte value -> the id of its "<0xXX>" piece, -1 where the vocabulary has none
     max_token_length : int
     add_space_prefix : bool = true // SPM add_dummy_prefix: prepend a ▁ to non-empty text (Gemma sets it false)
     bos_id : int64 = 1l            // BOS token id from GGUF metadata (Llama-2/TinyLlama 1, Gemma 2); default = llama2.c
@@ -52,6 +53,10 @@ def build_spm_derived(var tk : SpmTokenizer) {
         if (!empty(piece) && length(piece) <= 4) {
             tk.bkey_id[pack_piece_key(piece)] = int64(m)   // last duplicate wins, same as lookup
         }
+    }
+    tk.byte_piece_id |> resize(256)
+    for (b in range(256)) {
+        tk.byte_piece_id[b] = tk.lookup?[byte_token_name(b)] ?? -1l
     }
 }
 
@@ -270,7 +275,7 @@ def encode(tk : SpmTokenizer; text : string; bos, eos : bool) : array<int64> {
     }
     // split into UTF-8 codepoints; each window's raw bytes pack into the uint bkey_id probe —
     // byte-equality semantics, zero allocation (a slice + string-keyed lookup here strlens the
-    // whole source per call, O(n^2) over the text) — or byte fallback (byte + 3)
+    // whole source per call, O(n^2) over the text) — or byte fallback, each byte its "<0xXX>" piece
     peek_data(text) $(d : array<uint8> const#) {
         var i = 0
         while (i < length(d)) {
@@ -285,7 +290,11 @@ def encode(tk : SpmTokenizer; text : string; bos, eos : bool) : array<int64> {
                 tokens |> push(id)
             } else {
                 for (b in range(i, j)) {
-                    tokens |> push(int64(int(d[b]) + 3))
+                    let bid = tk.byte_piece_id[int(d[b])]
+                    if (bid < 0l) {
+                        panic("dasLLAMA spm: byte {int(d[b])} of '{text}' is no piece and the vocabulary has no {byte_token_name(int(d[b]))} byte piece")
+                    }
+                    tokens |> push(bid)
                 }
             }
             i = j
@@ -324,12 +333,6 @@ def private spm_piece_of(d : array<uint8> const#; i, n : int) : string {
         return string(temp_array(addr<uint8?>(d[i]), n, type<uint8>))
     }
 }
-
-def private hex_char(v : int) : int => v < 10 ? '0' + v : 'A' + v - 10
-
-// the byte piece's name, "<0xXX>", built without a string walk
-def private byte_piece_name(bv : int) : string =>
-    string([uint8('<'), uint8('0'), uint8('x'), uint8(hex_char(bv >> 4)), uint8(hex_char(bv & 15)), uint8('>')])
 
 // the next codepoint boundary after byte position i
 def private cpt_end(d : array<uint8> const#; i, n : int) : int {
@@ -417,7 +420,8 @@ def unigram_encode(tk : SpmTokenizer; text : string; unk_id : int64; byte_fallba
         while (k >= 0) {
             if (rev[k] == unk_id && byte_fallback) {
                 for (b in range(rev_at[k], rev_at[k] + rev_len[k])) {
-                    ids |> push(tk.lookup?[byte_piece_name(int(d[b]))] ?? unk_id)
+                    let bid = tk.byte_piece_id[int(d[b])]
+                    ids |> push(bid >= 0l ? bid : unk_id)
                 }
             } else {
                 ids |> push(rev[k])
