@@ -194,6 +194,18 @@ The ``as`` form tests the alternative by name, with the pattern on its left:
         }
     }
 
+The alternative's name can also be called like a function, with the pattern as its argument:
+
+.. code-block:: das
+
+    def variant_call_match ( v : IF ) {
+        return match ( v ) {
+            i(0) => "int zero"
+            i(n) => "int {n}"
+            f(x) => "float {x}"
+        }
+    }
+
 Matching Structs
 ----------------
 

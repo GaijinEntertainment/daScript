@@ -571,3 +571,35 @@ def test_table_patterns(t : T?) {
     bump_counter(other)
     t |> equal(length(other), 1)
 }
+
+struct Holder {
+    v : IntOrStr
+}
+
+def private call_kind(v : IntOrStr) : string {
+    return match (v) {
+        i(0) | i(1) => "small"
+        i(n) && n < 0 => "negative {n}"
+        i(n) => "int {n}"
+        s("") => "empty"
+        s(text) => "str {text}"
+    }
+}
+
+def private held_kind(h : Holder) : string {
+    return match (h) {
+        Holder(v = i(n)) => "held int {n}"
+        Holder(v = s(_)) => "held str"
+    }
+}
+
+[test]
+def test_variant_alternative_called_by_name(t : T?) {
+    t |> equal(call_kind(IntOrStr(i = 1)), "small")
+    t |> equal(call_kind(IntOrStr(i = -3)), "negative -3")
+    t |> equal(call_kind(IntOrStr(i = 7)), "int 7")
+    t |> equal(call_kind(IntOrStr(s = "")), "empty")
+    t |> equal(call_kind(IntOrStr(s = "x")), "str x")
+    t |> equal(held_kind(Holder(v = IntOrStr(i = 2))), "held int 2")
+    t |> equal(held_kind(Holder(v = IntOrStr(s = "y"))), "held str")
+}

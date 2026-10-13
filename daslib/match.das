@@ -372,19 +372,24 @@ def match_variant(what : TypeDeclPtr; wths : ExprMakeVariant?; access : Expressi
 }
 
 [macro_function]
-def match_as_variant(what : TypeDeclPtr; wthAs : ExprAsVariant?; access : Expression?; var to : MatchTo) {
-    //! ``n as i``: the variant holds ``i``, and ``n`` matches its value.
+def match_as_variant(what : TypeDeclPtr; wth : Expression?; access : Expression?;
+                     var to : MatchTo) {
+    //! ``n as i`` or ``i(n)``: the variant holds ``i``,
+    //! and ``n`` matches its value.
+    let as_form = wth is ExprAsVariant
+    let name = string(as_form ? (wth as ExprAsVariant).name : (wth as ExprCall).name)
+    let value = as_form ? (wth as ExprAsVariant).value : (wth as ExprCall).arguments[0]
     if (what.baseType != Type.tVariant) {
-        to.errors |> match_error("{describe(what)} is not a variant", wthAs.at)
+        to.errors |> match_error("{describe(what)} is not a variant", wth.at)
         return false
     }
-    let ftype = get_field_type(what, string(wthAs.name), what.flags.constant)
+    let ftype = get_field_type(what, name, what.flags.constant)
     if (ftype == null) {
-        to.errors |> match_error("variant {wthAs.name} not found", wthAs.at)
+        to.errors |> match_error("variant {name} not found", wth.at)
         return false
     }
-    log_m("\tas {wthAs.name} match passed\n")
-    return match_any(ftype, wthAs.value, variant_access(access, string(wthAs.name), wthAs.at, to), to)
+    log_m("\tas {name} match passed\n")
+    return match_any(ftype, value, variant_access(access, name, wth.at, to), to)
 }
 
 [macro_function]
@@ -711,8 +716,8 @@ def match_any(what : TypeDeclPtr; wth : Expression?; access : Expression?; var t
         }
     } elif (wth is ExprMakeVariant) {
         return match_variant(what, wth as ExprMakeVariant, access, to)
-    } elif (wth is ExprAsVariant) {
-        return match_as_variant(what, wth as ExprAsVariant, access, to)
+    } elif (wth is ExprAsVariant || is_variant_call(what, wth)) {
+        return match_as_variant(what, wth, access, to)
     } elif (is_call_to(wth, "match_type", "match")) {
         return match_type(what, wth as ExprCall, access, to)
     } elif (is_call_to(wth, "match_expr", "match")) {
