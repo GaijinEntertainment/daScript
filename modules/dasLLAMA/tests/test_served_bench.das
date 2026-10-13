@@ -42,7 +42,7 @@ class FakeChatServer : HvWebServer {
             let oneword = find(body, "\"model\":\"oneword\"") >= 0
             if (find(body, "\"model\":\"notext\"") < 0) {
                 for (word in ["one", " two", " three"]) {
-                    sleep(30u)
+                    sleep(100u)
                     sse_event(server, writer, slice(piece("content", word), 6), "")
                     break if (oneword)
                 }
@@ -176,7 +176,7 @@ def test_speech_rows_against_fakes(t : T?) {
             with_test_server(type<FakeChatServer>) $(chat_url) {
                 t |> run("a loaded row stands while the chat turn outlasts its reps") @(t : T?) {
                     let load = LoadJob(url = chat_url, model = "ok", question = "ask", budget = 8)
-                    t |> success(loaded_clip_row(Speech(url = speech_url), load, clip, "asr clip loaded", "hello world", 2), "two fast reps inside the turn's 90 ms of decode")
+                    t |> success(loaded_clip_row(Speech(url = speech_url), load, clip, "asr clip loaded", "hello world", 2), "two fast reps inside the turn's 300 ms of decode")
                     t |> success(!loaded_clip_row(Speech(url = speech_url, model = "slow"), load, clip, "asr clip loaded", "hello world", 2), "two 300 ms reps outlive the turn: refused")
                     t |> success(!loaded_clip_row(Speech(url = speech_url), LoadJob(url = chat_url, model = "notext", question = "ask", budget = 8), clip, "asr clip loaded", "hello world", 2), "a turn with no reply text never starts the reps: refused")
                     t |> success(!loaded_clip_row(Speech(url = speech_url), load, clip, "asr clip loaded", "another text", 2), "a loaded row that reads another text than the idle row: refused")
@@ -369,8 +369,8 @@ def test_turns_against_a_fake_server(t : T?) {
             t |> equal(turn.prompt_tokens, 100l)
             t |> equal(turn.completion_tokens, 3l)
             t |> equal(turn.cached_tokens, 40l)
-            t |> success(turn.ttft_us >= 30000l, "the first reply text arrived after the server's 30 ms pause ({turn.ttft_us} us)")
-            t |> success(turn.gen_us >= 40000l && turn.gen_us < 5000000l, "the decode span covers the two later pieces ({turn.gen_us} us)")
+            t |> success(turn.ttft_us >= 100000l, "the first reply text arrived after the server's 100 ms pause ({turn.ttft_us} us)")
+            t |> success(turn.gen_us >= 200000l && turn.gen_us < 5000000l, "the decode span covers the two later pieces ({turn.gen_us} us)")
             t |> equal(turn.self_ttft_ms, 12.5)
         }
         t |> run("the follow-up row stands over complete turns and is refused by a failed one") @(t : T?) {
