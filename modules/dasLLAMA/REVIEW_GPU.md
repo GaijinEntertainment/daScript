@@ -242,7 +242,7 @@ the donor.** A borrower that gathers, stores or releases them again frees the do
 twice or overwrites its rows.
 
 **A resident override that touches the mirror before gating the session on the armed mirror
-codec and on the flat (non-paged) cache is a defect** - a resident override is a
+codec is a defect** (a paged cache moves through `rdec_host_rows`, a physical run at a time) - a resident override is a
 decode/prefill hook `dasllama/dasllama_gpu_resident.das` registers in
 `dasllama/dasllama_common.das`'s override registries.
 

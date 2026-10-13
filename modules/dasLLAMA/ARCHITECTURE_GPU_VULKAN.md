@@ -59,8 +59,10 @@ final requant and the classifier at that row.
 **A prefill from a position past zero is the same chain entered later.** The call names its first position
 (`pos0`), the windows store at and attend from `pos0 + w0`, and the rows `[0, pos0)` are whatever the session's
 mirror region already holds - a chat's earlier turns, a scheduler's earlier chunks (`rdec_prefill_region`: kept
-where the session owns them, brought up from the host cache where it does not). A recurrent model passes a
-continuation to the CPU loop: the chain starts the deltanet state from zero (`followup_vulkan.md` item 69).
+where the session owns them, brought up from the host cache - a paged one a run at a time, `rdec_host_rows` - where it does
+not). A recurrent continuation starts from the live state at `dn_pos`: the host binds the region's state slots to the session
+as before a token (`rdec_dn_prefill_entry`) and the first window reads the ring the parity names (`#vk-prefill-dn-block`); one
+at another position passes as `rewind`, a hyper-connection model's as `continuation` (its n-gram ring has no hand-off).
 
 **The last layer's FFN runs on a one-segment window's last 32 rows only (a segmented window's every segment
 wants its own last row, so it runs the FFN whole).** Nothing downstream of the final layer reads more than the
@@ -204,10 +206,10 @@ alpha rows into the layer's smalls, the conv over the selected region's ring ima
 scan over that region's state slot (the slot's bases ride the pushes, the sets bind every region's
 slot), and the out GEMM into `pf_xb2`. The smalls are the layer's per-layer f32 plane: the layer's
 cold constants (conv taps, out-norm weights, the `a` and `dt` rows), the beta and alpha rows, and a
-parity ring pair per region (`ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command`). A prompt from position
-zero resets the region's parity word and zero-fills the slot's state and its first ring image
-alone (`pf_dn_zero_region`), so the first window's conv reads a zero history and the last window's tail
-lands in image 0, the parity the owner handoff hands the session. The weight planes stay in their file
+parity ring pair per region (`ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command`). A call enters on the image the region's
+parity word names (`pf_dn_begin`; a prompt from position zero resets the word and zero-fills the slot's state and that image,
+`pf_dn_zero_region`): its first window reads that image per-channel (`DnConvArgs.hist_mode` 1), the later windows and the tail
+use the other, which the word names after the call (`pf_dn_end`) - the parity the owner handoff hands the session. The weight planes stay in their file
 formats where the loader tags them natively (`ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command`
 carries the tagging condition), so a Q5_K/Q6_K file rides the k5/k6 tiles.
 
@@ -263,13 +265,13 @@ loads behind the previous token's o store (the two buffers may alias), and the s
 two-column form it replaced 8854). The raw o rows land in the per-op tier's workspace, for the
 gated out-norm's one workgroup per position.
 
-The conv history crosses windows position-major in ring image 0; the last window transposes the
+The conv history crosses windows position-major in the image the call did not enter on; the last window transposes the
 tail into the decode step's per-channel layout (`dn_tail_cls`; the handoff is stated in
 `ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command`). Every window past the first carries at least as
 many rows as the conv has taps: when a full window would leave the last window fewer rows than
 that, the earlier window takes fewer rows instead, so the last one still holds the taps. Only a
-lone first window can be shorter - its history is zero, so the tail writes the ring's leading
-rows as zero (`DnTailArgs.zero_rows`).
+lone first window can be shorter - the tail reads the ring's leading rows off the entry image (`DnTailArgs.old_rows`), zero
+for a prompt from position zero, the session's history for a continuation; the two images never alias.
 
 ### The device-init log names every Vulkan capability the tier keys a route on {#vk-extension-roster}
 

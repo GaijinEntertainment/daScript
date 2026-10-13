@@ -143,7 +143,7 @@ and the stream stays deterministic; on a verify tag it rides the assistant round
 `mtp-count-<tag>` attach). The same
 file carries the BATCH RAIL's parity arms per verify-fixture tag `l1b g12 q30 q38
 g26` (Llama-3.2-1B, gemma-4-12B, Qwen3-30B-A3B, Qwen3.8-27B head-less - one recurrent session's
-rows the rail declines as `dn_state`, gemma-4-26B-A4B): `mtp-dff-<tag>` = distinct sessions, GPU batch step vs GPU single step
+rows the rail serves as one group over its mirror, gemma-4-26B-A4B): `mtp-dff-<tag>` = distinct sessions, GPU batch step vs GPU single step
 at B=2/B=4 on identical real-text tokens plus one CPU reference row (the batch rail's logits gate -
 the support matrix's batch cell only proves ENGAGE); `mtp-vff-<tag>` takes both tag families;
 `mtp-vff1-<tag>` = one row through the batch driver (the encoder alone, no row mixing);
@@ -919,7 +919,10 @@ rope-store at a window row base past zero (`row0`, a segment's): the rows sit be
 out and projection planes, the lead rows untouched (the out plane's NaN sentinel, the q plane's poison) and the rows
 the oracle's; the three rope-store gates (`rope_kv_arm`, the Metal `rpst_flat_gate` and `rope_store_pocket_gate`)
 assert the roped q differs from its input at a rotated index, so the in-place compare has teeth;
-`test_vkd_dn_family` holds the deltanet conv, the
+`test_vkd_dn_tail` holds the window chain's ring hand-off (`DnTail`) bit for bit to the per-channel CPU form at 5, 3, 2 and 1
+window rows over 200 channels (the last workgroup partial): the window's last taps rows, and under the taps the leading rows off
+the entry image, the words between the two images untouched, the zero-history ring a position-zero call would write as the
+control a continuation's ring must differ from; `test_vkd_dn_family` holds the deltanet conv, the
 fused step and the two-phase scan to CPU oracles at head sizes 64 and 128 (the step's one-part
 and two-part state columns, the scan's four- and eight-lane clusters), and the sigmoid out-gate stamps
 (`dn_step_sig_cls`, `dn_scan_p3_sig_cls`, the qwen4exp form) against the same oracles under sigmoid(z) with
@@ -1435,8 +1438,7 @@ projection of a hidden row already within the deltanet bar) of the CPU warm's ro
 after the model drop, the CPU row one down missing by two bars as the control, the widest miss and
 the tightest control logged - over the 40-token prompt (rows [0, 39)) and, its second subtest, over
 a prompt one window plus 88 rows long (rows [0, 599): the second window's carry row is its row 0 and
-the head's rope sits a row behind the trunk's; a continuation's first window is unreachable on the
-hybrid, whose resident prefill passes every continuation); `test_gpu_resident_hybrid_mtp_rounds`
+the head's rope sits a row behind the trunk's); `test_gpu_resident_hybrid_mtp_rounds`
 runs six speculative rounds on
 the device (their draft and verify counters, every call served) and six on the CPU from the same
 prompt and fed tokens, every round's draft token tie-aware against the CPU round's draft logits
@@ -1458,11 +1460,11 @@ of the draft and verify seats' pass arms and holds the reason counted (`pass_cou
 device never homed, its prompt read on the CPU rails under the server's prefill pin
 (`set_resident_prefill_allowed(false)`, the pass counted as pinned_off, no mirror region, the
 recurrent state and the carry at the prompt's end) (unhomed: the draft and the verify), and a
-round five rows past the region's rows, the rows served on the CPU rails as a continuation the
-hybrid's resident prefill passes (the region's rows still at the prompt, the recurrent state and
+round five rows past the region's rows, the rows served on the CPU rails as a continuation under
+the prefill pin (pinned_off; the region's rows still at the prompt, the recurrent state and
 the carry five past it) (gap - the draft, which has no gap arm, serves) - each round completing
 on the CPU rails with no panic, the CPU verify over the recurrent state the CPU rails hold; the
-cap and paged arms are not shaped (a prompt past the region's cap, a pooled session);
+cap arm is not shaped (a prompt past the region's cap);
 `test_gpu_resident_hybrid_mtp_rewind_refused` shapes a round off the recurrent state's position
 by hand: the draft serves, the verify passes as rewind, and the CPU rails then refuse the rewind
 by name with both positions in the text, since the recurrent state is forward-only on every
@@ -1751,7 +1753,7 @@ device (the count held equal to the rows stepped less the second turn's, which s
 under a temperature and so lands logits). Every cell holds `gpu_cpu_passes_()` empty
 (the pin cell its one `busy`). The qwen2 file adds the tolerance cells, at the 6% bar of
 `test_gpu_resident_qwen2.das`: one prompt prefilled in one call against two calls, cut at 40
-of 57, 512 of 600 and 300 of 900 (the cuts placed against the engine's `PF_WINDOW`, asserted),
+of 57, 512 of 600, 300 of 900 and 40 of 42 (the cuts placed against the engine's `PF_WINDOW`, asserted),
 a prompt one token short the control, then four decoded steps over the continued rows, each
 against the step before it as its control; the chat shape (a prompt, steps, a second turn through the
 window chain against the same tokens stepped one by one); and the parked claim adopted once,
@@ -1764,9 +1766,18 @@ command's recurrent form, the gated q - a q projection row that carries the atte
 gate beside q - running over the rows; before a session's prefill zeroes its region's slot, it
 copies back to the host whatever state another session stepped in that slot and had not yet
 copied back. The batched cell copies session B's state back after the steps and holds that it
-moved, and the file runs the batched-first cell. Its scheduler cells hold that a recurrent model
-parks and adopts no rows and prefills a long prompt in one call, where the qwen2 carrier's 700 tokens reach the device in two window-sized
-chunks under a 64-token scheduler chunk. The qwen2 file also holds the guards - a third
+moved, and the file runs the batched-first cell. It runs the tolerance cells' continuation form too - its window chain starts
+from the region's live recurrent state, a 2-row tail under the conv taps among the cuts (the ring's leading rows off the
+history it continues), the recurrent position asserted at the prompt's end - and the recurrent parked claim
+(`cell_device_kv_park_adopt_recurrent`): a stream parked at 57 rows hands them and its state at their end to a session that takes
+all 57 (`gpu_device_kv_parked_pos_` the witness, the 17 tokens past them one device prefill within the bar of the 74-token prompt
+in one call, the one-token-short control past it) and refuses 40, since the state stands at no earlier row; its scheduler cells
+hold the stream prefilling in window-sized chunks and the second turn adopting the rows and the state of the turn it continues.
+Both the qwen2 and the hybrid file run the paged cell (`cell_scheduler_paged_resident`): the same four requests on a paged
+scheduler (64-row pages) and a flat one, the paged streams' prompts in the window chain and their steps on the device - their
+pages up a physical run at a time, the rows the device stepped hydrated into the pages before the prefix cache takes them -
+token for token the flat side's for the first three, the second turn attaching the pages (or, on the hybrid, the recurrent
+checkpoint) its first turn left, every call served. The qwen2 file also holds the guards - a third
 device-home session over two regions panics with its `busy` counted and the owners step on
 untouched - the driver's reports (every pass reason reads in words of its own, the plan's K/V
 scales with the region count and a count under one plans one, the tier status counts both

@@ -445,7 +445,7 @@ let private DRAFT_TOKEN = 2000l
 let private ROUNDS = 6l   //! the speculative rounds the device-vs-CPU cells run, one fed token each
 
 //! `prompt` through the prefill at `start_pos` with the speculative warm on, so the head's host rows the draft hydrates hold history;
-//! a continuation (`start_pos` past 0) on the hybrid passes to the CPU rails, which leave the recurrent state and the carry at its end
+//! a continuation (`start_pos` past 0) leaves the recurrent state and the carry at its end on whichever rail serves it
 def private prefill_warm(tr : Model; var s : Session; prompt : array<int64>; start_pos : int64 = 0l) {
     let spec0 = get_mtp_spec()
     set_mtp_spec(true)
@@ -1302,16 +1302,18 @@ def test_gpu_resident_hybrid_mtp_pass_arms(t : T?) {
             delete prompt
         }
     }
-    t |> run("Qwen3.5-0.8B-MTP: a round five rows past the region's rows - rows the CPU rails served as a continuation the hybrid's resident prefill passes - the draft, which has no gap arm, serves on the device; the verify passes as gap and the CPU verify completes over the recurrent state the CPU rails left") @(t : T?) {
+    t |> run("Qwen3.5-0.8B-MTP: a round five rows past the region's rows - rows the CPU rails served as a continuation under the server's prefill pin - the draft, which has no gap arm, serves on the device; the verify passes as gap and the CPU verify completes over the recurrent state the CPU rails left") @(t : T?) {
         with_mtp_carrier(t, 1l) $(var tr) {
             var prompt <- resident_prompt(DRAFT_PROMPT)
             var more <- [for (i in range64(GAP_ROWS)); 3000l + (i * 61l) % 4000l]
             var s <- create_session(tr, mirror_kv_dtype())
             prefill_warm(tr, s, prompt)
             t |> equal(moe_gpu_resident_rows(s), DRAFT_PROMPT, "the region's rows end at the prompt")
-            let cont0 = pass_count("continuation")
+            let pinned0 = pass_count("pinned_off")
+            set_resident_prefill_allowed(false)
             prefill_warm(tr, s, more, DRAFT_PROMPT)
-            t |> success(pass_count("continuation") - cont0 >= 1l, "the continuation passed to the CPU rails as continuation ({pass_count("continuation") - cont0} counted): a hybrid's resident prefill serves a prompt from its start alone")
+            set_resident_prefill_allowed(true)
+            t |> success(pass_count("pinned_off") - pinned0 >= 1l, "the continuation passed to the CPU rails under the prefill pin ({pass_count("pinned_off") - pinned0} counted)")
             t |> equal(moe_gpu_resident_rows(s), DRAFT_PROMPT, "the region's rows still end at the prompt: the CPU rails served the {GAP_ROWS} past it")
             t |> equal(s.dn_pos, DRAFT_PROMPT + GAP_ROWS, "the recurrent state sits past the CPU-served rows")
             t |> equal(s.mtp_h_pos1, DRAFT_PROMPT + GAP_ROWS, "the CPU tail stashed the carry at the last CPU-served row")

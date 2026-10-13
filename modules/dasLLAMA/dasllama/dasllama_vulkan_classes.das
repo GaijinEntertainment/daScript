@@ -1187,7 +1187,7 @@ struct RouterArgs {
     norm_on : uint      //! the row read as its weightless rms under the norm row at `nwoff` (the gemma-4 router's input: the norm hop folded into the GEMV)
     nwoff : uint
     eps : float
-    ncols : uint        //! the rows of x the dispatch serves, at most eight (the per-row planes' extent): each its own column of logits at `obase + c * ne`, or past `ne_split` at `obase_split + c * (ne - ne_split)`; the row's weights read once for all; 0 or 1 = one row
+    ncols : uint        //! the rows of x the dispatch serves, at most eight (the per-row planes' extent): each its own column of logits at `obase + c * ne` (`obase + c * ne_split` under a split), or past `ne_split` at `obase_split + c * (ne - ne_split)`; the row's weights read once for all; 0 or 1 = one row
     ne_split : uint     //! the row the second output base takes over at (the deltanet beta rows at obase, the alpha rows at obase_split, one dispatch); 0 = one base
     obase_split : uint
 }
@@ -1208,7 +1208,7 @@ class template RouterGemvT {
 
     //! a workgroup an expert row: the grid is `ne` rows, whatever the column count
     [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#whole-token-decode-span")]
-    def run {   // nolint:STYLE038 — one row pass over the columns: the per-column rms, the dot, the per-column reduce and store
+    def run {   // nolint:STYLE037,STYLE038 — one row pass over the columns: the per-column rms, the dot, the per-column reduce and store at its base
         let e = gl_WorkGroupID.x
         let nc = clamp(pa.ncols, 1u, 8u)
         let base = pa.woff + e * pa.dim
@@ -1304,7 +1304,7 @@ class template RouterGemvT {
                     tot += part[sgi * 8u + c8]
                     sgi++
                 }
-                var o = pa.obase + c8 * pa.ne + e
+                var o = pa.obase + c8 * (pa.ne_split != 0u ? pa.ne_split : pa.ne) + e
                 if (pa.ne_split != 0u && e >= pa.ne_split) {
                     o = pa.obase_split + c8 * (pa.ne - pa.ne_split) + (e - pa.ne_split)
                 }
@@ -2417,7 +2417,8 @@ struct DnTailArgs {
     taps : uint       // history rows (dconv - 1)
     row0 : uint       // the first tail row in src (the window's last taps raw rows)
     hist_off : uint   // the ring image's float offset in smalls
-    zero_rows : uint  // leading ring rows that read as zero: a lone window shorter than the taps, whose history is zero
+    old_rows : uint   //! leading ring rows the call's entry image supplies (a lone window shorter than the taps): new row k is old row k + taps - old_rows
+    old_off : uint    //! the entry image's float offset in smalls (per-channel, the decode step's layout); never the image at `hist_off`
 }
 
 [vk_dispatch(name = "dn_tail_cls", grid = "wgs", params = "wgs : int64")]
@@ -2433,8 +2434,10 @@ class DnTail {
             let ch = idx / pa.taps
             let k = idx % pa.taps
             var v = 0.0
-            if (k >= pa.zero_rows) {
-                v = src[(pa.row0 + k - pa.zero_rows) * pa.cd + ch]
+            if (k >= pa.old_rows) {
+                v = src[(pa.row0 + k - pa.old_rows) * pa.cd + ch]
+            } else {
+                v = smalls[pa.old_off + ch * pa.taps + k + pa.taps - pa.old_rows]
             }
             smalls[pa.hist_off + ch * pa.taps + k] = v
         }

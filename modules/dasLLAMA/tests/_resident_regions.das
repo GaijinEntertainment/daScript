@@ -243,6 +243,9 @@ def private continue_at(t : T?; tr : Model; n, cut : int64) {
     forward_prefill(tr, split, head, cut, 0l)
     forward_prefill(tr, split, tail, n - cut, cut)
     t |> equal(moe_gpu_resident_prefills(), served0 + 3l, "{n} tokens cut at {cut}: the window chain served all three calls, the continuation among them")
+    if (!empty(split.dn_state_prefix)) {
+        t |> equal(split.dn_pos, n, "{n} tokens cut at {cut}: the recurrent state stands at the prompt's end after the continuation")
+    }
     hold_within(t, tr, split.logits, whole.logits, short_logits, "{n} tokens cut at {cut}: the continued prefill against the one-call prefill")
     delete short_logits
     for (st in range64(4l)) {
@@ -267,6 +270,7 @@ def cell_prefill_continues_on_the_device(t : T?; file : string) {
             continue_at(t, tr, 57l, 40l)     // a short tail inside the first window
             continue_at(t, tr, PF_WINDOW_ROWS + 88l, PF_WINDOW_ROWS)   // the cut on the window boundary
             continue_at(t, tr, PF_WINDOW_ROWS + 388l, 300l)   // the tail runs a whole window from an unaligned start, then a remainder
+            continue_at(t, tr, 42l, 40l)   // a tail shorter than a recurrent layer's conv taps: the ring's leading rows come from the history it continues
             served_every_call(t)
         }
     }
@@ -889,14 +893,54 @@ def cell_device_kv_park_adopt(t : T?; file : string) {
     }
 }
 
+//! a recurrent model's parked claim keeps its state at its last row beside the rows: an adopter of all of them continues the
+//! stream as one call would have, and an adopter of fewer is refused, since the state stands at no earlier row
+def cell_device_kv_park_adopt_recurrent(t : T?; file : string) {
+    t |> run("a recurrent parked claim hands its rows and its state to a session that takes every row, and refuses a shorter opening") @(t : T?) {
+        with_regions_rig(t, file) $(tr) {
+            var prompt <- prose_ids(74l, 0l)
+            var head <- [for (i in range64(57l)); prompt[i]]
+            var tail <- [for (i in range64(17l)); prompt[57l + i]]
+            var short_logits <- short_control(tr, prompt, 74l)
+            var whole <- device_session(tr)
+            eval(tr, whole, prompt)
+            var want <- logits_of(whole, tr.config.vocab_size)
+            gpu_device_kv_park(whole)
+            delete whole
+            var first <- device_session(tr)
+            eval(tr, first, head)
+            let claim = gpu_device_kv_park(first)
+            delete first
+            t |> equal(gpu_device_kv_parked_pos_(claim), 57l, "the parked claim's recurrent state stands at its last row")
+            var second <- device_session(tr)
+            t |> success(!gpu_device_kv_adopt(second, claim, 40l) && second.n_past == 0l, "a recurrent claim refuses 40 of its 57 rows, and the adopter stays empty")
+            let served0 = moe_gpu_resident_prefills()
+            t |> success(gpu_device_kv_adopt(second, claim, 57l), "the claim hands all 57 rows over")
+            t |> equal(second.dn_pos, 57l, "the adopter's recurrent state stands where the parked stream's did")
+            eval(tr, second, tail)
+            t |> equal(moe_gpu_resident_prefills(), served0 + 1l, "one device prefill: the seventeen tokens past the adopted rows")
+            t |> equal(second.dn_pos, 74l, "the continuation advanced the adopted state")
+            hold_within(t, tr, second.logits, want, short_logits, "the adopter against the whole prompt prefilled in one call")
+            gpu_device_kv_park(second)
+            served_every_call(t)
+            delete second
+            delete short_logits
+            delete want
+            delete prompt
+            delete head
+            delete tail
+        }
+    }
+}
+
 def private cached_of(events : array<SchedEvent>; id : int64) : int64 => finished_of(events, id).n_cached
 
 //! three requests through a two-stream scheduler, then a second turn that opens with the last one's prompt and reply
 //! (two slots park two claims: the third request's arrival is what evicts the first's rows); every prompt is one prefill chunk.
 //! The second turn samples at top-k 1 under a temperature - the same token as the argmax, through a sampler that is not one,
 //! so its rows land logits where the other three land picks (a batched step of both kinds lands both)
-def private serve_four(m : Model; device : bool; var events : array<SchedEvent>) : tuple<on : bool; parked : int; rows_stepped : int64> {
-    var sch <- create_scheduler(m, 2l, 4l, 64l, 0l, 0l, mirror_kv_dtype())   //! the streams' caches on the mirror's codec: under DASLLAMA_VK_KV32=1 a f16 stream is not served
+def private serve_four(m : Model; device : bool; var events : array<SchedEvent>; page_rows : int64 = 0l) : tuple<on : bool; parked : int; rows_stepped : int64> {
+    var sch <- create_scheduler(m, 2l, 4l, 64l, page_rows, 8l, mirror_kv_dtype())   //! the streams' caches on the mirror's codec: under DASLLAMA_VK_KV32=1 a f16 stream is not served
     let on = set_device_kv(sch, device)
     var pa <- prompt_a()
     var pb <- prompt_b()
@@ -971,6 +1015,37 @@ def cell_scheduler_device_mode(t : T?; file : string) {
             delete passes
             delete host
             delete dev
+        }
+    }
+}
+
+//! a paged scheduler's host-cached streams on the resident driver: their pages go up a physical run at a time, the rows the device
+//! stepped come down into the pages before the prefix cache takes them, and a second turn attaches the first turn's pages
+def cell_scheduler_paged_resident(t : T?; file : string) {
+    t |> run("a paged scheduler's streams step on the device: token for token the flat scheduler's, and a second turn attaches the turn it continues") @(t : T?) {
+        with_regions_rig(t, file) $(tr) {
+            var flat, paged : array<SchedEvent>
+            serve_four(tr, false, flat)
+            let served0 = moe_gpu_resident_prefills()
+            let steps0 = rdec_picks_served()
+            serve_four(tr, false, paged, 64l)
+            t |> success(moe_gpu_resident_prefills() - served0 >= 4l, "the paged side's prompts entered the window chain ({moe_gpu_resident_prefills() - served0} calls)")
+            t |> success(rdec_picks_served() - steps0 >= 21l, "the paged side's argmax streams stepped on the device ({rdec_picks_served() - steps0} picks landed)")
+            for (id in range64(1l, 5l)) {
+                var tf <- toks_of(flat, id)
+                var tp <- toks_of(paged, id)
+                log_gen_texts(tr, "request {id} (CPU = flat, GPU = paged)", tf, tp)
+                t |> equal(length(tp), 8, "request {id} ran its eight tokens")
+                if (id < 4l) {   //! the second turn attaches its opening and prefills the rest in a call of its own: no token compare holds across that split
+                    t |> success(ids_equal(tf, tp), "request {id}: paged {tp} against flat {tf}")
+                }
+                delete tf
+                delete tp
+            }
+            t |> success(cached_of(paged, 4l) > 0l, "the second turn attached the pages its first turn left ({cached_of(paged, 4l)} tokens)")
+            served_every_call(t)
+            delete flat
+            delete paged
         }
     }
 }

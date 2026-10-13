@@ -152,7 +152,7 @@ def private any_stream_in(sch : Scheduler; state : StreamState) : bool {
     return false
 }
 
-//! on a host-cached stream `chunk_tokens` while a stream decodes and at least `idle_chunk_tokens` while none does; on a device-home stream at least the device's window, and the whole head at once for a model whose device prefill cannot continue past zero
+//! on a host-cached stream `chunk_tokens` while a stream decodes and at least `idle_chunk_tokens` while none does; on a device-home stream at least the device's window, and the whole head at once for a model whose device prefill cannot continue past zero (a recurrent hyper-connection model)
 def private prefill_chunk(m : Model; sch : Scheduler; head_end : int64) : int64 {
     let chunk = any_stream_in(sch, StreamState.decoding) ? sch.chunk_tokens : max(sch.chunk_tokens, sch.idle_chunk_tokens)
     if (!sch.device_kv) {
@@ -173,10 +173,11 @@ def chunk_default(on_gpu : bool) : int64
 def chunk_defaults(m : Model) : tuple<chunk : int64; idle : int64>
     => (chunk = chunk_default(m.metal_blob || gpu_tier_status().supported), idle = m.metal_blob ? METAL_IDLE_CHUNK_TOKENS : DEFAULT_CHUNK_TOKENS)
 
-//! A finished device-home stream's K/V rows, kept on the device for the next request that opens with the same tokens.
+//! A finished device-home stream's K/V rows - and a recurrent model's state at their end - kept on the device for the next request that opens with the same tokens.
 struct ParkedKv {
     claim : int64           //! the region claim the rows sit under (`gpu_device_kv_park`)
     tokens : array<int64>   //! the tokens those rows hold, in order
+    whole : bool            //! a recurrent model's claim: its state stands after the last of `tokens` alone, so only a prompt opening with all of them adopts it
 }
 
 //! The continuous-batching scheduler: active streams, the admission queue, the shared eval_batch
@@ -979,6 +980,7 @@ def private note_prefilled(m : Model; var sch : Scheduler; var events : array<Sc
     sch.prefill_tokens += take
     if (at_checkpoint(sch.streams[i])) {
         let tail = (sch.streams[i].ckpt_at_tail && sch.streams[i].n_prefilled == sch.streams[i].ckpt_at) || sch.streams[i].n_prefilled == sch.streams[i].ckpt_end_at
+        moe_gpu_hydrate_session(m, sch.streams[i].session)   //! the pages the checkpoint holds come down from a GPU driver's copy first
         prefix_insert(sch.prefix, sch.pool, sch.streams[i].session, sch.streams[i].prompt, "", !tail)
         to_log(LOG_INFO, "[stream {sch.streams[i].id}] prefix checkpoint at {sch.streams[i].n_prefilled} tok: {tail ? "this conversation's next turn" : "the next prompt on this opening"} attaches here ({length(sch.prefix.states)} checkpoints, {sch.prefix.state_bytes / 1048576l} MB)\n")
     }
@@ -1106,6 +1108,7 @@ def private adopt_spans(var st : Stream; matched : int64) {
 // skipped when it cannot fit; evicted streams donate only what ran. prefix_insert trims to n_past.
 def private donate_stream(m : Model; var sch : Scheduler; var st : Stream) {
     close_turn(m, sch, st)
+    moe_gpu_hydrate_session(m, st.session)   //! rows a GPU driver stepped live on its copy alone until they come down into the pages
     prefix_insert(sch.prefix, sch.pool, st.session, sch.donate_toks, st.prompt_head)
 }
 
@@ -1123,11 +1126,11 @@ def private park_stream(m : Model; var sch : Scheduler; var st : Stream) {
     while (long_length(sch.parked) >= sch.max_streams) {
         drop_parked(sch, 0)
     }
-    sch.parked |> emplace(ParkedKv(claim = claim, tokens := sch.donate_toks))
+    sch.parked |> emplace(ParkedKv(claim = claim, tokens := sch.donate_toks, whole = !empty(st.session.dn_state_prefix)))
 }
 
 //! Adopt the parked rows sharing the longest opening with `prompt` (always short of its last token, whose logits the
-//! prefill must produce); 0 when none stands. A claim another session took since is dropped where it is found.
+//! prefill must produce), a recurrent claim only whole; 0 when none stands. A claim another session took since is dropped where it is found.
 def private parked_attach(var sch : Scheduler; var session : Session; prompt : array<int64>) : int64 {
     var best = -1
     var best_len = 0l
@@ -1136,6 +1139,9 @@ def private parked_attach(var sch : Scheduler; var session : Session; prompt : a
         let cap = min(long_length(p.tokens), long_length(prompt) - 1l)
         while (n < cap && p.tokens[n] == prompt[n]) {
             n ++
+        }
+        if (p.whole && n < long_length(p.tokens)) {
+            n = 0l
         }
         if (n > best_len) {
             best = pi

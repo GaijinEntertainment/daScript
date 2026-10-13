@@ -2404,9 +2404,7 @@ def private rd_encode_dn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RLay
     var pcz = GemvArgs(n = uint(dim), d = uint(di), nreg = 1u, ybase = uint(cd), ncols = ncols, ystride = uint(cd + di))
     gemv_enc(L.fz, raw, h, L.s_dnz, pcz, di)
     rd_ts(raw, "d:z")
-    var bstride = uint(nvh)
     if (g_rd.dn_ba_f32) {
-        bstride = uint(2l * nvh)
         var pcb = RouterArgs(ne = uint(2l * nvh), dim = uint(dim), woff = uint(L.ba_off), obase = uint(DN_SM_BETA),
             ne_split = uint(nvh), obase_split = uint(DN_SM_G), ncols = nr)
         enc_router_gemv_cls(raw, h, L.s_dnba, pcb, 2l * nvh)
@@ -2426,7 +2424,7 @@ def private rd_encode_dn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RLay
     rd_ts(raw, "d:ba")
     var pcd = dn_step_args(cd, g_rd.dn_kd, g_rd.dn_nkh, g_rd.dn_ds, g_rd.dn_dconv, g_rd.eps)
     pcd.out_f32 = kq_sb(L.fout) ? 1u : 0u
-    pcd.beta_row_stride = bstride
+    pcd.beta_row_stride = uint(nvh)
     if (seq) {
         for (i in range64(nrows)) {
             pcd.row0 = uint(i)

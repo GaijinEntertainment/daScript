@@ -1460,6 +1460,7 @@ struct RdecRegion {
     pinned : bool   //!< a live device-home session owns the rows, which exist nowhere else: no other session takes this region
     head_cnt : int64   //!< the NextN head's K/V rows the device holds: a draft brings the host's rows past them up first
     head_host : int64   //!< the head's rows the owner's host cache holds as the session's: the device's rows above them come down on a pass
+    dn_pos : int64      //!< a parked claim's recurrent position: the region's state slots hold that position's state, which only an adopter of exactly that many rows takes
 }
 
 var private g_rdec_regions : array<RdecRegion>
@@ -1502,6 +1503,7 @@ def private rdec_owns(s : Session; r : int64) : bool
 
 def private rdec_claim(var s : Session; r, cnt : int64) {
     g_rdec_regions[r].cnt = cnt
+    g_rdec_regions[r].dn_pos = 0l
     g_rdec_regions[r].head_cnt = 0l
     g_rdec_regions[r].head_host = 0l
     g_rdec_regions[r].gen = ++g_rdec_gen_seq
@@ -1539,7 +1541,7 @@ def private rdec_hydrate_host(t : Model; var s : Session) {
     if (!s.rdec_host_current) {
         for (l in range64(c.n_layers)) {
             continue if (!layer_owns_kv(t, l))   // a shared-KV layer reads its donor's slab, gathered once through the donor
-            rdec_kv_read(l, 0l, cnt, kv_layer_kbase(s, l, c.seq_len), kv_layer_vbase(s, l, c.seq_len))
+            rdec_host_rows(s, c, l, 0l, cnt, false)
         }
         s.rdec_host_current = true
         to_log(LOG_INFO, "dasLLAMA: resident KV hydrated to host ({cnt} positions x {c.n_layers} layers)\n")
@@ -2574,7 +2576,6 @@ var private @scratch @exact_size g_rdec_tmp : array<float>
 // why a resident override handed a call back to the CPU rails; each kind is said once per armed model
 enum private RdecPass {
     codec
-    paged
     gap
     cap
     superseded
@@ -2619,11 +2620,10 @@ def private rdec_device_home_guard(s : Session; done : bool; what : string; seq0
 [cold_path]
 def private rdec_pass_words(kind : RdecPass) : string {
     if (kind == RdecPass.codec) return "the stream's cache format is not the one the GPU holds"
-    if (kind == RdecPass.paged) return "the stream keeps its cache in pages on the host, which the GPU path does not read"
     if (kind == RdecPass.gap) return "the GPU's copy of the stream's cache was behind the stream"
     if (kind == RdecPass.cap) return "the stream ran past the context the GPU holds"
     if (kind == RdecPass.superseded) return "another stream took the GPU's copy of the cache"
-    if (kind == RdecPass.continuation) return "a prompt continued a conversation the GPU prefills only from its start"
+    if (kind == RdecPass.continuation) return "a prompt continued a conversation the GPU's hyper-connection chain prefills only from its start"
     if (kind == RdecPass.span) return "the prompt carried an image or audio span"
     if (kind == RdecPass.rewind) return "the stream stepped back in a conversation the GPU only steps forward"
     if (kind == RdecPass.busy) return "every GPU cache slot was held by a live stream"
@@ -2639,8 +2639,6 @@ def private rdec_pass_text(kind : RdecPass; a, b : int64) : string {
     var why = ""
     if (kind == RdecPass.codec) {
         why = "the session's K/V codec {kv_dtype_of(int(a))}/{kv_dtype_of(int(b))} is not the armed mirror codec {g_rdec_kvdt} (a session made for the CPU rails)"
-    } elif (kind == RdecPass.paged) {
-        why = "the session uses a paged K/V cache; the mirror serves the flat cache only"
     } elif (kind == RdecPass.gap) {
         why = "position {a} is past the mirror's {b} live rows"
     } elif (kind == RdecPass.cap) {
@@ -2648,7 +2646,7 @@ def private rdec_pass_text(kind : RdecPass; a, b : int64) : string {
     } elif (kind == RdecPass.superseded) {
         why = "another session's prefill took this session's mirror region"
     } elif (kind == RdecPass.continuation) {
-        why = "the prefill continues an existing history from position {a}"
+        why = "the prefill continues an existing history from position {a} on the hyper-connection chain, whose n-gram ring has no continuation hand-off"
     } elif (kind == RdecPass.span) {
         why = "the eval carries a non-causal span"
     } elif (kind == RdecPass.rewind) {
@@ -2667,6 +2665,40 @@ def private rdec_pass_text(kind : RdecPass; a, b : int64) : string {
     return why
 }
 
+var private @scratch g_rdec_runs : array<KVRun>
+
+//! layer `l`'s positions [lo, hi) between `s`'s host cache and the selected region: up (`up`) or down - a paged cache a physical run at a time
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-pass-hydrate")]
+def private rdec_host_rows(var s : Session; c : Config; l, lo, hi : int64; up : bool) {
+    return if (hi <= lo)
+    var kp = kv_layer_kbase(s, l, c.seq_len)
+    var vp = kv_layer_vbase(s, l, c.seq_len)
+    if (s.kv_pool == null) {
+        rdec_host_span(l, lo, hi - lo, kp, vp, up)
+        return
+    }
+    let b = s.kv_pool.blob_of[l]
+    let kb = s.kv_pool.krow_bytes[b]
+    let vb = s.kv_pool.vrow_bytes[b]
+    let pr = s.kv_pool.page_rows
+    g_rdec_runs |> resize((hi - lo + pr - 1l) / pr + 1l)
+    let n = kv_runs(s, lo, hi, g_rdec_runs)
+    for (i in range64(n)) {
+        let run = g_rdec_runs[i]
+        unsafe {   //! the mirror addresses a span by its first position: a run's host rows sit `row0 - j0` rows off that position's
+            rdec_host_span(l, run.j0, run.j1 - run.j0, kp + (run.row0 - run.j0) * kb, vp + (run.row0 - run.j0) * vb, up)
+        }
+    }
+}
+
+def private rdec_host_span(l, row0, nrows : int64; var kp, vp : uint8?; up : bool) {
+    if (up) {
+        rdec_kv_sync(l, row0, nrows, kp, vp)
+    } else {
+        rdec_kv_read(l, row0, nrows, kp, vp)
+    }
+}
+
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command")]
 def private rdec_take_mirror(t : Model; var s : Session; r, pos : int64) {
     let c = t.config
@@ -2679,10 +2711,21 @@ def private rdec_take_mirror(t : Model; var s : Session; r, pos : int64) {
     }
     for (l in range64(c.n_layers)) {
         continue if (!layer_owns_kv(t, l))
-        rdec_kv_sync(l, 0l, pos, kv_layer_kbase(s, l, c.seq_len), kv_layer_vbase(s, l, c.seq_len))
+        rdec_host_rows(s, c, l, 0l, pos, true)
     }
     rdec_claim(s, r, pos)
     s.rdec_host_current = true   // the host still holds everything the mirror does
+}
+
+//! a prefill's recurrent state before its window chain: a prompt from position zero starts from zero (the chain zero-fills the
+//! slots), a continuation's live state at `dn_pos` goes into the selected region's slots (the owner's are in place already)
+[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
+def private rdec_dn_prefill_entry(var s : Session; c : Config; start_pos : int64) {
+    if (start_pos == 0l) {
+        dn_reset(s)
+    } else {
+        rdec_dn_own_all(s, c.n_layers)
+    }
 }
 
 //! a row's recurrent state into its selected region's slots before the step: the state from zero at position 0, its position advanced
@@ -2776,7 +2819,7 @@ def private rdec_head_hydrate(t : Model; var s : Session; upto : int64) {
     return if (lo >= hi)
     let c = t.config
     rdec_select_region(r)
-    rdec_kv_read(c.n_layers, lo, hi - lo, kv_layer_kbase(s, c.n_layers, c.seq_len), kv_layer_vbase(s, c.n_layers, c.seq_len))
+    rdec_host_rows(s, c, c.n_layers, lo, hi, false)
     g_rdec_regions[r].head_host = hi
 }
 
@@ -2829,14 +2872,10 @@ def private rdec_prefill_head_rows(t : Model; var s : Session; r, npos, start_po
         panic("dasLLAMA resident prefill: the chain warmed {rows} head rows for a {npos}-row prompt - engine bug")
     }
     let l = c.n_layers
-    var kp = kv_layer_kbase(s, l, c.seq_len)
-    var vp = kv_layer_vbase(s, l, c.seq_len)
     let held = g_rdec_regions[r].head_cnt
     rdec_head_hydrate(t, s, held)   // the device's rows the host never saw come down first: the count below claims no row nobody wrote
-    if (held < start_pos) {
-        rdec_kv_sync(l, held, start_pos - held, kp, vp)
-    }
-    rdec_kv_read(l, start_pos, rows, kp, vp)
+    rdec_host_rows(s, c, l, held, start_pos, true)
+    rdec_host_rows(s, c, l, start_pos, start_pos + rows, false)
     g_rdec_regions[r].head_cnt = start_pos + rows
     g_rdec_regions[r].head_host = start_pos + rows
 }
@@ -2875,9 +2914,6 @@ def private vulkan_resident_draft(t : Model; var s : Session; token, row : int64
 def private rdec_session_codec_gate(s : Session) : RdecGate {
     if (s.kv_dtype_k != g_rdec_kvdt || s.kv_dtype_v != g_rdec_kvdt) {
         return RdecGate(passes = true, kind = RdecPass.codec, a = int64(int(s.kv_dtype_k)), b = int64(int(s.kv_dtype_v)))
-    }
-    if (s.kv_pool != null) {
-        return RdecGate(passes = true, kind = RdecPass.paged)
     }
     return RdecGate()
 }
@@ -2921,9 +2957,12 @@ def private vulkan_resident_draft_go(t : Model; var s : Session; token, row : in
     rdec_rope_rows(t, row, g_rdec_cossin, 0l)
     //! a host-cached session's head rows the device lacks go up with the draft; a device-home session's live on the device alone
     let home = s.device_kv
-    let hyd0 = home ? row : min(g_rdec_regions[r].head_cnt, row)
+    var hyd0 = home ? row : min(g_rdec_regions[r].head_cnt, row)
     var kp, vp : uint8?
-    if (!home) {
+    if (!home && s.kv_pool != null) {   //! a paged cache's rows go up a run at a time here: the draft's own upload reads one flat span
+        rdec_host_rows(s, c, l, hyd0, row, true)
+        hyd0 = row
+    } elif (!home) {
         kp = kv_layer_kbase(s, l, c.seq_len)
         vp = kv_layer_vbase(s, l, c.seq_len)
     }
@@ -3878,7 +3917,12 @@ def private rdec_prefill_gate(t : Model; s : Session; npos, start_pos : int64) :
         return RdecGate(passes = true, kind = RdecPass.span)
     }
     if (start_pos != 0l && t.config.recr_mask != 0ul) {
-        return RdecGate(passes = true, kind = RdecPass.continuation, a = start_pos)
+        if (t.config.hyper_conn) {   //! the n-gram ring the hyper-connection chain reads has no continuation hand-off to the window
+            return RdecGate(passes = true, kind = RdecPass.continuation, a = start_pos)
+        }
+        if (start_pos != s.dn_pos) {
+            return RdecGate(passes = true, kind = RdecPass.rewind, a = start_pos, b = s.dn_pos)
+        }
     }
     if (start_pos + npos > g_rdec_cap) {
         return RdecGate(passes = true, kind = RdecPass.cap, a = start_pos + npos, b = g_rdec_cap)
@@ -4107,8 +4151,8 @@ def private vulkan_resident_prefill_go(t : Model; var s : Session; npos, start_p
     if (r < 0l) {
         return false
     }
-    if (start_pos == 0l && c.recr_mask != 0ul) {
-        dn_reset(s)
+    if (c.recr_mask != 0ul) {
+        rdec_dn_prefill_entry(s, c, start_pos)
     }
     if (rdec_peel_fits(t, npos)) {
         let ts_peel = ref_time_ticks()
@@ -4157,7 +4201,7 @@ def private rdec_prefill_landed(t : Model; var s : Session; r, npos, start_pos, 
     rdec_stash_carry(c, s, carry_row, start_pos + npos)
     if (c.recr_mask != 0ul) {
         rdec_dn_own_all(s, c.n_layers, true)
-        s.dn_pos = npos
+        s.dn_pos = start_pos + npos
     }
     if (start_pos == 0l) {
         rdec_claim(s, r, npos)
@@ -4302,7 +4346,7 @@ def private rdec_read_row_kv(t : Model; var s : Session; pos : int64) {
     let c = t.config
     for (l in range64(c.n_layers)) {
         continue if (!layer_owns_kv(t, l))
-        rdec_kv_read(l, pos, 1l, kv_layer_kbase(s, l, c.seq_len), kv_layer_vbase(s, l, c.seq_len))
+        rdec_host_rows(s, c, l, pos, pos + 1l, false)
     }
 }
 
@@ -4465,8 +4509,8 @@ def private vulkan_resident_batch_decode_go(t : Model; ws : BatchWorkspace; var 
 [hot_path, arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]   // per prefill quantum - reached only through the engine's registered probe
 def private vulkan_embed_gpu_gate(t : Model; s : Session; npos, start_pos : int64) : bool {
     return (active_prefill_override() == "vulkan" && g_rdec_active && !mtp_verify_window_active(s) && (g_resident_prefill_allowed || s.device_kv) && g_rdec_emb_gpu
-        && (start_pos == 0l || t.config.recr_mask == 0ul) && start_pos + npos <= g_rdec_cap
-        && s.kv_dtype_k == g_rdec_kvdt && s.kv_dtype_v == g_rdec_kvdt && s.kv_pool == null
+        && (start_pos == 0l || t.config.recr_mask == 0ul || !t.config.hyper_conn) && start_pos + npos <= g_rdec_cap
+        && s.kv_dtype_k == g_rdec_kvdt && s.kv_dtype_v == g_rdec_kvdt
         && s.attn_uniform_end == 0l && empty(s.mrope_pos) && !s.ds_active)
 }
 
@@ -4561,35 +4605,54 @@ def gpu_device_sessions_() : int64 => g_rdec_active ? long_length(g_rdec_regions
 def gpu_resident_mtp_device_home_(t : Model) : bool
     => g_rdec_active && g_rdec_head_armed && rdec_verify_rows() >= 2l && (t.config.recr_mask == 0ul || rdec_rollback_installed())
 
-//! A device-home session of `t` prefills from a position past zero - false for a recurrent model, whose prompt prefills whole, from zero.
-def gpu_device_prefill_continues_(t : Model) : bool => t.config.recr_mask == 0ul
+//! A device-home session of `t` prefills from a position past zero - false for a recurrent hyper-connection model, whose prompt prefills whole, from zero.
+def gpu_device_prefill_continues_(t : Model) : bool => t.config.recr_mask == 0ul || !t.config.hyper_conn
 
-//! A finished device-home session lets go of its region and answers the claim its rows stay under (0 = none), which dies when another session takes the region.
+//! A finished device-home session lets go of its region and answers the claim its rows stay under (0 = none), which dies when another
+//! session takes the region. A recurrent session's state stays in the region's slots beside its rows, at the session's position.
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
 def gpu_device_kv_park_(var s : Session) : int64 {
     let claim = s.rdec_gen
     if (rdec_owns(s, s.rdec_region)) {
         g_rdec_regions[s.rdec_region].pinned = false
+        g_rdec_regions[s.rdec_region].dn_pos = empty(s.dn_state_prefix) ? 0l : s.dn_pos
     }
     s.rdec_gen = 0l
     return claim
 }
 
-//! Hand the rows `[0, npos)` a kept `claim` holds to the fresh device-home session `s` under a claim of its own; false when the region was taken or holds fewer rows.
+//! Hand the rows `[0, npos)` a kept `claim` holds to the fresh device-home session `s` under a claim of its own; false when the region was
+//! taken or holds fewer rows, and on a recurrent model unless `npos` is the position the region's state slots stand at.
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
 def gpu_device_kv_adopt_(var s : Session; claim, npos : int64) : bool {
     if (!g_rdec_active || claim == 0l) {
         return false
     }
     for (r in range64(long_length(g_rdec_regions))) {
         continue if (g_rdec_regions[r].gen != claim)
-        if (g_rdec_regions[r].cnt < npos) {
+        let dn_pos = g_rdec_regions[r].dn_pos
+        if (g_rdec_regions[r].cnt < npos || (!empty(s.dn_state_prefix) && npos != dn_pos)) {
             return false
         }
         rdec_claim(s, r, npos)
         s.rdec_host_current = false
         s.n_past = npos
+        if (!empty(s.dn_state_prefix)) {   //! the slots hold the parked state: the session takes them as they stand, nothing crosses the bus
+            rdec_select_region(r)
+            s.dn_pos = npos
+            rdec_dn_own_all(s, long_length(s.dn_state_prefix), true)
+        }
         return true
     }
     return false
+}
+
+//! The position a parked `claim`'s recurrent state stands at - the one row count its adopter may take; 0 where the claim is dead or the model keeps no recurrent state.
+def gpu_device_kv_parked_pos_(claim : int64) : int64 {
+    for (reg in g_rdec_regions) {
+        return reg.dn_pos if (claim != 0l && reg.gen == claim)
+    }
+    return 0l
 }
 
 //! The positions one device-home session holds: the armed driver's per-region context.
@@ -4644,7 +4707,7 @@ def moe_gpu_hydrate_session_(t : Model; var s : Session) {
     // codec gate mirrors the overrides: hydration byte-copies mirror rows, so a codec-mismatched
     // session must never receive them (the gen match alone is ambiguous at generation 0)
     if (g_rdec_active && rdec_has_device_only_rows(s)
-            && s.kv_dtype_k == g_rdec_kvdt && s.kv_dtype_v == g_rdec_kvdt && s.kv_pool == null) {
+            && s.kv_dtype_k == g_rdec_kvdt && s.kv_dtype_v == g_rdec_kvdt) {
         rdec_hydrate_host(t, s)
     }
 }

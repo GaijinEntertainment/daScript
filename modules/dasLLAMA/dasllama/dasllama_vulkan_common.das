@@ -2478,7 +2478,8 @@ struct RDec {
     dn_oq_dev, dn_os_dev : uint64 // the step's Q8_0 o row - the out GEMV's activation image
     dn_of_dev : uint64            // the step's f32 o row for a K-quant out plane - the Q8_K requant's source
     dn_parity : array<int>
-    norms_dev : uint64            // rms_att[l]/rms_ffn[l] interleaved + final, uploaded once
+    pf_dn_par : int               //! the window call's entry parity: its first window reads that ring image, the call's tail lands in the other
+    norms_dev : uint64           // rms_att[l]/rms_ffn[l] interleaved + final, uploaded once
     bias_dev : uint64             // the q/k/v projection biases, per layer [q | k | v] (qwen2; 0 = the model has none)
     bias_bytes : int64
     has_bias : bool

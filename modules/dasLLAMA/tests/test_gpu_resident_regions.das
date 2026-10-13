@@ -67,3 +67,8 @@ def test_gpu_resident_regions_reports(t : T?) {
 def test_gpu_resident_regions_passes(t : T?) {
     cell_passes_with_their_rows(t, REGIONS_FILE)
 }
+
+[test]
+def test_scheduler_paged_resident(t : T?) {
+    cell_scheduler_paged_resident(t, REGIONS_FILE)
+}

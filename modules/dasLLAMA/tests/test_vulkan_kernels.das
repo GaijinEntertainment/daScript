@@ -6244,6 +6244,76 @@ def private dn_delta_ref(convh, sth, smh : array<float>; npos, nkh, nvh, ds, bet
     return <- ref
 }
 
+//! the CPU form of the window's ring hand-off: new ring row k of channel ch is window row `row0 + k - old_rows` of `src`, or for
+//! k under `old_rows` the entry image's row `k + taps - old_rows` (both images per-channel, `old` at `old_off`, the new one at `out_off`)
+def private dn_tail_oracle(src, smalls : array<float>; cd, taps, row0, old_rows, old_off, out_off : int) : array<float> {
+    var want := smalls
+    for (ch in range(cd)) {
+        for (k in range(taps)) {
+            want[out_off + ch * taps + k] = (k >= old_rows ? src[(row0 + k - old_rows) * cd + ch]
+                : smalls[old_off + ch * taps + k + taps - old_rows])
+        }
+    }
+    return <- want
+}
+
+// the window chain's conv-history hand-off: the call's last window's rows into the per-channel ring image, and a window shorter
+// than the taps (a continuation's lone short window) reading its leading rows off the image the call entered on
+[test]
+def test_vkd_dn_tail(t0 : T?) {
+    t0 |> run("dn_tail == the per-channel ring the decode step reads: the last taps rows of a window, the leading rows of a window shorter than the taps off the entry image") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_moe_init()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            verify(ensure_dn_tail_cls(), "the dn_tail class rail must engage on a live device")
+            let cd = 200   //! off the 256-thread grid: the last workgroup partial
+            let taps = 3
+            let img = cd * taps
+            let old_off = 16
+            let out_off = old_off + img + 4   //! four foreign words between the two images, which the kernel must leave alone
+            for (wlen in [5, 3, 2, 1]) {
+                let row0 = max(wlen - taps, 0)
+                let old_rows = max(taps - wlen, 0)
+                var src <- hash_fill(wlen * cd, 515u + uint(wlen), 1000u, 500.0, 1.0)
+                var smalls <- hash_fill(out_off + img + 8, 907u, 1000u, 250.0, 2.0)
+                var want <- dn_tail_oracle(src, smalls, cd, taps, row0, old_rows, old_off, out_off)
+                with_cell_planes() $(var cp : CellPlanes) {
+                    let ps = cp |> in_plain(src)
+                    let pm = cp |> io_(smalls)
+                    var sc = cp |> cls_set(fixed_array(ps, pm), @@set_dn_tail_cls)
+                    var pc = DnTailArgs(cd = uint(cd), taps = uint(taps), row0 = uint(row0), hist_off = uint(out_off), old_rows = uint(old_rows), old_off = uint(old_off))
+                    cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                        enc_dn_tail_cls(raw, h, sc, pc, int64((img + 255) / 256))
+                    }
+                    var got <- cp |> plane_run(pm)
+                    check_exact(t, "dn_tail at {wlen} window rows ({old_rows} off the entry image)", got, want)
+                    if (old_rows > 0) {   //! the control: the zero-history tail a prompt from position zero writes must miss a continuation's ring
+                        var zeroed := smalls
+                        for (i in range(img)) {
+                            zeroed[old_off + i] = 0.0
+                        }
+                        var from_zero <- dn_tail_oracle(src, zeroed, cd, taps, row0, old_rows, old_off, out_off)
+                        for (i in range(img)) {
+                            from_zero[old_off + i] = smalls[old_off + i]
+                        }
+                        t |> success(mismatch_exact(got, from_zero) > 0, "dn_tail at {wlen} rows: the zero-history ring differs from the continued one")
+                        delete from_zero
+                        delete zeroed
+                    }
+                    delete got
+                }
+                delete want
+                delete smalls
+                delete src
+            }
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
 [test]
 def test_vkd_dn_family(t0 : T?) {
     t0 |> run("deltanet class kernels == the CPU oracle (conv, fused step, 2-phase scan)") <| @(t : T?) {
