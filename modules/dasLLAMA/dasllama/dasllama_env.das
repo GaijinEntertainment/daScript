@@ -269,6 +269,9 @@ struct public MetalEnv {
     @clarg_doc = "Apply the box profile's tensor-lane crowns (its runtime.metal_tensor set), so every family the box's race crowned serves its tensor twin; 0 leaves the set empty and every family on its base form - what a GPU without the tensor lane (the M4 class) serves - the arm that proves a change, and the base kernel set, on that class from an M5."
     tensor : bool = true
 
+    @clarg_doc = "The dense Q8_0 and K-quant prefill sites read an f16 converted copy of their planes (the dev-W panels) instead of their own bytes; the A/B rail of the own-bytes default, which the image lane name carries as -devw."
+    devw : bool = false
+
     @clarg_doc = "Fused prefill qk_norm+rope pass (one panel rewrite, q panel dual-stores its f16 twin); 0 restores the split norm/rope/cvt dispatches (the A/B rail)."
     qk_rope : bool = true
 

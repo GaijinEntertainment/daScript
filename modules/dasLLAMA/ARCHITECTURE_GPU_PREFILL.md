@@ -92,7 +92,7 @@ f16 panel's W stream is 2 bytes an element against the q8 blob's 1.06 once it le
 dequant work, which only a large row count repays. The raced evidence (32 MiB wins everywhere, 47 MiB only from 2048 rows, 112 MiB loses everywhere) is
 `benchmarks/matmul/bench_metal_nax_probe.das`'s grid. **No dense site takes a panel by default**: a Q8_0 or K-quant site's
 f16 panel is a converted copy of its plane (`REVIEW_KQ_FORMATS.md`), so the site reads its own bytes - the q8 mul_mm forms,
-the K-quant twins, tall stamp or base tile (`set_metal_devw_panels` the A/B seat, off; an image bakes panels only under it,
+the K-quant twins, tall stamp or base tile (`set_metal_devw_panels` the A/B seat, off, `DASLLAMA_METAL_DEVW=1` its served arm; an image bakes panels only under it,
 `ARCHITECTURE_IMAGE.md#image-devw-plane`). Panel against own bytes, ms, M5 Max, a window's median on an owned load
 (`DASLLAMA_IMAGE=0`, scratch panels), at 128 / 512 / 2048 rows: Llama-3.2-3B Q4_K_M 25.5-23.5 / 69.4-88.4 / 282-392;
 Llama-3.2-1B IQ4_XS 32.8-45.7 at 512, 173-289 at 2048; Llama-3.2-3B Q8_0 25.8-24.0 / 65.0-62.1 / 264-284; Llama-3.2-1B

@@ -2110,14 +2110,15 @@ def public iq3s_serve_mode() : string => empty(g_iq3s_serve_pin) ? g_env_engine.
 var private g_metal_devw_panels = false
 
 //! A/B seat: the Metal prefill's dev-W f16 panels - a converted copy of a dense Q8_0 or K-quant site's plane - against the
-//! site's own-bytes forms. A metal image bakes the panels only under it, and its lane folds it. Default off.
+//! site's own-bytes forms. A metal image bakes the panels only under it, and its lane folds it. Default off; the pin or
+//! DASLLAMA_METAL_DEVW=1 (the served A/B rail) turns it on.
 [arch(at="../ARCHITECTURE_GPU_PREFILL.md#devw-panel-knees")]
 def public set_metal_devw_panels(v : bool) {
     g_metal_devw_panels = v
     to_log(LOG_WARNING, "dasLLAMA: set_metal_devw_panels({v}) - the dense Q8_0 and K-quant prefill sites {v ? "read an f16 converted copy of their planes" : "read their own bytes"}\n")
 }
 
-def public metal_devw_panels() : bool => g_metal_devw_panels
+def public metal_devw_panels() : bool => g_metal_devw_panels || g_env_metal.devw
 
 //! Whether an IQ3_S weight loads as the iq3s4 served form (DASLLAMA_IQ3S_SERVE): `lut` / `grid` decide
 //! outright, every home serving both forms at every site; `auto` = each home's form - the LUT form on the CPU
