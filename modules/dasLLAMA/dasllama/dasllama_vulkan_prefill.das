@@ -1005,7 +1005,7 @@ def private pf_setup {
     }
     if (g_rd.ple_tbl_blk >= 0l && g_rd.pf_ids != 0ul) {   //! the token table's gather into the side rows (the pre-step's finish reads them under the cos plane's bit)
         let all = g_rd.n_layers * g_rd.ple
-        g_rd.pf_ple_tbl_set = emb_cls_set(int(KqFmt.q8), arena_planes(int(KqFmt.q8), g_rd.ple_tbl_blk), g_rd.pf_ids, np * 4l, 0u,
+        g_rd.pf_ple_tbl_set = emb_cls_set(g_rd.ple_tbl_fmt, arena_planes(g_rd.ple_tbl_fmt, g_rd.ple_tbl_blk), g_rd.pf_ids, np * 4l, 0u,
             g_rd.tok_xh_host.buf, dim * 4l, g_rd.pf_ple, np * all * 4l, VHZ_COS)
     }
     ensure_batch_state()   // hq_dev/hs_dev for the FFN act
@@ -1749,9 +1749,10 @@ def private rd_gather_seat(ready : bool; what : string; fmt : int; seat : block)
 
 //! The per-layer-embedding token table in the arena: the ids prefill gathers the side rows from it (the embed gather's kernel at
 //! the row width layers x ple, scaled by sqrt(ple)) where the host gathered and uploaded them a window at a time
-def vk_rdec_set_ple_table(blk : int64) : bool {
-    return rd_gather_seat(g_rd != null && g_rd.ple > 0l, "vk_rdec_set_ple_table before set_ple", int(KqFmt.q8)) $ {
+def vk_rdec_set_ple_table(blk : int64; fmt : int) : bool {
+    return rd_gather_seat(g_rd != null && g_rd.ple > 0l, "vk_rdec_set_ple_table before set_ple", fmt) $ {
         g_rd.ple_tbl_blk = blk
+        g_rd.ple_tbl_fmt = fmt
     }
 }
 
@@ -2252,7 +2253,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 // no extra pfq_ts - the gather cost folds into the prologue stamp
                 rd_emb_enc(raw, h, g_rd.pf_emb_set, wlen, emb_scale)
                 if (ple_tbl) {   //! the side rows off the token table, sqrt(ple)-scaled as the host gather leaves them
-                    emb_cls_enc(int(KqFmt.q8), raw, h, g_rd.pf_ple_tbl_set, wlen, g_rd.n_layers * g_rd.ple, arena_local_blk(g_rd.ple_tbl_blk), sqrt(float(g_rd.ple)))
+                    emb_cls_enc(g_rd.ple_tbl_fmt, raw, h, g_rd.pf_ple_tbl_set, wlen, g_rd.n_layers * g_rd.ple, arena_local_blk(g_rd.ple_tbl_blk), sqrt(float(g_rd.ple)))
                 }
             }
             if (ple_raw) {   //! the per-layer-embedding pre-step's finish: the projection of the scaled embedding rows, normed per slice and averaged into the gathered rows

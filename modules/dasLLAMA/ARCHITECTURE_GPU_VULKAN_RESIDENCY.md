@@ -182,10 +182,10 @@ stays unfilled. It never shrinks any of the three, and it reports zero bytes whe
 fit - so the same model plans the plane in at a short context and out at a long one. Two planes are
 optional: the token table's gather plane (`#vk-token-gather`: an untied quantized table's own plane,
 `ResidentPlan.emb_bytes`, or a float table's exact f32 rows under `RDEC_EMB_F32_CAP`,
-`ResidentPlan.emb_f32_bytes`), and after it the gemma-4 E-series' per-layer-embedding token table (`ResidentPlan.ple_tbl_bytes`, a q8
-plane [vocab x layers*ple]). Both place first, into the empty arena, in pieces of 65536 rows the host
+`ResidentPlan.emb_f32_bytes`), and after it the gemma-4 E-series' per-layer-embedding token table (`ResidentPlan.ple_tbl_bytes`, a
+plane [vocab x layers*ple] in the table's own tag - q8, superblock or per-32 - gathered in disk order, no repack touching it). Both place first, into the empty arena, in pieces of 65536 rows the host
 gather's 2 GB array admits (`resident_place_table`), which must land back to back in one slab because
-a gather reads a table off one block base; the side-row gather is `EmbGather` at the row width
+a gather reads a table off one block base; the side-row gather is the tag's `EMB` leaf at the row width
 layers*ple, scaled by sqrt(ple). With the side table placed the ids prefill serves a
 per-layer-embedding model too - the embed and the side rows gathered on device, no host row upload -
 and the token command reads the row the host's pre-step embedded, in place (`EMB_ID_HOST`).

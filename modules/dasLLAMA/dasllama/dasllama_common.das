@@ -835,31 +835,33 @@ def register_model_layout(rq8, rkq, rmx4, rq51, riq4nl32 : ModelRepackFn; gs : G
     g_layout_hooks_set = true
 }
 
-//! the per-format layout gather over `src`'s planes - the model's, or a job view whose offset 0 is the job's `woff`
+//! the per-format layout gather over `src`'s planes - the model's, or a job view whose offset 0 is the job's `woff`; `disk`: the
+//! region sits in disk order whatever interleave its plane's other regions took (the per-layer-embedding table, outside every
+//! repack), so a superblock or per-32 region gathers unrepacked
 def layout_gather_dispatch(src : Model; f : KqFmt; woff, n, rows, slice_rows, mr, kgroup, wbias : int64;
-                           var wq : array<uint8>; var ws : array<uint8>) {
+                           var wq : array<uint8>; var ws : array<uint8>; disk : bool = false) {
     let srows = slice_rows > 0l ? slice_rows : rows
     if (f == KqFmt.q8) {
         layout_gather_stack(src, woff, n, rows, srows, mr, kgroup, wbias, wq, ws)
     } elif (f == KqFmt.q51) {
-        let qmr = active_q51_layout_mr()   // the q51 expert stacks sit in the active backend's grp<mr> layout (repack_q51_stacks), disk order at mr 1
+        let qmr = disk ? 1l : active_q51_layout_mr()   // the q51 expert stacks sit in the active backend's grp<mr> layout (repack_q51_stacks), disk order at mr 1
         layout_gather_stack_q51(src, woff, n, rows, srows, qmr > 1l, qmr, wq, ws)
     } elif (f == KqFmt.iq4nl32) {
-        let qmr = active_iq4nl32_layout_mr()   // the iq4nl32 expert stacks sit in the active backend's grp<mr> layout, disk order at mr 1
+        let qmr = disk ? 1l : active_iq4nl32_layout_mr()   // the iq4nl32 expert stacks sit in the active backend's grp<mr> layout, disk order at mr 1
         layout_gather_stack_iq4nl32(src, woff, n, rows, srows, qmr > 1l, qmr, wq, ws)
     } elif (f == KqFmt.q4032) {
         layout_hooks_check()
-        let qmr = active_q4032_layout_mr()   // the q4032 stacks sit in the active backend's grp<mr> layout, disk order at mr 1
+        let qmr = disk ? 1l : active_q4032_layout_mr()   // the q4032 stacks sit in the active backend's grp<mr> layout, disk order at mr 1
         invoke(g_layout_gather_q4032, src, woff, n, rows, srows, qmr > 1l, qmr, wq, ws)
     } elif (f == KqFmt.q5032) {
         layout_hooks_check()
-        let qmr = active_q5032_layout_mr()   // the q5032 stacks sit in the active backend's grp<mr> layout, disk order at mr 1
+        let qmr = disk ? 1l : active_q5032_layout_mr()   // the q5032 stacks sit in the active backend's grp<mr> layout, disk order at mr 1
         invoke(g_layout_gather_q5032, src, woff, n, rows, srows, qmr > 1l, qmr, wq, ws)
     } elif (f == KqFmt.mx4) {
         // the mx4 stacks ride the Q8 layout's grp<mr> interleave when the CPU repacked them (repack_mx4_stacks under the q8q8 perm), disk order otherwise
         layout_gather_stack_mx4(src, woff, n, rows, srows, src.mx4_repacked, active_q8_layout_mr(), wq, ws)
     } else {
-        layout_gather_stack_kq(src, f, woff, n, rows, srows, src.kq_repacked, kq_active_mr(src, f), wq, ws)
+        layout_gather_stack_kq(src, f, woff, n, rows, srows, src.kq_repacked && !disk, disk ? 1l : kq_active_mr(src, f), wq, ws)
     }
 }
 

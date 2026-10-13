@@ -2718,7 +2718,8 @@ struct RDec {
     tok_ids_host : HostBuf             //! the one-row command's token id, read by its gather where the step brings one (`EMB_ID_HOST` = the row below)
     tok_xh_host : HostBuf              //! the host's row for a step that brings no token id, read in place by the same gather
     s_tok_emb : VkDescriptorSet        //! the one-row command's gather set
-    ple_tbl_blk : int64 = -1l          //! the E-series token table's arena block (q8): the ids prefill gathers pf_ple from it
+    ple_tbl_blk : int64 = -1l          //! the E-series token table's arena block: the ids prefill gathers pf_ple from it
+    ple_tbl_fmt : int                  //! ... its format slot, the table's own tag - the gather's stamp (`emb_cls_ensure`)
     pf_ple_tbl_set : VkDescriptorSet
     pf_ids : uint64                    // [MAX_NPOS] token ids for the device-side embed gather
     pf_emb_set : VkDescriptorSet

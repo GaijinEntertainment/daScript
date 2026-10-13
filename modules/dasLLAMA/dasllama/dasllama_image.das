@@ -1322,7 +1322,7 @@ def private vk_mint_view_at(f : KqFmt; woff, n : int64) : bool {
 
 [arch(at = "../ARCHITECTURE_IMAGE_VULKAN.md#image-vulkan-mint")]
 def private vk_mint_gather_hook(fmt : int; woff, n, rows, slice_rows, mr, kgroup, wbias : int64;
-                                var wq : array<uint8>; var ws : array<uint8>) : bool {
+                                var wq : array<uint8>; var ws : array<uint8>; disk : bool) : bool {
     let f = kq_fmt_of_slot(fmt)
     if (!vk_mint_view_at(f, woff, n * rows)) {
         if (empty(g_vk_mint_jobs)) {
@@ -1334,7 +1334,7 @@ def private vk_mint_gather_hook(fmt : int; woff, n, rows, slice_rows, mr, kgroup
         }
         vk_mint_zero_view(f, woff, n * rows)
     }
-    layout_gather_dispatch(g_vk_mint_job_view, f, woff - g_vk_mint_view_rebase, n, rows, slice_rows, mr, kgroup, wbias, wq, ws)
+    layout_gather_dispatch(g_vk_mint_job_view, f, woff - g_vk_mint_view_rebase, n, rows, slice_rows, mr, kgroup, wbias, wq, ws, disk)
     return true
 }
 

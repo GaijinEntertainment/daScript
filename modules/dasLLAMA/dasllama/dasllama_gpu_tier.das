@@ -862,16 +862,17 @@ typedef RdecSetPleFn = function<(ple : int64) : bool>
 typedef RdecSetPleLayerFn = function<(l : int64; bgate : int64; bproj : int64; fmt : int) : void>
 //! the pre-step's projection on device: `w` the per-layer model projection [layers*ple x dim] as f32 rows, `pnorm` its [ple] norm row; false = the driver keeps the CPU pre-step
 typedef RdecSetPleProjFn = function<(w : array<float>; pnorm : array<float>; all : int64) : bool>
-//! the per-layer-embedding token table placed in the arena (`blk`, a q8 plane [vocab x layers*ple]): the window chain gathers its side rows on device off the token ids
-typedef RdecSetPleTableFn = function<(blk : int64) : bool>
+//! the per-layer-embedding token table placed in the arena (`blk`, a plane [vocab x layers*ple] in format slot `fmt`, the table's
+//! own tag): the window chain gathers its side rows on device off the token ids
+typedef RdecSetPleTableFn = function<(blk : int64; fmt : int) : bool>
 [unused_argument(ple)]
 def private rdec_unset_set_ple(ple : int64) : bool => false
 [unused_argument(l, bgate, bproj, fmt)]
 def private rdec_unset_set_ple_layer(l, bgate, bproj : int64; fmt : int) {}
 [unused_argument(w, pnorm, all)]
 def private rdec_unset_set_ple_proj(w : array<float>; pnorm : array<float>; all : int64) : bool => false
-[unused_argument(blk)]
-def private rdec_unset_set_ple_table(blk : int64) : bool => false
+[unused_argument(blk, fmt)]
+def private rdec_unset_set_ple_table(blk : int64; fmt : int) : bool => false
 
 var g_rdec_set_ple = @@rdec_unset_set_ple
 var g_rdec_set_ple_layer = @@rdec_unset_set_ple_layer
@@ -890,7 +891,7 @@ def public install_rdec_ple(set_ple : RdecSetPleFn; set_ple_layer : RdecSetPleLa
 }
 
 //! true once the driver holds the token table: the ids prefill then gathers the side rows itself
-def public rdec_set_ple_table(blk : int64) : bool => invoke(g_rdec_set_ple_table, blk)
+def public rdec_set_ple_table(blk : int64; fmt : int) : bool => invoke(g_rdec_set_ple_table, blk, fmt)
 
 def public rdec_ple_installed() : bool => g_rdec_ple_installed
 def public rdec_set_ple(ple : int64) : bool => invoke(g_rdec_set_ple, ple)

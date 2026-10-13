@@ -108,8 +108,9 @@ def vulkan_bake_take(var t : Model) : bool {
 }
 
 //! the mint's gather: `fmt`, the entry's element window and its gather geometry, answered from a source other than the
-//! model's planes (the gguf mapping, one job at a time); false = the source has no such entry, the model's planes serve
-typedef VkMintGatherFn = function<(fmt : int; woff, n, rows, slice_rows, mr, kgroup, wbias : int64; var wq : array<uint8>; var ws : array<uint8>) : bool>
+//! model's planes (the gguf mapping, one job at a time); false = the source has no such entry, the model's planes serve; `disk`
+//! marks a region outside every repack (`layout_gather_dispatch`)
+typedef VkMintGatherFn = function<(fmt : int; woff, n, rows, slice_rows, mr, kgroup, wbias : int64; var wq : array<uint8>; var ws : array<uint8>; disk : bool) : bool>
 //! the bake's sink: where a collected entry's bytes go - the RAM blob, or the image writer under the streaming mint
 typedef VkMintSinkFn = function<(p : void?; nbytes : uint64) : void>
 
@@ -206,8 +207,8 @@ def private vk_bake_collect(fmt : int; woff, n, rows : int64; wq, ws : array<uin
     g_vk_bake_plan |> push(e)
 }
 
-def private vk_mint_gather(fmt : int; woff, n, rows, slice_rows, mr, kgroup, wbias : int64; var wq : array<uint8>; var ws : array<uint8>) : bool
-    => g_vk_mint_on && invoke(g_vk_mint_gather, fmt, woff, n, rows, slice_rows, mr, kgroup, wbias, wq, ws)
+def private vk_mint_gather(fmt : int; woff, n, rows, slice_rows, mr, kgroup, wbias : int64; var wq : array<uint8>; var ws : array<uint8>; disk : bool) : bool
+    => g_vk_mint_on && invoke(g_vk_mint_gather, fmt, woff, n, rows, slice_rows, mr, kgroup, wbias, wq, ws, disk)
 
 //! the slice's answer where the walk leaves the baked plan: a gather the tier refuses anyway takes the refusal (empty planes,
 //! true); any other gather turns the slice off and regathers live (false), the warning saying `why`
@@ -264,15 +265,17 @@ def private vk_bake_slice(t : Model; fmt : int; woff, n, rows : int64;
     return true
 }
 
+//! `disk`: the region sits in its plane in disk order whatever interleave the plane's other regions took (the per-layer-embedding
+//! table, outside every repack) - `layout_gather_dispatch`'s unrepacked arm, on the live planes and in the streaming mint alike
 def private moe_gpu_gather(t : Model; f : KqFmt; woff : int64; n, rows, slice_rows : int64; mr, kgroup, wbias : int64;
-                           var wq : array<uint8>; var ws : array<uint8>) {
-    if (vk_bake_slice(t, int(f), woff, n, rows, wq, ws) || vk_mint_gather(int(f), woff, n, rows, slice_rows, mr, kgroup, wbias, wq, ws)) {
+                           var wq : array<uint8>; var ws : array<uint8>; disk : bool = false) {
+    if (vk_bake_slice(t, int(f), woff, n, rows, wq, ws) || vk_mint_gather(int(f), woff, n, rows, slice_rows, mr, kgroup, wbias, wq, ws, disk)) {
         return
     }
     if (t.planes_trimmed && !g_vk_mint_on) {   // the mint's own fallthrough reads planes the load left whole; a served trimmed image has none
         panic("dasLLAMA: planes_trimmed vulkan lane - a live gather is impossible (the whole-model driver declined this run, or the baked plan diverged; the decline line above): the lane's identity folds DASLLAMA_TRIM but not DASLLAMA_GPU_CTX_MAX / DASLLAMA_VK_KV32 / DASLLAMA_GPU_RESIDENT - match the mint's knobs, delete the lane to re-mint, or DASLLAMA_TRIM=0")
     }
-    layout_gather_dispatch(t, f, woff, n, rows, slice_rows, mr, kgroup, wbias, wq, ws)
+    layout_gather_dispatch(t, f, woff, n, rows, slice_rows, mr, kgroup, wbias, wq, ws, disk)
 }
 
 //! every entry of the baked plan sits in the whole-model driver's arena: the trimmed lane's admission
@@ -547,7 +550,7 @@ def private gather_upload_group(t : Model; ups : array<PlaneUp>; mr, kgroup, wbi
 [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#vk-token-gather")]
 def private resident_emb_gather_want(c : Config) : bool => g_env_vulkan.vk_gpu_embed && rdec_prefill_ids_installed() && !c.hyper_conn
 
-//! the format a device gather serves a token table in: q8, a superblock format or a per-32 one
+//! the format a device gather serves a token table - or the per-layer-embedding table - in: q8, a superblock format or a per-32 one
 def private resident_emb_fmt_ok(f : KqFmt) : bool => f == KqFmt.q8 || kq_sb(f) || kq_dense_b32(f)
 
 //! an untied token table's own plane the gather places: its q8 copy or its K-quant plane, in its format at its offset; `on` false
@@ -579,7 +582,7 @@ struct ResidentPlan {
     others_bytes : int64    //!< dedicated video memory every other process holds, when the OS answers (0 otherwise) - named in a decline
     emb_bytes : int64       //!< an untied token table's own plane the gather would place (`resident_emb_plane`) - counted only when it rides the headroom left after weights + KV (0 = a tied table's classifier plane serves, or the CPU embed)
     emb_f32_bytes : int64   //!< an F32/F16/BF16 table's exact f32 rows the f32 gather would upload (`resident_emb_f32_want`) - counted the same way, under `RDEC_EMB_F32_CAP` (0 = the CPU embed serves)
-    ple_tbl_bytes : int64   //!< the per-layer-embedding token table (gemma-4 E-series, q8) the window chain would gather on device - counted the same way, after the token table (0 = the host gathers)
+    ple_tbl_bytes : int64   //!< the per-layer-embedding token table (gemma-4 E-series, in its own tag: q8, a superblock or a per-32 format) the window chain would gather on device - counted the same way, after the token table (0 = the host gathers)
     host_layers : int64     //!< the routed layers whose experts serve on the host - the first this many in layer order (every one on a hyper-connection model)
     hot_slots : int64       //!< the hot expert pool's slots a routed layer, where the routed experts serve on the host (0 = no pool)
     hot_bytes : int64       //!< ... and the pool's bytes over every routed layer
@@ -865,7 +868,7 @@ def private resident_planes(t : Model; dng : RdecDnGeom; ple_tbl, emb_tbl : bool
     var planes : array<ResidentPlane>
     planes |> reserve(c.n_layers * 13l + 20l)
     if (ple_tbl) {
-        planes |> push(ResidentPlane(n = c.n_layers * c.n_embd_per_layer, rows = c.vocab_size, f = KqFmt.q8, off = t.ple_emb_off, role = ResidentRole.ple_table))
+        planes |> push(ResidentPlane(n = c.n_layers * c.n_embd_per_layer, rows = c.vocab_size, f = t.ple_emb_fmt, off = t.ple_emb_off, role = ResidentRole.ple_table))
     }
     if (emb_tbl) {
         let emb = resident_emb_plane(t)
@@ -1221,8 +1224,8 @@ def resident_plan(t : Model; seq_cap : int64; kdt, vdt : KVDtype; hot_cap : int6
     let emb_f32 = resident_emb_gather_want(c) && resident_emb_f32_want(t) ? rdec_emb_f32_bytes(c.vocab_size, c.dim) : 0l
     p.emb_f32_bytes = total + p.emb_bytes + emb_f32 <= usable ? emb_f32 : 0l
     p.weight_bytes += p.emb_f32_bytes
-    let ple_tbl_want = has_ple(c) && t.ple_emb_fmt == KqFmt.q8 && g_env_vulkan.vk_gpu_embed && rdec_prefill_ids_installed() && rdec_ple_installed()
-    let ple_tbl_bytes = ple_tbl_want ? moe_gpu_plane_bytes(c.n_layers * c.n_embd_per_layer, c.vocab_size, int(KqFmt.q8)) : 0l
+    let ple_tbl_want = has_ple(c) && resident_emb_fmt_ok(t.ple_emb_fmt) && g_env_vulkan.vk_gpu_embed && rdec_prefill_ids_installed() && rdec_ple_installed()
+    let ple_tbl_bytes = ple_tbl_want ? moe_gpu_plane_bytes(c.n_layers * c.n_embd_per_layer, c.vocab_size, int(t.ple_emb_fmt)) : 0l
     p.ple_tbl_bytes = total + p.emb_bytes + p.emb_f32_bytes + ple_tbl_bytes <= usable ? ple_tbl_bytes : 0l
     p.weight_bytes += p.ple_tbl_bytes
     p.fits = total <= usable
@@ -1804,9 +1807,9 @@ def resident_arm_floor(env_floor, pin : int64; strict : bool = false) : int64 {
 // the arena block index. The same gather the per-op tier's upload takes (moe_gpu_gather), then place
 // instead of upload_stack.
 def private resident_place(t : Model; f : KqFmt; woff : int64; n, rows : int64;
-                           mr, kgroup, wbias : int64; slice_rows : int64 = -1l) : int64 {
+                           mr, kgroup, wbias : int64; slice_rows : int64 = -1l; disk : bool = false) : int64 {
     var wq, ws : array<uint8>
-    moe_gpu_gather(t, f, woff, n, rows, slice_rows > 0l ? slice_rows : rows, mr, kgroup, wbias, wq, ws)
+    moe_gpu_gather(t, f, woff, n, rows, slice_rows > 0l ? slice_rows : rows, mr, kgroup, wbias, wq, ws, disk)
     let blk = rdec_place(wq, ws, n, rows, int(f))
     if (blk >= 0l) {
         vk_bake_collect(int(f), woff, n, rows, wq, ws)
@@ -1898,12 +1901,12 @@ let private RDEC_TBL_PIECE_ROWS = 65_536l   //! a token-table piece: 65536 rows 
 
 //! a token table placed whole in its format's arena a piece at a time (the host gather's temporaries stay bounded), each piece
 //! behind the one before - the gather reads the table as one run of blocks; its first block, -1 where a piece did not land so
-def private resident_place_table(t : Model; tbl : ResidentPlane; mr, kg, wb : int64) : int64 {
+def private resident_place_table(t : Model; tbl : ResidentPlane; mr, kg, wb : int64; disk : bool = false) : int64 {
     var b0 = -1l
     var row = 0l
     while (row < tbl.rows) {
         let prows = min(RDEC_TBL_PIECE_ROWS, tbl.rows - row)
-        let b = resident_place(t, tbl.f, tbl.off + row * tbl.n, tbl.n, prows, mr, kg, wb)
+        let b = resident_place(t, tbl.f, tbl.off + row * tbl.n, tbl.n, prows, mr, kg, wb, -1l, disk)
         if (row == 0l) {
             b0 = b
         }
@@ -2354,8 +2357,9 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     if (ple > 0l && !rdec_set_ple(ple)) return rdec_decline("the per-layer-embedding width {ple} is not a 32-multiple")
     var ple_tbl_placed = false
     if (plan.ple_tbl_bytes > 0l) {
-        let bpt0 = resident_place_table(t, take_plane(planes, cur, ResidentRole.ple_table), 1l, 4l, 0l)   //! the table sits linear in the q8 plane, outside the weights' repack
-        ple_tbl_placed = bpt0 >= 0l && rdec_set_ple_table(bpt0)
+        //! the table sits in disk order in its own plane, outside the weights' repack: linear q8 rows, or the disk-order superblock and per-32 blocks
+        let bpt0 = resident_place_table(t, take_plane(planes, cur, ResidentRole.ple_table), 1l, 4l, 0l, true)
+        ple_tbl_placed = bpt0 >= 0l && rdec_set_ple_table(bpt0, int(t.ple_emb_fmt))
         to_log(LOG_INFO, "dasLLAMA: resident driver - the per-layer-embedding token table {ple_tbl_placed ? "gathers on device" : "stays on the CPU (the placement or the gather rail declined)"}\n")
     }
     var bemb = -1l

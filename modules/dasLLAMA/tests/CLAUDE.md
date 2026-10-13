@@ -478,11 +478,13 @@ row gather at one row under the embed scale) at a 96-wide row and past a lead of
 small-batch cells run every superblock format's eight-column form at 9 and 16 rows too - two column groups in one
 dispatch over an x of the live rows alone - and every kernel cell of the iq4 family carries the iq3s4 stamps (format 35:
 the GEMV, the small-batch forms, the routed GEMV, the base and tensor tiles, the routed tiles and twins, the token
-gather). The prefill file's per-32 cells run the small-batch stamps (`b32_mvb_gate`: q51 and iq4nl32 at two, four and eight
+gather). The prefill file's per-32 cells run the small-batch stamps (`b32_mvb_gate`: q51, iq4nl32, q4032 and q5032 at two, four and eight
 columns, pad columns and two column groups, y rows past `d`, on the two-row stamps and on the K-split narrow-plane ones, a
 64-block row among them) bit for bit against the same form's one-row GEMV a row at a time over x off
-the dyadic lattice, the GEMV within a double dot's envelope, and the routed GEMV (`moe_b32_rows_gate`: q51, iq4nl32 and mx4's
-E8M0 path) over several streams in one dispatch bit for bit against one stream a dispatch. The gemm file's `router_f32_gate` holds the prefill router's tile (`MetalF32ExactMm`) at the 35B-A3B shape and at
+the dyadic lattice, the GEMV within a double dot's envelope, and the routed GEMV (`moe_b32_rows_gate`: q51, iq4nl32, q4032, q5032 and mx4's
+E8M0 path) over several streams in one dispatch bit for bit against one stream a dispatch; `ple_gather_b32_gate` the q51
+and q5032 PLE table gathers bound past another table's blocks, bit for bit `dequant_b32_plane_block` x sqrt(ple) (a
+poisoned lead element the control). The gemm file's `router_f32_gate` holds the prefill router's tile (`MetalF32ExactMm`) at the 35B-A3B shape and at
 64 experts against the dot in double on operands off the f16 lattice, the half-staged stamp over the same rows missing
 the bar as its control. Four
 cells need no
@@ -2039,7 +2041,9 @@ under tq4 (reads 1.022 against the CPU chain's 1.033, 80 of 80 hits; a 4-bit mir
 at the window's first row reads a perplexity of 13844. `test_gpu_resident_gemma4_e2b_short_window` holds a two-token prompt on the E2B to the window chain (the peel declines a per-layer-embedding model). `test_gpu_resident_gemma4_e2b_block_codecs`
 runs the shared-KV carrier - its upper layers store no K/V row of their own, and under tq4 still
 rotate their query - at forty tokens in the forced-feed form under q8_0 and at 150 + 150 in the
-perplexity form under tq4 (reads 1.032 against 1.032, 148 of 150 hits each).
+perplexity form under tq4 (reads 1.032 against 1.032, 148 of 150 hits each). Arm `g4e-ple`
+(`test_gpu_resident_gemma4_e2b_ple_tables`): the E2B Q8_0 file and its emb-Q5_0 / emb-Q5_1 / emb-Q4_0 mints - the plan seats
+the PLE table in its own tag (q8, q5032, q51, q40) and the forced feed's prefill gathers the side rows off it against the CPU chain.
 `test_gpu_resident_moe.das` (`_moe_resident.das` carries the rig, shared with
 `test_gpu_resident_gptoss.das`) - stocked suite, `-jit` only; the census fixtures (`MoeFixture.census`: the two UD-IQ2_XXS
 files and the Q4_K_M host-layer file) open on the format census, every site the file carries in its own format, and
@@ -2678,13 +2682,15 @@ as the control on both bars), and the n-gram side input's gather, window and row
 (`test_ngram_gather`, `test_ngram_window`, `test_ngram_row_decoders`).
 `test_ple_check.das` - model-free: the gemma4 router input's row identity (`gemma4_router` over
 npos rows against the npos = 1 decode call, bit for bit, on a synthetic scale row) and the PLE go-live tripwire (`ple_check_table`) on synthetic
-Model shells - short plane trips per format arm, full plane passes, non-PLE exempt.
+Model shells - short plane trips per format arm (the per-32 q51 / q5032 arms one byte short included), full plane passes, non-PLE exempt.
 `test_ple_modes.das` - stocked suite; model-gated (E2B Q8_0 + Q4_K_M, small tier): the PLE
 token table's pinned-plane rail across serving modes - fp32 keeps the Q8_0 table on a
 dedicated q8 plane (offset 0, plane == table exactly, gather rows BIT-match the file dequant,
 wblob provably too small to carry the expansion) and a K-quant table on its native kq plane;
 plus a greedy chat turn per serving mode on the E2B Q8_0 carrier - a q8 control, an fp32 turn,
-and a `q4_0` turn, the `q4_0` one proving q4 serving has a per-layer-embedding rail.
+and a `q4_0` turn, the `q4_0` one proving q4 serving has a per-layer-embedding rail; `test_ple_per32_tables` loads the
+E2B emb-Q5_0 / emb-Q5_1 / emb-Q4_0 mints - the PLE table tagged q5032 / q51 / q40, four rows of `ple_gather_row` bit for bit
+the file dequant (the neighbor row the control), a greedy turn on the CPU chain.
 `test_tts_textnorm.das` - model-free: the TTS text normalizer - the number, ordinal, year and
 decimal readers, the reference normalizer's own examples, the fixed upstream defects as
 failing-first cases, and the 200-sentence corpus (`_tts_fixtures/g2p_corpus.json`, loaded by
