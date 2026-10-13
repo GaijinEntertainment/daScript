@@ -1215,6 +1215,68 @@ def test_scheduler_mtp_resident_picks(t : T?) {
     }
 }
 
+[test]
+def test_scheduler_mtp_device_home(t : T?) {
+    t |> run("scheduler mtp in device mode under the resident driver: a speculating stream homed on the device - its K/V in the driver's region alone - drafts, verifies and rolls back there, token for token the host-cached speculating stream, every drafted round counted by the device's draft and verify counters (needs Qwen3.5-0.8B-MTP, DASLLAMA_GPU=1)") @(t : T?) {
+        return if (!jit_only(t))
+        if (!stat(MTP_MODEL_PATH).is_valid) {
+            t |> skip("{MTP_MODEL_PATH} not present")
+            return
+        }
+        if (!moe_gpu_tier_installed() || !gpu_want_auto()) {
+            t |> skip("the GPU tier is not armed - needs DASLLAMA_GPU=1 on a device that serves the whole-model driver")
+            return
+        }
+        if (mirror_kv_dtype() != KVDtype.f16) {
+            t |> skip("the scheduler's sessions are f16; under DASLLAMA_VK_KV32=1 the mirror is f32 and every call passes as codec")
+            return
+        }
+        with_dasllama_jobque() {
+            var m <- load_model_(MTP_MODEL_PATH, QuantMode.q8)
+            m.config.seq_len = min(m.config.seq_len, 512l)
+            t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the NextN-headed hybrid (the load log names any decline)")
+            t |> success(gpu_resident_mtp_device_home(m), "the draft head, its verify and its rollback run on the device: a speculating scheduler may home its streams there")
+            var prompt <- encode(m, "Count from one to twenty: one, two, three,", true, false)
+            var none : array<int64>
+            let greedy = SamplingParams()
+            let prev_spec = get_mtp_spec()
+            set_mtp_spec(true)
+            var sch0 <- create_scheduler(m, 1l, 4l, 64l, 0l, 0l, KVDtype.f16, true)   //! host-cached flat f16 sessions on the same rail: the reference
+            var events0 : array<SchedEvent>
+            t |> success(submit(m, sch0, make_req(1l, prompt, greedy, 24l, none)), "host-cached spec stream queued")
+            drain(m, sch0, events0)
+            var ref_toks <- toks_of(events0, 1l)
+            delete sch0
+            let drafts0 = moe_gpu_resident_drafts()
+            let verifies0 = moe_gpu_resident_verifies()
+            var sch <- create_scheduler(m, 1l, 4l, 64l, 0l, 0l, KVDtype.f16, true)
+            t |> success(gpu_device_sessions() >= sch.max_streams, "the driver homes the scheduler's one stream ({gpu_device_sessions()} regions)")
+            t |> success(set_device_kv(sch, true), "the idle scheduler homes its streams on the device")
+            var events : array<SchedEvent>
+            t |> success(submit(m, sch, make_req(2l, prompt, greedy, 24l, none)), "device-home spec stream queued")
+            drain(m, sch, events)
+            set_mtp_spec(prev_spec)
+            var got <- toks_of(events, 2l)
+            log_streams("spec (host-cached)", events0, 1l, "spec (device-home)", events, 2l)
+            t |> success(ids_equal(got, ref_toks), "the device-home spec stream == the host-cached spec stream ({got} vs {ref_toks})")
+            t |> equal(finished_of(events, 2l).n_gen, 24l)
+            t |> success(sch.mtp_drafted > 0l, "the speculative tick drafted ({sch.mtp_drafted} drafts, {sch.mtp_accepted} accepted)")
+            t |> equal(moe_gpu_resident_drafts() - drafts0, sch.mtp_drafted, "every drafted round's draft ran on the device's NextN head")
+            t |> equal(moe_gpu_resident_verifies() - verifies0, sch.mtp_drafted, "every drafted round's verify ran on the device")
+            var passes <- gpu_cpu_passes_()
+            t |> equal(length(passes), 0, "no call passed to the CPU rails: {passes}")
+            delete passes
+            delete got
+            delete events
+            delete sch
+            delete ref_toks
+            delete events0
+            delete prompt
+            delete m
+        }
+    }
+}
+
 // ===== paged + SAMPLED: the combination the server actually serves =====
 
 // A sampled stream consults the RNG once per token, so an extra or missing sample() call in the

@@ -36,7 +36,8 @@ def census_plane(var c : SiteCensus; m : GGUFMeta; name : string; tag : KqFmt; f
     }
 }
 
-//! every site's tally over the loaded model `tr` against the file's tensor types
+//! every site's tally over the loaded model `tr` against the file's tensor types; a tied classifier is the token table's plane, the
+//! shared expert the plane its sites read (`shexp_plane`)
 def format_census(tr : Model; m : GGUFMeta) : array<SiteCensus> {
     var attn = SiteCensus(site = "attention q/k/v/o")
     var exps = SiteCensus(site = "routed experts")
@@ -55,9 +56,11 @@ def format_census(tr : Model; m : GGUFMeta) : array<SiteCensus> {
         census_plane(exps, m, "blk.{l}.ffn_gate_exps.weight", fmt_at(tr.we1_fmt, l))
         census_plane(exps, m, "blk.{l}.ffn_up_exps.weight", fmt_at(tr.we3_fmt, l))
         census_plane(exps, m, "blk.{l}.ffn_down_exps.weight", fmt_at(tr.we2_fmt, l))
-        census_plane(shexp, m, "blk.{l}.ffn_gate_shexp.weight", fmt_at(tr.wsh1_fmt, l))
-        census_plane(shexp, m, "blk.{l}.ffn_up_shexp.weight", fmt_at(tr.wsh3_fmt, l))
-        census_plane(shexp, m, "blk.{l}.ffn_down_shexp.weight", fmt_at(tr.wsh2_fmt, l))
+        if (c.n_ff_shexp > 0l) {
+            census_plane(shexp, m, "blk.{l}.ffn_gate_shexp.weight", shexp_plane(tr, l, 1).f)
+            census_plane(shexp, m, "blk.{l}.ffn_up_shexp.weight", shexp_plane(tr, l, 3).f)
+            census_plane(shexp, m, "blk.{l}.ffn_down_shexp.weight", shexp_plane(tr, l, 2).f)
+        }
         census_plane(dn, m, "blk.{l}.attn_qkv.weight", fmt_at(tr.dnqkv_fmt, l))
         census_plane(dn, m, "blk.{l}.attn_gate.weight", fmt_at(tr.dngate_fmt, l))
         census_plane(dn, m, "blk.{l}.ssm_out.weight", fmt_at(tr.dnout_fmt, l))
@@ -65,25 +68,35 @@ def format_census(tr : Model; m : GGUFMeta) : array<SiteCensus> {
         census_plane(ba, m, "blk.{l}.ssm_alpha.weight", fmt_at(tr.dnalpha_fmt, l), tr.dn_ba_f32)
     }
     census_plane(emb, m, "token_embd.weight", tr.emb_fmt)
-    census_plane(cls, m, "output.weight", tr.wcls_fmt)
+    census_plane(cls, m, c.shared_weights ? "token_embd.weight" : "output.weight", cls_fmt_of(tr))
     census_plane(eh, m, "blk.{c.n_layers}.nextn.eh_proj.weight", tr.mtp_ehproj_fmt)
     return <- [attn, exps, shexp, dn, ba, emb, cls, eh]
 }
 
-//! the census of `tr` asserted site by site under `tag` (the file at `path`), each site's check soft so the cell names every
-//! site still on a converted copy; that list logged as one line and returned ("" when every site is native)
-def census_cell(t : T?; tr : Model; path, tag : string) : string {
-    var copies = ""
+//! every site the census tallies, in its order: what a cell on a file carrying them all wants
+def census_sites_all() : array<string> {
+    return <- ["attention q/k/v/o", "routed experts", "shared expert", "deltanet qkv/gate/out", "deltanet beta/alpha", "token table",
+        "classifier", "NextN eh_proj"]
+}
+
+//! the census of `tr` asserted site by site under `tag` (the file at `path`) - every site the file carries read in its own
+//! format, the sites `want` names carried at all - each check soft so the cell names every site still on a converted copy,
+//! that list logged as one line
+def census_cell(t : T?; tr : Model; path, tag : string; want : array<string>) {
     let f = fopen(path, "rb")
     if (f == null) {
         t |> failure("{tag}: cannot open {path}")
-        return "the file"
+        return
     }
     fmap(f) $(var bytes : array<uint8>#) {
         var inscope m <- parse_gguf_meta(bytes)
         var inscope sites <- format_census(tr, m)
+        var copies = ""
         for (s in sites) {
-            t |> success(s.planes > 0, "{tag} {s.site}: the file carries the site")
+            if (want |> has_value(s.site)) {
+                t |> success(s.planes > 0, "{tag} {s.site}: the file carries the site")
+            }
+            continue if (s.planes == 0)
             t |> success(s.copies == 0, "{tag} {s.site}: {s.copies} of {s.planes} planes read through a converted copy ({s.first})")
             if (s.copies > 0) {
                 copies = "{copies} [{s.site}: {s.copies}/{s.planes}]"
@@ -92,5 +105,4 @@ def census_cell(t : T?; tr : Model; path, tag : string) : string {
         to_log(LOG_INFO, "{tag}: sites still on a converted copy:{empty(copies) ? " none" : copies}\n")
     }
     fclose(f)
-    return copies
 }

@@ -208,7 +208,8 @@ trunk's in the site list, its routed experts sum on the host like the trunk's, a
 the hot expert pool.** The loader lays the head's seams at sites `2 x n_layers` and `2 x n_layers + 1`;
 the trunk's head mixer follows them (`RDec.hc_final_site`), then the head's own head mixer
 (`mtp_hc_head_*`, `hc_mtp_site`) and the carry's per-stream norm gammas (`mtp_hnorm`, `hc_hnorm_row`).
-The resident side admits a routed head where the tier serves host experts (`resident_head_routed`), counts
+The resident side admits a routed head on either chain (`resident_head_routed`; on the plain chain its experts ride the device,
+`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head`), here with its experts on the host, counts
 it in every routed walk (`resident_routed_layers`: the plan, the router plane's last slot, the biases, the
 pool's `HotLayer`s), and reads its dense triple off the shared expert's planes (`resident_head_fmts`,
 `resident_head_ffn_plane`). The carry is the trunk's WIDE residual before the head mixer (`hc x dim`

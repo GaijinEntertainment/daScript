@@ -177,7 +177,12 @@ under the same ledgered exception as the parity file's: the Metal MTP rail is wh
 flavor serves.
 
 Prefill parity: `base mm-tail s16
-kq cont attn-dev mirror segs span span-fused span-mrope span-ds dim qkv moe-gemv kq-tail` (segs = the segmented
+kq cont attn-dev mirror segs span span-fused span-mrope span-ds dim qkv moe-gemv moe-base kq-tail` (moe-base = the routed
+block's two GEMM forms on split-format expert carriers (`test_metal_prefill_moe_base_form`, family `qwen3moe`, large
+tier: Qwen3-30B-A3B UD-Q3_K_XL and UD-IQ2_XXS, loaded under the Metal mode so IQ3_S planes read their grid form): a 280-row
+then a 20-row window on the tensor twins over the gather panel, then with the panel off - the gate and up sites on the
+simdgroup base form - each leg's last-row logits within the carrier's bar of the CPU chain's largest, the base kernel's
+census count rising on the base leg alone, the control a window whose last token differs landing outside the bar; segs = the segmented
 window: two sessions' chunks as ONE window against the same chunks as two windows on one blob twin - Llama-3.2-1B at
 Q8_0, Q4_K_M and IQ4_XS, the three formats the window's GEMM ladder serves apart - on the mirror-fed form and the
 panel form: the continuations' last-row logits within the mirror arm's bar, eight greedy steps off each session token
@@ -890,7 +895,12 @@ four sentinel tails), the slot-to-bucket-row map as a permutation of each bucket
 atomic cursor fixes no order within a bucket) - and the combine-folded residual step (the shared
 row at its gate, ungated, and no shared expert; the in-place residual moved off its input; the
 f32 normed row and the f16 twin against one oracle) - every output under a sentinel fill before
-its dispatch, every bar with its own poison. `test_vkd_gemv_lane_rule` pins the decode GEMV
+its dispatch, every bar with its own poison. `test_vkd_emb_gather_family` holds the token-table gather's
+`KqEmb<Fmt>` leaves (every `kq_sb` format) at four rows - three ids off a five-row table past a one-row lead, one
+`EMB_ID_HOST` row copying the host's staged row - against the class's own `blk_decode` lanes under the `blk_fold` terms,
+and on the formats with a float witness each gathered row dotted with a Q8_K row against `kq_gemv_float_oracle` over the
+same table row; `test_vkd_emb_gather_q8_f32` holds the q8 stamp (`EmbGather`) against the CPU dequant and the f32 stamp
+(`EmbGatherF32`) against the table's rows, an `EMB_ID_HOST` row on both, each compare with its poisoned row. `test_vkd_gemv_lane_rule` pins the decode GEMV
 family's lanes-per-row rule (`gemv_lanes_per_row`) per format class and row length, the grid
 formats against the k-lattice ones and q8 at the whole subgroup. `test_vkd_readonly_stamp` reads
 the toy kernel's SPIR-V words and holds the lens's derived NonWritable to the binding the kernel
@@ -1213,6 +1223,10 @@ the resident driver on Qwen3.5-0.8B-MTP (skips without it, without the armed tie
 (the scheduler's ask, the device verify landing picks alone) and `sample_` consumes each - the
 stream token for token the plain scheduler's on the same rail, and the device verify counter up
 by the drafted rounds; a pick left unconsumed would refuse the next round's opening.
+`test_scheduler_mtp_device_home` runs the same speculative stream with the scheduler in device mode (the stream's K/V in
+the driver's region alone, `gpu_resident_mtp_device_home` asserted first): token for token the host-cached speculating
+stream, the device's draft counter (`moe_gpu_resident_drafts`) and verify counter each up by the drafted rounds, no call
+passed to the CPU rails; same skips.
 `test_gpu_tier.das` - model-free: the segments form's media guard (`test_segments_served_by_override`: under a
 probe override registered with a segments form and neither the per-row-table nor the deepstack arm, two plain sessions
 take the form, a session with `mrope_pos` rows or `ds_active` declines it, both take it again cleared, and no active
@@ -1241,9 +1255,10 @@ no attention layer; a block codec's byte cap on a device that binds four times i
 taking the wider range the control); and the cap a block codec's f16 shadow puts on a region's
 context (`resident_shadow_ctx`: one binding of the widest K/V row's halves, the same under q8_0
 and tq4, halved by a row twice as wide, none under a scalar codec). The Metal serving gates ride the
-same synthetic shells: `test_kq_fmt_one_row_gemv` holds the Metal prefill's one-row GEMV predicate (q8 at any width, a served superblock format at whole superblocks and not at a partial one, an unserved superblock format and a per-32 format at none; Q4_0 repacks to superblocks and has it); `test_peel_shape_arms` holds the token command's peel off the NextN-headed, hyper-connection, per-layer-embedding and recurrent shapes one at a time on dense shells (`rdec_peel_shape_why`), and the device-home tick's segmented-window predicate (`gpu_device_prefill_segments_`) false with no driver armed; `test_moe_metal_expert_formats` sweeps `moe_metal_ok` over the thirteen
-expert plane formats the routed block serves and the two it declines (iq4nl, k2), one
-mixed-format model, and the drift guard walking all fifteen `KqFmt` members - the kernel roster
+same synthetic shells: `test_kq_fmt_one_row_gemv` holds the Metal prefill's one-row GEMV predicate (q8 at any width, a served superblock format at whole superblocks and not at a partial one, an unserved superblock format and a per-32 format at none; Q4_0 repacks to superblocks and has it); `test_peel_shape_arms` holds the token command's peel off the NextN-headed, hyper-connection, per-layer-embedding and recurrent shapes one at a time on dense shells (`rdec_peel_shape_why`), and the device-home tick's segmented-window predicate (`gpu_device_prefill_segments_`) false with no driver armed; `test_moe_metal_expert_formats` sweeps `moe_metal_ok` over the sixteen
+expert plane formats the routed block serves and the two tags it declines (iq3s4, mx4), one
+mixed-format model, the native-MXFP4 stacks under the plain routed gate (served; the repacked planes
+and gpt-oss's gate over q8 stacks declining), and the drift guard walking every `KqFmt` member - the kernel roster
 (`moe_fmt_metal_served`) and the site-alignment gate (`moe_site_ok`) name ONE set, which is the
 only case that isolates the roster, since no format one admits the other refuses;
 `test_moe_metal_expert_count` pins the select stamps' ladder at 256 and 512 experts admitted,
@@ -1680,6 +1695,19 @@ uncached 80-token stream. Stocked
 suite; skips off the JIT, without dasMetal, or without the carrier. The row's refusal contract - a timed step that ran its rows one at a time refuses by
 name and reads 0 - lives in `test_batch_decode.das` on the SmolLM2 fixture with the rope table
 off, where every step is per-row by construction.
+`test_gpu_resident_format_census.das` - stocked suite, `-jit` only, `DASLLAMA_GPU=1`; the census rides `_format_census.das`
+(`census_cell`, `census_sites_all`), which the Metal file shares. Arm `vk-census` (family `qwen35moe`, large tier) on
+Qwen3.6-35B-A3B-MTP-IQ4_XS-pure: every site native, the whole-model driver armed, a window and six fed steps against the
+CPU chain at the routed bar with the IQ4_XS tile and GEMV counts rising, the untied IQ4_XS table gathered by the window
+(`kq_emb_iq4xs_cls_spv`) and by every step (`vk_rdec_token_gathered` up by the steps); the NextN cell - the routed head
+armed (`rdec_verify_rows` at two or more, `gpu_resident_mtp_device_home_`), its prompt rows warmed by the window chain,
+one device draft against the CPU head's (`unset_rdec_draft`) within the routed bar with another token's CPU draft as the
+control and the pick tie-aware, six rounds drafted and verified on the device (`moe_gpu_resident_drafts` /
+`_verifies`), then a device-home session's six rounds draft, accept and stand as the host-cached session's round for
+round; the per-op cell (the route off, every deltanet layer on the per-op rail's IQ4_XS stacks); the F32 beta/alpha cell
+on Qwen3.6-35B-A3B UD-IQ2_XXS. Arm `vk-gather` (families `qwen3`, `llama`): Qwen3-4B-Instruct-2507 Q4_K_M and
+Llama-3.2-3B-Instruct Q4_K_M, the tied K-quant table gathered by the window (its `kq_emb_<fmt>_cls_spv` count) and by
+every fed step off the classifier's plane, the forced feed against the CPU chain at the split bar.
 `test_metal_format_census.das` - stocked suite, `-jit` only: every site's tag against the file's own tensor type
 (`kq_ggml_type(tag)` against `gguf_tensor_type`; a tied classifier is the token table's plane), one soft check a site -
 attention q/k/v/o, routed experts, shared expert, deltanet qkv/gate/out, deltanet beta/alpha, token table, classifier,
@@ -3025,7 +3053,10 @@ Every `[test]` file requiring a `dasllama/*` module outside this folder, each wi
   (`dasllama_gpu_tier`) under the internal escape, so a blob-only Model shell's `seq_len` is cut to
   the rows the seam answers while a planar shell's stands; its slot-codec cell holds the K/V codec
   a slot runs on (`slot_kv_dtype`, which the live-load clamp reads): the server default for a slot
-  that asked for none, its own for one that asked.
+  that asked for none, its own for one that asked; its speculating-slot cell (`test_slot_mtp_device_home`, Qwen3.5-0.8B-MTP
+  under `DASLLAMA_GPU=1` and the JIT, skips without them) builds a slot over the loaded model, holds that
+  `slot_wants_device_kv` homes its stream on the device and the model card says so, then steps a greedy stream and holds the
+  device's draft and verify counters up by the slot's drafted rounds.
 - `utils/dasllama-server/test_exchange_client.das` - requires `dasllama/dasllama_exchange` by
   registered name (nothing pins it to that directory); it stays beside the server suites
   because its fixed test port is coordinated with theirs (see its `TEST_PORT` note).

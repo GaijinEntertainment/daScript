@@ -22,7 +22,10 @@ anchor.
   admission attaches the longest prefix-cache hit, whose positions never prefill), runs one `eval_batch` decode step over every
   decoding stream (a self-speculative scheduler instead ticks every stream's round through
   `mtp_spec_eval_batch`, one joint verify where a driver seats one, and counts the tick as a
-  batched step only when every stream's rows rode it), then - unless a stream is still on its prompt
+  batched step only when every stream's rows rode it; in device mode every seat of the round - the
+  draft, its verify, a rejected round's rollback, the continuation's seam row - runs on the device
+  over the stream's region, so the server homes a speculating slot's streams there only where the
+  armed driver serves them all, `gpu_resident_mtp_device_home`), then - unless a stream is still on its prompt
   and the decode phase emitted an event, a token or a finish, which ends the tick there (the caller
   drains the event to the wire, and the chunk the tick owes runs first on the next tick, which
   decodes nothing: a token a stream produced never waits out another stream's prefill window) - ONE

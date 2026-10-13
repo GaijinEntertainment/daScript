@@ -57,7 +57,7 @@ struct public DlimVulkanConfig {
     dense_shexp : bool
     trim : bool   //!< P3: big CPU weight families dropped from the image (GPU-resident consumers only)
     split : bool   //!< the streamed-layer split want: one stream slot instead of two under cm2, so the carve - and the walk - differ
-    dn_native : bool   //!< the whole-model driver is attempted, so a dense hybrid's deltanet planes keep their file formats (else the q8 transcode)
+    dn_native : bool   //!< the whole-model driver is attempted, so the walk bakes its arena placement in place of the per-op rails' (the two walks lay different images)
     subgroup_size : int
     max_storage_range : int64
 }

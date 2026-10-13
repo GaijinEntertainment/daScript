@@ -1588,10 +1588,8 @@ def private detect_kq_formats(var t : Model; m : GGUFMeta) {   // nolint:STYLE03
             any ||= t.wsh1_fmt[l] != KqFmt.q8 || t.wsh2_fmt[l] != KqFmt.q8 || t.wsh3_fmt[l] != KqFmt.q8
         }
     }
-    if (t.config.shared_weights || !moe_gpu_tier_installed()) {   //! an untied table keeps its own plane where no Vulkan tier is armed
-        t.emb_fmt = kq_tag(m, "token_embd.weight", t.config.dim)
-        any ||= t.emb_fmt != KqFmt.q8
-    }
+    t.emb_fmt = kq_tag(m, "token_embd.weight", t.config.dim)
+    any ||= t.emb_fmt != KqFmt.q8
     if (!t.config.shared_weights) {
         t.wcls_fmt = kq_tag(m, "output.weight", t.config.dim)
         any ||= t.wcls_fmt != KqFmt.q8
@@ -2506,6 +2504,8 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
         if (!t.emb_q8 && !emb_kq(t)) {
             gguf_read_tensor_f32(m, bytes, "token_embd.weight", t.fblob, t.tok_emb_off, vocab * dim)
             conv_account(m, "token_embd.weight", "f32 token table", ConvServed.f32, KqFmt.q8, vocab * dim)
+            let disk = gguf_tensor_type(m, "token_embd.weight")
+            t.emb_f32_exact = disk == GGML_TYPE_F32 || disk == GGML_TYPE_F16 || disk == GGML_TYPE_BF16
         }
         // gpt-oss names its pre-FFN norm post_attention_norm (same graph role as ffn_norm)
         let ffn_norm_name = t.config.post_attn_is_ffn_norm ? "post_attention_norm" : "ffn_norm"

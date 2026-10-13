@@ -40,7 +40,7 @@ require dasllama/dasllama_gemm_schema   // the q8 block geometry the mint's zero
 // WhisperModel.enc) contribute their planes under dotted names ("enc.fblob"); string-array
 // fields ride the meta blob via serialize_strings — raw string pointers can't be planes.
 
-let IMAGE_VERSION = 46   // the untied K-quant token table's plane offset and the tied table's q8 classifier copy ride the meta
+let IMAGE_VERSION = 47   // the untied K-quant token table's plane offset, the tied table's q8 classifier copy and the float table's exact bit ride the meta
 
 //! The metal (blob-only) flavor's identity tag: q8 planes ride the 34B block_q8_0 blob and the
 //! kq scale planes their GPU forms (convert_model_to_metal_blob) — flavors are per-config and
@@ -824,6 +824,7 @@ def serialize_image_meta(var arch : Archive; var t : Model) {
     arch |> serialize_raw(t.emb_q8_off)
     arch |> serialize_raw(t.emb_kq_off)
     arch |> serialize_raw(t.cls_q8_copy)
+    arch |> serialize_raw(t.emb_f32_exact)
     arch |> serialize_raw(t.quant)
     arch |> serialize_raw(t.dn_conv_off)
     arch |> serialize_raw(t.dn_dt_off)

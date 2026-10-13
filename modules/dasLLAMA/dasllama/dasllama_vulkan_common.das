@@ -2604,9 +2604,14 @@ struct RDec {
     @scratch pf_cls_gemm : table<int; VkDescriptorSet>   // GEMM-role class sets, keyed idx*16 + variant (lazy insert, steady-state hit)
     pf_cmd : VkCommandBuffer
     pf_cmd_ring : array<VkCommandBuffer>
-    emb_blk : int64 = -1l
-    emb_f32 : uint64
+    emb_blk : int64 = -1l              //! the token table's arena block (`vk_rdec_set_emb`): -1 = no quantized table placed
+    emb_f32 : uint64                   //! an F32/F16/BF16 table's exact rows uploaded whole (`vk_rdec_upload_emb_f32`): 0 = none
     emb_f32_bytes : int64
+    emb_fmt : int                      //! ... its format, the gather's stamp (`emb_cls_ensure`)
+    emb_scale : float                  //! ... and the embed scale the one-row command's gather applies
+    tok_ids_host : HostBuf             //! the one-row command's token id, read by its gather where the step brings one (`EMB_ID_HOST` = the row below)
+    tok_xh_host : HostBuf              //! the host's row for a step that brings no token id, read in place by the same gather
+    s_tok_emb : VkDescriptorSet        //! the one-row command's gather set
     ple_tbl_blk : int64 = -1l          //! the E-series token table's arena block (q8): the ids prefill gathers pf_ple from it
     pf_ple_tbl_set : VkDescriptorSet
     pf_ids : uint64                    // [MAX_NPOS] token ids for the device-side embed gather

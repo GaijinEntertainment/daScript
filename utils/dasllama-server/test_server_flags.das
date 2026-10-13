@@ -10,11 +10,16 @@ require dasllama/dasllama_gpu_tier                      // the K/V room seam a c
 require daslib/clargs                                   // get_user_args / flag_present: the match cli_has_flag rests on
 require strings
 require daslib/fio                                      // the roster cell writes its config
+require math
+require _server_rig                                     // models_dir / model_missing - the suites' one model root and gate
+require dasllama/dasllama_gpu_resident                  // resident_mirror_dtype, the device's draft and verify counters
+require dasllama/dasllama_scheduler                     // the slot's scheduler stepped in process
 
 // Model-free unit coverage for the flag-presence test behind the config surface's provenance:
 // a flag the process was given reads present, in both spellings, and an absent one reads absent;
 // and for the self-speculation default's rule, as the slot and the config surface read it.
-// Runs fully in CI - no GGUF, no JIT.
+// Every cell but the speculating slot's runs in CI with no GGUF and no JIT; that one needs a NextN-headed
+// model and an armed Vulkan tier, and skips without them.
 //! the process-argument cell skips when the test process was given no `--` flag
 
 [test]
@@ -281,5 +286,61 @@ def test_roster_from_flags(t : T?) {
         delete single
         delete both
         delete from_toml
+    }
+}
+
+//! A speculating Vulkan slot over a NextN-headed model: its stream homed on the device where every seat of the round runs there,
+//! and the drafted steps counted by the device's own draft and verify counters - not the slot's predicate alone. Needs
+//! Qwen3.5-0.8B-MTP under DASLLAMA_GPU=1 and the JIT; skips without them.
+[test]
+def test_slot_mtp_device_home(t : T?) {
+    t |> run("a speculating Vulkan slot homes its stream on the device, and its drafted steps run there") @(t : T?) {
+        let path = path_join(models_dir(), "Qwen3.5-0.8B-MTP-Q8_0.gguf")
+        return if (model_missing(t, path))
+        if (!jit_enabled()) {
+            t |> skip("the slot's decode is minutes interpreted - run under -jit")
+            return
+        }
+        if (!moe_gpu_tier_installed() || !gpu_want_auto()) {
+            t |> skip("the GPU tier is not armed - needs DASLLAMA_GPU=1 on a device that serves the whole-model driver")
+            return
+        }
+        if (resident_mirror_dtype() != KVDtype.f16) {
+            t |> skip("the slot's sessions are f16; under DASLLAMA_VK_KV32=1 the mirror is f32 and every call passes as codec")
+            return
+        }
+        with_dasllama_jobque() {
+            var s = ModelSlot()
+            s.model <- load_model_(path, QuantMode.q8)
+            s.model.config.seq_len = min(s.model.config.seq_len, 512l)
+            t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the NextN-headed hybrid (the load log names any decline)")
+            s.backend_effective = "gpu:resident"
+            s.gpu_regions = gpu_device_sessions()
+            s.sched <- create_scheduler(s.model, 1l, 4l, 64l, 0l, 0l, KVDtype.f16, true)
+            t |> success(s.sched.mtp, "the slot speculates")
+            t |> success(slot_wants_device_kv(s), "the speculating slot homes its stream on the device: the draft head, its verify and its rollback run there")
+            t |> success(set_device_kv(s.sched, slot_wants_device_kv(s)), "the scheduler admits device-home sessions")
+            t |> equal(slot_served(s, s.sched.device_kv, true), "GPU: the whole model and every stream's cache on the card", "the model card names where the stream's cache lives")
+            let prev = get_mtp_spec()
+            set_mtp_spec(true)
+            let drafts0 = moe_gpu_resident_drafts()
+            let verifies0 = moe_gpu_resident_verifies()
+            var req <- PendingReq(id = 1l, params = SamplingParams(), max_new = 24l)
+            req.prompt <- encode(s.model, "Count from one to twenty: one, two, three,", true, false)
+            t |> success(submit(s.model, s.sched, req), "the stream queued")
+            var events : array<SchedEvent>
+            var steps = 0
+            while (scheduler_step(s.model, s.sched, events) && steps < 4096) {
+                steps++
+            }
+            set_mtp_spec(prev)
+            t |> success(s.sched.mtp_drafted > 0l, "the slot's ticks drafted ({s.sched.mtp_drafted} drafts, {s.sched.mtp_accepted} accepted)")
+            t |> equal(moe_gpu_resident_drafts() - drafts0, s.sched.mtp_drafted, "every drafted step's draft ran on the device's NextN head")
+            t |> equal(moe_gpu_resident_verifies() - verifies0, s.sched.mtp_drafted, "every drafted step's verify ran on the device")
+            set_device_kv(s.sched, false)
+            delete events
+            delete s.sched
+            delete s.model
+        }
     }
 }

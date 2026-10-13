@@ -841,6 +841,13 @@ def gpu_device_sessions() : int64 {
     return gpu_device_sessions_()
 }
 
+def gpu_resident_mtp_device_home(model : Model) : bool {
+    //! Whether ``model``'s self-speculation (MTP/NextN) serves device-home sessions: the draft head, its verify
+    //! and a rejected round's rollback all run on the device, so a speculating scheduler may keep its streams'
+    //! caches there. False keeps a speculating slot's sessions host-cached.
+    return gpu_resident_mtp_device_home_(model)
+}
+
 def gpu_device_prefill_continues(model : Model) : bool {
     //! A device-home session of ``model`` prefills from a position past zero - a prompt in chunks,
     //! a turn over the turns before it. False for a recurrent model: prefill each prompt whole,

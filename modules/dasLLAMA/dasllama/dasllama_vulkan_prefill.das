@@ -800,27 +800,22 @@ def private pf_setup {
             g_rd.pf_cmd_ring |> push(alloc_cmd())
         }
     }
-    if (g_rd.emb_blk >= 0l) {
+    if (rd_emb_on()) {   //! the window's rows gather off their ids; no window row is the host's, so `xh` binds the one-row command's staging unread
         g_rd.pf_ids = make_device_buf(np * 4l)
-        verify(ensure_emb_gather_cls(), "vk prefill: the embed-gather class rail must engage")
-        let pe = arena_planes(int(KqFmt.q8), g_rd.emb_blk)
-        g_rd.pf_emb_set = set_emb_gather_cls(
-            fixed_array(pe.wq, pe.ws, g_rd.pf_ids, g_rd.pf_x),
-            fixed_array(pe.wqb, pe.wsb, np * 4l, np * dim * 4l),
-            fixed_array(0u, 0u, 0u, VHZ_X))
-    } elif (g_rd.emb_f32 != 0ul) {
-        g_rd.pf_ids = make_device_buf(np * 4l)
-        verify(ensure_emb_gather_f32_cls(), "vk prefill: the f32 embed-gather class rail must engage")
-        g_rd.pf_emb_set = set_emb_gather_f32_cls(
-            fixed_array(g_rd.emb_f32, g_rd.pf_ids, g_rd.pf_x),
-            fixed_array(g_rd.emb_f32_bytes, np * 4l, np * dim * 4l),
-            fixed_array(0u, 0u, VHZ_X))
+        if (g_rd.emb_blk >= 0l) {
+            verify(emb_cls_ensure(g_rd.emb_fmt), "vk prefill: the embed-gather class rail must engage")
+            g_rd.pf_emb_set = emb_cls_set(g_rd.emb_fmt, arena_planes(g_rd.emb_fmt, g_rd.emb_blk), g_rd.pf_ids, np * 4l, 0u,
+                g_rd.tok_xh_host.buf, dim * 4l, g_rd.pf_x, np * dim * 4l, VHZ_X)
+        } else {
+            verify(ensure_emb_gather_f32_cls(), "vk prefill: the f32 embed-gather class rail must engage")
+            g_rd.pf_emb_set = emb_f32_set(g_rd.emb_f32, g_rd.emb_f32_bytes, g_rd.pf_ids, np * 4l, 0u, g_rd.tok_xh_host.buf, dim * 4l,
+                g_rd.pf_x, np * dim * 4l, VHZ_X)
+        }
     }
     if (g_rd.ple_tbl_blk >= 0l && g_rd.pf_ids != 0ul) {   //! the token table's gather into the side rows (the pre-step's finish reads them under the cos plane's bit)
         let all = g_rd.n_layers * g_rd.ple
-        let pt = arena_planes(int(KqFmt.q8), g_rd.ple_tbl_blk)
-        g_rd.pf_ple_tbl_set = set_emb_gather_cls(fixed_array(pt.wq, pt.ws, g_rd.pf_ids, g_rd.pf_ple),
-            fixed_array(pt.wqb, pt.wsb, np * 4l, np * all * 4l), fixed_array(0u, 0u, 0u, VHZ_COS))
+        g_rd.pf_ple_tbl_set = emb_cls_set(int(KqFmt.q8), arena_planes(int(KqFmt.q8), g_rd.ple_tbl_blk), g_rd.pf_ids, np * 4l, 0u,
+            g_rd.tok_xh_host.buf, dim * 4l, g_rd.pf_ple, np * all * 4l, VHZ_COS)
     }
     ensure_batch_state()   // hq_dev/hs_dev for the FFN act
     // f16-fed groups (pf_f16_feed) take f16 convert roles; kq consumers the Q8_K quant/act forms
@@ -1396,7 +1391,7 @@ def vk_rdec_set_ple_proj(w : array<float>; pnorm : array<float>; all : int64) : 
 
 [hot_path, arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
 def vk_rdec_prefill_ids(tokens : array<int64>; emb_scale : float; cos_batch : array<float>; npos, pos0 : int64; var logits : array<float>; experts : RdecHostExpertsRowsFn) {
-    assert(g_rd != null && (g_rd.emb_blk >= 0l || g_rd.emb_f32 != 0ul), "vk_rdec_prefill_ids without a placed embd plane")
+    verify(g_rd != null && rd_emb_on(), "vk_rdec_prefill_ids without a placed token table")
     let nox : array<float>
     vk_demotion_check("prefill")
     let ple_tbl = pf_ple_tbl_on()
@@ -1439,39 +1434,31 @@ def vk_rdec_prefill_dn_own(l : int64; stp : float?; histp : float?) {
     st.dirty = true
 }
 
-//! False when the gather rail cannot build on this device (the caller keeps the CPU embed)
-[arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
-def vk_rdec_set_emb(emb_block : int64) : bool {
-    return rd_gather_seat(g_rd != null, "vk_rdec_set_emb before prepare") $ {
+//! False when the gather rail cannot build on this device for `fmt` (the caller keeps the CPU embed); true arms the window's
+//! ids gather and the one-row command's - which re-records, its row now gathered off the step's token id
+[arch(at="../ARCHITECTURE_GPU.md#gpu-backends"), arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#vk-token-gather")]
+def vk_rdec_set_emb(emb_block : int64; fmt : int; escale : float) : bool {
+    return rd_gather_seat(g_rd != null, "vk_rdec_set_emb before prepare", fmt) $ {
         g_rd.emb_blk = emb_block
+        g_rd.emb_fmt = fmt
+        rd_tok_emb_staging(escale)
+        g_rd.s_tok_emb = emb_cls_set(fmt, arena_planes(fmt, emb_block), g_rd.tok_ids_host.buf, 4l * g_rd.nb, 0u,
+            g_rd.tok_xh_host.buf, g_rd.dim * 4l, g_rd.x_dev, g_rd.dim * 4l * g_rd.nb, VHZ_X)
+        rd_invalidate_token()
     }
 }
 
-def private rd_gather_seat(ready : bool; what : string; seat : block) : bool {
-    return true if (g_gpu != null && g_gpu.dry)
-    if (!ready) {
-        panic(what)
-    }
-    return false if (!ensure_emb_gather_cls())
-    invoke(seat)
-    return true
+//! the one-row command's gather staging - the step's token id and the host's row a step without one stages - and the scale its rows take
+def private rd_tok_emb_staging(escale : float) {
+    g_rd.emb_scale = escale
+    g_rd.tok_ids_host = make_host_buf(4l * g_rd.nb, true)
+    g_rd.tok_xh_host = make_host_buf(g_rd.dim * 4l, true)
 }
 
-//! The per-layer-embedding token table in the arena: the ids prefill gathers the side rows from it (the embed gather's kernel at
-//! the row width layers x ple, scaled by sqrt(ple)) where the host gathered and uploaded them a window at a time
-def vk_rdec_set_ple_table(blk : int64) : bool {
-    return rd_gather_seat(g_rd != null && g_rd.ple > 0l, "vk_rdec_set_ple_table before set_ple") $ {
-        g_rd.ple_tbl_blk = blk
-    }
-}
-
-//! the ids prefill gathers and finishes the pre-step on device: the table placed and the projection held
-def private pf_ple_tbl_on : bool => g_rd.ple_tbl_blk >= 0l && g_rd.ple_gpu
-
-//! False past RDEC_EMB_F32_CAP, the device's SSBO range, or the weight budget, or when the gather
-//! rail cannot build (the caller keeps the CPU embed)
-[arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
-def vk_rdec_upload_emb_f32(fblob : array<float>; off, vocab, dim : int64) : bool {
+//! An F32/F16/BF16 table's exact rows uploaded whole as the gather's f32 plane, for the window and the one-row command. False past
+//! RDEC_EMB_F32_CAP, the device's SSBO range or the weight budget, or when the gather rail cannot build (the caller keeps the CPU embed)
+[arch(at="../ARCHITECTURE_GPU.md#gpu-backends"), arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#vk-token-gather")]
+def vk_rdec_upload_emb_f32(fblob : array<float>; off, vocab, dim : int64; escale : float) : bool {
     if (g_gpu != null && g_gpu.dry) {
         return false
     }
@@ -1485,8 +1472,33 @@ def vk_rdec_upload_emb_f32(fblob : array<float>; off, vocab, dim : int64) : bool
     g_rd.emb_f32_bytes = bytes
     g_gpu.resident_bytes += bytes
     upload_region_at(g_rd.emb_f32, 0l, unsafe(addr<uint8 const?>(fblob[int(off)])), bytes)
+    rd_tok_emb_staging(escale)
+    g_rd.s_tok_emb = emb_f32_set(g_rd.emb_f32, bytes, g_rd.tok_ids_host.buf, 4l * g_rd.nb, 0u, g_rd.tok_xh_host.buf, g_rd.dim * 4l,
+        g_rd.x_dev, g_rd.dim * 4l * g_rd.nb, VHZ_X)
+    rd_invalidate_token()
     return true
 }
+
+def private rd_gather_seat(ready : bool; what : string; fmt : int; seat : block) : bool {
+    return true if (g_gpu != null && g_gpu.dry)
+    if (!ready) {
+        panic(what)
+    }
+    return false if (!emb_cls_ensure(fmt))
+    invoke(seat)
+    return true
+}
+
+//! The per-layer-embedding token table in the arena: the ids prefill gathers the side rows from it (the embed gather's kernel at
+//! the row width layers x ple, scaled by sqrt(ple)) where the host gathered and uploaded them a window at a time
+def vk_rdec_set_ple_table(blk : int64) : bool {
+    return rd_gather_seat(g_rd != null && g_rd.ple > 0l, "vk_rdec_set_ple_table before set_ple", int(KqFmt.q8)) $ {
+        g_rd.ple_tbl_blk = blk
+    }
+}
+
+//! the ids prefill gathers and finishes the pre-step on device: the table placed and the projection held
+def private pf_ple_tbl_on : bool => g_rd.ple_tbl_blk >= 0l && g_rd.ple_gpu
 
 //! once per residency, after `pf_setup`
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-window-chain")]
@@ -1972,17 +1984,9 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
             pfq_ts(raw)   // q1: kept for the role-aggregation stamp shape (params ride push now)
             if (use_ids) {
                 // no extra pfq_ts - the gather cost folds into the prologue stamp
-                var pce = EmbArgs(npos = uint(wlen), dim = uint(dim),
-                    wblk0 = g_rd.emb_blk >= 0l ? uint(arena_local_blk(g_rd.emb_blk)) : 0u, embed_scale = emb_scale)
-                if (g_rd.emb_blk >= 0l) {
-                    enc_emb_gather_cls(raw, h, g_rd.pf_emb_set, pce, (wlen * dim / 4l + 255l) / 256l)
-                } else {
-                    enc_emb_gather_f32_cls(raw, h, g_rd.pf_emb_set, pce, (wlen * dim / 4l + 255l) / 256l)
-                }
+                rd_emb_enc(raw, h, g_rd.pf_emb_set, wlen, emb_scale)
                 if (ple_tbl) {   //! the side rows off the token table, sqrt(ple)-scaled as the host gather leaves them
-                    let all = g_rd.n_layers * g_rd.ple
-                    var pcs = EmbArgs(npos = uint(wlen), dim = uint(all), wblk0 = uint(arena_local_blk(g_rd.ple_tbl_blk)), embed_scale = sqrt(float(g_rd.ple)))
-                    enc_emb_gather_cls(raw, h, g_rd.pf_ple_tbl_set, pcs, (wlen * all / 4l + 255l) / 256l)
+                    emb_cls_enc(int(KqFmt.q8), raw, h, g_rd.pf_ple_tbl_set, wlen, g_rd.n_layers * g_rd.ple, arena_local_blk(g_rd.ple_tbl_blk), sqrt(float(g_rd.ple)))
                 }
             }
             if (ple_raw) {   //! the per-layer-embedding pre-step's finish: the projection of the scaled embedding rows, normed per slice and averaged into the gathered rows

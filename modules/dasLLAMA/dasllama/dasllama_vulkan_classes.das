@@ -890,38 +890,52 @@ struct EmbArgs {
     embed_scale : float
 }
 
-//! the token-embedding gather, four elements a thread: the q8 table dequantized then scaled (the CPU's order), or under `WF`
-//! the f32 table scaled; `ids` and `xout` sit at 2 and 3 on both stamps
+//! a gather row's token id that names no table row: the row is the host's, staged in the gather's `xh` plane
+let EMB_ID_HOST = 0xFFFFFFFFu
+
+//! the token-table gather, four elements a thread: the q8 table dequantized then scaled (the CPU's order), or under `WF` an
+//! F32/F16/BF16 table's exact f32 rows scaled; a row whose id is `EMB_ID_HOST` copies the host's staged row instead; `ids`,
+//! `xout` and `xh` sit at 2, 3 and 4 on both stamps
 [ |> template_struct_instance]
 class template EmbGatherT {
     @template_constant WF : bool = false   //!< the f32 table instead of the q8 one
     @ssbo @binding = 0 @role = "weight" @template_gate = "!WF" wq : array<uint>
     @ssbo @binding = 1 @role = "weight" @template_gate = "!WF" wsh : array<float16>
-    @ssbo @binding = 0 @role = "weight" @template_gate = WF wf : array<float>          //! the f32 embd table, vocab x dim rows
+    @ssbo @binding = 0 @role = "weight" @template_gate = WF wf : array<float>          //! the f32 table, vocab x dim rows
     @ssbo @binding = 2 ids : array<uint>       // one token id per row
     @ssbo @binding = 3 xout : array<float>
+    @ssbo @binding = 4 xh : array<float>       //! the host's staged rows, read for an `EMB_ID_HOST` row alone
     @push_constant pa : EmbArgs
 
     [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
     def run {
         let e = gl_GlobalInvocationID.x * 4u
         if (e < pa.npos * pa.dim) {
-            let row = e / pa.dim
-            let col = e % pa.dim
-            static_if (WF) {
-                let src = ids[row] * pa.dim + col
-                xout[e] = wf[src] * pa.embed_scale
-                xout[e + 1u] = wf[src + 1u] * pa.embed_scale
-                xout[e + 2u] = wf[src + 2u] * pa.embed_scale
-                xout[e + 3u] = wf[src + 3u] * pa.embed_scale
+            let dim = max(pa.dim, 1u)
+            let row = e / dim
+            let col = e % dim
+            let id = ids[row]
+            if (id == EMB_ID_HOST) {
+                xout[e] = xh[e]
+                xout[e + 1u] = xh[e + 1u]
+                xout[e + 2u] = xh[e + 2u]
+                xout[e + 3u] = xh[e + 3u]
             } else {
-                let ib = pa.wblk0 + ids[row] * (pa.dim / 32u) + col / 32u
-                let lw = (col % 32u) / 4u
-                let v = (float4(int4(unpack8(int(wq[ib * 8u + lw])))) * float(wsh[ib])) * pa.embed_scale
-                xout[e] = v.x
-                xout[e + 1u] = v.y
-                xout[e + 2u] = v.z
-                xout[e + 3u] = v.w
+                static_if (WF) {
+                    let src = id * pa.dim + col
+                    xout[e] = wf[src] * pa.embed_scale
+                    xout[e + 1u] = wf[src + 1u] * pa.embed_scale
+                    xout[e + 2u] = wf[src + 2u] * pa.embed_scale
+                    xout[e + 3u] = wf[src + 3u] * pa.embed_scale
+                } else {
+                    let ib = pa.wblk0 + id * (pa.dim / 32u) + col / 32u
+                    let lw = (col % 32u) / 4u
+                    let v = (float4(int4(unpack8(int(wq[ib * 8u + lw])))) * float(wsh[ib])) * pa.embed_scale
+                    xout[e] = v.x
+                    xout[e + 1u] = v.y
+                    xout[e + 2u] = v.z
+                    xout[e + 3u] = v.w
+                }
             }
         }
     }
@@ -7356,7 +7370,7 @@ class template Mx4Cm2T : KqCm2BatchT {
             let sh = (e0 >> 4u) * 4u
             let w4 = wq4[blk]
             let ex = (ws[blk >> 2u] >> ((blk & 3u) * 8u)) & 0xFFu
-            let sc = mx4_e8m0_half(ex)
+            let sc = e8m0_half_f32(ex)
             for [unroll_full] (c in range(4)) {
                 let v = mx4_dec4((w4[c] >> sh) & 0x0F0F0F0Fu, sc)
                 khr_put4(sbase + uint(c) * 2u, float4(v.x, v.y, v.z, v.w))
@@ -7372,7 +7386,7 @@ class template Mx4Cm2T : KqCm2BatchT {
         let nib = (by >> ((e >> 4u) * 4u)) & 0xFu
         let idx = wg_blk0 + bc.x * (pa.n >> 5u) + bc.y
         let ex = (ws[idx >> 2u] >> ((idx & 3u) * 8u)) & 0xFFu
-        return float16(mx4_dec4(nib, mx4_e8m0_half(ex)).x)
+        return float16(mx4_dec4(nib, e8m0_half_f32(ex)).x)
     }
 
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes"), arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block")]
@@ -7385,12 +7399,9 @@ class template Mx4Cm2T : KqCm2BatchT {
         let nw = ((l0 >> sh) & 0xFu) | (((l0 >> (sh + 8u)) & 0xFu) << 8u) | (((l1 >> sh) & 0xFu) << 16u) | (((l1 >> (sh + 8u)) & 0xFu) << 24u)
         let idx = wg_blk0 + bc.x * (pa.n >> 5u) + bc.y
         let ex = (ws[idx >> 2u] >> ((idx & 3u) * 8u)) & 0xFFu
-        return half4(mx4_dec4(nw, mx4_e8m0_half(ex)))
+        return half4(mx4_dec4(nw, e8m0_half_f32(ex)))
     }
 }
-
-//! the halved E8M0 scale of an MXFP4 block from its exponent byte: 2^(e - 128), the bit patterns below exponent 2 the denormals
-def mx4_e8m0_half(ex : uint) : float => uint_bits_to_float(ex < 2u ? (0x00200000u << ex) : ((ex - 1u) << 23u))
 
 //! the DOUBLED e2m1 magnitudes {0, 1, 2, 3, 4, 6, 8, 12} of four nibble codes, one per byte of `nib`, built without a table
 def mx4_mag2x4(nib : uint) : uint {
@@ -10680,6 +10691,8 @@ struct GemvArgs {
     uboff : uint
     ncols : uint     //! the N-column forms: activation rows dotted against one weight pass, 1 to 8; the one-column forms ignore it
     ystride : uint   //! ... and the distance between their y rows
+    wblk0 : uint     //! the token-table gather (`KqGemvLeafT`'s `EMB` stamps): the table plane's slab-local superblock base; the GEMVs ignore it
+    escale : float   //! ... and the embed scale its rows take
 }
 
 // ===== the Q8_0 decode GEMV pair =====
@@ -11250,7 +11263,7 @@ class template Blk32GemvT {
                     }
                     let sb = wb0 + b
                     let ex = (wsu[sb >> 2u] >> ((sb & 3u) * 8u)) & 0xFFu
-                    acc += float(idot) * mx4_e8m0_half(ex) * axs[xb0 + b]
+                    acc += float(idot) * e8m0_half_f32(ex) * axs[xb0 + b]
                 }
             }
             bi0 += gl_SubgroupSize
@@ -11898,6 +11911,7 @@ def gemv_cls_enc_n(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : V
 [ |> template_struct_instance]
 class template KqGemvLeafT : KqGemvBase {
     @template_constant NCOL : bool = false      //!< the N-column shell (`gemv_shell_n`) in place of the one-column one
+    @template_constant EMB : bool = false       //!< the token-table gather (`emb_shell`) in place of either GEMV shell
     @template_constant GRID : bool = false      //!< a grid-codebook format: `GRID_WORDS` words of `gridb` from `GRID_OFF` stage into `gridw` ahead of the shell
     @template_constant GRID_WORDS : uint = 64u  //!< the codebook's words and its first word in `gridb` - literals (template constants), held equal to the format's `KQ_GRID_<FMT>_WORDS` / `KQ_GRID_<FMT>` by REVIEW.das
     @template_constant GRID_OFF : uint = 0u
@@ -11923,12 +11937,58 @@ class template KqGemvLeafT : KqGemvBase {
         }
     }
 
+    //! the token-table gather (`EMB`): a thread a 32-block of a row, decoded by the format's own `blk_decode` - element k of the block is
+    //! lane k of the lo quad (k < 16) under the lo terms or of the hi quad under the hi ones, the term pair `blk_fold` reads - scaled by
+    //! `pa.escale`; row r's token id is `regions[r]`, and an `EMB_ID_HOST` row copies the host's staged row out of `axs`
+    [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#vk-token-gather")]
+    def emb_shell {
+        let gid = gl_GlobalInvocationID.x
+        let nsb = pa.n / 256u
+        let nb = nsb * 8u
+        if (gid < pa.nreg * nb) {
+            let row = gid / max(nb, 1u)
+            let b = gid - row * nb
+            let o = row * pa.n + b * 32u
+            let id = regions[row]
+            if (id == EMB_ID_HOST) {
+                for [unroll_full] (k in range(32)) {
+                    y[o + uint(k)] = axs[o + uint(k)]
+                }
+            } else {
+                var wl = uint4(0u)
+                var wh = uint4(0u)
+                let terms = blk_decode(pa.wblk0 + id * nsb + b / 8u, b % 8u, wl, wh)
+                let bsum = fold_reads_bsum()
+                emb_store16(o, wl, terms.x, bsum ? terms.y : 0.0)
+                emb_store16(o + 16u, wh, terms.z, bsum ? terms.w : 0.0)
+            }
+        }
+    }
+
+    //! the 16 int8 lanes of `w` at y[o ..], each `a x q + c` under the embed scale
+    def emb_store16(o : uint; w : uint4; a, c : float) {
+        emb_store4(o, w.x, a, c)
+        emb_store4(o + 4u, w.y, a, c)
+        emb_store4(o + 8u, w.z, a, c)
+        emb_store4(o + 12u, w.w, a, c)
+    }
+
+    def emb_store4(o, w : uint; a, c : float) {
+        let q = float4(int4(unpack8(int(w))))
+        y[o] = (a * q.x + c) * pa.escale
+        y[o + 1u] = (a * q.y + c) * pa.escale
+        y[o + 2u] = (a * q.z + c) * pa.escale
+        y[o + 3u] = (a * q.w + c) * pa.escale
+    }
+
     [spirv_kernel(local_size_x = 64)]
     def run {
         static_if (GRID) {
             stage_grid()
         }
-        static_if (NCOL) {
+        static_if (EMB) {
+            emb_shell()
+        } static_elif (NCOL) {
             gemv_shell_n()
         } else {
             gemv_shell()
@@ -12336,6 +12396,137 @@ class KqGemvIq2xxs : Iq2xxsGemvT {}
 [vk_dispatch(name = "kq_gemv_iq2xxs_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvIq2xxsN : Iq2xxsGemvT {
     override NCOL = true
+}
+
+// ===== the token-table gather: every superblock format's leaf under `EMB`, one family layout =====
+
+[vk_dispatch(name = "kq_emb_k4_cls", kernel = "run", family = "kq_emb_cls", grid = "wgs", params = "wgs : int64")]
+class KqEmbK4 : K4GemvT {
+    override EMB = true
+}
+
+[vk_dispatch(name = "kq_emb_k5_cls", kernel = "run", family = "kq_emb_cls", grid = "wgs", params = "wgs : int64")]
+class KqEmbK5 : K5GemvT {
+    override EMB = true
+}
+
+[vk_dispatch(name = "kq_emb_k6_cls", kernel = "run", family = "kq_emb_cls", grid = "wgs", params = "wgs : int64")]
+class KqEmbK6 : K6GemvT {
+    override EMB = true
+}
+
+[vk_dispatch(name = "kq_emb_q40_cls", kernel = "run", family = "kq_emb_cls", grid = "wgs", params = "wgs : int64")]
+class KqEmbQ40 : Q40GemvT {
+    override EMB = true
+}
+
+[vk_dispatch(name = "kq_emb_iq4xs_cls", kernel = "run", family = "kq_emb_cls", grid = "wgs", params = "wgs : int64")]
+class KqEmbIq4xs : Iq4xsGemvT {
+    override EMB = true
+}
+
+[vk_dispatch(name = "kq_emb_k3_cls", kernel = "run", family = "kq_emb_cls", grid = "wgs", params = "wgs : int64")]
+class KqEmbK3 : K3GemvT {
+    override EMB = true
+}
+
+[vk_dispatch(name = "kq_emb_iq3s_cls", kernel = "run", family = "kq_emb_cls", grid = "wgs", params = "wgs : int64")]
+class KqEmbIq3s : Iq3sGemvT {
+    override EMB = true
+}
+
+[vk_dispatch(name = "kq_emb_iq3xxs_cls", kernel = "run", family = "kq_emb_cls", grid = "wgs", params = "wgs : int64")]
+class KqEmbIq3xxs : Iq3xxsGemvT {
+    override EMB = true
+}
+
+[vk_dispatch(name = "kq_emb_iq4nl_cls", kernel = "run", family = "kq_emb_cls", grid = "wgs", params = "wgs : int64")]
+class KqEmbIq4nl : Iq4nlGemvT {
+    override EMB = true
+}
+
+[vk_dispatch(name = "kq_emb_k2_cls", kernel = "run", family = "kq_emb_cls", grid = "wgs", params = "wgs : int64")]
+class KqEmbK2 : K2GemvT {
+    override EMB = true
+}
+
+[vk_dispatch(name = "kq_emb_iq2s_cls", kernel = "run", family = "kq_emb_cls", grid = "wgs", params = "wgs : int64")]
+class KqEmbIq2s : Iq2sGemvT {
+    override EMB = true
+}
+
+[vk_dispatch(name = "kq_emb_iq2xs_cls", kernel = "run", family = "kq_emb_cls", grid = "wgs", params = "wgs : int64")]
+class KqEmbIq2xs : Iq2xsGemvT {
+    override EMB = true
+}
+
+[vk_dispatch(name = "kq_emb_iq2xxs_cls", kernel = "run", family = "kq_emb_cls", grid = "wgs", params = "wgs : int64")]
+class KqEmbIq2xxs : Iq2xxsGemvT {
+    override EMB = true
+}
+
+[vk_dispatch(name = "kq_emb_iq3s4_cls", kernel = "run", family = "kq_emb_cls", grid = "wgs", params = "wgs : int64")]
+class KqEmbIq3s4 : Iq4xsGemvT {
+    override IQODD = true
+    override EMB = true
+}
+
+//! the formats the token-table gather has no leaf for: q8 takes `EmbGather`, the per-32 forms never tag a dense table (`kq_fmt_row_ok`)
+let private EMB_NO_KQ_LEAF = "q8 q51 mx4 iq4nl32"
+
+//! a token table in `fmt` gathers on the device: q8 through `EmbGather`, a superblock format through its `KqEmb<Fmt>` leaf
+def emb_cls_fmt_ok(fmt : int) : bool => fmt == int(KqFmt.q8) || kq_sb(fmt)
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#vk-token-gather")]
+def emb_cls_ensure(fmt : int) : bool {
+    return ensure_emb_gather_cls() if (fmt == int(KqFmt.q8))
+    return false if (!kq_sb(fmt))
+    var r = false
+    kq_tile_stamp(fmt, EMB_NO_KQ_LEAF, "emb") <| $() {
+        r = tile_ensure_cls()
+    }
+    return r
+}
+
+//! the gather's set over a table plane pair `p`: its token ids `ids` (`ids_bytes`, hazard bit `ids_bit`), the host's staged rows
+//! `xh` an `EMB_ID_HOST` row copies, and the rows out `y`; one layout serves every superblock leaf, q8 its own
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#vk-token-gather")]
+def emb_cls_set(fmt : int; p : tuple<wq : uint64; ws : uint64; wqb : int64; wsb : int64>; ids : uint64; ids_bytes : int64; ids_bit : uint;
+                xh : uint64; xh_bytes : int64; y : uint64; y_bytes : int64; ybit : uint) : VkDescriptorSet {
+    if (fmt == int(KqFmt.q8)) {
+        return set_emb_gather_cls(fixed_array(p.wq, p.ws, ids, y, xh), fixed_array(p.wqb, p.wsb, ids_bytes, y_bytes, xh_bytes),
+            fixed_array(0u, 0u, ids_bit, ybit, 0u))
+    }
+    return set_kq_emb_cls(fixed_array(p.wq, p.ws, ids, ids, xh, y, kq_grid_dev()), fixed_array(p.wqb, p.wsb, ids_bytes, ids_bytes, xh_bytes, y_bytes, KQ_GRID_BYTES),
+        fixed_array(0u, 0u, ids_bit, ids_bit, 0u, ybit, 0u))
+}
+
+//! the f32 gather's set over an F32/F16/BF16 table's exact rows `wf` (`wf_bytes`), the ids, the host's staged rows and the rows out
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#vk-token-gather")]
+def emb_f32_set(wf : uint64; wf_bytes : int64; ids : uint64; ids_bytes : int64; ids_bit : uint; xh : uint64; xh_bytes : int64;
+                y : uint64; y_bytes : int64; ybit : uint) : VkDescriptorSet
+    => set_emb_gather_f32_cls(fixed_array(wf, ids, y, xh), fixed_array(wf_bytes, ids_bytes, y_bytes, xh_bytes), fixed_array(0u, ids_bit, ybit, 0u))
+
+//! `npos` rows of `dim` gathered off the f32 table
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#vk-token-gather")]
+def emb_f32_enc(raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; npos, dim : int64; escale : float) {
+    var pce = EmbArgs(npos = uint(npos), dim = uint(dim), wblk0 = 0u, embed_scale = escale)
+    enc_emb_gather_f32_cls(raw, h, set_, pce, (npos * dim / 4l + 255l) / 256l)
+}
+
+//! `npos` rows of `dim` gathered off the table at slab-local block `wblk0` (q8: 32-element blocks, a superblock format: superblocks)
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#vk-token-gather")]
+def emb_cls_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; npos, dim, wblk0 : int64; escale : float) {
+    if (fmt == int(KqFmt.q8)) {
+        var pce = EmbArgs(npos = uint(npos), dim = uint(dim), wblk0 = uint(wblk0), embed_scale = escale)
+        enc_emb_gather_cls(raw, h, set_, pce, (npos * dim / 4l + 255l) / 256l)
+        return
+    }
+    var pc = GemvArgs(n = uint(dim), nreg = uint(npos), wblk0 = uint(wblk0), escale = escale)
+    let wgs = (npos * (dim / KQ_B32_ELEMS) + 63l) / 64l   //! a thread a 32-block, 64 a workgroup
+    kq_tile_stamp(fmt, EMB_NO_KQ_LEAF, "emb") <| $() {
+        tile_enc_cls(raw, h, set_, pc, wgs)
+    }
 }
 
 // ===== the tower chains' q8 GEMM tile: the pick ladder and the grid rule over the q8 batch and cm2 stamps =====

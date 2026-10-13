@@ -2694,8 +2694,12 @@ def private rd_encode_token(var first_seg_raw : VkCommandBuffer; nrows, nsplit :
     unsafe {
         var h = cmd_open(raw, true)
         rd_stamps_begin(raw)
-        vhz_dep(raw, h, 0u, VHZ_X, true)
-        cmd_copy_whole(raw, g_rd.x_host.buf, g_rd.x_dev, dim * 4l * nrows)
+        if (one && !verify && rd_emb_on()) {   //! the row off the step's token id, or the host's staged row in place: no row crosses the bus ahead of the command
+            rd_emb_enc(raw, h, g_rd.s_tok_emb, 1l, g_rd.emb_scale)
+        } else {
+            vhz_dep(raw, h, 0u, VHZ_X, true)
+            cmd_copy_whole(raw, g_rd.x_host.buf, g_rd.x_dev, dim * 4l * nrows)
+        }
         vhz_dep(raw, h, 0u, VHZ_COS, true)
         cmd_copy_whole(raw, g_rd.cos_host.buf, g_rd.cos_dev, g_rd.cos_elems * 4l * nrows)
         if (g_rd.ple > 0l) {   //! the side-input rows ride the cos plane's hazard bit: written here, read by the act step
@@ -3067,11 +3071,29 @@ def rd_carry_sync {
     fill(g_rd.xlog_pick_recorded, false)
 }
 
-//! Resident-driver token: the whole stack on device from the embedded residual `x` and this position's rope row -> logits, or
-//! under `pick_only` the row's argmax id alone (`logits` unwritten; a guard step lands the logits too, so the over-commit check
-//! keeps its cadence). `cnt` = cached positions incl. this one; K/V for `pos` store into the mirror. Recorded once.
+//! the driver holds the token table: a quantized plane in the arena, or a float table's exact f32 rows
+def rd_emb_on : bool => g_rd.emb_blk >= 0l || g_rd.emb_f32 != 0ul
+
+//! `npos` rows of the table gathered through `set_` - the q8 or superblock stamp off the arena block, else the f32 stamp
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#vk-token-gather")]
+def rd_emb_enc(raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; npos : int64; escale : float) {
+    if (g_rd.emb_blk >= 0l) {
+        emb_cls_enc(g_rd.emb_fmt, raw, h, set_, npos, g_rd.dim, arena_local_blk(g_rd.emb_blk), escale)
+    } else {
+        emb_f32_enc(raw, h, set_, npos, g_rd.dim, escale)
+    }
+}
+
+var private g_rdec_tok_gathered = 0l
+
+//! The one-row steps whose row the device gathered off the step's token id, in this process (a cell's served witness)
+def vk_rdec_token_gathered : int64 => g_rdec_tok_gathered
+
+//! Resident-driver token: the stack from the row (`token` gathered where the table is placed, else `x`) and the rope row -> logits,
+//! or under `pick_only` the argmax alone (a guard step lands logits too, keeping the over-commit check's cadence). `cnt` = cached
+//! positions incl. this one; K/V for `pos` store into the mirror. Recorded once.
 [hot_path]   // the per-token resident submit — no goo between the memcpys and the fence
-def vk_rdec_token(x : array<float>; cossin : array<float>; ple_row : array<float>; pos, cnt : int64; pick_only : bool; var logits : array<float>) : int64 {
+def vk_rdec_token(x : array<float>; cossin : array<float>; ple_row : array<float>; token, pos, cnt : int64; pick_only : bool; var logits : array<float>) : int64 {
     assert(g_rd != null && g_rd.ready, "vk_rdec_token before prepare/set_cls")
     assert(!g_rd.experts_host, "vk_rdec_token on a model with host layers: the split command serves it")
     rd_carry_sync()
@@ -3101,7 +3123,16 @@ def vk_rdec_token(x : array<float>; cossin : array<float>; ple_row : array<float
     let guard = rd_guard_step(g_rd.tokens_served)
     let picks_only = pick_only && !guard
     unsafe {
-        memcpy(g_rd.x_host.mapped, addr<void?>(x[0]), g_rd.dim * 4l)
+        if (!rd_emb_on()) {
+            memcpy(g_rd.x_host.mapped, addr<void?>(x[0]), g_rd.dim * 4l)
+        } else {
+            *reinterpret<uint?>(g_rd.tok_ids_host.mapped) = token >= 0l ? uint(token) : EMB_ID_HOST
+            if (token < 0l) {
+                memcpy(g_rd.tok_xh_host.mapped, addr<void?>(x[0]), g_rd.dim * 4l)
+            } else {
+                g_rdec_tok_gathered++
+            }
+        }
         memcpy(g_rd.cos_host.mapped, addr<void?>(cossin[0]), g_rd.cos_elems * 4l)
         if (g_rd.ple > 0l) {
             assert(long_length(ple_row) >= g_rd.n_layers * g_rd.ple, "vk_rdec_token: the per-layer-embedding row is short")
@@ -3313,8 +3344,20 @@ def private rd_record_draft {
     rd_ts(raw, "a:rq_f")
     let nxt = hb + RDEC_HEAD_OUT * dim
     rd_encode_ffn(raw, h, L, l, nxt, 1l, 1u, 0)
-    var pco = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(nxt), eps = g_rd.eps, ascale = 1.0)
-    enc_cls_ar(raw, h, L.s_addr_next, pco, 1l)
+    if (L.moe) {   //! a routed head's block as a routed trunk layer's: the experts on the shared expert's feed, the combine's residual step
+        rd_encode_moe(raw, h, L, l, 1l)
+        var pcc = rd_ar_comb_args(L, l, nxt)
+        pcc.presummed = L.edown_sum ? 1u : 0u
+        if (L.moe_g4) {
+            enc_cls_ar_comb_g4(raw, h, L.s_addr_next, pcc, 1l)
+        } else {
+            enc_cls_ar_comb(raw, h, L.s_addr_next, pcc, 1l)
+        }
+        rd_ts(raw, "m:ar2")
+    } else {
+        var pco = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(nxt), eps = g_rd.eps, ascale = 1.0)
+        enc_cls_ar(raw, h, L.s_addr_next, pco, 1l)
+    }
     rd_encode_draft_pick(raw, h)
     if (!g_rd.log_xfer || !g_rd.carry_live) {   //! the head's own hidden lands whatever the knob says: the draft command copies it wherever the transfer command will not
         vhz_dep(raw, h, VHZ_XB, 0u, true)

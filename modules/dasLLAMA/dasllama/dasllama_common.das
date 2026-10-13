@@ -1327,6 +1327,9 @@ struct Model {
     //! a tied table whose disk type no KqFmt carries (F16, BF16, Q4_1, Q5_0): the fp32 rows serve the embed and the CPU classifier, and a
     //! q8 transcode at wcls_off - a converted copy - serves the device classifier (loads under a Metal mode)
     cls_q8_copy : bool = false
+    //! the fp32 table holds the file's own values: F32 on disk, or F16/BF16 widened without loss (a Q4_1/Q5_0 table's fp32 rows are a
+    //! dequant, a converted copy); the Vulkan gather's f32 seat serves this table alone
+    emb_f32_exact : bool = false
     quant : QuantMode
     rope_freqs : array<float>   // per-pair RoPE scaling (Llama-3.1 NTK-by-parts); empty = none
     // QKV projection biases (Qwen2) — fp32, per layer (q: layers×dim, k/v: layers×kv_dim);
@@ -2193,9 +2196,6 @@ def kq_fmt_expert_ok(f : KqFmt; n : int64) : KqFmt {
 // Any K-quant-tagged expert stack in layer `l`? (The MoE dispatch and prefill gates branch on this.)
 def moe_layer_kq(t : Model; l : int64) : bool =>
     fmt_at(t.we1_fmt, l) != KqFmt.q8 || fmt_at(t.we2_fmt, l) != KqFmt.q8 || fmt_at(t.we3_fmt, l) != KqFmt.q8
-
-def dn_layer_q8(t : Model; l : int64) : bool =>
-    fmt_at(t.dnqkv_fmt, l) == KqFmt.q8 && fmt_at(t.dngate_fmt, l) == KqFmt.q8 && fmt_at(t.dnout_fmt, l) == KqFmt.q8
 
 // Any expert stack on the SUPERBLOCK kq lattice? (q51 excluded — its grouped-prefill kernels are
 // always available, so it never gates on kq_repacked / the kq batch tile.)

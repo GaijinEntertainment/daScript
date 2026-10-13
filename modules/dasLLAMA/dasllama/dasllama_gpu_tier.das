@@ -186,8 +186,9 @@ typedef RdecDnPrefillOwnFn = function<(l : int64; stp : float?; histp : float?) 
 //! the classifier plane, and the epilogue its logits take: the final softcap (0 = none) and the checkpoint's suppressed token ids
 typedef RdecSetClsFn = function<(cls_block : int64; cls_fmt : int; cap : float; supp : array<int64>) : void>
 //! `ple_row` / `ple_rows`: the per-layer-embedding side input the CPU pre-step built ([layers x ple] a token; position-major over a prompt); empty on a model without one
-//! `pick_only`: land the row's argmax id alone (the answer) and leave `logits` unwritten; false lands the logits and answers -1
-typedef RdecTokenFn = function<(x : array<float>; cossin : array<float>; ple_row : array<float>; pos : int64; cnt : int64; pick_only : bool; var logits : array<float>) : int64>
+//! `pick_only`: land the row's argmax id alone (the answer) and leave `logits` unwritten; false lands the logits and answers -1;
+//! `token` >= 0: the row's token id, which a driver that holds the token table gathers on the device (`x` then unread); -1 = `x` is the row
+typedef RdecTokenFn = function<(x : array<float>; cossin : array<float>; ple_row : array<float>; token : int64; pos : int64; cnt : int64; pick_only : bool; var logits : array<float>) : int64>
 //! `ple_raw`: the rows are the gather half alone (sqrt(ple)-scaled table rows) and the driver finishes the pre-step on device; false = the finished side input;
 //! `experts` the host's routed sums of a plain MoE's host layers, asked at each one's cut of the window (unreached on a model without them)
 typedef RdecPrefillFn = function<(x_batch : array<float>; cos_batch : array<float>; ple_rows : array<float>; ple_raw : bool; npos : int64; pos0 : int64; var logits : array<float>; experts : RdecHostExpertsRowsFn) : void>
@@ -216,8 +217,8 @@ def private rdec_unset_dn_own(l : int64; stp : float?; histp : float?) {}
 def private rdec_unset_dn_prefill_own(l : int64; stp : float?; histp : float?) {}
 [unused_argument(cls_block, cls_fmt, cap, supp)]
 def private rdec_unset_set_cls(cls_block : int64; cls_fmt : int; cap : float; supp : array<int64>) {}
-[unused_argument(x, cossin, ple_row, pos, cnt, pick_only, logits)]
-def private rdec_unset_token(x : array<float>; cossin : array<float>; ple_row : array<float>; pos, cnt : int64; pick_only : bool; var logits : array<float>) : int64 {
+[unused_argument(x, cossin, ple_row, token, pos, cnt, pick_only, logits)]
+def private rdec_unset_token(x : array<float>; cossin : array<float>; ple_row : array<float>; token, pos, cnt : int64; pick_only : bool; var logits : array<float>) : int64 {
     panic("dasLLAMA: resident decode token hit without an installed GPU driver")
     return -1l
 }
@@ -562,31 +563,34 @@ def public install_moe_gpu_resident(reserve : RdecReserveFn; place : RdecPlaceFn
 }
 
 typedef RdecPrefillIdsFn = function<(tokens : array<int64>; emb_scale : float; cos_batch : array<float>; npos : int64; pos0 : int64; var logits : array<float>; experts : RdecHostExpertsRowsFn) : void>
-typedef RdecSetEmbFn = function<(emb_block : int64) : bool>
-typedef RdecUploadEmbF32Fn = function<(fblob : array<float>; off : int64; vocab : int64; dim : int64) : bool>
+//! the token table placed in the arena at `emb_block` in format `fmt` (q8 or a superblock format), its rows taking `escale`: the
+//! ids prefill and the one-row token command then gather the rows on the device; false = the device has no gather for `fmt`
+typedef RdecSetEmbFn = function<(emb_block : int64; fmt : int; escale : float) : bool>
+//! an F32/F16/BF16 table's exact fp32 rows (`Model.emb_f32_exact`) uploaded whole as the gather's f32 plane, its rows taking `escale`
+typedef RdecUploadEmbF32Fn = function<(fblob : array<float>; off : int64; vocab : int64; dim : int64; escale : float) : bool>
 
-//! The raw f32 embd table rides the residency plan's headroom only up to this size; past it the CPU embed serves.
+//! The f32 token table rides the residency plan's headroom only up to this size; past it the CPU embed serves.
 let public RDEC_EMB_F32_CAP = 512l * 1024l * 1024l
 
-//! Rows of read slack past a cm2 region's last row: the m column loads a partial column unclamped, so
-//! every plane a tile reads (the residency plan's scratch, the prefill's gathered rows, a probe's) carries them.
-let public TILE_READ_SLACK = 128l
-
-//! The device bytes the f32 embed-gather arm would upload for a (vocab x dim) table - 0 past its cap.
+//! The device bytes the f32 gather would upload for a (vocab x dim) table - 0 past its cap.
 [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
 def public rdec_emb_f32_bytes(vocab, dim : int64) : int64 {
     let bytes = vocab * dim * 4l
     return bytes > RDEC_EMB_F32_CAP ? 0l : bytes
 }
 
+//! Rows of read slack past a cm2 region's last row: the m column loads a partial column unclamped, so
+//! every plane a tile reads (the residency plan's scratch, the prefill's gathered rows, a probe's) carries them.
+let public TILE_READ_SLACK = 128l
+
 [unused_argument(tokens, emb_scale, cos_batch, npos, pos0, logits, experts)]
 def private rdec_unset_prefill_ids(tokens : array<int64>; emb_scale : float; cos_batch : array<float>; npos : int64; pos0 : int64; var logits : array<float>; experts : RdecHostExpertsRowsFn) {
     panic("dasLLAMA: ids-form resident prefill hit without an installed GPU driver")
 }
-[unused_argument(emb_block)]
-def private rdec_unset_set_emb(emb_block : int64) : bool => false
-[unused_argument(fblob, off, vocab, dim)]
-def private rdec_unset_upload_emb_f32(fblob : array<float>; off, vocab, dim : int64) : bool => false
+[unused_argument(emb_block, fmt, escale)]
+def private rdec_unset_set_emb(emb_block : int64; fmt : int; escale : float) : bool => false
+[unused_argument(fblob, off, vocab, dim, escale)]
+def private rdec_unset_upload_emb_f32(fblob : array<float>; off, vocab, dim : int64; escale : float) : bool => false
 
 var g_rdec_prefill_ids = @@rdec_unset_prefill_ids
 var g_rdec_set_emb = @@rdec_unset_set_emb
@@ -643,9 +647,9 @@ def public rdec_prefill_segs(x_batch : array<float>; tokens : array<int64>; use_
 }
 
 [arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
-def public rdec_set_emb(emb_block : int64) : bool => invoke(g_rdec_set_emb, emb_block)
+def public rdec_set_emb(emb_block : int64; fmt : int; escale : float) : bool => invoke(g_rdec_set_emb, emb_block, fmt, escale)
 [arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
-def public rdec_upload_emb_f32(fblob : array<float>; off, vocab, dim : int64) : bool => invoke(g_rdec_upload_emb_f32, fblob, off, vocab, dim)
+def public rdec_upload_emb_f32(fblob : array<float>; off, vocab, dim : int64; escale : float) : bool => invoke(g_rdec_upload_emb_f32, fblob, off, vocab, dim, escale)
 
 //! the speculative carry's landing on a driver prepared with `carry`: row `row` of the post-final-norm rows the last token
 //! step landed (the prefill's last row at row 0), `dim` floats into `dst`
@@ -834,7 +838,7 @@ def public rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, h
 def public rdec_upload_norms(norms : array<float>; obias : bool) { invoke(g_rdec_norms, norms, obias) }
 def public rdec_set_layer(l, mir_idx, bq, bk, bv, bo, b1, b3, b2 : int64; fq, fk, fv, fo, f1, f3, f2 : int; g : RdecLayerGeom) { invoke(g_rdec_set_layer, l, mir_idx, bq, bk, bv, bo, b1, b3, b2, fq, fk, fv, fo, f1, f3, f2, g) }
 def public rdec_set_cls(cls_block : int64; cls_fmt : int; cap : float; supp : array<int64>) { invoke(g_rdec_set_cls, cls_block, cls_fmt, cap, supp) }
-def public rdec_token(x : array<float>; cossin : array<float>; ple_row : array<float>; pos, cnt : int64; pick_only : bool; var logits : array<float>) : int64 => invoke(g_rdec_token, x, cossin, ple_row, pos, cnt, pick_only, logits)
+def public rdec_token(x : array<float>; cossin : array<float>; ple_row : array<float>; token, pos, cnt : int64; pick_only : bool; var logits : array<float>) : int64 => invoke(g_rdec_token, x, cossin, ple_row, token, pos, cnt, pick_only, logits)
 def public rdec_prefill(x_batch : array<float>; cos_batch : array<float>; ple_rows : array<float>; ple_raw : bool; npos : int64; pos0 : int64; var logits : array<float>; experts : RdecHostExpertsRowsFn) {
     invoke(g_rdec_prefill, x_batch, cos_batch, ple_rows, ple_raw, npos, pos0, logits, experts)
 }
@@ -1437,9 +1441,8 @@ def public gpu_want_auto : bool
 def public gpu_resident_requested : bool
     => gpu_want_auto() || g_gpu_want.resident
 
-//! The whole-model driver will be attempted on this box: the loader then keeps a dense hybrid's
-//! deltanet planes in their file formats (the driver's GEMVs and tiles dispatch per format), and
-//! the vulkan image identity carries the same bit.
+//! The whole-model driver will be attempted on this box: a bake's walk lays the driver's arena in place of the
+//! per-op rails' planes, and the vulkan image identity carries the same bit.
 def public gpu_want_dn_native : bool
     => moe_gpu_resident_installed() && gpu_resident_requested()
 

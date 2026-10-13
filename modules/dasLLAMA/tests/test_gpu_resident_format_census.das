@@ -11,18 +11,27 @@ require dasllama/dasllama_gpu_tier   // moe_gpu_dn_on_gpu, set_gpu_resident_rout
 require dasllama/dasllama_gpu_resident   // resident_layer_decline, perop_dn_decline
 require _moe_resident   // MoeFixture, moe_fixture_admitted, MOE_LOGIT_BAR_REL
 require _format_census
+require ?vulkan dasllama/dasllama_vulkan_decode   // vk_rdec_token_gathered: the token command's rows gathered off their ids, where the module exists
 
 // The Vulkan arm of the weight-format census on Qwen3.6-35B-A3B-MTP-IQ4_XS-pure, every big plane IQ4_XS on disk (the
 // deltanet beta/alpha included): each site's tag against the file's own tensor type, one soft check a site so the cell names
 // every site still read as a copy; the whole-model driver armed on the file, a window prefill and fed decode steps against
-// the CPU chain at the routed chain's bar with the IQ4_XS kernels' census rising; the same file with the whole-model route
-// off, its deltanet layers on the per-op rail's IQ4_XS stacks; and a file whose beta/alpha ship F32 (Qwen3.6-35B-A3B
-// UD-IQ2_XXS) read through the f32 GEMV and tile with no f16 router-form dispatch. Large tier (DASLLAMA_PARITY_FULL=1),
-// DASLLAMA_GPU=1, -jit; skips without the file, the armed tier, or the expert tiles the routed block needs.
+// the CPU chain at the routed chain's bar with the IQ4_XS kernels' census rising, the untied IQ4_XS token table gathered on
+// the device by the window and by every step; the routed NextN head on the device - its prompt rows warmed by the window
+// chain, its draft against the CPU head's, every speculative round drafted and verified there, a device-home session's
+// rounds token for token the host-cached session's; the same file with the whole-model route off, its deltanet layers on
+// the per-op rail's IQ4_XS stacks; and a file whose beta/alpha ship F32 (Qwen3.6-35B-A3B UD-IQ2_XXS) read through the f32
+// GEMV and tile with no f16 router-form dispatch. Large tier (DASLLAMA_PARITY_FULL=1), DASLLAMA_GPU=1, -jit; skips without
+// the file, the armed tier, or the expert tiles the routed block needs. The tied K-quant tables' gather rides two smaller
+// files (Qwen3-4B-Instruct-2507 Q4_K_M, Llama-3.2-3B-Instruct Q4_K_M), the window's and the steps' rows off the classifier's
+// plane against the CPU chain at the split bar.
 
 let private CENSUS = MoeFixture(file = "Qwen3.6-35B-A3B-MTP-IQ4_XS-pure.gguf", shexp = true, bar_rel = MOE_LOGIT_BAR_REL)
 let private BA_F32 = MoeFixture(file = "Qwen3.6-35B-A3B-UD-IQ2_XXS.gguf", shexp = true, bar_rel = MOE_LOGIT_BAR_REL)
+let private TIED_QWEN = "Qwen3-4B-Instruct-2507-Q4_K_M.gguf"
+let private TIED_LLAMA = "Llama-3.2-3B-Instruct-Q4_K_M.gguf"
 let private PROMPT = 40l   //! one window, past the per-op deltanet chain's 32-row floor
+let private ROUNDS = 6l   //! the speculative rounds a NextN cell runs a session
 let private STEPS = 6l
 
 def private recurrent_layers(tr : Model) : int64 {
@@ -31,6 +40,43 @@ def private recurrent_layers(tr : Model) : int64 {
         n += layer_is_recurrent(tr.config, l) ? 1l : 0l
     }
     return n
+}
+
+//! the one-row steps whose row the device gathered off the step's token id so far (NO_CENSUS when the module is absent)
+def private gathered_rows() : int64 {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        return vk_rdec_token_gathered()
+    } else {
+        return NO_CENSUS
+    }
+}
+
+//! the census name of the token-table gather's stamp for a table in `f`
+def private emb_kernel(f : KqFmt) : string => f == KqFmt.q8 ? "emb_gather_cls_spv" : "kq_emb_{f}_cls_spv"
+
+//! one speculative round's outcome on a session: its accept, its draft and the position it left
+struct private Round {
+    hit : bool
+    draft : int64
+    n_past : int64
+}
+
+//! one speculative round a fed token on `s` (the token forced, the round's own draft and verify), each round's outcome
+def private spec_rounds(tr : Model; var s : Session; toks : array<int64>) : array<Round> {
+    var out : array<Round>
+    out |> reserve(long_length(toks))
+    for (tok in toks) {
+        var acc = 0l
+        let hit = mtp_spec_eval(tr, s, tok, acc)
+        out |> push(Round(hit = hit, draft = s.mtp_vbatch[1], n_past = s.n_past))
+    }
+    return <- out
+}
+
+//! `prompt` prefilled on `s` with the speculative warm on, the session's position at its end
+def private prefill_warm(tr : Model; var s : Session; prompt : array<int64>) {
+    forward_prefill(tr, s, prompt, long_length(prompt), 0l)
+    s.n_past = long_length(prompt)
 }
 
 //! the census of the named kernels as one sum (NO_CENSUS when the module is absent)
@@ -51,31 +97,41 @@ def test_gpu_resident_format_census_iq4xs(t : T?) {
         let path = path_join(models_dir(), CENSUS.file)
         if (!resident_ready(t, path)) return
         var tr <- load_resident(path, 1l)
-        census_cell(t, tr, path, "vulkan load")
+        census_cell(t, tr, path, "vulkan load", census_sites_all())
         for (l in range64(tr.config.n_layers)) {
             t |> equal(resident_layer_decline(tr, l), "", "layer {l} draws no decline from the whole-model driver")
         }
         if (moe_fixture_admitted(t, tr, CENSUS) >= 0l) {
             t |> equal(gpu_resident_decline_(), "", "the whole-model driver armed: no decline reason")
             let nrec = recurrent_layers(tr)
+            t |> success(!tr.config.shared_weights && emb_kq(tr) && tr.emb_fmt == KqFmt.iq4xs, "the file's token table is untied and kept as its own IQ4_XS plane ({tr.emb_fmt})")
             var pf_tile = 0l
             var st_gemv = 0l
+            var pf_emb = 0l
+            var st_rows = 0l
             with_dasllama_jobque_() {
                 var prompt <- resident_prompt(PROMPT)
                 var toks <- resident_feed(STEPS)
                 let tile0 = census("kq_batch_iq4xs_cls_spv")
+                let emb0 = census(emb_kernel(KqFmt.iq4xs))
                 var gemv0 = 0l
+                var rows0 = 0l
                 var fed <- resident_then_cpu_feed(t, tr, prompt, toks, $ {
                     pf_tile = census("kq_batch_iq4xs_cls_spv") - tile0
+                    pf_emb = census(emb_kernel(KqFmt.iq4xs)) - emb0
                     gemv0 = census_sum(["kq_gemv_iq4xs_cls_spv", "kq_gemv_iq4xs_n_cls_spv"])
+                    rows0 = gathered_rows()
                 }, $ {
                     st_gemv = census_sum(["kq_gemv_iq4xs_cls_spv", "kq_gemv_iq4xs_n_cls_spv"]) - gemv0
+                    st_rows = gathered_rows() - rows0
                     served_every_call(t)
                 })
                 feed_steps_within(t, tr, "IQ4_XS census ", PROMPT, fed.gpu, fed.cpu, toks, CENSUS.bar_rel)
                 if (tile0 != NO_CENSUS) {
                     t |> success(pf_tile >= 2l * nrec, "the window read every recurrent layer's beta and alpha planes through the IQ4_XS tile ({pf_tile} dispatches, {2l * nrec} planes)")
                     t |> success(st_gemv >= 5l * nrec, "the token command read every recurrent layer's five planes through the IQ4_XS GEMV ({st_gemv} recorded, {5l * nrec} planes)")
+                    t |> success(pf_emb >= 1l, "the window gathered its token rows off the IQ4_XS table on the device ({pf_emb} dispatches)")
+                    t |> equal(st_rows, STEPS, "every fed step's row gathered on the device off its token id, no host row uploaded")
                 }
                 delete fed
                 delete prompt
@@ -171,5 +227,132 @@ def test_gpu_resident_format_census_ba_f32(t : T?) {
             }
         }
         delete tr
+    }
+}
+
+[test]
+def test_gpu_resident_format_census_nextn(t : T?) {
+    t |> run("{CENSUS.file}: the routed NextN head on the device - its prompt rows warmed by the window chain, its draft against the CPU head's, every speculative round drafted and verified there, and a device-home session's rounds token for token the host-cached session's") @(t : T?) {
+        if (!family_on(t, "qwen35moe") || !arm_on(t, "vk-census")) return
+        let path = path_join(models_dir(), CENSUS.file)
+        if (!resident_ready(t, path)) return
+        let spec0 = get_mtp_spec()
+        set_mtp_spec(true)
+        var tr <- load_resident(path, 2l)
+        if (moe_fixture_admitted(t, tr, CENSUS) >= 0l) {
+            t |> equal(tr.config.n_layer_nextn, 1l, "the -MTP- file carries its NextN head")
+            t |> success(layer_is_moe(tr, tr.config.n_layers), "the head's FFN is routed")
+            t |> success(rdec_verify_rows() >= 2l, "the routed head rides the driver: its verify seat holds two rows or more (the load log names any decline)")
+            t |> success(gpu_resident_mtp_device_home_(tr), "every seat of the round runs on the device, so a device-home session speculates")
+            with_dasllama_jobque_() {
+                var prompt <- resident_prompt(PROMPT)
+                var toks <- resident_feed(ROUNDS + 1l)
+                var fed <- [for (i in range64(ROUNDS)); toks[i]]
+                var s <- create_session(tr, mirror_kv_dtype())
+                prefill_warm(tr, s, prompt)
+                t |> equal(moe_gpu_resident_head_rows(s), PROMPT - 1l, "the window chain warmed the head's {PROMPT - 1l} prompt rows on the device")
+                var h0 <- [for (x in s.mtp_h); x]
+                let row = PROMPT - 1l
+                let drafts0 = moe_gpu_resident_drafts()
+                var dev <- draft_from(tr, s, toks[0], row, h0)
+                t |> equal(moe_gpu_resident_drafts(), drafts0 + 1l, "the routed head drafted on the device")
+                let seat = unset_rdec_draft()
+                var cpu <- draft_from(tr, s, toks[0], row, h0)
+                var ctrl <- draft_from(tr, s, toks[ROUNDS], row, h0)
+                reinstall_rdec_draft(seat)
+                t |> equal(moe_gpu_resident_drafts(), drafts0 + 1l, "the unset seat left both CPU drafts to forward_mtp")
+                row_within_ctrl(t, "the routed head's draft", dev.logits, cpu.logits, ctrl.logits, CENSUS.bar_rel, "(the CPU draft of another token as the control)")
+                pick_agrees(t, tr, "the routed head's draft", argmax_of(dev.logits), cpu.logits, CENSUS.bar_rel)
+                copy_floats(h0, 0l, s.mtp_h, 0l, long_length(h0))
+                s.mtp_h_pos1 = PROMPT
+                let verifies0 = moe_gpu_resident_verifies()
+                var host <- spec_rounds(tr, s, fed)
+                t |> equal(moe_gpu_resident_drafts(), drafts0 + 1l + ROUNDS, "every round drafted on the device")
+                t |> equal(moe_gpu_resident_verifies(), verifies0 + ROUNDS, "every round verified on the device")
+                t |> equal(moe_gpu_resident_head_rows(s), s.n_past - 1l, "the region holds the head's rows through the session's position less one")
+                var sd <- create_device_session(tr, mirror_kv_dtype())
+                t |> success(sd.device_kv, "the second session is device-home: its K/V lives in the driver's region alone")
+                prefill_warm(tr, sd, prompt)
+                t |> equal(moe_gpu_resident_head_rows(sd), PROMPT - 1l, "the device-home session's head rows warmed on the device, with no host copy")
+                let drafts1 = moe_gpu_resident_drafts()
+                let verifies1 = moe_gpu_resident_verifies()
+                var home <- spec_rounds(tr, sd, fed)
+                t |> equal(moe_gpu_resident_drafts(), drafts1 + ROUNDS, "every device-home round drafted on the device")
+                t |> equal(moe_gpu_resident_verifies(), verifies1 + ROUNDS, "every device-home round verified on the device")
+                for (r in range64(ROUNDS)) {
+                    to_log(LOG_INFO, "round {r}: host-cached draft {host[r].draft} '{decode_(tr, [host[r].draft])}' hit {host[r].hit} at {host[r].n_past}, device-home draft {home[r].draft} '{decode_(tr, [home[r].draft])}' hit {home[r].hit} at {home[r].n_past}\n")
+                    t |> equal(home[r].draft, host[r].draft, "round {r}: the device-home session drafts the host-cached session's token - one command over the same rows")
+                    t |> equal(home[r].hit, host[r].hit, "round {r}: both accept or both reject")
+                    t |> equal(home[r].n_past, host[r].n_past, "round {r}: both stand at one position")
+                }
+                served_every_call(t)
+                delete sd
+                delete home
+                delete host
+                delete s
+                delete dev
+                delete cpu
+                delete ctrl
+                delete h0
+                delete fed
+                delete prompt
+                delete toks
+            }
+        }
+        delete tr
+        set_mtp_spec(spec0)
+    }
+}
+
+//! `file` on the whole-model driver: the window's token rows and every fed step's row gathered on the device off the table's
+//! plane (the tied classifier's where the table is tied), the forced feed against the CPU chain at the split bar
+def private emb_gather_cell(t : T?; file : string) {
+    let path = path_join(models_dir(), file)
+    if (!resident_ready(t, path)) return
+    var tr <- load_resident(path, 1l)
+    t |> success(moe_gpu_resident_active(), "{file}: the whole-model driver armed (the load log names any decline)")
+    if (moe_gpu_resident_active()) {
+        t |> success(tr.config.shared_weights && emb_kq(tr), "{file}: the table is tied and kept as the classifier's {tr.emb_fmt} plane")
+        let kernel = emb_kernel(tr.emb_fmt)
+        with_dasllama_jobque_() {
+            var prompt <- resident_prompt(PROMPT)
+            var toks <- resident_feed(STEPS)
+            let emb0 = census(kernel)
+            var pf_emb = 0l
+            var rows0 = 0l
+            var st_rows = 0l
+            var fed <- resident_then_cpu_feed(t, tr, prompt, toks, $ {
+                pf_emb = census(kernel) - emb0
+                rows0 = gathered_rows()
+            }, $ {
+                st_rows = gathered_rows() - rows0
+                served_every_call(t)
+            })
+            feed_steps_within(t, tr, "{file} gather ", PROMPT, fed.gpu, fed.cpu, toks, SPLIT_BAR_REL)
+            if (emb0 != NO_CENSUS) {
+                t |> success(pf_emb >= 1l, "{file}: the window gathered its token rows off the tied {tr.emb_fmt} plane ({kernel}, {pf_emb} dispatches)")
+                t |> equal(st_rows, STEPS, "{file}: every fed step's row gathered on the device off its token id, no host row uploaded")
+            }
+            delete fed
+            delete prompt
+            delete toks
+        }
+    }
+    delete tr
+}
+
+[test]
+def test_gpu_resident_gather_tied_qwen3(t : T?) {
+    t |> run("{TIED_QWEN}: the tied K-quant table gathered on the device by the window and by every decode step") @(t : T?) {
+        if (!family_on(t, "qwen3") || !arm_on(t, "vk-gather")) return
+        emb_gather_cell(t, TIED_QWEN)
+    }
+}
+
+[test]
+def test_gpu_resident_gather_tied_llama(t : T?) {
+    t |> run("{TIED_LLAMA}: the tied Q6_K table gathered on the device by the window and by every decode step") @(t : T?) {
+        if (!family_on(t, "llama") || !arm_on(t, "vk-gather")) return
+        emb_gather_cell(t, TIED_LLAMA)
     }
 }

@@ -536,10 +536,11 @@ def private bind_gpu_slot(si : int) {
     to_log(LOG_INFO, "dasllama-server: GPU tier -> {g_slots[si].name} ({prev_note}{us / 1000l}ms, {g_slots[si].backend_effective})\n")
 }
 
-//! Read with the slot's marks installed, so the facade answers for THIS model.
+//! Read with the slot's marks installed, so the facade answers for THIS model. A speculating slot keeps its streams on the card
+//! where every seat of the round runs there (`gpu_resident_mtp_device_home`).
 def slot_wants_device_kv(s : ModelSlot) : bool {
     return (s.backend_effective == "gpu:resident" && s.vision.kind == VisionKind.none && !s.audio_armed
-        && !s.sched.mtp && s.gpu_regions >= s.sched.max_streams)
+        && (!s.sched.mtp || gpu_resident_mtp_device_home(s.model)) && s.gpu_regions >= s.sched.max_streams)
 }
 
 def private sync_slot_device_kv(var s : ModelSlot; holds_gpu : bool) {
@@ -583,8 +584,8 @@ def slot_served_note(s : ModelSlot; device_kv, holds_gpu : bool) : string {
     if (s.vision.kind != VisionKind.none || s.audio_armed) {
         return "this model also reads images or audio, and those parts of a prompt run on the host: every stream's cache stays there, and each step runs on the CPU"
     }
-    if (s.sched.mtp) {
-        return "self-speculation (the model drafting its own next tokens) has no GPU path yet: every stream's cache stays on the host, and each step runs on the CPU"
+    if (s.sched.mtp && !gpu_resident_mtp_device_home(s.model)) {
+        return "self-speculation (the model drafting its own next tokens) does not run whole on the card for this model - its draft head, its check of the drafts or its undo of a rejected draft stays on the host (the load log names which): every stream's cache stays on the host, and each step runs on the CPU"
     }
     return "the card has room for {s.gpu_regions} stream caches and this model serves {s.sched.max_streams} streams: every stream's cache stays on the host, and each step runs on the CPU"
 }

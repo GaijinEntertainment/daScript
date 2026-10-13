@@ -176,20 +176,54 @@ An OPTIONAL plane rides only the room left under the budget at THIS context - wh
 `budget_bytes - headroom_bytes` after weights, KV and scratch; the reserved headroom itself
 stays unfilled. It never shrinks any of the three, and it reports zero bytes when it does not
 fit - so the same model plans the plane in at a short context and out at a long one. Two planes are
-optional: the raw f32 embed table, and after it the gemma-4 E-series' per-layer-embedding token
-table (`ResidentPlan.ple_tbl_bytes`, a q8 plane [vocab x layers*ple]) - placed first, into the empty
-arena, in pieces of 65536 rows the host gather's 2 GB array admits, which must land back to back in
-one slab because the window chain's gather (`EmbGather` at the row width layers*ple, scaled by
-sqrt(ple)) reads them off one block base. With it placed the ids prefill serves a per-layer-embedding
-model too - the embed and the side rows gathered on device, no host row upload - and the token
-command keeps its one-row host gather.
+optional: the token table's gather plane (`#vk-token-gather`: an untied quantized table's own plane,
+`ResidentPlan.emb_bytes`, or a float table's exact f32 rows under `RDEC_EMB_F32_CAP`,
+`ResidentPlan.emb_f32_bytes`), and after it the gemma-4 E-series' per-layer-embedding token table (`ResidentPlan.ple_tbl_bytes`, a q8
+plane [vocab x layers*ple]). Both place first, into the empty arena, in pieces of 65536 rows the host
+gather's 2 GB array admits (`resident_place_table`), which must land back to back in one slab because
+a gather reads a table off one block base; the side-row gather is `EmbGather` at the row width
+layers*ple, scaled by sqrt(ple). With the side table placed the ids prefill serves a
+per-layer-embedding model too - the embed and the side rows gathered on device, no host row upload -
+and the token command reads the row the host's pre-step embedded, in place (`EMB_ID_HOST`).
+
+### The token rows gather on the device off the table's own plane {#vk-token-gather}
+
+**Where the table sits on the device in a format a gather reads, neither the window nor the one-row
+step brings a row across the bus: the window gathers its rows off the token ids, the step off its
+one token id.** Which gather a table takes is its disk type's:
+
+| Table on disk | Gather | Its plane |
+|---|---|---|
+| Q8_0 | `EmbGather` (four elements a thread off the per-32 plane) | the tied classifier's at its block, or an untied table's linear q8 copy |
+| a superblock format (the 14 `kq_sb` tags) | its `KqEmb<Fmt>` leaf | the tied classifier's K-quant plane, or an untied table's own (`resident_emb_plane`) |
+| F32, F16, BF16 | `EmbGatherF32` | the table's exact f32 rows (F16/BF16 widen without loss, `Model.emb_f32_exact`) uploaded whole under `RDEC_EMB_F32_CAP` |
+| Q4_1, Q5_0 | none: the host embeds | the fp32 rows are a dequant - a converted copy, disclosed at load |
+
+A `KqEmb<Fmt>` leaf is the format's own decode GEMV leaf stamped under `KqGemvLeafT`'s `EMB`: a
+thread a 32-block, element k the int8 lane `blk_decode` leaves and the term pair `blk_fold` reads (the
+per-format arithmetic is the GEMV's own, never re-spelled), the grid formats staging their codebook as
+the GEMV does. The per-32 forms (q51, iq4nl32, mx4) never tag a dense table (`kq_fmt_row_ok`).
+`resident_arm_emb` hands the plane to the tier (`rdec_set_emb` for a quantized plane in the arena,
+`rdec_upload_emb_f32` for the f32 rows) and logs why the host embeds where it does: a Q4_1/Q5_0 table,
+a prepared image (it does not carry `emb_f32_exact`), a plane past the room or the cap, a trimmed
+image, a per-layer-embedding model whose side table stays on the host, a hyper-connection model (its
+window reads the pre-step's rows). The window binds its ids plane (`pf_ids`); the one-row token command records the gather in place of
+the x upload when the table is placed, reading the step's id from a host-visible word
+(`tok_ids_host`) and, for a step that brings no id (`EMB_ID_HOST`: the peel's row, the split
+command's caller), the host's row from a host-visible staging row (`tok_xh_host`) in place - so the
+recorded command serves both. The engine leaves a decode step's row unembedded where the driver
+answers the decode gate (`register_embed_dev_gates("vulkan", ...)`, the table placed); the override
+embeds it itself where its path reads a host row (the split command) and the engine backfills it
+where the override declines. The N-row and verify commands keep their row upload: their rows come
+embedded from the batch engine and the round.
 
 **A MoE is planned like a dense model with bigger FFN planes.** Its weight planes are the
 attention quads, every MoE layer's expert triple (`[ne x nfe x dim]` twice and `[ne x dim x
 nfe]`, sliced per expert as the per-op walk gathers them), its shared expert's triple where it
 has one - in the file's K-quant format where the loader kept those planes beside the q8
-transcode the CPU chain reads (`wshk*_offs`; it keeps them on a load with a GPU tier armed, so
-a CPU-only load carries the transcode alone), the transcode otherwise - the classifier, and the
+transcode the CPU chain reads (`wshk*_offs`, `shexp_plane`; it keeps them on a load a device reads
+them on - an armed GPU tier or a Metal mode - so a CPU-only load carries the transcode alone), the
+transcode otherwise - the classifier, and the
 router plane - every MoE layer's f32 rows with a gated shared expert's gate row beside them. The scratch adds the window's routed planes: the gathered f16
 rows, the gate and up rows, the f16 hidden rows and the routed down rows over `PF_WINDOW x k`
 bucket rows plus `TILE_READ_SLACK` rows of tile slack (128 - the m column's unclamped partial
@@ -211,7 +245,7 @@ A multi-model host runs one device tier under several loaded models, and the tie
 state is offset-keyed - two models' marks installed together route one model's dispatches at
 the other's planes. `GpuModelMarks` is that state WHOLE: the loader-contract marks plus every
 resident-driver per-model global (the activation, the mirror count, the mirror cap, the mirror
-codec, the device-embed arm, and the per-layer-embedding projection arm). The save moves the installed state out and leaves the globals
+codec, the device-embed arm, the NextN head's arm, and the per-layer-embedding projection arm). The save moves the installed state out and leaves the globals
 reading as no-model; the restore is its exact inverse. The whole-model drop clears the same set
 and deselects the `"vulkan"` overrides, so a dropped model's prefill and decode take the plain
 CPU path and a later re-arm passes `resident_upload`'s no-active-override gate. The three carry

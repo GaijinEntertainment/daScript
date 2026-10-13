@@ -94,8 +94,8 @@ def private d_dn_prefill_own(l : int64; stp : float?; histp : float?) {
 [unused_argument(cls_block, cls_fmt, cap, supp)]
 def private d_set_cls(cls_block : int64; cls_fmt : int; cap : float; supp : array<int64>) {}
 
-[unused_argument(x, cossin, ple_row, cnt, pick_only)]
-def private d_token(x : array<float>; cossin : array<float>; ple_row : array<float>; pos, cnt : int64; pick_only : bool; var logits : array<float>) : int64 {
+[unused_argument(x, cossin, ple_row, token, cnt, pick_only)]
+def private d_token(x : array<float>; cossin : array<float>; ple_row : array<float>; token, pos, cnt : int64; pick_only : bool; var logits : array<float>) : int64 {
     g_token_pos = pos
     g_token_cnt = cnt
     if (!empty(logits)) {
@@ -134,7 +134,8 @@ def private d_read(l, row0, nrows : int64; var kp : uint8?; var vp : uint8?) {
 var private g_ids_npos = -1l
 var private g_ids_scale = 0.0
 var private g_emb_block = -1l
-var private g_emb_f32_vocab = -1l
+var private g_emb_fmt = -1
+var private g_emb_scale = 0.0
 
 [unused_argument(tokens, cos_batch, pos0, experts)]
 def private d_prefill_ids(tokens : array<int64>; emb_scale : float; cos_batch : array<float>; npos, pos0 : int64; var logits : array<float>; experts : RdecHostExpertsRowsFn) {
@@ -145,13 +146,17 @@ def private d_prefill_ids(tokens : array<int64>; emb_scale : float; cos_batch : 
     }
 }
 
-def private d_set_emb(emb_block : int64) : bool {
+def private d_set_emb(emb_block : int64; fmt : int; escale : float) : bool {
     g_emb_block = emb_block
+    g_emb_fmt = fmt
+    g_emb_scale = escale
     return emb_block >= 0l
 }
 
-[unused_argument(fblob, off, dim)]
-def private d_upload_emb_f32(fblob : array<float>; off, vocab, dim : int64) : bool {
+var private g_emb_f32_vocab = -1l
+
+[unused_argument(fblob, off, dim, escale)]
+def private d_upload_emb_f32(fblob : array<float>; off, vocab, dim : int64; escale : float) : bool {
     g_emb_f32_vocab = vocab
     return vocab > 0l
 }
@@ -270,7 +275,7 @@ def test_gpu_tier_contract(t : T?) {
         t |> equal(g_prepared_dn_cd, 96l)
         var x, cs, ple, logits : array<float>
         logits |> resize(4)
-        rdec_token(x, cs, ple, 9l, 10l, false, logits)
+        rdec_token(x, cs, ple, -1l, 9l, 10l, false, logits)
         t |> equal(g_token_pos, 9l)
         t |> equal(g_token_cnt, 10l)
         t |> equal(logits[0], 42.0)
@@ -538,17 +543,19 @@ def test_rdec_dn_seats(t : T?) {
 def test_rdec_prefill_ids_seam(t : T?) {
     t |> run("the ids-form prefill seat: unset declines, installed doubles receive the forwarded values") @(t : T?) {
         t |> success(!rdec_prefill_ids_installed(), "the seat starts uninstalled")
-        t |> success(!rdec_set_emb(3l), "an unset set_emb declines - the engine keeps the CPU embed")
+        t |> success(!rdec_set_emb(3l, int(KqFmt.q8), 1.0), "an unset set_emb declines - the engine keeps the CPU embed")
         let nofblob : array<float>
-        t |> success(!rdec_upload_emb_f32(nofblob, 0l, 16l, 8l), "an unset f32 upload declines")
+        t |> success(!rdec_upload_emb_f32(nofblob, 0l, 16l, 8l, 1.0), "an unset f32 upload declines")
         t |> equal(rdec_emb_f32_bytes(1000l, 256l), 1000l * 256l * 4l)
         t |> equal(rdec_emb_f32_bytes(1l << 20l, 4096l), 0l)   // past RDEC_EMB_F32_CAP the arm declines, so the plan counts nothing
         install_rdec_prefill_ids(@@d_prefill_ids, @@d_set_emb, @@d_upload_emb_f32)
         t |> success(rdec_prefill_ids_installed(), "install must flip the witness")
-        t |> success(rdec_set_emb(9l), "the double's answer forwards")
+        t |> success(rdec_set_emb(9l, int(KqFmt.iq4xs), 2.5), "the double's answer forwards")
         t |> equal(g_emb_block, 9l)
-        t |> success(!rdec_set_emb(-1l), "the double's decline forwards")
-        t |> success(rdec_upload_emb_f32(nofblob, 4l, 32000l, 2048l), "the f32 double's answer forwards")
+        t |> equal(g_emb_fmt, int(KqFmt.iq4xs))
+        t |> equal(g_emb_scale, 2.5)
+        t |> success(!rdec_set_emb(-1l, int(KqFmt.q8), 1.0), "the double's decline forwards")
+        t |> success(rdec_upload_emb_f32(nofblob, 4l, 32000l, 2048l, 1.0), "the f32 double's answer forwards")
         t |> equal(g_emb_f32_vocab, 32000l)
         var ids : array<int64>
         ids |> push(5l)

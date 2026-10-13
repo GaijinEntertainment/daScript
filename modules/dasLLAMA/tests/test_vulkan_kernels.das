@@ -1778,6 +1778,109 @@ def test_vkd_kq_gemv_family(t0 : T?) {
     }
 }
 
+//! the token-table gather's expected rows: row r the table row `ids[r]` at superblock `wblk0`, each element the class's own
+//! `blk_decode` lane under the lo or hi term pair `blk_fold` reads, times `escale`; an `EMB_ID_HOST` row the host's staged row
+def private emb_gather_oracle(fmt : int; wq, ws : array<uint>; ids : array<uint>; xh : array<float>; n : int; wblk0 : uint; escale : float) : array<float> {
+    var noq : array<uint>
+    var nos : array<float>
+    var k = kq_cls_ref(fmt, wq, ws, noq, nos)
+    let nsb = n / 256
+    var y : array<float>
+    y |> resize(length(ids) * n)
+    for (r in range(length(ids))) {
+        if (ids[r] == EMB_ID_HOST) {
+            for (e in range(n)) {
+                y[r * n + e] = xh[r * n + e]
+            }
+            continue
+        }
+        for (b in range(nsb * 8)) {
+            var wl = uint4(0u)
+            var wh = uint4(0u)
+            let terms = k->blk_decode(wblk0 + ids[r] * uint(nsb) + uint(b / 8), uint(b % 8), wl, wh)
+            let bsum = k->fold_reads_bsum()
+            for (e in range(32)) {
+                let w = e < 16 ? wl : wh
+                let word = (e % 16) / 4
+                let lane = word == 0 ? w.x : (word == 1 ? w.y : (word == 2 ? w.z : w.w))
+                let q = float(int(int8((lane >> uint((e % 4) * 8)) & 0xFFu)))
+                let a = e < 16 ? terms.x : terms.z
+                let c = bsum ? (e < 16 ? terms.y : terms.w) : 0.0
+                y[r * n + b * 32 + e] = (a * q + c) * escale
+            }
+        }
+    }
+    unsafe {
+        delete k
+    }
+    delete noq
+    delete nos
+    return <- y
+}
+
+//! the token-table gather's leaves (`KqEmb<Fmt>`, `KqGemvLeafT` under `EMB`) for every superblock format: four rows - three token
+//! ids off a five-row table past a one-row lead (the plane's block base), one `EMB_ID_HOST` row copying the host's staged row -
+//! against the class's own lane decode, and on the formats with a float witness each gathered row dotted with a Q8_K activation
+//! row against `kq_gemv_float_oracle` over the same table row (the lanes in element order, independent of the class bit-math)
+[test]
+def test_vkd_emb_gather_family(t0 : T?) {
+    t0 |> run("the token-table gather's leaves == the class lane decode, and the float witness, for all 14 superblock formats") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!kq_leaf_rails_engage() <| $(fmt : int) => emb_cls_ensure(fmt)) {
+                t |> skip("no Vulkan device, or a token-table gather pipeline failed to build")
+                return
+            }
+            let nsb = 2
+            let n = nsb * 256
+            let vocab = 5
+            let lead = 1   //! one table row ahead of the table: the gather reads past its block base
+            let escale = 1.5
+            var inscope ids <- [3u, 0u, EMB_ID_HOST, 4u]
+            let rows = length(ids)
+            var inscope xh <- row_fill(rows * n, 7, 3, 0.01, -0.5)
+            for (fmt in KQ_LEAF_FMTS) {
+                let sb_words = int(kq_qsb(kq_fmt_of_slot(fmt)) / 4l)
+                var inscope wq <- hashed_words((vocab + lead) * nsb * sb_words, 1u, uint(fmt) * 9973u)
+                var inscope ws <- ws_plane((vocab + lead) * nsb * int(kq_dev_ssb_i(fmt) / 4l), 1u, uint(fmt) * 17u)
+                let wblk0 = uint(lead * nsb)
+                var inscope y_ref <- emb_gather_oracle(fmt, wq, ws, ids, xh, n, wblk0, escale)
+                with_cell_planes() $(var cp : CellPlanes) {
+                    let pq = cp |> in_plain(wq, 1u)
+                    let ps = cp |> in_plain(ws, 2u)
+                    let pid = cp |> in_plain(ids, 4u)
+                    let pxh = cp |> in_(xh, 0, 0, 8u)
+                    let py = cp |> out_(rows * n, 0, 0, 16u)
+                    var s = emb_cls_set(fmt, (wq = cp.dev[pq], ws = cp.dev[ps], wqb = cp.bytes[pq], wsb = cp.bytes[ps]), cp.dev[pid], cp.bytes[pid], 4u,
+                        cp.dev[pxh], cp.bytes[pxh], cp.dev[py], cp.bytes[py], 16u)
+                    cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                        emb_cls_enc(fmt, raw, h, s, int64(rows), int64(n), int64(wblk0), escale)
+                    }
+                    var inscope y <- cp |> plane_run(py)
+                    check_rows(t, "{kq_fmt_of_slot(fmt)} token-table gather against the class lane decode", y, y_ref, BAR_APPROX_CTRL, n)
+                    if (kq_has_float_oracle(fmt)) {   //! the witness: a gathered row's dot with a Q8_K row against the float GEMV over the same table row
+                        var inscope xq <- hashed_words(nsb * 64, 31u, 5u)
+                        var inscope xs <- row_fill(nsb * 8, 1, 0, 0.25, -0.5, 7)
+                        for (r in range(rows)) {
+                            continue if (ids[r] == EMB_ID_HOST)
+                            var inscope reg <- [wblk0 + ids[r] * uint(nsb), 0u]
+                            var inscope want <- kq_gemv_float_oracle(fmt, wq, ws, xq, xs, reg, n, 1, 1)
+                            var dot = 0.0
+                            for (e in range(n)) {
+                                let qb = int(int8((xq[e / 4] >> uint((e % 4) * 8)) & 0xFFu))
+                                dot += y[r * n + e] / escale * float(qb) * xs[e / 32]
+                            }
+                            t |> success(abs(dot - want[0]) <= 1e-3 * max(1.0, abs(want[0])), "{kq_fmt_of_slot(fmt)} row {r}: the gathered row's dot {dot} is the float GEMV's {want[0]}")
+                            t |> success(abs(dot + 1.0 + abs(want[0]) - want[0]) > 1e-3 * max(1.0, abs(want[0])), "{kq_fmt_of_slot(fmt)} row {r}: the dot's bar reds a value moved by more than the row's magnitude")
+                        }
+                    }
+                }
+            }
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
 //! the Q4_K experts' gate+up+act twin against the family cell's oracle run twice: both stacks' rows in one plane
 //! (the up stack's regions after the gate's), the activated rows' Q8_0 blocks within a quant step at every lane
 //! split, the scales within 2e-3; a poisoned oracle element must red
@@ -7204,10 +7307,10 @@ def test_vkd_kv16_readers(t0 : T?) {
 }
 
 [test]
-def test_vkd_emb_gather_pair(t0 : T?) {
-    t0 |> run("embed-gather class kernels (q8 + f32) == the CPU dequant/copy") <| @(t : T?) {
+def test_vkd_emb_gather_q8_f32(t0 : T?) {
+    t0 |> run("the q8 and f32 token-table gathers == the CPU dequant and rows, an EMB_ID_HOST row the host's staged row") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!ensure_emb_gather_cls() || !ensure_emb_gather_f32_cls()) {
+            if (!ensure_emb_gather_cls()) {
                 t |> skip("no Vulkan device")
                 return
             }
@@ -7229,60 +7332,89 @@ def test_vkd_emb_gather_pair(t0 : T?) {
             for (i in range(npos)) {
                 idsh[i] = uint((i * 5 + 3) % 6)   // a 6-cycle over 8 rows: tokens 3 and 2 gather twice
             }
-            // f32 twin's table: a distinct pattern so a crossed binding cannot pass
-            var wfh : array<float>
-            wfh |> resize(vocab * dim)
-            for (i in range(vocab * dim)) {
-                wfh[i] = float(i % 97) * 0.125 - 6.0
-            }
-            var y_cls, yf_cls : array<float>
+            idsh[npos - 2] = EMB_ID_HOST   //! one row the host stages: the gather copies it in place of a table row
+            var xhh <- row_fill(npos * dim, 11, 2, 0.0625, -3.0)
+            var y_cls : array<float>
             with_cell_planes() $(var cp : CellPlanes) {
                 let pwq = cp |> in_plain(wqh)
                 let pws = cp |> in_plain(wsh16)
                 let pid = cp |> in_plain(idsh)
-                let pwf = cp |> in_(wfh)
+                let pxh = cp |> in_(xhh)
                 let px = cp |> out_(npos * dim)
-                var scq = cp |> cls_set(fixed_array(pwq, pws, pid, px), @@set_emb_gather_cls)
-                var scf = cp |> cls_set(fixed_array(pwf, pid, px), @@set_emb_gather_f32_cls)
+                var scq = cp |> cls_set(fixed_array(pwq, pws, pid, px, pxh), @@set_emb_gather_cls)
                 var pc = EmbArgs(npos = uint(npos), dim = uint(dim), wblk0 = uint(wblk0), embed_scale = scale)
                 cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                     enc_emb_gather_cls(raw, h, scq, pc, int64((npos * dim / 4 + 255) / 256))
                 }
                 delete y_cls
                 y_cls <- cp |> plane_run(px)
-                cp |> plane_refill(px)
-                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
-                    enc_emb_gather_f32_cls(raw, h, scf, pc, int64((npos * dim / 4 + 255) / 256))
-                }
-                delete yf_cls
-                yf_cls <- cp |> plane_run(px)
             }
-            var y_ref, yf_ref : array<float>
+            var y_ref : array<float>
             y_ref |> resize(npos * dim)
-            yf_ref |> resize(npos * dim)
             for (r in range(npos)) {
-                let tok = int(idsh[r])
                 for (col in range(dim)) {
-                    let ib = wblk0 + tok * nbb + col / 32
+                    if (idsh[r] == EMB_ID_HOST) {
+                        y_ref[r * dim + col] = xhh[r * dim + col]
+                        continue
+                    }
+                    let ib = wblk0 + int(idsh[r]) * nbb + col / 32
                     let by = col % 32
                     let w = wqh[ib * 8 + by / 4]
                     let q = int8(w >> uint(8 * (by % 4)))
                     y_ref[r * dim + col] = float(int(q)) * (float(wsh16[ib]) * scale)
-                    yf_ref[r * dim + col] = wfh[tok * dim + col] * scale
                 }
             }
             let bad = mismatch_exact(y_cls, y_ref)
-            t |> success(bad == 0, "q8 embed gather matches the CPU dequant ({bad} of {npos * dim} off)")
-            let badf = mismatch_exact(yf_cls, yf_ref)
-            t |> success(badf == 0, "f32 embed gather matches the CPU copy ({badf} of {npos * dim} off)")
+            t |> success(bad == 0, "q8 token-table gather matches the CPU dequant and the host row ({bad} of {npos * dim} off)")
+            var y_poison := y_cls   // the compare's control
+            y_poison[(npos - 2) * dim] += 0.5
+            t |> success(mismatch_exact(y_poison, y_ref) > 0, "the compare reds a host row moved by a half")
+            delete y_poison
+            if (ensure_emb_gather_f32_cls()) {   //! the f32 stamp over an F32/F16/BF16 table's exact rows: a distinct pattern, so a crossed binding cannot pass
+                var wfh : array<float>
+                wfh |> resize(vocab * dim)
+                for (i in range(vocab * dim)) {
+                    wfh[i] = float(i % 97) * 0.125 - 6.0
+                }
+                var yf_cls : array<float>
+                with_cell_planes() $(var cp : CellPlanes) {
+                    let pwf = cp |> in_(wfh)
+                    let pid = cp |> in_plain(idsh)
+                    let pxh = cp |> in_(xhh)
+                    let px = cp |> out_(npos * dim)
+                    var scf = cp |> cls_set(fixed_array(pwf, pid, px, pxh), @@set_emb_gather_f32_cls)
+                    var pc = EmbArgs(npos = uint(npos), dim = uint(dim), wblk0 = 0u, embed_scale = scale)
+                    cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                        enc_emb_gather_f32_cls(raw, h, scf, pc, int64((npos * dim / 4 + 255) / 256))
+                    }
+                    delete yf_cls
+                    yf_cls <- cp |> plane_run(px)
+                }
+                var yf_ref : array<float>
+                yf_ref |> resize(npos * dim)
+                for (r in range(npos)) {
+                    for (col in range(dim)) {
+                        yf_ref[r * dim + col] = idsh[r] == EMB_ID_HOST ? xhh[r * dim + col] : wfh[int(idsh[r]) * dim + col] * scale
+                    }
+                }
+                let badf = mismatch_exact(yf_cls, yf_ref)
+                t |> success(badf == 0, "f32 token-table gather matches the CPU rows and the host row ({badf} of {npos * dim} off)")
+                var yf_poison := yf_cls
+                yf_poison[0] += 0.5
+                t |> success(mismatch_exact(yf_poison, yf_ref) > 0, "the f32 compare reds a row moved by a half")
+                delete yf_poison
+                delete wfh
+                delete yf_cls
+                delete yf_ref
+            } else {
+                t |> failure("the f32 gather class failed to build on a device that built the q8 one")
+            }
             delete wqh
             delete wsh16
             delete idsh
-            delete wfh
+            delete xhh
             delete y_cls
-            delete yf_cls
             delete y_ref
-            delete yf_ref
         } else {
             t |> skip("dasVulkan not present")
         }
