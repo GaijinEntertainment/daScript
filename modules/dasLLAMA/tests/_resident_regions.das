@@ -1199,6 +1199,101 @@ def cell_device_checkpoint_adopt(t : T?; file : string) {
     }
 }
 
+//! what one five-request run left: the cache's checkpoints, and the pool's row traffic over the run
+struct private PooledRun {
+    states : int
+    evicted : int64
+    imports : int64
+    exports : int64
+}
+
+//! Five requests one after another on a two-stream scheduler - device-home or host-cached, paged (64-row pages) or flat - over
+//! three 100-token system prompts, more openings than the two regions hold: the first three open one each, the fourth opens
+//! with the first's system prompt again, the fifth continues the second's conversation (its prompt, its eight tokens, a new
+//! turn). Every request marks its system prompt's end as its system and stable opening; `max_states` caps the checkpoints.
+def private serve_pooled(m : Model; device : bool; page_rows, max_states : int64; var events : array<SchedEvent>) : PooledRun {
+    var sch <- create_scheduler(m, 2l, 8l, PF_WINDOW_ROWS, page_rows, 0l, mirror_kv_dtype(), false, -1l, max_states)
+    set_device_kv(sch, device)
+    let moves0 = gpu_device_kv_pool_moves()
+    var systems <- [for (k in range64(3l)); prose_ids(100l, 3l + k)]
+    for (id in range64(1l, 6l)) {
+        let sys = id <= 3l ? id - 1l : (id == 4l ? 0l : 1l)
+        var prompt := systems[sys]
+        prompt |> push_from(prose_ids(30l, 37l + 4l * (id == 5l ? 2l : id)))   //! the fifth repeats the second's turn, then its reply and a turn of its own
+        if (id == 5l) {
+            prompt |> push_from(toks_of(events, 2l), prose_ids(30l, 53l))
+        }
+        var req <- make_req(id, prompt, 8l)
+        req.system_at = 100l
+        req.stable_at = 100l
+        submit(m, sch, req)
+        drain(m, sch, events)
+        delete prompt
+    }
+    let moves = gpu_device_kv_pool_moves()
+    let out = PooledRun(states = length(sch.prefix.states), evicted = sch.prefix.n_state_evicted,
+                        imports = moves.imports - moves0.imports, exports = moves.exports - moves0.exports)
+    set_device_kv(sch, false)
+    delete systems
+    delete sch
+    return out
+}
+
+//! The host pool behind the regions: openings a region lost - its parked claim evicted by a later stream, its checkpoint row
+//! reused - come back from host RAM. On the paged device-home scheduler the fourth request takes its system prompt's checkpoint
+//! (a recurrent model) or its pages (a dense one) up from the pool after two other streams took both regions, and the fifth the
+//! second conversation's finished turn, token for token the host-cached paged scheduler, whose prefix cache keeps the same
+//! openings; the flat device-home scheduler - no pool - is the control, both requests prefilled whole. On a recurrent model a
+//! pool of four checkpoints drops the tails first: the fourth request still finds its opening, the fifth only its system prompt.
+def cell_device_pool(t : T?; file : string) {
+    t |> run("a device-home scheduler's openings outlive their regions in the host pool: a later request takes them up, token for token the host-cached prefix cache's run") @(t : T?) {
+        with_regions_rig(t, file) $(tr) {
+            if (!gpu_device_kv_pool_armed()) {
+                t |> skip("DASLLAMA_DEVICE_POOL=0 switches the pool off")
+                return
+            }
+            let recurrent = tr.config.recr_mask != 0ul
+            var host, pooled, flat, capped : array<SchedEvent>
+            serve_pooled(tr, false, 64l, 256l, host)
+            let p = serve_pooled(tr, true, 64l, 256l, pooled)
+            let f = serve_pooled(tr, true, 0l, 256l, flat)
+            let history = 100l + 30l + 8l
+            t |> equal(cached_of(host, 4l), 100l, "the host-cached run attached the first system prompt for the fourth request")
+            t |> equal(cached_of(host, 5l), history, "and the second conversation's turn for the fifth")
+            t |> equal(cached_of(pooled, 4l), 100l, "the fourth request took the first system prompt up from the pool: the region that held it went to the third request")
+            t |> equal(cached_of(pooled, 5l), history, "the fifth took the second conversation's finished turn up ({history} tokens): its region went to the fourth")
+            t |> equal(p.imports, 2l, "two openings came up from the pool")
+            t |> success(p.exports >= (recurrent ? 8l : 5l), "every finished turn went down, and on a recurrent model every new system prompt's checkpoint ({p.exports} copies)")
+            t |> equal(cached_of(flat, 4l), 0l, "control: with no pool the fourth request prefills whole - its opening's region is gone")
+            t |> equal(cached_of(flat, 5l), 0l, "and so does the fifth")
+            t |> equal(f.imports, 0l, "the flat scheduler keeps no pool")
+            for (id in range64(1l, 6l)) {
+                var th <- toks_of(host, id)
+                var td <- toks_of(pooled, id)
+                log_gen_texts(tr, "request {id} (CPU = host-cached paged, GPU = device-home pooled)", th, td)
+                t |> equal(length(td), 8, "request {id} ran its eight tokens")
+                t |> success(ids_equal(th, td), "request {id}: device-home pooled {td} against host-cached {th}")
+                delete th
+                delete td
+            }
+            if (recurrent) {
+                let c = serve_pooled(tr, true, 64l, 4l, capped)
+                t |> equal(cached_of(capped, 4l), 100l, "four checkpoints: the system prompts are openings, kept over the tails")
+                t |> equal(cached_of(capped, 5l), 100l, "the second conversation's turn - a tail - went first, so the fifth request finds its system prompt alone")
+                t |> success(c.states <= 4 && c.evicted >= 3l, "the pool held four checkpoints, dropping {c.evicted}")
+                var tc <- toks_of(capped, 5l)
+                t |> equal(length(tc), 8, "the fifth request ran its eight tokens")
+                delete tc
+            }
+            served_every_call(t)
+            delete host
+            delete pooled
+            delete flat
+            delete capped
+        }
+    }
+}
+
 def cell_scheduler_device_prefill_chunks(t : T?; file : string) {
     t |> run("a device-home stream prefills in the device's windows, and a model whose prefill cannot continue in one call") @(t : T?) {
         with_regions_rig(t, file) $(tr) {

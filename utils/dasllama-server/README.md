@@ -385,7 +385,11 @@ a thinking-off turn's generation prompt opens a think block the replay does not)
 within `--prefix-state-mb` (a quarter of RAM unless set, per served slot) and at most `--prefix-states` of them, a
 conversation's own stops (its last message's start, its last message's close, its finished turn) dropped before
 shared openings, and a prompt attaches the deepest one that is its exact prefix - the shared system block for a new
-conversation, the whole earlier exchange for the next turn.
+conversation, the whole earlier exchange for the next turn. A slot whose streams keep their caches on the card
+(device-home, the Vulkan whole-model driver) keeps the same cache in host RAM behind them, under the same two flags:
+the card holds one finished stream and a few checkpoints a stream slot, so every checkpoint and finished turn is also
+copied down, and a request whose opening the card no longer holds takes it back up into its region - milliseconds over
+the bus where the prefill would take seconds. `DASLLAMA_DEVICE_POOL=0` keeps the card's copies alone.
 Clients whose connection drops mid-generation are evicted within a tick. Audio uploads queue to
 long-lived `new_thread` ASR workers and do not block chat generation; `--asr-workers 2` permits two
 transcriptions at once. Each worker owns its model/context and reuses language-specific session

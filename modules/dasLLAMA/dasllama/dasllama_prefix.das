@@ -206,9 +206,8 @@ def private prefix_state_victim(cache : PrefixCache; exempt : int) : int {
     return lru
 }
 
-//! the deepest checkpoint whose every token opens `prompt`, short of the prompt's last token: its
-//! whole pages shared, its partial page copied (the session writes on from there), its state restored
-def private prefix_attach_state(var cache : PrefixCache; var pool : KVPool; var s : Session; prompt : array<int64>) : int64 {
+//! the deepest checkpoint whose every token opens `prompt`, short of the prompt's last token; -1 where none does
+def private prefix_state_best(cache : PrefixCache; prompt : array<int64>) : int {
     var best = -1
     var best_n = 0l
     for (st, i in cache.states, count()) {
@@ -218,9 +217,25 @@ def private prefix_attach_state(var cache : PrefixCache; var pool : KVPool; var 
             best_n = n
         }
     }
+    return best
+}
+
+//! checkpoint `at` counted as attached: its use is the newest, its hits and the cache's one up
+def private prefix_state_hit(var cache : PrefixCache; at : int) {
+    cache.tick ++
+    cache.states[at].last_use = cache.tick
+    cache.states[at].hits ++
+    cache.n_state_hits ++
+}
+
+//! the deepest checkpoint whose every token opens `prompt`, short of the prompt's last token: its
+//! whole pages shared, its partial page copied (the session writes on from there), its state restored
+def private prefix_attach_state(var cache : PrefixCache; var pool : KVPool; var s : Session; prompt : array<int64>) : int64 {
+    let best = prefix_state_best(cache, prompt)
     if (best < 0) {
         return 0l
     }
+    let best_n = long_length(cache.states[best].tokens)
     let kept = (best_n - 1l) / pool.page_rows   //! the page of row n - 1 is copied even when whole: the draft head rewrites that row for the token that follows
     s.block_table |> reserve(kept + 1l)
     for (i in range64(kept)) {
@@ -231,35 +246,113 @@ def private prefix_attach_state(var cache : PrefixCache; var pool : KVPool; var 
     s.block_table |> push(kv_pool_copy_group(pool, cache.states[best].groups[kept]))
     dn_snapshot_restore(s, cache.states[best].snap)
     s.n_past = best_n
-    cache.tick ++
-    cache.states[best].last_use = cache.tick
-    cache.states[best].hits ++
-    cache.n_state_hits ++
+    prefix_state_hit(cache, best)
     return best_n
+}
+
+//! How many leading positions of `prompt` a recurrent checkpoint would attach, touching nothing: the deepest one whose every
+//! token opens it, short of its last token; 0 where none does.
+def prefix_state_match_len_(cache : PrefixCache; prompt : array<int64>) : int64 {
+    let best = prefix_state_best(cache, prompt)
+    return best < 0 ? 0l : long_length(cache.states[best].tokens)
+}
+
+//! The deepest checkpoint opening `prompt`, attached apart: every page it holds shared into `pages` (a fresh session of the
+//! pool that reads them and writes nothing - a device's upload), its state restored into `state`; the count, 0 where none does
+[arch(at="../ARCHITECTURE_ENGINE_SERVING.md#device-home-pool")]
+def prefix_attach_state_split_(var cache : PrefixCache; var pool : KVPool; var pages : Session; var state : Session; prompt : array<int64>) : int64 {
+    let best = prefix_state_best(cache, prompt)
+    return 0l if (best < 0)
+    pages.block_table |> reserve(length(cache.states[best].groups))
+    for (g in cache.states[best].groups) {
+        pages.block_table |> push(g)
+        pool.refcnt[g] ++
+    }
+    let n = long_length(cache.states[best].tokens)
+    pages.n_past = n
+    dn_snapshot_restore(state, cache.states[best].snap)
+    prefix_state_hit(cache, best)
+    return n
+}
+
+//! Whether a checkpoint of the first `n` of `tokens` stands. One that does is used now, and a stop at a shared position
+//! (`opening`) makes it an opening from here on: a tail another request stops at serves more than its conversation.
+def prefix_state_touch_(var cache : PrefixCache; tokens : array<int64>; n : int64; opening : bool) : bool {
+    for (st in cache.states) {
+        if (long_length(st.tokens) == n && common_prefix_len(st.tokens, tokens) >= n) {
+            cache.tick ++
+            st.last_use = cache.tick
+            if (opening) {
+                st.kind = PrefixStateKind.opening
+            }
+            return true
+        }
+    }
+    return false
+}
+
+//! The whole pages of the first `n` of `tokens` the cache already holds, shared into the fresh session `s` of the pool: a
+//! checkpoint's pages under the longest opening it shares with them on a recurrent model, the page chain elsewhere. Answers the
+//! positions they cover, a whole number of pages - the rows a caller still has to write start there.
+[arch(at="../ARCHITECTURE_ENGINE_SERVING.md#device-home-pool")]
+def prefix_share_pages_(var cache : PrefixCache; var pool : KVPool; var s : Session; tokens : array<int64>; n : int64) : int64 {
+    let pr = pool.page_rows
+    if (!empty(s.dn_state_prefix)) {
+        var best = -1
+        var best_n = 0l
+        for (st, i in cache.states, count()) {
+            let common = min(common_prefix_len(st.tokens, tokens), n)
+            if (common > best_n) {
+                best = i
+                best_n = common
+            }
+        }
+        return 0l if (best < 0)
+        let kept = best_n / pr
+        s.block_table |> reserve(kept)
+        for (i in range64(kept)) {
+            let g = cache.states[best].groups[i]
+            s.block_table |> push(g)
+            pool.refcnt[g] ++
+        }
+        return kept * pr
+    }
+    var h = 0ul
+    var kept = 0l
+    while ((kept + 1l) * pr <= n) {
+        let nh = chain_page_hash(h, tokens, kept * pr, (kept + 1l) * pr)
+        let e = unsafe(cache.entries?[nh])
+        break if (e == null || long_length(e.tokens) != pr || !page_tokens_match(*e, tokens, kept * pr))
+        s.block_table |> push(e.group)
+        pool.refcnt[e.group] ++
+        h = nh
+        kept ++
+    }
+    return kept * pr
 }
 
 //! a checkpoint of the session where it stands: its first `n_past` tokens, their pages, the
 //! recurrent state. Nothing is kept when the state does not stand at that position.
 def private prefix_insert_state(var cache : PrefixCache; var pool : KVPool; var s : Session; tokens : array<int64>; kind : PrefixStateKind) {
     let n = min(long_length(tokens), s.n_past)
-    if (n <= 0l || cache.max_states <= 0l) {
+    if (n <= 0l || cache.max_states <= 0l || prefix_state_touch_(cache, tokens, n, kind == PrefixStateKind.opening)) {
         return
     }
-    cache.tick ++
-    for (st in cache.states) {
-        if (long_length(st.tokens) == n && common_prefix_len(st.tokens, tokens) == n) {
-            st.last_use = cache.tick
-            if (kind == PrefixStateKind.opening) {   //! a tail another request stops at is an opening from here on
-                st.kind = kind
-            }
-            return
-        }
-    }
     var snap <- dn_snapshot_take(s)
-    if (snap.pos != n) {
+    prefix_insert_snapshot_(cache, pool, s, tokens, snap, kind == PrefixStateKind.opening)
+}
+
+//! A checkpoint of the first `n_past` of `tokens` out of the session `s`'s pages, its state `snap` taken elsewhere (moved in) - a
+//! device's slots, where the session holds the rows alone. Nothing is kept when the state does not stand at that position.
+[arch(at="../ARCHITECTURE_ENGINE_SERVING.md#device-home-pool")]
+def prefix_insert_snapshot_(var cache : PrefixCache; var pool : KVPool; s : Session; tokens : array<int64>; var snap : DnSnapshot; opening : bool) {
+    let n = min(long_length(tokens), s.n_past)
+    if (n <= 0l || cache.max_states <= 0l || snap.pos != n) {
         delete snap
         return
     }
+    let kind = opening ? PrefixStateKind.opening : PrefixStateKind.tail
+    cache.tick ++
     let pr = pool.page_rows
     let nbytes = prefix_state_bytes_(pool, snap, n)   // before the move below: a call's arguments evaluate in no fixed order
     var e <- PrefixState(snap <- snap, kind = kind, nbytes = nbytes, last_use = cache.tick)

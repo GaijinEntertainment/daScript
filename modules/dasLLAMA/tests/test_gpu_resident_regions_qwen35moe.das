@@ -34,6 +34,11 @@ def test_regions_batched_groups_qwen35moe(t : T?) {
 }
 
 [test]
+def test_device_pool_qwen35moe(t : T?) {
+    cell_device_pool(t, REGIONS_FILE)
+}
+
+[test]
 def test_greedy_chain_qwen35moe(t : T?) {
     t |> run("the greedy chain forced on reads the plain walk's tokens and logits bit for bit, every on-pick step chained") @(t : T?) {
         let spec0 = get_mtp_spec()

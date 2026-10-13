@@ -1925,7 +1925,15 @@ checkpoint) its first turn left, every call served. The hybrid file's checkpoint
 two requests on one 100-token system prompt, a different 30-token user turn each, through a one-stream device-home scheduler and a
 paged host-cached one, both marking the system prompt's end as their stable opening: the device-home stream's region keeps its
 recurrent state there (a checkpoint row), the second request adopts it off the parked claim (100 tokens cached, 160 computed
-across the run, the same as the host-cached run's), and both requests' tokens are the host-cached run's. The qwen3 file adds the
+across the run, the same as the host-cached run's), and both requests' tokens are the host-cached run's. The qwen2, hybrid and
+qwen35moe files run the pool cell (`cell_device_pool`, `ARCHITECTURE_ENGINE_SERVING.md#device-home-pool`): five requests one after
+another on a two-stream scheduler over three 100-token system prompts - more openings than the two regions hold - the fourth on
+the first's system prompt after two other streams took both regions, the fifth the second conversation's next turn after its
+region went to the fourth: on the paged device-home scheduler the fourth takes its system prompt (100 tokens) and the fifth the
+whole earlier turn (138) up from the host pool, two imports counted (`gpu_device_kv_pool_moves`), every request token for token
+the host-cached paged scheduler's, whose prefix cache keeps the same openings; the flat device-home scheduler, which keeps no
+pool, is the control - both prefill whole; and on a recurrent model a pool capped at four checkpoints keeps the system prompts
+(openings) over the finished turns (tails), so the fifth request finds its system prompt alone. The qwen3 file adds the
 window's fused q/k norm cell (`cell_window_qkn_fused`): a prompt two windows long with the fused pass and with the split pair
 (`set_vulkan_prefill_qkn_fuse`, put back), the census counting the fused pass on the one and the norm pass on the other, the
 prompt's logits and eight fed steps within the split bar with the row one step off the control. The qwen2 file also holds the guards - a third
@@ -2396,7 +2404,14 @@ prefill stops (`prefix_checkpoint_at_`: the caller's stable opening, else the op
 checkpoint shares, a token short of a prompt an earlier one holds whole, nowhere under a page past
 the hit or on a model with no recurrent state), and the side state (the n-gram input's last tokens
 and conv history ride the checkpoint; a snapshot of another state size is refused and leaves the
-session as it stood); model-gated (stories15M): attached pages plus a tail eval read the cold
+session as it stood), and the device pool's verbs (`test_prefix_pool_carrier`: a carrier session takes the
+whole pages the cache already holds under the longest opening a checkpoint shares - none from an empty cache, the
+opening's partial page never - and the rows past them are its own; a state taken off another session enters as a
+checkpoint, an opening or a tail as asked, the shared page counted once in the bytes, a state off the carrier's
+position not kept; `prefix_state_touch_` answers a kept stop and promotes it to an opening; the split attach
+shares every page of the deepest opening into the carrier, copies none, restores the state into a session that
+holds no pages and counts a hit, the probe `prefix_state_match_len_` reading its count; on a model with no
+recurrent state the page chain's whole pages under the asked count); model-gated (stories15M): attached pages plus a tail eval read the cold
 prefill's logits bit for bit, and the page past the whole hits (`test_prefix_tail_copy`): a
 donation's partial tail page is an entry beside its whole ones, a prompt that shares rows with it
 takes a COPY (the donor's page stays the cache's alone, `n_hit_partial` counts the take) and lands

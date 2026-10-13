@@ -4940,6 +4940,72 @@ def gpu_device_kv_parked_pos_(claim : int64) : int64 {
     return 0l
 }
 
+//! What the host pool's copies of device-home rows moved since the process started: the rows brought down into its pages
+//! and taken back up into a region, and the wall each direction took
+struct RdecPoolMoves {
+    exports : int64
+    rows_down : int64
+    down_us : int64
+    imports : int64
+    rows_up : int64
+    up_us : int64
+}
+
+var private g_rdec_pool_moves : RdecPoolMoves
+
+//! The host pool's row traffic so far (`RdecPoolMoves`): a cell's witness and the server log's upload cost
+def gpu_device_kv_pool_moves_() : RdecPoolMoves => g_rdec_pool_moves
+
+//! `DASLLAMA_DEVICE_POOL`: a paged scheduler keeps its device-home streams' openings in its prefix cache too
+def gpu_device_kv_pool_armed_() : bool => g_env_engine.device_pool
+
+//! The rows `[lo, hi)` the device-home session `s` holds in its region copied down into the paged host session `host`'s pages,
+//! which grow to `hi`: the pool's copy of an opening the session's region may lose. False where `s` holds no region with those
+//! rows, or the host pages are not the mirror's codec.
+[arch(at="../ARCHITECTURE_ENGINE_SERVING.md#device-home-pool")]
+def gpu_device_kv_export_(t : Model; s : Session; var host : Session; lo, hi : int64) : bool {
+    return false if (!g_rdec_active || !s.device_kv || host.kv_pool == null || host.kv_pool.kdt != g_rdec_kvdt || host.kv_pool.vdt != g_rdec_kvdt)
+    let r = s.rdec_region
+    return false if (!rdec_owns(s, r) || g_rdec_regions[r].cnt < hi)
+    let t0 = ref_time_ticks()
+    kv_ensure(host, hi)
+    rdec_select_region(r)
+    let c = t.config
+    for (l in range64(c.n_layers)) {
+        continue if (!layer_owns_kv(t, l))
+        rdec_host_rows(host, c, l, lo, hi, false)
+    }
+    host.n_past = hi
+    g_rdec_pool_moves.exports ++
+    g_rdec_pool_moves.rows_down += max(hi - lo, 0l)
+    g_rdec_pool_moves.down_us += int64(get_time_usec(t0))
+    return true
+}
+
+//! The first `npos` rows of the paged host session `host` taken up into a region for the fresh device-home session `s`, under a
+//! claim of its own - a pool's opening a later request continues from; the caller puts a recurrent state in `s`'s host arrays
+//! (the next prefill hands them to the region's slots). False where no region is free or the pages are not the mirror's codec.
+[arch(at="../ARCHITECTURE_ENGINE_SERVING.md#device-home-pool")]
+def gpu_device_kv_import_(t : Model; var s : Session; var host : Session; npos : int64) : bool {
+    return false if (!g_rdec_active || !s.device_kv || s.rdec_gen != 0l || npos <= 0l || npos > g_rdec_cap || host.kv_pool == null
+        || host.kv_pool.kdt != g_rdec_kvdt || host.kv_pool.vdt != g_rdec_kvdt || long_length(host.block_table) * host.kv_pool.page_rows < npos)
+    let t0 = ref_time_ticks()
+    let r = rdec_bind_region(t, s)
+    return false if (r < 0l)
+    let c = t.config
+    for (l in range64(c.n_layers)) {
+        continue if (!layer_owns_kv(t, l))
+        rdec_host_rows(host, c, l, 0l, npos, true)
+    }
+    rdec_claim(s, r, npos)
+    rdec_host_mark(s, false)
+    s.n_past = npos
+    g_rdec_pool_moves.imports ++
+    g_rdec_pool_moves.rows_up += npos
+    g_rdec_pool_moves.up_us += int64(get_time_usec(t0))
+    return true
+}
+
 //! The positions one device-home session holds: the armed driver's per-region context.
 def gpu_device_session_ctx_() : int64 => g_rdec_cap
 

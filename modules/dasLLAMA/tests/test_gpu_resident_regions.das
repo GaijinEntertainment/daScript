@@ -77,3 +77,8 @@ def test_gpu_resident_regions_passes(t : T?) {
 def test_scheduler_paged_resident(t : T?) {
     cell_scheduler_paged_resident(t, REGIONS_FILE)
 }
+
+[test]
+def test_device_pool(t : T?) {
+    cell_device_pool(t, REGIONS_FILE)
+}

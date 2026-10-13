@@ -77,6 +77,9 @@ struct public EngineEnv {
     @clarg_doc = "Print engine diagnostics (tier selection, upload plan, arm/decline reasons)."
     noisy : bool = false
 
+    @clarg_doc = "A paged scheduler serving device-home streams keeps their openings in its prefix cache too - a recurrent model's checkpoints and the finished turns' rows copied down to host RAM under the cache's budget, taken back up into a region when a request opens with one the device no longer holds; 0 keeps the regions' parked claims and checkpoint rows alone - the A/B rail."
+    device_pool : bool = true
+
     @clarg_default_doc = "2 (the top notch)"
     @clarg_doc = "A/B rail for the dispatch caller's thread priority, -2..2; unset claims the top notch."
     caller_prio : int = 2

@@ -70,3 +70,8 @@ def test_scheduler_paged_resident(t : T?) {
 def test_device_checkpoint_adopt_hybrid(t : T?) {
     cell_device_checkpoint_adopt(t, REGIONS_FILE)
 }
+
+[test]
+def test_device_pool_hybrid(t : T?) {
+    cell_device_pool(t, REGIONS_FILE)
+}
