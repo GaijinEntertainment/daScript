@@ -200,6 +200,7 @@ jobs:
         path: |
           ${{ runner.temp }}/sccache
           .cache/daslang/test_cache
+          .cache/daslang/_anon_*
         key: sccache-${{ matrix.target }}-${{ matrix.architecture }}-${{ matrix.cmake_preset }}-${{ matrix.sanitizers }}${{ matrix.fast_math == 'ON' && '-fastmath' || '' }}@${{ github.run_id }}
         restore-keys: sccache-${{ matrix.target }}-${{ matrix.architecture }}-${{ matrix.cmake_preset }}-${{ matrix.sanitizers }}${{ matrix.fast_math == 'ON' && '-fastmath' || '' }}@
 
@@ -259,6 +260,7 @@ jobs:
         path: |
           ${{ runner.temp }}/sccache
           .cache/daslang/test_cache
+          .cache/daslang/_anon_*
         key: sccache-${{ matrix.target }}-${{ matrix.architecture }}-${{ matrix.cmake_preset }}-${{ matrix.sanitizers }}${{ matrix.fast_math == 'ON' && '-fastmath' || '' }}@${{ github.run_id }}
     - name: "Prune older sccache slots"
       if: ${{ !cancelled() && github.ref == 'refs/heads/master' && matrix.phase != 'slow' && matrix.phase != 'backend' }}
