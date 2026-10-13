@@ -338,13 +338,23 @@ def private deltanet_decode_gpu(t : Model; var s : Session; l : int64) {
         mm_f(s.dn_beta, t, fmt_at(t.dnbeta_fmt, l), t.dnbeta_offs[l], s.xb, s.xq, s.xs, s.xbs, dim, nvh)
         mm_f(s.dn_g, t, fmt_at(t.dnalpha_fmt, l), t.dnalpha_offs[l], s.xb, s.xq, s.xs, s.xbs, dim, nvh)
     }
-    quantize_q8_0_into(s.xb, dim, s.xq, s.xs, 0l, 0l)   // one Q8_0 image serves the qkv AND z GEMVs
+    let fq = fmt_at(t.dnqkv_fmt, l)
+    let kq_x = kq_sb(fq)
+    if (kq_x) {   // one image in the qkv/z planes' class serves both GEMVs: Q8_K for a superblock format
+        s.kxqb |> resize(dim)
+        s.kxsb |> resize(dim / 256l)
+        s.kxbsb |> resize(dim / 16l)
+        requant_rows_q8k_bs(s.xb, dim, 1l, s.kxqb, s.kxsb, s.kxbsb)
+    } else {
+        quantize_q8_0_into(s.xb, dim, s.xq, s.xs, 0l, 0l)
+    }
     prof_add("mm_qkv", ts_qkv)
     let ts_gpu = prof_ticks()
     s.dn_tail |> resize(taps * cd)   // contract slot only — the step arm never writes it
     unsafe {
         matmul_moe_gpu_dn(s.xb2, t.dnqkv_offs[l], t.dngate_offs[l], t.dnout_offs[l],
-            s.xq, s.xs, s.dn_beta, s.dn_g,
+            int(fq), int(fmt_at(t.dngate_fmt, l)), int(fmt_at(t.dnout_fmt, l)),
+            kq_x ? s.kxqb : s.xq, kq_x ? s.kxsb : s.xs, s.dn_beta, s.dn_g,
             addr < float const? >(t.fblob[t.dn_conv_off + l * dconv * cd]),
             addr < float const? >(t.fblob[t.dn_norm_off + l * ds]),
             addr < float const? >(t.fblob[t.dn_a_off + l * nvh]),
@@ -862,13 +872,23 @@ def private deltanet_prefill_gpu(t : Model; var s : Session; l : int64; npos : i
     prof_add("dn_norm", ts_norm0)
     let ts_in = prof_ticks()
     dn_beta_alpha_proj(t, s, l, npos)   // raw beta/alpha rows - the transforms run in-kernel
-    requant_rows_q8(s.xb_b, dim, npos, s.xqb, s.xsb)   // one Q8_0 image serves the qkv AND z GEMMs
+    let fq = fmt_at(t.dnqkv_fmt, l)
+    let kq_x = kq_sb(fq)
+    if (kq_x) {   // one image in the qkv/z planes' class serves both GEMMs: Q8_K for a superblock format
+        s.kxqb |> resize(npos * dim)
+        s.kxsb |> resize(npos * dim / 256l)
+        s.kxbsb |> resize(npos * dim / 16l)
+        requant_rows_q8k_bs(s.xb_b, dim, npos, s.kxqb, s.kxsb, s.kxbsb)
+    } else {
+        requant_rows_q8(s.xb_b, dim, npos, s.xqb, s.xsb)
+    }
     prof_add("dn_mm_in", ts_in)
     let ts_gpu = prof_ticks()
     s.dn_tail |> resize(taps * cd)
     unsafe {
         matmul_moe_gpu_dn(s.xb2_b, t.dnqkv_offs[l], t.dngate_offs[l], t.dnout_offs[l],
-            s.xqb, s.xsb, s.dn_beta_b, s.dn_g_b,
+            int(fq), int(fmt_at(t.dngate_fmt, l)), int(fmt_at(t.dnout_fmt, l)),
+            kq_x ? s.kxqb : s.xqb, kq_x ? s.kxsb : s.xsb, s.dn_beta_b, s.dn_g_b,
             addr<float const?>(t.fblob[t.dn_conv_off + l * dconv * cd]),
             addr<float const?>(t.fblob[t.dn_norm_off + l * ds]),
             addr<float const?>(t.fblob[t.dn_a_off + l * nvh]),

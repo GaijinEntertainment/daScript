@@ -6756,7 +6756,7 @@ def test_vkd_dn_ba(t0 : T?) {
     }
 }
 
-//! dn_ba at one geometry against the CPU dot over the f16-rounded weight rows (the layer's `ne` rows from row base `woff`): the
+//! dn_ba at one geometry against the CPU dot over the f32 weight rows (the layer's `ne` rows from row base `woff`): the
 //! beta outputs at 16, the alpha outputs past an 8-word gap, the plane under the sentinel and only the written positions
 //! compared; the bar's control pushes the first alpha output (`poison_beta`: the first beta output); `timed` logs the dispatch
 //! before its submit and times the submit, so a device hang names its kernel
@@ -6771,12 +6771,11 @@ def private dn_ba_cell(t : T?; tag : string; dim, nvh, npos, woff : int; poison_
         var xh <- hash_fill(npos * dim, 77777u, 1000u, 500.0, 1.0)
         var want : array<float>
         want |> resize(out_n)
-        var wh16 <- pack_f16(wh)   // the device keeps the rows f16: the oracle dots the rounded weights
-        for (p in range(npos)) {
+        for (p in range(npos)) {   // the device reads the file's f32 rows: the oracle dots the same floats
             for (e in range(ne)) {
                 var acc = 0.0
                 for (k in range(dim)) {
-                    acc += float(wh16[woff + e * dim + k]) * xh[p * dim + k]
+                    acc += wh[woff + e * dim + k] * xh[p * dim + k]
                 }
                 want[(e < nvh ? ob_b : ob_g) + p * ostride + e % nvh] = acc
             }
@@ -6784,7 +6783,7 @@ def private dn_ba_cell(t : T?; tag : string; dim, nvh, npos, woff : int; poison_
         let wgs = dn_ba_wgs(int64(npos), int64(nvh))
         var got : array<float>
         with_cell_planes() $(var cp : CellPlanes) {
-            let pw = cp |> in_plain(wh16)
+            let pw = cp |> in_plain(wh)
             let px = cp |> in_(xh)
             let po = cp |> out_(out_n)
             var sc = cp |> cls_set(fixed_array(pw, px, po), @@set_dn_ba_cls)
@@ -6810,7 +6809,6 @@ def private dn_ba_cell(t : T?; tag : string; dim, nvh, npos, woff : int; poison_
         t |> success(ba_plane_mismatches(poison, want, npos, ne, nvh, ob_b, ob_g, ostride) > 0, "{tag}: the bar reds a poisoned output")
         delete poison
         delete wh
-        delete wh16
         delete xh
         delete want
         delete got
@@ -6935,10 +6933,10 @@ def test_vkd_dn_9b_ba(t0 : T?) {
     }
 }
 
-// the decode's beta/alpha GEMV over the f16 rows: ne rows at a row base, the ne outputs at an output base
+// the f16 router-form GEMV (the per-layer-embedding projection's rows): ne rows at a row base, the ne outputs at an output base
 [test]
 def test_vkd_router_gemv_f16(t0 : T?) {
-    t0 |> run("router_gemv_f16 (the decode's f16 beta/alpha rows) == the CPU dot at a row base and an output base") <| @(t : T?) {
+    t0 |> run("router_gemv_f16 (the f16 router-form rows) == the CPU dot at a row base and an output base") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!vk_moe_init()) {
                 t |> skip("no Vulkan device")
@@ -7040,6 +7038,73 @@ def test_vkd_router_gemv_f16(t0 : T?) {
             delete wh16
             delete xh
             delete want
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+// the decode's f32 beta/alpha GEMV - the f32 stamp over the file's rows in its two-base form, one row and three rows a dispatch
+[test]
+def test_vkd_router_gemv_f32_ba(t0 : T?) {
+    t0 |> run("router_gemv (the decode's f32 beta/alpha rows) == the CPU dot over the f32 rows: the beta rows at one base, the alpha rows at the other, one and three columns") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_moe_init()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            verify(ensure_router_gemv_cls(), "the router_gemv class rail must engage on a live device")
+            let dim = 2048
+            let nvh = 32
+            let ne = 2 * nvh
+            let woff = ne * dim   // the second recurrent layer's [beta ; alpha] rows
+            let ob_b = 16
+            let ob_g = ob_b + 3 * nvh + 4
+            let out_n = ob_g + 3 * nvh + 8
+            var wh <- hash_fill(woff + ne * dim, 4343u, 1000u, 500.0, 1.0)
+            var xh <- hash_fill(3 * dim, 101u, 1000u, 500.0, 1.0)
+            for (ncols in [1, 3]) {
+                var want : array<float>
+                want |> resize(out_n)
+                for (c in range(ncols)) {
+                    for (e in range(ne)) {
+                        var acc = 0.0
+                        for (k in range(dim)) {
+                            acc += wh[woff + e * dim + k] * xh[c * dim + k]
+                        }
+                        want[e < nvh ? ob_b + c * nvh + e : ob_g + c * nvh + (e - nvh)] = acc
+                    }
+                }
+                with_cell_planes() $(var cp : CellPlanes) {
+                    let pw = cp |> in_plain(wh)
+                    let px = cp |> in_(xh)
+                    let po = cp |> out_(out_n)
+                    var sc = cp |> cls_set(fixed_array(pw, px, po, px), @@set_router_gemv_cls)
+                    var pc = RouterArgs(ne = uint(ne), dim = uint(dim), woff = uint(woff), obase = uint(ob_b),
+                        ne_split = uint(nvh), obase_split = uint(ob_g), ncols = uint(ncols))
+                    cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                        enc_router_gemv_cls(raw, h, sc, pc, int64(ne))
+                    }
+                    var got <- cp |> plane_run(po)
+                    let bad = rel_mismatches(got, want, ob_b, ncols * nvh) + rel_mismatches(got, want, ob_g, ncols * nvh)
+                    t |> success(bad == 0, "router_gemv f32 ba, {ncols} column(s): {bad} of {ncols * ne} outputs off the CPU dot")
+                    var gap = 0
+                    for (i in range(ob_b + ncols * nvh, ob_g)) {
+                        if (float_bits_to_uint(got[i]) != NAN_SENTINEL_BITS) {
+                            gap++
+                        }
+                    }
+                    t |> equal(gap, 0, "router_gemv f32 ba, {ncols} column(s): the words between the beta and alpha bases untouched")
+                    var poison := got   // the bar's control: one alpha output pushed past it must red
+                    poison[ob_g] += 1.0 + 2.0 * abs(want[ob_g])
+                    t |> success(rel_mismatches(poison, want, ob_g, ncols * nvh) > 0, "router_gemv f32 ba: the bar reds a poisoned output")
+                    delete poison
+                    delete got
+                }
+                delete want
+            }
+            delete wh
+            delete xh
         } else {
             t |> skip("dasVulkan not present")
         }

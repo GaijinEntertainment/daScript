@@ -68,8 +68,8 @@ def private d_norms(norms : array<float>; obias : bool) {}
 [unused_argument(l, mir_idx, bq, bk, bv, bo, b1, b3, b2, fq, fk, fv, fo, f1, f3, f2, g)]
 def private d_set_layer(l, mir_idx, bq, bk, bv, bo, b1, b3, b2 : int64; fq, fk, fv, fo, f1, f3, f2 : int; g : RdecLayerGeom) {}
 
-[unused_argument(bqkv, bz, bout, bbeta, balpha, b1, b3, b2, fqkv, fz, fout, f1, f3, f2, convw, wnormp, ap, dtp)]
-def private d_set_dn_layer(l, bqkv, bz, bout, bbeta, balpha, b1, b3, b2, ba_off : int64; fqkv, fz, fout, f1, f3, f2 : int; convw : float const?; wnormp : float const?; ap : float const?; dtp : float const?) {
+[unused_argument(bqkv, bz, bout, bbeta, balpha, b1, b3, b2, fqkv, fz, fout, fbeta, falpha, f1, f3, f2, convw, wnormp, ap, dtp)]
+def private d_set_dn_layer(l, bqkv, bz, bout, bbeta, balpha, b1, b3, b2, ba_off : int64; fqkv, fz, fout, fbeta, falpha, f1, f3, f2 : int; convw : float const?; wnormp : float const?; ap : float const?; dtp : float const?) {
     g_dn_layer_l = l
     g_dn_layer_ba_off = ba_off
 }
@@ -515,7 +515,7 @@ def test_rdec_dn_seats(t : T?) {
         t |> success(!rdec_dn_installed(), "no hybrid seats before their install")
         install_moe_gpu_resident_dn(@@d_set_dn_layer, @@d_upload_dn_ba, @@d_dn_own, @@d_dn_prefill_own)
         t |> success(rdec_dn_installed(), "the hybrid install must flip its witness")
-        rdec_set_dn_layer(3l, 1l, 2l, 3l, -1l, -1l, 4l, 5l, 6l, 4096l, 0, 0, 0, 0, 0, 0, null, null, null, null)
+        rdec_set_dn_layer(3l, 1l, 2l, 3l, -1l, -1l, 4l, 5l, 6l, 4096l, 0, 0, 0, 0, 0, 0, 0, 0, null, null, null, null)
         t |> equal(g_dn_layer_l, 3l)
         t |> equal(g_dn_layer_ba_off, 4096l)
         var ba : array<float>

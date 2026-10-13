@@ -1325,7 +1325,7 @@ struct DnBaArgs {
 
 [vk_dispatch(name = "dn_ba_cls", grid = "wgs", params = "wgs : int64")]
 class DnBaGemm {
-    @ssbo @binding = 0 @role = "weight" w : array<float16>   // the [beta ; alpha] rows per layer, f16 on the device
+    @ssbo @binding = 0 @role = "weight" w : array<float>   // the [beta ; alpha] rows per layer, the file's f32
     @ssbo @binding = 1 x : array<float>       // the normed rows
     @ssbo @binding = 2 outp : array<float>    // the layer smalls (beta / g rows, position-major)
     @push_constant pa : DnBaArgs
@@ -1359,12 +1359,12 @@ class DnBaGemm {
                 xs[(r + 8u) * 33u + k] = 0.0
             }
             if (eg0 + r < ne) {
-                ws[r * 33u + k] = float(w[pa.woff + (eg0 + r) * pa.dim + kb + k])
+                ws[r * 33u + k] = w[pa.woff + (eg0 + r) * pa.dim + kb + k]
             } else {
                 ws[r * 33u + k] = 0.0
             }
             if (eg0 + r + 8u < ne) {
-                ws[(r + 8u) * 33u + k] = float(w[pa.woff + (eg0 + r + 8u) * pa.dim + kb + k])
+                ws[(r + 8u) * 33u + k] = w[pa.woff + (eg0 + r + 8u) * pa.dim + kb + k]
             } else {
                 ws[(r + 8u) * 33u + k] = 0.0
             }

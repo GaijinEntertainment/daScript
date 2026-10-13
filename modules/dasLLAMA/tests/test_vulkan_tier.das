@@ -1018,7 +1018,7 @@ def test_vulkan_deltanet(t : T?) {
                 y |> resize(int(npos * DND))
                 tail |> resize(int(DNTAPS * DNCD))
                 unsafe {
-                    matmul_moe_gpu_dn(y, DNQKV_WOFF, DNZ_WOFF, DNO_WOFF, xq, xs, fx.bts, fx.gts,
+                    matmul_moe_gpu_dn(y, DNQKV_WOFF, DNZ_WOFF, DNO_WOFF, 0, 0, 0, xq, xs, fx.bts, fx.gts,
                         addr<float const?>(fx.tapsv[0]), addr<float const?>(fx.wnormv[0]),
                         addr<float const?>(fx.av[0]), addr<float const?>(fx.dtv[0]),
                         addr(gstate[0]), tail, addr<float const?>(fx.hist[0]),
@@ -1133,7 +1133,7 @@ def test_vulkan_deltanet_step(t : T?) {
                     g1[int(i)] = fx.gts[int(tok * DNVH + i)]
                 }
                 unsafe {
-                    matmul_moe_gpu_dn(y1, DNSQ_WOFF, DNSZ_WOFF, DNSO_WOFF, xq1, xs1, b1, g1,
+                    matmul_moe_gpu_dn(y1, DNSQ_WOFF, DNSZ_WOFF, DNSO_WOFF, 0, 0, 0, xq1, xs1, b1, g1,
                         addr<float const?>(fx.tapsv[0]), addr<float const?>(fx.wnormv[0]),
                         addr<float const?>(fx.av[0]), addr<float const?>(fx.dtv[0]),
                         addr(gstate[0]), tail1, addr<float const?>(gring[0]),

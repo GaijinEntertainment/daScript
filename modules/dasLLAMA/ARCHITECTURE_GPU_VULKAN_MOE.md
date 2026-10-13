@@ -34,8 +34,7 @@ except where a probe arm is named.
   beside the decode GEMV's f32 plane - runs eight k chunks into the split-k scratch planes and
   the reduce sums them into the logits (`pf_f16g_enc`). The grid of such a GEMM alone (four
   position tiles by two row tiles on the 35B) leaves the device under-filled, which is what the
-  chunks are for. The same class computes the deltanet beta and alpha rows
-  (`ARCHITECTURE_GPU_VULKAN.md#vk-prefill-dn-block`) and the E-series' per-layer-embedding projection, which
+  chunks are for. The same class computes the E-series' per-layer-embedding projection, which
   off cm2 takes `F16GemmKhr` instead - the whole-K twin on subgroup-scope 16x16x16 fragments, a
   64 x 64 output tile a workgroup with the x and w^T fragments loaded straight from the planes
   (`ple_proj_shape_ok`: a KHR device at subgroup 32, `dim` and the projected width 16-multiples); its

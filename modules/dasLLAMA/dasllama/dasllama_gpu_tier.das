@@ -33,10 +33,10 @@ typedef MoeGpuDropFn = function<(n : int; stream : bool) : void>
 // in place of the gathered quant image - the tier gathers, converts and combines device-side
 typedef MoeGpuFfnXfFn = function<(var goutp : float?; offs1 : int64 const?; offs3 : int64 const?; offs2 : int64 const?; nregions : int64; xp : float const?; wp : float const?; invp : uint const?; n : int64; nfe : int64; nrows : int64; npos : int64; f1 : int; f3 : int; f2 : int; is_gelu : bool) : void>
 typedef MoeGpuFfnXfOkFn = function<(npos : int64; n : int64; f1 : int; f3 : int; f2 : int) : bool>
-// The whole deltanet attention block of one recurrent layer as ONE device chain: qkv + z-gate
-// GEMMs (Q8_0, always q8 plane), depthwise conv + silu + q/k L2-norm, chunked delta-rule scan,
-// gated out-norm, out projection. histp feeds conv history channel-major; zeros = dn_reset's fresh state.
-typedef MoeGpuDnFn = function<(var yp : float?; woq : int64; woz : int64; woo : int64;
+// One recurrent layer's deltanet block as ONE device chain: qkv + z GEMMs in `fq` / `fz` over one image in their class (Q8_K
+// for a superblock format, else Q8_0), conv + silu + q/k L2-norm, the delta-rule scan, gated out-norm, out projection in `fo`.
+// histp feeds conv history channel-major; zeros = dn_reset's fresh state.
+typedef MoeGpuDnFn = function<(var yp : float?; woq : int64; woz : int64; woo : int64; fq : int; fz : int; fo : int;
                                xqp : int8 const?; xsp : float const?; bp : float const?; gp : float const?;
                                convw : float const?; wnormp : float const?; ap : float const?; dtp : float const?;
                                var stp : float?; var tailp : float?; histp : float const?;
@@ -80,8 +80,8 @@ def private moe_gpu_unset_drop(n : int; stream : bool) {
     panic("dasLLAMA: GPU stack drop hit without an installed GPU tier")
 }
 
-[unused_argument(yp, woq, woz, woo, xqp, xsp, bp, gp, convw, wnormp, ap, dtp, stp, tailp, histp, npos, dim, cd, kd, di, nvh, nkh, ds, dconv, eps)]
-def private moe_gpu_unset_dn(var yp : float?; woq, woz, woo : int64;
+[unused_argument(yp, woq, woz, woo, fq, fz, fo, xqp, xsp, bp, gp, convw, wnormp, ap, dtp, stp, tailp, histp, npos, dim, cd, kd, di, nvh, nkh, ds, dconv, eps)]
+def private moe_gpu_unset_dn(var yp : float?; woq, woz, woo : int64; fq, fz, fo : int;
                              xqp : int8 const?; xsp : float const?; bp : float const?; gp : float const?;
                              convw : float const?; wnormp : float const?; ap : float const?; dtp : float const?;
                              var stp : float?; var tailp : float?; histp : float const?;
@@ -121,7 +121,7 @@ typedef RdecReserveFn = function<(fmt : int; cap_blocks : int64) : bool>
 typedef RdecPlaceFn = function<(wq : array<uint8>; ws : array<uint8>; n : int64; rows : int64; fmt : int) : int64>
 //! The deltanet geometry a hybrid model hands the resident driver at prepare; `cd == 0` = no
 //! recurrent layers. `ba_f32`: the beta/alpha rows are f32 (uploaded whole through
-//! `rdec_upload_dn_ba`) rather than q8 arena planes.
+//! `rdec_upload_dn_ba`, read as f32) rather than arena planes in their tags' formats.
 struct RdecDnGeom {
     cd, kd, di, nvh, nkh, ds, dconv : int64
     ba_f32 : bool
@@ -178,7 +178,7 @@ typedef RdecPrepareFn = function<(n_layers : int64; n_attn : int64; dim : int64;
 //! `obias`: the plane's `RDEC_NORM_ROWS`-th row a layer is the attention output bias the residual step adds (gpt-oss); zero rows otherwise
 typedef RdecNormsFn = function<(norms : array<float>; obias : bool) : void>
 typedef RdecSetLayerFn = function<(l : int64; mir_idx : int64; bq : int64; bk : int64; bv : int64; bo : int64; b1 : int64; b3 : int64; b2 : int64; fq : int; fk : int; fv : int; fo : int; f1 : int; f3 : int; f2 : int; g : RdecLayerGeom) : void>
-typedef RdecSetDnLayerFn = function<(l : int64; bqkv : int64; bz : int64; bout : int64; bbeta : int64; balpha : int64; b1 : int64; b3 : int64; b2 : int64; ba_off : int64; fqkv : int; fz : int; fout : int; f1 : int; f3 : int; f2 : int; convw : float const?; wnormp : float const?; ap : float const?; dtp : float const?) : void>
+typedef RdecSetDnLayerFn = function<(l : int64; bqkv : int64; bz : int64; bout : int64; bbeta : int64; balpha : int64; b1 : int64; b3 : int64; b2 : int64; ba_off : int64; fqkv : int; fz : int; fout : int; fbeta : int; falpha : int; f1 : int; f3 : int; f2 : int; convw : float const?; wnormp : float const?; ap : float const?; dtp : float const?) : void>
 typedef RdecUploadDnBaFn = function<(rows : array<float>) : void>
 typedef RdecUploadBiasFn = function<(rows : array<float>) : void>
 typedef RdecDnOwnFn = function<(l : int64; stp : float?; histp : float?) : void>
@@ -206,8 +206,8 @@ def private rdec_unset_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_h
 def private rdec_unset_norms(norms : array<float>; obias : bool) {}
 [unused_argument(l, mir_idx, bq, bk, bv, bo, b1, b3, b2, fq, fk, fv, fo, f1, f3, f2, g)]
 def private rdec_unset_set_layer(l, mir_idx, bq, bk, bv, bo, b1, b3, b2 : int64; fq, fk, fv, fo, f1, f3, f2 : int; g : RdecLayerGeom) {}
-[unused_argument(l, bqkv, bz, bout, bbeta, balpha, b1, b3, b2, ba_off, fqkv, fz, fout, f1, f3, f2, convw, wnormp, ap, dtp)]
-def private rdec_unset_set_dn_layer(l, bqkv, bz, bout, bbeta, balpha, b1, b3, b2, ba_off : int64; fqkv, fz, fout, f1, f3, f2 : int; convw : float const?; wnormp : float const?; ap : float const?; dtp : float const?) {}
+[unused_argument(l, bqkv, bz, bout, bbeta, balpha, b1, b3, b2, ba_off, fqkv, fz, fout, fbeta, falpha, f1, f3, f2, convw, wnormp, ap, dtp)]
+def private rdec_unset_set_dn_layer(l, bqkv, bz, bout, bbeta, balpha, b1, b3, b2, ba_off : int64; fqkv, fz, fout, fbeta, falpha, f1, f3, f2 : int; convw : float const?; wnormp : float const?; ap : float const?; dtp : float const?) {}
 [unused_argument(rows)]
 def private rdec_unset_upload_dn_ba(rows : array<float>) {}
 [unused_argument(l, stp, histp)]
@@ -535,7 +535,7 @@ def public rdec_regions_installed() : bool => g_rdec_regions_installed
 //! Every mirror address and the next token command resolve against mirror region `region`.
 [arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
 def public rdec_select_region(region : int64) { invoke(g_rdec_select_region, region) }
-def public rdec_set_dn_layer(l, bqkv, bz, bout, bbeta, balpha, b1, b3, b2, ba_off : int64; fqkv, fz, fout, f1, f3, f2 : int; convw : float const?; wnormp : float const?; ap : float const?; dtp : float const?) { invoke(g_rdec_set_dn_layer, l, bqkv, bz, bout, bbeta, balpha, b1, b3, b2, ba_off, fqkv, fz, fout, f1, f3, f2, convw, wnormp, ap, dtp) }
+def public rdec_set_dn_layer(l, bqkv, bz, bout, bbeta, balpha, b1, b3, b2, ba_off : int64; fqkv, fz, fout, fbeta, falpha, f1, f3, f2 : int; convw : float const?; wnormp : float const?; ap : float const?; dtp : float const?) { invoke(g_rdec_set_dn_layer, l, bqkv, bz, bout, bbeta, balpha, b1, b3, b2, ba_off, fqkv, fz, fout, fbeta, falpha, f1, f3, f2, convw, wnormp, ap, dtp) }
 def public rdec_upload_dn_ba(rows : array<float>) { invoke(g_rdec_upload_dn_ba, rows) }
 def public rdec_dn_own(l : int64; stp : float?; histp : float?) { invoke(g_rdec_dn_own, l, stp, histp) }
 //! After a resident prefill: layer `l`'s device-advanced deltanet state and conv history become the
@@ -2100,13 +2100,13 @@ def public matmul_gpu_dense(var y : array<float>; woff : int64; xq : array<int8>
 //! One recurrent layer's whole deltanet attention block on the GPU tier — see MoeGpuDnFn for
 //! the contract. y gets npos x dim out-proj rows, state/tail update in place; beta/alpha arrive
 //! RAW (transforms run in-kernel), conv taps in the fblob disk layout (cd x dconv).
-def public matmul_moe_gpu_dn(var y : array<float>; woq, woz, woo : int64;
+def public matmul_moe_gpu_dn(var y : array<float>; woq, woz, woo : int64; fq, fz, fo : int;
                              xq : array<int8>; xs : array<float>; b : array<float>; g : array<float>;
                              convw : float const?; wnormp : float const?; ap : float const?; dtp : float const?;
                              var stp : float?; var tail : array<float>; histp : float const?;
                              npos, dim, cd, kd, di, nvh, nkh, ds, dconv : int64; eps : float) {
     unsafe {
-        invoke(g_moe_gpu_dn, addr(y[0]), woq, woz, woo,
+        invoke(g_moe_gpu_dn, addr(y[0]), woq, woz, woo, fq, fz, fo,
             addr<int8 const?>(xq[0]), addr<float const?>(xs[0]), addr<float const?>(b[0]), addr<float const?>(g[0]),
             convw, wnormp, ap, dtp, stp, addr(tail[0]), histp,
             npos, dim, cd, kd, di, nvh, nkh, ds, dconv, eps)

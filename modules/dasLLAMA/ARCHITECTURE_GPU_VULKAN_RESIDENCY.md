@@ -20,7 +20,8 @@ planes, the KV mirror at `seq_cap`, the driver's own device scratch, and the hea
 arm leaves unfilled (zero when the user pins VRAM). The weight planes are ONE list in placement order
 (`resident_planes`: per plane a row length, row count, format, offset and the role the upload registers it as):
 the plan sums its bytes and the upload reserves it and places it in order (`place_plane` panics on a role out of turn), so the two cannot drift; the router rows,
-the beta / alpha rows (f16 on the device) and the optional f32 embedding are the terms beside it. KV is reserved BEFORE weights and never
+the F32-on-disk beta / alpha rows (f32 on the device; a quantized file's beta and alpha are planes of the list in their tags'
+formats) and the optional f32 embedding are the terms beside it. KV is reserved BEFORE weights and never
 grows: on a discrete card the two compete directly, and evicting weights to grow KV would mean
 re-uploading gigabytes. The mirror's codec is f16 by default (`resident_mirror_dtype`): the
 flash-attention arms read f16 rows natively, and an f16 row is half an f32 row; a block codec the caller

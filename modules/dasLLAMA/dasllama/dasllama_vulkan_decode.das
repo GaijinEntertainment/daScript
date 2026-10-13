@@ -98,7 +98,7 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
         to_log(LOG_WARNING, "dasLLAMA vulkan resident: the device's shared-memory cap declined the deltanet chain - resident driver declines, the per-op rails serve\n")
         return false
     }
-    if (hybrid && !((dn.zsig ? ensure_dn_step_sig_cls() : ensure_dn_step_cls()) && ensure_router_gemv_f16_cls())) {
+    if (hybrid && !((dn.zsig ? ensure_dn_step_sig_cls() : ensure_dn_step_cls()) && (!dn.ba_f32 || ensure_router_gemv_cls()))) {
         to_log(LOG_WARNING, "dasLLAMA vulkan resident: the deltanet step class rail declined on this device - resident driver declines, the per-op rails serve\n")
         return false
     }
@@ -892,11 +892,11 @@ def private rdn_state_upload(var st : DnStep; stp : float const?; histp : float 
     st.dirty = false
 }
 
-//! Register a RECURRENT (deltanet) layer: the qkv / z / out q8 arena planes, the beta/alpha rows (q8
-//! planes `bbeta`/`balpha`, or the f32 rows at `ba_off` in the `vk_rdec_upload_dn_ba` buffer), the FFN
+//! Register a RECURRENT (deltanet) layer: the qkv / z / out arena planes, the beta/alpha rows (the
+//! planes `bbeta`/`balpha` in `fbeta`/`falpha`, or the f32 rows at `ba_off` in the `vk_rdec_upload_dn_ba` buffer), the FFN
 //! triple, and the layer's device state + smalls; the session's state arrives through `vk_rdec_dn_own`.
 [arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command")]
-def vk_rdec_set_dn_layer(l, bqkv, bz, bout, bbeta, balpha, b1, b3, b2, ba_off : int64; fqkv, fz, fout, f1, f3, f2 : int;
+def vk_rdec_set_dn_layer(l, bqkv, bz, bout, bbeta, balpha, b1, b3, b2, ba_off : int64; fqkv, fz, fout, fbeta, falpha, f1, f3, f2 : int;
                          convw : float const?; wnormp : float const?; ap : float const?; dtp : float const?) {
     if (g_gpu != null && g_gpu.dry) {
         return
@@ -910,6 +910,7 @@ def vk_rdec_set_dn_layer(l, bqkv, bz, bout, bbeta, balpha, b1, b3, b2, ba_off : 
     L.out_scale = 1.0     //! a PLE layer's residual step is unscaled: its row is the gate's feed
     L.bqkv = bqkv; L.bz = bz; L.bout = bout; L.bbeta = bbeta; L.balpha = balpha
     L.fqkv = fqkv; L.fz = fz; L.fout = fout
+    L.fbeta = fbeta; L.falpha = falpha
     L.ba_off = ba_off
     let dim = g_rd.dim
     let nb = g_rd.nb
@@ -922,7 +923,7 @@ def vk_rdec_set_dn_layer(l, bqkv, bz, bout, bbeta, balpha, b1, b3, b2, ba_off : 
         && (!anykq || (ensure_cls_q8k_rq() && ensure_q8k_actrq_cls()))
         && (!kq_sb(fout) || ensure_cls_q8k_rq())
         && (rd_triple_all(fqkv, fz, fout) $(f) => gemv_cls_ensure(f))
-        && (g_rd.dn_ba_f32 || gemv_cls_ensure(int(KqFmt.q8)))
+        && (g_rd.dn_ba_f32 || (gemv_cls_ensure(fbeta) && gemv_cls_ensure(falpha) && ensure_cls_q8k_rq()))
         && (rd_triple_all(f1, f3, f2) $(f) => gemv_cls_ensure(f)),
         "vk decode: the class rails must engage on a live device")
     L.m_dnqkv = rd_meta(); L.m_dnz = rd_meta(); L.m_dnout = rd_meta()
@@ -947,15 +948,15 @@ def vk_rdec_set_dn_layer(l, bqkv, bz, bout, bbeta, balpha, b1, b3, b2, ba_off : 
     L.s_dnqkv = arena_gemv_set_x(fqkv, pqkv, L.m_dnqkv.buf, g_rd.dn_proj_dev, (cd + di) * 4l * nb, VHZ_DNP)
     L.s_dnz = arena_gemv_set_x(fz, pz, L.m_dnz.buf, g_rd.dn_proj_dev, (cd + di) * 4l * nb, VHZ_DNZ)
     if (g_rd.dn_ba_f32) {
-        L.s_dnba = set_router_gemv_f16_cls(fixed_array(g_rd.dn_ba_dev, g_rd.xb_dev, smalls_dev, g_rd.norms_dev),
+        L.s_dnba = set_router_gemv_cls(fixed_array(g_rd.dn_ba_dev, g_rd.xb_dev, smalls_dev, g_rd.norms_dev),
             fixed_array(g_rd.dn_ba_bytes, dim * 4l * nb, smalls_bytes, g_rd.norms_bytes),
             fixed_array(0u, VHZ_XB, VHZ_DNSM, 0u))
     } else {
         L.m_dnbeta = rd_meta(); L.m_dnalpha = rd_meta()
-        let pb = arena_planes(int(KqFmt.q8), bbeta)
-        let pa = arena_planes(int(KqFmt.q8), balpha)
-        L.s_dnbeta = arena_gemv_set_x(int(KqFmt.q8), pb, L.m_dnbeta.buf, smalls_dev, smalls_bytes, VHZ_DNSM)
-        L.s_dnalpha = arena_gemv_set_x(int(KqFmt.q8), pa, L.m_dnalpha.buf, smalls_dev, smalls_bytes, VHZ_DNSM)
+        let pb = arena_planes(fbeta, bbeta)
+        let pa = arena_planes(falpha, balpha)
+        L.s_dnbeta = arena_gemv_set_x(fbeta, pb, L.m_dnbeta.buf, smalls_dev, smalls_bytes, VHZ_DNSM)
+        L.s_dnalpha = arena_gemv_set_x(falpha, pa, L.m_dnalpha.buf, smalls_dev, smalls_bytes, VHZ_DNSM)
     }
     // the fused step: proj @0, state @1 (in place), smalls @2 (rw), o scales @3, o quants @4, tok @5, o f32 @6
     let step_bufs = fixed_array(g_rd.dn_proj_dev, state_dev, smalls_dev, g_rd.dn_os_dev, g_rd.dn_oq_dev, g_rd.tok_meta.buf, g_rd.dn_of_dev)
@@ -1017,14 +1018,14 @@ def private rd_bias_off(L : RLayer) : uint => uint(L.boff)
 
 //! The f32 arm's beta/alpha rows for every recurrent layer, in layer order: per layer `[beta rows
 //! (nvh x dim) ; alpha rows (nvh x dim)]`; a layer's base is its `ba_off` at set_dn_layer. The
-//! device keeps them as f16 - half the bytes the prefill tile GEMM and the decode GEMV read per row.
+//! device keeps the file's f32: the decode GEMV and the prefill tile GEMM read the f32 rows.
 def vk_rdec_upload_dn_ba(rows : array<float>) {
     if (g_gpu != null && g_gpu.dry) {
         return
     }
     assert(g_rd != null && g_rd.hybrid, "vk_rdec_upload_dn_ba before a hybrid prepare")
-    g_rd.dn_ba_bytes = long_length(rows) * 2l
-    g_rd.dn_ba_dev = rd_upload_rows_f16(rows)
+    g_rd.dn_ba_bytes = long_length(rows) * 4l
+    g_rd.dn_ba_dev = rd_upload_rows(rows)
 }
 
 def private rd_upload_rows(rows : array<float>) : uint64 => dev_upload(rows)
@@ -2408,15 +2409,19 @@ def private rd_encode_dn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RLay
         bstride = uint(2l * nvh)
         var pcb = RouterArgs(ne = uint(2l * nvh), dim = uint(dim), woff = uint(L.ba_off), obase = uint(DN_SM_BETA),
             ne_split = uint(nvh), obase_split = uint(DN_SM_G), ncols = nr)
-        enc_router_gemv_f16_cls(raw, h, L.s_dnba, pcb, 2l * nvh)
+        enc_router_gemv_cls(raw, h, L.s_dnba, pcb, 2l * nvh)
     } else {
-        if (kq_sb(L.fqkv)) {   // the row above was requantized Q8_K for the kq GEMVs; the q8 beta/alpha GEMVs read it as Q8_0 (no stamp: the requant bills to the ba role)
-            rq_enc(raw, h, L.s_quant_xb, int(KqFmt.q8), dim * nrows)
+        //! the row above sits in the qkv plane's feed form; a beta or alpha plane of the other activation class takes its own requant (no stamp: it bills to the ba role)
+        if (kq_sb(L.fbeta) != kq_sb(L.fqkv)) {
+            rq_enc(raw, h, L.s_quant_xb, L.fbeta, dim * nrows)
         }
         var pcb = GemvArgs(n = uint(dim), d = uint(nvh), nreg = 1u, ybase = uint(DN_SM_BETA), ncols = ncols, ystride = uint(nvh))
-        gemv_enc(int(KqFmt.q8), raw, h, L.s_dnbeta, pcb, nvh)
+        gemv_enc(L.fbeta, raw, h, L.s_dnbeta, pcb, nvh)
+        if (kq_sb(L.falpha) != kq_sb(L.fbeta)) {
+            rq_enc(raw, h, L.s_quant_xb, L.falpha, dim * nrows)
+        }
         var pcg = GemvArgs(n = uint(dim), d = uint(nvh), nreg = 1u, ybase = uint(DN_SM_G), ncols = ncols, ystride = uint(nvh))
-        gemv_enc(int(KqFmt.q8), raw, h, L.s_dnalpha, pcg, nvh)
+        gemv_enc(L.falpha, raw, h, L.s_dnalpha, pcg, nvh)
     }
     rd_ts(raw, "d:ba")
     var pcd = dn_step_args(cd, g_rd.dn_kd, g_rd.dn_nkh, g_rd.dn_ds, g_rd.dn_dconv, g_rd.eps)
@@ -3188,7 +3193,7 @@ def private rd_ensure_n_rail : bool {
             to_log(LOG_INFO, "vk_rdec n rail: layer recurrent {L.recurrent} moe {L.moe} ple {L.ple} dense {has_dense_triple(L)} fq {L.fq} fk {L.fk} fv {L.fv} fo {L.fo} fqkv {L.fqkv} fz {L.fz} fout {L.fout} f1 {L.f1} f3 {L.f3} f2 {L.f2} fpg {L.fpg}\n")
         }
         let head_ok = (L.recurrent   //! its own statement: a `?:` binds looser than the `&&` chain below, which would then be the else arm alone
-                ? ((rd_triple_all(L.fqkv, L.fz, L.fout) $(f) => gemv_cls_ensure_n(f, nb)) && (g_rd.dn_ba_f32 || gemv_cls_ensure_n(int(KqFmt.q8), nb)))
+                ? ((rd_triple_all(L.fqkv, L.fz, L.fout) $(f) => gemv_cls_ensure_n(f, nb)) && (g_rd.dn_ba_f32 || (gemv_cls_ensure_n(L.fbeta, nb) && gemv_cls_ensure_n(L.falpha, nb))))
                 : (rd_quad_all(L) $(f) => gemv_cls_ensure_n(f, nb)))
         ok = (head_ok
             && (!has_dense_triple(L) || (rd_triple_all(L.f1, L.f3, L.f2) $(f) => gemv_cls_ensure_n(f, nb)))
@@ -3998,8 +4003,13 @@ def private dnd_step_make(s_qkv, s_z, s_o : int; woq, woz, woo : int64;
     let fqkv = g_gpu.stacks[s_qkv].fmt
     let fz = g_gpu.stacks[s_z].fmt
     let fo = g_gpu.stacks[s_o].fmt
-    verify(gemv_cls_ensure(fz) && gemv_cls_ensure(fo) && ensure_dn_step_cls(),
+    let o_kq = kq_sb(fo)
+    verify(gemv_cls_ensure(fqkv) && gemv_cls_ensure(fz) && gemv_cls_ensure(fo) && ensure_dn_step_cls() && (!o_kq || ensure_cls_q8k_rq()),
         "vk decode: the gemv class rail must engage on a live device")
+    if (o_kq) {
+        st.rq_set = set_rq_cls(fixed_array(g_gpu.dnd_of_dev, g_gpu.dnd_oq_dev, g_gpu.dnd_os_dev),
+            fixed_array(DND_OQ_BYTES * 4l, DND_OQ_BYTES, DND_OS_BYTES), fixed_array(VHG_WS, VHG_WS, VHG_WS))
+    }
     // z GEMV rides the qkv stack's SHARED acts image and y buffer (y base cd in the push) — the fused kernel sees qkv rows AND the z row on one binding
     st.z_set = stack_gemv_set_x(s_z, s_qkv, g_gpu.stacks[s_qkv].y_dev, Y_BYTES, VHG_Y2)
     // fused step (class): proj = the shared y (qkv rows + z at cd); state advances in place — residency IS that binding; parity rides TokMeta
@@ -4021,7 +4031,11 @@ def private dnd_step_make(s_qkv, s_z, s_o : int; woq, woz, woo : int64;
         var pcz = GemvArgs(n = uint(dim), d = uint(di), nreg = 1u, ybase = uint(cd))
         gemv_enc(fz, raw, h, st.z_set, pcz, di)
         var pcd = dn_step_args(cd, kd, nkh, ds, taps + 1l, eps)
+        pcd.out_f32 = o_kq ? 1u : 0u
         enc_dn_step_cls(raw, h, st.fused_set, pcd, nvh)
+        if (o_kq) {
+            rq_enc(raw, h, st.rq_set, fo, di)
+        }
         var pco = GemvArgs(n = uint(di), d = uint(dim), nreg = 1u, ybase = 0u)
         gemv_enc(fo, raw, h, st.out_set, pco, dim)
         vhz_dep(raw, h, VHG_YO, 0u, true)

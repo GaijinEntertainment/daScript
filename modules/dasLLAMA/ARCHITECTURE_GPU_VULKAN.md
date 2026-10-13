@@ -222,17 +222,15 @@ A K-quant file whose out plane is Q8_0 therefore keeps its qkv and z GEMMs on th
 tiles and takes the requant on the o feed alone.
 
 When the x feed is not f16, a K-quant qkv/z pair reads the Q8_K activation form, as the
-attention head's kq planes do, and the q8 beta/alpha arm re-requantizes the rows Q8_0 behind
-the z GEMM - one feed, two forms, as the decode step does (`ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command`).
+attention head's kq planes do, and a beta or alpha plane of the other activation class re-requantizes
+the rows into its own form behind the z GEMM - one feed, two forms, as the decode step does (`ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command`).
 
-The beta and alpha rows take one of three arms. A file that carries them as f32 rows keeps them
-f16 on the device; on the cm2 route with the f16 x feed they are two small f16 GEMMs - the beta
-rows and the alpha rows each through `F16GemmCm2`, eight k chunks into the split-k scratch and
-the reduce into the layer's smalls at the beta and alpha bases (the class is the MoE router's,
-`ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block`). Off that route the f32 arm is a scalar tile GEMM
-over the `[beta ; alpha]` rows: one workgroup covers 16 positions by 16 output rows, one output
+The beta and alpha rows take one of two arms. A file that carries them as f32 rows keeps the f32 rows on the
+device and reads them through a scalar tile GEMM over the `[beta ; alpha]` rows (`DnBaGemm`): one workgroup covers 16 positions by 16 output rows, one output
 per invocation, and the grid runs over both group axes, so a layer of only `2 x nvh` rows (`nvh`,
-the layer's value-head count) - 64 on the 9B - still fills the card. The q8 arm is two q8 GEMMs and copies.
+the layer's value-head count) - 64 on the 9B - still fills the card. The plane arm is two GEMMs, each in its tag's format, and
+copies: a `[dim x nvh]` plane is one 32-row tile of the quant-fed batch class (`BATCH_TILE`, the y store guarded past `nvh`), never the
+cm2 family's 128-row tiles, so the plane reads the quant feed whatever the x feed is.
 
 The conv is channel-major: a workgroup owns 256 channels over `DN_CONV_PB` positions
 (`dn_conv_wgs` sizes the grid), every thread slides one channel's window over them with the taps

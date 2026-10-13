@@ -828,11 +828,11 @@ def private place_plane(t : Model; planes : array<ResidentPlane>; var cur : int&
     return resident_place(t, pl.f, pl.off, pl.n, pl.rows, mr, kg, wb, pl.slice_rows)
 }
 
-//! the recurrent layers' beta / alpha rows on the f32 arm: device f16 rows beside the planes (`vk_rdec_upload_dn_ba` halves
-//! the model's f32 rows), no arena block
+//! the recurrent layers' beta / alpha rows on the f32 arm: the model's f32 rows on the device beside the planes
+//! (`vk_rdec_upload_dn_ba`), no arena block
 def private resident_dn_ba_f32_bytes(t : Model) : int64 {
     let c = t.config
-    return t.dn_ba_f32 ? resident_recurrent_layers(c) * 2l * c.ssm_dt_rank * c.dim * 2l : 0l
+    return t.dn_ba_f32 ? resident_recurrent_layers(c) * 2l * c.ssm_dt_rank * c.dim * 4l : 0l
 }
 
 //! the trunk's recurrent (deltanet) layers
@@ -1833,8 +1833,10 @@ def resident_layer_decline(t : Model; l : int64) : string {
             return "layer {l}'s deltanet out plane carries a format ({int(fout)}) the resident GEMVs do not serve at width {c.ssm_d_inner}"
         }
         if (!t.dn_ba_f32 && (t.dnbeta_offs[l] < 0l || t.dnalpha_offs[l] < 0l)) return "layer {l} lacks its beta/alpha planes"
-        if (!t.dn_ba_f32 && (fmt_at(t.dnbeta_fmt, l) != KqFmt.q8 || fmt_at(t.dnalpha_fmt, l) != KqFmt.q8)) {
-            return "layer {l}'s beta/alpha planes carry a format ({int(fmt_at(t.dnbeta_fmt, l))}/{int(fmt_at(t.dnalpha_fmt, l))}) the resident beta/alpha GEMVs and window GEMMs do not serve - they read q8 planes"
+        let fbeta = fmt_at(t.dnbeta_fmt, l)
+        let falpha = fmt_at(t.dnalpha_fmt, l)
+        if (!t.dn_ba_f32 && (!rdec_dn_fmt_ok(fbeta, c.dim) || !rdec_dn_fmt_ok(falpha, c.dim))) {
+            return "layer {l}'s beta/alpha planes carry a format ({int(fbeta)}/{int(falpha)}) the resident GEMVs and window tiles do not serve at width {c.dim}"
         }
         if (!rdec_dn_installed()) return "layer {l} is recurrent and the tier installed no deltanet seats for the whole-model driver"
         return ""
@@ -2137,7 +2139,7 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
             }
             unsafe {
                 rdec_set_dn_layer(l, bqkv, bz, bout, bbeta, balpha, fb.b1, fb.b3, fb.b2, rec_idx * 2l * dng.nvh * dim,
-                    int(fqkv), int(fz), int(fout), int(lf.f1), int(lf.f3), int(lf.f2),
+                    int(fqkv), int(fz), int(fout), int(fmt_at(t.dnbeta_fmt, l)), int(fmt_at(t.dnalpha_fmt, l)), int(lf.f1), int(lf.f3), int(lf.f2),
                     addr<float const?>(t.fblob[t.dn_conv_off + l * c.ssm_d_conv * dng.cd]),
                     addr<float const?>(t.fblob[t.dn_norm_off + l * dng.ds]),
                     addr<float const?>(t.fblob[t.dn_a_off + l * dng.nvh]),
@@ -4597,6 +4599,28 @@ def private walk_skip(var w : WalkSkips; l : int64; why : string) {
     w.skipped++
 }
 
+//! why the per-op deltanet chain cannot take layer `l`'s qkv / z / out planes in their tags' formats; "" when it can
+def perop_dn_decline(t : Model; l : int64) : string {
+    let c = t.config
+    if (t.dnqkv_offs[l] < 0l || t.dngate_offs[l] < 0l || t.dnout_offs[l] < 0l) return "no deltanet planes"
+    let fqkv = fmt_at(t.dnqkv_fmt, l)
+    let fz = fmt_at(t.dngate_fmt, l)
+    let fout = fmt_at(t.dnout_fmt, l)
+    if (!rdec_dn_fmt_ok(fqkv, c.dim) || !rdec_dn_fmt_ok(fz, c.dim) || !rdec_dn_fmt_ok(fout, c.ssm_d_inner)) {
+        return "deltanet plane formats {int(fqkv)}/{int(fz)}/{int(fout)} outside the chain's tiles and GEMVs"
+    }
+    if (kq_sb(fqkv) != kq_sb(fz)) return "deltanet qkv/z formats {int(fqkv)}/{int(fz)} mix activation forms - one image feeds both"
+    return ""
+}
+
+//! layer `l`'s deltanet qkv, z and out planes as the per-op chain uploads them: each in its tag's format
+def private perop_dn_planes(t : Model; l : int64) : array<PlaneUp> {
+    let c = t.config
+    return <- [plane_up(fmt_at(t.dnqkv_fmt, l), t.dnqkv_offs[l], c.dim, dn_conv_dim(c)),
+               plane_up(fmt_at(t.dngate_fmt, l), t.dngate_offs[l], c.dim, c.ssm_d_inner),
+               plane_up(fmt_at(t.dnout_fmt, l), t.dnout_offs[l], c.ssm_d_inner, c.dim)]
+}
+
 [cold_path]
 def private walk_say(w : WalkSkips; rail : string) {
     if (w.skipped > 0l) {
@@ -4764,15 +4788,15 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
         for (l in range64(layers)) {
             var inscope uploads : array<tuple<f : KqFmt; woff : int64; n : int64; rows : int64>>
             if (layer_is_recurrent(t.config, l)) {
-                // kq-tagged dn planes (CPU-rail loads) are not tier-servable — the dn chain reads q8
-                if (t.dnqkv_offs[l] < 0l || t.dngate_offs[l] < 0l || t.dnout_offs[l] < 0l) {
-                    walk_skip(dense_skips, l, "recurrent, no deltanet planes")
-                } elif (!dn_layer_q8(t, l)) {
-                    walk_skip(dense_skips, l, "recurrent, kq-tagged deltanet planes (CPU rail)")
+                let dn_why = perop_dn_decline(t, l)
+                if (!empty(dn_why)) {
+                    walk_skip(dense_skips, l, "recurrent, {dn_why}")
                 } else {
-                    uploads |> push((f = KqFmt.q8, woff = t.dnqkv_offs[l], n = dim, rows = dn_conv_dim(t.config)))
-                    uploads |> push((f = KqFmt.q8, woff = t.dngate_offs[l], n = dim, rows = t.config.ssm_d_inner))
-                    uploads |> push((f = KqFmt.q8, woff = t.dnout_offs[l], n = t.config.ssm_d_inner, rows = dim))
+                    var inscope dn_ups <- perop_dn_planes(t, l)
+                    uploads |> reserve(length(dn_ups))
+                    for (p in dn_ups) {
+                        uploads |> push((f = p.f, woff = p.woff, n = p.n, rows = p.rows))
+                    }
                 }
             } elif (gpu_want_dense_attn()) {
                 let qd = layer_qd(t.config, l)
@@ -4843,28 +4867,23 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
         var dn_skips : WalkSkips
         for (l in range64(layers)) {
             continue if (!layer_is_recurrent(t.config, l))
-            if (t.dnqkv_offs[l] < 0l || t.dngate_offs[l] < 0l || t.dnout_offs[l] < 0l) {
-                walk_skip(dn_skips, l, "no deltanet planes")
+            let dn_why = perop_dn_decline(t, l)
+            if (!empty(dn_why)) {
+                walk_skip(dn_skips, l, dn_why)
                 continue
             }
-            if (!dn_layer_q8(t, l)) {
-                walk_skip(dn_skips, l, "kq-tagged deltanet planes (CPU rail)")
-                continue
-            }
+            var inscope ups <- perop_dn_planes(t, l)
             // the alias needs the WHOLE triple: the dense walk marks per-plane and its budget stop
             // can land mid-triple — a lone dnqkv mark would route the serve into a non-resident panic
-            if (moe_gpu_dense_on_gpu(int(KqFmt.q8), t.dnqkv_offs[l])
-                    && moe_gpu_dense_on_gpu(int(KqFmt.q8), t.dngate_offs[l])
-                    && moe_gpu_dense_on_gpu(int(KqFmt.q8), t.dnout_offs[l])) {
+            var all_marked = true
+            for (u in ups) {
+                all_marked = all_marked && moe_gpu_dense_on_gpu(int(u.f), u.woff)
+            }
+            if (all_marked) {
                 set_moe_gpu_dn_layer(l, t.dnqkv_offs[l])
                 dn_marked++
                 continue
             }
-            let cd = dn_conv_dim(t.config)
-            let di = t.config.ssm_d_inner
-            var inscope ups <- [plane_up(KqFmt.q8, t.dnqkv_offs[l], dim, cd),
-                        plane_up(KqFmt.q8, t.dngate_offs[l], dim, di),
-                        plane_up(KqFmt.q8, t.dnout_offs[l], di, dim)]
             let ok = gather_upload_group(t, ups, mr, kgroup, wbias, wq, ws)
             delete ups
             if (!ok) {

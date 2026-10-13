@@ -207,8 +207,8 @@ command per model whose per-layer body is one of two heads followed by the share
 attention head (the q, k and v GEMVs as ONE region dispatch where the three planes share a format and a slab - q in kv-width pieces, then k, then v, the projection row landing whole, the ungated q buffer being that row's front - else a GEMV a plane; the fused qk-norm and rope storing the mirror row, decode attention
 over the mirror, the wo requant and GEMV) or a recurrent head - the fused qkv GEMV and the z
 GEMV into one projection row (z at offset `cd`; the two halves under their own hazard classes,
-`VHZ_DNP` and `VHZ_DNZ`, so the GEMVs co-run and the step waits on both), the beta and alpha rows as ONE `RouterGemvF16`
-dispatch (the rows read as half pairs, the alpha half landing at the smalls' g rows through the
+`VHZ_DNP` and `VHZ_DNZ`, so the GEMVs co-run and the step waits on both), the beta and alpha rows (F32 rows as ONE
+`RouterGemv` dispatch over the file's floats, the alpha half landing at the smalls' g rows through the
 push block's second base: a dispatch and a hazard barrier fewer a layer), the fused deltanet step
 (`dn_step_cls`, the same kernel the per-op tier's `vk_moe_dn_step` dispatches: one workgroup a
 head - the conv preamble over the head's channels, the q and k norms and the raw q.k by subgroup
@@ -220,15 +220,15 @@ in `xb2`, so the residual add, the FFN and the next layer's norm never know whic
 deltanet qkv and z planes ride their file formats - the loader tags every hybrid's deltanet
 planes with the file's format on every load (a grouped file's out plane alone is the q8
 transcode: its input columns permute across superblocks), the Metal drivers read each by its tag,
-and the per-op rails, which bind a q8 triple only, leave a K-quant layer's deltanet on the CPU;
-each GEMV dispatches per format and a superblock plane takes the Q8_K x feed. The out plane rides its
+and so do the per-op rails (`perop_dn_decline`: q8 or a superblock format, qkv and z in one activation
+class); each GEMV dispatches per format and a superblock plane takes the Q8_K x feed. The out plane rides its
 file format too: for a q8 plane the step writes the o row as Q8_0 blocks, for a superblock plane
 it writes the f32 row and the Q8_K requant - the attention head's wo twin - makes the out GEMV's
-feed, billed to the out role so the stamp count stands; the beta and alpha rows are q8 arena planes when
-the file carries them as Q8_0 (a layer whose beta/alpha planes carry any other format declines
-the driver: these GEMVs and the window's GEMMs read q8 alone), or - the F32-on-disk case - one f16 device copy of every
-recurrent layer's `[beta ; alpha]` rows that the router-form GEMV's f16 twin reads with an output
-base into the smalls. The fused add+rms+requant serves every site on every model: each site's
+feed, billed to the out role so the stamp count stands; the beta and alpha rows are arena planes in their
+tags' formats (`dnbeta_fmt` / `dnalpha_fmt`), each through its format's GEMV leaf - a plane of the other
+activation class than the qkv plane's requantizes the row into its own feed first - or, the F32-on-disk case,
+the file's f32 `[beta ; alpha]` rows of every recurrent layer that the f32 router-form GEMV reads with an
+output base into the smalls. The fused add+rms+requant serves every site on every model: each site's
 stamp (`RqStamp`, picked by `rd_ensure_fused_sets` once all layers are registered) is Q8_0 or
 Q8_K by the consumer's block form (the layer's triple, a bare MoE layer's experts, the next
 layer's head, the classifier), storing the normed row too where a consumer reads it as floats (a
