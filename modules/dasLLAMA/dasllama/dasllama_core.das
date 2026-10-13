@@ -875,6 +875,13 @@ def gpu_device_kv_adopt(var session : Session; claim : int64; npos : int64) : bo
     return gpu_device_kv_adopt_(session, claim, npos)
 }
 
+def gpu_device_kv_parked_pos(claim : int64) : int64 {
+    //! The position a kept ``claim``'s recurrent state stands at - the one row count
+    //! ``gpu_device_kv_adopt`` may take on a recurrent model; 0 where the claim is gone or the
+    //! model keeps no recurrent state.
+    return gpu_device_kv_parked_pos_(claim)
+}
+
 def gpu_device_kv_checkpoint(session : Session) : bool {
     //! Keep a device-home recurrent ``session``'s state at its position beside its rows, so a later
     //! request that opens with exactly those tokens adopts it from the parked claim. False where the
