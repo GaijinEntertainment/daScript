@@ -11,6 +11,30 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **MEASURED (2026-10-13) - the qwen leg's end re-measure: every plane on its own bytes against the stored q8 and f16
+  copies, MTP, the greedy chain, the per-op dense-FFN rail, on the house file `Qwen3.6-35B-A3B-MTP-IQ4_XS-pure.gguf`
+  (and Llama-3.2-3B Q4_K_M), the M5 Max and the RTX PRO 4500 (Vulkan), the leg against its base `fa7ce42649`.** Served
+  `harness/served_bench.das` (one stream, `--ctx 16384`, 5 reps, cv under 3 % unless marked) and the house replay's short
+  turns. M5, uncrowned on both trees (the committed M5 profile carries no tensor crowns): native non-expert planes lift
+  decode - the short turns' steady gen 118 to 146-150 tok/s, served decode 150.6 to 153.9 (3k) and 140.2 to 145.9 (9k) -
+  and cost the window: served cold TTFT 846 to 1383 ms at 3k and 2942 to 4302 at 9k, the window's own GPU time 623 to
+  1032 ms at 2967 rows; the base's image carried 318 baked dev-W f16 panels (2761 MB) that the K-quant and Q8_0 window
+  GEMMs read, and the deltanet planes and the shared expert as stored q8 copies; the per-forward scratch panel arm
+  (`DASLLAMA_METAL_DEVW=1`) reads 1301 ms. Short-turn TTFT: the branch with the scratch panels matches the base (0.232
+  against 0.235 s), without them it reads 0.355 against 0.287 on the M4 arm. MTP at one stream on Metal on this MoE
+  costs decode (served 157/148 with the round on, 178/168 off); at four streams it is a wash on both trees. Vulkan,
+  35B: served decode 147.9 to 159.8 (3k) and 141.2 to 151.6 (9k) with MTP off, prefill 4294 against 4158 tok/s; with
+  `--mtp` the base drafted on the CPU (TTFT 18.6 s, 18.6 tok/s) and the leg drafts on the device (746 ms, 176.6 tok/s,
+  cv 8 %); the greedy chain (`DASLLAMA_VK_CHAIN=1`) reads 157.4 against 159.8 and adds 6 ms of warm TTFT, +1.5 % on the
+  3B - off by default. Llama-3B whole-model: 202 to 210 tok/s (3k). The per-op tier's dense-FFN rail: the 3B decodes
+  29.2 against 17.4 tok/s and prefills 274 against 153 with it on - on by default. The house replay on the pod, warm
+  pass (cached / cold / TTFT med, p90 / steady): Llama-3B 86 % / 0 / 0.13, 0.28 / 204 (the base 0.20, 0.98 / 196;
+  llama-server 93 % / 0.11, 0.15 / 207); the 35B device-home 67 % / 33 / 0.22, 1.48 / 140 (the base 0 % / 98 / 1.40,
+  1.70 / 129; llama-server with its draft head 88 % / 0.51, 0.91 / 162), with `--mtp` 64 % / 36 / 0.30, 1.59 / 159;
+  its pair phase reads 39 tok/s steady a stream (29 with `--mtp`) against 180 on the 3B. Open from these readings: the
+  Metal window's own-bytes sites (a per-window scratch panel from the row floor), the device-home cache rate against
+  the M5's 91 % (the card holds one parked claim and four checkpoints a region, the host prefix cache a quarter of RAM),
+  the 35B pair phase on Vulkan.
 - **MEASURED (2026-10-13) - the Metal routed base form's bars (`tests/test_metal_prefill_parity.das`,
   `test_metal_prefill_moe_base_form`, the `moe-base` arm).** A `tests/run.das` cell; the GPU side is the Metal prefill
   window with `DASLLAMA_METAL_TENSOR=0` (the base form `MetalMoeMulMmKqT`, every superblock and per-32 format, no tensor
