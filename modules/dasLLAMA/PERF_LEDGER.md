@@ -34,7 +34,12 @@ what it costs today and what the fix would change.
   its pair phase reads 39 tok/s steady a stream (29 with `--mtp`) against 180 on the 3B. Open from these readings: the
   Metal window's own-bytes sites (a per-window scratch panel from the row floor), the device-home cache rate against
   the M5's 91 % (the card holds one parked claim and four checkpoints a region, the host prefix cache a quarter of RAM),
-  the 35B pair phase on Vulkan.
+  the 35B pair phase on Vulkan. With the Metal window on per-window scratch panels and the box crowned (the minted M5
+  profile on both trees), the house replay reads, two alternated rounds, leg against base: cached 91 % / 0 cold on both;
+  TTFT med 0.28, 0.25 against 0.24, 0.23 s; steady gen 120, 136 against 111, 114; short alone wall 0.335, 0.312 against
+  0.336, 0.334, TTFT 0.263, 0.254 against 0.245, 0.242, steady 135, 140 against 114, 115; pair wall 0.643, 0.655 against
+  0.690, 0.685, steady 109, 102 against 97, 98 - decode and the pair ahead, the short TTFT 10-18 ms behind (the base
+  form's dequant passes and the exact f32 router tile against the base's stored half copy).
 - **MEASURED (2026-10-13) - the Metal routed base form's bars (`tests/test_metal_prefill_parity.das`,
   `test_metal_prefill_moe_base_form`, the `moe-base` arm).** A `tests/run.das` cell; the GPU side is the Metal prefill
   window with `DASLLAMA_METAL_TENSOR=0` (the base form `MetalMoeMulMmKqT`, every superblock and per-32 format, no tensor
