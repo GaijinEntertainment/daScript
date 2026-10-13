@@ -891,7 +891,11 @@ what it costs today and what the fix would change.
   `dasllama-server` against the pinned llama-server, `harness/served_bench.das` (tagged `served`, `out-of-process`, `direction-grade`,
   f16 KV, 200-token replies, 5 reps, a rest before each life; `--mtp` on the NextN carriers,
   which llama-server serves plain). Decode tok/s at 3k / 9k of context, ours against the reference,
-  then warm TTFT ms:
+  then warm TTFT ms. The deltanet hybrids' K-quant labels (Qwen3.5-9B-MTP UD-Q5_K_XL, Qwen3.6-27B-MTP
+  Q4_K_M, Qwen3.6-35B-A3B-MTP UD-Q4_K_M, and the previous entry's Qwen3.8-27B UD-Q3_K_XL) name the file,
+  not the served form: the Metal drivers of this date read every deltanet plane, and the 35B's shared
+  expert, through their q8 transcodes, so those rows measure a mixed q8 serve against the reference's
+  native one - not like for like:
   - Qwen2.5-0.5B Q8_0 498.5 / 409.9 vs 312.5 / 310.8; 11.8 / 18.8 vs 25.5 / 38.4.
   - Qwen3-0.6B Q8_0 366.8 / 252.2 vs 275.8 / 217.5; 13.2 / 21.1 vs 25.6 / 39.1. Both fall with
     depth on the f16 K/V read - 28 layers of a 1024-wide K/V, about a gigabyte a step at 9k.
@@ -1055,7 +1059,9 @@ what it costs today and what the fix would change.
   own stamps through their generated builders, where they timed hand-written copies before.
   - `router_race` (2048 positions x 256 experts over 2048, best of its rounds): the slab GEMV
     (`MetalMoeRouterB`) 0.647 ms, off the double dot by 8.1e-7 of 4.24; the half tensor GEMM
-    (`MetalHalfMulMmTH128`) 0.0485 ms, x13.3, off by 1.39e-3.
+    (`MetalHalfMulMmTH128`) 0.0485 ms, x13.3, off by 1.39e-3. MEASURED (2026-10-12), the harness racing the
+    router's f32 tile (`MetalF32ExactMm`, the half arm gone with the half panel): the slab GEMV 0.646 ms (8.1e-7),
+    the f32 tile 0.174 ms, x3.72, off by 8.3e-6.
   - `attn_depth_race` (2048 queries at 8192 rows of context, 16 heads of 256 over 2 KV heads,
     cumulative stages): QK 6.25 ms staged against 3.02 device; + softmax 7.85 against 5.37; + AV
     19.84 against 8.06; + the K/V twin pass 19.85 against 8.12 - x2.44. Against the attention

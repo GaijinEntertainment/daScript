@@ -5,6 +5,7 @@ module dasllama_gpu_kernels_common shared public
 require dasllama/dasllama_lint public
 require daslib/typemacro_boost
 require math
+require spirv/spirv_shader   // [spirv_inline]: the helpers the SPIR-V emitter visits at their call sites
 
 struct GkAxpyArgs {
     nelem : uint
@@ -601,6 +602,15 @@ class template GkDwConvRows {
 [ |> template_struct_instance]
 class template GkWgReduce {
     @workgroup part : float[128]   //! two slots of 64 subgroup partials, one slot a reduce
+    @template_constant RSQRT : bool = false   //!< `wg_rms_inv_into`'s inverse norm: `rsqrt`, else the CPU's `1 / sqrt`
+
+    //! the inverse rms of the squares summed into `ss0` over `n` elements, every thread alike, its spelling the stamp's (`RSQRT`)
+    [arch(at="../ARCHITECTURE_GPU_SHARED_KERNELS.md#gpu-kernel-pairs")]
+    def wg_rms_inv_into(ss0 : float; n : uint; eps : float; slot : uint; var inv : float&) {
+        var tot = 0.0
+        wg_sum_into(ss0, slot, tot)
+        inv = rms_inv(tot / float(n) + eps, RSQRT)
+    }
 
     //! the workgroup sum every thread holds alike; `slot` alternates 0 / 1 between consecutive reduces; a statement with its
     //! result by reference, the form the MSL emitter inlines
@@ -756,6 +766,256 @@ class template GkPkAttn : GkWgReduce {
                 pp++
             }
             o[i * pa.d + h * 64u + lid] = tot
+        }
+    }
+}
+
+let GK_PK_GEMV_MAX_NIN = 4096u   //! the x the row GEMV stages, the body's literal: a wider input declines at the driver
+
+struct GkPkGemvArgs {
+    nin : uint
+    nout : uint
+    stride : uint   //! the weight rows' stride
+    eps : float     //! the input norm's epsilon, read under NORM_IN or NORM_MOD_IN
+    woff : uint     //! the weight rows [nout][stride] in wn
+    boff : uint     //! the bias [nout] in wn
+    xoff : uint     //! the input row in x
+    yoff : uint     //! the output row in y
+    moff : uint     //! the modulation rows in mod: shift [nin], scale [nin], gate [nout]
+    lwoff : uint    //! the input norm's scale row in wn
+    lboff : uint    //! the input norm's shift row in wn
+    aoff : uint     //! the slab vector in wn: the add-SiLU's [nout], the tail's scale [nout] then shift [nout], the residual's scale [nout]
+    x0off : uint    //! the tail's noise row in x0
+    loff : uint     //! the tail's latent row in lat
+    span : uint     //! the rope-store epilogue: the q, k and v spans' width (the backbone's d), the caches' row stride
+    dh : uint       //! ... the head size
+    p : uint        //! ... the position: the tables' row and the caches' row
+    coff : uint     //! ... the cos table [pos][dh / 2] in tabs
+    soff : uint     //! ... the sin table, the same layout
+}
+
+//! The Pocket frame's row GEMV: y [nout] = W . x [nin] + b at one row, x staged in the workgroup - as it is, under NORM_IN through a
+//! LayerNorm (lw, lb), under NORM_MOD_IN through it and the adaLN modulation; EPI the epilogue (`ARCHITECTURE_GPU_SHARED_KERNELS.md`);
+//! 32 lanes a row folded by shuffle, four rows a workgroup; a stamp supplies the row's dot
+[ |> template_struct_instance]
+class template GkPkGemv : GkWgReduce {
+    @template_constant NORM_IN : bool = false       //!< the input through the LayerNorm (lw, lb) alone
+    @template_constant NORM_MOD_IN : bool = false
+    @template_constant MOD_IN : bool = false   //!< the modulation rows are read: the normed input or the gate epilogue
+    @template_constant AUX_IN : bool = false   //!< the slab vector is read: the add-SiLU, the tail or the residual's scale
+    @template_constant TAIL : bool = false     //!< the frame tail: the noise row in, the latent row out
+    @template_constant ROPE_STORE : bool = false   //!< the qkv epilogue: the tables and the two caches bound
+    @template_constant EPI : int = 0           //!< the epilogue, spelled as its literal: a template constant folds only a literal
+    @template_constant QUAD : bool = true      //!< the f32 rows read as float4 on the four lattice (an alias of the rows' binding)
+    @ssbo @binding = 0 @role = "weight" wn : array<float>
+    @ssbo @binding = 0 @role = "alias" @template_gate = QUAD wn4 : array<float4>   //! the same rows as float4: the quad dot's loads
+    @ssbo @binding = 1 @role = "read" x : array<float>
+    @ssbo @binding = 2 @role = "readwrite" y : array<float>
+    @ssbo @binding = 3 @role = "read" @template_gate = MOD_IN mod : array<float>
+    @ssbo @binding = 4 @role = "read" @template_gate = TAIL x0 : array<float>
+    @ssbo @binding = 5 @role = "write" @template_gate = TAIL lat : array<float>
+    @ssbo @binding = 6 @role = "read" @template_gate = ROPE_STORE tabs : array<float>
+    @ssbo @binding = 7 @role = "write" @template_gate = ROPE_STORE kc : array<float>
+    @ssbo @binding = 8 @role = "write" @template_gate = ROPE_STORE vc : array<float>
+    @kargs pa : GkPkGemvArgs
+    @workgroup xs : float[int(GK_PK_GEMV_MAX_NIN)]
+    @workgroup @template_gate = ROPE_STORE dq : float[4]   //! the rope-store stamp: the workgroup's four dots side by side, so an even row turns its pair
+
+    def abstract row_dot_into(row, lane : uint; var acc : float&) : void   //! row `row`'s dot with the staged x over its 32 lanes
+
+    //! the 32 lanes of a row folded: a butterfly over the row's aligned lane group, every lane holding the row's sum
+    [spirv_inline]
+    def row_sum_into(var s : float&) {
+        var a = s
+        a += gk_subgroup_xor(a, 16u)
+        a += gk_subgroup_xor(a, 8u)
+        a += gk_subgroup_xor(a, 4u)
+        a += gk_subgroup_xor(a, 2u)
+        a += gk_subgroup_xor(a, 1u)
+        s = a
+    }
+
+    //! whether the rows' base, stride and width sit on the four lattice, under `QUAD`
+    [spirv_inline]
+    def quad_rows : bool {
+        static_if (QUAD) {
+            return ((pa.woff | pa.stride | pa.nin) & 3u) == 0u
+        } else {
+            return false
+        }
+    }
+
+    //! the f32 rows' dot over lanes: under `QUAD` float4 steps on the four lattice, floats otherwise
+    [spirv_inline]
+    def f32_row_dot_into(row, lane : uint; var acc : float&) {
+        let wrow = pa.woff + row * pa.stride
+        var a = acc
+        static_if (QUAD) {
+            if (quad_rows()) {
+                let w4 = wrow >> 2u
+                let n4 = pa.nin >> 2u
+                var j = lane
+                while (j < n4) {
+                    let w = wn4[w4 + j]
+                    let xb = j * 4u
+                    a += w.x * xs[xb]
+                    a += w.y * xs[xb + 1u]
+                    a += w.z * xs[xb + 2u]
+                    a += w.w * xs[xb + 3u]
+                    j += 32u
+                }
+            } else {
+                scalar_dot_add(wrow, lane, a)
+            }
+        } else {
+            scalar_dot_add(wrow, lane, a)
+        }
+        acc = a
+    }
+
+    //! the float rows' dot over lanes onto `a`
+    [spirv_inline]
+    def scalar_dot_add(wrow, lane : uint; var a : float&) {
+        var s = a
+        var j = lane
+        while (j < pa.nin) {
+            s += wn[wrow + j] * xs[j]
+            j += 32u
+        }
+        a = s
+    }
+
+    [spirv_inline]
+    def aux_at(i : uint) : float {
+        static_if (AUX_IN) {
+            return wn[pa.aoff + i]
+        } else {
+            return 0.0
+        }
+    }
+
+    //! the input row staged into xs through the LayerNorm (lw, lb), then under NORM_MOD_IN the adaLN modulation; the inverse norm the
+    //! stamp's spelling (`RSQRT`)
+    [spirv_inline]
+    def stage_normed(tid : uint) {
+        var k = tid
+        var s = 0.0
+        while (k < pa.nin) {
+            s += x[pa.xoff + k]
+            k += 128u
+        }
+        var total = 0.0
+        wg_sum_into(s, 0u, total)
+        let mean = total / float(pa.nin)
+        var vs = 0.0
+        k = tid
+        while (k < pa.nin) {
+            let dv = x[pa.xoff + k] - mean
+            vs += dv * dv
+            k += 128u
+        }
+        var inv = 0.0
+        wg_rms_inv_into(vs, pa.nin, pa.eps, 1u, inv)
+        k = tid
+        while (k < pa.nin) {
+            let nv = tts_ln_affine(x[pa.xoff + k], mean, inv, wn[pa.lwoff + k], wn[pa.lboff + k])
+            static_if (NORM_MOD_IN) {
+                xs[k] = tts_modulate(nv, mod[pa.moff + k], mod[pa.moff + pa.nin + k])
+            } else {
+                xs[k] = nv
+            }
+            k += 128u
+        }
+    }
+
+    //! workgroup `wg`'s four rows, thread `tid` of its 128
+    [spirv_inline]
+    def pk_gemv_body(wg, tid : uint) {
+        static_if (NORM_MOD_IN || NORM_IN) {
+            stage_normed(tid)
+        } else {
+            var k = tid
+            while (k < pa.nin) {
+                xs[k] = x[pa.xoff + k]
+                k += 128u
+            }
+        }
+        barrier()
+        let row = wg * 4u + tid / 32u
+        let lane = tid % 32u
+        let live = row < pa.nout
+        var sum = 0.0
+        if (live) {
+            row_dot_into(row, lane, sum)
+        }
+        row_sum_into(sum)
+        if (live && lane == 0u) {
+            let d = sum + wn[pa.boff + row]
+            static_if (EPI == 0) {
+                y[pa.yoff + row] = d
+            }
+            static_if (EPI == 1) {
+                y[pa.yoff + row] = silu_f32(d)
+            }
+            static_if (EPI == 2) {
+                y[pa.yoff + row] = y[pa.yoff + row] + mod[pa.moff + 2u * pa.nin + row] * d
+            }
+            static_if (EPI == 3) {
+                y[pa.yoff + row] = silu_f32(d + aux_at(row))
+            }
+            static_if (EPI == 4) {
+                let tv = d + x0[pa.x0off + row]
+                y[pa.yoff + row] = tv
+                lat[pa.loff + row] = tv * aux_at(row) + aux_at(pa.nout + row)
+            }
+            static_if (EPI == 5) {
+                dq[tid / 32u] = d
+            }
+            static_if (EPI == 6) {
+                y[pa.yoff + row] = y[pa.yoff + row] + d * aux_at(row)
+            }
+            static_if (EPI == 7) {
+                y[pa.yoff + row] = y[pa.yoff + row] + d
+            }
+            static_if (EPI == 8) {
+                y[pa.yoff + row] = tts_gelu_tanh(d)
+            }
+        }
+        static_if (EPI == 5) {
+            barrier()
+            if (live && lane == 0u && (row & 1u) == 0u) {
+                rope_store(row, dq[tid / 32u], dq[tid / 32u + 1u])
+            }
+        }
+    }
+
+    //! the rope-store epilogue over the pair (row, row + 1): the q span turned into y, the k span turned into the k cache's
+    //! row p, the v span copied into the v cache's
+    [spirv_inline]
+    def rope_store(row : uint; r0, r1 : float) {
+        static_if (ROPE_STORE) {
+            let span = max(pa.span, 1u)
+            let dh = max(pa.dh, 2u)
+            let sp = row / span
+            let c = row % span
+            if (sp < 2u) {
+                let hh = dh / 2u
+                let tb = pa.p * hh + (c % dh) / 2u
+                let cv = tabs[pa.coff + tb]
+                let sv = tabs[pa.soff + tb]
+                let o0 = r0 * cv - r1 * sv
+                let o1 = r0 * sv + r1 * cv
+                if (sp == 0u) {
+                    y[pa.yoff + c] = o0
+                    y[pa.yoff + c + 1u] = o1
+                } else {
+                    kc[pa.p * pa.span + c] = o0
+                    kc[pa.p * pa.span + c + 1u] = o1
+                }
+            } else {
+                vc[pa.p * pa.span + c] = r0
+                vc[pa.p * pa.span + c + 1u] = r1
+            }
         }
     }
 }
@@ -1819,6 +2079,432 @@ class template GkRopeKvStore {
     }
 }
 
+struct GkQknRopeArgs {
+    qd : uint
+    kvd : uint
+    hs : uint
+    half : uint        //! rotation pairs a head: hs / 2, or rot / 2 on a partial-rope model (the rest of the head passes through)
+    neox : uint
+    nh : uint          //! the q heads; the head workgroups past them are the k heads
+    layerbase : uint   //! the layer's K/V mirror base (Vulkan), or the per-layer stride a row table's layer index steps (Metal's rows form)
+    qwoff : uint       //! the q norm-weight row's base in wn
+    kwoff : uint
+    eps : float
+    qstride : uint     //! a q head's stride in qrows: 0 = hs; 2 hs on a gated-q model ([q | gate] a head, roped in place)
+    boff : uint        //! the layer's row base in the bias buffer ([q | k | v] rows, one layer after another)
+    hasb : uint
+    cbase : uint       //! the layer's rope class's row base in the cos plane
+    vfk : uint         //! V is the raw k row scaled by its own rms (a layer with no v plane: gemma-4's global layers)
+    vnorm : uint       //! V is its own projection scaled by its rms, no weight (gemma-4's v-norm)
+    rowwg : uint       //! head workgroups a row (q heads + k heads); 0 = the whole dispatch is row 0
+    kvrow : uint       //! a row's stride in the projection plane
+    qrow : uint        //! a row's stride in qrows
+    cosrow : uint      //! a row's stride in the cos plane
+    win : uint         //! the window form: row r sits at position `pos0 + r` in the mirror at `layerbase`, its rows `row0 + r` of the planes, its k
+                       //! row at `kbase` and its v row at `vbase` past the row's start in `kvsrc` (`kvrow` apart); 0 = the token rows' form
+    pos0 : uint
+    row0 : uint
+    kbase : uint
+    vbase : uint
+    nreal : uint       //! the live rows: past them a q head copies its row into its twin and a k head stores nothing; 0 = every row
+    skipnorm : uint    //! the rope alone, no per-head norm
+    hscale : float     //! the q twin's scale (`HX` stamps)
+}
+
+//! The fused per-head q/k RMSNorm, rope and K/V store, a workgroup of `LANES` a head (`ARCHITECTURE_GPU_SHARED_KERNELS.md`):
+//! q roped in place, k into the mirror, its workgroup storing the V row (plain, `vnorm`, or `vfk` the k row under k's rms);
+//! a stamp supplies the row's mirror bases and the sin row's read
+[ |> template_struct_instance]
+class template GkQknRopeKv : GkWgReduce {
+    @ssbo @binding = 0 @role = "readwrite" qrows : array<float>          //! the q rows, normed and roped in place
+    @ssbo @binding = 1 @role = "read" kvsrc : array<float>               //! the projection rows: [q | k | v]
+    @ssbo @binding = 2 @role = "write" @off = "koff" kmir : array<KT>    //! the mirror K plane
+    @ssbo @binding = 3 @role = "write" @off = "voff" vmir : array<KT>    //! the mirror V plane
+    @ssbo @binding = 4 @role = "read" @off = "toff" cossin : array<float>   //! the rope table's cos rows (and on Vulkan the sin rows a half past them)
+    @ssbo @binding = 5 @role = "weight" wn : array<float>                //! the q and k norm-weight rows
+    @ssbo @binding = 7 @role = "weight" bias : array<float>              //! the [q | k | v] projection biases (`hasb`), else a placeholder
+    @ssbo @binding = 9 @role = "write" @template_gate = HX qh : array<float16>   //! the q rows' half twin, under `hscale`
+    @kargs pa : GkQknRopeArgs
+    @template_constant CLAMP16 : bool = true
+    @template_constant LANES : uint = 256u
+    @template_constant EPT : int = 1   //!< the rotation pairs a thread holds: LANES x EPT covers the widest head's, 256
+    @template_constant V_WG : bool = false   //!< the V rows take workgroups of their own past the k heads; else a k head's stores its V row
+    @template_constant HX : bool = false
+
+    def abstract mir_base(rowi : uint) : uint2           //! row rowi's mirror K and V row bases, ahead of the head's own
+    def abstract rope_sin(cb, j : uint) : float          //! pair j's sin off the cos row at cb
+
+    //! whether head workgroup `wid` is a V row's (`V_WG`: past the q and the `nkh` k heads)
+    def v_head(wid, nkh : uint) : bool {
+        static_if (V_WG) {
+            return wid >= pa.nh + nkh
+        } else {
+            return false
+        }
+    }
+
+    def st_q(i : uint; v : float) {
+        qrows[i] = v
+        static_if (HX) {
+            qh[i] = half_sat(v * pa.hscale)
+        }
+    }
+
+    def st_k(i : uint; v : float) {
+        static_if (CLAMP16) {
+            kmir[i] = half_sat(v)
+        } else {
+            kmir[i] = v
+        }
+    }
+
+    def st_v(i : uint; v : float) {
+        static_if (CLAMP16) {
+            vmir[i] = half_sat(v)
+        } else {
+            vmir[i] = v
+        }
+    }
+
+    //! rotation pair p's two elements of a head: NEOX (p, p + half) inside the rotated span, NORM (2p, 2p + 1), and past the span
+    //! the identity pairs that cover [2 half, hs)
+    def pair_ix(p : uint) : uint2 => (pa.neox != 0u ? (p < pa.half ? uint2(p, p + pa.half) : uint2(p + pa.half, p + pa.hs / 2u))
+        : uint2(2u * p, 2u * p + 1u))
+
+    //! head workgroup `wid` of row `rowi`, thread `tid` holding `EPT` of the head's rotation pairs in registers
+    def qkn_head(rowi, wid, tid : uint) {   // nolint:STYLE037,STYLE038 - the norm, the rotation and both stores ride the pairs' registers
+        let nkh = pa.kvd / pa.hs
+        let is_v = v_head(wid, nkh)
+        let is_k = wid >= pa.nh && !is_v
+        let h = is_v ? wid - pa.nh - nkh : (is_k ? wid - pa.nh : wid)
+        let qstride = pa.qstride == 0u ? pa.hs : pa.qstride
+        let prow = pa.win != 0u ? pa.row0 + rowi : rowi
+        let qb = prow * pa.qrow + h * qstride
+        let kvb = prow * pa.kvrow
+        let vb = pa.qd + pa.kvd + h * pa.hs   //! the V head's offset in the projection row and in the layer's bias block
+        let vi = pa.win != 0u ? pa.vbase + kvb + h * pa.hs : kvb + vb
+        let vplain = is_v && pa.vfk == 0u   //! a V workgroup reading its own projection
+        let rdk = is_k || (is_v && !vplain)
+        let sbase = rdk ? kvb + (pa.win != 0u ? pa.kbase : pa.qd) + h * pa.hs : (vplain ? vi : qb)
+        let bbase = rdk ? pa.qd + h * pa.hs : (vplain ? vb : h * pa.hs)
+        let cb = prow * pa.cosrow + pa.cbase
+        let mb = mir_base(rowi)
+        let mk = mb.x + h * pa.hs
+        let mv = mb.y + h * pa.hs
+        let npair = pa.hs / 2u
+        var a, b : float[EPT]
+        var ss = 0.0
+        for [unroll_full] (c in range(EPT)) {
+            let p = tid + uint(c) * LANES
+            a[c] = 0.0
+            b[c] = 0.0
+            if (p < npair) {
+                let ix = pair_ix(p)
+                a[c] = (rdk || vplain ? kvsrc[sbase + ix.x] : qrows[sbase + ix.x]) + (pa.hasb != 0u ? bias[pa.boff + bbase + ix.x] : 0.0)
+                b[c] = (rdk || vplain ? kvsrc[sbase + ix.y] : qrows[sbase + ix.y]) + (pa.hasb != 0u ? bias[pa.boff + bbase + ix.y] : 0.0)
+                ss += a[c] * a[c] + b[c] * b[c]
+            }
+        }
+        if (pa.nreal != 0u && rowi >= pa.nreal) {   //! a pad row
+            if (!is_k && !is_v) {
+                for [unroll_full] (c in range(EPT)) {
+                    let p = tid + uint(c) * LANES
+                    if (p < npair) {
+                        let ix = pair_ix(p)
+                        st_q(qb + ix.x, a[c])
+                        st_q(qb + ix.y, b[c])
+                    }
+                }
+            }
+            return
+        }
+        var inv = 1.0
+        if (pa.skipnorm == 0u && (!vplain || pa.vnorm != 0u)) {
+            wg_rms_inv_into(ss, pa.hs, pa.eps, 0u, inv)
+        }
+        let woff = is_k ? pa.kwoff : pa.qwoff
+        for [unroll_full] (c in range(EPT)) {
+            let p = tid + uint(c) * LANES
+            if (p < npair) {
+                let ix = pair_ix(p)
+                if (is_v) {
+                    st_v(mv + ix.x, a[c] * inv)
+                    st_v(mv + ix.y, b[c] * inv)
+                } else {
+                    let a0 = pa.skipnorm != 0u ? a[c] : wn[woff + ix.x] * (a[c] * inv)
+                    let a1 = pa.skipnorm != 0u ? b[c] : wn[woff + ix.y] * (b[c] * inv)
+                    var r0 = a0
+                    var r1 = a1
+                    if (p < pa.half) {
+                        let fcr = cossin[cb + p]
+                        let fci = rope_sin(cb, p)
+                        r0 = a0 * fcr - a1 * fci
+                        r1 = a0 * fci + a1 * fcr
+                    }
+                    if (is_k) {
+                        st_k(mk + ix.x, r0)
+                        st_k(mk + ix.y, r1)
+                    } else {
+                        st_q(qb + ix.x, r0)
+                        st_q(qb + ix.y, r1)
+                    }
+                }
+            }
+        }
+        static_if (!V_WG) {
+            if (is_k) {
+                var wa, wb : float[EPT]
+                var ws = 0.0
+                for [unroll_full] (c in range(EPT)) {
+                    let p = tid + uint(c) * LANES
+                    wa[c] = 0.0
+                    wb[c] = 0.0
+                    if (pa.vfk != 0u) {
+                        wa[c] = a[c] * inv
+                        wb[c] = b[c] * inv
+                    } elif (p < npair) {
+                        let ix = pair_ix(p)
+                        wa[c] = kvsrc[vi + ix.x] + (pa.hasb != 0u ? bias[pa.boff + vb + ix.x] : 0.0)
+                        wb[c] = kvsrc[vi + ix.y] + (pa.hasb != 0u ? bias[pa.boff + vb + ix.y] : 0.0)
+                        ws += wa[c] * wa[c] + wb[c] * wb[c]
+                    }
+                }
+                if (pa.vfk == 0u && pa.vnorm != 0u) {
+                    var vinv = 0.0
+                    wg_rms_inv_into(ws, pa.hs, pa.eps, 1u, vinv)
+                    for [unroll_full] (c in range(EPT)) {
+                        wa[c] *= vinv
+                        wb[c] *= vinv
+                    }
+                }
+                for [unroll_full] (c in range(EPT)) {
+                    let p = tid + uint(c) * LANES
+                    if (p < npair) {
+                        let ix = pair_ix(p)
+                        st_v(mv + ix.x, wa[c])
+                        st_v(mv + ix.y, wb[c])
+                    }
+                }
+            }
+        }
+    }
+}
+
+struct GkRouterArgs {
+    ne : uint            //! the expert rows
+    dim : uint           //! the row width
+    woff : uint          //! the layer's row base in the router plane (elements)
+    obase : uint         //! the logits' base
+    norm_on : uint       //! x read as its weightless rms under the norm row at `nwoff` (the gemma-4 router's input; `NORM` stamps)
+    nwoff : uint
+    eps : float
+    ncols : uint         //! the x rows the dispatch serves past `col0` (0 reads as one): column c's logits at `obase + c ne`, or under a
+                         //! split at `obase + c ne_split` and past `ne_split` at `obase_split + c (ne - ne_split)`
+    ne_split : uint      //! the row the second output base takes over at (the deltanet beta and alpha rows in one dispatch); 0 = one base
+    obase_split : uint
+    col0 : uint          //! the dispatch's first column
+    xs : uint            //! a column's stride in x, elements (0 = dim)
+    hasb : uint          //! the bias row at `boff` added (`BIAS` stamps: gpt-oss)
+    boff : uint
+}
+
+//! The router GEMV: expert row e's logit for every column, the row's weights read once for all of them; `ROW_WG` gives a row a
+//! workgroup of `LANES` (the subgroups' partials crossing the workgroup slab), else a subgroup (`gl_NumSubgroups` rows a
+//! workgroup); a lane steps `VW` elements a load: 1 (the f32 rows), 2 (the f16 rows as half pairs), 4 (f32 rows and x as float4)
+[ |> template_struct_instance]
+class template GkRouterGemv {
+    @ssbo @binding = 0 @role = "weight" w : array<KT>                                 //! the rows, row-major [ne x dim] a layer, VW elements a word
+    @ssbo @binding = 1 @role = "read" x : array<XT>                                   //! the columns' rows, VW elements a word
+    @ssbo @binding = 2 @role = "write" logits : array<float>
+    @ssbo @binding = 3 @role = "weight" @template_gate = NORM wn : array<float>       //! the norms plane: the row at `nwoff` scales x under `norm_on`
+    @ssbo @binding = 4 @role = "weight" @template_gate = BIAS rb : array<float>       //! the bias rows
+    @kargs pa : GkRouterArgs
+    @workgroup @template_gate = ROW_WG part : float[256]   //! a subgroup's NC column partials at `sg * 8`: the dot's in 0..127, the norm's in 128..255
+    @template_constant ROW_WG : bool = true
+    @template_constant VW : uint = 1u
+    @template_constant NC : int = 8
+    @template_constant COL_CLAMP : bool = false   //!< the columns past the last read it again and store nothing, no branch in the dot; else they skip
+    @template_constant NORM : bool = false
+    @template_constant BIAS : bool = false
+
+    //! x's element i of the column at element xb (VW 1 and 2), under the norm row when `norm_on`
+    [spirv_inline]
+    def xn(xb, i : uint) : float {
+        static_if (VW == 4u) {
+            return 0.0
+        } else {
+            static_if (NORM) {
+                return pa.norm_on != 0u ? x[xb + i] * wn[pa.nwoff + i] : x[xb + i]
+            } else {
+                return x[xb + i]
+            }
+        }
+    }
+
+    //! word i of the row dotted with the column at xb into a scalar - an accumulator pointer down the call stalls the Vulkan driver
+    [spirv_inline]
+    def word_dot_into(wv : KT; xb, i : uint; var d : float&) {
+        static_if (VW == 4u) {
+            d = dot4_seq(wv, x[xb / 4u + i])
+        } else {
+            static_if (VW == 2u) {
+                d = unpackHalf2x16(wv).x * xn(xb, 2u * i) + unpackHalf2x16(wv).y * xn(xb, 2u * i + 1u)
+            } else {
+                d = float(wv) * xn(xb, i)   // nolint:PERF020,LINT019 - KT converts; the f32 stamp's cast is free, the rule fires where it lands
+            }
+        }
+    }
+
+    [spirv_inline]
+    def bias_at(e : uint) : float {
+        static_if (BIAS) {
+            return pa.hasb != 0u ? rb[pa.boff + e] : 0.0
+        } else {
+            return 0.0
+        }
+    }
+
+    //! row e's logit of column cc
+    [spirv_inline]
+    def store_logit(e, cc : uint; v : float) {
+        var o = pa.obase + cc * (pa.ne_split != 0u ? pa.ne_split : pa.ne) + e
+        if (pa.ne_split != 0u && e >= pa.ne_split) {
+            o = pa.obase_split + cc * (pa.ne - pa.ne_split) + (e - pa.ne_split)
+        }
+        logits[o] = v + bias_at(e)
+    }
+
+    //! a column's lane partial `v` summed over the subgroup in place, and under `ROW_WG` published at slot `slot` x 128 of the slab
+    [spirv_inline]
+    def col_part_into(var v : float&; c, slot : uint) {
+        v = gk_subgroup_add(v)
+        static_if (ROW_WG) {
+            if (gl_SubgroupInvocationID == 0u) {
+                part[slot * 128u + gl_SubgroupID * 8u + c] = v
+            }
+        }
+    }
+
+    //! under `ROW_WG`, column c's workgroup sum off the slab, after the barrier that follows the partials
+    [spirv_inline]
+    def col_total_into(c, slot : uint; var tot : float&) {
+        static_if (ROW_WG) {
+            var a = 0.0
+            var sgi = 0u
+            while (sgi < gl_NumSubgroups) {
+                a += part[slot * 128u + sgi * 8u + c]
+                sgi++
+            }
+            tot = a
+        }
+    }
+
+    //! the sum of squares of the column at element xb over the row's lanes' elements, onto `s`
+    [spirv_inline]
+    def col_sq_into(xb, lane, nl : uint; var s : float&) {
+        static_if (NORM) {
+            var a = 0.0
+            var j = lane
+            while (j < pa.dim) {
+                a += x[xb + j] * x[xb + j]
+                j += nl
+            }
+            s = a
+        }
+    }
+
+    //! row e's logits over the dispatch's columns, the row's lane `lane` of `nl`; under `COL_CLAMP` every one of NC columns unrolled, else
+    //! a loop over the live ones
+    [spirv_inline]
+    def router_row(e, lane, nl : uint) {   // nolint:STYLE038 - the norm, the dot, the partials and the stores share the column registers
+        let cb = gl_WorkGroupID.y * uint(NC)
+        let nct = max(pa.ncols, 1u)
+        let ncv = min(uint(NC), nct - cb)
+        let xs = pa.xs == 0u ? pa.dim : pa.xs
+        let xc0 = (pa.col0 + cb) * xs
+        let nw = pa.dim / VW
+        let wb = (pa.woff + e * pa.dim) / VW
+        var inv, acc : float[NC]
+        for [unroll_full] (c in range(NC)) {
+            inv[c] = 1.0
+            acc[c] = 0.0
+        }
+        static_if (NORM) {
+            if (pa.norm_on != 0u) {
+                var c = 0u
+                while (c < ncv) {
+                    var v = 0.0
+                    col_sq_into(xc0 + c * xs, lane, nl, v)
+                    inv[c] = v
+                    c++
+                }
+                c = 0u
+                while (c < ncv) {
+                    var v = inv[c]
+                    col_part_into(v, c, 1u)
+                    inv[c] = v
+                    c++
+                }
+                static_if (ROW_WG) {
+                    barrier()
+                    c = 0u
+                    while (c < ncv) {
+                        var v = 0.0
+                        col_total_into(c, 1u, v)
+                        inv[c] = v
+                        c++
+                    }
+                }
+                c = 0u
+                while (c < ncv) {
+                    inv[c] = rms_inv(inv[c] / float(pa.dim) + pa.eps, false)
+                    c++
+                }
+            }
+        }
+        var i = lane
+        while (i < nw) {
+            let wv = w[wb + i]
+            static_if (COL_CLAMP) {
+                for [unroll_full] (c in range(NC)) {
+                    var d = 0.0
+                    word_dot_into(wv, (pa.col0 + min(cb + uint(c), nct - 1u)) * xs, i, d)
+                    acc[c] += d
+                }
+            } else {
+                var c = 0u
+                while (c < ncv) {
+                    var d = 0.0
+                    word_dot_into(wv, xc0 + c * xs, i, d)
+                    acc[c] += d
+                    c++
+                }
+            }
+            i += nl
+        }
+        var c = 0u
+        while (c < ncv) {
+            var v = acc[c]
+            col_part_into(v, c, 0u)
+            acc[c] = v
+            c++
+        }
+        static_if (ROW_WG) {
+            barrier()
+        }
+        if (lane == 0u) {
+            c = 0u
+            while (c < ncv) {
+                var v = acc[c]
+                col_total_into(c, 0u, v)
+                acc[c] = v
+                store_logit(e, pa.col0 + cb + c, acc[c] * inv[c])
+                c++
+            }
+        }
+    }
+}
+
 struct GkGegluArgs {
     nelem : uint
     glo : float     //! the gate GEMM's output bounds
@@ -2496,4 +3182,763 @@ class template GkPostAddLn : GkQ8BlockStore {
     }
 
     def override normed_at(e : uint; mean, inv : float) : float => mad((x[e] - mean) * inv, wn[pa.lnoff + e % max(1u, pa.d)], wn[pa.lnboff + e % max(1u, pa.d)])
+}
+
+struct GkHcInitArgs {
+    dim : uint
+    hc : uint
+    rows : uint
+}
+
+//! the wide residual opens as hc copies of every embedded row, one element an invocation
+[ |> template_struct_instance]
+class template GkHcInit {
+    @ssbo @binding = 0 @role = "read" x : array<float>     //! the embedded rows [rows x dim]
+    @ssbo @binding = 1 @role = "write" res : array<float>  //! the wide rows [rows x hc x dim]
+    @kargs pa : GkHcInitArgs
+
+    def hc_init_body {
+        let e = gl_GlobalInvocationID.x
+        let hcd = pa.hc * pa.dim
+        if (e < pa.rows * hcd) {
+            let r = e / hcd
+            let i = (e - r * hcd) % max(1u, pa.dim)
+            res[e] = x[r * pa.dim + i]
+        }
+    }
+}
+
+struct GkCat2Args {
+    d : uint
+    rows : uint    //! the cat rows written, each [a row ; b row] at 2d
+    rep : uint     //! the streams a position spans (0 reads as one): cat row r is position p's stream c
+    smaj : uint    //! the cat rows stream-major (r = c * np + p), else position-major (r = p * rep + c)
+    np : uint      //! the positions, under `smaj`
+    a0 : uint      //! a's first row, its rows `as_` apart (0 = d): every stream of a position reads the position's a row
+    as_ : uint
+    b0 : uint      //! b's first row: position p's stream c reads b row `b0 + p * rep + c`
+}
+
+//! the MTP head's eh_proj input: every cat row the concatenation [a row ; b row], one element pair an invocation - the
+//! prompt warm's and the draft prelude's cat on both homes
+[ |> template_struct_instance]
+class template GkCat2 {
+    @ssbo @binding = 0 @role = "write" y : array<float>
+    @ssbo @binding = 1 @role = "read" a : array<float>
+    @ssbo @binding = 2 @role = "read" b : array<float>
+    @kargs pa : GkCat2Args
+
+    def cat2_body {
+        let e = gl_GlobalInvocationID.x
+        if (e < pa.rows * pa.d) {
+            let r = e / pa.d
+            let i = e - r * pa.d
+            let rep = max(pa.rep, 1u)
+            let p = pa.smaj != 0u ? r % max(pa.np, 1u) : r / rep
+            let c = pa.smaj != 0u ? r / max(pa.np, 1u) : r % rep
+            let ast = pa.as_ == 0u ? pa.d : pa.as_
+            y[r * 2u * pa.d + i] = a[(pa.a0 + p) * ast + i]
+            y[r * 2u * pa.d + pa.d + i] = b[(pa.b0 + p * rep + c) * pa.d + i]
+        }
+    }
+}
+
+struct GkHcNormArgs {
+    dim : uint
+    hc : uint     //! the residual streams: workgroup g norms stream g % hc of row row0 + g / hc
+    woff : uint   //! the site's gamma rows in wn: stream c's at woff + c * dim
+    row0 : uint   //! the first wide row read; the normed rows land from row 0 (the head mixer norms the window's last row alone)
+    eps : float
+}
+
+//! the grouped rms of the wide residual rows: stream c of a row normalizes over dim and scales by gamma row c - one workgroup
+//! a stream row, the CPU `rmsnorm`'s (x . inv) . w order; the inverse norm's spelling is the stamp's (`RSQRT`)
+[ |> template_struct_instance]
+class template GkHcNorm : GkWgReduce {
+    @ssbo @binding = 0 @role = "read" res : array<float>    //! the wide rows, [rows x hc x dim]
+    @ssbo @binding = 1 @role = "write" xn : array<float>    //! the normed streams, the same layout
+    @ssbo @binding = 2 @role = "weight" wn : array<float>
+    @kargs pa : GkHcNormArgs
+    @template_constant TG : uint = 256u   //!< the workgroup's lanes, the row loops' stride
+
+    def hc_norm_body {
+        let g = gl_WorkGroupID.x
+        let src = pa.row0 * pa.hc * pa.dim + g * pa.dim
+        let base = g * pa.dim
+        let wb = pa.woff + (g % max(1u, pa.hc)) * pa.dim
+        let tid = gl_LocalInvocationID.x
+        var ss = 0.0
+        var i = tid
+        while (i < pa.dim) {
+            let v = res[src + i]
+            ss += v * v
+            i += TG
+        }
+        var inv = 0.0
+        wg_rms_inv_into(ss, pa.dim, pa.eps, 0u, inv)
+        i = tid
+        while (i < pa.dim) {
+            xn[base + i] = (res[src + i] * inv) * wn[wb + i]
+            i += TG
+        }
+    }
+}
+
+struct GkHcMixArgs {
+    dim : uint
+    hc : uint
+    rows : uint
+}
+
+//! the mixer's tail: the block input row xb = the mean over the streams of the normed stream gated by the sigmoid of its
+//! up-projection row (the CPU `hc_mix_tail`'s x . sigmoid(g) and its 1 / hc scale), one element an invocation over the rows
+[ |> template_struct_instance]
+class template GkHcMix {
+    @ssbo @binding = 0 @role = "read" xn : array<float>     //! the normed streams [rows x hc x dim]
+    @ssbo @binding = 1 @role = "read" gate : array<float>   //! the up projection [rows x hc x dim]
+    @ssbo @binding = 2 @role = "write" xb : array<float>    //! the block input rows [rows x dim]
+    @kargs pa : GkHcMixArgs
+
+    def hc_mix_body {
+        let e = gl_GlobalInvocationID.x
+        if (e < pa.rows * pa.dim) {
+            let r = e / pa.dim
+            let i = e - r * pa.dim
+            let rb = r * pa.hc * pa.dim
+            var acc = 0.0
+            var c = 0u
+            while (c < pa.hc) {
+                let x = rb + c * pa.dim + i
+                acc += xn[x] * sigmoid_f32(gate[x])
+                c++
+            }
+            xb[e] = acc * (1.0 / float(pa.hc))
+        }
+    }
+}
+
+struct GkHcCombArgs {
+    dim : uint
+    hc : uint
+    moe_on : uint    //! the block output is the routed sum in `acc`, plus the shared expert's row under `sh_on` (the `MOE` stamp's)
+    sh_on : uint     //! ... the shared row `outr` at its gate joins the routed sum (0 = a routed block with no shared expert)
+    gated : uint     //! ... the gate: the sigmoid of the router logit at the row's last column, `lstride - 1` (0 = the shared row at unit weight)
+    rows : uint      //! the rows scattered, from `row0` (a window's last-layer slice scatters the rows the classifier reads)
+    row0 : uint
+    lstride : uint   //! the logits row stride (elements)
+}
+
+//! the scatter of a block's output into the streams: res_c += out x 2 sigmoid(inject_c / hc), one element an invocation over
+//! the rows; on the `MOE` stamp a MoE layer's output row is the routed experts' sum landed in `acc`, plus the shared expert's
+//! row at its gate
+[ |> template_struct_instance]
+class template GkHcCombine {
+    @ssbo @binding = 0 @role = "readwrite" res : array<float>                   //! the wide residual [rows x hc x dim], updated in place
+    @ssbo @binding = 1 @role = "read" outr : array<float>                       //! the block output rows [rows x dim]
+    @ssbo @binding = 2 @role = "read" inj : array<float>                        //! the site's hc scatter logits [rows x hc]
+    @ssbo @binding = 3 @role = "read" @template_gate = MOE acc : array<float>   //! the routed sums [rows x dim], read under `moe_on`
+    @ssbo @binding = 4 @role = "read" @template_gate = MOE logits : array<float>   //! the router logits rows, read under `gated`
+    @kargs pa : GkHcCombArgs
+    @template_constant MOE : bool = false
+
+    def hc_combine_body {
+        let g = gl_GlobalInvocationID.x
+        let hcd = pa.hc * pa.dim
+        if (g < pa.rows * hcd) {
+            let r = pa.row0 + g / hcd
+            let ee = g % hcd
+            let c = ee / pa.dim
+            let i = ee - c * pa.dim
+            let w = 2.0 / (1.0 + exp(-inj[r * pa.hc + c] / float(pa.hc)))
+            var v = outr[r * pa.dim + i]
+            static_if (MOE) {
+                if (pa.moe_on != 0u) {
+                    let gt = pa.gated != 0u ? sigmoid_f32(logits[r * pa.lstride + pa.lstride - 1u]) : 1.0
+                    v = acc[r * pa.dim + i] + (pa.sh_on != 0u ? v * gt : 0.0)
+                }
+            }
+            res[r * hcd + ee] += v * w
+        }
+    }
+}
+
+struct GkPleGateArgs {
+    dim : uint
+    hc : uint
+    nrows : uint    //! the conv ring's rows: (taps - 1) x dilation + 1
+    rows : uint     //! the Vulkan stamp's row form: 0 = the recorded token's row into its ring slot, else a window's rows into the panel
+    pos0 : uint     //! the position of row 0
+    eps : float
+    inv_sq : float  //! 1 / sqrt(dim): the key . query dot's scale, the CPU chain's own
+    direct : uint   //! the Metal stamp's: 1 = row r's conv input into panel row r, 0 = into the ring slot of position pos0 + r
+    roff : uint     //! the element bases of the residual, key, value, gated and conv-input rows (a joint verify's stream; 0 elsewhere)
+    koff : uint
+    voff : uint
+    goff : uint
+    coff : uint
+}
+
+//! The n-gram side input's gate, one workgroup a stream row: the normed key against the normed residual stream, the signed square
+//! root of their scaled dot through a sigmoid, the value row scaled by it into `gated`, and the grouped-normed gated row as the
+//! conv input row, landed where the stamp's `cin_base` / `cin_store` put it; `wn` holds the key, query and conv-input norm rows
+[ |> template_struct_instance]
+class template GkPleGate : GkWgReduce {
+    @ssbo @binding = 0 @role = "read" key : array<float>      //! the key projections [rows x hc x dim]
+    @ssbo @binding = 1 @role = "read" res : array<float>      //! the wide residual [rows x hc x dim]
+    @ssbo @binding = 2 @role = "read" val : array<float>      //! the value projections [rows x dim]
+    @ssbo @binding = 3 @role = "write" gated : array<float>   //! val x the stream's gate, [rows x hc x dim]
+    @ssbo @binding = 5 @role = "weight" wn : array<float>     //! [key norms | query norms | conv-input norms | conv taps]
+    @kargs pa : GkPleGateArgs
+    @template_constant TG : uint = 256u   //!< the workgroup's lanes, the row loops' stride
+
+    def abstract cin_base(r, c : uint) : uint             //! the element base of stream c's conv input row of row r
+    def abstract cin_store(e : uint; v : float) : void    //! ... one element of it
+
+    def ple_gate_body {
+        let wg = gl_WorkGroupID.x
+        let r = wg / max(1u, pa.hc)
+        let c = wg - r * pa.hc
+        let base = wg * pa.dim
+        let vbase = r * pa.dim
+        let hcd = pa.hc * pa.dim
+        let tid = gl_LocalInvocationID.x
+        var sk = 0.0
+        var sq = 0.0
+        var i = tid
+        while (i < pa.dim) {
+            let kv = key[pa.koff + base + i]
+            let qv = res[pa.roff + base + i]
+            sk += kv * kv
+            sq += qv * qv
+            i += TG
+        }
+        var ink = 0.0
+        wg_rms_inv_into(sk, pa.dim, pa.eps, 0u, ink)
+        var inq = 0.0
+        wg_rms_inv_into(sq, pa.dim, pa.eps, 1u, inq)
+        let cb = c * pa.dim
+        var pd = 0.0
+        i = tid
+        while (i < pa.dim) {
+            let kn = (key[pa.koff + base + i] * ink) * wn[cb + i]
+            let qn = (res[pa.roff + base + i] * inq) * wn[hcd + cb + i]
+            pd += kn * qn
+            i += TG
+        }
+        var sd = 0.0
+        wg_sum_into(pd, 0u, sd)
+        let sv = sd * pa.inv_sq
+        let mag = sqrt(max(abs(sv), 1.0e-6))
+        let sg = sv > 0.0 ? mag : (sv < 0.0 ? -mag : 0.0)
+        let g = sigmoid_f32(sg)
+        var sg2 = 0.0
+        i = tid
+        while (i < pa.dim) {
+            let gv = val[pa.voff + vbase + i] * g
+            gated[pa.goff + base + i] = gv
+            sg2 += gv * gv
+            i += TG
+        }
+        var ing = 0.0
+        wg_rms_inv_into(sg2, pa.dim, pa.eps, 1u, ing)
+        let cbase = cin_base(r, c)
+        i = tid
+        while (i < pa.dim) {
+            cin_store(cbase + i, ((val[pa.voff + vbase + i] * g) * ing) * wn[2u * hcd + cb + i])
+            i += TG
+        }
+    }
+}
+
+struct GkPleConvArgs {
+    dim : uint
+    hc : uint
+    kern : uint     //! the conv's taps
+    dil : uint      //! ... dilated by the n-gram size
+    rows : uint     //! the rows (the Vulkan stamp's 0 = the recorded token's row off its token block)
+    pos0 : uint     //! the position of row 0
+    direct : uint   //! the Metal stamp's: 1 = a tap at or past pos0 reads the window panel, 0 = every tap the ring
+    roff : uint     //! the element bases of the residual, gated, panel and ring rows (a joint verify's stream; 0 elsewhere)
+    goff : uint
+    coff : uint
+    ringoff : uint
+}
+
+//! The side input's landing, one element an invocation over the rows: the dilated depthwise causal conv (a tap before the sequence
+//! reads zero) over the taps the stamp's `tap` reads off its ring and panel, its silu and the gated value added to the residual
+//! stream in the CPU chain's order, (res + gated) + silu(conv); the taps sit in `wn` past the three norm rows
+[ |> template_struct_instance]
+class template GkPleConv {
+    @ssbo @binding = 0 @role = "readwrite" res : array<float>   //! the wide residual [rows x hc x dim], updated in place
+    @ssbo @binding = 1 @role = "read" gated : array<float>
+    @ssbo @binding = 3 @role = "weight" wn : array<float>       //! [key norms | query norms | conv-input norms | conv taps]
+    @kargs pa : GkPleConvArgs
+
+    def abstract row_pos(r : uint) : int                     //! row r's position
+    def abstract tap(e : uint; src_pos : int; nrows : uint) : float   //! channel e's conv input at position src_pos, off a ring of nrows rows or the panel
+
+    def ple_conv_body {
+        let g = gl_GlobalInvocationID.x
+        let hcd = pa.hc * pa.dim
+        let nrows = max(1u, (pa.kern - 1u) * pa.dil + 1u)
+        let conv_off = 3u * hcd
+        if (g < max(pa.rows, 1u) * hcd) {
+            let r = g / hcd
+            let e = g - r * hcd
+            let pos = row_pos(r)
+            var co = 0.0
+            var k = 0u
+            while (k < pa.kern) {
+                let src_pos = pos - int((pa.kern - 1u - k) * pa.dil)
+                if (src_pos >= 0) {
+                    co += wn[conv_off + e * pa.kern + k] * tap(e, src_pos, nrows)
+                }
+                k++
+            }
+            res[pa.roff + g] = (res[pa.roff + g] + gated[pa.goff + g]) + silu_f32(co)
+        }
+    }
+}
+
+let GK_NO_DSCALE = 0xFFFFFFFFu   //! `GkTopKArgs.dsoff`'s "no per-expert down scale" sentinel
+
+struct GkTopKArgs {
+    ne : uint
+    k : uint
+    norm : uint      //! renormalize the selected weights to sum 1
+    wscale : float   //! 0 or 1 = none
+    base1 : uint     //! the gate stack's expert-0 weight block (stack-relative, in the plane's units) - the Vulkan decode's slot records
+    stride1 : uint   //! ... blocks per expert
+    base3 : uint
+    stride3 : uint
+    base2 : uint
+    stride2 : uint
+    xnb2 : uint      //! the down feed's blocks per hidden row: slot s reads row s (gate/up read their row's feed)
+    dsoff : uint     //! this layer's row base in the per-expert down-scale plane (gemma-4: ffn_down_exps.scale folds into the routing weight); GK_NO_DSCALE = none
+    lstride : uint   //! the logits row stride (elements): row p's logits sit at p * lstride
+    xnb1 : uint      //! the feed's blocks per row - one feed row serves the gate and the up: row p's slots read it at p * xnb1
+    rbias_on : uint  //! the router bias (gpt-oss): logit e takes rb[rboff + e] before the pick
+    rboff : uint     //! ... this layer's row base in the router-bias plane ([ne] a layer)
+    raw : uint       //! select on the raw logits, no softmax (the Metal stamp's gpt-oss softmax_weight: the softmax runs over the picks)
+}
+
+//! The router's select over one row of `ne` logits: the softmax (max, exp floored at -80, sum) unless `raw`, then k picks of the
+//! largest, the lowest expert on a tie, landing in `pick` / `pickw` for the stamp to write; lane `tid` holds experts tid + i x
+//! LANES for i < DEPTH (a workgroup of LANES lanes - one simdgroup on Metal, 256 on Vulkan); `pick_weight` is the renorm
+[ |> template_struct_instance]
+class template GkTopKRow : GkWgReduce {
+    @kargs pa : GkTopKArgs
+    @template_constant LANES : uint = 256u   //!< the workgroup's lanes
+    @template_constant DEPTH : int = 1       //!< the logits a lane holds
+    @workgroup parti : uint[64]
+    @workgroup pick : uint[64]
+    @workgroup pickw : float[64]
+
+    //! row `p`'s logit of expert `e` as the select reads it; a stamp reads the row's plane
+    def abstract logit_at(p, e : uint) : float
+
+    [arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-topk-depth")]
+    def select_row(row, ne, k : uint; raw : bool) {   // nolint:STYLE038 - the softmax and the k argmax passes over the lane's register logits, one pass a pick
+        let tid = gl_LocalInvocationID.x
+        var lg : float[DEPTH]
+        var lmax = -3.0e38
+        for [unroll_full] (i in range(DEPTH)) {
+            let e = tid + uint(i) * LANES
+            lg[i] = e < ne ? logit_at(row, e) : -3.0e38
+            lmax = max(lmax, lg[i])
+        }
+        if (!raw) {
+            var wmax = 0.0
+            static_if (LANES <= 32u) {
+                wmax = gk_subgroup_max(lmax)
+            } else {
+                wg_max_into(lmax, 0u, wmax)
+            }
+            var esum = 0.0
+            for [unroll_full] (i in range(DEPTH)) {
+                let ev = tid + uint(i) * LANES < ne ? exp(max(lg[i] - wmax, -80.0)) : 0.0
+                lg[i] = ev
+                esum += ev
+            }
+            var wsum = 0.0
+            static_if (LANES <= 32u) {
+                wsum = gk_subgroup_add(esum)
+            } else {
+                wg_sum_into(esum, 1u, wsum)
+            }
+            for [unroll_full] (i in range(DEPTH)) {
+                lg[i] = tid + uint(i) * LANES < ne ? lg[i] / wsum : -3.0e38
+            }
+        }
+        var j = 0u
+        while (j < k) {
+            var p = lg[0]
+            var idx = tid
+            for [unroll_full] (i in range(1, DEPTH)) {
+                if (lg[i] > p) {   //! strictly: a tie keeps the lower expert
+                    p = lg[i]
+                    idx = tid + uint(i) * LANES
+                }
+            }
+            let vm = gk_subgroup_max(p)
+            let im = gk_subgroup_min_u(p == vm ? idx : 0xFFFFFFFFu)
+            var bsel = im
+            static_if (LANES <= 32u) {   //! one subgroup: its pick is the workgroup's, every lane holds it
+                if (tid == 0u) {
+                    pick[j] = im
+                    pickw[j] = vm
+                }
+            } else {
+                if (gl_SubgroupInvocationID == 0u) {
+                    part[gl_SubgroupID] = vm
+                    parti[gl_SubgroupID] = im
+                }
+                barrier()
+                if (tid == 0u) {
+                    var bv = part[0u]
+                    var bi = parti[0u]
+                    var sgi = 1u
+                    while (sgi < gl_NumSubgroups) {
+                        let pv = part[sgi]
+                        let pi = parti[sgi]
+                        if (pv > bv || (pv == bv && pi < bi)) {
+                            bv = pv
+                            bi = pi
+                        }
+                        sgi++
+                    }
+                    pick[j] = bi
+                    pickw[j] = bv
+                }
+                barrier()
+                bsel = pick[j]
+            }
+            for [unroll_full] (i in range(DEPTH)) {
+                if (tid + uint(i) * LANES == bsel) {
+                    lg[i] = -3.0e38
+                }
+            }
+            j++
+        }
+    }
+
+    //! the k picks' weight sum their renorm divides by, floored (`moe_renorm_sum`), into `ws`
+    def pick_wsum_into(k : uint; var ws : float&) {
+        ws = 0.0
+        var i = 0u
+        while (i < k) {
+            ws += pickw[i]
+            i++
+        }
+        ws = moe_renorm_sum(ws)
+    }
+
+    //! pick jj's routing weight into `wj`: renormalized over the sum `ws` when norm is set, then scaled
+    def pick_weight_into(jj, norm : uint; ws, wscale : float; var wj : float&) {
+        wj = pickw[jj]
+        if (norm != 0u) {
+            wj /= ws
+        }
+        if (wscale != 0.0 && wscale != 1.0) {
+            wj *= wscale
+        }
+    }
+}
+
+struct GkQkRmsArgs {
+    hs : uint
+    nh : uint        //! the q head groups (first)
+    nkvh : uint      //! the k head groups after them
+    qstride : uint   //! a row's stride in qrows
+    kstride : uint   //! ... and in krows
+    qbase : uint     //! the q rows' element base in qrows
+    kbase : uint     //! the k rows' base in krows
+    kwd : uint       //! the k groups' write displacement past their read rows: 0 in place, else where a pre-norm K row lands normed (the Metal no-wv V fill)
+    qwoff : uint     //! the q and k norm weight rows' bases in wn
+    kwoff : uint
+    eps : float
+    qhs : uint       //! a q head's stride: hs, or 2 * hs on a gated model (0 reads as hs)
+    vfk : uint       //! the k groups also write the V row: the raw k row scaled by its rms (a layer with no v plane)
+    vnorm : uint     //! nkvh more groups norm the V rows in place, weightless (gemma-4's v-norm)
+    vbase : uint     //! the V rows' base in krows (kstride apart), read under vnorm and written under vfk
+}
+
+//! The per-head RMSNorm of the q and k rows between the projections and rope (the qk-norm models), one workgroup a head row of
+//! 256 lanes, in place: a head past 256 (gemma-4's global layers, 512) gives each lane a second element at lane + 256; under
+//! `vfk` the k groups write V beside their norm, under `vnorm` the groups past the k ones scale the V rows by their own rms
+[ |> template_struct_instance]
+class template GkQkRms : GkWgReduce {
+    @ssbo @binding = 0 @role = "readwrite" qrows : array<float>   //! the q rows, normed in place
+    @ssbo @binding = 1 @role = "readwrite" krows : array<float>   //! the k rows, normed in place (the V rows sit at vbase in the same buffer)
+    @ssbo @binding = 2 @role = "weight" wn : array<float>         //! the q/k norm weight rows
+    @kargs pa : GkQkRmsArgs
+
+    //! head group `hh` of row `r`: the q groups, then the k groups, then under `vnorm` the V groups
+    def qk_rms_group(r, hh : uint) {   // nolint:STYLE037 - one head-row's norm: the q, k and v group selects and the two-element wide arm, one pass
+        let is_q = hh < pa.nh
+        let is_v = hh >= pa.nh + pa.nkvh
+        let qhs = pa.qhs == 0u ? pa.hs : pa.qhs
+        let kh = is_v ? hh - pa.nh - pa.nkvh : hh - pa.nh
+        let rb = is_q ? pa.qbase + r * pa.qstride + hh * qhs : (is_v ? pa.vbase + r * pa.kstride + kh * pa.hs : pa.kbase + r * pa.kstride + kh * pa.hs)
+        let wb = (is_q || is_v) ? rb : rb + pa.kwd
+        let woff = is_q ? pa.qwoff : pa.kwoff
+        let tid = gl_LocalInvocationID.x
+        let t1 = tid + 256u
+        let two = t1 < pa.hs
+        var v = 0.0
+        var v1 = 0.0
+        if (tid < pa.hs) {
+            v = is_q ? qrows[rb + tid] : krows[rb + tid]
+        }
+        if (two) {
+            v1 = is_q ? qrows[rb + t1] : krows[rb + t1]
+        }
+        let ss = tid < pa.hs ? v * v + v1 * v1 : 0.0
+        var inv = 0.0
+        wg_rms_inv_into(ss, pa.hs, pa.eps, 0u, inv)
+        if (tid < pa.hs) {
+            let w = is_v ? 1.0 : wn[woff + tid]
+            if (is_q) {
+                qrows[wb + tid] = w * (v * inv)
+            } else {
+                krows[wb + tid] = w * (v * inv)
+            }
+        }
+        if (two) {
+            let w = is_v ? 1.0 : wn[woff + t1]
+            if (is_q) {
+                qrows[wb + t1] = w * (v1 * inv)
+            } else {
+                krows[wb + t1] = w * (v1 * inv)
+            }
+        }
+        if (pa.vfk != 0u && !is_q) {
+            let vb = pa.vbase + r * pa.kstride + kh * pa.hs
+            if (tid < pa.hs) {
+                krows[vb + tid] = v * inv
+            }
+            if (two) {
+                krows[vb + t1] = v1 * inv
+            }
+        }
+    }
+}
+
+struct GkDnConvArgs {
+    npos : uint       //! the window's rows (the Metal groups' own counts ride the group table)
+    cd : uint         //! conv width (channels)
+    kd : uint         //! q/k region width: 2 kd channels L2-normed in ds blocks
+    ds : uint         //! d_state, the norm block
+    dconv : uint      //! conv taps + 1
+    hist_mode : uint  //! 1 = per-channel history rows, else per-position
+    taps_off : uint   //! the taps' and the history's float offsets in their planes
+    hist_off : uint
+    eps : float
+    qscale : float
+    row0 : uint       //! the dispatch's first row: a segmented window convolves a segment's rows over its own region's history
+}
+
+//! The deltanet causal conv + SiLU with the q/k L2 norm and q pre-scale folded in: a workgroup `PB` positions of 256 channels,
+//! the taps a register ring of `RING` (the leading `RING - dconv` weigh zero), a head's squares an xor fold over its 32-lane
+//! block and the blocks' partials off the slab; the rows, their history and the taps are the stamp's
+[ |> template_struct_instance]
+class template GkDnConv {
+    @ssbo @binding = 0 @role = "read" src : array<float>    //! the projected rows, position-major
+    @ssbo @binding = 1 @role = "write" outr : array<float>  //! the conv rows, normed
+    @kargs pa : GkDnConvArgs
+    @workgroup part : float[256]   //! the eight 32-lane blocks' per-position sums of squares
+    @template_constant RING : int = 4
+    @template_constant PB : int = 32
+
+    def abstract seg_row0 : uint
+    def abstract seg_npos : uint
+    //! channel ch's history row hidx (0 the oldest of `taps`)
+    def abstract hist_at(ch, taps, hidx : uint) : float
+    def abstract tap_at(ch, j : uint) : float
+
+    //! channel ch's input at segment row sp: a row, or the history row sp + taps below the segment (both reads in bounds, the
+    //! select's arms evaluated alike)
+    def xrow(sp : int; ch, taps : uint) : float => (sp >= 0 ? src[(seg_row0() + uint(max(sp, 0))) * pa.cd + ch]
+        : hist_at(ch, taps, uint(max(sp + int(taps), 0))))
+
+    def dn_conv_body(wgx, lid : uint) {   // nolint:STYLE037 - the tap ring, the per-position fold and the slab's head sums ride one block's registers
+        let npos = seg_npos()
+        let cblocks = (pa.cd + 255u) / 256u
+        let p0 = (wgx / cblocks) * uint(PB)
+        let ch = (wgx % cblocks) * 256u + lid
+        let live = ch < pa.cd
+        let cch = live ? ch : 0u
+        let taps = pa.dconv - 1u
+        let lead = uint(RING) - pa.dconv
+        var wt, xr : float[RING]
+        for [unroll_full] (j in range(RING)) {
+            wt[j] = uint(j) >= lead ? tap_at(cch, uint(j) - lead) : 0.0
+            let sp = int(p0) - (RING - 1) + j
+            xr[j] = j < RING - 1 ? xrow(sp, cch, taps) : 0.0
+        }
+        let normed = live && ch < 2u * pa.kd
+        var y, s : float[PB]
+        for [unroll] (i in range(PB)) {
+            let p = p0 + uint(i)
+            let sp = int(p)
+            xr[RING - 1] = p < npos ? xrow(sp, cch, taps) : 0.0
+            var acc = 0.0
+            for [unroll_full] (j in range(RING)) {
+                acc += wt[j] * xr[j]
+            }
+            y[i] = (live && p < npos) ? silu_f32(acc) : 0.0
+            for [unroll_full] (j in range(RING - 1)) {
+                xr[j] = xr[j + 1]
+            }
+            //! the head's sum of squares over an aligned 32-lane block (ds lanes below 32): the fold's masks stay inside the block on any subgroup width
+            var v = normed ? y[i] * y[i] : 0.0
+            if (pa.ds > 16u) {
+                v += gk_subgroup_xor(v, 16u)
+            }
+            v += gk_subgroup_xor(v, 8u)
+            v += gk_subgroup_xor(v, 4u)
+            v += gk_subgroup_xor(v, 2u)
+            v += gk_subgroup_xor(v, 1u)
+            s[i] = v
+        }
+        let blk = lid >> 5u   //! the lane block by the invocation id, never the subgroup: a 64-lane subgroup is two blocks
+        if ((lid & 31u) == 0u) {
+            for [unroll] (i in range(PB)) {
+                part[blk * uint(PB) + uint(i)] = s[i]
+            }
+        }
+        barrier()
+        let blocks_per_head = pa.ds > 32u ? pa.ds / 32u : 1u
+        let wb = (blk / blocks_per_head) * blocks_per_head
+        let qs = ch < pa.kd ? pa.qscale : 1.0
+        for [unroll] (i in range(PB)) {
+            let p = p0 + uint(i)
+            var tot = s[i]
+            if (blocks_per_head > 1u) {
+                tot = 0.0
+                var ww = 0u
+                while (ww < blocks_per_head) {
+                    tot += part[(wb + ww) * uint(PB) + uint(i)]
+                    ww++
+                }
+            }
+            let sc = normed ? (1.0 / max(sqrt(tot), pa.eps)) * qs : 1.0
+            if (live && p < npos) {
+                outr[(seg_row0() + p) * pa.cd + ch] = y[i] * sc
+            }
+        }
+    }
+}
+
+struct GkDnGateArgs {
+    nvh : uint
+    di : uint
+    ds : uint
+    o_off : uint       //! the raw o rows' base in orows (the Vulkan work surface's o region; the Metal window's first row)
+    z_off : uint       //! the z rows' base in zrows
+    wnorm_off : uint   //! the out-norm weight row's base in wn
+    eps : float
+}
+
+//! The deltanet gated out-norm in place, one subgroup a (value head, row): the head's rms over ds, the out-norm weight row,
+//! the z gate (`dn_zgate`, sigmoid under `ZSIG`); the lanes stride the head by the subgroup's width, the inverse norm's
+//! spelling the stamp's (`RSQRT`)
+[ |> template_struct_instance]
+class template GkDnGate {
+    @ssbo @binding = 0 @role = "read" zrows : array<float>        //! the z gate rows [rows x di]
+    @ssbo @binding = 1 @role = "readwrite" orows : array<float>   //! the raw o rows [rows x di], gated in place
+    @ssbo @binding = 2 @role = "weight" wn : array<float>         //! the shared out-norm weight row [ds]
+    @kargs pa : GkDnGateArgs
+    @template_constant ZSIG : bool = false
+    @template_constant RSQRT : bool = false
+    @template_constant EPL : int = 4   //!< the elements a lane holds: a head of up to EPL x the subgroup's width
+
+    def dn_gate_head(h, p : uint) {
+        let lane = gl_SubgroupInvocationID
+        let ob = pa.o_off + p * pa.di + h * pa.ds
+        let zb = pa.z_off + p * pa.di + h * pa.ds
+        var v : float[EPL]
+        var ss = 0.0
+        for [unroll_full] (c in range(EPL)) {
+            let e = lane + uint(c) * gl_SubgroupSize
+            v[c] = e < pa.ds ? orows[ob + e] : 0.0
+            ss += v[c] * v[c]
+        }
+        let inv = rms_inv(gk_subgroup_add(ss) / float(pa.ds) + pa.eps, RSQRT)
+        for [unroll_full] (c in range(EPL)) {
+            let e = lane + uint(c) * gl_SubgroupSize
+            if (e < pa.ds) {
+                orows[ob + e] = ((v[c] * inv) * wn[pa.wnorm_off + e]) * dn_zgate(zrows[zb + e], ZSIG)
+            }
+        }
+    }
+}
+
+struct GkMoeCombArgs {
+    n : uint         //! the row width
+    k : uint         //! the slots a row
+    r0 : uint        //! the slot-row window [r0, r1) a dispatch sums: r0 0 starts the sum, else it adds onto `acc_rows`
+    r1 : uint
+    wstride : uint   //! a row's stride in `slot_w` (0 reads as k; the Metal selection rows' 2k)
+    woff : uint      //! the weights' base in a row (the Metal selection rows' k, past the picks)
+    gstride : uint   //! the shared expert's gate logit: a row's stride in `gate` and its index there (`SH` stamps)
+    goff : uint
+}
+
+//! The routed experts' combine, row p's element i its k slots' down rows under their weights in slot order (the CPU axpy chain's);
+//! `WINDOW` skips a slot outside the dispatch's window or at zero weight, `GATHERED` reads the slot rows at `slot_idx`, `SH` adds the
+//! shared expert's row under its gate logit's sigmoid (`ARCHITECTURE_GPU_SHARED_KERNELS.md`)
+[ |> template_struct_instance]
+class template GkMoeCombine {
+    @ssbo @binding = 0 @role = "readwrite" acc_rows : array<float>                     //! [rows x n] the combined rows (in and out)
+    @ssbo @binding = 1 @role = "read" @template_gate = GATHERED slot_idx : array<uint>  //! row -> its k slot rows
+    @ssbo @binding = 2 @role = "read" slot_w : array<float>                            //! ... and their routing weights
+    @ssbo @binding = 3 @role = "read" down_rows : array<float>                         //! the slots' down-GEMM rows
+    @ssbo @binding = 4 @role = "read" @template_gate = SH sh_rows : array<float>        //! [rows x n] the shared expert's rows
+    @ssbo @binding = 5 @role = "read" @template_gate = SH gate : array<float>           //! its raw gate logits
+    @kargs pa : GkMoeCombArgs
+    @template_constant GATHERED : bool = true
+    @template_constant SH : bool = false
+    @template_constant WINDOW : bool = true   //!< the [r0, r1) window, the accumulate and the zero-weight skip (the Vulkan chunked chain); off, every slot sums from zero
+
+    def slot_row(p, j : uint) : uint {
+        static_if (GATHERED) {
+            return slot_idx[p * pa.k + j]
+        } else {
+            return p * pa.k + j
+        }
+    }
+
+    //! the sum's start at element `e`: zero, or under `WINDOW` past the first chunk the accumulated row
+    def acc_start(e : uint) : float {
+        static_if (WINDOW) {
+            return pa.r0 == 0u ? 0.0 : acc_rows[e]
+        } else {
+            return 0.0
+        }
+    }
+
+    def comb_elem(p, i : uint) {
+        let n = pa.n
+        let k = pa.k
+        let wb = p * (pa.wstride == 0u ? k : pa.wstride) + pa.woff
+        var acc = acc_start(p * n + i)
+        var j = 0u
+        while (j < k) {
+            let jb = slot_row(p, j)
+            let wj = slot_w[wb + j]
+            static_if (WINDOW) {
+                if (jb >= pa.r0 && jb < pa.r1 && wj != 0.0) {
+                    acc += wj * down_rows[(jb - pa.r0) * n + i]
+                }
+            } else {
+                acc += wj * down_rows[jb * n + i]
+            }
+            j++
+        }
+        static_if (SH) {
+            acc += sig_gate(sh_rows[p * n + i], gate[p * pa.gstride + pa.goff])
+        }
+        acc_rows[p * n + i] = acc
+    }
 }

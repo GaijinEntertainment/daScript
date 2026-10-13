@@ -36,6 +36,18 @@ def silu_f32(v : float) : float => v / (1.0 + exp(-v))
 //! `x` gated by the logistic of `g` as the one quotient x / (1 + exp(-g)), not x times `sigmoid_f32(g)`
 def sig_gate(x, g : float) : float => x / (1.0 + exp(-g))
 
+//! the inverse rms of a mean square `ms` (eps added): `rsqrt` where `rsq`, else the CPU rmsnorm's `1 / sqrt`
+def rms_inv(ms : float; rsq : bool) : float => rsq ? rsqrt(ms) : 1.0 / sqrt(ms)
+
+//! the selected routing weights' sum as their renorm divides by it: clamped at f16's smallest normal, the CPU select's floor
+def moe_renorm_sum(ws : float) : float => max(ws, 6.103515625e-5)
+
+//! the deltanet out-gate of `z`: sigmoid(z) where `sig` (qwen4exp), else silu(z) (qwen35)
+def dn_zgate(z : float; sig : bool) : float => sig ? sigmoid_f32(z) : silu_f32(z)
+
+//! the dot of two quads summed left to right, the order a lane's float4 step keeps
+def dot4_seq(a, b : float4) : float => a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w
+
 //! Softplus with the standard large-x shortcut: x > 20 → x, else log(1 + exp(x)).
 def softplus(x : float) : float => x > 20.0 ? x : log(1.0 + exp(x))
 
@@ -44,6 +56,24 @@ def dn_decay(a, g : float) : float => exp(a * softplus(g))
 
 //! the CPU `gelu`'s tanh form in f32 (not the f16 LUT form the vision towers read), its tanh clamped by `tts_tanh`
 def tts_gelu_tanh(v : float) : float => 0.5 * v * (1.0 + tts_tanh(0.7978845608028654 * mad(0.044715 * v * v, v, v)))
+
+let ACT_SILU = 0u
+let ACT_GELU = 1u   //! tanh-gelu
+let ACT_OAI = 2u    //! gpt-oss's clamped swiglu (`swiglu_oai`): the clamps and the +1 are the trained activation, not a guard
+
+//! the act kernels' `act` word from a model's flags
+def act_code(oai, gelu : bool) : uint => oai ? ACT_OAI : (gelu ? ACT_GELU : ACT_SILU)
+
+//! the gated FFN's one activation formula on both homes - `act` 0 silu, 1 tanh-gelu, 2 the clamped swiglu on v, times u
+//! (`ACT_*`; spelled as literals, which the MSL emitter reads where it reads no global)
+def gk_act_mul(v, u : float; act : uint) : float {
+    if (act == 2u) {
+        let x = min(v, 7.0)
+        let y = clamp(u, -7.0, 7.0)
+        return (x / (1.0 + exp(-1.702 * x))) * (y + 1.0)
+    }
+    return (act == 1u ? tts_gelu_tanh(v) : silu_f32(v)) * u
+}
 
 //! the erf GELU in the CPU `gelu_erf`'s form - the Numerical Recipes erfc - in f32, the one both homes evaluate
 def gelu_erf_f32(v : float) : float {

@@ -52,6 +52,36 @@ def attn_q_val(i : int) : float => float((i * 5) % 11 - 5) * 0.125
 //! `n` query elements, `attn_q_val` of 0 .. n - 1
 def attn_q_row(n : int) : array<float> => <- [for (i in range(n)); attn_q_val(i)]
 
+//! `n` gate elements of both signs past the sigmoid's linear range
+def attn_gate_row(n : int) : array<float> => <- [for (i in range(n)); 0.09 * float(i % 31) - 1.3]
+
+//! a gated model's q plane: each `hs`-wide head of `q` followed by the same head's gate off `gate`, 2 hs a head
+def q_gate_plane(q, gate : array<float>; hs : int) : array<float> {
+    var plane : array<float>
+    plane |> resize(2 * length(q))
+    for (g in range(length(q) / hs)) {
+        for (i in range(hs)) {
+            plane[g * 2 * hs + i] = q[g * hs + i]
+            plane[g * 2 * hs + hs + i] = gate[g * hs + i]
+        }
+    }
+    return <- plane
+}
+
+//! the head gate on attention rows `o` in place: each element over one plus exp of minus its gate (`sig_gate`'s CPU form)
+def gate_rows(var o : array<float>; gate : array<float>) {
+    for (x, g in o, gate) {
+        x /= 1.0 + exp(-g)
+    }
+}
+
+//! `gate_rows` into a copy, `o` left as it was
+def gated_rows(o, gate : array<float>) : array<float> {
+    var r := o
+    gate_rows(r, gate)
+    return <- r
+}
+
 //! the rows a routed tile's adaptive tensor op leaves unwritten: a 32-row tile of one to eight live rows runs an 8-row op,
 //! of nine to sixteen a 16-row one, so the rows from the op's height to 32 keep the sentinel the compare filled - the
 //! expectation over `want` (and its envelope, where one rides) for every twin stamp of both MoE scaffolds
@@ -92,7 +122,7 @@ def padded_bases(counts : array<int>) : tuple<cnt : array<uint>; base : array<ui
     return <- (cnt = cnt, base = base, pad = pad)
 }
 
-//! the one activation formula (act_mul_sel's shape): tanh-GELU(v) * u, or silu(v) * u - definitional, kept in sync by the arm bars
+//! the one activation formula (`gk_act_mul`'s shape): tanh-GELU(v) * u, or silu(v) * u - definitional, kept in sync by the arm bars
 def act_mul_ref(v, u : float; gelu : bool) : float {
     return (gelu ? (0.5 * v * (1.0 + tanh(0.7978845608028654 * (v + 0.044715 * v * v * v)))) * u
         : (v / (1.0 + exp(-v))) * u)

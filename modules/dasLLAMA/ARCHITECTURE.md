@@ -40,6 +40,8 @@ any sibling companion that sends a reader to it.
 - `ARCHITECTURE_GPU.md` - the GPU backend role table (`ARCHITECTURE_GPU.md#gpu-backends`).
 - `ARCHITECTURE_GPU_ASYMMETRIES.md` - the closed list of the allowed asymmetries between the
   two GPU backends (`ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries`).
+- `ARCHITECTURE_GPU_SHARED_KERNELS.md` - the kernel pairs of the two GPU homes: the shared templates' stamps, their
+  readings, and the pairs that stay per home (`ARCHITECTURE_GPU_SHARED_KERNELS.md#gpu-kernel-pairs`).
 - `ARCHITECTURE_MEDIA.md` - the encoder-tower, audio, ASR and vision charters.
 - `ARCHITECTURE_TTS.md` - the text-to-speech charters - the front end, the block home, the
   shared assembly, the families and the facade.
@@ -127,6 +129,8 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   span, the deltanet decode step's per-session resident state, and the whole-model driver's
   hybrid token command and prefill (recurrent layers, gated attention, partial rotary, the
   prefill-to-decode state handoff).
+- `ARCHITECTURE_GPU_VULKAN_PEROP.md` - the per-op tier's dense FFN rail: a dense layer's FFN triple on the dense rail
+  and the decode row it runs on the device.
 - `ARCHITECTURE_GPU_VULKAN_MOE.md` - the resident driver's routed block in its two eras - the MoE
   block of the prefill window, and the whole-model driver's MoE token command - and the gemma-4
   form both eras take.
