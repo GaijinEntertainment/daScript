@@ -4668,6 +4668,8 @@ def public set_metal_prefill_dev_w(v : bool) {
     to_log(LOG_INFO, "dasLLAMA: set_metal_prefill_dev_w({v}) - GEMM form override\n")
 }
 
+def public get_metal_prefill_dev_w : bool => g_pf_env_dev_w
+
 //! A/B seat: the tall 128-row M-tile mul_mm stamps (W streamed M/128 times) vs 32-row-only.
 //! Default on; identity witnesses pin it off with half-X — the same row-gated form-swap class.
 def public set_metal_prefill_tall(v : bool) {
@@ -5196,6 +5198,13 @@ var private g_pf_tail_rows = 0l
 def public metal_prefill_tail_stats() : tuple<sites : int64; kq_sites : int64; rows : int64> =>
     (sites = g_pf_tail_sites, kq_sites = g_pf_kq_tail_sites, rows = g_pf_tail_rows)
 
+var private g_pf_devw_scratch_sites = 0l
+var private g_pf_devw_scratch_bytes = 0ul
+
+//! K-quant sites served off a scratch panel since load, and the panel bytes their dequant passes wrote
+def public metal_prefill_devw_scratch_stats() : tuple<sites : int64; bytes : uint64> =>
+    (sites = g_pf_devw_scratch_sites, bytes = g_pf_devw_scratch_bytes)
+
 [arch(at="../ARCHITECTURE_GPU_PREFILL.md#gemv-tail-peel")]
 def private enc_gemm_mm_tail(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; wboff : uint64;
                              bx, by, bk, bn : MetalBuffer?; yoff : uint64; kdim, d, row0, r : int64) {
@@ -5485,18 +5494,24 @@ def private pf_enc_devw_q8_tile(enc : MetalComputeEncoder?; bwblob : MetalBuffer
 }
 
 def private pf_devw_panel(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; wboff : uint64;
-                          bxh, by, bk, bn : MetalBuffer?; rows, d, kdim : int64; yoff : uint64) : bool {
+                          bxh, by, bk, bn : MetalBuffer?; rows, d, kdim : int64; yoff : uint64; twin : bool) : bool {
     // the q8 dequant pass steps whole 32-blocks
-    if (!metal_devw_panels() || !g_pf_env_dev_w || kdim <= 0l || (kdim % 32l) != 0l) {
+    if (!g_pf_env_dev_w || kdim <= 0l || (kdim % 32l) != 0l) {
         return false
     }
-    if (pf_devw_panel_q8_resident(enc, bwblob, wboff, bxh, by, bk, bn, rows, d, kdim, yoff)) {
-        return true
+    if (metal_devw_panels()) {
+        if (pf_devw_panel_q8_resident(enc, bwblob, wboff, bxh, by, bk, bn, rows, d, kdim, yoff)) {
+            return true
+        }
+    } elif (rows < devw_scratch_floor(true, twin)) {
+        return false
     }
     let tiles = pf_devw_tiles(rows, d, kdim)
     if (tiles <= 0l) {
         return false
     }
+    g_pf_devw_scratch_sites++
+    g_pf_devw_scratch_bytes += uint64(d * kdim * 2l)
     let td = d / tiles
     for (ti in range64(tiles)) {
         pf_enc_devw_q8_tile(enc, bwblob, wboff, bxh, by, bk, bn, rows, ti * td, td, d, kdim, yoff)
@@ -5590,28 +5605,40 @@ def private pf_enc_kq_dq(enc : MetalComputeEncoder?; fmt : KqFmt; bs : tuple<buf
     }
 }
 
+//! the padded-row floor of a dense site's scratch panel, past which the window's one dequant pass and the half GEMM beat
+//! the site's own-bytes form: DEVW_SCRATCH_ROWS where the site has no crowned tensor form, else the crowned twin's band's
+//! top - DEVW_Q8_TWIN_ROWS on a Q8_0 site, DEVW_KQ_TWIN_ROWS on a K-quant one
+[arch(at="../ARCHITECTURE_GPU_PREFILL.md#devw-panel-knees")]
+def devw_scratch_floor(q8, twin : bool) : int64 => !twin ? DEVW_SCRATCH_ROWS : (q8 ? DEVW_Q8_TWIN_ROWS : DEVW_KQ_TWIN_ROWS)
+
 def private pf_devw_panel_kq(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; woff : int64;
-                             bxh, by, bk, bn : MetalBuffer?; rows, d, kdim : int64; yoff : uint64) : bool {
+                             bxh, by, bk, bn : MetalBuffer?; rows, d, kdim : int64; yoff : uint64; twin : bool) : bool {
     // the split formats' chunk passes dequant whole 64x64 chunks; the K-quant passes step 32-blocks
-    if (!metal_devw_panels() || !g_pf_env_dev_w || pf_kq_dq_pso(fmt) == null || kdim <= 0l
-            || (kdim % (pf_kq_split_fmt(fmt) ? 64l : 32l)) != 0l) {
+    if (!g_pf_env_dev_w || pf_kq_dq_pso(fmt) == null || kdim <= 0l || (kdim % (pf_kq_split_fmt(fmt) ? 64l : 32l)) != 0l) {
         return false
     }
+    let lever = metal_devw_panels()
     let bq = kq_quants_of(g_dev, t, fmt, woff)
     let bs = kq_scales_of(g_dev, t, fmt, woff)
-    var rfresh = false
-    let re = pf_devw_resident_panel(pf_devw_key(intptr(bq.buf), uint64(woff), kq_schema_id(fmt)), uint64(d * kdim * 2l), rfresh)
-    if (re.buf != null) {
-        if (rfresh) {
-            pf_enc_kq_dq(enc, fmt, bs, bq, 0l, d, kdim, re.buf, bk, bn)
+    if (lever) {
+        var rfresh = false
+        let re = pf_devw_resident_panel(pf_devw_key(intptr(bq.buf), uint64(woff), kq_schema_id(fmt)), uint64(d * kdim * 2l), rfresh)
+        if (re.buf != null) {
+            if (rfresh) {
+                pf_enc_kq_dq(enc, fmt, bs, bq, 0l, d, kdim, re.buf, bk, bn)
+            }
+            pf_enc_hmm(enc, re.buf, bxh, by, yoff, bk, bn, rows, d, d, kdim, re.boff)
+            return true
         }
-        pf_enc_hmm(enc, re.buf, bxh, by, yoff, bk, bn, rows, d, d, kdim, re.boff)
-        return true
+    } elif (rows < devw_scratch_floor(false, twin)) {
+        return false
     }
     let tiles = pf_devw_tiles(rows, d, kdim, slow_fb = true)
     if (tiles <= 0l || (pf_kq_split_fmt(fmt) && (d / tiles) % 64l != 0l)) {
         return false
     }
+    g_pf_devw_scratch_sites++
+    g_pf_devw_scratch_bytes += uint64(d * kdim * 2l)
     let td = d / tiles
     for (ti in range64(tiles)) {
         let tbase = ti * td
@@ -5700,7 +5727,7 @@ def private pf_devw_mirror_register {
 [arch(at="../ARCHITECTURE_GPU_PREFILL.md#prefill-gemm-ladder")]
 def private enc_gemm_mm_tensor(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; wboff : uint64; bx, by, bk, bn : MetalBuffer?; rows, d : int64; yoff : uint64; bxh : MetalBuffer?; kdim : int64 = 0l) {
     if (bxh != null && g_pf_pso_hmm_th != null) {
-        if (pf_devw_panel(enc, bwblob, wboff, bxh, by, bk, bn, rows, d, kdim, yoff)) {
+        if (pf_devw_panel(enc, bwblob, wboff, bxh, by, bk, bn, rows, d, kdim, yoff, true)) {
             return
         }
     }
@@ -5739,7 +5766,7 @@ def private enc_gemm_mm_tensor(enc : MetalComputeEncoder?; bwblob : MetalBuffer?
 }
 
 def private pf_q8_devw(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; wboff : uint64; bxh, by, bk, bn : MetalBuffer?; rows, d, kdim : int64; yoff : uint64) : bool =>
-    g_pf_tensor_ok && bxh != null && g_pf_pso_hmm_th != null && pf_devw_panel(enc, bwblob, wboff, bxh, by, bk, bn, rows, d, kdim, yoff)
+    g_pf_tensor_ok && bxh != null && g_pf_pso_hmm_th != null && pf_devw_panel(enc, bwblob, wboff, bxh, by, bk, bn, rows, d, kdim, yoff, false)
 
 //! yoff places K/V outputs past a continuation's panel rows; kdim/npos arm the GEMV tail;
 //! bxh is the caller-minted f16 twin (one convert per panel).
@@ -5993,7 +6020,7 @@ def private pf_enc_dn_ba_plane(enc : MetalComputeEncoder?; t : Model; fmt : KqFm
 }
 
 [arch(at="../ARCHITECTURE_GPU_PREFILL.md#prefill-kq-tensor-scaffold")]
-def private pf_enc_kq_site_mm(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; woff, rows : int64;   // nolint:STYLE037 — one ladder over the site's GEMM forms, an arm a form
+def private pf_enc_kq_site_mm(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; woff, rows : int64;
                               bx, by, bk, bn : MetalBuffer?; mp : int64; yoff : uint64 = 0ul; bxh : MetalBuffer? = null; kdim : int64 = 0l;
                               npos : int64 = 0l) {
     //! a window of eight rows or fewer rides the decode's row-batched GEMV forms, which stream the plane once for every row,
@@ -6011,14 +6038,13 @@ def private pf_enc_kq_site_mm(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt
     }
     let bq = kq_quants_of(g_dev, t, fmt, woff)
     let bs = kq_scales_of(g_dev, t, fmt, woff)
-    // the split-scale dev-W arm gates itself (the pass compiles behind the probe); a tall panel is over the knee and declines here
-    if (pf_kq_split_fmt(fmt) && bxh != null && g_pf_pso_hmm_th != null && kdim > 0l) {
-        if (pf_devw_panel_kq(enc, t, fmt, woff, bxh, by, bk, bn, mp, rows, kdim, yoff)) {
-            return
-        }
-    }
     if (pf_kq_split_fmt(fmt)) {
         let ss <- pf_kq_split_stamps(fmt)
+        // the split-scale dev-W arm gates itself (the pass compiles behind the probe); a tall panel is over the knee and declines here
+        if (bxh != null && g_pf_pso_hmm_th != null && kdim > 0l
+                && pf_devw_panel_kq(enc, t, fmt, woff, bxh, by, bk, bn, mp, rows, kdim, yoff, ss.crown && ss.pso_th != null)) {
+            return
+        }
         if (!ss.crown || ss.pso_t == null) {
             enc_kq_gemm_mm_b(enc, fmt, bq.buf, bq.qoff, bs.buf, bs.soff, bs.doff, bx, by, yoff, bk, bn, mp, rows)
             return
@@ -6052,10 +6078,9 @@ def private pf_enc_kq_site_mm(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt
         }
         return
     }
-    if (g_pf_tensor_ok && bxh != null && g_pf_pso_hmm_th != null && kdim > 0l) {
-        if (pf_devw_panel_kq(enc, t, fmt, woff, bxh, by, bk, bn, mp, rows, kdim, yoff)) {
-            return
-        }
+    if (g_pf_tensor_ok && bxh != null && g_pf_pso_hmm_th != null && kdim > 0l
+            && pf_devw_panel_kq(enc, t, fmt, woff, bxh, by, bk, bn, mp, rows, kdim, yoff, ks.crown && ks.pso_th != null)) {
+        return
     }
     if (!ks.crown || ks.pso_t == null) {
         enc_kq_gemm_mm_b(enc, fmt, bq.buf, bq.qoff, bs.buf, bs.soff, bs.doff, bx, by, yoff, bk, bn, mp, rows)
@@ -6892,6 +6917,7 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
     }
     residency_flush()   //! pin/commit before the first submission (the post-CPU-window slack)
     let ts_all = ref_time_ticks()
+    let devw0 = metal_prefill_devw_scratch_stats()
     let c = t.config
     let dim = c.dim
     let head_size = c.head_size
@@ -7190,7 +7216,7 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
     let wh_need = max(uint64(2l * max(dim, qd_mx) * max(hid_mx, max(nsh, max(2l * dim, di_dn)))),
         uint64(2l * hcd * max(hc_lr, ple_ind)))   //! the mixer's down/up and the side input's key panels are hc x dim wide
     let bytes_wh = min(wh_need, DEVW_BIG_PANEL)
-    let want_wh = (metal_devw_panels() && g_pf_env_dev_w && g_pf_pso_hmm_th != null
+    let want_wh = ((metal_devw_panels() || mp >= DEVW_SCRATCH_ROWS) && g_pf_env_dev_w && g_pf_pso_hmm_th != null
         && (g_pf_pso_dq_q8 != null || pf_kq_dq_any()))
     g_pf_bwh = want_wh ? pool_acquire_pinned(g_pf_pool, g_dev, bytes_wh) : null
     g_pf_bwh2 = want_wh ? pool_acquire_pinned(g_pf_pool, g_dev, bytes_wh) : null
@@ -8484,7 +8510,7 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
         g_pf_stage_gpu_ms += gpu_ms
         g_pf_stage_rb_us += readback_us
         let total_us = get_time_usec(ts_all)
-        to_log(LOG_INFO, "dasLLAMA metal prefill: npos={npos} segs={nseg} gemm=mulmm total={float(total_us) / 1000.0}ms setup={float(setup_us) / 1000.0}ms encode+wait={float(encwait_us) / 1000.0}ms (encode {encode_ms}ms, gpu {gpu_ms}ms) kv+readback={float(readback_us) / 1000.0}ms dispatches={17l * c.n_layers + (gpu_logits ? 2l : 0l)} logits={gpu_logits ? "gpu" : "cpu"} kv={mirk ? "mirror" : (mirw ? "panels+mirror" : "panels")}\n")   // nolint:PERF028,PERF026 — one line per prefill call, not per token
+        to_log(LOG_INFO, "dasLLAMA metal prefill: npos={npos} segs={nseg} gemm=mulmm total={float(total_us) / 1000.0}ms setup={float(setup_us) / 1000.0}ms encode+wait={float(encwait_us) / 1000.0}ms (encode {encode_ms}ms, gpu {gpu_ms}ms) kv+readback={float(readback_us) / 1000.0}ms dispatches={17l * c.n_layers + (gpu_logits ? 2l : 0l)} logits={gpu_logits ? "gpu" : "cpu"} kv={mirk ? "mirror" : (mirw ? "panels+mirror" : "panels")} devw_scratch={g_pf_devw_scratch_sites - devw0.sites} sites/{int64(g_pf_devw_scratch_bytes - devw0.bytes) >> 20l} MB\n")   // nolint:PERF028,PERF026 — one line per prefill call, not per token
     }
     return ok
 }
@@ -8509,11 +8535,14 @@ var private TALL_OCC_FLOOR = 64l         //!< sidecar knob "metal_tall_floor" �
 var private DEVW_SMALL_PANEL = 32ul * 1024ul * 1024ul   //!< sidecar knob "metal_devw_small_panel_mb"
 let DEVW_BIG_PANEL = 48ul * 1024ul * 1024ul
 let DEVW_WIDE_N = 4096l
-let DEVW_WIDE_N_ROWS = 512l
+let DEVW_WIDE_N_ROWS = 64l
 let DEVW_BIG_ROWS = 2048l
 let DEVW_LONG_K = 4096l
 let DEVW_LONG_K_ROWS = 1024l
 let DEVW_MAX_TILES = 32l
+let DEVW_SCRATCH_ROWS = 64l
+let DEVW_KQ_TWIN_ROWS = 384l
+let DEVW_Q8_TWIN_ROWS = 2048l
 var private TALLKQ_MIN_PANEL = 96ul * 1024ul * 1024ul //! DRAM-residency knee, raced on panel BYTES (ARCHITECTURE_GPU_PREFILL.md#prefill-gemm-ladder)
 var private g_pf_env_span = true
 var private g_pf_env_logits = true

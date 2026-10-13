@@ -151,7 +151,7 @@ lane and reap each other's image on every switch.
 ### The baked dev-W f16 panel plane {#image-devw-plane}
 
 A metal-flavor image minted under the dev-W panel lever (`set_metal_devw_panels`, its lane `metal-devw`; off, the sites
-read their own bytes and the image carries no panel) carries `devwf16`: every dev-W-eligible q8, k4/k5/k6 and split-scale
+take per-window scratch panels and the image carries none) carries `devwf16`: every dev-W-eligible q8, k4/k5/k6 and split-scale
 (iq4xs, iq4nl, q40, k3, iq3s, iq3xxs, k2, iq2s, iq2xs, iq2xxs) weight - a plane job whose f16 panel fits
 `DEVW_BAKE_PANEL_MAX`, the prefill knee's mirror, and whose tensor is not an expert stack (`*_exps.weight`: gemma-4
 splits its fused stacks per expert at load, and the routed block reads the quantized planes with no dev-W route, so a
@@ -169,7 +169,7 @@ to a runtime one. The first served prefill seeds the resident-panel cache with z
 and holds no dedicated memory; sites the bake does not cover (q51 - the dev-W route has no
 dequant kernel for it - and owned gguf loads) stay on the runtime path, resident under
 `DASLLAMA_METAL_DEVW_RESIDENT` or scratch. Which form a site's prefill takes under the lever, and
-why own bytes is the default, is `ARCHITECTURE_GPU_PREFILL.md#devw-panel-knees`.
+why the default is a per-window scratch panel rather than a stored one, is `ARCHITECTURE_GPU_PREFILL.md#devw-panel-knees`.
 
 The bake set is the minting PROGRAM's, not the box's: the split-scale formats bake only where
 the Metal prefill module registered its mirror, so a program on the same box whose module graph

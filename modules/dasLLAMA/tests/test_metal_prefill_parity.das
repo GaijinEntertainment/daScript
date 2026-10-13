@@ -1856,3 +1856,138 @@ def test_metal_prefill_kq_tail(t : T?) {
         short_window_cells(t, path_join(models_dir(), "Qwen2.5-0.5B-Instruct-IQ4_NL-local.gguf"), "kq-tail/qwen2-iq4nl32", 0.08, ShortForm.kq_tail)
     }
 }
+
+let private SCRATCH_SHORT = 200l   //! pads to 224 rows: past the base forms' scratch floor, under a crowned K-quant twin's
+let private SCRATCH_LONG = 400l    //! pads to 416 rows: past a crowned K-quant twin's floor
+//! every dense twin crown: a carrier's mixed planes (a K-quant file's Q6_K and Q5_K sites beside its own) all sit on twins
+let private SCRATCH_TWIN_CROWNS = "mulmm_q8,kq_mulmm_k4,kq_mulmm_k5,kq_mulmm_k6,kq_mulmm_iq4xs,kq_mulmm_iq4nl,kq_mulmm_q40,kq_mulmm_k3,kq_mulmm_iq3s,kq_mulmm_iq3xxs,kq_mulmm_k2,kq_mulmm_iq2s,kq_mulmm_iq2xs,kq_mulmm_iq2xxs"
+
+//! the last row's logits after one prefill window on an f16 session
+def private one_window_logits(trp : Model; w : array<int64>) : array<float> {
+    var out : array<float>
+    with_dasllama_jobque() {
+        var s = make_run_state(trp.config, KVDtype.f16, KVDtype.f16)
+        eval_(trp, s, w)
+        out := s.logits
+        delete s
+    }
+    return <- out
+}
+
+//! One window of `n` rows: the dense sites' scratch-panel count it moved against `scratch` (served off panels or not), its
+//! last-row logits against the all-CPU chain within `bar` of the largest, the same window with the dev-W route off (the
+//! sites' own bytes, no panel counted) inside the same bar, and the control - the window's last token changed - outside it.
+[cold_path]
+def private scratch_window_cell(t : T?; tr, trg : Model; prompt : array<int64>; n : int64; scratch : bool; bar : float; tag : string) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        var inscope w <- [for (i in range64(n)); prompt[i]]
+        var inscope w_ctrl := w
+        w_ctrl[n - 1l] = prompt[n]
+        var inscope cpu <- one_window_logits(tr, w)
+        let served0 = metal_prefill_stats().prefills
+        let sites0 = metal_prefill_devw_scratch_stats().sites
+        var inscope gpu <- one_window_logits(trg, w)
+        let sites = metal_prefill_devw_scratch_stats().sites - sites0
+        set_metal_prefill_dev_w(false)
+        let own0 = metal_prefill_devw_scratch_stats().sites
+        var inscope own <- one_window_logits(trg, w)
+        let own_sites = metal_prefill_devw_scratch_stats().sites - own0
+        set_metal_prefill_dev_w(true)
+        var inscope gpu_ctrl <- one_window_logits(trg, w_ctrl)
+        t |> equal(metal_prefill_stats().prefills - served0, 3l, "{tag}/{n}: the three windows served on the device")
+        if (scratch) {
+            t |> success(sites > 0l, "{tag}/{n}: the window's dense sites served off scratch panels ({sites} sites)")
+        } else {
+            t |> equal(sites, 0l, "{tag}/{n}: the crowned twin held the window - no scratch panel")
+        }
+        t |> equal(own_sites, 0l, "{tag}/{n}: with the dev-W route off no site took a panel")
+        let peak = logits_maxabs(cpu)
+        let g = logits_maxdiff(gpu, cpu)
+        let go = logits_maxdiff(own, cpu)
+        let gc = logits_maxdiff(gpu_ctrl, cpu)
+        to_log(LOG_INFO, "{tag}/{n}: {sites} panel sites, gap {g} of peak {peak} ({g / peak}); own-bytes gap {go} ({go / peak}); control gap {gc} ({gc / peak})\n")
+        t |> success(g <= bar * peak, "{tag}/{n}: the window's last-row logits within {bar} of the CPU chain's largest ({g} of {peak})")
+        t |> success(go <= bar * peak, "{tag}/{n}: and the own-bytes window's ({go})")
+        t |> success(gc > bar * peak, "{tag}/{n}: the control window (its last token changed) lands outside the bar ({gc} of {peak})")
+        t |> equal(max_element(gpu), max_element(cpu), "{tag}/{n}: the window's argmax is the CPU chain's")
+    }
+}
+
+//! One dense carrier through the scratch-panel floors: on the base forms (no crown) both windows serve off scratch panels;
+//! under every twin crown the short window stays on the twins and the long one takes the panels where `twin_long` says the
+//! carrier's twin floor lies under it (a K-quant twin's) - a Q8_0 twin's floor lies past both windows.
+[cold_path]
+def private scratch_panel_cells(t : T?; path, tag : string; bar : float; twin_long : bool) {   // nolint:STYLE037,LINT019 — one cell: load, the base and crowned legs, the knob restores
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        return if (!model_available(t, path))
+        let prior_wscale = get_wscale_f16()
+        let prior_backend = active_kernel_backend()
+        let prior_pin = kernel_backend_pin()
+        let prior_override = active_prefill_override()
+        let prior_min_npos = get_metal_prefill_min_npos()
+        let prior_crowns = get_metal_tensor_crowns()
+        let prior_crowns_pinned = metal_tensor_crowns_pinned()
+        set_wscale_f16(false)
+        pin_kernel_backend("portable")
+        var tr <- load_model_(path, QuantMode.q8)
+        if (tr.config.seq_len > 2048l) {
+            tr.config.seq_len = 2048l
+        }
+        let prompt <- encode(tr, counting_prompt(ATTN_DEV_COUNT_TO), true, false)
+        t |> success(long_length(prompt) > SCRATCH_LONG, "{tag}: the prompt covers the long window ({length(prompt)} tokens)")
+        var trg <- blob_twin(t, path, 2048l)
+        t |> equal(long_length(trg.devwf16), 0l, "{tag}: the blob carries no stored dev-W panel")
+        t |> success(select_prefill_override("metal"), "{tag}: override registered")
+        set_metal_prefill_min_npos(1l)
+        pin_metal_tensor_crowns("")
+        metal_prefill_shutdown()
+        var inscope probe <- [for (i in range64(SCRATCH_SHORT)); prompt[i]]
+        var inscope warm <- one_window_logits(trg, probe)
+        if (!pf_hmm_ready()) {
+            t |> skip("{tag}: the half GEMM did not compile (no tensor toolchain) - no site takes a panel on this box")
+        } else {
+            scratch_window_cell(t, tr, trg, prompt, SCRATCH_SHORT, true, bar, "{tag}/base")
+            scratch_window_cell(t, tr, trg, prompt, SCRATCH_LONG, true, bar, "{tag}/base")
+            pin_metal_tensor_crowns(SCRATCH_TWIN_CROWNS)
+            metal_prefill_shutdown()
+            scratch_window_cell(t, tr, trg, prompt, SCRATCH_SHORT, false, bar, "{tag}/crowned")
+            scratch_window_cell(t, tr, trg, prompt, SCRATCH_LONG, twin_long, bar, "{tag}/crowned")
+        }
+        if (prior_crowns_pinned) {
+            pin_metal_tensor_crowns(prior_crowns)
+        } else {
+            unpin_metal_tensor_crowns()
+            set_metal_tensor_crowns(prior_crowns)
+        }
+        set_metal_prefill_min_npos(prior_min_npos)
+        select_prefill_override(prior_override)
+        metal_prefill_shutdown()
+        if (empty(prior_pin)) {
+            clear_kernel_backend_pin()
+        } else {
+            pin_kernel_backend(prior_pin)
+        }
+        select_kernel_backend(prior_backend)
+        set_wscale_f16(prior_wscale)
+        delete tr
+        delete trg
+    } else {
+        t |> skip("das_metal is not built on this platform; the Metal prefill is not compiled")
+    }
+}
+
+[test]
+def test_metal_prefill_kq_scratch(t : T?) {
+    t |> run("the dense split-format sites' scratch panels == CPU control, the crowned twin holding the short window (Llama-3.2-1B IQ4_XS)") <| @(t : T?) {
+        if (!family_on(t, "llama") || !arm_on(t, "kq-scratch")) return
+        scratch_panel_cells(t, path_join(models_dir(), "Llama-3.2-1B-Instruct-IQ4_XS.gguf"), "kq-scratch/llama-iq4xs", 0.08, true)
+    }
+    t |> run("the dense K-quant sites' scratch panels == CPU control, the crowned twins holding the short window (Llama-3.2-1B Q4_K_M)") <| @(t : T?) {
+        if (!family_on(t, "llama") || !arm_on(t, "kq-scratch")) return
+        scratch_panel_cells(t, path_join(models_dir(), "Llama-3.2-1B-Instruct-Q4_K_M.gguf"), "kq-scratch/llama-k4", 0.08, true)
+    }
+    t |> run("the dense Q8_0 sites' scratch panels on the base forms == CPU control, the crowned twin holding both windows (Llama-3.2-1B Q8_0)") <| @(t : T?) {
+        if (!family_on(t, "llama") || !arm_on(t, "kq-scratch")) return
+        scratch_panel_cells(t, path_join(models_dir(), "Llama-3.2-1B-Instruct-Q8_0.gguf"), "kq-scratch/llama-q8", 0.08, false)
+    }
+}

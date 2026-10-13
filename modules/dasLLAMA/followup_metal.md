@@ -1050,11 +1050,3 @@ round apart from the decode step's at a near-tie; the scheduler keeps the step. 
 work: one dispatch a layer over every segment - a segment table the attention tiles and the scan read their row range,
 key extent and slices from, the batched decode's route-table shape lifted to tiles - so a segment costs its rows alone;
 then the rider is a one-row segment of a window that is no stall.
-
-## 54. The dense K-quant sites' own-bytes tile forms trail the f16 panel from 512 rows
-
-`ARCHITECTURE_GPU_PREFILL.md#devw-panel-knees`: a K-quant site reads its own bytes (the twins, the tall stamp, the base
-tile), and the f16 panel the lever builds - a converted copy - leads it by 27-39% on Llama-3.2-3B Q4_K_M and 39-67% on
-Llama-3.2-1B IQ4_XS at 512-2048 rows (the own bytes ahead at 128 rows; a Q8_0 site's mul_mm forms trail the panel by
-3-7% at 2048 rows alone). The work: the tile forms' decode and staging on the K-quant planes, raced against the panel
-at the same window, until the own bytes hold the panel's time from 512 rows up.

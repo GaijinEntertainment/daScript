@@ -195,7 +195,7 @@ under the same ledgered exception as the parity file's: the Metal MTP rail is wh
 flavor serves.
 
 Prefill parity: `base mm-tail s16
-kq cont attn-dev mirror mirror-codec mirror-cap segs span span-fused span-mrope span-ds dim qkv moe-gemv moe-base kq-tail` (moe-base = the routed
+kq cont attn-dev mirror mirror-codec mirror-cap segs span span-fused span-mrope span-ds dim qkv moe-gemv moe-base kq-tail kq-scratch` (moe-base = the routed
 block's two GEMM forms on split-format expert carriers (`test_metal_prefill_moe_base_form`, family `qwen3moe`, large
 tier: Qwen3-30B-A3B UD-Q3_K_XL and UD-IQ2_XXS, loaded under the Metal mode so IQ3_S planes read their grid form): a 280-row
 then a 20-row window on the tensor twins over the gather panel, then with the panel off - the gate and up sites on the
@@ -212,7 +212,13 @@ prefill by `metal_prefill_stats().prefills` (`segments_window` in `_metal_blob_t
 token their single windows' on the same witnesses; kq-tail = the dense
 K-quant and per-32 sites' row-batched GEMV peel on a window of eight rows or fewer (`test_metal_prefill_kq_tail`, Llama-3.2-1B
 Q4_K_M, IQ4_XS and the Q5_1 mint, Qwen3-4B Q4_K_M, Qwen2.5-0.5B's IQ4_NL mint, the same two-window shape as moe-gemv at 2, 5 and 8 rows, the peel's site
-counter the engage witness and `set_metal_prefill_mm_tail(false)` the off-lever); moe-gemv = the short
+counter the engage witness and `set_metal_prefill_mm_tail(false)` the off-lever); kq-scratch = the dense sites' per-window
+scratch panels (`test_metal_prefill_kq_scratch`, Llama-3.2-1B IQ4_XS, Q4_K_M and Q8_0 on a blob twin that carries no stored
+panel): a 200-row and a 400-row window with the crowns pinned empty, then pinned to the format's twin crown - the short window
+on the twin, the long one on panels past a K-quant twin's floor and on the twin under a Q8_0 one's - each window's last-row
+logits within 0.08 of the CPU chain's largest, `metal_prefill_devw_scratch_stats` the engage witness, the same window with
+`set_metal_prefill_dev_w(false)` inside the bar with no panel counted, the control a window whose last token differs
+landing outside the bar; moe-gemv = the short
 window's gathered expert route (`test_metal_prefill_moe_gemv_route`, families `qwen2moe` / `qwen3moe` /
 `gptoss` - the q8, K-quant and mx4 expert planes, every carrier large-tier; the hybrid holds its parity through
 the MTP parity file's served twin and `test_metal_format_census.das`'s blob twin of the pure IQ4_XS file): a 300-row window on the tiles then a 2-, 7-, 16- and 24-row window the

@@ -12,7 +12,9 @@ A site is any weight plane a serving call of a backend (CPU, Metal, Vulkan) read
 of a weight format is a `KqFmt` member with its own descriptor row over the same GGUF type
 (`ARCHITECTURE_ENGINE_FORMATS.md#served-form`). A converted copy is any form of a weight format
 other than its disk encoding or its served form: a q8 demotion, an f16 or f32 dequant, or a GPU
-site handed to the CPU kernels.
+site handed to the CPU kernels. A scratch panel - the f16 tile a window's GEMM dequantizes from the
+site's own bytes, sized to that window, reused or freed after it, never kept across windows nor
+written into an image - is the kernel's working memory, not a converted copy.
 
 **A diff that adds or changes a function in `dasllama/` that maps a kernel/IR format id - the int
 a generated kernel takes as its format parameter (`KqDesc.schema_id`) - or a format slot - the

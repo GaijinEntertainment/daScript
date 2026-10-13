@@ -19,7 +19,7 @@ require math   // nolint:STYLE030,LINT019 - min, used only inside the das_metal 
 // report, not a clock of this file's; `ARCHITECTURE_GPU_PREFILL_MOE.md#prefill-moe-gemv-route` reads them.
 //
 //   bin/daslang -jit modules/dasLLAMA/benchmarks/prefill_window_probe.das -- -m <model.gguf> [--prefix 2000] [-r 4]
-//       [--kprof 2,8,64] [--gemv-max N]
+//       [--kprof 2,8,64] [--gemv-max N] [--cold --windows 2967]
 //
 // The sidecar beside this file (`prefill_window_probe.tune.json`, copied from the box's) applies the box's Metal
 // crowns; without one every tensor twin runs its base form, and the report says so. A window the driver declines
@@ -41,10 +41,12 @@ struct Args {
     top : int = 24
     @clarg_doc = "the routed block's gathered-route knee in tokens (default -1: the box profile's)"
     gemv_max : int = -1
-    @clarg_doc = "an interleaved A/B over every window size, one process: `knee` = the gathered route (knee 512) against the tiles (knee 0), `tail` = the K-quant GEMV-tail peel on against off; reps a window per arm, alternating"
+    @clarg_doc = "an interleaved A/B over every window size, one process: `knee` = the gathered route (knee 512) against the tiles (knee 0), `tail` = the K-quant GEMV-tail peel on against off, `devw` = the dev-W route on against off (the K-quant sites' scratch f16 panels against their own bytes); reps a window per arm, alternating"
     ab : string = ""
     @clarg_doc = "window sizes to sweep, comma list (default 2,3,4,8,12,16,24,32,48,64,96,128,256,512)"
     windows : string = ""
+    @clarg_doc = "cold windows: every rep and every profiled window runs on a fresh session from position 0 - the served first prefill - and no prefix is evaluated"
+    cold : bool
     @clarg_short = "?"
     @clarg_doc = "Show this help and exit"
     help : bool
@@ -56,6 +58,20 @@ def private median(var xs : array<double>) : double {
     sort(xs)
     let n = length(xs)
     return n % 2 == 1 ? xs[n / 2] : 0.5lf * (xs[n / 2 - 1] + xs[n / 2])
+}
+
+//! the samples' coefficient of variation in percent - a row past 3% is noise, not a reading
+def private cv_pct(xs : array<double>) : double {
+    let n = double(length(xs))
+    var mean = 0.0lf
+    for (x in xs) {
+        mean += x / n
+    }
+    var vsum = 0.0lf
+    for (x in xs) {
+        vsum += (x - mean) * (x - mean) / n
+    }
+    return mean > 0.0lf ? 100.0lf * sqrt(vsum) / mean : 0.0lf
 }
 
 //! the token pool the prefix and every window read from: house notes, encoded as many times as the run needs
@@ -111,37 +127,48 @@ def private decode_reference(m : Model; var s : Session; pool : array<int64>; cu
 
 def private sweep(a : Args) : int {   // nolint:STYLE038 — one flat sweep: the warm prefix, the window ladder with its A/B arms, the profile and the decode row
     static_if (typeinfo builtin_module_exists(das_metal)) {
+        var inscope windows <- empty(a.windows) ? clone_to_move(WINDOWS) : [for (w in split(a.windows, ",")); to_int(w); where to_int(w) > 0]
+        var widest = 0
+        for (w in windows) {
+            widest = max(widest, w)
+        }
+        for (ks in split(a.kprof, ",")) {
+            widest = max(widest, to_int(ks))
+        }
         set_metal_mode(MetalMode.required)
         set_gpu_resident_regions(1l)
-        set_gpu_ctx_max(8192l)
+        set_gpu_ctx_max(a.cold ? int64(max(8192, widest + 64)) : 8192l)
         set_gpu_ctx_strict(true)
         set_gpu_kv_dtype(KVDtype.f16)
         apply_box_profile_runtime()
         if (a.gemv_max >= 0) {
             set_metal_moe_gemv_max(int64(a.gemv_max))
         }
-        if (!empty(a.ab) && a.ab != "knee" && a.ab != "tail") {
-            print("prefill_window_probe: --ab takes `knee` or `tail`, not `{a.ab}`\n")
+        if (!empty(a.ab) && a.ab != "knee" && a.ab != "tail" && a.ab != "devw") {
+            print("prefill_window_probe: --ab takes `knee`, `tail` or `devw`, not `{a.ab}`\n")
             return 2
         }
         let knee_before = metal_moe_gemv_max()
         let tail_before = get_metal_prefill_mm_tail()
+        let devw_before = get_metal_prefill_dev_w()
         var rows_served = 0
         with_dasllama_jobque() {   // nolint:STYLE037,LINT019 — the sweep's one block: the ladder and its A/B arms
             var m <- load_model(a.model, QuantMode.q8)
             var s <- create_session(m)
-            let pool <- token_pool(m, a.prefix + 6000)
-            var prefix <- [for (i in range(a.prefix)); pool[i]]
+            let pool <- token_pool(m, a.cold ? widest + 16 : a.prefix + 6000)   //! the decode row reads twelve tokens past the last window
             print("model {m.config.dim}d x {m.config.n_layers}L vocab {m.config.vocab_size}; metal mode {get_metal_mode()}; gathered-route knee {pf_moe_gemv_knee()} tokens\n")
-            eval(m, s, prefix)
-            print("warm prefix {s.n_past} tokens done\n")
-            var cursor = a.prefix
-            var inscope windows <- empty(a.windows) ? clone_to_move(WINDOWS) : [for (w in split(a.windows, ",")); to_int(w); where to_int(w) > 0]
+            if (!a.cold) {
+                var prefix <- [for (i in range(a.prefix)); pool[i]]
+                eval(m, s, prefix)
+                print("warm prefix {s.n_past} tokens done\n")
+            }
+            var cursor = a.cold ? 0 : a.prefix
+            let from = a.cold ? "each on a fresh session from 0" : "windows appended in sequence from {a.prefix}"
             if (empty(a.ab)) {
-                print("\nnpos  gpu_ms  encode_ms  wait_ms  rb_ms  ms/tok  (medians of {a.reps - 1} after the warmup rep; windows appended in sequence from {a.prefix})\n")
+                print("\nnpos  gpu_ms  encode_ms  wait_ms  rb_ms  ms/tok  gpu_cv%  (medians of {a.reps - 1} after the warmup rep; {from})\n")
             } else {
-                let arms = a.ab == "knee" ? "route (knee 512) vs tiles (knee 0)" : "peel on vs off"
-                print("\nnpos  A_ms  B_ms  A/B  ({a.ab}: {arms}; medians of {a.reps} a arm, the arms alternating after one warmup rep of A; windows appended in sequence from {a.prefix})\n")
+                let arms = a.ab == "knee" ? "route (knee 512) vs tiles (knee 0)" : (a.ab == "tail" ? "peel on vs off" : "scratch panels vs own bytes")
+                print("\nnpos  A_ms  B_ms  A/B  A_cv%  B_cv%  ({a.ab}: {arms}; medians of {a.reps} a arm, the arms alternating after one warmup rep of A; {from})\n")
             }
             for (n in windows) {
                 var inscope gpu, enc, wait, rb, gpu_b : array<double>
@@ -153,6 +180,13 @@ def private sweep(a : Args) : int {   // nolint:STYLE038 — one flat sweep: the
                         set_metal_moe_gemv_max(arm_b ? 0l : 512l)
                     } elif (a.ab == "tail") {
                         set_metal_prefill_mm_tail(!arm_b)
+                    } elif (a.ab == "devw") {
+                        set_metal_prefill_dev_w(!arm_b)
+                    }
+                    if (a.cold) {
+                        delete s
+                        s <- create_session(m)
+                        cursor = 0
                     }
                     var inscope win <- [for (i in range(n)); pool[cursor + i]]
                     cursor += n
@@ -182,20 +216,26 @@ def private sweep(a : Args) : int {   // nolint:STYLE038 — one flat sweep: the
                 }
                 let g = median(gpu)
                 if (empty(a.ab)) {
-                    print("{n}  {g}  {median(enc)}  {median(wait)}  {median(rb)}  {g / double(n)}\n")
+                    print("{n}  {g}  {median(enc)}  {median(wait)}  {median(rb)}  {g / double(n)}  {cv_pct(gpu)}\n")
                 } else {
                     let gb = median(gpu_b)
-                    print("{n}  {g}  {gb}  {g / gb}\n")
+                    print("{n}  {g}  {gb}  {g / gb}  {cv_pct(gpu)}  {cv_pct(gpu_b)}\n")
                 }
                 rows_served++
             }
             if (!empty(a.ab)) {   //! the ladder ends on an arm-B rep: the profiles and the decode row below run at the settings the run started with
                 set_metal_moe_gemv_max(knee_before)
                 set_metal_prefill_mm_tail(tail_before)
+                set_metal_prefill_dev_w(devw_before)
             }
             for (ks in split(a.kprof, ",")) {
                 let n = to_int(ks)
                 if (n > 0) {
+                    if (a.cold) {
+                        delete s
+                        s <- create_session(m)
+                        cursor = 0
+                    }
                     kernel_profile(m, s, pool, cursor, n, a.top)
                 }
             }

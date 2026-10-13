@@ -4902,12 +4902,20 @@ def test_devw_tile_pick(t : T?) {
         t |> equal(devw_tile_pick(2048l, 5120l, 32768l, false, cap), 10l)
         t |> equal(devw_tile_pick(512l, 5120l, 32768l, false, cap), 0l)
         // over-knee under the tiled-rows floor: no form serves - unless the slow-fallback class
-        // lowers the floor to 512
+        // lowers the floor to the wide-N one
         t |> equal(devw_tile_pick(512l, 32768l, 5120l, false, cap), 0l)
         t |> equal(devw_tile_pick(512l, 32768l, 5120l, true, cap), 16l)
         // mid panel (40 MiB) needs the big-rows floor
         t |> equal(devw_tile_pick(2048l, 4096l, 5120l, false, cap), 1l)
         t |> equal(devw_tile_pick(1024l, 4096l, 5120l, false, cap), 0l)
+        // a wide small panel (32 MiB, N 8192) serves whole from the wide-N floor (64 rows), not under it
+        t |> equal(devw_tile_pick(128l, 8192l, 2048l, false, cap), 1l)
+        t |> equal(devw_tile_pick(32l, 8192l, 2048l, false, cap), 0l)
+        // the scratch floors: 64 rows where no tensor form is crowned, else the crowned twin's band's top
+        t |> equal(devw_scratch_floor(false, false), 64l)
+        t |> equal(devw_scratch_floor(true, false), 64l)
+        t |> equal(devw_scratch_floor(false, true), 384l)
+        t |> equal(devw_scratch_floor(true, true), 2048l)
     } else {
         t |> skip("das_metal is not built on this platform; the knee predicate is not compiled")
     }
