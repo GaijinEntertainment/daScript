@@ -224,6 +224,7 @@ struct SlotOpts {
     kv_dtype : KVDtype = KVDtype.f16
     kv_dtype_set : bool = false
     mtp : int = -1                  // -1 inherit | 0 off | 1 on
+    mtp_platforms : string          //! the model's catalog `serve_mtp`: the platforms where an unset `mtp` arms ("" = none)
 }
 
 //! One live served model: the loaded model, its scheduler (sessions + KV pool + prefix cache —
@@ -6969,8 +6970,17 @@ struct private SchedDefaults {
 var private g_sched_defaults = SchedDefaults()
 
 //! Whether an unset `mtp` arms a slot: one stream whose decode runs on a GPU - the Metal flavor, or the whole model resident on a Vulkan device (`backend_effective` "gpu:resident"). On the CPU, on a slot the device serves in part, and where the resident driver sums the routed experts on the host (`experts_host`: a hyper-connection MoE the card does not hold whole - `PERF_LEDGER.md`'s NextN entry), the verify round costs more than the accepted drafts return. Non-private: test_openai_server_mtp.das gates it.
-def mtp_auto_arms(streams : int64; on_metal : bool; backend_effective : string; experts_host : bool = false) : bool
-    => streams == 1l && decodes_on_gpu(on_metal, backend_effective, experts_host)
+def mtp_auto_arms(streams : int64; on_metal : bool; backend_effective : string; experts_host : bool = false; platforms : string = "") : bool
+    => streams == 1l && decodes_on_gpu(on_metal, backend_effective, experts_host) && mtp_platform_listed(platforms, on_metal ? "metal" : "vulkan")
+
+//! Whether a model's catalog `serve_mtp` (a comma list of platforms) names the platform the slot decodes on: the default arms
+//! only where the model's self-speculation measured a win, never on a model whose row lists none. Non-private: test_server_flags.das gates it.
+def mtp_platform_listed(platforms, platform : string) : bool {
+    for (p in split(platforms, ",")) {
+        return true if (strip(p) == platform)
+    }
+    return false
+}
 
 //! Whether a slot's decode runs on a GPU, the worker team left idle: the Metal flavor, or the whole model resident on a Vulkan device with its routed experts on the card. Non-private: test_server_flags.das gates it.
 def decodes_on_gpu(on_metal : bool; backend_effective : string; experts_host : bool = false) : bool
@@ -7026,7 +7036,7 @@ def private init_one_scheduler(var s : ModelSlot) {
     }
     let s_kv = slot_kv_dtype(s.opts)
     let want = s.opts.mtp >= 0 ? s.opts.mtp : g_sched_defaults.mtp
-    var spec = want > 0 || (want < 0 && mtp_auto_arms(s_streams, slot_flavor(s) == "metal", s.backend_effective, gpu_resident_experts_host()))
+    var spec = want > 0 || (want < 0 && mtp_auto_arms(s_streams, slot_flavor(s) == "metal", s.backend_effective, gpu_resident_experts_host(), s.opts.mtp_platforms))
     if (spec && s.model.config.n_layer_nextn <= 0l) {
         let side = mtp_drafter_sidecar(s.path)
         if (!empty(side) && attach_mtp_drafter(s.model, side)) {

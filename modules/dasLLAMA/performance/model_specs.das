@@ -75,6 +75,7 @@ struct ModelSpec {
     serve_default : bool = false    // the one the getting-started path recommends
     serve_vision : string           // vision-tower companion NAME ("" = text only); [[serve_vision_tower]] resolves it
     serve_tts : bool = false        // a speech model of the served text-to-speech set ([[serve_tts_set]]); its packs ride the companions
+    serve_mtp : string              //! the platforms ("metal", "vulkan", comma list) where the model's self-speculation measured a win at one stream (PERF_LEDGER.md); "" = the server's unset `mtp` decodes plain
 }
 
 // ===== Parity fixture ids (simple_ids, harness/parity.sh) =====
@@ -469,13 +470,13 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             bytes = 16947541728l, sha256 = "f2c28b3dc4776931ac6f879e11f203dec637ea0f14267a86ec8f6165f63f293f",
             serve_name = "gemma-4-26b-a4b", serve_display = "Gemma 4 26B-A4B",
             serve_note = "the MoE - 26B quality at 4B active weights per token",
-            serve_ctx = 131072, serve_vram_gb = 19.0),
+            serve_ctx = 131072, serve_vram_gb = 19.0, serve_mtp = "metal"),
         ModelSpec(file = "Qwen3.8-27B-UD-Q4_K_M.gguf",
             url = "{HF}/unsloth/Qwen3.8-27B-GGUF/resolve/27af057ecb382ddfea5d12837360a8980560e3ed/Qwen3.8-27B-UD-Q4_K_M.gguf",
             bytes = 16464440224l, sha256 = "322e194ff79741c7baa497c240f677f54b201b0efab44ca8e50f122b39123482",
             serve_name = "qwen3.8-27b", serve_display = "Qwen 3.8 27B",
             serve_note = "the newest dense Qwen - thinking model, strong at code",
-            serve_ctx = 262144, serve_vram_gb = 18.5,
+            serve_ctx = 262144, serve_vram_gb = 18.5, serve_mtp = "metal",
             parity <- ev_qwen_count([dn_chunked = true])),
         ModelSpec(file = "gemma-3-4b-it-Q8_0.gguf", display = "gemma-3-4B",
             // the vision mmproj rides as a companion: the gemma3v tower tests and the image chat
@@ -698,7 +699,7 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             bytes = 22663387424l, sha256 = "0b21525e972670ed59e1812e170b27c26355381f0656ecc4e25617ece7dac58b",
             serve_name = "qwen3.6-35b-a3b", serve_display = "Qwen 3.6 35B-A3B",
             serve_note = "the Qwen MoE - 3B active weights, MTP-ready",
-            serve_ctx = 262144, serve_vram_gb = 24.0,
+            serve_ctx = 262144, serve_vram_gb = 24.0, serve_mtp = "vulkan",
             // plain evidence only (verified per-file 40/40, 2026-08-18): the qwen35moe arm
             // coverage (chunked deltanet + reference MoE prefill) lives on the plain-stem twin
             parity <- ev_qwen_count()),
@@ -711,7 +712,8 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         ModelSpec(file = "Qwen3.6-35B-A3B-MTP-IQ4_XS-pure.gguf",
             url = "{HF}/borisbat/Qwen3.6-35B-A3B-MTP-IQ4_XS-pure-GGUF/resolve/6a1d560e64f8a9058773e5c1521534d9ef533bc8/Qwen3.6-35B-A3B-MTP-IQ4_XS-pure.gguf",
             recipe = "llama-quantize --pure Qwen3.6-35B-A3B-BF16-00001-of-00002.gguf Qwen3.6-35B-A3B-MTP-IQ4_XS-pure.gguf IQ4_XS",
-            bytes = 18951018528l, sha256 = "8296de4b5b62724ae7eac1cf005a65a2936f227ef2cafcee8d9bad0a25c4806c"),
+            bytes = 18951018528l, sha256 = "8296de4b5b62724ae7eac1cf005a65a2936f227ef2cafcee8d9bad0a25c4806c",
+            serve_mtp = "vulkan"),
         ModelSpec(file = "Qwen3-Coder-30B-A3B-Instruct-Q8_0.gguf", display = "Qwen3-Coder-30B",
             parity <- ev_qwen_count([moe_reference = true])),
         ModelSpec(file = "Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf", display = "Qwen3-Coder-30B-q4k", quant_label = "q4_k_m",

@@ -160,7 +160,7 @@ struct ServerArgs {
     @clarg_doc = "Flat preallocated KV sessions — disables paged serving and the prefix cache"
     flat : bool
 
-    @clarg_doc = "MTP/NextN self-speculative decode. Unset: a slot turns it on when it runs one stream (--streams 1) on a GPU - Metal, or the whole model resident on a Vulkan device - and off at several streams, on the CPU, on a model the device serves in part, or where the resident driver sums a MoE's routed experts on the host (the card does not hold them); a drafting Vulkan slot keeps its streams' caches on the card where the driver runs the draft head, its verify and a rejected round's rollback on the device, and serves host-cached sessions where any of them stays on the host; true/false sets it outright. Needs a model with an in-file NextN head (the -MTP- GGUFs), or an assistant drafter GGUF beside the model file (gemma-4: mtp-<stem>-Q8_0.gguf), which the load attaches - any other model serves plain with a log line. A sampled or penalized request draws each verify row with its own sampler, keeping its distribution at a lower acceptance rate. A constrained reply (response_format, a forced tool_choice) decodes plain."
+    @clarg_doc = "MTP/NextN self-speculative decode. Unset: off, except a slot that runs one stream (--streams 1) on a GPU the model's catalog row lists under serve_mtp (performance/model_specs.das: the platforms, metal or vulkan, where its self-speculation measured a win) - Metal, or the whole model resident on a Vulkan device; off at several streams, on the CPU, on a model the device serves in part, on a model with no catalog row, or where the resident driver sums a MoE's routed experts on the host (the card does not hold them); a drafting Vulkan slot keeps its streams' caches on the card where the driver runs the draft head, its verify and a rejected round's rollback on the device, and serves host-cached sessions where any of them stays on the host; true/false sets it outright. Needs a model with an in-file NextN head (the -MTP- GGUFs), or an assistant drafter GGUF beside the model file (gemma-4: mtp-<stem>-Q8_0.gguf), which the load attaches - any other model serves plain with a log line. A sampled or penalized request draws each verify row with its own sampler, keeping its distribution at a lower acceptance rate. A constrained reply (response_format, a forced tool_choice) decodes plain."
     mtp : bool
 
     @clarg_doc = "RoPE scaling override for the load: yarn | linear | none (default: the model file's own rope.scaling keys; none drops them, a file's per-pair factor tensors stay). The Qwen families publish the YaRN recipe and enable it as a setting, for long conversations only: --rope-scaling yarn --rope-scale 4; no other vendor validates it, and a non-Qwen file logs a warning. The override is baked into the prepared image under its own lane (model.gguf.metal-yarn4.dlim). Per-model in a [[models]] roster: rope_scaling"
@@ -783,9 +783,16 @@ def mtp_setting(sourced : bool; on : bool) : int
 //! (`mtp_auto_arms`) over the configured backend, a Vulkan pick read as serving the model whole - whether the
 //! driver will sum a MoE's routed experts on the host (which leaves the round off) is known only at the load.
 //! Non-private: test_openai_server_mtp.das gates it.
-def mtp_default_resolved(streams : int; gpu, metal : string) : bool
+def mtp_default_resolved(streams : int; gpu, metal : string; platforms : string = "") : bool
     => mtp_auto_arms(int64(streams), resolved_metal_mode(metal_mode_of(metal).mode, gpu) != MetalMode.off,
-                     gpu == "vulkan" ? "gpu:resident" : "cpu")
+                     gpu == "vulkan" ? "gpu:resident" : "cpu", false, platforms)
+
+//! A model file's catalog `serve_mtp` - the platforms where an unset `mtp` arms - off its base name; "" for a file with no
+//! catalog row. Non-private: test_server_flags.das gates it.
+def catalog_mtp_platforms(path : string) : string {
+    var inscope spec <- spec_by_file(base_name(path))
+    return spec.serve_mtp
+}
 
 //! What an unset `chunk` resolves to on the GET /config surface, before any model loads: the scheduler's own
 //! default (`chunk_default`) over the configured backend. Non-private: test_server_flags.das gates it.
@@ -876,7 +883,7 @@ def private build_config_surface(cfg : ServerArgs; save_path : string) : string 
         prefix_states = cfg_sourced("prefix_states") ? cfg.prefix_states : int(SERVER_PREFIX_STATES),
         prefix_state_mb = cfg.prefix_state_mb,   // 0 = a quarter of the box's RAM, resolved at init
         flat = cfg.flat,
-        mtp = cfg_sourced("mtp") ? cfg.mtp : mtp_default_resolved(cfg.streams > 0 ? cfg.streams : 4, gpu, cfg.metal),
+        mtp = cfg_sourced("mtp") ? cfg.mtp : mtp_default_resolved(cfg.streams > 0 ? cfg.streams : 4, gpu, cfg.metal, catalog_mtp_platforms(cfg.model)),
         rope_scaling = cfg.rope_scaling,
         rope_scale = double(cfg.rope_scale),
         yarn_orig_ctx = cfg.yarn_orig_ctx,
@@ -1224,6 +1231,7 @@ def init() {   // nolint:STYLE037,STYLE038 — boot sequence: the knobs are orde
                 opts.kv_dtype_set = true
             }
             opts.mtp = ent.mtp
+            opts.mtp_platforms = catalog_mtp_platforms(ent.path)
             add_model(m, ent.name, opts, ent.path)   // captures this load's arm outcome + marks onto the slot
             if (gpu == "vulkan" && ent.backend != "cpu") {
                 set_slot_gpu_want(ent.name, slot_want)   // the want switch-in re-arms with

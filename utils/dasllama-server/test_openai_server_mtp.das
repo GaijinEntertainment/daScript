@@ -78,8 +78,13 @@ def test_mtp_default_on_metal(t : T?) {
         t |> skip("no Metal backend on this box")
         return
     }
-    t |> run("unset, one stream on Metal: the NextN-headed slot drafts") @(t : T?) {
+    t |> run("unset, one stream on Metal: the NextN-headed slot decodes plain, its file has no catalog row listing Metal") @(t : T?) {
         with_mtp_server(t, MTP_PATH, TEST_PORT, 1l, -1, true) $(base_url) {
+            t |> equal(0l, drafted_after_chat(t, base_url), "no draft under the default without a serve_mtp platform")
+        }
+    }
+    t |> run("explicit on, one stream on Metal: the NextN-headed slot drafts") @(t : T?) {
+        with_mtp_server(t, MTP_PATH, TEST_PORT + 8, 1l, 1, true) $(base_url) {
             t |> success(drafted_after_chat(t, base_url) > 0l, "mtp_drafted rose after one chat")
         }
     }

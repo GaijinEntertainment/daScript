@@ -67,15 +67,18 @@ def test_mtp_setting_tri_state(t : T?) {
         t |> equal(mtp_setting(false, false), -1, "unset: the slot decides")
         t |> equal(mtp_setting(false, true), -1, "an unsourced true is still unset")
     }
-    t |> run("the unset default resolves on for one stream on a GPU, off on the CPU or at several streams") @(t : T?) {
-        t |> success(mtp_default_resolved(1, "metal", ""), "one stream on Metal")
-        t |> success(mtp_default_resolved(1, "metal-required", ""), "one stream on required Metal")
-        t |> success(mtp_default_resolved(1, "vulkan", ""), "one stream on a Vulkan device")
-        t |> success(mtp_default_resolved(1, "", "auto"), "one stream on the legacy --metal auto")
-        t |> success(!mtp_default_resolved(1, "", ""), "one stream, no device")
-        t |> success(!mtp_default_resolved(1, "off", "required"), "one stream on the CPU, whatever --metal says")
-        t |> success(!mtp_default_resolved(4, "metal", ""), "four streams on Metal")
-        t |> success(!mtp_default_resolved(4, "vulkan", ""), "four streams on a Vulkan device")
+    t |> run("the unset default resolves on for one stream on a GPU the model's catalog row lists, off otherwise") @(t : T?) {
+        t |> success(mtp_default_resolved(1, "metal", "", "metal"), "one stream on Metal, the row lists metal")
+        t |> success(mtp_default_resolved(1, "metal-required", "", "metal") && mtp_default_resolved(1, "vulkan", "", "vulkan"), "one stream on required Metal; one on a Vulkan device whose row lists vulkan")
+        t |> success(mtp_default_resolved(1, "vulkan", "", "metal, vulkan"), "a row listing both platforms")
+        t |> success(mtp_default_resolved(1, "", "auto", "metal"), "one stream on the legacy --metal auto")
+        t |> success(!mtp_default_resolved(1, "metal", ""), "one stream on Metal, no catalog row: plain")
+        t |> success(!mtp_default_resolved(1, "metal", "", "vulkan"), "one stream on Metal, the row lists vulkan alone: plain")
+        t |> success(!mtp_default_resolved(1, "vulkan", "", "metal"), "one stream on a Vulkan device, the row lists metal alone: plain")
+        t |> success(!mtp_default_resolved(1, "", "", "metal"), "one stream, no device")
+        t |> success(!mtp_default_resolved(1, "off", "required", "metal"), "one stream on the CPU, whatever --metal says")
+        t |> success(!mtp_default_resolved(4, "metal", "", "metal"), "four streams on Metal")
+        t |> success(!mtp_default_resolved(4, "vulkan", "", "vulkan"), "four streams on a Vulkan device")
     }
     t |> run("an unset chunk resolves to one window where a GPU prefills, the short chunk on the CPU") @(t : T?) {
         t |> equal(chunk_default_resolved("metal", ""), 512, "Metal")
@@ -90,14 +93,13 @@ def test_mtp_setting_tri_state(t : T?) {
         t |> success(prefills_on_gpu(false, "gpu:rails"), "a model the device serves in part still prefills there")
         t |> success(!prefills_on_gpu(false, "cpu"), "a CPU slot beside another slot's armed model")
     }
-    t |> run("a slot arms on one stream whose decode runs on a GPU") @(t : T?) {
-        t |> success(mtp_auto_arms(1l, true, "cpu"), "the Metal flavor - its tier word reads cpu")
-        t |> success(mtp_auto_arms(1l, false, "gpu:resident"), "the whole model resident on a Vulkan device")
-        t |> success(!mtp_auto_arms(1l, false, "gpu:resident", true), "... but not where its routed experts sum on the host (the round loses there)")
-        t |> success(!mtp_auto_arms(1l, false, "gpu:rails"), "a model the device serves in part")
-        t |> success(!mtp_auto_arms(1l, false, "cpu"), "the CPU")
-        t |> success(!mtp_auto_arms(4l, true, "cpu"), "four streams on Metal")
-        t |> success(!mtp_auto_arms(4l, false, "gpu:resident"), "four streams on a Vulkan device")
+    t |> run("a slot arms on one stream whose decode runs on a GPU the model's row lists") @(t : T?) {
+        t |> success(mtp_auto_arms(1l, true, "cpu", false, "metal"), "the Metal flavor - its tier word reads cpu")
+        t |> success(mtp_auto_arms(1l, false, "gpu:resident", false, "vulkan"), "the whole model resident on a Vulkan device")
+        t |> success(!mtp_auto_arms(1l, true, "cpu") && !mtp_auto_arms(1l, false, "gpu:resident", false, "metal"), "a row listing no platform, or Metal alone on a Vulkan device: plain")
+        t |> success(!mtp_auto_arms(1l, false, "gpu:resident", true, "vulkan"), "... but not where its routed experts sum on the host (the round loses there)")
+        t |> success(!mtp_auto_arms(1l, false, "gpu:rails", false, "vulkan") && !mtp_auto_arms(1l, false, "cpu", false, "metal, vulkan"), "a model the device serves in part; the CPU")
+        t |> success(!mtp_auto_arms(4l, true, "cpu", false, "metal") && !mtp_auto_arms(4l, false, "gpu:resident", false, "vulkan"), "four streams on Metal or on a Vulkan device")
     }
     t |> run("an unset ASR dispatch joins the team when every LLM slot decodes on a GPU") @(t : T?) {
         t |> success(decodes_on_gpu(true, "cpu"), "the Metal flavor - its tier word reads cpu")
@@ -365,5 +367,17 @@ def test_slot_mtp_device_home(t : T?) {
 def test_slot_mtp_device_home_moe(t : T?) {
     t |> run("the same over Qwen3.6-35B-A3B-MTP-IQ4_XS-pure: the routed NextN head drafts and verifies on the device") @(t : T?) {
         slot_mtp_device_home(t, "Qwen3.6-35B-A3B-MTP-IQ4_XS-pure.gguf")
+    }
+}
+
+//! the catalog's `serve_mtp` read off a model file's base name, and the platform list it carries
+[test]
+def test_mtp_catalog_platforms(t : T?) {
+    t |> run("the catalog's serve_mtp is read off the model file's base name; a file with no row lists none") @(t : T?) {
+        t |> equal(catalog_mtp_platforms("/models/Qwen3.8-27B-UD-Q4_K_M.gguf"), "metal", "the Qwen3.8-27B row lists metal")
+        t |> equal(catalog_mtp_platforms("Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf"), "vulkan", "the Qwen3.6-35B MTP row lists vulkan")
+        t |> equal(catalog_mtp_platforms("Qwen3.6-35B-A3B-UD-Q4_K_M.gguf"), "", "the head-less Qwen3.6-35B file has nothing to draft with")
+        t |> equal(catalog_mtp_platforms("/models/no-such-model.gguf"), "", "no row, no platform")
+        t |> success(mtp_platform_listed("metal, vulkan", "vulkan") && !mtp_platform_listed("metal", "vulkan") && !mtp_platform_listed("", "metal"), "the comma list reads its members and nothing else")
     }
 }
