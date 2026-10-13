@@ -365,6 +365,36 @@ def unregister_embed_gpu_gate() {
     g_embed_gpu_gate_set = false
 }
 
+var private g_embed_dev_prefill_gates : table<string; EmbedGpuGateFn>
+var private g_embed_dev_decode_gates : table<string; EmbedGpuGateFn>
+
+//! An override's own token-table gather gates, keyed by its registered name: while that override is the active prefill
+//! (decode) override, its gate answers whether its window (step) gathers the rows off the token ids itself - the host
+//! leaves the rows unembedded and backfills them only where the override then declines.
+[arch(at="../ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries")]
+def register_embed_dev_gates(name : string; prefill, decode : EmbedGpuGateFn) {
+    g_embed_dev_prefill_gates[name] = prefill
+    g_embed_dev_decode_gates[name] = decode
+}
+
+//! the prefill rows gather on the device: the active override's own gate where it registered one, else the installed seat's
+def private embed_prefill_on_device(t : Model; s : Session; npos, start_pos : int64) : bool {
+    let own = g_embed_dev_prefill_gates?[g_prefill_override_name] ?? default<EmbedGpuGateFn>
+    if (own != default<EmbedGpuGateFn>) {
+        return invoke(own, t, s, npos, start_pos)
+    }
+    return g_embed_gpu_gate_set && invoke(g_embed_gpu_gate, t, s, npos, start_pos)
+}
+
+//! the decode step's row gathers on the device: the active decode override's gate, on a model whose pre-stack steps read no host row
+def private embed_decode_on_device(t : Model; s : Session; pos : int64) : bool {
+    if (t.blocks.pre_stack_decode != null || has_ple(t.config)) {
+        return false
+    }
+    let own = g_embed_dev_decode_gates?[g_decode_override_name] ?? default<EmbedGpuGateFn>
+    return own != default<EmbedGpuGateFn> && invoke(own, t, s, 1l, pos)
+}
+
 // ===== gemma-4 PLE pre-step hooks (registered by dasllama_ple at [init]) =====
 // PLE needs Model/Session, so it requires this module back and cannot be required from here — the
 // forward path reaches its per-pass pre-step through these hooks, and the umbrella breaks the cycle.
@@ -1293,6 +1323,10 @@ struct Model {
     // at emb_q8_off. Any QuantMode.q8 load of a Q8_0 token_embd, tied (cls_q8 implies it) or not.
     emb_q8 : bool = false
     emb_q8_off : int64
+    emb_kq_off : int64 = -1l   //! an untied K-quant token table's offset in emb_fmt's planes (the tied table is the classifier's plane at wcls_off)
+    //! a tied table whose disk type no KqFmt carries (F16, BF16, Q4_1, Q5_0): the fp32 rows serve the embed and the CPU classifier, and a
+    //! q8 transcode at wcls_off - a converted copy - serves the device classifier (loads under a Metal mode)
+    cls_q8_copy : bool = false
     quant : QuantMode
     rope_freqs : array<float>   // per-pair RoPE scaling (Llama-3.1 NTK-by-parts); empty = none
     // QKV projection biases (Qwen2) — fp32, per layer (q: layers×dim, k/v: layers×kv_dim);
@@ -1617,8 +1651,36 @@ struct ArchDesc {
 //! no fp32 table, no qblob copy (the cls_q8 analog for kquant_native loads).
 def cls_kq(t : Model) : bool => t.kquant_native && t.config.shared_weights && t.emb_fmt != KqFmt.q8
 
+//! The token table is one plane in its own K-quant format, tied or untied - no fp32 table, no q8 copy.
+def emb_kq(t : Model) : bool => t.kquant_native && t.emb_fmt != KqFmt.q8
+
+//! The K-quant token table's offset in emb_fmt's planes: the classifier's plane when tied, its own when untied.
+def emb_kq_plane_off(t : Model) : int64 => t.config.shared_weights ? t.wcls_off : t.emb_kq_off
+
+//! The classifier's format: the tied table's own, or the untied output plane's (a tied q8 copy reads q8).
+def cls_fmt_of(t : Model) : KqFmt => t.config.shared_weights ? t.emb_fmt : t.wcls_fmt
+
+//! A device reads the tied classifier off nothing but the fp32 table: no q8 plane, no K-quant plane, no q8 copy.
+def cls_tied_f32(t : Model) : bool => t.config.shared_weights && !t.cls_q8 && !t.cls_q8_copy && t.emb_fmt == KqFmt.q8
+
 // Format tag for layer l of a per-kind tag array; empty array (non-kq load) = q8.
 def fmt_at(a : array<KqFmt>; l : int64) : KqFmt => empty(a) ? KqFmt.q8 : a[l]
+
+//! The shared expert's plane of `kind` (1 gate, 3 up, 2 down) on layer l: the plane in the file's format where the loader kept one,
+//! else the q8 transcode the CPU chain reads (dasllama_moe.das's and dasllama_blocks.das's shared-expert sites read only it).
+def shexp_plane(t : Model; l : int64; kind : int) : tuple<f : KqFmt; off : int64> {
+    let she = t.config.dim * t.config.n_ff_shexp
+    if (kind == 1) {
+        return (f = fmt_at(t.wsh1_fmt, l), off = t.wshk1_offs[l]) if (l < long_length(t.wshk1_offs) && t.wshk1_offs[l] >= 0l)
+        return (f = KqFmt.q8, off = t.wsh1_off + l * she)
+    }
+    if (kind == 3) {
+        return (f = fmt_at(t.wsh3_fmt, l), off = t.wshk3_offs[l]) if (l < long_length(t.wshk3_offs) && t.wshk3_offs[l] >= 0l)
+        return (f = KqFmt.q8, off = t.wsh3_off + l * she)
+    }
+    return (f = fmt_at(t.wsh2_fmt, l), off = t.wshk2_offs[l]) if (l < long_length(t.wshk2_offs) && t.wshk2_offs[l] >= 0l)
+    return (f = KqFmt.q8, off = t.wsh2_off + l * she)
+}
 
 // Exact reserve then size — no pow2 slack, and the reserved resize never trips max_unreserved_size.
 //! A byte count against its baseline for a report line: "+12 MB, +3.4%" (a zero baseline prints n/a for the percent).
@@ -4792,8 +4854,8 @@ def private dequant_embq_row(t : Model; off, n : int64; var dst : float?) {
 }
 
 // Copy token `token`'s embedding row into dst — from fp32 fblob, or (emb_q8) dequanted from the
-// linear Q8 copy at emb_q8_off (embq when trimmed), or (cls_kq) from the K-quant plane at
-// wcls_off (embq/embs when trimmed). Rows are whole superblocks (the K-quant row invariant).
+// linear Q8 copy at emb_q8_off (embq when trimmed), or (emb_kq) from the table's K-quant plane at
+// emb_kq_plane_off (embq/embs when trimmed). Rows are whole superblocks (the K-quant row invariant).
 def embed_row(t : Model; token : int64; var dst : float?) {
     let dim = t.config.dim
     if (t.emb_q8) {
@@ -4802,8 +4864,8 @@ def embed_row(t : Model; token : int64; var dst : float?) {
         } else {
             dequant_q8_row(t, t.emb_q8_off + token * dim, dim, dst)
         }
-    } elif (cls_kq(t)) {
-        // trimmed: embq/embs hold the region's pair verbatim, rebased to 0; else the pair sits at wcls_off in the model's plane, split-scale when metal_blob
+    } elif (emb_kq(t)) {
+        // trimmed: embq/embs hold the region's pair verbatim, rebased to 0; else the pair sits at its plane offset, split-scale when metal_blob
         let fmt = t.emb_fmt
         var row = unsafe(temp_array(dst, dim, type<float>))
         let mr = kq_active_mr(t, fmt)
@@ -4811,7 +4873,7 @@ def embed_row(t : Model; token : int64; var dst : float?) {
             kq_plane_row_f32(fmt, t.embq, t.embs, dim, t.config.vocab_size, mr, token, row, 0l)
         } else {
             let i = kq_slot("embed_row", fmt)
-            kq_plane_row_f32(fmt, t.kq[i].q, t.kq[i].s, dim, t.config.vocab_size, mr, token, row, 0l, t.wcls_off / kq_elems(fmt), t.metal_blob)
+            kq_plane_row_f32(fmt, t.kq[i].q, t.kq[i].s, dim, t.config.vocab_size, mr, token, row, 0l, emb_kq_plane_off(t) / kq_elems(fmt), t.metal_blob)
         }
     } else {
         copy_floats(dst, unsafe(addr(t.fblob[t.tok_emb_off + token * dim])), dim)
@@ -4916,6 +4978,14 @@ def private cls_softcap_chain(t : Model; var s : Session; cap : float) {
     }
 }
 
+//! token's embedding row into the residual stream s.x, under the model's embed scale
+def private embed_token_row(t : Model; var s : Session; token : int64) {
+    embed_row(t, token, unsafe(addr(s.x[0])))
+    if (t.config.embed_scale != 1.0) {  // Gemma2: scale the embedding by sqrt(dim)
+        scale_inplace(unsafe(addr(s.x[0])), t.config.embed_scale, t.config.dim)
+    }
+}
+
 //! One forward pass: token at position `pos` -> s.logits.
 [no_alloc, no_env, no_io]
 def forward(t : Model; var s : Session; token, pos : int64) {   // nolint:STYLE038 — one decode step; the phases share s and must stay in order
@@ -4926,9 +4996,9 @@ def forward(t : Model; var s : Session; token, pos : int64) {   // nolint:STYLE0
 
     // token embedding: row `token` into the residual stream
     let ts_embed = prof_ticks()
-    embed_row(t, token, unsafe(addr(s.x[0])))
-    if (c.embed_scale != 1.0) {  // Gemma2: scale the embedding by sqrt(dim)
-        scale_inplace(unsafe(addr(s.x[0])), c.embed_scale, dim)
+    let embed_dev = embed_decode_on_device(t, s, pos)
+    if (!embed_dev) {
+        embed_token_row(t, s, token)
     }
     prof_add("embed", ts_embed)
     if (t.blocks.pre_stack_decode != null) {   // the arch's residual shape (hyper-connection streams, the n-gram gather)
@@ -4970,6 +5040,9 @@ def forward(t : Model; var s : Session; token, pos : int64) {   // nolint:STYLE0
         stack_done = invoke(g_decode_override, t, s, token, pos)
     }
     if (!stack_done) {
+        if (embed_dev) {
+            embed_token_row(t, s, token)   //! the override that would have gathered the row declined the step
+        }
         blob_only_panic(t, "decode stack")
         for (l in range64(c.n_layers)) {
             let ts_blk_attn = prof_ticks()
@@ -6360,7 +6433,7 @@ def private forward_prefill_head(t : Model; var s : Session; tokens : array<int6
     // token embeddings -> residual stream x_b [npos x dim]
     let dim = c.dim
     let ts_embed = prof_ticks()
-    if (g_embed_gpu_gate_set && invoke(g_embed_gpu_gate, t, s, npos, start_pos)) {
+    if (embed_prefill_on_device(t, s, npos, start_pos)) {
         s.embed_gpu_tokens |> resize(npos)
         for (p in range64(npos)) {
             s.embed_gpu_tokens[p] = tokens[p]
@@ -6376,7 +6449,7 @@ def private forward_prefill_head(t : Model; var s : Session; tokens : array<int6
     prof_add("embed", ts_embed)
     if (t.blocks.pre_stack_prefill != null) {   // the arch's residual shape (hyper-connection streams, the n-gram gather)
         if (s.embed_gpu_pending) {
-            embed_backfill_cpu(t, s, npos)   // the streams are made from the rows, so the rows come first
+            embed_backfill_rows(t, s, npos)   // the streams are made from the rows, so the rows come first
         }
         invoke(t.blocks.pre_stack_prefill, t, s, tokens, npos, start_pos)
     }
@@ -6578,8 +6651,9 @@ def private prefill_rope_tables(t : Model; var s : Session; npos, start_pos : in
     prof_add("rope_build", ts_rope_build)   // one-time cos/sin table build (separate bucket)
 }
 
+//! the rows a device gate left to the device, embedded on the host after all: the device declined the call, or reads its rows from the host
 [arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
-def private embed_backfill_cpu(t : Model; var s : Session; npos : int64) {
+def embed_backfill_rows(t : Model; var s : Session; npos : int64) {
     let ts_embed = prof_ticks()
     let dim = t.config.dim
     for (p in range64(npos)) {
@@ -6622,7 +6696,7 @@ def forward_prefill_body(t : Model; var s : Session; npos, start_pos : int64; sk
     }
     if (!stack_done) {
         if (s.embed_gpu_pending) {
-            embed_backfill_cpu(t, s, npos)
+            embed_backfill_rows(t, s, npos)
         }
         if (s.ds_active && s.wide_src != null) {   // the wide borrow was for an override that declined
             let ts_split = prof_ticks()

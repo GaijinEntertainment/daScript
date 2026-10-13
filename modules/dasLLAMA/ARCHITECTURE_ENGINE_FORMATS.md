@@ -176,6 +176,22 @@ classifier and final norm are dead by construction (tensor lookup is first-match
 is last). The prepared image folds the head's name and size into its path hash, so the
 trunk-only and trunk+head images never collide and one image file serves both trunk and head.
 
+### The token table and the shared expert carry their own planes {#kq-token-table}
+
+The token table is one plane in the file's format wherever its tag is a `KqFmt` member
+(`emb_kq`): tied, the classifier's plane at `wcls_off`; untied, its own plane at `emb_kq_off`,
+repacked with its format's plane like every region of it. No fp32 table rides beside it, and the
+CPU's `embed_row` and the devices' row gathers read that plane. An untied table keeps its plane on
+every load but one with the Vulkan tier armed, whose driver reads an untied table as the fp32
+rows or the q8 copy. A table whose disk type no member carries (F16, BF16, Q4_1, Q5_0) keeps its
+exact fp32 rows; tied, a load under a Metal mode adds a q8 transcode of it at `wcls_off`
+(`cls_q8_copy`) - a converted copy, logged at the load - for the device classifier, while the
+embed and the CPU classifier read the fp32 rows. The shared expert's gate, up and down planes
+(the NextN head's triple included) keep the file's format beside the q8 transcode on a load a
+device reads them on (a Metal mode or an armed GPU tier: `wsh*_fmt` / `wshk*_offs`,
+`shexp_plane` picks the plane by its tag). The transcode stays on every load, because the CPU
+chain's shared-expert sites (`dasllama_moe.das`, `dasllama_blocks.das`) read q8 alone.
+
 ### CPU kernel tiers {#cpu-kernel-tiers}
 
 - **`dasllama_math.das`** - the numeric ABSTRACTION: typedefs, active backend pointers, public

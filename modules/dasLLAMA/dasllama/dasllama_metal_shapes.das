@@ -318,13 +318,19 @@ def moe_metal_ok(t : Model) : bool {   // nolint:STYLE038 — flat per-shape ref
         // gmode 2 (qwen2moe)
         return false
     } elif (c.n_ff_shexp > 0l) {
-        // sigmoid-gated shared expert (qwen35moe): q8 wsh planes at base + l*she ride the
-        // dense site kernels — base + stride %256 (bind), nsh %64 (prefill C tiles)
+        // sigmoid-gated shared expert (qwen35moe): each plane rides the dense site kernels by its tag - the q8 transcode at
+        // base + l*she (base + stride %256, the bind) or the plane in the file's format; nsh %64 (prefill C tiles)
         let she = c.dim * c.n_ff_shexp
         if (!c.moe_shexp_gated ||
                 (c.n_ff_shexp % 64l) != 0l || (she % 256l) != 0l ||
                 (t.wsh1_off % 256l) != 0l || (t.wsh2_off % 256l) != 0l || (t.wsh3_off % 256l) != 0l) {
             return false
+        }
+        for (l in range64(c.n_layers + c.n_layer_nextn)) {
+            if (!kq_fmt_one_row_gemv(shexp_plane(t, l, 1).f, c.dim) || !kq_fmt_one_row_gemv(shexp_plane(t, l, 3).f, c.dim) ||
+                    !kq_fmt_one_row_gemv(shexp_plane(t, l, 2).f, c.n_ff_shexp)) {
+                return false
+            }
         }
     }
     let ne = c.n_expert
@@ -477,12 +483,11 @@ def decode_shape_decline(t : Model; needs_ok : MetalNeed; allow_moe : bool = fal
 }
 
 // mint-time servability (register_metal_servable): shape/graph/feature gates only — the planar
-// check is a RUNTIME gate. Tied-fp32 classifiers decline: the blob drivers force GPU logits
-// and have no fp32-table GEMV.
+// check is a RUNTIME gate. A tied classifier read off the fp32 table alone declines: the blob drivers
+// force GPU logits and have no fp32-table GEMV (a Metal-mode load keeps a q8 copy of a table no KqFmt carries).
 def private metal_model_servable_impl(t : Model) : bool {
-    let cls_fmt = t.config.shared_weights ? t.emb_fmt : t.wcls_fmt
-    // tied-fp32 classifier declines (no fp32-table GEMV); NextN serves — prefill stashes mtp_h + warms the slab
-    if (t.config.shared_weights && !t.cls_q8 && cls_fmt == KqFmt.q8) {
+    // NextN serves — prefill stashes mtp_h + warms the slab
+    if (cls_tied_f32(t)) {
         return false
     }
     return decode_shape_decline(t, DECODE_NEEDS_OK, true, true, true, mint_time = true, allow_hc = true) == MetalDecodeDecline.none

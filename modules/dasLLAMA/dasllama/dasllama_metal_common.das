@@ -212,7 +212,19 @@ var g_pso_argmax : MetalComputePipeline?
 var g_pso_argmax_rows : MetalComputePipeline?   // the same-slab verify's per-row accept-walk argmax
 var g_pso_copy_row : MetalComputePipeline?   // zero-copy logits: staging row -> wrapped session storage
 var g_pso_emb : MetalComputePipeline?
-var g_pso_emb_k6 : MetalComputePipeline?     // tied-k6 spec chain's embed gather
+var g_pso_emb_kq_k4 : MetalComputePipeline?     //! the token-table gather, one stamp a superblock format
+var g_pso_emb_kq_k5 : MetalComputePipeline?
+var g_pso_emb_kq_k6 : MetalComputePipeline?
+var g_pso_emb_kq_iq4xs : MetalComputePipeline?
+var g_pso_emb_kq_iq4nl : MetalComputePipeline?
+var g_pso_emb_kq_q40 : MetalComputePipeline?
+var g_pso_emb_kq_k3 : MetalComputePipeline?
+var g_pso_emb_kq_k2 : MetalComputePipeline?
+var g_pso_emb_kq_iq3s : MetalComputePipeline?
+var g_pso_emb_kq_iq3xxs : MetalComputePipeline?
+var g_pso_emb_kq_iq2s : MetalComputePipeline?
+var g_pso_emb_kq_iq2xs : MetalComputePipeline?
+var g_pso_emb_kq_iq2xxs : MetalComputePipeline?
 var g_pso_moe_router : MetalComputePipeline?   // MoE (Wave C): router GEMV over the fp32 slab
 var g_pso_moe_select : MetalComputePipeline?   // softmax + top-k + renorm (one simdgroup)
 var g_pso_moe_select_512 : MetalComputePipeline?   // the 16-deep ladder past 256 experts

@@ -1174,15 +1174,15 @@ class MetalArgmax : MetalArgmaxT {
     }
 }
 
-// Speculative embed gather: dequant the argmax winner's Q8 embedding row (the cls_q8 linear
-// copy's slice of the whole-model 34B blob, bound at emb_q8_off's byte offset) into the next
-// step's residual input — the GPU chain's embed_row.
-[metal_dispatch(name = "enc_embed_c", pso = "g_pso_emb", tg = 64, grid = "dim/64", params = "dim : int64")]
+// The Q8 token-table gather: dequant the rows of `nrows` token ids off the linear Q8 copy (the
+// whole-model 34B blob, bound at emb_q8_off's byte offset) into the residual input rows - the
+// device's embed_row, the decode step's, the greedy chain's and the prefill window's.
+[metal_dispatch(name = "enc_embed_c", pso = "g_pso_emb", tg = 64, grid = "dim/64, nrows", params = "dim : int64, nrows : int64")]
 class MetalEmbedQ8 {
     @ssbo @binding = 0 @role = "weight" @off = "eoff" q : array<int8>      // the embed blob slice, byte view (quants at 34*b + 2)
     @ssbo @binding = 1 @role = "weight" @off = "eoff" sc : array<float16>  // the same buffer, half-scale view (block b at 17*b)
-    @ssbo @binding = 2 @off = "toff" tok : array<uint>     // the token at a byte offset: row i of a token list
-    @ssbo @binding = 3 @off = "xoff" xo : array<float>     // [dim] residual input out, at row i's byte offset
+    @ssbo @binding = 2 @off = "toff" tok : array<uint>     // the tokens at a byte offset: row i of a token list
+    @ssbo @binding = 3 @off = "xoff" xo : array<float>     // [nrows x dim] residual input out, at row i's byte offset
     @uniform @binding = 4 dim : uint
     @uniform @binding = 5 @role = "weight" escale : float    // embed_scale (gemma: sqrt(dim); 1.0 elsewhere — g_one or an uploaded scalar)
 
@@ -1192,9 +1192,10 @@ class MetalEmbedQ8 {
         if (gid >= dim) {
             return
         }
-        let e = tok[0] * dim + gid
+        let row = gl_WorkGroupID.y
+        let e = tok[row] * dim + gid
         let b = e / 32u
-        xo[gid] = (float(q[b * 34u + 2u + e % 32u]) * float(sc[b * 17u])) * escale
+        xo[row * dim + gid] = (float(q[b * 34u + 2u + e % 32u]) * float(sc[b * 17u])) * escale
     }
 }
 
@@ -1208,47 +1209,273 @@ class MetalArgmaxRows : MetalArgmaxT {
     }
 }
 
-// k6 twin (tied Q6_K classifiers — the spec chain for kq): dequant the winner's row from the
-// disk-order k6 planes, dequant_k6_plane_superblock's exact math — (d * sc16) * (q - 32), the
-// same split scale layout as MetalKqGemvK6 (16B sub-scale blocks @0, f16 d plane @nsb*16).
-[metal_dispatch(name = "enc_embed_k6_c", pso = "g_pso_emb_k6", tg = 64, grid = "dim/64", params = "dim : int64")]
-class MetalEmbedK6 {
-    @ssbo @binding = 0 @role = "weight" @off = "doff" kdh : array<float16> // the d plane — the scale buffer bound at byte nsb*16
-    @ssbo @binding = 1 @role = "weight" @off = "soff" kscb : array<uint8>  // 16B sub-scale blocks, byte view (same buffer at 0)
-    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqb : array<uint8>   // k6 quant plane, byte view (ql at 192*blk, qh at +128)
-    @ssbo @binding = 3 tok : array<uint>
-    @ssbo @binding = 4 xo : array<float>    // [dim] residual input out
-    @uniform @binding = 5 dim : uint
-    @uniform @binding = 6 @role = "weight" escale : float    // embed_scale (gemma: sqrt(dim); 1.0 elsewhere — g_one or an uploaded scalar)
+//! byte `si` of a superblock's 16B sub-scale block
+def public kq_strip_byte(sv : uint4; si : uint) : uint {
+    let w = si < 8u ? (si < 4u ? sv.x : sv.y) : (si < 12u ? sv.z : sv.w)
+    return (w >> ((si & 3u) * 8u)) & 255u
+}
 
-    [metal_kernel(name="metal_embed_k6_msl")]
-    def metal_embed_k6 {
-        let gid = gl_GlobalInvocationID.x
-        if (gid >= dim) {
+//! byte `si` of the strip read signed (the split formats' i8 sub-scales)
+def public kq_strip_sbyte(sv : uint4; si : uint) : float => float((int(kq_strip_byte(sv, si)) ^ 128) - 128)
+
+struct EmbedKqArgs {
+    dim : uint       //!< the table row width (whole superblocks)
+    nsb : uint       //!< superblocks a table row
+    escale : float   //!< embed_scale (gemma: sqrt(dim); 1.0 elsewhere)
+}
+
+//! The K-quant token-table gather: `nrows` token ids' rows off a format's blob-form planes (kq_scales_of / kq_quants_of),
+//! dequantized in f32 by the format's own math; one invocation decodes one 16-element half of a 32-element sub-block,
+//! a format stamp supplying `unit16`.
+[ |> template_struct_instance]
+class template MetalEmbedKqT {
+    @ssbo @binding = 0 @role = "weight" @off = "s0off" kdh : array<float16>   //!< the d halves: the compact 16B block (soff) or the d tail (doff)
+    @ssbo @binding = 1 @role = "weight" @off = "soff" ksc : array<uint4>      //!< the same buffer, one 16B sub-scale block a superblock
+    @ssbo @binding = 2 @role = "weight" @off = "qoff" kqu : array<uint>       //!< the quant plane, uint view
+    @ssbo @binding = 3 @off = "toff" tok : array<uint>         //!< one token id an output row
+    @ssbo @binding = 4 @off = "xoff" xo : array<float>         //!< [nrows x dim] residual input rows
+    @kargs ka : EmbedKqArgs
+
+    //! the 16 elements of half `ile` of sub-block `js` of superblock `blk`, scaled, at xo[ob ..]
+    def abstract unit16(blk, js, ile, ob : uint) : void
+
+    def gather_body {
+        let u = gl_GlobalInvocationID.x
+        if (u >= ka.dim / 16u) {
             return
         }
-        let nb = dim / 256u
-        let ib = gid / 256u
-        let blk = tok[0] * nb + ib
-        let p = gid % 256u
-        let ip = p / 128u
-        let rr = p % 128u
-        let quarter = rr / 32u
-        let l = rr % 32u
-        let qlb = uint(kqb[blk * 192u + ip * 64u + l + ((quarter & 1u) != 0u ? 32u : 0u)])
-        let h = uint(kqb[blk * 192u + 128u + ip * 32u + l])
-        var qv = 0u
-        if (quarter == 0u) {
-            qv = (qlb & 0x0F) | ((h & 0x03) << 4u)
-        } elif (quarter == 1u) {
-            qv = (qlb & 0x0F) | ((h & 0x0C) << 2u)
-        } elif (quarter == 2u) {
-            qv = (qlb >> 4u) | (h & 0x30)
-        } else {
-            qv = (qlb >> 4u) | ((h & 0xC0) >> 2u)
+        let row = gl_WorkGroupID.y
+        let jsl = u / 2u
+        unit16(tok[row] * ka.nsb + jsl / 8u, jsl % 8u, u & 1u, row * ka.dim + u * 16u)
+    }
+
+    //! four decoded elements, scaled, at xo[o ..]
+    def store4(o : uint; mv : float4) {
+        xo[o] = mv.x * ka.escale
+        xo[o + 1u] = mv.y * ka.escale
+        xo[o + 2u] = mv.z * ka.escale
+        xo[o + 3u] = mv.w * ka.escale
+    }
+
+    [metal_kernel]
+    def metal_embed_kq {
+        gather_body()
+    }
+}
+
+//! k4 / k5: the 6-bit sc/min pair, d and dmin in the compact block; k5's fifth bit off the qh strip
+[ |> template_struct_instance]
+class template MetalEmbedK45T : MetalEmbedKqT {
+    @template_constant SB_UINTS : uint = 32u
+    @template_constant QH : bool = false
+
+    def override unit16(blk, js, ile, ob : uint) {
+        var sc = 0u
+        var mn = 0u
+        kmask_scmn(ksc[blk], js, sc, mn)
+        let dsc = float(kdh[blk * 8u]) * float(sc)
+        let dmn = float(kdh[blk * 8u + 1u]) * float(mn)
+        for [unroll_full] (t in range(16)) {
+            let e = ile * 16u + uint(t)
+            let lo = (kqu[blk * SB_UINTS + (js / 2u) * 8u + e / 4u] >> (8u * (e % 4u) + (js & 1u) * 4u)) & 15u
+            static_if (QH) {
+                let q = lo | (((kqu[blk * SB_UINTS + 32u + e / 4u] >> (8u * (e % 4u) + js)) & 1u) << 4u)
+                xo[ob + uint(t)] = (dsc * float(q) - dmn) * ka.escale
+            } else {
+                xo[ob + uint(t)] = (dsc * float(lo) - dmn) * ka.escale
+            }
         }
-        let sc = float((int(kscb[blk * 16u + ip * 8u + l / 16u + quarter * 2u]) ^ 128) - 128)
-        xo[gid] = (float(kdh[blk]) * sc * (float(qv) - 32.0)) * escale
+    }
+}
+
+[metal_dispatch(name = "enc_embed_kq_k4", pso = "g_pso_emb_kq_k4", tg = 64, grid = "units/64, nrows", params = "units : int64, nrows : int64")]
+class MetalEmbedK4 : MetalEmbedK45T {}
+
+[metal_dispatch(name = "enc_embed_kq_k5", pso = "g_pso_emb_kq_k5", tg = 64, grid = "units/64, nrows", params = "units : int64, nrows : int64")]
+class MetalEmbedK5 : MetalEmbedK45T {
+    override SB_UINTS = 40u
+    override QH = true
+}
+
+//! k6: (d * sc16) * (q - 32), q the low nibble pair plus two high bits
+[metal_dispatch(name = "enc_embed_kq_k6", pso = "g_pso_emb_kq_k6", tg = 64, grid = "units/64, nrows", params = "units : int64, nrows : int64")]
+class MetalEmbedK6 : MetalEmbedKqT {
+    def override unit16(blk, js, ile, ob : uint) {
+        let half6 = js / 4u
+        let gg = js % 4u
+        let dsc = float(kdh[blk]) * kq_strip_sbyte(ksc[blk], half6 * 8u + gg * 2u + ile)
+        for [unroll_full] (t in range(16)) {
+            let k = uint(t) / 4u
+            let c = uint(t) % 4u
+            let u = kqu[blk * 48u + half6 * 16u + (gg & 1u) * 8u + ile * 4u + k]
+            let hu = kqu[blk * 48u + 32u + half6 * 8u + ile * 4u + k]
+            let q = ((u >> ((gg / 2u) * 4u + 8u * c)) & 15u) | (((hu >> (gg * 2u + 8u * c)) & 3u) << 4u)
+            xo[ob + uint(t)] = (dsc * (float(q) - 32.0)) * ka.escale
+        }
+    }
+}
+
+//! the 4-bit codebook formats: iq4xs (d x the signed strip byte), iq4nl (a d a sub-block), q40 (iq4nl's d, the linear map q - 8)
+[ |> template_struct_instance]
+class template MetalEmbedIq4T : MetalEmbedKqT {
+    @template_constant SCALE_D : bool = false   //!< iq4nl / q40: one f16 d a 32-element sub-block, no strip
+    @template_constant LINEAR : bool = false    //!< q40: q - 8 in the codebook's place
+
+    def override unit16(blk, js, ile, ob : uint) {
+        var dsc : float
+        static_if (SCALE_D) {
+            dsc = float(kdh[blk * 8u + js])
+        } else {
+            dsc = float(kdh[blk]) * kq_strip_sbyte(ksc[blk], js)
+        }
+        let qp = unsafe(addr(kqu[blk * 32u + js * 4u]))
+        for [unroll_full] (t in range(16)) {
+            let q = (unsafe(qp[t / 4]) >> (8u * (uint(t) % 4u) + ile * 4u)) & 15u
+            static_if (LINEAR) {
+                xo[ob + uint(t)] = (dsc * (float(q) - 8.0)) * ka.escale
+            } else {
+                xo[ob + uint(t)] = (dsc * iq4_lut(q)) * ka.escale
+            }
+        }
+    }
+}
+
+[metal_dispatch(name = "enc_embed_kq_iq4xs", pso = "g_pso_emb_kq_iq4xs", tg = 64, grid = "units/64, nrows", params = "units : int64, nrows : int64")]
+class MetalEmbedIq4xs : MetalEmbedIq4T {}
+
+[metal_dispatch(name = "enc_embed_kq_iq4nl", pso = "g_pso_emb_kq_iq4nl", tg = 64, grid = "units/64, nrows", params = "units : int64, nrows : int64")]
+class MetalEmbedIq4nl : MetalEmbedIq4T {
+    override SCALE_D = true
+}
+
+[metal_dispatch(name = "enc_embed_kq_q40", pso = "g_pso_emb_kq_q40", tg = 64, grid = "units/64, nrows", params = "units : int64, nrows : int64")]
+class MetalEmbedQ40 : MetalEmbedIq4T {
+    override SCALE_D = true
+    override LINEAR = true
+}
+
+//! k3: d x the signed sub-scale, the low two bits plus the high bit, less 4 d where the high bit is clear
+[metal_dispatch(name = "enc_embed_kq_k3", pso = "g_pso_emb_kq_k3", tg = 64, grid = "units/64, nrows", params = "units : int64, nrows : int64")]
+class MetalEmbedK3 : MetalEmbedKqT {
+    def override unit16(blk, js, ile, ob : uint) {
+        let hf3 = js / 4u
+        let gg3 = js % 4u
+        let dsc = float(kdh[blk]) * kq_strip_sbyte(ksc[blk], hf3 * 8u + gg3 * 2u + ile)
+        let dmn = dsc * 4.0
+        for [unroll_full] (t in range(16)) {
+            let k = uint(t) / 4u
+            let c = uint(t) % 4u
+            let u = kqu[blk * 24u + hf3 * 8u + ile * 4u + k]
+            let hu = kqu[blk * 24u + 16u + ile * 4u + k]
+            let q = ((u >> (gg3 * 2u + 8u * c)) & 3u) | (((hu >> (hf3 * 4u + gg3 + 8u * c)) & 1u) << 2u)
+            xo[ob + uint(t)] = (dsc * float(q) - dmn) * ka.escale
+        }
+    }
+}
+
+//! k2: the nibble pair scale and min off one strip byte, d and dmin in the 4B tail
+[metal_dispatch(name = "enc_embed_kq_k2", pso = "g_pso_emb_kq_k2", tg = 64, grid = "units/64, nrows", params = "units : int64, nrows : int64")]
+class MetalEmbedK2 : MetalEmbedKqT {
+    def override unit16(blk, js, ile, ob : uint) {
+        let hf3 = js / 4u
+        let gg3 = js % 4u
+        let pb = kq_strip_byte(ksc[blk], hf3 * 8u + gg3 * 2u + ile)
+        let dsc = float(kdh[blk * 2u]) * float(pb & 15u)
+        let dmn = float(kdh[blk * 2u + 1u]) * float(pb >> 4u)
+        let qp = unsafe(addr(kqu[blk * 16u + hf3 * 8u + ile * 4u]))
+        for [unroll_full] (t in range(16)) {
+            let q = (unsafe(qp[t / 4]) >> (gg3 * 2u + 8u * (uint(t) % 4u))) & 3u
+            xo[ob + uint(t)] = (dsc * float(q) - dmn) * ka.escale
+        }
+    }
+}
+
+//! iq3s: the 9-bit grid index (byte + qh bit), a sign nibble a grid word, d x the signed strip byte
+[metal_dispatch(name = "enc_embed_kq_iq3s", pso = "g_pso_emb_kq_iq3s", tg = 64, grid = "units/64, nrows", params = "units : int64, nrows : int64")]
+class MetalEmbedIq3s : MetalEmbedKqT {
+    def override unit16(blk, js, ile, ob : uint) {
+        let dsc = float(kdh[blk]) * kq_strip_sbyte(ksc[blk], js)
+        let qsw = kqu[blk * 26u + js * 2u + ile]
+        let qh3 = (kqu[blk * 26u + 16u + js / 4u] >> ((js % 4u) * 8u)) & 255u
+        let sgw3 = kqu[blk * 26u + 18u + js]
+        for [unroll_full] (k in range(4)) {
+            let b3 = ile * 4u + uint(k)
+            let idx = ((qsw >> (8u * uint(k))) & 255u) | ((qh3 << (8u - b3)) & 256u)
+            let nib = (sgw3 >> ((b3 / 2u) * 8u + (b3 % 2u) * 4u)) & 15u
+            store4(ob + uint(k) * 4u, u8x4_f4(iq3s_gw(int(idx))) * iq_sign_apply(float4(dsc), nib))
+        }
+    }
+}
+
+//! iq3xxs: the halved 8-bit grid, the 7-bit sign code a grid pair, d x the signed strip byte
+[metal_dispatch(name = "enc_embed_kq_iq3xxs", pso = "g_pso_emb_kq_iq3xxs", tg = 64, grid = "units/64, nrows", params = "units : int64, nrows : int64")]
+class MetalEmbedIq3xxs : MetalEmbedKqT {
+    def override unit16(blk, js, ile, ob : uint) {
+        let dsc = float(kdh[blk]) * kq_strip_sbyte(ksc[blk], js)
+        let qsw = kqu[blk * 24u + js * 2u + ile]
+        let aux3 = kqu[blk * 24u + 16u + js]
+        for [unroll_full] (k in range(4)) {
+            let sgb = ksign7((aux3 >> (7u * (ile * 2u + uint(k) / 2u))) & 127u)
+            let nib = uint(k) % 2u == 0u ? sgb & 15u : sgb >> 4u
+            store4(ob + uint(k) * 4u, u8x4_f4(iq3xxs_gw(int((qsw >> (8u * uint(k))) & 255u))) * iq_sign_apply(float4(dsc), nib))
+        }
+    }
+}
+
+//! the 2-bit grid formats: one signed grid word of four magnitudes a k; d x the unsigned strip byte (a sub-block's half
+//! on iq2s / iq2xs, a sub-block on iq2xxs)
+[ |> template_struct_instance]
+class template MetalEmbedIq2T : MetalEmbedKqT {
+    def abstract grid_word(blk, js, ile, k : uint; var sw : uint&) : void
+    def abstract unit_scale(blk, js, ile : uint) : float
+
+    def override unit16(blk, js, ile, ob : uint) {
+        let dsc = unit_scale(blk, js, ile)
+        for [unroll_full] (k in range(4)) {
+            var sw = 0u
+            grid_word(blk, js, ile, uint(k), sw)
+            for [unroll_full] (c in range(4)) {
+                xo[ob + uint(k) * 4u + uint(c)] = (dsc * iq3s_sx(sw, uint(c))) * ka.escale
+            }
+        }
+    }
+}
+
+[metal_dispatch(name = "enc_embed_kq_iq2s", pso = "g_pso_emb_kq_iq2s", tg = 64, grid = "units/64, nrows", params = "units : int64, nrows : int64")]
+class MetalEmbedIq2s : MetalEmbedIq2T {
+    def override unit_scale(blk, js, ile : uint) : float => float(kdh[blk]) * float(kq_strip_byte(ksc[blk], js * 2u + ile))
+
+    def override grid_word(blk, js, ile, k : uint; var sw : uint&) {
+        let l2 = ile * 2u + k / 2u
+        let qw2 = kqu[blk * 18u + js]
+        let qh2 = (kqu[blk * 18u + 16u + js / 4u] >> ((js % 4u) * 8u)) & 255u
+        let idx2 = (((qw2 >> (8u * l2)) & 255u) | ((qh2 << (8u - 2u * l2)) & 0x300u)) * 2u + k % 2u
+        let sgb2 = (kqu[blk * 18u + 8u + js] >> (8u * l2)) & 255u
+        sw = iq3s_signed(iq2s_gw(int(idx2)), k % 2u == 0u ? sgb2 & 15u : sgb2 >> 4u)
+    }
+}
+
+[metal_dispatch(name = "enc_embed_kq_iq2xs", pso = "g_pso_emb_kq_iq2xs", tg = 64, grid = "units/64, nrows", params = "units : int64, nrows : int64")]
+class MetalEmbedIq2xs : MetalEmbedIq2T {
+    def override unit_scale(blk, js, ile : uint) : float => float(kdh[blk]) * float(kq_strip_byte(ksc[blk], js * 2u + ile))
+
+    def override grid_word(blk, js, ile, k : uint; var sw : uint&) {
+        let w16 = (kqu[blk * 16u + js * 2u + ile] >> (16u * (k / 2u))) & 0xFFFFu
+        let sgb2 = ksign7(w16 >> 9u)
+        sw = iq3s_signed(iq2xs_gw(int((w16 & 511u) * 2u + k % 2u)), k % 2u == 0u ? sgb2 & 15u : sgb2 >> 4u)
+    }
+}
+
+[metal_dispatch(name = "enc_embed_kq_iq2xxs", pso = "g_pso_emb_kq_iq2xxs", tg = 64, grid = "units/64, nrows", params = "units : int64, nrows : int64")]
+class MetalEmbedIq2xxs : MetalEmbedIq2T {
+    [unused_argument(ile)]
+    def override unit_scale(blk, js, ile : uint) : float => float(kdh[blk]) * float(kq_strip_byte(ksc[blk], js))
+
+    def override grid_word(blk, js, ile, k : uint; var sw : uint&) {
+        let q3 = ile * 2u + k / 2u
+        let bidx = (kqu[blk * 16u + js * 2u] >> (8u * q3)) & 255u
+        let sgb2 = ksign7((kqu[blk * 16u + js * 2u + 1u] >> (7u * q3)) & 127u)
+        sw = iq3s_signed(iq2xxs_gw(int(bidx * 2u + k % 2u)), k % 2u == 0u ? sgb2 & 15u : sgb2 >> 4u)
     }
 }
 
@@ -3631,7 +3858,19 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     }
     g_pso_copy_row = compile_stamp(metal_copy_row_msl, ok)
     g_pso_emb = compile_stamp(metal_embed_q8_msl, ok)
-    g_pso_emb_k6 = compile_stamp(metal_embed_k6_msl, ok)
+    g_pso_emb_kq_k4 = compile_stamp(MetalEmbedK4_metal_embed_kq_msl, ok)
+    g_pso_emb_kq_k5 = compile_stamp(MetalEmbedK5_metal_embed_kq_msl, ok)
+    g_pso_emb_kq_k6 = compile_stamp(MetalEmbedK6_metal_embed_kq_msl, ok)
+    g_pso_emb_kq_iq4xs = compile_stamp(MetalEmbedIq4xs_metal_embed_kq_msl, ok)
+    g_pso_emb_kq_iq4nl = compile_stamp(MetalEmbedIq4nl_metal_embed_kq_msl, ok)
+    g_pso_emb_kq_q40 = compile_stamp(MetalEmbedQ40_metal_embed_kq_msl, ok)
+    g_pso_emb_kq_k3 = compile_stamp(MetalEmbedK3_metal_embed_kq_msl, ok)
+    g_pso_emb_kq_k2 = compile_stamp(MetalEmbedK2_metal_embed_kq_msl, ok)
+    g_pso_emb_kq_iq3s = compile_stamp(MetalEmbedIq3s_metal_embed_kq_msl, ok)
+    g_pso_emb_kq_iq3xxs = compile_stamp(MetalEmbedIq3xxs_metal_embed_kq_msl, ok)
+    g_pso_emb_kq_iq2s = compile_stamp(MetalEmbedIq2s_metal_embed_kq_msl, ok)
+    g_pso_emb_kq_iq2xs = compile_stamp(MetalEmbedIq2xs_metal_embed_kq_msl, ok)
+    g_pso_emb_kq_iq2xxs = compile_stamp(MetalEmbedIq2xxs_metal_embed_kq_msl, ok)
     g_pso_qkvrs16 = compile_stamp(MetalQ8GemvQkvRsF16_metal_q8_gemv_qkv_rs_msl, ok)
     g_pso_qkvrs32 = compile_stamp(MetalQ8GemvQkvRsF32_metal_q8_gemv_qkv_rs_msl, ok)
     g_pso_w13sw = compile_stamp(MetalQ8GemvW13Sw_metal_q8_gemv_w13sw16_msl, ok)
@@ -4216,14 +4455,84 @@ def enc_gemv_w13sw(enc : MetalComputeEncoder?; bw : MetalBuffer?; w1off, w3off :
     }
 }
 
-def enc_embed(enc : MetalComputeEncoder?; bw : MetalBuffer?; eoff : uint64; btok, bx, bdim, bescale : MetalBuffer?; dim : int64; toff : uint64 = 0ul; xoff : uint64 = 0ul) {
-    enc_embed_c(enc, bw, eoff, bw, btok, toff, bx, xoff, bdim, bescale != null ? bescale : g_one, dim)
+def enc_embed(enc : MetalComputeEncoder?; bw : MetalBuffer?; eoff : uint64; btok, bx, bdim, bescale : MetalBuffer?; dim : int64; toff : uint64 = 0ul; xoff : uint64 = 0ul; nrows : int64 = 1l) {
+    enc_embed_c(enc, bw, eoff, bw, btok, toff, bx, xoff, bdim, bescale != null ? bescale : g_one, dim, nrows)
 }
 
-// the tied-k6 spec embed gather: the scale buffer binds twice (f16 d plane @doff + sub-scale
-// strips @soff — kq_scales_of's whole-plane offsets), the quant plane once @qoff
-def enc_embed_k6(enc : MetalComputeEncoder?; bq : MetalBuffer?; qoff : uint64; bs : MetalBuffer?; soff, doff : uint64; btok, bx, bdim, bescale : MetalBuffer?; dim : int64) {
-    enc_embed_k6_c(enc, bs, doff, bs, soff, bq, qoff, btok, bx, bdim, bescale != null ? bescale : g_one, dim)
+//! A blob model's token table serves its rows to the device gather: the q8 linear copy, the fp32 table, or its own
+//! K-quant plane in a format the gather has a stamp for.
+def emb_dev_gather_ok(t : Model) : bool {
+    return false if (!t.metal_blob || t.planes_trimmed)
+    return t.emb_q8 || (emb_kq(t) ? emb_kq_gather_fmt(t.emb_fmt) : t.tok_emb_off >= 0l)
+}
+
+//! the gather reads its token ids at any offset of a token list: the q8 copy's and the K-quant plane's stamps (the fp32 table's reads from 0)
+def emb_dev_gather_at_ok(t : Model) : bool => emb_dev_gather_ok(t) && (t.emb_q8 || emb_kq(t))
+
+//! The rows of `nrows` token ids (btok at toff) into bx at xoff, row stride dim, off the token table under the model's
+//! embed scale (bescale: its uploaded scalar, null = 1) - the device's embed_row. The fp32 table's gather reads its ids from 0.
+def enc_embed_dev(enc : MetalComputeEncoder?; t : Model; btok : MetalBuffer?; toff : uint64; bx : MetalBuffer?; xoff : uint64; nrows : int64;
+                  bdim, bescale : MetalBuffer?) {
+    let dim = t.config.dim
+    if (t.emb_q8) {
+        let bemb = blob_of(g_dev, t, t.emb_q8_off)
+        enc_embed(enc, bemb.buf, bemb.boff, btok, bx, bdim, bescale, dim, toff, xoff, nrows)
+    } elif (emb_kq(t)) {
+        let off = emb_kq_plane_off(t)
+        let bq = kq_quants_of(g_dev, t, t.emb_fmt, off)
+        let bs = kq_scales_of(g_dev, t, t.emb_fmt, off)
+        enc_embed_kq_rows(enc, t.emb_fmt, bq.buf, bq.qoff, bs.buf, bs.soff, bs.doff, btok, toff, bx, xoff, dim, nrows, t.config.embed_scale)
+    } else {
+        assert(toff == 0ul, "the fp32 table's gather reads its token ids from the buffer's start")
+        let bemb = plane_of(g_dev, t, t.fblob, t.tok_emb_off)
+        var kg = GkRowGatherArgs(c = uint(dim), rows = uint(nrows), aoff = uint(bemb.boff / 4ul), boff = 0u, coff = 0u, out_off = uint(xoff / 4ul),
+            add_b = 0u, add_c = 0u, scale = t.config.embed_scale)
+        enc_row_gather(enc, bemb.buf, btok, g_one, g_one, bx, kg, nrows * dim)
+    }
+}
+
+//! the formats the K-quant token-table gather has a stamp for
+def emb_kq_gather_fmt(f : KqFmt) : bool {
+    return (f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.k6 || f == KqFmt.iq4xs || f == KqFmt.iq4nl || f == KqFmt.q40 || f == KqFmt.k3
+        || f == KqFmt.k2 || f == KqFmt.iq3s || f == KqFmt.iq3xxs || f == KqFmt.iq2s || f == KqFmt.iq2xs || f == KqFmt.iq2xxs)
+}
+
+//! the K-quant table rows of `nrows` token ids (btok at toff) into bx at xoff, row stride dim: the scale buffer binds as the
+//! d halves (the compact block at soff, the split plane's d tail at doff) and as the sub-scale strips, the quant plane once
+def enc_embed_kq_rows(enc : MetalComputeEncoder?; fmt : KqFmt; bq : MetalBuffer?; qoff : uint64; bs : MetalBuffer?; soff, doff : uint64;
+                      btok : MetalBuffer?; toff : uint64; bx : MetalBuffer?; xoff : uint64; dim, nrows : int64; escale : float) {
+    let d0 = kq_scale_d_tail(fmt) == 0l ? soff : doff
+    var ka = EmbedKqArgs(dim = uint(dim), nsb = uint(dim / KQ_SB_ELEMS), escale = escale)
+    let units = dim / 16l
+    if (fmt == KqFmt.k4) {
+        enc_embed_kq_k4(enc, bs, d0, bs, soff, bq, qoff, btok, toff, bx, xoff, ka, units, nrows)
+    } elif (fmt == KqFmt.k5) {
+        enc_embed_kq_k5(enc, bs, d0, bs, soff, bq, qoff, btok, toff, bx, xoff, ka, units, nrows)
+    } elif (fmt == KqFmt.k6) {
+        enc_embed_kq_k6(enc, bs, d0, bs, soff, bq, qoff, btok, toff, bx, xoff, ka, units, nrows)
+    } elif (fmt == KqFmt.iq4xs) {
+        enc_embed_kq_iq4xs(enc, bs, d0, bs, soff, bq, qoff, btok, toff, bx, xoff, ka, units, nrows)
+    } elif (fmt == KqFmt.iq4nl) {
+        enc_embed_kq_iq4nl(enc, bs, d0, bs, soff, bq, qoff, btok, toff, bx, xoff, ka, units, nrows)
+    } elif (fmt == KqFmt.q40) {
+        enc_embed_kq_q40(enc, bs, d0, bs, soff, bq, qoff, btok, toff, bx, xoff, ka, units, nrows)
+    } elif (fmt == KqFmt.k3) {
+        enc_embed_kq_k3(enc, bs, d0, bs, soff, bq, qoff, btok, toff, bx, xoff, ka, units, nrows)
+    } elif (fmt == KqFmt.k2) {
+        enc_embed_kq_k2(enc, bs, d0, bs, soff, bq, qoff, btok, toff, bx, xoff, ka, units, nrows)
+    } elif (fmt == KqFmt.iq3s) {
+        enc_embed_kq_iq3s(enc, bs, d0, bs, soff, bq, qoff, btok, toff, bx, xoff, ka, units, nrows)
+    } elif (fmt == KqFmt.iq3xxs) {
+        enc_embed_kq_iq3xxs(enc, bs, d0, bs, soff, bq, qoff, btok, toff, bx, xoff, ka, units, nrows)
+    } elif (fmt == KqFmt.iq2s) {
+        enc_embed_kq_iq2s(enc, bs, d0, bs, soff, bq, qoff, btok, toff, bx, xoff, ka, units, nrows)
+    } elif (fmt == KqFmt.iq2xs) {
+        enc_embed_kq_iq2xs(enc, bs, d0, bs, soff, bq, qoff, btok, toff, bx, xoff, ka, units, nrows)
+    } elif (fmt == KqFmt.iq2xxs) {
+        enc_embed_kq_iq2xxs(enc, bs, d0, bs, soff, bq, qoff, btok, toff, bx, xoff, ka, units, nrows)
+    } else {
+        panic("dasLLAMA metal: no token-table gather stamp for {fmt} (emb_kq_gather_fmt admits the formats above)")
+    }
 }
 
 // ===== MoE routing encoders (Wave C) =====
@@ -4633,7 +4942,9 @@ def metal_kernels_release {
     release_handles(g_pso_swiglu_b, g_pso_geglu_hxb, g_pso_geglu_b, g_pso_attn16, g_pso_attn32, g_pso_attnp16)
     release_handles(g_pso_attnp32, g_pso_attn_q8, g_pso_attnp_q8, g_pso_rpst_q8, g_pso_attn_tq4, g_pso_attnp_tq4)
     release_handles(g_pso_rpst_tq4, g_pso_unsign, g_pso_qknorm, g_pso_attncomb, g_pso_rpst16, g_pso_rpst_h16)
-    release_handles(g_pso_rpst32, g_pso_argmax_rows, g_pso_argmax, g_pso_copy_row, g_pso_emb, g_pso_emb_k6)
+    release_handles(g_pso_rpst32, g_pso_argmax_rows, g_pso_argmax, g_pso_copy_row, g_pso_emb, g_pso_emb_kq_k6)
+    release_handles(g_pso_emb_kq_k4, g_pso_emb_kq_k5, g_pso_emb_kq_iq4xs, g_pso_emb_kq_iq4nl, g_pso_emb_kq_q40, g_pso_emb_kq_k3)
+    release_handles(g_pso_emb_kq_k2, g_pso_emb_kq_iq3s, g_pso_emb_kq_iq3xxs, g_pso_emb_kq_iq2s, g_pso_emb_kq_iq2xs, g_pso_emb_kq_iq2xxs)
     release_handles(g_pso_moe_router, g_pso_moe_select, g_pso_moe_select_512, g_pso_moe_gemv_q8, g_pso_moe_kq_k4, g_pso_moe_kq_k3)
     release_handles(g_pso_moe_kq_iq3s, g_pso_moe_kq_iq3xxs, g_pso_moe_kq_iq2s, g_pso_moe_kq_iq2xs, g_pso_moe_kq_iq2xxs, g_pso_moe_kq_iq4xs)
     release_handles(g_pso_moe_kq_iq3s_f4)

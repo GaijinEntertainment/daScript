@@ -101,8 +101,8 @@ that a question answered for one backend has an obvious address in the other. Th
   pre-step's position-major rows transposed at the poke), and a shared-KV layer as Q-only rows -
   the rope-store grid stops at the Q pairs, so nothing is written into the source slab the layer's
   attention reads through the aliased row prefix. A MoE's shared expert rides the batch the same
-  way it rides the verify rows: the gate dot as a one-row router GEMV over the rows, the gate|up
-  pair and the down as rows forms over the expert panel once the routed W2 has consumed it. A
+  way it rides the verify rows: the gate dot as a one-row router GEMV, the gate|up pair and the
+  down as rows forms by each plane's tag over the expert panel once the routed W2 consumed it. A
   deltanet hybrid's recurrent layer runs its projections as rows GEMVs, each plane by its tag, then the conv, history,
   norm, scan and gate a row at a time against that session's own `DnMirror` (`recurrent_batch`):
   the `DnArgs.row` field picks the row's slice of the batch planes, the mirror's live-region bases

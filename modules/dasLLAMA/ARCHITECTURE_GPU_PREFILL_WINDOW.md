@@ -128,8 +128,11 @@ segment one session's `npos` rows from its own position (`PrefillSeg`; `eval_seg
 facade, `forward_prefill_segments` in the engine, the Metal driver's `metal_prefill_window` over
 `PfSeg` records). The engine splits a prefill into a head, a body and a warm. The head
 (`forward_prefill_head`) does everything the layer stack reads of one session's chunk: the KV
-room, the scratch, the token embeddings into `x_b`, the arch's residual shape and side inputs, and
-the MTP seam row. So `forward_prefill_segments` runs every segment's head first, then offers the
+room, the scratch, the token embeddings into `x_b` - or, where the active override's gate takes
+them, the token ids alone (`embed_gpu_tokens`) - the arch's residual shape and side inputs, and
+the MTP seam row. The Metal window gathers the rows on the device when every segment's ids are
+stashed (the warm's shifted rows off the same ids) and embeds a stashed segment on the host
+otherwise (`embed_backfill_rows`). So `forward_prefill_segments` runs every segment's head first, then offers the
 active override the window where its segments form serves every segment (`segs_served_by_override`:
 a session roping from per-row tables or adding deepstack slices rides the window only on an
 override registering that arm, as the one-session call decides); a declined window runs each segment's body (`forward_prefill_body`)

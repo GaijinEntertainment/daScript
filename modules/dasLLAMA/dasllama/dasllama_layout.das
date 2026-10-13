@@ -26,7 +26,7 @@ require math
 //! The pack-code version folded into every .dlim identity: bump it with ANY edit to a pack or
 //! repack walker in this file, so a cached image baked by the old code re-bakes instead of
 //! being mapped and served (an image's filename hash carries model + schema + this).
-let PACK_VERSION = 2
+let PACK_VERSION = 3
 
 // ===== metal-flavor blob transform (the blob-only .dlim redesign) =====
 
@@ -79,7 +79,7 @@ def private metal_blob_layout_ok(t : Model) : bool {
             return false
         }
     }
-    // shexp planes: always q8, contiguous at base + l*she — base + stride covers every layer
+    // shexp planes: the q8 transcode contiguous at base + l*she (base + stride covers every layer), and each plane the loader kept in its file format
     if (c.n_ff_shexp > 0l) {
         let she = c.dim * c.n_ff_shexp
         if ((she % 256l) != 0l ||
@@ -88,6 +88,15 @@ def private metal_blob_layout_ok(t : Model) : bool {
                 !metal_blob_off_ok(t.wsh3_off, KqFmt.q8)) {
             return false
         }
+        for (l in range64(nl)) {
+            for (kind in fixed_array(1, 2, 3)) {
+                let p = shexp_plane(t, l, kind)
+                return false if (!metal_blob_off_ok(p.off, p.f))
+            }
+        }
+    }
+    if (!c.shared_weights && emb_kq(t) && !metal_blob_off_ok(t.emb_kq_off, t.emb_fmt)) {
+        return false
     }
     // E-series PLE gate/proj q8 planes bind per layer; the token table / model-proj stay CPU-side
     if (has_ple(c)) {
@@ -440,7 +449,7 @@ def private collect_q8_regions(t : Model; var regs : array<StreamReg>) {
             }
         }
     }
-    if ((!c.shared_weights && t.wcls_fmt == KqFmt.q8) || t.cls_q8) {
+    if ((!c.shared_weights && t.wcls_fmt == KqFmt.q8) || t.cls_q8 || t.cls_q8_copy) {
         // the linear copy at emb_q8_off is deliberately NOT repacked — embedding-row dequant indexes it directly
         push_repack(regs, 0, t.wcls_off, dim, c.vocab_size)
     }
@@ -548,6 +557,9 @@ def private collect_kq_regions(t : Model; var regs : array<StreamReg>) {
     }
     if ((!c.shared_weights && t.wcls_fmt != KqFmt.q8) || cls_kq(t)) {
         push_repack_kq(regs, c.shared_weights ? t.emb_fmt : t.wcls_fmt, t.wcls_off, dim, c.vocab_size)
+    }
+    if (!c.shared_weights && emb_kq(t)) {   // the untied table's own plane rides its format's interleave like every region of that plane
+        push_repack_kq(regs, t.emb_fmt, t.emb_kq_off, dim, c.vocab_size)
     }
     if (c.n_layer_nextn > 0l) {   // NextN eh_proj (no-op for q8 tags)
         push_repack_kq(regs, t.mtp_ehproj_fmt, t.mtp_ehproj_off, 2l * dim, dim)

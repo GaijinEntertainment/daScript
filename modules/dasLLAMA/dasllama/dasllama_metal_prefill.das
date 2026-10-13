@@ -5857,9 +5857,9 @@ def private pf_enc_narrow_gemv(enc : MetalComputeEncoder?; t : Model; fmt : KqFm
     enc_site_gemv(enc, t, fmt, woff, d, kdim, bx, by, bk, bn)
 }
 
-//! one deltanet projection site of the window: a K-quant plane through its tag's mul_mm site, a q8 plane through the blob GEMM
-def private pf_enc_dn_site_mm(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; woff, rows : int64; bx, by, bk, bn : MetalBuffer?;
-                              mp, kdim, npos : int64; bxh : MetalBuffer?) {
+//! one weight site of the window by its tag: a K-quant plane through its format's mul_mm site, a q8 plane through the blob GEMM
+def private pf_enc_site_mm(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; woff, rows : int64; bx, by, bk, bn : MetalBuffer?;
+                           mp, kdim, npos : int64; bxh : MetalBuffer?) {
     if (fmt != KqFmt.q8) {
         pf_enc_kq_site_mm(enc, t, fmt, woff, rows, bx, by, bk, bn, mp, 0ul, bxh, kdim, npos)
         return
@@ -6809,6 +6809,18 @@ def metal_prefill_forward(t : Model; var s : Session; npos, start_pos : int64) :
     return ok
 }
 
+//! the window's token ids at each segment's rows; `shifted` = the warm's row p reads the segment's token p + 1, its last row token 0
+def private pf_fill_window_tokens(var b : MetalBuffer?; segs : array<PfSeg>; shifted : bool) {
+    unsafe {
+        var tp = reinterpret<uint?>(metal_buffer_contents(b))
+        for (sg in segs) {
+            for (p in range64(sg.npos)) {
+                tp[sg.row0 + p] = uint(sg.s.embed_gpu_tokens[shifted ? (p + 1l) % sg.npos : p])
+            }
+        }
+    }
+}
+
 def private pf_segments_servable(t : Model; segs : array<PfSeg>) : bool {
     let c = t.config
     return false if (c.hyper_conn || has_ple_ngram(c))
@@ -7159,13 +7171,29 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
     g_pf_bwh2 = want_wh ? pool_acquire_pinned(g_pf_pool, g_dev, bytes_wh) : null
     g_pf_bwh_flip = false
     g_pf_bwh_bytes = want_wh ? bytes_wh : 0ul
+    //! the token rows: the device gathers them where every segment's gate left them to it, else the host's rows go up
+    var emb_dev = !wide
+    for (sg in segs) {
+        emb_dev = emb_dev && sg.s.embed_gpu_pending
+    }
+    var btok_win : MetalBuffer?
+    if (emb_dev) {
+        btok_win = pool_acquire_untracked_pinned(g_pf_upool, g_dev, uint64(npos * 4l))
+        pf_fill_window_tokens(btok_win, segs, false)
+    } else {
+        for (sg in segs) {
+            if (sg.s.embed_gpu_pending) {
+                embed_backfill_rows(t, *sg.s, sg.npos)
+            }
+        }
+    }
     //! rope tables are built for the chunk's GLOBAL positions (build_rope_table takes start_pos)
     unsafe {
         if (wide) {   //! ONE wide upload; bx and the bds slices extract on-device at encode time
             memcpy(metal_buffer_contents(bwide), reinterpret<void const?>(s.wide_src + s.wide_soff * wide_stride), npos * wide_stride * 4l)
         }
         for (sg in segs) {
-            if (!wide) {
+            if (!wide && !emb_dev) {
                 memcpy(contents_at(bx, uint64(sg.row0 * dim * 4l)), addr < void? >(sg.s.x_b[0]), sg.npos * dim * 4l)
             }
             memcpy(contents_at(bcos, uint64(sg.row0 * half * 4l)), addr < void? >(sg.s.rope_cos[0]), sg.npos * half * 4l)
@@ -7235,6 +7263,7 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
     var u_moe_shtot = nsh > 0l ? uniform_u32(uint(npos * nsh)) : null
     var u_moe_one = nsh > 0l ? uniform_u32(1u) : null
     var u_eps = uniform_f32(c.norm_eps)
+    var u_esc = emb_dev && c.embed_scale != 1.0 ? uniform_f32(c.embed_scale) : null
     var u_dn_cd = dn ? uniform_u32(uint(cd_dn)) : null
     var u_dn_di = dn ? uniform_u32(uint(di_dn)) : null
     var u_dn_nvh = dn ? uniform_u32(uint(nvh_dn)) : null
@@ -7255,8 +7284,8 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
     var u_vtot_sw = (vfromk && hetero) ? uniform_u32(uint(npos * kvd_sw)) : null
     //! prefill_override_logits_done skips the CPU final step; q8 classifiers only, with softcap
     //! and suppress on epilogue kernels
-    let cls_fmt = c.shared_weights ? t.emb_fmt : t.wcls_fmt
-    let tied_f32 = c.shared_weights && !t.cls_q8 && cls_fmt == KqFmt.q8
+    let cls_fmt = cls_fmt_of(t)
+    let tied_f32 = cls_tied_f32(t)
     //! GPU logits stay on under the knockout rail (deltas stay clean), and a blob-only
     //! metal-flavor load has no CPU classifier to fall back to
     let gpu_logits = (!g_pf_logits_cpu && g_pf_env_logits &&
@@ -7293,6 +7322,7 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
     var bwm_tmp : MetalBuffer?    //!< warm: rms_final intermediate (a hyper-connection model: the enorm rows repeated per stream)
     var bwm_hc : MetalBuffer?     //!< warm, hyper-connections: the trunk's wide residual rows saved past the draft head's rows
     var u_dim2, u_wm_tot, u_wm_hc_tot : MetalBuffer?
+    var btok_wm : MetalBuffer?    //!< warm on the device gather: the shifted rows' token ids
     let wm_rows = hcs.on ? npos * c.hc_count : npos   //! the eh_proj rows: one a position, or one a stream of a position
     let mp_hc = ((wm_rows + 31l) / 32l) * 32l
     if (warm) {
@@ -7310,12 +7340,17 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
             ds_split_quantum(t, s, npos)
         }
         //! shifted embeds: row p pairs the NEXT position's embed with hidden p; a segment's garbage last row reuses its row 0
-        unsafe {
-            var dst = reinterpret<uint8?>(metal_buffer_contents(bwm_emb))
-            for (sg in segs) {
-                let d0 = dst + uint64(sg.row0 * dim * 4l)
-                memcpy(reinterpret<void?>(d0), addr < void? >(sg.s.x_b[dim]), (sg.npos - 1l) * dim * 4l)
-                memcpy(reinterpret<void?>(d0 + (sg.npos - 1l) * dim * 4l), addr < void? >(sg.s.x_b[0]), dim * 4l)
+        if (emb_dev) {
+            btok_wm = pool_acquire_untracked_pinned(g_pf_upool, g_dev, uint64(npos * 4l))
+            pf_fill_window_tokens(btok_wm, segs, true)
+        } else {
+            unsafe {
+                var dst = reinterpret<uint8?>(metal_buffer_contents(bwm_emb))
+                for (sg in segs) {
+                    let d0 = dst + uint64(sg.row0 * dim * 4l)
+                    memcpy(reinterpret<void?>(d0), addr < void? >(sg.s.x_b[dim]), (sg.npos - 1l) * dim * 4l)
+                    memcpy(reinterpret<void?>(d0 + (sg.npos - 1l) * dim * 4l), addr < void? >(sg.s.x_b[0]), dim * 4l)
+                }
             }
         }
     }
@@ -7363,6 +7398,12 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                     gr_arm(true)
                     hz_d0 = metal_dispatch_calls()
                     hz_g0 = g_hz_gated
+                }
+            }
+            if (l == 0l && emb_dev) {
+                enc_embed_dev(enc, t, btok_win, 0ul, bx, 0ul, npos, u_dim, u_esc)
+                if (btok_wm != null) {
+                    enc_embed_dev(enc, t, btok_wm, 0ul, bwm_emb, 0ul, npos, u_dim, u_esc)
                 }
             }
             if (l == 0l && wide) {   //! slice the wide quantum on-device: x, then the slice-major ds planes
@@ -7456,8 +7497,8 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                 if (recr) {
                     if (g_pf_skip != "gemm") {
                         bxh_x = pf_hx_panel(enc, bxh_x, bxb, mp, dim, g_pf_skip == "act_cvt")
-                        pf_enc_dn_site_mm(enc, t, fmt_at(t.dnqkv_fmt, l), t.dnqkv_offs[l], cd_dn, bxb, bdnqkv, u_dim, u_dn_cd, mp, dim, npos, bxh_x)
-                        pf_enc_dn_site_mm(enc, t, fmt_at(t.dngate_fmt, l), t.dngate_offs[l], di_dn, bxb, bdnz, u_dim, u_dn_di, mp, dim, npos, bxh_x)
+                        pf_enc_site_mm(enc, t, fmt_at(t.dnqkv_fmt, l), t.dnqkv_offs[l], cd_dn, bxb, bdnqkv, u_dim, u_dn_cd, mp, dim, npos, bxh_x)
+                        pf_enc_site_mm(enc, t, fmt_at(t.dngate_fmt, l), t.dngate_offs[l], di_dn, bxb, bdnz, u_dim, u_dn_di, mp, dim, npos, bxh_x)
                         if (t.dn_ba_f32) {
                             //! F32-on-disk β/α (35B): fblob slabs ride the router-b f32 GEMV
                             var bw_bt = upload_region(addr < void? >(t.fblob[t.dn_betaf_off + l * dim * nvh_dn]), uint64(dim * nvh_dn * 4l))
@@ -7509,7 +7550,7 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                         }
                     }
                     if (g_pf_skip != "gemm") {
-                        pf_enc_dn_site_mm(enc, t, fmt_at(t.dnout_fmt, l), t.dnout_offs[l], dim, bdno, bxb2, u_dn_di, u_dim, mp, di_dn, npos,
+                        pf_enc_site_mm(enc, t, fmt_at(t.dnout_fmt, l), t.dnout_offs[l], dim, bdno, bxb2, u_dn_di, u_dim, mp, di_dn, npos,
                             pf_cvt_panel(enc, bdno, mp, di_dn, g_pf_skip == "act_cvt"))
                     }
                     dnli++
@@ -7870,12 +7911,12 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                                 contiguous = bxg1 != null, bxh = bxg1, bkd = u_dim, bnd = u_moe_nfe, mpad = mpad)
                         }
                         if (nsh > 0l) {
-                            //! shexp gate/up: dense q8 mul_mm at the wsh planes (bhb/bhb2 sized max(hidden, nsh))
+                            //! shexp gate/up: each plane's site by its tag (bhb/bhb2 sized max(hidden, nsh))
                             let bxh_sh = pf_hx_panel(enc, bxh_ffn, bxb, mp, dim, g_pf_skip == "act_cvt")
-                            let bwsh1 = blob_of(g_dev, t, t.wsh1_off + l * dim * nsh)
-                            enc_gemm_mm(enc, bwsh1.buf, bwsh1.boff, bxb, bhb, u_dim, u_moe_nsh, mp, nsh, 0ul, dim, npos, bxh_sh)
-                            let bwsh3 = blob_of(g_dev, t, t.wsh3_off + l * dim * nsh)
-                            enc_gemm_mm(enc, bwsh3.buf, bwsh3.boff, bxb, bhb2, u_dim, u_moe_nsh, mp, nsh, 0ul, dim, npos, bxh_sh)
+                            let p1 = shexp_plane(t, l, 1)
+                            let p3 = shexp_plane(t, l, 3)
+                            pf_enc_site_mm(enc, t, p1.f, p1.off, nsh, bxb, bhb, u_dim, u_moe_nsh, mp, dim, npos, bxh_sh)
+                            pf_enc_site_mm(enc, t, p3.f, p3.off, nsh, bxb, bhb2, u_dim, u_moe_nsh, mp, dim, npos, bxh_sh)
                         }
                     }
                 }
@@ -7936,8 +7977,8 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                         }
                         if (nsh > 0l) {
                             //! shexp down into bxb2 (free post-residual) — bxb still feeds the reduce
-                            let bwsh2 = blob_of(g_dev, t, t.wsh2_off + l * dim * nsh)
-                            enc_gemm_mm(enc, bwsh2.buf, bwsh2.boff, bhb, bxb2, u_moe_nsh, u_dim, mp, dim, 0ul, nsh, npos, pf_hx_panel(enc, bxh_shh, bhb, mp, nsh, g_pf_skip == "act_cvt"))
+                            let p2 = shexp_plane(t, l, 2)
+                            pf_enc_site_mm(enc, t, p2.f, p2.off, dim, bhb, bxb2, u_moe_nsh, u_dim, mp, nsh, npos, pf_hx_panel(enc, bxh_shh, bhb, mp, nsh, g_pf_skip == "act_cvt"))
                         }
                     }
                     if (moe_gemv_route) {
@@ -7962,27 +8003,8 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                 }
                 if (!narrow_last && (!moe || g4moe) && g_pf_skip != "gemm") {   //! g4: the dense parallel shared branch
                     bxh_ffn = pf_hx_panel(enc, bxh_ffn, bxb, mp, dim, g_pf_skip == "act_cvt")
-                    let f1 = fmt_at(t.w1_fmt, l)
-                    let f3 = fmt_at(t.w3_fmt, l)
-                    if (f1 != KqFmt.q8 || f3 != KqFmt.q8) {
-                        if (f1 != KqFmt.q8) {
-                            pf_enc_kq_site_mm(enc, t, f1, t.w1_offs[l], hid_l, bxb, bhb, u_dim, u_hid_l, mp, 0ul, bxh_ffn, dim, npos)
-                        } else {
-                            let bw1b = blob_of(g_dev, t, t.w1_offs[l])
-                            enc_gemm_mm(enc, bw1b.buf, bw1b.boff, bxb, bhb, u_dim, u_hid_l, mp, hid_l, 0ul, dim, npos, bxh_ffn)
-                        }
-                        if (f3 != KqFmt.q8) {
-                            pf_enc_kq_site_mm(enc, t, f3, t.w3_offs[l], hid_l, bxb, bhb2, u_dim, u_hid_l, mp, 0ul, bxh_ffn, dim, npos)
-                        } else {
-                            let bw3b = blob_of(g_dev, t, t.w3_offs[l])
-                            enc_gemm_mm(enc, bw3b.buf, bw3b.boff, bxb, bhb2, u_dim, u_hid_l, mp, hid_l, 0ul, dim, npos, bxh_ffn)
-                        }
-                    } else {
-                        let bw1b = blob_of(g_dev, t, t.w1_offs[l])
-                        let bw3b = blob_of(g_dev, t, t.w3_offs[l])
-                        enc_gemm_mm(enc, bw1b.buf, bw1b.boff, bxb, bhb, u_dim, u_hid_l, mp, hid_l, 0ul, dim, npos, bxh_ffn)
-                        enc_gemm_mm(enc, bw3b.buf, bw3b.boff, bxb, bhb2, u_dim, u_hid_l, mp, hid_l, 0ul, dim, npos, bxh_ffn)
-                    }
+                    pf_enc_site_mm(enc, t, fmt_at(t.w1_fmt, l), t.w1_offs[l], hid_l, bxb, bhb, u_dim, u_hid_l, mp, dim, npos, bxh_ffn)
+                    pf_enc_site_mm(enc, t, fmt_at(t.w3_fmt, l), t.w3_offs[l], hid_l, bxb, bhb2, u_dim, u_hid_l, mp, dim, npos, bxh_ffn)
                 }
                 var bxh_h : MetalBuffer?
                 if (!narrow_last && (!moe || g4moe) && g_pf_skip != "ew" && g_pf_skip != "nongemm") {
@@ -8004,13 +8026,7 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                 }
                 if (!narrow_last && (!moe || g4moe) && g_pf_skip != "gemm") {
                     bxh_h = pf_hx_panel(enc, bxh_h, bhb, mp, hid_l, g_pf_skip == "act_cvt")
-                    let f2 = fmt_at(t.w2_fmt, l)
-                    if (f2 != KqFmt.q8) {
-                        pf_enc_kq_site_mm(enc, t, f2, t.w2_offs[l], dim, bhb, bxb, u_hid_l, u_dim, mp, 0ul, bxh_h, hid_l, npos)
-                    } else {
-                        let bw2b = blob_of(g_dev, t, t.w2_offs[l])
-                        enc_gemm_mm(enc, bw2b.buf, bw2b.boff, bhb, bxb, u_hid_l, u_dim, mp, dim, 0ul, hid_l, npos, bxh_h)
-                    }
+                    pf_enc_site_mm(enc, t, fmt_at(t.w2_fmt, l), t.w2_offs[l], dim, bhb, bxb, u_hid_l, u_dim, mp, hid_l, npos, bxh_h)
                 }
                 if (g4moe && g_pf_skip != "ew" && g_pf_skip != "nongemm") {
                     //! dense-branch post-norm, then routed + dense summed into bxb for the epilogue
@@ -8448,6 +8464,20 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
         }
     }
     pool_release(g_pf_upool, u_eps, 4ul)
+    if (u_esc != null) {
+        pool_release(g_pf_upool, u_esc, 4ul)
+    }
+    if (btok_win != null) {
+        pool_release(g_pf_upool, btok_win, uint64(npos * 4l))
+    }
+    if (btok_wm != null) {
+        pool_release(g_pf_upool, btok_wm, uint64(npos * 4l))
+    }
+    if (ok) {
+        for (sg in segs) {
+            sg.s.embed_gpu_pending = false   //! the window gathered the rows the gate left to it
+        }
+    }
     if (u_flcap != null) {
         pool_release(g_pf_upool, u_flcap, 4ul)
     }

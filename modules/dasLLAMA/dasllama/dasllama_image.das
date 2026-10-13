@@ -40,7 +40,7 @@ require dasllama/dasllama_gemm_schema   // the q8 block geometry the mint's zero
 // WhisperModel.enc) contribute their planes under dotted names ("enc.fblob"); string-array
 // fields ride the meta blob via serialize_strings — raw string pointers can't be planes.
 
-let IMAGE_VERSION = 45   // Config.pooling and both tokenizers' add_eos flag ride the meta
+let IMAGE_VERSION = 46   // the untied K-quant token table's plane offset and the tied table's q8 classifier copy ride the meta
 
 //! The metal (blob-only) flavor's identity tag: q8 planes ride the 34B block_q8_0 blob and the
 //! kq scale planes their GPU forms (convert_model_to_metal_blob) — flavors are per-config and
@@ -822,6 +822,8 @@ def serialize_image_meta(var arch : Archive; var t : Model) {
     arch |> serialize_raw(t.cls_q8)
     arch |> serialize_raw(t.emb_q8)
     arch |> serialize_raw(t.emb_q8_off)
+    arch |> serialize_raw(t.emb_kq_off)
+    arch |> serialize_raw(t.cls_q8_copy)
     arch |> serialize_raw(t.quant)
     arch |> serialize_raw(t.dn_conv_off)
     arch |> serialize_raw(t.dn_dt_off)
@@ -856,7 +858,7 @@ def serialize_image_meta(var arch : Archive; var t : Model) {
 }
 
 //! the 4 deliberate skips: blocks, blob_scaled, image_map, image_bytes; the plane table counts as ONE field.
-let IMAGE_META_FIELDS = 81 + 4
+let IMAGE_META_FIELDS = 83 + 4
 
 // the tokenizer's tripwires: the SentencePiece backend's six serialized meta fields + its three
 // derived tables (lookup, pair_merge, bkey_id); the BPE backend's eight (merge_rank rides as the

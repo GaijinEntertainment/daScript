@@ -115,6 +115,49 @@ def test_attn_chain_unserved_features(t : T?) {
     }
 }
 
+//! a three-layer shell whose layer 1 is recurrent with every deltanet plane at offset 0, its qkv/z/out planes Q4_K
+def private dn_shell() : Model {
+    var m <- shell(3l, 2ul)
+    m.config.ssm_d_inner = 256l
+    m.dnqkv_offs <- [-1l, 0l, -1l]
+    m.dngate_offs <- [-1l, 0l, -1l]
+    m.dnout_offs <- [-1l, 0l, -1l]
+    m.dnbeta_offs <- [-1l, 0l, -1l]
+    m.dnalpha_offs <- [-1l, 0l, -1l]
+    m.dnqkv_fmt <- [KqFmt.q8, KqFmt.k4, KqFmt.q8]
+    m.dngate_fmt <- [KqFmt.q8, KqFmt.k4, KqFmt.q8]
+    m.dnout_fmt <- [KqFmt.q8, KqFmt.k4, KqFmt.q8]
+    m.dnbeta_fmt <- [KqFmt.q8, KqFmt.q8, KqFmt.q8]
+    m.dnalpha_fmt <- [KqFmt.q8, KqFmt.q8, KqFmt.q8]
+    return <- m
+}
+
+[test]
+def test_dn_plane_format_declines(t : T?) {
+    t |> run("the whole-model driver reads q8 and superblock beta/alpha planes by tag and names a per-32 one") @(t : T?) {
+        var m <- dn_shell()
+        t |> success(!contains(resident_layer_decline(m, 1l), "beta/alpha planes carry"), "q8 beta/alpha planes draw no format decline")
+        m.dnbeta_fmt[1] = KqFmt.iq4xs
+        m.dnalpha_fmt[1] = KqFmt.k4
+        let sk = resident_layer_decline(m, 1l)
+        t |> success(!contains(sk, "beta/alpha planes carry"), "K-quant beta/alpha planes draw no format decline - the resident GEMVs and tiles read them by tag: '{sk}'")
+        m.dnbeta_fmt[1] = KqFmt.q51
+        t |> success(contains(resident_layer_decline(m, 1l), "layer 1's beta/alpha planes carry a format"), "a per-32 beta plane past q8 is named: no resident GEMV or tile reads it")
+        delete m
+    }
+    t |> run("the per-op deltanet chain takes superblock planes by tag; mixed qkv/z classes, a per-32 plane and a missing triple are named") @(t : T?) {
+        var m <- dn_shell()
+        t |> equal(perop_dn_decline(m, 1l), "", "the per-op deltanet chain takes K-quant qkv/z/out planes by tag")
+        m.dngate_fmt[1] = KqFmt.q8
+        t |> success(contains(perop_dn_decline(m, 1l), "mix activation forms"), "a K-quant qkv beside a q8 z is named: one image feeds both")
+        m.dngate_fmt[1] = KqFmt.k4
+        m.dnout_fmt[1] = KqFmt.q51
+        t |> success(contains(perop_dn_decline(m, 1l), "outside the chain"), "a per-32 out plane past q8 is named")
+        t |> success(contains(perop_dn_decline(m, 0l), "no deltanet planes"), "a layer without the triple is named")
+        delete m
+    }
+}
+
 [test]
 def test_resident_layer_decline(t : T?) {
     t |> run("a recurrent layer without deltanet planes is named by number; the attention layers around it pass") @(t : T?) {
@@ -140,12 +183,6 @@ def test_resident_layer_decline(t : T?) {
         //! an inner width off the format's block leaves the out plane untileable - the decline names it
         m.config.ssm_d_inner = 100l
         t |> success(contains(resident_layer_decline(m, 1l), "layer 1's deltanet out plane carries a format"), "an untileable out plane is named")
-        m.config.ssm_d_inner = 256l
-        m.dnbeta_fmt <- [KqFmt.q8, KqFmt.q8, KqFmt.q8]
-        m.dnalpha_fmt <- [KqFmt.q8, KqFmt.q8, KqFmt.q8]
-        t |> success(!contains(resident_layer_decline(m, 1l), "beta/alpha planes carry"), "q8 beta/alpha planes draw no format decline")
-        m.dnbeta_fmt[1] = KqFmt.iq4xs
-        t |> success(contains(resident_layer_decline(m, 1l), "layer 1's beta/alpha planes carry a format"), "a K-quant beta plane is named: the resident beta/alpha forms read q8")
         delete m
     }
     t |> run("shared K/V, a missing plane and a head size off the kernels' shape each name the layer; a differing FFN width or a sliding window is served") @(t : T?) {

@@ -147,16 +147,21 @@ asymmetries a stamp family ledgers - stays in `ARCHITECTURE_GPU.md#gpu-backends`
   `gpu_device_sessions` answers 0 there: Metal's whole-forward driver reads the host cache in
   unified memory, so it has no mirror to split, and the batched row homes its streams on the host
   (`ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig`).
-- **The device-side token-embedding gather is Vulkan-only.** The engine asks one probe before
-  it embeds (`register_embed_gpu_gate`, `dasllama_common.das`); on true it stashes the token
-  ids, skips the CPU embed loop, and the resident driver gathers the rows on device through
-  the ids-form prefill. That prefill installs SEPARATELY from the resident driver bundle
-  (`install_rdec_prefill_ids`), so a tier without it never arms the gate, and a late decline
-  backfills the stash on the CPU in `forward_prefill_body`. The arms mirror `embed_row`'s
-  ladder: a tied q8 table gathers from the resident cls plane, a raw f32 table uploads whole
-  to a device plane under a size cap the residency plan counts first, and the kq ladder keeps
-  the CPU embed. What leaves the window wall is the CPU embed loop and the x upload - the ids ride a
-  4-byte-per-row upload instead. Metal has no twin: its whole-forward driver embeds host-side.
+- **The device-side token-embedding gather covers different tables and calls per backend.** The
+  engine asks a probe before it embeds; on true it stashes the token ids, skips the CPU embed
+  loop, and a late decline backfills the stash on the CPU (`embed_backfill_rows`). Vulkan answers
+  through the one installed seat (`register_embed_gpu_gate`, `dasllama_common.das`): the resident
+  driver gathers a prefill's rows through the ids-form prefill, which installs SEPARATELY from the
+  resident driver bundle (`install_rdec_prefill_ids`), so a tier without it never arms the gate; a
+  tied q8 table gathers from the resident cls plane, a raw f32 table uploads whole to a device
+  plane under a size cap the residency plan counts first, and a K-quant table keeps the CPU embed.
+  Metal registers its own gates under its override name (`register_embed_dev_gates("metal")`,
+  asked while it is the active prefill or decode override): a blob model's window and its
+  single-row decode step gather the rows on the device off the q8 linear copy, the fp32 table, or
+  the table's K-quant plane in any format the Metal tier serves (`MetalEmbedKqT`, one stamp a
+  format; `emb_dev_gather_ok`), and the step takes a 4-byte token poke in place of the row. What
+  Vulkan's device lacks is the K-quant table gather and the decode-step gather - its resident
+  token command reads the CPU-embedded row.
 - **The deltanet-resident seats are Vulkan-only.** The whole-model driver's recurrent arm
   installs SEPARATELY from the resident bundle (`install_moe_gpu_resident_dn`: a recurrent
   layer's plane set, its beta/alpha rows, the per-token owner bind and the prefill's slot

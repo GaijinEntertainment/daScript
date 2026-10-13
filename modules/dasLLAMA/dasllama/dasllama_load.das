@@ -116,7 +116,7 @@ def private layout_offsets(var t : Model) : LayoutSizes {   // nolint:STYLE037,S
     let layers = c.n_layers + c.n_layer_nextn
     var fo = 0l
     var bf16 = 0l
-    if (t.emb_q8 || cls_kq(t)) {
+    if (t.emb_q8 || emb_kq(t)) {
         t.tok_emb_off = -1l   // no fp32 embedding table — rows dequant from emb_q8_off / the kq plane
     } else {
         t.tok_emb_off = fo
@@ -361,11 +361,15 @@ def private layout_offsets(var t : Model) : LayoutSizes {   // nolint:STYLE037,S
         } elif (cls_kq(t)) {
             // tied K-quant: ONE plane copy serves both the classifier matmul and the embedding row reads
             t.wcls_off = kq_take(cur, t.emb_fmt, c.vocab_size * dim)
+        } elif (t.cls_q8_copy) {
+            t.wcls_off = cur.wo   // the device classifier's q8 copy; the embed and the CPU classifier read the fp32 table
+            cur.wo += c.vocab_size * dim
         } else {
             t.wcls_off = 0l   // unused — the classifier reads the fp32 embedding from fblob
         }
     } else {
         t.wcls_off = kq_take(cur, t.wcls_fmt, c.vocab_size * dim)
+        t.emb_kq_off = emb_kq(t) ? kq_take(cur, t.emb_fmt, c.vocab_size * dim) : -1l
         if (t.emb_q8) {
             // untied Q8: the embedding's own linear copy, beside the separately quantized classifier
             t.emb_q8_off = cur.wo
@@ -1510,7 +1514,7 @@ def private note_demotion(name : string; disk_fmt, tag_fmt : KqFmt; why : string
 // Fill the per-kind weight format tags from the file's tensor types (q8-mode loads with the
 // kquant_native knob on). Fused-projection arches (Phi3) split attn_qkv/ffn_up at row-aligned
 // slice offsets, so every slice stays superblock-aligned; one disk tensor = one tag for its slices.
-[arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command"), arch(at="../ARCHITECTURE_ENGINE_FORMATS.md#kq-token-table")]
 def private detect_kq_formats(var t : Model; m : GGUFMeta) {   // nolint:STYLE038 — a flat tag-assignment run: one weight kind per line
     if (t.quant != QuantMode.q8 || !get_kquant_native()
             || (t.config.fused_qkv && t.config.dim % 256l != 0l)) {   // fused slice offsets are dim-multiples
@@ -1568,8 +1572,8 @@ def private detect_kq_formats(var t : Model; m : GGUFMeta) {   // nolint:STYLE03
             any ||= t.we1_fmt[l] != KqFmt.q8 || t.we2_fmt[l] != KqFmt.q8 || t.we3_fmt[l] != KqFmt.q8
         }
     }
-    //! the shared expert's tags: its K-quant planes ride beside the q8 transcode on a load with a GPU tier armed (the resident driver reads them; a CPU-only load keeps the transcode alone)
-    if (moe_gpu_tier_installed() && t.config.n_expert > 0l && t.config.n_ff_shexp > 0l && (t.config.dim * t.config.n_ff_shexp) % 256l == 0l) {
+    //! the shared expert's tags: its planes in the file's format ride beside the q8 transcode the CPU chain reads, on a load a device reads them on
+    if (device_reads_side_planes() && t.config.n_expert > 0l && t.config.n_ff_shexp > 0l && (t.config.dim * t.config.n_ff_shexp) % 256l == 0l) {
         t.wsh1_fmt |> reserve(layers)
         t.wsh1_fmt |> resize(layers)
         t.wsh2_fmt |> reserve(layers)
@@ -1577,17 +1581,18 @@ def private detect_kq_formats(var t : Model; m : GGUFMeta) {   // nolint:STYLE03
         t.wsh3_fmt |> reserve(layers)
         t.wsh3_fmt |> resize(layers)
         for (l in range64(layers)) {
-            let has = l >= t.config.n_layer_dense_lead && l < t.config.n_layers
+            let has = l >= t.config.n_layer_dense_lead && gguf_find_tensor(m, "blk.{l}.ffn_gate_shexp.weight") >= 0   //! the NextN head's triple too
             t.wsh1_fmt[l] = has ? kq_tag(m, "blk.{l}.ffn_gate_shexp.weight", t.config.dim) : KqFmt.q8
             t.wsh3_fmt[l] = has ? kq_tag(m, "blk.{l}.ffn_up_shexp.weight", t.config.dim) : KqFmt.q8
             t.wsh2_fmt[l] = has ? kq_tag(m, "blk.{l}.ffn_down_shexp.weight", t.config.n_ff_shexp) : KqFmt.q8
             any ||= t.wsh1_fmt[l] != KqFmt.q8 || t.wsh2_fmt[l] != KqFmt.q8 || t.wsh3_fmt[l] != KqFmt.q8
         }
     }
-    if (t.config.shared_weights) {
+    if (t.config.shared_weights || !moe_gpu_tier_installed()) {   //! an untied table keeps its own plane where no Vulkan tier is armed
         t.emb_fmt = kq_tag(m, "token_embd.weight", t.config.dim)
         any ||= t.emb_fmt != KqFmt.q8
-    } else {
+    }
+    if (!t.config.shared_weights) {
         t.wcls_fmt = kq_tag(m, "output.weight", t.config.dim)
         any ||= t.wcls_fmt != KqFmt.q8
     }
@@ -1621,6 +1626,9 @@ def private detect_kq_formats(var t : Model; m : GGUFMeta) {   // nolint:STYLE03
     }
     t.kquant_native = any
 }
+
+//! a device driver on this load reads the shared expert and the tied classifier off planes of their own: an armed GPU tier, or a Metal mode
+def private device_reads_side_planes() : bool => moe_gpu_tier_installed() || get_metal_mode() != MetalMode.off
 
 //! the deltanet planes' tags off the file on every load; true when any is not q8
 def private detect_dn_formats(var t : Model; m : GGUFMeta; layers : int64) : bool {
@@ -2346,6 +2354,10 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
         // per-tensor K-quant format tags (kquant_native rail; no-op when the knob is off or the
         // file has no K-quant tensors) — must precede layout_offsets, which walks the tags
         detect_kq_formats(t, m)
+        t.cls_q8_copy = mode == QuantMode.q8 && t.config.shared_weights && !t.cls_q8 && !cls_kq(t) && get_metal_mode() != MetalMode.off
+        if (t.cls_q8_copy) {
+            to_log(LOG_WARNING, "dasLLAMA load: the tied classifier ({ggml_type_name(gguf_tensor_type(m, "token_embd.weight"))} token table) serves on the device through a q8 converted copy; the embed and the CPU classifier read the exact fp32 rows\n")
+        }
         // fp32/q4 serving: the PLE token table is STILL pinned to its disk format
         // (detect_kq_formats runs only on the q8 rail); same superblock-alignment gate
         if (t.quant != QuantMode.q8 && has_ple(t.config)
@@ -2491,7 +2503,7 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
         // embedding + norms -> fblob (decoded to fp32 from whatever the disk type is); emb_q8 /
         // cls_kq keep the embedding out of fblob — the quantized copies transcode with the big
         // weights below
-        if (!t.emb_q8 && !cls_kq(t)) {
+        if (!t.emb_q8 && !emb_kq(t)) {
             gguf_read_tensor_f32(m, bytes, "token_embd.weight", t.fblob, t.tok_emb_off, vocab * dim)
             conv_account(m, "token_embd.weight", "f32 token table", ConvServed.f32, KqFmt.q8, vocab * dim)
         }
@@ -2813,6 +2825,10 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
         }
         if (!t.config.shared_weights) {
             load_big(m, bytes, "output.weight", t, t.wcls_off, vocab * dim, scratch, 0l, t.wcls_fmt)
+            if (emb_kq(t)) {
+                // untied K-quant: the table's one plane in its file format, the row reads dequant from it
+                load_big(m, bytes, "token_embd.weight", t, t.emb_kq_off, vocab * dim, scratch, 0l, t.emb_fmt)
+            }
             if (t.emb_q8) {
                 // untied Q8: the embedding's linear copy the row reads dequant from (never repacked)
                 load_big(m, bytes, "token_embd.weight", t, t.emb_q8_off, vocab * dim, scratch)
@@ -2826,6 +2842,8 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
             // tied K-quant: ONE plane copy serves the classifier matmul and embedding row reads
             // (the kq planes stay in disk order — no repack, so no second linear copy)
             load_big(m, bytes, "token_embd.weight", t, t.wcls_off, vocab * dim, scratch, 0l, t.emb_fmt)
+        } elif (t.cls_q8_copy) {
+            load_big(m, bytes, "token_embd.weight", t, t.wcls_off, vocab * dim, scratch)   // the device classifier's q8 transcode
         }
         // Qwen2 Q/K/V projection biases — small fp32 tensors, kept dense
         if (t.config.attn_qkv_bias) {
