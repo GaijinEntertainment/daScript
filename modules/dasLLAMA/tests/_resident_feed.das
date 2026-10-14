@@ -595,6 +595,8 @@ def chain_walk(tr : Model; prompt : array<int64>; steps, off_every : int64; mode
 //! one fed a token off it every third step, each with the chain off and forced on - the chained walk's tokens and every step's
 //! logits bit for bit the plain walk's, every step after the first a hit on the argmax walk, and on the other every off-pick
 //! step a miss (its state put back) and every other step a hit
+//! The adaptive mode (-1) runs both walks too: the same tokens and
+//! logits, each miss but the last backing off the next step's chain.
 def greedy_chain_cell(t : T?; path : string) {
     if (!resident_ready(t, path)) return
     var tr <- load_resident(path, 1l)
@@ -620,9 +622,25 @@ def greedy_chain_cell(t : T?; path : string) {
                 t |> equal(differ, 0, "{what}: the chained run's tokens are the plain run's")
                 t |> equal(misses, offs, "{what}: every off-pick step discarded its chained step, and no other did")
                 t |> equal(hits, CHAIN_STEPS - 1l - offs, "{what}: every other step after the first took its chained step")
+                let sa0 = vk_rdec_chain_stats()
+                var adaptive <- chain_walk(tr, prompt, CHAIN_STEPS, off, -1)
+                let sa1 = vk_rdec_chain_stats()
+                for (i in range64(CHAIN_STEPS)) {
+                    t |> equal(adaptive.toks[i], plain.toks[i], "{what}, step {i}: adaptive token")
+                    t |> equal(logits_maxdiff(adaptive.rows[i], plain.rows[i]), 0.0,
+                        "{what}, step {i}: the adaptive run's logits are the plain run's")
+                }
+                //! adaptive: a miss backs off the next step's chain; the last
+                //! off-pick step ends the walk, so no step after it backs off
+                let backed = offs > 0l ? offs - 1l : 0l
+                t |> equal(sa1.misses - sa0.misses, offs,
+                    "{what}: adaptive, every off-pick step a miss")
+                t |> equal(sa1.hits - sa0.hits, CHAIN_STEPS - 1l - offs - backed,
+                    "{what}: adaptive, the step after each miss but the last unchained")
                 served_every_call(t)
                 delete plain
                 delete chained
+                delete adaptive
             }
             delete prompt
         }

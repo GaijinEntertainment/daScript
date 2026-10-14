@@ -200,6 +200,7 @@ def cell_regions_interleaved_single_steps(t : T?; file : string) {
 //! two host-cached sessions over ONE region: A prefills and takes a one-row step (rows on the device alone), B prefills and takes
 //! the region, then the two step in turn, each taking it back - every row bit for bit what the session reads alone, the driver's
 //! saved-claim counter up (A's rows read off the device before B's prefill overwrote them) and every call served
+[cold_path]
 def cell_region_taken_after_decode(t : T?; file : string) {
     t |> run("two host-cached sessions over one region: the session that loses it keeps its device-only rows") @(t : T?) {
         with_regions_rig(t, file, RegionsLoad(regions = 1l)) $(tr) {
@@ -303,6 +304,7 @@ def private continue_at(t : T?; tr : Model; n, cut : int64; rel : float) {
 
 //! `rel`: the bar the continued rows hold against the one-call rows - the split bar, the routed chain's on a routed model (its
 //! windows' expert tiles schedule other row counts, and the router's near-ties part the two)
+[cold_path]
 def cell_prefill_continues_on_the_device(t : T?; file : string) {
     cell_prefill_continues_on_the_device(t, file, SPLIT_BAR_REL)
 }
@@ -353,6 +355,7 @@ def cell_prefill_continues_on_the_device(t : T?; file : string; rel : float) {
 //! the window's fused q/k norm, rope and K/V store against its split pair (`set_vulkan_prefill_qkn_fuse`, put back as found): one
 //! prompt two windows long on each form, the prompt's logits and the fed steps within the split bar with the row one step off as the
 //! control, the census counting the fused pass's stamp on the fused form and the norm pass's on the split one
+[cold_path]
 def cell_window_qkn_fused(t : T?; file : string) {
     t |> run("the window's q/k norm, rope and store as one fused pass reads within the split bar of the split pair") @(t : T?) {
         with_regions_rig(t, file) $(tr) {
@@ -987,6 +990,7 @@ def cell_device_kv_park_adopt(t : T?; file : string) {
 
 //! a recurrent model's parked claim keeps its state at its last row beside the rows: an adopter of all of them continues the
 //! stream as one call would have, and an adopter of fewer is refused, since the state stands at no earlier row
+[cold_path]
 def cell_device_kv_park_adopt_recurrent(t : T?; file : string) {
     t |> run("a recurrent parked claim hands its rows and its state to a session that takes every row, and refuses a shorter opening") @(t : T?) {
         with_regions_rig(t, file) $(tr) {
@@ -1122,6 +1126,7 @@ def cell_scheduler_device_mode(t : T?; file : string) {
 
 //! a paged scheduler's host-cached streams on the resident driver: their pages go up a physical run at a time, the rows the device
 //! stepped come down into the pages before the prefix cache takes them, and a second turn attaches the first turn's pages
+[cold_path]
 def cell_scheduler_paged_resident(t : T?; file : string) {
     t |> run("a paged scheduler's streams step on the device: token for token the flat scheduler's, and a second turn attaches the turn it continues") @(t : T?) {
         with_regions_rig(t, file) $(tr) {
@@ -1167,6 +1172,7 @@ def private serve_shared_opening(m : Model; device : bool; system, u1, u2 : arra
 //! a device-home recurrent stream keeps its state at the system prompt's end beside its rows: a second request on the same system
 //! prompt with another user turn adopts that checkpoint off the parked claim and prefills its own turn alone, token for token what
 //! the host-cached paged scheduler - whose prefix cache keeps the same checkpoint - emits
+[cold_path]
 def cell_device_checkpoint_adopt(t : T?; file : string) {
     t |> run("a device-home recurrent stream's checkpoint at the system prompt's end serves the next request on that system prompt, token for token the host-cached prefix cache's run") @(t : T?) {
         with_regions_rig(t, file) $(tr) {
@@ -1238,11 +1244,24 @@ def private serve_pooled(m : Model; device : bool; page_rows, max_states : int64
 //! second conversation's finished turn, token for token the host-cached paged scheduler, whose prefix cache keeps the same
 //! openings; the flat device-home scheduler - no pool - is the control, both requests prefilled whole. On a recurrent model a
 //! pool of four checkpoints drops the tails first: the fourth request still finds its opening, the fifth only its system prompt.
+//! The host-cached and pooled runs compare token for token: both
+//! decode on the device over the same prefill cuts, and the pool
+//! moves bytes, not numerics. With DASLLAMA_DEVICE_POOL=0 the cell
+//! holds the off rail instead.
+[cold_path]
 def cell_device_pool(t : T?; file : string) {
     t |> run("a device-home scheduler's openings outlive their regions in the host pool: a later request takes them up, token for token the host-cached prefix cache's run") @(t : T?) {
         with_regions_rig(t, file) $(tr) {
             if (!gpu_device_kv_pool_armed()) {
-                t |> skip("DASLLAMA_DEVICE_POOL=0 switches the pool off")
+                //! the off rail: the regions alone, lost openings prefilled whole
+                var off : array<SchedEvent>
+                let o = serve_pooled(tr, true, 64l, 256l, off)
+                t |> equal(o.imports, 0l, "DASLLAMA_DEVICE_POOL=0: nothing comes up from a pool")
+                t |> equal(o.exports, 0l, "and nothing goes down to one")
+                t |> equal(cached_of(off, 4l), 0l, "the fourth request prefills whole")
+                t |> equal(cached_of(off, 5l), 0l, "and so does the fifth")
+                served_every_call(t)
+                delete off
                 return
             }
             let recurrent = tr.config.recr_mask != 0ul

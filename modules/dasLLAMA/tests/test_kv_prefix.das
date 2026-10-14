@@ -728,6 +728,15 @@ def test_prefix_pool_carrier(t : T?) {   // nolint:STYLE038 — one pool and cac
         t |> equal(hits0 + 1l, cache.n_state_hits, "an attach apart counts as a hit")
         var other <- [for (i in range64(12l)); 500l + i]
         t |> equal(0l, prefix_state_match_len_(cache, other), "a prompt no checkpoint opens: nothing")
+        let refs_miss = live_refs(pool)
+        let hits_miss = cache.n_state_hits
+        t |> equal(0l, prefix_attach_state_split_(cache, pool, carrier, taker, other),
+            "an attach apart no checkpoint opens attaches nothing")
+        t |> equal(3, length(carrier.block_table), "the miss shares no page")
+        t |> equal(10l, carrier.n_past)
+        t |> equal(refs_miss, live_refs(pool), "and takes no page reference")
+        t |> equal(10l, taker.dn_pos, "nor restores a state")
+        t |> equal(hits_miss, cache.n_state_hits, "and counts no hit")
         release_kv_pages_(carrier)
         release_kv_pages_(dev)
         release_kv_pages_(dev10)

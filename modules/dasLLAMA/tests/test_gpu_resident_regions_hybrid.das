@@ -13,6 +13,7 @@ require _resident_regions
 // among them), the parked claim that keeps its state beside its rows, and the scheduler's device mode, where a
 // stream prefills in the device's windows and a second turn adopts the rows and the state of the turn it continues.
 // Skips off the JIT, without DASLLAMA_GPU=1 on a device the driver serves, or without the file under models_dir().
+// Under DASLLAMA_DEVICE_POOL=0 the pool cell holds the off rail.
 let private REGIONS_FILE = "Qwen3.5-0.8B-Q8_0.gguf"
 
 [test]

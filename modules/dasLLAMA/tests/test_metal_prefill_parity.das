@@ -1759,8 +1759,12 @@ def private moe_base_form_cells(t : T?; path, tag, base_kernel : string; bar : f
         let prior_override = active_prefill_override()
         let prior_min_npos = get_metal_prefill_min_npos()
         let prior_mode = get_metal_mode()
+        let prior_crowns = get_metal_tensor_crowns()
+        let prior_crowns_pinned = metal_tensor_crowns_pinned()
         set_wscale_f16(false)
         set_metal_mode(MetalMode.when_available)   //! the load reads IQ3_S planes as the Metal tier's grid form, as a Metal load does
+        //! no crown: these formats' twins take every window they compiled for
+        pin_metal_tensor_crowns("")
         var tr <- load_model_(path, QuantMode.q8)
         if (tr.config.seq_len > 2048l) {
             tr.config.seq_len = 2048l
@@ -1778,6 +1782,10 @@ def private moe_base_form_cells(t : T?; path, tag, base_kernel : string; bar : f
         t |> success(metal_prefill_pso_init(), "{tag}: the prefill kernels compiled - the census reads them")
         for (leg in ["twins", "base"]) {
             let base_leg = leg == "base"
+            if (!base_leg && !pf_hmm_ready()) {
+                t |> skip("{tag}/twins: the tensor toolchain is absent - no twin compiled")
+                continue
+            }
             let prior_gx = set_metal_moe_gather_min(base_leg ? 1000000l : 1l)
             let served0 = metal_prefill_stats().prefills
             let base0 = metal_kernel_coverage_of(base_kernel)
@@ -1801,6 +1809,12 @@ def private moe_base_form_cells(t : T?; path, tag, base_kernel : string; bar : f
             to_log(LOG_INFO, "{tag}/{leg}: gap {g} of peak {peak} ({g / peak}); control gap {gc} ({gc / peak}); argmax pieces - GPU {escape(piece(tr, int64(max_element(gpu))))}, CPU {escape(piece(tr, int64(max_element(cpu))))}\n")
             t |> success(g <= bar * peak, "{tag}/{leg}: last-row logits within {bar} of the CPU chain's largest ({g} of {peak})")
             t |> success(gc > bar * peak, "{tag}/{leg}: the control window (its last token changed) lands outside the bar ({gc} of {peak})")
+        }
+        if (prior_crowns_pinned) {
+            pin_metal_tensor_crowns(prior_crowns)
+        } else {
+            unpin_metal_tensor_crowns()
+            set_metal_tensor_crowns(prior_crowns)
         }
         set_metal_prefill_min_npos(prior_min_npos)
         set_metal_mode(prior_mode)
@@ -1877,7 +1891,6 @@ def private one_window_logits(trp : Model; w : array<int64>) : array<float> {
 //! One window of `n` rows: the dense sites' scratch-panel count it moved against `scratch` (served off panels or not), its
 //! last-row logits against the all-CPU chain within `bar` of the largest, the same window with the dev-W route off (the
 //! sites' own bytes, no panel counted) inside the same bar, and the control - the window's last token changed - outside it.
-[cold_path]
 def private scratch_window_cell(t : T?; tr, trg : Model; prompt : array<int64>; n : int64; scratch : bool; bar : float; tag : string) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
         var inscope w <- [for (i in range64(n)); prompt[i]]

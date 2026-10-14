@@ -10,6 +10,7 @@ require _resident_regions
 // in two mirror regions, the prefill continued from a position past zero, device-home sessions, the region pin, the
 // parked claim and the scheduler's device mode. Skips off the JIT, without DASLLAMA_GPU=1 on a device the driver
 // serves, or without the file under models_dir().
+// Under DASLLAMA_DEVICE_POOL=0 the pool cell holds the off rail.
 let private REGIONS_FILE = "Qwen2.5-0.5B-Instruct-Q8_0.gguf"
 
 [test]

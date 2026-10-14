@@ -2537,7 +2537,7 @@ def test_vkd_kq_batch_family(t0 : T?) {
 
 [test]
 def test_vkd_blk32_batch_family(t0 : T?) {
-    t0 |> run("per-32 batch tiles (q51, iq4nl32, mx4) == the engine's scalar dots") <| @(t : T?) {
+    t0 |> run("per-32 batch tiles (q51 iq4nl32 q4032 q5032 mx4) == scalar dots") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!ensure_q8_batch_cls()) {
                 t |> skip("no Vulkan device")
@@ -5205,7 +5205,7 @@ def private gemv_ncol_arm(t : T?; f : KqFmt; n, d : int) {
 
 [test]
 def test_vkd_gemv_ncol(t0 : T?) {
-    t0 |> run("the N-column decode GEMV leaves (q8 and its row-pair stamps, every kq format, the per-32 q51 / iq4nl32 / mx4) == the one-column class, column for column") <| @(t : T?) {
+    t0 |> run("every format's N-column decode GEMV == its one-column class") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!ensure_q8_gemv_cls()) {
                 t |> skip("no Vulkan device")

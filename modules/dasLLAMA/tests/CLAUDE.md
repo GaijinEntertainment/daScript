@@ -123,8 +123,11 @@ runs with every half-x crown of the box's profile removed and the rail off, so t
 alone, and on a carrier whose q/k/v/o or dense FFN planes carry a k4 / k5 / k6 format the half-x forms' census
 count is asserted above zero (a leg that dispatched none measured the f32 forms twice); the crowns and the rail
 put back as found. `mtp-census-<tag>` = the served twin's format census, every site the file carries in its own format
-(the planar fixtures' tags; the split-shard served-only `3.8fn` has none). `mtp-ctrl-<tag> mtp-ff-<tag> mtp-ffk-<tag>
-mtp-vff-<tag> mtp-count-<tag>` per fixture tag `0.8b 4b 9b 27b 35b 35b-iq4xs 3.8-27b 3.8fn` (4b = Qwen3.5-4B-MTP
+(the planar fixtures' tags; the split-shard served-only `3.8fn` has none). `mtp-warm-<tag>` = the
+draft head's prompt warm adds only the head's own projections, norms and rope-and-store against the
+same prefill with the warm off, the rope count rising as the control.
+`mtp-ctrl-<tag> mtp-ff-<tag> mtp-ffk-<tag> mtp-vff-<tag> mtp-count-<tag>` per fixture tag
+`0.8b 4b 9b 27b 35b 35b-iq4xs 3.8-27b 3.8fn` (4b = Qwen3.5-4B-MTP
 Q8_0, the mid tier; 35b-iq4xs = Qwen3.6-35B-A3B-MTP-IQ4_XS-pure, large tier, the format census's carrier, its routed
 head's eh_proj and expert stacks IQ4_XS; 9b = Qwen3.5-9B-MTP UD-Q5_K_XL, large tier; 3.8-27b = the Qwen3.8-27B
 trunk + its split Q8_0 head; 3.8fn = Qwen3.8-Flash-Next UD-IQ4_XS + its split `shared` Q8_0 head,
@@ -286,6 +289,15 @@ qwen35 rows open on the format census of their blob twin, every site the file ca
 is the Flash-Next UD-IQ4_XS served image alone - the planar file and the image do not fit the box together - its Metal
 prefill and decode token for token the file's frozen counting fixture, the drivers' counters rising and no decline,
 PARITY_FULL-gated).
+
+Metal format census (`test_metal_format_census.das`, entry below): `census-iq4xs census-tied
+census-f16 census-iq3s4 census-iq3s4-moe` and the per-32 mints `census-q51 census-iq4nl32
+census-iq4nl32-table census-q4032 census-q5032 census-q51-table census-moe-q51 census-moe-q4032
+census-moe-q5032`. Vulkan format census (`test_gpu_resident_format_census.das`, entry below):
+`vk-census vk-gather vk-perop-ffn vk-per32-iq4nl32 vk-per32-q4032 vk-per32-q5032 vk-per32-q51`;
+`vk-per32-moe` is `test_gpu_resident_moe.das`'s per-32 MoE carriers. A filter token matches by
+substring, so `--arm census-q51` also runs `census-q51-table`, and `--arm vk-per32` runs every
+per-32 arm of both Vulkan files.
 
 The `image` suite (test_model_image - the prepared-image .dlim rail): `mechanics` (synthetic
 carrier, model-free - runs with no model stocked; also the layout fingerprint; the save's temp
@@ -1040,11 +1052,13 @@ last column standing),
 four-column one - against the one-row
 kernel run a column at a time, bit for bit, each stamp full and short of its width, over silu and
 gelu), `test_vkd_gemv_ncol` (every `KqFmt` member's N-column decode GEMV - q8 and its row-pair stamps, the fourteen kq
-leaves, and the per-32 q51 / iq4nl32 / mx4 leaves - against its one-column class a column at a time, bit for bit, at one
-to eight columns and through the tiled encoder at nine and twelve, the one-column rows against the CPU oracle - the
+leaves, and the per-32 q51 / iq4nl32 / q4032 / q5032 / mx4 leaves - against its one-column
+class a column at a time, bit for bit, at one to eight columns and through the tiled
+encoder at nine and twelve, the one-column rows against the CPU oracle - the
 engine's scalar dots on the per-32 formats - each bar with its poisoned element), `test_vkd_blk32_batch_family` (the
-per-32 batch tile `Blk32BatchT` - q51, iq4nl32, mx4 - over two regions with edge tiles and a K tail against the engine's
-scalar dots, `blk32_gemm_oracle`), `test_vkd_cls_epi_rows` (the classifier epilogue over four logits rows in one dispatch
+per-32 batch tile `Blk32BatchT` - q51, iq4nl32, q4032, q5032, mx4 - over two regions with
+edge tiles and a K tail against the engine's scalar dots, `blk32_gemm_oracle`),
+`test_vkd_cls_epi_rows` (the classifier epilogue over four logits rows in one dispatch
 against the one-row dispatch a row at a time, bit for bit, and the CPU softcap with every
 suppressed id pinned on every row), `test_vkd_cls_argmax` (the classifier tail's device pick over
 six rows at two vocab widths against the host's `parallel_argmax`, a tie landing on the lower id,

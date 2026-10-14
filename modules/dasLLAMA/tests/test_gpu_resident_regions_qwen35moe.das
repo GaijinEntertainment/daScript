@@ -16,10 +16,13 @@ require _moe_resident   // MOE_LOGIT_BAR_REL: the routed chain's bar
 // with a routed NextN head through the forms the rig holds on the small hybrids - a prefill from a position past zero on
 // the window chain over the region's live recurrent state (the prefill counter, every call served), ten sessions a
 // region each through batched steps the N-row command takes in groups past eight rows (the N-row counter), the greedy
-// chain forced on against the plain walk bit for bit (the chain's hits and misses), and a short tail peeled through the
-// token commands (the peel counter) with speculation off. The routed rows hold the routed chain's bar: the window's expert
+// chain forced on and adaptive against the plain walk bit for bit
+// (the chain's hits and misses), and a short tail peeled through the
+// token commands (the peel counter) with speculation off. The routed
+// rows hold the routed chain's bar: the window's expert
 // tiles schedule other row counts than the one-call form's, and the router's near-ties part the two. Skips off the JIT,
 // without DASLLAMA_GPU=1 on a device the driver serves, or without the file under models_dir().
+// Under DASLLAMA_DEVICE_POOL=0 the pool cell holds the off rail.
 let private REGIONS_FILE = "Qwen3.6-35B-A3B-MTP-IQ4_XS-pure.gguf"
 let private WIDE_ROWS = 10l   //! past the N-row command's eight rows and its GEMVs' eight-column tile
 
