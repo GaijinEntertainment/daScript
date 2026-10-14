@@ -93,6 +93,14 @@ def public is_call_to(wth : Expression?; name, mod : string) {
 def public is_range_call(pat : Expression?) : bool => pat is ExprCall && (pat as ExprCall).name == "interval" && length((pat as ExprCall).arguments) == 2
 
 [macro_function]
+def public is_variant_call(typ : TypeDeclPtr; pat : Expression?) : bool {
+    //! ``i(n)`` against a variant with an alternative ``i``.
+    if (typ == null || !typ.isVariant || !(pat is ExprCall)) return false
+    let call = pat as ExprCall
+    return length(call.arguments) == 1 && get_field_type(typ, string(call.name), false) != null
+}
+
+[macro_function]
 def public is_range_const(pat : Expression?) : bool => pat is ExprConstRange || pat is ExprConstURange || pat is ExprConstRange64 || pat is ExprConstURange64
 
 let public MATCH_ANY_OTHER = "_"
@@ -287,6 +295,9 @@ def private classify_cell(typ : TypeDeclPtr; var pat : Expression?; cuts : array
     }
     if (typ != null && typ.isVariant && p is ExprAsVariant && is_irrefutable(null, (p as ExprAsVariant).value)) {
         return <- MatchCell(keys <- [variant_key(typ, (p as ExprAsVariant).name)])
+    }
+    if (is_variant_call(typ, p) && is_irrefutable(null, (p as ExprCall).arguments[0])) {
+        return <- MatchCell(keys <- [variant_key(typ, (p as ExprCall).name)])
     }
     return <- MatchCell(opaque = true) if (!is_irrefutable(typ, p))
     return <- MatchCell(keys <- [MATCH_NON_NULL]) if (typ != null && typ.isPointer)

@@ -3,6 +3,8 @@ options no_unused_function_arguments = false
 
 require dastest/testing_boost public
 require daslib/match
+require daslib/strings_convert
+require math
 
 struct Point {
     x : int
@@ -570,4 +572,174 @@ def test_table_patterns(t : T?) {
     var other <- { "m" => 1 }
     bump_counter(other)
     t |> equal(length(other), 1)
+}
+
+def private array_size(a : array<int>) : string {
+    return match (a) {
+        (length(_) => 0) => "empty"
+        (length(_) => (1..10)) => "small"
+        _ => "big"
+    }
+}
+
+def private first_or_empty(a : array<int>) : string {
+    return match (a) {
+        (length(_) => 0) => "empty"
+        (_[0] => 1) => "starts with 1"
+        _ => "other"
+    }
+}
+
+struct Bag {
+    items : array<int>
+    name : string
+}
+
+def private bag_kind(b : Bag; lo : int) : string {
+    return match (b) {
+        Bag(items = (length(_) => n) && n > lo, name = (length(_) => 3)) => "long {n}"
+        _ => "other"
+    }
+}
+
+def private clamped(x, lo, hi : int) : string {
+    return match (x) {
+        (clamp(_, lo, hi) => 5) => "at 5"
+        _ => "else"
+    }
+}
+
+def private axis_one(t : tuple<Point; int>) : string {
+    return match (t) {
+        (Point(x = 0, y = _) | Point(x = _, y = 0), 1) => "axis one"
+        _ => "other"
+    }
+}
+
+variant Token {
+    num : int
+    word : string
+}
+
+def private token(s : string) : Token {
+    let n = try_to_int(s)
+    return is_ok(n) ? Token(num = unwrap(n)) : Token(word = s)
+}
+
+def private command(s : string) : string {
+    return match (s) {
+        (token(_) => num(n)) && n < 0 => "negative {n}"
+        (token(_) => num(n)) => "number {n}"
+        (token(_) => word("quit")) => "bye"
+        (token(_) => word(w)) => "word {w}"
+        _ => "other"
+    }
+}
+
+[test]
+def test_view_patterns(t : T?) {
+    let empty : array<int>
+    let small <- [1, 2, 3]
+    t |> equal(array_size(empty), "empty")
+    t |> equal(array_size(small), "small")
+    t |> equal(first_or_empty(empty), "empty")
+    t |> equal(first_or_empty(small), "starts with 1")
+    var b = Bag(name = "abc")
+    b.items <- [1, 2, 3, 4]
+    t |> equal(bag_kind(b, 2), "long 4")
+    t |> equal(bag_kind(b, 9), "other")
+    t |> equal(clamped(9, 0, 5), "at 5")
+    t |> equal(clamped(3, 0, 5), "else")
+    t |> equal(axis_one((Point(x = 0, y = 5), 1)), "axis one")
+    t |> equal(axis_one((Point(x = 3, y = 5), 1)), "other")
+}
+
+def private token_text(tok : Token) : string {
+    return match (tok) {
+        num(n) => "{n}"
+        word(w) => w
+    }
+}
+
+def private string_view(v : IntOrStr) : string {
+    return match (v) {
+        s((length(_) => 0)) => "empty"
+        IntOrStr(s = (length(_) => 1)) => "one"
+        (length(_) => 2) as s => "two"
+        _ => "other"
+    }
+}
+
+def private column_views(a : array<int>; text : string; pair : tuple<int; string>) : string {
+    return match (a, text, pair) {
+        ((length(_) => 0), (length(_) => 0), _) => "both empty"
+        (_, _, (1, (length(_) => n))) => "pair of {n}"
+        (_, (token(_) => (token_text(_) => "go")), _) => "go"
+        _ => "other"
+    }
+}
+
+def private sum3(v : tuple<int; int; int>) : int => v._0 + v._1 + v._2
+
+def private triple_kind(v : tuple<int; int; int>) : string {
+    return match (v) {
+        (sum3(_) => 0) => "zero sum"
+        _ => "other"
+    }
+}
+
+[test]
+def test_view_reads_the_value_where_it_stands(t : T?) {
+    t |> equal(string_view(IntOrStr(s = "")), "empty")
+    t |> equal(string_view(IntOrStr(s = "a")), "one")
+    t |> equal(string_view(IntOrStr(s = "ab")), "two")
+    t |> equal(string_view(IntOrStr(i = 2)), "other")
+    let empty : array<int>
+    let one <- [1]
+    t |> equal(column_views(empty, "", (0, "")), "both empty")
+    t |> equal(column_views(one, "", (1, "abc")), "pair of 3")
+    t |> equal(column_views(one, "go", (0, "")), "go")
+    t |> equal(column_views(one, "x", (0, "")), "other")
+    t |> equal(triple_kind((1, -1, 0)), "zero sum")
+    t |> equal(triple_kind((1, 2, 3)), "other")
+}
+
+[test]
+def test_view_result_matches_a_variant_alternative(t : T?) {
+    t |> equal(command("-4"), "negative -4")
+    t |> equal(command("12"), "number 12")
+    t |> equal(command("quit"), "bye")
+    t |> equal(command("go"), "word go")
+}
+
+struct Holder {
+    v : IntOrStr
+}
+
+def private call_kind(v : IntOrStr) : string {
+    return match (v) {
+        i(0) | i(1) => "small"
+        i(n) && n < 0 => "negative {n}"
+        i(n) => "int {n}"
+        s("") => "empty"
+        s(text) => "str {text}"
+    }
+}
+
+def private held_kind(h : Holder) : string {
+    return match (h) {
+        Holder(v = i(n)) => "held int {n}"
+        Holder(v = s(_)) => "held str"
+    }
+}
+
+[test]
+def test_variant_alternative_called_by_name(t : T?) {
+    t |> equal(call_kind(IntOrStr(i = 1)), "small")
+    t |> equal(call_kind(IntOrStr(i = -3)), "negative -3")
+    t |> equal(call_kind(IntOrStr(i = 7)), "int 7")
+    t |> equal(call_kind(IntOrStr(s = "")), "empty")
+    t |> equal(call_kind(IntOrStr(s = "x")), "str x")
+    t |> equal(held_kind(Holder(v = IntOrStr(i = 2))), "held int 2")
+    t |> equal(held_kind(Holder(v = IntOrStr(s = "y"))), "held str")
 }

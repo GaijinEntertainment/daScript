@@ -220,7 +220,7 @@ it returns from the enclosing function; an assignment body always needs the bloc
 | `_` | anything (also any single element inside a sequence) |
 | `...` | zero or more elements inside a sequence |
 | `n` (a bare name) | anything, binding it to a new variable `n` - it never compares against an existing `n` |
-| `IF(f = x)` | variant case `f`, binding its value; `x as f` is the same test |
+| `IF(f = x)` | variant case `f`, binding its value; `x as f` and `f(x)` are the same test |
 | `Foo(a = 13)` / `Foo(a = n)` | struct field equal to a value / bound |
 | `Color.Red` | enum value (dotted form) |
 | `(1, _, "3")`, `(13, ...)`, `(..., "13")` | tuple by position |
@@ -229,6 +229,7 @@ it returns from the enclosing function; an assignment body always needs the bloc
 | `pattern && cond` | guard - extra condition using the bound names |
 | `whole & Foo(a = 0)` | both patterns; a bare name on one side binds the whole value |
 | `({ "k" => v, "n" => 1 })` / `({ "a", "b" })` | a table with those keys, values matching (other keys allowed) / a set with those keys; reading never inserts |
+| `(length(_) => (1..10))`, `(token(_) => num(n))` | view: matches the pattern against `f(value)` (`_` is the value), as the type `f` returns; `f` runs each time an arm tests the view, so it must be pure |
 | `(0..10)` | `0 <= value && value < 10` - half-open; parentheses required outside a tuple; `int` for `range`, `uint` for `urange` |
 | `pattern \| pattern` | either; both sides must bind the same names, possibly from different fields - `V(a = n) \| V(b = n)` takes `n` from the side that matched |
 | `match_expr(limit)`, `match_expr(x + 1)` | equals an expression - an existing variable, or names bound earlier |
