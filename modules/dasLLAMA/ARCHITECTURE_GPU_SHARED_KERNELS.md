@@ -45,7 +45,8 @@ w13 combines and every Vulkan act class call it, the gelu its clamped tanh form.
 
 **What each stamp reads on its home.** One dispatch alone, the kernel bench (`benchmarks/ew/bench_metal_gk_rows.das`, M5 Max)
 and the Vulkan probe (`harness/vk_gk_rows_probe.das`, RTX PRO 4500 Blackwell), median of the rounds at under 3% cv, the
-per-home body before the template against the stamp, in us:
+per-home body before the template against the stamp, in us (`PERF_LEDGER.md`, the 2026-10-13 entry on the shared row
+templates' stamps, carries the run):
 
 | Kernel, shape | M5 before | M5 stamp | Vulkan before | Vulkan stamp |
 |---|---:|---:|---:|---:|
