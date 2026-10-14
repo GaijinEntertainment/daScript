@@ -241,9 +241,8 @@ carrier whose `dim` or hidden width is off 256 keeps the full panel) - whatever 
 
 ### The dense-KQ tensor mul_mm scaffold {#prefill-kq-tensor-scaffold}
 
-Ten iquant and split-scale formats - iq4xs, iq4nl, q40, k3, iq3s, iq3xxs, k2, iq2s, iq2xs, iq2xxs
-- share ONE tensor mul_mm body, `MetalKqMulMmSplitTensorBase`. The base holds the k6 tensor
-shell: the `tmm2d_tg_*` accumulate loop, the 6144-half `twb` W chunk, the store. It exposes
+Every dense format but q8 and the K-quant deep class shares ONE tensor mul_mm body,
+`MetalKqMulMmSplitTensorBase`, the k6 tensor shell: the `tmm2d_tg_*` accumulate loop, the 6144-half `twb` W chunk, the store. It exposes
 exactly one overridable stage, `stage16` - 16 elements per work item, decoded into `twb`. A
 format derives, binds its own weight views, and overrides `stage16` alone. 16 is not an
 arbitrary granularity: it is the base GEMV arm's own, so each format's decode ports into its
@@ -262,20 +261,21 @@ Each format's `stage16` takes one of three forms, inherited from that format's b
 - **direct constant-table gather** (iq2s, iq2xs, iq2xxs) - the u64 grid pair read straight off
   the hoisted tables, no slab. q40 is iq4nl's stamp (`Q40`) with the linear map in the LUT slot.
 
-Each format stamps `T` (`XT = float`) and `TH` (`XT = float16`); iq3s and iq3xxs add the `TH128`
-tall stamp (form 1), the rest have no tall twin yet, none is double-buffered. Every stamp
-compiles only behind its own crown (`metal_tensor_crowned("kq_mulmm_<fmt>")`) in
-`pf_compile_kq_iquant_tensor_twins`, and `pf_enc_kq_site_mm` dispatches a twin only when both
-the crown flag and the PSO are live - `pf_kq_split_stamps` is the one place a format maps to its
-crown, its psos and its builders per form, a format with no tall stamp holding null there so its
-tall arm stays closed. The crown is a RACE verdict (tensor stamp vs simdgroup base
+Every format stamps the same five forms - `T` (`XT = float`), `TH` (`XT = float16`), the `TH128`
+tall stamp (form 1) and the double-buffered `THDb` / `THDb128` pair off the scaffold's one
+`metal_kq_mulmm_db` kernel - the per-32 stage (`MetalKqMulMmB32TensorT`) indexing its 32-blocks
+off `kdim`. Every stamp compiles only behind its own crown (`metal_tensor_crowned("kq_mulmm_<fmt>")`),
+`pf_enc_kq_dense_site` dispatches a twin only when both the crown flag and the PSO are live, and
+`pf_kq_dense_stamps` is the one table a format maps to its crown, psos and builders through, and
+`check_kq_form_matrix` (`REVIEW.das`) holds every format to the same form set; a per-32 site takes a twin
+or the dev-W arm only on a K of whole 64-wide chunks (`b32_twin_fits`). The crown is a RACE verdict (tensor stamp vs simdgroup base
 at one dense shape); whether the box can run tensor kernels at all is a separate fact, the
 toolchain probe `g_pf_tensor_ok` (one quiet compile of the dev-W GEMM at init). A box whose
 Metal has no mpp kernels fails the probe and keeps every base form whatever its sidecar says.
 
 The same classes carry the family's dev-W dequant pass (form 2): `MetalKqDequant<Fmt>` derives
 from the format's tensor class, sets the base's `DEQW` axis (which gates the f16 panel binding
-at 7 and the `dequant_shell` entry), and runs the inherited `stage16`
+at 7) and takes the scaffold's `metal_kq_dequant` kernel, which runs the inherited `stage16`
 over one 64x64 chunk per threadgroup into `twb`, then stores the tile into the panel; the
 site dispatcher offers these formats the dev-W arm ahead of their staged stamps. The staged
 stamp re-dequantizes W per 32-row tile, the whole gap on a small model: the 1B split-scale files

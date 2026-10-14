@@ -2987,7 +2987,8 @@ enum KqRaceScaleForm {
     compact     //!< k4/k5: 16B kmask blocks, d+dmin leading halves
     split_d     //!< k6 + every split-scale iquant: 16B strips + a 2B f16 d tail
     split_dmin  //!< k2: 16B strips + a 4B d+dmin tail
-    pure_d      //!< iq4nl: a pure-d plane, 8 f16 per superblock
+    pure_d      //!< iq4nl, q40 and the per-32 d-only planes: a pure-d plane, 8 f16 per superblock
+    pair_dm     //!< q5_1: d and m a 32-block, 16 f16 per superblock
 }
 
 //! A K-quant weight fixture in the engine's split-plane layout: random quant bits (any pattern is a
@@ -3000,7 +3001,7 @@ def race_kq_planes(dev : MetalDevice?; nblk, qu_per_sb : int; sform : KqRaceScal
         qplane[i] = uint(i) * 2654435761u   //! deterministic pseudo-random bit pattern
     }
     var splane : array<uint8>
-    let sbytes = sform == KqRaceScaleForm.split_d ? nblk * 18 : (sform == KqRaceScaleForm.split_dmin ? nblk * 20 : nblk * 16)
+    let sbytes = sform == KqRaceScaleForm.split_d ? nblk * 18 : (sform == KqRaceScaleForm.split_dmin ? nblk * 20 : (sform == KqRaceScaleForm.pair_dm ? nblk * int(kq_ssb(KqFmt.q51) * (KQ_SB_ELEMS / KQ_B32_ELEMS)) : nblk * 16))
     splane |> reserve_resize(sbytes)
     if (sform == KqRaceScaleForm.split_d || sform == KqRaceScaleForm.split_dmin) {
         for (i in range(nblk * 16)) {
@@ -3013,10 +3014,10 @@ def race_kq_planes(dev : MetalDevice?; nblk, qu_per_sb : int; sform : KqRaceScal
                 ph[b] = float16(0.25)
             }
         }
-    } elif (sform == KqRaceScaleForm.pure_d) {
+    } elif (sform == KqRaceScaleForm.pure_d || sform == KqRaceScaleForm.pair_dm) {
         unsafe {
             var ph = addr<float16?>(splane[0])
-            for (b in range(nblk * 8)) {
+            for (b in range(sbytes / 2)) {
                 ph[b] = float16(0.25)
             }
         }

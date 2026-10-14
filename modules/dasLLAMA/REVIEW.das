@@ -459,6 +459,59 @@ def private check_metal_kernel_load_addressing {
     }
 }
 
+//! every Metal GEMM form a format family stamps, every member stamps
+def private check_kq_form_matrix {
+    var inscope forms_by_fmt, family_forms : table<string; table<string>>
+    var inscope first_stamp : table<string; string>
+    var inscope first_stamp_line : table<string; int>
+    var alltext = ""
+    dir("modules/dasLLAMA/dasllama") $(name) {
+        return if (!(starts_with(name, "dasllama_metal_") && ends_with(name, ".das")))
+        let path = "modules/dasLLAMA/dasllama/{name}"
+        let text = fread(path)
+        alltext += text
+        var line_no = 0
+        for (line in split(text, "\n")) {
+            line_no++
+            let k = find(line, "stamp = \"")
+            continue if (k < 0)
+            let rest = slice(line, k + length("stamp = \""))
+            let q = find(rest, "\"")
+            continue if (q < 0)
+            var inscope parts <- split(slice(rest, 0, q), ":")
+            continue if (length(parts) != 3)
+            let key = "{parts[0]}|{parts[1]}"
+            forms_by_fmt[key] |> insert(parts[2])
+            family_forms[parts[0]] |> insert(parts[2])
+            if (!key_exists(first_stamp, key)) {
+                first_stamp[key] = path
+                first_stamp_line[key] = line_no
+            }
+        }
+    }
+    var inscope stamped <- [for (k in keys(forms_by_fmt)); k]
+    for (key in stamped) {
+        var inscope kp <- split(key, "|")
+        let family = kp[0]
+        let fmt = kp[1]
+        let path = first_stamp?[key] ?? ""
+        let line = first_stamp_line?[key] ?? 0
+        for (form in keys(family_forms[family])) {
+            if (!key_exists(forms_by_fmt[key], form)) {
+                gate_finding(path, line,
+                    "format {fmt} stamps no {family}:{form} while another format of the family does - a form one format has and another lacks sends the two through different kernel sequences on one machine; stamp it, or drop the form from every member")
+            }
+        }
+        let race = family == "kq_mm" ? "\"kq_mulmm_{fmt}\"" : "\"moe_mulmm_{fmt}\""
+        if (find(alltext, race) < 0) {
+            gate_finding(path, line, "format {fmt} stamps {family} twins and races none - no {race} verdict picks between its twin and its base; register the race in metal_tensor_race")
+        }
+        if (family == "kq_mm" && find(alltext, "\"enc_kq_dq_{fmt}\"") < 0 && find(alltext, "enc_dequant_{fmt}h(") < 0) {
+            gate_finding(path, line, "format {fmt} stamps dense twins and has no dev-W dequant pass - every dense format takes the dev-W arm or none does")
+        }
+    }
+}
+
 def private check_gpu_role_partition {
     dir("modules/dasLLAMA/dasllama") $(name) {
         return if (!ends_with(name, ".das"))
@@ -1988,6 +2041,7 @@ def main() : int {
     check_cm2_ladder_sets()
     check_cm2_stamp_tiles()
     check_kq_gemv_grid_literals()
+    check_kq_form_matrix()
     check_vk_extension_roster()
     check_no_hand_pipelines()
     check_verify_decline_before_state_move()

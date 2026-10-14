@@ -160,9 +160,10 @@ requires alone, or adds an `[EnvConfig]` area struct, applies `REVIEW_FACADE.md`
 weight-format id (a `KqFmt` member, a GGUF type number, or the int a generated kernel takes as its
 format parameter) into plane strides; reads a per-block or per-element byte count of one weight
 format; writes as a literal a number fixed by one weight format (its kernel format id, its element
-or word count per block, a plane stride); makes a backend's serving call read a weight format in a
-form other than its disk bytes; or states, in checked-in text, a commit message or the PR body,
-that a backend serves a weight format.**
+or word count per block, a plane stride); adds or changes a `stamp = "<family>:<fmt>:<form>"` kernel
+class, a `kq_mulmm_<fmt>` or `moe_mulmm_<fmt>` race, a dev-W dequant pass or a format's twin pick;
+makes a backend's serving call read a weight format in a form other than its disk bytes; or states,
+in checked-in text, a commit message or the PR body, that a backend serves a weight format.**
 
 **A diff that bumps `DASLLAMA_RELEASE` (`dasllama/dasllama_version.das`) cites in the PR body the
 maintainer's ruling that rows measured before it can no longer be compared with rows after it.**

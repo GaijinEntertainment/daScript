@@ -269,7 +269,7 @@ struct public MetalEnv {
     @clarg_doc = "The K-quant rows sites (two to eight rows: the verify, the batch step, the prefill's short window) read x as the f16 twin the row producer stores beside it, for every format whose half-x route the box crowned (kq_rows_half_<fmt>); 0 keeps the f32 forms under every crown (the A/B rail)."
     kq_half : bool = true
 
-    @clarg_doc = "Apply the box profile's tensor-lane crowns (its runtime.metal_tensor set), so every family the box's race crowned serves its tensor twin; 0 leaves the set empty and every family on its base form - what a GPU without the tensor lane (the M4 class) serves - the arm that proves a change, and the base kernel set, on that class from an M5."
+    @clarg_doc = "Apply the box profile's tensor-lane crowns (its runtime.metal_tensor set), so every family the box's race crowned serves its tensor twin; 0 leaves the set empty and every family on its base form past the routed twins' knee (`set_metal_moe_kq_twin_avg`) and the dev-W route, which ride the toolchain probe - what a GPU without the tensor lane (the M4 class) serves - the arm that proves a change, and the base kernel set, on that class from an M5."
     tensor : bool = true
 
     @clarg_doc = "The dense Q8_0 and K-quant prefill sites read a stored f16 converted copy of their planes (the dev-W panels the image bakes, or the resident ones); the A/B rail of the default - per-window scratch panels past each site's row floor, its own bytes under it - which the image lane name carries as -devw."

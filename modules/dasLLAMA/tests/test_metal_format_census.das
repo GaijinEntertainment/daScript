@@ -14,7 +14,7 @@ require ?das_metal dasllama/dasllama_metal_prefill   // nolint:STYLE030,LINT019 
 require ?das_metal metal/das_metal_boost   // nolint:STYLE030,LINT019 - metal_live_object_count for the leak gate, inside the das_metal halves
 require daslib/jobque_boost
 require daslib/fio   // nolint:STYLE030,LINT019 - path_join and fmap, inside the das_metal halves
-require math
+require math   // nolint:STYLE030,LINT019 - min, inside the das_metal halves
 require daslib/linq   // long_count: the planes a format tags
 require _model_tier
 require _format_census   // census_cell, census_sites_all: the census both homes run
@@ -179,7 +179,9 @@ def test_metal_format_census_iq3s4(t : T?) {
                 //! the last layer's FFN tail narrows to the last row, so one of its sites rides the single-row GEMV
                 //! the tensor twins compile only under the dev-W panel lever, so their counts read 0 when nothing compiled them
                 let mm_n = (metal_kernel_count("MetalKqMulMmIq3s4_metal_kq_mulmm") + metal_kernel_count_compiled("MetalKqMulMmIq3s4T_metal_kq_mulmm_iq4xs_t")
-                    + metal_kernel_count_compiled("MetalKqMulMmIq3s4TH_metal_kq_mulmm_iq4xs_t"))
+                    + metal_kernel_count_compiled("MetalKqMulMmIq3s4TH_metal_kq_mulmm_iq4xs_t") + metal_kernel_count_compiled("MetalKqMulMmIq3s4TH128_metal_kq_mulmm_iq4xs_t")
+                    + metal_kernel_count_compiled("MetalKqMulMmIq3s4THDb_metal_kq_mulmm_db") + metal_kernel_count_compiled("MetalKqMulMmIq3s4THDb128_metal_kq_mulmm_db")
+                    + metal_kernel_count_compiled("MetalKqDequantIq3s4_metal_kq_dequant"))   //! the dev-W pass ahead of the twins under the crown
                 let gv_w = metal_kernel_count("MetalKqGemvIq3s4_metal_kq_gemv_iq4")
                 t |> success(mm_n + gv_w >= n35 && mm_n > 0l, "the window's iq3s4 sites rode the iq3s4 stamps ({mm_n} GEMM and {gv_w} GEMV dispatches, {n35} planes)")
             }
@@ -243,6 +245,13 @@ def private per32_window_dispatches() : int64 {
     var n = 0l
     for (f in PER32_STEMS) {
         n += metal_kernel_count("MetalKqMulMm{f}_metal_kq_mulmm")
+        for (v in ["T", "TH", "TH128"]) {   //! the tensor twins under the format's crown, the dev-W pass ahead of them
+            n += metal_kernel_count("MetalKqMulMm{f}{v}_metal_kq_mulmm_b32_t")
+        }
+        for (v in ["THDb", "THDb128"]) {
+            n += metal_kernel_count("MetalKqMulMm{f}{v}_metal_kq_mulmm_db")
+        }
+        n += metal_kernel_count("MetalKqDequant{f}_metal_kq_dequant")
         for (ks in ["", "Ks"]) {
             for (w in [2, 4, 8]) {
                 n += metal_kernel_count("MetalB32MvB{w}{f}{ks}_metal_b32_mvb")
@@ -349,7 +358,7 @@ def test_metal_format_census_per32_moe(t : T?) {
                 census_cell(t, trg, path, "blob twin", want)
                 let stem = "{spec.f}"
                 let cls = spec.f == KqFmt.q51 ? "Q51" : (spec.f == KqFmt.q4032 ? "Q4032" : "Q5032")
-                let tbody = spec.f == KqFmt.q4032 ? "metal_moe_mulmm_iq4nl32_t" : "metal_moe_mulmm_q51_t"   //! q5032's twins stage on q51's body
+                let tbody = "metal_moe_mulmm_b32_t"   //! every per-32 routed twin stages on the split scaffold's per-32 body
                 window_and_steps_cell(t, tr, trg, PLAIN_MOE_BAR, spec.emb, spec.arm) $ {
                     var mm = metal_kernel_count("metal_moe_mulmm_{stem}") + metal_kernel_count("metal_moe_gemv_{stem}")
                     for (v in ["T", "TH", "TH128", "THR"]) {

@@ -19,6 +19,24 @@ kernel stamps through its own table or branch over a `KqFmt`, a format id or a f
 defect - generate the arms with `kq_fmt_stamp` or `kq_tile_stamp` (`dasllama/dasllama_kqformat.das`)
 instead.**
 
+**Narrowing `check_kq_form_matrix` (`REVIEW.das`) - the gate that holds every `KqFmt` member of a
+Metal GEMM stamp family (`stamp = "<family>:<fmt>:<form>"`) to the same forms (the `<form>` field of
+its stamps), to its own `kq_mulmm_<fmt>` or `moe_mulmm_<fmt>` race (the per-machine timing contest
+that picks between the format's tensor twin and its base kernel) and, for a format in the `kq_mm`
+family, to a dev-W dequant pass (the pass that dequantizes its weights into an f16 panel on the
+device: `enc_kq_dq_<fmt>` or `enc_dequant_<fmt>h`) - is a defect.** A form one format has and
+another lacks dispatches the two through different kernel sequences on one machine, so a timing
+compared across the two measures the sequences, not the formats' kernels.
+
+**A diff that changes when a format's Metal MoE twin pick - `metal_moe_kq_twin_pick`, or a
+per-format condition beside it, the per-dispatch choice between the tensor-op kernel of the same
+form and the base kernel - takes the twin (the window's mean rows per expert, the K width, or
+whether the race chose the twin as the winner on this machine) makes the same change for every
+`KqFmt` member of the format's `moe_mm` / `moe_mm_split` stamp family, in the same change; a member
+whose twin cannot run a given K width is outside the trigger at that width.** When two formats'
+picks differ, a timing compared across them measures one format's base kernel against the other's
+tensor twin, not the two formats' kernels.
+
 **A literal that stands for a per-format quantity of a `KqFmt` member, in any unit (words, halves,
 superblocks), written outside a Metal or SPIR-V kernel body and outside a definition home -
 `dasllama/dasllama_kqformat.das`, the `ggml_type_bytes` table (`dasllama/dasllama_gguf.das`), the

@@ -18,6 +18,7 @@
 
 using Key = std::unique_ptr<EVP_PKEY, decltype(&EVP_PKEY_free)>;
 using Cert = std::unique_ptr<X509, decltype(&X509_free)>;
+using Name = std::unique_ptr<X509_NAME, decltype(&X509_NAME_free)>;
 static Key key() {
     EVP_PKEY_CTX * context = EVP_PKEY_CTX_new_id(EVP_PKEY_EC, nullptr);
     EVP_PKEY * result = nullptr;
@@ -44,10 +45,11 @@ static Cert certificate(EVP_PKEY * subject_key, X509 * issuer, EVP_PKEY * signer
     X509_gmtime_adj(X509_getm_notBefore(result.get()), -60);
     X509_gmtime_adj(X509_getm_notAfter(result.get()), 86400);
     X509_set_pubkey(result.get(), subject_key);
-    auto name = X509_get_subject_name(result.get());
-    X509_NAME_add_entry_by_txt(name, "CN", MBSTRING_ASC,
+    Name name(X509_NAME_new(), X509_NAME_free);
+    X509_NAME_add_entry_by_txt(name.get(), "CN", MBSTRING_ASC,
         reinterpret_cast<const unsigned char *>(san ? "localhost" : "Ephemeral test CA"), -1, -1, 0);
-    X509_set_issuer_name(result.get(), issuer ? X509_get_subject_name(issuer) : name);
+    X509_set_subject_name(result.get(), name.get());
+    X509_set_issuer_name(result.get(), issuer ? X509_get_subject_name(issuer) : name.get());
     if (!extension(result.get(), issuer ? issuer : result.get(), NID_basic_constraints,
                    san ? "critical,CA:FALSE" : "critical,CA:TRUE")) return Cert(nullptr, X509_free);
     if (san && (!extension(result.get(), issuer, NID_subject_alt_name, san) ||

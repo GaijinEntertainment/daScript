@@ -32,12 +32,13 @@ Pad rows inside each expert's padded bucket carry a stamped sentinel and the red
 references them; rows past the last expert's stamped tail are unstamped stale pool bytes, which
 is why validity tests compare the per-row entry against the live count, never the sentinel.
 
-Every superblock format's MoE tensor twins - k2 through k6, q40, iq4nl and the iquants - are its
-DENSE split class under the split base's MoE shell (the split-format paragraph below). The per-32
-formats (q5_1, iq4nl32) and mx4 ride a second scaffold, `MetalMoeMulMmKqTensorBase`: the expert
-prologue, the staged K walk with its barrier pair, and the store over `MoeMmArgs`; a weight format
-derives, owns its weight-view bindings, and overrides the staged decode (`stage_block`) - mx4
-also the store (its per-expert bias) and the chunk shape (32-deep, 128-item quota). The q8 twin
+Every superblock and per-32 format's MoE tensor twins - k2 through k6, q40, iq4nl, the iquants,
+q5_1, iq4nl32, q4032 and q5032 - are its DENSE split class under the split base's MoE shell (the
+split-format paragraph below; the per-32 ones `MetalMoeMulMmB32SplitT` over `MetalKqMulMmB32TensorT`,
+their expert planes the verbatim pair `b32_planes_of` binds). mx4 rides a second scaffold,
+`MetalMoeMulMmKqTensorBase`: the expert prologue, the staged K walk with its barrier pair, and the
+store over `MoeMmArgs`; it owns its weight-view bindings and overrides the staged decode
+(`stage_block`), the store (its per-expert bias) and the chunk shape (32-deep, 128-item quota). The q8 twin
 is not a copy of either: its whole body is the tuned `tmm2d_q8u_f32` staged helper, a different
 staging mechanism, so it stays its own template. That scaffold fixes its own binding numbers -
 `xf` at 3, `y` at 4, kargs at 5, `cnt` at 6, `basep` at 7 - and every derived twin inherits them.
@@ -90,10 +91,9 @@ to its psos and builders per form;
 the dispatcher passes the site's dim uniforms, the padded panel's row count for the y span,
 and the tile count as its own parameter - the K-quant twins' `npos/32` (an expert holds at most
 npos rows), never the padded row count, which would launch one tile per padded row and exit all
-but one. The twins of the formats with no race of their own compile behind the toolchain probe
-alone (`g_pf_tensor_ok`) and serve whenever they compiled; k4, k5 and k6 compile there too and
-take their twin under their crown or the knee (`#prefill-moe-kq-twin-pick`). A box whose probe
-failed serves every format on its base form. q40 and iq4nl own no split class of their own:
+but one. Every superblock format's twins compile behind the toolchain probe alone
+(`g_pf_tensor_ok`) and serve under the format's crown or the knee (`#prefill-moe-kq-twin-pick`).
+A box whose probe failed serves every format on its base form. q40 and iq4nl own no split class of their own:
 their four stamps each derive from the iq4xs MoE template with `IQ4NL` set (and `Q40` for q40),
 the pair the dense twins carry, and because their scale plane is compact - the eight per-32-block
 f16 d verbatim, no strip tail - both of their scale bindings take `soff`, as k4's and k5's do,
@@ -113,31 +113,33 @@ padded bound, and writes the down site's f16 X twin alongside its f32 rows (the 
 a panel that is mostly padding - ten rows per expert at 512 experts - costs neither a convert pass
 nor an activation pass over its tail.
 
-### The K-quant twins' pick {#prefill-moe-kq-twin-pick}
+### The superblock twins' pick {#prefill-moe-kq-twin-pick}
 
-The crowned twins (k4, k5, k6, and q5_1 / iq4nl32 under k4's verdict) compile behind the
-toolchain probe like the other formats', and each K-quant family carries its own MoE-shaped race -
-`moe_mulmm_k4` / `k5` / `k6` (`race_moe_mulmm_kq`, one body over the format) over the kq race
-planes of 128 experts of a 1024 x 2048 plane, past the last-level cache where a served model's
-planes stream, timed on one whole-tile region (32 rows an expert) and one of twelve rows an expert
-(the house window's mean) in one encoder, the outputs compared on the whole-tile region, where
-both arms write every row; the base arm binds at the family tail's numbers and the twin at the
-dense split layout's. The dense `kq_mulmm_*` crowns measure a 512-row GEMM, where the twin's merit on the
-routed site is the adaptive op at few rows an expert, and the two disagree on an M1-class GPU; the
-dense crown STANDS IN for a family's verdict all the same (`g_pf_moe_kq_mm*_tensor` is the MoE
-crown or the dense one), because the sidecar's runtime section keeps winners alone, so a box
-minted before the MoE races and a box whose MoE twin lost read the same, and the stand-in keeps
-the former on the twin it ran. A crowned family takes the twin at every shape. An uncrowned one
-takes it per dispatch where the window's mean rows an expert sit at or under
-`set_metal_moe_kq_twin_avg` (16, the adaptive op's region: `npos * nk <= avg * ne`), and the
-base form past it (`metal_moe_kq_twin_pick`). That pick is made once a site
-(`pf_moe_twin_live`) and read by the gather panel, the activation's half store and the dispatch
-arm alike, so no pass runs for a twin the arm then declines. The lab's base arm sets the knee: on
-the M1 Max the k4 twin reads 0.59 / 0.76 / 1.16 of the base form at 4 / 8-16 / 32 rows an expert (`debug-jit`, the same
-lab and board row)
-(1.42 / 1.80 / 2.76 ms against a flat 2.38), on the M5 Max 0.31 / 0.32 / 0.38 (0.40 / 0.42 /
-0.49 against 1.31), bit-equal on every live element. The house's 375-token window on a
-256-expert model is 11.7 rows an expert; a 1024-token one is 32.
+Every superblock expert format's twins compile behind the toolchain probe, and every one carries
+its own MoE-shaped race - `moe_mulmm_<fmt>` for k4, k5, k6, k3, k2, iq4xs, iq3s4, iq4nl, q40,
+iq3s, iq3xxs, iq2s, iq2xs, iq2xxs and the per-32 q51, iq4nl32, q4032 and q5032
+(`race_moe_mulmm_kq`, one body over the format) over the kq race planes of 128 experts of
+a 1024 x 2048 plane, past the last-level cache where a served model's planes stream, timed on one
+whole-tile region (32 rows an expert) and one of twelve rows an expert (the house window's mean)
+in one encoder, the outputs compared on the whole-tile region, where both arms write every row;
+the base arm binds at the family tail's numbers and the twin at the dense split layout's. The
+dense `kq_mulmm_*` crowns measure a 512-row GEMM, where the twin's merit on the routed site is the
+adaptive op at few rows an expert, and the two disagree on an M1-class GPU; the dense crown
+STANDS IN for a format's verdict all the same (`g_pf_moe_kq_crown` holds, by slot, the MoE crown
+or the dense one), because the sidecar's runtime section keeps winners alone, so a box minted
+before the MoE races and a box whose MoE twin lost read the same, and the stand-in keeps the
+former on the twin it ran. A crowned format takes the twin at every shape. An uncrowned one takes
+it per dispatch where the window's mean rows an expert sit at or under
+`set_metal_moe_kq_twin_avg` (16, the adaptive op's region: `npos * nk <= avg * ne`), and the base
+form past it (`metal_moe_kq_twin_pick`) - one rule for every format, so a box without a tensor
+lane reads two formats' base tiles against each other, never one format's base tile against the
+other's twin. That pick is made once a site (`pf_moe_twin_live`) and read by the gather panel,
+the activation's half store and the dispatch arm alike, so no pass runs for a twin the arm then
+declines. The lab's base arm sets the knee: on the M1 Max the k4 twin reads 0.59 / 0.76 / 1.16 of
+the base form at 4 / 8-16 / 32 rows an expert (`debug-jit`, the same lab and board row) (1.42 /
+1.80 / 2.76 ms against a flat 2.38), on the M5 Max 0.31 / 0.32 / 0.38 (0.40 / 0.42 / 0.49
+against 1.31), bit-equal on every live element. The house's 375-token window on a 256-expert
+model is 11.7 rows an expert; a 1024-token one is 32.
 
 ### The short window's gathered route {#prefill-moe-gemv-route}
 

@@ -11,6 +11,7 @@ require ?das_metal dasllama/dasllama_metal_prefill  // the mul_mm twins (bf16 + 
 require ?das_metal dasllama/dasllama_metal_common   // the pipeline globals the generated builders read
 require ?das_metal metal/das_metal_boost  // device/pipeline/buffer plumbing + the leak gate
 require ?das_metal _metal_kernel_common   // the MetalCell record, check_buf, the device shell, kq plane builders
+require ?das_metal _metal_kq_kernels   // kq_mm_form_kernel / kq_dq_kernel: the dense kq kernel pickers
 require dasllama/dasllama_convert         // devw_dequant_*_core — the image mint's dev-W bake mirrors
 require dasllama/dasllama_gemm_schema     // kq_qsb — the ONE per-format quant-plane stride source
 require dasllama/dasllama_kqformat        // KqFmt: the per-format stamp tables' key
@@ -34,58 +35,13 @@ require strings
 // fails to compile is a RED, and the simdgroup bases always assert. Without das_metal in the
 // build, or with no Metal device, every check skips.
 
-//! the simdgroup kq mul_mm stamp of a format
-def private kq_mm_stamp(f) {   //! generic, as the gates are: the Apple half alone instantiates it
-    if (f == KqFmt.iq2xxs) return stamp_of(@@enc_kq_mm_iq2xxs_c)
-    if (f == KqFmt.iq2xs) return stamp_of(@@enc_kq_mm_iq2xs_c)
-    if (f == KqFmt.iq2s) return stamp_of(@@enc_kq_mm_iq2s_c)
-    if (f == KqFmt.q40) return stamp_of(@@enc_kq_mm_q40_c)
-    if (f == KqFmt.iq4nl) return stamp_of(@@enc_kq_mm_iq4nl_c)
-    if (f == KqFmt.k2) return stamp_of(@@enc_kq_mm_k2_c)
-    if (f == KqFmt.iq3xxs) return stamp_of(@@enc_kq_mm_iq3xxs_c)
-    if (f == KqFmt.iq3s) return stamp_of(@@enc_kq_mm_iq3s_c)
-    if (f == KqFmt.k3) return stamp_of(@@enc_kq_mm_k3_c)
-    if (f == KqFmt.iq4xs) return stamp_of(@@enc_kq_mm_iq4xs_c)
-    if (f == KqFmt.iq3s4) return stamp_of(@@enc_kq_mm_iq3s4_c)
-    if (f == KqFmt.k4) return stamp_of(@@enc_kq_mm_k4_c)
-    if (f == KqFmt.k5) return stamp_of(@@enc_kq_mm_k5_c)
-    return stamp_of(@@enc_kq_mm_k6_c)
-}
-
-//! the 128-row f16-X Metal-4 tensor kq mul_mm kernel of a format (the tall stamps)
-def private kq_mm_th128_kernel(f) {
-    if (f == KqFmt.iq3xxs) return kernel_of(@@enc_kq_mm_iq3xxs_th128_c)
-    if (f == KqFmt.iq3s) return kernel_of(@@enc_kq_mm_iq3s_th128_c)
-    if (f == KqFmt.k4) return kernel_of(@@enc_kq_mm_k4_th128_c)
-    if (f == KqFmt.k5) return kernel_of(@@enc_kq_mm_k5_th128_c)
-    return kernel_of(@@enc_kq_mm_k6_th128_c)
-}
-
-//! the 32-row Metal-4 tensor kq mul_mm kernel of a format, f16 X (`halfx`) or f32 X
-def private kq_mm_tensor_kernel(f; halfx : bool) {
-    if (f == KqFmt.iq2xxs) return halfx ? kernel_of(@@enc_kq_mm_iq2xxs_th_c) : kernel_of(@@enc_kq_mm_iq2xxs_t_c)
-    if (f == KqFmt.iq2xs) return halfx ? kernel_of(@@enc_kq_mm_iq2xs_th_c) : kernel_of(@@enc_kq_mm_iq2xs_t_c)
-    if (f == KqFmt.iq2s) return halfx ? kernel_of(@@enc_kq_mm_iq2s_th_c) : kernel_of(@@enc_kq_mm_iq2s_t_c)
-    if (f == KqFmt.q40) return halfx ? kernel_of(@@enc_kq_mm_q40_th_c) : kernel_of(@@enc_kq_mm_q40_t_c)
-    if (f == KqFmt.iq4nl) return halfx ? kernel_of(@@enc_kq_mm_iq4nl_th_c) : kernel_of(@@enc_kq_mm_iq4nl_t_c)
-    if (f == KqFmt.k2) return halfx ? kernel_of(@@enc_kq_mm_k2_th_c) : kernel_of(@@enc_kq_mm_k2_t_c)
-    if (f == KqFmt.iq3xxs) return halfx ? kernel_of(@@enc_kq_mm_iq3xxs_th_c) : kernel_of(@@enc_kq_mm_iq3xxs_t_c)
-    if (f == KqFmt.iq3s) return halfx ? kernel_of(@@enc_kq_mm_iq3s_th_c) : kernel_of(@@enc_kq_mm_iq3s_t_c)
-    if (f == KqFmt.k3) return halfx ? kernel_of(@@enc_kq_mm_k3_th_c) : kernel_of(@@enc_kq_mm_k3_t_c)
-    if (f == KqFmt.iq4xs) return halfx ? kernel_of(@@enc_kq_mm_iq4xs_th_c) : kernel_of(@@enc_kq_mm_iq4xs_t_c)
-    if (f == KqFmt.iq3s4) return halfx ? kernel_of(@@enc_kq_mm_iq3s4_th_c) : kernel_of(@@enc_kq_mm_iq3s4_t_c)
-    if (f == KqFmt.k4) return halfx ? kernel_of(@@enc_kq_mm_k4_th_c) : kernel_of(@@enc_kq_mm_k4_t_c)
-    if (f == KqFmt.k5) return halfx ? kernel_of(@@enc_kq_mm_k5_th_c) : kernel_of(@@enc_kq_mm_k5_t_c)
-    return halfx ? kernel_of(@@enc_kq_mm_k6_th_c) : kernel_of(@@enc_kq_mm_k6_t_c)
-}
-
 def private kq_mulmm_gate(t : T?; var dev, queue; fmt : int; tensor : bool; m, kdim, ndim : int; halfx : bool = false; tall : bool = false) {
     let tag = "kq_mulmm_k{fmt}{tensor ? "t" : ""}{tall ? " tall" : ""}{halfx ? " halfx" : ""} m={m} k={kdim} n={ndim}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
         let f = kq_fmt_of_id(fmt, "kq_mulmm_gate")
-        let sb = kq_mm_stamp(f)
-        let kt = tall ? kq_mm_th128_kernel(f) : kq_mm_tensor_kernel(f, halfx)
+        let sb = kq_mm_base_stamp(f)
+        let kt = tall ? kq_mm_form_kernel(f, "th128") : kq_mm_form_kernel(f, halfx ? "th" : "t")
         var pso = tensor ? (mc |> keep_stamp(kt, err)) : (mc |> keep_stamp(sb, err))
         return if (!(tensor ? tensor_pso_or_skip(t, tag, pso, dev, err) : pso_ok(t, tag, pso, err)))
         let nb = kdim / 256
@@ -117,7 +73,7 @@ def private kq_mulmm_gate(t : T?; var dev, queue; fmt : int; tensor : bool; m, k
         // a tall m off the 128 floor mirrors the encoder's pair: the 128 stamp covers r0 rows and
         // the 32-row TH covers the rest at its x/y byte offsets - the nonzero-offset arm's binding
         let r0 = tall ? m / 128 * 128 : m
-        let kr = kq_mm_tensor_kernel(f, true)
+        let kr = kq_mm_form_kernel(f, "th")
         var rem_pso = (tall && r0 != m) ? (mc |> keep_stamp(kr, err)) : null
         if (tall && r0 != m) {
             t |> success(rem_pso != null, "{tag}: remainder pipeline: {err}")
@@ -274,23 +230,6 @@ def private kq_dqh_kernel(f) {   //! generic, as the gates are: the Apple half a
     return kernel_of(@@enc_dequant_k6h)
 }
 
-//! the dev-W dequant kernel of a split-scale format
-def private kq_dq_kernel(f) {   //! generic, as the gates are: the Apple half alone instantiates it
-    if (f == KqFmt.iq4xs) return kernel_of(@@enc_kq_dq_iq4xs)
-    if (f == KqFmt.iq4nl) return kernel_of(@@enc_kq_dq_iq4nl)
-    if (f == KqFmt.q40) return kernel_of(@@enc_kq_dq_q40)
-    if (f == KqFmt.k3) return kernel_of(@@enc_kq_dq_k3)
-    if (f == KqFmt.iq3s) return kernel_of(@@enc_kq_dq_iq3s)
-    if (f == KqFmt.iq3xxs) return kernel_of(@@enc_kq_dq_iq3xxs)
-    if (f == KqFmt.k2) return kernel_of(@@enc_kq_dq_k2)
-    if (f == KqFmt.iq2s) return kernel_of(@@enc_kq_dq_iq2s)
-    if (f == KqFmt.iq2xs) return kernel_of(@@enc_kq_dq_iq2xs)
-    if (f != KqFmt.iq2xxs) {
-        panic("kq_dq_kernel: no dev-W dequant kernel for {f}")
-    }
-    return kernel_of(@@enc_kq_dq_iq2xxs)
-}
-
 //! a format's dev-W dequant pipeline: the split-scale kernel, or the CvtArgs pass on k4 / k5 / k6
 def private kq_dq_pso(var mc; fmt : int; var err : string&) : MetalComputePipeline? {
     let f = kq_fmt_of_id(fmt, "kq_dq_pso")
@@ -433,12 +372,13 @@ def private q8_dbuf_gate(t : T?; var dev, queue; m, kdim, ndim : int; mt : int =
     }
 }
 
-def private kq_dbuf_gate(t : T?; var dev, queue; fmt : int; m, kdim, ndim : int) {
-    let tag = "kq_dbuf_k{fmt} m={m} k={kdim} n={ndim}"
+def private kq_dbuf_gate(t : T?; var dev, queue; fmt : int; m, kdim, ndim : int; mt : int = 128) {
+    let tag = "kq_dbuf_k{fmt} mt{mt} m={m} k={kdim} n={ndim}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
-        let ka = kq_mm_th128_kernel(kq_fmt_of_id(fmt, "kq_dbuf_gate"))
-        let kb = fmt == 4 ? kernel_of(@@enc_kq_mm_k4_thdb128_c) : (fmt == 5 ? kernel_of(@@enc_kq_mm_k5_thdb128_c) : kernel_of(@@enc_kq_mm_k6_thdb128_c))
+        let f = kq_fmt_of_id(fmt, "kq_dbuf_gate")
+        let ka = mt == 128 ? kq_mm_form_kernel(f, "th128") : kq_mm_form_kernel(f, "th")
+        let kb = mt == 128 ? kq_mm_form_kernel(f, "thdb128") : kq_mm_form_kernel(f, "thdb")
         var pso_a = mc |> keep_stamp(ka, err)
         var pso_b = mc |> keep_stamp(kb, err)
         return if ((pso_a == null || pso_b == null) && !tensor_pso_or_skip(t, tag, null, dev, err))
@@ -468,7 +408,8 @@ def private kq_dbuf_gate(t : T?; var dev, queue; fmt : int; m, kdim, ndim : int)
         let by_b = mc |> out_words(m * ndim, -500.0)
         let bk = mc |> in_plain([uint(kdim)])
         let bn = mc |> in_plain([uint(ndim)])
-        let doff = fmt == 6 ? uint64(nsb * 16) : 0ul   //! k6 keeps its f16 d scales in a tail past the 16B blocks
+        let compact = fmt == 4 || fmt == 5 || fmt == 45 || fmt == 40
+        let doff = compact ? 0ul : uint64(nsb * 16)
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
             invoke(ka.enc, enc, pso_a, mc.buf[bks], doff, mc.buf[bks], 0ul, mc.buf[bkq], 0ul, mc.buf[bx], 0ul, mc.buf[by_a], 0ul, mc.buf[bk], mc.buf[bn], int64(m), int64(ndim))
             invoke(kb.enc, enc, pso_b, mc.buf[bks], doff, mc.buf[bks], 0ul, mc.buf[bkq], 0ul, mc.buf[bx], 0ul, mc.buf[by_b], 0ul, mc.buf[bk], mc.buf[bn], int64(m), int64(ndim))
@@ -1678,10 +1619,12 @@ def test_metal_gemm_kernels(t : T?) {
                 kq_mulmm_gate(t, dev, queue, 24, false, 32, 256, 128)
                 kq_mulmm_gate(t, dev, queue, 25, false, 64, 512, 64)
                 kq_mulmm_gate(t, dev, queue, 25, false, 32, 256, 128)
-                // the iquant tensor twins (T + TH stamps; twins skip without Metal-4)
+                // the iquant tensor twins (T, TH and the tall TH128 stamps; twins skip without Metal-4)
                 for (fmt in [44, 35, 45, 40, 3, 33, 34, 2, 23, 24, 25]) {
                     kq_mulmm_gate(t, dev, queue, fmt, true, 64, 512, 64)
                     kq_mulmm_gate(t, dev, queue, fmt, true, 64, 512, 64, halfx = true)
+                    kq_mulmm_gate(t, dev, queue, fmt, true, 256, 512, 64, halfx = true, tall = true)
+                    kq_mulmm_gate(t, dev, queue, fmt, true, 320, 512, 64, halfx = true, tall = true)
                 }
                 q8_mulmm_t_gate(t, dev, queue, 64, 256, 64)
                 q8_mulmm_t_gate(t, dev, queue, 64, 256, 64, halfx = true)
@@ -1692,7 +1635,7 @@ def test_metal_gemm_kernels(t : T?) {
                 q8_devw_gate(t, dev, queue, 64, 256, 64)
                 q8_devw_gate(t, dev, queue, 32, 288, 128)   // non-256-multiple block count arms the dequant tail guard
                 q8_devw_gate(t, dev, queue, 128, 256, 128, mt = 128)   // tall dev-W GEMM stamp
-                for (fmt in [4, 5, 6, 44, 45, 40, 3, 33, 34, 2, 23, 24, 25]) {
+                for (fmt in [4, 5, 6, 44, 35, 45, 40, 3, 33, 34, 2, 23, 24, 25]) {
                     kq_devw_gate(t, dev, queue, fmt, 64, 512, 64)
                     kq_devw_gate(t, dev, queue, fmt, 32, 512, 128)   // ndim%128: the tiled leg runs
                 }
@@ -1703,8 +1646,9 @@ def test_metal_gemm_kernels(t : T?) {
                 q8_dbuf_gate(t, dev, queue, 128, 288, 128)   //! kdim%64 == 32: the tail chunk on both arms
                 q8_dbuf_gate(t, dev, queue, 256, 512, 128)   //! two M-tiles, deeper K
                 q8_dbuf_gate(t, dev, queue, 64, 256, 64, mt = 32)   //! the 32-row stamp pair
-                for (fmt in [4, 5, 6]) {
+                for (fmt in [4, 5, 6, 44, 35, 45, 40, 3, 33, 34, 2, 23, 24, 25]) {
                     kq_dbuf_gate(t, dev, queue, fmt, 128, 512, 64)
+                    kq_dbuf_gate(t, dev, queue, fmt, 64, 512, 64, mt = 32)   //! the 32-row stamp pair
                 }
                 bf16_mulmm_gate(t, dev, queue, false, 64, 256, 64)
                 bf16_mulmm_gate(t, dev, queue, true, 64, 256, 64)
