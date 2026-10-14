@@ -750,14 +750,17 @@ def sort_keys(tab : table<string>) : array<string> {
     return <- keys
 }
 
-//! The modules the host was started without (`--disable-module <name>` ahead of the script), sorted: a file that
-//! compiles with a module and not without it is clean under one host and not the other, so the cache keys on the set
+//! The modules the host was started without (`--disable-module X`
+//! ahead of the script), sorted: a file that compiles with a module
+//! and not without it is clean under one host and not the other,
+//! so the cache keys on the set
 def host_disabled_modules() : array<string> {
     var names : array<string>
     let args <- get_command_line_arguments()
     var i = 1
     while (i < length(args) && args[i] != "--") {
-        if ((args[i] == "--disable-module" || args[i] == "-disable-module") && i + 1 < length(args)) {
+        let flag = args[i] == "--disable-module" || args[i] == "-disable-module"
+        if (flag && i + 1 < length(args)) {
             names |> push(args[i + 1])
             i++
         }

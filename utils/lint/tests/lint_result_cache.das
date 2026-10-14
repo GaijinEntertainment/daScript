@@ -52,7 +52,7 @@ def private das_exe() : string {
     return empty(args) ? "" : args[0]
 }
 
-//! `host` goes ahead of the script (the daslang flags), `extra` after the `--` (the lint flags)
+//! `host`: daslang's flags before the script; `extra`: after `--`
 def private run_lint(root : string; extra, host : array<string>) : string {
     var argv <- [das_exe(), "-dasroot", get_das_root()]
     argv |> push_from(host)
@@ -121,7 +121,8 @@ def test_lint_result_cache(t : T?) {
         let root = build_tree("modules")
         run_lint(root, [], [])
         let out = run_lint(root, [], ["--disable-module", "dasSQLITE"])
-        t |> equal(status_of(out, root, "a.das"), "PASS", "the host's disabled-module set is part of the entry\n{out}")
+        t |> equal(status_of(out, root, "a.das"), "PASS",
+            "the host's disabled-module set is part of the entry\n{out}")
         t |> equal(entry_count(root), 2, "one entry per clean file, whatever host ran before")
         let again = run_lint(root, [], ["--disable-module", "dasSQLITE"])
         t |> equal(status_of(again, root, "a.das"), "CACHED", "the same host set is a hit\n{again}")
