@@ -1,7 +1,7 @@
 # dasLLAMA tests Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-doc: `CLAUDE.md`. Planned work: `../followup_general.md`, `../followup_vulkan.md`,
+doc: `../ARCHITECTURE.md`. Planned work: `../followup_general.md`, `../followup_vulkan.md`,
 `../followup_metal.md`.
 
 A cell is one `t |> run` subtest, or a `[test]` function that runs no subtest, and owns the asserts
@@ -23,17 +23,10 @@ or a knob list) - never a value the cell's own claim defines - or that a checked
 its evidence, applies `REVIEW_PINNED_GATES.md` too.** An assert that compares against a
 `../dasllama/` constant by name, not against a literal copy of it, keeps nothing in step.
 
-**A cell that calls a lane setter or a driver setter, in its own code or through a helper it
-calls, passes a loader parameter that takes a family's lane, or whose claim depends on which
-route or serving lane runs it - a lane pin, a driver hook, a CPU-vs-GPU compare - applies
-`REVIEW_LANE_PINS.md` (beside this file) too.** A lane setter is a call that writes the value a
-family's loader or its `*_serves_q8` accessor reads to choose the family's serving lane
-(`set_<name>_q8`, whisper's `set_asr_fp32` / `set_asr_tower_fp32`), or a facade call that makes
-that call; a driver setter is any other `../dasllama/` call the cell makes whose purpose is to set a
-value - a `set_*`, `enable_*`, `disable_*` or override call - stored in a module global or
-process-global state that a later load, route choice or kernel dispatch reads; a call a loader
-makes on its own is not the cell's (`REVIEW_LANE_PINS.md` carries the same two definitions, and
-the two files change together).
+**A cell that calls a `../dasllama/` `set_*`, `enable_*`, `disable_*` or override call, in its own
+code or through a helper it calls, passes a loader parameter that takes a family's lane, or whose
+claim depends on which route or serving lane runs it - a lane pin, a driver hook, a CPU-vs-GPU
+compare - applies `REVIEW_LANE_PINS.md` (beside this file) too.**
 
 **A cell that feeds, preprocesses, or asserts on media bytes an encoder consumes - pixels or
 audio samples - compares an encoder's output rows against a second source, or compares ASR
@@ -117,7 +110,8 @@ clauses true for every cell in the class.**
 **A diff that adds, renames, or drops an arm name - the literal passed to `arm_on(t, name)`
 (`_model_tier.das`), what `--arm` matches - updates the arm census in `CLAUDE.md`'s "Arm filter
 mechanics" section in the same change.** An arm the census does not name is unreachable to
-whoever is choosing what to run.
+whoever is choosing what to run. A `REVIEW.das` check comparing the `arm_on(t, "...")` literals
+with that section's names can enforce this rule.
 
 **A diff that adds, changes, or drops a cell's skip condition other than the runner's own
 `--arm` / `--family` filter - a `t |> skip` or an early return - updates in the same change the

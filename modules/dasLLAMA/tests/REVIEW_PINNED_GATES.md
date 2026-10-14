@@ -1,7 +1,7 @@
 # dasLLAMA tests - Pinned Gates Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-doc: `CLAUDE.md`. Planned work: `../followup_general.md`.
+doc: `../ARCHITECTURE.md`. Planned work: `../followup_general.md`.
 
 A cell is one `t |> run` subtest, or a `[test]` function that runs no subtest; a helper's
 asserts belong to every cell that calls it. A pinned test cell is a cell the pinned set lists,
@@ -18,9 +18,12 @@ must keep holding:
 - `test_model_specs.das` must hold `../performance/model_specs.das`'s model-set table, and
   `spec_by_file` answering by the models-dir path and by the gguf's base name (a split-shard row
   sits in a subfolder).
-- `test_metal_prefill_kernels.das`'s `test_metal_prefill_kernels` cell must hold its
-  `attn_trio_gate` calls whose `AttnKeys` sets `softcap`, `hass`, `uend` or `ulo` - the softcap,
-  sink, uniform-span and mixed-span arms.
+- `test_metal_prefill_kernels.das`'s `test_metal_prefill_kernels` cell must hold every kernel gate
+  it runs at the bars each sets: its `attn_trio_gate` calls whose `AttnKeys` sets `softcap`, `hass`,
+  `uend` or `ulo` - the softcap, sink, uniform-span and mixed-span arms; the per-32 gates
+  (`b32_gemv_gate`, `b32_mvb_gate`, `moe_b32_rows_gate`, `b32_mm_gate`, `moe_mulmm_b32_gate`,
+  `ple_gather_b32_gate`); the deltanet gates (`dn_chain_gate`, `dn_groups_gate`); `cat2_gate`,
+  stream-major included; `combine_sh_gate`; and every other gate the function calls.
 - `test_site_records.das` must hold the byte-compare of `site/files/dasllama/bench_records.json`
   and of `site/files/dasllama/bench_cells.json` (repo root) - the smaller copy the site page loads
   first - against a fresh `merge_site_records` run, and `bench_cells.json` keeping every field

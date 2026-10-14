@@ -17,8 +17,10 @@ in place and changes no value that code after the stage reads.** The CPU form se
 machine with no GPU driver.
 
 **A diff that adds an override without the announce is a defect.** An announce is the line the run
-prints where the override changes the outcome. An override is an environment knob, a non-private
-setter in a `dasllama/` engine file, or an on-disk state file - one a run writes or a user places,
+prints where the override changes the outcome.
+
+An override is an environment knob, a non-private setter in a `dasllama/` engine file that code
+outside `dasllama/` calls (a test, harness, tool or host), or an on-disk state file - one a run writes or a user places,
 never data a build ships - that moves a gate, policy, or threshold off its default and so changes
 what the run executes, writes, reads, mints (writes as a prepared image), or computes. A measured
 time, the run's own duration, or a different moment at which the same work happens is not such a

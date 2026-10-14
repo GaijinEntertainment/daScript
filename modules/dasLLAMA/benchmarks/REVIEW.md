@@ -60,8 +60,8 @@ it passed.** Two arms can agree and both be wrong; only the reference makes the 
 **A diff that adds a race arm that is not a compared arm, or changes its run or report line,
 makes that arm carry the literal token `timing-only` on its report line.**
 
-**A diff that adds a mode none of whose arms it reads back and compares, or changes such a mode's
-arms, makes that mode carry the literal text `ATTRIBUTION SWEEP`
+**A diff that adds a race or A/B mode none of whose arms it reads back and compares, or changes
+such a mode's arms, makes that mode carry the literal text `ATTRIBUTION SWEEP`
 on its own header-comment line, naming the mode and what its arms attribute.** Without the line a
 reader takes the mode's arms for an adoption decision it never made.
 
