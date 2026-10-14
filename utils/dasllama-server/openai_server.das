@@ -586,7 +586,7 @@ def slot_served_note(s : ModelSlot; device_kv, holds_gpu : bool) : string {
         return "this model also reads images or audio, and those parts of a prompt run on the host: every stream's cache stays there, and each step runs on the CPU"
     }
     if (s.sched.mtp && !gpu_resident_mtp_device_home(s.model)) {
-        return "self-speculation (the model drafting its own next tokens) does not run whole on the card for this model - its draft head, its check of the drafts or its undo of a rejected draft stays on the host (the load log names which): every stream's cache stays on the host, and each step runs on the CPU"
+        return "self-speculation (the model drafting its own next tokens) does not run whole on the card for this model - the part that writes the drafts, its check of the drafts or its undo of a rejected draft stays on the host (the load log names which): every stream's cache stays on the host, and each step runs on the CPU"
     }
     return "the card has room for {s.gpu_regions} stream caches and this model serves {s.sched.max_streams} streams: every stream's cache stays on the host, and each step runs on the CPU"
 }
@@ -1795,10 +1795,17 @@ def private box_ram_gb() : int {
         delete args
         return int(to_float(strip(out)) / gib + 0.5)
     }
-    let total = ram_gb_from_meminfo(fread("/proc/meminfo"))
-    var cap = ram_gb_from_cgroup(fread("/sys/fs/cgroup/memory.max"))
+    return linux_ram_gb(fread("/proc/meminfo"), fread("/sys/fs/cgroup/memory.max"),
+        fread("/sys/fs/cgroup/memory/memory.limit_in_bytes"))
+}
+
+//! a Linux box's RAM in whole GiB from its three files' texts: the
+//! cgroup v2 limit, else the v1 one, where under the meminfo total
+def linux_ram_gb(meminfo, cgroup_v2, cgroup_v1 : string) : int {
+    let total = ram_gb_from_meminfo(meminfo)
+    var cap = ram_gb_from_cgroup(cgroup_v2)
     if (cap == 0) {
-        cap = ram_gb_from_cgroup(fread("/sys/fs/cgroup/memory/memory.limit_in_bytes"))
+        cap = ram_gb_from_cgroup(cgroup_v1)
     }
     return cap > 0 && (total == 0 || cap < total) ? cap : total
 }
@@ -2898,8 +2905,7 @@ def private handle_model_load(req : FrontReq; var resp : Reply) : http_status { 
     if (want_ctx > 0l) {
         m.config.seq_len = min(m.config.seq_len, want_ctx)
     }
-    var opts = SlotOpts()
-    opts.backend = cpu_only ? "cpu" : "auto"
+    let opts = runtime_slot_opts(rpath, cpu_only)
     clamp_ctx_to_device_room(m, id, slot_kv_dtype(opts))   // the codec the scheduler will inherit, not SlotOpts' f16 seed
     failed = catch_worker_panic(failure) {
         // the KV-geometry validate inside create_scheduler can refuse the pool — caught, so an
@@ -6988,6 +6994,34 @@ var private g_sched_defaults = SchedDefaults()
 def mtp_auto_arms(streams : int64; on_metal : bool; backend_effective : string; experts_host : bool = false; platforms : string = "") : bool
     => streams == 1l && decodes_on_gpu(on_metal, backend_effective, experts_host) && mtp_platform_listed(platforms, on_metal ? "metal" : "vulkan")
 
+//! The model file's catalog `serve_mtp`, read off its base name; ""
+//! for a file with no catalog row. Non-private: a test gates it.
+def catalog_mtp_platforms(path : string) : string {
+    var inscope spec <- spec_by_file(base_name(path))
+    return spec.serve_mtp
+}
+
+//! A runtime POST load's slot options: the backend asked for, and the
+//! catalog row's MTP platforms the boot path reads too. Non-private:
+//! a test gates it.
+def runtime_slot_opts(path : string; cpu_only : bool) : SlotOpts
+    => SlotOpts(backend = cpu_only ? "cpu" : "auto", mtp_platforms = catalog_mtp_platforms(path))
+
+//! A slot's `mtp` ask: its own where set, else the server's
+//! (-1 auto | 0 off | 1 on)
+def slot_mtp_want(opts : SlotOpts; server_mtp : int) : int
+    => opts.mtp >= 0 ? opts.mtp : server_mtp
+
+//! Whether a slot speculates: asked on, or unset where
+//! `mtp_auto_arms` arms it over the slot's catalog platforms.
+//! Non-private: a test gates it.
+def slot_mtp_arms(opts : SlotOpts; server_mtp : int; streams : int64; on_metal : bool;
+                  backend_effective : string; experts_host : bool) : bool {
+    let want = slot_mtp_want(opts, server_mtp)
+    return want > 0 || (want < 0 && mtp_auto_arms(streams, on_metal, backend_effective,
+                                                  experts_host, opts.mtp_platforms))
+}
+
 //! Whether `platforms`, a catalog `serve_mtp` comma list, names `platform`; "" names none. Non-private: test_server_flags.das gates it.
 def mtp_platform_listed(platforms, platform : string) : bool {
     for (p in split(platforms, ",")) {
@@ -7049,8 +7083,9 @@ def private init_one_scheduler(var s : ModelSlot) {
         pfx = 0l   // explicit unbounded
     }
     let s_kv = slot_kv_dtype(s.opts)
-    let want = s.opts.mtp >= 0 ? s.opts.mtp : g_sched_defaults.mtp
-    var spec = want > 0 || (want < 0 && mtp_auto_arms(s_streams, slot_flavor(s) == "metal", s.backend_effective, gpu_resident_experts_host(), s.opts.mtp_platforms))
+    let want = slot_mtp_want(s.opts, g_sched_defaults.mtp)
+    var spec = slot_mtp_arms(s.opts, g_sched_defaults.mtp, s_streams, slot_flavor(s) == "metal",
+                             s.backend_effective, gpu_resident_experts_host())
     if (spec && s.model.config.n_layer_nextn <= 0l) {
         let side = mtp_drafter_sidecar(s.path)
         if (!empty(side) && attach_mtp_drafter(s.model, side)) {

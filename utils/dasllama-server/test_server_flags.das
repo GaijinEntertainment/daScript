@@ -294,6 +294,8 @@ def test_roster_from_flags(t : T?) {
 
 let private SLOT_PAGE_ROWS = 64l   //! the server's default paged sessions (`--flat` off): the slot's scheduler as `main.das` builds it
 
+//! the slot's auto-arm over a modeled catalog row that lists vulkan:
+//! Qwen3.5-0.8B-MTP has no catalog row of its own
 def private slot_mtp_device_home(t : T?; file : string) {
     let path = path_join(models_dir(), file)
     return if (model_missing(t, path))
@@ -353,7 +355,7 @@ def private slot_mtp_device_home(t : T?; file : string) {
 
 [test]
 def test_slot_mtp_device_home(t : T?) {
-    t |> run("a Vulkan slot on the server's defaults over Qwen3.5-0.8B-MTP: the auto-arm speculates, the stream homes on the device, and its drafted steps run there") @(t : T?) {
+    t |> run("Qwen3.5-0.8B-MTP, a row listing vulkan modeled: speculates device-home") @(t : T?) {
         slot_mtp_device_home(t, "Qwen3.5-0.8B-MTP-Q8_0.gguf")
     }
 }
@@ -373,5 +375,92 @@ def test_mtp_catalog_platforms(t : T?) {
         t |> equal(catalog_mtp_platforms("Qwen3.6-35B-A3B-UD-Q4_K_M.gguf"), "", "the head-less Qwen3.6-35B file has nothing to draft with")
         t |> equal(catalog_mtp_platforms("/models/no-such-model.gguf"), "", "no row, no platform")
         t |> success(mtp_platform_listed("metal, vulkan", "vulkan") && !mtp_platform_listed("metal", "vulkan") && !mtp_platform_listed("", "metal"), "the comma list reads its members and nothing else")
+    }
+}
+
+[test]
+def test_config_mtp_catalog(t : T?) {
+    t |> run("GET /config's unset mtp reads the configured model's catalog row") @(t : T?) {
+        let listed = "/models/Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf"
+        let one = ServerArgs(model = listed, streams = 1)
+        t |> success(config_mtp_resolved(one, "vulkan"), "one stream on the device the row lists")
+        t |> success(!config_mtp_resolved(one, "metal"), "the row lists vulkan alone")
+        let no_row = ServerArgs(model = "/models/no-such-model.gguf", streams = 1)
+        t |> success(!config_mtp_resolved(no_row, "vulkan"), "no catalog row: plain")
+        let wide = ServerArgs(model = listed)
+        t |> success(!config_mtp_resolved(wide, "vulkan"), "the four-stream default: plain")
+    }
+}
+
+//! the slot options both load paths build carry the catalog row's
+//! platforms, so an unset `mtp` arms a listed model's slot alike at
+//! boot and at a runtime POST load
+[test]
+def test_slot_mtp_platforms(t : T?) {
+    let listed = "/models/Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf"
+    let no_row = "/models/no-such-model.gguf"
+    t |> run("a [[models]] entry's boot options") @(t : T?) {
+        let opts = boot_slot_opts(ModelEntry(path = listed))
+        t |> equal(opts.mtp, -1, "the entry leaves mtp unset")
+        t |> equal(opts.mtp_platforms, "vulkan", "the catalog row's platforms")
+        t |> success(slot_mtp_arms(opts, -1, 1l, false, "gpu:resident", false),
+            "one resident stream on the listed device arms")
+        let plain = boot_slot_opts(ModelEntry(path = no_row))
+        t |> success(!slot_mtp_arms(plain, -1, 1l, false, "gpu:resident", false),
+            "no catalog row: plain")
+    }
+    t |> run("a runtime POST load's options") @(t : T?) {
+        let opts = runtime_slot_opts(listed, false)
+        t |> equal(opts.backend, "auto")
+        t |> equal(opts.mtp, -1, "the load leaves mtp unset")
+        t |> equal(opts.mtp_platforms, "vulkan", "the catalog row's platforms")
+        t |> success(slot_mtp_arms(opts, -1, 1l, false, "gpu:resident", false),
+            "one resident stream on the listed device arms")
+        t |> equal(runtime_slot_opts(listed, true).backend, "cpu")
+        let plain = runtime_slot_opts(no_row, false)
+        t |> success(!slot_mtp_arms(plain, -1, 1l, false, "gpu:resident", false),
+            "no catalog row: plain")
+    }
+    t |> run("the slot's own mtp, then the server's, outranks the catalog") @(t : T?) {
+        var opts = runtime_slot_opts(listed, false)
+        t |> success(!slot_mtp_arms(opts, 0, 1l, false, "gpu:resident", false),
+            "the server's mtp = false")
+        opts.mtp = 0
+        t |> success(!slot_mtp_arms(opts, 1, 1l, false, "gpu:resident", false),
+            "the slot's mtp = false over the server's true")
+        let on = runtime_slot_opts(no_row, false)
+        t |> success(slot_mtp_arms(on, 1, 4l, false, "cpu", false), "an ask on arms anywhere")
+    }
+}
+
+[test]
+def test_prefix_state_budget(t : T?) {
+    t |> run("the checkpoint budget: the MB asked, else a quarter of RAM, else 4 GB") @(t : T?) {
+        t |> equal(16384l, prefix_state_budget_mb(0l, 64l), "a 64 GB box")
+        t |> equal(4096l, prefix_state_budget_mb(0l, 16l), "a 16 GB box")
+        t |> equal(4096l, prefix_state_budget_mb(0l, 0l), "RAM unknown")
+        t |> equal(512l, prefix_state_budget_mb(512l, 64l), "an explicit budget stands")
+    }
+    t |> run("a cgroup limit file's byte count, no limit read as none") @(t : T?) {
+        t |> equal(58, ram_gb_from_cgroup("61999996928\n"), "a 62 GB container limit (v2)")
+        t |> equal(1, ram_gb_from_cgroup("268435456\n"), "256 MiB reads as one GiB, not no limit")
+        t |> equal(0, ram_gb_from_cgroup("max\n"), "v2 with no limit")
+        t |> equal(0, ram_gb_from_cgroup("9223372036854771712\n"), "v1 with no limit")
+        t |> equal(0, ram_gb_from_cgroup(""), "no cgroup file")
+        t |> equal(0, ram_gb_from_cgroup("+68719476736\n"), "a signed count")
+        t |> equal(0, ram_gb_from_cgroup(".5e11\n"), "text opening on no digit")
+        t |> equal(0, ram_gb_from_cgroup("nan\n"), "a float spelling")
+    }
+    t |> run("a Linux box's RAM: the v2 limit, else the v1 one, where under the total") @(t : T?) {
+        let mem = "MemFree:  1024 kB\nMemTotal:       67108864 kB\n"
+        let gb16 = "17179869184\n"
+        let gb8 = "8589934592\n"
+        t |> equal(64, linux_ram_gb(mem, "", ""), "no cgroup: the total")
+        t |> equal(16, linux_ram_gb(mem, gb16, gb8), "the v2 limit, the v1 file unread")
+        t |> equal(8, linux_ram_gb(mem, "max\n", gb8), "v2 with no limit: the v1 one")
+        t |> equal(8, linux_ram_gb(mem, "", gb8), "no v2 file: the v1 one")
+        t |> equal(64, linux_ram_gb(mem, "137438953472\n", ""), "a limit past the total")
+        t |> equal(16, linux_ram_gb("", gb16, ""), "the total unread: the limit")
+        t |> equal(0, linux_ram_gb("", "max\n", ""), "neither: unknown")
     }
 }

@@ -382,7 +382,8 @@ request on its system prompt and tool set shares, one where its last message sta
 a conversation share), one at its last message's close, ahead of the generation prompt (so the same prompt asked
 again and the conversation's follow-up attach everything up to it, whatever the replayed assistant turn renders -
 a thinking-off turn's generation prompt opens a think block the replay does not), and one at its finished turn,
-within `--prefix-state-mb` (a quarter of RAM unless set, per served slot) and at most `--prefix-states` of them, a
+within `--prefix-state-mb` (a quarter of RAM unless set - in a container, of its memory limit
+where that is lower - per served slot) and at most `--prefix-states` of them, a
 conversation's own stops (its last message's start, its last message's close, its finished turn) dropped before
 shared openings, and a prompt attaches the deepest one that is its exact prefix - the shared system block for a new
 conversation, the whole earlier exchange for the next turn. A slot whose streams keep their caches on the card
@@ -853,10 +854,13 @@ absent; set `DASLLAMA_MODELS_DIR`):
   prefix of a given one reads absent; the self-speculation default's rule as the slot reads it
   (`mtp_auto_arms`, the Vulkan arm and the catalog `serve_mtp` gate included) and as the config
   surface resolves it, with the Metal mode a `--gpu` pick and a `--metal` spelling resolve to;
-  and the catalog's `serve_mtp` read off a file's base name - all model-free. One cell is not: a
-  Vulkan slot on the server's defaults over `Qwen3.5-0.8B-MTP-Q8_0.gguf` and
-  `Qwen3.6-35B-A3B-MTP-IQ4_XS-pure.gguf` speculates with its stream device-home, and the
-  device's draft and verify counters count each drafted step; it needs `DASLLAMA_GPU=1` and
+  the catalog's `serve_mtp` read off a file's base name, and carried by the slot options both
+  the boot load and a runtime POST load build; the checkpoint byte budget and the box's RAM
+  under a container's cgroup limit - all model-free. One cell is not: a Vulkan slot over
+  `Qwen3.5-0.8B-MTP-Q8_0.gguf` and `Qwen3.6-35B-A3B-MTP-IQ4_XS-pure.gguf`, modeling a catalog
+  row that lists vulkan (the 0.8B file has no row of its own), speculates with its stream
+  device-home, and the device's draft and verify counters count each drafted step; it
+  needs `DASLLAMA_GPU=1` and
   skips without it.
 - `tests/` - the control page itself, under real Playwright (Node + chromium): badge states,
   models panel, streams/history, chat wire + SSE rendering, the speech studio, config editor,

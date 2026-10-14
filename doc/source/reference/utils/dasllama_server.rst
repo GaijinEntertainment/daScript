@@ -315,7 +315,9 @@ Run under ``-jit`` --- the interpreter is refused, it is far too slow for infere
    * - ``--prefix-state-mb``
      -
      - *auto*
-     - The checkpoints' byte budget in MB, snapshots and held pages (auto: a quarter of the box's RAM; config key ``prefix_state_mb``)
+     - The checkpoints' byte budget in MB, snapshots and held pages (auto: a quarter of
+       the box's RAM - in a container, of its memory limit where that is lower; config
+       key ``prefix_state_mb``)
    * - ``--flat``
      -
      - ---
