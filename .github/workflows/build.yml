@@ -67,7 +67,9 @@ jobs:
     needs: pre_job
     if: needs.pre_job.outputs.should_skip != 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # a cold sccache (the C++ base moved under the branch) builds the whole tree before
+    # the smoke runs and finishes past 45 minutes; the budget holds that run with room
+    timeout-minutes: 75
     # actions: write needed for `gh cache delete` in the sccache refresh step.
     permissions:
       contents: read
