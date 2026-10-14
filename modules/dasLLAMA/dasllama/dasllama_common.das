@@ -2109,6 +2109,11 @@ var private g_iq3s_serve_pin = ""   //! a process pin over DASLLAMA_IQ3S_SERVE f
 //! (put back through `get_iq3s_serve_pin`)
 def public set_iq3s_serve_pin(mode : string) {
     g_iq3s_serve_pin = mode
+    if (!empty(mode)) {
+        to_log(LOG_WARNING, ("dasLLAMA: set_iq3s_serve_pin(\"{mode}\") - later loads take"
+            + " that IQ3_S served form over DASLLAMA_IQ3S_SERVE;"
+            + " set_iq3s_serve_pin(\"\") reads the knob again\n"))
+    }
 }
 
 def public get_iq3s_serve_pin() : string => g_iq3s_serve_pin
@@ -2128,6 +2133,15 @@ def public set_metal_devw_panels(v : bool) {
 }
 
 def public metal_devw_panels() : bool => g_metal_devw_panels || g_env_metal.devw
+
+[init]
+def private metal_devw_env_announce {
+    if (g_env_metal.devw) {
+        to_log(LOG_WARNING, ("dasLLAMA: DASLLAMA_METAL_DEVW=1 - the dense Q8_0 and K-quant"
+            + " prefill sites read a stored f16 converted copy of their planes,"
+            + " the metal image lane -devw\n"))
+    }
+}
 
 //! Whether an IQ3_S weight loads as the iq3s4 served form (DASLLAMA_IQ3S_SERVE): `lut` / `grid` decide
 //! outright, every home serving both forms at every site; `auto` = each home's form - the LUT form on the CPU
@@ -2232,6 +2246,7 @@ def private dlim_metal_source_impl(var c : DlimMetalConfig) : bool {
         return false
     }
     c.mode = "{get_metal_mode()}"
+    c.devw = metal_devw_panels()
     return true
 }
 
@@ -4582,10 +4597,6 @@ def moe_pair_kform(f1, f3 : KqFmt) : bool {
     }
     return k1
 }
-
-//! a dense plane in a per-32 format the CPU serves off its own planes: Q5_1, Q5_0 and the per-32 IQ4_NL and Q4_0 (the expert
-//! kernels' forms)
-def kq_dense_b32(fmt : KqFmt) : bool => fmt == KqFmt.q51 || fmt == KqFmt.iq4nl32 || fmt == KqFmt.q4032 || fmt == KqFmt.q5032
 
 //! the grp<mr> interleave a per-32 plane pair sits in: the active layout the load's repack laid (`layout_repack_q51` and its
 //! twin, `mr > 1` alone), disk order on a Metal blob, which no CPU repack touches

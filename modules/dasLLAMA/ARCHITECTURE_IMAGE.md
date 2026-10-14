@@ -38,23 +38,23 @@ what licenses deletion without judgment.
 
 ### An image is named by its lane {#image-lane-name}
 
-A `.dlim` sits beside its source as `<file>.<lane>.dlim`, and the lane is what a person
-deliberately switches between on one box: `metal` (the blob flavor), `vulkan`, `cpu-<class>` (the
-planar flavor under the box's tune class - `cpu-arm-i8mm`, `cpu-x86-vnni512`; a build without the
-tune framework spells the architecture alone, never the active backend, which is a pin the
-identity supersedes), a family's own tag (`whisper-f32`), with `-lut` / `-grid` on the CPU and metal lanes where the
-IQ3_S serve mode (`iq3s_serve_mode`: the pin, else `DASLLAMA_IQ3S_SERVE`) names the served form, `-devw` on the metal
-lane under the dev-W panel lever (`#image-devw-plane`), `-yarn<s>` / `-linear<s>` / `-norope` where the rope scaling
-override rides (on the flavors whose identity carries it - a config-free family's does not), `-<quant>` off q8, and
-`-mtp` when a split head rides the load. `image_lane_name` spells it and
-`dlim_file_lane` reads it back off a file name (a hash-named legacy image reads as no lane). The
-lane names the FILE; the header's identity still decides whether the file is current: tune
-winners, backend pins, pack and image versions stay in the identity and supersede within the
-lane, so a stale lane re-bakes in place - the publish writes a temp beside it and renames over -
-and two lanes never reap each other. A lane is a per-box coexistence unit, not a portability
-promise: the class in the CPU lane's name is the box's, and a box of another class re-bakes.
-`image_path_for` adopts a hash-named image at the exact legacy path (identity hash, head fold) by
-renaming it into the lane once, so the switch costs no re-mint.
+A `.dlim` sits beside its source as `<file>.<lane>.dlim`, and the lane is what a person switches
+between on one box: `metal` (the blob flavor), `vulkan`, `cpu-<class>` (the planar flavor under the
+box's tune class - `cpu-arm-i8mm`, `cpu-x86-vnni512`; a build without the tune framework spells the
+architecture alone, never the active backend, which is a pin the identity supersedes), a family's
+own tag (`whisper-f32`), with `-lut` / `-grid` on the CPU and metal lanes where the IQ3_S serve mode
+(`iq3s_serve_mode`: the pin, else `DASLLAMA_IQ3S_SERVE`) names the served form, `-devw` on the metal
+lane under the dev-W panel lever (`#image-devw-plane`; a coexisting knob, `devw` in the blob
+identity alone), `-yarn<s>` / `-linear<s>` / `-norope` where the rope scaling override rides (on the
+flavors whose identity carries it - a config-free family's does not), `-<quant>` off q8, and `-mtp`
+when a split head rides the load. `image_lane_name` spells it and `dlim_file_lane` reads it back off
+a file name (a hash-named legacy image reads as no lane). The lane names the FILE; the header's
+identity still decides whether the file is current: tune winners, backend pins, pack and image
+versions stay in the identity and supersede within the lane, so a stale lane re-bakes in place (the
+publish writes a temp beside it and renames over) and two lanes never reap each other. A lane is a
+per-box coexistence unit, not a portability promise: the class in the CPU lane's name is the box's,
+and a box of another class re-bakes. `image_path_for` adopts a hash-named image at the exact legacy
+path (identity hash, head fold) by renaming it into the lane once, so the switch costs no re-mint.
 
 ### A planar image never stands in for the blob flavor {#image-flavor-rebake}
 

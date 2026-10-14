@@ -541,6 +541,14 @@ def test_image_mechanics(t : T?) {
         t |> equal(image_lane_name(METAL_IMAGE_TAG), "metal", "auto and the lever off read the bare blob lane")
         set_metal_devw_panels(prev_devw)
         set_iq3s_serve_pin(prev_serve)
+        var dc = DlimConfiguration(metal_on = true)
+        let blob_plain = image_identity_of(dc, METAL_IMAGE_TAG)
+        let planar_plain = image_identity_of(dc)
+        dc.metal.devw = true
+        let blob_devw = image_identity_of(dc, METAL_IMAGE_TAG)
+        t |> success(blob_devw != blob_plain, "the dev-W lever folds into the blob identity")
+        t |> equal(image_identity_of(dc), planar_plain, "and never into the planar one")
+        t |> equal(dlim_identity_tag(blob_devw), METAL_IMAGE_TAG, "the tag stays parseable")
         static_if (typeinfo builtin_module_exists(llvm)) {
             t |> equal(image_lane_name(), "cpu-{tune_cpu_class()}", "the planar lane names the box's tune class")
         } else {

@@ -126,9 +126,8 @@ def khr_kq_tile_on : bool => g_gpu.has_coopmat && g_gpu.subgroup_size == 32l
 //! the cm2 flash tiles serve where the device was created in cm2 mode AND the mode still reads cm2 - a test that forces the mode in-process moves the pick with it
 def cm2_fa_on : bool => g_gpu.has_coopmat2_fa && g_gpu.coopmat_mode == COOPMAT_CM2
 
-//! a per-32 format's slot, dense or routed: its one cm2 column is the s tile
-def cm2_b32_routed(fmt : int) : bool
-    => fmt != int(KqFmt.q8) && fmt >= 0 && fmt < KQ_FMT_COUNT && kq_block32(kq_fmt_of_slot(fmt))
+//! the per-32 formats and mx4: their one cm2 column is the s tile
+def cm2_b32_routed(fmt : int) : bool => fmt == int(KqFmt.mx4) || kq_dense_b32(fmt)
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
 def cm2_tile_cols(d, cnt : int64) : int64 {

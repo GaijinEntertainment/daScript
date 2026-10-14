@@ -64,10 +64,10 @@ struct public DlimVulkanConfig {
     max_storage_range : int64
 }
 
-//! The metal flavor's half. Minimal for now — the metal-flavor audit (arc phase G) decides
-//! whether servability needs more than the mode.
+//! The metal flavor's half.
 struct public DlimMetalConfig {
     mode : string
+    devw : bool   //!< the dev-W lever: a blob image minted under it bakes the panels
 }
 
 //! The whole bake configuration. `vulkan_on`/`metal_on` are presence flags — a flavor section
@@ -147,13 +147,15 @@ def private kq_mr_identity(c : DlimCpuConfig) : string {
 }
 
 //! the pipe-separated fields `dlim_identity` writes BEFORE the tag - the tag parsers skip exactly this many;
-//! a conditional element (the rope override) rides INSIDE the last field, so an unset one leaves every identity as it was
+//! a conditional element (the rope override, the dev-W lever) rides
+//! INSIDE the last field, so an unset one leaves every identity as is
 let public DLIM_IDENTITY_FIELDS = 9
 
-//! The identity string an image file/header is keyed by — a pure formatter of the struct.
-//! `image_version` / `pack_version` come from the caller (dasllama_image owns the schema
-//! version, dasllama_layout the pack-code version; 0 = the pre-versioned pack spelling).
-def public dlim_identity(c : DlimConfiguration; image_version : int; tag : string = ""; pack_version : int = 0) : string {
+//! The identity an image is keyed by: a pure formatter of the struct,
+//! `image_version`, `pack_version` (0: the pre-versioned spelling),
+//! `blob_devw` (a blob minted under the dev-W lever, as rope folds)
+def public dlim_identity(c : DlimConfiguration; image_version : int; tag : string = "";
+                         pack_version : int = 0; blob_devw : bool = false) : string {
     let pk = pack_version > 0 ? "p{pack_version}" : ""
     return ("v{image_version}{pk}|{c.quant}|{c.cpu.backend}|{c.cpu.wscale_f16 ? "s16" : "s32"}"
         + "|q8 mr{c.cpu.q8_mr} b{c.cpu.q8_wbias} g{c.cpu.q8_kgroup}"
@@ -161,6 +163,7 @@ def public dlim_identity(c : DlimConfiguration; image_version : int; tag : strin
         + "|q51 mr{c.cpu.q51_mr}|iq4nl32 mr{c.cpu.iq4nl32_mr} q4032 mr{c.cpu.q4032_mr} q5032 mr{c.cpu.q5032_mr}"
         + "|nat {c.cpu.kquant_native ? 1 : 0}{c.cpu.kq_q40_native ? 1 : 0}{c.cpu.kq_q51_native ? 1 : 0}{c.cpu.iq3s_lut ? 1 : 0}"
         + (c.cpu.rope_override != "" ? " rope {c.cpu.rope_override}" : "")
+        + (blob_devw ? " devw" : "")
         + (tag != "" ? "|{tag}" : ""))
 }
 

@@ -45,8 +45,8 @@ def moe_renorm_sum(ws : float) : float => max(ws, 6.103515625e-5)
 //! the deltanet out-gate of `z`: sigmoid(z) where `sig` (qwen4exp), else silu(z) (qwen35)
 def dn_zgate(z : float; sig : bool) : float => sig ? sigmoid_f32(z) : silu_f32(z)
 
-//! the dot of two quads summed left to right, the order a lane's float4 step keeps
-def dot4_seq(a, b : float4) : float => a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w
+//! the dot of two quads summed left to right, each step a `mad`
+def dot4_seq(a, b : float4) : float => mad(a.w, b.w, mad(a.z, b.z, mad(a.y, b.y, a.x * b.x)))
 
 //! Softplus with the standard large-x shortcut: x > 20 → x, else log(1 + exp(x)).
 def softplus(x : float) : float => x > 20.0 ? x : log(1.0 + exp(x))

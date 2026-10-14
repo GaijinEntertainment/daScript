@@ -179,12 +179,13 @@ def record_needs(var tab : table<string; int64>; missing : MetalNeed) {
 def kq_fmt_gpu_supported(f : KqFmt) : bool =>
     (f == KqFmt.q8 || f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.k6 || f == KqFmt.iq4xs || f == KqFmt.k3 || f == KqFmt.iq3s || f == KqFmt.iq3xxs
         || f == KqFmt.iq4nl || f == KqFmt.q40 || f == KqFmt.k2 || f == KqFmt.iq2s || f == KqFmt.iq2xs || f == KqFmt.iq2xxs || f == KqFmt.iq3s4
-        || kq_fmt_b32(f))
+        || kq_dense_b32(f))
 
 //! a plane format with a one-row GEMV on this home: q8's, a superblock format's row-batched decode form at one row, or a per-32
 //! plane's GEMV, whose K (`kdim`) is whole blocks of the format's unit and whose format the Metal kernels serve
 def kq_fmt_one_row_gemv(f : KqFmt; kdim : int64) : bool =>
-    f == KqFmt.q8 || ((kq_sb(int(f)) || kq_fmt_b32(f)) && kq_fmt_gpu_supported(f) && kdim % kq_unit(f) == 0l)
+    (f == KqFmt.q8 || ((kq_sb(int(f)) || kq_dense_b32(f)) && kq_fmt_gpu_supported(f)
+        && kdim % kq_unit(f) == 0l))
 
 def private kq_fmts_gpu_supported(a : array<KqFmt>) : bool {
     for (f in a) {
@@ -212,12 +213,13 @@ def kq_load_gpu_supported(t : Model) : bool {
 //! some dense plane - attention, FFN, classifier - is a per-32 format (q51, iq4nl32)
 def kq_dense_b32_any(t : Model) : bool {
     return (kq_fmts_b32_any(t.wq_fmt) || kq_fmts_b32_any(t.wk_fmt) || kq_fmts_b32_any(t.wv_fmt) || kq_fmts_b32_any(t.wo_fmt)
-        || kq_fmts_b32_any(t.w1_fmt) || kq_fmts_b32_any(t.w2_fmt) || kq_fmts_b32_any(t.w3_fmt) || kq_fmt_b32(t.wcls_fmt))
+        || kq_fmts_b32_any(t.w1_fmt) || kq_fmts_b32_any(t.w2_fmt) || kq_fmts_b32_any(t.w3_fmt)
+        || kq_dense_b32(t.wcls_fmt))
 }
 
 def private kq_fmts_b32_any(a : array<KqFmt>) : bool {
     for (f in a) {
-        return true if (kq_fmt_b32(f))
+        return true if (kq_dense_b32(f))
     }
     return false
 }
@@ -298,10 +300,6 @@ def moe_fmt_metal_served(f : KqFmt) : bool {
         || f == KqFmt.iq4xs || f == KqFmt.iq3s || f == KqFmt.iq3xxs || f == KqFmt.iq2s || f == KqFmt.iq2xs || f == KqFmt.iq2xxs
         || f == KqFmt.k2 || f == KqFmt.iq4nl || f == KqFmt.iq3s4)
 }
-
-//! the per-32 plane formats with their own Metal kernels over their own plane pair (`q51_planes_of` / `iq4nl32_planes_of`) -
-//! the 32-block reduction, never the superblock plane binds
-def kq_fmt_b32(f : KqFmt) : bool => f == KqFmt.q51 || f == KqFmt.iq4nl32 || f == KqFmt.q4032 || f == KqFmt.q5032
 
 //! The MoE serve gate: plain routed FFN (qwen3moe), the sigmoid-gated shared expert (qwen35moe), gemma4's dense-shared branch,
 //! gpt-oss's gate (softmax_weight, biases) over mx4 experts; no dense lead or selection bias. The stack format is its own axis:
@@ -389,8 +387,9 @@ def moe_metal_ok(t : Model) : bool {   // nolint:STYLE038 — flat per-shape ref
                 !moe_site_ok(f3, t.we3_offs[l], ege) ||
                 ((sb1 || sb3) && (c.dim % 256l) != 0l) ||
                 (sb2 && (nfe % 256l) != 0l) ||
-                ((kq_fmt_b32(f1) || kq_fmt_b32(f3)) && ((c.dim % 32l) != 0l || (nfe % 64l) != 0l)) ||
-                (kq_fmt_b32(f2) && ((nfe % 32l) != 0l || (c.dim % 64l) != 0l))) {
+                ((kq_dense_b32(f1) || kq_dense_b32(f3))
+                    && ((c.dim % 32l) != 0l || (nfe % 64l) != 0l)) ||
+                (kq_dense_b32(f2) && ((nfe % 32l) != 0l || (c.dim % 64l) != 0l))) {
             return false
         }
     }

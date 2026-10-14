@@ -443,5 +443,25 @@ def test_metal_b32_block_constants(t : T?) {
         t |> equal(kq_qsb(KqFmt.q5032), int64(5u * 4u), "PW = 5 (MetalPleGatherB32T): q51's and q5032's quant words a block")
         t |> equal(kq_ssb(KqFmt.q51), 2l * 2l, "PS = 2 on MetalPleGatherQ51: d | m")
         t |> equal(kq_ssb(KqFmt.q5032), 1l * 2l, "PS = 1 on MetalPleGatherQ5032: its d")
+        t |> equal(kq_qsb(KqFmt.q51), int64(5u * 4u),
+            "B32W = 5 on the q51 tile stamps, QW = 5 on MetalEmbedB32Q51")
+        t |> equal(kq_ssb(KqFmt.q51), int64(2u * 2u),
+            "B32S = 2 on the q51 tile stamps, SH = 2 on MetalEmbedB32Q51")
+        t |> equal(kq_ssb(KqFmt.iq4nl32), int64(1u * 2u), "B32S = 1 and SH = 1: one d")
+    }
+}
+
+//! the Metal K-quant token-table gathers' superblock constants
+//! (`MetalEmbedKqT`'s `SB_UINTS`, `MetalEmbedK45T`'s and
+//! `MetalPleGatherBaseT`'s `QH0`) against the descriptor rows
+[test]
+def test_metal_kq_table_constants(t : T?) {
+    t |> run("SB_UINTS and QH0 are a superblock's quant words and k5's qh strip start") @(t : T?) {
+        t |> equal(kq_qsb(KqFmt.k4), int64(32u * 4u), "SB_UINTS = 32: k4's 128 nibble bytes")
+        t |> equal(kq_qsb(KqFmt.k5), int64(40u * 4u), "SB_UINTS = 40 on k5: nibbles, then qh")
+        t |> equal(kq_qsb(KqFmt.k4) / 4l, int64(32u), "QH0 = 32: k5's qh past k4's nibble words")
+        for (f in [KqFmt.iq4xs, KqFmt.iq4nl, KqFmt.q40, KqFmt.iq3s4]) {
+            t |> equal(kq_qsb(f), int64(32u * 4u), "SB_UINTS = 32 on the codebook tables: {f}")
+        }
     }
 }

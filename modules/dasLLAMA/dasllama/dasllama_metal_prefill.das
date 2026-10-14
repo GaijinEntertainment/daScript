@@ -442,6 +442,7 @@ class template MetalPleGatherBaseT {
     @template_constant Q8 : bool = false    //!< the q8 table: one interleaved 34B blob, both views of it at 0/1
     @template_constant SB_UINTS : uint = 32u     //!< k5's qh strip adds 8
     @template_constant QH : bool = false    //!< k5: the 5th bit off the qh strip
+    @template_constant QH0 : uint = 32u     //!< k5's qh strip's first word, past the nibbles
     @template_constant Q40 : bool = false   //!< q40: one f16 d per 32-block, the linear map (q - 8)
     @template_constant KSC : bool = true    //!< the packed 6-bit sc/min uint4 view - k4 and k5 alone
     @ssbo @binding = 0 @role = "weight" @off = "eoff" @template_gate = Q8 wsh : array<float16> //!< ple_emb q8 region, half-scale view (block b at 17*b)
@@ -491,22 +492,17 @@ class template MetalPleGatherKqT : MetalPleGatherBaseT {
         let js = (el % 256u) / 32u
         let e = el % 32u
         static_if (Q40) {
-            let u = kqu[blk * SB_UINTS + js * 4u + (e % 16u) / 4u]
-            v = float(ksh[blk * 8u + js]) * (float((u >> (8u * (e % 4u) + (e / 16u) * 4u)) & 15u) - 8.0)
+            let u = kqu[blk * SB_UINTS + js * 4u + el32_word(e)]
+            v = q40_el_level(float(ksh[blk * 8u + js]), el32_nib(u, e))
         } else {
-            let sv = ks4[blk]
-            var sc = 0u
-            var mn = 0u
-            kmask_scmn(sv, js, sc, mn)
-            let dsc = float(ksh[blk * 8u]) * float(sc)
-            let dmn = float(ksh[blk * 8u + 1u]) * float(mn)
-            let u = kqu[blk * SB_UINTS + (js / 2u) * 8u + e / 4u]
+            var dsc, dmn : float
+            k45_el_scales(ks4[blk], float(ksh[blk * 8u]), float(ksh[blk * 8u + 1u]), js, dsc, dmn)
+            let u = kqu[blk * SB_UINTS + k45_el_word(js, e)]
             static_if (QH) {
-                let hu = kqu[blk * SB_UINTS + 32u + e / 4u]
-                let q = ((u >> (8u * (e % 4u) + (js & 1u) * 4u)) & 15u) | (((hu >> (8u * (e % 4u) + js)) & 1u) << 4u)
-                v = dsc * float(q) - dmn
+                let hu = kqu[blk * SB_UINTS + QH0 + e / 4u]
+                v = k45_el_level(dsc, dmn, k45_el_code(u, hu, js, e))
             } else {
-                v = dsc * float((u >> (8u * (e % 4u) + (js & 1u) * 4u)) & 15u) - dmn
+                v = k45_el_level(dsc, dmn, k45_el_code(u, 0u, js, e))
             }
         }
     }
@@ -543,13 +539,11 @@ class template MetalPleGatherB32T : MetalPleGatherBaseT {
     def override decode_el(el : uint; var v : float&) {
         let blk = el / 32u
         let e = el % 32u
-        let u = kqu[blk * PW + (e % 16u) / 4u]
-        let hu = kqu[blk * PW + 4u]
-        let q = ((u >> (8u * (e % 4u) + (e / 16u) * 4u)) & 15u) | (((hu >> e) & 1u) << 4u)
+        let q = el32_code5(kqu[blk * PW + el32_word(e)], kqu[blk * PW + PW - 1u], e)
         static_if (P50) {
-            v = (float(q) - 16.0) * float(ksh[blk * PS])
+            v = q5032_el_level(float(ksh[blk * PS]), q)
         } else {
-            v = float(ksh[blk * PS]) * float(q) + float(ksh[blk * PS + 1u])
+            v = q51_el_level(float(ksh[blk * PS]), float(ksh[blk * PS + 1u]), q)
         }
     }
 
@@ -2198,6 +2192,7 @@ class MetalMoeBucket {
     }
 }
 
+//! derives GkMoeCombine, the template both homes stamp
 [metal_dispatch(name = "pf_enc_moe_reduce", pso = "g_pf_pso_moe_reduce", tg = 256, grid = "dim/256, npos", params = "dim : int64, npos : int64")]
 class MetalMoeReduce : GkMoeCombine {
     override WINDOW = false
@@ -2210,6 +2205,7 @@ class MetalMoeReduce : GkMoeCombine {
 }
 
 //! ... and its shared-expert stamp: the shared expert's rows under their gate logit's sigmoid added in the same pass
+//! derives GkMoeCombine, the template both homes stamp
 [metal_dispatch(name = "pf_enc_moe_reduce_sh", pso = "g_pf_pso_moe_reduce_sh", tg = 256, grid = "dim/256, npos", params = "dim : int64, npos : int64")]
 class MetalMoeReduceSh : GkMoeCombine {
     override WINDOW = false
@@ -2837,6 +2833,8 @@ class MetalMoeMulMmIq2xxs : MetalMoeMulMmKqT {
 class MetalMoeMulMmQ51 : MetalMoeMulMmKqT {
     override B32 = true
     override Q51 = true
+    override B32W = 5u
+    override B32S = 2u
 
     [metal_kernel(name="metal_moe_mulmm_q51_msl")]
     def metal_moe_mulmm_q51 {
@@ -6147,7 +6145,9 @@ def private pf_enc_kq_site_mm(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt
         g_pf_tail_rows += npos
         return
     }
-    if (kq_fmt_b32(fmt)) {   //! a per-32 plane's GEMM form past the tail: the simdgroup mul_mm tile over its own planes
+    //! a per-32 plane's GEMM form past the tail: the simdgroup mul_mm
+    //! tile over its own planes
+    if (kq_dense_b32(fmt)) {
         enc_b32_gemm_mm(enc, t, fmt, woff, bx, by, yoff, bk, bn, mp, rows)
         return
     }
@@ -6295,7 +6295,7 @@ def moe_q51_twin_fits(kdim : uint) : bool => (kdim & 63u) == 0u
 [arch(at="../ARCHITECTURE_GPU_PREFILL_MOE.md#prefill-moe-kq-twin-pick")]
 def private pf_moe_twin_live(fmt : KqFmt; kdim, npos, nk, ne : int64) : bool {
     return false if (pf_moe_th_pso(fmt) == null)
-    if (kq_fmt_b32(fmt)) {
+    if (kq_dense_b32(fmt)) {
         return moe_q51_twin_fits(uint(kdim)) && metal_moe_kq_twin_pick(g_pf_moe_kq_mm4_tensor, npos, nk, ne)
     }
     if (kq_sb(fmt)) {
@@ -6498,7 +6498,7 @@ def private pf_enc_moe_mm(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; st
     return if (g_pf_skip == "moe_mm_disp")   //! attribution: gather+cvt kept, mm dispatches out
     if (fmt == KqFmt.q8) {
         pf_enc_moe_mm_q8(enc, t, stack_off, rows, npos, bx, by, bcnt, bbase, bbkt, ka, contiguous, bxh)
-    } elif (kq_fmt_b32(fmt)) {
+    } elif (kq_dense_b32(fmt)) {
         pf_enc_moe_mm_b32(enc, t, fmt, stack_off, rows, npos, bx, by, bcnt, bbase, bbkt, ka, contiguous, bxh)
     } else {
         pf_enc_moe_mm_kq(enc, t, fmt, stack_off, rows, npos, bx, by, bcnt, bbase, bbkt, ka, contiguous, bxh, bkd, bnd, mpad)
@@ -6758,7 +6758,9 @@ def private pf_enc_ple_gather_fmt(enc : MetalComputeEncoder?; t : Model; btok, b
         pf_enc_ple_gather(enc, bemb.buf, bemb.boff, bemb.buf, btok, by, ka, nlayers, npos, ple)
         return
     }
-    if (kq_fmt_b32(fmt)) {   //! the per-32 pair bound verbatim at the table, the 32-block index relative to it
+    //! the per-32 pair bound verbatim at the table, the 32-block index
+    //! relative to it
+    if (kq_dense_b32(fmt)) {
         let bp = b32_planes_of(g_dev, t, fmt, t.ple_emb_off)
         if (fmt == KqFmt.q51) {
             pf_enc_ple_gather_q51(enc, bp.sbuf, bp.soff, btok, by, ka, bp.qbuf, bp.qoff, nlayers, npos, ple)

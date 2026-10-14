@@ -513,6 +513,16 @@ def kq_fmt_of_slot(slot : int) : KqFmt => unsafe(reinterpret<KqFmt>(uint8(slot))
 //! The same predicate over the int id space the GPU drivers carry per stack/plane (pure: it sits in asserts).
 def kq_sb(fmt : int) : bool => fmt >= 0 && fmt < KQ_FMT_COUNT && kq_sb(kq_fmt_of_slot(fmt))
 
+//! a per-32 plane format - Q5_1, Q5_0, the per-32 IQ4_NL and Q4_0 -
+//! served off its own plane pair at the 32-block reduction, never a
+//! superblock plane bind
+def kq_dense_b32(fmt : KqFmt) : bool => (fmt == KqFmt.q51 || fmt == KqFmt.iq4nl32
+    || fmt == KqFmt.q4032 || fmt == KqFmt.q5032)
+
+//! The same predicate over the int slot space the GPU drivers carry.
+def kq_dense_b32(fmt : int) : bool => (fmt >= 0 && fmt < KQ_FMT_COUNT
+    && kq_dense_b32(kq_fmt_of_slot(fmt)))
+
 //! KqFmt -> the kernel/IR format id space — the ONE bridge between the enum and the int ids the
 //! generated kernels take as runtime params. Mnemonic ids: a K-quant is its bit width (3/4/5/6),
 //! Q4_0 is 40, an i-quant is bit width x 10 + a variant digit (IQ4_XS = 44, IQ3_S = 33). q8/q51 panic.

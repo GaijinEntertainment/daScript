@@ -374,7 +374,9 @@ def test_metal_format_census_per32_moe(t : T?) {
 
 [test]
 def test_metal_format_census_tied_f16(t : T?) {
-    t |> run("{TIED_F16_FILE}: a tied F16 table no KqFmt carries serves on Metal - the classifier through its q8 copy, the rows off the exact fp32 table") <| @(t : T?) {
+    let name = ("{TIED_F16_FILE}: the F16 carrier runs on Metal through converted copies - the"
+        + " classifier's q8, the rows' fp32 - the census listing them")
+    t |> run(name) <| @(t : T?) {
         if (!family_on(t, "qwen3") || !arm_on(t, "census-f16")) return
         static_if (typeinfo builtin_module_exists(das_metal)) {
             let path = path_join(models_dir(), TIED_F16_FILE)

@@ -585,7 +585,8 @@ base `MetalMoeMulMm<Fmt> : MetalMoeMulMmKqT`, with
 `enc_moe_gemv` (decode), `pf_moe_th_pso` and a `pf_enc_moe_mm` arm of its own with the
 `moe_q51_twin_fits` pick (the tensor twins walk 64-deep K, so a `kdim % 64` stack takes the base
 form) - NOT the split-format table, whose rows are kq stamps - plus `moe_fmt_metal_served`,
-`moe_site_ok`, `kq_fmt_b32` (the per-32 reduction dims in `moe_metal_ok`, the dense sites' plane pair)
+`moe_site_ok`, `kq_dense_b32` (the per-32 reduction dims in `moe_metal_ok`, the dense sites'
+plane pair)
 and `kq_fmt_gpu_supported`. Tests: a
 `MoeGemvFmt` member, `<fmt>_test_planes` (exact arithmetic - pow2 d, int x) and the
 `moe_gemv_gate` / `moe_mulmm_b32_gate` rows in `tests/test_metal_prefill_kernels.das` (the

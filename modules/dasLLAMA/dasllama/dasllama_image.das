@@ -75,7 +75,8 @@ def image_config_for(tag : string; quant : string = "q8") : DlimConfiguration {
 //! loader, the peek verdicts, the converter's want/have compare, the tests) formats through, so
 //! the schema version and the pack-code version can never be folded in two different ways.
 def image_identity_of(c : DlimConfiguration; tag : string = "") : string =>
-    dlim_identity(c, IMAGE_VERSION, tag, PACK_VERSION)
+    dlim_identity(c, IMAGE_VERSION, tag, PACK_VERSION,
+        tag == METAL_IMAGE_TAG && c.metal_on && c.metal.devw)
 
 //! the CPU lane's spelling: the box's tune class where the tune framework is built, the architecture alone otherwise -
 //! never the active backend, which is a pin the identity supersedes
