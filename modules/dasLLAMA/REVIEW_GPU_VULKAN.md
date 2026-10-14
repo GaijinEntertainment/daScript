@@ -18,10 +18,11 @@ field of `RDec` - the resident decode driver's state struct - are swept already,
 and a profiler accumulator are not; pipelines are device-lifetime state that survives the drop
 and rebuilds lazily.
 
-**A diff that adds a host-side ensure/set/enc pick ladder for a new family of class stamps -
-the stamps of one `[vk_dispatch]` class template, picked by a shape argument - to
-`dasllama/dasllama_vulkan_classes.das` adds that family's stamp glob to the kernel-home row's
-stamp list in `ARCHITECTURE_GPU.md#gpu-backends`, in the same change.**
+**A diff that adds to `dasllama/dasllama_vulkan_classes.das` a host-side ensure/set/enc pick
+ladder over a family's class stamps - the stamps of one `[vk_dispatch]` class template, picked by a
+shape argument - including a ladder over a family that had one stamp and gains a second, adds that
+family's stamp glob to the kernel-home row's stamp list in `ARCHITECTURE_GPU.md#gpu-backends`, in
+the same change.**
 
 **Never size a buffer bound as one SSBO (shader storage buffer) range above the device limit
 `vk_max_storage_range()` - check the size with `vk_range_ok` at the site that computes it, or
@@ -62,8 +63,9 @@ not log the concrete reason it declined, once per reason per armed model, is a d
 constant in `dasllama/dasllama_vulkan_tower.das` already states, returns that constant or starts
 its text with it - never a second wording of that reason.**
 
-**A diff that adds or changes a function under `dasllama/` outside the tier's arm probe
-`vulkan_moe_gpu_arm` that calls `vk_moe_init()` makes it test `gpu_want_arms_tier()` first, and
+**A diff that adds or changes a function under `dasllama/` that calls `vk_moe_init()` and that is
+not reached only through a hook `install_vk_moe_hooks` installs makes it test
+`gpu_want_arms_tier()` first, and
 decline without calling it when the want is off; a serving hook - a hook slot the CPU chain calls
 to hand work to the GPU - that keeps a `VkDeclineCounter` counts that decline under its decline
 enum's `device` member, the reason `VK_DECLINE_WORDS_DEVICE` words.** `vk_moe_init` reads no
@@ -235,10 +237,12 @@ state - over the whole buffer, never over one row's or one slot's range.** Each 
 row or region at run time, from `TokMeta` or its push constants, so a set narrowed to one slot sends
 every other row's or region's dispatch past its binding, with no error.
 
-**A diff that fills a `TokMeta` block, wherever it puts it, writes every field but the pads -
-`mirbase` as the row's K/V mirror base in elements past the base the kernel's push constants carry
-(0 where the push carries the row's own base), `dnslot` as the row's slot in the deltanet state and
-conv-history buffers (0 where they hold one slot).** A kernel reads each field from the row's block,
+**A diff that fills a `TokMeta` block, wherever it puts it, writes every field but the pads with
+the row's own value: `mirbase` the row's K/V mirror base in elements past the base the kernel's
+push constants carry (0 where the push carries the row's own base), `dnslot` the row's slot in the
+deltanet state and conv-history buffers (0 where they hold one slot); a field a zero-initialized
+literal leaves at 0 counts as written only where 0 is that row's value.** A kernel reads each
+field from the row's block,
 so a field left unwritten sends the row to whatever position, base or state the memory held, with
 no error.
 
@@ -257,19 +261,23 @@ before the recorder returns.** A form that leaves its list installed sends every
 profile to another form's role names.
 
 **A diff that submits a transfer copy with `xfer_submit_after`
-(`dasllama/dasllama_vulkan_common.das`) waits (`xfer_wait`, spinning or blocking) on the value it
-returned before it submits any command that writes the buffer that copy reads.** The host's wait
-is the only order between the copy's read and that write.
+(`dasllama/dasllama_vulkan_common.das`) submits no command that writes the buffer that copy reads
+until the transfer timeline reaches the value it returned: the host waits on it (`xfer_wait`)
+before the writing submit, or `g_gpu.pend_wait` holds at least that value - raised with `max`,
+never overwritten - from the copy's submit to the writing submit with no other compute submit
+between the two.**
+Nothing else orders the copy's read before that write.
 
 **A diff that adds an integer division or modulo to kernel code in `dasllama/dasllama_vulkan_classes.das`
 or `dasllama/dasllama_gpu_kernels_common.das` - a kernel body or any method it calls,
-`dasllama/dasllama_gpu_math.das`'s helpers included - or changes its divisor, the values that feed it,
-or its guard, where the divisor is not a literal or a template constant, clamps the divisor to at
+`dasllama/dasllama_gpu_math.das`'s helpers included - that the diff does not move unchanged, with
+the values feeding its divisor, from kernel code in these three files, or changes such a
+division's divisor, the values that feed it, or its
+guard, where the divisor is not a literal or a template constant, clamps the divisor to at
 least one (`max(1u, ...)`) before the division, or places the division inside an `if` whose
 condition compares that divisor expression itself with zero.** An integer division by zero is
 undefined in SPIR-V, and some drivers evaluate both arms of a `?:` select, so neither a select nor a
-condition on another expression - a field the divisor is computed from, a product it is a factor
-of - guards it.
+condition on another expression guards it.
 
 **A diff that adds or changes a path under `dasllama/` that re-records the split form of the
 one-row token command in `RDec.cmd[region]` - the chain recorded there with the attention at

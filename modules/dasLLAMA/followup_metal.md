@@ -160,10 +160,9 @@ stamp for the iquant scaffold before assuming the k6 result transfers; the arc-e
 soft spot is the deep-K w2 column (k6 0.91x / iq3s 0.88x / iq3xxs 0.92x vs llama.cpp on m5),
 which is exactly the column a tall stamp serves.
 
-## 7. The Qwen Metal sweep - every Qwen text file the M5 stocks, one at a time
+## 7. The Qwen Metal sweep - the M5's Qwen text files, one at a time
 
-The Vulkan tier went through every Qwen the zen2 box stocks; Metal never had that pass. This
-is it: smallest file first, one file per run, each file gating on two things before the next
+The Metal Qwen pass: smallest file first, one file per run, each file gating on two things before the next
 starts - the counting fixture matches (the parity pregate, 8/8 opening tokens) and both pp512
 and tg128 read at or above 0.9 of llama.cpp. A file under either bar stops the sweep until it
 is fixed; the fix lands as its own row above or its own PR, and the file re-runs. A Vulkan fix
@@ -181,45 +180,52 @@ llama.cpp. The scratch store is not in the tree; the rows here are the record.
 | file | pp512 llama.cpp | pp512 das | ratio | tg128 llama.cpp | tg128 das | ratio | fixture |
 |---|---|---|---|---|---|---|---|
 | Qwen2.5-0.5B-Instruct-Q8_0 | 31069 +- 169 | 40459 +- 362 | 1.30 | 358 +- 47 | 490 +- 18 | 1.37 | 8/8 |
-| Qwen3.5-0.8B-Q4_K_M | 16590 +- 35 | 23025 +- 60 | 1.39 | 337 +- 21 | 443 +- 3 | 1.31 | 8/8 |
-| Qwen3.5-0.8B-Q4_K_M-q8out | 16653 +- 29 | 23049 +- 66 | 1.38 | 273.7 +- 8.2 | 443.5 +- 3.4 | 1.62 | 40/40 |
+| Qwen3.5-0.8B-Q4_K_M [dn q8] | 16590 +- 35 | 23025 +- 60 | 1.39 | 337 +- 21 | 443 +- 3 | 1.31 | 8/8 |
+| Qwen3.5-0.8B-Q4_K_M-q8out [dn q8] | 16653 +- 29 | 23049 +- 66 | 1.38 | 273.7 +- 8.2 | 443.5 +- 3.4 | 1.62 | 40/40 |
 | Qwen3-0.6B-Q8_0 | 24669 +- 87 | 32194 +- 692 | 1.31 | 317.2 +- 41.0 | 441.2 +- 17.3 | 1.39 | 40/40 |
 | Qwen2.5-1.5B-Instruct-IQ3_XS | 11559 | 15820 | 1.37 | 280.8 | 354.5 | 1.26 | 40/40 |
 | Qwen3.5-0.8B-Q8_0 | 16921 +- 27 | 23060 +- 57 | 1.36 | 259.7 +- 13.9 | 396.6 +- 1.5 | 1.53 | 40/40 |
 | Qwen2.5-1.5B-Instruct-Q8_0 | 11844 +- 28 | 14958 +- 24 | 1.26 | 209.0 +- 3.9 | 249.8 +- 10.2 | 1.20 | 40/40 |
 | Qwen3-4B-Instruct-2507-Q4_K_M | 5067 +- 2 | 6643 +- 30 | 1.31 | 159.6 +- 2.4 | 164.0 +- 6.9 | 1.03 | 40/40 |
-| Qwen3.5-4B-Q4_K_M | 4157 +- 2 | 5504 +- 8 | 1.32 | 127.9 +- 0.4 | 138.2 +- 0.3 | 1.08 | 40/40 |
+| Qwen3.5-4B-Q4_K_M [dn q8] | 4157 +- 2 | 5504 +- 8 | 1.32 | 127.9 +- 0.4 | 138.2 +- 0.3 | 1.08 | 40/40 |
 | Qwen3-4B-Instruct-2507-Q5_K_M | 4899 +- 5 | 6636 +- 32 | 1.35 | 143.0 +- 0.5 | 138.8 +- 5.8 | 0.97 | 40/40 |
-| Qwen3.5-4B-Q5_K_M | 4005 +- 5 | 5505 +- 7 | 1.37 | 117.5 +- 0.7 | 126.1 +- 0.2 | 1.07 | 40/40 |
+| Qwen3.5-4B-Q5_K_M [dn q8] | 4005 +- 5 | 5505 +- 7 | 1.37 | 117.5 +- 0.7 | 126.1 +- 0.2 | 1.07 | 40/40 |
 | Qwen3-4B-Instruct-2507-Q6_K | 5091 +- 8 | 6648 +- 27 | 1.31 | 130.3 +- 0.4 | 133.2 +- 5.7 | 1.02 | 40/40 |
-| Qwen3.5-4B-Q6_K | 4114 +- 8 | 5493 +- 35 | 1.34 | 108.4 +- 0.4 | 122.3 +- 0.2 | 1.13 | 40/40 |
+| Qwen3.5-4B-Q6_K [dn q8] | 4114 +- 8 | 5493 +- 35 | 1.34 | 108.4 +- 0.4 | 122.3 +- 0.2 | 1.13 | 40/40 |
 | Qwen3-4B-Instruct-2507-Q8_0 | 5192 +- 10 | 6262 +- 27 | 1.21 | 108.5 +- 0.4 | 111.4 +- 4.6 | 1.03 | 40/40 |
 | Qwen3.5-4B-Q8_0 | 4338 +- 7 | 5175 +- 41 | 1.19 | 93.0 +- 0.1 | 107.3 +- 0.1 | 1.15 | 40/40 |
-| Qwen3.5-9B-IQ4_XS | 2496 +- 1 | 2490 +- 6 | 1.00 | 86.1 +- 0.1 | 85.4 +- 0.1 | 0.99 | 40/40 |
-| Qwen1.5-MoE-A2.7B-Chat-Q4_K_M-local | 5486 +- 21 | 6328 +- 51 | 1.15 | 200.7 +- 1.3 | 207.6 +- 0.3 | 1.03 | 40/40 |
+| Qwen3.5-9B-IQ4_XS [dn q8] | 2496 +- 1 | 2490 +- 6 | 1.00 | 86.1 +- 0.1 | 85.4 +- 0.1 | 0.99 | 40/40 |
+| Qwen1.5-MoE-A2.7B-Chat-Q4_K_M-local [shexp q8] | 5486 +- 21 | 6328 +- 51 | 1.15 | 200.7 +- 1.3 | 207.6 +- 0.3 | 1.03 | 40/40 |
 | Qwen3.5-9B-Q8_0 | 2565 +- 4 | 3087 +- 18 | 1.20 | 57.0 +- 0.4 | 62.3 +- 0.1 | 1.09 | 40/40 |
 | Qwen3-30B-A3B-Instruct-2507-UD-IQ2_XXS | 3695 | 3934 | 1.06 | 139.0 | 168.9 | 1.22 | 40/40 |
-| Qwen3.5-35B-A3B-UD-IQ2_XXS | 3307 | 3692 | 1.12 | 110.9 | 144.4 | 1.30 | 40/40 |
-| Qwen3.6-35B-A3B-UD-IQ2_XXS | 3299 | 3681 | 1.12 | 109.2 | 141.3 | 1.29 | 40/40 |
-| Qwen3.8-27B.i1-IQ3_S | 699 +- 14 | 882 +- 6 | 1.26 | 28.2 +- 3.3 | 28.9 +- 0.8 | 1.02 | 40/40 |
-| Qwen1.5-MoE-A2.7B-Chat.Q6_K | 5069 +- 40 | 5936 +- 355 | 1.17 | 164.0 +- 2.3 | 163.5 +- 4.1 | 1.00 | 40/40 |
-| Qwen3.8-27B-UD-Q3_K_XL | 756 | 782 | 1.03 | 23.6 +- 1.3 | 28.8 +- 0.9 | 1.22 | 40/40 |
-| Qwen3.5-35B-A3B-UD-IQ3_S | 3270 | 3269 | 1.00 | 105.0 | 131.0 | 1.25 | 40/40 |
-| Qwen3.6-35B-A3B-UD-IQ3_S | 3262 | 3285 | 1.01 | 104.7 | 129.8 | 1.24 | 40/40 |
+| Qwen3.5-35B-A3B-UD-IQ2_XXS [dn+shexp q8] | 3307 | 3692 | 1.12 | 110.9 | 144.4 | 1.30 | 40/40 |
+| Qwen3.6-35B-A3B-UD-IQ2_XXS [dn+shexp q8] | 3299 | 3681 | 1.12 | 109.2 | 141.3 | 1.29 | 40/40 |
+| Qwen3.8-27B.i1-IQ3_S [dn q8] | 699 +- 14 | 882 +- 6 | 1.26 | 28.2 +- 3.3 | 28.9 +- 0.8 | 1.02 | 40/40 |
+| Qwen1.5-MoE-A2.7B-Chat.Q6_K [shexp q8] | 5069 +- 40 | 5936 +- 355 | 1.17 | 164.0 +- 2.3 | 163.5 +- 4.1 | 1.00 | 40/40 |
+| Qwen3.8-27B-UD-Q3_K_XL [dn q8] | 756 | 782 | 1.03 | 23.6 +- 1.3 | 28.8 +- 0.9 | 1.22 | 40/40 |
+| Qwen3.5-35B-A3B-UD-IQ3_S [dn+shexp q8] | 3270 | 3269 | 1.00 | 105.0 | 131.0 | 1.25 | 40/40 |
+| Qwen3.6-35B-A3B-UD-IQ3_S [dn+shexp q8] | 3262 | 3285 | 1.01 | 104.7 | 129.8 | 1.24 | 40/40 |
 | Qwen3-Coder-30B-A3B-Instruct-UD-Q3_K_XL | 3187 | 3602 | 1.13 | 139.0 | 166.1 | 1.19 | 40/40 |
 | Qwen3-30B-A3B-Thinking-2507-UD-Q3_K_XL | 3227 | 4027 | 1.25 | 137.7 | 165.8 | 1.20 | 40/40 |
 | Qwen3-30B-A3B-Instruct-2507-UD-Q3_K_XL | 3205 | 4009 | 1.25 | 138.1 | 166.0 | 1.20 | 40/40 |
-| Qwen3.8-27B-UD-IQ4_XS | 493 +- 19 | 754 +- 7 | 1.53 | 22.1 +- 0.7 | 27.8 +- 1.0 | 1.26 | 40/40 |
+| Qwen3.8-27B-UD-IQ4_XS [dn q8] | 493 +- 19 | 754 +- 7 | 1.53 | 22.1 +- 0.7 | 27.8 +- 1.0 | 1.26 | 40/40 |
 | Qwen1.5-MoE-A2.7B-Chat.Q8_0 | 5348 +- 44 | 6004 +- 34 | 1.12 | 157.7 +- 2.0 | 179.7 +- 0.2 | 1.14 | 40/40 |
 | Qwen3-8B-BF16 (llama.cpp bf16, das q8-requant: no ratio) | 2734 +- 10 | 3496 +- 10 | - | 34.9 +- 0.1 | 65.9 +- 0.1 | - | 40/40 |
 | Qwen3-30B-A3B-Instruct-2507-Q4_K_M (board row: `performance/records/m5.json`) | 3414 +- 13 | 3761 +- 13 | 1.10 | 136.3 +- 1.2 | 164.6 +- 0.2 | 1.21 | 40/40 |
 | Qwen3-Coder-30B-A3B-Instruct-Q4_K_M | 3387 | 3669 | 1.08 | 137.1 | 165.3 | 1.21 | 40/40 |
-| Qwen3.8-27B-Q4_K_M (board row: `performance/records/m5.json`) | 752 | 906 +- 6 | 1.20 | 25.3 +- 0.4 | 28.0 | 1.11 | 40/40 |
-| Qwen3.6-35B-A3B-UD-Q4_K_M | 3173 +- 15 | 3426 +- 9 | 1.08 | 95.7 +- 0.8 | 127.5 +- 0.2 | 1.33 | 40/40 |
+| Qwen3.8-27B-Q4_K_M (board row: `performance/records/m5.json`) [dn q8] | 752 | 906 +- 6 | 1.20 | 25.3 +- 0.4 | 28.0 | 1.11 | 40/40 |
+| Qwen3.6-35B-A3B-UD-Q4_K_M [dn+shexp q8] | 3173 +- 15 | 3426 +- 9 | 1.08 | 95.7 +- 0.8 | 127.5 +- 0.2 | 1.33 | 40/40 |
 | Qwen3-30B-A3B-Q8_0 | 3392 +- 23 | 3515 +- 21 | 1.04 | 104.8 +- 0.5 | 122.1 | 1.16 | 40/40 |
 | Qwen3-Coder-30B-A3B-Instruct-Q8_0 | 3334 | 3381 | 1.01 | 103.5 | 122.3 | 1.18 | 40/40 |
 | Qwen3.6-35B-A3B-Q8_0 | 3081 +- 15 | 3225 +- 12 | 1.05 | 89.1 +- 0.3 | 121.1 +- 0.3 | 1.36 | 40/40 |
-| Qwen3-Coder-Next-Q4_K_M | 2091 | 2160 | 1.03 | 82.6 | 112.5 | 1.36 | 40/40 |
+| Qwen3-Coder-Next-Q4_K_M [dn+shexp q8] | 2091 | 2160 | 1.03 | 82.6 | 112.5 | 1.36 | 40/40 |
+
+The format in a row's file name is the file's, not every plane's: on the tree these rows were read, the Metal load
+served some planes from a q8 copy whatever the file carried. `[dn q8]` marks a deltanet hybrid whose recurrent
+planes - qkv, gate, out, beta and alpha - read the q8 copy; `[shexp q8]` a routed file whose shared expert's
+gate, up and down read it; `[dn+shexp q8]` both. So the 0.8B Q4_K_M and its q8out mint decode alike (443 and
+443.5): their recurrent planes, where the two files differ, read the same q8 bytes. These rows re-mint once every
+site reads its own format.
 
 The fixture column past the first two rows is the coherence gate: 40 greedy tokens of the
 counting fixture on Metal, token-for-token against llama.cpp's own greedy on the same file
@@ -590,12 +596,12 @@ uses. The bar is the eight `*T` entries of `CENSUS_NEVER_DISPATCHED` in
 (a) A `REVIEW.das` check that reads every per-format dispatch ladder in
 `dasllama/dasllama_metal_kernels.das` and `dasllama/dasllama_metal_prefill.das` (twelve today -
 `enc_kq_gemv`, `enc_kq_mvb`, `enc_kq_gemm_mm_b`, `enc_moe_gemv`, `pf_kq_dq_pso`,
-`pf_moe_split_stamps`, `pf_moe_th_pso`, `pf_enc_kq_dq`, `pf_kq_split_stamps`,
+`pf_moe_kq_row`, `pf_moe_th_pso`, `pf_enc_kq_dq`, `pf_kq_split_stamps`,
 `pf_kq_deep_stamps`, plus the PLE pre-step's
 pair `ple_gather_pso_of` and `pf_enc_ple_gather_fmt`, whose format sets must agree with each
 other and with the gate's alignment arm) against the served-format predicates
 (`kq_fmt_gpu_supported`, `moe_fmt_metal_served`, `moe_site_ok` in
-`dasllama/dasllama_metal_shapes.das`; `pf_kq_split_fmt`, `pf_moe_split_fmt` in the prefill) and
+`dasllama/dasllama_metal_shapes.das`; `pf_kq_split_fmt` and the rows `pf_moe_kq_row` returns in the prefill) and
 reports an arm whose format no predicate serves - today the ladders' `panic` default arms are the
 only catch, at serve time; the gate retires `REVIEW_GPU.md`'s two dispatch-ladder rules to
 "weakening it is a defect". (b) A `tests/REVIEW.das` check over the hand-bound kernel-cell sites
@@ -713,18 +719,6 @@ q8 rail measured negative, but against a 1.6x weight stream the K-quant arithmet
 Every other dense K-quant board file (12B 1.00, the two 27Bs 1.07 and 1.09) clears the bar on its
 flat lead alone.
 
-## 25. The Qwen3.8-27B no-head verify cell panics through the CPU decode stack
-
-`tests/test_metal_mtp_parity.das`'s `test_metal_verify_qwen38_27b` (large tier) pins the
-batch-rail same-slab verify to decline a recurrent session's rows as `dn_state`; on the M5 the
-B=2 arm serves (maxd 2.3e-4, no flips) and two later arms die in
-`dasllama_common.das`'s "CPU decode stack on a blob-only metal-flavor model" panic - the
-verify declines, and the fallback lands on a stack the blob twin cannot run. Red at master
-ce42fb986 and on every branch since; the stocked suite never reaches it (the mtp suite is not
-in `stocked`). The work: decide whether the batch driver now serves the hybrid's verify rows -
-then the pin flips to must-serve - or make the decline return a plain GPU step instead of the
-CPU stack.
-
 ## 27. The StyleTTS2 chain's remaining cost and precision
 
 The chain (`ARCHITECTURE_GPU_TOWER.md#tower-tts-chain`) serves the whole synthesis; the measured record
@@ -768,20 +762,6 @@ blob twin does not fit the 128 GB box. The work: a parity cell of the `harness/p
 form on the blob-only load (one model, the spec's pinned ids as the oracle - `test_parity_pregate`'s
 shape) under `DASLLAMA_PARITY_FULL=1`, and the sweep's rows (sec.7): pp512 and tg128 against
 llama.cpp on the M5 Max at or above 0.9, the box crowns applied.
-
-## 33. A prefill mints a recurrent mirror under the cap and evicts a live session's
-
-`dn_mirror_prepare` mints a session's `DnMirror` at its first served step under `g_dn_mirrors_max`
-(`DN_MIRRORS_MAX`, 4), evicting the least-recent mirror when the table is full; only the batch step
-grows the cap (`dn_mirror_room(nrows)`) and it grows it after the rows' prefills already ran. A
-fifth session's prefill therefore evicts a live session's mirror, and that session's next decode
-declines `dn_state` - its CPU state stopped at the prefill, so the CPU-prefix resync cannot
-rebuild it - and on a blob-only load the CPU fallback has no planar weights to run, so the step
-panics. The batch probe and `dff_pair` size the room before their prefills; the server's admission
-does not. The work: grow the room at admission (the server's stream count plus the reference
-rows), or let the mint evict only a mirror whose session is retired and decline the mint
-otherwise, and a cell that admits `DN_MIRRORS_MAX + 1` sessions through prefill and steps the
-first one.
 
 ## 32. Flash-Next's verify row 0 reads 0.89 logits off the plain step at one prose position
 
@@ -855,8 +835,8 @@ its deletion with its kernel cell, its `[metal_dispatch]` builder and its census
 
 `ARCHITECTURE_GPU_PREFILL_WINDOW.md#prefill-kv-mirror`: every other window keeps the f32 K/V
 panels and gathers the cached rows on the host each continuation (about 3.7 us a cached row on
-Llama-3.2-3B, M5 Max); the panel forms feed the mirror, so the gather is what the mirror-fed form
-spares. Three shapes stay there:
+Llama-3.2-3B, M5 Max); the panel forms feed the mirror at every codec (f16 halves, the q8_0 and tq4
+store stamps, an f32 copy), so the gather is what the mirror-fed form spares. Three shapes stay there:
 
 - **A box without the `attn_dev` crown.** The crown races the device pair against the staged trio
   at one shape, the pair paying its whole-panel twin pass; the mirror-fed form has no such pass, so
@@ -957,16 +937,6 @@ same record in `dasllama_vulkan_asr_dec.das`). A transcription makes a fresh sta
 window was dropped never returns: eight bytes a transcription, for as long as the server runs. The work: the
 pending mark on the state itself (a flag beside `DecoderState.gpu_uid`, the driver's one pending id beside
 it), so nothing outlives the state; both drivers in one change, the Vulkan one on a Vulkan box.
-
-## 43. The same-slab row probe cannot read a recurrent model's verify past one row
-
-`harness/batch_rows_probe.das --sameslab` sends its rows through the generic batch driver, whose row
-preparation asks the recurrent-state mirror for consecutive positions of one session and declines
-(`dn_state`); the verify the speculative round runs serves those rows through its shadow replay
-(`ARCHITECTURE_GPU_MTP.md#mtp-dn-shadow-replay`). On a DeltaNet hybrid the one-row same-slab step reads and
-every higher count declines, so the verify's per-row cost there has no probe (the two-session batch step
-stands in, `PERF_LEDGER.md`'s 2026-10-05 depth-1 NextN entry). The work: route the probe's same-slab rows through the
-verify entry the round uses, or give the batch driver the shadow replay.
 
 ## 44. A one-row rows-form step drafts differently from the two-row form
 
@@ -1080,3 +1050,13 @@ round apart from the decode step's at a near-tie; the scheduler keeps the step. 
 work: one dispatch a layer over every segment - a segment table the attention tiles and the scan read their row range,
 key extent and slices from, the batched decode's route-table shape lifted to tiles - so a segment costs its rows alone;
 then the rider is a one-row segment of a window that is no stall.
+
+## 54. The K-quant base-form window GEMM reads a third slower than the IQ4_XS one at near-equal bytes
+
+On the M4 arm (`DASLLAMA_METAL_TENSOR=0`) a pure Q4_K Qwen3.6-35B-A3B prefills at 2400-2900 tok/s against the pure
+IQ4_XS file's 3000-4100 at the same session, while the two decode within the rounds' drift (`PERF_LEDGER.md`, the
+qwen leg's end re-measure entry); the Q8_0-rest twins show the same gap on their expert planes alone. The bytes are
+4.5 against 4.25 a weight, so the difference is the base-form tile's K-quant decode (the 6-bit sub-scales and mins
+unpacked a superblock) against the IQ4_XS lookup, not the bandwidth. The work: the K-quant base-form window tile
+profiled against the IQ4_XS one at the window's row counts, the sub-scale unpack hoisted a superblock the way the
+IQ4_XS tile hoists its lookup.

@@ -653,6 +653,27 @@ def build_q51_block(blk : int) : array<uint8> {
     return <- b
 }
 
+//! the Q5_0 synthetic 32-block `blk`, written in the pack direction: q51's d (f16-exact, varied per block) and its q5_pat
+//! quants shifted per block; disk layout [d][qh u32][16 nibble bytes] - Q5_0's own 22 B block
+def build_q50_block(blk : int) : array<uint8> {
+    var b : array<uint8>
+    b |> resize(22)
+    put_f16(b, 0, q51_d(blk))
+    var qh = 0u
+    for (k in range(32)) {   // qh bit k = the 5th bit of element k
+        if ((q5_pat(k + blk) & 16) != 0) {
+            qh |= 1u << uint(k)
+        }
+    }
+    for (i in range(4)) {
+        b[2 + i] = uint8(qh >> uint(i * 8))
+    }
+    for (j in range(16)) {   // byte j: element j low nibble, element j + 16 high nibble
+        b[6 + j] = uint8((q5_pat(j + blk) & 15) | ((q5_pat(j + 16 + blk) & 15) << 4))
+    }
+    return <- b
+}
+
 // iq4nl32 synthetic 32-block index `blk`: f16-exact d varied per block, nibble byte j =
 // iq4nl_qs_pat(blk*16 + j) (shifted per block so an inter-block offset bug can't cancel); disk
 // layout [d][16 nibble bytes] - IQ4_NL's own 18 B block.

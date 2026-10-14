@@ -12,7 +12,7 @@ require _resident_regions
 // the one-token-off control, not bit for bit: the N-row command's Q8_K sites round apart from the one-row
 // command's (`../followup_vulkan.md` item 75). Skips off the JIT, without DASLLAMA_GPU=1 on a device the driver
 // serves, without the file under models_dir(), or on a card whose room the plan does not fit at the regions a cell asks
-// (twelve for the groups cell).
+// (twelve and twenty for the groups cells).
 let private REGIONS_FILE = "Llama-3.2-1B-Instruct-Q4_K_M.gguf"
 
 [test]
@@ -25,8 +25,14 @@ def test_regions_batched_steps_split_k(t : T?) {
     cell_regions_batched_steps_split(t, REGIONS_FILE, LogitsBar.split_bar)
 }
 
-//! twelve rows over twelve regions: past the N-row command's eight the step runs two commands of six, never a row at a time
+//! twelve rows over twelve regions: one command, its GEMVs in a tile of eight columns and one of four
 [test]
 def test_regions_batched_groups_k(t : T?) {
     cell_regions_batched_groups(t, REGIONS_FILE, 12l)
+}
+
+//! twenty rows over twenty regions: past the N-row command's sixteen the step runs two commands of ten, never a row at a time
+[test]
+def test_regions_batched_groups_wide_k(t : T?) {
+    cell_regions_batched_groups(t, REGIONS_FILE, 20l)
 }

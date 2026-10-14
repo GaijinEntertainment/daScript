@@ -42,3 +42,8 @@ def test_regions_batched_steps_qwen3(t : T?) {
 def test_regions_batched_steps_split_qwen3(t : T?) {
     cell_regions_batched_steps_split(t, REGIONS_FILE)
 }
+
+[test]
+def test_window_qkn_fused(t : T?) {
+    cell_window_qkn_fused(t, REGIONS_FILE)
+}

@@ -178,6 +178,24 @@ decision 8). The `mad` builtin lowers to the explicit `Fma`, which the mark does
 Vulkan's precision rules let a driver evaluate `Fma` as a multiply then an add, so a kernel whose
 correction step depends on a fused multiply-add does not rest it on `mad`.
 
+### 3.11 A `[spirv_inline]` helper is visited at its call sites {#emit-time-inline}
+
+A helper marked `[spirv_inline]` gets no `OpFunction`: every call to it - a plain call or a kernel-class self-method
+invoke - visits its body in the caller, a value parameter bound to the argument's value id and a by-reference
+parameter to the argument's lvalue pointer (an element of a local array included, with no copy-in / copy-out temp),
+and its tail `return` gives the call's result id with no terminator. The caller's entry block takes the inlined
+bodies' locals and temps, each body's once, in the prepass that already leads it with its own. An inlined body
+returns at most once, from its last statement - an early return would need a terminator mid-caller - and binds no
+plane element and no struct with array members; each is a compile error. A kernel with no `[spirv_inline]` helper
+emits the same words as before.
+
+The emitter emits naive SPIR-V and relies on the driver to optimize it, inlining included, but the driver does not
+reach the same code when it inlines the calls itself: NVIDIA's compiles dasLLAMA's f32 router body, a chain of method
+calls, at 6.1 us where the same words with the calls inlined beforehand (`spirv-opt
+--inline-entry-points-exhaustive`) run at 4.3 us; the `Inline` function-control hint leaves it at 6.1 us. The calls
+that cost it are the one-instruction subgroup wrappers (`subgroupAdd` behind a helper): with every method inlined but
+those, the body still reads 6.1 us, and with them inlined too, 4.4.
+
 ## 4. Test architecture - "every emitted instruction has a test" {#test-architecture}
 
 The behavioral layers, then the enforcement gates (all in main-tree `tests/spirv/` except the

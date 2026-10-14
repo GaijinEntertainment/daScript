@@ -10,11 +10,17 @@ require _resident_regions
 // in two mirror regions, the prefill continued from a position past zero, device-home sessions, the region pin, the
 // parked claim and the scheduler's device mode. Skips off the JIT, without DASLLAMA_GPU=1 on a device the driver
 // serves, or without the file under models_dir().
+// Under DASLLAMA_DEVICE_POOL=0 the pool cell holds the off rail.
 let private REGIONS_FILE = "Qwen2.5-0.5B-Instruct-Q8_0.gguf"
 
 [test]
 def test_regions_interleaved_single_steps(t : T?) {
     cell_regions_interleaved_single_steps(t, REGIONS_FILE)
+}
+
+[test]
+def test_region_taken_after_decode(t : T?) {
+    cell_region_taken_after_decode(t, REGIONS_FILE)
 }
 
 [test]
@@ -66,4 +72,14 @@ def test_gpu_resident_regions_reports(t : T?) {
 [test]
 def test_gpu_resident_regions_passes(t : T?) {
     cell_passes_with_their_rows(t, REGIONS_FILE)
+}
+
+[test]
+def test_scheduler_paged_resident(t : T?) {
+    cell_scheduler_paged_resident(t, REGIONS_FILE)
+}
+
+[test]
+def test_device_pool(t : T?) {
+    cell_device_pool(t, REGIONS_FILE)
 }

@@ -8,7 +8,9 @@ work: `../followup_metal.md` for Metal, `../followup_vulkan.md` for Vulkan,
 An instrument is a file whose result is a time or rate it clocked itself (own clock or GPU
 timestamps), printed or returned for printing; a serving path's profiler report beside its served
 output is not one. Its timed body is the statements between its clock reads, and what they call.
-A lever is a flag, an environment switch, a runtime setter or a profile key. A race times two
+
+A lever is a flag, an environment switch, a runtime setter or a profile key that picks what the
+run executes - never an input's size or content. A race times two
 implementations of one computation in one process, either of which the run could adopt (two
 values of one lever are not two implementations); an A/B is timed runs in one process differing
 only in one lever's value. An arm is every timed run of one implementation or one lever value; a
@@ -60,9 +62,10 @@ it passed.** Two arms can agree and both be wrong; only the reference makes the 
 **A diff that adds a race arm that is not a compared arm, or changes its run or report line,
 makes that arm carry the literal token `timing-only` on its report line.**
 
-**A diff that adds a mode none of whose arms it reads back and compares, or changes such a mode's
-arms, makes that mode carry the literal text `ATTRIBUTION SWEEP`
-on its own header-comment line, naming the mode and what its arms attribute.** Without the line a
+**A diff that adds a race or A/B mode with no compared arm - its arms in one process, or in
+processes the mode spawns where they would otherwise make one - or changes such a mode's arms,
+makes that mode carry the literal text `ATTRIBUTION SWEEP` on its own header-comment line, naming
+the mode and what its arms attribute.** Without the line a
 reader takes the mode's arms for an adoption decision it never made.
 
 **A new instrument that puts its own clock around a served turn - one whole request the engine

@@ -184,6 +184,13 @@ def test_gpu_resident_hybrid_short_windows(t : T?) {
 }
 
 [test]
+def test_gpu_resident_hybrid_greedy_chain(t : T?) {
+    t |> run("Qwen3.5-0.8B: the greedy chain's steps are the plain steps bit for bit, hits on the pick and misses off it") @(t : T?) {
+        greedy_chain_cell(t, path_join(models_dir(), "Qwen3.5-0.8B-Q8_0.gguf"))
+    }
+}
+
+[test]
 def test_gpu_resident_hybrid_kq(t : T?) {
     t |> run("Qwen3.5-0.8B-Q4_K_M: K-quant deltanet planes on the resident driver vs the CPU chain, one window") @(t : T?) {
         hybrid_forced_feed(t, 40l, "Qwen3.5-0.8B-Q4_K_M.gguf", HybridPlanes.kq)
@@ -318,6 +325,64 @@ def private with_mtp_carrier(t : T?; regions : int64; body : block<(var tr : Mod
     with_mtp_carrier(t, regions, false, body)
 }
 
+//! the greedy walk of `reply` tokens over the counting prompt on the carrier loaded with the driver prepared for depth `prep`:
+//! the rows the driver prepared, the walk's tokens and the plain decode's, its drafts, and the device verifies and
+//! `verify_rows` passes it took; the depth knob cleared after
+struct private DeepWalk {
+    ids : array<int64>
+    plain : array<int64>
+    drafted : int64
+    verifies : int64
+    verify_rows_passes : int64
+    prepared_rows : int64
+}
+
+def private deep_walk(t : T?; prep, reply : int64) : DeepWalk {
+    var r : DeepWalk
+    set_mtp_depth(prep)
+    var tr <- load_mtp_carrier(t, 1l)
+    r.prepared_rows = rdec_verify_rows()
+    with_dasllama_jobque_() {
+        var prompt <- encode(tr, "Count from one to twenty: one, two, three,", true, false)
+        let total = long_length(prompt) - 1l + reply
+        let verifies0 = moe_gpu_resident_verifies()
+        let rows0 = pass_count("verify_rows")
+        var s <- create_session(tr, mirror_kv_dtype())
+        var na = 0l
+        r.ids <- generate_mtp_greedy(tr, s, prompt, total, r.drafted, na)
+        delete s
+        r.verifies = moe_gpu_resident_verifies() - verifies0
+        r.verify_rows_passes = pass_count("verify_rows") - rows0
+        var p <- create_session(tr, mirror_kv_dtype())
+        r.plain <- generate(tr, p, prompt, int(total))
+        delete p
+        log_gen_texts(tr, "the walk on a driver prepared for depth {prep}: plain, speculative", r.plain, r.ids)
+        delete prompt
+    }
+    clear_mtp_depth()
+    delete tr
+    return <- r
+}
+
+//! the -MTP- carrier loaded under the depth-8 knob: the driver prepares the nine verify rows past the leaves' eight columns,
+//! and the greedy walk on it emits the plain decode, every round's verify on the device and none passed as `verify_rows`;
+//! loaded at depth 1 the driver prepares two rows (the control)
+[test]
+def test_gpu_resident_hybrid_mtp_depth8(t : T?) {
+    t |> run("Qwen3.5-0.8B-MTP under the depth-8 knob: the driver prepares nine verify rows, and its walk serves on the device") @(t : T?) {
+        if (!mtp_carry_ready(t)) return
+        var deep <- deep_walk(t, 8l, 32l)
+        t |> equal(deep.prepared_rows, 9l, "the driver was prepared for the depth-8 verify's nine rows")
+        t |> success(ids_equal(deep.ids, deep.plain), "the walk emits the plain greedy decode token for token")
+        t |> success(deep.drafted > 0l && deep.verifies > 0l, "the walk drafted ({deep.drafted}) and verified on the device ({deep.verifies} verifies)")
+        t |> equal(deep.verify_rows_passes, 0l, "no verify passed to the CPU as verify_rows")
+        var ctrl <- deep_walk(t, 1l, 4l)
+        t |> equal(ctrl.prepared_rows, 2l, "control: the driver prepared for depth 1 holds two verify rows")
+        delete ctrl
+        delete deep
+    }
+}
+
 //! `body` on the one-region carrier and a fresh session holding `resident_prompt(DRAFT_PROMPT)` through `prefill_warm`, the
 //! session and the prompt deleted after
 def private with_warm_carrier(t : T?; body : block<(var tr : Model; prompt : array<int64>; var s : Session) : void>) {
@@ -445,7 +510,7 @@ let private DRAFT_TOKEN = 2000l
 let private ROUNDS = 6l   //! the speculative rounds the device-vs-CPU cells run, one fed token each
 
 //! `prompt` through the prefill at `start_pos` with the speculative warm on, so the head's host rows the draft hydrates hold history;
-//! a continuation (`start_pos` past 0) on the hybrid passes to the CPU rails, which leave the recurrent state and the carry at its end
+//! a continuation (`start_pos` past 0) leaves the recurrent state and the carry at its end on whichever rail serves it
 def private prefill_warm(tr : Model; var s : Session; prompt : array<int64>; start_pos : int64 = 0l) {
     let spec0 = get_mtp_spec()
     set_mtp_spec(true)
@@ -460,10 +525,25 @@ def private dn_row_within(t : T?; what : string; gpu, cpu, off : array<float>) {
 }
 
 [test]
-def test_gpu_resident_hybrid_mtp_short_window(t : T?) {
-    t |> run("Qwen3.5-0.8B-MTP: a two-token prompt takes the window chain - the token command's peel declines a NextN-headed model") @(t : T?) {
+def test_gpu_resident_hybrid_peel(t : T?) {
+    t |> run("Qwen3.5-0.8B: a short tail peels through the token commands, the recurrent rows in order in the region's slot, and reads what the one-row steps read") @(t : T?) {
+        let path = path_join(models_dir(), "Qwen3.5-0.8B-Q8_0.gguf")
+        if (!resident_ready(t, path)) return
+        var tr <- load_resident(path, 1l)
+        t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the hybrid (the load log names any decline)")
+        with_dasllama_jobque_() {
+            recurrent_peel_cell(t, tr, SPLIT_BAR_REL)
+        }
+        delete tr
+    }
+    t |> run("Qwen3.5-0.8B-MTP: the same on the NextN-headed carrier with speculation off, whose peel warms no head row; with it on, a short tail takes the chain, which warms the head's rows") @(t : T?) {
         with_mtp_carrier(t, 1l) $(var tr) {
-            assert_short_window_takes_chain(t, tr, "a NextN-headed model")
+            let spec0 = get_mtp_spec()
+            set_mtp_spec(false)
+            recurrent_peel_cell(t, tr, SPLIT_BAR_REL)
+            set_mtp_spec(true)
+            assert_short_window_takes_chain(t, tr, "a NextN-headed model under speculation")
+            set_mtp_spec(spec0)
         }
     }
 }
@@ -669,13 +749,27 @@ def private declined_draft(tr : Model; var s : Session; tok, row : int64) {
 }
 
 //! one speculative round's record: the draft the round verified, whether it accepted it, the position it left, the token the
-//! caller's sample_ took after it (-1 where none was taken), and the CPU draft's logits where the reference kept them
+//! caller's sample_ took after it (-1 where none was taken), the CPU draft's logits where the reference kept them, and the verify's
+//! row 0 logits where they landed
 struct private RoundRec {
     draft : int64
     hit : bool
     n_past : int64
     next : int64
     draft_logits : array<float>
+    verify0 : array<float>
+}
+
+//! a device round and the CPU round on one draft: both accepted or both rejected, at one position - or, where the accepts part, the
+//! draft a near-tie of the CPU verify row 0's argmax (the accept is that row's argmax, which the two chains round apart); false where
+//! they parted, so the rounds after are not the same round
+def private accepts_agree(t : T?; tr : Model; what : string; dev, cpu : RoundRec) : bool {
+    if (dev.hit != cpu.hit) {
+        pick_agrees(t, tr, "{what}: the draft against the CPU verify row 0 (the accepts part)", dev.draft, cpu.verify0, DN_LOGIT_BAR_REL)
+        return false
+    }
+    t |> equal(dev.n_past, cpu.n_past, "{what}: both rounds left the session at one position")
+    return true
 }
 
 //! one speculative round of `s` a token of `toks`: `ask` sets the caller's pick ask before every round; under `chain` the
@@ -703,6 +797,7 @@ def private spec_rounds(tr : Model; var s : Session; toks : array<int64>; ask : 
         s.pick_asked = false
         rec.draft = s.mtp_vbatch[1]
         rec.n_past = s.n_past
+        rec.verify0 := s.mtp_logits
         rec.next = chain ? sample_(s, SamplingParams()) : -1l
         tok = rec.next
         out |> emplace(rec)
@@ -1159,11 +1254,8 @@ def test_gpu_resident_hybrid_mtp_rounds(t : T?) {
                     to_log(LOG_INFO, "round {r}: an earlier near-tie parted the sessions - the accept and position are not compared\n")
                     continue
                 }
-                agreed = pick_agrees(t, tr, "round {r} draft", gpu[r].draft, cpu[r].draft_logits, DN_LOGIT_BAR_REL)
-                if (agreed) {
-                    t |> equal(gpu[r].hit, cpu[r].hit, "round {r}: both rounds accepted or both rejected")
-                    t |> equal(gpu[r].n_past, cpu[r].n_past, "round {r}: both rounds left the session at one position")
-                } else {
+                agreed = pick_agrees(t, tr, "round {r} draft", gpu[r].draft, cpu[r].draft_logits, DN_LOGIT_BAR_REL) && accepts_agree(t, tr, "round {r}", gpu[r], cpu[r])
+                if (!agreed) {
                     agreed_head_rows = (r == 0l ? DRAFT_PROMPT : cpu[r - 1l].n_past) - 1l
                 }
             }
@@ -1175,8 +1267,7 @@ def test_gpu_resident_hybrid_mtp_rounds(t : T?) {
             var c7 <- spec_rounds(tr, c, [toks[ROUNDS]], false, false, true)
             to_log(LOG_INFO, "round 6 (declined draft): CPU head over hydrated rows drafts {round7[0].draft} '{decode_(tr, [round7[0].draft])}' hit {round7[0].hit} at {round7[0].n_past}, the CPU round {c7[0].draft} '{decode_(tr, [c7[0].draft])}' hit {c7[0].hit} at {c7[0].n_past}\n")
             if (agreed && pick_agrees(t, tr, "round 6 draft (the CPU head over the hydrated rows)", round7[0].draft, c7[0].draft_logits, DN_LOGIT_BAR_REL)) {
-                t |> equal(round7[0].hit, c7[0].hit, "round 6: both rounds accepted or both rejected")
-                t |> equal(round7[0].n_past, c7[0].n_past, "round 6: both rounds left the session at one position")
+                accepts_agree(t, tr, "round 6", round7[0], c7[0])
             }
             poison_head_rows(tr, c, c.n_past - 1l)
             var c8 <- spec_rounds(tr, c, [toks[ROUNDS + 1l]])
@@ -1302,16 +1393,18 @@ def test_gpu_resident_hybrid_mtp_pass_arms(t : T?) {
             delete prompt
         }
     }
-    t |> run("Qwen3.5-0.8B-MTP: a round five rows past the region's rows - rows the CPU rails served as a continuation the hybrid's resident prefill passes - the draft, which has no gap arm, serves on the device; the verify passes as gap and the CPU verify completes over the recurrent state the CPU rails left") @(t : T?) {
+    t |> run("Qwen3.5-0.8B-MTP: a round five rows past the region's rows - rows the CPU rails served as a continuation under the server's prefill pin - the draft, which has no gap arm, serves on the device; the verify passes as gap and the CPU verify completes over the recurrent state the CPU rails left") @(t : T?) {
         with_mtp_carrier(t, 1l) $(var tr) {
             var prompt <- resident_prompt(DRAFT_PROMPT)
             var more <- [for (i in range64(GAP_ROWS)); 3000l + (i * 61l) % 4000l]
             var s <- create_session(tr, mirror_kv_dtype())
             prefill_warm(tr, s, prompt)
             t |> equal(moe_gpu_resident_rows(s), DRAFT_PROMPT, "the region's rows end at the prompt")
-            let cont0 = pass_count("continuation")
+            let pinned0 = pass_count("pinned_off")
+            set_resident_prefill_allowed(false)
             prefill_warm(tr, s, more, DRAFT_PROMPT)
-            t |> success(pass_count("continuation") - cont0 >= 1l, "the continuation passed to the CPU rails as continuation ({pass_count("continuation") - cont0} counted): a hybrid's resident prefill serves a prompt from its start alone")
+            set_resident_prefill_allowed(true)
+            t |> success(pass_count("pinned_off") - pinned0 >= 1l, "the continuation passed to the CPU rails under the prefill pin ({pass_count("pinned_off") - pinned0} counted)")
             t |> equal(moe_gpu_resident_rows(s), DRAFT_PROMPT, "the region's rows still end at the prompt: the CPU rails served the {GAP_ROWS} past it")
             t |> equal(s.dn_pos, DRAFT_PROMPT + GAP_ROWS, "the recurrent state sits past the CPU-served rows")
             t |> equal(s.mtp_h_pos1, DRAFT_PROMPT + GAP_ROWS, "the CPU tail stashed the carry at the last CPU-served row")

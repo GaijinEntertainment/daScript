@@ -55,6 +55,8 @@
 		"k3q8_gemv_gen" : "mr8",
 		"k2q8_gemv_gen" : "mr8",
 		"iq3s4q8_gemv_gen" : "mr8",
+		"q4032q8_tile_gen" : "mr8",
+		"q5032q8_tile_gen" : "mr8",
 		"quantize_q8_0_into_ptr" : "plain",
 		"dot_q51e" : "vec16",
 		"dot" : "vec8_u2",
@@ -69,21 +71,21 @@
 	},
 	"provenance" : {
 		"platform" : "darwin",
-		"noise_floor_cv_pct" : "0.11",
+		"noise_floor_cv_pct" : "0.28",
 		"features" : "neon;dotprod;fullfp16;lse",
 		"class" : "arm-neon",
-		"written" : "2026-10-09T00:22:53.523Z",
+		"written" : "2026-10-14T09:58:15.123Z",
 		"validation_demoted" : "0",
 		"dasllama_version" : "16",
-		"mint_gen_ms" : "512802",
+		"mint_gen_ms" : "417628",
 		"arch" : "arm64",
 		"validation" : "ok",
-		"noise_probes" : "start cv 0.11%; mid1 cv 0.04%; mid2 cv 0.06%; end cv 0.06%",
-		"mint_total_ms" : "642359",
+		"noise_probes" : "start cv 0.28%; mid1 cv 0.08%; mid2 cv 0.08%; end cv 0.21%",
+		"mint_total_ms" : "609176",
 		"mode" : "normal",
 		"origin" : "profile",
 		"noise" : "ok",
-		"mint_kernels_ms" : "129547",
-		"validation_max_drift_pct" : "0.20"
+		"mint_kernels_ms" : "191537",
+		"validation_max_drift_pct" : "0.19"
 	}
 }

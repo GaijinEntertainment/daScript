@@ -62,6 +62,30 @@ def private two_window_logits(trp : Model; w1, w2 : array<int64>; step_tok : int
     return <- out
 }
 
+let private CODEC_FEED_STEPS = 12   //! the greedy steps after a codec session's two windows
+let private LONG_COUNT_TO = 11000   //! a counting prompt whose f16 K/V passes 4096 MiB on Llama-3.2-3B (112 KiB a row)
+let private LONG_WINDOW = 1024l      //! the long prompt's window
+let private LONG_STEPS = 6          //! the greedy steps over that context
+
+//! two prefill windows then `n` greedy steps on one session of codec `kdt`: the tokens the steps pick
+def private codec_two_window_greedy(trp : Model; w1, w2 : array<int64>; kdt : KVDtype; n : int) : array<int64> {
+    var ids : array<int64>
+    with_dasllama_jobque() {
+        var s = make_run_state(trp.config, kdt, kdt)
+        eval_(trp, s, w1)
+        eval_(trp, s, w2)
+        var one <- [0l]
+        for (_i in range(n)) {
+            one[0] = argmax_of(s.logits, trp.config.vocab_size)
+            ids |> push(one[0])
+            eval_(trp, s, one)
+        }
+        delete one
+        delete s
+    }
+    return <- ids
+}
+
 struct private AdoptRun {
     logits : array<float>
     matched : int64
@@ -963,6 +987,165 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                 delete trmg
             }
 
+            //! mirror-codec arm: a q8_0, tq4 and f32 session's windows feed the mirror through the codec's store stamp - both
+            //! windows counted on the panel form into the mirror, the store stamp dispatched, the decode steps after them
+            //! uploading no row and greedy token for token the CPU chain's on the same codec; the knob off the control (no
+            //! window into the mirror, every prompt row uploaded by the first step, the tokens the same)
+            if (arm_on(t, "mirror-codec")) {
+                set_wscale_f16(false)
+                pin_kernel_backend("portable")
+                var trcg <- blob_twin(t, path, 2048l)
+                let longp <- encode(tr, counting_prompt(ATTN_DEV_COUNT_TO), true, false)
+                var w1 <- [for (i in range(ATTN_DEV_W1)); longp[i]]
+                var w2 <- [for (i in range(ATTN_DEV_W1, ATTN_DEV_W1 + 20)); longp[i]]
+                let prev_override = active_prefill_override()
+                let prev_decode = active_decode_override()
+                let prev_min_npos = get_metal_prefill_min_npos()
+                let prev_mirror = get_metal_prefill_mirror()
+                for (kdt in [KVDtype.q8_0, KVDtype.tq4, KVDtype.f32]) {
+                    select_prefill_override("")
+                    select_decode_override("")
+                    var inscope cpu <- codec_two_window_greedy(tr, w1, w2, kdt, CODEC_FEED_STEPS)
+                    select_prefill_override("metal")
+                    select_decode_override("metal")
+                    set_metal_prefill_min_npos(1l)
+                    set_metal_prefill_mirror(true)
+                    metal_kernel_coverage_reset()
+                    let fed0 = metal_prefill_mirror_panel_served()
+                    let up0 = metal_mirror_uploaded_rows()
+                    let dec0 = metal_decode_stats().decodes
+                    var inscope gpu <- codec_two_window_greedy(trcg, w1, w2, kdt, CODEC_FEED_STEPS)
+                    let fed = metal_prefill_mirror_panel_served() - fed0
+                    let up = metal_mirror_uploaded_rows() - up0
+                    let dec = metal_decode_stats().decodes - dec0
+                    let stores = metal_kernel_count("metal_kv_rows_q8") + metal_kernel_count("metal_kv_rows_tq4")
+                    set_metal_prefill_mirror(false)
+                    let fed1 = metal_prefill_mirror_panel_served()
+                    let up1 = metal_mirror_uploaded_rows()
+                    var inscope gpu_off <- codec_two_window_greedy(trcg, w1, w2, kdt, CODEC_FEED_STEPS)
+                    let fed_off = metal_prefill_mirror_panel_served() - fed1
+                    let up_off = metal_mirror_uploaded_rows() - up1
+                    log_gen_texts(tr, "mirror-codec {kdt}", cpu, gpu)
+                    t |> equal(fed, 2l, "{kdt}: both windows fed the mirror through the codec's store")
+                    t |> equal(up, 0l, "{kdt}: the decode steps after the windows upload no row")
+                    t |> equal(dec, int64(CODEC_FEED_STEPS), "{kdt}: every step a device decode")
+                    if (kdt == KVDtype.f32) {
+                        t |> equal(stores, 0l, "{kdt}: the rows copy across, no quantizing store")
+                    } else {
+                        t |> success(stores > 0l, "{kdt}: the quantizing store stamp ran ({stores} dispatches)")
+                    }
+                    t |> success(ids_equal(cpu, gpu), "{kdt}: the device's greedy tokens are the CPU chain's on the same codec")
+                    t |> equal(fed_off, 0l, "{kdt} control: the knob off feeds no window into the mirror")
+                    t |> equal(up_off, int64(ATTN_DEV_W1 + 20), "{kdt} control: the first decode step uploads every prompt row")
+                    t |> success(ids_equal(cpu, gpu_off), "{kdt} control: the knob off reads the same tokens")
+                }
+                select_decode_override(prev_decode)
+                select_prefill_override(prev_override)
+                set_metal_prefill_min_npos(prev_min_npos)
+                set_metal_prefill_mirror(prev_mirror)
+                metal_prefill_shutdown()
+                metal_decode_shutdown()
+                clear_kernel_backend_pin()
+                select_kernel_backend(prior_backend)
+                set_wscale_f16(prior_wscale)
+                delete w1
+                delete w2
+                delete trcg
+            }
+
+            //! mirror-cap arm: a session's mirror slice past the cap still serves. Under a 64 MiB cap an f32 session of 1100-odd rows
+            //! (a 128 MiB slice) prefills and steps on the device, greedy token for token the CPU chain, its slice resident past
+            //! the cap; then, at the default cap, an f16 session past 4096 MiB of K/V - a counting prompt of 40000-odd rows on
+            //! Llama-3.2-3B, in window-sized calls - prefills and steps on the device, every call served and the count continued
+            if (arm_on(t, "mirror-cap")) {
+                set_wscale_f16(false)
+                pin_kernel_backend("portable")
+                let prev_override = active_prefill_override()
+                let prev_decode = active_decode_override()
+                let prev_min_npos = get_metal_prefill_min_npos()
+                let prev_cap = get_metal_decode_mirror_cap_mb()
+                let row_bytes = kv_row_bytes(KVDtype.f32, kv_row_total(tr)) * 2l
+                var trcg <- blob_twin(t, path, 2048l)
+                let midp <- encode(tr, counting_prompt(420), true, false)
+                var w1 <- [for (i in range64(long_length(midp) - 20l)); midp[i]]
+                var w2 <- [for (i in range64(long_length(midp) - 20l, long_length(midp))); midp[i]]
+                select_prefill_override("")
+                select_decode_override("")
+                var inscope cpu <- codec_two_window_greedy(tr, w1, w2, KVDtype.f32, CODEC_FEED_STEPS)
+                metal_decode_shutdown()
+                set_metal_decode_mirror_cap_mb(64)
+                select_prefill_override("metal")
+                select_decode_override("metal")
+                set_metal_prefill_min_npos(1l)
+                let dec0 = metal_decode_stats().decodes
+                var inscope gpu <- codec_two_window_greedy(trcg, w1, w2, KVDtype.f32, CODEC_FEED_STEPS)
+                let mir = metal_decode_mirror_stats()
+                log_gen_texts(tr, "mirror-cap 64 MiB", cpu, gpu)
+                t |> success(long_length(midp) * row_bytes > 64l * 1024l * 1024l, "the session's rows pass the 64 MiB cap ({long_length(midp)} rows of {row_bytes} bytes)")
+                t |> success(mir.bytes > 64ul * 1024ul * 1024ul, "the slice stands resident past the cap ({mir.bytes} bytes)")
+                t |> equal(metal_decode_stats().decodes - dec0, int64(CODEC_FEED_STEPS), "every step past the cap is the device's")
+                t |> success(ids_equal(cpu, gpu), "past the cap the device's greedy tokens are the CPU chain's")
+                set_metal_decode_mirror_cap_mb(prev_cap)
+                metal_decode_shutdown()
+                metal_prefill_shutdown()
+                delete w1
+                delete w2
+                delete trcg
+                let lpath = path_join(models_dir(), "Llama-3.2-3B-Instruct-Q8_0.gguf")
+                if (jit_model_available(t, lpath)) {
+                    //! the 3B's f16 K/V is 112 KiB a row: 37450 rows pass 4096 MiB inside its context, on the mirror-fed form
+                    let prev_crowns = get_metal_tensor_crowns()
+                    pin_metal_tensor_crowns("mulmm_q8,attn_qkmm,attn_dev")
+                    metal_prefill_shutdown()
+                    var trlg <- blob_twin(t, lpath, 131072l)
+                    let lrow = kv_row_bytes(KVDtype.f16, kv_row_total(trlg)) * 2l
+                    let last = LONG_COUNT_TO
+                    let longp <- encode(trlg, counting_prompt(last), true, false)
+                    let np = long_length(longp)
+                    t |> success(np * lrow > 4096l * 1024l * 1024l, "the prompt's K/V passes 4096 MiB ({np} rows of {lrow} bytes, {np * lrow / (1024l * 1024l)} MiB)")
+                    let pf0 = metal_prefill_stats().prefills
+                    let ldec0 = metal_decode_stats().decodes
+                    var ids : array<int64>
+                    with_dasllama_jobque() {
+                        var s = make_run_state(trlg.config, KVDtype.f16, KVDtype.f16)
+                        var at = 0l
+                        while (at < np) {   //! the prompt in the server's window-sized calls
+                            let n = min(LONG_WINDOW, np - at)
+                            var chunk <- [for (i in range64(at, at + n)); longp[i]]
+                            eval_(trlg, s, chunk)
+                            delete chunk
+                            at += n
+                        }
+                        var one <- [0l]
+                        for (_i in range(LONG_STEPS)) {
+                            one[0] = argmax_of(s.logits, trlg.config.vocab_size)
+                            ids |> push(one[0])
+                            eval_(trlg, s, one)
+                        }
+                        delete one
+                        delete s
+                    }
+                    let lmir = metal_decode_mirror_stats()
+                    let text = decode_(trlg, ids)
+                    to_log(LOG_INFO, "mirror-cap long: {np} rows, mirror {int64(lmir.bytes / (1024ul * 1024ul))} MiB, continuation '{text}'\n")
+                    t |> equal(metal_prefill_stats().prefills - pf0, (np + LONG_WINDOW - 1l) / LONG_WINDOW, "every window of the long prompt prefilled on the device")
+                    t |> equal(metal_decode_stats().decodes - ldec0, int64(LONG_STEPS), "every step over the long context is the device's")
+                    t |> success(lmir.bytes > 4096ul * 1024ul * 1024ul, "the mirror holds the session's slice past 4096 MiB ({lmir.bytes} bytes)")
+                    t |> success(starts_with(text, " {last + 1},"), "the continuation counts on from {last} ('{text}')")
+                    unpin_metal_tensor_crowns()
+                    set_metal_tensor_crowns(prev_crowns)
+                    delete trlg
+                }
+                select_decode_override(prev_decode)
+                select_prefill_override(prev_override)
+                set_metal_prefill_min_npos(prev_min_npos)
+                metal_prefill_shutdown()
+                metal_decode_shutdown()
+                clear_kernel_backend_pin()
+                select_kernel_backend(prior_backend)
+                set_wscale_f16(prior_wscale)
+            }
+
             //! segs arm: two sessions' chunks as ONE window against the same chunks as two windows, on the mirror-fed form and
             //! the panel form - the continuations' logits within the bar, eight greedy steps off each token for token, the
             //! openings as one window from position zero the same, every window counted
@@ -1561,6 +1744,109 @@ def test_metal_prefill_moe_gemv_route(t : T?) {
     }
 }
 
+//! One split-format MoE carrier through the routed block's two GEMM forms: a 280-row window then a 20-row one (both past the
+//! gathered route's knee) with the tensor twins over the gather panel, then the same windows with the panel off - the gate and
+//! up sites on the simdgroup base form a box without the tensor toolchain serves - each leg's last-row logits within `bar` of
+//! the CPU chain's largest, the base kernel's census count rising on the base leg alone, and the control a window whose last
+//! token differs landing outside the bar
+[cold_path]
+def private moe_base_form_cells(t : T?; path, tag, base_kernel : string; bar : float) {   // nolint:STYLE037,STYLE038,LINT019 — one cell: load, the two legs, the knob restores
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        return if (!model_available(t, path))
+        let prior_wscale = get_wscale_f16()
+        let prior_backend = active_kernel_backend()
+        let prior_pin = kernel_backend_pin()
+        let prior_override = active_prefill_override()
+        let prior_min_npos = get_metal_prefill_min_npos()
+        let prior_mode = get_metal_mode()
+        let prior_crowns = get_metal_tensor_crowns()
+        let prior_crowns_pinned = metal_tensor_crowns_pinned()
+        set_wscale_f16(false)
+        set_metal_mode(MetalMode.when_available)   //! the load reads IQ3_S planes as the Metal tier's grid form, as a Metal load does
+        //! no crown: these formats' twins take every window they compiled for
+        pin_metal_tensor_crowns("")
+        var tr <- load_model_(path, QuantMode.q8)
+        if (tr.config.seq_len > 2048l) {
+            tr.config.seq_len = 2048l
+        }
+        let prompt <- encode(tr, counting_prompt(ATTN_DEV_COUNT_TO), true, false)
+        var trg <- blob_twin(t, path, 2048l)
+        var inscope w1 <- [for (i in range64(280l)); prompt[i]]
+        var inscope w2 <- [for (i in range64(20l)); prompt[280l + i]]
+        var inscope w2_ctrl := w2
+        w2_ctrl[19] = prompt[300]
+        var inscope cpu <- two_window_logits(tr, w1, w2)
+        let peak = logits_maxabs(cpu)
+        t |> success(select_prefill_override("metal"), "{tag}: override registered")
+        set_metal_prefill_min_npos(1l)
+        t |> success(metal_prefill_pso_init(), "{tag}: the prefill kernels compiled - the census reads them")
+        for (leg in ["twins", "base"]) {
+            let base_leg = leg == "base"
+            if (!base_leg && !pf_hmm_ready()) {
+                t |> skip("{tag}/twins: the tensor toolchain is absent - no twin compiled")
+                continue
+            }
+            let prior_gx = set_metal_moe_gather_min(base_leg ? 1000000l : 1l)
+            let served0 = metal_prefill_stats().prefills
+            let base0 = metal_kernel_coverage_of(base_kernel)
+            var inscope gpu <- two_window_logits(trg, w1, w2)
+            let served = metal_prefill_stats().prefills - served0
+            let based = metal_kernel_coverage_of(base_kernel) - base0
+            var inscope gpu_ctrl <- two_window_logits(trg, w1, w2_ctrl)
+            set_metal_moe_gather_min(prior_gx)
+            if (served == 0l) {
+                t |> skip("{tag}/{leg}: metal prefill declined (no Metal device?); the routed forms' parity skipped")
+                continue
+            }
+            t |> equal(served, 2l, "{tag}/{leg}: both windows served on the device")
+            if (base_leg) {
+                t |> success(based > 0l, "{tag}/{leg}: the gate and up sites rode the base form ({based} dispatches of {base_kernel})")
+            } else {
+                t |> equal(based, 0l, "{tag}/{leg}: with the panel built every routed site rode its tensor twin, the base form none")
+            }
+            let g = logits_maxdiff(gpu, cpu)
+            let gc = logits_maxdiff(gpu_ctrl, cpu)
+            to_log(LOG_INFO, "{tag}/{leg}: gap {g} of peak {peak} ({g / peak}); control gap {gc} ({gc / peak}); argmax pieces - GPU {escape(piece(tr, int64(max_element(gpu))))}, CPU {escape(piece(tr, int64(max_element(cpu))))}\n")
+            t |> success(g <= bar * peak, "{tag}/{leg}: last-row logits within {bar} of the CPU chain's largest ({g} of {peak})")
+            t |> success(gc > bar * peak, "{tag}/{leg}: the control window (its last token changed) lands outside the bar ({gc} of {peak})")
+        }
+        if (prior_crowns_pinned) {
+            pin_metal_tensor_crowns(prior_crowns)
+        } else {
+            unpin_metal_tensor_crowns()
+            set_metal_tensor_crowns(prior_crowns)
+        }
+        set_metal_prefill_min_npos(prior_min_npos)
+        set_metal_mode(prior_mode)
+        select_prefill_override(prior_override)
+        metal_prefill_shutdown()
+        metal_decode_shutdown()
+        if (empty(prior_pin)) {
+            clear_kernel_backend_pin()
+        } else {
+            pin_kernel_backend(prior_pin)
+        }
+        select_kernel_backend(prior_backend)
+        set_wscale_f16(prior_wscale)
+        delete tr
+        delete trg
+    } else {
+        t |> skip("das_metal is not built on this platform; the Metal prefill is not compiled")
+    }
+}
+
+[test]
+def test_metal_prefill_moe_base_form(t : T?) {
+    t |> run("the routed simdgroup base form == CPU control on a Q3_K expert stack (Qwen3-30B-A3B UD-Q3_K_XL)") <| @(t : T?) {
+        if (!family_on(t, "qwen3moe") || !arm_on(t, "moe-base")) return
+        moe_base_form_cells(t, path_join(models_dir(), "Qwen3-30B-A3B-Instruct-2507-UD-Q3_K_XL.gguf"), "moe-base/qwen3moe-k3", "metal_moe_mulmm_k3", 0.10)
+    }
+    t |> run("the routed simdgroup base form == CPU control on IQ2 expert stacks (Qwen3-30B-A3B UD-IQ2_XXS)") <| @(t : T?) {
+        if (!family_on(t, "qwen3moe") || !arm_on(t, "moe-base")) return
+        moe_base_form_cells(t, path_join(models_dir(), "Qwen3-30B-A3B-Instruct-2507-UD-IQ2_XXS.gguf"), "moe-base/qwen3moe-iq2xxs", "metal_moe_mulmm_iq2xxs", 0.15)
+    }
+}
+
 [test]
 def test_metal_prefill_kq_tail(t : T?) {
     t |> run("the dense K-quant sites' row-batched GEMV peel == CPU control (Llama-3.2-1B Q4_K_M)") <| @(t : T?) {
@@ -1574,5 +1860,147 @@ def test_metal_prefill_kq_tail(t : T?) {
     t |> run("the dense K-quant sites' row-batched GEMV peel == CPU control (Qwen3-4B Q4_K_M)") <| @(t : T?) {
         if (!family_on(t, "qwen3") || !arm_on(t, "kq-tail")) return
         short_window_cells(t, path_join(models_dir(), "Qwen3-4B-Instruct-2507-Q4_K_M.gguf"), "kq-tail/qwen3-k4", 0.08, ShortForm.kq_tail)
+    }
+    t |> run("the dense per-32 sites' small-batch peel == CPU control (Llama-3.2-1B Q5_1)") <| @(t : T?) {
+        if (!family_on(t, "llama") || !arm_on(t, "kq-tail")) return
+        short_window_cells(t, path_join(models_dir(), "Llama-3.2-1B-Instruct-Q5_1-local.gguf"), "kq-tail/llama-q51", 0.08, ShortForm.kq_tail)
+    }
+    t |> run("the dense per-32 sites' small-batch peel == CPU control (Qwen2.5-0.5B IQ4_NL)") <| @(t : T?) {
+        if (!family_on(t, "qwen2") || !arm_on(t, "kq-tail")) return
+        short_window_cells(t, path_join(models_dir(), "Qwen2.5-0.5B-Instruct-IQ4_NL-local.gguf"), "kq-tail/qwen2-iq4nl32", 0.08, ShortForm.kq_tail)
+    }
+}
+
+let private SCRATCH_SHORT = 200l   //! pads to 224 rows: past the base forms' scratch floor, under a crowned K-quant twin's
+let private SCRATCH_LONG = 400l    //! pads to 416 rows: past a crowned K-quant twin's floor
+//! every dense twin crown: a carrier's mixed planes (a K-quant file's Q6_K and Q5_K sites beside its own) all sit on twins
+let private SCRATCH_TWIN_CROWNS = "mulmm_q8,kq_mulmm_k4,kq_mulmm_k5,kq_mulmm_k6,kq_mulmm_iq4xs,kq_mulmm_iq4nl,kq_mulmm_q40,kq_mulmm_k3,kq_mulmm_iq3s,kq_mulmm_iq3xxs,kq_mulmm_k2,kq_mulmm_iq2s,kq_mulmm_iq2xs,kq_mulmm_iq2xxs"
+
+//! the last row's logits after one prefill window on an f16 session
+def private one_window_logits(trp : Model; w : array<int64>) : array<float> {
+    var out : array<float>
+    with_dasllama_jobque() {
+        var s = make_run_state(trp.config, KVDtype.f16, KVDtype.f16)
+        eval_(trp, s, w)
+        out := s.logits
+        delete s
+    }
+    return <- out
+}
+
+//! One window of `n` rows: the dense sites' scratch-panel count it moved against `scratch` (served off panels or not), its
+//! last-row logits against the all-CPU chain within `bar` of the largest, the same window with the dev-W route off (the
+//! sites' own bytes, no panel counted) inside the same bar, and the control - the window's last token changed - outside it.
+def private scratch_window_cell(t : T?; tr, trg : Model; prompt : array<int64>; n : int64; scratch : bool; bar : float; tag : string) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        var inscope w <- [for (i in range64(n)); prompt[i]]
+        var inscope w_ctrl := w
+        w_ctrl[n - 1l] = prompt[n]
+        var inscope cpu <- one_window_logits(tr, w)
+        let served0 = metal_prefill_stats().prefills
+        let sites0 = metal_prefill_devw_scratch_stats().sites
+        var inscope gpu <- one_window_logits(trg, w)
+        let sites = metal_prefill_devw_scratch_stats().sites - sites0
+        set_metal_prefill_dev_w(false)
+        let own0 = metal_prefill_devw_scratch_stats().sites
+        var inscope own <- one_window_logits(trg, w)
+        let own_sites = metal_prefill_devw_scratch_stats().sites - own0
+        set_metal_prefill_dev_w(true)
+        var inscope gpu_ctrl <- one_window_logits(trg, w_ctrl)
+        t |> equal(metal_prefill_stats().prefills - served0, 3l, "{tag}/{n}: the three windows served on the device")
+        if (scratch) {
+            t |> success(sites > 0l, "{tag}/{n}: the window's dense sites served off scratch panels ({sites} sites)")
+        } else {
+            t |> equal(sites, 0l, "{tag}/{n}: the crowned twin held the window - no scratch panel")
+        }
+        t |> equal(own_sites, 0l, "{tag}/{n}: with the dev-W route off no site took a panel")
+        let peak = logits_maxabs(cpu)
+        let g = logits_maxdiff(gpu, cpu)
+        let go = logits_maxdiff(own, cpu)
+        let gc = logits_maxdiff(gpu_ctrl, cpu)
+        to_log(LOG_INFO, "{tag}/{n}: {sites} panel sites, gap {g} of peak {peak} ({g / peak}); own-bytes gap {go} ({go / peak}); control gap {gc} ({gc / peak})\n")
+        t |> success(g <= bar * peak, "{tag}/{n}: the window's last-row logits within {bar} of the CPU chain's largest ({g} of {peak})")
+        t |> success(go <= bar * peak, "{tag}/{n}: and the own-bytes window's ({go})")
+        t |> success(gc > bar * peak, "{tag}/{n}: the control window (its last token changed) lands outside the bar ({gc} of {peak})")
+        t |> equal(max_element(gpu), max_element(cpu), "{tag}/{n}: the window's argmax is the CPU chain's")
+    }
+}
+
+//! One dense carrier through the scratch-panel floors: on the base forms (no crown) both windows serve off scratch panels;
+//! under every twin crown the short window stays on the twins and the long one takes the panels where `twin_long` says the
+//! carrier's twin floor lies under it (a K-quant twin's) - a Q8_0 twin's floor lies past both windows.
+[cold_path]
+def private scratch_panel_cells(t : T?; path, tag : string; bar : float; twin_long : bool) {   // nolint:STYLE037,LINT019 — one cell: load, the base and crowned legs, the knob restores
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        return if (!model_available(t, path))
+        let prior_wscale = get_wscale_f16()
+        let prior_backend = active_kernel_backend()
+        let prior_pin = kernel_backend_pin()
+        let prior_override = active_prefill_override()
+        let prior_min_npos = get_metal_prefill_min_npos()
+        let prior_crowns = get_metal_tensor_crowns()
+        let prior_crowns_pinned = metal_tensor_crowns_pinned()
+        set_wscale_f16(false)
+        pin_kernel_backend("portable")
+        var tr <- load_model_(path, QuantMode.q8)
+        if (tr.config.seq_len > 2048l) {
+            tr.config.seq_len = 2048l
+        }
+        let prompt <- encode(tr, counting_prompt(ATTN_DEV_COUNT_TO), true, false)
+        t |> success(long_length(prompt) > SCRATCH_LONG, "{tag}: the prompt covers the long window ({length(prompt)} tokens)")
+        var trg <- blob_twin(t, path, 2048l)
+        t |> equal(long_length(trg.devwf16), 0l, "{tag}: the blob carries no stored dev-W panel")
+        t |> success(select_prefill_override("metal"), "{tag}: override registered")
+        set_metal_prefill_min_npos(1l)
+        pin_metal_tensor_crowns("")
+        metal_prefill_shutdown()
+        var inscope probe <- [for (i in range64(SCRATCH_SHORT)); prompt[i]]
+        var inscope warm <- one_window_logits(trg, probe)
+        if (!pf_hmm_ready()) {
+            t |> skip("{tag}: the half GEMM did not compile (no tensor toolchain) - no site takes a panel on this box")
+        } else {
+            scratch_window_cell(t, tr, trg, prompt, SCRATCH_SHORT, true, bar, "{tag}/base")
+            scratch_window_cell(t, tr, trg, prompt, SCRATCH_LONG, true, bar, "{tag}/base")
+            pin_metal_tensor_crowns(SCRATCH_TWIN_CROWNS)
+            metal_prefill_shutdown()
+            scratch_window_cell(t, tr, trg, prompt, SCRATCH_SHORT, false, bar, "{tag}/crowned")
+            scratch_window_cell(t, tr, trg, prompt, SCRATCH_LONG, twin_long, bar, "{tag}/crowned")
+        }
+        if (prior_crowns_pinned) {
+            pin_metal_tensor_crowns(prior_crowns)
+        } else {
+            unpin_metal_tensor_crowns()
+            set_metal_tensor_crowns(prior_crowns)
+        }
+        set_metal_prefill_min_npos(prior_min_npos)
+        select_prefill_override(prior_override)
+        metal_prefill_shutdown()
+        if (empty(prior_pin)) {
+            clear_kernel_backend_pin()
+        } else {
+            pin_kernel_backend(prior_pin)
+        }
+        select_kernel_backend(prior_backend)
+        set_wscale_f16(prior_wscale)
+        delete tr
+        delete trg
+    } else {
+        t |> skip("das_metal is not built on this platform; the Metal prefill is not compiled")
+    }
+}
+
+[test]
+def test_metal_prefill_kq_scratch(t : T?) {
+    t |> run("the dense split-format sites' scratch panels == CPU control, the crowned twin holding the short window (Llama-3.2-1B IQ4_XS)") <| @(t : T?) {
+        if (!family_on(t, "llama") || !arm_on(t, "kq-scratch")) return
+        scratch_panel_cells(t, path_join(models_dir(), "Llama-3.2-1B-Instruct-IQ4_XS.gguf"), "kq-scratch/llama-iq4xs", 0.08, true)
+    }
+    t |> run("the dense K-quant sites' scratch panels == CPU control, the crowned twins holding the short window (Llama-3.2-1B Q4_K_M)") <| @(t : T?) {
+        if (!family_on(t, "llama") || !arm_on(t, "kq-scratch")) return
+        scratch_panel_cells(t, path_join(models_dir(), "Llama-3.2-1B-Instruct-Q4_K_M.gguf"), "kq-scratch/llama-k4", 0.08, true)
+    }
+    t |> run("the dense Q8_0 sites' scratch panels on the base forms == CPU control, the crowned twin holding both windows (Llama-3.2-1B Q8_0)") <| @(t : T?) {
+        if (!family_on(t, "llama") || !arm_on(t, "kq-scratch")) return
+        scratch_panel_cells(t, path_join(models_dir(), "Llama-3.2-1B-Instruct-Q8_0.gguf"), "kq-scratch/llama-q8", 0.08, false)
     }
 }

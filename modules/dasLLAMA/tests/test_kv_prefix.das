@@ -666,6 +666,159 @@ def test_prefix_checkpoint_at(t : T?) {
     }
 }
 
+[test]
+def test_prefix_pool_carrier(t : T?) {   // nolint:STYLE038 — one pool and cache walked through the carrier's whole cycle: down, touch, the split attach
+    t |> run("a device's opening enters through a carrier: the pages the cache holds shared, the rest written, the state taken elsewhere, the same accounting") @(t : T?) {
+        let c = mk_config(2l, 4l, 2l, 16l, 32l)
+        var pool <- create_kv_pool_(c, 4l, KVDtype.f32, KVDtype.f32)
+        var cache <- create_prefix_cache_(0l, 8l)
+        var toks <- [for (i in range64(14l)); 100l + i]
+        var carrier <- mk_recurrent(c, pool, 0l)
+        t |> equal(0l, prefix_share_pages_(cache, pool, carrier, toks, 6l), "an empty cache shares nothing: every row is the carrier's to write")
+        kv_ensure(carrier, 6l)
+        carrier.n_past = 6l
+        var dev <- mk_recurrent(c, pool, 6l)   //! the state a device's slots hold at 6, taken off a session that holds no rows of it
+        var snap <- dn_snapshot_take(dev)
+        prefix_insert_snapshot_(cache, pool, carrier, toks, snap, true)
+        t |> equal(1, length(cache.states), "the opening stands")
+        t |> equal(PrefixStateKind.opening, cache.states[0].kind)
+        t |> equal(6l, long_length(cache.states[0].tokens))
+        t |> equal(60.0, cache.states[0].snap.state[0], "its state is the one taken off the device's session")
+        let g0 = carrier.block_table[0]
+        release_kv_pages_(carrier)
+        carrier.n_past = 0l
+        t |> equal(1, pool.refcnt[g0], "the carrier gone, the checkpoint holds its pages alone")
+        // the same conversation's later stop at 10: the whole page under the opening is shared, the rows past it written
+        t |> equal(4l, prefix_share_pages_(cache, pool, carrier, toks, 10l), "the page whole under the shared opening is held - the opening's partial page is not")
+        t |> equal(g0, carrier.block_table[0], "and is the checkpoint's own")
+        t |> equal(2, pool.refcnt[g0])
+        kv_ensure(carrier, 10l)
+        carrier.n_past = 10l
+        var dev10 <- mk_recurrent(c, pool, 10l)
+        var snap10 <- dn_snapshot_take(dev10)
+        t |> success(!prefix_state_touch_(cache, toks, 10l, false), "no checkpoint at 10 yet")
+        prefix_insert_snapshot_(cache, pool, carrier, toks, snap10, false)
+        t |> equal(2, length(cache.states))
+        t |> equal(PrefixStateKind.tail, cache.states[1].kind, "a conversation's own stop is a tail")
+        var page_bytes = 0l
+        for (k, v in pool.krow_bytes, pool.vrow_bytes) {
+            page_bytes += (k + v) * pool.page_rows
+        }
+        t |> equal(cache.states[0].nbytes + cache.states[1].nbytes - page_bytes, cache.state_bytes, "the shared page counts once in the budget")
+        t |> success(prefix_state_touch_(cache, toks, 10l, true), "the stop is kept: a second export reads nothing down")
+        t |> equal(PrefixStateKind.opening, cache.states[1].kind, "and a shared stop at it makes it an opening")
+        var stale <- mk_recurrent(c, pool, 9l)
+        var off <- dn_snapshot_take(stale)
+        prefix_insert_snapshot_(cache, pool, carrier, toks, off, false)
+        t |> equal(2, length(cache.states), "a state off the carrier's position is not kept")
+        release_kv_pages_(carrier)
+        carrier.n_past = 0l
+        // the deepest opening of a longer prompt comes back apart: every page shared, none copied, the state into another session
+        var prompt <- [for (i in range64(12l)); 100l + i]
+        t |> equal(10l, prefix_state_match_len_(cache, prompt), "the probe reads the deepest checkpoint opening the prompt")
+        var taker <- mk_recurrent(c, pool, 0l)
+        let hits0 = cache.n_state_hits
+        t |> equal(10l, prefix_attach_state_split_(cache, pool, carrier, taker, prompt))
+        t |> equal(cache.states[1].groups[2], carrier.block_table[2], "the page of the last row is shared, not copied: the carrier only reads it")
+        t |> equal(3, length(carrier.block_table))
+        t |> equal(10l, carrier.n_past)
+        t |> equal(10l, taker.dn_pos, "the state stands where the checkpoint's did")
+        t |> equal(100.0, taker.dn_state[0])
+        t |> equal(0, length(taker.block_table), "and the state's session holds no pages")
+        t |> equal(hits0 + 1l, cache.n_state_hits, "an attach apart counts as a hit")
+        var other <- [for (i in range64(12l)); 500l + i]
+        t |> equal(0l, prefix_state_match_len_(cache, other), "a prompt no checkpoint opens: nothing")
+        let refs_miss = live_refs(pool)
+        let hits_miss = cache.n_state_hits
+        t |> equal(0l, prefix_attach_state_split_(cache, pool, carrier, taker, other),
+            "an attach apart no checkpoint opens attaches nothing")
+        t |> equal(3, length(carrier.block_table), "the miss shares no page")
+        t |> equal(10l, carrier.n_past)
+        t |> equal(refs_miss, live_refs(pool), "and takes no page reference")
+        t |> equal(10l, taker.dn_pos, "nor restores a state")
+        t |> equal(hits_miss, cache.n_state_hits, "and counts no hit")
+        release_kv_pages_(carrier)
+        release_kv_pages_(dev)
+        release_kv_pages_(dev10)
+        release_kv_pages_(stale)
+        prefix_release_(cache, pool)
+        t |> equal(long_length(pool.free_groups), pool.capacity_groups, "every page back")
+        t |> equal(0, live_refs(pool))
+        delete other
+        delete taker
+        delete prompt
+        delete off
+        delete stale
+        delete snap10
+        delete dev10
+        delete snap
+        delete dev
+        delete carrier
+        delete toks
+        delete cache
+        delete pool
+    }
+    t |> run("a model with no recurrent state shares the page chain's whole pages, under the asked count") @(t : T?) {
+        let c = mk_config(2l, 4l, 2l, 16l, 32l)
+        var pool <- create_kv_pool_(c, 4l, KVDtype.f32, KVDtype.f32)
+        var cache <- create_prefix_cache_()
+        var toks <- [for (i in range64(11l)); 100l + i]
+        var donor <- make_run_state_paged(c, pool)
+        kv_ensure(donor, 11l)
+        donor.n_past = 11l
+        prefix_insert_(cache, pool, donor, toks)
+        var carrier <- make_run_state_paged(c, pool)
+        t |> equal(8l, prefix_share_pages_(cache, pool, carrier, toks, 11l), "two whole pages; the partial third is the carrier's to write")
+        t |> equal(donor.block_table[1], carrier.block_table[1])
+        release_kv_pages_(carrier)
+        t |> equal(4l, prefix_share_pages_(cache, pool, carrier, toks, 7l), "under the asked count: the one page whole under 7")
+        release_kv_pages_(carrier)
+        var forked <- [for (i in range64(11l)); i < 6l ? 100l + i : 900l + i]
+        t |> equal(4l, prefix_share_pages_(cache, pool, carrier, forked, 11l), "a prompt leaving the chain inside page two shares page one")
+        release_kv_pages_(carrier)
+        release_kv_pages_(donor)
+        prefix_release_(cache, pool)
+        t |> equal(long_length(pool.free_groups), pool.capacity_groups, "every page back")
+        delete forked
+        delete carrier
+        delete donor
+        delete toks
+        delete cache
+        delete pool
+    }
+}
+
+[test]
+def test_prefix_spare_snapshots(t : T?) {
+    t |> run("a dropped checkpoint's snapshot waits for reuse, two at most, outside the byte budget; an empty cache hands an empty one") @(t : T?) {
+        let c = mk_config(2l, 4l, 2l, 16l, 32l)
+        var pool <- create_kv_pool_(c, 4l, KVDtype.f32, KVDtype.f32)
+        var cache <- create_prefix_cache_(0l, 1l)
+        var none <- prefix_take_spare_(cache)
+        t |> equal(0, length(none.state), "nothing dropped: an empty snapshot")
+        for (k in range64(4l)) {
+            var s <- mk_recurrent(c, pool, 5l)
+            var inscope toks <- [for (i in range64(8l)); 100l * (k + 1l) + i]
+            prefix_insert_(cache, pool, s, toks)
+            release_kv_pages_(s)
+            delete s
+        }
+        t |> equal(1, length(cache.states), "a cap of one keeps the newest")
+        t |> equal(3l, cache.n_state_evicted)
+        t |> equal(2, length(cache.spare), "two of the three dropped wait")
+        var a <- prefix_take_spare_(cache)
+        t |> equal(8, length(a.state), "a spare keeps its arrays")
+        t |> equal(1, length(cache.spare))
+        prefix_release_(cache, pool)
+        t |> equal(0, length(cache.spare), "release drops the spares with the checkpoints")
+        t |> equal(long_length(pool.free_groups), pool.capacity_groups, "every page back")
+        delete a
+        delete none
+        delete cache
+        delete pool
+    }
+}
+
 def private restore_panics(var s : Session; snap : DnSnapshot) : bool {
     var tripped = false
     try {

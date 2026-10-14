@@ -13,9 +13,6 @@ tokenizer runs the changed code.**
 the next smaller size's time; a ratio that rises more than 10% from before to after, or an after
 ratio of 16 or more, is a defect.** The ladder steps 4x, so a ratio of 16 is quadratic growth.
 
-**A change to `dasllama/dasllama_tokenizer.das`, `dasllama/dasllama_spm.das`,
-`dasllama/dasllama_bpe.das` or `dasllama/dasllama_pretok.das`, or to a string any `special_id`
-overload receives, wherever that string is written, names in the PR body a run of this folder's
+**Every diff this checklist reviews names in the PR body a run of this folder's
 `tests/test_tokenizer.das` with no case skipped.** A case skips when its `ggml-vocab-*.gguf` fixture
-is absent, so the run needs every fixture present. This trigger and `REVIEW.md`'s routing trigger
-change together.
+is absent, so the run needs every fixture present.

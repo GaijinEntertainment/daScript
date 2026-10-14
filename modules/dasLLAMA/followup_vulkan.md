@@ -40,7 +40,7 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
    upstream; was 11.1 on the per-op rails). The PREFILL half followed: the window chain carries
    the recurrent block (conv + chunked scan on the layer's device state), gated attention and
    partial rotary on the batch kernels, and hands the device state to the session for the decode
-   (`ARCHITECTURE_GPU_VULKAN.md#vk-prefill-dn-block`, `ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command`; gate
+   (`ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-dn-block`, `ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command`; gate
    `tests/test_gpu_resident_hybrid.das`, one- and two-window cells). Every figure in this item:
    `benchmarks/lcpp_bench.das -m Qwen3.5-9B-MTP-UD-Q5_K_XL.gguf -r 3` (`-p 512 -n 128`) through
    `bin/Release/daslang.exe -jit` under `DASLLAMA_GPU=1 DASLLAMA_ALLOW_UNTUNED=1
@@ -1510,19 +1510,10 @@ module) is independent and can land any time - it is pure structure.
     `--save-all-logits` output beside the model, the cell scoring both arms against it and holding
     the resident's mean gap to a bar the CPU chain's gap sets.
 
-69. **Three serving shapes still leave the resident driver's device, and a fourth serves short.** A slot served whole from
-    the device holds its streams' K/V there (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan`:
-    regions, device-home sessions, the scheduler's device mode), `gpu_cpu_passes` empty.
-    `REVIEW_GPU.md` rules each shape below a defect, and `/v1/stats` counts it:
-    (a) a recurrent model's prefill continuation - the window chain starts the deltanet state
-    from zero (`continuation`), so a device-home stream of such a model prefills its prompt in
-    one quantum, stalling the other streams for its length, and a next turn re-prefills its
-    whole transcript. The work: the chain entered with the session's device state bound. Beside
-    it, each recurrent layer has ONE device state slot, so two streams stepping turn about pay a
-    flush and an upload a layer a token; a slot per region removes both. (b) A slot with a vision or
-    audio tower: the span eval is not the chain's (`span`), so the whole slot stays host-cached.
-    (c) Self-speculation, which has no Vulkan arm. (d) A host-cached outsider - the embeddings
-    route - while every region is held by a live stream (`busy`).
+69. **A slot with a vision or audio tower stays host-cached.** A slot served whole from the device holds its streams' K/V
+    there (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan`: regions, device-home sessions, the scheduler's device mode),
+    `gpu_cpu_passes` empty, and `REVIEW_GPU.md` rules a shape that leaves it a defect: the span eval is not the chain's
+    (`span`), so the whole slot stays host-cached.
 70. **The N-row command's K-quant feeds take the split residual pair.** `cls_ar_rq_b` fuses the
     residual step with its requant a row a workgroup for a Q8_0 feed; the Q8_K twin has no row
     form, so every site whose consumer reads superblocks (`rd_ensure_n_sets` skips it) runs the
@@ -1640,11 +1631,11 @@ module) is independent and can land any time - it is pure structure.
     file compares against the fused one-row command the server runs.
 
 84. **The workgroup argmax fold has two kernel-side spellings.** `ClsArgmaxBase.fold`
-    (`dasllama_vulkan_classes.das`) and the k-loop's inner fold of `TopKCore.select_row` are the
+    (`dasllama_vulkan_classes.das`) and the k-loop's inner fold of `GkTopKRow.select_row` are the
     same six lines - `subgroupMax`, the lowest id at the max through `subgroupMin`, a per-subgroup
     staging pair, a barrier, the walk over `gl_NumSubgroups` - differing on where the candidate id
     comes from and who reads the answer. The work: one base with `fold(m, mi) : (value, id)`, the
-    staging width a template constant, `TopKCore` calling it with its thread id and keeping its
+    staging width a template constant, `GkTopKRow` calling it with its thread id and keeping its
     publish-and-mask loop; the top-k cells and the argmax cell hold both bit for bit.
 
 85. **The recorded forms' profile-name triples are three copies of one bookkeeping.**
@@ -1978,7 +1969,7 @@ module) is independent and can land any time - it is pure structure.
     `DASLLAMA_VK_KV32=1`. What is still owed, in Metal's shape (`ARCHITECTURE_GPU_MTP.md`) on the
     resident driver: the Vulkan round seat (`register_mtp_round_override("vulkan", ...)`) - a
     round at depth k > 1 (the verify's per-row planes and the rollback scratch already hold the
-    box knob's depth plus one, eight rows at most, and the scratch's rows serve a reject to any
+    box knob's depth plus one, sixteen rows at most, and the scratch's rows serve a reject to any
     `a < k`) and the joint verify across streams - then the gemma assistant drafter. Carriers: Qwen3.5-0.8B-MTP first,
     Qwen3.8-27B with its split Q8_0 head for the rate (Metal reads 1.23x at depth 1, 1.31x at
     depth 3 on the M5 Max), gemma-4-26B with the assistant drafter as the second round kind; the
@@ -2182,3 +2173,29 @@ module) is independent and can land any time - it is pure structure.
     (`DASLLAMA_GPU_PROF=1`) over two consecutive encodes, read role by role, to name the stage that
     doubles - the deepstack mergers, the split-k down planes or the Q8_0 feed are the stages the other
     chains do not run.
+
+147. **The per-op tier serves no attention sink.** On gpt-oss the per-op attention block declines a
+    layer that carries sinks (`attn_dec_shape_ok`'s `attn_sinks` clause; gpt-oss's sliding layers decline
+    there too), so every attention layer runs on the CPU under the per-op tier, and the decode span, the
+    tail fusion and the f16-fed expert chain stand aside on the model
+    (`ARCHITECTURE_GPU_VULKAN_PEROP.md#perop-routed-form`). The device has the sink kernels - the
+    resident driver's token command and flash tiles carry them (`vk_rdec_upload_sinks`). Done = the
+    per-op block binds the sink rows and the sliding window and serves gpt-oss's attention layers, and the span, the tail
+    fusion and the f16 chain take the routed form, each held by a cell against the CPU chain; this is
+    the gpt-oss leg's.
+148. **The server's preserve-thinking replay cell never finishes under the Vulkan tier.**
+    `utils/dasllama-server/test_openai_server.das`'s `test_openai_server_preserve_thinking` (Qwen3-0.6B
+    Q8_0, `DASLLAMA_GPU=1`, the RTX PRO 4500) runs past a 3600 s cap with the host pool on and
+    aborts in `vkCmdBindPipeline` from JIT-compiled driver code with `DASLLAMA_DEVICE_POOL=0`; the
+    tree before the qwen leg (fa7ce42649) runs the same cell past a 600 s cap, so the stall predates
+    the pool. The cell passes on the M5 (Metal) in seconds and the pod's `test_server_flags`
+    device-home MTP cells pass, so the fault sits in the think-block replay's second turn on a
+    device-home slot: a paged device-mode scheduler attaching the whole first exchange off the
+    prefix cache. The work: run the cell under the Vulkan validation layer and a 120 s cap, read
+    which submit never signals (pool on) and which command records a pipeline the slot does not
+    hold (pool off), then hold the cell on the pod beside its Metal run.
+149. **The host pool is off for a drafting (MTP) slot.** `device_pool_on` requires `!sch.mtp`: the
+    draft head's rows ride no export, so a one-stream speculating slot keeps its openings on the
+    card alone and loses them with its region. The work: export and import the head's rows beside
+    the trunk's in `rdec_cache_rows`, then drop the `!sch.mtp` term and hold `cell_device_pool` on
+    a speculating scheduler.

@@ -1182,16 +1182,6 @@ def test_openai_server_checkpoint_bytes(t : T?) {
     }
 }
 
-[test]
-def test_prefix_state_budget(t : T?) {
-    t |> run("the checkpoint byte budget: the MB asked for, else a quarter of the box's RAM, else 4 GB") @(t : T?) {
-        t |> equal(16384l, prefix_state_budget_mb(0l, 64l), "a 64 GB box")
-        t |> equal(4096l, prefix_state_budget_mb(0l, 16l), "a 16 GB box")
-        t |> equal(4096l, prefix_state_budget_mb(0l, 0l), "RAM unknown")
-        t |> equal(512l, prefix_state_budget_mb(512l, 64l), "an explicit budget stands")
-    }
-}
-
 let TEST_PORT_BENCH = 18140   // 18097/18098/18099/18101/18102/18120/18121/18131/18135-18139 are the other server suites'
 
 //! the state GET /bench reports, "" on any failure

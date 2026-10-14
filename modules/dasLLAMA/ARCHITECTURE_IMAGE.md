@@ -38,22 +38,23 @@ what licenses deletion without judgment.
 
 ### An image is named by its lane {#image-lane-name}
 
-A `.dlim` sits beside its source as `<file>.<lane>.dlim`, and the lane is what a person
-deliberately switches between on one box: `metal` (the blob flavor), `vulkan`, `cpu-<class>` (the
-planar flavor under the box's tune class - `cpu-arm-i8mm`, `cpu-x86-vnni512`; a build without the
-tune framework spells the architecture alone, never the active backend, which is a pin the
-identity supersedes), a family's own tag (`whisper-f32`), with `-lut` / `-grid` appended where
-`DASLLAMA_IQ3S_SERVE` pins the served form, `-yarn<s>` / `-linear<s>` / `-norope` where the rope
-scaling override rides (on the flavors whose identity carries it - a config-free family's does
-not), `-<quant>` off q8, and `-mtp` when a split head rides the load. `image_lane_name` spells it and
-`dlim_file_lane` reads it back off a file name (a hash-named legacy image reads as no lane). The
-lane names the FILE; the header's identity still decides whether the file is current: tune
-winners, backend pins, pack and image versions stay in the identity and supersede within the
-lane, so a stale lane re-bakes in place - the publish writes a temp beside it and renames over -
-and two lanes never reap each other. A lane is a per-box coexistence unit, not a portability
-promise: the class in the CPU lane's name is the box's, and a box of another class re-bakes.
-`image_path_for` adopts a hash-named image at the exact legacy path (identity hash, head fold) by
-renaming it into the lane once, so the switch costs no re-mint.
+A `.dlim` sits beside its source as `<file>.<lane>.dlim`, and the lane is what a person switches
+between on one box: `metal` (the blob flavor), `vulkan`, `cpu-<class>` (the planar flavor under the
+box's tune class - `cpu-arm-i8mm`, `cpu-x86-vnni512`; a build without the tune framework spells the
+architecture alone, never the active backend, which is a pin the identity supersedes), a family's
+own tag (`whisper-f32`), with `-lut` / `-grid` on the CPU and metal lanes where the IQ3_S serve mode
+(`iq3s_serve_mode`: the pin, else `DASLLAMA_IQ3S_SERVE`) names the served form, `-devw` on the metal
+lane under the dev-W panel lever (`#image-devw-plane`; a coexisting knob, `devw` in the blob
+identity alone), `-yarn<s>` / `-linear<s>` / `-norope` where the rope scaling override rides (on the
+flavors whose identity carries it - a config-free family's does not), `-<quant>` off q8, and `-mtp`
+when a split head rides the load. `image_lane_name` spells it and `dlim_file_lane` reads it back off
+a file name (a hash-named legacy image reads as no lane). The lane names the FILE; the header's
+identity still decides whether the file is current: tune winners, backend pins, pack and image
+versions stay in the identity and supersede within the lane, so a stale lane re-bakes in place (the
+publish writes a temp beside it and renames over) and two lanes never reap each other. A lane is a
+per-box coexistence unit, not a portability promise: the class in the CPU lane's name is the box's,
+and a box of another class re-bakes. `image_path_for` adopts a hash-named image at the exact legacy
+path (identity hash, head fold) by renaming it into the lane once, so the switch costs no re-mint.
 
 ### A planar image never stands in for the blob flavor {#image-flavor-rebake}
 
@@ -149,13 +150,13 @@ lane and reap each other's image on every switch.
 
 ### The baked dev-W f16 panel plane {#image-devw-plane}
 
-A metal-flavor image carries `devwf16`: every dev-W-eligible q8, k4/k5/k6 and split-scale
-(iq4xs, iq4nl, q40, k3, iq3s, iq3xxs, k2, iq2s, iq2xs, iq2xxs) weight - a plane job whose f16 panel
-fits `DEVW_BAKE_PANEL_MAX`, the prefill knee's mirror, and whose tensor is not an expert stack
-(`*_exps.weight`: gemma-4 splits its fused stacks per expert at load, and the routed block reads
-the quantized planes with no dev-W route, so a baked expert panel is never read) - pre-dequantized at mint into one
-concatenated f16 plane, with parallel site tables (`devwf16_fmt/key/off/n`) serialized as
-ordinary planes. The mint dequant is the format's CPU mirror of the runtime dev-W dequant
+A metal-flavor image minted under the dev-W panel lever (`set_metal_devw_panels`, its lane `metal-devw`; off, the sites
+take per-window scratch panels and the image carries none) carries `devwf16`: every dev-W-eligible q8, k4/k5/k6 and split-scale
+(iq4xs, iq4nl, q40, k3, iq3s, iq3xxs, k2, iq2s, iq2xs, iq2xxs) weight - a plane job whose f16 panel fits
+`DEVW_BAKE_PANEL_MAX`, the prefill knee's mirror, and whose tensor is not an expert stack (`*_exps.weight`: gemma-4
+splits its fused stacks per expert at load, and the routed block reads the quantized planes with no dev-W route, so a
+baked expert panel is never read) - pre-dequantized at mint into one concatenated f16 plane, with parallel site
+tables (`devwf16_fmt/key/off/n`) serialized as ordinary planes. The mint dequant is the format's CPU mirror of the runtime dev-W dequant
 kernel. The q8 and K-quant mirrors are hand-written and bit-exact by construction: each f32
 product fits the 24-bit significand exactly (the widest, k6's `dsc*q`, needs 24), so only the
 final f16 round exists and contraction cannot move it. The split-scale mirror is the dequant
@@ -167,9 +168,8 @@ to a runtime one. The first served prefill seeds the resident-panel cache with z
 `(buffer, offset)` views over the mapped plane, so a baked site never dispatches a dequant
 and holds no dedicated memory; sites the bake does not cover (q51 - the dev-W route has no
 dequant kernel for it - and owned gguf loads) stay on the runtime path, resident under
-`DASLLAMA_METAL_DEVW_RESIDENT` or scratch. On a 1B every panel sits under the knee, and the
-resident form is the difference between 1.05x and 1.24x of llama.cpp's prefill on the
-split-scale files (`followup_metal.md` sec.7, the Llama-3.2-1B format matrix on the M5 Max).
+`DASLLAMA_METAL_DEVW_RESIDENT` or scratch. Which form a site's prefill takes under the lever, and
+why the default is a per-window scratch panel rather than a stored one, is `ARCHITECTURE_GPU_PREFILL.md#devw-panel-knees`.
 
 The bake set is the minting PROGRAM's, not the box's: the split-scale formats bake only where
 the Metal prefill module registered its mirror, so a program on the same box whose module graph
@@ -294,7 +294,7 @@ a struct field list, so it has no count to pin. Everything else taking an `Archi
 
 The `Model`'s per-format plane table (`kq`, one `KqPlanes` slot per `KqFmt`) carries planes for the
 256-element lattice formats alone - the formats `kq_sb` is true for. A 32-block format keeps its
-planes as top-level `Model` fields of the same name (`q51q`/`q51s`, `iq4nl32q`/`iq4nl32s`). The two walks that name
+planes as top-level `Model` fields of the same name (`q51q`/`q51s`, `iq4nl32q`/`iq4nl32s`, `q4032q`/`q4032s`, `q5032q`/`q5032s`). The two walks that name
 sections - the image writer and the map-back - skip a slot whose format is not `kq_sb`, because
 `kq_plane_name` gives that slot the same section name as the top-level field, and a `.dlim`
 carrying two sections of one name fails its map-back.

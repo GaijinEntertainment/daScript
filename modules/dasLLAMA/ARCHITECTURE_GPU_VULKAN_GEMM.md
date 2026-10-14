@@ -5,7 +5,7 @@ cooperative-matrix tiles the Vulkan tier's GEMMs run on and the decode GEMV fami
 quant bytes, how a tile and the served GEMM mode are picked, the class-pipeline build seat both
 shader instruments hang on, the MoE expert chain on those tiles, the KHR arm's hand-staged
 tile, and how a GEMV subgroup splits across short rows. `ARCHITECTURE_GPU_VULKAN.md` carries
-the prefill window chain that dispatches them (`ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain`) and its recurrent block (`ARCHITECTURE_GPU_VULKAN.md#vk-prefill-dn-block`),
+the prefill window chain that dispatches them (`ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain`) and its recurrent block (`ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-dn-block`),
 the Q8 requant byte store (`ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store`), the decode GEMV family's grid codebook buffer
 (`ARCHITECTURE_GPU_VULKAN.md#kq-gemv-grid-buffer`), and the tile probe's shared descriptor set layout (`ARCHITECTURE_GPU_VULKAN.md#khrx-shared-set-layout`). What a model has to
 fit on the card first is in `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`; the per-op
@@ -205,8 +205,8 @@ the layer's FFN is the routing alone. The f16 form is the combined (`npos > 0`) 
 combine is what makes the device-side gather pay, since neither the gathered image nor the bucket rows cross PCIe. Streamed groups take the same arm after the slot bind.
 
 **The shared expert of a qwen2moe-class layer takes the same arm as ONE region over every
-position of the window** - its q8 triple is resident under the shexp mark, the slot map is the
-identity and the combine runs at unit weight, so the host reduce scales its rows by the per-row
+position of the window** - its triple is resident under the shexp mark in the file's own formats (a superblock gate and up
+read the rows' Q8_K image, a q8 pair the Q8_0 one), the slot map is the identity and the combine runs at unit weight, so the host reduce scales its rows by the per-row
 sigmoid gate in the CPU form's order. The CPU form of the same triple costs 582 ms of a 945 ms
 window on Qwen1.5-MoE-A2.7B (`benchmarks/lcpp_bench.das -p 512 --prof`, the Q4_K_M mint, RTX 5060 Ti) - the term the arm moves.
 

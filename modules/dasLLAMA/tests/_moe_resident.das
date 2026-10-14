@@ -19,12 +19,14 @@ require daslib/fio
 require dasllama/dasllama_math   // with_dasllama_jobque_ (the engine-standard jobque config)
 require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed / gpu_want_auto: is the tier armed
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active: did the whole-model driver take the MoE
+require dasllama/dasllama_moe   // heat_totals, heat_reset and the shared expert's row counters: the per-op heat cell's witnesses
 require ?vulkan dasllama/dasllama_vulkan_common   // PF_WINDOW, the resolved coopmat mode and the kernel census, where the module exists
 require dasllama/dasllama_kqformat
 require daslib/enum_trait   // the KqFmt members as a loop
 require _model_tier public   // models_dir() + model_available() presence/size-tier gate
 require _resident_feed public   // resident_ready, load_resident, resident_prompt, resident_then_cpu_feed, feed_steps_within, tile_arm_tag
 require _kv_codec_cells   // codec_distance_over: the three-chain form of the block-codec cells
+require _format_census   // census_cell: a census fixture's every site in its own format
 
 [init]
 def private allow_cpu_prefill_intent() {
@@ -40,6 +42,7 @@ struct MoeFixture {
     window : int64 = 0l
     expect_host_layers : bool = false   //! the card does not hold the experts whole: the driver arms with some routed layers' experts on the host
     strict_ctx : int64 = 0l      //! > 0: the load pins this context whole (`set_gpu_ctx_max` + `set_gpu_ctx_strict`), and the armed region holds it
+    census : bool = false        //! every site the file carries read in its own format (`census_cell`): a file whose planes all sit on their formats' lattices
 }
 
 //! the logits bar as a fraction of the step's max |logit|: the routed chain's CPU-vs-device noise class (test_gpu_moe_shexp.das's
@@ -80,14 +83,19 @@ def private unsplit_want(nprompt : int64) : int64 {
     }
 }
 
-//! the census over every `KqFmt` member's stamp of one tile column - `cm2e` (the expert schedule's m pieces in cm2 mode) or `khr`
-//! (every piece in mm mode) - the expert planes carrying whichever format the file holds and the box serves it in (IQ3_S as
-//! `iq3s` or `iq3s4`); a 64-step format's e column is its m stamp (KQ_CM2E_ALIASES_M), so `cm2e` reads that stamp's census for it
+//! the census over every `KqFmt` member's stamp of one tile column - `cm2e` (the expert schedule's m pieces in cm2 mode), `khr`
+//! (every piece in mm mode) or `sdot4` (every piece on the Q8-fed chain's batch tiles) - the expert planes carrying whichever format
+//! the file holds and the box serves it in (IQ3_S as `iq3s` or `iq3s4`); a 64-step format's e column is its m stamp
+//! (KQ_CM2E_ALIASES_M), so `cm2e` reads that stamp's census for it
 def private column_census(col : string) : int64 {
     var n = 0l
     for (f in type<KqFmt>) {
         let name = "{f}"
-        n += census("{kq_tile_stem(name)}_{col == "cm2e" && kq_cm2e_aliases_m(name) ? "cm2m" : col}_cls_spv")
+        if (col == "sdot4") {
+            n += census("{kq_tile_stem(name)}_cls_spv")
+        } else {
+            n += census("{kq_tile_stem(name)}_{col == "cm2e" && kq_cm2e_aliases_m(name) ? "cm2m" : col}_cls_spv")
+        }
     }
     return n
 }
@@ -97,14 +105,17 @@ def private column_census(col : string) : int64 {
 //! KHR tile and the 64-step formats' m stamp both serve the window's dense GEMMs too
 def private expert_column() : tuple<col : string; per_plane : int64> {
     static_if (typeinfo builtin_module_exists(vulkan)) {
+        if (!device_has_expert_tiles()) {
+            return (col = "sdot4", per_plane = 1l)
+        }
         return g_gpu.coopmat_mode == COOPMAT_MM ? (col = "khr", per_plane = 2l) : (col = "cm2e", per_plane = 1l)
     } else {
         return (col = "cm2e", per_plane = 1l)
     }
 }
 
-//! the device carries a tile family for the routed block's expert pieces: the cm2 s and e stamps in cm2 mode, the KHR 128 x 128
-//! tile in mm mode at subgroup 32 (the driver declines a MoE without either)
+//! the device carries an f16-fed tile family for the routed block's expert pieces: the cm2 s and e stamps in cm2 mode, the KHR
+//! 128 x 128 tile in mm mode at subgroup 32; without either the Q8-fed chain's batch tiles serve them
 def private device_has_expert_tiles() : bool {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         return g_gpu != null && ((g_gpu.has_coopmat2 && g_gpu.coopmat_mode == COOPMAT_CM2) || (g_gpu.coopmat_mode == COOPMAT_MM && khr_kq_tile_on()))
@@ -119,10 +130,6 @@ def moe_fixture_admitted(t : T?; tr : Model; fx : MoeFixture) : int64 {
     t |> success(tr.config.n_expert > 0l && (tr.config.n_ff_shexp > 0l) == fx.shexp, "the fixture routes experts {fx.shexp ? "beside" : "with no"} shared expert")
     if (fx.window > 0l) {
         t |> equal(tr.config.sliding_window, fx.window, "the fixture's sliding layers attend {fx.window} keys")
-    }
-    if (!device_has_expert_tiles()) {
-        t |> skip("the device has no tile family for the expert pieces (cm2, or KHR at subgroup 32) - the whole-model driver declines a MoE by design")
-        return -1l
     }
     if (fx.expect_host_layers && !moe_gpu_resident_active() && moe_gpu_resident_memory_decline()) {
         t |> skip("the card holds neither the mirror asked whole ({fx.strict_ctx}) nor the dense planes beside it - the host-layer form needs a larger card (the load log names the room)")
@@ -159,6 +166,10 @@ def moe_forced_feed(t : T?; n : int64; fx : MoeFixture) {
         delete tr
         return
     }
+    if (fx.census) {
+        var inscope any_sites : array<string>
+        census_cell(t, tr, path, "vulkan load", any_sites)
+    }
     let device_routed_layers = tr.config.n_layers - host_layers   // a host layer runs its router alone
     let windows = (n + PF_WINDOW_ROWS - 1l) / PF_WINDOW_ROWS
     with_dasllama_jobque_() {
@@ -184,6 +195,70 @@ def moe_forced_feed(t : T?; n : int64; fx : MoeFixture) {
             }
         }
     }
+    delete tr
+}
+
+let HEAT_CELL_STEPS = 80l   //! fed steps past the heat pool's re-pin interval (64 tokens a layer), so every pooled layer is pinned and then hit
+
+//! the per-op tier's heat pool on a MoE fixture: the whole-model route off, the last `resident` routed layers' stacks placed and
+//! the rest streamed under `slots` hot experts a layer; a 40-token prompt and `HEAT_CELL_STEPS` fed steps against the CPU chain at
+//! the fixture's bar, the pool serving some of the streamed layers' picks, and on a shared-expert fixture every routed layer's
+//! shared expert on the device after the routed chain or the pool's hits - none overlapped, none on the CPU, none on the GEMMs
+def moe_perop_heat_cell(t : T?; fx : MoeFixture; resident, slots : int64) {
+    let path = path_join(models_dir(), fx.file)
+    if (!resident_ready(t, path)) return
+    let route = gpu_resident_route_lever()
+    let want0 = g_gpu_want
+    set_gpu_resident_route(false)
+    var want = want0
+    want.moe_layers = resident
+    want.moe_stream = -1l
+    want.heat = slots
+    set_gpu_tier_want_(want)
+    t |> success(moe_gpu_tier_arm_(), "the tier re-armed at {resident} resident routed layers")
+    heat_reset()
+    var tr <- load_model_(path, QuantMode.q8)
+    set_gpu_resident_route(route)
+    t |> success(!moe_gpu_resident_active(), "the whole-model route is off: the per-op rails serve")
+    var routed = 0l
+    var placed = 0l
+    for (l in range64(tr.config.n_layers)) {
+        continue if (!layer_is_moe(tr, l))
+        routed++
+        placed += moe_gpu_layer_on_gpu(l) ? 1l : 0l
+    }
+    t |> success(placed > 0l && placed < routed, "the expert walk placed {placed} of {routed} routed layers, the rest streamed under the heat pool")
+    with_dasllama_jobque_() {
+        var prompt <- resident_prompt(40l)
+        var toks <- resident_feed(HEAT_CELL_STEPS)
+        let heat0 = heat_totals()
+        let over0 = shexp_gpu_decode_rows()
+        let after0 = shexp_gpu_after_rows()
+        let gemm0 = shexp_gpu_gemm_rows()
+        var sg <- create_session(tr, mirror_kv_dtype())
+        var gpu <- feed_logits(tr, sg, prompt, toks)
+        delete sg
+        let heat = heat_totals()
+        to_log(LOG_INFO, "heat pool: {heat.hits - heat0.hits} of {heat.picks - heat0.picks} streamed picks served by the slots; shared expert rows overlapped {shexp_gpu_decode_rows() - over0}, after {shexp_gpu_after_rows() - after0}, GEMMs {shexp_gpu_gemm_rows() - gemm0}\n")
+        t |> success(heat.hits > heat0.hits, "the heat pool served {heat.hits - heat0.hits} of {heat.picks - heat0.picks} streamed picks on the device")
+        if (fx.shexp) {
+            t |> equal(shexp_gpu_after_rows() - after0, HEAT_CELL_STEPS * routed, "every routed layer's shared expert ran on the device after the routed chain or the pool's hits, every step")
+            t |> equal(shexp_gpu_decode_rows() - over0, 0l, "no shared expert overlapped CPU experts under the heat pool")
+            t |> equal(shexp_gpu_gemm_rows() - gemm0, 0l, "no shared expert on the three dense GEMMs: one activation form a layer")
+        }
+        set_gpu_tier_want_(want0)
+        moe_gpu_tier_arm_()
+        heat_reset()
+        moe_gpu_drop_model()
+        var cpu <- feed_alone(tr, mirror_kv_dtype(), prompt, toks)
+        feed_steps_within(t, tr, "heat pool ", 40l, gpu, cpu, toks, fx.bar_rel, "per-op heat")
+        delete gpu
+        delete cpu
+        delete prompt
+        delete toks
+    }
+    set_gpu_tier_want_(want0)
+    moe_gpu_tier_arm_()
     delete tr
 }
 

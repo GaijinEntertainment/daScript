@@ -23,6 +23,7 @@ require daslib/strings_boost   // nolint:STYLE030,LINT019 — split, the crown l
 require _model_tier
 require ../performance/model_specs.das   // nolint:STYLE030,LINT019 — counting_prompt, read only inside the das_metal static_if halves
 require _metal_blob_twin   // metal_kernel_count - the census reader
+require _format_census   // nolint:STYLE030,LINT019 - census_cell, read only inside the das_metal static_if halves
 
 [init]
 def private allow_cpu_prefill_intent() {
@@ -55,6 +56,53 @@ def private gpu_prefill(trg : Model; var s : Session; prompt : array<int64>) {  
         select_prefill_override("")
         set_metal_prefill_min_npos(floor_before)
     }
+}
+
+//! every kernel's dispatches over one Metal prefill of `prompt` on a fresh session, with the draft head's warm on or off
+def private prefill_census(trg : Model; prompt : array<int64>; warm : bool) : table<string; int64> {   // nolint:LINT012,LINT019 — the body is the das_metal half
+    var cov : table<string; int64>
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        let prior = get_mtp_spec()
+        set_mtp_spec(warm)
+        var s = make_run_state(trg.config, KVDtype.f16, KVDtype.f16)
+        metal_kernel_coverage_reset()
+        gpu_prefill(trg, s, prompt)
+        cov <- metal_kernel_coverage()
+        set_mtp_spec(prior)
+        delete s
+    }
+    return <- cov
+}
+
+//! The draft head's prompt warm runs its K/V alone (`ARCHITECTURE_GPU_MTP.md#mtp-verify-draft-warm`): against the same
+//! prefill with the warm off, the warm adds no attention, no routed or shared-expert dispatch and no FFN GEMM - only the
+//! head's projections, norms and rope-and-store (a hyper-connection head's mixers too) - while the rope count rising is the
+//! control that the warm ran at all
+def private warm_cell(t : T?; trg : Model; tag : string; prompt : array<int64>) {
+    var inscope off <- prefill_census(trg, prompt, false)
+    var inscope on <- prefill_census(trg, prompt, true)
+    var moved : array<string>
+    var heavy = 0l
+    var rope = 0l
+    for (k, n in keys(on), values(on)) {
+        let d = n - (off?[k] ?? 0l)
+        continue if (d == 0l)
+        moved |> push("{k}+{d}")
+        let lk = to_lower(k)
+        let qk = find(lk, "qk_") >= 0 && find(lk, "rope") < 0
+        let routed = find(lk, "moe") >= 0 && find(lk, "router") < 0   //! a hyper-connection mixer's scatter logits ride the router GEMV
+        if (qk || routed || find(lk, "attn") >= 0 || find(lk, "_av") >= 0 || find(lk, "swiglu") >= 0
+                || find(lk, "rowstat") >= 0 || find(lk, "pexp") >= 0) {
+            heavy += d
+        }
+        if (find(lk, "rope") >= 0) {
+            rope += d
+        }
+    }
+    to_log(LOG_INFO, "metal warm census {tag}: the warm's extra dispatches {moved}\n")
+    t |> success(rope > 0l, "{tag} warm: the head's K rows were roped and stored ({rope} extra rope dispatches)")
+    t |> equal(heavy, 0l, "{tag} warm: no attention, routed, shared-expert or FFN activation dispatch for the head ({moved})")
+    delete moved
 }
 
 def private gpu_prefill_pair(trg : Model; var sa, sb : Session; prompt : array<int64>) {
@@ -144,11 +192,14 @@ def private ff_pair(tr, trg : Model; prompt : array<int64>; nsteps : int64; veri
     return st
 }
 
+var private g_last_accepted = 0l   //! the drafts the last speculative free-run accepted
+
 //! top-k 1 makes every draw the penalized argmax, so a seeded sampled stream is deterministic and the token-exact gate holds
 let SAMPLED_PARAMS = SamplingParams(temp = 0.7, top_k = 1l, penalty = 1.1)
 
 //! Free-running pair on the GPU, greedy or through the session sampler: only valid as a token-exact gate on a counting prompt (near-tie-free by construction).
-def private free_run_pair(tr, trg : Model; prompt : array<int64>; n : int64; var plain, spec : array<int64>; depth : int64; var drafted, parked : int64&; sampled : bool = false) : int64 {   // nolint:LINT012,LINT019 — the body is the das_metal half
+def private free_run_pair(tr, trg : Model; prompt : array<int64>; n : int64; var plain, spec : array<int64>; depth : int64; var drafted, parked : int64&; sampled : bool = false;
+                          kdt : KVDtype = KVDtype.f16) : int64 {   // nolint:LINT012,LINT019 — the body is the das_metal half
     var served = 0l   // nolint:LINT003,LINT019 — counted in the das_metal half
     parked = 0l
     static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -156,8 +207,8 @@ def private free_run_pair(tr, trg : Model; prompt : array<int64>; n : int64; var
         let vocab = c.vocab_size
         var sp = SAMPLED_PARAMS
         with_dasllama_jobque() {
-            var sa = make_run_state(c, KVDtype.f16, KVDtype.f16)
-            var sb = make_run_state(c, KVDtype.f16, KVDtype.f16)
+            var sa = make_run_state(c, kdt, kdt)
+            var sb = make_run_state(c, kdt, kdt)
             gpu_prefill_pair(trg, sa, sb, prompt)
             select_decode_override("metal")
             let before = metal_decode_stats().decodes
@@ -179,10 +230,12 @@ def private free_run_pair(tr, trg : Model; prompt : array<int64>; n : int64; var
             }
             // speculative: commit tok, plus every accepted draft of the round
             set_mtp_depth(depth)
+            g_last_accepted = 0l
             tok = sampled ? sample_(sb, sp) : argmax_of(sb.logits, vocab)
             while (long_length(spec) < n) {
                 spec |> push(tok)
                 let a = mtp_spec_round(trg, sb, tok)
+                g_last_accepted += a
                 for (i in range64(a)) {
                     spec |> push(sb.mtp_vbatch[i + 1l])
                 }
@@ -230,13 +283,13 @@ let MM_TOL = 1.0
 let FF_STEPS = 48l
 let COUNT_STEPS = 40l
 
-// one forced-feed cell: engaged-or-skip, then the tolerance gate with its flip telemetry
+//! one forced-feed cell: the carrier is served, so a decline or a rail that never drafts fails; then the tolerance gate with its flip telemetry
 def private ff_cell(t : T?; tr, trg : Model; tag, pn : string; prompt : array<int64>; depth : int64 = 1l; tol : float = FF_TOL) {
     let st = ff_pair(tr, trg, prompt, FF_STEPS, true, depth)
     if (st.served == 0l) {
-        t |> skip("metal decode declined (no Metal device?)")
+        t |> failure("{tag} {pn}: the metal decode declined a served carrier's steps")
     } elif (st.drafted == 0l) {
-        t |> skip("{tag} {pn}: the spec rail never engaged ({st.cold} cold rounds) - nothing verified")
+        t |> failure("{tag} {pn}: the spec rail never engaged ({st.cold} cold rounds) - nothing verified")
     } else {
         t |> success(st.cold == 0l, "{tag} {pn}: every round drafted+verified ({st.drafted} drafted, {st.cold} cold)")
         t |> success(st.maxd <= tol, "{tag} {pn}: verify row0 vs plain step within {tol} over {st.steps} forced-feed steps (maxd {st.maxd}, argmax flips {st.flips}, widest flipped margin {st.flip_margin_max})")
@@ -246,30 +299,51 @@ def private ff_cell(t : T?; tr, trg : Model; tag, pn : string; prompt : array<in
 }
 
 //! answers the rounds the spec rail drafted - the draft-quality witness a crowned leg holds against the plain run's
-def private count_cell(t : T?; tr, trg : Model; tag : string; count : array<int64>; depth : int64; sampled : bool = false) : int64 {
+def private count_cell(t : T?; tr, trg : Model; tag : string; count : array<int64>; depth : int64; sampled : bool = false; kdt : KVDtype = KVDtype.f16) : int64 {
     var plain, spec : array<int64>
     var drafted = 0l
     var parked = 0l
     mtp_pos_reset()
+    var chained0, wide0 : int64   //! the das_metal half reads both counters before the run
     static_if (typeinfo builtin_module_exists(das_metal)) {
         metal_kernel_coverage_reset()
+        chained0 = metal_mtp_chained_rounds()
+        wide0 = metal_kq_mvb_wide_count()
     }
     var served = 0l
     with_metal_attn_d(true) $ {
-        served = free_run_pair(tr, trg, count, COUNT_STEPS, plain, spec, depth, drafted, parked, sampled)
+        served = free_run_pair(tr, trg, count, COUNT_STEPS, plain, spec, depth, drafted, parked, sampled, kdt)
     }
     let kind = sampled ? "sampled" : "counting"
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        if (served > 0l) {
+            let chained = metal_mtp_chained_rounds() - chained0
+            let wide = metal_kq_mvb_wide_count() - wide0
+            if (depth == 1l) {
+                //! a depth-1 round chains on any table the device gathers, the n-gram side input's model the control that never does
+                let chains = emb_dev_gather_ok(trg) && !has_ple_ngram(trg.config)
+                t |> equal(chained, chains ? drafted : 0l, "{tag} {kind} k1: every drafted round {chains ? "rode" : "kept off"} one command buffer (table {trg.emb_fmt}, {chained} chained of {drafted} rounds)")
+            }
+            if (depth == 8l) {
+                //! nine verify rows on a superblock plane are one small-batch dispatch; a carrier with none dispatches none
+                let kq = has_sb_rows_planes(tr)
+                to_log(LOG_INFO, "{tag} {kind} k8: {wide} K-quant dispatches past eight rows (superblock rows planes: {kq})\n")
+                t |> success(kq ? wide > 0l : wide == 0l, "{tag} {kind} k8: the verify's nine rows on superblock planes rode one dispatch a site ({wide} past-eight dispatches)")
+            }
+        }
+    }
     if (served == 0l) {
-        t |> skip("metal decode declined (no Metal device?)")
+        t |> failure("{tag} {kind} k{depth}: the metal decode declined a served carrier's steps")
     } else {
         let c = tr.config
         var fused_shape = false
         static_if (typeinfo builtin_module_exists(das_metal)) {
             fused_shape = attn_d_head_ok(c.head_size) && (c.head_size_swa == 0l || attn_d_head_ok(c.head_size_swa))
         }
-        let chunked = metal_kernel_count("MetalSqAttnPartBF16_metal_sq_attn_part_b")
-        let fused = metal_kernel_count("MetalSqAttnDF16_metal_sq_attn_d") + metal_kernel_count("MetalSqAttnDWF16_metal_sq_attn_d") + metal_kernel_count("MetalSqAttnDXF16_metal_sq_attn_d")
-        to_log(LOG_INFO, "{tag} {kind} k{depth}: prompt {long_length(count)} tokens, head {c.head_size}, fused shape {fused_shape}: {fused} fused dispatches, {chunked} chunked\n")
+        let cs = kdt == KVDtype.q8_0 ? "Q8" : (kdt == KVDtype.tq4 ? "Tq4" : (kdt == KVDtype.f32 ? "F32" : "F16"))   //! the mirror codec's stamps
+        let chunked = metal_kernel_count("MetalSqAttnPartB{cs}_metal_sq_attn_part_b")
+        let fused = metal_kernel_count("MetalSqAttnD{cs}_metal_sq_attn_d") + metal_kernel_count("MetalSqAttnDW{cs}_metal_sq_attn_d") + metal_kernel_count("MetalSqAttnDX{cs}_metal_sq_attn_d")
+        to_log(LOG_INFO, "{tag} {kind} k{depth} {kdt}: prompt {long_length(count)} tokens, head {c.head_size}, fused shape {fused_shape}: {fused} fused dispatches, {chunked} chunked\n")
         if (long_length(count) > 64l && fused_shape) {
             t |> success(fused > 0l && chunked == 0l, "{tag} {kind} k{depth}: the verify's rows took the fused attention under DASLLAMA_METAL_ATTN_D pinned on ({fused} fused dispatches, {chunked} chunked)")
         } elif (long_length(count) > 64l) {
@@ -295,6 +369,18 @@ def private has_kq_rows_planes(t : Model) : bool {
             if (f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.k6) {
                 return true
             }
+        }
+    }
+    return false
+}
+
+//! whether any layer's rows site - q, k, v, o, the dense FFN triple or the deltanet triple - reads a superblock plane, the
+//! planes the K-quant small-batch forms serve
+def private has_sb_rows_planes(t : Model) : bool {
+    for (l in range64(long_length(t.wq_offs))) {
+        for (f in [fmt_at(t.wq_fmt, l), fmt_at(t.wk_fmt, l), fmt_at(t.wv_fmt, l), fmt_at(t.wo_fmt, l), fmt_at(t.w1_fmt, l), fmt_at(t.w3_fmt, l),
+                fmt_at(t.w2_fmt, l), fmt_at(t.dnqkv_fmt, l), fmt_at(t.dngate_fmt, l), fmt_at(t.dnout_fmt, l)]) {
+            return true if (kq_sb(f))
         }
     }
     return false
@@ -531,9 +617,8 @@ def private dff_pair(tr, trg : Model; prompts : array<array<int64>>; nsteps : in
     }
 }
 
-//! `must_serve`: a carrier the batch rail is contracted to serve fails on a decline instead of skipping -
-//! a skip hid the partial-rope gate mismatch (rows built at rope-dim width, the gate asking head width)
-def private dff_cell(t : T?; tr, trg : Model; tag : string; prose_a, prose_b : array<int64>; tol : float; wide : bool = false; must_serve : bool = false) {
+//! a carrier the file loads is a carrier the batch rail serves: a decline fails the cell
+def private dff_cell(t : T?; tr, trg : Model; tag : string; prose_a, prose_b : array<int64>; tol : float; wide : bool = false) {
     for (nb in (wide ? [5l, 8l] : [2l, 4l])) {
         var inscope sub : array<array<int64>>
         sub |> reserve(nb)
@@ -544,11 +629,7 @@ def private dff_cell(t : T?; tr, trg : Model; tag : string; prose_a, prose_b : a
         var served = 0l
         dff_pair(tr, trg, sub, 24l, st, served, false)
         if (served == 0l) {
-            if (must_serve) {
-                t |> failure("{tag} dff B={nb}: the metal batch rail declined distinct-session steps on a carrier it must serve")
-            } else {
-                t |> skip("{tag} dff B={nb}: the metal batch rail declined distinct-session steps")
-            }
+            t |> failure("{tag} dff B={nb}: the metal batch rail declined distinct-session steps on a carrier it serves")
         } else {
             t |> success(st.max_abs <= tol, "{tag} dff B={nb}: GPU batch step vs GPU single step within {tol} over {st.rows} rows (maxd {st.max_abs}, argmax flips {st.flips}, widest flipped margin {st.flip_margin_max})")
             to_log(LOG_INFO, "metal dff {tag} B={nb}: maxd={st.max_abs} flips={st.flips}/{st.rows} widest_margin={st.flip_margin_max} steps={served}\n")
@@ -557,11 +638,8 @@ def private dff_cell(t : T?; tr, trg : Model; tag : string; prose_a, prose_b : a
     }
 }
 
-//! the same-slab verify lands GPU logits only on head-less models (the batch driver's gpu_logits gate
-//! excludes NextN carriers - their round has its own verify), so a NextN fixture's decline is a skip;
-//! `must_serve` marks a head-less carrier the rail is contracted to serve - a decline there is a failure
-def private vff_cell(t : T?; tr, trg : Model; tag : string; prompt : array<int64>; tol : float; nr : int64 = 4l; must_serve : bool = false;
-                     expect_decline : string = "") {
+//! a decline fails the cell unless `expect_decline` names the reason the carrier declines for
+def private vff_cell(t : T?; tr, trg : Model; tag : string; prompt : array<int64>; tol : float; nr : int64 = 4l; expect_decline : string = "") {
     var st = RowStats()
     var served = 0l
     var before = 0l   // nolint:LINT003,LINT019 — counted in the das_metal half
@@ -583,11 +661,7 @@ def private vff_cell(t : T?; tr, trg : Model; tag : string; prompt : array<int64
         t |> success(served == 0l && after > before,
             "{tag}: the metal batch rail declines this graph as {expect_decline} ({before} -> {after}, served {served}; declines {by_key})")
     } elif (served == 0l) {
-        if (must_serve) {
-            t |> failure("{tag}: the metal batch rail declined the same-slab verify on a carrier it must serve")
-        } else {
-            t |> skip("{tag}: the metal batch rail declined the same-slab verify")
-        }
+        t |> failure("{tag}: the metal batch rail declined the same-slab verify on a carrier it serves")
     } else {
         t |> success(st.rows > 0l, "{tag} vff: rows compared ({st.rows})")
         t |> success(st.max_abs <= tol, "{tag} vff: batch same-slab verify rows vs plain steps within {tol} over {st.rows} rows (maxd {st.max_abs}, argmax flips {st.flips}, widest flipped margin {st.flip_margin_max})")
@@ -605,7 +679,7 @@ def private vff_control_cell(t : T?; tr, trg : Model; tag : string; prompt : arr
         vff_pair(tr, trg, prompt, 4l, 9l, st, served, false)
         set_metal_decode_skip("")
         if (served == 0l) {
-            t |> skip("{tag} vff9 control: the metal batch rail declined the same-slab verify")
+            t |> failure("{tag} vff9 control: the metal batch rail declined the same-slab verify")
         } else {
             t |> success(st.max_abs > bar, "{tag} vff9 control: the nine-row verify with its GEMV stage knocked out reds the {bar} bar (maxd {st.max_abs} over {st.rows} rows)")
         }
@@ -614,8 +688,8 @@ def private vff_control_cell(t : T?; tr, trg : Model; tag : string; prompt : arr
 
 // the nine-row arm: the kq carriers take the wider mul_mm bar, and a bar wider than the file's
 // standing one ships its control in the same arm
-def private vff9_cell(t : T?; tr, trg : Model; tag : string; prompt : array<int64>; tol : float; must_serve : bool; expect_decline : string) {
-    vff_cell(t, tr, trg, tag, prompt, trg.kquant_native ? max(tol, MM_TOL) : tol, 9l, must_serve, expect_decline)
+def private vff9_cell(t : T?; tr, trg : Model; tag : string; prompt : array<int64>; tol : float; expect_decline : string) {
+    vff_cell(t, tr, trg, tag, prompt, trg.kquant_native ? max(tol, MM_TOL) : tol, 9l, expect_decline)
     if (trg.kquant_native && empty(expect_decline)) {
         vff_control_cell(t, tr, trg, tag, prompt, MM_TOL)
     }
@@ -649,12 +723,16 @@ def private run_fixture(t : T?; file, tag : string) {   // nolint:LINT012,LINT01
         }
         var trg <- served_twin(path, 512l)
         if (!trg.metal_blob) {
-            t |> skip("{file}: the served image is not the metal-blob flavor on this box - GPU arms have nothing to run")
+            t |> failure("{file}: the served image is not the metal-blob flavor - the Metal mode's load declined a carrier the box holds")
             set_mtp_spec(false)
             restore_knobs(prior_backend, prior_wscale)
             delete tr
             delete trg
             return
+        }
+        if (arm_on(t, "mtp-census-{tag}")) {
+            var inscope any_sites : array<string>
+            census_cell(t, trg, path, "{tag} served twin", any_sites)   //! the file's formats are the ones the rail serves: every site in its own
         }
         var prose_a <- encode(tr, PROSE_A, true, false)
         var prose_b <- encode(tr, PROSE_B, true, false)
@@ -682,7 +760,7 @@ def private run_arms(t : T?; tr, trg : Model; tag : string; prose_a, prose_b, co
         if (arm_on(t, "mtp-ctrl-{tag}")) {
             let st = ff_pair(tr, trg, prose_a, 16l, false)
             if (st.served == 0l) {
-                t |> skip("metal decode declined (no Metal device?)")
+                t |> failure("{tag} control: the metal decode declined a served carrier's steps")
             } else {
                 t |> success(st.maxd == 0.0 && st.flips == 0l, "{tag} control: plain-vs-plain forced feed is bit-identical (maxd {st.maxd}, flips {st.flips})")
             }
@@ -696,7 +774,11 @@ def private run_arms(t : T?; tr, trg : Model; tag : string; prose_a, prose_b, co
 
         // the batch-rail same-slab verify (the gemma drafter's verify) vs plain steps, GPU-vs-GPU
         if (arm_on(t, "mtp-vff-{tag}")) {
-            vff_cell(t, tr, trg, tag, prose_a, FF_TOL)
+            vff_cell(t, tr, trg, tag, prose_a, FF_TOL, 4l)
+        }
+
+        if (arm_on(t, "mtp-warm-{tag}")) {
+            warm_cell(t, trg, tag, prose_a)
         }
 
         // depth N under forced reject: every round verifies k+1 rows and replays row 0 from the
@@ -715,6 +797,14 @@ def private run_arms(t : T?; tr, trg : Model; tag : string; prose_a, prose_b, co
         }
 
         // the deepest round: depth 8 verifies MTP_MAX_ROWS rows, one past the eight-row GEMV rail
+        //! the round on every other mirror codec: the verify's rows store and read the session's codec, drafts accepted
+        if (arm_on(t, "mtp-codec-{tag}")) {
+            for (kdt in [KVDtype.q8_0, KVDtype.tq4, KVDtype.f32]) {
+                let drafted = count_cell(t, tr, trg, "{tag} {kdt}", count, 2l, false, kdt)
+                t |> success(drafted > 0l && g_last_accepted > 0l, "{tag} {kdt}: the verify accepted drafts on the codec's mirror ({g_last_accepted} of {drafted})")
+            }
+        }
+
         if (arm_on(t, "mtp-count8-{tag}")) {
             count_cell(t, tr, trg, tag, count, 8l)
         }
@@ -769,6 +859,14 @@ def test_metal_mtp_parity_35b(t : T?) {
     }
 }
 
+//! the format census's carrier: every big plane IQ4_XS on disk, the routed NextN head's eh_proj and expert stacks among them
+[test]
+def test_metal_mtp_parity_35b_iq4xs(t : T?) {
+    t |> run("metal MTP rail vs plain GPU decode - Qwen3.6-35B-A3B-MTP-IQ4_XS-pure (large tier)") <| @(t : T?) {
+        run_fixture(t, "Qwen3.6-35B-A3B-MTP-IQ4_XS-pure.gguf", "35b-iq4xs")
+    }
+}
+
 // The split-head carrier: Qwen3.8-27B's NextN head ships as its own file (the trunk is converted
 // without it), and the served pair here is the Q4_K_M trunk with the Q8_0 head - a
 // mixed-quant pair the mtp-<trunk basename> adjacency cannot name, so the fixture sets the
@@ -803,7 +901,7 @@ def private run_fixture_served(t : T?; file, head, tag : string; tol : float) { 
         var trg <- served_twin(path, 512l)
         clear_mtp_head_path()
         if (!trg.metal_blob || trg.config.n_layer_nextn <= 0l) {
-            t |> skip("{file}: the served image is not a metal-blob NextN carrier on this box - GPU arms have nothing to run")
+            t |> failure("{file}: the served image is not a metal-blob NextN carrier - the Metal mode's load declined a carrier the box holds")
             set_mtp_spec(false)
             delete trg
             return
@@ -812,7 +910,7 @@ def private run_fixture_served(t : T?; file, head, tag : string; tol : float) { 
         var prose_b <- encode(trg, PROSE_B, true, false)
         var count <- encode(trg, counting_prompt(1, 40), true, false)
         if (arm_on(t, "mtp-dff-{tag}")) {   // the batch rail on the twin alone: its reference row is the GPU single step
-            dff_cell(t, trg, trg, tag, prose_a, prose_b, tol, false, true)
+            dff_cell(t, trg, trg, tag, prose_a, prose_b, tol)
         }
         run_arms(t, trg, trg, tag, prose_a, prose_b, count, tol)
         metal_decode_shutdown()
@@ -844,11 +942,11 @@ def test_metal_mtp_parity_flashnext(t : T?) {
 // the row's, not the 0.5 one.
 // one row through the batch driver, plain and under the unfused add+rms pin - the row chains'
 // shared adapter takes the add + rms pair instead of the fused kernel
-def private vff1_cells(t : T?; tr, trg : Model; tag : string; prompt : array<int64>; tol : float; must_serve : bool; expect_decline : string) {
-    vff_cell(t, tr, trg, tag, prompt, tol, 1l, must_serve, expect_decline)
+def private vff1_cells(t : T?; tr, trg : Model; tag : string; prompt : array<int64>; tol : float; expect_decline : string) {
+    vff_cell(t, tr, trg, tag, prompt, tol, 1l, expect_decline)
     static_if (typeinfo builtin_module_exists(das_metal)) {
         set_metal_batch_addrms_unfused(true)
-        vff_cell(t, tr, trg, "{tag} unfused add+rms", prompt, tol, 1l, must_serve, expect_decline)
+        vff_cell(t, tr, trg, "{tag} unfused add+rms", prompt, tol, 1l, expect_decline)
         set_metal_batch_addrms_unfused(false)
     }
 }
@@ -861,31 +959,31 @@ def private vffc_cell(t : T?; tr, trg : Model; tag : string; prompt : array<int6
         metal_prefill_shutdown()
         let prev_cap = get_metal_decode_mirror_cap_mb()
         set_metal_decode_mirror_cap_mb(64)
-        vff_cell(t, tr, trg, "{tag} ceiling 64MB", prompt, trg.kquant_native ? max(tol, MM_TOL) : tol, 9l, true)
+        vff_cell(t, tr, trg, "{tag} ceiling 64MB", prompt, trg.kquant_native ? max(tol, MM_TOL) : tol, 9l)
         set_metal_decode_mirror_cap_mb(prev_cap)
     }
 }
 
 //! the same-slab verify arms by row count
-def private vff_arms(t : T?; tr, trg : Model; tag : string; prompt : array<int64>; tol : float; must_serve : bool; expect_decline : string) {
+def private vff_arms(t : T?; tr, trg : Model; tag : string; prompt : array<int64>; tol : float; expect_decline : string) {
     if (arm_on(t, "mtp-vff-{tag}")) {
-        vff_cell(t, tr, trg, tag, prompt, tol, 4l, must_serve, expect_decline)
+        vff_cell(t, tr, trg, tag, prompt, tol, 4l, expect_decline)
     }
     if (arm_on(t, "mtp-vff1-{tag}")) {   // one row through the batch driver: the encoder alone, no row mixing
-        vff1_cells(t, tr, trg, tag, prompt, tol, must_serve, expect_decline)
+        vff1_cells(t, tr, trg, tag, prompt, tol, expect_decline)
     }
     if (arm_on(t, "mtp-vff5-{tag}")) {   // five rows: the batch driver's GEMM rail (mp 32) under the same-slab verify
-        vff_cell(t, tr, trg, tag, prompt, tol, 5l, must_serve, expect_decline)
+        vff_cell(t, tr, trg, tag, prompt, tol, 5l, expect_decline)
     }
     if (arm_on(t, "mtp-vff9-{tag}")) {   // nine rows = MTP_MAX_ROWS: the batch driver's mul_mm rail (kq planes stage x to half)
-        vff9_cell(t, tr, trg, tag, prompt, tol, must_serve, expect_decline)
+        vff9_cell(t, tr, trg, tag, prompt, tol, expect_decline)
     }
     if (arm_on(t, "mtp-vffc-{tag}") && empty(expect_decline)) {
         vffc_cell(t, tr, trg, tag, prompt, tol)
     }
 }
 
-def private run_verify_fixture(t : T?; file, tag : string; tol : float; must_serve : bool = false; expect_decline : string = "") {   // nolint:LINT012,LINT019 — the body is the das_metal half
+def private run_verify_fixture(t : T?; file, tag : string; tol : float; expect_decline : string = "") {   // nolint:LINT012,LINT019 — the body is the das_metal half
     static_if (typeinfo builtin_module_exists(das_metal)) {
         let path = path_join(models_dir(), file)
         if (!model_available(t, path)) {
@@ -899,7 +997,7 @@ def private run_verify_fixture(t : T?; file, tag : string; tol : float; must_ser
         tr.config.seq_len = min(tr.config.seq_len, 512l)
         var trg <- served_twin(path, 512l)
         if (!trg.metal_blob) {
-            t |> skip("{file}: the served image is not the metal-blob flavor on this box")
+            t |> failure("{file}: the served image is not the metal-blob flavor - the Metal mode's load declined a carrier the box holds")
             restore_knobs(prior_backend, prior_wscale)
             delete tr
             delete trg
@@ -913,7 +1011,7 @@ def private run_verify_fixture(t : T?; file, tag : string; tol : float; must_ser
         if (arm_on(t, "mtp-dff8-{tag}")) {   // B=5 and B=8: the GEMM / mv8 rails of the batch driver
             dff_cell(t, tr, trg, tag, prose_a, prose_b, tol, true)
         }
-        vff_arms(t, tr, trg, tag, prose_a, tol, must_serve, expect_decline)
+        vff_arms(t, tr, trg, tag, prose_a, tol, expect_decline)
         // the assistant drafter's round (gemma-4 targets with an mtp-* sidecar beside them): counting
         // free-run, speculative == plain at depth 1, 2 and 4
         if (arm_on(t, "mtp-count-{tag}")) {
@@ -921,7 +1019,7 @@ def private run_verify_fixture(t : T?; file, tag : string; tol : float; must_ser
             if (empty(side)) {
                 t |> skip("{tag}: no assistant drafter sidecar beside {file}")
             } elif (!attach_gemma_drafter(trg, side)) {
-                t |> skip("{tag}: the drafter {side} did not attach")
+                t |> failure("{tag}: the drafter {side} beside the carrier did not attach")
             } else {
                 var count <- encode(tr, counting_prompt(1, 40), true, false)
                 set_gemma_trace(arm_on(t, "mtp-count-trace"))
@@ -981,14 +1079,13 @@ def test_metal_verify_gemma12(t : T?) {
     }
 }
 
-// the hybrid carrier (qwen35: deltanet layers, the 2x-wide gated Q), HEAD-LESS so the batch rail's GPU
-// logits gate admits it: the batch driver serves a hybrid's rows against one DnMirror per row, and a
-// same-slab verify is one session at k+1 positions - the second row finds no mirror at its position,
-// so the rail must decline dn_state by name (served, it would run the recurrent state twice per step)
+//! the hybrid carrier (qwen35: deltanet layers, the 2x-wide gated Q), head-less: a same-slab verify is one
+//! session at k+1 positions, so its recurrent rows are one group walking that session's mirror row after
+//! row (`ARCHITECTURE_GPU_MTP.md#dn-group-stages`) - the rail must serve them
 [test]
 def test_metal_verify_qwen38_27b(t : T?) {
-    t |> run("batch-rail same-slab verify declines a recurrent session's rows as dn_state - Qwen3.8-27B-Q4_K_M, no head (deltanet + gated Q, large tier)") <| @(t : T?) {
-        run_verify_fixture(t, "Qwen3.8-27B-Q4_K_M.gguf", "q38", 2.0, false, "dn_state")
+    t |> run("batch-rail same-slab verify serves a recurrent session's rows as one group - Qwen3.8-27B-Q4_K_M, no head (deltanet + gated Q, large tier)") <| @(t : T?) {
+        run_verify_fixture(t, "Qwen3.8-27B-Q4_K_M.gguf", "q38", 2.0)
     }
 }
 

@@ -224,6 +224,7 @@ struct SlotOpts {
     kv_dtype : KVDtype = KVDtype.f16
     kv_dtype_set : bool = false
     mtp : int = -1                  // -1 inherit | 0 off | 1 on
+    mtp_platforms : string          //! the model's catalog `serve_mtp`: the platforms where an unset `mtp` arms ("" = none)
 }
 
 //! One live served model: the loaded model, its scheduler (sessions + KV pool + prefix cache —
@@ -537,9 +538,10 @@ def private bind_gpu_slot(si : int) {
 }
 
 //! Read with the slot's marks installed, so the facade answers for THIS model.
+[arch(at = "README.md#gpu-key")]
 def slot_wants_device_kv(s : ModelSlot) : bool {
     return (s.backend_effective == "gpu:resident" && s.vision.kind == VisionKind.none && !s.audio_armed
-        && !s.sched.mtp && s.gpu_regions >= s.sched.max_streams)
+        && (!s.sched.mtp || gpu_resident_mtp_device_home(s.model)) && s.gpu_regions >= s.sched.max_streams)
 }
 
 def private sync_slot_device_kv(var s : ModelSlot; holds_gpu : bool) {
@@ -583,8 +585,8 @@ def slot_served_note(s : ModelSlot; device_kv, holds_gpu : bool) : string {
     if (s.vision.kind != VisionKind.none || s.audio_armed) {
         return "this model also reads images or audio, and those parts of a prompt run on the host: every stream's cache stays there, and each step runs on the CPU"
     }
-    if (s.sched.mtp) {
-        return "self-speculation (the model drafting its own next tokens) has no GPU path yet: every stream's cache stays on the host, and each step runs on the CPU"
+    if (s.sched.mtp && !gpu_resident_mtp_device_home(s.model)) {
+        return "self-speculation (the model drafting its own next tokens) does not run whole on the card for this model - the part that writes the drafts, its check of the drafts or its undo of a rejected draft stays on the host (the load log names which): every stream's cache stays on the host, and each step runs on the CPU"
     }
     return "the card has room for {s.gpu_regions} stream caches and this model serves {s.sched.max_streams} streams: every stream's cache stays on the host, and each step runs on the CPU"
 }
@@ -1793,7 +1795,29 @@ def private box_ram_gb() : int {
         delete args
         return int(to_float(strip(out)) / gib + 0.5)
     }
-    return ram_gb_from_meminfo(fread("/proc/meminfo"))
+    return linux_ram_gb(fread("/proc/meminfo"), fread("/sys/fs/cgroup/memory.max"),
+        fread("/sys/fs/cgroup/memory/memory.limit_in_bytes"))
+}
+
+//! a Linux box's RAM in whole GiB from its three files' texts: the
+//! cgroup v2 limit, else the v1 one, where under the meminfo total
+def linux_ram_gb(meminfo, cgroup_v2, cgroup_v1 : string) : int {
+    let total = ram_gb_from_meminfo(meminfo)
+    var cap = ram_gb_from_cgroup(cgroup_v2)
+    if (cap == 0) {
+        cap = ram_gb_from_cgroup(cgroup_v1)
+    }
+    return cap > 0 && (total == 0 || cap < total) ? cap : total
+}
+
+//! a cgroup memory-limit file's text in whole GiB, rounded up so a finite cap under a GiB still reads as one;
+//! 0 for no limit (`max`, or v1's page-rounded count past a petabyte) and for text that is no byte count
+def ram_gb_from_cgroup(text : string) : int {
+    let t = strip(text)
+    return 0 if (empty(t) || !is_number(first_character(t)))
+    let bytes = to_float(t)
+    let gib = 1024.0 * 1024.0 * 1024.0
+    return bytes <= 0.0 || bytes >= 1024.0 * 1024.0 * gib ? 0 : int(ceil(bytes / gib))
 }
 
 //! the lanes the kernels actually dispatch on: the jobque workers plus the calling thread,
@@ -2881,8 +2905,7 @@ def private handle_model_load(req : FrontReq; var resp : Reply) : http_status { 
     if (want_ctx > 0l) {
         m.config.seq_len = min(m.config.seq_len, want_ctx)
     }
-    var opts = SlotOpts()
-    opts.backend = cpu_only ? "cpu" : "auto"
+    let opts = runtime_slot_opts(rpath, cpu_only)
     clamp_ctx_to_device_room(m, id, slot_kv_dtype(opts))   // the codec the scheduler will inherit, not SlotOpts' f16 seed
     failed = catch_worker_panic(failure) {
         // the KV-geometry validate inside create_scheduler can refuse the pool — caught, so an
@@ -6968,8 +6991,44 @@ struct private SchedDefaults {
 var private g_sched_defaults = SchedDefaults()
 
 //! Whether an unset `mtp` arms a slot: one stream whose decode runs on a GPU - the Metal flavor, or the whole model resident on a Vulkan device (`backend_effective` "gpu:resident"). On the CPU, on a slot the device serves in part, and where the resident driver sums the routed experts on the host (`experts_host`: a hyper-connection MoE the card does not hold whole - `PERF_LEDGER.md`'s NextN entry), the verify round costs more than the accepted drafts return. Non-private: test_openai_server_mtp.das gates it.
-def mtp_auto_arms(streams : int64; on_metal : bool; backend_effective : string; experts_host : bool = false) : bool
-    => streams == 1l && decodes_on_gpu(on_metal, backend_effective, experts_host)
+def mtp_auto_arms(streams : int64; on_metal : bool; backend_effective : string; experts_host : bool = false; platforms : string = "") : bool
+    => streams == 1l && decodes_on_gpu(on_metal, backend_effective, experts_host) && mtp_platform_listed(platforms, on_metal ? "metal" : "vulkan")
+
+//! The model file's catalog `serve_mtp`, read off its base name; ""
+//! for a file with no catalog row. Non-private: a test gates it.
+def catalog_mtp_platforms(path : string) : string {
+    var inscope spec <- spec_by_file(base_name(path))
+    return spec.serve_mtp
+}
+
+//! A runtime POST load's slot options: the backend asked for, and the
+//! catalog row's MTP platforms the boot path reads too. Non-private:
+//! a test gates it.
+def runtime_slot_opts(path : string; cpu_only : bool) : SlotOpts
+    => SlotOpts(backend = cpu_only ? "cpu" : "auto", mtp_platforms = catalog_mtp_platforms(path))
+
+//! A slot's `mtp` ask: its own where set, else the server's
+//! (-1 auto | 0 off | 1 on)
+def slot_mtp_want(opts : SlotOpts; server_mtp : int) : int
+    => opts.mtp >= 0 ? opts.mtp : server_mtp
+
+//! Whether a slot speculates: asked on, or unset where
+//! `mtp_auto_arms` arms it over the slot's catalog platforms.
+//! Non-private: a test gates it.
+def slot_mtp_arms(opts : SlotOpts; server_mtp : int; streams : int64; on_metal : bool;
+                  backend_effective : string; experts_host : bool) : bool {
+    let want = slot_mtp_want(opts, server_mtp)
+    return want > 0 || (want < 0 && mtp_auto_arms(streams, on_metal, backend_effective,
+                                                  experts_host, opts.mtp_platforms))
+}
+
+//! Whether `platforms`, a catalog `serve_mtp` comma list, names `platform`; "" names none. Non-private: test_server_flags.das gates it.
+def mtp_platform_listed(platforms, platform : string) : bool {
+    for (p in split(platforms, ",")) {
+        return true if (strip(p) == platform)
+    }
+    return false
+}
 
 //! Whether a slot's decode runs on a GPU, the worker team left idle: the Metal flavor, or the whole model resident on a Vulkan device with its routed experts on the card. Non-private: test_server_flags.das gates it.
 def decodes_on_gpu(on_metal : bool; backend_effective : string; experts_host : bool = false) : bool
@@ -7024,8 +7083,9 @@ def private init_one_scheduler(var s : ModelSlot) {
         pfx = 0l   // explicit unbounded
     }
     let s_kv = slot_kv_dtype(s.opts)
-    let want = s.opts.mtp >= 0 ? s.opts.mtp : g_sched_defaults.mtp
-    var spec = want > 0 || (want < 0 && mtp_auto_arms(s_streams, slot_flavor(s) == "metal", s.backend_effective, gpu_resident_experts_host()))
+    let want = slot_mtp_want(s.opts, g_sched_defaults.mtp)
+    var spec = slot_mtp_arms(s.opts, g_sched_defaults.mtp, s_streams, slot_flavor(s) == "metal",
+                             s.backend_effective, gpu_resident_experts_host())
     if (spec && s.model.config.n_layer_nextn <= 0l) {
         let side = mtp_drafter_sidecar(s.path)
         if (!empty(side) && attach_mtp_drafter(s.model, side)) {

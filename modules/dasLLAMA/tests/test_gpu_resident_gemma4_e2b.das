@@ -6,6 +6,8 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require dasllama/dasllama_kv_dtype   // KVDtype: the block-codec cells' mirror ask
 require _gemma_resident
+require dasllama/dasllama_kqformat   // KqFmt - the PLE table's tag
+require dasllama/dasllama_gpu_resident   // resident_plan - the table's seat
 
 // gemma-4-E2B Q8_0 (the E-series carrier: per-layer embeddings, the upper layers sharing the K/V of the ones below, two
 // dense FFN widths, a sliding window the two-window cell engages): arm `g4e`. Skips off the JIT, without DASLLAMA_GPU=1
@@ -40,6 +42,27 @@ def test_gpu_resident_gemma4_e2b_block_codecs(t : T?) {
     t |> run("gemma-4-E2B Q8_0: a tq4 K/V mirror - a shared-KV layer rotates its query and stores nothing - scored as a perplexity against the CPU chain") @(t : T?) {
         with_gpu_kv_dtype(t, KVDtype.tq4) {
             ppl_compare(t, 150l, 150l, GEMMA4E_FILE)
+        }
+    }
+}
+
+//! the per-layer-embedding table in its own tag on the device (arm `g4e-ple`): E2B Q8_0 with the token and PLE tables
+//! requantized to Q5_0, Q5_1 and Q4_0 (`../performance/model_specs.das`) and the Q8_0 file as the shape control - the plan
+//! seats the table under its tag, and the forced feed's prefill gathers the side rows off it against the CPU chain
+[test]
+def test_gpu_resident_gemma4_e2b_ple_tables(t : T?) {
+    for (spec in [(file = "gemma-4-E2B-it-Q8_0.gguf", fmt = KqFmt.q8),
+                  (file = "gemma-4-E2B-it-emb-Q5_0-local.gguf", fmt = KqFmt.q5032),
+                  (file = "gemma-4-E2B-it-emb-Q5_1-local.gguf", fmt = KqFmt.q51),
+                  (file = "gemma-4-E2B-it-emb-Q4_0-local.gguf", fmt = KqFmt.q40)]) {
+        let gf = GemmaFile(file = spec.file, arm = "g4e-ple")
+        t |> run("{spec.file}: the {spec.fmt} per-layer-embedding table seats on the device and the prefill gathers off it") @(t : T?) {
+            with_gemma_rig(t, gf) $(tr) {
+                t |> equal(tr.ple_emb_fmt, spec.fmt, "the PLE table keeps its disk format's tag")
+                let plan = resident_plan(tr, 4096l, KVDtype.f16, KVDtype.f16)
+                t |> success(plan.ple_tbl_bytes > 0l, "the plan seats the {spec.fmt} table on the device ({plan.ple_tbl_bytes} bytes)")
+            }
+            gemma_forced_feed(t, 40l, gf)
         }
     }
 }

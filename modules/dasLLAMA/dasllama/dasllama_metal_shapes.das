@@ -27,7 +27,7 @@ enum MetalDecodeDecline {
     rope_mode           // rope tables off
     config              // RETIRED (family waves A): split into `feature` + the per-need
                         // `need_*` keys in the declines-by-reason table
-    graph               // block set is not the std dense stack (MoE / recurrent / custom attn)
+    graph               //! a block set past the std dense stack (MoE / recurrent / custom attn) this path's kernels do not cover
     feature             // the model needs layer-stack features this path's kernels don't
                         // implement — each missing bit records a `need_*` key alongside
     shape               // head/dim alignment outside the kernel grids
@@ -91,7 +91,7 @@ enum MetalPrefillDecline {
     backend_repack      // repack backend: interleaved weight layout unreadable by the GEMM kernel
     config              // RETIRED (family waves A): split into `feature` + the per-need
                         // `need_*` keys in the declines-by-reason table
-    graph               // block set is not the std dense stack (MoE / recurrent / custom attn)
+    graph               //! a block set past the std dense stack (MoE / recurrent / custom attn) this path's kernels do not cover
     feature             // the model needs layer-stack features this path's kernels don't
                         // implement — each missing bit records a `need_*` key alongside
     shape               // head/dim alignment outside the kernel grids
@@ -103,7 +103,6 @@ enum MetalPrefillDecline {
     gpu_error           // dispatch failed at execution time
     planar              // weights not in the blob-image form (the drivers are blob-only)
     dn_state            // recurrent state not GPU-resident and no CPU prefix to sync from
-    moe_twin            // an expert plane format whose only Metal kernels are the tensor twins, and this box compiled none
 }
 
 //! Layer-stack features a model's graph needs beyond the base llama dense block — ONE derivation
@@ -175,15 +174,18 @@ def record_needs(var tab : table<string; int64>; missing : MetalNeed) {
     if (missing.qd_neq_dim) { tab["need_qd_neq_dim"]++ }
 }
 
-// the kq formats the Metal kernels implement — anything else (a future format) must DECLINE
-// kquant_native instead of falling into a wrong-layout kernel branch (the dispatchers below
-// treat "not k4/k6" as k5)
+//! the dense plane formats the Metal kernels read in their own bytes - any other format (mx4) declines kquant_native
+//! instead of reaching a dispatcher, whose default arm reads a superblock layout
 def kq_fmt_gpu_supported(f : KqFmt) : bool =>
-    f == KqFmt.q8 || f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.k6 || f == KqFmt.iq4xs || f == KqFmt.k3 || f == KqFmt.iq3s || f == KqFmt.iq3xxs || f == KqFmt.iq4nl || f == KqFmt.q40 || f == KqFmt.k2 || f == KqFmt.iq2s || f == KqFmt.iq2xs || f == KqFmt.iq2xxs
+    (f == KqFmt.q8 || f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.k6 || f == KqFmt.iq4xs || f == KqFmt.k3 || f == KqFmt.iq3s || f == KqFmt.iq3xxs
+        || f == KqFmt.iq4nl || f == KqFmt.q40 || f == KqFmt.k2 || f == KqFmt.iq2s || f == KqFmt.iq2xs || f == KqFmt.iq2xxs || f == KqFmt.iq3s4
+        || kq_dense_b32(f))
 
-//! a plane format with a one-row GEMV on this home: q8's, or a superblock format's row-batched decode form at one row, whose K
-//! (`kdim`) is whole superblocks and whose format the Metal kernels serve
-def kq_fmt_one_row_gemv(f : KqFmt; kdim : int64) : bool => f == KqFmt.q8 || (kq_sb(int(f)) && kq_fmt_gpu_supported(f) && kdim % KQ_SB_ELEMS == 0l)
+//! a plane format with a one-row GEMV on this home: q8's, a superblock format's row-batched decode form at one row, or a per-32
+//! plane's GEMV, whose K (`kdim`) is whole blocks of the format's unit and whose format the Metal kernels serve
+def kq_fmt_one_row_gemv(f : KqFmt; kdim : int64) : bool =>
+    (f == KqFmt.q8 || ((kq_sb(int(f)) || kq_dense_b32(f)) && kq_fmt_gpu_supported(f)
+        && kdim % kq_unit(f) == 0l))
 
 def private kq_fmts_gpu_supported(a : array<KqFmt>) : bool {
     for (f in a) {
@@ -208,6 +210,20 @@ def kq_load_gpu_supported(t : Model) : bool {
         (kq_fmt_gpu_supported(t.wcls_fmt) && kq_fmt_gpu_supported(t.emb_fmt)))
 }
 
+//! some dense plane - attention, FFN, classifier - is a per-32 format (q51, iq4nl32)
+def kq_dense_b32_any(t : Model) : bool {
+    return (kq_fmts_b32_any(t.wq_fmt) || kq_fmts_b32_any(t.wk_fmt) || kq_fmts_b32_any(t.wv_fmt) || kq_fmts_b32_any(t.wo_fmt)
+        || kq_fmts_b32_any(t.w1_fmt) || kq_fmts_b32_any(t.w2_fmt) || kq_fmts_b32_any(t.w3_fmt)
+        || kq_dense_b32(t.wcls_fmt))
+}
+
+def private kq_fmts_b32_any(a : array<KqFmt>) : bool {
+    for (f in a) {
+        return true if (kq_dense_b32(f))
+    }
+    return false
+}
+
 //! Cross-layer KV sharing (gemma-4 E-series): does layer l either own its rows or share a
 //! byte-compatible source? A shared layer aliases its source's mirror slab / prefill panel via
 //! kv_row_prefix, so the source must own rows and match l's class geometry exactly.
@@ -225,11 +241,35 @@ def kv_share_ok(t : Model; l : int64) : bool {
 }
 
 // Wave D serve gate for the deltanet kernel set: fixed d_state 128 (the scan/l2/gate lane math
-// bakes 32 lanes x 4), conv taps <= 8 (hist registers). β/α projections: q8 planes ride the
-// site GEMVs; f32-on-disk (dn_ba_f32) rides the router-slab f32 GEMV off the fblob offsets.
+// bakes 32 lanes x 4), conv taps <= 8 (hist registers). Every projection plane rides its tag's
+// site GEMV; f32-on-disk β/α (dn_ba_f32) rides the router-slab f32 GEMV off the fblob offsets.
 def dn_metal_ok(t : Model) : bool {
     let c = t.config
-    return c.ssm_d_state == 128l && c.ssm_d_conv >= 2l && c.ssm_d_conv <= 8l
+    if (c.ssm_d_state != 128l || c.ssm_d_conv < 2l || c.ssm_d_conv > 8l) {
+        return false
+    }
+    for (l in range64(c.n_layers + c.n_layer_nextn)) {
+        if (layer_is_recurrent(c, l) && (!kq_fmt_one_row_gemv(fmt_at(t.dnqkv_fmt, l), c.dim) ||
+                !kq_fmt_one_row_gemv(fmt_at(t.dngate_fmt, l), c.dim) ||
+                !kq_fmt_one_row_gemv(fmt_at(t.dnout_fmt, l), c.ssm_d_inner) ||
+                !kq_fmt_one_row_gemv(fmt_at(t.dnbeta_fmt, l), c.dim) ||
+                !kq_fmt_one_row_gemv(fmt_at(t.dnalpha_fmt, l), c.dim))) {
+            return false
+        }
+    }
+    return true
+}
+
+//! the window's β/α rows: a K-quant plane rides its batched expert-form GEMV (one plane, every row a stream), so its
+//! format needs that form (`moe_fmt_metal_served`); q8 planes ride `pf_enc_dn_ba`, f32 ones the slab GEMV
+def dn_ba_metal_window_ok(t : Model) : bool {
+    let c = t.config
+    for (l in range64(c.n_layers + c.n_layer_nextn)) {
+        if (layer_is_recurrent(c, l) && (!moe_fmt_metal_served(fmt_at(t.dnbeta_fmt, l)) || !moe_fmt_metal_served(fmt_at(t.dnalpha_fmt, l)))) {
+            return false
+        }
+    }
+    return true
 }
 
 // (q8 32-blocks, kq 256-superblocks — the expert shift is index math, no base multiple)
@@ -238,45 +278,41 @@ def moe_site_ok(fmt : KqFmt; off, ege : int64) : bool {
     if (fmt == KqFmt.q8) {
         return off >= 0l && (off % 256l) == 0l && (ege % 32l) == 0l
     }
-    if (fmt == KqFmt.k4 || fmt == KqFmt.k5 || fmt == KqFmt.q40) {   // compact 16B scale rows: sb0*16 is 16B-aligned on its own
+    if (fmt == KqFmt.k4 || fmt == KqFmt.k5 || fmt == KqFmt.q40 || fmt == KqFmt.iq4nl || fmt == KqFmt.k2) {   // compact 16B scale rows, or k2's 4B d tail: every bind is aligned at a whole superblock
         return off >= 0l && (off % 256l) == 0l && (ege % 256l) == 0l
     }
-    if (fmt == KqFmt.k6 || fmt == KqFmt.iq4xs || fmt == KqFmt.k3 || fmt == KqFmt.iq3s || fmt == KqFmt.iq3xxs || fmt == KqFmt.iq2s || fmt == KqFmt.iq2xs || fmt == KqFmt.iq2xxs) {
+    if (fmt == KqFmt.k6 || fmt == KqFmt.iq4xs || fmt == KqFmt.iq3s4 || fmt == KqFmt.k3 || fmt == KqFmt.iq3s || fmt == KqFmt.iq3xxs || fmt == KqFmt.iq2s || fmt == KqFmt.iq2xs || fmt == KqFmt.iq2xxs) {
         return off >= 0l && (off % 512l) == 0l && (ege % 256l) == 0l
     }
     if (fmt == KqFmt.q51) {   // per-32 planes: off % 128 keeps the 20B/4B binds 16B-aligned
         return off >= 0l && (off % 128l) == 0l && (ege % 32l) == 0l
     }
-    if (fmt == KqFmt.iq4nl32) {   // per-32 planes: off % 256 keeps the 16B/2B binds 16B-aligned
+    if (fmt == KqFmt.iq4nl32 || fmt == KqFmt.q4032 || fmt == KqFmt.q5032) {   // per-32 planes: off % 256 keeps the 16B (20B on q5032) / 2B binds 16B-aligned
         return off >= 0l && (off % 256l) == 0l && (ege % 32l) == 0l
     }
     return false
 }
 
-//! the expert plane formats the Metal routed block has kernels for (mx4 rides its own gpt-oss arm)
+//! the expert plane formats the Metal routed block has kernels for at decode and prefill (the mx4 planes key off
+//! `experts_mx4`, a stack property, and ride their own arm); any other tag declines `graph`
 def moe_fmt_metal_served(f : KqFmt) : bool {
-    return (f == KqFmt.q8 || f == KqFmt.q51 || f == KqFmt.iq4nl32 || f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.k6 || f == KqFmt.k3 || f == KqFmt.q40
-        || f == KqFmt.iq4xs || f == KqFmt.iq3s || f == KqFmt.iq3xxs || f == KqFmt.iq2s || f == KqFmt.iq2xs || f == KqFmt.iq2xxs)
+    return (f == KqFmt.q8 || f == KqFmt.q51 || f == KqFmt.iq4nl32 || f == KqFmt.q4032 || f == KqFmt.q5032 || f == KqFmt.k4 || f == KqFmt.k5 || f == KqFmt.k6 || f == KqFmt.k3 || f == KqFmt.q40
+        || f == KqFmt.iq4xs || f == KqFmt.iq3s || f == KqFmt.iq3xxs || f == KqFmt.iq2s || f == KqFmt.iq2xs || f == KqFmt.iq2xxs
+        || f == KqFmt.k2 || f == KqFmt.iq4nl || f == KqFmt.iq3s4)
 }
 
-//! the per-32 expert plane formats with their own Metal kernels (the 32-block reduction, 64-deep tensor twins)
-def private moe_fmt_b32(f : KqFmt) : bool => f == KqFmt.q51 || f == KqFmt.iq4nl32
-
-// The MoE serve gate — covered graph shapes: plain routed FFN (qwen3moe, silu, no biases)
-// + optional sigmoid-gated shared expert (qwen35moe), gemma4's dense-shared dual branch, and
-// gpt-oss's mx4 experts (softmax_weight, biases, disk-order). No dense-lead / selection bias.
+//! The MoE serve gate: plain routed FFN (qwen3moe), the sigmoid-gated shared expert (qwen35moe), gemma4's dense-shared branch,
+//! gpt-oss's gate (softmax_weight, biases) over mx4 experts; no dense lead or selection bias. The stack format is its own axis:
+//! mx4 planes serve under every gate shape, disk-order only (the CPU laneq repack has no GPU carry).
 def moe_metal_ok(t : Model) : bool {   // nolint:STYLE038 — flat per-shape refusal ladder; every arm is one reason
     let c = t.config
     if (!c.moe || c.n_layer_dense_lead > 0l || c.moe_exp_probs ||
-            (c.expert_weights_scale != 0.0 && c.expert_weights_scale != 1.0)) {
+            (t.experts_mx4 && t.mx4_repacked)) {
         return false
     }
-    if (t.experts_mx4) {
-        // gpt-oss: softmax_weight top-k on raw logits, router + per-expert biases, clamped
-        // swiglu, disk-order mx4 stacks (the CPU laneq repack has no GPU carry)
-        if (c.moe_gate != MoeGate.softmax_weight || c.ffn_act != FfnAct.swiglu_oai ||
+    if (t.experts_mx4 && c.moe_gate == MoeGate.softmax_weight) {
+        if (c.ffn_act != FfnAct.swiglu_oai ||
                 !c.moe_router_bias || !c.moe_exps_bias || c.moe_dense_shexp || c.n_ff_shexp > 0l ||
-                t.mx4_repacked ||
                 t.router_b_off < 0l || t.web1_off < 0l || t.web2_off < 0l || t.web3_off < 0l) {
             return false
         }
@@ -294,13 +330,19 @@ def moe_metal_ok(t : Model) : bool {   // nolint:STYLE038 — flat per-shape ref
         // gmode 2 (qwen2moe)
         return false
     } elif (c.n_ff_shexp > 0l) {
-        // sigmoid-gated shared expert (qwen35moe): q8 wsh planes at base + l*she ride the
-        // dense site kernels — base + stride %256 (bind), nsh %64 (prefill C tiles)
+        // sigmoid-gated shared expert (qwen35moe): each plane rides the dense site kernels by its tag - the q8 transcode at
+        // base + l*she (base + stride %256, the bind) or the plane in the file's format; nsh %64 (prefill C tiles)
         let she = c.dim * c.n_ff_shexp
         if (!c.moe_shexp_gated ||
                 (c.n_ff_shexp % 64l) != 0l || (she % 256l) != 0l ||
                 (t.wsh1_off % 256l) != 0l || (t.wsh2_off % 256l) != 0l || (t.wsh3_off % 256l) != 0l) {
             return false
+        }
+        for (l in range64(c.n_layers + c.n_layer_nextn)) {
+            if (!kq_fmt_one_row_gemv(shexp_plane(t, l, 1).f, c.dim) || !kq_fmt_one_row_gemv(shexp_plane(t, l, 3).f, c.dim) ||
+                    !kq_fmt_one_row_gemv(shexp_plane(t, l, 2).f, c.n_ff_shexp)) {
+                return false
+            }
         }
     }
     let ne = c.n_expert
@@ -319,7 +361,7 @@ def moe_metal_ok(t : Model) : bool {   // nolint:STYLE038 — flat per-shape ref
         if ((ege % 32l) != 0l) {
             return false
         }
-        for (l in range64(c.n_layers)) {
+        for (l in range64(c.n_layers + c.n_layer_nextn)) {
             if (t.we1_offs[l] < 0l || (t.we1_offs[l] % 128l) != 0l ||
                     t.we2_offs[l] < 0l || (t.we2_offs[l] % 128l) != 0l ||
                     t.we3_offs[l] < 0l || (t.we3_offs[l] % 128l) != 0l) {
@@ -328,7 +370,7 @@ def moe_metal_ok(t : Model) : bool {   // nolint:STYLE038 — flat per-shape ref
         }
         return true
     }
-    for (l in range64(c.n_layers)) {
+    for (l in range64(c.n_layers + c.n_layer_nextn)) {   //! the NextN head's routed stacks dispatch on the draft step like a trunk layer's
         let f1 = fmt_at(t.we1_fmt, l)
         let f2 = fmt_at(t.we2_fmt, l)
         let f3 = fmt_at(t.we3_fmt, l)
@@ -345,8 +387,9 @@ def moe_metal_ok(t : Model) : bool {   // nolint:STYLE038 — flat per-shape ref
                 !moe_site_ok(f3, t.we3_offs[l], ege) ||
                 ((sb1 || sb3) && (c.dim % 256l) != 0l) ||
                 (sb2 && (nfe % 256l) != 0l) ||
-                ((moe_fmt_b32(f1) || moe_fmt_b32(f3)) && ((c.dim % 32l) != 0l || (nfe % 64l) != 0l)) ||
-                (moe_fmt_b32(f2) && ((nfe % 32l) != 0l || (c.dim % 64l) != 0l))) {
+                ((kq_dense_b32(f1) || kq_dense_b32(f3))
+                    && ((c.dim % 32l) != 0l || (nfe % 64l) != 0l)) ||
+                (kq_dense_b32(f2) && ((nfe % 32l) != 0l || (c.dim % 64l) != 0l))) {
             return false
         }
     }
@@ -359,8 +402,7 @@ let DECODE_NEEDS_OK = (MetalNeed.neox | MetalNeed.qkv_bias | MetalNeed.qk_norm |
     MetalNeed.v_norm | MetalNeed.attn_scale | MetalNeed.out_scale |
     MetalNeed.sinks | MetalNeed.out_bias | MetalNeed.partial_rope | MetalNeed.q_gated |
     MetalNeed.ple)
-// q_gated/partial_rope only occur on hybrid models (attn_is_std false), which batch graph-declines;
-// the batch serves every feature the single row does - the E-series PLE branch rides the rows form
+//! the batch serves every feature the single row does - the hybrid's gated q and partial rope, the E-series PLE branch, all on the rows form
 let BATCH_NEEDS_OK = DECODE_NEEDS_OK
 
 //! a routed model with no dense lead and no dense shared branch dispatches none, so its file's dense width gates nothing
@@ -453,12 +495,10 @@ def decode_shape_decline(t : Model; needs_ok : MetalNeed; allow_moe : bool = fal
 }
 
 // mint-time servability (register_metal_servable): shape/graph/feature gates only — the planar
-// check is a RUNTIME gate. Tied-fp32 classifiers decline: the blob drivers force GPU logits
-// and have no fp32-table GEMV.
+// check is a RUNTIME gate. A tied classifier read off the fp32 table alone declines: the blob drivers
+// force GPU logits and have no fp32-table GEMV (a Metal-mode load keeps a q8 copy of a table no KqFmt carries).
 def private metal_model_servable_impl(t : Model) : bool {
-    let cls_fmt = t.config.shared_weights ? t.emb_fmt : t.wcls_fmt
-    // tied-fp32 classifier declines (no fp32-table GEMV); NextN serves — prefill stashes mtp_h + warms the slab
-    if (t.config.shared_weights && !t.cls_q8 && cls_fmt == KqFmt.q8) {
+    if (cls_tied_f32(t)) {
         return false
     }
     return decode_shape_decline(t, DECODE_NEEDS_OK, true, true, true, mint_time = true, allow_hc = true) == MetalDecodeDecline.none

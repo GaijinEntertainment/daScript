@@ -2,8 +2,9 @@
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 docs: `ARCHITECTURE_MEASUREMENT.md`, `ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md`,
-`ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md`, `ARCHITECTURE_MEASUREMENT_FAT_START.md`. Planned
-work: `followup_metal.md`, `followup_vulkan.md`, `followup_general.md`.
+`ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md`, `ARCHITECTURE_MEASUREMENT_FAT_START.md`,
+`ARCHITECTURE_MEASUREMENT_SERVED.md`. Planned work: `followup_metal.md`, `followup_vulkan.md`,
+`followup_general.md`.
 
 Every rule below that governs a figure binds a figure this change writes or changes - in the
 repo outside `site*/` (repo root), in a commit message, or in its PR body. It does not bind a
@@ -33,8 +34,13 @@ the CPU kernel backend the registry served (the one `DASLLAMA_PIN_BACKEND` pinne
 unset, the one the auto-selection picked), the GPU backend where one served (Metal or Vulkan)
 with its device, and on Vulkan the coopmat mode (`DASLLAMA_COOPMAT`). The flags of an instrument
 run are the tier, the `DAS_TUNE_POLICY` value, the device, the coopmat mode where the GPU backend
-has one, and the instrument's arguments. An environment-variable flag the run left unset is named
-as unset.
+has one, and the instrument's arguments.
+
+The flags of a test run - a dastest test whose reading sets or checks a tolerance - are the tier,
+the `DAS_TUNE_POLICY` value, the device, the CPU kernel backend the registry served, the GPU
+backend where one served, and every environment variable it sets and every engine setter it calls
+to choose the code path it checks. An environment-variable flag a serving, instrument or test run
+left unset is named as unset.
 
 An environment override is an env variable given to the run that changes what it compiles,
 tunes, or serves, other than the run's flags.
@@ -129,20 +135,21 @@ version, the model, the command line, and any environment settings the command l
 show.** A citation of an architecture section that states that run's recipe in full - no
 placeholder in its exe, model or command line - names it.
 
-**A figure a script outside the tree produced, written down in any checked-in text, names it as
-outside the tree, with the command line it ran.**
+**A figure an instrument outside the tree produced, written down in any checked-in text, names
+that instrument by its role, the model, the box and the flags it ran under; a private instrument
+is never named by its repository or command line - its role names it.**
 
 **A figure the diff's text gives as the reason it ships one value, formula or kernel over
 another comes from a script in the tree at the diff's tip, or an exe built from that tree, named
 with its command line.** A figure from a script outside the tree cannot be measured again.
 
-**A diff never edits the figures or conclusion of a dated `PERF_LEDGER.md` entry - one whose
-bold head, or the heading it sits under, carries a date - and never adds figures to one: new
-figures go in a new dated entry.**
+**A diff never changes a dated `PERF_LEDGER.md` entry - one whose bold head, or the heading it
+sits under, carries a date - beyond repairing a link or anchor; a new figure, caveat or correction
+goes in a new dated entry.**
 
-**A diff whose figures contradict a dated `PERF_LEDGER.md` entry's figures or conclusion adds a
-new dated entry that carries them and names the old entry and the figure or conclusion it
-replaces.**
+**A diff whose figures contradict a dated `PERF_LEDGER.md` entry's figures or conclusion - a
+sentence of the entry stating what its figures show - adds a new dated entry that carries them and
+names the old entry and the figure or conclusion it replaces.**
 
 **A `PERF_LEDGER.md` entry never carries a timing that argues for code the same diff does not
 land - that timing goes in the PR that lands the code.**

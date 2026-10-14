@@ -36,6 +36,7 @@ def private kq_gemv_stamp(vform) {   //! generic, as the gates are: the Apple ha
     if (vform == "k5") return stamp_of(@@enc_kq_k5_c)
     if (vform == "k5c") return stamp_of(@@enc_kq_k5c_c)
     if (vform == "iq4xs") return stamp_of(@@enc_kq_iq4xs_c)
+    if (vform == "iq3s4") return stamp_of(@@enc_kq_iq3s4_c)
     if (vform == "k3") return stamp_of(@@enc_kq_k3_c)
     if (vform == "iq3s") return stamp_of(@@enc_kq_iq3s_c)
     if (vform == "iq3sf4") return stamp_of(@@enc_kq_iq3s_f4_c)
@@ -52,7 +53,7 @@ def private kq_gemv_stamp(vform) {   //! generic, as the gates are: the Apple ha
 }
 
 def private kq_gemv_gate(t : T?; var dev, queue; vform : string; n, d : int) {
-    let fmt = vform == "k4" ? 4 : (vform == "k6" ? 6 : (vform == "iq4xs" ? 44 : (vform == "k3" ? 3 : (vform == "iq3s" || vform == "iq3sf4" ? 33 : (vform == "iq3xxs" || vform == "iq3xxsf4" ? 34 : (vform == "q40" ? 40 : (vform == "iq4nl" ? 45 : (vform == "iq2s" ? 23 : (vform == "iq2xs" ? 24 : (vform == "iq2xxs" || vform == "iq2xxsf4" ? 25 : (vform == "k2" ? 2 : 5)))))))))))
+    let fmt = vform == "k4" ? 4 : (vform == "k6" ? 6 : (vform == "iq4xs" ? 44 : (vform == "iq3s4" ? 35 : (vform == "k3" ? 3 : (vform == "iq3s" || vform == "iq3sf4" ? 33 : (vform == "iq3xxs" || vform == "iq3xxsf4" ? 34 : (vform == "q40" ? 40 : (vform == "iq4nl" ? 45 : (vform == "iq2s" ? 23 : (vform == "iq2xs" ? 24 : (vform == "iq2xxs" || vform == "iq2xxsf4" ? 25 : (vform == "k2" ? 2 : 5))))))))))))
     let tag = "kq_gemv_{vform} n={n} d={d}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
@@ -102,6 +103,7 @@ def private kq_mvb2_stamp(f) {
     if (f == KqFmt.iq3s) return stamp_of(@@enc_kq_mvb2_iq3s_c)
     if (f == KqFmt.k3) return stamp_of(@@enc_kq_mvb2_k3_c)
     if (f == KqFmt.iq4xs) return stamp_of(@@enc_kq_mvb2_iq4xs_c)
+    if (f == KqFmt.iq3s4) return stamp_of(@@enc_kq_mvb2_iq3s4_c)
     if (f == KqFmt.k4) return stamp_of(@@enc_kq_mvb2_k4_c)
     if (f == KqFmt.k5) return stamp_of(@@enc_kq_mvb2_k5_c)
     return stamp_of(@@enc_kq_mvb2_k6_c)
@@ -119,6 +121,7 @@ def private kq_mvb4_stamp(f) {
     if (f == KqFmt.iq3s) return stamp_of(@@enc_kq_mvb4_iq3s_c)
     if (f == KqFmt.k3) return stamp_of(@@enc_kq_mvb4_k3_c)
     if (f == KqFmt.iq4xs) return stamp_of(@@enc_kq_mvb4_iq4xs_c)
+    if (f == KqFmt.iq3s4) return stamp_of(@@enc_kq_mvb4_iq3s4_c)
     if (f == KqFmt.k4) return stamp_of(@@enc_kq_mvb4_k4_c)
     if (f == KqFmt.k5) return stamp_of(@@enc_kq_mvb4_k5_c)
     return stamp_of(@@enc_kq_mvb4_k6_c)
@@ -136,6 +139,7 @@ def private kq_mvb8_stamp(f) {
     if (f == KqFmt.iq3s) return stamp_of(@@enc_kq_mvb8_iq3s_c)
     if (f == KqFmt.k3) return stamp_of(@@enc_kq_mvb8_k3_c)
     if (f == KqFmt.iq4xs) return stamp_of(@@enc_kq_mvb8_iq4xs_c)
+    if (f == KqFmt.iq3s4) return stamp_of(@@enc_kq_mvb8_iq3s4_c)
     if (f == KqFmt.k4) return stamp_of(@@enc_kq_mvb8_k4_c)
     if (f == KqFmt.k5) return stamp_of(@@enc_kq_mvb8_k5_c)
     return stamp_of(@@enc_kq_mvb8_k6_c)
@@ -154,9 +158,10 @@ def private kq_mvb_gate(t : T?; var dev, queue; fmt, bwidth, n, d, nr, ys : int;
         let nsb = d * nb
         var inscope kq, ks : array<uint8>
         kq_fill_planes(fmt, nsb, kq, ks)
-        // x is padded to the kernel's column-group width (the driver's mp guarantee); pad rows zero
-        let gcols = bwidth == 4 ? (nr + 3) / 4 : 1
-        let xpad = bwidth == 2 ? 2 : (bwidth == 4 ? gcols * 4 : 8)
+        // x is padded to the B2/B4 column-group width (the driver's mp guarantee), pad rows zero; the B8 form restages
+        // its last live row past nr, so its x holds the live rows alone
+        let gcols = bwidth == 4 ? (nr + 3) / 4 : (bwidth == 8 ? (nr + 7) / 8 : 1)
+        let xpad = bwidth == 2 ? 2 : (bwidth == 4 ? gcols * 4 : nr)
         var inscope xv : array<float>
         xv |> resize(xpad * n)
         for (i in range(xpad * n)) {
@@ -188,7 +193,7 @@ def private kq_mvb_gate(t : T?; var dev, queue; fmt, bwidth, n, d, nr, ys : int;
                 }
             } else {
                 stamp_run(s8, pso) {
-                    invoke(s8.enc, enc, pks, doff, pks, 0ul, pkq, 0ul, px, py, 0ul, ka, int64(d))
+                    invoke(s8.enc, enc, pks, doff, pks, 0ul, pkq, 0ul, px, py, 0ul, ka, int64(d), int64(gcols))
                 }
             }
         }
@@ -314,8 +319,6 @@ def test_metal_kq_k4_pair_walk(t : T?) {
     }
 }
 
-// ===== the expert-indexed MoeGemv stamps (MetalMoeGemvK4 / K5 / K6 / K3 / Iq4xs / Iq3s / Iq3xxs / Iq2s / Iq2xs / Iq2xxs) =====
-
 //! the expert-indexed kq GEMV stamp of a format
 def private moe_gemv_stamp(f) {
     if (f == KqFmt.k4) return stamp_of(@@enc_moe_gemv_k4_c)
@@ -328,6 +331,9 @@ def private moe_gemv_stamp(f) {
     if (f == KqFmt.iq2xs) return stamp_of(@@enc_moe_gemv_iq2xs_c)
     if (f == KqFmt.iq2xxs) return stamp_of(@@enc_moe_gemv_iq2xxs_c)
     if (f == KqFmt.iq4xs) return stamp_of(@@enc_moe_gemv_iq4xs_c)
+    if (f == KqFmt.iq3s4) return stamp_of(@@enc_moe_gemv_iq3s4_c)
+    if (f == KqFmt.iq4nl) return stamp_of(@@enc_moe_gemv_iq4nl_c)
+    if (f == KqFmt.k2) return stamp_of(@@enc_moe_gemv_k2_c)
     if (f != KqFmt.q40) {
         panic("moe_gemv_stamp: no expert GEMV for {f}")
     }
@@ -697,6 +703,8 @@ def test_metal_kq_gemv_kernels(t : T?) {
                 kq_gemv_gate(t, dev, queue, "k6", 512, 30)
                 kq_gemv_gate(t, dev, queue, "iq4xs", 1280, 11)
                 kq_gemv_gate(t, dev, queue, "iq4xs", 512, 30)
+                kq_gemv_gate(t, dev, queue, "iq3s4", 1280, 11)
+                kq_gemv_gate(t, dev, queue, "iq3s4", 512, 30)
                 kq_gemv_gate(t, dev, queue, "k3", 1280, 11)
                 kq_gemv_gate(t, dev, queue, "k3", 512, 30)
                 kq_gemv_gate(t, dev, queue, "iq3s", 1280, 11)
@@ -722,7 +730,7 @@ def test_metal_kq_gemv_kernels(t : T?) {
                 kq_gemv_gate(t, dev, queue, "iq2xxsf4", 1280, 11)
                 kq_gemv_gate(t, dev, queue, "iq2xxsf4", 512, 30)
                 // the small-batch twins: nr = 2 / 3 (b4 col guard) / 6 (b8 pad), ys > d
-                for (fmt in [4, 5, 6, 44, 3, 33, 34, 45, 40, 2, 23, 24, 25]) {
+                for (fmt in [4, 5, 6, 44, 35, 3, 33, 34, 45, 40, 2, 23, 24, 25]) {
                     kq_mvb_gate(t, dev, queue, fmt, 2, 768, 17, 2, 22)
                     if (fmt == 4) {   // the two-row tile: d=17 leaves a tail pair with one live row, d=32 none
                         kq_mvb_gate(t, dev, queue, fmt, 2, 768, 17, 2, 22, true)
@@ -731,9 +739,11 @@ def test_metal_kq_gemv_kernels(t : T?) {
                     kq_mvb_gate(t, dev, queue, fmt, 4, 768, 17, 3, 22)
                     kq_mvb_gate(t, dev, queue, fmt, 4, 768, 17, 6, 22)   // two column groups: the reduce's colbase term
                     kq_mvb_gate(t, dev, queue, fmt, 8, 768, 17, 6, 22)
+                    kq_mvb_gate(t, dev, queue, fmt, 8, 768, 17, 9, 22)    // the depth-8 verify's nine rows: two column groups, one dispatch
+                    kq_mvb_gate(t, dev, queue, fmt, 8, 768, 17, 16, 22)   // two full groups
                 }
                 // expert-indexed: shared-x (gate/up) and per-slot (down) forms
-                for (fmt in [4, 5, 6, 3, 33, 34, 23, 24, 25, 44, 40]) {
+                for (fmt in [4, 5, 6, 3, 33, 34, 23, 24, 25, 44, 35, 40, 45, 2]) {
                     moe_kq_gemv_gate(t, dev, queue, fmt, 512, 9, 5, 3, 2, false)
                     moe_kq_gemv_gate(t, dev, queue, fmt, 512, 9, 5, 3, 2, true)
                 }

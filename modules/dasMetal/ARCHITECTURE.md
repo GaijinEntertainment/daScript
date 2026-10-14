@@ -157,8 +157,8 @@ Cross-GPU parity of one source is secondary. Current entries:
 - **Method flattening, scope splicing, and plain-member thread-local state are Metal-only.**
   `msl_emit` splices method bodies inline (statically devirtualized, value and statement
   position) and lowers plain class members to kernel-entry thread-locals (scalar-with-init,
-  fixed array, carried pointer walk - the state contract is per-thread); `spirv_emit` rejects
-  an unannotated member and lowers method calls as calls. The asymmetry is deliberate.
+  fixed array, carried pointer walk - the state contract is per-thread); `spirv_emit` rejects an unannotated member and
+  lowers a call as a call, but a `[spirv_inline]` helper's body in place (`msl_emit` ignores the mark). Deliberate.
 - **The SSBO access decorations - `@readonly`, `@maybe_readonly`, `@coherent` - are Vulkan-only, and
   the asymmetry is deliberate.** `spirv_emit` decorates the `OpVariable` (`NonWritable`, `Coherent`);
   MSL has no per-buffer qualifier for either - a `device` buffer's stores reach another threadgroup

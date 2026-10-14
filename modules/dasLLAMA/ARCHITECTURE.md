@@ -30,8 +30,9 @@ any sibling companion that sends a reader to it.
   the decode pick tape a parity cell pins one arm's routing on another with
   (`ARCHITECTURE_ENGINE.md#moe-pick-tape`).
 - `ARCHITECTURE_ENGINE_SERVING.md` - the serving charter, the prefix cache's partial page
-  (`ARCHITECTURE_ENGINE_SERVING.md#prefix-tail-page`), its checkpoints on a recurrent model, and
-  the reasoning budget that closes a thinking span for the model.
+  (`ARCHITECTURE_ENGINE_SERVING.md#prefix-tail-page`), its checkpoints on a recurrent model, the
+  reasoning budget that closes a thinking span for the model, and the host pool behind
+  device-home streams (`ARCHITECTURE_ENGINE_SERVING.md#device-home-pool`).
 - `ARCHITECTURE_ENGINE_FORMATS.md` - the format, load-rail and CPU-kernel-tier charters, plus
   the shapes they key off - the bigram merge heap both tokenizer backends run
   (`ARCHITECTURE_ENGINE_FORMATS.md#bpe-merge-heap`), the one RoPE fill over a position source
@@ -40,6 +41,8 @@ any sibling companion that sends a reader to it.
 - `ARCHITECTURE_GPU.md` - the GPU backend role table (`ARCHITECTURE_GPU.md#gpu-backends`).
 - `ARCHITECTURE_GPU_ASYMMETRIES.md` - the closed list of the allowed asymmetries between the
   two GPU backends (`ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries`).
+- `ARCHITECTURE_GPU_SHARED_KERNELS.md` - the kernel pairs of the two GPU homes: the shared templates' stamps, their
+  readings, and the pairs that stay per home (`ARCHITECTURE_GPU_SHARED_KERNELS.md#gpu-kernel-pairs`).
 - `ARCHITECTURE_MEDIA.md` - the encoder-tower, audio, ASR and vision charters.
 - `ARCHITECTURE_TTS.md` - the text-to-speech charters - the front end, the block home, the
   shared assembly, the families and the facade.
@@ -93,20 +96,24 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   half rows, and how a kernel's hot loads are addressed.
 - `ARCHITECTURE_GPU_VULKAN.md` - the Vulkan resident driver's prefill chain and byte stores - the
   prefill window chain, the Q8 requant byte store, the decode GEMV family's grid codebook buffer,
-  the tile probe's shared descriptor set layout, the recurrent block of the prefill window, the
+  the tile probe's shared descriptor set layout, the
   device-init roster of the Vulkan capabilities the tier keys its routes on, and the
   `[vk_dispatch]` lens's readonly derivation.
 - `ARCHITECTURE_GPU_VULKAN_ATTN.md` - the token command's attention key split, the
   attention-side planes the resident driver uploads beside its norms - the q/k/v projection
   bias, gpt-oss's sink logits with the flash tiles' sink stamps, and its output bias - the
-  K/V mirror's block codecs (q8_0, tq4) with tq4's rotated basis, the segmented window holding
-  several sessions' chunks, and the short window's peel through the token command.
+  K/V mirror's block codecs (q8_0, tq4) with tq4's rotated basis.
+- `ARCHITECTURE_GPU_VULKAN_WINDOW.md` - what the prefill window does a session at a time: the
+  recurrent block over its region's state and ring, the segmented window holding several sessions'
+  chunks, and the short window's peel through the token commands.
 - `ARCHITECTURE_GPU_VULKAN_GEMM.md` - the cooperative-matrix tiles the Vulkan tier's GEMMs run
   on - the cm2 decode lanes, the tile pick and the coopmat mode ladder, the class-pipeline build
   seat, the MoE expert chain on those tiles, the KHR arm's hand-staged kq tile - and the decode
   GEMV family's lane split by row length.
 - `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md` - what a model has to fit on the card before the driver
-  runs - the residency plan, and the GPU-slot marks swap that lets one slot serve many models.
+  runs - the residency plan, the checkpoints a device-home recurrent stream keeps on the device,
+  the token rows' gather off the table's own plane, the GPU-slot marks swap that lets one slot
+  serve many models, and the hydrate a call passing to the CPU rails takes first.
 - `ARCHITECTURE_GPU_VULKAN_LANDING.md` - the token command's logits landing on the transfer queue.
 - `ARCHITECTURE_GPU_VULKAN_MTP.md` - the NextN draft head the resident driver homes beside the
   trunk: the draft command that steps it, the prompt warm the window chain gives its slab, the
@@ -114,6 +121,7 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   window a declined verify seat runs the CPU verify in, and the speculative knob's per-step
   gate on the carry.
 - `ARCHITECTURE_GPU_VULKAN_NROW.md` - the N-row token command a batched step's rows go through,
+  the N-column leaf every format has, the column tiles a dispatch past eight columns runs in,
   its same-slab form the speculative verify steps one stream's rows through, and the residual
   step's two forms it holds bit for bit.
 - `ARCHITECTURE_GPU_VULKAN_HC.md` - the whole-model driver's hyper-connection chain (qwen4exp):
@@ -125,9 +133,12 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   span, the deltanet decode step's per-session resident state, and the whole-model driver's
   hybrid token command and prefill (recurrent layers, gated attention, partial rotary, the
   prefill-to-decode state handoff).
+- `ARCHITECTURE_GPU_VULKAN_PEROP.md` - the per-op tier's dense FFN rail: a dense layer's FFN triple on the dense rail
+  and the decode row it runs on the device.
 - `ARCHITECTURE_GPU_VULKAN_MOE.md` - the resident driver's routed block in its two eras - the MoE
-  block of the prefill window, and the whole-model driver's MoE token command - and the gemma-4
-  form both eras take.
+  block of the prefill window with its Q8-fed chain, and the whole-model driver's MoE token
+  command - the select that reaches 512 experts two logits a thread, and the gemma-4 form both
+  eras take.
 - `ARCHITECTURE_GPU_MTP.md` - the Metal speculative round over the batch driver's same-slab
   verify, and the box knob that sets the depth a round drafts.
 - `ARCHITECTURE_GPU_MTP_DECODE.md` - the kernel argument-alignment contract enforced at every

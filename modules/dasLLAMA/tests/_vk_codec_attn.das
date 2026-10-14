@@ -135,13 +135,7 @@ def private codec_attn_fixture(a : CodecAttn) : CodecAttnFixture {
     }
     f.q <- stored_basis(a.kv, f.q_model, a.nrows, qdim, a.hs, f.signs)
     if (a.gated) {
-        f.q_plane |> resize(2 * a.nrows * qdim)
-        for (g in range(a.nrows * a.nheads)) {
-            for (i in range(a.hs)) {
-                f.q_plane[g * 2 * a.hs + i] = f.q[g * a.hs + i]
-                f.q_plane[g * 2 * a.hs + a.hs + i] = f.gate[g * a.hs + i]
-            }
-        }
+        f.q_plane <- q_gate_plane(f.q, f.gate, a.hs)
     } else {
         f.q_plane := f.q
     }
@@ -168,9 +162,7 @@ def private codec_attn_oracle(a : CodecAttn; f : CodecAttnFixture; q, k, v : arr
         }
     }
     if (gate && a.gated) {
-        for (i in range(a.nrows * qdim)) {
-            out[i] /= 1.0 + exp(-f.gate[i])
-        }
+        gate_rows(out, f.gate)
     }
     return <- out
 }

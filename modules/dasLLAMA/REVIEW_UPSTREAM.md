@@ -22,8 +22,9 @@ work.
 header, symbol, constant, or a label its output prints - outside a sentence doing reference-build
 work is a defect: outside such a sentence write "the reference build", or for one of its
 binaries a "<role> reference exe" phrase; the third party's own binary name appears only inside
-a sentence doing reference-build work.** A name this module defines, or the filename of a file it
-loads, is not attribution.
+a sentence doing reference-build work.** A name this module defines, a GGUF tensor type's name
+bare or with its `GGML_TYPE_` prefix, or the filename of a file it loads does not name the
+reference build.
 
 **A diff that describes what the reference build itself does, or attributes our code's shape to
 it ("in the reference build's form"), outside a sentence doing reference-build work, states the

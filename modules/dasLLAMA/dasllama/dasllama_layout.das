@@ -26,7 +26,7 @@ require math
 //! The pack-code version folded into every .dlim identity: bump it with ANY edit to a pack or
 //! repack walker in this file, so a cached image baked by the old code re-bakes instead of
 //! being mapped and served (an image's filename hash carries model + schema + this).
-let PACK_VERSION = 1
+let PACK_VERSION = 3
 
 // ===== metal-flavor blob transform (the blob-only .dlim redesign) =====
 
@@ -37,34 +37,34 @@ let PACK_VERSION = 1
 def private metal_blob_off_ok(off : int64; fmt : KqFmt) : bool {
     if (off < 0l) return true
     if (fmt == KqFmt.q8) return off % 256l == 0l
-    if (fmt == KqFmt.k6 || fmt == KqFmt.iq4xs || fmt == KqFmt.k3 || fmt == KqFmt.iq3s || fmt == KqFmt.iq3xxs || fmt == KqFmt.iq2s || fmt == KqFmt.iq2xs || fmt == KqFmt.iq2xxs) return off % 512l == 0l
+    if (fmt == KqFmt.k6 || fmt == KqFmt.iq4xs || fmt == KqFmt.iq3s4 || fmt == KqFmt.k3 || fmt == KqFmt.iq3s || fmt == KqFmt.iq3xxs || fmt == KqFmt.iq2s || fmt == KqFmt.iq2xs || fmt == KqFmt.iq2xxs) return off % 512l == 0l
     if (fmt == KqFmt.q51) return off % 128l == 0l   // (off/32)*20 and (off/32)*4 both 16B-aligned
-    if (fmt == KqFmt.iq4nl32) return off % 256l == 0l   // (off/32)*16 and (off/32)*2 both 16B-aligned
+    if (fmt == KqFmt.iq4nl32 || fmt == KqFmt.q4032 || fmt == KqFmt.q5032) return off % 256l == 0l   // (off/32)*16 or *20, and (off/32)*2, all 16B-aligned
     return true
 }
 
 def private metal_blob_layout_ok(t : Model) : bool {
     let c = t.config
-    if (long_length(t.wq_offs) < c.n_layers) {
+    let nl = c.n_layers + c.n_layer_nextn   //! the NextN head's planes bind like a trunk layer's
+    if (long_length(t.wq_offs) < nl) {
         return false
     }
     // a pure-MoE file (qwen3moe) carries no dense FFN arrays — its expert stacks bind instead
-    let has_ffn = long_length(t.w1_offs) >= c.n_layers
-    let has_exps = (c.moe && long_length(t.we1_offs) >= c.n_layers &&
-        long_length(t.we2_offs) >= c.n_layers && long_length(t.we3_offs) >= c.n_layers)
-    let has_dn = c.recr_mask != 0ul && long_length(t.dnqkv_offs) >= c.n_layers
+    let has_ffn = long_length(t.w1_offs) >= nl
+    let has_exps = (c.moe && long_length(t.we1_offs) >= nl &&
+        long_length(t.we2_offs) >= nl && long_length(t.we3_offs) >= nl)
+    let has_dn = c.recr_mask != 0ul && long_length(t.dnqkv_offs) >= nl
     if (!has_ffn && !has_exps) {
         return false
     }
-    for (l in range64(c.n_layers)) {
-        // recurrent layers (Wave D): no attention tensors (offs -1, off_ok true); dn planes must be q8
+    for (l in range64(nl)) {
+        // recurrent layers carry no attention tensors (offs -1, off_ok true); each dn plane binds at its own format
         let dn_bad = (has_dn && layer_is_recurrent(c, l) &&
-            (!dn_layer_q8(t, l) ||
-             !metal_blob_off_ok(t.dnqkv_offs[l], KqFmt.q8) ||
-             !metal_blob_off_ok(t.dngate_offs[l], KqFmt.q8) ||
-             !metal_blob_off_ok(t.dnbeta_offs[l], KqFmt.q8) ||
-             !metal_blob_off_ok(t.dnalpha_offs[l], KqFmt.q8) ||
-             !metal_blob_off_ok(t.dnout_offs[l], KqFmt.q8)))
+            (!metal_blob_off_ok(t.dnqkv_offs[l], fmt_at(t.dnqkv_fmt, l)) ||
+             !metal_blob_off_ok(t.dngate_offs[l], fmt_at(t.dngate_fmt, l)) ||
+             !metal_blob_off_ok(t.dnbeta_offs[l], fmt_at(t.dnbeta_fmt, l)) ||
+             !metal_blob_off_ok(t.dnalpha_offs[l], fmt_at(t.dnalpha_fmt, l)) ||
+             !metal_blob_off_ok(t.dnout_offs[l], fmt_at(t.dnout_fmt, l))))
         if (dn_bad ||
                 !metal_blob_off_ok(t.wq_offs[l], fmt_at(t.wq_fmt, l)) ||
                 !metal_blob_off_ok(t.wk_offs[l], fmt_at(t.wk_fmt, l)) ||
@@ -79,7 +79,7 @@ def private metal_blob_layout_ok(t : Model) : bool {
             return false
         }
     }
-    // shexp planes: always q8, contiguous at base + l*she — base + stride covers every layer
+    // shexp planes: the q8 transcode contiguous at base + l*she (base + stride covers every layer), and each plane the loader kept in its file format
     if (c.n_ff_shexp > 0l) {
         let she = c.dim * c.n_ff_shexp
         if ((she % 256l) != 0l ||
@@ -88,6 +88,15 @@ def private metal_blob_layout_ok(t : Model) : bool {
                 !metal_blob_off_ok(t.wsh3_off, KqFmt.q8)) {
             return false
         }
+        for (l in range64(nl)) {
+            for (kind in fixed_array(1, 2, 3)) {
+                let p = shexp_plane(t, l, kind)
+                return false if (!metal_blob_off_ok(p.off, p.f))
+            }
+        }
+    }
+    if (!c.shared_weights && emb_kq(t) && !metal_blob_off_ok(t.emb_kq_off, t.emb_fmt)) {
+        return false
     }
     // E-series PLE gate/proj q8 planes bind per layer; the token table / model-proj stay CPU-side
     if (has_ple(c)) {
@@ -288,38 +297,38 @@ def private repack_regions(var t : Model; regs : array<StreamReg>) {
     let rq8 = active_repack_q8q8()
     let rkq = active_repack_kq()
     let rmx = active_repack_mx4()
-    let rq51 = active_repack_q51()
-    let riq4 = active_repack_iq4nl32()
+    // plane bases and per-32 repacks by int(KqFmt): a region's format
+    var kqp, ksp : array<uint8?>
+    var rb32 : array<RepackQ51Fn>
+    kqp |> resize(KQ_FMT_COUNT)
+    ksp |> resize(KQ_FMT_COUNT)
+    rb32 |> resize(KQ_FMT_COUNT)
+    for (f in type<KqFmt>) {
+        kq_plane_pair(t, f) $(var q : array<uint8>; var s : array<uint8>) {
+            if (!empty(q)) {
+                kqp[int(f)] = unsafe(addr(q[0]))
+            }
+            if (!empty(s)) {
+                ksp[int(f)] = unsafe(addr(s[0]))
+            }
+        }
+        if (kq_dense_b32(f)) {
+            rb32[int(f)] = active_repack_b32(f)
+        }
+    }
     unsafe {
         var qbp : int8? = null
         var qsp : float? = null
-        var mxqp : uint8? = null
-        var mxsp : uint8? = null
-        var q51qp : uint8? = null
-        var q51sp : uint8? = null
-        var iq4qp : uint8? = null
-        var iq4sp : uint8? = null
-        // the lattice plane pairs' bases, by int(KqFmt); the lanes index them by the region's format
-        var kqp, ksp : array<uint8?>
-        kqp |> resize(KQ_FMT_COUNT)
-        ksp |> resize(KQ_FMT_COUNT)
-        for (pl, i in t.kq, count()) {
-            if (!empty(pl.q)) { kqp[i] = addr(pl.q[0]) }
-            if (!empty(pl.s)) { ksp[i] = addr(pl.s[0]) }
-        }
         if (!empty(t.qblob)) { qbp = addr(t.qblob[0]) }
         if (!empty(t.qscales)) { qsp = addr(t.qscales[0]) }
-        if (!empty(t.mxq)) { mxqp = addr(t.mxq[0]) }
-        if (!empty(t.mxs)) { mxsp = addr(t.mxs[0]) }
-        if (!empty(t.q51q)) { q51qp = addr(t.q51q[0]) }
-        if (!empty(t.q51s)) { q51sp = addr(t.q51s[0]) }
-        if (!empty(t.iq4nl32q)) { iq4qp = addr(t.iq4nl32q[0]) }
-        if (!empty(t.iq4nl32s)) { iq4sp = addr(t.iq4nl32s[0]) }
+        var mxqp = kqp[int(KqFmt.mx4)]
+        var mxsp = ksp[int(KqFmt.mx4)]
         let rp = addr<StreamReg const?>(regs[0])
         let nr = length(regs)
         let njobs = is_job_que_available() ? min(nr, 4 * (get_total_hw_jobs() + 1)) : 1
         var kqpp = addr(kqp[0])
         var kspp = addr(ksp[0])
+        var rb32p = addr(rb32[0])
         maybe_parallel_for(0, nr, njobs) $(rb, re) {
             unsafe {
                 for (i in range(rb, re)) {
@@ -327,25 +336,31 @@ def private repack_regions(var t : Model; regs : array<StreamReg>) {
                     if (f == 0) {
                         invoke(rq8, qbp + rp[i].off, qsp + rp[i].off / Q8_BLOCK_ELEMS, rp[i].n, rp[i].d)
                     } elif (f == 1) {
-                        invoke(rmx, mxqp + rp[i].off / 2l, mxsp + rp[i].off / 32l, rp[i].n, rp[i].d)
-                    } elif (f == 2) {
-                        invoke(rq51, q51qp + (rp[i].off / 32l) * Q51_QPB, q51sp + (rp[i].off / 32l) * Q51_SPB, rp[i].n, rp[i].d)
-                    } elif (f == IQ4NL32_STREAM_TAG) {
-                        invoke(riq4, iq4qp + (rp[i].off / 32l) * IQ4NL32_QB, iq4sp + (rp[i].off / 32l) * IQ4NL32_SB, rp[i].n, rp[i].d)
+                        let mb = rp[i].off / KQ_B32_ELEMS
+                        invoke(rmx, mxqp + rp[i].off / 2l, mxsp + mb, rp[i].n, rp[i].d)
                     } else {
-                        let sb = rp[i].off / 256l
                         var rf = KqFmt.q8
                         if (!kq_fmt_of_stream_code(f, rf)) {
                             panic("repack_regions: region code {f} names no kq format")
                         }
-                        invoke(rkq, kq_schema_id(rf), kqpp[int(rf)] + sb * kq_qsb(rf), kspp[int(rf)] + sb * kq_ssb(rf), rp[i].n, rp[i].d)
+                        let u = rp[i].off / kq_elems(rf)
+                        var qp = kqpp[int(rf)] + u * kq_qsb(rf)
+                        var sp = kspp[int(rf)] + u * kq_ssb(rf)
+                        if (kq_sb(rf)) {
+                            invoke(rkq, kq_schema_id(rf), qp, sp, rp[i].n, rp[i].d)
+                        } else {
+                            invoke(rb32p[int(rf)], qp, sp, rp[i].n, rp[i].d)
+                        }
                     }
                 }
             }
         }
+        kqp |> clear()
+        ksp |> clear()
         delete kqp
         delete ksp
     }
+    delete rb32
 }
 
 // Repack every Q8 2D weight tensor in qblob/qscales into the active backend's interleaved layout,
@@ -379,8 +394,10 @@ def private collect_q8_regions(t : Model; var regs : array<StreamReg>) {
             if (fmt_at(t.dngate_fmt, l) == KqFmt.q8) {
                 push_repack(regs, 0, t.dngate_offs[l], dim, c.ssm_d_inner)
             }
-            if (t.dnbeta_offs[l] >= 0l) {   // -1 when beta/alpha ship F32 (fblob, no repack)
+            if (t.dnbeta_offs[l] >= 0l && fmt_at(t.dnbeta_fmt, l) == KqFmt.q8) {   // -1 when beta/alpha ship F32 (fblob, no repack)
                 push_repack(regs, 0, t.dnbeta_offs[l], dim, c.ssm_dt_rank)
+            }
+            if (t.dnalpha_offs[l] >= 0l && fmt_at(t.dnalpha_fmt, l) == KqFmt.q8) {
                 push_repack(regs, 0, t.dnalpha_offs[l], dim, c.ssm_dt_rank)
             }
             if (fmt_at(t.dnout_fmt, l) == KqFmt.q8) {
@@ -409,9 +426,15 @@ def private collect_q8_regions(t : Model; var regs : array<StreamReg>) {
             }
             if (c.n_ff_shexp > 0l) {
                 let she = dim * c.n_ff_shexp
-                push_repack(regs, 0, t.wsh1_off + l * she, dim, c.n_ff_shexp)
-                push_repack(regs, 0, t.wsh2_off + l * she, c.n_ff_shexp, dim)
-                push_repack(regs, 0, t.wsh3_off + l * she, dim, c.n_ff_shexp)
+                if (shexp_plane_q8(t, l, 1)) {   //! the transcode regions the load filled: a q8-tagged plane's alone
+                    push_repack(regs, 0, t.wsh1_off + l * she, dim, c.n_ff_shexp)
+                }
+                if (shexp_plane_q8(t, l, 2)) {
+                    push_repack(regs, 0, t.wsh2_off + l * she, c.n_ff_shexp, dim)
+                }
+                if (shexp_plane_q8(t, l, 3)) {
+                    push_repack(regs, 0, t.wsh3_off + l * she, dim, c.n_ff_shexp)
+                }
             }
             if (c.moe_dense_shexp) {  // gemma4: the dense parallel shared expert repacks like a plain FFN
                 if (fmt_at(t.w1_fmt, l) == KqFmt.q8) {
@@ -438,7 +461,7 @@ def private collect_q8_regions(t : Model; var regs : array<StreamReg>) {
             }
         }
     }
-    if ((!c.shared_weights && t.wcls_fmt == KqFmt.q8) || t.cls_q8) {
+    if ((!c.shared_weights && t.wcls_fmt == KqFmt.q8) || t.cls_q8 || t.cls_q8_copy) {
         // the linear copy at emb_q8_off is deliberately NOT repacked — embedding-row dequant indexes it directly
         push_repack(regs, 0, t.wcls_off, dim, c.vocab_size)
     }
@@ -488,12 +511,16 @@ def private collect_kq_regions(t : Model; var regs : array<StreamReg>) {
     for (l in range64(c.n_layers + c.n_layer_nextn)) {   // + the MTP/NextN block at index n_layers
         let kv = layer_kv_dim(c, l)
         let qd = layer_qd(c, l)
-        // recurrent (deltanet) layers carry no attention projections — their kq planes are the dn triple
+        // recurrent (deltanet) layers carry no attention projections — their kq planes are the dn triple and beta/alpha
         if (layer_is_recurrent(c, l)) {
             let cd = dn_conv_dim(c)
             push_repack_kq(regs, fmt_at(t.dnqkv_fmt, l), t.dnqkv_offs[l], dim, cd)
             push_repack_kq(regs, fmt_at(t.dngate_fmt, l), t.dngate_offs[l], dim, c.ssm_d_inner)
             push_repack_kq(regs, fmt_at(t.dnout_fmt, l), t.dnout_offs[l], c.ssm_d_inner, dim)
+            if (!t.dn_ba_f32) {
+                push_repack_kq(regs, fmt_at(t.dnbeta_fmt, l), t.dnbeta_offs[l], dim, c.ssm_dt_rank)
+                push_repack_kq(regs, fmt_at(t.dnalpha_fmt, l), t.dnalpha_offs[l], dim, c.ssm_dt_rank)
+            }
         }
         if (t.wq_offs[l] >= 0l) {
             push_repack_kq(regs, fmt_at(t.wq_fmt, l), t.wq_offs[l], dim, qd * (c.q_gated ? 2l : 1l))
@@ -542,6 +569,9 @@ def private collect_kq_regions(t : Model; var regs : array<StreamReg>) {
     }
     if ((!c.shared_weights && t.wcls_fmt != KqFmt.q8) || cls_kq(t)) {
         push_repack_kq(regs, c.shared_weights ? t.emb_fmt : t.wcls_fmt, t.wcls_off, dim, c.vocab_size)
+    }
+    if (!c.shared_weights && emb_kq(t)) {
+        push_repack_kq(regs, t.emb_fmt, t.emb_kq_off, dim, c.vocab_size)
     }
     if (c.n_layer_nextn > 0l) {   // NextN eh_proj (no-op for q8 tags)
         push_repack_kq(regs, t.mtp_ehproj_fmt, t.mtp_ehproj_off, 2l * dim, dim)
@@ -603,32 +633,80 @@ def private collect_b32_regions(t : Model; var regs : array<StreamReg>; fmt : Kq
             }
         }
     }
+    collect_b32_dense_regions(t, regs, fmt)
 }
 
-def private collect_q51_regions(t : Model; var regs : array<StreamReg>) {
-    collect_b32_regions(t, regs, KqFmt.q51)
-}
-
-def private collect_iq4nl32_regions(t : Model; var regs : array<StreamReg>) {
-    collect_b32_regions(t, regs, KqFmt.iq4nl32)
-}
-
-def private repack_q51_stacks(var t : Model) {
-    var regs : array<StreamReg>
-    collect_q51_regions(t, regs)
-    if (!empty(regs)) {
-        repack_regions(t, regs)
-        to_log(LOG_INFO, "dasLLAMA: q51 expert planes repacked to grp{active_q51_layout_mr()}\n")
+//! the dense attention and FFN planes tagged `fmt` (`kq_fmt_row_ok` keeps their per-32 tags), each its own 2D region
+def private collect_b32_dense_regions(t : Model; var regs : array<StreamReg>; fmt : KqFmt) {
+    let c = t.config
+    let dim = c.dim
+    let code = kq_stream_code(fmt)
+    for (l in range64(c.n_layers + c.n_layer_nextn)) {
+        let qd = layer_qd(c, l)
+        let kv = layer_kv_dim(c, l)
+        let h = layer_hidden(t, l)
+        for (r in [(f = fmt_at(t.wq_fmt, l), off = l < long_length(t.wq_offs) ? t.wq_offs[l] : -1l, n = dim, d = qd * (c.q_gated ? 2l : 1l)),
+                   (f = fmt_at(t.wk_fmt, l), off = l < long_length(t.wk_offs) ? t.wk_offs[l] : -1l, n = dim, d = kv),
+                   (f = fmt_at(t.wv_fmt, l), off = l < long_length(t.wv_offs) ? t.wv_offs[l] : -1l, n = dim, d = kv),
+                   (f = fmt_at(t.wo_fmt, l), off = l < long_length(t.wo_offs) ? t.wo_offs[l] : -1l, n = qd, d = dim),
+                   (f = fmt_at(t.w1_fmt, l), off = l < long_length(t.w1_offs) ? t.w1_offs[l] : -1l, n = dim, d = h),
+                   (f = fmt_at(t.w2_fmt, l), off = l < long_length(t.w2_offs) ? t.w2_offs[l] : -1l, n = h, d = dim),
+                   (f = fmt_at(t.w3_fmt, l), off = l < long_length(t.w3_offs) ? t.w3_offs[l] : -1l, n = dim, d = h)]) {
+            if (r.f == fmt && r.off >= 0l) {
+                push_repack(regs, code, r.off, r.n, r.d)
+            }
+        }
     }
-    delete regs
+    collect_b32_table_regions(t, regs, fmt)
 }
 
-def private repack_iq4nl32_stacks(var t : Model) {
+//! the table planes tagged `fmt` (`kq_tag` keeps their per-32 tags): the deltanet five, the shared expert's triple,
+//! the classifier (the tied token table's plane), an untied token table and the NextN eh_proj, each its own 2D region
+def private collect_b32_table_regions(t : Model; var regs : array<StreamReg>; fmt : KqFmt) {
+    let c = t.config
+    let dim = c.dim
+    let code = kq_stream_code(fmt)
+    for (l in range64(c.n_layers + c.n_layer_nextn)) {
+        if (layer_is_recurrent(c, l)) {
+            let cd = dn_conv_dim(c)
+            for (r in [(f = fmt_at(t.dnqkv_fmt, l), off = t.dnqkv_offs[l], n = dim, d = cd),
+                       (f = fmt_at(t.dngate_fmt, l), off = t.dngate_offs[l], n = dim, d = c.ssm_d_inner),
+                       (f = fmt_at(t.dnout_fmt, l), off = t.dnout_offs[l], n = c.ssm_d_inner, d = dim),
+                       (f = t.dn_ba_f32 ? KqFmt.q8 : fmt_at(t.dnbeta_fmt, l), off = t.dn_ba_f32 ? -1l : t.dnbeta_offs[l], n = dim, d = c.ssm_dt_rank),
+                       (f = t.dn_ba_f32 ? KqFmt.q8 : fmt_at(t.dnalpha_fmt, l), off = t.dn_ba_f32 ? -1l : t.dnalpha_offs[l], n = dim, d = c.ssm_dt_rank)]) {
+                if (r.f == fmt && r.off >= 0l) {
+                    push_repack(regs, code, r.off, r.n, r.d)
+                }
+            }
+        }
+        if (c.n_ff_shexp > 0l && l < long_length(t.wshk1_offs)) {
+            for (r in [(f = fmt_at(t.wsh1_fmt, l), off = t.wshk1_offs[l], n = dim, d = c.n_ff_shexp),
+                       (f = fmt_at(t.wsh2_fmt, l), off = t.wshk2_offs[l], n = c.n_ff_shexp, d = dim),
+                       (f = fmt_at(t.wsh3_fmt, l), off = t.wshk3_offs[l], n = dim, d = c.n_ff_shexp)]) {
+                if (r.f == fmt && r.off >= 0l) {
+                    push_repack(regs, code, r.off, r.n, r.d)
+                }
+            }
+        }
+    }
+    if (cls_fmt_of(t) == fmt && (!c.shared_weights || emb_kq(t))) {
+        push_repack(regs, code, t.wcls_off, dim, c.vocab_size)
+    }
+    if (!c.shared_weights && emb_kq(t) && t.emb_fmt == fmt) {
+        push_repack(regs, code, t.emb_kq_off, dim, c.vocab_size)
+    }
+    if (c.n_layer_nextn > 0l && t.mtp_ehproj_fmt == fmt) {
+        push_repack(regs, code, t.mtp_ehproj_off, 2l * dim, dim)
+    }
+}
+
+//! every plane of per-32 format `fmt` repacked to the active grp<mr>
+def private repack_b32_stacks(var t : Model; fmt : KqFmt) {
     var regs : array<StreamReg>
-    collect_iq4nl32_regions(t, regs)
+    collect_b32_regions(t, regs, fmt)
     if (!empty(regs)) {
         repack_regions(t, regs)
-        to_log(LOG_INFO, "dasLLAMA: iq4nl32 expert planes repacked to grp{active_iq4nl32_layout_mr()}\n")
+        to_log(LOG_INFO, "dasLLAMA: {fmt} planes repacked to grp{active_b32_layout_mr(fmt)}\n")
     }
     delete regs
 }
@@ -640,14 +718,18 @@ def private stream_repack_one(fmt : int; qp, sp : void?; n, d : int64) {
     unsafe {
         if (fmt == 0) {
             invoke(active_repack_q8q8(), reinterpret<int8?>(qp), reinterpret<float?>(sp), n, d)
-        } elif (fmt == 2) {
-            invoke(active_repack_q51(), reinterpret<uint8?>(qp), reinterpret<uint8?>(sp), n, d)
-        } elif (fmt == IQ4NL32_STREAM_TAG) {
-            invoke(active_repack_iq4nl32(), reinterpret<uint8?>(qp), reinterpret<uint8?>(sp), n, d)
-        } elif (fmt == K2_STREAM_TAG) {
-            invoke(active_repack_kq(), 2, reinterpret<uint8?>(qp), reinterpret<uint8?>(sp), n, d)
+            return
+        }
+        var rf = KqFmt.q8
+        if (!kq_fmt_of_stream_code(fmt, rf)) {
+            panic("stream_repack_one: region code {fmt} names no plane format")
+        }
+        var q = reinterpret<uint8?>(qp)
+        var s = reinterpret<uint8?>(sp)
+        if (kq_dense_b32(rf)) {
+            invoke(active_repack_b32(rf), q, s, n, d)
         } else {
-            invoke(active_repack_kq(), fmt, reinterpret<uint8?>(qp), reinterpret<uint8?>(sp), n, d)
+            invoke(active_repack_kq(), kq_schema_id(rf), q, s, n, d)
         }
     }
 }
@@ -864,14 +946,14 @@ def private moe_gpu_gather_stack_b32(qplane, splane : array<uint8>; qb, sb : int
     }
 }
 
-def moe_gpu_gather_stack_q51(t : Model; woff : int64; n, rows, slice_rows : int64;
-                             repacked : bool; mr : int64; var wq : array<uint8>; var ws : array<uint8>) {
-    moe_gpu_gather_stack_b32(t.q51q, t.q51s, Q51_QB, Q51_SB, woff, n, rows, slice_rows, repacked, mr, wq, ws)
-}
-
-def moe_gpu_gather_stack_iq4nl32(t : Model; woff : int64; n, rows, slice_rows : int64;
-                                 repacked : bool; mr : int64; var wq : array<uint8>; var ws : array<uint8>) {
-    moe_gpu_gather_stack_b32(t.iq4nl32q, t.iq4nl32s, IQ4NL32_QB, IQ4NL32_SB, woff, n, rows, slice_rows, repacked, mr, wq, ws)
+//! one stack of per-32 format `fmt` gathered off its own plane pair
+def moe_gpu_gather_b32_stack(t : Model; fmt : KqFmt; woff : int64; n, rows, slice_rows : int64;
+                             repacked : bool; mr : int64; var wq : array<uint8>;
+                             var ws : array<uint8>) {
+    kq_plane_pair(t, fmt) $(q, s) {
+        moe_gpu_gather_stack_b32(q, s, kq_qsb(fmt), kq_ssb(fmt), woff, n, rows, slice_rows,
+            repacked, mr, wq, ws)
+    }
 }
 
 //! Gather one native-MXFP4 expert stack into the GPU tier's device planes: the disk layout (16 nibble bytes and one E8M0
@@ -1130,8 +1212,9 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
 
 [init]
 def private register_layout_hooks {
-    register_model_layout(@@repack_q8_weights, @@repack_kq_weights, @@repack_mx4_stacks, @@repack_q51_stacks, @@repack_iq4nl32_stacks,
-        @@moe_gpu_gather_stack, @@moe_gpu_gather_stack_kq, @@moe_gpu_gather_stack_q51, @@moe_gpu_gather_stack_iq4nl32, @@moe_gpu_gather_stack_mx4)
-    register_stream_layout(@@collect_q8_regions, @@collect_kq_regions, @@collect_q51_regions, @@collect_iq4nl32_regions, @@stream_repack_one,
-        @@metal_blob_eligible, @@metal_blob_scale_plane)
+    register_model_layout(@@repack_q8_weights, @@repack_kq_weights, @@repack_mx4_stacks,
+        @@repack_b32_stacks, @@moe_gpu_gather_stack, @@moe_gpu_gather_stack_kq,
+        @@moe_gpu_gather_b32_stack, @@moe_gpu_gather_stack_mx4)
+    register_stream_layout(@@collect_q8_regions, @@collect_kq_regions, @@collect_b32_regions,
+        @@stream_repack_one, @@metal_blob_eligible, @@metal_blob_scale_plane)
 }

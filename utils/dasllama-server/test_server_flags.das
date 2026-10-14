@@ -1,4 +1,5 @@
 options gen2
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options persistent_heap
 options _dasllama_internal = true   // the K/V room seam the ctx-clamp cell doubles is the engine's, not the facade's
 
@@ -10,11 +11,16 @@ require dasllama/dasllama_gpu_tier                      // the K/V room seam a c
 require daslib/clargs                                   // get_user_args / flag_present: the match cli_has_flag rests on
 require strings
 require daslib/fio                                      // the roster cell writes its config
+require math
+require _server_rig
+require dasllama/dasllama_gpu_resident
+require dasllama/dasllama_scheduler
 
 // Model-free unit coverage for the flag-presence test behind the config surface's provenance:
 // a flag the process was given reads present, in both spellings, and an absent one reads absent;
 // and for the self-speculation default's rule, as the slot and the config surface read it.
-// Runs fully in CI - no GGUF, no JIT.
+// Every cell but the speculating slot's runs in CI with no GGUF and no JIT; that one needs a NextN-headed
+// model and an armed Vulkan tier, and skips without them.
 //! the process-argument cell skips when the test process was given no `--` flag
 
 [test]
@@ -61,15 +67,18 @@ def test_mtp_setting_tri_state(t : T?) {
         t |> equal(mtp_setting(false, false), -1, "unset: the slot decides")
         t |> equal(mtp_setting(false, true), -1, "an unsourced true is still unset")
     }
-    t |> run("the unset default resolves on for one stream on a GPU, off on the CPU or at several streams") @(t : T?) {
-        t |> success(mtp_default_resolved(1, "metal", ""), "one stream on Metal")
-        t |> success(mtp_default_resolved(1, "metal-required", ""), "one stream on required Metal")
-        t |> success(mtp_default_resolved(1, "vulkan", ""), "one stream on a Vulkan device")
-        t |> success(mtp_default_resolved(1, "", "auto"), "one stream on the legacy --metal auto")
-        t |> success(!mtp_default_resolved(1, "", ""), "one stream, no device")
-        t |> success(!mtp_default_resolved(1, "off", "required"), "one stream on the CPU, whatever --metal says")
-        t |> success(!mtp_default_resolved(4, "metal", ""), "four streams on Metal")
-        t |> success(!mtp_default_resolved(4, "vulkan", ""), "four streams on a Vulkan device")
+    t |> run("the unset default resolves on for one stream on a GPU the model's catalog row lists, off otherwise") @(t : T?) {
+        t |> success(mtp_default_resolved(1, "metal", "", "metal"), "one stream on Metal, the row lists metal")
+        t |> success(mtp_default_resolved(1, "metal-required", "", "metal") && mtp_default_resolved(1, "vulkan", "", "vulkan"), "one stream on required Metal; one on a Vulkan device whose row lists vulkan")
+        t |> success(mtp_default_resolved(1, "vulkan", "", "metal, vulkan"), "a row listing both platforms")
+        t |> success(mtp_default_resolved(1, "", "auto", "metal"), "one stream on the legacy --metal auto")
+        t |> success(!mtp_default_resolved(1, "metal", ""), "one stream on Metal, no catalog row: plain")
+        t |> success(!mtp_default_resolved(1, "metal", "", "vulkan"), "one stream on Metal, the row lists vulkan alone: plain")
+        t |> success(!mtp_default_resolved(1, "vulkan", "", "metal"), "one stream on a Vulkan device, the row lists metal alone: plain")
+        t |> success(!mtp_default_resolved(1, "", "", "metal"), "one stream, no device")
+        t |> success(!mtp_default_resolved(1, "off", "required", "metal"), "one stream on the CPU, whatever --metal says")
+        t |> success(!mtp_default_resolved(4, "metal", "", "metal"), "four streams on Metal")
+        t |> success(!mtp_default_resolved(4, "vulkan", "", "vulkan"), "four streams on a Vulkan device")
     }
     t |> run("an unset chunk resolves to one window where a GPU prefills, the short chunk on the CPU") @(t : T?) {
         t |> equal(chunk_default_resolved("metal", ""), 512, "Metal")
@@ -84,14 +93,13 @@ def test_mtp_setting_tri_state(t : T?) {
         t |> success(prefills_on_gpu(false, "gpu:rails"), "a model the device serves in part still prefills there")
         t |> success(!prefills_on_gpu(false, "cpu"), "a CPU slot beside another slot's armed model")
     }
-    t |> run("a slot arms on one stream whose decode runs on a GPU") @(t : T?) {
-        t |> success(mtp_auto_arms(1l, true, "cpu"), "the Metal flavor - its tier word reads cpu")
-        t |> success(mtp_auto_arms(1l, false, "gpu:resident"), "the whole model resident on a Vulkan device")
-        t |> success(!mtp_auto_arms(1l, false, "gpu:resident", true), "... but not where its routed experts sum on the host (the round loses there)")
-        t |> success(!mtp_auto_arms(1l, false, "gpu:rails"), "a model the device serves in part")
-        t |> success(!mtp_auto_arms(1l, false, "cpu"), "the CPU")
-        t |> success(!mtp_auto_arms(4l, true, "cpu"), "four streams on Metal")
-        t |> success(!mtp_auto_arms(4l, false, "gpu:resident"), "four streams on a Vulkan device")
+    t |> run("a slot arms on one stream whose decode runs on a GPU the model's row lists") @(t : T?) {
+        t |> success(mtp_auto_arms(1l, true, "cpu", false, "metal"), "the Metal flavor - its tier word reads cpu")
+        t |> success(mtp_auto_arms(1l, false, "gpu:resident", false, "vulkan"), "the whole model resident on a Vulkan device")
+        t |> success(!mtp_auto_arms(1l, true, "cpu") && !mtp_auto_arms(1l, false, "gpu:resident", false, "metal"), "a row listing no platform, or Metal alone on a Vulkan device: plain")
+        t |> success(!mtp_auto_arms(1l, false, "gpu:resident", true, "vulkan"), "... but not where its routed experts sum on the host (the round loses there)")
+        t |> success(!mtp_auto_arms(1l, false, "gpu:rails", false, "vulkan") && !mtp_auto_arms(1l, false, "cpu", false, "metal, vulkan"), "a model the device serves in part; the CPU")
+        t |> success(!mtp_auto_arms(4l, true, "cpu", false, "metal") && !mtp_auto_arms(4l, false, "gpu:resident", false, "vulkan"), "four streams on Metal or on a Vulkan device")
     }
     t |> run("an unset ASR dispatch joins the team when every LLM slot decodes on a GPU") @(t : T?) {
         t |> success(decodes_on_gpu(true, "cpu"), "the Metal flavor - its tier word reads cpu")
@@ -281,5 +289,178 @@ def test_roster_from_flags(t : T?) {
         delete single
         delete both
         delete from_toml
+    }
+}
+
+let private SLOT_PAGE_ROWS = 64l   //! the server's default paged sessions (`--flat` off): the slot's scheduler as `main.das` builds it
+
+//! the slot's auto-arm over a modeled catalog row that lists vulkan:
+//! Qwen3.5-0.8B-MTP has no catalog row of its own
+def private slot_mtp_device_home(t : T?; file : string) {
+    let path = path_join(models_dir(), file)
+    return if (model_missing(t, path))
+    if (!moe_gpu_tier_installed() || !gpu_want_auto()) {
+        t |> skip("the GPU tier is not armed - needs DASLLAMA_GPU=1 on a device that serves the whole-model driver")
+        return
+    }
+    if (resident_mirror_dtype() != KVDtype.f16) {
+        t |> skip("the slot's sessions are f16; under DASLLAMA_VK_KV32=1 the mirror is f32 and every call passes as codec")
+        return
+    }
+    with_dasllama_jobque() {
+        var s = ModelSlot()
+        s.model <- load_model_(path, QuantMode.q8)
+        s.model.config.seq_len = min(s.model.config.seq_len, 512l)
+        t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the NextN-headed model (the load log names any decline)")
+        if (moe_gpu_resident_active() && gpu_resident_experts_host()) {
+            t |> skip("the driver sums the routed experts on the host on this card: the auto-arm leaves the round off there")
+            delete s.model
+            return
+        }
+        s.backend_effective = "gpu:resident"
+        s.gpu_regions = gpu_device_sessions()
+        let spec = mtp_auto_arms(1l, false, s.backend_effective, gpu_resident_experts_host(), "vulkan")
+        t |> success(spec, "the unset mtp arms one stream whose decode the whole-model driver serves, on a catalog row listing vulkan")
+        s.sched <- create_scheduler(s.model, 1l, 4l, 64l, SLOT_PAGE_ROWS, (s.model.config.seq_len + SLOT_PAGE_ROWS - 1l) / SLOT_PAGE_ROWS,
+                                    KVDtype.f16, spec)
+        t |> success(s.sched.mtp && s.sched.paged, "the slot speculates on the server's paged sessions")
+        t |> success(slot_wants_device_kv(s), "the speculating slot homes its stream on the device: the draft head, its verify and its rollback run there")
+        t |> success(set_device_kv(s.sched, slot_wants_device_kv(s)), "the scheduler admits device-home sessions")
+        t |> equal(slot_served(s, s.sched.device_kv, true), "GPU: the whole model and every stream's cache on the card", "the model card names where the stream's cache lives")
+        let prev = get_mtp_spec()
+        set_mtp_spec(true)
+        let drafts0 = moe_gpu_resident_drafts()
+        let verifies0 = moe_gpu_resident_verifies()
+        var req <- PendingReq(id = 1l, params = SamplingParams(), max_new = 24l)
+        req.prompt <- encode(s.model, "Count from one to twenty: one, two, three,", true, false)
+        t |> success(submit(s.model, s.sched, req), "the stream queued")
+        var events : array<SchedEvent>
+        var steps = 0
+        while (scheduler_step(s.model, s.sched, events) && steps < 4096) {
+            steps++
+        }
+        set_mtp_spec(prev)
+        t |> success(s.sched.mtp_drafted > 0l, "the slot's ticks drafted ({s.sched.mtp_drafted} drafts, {s.sched.mtp_accepted} accepted)")
+        t |> equal(moe_gpu_resident_drafts() - drafts0, s.sched.mtp_drafted, "every drafted step's draft ran on the device's NextN head")
+        t |> equal(moe_gpu_resident_verifies() - verifies0, s.sched.mtp_drafted, "every drafted step's verify ran on the device")
+        var passes <- gpu_cpu_passes_()
+        t |> equal(length(passes), 0, "no call passed to the CPU rails: {passes}")
+        delete passes
+        set_device_kv(s.sched, false)
+        delete events
+        delete s.sched
+        delete s.model
+    }
+}
+
+[test]
+def test_slot_mtp_device_home(t : T?) {
+    t |> run("Qwen3.5-0.8B-MTP, a row listing vulkan modeled: speculates device-home") @(t : T?) {
+        slot_mtp_device_home(t, "Qwen3.5-0.8B-MTP-Q8_0.gguf")
+    }
+}
+
+[test]
+def test_slot_mtp_device_home_moe(t : T?) {
+    t |> run("the same over Qwen3.6-35B-A3B-MTP-IQ4_XS-pure: the routed NextN head drafts and verifies on the device") @(t : T?) {
+        slot_mtp_device_home(t, "Qwen3.6-35B-A3B-MTP-IQ4_XS-pure.gguf")
+    }
+}
+
+[test]
+def test_mtp_catalog_platforms(t : T?) {
+    t |> run("the catalog's serve_mtp is read off the model file's base name; a file with no row lists none") @(t : T?) {
+        t |> equal(catalog_mtp_platforms("/models/Qwen3.8-27B-UD-Q4_K_M.gguf"), "metal", "the Qwen3.8-27B row lists metal")
+        t |> equal(catalog_mtp_platforms("Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf"), "vulkan", "the Qwen3.6-35B MTP row lists vulkan")
+        t |> equal(catalog_mtp_platforms("Qwen3.6-35B-A3B-UD-Q4_K_M.gguf"), "", "the head-less Qwen3.6-35B file has nothing to draft with")
+        t |> equal(catalog_mtp_platforms("/models/no-such-model.gguf"), "", "no row, no platform")
+        t |> success(mtp_platform_listed("metal, vulkan", "vulkan") && !mtp_platform_listed("metal", "vulkan") && !mtp_platform_listed("", "metal"), "the comma list reads its members and nothing else")
+    }
+}
+
+[test]
+def test_config_mtp_catalog(t : T?) {
+    t |> run("GET /config's unset mtp reads the configured model's catalog row") @(t : T?) {
+        let listed = "/models/Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf"
+        let one = ServerArgs(model = listed, streams = 1)
+        t |> success(config_mtp_resolved(one, "vulkan"), "one stream on the device the row lists")
+        t |> success(!config_mtp_resolved(one, "metal"), "the row lists vulkan alone")
+        let no_row = ServerArgs(model = "/models/no-such-model.gguf", streams = 1)
+        t |> success(!config_mtp_resolved(no_row, "vulkan"), "no catalog row: plain")
+        let wide = ServerArgs(model = listed)
+        t |> success(!config_mtp_resolved(wide, "vulkan"), "the four-stream default: plain")
+    }
+}
+
+//! the slot options both load paths build carry the catalog row's
+//! platforms, so an unset `mtp` arms a listed model's slot alike at
+//! boot and at a runtime POST load
+[test]
+def test_slot_mtp_platforms(t : T?) {
+    let listed = "/models/Qwen3.6-35B-A3B-MTP-UD-Q4_K_M.gguf"
+    let no_row = "/models/no-such-model.gguf"
+    t |> run("a [[models]] entry's boot options") @(t : T?) {
+        let opts = boot_slot_opts(ModelEntry(path = listed))
+        t |> equal(opts.mtp, -1, "the entry leaves mtp unset")
+        t |> equal(opts.mtp_platforms, "vulkan", "the catalog row's platforms")
+        t |> success(slot_mtp_arms(opts, -1, 1l, false, "gpu:resident", false),
+            "one resident stream on the listed device arms")
+        let plain = boot_slot_opts(ModelEntry(path = no_row))
+        t |> success(!slot_mtp_arms(plain, -1, 1l, false, "gpu:resident", false),
+            "no catalog row: plain")
+    }
+    t |> run("a runtime POST load's options") @(t : T?) {
+        let opts = runtime_slot_opts(listed, false)
+        t |> equal(opts.backend, "auto")
+        t |> equal(opts.mtp, -1, "the load leaves mtp unset")
+        t |> equal(opts.mtp_platforms, "vulkan", "the catalog row's platforms")
+        t |> success(slot_mtp_arms(opts, -1, 1l, false, "gpu:resident", false),
+            "one resident stream on the listed device arms")
+        t |> equal(runtime_slot_opts(listed, true).backend, "cpu")
+        let plain = runtime_slot_opts(no_row, false)
+        t |> success(!slot_mtp_arms(plain, -1, 1l, false, "gpu:resident", false),
+            "no catalog row: plain")
+    }
+    t |> run("the slot's own mtp, then the server's, outranks the catalog") @(t : T?) {
+        var opts = runtime_slot_opts(listed, false)
+        t |> success(!slot_mtp_arms(opts, 0, 1l, false, "gpu:resident", false),
+            "the server's mtp = false")
+        opts.mtp = 0
+        t |> success(!slot_mtp_arms(opts, 1, 1l, false, "gpu:resident", false),
+            "the slot's mtp = false over the server's true")
+        let on = runtime_slot_opts(no_row, false)
+        t |> success(slot_mtp_arms(on, 1, 4l, false, "cpu", false), "an ask on arms anywhere")
+    }
+}
+
+[test]
+def test_prefix_state_budget(t : T?) {
+    t |> run("the checkpoint budget: the MB asked, else a quarter of RAM, else 4 GB") @(t : T?) {
+        t |> equal(16384l, prefix_state_budget_mb(0l, 64l), "a 64 GB box")
+        t |> equal(4096l, prefix_state_budget_mb(0l, 16l), "a 16 GB box")
+        t |> equal(4096l, prefix_state_budget_mb(0l, 0l), "RAM unknown")
+        t |> equal(512l, prefix_state_budget_mb(512l, 64l), "an explicit budget stands")
+    }
+    t |> run("a cgroup limit file's byte count, no limit read as none") @(t : T?) {
+        t |> equal(58, ram_gb_from_cgroup("61999996928\n"), "a 62 GB container limit (v2)")
+        t |> equal(1, ram_gb_from_cgroup("268435456\n"), "256 MiB reads as one GiB, not no limit")
+        t |> equal(0, ram_gb_from_cgroup("max\n"), "v2 with no limit")
+        t |> equal(0, ram_gb_from_cgroup("9223372036854771712\n"), "v1 with no limit")
+        t |> equal(0, ram_gb_from_cgroup(""), "no cgroup file")
+        t |> equal(0, ram_gb_from_cgroup("+68719476736\n"), "a signed count")
+        t |> equal(0, ram_gb_from_cgroup(".5e11\n"), "text opening on no digit")
+        t |> equal(0, ram_gb_from_cgroup("nan\n"), "a float spelling")
+    }
+    t |> run("a Linux box's RAM: the v2 limit, else the v1 one, where under the total") @(t : T?) {
+        let mem = "MemFree:  1024 kB\nMemTotal:       67108864 kB\n"
+        let gb16 = "17179869184\n"
+        let gb8 = "8589934592\n"
+        t |> equal(64, linux_ram_gb(mem, "", ""), "no cgroup: the total")
+        t |> equal(16, linux_ram_gb(mem, gb16, gb8), "the v2 limit, the v1 file unread")
+        t |> equal(8, linux_ram_gb(mem, "max\n", gb8), "v2 with no limit: the v1 one")
+        t |> equal(8, linux_ram_gb(mem, "", gb8), "no v2 file: the v1 one")
+        t |> equal(64, linux_ram_gb(mem, "137438953472\n", ""), "a limit past the total")
+        t |> equal(16, linux_ram_gb("", gb16, ""), "the total unread: the limit")
+        t |> equal(0, linux_ram_gb("", "max\n", ""), "neither: unknown")
     }
 }

@@ -1,16 +1,13 @@
 # dasLLAMA Architecture - the Vulkan tier's model residency
 
-Companion to `ARCHITECTURE_GPU_VULKAN.md`; a section is cited by its anchor. This
-document carries the residency plan that sizes a whole model before a byte uploads and the marks
-swap that lets one GPU slot serve many models; the token command's logits landing on the
-transfer queue is in `ARCHITECTURE_GPU_VULKAN_LANDING.md`. The NextN draft head the driver homes beside the trunk, its draft command, the
-prompt warm the window chain gives its slab and the rollback a rejected verify takes on the
-device, are in `ARCHITECTURE_GPU_VULKAN_MTP.md`. The N-row token command a batched step's rows go through, and the residual
-step's two forms it holds bit for bit, are in `ARCHITECTURE_GPU_VULKAN_NROW.md`. The prefill
-chain and byte stores that run once a model is resident are in `ARCHITECTURE_GPU_VULKAN.md`, and
-the cooperative-matrix GEMM tiles under them are in `ARCHITECTURE_GPU_VULKAN_GEMM.md`; the per-op
-tier's decode era is in `ARCHITECTURE_GPU_VULKAN_DECODE.md`. The GPU backend role table these
-sections build on stays in `ARCHITECTURE_GPU.md#gpu-backends`.
+Companion to `ARCHITECTURE_GPU_VULKAN.md`; a section is cited by its anchor. This document carries the residency plan
+that sizes a whole model before a byte uploads, the checkpoints a device-home recurrent stream keeps on the device, the
+token rows' gather off the table's own plane, the marks swap that lets one GPU slot serve many models, and the hydrate a
+call passing to the CPU rails takes first. The driver's other parts are its siblings': the logits landing in
+`ARCHITECTURE_GPU_VULKAN_LANDING.md`, the NextN draft head in `ARCHITECTURE_GPU_VULKAN_MTP.md`, the N-row token command
+in `ARCHITECTURE_GPU_VULKAN_NROW.md`, the prefill chain and byte stores in `ARCHITECTURE_GPU_VULKAN.md`, the
+cooperative-matrix GEMM tiles in `ARCHITECTURE_GPU_VULKAN_GEMM.md`, the per-op tier's decode era in
+`ARCHITECTURE_GPU_VULKAN_DECODE.md`; the GPU backend role table stays in `ARCHITECTURE_GPU.md#gpu-backends`.
 
 ### The residency plan sizes a whole model before a byte uploads {#resident-plan}
 
@@ -20,7 +17,8 @@ planes, the KV mirror at `seq_cap`, the driver's own device scratch, and the hea
 arm leaves unfilled (zero when the user pins VRAM). The weight planes are ONE list in placement order
 (`resident_planes`: per plane a row length, row count, format, offset and the role the upload registers it as):
 the plan sums its bytes and the upload reserves it and places it in order (`place_plane` panics on a role out of turn), so the two cannot drift; the router rows,
-the beta / alpha rows (f16 on the device) and the optional f32 embedding are the terms beside it. KV is reserved BEFORE weights and never
+the F32-on-disk beta / alpha rows (f32 on the device; a quantized file's beta and alpha are planes of the list in their tags'
+formats) and the optional f32 embedding are the terms beside it. KV is reserved BEFORE weights and never
 grows: on a discrete card the two compete directly, and evicting weights to grow KV would mean
 re-uploading gigabytes. The mirror's codec is f16 by default (`resident_mirror_dtype`): the
 flash-attention arms read f16 rows natively, and an f16 row is half an f32 row; a block codec the caller
@@ -100,8 +98,11 @@ pin drops, and the claim it answers keeps naming the rows until another session 
 region; `gpu_device_kv_adopt` hands the first `npos` of them to a fresh session under a claim
 of its own, the next prefill rewriting whatever lay past. `gpu_device_sessions` answers how
 many a host may hold - the region count - and `gpu_device_prefill_continues` whether a
-session's prefill may start past zero: not on a recurrent model, whose window chain starts the
-deltanet state from zero.
+session's prefill may start past zero: everywhere but a recurrent hyper-connection model, whose
+n-gram ring has no continuation hand-off to the window chain. A recurrent session's state parks
+beside its rows: the region's state slots keep the state at the parked position
+(`RdecRegion.dn_pos`), and an adopter takes exactly that many rows, binding the slots as they
+stand with nothing crossing the bus - or, past a shorter shared opening, the region's checkpoint row at it.
 
 **The scheduler's device mode is that contract over streams.** `set_device_kv` switches an
 idle `Scheduler` (one batched step takes one kind of session): admitted streams are
@@ -110,7 +111,8 @@ a media request is refused at `submit` (a device-home session serves no media sp
 and a reaped stream parks its claim under the token list its rows hold - one parked claim a
 stream slot - so the next request adopts the longest opening it shares, short of its last
 token: a conversation's next turn prefills its new suffix alone, with no copy. A recurrent
-model's stream parks nothing: its prompt prefills whole in one quantum, from zero, and adopts nothing. `dasllama-server` turns the mode on
+model's parked claim is adopted at every token it holds or at the longest checkpoint the request
+shares (`#device-home-checkpoints`), since its state stands at those positions alone. `dasllama-server` turns the mode on
 per slot before each step (`sync_slot_device_kv`) while the slot is served whole from the device,
 has a region per stream and no media tower or self-speculation, and sizes the slot's context
 to a region's. `tests/_resident_regions.das` holds the sessions, the pin, the park and the
@@ -175,20 +177,71 @@ An OPTIONAL plane rides only the room left under the budget at THIS context - wh
 `budget_bytes - headroom_bytes` after weights, KV and scratch; the reserved headroom itself
 stays unfilled. It never shrinks any of the three, and it reports zero bytes when it does not
 fit - so the same model plans the plane in at a short context and out at a long one. Two planes are
-optional: the raw f32 embed table, and after it the gemma-4 E-series' per-layer-embedding token
-table (`ResidentPlan.ple_tbl_bytes`, a q8 plane [vocab x layers*ple]) - placed first, into the empty
-arena, in pieces of 65536 rows the host gather's 2 GB array admits, which must land back to back in
-one slab because the window chain's gather (`EmbGather` at the row width layers*ple, scaled by
-sqrt(ple)) reads them off one block base. With it placed the ids prefill serves a per-layer-embedding
-model too - the embed and the side rows gathered on device, no host row upload - and the token
-command keeps its one-row host gather.
+optional: the token table's gather plane (`#vk-token-gather`: an untied quantized table's own plane,
+`ResidentPlan.emb_bytes`, or a float table's exact f32 rows under `RDEC_EMB_F32_CAP`,
+`ResidentPlan.emb_f32_bytes`), and after it the gemma-4 E-series' per-layer-embedding token table (`ResidentPlan.ple_tbl_bytes`, a
+plane [vocab x layers*ple] in the table's own tag - q8, superblock or per-32 - gathered in disk order, no repack touching it). Both place first, into the empty arena, in pieces of 65536 rows the host
+gather's 2 GB array admits (`resident_place_table`), which must land back to back in one slab because
+a gather reads a table off one block base; the side-row gather is the tag's `EMB` leaf at the row width
+layers*ple, scaled by sqrt(ple). With the side table placed the ids prefill serves a
+per-layer-embedding model too - the embed and the side rows gathered on device, no host row upload -
+and the token command reads the row the host's pre-step embedded, in place (`EMB_ID_HOST`).
+
+### A device-home recurrent stream keeps its state at its checkpoints on the device {#device-home-checkpoints}
+
+**A recurrent state exists at one position, so a region keeps copies of it at the positions a later request can share.** A
+region carries `RDEC_DN_SNAPS` (4) checkpoint rows beside its state slots, each in the rollback row's shape - every recurrent
+layer's slot state (`nvh x ds x ds` floats) and its ring pair (`2 x cd x (dconv - 1)` floats) - with the region's ring parity
+(`RDec.snap_dev`, made at the first save). The plan charges them (`rdec_dn_snap_bytes`): on the 35B (30 recurrent layers, 32
+value heads of 128, a 8192-channel conv of 3 taps) a row is 2.19 MiB a layer, 65.6 MiB in all, 262 MiB a region. The scheduler's
+device mode stops a recurrent stream's prefill at the request's openings and its last message's start and end
+(`device_checkpoints_plan`, the markers the host prefix cache keeps checkpoints at) and saves the state there
+(`gpu_device_kv_checkpoint`: an empty row, else the least recently touched); the finished turn's state is the parked claim's
+own (`RdecRegion.dn_pos`). An adopter of a parked claim takes the longest of those positions its prompt contains
+(`parked_state_at`): the end state stands in the slots, a checkpoint row loads into them (`rdec_dn_snap_load`), and the rows
+the claim held past it are rewritten by the adopter's prefill. The checkpoints at or under the adopted position stay the new
+claim's - the same tokens put them there - so a third request on the same opening adopts them off the second's claim. Nothing
+crosses the bus: a save and a load are device copies.
+
+### The token rows gather on the device off the table's own plane {#vk-token-gather}
+
+**Where the table sits on the device in a format a gather reads, neither the window nor the one-row
+step brings a row across the bus: the window gathers its rows off the token ids, the step off its
+one token id.** Which gather a table takes is its disk type's:
+
+| Table on disk | Gather | Its plane |
+|---|---|---|
+| Q8_0 | `EmbGather` (four elements a thread off the per-32 plane) | the tied classifier's at its block, or an untied table's linear q8 copy |
+| a superblock format (the 14 `kq_sb` tags) | its `KqEmb<Fmt>` leaf | the tied classifier's K-quant plane, or an untied table's own (`resident_emb_plane`) |
+| F32, F16, BF16 | `EmbGatherF32` | the table's exact f32 rows (F16/BF16 widen without loss, `Model.emb_f32_exact`) uploaded whole under `RDEC_EMB_F32_CAP` |
+| Q4_1 | none: the host embeds | the fp32 rows are a dequant - a converted copy, disclosed at load |
+
+A `KqEmb<Fmt>` leaf is the format's own decode GEMV leaf stamped under `KqGemvLeafT`'s `EMB`: a
+thread a 32-block, element k the int8 lane `blk_decode` leaves and the term pair `blk_fold` reads (the
+per-format arithmetic is the GEMV's own, never re-spelled), the grid formats staging their codebook as
+the GEMV does. A per-32 table (q51, iq4nl32, q4032, q5032) is the `Blk32GemvRunT` family's `EMB` leaf
+(`Q51Emb`, `Iq4nl32Emb`, `Q4032Emb`, `Q5032Emb`), its block decode the GEMV's own; mx4 never tags a table.
+`resident_arm_emb` hands the plane to the tier (`rdec_set_emb` for a quantized plane in the arena,
+`rdec_upload_emb_f32` for the f32 rows) and logs why the host embeds where it does: a Q4_1 table,
+a prepared image (it does not carry `emb_f32_exact`), a plane past the room or the cap, a trimmed
+image, a per-layer-embedding model whose side table stays on the host, a hyper-connection model (its
+window reads the pre-step's rows). The window binds its ids plane (`pf_ids`); the one-row token command records the gather in place of
+the x upload when the table is placed, reading the step's id from a host-visible word
+(`tok_ids_host`) and, for a step that brings no id (`EMB_ID_HOST`: the peel's row, the split
+command's caller), the host's row from a host-visible staging row (`tok_xh_host`) in place - so the
+recorded command serves both. The engine leaves a decode step's row unembedded where the driver
+answers the decode gate (`register_embed_dev_gates("vulkan", ...)`, the table placed); the override
+embeds it itself where its path reads a host row (the split command) and the engine backfills it
+where the override declines. The N-row and verify commands keep their row upload: their rows come
+embedded from the batch engine and the round.
 
 **A MoE is planned like a dense model with bigger FFN planes.** Its weight planes are the
 attention quads, every MoE layer's expert triple (`[ne x nfe x dim]` twice and `[ne x dim x
 nfe]`, sliced per expert as the per-op walk gathers them), its shared expert's triple where it
 has one - in the file's K-quant format where the loader kept those planes beside the q8
-transcode the CPU chain reads (`wshk*_offs`; it keeps them on a load with a GPU tier armed, so
-a CPU-only load carries the transcode alone), the transcode otherwise - the classifier, and the
+transcode the CPU chain reads (`wshk*_offs`, `shexp_plane`; it keeps them on a load a device reads
+them on - an armed GPU tier or a Metal mode - so a CPU-only load carries the transcode alone), the
+transcode otherwise - the classifier, and the
 router plane - every MoE layer's f32 rows with a gated shared expert's gate row beside them. The scratch adds the window's routed planes: the gathered f16
 rows, the gate and up rows, the f16 hidden rows and the routed down rows over `PF_WINDOW x k`
 bucket rows plus `TILE_READ_SLACK` rows of tile slack (128 - the m column's unclamped partial
@@ -210,7 +263,7 @@ A multi-model host runs one device tier under several loaded models, and the tie
 state is offset-keyed - two models' marks installed together route one model's dispatches at
 the other's planes. `GpuModelMarks` is that state WHOLE: the loader-contract marks plus every
 resident-driver per-model global (the activation, the mirror count, the mirror cap, the mirror
-codec, the device-embed arm, and the per-layer-embedding projection arm). The save moves the installed state out and leaves the globals
+codec, the device-embed arm, the NextN head's arm, and the per-layer-embedding projection arm). The save moves the installed state out and leaves the globals
 reading as no-model; the restore is its exact inverse. The whole-model drop clears the same set
 and deselects the `"vulkan"` overrides, so a dropped model's prefill and decode take the plain
 CPU path and a later re-arm passes `resident_upload`'s no-active-override gate. The three carry
@@ -232,3 +285,13 @@ computes over the rows the mirror holds: an image turn's media rows attend the h
 prefilled, and a decode past the region's rows reads them beside the CPU-served ones. A
 device-home session has no host cache to fill, so its pass panics with the reason. The pass
 still answers false, and the CPU rails serve the call.
+
+A region another host-cached session takes may hold rows its owner's cache lacks (a window prefill, a one-row step): the taker saves them first (`rdec_bind_region` reads the region's `host_behind` and head counts, `rdec_stash_region` the rows), and the
+owner, back for a bind or a pass, writes them into its cache before anything reads it (`rdec_unstash`); the owner's own bind drops a save its steps outdated, and a released session's save goes with it.
+
+Every row that moves between a host cache and the mirror - up for a take, down for a hydrate, a
+batched row's write-back, the NextN head's rows, a saved claim - moves through `rdec_host_runs`: a flat cache as
+one span, a paged cache a physical run at a time (`kv_runs`), the mirror addressed by position
+either way, so a paged session is served like a flat one. A scheduler hydrates a paged stream
+before the prefix cache reads its pages - its donation, a recurrent checkpoint - since the rows a
+device stepped live on the mirror alone until a hydrate brings them down.

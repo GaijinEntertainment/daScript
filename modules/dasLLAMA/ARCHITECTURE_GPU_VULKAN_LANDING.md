@@ -2,7 +2,7 @@
 
 Companion to `ARCHITECTURE_GPU_VULKAN.md`; a section is cited by its anchor. This document carries the
 token command's logits landing on the transfer queue - the compute-timeline signal the copy waits on and
-the carry row every resident command lands beside. What a model has to fit on the card before the driver
+the carry row every resident command lands beside - and the greedy chain that submits the next one-row step behind it. What a model has to fit on the card before the driver
 runs is in `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`; the N-row token command a batched step's rows go
 through is in `ARCHITECTURE_GPU_VULKAN_NROW.md`; the NextN draft head and its rollback are in
 `ARCHITECTURE_GPU_VULKAN_MTP.md`.
@@ -23,7 +23,8 @@ on the transfer timeline's counter (`xfer_wait` spinning) instead of the fence -
 would pay the OS wake-up a step, as the fence wait's spin already knows. The logits planes are
 CONCURRENT between the two families (`make_device_buf` / `make_host_buf` at `xfer_shared`), so no
 ownership transfer sits on the path; the host orders the next step behind the copy, so the
-command's next write of the plane never races its read. `DASLLAMA_VK_XFERQ=0` leaves the device
+command's next write of the plane never races its read - or, on the greedy chain, the chained step's prologue waits for the
+copy on the transfer timeline (`#vk-greedy-chain`). `DASLLAMA_VK_XFERQ=0` leaves the device
 without a transfer family; there the command carries the copy and the fence as before
 (`rd_submit_land` / `rd_wait_land` choose) - the one in-process switch that puts the copy back
 inside the command. Pod, Llama-3.2-1B Q8_0 with the profiler on: the four-row step 3761 -> 3371
@@ -84,3 +85,32 @@ session takes no carry: the CPU round has no host rows to draft or verify it aga
 carry costs `dim x 4` bytes a row over the bus (4 KB a token on Qwen3.5-0.8B) and the last
 layer's fused down epilogue, which writes Q8_0 blocks and no float row, so that layer's residual
 step runs as its own dispatch; a model without a head records the command it always did.
+
+### The greedy chain submits the next one-row step behind the running one {#vk-greedy-chain}
+
+**A greedy session's next step runs on the device's own pick, submitted before the running step lands.** Asked
+(`vk_rdec_chain_ask`, which the resident decode makes for a session whose last draw was a bare argmax - `Session.sampled`
+clear - with the next position's rope row), the one-row step submits its command and then, before waiting its landing, the
+next step (`rd_chain_submit`): a prologue (`rd_chain_prologue`, a command a region and staging slot) that waits on the transfer
+timeline for the running step's landing - the chained step rewrites the logits and pick planes that copy reads - and then,
+fenced off both neighbours, copies the running step's pick into the gather's token id, the next position's staged TokMeta row
+and rope row into the live ones, and on a recurrent model the region's state slots into the chain's snapshot; then the same
+recorded one-row command (recorded for simultaneous use) and a landing copy into the slot's own host planes. The staging and
+the landing alternate two slots, so the host stages the step after while the chained one still reads its rows. The next call
+takes the chained step when it steps the same region at that position with the token the chain gathered and asks no landing
+the chain did not make: it chains the step after before waiting, and lands off the slot.
+The same step with another token is a miss; a chain dropped at a session switch or a
+settle predicted nothing and is neither hit nor miss. Either way the step is waited out,
+the region's state slots copied back from the snapshot - the ring images alternate by
+parity, so the rerun reads
+the image the chained step read and writes the one it wrote - and the call runs plain; the K/V row the chained step stored is
+the row the rerun stores again. Every other driver entry - a prefill, the N-row and in-order rows commands, a draft, a verify,
+a rollback, a hydrate or upload of rows, a checkpoint, a region switch - settles a chained step the same way first
+(`rd_chain_settle`), as does the model drop. The chain needs the transfer-queue landing, the device gather of the token id,
+and a command with no per-layer-embedding rows, carry, host experts or hyper-connection seats (`vk_rdec_chain_wanted`); it
+never chains into a guard step or across the wide twin's first record. `DASLLAMA_VK_CHAIN` picks the mode - 0 off, 1 every
+greedy step, -1 adaptive (a miss leaves the next 1, 2, 4 .. 64 steps unchained, a hit
+resets the run, a chain dropped at a switch or a settle backs off nothing) - and
+`vk_rdec_chain_stats` counts the steps taken and the misses.
+The plan charges the snapshot - one region's recurrent states - where the chain is asked
+(`rdec_chain_snap_bytes`).

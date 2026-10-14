@@ -5,6 +5,11 @@ options _dasllama_internal = true
 
 require dastest/testing_boost public
 require _moe_resident
+require dasllama/dasllama   // load_model_, create_session, moe_gpu_drop_model
+require daslib/fio   // path_join
+require dasllama/dasllama_math   // with_dasllama_jobque_
+require dasllama/dasllama_gpu_tier   // set_gpu_resident_route, moe_gpu_layer_on_gpu: the per-op cell's route lever and marks
+require dasllama/dasllama_gpu_resident   // tier_expert_decline
 
 // gpt-oss-20b (the native-MXFP4 routed stacks on the mx4 expert rail, the biased router's softmax over its four picks,
 // the gate / up / down bias rows at the act and the combine under the clamped swiglu, the per-head attention sinks in
@@ -19,6 +24,52 @@ require _moe_resident
 //! this fixture - while the one-step-off controls read 4.2-18.9, so a 5% bar keeps a 2x margin over the noise and 12x under the control
 let private GPTOSS_LOGIT_BAR_REL = 0.05
 let private GPTOSS = MoeFixture(file = "gpt-oss-20b-mxfp4.gguf", shexp = false, bar_rel = GPTOSS_LOGIT_BAR_REL, window = 128l)   //! the pinned upstream file (its row in ../performance/model_specs.das)
+
+[test]
+def test_gpu_perop_gptoss(t : T?) {
+    t |> run("gpt-oss-20b with the whole-model route off: the per-op expert chain takes every routed layer's mx4 stacks under the biased clamped swiglu, the window and steps against the CPU chain") @(t : T?) {
+        if (!family_on(t, "gptoss")) return
+        let path = path_join(models_dir(), GPTOSS.file)
+        if (!resident_ready(t, path)) return
+        let route = gpu_resident_route_lever()
+        set_gpu_resident_route(false)
+        var tr <- load_model_(path, QuantMode.q8)
+        set_gpu_resident_route(route)
+        t |> success(!moe_gpu_resident_active(), "the whole-model route is off: the per-op rails serve")
+        var placed = 0l
+        var routed = 0l
+        for (l in range64(tr.config.n_layers)) {
+            continue if (!layer_is_moe(tr, l))
+            routed++
+            t |> equal(tier_expert_decline(tr, l), "", "layer {l}'s mx4 stacks are the expert chain's")
+            placed += moe_gpu_layer_on_gpu(l) ? 1l : 0l
+        }
+        t |> equal(placed, routed, "the per-op expert walk placed every routed layer ({placed} of {routed}) - none left on the CPU")
+        with_dasllama_jobque_() {
+            var prompt <- resident_prompt(40l)
+            var toks <- resident_feed(6l)
+            var sg <- create_session(tr, mirror_kv_dtype())
+            var gpu <- feed_logits(tr, sg, prompt, toks)
+            delete sg
+            moe_gpu_drop_model()
+            var cpu <- feed_alone(tr, mirror_kv_dtype(), prompt, toks)
+            feed_steps_within(t, tr, "gpt-oss per-op ", 40l, gpu, cpu, toks, GPTOSS.bar_rel, "per-op")
+            delete gpu
+            delete cpu
+            delete prompt
+            delete toks
+        }
+        delete tr
+    }
+}
+
+[test]
+def test_gpu_perop_gptoss_heat(t : T?) {
+    t |> run("gpt-oss-20b on the per-op tier: twelve routed layers placed, twelve streamed under the heat pool's mx4 slots with the biased clamped swiglu, against the CPU chain") @(t : T?) {
+        if (!family_on(t, "gptoss")) return
+        moe_perop_heat_cell(t, GPTOSS, 12l, 8l)
+    }
+}
 
 [test]
 def test_gpu_resident_gptoss(t : T?) {

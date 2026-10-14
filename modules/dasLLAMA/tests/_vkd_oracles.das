@@ -15,6 +15,7 @@ require daslib/linq   // count: the bucket bounds
 require dasllama/dasllama_kqformat
 require dasllama/dasllama_convert   // quantize_q8_0_into, quantize_q8_k_into: the requant oracle
 require dasllama/dasllama_math
+require dasllama/dasllama_gpu_math
 require dasllama/dasllama_math_default
 require dasllama/dasllama_vulkan_classes
 require dasllama/dasllama_vulkan_decode   // RDEC_MIR_SLACK_ROWS: the flash fixtures pad their shadows as the driver's mirrors do
@@ -136,14 +137,12 @@ def private add_plane(var cp : CellPlanes; dev : uint64; bytes : int64; written 
 }
 
 //! a plane the kernels only read: `a` behind `base` poisoned slots and followed by `slack` more
-def in_(var cp : CellPlanes; a : array<float>; base : int = 0; slack : int = 0; bit : uint = 0u) : int {
-    return cp |> add_plane(dev_upload(at_base(a, base, slack)), int64(base + length(a) + slack) * 4l, false, base, length(a), bit)
-}
+def in_(var cp : CellPlanes; a : array<float>; base : int = 0; slack : int = 0; bit : uint = 0u) : int =>
+    cp |> add_plane(dev_upload(at_base(a, base, slack)), int64(base + length(a) + slack) * 4l, false, base, length(a), bit)
 
 //! a plane the kernels only read, `a` uploaded as it is - ids, words, halves
-def in_plain(var cp : CellPlanes; a : array<auto(TT)>; bit : uint = 0u) : int {
-    return cp |> add_plane(dev_upload(a), long_length(a) * int64(typeinfo sizeof(type<TT>)), false, 0, length(a), bit)
-}
+def in_plain(var cp : CellPlanes; a : array<auto(TT)>; bit : uint = 0u) : int =>
+    cp |> add_plane(dev_upload(a), long_length(a) * int64(typeinfo sizeof(type<TT>)), false, 0, length(a), bit)
 
 //! a plane the kernels write: `n` floats behind `base` slots and `slack` more, the whole plane under the NaN sentinel
 def out_(var cp : CellPlanes; n : int; base : int = 0; slack : int = 0; bit : uint = 0u) : int {
@@ -161,9 +160,8 @@ def out_words(var cp : CellPlanes; bytes : int64; word : uint; bit : uint = 0u) 
 }
 
 //! a plane the kernels read and write in place: `a` as `in_` lays it, read back as `out_`
-def io_(var cp : CellPlanes; a : array<float>; base : int = 0; slack : int = 0; bit : uint = 0u) : int {
-    return cp |> add_plane(dev_upload(at_base(a, base, slack)), int64(base + length(a) + slack) * 4l, true, base, length(a), bit)
-}
+def io_(var cp : CellPlanes; a : array<float>; base : int = 0; slack : int = 0; bit : uint = 0u) : int =>
+    cp |> add_plane(dev_upload(at_base(a, base, slack)), int64(base + length(a) + slack) * 4l, true, base, length(a), bit)
 
 //! one `CellPlanes` column - `dev`, `bytes` or `hazard_bit` - at the planes `idx` (a fixed array of plane ids in binding order): a descriptor set's argument
 def gather_planes(column : array<auto(TT)>; idx) {
@@ -175,9 +173,8 @@ def gather_planes(column : array<auto(TT)>; idx) {
 }
 
 //! a class's descriptor set over the planes `idx`: `set_fn` is its generated `set_*_cls`
-def cls_set(cp : CellPlanes; idx; set_fn) {
-    return invoke(set_fn, gather_planes(cp.dev, idx), gather_planes(cp.bytes, idx), gather_planes(cp.hazard_bit, idx))
-}
+def cls_set(cp : CellPlanes; idx; set_fn) =>
+    invoke(set_fn, gather_planes(cp.dev, idx), gather_planes(cp.bytes, idx), gather_planes(cp.hazard_bit, idx))
 
 //! one command buffer: `rec` records the dispatches, then every written plane copies back whole, behind its hazard bit, to the staging
 def cell_record(var cp : CellPlanes; rec : block<(raw : VkCommandBuffer; var h : VkHaz) : void>) {
@@ -207,8 +204,7 @@ def cell_record_timed(var cp : CellPlanes; tag, what : string; rec : block<(raw 
 //! the staging (grown to hold them): `cell_record`'s body, for a cell that records into a command it keeps
 def cell_record_into(var cp : CellPlanes; raw : VkCommandBuffer; var h : VkHaz; rec : block<(raw : VkCommandBuffer; var h : VkHaz) : void>) {
     var devs : array<uint64>
-    var sizes : array<int64>
-    var ats : array<int64>
+    var sizes, ats : array<int64>
     var bits = 0u
     var total = 0l
     for (p in range(length(cp.dev))) {
@@ -237,20 +233,17 @@ def plane_fill_cmd(cp : CellPlanes; p : int; raw : VkCommandBuffer; var h : VkHa
     vkCmdFillBuffer(raw, unsafe(reinterpret<VkBuffer>(cp.dev[p])), uint64((cp.base[p] + at) * 4), uint64(n * 4), cp.fill[p])
 }
 //! plane `p`'s live run as `cell_record` staged it
-def plane_run(cp : CellPlanes; p : int) : array<float> {
-    return <- staged(cp.host.mapped, cp.host_off[p] + int64(cp.base[p]) * 4l, cp.run[p], type<float>)
-}
+def plane_run(cp : CellPlanes; p : int) : array<float> =>
+    <- staged(cp.host.mapped, cp.host_off[p] + int64(cp.base[p]) * 4l, cp.run[p], type<float>)
 
 //! plane `p` whole as `cell_record` staged it: the slots before its base, its run and its slack
-def plane_whole(cp : CellPlanes; p : int) : array<float> {
-    return <- staged(cp.host.mapped, cp.host_off[p], int(cp.bytes[p] / 4l), type<float>)
-}
+def plane_whole(cp : CellPlanes; p : int) : array<float> =>
+    <- staged(cp.host.mapped, cp.host_off[p], int(cp.bytes[p] / 4l), type<float>)
 
 //! `n` elements of `TT` of plane `p` as `cell_record` staged it, `at` elements past its base: `plane_as(cp, p, type<uint16>, n)`
 [unused_argument(elem)]
-def plane_as(cp : CellPlanes; p : int; elem : auto(TT); n : int; at : int = 0) : array<TT -const> {
-    return <- staged(cp.host.mapped, cp.host_off[p] + int64(cp.base[p]) * 4l + int64(at) * int64(typeinfo sizeof(type<TT>)), n, type<TT -const>)
-}
+def plane_as(cp : CellPlanes; p : int; elem : auto(TT); n : int; at : int = 0) : array<TT -const> =>
+    <- staged(cp.host.mapped, cp.host_off[p] + int64(cp.base[p]) * 4l + int64(at) * int64(typeinfo sizeof(type<TT>)), n, type<TT -const>)
 
 //! the plane's sentinel over written plane `p` again, before a dispatch that must write it anew
 def plane_refill(cp : CellPlanes; p : int) {
@@ -328,6 +321,21 @@ def q8_gemm_oracle(wq : array<uint>; wsw : array<uint>; xq : array<uint>; xs : a
             acc += float(idot) * wsf * xs[xb]
         }
         return acc
+    }
+}
+
+//! the per-32 batch tile's oracle: each record row's Q8_0 activation row against weight row `wblk0 / nb + c` through the
+//! engine's scalar dot for the format (`q51_gemv_row_oracle` and its twins)
+def blk32_gemm_oracle(f : KqFmt; wq, ws, xq : array<uint>; xs : array<float>; recs : array<uint>; nrec, n, d : int; var y : array<float>) {
+    let nb = n / 32
+    rec_walk(recs, nrec, d, y) $(row, c, wblk0 : int) : float {
+        var inscope xq_r <- [for (i in range(nb * 8)); xq[row * nb * 8 + i]]
+        var inscope xs_r <- [for (i in range(nb)); xs[row * nb + i]]
+        let wb0 = wblk0 + c * nb
+        return (f == KqFmt.q51 ? q51_gemv_row_oracle(wq, ws, xq_r, xs_r, wb0, nb)
+            : (f == KqFmt.iq4nl32 ? iq4nl32_gemv_row_oracle(wq, ws, xq_r, xs_r, wb0, nb)
+            : (f == KqFmt.q4032 ? q4032_gemv_row_oracle(wq, ws, xq_r, xs_r, wb0, nb)
+            : (f == KqFmt.q5032 ? q5032_gemv_row_oracle(wq, ws, xq_r, xs_r, wb0, nb) : mx4_gemv_row_oracle(wq, ws, xq_r, xs_r, wb0, nb)))))
     }
 }
 
@@ -875,7 +883,43 @@ def q51f16_gemm_oracle(wq : array<uint>; wsw : array<uint>; xf : array<uint>;
 //! as the decode rounds, f16 activations, block order - approx bars
 def iq4nl32f16_gemm_oracle(wq : array<uint>; wsw : array<uint>; xf : array<uint>;
                            recs : array<uint>; nrec, n, d : int; var y : array<float>) {
-    let lut = iq4nl_lut()
+    nl32f16_gemm_oracle(wq, wsw, xf, recs, nrec, n, d, y, iq4nl_lut())
+}
+
+//! the q4032 twin: iq4nl32's plane form under the linear code q - 8
+def q4032f16_gemm_oracle(wq : array<uint>; wsw : array<uint>; xf : array<uint>;
+                         recs : array<uint>; nrec, n, d : int; var y : array<float>) {
+    nl32f16_gemm_oracle(wq, wsw, xf, recs, nrec, n, d, y, q40_lut())
+}
+
+//! Q5_0 per-32 x f16 GEMM oracle (the q5032 s and e stamps' shape): per weight d * (q - 16) off the per-32 plane - q the nibble
+//! (byte j: element j low, j + 16 high) with the qh word's bit e as its fifth, d the block's f16 half of its scale word (two
+//! blocks a word) - rounded f16 as the decode rounds, f16 activations, block order - approx bars
+def q5032f16_gemm_oracle(wq : array<uint>; wsw : array<uint>; xf : array<uint>;
+                         recs : array<uint>; nrec, n, d : int; var y : array<float>) {
+    q50f16_gemm_oracle(wq, wsw, xf, recs, nrec, n, d, y, true)
+}
+
+//! the q5032 cell's control: the same planes with the qh word unread - a decode that drops the fifth bit reads apart from the oracle
+def q5032_noqh_f16_gemm_oracle(wq : array<uint>; wsw : array<uint>; xf : array<uint>;
+                               recs : array<uint>; nrec, n, d : int; var y : array<float>) {
+    q50f16_gemm_oracle(wq, wsw, xf, recs, nrec, n, d, y, false)
+}
+
+def private q50f16_gemm_oracle(wq : array<uint>; wsw : array<uint>; xf : array<uint>;
+                               recs : array<uint>; nrec, n, d : int; var y : array<float>; read_qh : bool) {
+    f16_gemm_walk(xf, recs, nrec, n, d, 32, y) $(wb, e : int) : float {
+        let dp = unpackHalf2x16(wsw[wb / 2])
+        let dv = wb % 2 == 0 ? dp.x : dp.y
+        let qh = read_qh ? wq[wb * int(KQ_Q5032_QWORDS) + int(KQ_B32_QWORDS)] : 0u
+        let by = byte_u8(wq, wb * int(Q5032_QB) + e % 16)
+        let q = ((by >> ((e / 16) * 4)) & 0xF) | (int((qh >> uint(e)) & 1u) << 4)
+        return float(float16(dv * float(q - 16)))
+    }
+}
+
+def private nl32f16_gemm_oracle(wq : array<uint>; wsw : array<uint>; xf : array<uint>;
+                                recs : array<uint>; nrec, n, d : int; var y : array<float>; lut : int8[16]) {
     f16_gemm_walk(xf, recs, nrec, n, d, 32, y) $(wb, e : int) : float {
         let dp = unpackHalf2x16(wsw[wb / 2])
         let dv = wb % 2 == 0 ? dp.x : dp.y
@@ -986,7 +1030,7 @@ def requant_oracle(src : array<float>; base, nelem : int; q8k : bool;
 //! word, the Q8_0 activation bytes and scales from 0) - the CPU rail's float order, the kernel held to it
 def q51_gemv_row_oracle(wq, ws, xq : array<uint>; xs : array<float>; wb0, nb : int) : float {
     unsafe {
-        return dot_q51q8_scalar(addr<uint8 const?>(wq[wb0 * 5]), addr<uint8 const?>(ws[wb0]), addr<int8 const?>(xq[0]), addr(xs[0]), int64(nb) * 32l)
+        return dot_q51q8_scalar(addr<uint8 const?>(wq[wb0 * int(KQ_Q51_QWORDS)]), addr<uint8 const?>(ws[wb0]), addr<int8 const?>(xq[0]), addr(xs[0]), int64(nb) * 32l)
     }
 }
 
@@ -994,9 +1038,47 @@ def q51_gemv_row_oracle(wq, ws, xq : array<uint>; xs : array<float>; wb0, nb : i
 //! half-word, the Q8_0 activation bytes and scales from 0) - the CPU rail's float order, the kernel held to it
 def iq4nl32_gemv_row_oracle(wq, ws, xq : array<uint>; xs : array<float>; wb0, nb : int) : float {
     unsafe {
-        return dot_iq4nl32q8_scalar(addr<uint8 const?>(wq[wb0 * 4]), addr<uint8 const?>(ws[wb0 / 2]) + int64(wb0 % 2) * 2l,
+        return dot_iq4nl32q8_scalar(addr<uint8 const?>(wq[wb0 * int(KQ_B32_QWORDS)]), addr<uint8 const?>(ws[wb0 / 2]) + int64(wb0 % 2) * int64(KQ_IQ4NL32_SBYTES),
             addr<int8 const?>(xq[0]), addr(xs[0]), int64(nb) * 32l)
     }
+}
+
+//! the q4032 GEMV cell's oracle: iq4nl32's over the engine's linear-code scalar dot
+def q4032_gemv_row_oracle(wq, ws, xq : array<uint>; xs : array<float>; wb0, nb : int) : float {
+    unsafe {
+        return dot_q4032q8_scalar(addr<uint8 const?>(wq[wb0 * int(KQ_B32_QWORDS)]), addr<uint8 const?>(ws[wb0 / 2]) + int64(wb0 % 2) * int64(KQ_Q4032_SBYTES),
+            addr<int8 const?>(xq[0]), addr(xs[0]), int64(nb) * 32l)
+    }
+}
+
+//! the q5032 GEMV cell's oracle: the engine's scalar dot over the plane words from block `wb0` (q51's 20-byte blocks, the f16 d
+//! half-word) - the CPU rail's float order, the kernel held to it
+def q5032_gemv_row_oracle(wq, ws, xq : array<uint>; xs : array<float>; wb0, nb : int) : float {
+    unsafe {
+        return dot_q5032q8_scalar(addr<uint8 const?>(wq[wb0 * int(KQ_Q5032_QWORDS)]), addr<uint8 const?>(ws[wb0 / 2]) + int64(wb0 % 2) * int64(KQ_Q5032_SBYTES),
+            addr<int8 const?>(xq[0]), addr(xs[0]), int64(nb) * 32l)
+    }
+}
+
+//! the q5032 plane bytes' float witness: block-by-block `dequant_q5032_plane_block` dotted with the dequantized Q8_0 row in f64 -
+//! the plane decode straight off the bytes, independent of the scalar dot the class oracle and the kernel share
+def q5032_gemv_float_oracle(wq, ws, xq : array<uint>; xs : array<float>; wb0, nb : int) : float {
+    let qbn = int(Q5032_QB)
+    let sbn = int(Q5032_SB)
+    var inscope w : array<float>
+    w |> resize(32)
+    var acc = 0.0lf
+    for (b in range(nb)) {
+        let wb = wb0 + b
+        var inscope qb <- [for (i in range(qbn)); uint8(byte_u8(wq, wb * qbn + i))]
+        var inscope sb <- [for (i in range(sbn)); uint8(byte_u8(ws, wb * sbn + i))]
+        dequant_q5032_plane_block(qb, 0l, sb, 0l, w, 0l)
+        for (k in range(32)) {
+            let xv = (byte_u8(xq, b * 32 + k) ^ 0x80) - 0x80
+            acc += double(w[k]) * double(xv) * double(xs[b])
+        }
+    }
+    return float(acc)
 }
 
 //! the mx4 GEMV cell's oracle: the engine's scalar dot over the plane bytes from block `wb0` (its 16 nibble bytes, its E8M0
@@ -1005,7 +1087,7 @@ def mx4_gemv_row_oracle(wq, wsb, xq : array<uint>; xs : array<float>; wb0, nb : 
     var lut : int8[16]
     mxfp4_fill_lut(lut)
     unsafe {
-        return dot_mx4q8_scalar(addr(lut[0]), addr<uint8 const?>(wq[wb0 * 4]), addr<uint8 const?>(wsb[0]) + int64(wb0), addr<int8 const?>(xq[0]), addr(xs[0]), int64(nb) * 32l)
+        return dot_mx4q8_scalar(addr(lut[0]), addr<uint8 const?>(wq[wb0 * int(KQ_B32_QWORDS)]), addr<uint8 const?>(wsb[0]) + int64(wb0), addr<int8 const?>(xq[0]), addr(xs[0]), int64(nb) * 32l)
     }
 }
 
@@ -1046,9 +1128,11 @@ struct SchedShape {
     bound_mdn : int
 }
 
-def sched_shape(nk, ne, wt_gu, wt_dn : int) : SchedShape {
+def sched_shape(nk, ne, wt_gu, wt_dn : int; s_only : bool = false) : SchedShape {
     let rt_m = nk / int(SCHED_M_ROWS) + ne
-    var s = SchedShape(map_off = 2 * 4 * ne, bound_gu = ne * wt_gu, bound_dn = ne * wt_dn, bound_mgu = rt_m * wt_gu, bound_mdn = rt_m * wt_dn)
+    let rt_s = s_only ? nk / int(SCHED_S_ROWS) + ne : ne   //! the s-only schedule: every bucket a run of 32-row tiles on the s column
+    var s = SchedShape(map_off = 2 * 4 * ne, bound_gu = rt_s * wt_gu, bound_dn = rt_s * wt_dn, bound_mgu = s_only ? 0 : rt_m * wt_gu,
+        bound_mdn = s_only ? 0 : rt_m * wt_dn)
     s.map_off_mgu = s.map_off + s.bound_gu
     s.map_off_mdn = s.map_off + s.bound_dn
     return s
@@ -1087,7 +1171,7 @@ def oracle_piece(var s1, s3, s2 : array<uint>; bases : uint[6]; e : int; ri : ui
 //! expert order (empty pieces skipped), the two dispatches' per-wg maps, the sentinel tails past the
 //! real workgroup counts, and inv in slot order
 def sched_oracle(idx : array<uint>; ne, wt_gu, wt_dn : int; sh : SchedShape; bases : uint[6];
-                 var inv : array<uint>; var s1, s3, s2 : array<uint>) {
+                 var inv : array<uint>; var s1, s3, s2 : array<uint>; s_only : bool = false) {
     let nk = length(idx)
     var cnt : array<int>
     cnt |> resize(ne)
@@ -1130,7 +1214,7 @@ def sched_oracle(idx : array<uint>; ne, wt_gu, wt_dn : int; sh : SchedShape; bas
         //! the ladder spelled out (the shipped rule is the thing under test): a bucket within the s column
         //! takes it whole; past it, whole m columns, and a remainder past the s column joins the last as a partial
         let c = cnt[e]
-        let mrows = c <= s_col ? 0 : ((c % m_col) > s_col ? c : (c / m_col) * m_col)
+        let mrows = (s_only || c <= s_col) ? 0 : ((c % m_col) > s_col ? c : (c / m_col) * m_col)
         let srows = c - mrows
         if (mrows > 0) {
             let rt = (mrows + m_col - 1) / m_col
@@ -1140,9 +1224,10 @@ def sched_oracle(idx : array<uint>; ne, wt_gu, wt_dn : int; sh : SchedShape; bas
             ri_m++
         }
         if (srows > 0) {
-            oracle_piece(s1, s3, s2, bases, e, ri_s, start[e] + mrows, srows, 1, wt_gu, wt_dn, wg_gu_s, wg_dn_s, sh.map_off, sh.map_off)
-            wg_gu_s += wt_gu
-            wg_dn_s += wt_dn
+            let rt = (srows + s_col - 1) / s_col
+            oracle_piece(s1, s3, s2, bases, e, ri_s, start[e] + mrows, srows, rt, wt_gu, wt_dn, wg_gu_s, wg_dn_s, sh.map_off, sh.map_off)
+            wg_gu_s += rt * wt_gu
+            wg_dn_s += rt * wt_dn
             ri_s++
         }
     }

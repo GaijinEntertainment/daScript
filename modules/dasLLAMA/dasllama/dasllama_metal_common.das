@@ -136,7 +136,7 @@ struct KVMirror {
 var @scratch g_mirrors : table<uint64; KVMirror>   // per-session mirrors; hot [] after key_exists is a hit
 var g_mirror_bytes = 0ul
 var g_tick = 0l
-var g_mirror_cap_mb = -1   // <0 = unset: DASLLAMA_METAL_KV_MIRROR_MB (default 4096) reads at use
+var g_mirror_cap_mb = -1   //! <0 = unset: DASLLAMA_METAL_KV_MIRROR_MB reads at use
                            // — a CEILING (M2.7): the arena starts at 256MB and grows on demand
 
 // the mirror arena: one buffer, first-fit free-list suballocation (slices are per-session and
@@ -199,7 +199,10 @@ var g_pso_attnp_q8 : MetalComputePipeline?
 var g_pso_attnp_tq4 : MetalComputePipeline?
 var g_pso_attncomb : MetalComputePipeline?
 var g_pso_rpst16 : MetalComputePipeline?
-var g_pso_rpst_h16 : MetalComputePipeline?  // head-cooperative fused bias+norm+rope+store (QK-norm models)
+var g_pso_qkn16 : MetalComputePipeline?    //! the fused q/k norm + rope + store (`GkQknRopeKv`): f16 / f32 mirrors, one row and rows
+var g_pso_qkn32 : MetalComputePipeline?
+var g_pso_qknb16 : MetalComputePipeline?
+var g_pso_qknb32 : MetalComputePipeline?
 var g_pso_rpst32 : MetalComputePipeline?
 var g_pso_rpst_q8 : MetalComputePipeline?   // per-32-block quantizing store
 var g_pso_rpst_tq4 : MetalComputePipeline?  // threadgroup-per-head FWHT + quantizing store
@@ -212,7 +215,24 @@ var g_pso_argmax : MetalComputePipeline?
 var g_pso_argmax_rows : MetalComputePipeline?   // the same-slab verify's per-row accept-walk argmax
 var g_pso_copy_row : MetalComputePipeline?   // zero-copy logits: staging row -> wrapped session storage
 var g_pso_emb : MetalComputePipeline?
-var g_pso_emb_k6 : MetalComputePipeline?     // tied-k6 spec chain's embed gather
+var g_pso_emb_kq_k4 : MetalComputePipeline?     //! the token-table gather, one stamp a superblock format
+var g_pso_emb_kq_k5 : MetalComputePipeline?
+var g_pso_emb_kq_k6 : MetalComputePipeline?
+var g_pso_emb_kq_iq4xs : MetalComputePipeline?
+var g_pso_emb_kq_iq3s4 : MetalComputePipeline?
+var g_pso_emb_kq_iq4nl : MetalComputePipeline?
+var g_pso_emb_kq_q40 : MetalComputePipeline?
+var g_pso_emb_kq_k3 : MetalComputePipeline?
+var g_pso_emb_kq_k2 : MetalComputePipeline?
+var g_pso_emb_kq_iq3s : MetalComputePipeline?
+var g_pso_emb_kq_iq3xxs : MetalComputePipeline?
+var g_pso_emb_kq_iq2s : MetalComputePipeline?
+var g_pso_emb_kq_iq2xs : MetalComputePipeline?
+var g_pso_emb_kq_iq2xxs : MetalComputePipeline?
+var g_pso_emb_b32_q51 : MetalComputePipeline?       //! the per-32 token-table gathers
+var g_pso_emb_b32_iq4nl32 : MetalComputePipeline?
+var g_pso_emb_b32_q4032 : MetalComputePipeline?
+var g_pso_emb_b32_q5032 : MetalComputePipeline?
 var g_pso_moe_router : MetalComputePipeline?   // MoE (Wave C): router GEMV over the fp32 slab
 var g_pso_moe_select : MetalComputePipeline?   // softmax + top-k + renorm (one simdgroup)
 var g_pso_moe_select_512 : MetalComputePipeline?   // the 16-deep ladder past 256 experts
@@ -226,18 +246,60 @@ var g_pso_moe_kq_iq2s : MetalComputePipeline?
 var g_pso_moe_kq_iq2xs : MetalComputePipeline?
 var g_pso_moe_kq_iq2xxs : MetalComputePipeline?
 var g_pso_moe_kq_iq4xs : MetalComputePipeline?
+var g_pso_moe_kq_iq3s4 : MetalComputePipeline?
 var g_pso_moe_kq_q40 : MetalComputePipeline?
+var g_pso_moe_kq_iq4nl : MetalComputePipeline?
+var g_pso_moe_kq_k2 : MetalComputePipeline?
 var g_pso_moe_kq_k5 : MetalComputePipeline?
 var g_pso_moe_kq_k6 : MetalComputePipeline?
 var g_pso_moe_combine : MetalComputePipeline?  // weighted top-k reduce into the w2 write shape
+var g_pso_moe_combine_sh : MetalComputePipeline?   //! ... with the gated shared expert's rows added
 var g_pso_g4rnorm : MetalComputePipeline?      // gemma4 MoE router-input norm (stage 3)
 var g_pso_moe_wscale : MetalComputePipeline?   // gemma4 per-expert down-scale fold
 var g_pso_swiglu_oai : MetalComputePipeline?   // gpt-oss clamped swiglu (stage 4)
 var g_pso_moe_gemv_mx4 : MetalComputePipeline?  // gpt-oss MXFP4 expert GEMV
 var g_pso_moe_gemv_q51 : MetalComputePipeline?  // Q5_1 expert GEMV (per-32 planes)
 var g_pso_moe_gemv_iq4nl32 : MetalComputePipeline?  // IQ4_NL per-32 expert GEMV
+var g_pso_kq_q51 : MetalComputePipeline?           //! dense Q5_1 GEMV (per-32 planes)
+var g_pso_kq_iq4nl32 : MetalComputePipeline?       //! dense IQ4_NL per-32 GEMV
+var g_pso_b32_mvb2_q51 : MetalComputePipeline?     //! the per-32 small-batch forms, two / four / eight x columns a group
+var g_pso_b32_mvb4_q51 : MetalComputePipeline?
+var g_pso_b32_mvb8_q51 : MetalComputePipeline?
+var g_pso_b32_mvb2_iq4nl32 : MetalComputePipeline?
+var g_pso_b32_mvb4_iq4nl32 : MetalComputePipeline?
+var g_pso_b32_mvb8_iq4nl32 : MetalComputePipeline?
+var g_pso_kq_q51_ks : MetalComputePipeline?        //! the narrow-plane per-32 stamps: one row a threadgroup, K split four ways
+var g_pso_kq_iq4nl32_ks : MetalComputePipeline?
+var g_pso_b32_mvb2_q51_ks : MetalComputePipeline?
+var g_pso_b32_mvb4_q51_ks : MetalComputePipeline?
+var g_pso_b32_mvb8_q51_ks : MetalComputePipeline?
+var g_pso_b32_mvb2_iq4nl32_ks : MetalComputePipeline?
+var g_pso_b32_mvb4_iq4nl32_ks : MetalComputePipeline?
+var g_pso_b32_mvb8_iq4nl32_ks : MetalComputePipeline?
+var g_pso_moe_gemv_q4032 : MetalComputePipeline?   //! the q4032 stamps: the iq4nl32 set under the linear code
+var g_pso_kq_q4032 : MetalComputePipeline?
+var g_pso_kq_q4032_ks : MetalComputePipeline?
+var g_pso_b32_mvb2_q4032 : MetalComputePipeline?
+var g_pso_b32_mvb4_q4032 : MetalComputePipeline?
+var g_pso_b32_mvb8_q4032 : MetalComputePipeline?
+var g_pso_b32_mvb2_q4032_ks : MetalComputePipeline?
+var g_pso_b32_mvb4_q4032_ks : MetalComputePipeline?
+var g_pso_b32_mvb8_q4032_ks : MetalComputePipeline?
+var g_pso_kq_mm_b4032 : MetalComputePipeline?
+var g_pso_moe_gemv_q5032 : MetalComputePipeline?   //! the q5032 stamps: the codebook set over q51's quant block, the code q - 16
+var g_pso_kq_q5032 : MetalComputePipeline?
+var g_pso_kq_q5032_ks : MetalComputePipeline?
+var g_pso_b32_mvb2_q5032 : MetalComputePipeline?
+var g_pso_b32_mvb4_q5032 : MetalComputePipeline?
+var g_pso_b32_mvb8_q5032 : MetalComputePipeline?
+var g_pso_b32_mvb2_q5032_ks : MetalComputePipeline?
+var g_pso_b32_mvb4_q5032_ks : MetalComputePipeline?
+var g_pso_b32_mvb8_q5032_ks : MetalComputePipeline?
+var g_pso_kq_mm_b5032 : MetalComputePipeline?
 var g_mx4_vtab : MetalBuffer?                   // [16] signed doubled-e2m1 values
 var g_pso_dn_conv : MetalComputePipeline?      // deltanet (Wave D): causal conv + SiLU
+var g_pso_dn_conv_n : MetalComputePipeline?    //! ... and the q/k L2 norm in one pass (`GkDnConv`)
+var g_pso_dn_conv_n4 : MetalComputePipeline?
 var g_pso_dn_hist : MetalComputePipeline?      // conv-history advance
 var g_pso_st2_im2col : MetalComputePipeline?
 var g_pso_st2_conv_mm : MetalComputePipeline?
@@ -301,12 +363,12 @@ var g_pso_dn_deint : MetalComputePipeline?     // 2x-wide [q|gate] deinterleave
 var g_pso_hc_norm : MetalComputePipeline?      // hyper-connections: the grouped stream norm
 var g_pso_hc_lo : MetalComputePipeline?        // ... silu(lo / hc) on the low-rank row
 var g_pso_hc_init : MetalComputePipeline?      // ... the wide residual rows as hc copies of the embed rows
+var g_pso_cat2 : MetalComputePipeline?         //! the MTP head's [a ; b] eh_proj input rows
 var g_pso_hc_mix : MetalComputePipeline?       // ... the sigmoid-gated stream mean
 var g_pso_hc_combine : MetalComputePipeline?   // ... the scatter of a block output into the streams
 var g_pso_ple_gate : MetalComputePipeline?     // the n-gram side input's per-stream gate + conv-input row
 var g_pso_ple_conv : MetalComputePipeline?     // ... its dilated causal conv + residual add
 var g_pso_sigmul : MetalComputePipeline?       // x ⊙ σ(g) — the gated-attention out-gate
-var g_pso_axpy_sig : MetalComputePipeline?     // y += x ⊙ σ(g[row]) — the shexp combine (stage 3)
 var g_pso_qkvrs16 : MetalComputePipeline?   // fused QKV+rope+store (s16 path)
 var g_pso_qkvrs32 : MetalComputePipeline?
 var g_pso_w13sw : MetalComputePipeline?
@@ -316,6 +378,11 @@ var g_pso_kq_k5 : MetalComputePipeline?
 var g_pso_kq_k5c : MetalComputePipeline?   // the select-form nr0=1 twin — n < 3072 / small-d sites
 var g_pso_kq_k6 : MetalComputePipeline?
 var g_pso_kq_iq4xs : MetalComputePipeline?
+var g_pso_kq_iq3s4 : MetalComputePipeline?
+var g_pso_kq_mvb2_iq3s4 : MetalComputePipeline?
+var g_pso_kq_mvb4_iq3s4 : MetalComputePipeline?
+var g_pso_kq_mvb8_iq3s4 : MetalComputePipeline?
+var g_pso_kq_mm_b35 : MetalComputePipeline?   //!< the iq3s4 base mul_mm (the iq4xs walk over the odd codebook)
 var g_pso_kq_k3 : MetalComputePipeline?
 var g_pso_kq_mvb2_k4 : MetalComputePipeline?   // batch B=2..8: the kq ext small-batch mv twins
 var g_pso_kq_mvb2_k4r2 : MetalComputePipeline?   // the k4 twin's two-row register tile (the `kq_mvb2_k4_r2` crown)
@@ -357,6 +424,8 @@ var g_pso_kq_mvb2_q40 : MetalComputePipeline?
 var g_pso_kq_mvb4_q40 : MetalComputePipeline?
 var g_pso_kq_mvb8_q40 : MetalComputePipeline?
 var g_pso_kq_mm_b40 : MetalComputePipeline?
+var g_pso_kq_mm_b51 : MetalComputePipeline?
+var g_pso_kq_mm_b4n32 : MetalComputePipeline?
 var g_pso_kq_iq2s : MetalComputePipeline?
 var g_pso_kq_mvb2_iq2s : MetalComputePipeline?
 var g_pso_kq_mvb4_iq2s : MetalComputePipeline?
@@ -461,6 +530,8 @@ var g_pso_rpstb16 : MetalComputePipeline?
 var g_pso_rpstb32 : MetalComputePipeline?
 var g_pso_rpstb_q8 : MetalComputePipeline?
 var g_pso_rpstb_tq4 : MetalComputePipeline?
+var g_pso_kv_rows_q8 : MetalComputePipeline?    //! the prefill window's K/V rows into a q8_0 mirror
+var g_pso_kv_rows_tq4 : MetalComputePipeline?   //! the same into a tq4 mirror
 // uids a batch step is actively encoding against — eviction must never free a batch row's slice
 // out from under the step being assembled (the single path's `keep` protects only one uid)
 var g_pin : table<uint64>
@@ -503,9 +574,9 @@ def arena_free_slice(off : uint64; size : uint64) {
     }
 }
 
-//! The KV-mirror cap (M2.7): the arena's grow-on-demand CEILING (clamps to 64..4096MB) AND the
-//! RAW resident-bytes target for LRU eviction (tiny values = legitimate evict-aggressively policy).
-//! Negative restores the env default (`DASLLAMA_METAL_KV_MIRROR_MB`, else 4096).
+//! The KV-mirror cap in MiB: the arena's growth bound for every session together (64 at least, the device's largest buffer at
+//! most; a live session's own slice past it still gets room) AND the raw resident-bytes target idle mirrors evict down to (a
+//! tiny value is a legitimate evict-aggressively policy). Negative restores the env default (`DASLLAMA_METAL_KV_MIRROR_MB`).
 def public set_metal_decode_mirror_cap_mb(v : int) {
     g_mirror_cap_mb = v
 }
@@ -1132,31 +1203,26 @@ def kq_scale_doff(fmt : KqFmt; nsb_total, sb0 : int64) : int64 {
     return tail == 0l ? 0l : nsb_total * 16l + sb0 * tail
 }
 
-//! One q51 tensor's plane pair bind: quant plane (20B/block, uint-viewable) at (off/32)*20 and
-//! the f16 d+m scale plane at (off/32)*4 — both verbatim disk splits, never rebaked (the blob
-//! transform leaves q51 planes untouched). off % 128 keeps both binds 16B-aligned.
-def q51_planes_of(dev : MetalDevice?; t : Model; off : int64) : tuple<qbuf : MetalBuffer?; qoff : uint64; sbuf : MetalBuffer?; soff : uint64> {
-    assert(t.metal_blob)
-    let b0 = off / 32l
-    unsafe {
-        return (qbuf = plane_buffer(dev, addr < void? >(t.q51q[0]), uint64(long_length(t.q51q)), t.image_map != null),
-                qoff = uint64(b0 * 20l),
-                sbuf = plane_buffer(dev, addr < void? >(t.q51s[0]), uint64(long_length(t.q51s)), t.image_map != null),
-                soff = uint64(b0 * 4l))
-    }
-}
+//! a per-32 plane pair's binds: quant buffer and offset, then scale's
+typedef B32PlaneBind = tuple<qbuf : MetalBuffer?; qoff : uint64; sbuf : MetalBuffer?; soff : uint64>
 
-//! One iq4nl32 tensor's plane pair bind: nibble plane (16B/block, uint-viewable) at (off/32)*16 and
-//! the f16 d plane at (off/32)*2 — verbatim disk splits, never rebaked. off % 256 keeps both binds 16B-aligned.
-def iq4nl32_planes_of(dev : MetalDevice?; t : Model; off : int64) : tuple<qbuf : MetalBuffer?; qoff : uint64; sbuf : MetalBuffer?; soff : uint64> {
+//! A per-32 tensor's pair bind at block off/32: the quant plane
+//! (uint-viewable) and the scale plane, verbatim disk splits the blob
+//! never rebakes; `metal_blob_off_ok` keeps both binds 16B-aligned.
+def b32_planes_of(dev : MetalDevice?; t : Model; fmt : KqFmt; off : int64) : B32PlaneBind {
     assert(t.metal_blob)
-    let b0 = off / 32l
-    unsafe {
-        return (qbuf = plane_buffer(dev, addr < void? >(t.iq4nl32q[0]), uint64(long_length(t.iq4nl32q)), t.image_map != null),
-                qoff = uint64(b0 * IQ4NL32_QB),
-                sbuf = plane_buffer(dev, addr < void? >(t.iq4nl32s[0]), uint64(long_length(t.iq4nl32s)), t.image_map != null),
-                soff = uint64(b0 * IQ4NL32_SB))
+    let b0 = off / KQ_B32_ELEMS
+    let mapped = t.image_map != null
+    var qp : B32PlaneBind
+    kq_plane_pair(t, fmt) $(q, s) {
+        unsafe {
+            qp = (qbuf = plane_buffer(dev, addr<void?>(q[0]), uint64(long_length(q)), mapped),
+                  qoff = uint64(b0 * kq_qsb(fmt)),
+                  sbuf = plane_buffer(dev, addr<void?>(s[0]), uint64(long_length(s)), mapped),
+                  soff = uint64(b0 * kq_ssb(fmt)))
+        }
     }
+    return qp
 }
 
 //! A 4-byte buffer holding one scalar - the caller says where the bytes come from.
@@ -1205,9 +1271,26 @@ def private mirror_slice_shape(t : Model; s : Session; needed : int64) : tuple<c
             vbytes = uint64(cap * kv_row_bytes(s.kv_dtype_v, total)))
 }
 
+//! the device's largest buffer - the arena is one buffer, so neither a slice nor the arena grows past it
+def private mirror_device_max_bytes : uint64 => g_dev != null ? metal_max_buffer_length(g_dev) : 0xFFFFFFFFFFFFFFFFul
+
+[arch(at="../ARCHITECTURE_GPU_PREFILL_WINDOW.md#kv-mirror-arena")]
 def private mirror_ceiling_bytes : uint64 {
-    let ceil_mb = uint64(clamp(g_mirror_cap_mb >= 0 ? g_mirror_cap_mb : g_mirror_cap_env, 64, 4096))
-    return ceil_mb * 1024ul * 1024ul
+    let ceil_mb = uint64(max(g_mirror_cap_mb >= 0 ? g_mirror_cap_mb : g_mirror_cap_env, 64))
+    return min(ceil_mb * 1024ul * 1024ul, mirror_device_max_bytes())
+}
+
+[arch(at="../ARCHITECTURE_GPU_PREFILL_WINDOW.md#kv-mirror-arena")]
+def private mirror_ceiling_for(slice_bytes : uint64) : uint64 => clamp(slice_bytes, mirror_ceiling_bytes(), mirror_device_max_bytes())
+
+[arch(at="../ARCHITECTURE_GPU_PREFILL_WINDOW.md#kv-mirror-arena")]
+def mirror_in_reach(dt : KVDtype; end : uint64) : bool => end / uint64(kv_block_codec(dt) ? 1l : kv_row_bytes(dt, 1l)) <= 0xFFFFFFFFul
+
+//! `uid`'s whole slice lies inside the route tables' reach
+def mirror_slice_in_reach(uid : uint64) : bool {
+    return false if (!key_exists(g_mirrors, uid))
+    let mr = g_mirrors[uid]
+    return mirror_in_reach(mr.kdt, mr.koff + mr.bytes)
 }
 
 // release-all rebuild at `want` (clamped to the ceiling): every mirror re-uploads via its
@@ -1242,11 +1325,10 @@ def mirror_arena_demand(t : Model; s : Session; pos : int64) : uint64 {
     return shp.kbytes + shp.vbytes
 }
 
-// grow the arena until it can hold `total` bytes of slices — the batch driver reserves its
-// WHOLE step's demand through this before pinning any row (growth is a release-all rebuild,
-// forbidden under pins). false = total exceeds the ceiling (a genuine capability limit).
-def mirror_reserve(total : uint64) : bool {
-    let ceil_bytes = mirror_ceiling_bytes()
+//! grow the arena until it can hold `total` bytes of slices, `largest` the biggest of them - the batch driver reserves its whole
+//! step's demand through this before pinning any row (growth is a release-all rebuild, forbidden under pins); false = past the ceiling
+def mirror_reserve(total, largest : uint64) : bool {
+    let ceil_bytes = mirror_ceiling_for(largest)
     if (total > ceil_bytes) {
         return false
     }
@@ -1275,8 +1357,8 @@ def mirror_reserve(total : uint64) : bool {
 // per-session prepares can't pack a step that DOES fit capacity-wise (exact-fit demand around
 // older residents can strand contiguity). Callers unpin first; false = past the ceiling.
 [cold_path]   // arena defrag = the occasional rebuild leg
-def mirror_defrag(total : uint64) : bool {
-    let ceil_bytes = mirror_ceiling_bytes()
+def mirror_defrag(total, largest : uint64) : bool {
+    let ceil_bytes = mirror_ceiling_for(largest)
     if (total > ceil_bytes || !empty(g_pin) || g_arena == null) {
         return false
     }
@@ -1432,20 +1514,19 @@ def mirror_prepare_rows(t : Model; var s : Session; pos, needed : int64) : tuple
         }
     }
     if (!key_exists(g_mirrors, s.uid)) {
-        // the mirror cap is a CEILING (M2.7): grows on demand to clamp(cap, 64, 4096)MB — 4096 is a
-        // HARD max (the batch row table's uint32 arena offsets need arena size <= 2^32). Growth
-        // releases every mirror and rebuilds (re-mirror cost only); never runs while pins are held.
-        let ceil_bytes = mirror_ceiling_bytes()
+        //! the arena grows on demand to the ceiling - room for this slice where the slice alone passes the cap; growth releases
+        //! every mirror and rebuilds (re-mirror cost only) and never runs while pins are held
+        let shp = mirror_slice_shape(t, s, needed)
+        let cap = shp.cap
+        let kbytes = shp.kbytes
+        let vbytes = shp.vbytes
+        let ceil_bytes = mirror_ceiling_for(kbytes + vbytes)
         if (g_arena == null) {
             g_arena_bytes = min(256ul * 1024ul * 1024ul, ceil_bytes)
             g_arena = metal_new_buffer(g_dev, g_arena_bytes)
             g_arena_free |> clear()
             g_arena_free |> push((off = 0ul, size = g_arena_bytes))
         }
-        let shp = mirror_slice_shape(t, s, needed)
-        let cap = shp.cap
-        let kbytes = shp.kbytes
-        let vbytes = shp.vbytes
         var off = arena_alloc(kbytes + vbytes)
         while (off < 0l) {   // arena full — evict LRU until the slice fits (or nothing evictable)
             let victim = lru_victim(g_mirrors, s.uid, true)
@@ -1516,36 +1597,197 @@ def mirror_prepare_rows(t : Model; var s : Session; pos, needed : int64) : tuple
 
 
 // ===== deltanet recurrent-state mirrors (Wave D) — per-session GPU S + conv state =====
-// Forward-only, NOT re-derivable: pos 0 zeroes, s.dn_pos == pos syncs from CPU, else decline;
-// own buffers (KV-arena rebuild re-uploads from CPU — impossible for state); layout == Session's.
+// Forward-only, NOT re-derivable: pos 0 zeroes, s.dn_pos == pos syncs from CPU, an evicted session's stash restores, else decline;
+// every mirror is a slot of one pool buffer (the KV arena's rebuild re-uploads from CPU — impossible for state); layout == Session's.
 
+[arch(at="../ARCHITECTURE_GPU_MTP.md#dn-mirror-pool")]
 struct DnMirror {
     uid : uint64
-    @do_not_delete buf : MetalBuffer?   // regions x [state planes f32][conv planes f32]
+    slot : int64                        //! the mirror's slot in the pool
     conv_off : uint64                   // byte offset of the conv-history region within a region
     region_bytes : uint64
     regions : int64                     // 2 for MTP-verify dual-store (cur flips on reject), else 1
     cur : int64                         // live region index
-    bytes : uint64                      // regions * region_bytes
+    bytes : uint64                      //! the slot: regions * region_bytes + the n-gram ring
     pos : int64                         // next position the GPU state expects (forward-only)
     tick : int64
 }
 var @scratch g_dn_mirrors : table<uint64; DnMirror>   // per-session; hot [] after key_exists is a hit
-let DN_MIRRORS_MAX = 4      // per-session state is big (35B: ~60MB) — oldest evicts; a returning
-                            // evicted session declines unless it restarts at pos 0 or off CPU state
+let DN_MIRRORS_MAX = 4      //! per-session state is big (35B: ~60MB) — the least recent mirror evicts into its stash
 var private g_dn_mirrors_max = int64(DN_MIRRORS_MAX)   // grows to the widest batch served (dn_mirror_room)
+var private g_dn_pool : MetalBuffer?   //! every mirror's slot, back to back
+var private g_dn_pool_slots = 0l
+var private g_dn_slot_bytes = 0ul
+var g_dn_pool_epoch = 0l   //! bumps when the pool moves - a step encoded over the old buffer is stale
+
+//! An evicted mirror's live region and n-gram ring on the host, at the position it expects next.
+struct private DnStash {
+    pos : int64
+    bytes : array<uint8>
+}
+var private @scratch g_dn_stash : table<uint64; DnStash>
+var private g_dn_restores = 0l
 
 [arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]
 def dn_mirror_room(n : int64) {
     g_dn_mirrors_max = max(g_dn_mirrors_max, n)
 }
 
-// MTP-capable models verify at B=2 with dual-store — their mirrors carry the shadow region
-def dn_mirror_regions(t : Model) : int64 => t.config.n_layer_nextn > 0l ? 2l : 1l
+//! every mirror carries three regions: a step that must not touch the live state - a verify's shadow, the greedy chain's next
+//! step - reads one and writes the next, and the chain's second step in flight writes a third while the first is unverified
+let DN_REGIONS = 3l
 
-def dn_mirror_release(mr : DnMirror) {
-    if (mr.buf != null) {
-        metal_release(mr.buf)
+//! the region a step reading `region` writes
+def dn_region_next(region : int64) : int64 => (region + 1l) % DN_REGIONS
+
+//! the region `uid`'s mirror holds live, and its state and history bases in the pool for region `region`
+def dn_mirror_region_offs(uid : uint64; region : int64) : tuple<state_off : uint64; conv_off : uint64> {
+    let mr = g_dn_mirrors[uid]
+    let base = dn_slot_base(mr) + uint64(region) * mr.region_bytes
+    return (state_off = base, conv_off = base + mr.conv_off)
+}
+
+//! `uid`'s live region, while its mirror is resident at `pos` with both regions; -1 otherwise
+def dn_mirror_cur_at(uid : uint64; pos : int64) : int64 {
+    return -1l if (!key_exists(g_dn_mirrors, uid))
+    let mr = g_dn_mirrors[uid]
+    return mr.pos == pos && mr.regions == DN_REGIONS ? mr.cur : -1l
+}
+
+//! the step that wrote region `region` landed: the region is live, the mirror at `pos`
+def dn_mirror_land(uid : uint64; region : int64; pos : int64) {
+    if (key_exists(g_dn_mirrors, uid)) {
+        g_dn_mirrors[uid].cur = region
+        g_dn_mirrors[uid].pos = pos
+    }
+}
+
+//! the pool every mirror's offsets index; it moves only inside `dn_mirror_prepare`
+def dn_pool_buffer() : MetalBuffer? => g_dn_pool
+
+//! the evicted mirrors a later prepare rebuilt on the device from their stash
+def dn_mirror_restores() : int64 => g_dn_restores
+
+//! `uid`'s recurrent state is held for it on the device or in its stash
+def dn_mirror_holds(uid : uint64) : bool => key_exists(g_dn_mirrors, uid) || key_exists(g_dn_stash, uid)
+
+//! the mirrors resident at once before the least recent evicts
+def dn_mirrors_cap() : int64 => g_dn_mirrors_max
+
+def private dn_slot_base(mr : DnMirror) : uint64 => uint64(mr.slot) * g_dn_slot_bytes
+
+def private dn_slot_dev(mr : DnMirror) : uint8? {
+    unsafe {
+        return reinterpret<uint8?>(metal_buffer_contents(g_dn_pool)) + dn_slot_base(mr)
+    }
+}
+
+//! every step that may still write a recurrent slot landed or retired - the pool moving, a slot changing hands, the host writing one
+[cold_path]
+def private dn_mirror_quiesce {
+    mirror_quiesce()
+}
+
+//! Drops `uid`'s mirror and its stash: its slot is free for the next session.
+def dn_mirror_drop(uid : uint64) {
+    g_dn_mirrors |> erase(uid)
+    g_dn_stash |> erase(uid)
+}
+
+//! The pool at `slots` slots of `slot_bytes` - the slots it held keep their bytes; a new slot size drops every mirror.
+[cold_path]   // the pool moves when the cap grows or the model changes
+def private dn_pool_fit(slots : int64; slot_bytes : uint64) {
+    if (g_dn_pool != null && g_dn_slot_bytes == slot_bytes && g_dn_pool_slots >= slots) {
+        return
+    }
+    dn_mirror_quiesce()   //! no step encoded ahead may write the pool that moves
+    var nb = metal_new_buffer(g_dev, uint64(slots) * slot_bytes)
+    if (g_dn_pool != null) {
+        if (g_dn_slot_bytes == slot_bytes) {
+            unsafe(memcpy(metal_buffer_contents(nb), metal_buffer_contents(g_dn_pool), int64(uint64(g_dn_pool_slots) * slot_bytes)))
+        } else {
+            delete g_dn_mirrors
+            delete g_dn_stash
+        }
+        metal_release(g_dn_pool)
+    }
+    g_dn_pool = nb
+    g_dn_pool_slots = slots
+    g_dn_slot_bytes = slot_bytes
+    g_dn_pool_epoch++
+}
+
+//! a model swap frees a pool no live session holds a slot or stash in
+[cold_path, arch(at="../ARCHITECTURE_GPU_MTP.md#dn-mirror-pool")]
+def private dn_pool_drop_idle {
+    return if (g_dn_pool == null || !empty(g_dn_mirrors) || !empty(g_dn_stash))
+    dn_mirror_quiesce()   //! no step encoded ahead may write the pool that goes
+    metal_release(g_dn_pool)
+    g_dn_pool = null
+    g_dn_pool_slots = 0l
+    g_dn_slot_bytes = 0ul
+    g_dn_pool_epoch++
+}
+
+[init]
+def private dn_pool_reload_register {
+    register_reload_prep(@@dn_pool_drop_idle)
+}
+
+//! A free slot of `slot_bytes`, the pool grown when every slot holds a mirror.
+def private dn_slot_alloc(slot_bytes : uint64) : int64 {
+    if (g_dn_pool == null || g_dn_slot_bytes != slot_bytes) {
+        dn_pool_fit(1l, slot_bytes)
+    }
+    for (slot in range64(g_dn_pool_slots)) {
+        var used = false
+        for (mr in values(g_dn_mirrors)) {
+            used = used || mr.slot == slot
+        }
+        return slot if (!used)
+    }
+    let slot = g_dn_pool_slots
+    dn_pool_fit(clamp(2l * g_dn_pool_slots, slot + 1l, max(slot + 1l, g_dn_mirrors_max)), slot_bytes)
+    return slot
+}
+
+//! The least recent mirror leaves the pool for the host: its live region and ring land in its stash.
+[cold_path]   // past the cap alone
+def private dn_mirror_evict(victim : uint64) {
+    let mr = g_dn_mirrors[victim]
+    if (mr.pos > 0l) {
+        let rb = mr.region_bytes
+        let ring = mr.bytes - rb * uint64(mr.regions)
+        var st = DnStash(pos = mr.pos)
+        st.bytes |> reserve(int64(rb + ring))
+        st.bytes |> resize(int64(rb + ring))
+        unsafe {
+            let dev = dn_slot_dev(mr)
+            memcpy(addr<void?>(st.bytes[0]), reinterpret<void?>(dev + uint64(mr.cur) * rb), int64(rb))
+            if (ring > 0ul) {
+                memcpy(addr<void?>(st.bytes[int64(rb)]), reinterpret<void?>(dev + rb * uint64(mr.regions)), int64(ring))
+            }
+        }
+        g_dn_stash |> emplace(victim, st)
+    }
+    g_dn_mirrors |> erase(victim)
+}
+
+//! `uid`'s mirror is resident at `pos`, or its stash stands there to rebuild it
+def dn_mirror_at(uid : uint64; pos : int64) : bool => (key_exists(g_dn_mirrors, uid) && g_dn_mirrors[uid].pos == pos) || (key_exists(g_dn_stash, uid) && g_dn_stash[uid].pos == pos)
+
+//! `uid`'s live state base in the pool while its mirror stands resident at `pos`, else ~0
+def dn_mirror_live_off(uid : uint64; pos : int64) : uint64 {
+    return ~0ul if (!key_exists(g_dn_mirrors, uid) || g_dn_mirrors[uid].pos != pos)
+    let mr = g_dn_mirrors[uid]
+    return dn_slot_base(mr) + uint64(mr.cur) * mr.region_bytes
+}
+
+//! Test seam: `uid`'s mirror evicts as the LRU would evict it.
+def dn_mirror_evict_now(uid : uint64) {
+    if (key_exists(g_dn_mirrors, uid)) {
+        dn_mirror_quiesce()
+        dn_mirror_evict(uid)
     }
 }
 
@@ -1554,7 +1796,7 @@ def dn_mirror_release(mr : DnMirror) {
 def private dn_mirror_copy(var s : Session; mr : DnMirror; region : int64; to_host : bool) {
     let base = uint64(region) * mr.region_bytes
     unsafe {
-        var dev = reinterpret<uint8?>(metal_buffer_contents(mr.buf))
+        var dev = dn_slot_dev(mr)
         var spans = fixed_array(
             (host = addr<void?>(s.dn_state[0]), dev = reinterpret<void?>(dev + base), bytes = long_length(s.dn_state) * 4l),
             (host = addr<void?>(s.dn_conv_state[0]), dev = reinterpret<void?>(dev + base + mr.conv_off), bytes = long_length(s.dn_conv_state) * 4l),
@@ -1574,7 +1816,8 @@ def private dn_mirror_copy(var s : Session; mr : DnMirror; region : int64; to_ho
 //! A region is [state planes][conv planes]; the n-gram PLE conv ring sits ONCE past every region - it rides
 //! the recurrent mirror because it is the same kind of state (forward-only, per session, synced from the CPU
 //! prefix), but the verify's shadow flip must never retire it: its rows land only for committed positions
-def dn_mirror_prepare(var s : Session; pos : int64; regions : int64) : tuple<ok : bool; buf : MetalBuffer?; state_off : uint64; conv_off : uint64; state_alt : uint64; conv_alt : uint64; ple_off : uint64> {
+def dn_mirror_prepare(var s : Session; pos : int64) : tuple<ok : bool; buf : MetalBuffer?; state_off : uint64; conv_off : uint64; state_alt : uint64; conv_alt : uint64; ple_off : uint64> {
+    let regions = DN_REGIONS
     let sbytes = uint64(long_length(s.dn_state)) * 4ul
     let cbytes = uint64(long_length(s.dn_conv_state)) * 4ul
     let pbytes = uint64(long_length(s.ple_conv_hist)) * 4ul
@@ -1583,29 +1826,47 @@ def dn_mirror_prepare(var s : Session; pos : int64; regions : int64) : tuple<ok 
     if (sbytes == 0ul) {
         return (ok = false, buf = null, state_off = 0ul, conv_off = 0ul, state_alt = 0ul, conv_alt = 0ul, ple_off = 0ul)
     }
-    if (key_exists(g_dn_mirrors, s.uid) && g_dn_mirrors[s.uid].bytes != total) {
-        dn_mirror_release(g_dn_mirrors[s.uid])
-        g_dn_mirrors |> erase(s.uid)
+    if (g_dn_pool != null && g_dn_slot_bytes != total) {
+        dn_pool_fit(1l, total)
     }
     let have = key_exists(g_dn_mirrors, s.uid)
     let cpu_prefix = s.dn_pos == pos
-    if (!have && pos != 0l && !cpu_prefix) {
+    let stashed = !have && pos != 0l && key_exists(g_dn_stash, s.uid) && g_dn_stash[s.uid].pos == pos
+    if (!have && pos != 0l && !cpu_prefix && !stashed) {
         return (ok = false, buf = null, state_off = 0ul, conv_off = 0ul, state_alt = 0ul, conv_alt = 0ul, ple_off = 0ul)
     }
     if (!have) {
-        while (long_length(g_dn_mirrors) >= g_dn_mirrors_max) {
-            let victim = lru_victim(g_dn_mirrors, 0ul, false)
-            dn_mirror_release(g_dn_mirrors[victim])
-            g_dn_mirrors |> erase(victim)
+        if (long_length(g_dn_mirrors) >= g_dn_mirrors_max) {
+            dn_mirror_quiesce()   //! a step encoded ahead may still write the slot the eviction hands to this session
         }
-        g_dn_mirrors[s.uid] = DnMirror(uid = s.uid, buf = metal_new_buffer(g_dev, total),
+        while (long_length(g_dn_mirrors) >= g_dn_mirrors_max) {
+            dn_mirror_evict(lru_victim(g_dn_mirrors, 0ul, false))
+        }
+        let slot = dn_slot_alloc(total)
+        g_dn_mirrors[s.uid] = DnMirror(uid = s.uid, slot = slot,
             conv_off = sbytes, region_bytes = rb, regions = regions, cur = 0l, bytes = total, pos = -1l)
+        if (stashed) {
+            let mr = g_dn_mirrors[s.uid]
+            unsafe {
+                let dev = dn_slot_dev(mr)
+                memcpy(reinterpret<void?>(dev), addr<void?>(g_dn_stash[s.uid].bytes[0]), int64(rb))
+                if (pbytes > 0ul) {
+                    memcpy(reinterpret<void?>(dev + rb * uint64(regions)), addr<void?>(g_dn_stash[s.uid].bytes[int64(rb)]), int64(pbytes))
+                }
+            }
+            g_dn_mirrors[s.uid].pos = pos
+            g_dn_restores++
+        }
+    }
+    g_dn_stash |> erase(s.uid)
+    if (pos == 0l || g_dn_mirrors[s.uid].pos != pos) {
+        dn_mirror_quiesce()   //! the host writes the slot below: no step encoded ahead may still write any region
     }
     if (pos == 0l) {
         // fresh conversation: zero every region (dn_reset's GPU half). Safe on unified memory —
         // no step of this session is in flight at pos 0 (spec is clipped for recurrent models)
         unsafe {
-            memset8(metal_buffer_contents(g_dn_mirrors[s.uid].buf), uint8(0), int(total))
+            memset8(dn_slot_dev(g_dn_mirrors[s.uid]), uint8(0), int(total))
         }
         g_dn_mirrors[s.uid].cur = 0l
         g_dn_mirrors[s.uid].pos = 0l
@@ -1620,17 +1881,31 @@ def dn_mirror_prepare(var s : Session; pos : int64; regions : int64) : tuple<ok 
     }
     g_tick++
     g_dn_mirrors[s.uid].tick = g_tick
-    var mr = g_dn_mirrors[s.uid]   // cheap copy — one lookup per statement (table re-hash safety)
-    let base = uint64(mr.cur) * mr.region_bytes
-    let alt = mr.regions == 2l ? uint64(mr.cur ^ 1l) * mr.region_bytes : base
-    return (ok = true, buf = mr.buf, state_off = base, conv_off = base + mr.conv_off,
-        state_alt = alt, conv_alt = alt + mr.conv_off, ple_off = mr.region_bytes * uint64(mr.regions))
+    let mr = g_dn_mirrors[s.uid]   // cheap copy — one lookup per statement (table re-hash safety)
+    let sb = dn_slot_base(mr)
+    let base = sb + uint64(mr.cur) * mr.region_bytes
+    let alt = sb + uint64(dn_region_next(mr.cur)) * mr.region_bytes
+    return (ok = true, buf = g_dn_pool, state_off = base, conv_off = base + mr.conv_off,
+        state_alt = alt, conv_alt = alt + mr.conv_off, ple_off = sb + mr.region_bytes * uint64(mr.regions))
 }
 
 //! the mirror's live region into the session's host arrays, `dn_pos` the mirror's position: the host
-//! copy is what a snapshot reads, and the Metal drivers leave it where the session started
+//! copy is what a snapshot reads, and the Metal drivers leave it where the session started; an
+//! evicted session's stash lands there the same way
 def private dn_mirror_to_host(var s : Session) {
     if (!key_exists(g_dn_mirrors, s.uid)) {
+        if (key_exists(g_dn_stash, s.uid) && g_dn_stash[s.uid].pos != s.dn_pos) {
+            let sbytes = long_length(s.dn_state) * 4l
+            let cbytes = long_length(s.dn_conv_state) * 4l
+            unsafe {
+                memcpy(addr<void?>(s.dn_state[0]), addr<void?>(g_dn_stash[s.uid].bytes[0]), sbytes)
+                memcpy(addr<void?>(s.dn_conv_state[0]), addr<void?>(g_dn_stash[s.uid].bytes[sbytes]), cbytes)
+                if (!empty(s.ple_conv_hist)) {
+                    memcpy(addr<void?>(s.ple_conv_hist[0]), addr<void?>(g_dn_stash[s.uid].bytes[sbytes + cbytes]), long_length(s.ple_conv_hist) * 4l)
+                }
+            }
+            s.dn_pos = g_dn_stash[s.uid].pos
+        }
         return
     }
     let mr = g_dn_mirrors[s.uid]
@@ -1641,22 +1916,34 @@ def private dn_mirror_to_host(var s : Session) {
     s.dn_pos = mr.pos
 }
 
+//! A released session's mirror and stash leave: no step reads them again, and the slot is the next session's.
+[cold_path]   // a session's release
+def private dn_mirror_released(uid : uint64) {
+    if (key_exists(g_dn_mirrors, uid)) {
+        dn_mirror_quiesce()   //! a step encoded ahead may still write the slot the next session takes
+    }
+    dn_mirror_drop(uid)
+}
+
 [init]
 def private dn_mirror_host_sync_register {
     register_dn_host_sync(@@dn_mirror_to_host)
+    register_session_release_listener(@@dn_mirror_released)
 }
 
 // the step served and its command buffer completed — the GPU state now holds position pos's update
 def dn_mirror_advance(uid : uint64; pos : int64) {
     if (key_exists(g_dn_mirrors, uid)) {
-        g_dn_mirrors[uid].pos = pos + 1l
+        let p0 = g_dn_mirrors[uid].pos
+        g_dn_mirrors[uid].pos = max(p0, pos + 1l)
     }
 }
 
 // MTP verify reject: the shadow region holds the post-row0 state — make it live (zero copies)
 def dn_mirror_flip(uid : uint64; pos : int64) {
-    if (key_exists(g_dn_mirrors, uid) && g_dn_mirrors[uid].regions == 2l) {
-        g_dn_mirrors[uid].cur ^= 1l
+    if (key_exists(g_dn_mirrors, uid)) {
+        let cur = g_dn_mirrors[uid].cur
+        g_dn_mirrors[uid].cur = dn_region_next(cur)
         g_dn_mirrors[uid].pos = pos
     }
 }
@@ -2197,8 +2484,10 @@ struct BatchLanding {
     xb_bytes : int64
     @scratch sessions : array<Session?>
     @scratch positions : array<int64>
-    @scratch dn_uids : array<uint64>   //!< the recurrent rows: each session's DnMirror advances when the step lands
+    @scratch dn_uids : array<uint64>   //!< the recurrent rows: each session's DnMirror advances when the step commits
     @scratch dn_pos : array<int64>
+    @scratch dn_soffs : array<uint64>   //!< each recurrent row's live state base in the pool the step was encoded over
+    dn_epoch : int64                    //!< the pool generation those bases index
     @scratch koffs : array<uint64>
     @scratch voffs : array<uint64>
     @scratch caps : array<int64>
@@ -2268,6 +2557,7 @@ def release_landing(var L : BatchLanding&) {
     L.ncbufs |> clear()   // the nc cache owns these
     L.dn_uids |> clear()
     L.dn_pos |> clear()
+    L.dn_soffs |> clear()
     L.active = false
     L.pre_valid = false
 }
@@ -2290,6 +2580,9 @@ def mark_rows_committed(L : BatchLanding) {
             let wm0 = g_mirrors[sp.uid].watermark
             g_mirrors[sp.uid].watermark = max(wm0, L.positions[i] + 1l)
         }
+    }
+    for (u, p in L.dn_uids, L.dn_pos) {   //! the recurrent mirrors move with the K/V watermark: queue order writes the state first
+        dn_mirror_advance(u, p)
     }
 }
 
@@ -2435,6 +2728,9 @@ def finish_pending_step {   // nolint:STYLE038 — the pipeline join: wait/error
                 g_mirrors[sp.uid].watermark = 0l
             }
         }
+        for (u in L.dn_uids) {   //! a failed step leaves the recurrent state neither live nor re-derivable
+            dn_mirror_drop(u)
+        }
         g_land_err = true
         batch_decline(MetalDecodeDecline.gpu_error)
     }
@@ -2565,10 +2861,14 @@ def metal_common_release {
         mirror_release(mr)
     }
     delete g_mirrors
-    for (dmr in values(g_dn_mirrors)) {
-        dn_mirror_release(dmr)
-    }
     delete g_dn_mirrors
+    delete g_dn_stash
+    if (g_dn_pool != null) {
+        metal_release(g_dn_pool)
+        g_dn_pool = null
+    }
+    g_dn_pool_slots = 0l
+    g_dn_slot_bytes = 0ul
     g_mirror_bytes = 0ul
     if (g_arena != null) {
         metal_release(g_arena)
@@ -2626,6 +2926,12 @@ def public iq4_lut(q : uint) : float {
     let w = q < 8u ? (q < 4u ? 3215825025u : 4142587343u) : (q < 12u ? 639175937u : 1901675829u)
     return float((int((w >> ((q & 3u) * 8u)) & 255u) ^ 128) - 128)
 }
+
+//! a per-32 code's value: q4032's linear q - 8, else the iq4 table
+def public b32_code_val(q : uint; q40l : bool) : float => q40l ? float(int(q) - 8) : iq4_lut(q)
+
+[arch(at = "../ARCHITECTURE_GPU_QUANT_PLANES.md#metal-kq-split-scale-plane")]
+def public iq3s4_val(q : uint) : float => float(2 * int(q) - 15)
 
 // ===== Metal-4 tensor twin race scaffolding (shared by the per-module race sections) =====
 

@@ -29,13 +29,31 @@ struct public DlimCpuConfig {
     kq_mr : array<int64>   //!< the lattice planes' repack interleaves, by int(KqFmt) (0 off the lattice)
     q51_mr : int64
     iq4nl32_mr : int64
+    q4032_mr : int64
+    q5032_mr : int64
     wscale_f16 : bool
     kquant_native : bool
     kq_q40_native : bool
-    kq_q50_native : bool
     kq_q51_native : bool
     iq3s_lut : bool   //! the IQ3_S weights serve as iq3s4 planes (DASLLAMA_IQ3S_SERVE resolved at the load)
     rope_override : string   //! the rope-scaling override baked into the rope tables ("" = the file's keys; rope_override_spelling)
+}
+
+//! a per-32 format's repack interleave in `c` (1 off the per-32 rail)
+def public dlim_b32_mr(c : DlimCpuConfig; fmt : KqFmt) : int64 {
+    if (fmt == KqFmt.q51) return c.q51_mr
+    if (fmt == KqFmt.iq4nl32) return c.iq4nl32_mr
+    if (fmt == KqFmt.q4032) return c.q4032_mr
+    if (fmt == KqFmt.q5032) return c.q5032_mr
+    return 1l
+}
+
+//! the per-32 interleaves of `c` from `mr_of`, one call a format
+def public set_dlim_b32_mr(var c : DlimCpuConfig; mr_of : block<(fmt : KqFmt) : int64>) {
+    c.q51_mr = invoke(mr_of, KqFmt.q51)
+    c.iq4nl32_mr = invoke(mr_of, KqFmt.iq4nl32)
+    c.q4032_mr = invoke(mr_of, KqFmt.q4032)
+    c.q5032_mr = invoke(mr_of, KqFmt.q5032)
 }
 
 //! The vulkan flavor's plan inputs, RESOLVED — `coopmat_mode` is the running mode (not the raw
@@ -55,17 +73,18 @@ struct public DlimVulkanConfig {
     dense : bool
     dense_attn : bool
     dense_shexp : bool
+    dense_ffn : bool   //!< the dense rail's FFN triples, on by default: the tag spells it only when on, so the images minted without it keep their identity
     trim : bool   //!< P3: big CPU weight families dropped from the image (GPU-resident consumers only)
     split : bool   //!< the streamed-layer split want: one stream slot instead of two under cm2, so the carve - and the walk - differ
-    dn_native : bool   //!< the whole-model driver is attempted, so a dense hybrid's deltanet planes keep their file formats (else the q8 transcode)
+    dn_native : bool   //!< the whole-model driver is attempted, so the walk bakes its arena placement in place of the per-op rails' (the two walks lay different images)
     subgroup_size : int
     max_storage_range : int64
 }
 
-//! The metal flavor's half. Minimal for now — the metal-flavor audit (arc phase G) decides
-//! whether servability needs more than the mode.
+//! The metal flavor's half.
 struct public DlimMetalConfig {
     mode : string
+    devw : bool   //!< the dev-W lever: a blob image minted under it bakes the panels
 }
 
 //! The whole bake configuration. `vulkan_on`/`metal_on` are presence flags — a flavor section
@@ -145,20 +164,23 @@ def private kq_mr_identity(c : DlimCpuConfig) : string {
 }
 
 //! the pipe-separated fields `dlim_identity` writes BEFORE the tag - the tag parsers skip exactly this many;
-//! a conditional element (the rope override) rides INSIDE the last field, so an unset one leaves every identity as it was
+//! a conditional element (the rope override, the dev-W lever) rides
+//! INSIDE the last field, so an unset one leaves every identity as is
 let public DLIM_IDENTITY_FIELDS = 9
 
-//! The identity string an image file/header is keyed by — a pure formatter of the struct.
-//! `image_version` / `pack_version` come from the caller (dasllama_image owns the schema
-//! version, dasllama_layout the pack-code version; 0 = the pre-versioned pack spelling).
-def public dlim_identity(c : DlimConfiguration; image_version : int; tag : string = ""; pack_version : int = 0) : string {
+//! The identity an image is keyed by: a pure formatter of the struct,
+//! `image_version`, `pack_version` (0: the pre-versioned spelling),
+//! `blob_devw` (a blob minted under the dev-W lever, as rope folds)
+def public dlim_identity(c : DlimConfiguration; image_version : int; tag : string = "";
+                         pack_version : int = 0; blob_devw : bool = false) : string {
     let pk = pack_version > 0 ? "p{pack_version}" : ""
     return ("v{image_version}{pk}|{c.quant}|{c.cpu.backend}|{c.cpu.wscale_f16 ? "s16" : "s32"}"
         + "|q8 mr{c.cpu.q8_mr} b{c.cpu.q8_wbias} g{c.cpu.q8_kgroup}"
         + "|kq {kq_mr_identity(c.cpu)}"
-        + "|q51 mr{c.cpu.q51_mr}|iq4nl32 mr{c.cpu.iq4nl32_mr}"
-        + "|nat {c.cpu.kquant_native ? 1 : 0}{c.cpu.kq_q40_native ? 1 : 0}{c.cpu.kq_q50_native ? 1 : 0}{c.cpu.kq_q51_native ? 1 : 0}{c.cpu.iq3s_lut ? 1 : 0}"
+        + "|q51 mr{c.cpu.q51_mr}|iq4nl32 mr{c.cpu.iq4nl32_mr} q4032 mr{c.cpu.q4032_mr} q5032 mr{c.cpu.q5032_mr}"
+        + "|nat {c.cpu.kquant_native ? 1 : 0}{c.cpu.kq_q40_native ? 1 : 0}{c.cpu.kq_q51_native ? 1 : 0}{c.cpu.iq3s_lut ? 1 : 0}"
         + (c.cpu.rope_override != "" ? " rope {c.cpu.rope_override}" : "")
+        + (blob_devw ? " devw" : "")
         + (tag != "" ? "|{tag}" : ""))
 }
 
@@ -168,7 +190,7 @@ def public dlim_vulkan_tag(v : DlimVulkanConfig) : string {
     return ("vulkan|m{v.coopmat_mode} b{v.vram_mb}"
         + " l{v.moe_layers} s{v.moe_stream}"
         + " r{v.dn ? 1 : 0}{v.attn ? 1 : 0}{v.dnd ? 1 : 0}{v.shexp ? 1 : 0}{v.qkv ? 1 : 0}{v.cls ? 1 : 0}"
-        + "{v.dense ? 1 : 0}{v.dense_attn ? 1 : 0}{v.dense_shexp ? 1 : 0}{v.split ? 1 : 0}{v.dn_native ? 1 : 0}{v.trim ? " T" : ""}")
+        + "{v.dense ? 1 : 0}{v.dense_attn ? 1 : 0}{v.dense_shexp ? 1 : 0}{v.split ? 1 : 0}{v.dn_native ? 1 : 0}{v.trim ? " T" : ""}{v.dense_ffn ? " F" : ""}")
 }
 
 //! Round-trip: the JSON embedded in the image meta and consumed by `dasllama-convert --config`.

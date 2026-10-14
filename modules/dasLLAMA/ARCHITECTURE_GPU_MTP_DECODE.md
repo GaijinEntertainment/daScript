@@ -92,13 +92,14 @@ the kernel cells hold every format's route at every row count (`test_metal_kq_ha
 the rows parity cell holds k4 and k6 token for token (`test_metal_decode_parity.das`, the
 `batchB8-kq` arm's half-x leg).
 
-Past eight rows the form is the panel's. The kq mul_mm twins dispatch `mp / 32` threadgroups
-along M, so `enc_kq_site_b` takes them only over a panel padded to that tile (`mp` a multiple of
-32) - the batch driver's at nine rows and up. The verify's panel is padded to the GEMV forms'
-4-row tile (`ARCHITECTURE_GPU_MTP_DECODE.md#verify-row-pad`), so its nine rows (`MTP_MAX_ROWS`, depth 8) ride the small-batch forms: the
-first eight as the eight-row dispatch, each row past eight as a single pass at its own x and y row
-offsets. An unpadded nine-row panel handed to the mul_mm dispatches no threadgroup at all; the
-twins' `mp % 32` contract names that site instead of leaving the output unwritten.
+Past eight rows the form is the panel's. The kq mul_mm twins dispatch `mp / 32` threadgroups along M, so `enc_kq_site_b` takes
+them only over a panel padded to that tile (`mp` a multiple of 32) - the batch driver's at nine rows and up. The verify's panel
+is padded to the GEMV forms' 4-row tile (`#verify-row-pad`), so its nine rows (`MTP_MAX_ROWS`, depth 8) ride the small-batch
+forms in ONE dispatch: the eight- and four-column forms carry a column-group grid axis (`ceil(rows / 8)`, `ceil(rows / 4)`
+groups), the eight-column form restaging its last live row in a group's columns past the live rows, so its x needs no pad
+(`metal_kq_mvb_wide_count` counts the dispatches past eight rows); a box crowned to single passes keeps them past eight rows
+too. An unpadded nine-row panel handed to the mul_mm dispatches no threadgroup at all; the twins' `mp % 32` contract names
+that site instead of leaving the output unwritten.
 
 ### The verify's row buffers are padded to the GEMV form's row tile {#verify-row-pad}
 
@@ -140,21 +141,22 @@ commit turnaround does not. `finish_step` then compares the GPU's pick with the 
 miss waits the chained step out, discards it, and reruns the step through the slow path, so a miss
 costs about two steps (30 ms against a 15 ms step on gemma-4-12B, M5 Max; every figure in this
 section is `harness/batch_rows_probe.das` with `--feed text|greedy|second:K --spec -1|0|1`,
-`-jit`) where a hit saves the turnaround, about 2% of a step. The adaptive mode
-(`DASLLAMA_METAL_SPEC` -1) backs off exponentially after a miss and re-arms on the next hit; under
-a sampler that agrees with the argmax two steps in three it still costs 63% of the step (26.0
-against 15.9 ms), because the
-re-arm attempts far more often than a 2% upside pays for. So the sampler decides: `sample_` marks
+`-jit`) where a hit saves the turnaround, about 2% of a step. The adaptive mode (`DASLLAMA_METAL_SPEC` -1)
+backs off exponentially after a miss and re-arms on the next hit; under a sampler that agrees with the argmax
+two steps in three it still costs 63% of the step (26.0 against 15.9 ms), because the re-arm attempts far
+more often than a 2% upside pays for. So the sampler decides: `sample_` marks
 the session `sampled` whenever its pick can differ from the raw argmax - a temperature above zero,
 or a penalty at temp 0 (`sampler_is_argmax` is the negation) - and the driver never chains such a
 session, because the chain predicts the raw argmax the penalty then rejects. Only a bare argmax
 sampler (temp 0, penalties off) and a caller feeding the argmax directly keep the adaptive chain.
-The winner's embed gather reads the table the host's `embed_row` would: the Q8 linear copy
-(`cls_q8`, `MetalEmbedQ8`), a tied K6 classifier's planes (`MetalEmbedK6`), or the fp32 token
-table in fblob (one row through `MetalRowGather` under the embed scale, the plane wrapped zero-copy
-through `plane_of`) - an untied model
-whose embedding is a K-quant keeps that copy (phi-3, mistral, the Q4_K_M llamas), and chained
-nowhere before the f32 gather. A recurrent model never chains (`spec_cls_capable`).
+The winner's embed gather reads the table the host's `embed_row` would (`enc_embed_dev`): the Q8
+linear copy (`MetalEmbedQ8`), the table's K-quant plane in its own format, tied or untied (the
+`MetalEmbedKqT` stamp of that format), or the fp32 token table in fblob (one row through
+`MetalRowGather` under the embed scale, the plane wrapped zero-copy through `plane_of`). The same gather opens every unchained
+single-row step, off the token `forward()` pokes, and the MTP round's depth-1 chain takes every table
+(`ARCHITECTURE_GPU_MTP.md#mtp-nextn-chain`). A recurrent model chains on its mirror's three regions: a chained step reads the
+region the step in flight writes and writes the next, so a miss lands the region it read live again (`dn_mirror_land`) and
+the rerun steps from the state the chain never touched; an n-gram ring has one copy, so its models never chain.
 
 **The step wait spins on the GPU end time, then blocks.** `finish_step` polls the command
 buffer's `GPUEndTime` until it is set and only then enters `waitUntilCompleted`, because a
@@ -169,9 +171,9 @@ the spin costs a core's idle and buys the wake's latency. `DASLLAMA_METAL_WAIT_S
 blocking wait alone, the A/B rail. The spin is capped at 200 ms so a stalled step still reaches
 the blocking wait that reports it.
 
-The GPU argmax reproduces the CPU sampler's tie-break exactly: a lane keeps the earliest of equal
-values (strict `>`), and the cross-lane fold takes the lower index on a tie, so the lowest index
-wins - what lets the chain predict a bare-argmax sampler's pick bit for bit.
+The GPU argmax reproduces the CPU sampler's tie-break exactly: a lane keeps the earliest of equal values
+(strict `>`), and the cross-lane fold takes the lower index on a tie, so the lowest index wins - what lets
+the chain predict a bare-argmax sampler's pick bit for bit.
 
 ### The batch driver's pre-encoded step {#batch-pre-encode}
 
@@ -191,8 +193,12 @@ slice still where the row table names it, and every row's zero-copy logits wrap 
 was encoded - pokes the token-dependent inputs the caller's CPU pre-step produced - the rows'
 embeds, their rope rows, the E-series' per-layer side rows - commits the command buffers in order
 and lands the step like a freshly built one; a step that does not match is retired unrun. The
-same-slab verify, the recurrent rows (their state buffer is one per session) and a knockout run
-stay on the build-at-call path. The single-row driver, the speculative round's draft and verify
+same-slab verify, a hyper-connection model's rows and a knockout run stay on the build-at-call path.
+A recurrent row's mirror moves with the K/V watermark at commit (`mark_rows_committed`), so the
+pre-encoded step's group table names each row's state where it will stand
+(`ARCHITECTURE_GPU_MTP.md#dn-group-stages`); the match also holds the pool's generation and every
+row's live state base, and a failed step drops its rows' mirrors, whose state is then neither live
+nor re-derivable. The single-row driver, the speculative round's draft and verify
 steps, a knob setter that changes what a step encodes, a dispatch failure's CPU rerun and
 `metal_decode_flush` all retire the pre-encoded step: each advances the rows past the positions it
 was built for or moves the slices under it. The rail ships off - `DASLLAMA_METAL_BATCH_PRE=1` arms

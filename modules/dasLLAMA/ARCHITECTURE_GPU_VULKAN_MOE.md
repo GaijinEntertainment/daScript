@@ -2,9 +2,10 @@
 
 Companion to `ARCHITECTURE_GPU_VULKAN.md`; a section is cited by its anchor. This
 document carries the resident driver's routed block in its two eras:
-the MoE block of the prefill window, and the whole-model driver's MoE token command, and the
-gemma-4 form both eras take. The window
-chain the prefill block runs inside (`ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain`), the recurrent block beside it (`ARCHITECTURE_GPU_VULKAN.md#vk-prefill-dn-block`), the Q8
+the MoE block of the prefill window with its Q8-fed chain, the whole-model driver's MoE token
+command, the select that reaches 512 experts two logits a thread, and the gemma-4 form both eras
+take. The window
+chain the prefill block runs inside (`ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain`), the recurrent block beside it (`ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-dn-block`), the Q8
 requant byte store (`ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store`), the decode GEMV family's grid codebook buffer (`ARCHITECTURE_GPU_VULKAN.md#kq-gemv-grid-buffer`) and the
 tile probe's shared descriptor set layout (`ARCHITECTURE_GPU_VULKAN.md#khrx-shared-set-layout`) are `ARCHITECTURE_GPU_VULKAN.md`'s. The
 token command's attention and recurrent heads this block's tail follows, and the per-op tier's
@@ -13,8 +14,7 @@ decode era - the decode span whose kernels the routed block runs - are in
 the per-op tier's MoE expert chain are in `ARCHITECTURE_GPU_VULKAN_GEMM.md`, and the lane split
 of the decode GEMV family the token command's expert GEMVs take is
 `ARCHITECTURE_GPU_VULKAN_GEMM.md#kq-gemv-lanes`. What a model has to fit on the card before any
-of this runs - the residency plan that sizes the expert planes, and the marks swap - is in
-`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`. The GPU backend
+of this runs is in `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`. The GPU backend
 role table these sections build on stays in `ARCHITECTURE_GPU.md#gpu-backends`.
 
 ### The MoE block of the prefill window {#vk-prefill-moe-block}
@@ -34,8 +34,7 @@ except where a probe arm is named.
   beside the decode GEMV's f32 plane - runs eight k chunks into the split-k scratch planes and
   the reduce sums them into the logits (`pf_f16g_enc`). The grid of such a GEMM alone (four
   position tiles by two row tiles on the 35B) leaves the device under-filled, which is what the
-  chunks are for. The same class computes the deltanet beta and alpha rows
-  (`ARCHITECTURE_GPU_VULKAN.md#vk-prefill-dn-block`) and the E-series' per-layer-embedding projection, which
+  chunks are for. The same class computes the E-series' per-layer-embedding projection, which
   off cm2 takes `F16GemmKhr` instead - the whole-K twin on subgroup-scope 16x16x16 fragments, a
   64 x 64 output tile a workgroup with the x and w^T fragments loaded straight from the planes
   (`ple_proj_shape_ok`: a KHR device at subgroup 32, `dim` and the projected width 16-multiples); its
@@ -58,8 +57,9 @@ except where a probe arm is named.
   renormalized or scaled weights - the host `moe_select_core`'s arithmetic - written
   position-major as the picked expert and its weight per slot.
 - **The bucket schedule** (`MoeSched`, one workgroup) writes what the host fill writes for the
-  per-op chain: the experts' slot counts are an atomic tally over the window (the 256 threads
-  stride the picks, one workgroup atomic per slot), exclusive scans place each bucket's rows,
+  per-op chain: the experts' slot counts are an atomic tally over the window (a thread an expert,
+  256 of them or the 512-thread stamp `MoeSched2` past 256 experts, `moe_sched_enc`, stride the
+  picks, one workgroup atomic per slot), exclusive scans place each bucket's rows,
   its region indices (experts with rows, in expert order) and its tile workgroups, and the
   three expert planes' schedules land as 4-word records plus per-workgroup maps. A
   bucket is cut into at most two pieces by the tile ladder: a bucket within the s column (32
@@ -79,9 +79,9 @@ except where a probe arm is named.
   the decode GEMV and the CPU dot agree by construction, and its scale plane is one byte a block,
   read four blocks a word. The s pieces' records sit at `[0, ne)`,
   the m pieces' at `[ne, 2 ne)`,
-  and each dispatch's map at its own offset past the records (`PF_MOE_MAP_OFF`, 2048 words for up
-  to 256 experts twice), the two tile counts scanned as one packed word (its halves stay under
-  65536 for any admitted shape: 512 tokens by 64 slots over 256 experts). Every dispatch is sized
+  and each dispatch's map at its own offset past the records (`PF_MOE_MAP_OFF`, 4096 words for up
+  to 512 experts twice), the two tile counts scanned as one packed word (its halves stay under
+  65536 for any admitted shape: 512 tokens by 64 slots over 512 experts). Every dispatch is sized
   for its worst case - one s tile per expert; every expert's whole columns plus a partial one -
   and the map's tail past the real workgroup count carries the sentinel (`SCHED_NONE`): a tile
   workgroup that reads it sees a zero-row region and returns before its first barrier. A real
@@ -130,15 +130,29 @@ The router reads the f32 normed rows, so an MoE layer takes the split add+rms ar
 site (the fused twins never store `xb`), and the last-layer FFN slice of
 `ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain` does not apply to the routed block. The arm's requant of
 the normed rows feeds the dense triple alone - the gather takes the f32 rows - so a layer with
-no shared expert skips it. The tile family is the f16-fed cm2 tiles, so the plan admits a MoE
-only in cm2 mode on a coopmat2 device with every expert format the f16 feed admits
-(`rdec_moe_ok`). Q5_1 is admitted as a routed expert plane alone: its rail is the schedule's s and
-e stamps (`Q51Cm2T`, the per-32 plane verbatim, `BLKW` 32) and the token command's `Q51Gemv` over
-Q8_0 activations (`vk_fmt_b32`, one lane a block), so a 704-wide down stack rides its own format
-where the K-quant rails' 256-multiple rule would demote it to q8; a dense q51 plane stays declined.
-The per-32 IQ4_NL plane (`iq4nl32`) rides the same admission on its own stamps (`Iq4nl32Cm2T`, the
-codebook staged as the kq iq4 tiles stage it; `Iq4nl32Gemv` through `iq4_word`), the 640-wide down
-stacks of Qwen3.8-Flash-Next.
+no shared expert skips it. On a coopmat2 device in cm2 mode, or in mm mode with the KHR tile, the
+expert pieces run on the f16-fed tiles (`rdec_moe_ok` admits every expert format the f16 feed
+admits); on any other device - an sdot4, f16 or int8 card, or `DASLLAMA_COOPMAT=sdot4` - they run on
+the Q8-fed chain (`#vk-moe-q8-chain`). Q5_1 rides the schedule's s and e stamps (`Q51Cm2T`, the
+per-32 plane verbatim, `BLKW` 32) and the token command's `Q51Gemv` over Q8_0 activations
+(`vk_fmt_b32`, one lane a block), so a 704-wide down stack rides its own format where the K-quant
+rails' 256-multiple rule would demote it to q8; a dense q51 plane takes the same GEMV and the s tile
+(`ARCHITECTURE_GPU_VULKAN.md#vk-b32-window-gemm`). The per-32 IQ4_NL plane (`iq4nl32`) rides the
+same admission on its own stamps (`Iq4nl32Cm2T`, the codebook staged as the kq iq4 tiles stage it;
+`Iq4nl32Gemv` through `iq4_word`), the 640-wide down stacks of Qwen3.8-Flash-Next.
+
+### The routed block's Q8-fed chain {#vk-moe-q8-chain}
+
+Where no f16-fed tile serves the expert pieces (`pf_moe_tiles` false, `RDec.pf_moe_q8`), the window's
+routed block keeps the router, the select, the bucket schedule and the combine, and runs the expert
+GEMMs over Q8 rows: the gather copies each slot row's normed row into its bucket row as floats
+(`MoeGatherF32`), one requant takes the gathered rows to the gate plane's feed (Q8_K for a superblock
+format, Q8_0 otherwise), the gate and up GEMMs run the sdot4 batch tiles - `Q8Batch` on a q8 plane,
+the kq batch leaves on a superblock plane, `Blk32BatchT` on a per-32 plane (`pf_q8_tile_ok`) - the
+act + requant (`Q8ActRq` / `Q8KActRq`, the biased `Q8ActRqB` on gpt-oss's stacks) takes the hidden
+rows to the down plane's feed, and the down tile writes the routed rows the combine reads. The
+sdot4 tile is 32 rows by 32 columns, so the schedule runs s-only (`SchedArgs.s_only`): every bucket a
+run of 32-row tiles on the s column, no m piece, the column tiles 32 wide (`pf_moe_bounds`).
 
 ### The whole-model driver's MoE token command {#resident-moe-token}
 
@@ -199,8 +213,21 @@ shares the experts' feed). The fused add+rms+requant twins are off on a MoE: the
 normed row those twins never store. The MoE seats install separately
 (`install_moe_gpu_resident_moe`), so a tier without them declines a MoE by name, and the plan
 declines a router the top-k kernels do not serve - a gate off the two softmax forms, an expert
-selection bias, more than 256 experts or 64 routed slots - by name too; the router bias, the
+selection bias, more than 512 experts or more picks a row than the 128 routed slots - by name too; the router bias, the
 biased stacks and the mx4 stacks are gpt-oss's served form (`ARCHITECTURE_GPU_VULKAN_MOE.md#resident-moe-token`).
+
+### The select reaches 512 experts two logits a thread {#vk-topk-depth}
+
+**A select workgroup holds `DEPTH` logits a thread, so 256 threads reach 512 experts.**
+`GkTopKRow.select_row` (at 256 lanes) reads expert `tid + i x 256` for `i < DEPTH`: the row max over every held
+logit, the exp floored at -80 and the thread's sum before the workgroup sum, then each pick takes a
+thread's largest held weight (the lower expert on a tie) into the same subgroup and workgroup
+reduction the one-deep form runs, and the picked expert's holder knocks it out. At `DEPTH` 1 the
+arithmetic is the one-deep form's, so a model at 256 experts or fewer reads the same picks.
+`topk_depth` picks the stamp by the expert count (`TopKN2` / `TopKRows2` past 256, in their
+one-deep classes' set families), `RDEC_EXPERTS_MAX` (512) is the reach the plan admits, and the
+window's bucket schedule takes its 512-thread stamp at the same count. No 512-expert carrier fits
+the 32 GB card whole; the kernels hold to the host select (`test_vkd_topk_n`, `test_vkd_moe_routing`).
 
 ### The gemma-4 form of the routed block {#vk-gemma4-moe-block}
 
@@ -220,8 +247,8 @@ learned input scale over sqrt(dim), which the norms plane carries as one weight 
 token command's router GEMV takes that rms itself, every expert workgroup over the same x
 (`RouterArgs.norm_on`, `rtn_fused`), so no norm dispatch precedes it.
 The top-k folds the checkpoint's per-expert down scale into each routing weight after the
-renormalization (`TopkArgs.dsoff`, in the decode's and the window's top-k alike, names the layer's row in the
-`[n_moe x ne]` scale plane `rdec_prepare_moe` uploads; `NO_DSCALE` on every other model, the
+renormalization (`GkTopKArgs.dsoff`, in the decode's and the window's top-k alike, names the layer's row in the
+`[n_moe x ne]` scale plane `rdec_prepare_moe` uploads; `GK_NO_DSCALE` on every other model, the
 binding filled and never read), where the CPU chain scales the picked weights before the expert
 GEMVs. The combine (`ClsArCombG4`, the f16 normed-row twin `ClsArCombG4F16B`) is the residual step
 of the CPU chain's `gemma4_moe_ffn`: the k weighted routed rows summed and normed under the

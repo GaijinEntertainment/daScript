@@ -20,7 +20,7 @@ require math                                            // min
 // Qwen3.5-0.8B-MTP-Q8_0.gguf (the NextN head) and tinyllama-1.1b-chat-v1.0.Q8_0.gguf (no head).
 //! the Metal cells skip on a box with no Metal backend
 
-let TEST_PORT = 18150   // 18150-18156: the seven cells' boots; 18097-18147 belong to the sibling suites (test_openai_server*.das, test_setup_mode.das)
+let TEST_PORT = 18150   // 18150-18158: the nine cells' boots; 18097-18147 belong to the sibling suites (test_openai_server*.das, test_setup_mode.das)
 let TEST_CTX = 1024l
 
 let MTP_PATH = path_join(models_dir(), "Qwen3.5-0.8B-MTP-Q8_0.gguf")
@@ -78,8 +78,13 @@ def test_mtp_default_on_metal(t : T?) {
         t |> skip("no Metal backend on this box")
         return
     }
-    t |> run("unset, one stream on Metal: the NextN-headed slot drafts") @(t : T?) {
+    t |> run("unset, one stream on Metal: the NextN-headed slot decodes plain, its file has no catalog row listing Metal") @(t : T?) {
         with_mtp_server(t, MTP_PATH, TEST_PORT, 1l, -1, true) $(base_url) {
+            t |> equal(0l, drafted_after_chat(t, base_url), "no draft under the default without a serve_mtp platform")
+        }
+    }
+    t |> run("explicit on, one stream on Metal: the NextN-headed slot drafts") @(t : T?) {
+        with_mtp_server(t, MTP_PATH, TEST_PORT + 8, 1l, 1, true) $(base_url) {
             t |> success(drafted_after_chat(t, base_url) > 0l, "mtp_drafted rose after one chat")
         }
     }

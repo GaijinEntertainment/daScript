@@ -49,6 +49,25 @@ def test_ple_check_table(t : T?) {
             t |> success(!trips(mk), "{fmt} fmt with the table resident passes")
             delete mk
         }
+        // the per-32 arms read their own top-level plane pair at the 32-block stride
+        for (fmt in [KqFmt.q51, KqFmt.q5032]) {
+            var mb <- ple_shell(fmt)
+            t |> success(trips(mb), "{fmt} fmt with an empty plane trips")
+            let qbytes = (need / KQ_B32_ELEMS) * kq_qsb(fmt)
+            if (fmt == KqFmt.q51) {
+                mb.q51q |> resize(qbytes - 1l)
+            } else {
+                mb.q5032q |> resize(qbytes - 1l)
+            }
+            t |> success(trips(mb), "{fmt} fmt one byte short of the table trips")
+            if (fmt == KqFmt.q51) {
+                mb.q51q |> resize(qbytes)
+            } else {
+                mb.q5032q |> resize(qbytes)
+            }
+            t |> success(!trips(mb), "{fmt} fmt with the table resident passes")
+            delete mb
+        }
         // the exemption is a real branch: a non-PLE model keeps whatever offset it has, and the
         // check must not read the planes at all (a nonzero offset would trip if it did)
         var mn <- ple_shell(KqFmt.q8)

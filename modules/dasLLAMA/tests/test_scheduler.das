@@ -19,11 +19,15 @@ require daslib/strings_boost   // join: the decoded stream logs beside the token
 require math
 require strings
 require _model_tier
+require _resident_feed   // census, pass_total: the deltanet-on-GPU cell's device witnesses
 
 // Unit gates for the continuous-batching scheduler — all through the SchedEvent seam, zero HTTP:
 // scheduler ≡ generate bit-exact (1 stream), chunk-size invariance under classic prefill, staggered
 // admit + queue overflow, stop/budget/context-length finishes, evict mid-run. Model-gated + JIT-only
 // (SmolLM2-135M GGUF via DASLLAMA_MODELS_DIR), same skip contract as test_openai_server.
+// test_scheduler_mtp_device_home skips without Qwen3.5-0.8B-MTP,
+// without the GPU tier armed (DASLLAMA_GPU=1), and under
+// DASLLAMA_VK_KV32=1.
 
 let MODEL_PATH = path_join(models_dir(), "SmolLM2-135M-Instruct-Q8_0.gguf")
 
@@ -98,9 +102,29 @@ def private text_of(pieces : array<string>) : string {
 
 // ===== two deltanet streams turn about on the GPU tier: each reads its own recurrent state =====
 
+//! the fused deltanet step's control: off the tier, the stream's steps
+//! run on the CPU and the step's census count stays
+def private dn_step_cpu_control(t : T?; var m : Model; prompt, want : array<int64>) {
+    moe_gpu_drop_model()
+    let flat0 = census("dn_step_cls_spv")
+    var none : array<int64>
+    var sch <- create_scheduler(m, 1l, 2l, 64l)
+    var events : array<SchedEvent>
+    t |> success(submit(m, sch, make_req(30l, prompt, SamplingParams(), 8l, none)),
+        "CPU stream queued")
+    drain(m, sch, events)
+    var got <- toks_of(events, 30l)
+    t |> success(ids_equal(got, want), "the CPU stream matches generate ({got})")
+    t |> success(census("dn_step_cls_spv") == flat0,
+        "control: dropped from the tier, no fused deltanet step recorded")
+    delete got
+    delete events
+    delete sch
+}
+
 [test]
 def test_scheduler_batching_deltanet_gpu(t : T?) {
-    t |> run("two interleaved deltanet streams on the GPU tier match their solo references (needs Qwen3.5-0.8B-Q8_0, DASLLAMA_GPU=1)") @(t : T?) {
+    t |> run("two interleaved deltanet streams on the GPU tier match their solo references, their deltanet steps counted on the device (needs Qwen3.5-0.8B-Q8_0, DASLLAMA_GPU=1)") @(t : T?) {
         return if (!jit_only(t))
         if (!stat(DN_MODEL_PATH).is_valid) {
             t |> skip("{DN_MODEL_PATH} not present")
@@ -111,12 +135,15 @@ def test_scheduler_batching_deltanet_gpu(t : T?) {
             m.config.seq_len = min(m.config.seq_len, 256l)
             let prev_dnd_route = moe_gpu_dnd_route()
             set_moe_gpu_dnd_route(true)   // the claim is about the tier's decode step: pin its route on, whatever an earlier cell left
-            if (!has_gpu_dn_layer(m.config)) {
+            if (!moe_gpu_resident_active() && !has_gpu_dn_layer(m.config)) {
                 t |> skip("the GPU tier's deltanet decode step is not armed - needs DASLLAMA_GPU=1 on a device that serves it")
                 set_moe_gpu_dnd_route(prev_dnd_route)
                 delete m
                 return
             }
+            let nrec = recurrent_layer_count(m.config)
+            let step0 = census("dn_step_cls_spv")   //! the device's fused deltanet step: recorded per layer by the per-op step and by the driver's token commands
+            let passes0 = pass_total()
             let greedy = SamplingParams()
             var none : array<int64>
             var pa <- encode(m, "Count from one to ten in words.", true, false)
@@ -137,7 +164,7 @@ def test_scheduler_batching_deltanet_gpu(t : T?) {
             var events : array<SchedEvent>
             t |> success(submit(m, sch, make_req(20l, pa, greedy, 8l, none)), "stream A queued")
             t |> success(submit(m, sch, make_req(21l, pb, greedy, 8l, none)), "stream B queued")
-            drain(m, sch, events)
+            drain(m, sch, events)   //! two host-cached streams over the load's one region: each takes it from the other, the other's device-only rows saved first
             var ga <- toks_of(events, 20l)
             var gb <- toks_of(events, 21l)
             to_log(LOG_INFO, "two-stream A: \"{text_of(pieces_of(events, 20l))}\" | solo A: \"{text_of(refs[0].pieces)}\"\n")
@@ -145,6 +172,14 @@ def test_scheduler_batching_deltanet_gpu(t : T?) {
             t |> success(ids_equal(ga, refs[0].toks), "stream A, decoded turn about with B, matches its solo reference ({ga} vs {refs[0].toks})")
             t |> success(ids_equal(gb, refs[1].toks), "stream B, decoded turn about with A, matches its solo reference ({gb} vs {refs[1].toks})")
             t |> success(sch.sum_batch >= 2l * 2l, "the two streams shared decode steps (sum batch {sch.sum_batch})")
+            if (step0 != NO_CENSUS) {
+                let stepped = census("dn_step_cls_spv") - step0
+                t |> success(stepped >= nrec, "the streams' deltanet steps ran on the device: {stepped} fused-step dispatches recorded over {nrec} recurrent layers")
+            }
+            t |> equal(pass_total() - passes0, 0l, "no call passed to the CPU rails")
+            if (step0 != NO_CENSUS) {
+                dn_step_cpu_control(t, m, pa, refs[0].toks)
+            }
             delete sa
             delete sb
             delete events1
@@ -1163,11 +1198,7 @@ def test_scheduler_mtp(t : T?) {   // nolint:STYLE038 — one model load per tes
 [test]
 def test_scheduler_mtp_resident_picks(t : T?) {
     t |> run("scheduler mtp under the resident driver: every tick of a greedy stream asks a pick - the device verify lands picks alone and sample_ consumes each - the stream token for token the plain scheduler's on the same device rail, every round's verify served on the device (needs Qwen3.5-0.8B-MTP, DASLLAMA_GPU=1)") @(t : T?) {
-        return if (!jit_only(t))
-        if (!stat(MTP_MODEL_PATH).is_valid) {
-            t |> skip("{MTP_MODEL_PATH} not present")
-            return
-        }
+        return if (!jit_model_available(t, MTP_MODEL_PATH))
         if (!moe_gpu_tier_installed() || !gpu_want_auto()) {
             t |> skip("the GPU tier is not armed - needs DASLLAMA_GPU=1 on a device that serves the whole-model driver")
             return
@@ -1207,6 +1238,79 @@ def test_scheduler_mtp_resident_picks(t : T?) {
             delete got
             delete events
             delete sch
+            delete ref_toks
+            delete events0
+            delete prompt
+            delete m
+        }
+    }
+}
+
+[test]
+def test_scheduler_mtp_device_home(t : T?) {
+    t |> run("scheduler mtp in device mode under the resident driver: a speculating stream homed on the device - its K/V in the driver's region alone - drafts, verifies and rolls back there, token for token the host-cached speculating stream, every drafted round counted by the device's draft and verify counters (needs Qwen3.5-0.8B-MTP, DASLLAMA_GPU=1)") @(t : T?) {
+        return if (!jit_model_available(t, MTP_MODEL_PATH))
+        if (!moe_gpu_tier_installed() || !gpu_want_auto()) {
+            t |> skip("the GPU tier is not armed - needs DASLLAMA_GPU=1 on a device that serves the whole-model driver")
+            return
+        }
+        if (mirror_kv_dtype() != KVDtype.f16) {
+            t |> skip("the scheduler's sessions are f16; under DASLLAMA_VK_KV32=1 the mirror is f32 and every call passes as codec")
+            return
+        }
+        with_dasllama_jobque() {
+            var m <- load_model_(MTP_MODEL_PATH, QuantMode.q8)
+            m.config.seq_len = min(m.config.seq_len, 512l)
+            t |> success(moe_gpu_resident_active(), "the whole-model driver armed on the NextN-headed hybrid (the load log names any decline)")
+            t |> success(gpu_resident_mtp_device_home(m), "the draft head, its verify and its rollback run on the device: a speculating scheduler may home its streams there")
+            var prompt <- encode(m, "Count from one to twenty: one, two, three,", true, false)
+            var none : array<int64>
+            let greedy = SamplingParams()
+            let prev_spec = get_mtp_spec()
+            set_mtp_spec(true)
+            var sch0 <- create_scheduler(m, 1l, 4l, 64l, 0l, 0l, KVDtype.f16, true)   //! host-cached flat f16 sessions on the same rail: the reference
+            var events0 : array<SchedEvent>
+            t |> success(submit(m, sch0, make_req(1l, prompt, greedy, 24l, none)), "host-cached spec stream queued")
+            drain(m, sch0, events0)
+            var ref_toks <- toks_of(events0, 1l)
+            delete sch0
+            let drafts0 = moe_gpu_resident_drafts()
+            let verifies0 = moe_gpu_resident_verifies()
+            var sch <- create_scheduler(m, 1l, 4l, 64l, 0l, 0l, KVDtype.f16, true)
+            t |> success(gpu_device_sessions() >= sch.max_streams, "the driver homes the scheduler's one stream ({gpu_device_sessions()} regions)")
+            t |> success(set_device_kv(sch, true), "the idle scheduler homes its streams on the device")
+            var events : array<SchedEvent>
+            t |> success(submit(m, sch, make_req(2l, prompt, greedy, 24l, none)), "device-home spec stream queued")
+            drain(m, sch, events)
+            set_mtp_spec(prev_spec)
+            var got <- toks_of(events, 2l)
+            log_streams("spec (host-cached)", events0, 1l, "spec (device-home)", events, 2l)
+            t |> success(ids_equal(got, ref_toks), "the device-home spec stream == the host-cached spec stream ({got} vs {ref_toks})")
+            t |> equal(finished_of(events, 2l).n_gen, 24l)
+            t |> success(sch.mtp_drafted > 0l, "the speculative tick drafted ({sch.mtp_drafted} drafts, {sch.mtp_accepted} accepted)")
+            t |> equal(moe_gpu_resident_drafts() - drafts0, sch.mtp_drafted, "every drafted round's draft ran on the device's NextN head")
+            t |> equal(moe_gpu_resident_verifies() - verifies0, sch.mtp_drafted, "every drafted round's verify ran on the device")
+            var passes <- gpu_cpu_passes_()
+            t |> equal(length(passes), 0, "no call passed to the CPU rails: {passes}")
+            delete passes
+            delete sch
+            //! control: speculation off, the draft and verify counters stay
+            //! flat
+            let drafts1 = moe_gpu_resident_drafts()
+            let verifies1 = moe_gpu_resident_verifies()
+            var plain <- create_scheduler(m, 1l, 4l, 64l, 0l, 0l, KVDtype.f16, false)
+            t |> success(set_device_kv(plain, true), "the plain scheduler homes its stream")
+            var events_plain : array<SchedEvent>
+            t |> success(submit(m, plain, make_req(3l, prompt, greedy, 24l, none)),
+                "plain stream queued")
+            drain(m, plain, events_plain)
+            t |> equal(finished_of(events_plain, 3l).n_gen, 24l)
+            t |> equal(moe_gpu_resident_drafts(), drafts1, "control: no round drafted")
+            t |> equal(moe_gpu_resident_verifies(), verifies1, "control: no round verified")
+            delete events_plain
+            delete plain
+            delete got
+            delete events
             delete ref_toks
             delete events0
             delete prompt

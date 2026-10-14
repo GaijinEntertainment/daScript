@@ -1,7 +1,7 @@
 # dasLLAMA tests Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-doc: `CLAUDE.md`. Planned work: `../followup_general.md`, `../followup_vulkan.md`,
+doc: `../ARCHITECTURE.md`. Planned work: `../followup_general.md`, `../followup_vulkan.md`,
 `../followup_metal.md`.
 
 A cell is one `t |> run` subtest, or a `[test]` function that runs no subtest, and owns the asserts
@@ -23,17 +23,10 @@ or a knob list) - never a value the cell's own claim defines - or that a checked
 its evidence, applies `REVIEW_PINNED_GATES.md` too.** An assert that compares against a
 `../dasllama/` constant by name, not against a literal copy of it, keeps nothing in step.
 
-**A cell that calls a lane setter or a driver setter, in its own code or through a helper it
-calls, passes a loader parameter that takes a family's lane, or whose claim depends on which
-route or serving lane runs it - a lane pin, a driver hook, a CPU-vs-GPU compare - applies
-`REVIEW_LANE_PINS.md` (beside this file) too.** A lane setter is a call that writes the value a
-family's loader or its `*_serves_q8` accessor reads to choose the family's serving lane
-(`set_<name>_q8`, whisper's `set_asr_fp32` / `set_asr_tower_fp32`), or a facade call that makes
-that call; a driver setter is any other `../dasllama/` call the cell makes whose purpose is to set a
-value - a `set_*`, `enable_*`, `disable_*` or override call - stored in a module global or
-process-global state that a later load, route choice or kernel dispatch reads; a call a loader
-makes on its own is not the cell's (`REVIEW_LANE_PINS.md` carries the same two definitions, and
-the two files change together).
+**A cell that calls a driver setter as `REVIEW_LANE_PINS.md` defines it, in its own code or
+through a helper it calls, passes a loader parameter that takes a family's lane, or whose
+claim depends on which route or serving lane runs it - a lane pin, a driver hook, a CPU-vs-GPU
+compare - applies `REVIEW_LANE_PINS.md` (beside this file) too.**
 
 **A cell that feeds, preprocesses, or asserts on media bytes an encoder consumes - pixels or
 audio samples - compares an encoder's output rows against a second source, or compares ASR
@@ -44,9 +37,6 @@ their rows.
 **Weakening `test_metal_float_a_gate.das` - the gate that checks the MSL emitter refuses a float A
 operand (the activation input) to a `tmm2d_*` tiled matrix-multiply call without the
 `[metal_kernel(float_a_ok=true)]` annotation - is a defect.**
-
-**Weakening `st2_source_gate` in `test_metal_prefill_kernels.das` - the check that the StyleTTS2
-harmonic-source kernels match the CPU chain under both resample laws - is a defect.**
 
 **Every PR runs `run.das -- --suite model-free`, and `run.das -- --changed` on a box with the
 models stocked (the stocked files of the areas the change reaches; a core module with no

@@ -336,6 +336,9 @@ struct private TileEmit {
                                          // per-block f16 d/m scale pairs + xbs min-term)
     iq4nl32 : bool                       // block emitter: the mx4 LUT-dequant over the per-32 IQ4_NL
                                          // planes (16 nibble bytes, one f16 d a block, the iq4nl codebook)
+    q40 : bool                           // with iq4nl32: q4032's linear q - 8 code over the same planes
+    q5032 : bool                         // block emitter: q51's nibble+qh planes re-centred to q - 16 under
+                                         // one f16 d a block (the signed lattice, no min term)
     kq : int                             // the gemm_schema kq id (0 = not kq): the
                                          // block unit is a 256-weight superblock over the grp<mr>
                                          // kq planes; dots run unsigned-q (kq_dot_lane)
@@ -742,16 +745,94 @@ def private emit_block_mx4(var te : TileEmit; var bi : LLVMOpaqueValue?; var f :
 // One 32-k block, iq4nl32 form: the mx4 nibble+LUT dots over the codebook planes, folded by the
 // block's f16 d per row (the grp scale plane: mr halfwords a block) - dot_iq4nl32q8_scalar's op order
 def private emit_block_iq4nl32(var te : TileEmit; var bi : LLVMOpaqueValue?; var f : LLVMOpaqueValue? [8]; tokBase, tokCount : int) {
-    let b = te.builder
     var a : LLVMOpaqueValue? [8]
     emit_lut_nibble_dots(te, bi, tokBase, tokCount, a)
     var d4 : LLVMOpaqueValue? [4]
+    load_d16_rows(te, bi, d4)
+    emit_block_fold(te, bi, d4, a, f, tokBase, tokCount)
+}
+
+//! one block's f16 d per row vector off the grp scale plane
+//! (mr halfwords a block)
+def private load_d16_rows(var te : TileEmit; var bi : LLVMOpaqueValue?;
+                          var d4 : LLVMOpaqueValue? [4]) {
+    let b = te.builder
     var sIdx0 = LLVMBuildMul(b, bi, te.types->ConstI64(uint64(2 * te.interleave)), "")
     for (qd in range(te.rq)) {
-        var sIdx = qd == 0 ? sIdx0 : LLVMBuildAdd(b, sIdx0, te.types->ConstI64(uint64(qd * te.rv * 2)), "")
+        let step = te.types->ConstI64(uint64(qd * te.rv * 2))
+        var sIdx = qd == 0 ? sIdx0 : LLVMBuildAdd(b, sIdx0, step, "")
         d4[qd] = load_f16_vec_at(te, te.sg, sIdx, "d{qd}")
     }
-    emit_block_fold(te, bi, d4, a, f, tokBase, tokCount)
+}
+
+//! a 32-k block's activation halves a token: k 0..15, then k 16..31
+def private load_x_halves(var te : TileEmit; var bi : LLVMOpaqueValue?; tokBase, tokCount : int;
+                          var xv0, xv1 : LLVMOpaqueValue? [4]) {
+    let b = te.builder
+    var xb = LLVMBuildMul(b, bi, te.types->ConstI64(0x20ul), "xb")
+    var xb1 = LLVMBuildAdd(b, xb, te.types->ConstI64(16ul), "")
+    for (i in range(tokCount)) {
+        xv0[i] = load_v16i8(te, te.x[tokBase + i], xb, "x{tokBase + i}lo")
+        xv1[i] = load_v16i8(te, te.x[tokBase + i], xb1, "x{tokBase + i}hi")
+    }
+}
+
+//! a 32-k block's lane dots into `a` [token * rq + qd], low weights
+//! on k 0..15, high on k 16..31: the signed lattice (`dot_lane` over
+//! |w| in `ulo` / `uhi`) or the unsigned one (`kq_dot_lane`)
+def private emit_block_dots(var te : TileEmit; var wlo, whi, ulo, uhi : LLVMOpaqueValue? [8];
+                            var xv0, xv1 : LLVMOpaqueValue? [4]; tokCount : int; signed : bool;
+                            var a : LLVMOpaqueValue? [8]) {
+    let rq = te.rq
+    for (i in range(tokCount * rq)) {
+        a[i] = LLVMConstNull(te.vni32)
+    }
+    for (l in range(4)) {           // chunk 0 (k 0..15): low-nibble weights
+        for (i in range(tokCount)) {
+            for (qd in range(rq)) {
+                let k = i * rq + qd
+                let w = l * rq + qd
+                a[k] = (signed ? dot_lane(te, a[k], wlo[w], ulo[w], xv0[i], l)
+                    : kq_dot_lane(te, a[k], wlo[w], xv0[i], l))
+            }
+        }
+    }
+    for (l in range(4)) {           // chunk 1 (k 16..31): high-nibble weights
+        for (i in range(tokCount)) {
+            for (qd in range(rq)) {
+                let k = i * rq + qd
+                let w = l * rq + qd
+                a[k] = (signed ? dot_lane(te, a[k], whi[w], uhi[w], xv1[i], l)
+                    : kq_dot_lane(te, a[k], whi[w], xv1[i], l))
+            }
+        }
+    }
+}
+
+//! a 32-k block's 5-bit codes off q51's quant interleave (nibble
+//! dwords, qh at 16·mr): each nibble load ORs its qh bits in
+//! register, unsigned 0..31, low and high halves
+def private load_b5_codes(var te : TileEmit; var bi : LLVMOpaqueValue?;
+                          var wlo, whi : LLVMOpaqueValue? [8]) {
+    let b = te.builder
+    let rq = te.rq
+    let wbytes = te.width / 8
+    var wb = LLVMBuildMul(b, bi, te.types->ConstI64(uint64(te.interleave * 20)), "wb")
+    var qh : LLVMOpaqueValue? [2]
+    for (qd in range(rq)) {
+        let hstep = te.types->ConstI64(uint64(16 * te.interleave + qd * wbytes))
+        qh[qd] = load_vec(te, te.vwi8, te.wg, LLVMBuildAdd(b, wb, hstep, ""), "qh{qd}")
+    }
+    for (j in range(4)) {
+        for (qd in range(rq)) {
+            let w = j * rq + qd
+            let boff = j * 4 * te.interleave + qd * wbytes
+            var off = boff == 0 ? wb : LLVMBuildAdd(b, wb, te.types->ConstI64(uint64(boff)), "")
+            var nib = nibbles(te, load_vec(te, te.vwi8, te.wg, off, "nv{w}"), "", "")
+            wlo[w] = LLVMBuildOr(b, nib.lo, qh_bits(te, qh[qd], j, 0, "hl{w}"), "wlo{w}")
+            whi[w] = LLVMBuildOr(b, nib.hi, qh_bits(te, qh[qd], j, 1, "hh{w}"), "whi{w}")
+        }
+    }
 }
 
 //! the per-block fold shared by the Q8 lattices and the LUT-decoded per-32 forms: f += float(isum) * (scale * xs) per token per row vector
@@ -776,7 +857,6 @@ def private emit_lut_nibble_dots(var te : TileEmit; var bi : LLVMOpaqueValue?; t
     let b = te.builder
     let rq = te.rq
     var wb = LLVMBuildMul(b, bi, te.types->ConstI64(uint64(te.interleave * 16)), "wb")
-    var xb = LLVMBuildMul(b, bi, te.types->ConstI64(0x20ul), "xb")
     var wlo, whi, ulo, uhi : LLVMOpaqueValue? [8]
     for (j in range(4)) {
         for (qd in range(rq)) {
@@ -790,28 +870,8 @@ def private emit_lut_nibble_dots(var te : TileEmit; var bi : LLVMOpaqueValue?; t
         }
     }
     var xv0, xv1 : LLVMOpaqueValue? [4]
-    var xb1 = LLVMBuildAdd(b, xb, te.types->ConstI64(16ul), "")
-    for (i in range(tokCount)) {
-        xv0[i] = load_v16i8(te, te.x[tokBase + i], xb, "x{tokBase + i}lo")
-        xv1[i] = load_v16i8(te, te.x[tokBase + i], xb1, "x{tokBase + i}hi")
-    }
-    for (i in range(tokCount * rq)) {
-        a[i] = LLVMConstNull(te.vni32)
-    }
-    for (l in range(4)) {           // chunk 0 (k 0..15): low-nibble weights
-        for (i in range(tokCount)) {
-            for (qd in range(rq)) {
-                a[i * rq + qd] = dot_lane(te, a[i * rq + qd], wlo[l * rq + qd], ulo[l * rq + qd], xv0[i], l)
-            }
-        }
-    }
-    for (l in range(4)) {           // chunk 1 (k 16..31): high-nibble weights
-        for (i in range(tokCount)) {
-            for (qd in range(rq)) {
-                a[i * rq + qd] = dot_lane(te, a[i * rq + qd], whi[l * rq + qd], uhi[l * rq + qd], xv1[i], l)
-            }
-        }
-    }
+    load_x_halves(te, bi, tokBase, tokCount, xv0, xv1)
+    emit_block_dots(te, wlo, whi, ulo, uhi, xv0, xv1, tokCount, true, a)
 }
 
 // The qh bit-plane of one width-sized row-group qh vector as 0x10-or-0 bytes for k-group j
@@ -836,48 +896,12 @@ def private qh_bits(var te : TileEmit; var qhv : LLVMOpaqueValue?; j, half : int
 def private emit_block_q51(var te : TileEmit; var bi : LLVMOpaqueValue?; var f : LLVMOpaqueValue? [8]; tokBase, tokCount : int) {
     let b = te.builder
     let rq = te.rq
-    let wbytes = te.width / 8
-    var wb = LLVMBuildMul(b, bi, te.types->ConstI64(uint64(te.interleave * 20)), "wb")
-    var xb = LLVMBuildMul(b, bi, te.types->ConstI64(0x20ul), "xb")
-    var qh : LLVMOpaqueValue? [2]
-    for (qd in range(rq)) {
-        var hoff = LLVMBuildAdd(b, wb, te.types->ConstI64(uint64(16 * te.interleave + qd * wbytes)), "")
-        qh[qd] = load_vec(te, te.vwi8, te.wg, hoff, "qh{qd}")
-    }
     var wlo, whi : LLVMOpaqueValue? [8]
-    for (j in range(4)) {
-        for (qd in range(rq)) {
-            let boff = j * 4 * te.interleave + qd * wbytes
-            var off = boff == 0 ? wb : LLVMBuildAdd(b, wb, te.types->ConstI64(uint64(boff)), "")
-            var nib = nibbles(te, load_vec(te, te.vwi8, te.wg, off, "nv{j * rq + qd}"), "", "")
-            wlo[j * rq + qd] = LLVMBuildOr(b, nib.lo, qh_bits(te, qh[qd], j, 0, "hl{j * rq + qd}"), "wlo{j * rq + qd}")
-            whi[j * rq + qd] = LLVMBuildOr(b, nib.hi, qh_bits(te, qh[qd], j, 1, "hh{j * rq + qd}"), "whi{j * rq + qd}")
-        }
-    }
+    load_b5_codes(te, bi, wlo, whi)
     var xv0, xv1 : LLVMOpaqueValue? [4]
-    var xb1 = LLVMBuildAdd(b, xb, te.types->ConstI64(16ul), "")
-    for (i in range(tokCount)) {
-        xv0[i] = load_v16i8(te, te.x[tokBase + i], xb, "x{tokBase + i}lo")
-        xv1[i] = load_v16i8(te, te.x[tokBase + i], xb1, "x{tokBase + i}hi")
-    }
+    load_x_halves(te, bi, tokBase, tokCount, xv0, xv1)
     var a : LLVMOpaqueValue? [8]
-    for (i in range(tokCount * rq)) {
-        a[i] = LLVMConstNull(te.vni32)
-    }
-    for (l in range(4)) {           // chunk 0 (k 0..15): low-nibble weights
-        for (i in range(tokCount)) {
-            for (qd in range(rq)) {
-                a[i * rq + qd] = kq_dot_lane(te, a[i * rq + qd], wlo[l * rq + qd], xv0[i], l)
-            }
-        }
-    }
-    for (l in range(4)) {           // chunk 1 (k 16..31): high-nibble weights
-        for (i in range(tokCount)) {
-            for (qd in range(rq)) {
-                a[i * rq + qd] = kq_dot_lane(te, a[i * rq + qd], whi[l * rq + qd], xv1[i], l)
-            }
-        }
-    }
+    emit_block_dots(te, wlo, whi, wlo, whi, xv0, xv1, tokCount, false, a)
     // fold: f += (d4·isum4 + m4·asum)·xs — d/m interleaved f16 pairs, 2·rv-lane i16 load
     var vdm16 = LLVMVectorType(te.types.t_int16, uint(te.rv * 2))
     var d4, m4 : LLVMOpaqueValue? [2]
@@ -906,6 +930,29 @@ def private emit_block_q51(var te : TileEmit; var bi : LLVMOpaqueValue?; var f :
             f[i * rq + qd] = fold_fma(te, s, xsv, f[i * rq + qd], "f{tk}")
         }
     }
+}
+
+//! One 32-k block, q5032 form: emit_block_q51's nibble load with the qh bits OR-ed in register, re-centred to the signed
+//! q - 16 levels, the signed lane-dot lattice (the iq4nl32 dots' sign trick), then emit_block_fold under the block's f16 d -
+//! dot_q5032q8_scalar's op order, no activation sum
+def private emit_block_q5032(var te : TileEmit; var bi : LLVMOpaqueValue?; var f : LLVMOpaqueValue? [8]; tokBase, tokCount : int) {
+    let b = te.builder
+    var wlo, whi, ulo, uhi : LLVMOpaqueValue? [8]
+    load_b5_codes(te, bi, wlo, whi)
+    var sixteen = splat_i8w(te, 16)
+    for (w in range(4 * te.rq)) {
+        wlo[w] = LLVMBuildSub(b, wlo[w], sixteen, "wlo{w}")
+        whi[w] = LLVMBuildSub(b, whi[w], sixteen, "whi{w}")
+        ulo[w] = abs_w(te, wlo[w], "ulo{w}")
+        uhi[w] = abs_w(te, whi[w], "uhi{w}")
+    }
+    var xv0, xv1 : LLVMOpaqueValue? [4]
+    load_x_halves(te, bi, tokBase, tokCount, xv0, xv1)
+    var a : LLVMOpaqueValue? [8]
+    emit_block_dots(te, wlo, whi, ulo, uhi, xv0, xv1, tokCount, true, a)
+    var d4 : LLVMOpaqueValue? [4]
+    load_d16_rows(te, bi, d4)
+    emit_block_fold(te, bi, d4, a, f, tokBase, tokCount)
 }
 
 // One K-quant lane-dot: acc += q · (dword-group `lane` of x, splatted). Quants are UNSIGNED
@@ -2168,6 +2215,8 @@ def private emit_one_block(var te : TileEmit; var bi : LLVMOpaqueValue?; var f :
         emit_block_kqv2(te, bi, f, tokBase, tokCount)
     } elif (te.q51) {
         emit_block_q51(te, bi, f, tokBase, tokCount)
+    } elif (te.q5032) {
+        emit_block_q5032(te, bi, f, tokBase, tokCount)
     } elif (te.iq4nl32) {
         emit_block_iq4nl32(te, bi, f, tokBase, tokCount)
     } elif (te.mx4) {
@@ -2340,7 +2389,7 @@ def private setup_tile_emit(var te : TileEmit; var gc : LlvmCodeCtx; p : TilePer
     te.interleave = rt.interleave
     te.dotKind = dot_kind(p.dotPrim)
     // mx4/kq/q51/iq4nl32 planes are kgroup-independent — under an smmla perm they ride the plain sdot lattice
-    let nibblePlane = te.mx4 || te.q51 || te.iq4nl32 || te.kq != 0
+    let nibblePlane = te.mx4 || te.q51 || te.q5032 || te.iq4nl32 || te.kq != 0
     if (nibblePlane && te.dotKind == DOT_SMMLA) {
         te.dotKind = DOT_SDOT
     }
@@ -2456,7 +2505,7 @@ def private setup_tile_emit(var te : TileEmit; var gc : LlvmCodeCtx; p : TilePer
     }
     if (needMx4) {
         // the nibble codebook as a constant vector (mx4: doubled e2m1; kq 44 / 45 / iq4nl32: kvalues_iq4nl; kq 35: the iq3s4 odd values) - no runtime table pointer; broadcast per 16-byte lane on x64
-        let lut = te.kq == 44 || te.kq == 45 || te.iq4nl32 ? iq4nl_lut() : (te.kq == 35 ? iq3s4_lut() : mx4_lut())
+        let lut = te.q40 ? q40_lut() : (te.kq == 44 || te.kq == 45 || te.iq4nl32 ? iq4nl_lut() : (te.kq == 35 ? iq3s4_lut() : mx4_lut()))
         te.lut = codebook_lut(te, lut, te.dotKind == DOT_SDOT ? 1 : te.width / 128)
     }
     return true
@@ -3235,17 +3284,19 @@ def private plane_row_strides(var gc : LlvmCodeCtx; nb : LLVMOpaqueValue?; qbyte
 // iq4nl32 16/2). The block dots ride the lane lattices, so every leg (sdot/maddubs/vpdpbusd) emits.
 def private q51_gemv_gen(var gc : LlvmCodeCtx) : bool => b32_gemv_gen_impl(gc, false)
 def private iq4nl32_gemv_gen(var gc : LlvmCodeCtx) : bool => b32_gemv_gen_impl(gc, true)
+def private q4032_gemv_gen(var gc : LlvmCodeCtx) : bool => b32_gemv_gen_impl(gc, true, true)
+def private q5032_gemv_gen(var gc : LlvmCodeCtx) : bool => b32_gemv_gen_impl(gc, false, false, true)
 
-def private b32_gemv_gen_impl(var gc : LlvmCodeCtx; iq4nl32 : bool) : bool {
+def private b32_gemv_gen_impl(var gc : LlvmCodeCtx; iq4nl32 : bool; q40 : bool = false; q5032 : bool = false) : bool {
     if (!is_kq_gemv_signature(gc.fn)) return false
     let p0 = parse_perm(gc)
     if (perm_declines(gc, p0)) return false
     let p = companion_perm(p0)
 
-    var te = TileEmit(q51 = !iq4nl32, iq4nl32 = iq4nl32)
+    var te = TileEmit(q51 = !iq4nl32 && !q5032, iq4nl32 = iq4nl32, q40 = q40, q5032 = q5032)
     if (!setup_tile_emit(te, gc, p, iq4nl32)) return false
     let qbytes = iq4nl32 ? 16l : 20l
-    let sbytes = iq4nl32 ? 2l : 4l
+    let sbytes = iq4nl32 || q5032 ? 2l : 4l
     return emit_rows_gemv(gc, te, 1, 32, "nb", true, gc.jit.types.t_int8, "sg") $(_n, nb) => plane_row_strides(gc, nb, qbytes, sbytes)
 }
 
@@ -3726,14 +3777,16 @@ def private emit_kq_vector_tile(var gc : LlvmCodeCtx; p : TilePerm; fmt : int) :
 // body reads no asum).
 def private q51_tile_gen(var gc : LlvmCodeCtx) : bool => b32_tile_gen_impl(gc, false)
 def private iq4nl32_tile_gen(var gc : LlvmCodeCtx) : bool => b32_tile_gen_impl(gc, true)
+def private q4032_tile_gen(var gc : LlvmCodeCtx) : bool => b32_tile_gen_impl(gc, true, true)
+def private q5032_tile_gen(var gc : LlvmCodeCtx) : bool => b32_tile_gen_impl(gc, false, false, true)
 
-def private b32_tile_gen_impl(var gc : LlvmCodeCtx; iq4nl32 : bool) : bool {
+def private b32_tile_gen_impl(var gc : LlvmCodeCtx; iq4nl32 : bool; q40 : bool = false; q5032 : bool = false) : bool {
     if (!is_tile_signature(gc.fn)) return false
     let p0 = parse_perm(gc)
     if (perm_declines(gc, p0)) return false
     let p = companion_perm(p0)
 
-    var te = TileEmit(q51 = !iq4nl32, iq4nl32 = iq4nl32)
+    var te = TileEmit(q51 = !iq4nl32 && !q5032, iq4nl32 = iq4nl32, q40 = q40, q5032 = q5032)
     if (!setup_tile_emit(te, gc, p, iq4nl32)) return false
     return emit_tile_walk(gc, te, p.nrsplit, 1, 32, "nb", 32)
 }
@@ -3767,6 +3820,10 @@ def public register_dasllama_gemm_generators {
     register_llvm_code_generator("dasllama_gemm_gen::q51_tile", @@q51_tile_gen)
     register_llvm_code_generator("dasllama_gemm_gen::iq4nl32_gemv", @@iq4nl32_gemv_gen)
     register_llvm_code_generator("dasllama_gemm_gen::iq4nl32_tile", @@iq4nl32_tile_gen)
+    register_llvm_code_generator("dasllama_gemm_gen::q4032_gemv", @@q4032_gemv_gen)
+    register_llvm_code_generator("dasllama_gemm_gen::q4032_tile", @@q4032_tile_gen)
+    register_llvm_code_generator("dasllama_gemm_gen::q5032_gemv", @@q5032_gemv_gen)
+    register_llvm_code_generator("dasllama_gemm_gen::q5032_tile", @@q5032_tile_gen)
     register_llvm_code_generator("dasllama_gemm_gen::q8q8_witness", @@witness_gen)
     register_llvm_code_generator("dasllama_gemm_gen::kq_amx_cfg", @@cfg_gen)
     register_llvm_code_generator("dasllama_gemm_gen::kq_witness", @@witness_gen)

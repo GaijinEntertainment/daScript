@@ -126,8 +126,8 @@ def khr_kq_tile_on : bool => g_gpu.has_coopmat && g_gpu.subgroup_size == 32l
 //! the cm2 flash tiles serve where the device was created in cm2 mode AND the mode still reads cm2 - a test that forces the mode in-process moves the pick with it
 def cm2_fa_on : bool => g_gpu.has_coopmat2_fa && g_gpu.coopmat_mode == COOPMAT_CM2
 
-//! the per-32 formats that serve as routed expert planes only: their one cm2 column is the s tile
-def cm2_b32_routed(fmt : int) : bool => fmt == int(KqFmt.q51) || fmt == int(KqFmt.mx4) || fmt == int(KqFmt.iq4nl32)
+//! the per-32 formats and mx4: their one cm2 column is the s tile
+def cm2_b32_routed(fmt : int) : bool => fmt == int(KqFmt.mx4) || kq_dense_b32(fmt)
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
 def cm2_tile_cols(d, cnt : int64) : int64 {
@@ -265,14 +265,14 @@ let STREAM_RESERVE = 1_100_000_000l  // LEGACY fallback stream-slot carve — us
 // with headroom — vk_moe_dn asserts them and the engine arm fail-closes on bigger models.
 let DN_MAX_DS = 128l
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-dn-block")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-dn-block")]
 def dn_scan_wgs(nvh, ds : int64) : int64 {
     let cpg = 4l * (32l / (ds / 16l))
     return nvh * ((ds + cpg - 1l) / cpg)
 }
 
 let DN_CONV_PB = 32u   //! the conv's positions per workgroup
-[arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-dn-block")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-dn-block")]
 def dn_conv_wgs(cd, npos : int64) : int64 => ((cd + 255l) / 256l) * ((npos + int64(DN_CONV_PB) - 1l) / int64(DN_CONV_PB))
 
 //! The prefill's beta/alpha tile GEMM's workgroups: 16-position tiles x 16-output groups over the 2 x nvh rows.
@@ -448,7 +448,9 @@ struct FfnCmd {
     actrq_set : VkDescriptorSet   // gate y_dev + up y_dev -> hq/hs device planes (class set)
     down_set : VkDescriptorSet    // down stack planes + hq/hs as activations + its y_dev (class set)
     nrows : int64                 // row count cmd was recorded with
-    gelu : bool                   // activation form recorded into the push (re-record key with nrows)
+    act : uint                    //! the activation code recorded into the push (re-record key with nrows and bias_off)
+    bias_off : int64 = -1l        //! the routed form's bias row base recorded (-1 = unbiased)
+    actrq_b_set : VkDescriptorSet //! the biased twin's set: gate / up y_dev, hq/hs, the bias planes, the row -> expert words
 }
 
 //! the decode FFN tail: the resident FFN chain plus combine -> add-rms -> requant into the NEXT
@@ -495,6 +497,7 @@ struct DnStep {
     z_set : VkDescriptorSet  // z GEMV rerouted into the shared y buffer (meta y base = cd)
     fused_set : VkDescriptorSet
     out_set : VkDescriptorSet
+    rq_set : VkDescriptorSet //! a superblock out plane's feed: the step's f32 o row requantized Q8_K (unset over a q8 out plane, whose step stores Q8_0 itself)
     cmd : VkCommandBuffer    // the warm step chain, recorded once — no per-token re-record
     s_qkv : int
     s_z : int
@@ -651,6 +654,10 @@ struct GpuState {
     hq_dev : uint64          // device requantized-hidden quants (the down GEMM's activation image)
     hs_dev : uint64          // ... its scales
     ffn_ready : bool
+    ffn_gb_dev : uint64      //! the routed experts' gate-bias plane, every routed layer's rows (`vk_moe_upload_ffn_bias`; 0 = none)
+    ffn_ub_dev : uint64      //! ... the up-bias plane
+    ffn_bias_bytes : int64
+    ffn_rex : HostBuf        //! the expert-chain's row -> expert words the biased act reads (host-written a call)
     // prefill batch state (lazy — first batch dispatch creates it; decode-only runs skip it)
     batch_xq_dev : uint64    // device-local gathered-activation quants (chunk window)
     batch_xs_dev : uint64    // ... their scales
@@ -663,6 +670,12 @@ struct GpuState {
     batch_actrq_set : VkDescriptorSet   // batch twin of FfnCmd's fused act+requant set (y1/y2
                                         // planes; the actrq family shares one layout — one set)
     batch_acts_cls_ready : bool         // both act sets built (by prefill; reset on drop)
+    batch_actrq_b_set : VkDescriptorSet //! the biased twin's set over y1/y2, the routed bias planes and the row -> expert words
+    batch_actrq_b_ready : bool
+    batch_xq2_dev : uint64   //! the second activation image's quants (the up / z plane's own form), its scales beside
+    batch_xs2_dev : uint64
+    batch_x2_stage : HostBuf //! its host staging: quants at 0, scales at BATCH_XQ_BYTES
+    batch_x2_ready : bool
     batch_cmd : VkCommandBuffer   // one reusable batch cmd buffer, re-recorded per submit
     batch_ready : bool
     // combined-output state (lazy — first combined prefill dispatch creates it)
@@ -1187,7 +1200,7 @@ def public vk_ext_roster(phys : VkPhysicalDevice) : array<VkExtEntry> {
         VkExtEntry(name = "VK_KHR_shader_integer_dot_product", present = integer_dot_product_supported(phys),
             rides = "the sdot4 integer tiles and the quant dot kernels; the tier is disabled without it"),
         VkExtEntry(name = "VK_KHR_cooperative_matrix", present = has_cm,
-            rides = "the KHR f16 and int8 tiles (the mm mode), the resident MoE block's expert pieces in mm mode, the KHR flash tile and its sink stamps, the KHR f16 GEMM off cm2 (at subgroup 32), the h128 attention twin, the tower driver's KHR route (the vision and whisper-class bidirectional flash tiles, the qwen25v f16 GEMM off cm2 and the audio fronts' f16 GEMMs - the conv stems, the qwen3a and canary fronts), and the TTS seats' f16 tile off cm2 (the StyleTTS2 decoder and generator convs, at subgroup 32); without it the sdot4 tiles and the chunked attention serve, a MoE stays per op in mm mode, the tower driver declines `device` off cm2, and the TTS decoder convs ride the f32 tile"),
+            rides = "the KHR f16 and int8 tiles (the mm mode), the resident MoE block's expert pieces in mm mode, the KHR flash tile and its sink stamps, the KHR f16 GEMM off cm2 (at subgroup 32), the h128 attention twin, the tower driver's KHR route (the vision and whisper-class bidirectional flash tiles, the qwen25v f16 GEMM off cm2 and the audio fronts' f16 GEMMs - the conv stems, the qwen3a and canary fronts), and the TTS seats' f16 tile off cm2 (the StyleTTS2 decoder and generator convs, at subgroup 32); without it the sdot4 tiles and the chunked attention serve, a resident MoE's routed block rides the Q8-fed chain, the tower driver declines `device` off cm2, and the TTS decoder convs ride the f32 tile"),
         VkExtEntry(name = "VK_NV_cooperative_matrix2 (workgroup scope, flexible dimensions, tensor addressing, block loads, bufferDeviceAddress)",
             present = has_cm2,
             rides = "the cm2 decode-in-load prefill tiles, the served default; without it the KHR tiles serve (DASLLAMA_COOPMAT picks a mode by name)"),
@@ -1770,6 +1783,51 @@ def vk_moe_upload_stack(wq : uint8 const?; ws : uint8 const?; woff : int64; n : 
     return true
 }
 
+//! MoeGpuFfnBiasFn: the routed experts' gate and up bias planes, every routed layer's rows in layer order, resident beside the
+//! stacks for the biased act (`Q8ActRqB`); the form's `bias_off` names a layer's row base in them
+def vk_moe_upload_ffn_bias(gb : array<float>; ub : array<float>) : bool {
+    if (!gpu_want_arms_tier() || !vk_moe_init() || empty(gb) || length(gb) != length(ub)) {
+        return false
+    }
+    let bytes = long_length(gb) * 4l
+    if (g_gpu.resident_bytes + 2l * bytes > carved_budget()) {
+        return false
+    }
+    if (!g_gpu.dry) {
+        g_gpu.ffn_gb_dev = make_device_buf(bytes)
+        g_gpu.ffn_ub_dev = make_device_buf(bytes)
+        upload_region(g_gpu.ffn_gb_dev, unsafe(addr<uint8 const?>(gb[0])), bytes)
+        upload_region(g_gpu.ffn_ub_dev, unsafe(addr<uint8 const?>(ub[0])), bytes)
+    }
+    g_gpu.ffn_bias_bytes = bytes
+    g_gpu.resident_bytes += 2l * bytes
+    return true
+}
+
+let FFN_REX_ROWS = BATCH_CHUNK_ROWS   //! the expert-chain's row -> expert words: a batch chunk's rows at most
+
+//! the routed form's row -> expert words for the chain's rows [r0, r1): row r lies in the region whose row span holds it, its
+//! expert the caller's list entry (`moe_gpu_ffn_expert`) or the region's gate offset off the form's base
+def ffn_rex_fill(offs1 : int64 const?; nregions, r0, r1 : int64) {
+    if (g_gpu.ffn_rex.buf == 0ul) {
+        g_gpu.ffn_rex = make_host_buf(FFN_REX_ROWS * 4l, true)
+    }
+    let f = moe_gpu_ffn_form()
+    assert(r1 - r0 <= FFN_REX_ROWS, "dasLLAMA vulkan tier: the routed chain's rows exceed the row -> expert words")
+    unsafe {
+        var rp = reinterpret<uint?>(g_gpu.ffn_rex.mapped)
+        for (r in range64(nregions)) {
+            let b0 = max(offs1[r * 3l + 1l], r0)
+            let b1 = min(offs1[r * 3l + 1l] + offs1[r * 3l + 2l], r1)
+            let le = moe_gpu_ffn_expert(r)   // nolint:LINT021 — the expert index is plane-offset (64-bit) math, narrowed once to the device word
+            let e = uint(le >= 0l ? le : (offs1[r * 3l] - f.e_base) / f.e_stride)
+            for (row in range64(b0, b1)) {
+                rp[row - r0] = e
+            }
+        }
+    }
+}
+
 //! MoeGpuDropFn: roll back the last n uploads (a partial layer triple the budget cut mid-way).
 //! Only freshly-uploaded stacks with no dispatch state yet may be dropped.
 def vk_moe_drop_stacks(n : int; stream : bool) {
@@ -1954,8 +2012,14 @@ def vk_drop_model_state {
     g_gpu.rks_ready = false
     g_gpu.da_ready = false
     g_gpu.ffn_ready = false
+    g_gpu.ffn_gb_dev = 0ul
+    g_gpu.ffn_ub_dev = 0ul
+    g_gpu.ffn_bias_bytes = 0l
+    g_gpu.ffn_rex = HostBuf()
     g_gpu.batch_ready = false
     g_gpu.batch_acts_cls_ready = false
+    g_gpu.batch_actrq_b_ready = false
+    g_gpu.batch_x2_ready = false
     g_gpu.comb_ready = false
     g_gpu.stream_ready = false
     g_gpu.dat_ready = false
@@ -2060,14 +2124,9 @@ def arena_block_bytes(fmt : int) : tuple<wq : int64; ws : int64> {
     if (fmt == int(KqFmt.q8)) {
         return (wq = Q8_QPB, ws = Q8_SPB)     // 32 int8 quants + one f16 scale
     }
-    if (fmt == int(KqFmt.q51)) {
-        return (wq = Q51_QPB, ws = Q51_SPB)   // 16 nibble bytes + 4 qh bytes, f16 d + f16 m: the CPU plane verbatim
-    }
-    if (fmt == int(KqFmt.mx4)) {
-        return (wq = MX4_QB, ws = MX4_SB)   // 16 nibble bytes, one E8M0 byte: the CPU's mxq / mxs planes verbatim
-    }
-    if (fmt == int(KqFmt.iq4nl32)) {
-        return (wq = IQ4NL32_QB, ws = IQ4NL32_SB)   // 16 nibble bytes, one f16 d: the CPU's iq4nl32q / iq4nl32s planes verbatim
+    if (cm2_b32_routed(fmt)) {
+        let f = kq_fmt_of_slot(fmt)
+        return (wq = kq_qsb(f), ws = kq_ssb(f))   // the CPU's per-32 planes verbatim
     }
     return (wq = kq_qsb(vk_kq_schema_id(fmt)), ws = kq_dev_ssb_i(fmt))
 }
@@ -2281,6 +2340,7 @@ struct RLayer {
     qkv_merged : bool
     s_qkn : VkDescriptorSet         // per-head q/k rmsnorm class set (qk_norm models only)
     s_qkn_rope : VkDescriptorSet    // the fused qk-rmsnorm + rope + KV store (qk_norm models only; per-token words ride the shared TokMeta)
+    pf_s_qkn_rope : VkDescriptorSet //! the window's form of it over the prefill planes, made on the first window that takes it
     s_rope : VkDescriptorSet        // rope + KV store class set
     s_kv_store : VkDescriptorSet    //! a block codec's store of the staged rows into the mirror
     s_unrot : VkDescriptorSet       //! tq4: the attention rows out of the rotated basis
@@ -2340,24 +2400,25 @@ struct RLayer {
     // the recurrent (deltanet) form - the attention fields above stay unused on such a layer
     recurrent : bool
     mir_idx : int64 = -1l           // this attention layer's K/V mirror slot; -1 = recurrent (no KV)
-    bqkv, bz, bout, bbeta, balpha : int64   // arena blocks: fused qkv, z gate, out projection, the q8 beta/alpha rows (-1 on the f32 arm)
+    bqkv, bz, bout, bbeta, balpha : int64   //! arena blocks: fused qkv, z gate, out projection, the beta/alpha rows (-1 on the f32 arm)
     fqkv, fz, fout : int
+    fbeta, falpha : int             //! the beta/alpha planes' formats (their tags); unread on the f32 arm
     ba_off : int64                  // the f32 arm: this layer's [beta ; alpha] row base in dn_ba_dev (elements)
     s_dnqkv, s_dnz, s_dnout : VkDescriptorSet
-    s_dnbeta, s_dnalpha : VkDescriptorSet   // q8 arm: GEMVs landing in the smalls at the beta/g rows
-    s_dnba : VkDescriptorSet                // f32 arm: the router-form GEMV over dn_ba_dev, two pushes
+    s_dnbeta, s_dnalpha : VkDescriptorSet   //! the plane arm: each plane's GEMV in its format, landing in the smalls at the beta/g rows
+    s_dnba : VkDescriptorSet                //! f32 arm: the f32 router-form GEMV over dn_ba_dev, two pushes
     s_dnstep : VkDescriptorSet
     m_dnqkv, m_dnz, m_dnout, m_dnbeta, m_dnalpha : HostBuf
     dn : array<DnStep>
     roll_off : int64                //! this layer's byte offset in a rollback scratch row (`RDec.roll_dev`): its slot state, then its ring pair
+    snap_off : int64                //! ... and in a checkpoint row (`RDec.snap_dev`), the same shape
     // the prefill window chain's per-recurrent-layer sets (built by pf_setup; the smalls/state differ per layer)
     pf_dn_conv_set : VkDescriptorSet       // pf_dnqkv -> pf_dnconv, this layer's smalls (taps + hist)
     pf_dn_scan_set : VkDescriptorSet       // pf_dnconv + this layer's state + smalls -> the o rows (the sequential scan)
     pf_dn_scan_p3_set : VkDescriptorSet    // pf_dnz + dn_ws + this layer's smalls (the gated out-norm)
     pf_dn_tail_set : VkDescriptorSet       // pf_dnqkv last taps rows -> this layer's smalls ring image
-    pf_dn_ba_set : VkDescriptorSet         // f32 arm: dn_ba_dev + pf_xb -> this layer's smalls (batched router GEMV)
+    pf_dn_ba_set : VkDescriptorSet         //! f32 arm: dn_ba_dev + pf_xb -> this layer's smalls (the f32 tile GEMM)
     pf_dn_cvt_set : VkDescriptorSet        // the cm2 route: pf_xb -> pf_xf, the qkv / z GEMMs' f16 feed
-    pf_f16g_ba_set, pf_f16g_ba_red_set : VkDescriptorSet   //! the f32 arm on the cm2 route: dn_ba_dev x pf_xf into the split-k planes, the reduce into this layer's smalls
     pf_f16g_router_set, pf_f16g_router_red_set, pf_router_cvt_set : VkDescriptorSet   //! the MoE block's router on the cm2 route: pf_xb -> pf_xf, router16 x pf_xf into the split-k planes, the reduce into the logits
     m_pf_dnqkv, m_pf_dnz, m_pf_dnout, m_pf_dnbeta, m_pf_dnalpha : HostBuf   // the prefill GEMMs' region metas
     //! the MoE form: the routed expert triple beside the dense triple (the shared expert's, or none: b1 < 0)
@@ -2370,7 +2431,7 @@ struct RLayer {
     pre2_fused : bool               //! the gemma-4 routed feed's norm and requant as one dispatch (`s_pre2_rq`, an ArRq stamp with the add off)
     pre2_stamp : RqStamp
     s_pre2_rq : VkDescriptorSet
-    rtn_fused : bool                //! the gemma-4 router takes its own rms of x (`RouterArgs.norm_on`): no norm dispatch before it
+    rtn_fused : bool                //! the gemma-4 router takes its own rms of x (`GkRouterArgs.norm_on`): no norm dispatch before it
     s_router, s_topk : VkDescriptorSet
     s_egate, s_eup : VkDescriptorSet
     s_eact : VkDescriptorSet
@@ -2388,6 +2449,7 @@ struct RLayer {
     pf_e1_set, pf_e3_set, pf_e2_set : VkDescriptorSet   //! the expert tiles over the device-written schedules: the s column's
     pf_e1m_set, pf_e3m_set, pf_e2m_set : VkDescriptorSet   //! ... and the m column's, over the same planes
     pf_eact_set : VkDescriptorSet
+    pf_grq_set : VkDescriptorSet    //! the Q8-fed chain's requant of the gathered rows into the expert tiles' feed
     pf_arcomb_set, pf_arcomb_f16_set : VkDescriptorSet   //! the residual step with the combine folded in: the f32 and f16 normed-row forms
     moe_g4 : bool                   //! the gemma-4 form: the dense triple is a parallel shared expert, the routed feed and the router take their own norms of x, the combine norms both branches (`ClsArCombG4`)
     experts_host : bool             //! the routed experts serve on the host: no expert planes, the router alone runs here and the token command ends its segment after it
@@ -2422,6 +2484,22 @@ enum NRail {
     unasked
     built
     declined
+}
+
+//! the one-row command's chained step: the next step submitted behind the running one, its token the running step's pick
+struct RdChain {
+    pend : bool          //! a chained step is in flight or landed and not yet taken
+    region : int64
+    pos : int64          //! the position it steps
+    slot : int           //! its staging and landing slot
+    xv : uint64          //! the transfer timeline value its landing completes at
+    pred : int64         //! the token it stepped: the running step's pick
+    logits : bool        //! it lands its logits beside its pick
+    next_slot : int
+    ask : bool           //! the caller asked this step to chain the next (`vk_rdec_chain_ask`), with the next position's rope row
+    cos_next : array<float>
+    backoff : int        //! the adaptive mode's steps left unchained after a miss
+    backoff_len : int
 }
 
 struct RDec {
@@ -2467,17 +2545,18 @@ struct RDec {
     // the hybrid (deltanet) form: geometry + the buffers every recurrent layer shares
     hybrid : bool
     dn_cd, dn_kd, dn_di, dn_nvh, dn_nkh, dn_ds, dn_dconv : int64
-    dn_ba_f32 : bool              // beta/alpha rows come as f32 in the file (dn_ba_dev, f16 on the device) rather than q8 arena planes
+    dn_ba_f32 : bool              //! beta/alpha rows come as f32 in the file (dn_ba_dev, f32 on the device) rather than arena planes
     dn_zsig : bool                //! the deltanet out-gate is sigmoid(z): the step kernel's `ZSIG` stamp serves (qwen4exp)
     dn_proj_dev : uint64          // [cd + di] floats: the fused qkv row, the z row at cd
     fused_sets_made : bool        //! the fused add+rms+requant sites' stamps and sets are picked once, at the first record
     rq_pro_stamp : RqStamp        //! the prologue site's: layer 0's feed form, the row stored where its head reads floats
-    dn_ba_dev : uint64            // f32 arm: every recurrent layer's [beta ; alpha] rows, [2 x nvh x dim] per layer, f16
+    dn_ba_dev : uint64            //! f32 arm: every recurrent layer's [beta ; alpha] rows, [2 x nvh x dim] per layer, f32
     dn_ba_bytes : int64
     dn_oq_dev, dn_os_dev : uint64 // the step's Q8_0 o row - the out GEMV's activation image
     dn_of_dev : uint64            // the step's f32 o row for a K-quant out plane - the Q8_K requant's source
     dn_parity : array<int>
-    norms_dev : uint64            // rms_att[l]/rms_ffn[l] interleaved + final, uploaded once
+    pf_dn_cur : array<int>        //! a window call's ring image per region: the next window of the region's segment reads it, its tail lands in the other
+    norms_dev : uint64           // rms_att[l]/rms_ffn[l] interleaved + final, uploaded once
     bias_dev : uint64             // the q/k/v projection biases, per layer [q | k | v] (qwen2; 0 = the model has none)
     bias_bytes : int64
     has_bias : bool
@@ -2495,6 +2574,16 @@ struct RDec {
     xlog_pick_recorded : array<bool>
     pick_dev : uint64             //! the rows' argmax ids (`ClsArgmaxPart` then `ClsArgmaxFin`, after the epilogue), and their host landing
     pick_host : HostBuf
+    ch_meta : array<HostBuf>      //! the chained step's staged TokMeta row and rope row, two slots the chained steps alternate
+    ch_cos : array<HostBuf>
+    ch_logits : array<HostBuf>    //! ... its landing a slot: the logits row and the pick
+    ch_pick : array<HostBuf>
+    ch_pro_cmd : array<VkCommandBuffer>   //! ... its prologue a (region, slot), recorded on first use
+    ch_pro_recorded : array<bool>
+    ch_xlog_cmd : array<VkCommandBuffer>  //! ... its landing copy a (slot, logits landed)
+    ch_xlog_recorded : array<bool>
+    ch_snap_dev : uint64          //! the chained region's recurrent states as the step before the chained one left them
+    ch : RdChain                  //! the chained step in flight
     carry : bool                  //! the plan's carry, whatever the knob said at the load: the landing's planes exist, and the final site can store the rows' post-final-norm hidden in xb_dev and land it into hid_host beside the logits (a NextN-headed model whose tier installed the landing)
     carry_live : bool             //! the carry as this step wants it - `carry` and the speculative round on; a flip re-records the commands whose last site stores or lands the row (`rd_carry_sync`)
     hid_host : HostBuf            //! the landed carry rows: the token command's, or the window chain's last row at row 0
@@ -2511,6 +2600,7 @@ struct RDec {
     head_cos_dev : uint64
     head_cos_host : HostBuf
     head_s_hx_ar : VkDescriptorSet   //! the verify's head attention norm of the eh_proj rows into cat (`head_s_cat_rq` quantizes them): xb keeps the trunk rows the landing reads
+    head_s_cat2_self, head_s_cat2_emb : VkDescriptorSet   //! the chain's stream cat rows off the normed embed in the cat's row 0 (the draft) or in `xb2_dev` (the verify warm)
     pf_head_ask : bool            //! the next window chain warms the head's slab over the prompt rows it serves (`vk_rdec_head_warm_ask`)
     pf_head_rows : int64          //! the head rows the last chain wrote
     pf_head_ready : bool          //! the chain's head planes and sets are built (`pf_head_setup`)
@@ -2527,11 +2617,15 @@ struct RDec {
     roll_dev : uint64             //! the verify's rollback scratch: a row per verify row the round can reject past (`roll_rows` = `verify_rows` - 1), each row every recurrent layer's slot state and ring pair in layer order (`RLayer.roll_off`); 0 = none
     roll_rows : int64
     roll_row_bytes : int64
+    snap_dev : uint64             //! the regions' recurrent checkpoints: `RDEC_DN_SNAPS` rows a region, a row every recurrent layer's slot state and ring pair (`RLayer.snap_off`); 0 until the first save
+    snap_row_bytes : int64
+    snap_par : array<int>         //! a checkpoint row's ring parity, the region's when it was saved
     roll_region : int64 = -1l     //! ... the region whose slots the last verify copied (-1 = none to roll back), and that verify's rows
     roll_vrows : int64
     pick_part_max_dev, pick_part_id_dev : uint64   //! the first pass's partials: a (max, id) a (row, chunk)
     s_pick_part, s_pick_fin : VkDescriptorSet
     kv_readback : HostBuf         // per-layer K/V row -> CPU cache writeback
+    pool_xfer : HostBuf           //! the host pool's staging: a move's every span in one submit (`vk_rdec_kv_xfer`), made at the first move, grown to the largest
     cls_regions_dev : uint64      // the classifier class-GEMV's one-pair regions buffer (device —
                                   // vocab-row dispatches read it from ~150K subgroups)
     cls_set : VkDescriptorSet
@@ -2563,6 +2657,9 @@ struct RDec {
     cmd_n : array<VkCommandBuffer>   //! the N-row token commands by row count (index 0 unused): every row reads its own TokMeta entry, so one command serves any region mix
     cmd_n_unsplit : array<VkCommandBuffer>   //! ... and their unsplit attention twins, submitted while every row sits under RD_UNSPLIT_POS; the rows take no wide form (ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-decode-attn-split)
     tok_n_recorded : array<bool>
+    cmd_seq : array<VkCommandBuffer>   //! the in-order rows commands by row count: one region's consecutive rows, a recurrent layer stepping them one after another in its slot (the short window's peel)
+    cmd_seq_unsplit : array<VkCommandBuffer>
+    tok_seq_recorded : array<bool>
     cos_host : HostBuf            // this token's rope row, copied to cos_dev in-cmd
     // the per-layer-embedding side input (gemma-4 E-series; ple = 0 elsewhere): this token's [layers x ple]
     // row copied to ple_dev in-cmd, the gate GEMV's [ple] output, and the window chain's position-major rows
@@ -2603,10 +2700,16 @@ struct RDec {
     @scratch pf_cls_gemm : table<int; VkDescriptorSet>   // GEMM-role class sets, keyed idx*16 + variant (lazy insert, steady-state hit)
     pf_cmd : VkCommandBuffer
     pf_cmd_ring : array<VkCommandBuffer>
-    emb_blk : int64 = -1l
-    emb_f32 : uint64
+    emb_blk : int64 = -1l              //! the token table's arena block (`vk_rdec_set_emb`): -1 = no quantized table placed
+    emb_f32 : uint64                   //! an F32/F16/BF16 table's exact rows uploaded whole (`vk_rdec_upload_emb_f32`): 0 = none
     emb_f32_bytes : int64
-    ple_tbl_blk : int64 = -1l          //! the E-series token table's arena block (q8): the ids prefill gathers pf_ple from it
+    emb_fmt : int                      //! ... its format, the gather's stamp (`emb_cls_ensure`)
+    emb_scale : float                  //! ... and the embed scale the one-row command's gather applies
+    tok_ids_host : HostBuf             //! the one-row command's token id, read by its gather where the step brings one (`EMB_ID_HOST` = the row below)
+    tok_xh_host : HostBuf              //! the host's row for a step that brings no token id, read in place by the same gather
+    s_tok_emb : VkDescriptorSet        //! the one-row command's gather set
+    ple_tbl_blk : int64 = -1l          //! the E-series token table's arena block: the ids prefill gathers pf_ple from it
+    ple_tbl_fmt : int                  //! ... its format slot, the table's own tag - the gather's stamp (`emb_cls_ensure`)
     pf_ple_tbl_set : VkDescriptorSet
     pf_ids : uint64                    // [MAX_NPOS] token ids for the device-side embed gather
     pf_emb_set : VkDescriptorSet
@@ -2656,6 +2759,8 @@ struct RDec {
     pf_my1, pf_my2 : uint64       //! [nk x nfe] the gate / up rows
     pf_mhf : uint64               //! [nk + slack x nfe] the hidden rows, f16
     pf_mdn : uint64               //! [nk x dim] the routed down rows
+    pf_moe_q8 : bool              //! the routed block's Q8-fed chain: no coopmat tile serves the expert planes, so the gathered rows quantize and the sdot4 batch tiles run the expert GEMMs
+    pf_mxg32, pf_mgq, pf_mgs : uint64   //! ... its gathered f32 rows and their quants and scales
     //! the hyper-connection form (qwen4exp): the wide residual and the mixer seams every block reads through (`vk_rdec_set_hc`)
     hc : bool
     hc_n, hc_lr : int64           //! the streams, the mixer's low-rank width
@@ -2676,6 +2781,7 @@ struct RDec {
     head_pf_hsrc_w : uint64       //! the shifted wide rows the head warm norms: row 0 the previous window's last wide row, rows 1.. this window's rows 0..wlen-2 [np x hc x dim]
     head_pf_wsm : uint64          //! the head's wide residual rows as eh_proj lands them, stream-major [hc x np x dim]
     head_pf_s_hnorm, head_pf_s_enorm : VkDescriptorSet   //! the carry rows' grouped norm (hsrc_w -> pf_hcxn), the embed rows' norm (pf_x -> pf_xb2)
+    head_pf_s_cat2, head_pf_s_cat2_hc : VkDescriptorSet  //! the head rows' cat: [pf_xb2 ; pf_ffnout], and on the chain [pf_xb2 ; pf_hcxn] a stream
     hccarry_dev : uint64          //! the NextN head's carry, uploaded wide [hc x dim]: the prelude norms its streams into the cat rows
     hc_draft_cmd : array<VkCommandBuffer>   //! the hc draft's second segment per region (the first is `head_draft_cmd`): the head's routed sum up, its head mixer, the classifier and the pick
     s_hc_norm_carry : VkDescriptorSet   //! the carry's grouped norm: `hccarry_dev` in, `hcxn_dev` out
@@ -2691,7 +2797,7 @@ struct RDec {
     s_ple_commit : VkDescriptorSet      //! the panel's rows into the ring's slots after the rows
     @exact_size hc_v_seg : array<VkCommandBuffer>   //! the hc verify's segments per region (`nseg` a region), recorded at the verify's row count
     @exact_size hc_v_recorded : array<bool>
-    s_hc_norm, s_hc_inj, s_hc_xnrq, s_hc_lorq, s_hc_mix : VkDescriptorSet
+    s_hc_init, s_hc_norm, s_hc_inj, s_hc_xnrq, s_hc_lorq, s_hc_mix : VkDescriptorSet
     s_hc_comb_a, s_hc_comb_f : VkDescriptorSet   //! the scatter after the attention head (the wo row) and after the FFN (the shared row plus the host's routed sum)
     //! the n-gram side input before layer `ngram_layer`'s attention mixer (`vk_rdec_set_ngram`)
     ngram : bool
@@ -2807,6 +2913,7 @@ def rd_invalidate_token {
     fill(g_rd.seg_recorded, false)
     fill(g_rd.tok_wide_recorded, false)
     fill(g_rd.tok_n_recorded, false)
+    fill(g_rd.tok_seq_recorded, false)
     fill(g_rd.head_draft_recorded, false)
     fill(g_rd.v_recorded, false)
 }
@@ -3528,6 +3635,9 @@ let FUSE_BX_QKN_ROPE = 64l     //! the fused qk-norm + rope + store
 
 def vk_fuse_on : bool => g_vk_fuse >= 0 ? g_vk_fuse != 0 : g_env_vulkan.vk_fuse
 
+//! the greedy chain's mode as `DASLLAMA_VK_CHAIN` asks it
+def vk_chain_env : int => g_env_vulkan.vk_chain
+
 [cold_path]   // DASLLAMA_VK_HAZARD_TRACE reporting leg
 def private vhz_trace_log(disp : int; rmask, wmask : uint; transfer : bool) {
     to_log(LOG_INFO, "vhz {disp} r={rmask} w={wmask} t={transfer ? 1 : 0}\n")
@@ -3611,14 +3721,35 @@ def record_submit_wait(var raw : VkCommandBuffer; reset : bool; rec : block<(raw
 }
 
 //! `raw` begun, reset first under `reset`; returns the fresh hazard rail its recording starts on
-def cmd_open(raw : VkCommandBuffer; reset : bool) : VkHaz {
+def cmd_open(raw : VkCommandBuffer; reset : bool; simultaneous : bool = false) : VkHaz {
     if (reset) {
         let rf : VkCommandBufferResetFlags
         vk_check(vkResetCommandBuffer(raw, rf), null)
     }
-    let begin = VkCommandBufferBeginInfo()
+    var begin = VkCommandBufferBeginInfo()
+    begin.flags.simultaneous_use = simultaneous
     vk_check(vkBeginCommandBuffer(raw, begin), null)
     return VkHaz()
+}
+
+//! every earlier command's shader and transfer writes visible to every later command's shader and transfer accesses, in
+//! submission order across command buffers
+def cmd_full_barrier(raw : VkCommandBuffer) {
+    var mb = VkMemoryBarrier()
+    mb.srcAccessMask.shader_write = true
+    mb.srcAccessMask.transfer_write = true
+    mb.dstAccessMask.shader_read = true
+    mb.dstAccessMask.shader_write = true
+    mb.dstAccessMask.transfer_read = true
+    mb.dstAccessMask.transfer_write = true
+    var sstage : VkPipelineStageFlags
+    sstage.compute_shader = true
+    sstage.transfer = true
+    var dstage : VkPipelineStageFlags
+    dstage.compute_shader = true
+    dstage.transfer = true
+    let dflags : VkDependencyFlags
+    vkCmdPipelineBarrier(raw, sstage, dstage, dflags, 1u, unsafe(addr(mb)), 0u, null, 0u, null)
 }
 
 def cmd_close(raw : VkCommandBuffer) {

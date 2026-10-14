@@ -65,7 +65,7 @@ struct public EngineEnv {
     @clarg_doc = "Pin the matmul backend by name, bypassing the measured auto-selection."
     pin_backend : string = ""
 
-    @clarg_doc = "How an IQ3_S weight is served: grid = the disk form (the 3.44-bit grid planes, decoded by a gather), lut = the iq3s4 form (a 4-bit codebook index a superblock, decoded by the LUT kernels - exact, 17% more bytes, the CPU decode several times faster), auto = lut wherever the serving rails decode it (the CPU rails and the Vulkan tier), grid under the Metal tier (it gathers the grid and carries no iq3s4 kernel)."
+    @clarg_doc = "How an IQ3_S weight is served: grid = the disk form (the 3.44-bit grid planes, decoded by a gather), lut = the iq3s4 form (a 4-bit codebook index a superblock, decoded by the LUT kernels - exact, 17% more bytes, the CPU decode several times faster), auto = lut on the CPU rails and the Vulkan tier, grid under the Metal tier (every home serves both forms at every site)."
     iq3s_serve : string = "auto"
 
     @clarg_doc = "Pin the batched (prefill) matmul backend independently of the decode one."
@@ -76,6 +76,9 @@ struct public EngineEnv {
 
     @clarg_doc = "Print engine diagnostics (tier selection, upload plan, arm/decline reasons)."
     noisy : bool = false
+
+    @clarg_doc = "A paged scheduler serving device-home streams keeps their openings in its prefix cache too - a recurrent model's checkpoints and the finished turns' rows copied down to host RAM under the cache's budget, taken back up into a region when a request opens with one the device no longer holds; 0 keeps the regions' parked claims and checkpoint rows alone - the A/B rail."
+    device_pool : bool = true
 
     @clarg_default_doc = "2 (the top notch)"
     @clarg_doc = "A/B rail for the dispatch caller's thread priority, -2..2; unset claims the top notch."
@@ -161,6 +164,9 @@ struct public GpuTierEnv {
 
     @clarg_doc = "The dense rail's gemma-4 shared-expert w1/w3/w2 triple; opt-IN, measured a wash-to-loss."
     gpu_dense_shexp : bool = false
+
+    @clarg_doc = "The dense rail's FFN half (each dense layer's w1/w3/w2 triple, the decode row's FFN on the device); 0 keeps a dense layer's FFN on the CPU (the A/B rail)."
+    gpu_dense_ffn : bool = true
 
     @clarg_default_doc = "follows DASLLAMA_GPU"
     @clarg_doc = "Shared-expert rail on the GPU."
@@ -266,6 +272,9 @@ struct public MetalEnv {
     @clarg_doc = "Apply the box profile's tensor-lane crowns (its runtime.metal_tensor set), so every family the box's race crowned serves its tensor twin; 0 leaves the set empty and every family on its base form - what a GPU without the tensor lane (the M4 class) serves - the arm that proves a change, and the base kernel set, on that class from an M5."
     tensor : bool = true
 
+    @clarg_doc = "The dense Q8_0 and K-quant prefill sites read a stored f16 converted copy of their planes (the dev-W panels the image bakes, or the resident ones); the A/B rail of the default - per-window scratch panels past each site's row floor, its own bytes under it - which the image lane name carries as -devw."
+    devw : bool = false
+
     @clarg_doc = "Fused prefill qk_norm+rope pass (one panel rewrite, q panel dual-stores its f16 twin); 0 restores the split norm/rope/cvt dispatches (the A/B rail)."
     qk_rope : bool = true
 
@@ -286,7 +295,7 @@ struct public MetalEnv {
     unretained : bool = false
 
     @clarg_default_doc = "0 (off)"
-    @clarg_doc = "MB budget for RESIDENT dev-W f16 panels: static weights dequantize ONCE and the panels persist across forwards (vs the per-forward scratch re-dequant). Sites past the budget fall back to scratch."
+    @clarg_doc = "MB budget for RESIDENT dev-W f16 panels under DASLLAMA_METAL_DEVW=1: static weights dequantize ONCE and the panels persist across forwards (vs the per-forward scratch re-dequant). Sites past the budget fall back to scratch."
     devw_resident : int = 0
 
     @clarg_doc = "Record each prefill chunk as a step graph and replay on a concurrent encoder; 0 is serial-encode rollback."
@@ -314,7 +323,7 @@ struct public MetalEnv {
     @clarg_doc = "Single-pass B8 twin for K-quant small-batch mv at B=5..8; 0 is the A/B rail."
     kq_b8 : bool = true
 
-    @clarg_doc = "Ceiling in MiB for the device-side KV mirror, clamped 64..4096."
+    @clarg_doc = "The device-side KV mirror's cap in MiB (64 at least, the device's largest buffer at most): the arena's growth bound for every session together and the bytes idle mirrors evict down to; a live session's own slice past it still gets room."
     kv_mirror_mb : int = 4096
 
     @clarg_doc = "A released paged session's KV mirror goes to the next session whose leading pages are the same pool groups, its rows not uploaded again; 0 uploads every attached row - the A/B rail."
@@ -397,6 +406,9 @@ struct public VulkanEnv {
     @clarg_doc = "Fused add+rms+requant on every site of the decode token command and the prefill's batch pairs, plus the fused qk-norm+rope; 0 pins the split dispatches for a same-build A/B."
     vk_fuse : bool = true
 
+    @clarg_doc = "The whole-model driver's greedy chain: the next one-row step submitted behind the running one on the device's own pick; 0 off, 1 every greedy step, -1 adaptive (backs off after a miss). A sampled session never chains."
+    vk_chain : int = 0
+
     @clarg_doc = "The resident prefill's FFN GEMMs (gate, up, down) take the f16 activation feed where the tile family admits it; 0 pins the FFN group to the Q8 activation blocks the CPU chain quantizes, while the attention group keeps its own pick - the A/B rail that takes the feed's rounding out of a resident-vs-CPU compare (gemma's logits move with it)."
     vk_f16_ffn : bool = true
 
@@ -433,7 +445,7 @@ struct public VulkanEnv {
     @clarg_doc = "Prefill record/execute overlap: the window chain submits in ramped chunks (1,2,4,8 layers) so the GPU starts while the CPU still records; 0 pins the single fenced submit (the per-role GPU profile pins it too, so a chunk gap never bills to a role)."
     vk_overlap : bool = true
 
-    @clarg_doc = "Device-side token-embedding gather for the resident prefill (a tied q8 table gathers from the resident cls plane; a raw f32 table uploads whole under a 512 MB cap); 0 keeps the CPU embed loop."
+    @clarg_doc = "Device-side token-embedding gather for the resident prefill and the one-row decode step: a q8 or K-quant table off its own plane (the tied classifier's, or an untied table's where it fits the room past the weights and the K/V), an F32/F16/BF16 table off its exact f32 rows uploaded under a 512 MB cap; a Q4_1 table keeps the CPU embed; 0 keeps the CPU embed loop."
     vk_gpu_embed : bool = true
 
     @clarg_doc = "Pin REQUIRE_FULL_SUBGROUPS on every class pipeline (instrument; measured slower than plain pipelines on the mm_a gate shape, so those are the default)."

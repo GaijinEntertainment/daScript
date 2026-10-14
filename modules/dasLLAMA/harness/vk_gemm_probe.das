@@ -604,19 +604,18 @@ def private run_cm2_fmt_shape(fmt : int; name : string; d, n, cnt : int; l_stamp
 
 [arch(at="../ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md#vk-gemm-probe")]
 def private run_dec_small_kernels() {   // nolint:STYLE038 — one linear measurement sweep
-    verify(ensure_router_gemv_f16_cls() && ensure_dn_step_cls(), "dec probe pipelines must engage")
+    verify(ensure_router_gemv_cls() && ensure_dn_step_cls(), "dec probe pipelines must engage")
     for (shape in fixed_array(int2(64, 4096), int2(32, 1024), int2(64, 5120))) {   //! (rows, dim): the 9B's, the 0.8B's, the 27B's
         let ne = shape.x
         let dim = shape.y
-        let w_bytes = int64(ne * dim) * 2l
+        let w_bytes = int64(ne * dim) * 4l
         let x_bytes = int64(dim) * 4l
         let o_bytes = 4096l
-        var inscope wh : array<uint>
-        var inscope xh : array<float>
-        wh |> resize(ne * dim / 2)
+        var inscope wh, xh : array<float>
+        wh |> resize(ne * dim)
         xh |> resize(dim)
         for (i in range(length(wh))) {
-            wh[i] = cool_f16_pair(uint(i) + 11u)
+            wh[i] = float(hash_word(uint(i) + 11u) % 1000u) / 25000.0 - 0.02
         }
         for (i in range(dim)) {
             xh[i] = float(hash_word(uint(i) + 5u) % 1000u) / 500.0 - 1.0
@@ -628,14 +627,15 @@ def private run_dec_small_kernels() {   // nolint:STYLE038 — one linear measur
             upload_region_at(wd, 0l, addr<uint8 const?>(wh[0]), w_bytes)
             upload_region_at(xd, 0l, addr<uint8 const?>(xh[0]), x_bytes)
         }
-        var s = set_router_gemv_f16_cls(fixed_array(wd, xd, od, xd), fixed_array(w_bytes, x_bytes, o_bytes, x_bytes), fixed_array(0u, 1u, 2u, 0u))
-        var pc = RouterArgs(ne = uint(ne), dim = uint(dim), woff = 0u, obase = 16u, ne_split = uint(ne / 2), obase_split = uint(16 + ne))
+        //! the decode's F32 [beta ; alpha] rows (`rd_encode_dn_head`, `dn_ba_f32`): the router GEMV's f32 stamp over both halves, split at the first
+        var s = set_router_gemv_cls(fixed_array(wd, xd, od, xd), fixed_array(w_bytes, x_bytes, o_bytes, x_bytes), fixed_array(0u, 1u, 2u, 0u))
+        var pc = GkRouterArgs(ne = uint(ne), dim = uint(dim), woff = 0u, obase = 16u, ne_split = uint(ne / 2), obase_split = uint(16 + ne), ncols = 1u)
         let us = timed_chain() $(raw; var hz) {
             for (_k in range(DISPATCHES)) {
-                enc_router_gemv_f16_cls(raw, hz, s, pc, int64(ne))
+                enc_router_gemv_cls(raw, hz, s, pc, int64(ne))
             }
         }
-        print("dec ba gemv f16 {ne}x{dim}: {us} us/dispatch  timing-only\n")
+        print("dec ba gemv f32 {ne}x{dim}: {us} us/dispatch  timing-only\n")
         delete wh
         delete xh
     }

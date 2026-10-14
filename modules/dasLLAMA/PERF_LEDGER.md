@@ -11,6 +11,163 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **MEASURED (2026-10-13) - the qwen leg's end re-measure: every plane on its own bytes against the stored q8 and f16
+  copies, MTP, the greedy chain, the per-op dense-FFN rail, on the house file `Qwen3.6-35B-A3B-MTP-IQ4_XS-pure.gguf`
+  (and Llama-3.2-3B Q4_K_M), the M5 Max and the RTX PRO 4500 (Vulkan), the leg against its base `fa7ce42649`.** Every
+  reading in this entry is `out-of-process` and `direction-grade`: a client's clock times a server process, and each
+  reading sets the leg against its base in another process.
+  - `harness/served_bench.das` as `ARCHITECTURE_MEASUREMENT_SERVED.md#served-turn-instrument` runs it (`--sizes
+    3000,9000 --reply 200 --reps 5`, cv under 3 % unless marked) against `utils/dasllama-server/main.das` at one stream
+    and `--ctx 16384`, Metal on the M5 Max, Vulkan on the RTX PRO 4500 pod; the server's tier, its `DAS_TUNE_POLICY`, the
+    CPU kernel backend and, on the pod, `DASLLAMA_COOPMAT` are not recorded.
+  - M5, uncrowned on both trees (the committed M5 profile carries no tensor crowns): native non-expert planes lift
+    served decode 150.6 to 153.9 (3k) and 140.2 to 145.9 (9k) and cost the window: served cold TTFT 846 to 1383 ms at 3k
+    and 2942 to 4302 at 9k, the window's own GPU time 623 to 1032 ms at 2967 rows; the base's image carried 318 baked
+    dev-W f16 panels (2761 MB) that the K-quant and Q8_0 window GEMMs read, and the deltanet planes and the shared expert
+    as stored q8 copies; the per-forward scratch panel arm (`DASLLAMA_METAL_DEVW=1`) reads 1301 ms. MTP at one stream on
+    Metal on this MoE costs decode (served 157/148 with the server's `--mtp` round on, 178/168 off); at four streams it
+    is a wash on both trees.
+  - Vulkan, 35B: served decode 147.9 to 159.8 (3k) and 141.2 to 151.6 (9k) with MTP off, prefill 4294 against 4158
+    tok/s. With the server's `--mtp` the base drafted on the CPU (TTFT 18.6 s, 18.6 tok/s) and the leg drafts on the
+    device (746 ms, 176.6 tok/s at cv 8 % - past the 3 % line, a row the instrument prints VOID); the shipped
+    `serve_mtp = "vulkan"` (`performance/model_specs.das`) rests on that VOID reading. The greedy chain
+    (`DASLLAMA_VK_CHAIN=1` against unset) reads 157.4 against 159.8 and adds 6 ms of warm TTFT, +1.5 % on the 3B - off by
+    default. Llama-3B whole-model: 202 to 210 tok/s (3k). The per-op tier's dense-FFN rail (`DASLLAMA_GPU_DENSE_FFN=1`
+    against `=0`): the 3B decodes 29.2 against 17.4 tok/s and prefills 274 against 153 with it on - on by default.
+  - The house replay is an instrument outside the tree: a client replaying a home assistant's recorded requests against
+    `utils/dasllama-server/main.das`, a warm and a cold pass. Every figure it read is `external`. Its command line, the
+    server's tier, `DAS_TUNE_POLICY`, CPU kernel backend and, on the pod, `DASLLAMA_COOPMAT` are not recorded in the
+    tree, and no `ARCHITECTURE_MEASUREMENT*.md` section carries the recipe of the llama-server rows beside it (version,
+    command line, draft head).
+  - M5, uncrowned: the short turns' steady gen 118 to 146-150 tok/s; short-turn TTFT with the scratch panels matches the
+    base (0.232 against 0.235 s), without them 0.355 against 0.287 on the M4 arm. The pod, warm pass (cached / cold /
+    TTFT med, p90 / steady): Llama-3B 86 % / 0 / 0.13, 0.28 / 204 (the base 0.20, 0.98 / 196; llama-server 93 % / 0.11,
+    0.15 / 207); the 35B device-home 67 % / 33 / 0.22, 1.48 / 140 (the base 0 % / 98 / 1.40, 1.70 / 129; llama-server
+    with its draft head 88 % / 0.51, 0.91 / 162), with `--mtp` 64 % / 36 / 0.30, 1.59 / 159; its pair phase reads 39
+    tok/s steady a stream (29 with `--mtp`) against 180 on the 3B. Open from these readings: the Metal window's
+    own-bytes sites (a per-window scratch panel from the row floor), the device-home cache rate against the M5's 91 %
+    (the card holds one parked claim and four checkpoints a region, the host prefix cache a quarter of RAM), the 35B
+    pair phase on Vulkan.
+  - With the Metal window on per-window scratch panels and the box crowned (the minted M5 profile on both trees), two
+    alternated rounds, each round's figure listed, leg against base: cached 91 % / 0 cold on both; TTFT med 0.28, 0.25
+    against 0.24, 0.23 s; steady gen 120, 136 against 111, 114; short alone wall 0.335, 0.312 against 0.336, 0.334,
+    TTFT 0.263, 0.254 against 0.245, 0.242, steady 135, 140 against 114, 115; pair wall 0.643, 0.655 against 0.690,
+    0.685, steady 109, 102 against 97, 98 - decode and the pair ahead, the short TTFT 10-18 ms behind (the base form's
+    dequant passes and the exact f32 router tile against the base's stored half copy).
+  - With the host pool behind the device-home streams (`--prefix-state-mb`, a quarter of RAM or the container's limit -
+    14,848 MB on the pod), the 35B device-home replay on the pod reads 93 % cached / 0 cold on the warm pass and 86 % / 7
+    on the cold pass (the 7 are the openings nothing precedes, the M5's floor too) against the M5's 91 % / 0; TTFT med
+    0.25, p90 0.59 s against the card-only 0.24, 1.47 - the pool costs about 10 ms at the median; the pool held to the
+    card's own bytes (1,700 MB) reads 86 % / 7. An opening of 4.2-4.8k tokens comes up from the pool in 10-16 ms, a
+    checkpoint goes down in about 15 ms, a new conversation forcing three copies and an upload pays about 64 ms at
+    admission. 22 of 124 warm replies differ from the card-only run: the attach position moves, and the split prefill's
+    routed numerics with it.
+  - The M4 arm (`DASLLAMA_METAL_TENSOR=0`, served at one stream): the 35B IQ4_XS, two alternated rounds,
+    leg against base, each round's figure listed - decode 188.9, 176.0 against 158.4, 150.0 (3k) and 175.2, 166.3 against
+    147.8, 141.4 (9k); cold TTFT 733, 934 against 726, 850 ms (3k) and 2710, 3123 against 2679, 2952 (9k) - decode 18 %
+    ahead on the base forms, the cold window inside the rounds' own drift (the second round slower on both trees). The
+    same arm on the leg across the file's forms, one round each: UD-Q4_K_M (Q4_K / Q5_K experts, Q8_0 rest) cold 1042 /
+    3662 ms, decode 139.1 / 131.6; Q8_0 cold 2001 (cv 19 %) / 5229 (cv 3.6 %) ms, decode 96.8 (cv 13 %) / 104.2 (cv
+    6.5 %) - every Q8_0 row and a second UD-Q4_K_M round sit past the 3 % line (the box after an hour of back-to-back
+    loads), so the Q8_0 column is a direction only; the IQ4_XS file is the M4 arm's pick on both axes.
+  - The same arm, the box idle, two alternated rounds of three files minted from unsloth's BF16 shards (`llama-quantize
+    --tensor-type 'ffn_(gate|up|down)_exps=<fmt>' <bf16> <out> Q8_0`: the routed experts in the named format, every
+    other plane - the shared expert, attention, deltanet, token table, classifier and the NextN head - Q8_0; no
+    imatrix): pure IQ4_XS (18.95 GB) cold 730, 865 / 2631, 2950 ms, decode 189.2, 182.2 / 175.6, 169.9; Q4_K experts +
+    Q8_0 rest (21.29 GB) cold 1037, 1239 / 3942 (cv 6.6 %), 3947 ms, decode 143.6, 139.8 / 133.7, 133.6; IQ4_XS experts
+    + Q8_0 rest (20.26 GB) cold 948 (cv 3.4 %), 879 / 3079, 2946 ms, decode 139.1, 142.0 / 133.4, 134.9. The Q8_0 rest
+    costs a quarter of the decode and a fifth to a third of the cold window on the bandwidth-bound arm: an A3B's dense
+    planes are most of a token's bytes (about 1.9 GB a token at Q8_0 against 1.0 at 4 bits, the eight routed experts
+    0.55), and the pure file's window reads the 4-bit experts and dense planes on its own bytes at the q8 tile's rate.
+  - Pure Q4_K (`llama-quantize --pure`, 20.06 GB, 4.5 bpw) against pure IQ4_XS on the same arm, two alternated rounds:
+    decode 187.3, 177.3 / 174.4, 166.9 against 188.6, 182.4 / 168.8, 169.8 - the two within the rounds' drift, so the
+    IQ4_XS lookup costs the bandwidth-bound decode nothing; prefill 2903, 2367 / 2456, 2172 against 4092, 3498 / 3220,
+    3023 tok/s - the Q4_K base-form window GEMM reads a third slower than the IQ4_XS one on this arm at near-equal
+    bytes (the Q8_0-rest twins above show the same gap on their expert planes: 2236 against 2862 at 9k). Open from this
+    reading: the K-quant base-form window tile against the IQ4_XS one (`followup_metal.md`).
+  - The same six files on the M5's own arm (the box profile re-minted, its tensor crowns applied), two alternated
+    rounds, prefill 3k / 9k tok/s then decode 3k / 9k: pure IQ4_XS 5117, 4502 / 4411, 4072 and 189.0, 184.5 / 175.8,
+    171.0; pure Q4_K 4627, 4651 / 4153, 4205 and 182.6, 182.7 / 168.5, 169.3; Q4_K + Q8_0 rest 4394, 4531 / 4047, 4132
+    and 139.8, 141.2 / 132.6, 134.0; IQ4_XS + Q8_0 rest 4355, 4406 / 4002, 4036 and 142.4, 142.9 / 135.1, 135.9;
+    UD-Q4_K_M 4401, 4471 / 4061, 4099 and 134.7, 135.0 / 127.9, 128.5; Q8_0 (no NextN head) 4113, 4140 / 3809, 3811
+    and 128.0, 128.3 / 122.2, 122.3. The tensor twins close the K-quant window gap (pure Q4_K within 10 % of pure
+    IQ4_XS, every file within 20 %), so the base-form tile's third is the M4 class's alone; decode is the M4 arm's
+    figure for every file - the crowns move the window, not the bandwidth-bound step.
+- **MEASURED (2026-10-13) - the Metal routed base form's bars (`tests/test_metal_prefill_parity.das`,
+  `test_metal_prefill_moe_base_form`, the `moe-base` arm).** A `tests/run.das` cell; the GPU side is the Metal prefill
+  window with the gather panel held off (`set_metal_moe_gather_min(1000000)`, so the gate and up sites ride the base form
+  `MetalMoeMulMmKqT`, every superblock and per-32 format, the form a box without the tensor toolchain serves) against the
+  same window with the panel built from one token (`set_metal_moe_gather_min(1)`) on the tensor twins, each leg against
+  the CPU chain's rows; the witness is the base kernel's dispatch count. Bars: `Qwen3-30B-A3B-Instruct-2507-UD-Q3_K_XL.gguf` 0.10 (read 0.042 on both legs),
+  `Qwen3-30B-A3B-Instruct-2507-UD-IQ2_XXS.gguf` 0.15 (read 0.095 on the twins, 0.046 on the base form) - the M5 Max,
+  `-jit`, one model process. The IQ2 carrier's bar sits above the twins' own reading on this file; the base form reads
+  under half of it.
+- **MEASURED (2026-10-13, `direction-grade`) - the shared row templates' stamps against the per-home bodies they
+  replaced.** One dispatch alone at a qwen35moe / qwen4exp decode shape, in us, the per-home body read on the tree before
+  the templates landed against the stamp on the tree after, by the same instrument; each row the median of its rounds at
+  under 3 % cv (the instruments print a row past it VOID). M5 Max, Metal:
+  `bin/daslang -jit dastest/dastest.das -- --bench --test modules/dasLLAMA/benchmarks/ew/bench_metal_gk_rows.das`
+  (at least 9 rounds of 200 back-to-back dispatches). RTX PRO 4500 Blackwell pod, Vulkan:
+  `bin/daslang -jit modules/dasLLAMA/harness/vk_gk_rows_probe.das` (64 dispatches a command, 8 submits a round, 9 rounds,
+  the device clock, which steps by 2.05 us at these sizes). `DAS_TUNE_POLICY` and, on the pod, `DASLLAMA_COOPMAT` are not
+  recorded. M5 before / stamp, then Vulkan before / stamp:
+  - hc norm (dim 2048, hc 4, 1 row) 3.87 / 3.87, 4.19 / 4.19; hc mix 1.75 / 1.63, 4.06 / 4.06; hc combine 1.45 / 1.50,
+    2.50 (the MoE arm) / 2.16; ple gate (the ring row) 11.05 / 11.13, 6.17 / 6.50; ple conv 2.38 / 2.25, 4.10 / 4.09.
+  - q/k norm (hs 256, q 16, k 2) 1.57 / 1.71, 2.40 / 2.40; select (256 experts, k 8) 3.05 / 2.81, 6.14 / 6.14; select
+    (512 experts, k 10) 5.51 / 3.67, Vulkan stamp 6.14; routed combine (dim 2048, k 8) 1.70 / 1.92, 4.12 / 4.11.
+  - deltanet out-norm (32 heads of 128) 1 row 1.28 / 1.61, 10.24 / 6.14, 512 rows 34.6 / 29.0, 22.5 / 12.1.
+  - q/k norm + rope + store (hs 128, q 32, k 8): 1 row f32 against the split pair 3.27 / 1.89, 4.09 / 4.09; 4 rows f16 on
+    the M5 3.66 / 1.95; 1 row f16 against the half-twin rope store 1.79 / 1.93; the window's pass with its q twin (512
+    rows) 26.9 / 26.5.
+  - router (256 experts, dim 2048): 1 column f32 rows 3.82 / 3.37, 4.2 / 4.43 (f16 rows 4.10 / 4.11; the pre-template
+    body through the same probe 4.40); 8 columns on Vulkan 14.34 / 14.34 (f16 rows 10.24 / 10.24); 512 columns on the
+    M5 141.6 / 144.4.
+  - shared gate on the M5: its own GEMV then the routed combine and the gated add 3.08 + 2.93, against 0 + 2.01 as the
+    router's row `ne` under the combine's `SH` arm; gated attention's deinterleave + sigmoid epilogue (8 heads of 256)
+    2.19 (2.23 at 4 rows) against 0.
+  - Pocket row GEMV (1024 x 1024) 9.67 / 9.79, 5.4-5.8 / 5.2-5.7; with LayerNorm + SiLU 12.79 / 12.99, 6.14 / 6.14.
+  - With the subgroup reductions behind calls rather than `[spirv_inline]`, the Vulkan stamp read 1.9 us slower. The
+    widest move is the 1-row out-norm's 0.33 us on the M5 against the 512-row window's 5.6 us back.
+  - The pair rulings the shared-kernels doc carries beside the table, same instruments: the router's two lane splits on
+    the M5 - a workgroup a row 3.37 against a subgroup a row 3.82 at one column, a subgroup a row 144 against a workgroup
+    a row 745 at 512 columns; the deltanet conv + L2 fold on the M5 at a 512-row window 83 against the fused 75 (a PB of
+    32 reads 108), at 8 rows 3.37 against 3.81 and at 16 rows 4.77 against 5.00, so `DN_CONV_FUSED_ROWS` sits at 16;
+    the one MoE tile walk under both Metal scaffolds within 0.5 % of the per-scaffold walks (the tile lab, two
+    alternated rounds, best of three; the lab's command line is not recorded); the Vulkan cm2 tile's unsplit k-loop
+    beside the split one on the pod, `harness/vk_gemm_probe.das` `cm2:k4`, two alternated rounds: the k4 l and m
+    stamps 1.2 to 1.5 % slower with the split arm alone (gate 0.190 to 0.193 ms, down 0.184 to 0.187 ms).
+- **STATED (2026-10-13) - the lasting buffers the device-home checkpoints, the host-cached claim stash and the Metal
+  recurrent pool hold.** Not measured; the formulas are the record, f32 recurrent state, `L` the recurrent layers, `nvh`
+  the value heads, `ds` the state size, `cd` the conv width (`2 x groups x ds + inner`), `taps` the conv kernel less one.
+  The 35B is `Qwen3.6-35B-A3B` (`L` 30, `nvh` 32, `ds` 128, `cd` 8192, `taps` 3, 10 attention layers of a 512-wide K/V),
+  the 0.8B `Qwen3.5-0.8B` (`L` 18, `nvh` 16, `ds` 128, `cd` 6144, `taps` 3, 6 attention layers of a 512-wide K/V).
+  - Vulkan `snap_dev` (`dasllama_vulkan_decode.das` `rd_snap_alloc`; budgeted by `rdec_dn_snap_bytes`): regions x
+    `RDEC_DN_SNAPS` (4) x `L` x (`nvh x ds x ds` + 2 x `cd x taps`) x 4 bytes, allocated at the first checkpoint save and
+    kept for the driver's life: 262.5 MiB a region on the 35B, 82.1 MiB on the 0.8B.
+  - Vulkan `g_rdec_stash` (`dasllama_gpu_resident.das` `rdec_stash_region`): one entry a host-cached session whose region
+    changed hands while it held rows its cache lacked, kept until the session takes a region again or is released; an
+    entry is 2 x the attention layers x the stashed rows x the mirror codec's row bytes (K and V), plus the NextN head's
+    rows past its host count - at an f16 mirror 20 KiB a row on the 35B (320 MiB at 16384 rows) and 12 KiB a row on the
+    0.8B (192 MiB at 16384), so it scales with context and with the sessions that lost a region.
+  - Metal `g_dn_pool` (`dasllama_metal_common.das` `dn_pool_fit`): slots x a slot of 3 regions x `L` x (`nvh x ds x ds`
+    + `cd x taps`) x 4 bytes (plus a gemma PLE ring), the slots doubling up to the widest batch served (`DN_MIRRORS_MAX`
+    4 at least): a slot is 188.4 MiB on the 35B (753.8 MiB at four slots), 57.8 MiB on the 0.8B (231.2 MiB at four);
+    `g_dn_stash` keeps one region a mirror evicted past the cap, 62.8 MiB on the 35B and 19.3 MiB on the 0.8B.
+- **MEASURED (2026-10-12) - the router race against the f32 tile that replaced the half panel.** M5 Max,
+  `bin/daslang -jit modules/dasLLAMA/harness/router_race.das`, one process, no flags, 2048 positions x 256 experts over
+  2048, best of its rounds; it now races the router's f32 tile (`MetalF32ExactMm`) where the 2026-10-01 entry's half
+  tensor GEMM arm (`MetalHalfMulMmTH128`) ran, that arm gone with the half panel. The slab GEMV (`MetalMoeRouterB`)
+  0.646 ms, off the double dot by 8.1e-7; the f32 tile 0.174 ms, x3.72, off by 8.3e-6.
+- **STATED (2026-10-12) - the hybrid same-slab verify serves.** The 2026-10-05 entry's conclusion that the same-slab
+  probe declines at two rows on its hybrid no longer holds: a same-slab batch on a hybrid is one row group over the
+  session's recurrent mirror, so the batch rail serves the hybrid verify. That entry's two-row figure stays the
+  two-session batch step it measured.
+- **STATED (2026-10-13) - the 2026-10-02 qwen ladder's deltanet K-quant rows are not like for like.** The deltanet
+  hybrids' K-quant labels in that entry (Qwen3.5-9B-MTP UD-Q5_K_XL, Qwen3.6-27B-MTP Q4_K_M, Qwen3.6-35B-A3B-MTP
+  UD-Q4_K_M, and the entry before it's Qwen3.8-27B UD-Q3_K_XL) name the file, not the served form: the Metal drivers of
+  that date read every deltanet plane, and the 35B's shared expert, through their q8 transcodes, so those rows measure a
+  mixed q8 serve against the reference's native one.
+
 - **MEASURED (2026-10-10) - the house replay on the M5 Max: a reply's tail, the pair's re-prefill, the uncrowned
   sidecar.** The instrument is outside the tree (`external`, `out-of-process`): the house replay's runners,
   `BOX=m5 ./run_replay.sh <tag>` and `BOX=m5 ./run_short.sh <tag>` in the private `dasllama-bench` repository, a
@@ -555,7 +712,7 @@ what it costs today and what the fix would change.
     ratio against the single-row driver's step. The verify's 22.2 ms of GPU is that two-row step plus the
     draft layer, two classifier passes and the draft-slab re-warm; two rows route to two expert sets, so the
     step streams their union. At 1.76 tokens a round over a 1.45x step the depth-1 ceiling here is 1.21x.
-  - The same-slab probe declines at two rows on this hybrid (`followup_metal.md` 43), so the two-row figure is
+  - The same-slab probe declines at two rows on this hybrid, so the two-row figure is
     the two-session batch step, not the verify itself.
 - **MEASURED (2026-10-05, `direction-grade`) - Axpy and Concat as kernels both GPU homes stamp read as before on
   both.** The two kernels moved to one class template each (`dasllama_gpu_kernels_common.das`); on Metal their
@@ -5358,7 +5515,7 @@ record store carries a Vulkan row), so the pod's figures are direction-grade thr
 - **A short window on the Vulkan chain costs about two decode steps whatever its row count, and the peel brings it to
   one.** The race bed `DASLLAMA_GPU=1 bin/daslang -jit modules/dasLLAMA/harness/vk_short_window_race.das -- --model <gguf>`
   (`--rows 1,2,4,8 --reps 5 --prompt 40`: the lever `set_vulkan_prefill_peel` flipped between the forms in one process, five
-  interleaved reps a form, the fastest kept; `ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-prefill-peel`) at 0f1e793e18 reads on the 3B
+  interleaved reps a form, the fastest kept; `ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-peel`) at 0f1e793e18 reads on the 3B
   peel 6.5 / 6.9 / 4.5 / 7.4 ms against the chain's 13.5 / 11.7 / 13.4 / 13.5 at 1 / 2 / 4 / 8 rows, on the 1B Q8_0 2.2 / 4.1
   / 4.2 / 3.0 against 5.4 / 6.6 / 6.6 / 5.5, the forms' last-row logits at most 0.27 apart on the 3B and 0.23 on the 1B (the
   chain's tiles and the command's GEMV leaves round apart; the split bar holds them). The bed prints the slowest rep beside the

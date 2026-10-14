@@ -173,6 +173,19 @@ let private CENSUS_NEVER_DISPATCHED <- [
     // Their coverage is moe_kq_gemv_gate in test_metal_gemv_kernels.das
     "metal_moe_gemv_k3", "metal_moe_gemv_iq4xs", "metal_moe_gemv_iq3s", "metal_moe_gemv_iq3xxs",
     "metal_moe_gemv_iq2s", "metal_moe_gemv_iq2xs", "metal_moe_gemv_iq2xxs",
+    // the Q2_K and superblock IQ4_NL routed forms - the gathered GEMV, the simdgroup base mul_mm and the four tensor
+    // twins: no stocked MoE carrier holds a k2 or iq4nl expert plane. Their coverage is moe_kq_gemv_gate (fmt 2 / 45) in
+    // test_metal_gemv_kernels.das and moe_mulmm_kq_gate / moe_mulmm_split_gate in test_metal_gemm_kernels.das
+    "metal_moe_gemv_k2", "metal_moe_gemv_iq4nl", "MetalMoeMulMmK2T", "MetalMoeMulMmIq4nlT",
+    // the simdgroup base mul_mm of the split formats - the routed site's form on a box without the tensor toolchain, or
+    // where the window took no gather panel: the same expert planes nothing stocks. Their coverage is moe_mulmm_kq_gate
+    // in test_metal_gemm_kernels.das
+    "metal_moe_mulmm_k3", "metal_moe_mulmm_k2", "metal_moe_mulmm_iq4xs", "metal_moe_mulmm_iq4nl", "metal_moe_mulmm_q40",
+    "metal_moe_mulmm_iq3s", "metal_moe_mulmm_iq3xxs", "metal_moe_mulmm_iq2s", "metal_moe_mulmm_iq2xs", "metal_moe_mulmm_iq2xxs",
+    // the dense per-32 forms (q51, iq4nl32): a dense Q5_1 or off-lattice IQ4_NL plane loads in its own form
+    // (`kq_fmt_row_ok`), and no stocked census carrier holds one - the census-q51 / census-iq4nl32 arms mint
+    // theirs locally. Their coverage is b32_gemv_gate and b32_mm_gate in test_metal_prefill_kernels.das
+    "metal_kq_gemv_q51", "metal_kq_gemv_iq4nl32", "MetalKqMulMmQ51", "MetalKqMulMmIq4nl32",
     // the 16-deep router select stamp: it serves past 256 experts, and the stocked MoE carriers top
     // out at 128 (Qwen3-30B-A3B), 60 (Qwen1.5-MoE) and 32 (gpt-oss-20b). Its coverage is
     // moe_select_gate's ne=512 and ne=300 cases in test_metal_prefill_kernels.das
@@ -973,10 +986,6 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // 64-deep chunks divide takes the f16 route, so the scalar tile runs only off it (a dim off
     // 512, the KHR route). Its coverage is test_vkd_moe_routing's router arm in test_vulkan_kernels.das
     "router_gemm_cls_spv",
-    // the scalar beta/alpha GEMM: the same route split for a hybrid's f32 beta/alpha rows on the f16
-    // feed; off the f16 feed (DASLLAMA_COOPMAT=sdot4) it runs. Its coverage is the dn_ba run of
-    // test_vkd_dn_family in test_vulkan_kernels.das
-    "dn_ba_cls_spv",
     // the N-column decode GEMV leaves serve only the N-row token command, which the zoo's one-region loads never
     // engage (a batched step here rides f32 sessions on the per-op rails); the q8 row-pair stamps serve only past
     // `g_q8_n2_min_n`, off until a box's token command proves the pair. Their coverage is test_vkd_gemv_ncol in

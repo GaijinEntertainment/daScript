@@ -1866,7 +1866,7 @@ let private TS_PK_GEMV_ADD = 7          //! ... or y += d alone
 
 //! the row GEMV at a site under the stamp `kind` names (a `TS_PK_GEMV_*`), over the slab's f32 rows of `p`
 def private ts_pk_gemv(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; p : TtsConvSlot; nin, nout : int64; kind : int; s : TsPkSite) {
-    var pa = TtsPkGemvArgs(nin = uint(nin), nout = uint(nout), stride = uint(p.kdim_p), eps = s.eps, woff = uint(p.woff), boff = uint(p.boff),
+    var pa = GkPkGemvArgs(nin = uint(nin), nout = uint(nout), stride = uint(p.kdim_p), eps = s.eps, woff = uint(p.woff), boff = uint(p.boff),
         xoff = uint(s.xoff), yoff = uint(s.yoff), moff = uint(s.moff), lwoff = uint(s.lwoff), lboff = uint(s.lboff), aoff = uint(s.aoff),
         x0off = uint(s.x0off), loff = uint(s.loff))
     if (kind == TS_PK_GEMV_DOT) {
@@ -2191,7 +2191,7 @@ def private ts_pk_fr_layer(raw : VkCommandBuffer; var h : VkHaz; slab : TsRows; 
     var sq = set_tts_pk_gemv_ln_qkv_cls(fixed_array(slab.dev, r_x.dev, r_qkv.dev, v.rope.dev, v.k[li].dev, v.v[li].dev),
         fixed_array(slab.bytes, r_x.bytes, r_qkv.bytes, v.rope.bytes, v.k[li].bytes, v.v[li].bytes),
         fixed_array(0u, r_x.bit, r_qkv.bit, v.rope.bit, v.k[li].bit, v.v[li].bit))
-    var pq = TtsPkGemvArgs(nin = uint(d), nout = uint(3l * d), stride = uint(L.in_proj.kdim_p), eps = tf.eps, woff = uint(L.in_proj.woff),
+    var pq = GkPkGemvArgs(nin = uint(d), nout = uint(3l * d), stride = uint(L.in_proj.kdim_p), eps = tf.eps, woff = uint(L.in_proj.woff),
         boff = uint(L.in_proj.boff), xoff = 0u, yoff = 0u, moff = 0u, lwoff = uint(L.n1.gwoff), lboff = uint(L.n1.gboff), aoff = 0u, x0off = 0u, loff = 0u,
         span = uint(d), dh = dh, p = uint(p), coff = 0u, soff = uint(v.sin_off))
     enc_tts_pk_gemv_ln_qkv_cls(raw, h, sq, pq, 3l * d)

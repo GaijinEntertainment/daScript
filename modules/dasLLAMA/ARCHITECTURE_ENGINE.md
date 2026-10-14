@@ -29,7 +29,7 @@ or `ensure_capacity` earlier in the function, and never compares the two counts.
 grows with a model dimension but is not declared `@exact_size` gets no lint at all, which is why
 the module declares every such buffer `@exact_size` and sizes it through a reserve first.
 
-### Engine core
+### Engine core {#engine-core}
 
 - **`dasllama.das`** - the public API facade and nothing else: `load_model` -> `create_session` ->
   generate, re-exported names, the doc surface. No engine logic; a function that does work belongs
@@ -50,18 +50,18 @@ the module declares every such buffer `@exact_size` and sizes it through a reser
   registry's rounds feed. The standard attention's Config-keyed arms live beside it - the gated
   projection (`q_gated`: a 2x-wide q whose second half sigmoid-gates the output) among them - one
   kernel every arch shares, its arms chosen by the model's flags. **Not** the load walk (`ARCHITECTURE_ENGINE_FORMATS.md#the-load-and-image-rail`) and **not** GPU residency
-  (`ARCHITECTURE_GPU.md#gpu-backends`) - both left, and the seam each left behind is a registered hook,
-  so neither comes back.
+  (`ARCHITECTURE_GPU.md#gpu-backends`) - both left; the seam each left is a registered hook, so neither comes back.
   It remains the module's debt sink; what sits here that is family-specific or platform-specific is
   debt, **not precedent**. Ledgered exceptions the sidecar-apply seam forces
   (the knob rail lives here, and the backends require this module, so their sidecar knobs cannot):
   the metal tensor crowns, and the three metal prefill raced-constant knobs beside them - both are
   applied by `apply_box_profile_runtime` and CONSUMED by the Metal backends at their own init.
   `REVIEW.das`'s `check_fastmath_default` licensed set names each kernel that opts out of fastmath
-  against the test that reds under it - the StyleTTS2 harmonic-source stamps, a resample law each
-  (`metal_st2_src_low_torch_msl` / `_onnx_msl`, `metal_st2_src_cumsum_torch_msl` / `_onnx_msl`,
-  `metal_st2_src_sines_torch_msl` / `_onnx_msl`, gated by `st2_source_gate`) - and an entrant
-  ships its failing-under-fastmath test with the kernel.
+  against the test that reds under it: the StyleTTS2 harmonic-source stamps, a resample law each
+  (`metal_st2_src_{low,cumsum,sines}_{torch,onnx}_msl`, gated by `st2_source_gate`), and the per-32
+  GEMV with its small-batch form (`metal_kq_gemv_<fmt>_msl` for q51, iq4nl32, q4032 and q5032, their
+  `_ks_msl` K-split stamps, `metal_b32_mvb` by its method - gated by `b32_mvb_gate`, whose
+  bit-for-bit compare fast math breaks); an entrant ships its failing-under-fastmath test too.
 - **`dasllama_transformer.das`** - the block-composition seam, and the require umbrella: the
   `[init]`-only side-effect requires (arch registrations, GPU tiers, and any module that
   requires the engine back, which the umbrella therefore hosts to break the cycle).

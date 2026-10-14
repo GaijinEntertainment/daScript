@@ -80,6 +80,23 @@ def heat_report(verbose : bool = false) {
     to_log(LOG_INFO, "heat MEAN hit {double(hits) * 100.0lf / double(picks):.1f}% ({hits}/{picks} picks over {nl} layers)\n")
 }
 
+//! drops the heat pool's counters and its cached slot ask, so the next decode reads the tier's want again
+def public heat_reset() {
+    delete g_heat
+    g_heat_want = -1l
+}
+
+//! the heat pool's routed picks over the run and the hits its slots served, every layer summed
+def public heat_totals() : tuple<hits : int64; picks : int64> {
+    var hits = 0l
+    var picks = 0l
+    for (h in g_heat) {
+        hits += h.hits
+        picks += h.picks
+    }
+    return (hits = hits, picks = picks)
+}
+
 [cold_path]   // one-time env resolution; heat_armed is a global test after the first call
 def private load_heat_want() {
     g_heat_want = max(gpu_want_heat(), 0l)
@@ -94,12 +111,12 @@ def private heat_armed() : bool {
 
 def private heat_advise_layer(t : Model; l : int64; h : HeatLayer) {
     let c = t.config
-    // same fmt rule as the resident walk: a stack the tier has no kernels for (q51) never pools
-    let hf1 = fmt_at(t.we1_fmt, l)
-    let hf2 = fmt_at(t.we2_fmt, l)
-    let hf3 = fmt_at(t.we3_fmt, l)
-    if (!((hf1 == KqFmt.q8 || kq_sb(hf1)) && (hf2 == KqFmt.q8 || kq_sb(hf2))
-            && (hf3 == KqFmt.q8 || kq_sb(hf3)))) {
+    // the per-op expert walk's format rule: a stack the expert chain has no kernels for never pools
+    let hf1 = expert_fmt(t, t.we1_fmt, l)
+    let hf2 = expert_fmt(t, t.we2_fmt, l)
+    let hf3 = expert_fmt(t, t.we3_fmt, l)
+    if (!expert_chain_fmt_ok(hf1) || !expert_chain_fmt_ok(hf2) || !expert_chain_fmt_ok(hf3)
+            || (c.moe_exps_bias && kq_sb(hf2))) {
         return
     }
     var ids <- [for (i in range(length(h.cnt))); int64(i)]
@@ -109,9 +126,7 @@ def private heat_advise_layer(t : Model; l : int64; h : HeatLayer) {
         want--
     }
     if (want > 0l) {
-        moe_gpu_heat_advise(l, t.we1_offs[l], t.we3_offs[l], t.we2_offs[l],
-            int(fmt_at(t.we1_fmt, l)), int(fmt_at(t.we3_fmt, l)),
-            int(fmt_at(t.we2_fmt, l)), c.dim, c.n_ff_exp, ids, want)
+        moe_gpu_heat_advise(l, t.we1_offs[l], t.we3_offs[l], t.we2_offs[l], int(hf1), int(hf3), int(hf2), c.dim, c.n_ff_exp, ids, want)
     }
     delete ids
 }
@@ -392,6 +407,38 @@ def private moe_experts_chain(t : Model; var s : Session; l : int64) { // nolint
 }
 
 // Routed experts, given the pre-normed input in s.xb and the top-k selection in s.moe_idx/s.moe_w:
+var private @scratch g_up_q : array<int8>   //! the up stacks' own gathered image where a gate and up take two activation forms
+var private @scratch g_up_s : array<float>
+var private @scratch g_heat_ex : array<int64>    //! the heat pool's hit regions' experts, in hit order
+var private @scratch g_heat_idx : array<int64>   //! the picks as the router left them, while the misses ride packed to the front
+
+//! `k` copies of one quantized row (`unit` elements a scale) as the chain's gathered image - a row a routed slot
+def private moe_gather_feed(xq : array<int8>; xs : array<float>; k, dim, unit : int64; @scratch var q : array<int8>; @scratch var sc : array<float>) {
+    let nb = dim / unit
+    q |> resize(k * dim)
+    sc |> resize(k * nb)
+    for (j in range64(k)) {
+        unsafe {
+            memcpy(addr(q[j * dim]), addr(xq[0]), dim)
+            memcpy(addr(sc[j * nb]), addr(xs[0]), nb * 4l)
+        }
+    }
+}
+
+//! a routed expert stack's format on layer l off its per-kind tags: the native-MXFP4 planes carry no per-tensor tag (the loader keeps
+//! `experts_mx4`), so the format is mx4 for every routed stack of such a model
+def public expert_fmt(t : Model; tags : array<KqFmt>; l : int64) : KqFmt => t.experts_mx4 ? KqFmt.mx4 : fmt_at(tags, l)
+
+//! an expert plane format the per-op expert chain reads: q8, a superblock format, a per-32 one (the GEMVs and the batch tiles)
+def public expert_chain_fmt_ok(f : KqFmt) : bool => f == KqFmt.q8 || kq_sb(f) || kq_dense_b32(f) || f == KqFmt.mx4
+
+[arch(at="../ARCHITECTURE_GPU_VULKAN_PEROP.md#perop-routed-form")]
+def public moe_routed_form(t : Model; l : int64) : MoeGpuFfnForm {
+    let c = t.config
+    return MoeGpuFfnForm(oai = c.ffn_act == FfnAct.swiglu_oai, bias_off = c.moe_exps_bias ? l * c.n_expert * c.n_ff_exp : -1l,
+        e_base = t.we1_offs[l], e_stride = c.dim * c.n_ff_exp)
+}
+
 // s.moe_acc = Σ_j w_j · FFN_e_j(xb). Shared by qwen2moe/gpt-oss (via moe_ffn_core) and gemma4
 // (which folds its per-expert down scale into s.moe_w first).
 def moe_experts_apply(t : Model; var s : Session; l : int64) { // nolint:STYLE037,STYLE038 — a flat dispatch table over expert weight format (q8/kq/q51/mx4) x placement; each arm is a distinct kernel call, not a branch to factor
@@ -420,10 +467,9 @@ def moe_experts_apply(t : Model; var s : Session; l : int64) { // nolint:STYLE03
         let f1 = fmt_at(t.we1_fmt, l)
         let f2 = fmt_at(t.we2_fmt, l)
         let f3 = fmt_at(t.we3_fmt, l)
-        // GPU MoE tier: unbiased plain-q8 or all-K-quant stacks of offloaded layers dispatch on the GPU
-        let gpu_moe = !biased && !t.experts_mx4 && c.ffn_act != FfnAct.swiglu_oai && moe_gpu_layer_on_gpu(l)
+        let gpu_moe = moe_gpu_layer_on_gpu(l)
         // heat cache: non-resident layers partition the top-k against the tier's slot pools — hits ride the GPU FFN chain async, misses run the CPU groupn path concurrently
-        let heat_moe = !gpu_moe && !biased && !t.experts_mx4 && c.ffn_act != FfnAct.swiglu_oai && heat_armed()
+        let heat_moe = !gpu_moe && heat_armed()
         var nhits = 0l
         var moe_chained = false   // the fused chain reduces inline — the nhits==0 axpy tail must skip
         if (heat_moe) {
@@ -454,30 +500,50 @@ def moe_experts_apply(t : Model; var s : Session; l : int64) { // nolint:STYLE03
                 s.moe_offs2 |> push(j)
                 s.moe_offs2 |> push(1l)
             }
-            // kq layers gather the Q8_K image; q8 layers the Q8_0 one — the tier resolves the form per stack
-            let nb = layer_kq ? dim / 256l : dim / 32l
-            s.moe_gxq |> resize(k * dim)
-            s.moe_gxs |> resize(k * nb)
-            unsafe {
-                var gq = addr(s.moe_gxq[0])
-                var gs = addr(s.moe_gxs[0])
-                let sxq = layer_kq ? addr<void?>(s.kxq[0]) : addr<void?>(s.moe_xq[0])
-                let sxs = layer_kq ? addr<void?>(s.kxs[0]) : addr<void?>(s.moe_xs[0])
-                for (j in range64(k)) {
-                    memcpy(reinterpret<void?>(gq + j * dim), sxq, dim)
-                    memcpy(reinterpret<void?>(gs + j * nb), sxs, nb * 4l)
-                }
+            // superblock gate/up stacks gather the Q8_K image, the rest the Q8_0 one (`moe_quant_feed` made the pair's form)
+            let ef1 = expert_fmt(t, t.we1_fmt, l)
+            let ef3 = expert_fmt(t, t.we3_fmt, l)
+            let ef2 = expert_fmt(t, t.we2_fmt, l)
+            let kin = kq_sb(ef1)
+            if (kin) {
+                moe_gather_feed(s.kxq, s.kxs, k, dim, 256l, s.moe_gxq, s.moe_gxs)
+            } else {
+                moe_gather_feed(s.moe_xq, s.moe_xs, k, dim, 32l, s.moe_gxq, s.moe_gxs)
             }
+            let two_forms = kin != kq_sb(ef3)   //! a gate and up of two activation forms: the up stacks read their own image
+            if (two_forms) {
+                if (kin) {
+                    moe_gather_feed(s.moe_xq, s.moe_xs, k, dim, 32l, g_up_q, g_up_s)
+                } else {
+                    moe_gather_feed(s.kxq, s.kxs, k, dim, 256l, g_up_q, g_up_s)
+                }
+                set_moe_gpu_image2(g_up_q, g_up_s)
+            }
+            let plain = !biased && c.ffn_act != FfnAct.swiglu_oai
             if (s.tail_next1 == l + 1l) {
                 s.tail_next1 = 0l
                 matmul_moe_gpu_ffn_tail(s.moe_offs1, s.moe_offs3, s.moe_offs2, k, s.moe_gxq, s.moe_gxs, dim, nfe, k,
-                    int(f1), int(f3), int(f2), c.ffn_act == FfnAct.gelu, s.moe_w, s.x, t.wq_offs[l + 1l], int(fmt_at(t.wq_fmt, l + 1l)),
+                    int(ef1), int(ef3), int(ef2), c.ffn_act == FfnAct.gelu, s.moe_w, s.x, t.wq_offs[l + 1l], int(fmt_at(t.wq_fmt, l + 1l)),
                     unsafe(addr<float const?>(t.fblob[t.rms_att_off + (l + 1l) * dim])), c.norm_eps)
                 s.tail_taken = true
                 moe_chained = true
             } else {
+                if (!plain) {
+                    set_moe_gpu_ffn_form(moe_routed_form(t, l))
+                }
                 matmul_moe_gpu_ffn(s.moe_dn, s.moe_offs1, s.moe_offs3, s.moe_offs2, k,
-                    s.moe_gxq, s.moe_gxs, dim, nfe, k, int(f1), int(f3), int(f2), c.ffn_act == FfnAct.gelu)
+                    s.moe_gxq, s.moe_gxs, dim, nfe, k, int(ef1), int(ef3), int(ef2), c.ffn_act == FfnAct.gelu)
+                if (!plain) {
+                    clear_moe_gpu_ffn_form()
+                }
+                if (biased) {
+                    for (j in range64(k)) {
+                        add_bias(s.moe_dn, j * dim, t.fblob, t.web2_off + (l * ne + s.moe_idx[j]) * dim, dim)
+                    }
+                }
+            }
+            if (two_forms) {
+                clear_moe_gpu_image2()
             }
             prof_add("mm_moe", ts_gu)
         } elif (nhits > 0l) {
@@ -497,59 +563,61 @@ def moe_experts_apply(t : Model; var s : Session; l : int64) { // nolint:STYLE03
                 s.moe_offs2 |> push(i)
                 s.moe_offs2 |> push(1l)
             }
-            let nb = layer_kq ? dim / 256l : dim / 32l
-            s.moe_gxq |> resize(nhits * dim)
-            s.moe_gxs |> resize(nhits * nb)
-            unsafe {
-                var gq = addr(s.moe_gxq[0])
-                var gs = addr(s.moe_gxs[0])
-                let sxq = layer_kq ? addr<void?>(s.kxq[0]) : addr<void?>(s.moe_xq[0])
-                let sxs = layer_kq ? addr<void?>(s.kxs[0]) : addr<void?>(s.moe_xs[0])
-                for (i in range64(nhits)) {
-                    memcpy(reinterpret<void?>(gq + i * dim), sxq, dim)
-                    memcpy(reinterpret<void?>(gs + i * nb), sxs, nb * 4l)
+            let ef1 = expert_fmt(t, t.we1_fmt, l)
+            let ef3 = expert_fmt(t, t.we3_fmt, l)
+            let ef2 = expert_fmt(t, t.we2_fmt, l)
+            let kin = kq_sb(ef1)
+            if (kin) {
+                moe_gather_feed(s.kxq, s.kxs, nhits, dim, 256l, s.moe_gxq, s.moe_gxs)
+            } else {
+                moe_gather_feed(s.moe_xq, s.moe_xs, nhits, dim, 32l, s.moe_gxq, s.moe_gxs)
+            }
+            let two_forms = kin != kq_sb(ef3)   //! a gate and up of two activation forms: the up slots read their own image
+            if (two_forms) {
+                if (kin) {
+                    moe_gather_feed(s.moe_xq, s.moe_xs, nhits, dim, 32l, g_up_q, g_up_s)
+                } else {
+                    moe_gather_feed(s.kxq, s.kxs, nhits, dim, 256l, g_up_q, g_up_s)
                 }
+                set_moe_gpu_image2(g_up_q, g_up_s)
+            }
+            let plain = !biased && c.ffn_act != FfnAct.swiglu_oai
+            if (!plain) {   //! the pool's regions sit at slot offsets: the hits' experts ride beside them
+                set_moe_gpu_ffn_form(moe_routed_form(t, l))
+                g_heat_ex |> clear()
+                for (j in range64(k)) {
+                    if (s.heat_hit[j] != int8(0)) {
+                        g_heat_ex |> push(s.moe_idx[j])
+                    }
+                }
+                set_moe_gpu_ffn_experts(g_heat_ex)
             }
             let ts_sub = prof_ticks()
             matmul_moe_gpu_ffn_begin(s.moe_offs1, s.moe_offs3, s.moe_offs2, nhits,
-                s.moe_gxq, s.moe_gxs, dim, nfe, nhits, int(f1), int(f3), int(f2), c.ffn_act == FfnAct.gelu)
+                s.moe_gxq, s.moe_gxs, dim, nfe, nhits, int(ef1), int(ef3), int(ef2), c.ffn_act == FfnAct.gelu)
+            clear_moe_gpu_ffn_form()
+            clear_moe_gpu_ffn_experts()
+            clear_moe_gpu_image2()
             prof_add("heat_sub", ts_sub)   // dispatch cost ON the critical path (the split's tax)
-            // the missed experts run the CPU groupn chain while the GPU crunches the hits
+            // the missed experts run the CPU's routed chain over their picks packed to the front while the GPU crunches the hits
             var ts_down = ts_gu
             if (m > 0l) {
+                g_heat_idx |> resize(k)
+                for (src, dst in s.moe_idx, g_heat_idx) {
+                    dst = src
+                }
                 var mi = 0l
                 for (j in range64(k)) {
                     if (s.heat_hit[j] == int8(0)) {
-                        s.moe_offs[mi * 2l] = t.we1_offs[l] + s.moe_idx[j] * ege
-                        s.moe_offs[mi * 2l + 1l] = 0l
+                        s.moe_idx[mi] = g_heat_idx[j]
                         mi++
                     }
                 }
-                mm_at_f_groupn(s.moe_gu, t, f1, s.moe_offs, s.moe_boffs, false, m, s.moe_xq, s.moe_xs, s.kxq, s.kxs, s.kxbs, dim, nfe)
-                mi = 0l
+                moe_routed_plain(t, s, l, m, biased, ts_gu)
                 for (j in range64(k)) {
-                    if (s.heat_hit[j] == int8(0)) {
-                        s.moe_offs[mi * 2l] = t.we3_offs[l] + s.moe_idx[j] * ege
-                        s.moe_offs[mi * 2l + 1l] = 0l
-                        mi++
-                    }
+                    s.moe_idx[j] = g_heat_idx[j]
                 }
-                mm_at_f_groupn(s.moe_gu2, t, f3, s.moe_offs, s.moe_boffs, false, m, s.moe_xq, s.moe_xs, s.kxq, s.kxs, s.kxbs, dim, nfe)
-                prof_add("mm_moe", ts_gu)
-                let ts_act = prof_ticks()
-                gate_batch(s.moe_gu, s.moe_gu2, c.ffn_act, nfe, m)
-                prof_add("act", ts_act)
-                requant_rows_f(f2, s.moe_gu, nfe, m, s.moe_dq, s.moe_ds, s.moe_dbs)
                 ts_down = prof_ticks()
-                mi = 0l
-                for (j in range64(k)) {
-                    if (s.heat_hit[j] == int8(0)) {
-                        s.moe_offs[mi * 2l] = t.we2_offs[l] + s.moe_idx[j] * ege
-                        s.moe_offs[mi * 2l + 1l] = mi * nfe
-                        mi++
-                    }
-                }
-                mm_at_f_groupn(s.moe_dn, t, f2, s.moe_offs, s.moe_boffs, false, m, s.moe_dq, s.moe_ds, s.moe_dq, s.moe_ds, s.moe_dbs, nfe, dim)
             }
             s.moe_hdn |> resize(nhits * dim)
             prof_add("mm_moe_dn", ts_down)
@@ -561,6 +629,9 @@ def moe_experts_apply(t : Model; var s : Session; l : int64) { // nolint:STYLE03
             var mrow = 0l
             for (j in range64(k)) {   // original slot order — the weighted sum stays order-stable
                 if (s.heat_hit[j] != int8(0)) {
+                    if (biased) {   //! the device chain's down adds no bias: each hit's own joins here, as the CPU misses' did
+                        add_bias(s.moe_hdn, hi * dim, t.fblob, t.web2_off + (l * ne + s.moe_idx[j]) * dim, dim)
+                    }
                     axpy(unsafe(addr(s.moe_acc[0])), unsafe(addr(s.moe_hdn[hi * dim])), s.moe_w[j], dim)
                     hi++
                 } else {
@@ -613,7 +684,11 @@ def moe_experts_apply(t : Model; var s : Session; l : int64) { // nolint:STYLE03
 def private moe_quant_feed(t : Model; var s : Session; l : int64; layer_kq : bool) {
     let c = t.config
     let ts_rq = prof_ticks()
-    if (layer_kq && moe_pair_kform(fmt_at(t.we1_fmt, l), fmt_at(t.we3_fmt, l))) {
+    let k1 = kq_sb(fmt_at(t.we1_fmt, l))
+    if (layer_kq && k1 != kq_sb(fmt_at(t.we3_fmt, l))) {   //! a gate and up of two activation forms: both images (the device chain feeds each its own)
+        quantize_q8_k_into(s.xb, c.dim, s.kxq, s.kxs, s.kxbs, 0l, 0l, 0l)
+        quantize_q8_0_into(s.xb, c.dim, s.moe_xq, s.moe_xs, 0l, 0l)
+    } elif (layer_kq && k1) {
         quantize_q8_k_into(s.xb, c.dim, s.kxq, s.kxs, s.kxbs, 0l, 0l, 0l)
         if (c.n_ff_shexp > 0l && !c.moe_dense_shexp) {
             quantize_q8_0_into(s.xb, c.dim, s.moe_xq, s.moe_xs, 0l, 0l)
@@ -702,6 +777,92 @@ def moe_routed_sum_k(t : Model; var s : Session; l, k : int64) {
     moe_routed_reduce(s, k, c.dim)
 }
 
+var private g_shexp_gpu_steps = 0l   //! decode rows whose shared expert the per-op tier's overlapped chain served (read on the main context only)
+
+//! The decode rows whose shared expert the per-op tier's expert chain served overlapped with the routed window, since the process started
+def public shexp_gpu_decode_rows() : int64 => g_shexp_gpu_steps
+
+var private g_shexp_gpu_gemm_rows = 0l   //! rows whose shared expert the tier's three dense GEMMs served (read on the main context only)
+
+//! The rows whose shared expert ran as the tier's three dense GEMMs (`shexp_gpu_gemms`), since the process started
+def public shexp_gpu_gemm_rows() : int64 => g_shexp_gpu_gemm_rows
+
+//! whether the planes the tier holds for layer `l`'s shared expert take two activation forms: a superblock gate or up beside a Q8_0-fed one
+def public shexp_gpu_mixed_forms(l : int64) : bool {
+    let p = moe_gpu_shexp_planes(l)
+    return kq_sb(p.f1) != kq_sb(p.f3)
+}
+
+var private @scratch g_sh_y : array<float>   //! the decode row's shared expert off the dense GEMMs, held until the routed sum joins it
+var private @scratch g_sh_g : array<float>
+var private @scratch g_sh_u : array<float>
+var private @scratch g_sh_q : array<int8>
+var private @scratch g_sh_s : array<float>
+var private @scratch g_sh_bs : array<int>
+
+//! `x`'s `rows` rows of width `n` quantized to the activation form plane format `f` reads, into the scratch image
+def private shexp_image(f : int; x : array<float>; n, rows : int64) {
+    g_sh_q |> grow_resize(n * rows)
+    g_sh_s |> grow_resize(n * rows / 32l)
+    g_sh_bs |> grow_resize(n * rows / 16l)
+    requant_rows_f(kq_fmt_of_slot(f), x, n, rows, g_sh_q, g_sh_s, g_sh_bs)
+}
+
+//! A gated FFN triple on the tier's dense planes as three GEMMs - the form for a gate and up of two activation forms: gate and up
+//! each over its own image of `x` [rows x n], the activation on the host, the down over the down's form - `y` [rows x n]
+def public ffn_gpu_gemms(w1, w3, w2 : int64; f1, f3, f2 : int; act : FfnAct; n, nh, rows : int64; x : array<float>; var y : array<float>) {
+    g_sh_g |> grow_resize(rows * nh)
+    g_sh_u |> grow_resize(rows * nh)
+    y |> grow_resize(rows * n)
+    shexp_image(f1, x, n, rows)
+    matmul_gpu_dense(g_sh_g, w1, g_sh_q, g_sh_s, n, nh, rows, f1)
+    shexp_image(f3, x, n, rows)
+    matmul_gpu_dense(g_sh_u, w3, g_sh_q, g_sh_s, n, nh, rows, f3)
+    gate_batch(g_sh_g, g_sh_u, act, nh, rows)
+    shexp_image(f2, g_sh_g, nh, rows)
+    matmul_gpu_dense(y, w2, g_sh_q, g_sh_s, nh, n, rows, f2)
+}
+
+//! Layer `l`'s shared expert as `ffn_gpu_gemms` over the planes the tier holds for it
+def public shexp_gpu_gemms(t : Model; l, rows : int64; x : array<float>; var y : array<float>) {
+    let p = moe_gpu_shexp_planes(l)
+    ffn_gpu_gemms(p.o1, p.o3, p.o2, p.f1, p.f3, p.f2, t.config.ffn_act, t.config.dim, t.config.n_ff_shexp, rows, x, y)
+    g_shexp_gpu_gemm_rows += rows
+}
+
+var private g_shexp_gpu_after_rows = 0l   //! decode rows whose shared expert the expert chain served after the device's routed chain (main context only)
+
+//! The decode rows whose shared expert the per-op tier's expert chain served after the routed experts' device chain, since the process started
+def public shexp_gpu_after_rows() : int64 => g_shexp_gpu_after_rows
+
+//! layer `l`'s shared expert on the per-op expert chain over the planes the tier holds, the row quantized to the gate plane's
+//! form: submitted into the async slot under `async` (`matmul_moe_gpu_ffn_join` lands s.xb2), else run into s.xb2 at once
+def private shexp_chain(t : Model; var s : Session; l : int64; async : bool) {
+    let c = t.config
+    let dim = c.dim
+    let nsh = c.n_ff_shexp
+    let p = moe_gpu_shexp_planes(l)
+    s.moe_offs1 <- [p.o1, 0l, 1l]   // the routed CPU path uses moe_offs (not the triples) - these are free here
+    s.moe_offs3 <- [p.o3, 0l, 1l]
+    s.moe_offs2 <- [p.o2, 0l, 1l]
+    let gelu = c.ffn_act == FfnAct.gelu
+    if (kq_sb(p.f1)) {
+        quantize_q8_k_into(s.xb, dim, s.kxq, s.kxs, s.kxbs, 0l, 0l, 0l)   // moe_experts_apply recomputes the same bits
+        if (async) {
+            matmul_moe_gpu_ffn_begin(s.moe_offs1, s.moe_offs3, s.moe_offs2, 1l, s.kxq, s.kxs, dim, nsh, 1l, p.f1, p.f3, p.f2, gelu)
+        } else {
+            matmul_moe_gpu_ffn(s.xb2, s.moe_offs1, s.moe_offs3, s.moe_offs2, 1l, s.kxq, s.kxs, dim, nsh, 1l, p.f1, p.f3, p.f2, gelu)
+        }
+    } else {
+        quantize_q8_0_into(s.xb, dim, s.moe_xq, s.moe_xs, 0l, 0l)   // moe_experts_apply recomputes the same bits
+        if (async) {
+            matmul_moe_gpu_ffn_begin(s.moe_offs1, s.moe_offs3, s.moe_offs2, 1l, s.moe_xq, s.moe_xs, dim, nsh, 1l, p.f1, p.f3, p.f2, gelu)
+        } else {
+            matmul_moe_gpu_ffn(s.xb2, s.moe_offs1, s.moe_offs3, s.moe_offs2, 1l, s.moe_xq, s.moe_xs, dim, nsh, 1l, p.f1, p.f3, p.f2, gelu)
+        }
+    }
+}
+
 // MoE FFN core (qwen2moe / gpt-oss): router logits on the rmsnormed activation in s.xb -> softmax /
 // sigmoid select -> routed experts (moe_experts_apply) -> optional sigmoid-gated shared expert.
 // Leaves the combined output in s.moe_acc; callers add the post-norm / residual / layer-out scale.
@@ -722,57 +883,87 @@ def moe_ffn_core(t : Model; var s : Session; l : int64) {
     moe_select(c, unsafe(addr(s.moe_logits[0])), s.moe_idx, s.moe_w, 0l, ebp)
     prof_add("moe_route", ts_route)
     // resident shared expert: submit FIRST, collect AFTER the routed experts, so it runs inside the CPU's own expert window — a synchronous per-layer submit is the heat-cache wash.
-    let sh_gpu = (c.n_ff_shexp > 0l && !c.moe_dense_shexp && t.quant == QuantMode.q8
-        && moe_gpu_shexp_on_gpu(l) && !moe_gpu_layer_on_gpu(l) && !heat_armed())
-    let nsh = c.n_ff_shexp
-    let she = dim * nsh
-    if (sh_gpu) {
+    let sh_tier = c.n_ff_shexp > 0l && !c.moe_dense_shexp && t.quant == QuantMode.q8 && moe_gpu_shexp_on_gpu(l)
+    //! a gate and up of two activation forms take the three dense GEMMs before the routed experts; every other layer the chain,
+    //! overlapped with a CPU routed window, else after the device's routed chain or the heat pool's hits
+    let sh_gemms = sh_tier && shexp_gpu_mixed_forms(l)
+    let sh_gpu = sh_tier && !sh_gemms && !moe_gpu_layer_on_gpu(l) && !heat_armed()
+    //! the routed experts' chain or the heat pool's hits hold the device's one async slot: the shared expert's chain runs after theirs
+    let sh_after = sh_tier && !sh_gemms && !sh_gpu
+    let sh_on = sh_gemms || sh_gpu || sh_after
+    if (sh_gemms) {
+        let ts_shm = prof_ticks()
+        shexp_gpu_gemms(t, l, 1l, s.xb, g_sh_y)
+        prof_add("shexp_sub", ts_shm)
+    } elif (sh_gpu) {
         let ts_shs = prof_ticks()
-        quantize_q8_0_into(s.xb, dim, s.moe_xq, s.moe_xs, 0l, 0l)   // moe_experts_apply recomputes the same bits
-        // the routed CPU path uses moe_offs (not the triples) — these are free at this gate
-        s.moe_offs1 <- [t.wsh1_off + l * she, 0l, 1l]
-        s.moe_offs3 <- [t.wsh3_off + l * she, 0l, 1l]
-        s.moe_offs2 <- [t.wsh2_off + l * she, 0l, 1l]
-        matmul_moe_gpu_ffn_begin(s.moe_offs1, s.moe_offs3, s.moe_offs2, 1l, s.moe_xq, s.moe_xs,
-            dim, nsh, 1l, 0, 0, 0, c.ffn_act == FfnAct.gelu)
+        shexp_chain(t, s, l, true)
+        g_shexp_gpu_steps++
         prof_add("shexp_sub", ts_shs)
     }
     moe_experts_apply(t, s, l)
-    if (sh_gpu) {
+    if (sh_after) {
+        let ts_sha = prof_ticks()
+        shexp_chain(t, s, l, false)
+        g_shexp_gpu_after_rows++
+        prof_add("shexp_sub", ts_sha)
+    }
+    if (sh_on) {
         let ts_shw = prof_ticks()
         trace_tag(TRACE_TAG_SHEXP)
         let g = c.moe_shexp_gated ? moe_shexp_gate(t, l, unsafe(addr(s.xb[0]))) : 1.0
-        matmul_moe_gpu_ffn_join(s.xb2)
-        axpy(unsafe(addr(s.moe_acc[0])), unsafe(addr(s.xb2[0])), g, dim)
+        if (sh_gemms) {
+            axpy(unsafe(addr(s.moe_acc[0])), unsafe(addr(g_sh_y[0])), g, dim)
+        } else {
+            if (sh_gpu) {
+                matmul_moe_gpu_ffn_join(s.xb2)
+            }
+            axpy(unsafe(addr(s.moe_acc[0])), unsafe(addr(s.xb2[0])), g, dim)
+        }
         prof_add("shexp_wait", ts_shw)   // 0 = fully hidden behind the routed-expert window
     }
-    // shared expert, gated by a sigmoid scalar from its per-layer gate vector (glm4moe: ungated, g = 1)
-    if (c.n_ff_shexp > 0l && !sh_gpu) {
-        let pre_q8 = t.quant == QuantMode.q8
-        let ts_sh = prof_ticks()
-        trace_tag(TRACE_TAG_SHEXP)
-        let g = c.moe_shexp_gated ? moe_shexp_gate(t, l, unsafe(addr(s.xb[0]))) : 1.0
-        if (pre_q8) {
-            // shexp gate+up share the hoisted xb quants: one region-list dispatch, act on the halves
-            s.ffn_offs[0] = t.wsh1_off + l * she
-            s.ffn_offs[1] = 0l
-            s.ffn_offs[2] = t.wsh3_off + l * she
-            s.ffn_offs[3] = 0l
-            mm_at_q8_groupn(s.ffn_gu, t, s.ffn_offs, 2l, s.moe_xq, s.moe_xs, dim, nsh)
-            unsafe {
-                gate_batch(addr(s.ffn_gu[0]), addr < float const? >(s.ffn_gu[nsh]), c.ffn_act, nsh, 1l)
-            }
-            quantize_q8_0_into(s.ffn_gu, nsh, s.xq, s.xs, 0l, 0l)
-            mm_at_q8_pre(s.xb2, t, t.wsh2_off + l * she, s.xq, s.xs, nsh, dim)
-        } else {
-            mm(s.hb, t, t.wsh1_off + l * she, s.xb, s.xq, s.xs, dim, nsh)
-            mm(s.hb2, t, t.wsh3_off + l * she, s.xb, s.xq, s.xs, dim, nsh)
-            gate_batch(s.hb, s.hb2, c.ffn_act, nsh, 1l)
-            mm(s.xb2, t, t.wsh2_off + l * she, s.hb, s.xq, s.xs, nsh, dim)
-        }
-        axpy(unsafe(addr(s.moe_acc[0])), unsafe(addr(s.xb2[0])), g, dim)
-        prof_add("mm_shexp", ts_sh)
+    if (c.n_ff_shexp > 0l && !sh_on) {
+        moe_shexp_cpu(t, s, l)
     }
+}
+
+//! layer `l`'s shared expert on the CPU onto `s.moe_acc`, gated by a sigmoid scalar from its per-layer gate vector (glm4moe: ungated, g = 1)
+def private moe_shexp_cpu(t : Model; var s : Session; l : int64) {
+    let c = t.config
+    let dim = c.dim
+    let nsh = c.n_ff_shexp
+    let she = dim * nsh
+    let ts_sh = prof_ticks()
+    trace_tag(TRACE_TAG_SHEXP)
+    let g = c.moe_shexp_gated ? moe_shexp_gate(t, l, unsafe(addr(s.xb[0]))) : 1.0
+    if (shexp_tagged(t, l)) {
+        let p1 = shexp_plane(t, l, 1)
+        let p3 = shexp_plane(t, l, 3)
+        let p2 = shexp_plane(t, l, 2)
+        mm_f(s.hb, t, p1.f, p1.off, s.xb, s.xq, s.xs, s.xbs, dim, nsh)
+        mm_f(s.hb2, t, p3.f, p3.off, s.xb, s.xq, s.xs, s.xbs, dim, nsh)
+        gate_batch(s.hb, s.hb2, c.ffn_act, nsh, 1l)
+        mm_f(s.xb2, t, p2.f, p2.off, s.hb, s.xq, s.xs, s.xbs, nsh, dim)
+    } elif (t.quant == QuantMode.q8) {
+        // shexp gate+up share the hoisted xb quants: one region-list dispatch, act on the halves
+        s.ffn_offs[0] = t.wsh1_off + l * she
+        s.ffn_offs[1] = 0l
+        s.ffn_offs[2] = t.wsh3_off + l * she
+        s.ffn_offs[3] = 0l
+        mm_at_q8_groupn(s.ffn_gu, t, s.ffn_offs, 2l, s.moe_xq, s.moe_xs, dim, nsh)
+        unsafe {
+            gate_batch(addr(s.ffn_gu[0]), addr < float const? >(s.ffn_gu[nsh]), c.ffn_act, nsh, 1l)
+        }
+        quantize_q8_0_into(s.ffn_gu, nsh, s.xq, s.xs, 0l, 0l)
+        mm_at_q8_pre(s.xb2, t, t.wsh2_off + l * she, s.xq, s.xs, nsh, dim)
+    } else {
+        mm(s.hb, t, t.wsh1_off + l * she, s.xb, s.xq, s.xs, dim, nsh)
+        mm(s.hb2, t, t.wsh3_off + l * she, s.xb, s.xq, s.xs, dim, nsh)
+        gate_batch(s.hb, s.hb2, c.ffn_act, nsh, 1l)
+        mm(s.xb2, t, t.wsh2_off + l * she, s.hb, s.xq, s.xs, nsh, dim)
+    }
+    axpy(unsafe(addr(s.moe_acc[0])), unsafe(addr(s.xb2[0])), g, dim)
+    prof_add("mm_shexp", ts_sh)
 }
 
 let private MOE_TAPE_RESERVE = 65_536l   //! picks reserved at arming: past 128 steps of a 48-layer top-10 model before the tape grows
@@ -989,7 +1180,7 @@ def moe_select_core(gate : MoeGate; ne, k : int64; norm_topk : bool; wscale : fl
         for (j in range64(k)) {
             ws += w[off + j]
         }
-        ws = max(ws, 6.103515625e-5)
+        ws = moe_renorm_sum(ws)
         for (j in range64(k)) {
             w[off + j] /= ws
         }

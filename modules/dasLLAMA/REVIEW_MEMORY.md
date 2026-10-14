@@ -42,8 +42,11 @@ the optimizer, when on, folds such a `let` into its literal at each read.
 dispatching caller sizes and passes in instead.** A pooled lane runs in another context, so a
 resize acts on that context's out-of-date copy of the global.
 
-**An array in `dasllama/` whose element count grows with a count the model file sets and is not
-declared `@exact_size` (`@scratch @exact_size` when the buffer is `@scratch`) is a defect.**
+**An array a `dasllama/` function resizes through the builtin `resize` or any helper that reaches
+it (`reserve_resize`, `grow_resize`, `ensure_length`, `overwrite_resize` among them), whose element
+count grows
+with a count the model file sets and is not declared `@exact_size` (`@scratch @exact_size` when
+the buffer is `@scratch`), is a defect.**
 PERF032 - the lint that flags a `resize` with no reserve before it - checks only `@exact_size`
 arrays.
 

@@ -10,6 +10,7 @@ require dasllama/dasllama_env  // the g_env_* knob globals ([EnvConfig] declarat
 require metal/msl_shader
 require dasllama/dasllama_metal_prefill   // the production MoE mul_mm MSL (zero copy drift)
 require dasllama/dasllama_metal_kernels   // the production MoE GEMV + geglu MSL (zero copy drift)
+require dasllama/dasllama_gpu_math   // e8m0_half_f32: the kernels' MXFP4 scale decode
 require daslib/f16_cvt
 require daslib/fio   // used only inside the Apple static_if half
 require math   // used only inside the Apple static_if half
@@ -1069,8 +1070,7 @@ class LabMoeGemvMx4E {
                 let acc3 = yl2 * float4(vt[u1 & 15u], vt[(u1 >> 8u) & 15u], vt[(u1 >> 16u) & 15u], vt[(u1 >> 24u) & 15u])
                 let acc4 = yl3 * float4(vt[(u1 >> 4u) & 15u], vt[(u1 >> 12u) & 15u], vt[(u1 >> 20u) & 15u], vt[u1 >> 28u])
                 let am = (acc1 + acc3) + (acc2 + acc4)
-                let ex = uint(mxe[blk])
-                let sc = uint_bits_to_float(ex < 2u ? (0x00200000u << ex) : ((ex - 1u) << 23u))
+                let sc = e8m0_half_f32(uint(mxe[blk]))
                 sumf[r] += sc * ((am.x + am.y) + (am.z + am.w))
             }
             ib += 16u
@@ -1088,8 +1088,7 @@ class LabMoeGemvMx4E {
 def private build_mx4_tabs(var etab : array<float>; var vtab : array<float>) {
     etab |> resize(256)
     for (ei in range(256)) {
-        let bits = ei < 2 ? (0x00200000u << uint(ei)) : (uint(ei - 1) << 23u)
-        etab[ei] = unsafe(reinterpret<float>(bits))
+        etab[ei] = e8m0_half_f32(uint(ei))
     }
     vtab |> resize(16)
     let mags = fixed_array(0.0, 1.0, 2.0, 3.0, 4.0, 6.0, 8.0, 12.0)
@@ -1420,8 +1419,7 @@ class LabMoeMmMx4Bf32 {
             let blk = eb + kb
             let b0 = unsafe(xcur[0])
             let b1 = unsafe(xcur[1])
-            let sc = uint(mxe[blk])
-            let d = uint_bits_to_float(sc < 2u ? (0x00200000u << sc) : ((sc - 1u) << 23u))   // exact e8m0_half, denormal e < 2 included
+            let d = e8m0_half_f32(uint(mxe[blk]))
             let u4 = mxq4[blk]
             for [unroll_full] (w in range(4)) {
                 let uw = w == 0 ? u4.x : (w == 1 ? u4.y : (w == 2 ? u4.z : u4.w))

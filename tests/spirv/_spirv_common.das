@@ -30,9 +30,7 @@ def square {
 }
 
 // A fresh, caller-owned copy of the captured words (the global itself must not be mutated/moved).
-def public square_words : array<uint> {
-    return clone_to_move(square_spv)
-}
+def public square_words : array<uint> => clone_to_move(square_spv)
 
 // ===== Phase-2 arithmetic fixtures: exercise every binary/unary scalar op the emitter supports.
 // Operands are loaded SSBO values (+ the uint index), so no constants/conversions are needed yet —
@@ -70,17 +68,11 @@ def farith {
     fdata[i] = -fdata[i]        // FNegate
 }
 
-def public uarith_words : array<uint> {
-    return clone_to_move(uarith_spv)
-}
+def public uarith_words : array<uint> => clone_to_move(uarith_spv)
 
-def public iarith_words : array<uint> {
-    return clone_to_move(iarith_spv)
-}
+def public iarith_words : array<uint> => clone_to_move(iarith_spv)
 
-def public farith_words : array<uint> {
-    return clone_to_move(farith_spv)
-}
+def public farith_words : array<uint> => clone_to_move(farith_spv)
 
 var @ssbo @binding = 0 pr_x : array<float>
 var @ssbo @binding = 1 pr_y : array<float2>
@@ -121,17 +113,11 @@ class PreciseKern {
     }
 }
 
-def public precise_words : array<uint> {
-    return clone_to_move(precise_spv)
-}
+def public precise_words : array<uint> => clone_to_move(precise_spv)
 
-def public plain_sum_words : array<uint> {
-    return clone_to_move(plain_sum_spv)
-}
+def public plain_sum_words : array<uint> => clone_to_move(plain_sum_spv)
 
-def public precise_kern_words : array<uint> {
-    return clone_to_move(precise_kern_spv)
-}
+def public precise_kern_words : array<uint> => clone_to_move(precise_kern_spv)
 
 // ===== Phase-2 control-flow fixtures: mutable locals (Function OpVariables), compound assignment,
 // ++/--, comparisons (signed/unsigned/float), logical &&/||/!, and if/else (OpSelectionMerge +
@@ -194,17 +180,11 @@ def fctrl {
     fdata[i] = acc
 }
 
-def public uctrl_words : array<uint> {
-    return clone_to_move(uctrl_spv)
-}
+def public uctrl_words : array<uint> => clone_to_move(uctrl_spv)
 
-def public ictrl_words : array<uint> {
-    return clone_to_move(ictrl_spv)
-}
+def public ictrl_words : array<uint> => clone_to_move(ictrl_spv)
 
-def public fctrl_words : array<uint> {
-    return clone_to_move(fctrl_spv)
-}
+def public fctrl_words : array<uint> => clone_to_move(fctrl_spv)
 
 // ===== Phase-2 loop fixtures: while + range-for (OpLoopMerge 4-block) with break/continue. The
 // structured CFG these produce is the real spirv-val workout — a misrouted break/continue or a
@@ -240,13 +220,9 @@ def floop {
     idata[gi] = acc
 }
 
-def public wloop_words : array<uint> {
-    return clone_to_move(wloop_spv)
-}
+def public wloop_words : array<uint> => clone_to_move(wloop_spv)
 
-def public floop_words : array<uint> {
-    return clone_to_move(floop_spv)
-}
+def public floop_words : array<uint> => clone_to_move(floop_spv)
 
 // ===== Phase-6 control-flow coverage fixtures (added during the AstVisitor port). Each targets a
 // construct the Phase-2 fixtures left unexercised; all are byte-identical between the hand-walker and
@@ -333,21 +309,13 @@ def rfor {
     data[i] = acc
 }
 
-def public nloop_words : array<uint> {
-    return clone_to_move(nloop_spv)
-}
+def public nloop_words : array<uint> => clone_to_move(nloop_spv)
 
-def public echain_words : array<uint> {
-    return clone_to_move(echain_spv)
-}
+def public echain_words : array<uint> => clone_to_move(echain_spv)
 
-def public eret_words : array<uint> {
-    return clone_to_move(eret_spv)
-}
+def public eret_words : array<uint> => clone_to_move(eret_spv)
 
-def public rfor_words : array<uint> {
-    return clone_to_move(rfor_spv)
-}
+def public rfor_words : array<uint> => clone_to_move(rfor_spv)
 
 //! three shapes, three folds: the bare induction constant, a nested pair through a `uint()` re-type, a non-zero lower bound.
 [compute_shader(local_size_x=64, name="ufor_spv"), marker(no_coverage)]
@@ -369,9 +337,7 @@ def ufor {
     fdata[gi] = s
 }
 
-def public ufor_words : array<uint> {
-    return clone_to_move(ufor_spv)
-}
+def public ufor_words : array<uint> => clone_to_move(ufor_spv)
 
 let private UFOLD_N = 4   //! a named module constant as the bound: the lint compile hands it over unfolded
 
@@ -397,9 +363,7 @@ def ufold {
     fdata[gi] = s
 }
 
-def public ufold_words : array<uint> {
-    return clone_to_move(ufold_spv)
-}
+def public ufold_words : array<uint> => clone_to_move(ufold_spv)
 
 // ===== Phase-3 vertex/fragment fixtures: stage I/O (@in/@out + Location), rasterizer builtins
 // (gl_Position/gl_VertexIndex/gl_InstanceIndex/gl_FragCoord), vector constructors
@@ -534,53 +498,29 @@ def attr_frag {
     fo_mat_id = 7
 }
 
-def public attr_vert_words : array<uint> {
-    return clone_to_move(attr_vert_spv)
-}
+def public attr_vert_words : array<uint> => clone_to_move(attr_vert_spv)
 
-def public attr_frag_words : array<uint> {
-    return clone_to_move(attr_frag_spv)
-}
+def public attr_frag_words : array<uint> => clone_to_move(attr_frag_spv)
 
-def public tri_vert_words : array<uint> {
-    return clone_to_move(tri_vert_spv)
-}
+def public tri_vert_words : array<uint> => clone_to_move(tri_vert_spv)
 
-def public point_size_words : array<uint> {
-    return clone_to_move(point_size_spv)
-}
+def public point_size_words : array<uint> => clone_to_move(point_size_spv)
 
-def public draw_id_words : array<uint> {
-    return clone_to_move(draw_id_spv)
-}
+def public draw_id_words : array<uint> => clone_to_move(draw_id_spv)
 
-def public nuext_words : array<uint> {
-    return clone_to_move(nuext_spv)
-}
+def public nuext_words : array<uint> => clone_to_move(nuext_spv)
 
-def public point_coord_words : array<uint> {
-    return clone_to_move(point_coord_spv)
-}
+def public point_coord_words : array<uint> => clone_to_move(point_coord_spv)
 
-def public tri_frag_words : array<uint> {
-    return clone_to_move(tri_frag_spv)
-}
+def public tri_frag_words : array<uint> => clone_to_move(tri_frag_spv)
 
-def public vindex_words : array<uint> {
-    return clone_to_move(vindex_spv)
-}
+def public vindex_words : array<uint> => clone_to_move(vindex_spv)
 
-def public raster_math_words : array<uint> {
-    return clone_to_move(raster_math_spv)
-}
+def public raster_math_words : array<uint> => clone_to_move(raster_math_spv)
 
-def public flat_vert_words : array<uint> {
-    return clone_to_move(flat_vert_spv)
-}
+def public flat_vert_words : array<uint> => clone_to_move(flat_vert_spv)
 
-def public flat_frag_words : array<uint> {
-    return clone_to_move(flat_frag_spv)
-}
+def public flat_frag_words : array<uint> => clone_to_move(flat_frag_spv)
 
 // ===== const arrays + dynamic indexing: the gl_VertexIndex hardcoded-triangle vertex shader.
 // Exercises OpTypeArray, OpConstantComposite (vec + array constants), a Function-storage array
@@ -594,9 +534,7 @@ def catri {
     cv_color = colors[gl_VertexIndex]
 }
 
-def public catri_words : array<uint> {
-    return clone_to_move(catri_spv)
-}
+def public catri_words : array<uint> => clone_to_move(catri_spv)
 
 // ===== fixed-array literal of RUNTIME elements: glslang builds `int[5](a, b, c, d, e)` with one
 // OpCompositeConstruct of the five values, then OpStores it into the array's Function-storage
@@ -613,9 +551,7 @@ def rtarr {
     rta_buf[i0] = float4(acc, 0.0)
 }
 
-def public rtarr_words : array<uint> {
-    return clone_to_move(rtarr_spv)
-}
+def public rtarr_words : array<uint> => clone_to_move(rtarr_spv)
 
 // ===== Phase-4a UBO fixture: a @uniform struct read through OpAccessChain by field index. The
 // struct's std140 layout exercises both packing edge cases — a scalar packing after a vec2
@@ -649,9 +585,7 @@ def ubo_frag {
     }
 }
 
-def public ubo_frag_words : array<uint> {
-    return clone_to_move(ubo_frag_spv)
-}
+def public ubo_frag_words : array<uint> => clone_to_move(ubo_frag_spv)
 
 // ===== Phase-4b matrix fixture: a UBO with two float4x4 -> MVP transform. Matrices are tHandle
 // types lowered to OpTypeMatrix (4 float4 columns); daslang stores them column-major (m[i] is
@@ -676,9 +610,7 @@ def mvp_vert {
     mv_color = float4(xy, w, 1.0f)          // OpCompositeConstruct from the swizzles
 }
 
-def public mvp_vert_words : array<uint> {
-    return clone_to_move(mvp_vert_spv)
-}
+def public mvp_vert_words : array<uint> => clone_to_move(mvp_vert_spv)
 
 // ===== Phase-4c push-constant fixture: a @push_constant struct -> PushConstant storage + Block,
 // laid out like a UBO (std140 offsets) but with NO DescriptorSet/Binding (push constants are not
@@ -694,9 +626,7 @@ def pc_frag {
     pc_out = pc.tint * pc.gamma     // PushConstant member loads -> VectorTimesScalar
 }
 
-def public pc_frag_words : array<uint> {
-    return clone_to_move(pc_frag_spv)
-}
+def public pc_frag_words : array<uint> => clone_to_move(pc_frag_spv)
 
 // ===== PR-G nested-block fixture: a UBO whose fields span the THREE composite shapes the pre-PR-G
 // emitter rejected — a fixed-array of vec4 (ArrayStride 16), a nested struct (laid out non-Block at
@@ -730,9 +660,7 @@ def ubo_nested_frag {
     nu_out = p + m + l
 }
 
-def public ubo_nested_words : array<uint> {
-    return clone_to_move(ubo_nested_spv)
-}
+def public ubo_nested_words : array<uint> => clone_to_move(ubo_nested_spv)
 
 // ===== Phase-4d combined image sampler fixture: a sampler2D global -> OpTypeImage +
 // OpTypeSampledImage in UniformConstant storage + DescriptorSet/Binding; texture(tex, uv) ->
@@ -745,9 +673,7 @@ def tex_frag {
     tex_out = texture(tex, ti_uv)       // OpLoad sampler + OpImageSampleImplicitLod
 }
 
-def public tex_frag_words : array<uint> {
-    return clone_to_move(tex_frag_spv)
-}
+def public tex_frag_words : array<uint> => clone_to_move(tex_frag_spv)
 
 // ===== PR-C descriptor array fixture: a sampler2D[8] global -> UniformConstant OpTypeArray of
 // OpTypeSampledImage + DescriptorSet/Binding with count=8; texture(samplers[i], uv) ->
@@ -767,9 +693,7 @@ def darr_fs {
     darr_out = texture(samplers[i], darr_uv)  // OpAccessChain (NonUniform-cascaded) + OpLoad + sample
 }
 
-def public darr_words : array<uint> {
-    return clone_to_move(darr_spv)
-}
+def public darr_words : array<uint> => clone_to_move(darr_spv)
 
 // ===== Phase-7.1a scalar conversions: float(int/uint), int(float/uint), uint(float/int) ->
 // OpConvertSToF/UToF/FToS/FToU + OpBitcast (int<->uint same-width reinterpret). Reuses the existing
@@ -785,9 +709,7 @@ def conv {
     data[i] = uint(f) + uint(s)         // ConvertFToU + Bitcast (int -> uint)
 }
 
-def public conv_words : array<uint> {
-    return clone_to_move(conv_spv)
-}
+def public conv_words : array<uint> => clone_to_move(conv_spv)
 
 // ===== Phase-7.1b storage image: an image2D global -> UniformConstant OpTypeImage (Rgba8, sampled=2)
 // + DescriptorSet/Binding; imageLoad -> OpImageRead, imageStore -> OpImageWrite. A 2D dispatch writes a
@@ -801,9 +723,7 @@ def storimg {
     imageStore(img, coord, float4(float(gid.x), float(gid.y), prev.z, 1.0f))    // OpImageWrite
 }
 
-def public storimg_words : array<uint> {
-    return clone_to_move(storimg_spv)
-}
+def public storimg_words : array<uint> => clone_to_move(storimg_spv)
 
 // ===== storage-image @format qualifier: a bare image2D stays Rgba8 (default, back-compat); an
 // @format = "r32f" image2D lowers to OpTypeImage format R32f (the Hi-Z depth-pyramid storage format).
@@ -819,9 +739,7 @@ def imgfmt {
     imageStore(fmt_dst, coord, float4(d.x, 0.0f, 0.0f, 1.0f))    // OpImageWrite on the default Rgba8 image
 }
 
-def public imgfmt_words : array<uint> {
-    return clone_to_move(imgfmt_spv)
-}
+def public imgfmt_words : array<uint> => clone_to_move(imgfmt_spv)
 
 // ===== local struct value member access: `let e = ssbo[i]; e.field` copies an SSBO struct element into
 // an immutable local, then reads members off it. The let holds the loaded composite (OpLoad of the whole
@@ -840,9 +758,7 @@ def lsvmember {
     lsv_out[i] = e.a + e.b         // two member reads -> exactly two OpCompositeExtract (no swizzles)
 }
 
-def public lsvmember_words : array<uint> {
-    return clone_to_move(lsvmember_spv)
-}
+def public lsvmember_words : array<uint> => clone_to_move(lsvmember_spv)
 
 // ===== Phase-7.2 explicit-LOD + texel fetch: textureLod -> OpImageSampleExplicitLod (Lod operand),
 // texelFetch -> OpImage (extract image from the sampled image) + OpImageFetch. Both are derivative-free,
@@ -857,9 +773,7 @@ def texlod {
     fdata[i] = a.x + b.x                                    // scalar swizzles + FAdd
 }
 
-def public texlod_words : array<uint> {
-    return clone_to_move(texlod_spv)
-}
+def public texlod_words : array<uint> => clone_to_move(texlod_spv)
 
 // ===== Phase-7.3 additional sampler dimensionalities: samplerCube (Dim Cube), sampler3D (Dim 3D),
 // sampler2DArray (Dim 2D + Arrayed). All sample via texture() with a float3 coordinate. These add NO
@@ -877,9 +791,7 @@ def dims_frag {
     dims_out = float4(c.x, v.y, a.z, 1.0f)  // scalar swizzles + CompositeConstruct
 }
 
-def public dims_words : array<uint> {
-    return clone_to_move(dims_spv)
-}
+def public dims_words : array<uint> => clone_to_move(dims_spv)
 
 // ===== Phase-7.4 separate image + sampler: a texture2D (standalone OpTypeImage) and a sampler
 // (standalone OpTypeSampler) are two independent descriptors; sampleTexture combines them at the call
@@ -893,9 +805,7 @@ def septex_frag {
     sep_out = sampleTexture(sep_img, sep_smp, sep_uv)   // OpSampledImage + OpImageSampleImplicitLod
 }
 
-def public septex_words : array<uint> {
-    return clone_to_move(septex_spv)
-}
+def public septex_words : array<uint> => clone_to_move(septex_spv)
 
 // ===== Phase-8.1 ternary cond ? a : b -> OpSelect (branchless). A scalar select uses the scalar bool
 // condition directly; a vector select with a scalar condition splats the bool to a bvecN first
@@ -910,9 +820,7 @@ def tern {
     fdata[i] = s + v.x
 }
 
-def public tern_words : array<uint> {
-    return clone_to_move(tern_spv)
-}
+def public tern_words : array<uint> => clone_to_move(tern_spv)
 
 // ===== tern_lazy: an ssbo load in a ternary / && / || operand - the branched lowering; the pure ternaries beside it stay OpSelect =====
 [compute_shader(local_size_x=64, name="tern_lazy_spv"), marker(no_coverage)]
@@ -925,9 +833,7 @@ def tern_lazy {
     fdata[i] = pure + (both ? 1.0 : 0.0) + (either ? 2.0 : 0.0)
 }
 
-def public tern_lazy_words : array<uint> {
-    return clone_to_move(tern_lazy_spv)
-}
+def public tern_lazy_words : array<uint> => clone_to_move(tern_lazy_spv)
 
 // ===== Phase-8.2 vector arithmetic + a folded const-vector operand. Component-wise +/-/ lower to
 // OpFAdd/OpFSub/OpFDiv on the vector result type (scalar_class reads the lane kind); unary - is
@@ -944,9 +850,7 @@ def vecarith {
     va_out = -d                         // component-wise OpFNegate
 }
 
-def public vecarith_words : array<uint> {
-    return clone_to_move(vecarith_spv)
-}
+def public vecarith_words : array<uint> => clone_to_move(vecarith_spv)
 
 // ===== vec *= scalar: a compound-assignment multiply with a vector LHS and a scalar RHS must lower to
 // OpVectorTimesScalar, NOT a component-wise OpFMul (illegal: OpFMul needs both operands == the result
@@ -965,9 +869,7 @@ def vts {
     vts_out = v + w
 }
 
-def public vts_words : array<uint> {
-    return clone_to_move(vts_spv)
-}
+def public vts_words : array<uint> => clone_to_move(vts_spv)
 
 // ===== Phase-8.3 GLSL.std.450 math breadth: exercise every reachable ext-inst the emitter maps beyond
 // Phase 3's dot/sqrt/clamp. Keyed on the DASLANG name (lerp -> FMix, rsqrt -> InverseSqrt). Vectors are
@@ -997,9 +899,7 @@ def mathx {
     mx_out = float4(r + n.x + cr.x + rf.x + rr.x, 0.0f, 0.0f, 1.0f)
 }
 
-def public mathx_words : array<uint> {
-    return clone_to_move(mathx_spv)
-}
+def public mathx_words : array<uint> => clone_to_move(mathx_spv)
 
 // ===== Phase-10.1 SSBO std430 vector elements: array<float2/3/4> runtime arrays. The std430 ArrayStride
 // is the element's base size rounded up to its base alignment: float2 -> 8, float3 -> 16 (size 12, align
@@ -1033,13 +933,9 @@ def ssbostruct {
     particles[i].life = particles[i].life - 1.0f    // scalar field read + write
 }
 
-def public ssbovec_words : array<uint> {
-    return clone_to_move(ssbovec_spv)
-}
+def public ssbovec_words : array<uint> => clone_to_move(ssbovec_spv)
 
-def public ssbostruct_words : array<uint> {
-    return clone_to_move(ssbostruct_spv)
-}
+def public ssbostruct_words : array<uint> => clone_to_move(ssbostruct_spv)
 
 // ===== @readonly SSBO -> NonWritable. A rendering shader's shared-data buffers are declared readonly
 // in GLSL so the driver may optimize (and no accidental write compiles); the @readonly annotation must
@@ -1055,9 +951,7 @@ def rossbo {
     ro_dst[i] = ro_src[i] * 2u      // read the readonly source, write the writable dest
 }
 
-def public rossbo_words : array<uint> {
-    return clone_to_move(rossbo_spv)
-}
+def public rossbo_words : array<uint> => clone_to_move(rossbo_spv)
 
 // ===== Phase-10.2 composite/global swizzle: multi-component swizzle of a bare global (the Phase-8
 // out-of-scope note). A single-component global swizzle stays an lvalue (AccessChain); a multi-component
@@ -1076,9 +970,7 @@ def gswizzle {
     sw_out = float4(rgb, fc.x + yx.x + a + lx.y)
 }
 
-def public gswizzle_words : array<uint> {
-    return clone_to_move(gswizzle_spv)
-}
+def public gswizzle_words : array<uint> => clone_to_move(gswizzle_spv)
 
 // ===== Phase-10.3 fragment realism: discard (OpKill), screen-space derivatives (OpDPdx/OpDPdy/
 // OpFwidth), textureSize (OpImageQuerySizeLod + the ImageQuery capability), and a gl_FragDepth write
@@ -1102,9 +994,7 @@ def fragx {
     fx_color = float4(dx.x + dy.y + w, float(sz.x), float(sz.y), 1.0f)
 }
 
-def public fragx_words : array<uint> {
-    return clone_to_move(fragx_spv)
-}
+def public fragx_words : array<uint> => clone_to_move(fragx_spv)
 
 // ===== early_fragment_tests: [fragment_shader(early_fragment_tests=true)] -> the EarlyFragmentTests
 // execution mode. Depth/stencil run BEFORE the shader, so an occluded / stencil-killed fragment skips
@@ -1115,9 +1005,7 @@ def early_frag {
     ef_color = float4(1.0f, 0.0f, 0.0f, 1.0f)
 }
 
-def public early_frag_words : array<uint> {
-    return clone_to_move(early_frag_spv)
-}
+def public early_frag_words : array<uint> => clone_to_move(early_frag_spv)
 
 // ===== Phase-10.4 depth-compare (shadow) sampling: a sampler2DShadow sampled via textureCompare
 // (OpImageSampleDrefImplicitLod). The sampler's OpTypeImage carries Depth=1 and the descriptor reflects
@@ -1134,9 +1022,7 @@ def fragshadow {
     sh_color = float4(lit, lit, lit, 1.0f)
 }
 
-def public fragshadow_words : array<uint> {
-    return clone_to_move(fragshadow_spv)
-}
+def public fragshadow_words : array<uint> => clone_to_move(fragshadow_spv)
 
 // ===== MRT: multiple @location outputs in a fragment shader (G-buffer prep for tutorial 10's
 // deferred rendering). Each `var @out @location = N` global is its own Output OpVariable with a
@@ -1154,9 +1040,7 @@ def mrt {
     mrt_albedo   = float4(0.8f, 0.2f, 0.4f, 1.0f)            // OpStore -> mrt_albedo   (location 2)
 }
 
-def public mrt_words : array<uint> {
-    return clone_to_move(mrt_spv)
-}
+def public mrt_words : array<uint> => clone_to_move(mrt_spv)
 
 // ===== Subpass input attachment: a Vulkan deferred-rendering rail (tutorial 10 lighting subpass).
 // Reads a previous subpass's color/depth at the SAME fragment coordinate via subpassLoad. The
@@ -1171,9 +1055,7 @@ def subpass_load_frag {
     sp_out = float4(sample.x, sample.y, sample.z, 1.0f)
 }
 
-def public subpass_words : array<uint> {
-    return clone_to_move(subpass_spv)
-}
+def public subpass_words : array<uint> => clone_to_move(subpass_spv)
 
 // ===== named layout-index constants: @set / @binding taking a module-scope `let` int constant
 // rather than a literal. The identifier is stored as a STRING annotation arg, so the emitter resolves
@@ -1192,9 +1074,7 @@ def bindconst {
     bindconst_data[i] = i
 }
 
-def public bindconst_words : array<uint> {
-    return clone_to_move(bindconst_spv)
-}
+def public bindconst_words : array<uint> => clone_to_move(bindconst_spv)
 
 // ===== Phase-10.5 compute-tier fixtures: shared memory + barriers + atomics =====
 // cshared: a workgroup-shared scratch array (`@workgroup`, GLSL `shared` -> Workgroup OpVariable),
@@ -1231,9 +1111,7 @@ def cbufbar {
     bb_io[gid] = bb_io[gid ^ 1u] + lid
 }
 
-def public cbufbar_words : array<uint> {
-    return clone_to_move(cbufbar_spv)
-}
+def public cbufbar_words : array<uint> => clone_to_move(cbufbar_spv)
 
 // cossbo: @coherent -> Coherent on the SSBO OpVariable (not the block member); the last-arriving-workgroup hand-off is a body that needs the decoration
 var @ssbo @coherent @binding = 0 co_rows : array<uint>
@@ -1267,9 +1145,7 @@ def cossbo {
     }
 }
 
-def public cossbo_words : array<uint> {
-    return clone_to_move(cossbo_spv)
-}
+def public cossbo_words : array<uint> => clone_to_move(cossbo_spv)
 
 // catomics: the rest of the atomic family on @workgroup int + uint scalar counters (Workgroup
 // scope). Both signednesses are present so atomicMin/Max emit BOTH the signed (SMin/SMax) and
@@ -1296,13 +1172,9 @@ def catomics {
     aout[gid] = a + b + e + f + g + h + kk + int(c) + int(d)
 }
 
-def public cshared_words : array<uint> {
-    return clone_to_move(cshared_spv)
-}
+def public cshared_words : array<uint> => clone_to_move(cshared_spv)
 
-def public catomics_words : array<uint> {
-    return clone_to_move(catomics_spv)
-}
+def public catomics_words : array<uint> => clone_to_move(catomics_spv)
 
 // ===== float atomicAdd + the single-component swizzle lvalue =====
 // cfatomic: atomicAdd onto ONE COMPONENT of an SSBO vector element (fout[i].x), the shape a scatter
@@ -1326,9 +1198,7 @@ def cfatomic {
     fout[gid].w = a + b                 // component STORE through the same OpAccessChain
 }
 
-def public cfatomic_words : array<uint> {
-    return clone_to_move(cfatomic_spv)
-}
+def public cfatomic_words : array<uint> => clone_to_move(cfatomic_spv)
 
 // ===== Phase-10.6 storage-image size query + module-scope shader constants =====
 // imgquery: imageSize(img) -> OpImageQuerySize (the storage image's dimensions in texels, NO LOD --
@@ -1366,13 +1236,9 @@ def modconst {
     fdata[i] = acc + b.x
 }
 
-def public imgquery_words : array<uint> {
-    return clone_to_move(imgquery_spv)
-}
+def public imgquery_words : array<uint> => clone_to_move(imgquery_spv)
 
-def public modconst_words : array<uint> {
-    return clone_to_move(modconst_spv)
-}
+def public modconst_words : array<uint> => clone_to_move(modconst_spv)
 
 // ===== Phase-11 user-defined shader functions: OpFunction / OpFunctionCall + ref-param copy-in/out =====
 // Each user function called (transitively) from a shader is emitted as its own OpFunction. A value
@@ -1381,12 +1247,8 @@ def public modconst_words : array<uint> {
 // access-chain pointer straight to a call). The only NEW opcodes are OpFunctionCall / OpFunctionParameter
 // / OpReturnValue; everything else reuses already-declared opcodes.
 
-def private uf_add1(x : int) : int {                // scalar value param, scalar return
-    return x + 1
-}
-def private uf_muladd(a, b, c : int) : int {        // multiple value params
-    return a * b + c
-}
+def private uf_add1(x : int) : int => x + 1  // scalar value param, scalar return
+def private uf_muladd(a, b, c : int) : int => a * b + c  // multiple value params
 def private uf_double(x : int) : int {              // transitive: calls the shared uf_add1 twice
     return uf_add1(uf_add1(x))
 }
@@ -1437,33 +1299,112 @@ def userfn_global {
     data[i] = uf_lane_seed()
 }
 
-def public userfn_words : array<uint> {
-    return clone_to_move(userfn_spv)
+[spirv_inline]
+def uf_inl_scaled(x : float; k : int) : float {   // a value helper: a branch, then one tail return
+    var s = x
+    if (k > 1) {
+        s = s * float(k)
+    }
+    return s + 1.0f
+}
+// a ref helper over an array element, its loop and a nested inline
+// call
+[spirv_inline]
+def private uf_inl_acc(var acc : float&; x : float) {
+    var j = 0
+    while (j < 2) {
+        acc += uf_inl_scaled(x, j)
+        j++
+    }
+}
+// a plain helper an inlined body calls: still its own OpFunction
+def private uf_inl_called(x : float) : float => x * 0.5f
+[spirv_inline]
+def private uf_inl_outer(x : float) : float => (uf_inl_called(x) + uf_inl_scaled(x, 3) +
+    uf_inl_static(x))
+// a static_if per arm return: the dead arm is gone, one tail return
+// left
+[spirv_inline]
+def private uf_inl_static(x : float) : float {
+    static_if (typeinfo sizeof(x) == 4) {
+        return x * 2.0f
+    } else {
+        return x
+    }
 }
 
-def public userfn_ref_words : array<uint> {
-    return clone_to_move(userfn_ref_spv)
+// userfn_inline: [spirv_inline] helpers visited in place - no
+// OpFunction and no OpFunctionCall for them, a by-reference
+// parameter bound to the caller's lvalue (an element of a local
+// array), a tail value, a nested inline, and a plain helper called
+// from an inlined body
+[compute_shader(local_size_x=64, name="userfn_inline_spv"), marker(no_coverage)]
+def userfn_inline {
+    let i = int(gl_GlobalInvocationID.x)
+    var acc : float[2]
+    acc[0] = 0.0f
+    acc[1] = 0.0f
+    uf_inl_acc(acc[i & 1], fdata[i])
+    fdata[i] = acc[0] + acc[1] + uf_inl_outer(fdata[i])
 }
 
-def public userfn_global_words : array<uint> {
-    return clone_to_move(userfn_global_spv)
+struct UfInlArgs {
+    n : uint
+    gain : float
 }
+
+// userfn_inline_method: [spirv_inline] kernel-class methods - a
+// self-method chain reading members and the push block, and a
+// by-reference method over an element of a local array, all visited
+// in the kernel body
+class UfInlKern {
+    @ssbo @binding = 0 xs : array<float>
+    @ssbo @binding = 1 ys : array<float>
+    @push_constant pa : UfInlArgs
+
+    [spirv_inline]
+    def gained(v : float) : float => v * pa.gain
+
+    [spirv_inline]
+    def add_gained(var acc : float&; i : uint) {
+        acc += gained(xs[i])
+    }
+
+    [spirv_kernel(local_size_x=64, name="userfn_inline_method_spv"), marker(no_coverage)]
+    def run {
+        let i = gl_GlobalInvocationID.x
+        if (i < pa.n) {
+            var acc : float[2]
+            acc[0] = 1.0f
+            acc[1] = 0.0f
+            add_gained(acc[i & 1u], i)
+            ys[i] = acc[0] + acc[1]
+        }
+    }
+}
+
+def public userfn_inline_method_words : array<uint> => <- clone_to_move(userfn_inline_method_spv)
+
+def public userfn_words : array<uint> => clone_to_move(userfn_spv)
+
+def public userfn_inline_words : array<uint> => <- clone_to_move(userfn_inline_spv)
+
+def public userfn_ref_words : array<uint> => clone_to_move(userfn_ref_spv)
+
+def public userfn_global_words : array<uint> => clone_to_move(userfn_global_spv)
 
 // ===== gl_WorkGroupSize fixture: the workgroup size is a compile-time CONSTANT, not a dispatch
 // input. wgs_flat_index reads it from a helper, the way a shared module does: the helper names no
 // local_size of its own and still lowers to the size of the shader that compiled it. =====
-def private wgs_flat_index() : uint {
-    return gl_WorkGroupID.x * gl_WorkGroupSize.x + gl_LocalInvocationID.x
-}
+def private wgs_flat_index() : uint =>
+    gl_WorkGroupID.x * gl_WorkGroupSize.x + gl_LocalInvocationID.x
 
 [compute_shader(local_size_x=64, name="wgsize_spv"), marker(no_coverage)]
 def wgsize {
     data[wgs_flat_index()] = gl_WorkGroupSize.x
 }
 
-def public wgsize_words : array<uint> {
-    return clone_to_move(wgsize_spv)
-}
+def public wgsize_words : array<uint> => clone_to_move(wgsize_spv)
 
 // ===== spirv-val gate =====
 struct SpirvValResult {
@@ -1596,9 +1537,7 @@ def public const_array_emitter_opcodes : table<uint> {
 // Phase-4a UBOs add NO new opcodes: @uniform member access is OpAccessChain/OpLoad over a Block-
 // decorated OpTypeStruct, all already in the set (Uniform storage + DescriptorSet/Binding are
 // operands, not opcodes). The declared set is unchanged — the UBO fixture must still stay within it.
-def public phase4a_emitter_opcodes : table<uint> {
-    return <- const_array_emitter_opcodes()
-}
+def public phase4a_emitter_opcodes : table<uint> => <- const_array_emitter_opcodes()
 
 // Phase-4b adds matrices + matrix/vector arithmetic + local-value swizzles. Phase-4a set + these:
 def public phase4b_emitter_opcodes : table<uint> {
@@ -1617,9 +1556,7 @@ def public phase4b_emitter_opcodes : table<uint> {
 // Phase-4c push constants add NO new opcodes: a @push_constant block is the same Block-decorated
 // OpTypeStruct read via OpAccessChain/OpLoad — only the storage class (PushConstant) differs, and
 // that is an operand, not an opcode. The declared set is unchanged.
-def public phase4c_emitter_opcodes : table<uint> {
-    return <- phase4b_emitter_opcodes()
-}
+def public phase4c_emitter_opcodes : table<uint> => <- phase4b_emitter_opcodes()
 
 // Phase-4d combined image samplers add the image type pair + the sample op. Phase-4c set + these:
 def public phase4d_emitter_opcodes : table<uint> {
@@ -1661,9 +1598,7 @@ def public phase7b_emitter_opcodes : table<uint> {
 
 // Phase-7.3 (sampler3D / samplerCube / sampler2DArray) adds NO new opcodes -- only different
 // OpTypeImage Dim/Arrayed operands. The declared set is unchanged; the dims fixture must stay within it.
-def public phase7c_emitter_opcodes : table<uint> {
-    return <- phase7b_emitter_opcodes()
-}
+def public phase7c_emitter_opcodes : table<uint> => <- phase7b_emitter_opcodes()
 
 // Phase-7.4 separate image + sampler adds the standalone sampler type + the call-site combine. 7.3 + these:
 def public phase7d_emitter_opcodes : table<uint> {
@@ -1691,16 +1626,12 @@ def public phase8_emitter_opcodes : table<uint> {
 // OpTypeRuntimeArray (different ArrayStride operand); a struct element is an extra OpTypeStruct
 // (non-Block) read via a chained OpAccessChain/OpLoad — all already declared. The set is unchanged;
 // the new fixtures must still stay within it.
-def public phase10_1_emitter_opcodes : table<uint> {
-    return <- phase8_emitter_opcodes()
-}
+def public phase10_1_emitter_opcodes : table<uint> => <- phase8_emitter_opcodes()
 
 // Phase-10.2 multi-component global swizzle adds NO new opcodes: it routes a bare global through the
 // existing load + OpVectorShuffle / OpCompositeExtract path (both declared by Phase 4b). The set is
 // unchanged; the gswizzle fixture must still stay within it.
-def public phase10_2_emitter_opcodes : table<uint> {
-    return <- phase10_1_emitter_opcodes()
-}
+def public phase10_2_emitter_opcodes : table<uint> => <- phase10_1_emitter_opcodes()
 
 // Phase-10.3 fragment realism adds five opcodes: OpKill (discard), OpDPdx/OpDPdy/OpFwidth (derivatives),
 // and OpImageQuerySizeLod (textureSize). gl_FragDepth reuses the existing builtin Variable/Decorate path
@@ -1799,13 +1730,9 @@ def task_empty {
     EmitMeshTasksEXT(1u, 1u, 1u)         // dispatch one mesh workgroup + terminate THIS task workgroup
 }
 
-def public mesh_empty_words : array<uint> {
-    return clone_to_move(mesh_empty_spv)
-}
+def public mesh_empty_words : array<uint> => clone_to_move(mesh_empty_spv)
 
-def public task_empty_words : array<uint> {
-    return clone_to_move(task_empty_spv)
-}
+def public task_empty_words : array<uint> => clone_to_move(task_empty_spv)
 
 // ===== PR-E mesh output configuration fixtures (max_vertices / max_primitives / output_topology) =====
 // The [mesh_shader] output args drive the OutputVertices / OutputPrimitivesEXT counts and the topology
@@ -1823,13 +1750,9 @@ def mesh_points {
     SetMeshOutputsEXT(0u, 0u)
 }
 
-def public mesh_lines_words : array<uint> {
-    return clone_to_move(mesh_lines_spv)
-}
+def public mesh_lines_words : array<uint> => clone_to_move(mesh_lines_spv)
 
-def public mesh_points_words : array<uint> {
-    return clone_to_move(mesh_points_spv)
-}
+def public mesh_points_words : array<uint> => clone_to_move(mesh_points_spv)
 
 // ===== PR-E2 per-vertex / per-primitive output arrays (the array-of-builtin classifier) =====
 // mesh_tri emits ONE triangle: three per-vertex gl_Position writes through gl_MeshVerticesEXT[i] (an
@@ -1848,9 +1771,7 @@ def mesh_tri {
     gl_PrimitiveTriangleIndicesEXT[0] = uint3(0u, 1u, 2u)             // per-primitive triangle connectivity
 }
 
-def public mesh_tri_words : array<uint> {
-    return clone_to_move(mesh_tri_spv)
-}
+def public mesh_tri_words : array<uint> => clone_to_move(mesh_tri_spv)
 
 // ===== mesh shader reading a UBO: SPIR-V >= 1.4 requires EVERY global the entry point references in
 // the OpEntryPoint interface -- not only Input/Output but also the Uniform/Block descriptor. A mesh
@@ -1876,9 +1797,7 @@ def mesh_ubo {
     gl_PrimitiveTriangleIndicesEXT[0] = uint3(0u, 1u, 2u)
 }
 
-def public mesh_ubo_words : array<uint> {
-    return clone_to_move(mesh_ubo_spv)
-}
+def public mesh_ubo_words : array<uint> => clone_to_move(mesh_ubo_spv)
 
 // ===== PR-F mesh user + per-primitive-builtin outputs (the three Tutorial-13 color rails) =====
 // mesh_outs writes all three mesh->fragment color paths: a per-vertex @out varying (mo_vcolor[i],
@@ -1905,9 +1824,7 @@ def mesh_outs {
     gl_MeshPrimitivesEXT[0].gl_PrimitiveID = 7                   // per-primitive builtin id
 }
 
-def public mesh_outs_words : array<uint> {
-    return clone_to_move(mesh_outs_spv)
-}
+def public mesh_outs_words : array<uint> => clone_to_move(mesh_outs_spv)
 
 var @out @location = 0 pf_color : float4
 [fragment_shader(name="prim_frag_spv"), marker(no_coverage)]
@@ -1916,9 +1833,7 @@ def prim_frag {
     pf_color = float4(id * 0.1, 0.0, 0.0, 1.0)
 }
 
-def public prim_frag_words : array<uint> {
-    return clone_to_move(prim_frag_spv)
-}
+def public prim_frag_words : array<uint> => clone_to_move(prim_frag_spv)
 
 // pp_frag reads a @per_primitive @in varying WITHOUT gl_PrimitiveID: the PerPrimitiveEXT decoration
 // alone must still pull in the MeshShadingEXT capability (-> SPIR-V 1.4), or the blob is invalid.
@@ -1929,9 +1844,7 @@ def pp_frag {
     pp_out = float4(pp_in, 1.0)
 }
 
-def public pp_frag_words : array<uint> {
-    return clone_to_move(pp_frag_spv)
-}
+def public pp_frag_words : array<uint> => clone_to_move(pp_frag_spv)
 
 // ===== PR-G task -> mesh payload (TaskPayloadWorkgroupEXT) =====
 // The cluster-cull task half of a meshlet pipeline. The task workgroup decides which meshlets survive
@@ -1975,13 +1888,9 @@ def mesh_payload {
     gl_PrimitiveTriangleIndicesEXT[0] = uint3(0u, 1u, 2u)
 }
 
-def public task_payload_words : array<uint> {
-    return clone_to_move(task_payload_spv)
-}
+def public task_payload_words : array<uint> => clone_to_move(task_payload_spv)
 
-def public mesh_payload_words : array<uint> {
-    return clone_to_move(mesh_payload_spv)
-}
+def public mesh_payload_words : array<uint> => clone_to_move(mesh_payload_spv)
 
 // PR-D mesh + task scaffolding adds two opcodes: OpSetMeshOutputsEXT (the mesh prologue) and
 // OpEmitMeshTasksEXT (the task terminator). The MeshShadingEXT capability + the SPV_EXT_mesh_shader
@@ -2039,21 +1948,13 @@ def rt_chit {
     rt_chit_prd = float3(w, rt_bary.x, rt_bary.y) * (rt_shadow.x + ids * 0.0)
 }
 
-def public rt_raygen_words : array<uint> {
-    return clone_to_move(rt_raygen_spv)
-}
+def public rt_raygen_words : array<uint> => clone_to_move(rt_raygen_spv)
 
-def public rt_miss_words : array<uint> {
-    return clone_to_move(rt_miss_spv)
-}
+def public rt_miss_words : array<uint> => clone_to_move(rt_miss_spv)
 
-def public rt_chit_words : array<uint> {
-    return clone_to_move(rt_chit_spv)
-}
+def public rt_chit_words : array<uint> => clone_to_move(rt_chit_spv)
 
-def public rt_raygen_reflect_words : array<uint> {
-    return clone_to_move(rt_raygen_spv_reflect)
-}
+def public rt_raygen_reflect_words : array<uint> => clone_to_move(rt_raygen_spv_reflect)
 
 // The RT stages add two opcodes: OpTypeAccelerationStructureKHR (the TLAS descriptor type) and
 // OpTraceRayKHR. The RayTracingKHR capability + the SPV_KHR_ray_tracing extension ride on the
@@ -2096,9 +1997,7 @@ def lattice_kernel {
     lat_data[gi] = f.x + f.w + float(w.y) + float(uw.x) + float(1.5h)
 }
 
-def public lattice_words : array<uint> {
-    return clone_to_move(lattice_spv)
-}
+def public lattice_words : array<uint> => clone_to_move(lattice_spv)
 
 // ===== subgroup ops: the GroupNonUniform reduce family (8 opcodes — IAdd serves both int
 // classes), shuffle-xor, broadcast-first, elect, + the four subgroup builtins. The
@@ -2135,9 +2034,7 @@ def subgroup_kernel {
     }
 }
 
-def public subgroup_words : array<uint> {
-    return clone_to_move(subgroup_spv)
-}
+def public subgroup_words : array<uint> => clone_to_move(subgroup_spv)
 
 // ===== spec constants: @constant_id scalars (uint / int / float / both bool defaults — the census
 // needs SpecConstantTrue AND SpecConstantFalse) + a local_size_x_id workgroup axis (per-axis
@@ -2169,18 +2066,14 @@ def specc_kernel {
     spc_data[gi] = acc
 }
 
-def public specc_words : array<uint> {
-    return clone_to_move(specc_spv)
-}
+def public specc_words : array<uint> => clone_to_move(specc_spv)
 
 // ===== 8/16-bit SSBO storage: the llama.cpp block_q8_0 mirror (f16 scale + int8[32] quants —
 // ArrayStride 34, member Offsets 0/2, qs element stride 1 under std430), a half4 element array
 // (stride 8), and the unpack8/pack32 OpBitcast pack intrinsics with OpSConvert sign-extended
 // widening. Zero NEW opcodes — the StorageBuffer8/16BitAccess capabilities + the
 // SPV_KHR_8bit_storage extension ride the declared Capability/Extension opcodes. =====
-def public storage816_emitter_opcodes : table<uint> {
-    return <- spec_emitter_opcodes()
-}
+def public storage816_emitter_opcodes : table<uint> => <- spec_emitter_opcodes()
 
 struct BlockQ8 {
     d  : float16
@@ -2208,9 +2101,7 @@ def q8blk_kernel {
         + float(hp.x) + float(pack32(b4)))
 }
 
-def public q8blk_words : array<uint> {
-    return clone_to_move(q8blk_spv)
-}
+def public q8blk_words : array<uint> => clone_to_move(q8blk_spv)
 
 // ===== the 8/16-bit STORE half: narrowing casts (OpSConvert/OpUConvert) and stores through
 // 8/16-bit access chains — the requant-writer shapes (a quantizer writing int8 quants and an
@@ -2232,9 +2123,7 @@ def q8store_kernel {
     st_blocks[gi].d = float16(0.5)
 }
 
-def public q8store_words : array<uint> {
-    return clone_to_move(q8store_spv)
-}
+def public q8store_words : array<uint> => clone_to_move(q8store_spv)
 
 // ===== unpack8 on 16-bit lanes: an int16/uint16 SSBO element bitcast to byte2/ubyte2 and a runtime
 // lane select (the cm2 decode callbacks' 16-bit quant read). Zero NEW opcodes. =====
@@ -2250,9 +2139,7 @@ def unpack16_kernel {
     up16_u8[gi] = unpack8(up16_u16[gi >> 1u])[int(gi & 1u)]
 }
 
-def public unpack16_words : array<uint> {
-    return clone_to_move(unpack16_spv)
-}
+def public unpack16_words : array<uint> => clone_to_move(unpack16_spv)
 
 // ===== spdirect: a [spirv_decode] method called DIRECTLY over a block the kernel body copied out of its plane =====
 struct SpBlk {
@@ -2285,9 +2172,7 @@ class SpDirectCls {
     }
 }
 
-def public spdirect_words : array<uint> {
-    return clone_to_move(spdirect_spv)
-}
+def public spdirect_words : array<uint> => clone_to_move(spdirect_spv)
 
 // ===== spelem: the same call on the plane element itself - the block argument is the SSBO element =====
 class SpElemCls {
@@ -2311,9 +2196,7 @@ class SpElemCls {
     }
 }
 
-def public spelem_words : array<uint> {
-    return clone_to_move(spelem_spv)
-}
+def public spelem_words : array<uint> => clone_to_move(spelem_spv)
 
 // ===== spelemi: the plane-element call with an int index - the index bitcasts to uint on the way in =====
 class SpElemIntCls {
@@ -2338,9 +2221,7 @@ class SpElemIntCls {
     }
 }
 
-def public spelemi_words : array<uint> {
-    return clone_to_move(spelemi_spv)
-}
+def public spelemi_words : array<uint> => clone_to_move(spelemi_spv)
 
 // ===== cooperative matrix (SPV_KHR_cooperative_matrix): an f16 x f16 -> f32 GEMM tile. Loads a 16x16 A
 // (row-major) and B (column-major) from f16 SSBOs into subgroup tiles, one MulAdd into a zero-initialized
@@ -2362,9 +2243,7 @@ def coopmat_kernel {
     coopmatStore(acc, cm_c, 0, 16, 1)   // C: 16x16 column-major, stride 16
 }
 
-def public coopmat_words : array<uint> {
-    return clone_to_move(coopmat_spv)
-}
+def public coopmat_words : array<uint> => clone_to_move(coopmat_spv)
 
 // ===== cooperative matrix INT8 path (SPV_KHR_cooperative_matrix): the native s8 x s8 -> s32 tile
 // (16x16x32 — the Q8-weight path, no dequant). A is 16x32 (row-major) and B is 32x16 (column-major),
@@ -2386,9 +2265,7 @@ def coopmat_i8_kernel {
     coopmatStore(acc, cmi_c, 0, 16, 1)   // C: 16x16 column-major, stride 16
 }
 
-def public coopmat_i8_words : array<uint> {
-    return clone_to_move(coopmat_i8_spv)
-}
+def public coopmat_i8_words : array<uint> => clone_to_move(coopmat_i8_spv)
 
 // ===== coopmat from @workgroup SHARED memory: the real-GEMM prerequisite. A tiled GEMM stages a block of
 // A/B into shared, then coopMatLoads the tiles from SHARED (coalesced, reused) rather than straight from
@@ -2417,9 +2294,7 @@ def coopmat_sm_kernel {
     coopmatStore(acc, sm_c, 0, 16, 1)
 }
 
-def public coopmat_sm_words : array<uint> {
-    return clone_to_move(coopmat_sm_spv)
-}
+def public coopmat_sm_words : array<uint> => clone_to_move(coopmat_sm_spv)
 
 // ===== f16-ACCUMULATOR coopmat (llama.cpp's NV-default mul_mm form): MulAdd accumulates in f16
 // (halves accumulator registers so big-tile kernels hold many live fragments), then coopmatConvert
@@ -2442,9 +2317,7 @@ def coopmat_f16acc_kernel {
     coopmatStore(accw, cmh_c, 0, 16, 1)   // C: the WIDENED f32 tile, column-major
 }
 
-def public coopmat_f16acc_words : array<uint> {
-    return clone_to_move(coopmat_f16acc_spv)
-}
+def public coopmat_f16acc_words : array<uint> => clone_to_move(coopmat_f16acc_spv)
 
 var @ssbo @binding = 0 cma_a : array<float16>
 var @ssbo @binding = 1 cma_b : array<float16>
@@ -2467,9 +2340,7 @@ def coopmat_arr_kernel {
     }
 }
 
-def public coopmat_arr_words : array<uint> {
-    return clone_to_move(coopmat_arr_spv)
-}
+def public coopmat_arr_words : array<uint> => clone_to_move(coopmat_arr_spv)
 
 //! the cooperative-matrix loads whose pointer chains through a uint-typed index: the ids of every value typed as the
 //! module's 32-bit unsigned int, then every OpAccessChain whose last index is one of them, then the loads on those chains
@@ -2504,8 +2375,7 @@ def public count_uint_indexed_coopmat_loads(words : array<uint>) : int {
 }
 
 def public count_function_storage_chains(words : array<uint>) : tuple<chains : int; dynamic_indices : int> {
-    var consts : table<uint>
-    var fvars : table<uint>
+    var consts, fvars : table<uint>
     foreach_inst(words) $(opcode : uint; w : array<uint>; s, n : int) {
         if (opcode == uint(SpvOp.Constant) && n >= 2) {
             consts |> insert(w[s + 1])
@@ -2621,9 +2491,7 @@ def coopmat2_kernel {
     coopmatStoreTensor(accw, cm2_c, 0u, tlo, ti * 64u, 64u, tj * 32u, 32u)
 }
 
-def public coopmat2_words : array<uint> {
-    return clone_to_move(coopmat2_spv)
-}
+def public coopmat2_words : array<uint> => clone_to_move(coopmat2_spv)
 
 //! the MoE expert-bucket s stamp at the 32-deep k step: the shapes dasLLAMA's Cm2SBatch classes declare for the grid-codebook formats (iq2xxs, iq2xs, iq2s, iq3xxs, iq3s)
 [compute_shader(local_size_x=128, name="coopmat2s_spv"), marker(no_coverage)]
@@ -2664,9 +2532,7 @@ def coopmat2s_kernel {
     coopmatStoreTensor(accw, cm2_c, 0u, tlo, ti * 128u, 128u, tj * 32u, 32u)
 }
 
-def public coopmat2s_words : array<uint> {
-    return clone_to_move(coopmat2s_spv)
-}
+def public coopmat2s_words : array<uint> => clone_to_move(coopmat2s_spv)
 
 //! the s stamp at the 64-deep k step: the shapes dasLLAMA's Cm2SBatch classes declare for every format whose decode is step-bound - the K-quants, q4_0, q8 and the 4-bit LUT formats
 [compute_shader(local_size_x=128, name="coopmat2s64_spv"), marker(no_coverage)]
@@ -2707,9 +2573,7 @@ def coopmat2s64_kernel {
     coopmatStoreTensor(accw, cm2_c, 0u, tlo, ti * 128u, 128u, tj * 32u, 32u)
 }
 
-def public coopmat2s64_words : array<uint> {
-    return clone_to_move(coopmat2s64_spv)
-}
+def public coopmat2s64_words : array<uint> => clone_to_move(coopmat2s64_spv)
 
 //! the e stamp at the 32-deep k step: the shapes dasLLAMA's Cm2EBatch classes declare for the grid-codebook formats; every other format's e stamp runs the m stamp's 64-deep shapes
 [compute_shader(local_size_x=128, name="coopmat2e_spv"), marker(no_coverage)]
@@ -2750,9 +2614,7 @@ def coopmat2e_kernel {
     coopmatStoreTensor(accw, cm2_c, 0u, tlo, ti * 128u, 128u, tj * 128u, 128u)
 }
 
-def public coopmat2e_words : array<uint> {
-    return clone_to_move(coopmat2e_spv)
-}
+def public coopmat2e_words : array<uint> => clone_to_move(coopmat2e_spv)
 
 // ===== The cm2 flash-attention fixture: llama.cpp's flash_attn_cm2 inner loop at Br=Bc=64,
 // HSK=64, HSV=128 — online softmax over KV tiles. Exercises every reduce/per-element rail shape:
@@ -2858,9 +2720,7 @@ def coopmat2fa_kernel {
     coopmatStoreTensor(o, fa_o, 0u, tlo, ti * 64u, 64u, 0u, 128u)
 }
 
-def public coopmat2fa_words : array<uint> {
-    return clone_to_move(coopmat2fa_spv)
-}
+def public coopmat2fa_words : array<uint> => clone_to_move(coopmat2fa_spv)
 
 // ===== The h256 flash tiles: the flash-attention inner loop at head size 256 (Br=64, Bc=32) - the shape dasLLAMA's attention runs =====
 [compute_shader(local_size_x=128, name="coopmat2fa256_spv"), marker(no_coverage)]
@@ -2931,9 +2791,7 @@ def coopmat2fa256_kernel {
     coopmatStoreTensor(o, fa_o, 0u, tlo, ti * 64u, 64u, 0u, 256u)
 }
 
-def public coopmat2fa256_words : array<uint> {
-    return clone_to_move(coopmat2fa256_spv)
-}
+def public coopmat2fa256_words : array<uint> => clone_to_move(coopmat2fa256_spv)
 
 // ===== The h512 flash tiles (Br=64, Bc=32): the loop at head size 512 with the O accumulated in f16 beside f32 =====
 [compute_shader(local_size_x=128, name="coopmat2fa512_spv"), marker(no_coverage)]
@@ -3009,9 +2867,7 @@ def coopmat2fa512_kernel {
     coopmatStoreTensor(o, fa_o, 0u, tlo, ti * 64u, 64u, 0u, 512u)
 }
 
-def public coopmat2fa512_words : array<uint> {
-    return clone_to_move(coopmat2fa512_spv)
-}
+def public coopmat2fa512_words : array<uint> => clone_to_move(coopmat2fa512_spv)
 
 // The cm2 fixture adds the tensor-addressing type/builder opcodes, the tensor-addressed coopmat
 // load/store, OpCooperativeMatrixLengthKHR, and OpPhi (coopmatClamp's hand-emitted element loop is
@@ -3074,9 +2930,7 @@ def sdot_kernel {
     sd_y[gi] = sdot4(sd_a[gi], sd_b[gi]) + sdot4(sd_a[gi], 0x01010101u) + usdot4(sd_a[gi], 0x02020202u)
 }
 
-def public sdot_words : array<uint> {
-    return clone_to_move(sdot_spv)
-}
+def public sdot_words : array<uint> => clone_to_move(sdot_spv)
 
 // ===== inline ray query (VK_KHR_ray_query) =====
 // A COMPUTE shader driving one inline ray query against a single TLAS descriptor: declare the opaque
@@ -3107,9 +2961,7 @@ def ray_query {
     rq_out[i] = hit
 }
 
-def public ray_query_words : array<uint> {
-    return clone_to_move(ray_query_spv)
-}
+def public ray_query_words : array<uint> => clone_to_move(ray_query_spv)
 
 //! a module's OpConstant value by result id (the instruction's second operand after the type; the value is its third); 0 when no such constant
 def public spv_const_uint(words : array<uint>; id : uint) : uint {

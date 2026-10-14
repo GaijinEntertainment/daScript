@@ -3,8 +3,8 @@
 Companion to `ARCHITECTURE_GPU_PREFILL.md`; a section is cited by its anchor. This
 document carries the routed block of the Metal prefill driver: the atomics-free
 bucket rail, the tensor-twin scaffold the gathered expert sites ride, the split-format
-expert twins, the K-quant twins' own crowns and the knee that picks them on an uncrowned box, and
-the short window's gathered expert route. The GEMM form ladder those sites pick from (`ARCHITECTURE_GPU_PREFILL.md#prefill-gemm-ladder`), the dev-W panel knee map
+expert twins, the K-quant twins' own crowns and the knee that picks them on an uncrowned box,
+the short window's gathered expert route, and the routed weights' global scale every row shape applies. The GEMM form ladder those sites pick from (`ARCHITECTURE_GPU_PREFILL.md#prefill-gemm-ladder`), the dev-W panel knee map
 (`ARCHITECTURE_GPU_PREFILL.md#devw-panel-knees`) and the dense-KQ tensor mul_mm scaffold the split-format twins derive from (`ARCHITECTURE_GPU_PREFILL.md#prefill-kq-tensor-scaffold`)
 stay in `ARCHITECTURE_GPU_PREFILL.md`.
 
@@ -20,28 +20,39 @@ that parks each routed expert's rows and reduces them in entry order. The select
 GPU-side by the kernels; nothing reads back to the CPU, so encode-ahead and speculation stay
 compatible.
 
-The router's logits are one half x half GEMM (`pf_enc_router_mm`): the routed rows' half twin
-against a half panel of the layer's router rows, a megabyte a layer kept for the weights' life. At
-2048 positions and 256 experts it runs thirteen times the batched slab GEMV's rate
-(`harness/router_race.das`). The GEMV serves a router with a bias, an expert count off the 64-wide
-tile, and a window with no twin. The GEMM's operands are halves, so its logits sit 3e-4 of their
-largest from the GEMV's, and a near-tie between two experts can fall either way.
+The router's logits are one f32 tile GEMM (`pf_enc_router_mm`, the `MetalF32ExactMm` stamp): the
+routed rows against the layer's router rows in their own F32 bytes, staged as floats - no half copy
+of the plane, no rounding of either operand. At 2048 positions and 256 experts over 2048 it costs
+0.174 ms against the batched slab GEMV's 0.646 (M5 Max), its logits 8e-6 of a 4.2 logit from the
+double dot (the GEMV's 8e-7); a half panel ran 0.049 ms at 1.4e-3, which is a converted copy of the
+plane. The GEMV serves a router with a bias, an expert count off the 64-wide tile, a width off 32
+and an unpadded window.
 
 Pad rows inside each expert's padded bucket carry a stamped sentinel and the reduce never
 references them; rows past the last expert's stamped tail are unstamped stale pool bytes, which
 is why validity tests compare the per-row entry against the live count, never the sentinel.
 
-The MoE tensor twins ride one scaffold: `MetalMoeMulMmKqTensorBase` carries the expert
-prologue, the staged K walk with its barrier pair, and the store; a weight format derives,
-owns its weight-view bindings, and overrides the staged decode (`stage_block`) - mx4 also the
-store (its per-expert bias) and the chunk shape (32-deep, 128-item quota). The q8 twin is not
-a copy of this scaffold: its whole body is the tuned `tmm2d_q8u_f32` staged helper, a
-different staging mechanism, so it stays its own template. The scaffold fixes its own binding numbers - `xf` at 3, `y` at 4, kargs at 5, `cnt` at 6,
-`basep` at 7 - and every derived twin inherits them. Those are NOT the family tail's numbers
-(`kn_moe_mm_family_tail` binds `cnt` at 7, `basep` at 8, `bkt` at 9), so a race harness
-hand-binding a tensor twin follows the scaffold's declaration and its base arm follows the
-tail's; binding a twin at the base's numbers hands the kernel the OUTPUT buffer as X, and the
-race then crowns whichever arm computed nothing. The gather-X pass
+Every superblock format's MoE tensor twins - k2 through k6, q40, iq4nl and the iquants - are its
+DENSE split class under the split base's MoE shell (the split-format paragraph below). The per-32
+formats (q5_1, iq4nl32) and mx4 ride a second scaffold, `MetalMoeMulMmKqTensorBase`: the expert
+prologue, the staged K walk with its barrier pair, and the store over `MoeMmArgs`; a weight format
+derives, owns its weight-view bindings, and overrides the staged decode (`stage_block`) - mx4
+also the store (its per-expert bias) and the chunk shape (32-deep, 128-item quota). The q8 twin
+is not a copy of either: its whole body is the tuned `tmm2d_q8u_f32` staged helper, a different
+staging mechanism, so it stays its own template. That scaffold fixes its own binding numbers -
+`xf` at 3, `y` at 4, kargs at 5, `cnt` at 6, `basep` at 7 - and every derived twin inherits them.
+Those are NOT the family tail's numbers (`kn_moe_mm_family_tail` binds `cnt` at 7, `basep` at 8,
+`bkt` at 9), so a race harness hand-binding a tensor twin follows its class's declaration and its
+base arm follows the tail's; binding a twin at the base's numbers hands the kernel the OUTPUT
+buffer as X, and the race then crowns whichever arm computed nothing.
+
+Every superblock and per-32 format also has a simdgroup BASE form, `MetalMoeMulMmKqT` - the
+walk of `MetalMoeMulMmBase` around `MetalKqTileDecodeT.kq_decode`, the decode the dense
+simdgroup mul_mm (`MetalKqMulMmK45T`) runs, so a format's routed and dense tiles decode one source
+and a format is one template-constant stamp. The base reads X through the bucket index or over
+contiguous rows, so it serves the in-kernel gather, a window that built no gather panel, and a
+box whose tensor toolchain probe failed; `pf_moe_kq_row` is the one table of a superblock
+format's routed forms - its base, its four twins with their builders, and its twin pick. The gather-X pass
 copies the bucket's token rows into a CONTIGUOUS f16 panel with pad rows zeroed, which lets the up
 and gate sites ride the contiguous tensor twins instead of the in-kernel gather form at every window
 size - the in-kernel gather is the slower form from a 17-token window up; the panel is
@@ -68,26 +79,25 @@ live element (`benchmarks/matmul/bench_metal_moe_tile_lab.das`: the shipped form
 form it replaced, and the two knockouts). The mx4 twin keeps the 32-row op, since its per-expert
 bias store is MT-only.
 
-The split-format expert twins (k3, q40 and the iquants) do not derive from that scaffold: they
+The superblock formats' expert twins do not derive from that scaffold: they
 derive from the format's DENSE split class (`ARCHITECTURE_GPU_PREFILL.md#prefill-kq-tensor-scaffold`) with the base's `MOE` axis set and run its
 `stage16` under the dense base's `moe_kernel` entry, whose expert plane rides `nBase` -
 `(e*ndim + n)*nsb + sb` is the plane's superblock, so the decode is one source for both the dense
 and the routed site, and a table format's threadgroup prologue is one override serving both.
 Their bindings are the dense layout's (`xf` 3, `y` 4, the kdim/ndim uniforms at 5 and 6) plus the
-axis-gated `cnt` at 7 and `basep` at 8; `pf_moe_split_stamps` is the one place a format maps
+axis-gated `cnt` at 7 and `basep` at 8; `pf_moe_kq_row` is the one place a format maps
 to its psos and builders per form;
 the dispatcher passes the site's dim uniforms, the padded panel's row count for the y span,
 and the tile count as its own parameter - the K-quant twins' `npos/32` (an expert holds at most
 npos rows), never the padded row count, which would launch one tile per padded row and exit all
-but one. These formats have no gathered base kernel, so their twins compile behind the toolchain
-probe alone (`g_pf_tensor_ok`), not behind the dense race's crown - on a GPU where the tensor
-stamp loses the dense race by a few percent (M4-class) the twin is still the only Metal path,
-and a few percent of a GEMM beats the CPU. Their model builds the gather panel at every prompt
-length and declines `moe_twin` only where the probe failed. q40 owns no split class of its own:
-its four stamps derive from the iq4xs MoE template with `IQ4NL` and `Q40` set, the same pair the
-dense q40 twins carry, and because its scale plane is compact - the eight per-32-block f16 d
-verbatim, no strip tail - both of its scale bindings take `soff`, where every other split format
-binds the d plane at `doff`.
+but one. The twins of the formats with no race of their own compile behind the toolchain probe
+alone (`g_pf_tensor_ok`) and serve whenever they compiled; k4, k5 and k6 compile there too and
+take their twin under their crown or the knee (`#prefill-moe-kq-twin-pick`). A box whose probe
+failed serves every format on its base form. q40 and iq4nl own no split class of their own:
+their four stamps each derive from the iq4xs MoE template with `IQ4NL` set (and `Q40` for q40),
+the pair the dense twins carry, and because their scale plane is compact - the eight per-32-block
+f16 d verbatim, no strip tail - both of their scale bindings take `soff`, as k4's and k5's do,
+where every other format binds the d plane at `doff` (the row's `d_soff`).
 
 The select kernel is one template at two per-lane depths: 8 logits per lane covers 256 experts,
 the 16-deep stamp 512 (Qwen3-Coder-Next), and the serve gate admits 512.
@@ -105,14 +115,14 @@ nor an activation pass over its tail.
 
 ### The K-quant twins' pick {#prefill-moe-kq-twin-pick}
 
-The kq-scaffold twins (k4, k5, k6, and q5_1 / iq4nl32 under k4's verdict) compile behind the
-toolchain probe like the split formats, and each family carries its own MoE-shaped race -
+The crowned twins (k4, k5, k6, and q5_1 / iq4nl32 under k4's verdict) compile behind the
+toolchain probe like the other formats', and each K-quant family carries its own MoE-shaped race -
 `moe_mulmm_k4` / `k5` / `k6` (`race_moe_mulmm_kq`, one body over the format) over the kq race
 planes of 128 experts of a 1024 x 2048 plane, past the last-level cache where a served model's
 planes stream, timed on one whole-tile region (32 rows an expert) and one of twelve rows an expert
 (the house window's mean) in one encoder, the outputs compared on the whole-tile region, where
 both arms write every row; the base arm binds at the family tail's numbers and the twin at the
-scaffold's. The dense `kq_mulmm_*` crowns measure a 512-row GEMM, where the twin's merit on the
+dense split layout's. The dense `kq_mulmm_*` crowns measure a 512-row GEMM, where the twin's merit on the
 routed site is the adaptive op at few rows an expert, and the two disagree on an M1-class GPU; the
 dense crown STANDS IN for a family's verdict all the same (`g_pf_moe_kq_mm*_tensor` is the MoE
 crown or the dense one), because the sidecar's runtime section keeps winners alone, so a box
@@ -163,3 +173,12 @@ The gathered q8 form carries its scale and quant pointers across k-blocks; the s
 form measures slower (`benchmarks/matmul/bench_metal_moe_lab.das`, gmm8 section). The gathered
 Q6_K is the opposite: a superblock-scalar cache measures slower per mm than reloading per
 k-block (same lab, gmm6 section), so its stage is stateless.
+
+### The routed weights' global scale {#moe-wscale}
+
+**A model's `expert_weights_scale` (0 and 1 mean none) multiplies every picked weight after the
+select, on every Metal row shape.** `enc_moe_select_rows` runs the select stamp, then `MetalMoeWScale`
+- the per-expert scale fold gemma-4 runs over its down scales - over a row holding the scale once an
+expert, the CPU `moe_select_core`'s order (renorm, then the scale). The decode, the batch and verify
+rows and the prefill window's route all select through it; the row is a driver buffer rebuilt when
+the scale or the expert count moves and dropped with the weights epoch.

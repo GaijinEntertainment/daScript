@@ -2,7 +2,8 @@
 
 Companion to `ARCHITECTURE_GPU.md`; a section is cited by its anchor. This document
 carries the speculative round on Metal, the box knob that sets the depth a round drafts, the
-draft chains and the verify that commits them, and the assistant drafter.
+draft chains and the verify that commits them, the assistant drafter, and the recurrent layer's
+stages over groups of rows with the mirror pool they read.
 `ARCHITECTURE_GPU_MTP_DECODE.md` beside it carries the decode driver's layer encoder, the kernel forms and row-buffer pad a
 multi-row verify dispatches under, the single-row driver's greedy chain, the argument-alignment
 contract a kernel declares on its `[metal_dispatch]`, and the rotated prefix a rope-store kernel
@@ -100,12 +101,15 @@ watermark only has to cover the base, since a draft at `pos + i` reads exactly t
 chain wrote above it, while the slab capacity must still cover the row being written. Gating on the
 drafted position refuses every round past the first draft.
 
-**A depth-1 round on a Q8_0 embedding table is one command buffer.** The rows step's draft is
+**A depth-1 round on any table the device gathers is one command buffer.** The rows step's draft is
 parked (`g_chain_rd`) and encoded ahead of the verify on the verify's own serial encoder, with
 `enc_argmax_rows` landing every row's winner in the step's `btok`; the verify then embeds each
 group's row 1 from that slot on the device (`enc_embed`, into its rows and the head's cat image)
 and the host reads the winners into `mtp_vbatch` only after the verify's join - one commit, one
-join, no readback between the draft and the verify. The draft body reads the groups in the draft
+join, no readback between the draft and the verify (`metal_mtp_chained_rounds` counts the rounds).
+The gather reads group gi's winner at its offset in that slot: the q8 copy's and the K-quant planes'
+stamps take any offset, the fp32 table's (an F32/F16/BF16 table) reads the slot's head, so a round of
+one group chains on every table and a round of several on the first two. The draft body reads the groups in the draft
 layout (one row a group at the seam), so the encoder sets that layout around it and restores the
 verify layout, in which a group's row count is its own `nr`, not the step's total
 (`set_groups_layout` writes both). The landing after the join still writes the seam row's draft
@@ -131,6 +135,12 @@ at `bcat` row `nr`, and `h_i` is verify post-norm row `i-1`. It norms the embeds
 and the hiddens with `mtp_hnorm`, interleaves `[enorm(embed_i) ; hnorm(h_i)]` per row into the cat
 image, runs `mtp_ehproj`, and encodes the verify layer once more at `l == n_layers`. The head
 therefore enters the next round on rows the trunk actually committed, not on the chain's own drafts.
+The prefill window warms the same slab from the prompt as one more layer past the trunk: the
+shifted embeds and the trunk's final hiddens through the norms and eh_proj, then the head layer's
+attention norm, K/V projections, k-norm, rope and store alone - its query, attention, output
+projection and FFN (a routed FFN on the 35B) do not run, since a round reads only the K/V rows. The
+warm reads every row's final hidden, so the trunk's last layer keeps every row
+(`ARCHITECTURE_GPU_PREFILL.md#prefill-last-row-tail`).
 On a hyper-connection model the carry is the trunk's WIDE residual row before the head mixer
 (`hc_dim` floats, `StepRes.bhc_carry` / `bhc_save`, `Session.mtp_h` sized by `mtp_h_dim`): the
 head's prelude (`hc_draft_prelude`) norms each carry's streams under `mtp_hnorm`, repeats the
@@ -177,7 +187,10 @@ prepared once and the whole step lands on one session.** `verify_batch_step` fil
 with `nrows` copies of one session handle at `pos .. pos+nrows-1` and arms
 `set_batch_same_slab(true)`; the Metal batch driver then calls `mirror_prepare` only for row 0, at
 the base position, and every row shares that slab - the rows above the base are exactly what this
-step writes, so row i attends the rows below it that the same step produced. The landing side
+step writes, so row i attends the rows below it that the same step produced. A hybrid's recurrent
+rows are one group over the session's one mirror, walked row after row in place
+(`ARCHITECTURE_GPU_MTP.md#dn-group-stages`); every row commits, so the mirror lands at the last row's
+position plus one. The landing side
 follows: the zero-copy per-session logits scatter stands down, because all rows would scatter to one
 session, and `land_sameslab_rows` copies every row's logits into `s.mtp_logits_b` (row 0 also into
 `s.mtp_logits`, which only a NextN-headed session has sized), the post-final-norm hidden rows into
@@ -222,6 +235,17 @@ beside others - the joint invariance cell's claim - at the two-row tile's cost. 
 mirror cannot take the row (its watermark or capacity short) declines the whole rows step and
 every warm stream plain-steps.
 
+The verify serves every mirror codec the decode does: its rows rope and store into the session's codec and its
+attention reads it, the codec's batch stamps over the per-layer route table (`rtoff`; a block codec's bases in bytes),
+and a tq4 verify's attention output un-rotates before wo as a step's does. The NextN round and the assistant round
+share one accept walk and one commit (`mtp_accept_walk`, `mtp_round_commit`).
+
+The batch driver's weight sites dispatch a tensor at a time by its own tag, so a layer mixing q8 and
+K-quant planes serves. The planes a batched step reads more than once: past eight rows, a K-quant
+plane whose shape misses the mul_mm tile (rows a multiple of 64 over the panel's 32-row pad) takes
+the eight-row form and one pass a row past it, as the deepest verify does; a per-32 dense plane
+(q51, iq4nl32) rides its small-batch form (`ARCHITECTURE_GPU_QUANT_PLANES.md#metal-b32-small-batch`).
+
 ### The verify encodes on the serial encoder {#verify-serial-encoder}
 
 **The NextN round's verify builds its whole step on one serial compute encoder - the one decode
@@ -231,3 +255,44 @@ concurrent rail buys nothing here: measured through the round's profiler section
 (`lcpp_bench --mtp-ab --prof --for-debug-purposes` under `JOBQUE_PROFILING=1`, `-jit`, Qwen3.8-27B
 on the M5 Max), the two forms show the same GPU time and the concurrent one doubles the host
 encode, so the round keeps the serial encoder and pays no hazard-tracker work per dispatch.
+
+### The recurrent stages run over groups of rows {#dn-group-stages}
+
+**A recurrent layer's conv, history advance, q/k L2, scan and gate are one dispatch each, whatever the
+rows.** A group is one session's rows against its mirror: the single row is one group of one row, the
+batch step a group a row (a row a session), the same-slab step and each stream of a joint verify a
+group of its k+1 rows, the prefill window a group a segment. The rows sit back to back in the planes,
+and a small table names each group's first row, its row count and its live and shadow state and
+history bases (`dn_grp_push`, eight words a group); the conv grid spans the longest group's rows by the
+group count, the history advance and the scan take the group count as their last axis, and each
+group's scan walks its own rows in order against its own state. The L2 and the gate read no state, so
+they run over every row as one window. `enc_dn_front` and `enc_dn_back`
+(`dasllama/dasllama_metal_kernels.das`) encode the stages for every row shape; the verify tapes its
+groups' operands between them and the replay runs the history and scan over one group's tape. The
+layer's slice inside a region rides the kargs (`DnArgs.sslice`, `cslice`), so one table serves every
+layer of a step. F32-on-disk beta and alpha planes (the 35B) run as one router GEMV over the two planes
+concatenated, each row's [beta; alpha] landing in one plane the scan reads at a doubled row stride
+(`DnArgs.bstr`, `goff`); a tagged pair keeps a site and a plane each.
+
+### The recurrent mirrors are slots of one pool {#dn-mirror-pool}
+
+**Every session's `DnMirror` is a slot of one device buffer, so one dispatch binds every group's
+state.** A slot holds three regions and the n-gram ring: the live region, and the next one a step that
+must leave the live state whole writes - a verify's shadow, the greedy chain's step - with a third for the
+chained step behind it (`DN_REGIONS`, `dn_region_next`). The pool grows by doubling to the mirror cap
+(`dn_mirror_room`) once every step that may still write a slot has landed or retired (`mirror_quiesce`, which an
+eviction and a host write into a slot run too), copying the slots it held, and a slot size that changes
+(another model) drops every mirror.
+The cap is an LRU over the slots: the least recent mirror evicts into a host stash of its live
+region and ring at the position it expects, and that session's next prepare at that position
+rebuilds the slot from the stash (`dn_mirror_restores` counts them) - the state is forward-only and
+a blob-only load has no CPU chain to rebuild it, so an eviction keeps it. The stash has no cap: an entry
+leaves with its rebuild or with its session, whose `delete` - the facade's and the scheduler's stream release alike -
+runs `SessionOwner`'s finalizer, which tells every `register_session_release_listener` subscriber the uid is gone, and
+the Metal driver drops that uid's mirror and stash (`dn_mirror_released`). So every entry is a live session's and no
+live session's state is ever dropped, however many sessions step in turn; a session never deleted keeps its entry. A
+snapshot of an evicted session reads the stash into the host arrays.
+A weights reload (`register_reload_prep`, `dn_pool_drop_idle`) frees the pool only when no mirror
+and no stash is left in it: every model load bumps the epoch, a second model's included, so a live
+session's entries stay and leave with the session, and a new session's uid, never reused, can
+adopt no entry an earlier model wrote.

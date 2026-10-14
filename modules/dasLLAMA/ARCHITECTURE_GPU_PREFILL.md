@@ -78,52 +78,52 @@ panel GEMM, the q8 and K-quant tensor twins, the tower's f16 route) opens only w
 crowned `hmm_tall`: the race (`race_hmm_tall`) times the 128-row half GEMM against its 32-row
 form at a 1B-class site (512 rows, 2048 x 2048), and the M5 Max crowns it while the M4 Pro
 declines - its tensor tiles idle in the tall grid and Llama-1B prefill reads 5% under the 32-row
-form there, the 30B 1% (`PERF_LEDGER.md`, the M4 Metal pass). Crowned, a tall grid is taken
-only when
+form there, the 30B 1% (`PERF_LEDGER.md`, the M4 Metal pass). Crowned, a tall grid is taken only when
 `rows/128 * (d/64) >= TALL_OCC_FLOOR` (default 64, a sidecar knob): an under-occupied tall grid
 starves the GPU and small prompts regress hard without the floor.
 
 ### The dev-W panel knee map {#devw-panel-knees}
 
-Panel SIZE dominates the dev-W decision, not shape - each threshold is a knee, the panel size at
-which the dev-W win flips sign. A panel at or under `DEVW_SMALL_PANEL` (32 MiB) engages at every
-row count while its output width is at or under `DEVW_WIDE_N` (4096), and from
-`DEVW_WIDE_N_ROWS` (512 rows) when wider; a panel up to `DEVW_BIG_PANEL` (48 MiB) engages from
-`DEVW_BIG_ROWS` (2048 rows); above that the panel either splits into N-column tiles or the site
-declines. The mechanism: the f16 panel's W stream is 2 bytes an element against the q8 blob's
-1.06 once it leaves cache, and a wide-N panel costs more dequant work, which only a large row
-count repays. The raced evidence
-(32 MiB wins everywhere, 47 MiB only from 2048 rows, 112 MiB loses everywhere) is
+Panel SIZE dominates the dev-W decision, not shape - each threshold is a knee, the panel size at which the dev-W win flips
+sign. A panel at or under `DEVW_SMALL_PANEL` (32 MiB) engages at every row count while its output width is at or under
+`DEVW_WIDE_N` (4096), and from `DEVW_WIDE_N_ROWS` (64 rows) when wider; a panel up to `DEVW_BIG_PANEL` (48 MiB) engages from
+`DEVW_BIG_ROWS` (2048 rows); above that the panel either splits into N-column tiles or the site declines. The mechanism: the
+f16 panel's W stream is 2 bytes an element against the q8 blob's 1.06 once it leaves cache, and a wide-N panel costs more
+dequant work, which only a large row count repays. The raced evidence (32 MiB wins everywhere, 47 MiB only from 2048 rows, 112 MiB loses everywhere) is
 `benchmarks/matmul/bench_metal_nax_probe.das`'s grid.
 
-**Resident panels remove the re-dequant entirely.** The dev-W scratch pair re-pays every
-site's dequant every forward - at 8B geometry ~4.5 GB of panel writes and quant reads per
-512-chunk, the whole `devw_cvt` knockout pool (~7.7 ms, `harness/p0_ko_probe.das`). A resident site reads as a single
-full-panel GEMM at a `(buffer, offset)` seat (no N-column tiling - tiling exists only for the
-scratch pair's capacity), keyed by the site's quant-plane buffer pointer plus its offset in
-that plane's own unit (q8: mblob bytes; kq: elem woff) with the format folded into the key -
-the two unit spaces cannot alias - and a hit serves only at the seeded byte size. The cache
-is released on driver shutdown, on weight refill, and by the prefill's reload prep when the
-weights epoch bumps. Panels become resident two ways: an image-served model seeds them ZERO-COPY
-from its baked `devwf16` plane (`ARCHITECTURE_IMAGE.md#image-devw-plane` - no dequant ever, no
-dedicated memory), and an owned load dequantizes once into persistent hazard-tracked buffers
-under the `DASLLAMA_METAL_DEVW_RESIDENT` MB budget (past it, scratch, warned once).
-Measured 8B npos=512: 162.1 -> 153.8 ms, both ways (`benchmarks/lcpp_bench.das -p 512 -n 0`, m5).
+**Every dense site takes a scratch panel from its row floor.** The scratch pair is the window's working memory - a site's
+panel dequantized from its own bytes inside the window, the pair reused by the next one - so it is no converted copy
+(`REVIEW_KQ_FORMATS.md`); a STORED panel, baked into an image or resident across windows, is one, and only the lever builds
+it (`set_metal_devw_panels`, `DASLLAMA_METAL_DEVW=1`; `ARCHITECTURE_IMAGE.md#image-devw-plane`). The floor
+(`devw_scratch_floor`) is `DEVW_SCRATCH_ROWS` (64 padded rows) where the site has no crowned tensor form - the base tiles
+re-dequantize W every 32-row tile - and where its twin is crowned, the band the twin holds: `DEVW_KQ_TWIN_ROWS` (384) on a
+K-quant site, `DEVW_Q8_TWIN_ROWS` (2048) on a Q8_0 one. Scratch / own-bytes window ratios (`benchmarks/prefill_window_probe.das
+--cold --ab devw`, M5 Max, `DASLLAMA_METAL_TENSOR=0` uncrowned): Qwen3.6-35B-A3B IQ4_XS uncrowned 0.89 / 0.74 / 0.69 at 128
+/ 256 / 512 rows and 0.62 at 2967, crowned 0.96 at 384-512 and 0.91 at 2967; Llama-3.2-3B Q4_K_M uncrowned 0.66 / 0.48 at
+128 / 512, crowned 0.91 / 0.85 at 384 / 512; Llama-3.1-8B Q8_0 uncrowned 0.96 / 0.89 / 0.44 at 128 / 512 / 1024, crowned
+1.00 / 0.96 / 0.93 at 1024 / 2048 / 4096. The IQ4_XS file's 2967-row window spends 6.6 ms in its dequant passes - 2.68 GB of
+panel writes at the memory's rate - and the server's window line counts them (`devw_scratch=<sites>/<MB>`).
+
+**Under the lever, resident panels remove the re-dequant** the scratch pair pays every window (8B, 512 rows: ~4.5 GB of
+panel writes and quant reads, ~7.7 ms, `harness/p0_ko_probe.das`'s `devw_cvt` knockout). A resident site is one full-panel
+GEMM at a `(buffer, offset)` seat - N-column tiling exists only for the scratch pair's capacity - keyed by its quant-plane
+buffer plus its offset in the plane's own unit (q8: mblob bytes; kq: elem woff) with the format folded in, so the unit spaces
+cannot alias, and a hit serves only at the seeded byte size; the cache is released on driver shutdown, weight refill and a
+weights-epoch bump. An image-served model seeds it ZERO-COPY off its baked `devwf16` plane; an owned load dequantizes once
+under the `DASLLAMA_METAL_DEVW_RESIDENT` MB budget (past it, scratch, warned once). 8B, 512 rows: 162.1 -> 153.8 ms, both
+ways (`benchmarks/lcpp_bench.das -p 512 -n 0`, m5).
 
 Clauses the isolated grid cannot see, because it races one site while production overlaps
 sites:
 
-- **A long-K (down-projection) dequant serializes** on the panel pair behind the up/gate GEMM
-  chain at small M, so it loses end to end there despite winning its isolated site race. The
-  long-K floor is 1024 rows on q8; the same tiling that wins its isolated site race at 512
-  rows measures zero to negative end to end (`../benchmarks/lcpp_bench.das -p 512 -n 0` A/B
-  with the form forced per run).
+- **A long-K (down-projection) dequant serializes** on the panel pair behind the up/gate GEMM chain at small M, so the
+  long-K floor is 1024 rows on q8: the tiling that wins its isolated site race at 512 rows measures zero to negative end
+  to end (`../benchmarks/lcpp_bench.das -p 512 -n 0` A/B with the form forced per run).
 - **An over-knee panel runs as N-column TILES**, each under the small-panel knee, with the tile
   count bounded by `DEVW_MAX_TILES` (32), divisibility, the small-panel knee and the pool.
-  Narrow tiles measure fine in the same A/B. A K-quant site whose panel reaches `TALLKQ_MIN_PANEL` leaves dev-W
-  entirely for the tall in-kernel-dequant stamp (`ARCHITECTURE_GPU_PREFILL.md#prefill-gemm-ladder` form 1).
-- **A k-quant tg fallback is slower than the q8 half-panel form**, so a k-quant site lowers the over-knee bar, the
-  tiled-rows floor, and the long-K floor (1024 rows to 512): a tiled read still beats THAT fallback.
+  Narrow tiles measure fine in the same A/B. Under the K-quant seat a site lowers the over-knee bar, the tiled-rows
+  floor and the long-K floor (1024 rows to the wide-N floor), and leaves dev-W for the tall stamp past `TALLKQ_MIN_PANEL`.
 
 `CVT_MIN_ROWS`, `TALL_OCC_FLOOR` and `DEVW_SMALL_PANEL` are box-raced and cached at init from the sidecar
 (`metal_cvt_min_rows`, `metal_tall_floor`, `metal_devw_small_panel_mb`); the routed block's gathered-route knee
@@ -135,9 +135,9 @@ A prefill panel pads to `mp` rows, so `npos % 32` rows of every GEMM are padding
 off the padded tile onto the fixed-B mv family instead; above that the padded tile is cheaper than three or more weight streams.
 One peeled row rides the reduction-split GEMV, two or more ride the b4 form only - the reduction-split GEMV walks per block and
 needs `kdim % 32`, while the b4 form - the batched fixed-B mv stamp, up to four rows a dispatch (`enc_mv_b4_c`) - reads whole
-128-quant rounds and needs `kdim % 128`. That peel is the q8 blob's. A dense K-quant or grid-format site (`pf_enc_kq_site_mm`)
+128-quant rounds and needs `kdim % 128`. That peel is the q8 blob's. A dense K-quant, grid-format or per-32 site (`pf_enc_kq_site_mm`)
 has no remainder peel; a whole window of `MM_TAIL_MAX` rows or fewer rides the decode's row-batched forms instead
-(`enc_kq_site_b`: the B2, B4 and B8 stamps, which stream the plane once for every row) on a `kdim` of whole superblocks, where
+(`enc_kq_site_b`: the B2, B4 and B8 stamps, which stream the plane once for every row) on a `kdim` of whole blocks (`kq_unit`), where
 the 32-row tile would walk K serially under barriers one threadgroup per core. From 9 rows up the remainder stays on the tile
 and the tile cost sets the window's floor; the form for that band is `followup_metal.md`'s.
 
@@ -232,8 +232,8 @@ counters (`ARCHITECTURE_GPU_PREFILL.md#gemv-tail-peel`) stay an instrument of th
 narrowing declines wherever another consumer reads every row - a session keeping the hidden state, a warm or
 MTP forward (`n_layer_nextn` present), a recurrent, MoE or PLE layer, a sandwich-norm or gated-query model, a
 deepstack-tapped layer - and it engages only at `npos > 1` with `dim` and the layer's hidden width both %32
-and every FFN weight on a plane with a one-row form - the q8 plane's GEMV, or a superblock format's
-row-batched decode form at one row (`pf_enc_narrow_gemv`; the site's K must be whole superblocks, so a K-quant
+and every FFN weight on a plane with a one-row form - the q8 plane's GEMV, a per-32 plane's, or a superblock format's
+row-batched decode form at one row (`pf_enc_narrow_gemv`; the site's K must be whole blocks of its unit, so a K-quant
 carrier whose `dim` or hidden width is off 256 keeps the full panel) - whatever the mm-tail lever
 (`DASLLAMA_METAL_MM_TAIL`) says. `DASLLAMA_METAL_LASTROW=0` pins the full-panel tail. A caller that reads
 `x_b` rows afterwards - embedding pooling, whichever rows its pooling picks, a plane-compare probe - sets

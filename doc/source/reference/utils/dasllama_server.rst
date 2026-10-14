@@ -315,15 +315,17 @@ Run under ``-jit`` --- the interpreter is refused, it is far too slow for infere
    * - ``--prefix-state-mb``
      -
      - *auto*
-     - The checkpoints' byte budget in MB, snapshots and held pages (auto: a quarter of the box's RAM; config key ``prefix_state_mb``)
+     - The checkpoints' byte budget in MB, snapshots and held pages (auto: a quarter of
+       the box's RAM - in a container, of its memory limit where that is lower; config
+       key ``prefix_state_mb``)
    * - ``--flat``
      -
      - ---
      - Flat preallocated KV sessions --- disables paged serving and the prefix cache
    * - ``--mtp``
      -
-     - *auto*
-     - MTP/NextN self-speculative decode. Unset, a slot turns it on when it runs one stream (``streams = 1``) on a GPU --- Metal, or the whole model resident on a Vulkan device with its routed experts on the card --- and leaves it off otherwise: at one stream on Metal the draft-and-verify round cuts decode time on the dense Qwen3.5 MTP models (0.8B 1.20x, 4B 1.21x, 9B 1.10x), on a Vulkan device more unless the driver sums a MoE's routed experts on the host (there the verify rows' host sums cost more than a plain token), on the CPU the round's second verify row costs a second decode step and the round is slower than plain decode, and at several streams the plain batched step is faster. An armed round keeps every stream's cache on the host, so a drafting Vulkan slot (``--gpu vulkan``) serves host-cached sessions in place of device-home ones. ``true`` / ``false`` set it outright. It needs a model with an in-file NextN head (the ``-MTP-`` GGUFs), or an assistant drafter GGUF beside the model file (gemma-4: ``mtp-<stem>-Q8_0.gguf``), which the load attaches; on any other model the server logs one line and serves plain. Greedy requests are output-invariant; a sampled request draws each verify row with its own sampler and keeps the plain sampled distribution, at a lower acceptance rate. ``/v1/stats`` reports ``mtp_drafted`` / ``mtp_accepted``. A constrained reply (``response_format``, a forced ``tool_choice``) decodes plain.
+     - *off*
+     - MTP/NextN self-speculative decode. Unset, a slot leaves it off, except one that runs one stream (``streams = 1``) on a GPU the model's catalog row lists under ``serve_mtp`` (``modules/dasLLAMA/performance/model_specs.das``: the platforms, ``metal`` or ``vulkan``, where that model's self-speculation measured a win) --- Metal, or the whole model resident on a Vulkan device with its routed experts on the card. A model with no catalog row, a model whose row lists another platform, several streams, the CPU, and a MoE whose routed experts the resident driver sums on the host all decode plain: on the CPU the round's second verify row costs a second decode step, at several streams the plain batched step is faster, and on a MoE at one stream the draft overhead can cost more than the accepted rows buy. A drafting Vulkan slot (``--gpu vulkan``) keeps its streams' caches on the card (device-home) where the whole-model driver runs the draft head, its verify and a rejected round's rollback on the device; where any of them stays on the host (the load log names which), the slot serves host-cached sessions. ``true`` / ``false`` set it outright. It needs a model with an in-file NextN head (the ``-MTP-`` GGUFs), or an assistant drafter GGUF beside the model file (gemma-4: ``mtp-<stem>-Q8_0.gguf``), which the load attaches; on any other model the server logs one line and serves plain. Greedy requests are output-invariant; a sampled request draws each verify row with its own sampler and keeps the plain sampled distribution, at a lower acceptance rate. ``/v1/stats`` reports ``mtp_drafted`` / ``mtp_accepted``. A constrained reply (``response_format``, a forced ``tool_choice``) decodes plain.
    * - ``--rope-scaling``
      -
      - *file*
@@ -537,13 +539,17 @@ picks up its earlier rows from the region they were left in. ``/v1/stats``
 counts every call the device handed back to the CPU (``gpu_cpu_passes``); a
 slot served this way keeps it empty. The control page's model card says which
 of these a slot got (``served``) and why it got less when it did
-(``served_note``). A recurrent (deltanet) model serves the same way with two
-differences: a prompt prefills in one piece, and a next turn re-prefills its
-whole transcript. A slot with a vision or audio tower, and a self-speculative
-slot, keep host-cached sessions. Beneath the driver the per-op rails arm as the
+(``served_note``). A recurrent (deltanet) model serves the same way, its
+recurrent state kept in the stream's region beside its rows; a recurrent model
+with hyper-connections (Qwen3.8-Flash-Next) differs in two ways: a prompt
+prefills in one piece, and a next turn re-prefills its whole transcript. A slot with a vision or audio tower keeps host-cached
+sessions, and so does a self-speculative slot where any seat of the round (the
+draft head, its verify, a rejected round's rollback) stays on the host. Beneath the driver the per-op rails arm as the
 fallback for a model that does not fit: expert stacks sized automatically
-(resident layers fill the VRAM budget, the rest stream) plus the deltanet,
-attention and dense rails. The config keys ``gpu_layers`` / ``gpu_stream`` are
+(resident layers fill the VRAM budget, the rest stream) plus the deltanet
+rail (each deltanet plane in its own format), the attention rail, the dense
+layers' attention projections and the shared expert, each over its own planes;
+a dense layer's FFN rides the per-op FFN rail (``DASLLAMA_GPU_DENSE_FFN=0`` keeps it on the CPU). The config keys ``gpu_layers`` / ``gpu_stream`` are
 ``0`` = auto; ``gpu_dn`` / ``gpu_attn`` / ``gpu_dense`` / ``gpu_vram_mb``
 override the rest, and the ``DASLLAMA_GPU_*`` environment variables override
 everything.
@@ -884,8 +890,8 @@ in :ref:`the dasLLAMA knob reference <dasllama_env>`)::
 - ``test_openai_server_audio.das`` and ``test_openai_server_think.das`` --- the
   native-audio content parts and the thinking control.
 - ``test_openai_server_mtp.das`` --- the self-speculation default: a
-  NextN-headed slot drafts at one stream on Metal and decodes plain at four or
-  on the CPU, an explicit ``mtp`` wins either way, a head-less model with no
+  NextN-headed slot whose file has no catalog ``serve_mtp`` row decodes plain at one
+  stream on Metal, at four and on the CPU, an explicit ``mtp`` wins either way, a head-less model with no
   drafter beside it serves plain; the Metal cells skip on a box with no Metal backend; needs
   ``Qwen3.5-0.8B-MTP-Q8_0.gguf`` and the TinyLlama file.
 - ``test_exchange_client.das``, ``test_model_catalog.das``,

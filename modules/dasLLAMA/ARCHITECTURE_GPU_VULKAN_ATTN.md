@@ -3,8 +3,8 @@
 Companion to `ARCHITECTURE_GPU_VULKAN.md`; a section is cited by its anchor. This document carries the
 token command's attention key split, the attention-side planes the resident driver uploads beside its
 norms - the q/k/v projection bias, gpt-oss's sink logits and its output bias - with the flash tiles'
-sink stamps, the K/V mirror's block codecs, q8_0 and tq4, the segmented window, which holds several
-sessions' chunks, and the short window's peel through the token command. The window chain the flash
+sink stamps, and the K/V mirror's block codecs, q8_0 and tq4, with tq4's attention in the rotated
+basis. The segmented window and the short window's peel are in `ARCHITECTURE_GPU_VULKAN_WINDOW.md`. The window chain the flash
 tiles serve is `ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain`; the token command the decode pass
 sits in is `ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command`.
 
@@ -249,51 +249,3 @@ bytes and the attention to the dequantized rows (`test_vulkan_kv_codec_kernels.d
 model cells hold comparisons: the device reads no further from the f16 chain than the CPU's tq4
 rows do, and layer 0's stored bytes are the CPU cache's but for a quant on a rounding edge
 (`test_gpu_resident_qwen2.das`).
-
-### The segmented window {#vk-prefill-segments}
-
-The window chain holds several sessions' chunks at once: the window's rows are the segments' back to back, a
-segment one session's `npos` rows from its own position into its own mirror region (`RdecPfSeg` on the tier's
-SPI: `row0`, `npos`, `pos0`, `region`; the engine's `eval_segments` reaches it through the `vulkan` segments
-override, `vulkan_resident_prefill_segments`, which `rdec_prefill_segs` hands to `vk_rdec_prefill_segs`). The
-row-independent stages - the prologue norm, every GEMM, the feeds, the activation, the residual steps - run
-once over the window as the one-session chain runs them. What a session owns runs a segment at a time inside
-the layer: the rope-and-store writes the segment's K/V rows at its positions of its region
-(`RopeKvBArgs.pos0`, `layerbase`, the window row base `row0`), and the attention binds the segment's query
-rows and its output rows at `row0` of the window's planes (`FaArgs.row0`, `DaAttnBArgs.row0`: the flash tiles'
-tensor layouts end at the segment's last row, so a padded load past it reads zero rows; the chunked pair reads
-its q tile from `row0` and keeps its causal arithmetic segment-local) and its keys at its region's base
-(`kvbase`), so a row never sees another session's keys. Under a block-codec mirror the window holds one
-segment: the codec stages the window's rows window-local (the rope-and-store's `pos0` is the segment's window
-row), so its store and shadow run once over the whole window. A window past `PF_WINDOW` rows loops as the
-one-session chain does, the parts of the segments inside each window the window's own (`pf_window_segs`).
-Every segment whose last row a window holds takes the final requant and the classifier at that row, its logits
-landing at its slot of the host buffer (`pf_logits_host`, `regions` slots of `vocab`); a segmented window runs
-the last layer's FFN over every row, since every segment's last row wants it. The one-session call is one
-segment at row 0, so both forms are one code path.
-
-The segmented form serves where every segment would take the one-session form - the codec armed, no span,
-under the cap, every session's embed form alike (the ids the driver gathers, or the host's rows) - and each
-session binds a region of its own, the owners first; the admission decides before any bind, so a declined call
-binds, steals and counts nothing (the one-session fallback counts the pass it takes). It declines a recurrent
-model, a per-layer-embedding or NextN-headed one, a routed one, a hyper-connection chain and a block-codec
-mirror: their state, side rows, carry, host experts and staged rows are per call on this driver. A declined
-call falls to the engine, which prefills the segments one at a time through the one-session override. The
-scheduler's prefill tick hands a device-home scheduler its segments like a host-cached one, but for a model
-whose device prefill cannot continue past zero, which takes each stream's whole head alone. The witness is
-`vk_rdec_prefill_segment_windows`; the driver counts a prefill a segment.
-
-### The short window's peel {#vk-prefill-peel}
-
-A prefill of at most the rows the N-row token command steps at once (`vk_rdec_token_n_rows`; one row is the
-one-row command's) skips the window chain: `rdec_prefill_peel` embeds the rows on the host and runs them
-through the token command with every row in the session's region at its own position, row i's key count its
-position plus one, so a row never reads a row after it; the last row lands the session's logits, the rows
-before it land picks nobody reads. The chain costs a short continuation about two decode steps whatever its
-row count (the race bed's rows are the `PERF_LEDGER.md` entry's); the token command reads the weights once.
-The peel fits a chain with no recurrent state, side rows, wide residual, NextN head or host experts
-(`rdec_peel_fits`, logging the property that keeps a model off it once per armed model); the rest take the
-chain, as does every window under the lever `set_vulkan_prefill_peel(false)`, which
-`harness/vk_short_window_race.das` races the two forms through. The rows stay on the device as the chain
-leaves them; `rdec_prefill_landed` is either form's bookkeeping; the witness is `moe_gpu_resident_peels`, a
-peel counting as a served prefill too.

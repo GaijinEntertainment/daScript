@@ -841,9 +841,16 @@ def gpu_device_sessions() : int64 {
     return gpu_device_sessions_()
 }
 
+def gpu_resident_mtp_device_home(model : Model) : bool {
+    //! Whether ``model``'s self-speculation (MTP/NextN) serves device-home sessions: the draft head, its verify
+    //! and a rejected round's rollback all run on the device, so a speculating scheduler may keep its streams'
+    //! caches there. False keeps a speculating slot's sessions host-cached.
+    return gpu_resident_mtp_device_home_(model)
+}
+
 def gpu_device_prefill_continues(model : Model) : bool {
     //! A device-home session of ``model`` prefills from a position past zero - a prompt in chunks,
-    //! a turn over the turns before it. False for a recurrent model: prefill each prompt whole,
+    //! a turn over the turns before it. False for a recurrent hyper-connection model: prefill each prompt whole,
     //! from position zero, and adopt no earlier rows.
     return gpu_device_prefill_continues_(model)
 }
@@ -866,6 +873,113 @@ def gpu_device_kv_adopt(var session : Session; claim : int64; npos : int64) : bo
     //! Hand the first ``npos`` rows a kept ``claim`` holds to the fresh device-home ``session``, whose
     //! ``n_past`` becomes ``npos``. False when the rows are gone (another session took the region).
     return gpu_device_kv_adopt_(session, claim, npos)
+}
+
+def gpu_device_kv_parked_pos(claim : int64) : int64 {
+    //! The position a kept ``claim``'s recurrent state stands at - the one row count
+    //! ``gpu_device_kv_adopt`` may take on a recurrent model; 0 where the claim is gone or the
+    //! model keeps no recurrent state.
+    return gpu_device_kv_parked_pos_(claim)
+}
+
+def gpu_device_kv_checkpoint(session : Session) : bool {
+    //! Keep a device-home recurrent ``session``'s state at its position beside its rows, so a later
+    //! request that opens with exactly those tokens adopts it from the parked claim. False where the
+    //! model keeps no recurrent state or the driver no checkpoints.
+    return gpu_device_kv_checkpoint_(session)
+}
+
+def gpu_device_kv_checkpoints(claim : int64) : array<int64> {
+    //! The positions a parked ``claim``'s checkpoints hold its recurrent state at (empty where it is dead).
+    return <- gpu_device_kv_checkpoints_(claim)
+}
+
+def gpu_device_kv_export(model : Model; claim : int64; var host : Session; lo : int64; hi : int64) : bool {
+    //! Copy the rows ``[lo, hi)`` the region of a live or parked ``claim`` holds down into the paged ``host``
+    //! session's pages (grown to ``hi``), so a prefix cache keeps them past the region. False where the claim is
+    //! gone, holds fewer rows, or the pool is not the driver's codec.
+    return gpu_device_kv_export_(model, claim, host, lo, hi)
+}
+
+def gpu_device_kv_claim(session : Session) : int64 {
+    //! The claim a live device-home ``session`` holds its region under (0 = none).
+    return gpu_device_kv_claim_(session)
+}
+
+def gpu_device_kv_victim_claims(n : int) : array<int64> {
+    //! The claims whose regions the next ``n`` fresh device-home sessions bind - the least recently used regions
+    //! no live session holds - and so lose.
+    return <- gpu_device_kv_victim_claims_(n)
+}
+
+def gpu_device_kv_parked_snapshot(claim : int64; at : int64; like : Session; var into : DnSnapshot) : DnSnapshot {
+    //! The recurrent state a parked ``claim`` keeps at position ``at`` (where its state stands, or a checkpoint),
+    //! copied off the device into ``into`` (moved in; ``prefix_take_spare`` hands one whose arrays keep their room)
+    //! shaped as ``like``; ``pos`` -1 where none stands at ``at``.
+    return <- gpu_device_kv_parked_snapshot_(claim, at, like, into)
+}
+
+def prefix_take_spare(var cache : PrefixCache) : DnSnapshot {
+    //! A recurrent checkpoint ``cache`` dropped, to refill in place of a fresh snapshot (its arrays keep their
+    //! room), or an empty snapshot where none waits.
+    return <- prefix_take_spare_(cache)
+}
+
+def gpu_device_kv_import(model : Model; var session : Session; var host : Session; npos : int64) : bool {
+    //! Bring the first ``npos`` rows of the paged ``host`` session up into a region for the fresh device-home
+    //! ``session``, whose ``n_past`` becomes ``npos``; a recurrent state goes in the session's host arrays first.
+    //! False where no region is free or the pool is not the driver's codec.
+    return gpu_device_kv_import_(model, session, host, npos)
+}
+
+def gpu_device_kv_pool_armed() : bool {
+    //! Whether a paged scheduler keeps its device-home streams' openings in its prefix cache too
+    //! (``DASLLAMA_DEVICE_POOL``, on unless set to 0).
+    return gpu_device_kv_pool_armed_()
+}
+
+def gpu_device_kv_pool_moves() : tuple<exports : int64; rows_down : int64; down_us : int64; imports : int64; rows_up : int64; up_us : int64; state_us : int64> {
+    //! The rows ``gpu_device_kv_export`` brought down and ``gpu_device_kv_import`` took up since the process
+    //! started, with the wall each direction took, and the wall ``gpu_device_kv_snapshot`` spent on states.
+    let m = gpu_device_kv_pool_moves_()
+    return (exports = m.exports, rows_down = m.rows_down, down_us = m.down_us, imports = m.imports, rows_up = m.rows_up, up_us = m.up_us, state_us = m.state_us)
+}
+
+def gpu_device_kv_snapshot(var session : Session; at : int64; var into : DnSnapshot) : DnSnapshot {
+    //! The recurrent state a live device-home ``session`` held at ``at`` (where it stands, or a kept checkpoint) copied
+    //! off its region into ``into`` (moved in), the region left as it stands - a session the driver does not hold
+    //! flushes as ``dn_snapshot_take`` does; ``pos`` -1 where no state stands at ``at``.
+    return <- gpu_device_kv_snapshot_(session, at, into)
+}
+
+def prefix_state_match_len(cache : PrefixCache; prompt : array<int64>) : int64 {
+    //! How many leading positions of ``prompt`` a recurrent checkpoint in ``cache`` would attach, touching
+    //! nothing (0 where none opens it).
+    return prefix_state_match_len_(cache, prompt)
+}
+
+def prefix_attach_state_split(var cache : PrefixCache; var pool : KVPool; var pages : Session; var state : Session; prompt : array<int64>) : int64 {
+    //! Attach the deepest recurrent checkpoint opening ``prompt`` apart: its pages shared into ``pages`` (a
+    //! fresh session of ``pool`` that only reads them), its state into ``state``. Answers the positions, 0 = none.
+    return prefix_attach_state_split_(cache, pool, pages, state, prompt)
+}
+
+def prefix_state_touch(var cache : PrefixCache; tokens : array<int64>; n : int64; opening : bool) : bool {
+    //! Whether ``cache`` keeps a checkpoint of the first ``n`` of ``tokens``; one that does is used now, and
+    //! ``opening`` makes it an opening from here on.
+    return prefix_state_touch_(cache, tokens, n, opening)
+}
+
+def prefix_share_pages(var cache : PrefixCache; var pool : KVPool; var session : Session; tokens : array<int64>; n : int64) : int64 {
+    //! Share the whole pages of the first ``n`` of ``tokens`` ``cache`` already holds into the fresh paged
+    //! ``session``; answers the positions they cover, where the rows still to write start.
+    return prefix_share_pages_(cache, pool, session, tokens, n)
+}
+
+def prefix_insert_snapshot(var cache : PrefixCache; var pool : KVPool; session : Session; tokens : array<int64>; var snap : DnSnapshot; opening : bool = false) {
+    //! A recurrent checkpoint of the first ``n_past`` of ``tokens`` out of ``session``'s pages, its state ``snap``
+    //! (moved in) taken elsewhere - a device's slots. ``opening`` kinds it as shared, else as a conversation's tail.
+    prefix_insert_snapshot_(cache, pool, session, tokens, snap, opening)
 }
 
 def gpu_device_session_ctx() : int64 {

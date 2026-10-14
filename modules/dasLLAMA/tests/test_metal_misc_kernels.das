@@ -13,6 +13,8 @@ require dasllama/dasllama_qwen3v   // q3v_reorder_src - the stem assemble gate's
 require _kernel_oracles   // pos_add_2d_ref
 require ?das_metal dasllama/dasllama_metal_kernels  // the decode elementwise/misc kernel set (Apple builds)
 require ?das_metal dasllama/dasllama_metal_common   // the pipeline globals the generated builders read
+require ?das_metal dasllama/dasllama_kqformat   // kq_fmt_of_id - the token-table gather gates name their format
+require ?das_metal dasllama/dasllama_convert    // dequant_b32_plane_block - the per-32 gather gate's rows
 require ?das_metal dasllama/dasllama_metal_prefill  // metal_moe_kq_twin_pick + its knee knob - the K-quant MoE twins' pick cell
 require ?das_metal metal/das_metal_boost  // device/pipeline/buffer plumbing + the leak gate
 require ?das_metal _metal_kernel_common   // the MetalCell record, check_buf, the device shell
@@ -28,7 +30,7 @@ require dasllama/dasllama_gpu_math   // nolint:STYLE030,LINT019 - the row stamps
 
 // The decode-side elementwise/misc corpus vs direct CPU oracles on synthetic data: copy_row,
 // argmax (the CPU sampler's exact lowest-index tie-break, exercised with deliberate exact
-// ties), the q8/k6 embed gathers (pow2 scales -> bit-exact), the fused add+rms family (simd_sum
+// ties), the q8 and every K-quant format's token-table gathers (pow2 scales -> bit-exact), the fused add+rms family (simd_sum
 // reassociates -> the shared 1e-4 bar), per-head QK-norm in both its in-place and V-fusion
 // binding shapes, geglu, and the logit suppress/softcap pins. Outputs sit in sentinel-padded
 // buffers compared WHOLE, so a write outside the target span is a red. Without das_metal in the
@@ -142,19 +144,22 @@ def private embed_q8_gate(t : T?; var dev, queue; dim, vocab, tok : int) {
         var inscope blob : array<uint8>
         var inscope wdeq : array<float>
         q8_blob_fill(vocab, dim / 32, blob, wdeq, 256)
+        let toks = fixed_array(tok, vocab - 1)   //! two rows: the grid's row axis, each row its own token
         var inscope want : array<float>
-        want |> resize(dim)
-        for (i in range(dim)) {
-            want[i] = wdeq[tok * dim + i] * escale
+        want |> resize(2 * dim)
+        for (r in range(2)) {
+            for (i in range(dim)) {
+                want[r * dim + i] = wdeq[toks[r] * dim + i] * escale
+            }
         }
         let bblob = mc |> in_plain(blob)
-        let btok = mc |> in_plain([uint(tok)])
-        let bxo = mc |> out_words(dim, PAD_SENTINEL)
+        let btok = mc |> in_plain([uint(toks[0]), uint(toks[1])])
+        let bxo = mc |> out_words(2 * dim, PAD_SENTINEL)
         let bdim = mc |> in_plain([uint(dim)])
         let besc = mc |> in_plain([escale])
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
             stamp_run(st, pso) {   // one blob, its byte and half-scale views
-                invoke(st.enc, enc, mc.buf[bblob], 0ul, mc.buf[bblob], mc.buf[btok], 0ul, mc.buf[bxo], 0ul, mc.buf[bdim], mc.buf[besc], int64(dim))
+                invoke(st.enc, enc, mc.buf[bblob], 0ul, mc.buf[bblob], mc.buf[btok], 0ul, mc.buf[bxo], 0ul, mc.buf[bdim], mc.buf[besc], int64(dim), 2l)
             }
         }
         return if (!ran)
@@ -189,33 +194,123 @@ def private embed_f32_gate(t : T?; var dev, queue; dim, vocab, tok, lead : int) 
     }
 }
 
-def private embed_k6_gate(t : T?; var dev, queue; dim, vocab, tok : int) {
-    let tag = "embed_k6 dim={dim} vocab={vocab} tok={tok}"
+//! the token-table gather of one K-quant format through the engine's dispatcher: three rows - a middle token, token 0 and the
+//! last - off the format's metal-form planes, the token list read past a lead id and the rows written past a lead row, each row
+//! against the engine's own plane-row dequant under the embed scale
+def private embed_kq_gate(t : T?; var dev, queue; st : auto(ST); fmt, dim, vocab : int) {
+    let f = kq_fmt_of_id(fmt, "embed_kq_gate")
+    let tag = "embed_kq {f} dim={dim} vocab={vocab}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
-        let st = stamp_of(@@enc_embed_k6_c)
         var pso = mc |> keep_stamp(st, err)
         return if (!pso_ok(t, tag, pso, err))
         let nb = dim / 256
         let nsb = vocab * nb
         let escale = 2.0
         var inscope kq, ks : array<uint8>
-        kq_fill_planes(6, nsb, kq, ks)
+        kq_fill_planes(fmt, nsb, kq, ks)
+        let toks = fixed_array(vocab / 2, 0, vocab - 1)
         var inscope want : array<float>
-        want |> resize(dim)
-        kq_row_ref(6, tok * nb, nb, nsb, kq, ks, want)
+        want |> resize(4 * dim)
         for (i in range(dim)) {
+            want[i] = PAD_SENTINEL
+        }
+        var inscope wrow : array<float>
+        wrow |> resize(dim)
+        for (r in range(3)) {
+            kq_row_ref(fmt, toks[r] * nb, nb, nsb, kq, ks, wrow)
+            for (i in range(dim)) {
+                want[(r + 1) * dim + i] = wrow[i] * escale
+            }
+        }
+        let bks = mc |> in_plain(ks)
+        let bkq = mc |> in_plain(kq)
+        let btok = mc |> in_plain([0x7FFFFFFFu, uint(toks[0]), uint(toks[1]), uint(toks[2])])
+        let bxo = mc |> out_words(4 * dim, PAD_SENTINEL)
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(st, pso) {
+                enc_embed_kq_rows(enc, f, mc.buf[bkq], 0ul, mc.buf[bks], 0ul, kq_split_doff(fmt, nsb), mc.buf[btok], 4ul, mc.buf[bxo],
+                    uint64(dim * 4), int64(dim), 3l, escale)
+            }
+        }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[bxo], want, BAR_BITS, FLAT_SHAPE)
+    }
+}
+
+//! the per-32 token-table gather (`MetalEmbedB32T`) of one format: three rows - a middle token, token 0 and the last - off a
+//! plane pair bound past `lead` blocks of other rows (an untied table sits past the classifier's), the token list read past a lead
+//! id and the rows written past a lead row, each row bit for bit the engine's own block dequant under the embed scale
+def private embed_b32_gate(t : T?; var dev, queue; f : KqFmt; dim, vocab, lead : int) {
+    let tag = "embed_b32 {f} dim={dim} vocab={vocab} lead={lead}"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let sq = stamp_of(@@enc_embed_b32_q51)
+        let si = stamp_of(@@enc_embed_b32_iq4nl32)
+        let s4 = stamp_of(@@enc_embed_b32_q4032)
+        let s5 = stamp_of(@@enc_embed_b32_q5032)
+        var pso = f == KqFmt.q51 ? mc |> keep_stamp(sq, err) : (f == KqFmt.iq4nl32 ? mc |> keep_stamp(si, err)
+            : (f == KqFmt.q5032 ? mc |> keep_stamp(s5, err) : mc |> keep_stamp(s4, err)))
+        return if (!pso_ok(t, tag, pso, err))
+        let nb = dim / int(KQ_B32_ELEMS)
+        let nblk = lead + vocab * nb
+        let qb = int(kq_qsb(f))
+        let sb = int(kq_ssb(f))
+        var inscope kq, ks : array<uint8>
+        kq |> resize(nblk * qb)
+        ks |> resize(nblk * sb)
+        for (i in range(nblk * qb)) {
+            kq[i] = uint8((i * 37 + 11) & 255)
+        }
+        for (b in range(nblk)) {
+            let d = f32_to_f16(0.0625 * float(1 + (b * 7) % 13))
+            ks[b * sb] = uint8(d & 255u)
+            ks[b * sb + 1] = uint8(d >> 8u)
+            if (sb == 4) {
+                let m = f32_to_f16(-0.5 * float(1 + (b * 5) % 7))
+                ks[b * sb + 2] = uint8(m & 255u)
+                ks[b * sb + 3] = uint8(m >> 8u)
+            }
+        }
+        let escale = 2.0
+        let toks = fixed_array(vocab / 2, 0, vocab - 1)
+        var inscope want : array<float>
+        want |> resize(4 * dim)
+        for (i in range(dim)) {
+            want[i] = PAD_SENTINEL
+        }
+        for (r in range(3)) {
+            for (b in range(nb)) {
+                dequant_b32_plane_block(f, kq, ks, int64(lead + toks[r] * nb + b), want, int64((r + 1) * dim + b * int(KQ_B32_ELEMS)))
+            }
+        }
+        for (i in range(dim, 4 * dim)) {
             want[i] *= escale
         }
         let bks = mc |> in_plain(ks)
         let bkq = mc |> in_plain(kq)
-        let btok = mc |> in_plain([uint(tok)])
-        let bxo = mc |> out_words(dim, PAD_SENTINEL)
-        let bdim = mc |> in_plain([uint(dim)])
-        let besc = mc |> in_plain([escale])
+        let btok = mc |> in_plain([0x7FFFFFFFu, uint(toks[0]), uint(toks[1]), uint(toks[2])])
+        let bxo = mc |> out_words(4 * dim, PAD_SENTINEL)
+        var ka = EmbedKqArgs(dim = uint(dim), nsb = uint(nb), escale = escale)
+        let soff = uint64(lead * sb)
+        let qoff = uint64(lead * qb)
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
-            stamp_run(st, pso) {
-                invoke(st.enc, enc, mc.buf[bks], kq_split_doff(6, nsb), mc.buf[bks], 0ul, mc.buf[bkq], 0ul, mc.buf[btok], mc.buf[bxo], mc.buf[bdim], mc.buf[besc], int64(dim))
+            if (f == KqFmt.q51) {
+                stamp_run(sq, pso) {
+                    invoke(sq.enc, enc, mc.buf[bks], soff, mc.buf[bkq], qoff, mc.buf[btok], 4ul, mc.buf[bxo], uint64(dim * 4), ka, int64(dim / 16), 3l)
+                }
+            } elif (f == KqFmt.iq4nl32) {
+                stamp_run(si, pso) {
+                    invoke(si.enc, enc, mc.buf[bks], soff, mc.buf[bkq], qoff, mc.buf[btok], 4ul, mc.buf[bxo], uint64(dim * 4), ka, int64(dim / 16), 3l)
+                }
+            } elif (f == KqFmt.q5032) {
+                stamp_run(s5, pso) {
+                    invoke(s5.enc, enc, mc.buf[bks], soff, mc.buf[bkq], qoff, mc.buf[btok], 4ul, mc.buf[bxo], uint64(dim * 4), ka, int64(dim / 16), 3l)
+                }
+            } else {
+                stamp_run(s4, pso) {
+                    invoke(s4.enc, enc, mc.buf[bks], soff, mc.buf[bkq], qoff, mc.buf[btok], 4ul, mc.buf[bxo], uint64(dim * 4), ka, int64(dim / 16), 3l)
+                }
             }
         }
         return if (!ran)
@@ -361,11 +456,10 @@ def private qk_norm_gate(t : T?; var dev, queue; hs, nq, nk, nrows : int; vfusio
         }
         let bx = mc |> io_(xv)
         let bw = mc |> in_(w)
-        var ka = QkNormArgs(nq = uint(nq), koffe = uint(koffe), rstride = uint(rstride), hs = uint(hs),
-            woffe = uint(hs), eps = EPS, soffe = uint(soffe))
+        var ka = qk_norm_args(uint(nq), uint(nk), uint(hs), uint(rstride), uint(soffe), uint(koffe), uint(hs), EPS)
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
             stamp_run(st, pso) {
-                invoke(st.enc, enc, mc.buf[bx], 0ul, mc.buf[bw], ka, int64(nq + nk), int64(nrows), int64(hs))
+                invoke(st.enc, enc, mc.buf[bx], mc.buf[bx], mc.buf[bw], ka, int64(nq + nk), int64(nrows))
             }
         }
         return if (!ran)
@@ -1408,12 +1502,10 @@ def private hc_norm_gate(t : T?; var dev, queue; dim, hc, nrows : int) {
         let bx = mc |> in_(x)
         let bw = mc |> in_(w)
         let by = mc |> out_words(rows * dim, PAD_SENTINEL)
-        let bdim = mc |> in_plain([uint(dim)])
-        let beps = mc |> in_plain([EPS])
-        let bhc = mc |> in_plain([uint(hc)])
+        var ka = GkHcNormArgs(dim = uint(dim), hc = uint(hc), woff = 0u, row0 = 0u, eps = EPS)
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
             stamp_run(st, pso) {
-                invoke(st.enc, enc, mc.buf[bx], mc.buf[bw], mc.buf[by], mc.buf[bdim], mc.buf[beps], mc.buf[bhc], int64(rows))
+                invoke(st.enc, enc, mc.buf[bx], mc.buf[by], mc.buf[bw], ka, int64(rows))
             }
         }
         return if (!ran)
@@ -1445,12 +1537,10 @@ def private hc_init_gate(t : T?; var dev, queue; dim, hc, nrows : int) {
         }
         let bx = mc |> in_(x)
         let bres = mc |> out_words(nrows * hcd, PAD_SENTINEL)
-        let bdim = mc |> in_plain([uint(dim)])
-        let bhc = mc |> in_plain([uint(hc)])
-        let btot = mc |> in_plain([uint(nrows * hcd)])
+        var ka = GkHcInitArgs(dim = uint(dim), hc = uint(hc), rows = uint(nrows))
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
             stamp_run(st, pso) {
-                invoke(st.enc, enc, mc.buf[bx], mc.buf[bres], mc.buf[bdim], mc.buf[bhc], mc.buf[btot], int64(nrows * hcd))
+                invoke(st.enc, enc, mc.buf[bx], mc.buf[bres], ka, int64(nrows * hcd))
             }
         }
         return if (!ran)
@@ -1519,12 +1609,10 @@ def private hc_mix_gate(t : T?; var dev, queue; dim, hc, nrows : int) {
         let bxn = mc |> in_(xn)
         let bgt = mc |> in_(gt)
         let by = mc |> out_words(nrows * dim, PAD_SENTINEL)
-        let bdim = mc |> in_plain([uint(dim)])
-        let bhc = mc |> in_plain([uint(hc)])
-        let bnr = mc |> in_plain([uint(nrows)])
+        var ka = GkHcMixArgs(dim = uint(dim), hc = uint(hc), rows = uint(nrows))
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
             stamp_run(st, pso) {
-                invoke(st.enc, enc, mc.buf[bxn], mc.buf[bgt], mc.buf[by], mc.buf[bdim], mc.buf[bhc], mc.buf[bnr], int64(nrows * dim))
+                invoke(st.enc, enc, mc.buf[bxn], mc.buf[bgt], mc.buf[by], ka, int64(nrows * dim))
             }
         }
         return if (!ran)
@@ -1567,12 +1655,10 @@ def private hc_combine_gate(t : T?; var dev, queue; dim, hc, nrows : int) {
         let bres = mc |> io_(res)
         let bo = mc |> in_(o)
         let binj = mc |> in_(inj)
-        let bdim = mc |> in_plain([uint(dim)])
-        let bhc = mc |> in_plain([uint(hc)])
-        let bnr = mc |> in_plain([uint(nrows)])
+        var ka = GkHcCombArgs(dim = uint(dim), hc = uint(hc), rows = uint(nrows))
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
             stamp_run(st, pso) {
-                invoke(st.enc, enc, mc.buf[bres], mc.buf[bo], mc.buf[binj], mc.buf[bdim], mc.buf[bhc], mc.buf[bnr], int64(nrows * hcd))
+                invoke(st.enc, enc, mc.buf[bres], mc.buf[bo], mc.buf[binj], ka, int64(nrows * hcd))
             }
         }
         return if (!ran)
@@ -1660,19 +1746,21 @@ def private ple_gate_gate(t : T?; var dev, queue; dim, hc, rows, pos0, roff_rows
             }
         }
         t |> success(gates[0] > 0.5 && gates[1] < 0.5 && abs(gates[2] - 0.5) < 1.0e-6, "{tag}: the fixture reaches all three sign arms ({gates[0]}, {gates[1]}, {gates[2]})")
+        var inscope wn : array<float>   //! the norm rows as the drivers bind them: key, query, conv input
+        wn |> push_from(wk)
+        wn |> push_from(wq)
+        wn |> push_from(wc)
         let bres = mc |> in_(res)
         let bkey = mc |> in_(key)
         let bval = mc |> in_(val)
-        let bwk = mc |> in_(wk)
-        let bwq = mc |> in_(wq)
-        let bwc = mc |> in_(wc)
+        let bwn = mc |> in_(wn)
         let bg = mc |> out_words(nrows * hcd, PAD_SENTINEL)
         let bdst = mc |> out_words((roff_rows + dst_rows) * hcd, PAD_SENTINEL)
-        var ka = PleGateArgs(dim = uint(dim), hc = uint(hc), eps = EPS, pos0 = uint(pos0), rows = uint(rows), direct = direct ? 1u : 0u)
+        var ka = GkPleGateArgs(dim = uint(dim), hc = uint(hc), nrows = uint(rows), pos0 = uint(pos0), eps = EPS, inv_sq = 1.0 / sqrt(float(dim)),
+            direct = direct ? 1u : 0u, coff = uint(roff_rows * hcd))
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
             stamp_run(st, pso) {
-                invoke(st.enc, enc, mc.buf[bres], 0ul, mc.buf[bkey], 0ul, mc.buf[bval], 0ul, mc.buf[bwk], mc.buf[bwq], mc.buf[bwc], mc.buf[bg], 0ul,
-                    mc.buf[bdst], uint64(roff_rows * hcd * 4), ka, int64(nrows * hc))
+                invoke(st.enc, enc, mc.buf[bkey], mc.buf[bres], mc.buf[bval], mc.buf[bg], mc.buf[bdst], mc.buf[bwn], ka, int64(nrows * hc))
             }
         }
         return if (!ran)
@@ -1749,17 +1837,20 @@ def private ple_conv_gate(t : T?; var dev, queue; dim, hc, kern, dil, rows, pos0
                 want[p * hcd + chn] = float(double(res[p * hcd + chn]) + double(gated[p * hcd + chn]) + silu_d(acc))
             }
         }
+        t |> equal(rows, (kern - 1) * dil + 1, "{tag}: the ring's rows are the taps' reach")
+        var inscope wn : array<float>   //! the taps past the three norm rows, as the drivers bind them
+        wn |> resize(3 * hcd)
+        wn |> push_from(w)
         let bres = mc |> io_(res)
         let bg = mc |> in_(gated)
         let bring = mc |> in_(ring)
         let bpanel = mc |> in_(panel)
-        let bw = mc |> in_(w)
-        var ka = PleConvArgs(dim = uint(dim), hc = uint(hc), kern = uint(kern), dil = uint(dil), rows = uint(rows),
-            pos0 = uint(pos0), nrows = uint(nrows), direct = direct ? 1u : 0u)
+        let bwn = mc |> in_(wn)
+        var ka = GkPleConvArgs(dim = uint(dim), hc = uint(hc), kern = uint(kern), dil = uint(dil), rows = uint(nrows), pos0 = uint(pos0),
+            direct = direct ? 1u : 0u, coff = uint(coff_rows * hcd), ringoff = uint(roff_rows * hcd))
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
             stamp_run(st, pso) {
-                invoke(st.enc, enc, mc.buf[bres], 0ul, mc.buf[bg], 0ul, mc.buf[bpanel], uint64(coff_rows * hcd * 4), mc.buf[bring], uint64(roff_rows * hcd * 4),
-                    mc.buf[bw], ka, int64(nrows * hcd))
+                invoke(st.enc, enc, mc.buf[bres], mc.buf[bg], mc.buf[bring], mc.buf[bwn], mc.buf[bpanel], ka, int64(nrows * hcd))
             }
         }
         return if (!ran)
@@ -1850,7 +1941,24 @@ def test_metal_misc_kernels(t : T?) {
                 argmax_rows_gate(t, dev, queue, 5, 5000)        // the same-slab verify's per-row accept walk
                 argmax_rows_gate(t, dev, queue, 9, 700)         // MTP_MAX_ROWS rows, n below one threadgroup
                 embed_q8_gate(t, dev, queue, 512, 3, 2)
-                embed_k6_gate(t, dev, queue, 512, 3, 1)
+                for (f in [KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q5032]) {
+                    embed_b32_gate(t, dev, queue, f, 96, 5, 0)
+                    embed_b32_gate(t, dev, queue, f, 2048, 7, 7 * 64)   //! past a whole other table's blocks: an untied table's offset
+                }
+                embed_kq_gate(t, dev, queue, stamp_of(@@enc_embed_kq_k4), 4, 512, 5)
+                embed_kq_gate(t, dev, queue, stamp_of(@@enc_embed_kq_k5), 5, 512, 5)
+                embed_kq_gate(t, dev, queue, stamp_of(@@enc_embed_kq_k6), 6, 512, 5)
+                embed_kq_gate(t, dev, queue, stamp_of(@@enc_embed_kq_iq4xs), 44, 512, 5)
+                embed_kq_gate(t, dev, queue, stamp_of(@@enc_embed_kq_iq3s4), 35, 512, 5)
+                embed_kq_gate(t, dev, queue, stamp_of(@@enc_embed_kq_iq4nl), 45, 512, 5)
+                embed_kq_gate(t, dev, queue, stamp_of(@@enc_embed_kq_q40), 40, 512, 5)
+                embed_kq_gate(t, dev, queue, stamp_of(@@enc_embed_kq_k3), 3, 512, 5)
+                embed_kq_gate(t, dev, queue, stamp_of(@@enc_embed_kq_k2), 2, 512, 5)
+                embed_kq_gate(t, dev, queue, stamp_of(@@enc_embed_kq_iq3s), 33, 512, 5)
+                embed_kq_gate(t, dev, queue, stamp_of(@@enc_embed_kq_iq3xxs), 34, 512, 5)
+                embed_kq_gate(t, dev, queue, stamp_of(@@enc_embed_kq_iq2s), 23, 512, 5)
+                embed_kq_gate(t, dev, queue, stamp_of(@@enc_embed_kq_iq2xs), 24, 512, 5)
+                embed_kq_gate(t, dev, queue, stamp_of(@@enc_embed_kq_iq2xxs), 25, 768, 5)
                 embed_f32_gate(t, dev, queue, 96, 5, 3, 0)
                 embed_f32_gate(t, dev, queue, 512, 3, 2, 64)
                 add_rms_gate(t, dev, queue, false, 1500, 1, 1.0)
@@ -1860,6 +1968,8 @@ def test_metal_misc_kernels(t : T?) {
                 qk_norm_gate(t, dev, queue, 64, 4, 2, 2, false)     // in-place decode shape
                 qk_norm_gate(t, dev, queue, 64, 4, 2, 2, true)      // the no-wv V-fusion shape
                 qk_norm_gate(t, dev, queue, 128, 2, 1, 1, false)
+                qk_norm_gate(t, dev, queue, 512, 2, 1, 2, false)     // past the 256 lanes: a second element a lane (gemma-4's global heads)
+                qk_norm_gate(t, dev, queue, 96, 3, 1, 2, true)       // a head off the lane lattice
                 // the tanh-form CPU geglu; the GPU's exp identity agrees inside the approx bar
                 ew2_act_gate(t, dev, queue, "geglu", stamp_of(@@enc_geglu), 800) $(var want : array<float>; g, u : array<float>) {
                     geglu(want, u, int64(length(g)))

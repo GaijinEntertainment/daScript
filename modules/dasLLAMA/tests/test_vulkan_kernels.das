@@ -6,6 +6,7 @@ options _dasllama_internal = true
 require dastest/testing_boost public
 require math
 require strings   // starts_with: the roster cell finds an entry by its name's head
+require daslib/enum_trait
 require dasllama/dasllama_math
 require _compares
 require _kernel_oracles   // rope_tab_ref: the rope and KV-writer cells' oracle
@@ -210,7 +211,9 @@ def private fmt_tile_rows() : array<FmtTile> {
             FmtTile(fmt = KqFmt.iq4xs, n = TILE_CELL_K, blk_k = 256, wq_words = 32, wq_seed = 29u, form = ScaleForm.d_hi_hash, dmul = 0.0002, sseed = 613u, xf_add = 5u, oracle = @@iq4xsf16_gemm_oracle, control = @@iq3s4f16_gemm_oracle),
             FmtTile(fmt = KqFmt.iq3s4, n = TILE_CELL_K, blk_k = 256, wq_words = 32, wq_seed = 29u, form = ScaleForm.d_hi_hash, dmul = 0.0002, sseed = 613u, xf_add = 5u, oracle = @@iq3s4f16_gemm_oracle, control = @@iq4xsf16_gemm_oracle),
             FmtTile(fmt = KqFmt.q51, n = 704, blk_k = 32, wq_words = 5, wq_seed = 37u, form = ScaleForm.q51_dm, xf_add = 5u, per32 = true, oracle = @@q51f16_gemm_oracle),         //! the 26B-A4B's expert width: 22 blocks, two unrolled 256-passes and a 192 tail
-            FmtTile(fmt = KqFmt.iq4nl32, n = 640, blk_k = 32, wq_words = 4, wq_seed = 41u, form = ScaleForm.iq4nl32_d, xf_add = 5u, per32 = true, oracle = @@iq4nl32f16_gemm_oracle),   //! Qwen3.8-Flash-Next's expert width: 20 blocks, two unrolled 256-passes and a 128 tail
+            FmtTile(fmt = KqFmt.iq4nl32, n = 640, blk_k = 32, wq_words = 4, wq_seed = 41u, form = ScaleForm.iq4nl32_d, xf_add = 5u, per32 = true, oracle = @@iq4nl32f16_gemm_oracle, control = @@q4032f16_gemm_oracle),   //! Qwen3.8-Flash-Next's expert width: 20 blocks, two unrolled 256-passes and a 128 tail
+            FmtTile(fmt = KqFmt.q4032, n = 896, blk_k = 32, wq_words = 4, wq_seed = 43u, form = ScaleForm.iq4nl32_d, xf_add = 5u, per32 = true, oracle = @@q4032f16_gemm_oracle, control = @@iq4nl32f16_gemm_oracle),   //! Qwen2.5-0.5B's width: 28 blocks, three unrolled 256-passes and a 128 tail
+            FmtTile(fmt = KqFmt.q5032, n = 1408, blk_k = 32, wq_words = 5, wq_seed = 47u, form = ScaleForm.iq4nl32_d, xf_add = 5u, per32 = true, oracle = @@q5032f16_gemm_oracle, control = @@q5032_noqh_f16_gemm_oracle),   //! Qwen1.5-MoE's expert down width: 44 blocks, five unrolled 256-passes and a 128 tail
             FmtTile(fmt = KqFmt.mx4, n = 704, blk_k = 32, wq_words = 4, wq_seed = 53u, form = ScaleForm.mx4_e8m0, xf_add = 5u, per32 = true, oracle = @@mx4f16_gemm_oracle)            //! 22 blocks: eleven 64-deep k steps, two unrolled 256-passes and a 192 tail
         ]
     }
@@ -1778,6 +1781,176 @@ def test_vkd_kq_gemv_family(t0 : T?) {
     }
 }
 
+//! the token-table gather's expected rows: row r the table row `ids[r]` at superblock `wblk0`, each element the class's own
+//! `blk_decode` lane under the lo or hi term pair `blk_fold` reads, times `escale`; an `EMB_ID_HOST` row the host's staged row
+def private emb_gather_oracle(fmt : int; wq, ws : array<uint>; ids : array<uint>; xh : array<float>; n : int; wblk0 : uint; escale : float) : array<float> {
+    var y : array<float>
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        var noq : array<uint>
+        var nos : array<float>
+        var k = kq_cls_ref(fmt, wq, ws, noq, nos)
+        let nsb = n / 256
+        y |> resize(length(ids) * n)
+        for (r in range(length(ids))) {
+            if (ids[r] == EMB_ID_HOST) {
+                for (e in range(n)) {
+                    y[r * n + e] = xh[r * n + e]
+                }
+                continue
+            }
+            for (b in range(nsb * 8)) {
+                var wl = uint4(0u)
+                var wh = uint4(0u)
+                let terms = k->blk_decode(wblk0 + ids[r] * uint(nsb) + uint(b / 8), uint(b % 8), wl, wh)
+                let bsum = k->fold_reads_bsum()
+                for (e in range(32)) {
+                    let w = e < 16 ? wl : wh
+                    let word = (e % 16) / 4
+                    let lane = word == 0 ? w.x : (word == 1 ? w.y : (word == 2 ? w.z : w.w))
+                    let q = float(int(int8((lane >> uint((e % 4) * 8)) & 0xFFu)))
+                    let a = e < 16 ? terms.x : terms.z
+                    let c = bsum ? (e < 16 ? terms.y : terms.w) : 0.0
+                    y[r * n + b * 32 + e] = (a * q + c) * escale
+                }
+            }
+        }
+        unsafe {
+            delete k
+        }
+        delete noq
+        delete nos
+    }
+    return <- y
+}
+
+//! the token-table gather's leaves (`KqEmb<Fmt>`, `KqGemvLeafT` under `EMB`) for every superblock format: four rows - three token
+//! ids off a five-row table past a one-row lead (the plane's block base), one `EMB_ID_HOST` row copying the host's staged row -
+//! against the class's own lane decode, and on the formats with a float witness each gathered row dotted with a Q8_K activation
+//! row against `kq_gemv_float_oracle` over the same table row (the lanes in element order, independent of the class bit-math)
+[test]
+def test_vkd_emb_gather_family(t0 : T?) {
+    t0 |> run("the token-table gather's leaves == the class lane decode, and the float witness, for all 14 superblock formats") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!kq_leaf_rails_engage() <| $(fmt : int) => emb_cls_ensure(fmt)) {
+                t |> skip("no Vulkan device, or a token-table gather pipeline failed to build")
+                return
+            }
+            let nsb = 2
+            let n = nsb * 256
+            let vocab = 5
+            let lead = 1   //! one table row ahead of the table: the gather reads past its block base
+            let escale = 1.5
+            var inscope ids <- [3u, 0u, EMB_ID_HOST, 4u]
+            let rows = length(ids)
+            var inscope xh <- row_fill(rows * n, 7, 3, 0.01, -0.5)
+            for (fmt in KQ_LEAF_FMTS) {
+                let sb_words = int(kq_qsb(kq_fmt_of_slot(fmt)) / 4l)
+                var inscope wq <- hashed_words((vocab + lead) * nsb * sb_words, 1u, uint(fmt) * 9973u)
+                var inscope ws <- ws_plane((vocab + lead) * nsb * int(kq_dev_ssb_i(fmt) / 4l), 1u, uint(fmt) * 17u)
+                let wblk0 = uint(lead * nsb)
+                var inscope y_ref <- emb_gather_oracle(fmt, wq, ws, ids, xh, n, wblk0, escale)
+                with_cell_planes() $(var cp : CellPlanes) {
+                    let pq = cp |> in_plain(wq, 1u)
+                    let ps = cp |> in_plain(ws, 2u)
+                    let pid = cp |> in_plain(ids, 4u)
+                    let pxh = cp |> in_(xh, 0, 0, 8u)
+                    let py = cp |> out_(rows * n, 0, 0, 16u)
+                    var s = emb_cls_set(fmt, (wq = cp.dev[pq], ws = cp.dev[ps], wqb = cp.bytes[pq], wsb = cp.bytes[ps]), cp.dev[pid], cp.bytes[pid], 4u,
+                        cp.dev[pxh], cp.bytes[pxh], cp.dev[py], cp.bytes[py], 16u)
+                    cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                        emb_cls_enc(fmt, raw, h, s, int64(rows), int64(n), int64(wblk0), escale)
+                    }
+                    var inscope y <- cp |> plane_run(py)
+                    check_rows(t, "{kq_fmt_of_slot(fmt)} token-table gather against the class lane decode", y, y_ref, BAR_APPROX_CTRL, n)
+                    if (kq_has_float_oracle(fmt)) {   //! the witness: a gathered row's dot with a Q8_K row against the float GEMV over the same table row
+                        var inscope xq <- hashed_words(nsb * 64, 31u, 5u)
+                        var inscope xs <- row_fill(nsb, 1, 0, 0.25, -0.5, 7)   //! a Q8_K row's one scale a superblock
+                        for (r in range(rows)) {
+                            continue if (ids[r] == EMB_ID_HOST)
+                            var inscope reg <- [wblk0 + ids[r] * uint(nsb), 0u]
+                            var inscope want <- kq_gemv_float_oracle(fmt, wq, ws, xq, xs, reg, n, 1, 1)
+                            var dot = 0.0
+                            for (e in range(n)) {
+                                let qb = int(int8((xq[e / 4] >> uint((e % 4) * 8)) & 0xFFu))
+                                dot += y[r * n + e] / escale * float(qb) * xs[e / 256]
+                            }
+                            t |> success(abs(dot - want[0]) <= 1e-3 * max(1.0, abs(want[0])), "{kq_fmt_of_slot(fmt)} row {r}: the gathered row's dot {dot} is the float GEMV's {want[0]}")
+                            t |> success(abs(dot + 1.0 + abs(want[0]) - want[0]) > 1e-3 * max(1.0, abs(want[0])), "{kq_fmt_of_slot(fmt)} row {r}: the dot's bar reds a value moved by more than the row's magnitude")
+                        }
+                    }
+                }
+            }
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+//! the per-32 token-table gathers (`<Fmt>Emb`, `Blk32GemvRunT` under `EMB`) for q51, iq4nl32, q4032 and q5032: the same four rows
+//! against the engine's per-32 plane dequant (`dequant_b32_plane_block`) over the cell's own plane bytes, under the embed scale
+[test]
+def test_vkd_emb_gather_b32(t0 : T?) {
+    t0 |> run("the per-32 token-table gathers == the engine's plane dequant, for q51, iq4nl32, q4032 and q5032") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!emb_cls_ensure(int(KqFmt.q51)) || !emb_cls_ensure(int(KqFmt.iq4nl32)) || !emb_cls_ensure(int(KqFmt.q4032)) || !emb_cls_ensure(int(KqFmt.q5032))) {
+                t |> skip("no Vulkan device, or a per-32 gather pipeline failed to build")
+                return
+            }
+            let n = 96   //! three 32-blocks a row
+            let nb = n / 32
+            let vocab = 5
+            let lead = 1
+            let escale = 1.5
+            var inscope ids <- [3u, 0u, EMB_ID_HOST, 4u]
+            let rows = length(ids)
+            var inscope xh <- row_fill(rows * n, 7, 3, 0.01, -0.5)
+            for (f in [KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q5032]) {
+                let totblk = (vocab + lead) * nb
+                let qwords = int(kq_qsb(f) / 4l)
+                var inscope wq <- hashed_words(totblk * qwords, 1u, uint(f) * 9973u)
+                var inscope ws <- blk32_scale_plane(f, totblk)
+                var inscope kqb <- [for (i in range(totblk * qwords * 4)); uint8((wq[i / 4] >> uint((i % 4) * 8)) & 0xFFu)]
+                var inscope ksb <- [for (i in range(length(ws) * 4)); uint8((ws[i / 4] >> uint((i % 4) * 8)) & 0xFFu)]
+                var inscope y_ref : array<float>
+                y_ref |> resize(rows * n)
+                for (r in range(rows)) {
+                    if (ids[r] == EMB_ID_HOST) {
+                        for (e in range(n)) {
+                            y_ref[r * n + e] = xh[r * n + e]
+                        }
+                        continue
+                    }
+                    var inscope blk : array<float>
+                    blk |> resize(32)
+                    for (b in range(nb)) {
+                        dequant_b32_plane_block(f, kqb, ksb, int64((lead + int(ids[r])) * nb + b), blk, 0l)
+                        for (e in range(32)) {
+                            y_ref[r * n + b * 32 + e] = blk[e] * escale
+                        }
+                    }
+                }
+                with_cell_planes() $(var cp : CellPlanes) {
+                    let pq = cp |> in_plain(wq, 1u)
+                    let ps = cp |> in_plain(ws, 2u)
+                    let pid = cp |> in_plain(ids, 4u)
+                    let pxh = cp |> in_(xh, 0, 0, 8u)
+                    let py = cp |> out_(rows * n, 0, 0, 16u)
+                    let fmt = int(f)
+                    var s = emb_cls_set(fmt, (wq = cp.dev[pq], ws = cp.dev[ps], wqb = cp.bytes[pq], wsb = cp.bytes[ps]), cp.dev[pid], cp.bytes[pid], 4u,
+                        cp.dev[pxh], cp.bytes[pxh], cp.dev[py], cp.bytes[py], 16u)
+                    cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                        emb_cls_enc(fmt, raw, h, s, int64(rows), int64(n), int64(lead * nb), escale)
+                    }
+                    var inscope y <- cp |> plane_run(py)
+                    check_rows(t, "{f} token-table gather against the engine's plane dequant", y, y_ref, BAR_APPROX_CTRL, n)
+                }
+            }
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
 //! the Q4_K experts' gate+up+act twin against the family cell's oracle run twice: both stacks' rows in one plane
 //! (the up stack's regions after the gate's), the activated rows' Q8_0 blocks within a quant step at every lane
 //! split, the scales within 2e-3; a poisoned oracle element must red
@@ -2038,7 +2211,7 @@ def test_vkd_act_family(t0 : T?) {
                     let psw = cp |> in_(sw)
                     let pr = cp |> in_(rows)
                     var sc = cp |> cls_set(fixed_array(pa, psi, psw, pr), @@set_combine_cls)
-                    var pc = CombineArgs(n = uint(n), k = uint(k), r0 = 0u, r1 = uint(nrows))
+                    var pc = GkMoeCombArgs(n = uint(n), k = uint(k), r0 = 0u, r1 = uint(nrows))
                     cp |> cell_record() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
                         enc_combine_cls(raw2, h2, sc, pc, int64(npos))
                     }
@@ -2242,7 +2415,7 @@ def test_vkd_rope_family(t0 : T?) {
                     let pk = cp |> io_(kh)
                     let pw = cp |> in_(wh)
                     var sc = cp |> cls_set(fixed_array(pq, pk, pw), @@set_qk_rms_cls)
-                    var pc = QkRmsArgs(hs = uint(hs), nh = uint(nh), nkvh = uint(nkvh),
+                    var pc = GkQkRmsArgs(hs = uint(hs), nh = uint(nh), nkvh = uint(nkvh),
                         qstride = uint(qstride), kstride = uint(kstride), kbase = 0u,
                         qwoff = 0u, kwoff = uint(hs), eps = eps)
                     cp |> cell_record() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
@@ -2355,6 +2528,46 @@ def test_vkd_kq_batch_family(t0 : T?) {
                 kq_gemm_oracle(fmt, p.wqh, p.wsh, p.xqh, p.xsh, r.sched, 2, n, d, y_ref)
                 check_rows(t, "kq batch fmt {fmt} against the CPU oracle", r.y, y_ref, BAR_APPROX_CTRL, d)
                 delete y_ref
+                delete r
+                delete p
+            }
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+[test]
+def test_vkd_blk32_batch_family(t0 : T?) {
+    t0 |> run("per-32 batch tiles (q51 iq4nl32 q4032 q5032 mx4) == scalar dots") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!ensure_q8_batch_cls()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            let n = 96                // nbb = 3: the zero-filled K tail of the 8-block pass
+            let nbb = n / 32
+            let d = 40                // 2 w-tiles with an 8-col edge
+            let cnt0 = 35
+            let cnt1 = 20
+            let rows = cnt0 + cnt1
+            let totblk = 2 * d * nbb
+            for (f in [KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q5032, KqFmt.mx4]) {
+                let fmt = int(f)
+                verify(kq_batch_cls_ensure(fmt, false), "the per-32 batch class rail must engage")
+                var wsh <- blk32_scale_plane(f, totblk)
+                let ws_bytes = long_length(wsh) * 4l
+                var p <- Sdot4Planes(wqh <- hashed_words(totblk * int(kq_qsb(f) / 4l), 1u, uint(fmt) * 131u), wsh <- wsh,
+                    ws_bytes = ws_bytes, xqh <- hashed_words(rows * nbb * 8, 7u, 2u), xsh <- row_fill(rows * nbb, 1, 0, 0.05, -0.3, 11))
+                var r <- sdot4_tile_run(n, d, cnt0, cnt1, 32, d * nbb, p) $(bufs : uint64[6]; sizes : int64[6]; bits : uint[6]; raw2 : VkCommandBuffer; var h2 : VkHaz; wgs : int64) {
+                    var sc = kq_batch_cls_set_for(fmt, false, bufs, sizes, bits)
+                    var pc = BatchArgs(n = uint(n), d = uint(d), map_off = uint(2 * 4))
+                    kq_batch_cls_enc_for(fmt, false, raw2, h2, sc, pc, wgs)
+                }
+                var inscope y_ref : array<float>
+                y_ref |> resize(rows * d)
+                blk32_gemm_oracle(f, p.wqh, p.wsh, p.xqh, p.xsh, r.sched, 2, n, d, y_ref)
+                check_rows(t, "{f} batch tile against the engine's scalar dot", r.y, y_ref, BAR_APPROX_CTRL, d)
                 delete r
                 delete p
             }
@@ -2614,6 +2827,20 @@ def private iq4nl32_scale_words(totblk : int; mul : float) : array<uint> {
 def test_vkd_iq4nl32_cm2_batch(t0 : T?) {
     t0 |> run("cm2 IQ4_NL per-32 s and e tiles == the CPU oracle (the per-32 plane verbatim: d * LUT[nibble] off a half-word d)") <| @(t : T?) {
         fmt_tile_cell(t, KqFmt.iq4nl32)
+    }
+}
+
+[test]
+def test_vkd_q4032_cm2_batch(t0 : T?) {
+    t0 |> run("cm2 Q4_0 per-32 s and e tiles == the CPU oracle (iq4nl32's plane form: d * (nibble - 8) off a half-word d)") <| @(t : T?) {
+        fmt_tile_cell(t, KqFmt.q4032)
+    }
+}
+
+[test]
+def test_vkd_q5032_cm2_batch(t0 : T?) {
+    t0 |> run("cm2 Q5_0 per-32 s and e tiles == the CPU oracle (q51's quant form under a half-word d: d * (q - 16), the qh bit as q's fifth)") <| @(t : T?) {
+        fmt_tile_cell(t, KqFmt.q5032)
     }
 }
 
@@ -3896,6 +4123,65 @@ def test_vkd_iq4nl32_gemv(t0 : T?) {
 }
 
 [test]
+def test_vkd_q4032_gemv(t0 : T?) {
+    t0 |> run("q4032 GEMV class kernel == the scalar dot's float order (the linear code over iq4nl32's blocks; 640 and 896 wide)") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!ensure_q4032_gemv_cls()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            per32_gemv_cell(t, KqFmt.q4032, [640, 896], 4, 71u, 29u, 5u, @@q4032_gemv_row_oracle) $(totblk : int) {
+                return <- iq4nl32_scale_words(totblk, 0.002)
+            }
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+[test]
+def test_vkd_q5032_gemv(t0 : T?) {
+    t0 |> run("q5032 GEMV class kernel == the scalar dot's float order (q51's blocks re-centred to q - 16 under a half-word d; 896 and 1408 wide)") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!ensure_q5032_gemv_cls()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            per32_gemv_cell(t, KqFmt.q5032, [896, 1408], int(KQ_Q5032_QWORDS), 73u, 31u, 5u, @@q5032_gemv_row_oracle) $(totblk : int) {
+                return <- iq4nl32_scale_words(totblk, 0.002)
+            }
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+//! the q5032 scalar dot (the GEMV cells' row oracle) against the plane bytes' own decode (`dequant_q5032_plane_block`, f64
+//! sums): the class oracle and the kernel share the dot, so the plane's bit layout is pinned by a witness neither reads
+[test]
+def test_vkd_q5032_float_witness(t0 : T?) {
+    t0 |> run("q5032: the scalar dot == the plane-dequant float witness over hashed planes, and a dropped qh bit reads apart") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            let nb = 44
+            var inscope wq <- hashed_words(nb * int(KQ_Q5032_QWORDS), 1u, 73u)
+            var inscope ws <- iq4nl32_scale_words(nb, 0.002)
+            var inscope xq <- hashed_words(nb * 8, 31u, 5u)
+            var inscope xs <- [for (b in range(nb)); 0.05 + 0.01 * float(b % 5)]
+            let dot = q5032_gemv_row_oracle(wq, ws, xq, xs, 0, nb)
+            let wit = q5032_gemv_float_oracle(wq, ws, xq, xs, 0, nb)
+            t |> success(abs(dot - wit) <= 1.0e-4 * max(1.0, abs(wit)), "the scalar dot {dot} matches the plane-dequant witness {wit}")
+            for (b in range(nb)) {
+                wq[b * int(KQ_Q5032_QWORDS) + int(KQ_B32_QWORDS)] = 0u
+            }
+            let dropped = q5032_gemv_float_oracle(wq, ws, xq, xs, 0, nb)
+            t |> success(abs(dropped - wit) > 1.0e-3 * max(1.0, abs(wit)), "the control: the planes with their qh words zeroed read apart ({dropped} vs {wit})")
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+[test]
 def test_vkd_mx4_gemv(t0 : T?) {
     t0 |> run("mx4 GEMV class kernel == the scalar dot's float order (one lane a block over Q8_0 activations; 704 and 2880 wide)") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -4604,7 +4890,7 @@ def private q8_gemv_gu_n_run(t; n, hid, ncols : int; act : uint) {
     let ws_bytes = int64(totblk) * 2l
     let xq_bytes = int64(nb) * 32l
     let xs_bytes = int64(nb) * 4l
-    let ncol_max = 8
+    let ncol_max = max(ncols, 8)
     var gqh, gsh, uqh, ush : array<uint>
     q8_plane(totblk, 1u, 71u, 1u, 3u, gqh, gsh)
     q8_plane(totblk, 3u, 5u, 7u, 11u, uqh, ush)
@@ -4671,6 +4957,7 @@ def test_vkd_q8_gemv_gu_n(t0 : T?) {
             q8_gemv_gu_n_run(t, 256, 512, 2, ACT_GELU)   //! the two-column stamp full
             q8_gemv_gu_n_run(t, 256, 512, 1, ACT_SILU)   //! one column on the two-column stamp: the one-row command's shape through the N form
             q8_gemv_gu_n_run(t, 256, 512, 2, ACT_OAI)   //! the clamped swiglu through the N form
+            q8_gemv_gu_n_run(t, 256, 512, 11, ACT_SILU)   //! past the widest stamp: an eight-column tile and a four-column one at `col0` 8
         } else {
             t |> skip("dasVulkan not present")
         }
@@ -4798,9 +5085,46 @@ def test_vkd_q8_gemv_pair(t0 : T?) {
     }
 }
 
-//! one format's N-column decode GEMV against its one-column class over a synthetic [n x d] plane and eight activation
+//! a per-32 plane's scale words for `totblk` blocks: q51's d | m halves, iq4nl32's two halves a word, mx4's four E8M0 bytes a word
+def private blk32_scale_plane(f : KqFmt; totblk : int) : array<uint> {
+    var words : array<uint>
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        if (f == KqFmt.q51) {
+            words <- [for (b in range(totblk)); packHalf2x16(float2(0.002 * float(1 + b % 7), 0.001 * float(b % 5) - 0.002))]
+        } elif (f == KqFmt.iq4nl32 || f == KqFmt.q4032 || f == KqFmt.q5032) {
+            words <- iq4nl32_scale_words(totblk, 0.002)
+        } else {
+            words <- mx4_scale_words(totblk)
+        }
+    }
+    return <- words
+}
+
+//! the per-32 formats' columns against the engine's scalar dots: column c's activation row (the quants and scales c x nb
+//! blocks in) dotted with every weight row, landing at c x d + row
+def private blk32_ncol_oracle(f : KqFmt; wqh, wsh, xqh : array<uint>; xsh : array<float>; n, d, ncol_max : int) : array<float> {
+    let nb = n / 32
+    var y_ref : array<float>
+    y_ref |> resize(d * ncol_max)
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        for (c in range(ncol_max)) {
+            var inscope xq_c <- [for (i in range(nb * 8)); xqh[c * nb * 8 + i]]
+            var inscope xs_c <- [for (i in range(nb)); xsh[c * nb + i]]
+            for (row in range(d)) {
+                y_ref[c * d + row] = (f == KqFmt.q51 ? q51_gemv_row_oracle(wqh, wsh, xq_c, xs_c, row * nb, nb)
+                    : (f == KqFmt.iq4nl32 ? iq4nl32_gemv_row_oracle(wqh, wsh, xq_c, xs_c, row * nb, nb)
+                    : (f == KqFmt.q4032 ? q4032_gemv_row_oracle(wqh, wsh, xq_c, xs_c, row * nb, nb)
+                    : (f == KqFmt.q5032 ? q5032_gemv_row_oracle(wqh, wsh, xq_c, xs_c, row * nb, nb)
+                    : mx4_gemv_row_oracle(wqh, wsh, xq_c, xs_c, row * nb, nb)))))
+            }
+        }
+    }
+    return <- y_ref
+}
+
+//! one format's N-column decode GEMV against its one-column class over a synthetic [n x d] plane and twelve activation
 //! rows of distinct content: the one-column class once per row (its region naming that row's activation blocks, its
-//! `ybase` that row's y), held to the CPU oracle; then the N class at 1, 2, 4 and 8 columns (`ystride` = d), every
+//! `ybase` that row's y), held to the CPU oracle; then the N class at 1 to 8 columns and the tiled encoder at 9 and 12 (`ystride` = d), every
 //! column bit for bit against the one-column row - the N form walks a lane's blocks in the one-column's order and folds
 //! the lanes the same way (`gemv_shell_n` against `gemv_shell`, `Q8GemvNT` against `Q8Gemv`), so the sums land in one
 //! order - the sentinel past the columns it wrote untouched; the q8 plane runs again with the row-pair stamps engaged
@@ -4810,12 +5134,16 @@ def private gemv_ncol_arm(t : T?; f : KqFmt; n, d : int) {
         let fmt = int(f)
         let name = "{f}"
         let q8 = f == KqFmt.q8
-        let xblk = q8 ? n / 32 : n / 256
-        let xq_col = q8 ? xblk * 8 : xblk * 64
-        let ncol_max = 8
+        let blk32 = !q8 && kq_block32(f)
+        let xblk = kq_block32(f) ? n / 32 : n / 256
+        let xq_col = kq_block32(f) ? xblk * 8 : xblk * 64
+        let ncol_max = 12   //! past the leaves' eight: 9 and 12 run through `gemv_enc`'s column tiles
         var wqh, wsh : array<uint>
         if (q8) {
             q8_plane(d * xblk, 1u, uint(fmt) * 77777u, 1u, uint(fmt) * 13u, wqh, wsh)
+        } elif (blk32) {
+            wqh |> push_from(hashed_words(d * xblk * int(kq_qsb(f) / 4l), 1u, uint(fmt) * 77777u))
+            wsh |> push_from(blk32_scale_plane(f, d * xblk))
         } else {
             wqh |> push_from(hashed_words(d * xblk * int(kq_qsb(f) / 4l), 1u, uint(fmt) * 77777u))
             wsh |> push_from(ws_plane(d * xblk * int(kq_dev_ssb(f) / 4l), 1u, uint(fmt) * 13u))
@@ -4845,7 +5173,7 @@ def private gemv_ncol_arm(t : T?; f : KqFmt; n, d : int) {
             g_q8_n2_min_n = paired ? 0u : 0xFFFFFFFFu
             let form = paired ? "{name} row-pair" : name
             t |> success(gemv_cls_ensure_n(fmt), "{form}: the N-column class rail engages")
-            var planes <- nform_cols_cell(t, form, [1, 2, 3, 4, 5, 6, 7, 8], ncol_max, [NformPlane(name = "the y rows", words = d)], 32u,   //! every count: the odd ones leave dead columns on the wider stamps
+            var planes <- nform_cols_cell(t, form, [1, 2, 3, 4, 5, 6, 7, 8, 9, 12], ncol_max, [NformPlane(name = "the y rows", words = d)], 32u,   //! every count: the odd ones leave dead columns on the wider stamps
                 $(c : int; raw : VkCommandBuffer; var h : VkHaz; o : NformOuts) {
                     var inscope pair <- [0u, uint(c * xblk)]
                     upload_region_at(rgd, 0l, unsafe(addr<uint8 const?>(pair[0])), 8l)
@@ -4860,7 +5188,11 @@ def private gemv_ncol_arm(t : T?; f : KqFmt; n, d : int) {
                     var s_n = gemv_cls_set_n(fmt, fixed_array(wqd, wsd, rgd, xqd, xsd, o.bufs[0]), fixed_array(wq_bytes, ws_bytes, 8l, xq_bytes, xs_bytes, o.bytes[0]), gbits)
                     var pc = GemvArgs(n = uint(n), d = uint(d), nreg = 1u, ybase = 0u, ncols = uint(ncols), ystride = uint(d),
                         lanes_per_row = gemv_lanes_per_row(fmt, int64(n)))
-                    gemv_cls_enc_n(fmt, raw, h, s_n, pc, gemv_wgs(int64(d), pc.lanes_per_row))   //! the class entry: the one-column count still lands on the narrowest N stamp
+                    if (uint(ncols) <= GEMV_COL_TILE) {
+                        gemv_cls_enc_n(fmt, raw, h, s_n, pc, gemv_wgs(int64(d), pc.lanes_per_row))   //! the class entry: the one-column count still lands on the narrowest N stamp
+                    } else {
+                        gemv_enc(fmt, raw, h, s_n, pc, int64(d))   //! the tiled entry: two dispatches, the second's `col0` at eight
+                    }
                     delete pair
                 })
             delete y_one
@@ -4868,7 +5200,7 @@ def private gemv_ncol_arm(t : T?; f : KqFmt; n, d : int) {
             delete planes
         }
         g_q8_n2_min_n = n2_min_prior
-        var y_ref <- gemv_ncol_oracle(f, wqh, wsh, xqh, xsh, n, d, ncol_max)
+        var y_ref <- blk32 ? blk32_ncol_oracle(f, wqh, wsh, xqh, xsh, n, d, ncol_max) : gemv_ncol_oracle(f, wqh, wsh, xqh, xsh, n, d, ncol_max)
         var y_onef <- plane_floats(y_one)
         let bad_o = mismatch_approx(y_onef, y_ref)
         t |> success(bad_o == 0, "{name}: the one-column class over every activation row matches the CPU oracle ({bad_o} of {d * ncol_max} off)")
@@ -4886,15 +5218,15 @@ def private gemv_ncol_arm(t : T?; f : KqFmt; n, d : int) {
 
 [test]
 def test_vkd_gemv_ncol(t0 : T?) {
-    t0 |> run("the N-column decode GEMV leaves (q8 and its row-pair stamps, every kq format) == the one-column class, column for column") <| @(t : T?) {
+    t0 |> run("every format's N-column decode GEMV == its one-column class") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!ensure_q8_gemv_cls()) {
                 t |> skip("no Vulkan device")
                 return
             }
             let fmts <- kq_gemv_fmts()
-            t |> equal(length(fmts), 1 + length(KQ_LEAF_FMTS), "the family's roster is q8 and the fourteen kq leaves")
-            for (f in fmts) {
+            t |> equal(length(fmts), 1 + length(KQ_LEAF_FMTS), "the superblock roster is q8 and the fourteen kq leaves")
+            for (f in type<KqFmt>) {
                 t |> success(gemv_cls_ensure(int(f)), "{f}: the one-column class rail engages")
                 gemv_ncol_arm(t, f, 1024, 96)   //! n a multiple of 256 for the superblock formats, d even for the row-pair stamps
                 gemv_ncol_arm(t, f, 4096, 90)   //! a wider reduction at a row count off the lane splits' multiples
@@ -5193,7 +5525,7 @@ def private qkn_rope_arm(t : T?; f16, biased : bool) {
         let bpad = biased ? 96 : 0   // the bias rows sit past a pad, so boff is exercised off its default
         var bh <- biased ? bias_past_pad(bpad, qd + 2 * kvd, 17, 0.02, 0.28, 29, 77.0) : array<float>()
         let wgs = nh + nkvh
-        var pc = QknRopeArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs),
+        var pc = GkQknRopeArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs),
             half = uint(half), neox = uint(neox), nh = uint(nh),
             layerbase = uint(krow), qwoff = 0u,
             kwoff = uint(hs), eps = eps, boff = uint(bpad), hasb = biased ? 1u : 0u)
@@ -5395,6 +5727,108 @@ def private rope_kv_b_row0_arm(t : T?) {
     }
 }
 
+//! one window-form `qkn_rope_cls` dispatch: `nr` rows from row `row0` of planes `rows` deep, their k and v rows `kvrow` apart in the
+//! projection plane (`kv`, the v rows at `vbase`), at positions from `pos0`; the q plane in place, then the K and V mirrors
+def private qkn_window_run(q, kv, cs, wn : array<float>; pc; nr, mirn : int) : tuple<q : array<float>; m : array<float>> {
+    var out : tuple<q : array<float>; m : array<float>>
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        with_cell_planes() $(var cp : CellPlanes) {
+            let pq = cp |> io_(q)
+            let pkv = cp |> in_(kv)
+            let pkm = cp |> out_(mirn)
+            let pvm = cp |> out_(mirn)
+            let pcs = cp |> in_(cs)
+            let pwn = cp |> in_(wn)
+            let ptok = cp |> in_plain([TokMeta(pos = 0u), TokMeta(pos = 1u), TokMeta(pos = 2u)])
+            var sc = cp |> cls_set(fixed_array(pq, pkv, pkm, pvm, pcs, pwn, ptok, pcs), @@set_qkn_rope_cls)
+            var pcv = pc
+            cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                enc_qkn_rope_cls(raw, h, sc, pcv, int64(nr) * int64(pc.rowwg))
+            }
+            out.q <- cp |> plane_run(pq)
+            out.m <- mirror_pair(cp, pkm, pvm, mirn, false)
+        }
+    }
+    return <- out
+}
+
+//! the window's fused q/k norm, rope and K/V store: `qkn_rope_cls`'s window form over three rows past two lead rows of planes laid
+//! as the window lays them - q rows, the [k | v] projection rows, the rope rows - at positions 7 to 9 of the mirror, bit for bit
+//! the token rows' form over the same rows laid as the token command lays them ([q | k | v] a row, the positions off the token block)
+[test]
+def test_vkd_qkn_rope_window(t0 : T?) {
+    t0 |> run("qkn_rope_cls's window form == its token rows' form over the same three rows, bit for bit, the lead rows untouched") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!ensure_qkn_rope_cls()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            let nh = 4
+            let nkvh = 2
+            let hs = 64
+            let qd = nh * hs
+            let kvd = nkvh * hs
+            let lead = 2
+            let nr = 3
+            let pos0 = 7
+            let mirn = (pos0 + nr + 2) * kvd
+            var q5 <- row_fill((lead + nr) * qd, 31, 0, 0.05, 1.6, 67)
+            var kv5 <- row_fill((lead + nr) * 2 * kvd, 23, 0, 0.04, 1.5, 71)
+            var cs5 <- row_fill((lead + nr) * hs, 13, 0, 0.045, 0.9, 41)
+            var wnh <- [for (i in range(2 * hs)); 0.75 + float(i % 11) * 0.05]
+            let base = GkQknRopeArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), half = uint(hs / 2), neox = 1u, nh = uint(nh),
+                qwoff = 0u, kwoff = uint(hs), eps = 0.00001, rowwg = uint(nh + nkvh), qrow = uint(qd), cosrow = uint(hs))
+            var pw = base
+            pw.win = 1u
+            pw.pos0 = uint(pos0)
+            pw.row0 = uint(lead)
+            pw.kvrow = uint(2 * kvd)
+            pw.kbase = 0u
+            pw.vbase = uint(kvd)
+            var win <- qkn_window_run(q5, kv5, cs5, wnh, pw, nr, mirn)
+            //! the token rows' form: the three rows alone, each projection row [q | k | v], positions off the token block from 7
+            var q3 <- [for (i in range(nr * qd)); q5[lead * qd + i]]
+            var kv3 : array<float>
+            kv3 |> resize(nr * (qd + 2 * kvd))
+            var cs3 <- [for (i in range(nr * hs)); cs5[lead * hs + i]]
+            for (r in range(nr)) {
+                for (i in range(2 * kvd)) {
+                    kv3[r * (qd + 2 * kvd) + qd + i] = kv5[(lead + r) * 2 * kvd + i]
+                }
+            }
+            var pt = base
+            pt.kvrow = uint(qd + 2 * kvd)
+            pt.layerbase = uint(pos0 * kvd)
+            var tok <- qkn_window_run(q3, kv3, cs3, wnh, pt, nr, mirn)
+            var win_rows <- [for (i in range(nr * qd)); win.q[lead * qd + i]]
+            check_exact(t, "the window form's q rows against the token rows' form", win_rows, tok.q)
+            var mw <- [for (i in range(2 * nr * kvd)); win.m[(i / (nr * kvd)) * mirn + pos0 * kvd + i % (nr * kvd)]]
+            var mt <- [for (i in range(2 * nr * kvd)); tok.m[(i / (nr * kvd)) * mirn + pos0 * kvd + i % (nr * kvd)]]
+            check_exact(t, "the window form's K and V mirror rows against the token rows' form", mw, mt)
+            delete mw
+            delete mt
+            var kept = 0
+            for (i in range(lead * qd)) {
+                kept += win.q[i] == q5[i] ? 1 : 0
+            }
+            t |> equal(kept, lead * qd, "the q rows ahead of the window's row base are untouched")
+            t |> success(mismatch_exact(win_rows, [for (i in range(nr * qd)); q5[lead * qd + i]]) > 0, "the window form roped its q rows in place")
+            delete win_rows
+            delete win
+            delete tok
+            delete q3
+            delete kv3
+            delete cs3
+            delete q5
+            delete kv5
+            delete cs5
+            delete wnh
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
 [test]
 def test_vkd_rope_b_pair(t0 : T?) {
     t0 |> run("batch rope + fused qkn-rope class kernels == the CPU oracle") <| @(t : T?) {
@@ -5590,7 +6024,7 @@ def test_vkd_hc_seams(t0 : T?) {
                 let wp = cp |> in_(wn)
                 let xp = cp |> out_(HCT_HCD)
                 var s = cp |> cls_set(fixed_array(rp, xp, wp), @@set_hc_norm_cls)
-                var pa = HcNormArgs(dim = uint(HCT_DIM), hc = uint(HCT_HC), woff = uint(HCT_HCD), row0 = 0u, eps = HCT_EPS)
+                var pa = GkHcNormArgs(dim = uint(HCT_DIM), hc = uint(HCT_HC), woff = uint(HCT_HCD), row0 = 0u, eps = HCT_EPS)
                 cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                     enc_hc_norm_cls(raw, h, s, pa, int64(HCT_HC))
                 }
@@ -5663,7 +6097,7 @@ def test_vkd_hc_seams(t0 : T?) {
                 let gp = cp |> in_(gate)
                 let bp = cp |> out_(HCT_DIM)
                 var s = cp |> cls_set(fixed_array(xp, gp, bp), @@set_hc_mix_cls)
-                var pa = HcMixArgs(dim = uint(HCT_DIM), hc = uint(HCT_HC), rows = 1u)
+                var pa = GkHcMixArgs(dim = uint(HCT_DIM), hc = uint(HCT_HC), rows = 1u)
                 cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                     enc_hc_mix_cls(raw, h, s, pa, int64((HCT_DIM + 255) / 256))
                 }
@@ -5702,10 +6136,10 @@ def test_vkd_hc_seams(t0 : T?) {
                 var s2 = cp |> cls_set(fixed_array(rp2, op, ip, ap, lp), @@set_hc_comb_cls)
                 var s3 = cp |> cls_set(fixed_array(rp3, op, ip, ap, lp), @@set_hc_comb_cls)
                 let wgs = int64((HCT_HCD + 255) / 256)
-                var pa0 = HcCombArgs(dim = uint(HCT_DIM), hc = uint(HCT_HC), moe_on = 0u, sh_on = 0u, gated = 0u, rows = 1u, row0 = 0u, lstride = uint(lstride))
-                var pa1 = HcCombArgs(dim = uint(HCT_DIM), hc = uint(HCT_HC), moe_on = 1u, sh_on = 1u, gated = 1u, rows = 1u, row0 = 0u, lstride = uint(lstride))
-                var pa2 = HcCombArgs(dim = uint(HCT_DIM), hc = uint(HCT_HC), moe_on = 1u, sh_on = 1u, gated = 0u, rows = 1u, row0 = 0u, lstride = uint(lstride))
-                var pa3 = HcCombArgs(dim = uint(HCT_DIM), hc = uint(HCT_HC), moe_on = 1u, sh_on = 0u, gated = 1u, rows = 1u, row0 = 0u, lstride = uint(lstride))
+                var pa0 = GkHcCombArgs(dim = uint(HCT_DIM), hc = uint(HCT_HC), moe_on = 0u, sh_on = 0u, gated = 0u, rows = 1u, row0 = 0u, lstride = uint(lstride))
+                var pa1 = GkHcCombArgs(dim = uint(HCT_DIM), hc = uint(HCT_HC), moe_on = 1u, sh_on = 1u, gated = 1u, rows = 1u, row0 = 0u, lstride = uint(lstride))
+                var pa2 = GkHcCombArgs(dim = uint(HCT_DIM), hc = uint(HCT_HC), moe_on = 1u, sh_on = 1u, gated = 0u, rows = 1u, row0 = 0u, lstride = uint(lstride))
+                var pa3 = GkHcCombArgs(dim = uint(HCT_DIM), hc = uint(HCT_HC), moe_on = 1u, sh_on = 0u, gated = 1u, rows = 1u, row0 = 0u, lstride = uint(lstride))
                 cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                     enc_hc_comb_cls(raw, h, s0, pa0, wgs)
                     enc_hc_comb_cls(raw, h, s1, pa1, wgs)
@@ -5752,11 +6186,51 @@ def test_vkd_hc_rows(t0 : T?) {
                 let xp = cp |> in_(x)
                 let rp = cp |> out_(rows * HCT_HCD)
                 var s = cp |> cls_set(fixed_array(xp, rp), @@set_hc_init_cls)
-                var pa = HcInitArgs(dim = uint(HCT_DIM), hc = uint(HCT_HC), rows = uint(rows))
+                var pa = GkHcInitArgs(dim = uint(HCT_DIM), hc = uint(HCT_HC), rows = uint(rows))
                 cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                     enc_hc_init_cls(raw, h, s, pa, int64((rows * HCT_HCD + 255) / 256))
                 }
                 check_rows(t, "hc_init wide rows", cp |> plane_run(rp), want, BAR_APPROX, HCT_HCD)
+            }
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+    t0 |> run("cat2: [a row ; b row] position-major over the streams, stream-major past a carried row, a read at a cat's stride") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_moe_init() || !ensure_cat2_cls()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            //! (np, rep, smaj, a0, as_, b0) a row: the hc draft and verify warm, the chain's prompt warm, the draft's in-cat row
+            for (arm in [(3, HCT_HC, 0, 0, 0, 0), (3, HCT_HC, 1, 1, 0, HCT_HC), (1, HCT_HC, 0, 0, 2 * HCT_DIM, 0), (5, 1, 0, 2, 0, 2)]) {
+                let (np, rep, smaj, a0, as_, b0) = arm
+                let rows = np * rep
+                let ast = as_ == 0 ? HCT_DIM : as_
+                var inscope a <- row_fill((a0 + np) * ast, 31, 7, 0.05, 1.7)
+                var inscope b <- row_fill((b0 + rows) * HCT_DIM, 13, 5, 0.03, 1.1)
+                var inscope want : array<float>
+                want |> resize(rows * 2 * HCT_DIM)
+                for (r in range(rows)) {
+                    let p = smaj != 0 ? r % np : r / rep
+                    let c = smaj != 0 ? r / np : r % rep
+                    for (i in range(HCT_DIM)) {
+                        want[r * 2 * HCT_DIM + i] = a[(a0 + p) * ast + i]
+                        want[r * 2 * HCT_DIM + HCT_DIM + i] = b[(b0 + p * rep + c) * HCT_DIM + i]
+                    }
+                }
+                with_cell_planes() $(var cp : CellPlanes) {
+                    let yp = cp |> out_(rows * 2 * HCT_DIM)
+                    let ap = cp |> in_(a)
+                    let bp = cp |> in_(b)
+                    var s = cp |> cls_set(fixed_array(yp, ap, bp), @@set_cat2_cls)
+                    var pa = GkCat2Args(d = uint(HCT_DIM), rows = uint(rows), rep = uint(rep), smaj = uint(smaj), np = uint(np), a0 = uint(a0),
+                        as_ = uint(as_), b0 = uint(b0))
+                    cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                        enc_cat2_cls(raw, h, s, pa, int64((rows * HCT_DIM + 255) / 256))
+                    }
+                    check_rows(t, "cat2 np {np} rep {rep} smaj {smaj} a0 {a0} as {as_} b0 {b0}", cp |> plane_run(yp), want, BAR_EXACT, 2 * HCT_DIM)
+                }
             }
         } else {
             t |> skip("dasVulkan not present")
@@ -5783,8 +6257,8 @@ def test_vkd_hc_rows(t0 : T?) {
                 let xp1 = cp |> out_(HCT_HCD)
                 var s = cp |> cls_set(fixed_array(rp, xp, wp), @@set_hc_norm_cls)
                 var s1 = cp |> cls_set(fixed_array(rp, xp1, wp), @@set_hc_norm_cls)
-                var pa = HcNormArgs(dim = uint(HCT_DIM), hc = uint(HCT_HC), woff = 0u, row0 = 0u, eps = HCT_EPS)
-                var pa1 = HcNormArgs(dim = uint(HCT_DIM), hc = uint(HCT_HC), woff = 0u, row0 = 1u, eps = HCT_EPS)
+                var pa = GkHcNormArgs(dim = uint(HCT_DIM), hc = uint(HCT_HC), woff = 0u, row0 = 0u, eps = HCT_EPS)
+                var pa1 = GkHcNormArgs(dim = uint(HCT_DIM), hc = uint(HCT_HC), woff = 0u, row0 = 1u, eps = HCT_EPS)
                 cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                     enc_hc_norm_cls(raw, h, s, pa, int64(2 * HCT_HC))
                     enc_hc_norm_cls(raw, h, s1, pa1, int64(HCT_HC))
@@ -5810,7 +6284,7 @@ def test_vkd_hc_rows(t0 : T?) {
                 let gp = cp |> in_(gate)
                 let bp = cp |> out_(2 * HCT_DIM)
                 var s = cp |> cls_set(fixed_array(xp, gp, bp), @@set_hc_mix_cls)
-                var pa = HcMixArgs(dim = uint(HCT_DIM), hc = uint(HCT_HC), rows = 2u)
+                var pa = GkHcMixArgs(dim = uint(HCT_DIM), hc = uint(HCT_HC), rows = 2u)
                 cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                     enc_hc_mix_cls(raw, h, s, pa, int64((2 * HCT_DIM + 255) / 256))
                 }
@@ -5849,7 +6323,7 @@ def test_vkd_hc_rows(t0 : T?) {
                 let ap = cp |> in_(acc)
                 let lp = cp |> in_(logits)
                 var s = cp |> cls_set(fixed_array(rp, op, ip, ap, lp), @@set_hc_comb_cls)
-                var pa = HcCombArgs(dim = uint(HCT_DIM), hc = uint(HCT_HC), moe_on = 1u, sh_on = 1u, gated = 1u,
+                var pa = GkHcCombArgs(dim = uint(HCT_DIM), hc = uint(HCT_HC), moe_on = 1u, sh_on = 1u, gated = 1u,
                     rows = uint(rows - 1), row0 = 1u, lstride = uint(lstride))
                 cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                     enc_hc_comb_cls(raw, h, s, pa, int64(((rows - 1) * HCT_HCD + 255) / 256))
@@ -5952,9 +6426,9 @@ def private ple_side_case(t : T?; pos : int) {
             let tp = cp |> in_plain(toks)
             var sg = cp |> cls_set(fixed_array(kp, rp, vp, gp, hp, wp, tp, hp), @@set_ple_gate_cls)
             var sc = cp |> cls_set(fixed_array(rp, gp, hp, wp, tp, hp), @@set_ple_conv_cls)
-            var pg = PleGateArgs(dim = uint(dim), hc = uint(hc), nrows = uint(PLT_NROWS),
+            var pg = GkPleGateArgs(dim = uint(dim), hc = uint(hc), nrows = uint(PLT_NROWS),
                 rows = 0u, pos0 = 0u, eps = HCT_EPS, inv_sq = 1.0 / sqrt(float(dim)))
-            var pc = PleConvArgs(dim = uint(dim), hc = uint(hc), kern = uint(PLT_KERN), dil = uint(PLT_DIL),
+            var pc = GkPleConvArgs(dim = uint(dim), hc = uint(hc), kern = uint(PLT_KERN), dil = uint(PLT_DIL),
                 rows = 0u, pos0 = 0u)
             cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                 enc_ple_gate_cls(raw, h, sg, pg, int64(hc))
@@ -6041,9 +6515,9 @@ def private ple_panel_case(t : T?; rows, pos0 : int; tok_pos : bool = false) {
             var sc = cp |> cls_set(fixed_array(rp, gp, hp, wp, tp, pp), @@set_ple_conv_cls)
             var sm = cp |> cls_set(fixed_array(pp, hp, tp), @@set_ple_commit_cls)
             let push_pos = tok_pos ? PLE_POS_TOK : uint(pos0)
-            var pg = PleGateArgs(dim = uint(dim), hc = uint(hc), nrows = uint(PLT_NROWS),
+            var pg = GkPleGateArgs(dim = uint(dim), hc = uint(hc), nrows = uint(PLT_NROWS),
                 rows = uint(rows), pos0 = push_pos, eps = HCT_EPS, inv_sq = 1.0 / sqrt(float(dim)))
-            var pc = PleConvArgs(dim = uint(dim), hc = uint(hc), kern = uint(PLT_KERN), dil = uint(PLT_DIL),
+            var pc = GkPleConvArgs(dim = uint(dim), hc = uint(hc), kern = uint(PLT_KERN), dil = uint(PLT_DIL),
                 rows = uint(rows), pos0 = push_pos)
             var pm = PleCommitArgs(dim = uint(dim), hc = uint(hc), nrows = uint(PLT_NROWS), rows = uint(rows))
             cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
@@ -6141,6 +6615,185 @@ def private dn_delta_ref(convh, sth, smh : array<float>; npos, nkh, nvh, ds, bet
     return <- ref
 }
 
+//! the CPU form of the window's ring hand-off: new ring row k of channel ch is window row `row0 + k - old_rows` of `src`, or for
+//! k under `old_rows` the entry image's row `k + taps - old_rows` (both images per-channel, `old` at `old_off`, the new one at `out_off`)
+def private dn_tail_oracle(src, smalls : array<float>; cd, taps, row0, old_rows, old_off, out_off : int) : array<float> {
+    var want := smalls
+    for (ch in range(cd)) {
+        for (k in range(taps)) {
+            want[out_off + ch * taps + k] = (k >= old_rows ? src[(row0 + k - old_rows) * cd + ch]
+                : smalls[old_off + ch * taps + k + taps - old_rows])
+        }
+    }
+    return <- want
+}
+
+//! the window chain's conv-history hand-off: the call's last window's rows into the per-channel ring image, and a window shorter
+//! than the taps (a continuation's lone short window) reading its leading rows off the image the call entered on
+[test]
+def test_vkd_dn_tail(t0 : T?) {
+    t0 |> run("dn_tail == the per-channel ring the decode step reads: the last taps rows of a window, the leading rows of a window shorter than the taps off the entry image") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_moe_init()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            verify(ensure_dn_tail_cls(), "the dn_tail class rail must engage on a live device")
+            let cd = 200   //! off the 256-thread grid: the last workgroup partial
+            let taps = 3
+            let img = cd * taps
+            let old_off = 16
+            let out_off = old_off + img + 4   //! four foreign words between the two images, which the kernel must leave alone
+            for (wlen in [5, 3, 2, 1]) {
+                let row0 = max(wlen - taps, 0)
+                let old_rows = max(taps - wlen, 0)
+                var src <- hash_fill(wlen * cd, 515u + uint(wlen), 1000u, 500.0, 1.0)
+                var smalls <- hash_fill(out_off + img + 8, 907u, 1000u, 250.0, 2.0)
+                var want <- dn_tail_oracle(src, smalls, cd, taps, row0, old_rows, old_off, out_off)
+                with_cell_planes() $(var cp : CellPlanes) {
+                    let ps = cp |> in_plain(src)
+                    let pm = cp |> io_(smalls)
+                    var sc = cp |> cls_set(fixed_array(ps, pm), @@set_dn_tail_cls)
+                    var pc = DnTailArgs(cd = uint(cd), taps = uint(taps), row0 = uint(row0), hist_off = uint(out_off), old_rows = uint(old_rows), old_off = uint(old_off))
+                    cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                        enc_dn_tail_cls(raw, h, sc, pc, int64((img + 255) / 256))
+                    }
+                    var got <- cp |> plane_run(pm)
+                    check_exact(t, "dn_tail at {wlen} window rows ({old_rows} off the entry image)", got, want)
+                    if (old_rows > 0) {   //! the control: the zero-history tail a prompt from position zero writes must miss a continuation's ring
+                        var zeroed := smalls
+                        for (i in range(img)) {
+                            zeroed[old_off + i] = 0.0
+                        }
+                        var from_zero <- dn_tail_oracle(src, zeroed, cd, taps, row0, old_rows, old_off, out_off)
+                        for (i in range(img)) {
+                            from_zero[old_off + i] = smalls[old_off + i]
+                        }
+                        t |> success(mismatch_exact(got, from_zero) > 0, "dn_tail at {wlen} rows: the zero-history ring differs from the continued one")
+                        delete from_zero
+                        delete zeroed
+                    }
+                    delete got
+                }
+                delete want
+                delete smalls
+                delete src
+            }
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+//! the window rows `[lead, lead + npos)` of `rows` a row of `w` floats each, the `lead` rows ahead of them garbage that a kernel
+//! reading them would carry into its output
+def private dn_rows_at(rows : array<float>; lead, w : int) : array<float> {
+    var out <- row_fill(lead * w, 31, 0, 7.0, 3.0, 13)
+    out |> push_from(rows)
+    return <- out
+}
+
+//! a segmented window's recurrent parts: the conv and the scan dispatched at a row base past zero read and write the part's rows
+//! alone - its src and conv rows, its beta / g rows, its o rows - bit for bit the same rows dispatched at row 0
+[test]
+def test_vkd_dn_rows_base(t0 : T?) {
+    t0 |> run("dn_conv and dn_scan at a row base past zero == the same rows at row 0, bit for bit, the rows ahead of the base untouched") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!dn_cells_gate(t)) return
+            verify(ensure_dn_conv_cls() && ensure_dn_scan_cls(), "the dn class rails must engage on a device over the shared cap")
+            let ds = 128
+            let nkh = 2
+            let nvh = 4
+            let kd = nkh * ds
+            let cd = 2 * kd + nvh * ds
+            let di = nvh * ds
+            let dconv = 4
+            let taps = dconv - 1
+            let npos = 21
+            let lead = 9
+            let eps = 0.00001
+            let taps_off = 16
+            let hist_off = taps_off + cd * dconv
+            var inscope srch <- row_fill(npos * cd, 19, 0, 0.03, 1.1, 79)
+            var inscope srcl <- dn_rows_at(srch, lead, cd)
+            var inscope smh <- row_fill(hist_off + cd * taps, 11, 0, 0.02, 0.35, 37)
+            var inscope convs : array<array<float>>
+            for (base in fixed_array(0, lead)) {
+                with_cell_planes() $(var cp : CellPlanes) {
+                    let psrc = cp |> in_(base == 0 ? srch : srcl)
+                    let psm = cp |> in_(smh)
+                    let po = cp |> out_((base + npos) * cd)
+                    var sc = cp |> cls_set(fixed_array(psrc, po, psm), @@set_dn_conv_cls)
+                    var pc = GkDnConvArgs(npos = uint(npos), cd = uint(cd), kd = uint(kd), ds = uint(ds), dconv = uint(dconv), hist_mode = 1u,
+                        taps_off = uint(taps_off), hist_off = uint(hist_off), eps = eps, qscale = 1.25, row0 = uint(base))
+                    cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                        enc_dn_conv_cls(raw, h, sc, pc, dn_conv_wgs(int64(cd), int64(npos)))
+                    }
+                    var inscope o <- cp |> plane_run(po)
+                    var lead_kept = 0
+                    for (i in range(base * cd)) {
+                        lead_kept += float_bits_to_uint(o[i]) == NAN_SENTINEL_BITS ? 1 : 0
+                    }
+                    t |> equal(lead_kept, base * cd, "dn_conv at row base {base}: the rows ahead of the base keep their sentinel")
+                    convs |> emplace <| [for (i in range(npos * cd)); o[base * cd + i]]
+                }
+            }
+            check_exact(t, "dn_conv at row base {lead} against row 0", convs[1], convs[0])
+            //! the scan over the conv rows, with the beta / g rows and the o rows at the same base
+            let beta_off = 16
+            let g_off = beta_off + (lead + npos) * nvh
+            let a_off = g_off + (lead + npos) * nvh
+            let dt_off = a_off + nvh
+            var inscope bg <- row_fill((lead + npos) * nvh, 17, 0, 0.03, 0.6, 43)
+            var inscope scans : array<array<float>>
+            for (base in fixed_array(0, lead)) {
+                var inscope smv : array<float>
+                smv |> resize(dt_off + nvh)
+                for (i in range(npos * nvh)) {
+                    smv[beta_off + (base + i / nvh) * nvh + i % nvh] = bg[lead * nvh + i]
+                    smv[g_off + (base + i / nvh) * nvh + i % nvh] = bg[i]
+                }
+                for (i in range(nvh)) {
+                    smv[a_off + i] = -0.4 - float(i) * 0.1
+                    smv[dt_off + i] = 0.05 * float(i)
+                }
+                var inscope convh : array<float>
+                convh |> resize((base + npos) * cd)
+                for (i in range(npos * cd)) {   //! unit-scale rows, the conv stage's L2-normed shape
+                    convh[base * cd + i] = (float((i * 19) % 79) * 0.025 - 0.9) * 0.15
+                }
+                var inscope sth <- row_fill(nvh * ds * ds, 13, 0, 0.02, 0.5, 53)
+                with_cell_planes() $(var cp : CellPlanes) {
+                    let pconv = cp |> in_(convh)
+                    let pst = cp |> io_(sth)
+                    let psm = cp |> in_(smv)
+                    let po = cp |> out_((base + npos) * di)
+                    var sc = cp |> cls_set(fixed_array(pconv, pst, psm, po), @@set_dn_scan_cls)
+                    var pcs = DnScanArgs(npos = uint(npos), cd = uint(cd), kd = uint(kd), nvh = uint(nvh), nkh = uint(nkh), ds = uint(ds),
+                        beta_off = uint(beta_off), g_off = uint(g_off), a_off = uint(a_off), dt_off = uint(dt_off), o_off = 0u,
+                        di = uint(di), row0 = uint(base))
+                    cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                        enc_dn_scan_cls(raw, h, sc, pcs, dn_scan_wgs(int64(nvh), int64(ds)))
+                    }
+                    var inscope o <- cp |> plane_run(po)
+                    var inscope st_got <- cp |> plane_run(pst)
+                    var lead_kept = 0
+                    for (i in range(base * di)) {
+                        lead_kept += float_bits_to_uint(o[i]) == NAN_SENTINEL_BITS ? 1 : 0
+                    }
+                    t |> equal(lead_kept, base * di, "dn_scan at row base {base}: the o rows ahead of the base keep their sentinel")
+                    var got <- [for (i in range(npos * di)); o[base * di + i]]
+                    got |> push_from(st_got)
+                    scans |> emplace(got)
+                }
+            }
+            check_exact(t, "dn_scan at row base {lead} against row 0 (the o rows, then the state)", scans[1], scans[0])
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
 [test]
 def test_vkd_dn_family(t0 : T?) {
     t0 |> run("deltanet class kernels == the CPU oracle (conv, fused step, 2-phase scan)") <| @(t : T?) {
@@ -6174,7 +6827,7 @@ def test_vkd_dn_family(t0 : T?) {
                     let psm = cp |> in_(smh)
                     let po = cp |> out_(npos * cd)
                     var sc = cp |> cls_set(fixed_array(psrc, po, psm), @@set_dn_conv_cls)
-                    var pc = DnConvArgs(npos = uint(npos), cd = uint(cd), kd = uint(kd), ds = uint(ds),
+                    var pc = GkDnConvArgs(npos = uint(npos), cd = uint(cd), kd = uint(kd), ds = uint(ds),
                         dconv = uint(dconv), hist_mode = uint(hist_mode), taps_off = uint(taps_off),
                         hist_off = uint(hist_off), eps = eps, qscale = qscale)
                     cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
@@ -6367,7 +7020,7 @@ def test_vkd_dn_family(t0 : T?) {
                     nvh = uint(nvh), nkh = uint(nkh), ds = uint(ds),
                     beta_off = uint(beta_off), g_off = uint(g_off), a_off = uint(a_off),
                     dt_off = uint(dt_off), o_off = uint(o_off), di = uint(di))
-                var pc3 = DnScanP3Args(npos = uint(npos), nvh = uint(nvh), di = uint(di), ds = uint(ds),
+                var pc3 = GkDnGateArgs(nvh = uint(nvh), di = uint(di), ds = uint(ds),
                     o_off = uint(o_off), wnorm_off = uint(wnorm_off), eps = eps)
                 //! the scan from the uploaded state, then the out-norm gated by silu(z) and, the second time, by the sigmoid out-gate
                 //! stamp (`dn_scan_p3_sig_cls`, qwen4exp)
@@ -6756,7 +7409,7 @@ def test_vkd_dn_ba(t0 : T?) {
     }
 }
 
-//! dn_ba at one geometry against the CPU dot over the f16-rounded weight rows (the layer's `ne` rows from row base `woff`): the
+//! dn_ba at one geometry against the CPU dot over the f32 weight rows (the layer's `ne` rows from row base `woff`): the
 //! beta outputs at 16, the alpha outputs past an 8-word gap, the plane under the sentinel and only the written positions
 //! compared; the bar's control pushes the first alpha output (`poison_beta`: the first beta output); `timed` logs the dispatch
 //! before its submit and times the submit, so a device hang names its kernel
@@ -6771,12 +7424,11 @@ def private dn_ba_cell(t : T?; tag : string; dim, nvh, npos, woff : int; poison_
         var xh <- hash_fill(npos * dim, 77777u, 1000u, 500.0, 1.0)
         var want : array<float>
         want |> resize(out_n)
-        var wh16 <- pack_f16(wh)   // the device keeps the rows f16: the oracle dots the rounded weights
-        for (p in range(npos)) {
+        for (p in range(npos)) {   // the device reads the file's f32 rows: the oracle dots the same floats
             for (e in range(ne)) {
                 var acc = 0.0
                 for (k in range(dim)) {
-                    acc += float(wh16[woff + e * dim + k]) * xh[p * dim + k]
+                    acc += wh[woff + e * dim + k] * xh[p * dim + k]
                 }
                 want[(e < nvh ? ob_b : ob_g) + p * ostride + e % nvh] = acc
             }
@@ -6784,7 +7436,7 @@ def private dn_ba_cell(t : T?; tag : string; dim, nvh, npos, woff : int; poison_
         let wgs = dn_ba_wgs(int64(npos), int64(nvh))
         var got : array<float>
         with_cell_planes() $(var cp : CellPlanes) {
-            let pw = cp |> in_plain(wh16)
+            let pw = cp |> in_plain(wh)
             let px = cp |> in_(xh)
             let po = cp |> out_(out_n)
             var sc = cp |> cls_set(fixed_array(pw, px, po), @@set_dn_ba_cls)
@@ -6810,7 +7462,6 @@ def private dn_ba_cell(t : T?; tag : string; dim, nvh, npos, woff : int; poison_
         t |> success(ba_plane_mismatches(poison, want, npos, ne, nvh, ob_b, ob_g, ostride) > 0, "{tag}: the bar reds a poisoned output")
         delete poison
         delete wh
-        delete wh16
         delete xh
         delete want
         delete got
@@ -6935,10 +7586,10 @@ def test_vkd_dn_9b_ba(t0 : T?) {
     }
 }
 
-// the decode's beta/alpha GEMV over the f16 rows: ne rows at a row base, the ne outputs at an output base
+//! the f16 router-form GEMV (the per-layer-embedding projection's rows): ne rows at a row base, the ne outputs at an output base
 [test]
 def test_vkd_router_gemv_f16(t0 : T?) {
-    t0 |> run("router_gemv_f16 (the decode's f16 beta/alpha rows) == the CPU dot at a row base and an output base") <| @(t : T?) {
+    t0 |> run("router_gemv_f16 (the f16 router-form rows) == the CPU dot at a row base and an output base") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!vk_moe_init()) {
                 t |> skip("no Vulkan device")
@@ -6994,7 +7645,7 @@ def test_vkd_router_gemv_f16(t0 : T?) {
                 let po = cp |> out_(out_n)
                 let pn = cp |> in_(wnh)
                 var sc = cp |> cls_set(fixed_array(pw, px, po, px), @@set_router_gemv_f16_cls)
-                var pc = RouterArgs(ne = uint(ne), dim = uint(dim), woff = uint(woff), obase = uint(obase))
+                var pc = GkRouterArgs(ne = uint(ne), dim = uint(dim), woff = uint(woff), obase = uint(obase))
                 cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                     enc_router_gemv_f16_cls(raw, h, sc, pc, int64(ne))
                 }
@@ -7006,7 +7657,7 @@ def test_vkd_router_gemv_f16(t0 : T?) {
                 t |> success(rel_mismatches(poison, want, obase, ne) > 0, "router_gemv_f16: the bar reds a poisoned output")
                 delete poison
                 cp |> plane_refill(po)
-                var pc2 = RouterArgs(ne = uint(ne), dim = uint(dim), woff = uint(woff), obase = uint(obase), ne_split = uint(ne1), obase_split = uint(obase2))
+                var pc2 = GkRouterArgs(ne = uint(ne), dim = uint(dim), woff = uint(woff), obase = uint(obase), ne_split = uint(ne1), obase_split = uint(obase2))
                 cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                     enc_router_gemv_f16_cls(raw, h, sc, pc2, int64(ne))
                 }
@@ -7021,7 +7672,7 @@ def test_vkd_router_gemv_f16(t0 : T?) {
                 t |> success(bad2 == 0 && gap == 0, "router_gemv_f16 two bases: {bad2} of {ne} outputs off the CPU dot, {gap} of 4 gap words written")
                 cp |> plane_refill(po)
                 var sc3 = cp |> cls_set(fixed_array(pw, px, po, pn), @@set_router_gemv_f16_cls)
-                var pc3 = RouterArgs(ne = uint(ne), dim = uint(dim), woff = uint(woff), obase = uint(obase), norm_on = 1u, nwoff = uint(nwoff), eps = eps)
+                var pc3 = GkRouterArgs(ne = uint(ne), dim = uint(dim), woff = uint(woff), obase = uint(obase), norm_on = 1u, nwoff = uint(nwoff), eps = eps)
                 cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                     enc_router_gemv_f16_cls(raw, h, sc3, pc3, int64(ne))
                 }
@@ -7040,6 +7691,73 @@ def test_vkd_router_gemv_f16(t0 : T?) {
             delete wh16
             delete xh
             delete want
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+//! the decode's f32 beta/alpha GEMV - the f32 stamp over the file's rows in its two-base form, one row and three rows a dispatch
+[test]
+def test_vkd_router_gemv_f32_ba(t0 : T?) {
+    t0 |> run("router_gemv (the decode's f32 beta/alpha rows) == the CPU dot over the f32 rows: the beta rows at one base, the alpha rows at the other, one and three columns") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_moe_init()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            verify(ensure_router_gemv_cls(), "the router_gemv class rail must engage on a live device")
+            let dim = 2048
+            let nvh = 32
+            let ne = 2 * nvh
+            let woff = ne * dim   // the second recurrent layer's [beta ; alpha] rows
+            let ob_b = 16
+            let ob_g = ob_b + 3 * nvh + 4
+            let out_n = ob_g + 3 * nvh + 8
+            var wh <- hash_fill(woff + ne * dim, 4343u, 1000u, 500.0, 1.0)
+            var xh <- hash_fill(3 * dim, 101u, 1000u, 500.0, 1.0)
+            for (ncols in [1, 3]) {
+                var want : array<float>
+                want |> resize(out_n)
+                for (c in range(ncols)) {
+                    for (e in range(ne)) {
+                        var acc = 0.0
+                        for (k in range(dim)) {
+                            acc += wh[woff + e * dim + k] * xh[c * dim + k]
+                        }
+                        want[e < nvh ? ob_b + c * nvh + e : ob_g + c * nvh + (e - nvh)] = acc
+                    }
+                }
+                with_cell_planes() $(var cp : CellPlanes) {
+                    let pw = cp |> in_plain(wh)
+                    let px = cp |> in_(xh)
+                    let po = cp |> out_(out_n)
+                    var sc = cp |> cls_set(fixed_array(pw, px, po, px), @@set_router_gemv_cls)
+                    var pc = GkRouterArgs(ne = uint(ne), dim = uint(dim), woff = uint(woff), obase = uint(ob_b),
+                        ne_split = uint(nvh), obase_split = uint(ob_g), ncols = uint(ncols))
+                    cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                        enc_router_gemv_cls(raw, h, sc, pc, int64(ne))
+                    }
+                    var got <- cp |> plane_run(po)
+                    let bad = rel_mismatches(got, want, ob_b, ncols * nvh) + rel_mismatches(got, want, ob_g, ncols * nvh)
+                    t |> success(bad == 0, "router_gemv f32 ba, {ncols} column(s): {bad} of {ncols * ne} outputs off the CPU dot")
+                    var gap = 0
+                    for (i in range(ob_b + ncols * nvh, ob_g)) {
+                        if (float_bits_to_uint(got[i]) != NAN_SENTINEL_BITS) {
+                            gap++
+                        }
+                    }
+                    t |> equal(gap, 0, "router_gemv f32 ba, {ncols} column(s): the words between the beta and alpha bases untouched")
+                    var poison := got   // the bar's control: one alpha output pushed past it must red
+                    poison[ob_g] += 1.0 + 2.0 * abs(want[ob_g])
+                    t |> success(rel_mismatches(poison, want, ob_g, ncols * nvh) > 0, "router_gemv f32 ba: the bar reds a poisoned output")
+                    delete poison
+                    delete got
+                }
+                delete want
+            }
+            delete wh
+            delete xh
         } else {
             t |> skip("dasVulkan not present")
         }
@@ -7139,10 +7857,10 @@ def test_vkd_kv16_readers(t0 : T?) {
 }
 
 [test]
-def test_vkd_emb_gather_pair(t0 : T?) {
-    t0 |> run("embed-gather class kernels (q8 + f32) == the CPU dequant/copy") <| @(t : T?) {
+def test_vkd_emb_gather_q8_f32(t0 : T?) {
+    t0 |> run("the q8 and f32 token-table gathers == the CPU dequant and rows, an EMB_ID_HOST row the host's staged row") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!ensure_emb_gather_cls() || !ensure_emb_gather_f32_cls()) {
+            if (!ensure_emb_gather_cls()) {
                 t |> skip("no Vulkan device")
                 return
             }
@@ -7150,7 +7868,7 @@ def test_vkd_emb_gather_pair(t0 : T?) {
             let nbb = dim / 32
             let vocab = 16
             let npos = 8
-            let scale = 1.25
+            let scale = sqrt(1536.0)   //! gemma-4-E2B's embed scale: off the lattice, so the dequant's two roundings and the folded scale's part
             let wblk0 = 3              // the plane sits 3 blocks into its slab - the serving shape, never block 0
             let totblk = wblk0 + vocab * nbb
             var wqh <- hashed_words(totblk * 8, 1u, 5u)
@@ -7159,65 +7877,109 @@ def test_vkd_emb_gather_pair(t0 : T?) {
             wsh16 |> resize(totblk)
             idsh |> resize(npos)
             for (i in range(totblk)) {
-                wsh16[i] = float16(0.0625 + float(i % 7) * 0.03125)
+                wsh16[i] = float16(0.0625 + float(i % 7) * 0.03125 + float(i % 5) * 0.0013)
             }
             for (i in range(npos)) {
                 idsh[i] = uint((i * 5 + 3) % 6)   // a 6-cycle over 8 rows: tokens 3 and 2 gather twice
             }
-            // f32 twin's table: a distinct pattern so a crossed binding cannot pass
-            var wfh : array<float>
-            wfh |> resize(vocab * dim)
-            for (i in range(vocab * dim)) {
-                wfh[i] = float(i % 97) * 0.125 - 6.0
-            }
-            var y_cls, yf_cls : array<float>
+            idsh[npos - 2] = EMB_ID_HOST   //! one row the host stages: the gather copies it in place of a table row
+            var xhh <- row_fill(npos * dim, 11, 2, 0.0625, -3.0)
+            var y_cls : array<float>
             with_cell_planes() $(var cp : CellPlanes) {
                 let pwq = cp |> in_plain(wqh)
                 let pws = cp |> in_plain(wsh16)
                 let pid = cp |> in_plain(idsh)
-                let pwf = cp |> in_(wfh)
+                let pxh = cp |> in_(xhh)
                 let px = cp |> out_(npos * dim)
-                var scq = cp |> cls_set(fixed_array(pwq, pws, pid, px), @@set_emb_gather_cls)
-                var scf = cp |> cls_set(fixed_array(pwf, pid, px), @@set_emb_gather_f32_cls)
+                var scq = cp |> cls_set(fixed_array(pwq, pws, pid, px, pxh), @@set_emb_gather_cls)
                 var pc = EmbArgs(npos = uint(npos), dim = uint(dim), wblk0 = uint(wblk0), embed_scale = scale)
                 cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                     enc_emb_gather_cls(raw, h, scq, pc, int64((npos * dim / 4 + 255) / 256))
                 }
                 delete y_cls
                 y_cls <- cp |> plane_run(px)
-                cp |> plane_refill(px)
-                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
-                    enc_emb_gather_f32_cls(raw, h, scf, pc, int64((npos * dim / 4 + 255) / 256))
-                }
-                delete yf_cls
-                yf_cls <- cp |> plane_run(px)
             }
-            var y_ref, yf_ref : array<float>
+            var y_ref : array<float>
             y_ref |> resize(npos * dim)
-            yf_ref |> resize(npos * dim)
             for (r in range(npos)) {
-                let tok = int(idsh[r])
                 for (col in range(dim)) {
-                    let ib = wblk0 + tok * nbb + col / 32
+                    if (idsh[r] == EMB_ID_HOST) {
+                        y_ref[r * dim + col] = xhh[r * dim + col]
+                        continue
+                    }
+                    let ib = wblk0 + int(idsh[r]) * nbb + col / 32
                     let by = col % 32
                     let w = wqh[ib * 8 + by / 4]
                     let q = int8(w >> uint(8 * (by % 4)))
-                    y_ref[r * dim + col] = float(int(q)) * (float(wsh16[ib]) * scale)
-                    yf_ref[r * dim + col] = wfh[tok * dim + col] * scale
+                    y_ref[r * dim + col] = (float(int(q)) * float(wsh16[ib])) * scale   //! the host embed's order: the row's dequant, then the embed scale (`embed_row`, `scale_inplace`)
                 }
             }
             let bad = mismatch_exact(y_cls, y_ref)
-            t |> success(bad == 0, "q8 embed gather matches the CPU dequant ({bad} of {npos * dim} off)")
-            let badf = mismatch_exact(yf_cls, yf_ref)
-            t |> success(badf == 0, "f32 embed gather matches the CPU copy ({badf} of {npos * dim} off)")
+            t |> success(bad == 0, "q8 token-table gather matches the CPU dequant and the host row ({bad} of {npos * dim} off)")
+            var folded = 0   //! the order control: the scale folded into the block scale first rounds apart on this fixture
+            var dev_folded = 0
+            for (r in range(npos)) {
+                for (col in range(dim)) {
+                    continue if (idsh[r] == EMB_ID_HOST)
+                    let ib = wblk0 + int(idsh[r]) * nbb + col / 32
+                    let by = col % 32
+                    let q = int8(wqh[ib * 8 + by / 4] >> uint(8 * (by % 4)))
+                    let fv = float(int(q)) * (float(wsh16[ib]) * scale)
+                    folded += fv != y_ref[r * dim + col] ? 1 : 0
+                    dev_folded += fv != y_cls[r * dim + col] ? 1 : 0
+                }
+            }
+            to_log(LOG_INFO, "q8 gather: the device off the folded order at {dev_folded} elements, the host order at {bad}\n")
+            t |> success(folded > 0, "the q8 gather's order control: the scale folded into the block scale lands {folded} elements off the host's order")
+            var y_poison := y_cls   // the compare's control
+            y_poison[(npos - 2) * dim] += 0.5
+            t |> success(mismatch_exact(y_poison, y_ref) > 0, "the compare reds a host row moved by a half")
+            delete y_poison
+            if (ensure_emb_gather_f32_cls()) {   //! the f32 stamp over an F32/F16/BF16 table's exact rows: a distinct pattern, so a crossed binding cannot pass
+                var wfh : array<float>
+                wfh |> resize(vocab * dim)
+                for (i in range(vocab * dim)) {
+                    wfh[i] = float(i % 97) * 0.125 - 6.0
+                }
+                var yf_cls : array<float>
+                with_cell_planes() $(var cp : CellPlanes) {
+                    let pwf = cp |> in_(wfh)
+                    let pid = cp |> in_plain(idsh)
+                    let pxh = cp |> in_(xhh)
+                    let px = cp |> out_(npos * dim)
+                    var scf = cp |> cls_set(fixed_array(pwf, pid, px, pxh), @@set_emb_gather_f32_cls)
+                    var pc = EmbArgs(npos = uint(npos), dim = uint(dim), wblk0 = 0u, embed_scale = scale)
+                    cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                        enc_emb_gather_f32_cls(raw, h, scf, pc, int64((npos * dim / 4 + 255) / 256))
+                    }
+                    delete yf_cls
+                    yf_cls <- cp |> plane_run(px)
+                }
+                var yf_ref : array<float>
+                yf_ref |> resize(npos * dim)
+                for (r in range(npos)) {
+                    for (col in range(dim)) {
+                        yf_ref[r * dim + col] = idsh[r] == EMB_ID_HOST ? xhh[r * dim + col] : wfh[int(idsh[r]) * dim + col] * scale
+                    }
+                }
+                let badf = mismatch_exact(yf_cls, yf_ref)
+                t |> success(badf == 0, "f32 token-table gather matches the CPU rows and the host row ({badf} of {npos * dim} off)")
+                var yf_poison := yf_cls
+                yf_poison[0] += 0.5
+                t |> success(mismatch_exact(yf_poison, yf_ref) > 0, "the f32 compare reds a row moved by a half")
+                delete yf_poison
+                delete wfh
+                delete yf_cls
+                delete yf_ref
+            } else {
+                t |> failure("the f32 gather class failed to build on a device that built the q8 one")
+            }
             delete wqh
             delete wsh16
             delete idsh
-            delete wfh
+            delete xhh
             delete y_cls
-            delete yf_cls
             delete y_ref
-            delete yf_ref
         } else {
             t |> skip("dasVulkan not present")
         }
@@ -7258,8 +8020,8 @@ def test_vkd_hot_combine(t0 : T?) {
                 let pd = cp |> in_(down)
                 var sp = cp |> cls_set(fixed_array(pa, pid, pw, pd), @@set_combine_cls)
                 var s0 = cp |> cls_set(fixed_array(pa0, pid, pw, pd), @@set_combine_cls)
-                var pc = CombineArgs(n = uint(n), k = uint(k), r0 = 1u, r1 = uint(k) + 1u)
-                var pc0 = CombineArgs(n = uint(n), k = uint(k), r0 = 0u, r1 = uint(k))   // the window at 0 starts the sum: the host's row is lost
+                var pc = GkMoeCombArgs(n = uint(n), k = uint(k), r0 = 1u, r1 = uint(k) + 1u)
+                var pc0 = GkMoeCombArgs(n = uint(n), k = uint(k), r0 = 0u, r1 = uint(k))   // the window at 0 starts the sum: the host's row is lost
                 cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                     enc_combine_cls(raw, h, sp, pc, 1l)
                     enc_combine_cls(raw, h, s0, pc0, 1l)
@@ -7754,8 +8516,8 @@ def private moe_topk_rows_arm(t : T?; norm : bool; wscale : float; gate : MoeGat
             let prb = cp |> in_(rb)
             let pw = cp |> out_(MR_NPOS * MR_K)
             let pidx = cp |> out_(MR_NPOS * MR_K)
-            var sc = cp |> cls_set(fixed_array(pl, pw, pl, prb, pidx), @@set_topk_rows_cls)   //! no down scale: the logits fill the ds binding, never read at NO_DSCALE
-            var pc = TopkArgs(ne = uint(MR_NE), k = uint(MR_K), norm = norm || gate == MoeGate.softmax_weight ? 1u : 0u, lstride = uint(MR_NER), wscale = wscale, dsoff = NO_DSCALE,
+            var sc = cp |> cls_set(fixed_array(pl, pw, pl, prb, pidx), @@set_topk_rows_cls)   //! no down scale: the logits fill the ds binding, never read at GK_NO_DSCALE
+            var pc = GkTopKArgs(ne = uint(MR_NE), k = uint(MR_K), norm = norm || gate == MoeGate.softmax_weight ? 1u : 0u, lstride = uint(MR_NER), wscale = wscale, dsoff = GK_NO_DSCALE,
                 rbias_on = rbias ? 1u : 0u, rboff = uint(MR_NE))
             cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                 enc_topk_rows_cls(raw, h, sc, pc, int64(MR_NPOS))
@@ -7790,12 +8552,12 @@ def private moe_topk_rows_arm(t : T?; norm : bool; wscale : float; gate : MoeGat
 }
 
 //! the bucket schedule against its CPU twin, word for word over the whole planes (three empty experts, a sentinel fill)
-def private moe_sched_arm(t : T?) {
+def private moe_sched_arm(t : T?; ne : int = MR_NE; s_only : bool = false) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let nk = 4 * MR_NPOS * MR_K
         let wt_gu = 3
         let wt_dn = 2
-        let sh = sched_shape(nk, MR_NE, wt_gu, wt_dn)
+        let sh = sched_shape(nk, ne, wt_gu, wt_dn, s_only)
         var idx : array<uint>
         idx |> resize(nk)
         //! the ladder's four shapes: expert 0 a whole m column plus an s remainder, 1 and 2 one partial
@@ -7805,11 +8567,11 @@ def private moe_sched_arm(t : T?) {
         let c2 = int(SCHED_S_ROWS) + 8
         let c3 = int(SCHED_S_ROWS) - 12
         for (r in range(nk)) {
-            idx[r] = r < c0 ? 0u : (r < c0 + c1 ? 1u : (r < c0 + c1 + c2 ? 2u : (r < c0 + c1 + c2 + c3 ? 3u : 4u + hash_word(uint(r) + 55u) % uint(MR_NE - 7))))
+            idx[r] = r < c0 ? 0u : (r < c0 + c1 ? 1u : (r < c0 + c1 + c2 ? 2u : (r < c0 + c1 + c2 + c3 ? 3u : 4u + hash_word(uint(r) + 55u) % uint(ne - 7))))
         }
         let bases = fixed_array(1_000u, 96u, 2_000u, 96u, 3_000u, 48u)
         var winv, w1, w3, w2 : array<uint>
-        sched_oracle(idx, MR_NE, wt_gu, wt_dn, sh, bases, winv, w1, w3, w2)
+        sched_oracle(idx, ne, wt_gu, wt_dn, sh, bases, winv, w1, w3, w2, s_only)
         let s_bytes = long_length(w1) * 4l
         var ginv, g1, g3, g2, gbex : array<uint>
         with_cell_planes() $(var cp : CellPlanes) {
@@ -7820,12 +8582,13 @@ def private moe_sched_arm(t : T?) {
             let p2 = cp |> out_words(s_bytes, MR_SENT)
             let pbex = cp |> out_(nk)
             var sc = cp |> cls_set(fixed_array(pidx, pinv, p1, p3, p2, pbex), @@set_moe_sched_cls)
-            var pc = SchedArgs(nk = uint(nk), ne = uint(MR_NE), wt_gu = uint(wt_gu), wt_dn = uint(wt_dn),
+            var pc = SchedArgs(nk = uint(nk), ne = uint(ne), wt_gu = uint(wt_gu), wt_dn = uint(wt_dn),
                 map_off = uint(sh.map_off), map_off_mgu = uint(sh.map_off_mgu), map_off_mdn = uint(sh.map_off_mdn),
                 bound_gu = uint(sh.bound_gu), bound_dn = uint(sh.bound_dn), bound_mgu = uint(sh.bound_mgu), bound_mdn = uint(sh.bound_mdn),
-                base1 = bases[0], stride1 = bases[1], base3 = bases[2], stride3 = bases[3], base2 = bases[4], stride2 = bases[5])
+                base1 = bases[0], stride1 = bases[1], base3 = bases[2], stride3 = bases[3], base2 = bases[4], stride2 = bases[5],
+                s_only = s_only ? 1u : 0u)
             cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
-                enc_moe_sched_cls(raw, h, sc, pc, 1l)
+                moe_sched_enc(int64(ne), raw, h, sc, pc)
             }
             delete ginv
             ginv <- cp |> plane_as(pinv, type<uint>, nk)
@@ -7864,8 +8627,9 @@ def private moe_sched_arm(t : T?) {
         t |> success(mismatch_qbytes(g1, w1, 0) == 0, "the gate plane's s and m records, maps and sentinel tails match the CPU twin word for word ({length(w1)} words)")
         t |> success(mismatch_qbytes(g3, w3, 0) == 0, "the up plane's schedule matches")
         t |> success(mismatch_qbytes(g2, w2, 0) == 0, "the down plane's schedule matches (its own tile counts and tails)")
-        w2[sh.map_off_mdn + sh.bound_mdn - 1] = 0u
-        t |> success(mismatch_qbytes(g2, w2, 0) > 0, "schedule control: the m map's last sentinel word flipped reds the compare")
+        let last = s_only ? sh.map_off + sh.bound_dn - 1 : sh.map_off_mdn + sh.bound_mdn - 1
+        w2[last] = 0u
+        t |> success(mismatch_qbytes(g2, w2, 0) > 0, "schedule control: the last map's last sentinel word flipped reds the compare")
         delete idx
         delete winv
         delete w1
@@ -8158,12 +8922,10 @@ def private moe_ar_comb_g4_arm(t : T?) {
 //! the N-row command's top-k against the one-row top-k run a row at a time: the picks, the weights and the region
 //! records bit for bit, the rows' feed blocks where the one-row form writes row zero's - and the picks against the host
 //! select, the same oracle the window's per-row form holds to; `gptoss_router_bias` takes the biased pick
-def private topk_n_arm(t : T?; gptoss_router_bias : bool) {
+def private topk_n_arm(t : T?; gptoss_router_bias : bool; ne : int = 40; k : int = 6; depth1 : bool = false) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let npos = 4
-        let ne = 40
-        let k = 6
-        let lstride = 48
+        let lstride = ne + 8
         let xnb1 = 7u
         let xnb2 = 5u
         var lh, rb : array<float>
@@ -8171,6 +8933,11 @@ def private topk_n_arm(t : T?; gptoss_router_bias : bool) {
         rb |> resize(2 * ne)
         for (i in range(npos * lstride)) {
             lh[i] = hash_unit(uint(i) * 3u + 211u) * 2.0 + float(i % 7) * 0.0625   //! spread past any near-tie
+        }
+        for (p in range(npos)) {   //! past 256 experts each row's largest logit sits past the first 256: a select that reaches 256 misses it
+            if (ne > 256) {
+                lh[p * lstride + 300 + 37 * p] += 8.0
+            }
         }
         for (e in range(ne)) {
             rb[e] = 7.0
@@ -8185,7 +8952,7 @@ def private topk_n_arm(t : T?; gptoss_router_bias : bool) {
         let dsd = make_device_buf(ds_bytes)
         let rbd = make_device_buf(rb_bytes)
         let gbits = fixed_array(1u, 2u, 4u, 8u, 16u, 0u, 0u, 32u)
-        var pc = TopkArgs(ne = uint(ne), k = uint(k), norm = 1u, wscale = 0.0, dsoff = NO_DSCALE, rbias_on = gptoss_router_bias ? 1u : 0u, rboff = uint(ne),
+        var pc = GkTopKArgs(ne = uint(ne), k = uint(k), norm = 1u, wscale = 0.0, dsoff = GK_NO_DSCALE, rbias_on = gptoss_router_bias ? 1u : 0u, rboff = uint(ne),
             base1 = 100u, stride1 = 1000u, base3 = 200u, stride3 = 1000u, base2 = 300u, stride2 = 2000u, xnb2 = xnb2,
             lstride = uint(lstride), xnb1 = xnb1)
         var pc1 = pc
@@ -8197,7 +8964,8 @@ def private topk_n_arm(t : T?; gptoss_router_bias : bool) {
             nan_sentinel_upload(dsd, ds_bytes)
         }
         let arm = gptoss_router_bias ? "router bias" : "plain"
-        let tag = "topk_n ({arm})"
+        let tag = "topk_n ({arm}, {ne} experts{depth1 ? ", the one-deep stamp" : ""})"
+        let ne64 = depth1 ? 1l : int64(ne)   //! the stamp `topk_n_enc` picks: the one-deep one under `depth1`, the control past 256
         var planes <- nform_cols_cell(t, tag, [npos], npos,
             [NformPlane(name = "the w1 slot blocks", words = 2 * k, cmp = false), NformPlane(name = "the w3 slot blocks", words = 2 * k, cmp = false),
              NformPlane(name = "the w2 slot blocks", words = 2 * k, cmp = false), NformPlane(name = "the weights", words = k), NformPlane(name = "the picks", words = k)],
@@ -8206,12 +8974,12 @@ def private topk_n_arm(t : T?; gptoss_router_bias : bool) {
                 upload_region_at(ld1, 0l, unsafe(addr<uint8 const?>(lh[p * lstride])), l1_bytes)
                 var sc1 = set_topk_n_cls(fixed_array(ld1, o.bufs[0], o.bufs[1], o.bufs[2], o.bufs[3], dsd, rbd, o.bufs[4]),
                     fixed_array(l1_bytes, o.bytes[0], o.bytes[1], o.bytes[2], o.bytes[3], ds_bytes, rb_bytes, o.bytes[4]), gbits)
-                enc_topk_n_cls(raw, h, sc1, pc1, 1l)
+                topk_n_enc(ne64, raw, h, sc1, pc1, 1l)
             },
             $(nrows : int; raw : VkCommandBuffer; var h : VkHaz; o : NformOuts) {
                 var scN = set_topk_n_cls(fixed_array(ld, o.bufs[0], o.bufs[1], o.bufs[2], o.bufs[3], dsd, rbd, o.bufs[4]),
                     fixed_array(l_bytes, o.bytes[0], o.bytes[1], o.bytes[2], o.bytes[3], ds_bytes, rb_bytes, o.bytes[4]), gbits)
-                enc_topk_n_cls(raw, h, scN, pc, int64(nrows))
+                topk_n_enc(ne64, raw, h, scN, pc, int64(nrows))
             })
         var bad = 0
         var badx = 0
@@ -8233,7 +9001,15 @@ def private topk_n_arm(t : T?; gptoss_router_bias : bool) {
         var gw <- [for (i in range(live)); uint_bits_to_float(planes.nf[3][i])]
         var gidx <- [for (i in range(live)); planes.nf[4][i]]
         var sel <- topk_rows_select(MoeGate.softmax, lh, rb, npos, ne, k, lstride, ne, true, true, 0.0)
-        topk_rows_compare(t, tag, gidx, gw, sel)
+        if (depth1) {
+            var off = 0
+            for (g, w in gidx, sel.idx) {
+                off += int64(g) != w ? 1 : 0
+            }
+            t |> success(off > 0, "{tag} control: the stamp that reaches 256 misses the host select's picks past them ({off} of {live} off)")
+        } else {
+            topk_rows_compare(t, tag, gidx, gw, sel)
+        }
         delete sel
         delete gidx
         delete gw
@@ -8253,6 +9029,13 @@ def test_vkd_topk_n(t0 : T?) {
             }
             topk_n_arm(t, gptoss_router_bias = false)
             topk_n_arm(t, gptoss_router_bias = true)
+            if (topk_n_ensure(512l)) {   //! the two-deep stamp: 512 experts, Qwen3-Next's ten picks a row
+                topk_n_arm(t, false, 512, 10)
+                topk_n_arm(t, true, 512, 10)
+                topk_n_arm(t, false, 512, 10, true)   //! the control: the one-deep stamp over the same rows
+            } else {
+                t |> success(false, "the two-deep top-k stamp declined on a device the one-deep stamp serves")
+            }
         } else {
             t |> skip("dasVulkan not present")
         }
@@ -8307,7 +9090,7 @@ def private router_cols_arm(t : T?; ncols : int; norm_on, f16 : bool) {
         let dim = 2048
         let ne = 24
         let obase = 8
-        let ncol_max = 8
+        let ncol_max = max(ncols, 8)
         var wh <- hash_fill(ne * dim, 777u, 1000u, 500.0, 1.0)
         var xh <- hash_fill(ncol_max * dim, 31u, 1000u, 500.0, 1.0)
         var nh <- hash_fill(dim, 9u, 1000u, 1000.0, -0.5)
@@ -8340,13 +9123,13 @@ def private router_cols_arm(t : T?; ncols : int; norm_on, f16 : bool) {
             $(c : int; raw : VkCommandBuffer; var h : VkHaz; o : NformOuts) {
                 upload_region_at(xd1, 0l, unsafe(addr<uint8 const?>(xh[c * dim])), x1_bytes)
                 var sc1 = router_set(f16, fixed_array(wd, xd1, o.bufs[0], nd), fixed_array(w_bytes, x1_bytes, o.bytes[0], n_bytes))
-                var pc1 = RouterArgs(ne = uint(ne), dim = uint(dim), woff = 0u, obase = uint(obase), norm_on = non, nwoff = 0u, eps = eps)
+                var pc1 = GkRouterArgs(ne = uint(ne), dim = uint(dim), woff = 0u, obase = uint(obase), norm_on = non, nwoff = 0u, eps = eps)
                 router_enc(f16, raw, h, sc1, pc1, int64(ne))
             },
             $(nc : int; raw : VkCommandBuffer; var h : VkHaz; o : NformOuts) {
                 var sc = router_set(f16, fixed_array(wd, xd, o.bufs[0], nd), fixed_array(w_bytes, x_bytes, o.bytes[0], n_bytes))
-                var pc = RouterArgs(ne = uint(ne), dim = uint(dim), woff = 0u, obase = uint(obase), norm_on = non, nwoff = 0u, eps = eps, ncols = uint(nc))
-                router_enc(f16, raw, h, sc, pc, int64(ne))
+                var pc = GkRouterArgs(ne = uint(ne), dim = uint(dim), woff = 0u, obase = uint(obase), norm_on = non, nwoff = 0u, eps = eps, ncols = uint(nc))
+                router_enc_cols(f16, raw, h, sc, pc, int64(ne))   //! past eight columns, two tiles (the second's `col0` at eight)
             })
         var got <- plane_floats(planes.nf[0])
         router_cols_oracle(t, arm, got, xh, nh, wdev, ncols, ne, dim, obase, norm_on, eps)
@@ -8375,6 +9158,8 @@ def test_vkd_router_gemv_cols(t0 : T?) {
             router_cols_arm(t, 3, false, false)   // the MoE router's stamp
             router_cols_arm(t, 3, true, false)    // ... under the gemma-4 router's fused rms
             router_cols_arm(t, 8, true, false)    // ... at the extent, every partial slot live
+            router_cols_arm(t, 12, true, false)   // ... past it, in two column tiles
+            router_cols_arm(t, 12, false, true)   // ... the f16 stamp the same
         } else {
             t |> skip("dasVulkan not present")
         }
@@ -8396,6 +9181,9 @@ def test_vkd_moe_routing(t0 : T?) {
             moe_topk_rows_arm(t, false, 2.5, MoeGate.softmax, false)
             moe_topk_rows_arm(t, false, 0.0, MoeGate.softmax_weight, true)   //! gpt-oss: the biased pick, softmax over the picks
             moe_sched_arm(t)
+            t |> success(moe_sched_ensure(512l), "the 512-thread schedule stamp engages")
+            moe_sched_arm(t, 512)   //! past 256 experts: the 512-thread stamp, experts past 256 routed
+            moe_sched_arm(t, MR_NE, true)   //! the Q8-fed chain's s-only schedule: every bucket a run of 32-row tiles, no m piece
             moe_ar_comb_arm(t, true, true, false)
             moe_ar_comb_arm(t, false, true, false)
             moe_ar_comb_arm(t, false, false, false)

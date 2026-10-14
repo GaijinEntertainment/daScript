@@ -120,6 +120,8 @@ struct Stream {
     ckpt_head_at : int64                    //! an earlier stop still, at the opening's shared head - the system text ahead of the tool block, or the tool block ahead of the text (0 = none; always under `ckpt_sys_at`)
     ckpt_at_tail : bool                     //! `ckpt_at` is the request's own stable opening and no shared stop: its checkpoint is a tail, which only this conversation's next turn extends
     ckpt_end_at : int64                     //! the last stop - the last message's close when the request names it, else one token short of the prompt - so the same prompt asked again and the conversation's next turn attach there (0 = none; a page or more past `ckpt_at`)
+    ckpt_shared_to : int64                  //! a device-home stream's deepest stop other requests share (the opening's head, the system opening): the host pool keeps a stop at or under it as an opening, past it as this conversation's tail
+    pool_stops : array<tuple<at : int64; opening : bool>>   //! a device-home stream's checkpoint stops its region kept, in order, copied into the host pool at the park
     t_admit : int64                         // ref_time_ticks at admit
     t_first : int64                         // ref_time_ticks at the first sampled token (0 until then)
     ttft_us : int64
@@ -152,7 +154,7 @@ def private any_stream_in(sch : Scheduler; state : StreamState) : bool {
     return false
 }
 
-//! on a host-cached stream `chunk_tokens` while a stream decodes and at least `idle_chunk_tokens` while none does; on a device-home stream at least the device's window, and the whole head at once for a model whose device prefill cannot continue past zero
+//! on a host-cached stream `chunk_tokens` while a stream decodes and at least `idle_chunk_tokens` while none does; on a device-home stream at least the device's window, and the whole head at once for a model whose device prefill cannot continue past zero (a recurrent hyper-connection model)
 def private prefill_chunk(m : Model; sch : Scheduler; head_end : int64) : int64 {
     let chunk = any_stream_in(sch, StreamState.decoding) ? sch.chunk_tokens : max(sch.chunk_tokens, sch.idle_chunk_tokens)
     if (!sch.device_kv) {
@@ -173,10 +175,12 @@ def chunk_default(on_gpu : bool) : int64
 def chunk_defaults(m : Model) : tuple<chunk : int64; idle : int64>
     => (chunk = chunk_default(m.metal_blob || gpu_tier_status().supported), idle = m.metal_blob ? METAL_IDLE_CHUNK_TOKENS : DEFAULT_CHUNK_TOKENS)
 
-//! A finished device-home stream's K/V rows, kept on the device for the next request that opens with the same tokens.
+//! A finished device-home stream's K/V rows - and a recurrent model's state at their end - kept on the device for the next request that opens with the same tokens.
 struct ParkedKv {
     claim : int64           //! the region claim the rows sit under (`gpu_device_kv_park`)
     tokens : array<int64>   //! the tokens those rows hold, in order
+    whole : bool            //! a recurrent model's claim: its state stands after the last of `tokens` alone, so only a prompt opening with all of them adopts it
+    tails : array<int64>    //! the positions whose states the region alone holds (the conversation's own stops, the finished turn - all its rows on a dense model): the host pool takes them before the region is lost (`flush_parked`)
 }
 
 //! The continuous-batching scheduler: active streams, the admission queue, the shared eval_batch
@@ -197,7 +201,9 @@ struct Scheduler {
     kv_dtype : KVDtype = KVDtype.f16        // KV codec for every stream (pool-wide when paged)
     device_kv : bool                        //! admitted sessions are DEVICE-HOME: their K/V lives only in the GPU driver's regions (`set_device_kv`)
     parked : array<ParkedKv>
-    mtp : bool                              // MTP/NextN self-spec ticks for every decoding stream - sampled and penalized ones draw the walk through their own sampler (the server also sets the engine's prefill-warm gate)
+    pool_host : Session                     //! device mode's carrier between the regions and the prefix cache: a paged session of `pool` whose pages hold the rows a device-home stream's opening brings down or a pooled opening takes up, released after each move (`pool_carrier`)
+    pool_host_made : bool
+    mtp : bool                             // MTP/NextN self-spec ticks for every decoding stream - sampled and penalized ones draw the walk through their own sampler (the server also sets the engine's prefill-warm gate)
     // per-step gather scratch. @do_not_delete is load-bearing: delete of a plain array<T?>
     // CASCADES to the pointees — these are borrowed rows into streams[i].session
     @do_not_delete batch_rows : array<Session?>
@@ -268,6 +274,12 @@ def set_device_kv(var sch : Scheduler; on : bool) : bool {
     if (sch.device_kv != on && empty(sch.streams)) {
         sch.device_kv = on
         to_log(LOG_INFO, "dasLLAMA scheduler: streams admitted from here on are {on ? "device-home (their K/V lives only on the GPU)" : "host-cached"} (set_device_kv)\n")
+        if (on && sch.paged) {
+            let pool_words = (gpu_device_kv_pool_armed()
+                ? "keeps their openings in host RAM too (DASLLAMA_DEVICE_POOL=0 turns it off)"
+                : "is off (DASLLAMA_DEVICE_POOL=0): the regions' claims alone hold openings")
+            to_log(LOG_INFO, "dasLLAMA scheduler: the host pool {pool_words}\n")
+        }
         if (!on) {
             delete sch.parked   // the claims die with the device state
         }
@@ -689,7 +701,10 @@ def private reap_finished(m : Model; var sch : Scheduler) {
                 prompt_head = sch.streams[i].prompt_head, gen_tail = string(sch.streams[i].gen_tail_bytes),
                 done_at = ref_time_ticks()))
             if (sch.streams[i].session.device_kv) {
+                let t_park = prof_ticks()
                 park_stream(m, sch, sch.streams[i])
+                prof_add("sched_park", t_park)
+                to_log(LOG_INFO, "[stream {sch.streams[i].id}] parked\n")
             } elif (sch.paged) {
                 if (sch.streams[i].finish != "media_lost") {
                     donate_stream(m, sch, sch.streams[i])
@@ -727,12 +742,16 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
                          think_budget = sch.queue[0].think_budget, think_marks <- sch.queue[0].think_marks)
         st.think_state = st.think_marks.opened ? 1 : 0
         if (sch.device_kv) {
+            let t_attach = prof_ticks()
             st.session <- create_device_session(m, gpu_device_session_dtype())
-            let matched = parked_attach(sch, st.session, st.prompt)   // a model whose prefill cannot continue parks nothing, so nothing matches
+            let hit = device_attach(m, sch, st.session, st.prompt)   // a model whose prefill cannot continue parks and pools nothing, so nothing matches
+            prof_add("sched_device_attach", t_attach)
+            let matched = hit.n
+            device_checkpoints_plan(st, sch.queue[0], matched)
             st.n_prefilled = matched
             st.n_cached = matched
             sch.cached_tokens += matched
-            to_log(LOG_INFO, "[stream {st.id}] device prefix: {matched}/{length(st.prompt)} tok already on the device\n")
+            to_log(LOG_INFO, "[stream {st.id}] device prefix: {matched}/{length(st.prompt)} tok {hit.pooled ? "taken up from the host pool" : "already on the device"} (stops at {st.ckpt_head_at}, {st.ckpt_sys_at}, {st.ckpt_at}, {st.ckpt_end_at}; pool {length(sch.prefix.states)} checkpoints, {sch.prefix.state_bytes / 1048576l} MB)\n")
         } elif (sch.paged) {
             st.session <- create_session(m, sch.pool)
             var matched = prefix_attach(sch.prefix, sch.pool, st.session, st.prompt)
@@ -917,6 +936,7 @@ def private next_prefilling(sch : Scheduler) : int64 {
 //! that is no tail: a request admitted now would prefill the opening that stop is about to leave for it, so admission
 //! waits; a stream past its shared stops, with only its own conversation's stops ahead, or with none, holds nothing back
 def private any_prefilling_before_a_shared_checkpoint(sch : Scheduler) : bool {
+    return false if (sch.device_kv)   //! a live device-home stream's checkpoint is its own region's: no request adopts it before the stream parks
     for (st in sch.streams) {
         continue if (st.state != StreamState.prefilling)
         return true if (st.ckpt_head_at > st.n_prefilled || st.ckpt_sys_at > st.n_prefilled || (!st.ckpt_at_tail && st.ckpt_at > st.n_prefilled))
@@ -977,8 +997,16 @@ def private prefill_tick(m : Model; var sch : Scheduler; var events : array<Sche
 def private note_prefilled(m : Model; var sch : Scheduler; var events : array<SchedEvent>; i, take : int64) {
     sch.streams[i].n_prefilled += take
     sch.prefill_tokens += take
-    if (at_checkpoint(sch.streams[i])) {
+    if (at_checkpoint(sch.streams[i]) && sch.streams[i].session.device_kv) {
+        let kept = gpu_device_kv_checkpoint(sch.streams[i].session)
+        let at = sch.streams[i].n_prefilled
+        if (kept && device_pool_on(m, sch, sch.streams[i].session)) {   //! the host pool's copy waits for the park: nothing crosses the bus before the first token
+            sch.streams[i].pool_stops |> push((at = at, opening = at <= sch.streams[i].ckpt_shared_to))
+        }
+        to_log(LOG_INFO, "[stream {sch.streams[i].id}] device checkpoint at {at} tok: {kept ? "the region keeps the recurrent state here" : "not kept"}\n")
+    } elif (at_checkpoint(sch.streams[i])) {
         let tail = (sch.streams[i].ckpt_at_tail && sch.streams[i].n_prefilled == sch.streams[i].ckpt_at) || sch.streams[i].n_prefilled == sch.streams[i].ckpt_end_at
+        moe_gpu_hydrate_session(m, sch.streams[i].session)   //! the pages the checkpoint holds come down from a GPU driver's copy first
         prefix_insert(sch.prefix, sch.pool, sch.streams[i].session, sch.streams[i].prompt, "", !tail)
         to_log(LOG_INFO, "[stream {sch.streams[i].id}] prefix checkpoint at {sch.streams[i].n_prefilled} tok: {tail ? "this conversation's next turn" : "the next prompt on this opening"} attaches here ({length(sch.prefix.states)} checkpoints, {sch.prefix.state_bytes / 1048576l} MB)\n")
     }
@@ -1106,6 +1134,7 @@ def private adopt_spans(var st : Stream; matched : int64) {
 // skipped when it cannot fit; evicted streams donate only what ran. prefix_insert trims to n_past.
 def private donate_stream(m : Model; var sch : Scheduler; var st : Stream) {
     close_turn(m, sch, st)
+    moe_gpu_hydrate_session(m, st.session)   //! rows a GPU driver stepped live on its copy alone until they come down into the pages
     prefix_insert(sch.prefix, sch.pool, st.session, sch.donate_toks, st.prompt_head)
 }
 
@@ -1115,20 +1144,67 @@ def private park_stream(m : Model; var sch : Scheduler; var st : Stream) {
         return
     }
     close_turn(m, sch, st)
+    sch.donate_toks |> resize(min(long_length(sch.donate_toks), st.session.n_past))
+    let pooled = device_pool_on(m, sch, st.session)
+    var tails : array<int64>
+    if (pooled) {   //! the shared openings go to the pool now; the conversation's own tails stay the region's until it is lost (`flush_parked`)
+        for (stop in st.pool_stops) {
+            if (stop.opening) {
+                pool_export_live(m, sch, st.session, st.prompt, stop.at, true)
+            } else {
+                tails |> push(stop.at)
+            }
+        }
+        tails |> push(long_length(sch.donate_toks))
+    }
     let claim = gpu_device_kv_park(st.session)
     if (claim == 0l) {
+        delete tails
         return
     }
-    sch.donate_toks |> resize(min(long_length(sch.donate_toks), st.session.n_past))
     while (long_length(sch.parked) >= sch.max_streams) {
+        flush_parked(m, sch, 0, 0l)
         drop_parked(sch, 0)
     }
-    sch.parked |> emplace(ParkedKv(claim = claim, tokens := sch.donate_toks))
+    sch.parked |> emplace(ParkedKv(claim = claim, tokens := sch.donate_toks, whole = !empty(st.session.dn_state_prefix), tails <- tails))
 }
 
-//! Adopt the parked rows sharing the longest opening with `prompt` (always short of its last token, whose logits the
-//! prefill must produce); 0 when none stands. A claim another session took since is dropped where it is found.
-def private parked_attach(var sch : Scheduler; var session : Session; prompt : array<int64>) : int64 {
+//! The longest opening a fresh device-home `session` can start `prompt` from, attached: the parked rows sharing it on the device,
+//! or the host pool's copy where that is longer (taken up into a region). `pooled` says which served it.
+[arch(at="../ARCHITECTURE_ENGINE_SERVING.md#device-home-pool")]
+def private device_attach(m : Model; var sch : Scheduler; var session : Session; prompt : array<int64>) : tuple<n : int64; pooled : bool> {
+    let dev = parked_best(sch, prompt)
+    log_parked(sch, prompt)
+    if (device_pool_on(m, sch, session)) {
+        let recurrent = !empty(session.dn_state_prefix)
+        let pool_n = recurrent ? prefix_state_match_len(sch.prefix, prompt) : prefix_match_len(sch.prefix, sch.pool, prompt)
+        if (pool_n > dev.n || dev.at < 0) {   //! a region another claim holds is about to be taken: its tails go to the pool first
+            flush_victims(m, sch)
+        }
+        if (pool_n > dev.n) {
+            let n = pool_import(m, sch, session, prompt)
+            return (n = n, pooled = true) if (n > 0l)
+        }
+        if (dev.at >= 0 && !empty(sch.parked[dev.at].tails) && dev.n < sch.parked[dev.at].tails[0]) {
+            flush_parked(m, sch, dev.at, dev.n)   //! another conversation on the claim's opening rewrites the rows past it; the claim's own next turn, past its first tail, supersedes them
+        }
+    }
+    return (n = parked_adopt(sch, session, dev.at, dev.n), pooled = false)
+}
+
+//! what the device holds for `prompt`, a parked claim a line: its rows, the opening it shares with the prompt, the positions its
+//! state stands at - the record a prefix miss is read from
+def private log_parked(sch : Scheduler; prompt : array<int64>) {
+    for (p in sch.parked) {
+        var ckpts <- gpu_device_kv_checkpoints(p.claim)
+        to_log(LOG_INFO, "  parked claim {p.claim}: {length(p.tokens)} rows, {common_prefix_len(p.tokens, prompt)} shared, state at {p.whole ? gpu_device_kv_parked_pos(p.claim) : 0l} and {ckpts}\n")
+        delete ckpts
+    }
+}
+
+//! The parked claim sharing the longest opening with `prompt` (always short of its last token, whose logits the prefill must
+//! produce), a recurrent claim only at a position its state stands at: its index and that opening's length, -1 and 0 for none
+def private parked_best(sch : Scheduler; prompt : array<int64>) : tuple<at : int; n : int64> {
     var best = -1
     var best_len = 0l
     for (p, pi in sch.parked, count()) {
@@ -1137,22 +1213,182 @@ def private parked_attach(var sch : Scheduler; var session : Session; prompt : a
         while (n < cap && p.tokens[n] == prompt[n]) {
             n ++
         }
+        if (p.whole) {
+            n = parked_state_at(p, n)
+        }
         if (n > best_len) {
             best = pi
             best_len = n
         }
     }
-    if (best < 0) {
-        return 0l
-    }
-    let adopted = gpu_device_kv_adopt(session, sch.parked[best].claim, best_len)
-    drop_parked(sch, best)
-    return adopted ? best_len : 0l
+    return (at = best, n = best_len)
 }
 
-//! `erase` moves the entries after it down and finalizes nothing, so the entry's token list goes first
+//! Adopt `n` rows of parked claim `at`; 0 when none stands. A claim another session took since is dropped where it is found.
+def private parked_adopt(var sch : Scheduler; var session : Session; at : int; n : int64) : int64 {
+    return 0l if (at < 0)
+    let adopted = gpu_device_kv_adopt(session, sch.parked[at].claim, n)
+    drop_parked(sch, at)
+    return adopted ? n : 0l
+}
+
+//! The host pool serves device mode: a paged scheduler, the pool's pages in the device's codec, no draft head (its rows ride no
+//! export), no n-gram side input (its ring may sit on the device), and a model whose device prefill continues past zero
+def private device_pool_on(m : Model; sch : Scheduler; session : Session) : bool
+    => (gpu_device_kv_pool_armed() && sch.paged && !sch.mtp && sch.pool.kdt == gpu_device_session_dtype() && empty(session.ple_conv_hist) && gpu_device_prefill_continues(m)
+        && (empty(session.dn_state_prefix) || sch.prefix.max_states > 0l))
+
+//! the scheduler's carrier session, made at its first move and pointed at the pool where the scheduler stands now (a moved
+//! scheduler moves its pool), holding no pages
+def private pool_carrier(m : Model; var sch : Scheduler) {
+    if (!sch.pool_host_made) {
+        sch.pool_host <- create_session(m, sch.pool)
+        sch.pool_host_made = true
+    }
+    sch.pool_host.kv_pool = unsafe(addr(sch.pool))
+}
+
+//! the carrier's pages back to the pool: it holds nothing between moves
+def private pool_carrier_done(var sch : Scheduler) {
+    release_kv_pages(sch.pool_host)
+    sch.pool_host.n_past = 0l
+}
+
+[arch(at="../ARCHITECTURE_ENGINE_SERVING.md#device-home-pool")]
+def private pool_export_live(m : Model; var sch : Scheduler; var session : Session; tokens : array<int64>; n : int64; opening : bool) {
+    return if (n <= 0l || prefix_state_touch(sch.prefix, tokens, n, opening))
+    var spare <- prefix_take_spare(sch.prefix)
+    var snap <- gpu_device_kv_snapshot(session, n, spare)
+    pool_keep(m, sch, gpu_device_kv_claim(session), tokens, n, opening, true, snap)
+}
+
+[arch(at="../ARCHITECTURE_ENGINE_SERVING.md#device-home-pool")]
+def private pool_export_parked(m : Model; var sch : Scheduler; p : ParkedKv; n : int64) {
+    return if (n <= 0l || (p.whole && prefix_state_touch(sch.prefix, p.tokens, n, false)))
+    pool_carrier(m, sch)
+    var spare <- prefix_take_spare(sch.prefix)
+    var snap <- p.whole ? gpu_device_kv_parked_snapshot(p.claim, n, sch.pool_host, spare) : DnSnapshot()
+    delete spare
+    pool_keep(m, sch, p.claim, p.tokens, n, false, p.whole, snap)
+}
+
+//! The first `n` of `tokens` the region of `claim` holds copied into the prefix cache - a recurrent model's checkpoint with the state
+//! `snap` (moved in; one standing elsewhere than `n` keeps nothing), a dense model's pages - reading down only the rows past the
+//! pages the cache already holds
+def private pool_keep(m : Model; var sch : Scheduler; claim : int64; tokens : array<int64>; n : int64; opening, recurrent : bool; var snap : DnSnapshot) {
+    if (recurrent && snap.pos != n) {
+        delete snap
+        return
+    }
+    let t0 = prof_ticks()
+    pool_carrier(m, sch)
+    let held = prefix_share_pages(sch.prefix, sch.pool, sch.pool_host, tokens, n)
+    let moved = gpu_device_kv_export(m, claim, sch.pool_host, held, n)
+    if (moved && recurrent) {
+        prefix_insert_snapshot(sch.prefix, sch.pool, sch.pool_host, tokens, snap, opening)
+    } elif (moved) {
+        prefix_insert(sch.prefix, sch.pool, sch.pool_host, tokens)
+    }
+    delete snap
+    pool_carrier_done(sch)
+    prof_add("sched_pool_down", t0)
+    let kind = opening ? "opening" : "tail"
+    to_log(LOG_INFO, "  host pool: {n} tok {kind} down, {n - held} rows read\n")
+}
+
+//! the tails a parked claim's region alone holds past `above` copied into the pool before the region is lost; the claim keeps none
+def private flush_parked(m : Model; var sch : Scheduler; at : int; above : int64) {
+    return if (at < 0 || empty(sch.parked[at].tails) || !device_pool_on(m, sch, sch.pool_host))
+    for (n in sch.parked[at].tails) {
+        if (n > above) {
+            pool_export_parked(m, sch, sch.parked[at], n)
+        }
+    }
+    sch.parked[at].tails |> clear()
+}
+
+//! the parked claims whose regions the fresh device-home sessions admitted this tick take - one for each not yet in a region, and
+//! one for the session about to be admitted - flushed into the pool first
+def private flush_victims(m : Model; var sch : Scheduler) {
+    var fresh = 1
+    for (st in sch.streams) {
+        if (st.session.device_kv && gpu_device_kv_claim(st.session) == 0l) {
+            fresh ++
+        }
+    }
+    var victims <- gpu_device_kv_victim_claims(fresh)
+    for (claim in victims) {
+        for (p, pi in sch.parked, count()) {
+            if (p.claim == claim) {
+                flush_parked(m, sch, pi, 0l)
+            }
+        }
+    }
+    delete victims
+}
+
+//! The prefix cache's longest opening of `prompt` taken up into a region for the fresh device-home `session`: a recurrent model's
+//! checkpoint (its state into the session, which its next prefill hands to the region), a dense model's pages; 0 where none opens
+//! it or no region is free
+[arch(at="../ARCHITECTURE_ENGINE_SERVING.md#device-home-pool")]
+def private pool_import(m : Model; var sch : Scheduler; var session : Session; prompt : array<int64>) : int64 {
+    let t0 = prof_ticks()
+    pool_carrier(m, sch)
+    let recurrent = !empty(session.dn_state_prefix)
+    var n = recurrent ? prefix_attach_state_split(sch.prefix, sch.pool, sch.pool_host, session, prompt) : prefix_attach(sch.prefix, sch.pool, sch.pool_host, prompt)
+    if (n > 0l && !gpu_device_kv_import(m, session, sch.pool_host, n)) {
+        n = 0l
+        if (recurrent) {   //! the restored state stands for rows the session never got: it starts from zero
+            dn_reset(session)
+            session.dn_pos = 0l
+        }
+    }
+    pool_carrier_done(sch)
+    prof_add("sched_pool_up", t0)
+    to_log(LOG_INFO, "  host pool: {n} tok up\n")
+    return n
+}
+
+//! the longest opening of a recurrent claim `p` within `n` shared tokens at which a state stands: all of its tokens, else its
+//! longest checkpoint under `n`; 0 where none does
+def private parked_state_at(p : ParkedKv; n : int64) : int64 {
+    return n if (n == long_length(p.tokens))
+    var best = 0l
+    var ckpts <- gpu_device_kv_checkpoints(p.claim)
+    for (c in ckpts) {
+        if (c <= n && c > best) {
+            best = c
+        }
+    }
+    delete ckpts
+    return best
+}
+
+//! a device-home recurrent stream's checkpoint stops: the request's openings, its last message's start and end, each past the
+//! adopted rows and short of the prompt's end, in order - its region keeps the state at each for a later request that shares it
+def private device_checkpoints_plan(var st : Stream; req : PendingReq; matched : int64) {
+    return if (empty(st.session.dn_state_prefix))
+    let n = long_length(st.prompt)
+    var stops <- [for (at in fixed_array(req.system_head_at, req.system_at, req.stable_at, req.messages_end_at)); at; where at > matched && at < n]
+    var fields : int64[4]
+    var k = 0
+    for (at in stops) {   //! in order, each past the one before: a marker at or under the last kept one adds no stop
+        if (k == 0 || at > fields[k - 1]) {
+            fields[k] = at
+            k++
+        }
+    }
+    st.ckpt_head_at = fields[0]
+    st.ckpt_sys_at = fields[1]
+    st.ckpt_at = fields[2]
+    st.ckpt_end_at = fields[3]
+    st.ckpt_shared_to = max(req.system_head_at, req.system_at)
+    delete stops
+}
+
+//! `erase` moves the entries after it down and finalizes nothing, so the entry's lists go first
 def private drop_parked(var sch : Scheduler; at : int) {
-    delete sch.parked[at].tokens
+    delete sch.parked[at]
     sch.parked |> erase(at)
 }
 

@@ -111,16 +111,45 @@ Every materialized cos/sin table is the same fill; the position source is what d
 
 ### The per-32 rail is one kernel body over a format tag {#per-32-rail}
 
-The per-32 formats (`q51`, `iq4nl32`) sit off the superblock lattice: 32-weight blocks, Q8_0-form
+The per-32 formats (`q51`, `iq4nl32`, `q4032`, `q5032`) sit off the superblock lattice: 32-weight blocks, Q8_0-form
 activations, dedicated `Model` plane pairs (`ARCHITECTURE_IMAGE.md#image-kq-table-sb-only`), and in
-`dasllama_math.das` one body per kernel shape (`b32_batch_kernel`, `b32_groupn_kernel`,
+`dasllama_math_default.das` one body per kernel shape (`b32_batch_kernel`, `b32_groupn_kernel`,
 `b32_batch_groupn_kernel`) generic over the `KqTag_<fmt>` it takes last - the tag picks the
-strides, the row expand, the grp scale gather and the expanded-row dot. `iq4nl32` is the IQ4_NL
-disk block served per-32: `kq_fmt_expert_ok` chooses it for an expert stack whose rows are off
-the 256 lattice and on the 32 lattice (the superblock member `iq4nl` serves a `% 256` row), and a
-dense plane off the lattice still demotes to q8. The codebook levels are int8, so the q8 rail's
-requant of an IQ4_NL block is value-exact and the per-32 form's gain is bytes - 18 a block
-against 34 - not precision.
+strides, the row expand, the grp scale gather and the expanded-row dot; the two 5-bit members share
+q51's leaves under a level and fold arm (`b5_level`, `b5_fold`). Every per-format seat around them
+is a table indexed by `int(KqFmt)` - the backend's `B32Slots` (`KernelBackend.b32`), the layout and
+stream hooks - read by one fmt-taking call (`matmul_b32q8_*`, `mm_b32_pre`, `b32_planes_of`), the
+planes reached through `kq_plane_pair`. `iq4nl32` is the IQ4_NL
+disk block served per-32 and `q4032` the Q4_0 one: `kq_fmt_row_ok` chooses each for a plane whose
+rows are off the 256 lattice and on the 32 lattice (the superblock members `iq4nl` and `q40` serve a
+`% 256` row), and `q51` and `q5032` keep their tags on any 32-multiple row - Q5_0 has no superblock
+member. Every site takes that one rule - dense, expert and table planes alike (`#per-32-tables`).
+The codebook levels are int8, so a q8 requant of an IQ4_NL, Q4_0 or Q5_0 block would be
+value-exact: the per-32 form's gain is bytes - 18 or 22 a block against 34 - not precision.
+
+### The table planes serve per-32 like the dense ones {#per-32-tables}
+
+`kq_tag` is one rule for every site: the disk type's member, kept where `kq_fmt_row_ok` admits the
+row, else q8 with the demotion logged. So the token table, the classifier, the NextN eh_proj, the
+deltanet five and the shared expert's triple carry a per-32 tag on the same terms as a dense
+plane, and each home reads it in that form: the CPU through `embed_b32_row` and the per-32 arms of
+`mm_f` / `mm_b_f` (`mm_cls` included); Vulkan through the `Blk32GemvRunT` leaves - the token gather
+is its `EMB` axis, the classifier and the per-op sites `resident_plane_ok`; Metal through the
+`MetalBlk32GemvT` stamps and the `MetalEmbedB32T` gather. A tied per-32 table is the classifier's
+plane at `wcls_off`; an untied one sits past it at `emb_kq_off`.
+
+`q4032` is the member a Q4_0 row off the 256 lattice serves as, `q5032` the member every Q5_0 row
+serves as:
+
+| | q4032 | q5032 |
+|---|---|---|
+| disk type | GGML Q4_0, 18 bytes a 32-block (f16 d, 16 nibble bytes) | GGML Q5_0, 22 bytes a 32-block (f16 d, qh u32, 16 nibble bytes) |
+| planes | `q4032q` 16 nibble bytes a block (`Q4032_QB`), `q4032s` the f16 d (`Q4032_SB`) - iq4nl32's split | `q5032q` the 16 nibble bytes then the qh word (`Q5032_QB`, q51's quant form), `q5032s` the f16 d (`Q5032_SB`) |
+| code | `q - 8` (`q40_lut`, -8..7), the linear twin of iq4nl32's codebook | `q - 16`, q = nibble \| qh bit << 4 (-16..15), signed: no activation sum enters the fold |
+| CPU | the `q4032q8_tile_gen` `[tune]` family (iq4nl32's permutations and fallback, its own layout and GEMV companions, the generator's `q40` code), the portable per-32 bodies the hand tiers' slots and the controls | the `q5032q8_tile_gen` family (q51's grid and fallback, the emitter's `emit_block_q5032`: q51's nibble+qh unpack re-centred, the signed lattice, iq4nl32's fold), the portable bodies (`expand_q5032_row`, `dot_iq4nl32e`) |
+| Vulkan | the Blk32 leaves (`q40_signed_word`), the cm2 S/E stamps and the KHR tile (`Q4032Cm2T`), the `EMB` gather | the Blk32 leaves, the cm2 S/E stamps and the KHR tile (`Q5032Cm2T`), the `EMB` gather |
+| Metal | iq4nl32's stamps under `Q40L`: the GEMV and its K-split, the small-batch forms, `mul_mm`, the routed GEMV and tiles, the gather | iq4nl32's stamps under `Q50`: the GEMV, its K-split, the routed GEMV and the small-batch forms over a 32-entry `q - 16` table; the gather and `mul_mm` decode `q - 16` directly; the routed tensor twins on q51's staging under `Q50` |
+| ids | enum 18, stream tag `Q4032_STREAM_TAG`, no gemm schema | enum 19, stream tag `Q5032_STREAM_TAG`, no gemm schema |
 
 ### A served form is a second member over the same disk type {#served-form}
 
@@ -133,14 +162,17 @@ one table lookup a nibble in place of the grid gather, which is where the IQ3_S 
 its time. The member's descriptor row names the source type (`GGML_TYPE_IQ3_S`, 110 disk bytes)
 with its own schema and stream ids, so the image and the stream rail carry it like any lattice
 member. The choice is `kq_fmt_of`'s at the load (`iq3s_serve_lut`, the `DASLLAMA_IQ3S_SERVE`
-knob: `grid`, `lut`, `auto` = lut wherever the serving rails decode it), and it is an image
-identity bit (`DlimCpuConfig.iq3s_lut`), because it changes plane bytes. The Vulkan tier decodes
-it on every ladder: the device row is iq4xs's quant plane under iq3s's scale word, the codebook is
-arithmetic (`2q - 15`, no table bound), and the stamps are the iq4xs kernels with the odd
-codebook and the grid scale switched in. So a host that sums routed experts beside a Vulkan
-device reads the fast planes, and the device reads the same bytes. The Metal tier keeps the grid
-form: its gather is a device read and no Metal kernel decodes `iq3s4`, so the member sits off the
-Metal roster and a load the Metal tier targets serves `iq3s`.
+knob or a process pin, `set_iq3s_serve_pin`: `grid`, `lut`, `auto` = lut on the CPU rails and the
+Vulkan tier, the grid under the Metal tier), and it is an image identity bit
+(`DlimCpuConfig.iq3s_lut`), because it changes plane bytes. Both GPU tiers decode it on every
+ladder, the codebook arithmetic (`2q - 15`, no table bound) and the stamps the iq4xs kernels with
+the odd codebook switched in: on Vulkan the device row is iq4xs's quant plane under iq3s's scale
+word; on Metal the blob's split scale plane carries the eight `1 + 2s` strip bytes and the f16 d
+exactly as iq4xs's carries its signed sub-scales (`ARCHITECTURE_GPU_QUANT_PLANES.md#metal-kq-split-scale-plane`),
+so every iq4 family stamp under `IQODD` reads it - the GEMV, the small-batch forms, the base and
+tensor tiles, the routed GEMV and tiles, the token gather. So a host that sums routed experts
+beside a Vulkan device reads the fast planes, and the device reads the same bytes; under Metal
+`auto` keeps the grid, which streams 17% fewer bytes a superblock.
 
 ### The load and image rail {#the-load-and-image-rail}
 
@@ -155,7 +187,11 @@ conversion kind) as bytes on disk against bytes served with the delta, biggest o
 and the count of tags the row-length rule demoted to the q8 rail (each demotion logged by
 name as it is decided). The delta column is where a served form costs more than the file - a
 decoded scale row, an f32 copy of a quantized token table - and it is read as a number, not
-inferred from image sizes.
+inferred from image sizes. A hybrid's deltanet planes - qkv, z, out, beta and alpha - carry the
+file's format on every load, whatever backend is armed: one plane a tag, no q8 transcode beside
+it, the CPU chain and the Metal drivers each reading it in that format. The one exception is a
+grouped (qwen3next) file's out plane, whose input columns the load permutes across superblocks,
+so the q8 transcode is its only form.
 
 - **`dasllama_image.das`** - the prepared-model `.dlim` rail, and it is ONE rail
   (`ARCHITECTURE_IMAGE.md#there-is-one-way-to-load-a`). Nothing
@@ -172,6 +208,24 @@ classifier and final norm are dead by construction (tensor lookup is first-match
 is last). The prepared image folds the head's name and size into its path hash, so the
 trunk-only and trunk+head images never collide and one image file serves both trunk and head.
 
+### The token table and the shared expert carry their own planes {#kq-token-table}
+
+The token table is one plane in the file's format wherever its tag is a `KqFmt` member
+(`emb_kq`): tied, the classifier's plane at `wcls_off`; untied, its own plane at `emb_kq_off`,
+repacked with its format's plane like every region of it. No fp32 table rides beside it, and the
+CPU's `embed_row` and the devices' row gathers read that plane, tied or untied: the Vulkan
+window and token commands gather an untied table's rows on the device off its plane as the Metal
+drivers do. A table whose disk type no member carries (F16, BF16, Q4_1) keeps its
+exact fp32 rows; tied, a load under a Metal mode adds a q8 transcode of it at `wcls_off`
+(`cls_q8_copy`) - a converted copy, logged at the load - for the device classifier, while the
+embed and the CPU classifier read the fp32 rows. The shared expert's gate, up and down planes
+(the NextN head's triple included) keep the file's format on every load (`wsh*_fmt` /
+`wshk*_offs`; `shexp_plane` picks the plane by its tag), and every home reads that plane: the CPU
+chain's shared-expert sites (`dasllama_moe.das`, `dasllama_blocks.das`) take `shexp_tagged` to the
+format's arm. The q8 transcode holds the planes a tag left on q8 alone: the layout allots it only
+where some routed layer's plane reads it (`shexp_reads_transcode`), and the load fills and the
+repack walks that plane's region alone (`shexp_plane_q8`).
+
 ### CPU kernel tiers {#cpu-kernel-tiers}
 
 - **`dasllama_math.das`** - the numeric ABSTRACTION: typedefs, active backend pointers, public
@@ -179,8 +233,9 @@ trunk-only and trunk+head images never collide and one image file serves both tr
   (`reserve_resize`, `grow_resize`, `ensure_length`, `overwrite_resize`). Kernels themselves
   live in a tier file; a kernel body here is a placement defect.
 - **`dasllama_math_default.das`** - the portable backend, always registered, always correct,
-  out-ranked by any platform tier - and the ONE body of every Q8*Q8 and mx4 kernel shape: each
-  shape is a `def template` over a dot and a chunk-split placeholder, and `[from_template]` stamps
+  out-ranked by any platform tier - the per-32 rail's portable kernels and scalar leaves, which
+  seat every backend's unset per-32 slot (`#per-32-rail`) - and the ONE body of every Q8*Q8 and
+  mx4 kernel shape: each shape is a `def template` over a dot and a chunk-split placeholder, and `[from_template]` stamps
   it per (dot, split) and per weight-scale plane (the f32 plane and the wscale_f16 halfword plane,
   bit-identical over the widened plane). The idot4 stamps the arm64 tier registers live here too:
   the `idot4` builtin is plain das that every target lowers for itself.

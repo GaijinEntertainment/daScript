@@ -34,10 +34,10 @@ causal conv's silu plus the gated value in the streams (`PleConv`). The ring is 
 `pos % rows` off the row's `TokMeta`. The deltanet heads take the sigmoid out-gate through the step and
 scan kernels' `ZSIG` stamps (`dn_step_sig_cls`, `dn_scan_p3_sig_cls`), picked by `RdecDnGeom.zsig`.
 
-**The routed experts serve on the host, and the token command splits at every routed block.** The
-model's expert stacks (55 GiB on the carrier) never fit the card beside its other planes, and their
-formats sit outside the device tile family, so the plan leaves them out (`resident_host_experts`), the
-layers register with no expert planes (`RLayer.experts_host`) and the routed block on the device is the
+**The routed experts serve on the host, and the token command splits at every routed block.** The plan
+leaves a hyper-connection MoE's expert stacks out by construction, not by a fit decision:
+`resident_host_experts` is the model's shape alone (hyper-connections, routed experts, the hc chain
+installed), so the stacks sum on the host on any card, whatever room it has. The plain MoE's fit decision is the host-layer form below. The layers register with no expert planes (`RLayer.experts_host`) and the routed block on the device is the
 router GEMV alone. The command is recorded once per region as `nseg` = routed layers + 1 segments
 (`RDec.cmd_seg`, `rd_record_segments`): a segment ends after a routed layer's router by landing the
 FFN-mixed row and the router logits in host memory (`hx_host`, `hlog_host`); the host selects the top-k
@@ -208,7 +208,8 @@ trunk's in the site list, its routed experts sum on the host like the trunk's, a
 the hot expert pool.** The loader lays the head's seams at sites `2 x n_layers` and `2 x n_layers + 1`;
 the trunk's head mixer follows them (`RDec.hc_final_site`), then the head's own head mixer
 (`mtp_hc_head_*`, `hc_mtp_site`) and the carry's per-stream norm gammas (`mtp_hnorm`, `hc_hnorm_row`).
-The resident side admits a routed head where the tier serves host experts (`resident_head_routed`), counts
+The resident side admits a routed head on either chain (`resident_head_routed`; on the plain chain its experts ride the device,
+`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head`), here with its experts on the host, counts
 it in every routed walk (`resident_routed_layers`: the plan, the router plane's last slot, the biases, the
 pool's `HotLayer`s), and reads its dense triple off the shared expert's planes (`resident_head_fmts`,
 `resident_head_ffn_plane`). The carry is the trunk's WIDE residual before the head mixer (`hc x dim`

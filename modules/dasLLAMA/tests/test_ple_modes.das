@@ -7,6 +7,7 @@ require dastest/testing_boost public
 require dasllama/dasllama   // the public facade — load_model_/create_chat/generate/decode
 require dasllama/dasllama_gguf
 require dasllama/dasllama_convert   // dequant_k5_plane_superblock — the kq plane oracle
+require dasllama/dasllama_ple   // ple_gather_row - the CPU gather under test
 require daslib/jobque_boost
 require daslib/fio
 require math
@@ -154,6 +155,53 @@ def test_ple_fp32_kq_table(t : T?) {
         delete want
         delete have
         delete tr
+    }
+}
+
+//! the per-32 PLE table carriers (`../performance/model_specs.das`: E2B Q8_0 requantized with the token table - and so the
+//! PLE table - in Q5_0, Q5_1 and Q4_0): the table keeps its disk format's tag, its rows gather off that plane bit for bit
+//! the file's dequant (control: the neighbor row must miss), and a greedy turn runs on the CPU chain
+[test]
+def test_ple_per32_tables(t : T?) {
+    for (spec in [(file = "gemma-4-E2B-it-emb-Q5_0-local.gguf", fmt = KqFmt.q5032),
+                  (file = "gemma-4-E2B-it-emb-Q5_1-local.gguf", fmt = KqFmt.q51),
+                  (file = "gemma-4-E2B-it-emb-Q4_0-local.gguf", fmt = KqFmt.q40)]) {
+        t |> run("{spec.file}: the PLE table serves its own {spec.fmt} bytes on the CPU") @(t : T?) {
+            return if (!jit_only(t))
+            let path = path_join(models_dir(), spec.file)
+            if (!model_available(t, path)) {
+                return
+            }
+            var m <- load_model_(path, QuantMode.q8)
+            m.config.seq_len = min(m.config.seq_len, 512l)
+            t |> equal(m.ple_emb_fmt, spec.fmt, "the PLE table keeps its disk format's tag")
+            let all = m.config.n_layers * m.config.n_embd_per_layer
+            var row : array<float>
+            row |> resize(all)
+            for (r in [0l, 1l, 70001l, m.config.vocab_size - 1l]) {
+                ple_gather_row(m, r, row, 0l)
+                var want <- file_row(path, r, all)
+                var bad = 0
+                for (h, w in row, want) {
+                    bad += h == w ? 0 : 1
+                }
+                t |> equal(bad, 0, "PLE row {r} against the file dequant, bit for bit")
+                delete want
+            }
+            var next <- file_row(path, 1l, all)
+            ple_gather_row(m, 0l, row, 0l)
+            var same = 0
+            for (h, w in row, next) {
+                same += h == w ? 1 : 0
+            }
+            t |> success(same < int(all), "control: row 0 against row 1's file dequant must miss")
+            let text = greedy_turn(m, "Name three colors.", 24l)
+            to_log(LOG_INFO, "PLE {spec.fmt} greedy: {text}\n")
+            t |> success(letters(text) >= 3, "the {spec.fmt} PLE carrier's greedy continuation is text: '{text}'")
+            delete next
+            delete row
+            delete m
+        }
     }
 }
 

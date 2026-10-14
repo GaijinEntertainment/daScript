@@ -230,9 +230,9 @@ Run under `-jit` - the interpreter is refused, it is far too slow for inference.
 | `--page-rows` | - | `64` | KV page size in positions for paged serving |
 | `--prefix` | - | *auto* | Prefix-cache retention cap in pages (auto: one full context per stream; `-1` = unbounded) |
 | `--prefix-states` | - | `256` | Recurrent models (the Qwen3.5/3.6/3.8 hybrids) cache whole checkpoints instead of pages: the most a slot keeps (`0` = none; config key `prefix_states`); the byte budget binds first. Every request leaves one at its opening's shared head (the system text or the tool block, whichever its template writes first), one at its opening with the tools, one where its last message starts, one where it ends (ahead of the generation prompt), one at its finished turn; a conversation's own stops are dropped before shared openings |
-| `--prefix-state-mb` | - | *auto* | The checkpoints' byte budget in MB, snapshots and held pages (auto: a quarter of the box's RAM; config key `prefix_state_mb`). A 35B hybrid's checkpoint is about 160 MB. The server log's checkpoint line carries the standing count and MB |
+| `--prefix-state-mb` | - | *auto* | The checkpoints' byte budget in MB, snapshots and held pages (auto: a quarter of the box's RAM - in a container, of its memory limit where that is lower; config key `prefix_state_mb`). A 35B hybrid's checkpoint is about 160 MB. The server log's checkpoint line carries the standing count and MB |
 | `--flat` | - | - | Flat preallocated KV sessions - disables paged serving and the prefix cache |
-| `--mtp` | - | *auto* | MTP/NextN self-speculative decode. Unset, a slot turns it on when it runs one stream (`streams = 1`) on a GPU - Metal, or the whole model resident on a Vulkan device with its routed experts on the card - and leaves it off otherwise: at one stream on Metal the draft-and-verify round cuts decode time on the dense Qwen3.5 MTP models (0.8B 1.20x, 4B 1.21x, 9B 1.10x - `modules/dasLLAMA/followup_metal.md` row 26), on a Vulkan device more (`modules/dasLLAMA/PERF_LEDGER.md`, the resident driver's NextN entries) unless the driver sums a MoE's routed experts on the host, where the verify rows' host sums cost more than a plain token (the same ledger's Qwen3.8-Flash-Next entry), on the CPU the round's second verify row costs a second decode step and the round is slower than plain decode (`modules/dasLLAMA/PERF_LEDGER.md`, the CPU self-speculation entry), and at several streams the plain batched step is faster (`modules/dasLLAMA/PERF_LEDGER.md`, the batched arcs). An armed round keeps every stream's cache on the host, so a drafting Vulkan slot serves host-cached sessions in place of device-home ones. `true` / `false` set it outright. It needs a model with an in-file NextN head (the `-MTP-` GGUFs), or an assistant drafter GGUF beside the model file (gemma-4: `mtp-<stem>-Q8_0.gguf`), which the load attaches; on any other model the server logs one line and serves plain. Greedy requests are output-invariant; a sampled request (`temperature` > 0, penalties included) draws each verify row with its own sampler and keeps the plain sampled distribution, at a lower acceptance rate. `/v1/stats` reports `mtp_drafted`/`mtp_accepted`; a constrained reply (`response_format`, a forced `tool_choice`) decodes plain |
+| `--mtp` | - | *off* | MTP/NextN self-speculative decode. Unset, a slot leaves it off, except one that runs one stream (`streams = 1`) on a GPU the model's catalog row lists under `serve_mtp` (`modules/dasLLAMA/performance/model_specs.das`: the platforms, `metal` or `vulkan`, where that model's self-speculation measured a win - gemma-4-26B-A4B and Qwen3.8-27B on Metal, Qwen3.6-35B-A3B on a Vulkan device; `modules/dasLLAMA/PERF_LEDGER.md` carries the readings) - Metal, or the whole model resident on a Vulkan device with its routed experts on the card. A model with no catalog row, a model whose row lists another platform, several streams, the CPU, and a MoE whose routed experts the resident driver sums on the host all decode plain: on the CPU the round's second verify row costs a second decode step, at several streams the plain batched step is faster, and on a MoE at one stream the draft overhead can cost more than the accepted rows buy (the ledger's readings per model). A drafting Vulkan slot keeps its streams' caches on the card (device-home) where the whole-model driver runs the draft head, its verify and a rejected round's rollback on the device; where any of them stays on the host (the load log names which), the slot serves host-cached sessions. `true` / `false` set it outright. It needs a model with an in-file NextN head (the `-MTP-` GGUFs), or an assistant drafter GGUF beside the model file (gemma-4: `mtp-<stem>-Q8_0.gguf`), which the load attaches; on any other model the server logs one line and serves plain. Greedy requests are output-invariant; a sampled request (`temperature` > 0, penalties included) draws each verify row with its own sampler and keeps the plain sampled distribution, at a lower acceptance rate. `/v1/stats` reports `mtp_drafted`/`mtp_accepted`; a constrained reply (`response_format`, a forced `tool_choice`) decodes plain |
 | `--rope-scaling` | - | *file* | RoPE scaling override for the load: `yarn` \| `linear` \| `none`; unset keeps the model file's own `rope.scaling.*` keys, `none` drops them (a file's per-pair factor tensors, Llama-3.1's `rope_freqs`, stay, as llama.cpp keeps them). `yarn` folds the NTK-by-parts frequency ramp and the `1 + 0.1 ln(s)` magnitude into the rope tables the way llama.cpp's `--rope-scaling yarn` does. The Qwen families publish the recipe (Qwen2.5-Instruct 7B and up, Qwen3, Qwen3-Next / 3.5 / 3.8: factor 4 over the trained context) and ship no scaling keys because static YaRN costs a little on short texts - arm it when a conversation needs the length; no other vendor validates it, and a non-Qwen file logs a warning. The override is baked into the prepared image under its own lane (`model.gguf.metal-yarn4.dlim`), so the first load with it mints once. Per-model in a `[[models]]` roster: `rope_scaling = "yarn"` |
 | `--rope-scale` | - | *file* | The scaling factor `s` (the context multiplier) for the override; unset reads the file's `rope.scaling.factor`, and `yarn` needs one (config key `rope_scale`) |
 | `--yarn-orig-ctx` | - | *file* | YaRN: the original training context the factor extends; unset reads the file's `original_context_length`, else its `context_length` (config key `yarn_orig_ctx`; llama.cpp's `--yarn-orig-ctx`) |
@@ -382,10 +382,15 @@ request on its system prompt and tool set shares, one where its last message sta
 a conversation share), one at its last message's close, ahead of the generation prompt (so the same prompt asked
 again and the conversation's follow-up attach everything up to it, whatever the replayed assistant turn renders -
 a thinking-off turn's generation prompt opens a think block the replay does not), and one at its finished turn,
-within `--prefix-state-mb` (a quarter of RAM unless set, per served slot) and at most `--prefix-states` of them, a
+within `--prefix-state-mb` (a quarter of RAM unless set - in a container, of its memory limit
+where that is lower - per served slot) and at most `--prefix-states` of them, a
 conversation's own stops (its last message's start, its last message's close, its finished turn) dropped before
 shared openings, and a prompt attaches the deepest one that is its exact prefix - the shared system block for a new
-conversation, the whole earlier exchange for the next turn.
+conversation, the whole earlier exchange for the next turn. A slot whose streams keep their caches on the card
+(device-home, the Vulkan whole-model driver) keeps the same cache in host RAM behind them, under the same two flags:
+the card holds one finished stream and a few checkpoints a stream slot, so every checkpoint and finished turn is also
+copied down, and a request whose opening the card no longer holds takes it back up into its region - milliseconds over
+the bus where the prefill would take seconds. `DASLLAMA_DEVICE_POOL=0` keeps the card's copies alone.
 Clients whose connection drops mid-generation are evicted within a tick. Audio uploads queue to
 long-lived `new_thread` ASR workers and do not block chat generation; `--asr-workers 2` permits two
 transcriptions at once. Each worker owns its model/context and reuses language-specific session
@@ -549,15 +554,18 @@ by the stream count allows, and the load log says why. A request that fills the 
 `length` stop. `/v1/stats` counts every call the device handed
 back to the CPU (`gpu_cpu_passes`); a slot served this way keeps it empty. The control page's
 model card says which of these a slot got (`served`), why it got less when it did
-(`served_note`), and the passes by reason once any fired. A recurrent (deltanet)
-model is served the same way with two differences: a prompt prefills in one piece, and a next
-turn re-prefills its whole transcript. A slot with a vision or audio tower, and self-speculation,
-keep host-cached sessions for now, and show their passes there. The want that asks for the driver
+(`served_note`), and the passes by reason once any fired. A recurrent (deltanet) model is served the
+same way, its recurrent state kept in the stream's region beside its rows; a recurrent model with
+hyper-connections (Qwen3.8-Flash-Next) differs in two ways: a prompt prefills in one piece, and a next
+turn re-prefills its whole transcript. A slot with a vision or audio tower keeps host-cached sessions, and shows its passes there; a
+self-speculative slot does too where any seat of the round (the draft head, its verify, a rejected
+round's rollback) stays on the host. The want that asks for the driver
 sets `resident` outright rather than riding `auto_tier`, and spells every rail out one by one, so
 an explicit `gpu_dn = false` still turns that rail off. The per-op rails arm beneath the driver as the
 fallback for a model that does not fit: expert stacks sized
-**automatically** (resident layers fill the VRAM budget, the rest stream) plus DN + ATTN + dense +
-the resident shared expert. `gpu_layers` / `gpu_stream` are `0` = auto by default; set either to a
+**automatically** (resident layers fill the VRAM budget, the rest stream) plus DN (each deltanet plane in
+its own format) + ATTN + the dense layers' attention projections + the resident shared expert (its own planes).
+A dense layer's FFN rides the per-op FFN rail (`DASLLAMA_GPU_DENSE_FFN=0` keeps it on the CPU). `gpu_layers` / `gpu_stream` are `0` = auto by default; set either to a
 positive value to pin it exactly, and `gpu_dn` / `gpu_attn` / `gpu_dense` / `gpu_vram_mb` override
 the rest. The `DASLLAMA_GPU_*` env vars still override everything (they remain the A/B levers), and
 `DASLLAMA_GPU=1` requests the same auto shape without a config file.
@@ -824,8 +832,8 @@ absent; set `DASLLAMA_MODELS_DIR`):
   picture through the vision tower, the JFK clip through the audio tower, spoken back by
   `pocket-tts-en-q8.gguf`, and a `--no-think --hide-thinking` image turn whose leading thought
   block stays off the screen). Runs on the stocked box at release time.
-- `test_openai_server_mtp.das` - the self-speculation default: a NextN-headed slot drafts at one
-  stream on Metal and decodes plain at four or on the CPU, an explicit `mtp` wins either way, and
+- `test_openai_server_mtp.das` - the self-speculation default: a NextN-headed slot whose file has no
+  catalog `serve_mtp` row decodes plain at one stream on Metal, at four and on the CPU, an explicit `mtp` wins either way, and
   a head-less model with no drafter beside it serves plain under the default; read off `/v1/stats`'s `mtp_drafted`. The
   Metal cells skip on a box with no Metal backend. Needs
   `Qwen3.5-0.8B-MTP-Q8_0.gguf` and `tinyllama-1.1b-chat-v1.0.Q8_0.gguf`.
@@ -841,11 +849,19 @@ absent; set `DASLLAMA_MODELS_DIR`):
   conversations, the replayed first replies, the byte-identical repeat) and its summary off a
   fixed table of answers (shares by kind, the cold start, the openings attached, the medians, a
   refused request counted as failed).
-- `test_server_flags.das` - model-free: the flag-presence test behind the config surface's
-  provenance - a flag the process was given reads present, bare or as `flag=value`, and an
-  absent one or a prefix of a given one reads absent; and the self-speculation default's rule
-  as the slot reads it (`mtp_auto_arms`, the Vulkan arm included) and as the config surface
-  resolves it, with the Metal mode a `--gpu` pick and a `--metal` spelling resolve to.
+- `test_server_flags.das` - the flag-presence test behind the config surface's provenance - a
+  flag the process was given reads present, bare or as `flag=value`, and an absent one or a
+  prefix of a given one reads absent; the self-speculation default's rule as the slot reads it
+  (`mtp_auto_arms`, the Vulkan arm and the catalog `serve_mtp` gate included) and as the config
+  surface resolves it, with the Metal mode a `--gpu` pick and a `--metal` spelling resolve to;
+  the catalog's `serve_mtp` read off a file's base name, and carried by the slot options both
+  the boot load and a runtime POST load build; the checkpoint byte budget and the box's RAM
+  under a container's cgroup limit - all model-free. One cell is not: a Vulkan slot over
+  `Qwen3.5-0.8B-MTP-Q8_0.gguf` and `Qwen3.6-35B-A3B-MTP-IQ4_XS-pure.gguf`, modeling a catalog
+  row that lists vulkan (the 0.8B file has no row of its own), speculates with its stream
+  device-home, and the device's draft and verify counters count each drafted step; it
+  needs `DASLLAMA_GPU=1` and
+  skips without it.
 - `tests/` - the control page itself, under real Playwright (Node + chromium): badge states,
   models panel, streams/history, chat wire + SSE rendering, the speech studio, config editor,
   exchange section, the confirm-gated controls. Model-free - the page runs against JSON/SSE fixtures captured

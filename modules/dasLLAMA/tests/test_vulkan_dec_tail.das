@@ -6,6 +6,7 @@ module test_vulkan_dec_tail
 
 require dastest/testing_boost public
 require dasllama/dasllama_math
+require dasllama/dasllama_math_default   // dot_mx4q8_scalar: the routed mx4 cell's reference dot
 require dasllama/dasllama_gpu_math
 require dasllama/dasllama_rope
 require dasllama/dasllama_common   // MoeGate, select_decode_override
@@ -487,6 +488,10 @@ def private span_args_sh(qa, qb : Quad; f : Ffn; sh : Shexp; gated : bool) : Moe
     a.wsh1 <- [sh.off1, sh.off1]
     a.wsh3 <- [sh.off3, sh.off3]
     a.wsh2 <- [sh.off2, sh.off2]
+    let q8 = int(KqFmt.q8)   //! the q8 triple on both layers
+    a.fsh1 <- [q8, q8]
+    a.fsh3 <- [q8, q8]
+    a.fsh2 <- [q8, q8]
     return <- a
 }
 
@@ -620,6 +625,443 @@ def test_vulkan_dec_span_shexp(t : T?) {
         }
     } else {
         t |> skip("dasVulkan not installed; the decode span is untestable here")
+    }
+}
+
+//! the shared expert's three dense GEMMs over the rows' images: the gate's Q8_0 image, the up's Q8_K one, the gated hidden
+//! row requantized to Q8_K for the k6 down - each plane's reference over the image it reads
+def private shexp_mixed_ref(w1, w3, w2 : array<float>; x : array<float>; rows : int64) : array<float> {
+    let g8 <- q8_roundtrip(x, rows * N, false)
+    let uk <- q8_roundtrip(x, rows * N, true)
+    var g <- dense_ref_rows(w1, g8.deq, int(rows), int(N), int(NFE))
+    var u <- dense_ref_rows(w3, uk.deq, int(rows), int(N), int(NFE))
+    gate_batch(g.want, u.want, FfnAct.silu, NFE, rows)
+    let hk <- q8_roundtrip(g.want, rows * NFE, true)
+    var d <- dense_ref_rows(w2, hk.deq, int(rows), int(NFE), int(N))
+    var y <- d.want
+    delete g
+    delete u
+    delete d
+    return <- y
+}
+
+//! a shared expert whose gate and up take two activation forms - a q8 gate fed Q8_0 beside a k4 up fed Q8_K, a k6 down - through
+//! `shexp_gpu_gemms`: every plane read in its own format over its own image, at one row (a decode step) and at three (a prefill);
+//! the k4 up fed the gate's Q8_0 image - one image for both - misses its row (the control that the two images are load-bearing)
+[test]
+def test_vulkan_shexp_mixed_forms(t : T?) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        install_vk_moe_hooks()
+        let o1 = 170l * STRIDE   //! slots 170-172: past every plane the file's other cells upload
+        let o3 = 171l * STRIDE
+        let o2 = 172l * STRIDE
+        var w1, w3, w2 : array<float>
+        if (!plane_up(int(KqFmt.q8), NFE, N, 131l, o1, w1)) {
+            t |> skip("shexp mixed forms: no Vulkan device (or probe/budget refused the upload)")
+            return
+        }
+        t |> success(plane_up(int(KqFmt.k4), NFE, N, 137l, o3, w3), "shexp mixed forms: the k4 up plane uploaded")
+        t |> success(plane_up(int(KqFmt.k6), N, NFE, 139l, o2, w2, false), "shexp mixed forms: the k6 down plane uploaded")
+        set_moe_gpu_shexp_layer(0l, ShexpGpuPlanes(f1 = int(KqFmt.q8), f3 = int(KqFmt.k4), f2 = int(KqFmt.k6), o1 = o1, o3 = o3, o2 = o2))
+        set_moe_gpu_shexp_layer(1l, ShexpGpuPlanes(f1 = int(KqFmt.k4), f3 = int(KqFmt.k4), f2 = int(KqFmt.k6), o1 = o3, o3 = o3, o2 = o2))
+        t |> success(shexp_gpu_mixed_forms(0l), "shexp mixed forms: a q8 gate beside a k4 up takes two activation forms")
+        t |> success(!shexp_gpu_mixed_forms(1l), "shexp mixed forms: a k4 gate beside a k4 up takes one (the predicate's control)")
+        var m = Model()
+        m.config.dim = N
+        m.config.n_ff_shexp = NFE
+        m.config.ffn_act = FfnAct.silu
+        for (rows in fixed_array(1l, 3l)) {
+            var inscope x : array<float>
+            fill_row(x, rows * N, 0.3 + float(rows))
+            var inscope y : array<float>
+            let before = shexp_gpu_gemm_rows()
+            shexp_gpu_gemms(m, 0l, rows, x, y)
+            t |> equal(shexp_gpu_gemm_rows() - before, rows, "shexp mixed forms ({rows} rows): the dense GEMMs served every row")
+            var inscope want <- shexp_mixed_ref(w1, w3, w2, x, rows)
+            held_row(t, "shexp mixed forms ({rows} rows): the shared expert's rows", copy_span(y, 0l, rows * N), want)
+            let g8 <- q8_roundtrip(x, rows * N, false)
+            let uk <- q8_roundtrip(x, rows * N, true)
+            var inscope u_own, u_one : array<float>
+            u_own |> resize(rows * NFE)
+            u_one |> resize(rows * NFE)
+            matmul_gpu_dense(u_own, o3, uk.xq, uk.xs, N, NFE, rows, int(KqFmt.k4))
+            matmul_gpu_dense(u_one, o3, g8.xq, g8.xs, N, NFE, rows, int(KqFmt.k4))
+            var inscope u_ref <- dense_ref_rows(w3, uk.deq, int(rows), int(N), int(NFE))
+            held_row(t, "shexp mixed forms ({rows} rows): the k4 up over its own Q8_K image", u_own, u_ref.want)
+            t |> success(check_count(u_one, u_ref.want, ROW_BAR) > 0, "shexp mixed forms ({rows} rows): the k4 up fed the gate's Q8_0 image misses its row")
+        }
+        delete m
+    } else {
+        t |> skip("dasVulkan not installed; the shared expert's dense GEMMs are untestable here")
+    }
+}
+
+//! a q51 plane of `rows` rows of `n` on the upload wire (20-byte blocks, an f16 d | m pair a block) at `woff`, its bytes kept for
+//! the reference; false = the upload was refused
+def private q51_up(rows, n, seed, woff : int64; var wq : array<uint8>; var ws : array<uint8>) : bool {
+    let nb = rows * (n / 32l)
+    wq |> resize(nb * int64(KQ_Q51_QWORDS) * 4l)
+    ws |> resize(nb * 4l)
+    var st = uint64(seed) * 2654435761ul + 12345ul
+    for (c in wq) {
+        c = lcg_byte(st)
+    }
+    for (b in range64(nb)) {
+        put_f16(ws, b * 4l, 0.004 * float(1l + b % 7l))
+        put_f16(ws, b * 4l + 2l, 0.002 * float(b % 5l) - 0.004)
+    }
+    return moe_gpu_upload_stack(wq, ws, woff, n, rows, int(KqFmt.q51), false)
+}
+
+//! the q51 plane's rows over a Q8_0 image: the engine's scalar dot, a row at a time
+def private q51_rows_ref(wq, ws : array<uint8>; xq : array<int8>; xs : array<float>; rows, n, nrows : int64) : array<float> {
+    let nb = n / 32l
+    var y : array<float>
+    y |> resize(nrows * rows)
+    for (r in range64(nrows)) {
+        for (j in range64(rows)) {
+            unsafe {
+                y[r * rows + j] = dot_q51q8_scalar(addr(wq[j * nb * int64(KQ_Q51_QWORDS) * 4l]), addr(ws[j * nb * 4l]),
+                    addr(xq[r * n]), addr(xs[r * nb]), n)
+            }
+        }
+    }
+    return <- y
+}
+
+//! a dense FFN triple of two activation forms - a q51 gate fed Q8_0 beside a k4 up fed Q8_K, a k6 down - through `ffn_gpu_gemms`,
+//! the per-op FFN rail's form for such a layer: the q51 gate on the per-32 batch tile, every plane over its own image, at one row
+//! and at three; the k4 up fed the gate's Q8_0 image misses its row (the control)
+[test]
+def test_vulkan_dense_ffn_mixed_forms(t : T?) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        install_vk_moe_hooks()
+        let o1 = 173l * STRIDE   //! slots 173-175: past the shared-expert cell's
+        let o3 = 174l * STRIDE
+        let o2 = 175l * STRIDE
+        var gq, gs : array<uint8>
+        if (!q51_up(NFE, N, 151l, o1, gq, gs)) {
+            t |> skip("dense ffn mixed forms: no Vulkan device (or probe/budget refused the upload)")
+            return
+        }
+        var w3, w2 : array<float>
+        t |> success(plane_up(int(KqFmt.k4), NFE, N, 157l, o3, w3), "dense ffn mixed forms: the k4 up plane uploaded")
+        t |> success(plane_up(int(KqFmt.k6), N, NFE, 163l, o2, w2, false), "dense ffn mixed forms: the k6 down plane uploaded")
+        for (rows in fixed_array(1l, 3l)) {
+            var inscope x : array<float>
+            fill_row(x, rows * N, 0.7 + float(rows))
+            var inscope y : array<float>
+            ffn_gpu_gemms(o1, o3, o2, int(KqFmt.q51), int(KqFmt.k4), int(KqFmt.k6), FfnAct.silu, N, NFE, rows, x, y)
+            let g8 <- q8_roundtrip(x, rows * N, false)
+            let uk <- q8_roundtrip(x, rows * N, true)
+            var inscope g <- q51_rows_ref(gq, gs, g8.xq, g8.xs, NFE, N, rows)
+            var inscope u <- dense_ref_rows(w3, uk.deq, int(rows), int(N), int(NFE))
+            gate_batch(g, u.want, FfnAct.silu, NFE, rows)
+            let hk <- q8_roundtrip(g, rows * NFE, true)
+            var inscope d <- dense_ref_rows(w2, hk.deq, int(rows), int(NFE), int(N))
+            held_row(t, "dense ffn mixed forms ({rows} rows): the FFN rows", copy_span(y, 0l, rows * N), d.want)
+            var inscope u_one : array<float>
+            u_one |> resize(rows * NFE)
+            matmul_gpu_dense(u_one, o3, g8.xq, g8.xs, N, NFE, rows, int(KqFmt.k4))
+            t |> success(check_count(u_one, u.want, ROW_BAR) > 0, "dense ffn mixed forms ({rows} rows): the k4 up fed the gate's Q8_0 image misses its row")
+        }
+    } else {
+        t |> skip("dasVulkan not installed; the dense FFN's GEMMs are untestable here")
+    }
+}
+
+//! an mx4 stack of `rows` rows of `n` on the upload wire (16 nibble bytes a block, an E8M0 byte a block) at `woff`, its bytes kept
+//! for the reference; false = the upload was refused
+def private mx4_up(rows, n, seed, woff : int64; var wq : array<uint8>; var we : array<uint8>; stream : bool = false) : bool {
+    let nb = rows * (n / 32l)
+    wq |> resize(nb * 16l)
+    we |> resize(nb)
+    var st = uint64(seed) * 2654435761ul + 12345ul
+    for (c in wq) {
+        c = lcg_byte(st)
+    }
+    for (b in range64(nb)) {
+        we[b] = uint8(119l + b % 5l)   //! 2^-8 .. 2^-4 a block
+    }
+    return moe_gpu_upload_stack(wq, we, woff, n, rows, int(KqFmt.mx4), stream)
+}
+
+//! row `j` of an mx4 stack over the Q8_0 activation row at `xo`: the engine's scalar dot
+def private mx4_row_dot(wq, we : array<uint8>; j, n : int64; xq : array<int8>; xs : array<float>; xo : int64) : float {
+    var lut : int8[16]
+    mxfp4_fill_lut(lut)
+    let nb = n / 32l
+    unsafe {
+        return dot_mx4q8_scalar(addr(lut[0]), addr(wq[j * nb * 16l]), addr(we[j * nb]), addr(xq[xo]), addr(xs[xo / 32l]), n)
+    }
+}
+
+//! the routed experts' fixture: three mx4 stacks of NE experts and the gate / up bias rows
+struct private Mx4Experts {
+    w1q : array<uint8>
+    w1e : array<uint8>
+    w3q : array<uint8>
+    w3e : array<uint8>
+    w2q : array<uint8>
+    w2e : array<uint8>
+    gb : array<float>
+    ub : array<float>
+    o1 : int64
+    o3 : int64
+    o2 : int64
+}
+
+//! the routed chain's reference over the regions `ex` (an expert each, `cnt` rows each, the rows in order): each row's gate and up
+//! over its Q8_0 image, the expert's bias rows where `biased`, the act, the Q8_0 hidden, the down
+def private routed_ref(f : Mx4Experts; x : array<float>; ex, cnt : array<int64>; biased : bool; act : FfnAct) : array<float> {
+    var nrows = 0l
+    for (c in cnt) {
+        nrows += c
+    }
+    let xi <- q8_roundtrip(x, nrows * N, false)
+    var y : array<float>
+    y |> resize(nrows * N)
+    var row = 0l
+    for (e, ce in ex, cnt) {
+        for (_c in range64(ce)) {
+            var inscope g, u : array<float>
+            g |> resize(NFE)
+            u |> resize(NFE)
+            for (j in range64(NFE)) {
+                g[j] = mx4_row_dot(f.w1q, f.w1e, e * NFE + j, N, xi.xq, xi.xs, row * N) + (biased ? f.gb[e * NFE + j] : 0.0)
+                u[j] = mx4_row_dot(f.w3q, f.w3e, e * NFE + j, N, xi.xq, xi.xs, row * N) + (biased ? f.ub[e * NFE + j] : 0.0)
+            }
+            gate_batch(g, u, act, NFE, 1l)
+            let hq <- q8_roundtrip(g, NFE, false)
+            for (i in range64(N)) {
+                y[row * N + i] = mx4_row_dot(f.w2q, f.w2e, e * N + i, NFE, hq.xq, hq.xs, 0l)
+            }
+            row++
+        }
+    }
+    return <- y
+}
+
+//! the regions over the fixture's stacks: expert `ex[r]`'s planes at its offset, `cnt[r]` rows from the running row
+def private routed_regions(f : Mx4Experts; ex, cnt : array<int64>; var o1, o3, o2 : array<int64>) {
+    var row = 0l
+    for (e, ce in ex, cnt) {
+        o1 |> push_from([f.o1 + e * NFE * N, row, ce])
+        o3 |> push_from([f.o3 + e * NFE * N, row, ce])
+        o2 |> push_from([f.o2 + e * N * NFE, row, ce])
+        row += ce
+    }
+}
+
+//! native-MXFP4 routed stacks on the per-op expert chain, plain and under gpt-oss's form (`MoeGpuFfnForm`: the gate/up bias rows,
+//! the clamped swiglu), on the decode GEMV arm and the batch arm against the engine's scalar dots; the plain reference misses the
+//! biased rows (the control that the form reaches the act)
+[test]
+def test_vulkan_routed_mx4_form(t : T?) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        install_vk_moe_hooks()
+        var f = Mx4Experts(o1 = 176l * STRIDE, o3 = 177l * STRIDE, o2 = 178l * STRIDE)   //! slots 176-178: past the dense FFN cell's
+        if (!mx4_up(NE * NFE, N, 181l, f.o1, f.w1q, f.w1e)) {
+            t |> skip("routed mx4 form: no Vulkan device (or probe/budget refused the upload)")
+            return
+        }
+        t |> success(mx4_up(NE * NFE, N, 183l, f.o3, f.w3q, f.w3e), "routed mx4 form: the up stack uploaded")
+        t |> success(mx4_up(NE * N, NFE, 187l, f.o2, f.w2q, f.w2e), "routed mx4 form: the down stack uploaded")
+        f.gb <- [for (i in range64(NE * NFE)); 0.3 * sin(float(i) * 0.71)]
+        f.ub <- [for (i in range64(NE * NFE)); 0.25 * cos(float(i) * 0.53)]
+        t |> success(moe_gpu_upload_ffn_bias(f.gb, f.ub), "routed mx4 form: the bias rows uploaded")
+        let arms = fixed_array((name = "decode", ex = [2l, 0l, 3l, 1l], cnt = [1l, 1l, 1l, 1l]),
+                               (name = "batch", ex = [1l, 3l, 0l], cnt = [15l, 9l, 16l]))
+        for (arm in arms) {
+            var inscope o1, o3, o2 : array<int64>
+            routed_regions(f, arm.ex, arm.cnt, o1, o3, o2)
+            var nrows = 0l
+            for (c in arm.cnt) {
+                nrows += c
+            }
+            var inscope x : array<float>
+            fill_row(x, nrows * N, 0.9)
+            let xi <- q8_roundtrip(x, nrows * N, false)
+            for (biased in fixed_array(true, false)) {
+                let tag = "{arm.name}, {biased ? "biased clamped swiglu" : "plain silu"}"
+                if (biased) {
+                    set_moe_gpu_ffn_form(MoeGpuFfnForm(oai = true, bias_off = 0l, e_base = f.o1, e_stride = NFE * N))
+                }
+                var inscope y : array<float>
+                y |> resize(nrows * N)
+                matmul_moe_gpu_ffn(y, o1, o3, o2, long_length(arm.ex), xi.xq, xi.xs, N, NFE, nrows,
+                    int(KqFmt.mx4), int(KqFmt.mx4), int(KqFmt.mx4), false)
+                clear_moe_gpu_ffn_form()
+                var inscope want <- routed_ref(f, x, arm.ex, arm.cnt, biased, biased ? FfnAct.swiglu_oai : FfnAct.silu)
+                held_row(t, "routed mx4 form ({tag}): the down rows", y, want)
+                if (biased) {
+                    var inscope plain <- routed_ref(f, x, arm.ex, arm.cnt, false, FfnAct.silu)
+                    t |> success(check_count(y, plain, ROW_BAR) > 0, "routed mx4 form ({tag}): the plain reference misses the device rows")
+                }
+            }
+        }
+    } else {
+        t |> skip("dasVulkan not installed; the routed expert chain is untestable here")
+    }
+}
+
+//! a routed chain's rows over dequantized gate (`g8` Q8_0 rows), up (`uk` Q8_K rows) and down stacks: expert `ex[r]`'s rows for
+//! `cnt[r]` rows in order, the silu act, the hidden row through the k6 down's Q8_K form
+def private two_forms_ref(w1, w3, w2 : array<float>; g8, uk : array<float>; ex, cnt : array<int64>) : array<float> {
+    var y : array<float>
+    var rows_all = 0l
+    for (ce in cnt) {
+        rows_all += ce
+    }
+    y |> reserve(rows_all * N)
+    var row = 0l
+    for (e, ce in ex, cnt) {
+        for (_c in range64(ce)) {
+            var inscope g, u : array<float>
+            g |> resize(NFE)
+            u |> resize(NFE)
+            for (j in range64(NFE)) {
+                var ag = 0.0lf
+                var au = 0.0lf
+                for (i in range64(N)) {
+                    ag += double(w1[(e * NFE + j) * N + i]) * double(g8[row * N + i])
+                    au += double(w3[(e * NFE + j) * N + i]) * double(uk[row * N + i])
+                }
+                g[j] = float(ag)
+                u[j] = float(au)
+            }
+            gate_batch(g, u, FfnAct.silu, NFE, 1l)
+            let hk <- q8_roundtrip(g, NFE, true)
+            for (i in range64(N)) {
+                var ad = 0.0lf
+                for (j in range64(NFE)) {
+                    ad += double(w2[(e * N + i) * NFE + j]) * double(hk.deq[j])
+                }
+                y |> push(float(ad))
+            }
+            row++
+        }
+    }
+    return <- y
+}
+
+//! routed experts whose gate and up take two activation classes - a q8 gate stack fed Q8_0 beside a k4 up stack fed Q8_K, a k6
+//! down - through `matmul_moe_gpu_ffn`, the up stacks reading the call's second image (`set_moe_gpu_image2`), on the decode GEMV
+//! arm and the batch arm; the up stacks fed the gate's Q8_0 image miss the rows (the control that the second image reaches them)
+[test]
+def test_vulkan_routed_two_forms(t : T?) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        install_vk_moe_hooks()
+        let o1 = 179l * STRIDE   //! slots 179-181: past the routed mx4 cell's
+        let o3 = 180l * STRIDE
+        let o2 = 181l * STRIDE
+        var w1, w3, w2 : array<float>
+        if (!plane_up(int(KqFmt.q8), NE * NFE, N, 191l, o1, w1)) {
+            t |> skip("routed two forms: no Vulkan device (or probe/budget refused the upload)")
+            return
+        }
+        t |> success(plane_up(int(KqFmt.k4), NE * NFE, N, 193l, o3, w3), "routed two forms: the k4 up stack uploaded")
+        t |> success(plane_up(int(KqFmt.k6), NE * N, NFE, 197l, o2, w2, false), "routed two forms: the k6 down stack uploaded")
+        let arms = fixed_array((name = "decode", ex = [3l, 1l, 0l, 2l], cnt = [1l, 1l, 1l, 1l]),
+                               (name = "batch", ex = [2l, 0l, 3l], cnt = [13l, 11l, 16l]))
+        for (arm in arms) {
+            var inscope o1s, o3s, o2s : array<int64>
+            var row = 0l
+            for (e, ce in arm.ex, arm.cnt) {
+                o1s |> push_from([o1 + e * NFE * N, row, ce])
+                o3s |> push_from([o3 + e * NFE * N, row, ce])
+                o2s |> push_from([o2 + e * N * NFE, row, ce])
+                row += ce
+            }
+            var inscope x : array<float>
+            fill_row(x, row * N, 1.3)
+            let g8 <- q8_roundtrip(x, row * N, false)
+            let uk <- q8_roundtrip(x, row * N, true)
+            var inscope want <- two_forms_ref(w1, w3, w2, g8.deq, uk.deq, arm.ex, arm.cnt)
+            for (own in fixed_array(true, false)) {
+                if (own) {
+                    set_moe_gpu_image2(uk.xq, uk.xs)
+                } else {
+                    set_moe_gpu_image2(g8.xq, g8.xs)
+                }
+                var inscope y : array<float>
+                y |> resize(row * N)
+                matmul_moe_gpu_ffn(y, o1s, o3s, o2s, long_length(arm.ex), g8.xq, g8.xs, N, NFE, row,
+                    int(KqFmt.q8), int(KqFmt.k4), int(KqFmt.k6), false)
+                clear_moe_gpu_image2()
+                if (own) {
+                    held_row(t, "routed two forms ({arm.name}): the down rows, each stack over its own image", y, want)
+                } else {
+                    t |> success(check_count(y, want, ROW_BAR) > 0, "routed two forms ({arm.name}): the up stacks fed the gate's Q8_0 image miss the rows")
+                }
+            }
+        }
+    } else {
+        t |> skip("dasVulkan not installed; the routed expert chain is untestable here")
+    }
+}
+
+let private HEAT_LAYER = 11l   //! the heat cell's pool layer
+
+//! the heat pool under gpt-oss's form: native-MXFP4 stacks streamed, two experts pinned, a top-k of three splitting into two hits
+//! the pool serves on the async chain under the biased clamped swiglu - the hits' experts carried beside their slot regions
+//! (`set_moe_gpu_ffn_experts`) - against the engine's scalar dots; the plain reference misses the hit rows (the control)
+[test]
+def test_vulkan_heat_mx4_form(t : T?) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        install_vk_moe_hooks()
+        set_moe_gpu_heat_hooks(@@vk_moe_heat_query, @@vk_moe_heat_advise, @@vk_moe_ffn_begin, @@vk_moe_ffn_join)
+        set_gpu_tier_want_(GpuTierWant(heat = 2l))
+        var f = Mx4Experts(o1 = 182l * STRIDE, o3 = 183l * STRIDE, o2 = 184l * STRIDE)   //! slots 182-184: past the two-forms cell's
+        if (!mx4_up(NE * NFE, N, 201l, f.o1, f.w1q, f.w1e, true)) {
+            set_gpu_tier_want_(GpuTierWant())
+            t |> skip("heat mx4 form: no Vulkan device (or probe refused the stream uploads)")
+            return
+        }
+        t |> success(mx4_up(NE * NFE, N, 203l, f.o3, f.w3q, f.w3e, true), "heat mx4 form: the up stack streamed")
+        t |> success(mx4_up(NE * N, NFE, 207l, f.o2, f.w2q, f.w2e, true), "heat mx4 form: the down stack streamed")
+        f.gb <- [for (i in range64(NE * NFE)); 0.3 * sin(float(i) * 0.37)]
+        f.ub <- [for (i in range64(NE * NFE)); 0.25 * cos(float(i) * 0.61)]
+        t |> success(moe_gpu_upload_ffn_bias(f.gb, f.ub), "heat mx4 form: the bias rows uploaded")
+        let mx = int(KqFmt.mx4)
+        var inscope ids <- [1l, 3l]
+        moe_gpu_heat_advise(HEAT_LAYER, f.o1, f.o3, f.o2, mx, mx, mx, N, NFE, ids, 2l)
+        var inscope idx <- [1l, 0l, 3l]
+        var inscope hit : array<int8>
+        var inscope h1, h3, h2 : array<int64>
+        hit |> resize(3)
+        h1 |> resize(3)
+        h3 |> resize(3)
+        h2 |> resize(3)
+        let nh = matmul_moe_gpu_heat_query(HEAT_LAYER, idx, 3l, hit, h1, h3, h2)
+        t |> equal(nh, 2l, "heat mx4 form: the mx4 pool takes the two pinned experts")
+        if (nh == 2l) {
+            var inscope o1s, o3s, o2s : array<int64>
+            for (i in range64(nh)) {
+                o1s |> push_from([h1[i], i, 1l])
+                o3s |> push_from([h3[i], i, 1l])
+                o2s |> push_from([h2[i], i, 1l])
+            }
+            var inscope x : array<float>
+            fill_row(x, 2l * N, 0.4)
+            let xi <- q8_roundtrip(x, 2l * N, false)
+            var inscope ex <- [1l, 3l]
+            set_moe_gpu_ffn_form(MoeGpuFfnForm(oai = true, bias_off = 0l, e_base = f.o1, e_stride = NFE * N))
+            set_moe_gpu_ffn_experts(ex)
+            matmul_moe_gpu_ffn_begin(o1s, o3s, o2s, nh, xi.xq, xi.xs, N, NFE, nh, mx, mx, mx, false)
+            clear_moe_gpu_ffn_form()
+            clear_moe_gpu_ffn_experts()
+            var inscope y : array<float>
+            y |> resize(2l * N)
+            matmul_moe_gpu_ffn_join(y)
+            var inscope want <- routed_ref(f, x, ex, [1l, 1l], true, FfnAct.swiglu_oai)
+            held_row(t, "heat mx4 form: the hits' down rows under the biased clamped swiglu", y, want)
+            var inscope plain <- routed_ref(f, x, ex, [1l, 1l], false, FfnAct.silu)
+            t |> success(check_count(y, plain, ROW_BAR) > 0, "heat mx4 form: the plain reference misses the hit rows")
+        }
+        set_gpu_tier_want_(GpuTierWant())
+    } else {
+        t |> skip("dasVulkan not installed; the heat pool is untestable here")
     }
 }
 

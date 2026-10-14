@@ -4852,37 +4852,39 @@ def private pk_site(var c : St2GpuCtx; var bx : MetalBuffer?; xoff : uint64; var
 //! The row GEMV at a site under one of the five stamp kinds.
 [arch(at = "../ARCHITECTURE_GPU_TOWER_POCKET.md#tower-pocket-frames")]
 def private pk_gemv(enc : MetalComputeEncoder?; var c : St2GpuCtx; p : PkLin; kind : int; s : PkGemvSite) {
-    var ka = PkGemvArgs(nin = uint(p.nin), nout = uint(p.nout), stride = p.q8 ? 0u : uint(p.f.kdim_p), eps = POCKET_HEAD_LN_EPS)
-    let woff = p.q8 ? 0ul : p.f.woff
-    let boff = p.q8 ? p.boff : p.f.boff
+    let boff = uint((p.q8 ? p.boff : p.f.boff) / 4ul)
+    var ka = GkPkGemvArgs(nin = uint(p.nin), nout = uint(p.nout), stride = p.q8 ? 0u : uint(p.f.kdim_p), eps = POCKET_HEAD_LN_EPS,
+        woff = uint((p.q8 ? 0ul : p.f.woff) / 4ul), boff = boff, xoff = uint(s.xoff / 4ul), yoff = uint(s.yoff / 4ul), moff = uint(s.mod_off / 4ul),
+        lwoff = uint(s.ln_w_off / 4ul), lboff = uint(s.ln_b_off / 4ul), aoff = uint(s.aux_off / 4ul), x0off = uint(s.noise_off / 4ul),
+        loff = uint(s.lat_off / 4ul))
     var bq = p.q8 ? g_tw_pk_frames.blob : c.slab
     let qoff = p.q8 ? p.qoff : 0ul
     if (p.q8) {
         if (kind == PK_GEMV_DOT) {
             enc_gemv(enc, bq, qoff, s.bx, s.by, p.u_nin, p.u_nout, p.nout, s.yoff, s.xoff)
             if (p.has_b) {
-                tw_bias(enc, s.by, c.slab, GkBiasActArgs(d = uint(p.nout), nelem = uint(p.nout), boff = uint(boff / 4ul), act = BIAS_ACT_NONE, xoff = uint(s.yoff / 4ul)))
+                tw_bias(enc, s.by, c.slab, GkBiasActArgs(d = uint(p.nout), nelem = uint(p.nout), boff = boff, act = BIAS_ACT_NONE, xoff = uint(s.yoff / 4ul)))
             }
         } elif (kind == PK_GEMV_LN_SILU) {
-            enc_pk_gemv_q8_ln_silu(enc, c.slab, boff, bq, qoff, bq, s.bx, s.xoff, s.by, s.yoff, s.bmod, s.mod_off, c.slab, s.ln_w_off, c.slab, s.ln_b_off, ka, p.nout)
+            enc_pk_gemv_q8_ln_silu(enc, c.slab, s.bx, s.by, s.bmod, bq, qoff, bq, ka, p.nout)
         } elif (kind == PK_GEMV_GATE) {
-            enc_pk_gemv_q8_gate(enc, c.slab, boff, bq, qoff, bq, s.bx, s.xoff, s.by, s.yoff, s.bmod, s.mod_off, ka, p.nout)
+            enc_pk_gemv_q8_gate(enc, c.slab, s.bx, s.by, s.bmod, bq, qoff, bq, ka, p.nout)
         } elif (kind == PK_GEMV_ADD_SILU) {
-            enc_pk_gemv_q8_add_silu(enc, c.slab, boff, bq, qoff, bq, s.bx, s.xoff, s.by, s.yoff, c.slab, s.aux_off, ka, p.nout)
+            enc_pk_gemv_q8_add_silu(enc, c.slab, s.bx, s.by, bq, qoff, bq, ka, p.nout)
         } else {
-            enc_pk_gemv_q8_tail(enc, c.slab, boff, bq, qoff, bq, s.bx, s.xoff, s.by, s.yoff, s.bmod, s.mod_off, c.slab, s.ln_w_off, c.slab, s.ln_b_off, c.slab, s.aux_off, s.bnoise, s.noise_off, s.blat, s.lat_off, ka, p.nout)
+            enc_pk_gemv_q8_tail(enc, c.slab, s.bx, s.by, s.bmod, s.bnoise, s.blat, bq, qoff, bq, ka, p.nout)
         }
     } else {
         if (kind == PK_GEMV_DOT) {
-            enc_pk_gemv_f32(enc, c.slab, woff, c.slab, boff, s.bx, s.xoff, s.by, s.yoff, ka, p.nout)
+            enc_pk_gemv_f32(enc, c.slab, s.bx, s.by, ka, p.nout)
         } elif (kind == PK_GEMV_LN_SILU) {
-            enc_pk_gemv_f32_ln_silu(enc, c.slab, woff, c.slab, boff, s.bx, s.xoff, s.by, s.yoff, s.bmod, s.mod_off, c.slab, s.ln_w_off, c.slab, s.ln_b_off, ka, p.nout)
+            enc_pk_gemv_f32_ln_silu(enc, c.slab, s.bx, s.by, s.bmod, ka, p.nout)
         } elif (kind == PK_GEMV_GATE) {
-            enc_pk_gemv_f32_gate(enc, c.slab, woff, c.slab, boff, s.bx, s.xoff, s.by, s.yoff, s.bmod, s.mod_off, ka, p.nout)
+            enc_pk_gemv_f32_gate(enc, c.slab, s.bx, s.by, s.bmod, ka, p.nout)
         } elif (kind == PK_GEMV_ADD_SILU) {
-            enc_pk_gemv_f32_add_silu(enc, c.slab, woff, c.slab, boff, s.bx, s.xoff, s.by, s.yoff, c.slab, s.aux_off, ka, p.nout)
+            enc_pk_gemv_f32_add_silu(enc, c.slab, s.bx, s.by, ka, p.nout)
         } else {
-            enc_pk_gemv_f32_tail(enc, c.slab, woff, c.slab, boff, s.bx, s.xoff, s.by, s.yoff, s.bmod, s.mod_off, c.slab, s.ln_w_off, c.slab, s.ln_b_off, c.slab, s.aux_off, s.bnoise, s.noise_off, s.blat, s.lat_off, ka, p.nout)
+            enc_pk_gemv_f32_tail(enc, c.slab, s.bx, s.by, s.bmod, s.bnoise, s.blat, ka, p.nout)
         }
     }
 }

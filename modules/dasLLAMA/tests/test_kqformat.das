@@ -52,6 +52,8 @@ def test_kqfmt_enum_values(t : T?) {
         t |> equal(int(KqFmt.mx4), 15)
         t |> equal(int(KqFmt.iq4nl32), 16)
         t |> equal(int(KqFmt.iq3s4), 17)
+        t |> equal(int(KqFmt.q4032), 18)
+        t |> equal(int(KqFmt.q5032), 19)
     }
 }
 
@@ -92,6 +94,21 @@ def test_kqfmt_predicates(t : T?) {
         t |> equal(kq_ssb(KqFmt.iq4nl32), 2l)    // per 32-BLOCK: f16 d
         t |> equal(kq_elems(KqFmt.iq4nl32), 32l)
         t |> equal(kq_ggml_type(KqFmt.iq4nl32), GGML_TYPE_IQ4_NL)   // iq4nl's disk blocks, q51's plane form
+        t |> success(!kq_sb(KqFmt.q4032) && kq_block32(KqFmt.q4032) && kq_block32(int(KqFmt.q4032)), "q4032 is a per-32 format on both predicates")
+        t |> equal(kq_qsb(KqFmt.q4032), 16l)   // per 32-BLOCK: the 16 nibble bytes
+        t |> equal(kq_ssb(KqFmt.q4032), 2l)    // per 32-BLOCK: f16 d
+        t |> equal(kq_elems(KqFmt.q4032), 32l)
+        t |> equal(kq_ggml_type(KqFmt.q4032), GGML_TYPE_Q4_0)
+        t |> equal(kq_desc(KqFmt.q4032).schema_id, -1)          // no kq kernel takes it by id
+        t |> success(!kq_sb(KqFmt.q5032) && kq_block32(KqFmt.q5032) && kq_block32(int(KqFmt.q5032)), "q5032 is a per-32 format on both predicates")
+        t |> equal(kq_qsb(KqFmt.q5032), 20l)   // per 32-BLOCK: the 16 nibble bytes and the qh word
+        t |> equal(kq_ssb(KqFmt.q5032), 2l)    // per 32-BLOCK: f16 d
+        t |> equal(kq_elems(KqFmt.q5032), 32l)
+        t |> equal(kq_ggml_type(KqFmt.q5032), GGML_TYPE_Q5_0)
+        t |> equal(kq_desc(KqFmt.q5032).schema_id, -1)          // no kq kernel takes it by id
+        for (q in range(16)) {
+            t |> equal(int(Q40_LUT[q]), q - 8, "the linear codebook's level {q}")
+        }
         t |> success(kq_sb(KqFmt.iq3s4) && kq_sb(int(KqFmt.iq3s4)), "iq3s4 is a superblock format on both predicates")
         t |> equal(kq_qsb(KqFmt.iq3s4), IQ4XS_QSB)   // the k4 nibble tiling: 128 codebook-index bytes
         t |> equal(kq_ssb(KqFmt.iq3s4), IQ3S_SSB)    // iq3s's own scale row: f16 d + 8 x (1 + 2s)
@@ -295,6 +312,8 @@ def test_kqfmt_elems_and_stream(t : T?) {
         t |> equal(kq_stream_code(KqFmt.mx4), 39)
         t |> equal(kq_stream_code(KqFmt.iq4nl32), 46)
         t |> equal(kq_stream_code(KqFmt.iq3s4), 35)
+        t |> equal(kq_stream_code(KqFmt.q4032), 47)
+        t |> equal(kq_stream_code(KqFmt.q5032), 48)
     }
 }
 
@@ -328,23 +347,53 @@ def test_iq3xxs_tables(t : T?) {
 }
 
 [test]
+def test_b32_plane_words(t : T?) {
+    t |> run("a per-32 block's quant words and scale bytes are its disk bytes") @(t : T?) {
+        t |> equal(int64(KQ_Q51_QWORDS * 4u + KQ_Q51_SBYTES), kq_desc(KqFmt.q51).disk_bytes, "q51: five quant words (the nibbles, the qh word) and the d | m halves")
+        t |> equal(int64(KQ_B32_QWORDS * 4u + KQ_IQ4NL32_SBYTES), kq_desc(KqFmt.iq4nl32).disk_bytes, "iq4nl32: four nibble words and the d half")
+        t |> equal(int64(KQ_B32_QWORDS * 4u + KQ_MX4_SBYTES), kq_desc(KqFmt.mx4).disk_bytes, "mx4: four nibble words and the E8M0 byte")
+        t |> equal(int64(KQ_B32_QWORDS * 4u + KQ_Q4032_SBYTES), kq_desc(KqFmt.q4032).disk_bytes, "q4032: four nibble words and the d half")
+        t |> equal(int64(KQ_Q5032_QWORDS * 4u + KQ_Q5032_SBYTES), kq_desc(KqFmt.q5032).disk_bytes, "q5032: five quant words (the nibbles, the qh word) and the d half")
+        t |> equal(B32_NIB_BYTES, 16l, "the 16 nibble bytes of a per-32 block")
+        t |> equal(B5_QH_BYTES, 4l, "the qh word after them")
+        t |> equal(B32_NIB_BYTES + B5_QH_BYTES, kq_qsb(KqFmt.q51), "q51's quant block")
+        t |> equal(B32_NIB_BYTES + B5_QH_BYTES, kq_qsb(KqFmt.q5032), "q5032's quant block")
+        for (f in [KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q5032]) {
+            t |> success(kq_qsb(f) <= int64(B32_MAX_QB) && kq_ssb(f) <= int64(B32_MAX_SB),
+                "{f}: one block fits the one-block scratch")
+        }
+    }
+}
+
+[test]
 def test_kq_fmt_row_demotion(t : T?) {
-    t |> run("the 32-block disk formats demote to q8 on rows the superblock walkers cannot tile") <| @(t : T?) {
-        // 704 = 22 blocks of 32, not a 256-multiple: q40, iq4nl and Q5_0-born k5 all fall to q8
-        t |> equal(kq_fmt_row_ok(KqFmt.q40, 704l), KqFmt.q8)
-        t |> equal(kq_fmt_row_ok(KqFmt.iq4nl, 704l), KqFmt.q8)
+    t |> run("the 32-block disk formats take their per-32 planes on rows the superblock walkers cannot tile") <| @(t : T?) {
+        // 704 = 22 blocks of 32, not a 256-multiple: q40 and iq4nl to their per-32 planes, k5 to q8
+        t |> equal(kq_fmt_row_ok(KqFmt.q40, 704l), KqFmt.q4032)
+        t |> equal(kq_fmt_row_ok(KqFmt.q40, 650l), KqFmt.q8)              // off the 32 lattice too: the q8 rail
+        t |> equal(kq_fmt_row_ok(KqFmt.iq4nl, 704l), KqFmt.iq4nl32)
         t |> equal(kq_fmt_row_ok(KqFmt.k5, 704l), KqFmt.q8)
         t |> equal(kq_fmt_row_ok(KqFmt.iq4nl, 768l), KqFmt.iq4nl)
         t |> equal(kq_fmt_row_ok(KqFmt.q40, 768l), KqFmt.q40)
         // the 256-superblock disk formats never see a non-multiple row (the file cannot hold one)
         t |> equal(kq_fmt_row_ok(KqFmt.iq2xxs, 768l), KqFmt.iq2xxs)
     }
-    t |> run("an IQ4_NL expert stack off the superblock lattice takes the per-32 planes; a dense one still demotes") <| @(t : T?) {
+    t |> run("an IQ4_NL or Q4_0 plane off the superblock lattice takes the per-32 planes, dense, expert or table") <| @(t : T?) {
         t |> equal(kq_fmt_expert_ok(KqFmt.iq4nl, 640l), KqFmt.iq4nl32)   // Qwen3.8-Flash-Next's down stacks: 20 blocks of 32
         t |> equal(kq_fmt_expert_ok(KqFmt.iq4nl, 768l), KqFmt.iq4nl)     // a superblock multiple keeps the lattice form
         t |> equal(kq_fmt_expert_ok(KqFmt.iq4nl, 650l), KqFmt.q8)        // off the 32 lattice too: the q8 rail
-        t |> equal(kq_fmt_expert_ok(KqFmt.q40, 640l), KqFmt.q8)          // the rule is iq4nl's alone
-        t |> equal(kq_fmt_row_ok(KqFmt.iq4nl, 640l), KqFmt.q8)           // the dense rails carry no iq4nl32 form
+        t |> equal(kq_fmt_expert_ok(KqFmt.q40, 640l), KqFmt.q4032)       // a Q4_0 stack off the lattice: the per-32 Q4_0 planes
+        t |> equal(kq_fmt_expert_ok(KqFmt.q40, 1408l), KqFmt.q4032)      // Qwen1.5-MoE's expert downs: 44 blocks of 32
+        t |> equal(kq_fmt_row_ok(KqFmt.iq4nl, 896l), KqFmt.iq4nl32)      // Qwen2.5-0.5B's dense rows and table: 28 blocks of 32
+        t |> equal(kq_fmt_row_ok(KqFmt.q40, 896l), KqFmt.q4032)
+        t |> equal(kq_fmt_row_ok(KqFmt.q51, 2048l), KqFmt.q51)           // a q51 plane - dense or table - serves off its per-32 planes
+        t |> equal(kq_fmt_row_ok(KqFmt.q51, 650l), KqFmt.q8)
+    }
+    t |> run("a Q5_0 plane keeps its q5032 tag on any 32-multiple row, on or off the superblock lattice") <| @(t : T?) {
+        t |> equal(kq_fmt_row_ok(KqFmt.q5032, 896l), KqFmt.q5032)        // Qwen2.5-0.5B's dense rows and table
+        t |> equal(kq_fmt_row_ok(KqFmt.q5032, 4864l), KqFmt.q5032)       // its FFN down: 19 superblocks, no k5 re-encode
+        t |> equal(kq_fmt_expert_ok(KqFmt.q5032, 1408l), KqFmt.q5032)    // Qwen1.5-MoE's expert downs
+        t |> equal(kq_fmt_row_ok(KqFmt.q5032, 650l), KqFmt.q8)           // off the 32 lattice: the q8 rail
     }
 }
 
@@ -381,5 +430,46 @@ def test_gguf_need_tensor_refuses(t : T?) {
             gguf_need_tensor(m, "absent.weight", "probe")
         }
         t |> success(find(why, "probe") >= 0 && find(why, "absent.weight") >= 0, "the refusal names both: {why}")
+    }
+}
+
+//! the Metal per-32 GEMV family's block constants (`MetalBlk32GemvT`'s `BE`, `QW`, `SH`: the template's defaults and the q5_1
+//! stamps' overrides, spelled as literals in the kernel class) against the descriptor rows
+[test]
+def test_metal_b32_block_constants(t : T?) {
+    t |> run("BE, QW and SH are the per-32 rows' block width, quant words and scale halves") @(t : T?) {
+        t |> equal(kq_elems(KqFmt.q51), 32l, "BE: 32 weights a block")
+        t |> equal(kq_elems(KqFmt.iq4nl32), 32l, "BE on iq4nl32")
+        t |> equal(kq_qsb(KqFmt.iq4nl32), 4l * 4l, "QW = 4: iq4nl32's 16 nibble bytes")
+        t |> equal(kq_qsb(KqFmt.q51), 5l * 4l, "QW = 5 on q51: the nibble words and the qh word")
+        t |> equal(kq_ssb(KqFmt.iq4nl32), 1l * 2l, "SH = 1: iq4nl32's f16 d")
+        t |> equal(kq_ssb(KqFmt.q51), 2l * 2l, "SH = 2 on q51: f16 d then f16 m")
+        t |> equal(kq_qsb(KqFmt.q4032), 4l * 4l, "QW = 4 on q4032: iq4nl32's 16 nibble bytes")
+        t |> equal(kq_ssb(KqFmt.q4032), 1l * 2l, "SH = 1 on q4032: its f16 d")
+        t |> equal(kq_qsb(KqFmt.q5032), 5l * 4l, "B32W = 5 (MetalKqTileDecodeT's q5032 stamps) and QW = 5 (MetalEmbedB32Q5032, MetalMoeMulMmQ51TensorT): KQ_Q5032_QWORDS words a block")
+        t |> equal(kq_ssb(KqFmt.q5032), 1l * 2l, "SH = 1 on q5032: its f16 d")
+        t |> equal(kq_qsb(KqFmt.q5032), int64(5u * 4u), "PW = 5 (MetalPleGatherB32T): q51's and q5032's quant words a block")
+        t |> equal(kq_ssb(KqFmt.q51), 2l * 2l, "PS = 2 on MetalPleGatherQ51: d | m")
+        t |> equal(kq_ssb(KqFmt.q5032), 1l * 2l, "PS = 1 on MetalPleGatherQ5032: its d")
+        t |> equal(kq_qsb(KqFmt.q51), int64(5u * 4u),
+            "B32W = 5 on the q51 tile stamps, QW = 5 on MetalEmbedB32Q51")
+        t |> equal(kq_ssb(KqFmt.q51), int64(2u * 2u),
+            "B32S = 2 on the q51 tile stamps, SH = 2 on MetalEmbedB32Q51")
+        t |> equal(kq_ssb(KqFmt.iq4nl32), int64(1u * 2u), "B32S = 1 and SH = 1: one d")
+    }
+}
+
+//! the Metal K-quant token-table gathers' superblock constants
+//! (`MetalEmbedKqT`'s `SB_UINTS`, `MetalEmbedK45T`'s and
+//! `MetalPleGatherBaseT`'s `QH0`) against the descriptor rows
+[test]
+def test_metal_kq_table_constants(t : T?) {
+    t |> run("SB_UINTS and QH0 are a superblock's quant words and k5's qh strip start") @(t : T?) {
+        t |> equal(kq_qsb(KqFmt.k4), int64(32u * 4u), "SB_UINTS = 32: k4's 128 nibble bytes")
+        t |> equal(kq_qsb(KqFmt.k5), int64(40u * 4u), "SB_UINTS = 40 on k5: nibbles, then qh")
+        t |> equal(kq_qsb(KqFmt.k4) / 4l, int64(32u), "QH0 = 32: k5's qh past k4's nibble words")
+        for (f in [KqFmt.iq4xs, KqFmt.iq4nl, KqFmt.q40, KqFmt.iq3s4]) {
+            t |> equal(kq_qsb(f), int64(32u * 4u), "SB_UINTS = 32 on the codebook tables: {f}")
+        }
     }
 }

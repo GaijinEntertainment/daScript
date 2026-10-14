@@ -772,7 +772,7 @@ def private ref_q8_gemm(wq : array<int8>; ws : array<float>; xq : array<int8>; x
 // out projection. state advances in place; qkvy/zy are the GEMM outputs the caller made.
 def private ref_dn_core(qkvy, zy : array<float>; bts, gts, tapsv, wnormv, av, dtv : array<float>;   // nolint:STYLE037 — one flat CPU mirror of the deltanet chain; its stages share the chunk buffers
                         var state : array<float>; hist : array<float>; npos : int64;
-                        wo : array<int8>; wso : array<float>; var yout : array<float>; var conv : array<float>) {
+                        wo : array<int8>; wso : array<float>; var yout : array<float>; var conv : array<float>; dim : int64 = DND) {
     delete conv
     conv <- dn_conv_ref(qkvy, hist, 0, tapsv, 0, int(npos), int(DNCD), int(DNCONV), int(DNKD), int(DNDS), DN_EPS, 1.0 / sqrt(float(DNDS)))
     let CS = 64l
@@ -926,7 +926,7 @@ def private ref_dn_core(qkvy, zy : array<float>; bts, gts, tapsv, wnormv, av, dt
     }
     // Q8_0 requant of the o rows, then the out projection off the quantized image
     var orq <- q8_roundtrip(o, npos * DNDI, false)
-    ref_q8_gemm(wo, wso, orq.xq, orq.xs, DNDI, DND, npos, yout)
+    ref_q8_gemm(wo, wso, orq.xq, orq.xs, DNDI, dim, npos, yout)
     delete o
     delete orq
     delete p_qc
@@ -1018,7 +1018,7 @@ def test_vulkan_deltanet(t : T?) {
                 y |> resize(int(npos * DND))
                 tail |> resize(int(DNTAPS * DNCD))
                 unsafe {
-                    matmul_moe_gpu_dn(y, DNQKV_WOFF, DNZ_WOFF, DNO_WOFF, xq, xs, fx.bts, fx.gts,
+                    matmul_moe_gpu_dn(y, DNQKV_WOFF, DNZ_WOFF, DNO_WOFF, 0, 0, 0, xq, xs, fx.bts, fx.gts,
                         addr<float const?>(fx.tapsv[0]), addr<float const?>(fx.wnormv[0]),
                         addr<float const?>(fx.av[0]), addr<float const?>(fx.dtv[0]),
                         addr(gstate[0]), tail, addr<float const?>(fx.hist[0]),
@@ -1053,6 +1053,80 @@ def test_vulkan_deltanet(t : T?) {
                 delete reft
             }
             delete st
+        } else {
+            t |> skip("dasVulkan not installed; vulkan deltanet chain untestable here")
+        }
+    }
+}
+
+let DN2_DIM = 256l   //! the two-forms cell's model dim: one Q8_K superblock
+let DN2Q_WOFF = 26000000l   //! the two-forms cell's stacks, clear of every other cell's offsets
+let DN2Z_WOFF = 27000000l
+let DN2O_WOFF = 28000000l
+
+//! the deltanet chain with its qkv and z planes in two activation classes - a q8 qkv plane fed Q8_0, a k4 z plane fed Q8_K through
+//! the call's second image (`set_moe_gpu_image2`) - on the window chain (70 rows) and the decode step (one row), against the CPU
+//! chain over each plane's own image; the z plane fed the qkv's Q8_0 image misses the rows (the control)
+[test]
+def test_vulkan_deltanet_two_forms(t : T?) {
+    t |> run("vulkan deltanet chain with qkv and z planes of two activation classes == CPU reference") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            install_vk_moe_hooks()
+            var inscope wqkv, wo : array<int8>
+            var inscope wsqkv, wso, wz : array<float>
+            fill_q8_quants(wqkv, wsqkv, DNCD, DN2_DIM, 71l, true)
+            fill_q8_quants(wo, wso, DN2_DIM, DNDI, 79l, false)
+            if (!q8_upload(wqkv, wsqkv, DN2Q_WOFF, DN2_DIM, DNCD)) {
+                t |> skip("no Vulkan device (or probe/budget refused the upload)")
+                return
+            }
+            if (!g_gpu.dn_shared_ok) {
+                t |> skip("dn/attention chains declined on this device (shared-memory cap)")
+                return
+            }
+            t |> success(plane_up(1, DNDI, DN2_DIM, 73l, DN2Z_WOFF, wz), "the k4 z stack uploaded")
+            t |> success(q8_upload(wo, wso, DN2O_WOFF, DNDI, DN2_DIM), "out stack uploaded")
+            for (npos in fixed_array(70l, 1l)) {
+                var inscope x : array<float>
+                x |> resize(npos * DN2_DIM)
+                for (i in range64(npos * DN2_DIM)) {
+                    x[i] = synth_f(i, 83l, 0.8)
+                }
+                var inscope x8 <- q8_roundtrip(x, npos * DN2_DIM, false)
+                var inscope xk <- q8_roundtrip(x, npos * DN2_DIM, true)
+                var fx <- dn_fixture(npos)
+                var inscope qkvy : array<float>
+                ref_q8_gemm(wqkv, wsqkv, x8.xq, x8.xs, DN2_DIM, DNCD, npos, qkvy)
+                var inscope zr <- dense_ref_rows(wz, xk.deq, int(npos), int(DN2_DIM), int(DNDI))
+                var inscope rstate := fx.state
+                var inscope refy, refconv : array<float>
+                ref_dn_core(qkvy, zr.want, fx.bts, fx.gts, fx.tapsv, fx.wnormv, fx.av, fx.dtv, rstate, fx.hist, npos, wo, wso, refy, refconv, DN2_DIM)
+                for (own in fixed_array(true, false)) {
+                    if (own) {
+                        set_moe_gpu_image2(xk.xq, xk.xs)
+                    } else {
+                        set_moe_gpu_image2(x8.xq, x8.xs)
+                    }
+                    var inscope gstate := fx.state
+                    var inscope y, tail : array<float>
+                    y |> resize(npos * DN2_DIM)
+                    tail |> resize(DNTAPS * DNCD)
+                    unsafe {
+                        matmul_moe_gpu_dn(y, DN2Q_WOFF, DN2Z_WOFF, DN2O_WOFF, 0, 1, 0, x8.xq, x8.xs, fx.bts, fx.gts,
+                            addr<float const?>(fx.tapsv[0]), addr<float const?>(fx.wnormv[0]),
+                            addr<float const?>(fx.av[0]), addr<float const?>(fx.dtv[0]),
+                            addr(gstate[0]), tail, addr<float const?>(fx.hist[0]),
+                            npos, DN2_DIM, DNCD, DNKD, DNDI, DNVH, DNKH, DNDS, DNCONV, DN_EPS)
+                    }
+                    clear_moe_gpu_image2()
+                    if (own) {
+                        held_nontrivial(t, "npos={npos}: out rows, each plane over its own image", y, refy, DN_REL_TOL, DN2_DIM)
+                    } else {
+                        t |> success(check_count(y, refy, Bar(kind = BarKind.rel_of_max, rel = DN_REL_TOL)) > 0, "npos={npos}: the z plane fed the qkv's Q8_0 image misses the rows")
+                    }
+                }
+                delete fx
+            }
         } else {
             t |> skip("dasVulkan not installed; vulkan deltanet chain untestable here")
         }
@@ -1133,7 +1207,7 @@ def test_vulkan_deltanet_step(t : T?) {
                     g1[int(i)] = fx.gts[int(tok * DNVH + i)]
                 }
                 unsafe {
-                    matmul_moe_gpu_dn(y1, DNSQ_WOFF, DNSZ_WOFF, DNSO_WOFF, xq1, xs1, b1, g1,
+                    matmul_moe_gpu_dn(y1, DNSQ_WOFF, DNSZ_WOFF, DNSO_WOFF, 0, 0, 0, xq1, xs1, b1, g1,
                         addr<float const?>(fx.tapsv[0]), addr<float const?>(fx.wnormv[0]),
                         addr<float const?>(fx.av[0]), addr<float const?>(fx.dtv[0]),
                         addr(gstate[0]), tail1, addr<float const?>(gring[0]),

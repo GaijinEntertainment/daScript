@@ -74,6 +74,13 @@ def test_gpu_resident_llama_1b(t : T?) {
     llama_cells(t, "Llama-3.2-1B-Instruct-Q8_0.gguf")
 }
 
+[test]
+def test_gpu_resident_llama_greedy_chain(t : T?) {
+    t |> run("Llama-3.2-1B Q8_0: the greedy chain's steps are the plain steps bit for bit, hits on the pick and misses off it") @(t : T?) {
+        greedy_chain_cell(t, path_join(models_dir(), "Llama-3.2-1B-Instruct-Q8_0.gguf"))
+    }
+}
+
 //! the batched bench row on the 1B, the driver homing two streams: a refusal names the streams the device homes against
 //! the row's ask and reads 0, and a rep the device can home serves - a rate, no refusal, every stream parked after it
 //! (a one-stream row is no batch: the step census counts it a row at a time and the row refuses by name)
@@ -110,6 +117,21 @@ def test_gpu_resident_llama_batched_row(t : T?) {
 [test]
 def test_gpu_resident_llama_1b_q40(t : T?) {
     llama_cells(t, "Llama-3.2-1B-Instruct-Q4_0-local.gguf")
+}
+
+//! the 1B's Q5_1 requant (`-local`, the catalog row's recipe): every dense plane keeps the per-32 q51 tag - the window's GEMMs on
+//! the s tile on the f16 feed and the per-32 batch tile off it, the steps on the per-32 GEMVs; the tied table demotes to q8
+[test]
+def test_gpu_resident_llama_1b_q51(t : T?) {
+    let file = "Llama-3.2-1B-Instruct-Q5_1-local.gguf"
+    t |> run("{file}: every dense plane keeps the q51 tag") @(t : T?) {
+        let path = llama_model_path(t, file)
+        if (empty(path)) return
+        var tr <- load_model_(path, QuantMode.q8)
+        dense_planes_tagged(t, tr, path, KqFmt.q51)
+        delete tr
+    }
+    llama_cells(t, file)
 }
 
 [test]
@@ -187,6 +209,13 @@ def private llama_peel(t : T?; file : string) {
 def test_gpu_resident_llama_peel_1b(t : T?) {
     t |> run("Llama-3.2-1B Q8_0: a short tail peels through the token commands and reads what the one-row steps read") @(t : T?) {
         llama_peel(t, "Llama-3.2-1B-Instruct-Q8_0.gguf")
+    }
+}
+
+[test]
+def test_gpu_resident_llama_peel_1b_q51(t : T?) {
+    t |> run("Llama-3.2-1B Q5_1: the same on the per-32 planes' N-column leaves") @(t : T?) {
+        llama_peel(t, "Llama-3.2-1B-Instruct-Q5_1-local.gguf")
     }
 }
 

@@ -8,8 +8,8 @@ and byte stores these build on are in `ARCHITECTURE_GPU_VULKAN.md`; the routed b
 layer takes in either era - the prefill window's and the token command's - is in
 `ARCHITECTURE_GPU_VULKAN_MOE.md`; the cm2 tiles, the MoE expert chain on them, the KHR arm's kq
 tile and the decode GEMV family's lane split are in `ARCHITECTURE_GPU_VULKAN_GEMM.md`; the
-residency plan and the marks swap under them and the token command's logits landing on the
-transfer queue are in `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`, the NextN draft head is
+model's residency on the card is in `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`, the token command's
+logits landing on the transfer queue in `ARCHITECTURE_GPU_VULKAN_LANDING.md`, the NextN draft head is
 `ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head`, and the N-row token command is
 `ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command`.
 
@@ -143,15 +143,15 @@ f16-min) and scaled. Only that arm rides - sigmoid gates, router biases, gemma4'
 shared expert with its sandwich norms, post-norms and biased experts decline to the per-layer
 path (`span_model_ok`).
 
-**A qwen2moe-class shared expert rides inside the span beside the routed slots.** Its q8 triple
-is resident under the shexp mark (the span's serve gate asks per layer), its feed is the same
-normed row requantized into its own stacks' images, its metas are one fixed region the host
+**A qwen2moe-class shared expert rides inside the span beside the routed slots.** Its triple is
+resident under the shexp mark in the file's own formats (`moe_gpu_shexp_planes`); a gate and up of
+two activation classes stop the span and run as three dense GEMMs, each fed its own image of the row
+(`shexp_gpu_gemms`), the span's serve gate asks per layer, its feed is the same normed row requantized
+into its own stacks' images by its gate's format, its metas are one fixed region the host
 writes once (the top-k never touches them), its gate logit is one more `RouterGemv` row over the
 layer's gate vector landing past the router's logits, and one combine (`DecCombineSh`) adds
-the routed slots and `sigmoid(gate)` times the shared down row onto the residual; an ungated
-shared expert (glm4moe) adds at weight one. Before this the span declined every shared-expert
-model to the per-layer path, and there the resident layer's shared expert ran on the CPU
-(`sh_gpu` in `dasllama_moe.das` serves the shexp rail only beside CPU experts).
+the routed slots and `sigmoid(gate)` times the shared down row onto the residual; an ungated shared expert (glm4moe) adds at
+weight one; off the span its chain overlaps CPU experts and follows device ones or the heat pool's hits (`shexp_gpu_after_rows`).
 
 **The span declines whole, per token, never per layer.** `span_first_layer` walks the layers
 downward through the block's serve gate (so a hydrate a layer needs runs first) and stops at
@@ -207,8 +207,8 @@ command per model whose per-layer body is one of two heads followed by the share
 attention head (the q, k and v GEMVs as ONE region dispatch where the three planes share a format and a slab - q in kv-width pieces, then k, then v, the projection row landing whole, the ungated q buffer being that row's front - else a GEMV a plane; the fused qk-norm and rope storing the mirror row, decode attention
 over the mirror, the wo requant and GEMV) or a recurrent head - the fused qkv GEMV and the z
 GEMV into one projection row (z at offset `cd`; the two halves under their own hazard classes,
-`VHZ_DNP` and `VHZ_DNZ`, so the GEMVs co-run and the step waits on both), the beta and alpha rows as ONE `RouterGemvF16`
-dispatch (the rows read as half pairs, the alpha half landing at the smalls' g rows through the
+`VHZ_DNP` and `VHZ_DNZ`, so the GEMVs co-run and the step waits on both), the beta and alpha rows (F32 rows as ONE
+`RouterGemv` dispatch over the file's floats, the alpha half landing at the smalls' g rows through the
 push block's second base: a dispatch and a hazard barrier fewer a layer), the fused deltanet step
 (`dn_step_cls`, the same kernel the per-op tier's `vk_moe_dn_step` dispatches: one workgroup a
 head - the conv preamble over the head's channels, the q and k norms and the raw q.k by subgroup
@@ -217,18 +217,18 @@ rows at ds 128, held in registers from the k.S / q.S pass through the update so 
 streams once each way with a row's loads coalesced across the columns, the out-norm's sum by a
 subgroup add, and the o row) and the out GEMV. Both heads leave the block output
 in `xb2`, so the residual add, the FFN and the next layer's norm never know which head ran. The
-deltanet qkv and z planes ride their file formats - the loader tags a dense hybrid's planes
-natively where this driver will be attempted or no GPU rail wants them (Metal off, the file not
-grouped, since a grouped file has no exact transcode, and either the whole-model driver armed on
-an expert-free model or a tier whose per-op dense and deltanet rails are unwanted; every other
-case transcodes them to q8, because Metal and the per-op rails bind deltanet q8 only), each GEMV
-dispatches per format and a superblock plane takes the Q8_K x feed. The out plane rides its
+deltanet qkv and z planes ride their file formats - the loader tags every hybrid's deltanet
+planes with the file's format on every load (a grouped file's out plane alone is the q8
+transcode: its input columns permute across superblocks), the Metal drivers read each by its tag,
+and so do the per-op rails (`perop_dn_decline`: q8 or a superblock format, qkv and z in one activation
+class); each GEMV dispatches per format and a superblock plane takes the Q8_K x feed. The out plane rides its
 file format too: for a q8 plane the step writes the o row as Q8_0 blocks, for a superblock plane
 it writes the f32 row and the Q8_K requant - the attention head's wo twin - makes the out GEMV's
-feed, billed to the out role so the stamp count stands; the beta and alpha rows are q8 arena planes when
-the file carries them quantized, or - the F32-on-disk case - one f16 device copy of every
-recurrent layer's `[beta ; alpha]` rows that the router-form GEMV's f16 twin reads with an output
-base into the smalls. The fused add+rms+requant serves every site on every model: each site's
+feed, billed to the out role so the stamp count stands; the beta and alpha rows are arena planes in their
+tags' formats (`dnbeta_fmt` / `dnalpha_fmt`), each through its format's GEMV leaf - a plane of the other
+activation class than the qkv plane's requantizes the row into its own feed first - or, the F32-on-disk case,
+the file's f32 `[beta ; alpha]` rows of every recurrent layer that the f32 router-form GEMV reads with an
+output base into the smalls. The fused add+rms+requant serves every site on every model: each site's
 stamp (`RqStamp`, picked by `rd_ensure_fused_sets` once all layers are registered) is Q8_0 or
 Q8_K by the consumer's block form (the layer's triple, a bare MoE layer's experts, the next
 layer's head, the classifier), storing the normed row too where a consumer reads it as floats (a
@@ -272,16 +272,16 @@ split qk-rms + rope pair carries neither arm, so a gated or partial-rope model t
 kernel whatever the lever says (`DASLLAMA_VK_FUSE=0` pins the split pair only on a plain qk-norm
 model); the two arms need qk-norm, and a model with either but without it declines by name.
 
-**The prefill window chain carries the same three arms** (`ARCHITECTURE_GPU_VULKAN.md#vk-prefill-dn-block`): a recurrent layer's window block runs the qkv and z batch GEMMs, the beta and alpha
+**The prefill window chain carries the same three arms** (`ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-dn-block`): a recurrent layer's window block runs the qkv and z batch GEMMs, the beta and alpha
 rows into the layer's own smalls, the conv, the sequential scan over the layer's own device
 state slot (the raw o rows in the tier's workspace), the o requant and the out GEMM into the block
 output, so the window command needs no host round trip per layer. The state slots are the
-decode's (`RLayer.dn`): the prefill zeroes them at window 0 with transfer fills inside the window
-command (a position-zero prefill starts the forward-only state fresh - the engine's `dn_reset` on
-the host, the fills on the device) and, after the last window, hands each layer's slot to the
-session (`vk_rdec_prefill_dn_own`: valid, dirty, owned, the history in ring image 0), so the first
+decode's (`RLayer.dn`): a position-zero prefill zeroes them at window 0 with transfer fills inside the window
+command (the forward-only state starts fresh - the engine's `dn_reset` on the host, the fills on the device),
+a continuation steps them on from the state the session's slots hold, and after the last window the chain hands each
+layer's slot to the session (`vk_rdec_prefill_dn_own`: valid, dirty, owned, the history in the ring image the parity word names), so the first
 decode's owner bind finds the state in place and a host read syncs it down through `dn_flush_layer`;
-no state crosses the bus at the seam. The session's deltanet position is the prompt length after the prefill.
+no state crosses the bus at the seam. The session's deltanet position is the prompt's end after the prefill.
 
 **A session whose rows the mirror lacks takes the mirror from the host cache.** A session that
 prefilled on the CPU rails (a pinned-off resident prefill, a CPU-only session) or that another

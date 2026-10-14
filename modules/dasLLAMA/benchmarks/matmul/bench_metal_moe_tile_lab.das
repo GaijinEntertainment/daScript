@@ -46,17 +46,17 @@ class LabMoeIq4xsKoTensor : MetalMoeMulMmIq4xsSplitT {
     override KO_TENSOR = true
 }
 
-class LabMoeK4Tile32 : MetalMoeMulMmK45TensorT {
+class LabMoeK4Tile32 : MetalMoeMulMmK45SplitT {
     typedef XT = float16
     override ADAPT = false
 }
 
-class LabMoeK4KoStage : MetalMoeMulMmK45TensorT {
+class LabMoeK4KoStage : MetalMoeMulMmK45SplitT {
     typedef XT = float16
     override KO_STAGE = true
 }
 
-class LabMoeK4KoTensor : MetalMoeMulMmK45TensorT {
+class LabMoeK4KoTensor : MetalMoeMulMmK45SplitT {
     typedef XT = float16
     override KO_TENSOR = true
 }
@@ -248,15 +248,12 @@ def main {
                             let ok = with_compute_encoder_timed(queue, err, gpu_ms) $(enc : MetalComputeEncoder?) {
                                 for (d in range(NDISP)) {
                                     let by = mc.buf[ys[d]]
-                                    if (fmt == 44) {
-                                        invoke(kiq.enc, enc, ps, mc.buf[bks], doff, mc.buf[bks], 0ul, mc.buf[bkq], 0ul, mc.buf[bxf], 0ul, by, 0ul,
+                                    if (ai != BASE_ARM) {
+                                        invoke(fmt == 44 ? kiq.enc : kk4.enc, enc, ps, mc.buf[bks], doff, mc.buf[bks], 0ul, mc.buf[bkq], 0ul, mc.buf[bxf], 0ul, by, 0ul,
                                             mc.buf[bkd], mc.buf[bnd], mc.buf[bcnt], mc.buf[bbase], int64(p.mpad), int64(NDIM), int64(NE), int64(NPOS / 32))
-                                    } elif (ai == BASE_ARM) {
-                                        invoke(kb4.enc, enc, ps, mc.buf[bks], doff, mc.buf[bks], mc.buf[bkq], 0ul, mc.buf[bx32], by, ka,
-                                            mc.buf[bcnt], mc.buf[bbase], mc.buf[bbkt], int64(NDIM), int64(NPOS), int64(NE))
                                     } else {
-                                        invoke(kk4.enc, enc, ps, mc.buf[bks], doff, mc.buf[bks], 0ul, mc.buf[bkq], 0ul, mc.buf[bxf], by, ka,
-                                            mc.buf[bcnt], mc.buf[bbase], int64(NDIM), int64(NPOS), int64(NE))
+                                        invoke(kb4.enc, enc, ps, mc.buf[bks], doff, mc.buf[bks], 0ul, mc.buf[bkq], 0ul, mc.buf[bx32], by, ka,
+                                            mc.buf[bcnt], mc.buf[bbase], mc.buf[bbkt], int64(NDIM), int64(NPOS), int64(NE))
                                     }
                                 }
                             }
@@ -278,15 +275,12 @@ def main {
                         var gpu_ms = 0.0lf
                         let yi = mc |> out_words(p.mpad * NDIM, 0.0)
                         with_compute_encoder_timed(queue, err, gpu_ms) $(enc : MetalComputeEncoder?) {
-                            if (fmt == 44) {
-                                invoke(kiq.enc, enc, ps, mc.buf[bks], doff, mc.buf[bks], 0ul, mc.buf[bkq], 0ul, mc.buf[bxf], 0ul, mc.buf[yi], 0ul,
+                            if (ai != BASE_ARM) {
+                                invoke(fmt == 44 ? kiq.enc : kk4.enc, enc, ps, mc.buf[bks], doff, mc.buf[bks], 0ul, mc.buf[bkq], 0ul, mc.buf[bxf], 0ul, mc.buf[yi], 0ul,
                                     mc.buf[bkd], mc.buf[bnd], mc.buf[bcnt], mc.buf[bbase], int64(p.mpad), int64(NDIM), int64(NE), int64(NPOS / 32))
-                            } elif (ai == BASE_ARM) {
-                                invoke(kb4.enc, enc, ps, mc.buf[bks], doff, mc.buf[bks], mc.buf[bkq], 0ul, mc.buf[bx32], mc.buf[yi], ka,
-                                    mc.buf[bcnt], mc.buf[bbase], mc.buf[bbkt], int64(NDIM), int64(NPOS), int64(NE))
                             } else {
-                                invoke(kk4.enc, enc, ps, mc.buf[bks], doff, mc.buf[bks], 0ul, mc.buf[bkq], 0ul, mc.buf[bxf], mc.buf[yi], ka,
-                                    mc.buf[bcnt], mc.buf[bbase], int64(NDIM), int64(NPOS), int64(NE))
+                                invoke(kb4.enc, enc, ps, mc.buf[bks], doff, mc.buf[bks], 0ul, mc.buf[bkq], 0ul, mc.buf[bx32], mc.buf[yi], ka,
+                                    mc.buf[bcnt], mc.buf[bbase], mc.buf[bbkt], int64(NDIM), int64(NPOS), int64(NE))
                             }
                         }
                         if (ai == 0) {
