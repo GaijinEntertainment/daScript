@@ -743,3 +743,25 @@ def test_variant_alternative_called_by_name(t : T?) {
     t |> equal(held_kind(Holder(v = IntOrStr(i = 2))), "held int 2")
     t |> equal(held_kind(Holder(v = IntOrStr(s = "y"))), "held str")
 }
+
+variant Answer {
+    nothing
+    maybe
+    amount : int
+}
+
+def private answer_text(a : Answer) : string {
+    return match (a) {
+        nothing() => "nothing"
+        maybe() | amount(0) => "maybe"
+        amount(n) => "{n}"
+    }
+}
+
+[test]
+def test_variant_case_without_value_called_by_name(t : T?) {
+    t |> equal(answer_text(Answer(nothing)), "nothing")
+    t |> equal(answer_text(Answer(maybe)), "maybe")
+    t |> equal(answer_text(Answer(amount = 0)), "maybe")
+    t |> equal(answer_text(Answer(amount = 3)), "3")
+}

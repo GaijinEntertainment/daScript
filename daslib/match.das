@@ -379,13 +379,33 @@ def match_variant(what : TypeDeclPtr; wths : ExprMakeVariant?; access : Expressi
 }
 
 [macro_function]
+def private calls_variant_case(what : TypeDeclPtr; wth : Expression?) : bool {
+    //! A call named after a case of the variant ``what``, with any
+    //! number of arguments.
+    if (what == null || !what.isVariant || !(wth is ExprCall)) return false
+    return get_field_type(what, string((wth as ExprCall).name), false) != null
+}
+
+[macro_function]
 def match_as_variant(what : TypeDeclPtr; wth : Expression?; access : Expression?;
                      var to : MatchTo) {
-    //! ``n as i`` or ``i(n)``: the variant holds ``i``,
-    //! and ``n`` matches its value.
+    //! ``n as i`` or ``i(n)``: the variant holds ``i``, and ``n``
+    //! matches its value. ``nada()``: the variant holds ``nada``.
     let as_form = wth is ExprAsVariant
     let name = string(as_form ? (wth as ExprAsVariant).name : (wth as ExprCall).name)
-    let value = as_form ? (wth as ExprAsVariant).value : (wth as ExprCall).arguments[0]
+    if (!as_form && !is_variant_call(what, wth)) {
+        let text = (is_bare_variant_case(what, name)
+            ? "`{name}` has no value; write `{name}()`"
+            : "`{name}` has a value; write `{name}(x)` or `{name}(_)`")
+        to.errors |> match_error(text, wth.at)
+        return false
+    }
+    var value : Expression?
+    if (as_form) {
+        value = (wth as ExprAsVariant).value
+    } elif (length((wth as ExprCall).arguments) == 1) {
+        value = (wth as ExprCall).arguments[0]
+    }
     if (what.baseType != Type.tVariant) {
         to.errors |> match_error("{describe(what)} is not a variant", wth.at)
         return false
@@ -396,7 +416,8 @@ def match_as_variant(what : TypeDeclPtr; wth : Expression?; access : Expression?
         return false
     }
     log_m("\tas {name} match passed\n")
-    return match_any(ftype, value, variant_access(access, name, wth.at, to), to)
+    var part = variant_access(access, name, wth.at, to)
+    return value == null || match_any(ftype, value, part, to)
 }
 
 [macro_function]
@@ -755,6 +776,7 @@ class private ProbeAttacher {
     //! call with ``_`` replaced by the path to the value it reads.
     //! The probe never runs; its type becomes the view's result type.
     def attach(var pat : Expression?; path : Expression?) : void {
+        return if (pat == null)
         if (is_view(pat)) {
             view(pat as ExprMakeTuple, path)
         } elif (pat is ExprOp2) {
@@ -891,7 +913,7 @@ def match_any(what : TypeDeclPtr; wth : Expression?; access : Expression?; var t
         }
     } elif (wth is ExprMakeVariant) {
         return match_variant(what, wth as ExprMakeVariant, access, to)
-    } elif (wth is ExprAsVariant || is_variant_call(what, wth)) {
+    } elif (wth is ExprAsVariant || calls_variant_case(what, wth)) {
         return match_as_variant(what, wth, access, to)
     } elif (is_call_to(wth, "match_type", "match")) {
         return match_type(what, wth as ExprCall, access, to)

@@ -223,6 +223,17 @@ The alternative's name can also be called like a function, with the pattern as i
         }
     }
 
+A case without a value is called with no argument:
+
+.. code-block:: das
+
+    def maybe_call_match ( m : Maybe ) {
+        return match ( m ) {
+            nothing() => -1
+            value(n) => n
+        }
+    }
+
 Matching Structs
 ----------------
 

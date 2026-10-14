@@ -94,10 +94,14 @@ def public is_range_call(pat : Expression?) : bool => pat is ExprCall && (pat as
 
 [macro_function]
 def public is_variant_call(typ : TypeDeclPtr; pat : Expression?) : bool {
-    //! ``i(n)`` against a variant with an alternative ``i``.
+    //! ``i(n)`` against a variant with an alternative ``i``;
+    //! ``nada()`` for an alternative without a value.
     if (typ == null || !typ.isVariant || !(pat is ExprCall)) return false
     let call = pat as ExprCall
-    return length(call.arguments) == 1 && get_field_type(typ, string(call.name), false) != null
+    let name = string(call.name)
+    let nargs = length(call.arguments)
+    return (nargs <= 1 && get_field_type(typ, name, false) != null
+            && (nargs == 0) == is_bare_variant_case(typ, name))
 }
 
 [macro_function]
@@ -289,6 +293,7 @@ def private is_irrefutable_single_arm(var p : Expression?) : bool {
     return value == null || is_irrefutable(null, value)
 }
 
+[macro_function]
 def private classify_cell(typ : TypeDeclPtr; var pat : Expression?; cuts : array<int64>) : MatchCell {
     //! What one pattern covers of one column: everything, named values, or values the analysis can't name.
     var p = peel_r2v(pat)
@@ -308,7 +313,8 @@ def private classify_cell(typ : TypeDeclPtr; var pat : Expression?; cuts : array
     if (typ != null && typ.isVariant && p is ExprAsVariant && is_irrefutable(null, (p as ExprAsVariant).value)) {
         return <- MatchCell(keys <- [variant_key(typ, (p as ExprAsVariant).name)])
     }
-    if (is_variant_call(typ, p) && is_irrefutable(null, (p as ExprCall).arguments[0])) {
+    if (is_variant_call(typ, p) && (length((p as ExprCall).arguments) == 0
+            || is_irrefutable(null, (p as ExprCall).arguments[0]))) {
         return <- MatchCell(keys <- [variant_key(typ, (p as ExprCall).name)])
     }
     return <- MatchCell(opaque = true) if (!is_irrefutable(typ, p))
