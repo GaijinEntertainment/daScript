@@ -163,13 +163,19 @@ def test_line_length_run(t : T?) {
 
 [test]
 def test_lint_pass_detail(t : T?) {
-    t |> equal(lint_pass_detail(6, 0),
-        "6 file(s) clean on both rails (host, linux-mirror), added lines within CI's length limits",
-        "nothing rewritten: the rails and the length check")
-    t |> equal(lint_pass_detail(6, 2),
-        ("6 file(s) clean on both rails after --fix rewrote 2 of them - " +
-         "review and commit those edits; added lines within CI's length limits"),
+    t |> equal(lint_pass_detail(6, 0, "host, linux-mirror, darwin-mirror"),
+        ("6 file(s) clean on every rail (host, linux-mirror, darwin-mirror), " +
+         "added lines within CI's length limits"),
+        "nothing rewritten: the rails that ran and the length check")
+    t |> equal(lint_pass_detail(6, 2, "host = darwin world, linux-mirror"),
+        ("6 file(s) clean on every rail (host = darwin world, linux-mirror) after --fix " +
+         "rewrote 2 of them - review and commit those edits; " +
+         "added lines within CI's length limits"),
         "--fix edits are named so they get committed")
+    let rails = lint_rails()
+    let expected = (module_absent(VULKAN_GATE) ? "host = darwin world, linux-mirror" :
+        "host, linux-mirror, darwin-mirror")
+    t |> equal(rails, expected, "the darwin mirror runs only where the box carries dasVulkan")
 }
 
 [test]

@@ -42,7 +42,7 @@ daslang utils/daspkg/main.das -- install --global dasImgui
 | `build [name]` | Build all C/C++ packages (cmake), or only the named one |
 | `check` | Verify installed packages are present |
 | `doctor` | Check environment (git, cmake, gh) |
-| `release [--out <dir>] [--paranoid \| --quick \| --fat <class>]` | Bundle project as a redistributable standalone. A plain release mints the tune sidecar on the build box and ships it; `--quick` inherits a complete existing one instead of minting; `--fat <class>` builds a fat exe from the class profiles - no mint, no sidecar |
+| `release [--out <dir>] [--paranoid \| --quick \| --fat <class>]` | Bundle project as a redistributable standalone. A plain release mints the tune sidecar on the build box and ships it; `--quick` inherits a complete existing one instead of minting; `--fat <class>` builds a fat exe from the class profiles - no mint, no sidecar. The sidecar is the app's own `<stem>.tune.json`: `release_in_workspace` clears a `DAS_TUNE_MANIFEST` inherited from the environment daspkg was started in before its first build, and the tuner command `release_tuner_cmd` builds names the scope's manifest itself |
 | `introduce [url]` | Submit a package to the index via PR |
 | `withdraw <name>` | Remove a package from the index via PR |
 | `update-index [--commit \| --dry-run]` | Re-read every index entry's manifest from its repo and refresh the entry. Default opens a PR on the index repo; `--commit` pushes straight to its main branch; `--dry-run` prints the diff and changes nothing. A package whose clone or manifest fails is reported and exits 1 after the rest refreshed |

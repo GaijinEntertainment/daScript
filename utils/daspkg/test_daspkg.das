@@ -2161,6 +2161,35 @@ def test_cmd_release_refuses_unsafe_bundle_name(t : T?) {
     }
 }
 
+// a tune-scope release fixture whose tuner is a STUB: a real tuner
+// races candidates for minutes under the noise gate; the stub copies
+// a canned sidecar into DAS_TUNE_MANIFEST, so the mint and ship paths
+// test at unit speed
+def private write_tunestub_fixture(tmp_root : string) {
+    mkdir(tmp_root)
+    let payload = ("\{\"kernels\":\{\"stub_kernel\":\{\"suffix\":\"stub\"\}\}," +
+        "\"provenance\":\{\"mode\":\"stub\"\}\}")
+    fopen("{tmp_root}/stub_payload.json", "wb") $(f) {
+        fwrite(f, payload)
+    }
+    fopen("{tmp_root}/main.das", "wb") $(f) {
+        fwrite(f, "options gen2\nrequire daslib/tune\nrequire llvm/daslib/llvm_tune\n" +
+            "[tune_scope(name=\"stubscope\", tuner=\"stub_tuner.das\")]\n" +
+            "struct StubScope \{\n    unused : int\n\}\n" +
+            "[export]\ndef main() \{\n    print(\"hi\\n\")\n\}\n")
+    }
+    fopen("{tmp_root}/stub_tuner.das", "wb") $(f) {
+        fwrite(f, "options gen2\nrequire daslib/fio\n[export]\ndef main() \{\n" +
+            "    fopen(get_env_variable(\"DAS_TUNE_MANIFEST\"), \"wb\") $(mf) \{\n" +
+            "        fwrite(mf, fread(\"{tmp_root}/stub_payload.json\"))\n    \}\n\}\n")
+    }
+    fopen("{tmp_root}/.das_package", "wb") $(f) {
+        fwrite(f, "options gen2\nrequire daslib/daspkg\n" +
+            "[export]\ndef package() \{\n    package_name(\"tunestub\")\n\}\n" +
+            "[export]\ndef release() \{\n    release_main(\"main.das\")\n\}\n")
+    }
+}
+
 [test]
 def test_cmd_release_ships_minted_scope_manifest(t : T?) {
     t |> run("a tune scope's RESOLVED manifest ships beside the exe") @(tt : T?) {
@@ -2168,23 +2197,7 @@ def test_cmd_release_ships_minted_scope_manifest(t : T?) {
         let out_dir = "{get_das_root()}/_test_release_tunescope_out"
         force_rmdir(tmp_root)
         force_rmdir(out_dir)
-        mkdir(tmp_root)
-        // the scope's tuner is a STUB: a real tuner races candidates (minutes, noise-gated);
-        // the stub copies a canned sidecar into DAS_TUNE_MANIFEST, so the SHIP path — the
-        // exact line the M4 mis-ship broke — tests at unit speed
-        let payload = "\{\"kernels\":\{\"stub_kernel\":\{\"suffix\":\"stub\"\}\},\"provenance\":\{\"mode\":\"stub\"\}\}"
-        fopen("{tmp_root}/stub_payload.json", "wb") $(f) {
-            fwrite(f, payload)
-        }
-        fopen("{tmp_root}/main.das", "wb") $(f) {
-            fwrite(f, "options gen2\nrequire daslib/tune\nrequire llvm/daslib/llvm_tune\n[tune_scope(name=\"stubscope\", tuner=\"stub_tuner.das\")]\nstruct StubScope \{\n    unused : int\n\}\n[export]\ndef main() \{\n    print(\"hi\\n\")\n\}\n")
-        }
-        fopen("{tmp_root}/stub_tuner.das", "wb") $(f) {
-            fwrite(f, "options gen2\nrequire daslib/fio\n[export]\ndef main() \{\n    fopen(get_env_variable(\"DAS_TUNE_MANIFEST\"), \"wb\") $(mf) \{\n        fwrite(mf, fread(\"{tmp_root}/stub_payload.json\"))\n    \}\n\}\n")
-        }
-        fopen("{tmp_root}/.das_package", "wb") $(f) {
-            fwrite(f, "options gen2\nrequire daslib/daspkg\n[export]\ndef package() \{\n    package_name(\"tunestub\")\n\}\n[export]\ndef release() \{\n    release_main(\"main.das\")\n\}\n")
-        }
+        write_tunestub_fixture(tmp_root)
         let rc = cmd_release(tmp_root, out_dir)
         tt |> equal(0, rc, "cmd_release returns 0")
         // the mint ran: the stub wrote the resolved manifest beside main.das
@@ -2203,6 +2216,27 @@ def test_cmd_release_ships_minted_scope_manifest(t : T?) {
         tt |> success(stat(bundle_exe_path(out_dir, "tunestub"), exe_fs), "exe stats")
         tt |> success(stat(shipped, side_fs), "shipped sidecar stats")
         tt |> success(int64(side_fs.mtime) > int64(exe_fs.mtime), "shipped sidecar mtime is strictly newer than the exe")
+        force_rmdir(tmp_root)
+        force_rmdir(out_dir)
+    }
+    t |> run("an exported DAS_TUNE_MANIFEST takes neither the mint nor the ship") @(tt : T?) {
+        let tmp_root = "{get_das_root()}/_test_release_tunescope_env"
+        let out_dir = "{get_das_root()}/_test_release_tunescope_env_out"
+        force_rmdir(tmp_root)
+        force_rmdir(out_dir)
+        write_tunestub_fixture(tmp_root)
+        let elsewhere = "{tmp_root}/elsewhere.tune.json"
+        set_env_variable("DAS_TUNE_MANIFEST", elsewhere)
+        let rc = cmd_release(tmp_root, out_dir)
+        set_env_variable("DAS_TUNE_MANIFEST", "")
+        tt |> equal(0, rc, "cmd_release returns 0")
+        tt |> success(!fexist(elsewhere), "the redirect never received the mint")
+        let src_manifest = "{tmp_root}/main.tune.json"
+        tt |> success(fexist(src_manifest), "the scope's manifest was minted beside the app")
+        let bundle_dir = dir_name(bundle_exe_path(out_dir, "tunestub"))
+        let shipped = path_join(bundle_dir, "tunestub.tune.json")
+        tt |> success(fexist(shipped) && find(fread(shipped), "stub_kernel") >= 0,
+            "the bundle ships the app's own mint")
         force_rmdir(tmp_root)
         force_rmdir(out_dir)
     }

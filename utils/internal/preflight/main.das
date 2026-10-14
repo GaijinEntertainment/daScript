@@ -575,13 +575,20 @@ def gate_format(ctx : PreflightCtx) : GateResult {
         output = r.out)
 }
 
-// CI's lint verdict is rendered ONLY by the linux lane (extended_checks gates the step on
-// matrix.target == 'linux'), in the linux MODULE WORLD (no dasMetal — platform static_if
-// halves compile out, so their requires/args read unused there and nowhere else; dasVulkan
-// is in-tree and present on linux, so it is NOT disabled). A host-flavor pass alone is
-// structurally blind to that — so this gate runs two rails, host then linux-mirror.
-// LINT019 is OFF on both (mirrors CI): a changed-set ledger cannot see consumers
-// outside the PR — staleness belongs to the nightly whole-tree -j 1 pass.
+// CI's lint verdict is rendered by the linux lane (extended_checks
+// gates the step on matrix.target == 'linux'), in the linux MODULE
+// WORLD (no dasMetal — platform static_if halves compile out, so
+// their requires/args read unused there and nowhere else; dasVulkan
+// is in-tree and present on linux, so it is NOT disabled), and the
+// darwin core lane compiles the whole tree with NO dasVulkan (off by
+// default on Apple), where a `?vulkan` symbol used outside
+// `static_if (typeinfo builtin_module_exists(vulkan))` fails. A
+// host-flavor pass alone is structurally blind to both — so this
+// gate runs host, linux-mirror, then the darwin-mirror on a box
+// whose build carries dasVulkan (a box without it already ran that
+// world as its host pass). LINT019 is OFF on every rail (mirrors
+// CI): a changed-set ledger cannot see consumers outside the PR —
+// staleness belongs to the nightly whole-tree -j 1 pass.
 def gate_lint(ctx : PreflightCtx) : GateResult {
     let t0 = ref_time_ticks()
     let line_check = run_argv(line_length_argv(ctx.daslang, ctx.base))
@@ -620,8 +627,25 @@ def gate_lint(ctx : PreflightCtx) : GateResult {
         return GateResult(name = "lint", status = GateStatus.Fail, seconds = seconds_since(t0),
             detail = "LINUX-lane lint warnings (host pass was clean — a platform static_if half hides the symbol here; nolint:...,LINT019 both-worlds spelling, see skills/internal/preflight.md)", output = mirror.out)
     }
+    if (!module_absent(VULKAN_GATE)) {
+        var darwin_args <- [ctx.daslang, "--disable-module", "dasVulkan",
+                            "utils/lint/main.das", "--"]
+        darwin_args |> push_from(files)
+        darwin_args |> push("--quiet")
+        darwin_args |> push("--disable")
+        darwin_args |> push("LINT019")
+        let darwin = run_argv(darwin_args)
+        if (darwin.rc != 0) {
+            return GateResult(name = "lint", status = GateStatus.Fail, seconds = seconds_since(t0),
+                detail = ("DARWIN core lane lint warnings (host pass was clean — a `?vulkan` " +
+                          "symbol or type is used outside " +
+                          "`static_if (typeinfo builtin_module_exists(vulkan))`, " +
+                          "see skills/internal/preflight.md)"), output = darwin.out)
+        }
+    }
     return GateResult(name = "lint", status = GateStatus.Pass, seconds = seconds_since(t0),
-        detail = lint_pass_detail(length(files), fixed), output = fixed == 0 ? "" : host.out)
+        detail = lint_pass_detail(length(files), fixed, lint_rails()),
+        output = fixed == 0 ? "" : host.out)
 }
 
 // ===== ast-verify on changed .das (mirrors extended_checks "Run ast-verify on changed .das files") =====

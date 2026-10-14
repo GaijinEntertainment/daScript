@@ -48,6 +48,12 @@ refuses; a fat exe never tunes.
 **A diff that lets a release path other than `--quick` reuse a sidecar from an earlier run is a
 defect.**
 
+**A diff that lets any build of a release - the first `-exe`, the rebuild after the mint, a
+companion's - or its tuner read a `DAS_TUNE_MANIFEST` inherited from the environment daspkg was
+started in is a defect** - the sidecar a release mints, inherits under `--quick`, or ships is the
+app's own `<stem>.tune.json`. The `test_daspkg.das` cell "an exported DAS_TUNE_MANIFEST takes
+neither the mint nor the ship" holds the mint and the ship; a diff that weakens it is a defect.
+
 **A diff that lets `--quick` accept an incomplete sidecar is a defect** - incomplete means
 missing a scope key, that is, an entry of the `tune_scopes` list in any deps JSON the release
 wrote.
