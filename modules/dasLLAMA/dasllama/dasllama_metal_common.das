@@ -1755,6 +1755,23 @@ def private dn_pool_fit(slots : int64; slot_bytes : uint64) {
     g_dn_pool_epoch++
 }
 
+//! a model swap frees a pool no live session holds a slot or stash in
+[cold_path, arch(at="../ARCHITECTURE_GPU_MTP.md#dn-mirror-pool")]
+def private dn_pool_drop_idle {
+    return if (g_dn_pool == null || !empty(g_dn_mirrors) || !empty(g_dn_stash))
+    dn_mirror_quiesce()   //! no step encoded ahead may write the pool that goes
+    metal_release(g_dn_pool)
+    g_dn_pool = null
+    g_dn_pool_slots = 0l
+    g_dn_slot_bytes = 0ul
+    g_dn_pool_epoch++
+}
+
+[init]
+def private dn_pool_reload_register {
+    register_reload_prep(@@dn_pool_drop_idle)
+}
+
 //! A free slot of `slot_bytes`, the pool grown when every slot holds a mirror.
 def private dn_slot_alloc(slot_bytes : uint64) : int64 {
     if (g_dn_pool == null || g_dn_slot_bytes != slot_bytes) {

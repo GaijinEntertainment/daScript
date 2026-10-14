@@ -292,3 +292,7 @@ runs `SessionOwner`'s finalizer, which tells every `register_session_release_lis
 the Metal driver drops that uid's mirror and stash (`dn_mirror_released`). So every entry is a live session's and no
 live session's state is ever dropped, however many sessions step in turn; a session never deleted keeps its entry. A
 snapshot of an evicted session reads the stash into the host arrays.
+A weights reload (`register_reload_prep`, `dn_pool_drop_idle`) frees the pool only when no mirror
+and no stash is left in it: every model load bumps the epoch, a second model's included, so a live
+session's entries stay and leave with the session, and a new session's uid, never reused, can
+adopt no entry an earlier model wrote.
