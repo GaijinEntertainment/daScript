@@ -1784,40 +1784,42 @@ def test_vkd_kq_gemv_family(t0 : T?) {
 //! the token-table gather's expected rows: row r the table row `ids[r]` at superblock `wblk0`, each element the class's own
 //! `blk_decode` lane under the lo or hi term pair `blk_fold` reads, times `escale`; an `EMB_ID_HOST` row the host's staged row
 def private emb_gather_oracle(fmt : int; wq, ws : array<uint>; ids : array<uint>; xh : array<float>; n : int; wblk0 : uint; escale : float) : array<float> {
-    var noq : array<uint>
-    var nos : array<float>
-    var k = kq_cls_ref(fmt, wq, ws, noq, nos)
-    let nsb = n / 256
     var y : array<float>
-    y |> resize(length(ids) * n)
-    for (r in range(length(ids))) {
-        if (ids[r] == EMB_ID_HOST) {
-            for (e in range(n)) {
-                y[r * n + e] = xh[r * n + e]
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        var noq : array<uint>
+        var nos : array<float>
+        var k = kq_cls_ref(fmt, wq, ws, noq, nos)
+        let nsb = n / 256
+        y |> resize(length(ids) * n)
+        for (r in range(length(ids))) {
+            if (ids[r] == EMB_ID_HOST) {
+                for (e in range(n)) {
+                    y[r * n + e] = xh[r * n + e]
+                }
+                continue
             }
-            continue
-        }
-        for (b in range(nsb * 8)) {
-            var wl = uint4(0u)
-            var wh = uint4(0u)
-            let terms = k->blk_decode(wblk0 + ids[r] * uint(nsb) + uint(b / 8), uint(b % 8), wl, wh)
-            let bsum = k->fold_reads_bsum()
-            for (e in range(32)) {
-                let w = e < 16 ? wl : wh
-                let word = (e % 16) / 4
-                let lane = word == 0 ? w.x : (word == 1 ? w.y : (word == 2 ? w.z : w.w))
-                let q = float(int(int8((lane >> uint((e % 4) * 8)) & 0xFFu)))
-                let a = e < 16 ? terms.x : terms.z
-                let c = bsum ? (e < 16 ? terms.y : terms.w) : 0.0
-                y[r * n + b * 32 + e] = (a * q + c) * escale
+            for (b in range(nsb * 8)) {
+                var wl = uint4(0u)
+                var wh = uint4(0u)
+                let terms = k->blk_decode(wblk0 + ids[r] * uint(nsb) + uint(b / 8), uint(b % 8), wl, wh)
+                let bsum = k->fold_reads_bsum()
+                for (e in range(32)) {
+                    let w = e < 16 ? wl : wh
+                    let word = (e % 16) / 4
+                    let lane = word == 0 ? w.x : (word == 1 ? w.y : (word == 2 ? w.z : w.w))
+                    let q = float(int(int8((lane >> uint((e % 4) * 8)) & 0xFFu)))
+                    let a = e < 16 ? terms.x : terms.z
+                    let c = bsum ? (e < 16 ? terms.y : terms.w) : 0.0
+                    y[r * n + b * 32 + e] = (a * q + c) * escale
+                }
             }
         }
+        unsafe {
+            delete k
+        }
+        delete noq
+        delete nos
     }
-    unsafe {
-        delete k
-    }
-    delete noq
-    delete nos
     return <- y
 }
 
