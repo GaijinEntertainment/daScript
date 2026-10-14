@@ -5049,14 +5049,13 @@ def gpu_device_kv_snapshot_(var s : Session; at : int64; var into : DnSnapshot) 
     let t0 = ref_time_ticks()
     let owned = g_rdec_active && s.device_kv && rdec_owns(s, s.rdec_region) && empty(s.ple_conv_hist)
     let slot = !owned || at == s.dn_pos ? -1 : rdec_snap_at(g_rdec_regions[s.rdec_region], at)
-    var snap : DnSnapshot
-    if (owned && (at == s.dn_pos || slot >= 0)) {
+    let held = owned && (at == s.dn_pos || slot >= 0)
+    if (held) {
         rdec_select_region(s.rdec_region)
-        snap <- rdec_peek_snapshot(s, slot, into)
     } else {
         delete into
-        snap.pos = -1l
     }
+    var snap <- held ? rdec_peek_snapshot(s, slot, into) : DnSnapshot(pos = -1l)
     if (snap.pos < 0l) {
         delete snap
         return <- at == s.dn_pos ? dn_snapshot_take(s) : DnSnapshot(pos = -1l)
