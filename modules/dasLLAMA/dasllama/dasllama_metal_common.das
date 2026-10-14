@@ -2927,6 +2927,9 @@ def public iq4_lut(q : uint) : float {
     return float((int((w >> ((q & 3u) * 8u)) & 255u) ^ 128) - 128)
 }
 
+//! a per-32 code's value: q4032's linear q - 8, else the iq4 table
+def public b32_code_val(q : uint; q40l : bool) : float => q40l ? float(int(q) - 8) : iq4_lut(q)
+
 [arch(at = "../ARCHITECTURE_GPU_QUANT_PLANES.md#metal-kq-split-scale-plane")]
 def public iq3s4_val(q : uint) : float => float(2 * int(q) - 15)
 

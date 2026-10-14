@@ -2440,14 +2440,6 @@ class template MetalMoeMulMmIq4nl32TensorT : MetalMoeMulMmKqTensorBase {
     @workgroup twb : float16[6144]
     @template_constant Q40L : bool = false   //!< q4032: the block form under the linear code q - 8
 
-    def code_val(q : uint) : float {
-        static_if (Q40L) {
-            return float(int(q) - 8)
-        } else {
-            return iq4_lut(q)
-        }
-    }
-
     [metal_kernel(float_a_ok=true)]
     def metal_moe_mulmm_iq4nl32_t {
         run_shell()
@@ -2466,7 +2458,7 @@ class template MetalMoeMulMmIq4nl32TensorT : MetalMoeMulMmKqTensorBase {
         for [unroll_full] (t in range(16)) {
             let u = unsafe(qp[t / 4])
             let q = (u >> (8u * (uint(t) % 4u) + nsh)) & 15u
-            twb[j * 72u + (sub >> 1u) * 32u + kh + uint(t)] = float16(d * code_val(q))
+            twb[j * 72u + (sub >> 1u) * 32u + kh + uint(t)] = float16(d * b32_code_val(q, Q40L))
         }
     }
 }

@@ -2242,6 +2242,7 @@ def kq_plane_pair(var t : Model; f : KqFmt;
 }
 
 //! the read-only twin: `f`'s plane pair in a const `t`
+//! deliberate twin: `var t : auto` loops inference on a const Model
 def kq_plane_pair(t : Model; f : KqFmt;
                   blk : block<(q : array<uint8>; s : array<uint8>) : void>) : bool {
     if (kq_sb(f)) {

@@ -85,15 +85,6 @@ def test_userfn_inline(t : T?) {
 
 var @ssbo @binding = 0 unr_data : array<float>
 
-[spirv_inline]
-def private unr_scaled(x : float; k : int) : float {
-    var s = x
-    if (k > 1) {
-        s = s * float(k)
-    }
-    return s + 1.0f
-}
-
 //! an inlined tail return inside a caller's `for [unroll_full]`
 //! body is the call's value, not a return out of the unrolled copy
 [compute_shader(local_size_x=64, name="userfn_inline_unrolled_spv"), marker(no_coverage)]
@@ -101,7 +92,7 @@ def userfn_inline_unrolled {
     let i = int(gl_GlobalInvocationID.x)
     var acc = 0.0f
     for [unroll_full] (k in range(3)) {
-        acc += unr_scaled(unr_data[i], k)
+        acc += uf_inl_scaled(unr_data[i], k)
     }
     unr_data[i] = acc
 }

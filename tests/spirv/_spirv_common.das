@@ -1300,7 +1300,7 @@ def userfn_global {
 }
 
 [spirv_inline]
-def private uf_inl_scaled(x : float; k : int) : float {   // a value helper: a branch, then one tail return
+def uf_inl_scaled(x : float; k : int) : float {   // a value helper: a branch, then one tail return
     var s = x
     if (k > 1) {
         s = s * float(k)

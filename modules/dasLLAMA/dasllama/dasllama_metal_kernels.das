@@ -1436,14 +1436,6 @@ class template MetalEmbedB32T {
     @template_constant QW : uint = 4u       //!< quant words a block: 5 on q51, q5032 (qh last)
     @template_constant SH : uint = 1u       //!< scale halves a block: 2 on q51 (d then m)
 
-    def code_val(q : uint) : float {
-        static_if (Q40L) {
-            return float(int(q) - 8)
-        } else {
-            return iq4_lut(q)
-        }
-    }
-
     [metal_kernel]
     def metal_embed_b32 {
         let u = gl_GlobalInvocationID.x
@@ -1470,7 +1462,8 @@ class template MetalEmbedB32T {
         } else {
             for [unroll_full] (t in range(16)) {
                 let e = half * 16u + uint(t)
-                xo[ob + uint(t)] = (d * code_val(el32_nib(unsafe(p[el32_word(e)]), e))) * ka.escale
+                let q = el32_nib(unsafe(p[el32_word(e)]), e)
+                xo[ob + uint(t)] = (d * b32_code_val(q, Q40L)) * ka.escale
             }
         }
     }
@@ -1570,7 +1563,8 @@ class MetalEmbedIq3xxs : MetalEmbedKqT {
 [ |> template_struct_instance]
 class template MetalEmbedIq2T : MetalEmbedKqT {
     def abstract grid_word(blk, js, ile, k : uint; var sw : uint&) : void
-    def abstract unit_scale(blk, js, ile : uint) : float
+    def unit_scale(blk, js, ile : uint) : float => (float(kdh[blk]) *
+                                                    float(kq_strip_byte(ksc[blk], js * 2u + ile)))
 
     def override unit16(blk, js, ile, ob : uint) {
         let dsc = unit_scale(blk, js, ile)
@@ -1586,8 +1580,6 @@ class template MetalEmbedIq2T : MetalEmbedKqT {
 
 [metal_dispatch(name = "enc_embed_kq_iq2s", pso = "g_pso_emb_kq_iq2s", tg = 64, grid = "units/64, nrows", params = "units : int64, nrows : int64")]
 class MetalEmbedIq2s : MetalEmbedIq2T {
-    def override unit_scale(blk, js, ile : uint) : float => float(kdh[blk]) * float(kq_strip_byte(ksc[blk], js * 2u + ile))
-
     def override grid_word(blk, js, ile, k : uint; var sw : uint&) {
         let l2 = ile * 2u + k / 2u
         let qw2 = kqu[blk * 18u + js]
@@ -1600,8 +1592,6 @@ class MetalEmbedIq2s : MetalEmbedIq2T {
 
 [metal_dispatch(name = "enc_embed_kq_iq2xs", pso = "g_pso_emb_kq_iq2xs", tg = 64, grid = "units/64, nrows", params = "units : int64, nrows : int64")]
 class MetalEmbedIq2xs : MetalEmbedIq2T {
-    def override unit_scale(blk, js, ile : uint) : float => float(kdh[blk]) * float(kq_strip_byte(ksc[blk], js * 2u + ile))
-
     def override grid_word(blk, js, ile, k : uint; var sw : uint&) {
         let w16 = (kqu[blk * 16u + js * 2u + ile] >> (16u * (k / 2u))) & 0xFFFFu
         let sgb2 = ksign7(w16 >> 9u)

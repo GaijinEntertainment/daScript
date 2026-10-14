@@ -365,48 +365,19 @@ def private p32_expand_row(wq : uint8 const?; var qe : int8?; nb : int64; _f : K
 def private p32_dot_e(qe : int8 const?; ws : uint8 const?; xq : int8 const?; xs : float const?; n : int64; _f : KqTag_q5032) : float => dot_iq4nl32e(qe, ws, xq, xs, n)
 
 //! `m`'s per-32 plane pair of the tag's format set to `kq` / `ks`
-def private p32_put_planes(var m : Model; kq, ks : array<uint8>; _f : KqTag_q51) {
-    m.q51q := kq
-    m.q51s := ks
-}
-
-def private p32_put_planes(var m : Model; kq, ks : array<uint8>; _f : KqTag_iq4nl32) {
-    m.iq4nl32q := kq
-    m.iq4nl32s := ks
-}
-
-def private p32_put_planes(var m : Model; kq, ks : array<uint8>; _f : KqTag_q4032) {
-    m.q4032q := kq
-    m.q4032s := ks
-}
-
-def private p32_put_planes(var m : Model; kq, ks : array<uint8>; _f : KqTag_q5032) {
-    m.q5032q := kq
-    m.q5032s := ks
+def private p32_put_planes(var m : Model; kq, ks : array<uint8>; f : auto(TT)) {
+    kq_plane_pair(m, p32_fmt(f)) $(var q : array<uint8>; var s : array<uint8>) {
+        q := kq
+        s := ks
+    }
 }
 
 //! `m`'s per-32 plane pair of the tag's format repacked grp<mr> in place
-def private p32_repack_model(var m : Model; n, d, mr : int64; _f : KqTag_q51) {
-    unsafe {
-        repack_kq_grp(KqFmt.q51, addr(m.q51q[0]), addr(m.q51s[0]), n, d, mr)
-    }
-}
-
-def private p32_repack_model(var m : Model; n, d, mr : int64; _f : KqTag_iq4nl32) {
-    unsafe {
-        repack_kq_grp(KqFmt.iq4nl32, addr(m.iq4nl32q[0]), addr(m.iq4nl32s[0]), n, d, mr)
-    }
-}
-
-def private p32_repack_model(var m : Model; n, d, mr : int64; _f : KqTag_q4032) {
-    unsafe {
-        repack_kq_grp(KqFmt.q4032, addr(m.q4032q[0]), addr(m.q4032s[0]), n, d, mr)
-    }
-}
-
-def private p32_repack_model(var m : Model; n, d, mr : int64; _f : KqTag_q5032) {
-    unsafe {
-        repack_kq_grp(KqFmt.q5032, addr(m.q5032q[0]), addr(m.q5032s[0]), n, d, mr)
+def private p32_repack_model(var m : Model; n, d, mr : int64; f : auto(TT)) {
+    kq_plane_pair(m, p32_fmt(f)) $(var q : array<uint8>; var s : array<uint8>) {
+        unsafe {
+            repack_kq_grp(p32_fmt(f), addr(q[0]), addr(s[0]), n, d, mr)
+        }
     }
 }
 
