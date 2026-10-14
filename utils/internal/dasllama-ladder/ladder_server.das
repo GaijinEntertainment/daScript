@@ -653,7 +653,7 @@ def init_server(port : int; db_path : string; policy : LadderPolicy; official_di
         logger_error("ladder", "could not open {db_path}: {open_result |> unwrap_err}")
         return false
     }
-    g_db <- open_result._value
+    g_db <- move_unwrap(open_result)
     g_db_open = true
     g_db |> apply_recommended_pragmas()
     let applied = migrate_to_latest(g_db)

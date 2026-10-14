@@ -10,17 +10,18 @@ Option<T> and Result<T, E>
     single: Tutorial; Monadic types
     single: Tutorial; Error handling
 
-``daslib/option`` and ``daslib/result`` are two small template-tuple modules
+``daslib/option`` and ``daslib/result`` are two small template-variant modules
 that give daslang a principled way to express "value or nothing" and "value or
 error" for ordinary value types. They compose through the existing ``|>`` pipe.
 
-Both are declared with ``[template_tuple]``, so ``Option<T>`` resolves to
-``tuple<_has_value : bool; _value : T>`` and ``Result<T, E>`` to
-``tuple<_is_ok : bool; _value : T; _error : E>`` — a structural type with no
-module home, which is what lets the same type reached through any chain of
-``require ... public`` stay one canonical type. Because it is a tuple and not
-a variant, there is no ``r is ok``: read the tag and the payload through the
-accessor functions below.
+Both are declared with ``[template_variant]``, so ``Option<T>`` resolves to
+``variant<none; some : T>`` and ``Result<T, E>`` to ``variant<err : E; ok : T>``
+— a structural type with no module home, which is what lets the same type
+reached through any chain of ``require ... public`` stay one canonical type.
+``o is some`` and ``r is ok`` test the case, ``match`` takes ``none()``,
+``some(x)``, ``ok(x)`` and ``err(e)`` patterns, and the accessor functions
+below do the rest. ``default`` is ``none`` for ``Option`` and an ``err`` for
+``Result``.
 
 ``Option<T>`` models **absence**. ``Result<T, E>`` models **failure with a
 reason**. Prefer them over sentinel return values (``-1``, ``""``) or nullable

@@ -309,7 +309,7 @@ def pending_migrations(db) : array<PendingMigration> {
     if (r |> is_err) {
         panic(r |> unwrap_err)
     }
-    return <- r._value
+    return move_unwrap(r)
 }
 
 def try_migration_history(db) : Result<array<MigrationRecord>, string> {
@@ -328,7 +328,7 @@ def migration_history(db) : array<MigrationRecord> {
     if (r |> is_err) {
         panic(r |> unwrap_err)
     }
-    return <- r._value
+    return move_unwrap(r)
 }
 
 def migrate_to_latest(db) : int {

@@ -142,7 +142,7 @@ def open_sqlite(path : string) : SqlRunner {
     if (r |> is_err) {
         panic(r |> unwrap_err)
     }
-    return <- r._value
+    return move_unwrap(r)
 }
 
 def with_sqlite(path : string; blk : block<(db : SqlRunner) : void>) : void {
@@ -344,8 +344,8 @@ def sql_bind_to_stmt(var stmt : sqlite3_stmt?; idx : int; v : array<uint8>) : vo
 def sql_bind_to_stmt(var stmt : sqlite3_stmt?; idx : int; v : $Option < auto(TT) >) : void {
     //! ``some(x)`` recurses on ``x`` (which routes through the user's
     //! ``_::sql_bind`` adapter for non-primitive ``T``); ``none`` binds NULL.
-    if (v._has_value) {
-        sql_bind_to_stmt(stmt, idx, v._value)
+    if (is_some(v)) {
+        sql_bind_to_stmt(stmt, idx, v as some)
     } else {
         sqlite3_bind_null(stmt, idx)
     }
@@ -437,7 +437,7 @@ def query_scalar_opt(db : SqlRunner; sql : string; t : type<auto(TT)>) : Option<
     if (r |> is_err) {
         panic(r |> unwrap_err)
     }
-    return <- r._value
+    return move_unwrap(r)
 }
 
 // ===== query_one — full-row read with positional bind args =====
@@ -551,7 +551,7 @@ def private query_one_impl(db : SqlRunner; sql : string; t : type<auto(TT)>;
     if (r |> is_err) {
         panic(r |> unwrap_err)
     }
-    return <- r._value
+    return move_unwrap(r)
 }
 
 def private query_one_opt_impl(db : SqlRunner; sql : string; t : type<auto(TT)>;
@@ -567,7 +567,7 @@ def private query_one_opt_impl(db : SqlRunner; sql : string; t : type<auto(TT)>;
     if (r |> is_err) {
         panic(r |> unwrap_err)
     }
-    return <- r._value
+    return move_unwrap(r)
 }
 
 // ---- try_query_one — Result<TT, string>; 0..3 positional args ----
@@ -679,7 +679,7 @@ def private query_impl(db : SqlRunner; sql : string; t : type<auto(TT)>;
     if (r |> is_err) {
         panic(r |> unwrap_err)
     }
-    return <- r._value
+    return move_unwrap(r)
 }
 
 // ---- try_query — Result<array<TT>, string>; 0..3 positional args ----
@@ -829,7 +829,7 @@ def try_check_schema(db : SqlRunner; t : type<auto(TT)>) : SqlError {
     let table_name = _::_sql_table_name(default<TT>)
     var got_result <- sqlite_read_table_info(db.sqlite_handle, db.schema_name, table_name)
     if (got_result |> is_err) return some(got_result |> unwrap_err)
-    let got <- got_result._value
+    let got <- move_unwrap(got_result)
     if (empty(got)) return some("check_schema: table \"{table_name}\" not found in DB.")
     // A struct may omit GENERATED columns (the schema_from shape), so counts compare
     // against the ordinary-column floor and the all-column ceiling, not strict equality.
@@ -1456,7 +1456,7 @@ def integrity_check(db : SqlRunner) : array<string> {
     if (r |> is_err) {
         panic(r |> unwrap_err)
     }
-    return <- r._value
+    return move_unwrap(r)
 }
 
 def try_quick_check(db : SqlRunner) : Result<array<string>, string> {
@@ -1471,7 +1471,7 @@ def quick_check(db : SqlRunner) : array<string> {
     if (r |> is_err) {
         panic(r |> unwrap_err)
     }
-    return <- r._value
+    return move_unwrap(r)
 }
 
 def try_backup_to(db : SqlRunner; dest : SqlRunner) : SqlError {
@@ -1544,7 +1544,7 @@ def run_dml_returning(db : SqlRunner; sql : string;
     if (r |> is_err) {
         panic(r |> unwrap_err)
     }
-    return <- r._value
+    return move_unwrap(r)
 }
 
 [unused_argument(t)]
@@ -1569,7 +1569,7 @@ def select_from(db : SqlRunner; t : type<auto(TT)>) : array<TT -const -#> {
     if (r |> is_err) {
         panic(r |> unwrap_err)
     }
-    return <- r._value
+    return move_unwrap(r)
 }
 
 [unsafe_outside_of_for, nodiscard]
@@ -1617,7 +1617,7 @@ def run_select(db : SqlRunner; sql : string; bind_blk : block<(var stmt : sqlite
     if (r |> is_err) {
         panic(r |> unwrap_err)
     }
-    return <- r._value
+    return move_unwrap(r)
 }
 
 def try_run_select_one(db : SqlRunner; sql : string; bind_blk : block<(var stmt : sqlite3_stmt?) : void>; row_blk : block<(stmt : sqlite3_stmt?) : auto(TT)>) : Result<TT -const -#, string> {
@@ -1632,7 +1632,7 @@ def run_select_one(db : SqlRunner; sql : string; bind_blk : block<(var stmt : sq
     if (r |> is_err) {
         panic(r |> unwrap_err)
     }
-    return <- r._value
+    return move_unwrap(r)
 }
 
 def try_run_select_one_opt(db : SqlRunner; sql : string; bind_blk : block<(var stmt : sqlite3_stmt?) : void>; row_blk : block<(stmt : sqlite3_stmt?) : auto(TT)>) : Result<Option<TT -const -#>, string> {
@@ -1649,7 +1649,7 @@ def run_select_one_opt(db : SqlRunner; sql : string; bind_blk : block<(var stmt 
     if (r |> is_err) {
         panic(r |> unwrap_err)
     }
-    return <- r._value
+    return move_unwrap(r)
 }
 
 // ===== [sql_fts5] — FTS5 virtual-table struct (tut 40) =====

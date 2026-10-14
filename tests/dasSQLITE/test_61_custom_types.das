@@ -164,7 +164,7 @@ def test_option_over_custom_adapter(t : T?) {
 
         let r2 = db |> query_one("SELECT * FROM Events WHERE Id = 2", type<Event>)
         t |> success(r2.StartsAt |> is_some(), "some(...) Option<DateTime> binds and reads back as some")
-        t |> equal(r2.StartsAt._value.unix_seconds, 300l, "Option<DateTime> inner value preserved")
+        t |> equal(unwrap(r2.StartsAt).unix_seconds, 300l, "Option<DateTime> inner value preserved")
     }
 }
 

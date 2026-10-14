@@ -39,7 +39,7 @@ def main() {
     // Move the SqlRunner out of the Result. SqlRunner has finalize-on-scope-
     // exit (closes the SQLite handle), so it must be `var inscope` and bound
     // by move (`<-`); plain `unwrap` would fail because the type isn't copyable.
-    var inscope db <- open_result._value
+    var inscope db <- move_unwrap(open_result)
     db |> create_table(type<User>)
 
     // ── try_insert: Result<int64, string> ────────────────────────────────

@@ -2056,7 +2056,7 @@ def public repository_parse_rev_list_count(output : string;
     if (empty(last)) return false
     let parsed = try_to_int(last)
     if (!is_ok(parsed)) return false
-    count = parsed._value
+    count = unwrap(parsed)
     return count >= 0
 }
 

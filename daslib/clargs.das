@@ -696,18 +696,9 @@ def option_inner_type(t : TypeDeclPtr) : TypeDeclPtr {
                 || t.typeMacroExpr[1] == null || !(t.typeMacroExpr[1] is ExprTypeDecl)) return null
         return clone_type((t.typeMacroExpr[1] as ExprTypeDecl).typeexpr)
     }
-    if (t.baseType != Type.tStructure || t.structType == null) return null
-    var has_flag = false
-    var value_t : TypeDeclPtr = null
-    for (f in t.structType.fields) {
-        if ("{f.name}" == "_has_value" && f._type.baseType == Type.tBool) {
-            has_flag = true
-        } elif ("{f.name}" == "_value") {
-            value_t = clone_type(f._type)
-        }
-    }
-    if (!has_flag || value_t == null) return null
-    return value_t
+    if (t.baseType != Type.tVariant || length(t.argNames) != 2 || t.argNames[0] != "none"
+        || t.argNames[1] != "some" || t.argTypes[0].baseType != Type.tVoid) return null
+    return clone_type(t.argTypes[1])
 }
 
 

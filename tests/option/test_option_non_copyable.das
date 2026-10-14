@@ -45,15 +45,15 @@ def make_arr(a : int; b : int) : array<int> => <- [a, b]
 def test_constructors(t : T?) {
     t |> run("some carries a non-copyable payload") @(t : T?) {
         let o = some(make_arr(1, 2))
-        t |> success(o._has_value)
-        t |> equal(length(o._value), 2)
-        t |> equal(o._value[0], 1)
-        t |> equal(o._value[1], 2)
+        t |> success(is_some(o))
+        t |> equal(length(unwrap(o)), 2)
+        t |> equal(unwrap(o)[0], 1)
+        t |> equal(unwrap(o)[1], 2)
     }
 
     t |> run("none of array<int> is empty") @(t : T?) {
         let o = none(type<array<int>>)
-        t |> success(!o._has_value)
+        t |> success(is_none(o))
     }
 
     t |> run("is_some / is_none on Option<array<int>>") @(t : T?) {
@@ -67,10 +67,10 @@ def test_move_some(t : T?) {
     t |> run("move_some moves a non-copyable payload out of the source") @(t : T?) {
         var src = make_arr(1, 2)
         let o = move_some(src)
-        t |> success(o._has_value)
-        t |> equal(length(o._value), 2)
-        t |> equal(o._value[0], 1)
-        t |> equal(o._value[1], 2)
+        t |> success(is_some(o))
+        t |> equal(length(unwrap(o)), 2)
+        t |> equal(unwrap(o)[0], 1)
+        t |> equal(unwrap(o)[1], 2)
         // Source is moved-from: empty after the call.
         t |> equal(length(src), 0)
     }
@@ -78,8 +78,8 @@ def test_move_some(t : T?) {
     t |> run("move_some works on a copyable payload too") @(t : T?) {
         let n = 42
         let o = move_some(n)
-        t |> success(o._has_value)
-        t |> equal(o._value, 42)
+        t |> success(is_some(o))
+        t |> equal(unwrap(o), 42)
     }
 }
 
@@ -87,13 +87,13 @@ def test_move_some(t : T?) {
 def test_map(t : T?) {
     t |> run("map Option<array<int>> -> Option<int> via length") @(t : T?) {
         let n = some(make_arr(1, 2)) |> map($(v : array<int>) => length(v))
-        t |> success(n._has_value)
-        t |> equal(n._value, 2)
+        t |> success(is_some(n))
+        t |> equal(unwrap(n), 2)
     }
 
     t |> run("map none stays none") @(t : T?) {
         let n = none(type<array<int>>) |> map($(v : array<int>) => length(v))
-        t |> success(!n._has_value)
+        t |> success(is_none(n))
     }
 }
 
@@ -101,17 +101,17 @@ def test_map(t : T?) {
 def test_filter(t : T?) {
     t |> run("filter keeps matching some") @(t : T?) {
         let f = some(make_arr(1, 2)) |> filter($(v : array<int>) => !empty(v))
-        t |> success(f._has_value)
+        t |> success(is_some(f))
     }
 
     t |> run("filter drops non-matching some") @(t : T?) {
         let f = some(make_arr(1, 2)) |> filter($(v : array<int>) => length(v) > 99)
-        t |> success(!f._has_value)
+        t |> success(is_none(f))
     }
 
     t |> run("filter passes none through") @(t : T?) {
         let f = none(type<array<int>>) |> filter($(v : array<int>) => true)
-        t |> success(!f._has_value)
+        t |> success(is_none(f))
     }
 }
 
@@ -119,13 +119,13 @@ def test_filter(t : T?) {
 def test_and_then(t : T?) {
     t |> run("and_then chains some -> some") @(t : T?) {
         let r = some(make_arr(1, 2)) |> and_then($(v : array<int>) => some(make_arr(length(v), 0)))
-        t |> success(r._has_value)
-        t |> equal(r._value[0], 2)
+        t |> success(is_some(r))
+        t |> equal(unwrap(r)[0], 2)
     }
 
     t |> run("and_then on none short-circuits") @(t : T?) {
         let r = none(type<array<int>>) |> and_then($(v : array<int>) => some(make_arr(length(v), 0)))
-        t |> success(!r._has_value)
+        t |> success(is_none(r))
     }
 }
 
@@ -133,19 +133,19 @@ def test_and_then(t : T?) {
 def test_or_else_or_value(t : T?) {
     t |> run("or_else passes some through") @(t : T?) {
         let r = some(make_arr(1, 2)) |> or_else() { return some(make_arr(9, 9)); }
-        t |> equal(r._value[0], 1)
+        t |> equal(unwrap(r)[0], 1)
     }
 
     t |> run("or_else fires on none") @(t : T?) {
         let r = none(type<array<int>>) |> or_else() { return some(make_arr(9, 9)); }
-        t |> success(r._has_value)
-        t |> equal(r._value[0], 9)
+        t |> success(is_some(r))
+        t |> equal(unwrap(r)[0], 9)
     }
 
     t |> run("or_value on none uses fallback") @(t : T?) {
         let r = none(type<array<int>>) |> or_value(make_arr(7, 8))
-        t |> success(r._has_value)
-        t |> equal(r._value[0], 7)
+        t |> success(is_some(r))
+        t |> equal(unwrap(r)[0], 7)
     }
 }
 
@@ -183,9 +183,7 @@ def test_move_unwrap(t : T?) {
         t |> equal(length(arr), 2)
         t |> equal(arr[0], 7)
         t |> equal(arr[1], 8)
-        // Source is moved-from: tag flipped to none, payload zeroed.
-        t |> success(!o._has_value)
-        t |> equal(length(o._value), 0)
+        t |> success(is_none(o))
     }
 }
 
@@ -243,17 +241,17 @@ def test_chaining(t : T?) {
 def test_zip(t : T?) {
     t |> run("zip some + some -> some pair of arrays") @(t : T?) {
         let z = zip(some(make_arr(1, 2)), some(make_arr(3, 4)))
-        t |> success(z._has_value)
-        t |> equal(length(z._value._0), 2)
-        t |> equal(z._value._0[0], 1)
-        t |> equal(length(z._value._1), 2)
-        t |> equal(z._value._1[1], 4)
+        t |> success(is_some(z))
+        t |> equal(length(unwrap(z)._0), 2)
+        t |> equal(unwrap(z)._0[0], 1)
+        t |> equal(length(unwrap(z)._1), 2)
+        t |> equal(unwrap(z)._1[1], 4)
     }
 
     t |> run("zip with either none -> none") @(t : T?) {
-        t |> success(!zip(none(type<array<int>>), some(make_arr(1, 2)))._has_value)
-        t |> success(!zip(some(make_arr(1, 2)), none(type<array<int>>))._has_value)
-        t |> success(!zip(none(type<array<int>>), none(type<array<int>>))._has_value)
+        t |> success(is_none(zip(none(type<array<int>>), some(make_arr(1, 2)))))
+        t |> success(is_none(zip(some(make_arr(1, 2)), none(type<array<int>>))))
+        t |> success(is_none(zip(none(type<array<int>>), none(type<array<int>>))))
     }
 }
 

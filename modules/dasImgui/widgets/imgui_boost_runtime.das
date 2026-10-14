@@ -1310,9 +1310,9 @@ def public JV(r : $Result < auto(TT); auto(EE) >) : JsonValue? {
     var tab : table<string; JsonValue?>
     tab |> insert("ok", JV(r |> is_ok))
     if (r |> is_ok) {
-        tab |> insert("value", JV(r._value))
+        tab |> insert("value", JV(unwrap(r)))
     } else {
-        tab |> insert("error", JV(r._error))
+        tab |> insert("error", JV(unwrap_err(r)))
     }
     return JV(tab)
 }
@@ -1952,7 +1952,7 @@ def imgui_click(input : JsonValue?) : JsonValue? {
     //! optional ``input["button"]`` — 0 left / 1 right / 2 middle). Presses/releases through ImGui's own
     //! input path, so the widget behaves exactly as under a real click. For an exact value, use ``imgui_force_set``.
     let r = dispatch_or_err("click", input)
-    if (r._is_ok) dispatch_post_command_hooks("click", r._value)
+    if (is_ok(r)) dispatch_post_command_hooks("click", unwrap(r))
     return with_await(input, r)
 }
 
@@ -1962,7 +1962,7 @@ def imgui_force_set(input : JsonValue?) : JsonValue? {
     //! writes state directly, doing what a user couldn't (exact value, off-screen or inactive widget).
     //! For a faithful interaction prefer ``imgui_click`` / ``imgui_key_type``; use this only when the value is the goal.
     let r = dispatch_or_err("set", input)
-    if (r._is_ok) dispatch_post_command_hooks("set", r._value)
+    if (is_ok(r)) dispatch_post_command_hooks("set", unwrap(r))
     return with_await(input, r)
 }
 
@@ -1991,7 +1991,7 @@ def imgui_log_drain(_input : JsonValue?) : JsonValue? {
 def imgui_open(input : JsonValue?) : JsonValue? {
     //! Live-command: open the container named by ``input["target"]`` (window/popup/tree_node/collapsing_header/tab_item).
     let r = dispatch_or_err("open", input)
-    if (r._is_ok) dispatch_post_command_hooks("open", r._value)
+    if (is_ok(r)) dispatch_post_command_hooks("open", unwrap(r))
     return with_await(input, r)
 }
 
@@ -1999,7 +1999,7 @@ def imgui_open(input : JsonValue?) : JsonValue? {
 def imgui_close(input : JsonValue?) : JsonValue? {
     //! Live-command: close the container named by ``input["target"]`` (window/popup/tree_node/collapsing_header/tab_item).
     let r = dispatch_or_err("close", input)
-    if (r._is_ok) dispatch_post_command_hooks("close", r._value)
+    if (is_ok(r)) dispatch_post_command_hooks("close", unwrap(r))
     return with_await(input, r)
 }
 
@@ -2009,7 +2009,7 @@ def imgui_select(input : JsonValue?) : JsonValue? {
     //! of clicking a tab (ImGui owns active-tab selection, so an inactive tab can't be reached by
     //! ``imgui_click``). Routes through ImGuiTabItemFlags.SetSelected next frame; sets ``state.selected = true``.
     let r = dispatch_or_err("select", input)
-    if (r._is_ok) dispatch_post_command_hooks("select", r._value)
+    if (is_ok(r)) dispatch_post_command_hooks("select", unwrap(r))
     return with_await(input, r)
 }
 
@@ -2017,7 +2017,7 @@ def imgui_select(input : JsonValue?) : JsonValue? {
 def imgui_focus(input : JsonValue?) : JsonValue? {
     //! Live-command: force keyboard focus onto ``input["target"]``; the widget's path must have been tagged via :ref:`register_focusable <function-imgui_boost_runtime_register_focusable_string>`.
     let r = dispatch_or_err("focus", input)
-    if (r._is_ok) dispatch_post_command_hooks("focus", r._value)
+    if (is_ok(r)) dispatch_post_command_hooks("focus", unwrap(r))
     return with_await(input, r)
 }
 
@@ -2025,7 +2025,7 @@ def imgui_focus(input : JsonValue?) : JsonValue? {
 def imgui_dock(input : JsonValue?) : JsonValue? {
     //! Live-command: re-dock the dock_window named by ``input["target"]`` into the dock node id supplied in ``input["value"]`` (a ``uint`` from a ``DockBuilder*`` call). Routes through SetNextWindowDockID on the next frame.
     let r = dispatch_or_err("dock", input)
-    if (r._is_ok) dispatch_post_command_hooks("dock", r._value)
+    if (is_ok(r)) dispatch_post_command_hooks("dock", unwrap(r))
     return with_await(input, r)
 }
 
@@ -2033,7 +2033,7 @@ def imgui_dock(input : JsonValue?) : JsonValue? {
 def imgui_undock(input : JsonValue?) : JsonValue? {
     //! Live-command: undock the dock_window named by ``input["target"]``; the window becomes free-floating. Routes through SetNextWindowDockID(0) on the next frame.
     let r = dispatch_or_err("undock", input)
-    if (r._is_ok) dispatch_post_command_hooks("undock", r._value)
+    if (is_ok(r)) dispatch_post_command_hooks("undock", unwrap(r))
     return with_await(input, r)
 }
 
@@ -2041,7 +2041,7 @@ def imgui_undock(input : JsonValue?) : JsonValue? {
 def imgui_raise(input : JsonValue?) : JsonValue? {
     //! Live-command: bring the dock_window named by ``input["target"]`` to the front of its dock node — when several windows are docked into one node (so they render as a tab strip), this selects that window's tab. Routes through SetNextWindowFocus() on the next frame. The automation counterpart of clicking a tab; ``imgui_click`` can't reach a dock node's internal tab bar.
     let r = dispatch_or_err("raise", input)
-    if (r._is_ok) dispatch_post_command_hooks("raise", r._value)
+    if (is_ok(r)) dispatch_post_command_hooks("raise", unwrap(r))
     return with_await(input, r)
 }
 
@@ -2049,7 +2049,7 @@ def imgui_raise(input : JsonValue?) : JsonValue? {
 def imgui_dock_reset(input : JsonValue?) : JsonValue? {
     //! Live-command: reset the dockspace named by ``input["target"]`` — clears the DockBuilder node tree and flips ``state.has_initial_layout`` back to false so the user's setup function re-runs on the next frame.
     let r = dispatch_or_err("reset", input)
-    if (r._is_ok) dispatch_post_command_hooks("reset", r._value)
+    if (is_ok(r)) dispatch_post_command_hooks("reset", unwrap(r))
     return with_await(input, r)
 }
 
@@ -2057,7 +2057,7 @@ def imgui_dock_reset(input : JsonValue?) : JsonValue? {
 def imgui_set_window_pos(input : JsonValue?) : JsonValue? {
     //! Live-command: reposition the dock_window named by ``input["target"]``. ``value`` is a JSON object with required ``x``/``y`` and optional ``w``/``h``. Routes through SetNextWindowPos / SetNextWindowSize on the next frame; useful for placing a window after ``imgui_undock`` (the floating-window default location is implementation-defined) or for scripted layouts.
     let r = dispatch_or_err("set_window_pos", input)
-    if (r._is_ok) dispatch_post_command_hooks("set_window_pos", r._value)
+    if (is_ok(r)) dispatch_post_command_hooks("set_window_pos", unwrap(r))
     return with_await(input, r)
 }
 
@@ -2065,7 +2065,7 @@ def imgui_set_window_pos(input : JsonValue?) : JsonValue? {
 def imgui_set_window_size(input : JsonValue?) : JsonValue? {
     //! Live-command: resize the window named by ``input["target"]`` to (``w``, ``h``). Routes through SetNextWindowSize on the next frame via the regular-window dispatcher's ``pending_size`` rail. Used by the ``window_size_constraints`` recording driver to demonstrate the SetNextWindowSizeConstraints callbacks (snap/aspect/quantize) without needing a real border-drag synth.
     let r = dispatch_or_err("set_window_size", input)
-    if (r._is_ok) dispatch_post_command_hooks("set_window_size", r._value)
+    if (is_ok(r)) dispatch_post_command_hooks("set_window_size", unwrap(r))
     return with_await(input, r)
 }
 

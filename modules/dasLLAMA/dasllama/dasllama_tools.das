@@ -617,7 +617,7 @@ def private xml_function_value_json(v : string; ty : string) : string {
         return (bare == "true" || bare == "false") ? bare : json_quoted(v)
     }
     if (ty == "integer" || ty == "number") {
-        return try_to_float(bare)._is_ok ? bare : json_quoted(v)
+        return is_ok(try_to_float(bare)) ? bare : json_quoted(v)
     }
     return (starts_with(bare, "\{") || starts_with(bare, "[")) ? json_value_or_quoted(bare) : json_quoted(v)
 }

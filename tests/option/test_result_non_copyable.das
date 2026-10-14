@@ -32,16 +32,16 @@ def make_arr(a : int; b : int) : array<int> => <- [a, b]
 def test_constructors(t : T?) {
     t |> run("ok carries a non-copyable payload") @(t : T?) {
         let r = ok(make_arr(1, 2), type<string>)
-        t |> success(r._is_ok)
-        t |> equal(length(r._value), 2)
-        t |> equal(r._value[0], 1)
-        t |> equal(r._value[1], 2)
+        t |> success(is_ok(r))
+        t |> equal(length(unwrap(r)), 2)
+        t |> equal(unwrap(r)[0], 1)
+        t |> equal(unwrap(r)[1], 2)
     }
 
     t |> run("err with a non-copyable T witness") @(t : T?) {
         let r = err("boom", type<array<int>>)
-        t |> success(!r._is_ok)
-        t |> equal(r._error, "boom")
+        t |> success(is_err(r))
+        t |> equal(unwrap_err(r), "boom")
     }
 
     t |> run("is_ok / is_err on Result<array<int>, string>") @(t : T?) {
@@ -55,18 +55,18 @@ def test_move_ok(t : T?) {
     t |> run("move_ok moves a non-copyable value payload out of the source") @(t : T?) {
         var src = make_arr(1, 2)
         let r = move_ok(src, type<string>)
-        t |> success(r._is_ok)
-        t |> equal(length(r._value), 2)
-        t |> equal(r._value[0], 1)
-        t |> equal(r._value[1], 2)
+        t |> success(is_ok(r))
+        t |> equal(length(unwrap(r)), 2)
+        t |> equal(unwrap(r)[0], 1)
+        t |> equal(unwrap(r)[1], 2)
         t |> equal(length(src), 0)
     }
 
     t |> run("move_ok works on a copyable payload too") @(t : T?) {
         let n = 42
         let r = move_ok(n, type<string>)
-        t |> success(r._is_ok)
-        t |> equal(r._value, 42)
+        t |> success(is_ok(r))
+        t |> equal(unwrap(r), 42)
     }
 }
 
@@ -75,18 +75,18 @@ def test_move_err(t : T?) {
     t |> run("move_err moves a non-copyable error payload out of the source") @(t : T?) {
         var src = make_arr(7, 8)
         let r = move_err(src, type<int>)
-        t |> success(!r._is_ok)
-        t |> equal(length(r._error), 2)
-        t |> equal(r._error[0], 7)
-        t |> equal(r._error[1], 8)
+        t |> success(is_err(r))
+        t |> equal(length(unwrap_err(r)), 2)
+        t |> equal(unwrap_err(r)[0], 7)
+        t |> equal(unwrap_err(r)[1], 8)
         t |> equal(length(src), 0)
     }
 
     t |> run("move_err works on a copyable error too") @(t : T?) {
         let s = "boom"
         let r = move_err(s, type<int>)
-        t |> success(!r._is_ok)
-        t |> equal(r._error, "boom")
+        t |> success(is_err(r))
+        t |> equal(unwrap_err(r), "boom")
     }
 }
 
@@ -94,20 +94,20 @@ def test_move_err(t : T?) {
 def test_map(t : T?) {
     t |> run("map Result<array<int>, string> -> Result<int, string>") @(t : T?) {
         let m = ok(make_arr(1, 2), type<string>) |> map($(v : array<int>) => length(v))
-        t |> success(m._is_ok)
-        t |> equal(m._value, 2)
+        t |> success(is_ok(m))
+        t |> equal(unwrap(m), 2)
     }
 
     t |> run("map keeps a non-copyable output type") @(t : T?) {
         let m = ok(make_arr(1, 2), type<string>) |> map($(v : array<int>) => make_arr(length(v), 0))
-        t |> success(m._is_ok)
-        t |> equal(m._value[0], 2)
+        t |> success(is_ok(m))
+        t |> equal(unwrap(m)[0], 2)
     }
 
     t |> run("map leaves err as err") @(t : T?) {
         let m = err("boom", type<array<int>>) |> map($(v : array<int>) => length(v))
-        t |> success(!m._is_ok)
-        t |> equal(m._error, "boom")
+        t |> success(is_err(m))
+        t |> equal(unwrap_err(m), "boom")
     }
 }
 
@@ -115,15 +115,15 @@ def test_map(t : T?) {
 def test_map_err(t : T?) {
     t |> run("map_err leaves ok unchanged") @(t : T?) {
         let m = ok(make_arr(1, 2), type<string>) |> map_err($(e : string) => "<{e}>")
-        t |> success(m._is_ok)
-        t |> equal(length(m._value), 2)
-        t |> equal(m._value[0], 1)
+        t |> success(is_ok(m))
+        t |> equal(length(unwrap(m)), 2)
+        t |> equal(unwrap(m)[0], 1)
     }
 
     t |> run("map_err transforms err side") @(t : T?) {
         let m = err("boom", type<array<int>>) |> map_err($(e : string) => "<{e}>")
-        t |> success(!m._is_ok)
-        t |> equal(m._error, "<boom>")
+        t |> success(is_err(m))
+        t |> equal(unwrap_err(m), "<boom>")
     }
 }
 
@@ -131,19 +131,19 @@ def test_map_err(t : T?) {
 def test_and_then(t : T?) {
     t |> run("and_then chains ok -> ok") @(t : T?) {
         let r = ok(make_arr(1, 2), type<string>) |> and_then($(v : array<int>) => ok(length(v), type<string>))
-        t |> equal(r._value, 2)
+        t |> equal(unwrap(r), 2)
     }
 
     t |> run("and_then with non-copyable output") @(t : T?) {
         let r = ok(make_arr(1, 2), type<string>) |> and_then($(v : array<int>) => ok(make_arr(length(v), 0), type<string>))
-        t |> success(r._is_ok)
-        t |> equal(r._value[0], 2)
+        t |> success(is_ok(r))
+        t |> equal(unwrap(r)[0], 2)
     }
 
     t |> run("and_then on err short-circuits") @(t : T?) {
         let r = err("boom", type<array<int>>) |> and_then($(v : array<int>) => ok(length(v), type<string>))
-        t |> success(!r._is_ok)
-        t |> equal(r._error, "boom")
+        t |> success(is_err(r))
+        t |> equal(unwrap_err(r), "boom")
     }
 }
 
@@ -151,14 +151,14 @@ def test_and_then(t : T?) {
 def test_or_else(t : T?) {
     t |> run("or_else passes ok through") @(t : T?) {
         let r = ok(make_arr(1, 2), type<string>) |> or_else($(e : string) => ok(make_arr(9, 9), type<string>))
-        t |> success(r._is_ok)
-        t |> equal(r._value[0], 1)
+        t |> success(is_ok(r))
+        t |> equal(unwrap(r)[0], 1)
     }
 
     t |> run("or_else recovers from err") @(t : T?) {
         let r = err("boom", type<array<int>>) |> or_else($(e : string) => ok(make_arr(9, 10), type<string>))
-        t |> success(r._is_ok)
-        t |> equal(r._value[0], 9)
+        t |> success(is_ok(r))
+        t |> equal(unwrap(r)[0], 9)
     }
 }
 
@@ -200,9 +200,7 @@ def test_move_unwrap(t : T?) {
         t |> equal(length(arr), 2)
         t |> equal(arr[0], 5)
         t |> equal(arr[1], 6)
-        // Source is moved-from: tag flipped, payload zeroed.
-        t |> success(!r._is_ok)
-        t |> equal(length(r._value), 0)
+        t |> success(is_err(r))
     }
 }
 
@@ -251,24 +249,24 @@ def test_if_ok_if_err(t : T?) {
 def test_bridges(t : T?) {
     t |> run("to_option of ok carries the array") @(t : T?) {
         let o = ok(make_arr(7, 8), type<string>) |> to_option
-        t |> success(o._has_value)
-        t |> equal(length(o._value), 2)
+        t |> success(is_some(o))
+        t |> equal(length(unwrap(o)), 2)
     }
 
     t |> run("to_option of err is none") @(t : T?) {
         let o = err("e", type<array<int>>) |> to_option
-        t |> success(!o._has_value)
+        t |> success(is_none(o))
     }
 
     t |> run("err_to_option of err carries the error") @(t : T?) {
         let o = err("boom", type<array<int>>) |> err_to_option
-        t |> success(o._has_value)
-        t |> equal(o._value, "boom")
+        t |> success(is_some(o))
+        t |> equal(unwrap(o), "boom")
     }
 
     t |> run("err_to_option of ok is none") @(t : T?) {
         let o = ok(make_arr(1, 2), type<string>) |> err_to_option
-        t |> success(!o._has_value)
+        t |> success(is_none(o))
     }
 }
 

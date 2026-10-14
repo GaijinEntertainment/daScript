@@ -52,7 +52,7 @@ def test_sql_try_delete_returning_ok(t : T?) {
         fixture(db)
         var r <- db |> _sql_try_delete_returning(type<User>, _.Id == 1)
         t |> equal(r |> is_ok(), true, "try_delete_returning Ok on success")
-        let rows <- r._value
+        let rows <- move_unwrap(r)
         t |> equal(length(rows), 1, "Ok payload contains 1 returned row")
         t |> equal(rows[0].Name, "alice", "returned row carries pre-delete column data")
     }

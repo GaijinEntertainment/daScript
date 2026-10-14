@@ -32,7 +32,7 @@ def test_try_sql_array_ok(t : T?) {
         fixture(db)
         var res <- _try_sql(db |> select_from(type<Car>))
         t |> success(res |> is_ok, "well-formed query -> ok")
-        let cars <- res._value
+        let cars <- move_unwrap(res)
         t |> equal(length(cars), 2, "2 rows")
     }
 }

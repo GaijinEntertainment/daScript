@@ -47,9 +47,8 @@ use(unwrap(r))
   clean.
 - **`try_to_int` / `try_to_float`** *(strings_convert)* cover `int8`...`uint64`, `float`, `double`
   and distinguish `invalid_argument`, `out_of_range`, `trailing_garbage`. Accessors (`is_ok` /
-  `unwrap` / `unwrap_or` / `map` / `and_then` / `??`) arrive transitively. `Result` is a structural
-  **tuple**, not a variant - `r is value` is `error[30190]`; never touch the raw `_is_ok` /
-  `_value` / `_error` fields.
+  `unwrap` / `unwrap_or` / `map` / `and_then` / `??`) arrive transitively. `Result` is the variant
+  `variant<err : E; ok : T>`: `r is ok` tests it, and `match` takes `ok(x)` / `err(e)` patterns.
 - **Raw builtins do not flag trailing garbage.** `int(s, var conv, var consumed, accept_hex)`
   (3-arg for `float` / `double`) reports `conv = ok` on `"12abc"`, `consumed = 2`; only
   `consumed != length(s)` catches it.

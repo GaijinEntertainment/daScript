@@ -65,7 +65,7 @@ def main : int { // nolint:STYLE037,STYLE038 — flat CLI dispatch, one arm per 
         print("error: cannot open {cfg.db}: {open_result |> unwrap_err}\n")
         return 1
     }
-    var inscope db <- open_result._value
+    var inscope db <- move_unwrap(open_result)
     // sqlite3_open CREATES an empty file for a mistyped path, so "opened" does
     // not mean "has the schema" — and every store call below would panic in
     // prepare instead of reporting the path. Migrating first also makes the CLI

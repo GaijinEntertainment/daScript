@@ -476,6 +476,7 @@ class TemplateStructure : AstStructureAnnotation {
 [structure_macro(name="template_tuple")]
 class TemplateTuple : AstStructureAnnotation {
     //! Like ``[template_structure]``, but produces a typemacro that returns a named tuple instead of cloning a structure. Result is structural — no module home, no per-consumer cloning. Use for sum-type / discriminated- pair shapes (``Option``, ``Result``) where structural identity across transitive ``require ... public`` is the desired behavior (issue #2598).
+    kind : Type = Type.tTuple
     def override apply(var st : StructurePtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool { // nolint:STYLE038 — pre-existing tuple-typemacro emission; one sequential build, no free-standing seam
         if (length(args) == 0) {
             errors := "expecting at least one template argument name"
@@ -510,7 +511,7 @@ class TemplateTuple : AstStructureAnnotation {
         }]
         var typeMacroFunction = qmacro_function(typeMacroFunctionName) $(macroArgument, passArgument : TypeDeclPtr; $a(ctxFnArguments)) : TypeDeclPtr {
             if (passArgument != null) {
-                if (passArgument.baseType != Type.tTuple) {
+                if (passArgument.baseType != $v(kind)) {
                     return null
                 }
                 if (length(passArgument.argTypes) != $v(nFields)) {
@@ -537,7 +538,7 @@ class TemplateTuple : AstStructureAnnotation {
             }
             var src_type = typeinfo ast_typedecl(type<$t(aliasT)>)
             var src = src_type.structType
-            var tt = new TypeDecl(baseType = Type.tTuple, at = macroArgument.at)
+            var tt = new TypeDecl(baseType = $v(kind), at = macroArgument.at)
             tt.argNames |> resize($v(nFields))
             for (i, fld in iter_range(src.fields), src.fields) {
                 var fldType <- clone_type(fld._type)
@@ -558,6 +559,14 @@ class TemplateTuple : AstStructureAnnotation {
         }
         return true
     }
+}
+
+[structure_macro(name="template_variant")]
+class TemplateVariant : TemplateTuple {
+    //! Like ``[template_tuple]``, but the typemacro returns a variant:
+    //! each field is a case, and a ``void`` field is a case without a
+    //! value.
+    override kind : Type = Type.tVariant
 }
 
 [macro_function]

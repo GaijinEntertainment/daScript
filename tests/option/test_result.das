@@ -14,14 +14,14 @@ require daslib/result
 def test_constructors(t : T?) {
     t |> run("ok carries the value") @(t : T?) {
         let r = ok(42, type<string>)
-        t |> success(r._is_ok)
-        t |> equal(r._value, 42)
+        t |> success(is_ok(r))
+        t |> equal(unwrap(r), 42)
     }
 
     t |> run("err carries the error") @(t : T?) {
         let r = err("boom", type<int>)
-        t |> success(!r._is_ok)
-        t |> equal(r._error, "boom")
+        t |> success(is_err(r))
+        t |> equal(unwrap_err(r), "boom")
     }
 
     t |> run("is_ok / is_err") @(t : T?) {
@@ -40,18 +40,18 @@ def test_constructors(t : T?) {
 def test_map(t : T?) {
     t |> run("map transforms ok") @(t : T?) {
         let m = ok(3, type<string>) |> map($(x : int) => x * 2)
-        t |> equal(m._value, 6)
+        t |> equal(unwrap(m), 6)
     }
 
     t |> run("map leaves err as err") @(t : T?) {
         let m = err("boom", type<int>) |> map($(x : int) => x * 2)
-        t |> success(!m._is_ok)
-        t |> equal(m._error, "boom")
+        t |> success(is_err(m))
+        t |> equal(unwrap_err(m), "boom")
     }
 
     t |> run("map can change ok type") @(t : T?) {
         let m = ok(7, type<string>) |> map($(x : int) => "{x}")
-        t |> equal(m._value, "7")
+        t |> equal(unwrap(m), "7")
     }
 }
 
@@ -59,12 +59,12 @@ def test_map(t : T?) {
 def test_map_err(t : T?) {
     t |> run("map_err transforms err") @(t : T?) {
         let m = err("boom", type<int>) |> map_err($(e : string) => "wrapped: {e}")
-        t |> equal(m._error, "wrapped: boom")
+        t |> equal(unwrap_err(m), "wrapped: boom")
     }
 
     t |> run("map_err leaves ok unchanged") @(t : T?) {
         let m = ok(3, type<string>) |> map_err($(e : string) => "x")
-        t |> equal(m._value, 3)
+        t |> equal(unwrap(m), 3)
     }
 }
 
@@ -72,19 +72,19 @@ def test_map_err(t : T?) {
 def test_and_then(t : T?) {
     t |> run("and_then chains ok → ok") @(t : T?) {
         let next = ok(4, type<string>) |> and_then($(x : int) => ok(x + 10, type<string>))
-        t |> equal(next._value, 14)
+        t |> equal(unwrap(next), 14)
     }
 
     t |> run("and_then on err short-circuits") @(t : T?) {
         let next = err("boom", type<int>) |> and_then($(x : int) => ok(x + 10, type<string>))
-        t |> success(!next._is_ok)
-        t |> equal(next._error, "boom")
+        t |> success(is_err(next))
+        t |> equal(unwrap_err(next), "boom")
     }
 
     t |> run("and_then can return err") @(t : T?) {
         let next = ok(5, type<string>) |> and_then($(x : int) => err("rejected", type<int>))
-        t |> success(!next._is_ok)
-        t |> equal(next._error, "rejected")
+        t |> success(is_err(next))
+        t |> equal(unwrap_err(next), "rejected")
     }
 }
 
@@ -92,12 +92,12 @@ def test_and_then(t : T?) {
 def test_or_else(t : T?) {
     t |> run("or_else passes ok through") @(t : T?) {
         let rec = ok(1, type<string>) |> or_else($(e : string) => ok(99, type<string>))
-        t |> equal(rec._value, 1)
+        t |> equal(unwrap(rec), 1)
     }
 
     t |> run("or_else recovers on err") @(t : T?) {
         let rec = err("boom", type<int>) |> or_else($(e : string) => ok(99, type<string>))
-        t |> equal(rec._value, 99)
+        t |> equal(unwrap(rec), 99)
     }
 }
 
@@ -132,13 +132,13 @@ def test_unwrap(t : T?) {
     t |> run("move_unwrap on copyable T returns value, flips r to err state") @(t : T?) {
         var r = ok(42, type<string>)
         t |> equal(r |> move_unwrap, 42)
-        t |> success(!r._is_ok)
+        t |> success(is_err(r))
     }
 
     t |> run("move_unwrap_err on copyable E returns error, flips r to ok state") @(t : T?) {
         var r = err("boom", type<int>)
         t |> equal(r |> move_unwrap_err, "boom")
-        t |> success(r._is_ok)
+        t |> success(is_ok(r))
     }
 }
 
@@ -221,24 +221,24 @@ def test_if_ok_if_err(t : T?) {
 def test_to_option(t : T?) {
     t |> run("to_option on ok is some") @(t : T?) {
         let o = ok(42, type<string>) |> to_option
-        t |> success(o._has_value)
-        t |> equal(o._value, 42)
+        t |> success(is_some(o))
+        t |> equal(unwrap(o), 42)
     }
 
     t |> run("to_option on err is none") @(t : T?) {
         let o = err("boom", type<int>) |> to_option
-        t |> success(!o._has_value)
+        t |> success(is_none(o))
     }
 
     t |> run("err_to_option on err is some") @(t : T?) {
         let o = err("boom", type<int>) |> err_to_option
-        t |> success(o._has_value)
-        t |> equal(o._value, "boom")
+        t |> success(is_some(o))
+        t |> equal(unwrap(o), "boom")
     }
 
     t |> run("err_to_option on ok is none") @(t : T?) {
         let o = ok(42, type<string>) |> err_to_option
-        t |> success(!o._has_value)
+        t |> success(is_none(o))
     }
 }
 
@@ -261,6 +261,6 @@ def test_chaining(t : T?) {
             |> map($(x : int) => x * 2)
             |> map_err($(s : string) => "<{s}>"))
         t |> equal(on_err |> unwrap_or(-1), -1)
-        t |> equal(on_err._error, "<boom>")
+        t |> equal(unwrap_err(on_err), "<boom>")
     }
 }

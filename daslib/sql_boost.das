@@ -329,15 +329,20 @@ def private resolve_schema_from_path(p : string) : string {
     return path_join(get_das_root(), p)
 }
 
+def private is_option_variant(td : TypeDeclPtr) : bool {
+    //! ``variant<none; some : T>`` - what ``Option<T>`` resolves to.
+    return (td.baseType == Type.tVariant
+            && length(td.argTypes) == 2
+            && length(td.argNames) == 2
+            && td.argNames[0] == "none"
+            && td.argNames[1] == "some"
+            && td.argTypes[0].baseType == Type.tVoid)
+}
+
 def is_option_field_type(td : TypeDeclPtr) : bool {
     if (td == null) return false
     if (td.baseType == Type.typeMacro && !empty(td.typeMacroExpr) && (td.typeMacroExpr[0] is ExprConstString)) return (td.typeMacroExpr[0] as ExprConstString).value == "Option"
-    return (td.baseType == Type.tTuple
-            && length(td.argTypes) == 2
-            && length(td.argNames) == 2
-            && td.argNames[0] == "_has_value"
-            && td.argNames[1] == "_value"
-            && td.argTypes[0].baseType == Type.tBool)
+    return is_option_variant(td)
 }
 
 def unwrap_option_payload_type(var td : TypeDeclPtr) : TypeDeclPtr {
@@ -348,12 +353,7 @@ def unwrap_option_payload_type(var td : TypeDeclPtr) : TypeDeclPtr {
             || td.typeMacroExpr[1] == null || !(td.typeMacroExpr[1] is ExprTypeDecl)) return td
         return clone_type((td.typeMacroExpr[1] as ExprTypeDecl).typeexpr)
     }
-    if (td.baseType == Type.tTuple
-            && length(td.argTypes) == 2
-            && length(td.argNames) == 2
-            && td.argNames[0] == "_has_value"
-            && td.argNames[1] == "_value"
-            && td.argTypes[0].baseType == Type.tBool) return clone_type(td.argTypes[1])
+    if (is_option_variant(td)) return clone_type(td.argTypes[1])
     return td
 }
 
@@ -813,7 +813,7 @@ class SqlTableMacro : AstStructureAnnotation {
             errors := "[sql_table]: schema_from=\"{raw_path}\" - {cols_result |> unwrap_err}"
             return false
         }
-        let cols <- cols_result._value
+        let cols <- move_unwrap(cols_result)
         if (empty(cols)) {
             errors := "[sql_table]: schema_from=\"{raw_path}\" - table \"{tbl_name}\" has no columns or doesn't exist in this database."
             return false

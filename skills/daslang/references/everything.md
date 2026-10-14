@@ -7807,6 +7807,7 @@ The TYPEMACRO_BOOST module provides infrastructure for defining type macros — 
 ### Structure macros
 
 - `template_tuple` - Like `[template_structure]`, but produces a typemacro that returns a named tuple instead of cloning a structure.
+- `template_variant` - Like `[template_tuple]`, but the typemacro returns a variant: each field is a case, and a `void` field is a case without a value.
 - `template_structure` - This macro creates typemacro function and associates it with the structure.
 - `typemacro_documentation` - Structure annotation that stores type macro documentation metadata.
 - `typemacro_template` - Structure annotation that marks a struct as a type macro template instance.

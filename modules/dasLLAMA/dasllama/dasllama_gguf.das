@@ -368,12 +368,12 @@ def private gguf_split_paths(path : string; missing_ok : bool) : array<string> {
     }
     let ridx = try_to_int(slice(tail, 1, 6))
     let rcnt = try_to_int(slice(tail, 10, 15))
-    if (!ridx._is_ok || !rcnt._is_ok) {
+    if (is_err(ridx) || is_err(rcnt)) {
         res |> push(path)
         return <- res
     }
-    let cnt = rcnt._value
-    if (ridx._value < 1 || cnt < 1 || ridx._value > cnt) {
+    let cnt = unwrap(rcnt)
+    if (unwrap(ridx) < 1 || cnt < 1 || unwrap(ridx) > cnt) {
         res |> push(path)
         return <- res
     }
