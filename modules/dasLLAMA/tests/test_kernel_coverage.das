@@ -986,10 +986,6 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // 64-deep chunks divide takes the f16 route, so the scalar tile runs only off it (a dim off
     // 512, the KHR route). Its coverage is test_vkd_moe_routing's router arm in test_vulkan_kernels.das
     "router_gemm_cls_spv",
-    // the scalar beta/alpha GEMM: the same route split for a hybrid's f32 beta/alpha rows on the f16
-    // feed; off the f16 feed (DASLLAMA_COOPMAT=sdot4) it runs. Its coverage is the dn_ba run of
-    // test_vkd_dn_family in test_vulkan_kernels.das
-    "dn_ba_cls_spv",
     // the N-column decode GEMV leaves serve only the N-row token command, which the zoo's one-region loads never
     // engage (a batched step here rides f32 sessions on the per-op rails); the q8 row-pair stamps serve only past
     // `g_q8_n2_min_n`, off until a box's token command proves the pair. Their coverage is test_vkd_gemv_ncol in
