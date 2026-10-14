@@ -62,6 +62,14 @@ what it costs today and what the fix would change.
     checkpoint goes down in about 15 ms, a new conversation forcing three copies and an upload pays about 64 ms at
     admission. 22 of 124 warm replies differ from the card-only run: the attach position moves, and the split prefill's
     routed numerics with it.
+  - The M4 arm (`DASLLAMA_METAL_TENSOR=0`, the box crowned, served at one stream): the 35B IQ4_XS, two alternated rounds,
+    leg against base, each round's figure listed - decode 188.9, 176.0 against 158.4, 150.0 (3k) and 175.2, 166.3 against
+    147.8, 141.4 (9k); cold TTFT 733, 934 against 726, 850 ms (3k) and 2710, 3123 against 2679, 2952 (9k) - decode 18 %
+    ahead on the base forms, the cold window inside the rounds' own drift (the second round slower on both trees). The
+    same arm on the leg across the file's forms, one round each: UD-Q4_K_M (Q4_K / Q5_K experts, Q8_0 rest) cold 1042 /
+    3662 ms, decode 139.1 / 131.6; Q8_0 cold 2001 (cv 19 %) / 5229 (cv 3.6 %) ms, decode 96.8 (cv 13 %) / 104.2 (cv
+    6.5 %) - every Q8_0 row and a second UD-Q4_K_M round sit past the 3 % line (the box after an hour of back-to-back
+    loads), so the Q8_0 column is a direction only; the IQ4_XS file is the M4 arm's pick on both axes.
 - **MEASURED (2026-10-13) - the Metal routed base form's bars (`tests/test_metal_prefill_parity.das`,
   `test_metal_prefill_moe_base_form`, the `moe-base` arm).** A `tests/run.das` cell; the GPU side is the Metal prefill
   window with the gather panel held off (`set_metal_moe_gather_min(1000000)`, so the gate and up sites ride the base form
