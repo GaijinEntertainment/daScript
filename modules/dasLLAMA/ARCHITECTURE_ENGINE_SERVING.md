@@ -155,8 +155,9 @@ crosses the bus per token; the pool holds the parked and the evicted state.
   it. At the park the openings go into the cache (`pool_export_live`; every request on a system prompt leaves one, so after
   the first it is a touch), and the tails - the conversation's own stops and its finished turn, a dense model's rows - stay
   listed on the parked claim (`ParkedKv.tails`). They go into the cache when the region is about to change hands
-  (`flush_parked`, `pool_export_parked`, read off the parked region's slots and rows): before an adopter rewrites the claim's
-  rows past the opening it takes, before a fresh or pooled session binds the least recently used regions
+  (`flush_parked`, `pool_export_parked`, read off the parked region's slots and rows): before another conversation on the
+  claim's opening rewrites the claim's rows past it (an adopter short of the claim's first tail; the conversation's own next
+  turn, past that tail, supersedes them), before a fresh or pooled session binds the least recently used regions
   (`flush_victims`, `gpu_device_kv_victim_claims`: one region for each stream admitted but not yet in one), and before a claim
   drops out of the parked list. A tail a later stop of the same conversation overwrites in the region's checkpoint rows is not
   copied: the conversation's newer tail extends it. The rows come down into a carrier session's pages (`Scheduler.pool_host`, a paged session of the pool that
@@ -168,7 +169,10 @@ crosses the bus per token; the pool holds the parked and the evicted state.
   checkpoint row its stop saved - in one submit, the region left as it stands (`gpu_device_kv_snapshot`,
   `gpu_device_kv_parked_snapshot`, `rdec_dn_peek`: a flush would hand a live stream's slots back and its next chunk would take
   them up again), and enters through `prefix_insert_snapshot`. A checkpoint the cache already holds is touched instead
-  (`prefix_state_touch`), so nothing is read.
+  (`prefix_state_touch`), so nothing is read. The copies out of the driver's staging run a layer, or a page run, a lane
+  (one thread's memcpy is the move's floor), into the arrays of a checkpoint the cache dropped where one waits
+  (`PrefixCache.spare`, two at most, outside the budget: a full pool drops one a copy, and fresh arrays are fresh pages to
+  fault in).
 - **Up.** At admission (`device_attach`) the parked claim sharing the longest opening is weighed against the cache's longest
   (`prefix_state_match_len`, `prefix_match_len`); the device's is taken where it is as long - it costs no copy - and the pool's
   where it is longer: `prefix_attach_state_split` shares the checkpoint's pages into the carrier and restores its state into

@@ -5004,14 +5004,16 @@ def gpu_device_kv_victim_claims_(n : int) : array<int64> {
 //! row at `at` - copied into a snapshot shaped as `like` (any session of the model), the region left as it stands; a snapshot at
 //! position -1 where the claim is gone or holds no state at `at`
 [arch(at="../ARCHITECTURE_ENGINE_SERVING.md#device-home-pool")]
-def gpu_device_kv_parked_snapshot_(claim, at : int64; like : Session) : DnSnapshot {
+def gpu_device_kv_parked_snapshot_(claim, at : int64; like : Session; var into : DnSnapshot) : DnSnapshot {
     let r = rdec_region_of(claim)
-    return <- DnSnapshot(pos = -1l) if (!g_rdec_active || r < 0l || g_rdec_regions[r].pinned || at <= 0l || !empty(like.ple_conv_hist))
-    let slot = at == g_rdec_regions[r].dn_pos ? -2 : rdec_snap_at(g_rdec_regions[r], at)
-    return <- DnSnapshot(pos = -1l) if (slot == -1)
+    let slot = r < 0l ? -1 : (at == g_rdec_regions[r].dn_pos ? -2 : rdec_snap_at(g_rdec_regions[r], at))
+    if (!g_rdec_active || r < 0l || g_rdec_regions[r].pinned || at <= 0l || !empty(like.ple_conv_hist) || slot == -1) {
+        delete into
+        return <- DnSnapshot(pos = -1l)
+    }
     let t0 = ref_time_ticks()
     rdec_select_region(r)
-    var snap <- rdec_peek_snapshot(like, slot)
+    var snap <- rdec_peek_snapshot(like, slot, into)
     if (snap.pos == 0l) {
         snap.pos = at
         g_rdec_pool_moves.state_us += int64(get_time_usec(t0))
@@ -5020,9 +5022,14 @@ def gpu_device_kv_parked_snapshot_(claim, at : int64; like : Session) : DnSnapsh
 }
 
 //! the selected region's recurrent state - its live slots (`slot` -1), its slots as a parked claim left them (-2), or checkpoint
-//! row `slot` - into a fresh snapshot shaped as `like`, position 0 (the caller names it); position -1 where the driver holds none
-def private rdec_peek_snapshot(like : Session; slot : int) : DnSnapshot {
-    var snap : DnSnapshot
+//! row `slot` - into the snapshot `into` (moved in; a dropped one's arrays keep their room) shaped as `like`, position 0 (the caller
+//! names it); position -1 where the driver holds none
+def private rdec_peek_snapshot(like : Session; slot : int; var into : DnSnapshot) : DnSnapshot {
+    var snap <- into
+    snap.pos = 0l
+    snap.ple_hist |> clear()
+    snap.ple_prev |> clear()
+    snap.mtp_h |> clear()
     snap.state |> reserve(long_length(like.dn_state))
     snap.state |> resize_no_init(long_length(like.dn_state))   //! every float is the peek's
     snap.conv |> reserve(long_length(like.dn_conv_state))
@@ -5069,15 +5076,16 @@ def private rdec_pool_rows(t : Model; var host : Session; lo, hi : int64; up : b
 //! - copied off with the region left as it stands; a session the driver does not hold flushes (`dn_snapshot_take`); position -1 where
 //! neither holds `at`
 [arch(at="../ARCHITECTURE_ENGINE_SERVING.md#device-home-pool")]
-def gpu_device_kv_snapshot_(var s : Session; at : int64) : DnSnapshot {
+def gpu_device_kv_snapshot_(var s : Session; at : int64; var into : DnSnapshot) : DnSnapshot {
     let t0 = ref_time_ticks()
     let owned = g_rdec_active && s.device_kv && rdec_owns(s, s.rdec_region) && empty(s.ple_conv_hist)
     let slot = !owned || at == s.dn_pos ? -1 : rdec_snap_at(g_rdec_regions[s.rdec_region], at)
     var snap : DnSnapshot
     if (owned && (at == s.dn_pos || slot >= 0)) {
         rdec_select_region(s.rdec_region)
-        snap <- rdec_peek_snapshot(s, slot)
+        snap <- rdec_peek_snapshot(s, slot, into)
     } else {
+        delete into
         snap.pos = -1l
     }
     if (snap.pos < 0l) {

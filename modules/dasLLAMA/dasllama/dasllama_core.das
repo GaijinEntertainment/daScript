@@ -912,10 +912,17 @@ def gpu_device_kv_victim_claims(n : int) : array<int64> {
     return <- gpu_device_kv_victim_claims_(n)
 }
 
-def gpu_device_kv_parked_snapshot(claim : int64; at : int64; like : Session) : DnSnapshot {
+def gpu_device_kv_parked_snapshot(claim : int64; at : int64; like : Session; var into : DnSnapshot) : DnSnapshot {
     //! The recurrent state a parked ``claim`` keeps at position ``at`` (where its state stands, or a checkpoint),
-    //! copied off the device into a snapshot shaped as ``like``; ``pos`` -1 where none stands at ``at``.
-    return <- gpu_device_kv_parked_snapshot_(claim, at, like)
+    //! copied off the device into ``into`` (moved in; ``prefix_take_spare`` hands one whose arrays keep their room)
+    //! shaped as ``like``; ``pos`` -1 where none stands at ``at``.
+    return <- gpu_device_kv_parked_snapshot_(claim, at, like, into)
+}
+
+def prefix_take_spare(var cache : PrefixCache) : DnSnapshot {
+    //! A recurrent checkpoint ``cache`` dropped, to refill in place of a fresh snapshot (its arrays keep their
+    //! room), or an empty snapshot where none waits.
+    return <- prefix_take_spare_(cache)
 }
 
 def gpu_device_kv_import(model : Model; var session : Session; var host : Session; npos : int64) : bool {
@@ -938,11 +945,11 @@ def gpu_device_kv_pool_moves() : tuple<exports : int64; rows_down : int64; down_
     return (exports = m.exports, rows_down = m.rows_down, down_us = m.down_us, imports = m.imports, rows_up = m.rows_up, up_us = m.up_us, state_us = m.state_us)
 }
 
-def gpu_device_kv_snapshot(var session : Session; at : int64) : DnSnapshot {
-    //! The recurrent state a live device-home ``session`` held at position ``at`` - where it stands, or a checkpoint
-    //! ``gpu_device_kv_checkpoint`` kept - copied off its region with the region left as it stands (a session the
-    //! driver does not hold is flushed to the host as ``dn_snapshot_take`` does); ``pos`` -1 where no state stands at ``at``.
-    return <- gpu_device_kv_snapshot_(session, at)
+def gpu_device_kv_snapshot(var session : Session; at : int64; var into : DnSnapshot) : DnSnapshot {
+    //! The recurrent state a live device-home ``session`` held at ``at`` (where it stands, or a kept checkpoint) copied
+    //! off its region into ``into`` (moved in), the region left as it stands - a session the driver does not hold
+    //! flushes as ``dn_snapshot_take`` does; ``pos`` -1 where no state stands at ``at``.
+    return <- gpu_device_kv_snapshot_(session, at, into)
 }
 
 def prefix_state_match_len(cache : PrefixCache; prompt : array<int64>) : int64 {

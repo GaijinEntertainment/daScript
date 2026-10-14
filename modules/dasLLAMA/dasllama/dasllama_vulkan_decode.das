@@ -4382,14 +4382,8 @@ def vk_rdec_kv_xfer(spans : array<RdecKvSpan>; up : bool) : bool {
 
 //! spans `[i, j)` through the staging in one submit: host rows into it before the copies up, out of it after the copies down
 def private pool_xfer_batch(spans : array<RdecKvSpan>; i, j : int; up : bool) {
-    let base = unsafe(reinterpret<uint8?>(g_rd.pool_xfer.mapped))
     if (up) {
-        pool_xfer_walk(spans, i, j) $(sp : RdecKvSpan; off, bytes, rowb : int64) {
-            unsafe {
-                memcpy(reinterpret<void?>(base + off), reinterpret<void?>(sp.kp + sp.row0 * rowb), bytes)
-                memcpy(reinterpret<void?>(base + off + bytes), reinterpret<void?>(sp.vp + sp.row0 * rowb), bytes)
-            }
-        }
+        pool_xfer_host(spans, i, j, true)
     }
     batch_cmd_one_shot() $(raw : VkCommandBuffer) {
         pool_xfer_walk(spans, i, j) $(sp : RdecKvSpan; off, bytes, rowb : int64) {
@@ -4406,10 +4400,50 @@ def private pool_xfer_batch(spans : array<RdecKvSpan>; i, j : int; up : bool) {
         }
     }
     if (!up) {
-        pool_xfer_walk(spans, i, j) $(sp : RdecKvSpan; off, bytes, rowb : int64) {
-            unsafe {
-                memcpy(reinterpret<void?>(sp.kp + sp.row0 * rowb), reinterpret<void?>(base + off), bytes)
-                memcpy(reinterpret<void?>(sp.vp + sp.row0 * rowb), reinterpret<void?>(base + off + bytes), bytes)
+        pool_xfer_host(spans, i, j, false)
+    }
+}
+
+var private @scratch g_pool_xfer_offs : array<int64>
+var private @scratch g_pool_xfer_rowb : array<int64>
+var private @scratch g_pool_xfer_at : array<int>
+
+//! spans `[i, j)` between their host rows and the staging, a share of the spans a lane: one thread's memcpy is the move's floor
+def private pool_xfer_host(spans : array<RdecKvSpan>; i, j : int; up : bool) {
+    let base = unsafe(reinterpret<uint8?>(g_rd.pool_xfer.mapped))
+    g_pool_xfer_offs |> clear()
+    g_pool_xfer_rowb |> clear()
+    pool_xfer_walk(spans, i, j) $(_sp : RdecKvSpan; off, _bytes, rowb : int64) {
+        g_pool_xfer_offs |> push(off)
+        g_pool_xfer_rowb |> push(rowb)
+    }
+    g_pool_xfer_at |> clear()   //! the span each walked entry is: the walk skips a span with no mirror slab
+    for (s in range(i, j)) {
+        let L & = unsafe(spans[s].l == g_rd.n_layers ? g_rd.head : g_rd.layers[spans[s].l])
+        if (L.mir_idx >= 0l) {
+            g_pool_xfer_at |> push(s)
+        }
+    }
+    let k = length(g_pool_xfer_at)
+    return if (k == 0)
+    let sp0 = unsafe(addr<RdecKvSpan?>(spans[0]))   //! the lanes' lambda captures no array
+    let at0 = unsafe(addr<int?>(g_pool_xfer_at[0]))
+    let off0 = unsafe(addr<int64?>(g_pool_xfer_offs[0]))
+    let rowb0 = unsafe(addr<int64?>(g_pool_xfer_rowb[0]))
+    maybe_parallel_for(0, k, min(k, get_dispatch_lanes())) $(b, e) {
+        unsafe {
+            for (q in range(b, e)) {
+                let sp & = sp0[at0[q]]
+                let off = off0[q]
+                let rowb = rowb0[q]
+                let bytes = sp.nrows * rowb
+                if (up) {
+                    memcpy(reinterpret<void?>(base + off), reinterpret<void?>(sp.kp + sp.row0 * rowb), bytes)
+                    memcpy(reinterpret<void?>(base + off + bytes), reinterpret<void?>(sp.vp + sp.row0 * rowb), bytes)
+                } else {
+                    memcpy(reinterpret<void?>(sp.kp + sp.row0 * rowb), reinterpret<void?>(base + off), bytes)
+                    memcpy(reinterpret<void?>(sp.vp + sp.row0 * rowb), reinterpret<void?>(base + off + bytes), bytes)
+                }
             }
         }
     }
@@ -4659,7 +4693,7 @@ def private dnd_flush_down(st : DnStep) {
 [cold_path, arch(at="../ARCHITECTURE_ENGINE_SERVING.md#device-home-pool")]   //! once per pooled checkpoint, reached through the tier's registered seat
 def vk_rdec_dn_peek(slot : int64; dsts : array<RdecDnDst>) : bool {
     rd_chain_settle()
-    return false if (g_rd == null || !g_rd.ready || !g_rd.hybrid || slot >= int64(RDEC_DN_SNAPS) || (slot >= 0l && g_rd.snap_dev == 0ul))
+    return false if (g_rd == null || !g_rd.ready || !g_rd.hybrid || empty(dsts) || slot >= int64(RDEC_DN_SNAPS) || (slot >= 0l && g_rd.snap_dev == 0ul))
     let row = g_rd.region * int64(RDEC_DN_SNAPS) + slot
     var bytes = 0l
     for (d in dsts) {
@@ -4691,15 +4725,19 @@ def vk_rdec_dn_peek(slot : int64; dsts : array<RdecDnDst>) : bool {
             off += st.slot_state_bytes + st.ring_image_bytes
         }
     }
-    var off = 0l
     let base = unsafe(reinterpret<uint8?>(g_rd.pool_xfer.mapped))
-    for (d in dsts) {
-        let st & = unsafe(g_rd.layers[d.l].dn[g_rd.region])
-        unsafe {
-            memcpy(reinterpret<void?>(d.stp), reinterpret<void?>(base + off), st.slot_state_bytes)
-            memcpy(reinterpret<void?>(d.histp), reinterpret<void?>(base + off + st.slot_state_bytes), st.ring_image_bytes)
+    let st0 & = unsafe(g_rd.layers[dsts[0].l].dn[g_rd.region])   //! every recurrent layer's slot has one shape
+    let sb = st0.slot_state_bytes
+    let rb = st0.ring_image_bytes
+    let dp = unsafe(addr<RdecDnDst?>(dsts[0]))   //! the lanes' lambda captures no array
+    maybe_parallel_for(0, length(dsts), min(length(dsts), get_dispatch_lanes())) $(b, e) {   //! a layer a lane: one thread's memcpy out of the staging is the copy's floor
+        for (i in range(b, e)) {
+            let off = int64(i) * (sb + rb)
+            unsafe {
+                memcpy(reinterpret<void?>(dp[i].stp), reinterpret<void?>(base + off), sb)
+                memcpy(reinterpret<void?>(dp[i].histp), reinterpret<void?>(base + off + sb), rb)
+            }
         }
-        off += st.slot_state_bytes + st.ring_image_bytes
     }
     return true
 }

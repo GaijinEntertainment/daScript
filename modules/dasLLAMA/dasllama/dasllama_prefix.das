@@ -80,6 +80,7 @@ struct PrefixCache {
     n_state_hits : int64
     n_state_inserts : int64
     n_state_evicted : int64
+    spare : array<DnSnapshot>   //! the arrays of the last checkpoints dropped (`PREFIX_SPARE_SNAPS` at most, outside the byte budget), refilled by the next snapshot a device takes (`prefix_take_spare_`)
 }
 
 // FNV-1a 64 over the 8 bytes of v, continuing h.
@@ -175,11 +176,24 @@ def prefix_checkpoint_at_(cache : PrefixCache; pool : KVPool; s : Session; promp
     return opening >= floor_at ? opening : 0l
 }
 
+let PREFIX_SPARE_SNAPS = 2l   //! dropped checkpoints whose arrays wait for reuse: a full pool drops one a copy, so one would do; the second covers a copy that drops two
+
+//! A dropped checkpoint's snapshot to refill in place of a fresh one (its arrays keep their room), or an empty one where none waits
+def prefix_take_spare_(var cache : PrefixCache) : DnSnapshot {
+    return <- DnSnapshot() if (empty(cache.spare))
+    var snap <- cache.spare[length(cache.spare) - 1]
+    cache.spare |> pop()
+    return <- snap
+}
+
 def private prefix_state_drop(var cache : PrefixCache; var pool : KVPool; at : int) {
     for (g in cache.states[at].groups) {
         kv_pool_release_group(pool, g)
     }
     cache.n_state_evicted ++
+    if (long_length(cache.spare) < PREFIX_SPARE_SNAPS) {   //! the next snapshot taken off a device reuses these arrays: no fresh pages to fault in
+        cache.spare |> emplace(cache.states[at].snap)
+    }
     delete cache.states[at]   //! erase is a raw remove: the owned arrays go first
     cache.states |> erase(at)
     cache.state_bytes = prefix_states_bytes_(cache, pool)
@@ -608,6 +622,7 @@ def prefix_release_(var cache : PrefixCache; var pool : KVPool) {
     while (!empty(cache.states)) {
         prefix_state_drop(cache, pool, length(cache.states) - 1)   // release: the newest goes too
     }
+    delete cache.spare
 }
 
 //! Snapshot of the donated chains for dashboards (order unspecified).

@@ -779,6 +779,37 @@ def test_prefix_pool_carrier(t : T?) {   // nolint:STYLE038 — one pool and cac
     }
 }
 
+[test]
+def test_prefix_spare_snapshots(t : T?) {
+    t |> run("a dropped checkpoint's snapshot waits for reuse, two at most, outside the byte budget; an empty cache hands an empty one") @(t : T?) {
+        let c = mk_config(2l, 4l, 2l, 16l, 32l)
+        var pool <- create_kv_pool_(c, 4l, KVDtype.f32, KVDtype.f32)
+        var cache <- create_prefix_cache_(0l, 1l)
+        var none <- prefix_take_spare_(cache)
+        t |> equal(0, length(none.state), "nothing dropped: an empty snapshot")
+        for (k in range64(4l)) {
+            var s <- mk_recurrent(c, pool, 5l)
+            var inscope toks <- [for (i in range64(8l)); 100l * (k + 1l) + i]
+            prefix_insert_(cache, pool, s, toks)
+            release_kv_pages_(s)
+            delete s
+        }
+        t |> equal(1, length(cache.states), "a cap of one keeps the newest")
+        t |> equal(3l, cache.n_state_evicted)
+        t |> equal(2, length(cache.spare), "two of the three dropped wait")
+        var a <- prefix_take_spare_(cache)
+        t |> equal(8, length(a.state), "a spare keeps its arrays")
+        t |> equal(1, length(cache.spare))
+        prefix_release_(cache, pool)
+        t |> equal(0, length(cache.spare), "release drops the spares with the checkpoints")
+        t |> equal(long_length(pool.free_groups), pool.capacity_groups, "every page back")
+        delete a
+        delete none
+        delete cache
+        delete pool
+    }
+}
+
 def private restore_panics(var s : Session; snap : DnSnapshot) : bool {
     var tripped = false
     try {

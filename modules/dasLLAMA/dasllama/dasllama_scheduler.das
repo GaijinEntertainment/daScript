@@ -695,7 +695,9 @@ def private reap_finished(m : Model; var sch : Scheduler) {
                 prompt_head = sch.streams[i].prompt_head, gen_tail = string(sch.streams[i].gen_tail_bytes),
                 done_at = ref_time_ticks()))
             if (sch.streams[i].session.device_kv) {
+                let t_park = ref_time_ticks()
                 park_stream(m, sch, sch.streams[i])
+                to_log(LOG_INFO, "[stream {sch.streams[i].id}] parked in {int64(get_time_usec(t_park)) / 1000l} ms\n")
             } elif (sch.paged) {
                 if (sch.streams[i].finish != "media_lost") {
                     donate_stream(m, sch, sch.streams[i])
@@ -733,8 +735,10 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
                          think_budget = sch.queue[0].think_budget, think_marks <- sch.queue[0].think_marks)
         st.think_state = st.think_marks.opened ? 1 : 0
         if (sch.device_kv) {
+            let t_attach = ref_time_ticks()
             st.session <- create_device_session(m, gpu_device_session_dtype())
             let hit = device_attach(m, sch, st.session, st.prompt)   // a model whose prefill cannot continue parks and pools nothing, so nothing matches
+            to_log(LOG_INFO, "[stream {st.id}] device attach {int64(get_time_usec(t_attach)) / 1000l} ms\n")
             let matched = hit.n
             device_checkpoints_plan(st, sch.queue[0], matched)
             st.n_prefilled = matched
@@ -1174,7 +1178,9 @@ def private device_attach(m : Model; var sch : Scheduler; var session : Session;
             let n = pool_import(m, sch, session, prompt)
             return (n = n, pooled = true) if (n > 0l)
         }
-        flush_parked(m, sch, dev.at, dev.n)   //! the adopter rewrites the claim's rows past its opening
+        if (dev.at >= 0 && !empty(sch.parked[dev.at].tails) && dev.n < sch.parked[dev.at].tails[0]) {
+            flush_parked(m, sch, dev.at, dev.n)   //! another conversation on the claim's opening rewrites the rows past it; the claim's own next turn, past its first tail, supersedes them
+        }
     }
     return (n = parked_adopt(sch, session, dev.at, dev.n), pooled = false)
 }
@@ -1246,7 +1252,8 @@ def private pool_carrier_done(var sch : Scheduler) {
 [arch(at="../ARCHITECTURE_ENGINE_SERVING.md#device-home-pool")]
 def private pool_export_live(m : Model; var sch : Scheduler; var session : Session; tokens : array<int64>; n : int64; opening : bool) {
     return if (n <= 0l || prefix_state_touch(sch.prefix, tokens, n, opening))
-    var snap <- gpu_device_kv_snapshot(session, n)
+    var spare <- prefix_take_spare(sch.prefix)
+    var snap <- gpu_device_kv_snapshot(session, n, spare)
     pool_keep(m, sch, gpu_device_kv_claim(session), tokens, n, opening, true, snap)
 }
 
@@ -1256,7 +1263,9 @@ def private pool_export_live(m : Model; var sch : Scheduler; var session : Sessi
 def private pool_export_parked(m : Model; var sch : Scheduler; p : ParkedKv; n : int64) {
     return if (n <= 0l || (p.whole && prefix_state_touch(sch.prefix, p.tokens, n, false)))
     pool_carrier(m, sch)
-    var snap <- p.whole ? gpu_device_kv_parked_snapshot(p.claim, n, sch.pool_host) : DnSnapshot()
+    var spare <- prefix_take_spare(sch.prefix)
+    var snap <- p.whole ? gpu_device_kv_parked_snapshot(p.claim, n, sch.pool_host, spare) : DnSnapshot()
+    delete spare
     pool_keep(m, sch, p.claim, p.tokens, n, false, p.whole, snap)
 }
 
