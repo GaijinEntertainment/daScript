@@ -115,13 +115,16 @@ namespace das {
             if ( hasFlag(PrintFlags::refAddresses) ) {
                 ss << "at 0x" << HEX << intptr_t(ps) << DEC << " ";
             }
+            auto vindex = *(uint32_t *)ps;
+            bool noValue = vindex < ti->argCount && ti->argTypes[vindex]->type == Type::tVoid;
             if ( hasFlag(PrintFlags::namesAndDimensions) && ti->argNames) {
-                auto vindex = *(uint32_t *)ps;
                 if ( vindex < ti->argCount ) {
-                    ss << ti->argNames[vindex] << " = ";
+                    ss << ti->argNames[vindex] << (noValue ? "" : " = ");
                 } else {
                     ss << "unknown = ";
                 }
+            } else if ( noValue && ti->argNames ) {
+                ss << ti->argNames[vindex];
             }
             if ( !ti->isVariantOfSimpleTypes() ) br();
         }

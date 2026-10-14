@@ -544,8 +544,13 @@ class PrintVisitor : AstVisitor {
         return <- expr;
     }
     def override preVisitExprMakeVariantField(expr : ExprMakeVariant?; index : int; decl : MakeFieldDeclPtr; last : bool) {
-        //! Prints field name and assignment operator in a make-variant expression.
-        write(*writer, "{decl.name} {decl.flags.moveSemantics ? "<-" : "=" } ");
+        //! Prints field name and assignment operator in a make-variant
+        //! expression; a case with no value prints its name alone.
+        if (decl.value == null) {
+            write(*writer, "{decl.name}");
+        } else {
+            write(*writer, "{decl.name} {decl.flags.moveSemantics ? "<-" : "=" } ");
+        }
     }
     def override visitExprMakeVariantField(expr : ExprMakeVariant?; index : int; decl : MakeFieldDeclPtr; last : bool) {
         //! Prints separator between variant fields.

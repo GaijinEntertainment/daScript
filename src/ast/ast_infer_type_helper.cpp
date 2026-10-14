@@ -46,6 +46,12 @@ namespace das {
             program->error(err, extra, fixme, at, cerr);
         }
     }
+    bool InferTypes::rejectVoidVariantCase(const TypeDeclPtr &variantType, int index, const string &name, const LineInfo &at, CompilationError cerr) {
+        if (!variantType->argTypes[index]->isVoid()) return false;
+        error("variant case '" + name + "' has no value", "", "", at, cerr);
+        return true;
+    }
+
     void InferTypes::checkEmptyName(const string &name, const char *nodeKind, const LineInfo &at) {
         if (!name.empty()) return;
         string msg = string(nodeKind) + " has empty name";
@@ -257,11 +263,7 @@ namespace das {
                     error("variant element can't be a reference: '" + describeType(argType) + "'", "", "",
                           argType->at, CompilationError::invalid_variant);
                 }
-                if (argType->isVoid()) {
-                    error("variant element can't be void", "", "",
-                          argType->at, CompilationError::invalid_variant);
-                }
-                if (!argType->canBePlacedInContainer()) {
+                if (!argType->isVoid() && !argType->canBePlacedInContainer()) {
                     error("invalid variant element type: '" + describeType(argType) + "'", "", "",
                           argType->at, CompilationError::invalid_variant_type);
                 }

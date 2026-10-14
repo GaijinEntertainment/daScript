@@ -460,7 +460,7 @@ export default grammar({
       alias($._close_brace, '}'),
     ),
 
-    _variant_alias_entry: $ => seq(field('argument_names', $.identifier), ':', field('argument_types', $._type)),
+    _variant_alias_entry: $ => seq(field('argument_names', $.identifier), optional(seq(':', field('argument_types', $._type)))),
 
     bitfield_alias_declaration: $ => seq(
       'bitfield',
@@ -1451,7 +1451,7 @@ export default grammar({
     variant_type: $ => seq('variant', angles($, $._variant_type_list)),
 
     _variant_type_list: $ => sepBy1(
-      seq(field('argument_names', $.identifier), ':', field('argument_types', $._type)),
+      seq(field('argument_names', $.identifier), optional(seq(':', field('argument_types', $._type)))),
       $._comma_or_semicolon,
     ),
 

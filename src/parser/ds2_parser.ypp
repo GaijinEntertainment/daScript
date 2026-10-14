@@ -2882,6 +2882,12 @@ variant_type
         $$ = new VariableDeclaration(na,$typeDecl,nullptr);
         delete $name;
     }
+    |   NAME[name] {
+        auto na = new vector<VariableNameAndPosition>();
+        na->push_back(VariableNameAndPosition(*$name,"",tokAt(scanner,@name)));
+        $$ = new VariableDeclaration(na,new TypeDecl(Type::tVoid,tokAt(scanner,@name)),nullptr);
+        delete $name;
+    }
     ;
 
 variant_type_list

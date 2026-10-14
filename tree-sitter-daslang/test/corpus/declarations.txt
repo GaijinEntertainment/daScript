@@ -688,6 +688,32 @@ variant Value {
     argument_types: (basic_type)))
 
 ================================================================================
+Variant cases without a value
+================================================================================
+
+variant Tags {
+    nada
+    anything : int
+}
+
+typedef Anon = variant<nada; anything : int>
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (variant_alias_declaration
+    name: (identifier)
+    argument_names: (identifier)
+    argument_names: (identifier)
+    argument_types: (basic_type))
+  (typedef_declaration
+    name: (identifier)
+    type: (variant_type
+      argument_names: (identifier)
+      argument_names: (identifier)
+      argument_types: (basic_type))))
+
+================================================================================
 Bitfield alias
 ================================================================================
 

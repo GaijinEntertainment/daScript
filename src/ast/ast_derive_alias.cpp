@@ -423,7 +423,7 @@ namespace das {
             Visitor::preVisit(expr);
             preVisitMakeLocal(expr,[&](ExpressionSources & argSrc, bool anyGlobals) -> bool {
                 for ( auto & arg : expr->variants ) {
-                    if ( appendSources(program, arg->value, argSrc, true, anyGlobals) ) return true;
+                    if ( arg->value && appendSources(program, arg->value, argSrc, true, anyGlobals) ) return true;
                 }
                 return false;
             });

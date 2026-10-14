@@ -157,6 +157,10 @@ def generateApplyVisitTuple(stype : TypeDeclPtr; frange : range; fnname : string
     for (fldi in frange) {
         {
             assume flda = stype.argTypes[fldi]
+            if (flda.baseType == Type.tVoid) {
+                names |> push("")
+                continue
+            }
             let fldname = length(stype.argNames) == length(stype.argTypes) ? string(stype.argNames[fldi]) : "_{fldi}"
             names |> push(fldname)
             blkList |> push(qmacro(invoke($i("__arg_{fldname}"), _`_self.$f(fldname))))
@@ -203,6 +207,10 @@ def generateApplyVisitVariant(stype : TypeDeclPtr; frange : range; fnname : stri
     for (fldi in frange) {
         {
             assume flda = stype.argTypes[fldi]
+            if (flda.baseType == Type.tVoid) {
+                names |> push("")
+                continue
+            }
             let fldname = length(stype.argNames) == length(stype.argTypes) ? string(stype.argNames[fldi]) : "_{fldi}"
             names |> push(fldname)
             var vexpr = qmacro_block() {
@@ -290,7 +298,16 @@ def private apply_block_inline_safe(blk : ExpressionPtr) : bool {
 
 [call_macro(name = "apply")]
 class ApplyMacro : AstCallMacro {
-    //! Visits every field of a struct, tuple, or variant with a per-field block. The block is ``$(name, field)`` — ``name`` is the field-name string (a compile-time constant, so ``static_if (name == "...")`` folds) and ``field`` is a reference to the field value (read or mutate; writes propagate to the source). A struct may use a third ``annotations`` param receiving ``array<tuple<name:string; data:RttiValue>>`` per field. A variant runs only its active arm.
+    //!@nolint
+    //! Visits every field of a struct, tuple, or variant with a
+    //! per-field block. The block is ``$(name, field)`` — ``name`` is
+    //! the field-name string (a compile-time constant, so
+    //! ``static_if (name == "...")`` folds) and ``field`` is a
+    //! reference to the field value (read or mutate; writes propagate
+    //! to the source). A struct may use a third ``annotations`` param
+    //! receiving ``array<tuple<name:string; data:RttiValue>>`` per
+    //! field. A variant runs only its active arm, and a case declared
+    //! without a value runs nothing.
     def override visit(prog : ProgramPtr; mod : Module?; var expr : ExprCallMacro?) : ExpressionPtr {
         macro_verify(expr.arguments |> length == 2, prog, expr.at, "expecting apply(value, block)")
         if (expr.arguments[0]._type == null) {
@@ -375,6 +392,7 @@ def private inline_apply(var expr : ExprCallMacro?; argT : TypeDeclPtr; hasExtra
         var chain : ExpressionPtr
         for (ri in range(nfields)) {
             let fldi = nfields - 1 - ri
+            continue if (vt.argTypes[fldi].baseType == Type.tVoid)
             let fname = length(vt.argNames) == length(vt.argTypes) ? string(vt.argNames[fldi]) : "_{fldi}"
             var access = qmacro($i(selfName) as $f(fname))
             let isConst = selfIsConst || vt.argTypes[fldi].flags.constant
@@ -413,6 +431,7 @@ def private invoke_apply(var expr : ExprCallMacro?; argT : TypeDeclPtr; hasExtra
         var call = new ExprCall(name := "_::{callName}`{frange.x}`{frange.y}", at = expr.at)
         emplace_new(call.arguments, clone_expression(expr.arguments[0]))
         for (idx in frange) {
+            continue if (empty(names[idx]))
             emplace_new(call.arguments, clone_block_with_name(names[idx], expr.arguments[1], hasExtraArg))
         }
         calls |> emplace(call)

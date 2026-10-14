@@ -1423,6 +1423,11 @@ namespace das {
         static constexpr int align = 16; // hardcoded in module fio
     };
 
+    template <>
+    struct TypeAlign<void> {
+        static constexpr int align = 1;
+    };
+
     template <typename... TA>
     constexpr int max_alignof() { return std::max({TypeAlign<TA>::align..., 1}); }
 
@@ -1571,6 +1576,7 @@ namespace das {
     struct alignas(variantAlign) TVariant : Variant {
         static_assert(variantSize == variant_sizeof<TA...>());
         static_assert(variantAlign == variant_align<TA...>());
+        static_assert(variantSize > int(sizeof(int32_t)), "a variant with no payload is TVariant<variantSize, variantAlign>");
 
         template<int N> using NthType =
             typename std::tuple_element<N, std::tuple<TA...>>::type;
@@ -1671,6 +1677,16 @@ namespace das {
 
     template <typename TT, int idx, typename ...Types>
     using das_get_auto_variant_field = das_get_variant_field<TT, TypeSize<int>::size, idx>;
+
+    template <int offset, int variant>
+    struct das_get_variant_field<void, offset, variant> {
+        static __forceinline void set ( const Variant & t ) {
+            *(int32_t *)&t = int32_t(variant);
+        }
+        static __forceinline bool is ( const Variant & t ) {
+            return *(int32_t *)&t == variant;
+        }
+    };
 
     template <typename TT, int offset, int variant>
     struct das_get_variant_field_ptr {

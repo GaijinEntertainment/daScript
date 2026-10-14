@@ -31,6 +31,26 @@ Any two variants are the same type if they have the same named cases of the same
 
 Variants hold the ``index`` of the current case, as well as the value for the current case only.
 
+A case written without a type has an index and no value. Such a case is constructed by name alone,
+tested with ``is``, and has nothing to read with ``as``:
+
+.. code-block:: das
+
+    variant Maybe {
+        nothing
+        value : int
+    }
+
+    var m = Maybe(nothing)          // case 0, no value
+    assert(m is nothing)
+    m = Maybe(value = 3)
+    assert(m ?as value ?? -1 == 3)
+
+A case with no value adds nothing to the variant's size or alignment, so a variant whose cases all
+have no value is one ``int``. Zero memory is case 0 whatever that case is, so a variant that lists
+such a case first is "unset" when default-initialized. ``m as nothing``, ``m ?as nothing`` and
+``m.nothing`` are compilation errors; ``Maybe(nothing = x)`` and ``Maybe(value)`` are as well.
+
 The current case selection can be checked via the ``is`` operator, and accessed via the ``as`` operator:
 
 .. code-block:: das

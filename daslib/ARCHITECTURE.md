@@ -42,12 +42,12 @@ Companion documents carry separate concerns.
   (`in_field_init`, set/cleared around the field walk); every other invariant (types, ats)
   still applies to them. The same-module shape resolves eagerly and never had the hole -
   the selftest fixture is cross-module for exactly that reason.
-- **Each check's licensing C++ site**: `ExprOp1.subexpr` -
-  `SimulateVisitor::visit(ExprOp1*)` dereferences;
-  `TypeDecl.dim` entries - `TypeDecl::dimConst` sentinel (`ast_typedecl.h`); `ExprFor`
-  sources/body - `ExprFor::visit` walks sources and body, never the iterator tags;
-  `ExprBlock.arguments` - `ExprBlock::visit` walks `arguments` only when `isClosure`;
-  `ExprBlock.returnType` - `ExprBlock::visit` walks it only for a closure.
+- **Each check's licensing C++ site**: `ExprOp1.subexpr` - `SimulateVisitor::visit(ExprOp1*)`
+  dereferences; `TypeDecl.dim` entries - `TypeDecl::dimConst` sentinel (`ast_typedecl.h`);
+  `ExprFor` sources/body - `ExprFor::visit` walks sources and body, never the iterator tags;
+  `ExprBlock.arguments` / `ExprBlock.returnType` - `ExprBlock::visit` walks them only for a closure;
+  `ExprMakeVariant` field `value` - infer's `visitMakeVariantField` (`ast_infer_type_make.cpp`)
+  rejects a missing value for a case with a type; a case declared without one carries none.
 
 ## 9. quote
 

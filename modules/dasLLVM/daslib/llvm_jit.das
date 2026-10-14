@@ -4426,6 +4426,7 @@ class public LlvmJitVisitor : AstVisitor {
         verify(v_ptr != null && LLVMIsUndef(v_ptr) == 0, "make variant field, but no pointer")
         let index_ptr = LLVMBuildGEP2(g_builder, types.t_int8, v_ptr, types.ConstI32(uint64(offset)), "")
         LLVMBuildStore2(g_builder, types, types.t_int32, types.ConstI32(uint64(field_index)), index_ptr)
+        if (decl.value == null) return
         let field_ptr = LLVMBuildGEP2(g_builder, types.t_int8, v_ptr, types.ConstI32(uint64(offset + field_offset)), "")
         if (decl.value |> isMakeLocal) {
             var val = unsafe(reinterpret<ExprMakeLocal?>(decl.value))
@@ -4439,6 +4440,7 @@ class public LlvmJitVisitor : AstVisitor {
     }
 
     def override visitExprMakeVariantField(expr : ExprMakeVariant?; index : int; decl : MakeFieldDeclPtr; last : bool) : MakeFieldDeclPtr {
+        if (decl.value == null) return decl
         let field_index = find_argument_index(expr.makeType, string(decl.name))
         if (field_index == -1) {
             failed_E(expr, "variant field {decl.name} not found")

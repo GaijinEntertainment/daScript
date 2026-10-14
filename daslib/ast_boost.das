@@ -1256,6 +1256,13 @@ def public find_argument_index(typ : TypeDeclPtr; name : string) {
     return -1
 }
 
+def public is_bare_variant_case(typ : TypeDeclPtr; name : string) : bool {
+    //! True when ``name`` is a case of the variant ``typ`` declared
+    //! without a value.
+    let idx = find_argument_index(typ, name)
+    return idx != -1 && typ.argTypes[idx].baseType == Type.tVoid
+}
+
 def public isCMRESType(blockT : TypeDeclPtr) {
     //! Returns true if the type is a reference type not passed by ref (CMRES pattern).
     return blockT != null && blockT.isRefType && !blockT.flags.ref

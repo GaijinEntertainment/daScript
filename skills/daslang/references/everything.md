@@ -2366,17 +2366,17 @@ Module strudel_synth
 
 ### Drum renderers
 
-- `render_bd`
-- `render_cowbell`
-- `render_cp`
-- `render_crash`
-- `render_hh`
-- `render_oh`
-- `render_ride`
-- `render_rimshot`
-- `render_sd`
-- `render_tambourine`
-- `render_tom`
+- `render_bd` - Render an 808-style kick drum as a mono buffer at SAMPLE_RATE.
+- `render_cowbell` - Render a cowbell: two detuned square-wave tones through a narrow bandpass, with a second quieter strike 8 ms later.
+- `render_cp` - Render a hand-clap: a sharp bandpassed noise burst (~1.1 kHz) with a metallic bright edge and a long room tail.
+- `render_crash` - Render a crash cymbal: lower-pitched bell partials plus a broadband metallic wash with a medium-fast decay.
+- `render_hh` - Render a closed hi-hat: metallic oscillator bank layered with a short tonal bell (~180 Hz), plus room.
+- `render_oh` - Render an open hi-hat: the same metallic oscillator bank as hh but with a much slower decay.
+- `render_ride` - Render a ride cymbal: two bell partials (~340/387 Hz) plus a metallic shimmer, with a long sustain.
+- `render_rimshot` - Render a rimshot/side-stick: a short woody body (~200 Hz) plus a bandpassed noise snap and a high transient click.
+- `render_sd` - Render a snare drum as a mono buffer: tonal body (~220/330 Hz) plus high-passed noise for the wires, with a short room tail.
+- `render_tambourine` - Render a tambourine: high-passed noise with two narrow bandpass jingle peaks (~3.8 kHz and ~8.8 kHz) and a delayed second hit.
+- `render_tom` - Render a tom drum at `base_freq` with a BD-style body + beater click + impulse + resonant-head overtones and a short room.
 
 ### Oscillator type
 
@@ -4287,6 +4287,7 @@ The AST module provides access to the abstract syntax tree representation of das
 - `find_struct_field_parent` - Finds and returns the parent structure in the inheritance chain that originally declares the field with the given name.
 - `find_structure_field` - Returns the FieldDeclaration for a specific field of a structure type, or null if not found or the structure is null.
 - `find_unique_structure` - Finds a uniquely named structure in the program, returning it if unique or null if ambiguous.
+- `find_unique_typedef` - Finds a uniquely named typedef in the program, returning its type if unique or null if missing or ambiguous.
 - `find_variable` - Finds a variable by name in the specified module.
 
 ### Iterating
@@ -5052,6 +5053,7 @@ The AST_BOOST module provides high-level utilities for working with the AST. It 
 - `isExpression` - Returns `true` if the given `TypeDeclPtr` refers to an `ast` module handled type whose name starts with `Expr`, including pointer-to-expression types.
 - `isMakeLocal` - Returns `true` if the expression is any `ExprMakeLocal` subclass: `ExprMakeStruct`, `ExprMakeArray`, `ExprMakeTuple`, or `ExprMakeVariant`.
 - `isVectorType` - Returns `true` if the given `Type` is a vector, range, or urange type (`int2`..`int4`, `uint2`..`uint4`, `float2`..`float4`, `range`, `urange`, `range64`, `urange64`).
+- `is_bare_variant_case` - Returns true when `name` is a case of the variant `typ` that was declared without a value (with no type).
 - `is_class_method` - Returns `true` if a `TypeDeclPtr` field represents a class method — a non-dim `tFunction` whose first argument is the class structure (or a parent of it).
 - `is_same_or_inherited` - Returns `true` if `child` is the same `Structure` as `parent` or is transitively inherited from `parent` by walking the parent chain.
 - `peel_distinct` - Returns the type under every `distinct` level; a type that is not distinct comes back as is.
@@ -6619,7 +6621,7 @@ The LINQ_FOLD module provides the `_fold` and `_old_fold` call macros that rewri
 
 ### Call macros
 
-- `_fold`
+- `_fold` - implements _fold(expression) that folds LINQ expressions into optimized sequnences for example::
 
 ## lint
 

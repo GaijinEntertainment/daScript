@@ -11399,7 +11399,7 @@
       },
       "argument_types": {
         "multiple": true,
-        "required": true,
+        "required": false,
         "types": [
           {
             "type": "_type",

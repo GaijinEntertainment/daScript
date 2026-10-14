@@ -2866,7 +2866,7 @@ namespace das {
         for ( auto it = variants.begin(); it != variants.end(); index ++ ) {
             auto & field = *it;
             vis.preVisitMakeVariantField(this, index, field, field==variants.back());
-            field->value = field->value->visit(vis);
+            if ( field->value ) field->value = field->value->visit(vis);
             if ( field ) {
                 field = vis.visitMakeVariantField(this, index, field, field==variants.back());
             }
@@ -2877,7 +2877,7 @@ namespace das {
 
     void ExprMakeVariant::markNoDiscard() {
         for ( auto & field : variants ) {
-            field->value->markNoDiscard();
+            if ( field->value ) field->value->markNoDiscard();
         }
     }
 

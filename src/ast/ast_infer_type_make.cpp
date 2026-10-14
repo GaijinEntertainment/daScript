@@ -405,7 +405,7 @@ namespace das {
         }
     }
     MakeFieldDeclPtr InferTypes::visitMakeVariantField(ExprMakeVariant *expr, int index, MakeFieldDecl *decl, bool last) {
-        if (!decl->value->type) {
+        if (decl->value && !decl->value->type) {
             return Visitor::visitMakeVariantField(expr, index, decl, last);
         }
         auto mkBaseT = expr->makeType;
@@ -413,6 +413,17 @@ namespace das {
         auto fieldVariant = mkBaseT->findArgumentIndex(decl->name);
         if (fieldVariant != -1) {
             auto fieldType = mkBaseT->argTypes[fieldVariant];
+            if (fieldType->isVoid()) {
+                if (decl->value) {
+                    error("variant case '" + decl->name + "' has no value", "", "",
+                          decl->at, CompilationError::cant_variant_field);
+                }
+                return Visitor::visitMakeVariantField(expr, index, decl, last);
+            } else if (!decl->value) {
+                error("variant case '" + decl->name + "' needs a value", "", "",
+                      decl->at, CompilationError::cant_variant_field);
+                return Visitor::visitMakeVariantField(expr, index, decl, last);
+            }
             if (decl->cloneSemantics) {
                 convertCloneFieldToMove(fieldType, decl);
                 return Visitor::visitMakeVariantField(expr, index, decl, last);
@@ -1618,7 +1629,7 @@ namespace das {
                     mkv->variants.push_back(new MakeFieldDecl(
                         fmkv->at,
                         fmkv->name,
-                        fmkv->value->clone(),
+                        fmkv->value ? fmkv->value->clone() : nullptr,
                         bool(fmkv->moveSemantics),
                         bool(fmkv->cloneSemantics)));
                 }

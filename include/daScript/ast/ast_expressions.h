@@ -247,6 +247,8 @@ namespace das
                 bool        r2cr : 1;       // built-in ref2contref (read-only, but stay ref)
                 bool        write : 1;
                 bool        underClone : 1; // this variable is [var] := expr or [var] = expr
+                bool        variantCase : 1;
+                bool        variantCaseNamed : 1;
             };
             uint32_t varFlags = 0;
         };

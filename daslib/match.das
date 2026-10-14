@@ -368,6 +368,13 @@ def match_variant(what : TypeDeclPtr; wths : ExprMakeVariant?; access : Expressi
         return false
     }
     log_m("\t[[variant {mf.name}]] match passed\n")
+    if (mf.value == null) {
+        var cond = new ExprIsVariant(at = wths.at, value = clone_expression(access),
+            name := string(mf.name))
+        cond |> force_at(wths.at)
+        to.conditions |> emplace(cond)
+        return true
+    }
     return match_any(ftype, mf.value, variant_access(access, string(mf.name), wths.at, to), to)
 }
 
@@ -989,6 +996,17 @@ def arm_body(arm : Expression?; as_value : bool; binds : array<Expression?>) : E
 }
 
 [macro_function]
+def private is_bare_case_pattern(call : ExprCall?; arg : Expression?) : bool {
+    //! ``Tags(nada)``: the call names a variant typedef and the argument
+    //! is one of its cases without a value, so the name is the case,
+    //! not a binding.
+    return false if (length(call.arguments) != 1 || !(arg is ExprVar))
+    let vt = compiling_program() |> find_unique_typedef(string(call.name))
+    return false if (vt == null || vt.baseType != Type.tVariant)
+    return is_bare_variant_case(vt, string((arg as ExprVar).name))
+}
+
+[macro_function]
 def prepare_call_pattern(var call : ExprCall?; bind_bare : bool) : array<string> {
     //! A table pattern binds in its values, never its keys; ``match_expr`` and range bounds bind nothing.
     var names : array<string>
@@ -998,8 +1016,18 @@ def prepare_call_pattern(var call : ExprCall?; bind_bare : bool) : array<string>
         }
     } elif (!is_call_to(call, "match_expr", "match") && !is_range_call(call)) {
         for (a in call.arguments) {
-            names |> push_from(prepare_pattern(a, bind_bare))
+            names |> push_from(prepare_pattern(a, bind_bare)) if (!is_bare_case_pattern(call, a))
         }
+    }
+    return <- names
+}
+
+[macro_function]
+def prepare_variant_patterns(var mkv : ExprMakeVariant?; bind_bare : bool) : array<string> {
+    //! A case with no value carries no sub-pattern to bind.
+    var names : array<string>
+    for (mf in mkv.variants) {
+        names |> push_from(prepare_pattern(mf.value, bind_bare)) if (mf.value != null)
     }
     return <- names
 }
@@ -1024,9 +1052,7 @@ def prepare_sub_patterns(var pat : Expression?; bind_bare : bool) : array<string
             }
         }
     } elif (pat is ExprMakeVariant) {
-        for (mf in (pat as ExprMakeVariant).variants) {
-            names |> push_from(prepare_pattern(mf.value, bind_bare))
-        }
+        names <- prepare_variant_patterns(pat as ExprMakeVariant, bind_bare)
     } elif (pat is ExprAsVariant) {
         names <- prepare_pattern((pat as ExprAsVariant).value, bind_bare)
     } elif (pat is ExprCall) {

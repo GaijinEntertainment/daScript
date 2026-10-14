@@ -227,7 +227,12 @@ def private variant_name(typ : TypeDeclPtr) : string {
 }
 
 [macro_function]
-def private variant_key(typ : TypeDeclPtr; alt : das_string) : string => "{variant_name(typ)}({alt} = _)"
+def private variant_key(typ : TypeDeclPtr; alt : das_string) : string {
+    //! The key spells the arm as a pattern: a case with no value is its
+    //! bare name.
+    let bare = is_bare_variant_case(typ, string(alt))
+    return bare ? "{variant_name(typ)}({alt})" : "{variant_name(typ)}({alt} = _)"
+}
 
 [macro_function]
 def private is_struct_of(typ : TypeDeclPtr; p : Expression?) : bool {
@@ -276,6 +281,14 @@ def private both(var l : MatchCell; var r : MatchCell) : MatchCell {
 }
 
 [macro_function]
+def private is_irrefutable_single_arm(var p : Expression?) : bool {
+    //! ``V(name)`` or ``V(name = x)``: one arm whose sub-pattern
+    //! (none for a case with no value) can not fail.
+    return false if (!(p is ExprMakeVariant) || length((p as ExprMakeVariant).variants) != 1)
+    var value = (p as ExprMakeVariant).variants[0].value
+    return value == null || is_irrefutable(null, value)
+}
+
 def private classify_cell(typ : TypeDeclPtr; var pat : Expression?; cuts : array<int64>) : MatchCell {
     //! What one pattern covers of one column: everything, named values, or values the analysis can't name.
     var p = peel_r2v(pat)
@@ -289,8 +302,7 @@ def private classify_cell(typ : TypeDeclPtr; var pat : Expression?; cuts : array
     return <- MatchCell(keys <- span_keys(p, cuts)) if (!empty(cuts) && is_some(constant_span(p)))
     let key = constant_key(p)
     return <- MatchCell(keys <- [key]) if (!empty(key))
-    if (typ != null && typ.isVariant && p is ExprMakeVariant && length((p as ExprMakeVariant).variants) == 1
-            && is_irrefutable(null, (p as ExprMakeVariant).variants[0].value)) {
+    if (typ != null && typ.isVariant && is_irrefutable_single_arm(p)) {
         return <- MatchCell(keys <- [variant_key(typ, (p as ExprMakeVariant).variants[0].name)])
     }
     if (typ != null && typ.isVariant && p is ExprAsVariant && is_irrefutable(null, (p as ExprAsVariant).value)) {

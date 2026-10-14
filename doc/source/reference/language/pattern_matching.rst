@@ -183,6 +183,23 @@ A variant pattern is spelled like the variant constructor; the field value is it
         }
     }
 
+A case declared without a value is matched by name alone, and counts as one value of the variant
+for coverage:
+
+.. code-block:: das
+
+    variant Maybe {
+        nothing
+        value : int
+    }
+
+    def maybe_match ( m : Maybe ) {
+        return match ( m ) {
+            Maybe(nothing) => -1
+            Maybe(value = n) => n
+        }
+    }
+
 The ``as`` form tests the alternative by name, with the pattern on its left:
 
 .. code-block:: das
