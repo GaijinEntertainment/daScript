@@ -39,7 +39,14 @@ what it costs today and what the fix would change.
   TTFT med 0.28, 0.25 against 0.24, 0.23 s; steady gen 120, 136 against 111, 114; short alone wall 0.335, 0.312 against
   0.336, 0.334, TTFT 0.263, 0.254 against 0.245, 0.242, steady 135, 140 against 114, 115; pair wall 0.643, 0.655 against
   0.690, 0.685, steady 109, 102 against 97, 98 - decode and the pair ahead, the short TTFT 10-18 ms behind (the base
-  form's dequant passes and the exact f32 router tile against the base's stored half copy).
+  form's dequant passes and the exact f32 router tile against the base's stored half copy). With the host pool behind
+  the device-home streams (`--prefix-state-mb`, a quarter of RAM or the container's limit - 14,848 MB on the pod), the
+  35B device-home replay on the pod reads 93 % cached / 0 cold on the warm pass and 86 % / 7 on the cold pass (the 7
+  are the openings nothing precedes, the M5's floor too) against the M5's 91 % / 0; TTFT med 0.25, p90 0.59 s against
+  the card-only 0.24, 1.47 - the pool costs about 10 ms at the median; the pool held to the card's own bytes (1,700 MB)
+  reads 86 % / 7. An opening of 4.2-4.8k tokens comes up from the pool in 10-16 ms, a checkpoint goes down in about
+  15 ms, a new conversation forcing three copies and an upload pays about 64 ms at admission. 22 of 124 warm replies
+  differ from the card-only run: the attach position moves, and the split prefill's routed numerics with it.
 - **MEASURED (2026-10-13) - the Metal routed base form's bars (`tests/test_metal_prefill_parity.das`,
   `test_metal_prefill_moe_base_form`, the `moe-base` arm).** A `tests/run.das` cell; the GPU side is the Metal prefill
   window with `DASLLAMA_METAL_TENSOR=0` (the base form `MetalMoeMulMmKqT`, every superblock and per-32 format, no tensor
