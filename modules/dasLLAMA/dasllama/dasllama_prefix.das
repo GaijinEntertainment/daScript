@@ -115,6 +115,16 @@ def private page_tokens_match(entry : PrefixEntry; tokens : array<int64>; lo : i
     return true
 }
 
+//! The key of page `i` of `tokens` chained after `h`, when the cache holds
+//! it whole with matching tokens; 0 otherwise.
+def private prefix_page_next(cache : PrefixCache; tokens : array<int64>; i, pr : int64;
+                             h : uint64) : uint64 {
+    let nh = chain_page_hash(h, tokens, i * pr, (i + 1l) * pr)
+    let e = unsafe(cache.entries?[nh])
+    let whole = e != null && long_length(e.tokens) == pr
+    return whole && page_tokens_match(*e, tokens, i * pr) ? nh : 0ul
+}
+
 //! Create a prefix cache for the sessions of one pool. ``max_groups`` caps how many page groups
 //! the cache retains (LRU-dropped past it; a dropped page a session still uses stays alive — only
 //! the cache's hold is released); 0 = unbounded.
@@ -340,12 +350,12 @@ def prefix_share_pages_(var cache : PrefixCache; var pool : KVPool; var s : Sess
     }
     var h = 0ul
     var kept = 0l
-    while ((kept + 1l) * pr <= n) {
-        let nh = chain_page_hash(h, tokens, kept * pr, (kept + 1l) * pr)
-        let e = unsafe(cache.entries?[nh])
-        break if (e == null || long_length(e.tokens) != pr || !page_tokens_match(*e, tokens, kept * pr))
-        s.block_table |> push(e.group)
-        pool.refcnt[e.group] ++
+    for (i in range64(n / pr)) {
+        let nh = prefix_page_next(cache, tokens, i, pr, h)
+        break if (nh == 0ul)
+        let g = unsafe(cache.entries?[nh]).group
+        s.block_table |> push(g)
+        pool.refcnt[g] ++
         h = nh
         kept ++
     }
@@ -446,15 +456,10 @@ def prefix_attach_(var cache : PrefixCache; var pool : KVPool; var s : Session; 
     var matched = 0l
     var hit_chain = 0l
     for (i in range64(pages_max)) {
-        let nh = chain_page_hash(hit_hash, prompt, i * pr, (i + 1l) * pr)
-        if (!key_exists(cache.entries, nh)) {
-            break
-        }
+        let nh = prefix_page_next(cache, prompt, i, pr, hit_hash)
+        break if (nh == 0ul)
         // interior pointer into the table — nothing inserts before the loop exits
         var e = unsafe(cache.entries?[nh])
-        if (e == null || long_length(e.tokens) != pr || !page_tokens_match(*e, prompt, i * pr)) {
-            break   // hash collision or corrupted entry: tokens are the truth
-        }
         hit_hash = nh
         cache.tick ++
         e.last_use = cache.tick
@@ -508,10 +513,8 @@ def prefix_match_len_(cache : PrefixCache; pool : KVPool; prompt : array<int64>)
     var hit_hash = 0ul
     var matched = 0l
     for (i in range64(pages_max)) {
-        let nh = chain_page_hash(hit_hash, prompt, i * pr, (i + 1l) * pr)
-        break if (!key_exists(cache.entries, nh))
-        let e = unsafe(cache.entries?[nh])
-        break if (e == null || long_length(e.tokens) != pr || !page_tokens_match(*e, prompt, i * pr))
+        let nh = prefix_page_next(cache, prompt, i, pr, hit_hash)
+        break if (nh == 0ul)
         hit_hash = nh
         matched += pr
     }
