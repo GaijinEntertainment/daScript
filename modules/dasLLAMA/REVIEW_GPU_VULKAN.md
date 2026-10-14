@@ -63,8 +63,8 @@ not log the concrete reason it declined, once per reason per armed model, is a d
 constant in `dasllama/dasllama_vulkan_tower.das` already states, returns that constant or starts
 its text with it - never a second wording of that reason.**
 
-**A diff that adds or changes a function under `dasllama/` that calls `vk_moe_init()` and that a
-caller can reach before the tier's arm probe `vulkan_moe_gpu_arm` armed the tier makes it test
+**A diff that adds or changes a function under `dasllama/` that calls `vk_moe_init()` and that is
+not reached only through a hook `install_vk_moe_hooks` installs makes it test
 `gpu_want_arms_tier()` first, and
 decline without calling it when the want is off; a serving hook - a hook slot the CPU chain calls
 to hand work to the GPU - that keeps a `VkDeclineCounter` counts that decline under its decline
@@ -237,11 +237,12 @@ state - over the whole buffer, never over one row's or one slot's range.** Each 
 row or region at run time, from `TokMeta` or its push constants, so a set narrowed to one slot sends
 every other row's or region's dispatch past its binding, with no error.
 
-**A diff that fills a `TokMeta` block, wherever it puts it, leaves no field but the pads at a value
-it did not choose (a literal whose fields default to zero chooses 0) -
-`mirbase` as the row's K/V mirror base in elements past the base the kernel's push constants carry
-(0 where the push carries the row's own base), `dnslot` as the row's slot in the deltanet state and
-conv-history buffers (0 where they hold one slot).** A kernel reads each field from the row's block,
+**A diff that fills a `TokMeta` block, wherever it puts it, writes every field but the pads with
+the row's own value: `mirbase` the row's K/V mirror base in elements past the base the kernel's
+push constants carry (0 where the push carries the row's own base), `dnslot` the row's slot in the
+deltanet state and conv-history buffers (0 where they hold one slot); a field a zero-initialized
+literal leaves at 0 counts as written only where 0 is that row's value.** A kernel reads each
+field from the row's block,
 so a field left unwritten sends the row to whatever position, base or state the memory held, with
 no error.
 
@@ -261,14 +262,16 @@ profile to another form's role names.
 
 **A diff that submits a transfer copy with `xfer_submit_after`
 (`dasllama/dasllama_vulkan_common.das`) orders any command that writes the buffer that copy reads
-after the value it returned: the host waits on it (`xfer_wait`, spinning or blocking) before that
-submit, or that submit carries it as its device-side wait (`g_gpu.pend_wait`).** Nothing else orders
-the copy's read before that write.
+the transfer timeline reaching the value it returned: the host waits on it (`xfer_wait`, spinning
+or blocking) before that submit, or `g_gpu.pend_wait` holds at least that value - raised with
+`max`, never overwritten - when the writing submit is made, with no compute submit in between.**
+Nothing else orders the copy's read before that write.
 
 **A diff that adds an integer division or modulo to kernel code in `dasllama/dasllama_vulkan_classes.das`
 or `dasllama/dasllama_gpu_kernels_common.das` - a kernel body or any method it calls,
-`dasllama/dasllama_gpu_math.das`'s helpers included - that the pre-change tree's kernel code in
-either file did not hold, or changes such a division's divisor, the values that feed it, or its
+`dasllama/dasllama_gpu_math.das`'s helpers included - that the diff does not move unchanged, with
+the values feeding its divisor, from kernel code in these three files, or changes such a
+division's divisor, the values that feed it, or its
 guard, where the divisor is not a literal or a template constant, clamps the divisor to at
 least one (`max(1u, ...)`) before the division, or places the division inside an `if` whose
 condition compares that divisor expression itself with zero.** An integer division by zero is

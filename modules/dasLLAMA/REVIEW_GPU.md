@@ -163,14 +163,14 @@ builder a tower driver borrows, names it - the hook by the seat's register funct
 by its name - in that driver's row of the role table in `ARCHITECTURE_GPU.md#gpu-backends`; a
 diff that removes one deletes its name from that row; in the same change.**
 
-**A diff that adds a surface one GPU backend has and the other lacks - anything `dasllama/` engine
-code outside the backend's files, a dispatch lens or a run can call, register, annotate, select or
-set on that backend alone, a decode or prefill behavior and a step's precision included - lands its
-own entry, naming the operation the other backend's API or device lacks, in
-`ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries`; a diff that removes one deletes its entry; in the
-same change.** A hook a tower driver registers in a model family's registry and a seat only the
-Vulkan family fills are not such surfaces (the role table names them), and the same path served
-faster or slower is not a behavior.
+**A diff that adds a function, export, hook registration, kernel annotation, setter or environment
+variable that only one GPU backend (Metal or Vulkan) has, or a decode or prefill behavior or a
+step's precision only one has, lands its own entry, naming the operation the other backend's API
+or device lacks, in `ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries`; a diff that removes one
+deletes its entry; in the same change.** A hook a tower driver registers in a model family's
+registry and a seat (a hook slot `dasllama/dasllama_gpu_tier.das` declares) only the Vulkan
+backend's files fill land in that section's role table instead of an entry of their own; the same
+path served faster or slower is not a behavior.
 
 **A diff that adds or extends, on one GPU backend (Metal or Vulkan), a prefill or decode path or
 a K/V cache feature for a model family the other backend also serves lands the same capability on
@@ -292,6 +292,6 @@ one format (a range or family test) also tests `kq_fmt_gpu_supported` - for an e
 so an unlisted format decodes under whatever the pick's default arm holds.
 
 **A diff that gives the Metal PLE (per-layer embedding) token-table gather a weight format makes
-`metal_ple_pre_gpu_gate` admit that format only where the table's base and row stride are whole
-blocks of the format's own block size.** A base off the format's own block grid is gathered
+`metal_ple_pre_gpu_gate` admit that format only where the table's base and row stride are each a
+whole number of the format's blocks.** A base off the format's own block grid is gathered
 under a layout that is not its own.
