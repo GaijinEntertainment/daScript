@@ -130,8 +130,8 @@ endif()
 # subset build itself as the gate and runs no AOT tests.
 if(TARGET test_aot_subset)
     add_das_target(run_tests_aot_subset
-        COMMAND ${DAS_SANITIZER_ENV} $<TARGET_FILE:test_aot_subset> -use-aot ${PROJECT_SOURCE_DIR}/dastest/dastest.das -- --use-aot --color --failures-only --timeout 1800 --test ${PROJECT_SOURCE_DIR}/tests/language
-        DEPENDS test_aot_subset
+        COMMAND ${DAS_SANITIZER_ENV} $<TARGET_FILE:test_aot_subset> -use-aot ${PROJECT_SOURCE_DIR}/dastest/dastest.das -- --use-aot --color --failures-only --timeout 1800 --test ${PROJECT_SOURCE_DIR}/tests/language --cache-dir ${DAS_TEST_CACHE_DIR}
+        DEPENDS test_aot_subset dastest_cache_guard
         WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
         COMMENT "Running tests (AOT, tests/language subset)"
     )
