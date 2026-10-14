@@ -34,7 +34,7 @@ Key helpers used by the emitter:
 
 | Binary | Contents | In default build (ALL)? | Who builds/runs it |
 |---|---|---|---|
-| `test_aot_subset` | `tests/language` + its `_*` fixtures + `dastest/testing.das` + the minimal daslib runtime closure (`AOT_SUBSET_DASLIB_MODULE_FILES` - random/regex/faker/fuzzer/coroutines/archive/strings_boost etc., ~15 small files; a language test requiring another runtime daslib module fails 50101 -> extend that list) - ~230 AOT TUs total | YES - every CI lane, Debug included | Per-PR CI, as a **compile+link gate only** (no AOT test run on PRs); locally via `run_tests_aot_subset` |
+| `test_aot_subset` | `tests/language` + its `_*` fixtures + `dastest/testing.das` + the minimal daslib runtime closure (`AOT_SUBSET_DASLIB_MODULE_FILES` - random/regex/faker/fuzzer/coroutines/archive/strings_boost etc., ~15 small files; a language test requiring another runtime daslib module fails 50101 -> extend that list) - ~230 AOT TUs total | YES - every CI lane, Debug included | Per-PR CI: built in ALL, then run by the `run_build` lane through `run_tests_aot_subset`, result-cached in the shared `.cache/daslang/test_cache` (the cache guard hashes the subset binary) |
 | `test_aot` | everything (~1080 AOT TUs) | NO - `EXCLUDE_FROM_ALL` | Nightly CI cron (all Release matrix lanes incl. sanitizers, plus mingw/clang-cl) and `preflight --full`, both via `--target test_aot` / `run_tests_aot` |
 
 Neither binary uses LTO (the full binary's LTCG link alone was ~21 min on MSVC CI). Consequence: **an AOT regression outside `tests/language` does NOT fail PR CI** - it's caught by local `preflight --full` before push, or by the nightly.
@@ -359,7 +359,7 @@ Common causes of AOT link failures:
 
 ## CI Integration
 
-The full AOT sweep runs in `.github/workflows/build.yml` on **Release lanes of the nightly cron / `workflow_dispatch` only** - the step guard is `if: matrix.cmake_preset == 'Release' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')`. It is driven through the `run_tests_aot` CMake target (`tests/CMakeLists.txt`) rather than a direct test_aot invocation - look for the "Slow Release Tests" / "Slow Release Tests (AOT)" / "Test: AOT sweep" steps (`cmake --build ... --target run_tests_aot`). Per-PR lanes get only the `test_aot_subset` compile+link gate from the Build step. `windows32` is skipped (the matrix variable is `matrix.cmake_preset`).
+The full AOT sweep runs in `.github/workflows/build.yml` on **Release lanes of the nightly cron / `workflow_dispatch` only** - the step guard is `if: matrix.cmake_preset == 'Release' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')`. It is driven through the `run_tests_aot` CMake target (`tests/CMakeLists.txt`) rather than a direct test_aot invocation - look for the "Slow Release Tests" / "Slow Release Tests (AOT)" / "Test: AOT sweep" steps (`cmake --build ... --target run_tests_aot`). Per-PR lanes run only `test_aot_subset` over `tests/language`, through the `run_build` lane. `windows32` is skipped (the matrix variable is `matrix.cmake_preset`).
 
 ## _aot_generated Directories
 
