@@ -10,12 +10,22 @@ require ?das_metal dasllama/dasllama_metal_kernels  // the production stamps of 
 require ?das_metal dasllama/dasllama_metal_prefill  // the window's stamps
 require math
 
-// The row kernels the Metal home stamps off the shared templates (`dasllama_gpu_kernels_common.das`), each timed alone at a
-// qwen35moe / qwen4exp decode shape through its generated builder: the hyper-connection seams, the n-gram side input, the
-// per-head q/k norm, the router select and the routed combine. One instrument, no race: a kernel's row is the median GPU time
-// of one dispatch over `g_env_bench.lab_rounds` rounds (at least 9) of 200 back-to-back dispatches, with the rounds' cv - a
-// row past 3% cv is VOID and reruns on a quiet box. The kernels' numerics are the kernel cells'
-// (`tests/test_metal_misc_kernels.das`, `tests/test_metal_prefill_kernels.das`); this file times them.
+// The row kernels the Metal home stamps off the shared templates
+// (`dasllama_gpu_kernels_common.das`), each timed alone at a
+// qwen35moe / qwen4exp decode shape through its generated builder: the
+// hyper-connection seams, the n-gram side input, the per-head q/k
+// norm, the router select and the routed combine. One instrument, no
+// race: a kernel's row is the median GPU time of one dispatch over
+// `g_env_bench.lab_rounds` rounds (at least 9) of 200 back-to-back
+// dispatches, with the rounds' cv - a row past 3% cv is VOID and
+// reruns on a quiet box. Warmup: each row runs one round more and
+// drops the first (`time_rows`), and the run opens on a `warm-up` row
+// (hc_init at the seam shape, never reported) that ramps the clocks
+// before the first timed row. A run that times no row - no Metal
+// device, an interpreted run, a build with no Metal - fails. The
+// kernels' numerics are the kernel cells'
+// (`tests/test_metal_misc_kernels.das`,
+// `tests/test_metal_prefill_kernels.das`); this file times them.
 //
 //   bin/daslang -jit dastest/dastest.das -- --bench --test modules/dasLLAMA/benchmarks/ew/bench_metal_gk_rows.das
 
@@ -315,7 +325,7 @@ def private gate_rows : array<Reading> {
 
 def private run_gk_rows(b : B?) {
     if (!metal_common_init() || !metal_decode_init()) {
-        to_log(LOG_WARNING, "skipped: no Metal device\n")
+        b |> failure("no Metal device: no row timed")
         return
     }
     var rows <- seam_rows()
@@ -337,13 +347,15 @@ def private run_gk_rows(b : B?) {
     }
 }
 
-[benchmark, unused_argument(b)]   // b is consumed only inside the Apple static_if half
+[benchmark]
 def bench_metal_gk_rows(b : B?) {
     if (!jit_enabled()) {
-        to_log(LOG_WARNING, "skipped: interpreted (dasLLAMA benchmarks are JIT-only)\n")
+        b |> failure("interpreted: dasLLAMA benchmarks are JIT-only, no row timed")
         return
     }
     static_if (typeinfo builtin_module_exists(das_metal)) {
         run_gk_rows(b)
+    } else {
+        b |> failure("this build carries no Metal: no row timed")
     }
 }

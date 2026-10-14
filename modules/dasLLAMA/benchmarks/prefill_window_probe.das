@@ -7,6 +7,7 @@ require dasllama/dasllama
 require dasllama/dasllama_common   // apply_box_profile_runtime, set_metal_mode, the route knee setter
 require ?das_metal dasllama/dasllama_metal_prefill   // the driver's per-window stage report
 require ?das_metal dasllama/dasllama_metal_common    // the decode stage report, the per-kernel profile
+require ../performance/profile_common.das   // tune_gate - never time fallback kernels
 require daslib/clargs
 require daslib/strings_boost   // nolint:STYLE030,LINT019 - split, used only inside the das_metal static_if halves
 require strings   // nolint:STYLE030,LINT019 - to_int, used only inside the das_metal static_if halves
@@ -24,6 +25,13 @@ require math   // nolint:STYLE030,LINT019 - min, used only inside the das_metal 
 // The sidecar beside this file (`prefill_window_probe.tune.json`, copied from the box's) applies the box's Metal
 // crowns; without one every tensor twin runs its base form, and the report says so. A window the driver declines
 // prints its refusal and no number. The run exits non-zero when no window row was served.
+// `tune_gate()` runs before the first rep: a run on untuned CPU
+// winners exits non-zero (DASLLAMA_ALLOW_UNTUNED=1 measures anyway,
+// stamped not publishable).
+// ATTRIBUTION SWEEP --ab: window GPU ms to each lever arm, no compare
+// ATTRIBUTION SWEEP --cold: GPU ms to a cold first window, no compare
+// `--ab devw` prints a window whose A arm ran no dev-W site as inert,
+// with no number, and exits non-zero when every window was inert.
 
 [CommandLineArgs]
 struct Args {
@@ -141,6 +149,7 @@ def private sweep(a : Args) : int {   // nolint:STYLE038 — one flat sweep: the
         set_gpu_ctx_strict(true)
         set_gpu_kv_dtype(KVDtype.f16)
         apply_box_profile_runtime()
+        return 1 if (!tune_gate())
         if (a.gemv_max >= 0) {
             set_metal_moe_gemv_max(int64(a.gemv_max))
         }
@@ -152,6 +161,7 @@ def private sweep(a : Args) : int {   // nolint:STYLE038 — one flat sweep: the
         let tail_before = get_metal_prefill_mm_tail()
         let devw_before = get_metal_prefill_dev_w()
         var rows_served = 0
+        var rows_inert = 0
         with_dasllama_jobque() {   // nolint:STYLE037,LINT019 — the sweep's one block: the ladder and its A/B arms
             var m <- load_model(a.model, QuantMode.q8)
             var s <- create_session(m)
@@ -173,6 +183,7 @@ def private sweep(a : Args) : int {   // nolint:STYLE038 — one flat sweep: the
             for (n in windows) {
                 var inscope gpu, enc, wait, rb, gpu_b : array<double>
                 var declined = 0
+                var devw_sites = 0l   //! the dev-W sites arm A's timed reps ran
                 let reps = empty(a.ab) ? a.reps : 1 + 2 * a.reps
                 for (r in range(reps)) {
                     let arm_b = !empty(a.ab) && r > 0 && (r - 1) % 2 == 1
@@ -192,8 +203,12 @@ def private sweep(a : Args) : int {   // nolint:STYLE038 — one flat sweep: the
                     cursor += n
                     metal_prefill_stage_reset()
                     let declines0 = metal_prefill_stats().declines
+                    let devw0 = metal_prefill_devw_scratch_stats().sites
                     eval(m, s, win)
                     let st = metal_prefill_stage_stats()
+                    if (r > 0 && !arm_b) {
+                        devw_sites += metal_prefill_devw_scratch_stats().sites - devw0
+                    }
                     if (st.prefills != 1l) {
                         declined++
                         print("{n}  declined ({metal_prefill_stats().declines - declines0} decline(s) counted)\n")
@@ -212,6 +227,11 @@ def private sweep(a : Args) : int {   // nolint:STYLE038 — one flat sweep: the
                     rb |> push(double(st.readback_us) / 1000.0lf)
                 }
                 if (declined > 0 || empty(gpu)) {
+                    continue
+                }
+                if (a.ab == "devw" && devw_sites == 0l) {
+                    print("{n}  inert: arm A ran no dev-W site, the devw lever changed nothing\n")
+                    rows_inert++
                     continue
                 }
                 let g = median(gpu)
@@ -244,7 +264,8 @@ def private sweep(a : Args) : int {   // nolint:STYLE038 — one flat sweep: the
             delete m
         }
         if (rows_served == 0) {
-            print("no window row served - every window declined\n")
+            let why = rows_inert > 0 ? "the devw lever was inert" : "every window declined"
+            print("no window row served - {why}\n")
             return 1
         }
         return 0
