@@ -2,8 +2,8 @@
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 docs: `ARCHITECTURE_ENGINE_FORMATS.md`, `ARCHITECTURE_CPU_KERNELS.md`,
-`ARCHITECTURE_GPU_ASYMMETRIES.md`. Planned work: `followup_general.md`, `followup_metal.md`,
-`followup_vulkan.md`.
+`ARCHITECTURE_GPU_ASYMMETRIES.md`, `ARCHITECTURE_MEASUREMENT.md`. Planned work:
+`followup_general.md`, `followup_metal.md`, `followup_vulkan.md`.
 
 **A diff that adds or changes a function in `dasllama/` that maps a format id - the int a
 generated kernel takes as its format parameter (`KqDesc.schema_id`) - or a format slot - the
@@ -39,14 +39,16 @@ format's `kq_desc` row in `tests/test_kqformat.das` in the same change.**
 value, and its `disk_bytes` inside the walk that checks every row against `ggml_type_bytes`.**
 Narrowing the row's literal pins or the `ggml_type_bytes` walk is a defect.
 
-**A diff that makes a site - a weight plane a backend's (CPU, Metal, Vulkan) serving call reads -
-read a weight format through a converted copy, or hands a GPU site to the CPU's kernels, on a run
-with every lever at its default is a defect - add that backend's kernels for the format at the
-site instead.** A lever is an env knob or setter that changes which form a site reads. A converted
-copy is a q8, f16 or f32 form of a format's weights, other than its served form (a `KqFmt` member
-with its own descriptor row over the same GGUF type, `ARCHITECTURE_ENGINE_FORMATS.md#served-form`),
-whose bytes outlive the prefill window - one chunk of prompt rows - that made them, or are written
-to the `.dlim` image.
+A site is a weight plane a backend's (CPU, Metal, Vulkan) serving call reads. A lever is an env
+knob or setter that changes which form a site reads. A converted copy is any form of a format's
+weights other than its disk bytes or its served form - a re-layout of the format's own quantized
+values, value-exact against the disk form, with no wider element type (a `KqFmt` member over the
+same GGUF type, `ARCHITECTURE_ENGINE_FORMATS.md#served-form`) - whose bytes outlive the one kernel call or
+window that made them, or reach the `.dlim` image.
+
+**A diff that makes a site read a weight format through a converted copy, or hands a GPU site to
+the CPU's kernels, on a run with every lever at its default is a defect - add that backend's
+kernels for the format at the site instead.**
 
 **A diff that states a backend serves a weight format - in any document, PR description, test
 name, or a predicate that returns true for "this backend runs this format" - while, on a run with
@@ -54,5 +56,7 @@ every lever at its default, a site that backend's serving call reaches reads the
 converted copy or hands a GPU site to the CPU's kernels is a defect - state that site as a gap
 instead, or cite the follow-up row that ledgers it.**
 
-**A diff that adds a lever, off by default, that makes a GPU site read a weight format through a
-converted copy names the lever in `ARCHITECTURE_GPU_ASYMMETRIES.md` in the same change.**
+**A diff that adds a lever, off by default, that makes a site read a weight format through a
+converted copy names the lever in the same change - in `ARCHITECTURE_GPU_ASYMMETRIES.md` where
+only one GPU backend carries it, else in
+`ARCHITECTURE_MEASUREMENT.md#sanctioned-instrumentation-rails`.**

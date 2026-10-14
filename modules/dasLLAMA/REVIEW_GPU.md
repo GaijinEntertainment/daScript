@@ -163,13 +163,14 @@ builder a tower driver borrows, names it - the hook by the seat's register funct
 by its name - in that driver's row of the role table in `ARCHITECTURE_GPU.md#gpu-backends`; a
 diff that removes one deletes its name from that row; in the same change.**
 
-**A diff that adds a function, export, hook registration, kernel annotation, setter or environment
-variable that only one GPU backend (Metal or Vulkan) has, or a decode or prefill behavior or a
-step's precision only one has, lands its own entry, naming the operation the other backend's API
-or device lacks, in `ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries`; a diff that removes one
-deletes its entry; in the same change.** A hook a tower driver registers in a model family's
-registry and a seat (a hook slot `dasllama/dasllama_gpu_tier.das` declares) only the Vulkan
-backend's files fill land in that section's role table instead of an entry of their own; the same
+**A diff that adds a function or export that `dasllama/` code outside the backend's own files
+calls, a hook registration, kernel annotation, setter or environment variable only one GPU backend
+(Metal or Vulkan) has, or a decode or prefill behavior or a step's precision only one has, lands
+its own entry, naming the operation the other backend's API or device lacks, in
+`ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries`; a diff that removes one deletes its entry; in
+the same change.** A hook a tower driver registers in a model family's registry and a seat (a hook
+slot `dasllama/dasllama_gpu_tier.das` declares) only the Vulkan backend's files fill land in the
+backend role table at `ARCHITECTURE_GPU.md#gpu-backends` instead of an entry of their own; the same
 path served faster or slower is not a behavior.
 
 **A diff that adds or extends, on one GPU backend (Metal or Vulkan), a prefill or decode path or

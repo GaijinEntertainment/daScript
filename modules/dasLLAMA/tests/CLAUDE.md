@@ -284,7 +284,8 @@ fam-qwen35's batch cell asserts the batched step ENGAGES on the deltanet hybrid'
 and compares it against the single-row GPU step; fam-qwen2moe's batch cell compares the blob
 twin's batched step against the CPU batched stack on the planar model - the two arms the
 batched driver gained, deltanet rows against per-session mirrors and the shared expert's rows
-site; fam-qwen35moe keeps the per-row FALLBACK assertion until the MoE hybrid's arm lands; both
+site; fam-qwen35moe keeps the per-row FALLBACK assertion - the MoE hybrid has no batched arm;
+both
 qwen35 rows open on the format census of their blob twin, every site the file carries in its own format; fam-qwen4exp
 is the Flash-Next UD-IQ4_XS served image alone - the planar file and the image do not fit the box together - its Metal
 prefill and decode token for token the file's frozen counting fixture, the drivers' counters rising and no decline,

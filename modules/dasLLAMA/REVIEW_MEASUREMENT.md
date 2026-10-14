@@ -135,8 +135,9 @@ version, the model, the command line, and any environment settings the command l
 show.** A citation of an architecture section that states that run's recipe in full - no
 placeholder in its exe, model or command line - names it.
 
-**A figure a script outside the tree produced, written down in any checked-in text, names it as
-outside the tree, with the command line it ran.**
+**A figure an instrument outside the tree produced, written down in any checked-in text, names
+that instrument by its role, the model, the box and the flags it ran under; a private instrument
+is never named by its repository or command line - its role names it.**
 
 **A figure the diff's text gives as the reason it ships one value, formula or kernel over
 another comes from a script in the tree at the diff's tip, or an exe built from that tree, named

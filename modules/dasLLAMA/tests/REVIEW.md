@@ -23,10 +23,8 @@ or a knob list) - never a value the cell's own claim defines - or that a checked
 its evidence, applies `REVIEW_PINNED_GATES.md` too.** An assert that compares against a
 `../dasllama/` constant by name, not against a literal copy of it, keeps nothing in step.
 
-**A cell that calls a `../dasllama/` function that writes a module-global or process-global
-value a later load, route choice or kernel dispatch reads - `set_*`, `enable_*`, `disable_*`,
-`pin_*`, `reset_*`, `restore_*`, `register_*`, `select_*_override`, `unset_*` - in its own code
-or through a helper it calls, passes a loader parameter that takes a family's lane, or whose
+**A cell that calls a driver setter as `REVIEW_LANE_PINS.md` defines it, in its own code or
+through a helper it calls, passes a loader parameter that takes a family's lane, or whose
 claim depends on which route or serving lane runs it - a lane pin, a driver hook, a CPU-vs-GPU
 compare - applies `REVIEW_LANE_PINS.md` (beside this file) too.**
 

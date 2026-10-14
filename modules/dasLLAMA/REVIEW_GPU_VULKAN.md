@@ -261,10 +261,11 @@ before the recorder returns.** A form that leaves its list installed sends every
 profile to another form's role names.
 
 **A diff that submits a transfer copy with `xfer_submit_after`
-(`dasllama/dasllama_vulkan_common.das`) orders any command that writes the buffer that copy reads
-the transfer timeline reaching the value it returned: the host waits on it (`xfer_wait`, spinning
-or blocking) before that submit, or `g_gpu.pend_wait` holds at least that value - raised with
-`max`, never overwritten - when the writing submit is made, with no compute submit in between.**
+(`dasllama/dasllama_vulkan_common.das`) submits no command that writes the buffer that copy reads
+until the transfer timeline reaches the value it returned: the host waits on it (`xfer_wait`)
+before the writing submit, or `g_gpu.pend_wait` holds at least that value - raised with `max`,
+never overwritten - from the copy's submit to the writing submit with no other compute submit
+between the two.**
 Nothing else orders the copy's read before that write.
 
 **A diff that adds an integer division or modulo to kernel code in `dasllama/dasllama_vulkan_classes.das`

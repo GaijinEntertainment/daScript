@@ -174,8 +174,8 @@ Every recorded row, tune sidecar and exchange entry carries the release, so a bu
 **A diff that adds or changes a `dasllama/dasllama_common.das` function working through or reporting
 on another module's hook, moves a family encode stage (a `dasllama/dasllama_<family>.das` stage
 turning input into embeddings or filling a cache the next stage reads) onto a GPU hook, calls a
-`set_*_q8` lane setter under `dasllama/` or `harness/`, adds or changes an override (an environment
-knob, a public setter or a state file that moves a default), or adds or changes an announce (the
+`set_*_q8` lane setter under `dasllama/` or `harness/`, adds or changes an override as
+`REVIEW_OVERRIDES.md` defines it, or adds or changes an announce (the
 line a run prints where an override changes the outcome) applies `REVIEW_OVERRIDES.md` (beside
 this file) too.**
 

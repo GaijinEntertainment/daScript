@@ -12,8 +12,8 @@ the family runs a model's weights in; the blob form is a model after
 writes the value a family's loader or its `*_serves_q8` accessor reads to choose the family's
 serving lane (`set_<name>_q8`, whisper's `set_asr_fp32` / `set_asr_tower_fp32`), or a facade call
 that makes that call. A driver setter is any other `../dasllama/` call the cell makes whose purpose
-is to set a value - a `set_*`, `enable_*`, `disable_*`, `register_*_override` or
-`select_*_override` call - stored in a module global
+is to set a value - a `set_*`, `enable_*`, `disable_*`, `pin_*`, `reset_*`, `restore_*`,
+`register_*`, `select_*_override` or `unset_*` call - stored in a module global
 or process-global state that a later load, route choice or kernel dispatch reads; a call a loader
 makes on its own is not the cell's. A driver setter's getter is the
 `../dasllama/` call, or the set of them, that returns the values the driver setter last wrote.
