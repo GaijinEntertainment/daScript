@@ -9,9 +9,10 @@ docs: `ARCHITECTURE.md`, `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_MEASUREMENT.md`
 overload receives, wherever that string is written, applies `REVIEW_TOKENIZER.md` (beside this
 file) too.**
 
-**A diff that touches a `followup_*.md` or an `ARCHITECTURE*.md` under this folder, adds a file
-under `dasllama/`, or adds a STYLE037/STYLE038 suppression anywhere under this folder applies
-`REVIEW_DOCS.md` (beside this file) too.**
+**A diff that touches a `followup_*.md` or an `ARCHITECTURE*.md` under this folder, removes or
+rewrites the problem a `followup_*.md` row states, adds a file under `dasllama/`, or adds a
+STYLE037/STYLE038 suppression anywhere under this folder applies `REVIEW_DOCS.md` (beside this
+file) too.**
 
 **A diff that adds, changes or drops a check in a `REVIEW.das` under this folder, or adds a name
 to a check's licensed set - the names a check does not flag - applies `REVIEW_GATES.md` (beside
@@ -35,7 +36,7 @@ A serving path is the end-to-end route a run takes from prompt to tokens; its co
 file) together with this list: adds a kernel, loop or call path the runtime re-enters once per
 serving step; adds, moves, renames or removes a `[hot_path]`, `[cold_path]`, `[no_alloc]`,
 `[no_env]` or `[no_io]` annotation; adds or changes a test, harness, benchmark or performance-rig
-function that reaches a function carrying `[hot_path]` or one of those three contracts.** A serving
+function that reaches a function carrying `[hot_path]`, `[no_alloc]`, `[no_env]` or `[no_io]`.** A serving
 step is a token, a prefill quantum (one batch of prompt tokens prefilled in one pass), one encoded
 image, video frame or audio chunk, or one synthesized speech chunk or frame.
 
@@ -160,7 +161,8 @@ weight-format id (a `KqFmt` member, a GGUF type number, or the int a generated k
 format parameter) into plane strides; reads a per-block or per-element byte count of one weight
 format; writes as a literal a number fixed by one weight format (its kernel format id, its element
 or word count per block, a plane stride); makes a backend's serving call read a weight format in a
-form other than its disk bytes; or states that a backend serves a weight format.**
+form other than its disk bytes; or states, in checked-in text, a commit message or the PR body,
+that a backend serves a weight format.**
 
 **A diff that bumps `DASLLAMA_RELEASE` (`dasllama/dasllama_version.das`) cites in the PR body the
 maintainer's ruling that rows measured before it can no longer be compared with rows after it.**
@@ -194,8 +196,9 @@ script that races every candidate in one process, interleaved, each chosen by a 
 in the code the diff ships** - two commits or two processes differ by everything else that
 changed, so their timings pick nothing.
 
-**A diff that picks a candidate by such a race puts the race's output lines, one per candidate and
-each naming it, in the PR body or in a `PERF_LEDGER.md` row the diff adds.**
+**A diff that picks a candidate by racing every candidate in one process, interleaved, puts the
+race's output lines, one per candidate and each naming it, in the PR body or in a `PERF_LEDGER.md`
+row the diff adds.**
 
 **A race that picks a numeric threshold times the chosen value and at least one value on each side
 of it.**
@@ -225,10 +228,11 @@ the concern, and the other folder requires it - never a copy in each.**
 without first proving both stdin and stdout are terminals is a defect - emit the question as
 a `@sidecar` event instead.** A supervised or piped boot must never block on input.
 
-**A print or log of an elapsed interval in an engine file (`dasllama/`) that a run with no
-profiling flag set can print more than once a process or a model load is a defect - route it
-through a profiling rail (`profile_tag` / `profile_marker`, `prof_add`, `asr_prof_add`, or a log
-`DASLLAMA_GPU_PROF` gates; `ARCHITECTURE_MEASUREMENT.md#sanctioned-instrumentation-rails`).**
+**A print or log of an elapsed interval in an engine file (`dasllama/`) outside the profiling
+rails (`profile_tag` / `profile_marker`, `prof_add`, `asr_prof_add`, or a log `DASLLAMA_GPU_PROF`
+gates; `ARCHITECTURE_MEASUREMENT.md#sanctioned-instrumentation-rails`) that can fire more than
+once per model load, or more than once per process where it runs outside any load, is a defect -
+route it through a rail.**
 
 **In an engine file (`dasllama/`), a clock value that changes what the program DOES - control
 flow, eviction, a generated name; not a reported wall-clock time or a best-of reduction over

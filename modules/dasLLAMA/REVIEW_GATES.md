@@ -16,9 +16,10 @@ it does not flag - gains a name, names in its finding text the `ARCHITECTURE_*.m
 section carrying the charter of the feature it guards (the section that says which file owns the
 feature), never `ARCHITECTURE.md`.**
 
-**A diff that adds such a check, or a name to such a set, ships in that section, in the same
-change, the check's line: the check, the names it licenses, and the property those names share, or
-that the check licenses no names.**
+**A diff that adds a check to a `REVIEW.das` under this folder, or a name to a check's licensed
+set, ships in the section the check's finding text names, in the same change, the check's line:
+the check, the names it licenses, and the property those names share, or that the check licenses
+no names.**
 
-**A diff never adds to a check's licensed set a name that lacks the shared property the finding
-text names - fix the flagged code instead.**
+**A diff adds a name to a check's licensed set only when the finding text names the property the
+licensed names share and the new name has it - otherwise fix the flagged code.**
