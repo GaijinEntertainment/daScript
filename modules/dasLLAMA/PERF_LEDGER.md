@@ -70,6 +70,15 @@ what it costs today and what the fix would change.
     3662 ms, decode 139.1 / 131.6; Q8_0 cold 2001 (cv 19 %) / 5229 (cv 3.6 %) ms, decode 96.8 (cv 13 %) / 104.2 (cv
     6.5 %) - every Q8_0 row and a second UD-Q4_K_M round sit past the 3 % line (the box after an hour of back-to-back
     loads), so the Q8_0 column is a direction only; the IQ4_XS file is the M4 arm's pick on both axes.
+  - The same arm, the box idle, two alternated rounds of three files minted from unsloth's BF16 shards (`llama-quantize
+    --tensor-type 'ffn_(gate|up|down)_exps=<fmt>' <bf16> <out> Q8_0`: the routed experts in the named format, every
+    other plane - the shared expert, attention, deltanet, token table, classifier and the NextN head - Q8_0; no
+    imatrix): pure IQ4_XS (18.95 GB) cold 730, 865 / 2631, 2950 ms, decode 189.2, 182.2 / 175.6, 169.9; Q4_K experts +
+    Q8_0 rest (21.29 GB) cold 1037, 1239 / 3942 (cv 6.6 %), 3947 ms, decode 143.6, 139.8 / 133.7, 133.6; IQ4_XS experts
+    + Q8_0 rest (20.26 GB) cold 948 (cv 3.4 %), 879 / 3079, 2946 ms, decode 139.1, 142.0 / 133.4, 134.9. The Q8_0 rest
+    costs a quarter of the decode and a fifth to a third of the cold window on the bandwidth-bound arm: an A3B's dense
+    planes are most of a token's bytes (about 1.9 GB a token at Q8_0 against 1.0 at 4 bits, the eight routed experts
+    0.55), and the pure file's window reads the 4-bit experts and dense planes on its own bytes at the q8 tile's rate.
 - **MEASURED (2026-10-13) - the Metal routed base form's bars (`tests/test_metal_prefill_parity.das`,
   `test_metal_prefill_moe_base_form`, the `moe-base` arm).** A `tests/run.das` cell; the GPU side is the Metal prefill
   window with the gather panel held off (`set_metal_moe_gather_min(1000000)`, so the gate and up sites ride the base form
