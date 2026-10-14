@@ -76,8 +76,9 @@ templates' stamps, carries the run):
 
 The Vulkan clock reads in steps of 2.05 us at these sizes, so a Vulkan cell under 8 us moves by whole steps.
 The template stamps' Vulkan words keep their helpers' bodies in place: the router's methods, the Pocket GEMV's and the
-`gk_subgroup_*` shims carry `[spirv_inline]` (`../dasSpirv/ARCHITECTURE.md#emit-time-inline`), since the driver compiled
-the stamp 1.9 us slower with the subgroup reductions behind calls. The router's 1-column 4.43 is the pre-template body's
+`gk_subgroup_*` shims carry `[spirv_inline]` - the SPIR-V emitter visits such a helper's body at each call site, so the
+stamp pays no function call for it - since the driver compiled the stamp 1.9 us slower with the subgroup reductions
+behind calls. The router's 1-column 4.43 is the pre-template body's
 own reading through the same probe (4.40); the 4.2 is that body's own probe.
 
 **A gated model's q stays in its `[q | gate]` projection rows on both homes.** The Metal decode and verify rope stores
