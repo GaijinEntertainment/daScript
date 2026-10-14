@@ -4866,6 +4866,15 @@ def has_ple(c : Config) : bool => c.n_embd_per_layer > 0l
 // a 64-trunk-layer model (27B) means a shift by 64 — x86 wraps that to bit 0 (a recurrent layer)
 def layer_is_recurrent(c : Config; l : int64) : bool => l < c.n_layers && ((c.recr_mask >> uint64(l)) & 1ul) != 0ul
 
+//! the trunk's recurrent (deltanet) layers
+def recurrent_layer_count(c : Config) : int64 {
+    var n = 0l
+    for (l in range64(c.n_layers)) {
+        n += layer_is_recurrent(c, l) ? 1l : 0l
+    }
+    return n
+}
+
 //! deltanet q/k projection width (n_group heads of d_state each).
 def dn_key_dim(c : Config) : int64 => c.ssm_n_group * c.ssm_d_state
 

@@ -1056,6 +1056,24 @@ def private serve_four(m : Model; device : bool; var events : array<SchedEvent>;
     return (on = on, parked = parked, rows_stepped = rows_stepped)
 }
 
+//! requests `first` up to `last` of two runs side by side: eight tokens each on the
+//! `got` side, token for token the `want` side's for every id below `same_below`
+def private hold_streams_equal(t : T?; m : Model; want, got : array<SchedEvent>;
+                               first, last, same_below : int64; want_name, got_name : string) {
+    for (id in range64(first, last)) {
+        var tw <- toks_of(want, id)
+        var tg <- toks_of(got, id)
+        log_gen_texts(m, "request {id} (CPU = {want_name}, GPU = {got_name})", tw, tg)
+        t |> equal(length(tg), 8, "request {id} ran its eight tokens")
+        if (id < same_below) {
+            t |> success(ids_equal(tw, tg),
+                         "request {id}: {got_name} {tg} against {want_name} {tw}")
+        }
+        delete tw
+        delete tg
+    }
+}
+
 def cell_scheduler_device_mode(t : T?; file : string) {
     t |> run("a device-mode scheduler emits what the host-cached one does where the two run one code path, and a second turn adopts its first turn's rows") @(t : T?) {
         with_regions_rig(t, file) $(tr) {
@@ -1085,17 +1103,8 @@ def cell_scheduler_device_mode(t : T?; file : string) {
             // a device-home stream differs by the host copy it skips. The adopting turn splits its prefill, so it holds no token compare
             t |> equal(served1 - served0, 4l, "the host-cached side prefilled its four prompts on the device, one call each")
             t |> equal(moe_gpu_resident_prefills() - served1, 4l, "and so did the device-home side")
-            for (id in range64(1l, 5l)) {
-                var th <- toks_of(host, id)
-                var td <- toks_of(dev, id)
-                log_gen_texts(tr, "request {id} (CPU = host-cached, GPU = device-home)", th, td)
-                t |> equal(length(td), 8, "request {id} ran its eight tokens on the device")
-                if (id < 4l || !gpu_device_prefill_continues(tr)) {
-                    t |> success(ids_equal(th, td), "request {id}: device-home {td} against host-cached {th}")
-                }
-                delete th
-                delete td
-            }
+            let same_below = gpu_device_prefill_continues(tr) ? 4l : 5l
+            hold_streams_equal(t, tr, host, dev, 1l, 5l, same_below, "host-cached", "device-home")
             t |> equal(cached_of(host, 4l), 0l, "the host-cached flat scheduler keeps no prefix")
             if (gpu_device_prefill_continues(tr)) {
                 t |> success(cached_of(dev, 4l) >= 33l, "the second turn adopted the rows of the turn it continues from the device ({cached_of(dev, 4l)} of them)")
@@ -1123,17 +1132,9 @@ def cell_scheduler_paged_resident(t : T?; file : string) {
             serve_four(tr, false, paged, 64l)
             t |> success(moe_gpu_resident_prefills() - served0 >= 4l, "the paged side's prompts entered the window chain ({moe_gpu_resident_prefills() - served0} calls)")
             t |> success(rdec_picks_served() - steps0 >= 21l, "the paged side's argmax streams stepped on the device ({rdec_picks_served() - steps0} picks landed)")
-            for (id in range64(1l, 5l)) {
-                var tf <- toks_of(flat, id)
-                var tp <- toks_of(paged, id)
-                log_gen_texts(tr, "request {id} (CPU = flat, GPU = paged)", tf, tp)
-                t |> equal(length(tp), 8, "request {id} ran its eight tokens")
-                if (id < 4l) {   //! the second turn attaches its opening and prefills the rest in a call of its own: no token compare holds across that split
-                    t |> success(ids_equal(tf, tp), "request {id}: paged {tp} against flat {tf}")
-                }
-                delete tf
-                delete tp
-            }
+            //! the second turn attaches its opening and prefills the rest in a
+            //! call of its own: no token compare holds across that split
+            hold_streams_equal(t, tr, flat, paged, 1l, 5l, 4l, "flat", "paged")
             t |> success(cached_of(paged, 4l) > 0l, "the second turn attached the pages its first turn left ({cached_of(paged, 4l)} tokens)")
             served_every_call(t)
             delete flat
@@ -1180,15 +1181,7 @@ def cell_device_checkpoint_adopt(t : T?; file : string) {
             t |> equal(d.computed, 130l + 30l, "the device-home run computed the first prompt and the second's user turn alone ({d.computed} tokens)")
             t |> equal(cached_of(host, 2l), 100l, "the host-cached run attached the same checkpoint")
             t |> equal(h.computed, d.computed, "both runs computed the same tokens")
-            for (id in [1l, 2l]) {
-                var th <- toks_of(host, id)
-                var td <- toks_of(dev, id)
-                log_gen_texts(tr, "request {id} (CPU = host-cached paged, GPU = device-home)", th, td)
-                t |> equal(length(td), 8, "request {id} ran its eight tokens")
-                t |> success(ids_equal(th, td), "request {id}: device-home {td} against host-cached {th}")
-                delete th
-                delete td
-            }
+            hold_streams_equal(t, tr, host, dev, 1l, 3l, 3l, "host-cached paged", "device-home")
             served_every_call(t)
             delete host
             delete dev
@@ -1267,15 +1260,8 @@ def cell_device_pool(t : T?; file : string) {
             t |> equal(cached_of(flat, 4l), 0l, "control: with no pool the fourth request prefills whole - its opening's region is gone")
             t |> equal(cached_of(flat, 5l), 0l, "and so does the fifth")
             t |> equal(f.imports, 0l, "the flat scheduler keeps no pool")
-            for (id in range64(1l, 6l)) {
-                var th <- toks_of(host, id)
-                var td <- toks_of(pooled, id)
-                log_gen_texts(tr, "request {id} (CPU = host-cached paged, GPU = device-home pooled)", th, td)
-                t |> equal(length(td), 8, "request {id} ran its eight tokens")
-                t |> success(ids_equal(th, td), "request {id}: device-home pooled {td} against host-cached {th}")
-                delete th
-                delete td
-            }
+            hold_streams_equal(t, tr, host, pooled, 1l, 6l, 6l,
+                               "host-cached paged", "device-home pooled")
             if (recurrent) {
                 let c = serve_pooled(tr, true, 64l, 4l, capped)
                 t |> equal(cached_of(capped, 4l), 100l, "four checkpoints: the system prompts are openings, kept over the tails")

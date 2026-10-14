@@ -118,10 +118,7 @@ def test_scheduler_batching_deltanet_gpu(t : T?) {
                 delete m
                 return
             }
-            var nrec = 0l
-            for (l in range64(m.config.n_layers)) {
-                nrec += layer_is_recurrent(m.config, l) ? 1l : 0l
-            }
+            let nrec = recurrent_layer_count(m.config)
             let step0 = census("dn_step_cls_spv")   //! the device's fused deltanet step: recorded per layer by the per-op step and by the driver's token commands
             let passes0 = pass_total()
             let greedy = SamplingParams()

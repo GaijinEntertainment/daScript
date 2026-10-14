@@ -15,6 +15,7 @@ require ?das_metal metal/das_metal_boost   // nolint:STYLE030,LINT019 - metal_li
 require daslib/jobque_boost
 require daslib/fio   // nolint:STYLE030,LINT019 - path_join and fmap, inside the das_metal halves
 require math
+require daslib/linq   // long_count: the planes a format tags
 require _model_tier
 require _format_census   // census_cell, census_sites_all: the census both homes run
 require dasllama/dasllama_gguf   // nolint:STYLE030,LINT019 - parse_gguf_meta, inside the das_metal halves
@@ -150,18 +151,11 @@ def test_metal_format_census_tied_kq(t : T?) {
 
 //! a model's planes tagged `f` across the dense sites and the routed stacks
 def private planes_tagged(m : Model; f : KqFmt) : int64 {
-    return (tags_of(m.wq_fmt, f) + tags_of(m.wk_fmt, f) + tags_of(m.wv_fmt, f) + tags_of(m.wo_fmt, f) + tags_of(m.w1_fmt, f)
-        + tags_of(m.w2_fmt, f) + tags_of(m.w3_fmt, f) + tags_of(m.we1_fmt, f) + tags_of(m.we2_fmt, f) + tags_of(m.we3_fmt, f))
-}
-
-def private tags_of(a : array<KqFmt>; f : KqFmt) : int64 {
-    var n = 0l
-    for (x in a) {
-        if (x == f) {
-            n++
-        }
-    }
-    return n
+    return (long_count(m.wq_fmt, $(x) => x == f) + long_count(m.wk_fmt, $(x) => x == f)
+        + long_count(m.wv_fmt, $(x) => x == f) + long_count(m.wo_fmt, $(x) => x == f)
+        + long_count(m.w1_fmt, $(x) => x == f) + long_count(m.w2_fmt, $(x) => x == f)
+        + long_count(m.w3_fmt, $(x) => x == f) + long_count(m.we1_fmt, $(x) => x == f)
+        + long_count(m.we2_fmt, $(x) => x == f) + long_count(m.we3_fmt, $(x) => x == f))
 }
 
 [test]
@@ -345,7 +339,9 @@ def test_metal_format_census_per32_moe(t : T?) {
                 let pins = census_pin()
                 var tr <- load_model_(path, QuantMode.q8)
                 tr.config.seq_len = min(tr.config.seq_len, 512l)
-                let nexp = tags_of(tr.we1_fmt, spec.f) + tags_of(tr.we2_fmt, spec.f) + tags_of(tr.we3_fmt, spec.f)
+                let nexp = (long_count(tr.we1_fmt, $(x) => x == spec.f)
+                    + long_count(tr.we2_fmt, $(x) => x == spec.f)
+                    + long_count(tr.we3_fmt, $(x) => x == spec.f))
                 t |> success(nexp >= tr.config.n_layers, "{spec.arm}: the routed stacks load as {spec.f} ({nexp} stacks)")
                 let want <- ["attention q/k/v/o", "routed experts", "shared expert", "token table", "classifier"]
                 census_cell(t, tr, path, "planar", want)
@@ -456,14 +452,6 @@ def test_metal_tied_classifier_reads(t : T?) {
     }
 }
 
-def private maxdiff(a, b : array<float>; n : int64) : float {
-    var d = 0.0
-    for (i in range64(n)) {
-        d = max(d, abs(a[i] - b[i]))
-    }
-    return d
-}
-
 //! "1, 2, ..., n," - the confident counting prompt
 def private counting_text(n : int) : string {
     return build_string() $(var w) {
@@ -500,7 +488,7 @@ def private window_and_steps_cell(t : T?; tr, trg : Model; bar : float; emb_kern
             let emb_w = metal_kernel_count(emb_kernel)
             t |> success(emb_w >= 1l, "{tag}: the window gathered its token rows on the device ({emb_kernel}: {emb_w} dispatches)")
             invoke(after_window)
-            let pf_d = maxdiff(sc.logits, sg.logits, vocab)
+            let pf_d = logits_maxdiff(sc.logits, sg.logits)
             var cpu_prev, gpu_window : array<float>
             cpu_prev := sc.logits
             gpu_window := sg.logits
@@ -516,10 +504,10 @@ def private window_and_steps_cell(t : T?; tr, trg : Model; bar : float; emb_kern
                 one[0] = argmax_of(sc.logits, vocab)
                 eval_(tr, sc, one)
                 eval_(trg, sg, one)
-                let d = maxdiff(sc.logits, sg.logits, vocab)
-                let off = maxdiff(cpu_prev, sg.logits, vocab)
+                let d = logits_maxdiff(sc.logits, sg.logits)
+                let off = logits_maxdiff(cpu_prev, sg.logits)
                 if (step == 0l) {
-                    let ctl = maxdiff(sc.logits, gpu_window, vocab)
+                    let ctl = logits_maxdiff(sc.logits, gpu_window)
                     t |> success(ctl > bar, "{tag}: the window compare's control: the CPU chain's next row lands outside the bar of the window's ({ctl})")
                 }
                 to_log(LOG_INFO, "{tag} step {step}: fed '{eyeball_str(piece_(tr, one[0]))}', CPU next '{eyeball_str(piece_(tr, argmax_of(sc.logits, vocab)))}' vs Metal next '{eyeball_str(piece_(tr, argmax_of(sg.logits, vocab)))}' (maxd {d}, one step off {off})\n")

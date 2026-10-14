@@ -36,14 +36,6 @@ let private PROMPT = 40l   //! one window, past the per-op deltanet chain's 32-r
 let private ROUNDS = 6l   //! the speculative rounds a NextN cell runs a session
 let private STEPS = 6l
 
-def private recurrent_layers(tr : Model) : int64 {
-    var n = 0l
-    for (l in range64(tr.config.n_layers)) {
-        n += layer_is_recurrent(tr.config, l) ? 1l : 0l
-    }
-    return n
-}
-
 //! the one-row steps whose row the device gathered off the step's token id so far (NO_CENSUS when the module is absent)
 def private gathered_rows() : int64 {
     static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -105,7 +97,7 @@ def test_gpu_resident_format_census_iq4xs(t : T?) {
         }
         if (moe_fixture_admitted(t, tr, CENSUS) >= 0l) {
             t |> equal(gpu_resident_decline_(), "", "the whole-model driver armed: no decline reason")
-            let nrec = recurrent_layers(tr)
+            let nrec = recurrent_layer_count(tr.config)
             t |> success(!tr.config.shared_weights && emb_kq(tr) && tr.emb_fmt == KqFmt.iq4xs, "the file's token table is untied and kept as its own IQ4_XS plane ({tr.emb_fmt})")
             var pf_tile = 0l
             var st_gemv = 0l
@@ -155,7 +147,7 @@ def test_gpu_resident_format_census_perop(t : T?) {
         var tr <- load_model_(path, QuantMode.q8)
         set_gpu_resident_route(route)
         t |> success(!moe_gpu_resident_active(), "the whole-model route is off: the per-op rails serve")
-        let nrec = recurrent_layers(tr)
+        let nrec = recurrent_layer_count(tr.config)
         var marked = 0l
         for (l in range64(tr.config.n_layers)) {
             continue if (!layer_is_recurrent(tr.config, l))
@@ -274,7 +266,7 @@ def test_gpu_resident_format_census_ba_f32(t : T?) {
         var tr <- load_resident(path, 1l)
         t |> success(tr.dn_ba_f32, "the file ships its beta/alpha rows F32")
         if (moe_fixture_admitted(t, tr, BA_F32) >= 0l) {
-            let nrec = recurrent_layers(tr)
+            let nrec = recurrent_layer_count(tr.config)
             var pf_ba = 0l
             var st_rt = 0l
             with_dasllama_jobque_() {

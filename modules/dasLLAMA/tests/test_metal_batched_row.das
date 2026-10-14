@@ -485,10 +485,7 @@ def test_metal_batched_row_deltanet(t : T?) {
                 t |> equal(census1.cpu_stack, census0.cpu_stack, "the hybrid never reached the CPU batched stack")
                 //! the recurrent stages run once a layer a step over every row (`ARCHITECTURE_GPU_MTP.md#dn-group-stages`): a
                 //! row-at-a-time step would scan four times a layer
-                var nrec = 0l
-                for (l in range64(tr.config.n_layers)) {
-                    nrec += layer_is_recurrent(tr.config, l) ? 1l : 0l
-                }
+                let nrec = recurrent_layer_count(tr.config)
                 let calls = census1.device - census0.device + metal_decode_stats().decodes + metal_prefill_stats().prefills - calls0
                 t |> equal(dn_scan_dispatches() - scans0, calls * nrec, "one scan dispatch a recurrent layer a device call ({calls} calls, {nrec} recurrent layers)")
                 // nine streams: more rows than the mirror cache's resting size
