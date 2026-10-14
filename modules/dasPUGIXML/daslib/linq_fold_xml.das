@@ -265,7 +265,7 @@ class XmlAdapter : SourceAdapter {
                 $i(hashName)[$e(keybBody)] |> push_clone($i(tupBName))
             }
         }
-        allStmts |> push(wrap_source_loop(LoopDispatch(Each = null), pieces.probeOuter, at))
+        allStmts |> push(wrap_source_loop(LoopDispatch(Each), pieces.probeOuter, at))
         allStmts |> push(pieces.returnStmt)
         return build_xml_join_invoke(nodeExpr, srcName, allStmts, srcBName, invoke_src_param_type(srcbSrc), srcbSrc, pieces.invokeRetType, wrapIter, at)
     }

@@ -87,7 +87,7 @@ struct Regex {
 variant MaybeReNode {
     //! Single regular expression node or nothing.
     value   : ReNode?
-    nothing : void?
+    nothing
 }
 
 let private log_parse_enabled = false
@@ -138,7 +138,7 @@ def private trace_value(value : ReNode?) {
 
 def private nada() {
     trace_backtrack()
-    return MaybeReNode(nothing = null)
+    return MaybeReNode(nothing)
 }
 
 def private maybe(var value : ReNode?) {

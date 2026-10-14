@@ -23,7 +23,7 @@ variant JsValue {
     _number  : double                      //! JSON number
     _longint : int64                       //! extension, not part of JSON standard (represents long integer numbers)
     _bool    : bool                        //! JSON boolean
-    _null    : void?                       //! JSON null
+    _null                                  //! JSON null
 }
 
 struct JsonValue {
@@ -37,7 +37,7 @@ variant Token {
     _number  : double                       //! number token
     _longint : int64                        //! extension, not part of JSON standard (represents long integer numbers)
     _bool    : bool                         //! boolean token
-    _null    : void?                        //! null token
+    _null                                   //! null token
     _symbol  : int                          //! symbol token (one of []{}:,)
     _error   : string                       //! error token
 }
@@ -141,7 +141,7 @@ def private fits_int64(num : string) : bool {
 
 def JVNull {
     //! Creates `JsonValue` representing `null`.
-    return new JsonValue(value <- JsValue(_null = null))
+    return new JsonValue(value <- JsValue(_null))
 }
 
 var private g_json_null_sentinel : JsonValue?
@@ -485,7 +485,7 @@ def private _lexer(var stext : string implicit; strict : bool = false; max_strin
                 } elif (name == "false") {
                     yield TokenAt(value = Token(_bool = false), line = line, row = row)
                 } elif (name == "null") {
-                    yield TokenAt(value = Token(_null = null), line = line, row = row)
+                    yield TokenAt(value = Token(_null), line = line, row = row)
                 } else {
                     yield TokenAt(value = Token(_error = "invalid name {name}"), line = line, row = row)
                     return false
