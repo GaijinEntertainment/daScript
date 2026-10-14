@@ -27,6 +27,7 @@ require math
 require ../../common/parallel_workers.das
 require ../../common/git_signature.das
 require ../../common/log_floor.das
+require ../../common/text_lines.das
 require ../../../dastest/worker_policy.das
 require config
 require compile_db
@@ -167,17 +168,6 @@ def temp_dir_or_cwd() : string {
 // fixed name lets concurrent preflights clobber each other's files
 def unique_temp_path(prefix, suffix : string) : string =>
     path_join(temp_dir_or_cwd(), "{prefix}_{ref_time_ticks()}{suffix}")
-
-def non_empty_lines(s : string) : array<string> {
-    var out : array<string>
-    for (raw in split(s, "\n")) {
-        let line = strip(replace(raw, "\r", ""))
-        if (!empty(line)) {
-            out |> push(line)
-        }
-    }
-    return <- out
-}
 
 // ===== environment discovery =====
 
@@ -394,7 +384,7 @@ def gate_untracked() : GateResult {
         return GateResult(name = "untracked", status = GateStatus.Fail, seconds = seconds_since(t0),
             detail = "git ls-files failed", output = ls.out)
     }
-    var inscope files <- untracked_from_ls(ls.out)
+    var inscope files <- non_empty_lines(ls.out)
     if (empty(files)) {
         return GateResult(name = "untracked", status = GateStatus.Pass, seconds = seconds_since(t0))
     }

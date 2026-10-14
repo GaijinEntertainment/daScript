@@ -331,6 +331,7 @@ SET(DAS_UTILS_TO_TEST
     internal/requirefix
     internal/test-release
     internal/line-length/test_line_length.das
+    common/tests
     daspkg/test_daspkg.das
     daspkg/test_release_workspace.das
     daspkg/test_package_runner_errors.das

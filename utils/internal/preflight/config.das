@@ -15,11 +15,6 @@ struct public PreflightSettings {
     jit_max_file_time : float = 120.0
 }
 
-//! The pure half of the untracked-files gate: repo-relative paths from
-//! `git ls-files --others --exclude-standard` output, CR and blank lines dropped.
-def public untracked_from_ls(out : string) : array<string> =>
-    <- [for (ln in split(out, "\n")); strip(ln); where !empty(strip(ln))]
-
 //! The pure half of the dasLLAMA gates' trigger: does a changed path (as `git diff --name-only`
 //! prints them - repo-relative, forward slashes, maybe CR-terminated) sit under `prefix`?
 def public has_path_under(paths : array<string>; prefix : string) : bool {

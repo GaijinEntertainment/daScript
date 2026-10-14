@@ -6,6 +6,7 @@ module line_length shared public
 require strings
 require daslib/strings_boost
 require daslib/lint_config public
+require ../../common/text_lines.das
 
 //! The repo defaults are `LineLengthPolicy`'s field defaults; named
 //! here for the summary line and the tests
@@ -229,6 +230,11 @@ def find_violations(path, text : string; added : array<int>;
 //! The findings under the repo defaults
 def find_violations(path, text : string; added : array<int>) : array<Finding>
     => <- find_violations(path, text, added, LineLengthPolicy())
+def untracked_paths(ls_files_out : string) : array<string> => <- [
+    for (path in non_empty_lines(ls_files_out)); path; where is_checked(path)]
+
+def all_lines(text : string) : array<int> => <- [
+    for (k in range(1, count(text, "\n") + 2)); k]
 
 //! Reads `git diff -U0` output: the new-side line numbers each file's hunks add.
 def added_lines(diff : string) : table<string; array<int>> {
