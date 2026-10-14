@@ -135,7 +135,7 @@ def test_untracked_files_are_checked(t : T?) {
     write_at(t, repo, "skip.das", long_file)
     let main_das = get_full_file_name("utils/internal/line-length/main.das")
     let run = run_in(repo, [get_das_exe(), main_das, "--", "--base", "HEAD"])
-    t |> equal(1, run.rc, "an untracked long line fails the check: {run.out}")
+    t |> equal(run.rc, 1, "an untracked long line fails the check: {run.out}")
     t |> success(find(run.out, "long.das:2:") >= 0, "the untracked file's line is named: {run.out}")
     t |> success(find(run.out, "skip.das") < 0, "an ignored file is not read: {run.out}")
 }
