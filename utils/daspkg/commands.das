@@ -2500,6 +2500,12 @@ def private release_in_workspace(root, out_dir, workspace : string; paranoid, qu
     if (!empty(fat) && quick) {
         to_log(LOG_WARNING, "release: --quick means nothing under --fat - a fat exe mints nothing and inherits nothing; its kernels come from the class profiles\n")
     }
+    let redirect = get_env_variable("DAS_TUNE_MANIFEST")
+    if (!empty(redirect)) {
+        log("  tune: the shell's DAS_TUNE_MANIFEST ({redirect}) is ignored - " +
+            "a release mints and ships the app's own sidecar\n")
+        set_env_variable("DAS_TUNE_MANIFEST", "")
+    }
     // Reset the patchelf availability cache so a daspkg process that releases
     // multiple bundles can pick up a patchelf install between calls.
     patchelf_state = -1

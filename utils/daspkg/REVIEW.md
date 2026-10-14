@@ -48,6 +48,11 @@ refuses; a fat exe never tunes.
 **A diff that lets a release path other than `--quick` reuse a sidecar from an earlier run is a
 defect.**
 
+**A diff that lets a release mint into, rebuild from, or ship a sidecar named by a
+`DAS_TUNE_MANIFEST` the shell exported is a defect** - a release mints and ships the app's own
+sidecar; `release_in_workspace` clears the inherited variable before its first build, and the
+tuner line names the scope's manifest on its own.
+
 **A diff that lets `--quick` accept an incomplete sidecar is a defect** - incomplete means
 missing a scope key, that is, an entry of the `tune_scopes` list in any deps JSON the release
 wrote.
