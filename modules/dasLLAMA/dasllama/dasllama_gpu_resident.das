@@ -1633,15 +1633,18 @@ def moe_gpu_resident_stashes() : int64 => g_rdec_stashes
 def private rdec_region_device_only(reg : RdecRegion) : bool
     => !reg.pinned && reg.gen != 0l && ((reg.host_behind && reg.cnt > 0l) || reg.head_host < reg.head_cnt)
 
-//! layer `l`'s rows [lo, hi) of the selected region read off the device
+//! layer `l`'s rows [lo, hi) of the selected region,
+//! sized and queued for the batched read off the device
 def private rdec_stash_span(c : Config; l, lo, hi : int64) : RdecStashSpan {
     let rowb = kv_row_bytes(g_rdec_kvdt, layer_kv_dim(c, l))
     var sp = RdecStashSpan(l = l, lo = lo, hi = hi, rowb = rowb)
     let bytes = (hi - lo) * rowb
     sp.k |> reserve_resize(bytes)
     sp.v |> reserve_resize(bytes)
-    unsafe {   //! the readback writes row `row0` at `kp + row0 * rowb`: the planes stand in from row `lo`
-        rdec_kv_read(l, lo, hi - lo, addr(sp.k[0]) + (-lo * rowb), addr(sp.v[0]) + (-lo * rowb))
+    unsafe {   //! row `row0` lands at `kp + row0 * rowb`: the planes stand in from row `lo`
+        var kp = addr(sp.k[0]) + (-lo * rowb)
+        var vp = addr(sp.v[0]) + (-lo * rowb)
+        g_rdec_pool_spans |> push(RdecKvSpan(l = l, row0 = lo, nrows = hi - lo, kp = kp, vp = vp))
     }
     return <- sp
 }
@@ -1652,6 +1655,7 @@ def private rdec_stash_region(t : Model; r : int64) {
     let reg = g_rdec_regions[r]
     var st = RdecStash(uid = reg.owner_uid)
     rdec_select_region(r)
+    g_rdec_pool_spans |> clear()
     if (reg.host_behind && reg.cnt > 0l) {
         for (l in range64(c.n_layers)) {
             continue if (!layer_owns_kv(t, l))
@@ -1661,6 +1665,7 @@ def private rdec_stash_region(t : Model; r : int64) {
     if (reg.head_host < reg.head_cnt) {
         st.spans |> emplace <| rdec_stash_span(c, c.n_layers, reg.head_host, reg.head_cnt)
     }
+    rdec_kv_spans_move(false)
     g_rdec_stash |> emplace(reg.gen, st)
     g_rdec_stashes++
 }
@@ -1720,10 +1725,7 @@ def private rdec_hydrate_host(t : Model; var s : Session) {
     rdec_select_region(s.rdec_region)
     let cnt = g_rdec_regions[s.rdec_region].cnt
     if (!s.rdec_host_current) {
-        for (l in range64(c.n_layers)) {
-            continue if (!layer_owns_kv(t, l))   // a shared-KV layer reads its donor's slab, gathered once through the donor
-            rdec_host_rows(s, c, l, 0l, cnt, false)
-        }
+        rdec_cache_rows(t, s, 0l, cnt, false)
         rdec_host_mark(s, true)
         to_log(LOG_INFO, "dasLLAMA: resident KV hydrated to host ({cnt} positions x {c.n_layers} layers)\n")
     }
@@ -2892,7 +2894,6 @@ def private rdec_host_span(l, row0, nrows : int64; var kp, vp : uint8?; up : boo
 
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command")]
 def private rdec_take_mirror(t : Model; var s : Session; r, pos : int64) {
-    let c = t.config
     if (s.device_kv) {   //! a device-home session has nothing on the host to bring up: it claims an empty region
         if (pos != 0l) {
             panic("dasLLAMA resident driver: a device-home session at position {pos} holds no mirror region - more live device-home sessions than the driver has regions ({long_length(g_rdec_regions)})")
@@ -2900,10 +2901,7 @@ def private rdec_take_mirror(t : Model; var s : Session; r, pos : int64) {
         rdec_claim(s, r, 0l)
         return
     }
-    for (l in range64(c.n_layers)) {
-        continue if (!layer_owns_kv(t, l))
-        rdec_host_rows(s, c, l, 0l, pos, true)
-    }
+    rdec_cache_rows(t, s, 0l, pos, true)
     rdec_claim(s, r, pos)
     rdec_host_mark(s, true)   // the host still holds everything the mirror does
 }
@@ -4762,6 +4760,7 @@ struct GpuModelMarks {
     marks : MoeGpuMarks <- MoeGpuMarks()
     rdec_active : bool
     rdec_regions : array<RdecRegion>   //! every mirror region's rows and owner, so a model stepped out and back finds its sessions where they were
+    rdec_stash : table<int64; RdecStash>   //! the claims saved as the model's regions changed hands
     rdec_cap : int64
     rdec_kvdt : KVDtype
     rdec_emb_gpu : bool
@@ -4779,6 +4778,8 @@ def moe_gpu_model_marks_save_(var st : GpuModelMarks) {
     st.rdec_active = g_rdec_active
     delete st.rdec_regions
     st.rdec_regions <- g_rdec_regions
+    delete st.rdec_stash
+    st.rdec_stash <- g_rdec_stash
     st.rdec_cap = g_rdec_cap
     st.rdec_kvdt = g_rdec_kvdt
     st.rdec_emb_gpu = g_rdec_emb_gpu
@@ -4797,6 +4798,8 @@ def moe_gpu_model_marks_restore_(var st : GpuModelMarks) {
     rdec_set_active(st.rdec_active)
     delete g_rdec_regions
     g_rdec_regions <- st.rdec_regions
+    delete g_rdec_stash
+    g_rdec_stash <- st.rdec_stash
     g_rdec_cap = st.rdec_cap
     g_rdec_kvdt = st.rdec_kvdt
     g_rdec_emb_gpu = st.rdec_emb_gpu
@@ -4963,7 +4966,7 @@ def gpu_device_kv_export_(t : Model; claim : int64; var host : Session; lo, hi :
     let t0 = ref_time_ticks()
     kv_ensure(host, hi)
     rdec_select_region(r)
-    rdec_pool_rows(t, host, lo, hi, false)
+    rdec_cache_rows(t, host, lo, hi, false)
     host.n_past = hi
     g_rdec_pool_moves.exports ++
     g_rdec_pool_moves.rows_down += max(hi - lo, 0l)
@@ -5045,9 +5048,10 @@ def private rdec_peek_snapshot(like : Session; slot : int; var into : DnSnapshot
 var private @scratch g_rdec_pool_spans : array<RdecKvSpan>
 var private @scratch g_rdec_pool_dsts : array<RdecDnDst>
 
-//! positions [lo, hi) of every K/V-owning layer between `host`'s pages and the selected region, every page run in one batch where
-//! the driver stages one (`rdec_kv_xfer`), else a run at a time
-def private rdec_pool_rows(t : Model; var host : Session; lo, hi : int64; up : bool) {
+//! positions [lo, hi) of every K/V-owning layer between `host`'s cache
+//! and the selected region, in one batch (`rdec_kv_spans_move`);
+//! a shared-KV layer's rows move once, through its donor
+def private rdec_cache_rows(t : Model; var host : Session; lo, hi : int64; up : bool) {
     let c = t.config
     g_rdec_pool_spans |> clear()
     for (l in range64(c.n_layers)) {
@@ -5056,6 +5060,13 @@ def private rdec_pool_rows(t : Model; var host : Session; lo, hi : int64; up : b
             g_rdec_pool_spans |> push(RdecKvSpan(l = l, row0 = row0, nrows = nrows, kp = kp, vp = vp))
         }
     }
+    rdec_kv_spans_move(up)
+}
+
+//! the spans queued in `g_rdec_pool_spans` moved up (`up`) or down in
+//! one batch where the driver stages one (`rdec_kv_xfer`), else a span
+//! at a time
+def private rdec_kv_spans_move(up : bool) {
     if (!rdec_kv_xfer(g_rdec_pool_spans, up)) {
         for (sp in g_rdec_pool_spans) {
             rdec_host_span(sp.l, sp.row0, sp.nrows, sp.kp, sp.vp, up)
@@ -5103,7 +5114,7 @@ def gpu_device_kv_import_(t : Model; var s : Session; var host : Session; npos :
     let t0 = ref_time_ticks()
     let r = rdec_bind_region(t, s)
     return false if (r < 0l)
-    rdec_pool_rows(t, host, 0l, npos, true)
+    rdec_cache_rows(t, host, 0l, npos, true)
     rdec_claim(s, r, npos)
     rdec_host_mark(s, false)
     s.n_past = npos
@@ -5164,9 +5175,11 @@ def gpu_slot_rearm_(want : GpuTierWant; t : Model) : string {
 def moe_gpu_hydrate_session_(t : Model; var s : Session) {
     // codec gate mirrors the overrides: hydration byte-copies mirror rows, so a codec-mismatched
     // session must never receive them (the gen match alone is ambiguous at generation 0)
-    if (g_rdec_active && rdec_has_device_only_rows(s)
-            && s.kv_dtype_k == g_rdec_kvdt && s.kv_dtype_v == g_rdec_kvdt) {
+    return if (!g_rdec_active || s.kv_dtype_k != g_rdec_kvdt || s.kv_dtype_v != g_rdec_kvdt)
+    if (rdec_has_device_only_rows(s)) {
         rdec_hydrate_host(t, s)
+    } elif (!rdec_owns(s, s.rdec_region)) {
+        rdec_unstash(t, s)   //! a lost claim's saved rows, before the drop clears the stash
     }
 }
 
@@ -5191,6 +5204,7 @@ def moe_gpu_drop_model_() {
     g_rdec_draft_pick = -1l
     g_rdec_verify_picks |> clear()
     g_rdec_regions |> clear()
+    g_rdec_stash |> clear()
     g_rdec_cap = 0l
     g_rdec_emb_gpu = false
     g_rdec_head_armed = false
@@ -5321,7 +5335,10 @@ def private dense_ffn_cpu_say(t : Model) {
         bytes += moe_gpu_plane_bytes(c.dim, hid, int(fmt_at(t.w3_fmt, l)))
         bytes += moe_gpu_plane_bytes(hid, c.dim, int(fmt_at(t.w2_fmt, l)))
     }
-    to_log(LOG_WARNING, "dasLLAMA: GPU MoE tier: the dense FFN of {c.n_layers} layers ({bytes >> 20l} MB) stays on the CPU - the per-op tier's FFN rail is opt-in (DASLLAMA_GPU_DENSE=1 DASLLAMA_GPU_DENSE_FFN=1)\n")
+    let why = (!gpu_want_dense() ? "the dense rail is off (DASLLAMA_GPU_DENSE=0)"
+        : "its FFN rail, on by default, is off (DASLLAMA_GPU_DENSE_FFN=0)")
+    to_log(LOG_WARNING, "dasLLAMA: GPU MoE tier: the dense FFN of {c.n_layers} layers "
+        + "({bytes >> 20l} MB) stays on the CPU - {why}\n")
 }
 
 // Upload the offloaded layers' expert stacks to the GPU tier from the PREPARED planes. Called at
