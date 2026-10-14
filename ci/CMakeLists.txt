@@ -120,7 +120,7 @@ das_lane_group(run_extended_all "Running every extended check"
     ${DAS_EXTENDED_CORE} ${DAS_EXTENDED_MODULES} ${DAS_EXTENDED_NIGHTLY})
 
 das_lane_group(run_build "Running the build lane"
-    run_tests_sweeps test-small)
+    run_tests_sweeps test-small run_tests_aot_subset)
 das_lane_group(run_build_nightly "Running the build lane's nightly sweeps"
     run_tests_slow run_backend_sweeps test_aot_subset)
 das_lane_group(run_build_sanitizers "Running the sanitizer lane"
@@ -133,7 +133,7 @@ das_lane_group(run_build_mingw "Running the mingw lane"
 # (cmake has no retry primitive inside one target). The windows 64 Debug cell needs it every run -
 # its first pass outgrows the 1800 s watchdog and only the isolated pass finishes.
 das_lane_group(run_build_isolated "Retrying the build lane's sweeps in isolated mode"
-    run_tests_sweeps_isolated test-small)
+    run_tests_sweeps_isolated test-small run_tests_aot_subset)
 das_lane_group(run_build_sanitizers_isolated "Retrying the sanitizer lane's sweep in isolated mode"
     run_tests_interpreter_isolated test-small)
 das_lane_group(run_build_mingw_isolated "Retrying the mingw lane's sweeps in isolated mode"

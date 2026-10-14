@@ -126,8 +126,8 @@ if(TARGET test_aot)
 endif()
 
 # Fast AOT run over tests/language only, against the subset binary that per-PR
-# CI already builds as part of ALL. For local/debug use — PR CI treats the
-# subset build itself as the gate and runs no AOT tests.
+# CI already builds as part of ALL. The build lane runs it; the shared result
+# cache serves it until the subset binary changes.
 if(TARGET test_aot_subset)
     add_das_target(run_tests_aot_subset
         COMMAND ${DAS_SANITIZER_ENV} $<TARGET_FILE:test_aot_subset> -use-aot ${PROJECT_SOURCE_DIR}/dastest/dastest.das -- --use-aot --color --failures-only --timeout 1800 --test ${PROJECT_SOURCE_DIR}/tests/language --cache-dir ${DAS_TEST_CACHE_DIR}
