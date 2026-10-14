@@ -230,6 +230,7 @@ def find_violations(path, text : string; added : array<int>;
 //! The findings under the repo defaults
 def find_violations(path, text : string; added : array<int>) : array<Finding>
     => <- find_violations(path, text, added, LineLengthPolicy())
+
 def untracked_paths(ls_files_out : string) : array<string> => <- [
     for (path in non_empty_lines(ls_files_out)); path; where is_checked(path)]
 
