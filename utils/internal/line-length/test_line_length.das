@@ -91,6 +91,55 @@ def test_skips(t : T?) {
 }
 
 [test]
+def test_folder_limits(t : T?) {
+    t |> run("a limit of 0 leaves that measure unchecked") @(t : T?) {
+        let text = "{LONG_CODE}\n// {LONG_COMMENT}\n"
+        let lines <- every_line(text)
+        let code_only <- find_violations("a.das", text, lines,
+            LineLengthPolicy(code = CODE_LIMIT, comment = 0))
+        t |> equal(length(code_only), 1)
+        t |> equal(code_only[0].line, 1)
+        let comment_only <- find_violations("a.das", text, lines,
+            LineLengthPolicy(code = 0, comment = COMMENT_LIMIT))
+        t |> equal(length(comment_only), 1)
+        t |> equal(comment_only[0].line, 2)
+        let none <- find_violations("a.das", text, lines, LineLengthPolicy(code = 0, comment = 0))
+        t |> equal(length(none), 0)
+    }
+    t |> run("a wider limit admits the line") @(t : T?) {
+        let text = "{LONG_CODE}\n"
+        let wide <- find_violations("a.das", text, every_line(text),
+            LineLengthPolicy(code = CODE_LIMIT + 1, comment = COMMENT_LIMIT))
+        t |> equal(length(wide), 0)
+    }
+    t |> run("the nearest folder's .lint_config wins a key, the defaults fill the rest") @(t : T?) {
+        var error : string
+        let root = create_temp_directory("line_length_policy", error)
+        t |> success(empty(error), "a temp root: {error}")
+        let sub = path_join(root, "sub")
+        let deep = path_join(sub, "deep")
+        t |> success(mkdir_rec(path_join(root, ".git")) && mkdir_rec(deep), "the folders")
+        fwrite(path_join(root, ".lint_config"), "[line_length]\ncode = 120\ncomment = 90\n")
+        fwrite(path_join(sub, ".lint_config"), "[line_length]\ncode = 0\n")
+        fwrite(path_join(deep, "x.das"), "")
+        fwrite(path_join(root, "y.das"), "")
+        let deep_pol = line_length_policy_for(path_join(deep, "x.das"))
+        t |> equal(deep_pol.code, 0, "the nearest file's code limit")
+        t |> equal(deep_pol.comment, 90, "the parent's comment limit where the nearest has none")
+        let root_pol = line_length_policy_for(path_join(root, "y.das"))
+        t |> equal(root_pol.code, 120)
+        t |> equal(root_pol.comment, 90)
+        let none_pol = line_length_policy_for(path_join(path_join(root, "no_such_dir"), "z.das"))
+        t |> equal(none_pol.code, 120, "a missing folder still reads its parents")
+        let bare = path_join(path_join(dir_name(root), "no_such_dir_at_all"), "z.das")
+        let bare_pol = line_length_policy_for(bare)
+        t |> equal(bare_pol.code, CODE_LIMIT, "no config reads the defaults")
+        t |> equal(bare_pol.comment, COMMENT_LIMIT)
+        t |> success(rmdir_rec(root, error), "the temp root goes: {error}")
+    }
+}
+
+[test]
 def test_diff_base(t : T?) {
     t |> equal(diff_base("", "master"), "origin/master", "no --base: the remote's branch")
     t |> equal(diff_base("HEAD~1", "master"), "HEAD~1", "--base is used as given")

@@ -52,15 +52,16 @@ def main : int {
     var total = 0
     let changed <- added_lines(diff.out)
     for (path, lines in keys(changed), values(changed)) {
-        let text = fread(path_join(top, path))
-        for (f in find_violations(path, text, lines)) {
+        let full = path_join(top, path)
+        let text = fread(full)
+        for (f in find_violations(path, text, lines, line_length_policy_for(full))) {
             to_log(LOG_ERROR, "{path}:{f.line}: {f.message}\n")
             total++
         }
     }
     if (total != 0) {
         to_log(LOG_ERROR, "line-length: {total} added line(s) over the limit "
-            + "(code {CODE_LIMIT}, comments {COMMENT_LIMIT})\n")
+            + "(code {CODE_LIMIT}, comments {COMMENT_LIMIT}, or a folder's `[line_length]`)\n")
         return 1
     }
     return 0
