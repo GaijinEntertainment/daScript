@@ -6098,6 +6098,7 @@ class template KqCm2BatchT : MoeCmBase {
     @template_constant IQLUT : bool = false               // stage the iq4nl codebook into workgroup memory
     @workgroup @template_gate = IQLUT iq4lut : float16[16]   // kvalues_iq4nl as f16
     @template_constant IQODD : bool = false               //!< under IQLUT the staged codebook is iq3s4's odd values 2q - 15
+    @template_constant Q50 : bool = false   //!< q51's block under one d: d * (q - 16), q5032
     @template_constant SCGRID : bool = false              //!< under SCIQ4 the two-word row's sub-scale is the iq3 row's 1 + 2s (`grid_sc`), not iq4xs's ls - 32
     @template_constant IQ3GRID : bool = false             // stage the 2 KB iq3s grid into workgroup memory
     @workgroup @template_gate = IQ3GRID iq3s_gridc : uint[512]
@@ -6828,7 +6829,8 @@ class template Q40Cm2T : KqCm2BatchT {
 }
 
 //! Q5_1 on the cm2 tile: the per-32 plane verbatim (the CPU's `dot_q51q8_scalar` layout), w = d * q + m with
-//! q = nibble | qh bit << 4; the scale word is f16 d in the low half, f16 m in the high
+//! q = nibble | qh bit << 4; the scale word is f16 d in the low half, f16 m in the high.
+//! Under `Q50` (q5032) one f16 d a block, two blocks a word: w = d * (q - 16)
 [ |> template_struct_instance]
 class template Q51Cm2T : KqCm2BatchT {
     typedef BLK = VkQ51Blk
@@ -6839,16 +6841,24 @@ class template Q51Cm2T : KqCm2BatchT {
     def override khr_stage16(blk, e0, sbase : uint) : void {
         static_if (KHR) {   //! the 20-byte block off its words: four nibble words then the qh word, the low or high nibbles by e0
             let sh = (e0 >> 4u) * 4u
-            let dm = unpackHalf2x16(ws[blk])
-            let qh = wqw[blk * KQ_Q51_QWORDS + KQ_B32_QWORDS] >> e0
+            let qw = Q50 ? KQ_Q5032_QWORDS : KQ_Q51_QWORDS
+            let qh = wqw[blk * qw + KQ_B32_QWORDS] >> e0
             for [unroll_full] (c in range(4)) {
-                let w = wqw[blk * KQ_Q51_QWORDS + uint(c)] >> sh
+                let w = wqw[blk * qw + uint(c)] >> sh
                 let hb = qh >> (uint(c) * 4u)
-                let q0 = float((w & 0xFu) | ((hb & 1u) << 4u))
-                let q1 = float(((w >> 8u) & 0xFu) | (((hb >> 1u) & 1u) << 4u))
-                let q2 = float(((w >> 16u) & 0xFu) | (((hb >> 2u) & 1u) << 4u))
-                let q3 = float(((w >> 24u) & 0xFu) | (((hb >> 3u) & 1u) << 4u))
-                khr_put4(sbase + uint(c) * 2u, float4(dm.x * q0 + dm.y, dm.x * q1 + dm.y, dm.x * q2 + dm.y, dm.x * q3 + dm.y))
+                let u0 = (w & 0xFu) | ((hb & 1u) << 4u)
+                let u1 = ((w >> 8u) & 0xFu) | (((hb >> 1u) & 1u) << 4u)
+                let u2 = ((w >> 16u) & 0xFu) | (((hb >> 2u) & 1u) << 4u)
+                let u3 = ((w >> 24u) & 0xFu) | (((hb >> 3u) & 1u) << 4u)
+                static_if (Q50) {
+                    let d = q40_d_of(ws[blk >> 1u], blk)
+                    khr_put4(sbase + uint(c) * 2u, float4(d * float(int(u0) - 16),
+                        d * float(int(u1) - 16), d * float(int(u2) - 16), d * float(int(u3) - 16)))
+                } else {
+                    let dm = unpackHalf2x16(ws[blk])
+                    khr_put4(sbase + uint(c) * 2u, float4(dm.x * float(u0) + dm.y,
+                        dm.x * float(u1) + dm.y, dm.x * float(u2) + dm.y, dm.x * float(u3) + dm.y))
+                }
             }
         }
     }
@@ -6860,8 +6870,14 @@ class template Q51Cm2T : KqCm2BatchT {
         let by = ((uint(int(blk.qs[int(j >> 1u)])) & 0xFFFFu) >> ((j & 1u) * 8u)) & 0xFFu
         let qh = (uint(int(blk.qs[8])) & 0xFFFFu) | ((uint(int(blk.qs[9])) & 0xFFFFu) << 16u)
         let q = ((by >> ((e >> 4u) * 4u)) & 0xFu) | (((qh >> e) & 1u) << 4u)
-        let dm = unpackHalf2x16(ws[wg_blk0 + bc.x * (pa.n >> 5u) + bc.y])
-        return float16(dm.x * float(q) + dm.y)
+        let idx = wg_blk0 + bc.x * (pa.n >> 5u) + bc.y
+        static_if (Q50) {
+            let d = q40_d_of(ws[idx >> 1u], idx)
+            return float16(d * float(int(q) - 16))
+        } else {
+            let dm = unpackHalf2x16(ws[idx])
+            return float16(dm.x * float(q) + dm.y)
+        }
     }
 
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
@@ -6872,64 +6888,26 @@ class template Q51Cm2T : KqCm2BatchT {
         let l1 = uint(int(blk.qs[li + 1])) & 0xFFFFu
         let sh = (e >> 4u) * 4u
         let qh = ((uint(int(blk.qs[8])) & 0xFFFFu) | ((uint(int(blk.qs[9])) & 0xFFFFu) << 16u)) >> e
-        let dm = unpackHalf2x16(ws[wg_blk0 + bc.x * (pa.n >> 5u) + bc.y])
-        return half4(float4(dm.x * float(((l0 >> sh) & 0xFu) | ((qh & 1u) << 4u)) + dm.y,
-            dm.x * float(((l0 >> (sh + 8u)) & 0xFu) | (((qh >> 1u) & 1u) << 4u)) + dm.y,
-            dm.x * float(((l1 >> sh) & 0xFu) | (((qh >> 2u) & 1u) << 4u)) + dm.y,
-            dm.x * float(((l1 >> (sh + 8u)) & 0xFu) | (((qh >> 3u) & 1u) << 4u)) + dm.y))
-    }
-}
-
-//! IQ4_NL per-32 on the cm2 tile: the per-32 plane verbatim (the CPU's `dot_iq4nl32q8_scalar` layout), w = d * LUT[q]
-//! off the staged codebook (`IQLUT`); the scale plane holds one f16 d a block, two blocks a word
-[ |> template_struct_instance]
-class template Iq4nl32Cm2T : KqCm2BatchT {
-    typedef BLK = VkIq4nl32Blk
-    typedef ST = uint
-    override BLKW = 32u
-    override DECV4 = true
-    override IQLUT = true
-
-    def override khr_stage16(blk, e0, sbase : uint) : void {
-        static_if (KHR) {   //! the block's 16 nibble bytes as one word4: the low nibbles are elements 0..15, the high 16..31
-            let sh = (e0 >> 4u) * 4u
-            let w4 = wq4[blk]
-            let d = q40_d_of(ws[blk >> 1u], blk)
-            for [unroll_full] (c in range(4)) {
-                let w = w4[c] >> sh
-                khr_put4(sbase + uint(c) * 2u, float4(d * float(iq4lut[int(w & 0xFu)]), d * float(iq4lut[int((w >> 8u) & 0xFu)]),
-                    d * float(iq4lut[int((w >> 16u) & 0xFu)]), d * float(iq4lut[int((w >> 24u) & 0xFu)])))
-            }
+        let idx = wg_blk0 + bc.x * (pa.n >> 5u) + bc.y
+        let u0 = ((l0 >> sh) & 0xFu) | ((qh & 1u) << 4u)
+        let u1 = ((l0 >> (sh + 8u)) & 0xFu) | (((qh >> 1u) & 1u) << 4u)
+        let u2 = ((l1 >> sh) & 0xFu) | (((qh >> 2u) & 1u) << 4u)
+        let u3 = ((l1 >> (sh + 8u)) & 0xFu) | (((qh >> 3u) & 1u) << 4u)
+        static_if (Q50) {
+            let d = q40_d_of(ws[idx >> 1u], idx)
+            return half4(float4(d * float(int(u0) - 16), d * float(int(u1) - 16),
+                d * float(int(u2) - 16), d * float(int(u3) - 16)))
+        } else {
+            let dm = unpackHalf2x16(ws[idx])
+            return half4(float4(dm.x * float(u0) + dm.y, dm.x * float(u1) + dm.y,
+                dm.x * float(u2) + dm.y, dm.x * float(u3) + dm.y))
         }
     }
-
-    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
-    def decode(blk : VkIq4nl32Blk; bc, cib : uint2) : float16 {
-        let e = cib.y
-        let j = e & 15u
-        let by = ((uint(int(blk.qs[int(j >> 1u)])) & 0xFFFFu) >> ((j & 1u) * 8u)) & 0xFFu
-        let q = (by >> ((e >> 4u) * 4u)) & 0xFu
-        let idx = wg_blk0 + bc.x * (pa.n >> 5u) + bc.y
-        let d = q40_d_of(ws[idx >> 1u], idx)
-        return float16(d * float(iq4lut[int(q)]))
-    }
-
-    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
-    def decode_v4(blk : VkIq4nl32Blk; bc, cib : uint2) : half4 {
-        let e = cib.y
-        let li = int((e & 15u) >> 1u)
-        let l0 = uint(int(blk.qs[li])) & 0xFFFFu
-        let l1 = uint(int(blk.qs[li + 1])) & 0xFFFFu
-        let sh = (e >> 4u) * 4u
-        let idx = wg_blk0 + bc.x * (pa.n >> 5u) + bc.y
-        let d = q40_d_of(ws[idx >> 1u], idx)
-        return half4(float4(d * float(iq4lut[int((l0 >> sh) & 0xFu)]), d * float(iq4lut[int((l0 >> (sh + 8u)) & 0xFu)]),
-            d * float(iq4lut[int((l1 >> sh) & 0xFu)]), d * float(iq4lut[int((l1 >> (sh + 8u)) & 0xFu)])))
-    }
 }
 
-//! Q4_0 per-32 on the cm2 tile: iq4nl32's plane form (`VkIq4nl32Blk`, one f16 d a block, two blocks a word) under the linear
-//! code, w = d * (q - 8)
+//! Q4_0 per-32 on the cm2 tile: the per-32 plane verbatim (one f16 d a block, two blocks a word),
+//! w = d * (q - 8); under `IQLUT` (iq4nl32, the CPU's `dot_iq4nl32q8_scalar` layout) w = d * LUT[q]
+//! off the staged codebook
 [ |> template_struct_instance]
 class template Q4032Cm2T : KqCm2BatchT {
     typedef BLK = VkIq4nl32Blk
@@ -6944,8 +6922,17 @@ class template Q4032Cm2T : KqCm2BatchT {
             let d = q40_d_of(ws[blk >> 1u], blk)
             for [unroll_full] (c in range(4)) {
                 let w = w4[c] >> sh
-                khr_put4(sbase + uint(c) * 2u, float4(d * float(int(w & 0xFu) - 8), d * float(int((w >> 8u) & 0xFu) - 8),
-                    d * float(int((w >> 16u) & 0xFu) - 8), d * float(int((w >> 24u) & 0xFu) - 8)))
+                static_if (IQLUT) {
+                    khr_put4(sbase + uint(c) * 2u, float4(d * float(iq4lut[int(w & 0xFu)]),
+                        d * float(iq4lut[int((w >> 8u) & 0xFu)]),
+                        d * float(iq4lut[int((w >> 16u) & 0xFu)]),
+                        d * float(iq4lut[int((w >> 24u) & 0xFu)])))
+                } else {
+                    khr_put4(sbase + uint(c) * 2u, float4(d * float(int(w & 0xFu) - 8),
+                        d * float(int((w >> 8u) & 0xFu) - 8),
+                        d * float(int((w >> 16u) & 0xFu) - 8),
+                        d * float(int((w >> 24u) & 0xFu) - 8)))
+                }
             }
         }
     }
@@ -6958,7 +6945,11 @@ class template Q4032Cm2T : KqCm2BatchT {
         let q = (by >> ((e >> 4u) * 4u)) & 0xFu
         let idx = wg_blk0 + bc.x * (pa.n >> 5u) + bc.y
         let d = q40_d_of(ws[idx >> 1u], idx)
-        return float16(d * float(int(q) - 8))
+        static_if (IQLUT) {
+            return float16(d * float(iq4lut[int(q)]))
+        } else {
+            return float16(d * float(int(q) - 8))
+        }
     }
 
     [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
@@ -6970,64 +6961,28 @@ class template Q4032Cm2T : KqCm2BatchT {
         let sh = (e >> 4u) * 4u
         let idx = wg_blk0 + bc.x * (pa.n >> 5u) + bc.y
         let d = q40_d_of(ws[idx >> 1u], idx)
-        return half4(float4(d * float(int((l0 >> sh) & 0xFu) - 8), d * float(int((l0 >> (sh + 8u)) & 0xFu) - 8),
-            d * float(int((l1 >> sh) & 0xFu) - 8), d * float(int((l1 >> (sh + 8u)) & 0xFu) - 8)))
+        static_if (IQLUT) {
+            return half4(float4(d * float(iq4lut[int((l0 >> sh) & 0xFu)]),
+                d * float(iq4lut[int((l0 >> (sh + 8u)) & 0xFu)]),
+                d * float(iq4lut[int((l1 >> sh) & 0xFu)]),
+                d * float(iq4lut[int((l1 >> (sh + 8u)) & 0xFu)])))
+        } else {
+            return half4(float4(d * float(int((l0 >> sh) & 0xFu) - 8),
+                d * float(int((l0 >> (sh + 8u)) & 0xFu) - 8),
+                d * float(int((l1 >> sh) & 0xFu) - 8),
+                d * float(int((l1 >> (sh + 8u)) & 0xFu) - 8)))
+        }
     }
 }
 
-//! Q5_0 per-32 on the cm2 tile: q51's quant form (`VkQ51Blk`, four nibble words then the qh word) under one f16 d a block, two
-//! blocks a word (q4032's scale plane), w = d * (q - 16) with q = nibble | qh bit << 4
 [ |> template_struct_instance]
-class template Q5032Cm2T : KqCm2BatchT {
-    typedef BLK = VkQ51Blk
-    typedef ST = uint
-    override BLKW = 32u
-    override DECV4 = true
+class template Iq4nl32Cm2T : Q4032Cm2T {
+    override IQLUT = true
+}
 
-    def override khr_stage16(blk, e0, sbase : uint) : void {
-        static_if (KHR) {   //! the 20-byte block off its words: four nibble words then the qh word, the low or high nibbles by e0
-            let sh = (e0 >> 4u) * 4u
-            let d = q40_d_of(ws[blk >> 1u], blk)
-            let qh = wqw[blk * KQ_Q5032_QWORDS + KQ_B32_QWORDS] >> e0
-            for [unroll_full] (c in range(4)) {
-                let w = wqw[blk * KQ_Q5032_QWORDS + uint(c)] >> sh
-                let hb = qh >> (uint(c) * 4u)
-                let q0 = int((w & 0xFu) | ((hb & 1u) << 4u)) - 16
-                let q1 = int(((w >> 8u) & 0xFu) | (((hb >> 1u) & 1u) << 4u)) - 16
-                let q2 = int(((w >> 16u) & 0xFu) | (((hb >> 2u) & 1u) << 4u)) - 16
-                let q3 = int(((w >> 24u) & 0xFu) | (((hb >> 3u) & 1u) << 4u)) - 16
-                khr_put4(sbase + uint(c) * 2u, float4(d * float(q0), d * float(q1), d * float(q2), d * float(q3)))
-            }
-        }
-    }
-
-    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
-    def decode(blk : VkQ51Blk; bc, cib : uint2) : float16 {
-        let e = cib.y
-        let j = e & 15u
-        let by = ((uint(int(blk.qs[int(j >> 1u)])) & 0xFFFFu) >> ((j & 1u) * 8u)) & 0xFFu
-        let qh = (uint(int(blk.qs[8])) & 0xFFFFu) | ((uint(int(blk.qs[9])) & 0xFFFFu) << 16u)
-        let q = ((by >> ((e >> 4u) * 4u)) & 0xFu) | (((qh >> e) & 1u) << 4u)
-        let idx = wg_blk0 + bc.x * (pa.n >> 5u) + bc.y
-        let d = q40_d_of(ws[idx >> 1u], idx)
-        return float16(d * float(int(q) - 16))
-    }
-
-    [spirv_decode, arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-decode-16bit-lanes")]
-    def decode_v4(blk : VkQ51Blk; bc, cib : uint2) : half4 {
-        let e = cib.y
-        let li = int((e & 15u) >> 1u)
-        let l0 = uint(int(blk.qs[li])) & 0xFFFFu
-        let l1 = uint(int(blk.qs[li + 1])) & 0xFFFFu
-        let sh = (e >> 4u) * 4u
-        let qh = ((uint(int(blk.qs[8])) & 0xFFFFu) | ((uint(int(blk.qs[9])) & 0xFFFFu) << 16u)) >> e
-        let idx = wg_blk0 + bc.x * (pa.n >> 5u) + bc.y
-        let d = q40_d_of(ws[idx >> 1u], idx)
-        return half4(float4(d * float(int(((l0 >> sh) & 0xFu) | ((qh & 1u) << 4u)) - 16),
-            d * float(int(((l0 >> (sh + 8u)) & 0xFu) | (((qh >> 1u) & 1u) << 4u)) - 16),
-            d * float(int(((l1 >> sh) & 0xFu) | (((qh >> 2u) & 1u) << 4u)) - 16),
-            d * float(int(((l1 >> (sh + 8u)) & 0xFu) | (((qh >> 3u) & 1u) << 4u)) - 16)))
-    }
+[ |> template_struct_instance]
+class template Q5032Cm2T : Q51Cm2T {
+    override Q50 = true
 }
 
 [ |> template_struct_instance]
@@ -12489,8 +12444,13 @@ class KqEmbIq3s4 : Iq4xsGemvT {
 let private EMB_NO_KQ_LEAF = "q8 mx4"
 
 //! a token table in `fmt` gathers on the device: q8 through `EmbGather`, a superblock format through its `KqEmb<Fmt>` leaf, a
-//! per-32 format through its `<Fmt>Emb` stamp
-def emb_cls_fmt_ok(fmt : int) : bool => fmt == int(KqFmt.q8) || (fmt != int(KqFmt.mx4) && fmt >= 0 && fmt < KQ_FMT_COUNT)
+//! per-32 format through its `<Fmt>Emb` stamp - any slot `EMB_NO_KQ_LEAF` leaves an arm
+[cold_path]
+def emb_cls_fmt_ok(fmt : int) : bool {
+    return true if (fmt == int(KqFmt.q8))
+    return false if (fmt < 0 || fmt >= KQ_FMT_COUNT)
+    return find(" {EMB_NO_KQ_LEAF} ", " {kq_fmt_of_slot(fmt)} ") < 0
+}
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#vk-token-gather")]
 def emb_cls_ensure(fmt : int) : bool {   // nolint:STYLE037 — kq_tile_stamp's generated arms, one a format's stamp
