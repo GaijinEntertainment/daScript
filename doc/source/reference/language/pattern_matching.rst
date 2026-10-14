@@ -456,6 +456,26 @@ A view works inside a tuple, a struct field or an alternative too:
 
 A view covers nothing for exhaustiveness, so a match with views ends with a ``_`` arm.
 
+String Patterns
+---------------
+
+``"lit" + rest`` matches a string that starts with ``lit``, ``rest + "lit"`` one that ends with
+it, and ``"<" + inner + ">"`` both. ``rest`` is a pattern for what is left without the literal:
+``_`` ignores it, and a name binds it as a new string. A string pattern is a view:
+``"lit" + rest`` is ``(match_strip_prefix(_, "lit") => some(rest))``, where the call returns an
+``Option<string>``, and ``"<" + inner + ">"`` is one view inside another.
+
+.. code-block:: das
+
+    def route ( req : string ) {
+        return match ( req ) {
+            "GET /static/" + _ => "static"
+            "GET " + path => "get {path}"
+            name + ".das" => "script {name}"
+            _ => "other"
+        }
+    }
+
 Table Matching
 --------------
 

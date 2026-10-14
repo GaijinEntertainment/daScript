@@ -770,13 +770,53 @@ def private is_view(var pat : Expression?) : bool {
     return reads && !is_pattern_call(head) && mentions_placeholder(head)
 }
 
+def public match_strip_prefix(s, prefix : string) : Option<string> {
+    //! ``s`` without ``prefix``; ``none`` when ``s`` does not start
+    //! with it.
+    return starts_with(s, prefix) ? some(slice(s, length(prefix))) : none(type<string>)
+}
+
+def public match_strip_suffix(s, suffix : string) : Option<string> {
+    //! ``s`` without ``suffix``; ``none`` when ``s`` does not end
+    //! with it.
+    let n = length(s) - length(suffix)
+    return n >= 0 && ends_with(s, suffix) ? some(slice(s, 0, n)) : none(type<string>)
+}
+
+[macro_function]
+def private is_string_pattern(pat : Expression?) : bool {
+    //! ``"pre" + rest`` or ``rest + "suf"``.
+    return false if (!(pat is ExprOp2) || (pat as ExprOp2).op != "+")
+    let op2 = pat as ExprOp2
+    return (match_peel_r2v(op2.left) is ExprConstString
+            || match_peel_r2v(op2.right) is ExprConstString)
+}
+
+[macro_function]
+def private string_view(op2 : ExprOp2?) : Expression? {
+    //! ``x + "suf"`` is ``(match_strip_suffix(_, "suf") => some(x))``
+    //! and ``"pre" + x`` is the view with ``match_strip_prefix``.
+    let suffix = match_peel_r2v(op2.right) is ExprConstString
+    var head = (suffix
+        ? qmacro(match_strip_suffix(_, $e(clone_expression(op2.right))))
+        : qmacro(match_strip_prefix(_, $e(clone_expression(op2.left)))))
+    head.at = op2.at
+    var rest = new ExprCall(at = op2.at, name := "some")
+    rest.arguments |> emplace_new <| clone_expression(suffix ? op2.left : op2.right)
+    var view = new ExprMakeTuple(at = op2.at)
+    view.values |> emplace(head)
+    view.values |> emplace(rest)
+    return view
+}
+
 [macro_function]
 class private ProbeAttacher {
     //! Before type inference, gives every view of an arm a probe: its
     //! call with ``_`` replaced by the path to the value it reads.
-    //! The probe never runs; its type becomes the view's result type.
-    def attach(var pat : Expression?; path : Expression?) : void {
+    //! A string pattern ``"pre" + rest`` becomes its view first.
+    def attach(var pat : Expression?&; path : Expression?) : void {
         return if (pat == null)
+        pat = is_string_pattern(pat) ? string_view(pat as ExprOp2) : pat
         if (is_view(pat)) {
             view(pat as ExprMakeTuple, path)
         } elif (pat is ExprOp2) {
@@ -843,7 +883,7 @@ class private ProbeAttacher {
 }
 
 [macro_function]
-def add_probes(var pattern : Expression?; expr : ExprCallMacro?) : void {
+def add_probes(var pattern : Expression?&; expr : ExprCallMacro?) : void {
     //! Adds probes to the views of one arm. With one matched value,
     //! ``_`` is that value; with ``match (a, b)``, it is the value of
     //! the view's column.
@@ -1395,8 +1435,8 @@ class MatchMacro : AstCallMacro {
                 (ee as ExprIfThenElse).if_flags.doNotFold = true
                 hide_bound_names(ee, (ee as ExprIfThenElse).cond, false)
             } elif (is_arrow_arm(ee)) {
-                hide_bound_names(ee, (ee as ExprMakeTuple).values[0], true)
                 add_probes((ee as ExprMakeTuple).values[0], expr)
+                hide_bound_names(ee, (ee as ExprMakeTuple).values[0], true)
             }
         }
     }
