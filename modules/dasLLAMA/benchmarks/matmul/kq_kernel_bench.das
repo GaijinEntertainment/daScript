@@ -82,7 +82,7 @@ def fmt_of_name(name : string) : KqFmt {
 
 //! a non-q8 format's gemv, tile and layout registries: a kq family's through kq_registries, the per-32
 //! families' (q51, iq4nl32 - no kq family) by name; empty for q8 and mx4, which bench_q8_family races
-def fmt_registries(f : KqFmt) : KqRegistries {
+def fmt_registries(f : KqFmt) : KqRegistries { // nolint:STYLE037 — kq_fmt_stamp's generated arms, one a format
     if (f == KqFmt.q51) {
         return <- KqRegistries(gemv <- q51q8_gemv_gen_variants(), tile <- q51q8_tile_gen_variants(), layout <- q51q8_layout_gen_variants())
     }
