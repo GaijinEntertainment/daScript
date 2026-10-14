@@ -1142,13 +1142,11 @@ struct KernelBackend {
     iq4nl32_batch_groupn : MatmulQ51Q8BatchGroupNFn = @@iq4nl32q8_batch_groupn_kernel
     repack_iq4nl32 : RepackQ51Fn = @@repack_iq4nl32_identity
     iq4nl32_layout : function<() : int> = @@q51_layout_grp1
-    // the q4032 slots: iq4nl32's shapes under q4_0's linear code
     q4032_batch : MatmulQ51Q8BatchFn = @@q4032q8_batch_kernel
     groupn_q4032 : MatmulQ51GroupNFn = @@q4032q8_groupn_kernel
     q4032_batch_groupn : MatmulQ51Q8BatchGroupNFn = @@q4032q8_batch_groupn_kernel
     repack_q4032 : RepackQ51Fn = @@repack_q4032_identity
     q4032_layout : function<() : int> = @@q51_layout_grp1
-    // the q5032 slots: q51's quant plane under one f16 d, the signed q - 16 code
     q5032_batch : MatmulQ51Q8BatchFn = @@q5032q8_batch_kernel
     groupn_q5032 : MatmulQ51GroupNFn = @@q5032q8_groupn_kernel
     q5032_batch_groupn : MatmulQ51Q8BatchGroupNFn = @@q5032q8_batch_groupn_kernel
@@ -1285,8 +1283,8 @@ var g_active_q8_layout_mr = 4l                // see KernelBackend.q8_layout (ac
 var g_active_kq_layout = @@kq_layout_grp4_fmt // see KernelBackend.kq_layout (activation-time cache)
 var g_active_q51_layout_mr = 1l               // see KernelBackend.q51_layout (activation-time cache)
 var g_active_iq4nl32_layout_mr = 1l           // see KernelBackend.iq4nl32_layout (activation-time cache)
-var g_active_q4032_layout_mr = 1l             // see KernelBackend.q4032_layout (activation-time cache)
-var g_active_q5032_layout_mr = 1l             // see KernelBackend.q5032_layout (activation-time cache)
+var g_active_q4032_layout_mr = 1l             //! see KernelBackend.q4032_layout (activation-time cache)
+var g_active_q5032_layout_mr = 1l             //! see KernelBackend.q5032_layout (activation-time cache)
 var g_active_q8_wbias = 0l                    // see KernelBackend.q8_wbias (activation-time cache)
 var g_active_q8_kgroup = 4l                   // see KernelBackend.q8_kgroup (activation-time cache)
 var g_backend_pin = ""              // A/B: force this backend by name; "" = auto-select

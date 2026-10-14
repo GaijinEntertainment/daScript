@@ -33,9 +33,9 @@ typedef MoeGpuDropFn = function<(n : int; stream : bool) : void>
 // in place of the gathered quant image - the tier gathers, converts and combines device-side
 typedef MoeGpuFfnXfFn = function<(var goutp : float?; offs1 : int64 const?; offs3 : int64 const?; offs2 : int64 const?; nregions : int64; xp : float const?; wp : float const?; invp : uint const?; n : int64; nfe : int64; nrows : int64; npos : int64; f1 : int; f3 : int; f2 : int; is_gelu : bool) : void>
 typedef MoeGpuFfnXfOkFn = function<(npos : int64; n : int64; f1 : int; f3 : int; f2 : int) : bool>
-// One recurrent layer's deltanet block as ONE device chain: qkv + z GEMMs in `fq` / `fz` over one image in their class (Q8_K
-// for a superblock format, else Q8_0), conv + silu + q/k L2-norm, the delta-rule scan, gated out-norm, out projection in `fo`.
-// histp feeds conv history channel-major; zeros = dn_reset's fresh state.
+//! One recurrent layer's deltanet block as ONE device chain: qkv + z GEMMs in `fq` / `fz` over one image in their class (Q8_K
+//! for a superblock format, else Q8_0), conv + silu + q/k L2-norm, the delta-rule scan, gated out-norm, out projection in `fo`.
+//! histp feeds conv history channel-major; zeros = dn_reset's fresh state.
 typedef MoeGpuDnFn = function<(var yp : float?; woq : int64; woz : int64; woo : int64; fq : int; fz : int; fo : int;
                                xqp : int8 const?; xsp : float const?; bp : float const?; gp : float const?;
                                convw : float const?; wnormp : float const?; ap : float const?; dtp : float const?;
@@ -1039,9 +1039,6 @@ def public moe_gpu_dense_ffn_note(rows : int64) {
 def public moe_gpu_dense_ffn_on_gpu(f1, f3, f2 : int; w1, w3, w2 : int64) : bool =>
     moe_gpu_dense_on_gpu(f1, w1) && moe_gpu_dense_on_gpu(f3, w3) && moe_gpu_dense_on_gpu(f2, w2)
 
-//! one dense FFN row on the GPU tier over the dense rail's planes: the gate and up GEMVs off `w1` / `w3` against the quantized
-//! row (`xq` / `xs`, the gate plane's activation form), the act and its requant, the down GEMV off `w2` into `y` - the routed
-//! decode chain at one region of one row
 [arch(at="../ARCHITECTURE_GPU_VULKAN_PEROP.md#perop-dense-ffn")]
 def public matmul_gpu_dense_ffn(var y : array<float>; w1, w3, w2 : int64; xq : array<int8>; xs : array<float>; n, nfe : int64; f1, f3, f2 : int; is_gelu : bool) {
     g_dense_ffn_rows++
@@ -1241,8 +1238,6 @@ def public set_moe_gpu_heat_hooks(query : MoeGpuHeatQueryFn; advise : MoeGpuHeat
 }
 
 def public moe_gpu_heat_on : bool => g_moe_gpu_heat_installed && g_moe_gpu_heat_route
-
-// ===== the routed experts' form: the activation and the per-expert bias rows the expert chain serves =====
 
 //! The form the next routed expert-chain calls take past the plain SwiGLU / GeGLU: gpt-oss's clamped swiglu, and each expert's
 //! gate and up bias rows joining before the activation; a region's expert is `(offs1[3r] - e_base) / e_stride`
@@ -1718,8 +1713,9 @@ def public gpu_want_dense_shexp : bool
 def public gpu_want_dense_attn : bool
     => g_env_gpu.gpu_dense_attn
 
-//! The dense rail's FFN half (each dense layer's w1/w3/w2 triple, the decode row's FFN on the device). Opt-IN
-//! (``DASLLAMA_GPU_DENSE_FFN=1``): the triples are most of a dense model's bytes, placed ahead of the rails the walk reaches after them
+//! The dense rail's FFN half (each dense layer's w1/w3/w2 triple, the decode row's FFN on the device). On by
+//! default (``DASLLAMA_GPU_DENSE_FFN=0`` keeps it on the CPU): the triples are most of a dense model's bytes, placed
+//! ahead of the rails the walk reaches after them
 [arch(at="../ARCHITECTURE_GPU_VULKAN_PEROP.md#perop-dense-ffn")]
 def public gpu_want_dense_ffn : bool
     => g_dense_ffn_pin >= 0 ? g_dense_ffn_pin == 1 : g_env_gpu.gpu_dense_ffn

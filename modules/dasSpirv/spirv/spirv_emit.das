@@ -4518,13 +4518,14 @@ class SpirvEmit : AstVisitor {
     // ONLY set when an actual terminator was emitted — if value_of() failed (e.g. an upstream error
     // already pushed onto errs), leaving terminated=false lets the function-end fallback close the
     // block with OpUnreachable so the blob stays structurally valid (one terminator per block).
+    [arch(at="../ARCHITECTURE.md#emit-time-inline")]
     def override visitExprReturn(var expr : ExprReturn?) : ExpressionPtr {
         var bm & = unsafe(*m)
         if (!empty(ctx.loop_stack) && is_unrolled_body(ctx.loop_stack[length(ctx.loop_stack) - 1])) {
             errs |> push("return inside a `for [unroll_full]` body: the loop is unrolled at emission and a return in one copy leaves the copies after it unreachable - restructure the body or take [unroll]")
             return expr
         }
-        if (!empty(ctx.inline_ret)) {   //! a [spirv_inline] body's tail return: its value is the call's, no terminator
+        if (!empty(ctx.inline_ret)) {
             if (expr.subexpr != null) {
                 ctx.inline_ret[length(ctx.inline_ret) - 1] = value_of(expr.subexpr)
             }
@@ -4829,7 +4830,6 @@ class SpirvEmit : AstVisitor {
         }
     }
 
-    //! a [spirv_inline] call: the callee's parameters bound to the call's values and lvalues, its body visited here
     [arch(at="../ARCHITECTURE.md#emit-time-inline")]
     def emit_inline_call(uf : UserFunc; arguments : dasvector`ptr`Expression; skip, fshift : int; resKey : uint64) {
         let f = unsafe(reinterpret<FunctionPtr>(uf.fn))
@@ -8165,7 +8165,6 @@ class SpirvReturnCount : AstVisitor {
     }
 }
 
-//! whether a body ends on a return, through its trailing blocks and the method form's with(self)
 def private ends_on_return(e : ExpressionPtr) : bool {
     let blk = e ?as ExprBlock
     if (blk != null) return !empty(blk.list) && ends_on_return(blk.list[length(blk.list) - 1])
@@ -8174,7 +8173,7 @@ def private ends_on_return(e : ExpressionPtr) : bool {
     return e is ExprReturn
 }
 
-//! a [spirv_inline] body returns at most once, from its last statement: the inlined body falls through to the call's result
+[arch(at="../ARCHITECTURE.md#emit-time-inline")]
 def private inline_returns_at_tail(f : FunctionPtr) : bool {
     var v = new SpirvReturnCount()
     make_visitor(*v) $(mv_adapter) {
@@ -8206,7 +8205,6 @@ class SpirvInlineScan : AstVisitor {
     }
 }
 
-//! the entry block's locals and call temps of every [spirv_inline] body `f` reaches, each body once
 [arch(at="../ARCHITECTURE.md#emit-time-inline")]
 def private collect_inline_locals(var m : SpirvModule; var ctx : EmitCtx; f : FunctionPtr; var seen : table<uint64>; var errors : array<string>) {
     var v = new SpirvInlineScan(ctx = unsafe(addr(ctx)))
@@ -8229,7 +8227,7 @@ def private collect_inline_locals(var m : SpirvModule; var ctx : EmitCtx; f : Fu
     delete found
 }
 
-//! the prepass a function's entry block owes: its own locals and call temps, then those of the [spirv_inline] bodies it reaches
+[arch(at="../ARCHITECTURE.md#emit-time-inline")]
 def private collect_entry_locals(var m : SpirvModule; var ctx : EmitCtx; f : FunctionPtr; var errors : array<string>) {
     collect_locals(m, ctx, f.body, errors)
     alloc_call_temps(m, ctx, f, errors)

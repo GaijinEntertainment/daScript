@@ -777,7 +777,6 @@ def private resident_head_decline(t : Model) : string {
 
 def private resident_head_on(t : Model) : bool => t.config.n_layer_nextn > 0l && empty(resident_head_decline(t))
 
-//! the NextN head rides the driver with a routed FFN: its experts sum where the trunk's do - on the device, or on the host in the hc chain
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head"), arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-draft-head")]
 def private resident_head_routed(t : Model) : bool => layer_is_moe(t, t.config.n_layers) && resident_head_on(t)
 
@@ -947,7 +946,6 @@ def private rdec_scratch_bytes(t : Model) : int64 {
         + 8l * hid + 4l * resident_cos_elems(c) + 4l * hs) + (c.vocab_size * 4l + pieces) * nb + RDEC_MISC_BYTES + moe + rdec_rollback_bytes(t) + rdec_dn_snap_bytes(t) + rdec_chain_snap_bytes(t)
 }
 
-//! the greedy chain's snapshot: one region's recurrent states, charged where the chain is asked at the plan
 [arch(at="../ARCHITECTURE_GPU_VULKAN_LANDING.md#vk-greedy-chain")]
 def private rdec_chain_snap_bytes(t : Model) : int64 {
     let c = t.config
@@ -956,7 +954,6 @@ def private rdec_chain_snap_bytes(t : Model) : int64 {
     return resident_recurrent_layers(c) * dng.nvh * dng.ds * dng.ds * 4l
 }
 
-//! the regions' recurrent checkpoints: `RDEC_DN_SNAPS` rows a region, a row every recurrent layer's state and ring pair
 [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#device-home-checkpoints")]
 def rdec_dn_snap_bytes(t : Model) : int64 {
     let c = t.config
@@ -1649,7 +1646,6 @@ def private rdec_stash_span(c : Config; l, lo, hi : int64) : RdecStashSpan {
     return <- sp
 }
 
-//! region `r`'s claim saved before another session takes it: every layer's rows its owner's cache lacks
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-pass-hydrate")]
 def private rdec_stash_region(t : Model; r : int64) {
     let c = t.config
@@ -1669,7 +1665,6 @@ def private rdec_stash_region(t : Model; r : int64) {
     g_rdec_stashes++
 }
 
-//! the rows `s`'s claim had saved, written into its cache: the cache then holds everything its lost region did
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-pass-hydrate")]
 def private rdec_unstash(t : Model; var s : Session) {
     return if (s.rdec_gen == 0l || !key_exists(g_rdec_stash, s.rdec_gen))
@@ -4817,9 +4812,6 @@ def moe_gpu_model_marks_restore_(var st : GpuModelMarks) {
 //! How many device-home sessions the INSTALLED model serves at once: the armed driver's region count, 0 when the driver is not armed.
 def gpu_device_sessions_() : int64 => g_rdec_active ? long_length(g_rdec_regions) : 0l
 
-//! The speculative round serves the INSTALLED model's device-home sessions: the NextN head rides the armed driver, its verify rows
-//! take the device form, and a recurrent model's rejected round rolls back on the device - no seat of the round can fall back on a
-//! host cache such a session does not have
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-mtp-device-home")]
 def gpu_resident_mtp_device_home_(t : Model) : bool
     => g_rdec_active && g_rdec_head_armed && rdec_verify_rows() >= 2l && (t.config.recr_mask == 0ul || rdec_rollback_installed())

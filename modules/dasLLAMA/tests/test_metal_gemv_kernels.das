@@ -319,8 +319,6 @@ def test_metal_kq_k4_pair_walk(t : T?) {
     }
 }
 
-// ===== the expert-indexed MoeGemv stamps (MetalMoeGemvK4 / K5 / K6 / K3 / K2 / Iq4xs / Iq4nl / Q40 / Iq3s / Iq3xxs / Iq2s / Iq2xs / Iq2xxs) =====
-
 //! the expert-indexed kq GEMV stamp of a format
 def private moe_gemv_stamp(f) {
     if (f == KqFmt.k4) return stamp_of(@@enc_moe_gemv_k4_c)

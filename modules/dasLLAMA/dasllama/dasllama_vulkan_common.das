@@ -2134,10 +2134,10 @@ def arena_block_bytes(fmt : int) : tuple<wq : int64; ws : int64> {
         return (wq = IQ4NL32_QB, ws = IQ4NL32_SB)   // 16 nibble bytes, one f16 d: the CPU's iq4nl32q / iq4nl32s planes verbatim
     }
     if (fmt == int(KqFmt.q4032)) {
-        return (wq = Q4032_QB, ws = Q4032_SB)   // the q4032q / q4032s planes verbatim, iq4nl32's block form
+        return (wq = Q4032_QB, ws = Q4032_SB)
     }
     if (fmt == int(KqFmt.q5032)) {
-        return (wq = Q5032_QB, ws = Q5032_SB)   // the q5032q / q5032s planes verbatim: q51's quant form, one f16 d
+        return (wq = Q5032_QB, ws = Q5032_SB)
     }
     return (wq = kq_qsb(vk_kq_schema_id(fmt)), ws = kq_dev_ssb_i(fmt))
 }
@@ -2411,13 +2411,13 @@ struct RLayer {
     // the recurrent (deltanet) form - the attention fields above stay unused on such a layer
     recurrent : bool
     mir_idx : int64 = -1l           // this attention layer's K/V mirror slot; -1 = recurrent (no KV)
-    bqkv, bz, bout, bbeta, balpha : int64   // arena blocks: fused qkv, z gate, out projection, the beta/alpha rows (-1 on the f32 arm)
+    bqkv, bz, bout, bbeta, balpha : int64   //! arena blocks: fused qkv, z gate, out projection, the beta/alpha rows (-1 on the f32 arm)
     fqkv, fz, fout : int
     fbeta, falpha : int             //! the beta/alpha planes' formats (their tags); unread on the f32 arm
     ba_off : int64                  // the f32 arm: this layer's [beta ; alpha] row base in dn_ba_dev (elements)
     s_dnqkv, s_dnz, s_dnout : VkDescriptorSet
-    s_dnbeta, s_dnalpha : VkDescriptorSet   // the plane arm: each plane's GEMV in its format, landing in the smalls at the beta/g rows
-    s_dnba : VkDescriptorSet                // f32 arm: the f32 router-form GEMV over dn_ba_dev, two pushes
+    s_dnbeta, s_dnalpha : VkDescriptorSet   //! the plane arm: each plane's GEMV in its format, landing in the smalls at the beta/g rows
+    s_dnba : VkDescriptorSet                //! f32 arm: the f32 router-form GEMV over dn_ba_dev, two pushes
     s_dnstep : VkDescriptorSet
     m_dnqkv, m_dnz, m_dnout, m_dnbeta, m_dnalpha : HostBuf
     dn : array<DnStep>
@@ -2428,7 +2428,7 @@ struct RLayer {
     pf_dn_scan_set : VkDescriptorSet       // pf_dnconv + this layer's state + smalls -> the o rows (the sequential scan)
     pf_dn_scan_p3_set : VkDescriptorSet    // pf_dnz + dn_ws + this layer's smalls (the gated out-norm)
     pf_dn_tail_set : VkDescriptorSet       // pf_dnqkv last taps rows -> this layer's smalls ring image
-    pf_dn_ba_set : VkDescriptorSet         // f32 arm: dn_ba_dev + pf_xb -> this layer's smalls (the f32 tile GEMM)
+    pf_dn_ba_set : VkDescriptorSet         //! f32 arm: dn_ba_dev + pf_xb -> this layer's smalls (the f32 tile GEMM)
     pf_dn_cvt_set : VkDescriptorSet        // the cm2 route: pf_xb -> pf_xf, the qkv / z GEMMs' f16 feed
     pf_f16g_router_set, pf_f16g_router_red_set, pf_router_cvt_set : VkDescriptorSet   //! the MoE block's router on the cm2 route: pf_xb -> pf_xf, router16 x pf_xf into the split-k planes, the reduce into the logits
     m_pf_dnqkv, m_pf_dnz, m_pf_dnout, m_pf_dnbeta, m_pf_dnalpha : HostBuf   // the prefill GEMMs' region metas
@@ -2556,12 +2556,12 @@ struct RDec {
     // the hybrid (deltanet) form: geometry + the buffers every recurrent layer shares
     hybrid : bool
     dn_cd, dn_kd, dn_di, dn_nvh, dn_nkh, dn_ds, dn_dconv : int64
-    dn_ba_f32 : bool              // beta/alpha rows come as f32 in the file (dn_ba_dev, f32 on the device) rather than arena planes
+    dn_ba_f32 : bool              //! beta/alpha rows come as f32 in the file (dn_ba_dev, f32 on the device) rather than arena planes
     dn_zsig : bool                //! the deltanet out-gate is sigmoid(z): the step kernel's `ZSIG` stamp serves (qwen4exp)
     dn_proj_dev : uint64          // [cd + di] floats: the fused qkv row, the z row at cd
     fused_sets_made : bool        //! the fused add+rms+requant sites' stamps and sets are picked once, at the first record
     rq_pro_stamp : RqStamp        //! the prologue site's: layer 0's feed form, the row stored where its head reads floats
-    dn_ba_dev : uint64            // f32 arm: every recurrent layer's [beta ; alpha] rows, [2 x nvh x dim] per layer, f32
+    dn_ba_dev : uint64            //! f32 arm: every recurrent layer's [beta ; alpha] rows, [2 x nvh x dim] per layer, f32
     dn_ba_bytes : int64
     dn_oq_dev, dn_os_dev : uint64 // the step's Q8_0 o row - the out GEMV's activation image
     dn_of_dev : uint64            // the step's f32 o row for a K-quant out plane - the Q8_K requant's source

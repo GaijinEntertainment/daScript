@@ -3093,8 +3093,6 @@ var private g_rdec_tok_gathered = 0l
 //! The one-row steps whose row the device gathered off the step's token id, in this process (a cell's served witness)
 def vk_rdec_token_gathered : int64 => g_rdec_tok_gathered
 
-// ===== the one-row command's greedy chain =====
-
 let private RD_CHAIN_ENV = -2   //! `g_vk_chain_pin` unset: the mode is the environment's
 var private g_vk_chain_pin = RD_CHAIN_ENV
 var private g_rdec_chain_hits = 0l
@@ -3115,8 +3113,6 @@ def vk_rdec_chain_pin : int => g_vk_chain_pin
 //! the chained steps taken (hits) and discarded (misses) in this process
 def vk_rdec_chain_stats : tuple<hits : int64; misses : int64> => (hits = g_rdec_chain_hits, misses = g_rdec_chain_misses)
 
-//! the chain's seat: whether the armed model's next one-row step may chain - the mode, the transfer-queue landing whose
-//! timeline orders the two steps, the device gather of the token id, and a command with no host rows or carry beside it
 [arch(at="../ARCHITECTURE_GPU_VULKAN_LANDING.md#vk-greedy-chain")]
 def vk_rdec_chain_wanted : bool {
     return false if (g_rd == null || !g_rd.ready || vk_rdec_chain_mode() == 0)
@@ -3124,7 +3120,6 @@ def vk_rdec_chain_wanted : bool {
         && !vk_prof() && !vk_rdec_rerecord_on())
 }
 
-//! the chain's ask: the step about to run chains the next one, `cos_next` the next position's rope row
 [arch(at="../ARCHITECTURE_GPU_VULKAN_LANDING.md#vk-greedy-chain")]
 def vk_rdec_chain_ask(cos_next : array<float>) {
     return if (g_rd == null)
@@ -3212,8 +3207,6 @@ def private rd_form_cmd(form : RdForm) : VkCommandBuffer {
     return form == RdForm.wide ? g_rd.cmd_wide[g_rd.region] : g_rd.cmd[g_rd.region]
 }
 
-//! submits the step at `pos_next` behind the running one, its token the running step's pick: the prologue waits for the running
-//! step's landing (`wait_xv`) - the chained step rewrites the planes that landing copies - then the command and its own landing
 [arch(at="../ARCHITECTURE_GPU_VULKAN_LANDING.md#vk-greedy-chain")]
 def private rd_chain_submit(pos_next : int64; logits_on : bool; wait_xv : uint64) {
     g_rd.ch.ask = false
@@ -3248,7 +3241,6 @@ def private rd_chain_submit(pos_next : int64; logits_on : bool; wait_xv : uint64
     g_rd.ch.pred = -1l
 }
 
-//! a chained step nobody takes: waited out, the region's recurrent states put back as the step before it left them, counted a miss
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_LANDING.md#vk-greedy-chain")]
 def private rd_chain_drop {
     return if (!g_rd.ch.pend)
@@ -3269,7 +3261,6 @@ def private rd_chain_drop {
     }
 }
 
-//! every driver entry but the one-row step settles a chained step first: it is discarded, its state put back
 [arch(at="../ARCHITECTURE_GPU_VULKAN_LANDING.md#vk-greedy-chain")]
 def rd_chain_settle {
     if (g_rd != null) {
@@ -3278,8 +3269,6 @@ def rd_chain_settle {
     }
 }
 
-//! the chained step, taken: the next one chained behind it where asked, then its landing - the pick, and the logits where it
-//! landed them - read off its slot
 [arch(at="../ARCHITECTURE_GPU_VULKAN_LANDING.md#vk-greedy-chain")]
 def private rd_chain_take(pos : int64; pick_only : bool; var logits : array<float>) : int64 {
     let slot = g_rd.ch.slot
@@ -4083,7 +4072,6 @@ def vk_rdec_rollback(a : int64) : bool {
     return true
 }
 
-//! the checkpoint rows, made at the first save: every region's `RDEC_DN_SNAPS` rows, each in the rollback row's shape
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#device-home-checkpoints")]
 def private rd_snap_alloc {
     var off = 0l
@@ -4917,7 +4905,6 @@ def private ffn_fill(offs1 : int64 const?; offs3 : int64 const?; offs2 : int64 c
     let s3 = find_stack(unsafe(offs3[0]), f3, "decode ffn up")
     let s2 = find_stack(unsafe(offs2[0]), f2, "decode ffn down")
     assert(nrows * max(nfe, n) * 4l <= Y_BYTES, "dasLLAMA vulkan tier: FFN dispatch exceeds output capacity")
-    // gate/up share one activation image unless the call carries the up plane's own (`moe_gpu_image2`); down's is its own
     let i2 = moe_gpu_image2()
     verify(i2.on || kq_block32(f3) == kq_block32(f1),
         "dasLLAMA vulkan tier: gate/up form mismatch with no second image")

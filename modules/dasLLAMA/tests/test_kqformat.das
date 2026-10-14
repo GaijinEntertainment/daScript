@@ -98,13 +98,13 @@ def test_kqfmt_predicates(t : T?) {
         t |> equal(kq_qsb(KqFmt.q4032), 16l)   // per 32-BLOCK: the 16 nibble bytes
         t |> equal(kq_ssb(KqFmt.q4032), 2l)    // per 32-BLOCK: f16 d
         t |> equal(kq_elems(KqFmt.q4032), 32l)
-        t |> equal(kq_ggml_type(KqFmt.q4032), GGML_TYPE_Q4_0)   // Q4_0's disk blocks, iq4nl32's plane form
+        t |> equal(kq_ggml_type(KqFmt.q4032), GGML_TYPE_Q4_0)
         t |> equal(kq_desc(KqFmt.q4032).schema_id, -1)          // no kq kernel takes it by id
         t |> success(!kq_sb(KqFmt.q5032) && kq_block32(KqFmt.q5032) && kq_block32(int(KqFmt.q5032)), "q5032 is a per-32 format on both predicates")
         t |> equal(kq_qsb(KqFmt.q5032), 20l)   // per 32-BLOCK: the 16 nibble bytes and the qh word
         t |> equal(kq_ssb(KqFmt.q5032), 2l)    // per 32-BLOCK: f16 d
         t |> equal(kq_elems(KqFmt.q5032), 32l)
-        t |> equal(kq_ggml_type(KqFmt.q5032), GGML_TYPE_Q5_0)   // Q5_0's disk blocks, q51's quant plane form
+        t |> equal(kq_ggml_type(KqFmt.q5032), GGML_TYPE_Q5_0)
         t |> equal(kq_desc(KqFmt.q5032).schema_id, -1)          // no kq kernel takes it by id
         for (q in range(16)) {
             t |> equal(int(Q40_LUT[q]), q - 8, "the linear codebook's level {q}")

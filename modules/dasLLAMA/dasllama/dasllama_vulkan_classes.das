@@ -1198,7 +1198,7 @@ struct DnBaArgs {
 
 [vk_dispatch(name = "dn_ba_cls", grid = "wgs", params = "wgs : int64")]
 class DnBaGemm {
-    @ssbo @binding = 0 @role = "weight" w : array<float>   // the [beta ; alpha] rows per layer, the file's f32
+    @ssbo @binding = 0 @role = "weight" w : array<float>   //! the [beta ; alpha] rows per layer, the file's f32
     @ssbo @binding = 1 x : array<float>       // the normed rows
     @ssbo @binding = 2 outp : array<float>    // the layer smalls (beta / g rows, position-major)
     @push_constant pa : DnBaArgs
@@ -11180,15 +11180,15 @@ class Mx4GemvN : Blk32GemvRunT {
 class template Blk32BatchT : MoeCmBase {
     @template_constant Q51 : bool = false
     @template_constant MX4 : bool = false
-    @ssbo @binding = 0 wq : array<uint>        // weight quant words, `Blk32GemvT`'s layout
-    @ssbo @binding = 1 wsu : array<uint>       // per-block scales, `Blk32GemvT`'s layout
-    @ssbo @binding = 3 xqw : array<uint>       // Q8_0 activation words
+    @ssbo @binding = 0 wq : array<uint>        //! weight quant words, `Blk32GemvT`'s layout
+    @ssbo @binding = 1 wsu : array<uint>       //! per-block scales, `Blk32GemvT`'s layout
+    @ssbo @binding = 3 xqw : array<uint>       //! Q8_0 activation words
     @ssbo @binding = 4 axs : array<float>      // per-block activation scales
     @workgroup xw4 : uint4[544]
     @workgroup ww4 : uint4[544]
     @workgroup xsw : float[256]
-    @workgroup wsw : float[256]    // per-(block, col) d
-    @workgroup wmw : float[256]    // per-(block, col) m (Q5_1)
+    @workgroup wsw : float[256]    //! per-(block, col) d
+    @workgroup wmw : float[256]    //! per-(block, col) m (Q5_1)
 
     //! weight block `wb`'s half `sh` (`blk32_quad`): its words as this class binds the plane
     def blk_quad(wb, sh : uint) : uint4 {
@@ -12413,8 +12413,6 @@ class KqGemvIq2xxs : Iq2xxsGemvT {}
 class KqGemvIq2xxsN : Iq2xxsGemvT {
     override NCOL = true
 }
-
-// ===== the token-table gather: every superblock format's leaf under `EMB`, one family layout =====
 
 [vk_dispatch(name = "kq_emb_k4_cls", kernel = "run", family = "kq_emb_cls", grid = "wgs", params = "wgs : int64")]
 class KqEmbK4 : K4GemvT {

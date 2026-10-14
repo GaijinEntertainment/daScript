@@ -74,19 +74,19 @@ def private qk_rope_gate(t : T?; var dev, queue; hx, donorm, neox, partial : boo
         let nk = N_KV_HEADS
         let rstride = nh * hs
         let kvd = nk * hs
-        let kofs = 24   //! the K panel's rows sit this many floats into their buffer
+        let k_panel_lead = 24   //! the K panel's rows sit this many floats into their buffer
         let rot = partial ? hs / 2 : hs
         let halfr = rot / 2
         var inscope xv, kv, wv, tc, ts, want, wantk : array<float>
         xv |> resize(nrows * rstride)
-        kv |> resize(kofs + nrows * kvd)
+        kv |> resize(k_panel_lead + nrows * kvd)
         wv |> resize(2 * hs)
         tc |> resize(nreal * halfr)
         ts |> resize(nreal * halfr)
         for (k in range(nrows * rstride)) {
             xv[k] = 0.19 * float(k % 29) - 1.7
         }
-        for (k in range(kofs + nrows * kvd)) {
+        for (k in range(k_panel_lead + nrows * kvd)) {
             kv[k] = 0.17 * float(k % 23) - 1.5
         }
         for (k in range(2 * hs)) {
@@ -106,12 +106,12 @@ def private qk_rope_gate(t : T?; var dev, queue; hx, donorm, neox, partial : boo
                         rmsnorm(addr(want[rb]), addr<float const?>(want[rb]), addr<float const?>(wv[0]), int64(hs), EPS)
                     }
                     for (h in range(nk)) {
-                        let rb = kofs + p * kvd + h * hs
+                        let rb = k_panel_lead + p * kvd + h * hs
                         rmsnorm(addr(wantk[rb]), addr<float const?>(wantk[rb]), addr<float const?>(wv[hs]), int64(hs), EPS)
                     }
                 }
                 rope_tab_ref(want, p * rstride, hs, rot, rstride, neox, tc, ts, p * halfr)
-                rope_tab_ref(wantk, kofs + p * kvd, hs, rot, kvd, neox, tc, ts, p * halfr)
+                rope_tab_ref(wantk, k_panel_lead + p * kvd, hs, rot, kvd, neox, tc, ts, p * halfr)
             }
         }
         var moved = 0
@@ -126,7 +126,7 @@ def private qk_rope_gate(t : T?; var dev, queue; hx, donorm, neox, partial : boo
         let bts = mc |> in_(ts)
         let bxh = hx ? (mc |> out_words(nrows * rstride, float16(-77.0))) : -1
         var ka = GkQknRopeArgs(kvd = uint(kvd), hs = uint(hs), half = uint(halfr), neox = neox || partial ? 1u : 0u, nh = uint(nh),
-            kwoff = uint(hs), eps = EPS, win = 1u, kbase = uint(kofs), kvrow = uint(kvd), qrow = uint(rstride), cosrow = uint(halfr),
+            kwoff = uint(hs), eps = EPS, win = 1u, kbase = uint(k_panel_lead), kvrow = uint(kvd), qrow = uint(rstride), cosrow = uint(halfr),
             nreal = uint(nreal), skipnorm = donorm ? 0u : 1u, hscale = 1.0)
         let nwg = int64(nh + nk)
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
@@ -3524,7 +3524,6 @@ def test_metal_prefill_kernels(t : T?) {
                 moe_mulmm_b32_gate(t, dev, queue, KqFmt.iq4nl32, 64, 64, [32, 40, 64])
                 moe_mulmm_b32_gate(t, dev, queue, KqFmt.iq4nl32, 96, 128, [8, 96])
                 moe_mulmm_b32_gate(t, dev, queue, KqFmt.iq4nl32, 64, 64, [136, 32])
-                // q4032: the iq4nl32 shapes under the linear q-8 code
                 moe_gemv_gate(t, dev, queue, KqFmt.q4032, 96, 24, 5, 3, 1, false)
                 moe_gemv_gate(t, dev, queue, KqFmt.q4032, 64, 32, 7, 4, 1, true)
                 moe_gemv_gate(t, dev, queue, KqFmt.q4032, 64, 24, 5, 3, 3, true)
@@ -3534,7 +3533,6 @@ def test_metal_prefill_kernels(t : T?) {
                 moe_mulmm_b32_gate(t, dev, queue, KqFmt.q4032, 64, 64, [32, 40, 64])
                 moe_mulmm_b32_gate(t, dev, queue, KqFmt.q4032, 96, 128, [8, 96])
                 moe_mulmm_b32_gate(t, dev, queue, KqFmt.q4032, 64, 64, [136, 32])
-                // q5032: q51's quant block under one d, the signed code q - 16
                 moe_gemv_gate(t, dev, queue, KqFmt.q5032, 96, 24, 5, 3, 1, false)
                 moe_gemv_gate(t, dev, queue, KqFmt.q5032, 64, 32, 7, 4, 1, true)
                 moe_gemv_gate(t, dev, queue, KqFmt.q5032, 64, 24, 5, 3, 3, true)
@@ -4248,8 +4246,8 @@ def private add_bias_rows_gate(t : T?; var dev, queue; nrows, n : int) {
     }
 }
 
-// the MTP eh_proj cat (MetalCat2, `GkCat2`): cat row r = [a row ; b row], position- or stream-major over rep streams, a's
-// rows at a0 and stride as_, b's at b0 - pure copy, BIT-exact
+//! the MTP eh_proj cat (MetalCat2, `GkCat2`): cat row r = [a row ; b row], position- or stream-major over rep streams, a's
+//! rows at a0 and stride as_, b's at b0 - pure copy, BIT-exact
 def private cat2_gate(t : T?; var dev, queue; npos, d, rep, smaj, a0, as_, b0 : int) {
     let tag = "cat2 np={npos} d={d} rep={rep} smaj={smaj} a0={a0} as={as_} b0={b0}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
@@ -4944,8 +4942,8 @@ def private q51_test_planes(rows, n : int; var qp : array<uint8>; var sp : array
     }
 }
 
-// Build q5032 plane pairs for `rows` rows of n elements: q51's quant form (patterned 5-bit codes, every one of the 32 reached)
-// under a pow2 f16 d - d * (q - 16) is f16-exact, so the CPU float reference is BIT-exact under any GPU reduction order.
+//! Build q5032 plane pairs for `rows` rows of n elements: q51's quant form (patterned 5-bit codes, every one of the 32 reached)
+//! under a pow2 f16 d - d * (q - 16) is f16-exact, so the CPU float reference is BIT-exact under any GPU reduction order.
 def private q5032_test_planes(rows, n : int; var qp : array<uint8>; var sp : array<uint8>; var wref : array<float>) {
     let nb = n / 32
     let qb = int(Q5032_QB)
@@ -4978,9 +4976,9 @@ def private q5032_test_planes(rows, n : int; var qp : array<uint8>; var sp : arr
     }
 }
 
-// Build iq4nl32-form plane pairs for `rows` rows of n elements under the codebook `lut` (iq4nl's, or q4032's linear one):
-// patterned nibbles (position-dependent, every codebook slot reached), pow2 f16 d - d*LUT[q] is an f16-exact value, so the
-// CPU float reference is BIT-exact under any GPU reduction order.
+//! Build iq4nl32-form plane pairs for `rows` rows of n elements under the codebook `lut` (iq4nl's, or q4032's linear one):
+//! patterned nibbles (position-dependent, every codebook slot reached), pow2 f16 d - d*LUT[q] is an f16-exact value, so the
+//! CPU float reference is BIT-exact under any GPU reduction order.
 def private iq4nl32_test_planes(rows, n : int; var qp : array<uint8>; var sp : array<uint8>; var wref : array<float>; lut : int8[16]) {
     let nb = n / 32
     let dlut = fixed_array(0.25, 0.5, 1.0, 2.0)

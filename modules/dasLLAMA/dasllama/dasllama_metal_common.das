@@ -136,7 +136,7 @@ struct KVMirror {
 var @scratch g_mirrors : table<uint64; KVMirror>   // per-session mirrors; hot [] after key_exists is a hit
 var g_mirror_bytes = 0ul
 var g_tick = 0l
-var g_mirror_cap_mb = -1   // <0 = unset: DASLLAMA_METAL_KV_MIRROR_MB reads at use
+var g_mirror_cap_mb = -1   //! <0 = unset: DASLLAMA_METAL_KV_MIRROR_MB reads at use
                            // — a CEILING (M2.7): the arena starts at 256MB and grows on demand
 
 // the mirror arena: one buffer, first-fit free-list suballocation (slices are per-session and
@@ -260,8 +260,8 @@ var g_pso_swiglu_oai : MetalComputePipeline?   // gpt-oss clamped swiglu (stage 
 var g_pso_moe_gemv_mx4 : MetalComputePipeline?  // gpt-oss MXFP4 expert GEMV
 var g_pso_moe_gemv_q51 : MetalComputePipeline?  // Q5_1 expert GEMV (per-32 planes)
 var g_pso_moe_gemv_iq4nl32 : MetalComputePipeline?  // IQ4_NL per-32 expert GEMV
-var g_pso_kq_q51 : MetalComputePipeline?           // dense Q5_1 GEMV (per-32 planes)
-var g_pso_kq_iq4nl32 : MetalComputePipeline?       // dense IQ4_NL per-32 GEMV
+var g_pso_kq_q51 : MetalComputePipeline?           //! dense Q5_1 GEMV (per-32 planes)
+var g_pso_kq_iq4nl32 : MetalComputePipeline?       //! dense IQ4_NL per-32 GEMV
 var g_pso_b32_mvb2_q51 : MetalComputePipeline?     //! the per-32 small-batch forms, two / four / eight x columns a group
 var g_pso_b32_mvb4_q51 : MetalComputePipeline?
 var g_pso_b32_mvb8_q51 : MetalComputePipeline?
@@ -1312,19 +1312,15 @@ def private mirror_slice_shape(t : Model; s : Session; needed : int64) : tuple<c
 //! the device's largest buffer - the arena is one buffer, so neither a slice nor the arena grows past it
 def private mirror_device_max_bytes : uint64 => g_dev != null ? metal_max_buffer_length(g_dev) : 0xFFFFFFFFFFFFFFFFul
 
-//! the cap: the arena's growth bound for every session together and the bytes idle mirrors evict down to (64 MiB at least)
 [arch(at="../ARCHITECTURE_GPU_PREFILL_WINDOW.md#kv-mirror-arena")]
 def private mirror_ceiling_bytes : uint64 {
     let ceil_mb = uint64(max(g_mirror_cap_mb >= 0 ? g_mirror_cap_mb : g_mirror_cap_env, 64))
     return min(ceil_mb * 1024ul * 1024ul, mirror_device_max_bytes())
 }
 
-//! the arena's growth bound for a demand whose largest slice is `slice_bytes`: the cap, or that slice where it alone passes the cap
 [arch(at="../ARCHITECTURE_GPU_PREFILL_WINDOW.md#kv-mirror-arena")]
 def private mirror_ceiling_for(slice_bytes : uint64) : uint64 => clamp(slice_bytes, mirror_ceiling_bytes(), mirror_device_max_bytes())
 
-//! a slice ending at byte `end` lies inside the 32-bit reach of the forms that address the arena from its start - the route
-//! tables count elements under a scalar codec and bytes under a block codec
 [arch(at="../ARCHITECTURE_GPU_PREFILL_WINDOW.md#kv-mirror-arena")]
 def mirror_in_reach(dt : KVDtype; end : uint64) : bool => end / uint64(kv_block_codec(dt) ? 1l : kv_row_bytes(dt, 1l)) <= 0xFFFFFFFFul
 
@@ -1650,12 +1646,12 @@ struct DnMirror {
     region_bytes : uint64
     regions : int64                     // 2 for MTP-verify dual-store (cur flips on reject), else 1
     cur : int64                         // live region index
-    bytes : uint64                      // the slot: regions * region_bytes + the n-gram ring
+    bytes : uint64                      //! the slot: regions * region_bytes + the n-gram ring
     pos : int64                         // next position the GPU state expects (forward-only)
     tick : int64
 }
 var @scratch g_dn_mirrors : table<uint64; DnMirror>   // per-session; hot [] after key_exists is a hit
-let DN_MIRRORS_MAX = 4      // per-session state is big (35B: ~60MB) — the least recent mirror evicts into its stash
+let DN_MIRRORS_MAX = 4      //! per-session state is big (35B: ~60MB) — the least recent mirror evicts into its stash
 var private g_dn_mirrors_max = int64(DN_MIRRORS_MAX)   // grows to the widest batch served (dn_mirror_room)
 var private g_dn_pool : MetalBuffer?   //! every mirror's slot, back to back
 var private g_dn_pool_slots = 0l
@@ -2952,8 +2948,6 @@ def public iq4_lut(q : uint) : float {
     return float((int((w >> ((q & 3u) * 8u)) & 255u) ^ 128) - 128)
 }
 
-//! The iq3s4 codebook (the odd values an IQ3_S weight takes, `iq3s4_lut` of dasllama_kqformat) by arithmetic, 2q - 15 - the
-//! iq4 family's IQODD stamps read it in iq4_lut's place.
 [arch(at = "../ARCHITECTURE_GPU_QUANT_PLANES.md#metal-kq-split-scale-plane")]
 def public iq3s4_val(q : uint) : float => float(2 * int(q) - 15)
 

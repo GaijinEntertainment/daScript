@@ -295,7 +295,6 @@ def private pf_dn_layer_sets(l, dim, cd, di : int64) {
     }
 }
 
-//! region `r`'s state slot and its first ring image zero-filled in every recurrent layer: a segment that starts at position zero
 [arch(at="../ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-dn-block")]
 def private pf_dn_zero_region(raw : VkCommandBuffer; var h : VkHaz; r : int64) {
     vhz_dep(raw, h, 0u, VHZ_DNST | VHZ_DNSM, true)
@@ -514,8 +513,6 @@ def vk_rdec_moe_ok(f1, f3, f2 : int) : bool {
 //! the routed block's f16-fed tiles serve on this device: the cm2 tiles on a coopmat2 device in cm2 mode, the KHR tile in mm mode
 def private pf_moe_tiles : bool => (g_gpu.coopmat_mode == COOPMAT_CM2 && g_gpu.has_coopmat2) || (g_gpu.coopmat_mode == COOPMAT_MM && khr_kq_tile_on())
 
-//! an expert plane format the Q8-fed chain's sdot4 tiles serve: q8 (`Q8Batch`), a superblock format (the kq batch leaves) and a
-//! per-32 format (`Blk32BatchT`)
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-moe-q8-chain")]
 def private pf_q8_tile_ok(f : int) : bool => f == int(KqFmt.q8) || kq_sb(f) || cm2_b32_routed(f)
 
@@ -700,8 +697,6 @@ def private pf_moe_layer_sets(l : int64) {
         fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XQ, VHZ_MRT, VHZ_MRT, VHZ_MDN | VHZ_MDN_M, VHZ_MRT, 0u, VHZ_MRT))
 }
 
-//! the Q8-fed chain's sets for MoE layer `l`: the f32 gather, its requant into the gate plane's feed, the three expert tiles over
-//! the quantized rows, and the act + requant of the hidden rows into the down plane's feed
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-moe-q8-chain")]
 def private pf_moe_q8_layer_sets(l : int64; pe1, pe3, pe2 : tuple<wq : uint64; ws : uint64; wqb : int64; wsb : int64>) {
     var L & = unsafe(g_rd.layers[l])
@@ -781,8 +776,6 @@ def private pf_host_cut(var raw : VkCommandBuffer&; var next : VkCommandBuffer; 
     cmd_copy_range(raw, g_rd.pf_hacc_host.buf, row0 * dim * 4l, g_rd.pf_hacc_dev, row0 * dim * 4l, (wlen - row0) * dim * 4l)
 }
 
-//! the Q8-fed chain's expert GEMMs over the gathered rows: their requant to the gate plane's feed, the gate and up tiles, the
-//! act + requant to the down plane's feed, the down tile into the routed rows the combine reads
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-moe-q8-chain")]
 def private pf_moe_q8_experts(raw : VkCommandBuffer; var h : VkHaz; l, nk : int64; bounds : tuple<gu : int64; dn : int64; mgu : int64; mdn : int64>) {
     var L & = unsafe(g_rd.layers[l])
@@ -1522,7 +1515,6 @@ def set_vulkan_prefill_qkn_fuse(on : bool) {
 
 def vulkan_prefill_qkn_fuse : bool => g_pf_qkn_fuse
 
-//! layer `l`'s window takes the fused pass: a q/k-normed layer of its own K/V over a float mirror, under the fuse lever
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
 def private pf_qkn_fused(l : int64) : bool
     => g_pf_qkn_fuse && g_env_vulkan.vk_fuse && g_rd.qk_norm && !rd_kv_block_codec() && !g_rd.layers[l].kv_shared
@@ -3031,7 +3023,6 @@ def private record_ffn_batch_cmd(s1, s3, s2 : int; nwg_gu, nwg_dn : uint; rows, 
 // kernel folds each chunk's down rows into comb_y_dev, read back once after the last chunk.
 def vk_moe_ffn_batch(var goutp : float?; offs1 : int64 const?; offs3 : int64 const?; offs2 : int64 const?; nregions : int64; xqp : int8 const?; xsp : float const?; wp : float const?; invp : uint const?; n, nfe, nrows, npos : int64; f1, f3, f2 : int; is_gelu : bool) {
     let (s1, s3, s2) = ffn_stacks(offs1, offs3, offs2, f1, f3, f2)
-    // gate/up share one activation image unless the call carries the up plane's own (`moe_gpu_image2`); down's is its own unit
     let i2 = moe_gpu_image2()
     verify(i2.on || kq_block32(f3) == kq_block32(f1),
         "dasLLAMA vulkan tier: gate/up form mismatch with no second image")

@@ -296,7 +296,7 @@ def private layout_offsets(var t : Model) : LayoutSizes {   // nolint:STYLE037,S
             t.wo_offs |> push(kq_take(cur, fmt_at(t.wo_fmt, l), layer_qd(c, l) * dim))
         }
     }
-    if (c.recr_mask != 0ul) {  // deltanet big weights (recurrent layers only; kind-major regions)
+    if (c.recr_mask != 0ul) {
         let cd = dn_conv_dim(c)
         t.dnqkv_offs |> clear(); t.dnqkv_offs |> reserve(layers)
         for (l in range64(layers)) { t.dnqkv_offs |> push(layer_is_recurrent(c, l) ? kq_take(cur, fmt_at(t.dnqkv_fmt, l), dim * cd) : -1l) }
@@ -377,7 +377,7 @@ def private layout_offsets(var t : Model) : LayoutSizes {   // nolint:STYLE037,S
             // tied K-quant: ONE plane copy serves both the classifier matmul and the embedding row reads
             t.wcls_off = kq_take(cur, t.emb_fmt, c.vocab_size * dim)
         } elif (t.cls_q8_copy) {
-            t.wcls_off = cur.wo   // the device classifier's q8 copy; the embed and the CPU classifier read the fp32 table
+            t.wcls_off = cur.wo
             cur.wo += c.vocab_size * dim
         } else {
             t.wcls_off = 0l   // unused — the classifier reads the fp32 embedding from fblob
@@ -1533,9 +1533,6 @@ def private kq_fmt_of(gt : int) : KqFmt {
 }
 
 
-//! One weight's plane tag off its disk type, every site alike - the dense planes, the expert stacks and the table planes (the
-//! token table, the classifier, the eh_proj, the deltanet and shared-expert planes, a fused slice): `kq_fmt_row_ok`'s form,
-//! a per-32 one off the 256 lattice, else the q8 rail - a demotion is logged and counted for the load report.
 [arch(at="../ARCHITECTURE_ENGINE_FORMATS.md#per-32-tables")]
 def private kq_tag(m : GGUFMeta; name : string; rows : int64) : KqFmt {
     let disk_fmt = kq_fmt_of(gguf_tensor_type(m, name))
@@ -1683,7 +1680,7 @@ def private detect_dn_formats(var t : Model; m : GGUFMeta; layers : int64) : boo
             if (layer_is_recurrent(t.config, l)) {
                 t.dnqkv_fmt[l] = kq_tag(m, "blk.{l}.attn_qkv.weight", t.config.dim)
                 t.dngate_fmt[l] = kq_tag(m, "blk.{l}.attn_gate.weight", t.config.dim)
-                if (!t.dn_grouped) {   // a grouped file's ssm_out permutes its input columns across superblocks: the q8 transcode is its only form
+                if (!t.dn_grouped) {
                     t.dnout_fmt[l] = kq_tag(m, "blk.{l}.ssm_out.weight", t.config.ssm_d_inner)
                 }
                 if (!t.dn_ba_f32) {
@@ -2892,7 +2889,6 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
         if (!t.config.shared_weights) {
             load_big(m, bytes, "output.weight", t, t.wcls_off, vocab * dim, scratch, 0l, t.wcls_fmt)
             if (emb_kq(t)) {
-                // untied K-quant: the table's one plane in its file format, the row reads dequant from it
                 load_big(m, bytes, "token_embd.weight", t, t.emb_kq_off, vocab * dim, scratch, 0l, t.emb_fmt)
             }
             if (t.emb_q8) {
@@ -2909,7 +2905,7 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
             // (the kq planes stay in disk order — no repack, so no second linear copy)
             load_big(m, bytes, "token_embd.weight", t, t.wcls_off, vocab * dim, scratch, 0l, t.emb_fmt)
         } elif (t.cls_q8_copy) {
-            load_big(m, bytes, "token_embd.weight", t, t.wcls_off, vocab * dim, scratch)   // the device classifier's q8 transcode
+            load_big(m, bytes, "token_embd.weight", t, t.wcls_off, vocab * dim, scratch)
         }
         // Qwen2 Q/K/V projection biases — small fp32 tensors, kept dense
         if (t.config.attn_qkv_bias) {

@@ -1079,9 +1079,9 @@ def test_metal_verify_gemma12(t : T?) {
     }
 }
 
-// the hybrid carrier (qwen35: deltanet layers, the 2x-wide gated Q), head-less: a same-slab verify is one
-// session at k+1 positions, so its recurrent rows are one group walking that session's mirror row after
-// row (`ARCHITECTURE_GPU_MTP.md#dn-group-stages`) - the rail must serve them
+//! the hybrid carrier (qwen35: deltanet layers, the 2x-wide gated Q), head-less: a same-slab verify is one
+//! session at k+1 positions, so its recurrent rows are one group walking that session's mirror row after
+//! row (`ARCHITECTURE_GPU_MTP.md#dn-group-stages`) - the rail must serve them
 [test]
 def test_metal_verify_qwen38_27b(t : T?) {
     t |> run("batch-rail same-slab verify serves a recurrent session's rows as one group - Qwen3.8-27B-Q4_K_M, no head (deltanet + gated Q, large tier)") <| @(t : T?) {

@@ -537,8 +537,8 @@ def private bind_gpu_slot(si : int) {
     to_log(LOG_INFO, "dasllama-server: GPU tier -> {g_slots[si].name} ({prev_note}{us / 1000l}ms, {g_slots[si].backend_effective})\n")
 }
 
-//! Read with the slot's marks installed, so the facade answers for THIS model. A speculating slot keeps its streams on the card
-//! where every seat of the round runs there (`gpu_resident_mtp_device_home`).
+//! Read with the slot's marks installed, so the facade answers for THIS model.
+[arch(at = "README.md#gpu-key")]
 def slot_wants_device_kv(s : ModelSlot) : bool {
     return (s.backend_effective == "gpu:resident" && s.vision.kind == VisionKind.none && !s.audio_armed
         && (!s.sched.mtp || gpu_resident_mtp_device_home(s.model)) && s.gpu_regions >= s.sched.max_streams)
@@ -1803,8 +1803,7 @@ def private box_ram_gb() : int {
     return cap > 0 && (total == 0 || cap < total) ? cap : total
 }
 
-//! a cgroup's memory limit in whole GiB - the RAM a container's process may hold, which /proc/meminfo does not see; 0 for
-//! no limit (`max`, or v1's page-rounded "unlimited" past a petabyte) and for text that is no byte count
+//! a cgroup memory-limit file's text in whole GiB; 0 for no limit (`max`, or v1's page-rounded count past a petabyte) and for text that is no byte count
 def ram_gb_from_cgroup(text : string) : int {
     let t = strip(text)
     return 0 if (empty(t) || !is_number(first_character(t)))
@@ -6988,8 +6987,7 @@ var private g_sched_defaults = SchedDefaults()
 def mtp_auto_arms(streams : int64; on_metal : bool; backend_effective : string; experts_host : bool = false; platforms : string = "") : bool
     => streams == 1l && decodes_on_gpu(on_metal, backend_effective, experts_host) && mtp_platform_listed(platforms, on_metal ? "metal" : "vulkan")
 
-//! Whether a model's catalog `serve_mtp` (a comma list of platforms) names the platform the slot decodes on: the default arms
-//! only where the model's self-speculation measured a win, never on a model whose row lists none. Non-private: test_server_flags.das gates it.
+//! Whether `platforms`, a catalog `serve_mtp` comma list, names `platform`; "" names none. Non-private: test_server_flags.das gates it.
 def mtp_platform_listed(platforms, platform : string) : bool {
     for (p in split(platforms, ",")) {
         return true if (strip(p) == platform)

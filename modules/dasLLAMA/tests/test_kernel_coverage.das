@@ -182,9 +182,9 @@ let private CENSUS_NEVER_DISPATCHED <- [
     // in test_metal_gemm_kernels.das
     "metal_moe_mulmm_k3", "metal_moe_mulmm_k2", "metal_moe_mulmm_iq4xs", "metal_moe_mulmm_iq4nl", "metal_moe_mulmm_q40",
     "metal_moe_mulmm_iq3s", "metal_moe_mulmm_iq3xxs", "metal_moe_mulmm_iq2s", "metal_moe_mulmm_iq2xs", "metal_moe_mulmm_iq2xxs",
-    // the dense per-32 forms (q51, iq4nl32): the loader tags no dense plane in either format yet - a dense Q5_1 plane and an
-    // off-lattice IQ4_NL plane load as q8 (`kq_fmt_row_ok`). Their coverage is b32_gemv_gate and b32_mm_gate in
-    // test_metal_prefill_kernels.das
+    // the dense per-32 forms (q51, iq4nl32): a dense Q5_1 or off-lattice IQ4_NL plane loads in its own form
+    // (`kq_fmt_row_ok`), and no stocked census carrier holds one - the census-q51 / census-iq4nl32 arms mint
+    // theirs locally. Their coverage is b32_gemv_gate and b32_mm_gate in test_metal_prefill_kernels.das
     "metal_kq_gemv_q51", "metal_kq_gemv_iq4nl32", "MetalKqMulMmQ51", "MetalKqMulMmIq4nl32",
     // the 16-deep router select stamp: it serves past 256 experts, and the stocked MoE carriers top
     // out at 128 (Qwen3-30B-A3B), 60 (Qwen1.5-MoE) and 32 (gpt-oss-20b). Its coverage is

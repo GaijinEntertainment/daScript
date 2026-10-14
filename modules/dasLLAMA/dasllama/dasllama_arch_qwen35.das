@@ -339,20 +339,20 @@ def private deltanet_decode_gpu(t : Model; var s : Session; l : int64) {
         mm_f(s.dn_g, t, fmt_at(t.dnalpha_fmt, l), t.dnalpha_offs[l], s.xb, s.xq, s.xs, s.xbs, dim, nvh)
     }
     let fq = fmt_at(t.dnqkv_fmt, l)
-    let kq_x = kq_sb(fq)
+    let qkv_reads_q8k = kq_sb(fq)
     //! the qkv plane's image - Q8_K for a superblock format, else Q8_0 - and, where the z plane takes the other class, both
-    let two = kq_x != kq_sb(fmt_at(t.dngate_fmt, l))
-    if (kq_x || two) {
+    let z_own_image = qkv_reads_q8k != kq_sb(fmt_at(t.dngate_fmt, l))
+    if (qkv_reads_q8k || z_own_image) {
         s.kxqb |> resize(dim)
         s.kxsb |> resize(dim / 256l)
         s.kxbsb |> resize(dim / 16l)
         requant_rows_q8k_bs(s.xb, dim, 1l, s.kxqb, s.kxsb, s.kxbsb)
     }
-    if (!kq_x || two) {
+    if (!qkv_reads_q8k || z_own_image) {
         quantize_q8_0_into(s.xb, dim, s.xq, s.xs, 0l, 0l)
     }
-    if (two) {
-        if (kq_x) {
+    if (z_own_image) {
+        if (qkv_reads_q8k) {
             set_moe_gpu_image2(s.xq, s.xs)
         } else {
             set_moe_gpu_image2(s.kxqb, s.kxsb)
@@ -364,7 +364,7 @@ def private deltanet_decode_gpu(t : Model; var s : Session; l : int64) {
     unsafe {
         matmul_moe_gpu_dn(s.xb2, t.dnqkv_offs[l], t.dngate_offs[l], t.dnout_offs[l],
             int(fq), int(fmt_at(t.dngate_fmt, l)), int(fmt_at(t.dnout_fmt, l)),
-            kq_x ? s.kxqb : s.xq, kq_x ? s.kxsb : s.xs, s.dn_beta, s.dn_g,
+            qkv_reads_q8k ? s.kxqb : s.xq, qkv_reads_q8k ? s.kxsb : s.xs, s.dn_beta, s.dn_g,
             addr < float const? >(t.fblob[t.dn_conv_off + l * dconv * cd]),
             addr < float const? >(t.fblob[t.dn_norm_off + l * ds]),
             addr < float const? >(t.fblob[t.dn_a_off + l * nvh]),
@@ -884,20 +884,20 @@ def private deltanet_prefill_gpu(t : Model; var s : Session; l : int64; npos : i
     let ts_in = prof_ticks()
     dn_beta_alpha_proj(t, s, l, npos)   // raw beta/alpha rows - the transforms run in-kernel
     let fq = fmt_at(t.dnqkv_fmt, l)
-    let kq_x = kq_sb(fq)
+    let qkv_reads_q8k = kq_sb(fq)
     //! the qkv plane's image - Q8_K for a superblock format, else Q8_0 - and, where the z plane takes the other class, both
-    let two = kq_x != kq_sb(fmt_at(t.dngate_fmt, l))
-    if (kq_x || two) {
+    let z_own_image = qkv_reads_q8k != kq_sb(fmt_at(t.dngate_fmt, l))
+    if (qkv_reads_q8k || z_own_image) {
         s.kxqb |> resize(npos * dim)
         s.kxsb |> resize(npos * dim / 256l)
         s.kxbsb |> resize(npos * dim / 16l)
         requant_rows_q8k_bs(s.xb_b, dim, npos, s.kxqb, s.kxsb, s.kxbsb)
     }
-    if (!kq_x || two) {
+    if (!qkv_reads_q8k || z_own_image) {
         requant_rows_q8(s.xb_b, dim, npos, s.xqb, s.xsb)
     }
-    if (two) {
-        if (kq_x) {
+    if (z_own_image) {
+        if (qkv_reads_q8k) {
             set_moe_gpu_image2(s.xqb, s.xsb)
         } else {
             set_moe_gpu_image2(s.kxqb, s.kxsb)
@@ -909,7 +909,7 @@ def private deltanet_prefill_gpu(t : Model; var s : Session; l : int64; npos : i
     unsafe {
         matmul_moe_gpu_dn(s.xb2_b, t.dnqkv_offs[l], t.dngate_offs[l], t.dnout_offs[l],
             int(fq), int(fmt_at(t.dngate_fmt, l)), int(fmt_at(t.dnout_fmt, l)),
-            kq_x ? s.kxqb : s.xqb, kq_x ? s.kxsb : s.xsb, s.dn_beta_b, s.dn_g_b,
+            qkv_reads_q8k ? s.kxqb : s.xqb, qkv_reads_q8k ? s.kxsb : s.xsb, s.dn_beta_b, s.dn_g_b,
             addr<float const?>(t.fblob[t.dn_conv_off + l * dconv * cd]),
             addr<float const?>(t.fblob[t.dn_norm_off + l * ds]),
             addr<float const?>(t.fblob[t.dn_a_off + l * nvh]),

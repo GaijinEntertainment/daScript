@@ -1729,8 +1729,6 @@ def iq4nl32q8_tile_gen(var yp : float?; qgp : uint8 const?; sgp : uint8 const?; 
     }
 }
 
-// ===== the q4032 family (iq4nl32's tile + GEMV over the same plane shape under q4_0's linear code) =====
-
 //! The q4032 layout companion: reference body = 1 (grp1 IS the disk order), the q51 rule.
 def q4032q8_layout_gen() : int => 1
 
@@ -1777,8 +1775,6 @@ def q4032q8_tile_gen(var yp : float?; qgp : uint8 const?; sgp : uint8 const?; xq
         }
     }
 }
-
-// ===== the q5032 family (tile + GEMV over q51's quant plane shape under one f16 d, the signed q - 16 code) =====
 
 //! The q5032 layout companion: reference body = 1 (grp1 IS the disk order), the q51 rule.
 def q5032q8_layout_gen() : int => 1

@@ -1191,15 +1191,15 @@ class MetalArgmax : MetalArgmaxT {
     }
 }
 
-// The Q8 token-table gather: dequant the rows of `nrows` token ids off the linear Q8 copy (the
-// whole-model 34B blob, bound at emb_q8_off's byte offset) into the residual input rows - the
-// device's embed_row, the decode step's, the greedy chain's and the prefill window's.
+//! The Q8 token-table gather: dequant the rows of `nrows` token ids off the linear Q8 copy (the
+//! whole-model 34B blob, bound at emb_q8_off's byte offset) into the residual input rows - the
+//! device's embed_row, the decode step's, the greedy chain's and the prefill window's.
 [metal_dispatch(name = "enc_embed_c", pso = "g_pso_emb", tg = 64, grid = "dim/64, nrows", params = "dim : int64, nrows : int64")]
 class MetalEmbedQ8 {
     @ssbo @binding = 0 @role = "weight" @off = "eoff" q : array<int8>      // the embed blob slice, byte view (quants at 34*b + 2)
     @ssbo @binding = 1 @role = "weight" @off = "eoff" sc : array<float16>  // the same buffer, half-scale view (block b at 17*b)
-    @ssbo @binding = 2 @off = "toff" tok : array<uint>     // the tokens at a byte offset: row i of a token list
-    @ssbo @binding = 3 @off = "xoff" xo : array<float>     // [nrows x dim] residual input out, at row i's byte offset
+    @ssbo @binding = 2 @off = "toff" tok : array<uint>     //! the tokens at a byte offset: row i of a token list
+    @ssbo @binding = 3 @off = "xoff" xo : array<float>     //! [nrows x dim] residual input out, at row i's byte offset
     @uniform @binding = 4 dim : uint
     @uniform @binding = 5 @role = "weight" escale : float    // embed_scale (gemma: sqrt(dim); 1.0 elsewhere — g_one or an uploaded scalar)
 
@@ -1894,7 +1894,7 @@ class MetalRopeStoreQ8Base {
 // same codec. K blocks rope their 16 pairs first; V blocks copy raw.
 [metal_dispatch(name = "enc_rpst_q8_c", pso = "g_pso_rpst_q8", tg = 64, grid = "nthreads/64", params = "nthreads : int64")]
 class MetalRopeStoreQ8 : MetalRopeStoreQ8Base {
-    @ssbo @binding = 0 @role = "read" qk : array<float>    // k at [qd, qd + kvd) of the projection row (q ropes in `qr`)
+    @ssbo @binding = 0 @role = "read" qk : array<float>    //! k at [qd, qd + kvd) of the projection row (q ropes in `qr`)
     @ssbo @binding = 1 @role = "alias" @off = "vsoff" vs : array<float>    // raw v (the QKV buffer at the v offset)
     @ssbo @binding = 2 @role = "write" @off = "koff" ksh : array<float16> // mirror K row, HALF-SCALE view (bound at the (layer, pos) row offset)
     @ssbo @binding = 3 @role = "alias" @off = "koff" kqb : array<int8>    // the SAME K row, BYTE view
@@ -3076,7 +3076,7 @@ struct DnArgs {
     qscale : float
     mid : uint
     split : uint
-    row : uint   // the first row of the [npos x ...] planes the row-wise stages (L2, prep, gate) read and write
+    row : uint   //! the first row of the [npos x ...] planes the row-wise stages (L2, prep, gate) read and write
     sslice : uint   //! the layer's state plane, floats past a group's region base
     cslice : uint   //! the layer's history plane, floats past a group's region base
     bstr : uint     //! the scan's beta and alpha row stride: nvh, or 2 nvh where one GEMV wrote [beta; alpha] a row
@@ -3648,7 +3648,7 @@ class MetalSqAttnDXTq4 : MetalSqAttnDQuantT {
 // (grid y = batch row; the new KV row lands at cnt-1). Same quantize_q8kv_row semantics.
 [metal_dispatch(name = "enc_rpstb_q8_c", pso = "g_pso_rpstb_q8", tg = 64, grid = "nthreads/64, nrows", params = "nthreads : int64, nrows : int64")]
 class MetalRopeStoreBQ8 : MetalRopeStoreQ8Base {
-    @ssbo @binding = 0 @role = "read" qk : array<float>    // [B x qstride] fused QKV rows (q ropes in `qr`)
+    @ssbo @binding = 0 @role = "read" qk : array<float>    //! [B x qstride] fused QKV rows (q ropes in `qr`)
     @ssbo @binding = 1 @role = "write" ksh : array<float16> // the whole mirror arena, half-scale view (k dest)
     @ssbo @binding = 2 @role = "write" kqb : array<int8>    // the SAME arena, byte view
     @ssbo @binding = 3 @role = "write" vsh : array<float16>
@@ -3713,7 +3713,7 @@ class MetalRopeStoreBQ8 : MetalRopeStoreQ8Base {
 // byte-offset row table — grid (heads, batch rows); the new KV row lands at cnt-1.
 [metal_dispatch(name = "enc_rpstb_tq4_c", pso = "g_pso_rpstb_tq4", tgmem = "metal_rope_store_b_tq4_msl_tgmem", tg = "head_size", grid = "ntg, nrows", params = "ntg : int64, nrows : int64, head_size : int64")]
 class MetalRopeStoreBTq4 : MetalRopeStoreTq4Base {
-    @ssbo @binding = 0 @role = "read" qk : array<float>    // [B x qstride] fused QKV rows (q ropes + rotates in `qr`)
+    @ssbo @binding = 0 @role = "read" qk : array<float>    //! [B x qstride] fused QKV rows (q ropes + rotates in `qr`)
     @ssbo @binding = 1 @role = "write" ksh : array<float16> // the whole mirror arena, half-scale view (k dest)
     @ssbo @binding = 2 @role = "write" kqb : array<uint8>   // the SAME arena, byte view
     @ssbo @binding = 3 @role = "write" vsh : array<float16>
@@ -4410,8 +4410,6 @@ let B32_MVB_STEMS = "b32_mvb2_q51 b32_mvb2_iq4nl32 b32_mvb2_q4032 b32_mvb2_q5032
 //! the per-32 K-split dispatches since load - the narrow-plane form's witness
 def metal_b32_ks_count() : int64 => g_b32_ks
 
-//! a per-32 plane of `rows` rows and K `n` read by `nrows` x rows takes the K-split stamps: its two-row form fills too few
-//! simdgroups to hide the block walk's latency
 [arch(at="../ARCHITECTURE_GPU_QUANT_PLANES.md#metal-b32-small-batch")]
 def b32_narrow(rows, n, nrows : int64) : bool {
     return (rows <= B32_NARROW_ROWS || (rows <= B32_NARROW_WIDE_ROWS && nrows <= 2l)
@@ -4506,8 +4504,8 @@ def enc_kq_gemv(enc : MetalComputeEncoder?; fmt : KqFmt; bq : MetalBuffer?; qoff
     }
 }
 
-// K-quant small-batch mv (B >= 2): R=4 column groups via grid.y, R=2 via the B2 PSO; B >= 5 rides
-// the staged B8 twin over 8-column groups via grid.y (DASLLAMA_METAL_KQ_B8=0 = the A/B rail).
+//! K-quant small-batch mv (B >= 2): R=4 column groups via grid.y, R=2 via the B2 PSO; B >= 5 rides
+//! the staged B8 twin over 8-column groups via grid.y (DASLLAMA_METAL_KQ_B8=0 = the A/B rail).
 def private kq_b8_on : bool => g_env_metal.kq_b8
 
 typedef KqMvbBuilder = function<(enc : MetalComputeEncoder?; s0 : MetalBuffer?; s0off : uint64; s : MetalBuffer?; soff : uint64;
@@ -6390,20 +6388,20 @@ class MetalQ8MulMm : MetalMmTileBase {
 class template MetalKqTileDecodeT : MetalMmTileBase {
     typedef TILET = float16
     typedef SGT = simdgroup_half8x8
-    // s0off is the SLOT-0 view offset: k4/k5 callers pass soff again, k6 passes the d-plane doff; the per-32 formats bind their scale plane there
-    @ssbo @binding = 0 @role = "weight" @off = "s0off" @template_gate = KQ ksh : array<float16> // k4/k5: 16B scale blocks, half view (d at 8*blk, dmin at 8*blk+1); k6: the d plane (bound at byte nsb*16); q51: d, m at 2*blk; iq4nl32: d at blk
+    //! s0off is the SLOT-0 view offset: k4/k5 callers pass soff again, k6 passes the d-plane doff; the per-32 formats bind their scale plane there
+    @ssbo @binding = 0 @role = "weight" @off = "s0off" @template_gate = KQ ksh : array<float16> //! k4/k5: 16B scale blocks, half view (d at 8*blk, dmin at 8*blk+1); k6: the d plane (bound at byte nsb*16); q51: d, m at 2*blk; iq4nl32: d at blk
     @ssbo @binding = 1 @role = "weight" @off = "soff" @template_gate = KQ_SC ks4 : array<uint4>   // the same buffer, uint4 view (k6: 16 int8 sub-scales at blk, bound at 0)
-    @ssbo @binding = 2 @role = "weight" @off = "qoff" @template_gate = KQ kqu : array<uint>    // quant plane, uint view (qs at SB_UINTS*blk; k5 qh at SB_UINTS*blk+32; k6 ql at 48*blk, qh at 48*blk+32; q51 at 5*blk; iq4nl32 at 4*blk)
-    @template_constant KQ : bool = false   // the stamp decodes through this template's views
-    @template_constant KQ_SC : bool = false   // ... and reads the sub-scale uint4 view (every superblock format)
-    @template_constant B32 : bool = false   // the per-32 planes: a 32-block a block, no superblock
-    @template_constant Q51 : bool = false   // q5_1: 5-bit quants (nibble | qh bit), d*q + m
+    @ssbo @binding = 2 @role = "weight" @off = "qoff" @template_gate = KQ kqu : array<uint>    //! quant plane, uint view (qs at SB_UINTS*blk; k5 qh at SB_UINTS*blk+32; k6 ql at 48*blk, qh at 48*blk+32; q51 at 5*blk; iq4nl32 at 4*blk)
+    @template_constant KQ : bool = false   //! the stamp decodes through this template's views
+    @template_constant KQ_SC : bool = false   //! ... and reads the sub-scale uint4 view (every superblock format)
+    @template_constant B32 : bool = false   //! the per-32 planes: a 32-block a block, no superblock
+    @template_constant Q51 : bool = false   //! q5_1: 5-bit quants (nibble | qh bit), d*q + m
     @template_constant Q50 : bool = false   //!< q5032: q5_1's quant block under one d, d * (q - 16)
     @template_constant B32W : uint = 4u     //!< a per-32 quant block's words: KQ_B32_QWORDS, KQ_Q5032_QWORDS on q5032 (the qh word last)
     @template_constant SB_UINTS : uint = 32u  // superblock quant-plane stride in uints (unused in the SIXBIT arm — k6 strides are hardcoded 48/16/8)
     @template_constant QH : bool = false // q5_K: the 5th-bit overlay plane rides after the nibbles
     @template_constant SIXBIT : bool = false // q6_K: int8 sub-scales x super-d, ql/qh compose
-    @template_constant IQ4XS : bool = false // iq4xs: the k6 split scale form, the q40 pairing, codebook decode (B32: iq4nl32's block d)
+    @template_constant IQ4XS : bool = false //! iq4xs: the k6 split scale form, the q40 pairing, codebook decode (B32: iq4nl32's block d)
     @template_constant K3 : bool = false // q3_K: the k6 split scale form, 2-bit lane + hmask compose, offset 4
     @template_constant IQ3S : bool = false // iq3s: the k6 split scale form, threadgroup grid gather + sign flip
     @template_constant IQ3XXS : bool = false // iq3xxs: the same form over the halved grid + parity signs
@@ -6765,8 +6763,8 @@ class template MetalKqTileDecodeT : MetalMmTileBase {
     }
 }
 
-// The dense K-quant prefill GEMM over every superblock and per-32 format as one template: the 32 x 64 simdgroup tile
-// walk around MetalKqTileDecodeT's decode. Q8 (blob walk) stays its own class.
+//! The dense K-quant prefill GEMM over every superblock and per-32 format as one template: the 32 x 64 simdgroup tile
+//! walk around MetalKqTileDecodeT's decode. Q8 (blob walk) stays its own class.
 [ |> template_struct_instance]
 class template MetalKqMulMmK45T : MetalKqTileDecodeT {
     @ssbo @binding = 3 @role = "read" xf : array<float4>
@@ -7356,8 +7354,6 @@ def private wscale_row_register {
     register_reload_prep(@@wscale_row_drop)
 }
 
-//! the routed selection of `nrows` rows: the top-k select (the 512-deep stamp past 256 experts), then a global
-//! `expert_weights_scale` other than 0 or 1 on every picked weight - the CPU `moe_select_core`'s order
 [arch(at="../ARCHITECTURE_GPU_PREFILL_MOE.md#moe-wscale")]
 def enc_moe_select_rows(enc : MetalComputeEncoder?; c : Config; blg, bsel, bnk : MetalBuffer?; nrows : int64; lstride : int64 = 0l) {
     let sw = c.moe_gate == MoeGate.softmax_weight
@@ -7455,19 +7451,19 @@ def public b32_q51_w4(u, qh, nsh : uint; dm : float2) : float4 {
     return float4(dm.x) * q + float4(dm.y)
 }
 
-// Q5_1 / IQ4_NL per-32 GEMV over the verbatim disk planes, an 8-lane group per 32-block, 2 rows a simdgroup; MVB stamps the
-// small-batch form over the same decode and dot.
+//! Q5_1 / IQ4_NL per-32 GEMV over the verbatim disk planes, an 8-lane group per 32-block, 2 rows a simdgroup; MVB stamps the
+//! small-batch form over the same decode and dot.
 [ |> template_struct_instance]
 class template MetalBlk32GemvT : MetalGemvSiteT {
-    @ssbo @binding = 0 @role = "weight" @off = "qoff" wqu : array<uint>    // quant plane, uint view (QW words a block)
-    @ssbo @binding = 1 @role = "weight" @off = "soff" wsh : array<float16> // scale plane (q51: d then m a block; iq4nl32: d)
+    @ssbo @binding = 0 @role = "weight" @off = "qoff" wqu : array<uint>    //! quant plane, uint view (QW words a block)
+    @ssbo @binding = 1 @role = "weight" @off = "soff" wsh : array<float16> //! scale plane (q51: d then m a block; iq4nl32: d)
     @uniform @binding = 4 @template_gate = "!GATHERED" ndim : uint
     @uniform @binding = 5 @template_gate = "!GATHERED" ddim : uint
     @uniform @binding = 4 @template_gate = GATHERED ka : MoeGemvArgs
     @ssbo @binding = 6 @role = "read" @template_gate = GATHERED sel : array<uint>    // [streams x 2k] selection rows (idx section read)
-    @uniform @binding = 6 @template_gate = MVB mv : KqMvArgs   // the small-batch form's y row stride and live column count
-    @workgroup @template_gate = "!Q51" lut : float[64]   // kvalues_iq4nl as floats, one slot per thread of the first 64
-    @workgroup @template_gate = KSPLIT part : float[64]   // the K-split stamps' per-simdgroup partial sums, KS x RS x NC
+    @uniform @binding = 6 @template_gate = MVB mv : KqMvArgs   //! the small-batch form's y row stride and live column count
+    @workgroup @template_gate = "!Q51" lut : float[64]   //! kvalues_iq4nl as floats, one slot per thread of the first 64
+    @workgroup @template_gate = KSPLIT part : float[64]   //! the K-split stamps' per-simdgroup partial sums, KS x RS x NC
     @template_constant Q51 : bool = false
     @template_constant Q40L : bool = false     //!< a Q4_0 per-32 plane (q4032): iq4nl32's block form under the linear code q - 8
     @template_constant Q50 : bool = false      //!< a Q5_0 per-32 plane (q5032): q51's quant block under one d, the 32-entry code q - 16
@@ -7788,7 +7784,7 @@ class MetalKqGemvIq4nl32Ks : MetalBlk32GemvT {
     }
 }
 
-// Expert-indexed per-32 GEMVs: MetalBlk32GemvT's dot with the expert block shift; x and y ride the slot strides
+//! Expert-indexed per-32 GEMVs: MetalBlk32GemvT's dot with the expert block shift; x and y ride the slot strides
 [metal_dispatch(name = "enc_moe_gemv_q51_c", pso = "g_pso_moe_gemv_q51", tg = 64, grid = "rows/4, k, nst", params = "rows : int64, k : int64, nst : int64")]
 class MetalMoeGemvQ51 : MetalBlk32GemvT {
     @ssbo @binding = 2 @role = "read" xf : array<float4>   // activations, float4 view (xoff always % 4)
@@ -7921,8 +7917,6 @@ class MetalB32MvB4Iq4nl32Ks : MetalB32MvbNarrowT {
 [metal_dispatch(name = "enc_b32_mvb8_iq4nl32_ks_c", pso = "g_pso_b32_mvb8_iq4nl32_ks", tgmem = "MetalB32MvB8Iq4nl32Ks_metal_b32_mvb_msl_tgmem", tg = 128, grid = "rows, gcols", params = "rows : int64, gcols : int64")]
 class MetalB32MvB8Iq4nl32Ks : MetalB32MvbNarrowT {}
 
-// ===== q4032: the iq4nl32 stamps under the linear code (`Q40L`) =====
-
 [metal_dispatch(name = "enc_kq_q4032_c", pso = "g_pso_kq_q4032", tgmem = "metal_kq_gemv_q4032_msl_tgmem", tg = 64, grid = "rows/4", params = "rows : int64, n : int64")]
 class MetalKqGemvQ4032 : MetalBlk32GemvT {
     @ssbo @binding = 2 @role = "read" @off = "xoff" @span = "n*4" xf : array<float4>
@@ -8003,8 +7997,6 @@ class MetalB32MvB4Q4032Ks : MetalB32MvbNarrowT {
 class MetalB32MvB8Q4032Ks : MetalB32MvbNarrowT {
     override Q40L = true
 }
-
-// ===== q5032: the codebook stamps over q51's quant block under the 32-entry code q - 16 (`Q50`) =====
 
 [metal_dispatch(name = "enc_kq_q5032_c", pso = "g_pso_kq_q5032", tgmem = "metal_kq_gemv_q5032_msl_tgmem", tg = 64, grid = "rows/4", params = "rows : int64, n : int64")]
 class MetalKqGemvQ5032 : MetalBlk32GemvT {
@@ -8779,7 +8771,7 @@ class MetalKqGemvK2 : MetalKqGemvK2T {
     }
 }
 
-// Expert-indexed Q2_K GEMV - MetalKqGemvK2T's dot with the expert superblock shift
+//! Expert-indexed Q2_K GEMV - MetalKqGemvK2T's dot with the expert superblock shift
 [metal_dispatch(name = "enc_moe_gemv_k2_c", pso = "g_pso_moe_kq_k2", tg = 64, grid = "rows/8, k, nst", params = "rows : int64, k : int64, nst : int64")]
 class MetalMoeGemvK2 : MetalKqGemvK2T {
     @ssbo @binding = 3 @role = "read" x : array<float>
@@ -11581,11 +11573,11 @@ class MetalSoftcapRow {
 // channel-major history taps (the CPU dn_conv_state layout). Never writes history — MetalDnConvHist advances.
 [metal_dispatch(name = "enc_dn_conv", pso = "g_pso_dn_conv", tg = 256, grid = "cd/256, npos, ng", params = "cd : int64, npos : int64, ng : int64")]
 class MetalDnConv {
-    @ssbo @binding = 0 x : array<float>     // [rows x cd] fused qkv projection rows
-    @ssbo @binding = 1 hist : array<float>  // the mirror pool: [cd x taps] channel-major history at each group's base
+    @ssbo @binding = 0 x : array<float>     //! [rows x cd] fused qkv projection rows
+    @ssbo @binding = 1 hist : array<float>  //! the mirror pool: [cd x taps] channel-major history at each group's base
     @ssbo @binding = 2 @role = "weight" w : array<float>     // [cd x dconv] conv taps (raw fblob layout)
-    @ssbo @binding = 3 y : array<float>     // [rows x cd] conv output, silu'd
-    @ssbo @binding = 4 grp : array<uint>    // the group table, eight words a group (dn_grp_push)
+    @ssbo @binding = 3 y : array<float>     //! [rows x cd] conv output, silu'd
+    @ssbo @binding = 4 grp : array<uint>    //! the group table, eight words a group (dn_grp_push)
     @uniform @binding = 5 ka : DnArgs
 
     [metal_kernel(name="metal_dn_conv_msl")]
@@ -11618,10 +11610,10 @@ class MetalDnConv {
 // land in registers before any write, so the in-place buffer update is safe per channel.
 [metal_dispatch(name = "enc_dn_conv_hist", pso = "g_pso_dn_hist", tg = 256, grid = "cd/256, ng", params = "cd : int64, ng : int64")]
 class MetalDnConvHist {
-    @ssbo @binding = 0 x : array<float>     // [rows x cd] the fused qkv rows
-    @ssbo @binding = 1 hist : array<float>  // the mirror pool: each group's live history
-    @ssbo @binding = 2 @role = "alias" histm : array<float> // dual-store: the history one row short of the group's (verify shadow region)
-    @ssbo @binding = 3 grp : array<uint>    // the group table, eight words a group (dn_grp_push)
+    @ssbo @binding = 0 x : array<float>     //! [rows x cd] the fused qkv rows
+    @ssbo @binding = 1 hist : array<float>  //! the mirror pool: each group's live history
+    @ssbo @binding = 2 @role = "alias" histm : array<float> //! dual-store: the history one row short of the group's (verify shadow region)
+    @ssbo @binding = 3 grp : array<uint>    //! the group table, eight words a group (dn_grp_push)
     @uniform @binding = 4 ka : DnArgs
 
     [metal_kernel(name="metal_dn_conv_hist_msl")]
@@ -11751,15 +11743,15 @@ def dn_conv_n_wgs(cd, npmax : int64; pb : int64 = 1l) : int64 => ((cd + 255l) / 
 [ |> template_struct_instance]
 class template MetalDnScanT {
     @template_constant PREP : bool = false   //! braw / graw hold beta and the decay (MetalDnPrep wrote them), not the raw projections
-    @ssbo @binding = 0 cv : array<CT>       // [rows x cd] conv rows: q at 0 / k at kd / v at 2kd
-    @ssbo @binding = 1 st : array<float>    // the mirror pool: each group's state layer [nvh x ds x ds] row-major (i·ds + j)
-    @ssbo @binding = 2 braw : array<float>  // [rows x nvh] raw beta projections
-    @ssbo @binding = 3 graw : array<float>  // [rows x nvh] raw alpha projections
+    @ssbo @binding = 0 cv : array<CT>       //! [rows x cd] conv rows: q at 0 / k at kd / v at 2kd
+    @ssbo @binding = 1 st : array<float>    //! the mirror pool: each group's state layer [nvh x ds x ds] row-major (i·ds + j)
+    @ssbo @binding = 2 braw : array<float>  //! [rows x nvh] raw beta projections
+    @ssbo @binding = 3 graw : array<float>  //! [rows x nvh] raw alpha projections
     @ssbo @binding = 4 @role = "weight" aa : array<float>    // [nvh] ssm_a = -exp(A_log) (fblob row)
     @ssbo @binding = 5 @role = "weight" dtb : array<float>   // [nvh] dt_bias (fblob row)
-    @ssbo @binding = 6 o : array<float>     // [rows x di] delta-rule output rows
-    @ssbo @binding = 7 @role = "alias" stm : array<float>  // dual-store: the state one row short of the group's (verify shadow region)
-    @ssbo @binding = 8 grp : array<uint>    // the group table, eight words a group (dn_grp_push)
+    @ssbo @binding = 6 o : array<float>     //! [rows x di] delta-rule output rows
+    @ssbo @binding = 7 @role = "alias" stm : array<float>  //! dual-store: the state one row short of the group's (verify shadow region)
+    @ssbo @binding = 8 grp : array<uint>    //! the group table, eight words a group (dn_grp_push)
     @uniform @binding = 9 ka : DnArgs
 
     [metal_kernel, arch(at="../ARCHITECTURE_GPU_PREFILL_WINDOW.md#prefill-dn-scan")]
@@ -11997,7 +11989,6 @@ def enc_dn_hist(enc : MetalComputeEncoder?; c : Config; dnli : int64; d : DnStag
 //! past it takes the conv and the L2 pass apart
 let DN_CONV_FUSED_ROWS = 16l
 
-//! Layer `l`'s conv, history advance and q/k L2 over every group's rows: one dispatch a stage.
 [arch(at="../ARCHITECTURE_GPU_MTP.md#dn-group-stages")]
 def enc_dn_front(enc : MetalComputeEncoder?; t : Model; l, dnli : int64; d : DnStages) {
     let c = t.config
@@ -12019,7 +12010,6 @@ def enc_dn_front(enc : MetalComputeEncoder?; t : Model; l, dnli : int64; d : DnS
     enc_dn_hist(enc, c, dnli, d)
 }
 
-//! Layer `l`'s delta-rule scan of every group against its state and the gated out-norm over every row: one dispatch a stage.
 [arch(at="../ARCHITECTURE_GPU_MTP.md#dn-group-stages")]
 def enc_dn_back(enc : MetalComputeEncoder?; t : Model; l, dnli : int64; d : DnStages) {
     let c = t.config

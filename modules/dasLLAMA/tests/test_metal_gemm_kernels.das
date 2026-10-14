@@ -946,10 +946,9 @@ def private adapt_pad_truth(fx : MoeFix; ndim : int; sentinel : float; var want,
     adapt_pad_rows(fx.cnt, fx.basep, ndim, sentinel, want, env)
 }
 
-// The routed simdgroup base form of every superblock format (MetalMoeMulMmKqT stamps): per-expert superblock planes off
-// the shared kq fixture, truth through the shipped plane-row dequant. Binds at the MetalMoeMulMmBase family numbers
-// (0..2 weight views, x 3, y 4, cnt/base/bkt 7..9); a split-scale format's binding 0 is the f16 d-tail view of the scale
-// plane. The tensor twins of the same formats ride moe_mulmm_split_gate.
+//! the routed simdgroup base form of every superblock format (MetalMoeMulMmKqT) against the shipped plane-row dequant, bound
+//! at the MetalMoeMulMmBase numbers (0..2 weight views, x 3, y 4, cnt/base/bkt 7..9; a split-scale format's 0 the f16 d-tail
+//! view); the tensor twins ride moe_mulmm_split_gate
 def private moe_mulmm_kq_gate(t : T?; var dev, queue; fmt : int; kdim, ndim : int; counts : array<int>; gather : bool) {
     let tag = "moe_mulmm_k{fmt}{gather ? " gather" : ""} k={kdim} n={ndim}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {

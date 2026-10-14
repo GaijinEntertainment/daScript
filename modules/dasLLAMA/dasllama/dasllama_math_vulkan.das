@@ -74,7 +74,7 @@ def vulkan_dry_bake_arm(v : DlimVulkanConfig) : bool {
     return true
 }
 
-// the tier's whole hook set - the dry bake and the live arm install the same seats
+//! the tier's whole hook set - the dry bake and the live arm install the same seats
 def install_vk_moe_hooks {
     install_moe_gpu_tier(@@vk_moe_ffn, @@vk_moe_upload_stack, @@vk_moe_cls, @@vk_moe_dense, @@vk_moe_drop_stacks, @@vk_moe_dn, @@vk_moe_attn)
     set_moe_gpu_ffn_xf_hooks(@@vk_moe_ffn_xf, @@vk_moe_ffn_xf_ok)

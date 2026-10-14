@@ -851,11 +851,11 @@ def layout_gather_dispatch(src : Model; f : KqFmt; woff, n, rows, slice_rows, mr
         layout_gather_stack_iq4nl32(src, woff, n, rows, srows, qmr > 1l, qmr, wq, ws)
     } elif (f == KqFmt.q4032) {
         layout_hooks_check()
-        let qmr = disk ? 1l : active_q4032_layout_mr()   // the q4032 stacks sit in the active backend's grp<mr> layout, disk order at mr 1
+        let qmr = disk ? 1l : active_q4032_layout_mr()
         invoke(g_layout_gather_q4032, src, woff, n, rows, srows, qmr > 1l, qmr, wq, ws)
     } elif (f == KqFmt.q5032) {
         layout_hooks_check()
-        let qmr = disk ? 1l : active_q5032_layout_mr()   // the q5032 stacks sit in the active backend's grp<mr> layout, disk order at mr 1
+        let qmr = disk ? 1l : active_q5032_layout_mr()
         invoke(g_layout_gather_q5032, src, woff, n, rows, srows, qmr > 1l, qmr, wq, ws)
     } elif (f == KqFmt.mx4) {
         // the mx4 stacks ride the Q8 layout's grp<mr> interleave when the CPU repacked them (repack_mx4_stacks under the q8q8 perm), disk order otherwise
@@ -1268,10 +1268,8 @@ struct Model {
     // the iq4nl32 tier's plane pair, per 32-BLOCK: 16B nibbles / 2B f16 d
     iq4nl32q : array<uint8>
     iq4nl32s : array<uint8>
-    // the q4032 tier's plane pair, per 32-BLOCK: 16B nibbles / 2B f16 d (iq4nl32's form, the Q4_0 code)
     q4032q : array<uint8>
     q4032s : array<uint8>
-    // the q5032 tier's plane pair, per 32-BLOCK: 20B nibbles + qh (q51's quant form) / 2B f16 d, the Q5_0 code
     q5032q : array<uint8>
     q5032s : array<uint8>
     kquant_native : bool = false
@@ -1294,8 +1292,8 @@ struct Model {
     we1_fmt : array<KqFmt>
     we2_fmt : array<KqFmt>
     we3_fmt : array<KqFmt>
-    // deltanet projection tags (recurrent layers; empty = all q8) - the file's format on every
-    // load, one plane per tag; beta/alpha carry their own (q8 where they ship F32, dn_ba_f32)
+    //! deltanet projection tags (recurrent layers; empty = all q8) - the file's format on every
+    //! load, one plane per tag; beta/alpha carry their own (q8 where they ship F32, dn_ba_f32)
     dnqkv_fmt : array<KqFmt>
     dngate_fmt : array<KqFmt>
     dnout_fmt : array<KqFmt>
@@ -2254,9 +2252,7 @@ def kq_planes_of(t : Model; fmt : KqFmt; var kq : array<uint8> const?&; var ks :
     }
 }
 
-// A weight plane's tag rule: q51 and q5032 serve off their per-32 planes on any 32-multiple row, and an IQ4_NL plane off the
-// superblock lattice takes the per-32 iq4nl32 planes (Qwen2.5-0.5B's 896-wide rows, Qwen3.8-Flash-Next's 640-wide down
-// stacks), a Q4_0 one the q4032 planes; k5 keeps the % 256 rule. The dense layer planes and the expert stacks share it.
+[arch(at="../ARCHITECTURE_ENGINE_FORMATS.md#per-32-rail")]
 def kq_fmt_row_ok(f : KqFmt; n : int64) : KqFmt {
     if (f == KqFmt.q51 || f == KqFmt.q5032) return n % 32l == 0l ? f : KqFmt.q8
     if (f == KqFmt.iq4nl && n % 256l != 0l) return n % 32l == 0l ? KqFmt.iq4nl32 : KqFmt.q8
@@ -4444,8 +4440,6 @@ def mm_b_iq4nl32_groupn(var y : array<float>; t : Model; offs : array<int64>; nr
     matmul_iq4nl32q8_batch_groupn(y, t.iq4nl32q, t.iq4nl32s, offs, nregions, xq, xs, n, d)
 }
 
-// ===== native q4032 dispatch (Q8_0-form activations, iq4nl32's shapes over the per-32 Q4_0 planes) =====
-
 def mm_at_q4032_groupn(var y : array<float>; t : Model; offs : array<int64>; nregions : int64; xq : array<int8>; xs : array<float>; n, d : int64) {
     matmul_q4032q8_groupn(y, t.q4032q, t.q4032s, offs, nregions, xq, xs, n, d)
 }
@@ -4459,8 +4453,6 @@ def mm_b_q4032_pre(var y : array<float>; t : Model; woff : int64; xqb : array<in
 def mm_b_q4032_groupn(var y : array<float>; t : Model; offs : array<int64>; nregions : int64; xq : array<int8>; xs : array<float>; n, d : int64) {
     matmul_q4032q8_batch_groupn(y, t.q4032q, t.q4032s, offs, nregions, xq, xs, n, d)
 }
-
-// ===== native q5032 dispatch (Q8_0-form activations, the per-32 shapes over the Q5_0 planes) =====
 
 def mm_at_q5032_groupn(var y : array<float>; t : Model; offs : array<int64>; nregions : int64; xq : array<int8>; xs : array<float>; n, d : int64) {
     matmul_q5032q8_groupn(y, t.q5032q, t.q5032s, offs, nregions, xq, xs, n, d)
@@ -4645,8 +4637,8 @@ def private mm_b32_pre(var y : array<float>; t : Model; fmt : KqFmt; woff : int6
     }
 }
 
-// Format router: q8-tagged weights take the classic mm; kq tags take the plane GEMV; a per-32 plane
-// quantizes x to Q8_0 and takes its own format's kernel.
+//! Format router: q8-tagged weights take the classic mm; kq tags take the plane GEMV; a per-32 plane
+//! quantizes x to Q8_0 and takes its own format's kernel.
 def mm_f(var y : array<float>; t : Model; fmt : KqFmt; woff : int64; x : array<float>; var xq : array<int8>; var xs : array<float>; var xbs : array<int>; n, d : int64) {
     if (fmt == KqFmt.q8) {
         mm(y, t, woff, x, xq, xs, n, d)
@@ -4658,9 +4650,8 @@ def mm_f(var y : array<float>; t : Model; fmt : KqFmt; woff : int64; x : array<f
     }
 }
 
-// Pre-quantized format router: q8-tagged and per-32 weights consume the Q8_0-form scratch (xq/xs);
-// kq-tagged weights the Q8_K-form scratch (kxq/kxs/kxbs — kq v2). A caller fills each form a plane
-// it dispatches reads (`fmt_reads_q8k`).
+//! q8 and per-32 planes read the Q8_0-form scratch (xq/xs), kq planes the Q8_K form (kxq/kxs/kxbs); the caller
+//! fills each form a plane it dispatches reads (`fmt_reads_q8k`)
 def mm_pre_f(var y : array<float>; t : Model; fmt : KqFmt; woff : int64; xq : array<int8>; xs : array<float>; kxq : array<int8>; kxs : array<float>; kxbs : array<int>; n, d : int64) {
     if (fmt == KqFmt.q8) {
         mm_at_q8_pre(y, t, woff, xq, xs, n, d)
@@ -5118,7 +5109,6 @@ def private mm_cls(var y : array<float>; t : Model; x : array<float>; var xq : a
         // tied weights (fp32/q4_0 loads): the classifier IS the fp32 embedding table
         mm_fblob(y, t, t.tok_emb_off, x, n, d)
     } elif (cls_fmt != KqFmt.q8) {
-        // a K-quant or per-32 classifier (the tied table's plane or the untied output plane), off its own planes
         mm_f(y, t, cls_fmt, t.wcls_off, x, xq, xs, xbs, n, d)
     } else {
         // untied — or the tied classifier's Q8 transcode (the exact quants the reference matmuls)

@@ -432,7 +432,6 @@ def public expert_fmt(t : Model; tags : array<KqFmt>; l : int64) : KqFmt => t.ex
 //! an expert plane format the per-op expert chain reads: q8, a superblock format, a per-32 one (the GEMVs and the batch tiles)
 def public expert_chain_fmt_ok(f : KqFmt) : bool => f == KqFmt.q8 || kq_sb(f) || kq_dense_b32(f) || f == KqFmt.mx4
 
-//! layer l's routed form on the tier's expert chain
 [arch(at="../ARCHITECTURE_GPU_VULKAN_PEROP.md#perop-routed-form")]
 def public moe_routed_form(t : Model; l : int64) : MoeGpuFfnForm {
     let c = t.config
@@ -468,7 +467,6 @@ def moe_experts_apply(t : Model; var s : Session; l : int64) { // nolint:STYLE03
         let f1 = fmt_at(t.we1_fmt, l)
         let f2 = fmt_at(t.we2_fmt, l)
         let f3 = fmt_at(t.we3_fmt, l)
-        // GPU MoE tier: the offloaded layers' stacks dispatch on the GPU in their own formats, under the routed form (`moe_gpu_ffn_form`)
         let gpu_moe = moe_gpu_layer_on_gpu(l)
         // heat cache: non-resident layers partition the top-k against the tier's slot pools — hits ride the GPU FFN chain async, misses run the CPU groupn path concurrently
         let heat_moe = !gpu_moe && heat_armed()
@@ -512,8 +510,8 @@ def moe_experts_apply(t : Model; var s : Session; l : int64) { // nolint:STYLE03
             } else {
                 moe_gather_feed(s.moe_xq, s.moe_xs, k, dim, 32l, s.moe_gxq, s.moe_gxs)
             }
-            let two = kin != kq_sb(ef3)   //! a gate and up of two activation forms: the up stacks read their own image
-            if (two) {
+            let two_forms = kin != kq_sb(ef3)   //! a gate and up of two activation forms: the up stacks read their own image
+            if (two_forms) {
                 if (kin) {
                     moe_gather_feed(s.moe_xq, s.moe_xs, k, dim, 32l, g_up_q, g_up_s)
                 } else {
@@ -544,7 +542,7 @@ def moe_experts_apply(t : Model; var s : Session; l : int64) { // nolint:STYLE03
                     }
                 }
             }
-            if (two) {
+            if (two_forms) {
                 clear_moe_gpu_image2()
             }
             prof_add("mm_moe", ts_gu)
@@ -574,8 +572,8 @@ def moe_experts_apply(t : Model; var s : Session; l : int64) { // nolint:STYLE03
             } else {
                 moe_gather_feed(s.moe_xq, s.moe_xs, nhits, dim, 32l, s.moe_gxq, s.moe_gxs)
             }
-            let two = kin != kq_sb(ef3)   //! a gate and up of two activation forms: the up slots read their own image
-            if (two) {
+            let two_forms = kin != kq_sb(ef3)   //! a gate and up of two activation forms: the up slots read their own image
+            if (two_forms) {
                 if (kin) {
                     moe_gather_feed(s.moe_xq, s.moe_xs, nhits, dim, 32l, g_up_q, g_up_s)
                 } else {
@@ -938,7 +936,7 @@ def private moe_shexp_cpu(t : Model; var s : Session; l : int64) {
     let ts_sh = prof_ticks()
     trace_tag(TRACE_TAG_SHEXP)
     let g = c.moe_shexp_gated ? moe_shexp_gate(t, l, unsafe(addr(s.xb[0]))) : 1.0
-    if (shexp_tagged(t, l)) {   // the planes in the file's format, each through its format's router
+    if (shexp_tagged(t, l)) {
         let p1 = shexp_plane(t, l, 1)
         let p3 = shexp_plane(t, l, 3)
         let p2 = shexp_plane(t, l, 2)

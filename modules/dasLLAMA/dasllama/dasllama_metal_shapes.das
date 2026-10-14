@@ -27,7 +27,7 @@ enum MetalDecodeDecline {
     rope_mode           // rope tables off
     config              // RETIRED (family waves A): split into `feature` + the per-need
                         // `need_*` keys in the declines-by-reason table
-    graph               // a block set past the std dense stack (MoE / recurrent / custom attn) this path's kernels do not cover
+    graph               //! a block set past the std dense stack (MoE / recurrent / custom attn) this path's kernels do not cover
     feature             // the model needs layer-stack features this path's kernels don't
                         // implement — each missing bit records a `need_*` key alongside
     shape               // head/dim alignment outside the kernel grids
@@ -91,7 +91,7 @@ enum MetalPrefillDecline {
     backend_repack      // repack backend: interleaved weight layout unreadable by the GEMM kernel
     config              // RETIRED (family waves A): split into `feature` + the per-need
                         // `need_*` keys in the declines-by-reason table
-    graph               // a block set past the std dense stack (MoE / recurrent / custom attn) this path's kernels do not cover
+    graph               //! a block set past the std dense stack (MoE / recurrent / custom attn) this path's kernels do not cover
     feature             // the model needs layer-stack features this path's kernels don't
                         // implement — each missing bit records a `need_*` key alongside
     shape               // head/dim alignment outside the kernel grids
@@ -303,9 +303,9 @@ def moe_fmt_metal_served(f : KqFmt) : bool {
 //! the 32-block reduction, never the superblock plane binds
 def kq_fmt_b32(f : KqFmt) : bool => f == KqFmt.q51 || f == KqFmt.iq4nl32 || f == KqFmt.q4032 || f == KqFmt.q5032
 
-// The MoE serve gate: plain routed FFN (qwen3moe), the sigmoid-gated shared expert (qwen35moe), gemma4's dense-shared branch,
-// gpt-oss's gate (softmax_weight, biases) over mx4 experts; no dense lead or selection bias. The stack format is its own axis:
-// mx4 planes serve under every gate shape, disk-order only (the CPU laneq repack has no GPU carry).
+//! The MoE serve gate: plain routed FFN (qwen3moe), the sigmoid-gated shared expert (qwen35moe), gemma4's dense-shared branch,
+//! gpt-oss's gate (softmax_weight, biases) over mx4 experts; no dense lead or selection bias. The stack format is its own axis:
+//! mx4 planes serve under every gate shape, disk-order only (the CPU laneq repack has no GPU carry).
 def moe_metal_ok(t : Model) : bool {   // nolint:STYLE038 — flat per-shape refusal ladder; every arm is one reason
     let c = t.config
     if (!c.moe || c.n_layer_dense_lead > 0l || c.moe_exp_probs ||
@@ -313,7 +313,6 @@ def moe_metal_ok(t : Model) : bool {   // nolint:STYLE038 — flat per-shape ref
         return false
     }
     if (t.experts_mx4 && c.moe_gate == MoeGate.softmax_weight) {
-        // gpt-oss: softmax_weight top-k on raw logits, router + per-expert biases, clamped swiglu
         if (c.ffn_act != FfnAct.swiglu_oai ||
                 !c.moe_router_bias || !c.moe_exps_bias || c.moe_dense_shexp || c.n_ff_shexp > 0l ||
                 t.router_b_off < 0l || t.web1_off < 0l || t.web2_off < 0l || t.web3_off < 0l) {
@@ -500,7 +499,6 @@ def decode_shape_decline(t : Model; needs_ok : MetalNeed; allow_moe : bool = fal
 // check is a RUNTIME gate. A tied classifier read off the fp32 table alone declines: the blob drivers
 // force GPU logits and have no fp32-table GEMV (a Metal-mode load keeps a q8 copy of a table no KqFmt carries).
 def private metal_model_servable_impl(t : Model) : bool {
-    // NextN serves — prefill stashes mtp_h + warms the slab
     if (cls_tied_f32(t)) {
         return false
     }

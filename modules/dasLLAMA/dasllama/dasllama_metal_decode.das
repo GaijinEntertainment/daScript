@@ -318,11 +318,11 @@ struct private StepRes {
     bytes_ple_in : uint64
     // deltanet (Wave D) — recurrent-layer scratch + the gated-attention twins; dn steps only
     dn : bool
-    bdn_state : MetalBuffer?   // the DnMirror pool (mirror-owned, never released here)
+    bdn_state : MetalBuffer?   //! the DnMirror pool (mirror-owned, never released here)
     bdn_qkv : MetalBuffer?     // [cd] fused qkv projection row
     bdn_cv : MetalBuffer?      // [cd] conv output (l2-normed in place)
     bdn_z : MetalBuffer?       // [di] z gate row
-    bdn_b : MetalBuffer?       // [nvh] raw beta projections; [2 nvh] beta then alpha a row under `dn_ba_rows`
+    bdn_b : MetalBuffer?       //! [nvh] raw beta projections; [2 nvh] beta then alpha a row under `dn_ba_rows`
     bdn_g : MetalBuffer?       // [nvh] raw alpha projections
     dn_ba_rows : bool          //! the F32 beta/alpha planes ran as one GEMV into `bdn_b`
     u_nvh2 : MetalBuffer?      //! 2 nvh - the [beta; alpha] GEMV's row count
@@ -922,8 +922,6 @@ def private dn_stages_of(var r : StepRes; split : bool) : DnStages {
         grp = r.bdn_grp, ng = r.dn_ng, npmax = r.dn_npmax, rows = r.nrows, split = split, ba_rows = r.dn_ba_rows)
 }
 
-//! F32-on-disk beta/alpha (the 35B): both planes as ONE router f32 GEMV over [beta; alpha], each row's 2 nvh outputs
-//! beta first into `by`
 [arch(at="../ARCHITECTURE_GPU_MTP.md#dn-group-stages")]
 def private enc_dn_ba_f32(enc : MetalComputeEncoder?; t : Model; l : int64; bx, by : MetalBuffer?; nrows : int64) {
     let dim = t.config.dim
@@ -1258,7 +1256,6 @@ struct template LayerEncT {
                 }
             }
             if (!recr && c.qk_norm && g_skip != "ew" && !qkn_fused(c, r.kdt)) {
-                // per-head QK RMSNorm before the block codecs' rope-store
                 var bqkw = upload_region_cat3(
                     addr < void? >(t.fblob[t.rms_q_offs[l]]), uint64(head_size * 4l),
                     addr < void? >(t.fblob[t.rms_k_offs[l]]), uint64(head_size * 4l), null, 0ul)
@@ -1679,7 +1676,6 @@ var private g_chain_on = false   //! the chained draft rides ahead of the verify
 var private g_chain_rd : StepRes   //! the round's chained draft step; its btok row gi is group gi's winner, embedded as the verify's row 1
 var private g_chain_rounds = 0l   //! rounds whose draft and verify ran as one command buffer since load
 
-//! the speculative rounds whose depth-1 draft rode ahead of the verify in one command buffer since load - the chain's witness
 [arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-nextn-chain")]
 def public metal_mtp_chained_rounds() : int64 => g_chain_rounds
 
@@ -3403,7 +3399,7 @@ var private @scratch g_b_rte : array<uint>
 var private @scratch g_b_koffs : array<uint64>
 var private @scratch g_b_voffs : array<uint64>
 var private @scratch g_b_caps : array<int64>
-// the step being built: each recurrent group's live state base, and the group count (a row a session, or the same-slab rows as one)
+//! the step being built: each recurrent group's live state base, and the group count (a row a session, or the same-slab rows as one)
 var private @scratch g_b_dn_soffs : array<uint64>
 var private g_b_dn_ng = 0l
 var private @scratch g_b_ple_bases : array<uint64>   //! each row's n-gram conv ring inside its session's mirror (qwen4exp)

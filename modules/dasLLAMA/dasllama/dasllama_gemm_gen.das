@@ -911,9 +911,9 @@ def private emit_block_q51(var te : TileEmit; var bi : LLVMOpaqueValue?; var f :
     }
 }
 
-// One 32-k block, q5032 form: emit_block_q51's nibble load with the qh bits OR-ed in register, re-centred to the signed
-// q - 16 levels, the signed lane-dot lattice (the iq4nl32 dots' sign trick), then emit_block_fold under the block's f16 d -
-// dot_q5032q8_scalar's op order, no activation sum
+//! One 32-k block, q5032 form: emit_block_q51's nibble load with the qh bits OR-ed in register, re-centred to the signed
+//! q - 16 levels, the signed lane-dot lattice (the iq4nl32 dots' sign trick), then emit_block_fold under the block's f16 d -
+//! dot_q5032q8_scalar's op order, no activation sum
 def private emit_block_q5032(var te : TileEmit; var bi : LLVMOpaqueValue?; var f : LLVMOpaqueValue? [8]; tokBase, tokCount : int) {
     let b = te.builder
     let rq = te.rq

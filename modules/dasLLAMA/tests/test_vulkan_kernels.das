@@ -5739,9 +5739,9 @@ def private qkn_window_run(q, kv, cs, wn : array<float>; pc : GkQknRopeArgs; nr,
     return <- out
 }
 
-// the window's fused q/k norm, rope and K/V store: `qkn_rope_cls`'s window form over three rows past two lead rows of planes laid
-// as the window lays them - q rows, the [k | v] projection rows, the rope rows - at positions 7 to 9 of the mirror, bit for bit
-// the token rows' form over the same rows laid as the token command lays them ([q | k | v] a row, the positions off the token block)
+//! the window's fused q/k norm, rope and K/V store: `qkn_rope_cls`'s window form over three rows past two lead rows of planes laid
+//! as the window lays them - q rows, the [k | v] projection rows, the rope rows - at positions 7 to 9 of the mirror, bit for bit
+//! the token rows' form over the same rows laid as the token command lays them ([q | k | v] a row, the positions off the token block)
 [test]
 def test_vkd_qkn_rope_window(t0 : T?) {
     t0 |> run("qkn_rope_cls's window form == its token rows' form over the same three rows, bit for bit, the lead rows untouched") <| @(t : T?) {
@@ -6615,8 +6615,8 @@ def private dn_tail_oracle(src, smalls : array<float>; cd, taps, row0, old_rows,
     return <- want
 }
 
-// the window chain's conv-history hand-off: the call's last window's rows into the per-channel ring image, and a window shorter
-// than the taps (a continuation's lone short window) reading its leading rows off the image the call entered on
+//! the window chain's conv-history hand-off: the call's last window's rows into the per-channel ring image, and a window shorter
+//! than the taps (a continuation's lone short window) reading its leading rows off the image the call entered on
 [test]
 def test_vkd_dn_tail(t0 : T?) {
     t0 |> run("dn_tail == the per-channel ring the decode step reads: the last taps rows of a window, the leading rows of a window shorter than the taps off the entry image") <| @(t : T?) {
@@ -6680,8 +6680,8 @@ def private dn_rows_at(rows : array<float>; lead, w : int) : array<float> {
     return <- out
 }
 
-// a segmented window's recurrent parts: the conv and the scan dispatched at a row base past zero read and write the part's rows
-// alone - its src and conv rows, its beta / g rows, its o rows - bit for bit the same rows dispatched at row 0
+//! a segmented window's recurrent parts: the conv and the scan dispatched at a row base past zero read and write the part's rows
+//! alone - its src and conv rows, its beta / g rows, its o rows - bit for bit the same rows dispatched at row 0
 [test]
 def test_vkd_dn_rows_base(t0 : T?) {
     t0 |> run("dn_conv and dn_scan at a row base past zero == the same rows at row 0, bit for bit, the rows ahead of the base untouched") <| @(t : T?) {
@@ -7573,7 +7573,7 @@ def test_vkd_dn_9b_ba(t0 : T?) {
     }
 }
 
-// the f16 router-form GEMV (the per-layer-embedding projection's rows): ne rows at a row base, the ne outputs at an output base
+//! the f16 router-form GEMV (the per-layer-embedding projection's rows): ne rows at a row base, the ne outputs at an output base
 [test]
 def test_vkd_router_gemv_f16(t0 : T?) {
     t0 |> run("router_gemv_f16 (the f16 router-form rows) == the CPU dot at a row base and an output base") <| @(t : T?) {
@@ -7684,7 +7684,7 @@ def test_vkd_router_gemv_f16(t0 : T?) {
     }
 }
 
-// the decode's f32 beta/alpha GEMV - the f32 stamp over the file's rows in its two-base form, one row and three rows a dispatch
+//! the decode's f32 beta/alpha GEMV - the f32 stamp over the file's rows in its two-base form, one row and three rows a dispatch
 [test]
 def test_vkd_router_gemv_f32_ba(t0 : T?) {
     t0 |> run("router_gemv (the decode's f32 beta/alpha rows) == the CPU dot over the f32 rows: the beta rows at one base, the alpha rows at the other, one and three columns") <| @(t : T?) {

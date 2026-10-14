@@ -578,7 +578,7 @@ def private collect_kq_regions(t : Model; var regs : array<StreamReg>) {
     if ((!c.shared_weights && t.wcls_fmt != KqFmt.q8) || cls_kq(t)) {
         push_repack_kq(regs, c.shared_weights ? t.emb_fmt : t.wcls_fmt, t.wcls_off, dim, c.vocab_size)
     }
-    if (!c.shared_weights && emb_kq(t)) {   // the untied table's own plane rides its format's interleave like every region of that plane
+    if (!c.shared_weights && emb_kq(t)) {
         push_repack_kq(regs, t.emb_fmt, t.emb_kq_off, dim, c.vocab_size)
     }
     if (c.n_layer_nextn > 0l) {   // NextN eh_proj (no-op for q8 tags)

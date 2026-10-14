@@ -113,8 +113,6 @@ def private rpst_flat_gate(t : T?; var dev, queue; f16dst : bool; hs, nheads, kv
     }
 }
 
-// ===== the fused q/k norm, rope and K/V store (`GkQknRopeKv`): one row bound at its offsets, and the rows form off the route table =====
-
 let private QKN_VPLAIN = 0   //! the V row: its projection
 let private QKN_VNORM = 1    //! ... scaled by its own rms
 let private QKN_VFK = 2      //! ... the raw k row under the k norm's rms
@@ -168,8 +166,8 @@ def private qkn_gate(t : T?; var dev, queue; f16dst, rows : bool; hs, nheads, kv
         let eps = 1.0e-6
         let lay = 1
         let laystride = 9000
-        let kone = 96    //! the one-row form's K and V rows bound this many elements into the arenas
-        let vone = 400
+        let k_one_row_off = 96    //! the one-row form's K and V rows bound this many elements into the arenas
+        let v_one_row_off = 400
         let asz = rows ? 36000 : 400 + kvd
         var inscope qk, bias, w, tcos, tsin : array<float>
         var inscope rt : array<uint4>
@@ -205,8 +203,8 @@ def private qkn_gate(t : T?; var dev, queue; f16dst, rows : bool; hs, nheads, kv
         }
         for (r in range(nb)) {
             let qb = r * qkvd
-            let kdst = rows ? int(rt[r].x) + lay * laystride + (int(rt[r].w) - 1) * kvd : kone
-            let vdst = rows ? int(rt[r].y) + lay * laystride + (int(rt[r].w) - 1) * kvd : vone
+            let kdst = rows ? int(rt[r].x) + lay * laystride + (int(rt[r].w) - 1) * kvd : k_one_row_off
+            let vdst = rows ? int(rt[r].y) + lay * laystride + (int(rt[r].w) - 1) * kvd : v_one_row_off
             for (h in range(nheads)) {
                 let hq = qkn_head_ref(qk, bias, qb + h * hs, h * hs, hs, hasbias, eps)
                 for (e in range(hs)) {
@@ -249,8 +247,8 @@ def private qkn_gate(t : T?; var dev, queue; f16dst, rows : bool; hs, nheads, kv
             ran = (f16dst ? qkn_record_rows(t, mc, tag, stamp_of(@@enc_qkn_rope_b16), b, ka, nwg, int64(nb))
                 : qkn_record_rows(t, mc, tag, stamp_of(@@enc_qkn_rope_b32), b, ka, nwg, int64(nb)))
         } else {
-            ran = (f16dst ? qkn_record_one(t, mc, tag, stamp_of(@@enc_qkn_rope16), b, ka, nwg, uint64(kone) * esz, uint64(vone) * esz)
-                : qkn_record_one(t, mc, tag, stamp_of(@@enc_qkn_rope32), b, ka, nwg, uint64(kone) * esz, uint64(vone) * esz))
+            ran = (f16dst ? qkn_record_one(t, mc, tag, stamp_of(@@enc_qkn_rope16), b, ka, nwg, uint64(k_one_row_off) * esz, uint64(v_one_row_off) * esz)
+                : qkn_record_one(t, mc, tag, stamp_of(@@enc_qkn_rope32), b, ka, nwg, uint64(k_one_row_off) * esz, uint64(v_one_row_off) * esz))
         }
         return if (!ran)
         t |> success(moved_off(want_qk, qk, 3, BAR_FP), "{tag}: the normed q row differs from its input past the bar (the in-place compare has teeth)")

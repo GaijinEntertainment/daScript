@@ -787,8 +787,7 @@ def mtp_default_resolved(streams : int; gpu, metal : string; platforms : string 
     => mtp_auto_arms(int64(streams), resolved_metal_mode(metal_mode_of(metal).mode, gpu) != MetalMode.off,
                      gpu == "vulkan" ? "gpu:resident" : "cpu", false, platforms)
 
-//! A model file's catalog `serve_mtp` - the platforms where an unset `mtp` arms - off its base name; "" for a file with no
-//! catalog row. Non-private: test_server_flags.das gates it.
+//! The model file's catalog `serve_mtp`, read off its base name; "" for a file with no catalog row. Non-private: test_server_flags.das gates it.
 def catalog_mtp_platforms(path : string) : string {
     var inscope spec <- spec_by_file(base_name(path))
     return spec.serve_mtp

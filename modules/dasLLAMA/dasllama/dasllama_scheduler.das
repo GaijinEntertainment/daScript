@@ -1247,8 +1247,6 @@ def private pool_carrier_done(var sch : Scheduler) {
     sch.pool_host.n_past = 0l
 }
 
-//! A live device-home `session`'s opening at `n` of `tokens` copied into the prefix cache: its state off the checkpoint row its stop
-//! at `n` saved, or off its slots where it stands at `n`
 [arch(at="../ARCHITECTURE_ENGINE_SERVING.md#device-home-pool")]
 def private pool_export_live(m : Model; var sch : Scheduler; var session : Session; tokens : array<int64>; n : int64; opening : bool) {
     return if (n <= 0l || prefix_state_touch(sch.prefix, tokens, n, opening))
@@ -1257,8 +1255,6 @@ def private pool_export_live(m : Model; var sch : Scheduler; var session : Sessi
     pool_keep(m, sch, gpu_device_kv_claim(session), tokens, n, opening, true, snap)
 }
 
-//! A parked claim's state at `n` - one its region alone holds - copied into the prefix cache as a tail before the region goes to
-//! another stream; a dense model's claim, its pages
 [arch(at="../ARCHITECTURE_ENGINE_SERVING.md#device-home-pool")]
 def private pool_export_parked(m : Model; var sch : Scheduler; p : ParkedKv; n : int64) {
     return if (n <= 0l || (p.whole && prefix_state_touch(sch.prefix, p.tokens, n, false)))

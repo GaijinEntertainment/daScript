@@ -5723,9 +5723,6 @@ def private pf_enc_kq_dq(enc : MetalComputeEncoder?; fmt : KqFmt; bs : tuple<buf
     }
 }
 
-//! the padded-row floor of a dense site's scratch panel, past which the window's one dequant pass and the half GEMM beat
-//! the site's own-bytes form: DEVW_SCRATCH_ROWS where the site has no crowned tensor form, else the crowned twin's band's
-//! top - DEVW_Q8_TWIN_ROWS on a Q8_0 site, DEVW_KQ_TWIN_ROWS on a K-quant one
 [arch(at="../ARCHITECTURE_GPU_PREFILL.md#devw-panel-knees")]
 def devw_scratch_floor(q8, twin : bool) : int64 => !twin ? DEVW_SCRATCH_ROWS : (q8 ? DEVW_Q8_TWIN_ROWS : DEVW_KQ_TWIN_ROWS)
 
