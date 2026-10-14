@@ -163,17 +163,14 @@ builder a tower driver borrows, names it - the hook by the seat's register funct
 by its name - in that driver's row of the role table in `ARCHITECTURE_GPU.md#gpu-backends`; a
 diff that removes one deletes its name from that row; in the same change.**
 
-**A diff that adds a surface only one GPU backend has - a `dasllama/dasllama_gpu_tier.das` seat only
-Metal fills; an override only one backend registers (`register_*("metal", ...)` /
-`register_*("vulkan", ...)`) other than a hook a tower driver registers in a model family's
-registry; an export with no counterpart under the other backend's prefix that `dasllama/` engine
-code outside the backend's files calls; a function kind, argument or field annotation only one
-dispatch lens generates or accepts; a decode or prefill behavior, the precision of a step included,
-or a pin or knob only one backend has - lands one entry for it, naming the operation the other
-backend's API or device lacks, in `ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries`, even when the
-list carries one of the same class; a diff that removes one deletes its entry; in the same change.**
-The same path served faster or slower is not a behavior; a pin or knob is a setter or environment
-variable that changes what a run selects or computes.
+**A diff that adds a surface one GPU backend has and the other lacks - anything `dasllama/` engine
+code outside the backend's files, a dispatch lens or a run can call, register, annotate, select or
+set on that backend alone, a decode or prefill behavior and a step's precision included - lands its
+own entry, naming the operation the other backend's API or device lacks, in
+`ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries`; a diff that removes one deletes its entry; in the
+same change.** A hook a tower driver registers in a model family's registry and a seat only the
+Vulkan family fills are not such surfaces (the role table names them), and the same path served
+faster or slower is not a behavior.
 
 **A diff that adds or extends, on one GPU backend (Metal or Vulkan), a prefill or decode path or
 a K/V cache feature for a model family the other backend also serves lands the same capability on
@@ -242,7 +239,7 @@ the donor.** A borrower that gathers, stores or releases them again frees the do
 twice or overwrites its rows.
 
 **A resident override that touches the mirror before gating the session on the armed mirror
-codec is a defect** (a paged cache moves through `rdec_host_rows`, a physical run at a time) - a resident override is a
+codec is a defect** - a resident override is a
 decode/prefill hook `dasllama/dasllama_gpu_resident.das` registers in
 `dasllama/dasllama_common.das`'s override registries.
 
@@ -296,5 +293,5 @@ so an unlisted format decodes under whatever the pick's default arm holds.
 
 **A diff that gives the Metal PLE (per-layer embedding) token-table gather a weight format makes
 `metal_ple_pre_gpu_gate` admit that format only where the table's base and row stride are whole
-superblocks of the format's own block size.** A base off the format's own block grid is gathered
+blocks of the format's own block size.** A base off the format's own block grid is gathered
 under a layout that is not its own.

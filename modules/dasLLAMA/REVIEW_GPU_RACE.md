@@ -75,7 +75,8 @@ the same change.** The widened gate otherwise applies the ranking at values it w
 at.
 
 **A diff that decides the ranking of a prefill tile's timing arm over a variable region, or adds
-or changes such an arm whose ranking is decided, makes the deciding arm itself time its kernel at
+or changes such an arm whose ranking is decided, where some dispatch of that tile can take a token
+count that is not a whole multiple of its token column, makes the deciding arm itself time its kernel at
 one region whose token count is a whole multiple of the tile's token column - the token extent one
 tile covers - and at one where it is not.** A token count that is not a whole multiple is what
 makes the tile take its partial-tile store path.
