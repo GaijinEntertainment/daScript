@@ -62,7 +62,7 @@ what it costs today and what the fix would change.
     checkpoint goes down in about 15 ms, a new conversation forcing three copies and an upload pays about 64 ms at
     admission. 22 of 124 warm replies differ from the card-only run: the attach position moves, and the split prefill's
     routed numerics with it.
-  - The M4 arm (`DASLLAMA_METAL_TENSOR=0`, the box crowned, served at one stream): the 35B IQ4_XS, two alternated rounds,
+  - The M4 arm (`DASLLAMA_METAL_TENSOR=0`, served at one stream): the 35B IQ4_XS, two alternated rounds,
     leg against base, each round's figure listed - decode 188.9, 176.0 against 158.4, 150.0 (3k) and 175.2, 166.3 against
     147.8, 141.4 (9k); cold TTFT 733, 934 against 726, 850 ms (3k) and 2710, 3123 against 2679, 2952 (9k) - decode 18 %
     ahead on the base forms, the cold window inside the rounds' own drift (the second round slower on both trees). The
@@ -85,6 +85,14 @@ what it costs today and what the fix would change.
     3023 tok/s - the Q4_K base-form window GEMM reads a third slower than the IQ4_XS one on this arm at near-equal
     bytes (the Q8_0-rest twins above show the same gap on their expert planes: 2236 against 2862 at 9k). Open from this
     reading: the K-quant base-form window tile against the IQ4_XS one (`followup_metal.md`).
+  - The same six files on the M5's own arm (the box profile re-minted, its tensor crowns applied), two alternated
+    rounds, prefill 3k / 9k tok/s then decode 3k / 9k: pure IQ4_XS 5117, 4502 / 4411, 4072 and 189.0, 184.5 / 175.8,
+    171.0; pure Q4_K 4627, 4651 / 4153, 4205 and 182.6, 182.7 / 168.5, 169.3; Q4_K + Q8_0 rest 4394, 4531 / 4047, 4132
+    and 139.8, 141.2 / 132.6, 134.0; IQ4_XS + Q8_0 rest 4355, 4406 / 4002, 4036 and 142.4, 142.9 / 135.1, 135.9;
+    UD-Q4_K_M 4401, 4471 / 4061, 4099 and 134.7, 135.0 / 127.9, 128.5; Q8_0 (no NextN head) 4113, 4140 / 3809, 3811
+    and 128.0, 128.3 / 122.2, 122.3. The tensor twins close the K-quant window gap (pure Q4_K within 10 % of pure
+    IQ4_XS, every file within 20 %), so the base-form tile's third is the M4 class's alone; decode is the M4 arm's
+    figure for every file - the crowns move the window, not the bandwidth-bound step.
 - **MEASURED (2026-10-13) - the Metal routed base form's bars (`tests/test_metal_prefill_parity.das`,
   `test_metal_prefill_moe_base_form`, the `moe-base` arm).** A `tests/run.das` cell; the GPU side is the Metal prefill
   window with the gather panel held off (`set_metal_moe_gather_min(1000000)`, so the gate and up sites ride the base form
