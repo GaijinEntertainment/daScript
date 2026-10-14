@@ -20,8 +20,9 @@ struct GitResult {
     out : string
 }
 
+//! non-ASCII paths come back raw, not in git's quoted-escaped form
 def private git(args : array<string>) : GitResult {
-    var argv <- ["git"]
+    var argv <- ["git", "-c", "core.quotePath=false"]
     argv |> push_from(args)
     var res : GitResult
     let ec = run_and_capture(argv, res.out, 0.0)
@@ -47,10 +48,15 @@ def main : int {
         "diff", "-U0", "--no-color", "--no-ext-diff", "--diff-filter=AMR", strip(merge_base.out),
         "--", "*.das"
     ])
-    return 1 if (!diff.ok)
+    let untracked = git(["ls-files", "--others", "--exclude-standard", "--full-name",
+                         "--", "*.das"])
+    return 1 if (!diff.ok || !untracked.ok)
     let top = strip(root.out)
     var total = 0
-    let changed <- added_lines(diff.out)
+    var changed <- added_lines(diff.out)
+    for (path in untracked_paths(untracked.out)) {
+        changed[path] <- all_lines(fread(path_join(top, path)))
+    }
     for (path, lines in keys(changed), values(changed)) {
         let text = fread(path_join(top, path))
         for (f in find_violations(path, text, lines)) {

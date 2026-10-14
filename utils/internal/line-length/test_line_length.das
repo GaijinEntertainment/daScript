@@ -9,14 +9,11 @@ require daslib/fio
 require daslib/command_line
 require line_length
 
-def private every_line(text : string) : array<int> => <- [
-    for (k in range(1, count(text, "\n") + 2)); k]
-
 def private kinds(path, text : string; added : array<int>) : array<string> => <- [
     for (f in find_violations(path, text, added));
         "{f.line}:{slice(f.message, 0, find(f.message, " "))}"]
 
-def private kinds(path, text : string) : array<string> => <- kinds(path, text, every_line(text))
+def private kinds(path, text : string) : array<string> => <- kinds(path, text, all_lines(text))
 
 let LONG_COMMENT = repeat("x", COMMENT_LIMIT + 1)
 let LONG_CODE = repeat("y", CODE_LIMIT + 1)
@@ -95,6 +92,52 @@ def test_diff_base(t : T?) {
     t |> equal(diff_base("", "master"), "origin/master", "no --base: the remote's branch")
     t |> equal(diff_base("HEAD~1", "master"), "HEAD~1", "--base is used as given")
     t |> equal(diff_base("upstream/main", "master"), "upstream/main", "another remote stays")
+}
+
+[test]
+def test_untracked(t : T?) {
+    t |> equal(untracked_paths("a/new.das\r\nnotes.md\n\nb.das\n"), ["a/new.das", "b.das"],
+        "only .das files, blank lines and CR dropped")
+    t |> equal(all_lines("x\ny"), [1, 2], "a final line without a newline counts")
+    t |> equal(all_lines("x\ny\n"), [1, 2, 3], "the empty tail after a final newline is a line")
+}
+
+def private write_at(t : T?; root, rel, text : string) {
+    t |> success(fwrite(path_join(root, rel), text), "wrote {rel}")
+}
+
+def private run_in(cwd : string; args : array<string>) : tuple<rc : int; out : string> {
+    let noenv : array<string>
+    var out : string
+    let rc = run_and_capture(args, cwd, noenv, out, 120.0)
+    return (rc = rc, out = out)
+}
+
+[test]
+def test_untracked_files_are_checked(t : T?) {
+    let made = create_temp_directory_result("line_length_repo")
+    if (!(made is value)) {
+        t |> skip("no temp dir: {unsafe(made.error)}")
+        return
+    }
+    let repo = unsafe(made.value)
+    let git = run_in(repo, ["git", "init", "-q"])
+    if (git.rc != 0) {
+        t |> skip("git init unavailable: {git.out}")
+        return
+    }
+    let long_file = "options gen2\nlet s = \"{LONG_CODE}\"\n"
+    write_at(t, repo, "ok.das", "options gen2\n")
+    run_in(repo, ["git", "add", "ok.das"])
+    run_in(repo, ["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "init"])
+    write_at(t, repo, "long.das", long_file)
+    write_at(t, repo, ".gitignore", "skip.das\n")
+    write_at(t, repo, "skip.das", long_file)
+    let main_das = get_full_file_name("utils/internal/line-length/main.das")
+    let run = run_in(repo, [get_das_exe(), main_das, "--", "--base", "HEAD"])
+    t |> equal(run.rc, 1, "an untracked long line fails the check: {run.out}")
+    t |> success(find(run.out, "long.das:2:") >= 0, "the untracked file's line is named: {run.out}")
+    t |> success(find(run.out, "skip.das") < 0, "an ignored file is not read: {run.out}")
 }
 
 [test]
