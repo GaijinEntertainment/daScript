@@ -40,11 +40,11 @@ value, and its `disk_bytes` inside the walk that checks every row against `ggml_
 Narrowing the row's literal pins or the `ggml_type_bytes` walk is a defect.
 
 A site is a weight plane a backend's (CPU, Metal, Vulkan) serving call reads. A lever is an env
-knob or setter that changes which form a site reads. A converted copy is any form of a format's
-weights other than its disk bytes or its served form - a re-layout of the format's own quantized
-values, value-exact against the disk form, with no wider element type (a `KqFmt` member over the
-same GGUF type, `ARCHITECTURE_ENGINE_FORMATS.md#served-form`) - whose bytes outlive the one kernel call or
-window that made them, or reach the `.dlim` image.
+knob or setter that changes which form a site reads. A format's served form is a re-layout of its
+own quantized values, value-exact against the disk form, with no wider element type (a `KqFmt`
+member over the same GGUF type, `ARCHITECTURE_ENGINE_FORMATS.md#served-form`). A converted copy is
+any other form of the weights whose bytes outlive the one kernel call or window that made them,
+or reach the `.dlim` image.
 
 **A diff that makes a site read a weight format through a converted copy, or hands a GPU site to
 the CPU's kernels, on a run with every lever at its default is a defect - add that backend's
