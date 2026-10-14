@@ -3121,7 +3121,9 @@ def vk_rdec_chain_announce {
 
 def vk_rdec_chain_pin : int => g_vk_chain_pin
 
-//! the chained steps taken (hits) and discarded (misses) in this process
+//! the chained steps taken (hits) and those a wrong prediction at
+//! their own step discarded (misses) in this process; a chain
+//! dropped at a switch or a settle counts as neither
 def vk_rdec_chain_stats : tuple<hits : int64; misses : int64> => (hits = g_rdec_chain_hits, misses = g_rdec_chain_misses)
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_LANDING.md#vk-greedy-chain")]
@@ -3252,8 +3254,10 @@ def private rd_chain_submit(pos_next : int64; logits_on : bool; wait_xv : uint64
     g_rd.ch.pred = -1l
 }
 
+//! `miss`: the chained step ran at the token's own region and position and predicted another
+//! token; a chain dropped at a session switch or a settle predicted nothing and backs off nothing
 [cold_path, arch(at="../ARCHITECTURE_GPU_VULKAN_LANDING.md#vk-greedy-chain")]
-def private rd_chain_drop {
+def private rd_chain_drop(miss : bool) {
     return if (!g_rd.ch.pend)
     g_rd.ch.pend = false
     xfer_wait(g_rd.ch.xv, true)
@@ -3265,6 +3269,7 @@ def private rd_chain_drop {
             }
         }
     }
+    return if (!miss)
     g_rdec_chain_misses++
     if (vk_rdec_chain_mode() < 0) {
         g_rd.ch.backoff_len = clamp(g_rd.ch.backoff_len * 2, 1, RD_CHAIN_BACKOFF_MAX)
@@ -3276,7 +3281,7 @@ def private rd_chain_drop {
 def rd_chain_settle {
     if (g_rd != null) {
         g_rd.ch.ask = false
-        rd_chain_drop()
+        rd_chain_drop(false)
     }
 }
 
@@ -3317,15 +3322,15 @@ def vk_rdec_token(x : array<float>; cossin : array<float>; ple_row : array<float
     assert(g_rd != null && g_rd.ready, "vk_rdec_token before prepare/set_cls")
     assert(!g_rd.experts_host, "vk_rdec_token on a model with host layers: the split command serves it")
     if (g_rd.ch.pend) {
-        if (g_rd.ch.region == g_rd.region && g_rd.ch.pos == pos && cnt == pos + 1l && token >= 0l && token == g_rd.ch.pred
-                && (pick_only || g_rd.ch.logits)) {
+        let same_step = g_rd.ch.region == g_rd.region && g_rd.ch.pos == pos && cnt == pos + 1l
+        if (same_step && token >= 0l && token == g_rd.ch.pred && (pick_only || g_rd.ch.logits)) {
             let tsc = ref_time_ticks()
             let taken = rd_chain_take(pos, pick_only, logits)
             g_rd.ch.ask = false
             rd_token_close(tsc, false)
             return taken
         }
-        rd_chain_drop()
+        rd_chain_drop(same_step)
     }
     rd_carry_sync()
     if (!g_rd.tok_recorded[g_rd.region]) {

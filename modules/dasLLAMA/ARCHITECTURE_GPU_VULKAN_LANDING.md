@@ -98,14 +98,19 @@ and rope row into the live ones, and on a recurrent model the region's state slo
 recorded one-row command (recorded for simultaneous use) and a landing copy into the slot's own host planes. The staging and
 the landing alternate two slots, so the host stages the step after while the chained one still reads its rows. The next call
 takes the chained step when it steps the same region at that position with the token the chain gathered and asks no landing
-the chain did not make: it chains the step after before waiting, and lands off the slot. Anything else is a miss: the step is
-waited out, the region's state slots copied back from the snapshot - the ring images alternate by parity, so the rerun reads
+the chain did not make: it chains the step after before waiting, and lands off the slot.
+The same step with another token is a miss; a chain dropped at a session switch or a
+settle predicted nothing and is neither hit nor miss. Either way the step is waited out,
+the region's state slots copied back from the snapshot - the ring images alternate by
+parity, so the rerun reads
 the image the chained step read and writes the one it wrote - and the call runs plain; the K/V row the chained step stored is
 the row the rerun stores again. Every other driver entry - a prefill, the N-row and in-order rows commands, a draft, a verify,
 a rollback, a hydrate or upload of rows, a checkpoint, a region switch - settles a chained step the same way first
 (`rd_chain_settle`), as does the model drop. The chain needs the transfer-queue landing, the device gather of the token id,
 and a command with no per-layer-embedding rows, carry, host experts or hyper-connection seats (`vk_rdec_chain_wanted`); it
 never chains into a guard step or across the wide twin's first record. `DASLLAMA_VK_CHAIN` picks the mode - 0 off, 1 every
-greedy step, -1 adaptive (a miss leaves the next 1, 2, 4 .. 64 steps unchained) - and `vk_rdec_chain_stats` counts the
-steps taken and discarded. The plan charges the snapshot - one region's recurrent states - where the chain is asked
+greedy step, -1 adaptive (a miss leaves the next 1, 2, 4 .. 64 steps unchained, a hit
+resets the run, a chain dropped at a switch or a settle backs off nothing) - and
+`vk_rdec_chain_stats` counts the steps taken and the misses.
+The plan charges the snapshot - one region's recurrent states - where the chain is asked
 (`rdec_chain_snap_bytes`).

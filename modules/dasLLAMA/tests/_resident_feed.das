@@ -630,8 +630,9 @@ def greedy_chain_cell(t : T?; path : string) {
                     t |> equal(logits_maxdiff(adaptive.rows[i], plain.rows[i]), 0.0,
                         "{what}, step {i}: the adaptive run's logits are the plain run's")
                 }
-                //! adaptive: a miss backs off the next step's chain; the last
-                //! off-pick step ends the walk, so no step after it backs off
+                //! the last walk's settle-dropped chain counts nothing; off every
+                //! 3rd, each miss (len 0 -> 1) skips the next step, the one after
+                //! hits and resets it: misses 2/5/../23, hits 1/4/../22
                 let backed = offs > 0l ? offs - 1l : 0l
                 t |> equal(sa1.misses - sa0.misses, offs,
                     "{what}: adaptive, every off-pick step a miss")
