@@ -1282,7 +1282,7 @@ def private pool_keep(m : Model; var sch : Scheduler; claim : int64; tokens : ar
     }
     let t0 = prof_ticks()
     pool_carrier(m, sch)
-    let held =prefix_share_pages(sch.prefix, sch.pool, sch.pool_host, tokens, n)
+    let held = prefix_share_pages(sch.prefix, sch.pool, sch.pool_host, tokens, n)
     let moved = gpu_device_kv_export(m, claim, sch.pool_host, held, n)
     if (moved && recurrent) {
         prefix_insert_snapshot(sch.prefix, sch.pool, sch.pool_host, tokens, snap, opening)

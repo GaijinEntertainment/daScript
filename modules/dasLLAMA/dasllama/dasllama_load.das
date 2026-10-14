@@ -1629,7 +1629,7 @@ def private detect_kq_formats(var t : Model; m : GGUFMeta) {   // nolint:STYLE03
     // E-series PLE token table: gather-only whole rows; row length must be superblock-aligned
     if (has_ple(t.config) && (t.config.n_layers * t.config.n_embd_per_layer) % 256l == 0l) {
         t.ple_emb_fmt = kq_fmt_of(gguf_tensor_type(m, "per_layer_token_embd.weight"))
-        any ||=t.ple_emb_fmt != KqFmt.q8
+        any ||= t.ple_emb_fmt != KqFmt.q8
     }
     if (!any) {   // nothing K-quant in the file: drop the tags so fmt_at short-circuits on empty
         delete t.wq_fmt

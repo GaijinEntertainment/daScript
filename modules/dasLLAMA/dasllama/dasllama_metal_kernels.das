@@ -4069,7 +4069,7 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_b32_mvb2_q5032_ks = compile_stamp(MetalB32MvB2Q5032Ks_metal_b32_mvb_msl, ok)
     g_pso_b32_mvb4_q5032_ks = compile_stamp(MetalB32MvB4Q5032Ks_metal_b32_mvb_msl, ok)
     g_pso_b32_mvb8_q5032_ks = compile_stamp(MetalB32MvB8Q5032Ks_metal_b32_mvb_msl, ok)
-    g_pso_dn_conv =compile_stamp(metal_dn_conv_msl, ok)
+    g_pso_dn_conv = compile_stamp(metal_dn_conv_msl, ok)
     g_pso_dn_conv_n = compile_stamp(metal_dn_conv_n_msl, ok)
     g_pso_dn_conv_n4 = compile_stamp(metal_dn_conv_n4_msl, ok)
     g_pso_dn_hist = compile_stamp(metal_dn_conv_hist_msl, ok)
