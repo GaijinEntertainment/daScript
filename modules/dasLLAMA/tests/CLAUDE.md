@@ -2413,7 +2413,9 @@ checkpoint, an opening or a tail as asked, the shared page counted once in the b
 position not kept; `prefix_state_touch_` answers a kept stop and promotes it to an opening; the split attach
 shares every page of the deepest opening into the carrier, copies none, restores the state into a session that
 holds no pages and counts a hit, the probe `prefix_state_match_len_` reading its count; on a model with no
-recurrent state the page chain's whole pages under the asked count); model-gated (stories15M): attached pages plus a tail eval read the cold
+recurrent state the page chain's whole pages under the asked count), and the dropped checkpoints' snapshots
+(`test_prefix_spare_snapshots`: two of three dropped wait for reuse with their arrays, an empty cache hands an empty one,
+the release drops them); model-gated (stories15M): attached pages plus a tail eval read the cold
 prefill's logits bit for bit, and the page past the whole hits (`test_prefix_tail_copy`): a
 donation's partial tail page is an entry beside its whole ones, a prompt that shares rows with it
 takes a COPY (the donor's page stays the cache's alone, `n_hit_partial` counts the take) and lands
