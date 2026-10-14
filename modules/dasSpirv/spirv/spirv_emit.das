@@ -4521,7 +4521,8 @@ class SpirvEmit : AstVisitor {
     [arch(at="../ARCHITECTURE.md#emit-time-inline")]
     def override visitExprReturn(var expr : ExprReturn?) : ExpressionPtr {
         var bm & = unsafe(*m)
-        if (!empty(ctx.loop_stack) && is_unrolled_body(ctx.loop_stack[length(ctx.loop_stack) - 1])) {
+        if (empty(ctx.inline_ret) && !empty(ctx.loop_stack)
+                && is_unrolled_body(ctx.loop_stack[length(ctx.loop_stack) - 1])) {
             errs |> push("return inside a `for [unroll_full]` body: the loop is unrolled at emission and a return in one copy leaves the copies after it unreachable - restructure the body or take [unroll]")
             return expr
         }

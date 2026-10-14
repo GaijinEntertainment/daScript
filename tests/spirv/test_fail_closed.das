@@ -99,6 +99,10 @@ def test_fail_closed_rejections(t : T?) {   // nolint:STYLE038 — flat one-chec
         check_rejects(t, "_fc_badparam", "parameter 'x' of type tInt64 is not supported")
         check_rejects(t, "_fc_badret", "return type tInt64 is not supported")
         check_rejects(t, "_fc_inline_early_return", "an inlined function returns only from its last statement")
+        check_rejects(t, "_fc_inline_array_struct",
+            "parameter 'c' takes a plane element or a struct with array members")
+        check_rejects(t, "_fc_inline_plane_elem",
+            "parameter 'blk' takes a plane element or a struct with array members")
         // a 4-parameter [spirv_decode] is legal only as a kernel-class method (the leading self is
         // erased from the emitted signature); a free function with 4 params is rejected outright
         check_rejects(t, "_fc_decode4", "must be a class method (leading self)")
