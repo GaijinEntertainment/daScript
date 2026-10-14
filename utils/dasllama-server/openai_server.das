@@ -1803,13 +1803,14 @@ def private box_ram_gb() : int {
     return cap > 0 && (total == 0 || cap < total) ? cap : total
 }
 
-//! a cgroup memory-limit file's text in whole GiB; 0 for no limit (`max`, or v1's page-rounded count past a petabyte) and for text that is no byte count
+//! a cgroup memory-limit file's text in whole GiB, rounded up so a finite cap under a GiB still reads as one;
+//! 0 for no limit (`max`, or v1's page-rounded count past a petabyte) and for text that is no byte count
 def ram_gb_from_cgroup(text : string) : int {
     let t = strip(text)
     return 0 if (empty(t) || !is_number(first_character(t)))
     let bytes = to_float(t)
     let gib = 1024.0 * 1024.0 * 1024.0
-    return bytes <= 0.0 || bytes >= 1024.0 * 1024.0 * gib ? 0 : int(bytes / gib + 0.5)
+    return bytes <= 0.0 || bytes >= 1024.0 * 1024.0 * gib ? 0 : int(ceil(bytes / gib))
 }
 
 //! the lanes the kernels actually dispatch on: the jobque workers plus the calling thread,

@@ -1192,6 +1192,7 @@ def test_prefix_state_budget(t : T?) {
     }
     t |> run("a container's memory limit is the box's RAM where it is the smaller: the cgroup's byte count read, no limit read as none") @(t : T?) {
         t |> equal(58, ram_gb_from_cgroup("61999996928\n"), "a 62 GB-byte container limit (v2 memory.max)")
+        t |> equal(1, ram_gb_from_cgroup("268435456\n"), "a 256 MiB container limit reads as one GiB, never as no limit")
         t |> equal(0, ram_gb_from_cgroup("max\n"), "v2 with no limit")
         t |> equal(0, ram_gb_from_cgroup("9223372036854771712\n"), "v1 with no limit: the page-rounded largest count")
         t |> equal(0, ram_gb_from_cgroup(""), "no cgroup file")
