@@ -1,0 +1,5 @@
+# The documentation generator's group rows are one regex a line by construction - a module's
+# public names on one row - so a row's width is the module's, not the gate's; comments keep the
+# repo limit.
+[line_length]
+code = 0
