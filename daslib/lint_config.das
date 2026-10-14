@@ -415,6 +415,48 @@ def public format_policy_for(file : string) : FormatPolicy {
     return pol
 }
 
+//! A folder's line-length limits: ``[line_length] code = N`` for an
+//! added ``.das`` line, ``comment = N`` for a comment from where it
+//! starts; ``0`` leaves that measure unchecked in the folder.
+struct public LineLengthPolicy {
+    code : int = 100
+    comment : int = 70
+}
+
+def private take_int_key(var tbl_jv : JsonValue?; key : string;
+                         var dst : int&; var decided : bool&) {
+    return if (decided)
+    var tbl & = unsafe(tbl_jv.value as _object)
+    if (!key_exists(tbl, key)) return
+    let val_jv : JsonValue? = tbl[key]
+    return if (val_jv == null)
+    if (val_jv.value is _longint) {
+        dst = int(val_jv.value as _longint)
+    } elif (val_jv.value is _number) {
+        dst = int(val_jv.value as _number)
+    } else {
+        return
+    }
+    decided = true
+}
+
+//! Walks ``.lint_config`` files from ``file``'s directory up to the
+//! repo root (the directory holding ``.git``, read inclusively): the
+//! nearest file setting a key wins; an unset key keeps its default.
+def public line_length_policy_for(file : string) : LineLengthPolicy {
+    var pol = LineLengthPolicy()
+    var code_decided = false
+    var comment_decided = false
+    for (cfg in folder_configs_of(file)) {
+        with_config_table(cfg, "line_length") $(var ll_jv) {
+            take_int_key(ll_jv, "code", pol.code, code_decided)
+            take_int_key(ll_jv, "comment", pol.comment, comment_decided)
+        }
+        break if (code_decided && comment_decided)
+    }
+    return pol
+}
+
 //! Every config file that can steer a lint of ``file``: its folders' ``.lint_config`` files, nearest first, then the repo-level one
 def public lint_configs_for(file : string) : array<string> {
     var configs <- folder_configs_of(file)

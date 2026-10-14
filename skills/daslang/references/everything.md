@@ -6647,6 +6647,7 @@ The lint_config module loads `{get_das_root()}/.lint_config` (a TOML file with a
 
 - `FormatPolicy`
 - `FormatJob`
+- `LineLengthPolicy`
 - `LintFix`
 - `LintIssue`
 
@@ -6699,6 +6700,10 @@ The lint_config module loads `{get_das_root()}/.lint_config` (a TOML file with a
 
 - `format_policy_for`
 - `partition_by_format_policy`
+
+### Line-length policy
+
+- `line_length_policy_for`
 
 ## toml
 

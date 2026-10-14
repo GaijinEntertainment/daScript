@@ -5,10 +5,13 @@ module line_length shared public
 
 require strings
 require daslib/strings_boost
+require daslib/lint_config public
 require ../../common/text_lines.das
 
-let CODE_LIMIT = 100
-let COMMENT_LIMIT = 70
+//! The repo defaults are `LineLengthPolicy`'s field defaults; named
+//! here for the summary line and the tests
+let CODE_LIMIT = LineLengthPolicy().code
+let COMMENT_LIMIT = LineLengthPolicy().comment
 let TAB_WIDTH = 4
 
 struct Finding {
@@ -194,9 +197,11 @@ def comment_columns(text : string) : table<int; int> {
     return <- cols
 }
 
-def find_violations(path, text : string; added : array<int>) : array<Finding> {
+//! The findings over ``added`` under the limits ``pol`` carries; a limit of 0 measures nothing
+def find_violations(path, text : string; added : array<int>;
+                    pol : LineLengthPolicy) : array<Finding> {
     var found : array<Finding>
-    if (!is_checked(path) || is_generated(text)) {
+    if (!is_checked(path) || is_generated(text) || (pol.code <= 0 && pol.comment <= 0)) {
         return <- found
     }
     let lines <- split(text, "\n")
@@ -205,21 +210,26 @@ def find_violations(path, text : string; added : array<int>) : array<Finding> {
         continue if (ln < 1 || ln > length(lines))
         let raw = rtrim(lines[ln - 1])
         let width = display_width(raw)
-        if (width > CODE_LIMIT) {
-            let message = "line is {width} columns, limit {CODE_LIMIT}"
+        if (pol.code > 0 && width > pol.code) {
+            let message = "line is {width} columns, limit {pol.code}"
             found |> push(Finding(line = ln, message = message))
             continue
         }
+        continue if (pol.comment <= 0)
         let col = cols?[ln - 1] ?? -1
         continue if (col < 0)
         let comment = display_width(slice(raw, col))
-        if (comment > COMMENT_LIMIT) {
-            let message = "comment is {comment} columns, limit {COMMENT_LIMIT}"
+        if (comment > pol.comment) {
+            let message = "comment is {comment} columns, limit {pol.comment}"
             found |> push(Finding(line = ln, message = message))
         }
     }
     return <- found
 }
+
+//! The findings under the repo defaults
+def find_violations(path, text : string; added : array<int>) : array<Finding>
+    => <- find_violations(path, text, added, LineLengthPolicy())
 
 def untracked_paths(ls_files_out : string) : array<string> => <- [
     for (path in non_empty_lines(ls_files_out)); path; where is_checked(path)]
