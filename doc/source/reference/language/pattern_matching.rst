@@ -211,7 +211,10 @@ The ``as`` form tests the alternative by name, with the pattern on its left:
         }
     }
 
-The alternative's name can also be called like a function, with the pattern as its argument:
+The call form names the alternative alone, as Rust and OCaml do: ``f(x)`` is ``x as f``. In a
+pattern it always means the alternative, even when a function of that name is in scope; compare
+against a function's result with ``match_expr(f(x))``. Against a value that is not a variant, a
+one-argument call keeps its meaning - ``range(10)``, ``uint8(1)``:
 
 .. code-block:: das
 

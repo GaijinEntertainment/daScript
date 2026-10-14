@@ -383,7 +383,7 @@ def private calls_variant_case(what : TypeDeclPtr; wth : Expression?) : bool {
     //! A call named after a case of the variant ``what``, with any
     //! number of arguments.
     if (what == null || !what.isVariant || !(wth is ExprCall)) return false
-    return get_field_type(what, string((wth as ExprCall).name), false) != null
+    return get_field_type(what, variant_call_name(wth as ExprCall), false) != null
 }
 
 [macro_function]
@@ -392,7 +392,7 @@ def match_as_variant(what : TypeDeclPtr; wth : Expression?; access : Expression?
     //! ``n as i`` or ``i(n)``: the variant holds ``i``, and ``n``
     //! matches its value. ``nada()``: the variant holds ``nada``.
     let as_form = wth is ExprAsVariant
-    let name = string(as_form ? (wth as ExprAsVariant).name : (wth as ExprCall).name)
+    let name = as_form ? string((wth as ExprAsVariant).name) : variant_call_name(wth as ExprCall)
     if (!as_form && !is_variant_call(what, wth)) {
         let text = (is_bare_variant_case(what, name)
             ? "`{name}` has no value; write `{name}()`"

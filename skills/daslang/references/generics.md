@@ -220,7 +220,7 @@ it returns from the enclosing function; an assignment body always needs the bloc
 | `_` | anything (also any single element inside a sequence) |
 | `...` | zero or more elements inside a sequence |
 | `n` (a bare name) | anything, binding it to a new variable `n` - it never compares against an existing `n` |
-| `IF(f = x)` | variant case `f`, binding its value; `x as f` and `f(x)` are the same test; a case without a value is `nada()` |
+| `IF(f = x)` / `f(x)` | variant case `f`, binding its value; `x as f` is the same test; a case without a value is `nada()`. In a pattern `f(x)` is always the alternative, even with a function `f` in scope - `match_expr(f(x))` calls it |
 | `Foo(a = 13)` / `Foo(a = n)` | struct field equal to a value / bound |
 | `Color.Red` | enum value (dotted form) |
 | `(1, _, "3")`, `(13, ...)`, `(..., "13")` | tuple by position |
