@@ -3103,10 +3103,21 @@ let private RD_CHAIN_BACKOFF_MAX = 64   //! the adaptive mode's longest run of u
 def vk_rdec_chain_mode_set(mode : int) {
     g_vk_chain_pin = mode
     set_rdec_chain_charged(vk_rdec_chain_mode() != 0)
+    vk_rdec_chain_announce()
 }
 
 //! the chain's mode: the pin, else the environment's; `vk_rdec_chain_mode_set(vk_rdec_chain_pin())` puts a pin back as found
 def vk_rdec_chain_mode : int => g_vk_chain_pin != RD_CHAIN_ENV ? g_vk_chain_pin : vk_chain_env()
+
+//! the greedy chain's announce, where its mode moved off the default off
+def vk_rdec_chain_announce {
+    let mode = vk_rdec_chain_mode()
+    return if (mode == 0)
+    let pinned = g_vk_chain_pin != RD_CHAIN_ENV
+    let knob = pinned ? "vk_rdec_chain_mode_set({mode})" : "DASLLAMA_VK_CHAIN={mode}"
+    let form = mode < 0 ? "adaptively, backing off after a miss" : "on every greedy step"
+    to_log(LOG_INFO, "dasLLAMA vulkan tier: {knob} - the greedy chain runs {form}\n")
+}
 
 def vk_rdec_chain_pin : int => g_vk_chain_pin
 

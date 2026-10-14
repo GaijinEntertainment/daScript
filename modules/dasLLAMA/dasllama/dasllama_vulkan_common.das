@@ -126,8 +126,9 @@ def khr_kq_tile_on : bool => g_gpu.has_coopmat && g_gpu.subgroup_size == 32l
 //! the cm2 flash tiles serve where the device was created in cm2 mode AND the mode still reads cm2 - a test that forces the mode in-process moves the pick with it
 def cm2_fa_on : bool => g_gpu.has_coopmat2_fa && g_gpu.coopmat_mode == COOPMAT_CM2
 
-//! the per-32 formats that serve as routed expert planes only: their one cm2 column is the s tile
-def cm2_b32_routed(fmt : int) : bool => fmt == int(KqFmt.q51) || fmt == int(KqFmt.mx4) || fmt == int(KqFmt.iq4nl32) || fmt == int(KqFmt.q4032) || fmt == int(KqFmt.q5032)
+//! a per-32 format's slot, dense or routed: its one cm2 column is the s tile
+def cm2_b32_routed(fmt : int) : bool
+    => fmt != int(KqFmt.q8) && fmt >= 0 && fmt < KQ_FMT_COUNT && kq_block32(kq_fmt_of_slot(fmt))
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-tile-pick-and-default")]
 def cm2_tile_cols(d, cnt : int64) : int64 {
@@ -1200,7 +1201,7 @@ def public vk_ext_roster(phys : VkPhysicalDevice) : array<VkExtEntry> {
         VkExtEntry(name = "VK_KHR_shader_integer_dot_product", present = integer_dot_product_supported(phys),
             rides = "the sdot4 integer tiles and the quant dot kernels; the tier is disabled without it"),
         VkExtEntry(name = "VK_KHR_cooperative_matrix", present = has_cm,
-            rides = "the KHR f16 and int8 tiles (the mm mode), the resident MoE block's expert pieces in mm mode, the KHR flash tile and its sink stamps, the KHR f16 GEMM off cm2 (at subgroup 32), the h128 attention twin, the tower driver's KHR route (the vision and whisper-class bidirectional flash tiles, the qwen25v f16 GEMM off cm2 and the audio fronts' f16 GEMMs - the conv stems, the qwen3a and canary fronts), and the TTS seats' f16 tile off cm2 (the StyleTTS2 decoder and generator convs, at subgroup 32); without it the sdot4 tiles and the chunked attention serve, a MoE stays per op in mm mode, the tower driver declines `device` off cm2, and the TTS decoder convs ride the f32 tile"),
+            rides = "the KHR f16 and int8 tiles (the mm mode), the resident MoE block's expert pieces in mm mode, the KHR flash tile and its sink stamps, the KHR f16 GEMM off cm2 (at subgroup 32), the h128 attention twin, the tower driver's KHR route (the vision and whisper-class bidirectional flash tiles, the qwen25v f16 GEMM off cm2 and the audio fronts' f16 GEMMs - the conv stems, the qwen3a and canary fronts), and the TTS seats' f16 tile off cm2 (the StyleTTS2 decoder and generator convs, at subgroup 32); without it the sdot4 tiles and the chunked attention serve, a resident MoE's routed block rides the Q8-fed chain, the tower driver declines `device` off cm2, and the TTS decoder convs ride the f32 tile"),
         VkExtEntry(name = "VK_NV_cooperative_matrix2 (workgroup scope, flexible dimensions, tensor addressing, block loads, bufferDeviceAddress)",
             present = has_cm2,
             rides = "the cm2 decode-in-load prefill tiles, the served default; without it the KHR tiles serve (DASLLAMA_COOPMAT picks a mode by name)"),
@@ -1786,7 +1787,7 @@ def vk_moe_upload_stack(wq : uint8 const?; ws : uint8 const?; woff : int64; n : 
 //! MoeGpuFfnBiasFn: the routed experts' gate and up bias planes, every routed layer's rows in layer order, resident beside the
 //! stacks for the biased act (`Q8ActRqB`); the form's `bias_off` names a layer's row base in them
 def vk_moe_upload_ffn_bias(gb : array<float>; ub : array<float>) : bool {
-    if (!vk_moe_init() || empty(gb) || length(gb) != length(ub)) {
+    if (!gpu_want_arms_tier() || !vk_moe_init() || empty(gb) || length(gb) != length(ub)) {
         return false
     }
     let bytes = long_length(gb) * 4l
@@ -2124,20 +2125,9 @@ def arena_block_bytes(fmt : int) : tuple<wq : int64; ws : int64> {
     if (fmt == int(KqFmt.q8)) {
         return (wq = Q8_QPB, ws = Q8_SPB)     // 32 int8 quants + one f16 scale
     }
-    if (fmt == int(KqFmt.q51)) {
-        return (wq = Q51_QPB, ws = Q51_SPB)   // 16 nibble bytes + 4 qh bytes, f16 d + f16 m: the CPU plane verbatim
-    }
-    if (fmt == int(KqFmt.mx4)) {
-        return (wq = MX4_QB, ws = MX4_SB)   // 16 nibble bytes, one E8M0 byte: the CPU's mxq / mxs planes verbatim
-    }
-    if (fmt == int(KqFmt.iq4nl32)) {
-        return (wq = IQ4NL32_QB, ws = IQ4NL32_SB)   // 16 nibble bytes, one f16 d: the CPU's iq4nl32q / iq4nl32s planes verbatim
-    }
-    if (fmt == int(KqFmt.q4032)) {
-        return (wq = Q4032_QB, ws = Q4032_SB)
-    }
-    if (fmt == int(KqFmt.q5032)) {
-        return (wq = Q5032_QB, ws = Q5032_SB)
+    if (cm2_b32_routed(fmt)) {
+        let f = kq_fmt_of_slot(fmt)
+        return (wq = kq_qsb(f), ws = kq_ssb(f))   // the CPU's per-32 planes verbatim
     }
     return (wq = kq_qsb(vk_kq_schema_id(fmt)), ws = kq_dev_ssb_i(fmt))
 }

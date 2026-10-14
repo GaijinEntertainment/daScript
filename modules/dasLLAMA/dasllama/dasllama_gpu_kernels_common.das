@@ -2173,7 +2173,7 @@ class template GkQknRopeKv : GkWgReduce {
 
     //! head workgroup `wid` of row `rowi`, thread `tid` holding `EPT` of the head's rotation pairs in registers
     def qkn_head(rowi, wid, tid : uint) {   // nolint:STYLE037,STYLE038 - the norm, the rotation and both stores ride the pairs' registers
-        let nkh = pa.kvd / pa.hs
+        let nkh = pa.kvd / max(1u, pa.hs)
         let is_v = v_head(wid, nkh)
         let is_k = wid >= pa.nh && !is_v
         let h = is_v ? wid - pa.nh - nkh : (is_k ? wid - pa.nh : wid)

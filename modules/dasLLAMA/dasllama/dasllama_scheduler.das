@@ -274,6 +274,12 @@ def set_device_kv(var sch : Scheduler; on : bool) : bool {
     if (sch.device_kv != on && empty(sch.streams)) {
         sch.device_kv = on
         to_log(LOG_INFO, "dasLLAMA scheduler: streams admitted from here on are {on ? "device-home (their K/V lives only on the GPU)" : "host-cached"} (set_device_kv)\n")
+        if (on && sch.paged) {
+            let pool_words = (gpu_device_kv_pool_armed()
+                ? "keeps their openings in host RAM too (DASLLAMA_DEVICE_POOL=0 turns it off)"
+                : "is off (DASLLAMA_DEVICE_POOL=0): the regions' claims alone hold openings")
+            to_log(LOG_INFO, "dasLLAMA scheduler: the host pool {pool_words}\n")
+        }
         if (!on) {
             delete sch.parked   // the claims die with the device state
         }
@@ -695,9 +701,10 @@ def private reap_finished(m : Model; var sch : Scheduler) {
                 prompt_head = sch.streams[i].prompt_head, gen_tail = string(sch.streams[i].gen_tail_bytes),
                 done_at = ref_time_ticks()))
             if (sch.streams[i].session.device_kv) {
-                let t_park = ref_time_ticks()
+                let t_park = prof_ticks()
                 park_stream(m, sch, sch.streams[i])
-                to_log(LOG_INFO, "[stream {sch.streams[i].id}] parked in {int64(get_time_usec(t_park)) / 1000l} ms\n")
+                prof_add("sched_park", t_park)
+                to_log(LOG_INFO, "[stream {sch.streams[i].id}] parked\n")
             } elif (sch.paged) {
                 if (sch.streams[i].finish != "media_lost") {
                     donate_stream(m, sch, sch.streams[i])
@@ -735,10 +742,10 @@ def scheduler_step(m : Model; var sch : Scheduler; var events : array<SchedEvent
                          think_budget = sch.queue[0].think_budget, think_marks <- sch.queue[0].think_marks)
         st.think_state = st.think_marks.opened ? 1 : 0
         if (sch.device_kv) {
-            let t_attach = ref_time_ticks()
+            let t_attach = prof_ticks()
             st.session <- create_device_session(m, gpu_device_session_dtype())
             let hit = device_attach(m, sch, st.session, st.prompt)   // a model whose prefill cannot continue parks and pools nothing, so nothing matches
-            to_log(LOG_INFO, "[stream {st.id}] device attach {int64(get_time_usec(t_attach)) / 1000l} ms\n")
+            prof_add("sched_device_attach", t_attach)
             let matched = hit.n
             device_checkpoints_plan(st, sch.queue[0], matched)
             st.n_prefilled = matched
@@ -1273,9 +1280,9 @@ def private pool_keep(m : Model; var sch : Scheduler; claim : int64; tokens : ar
         delete snap
         return
     }
-    let t0 = ref_time_ticks()
+    let t0 = prof_ticks()
     pool_carrier(m, sch)
-    let held = prefix_share_pages(sch.prefix, sch.pool, sch.pool_host, tokens, n)
+    let held =prefix_share_pages(sch.prefix, sch.pool, sch.pool_host, tokens, n)
     let moved = gpu_device_kv_export(m, claim, sch.pool_host, held, n)
     if (moved && recurrent) {
         prefix_insert_snapshot(sch.prefix, sch.pool, sch.pool_host, tokens, snap, opening)
@@ -1284,7 +1291,9 @@ def private pool_keep(m : Model; var sch : Scheduler; claim : int64; tokens : ar
     }
     delete snap
     pool_carrier_done(sch)
-    to_log(LOG_INFO, "  host pool: {n} tok {opening ? "opening" : "tail"} down, {n - held} rows read, {int64(get_time_usec(t0)) / 1000l} ms\n")
+    prof_add("sched_pool_down", t0)
+    let kind = opening ? "opening" : "tail"
+    to_log(LOG_INFO, "  host pool: {n} tok {kind} down, {n - held} rows read\n")
 }
 
 //! the tails a parked claim's region alone holds past `above` copied into the pool before the region is lost; the claim keeps none
@@ -1323,7 +1332,7 @@ def private flush_victims(m : Model; var sch : Scheduler) {
 //! it or no region is free
 [arch(at="../ARCHITECTURE_ENGINE_SERVING.md#device-home-pool")]
 def private pool_import(m : Model; var sch : Scheduler; var session : Session; prompt : array<int64>) : int64 {
-    let t0 = ref_time_ticks()
+    let t0 = prof_ticks()
     pool_carrier(m, sch)
     let recurrent = !empty(session.dn_state_prefix)
     var n = recurrent ? prefix_attach_state_split(sch.prefix, sch.pool, sch.pool_host, session, prompt) : prefix_attach(sch.prefix, sch.pool, sch.pool_host, prompt)
@@ -1335,7 +1344,8 @@ def private pool_import(m : Model; var sch : Scheduler; var session : Session; p
         }
     }
     pool_carrier_done(sch)
-    to_log(LOG_INFO, "  host pool: {n} tok up, {int64(get_time_usec(t0)) / 1000l} ms\n")
+    prof_add("sched_pool_up", t0)
+    to_log(LOG_INFO, "  host pool: {n} tok up\n")
     return n
 }
 

@@ -394,6 +394,7 @@ def dasllama_math_vulkan_register() {
     install_rdec_token_seq(@@vk_rdec_token_seq)
     install_rdec_chain(@@vk_rdec_chain_wanted, @@vk_rdec_chain_ask)
     set_rdec_chain_charged(vk_rdec_chain_mode() != 0)
+    vk_rdec_chain_announce()
     install_rdec_head_warm(@@vk_rdec_head_warm_ask, @@vk_rdec_head_warm_rows)
     install_moe_gpu_resident_dn(@@vk_rdec_set_dn_layer, @@vk_rdec_upload_dn_ba, @@vk_rdec_dn_own, @@vk_rdec_prefill_dn_own)
     install_moe_gpu_resident_moe(@@vk_rdec_moe_ok, @@vk_rdec_prepare_moe, @@vk_rdec_set_moe_layer, @@vk_rdec_set_moe_experts)

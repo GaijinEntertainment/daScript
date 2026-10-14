@@ -1511,6 +1511,9 @@ var private g_pf_qkn_fuse = true
 //! pass (off: the A/B lever's split arm)
 def set_vulkan_prefill_qkn_fuse(on : bool) {
     g_pf_qkn_fuse = on
+    let form = on ? "one fused pass" : "the norm pass, then the rope-and-store pass"
+    let knob = "set_vulkan_prefill_qkn_fuse({on})"
+    to_log(LOG_INFO, "dasLLAMA vulkan tier: {knob} - the window's q/k norm, rope, store: {form}\n")
 }
 
 def vulkan_prefill_qkn_fuse : bool => g_pf_qkn_fuse

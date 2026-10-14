@@ -137,7 +137,8 @@ asymmetries a stamp family ledgers - stays in `ARCHITECTURE_GPU.md#gpu-backends`
   every decline says its reason: the whole-model driver's gates speak through one
   `resident driver declined - <reason>; the per-op rails serve` line, each per-op rail walk
   reports the layers it left on the CPU with the first layer's reason and its VRAM-budget stop,
-  a dense model's FFN gets its own line (the per-op tier's dense-FFN rail is opt-in, `DASLLAMA_GPU_DENSE_FFN`,
+  a dense model's FFN gets its own line (the per-op tier's dense-FFN rail is on by default;
+  `DASLLAMA_GPU_DENSE_FFN=0` keeps a dense FFN on the CPU,
   `ARCHITECTURE_GPU_VULKAN_PEROP.md`), and the
   per-call resident overrides say each pass-to-CPU reason once per armed model
   (`rdec_pass_once`) and count every pass by reason in the tier (`gpu_cpu_passes`, zeroed as a
@@ -147,7 +148,15 @@ asymmetries a stamp family ledgers - stays in `ARCHITECTURE_GPU.md#gpu-backends`
   adopt: `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan`) has no Metal twin, and
   `gpu_device_sessions` answers 0 there: Metal's whole-forward driver reads the host cache in
   unified memory, so it has no mirror to split, and the batched row homes its streams on the host
-  (`ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig`).
+  (`ARCHITECTURE_MEASUREMENT.md#one-benchmark-rig`). The host pool behind them - openings and
+  finished turns copied down to host RAM, taken back up into a region - is Vulkan-only with
+  them; `DASLLAMA_DEVICE_POOL=0` keeps the regions' own claims alone
+  (`ARCHITECTURE_ENGINE_SERVING.md#device-home-pool`).
+- **The dev-W f16 panels are a Metal-only knob.** `DASLLAMA_METAL_DEVW` /
+  `set_metal_devw_panels` makes Metal's dense Q8_0 and K-quant prefill sites read a stored f16
+  copy of their planes in place of the per-window scratch panels
+  (`ARCHITECTURE_GPU_PREFILL.md#devw-panel-knees`); Vulkan's prefill tiles read each plane's
+  own blocks in the tile load, so that tier has no f16 weight panel for such a knob to keep.
 - **The device-side token-embedding gather covers different tables and calls per backend.** The
   engine asks a probe before it embeds; on true it stashes the token ids, skips the CPU embed
   loop, and a late decline backfills the stash on the CPU (`embed_backfill_rows`). Vulkan answers a

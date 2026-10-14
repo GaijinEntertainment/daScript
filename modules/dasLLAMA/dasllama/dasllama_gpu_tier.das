@@ -1725,6 +1725,11 @@ var private g_dense_ffn_pin = -1   //! `set_gpu_want_dense_ffn`'s pin: -1 reads 
 //! the in-process twin of ``DASLLAMA_GPU_DENSE_FFN``, read by the next load's walk; -1 lifts the pin
 def public set_gpu_want_dense_ffn(pin : int) {
     g_dense_ffn_pin = pin
+    if (pin >= 0) {
+        let home = pin == 1 ? "on the device" : "on the CPU"
+        let knob = "set_gpu_want_dense_ffn({pin})"
+        to_log(LOG_INFO, "dasLLAMA GPU tier: {knob} - the next load's dense FFNs run {home}\n")
+    }
 }
 
 //! the pin `set_gpu_want_dense_ffn` holds, -1 where none
