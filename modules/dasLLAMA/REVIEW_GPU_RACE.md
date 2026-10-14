@@ -75,11 +75,10 @@ the same change.** The widened gate otherwise applies the ranking at values it w
 at.
 
 **A diff that decides the ranking of a prefill tile's timing arm over a variable region, or adds
-or changes such an arm whose ranking is decided, where some dispatch of that tile can take a token
-count that is not a whole multiple of its token column, makes the deciding arm itself time its kernel at
-one region whose token count is a whole multiple of the tile's token column - the token extent one
-tile covers - and at one where it is not.** A token count that is not a whole multiple is what
-makes the tile take its partial-tile store path.
+or changes such an arm whose ranking is decided, for a tile some dispatch can run at a token count
+off a whole multiple of its token column (the token extent one tile covers), makes the deciding arm
+time its kernel at one region on such a multiple and at one off it.** Only the count off a multiple
+takes the tile's partial-tile store path.
 
 **A diff that adds or changes an
 `ARCHITECTURE_GPU_RACE_SHAPES.md#tensor-gemm-shapes-that-measured-out-m5` or Vulkan arm ledger

@@ -26,8 +26,7 @@ superblocks), written outside a Metal or SPIR-V kernel body and outside a defini
 kernel class, the pins of `tests/test_kqformat.das` - is a defect: read it through a `KqFmt` accessor
 (`kq_elems`, `kq_disk_bytes`, ...), through `kq_qsb` / `kq_ssb` on a format id, or through a named
 constant a definition home declares, declared there in the same change when none exists.** A
-hand-copied value drifts from the definition it restates, and a literal `32` cannot be told apart
-from a tile width that happens to match.
+literal `32` reads like a tile width.
 
 **A diff that writes a per-format quantity as a bare literal in a Metal or SPIR-V kernel body is a
 defect - read it through a `@template_constant` declared on the shared base of its class family, or
@@ -45,9 +44,11 @@ read a weight format through a converted copy on a run that sets no lever is a d
 backend's kernels for the format at the site instead.** A converted copy is any form other than the
 format's disk encoding or its served form (a `KqFmt` member with its own descriptor row over the
 same GGUF type, `ARCHITECTURE_ENGINE_FORMATS.md#served-form`): a q8 demotion, an f16 or f32
-dequant. A scratch panel - an f16 tile a window's GEMM dequantizes from the site's own bytes - is
-not one while the bytes it holds are the current window's alone and no image carries them; its
-buffer may serve the next window.
+dequant.
+
+A scratch panel - an f16 tile a window's GEMM dequantizes from the site's own bytes - is not a
+converted copy while the bytes it holds are the current window's alone and no image carries them;
+its buffer may serve the next window.
 
 **A diff that states a backend serves a weight format - in any document, PR description, test
 name, or predicate answering that the format fits - while a site that backend's serving call

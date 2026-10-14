@@ -273,8 +273,7 @@ guard, where the divisor is not a literal or a template constant, clamps the div
 least one (`max(1u, ...)`) before the division, or places the division inside an `if` whose
 condition compares that divisor expression itself with zero.** An integer division by zero is
 undefined in SPIR-V, and some drivers evaluate both arms of a `?:` select, so neither a select nor a
-condition on another expression - a field the divisor is computed from, a product it is a factor
-of - guards it.
+condition on another expression guards it.
 
 **A diff that adds or changes a path under `dasllama/` that re-records the split form of the
 one-row token command in `RDec.cmd[region]` - the chain recorded there with the attention at
