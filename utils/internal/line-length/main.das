@@ -11,6 +11,8 @@ require line_length
 struct Config {
     @clarg_doc = "Base branch; the diff starts at its merge-base with origin/<base-ref>"
     base_ref : string = "master"
+    @clarg_doc = "Base ref used as given - a SHA, a local branch, another remote"
+    base : string = ""
 }
 
 struct GitResult {
@@ -39,7 +41,7 @@ def main : int {
     }
     let cfg <- r |> move_unwrap
     let root = git(["rev-parse", "--show-toplevel"])
-    let merge_base = git(["merge-base", "origin/{cfg.base_ref}", "HEAD"])
+    let merge_base = git(["merge-base", diff_base(cfg.base, cfg.base_ref), "HEAD"])
     return 1 if (!root.ok || !merge_base.ok)
     let diff = git([
         "diff", "-U0", "--no-color", "--no-ext-diff", "--diff-filter=AMR", strip(merge_base.out),

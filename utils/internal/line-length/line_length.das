@@ -20,6 +20,9 @@ let private GENERATED_MARKERS = fixed_array(
 
 let private GENERATED_HEADER_LINES = 10
 
+//! The diff's base: ``base`` as given, else ``origin/<base_ref>``
+def diff_base(base, base_ref : string) : string => empty(base) ? "origin/{base_ref}" : base
+
 def is_checked(path : string) : bool => ends_with(path, ".das")
 
 def is_generated(text : string) : bool {

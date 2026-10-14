@@ -77,9 +77,10 @@ struct ModelSpec {
     serve_tts : bool = false        // a speech model of the served text-to-speech set ([[serve_tts_set]]); its packs ride the companions
 }
 
-// ===== Parity fixture ids (frozen from the simple_ids oracle — harness/parity.sh) =====
-// Prompts are deliberately the *confident* ones: high-entropy prompts flip on genuine near-ties
-// (sub-ULP libm cos/sin/exp/tanh vs the oracle), which are not bugs. See dasllama_newmodels_arc.
+// ===== Parity fixture ids (simple_ids, harness/parity.sh) =====
+// Prompts are the confident ones: a high-entropy prompt flips on a
+// genuine near-tie (sub-ULP libm cos/sin/exp/tanh vs the oracle),
+// which is not a bug.
 
 // the Qwen BPE counting fixture, "1, 2, 3, 4, 5, 6, 7," (no BOS) — every Qwen-vocab carrier
 // continues it identically (verified per-file against the live oracle before each reuse)
@@ -216,14 +217,16 @@ def private ev_smollm2() : ParityEvidence {
                 28418l, 18375l, 338l, 443l, 9086l, 1283l, 702l, 260l, 5703l, 335l])
 }
 
-// Mistral-7B-Instruct-v0.3 Q8, "Once upon a time" (SPM, BOS=1) — arch "llama" (v0.3 has no SWA).
+//! "1, 2, ... 7," - BOS=1, SPM dummy-prefix 29473 before each number
 def private ev_mistral7b() : ParityEvidence {
     return <- ParityEvidence(
-        prompt <- [1l, 6481l, 4482l, 1032l, 1495l],
-        gen <- [29493l, 1504l, 1171l, 1032l, 3286l, 1444l, 5928l, 5067l, 29491l, 5067l,
-                1171l, 1032l, 2624l, 21635l, 1072l, 28981l, 4003l, 1461l, 5767l, 1054l,
-                1070l, 3260l, 1032l, 1909l, 1122l, 3490l, 1065l, 1040l, 2294l, 1070l,
-                2723l, 29491l, 1418l, 1321l, 1032l, 3598l, 2913l, 1065l, 1040l, 6282l])
+        prompt <- [1l, 29473l, 29508l, 29493l, 29473l, 29518l, 29493l, 29473l, 29538l, 29493l,
+                   29473l, 29549l, 29493l, 29473l, 29550l, 29493l, 29473l, 29552l, 29493l,
+                   29473l, 29555l, 29493l],
+        gen <- [29473l, 29551l, 29493l, 29473l, 29542l, 29493l, 29473l, 29508l, 29502l, 29493l,
+                29473l, 29508l, 29508l, 29493l, 29473l, 29508l, 29518l, 29493l, 29473l, 29508l,
+                29538l, 29493l, 29473l, 29508l, 29549l, 29493l, 29473l, 29508l, 29550l, 29493l,
+                29473l, 29508l, 29552l, 29493l, 29473l, 29508l, 29555l, 29493l, 29473l, 29508l])
 }
 
 // gemma-3 counting fixture (5-local:1-global SWA + dual RoPE θ): the 4B counts cleanly from

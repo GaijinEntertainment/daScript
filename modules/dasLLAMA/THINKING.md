@@ -77,7 +77,8 @@ DeepSeek framing). Tool-capable replies split reasoning FIRST, then
 | family | thinking default | reply mode | tools | smallest local model |
 |---|---|---|---|---|
 | Qwen 2.5 (qwen2, qwen2moe) | n/a (no think vocab) | symmetric (inert) | hermes | Qwen2.5-0.5B |
-| Qwen 3 / 3.5 / 3.6 (qwen3, qwen3moe, qwen35, qwen35moe, qwen3next) | on | symmetric | hermes | Qwen3-0.6B / Qwen3.5-0.8B |
+| Qwen 3 / 3.5 / 3.6 (qwen3, qwen3moe, qwen35, qwen35moe) | on | symmetric | hermes | Qwen3-0.6B / Qwen3.5-0.8B |
+| Qwen3-Coder-Next (qwen3next) | off - its template has no think block, so the sniff lands on `ThinkMode.none` | none | hermes | none local small; Qwen3-Coder-Next (huge tier) |
 | Qwen3 Instruct-2507 (embedded bare generation branch) | off | none | hermes | Qwen3-4B-Instruct-2507 |
 | GLM-4 MoE (glm4moe) | on | symmetric | none declared | **none local - zen2 leg pending, below** |
 | gpt-oss | on | channel_switch | harmony (developer-turn namespace, commentary-channel calls) | gpt-oss-20b (11 GB, large-tier) |

@@ -157,5 +157,12 @@ fetch through that url into a scratch dir, or the size and content sha the url's
 for that file, pasted with the command that asked, matching the row's `bytes` and `sha256`** -
 `fetch_models` checks a file already on disk by size and hash, never through its url.
 
+**A diff that changes a `model_specs.das` row's `parity` - gives a row one, or changes its
+`prompt`, `prompt_text` or `gen`, in place or through a shared `ids_*`/`ev_*` helper - records,
+in the PR description, for each row whose `parity` changed, the `simple_ids` output for that
+row's model file and dasLLAMA's matched count over the `gen` length (`../harness/parity.sh`
+prints both).** `simple_ids` is the reference-engine oracle `../harness/oracle/simple_ids.cpp`
+builds; the ids claim two engines agree on that file, and the diff shows neither run.
+
 **A diff that refreshes `last_known_good_sidecar.json` replaces it with one complete mint from
 the box its provenance names, at the current `DASLLAMA_RELEASE` - never a hand-edited copy.**
