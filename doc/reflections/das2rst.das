@@ -340,11 +340,12 @@ def private dasllama_type_stanza(f : FILE const?; lab : string; tname : string; 
     fwrite(f, "{text}\n\n")
 }
 
-def document_module_dasllama(_root : string) {
+def document_module_dasllama(_root : string) {  // nolint:STYLE038 — flat doc-group list
     var mod = [find_module("dasllama"), find_module("dasllama_core")]   //! the facade re-exports the core module, which holds the documented functions
     var groups <- array<DocGroup>(
         group_by_regex("Model loading and sessions", mod, %regex~(load_model|create_session|create_kv_pool|release_kv_pages|create_batch_workspace|setup_dasllama_jobque|with_dasllama_jobque|caps|mtp_drafter_sidecar|attach_mtp_drafter|mtp_capable)$%%),
-        group_by_regex("Prefix cache", mod, %regex~(create_prefix_cache|prefix_attach|prefix_insert|prefix_checkpoint_at|prefix_match_len|prefix_release|prefix_held_groups|prefix_chain_list)$%%),
+        group_by_regex("Prefix cache", mod, %regex~(create_prefix_cache|prefix_attach|prefix_insert|prefix_insert_snapshot|prefix_checkpoint_at|prefix_match_len|prefix_state_match_len|prefix_attach_state_split|prefix_state_touch|prefix_share_pages|prefix_take_spare|prefix_release|prefix_held_groups|prefix_chain_list)$%%),
+        group_by_regex("Device-home streams and the host pool", mod, %regex~(gpu_resident_mtp_device_home|gpu_device_kv_claim|gpu_device_kv_checkpoint|gpu_device_kv_checkpoints|gpu_device_kv_snapshot|gpu_device_kv_parked_pos|gpu_device_kv_parked_snapshot|gpu_device_kv_victim_claims|gpu_device_kv_export|gpu_device_kv_import|gpu_device_kv_pool_armed|gpu_device_kv_pool_moves)$%%),
         group_by_regex("Tokenizer", mod, %regex~(encode|decode|piece)$%%),
         group_by_regex("Evaluation and sampling", mod, %regex~(eval|eval_segments|eval_embd|eval_embd_span|eval_embd_span_mrope|eval_embd_body|media_body_rows|eval_batch|sample|set_seed|stats)$%%),
         group_by_regex("Generation", mod, %regex~(generate|generate_embd)$%%),
@@ -372,6 +373,8 @@ def document_module_dasllama(_root : string) {
             "A caller-owned paged KV-cache pool (``create_kv_pool``): sessions created over it allocate fixed-size page groups on demand, so cache memory tracks the actual context instead of the full ``seq_len`` slab. One pool serves many sessions; an ``eval_batch`` batch must share one pool. Keep it alive and in place while its sessions live.")
         dasllama_type_stanza(f, "struct-dasllama_prefix-PrefixCache", "PrefixCache",
             "A page-granular prefix cache over one pool's sessions (``create_prefix_cache``): finished streams donate their KV pages keyed by a chained page hash of the token history, and later requests attach the longest cached prefix instead of re-prefilling it. Pages are refcounted with the pool; an LRU budget bounds retention.")
+        dasllama_type_stanza(f, "struct-dasllama_common-DnSnapshot", "DnSnapshot",
+            "A recurrent (deltanet) session's state at one position - the conv history and the scan state of every recurrent layer - as the prefix cache's checkpoints and the device-home pool carry it: taken off a parked claim (``gpu_device_kv_parked_snapshot``), reused from the cache's dropped checkpoints (``prefix_take_spare``), and restored into a session that attaches at that position.")
         dasllama_type_stanza(f, "enum-dasllama_kv_dtype-KVDtype", "KVDtype",
             "Per-session KV-cache codec picked at ``create_session``/``create_chat``: ``f16`` — the default, half the KV bytes and faster deep-context decode (stores clamp to ±65504); ``f32`` — the bit-exact reference; ``q8_0`` — block-quantized (llama.cpp ``-ctk``/``-ctv q8_0``), half the f16 bytes again and near-lossless in practice; needs head_size and kv_dim to be multiples of 32 (checked at create); ``tq4`` — the FWHT-rotated ternary codec, smaller still.")
         dasllama_type_stanza(f, "enum-dasllama_common-QuantMode", "QuantMode",

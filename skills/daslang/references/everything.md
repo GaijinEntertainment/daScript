@@ -3186,12 +3186,33 @@ CPU large-language-model inference in pure daslang: load a GGUF model, tokenize,
 
 - `create_prefix_cache` - A prefix cache for one `create_kv_pool` pool: streams donate KV pages (`prefix_insert`), later requests with the same prefix attach them (`prefix_attach`); `max_groups` caps the pages (0 = unbounded).
 - `prefix_attach` - Attach the longest cached prefix of `prompt` to a FRESH paged `session` of `pool`: matched pages join the session's block table and `n_past` advances past them, so the caller prefills only the tail.
+- `prefix_attach_state_split` - Attach the deepest recurrent checkpoint opening `prompt` apart: its pages shared into `pages` (a fresh session of `pool` that only reads them), its state into `state`.
 - `prefix_chain_list` - Snapshot of the cache's donated chains for dashboards: per donation — page-covered token count, live pages, hit count, born/last-hit ticks, and the caller-provided preview.
 - `prefix_checkpoint_at` - Where a recurrent `session`'s prefill of `prompt` should stop for a `prefix_insert`, after `prefix_attach` matched `matched` tokens: `stable_at` (`render_turn_marked`'s opening) when the caller knows it, else the longest opening an earlier checkpoint shares.
 - `prefix_held_groups` - Pages the cache currently holds (== pool groups retained for reuse).
 - `prefix_insert` - Donate a session's KV pages to the cache: `tokens` is its EVALED history (the first `n_past` rows exist), every full page not already cached survives `release_kv_pages`, `preview` labels the chain.
+- `prefix_insert_snapshot` - A recurrent checkpoint of the first `n_past` of `tokens` out of `session`'s pages, its state `snap` (moved in) taken elsewhere - a device's slots.
 - `prefix_match_len` - How many leading positions of `prompt` a `prefix_attach` would attach right now, attaching nothing: a probe for a caller deciding what a request must bring (a media span's rows).
 - `prefix_release` - Release every cached page back to `pool` and clear the cache (pages still used by live sessions stay alive until those sessions release them).
+- `prefix_share_pages` - Share the whole pages of the first `n` of `tokens` `cache` already holds into the fresh paged `session`; answers the positions they cover, where the rows still to write start.
+- `prefix_state_match_len` - How many leading positions of `prompt` a recurrent checkpoint in `cache` would attach, touching nothing (0 where none opens it).
+- `prefix_state_touch` - Whether `cache` keeps a checkpoint of the first `n` of `tokens`; one that does is used now, and `opening` makes it an opening from here on.
+- `prefix_take_spare` - A recurrent checkpoint `cache` dropped, to refill in place of a fresh snapshot (its arrays keep their room), or an empty snapshot where none waits.
+
+### Device-home streams and the host pool
+
+- `gpu_device_kv_checkpoint` - Keep a device-home recurrent `session`'s state at its position beside its rows, so a later request that opens with exactly those tokens adopts it from the parked claim.
+- `gpu_device_kv_checkpoints` - The positions a parked `claim`'s checkpoints hold its recurrent state at (empty where it is dead).
+- `gpu_device_kv_claim` - The claim a live device-home `session` holds its region under (0 = none).
+- `gpu_device_kv_export` - Copy the rows `[lo, hi)` the region of a live or parked `claim` holds down into the paged `host` session's pages (grown to `hi`), so a prefix cache keeps them past the region.
+- `gpu_device_kv_import` - Bring the first `npos` rows of the paged `host` session up into a region for the fresh device-home `session`, whose `n_past` becomes `npos`; a recurrent state goes in the session's host arrays first.
+- `gpu_device_kv_parked_pos` - The position a kept `claim`'s recurrent state stands at - the one row count `gpu_device_kv_adopt` may take on a recurrent model; 0 where the claim is gone or the model keeps no recurrent state.
+- `gpu_device_kv_parked_snapshot` - The recurrent state a parked `claim` keeps at position `at` (where its state stands, or a checkpoint), copied off the device into `into` (moved in; `prefix_take_spare` hands one whose arrays keep their room) shaped as `like`; `pos` -1 where none stands at `at`.
+- `gpu_device_kv_pool_armed` - Whether a paged scheduler keeps its device-home streams' openings in its prefix cache too (`DASLLAMA_DEVICE_POOL`, on unless set to 0).
+- `gpu_device_kv_pool_moves` - The rows `gpu_device_kv_export` brought down and `gpu_device_kv_import` took up since the process started, with the wall each direction took, and the wall `gpu_device_kv_snapshot` spent on states.
+- `gpu_device_kv_snapshot` - The recurrent state a live device-home `session` held at `at` (where it stands, or a kept checkpoint) copied off its region into `into` (moved in), the region left as it stands - a session the driver does not hold flushes as `dn_snapshot_take` does; `pos` -1 where no state stands at `at`.
+- `gpu_device_kv_victim_claims` - The claims whose regions the next `n` fresh device-home sessions bind - the least recently used regions no live session holds - and so lose.
+- `gpu_resident_mtp_device_home` - Whether `model`'s self-speculation (MTP/NextN) serves device-home sessions: the draft head, its verify and a rejected round's rollback all run on the device, so a speculating scheduler may keep its streams' caches there.
 
 ### Tokenizer
 
