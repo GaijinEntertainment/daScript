@@ -22,10 +22,15 @@ each file's charter line.
 number higher than every number that file has carried on the base branch or in the diff's own
 commits, deleted rows included.** Text cites rows by number.
 
-**A diff that changes the problem a `followup_*.md` row states deletes the row, repoints every
+**A diff that removes the problem a `followup_*.md` row states deletes the row - or, when the row
+lists several items and the diff resolves only some, deletes those items alone and the row keeps
+its number - and repoints every checked-in citation naming what it deleted to where the fact now
+lives (the architecture doc or the code) or drops it.**
+
+**A diff that rewrites the problem a `followup_*.md` row states deletes the row, repoints every
 checked-in citation that names it to the new row's number or drops it, and adds the new problem
-under a new number.** A row rewritten under its number turns every citation of that number into a
-citation of something else.
+under a new number; deleting a resolved item is not a rewrite.** A row rewritten under its number
+turns every citation of that number into a citation of something else.
 
 **A diff files planned work in the ledger that owns it: `followup_metal.md` for work that would
 change a Metal kernel, driver or dispatch and no Vulkan one, or CPU engine work whose problem

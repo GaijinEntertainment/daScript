@@ -47,9 +47,11 @@ rarely-taken branch.**
 serving step reaches - it is no region entry; it carries `[cold_path]` or nothing.**
 
 **A diff that adds or changes a non-`[test]` function under this module's `tests/`, `harness/`,
-`benchmarks/` or `performance/` that reaches a region entry gives it `[cold_path]` where no other
-non-`[test]` function under those four folders reaches it, and no annotation otherwise.**
+`benchmarks/` or `performance/` that reaches a function carrying `[hot_path]` or a `[no_alloc]` /
+`[no_env]` / `[no_io]` contract gives it `[cold_path]` where no other non-`[test]` function under
+those four folders reaches it, and no annotation otherwise.**
 
 **A diff that adds or changes a non-`[test]` function under `tests/`, `harness/`, `benchmarks/` or
-`performance/` that reaches a region entry leaves no `[cold_path]` on any function under those
-four folders that it reaches.**
+`performance/` that reaches a function carrying `[hot_path]` or a `[no_alloc]` / `[no_env]` /
+`[no_io]` contract leaves no `[cold_path]` on any function under those four folders that it
+reaches.**

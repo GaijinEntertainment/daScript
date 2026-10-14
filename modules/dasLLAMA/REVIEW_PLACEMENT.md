@@ -87,8 +87,9 @@ both do (`ARCHITECTURE_GPU.md#gpu-shared-kernels`).** A
 class stamped from a template declared elsewhere is not a kernel body: it compiles its own
 pipeline where it is stamped.
 
-**A CPU kernel body under `dasllama/` - the arithmetic loop a `[tune]` family picks one variant
-of, or a function a `register_kernel_backend` call names - lands in a tier file,
+**A CPU kernel body under `dasllama/` - a function whose loop reads weight-plane bytes and produces
+a dot product or an expanded row, whether a `[tune]` variant, a function a `register_kernel_backend`
+call or a `KernelBackend` field default names, or a scalar body one of those calls - lands in a tier file,
 `dasllama/dasllama_math_<tier>.das`, never in `dasllama/dasllama_math.das`; a body that a
 `register_kernel_backend` call in another tier file names, or that two tier files' calls name,
 lands in `dasllama/dasllama_math_default.das`.**

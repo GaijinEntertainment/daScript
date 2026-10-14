@@ -14,7 +14,11 @@ still names as a defect - fix the flagged code instead.**
 **A new check in any `REVIEW.das` under this folder, or a check whose licensed set - the names
 it does not flag - gains a name, names in its finding text the `ARCHITECTURE_*.md#<anchor>`
 section carrying the charter of the feature it guards (the section that says which file owns the
-feature) - never `ARCHITECTURE.md` - and ships its line in that section in the same change. The
-line names the check, the names it licenses, and the property those names share, or says the
-check licenses no names. A name whose shared property the finding text does not name stays out -
-fix the flagged code instead.**
+feature), never `ARCHITECTURE.md`.**
+
+**A diff that adds such a check, or a name to such a set, ships in that section, in the same
+change, the check's line: the check, the names it licenses, and the property those names share, or
+that the check licenses no names.**
+
+**A diff never adds to a check's licensed set a name that lacks the shared property the finding
+text names - fix the flagged code instead.**

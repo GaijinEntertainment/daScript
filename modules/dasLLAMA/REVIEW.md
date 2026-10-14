@@ -7,7 +7,7 @@ docs: `ARCHITECTURE.md`, `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_MEASUREMENT.md`
 **A change to the tokenizer - `dasllama/dasllama_tokenizer.das`, `dasllama/dasllama_spm.das`,
 `dasllama/dasllama_bpe.das` or `dasllama/dasllama_pretok.das` - or to a string any `special_id`
 overload receives, wherever that string is written, applies `REVIEW_TOKENIZER.md` (beside this
-file) too.** This trigger and `REVIEW_TOKENIZER.md`'s matching trigger change together.
+file) too.**
 
 **A diff that touches a `followup_*.md` or an `ARCHITECTURE*.md` under this folder, adds a file
 under `dasllama/`, or adds a STYLE037/STYLE038 suppression anywhere under this folder applies
@@ -17,19 +17,11 @@ under `dasllama/`, or adds a STYLE037/STYLE038 suppression anywhere under this f
 to a check's licensed set - the names a check does not flag - applies `REVIEW_GATES.md` (beside
 this file) too.**
 
-**A diff that removes the problem a `followup_*.md` row states deletes the row - or, when the row
-lists several items, only the item it resolved - and repoints every checked-in citation naming
-that item to where the fact now lives (the architecture doc or the code) or drops it.**
-
-**Code that times a run on its own clock (not a spawned child's) and hands the wall or rate back
-as its result - a file printing it, or a function returning it to whichever file calls it -
-wherever it lives, answers to this folder's `benchmarks/REVIEW.md` beside its own folder's checklist.**
-
-**A kernel race - a run timing two kernel variants (arms) against each other in one process -
-wherever it lives, answers to this folder's `benchmarks/REVIEW.md` beside its own folder's checklist.**
-
-**A file `benchmarks/lcpp_bench.das` requires directly, wherever it lives, answers to this
-folder's `benchmarks/REVIEW.md` beside its own folder's checklist.**
+**Wherever it lives, each of these answers to this folder's `benchmarks/REVIEW.md` beside its own
+folder's checklist: code that times a run on its own clock (not a spawned child's) and hands the
+wall or rate back as its result (a file printing it, or a function returning it to its caller); a
+kernel race - a run timing two kernel variants (arms) against each other in one process; a file
+`benchmarks/lcpp_bench.das` requires directly.**
 
 **A diff that writes a measured number down - into `PERF_LEDGER.md`, a checked-in doc outside
 `site*/` (repo root), a code comment, checked-in data a run produced, a commit message, or a PR
@@ -39,19 +31,13 @@ when, or in what order, it does the same work does not route), applies `REVIEW_M
 A serving path is the end-to-end route a run takes from prompt to tokens; its compile tier
 (interpreted, JIT, AOT) and its cross target (a build for another platform) are part of it.
 
-**A diff that adds a kernel, loop or call path the runtime re-enters once per serving step,
-wherever the diff puts it, applies `REVIEW_HOT_PATH.md` (beside this file) together with this
-list.** A serving step is a token, a prefill quantum (one batch of prompt tokens prefilled in one
-pass), one encoded image, video frame or audio chunk, or one synthesized speech chunk or frame.
-
-**A diff that adds, moves, renames or removes a `[hot_path]`, `[cold_path]`, `[no_alloc]`,
-`[no_env]` or `[no_io]` annotation, wherever the diff puts it, applies `REVIEW_HOT_PATH.md`
-together with this list.**
-
-**A diff that adds or changes a test, harness, benchmark or performance-rig function that reaches
-a region entry - the outermost function re-entered each serving step (each token, prefill quantum,
-media input, or speech chunk or frame) - wherever the diff puts it, applies `REVIEW_HOT_PATH.md`
-together with this list.**
+**A diff that does any of these, wherever it puts it, applies `REVIEW_HOT_PATH.md` (beside this
+file) together with this list: adds a kernel, loop or call path the runtime re-enters once per
+serving step; adds, moves, renames or removes a `[hot_path]`, `[cold_path]`, `[no_alloc]`,
+`[no_env]` or `[no_io]` annotation; adds or changes a test, harness, benchmark or performance-rig
+function that reaches a function carrying `[hot_path]` or one of those three contracts.** A serving
+step is a token, a prefill quantum (one batch of prompt tokens prefilled in one pass), one encoded
+image, video frame or audio chunk, or one synthesized speech chunk or frame.
 
 **A diff that adds an allocation, changes an allocation's size formula, or adds, changes or
 drops a `resize` or an `@exact_size` on a buffer; that adds or changes a module global (an
@@ -120,13 +106,15 @@ that fills or binds a `TokMeta` block, wherever the diff puts it, applies `REVIE
 `[metal_dispatch]` / `[vk_dispatch]` declares, or a fixture the Metal or SPIR-V emitter
 compiles - wherever the diff puts it, applies `modules/REVIEW_SHADER_EMITTERS.md` (repo root) too.**
 
-**A change to the image rail - `dasllama/dasllama_image.das`, or, wherever the diff puts it, a
-`.dlim` mint (building a `.dlim` from a gguf), a `.dlim` load, an image identity, a flavor (the
-backend-and-layout variant an image is baked for, one part of its identity), which prepared
-image (its tag, lane or flavor) a load requests or mints, or what `resident_would_serve` answers,
-or an environment variable or setter `resident_would_serve` or any function it calls reads - applies
-`REVIEW_IMAGE.md`.** The mint of a trimmed image - one written without the weight planes the GPU
-driver holds - reads that answer to decide whether to trim.
+**A change to `dasllama/dasllama_image.das`, or, wherever the diff puts it, to a `.dlim` mint
+(building a `.dlim` from a gguf), a `.dlim` load, an image identity, a flavor (the
+backend-and-layout variant an image is baked for, one part of its identity), or which prepared
+image (its tag, lane or flavor) a load requests or mints, applies `REVIEW_IMAGE.md`.**
+
+**A change to what `resident_would_serve` answers, or to an environment variable or setter it or
+any function it calls reads, applies `REVIEW_IMAGE.md`.** The mint of a trimmed image - one
+written without the weight planes the GPU driver holds - reads that answer to decide whether to
+trim.
 
 **A change to `dasllama/dasllama_audio.das`, `dasllama_audio_io.das`,
 `dasllama_audio_embedder.das`, `dasllama_asr.das`, `dasllama_asr_types.das` or `dasllama_vad.das`
@@ -134,25 +122,30 @@ driver holds - reads that answer to decide whether to trim.
 speech-recognition family's CPU model - applies `REVIEW_AUDIO.md`.**
 
 **A change to `dasllama/dasllama_vision.das`, `dasllama/dasllama_vision_io.das`,
-`dasllama/dasllama_vision_embedder.das`, a vision family file - one `dasllama/dasllama_<family>.das`
-holding a single vision projector family - an in-process path (one that runs inside the program
-under review, not a spawned child process) that splices a stream carrying decoded media - pixels or
-audio samples - into a prompt or schedules such a stream, or a change to how a prefill driver
-serves, declines, or passes to the CPU a media span - the rows of one image or audio turn inside a
-single model call - applies `REVIEW_VISION.md`.**
+`dasllama/dasllama_vision_embedder.das`, or a vision family file - one `dasllama/dasllama_<family>.das`
+holding a single vision projector family - applies `REVIEW_VISION.md`.**
+
+**A change to an in-process path (one that runs inside the program under review, not a spawned
+child process) that splices a stream carrying decoded media - pixels or audio samples - into a
+prompt or schedules such a stream applies `REVIEW_VISION.md`.**
+
+**A change to how a prefill driver serves, declines, or passes to the CPU a media span - the rows
+of one image or audio turn inside a single model call - applies `REVIEW_VISION.md`.**
 
 **A `dasllama/dasllama_tower.das` change - the backend-independent encoder-tower home, not a
 backend tower driver - applies `REVIEW_AUDIO.md` and `REVIEW_VISION.md`.**
 
 **A change to a file `dasllama/dasllama_tts*.das` matches, `dasllama/dasllama_styletts2.das`,
 a TTS family file - a `dasllama/dasllama_<family>.das` holding exactly one voice model's code,
-never the two-family carrier `dasllama/dasllama_styletts2.das` - a text front-end file - one stage
-of the pass that turns text into phonemes (`dasllama/dasllama_textnorm.das`,
-`dasllama/dasllama_postag.das`, `dasllama/dasllama_g2p.das`) - the front-end packs' mint
-(`harness/build_g2p_data.py`, `harness/train_postag.py`, `harness/mint_postag_silver.py`,
-`performance/build_tts_data.das`), the Pocket converter and its card (`harness/convert_pocket.py`,
-`harness/tts_model_card.md`), or a call that pins a TTS weight lane (`set_tts_q8` /
-`set_styletts2_q8` / `set_pocket_q8`), wherever the diff puts it, applies `REVIEW_TTS.md`.**
+never the two-family carrier `dasllama/dasllama_styletts2.das` - or a text front-end file - one
+stage of the pass that turns text into phonemes (`dasllama/dasllama_textnorm.das`,
+`dasllama/dasllama_postag.das`, `dasllama/dasllama_g2p.das`) - applies `REVIEW_TTS.md`.**
+
+**A change to the front-end packs' mint (`harness/build_g2p_data.py`, `harness/train_postag.py`,
+`harness/mint_postag_silver.py`, `performance/build_tts_data.das`), to the Pocket converter or its
+card (`harness/convert_pocket.py`, `harness/tts_model_card.md`), or to a call that pins a TTS
+weight lane (`set_tts_q8` / `set_styletts2_q8` / `set_pocket_q8`), wherever the diff puts it,
+applies `REVIEW_TTS.md`.**
 
 **A diff that adds a file under `dasllama/`, or adds or moves a def, a class, a module global or
 named constant, or a `require` in a file under `dasllama/`, applies `REVIEW_PLACEMENT.md`** - the
@@ -166,8 +159,8 @@ requires alone, or adds an `[EnvConfig]` area struct, applies `REVIEW_FACADE.md`
 weight-format id (a `KqFmt` member, a GGUF type number, or the int a generated kernel takes as its
 format parameter) into plane strides; reads a per-block or per-element byte count of one weight
 format; writes as a literal a number fixed by one weight format (its kernel format id, its element
-or word count per block, a plane stride); converts a weight format at a site a backend serves; or
-states a format served on a backend.**
+or word count per block, a plane stride); makes a backend's serving call read a weight format in a
+form other than its disk bytes; or states that a backend serves a weight format.**
 
 **A diff that bumps `DASLLAMA_RELEASE` (`dasllama/dasllama_version.das`) cites in the PR body the
 maintainer's ruling that rows measured before it can no longer be compared with rows after it.**
@@ -198,9 +191,11 @@ spelling missing from `DEVICE_CREATION_CALLS` weakens it.**
 or the PR body) as the reason it picks one candidate over another - a constant's value, a formula,
 or a predicate choosing among kernels that compute the same result - takes the winner from one
 script that races every candidate in one process, interleaved, each chosen by a flag or argument
-in the code the diff ships, and puts the race's output lines, one per candidate and each naming
-it, in the PR body or in a `PERF_LEDGER.md` row the diff adds** - two commits or two processes
-differ by everything else that changed, so their timings pick nothing.
+in the code the diff ships** - two commits or two processes differ by everything else that
+changed, so their timings pick nothing.
+
+**A diff that picks a candidate by such a race puts the race's output lines, one per candidate and
+each naming it, in the PR body or in a `PERF_LEDGER.md` row the diff adds.**
 
 **A race that picks a numeric threshold times the chosen value and at least one value on each side
 of it.**
@@ -230,12 +225,10 @@ the concern, and the other folder requires it - never a copy in each.**
 without first proving both stdin and stdout are terminals is a defect - emit the question as
 a `@sidecar` event instead.** A supervised or piped boot must never block on input.
 
-**A print or log of an elapsed interval whose site is in an engine file (`dasllama/`), outside
-the profiling rails (`profile_tag` / `profile_marker`, `prof_add`, `asr_prof_add`, the ledgers
-and logs the GPU profile flag `DASLLAMA_GPU_PROF` gates), a cold one-shot load, bake, map or tokenizer-build
-progress log, or the first-start kernel race report of a fat exe (one built `DAS_TUNE_MODE=fat`,
-shipping its tune profile), is a defect - route it through a rail
-(`ARCHITECTURE_MEASUREMENT.md#sanctioned-instrumentation-rails`).**
+**A print or log of an elapsed interval in an engine file (`dasllama/`) that a run with no
+profiling flag set can print more than once a process or a model load is a defect - route it
+through a profiling rail (`profile_tag` / `profile_marker`, `prof_add`, `asr_prof_add`, or a log
+`DASLLAMA_GPU_PROF` gates; `ARCHITECTURE_MEASUREMENT.md#sanctioned-instrumentation-rails`).**
 
 **In an engine file (`dasllama/`), a clock value that changes what the program DOES - control
 flow, eviction, a generated name; not a reported wall-clock time or a best-of reduction over
