@@ -40,8 +40,8 @@ value, and its `disk_bytes` inside the walk that checks every row against `ggml_
 Narrowing the row's literal pins or the `ggml_type_bytes` walk is a defect.
 
 **A diff that makes a site - a weight plane a backend's (CPU, Metal, Vulkan) serving call reads -
-read a weight format through a converted copy on a run that sets no lever is a defect - add that
-backend's kernels for the format at the site instead.** A converted copy is any form other than the
+read a weight format through a converted copy, or hands a GPU site to the CPU's kernels, on a run
+that sets no lever is a defect - add that backend's kernels for the format at the site instead.** A converted copy is any form other than the
 format's disk encoding or its served form (a `KqFmt` member with its own descriptor row over the
 same GGUF type, `ARCHITECTURE_ENGINE_FORMATS.md#served-form`): a q8 demotion, an f16 or f32
 dequant.
