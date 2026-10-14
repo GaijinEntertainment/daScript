@@ -65,19 +65,25 @@ def test_userfn_ref(t : T?) {
 
 [test]
 def test_userfn_inline(t : T?) {
-    t |> run("[spirv_inline] helpers: visited in place, no OpFunction or OpFunctionCall of their own") <| @(t : T?) {
+    t |> run("[spirv_inline] helpers: visited in place, " +
+            "no OpFunction or OpFunctionCall of their own") <| @(t : T?) {
         var words <- userfn_inline_words()
         t |> equal(words[1], 0x00010300u, "userfn_inline: SPIR-V 1.3")
-        // entry + uf_inl_called (the plain helper an inlined body calls) = 2; the three inline helpers emit none.
+        // entry + uf_inl_called (the plain helper an inlined body
+        // calls) = 2; the three inline helpers emit none.
         t |> equal(count_op(words, SpvOp.Function), 2)
-        // the one call left is the inlined uf_inl_outer's call to uf_inl_called.
+        // the one call left is the inlined uf_inl_outer's call to
+        // uf_inl_called.
         t |> equal(count_op(words, SpvOp.FunctionCall), 1)
-        // uf_inl_called's single x; the inline helpers bind their parameters to the call's values and lvalues.
+        // uf_inl_called's single x; the inline helpers bind their
+        // parameters to the call's values and lvalues.
         t |> equal(count_op(words, SpvOp.FunctionParameter), 1)
-        // only uf_inl_called returns a value; an inlined tail return is the call's result id.
+        // only uf_inl_called returns a value; an inlined tail return
+        // is the call's result id.
         t |> equal(count_op(words, SpvOp.ReturnValue), 1)
         // uf_inl_acc's loop lands in the entry: a loop merge for its while.
-        t |> success(has_op(words, SpvOp.LoopMerge), "userfn_inline: the inlined loop's OpLoopMerge")
+        t |> success(has_op(words, SpvOp.LoopMerge),
+            "userfn_inline: the inlined loop's OpLoopMerge")
         validate(t, words, "userfn_inline")
         delete words
     }
@@ -111,7 +117,8 @@ def test_userfn_inline_unrolled(t : T?) {
 
 [test]
 def test_userfn_inline_method(t : T?) {
-    t |> run("[spirv_inline] kernel-class methods: a self-method chain and a by-reference method, inlined into the kernel") <| @(t : T?) {
+    t |> run("[spirv_inline] kernel-class methods: a self-method chain " +
+            "and a by-reference method, inlined into the kernel") <| @(t : T?) {
         var words <- userfn_inline_method_words()
         t |> equal(words[1], 0x00010300u, "userfn_inline_method: SPIR-V 1.3")
         t |> equal(count_op(words, SpvOp.Function), 1)

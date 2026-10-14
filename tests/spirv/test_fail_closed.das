@@ -98,7 +98,8 @@ def test_fail_closed_rejections(t : T?) {   // nolint:STYLE038 — flat one-chec
         check_rejects(t, "_fc_mutual", "recursion is not supported")
         check_rejects(t, "_fc_badparam", "parameter 'x' of type tInt64 is not supported")
         check_rejects(t, "_fc_badret", "return type tInt64 is not supported")
-        check_rejects(t, "_fc_inline_early_return", "an inlined function returns only from its last statement")
+        check_rejects(t, "_fc_inline_early_return",
+            "an inlined function returns only from its last statement")
         check_rejects(t, "_fc_inline_array_struct",
             "parameter 'c' takes a plane element or a struct with array members")
         check_rejects(t, "_fc_inline_plane_elem",

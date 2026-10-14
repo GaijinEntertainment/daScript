@@ -300,8 +300,9 @@ class SpirvCombineAnnotation : AstFunctionAnnotation {
     }
 }
 
-//! [spirv_inline] - a shader helper the emitter inlines at every call site instead of emitting an OpFunction; a marker the
-//! emitter reads, the CPU body untouched
+//! [spirv_inline] - a shader helper the emitter inlines at every
+//! call site instead of emitting an OpFunction; a marker the emitter
+//! reads, the CPU body untouched
 [function_macro(name="spirv_inline")]
 class SpirvInlineAnnotation : AstFunctionAnnotation {}
 

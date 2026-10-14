@@ -1,5 +1,6 @@
-// Fail-closed fixture: a [spirv_inline] helper that returns before its last statement must be rejected - an inlined
-// body falls through to the call's result, so only a single tail return lowers.
+// Fail-closed fixture: a [spirv_inline] helper that returns before
+// its last statement must be rejected - an inlined body falls
+// through to the call's result, so only a single tail return lowers.
 expect 50501
 
 options gen2

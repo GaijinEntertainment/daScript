@@ -1307,21 +1307,25 @@ def uf_inl_scaled(x : float; k : int) : float {   // a value helper: a branch, t
     }
     return s + 1.0f
 }
+// a ref helper over an array element, its loop and a nested inline
+// call
 [spirv_inline]
-def private uf_inl_acc(var acc : float&; x : float) {     // a ref helper over an array element, its loop and a nested inline call
+def private uf_inl_acc(var acc : float&; x : float) {
     var j = 0
     while (j < 2) {
         acc += uf_inl_scaled(x, j)
         j++
     }
 }
-def private uf_inl_called(x : float) : float {           // a plain helper an inlined body calls: still its own OpFunction
-    return x * 0.5f
-}
+// a plain helper an inlined body calls: still its own OpFunction
+def private uf_inl_called(x : float) : float => x * 0.5f
 [spirv_inline]
-def private uf_inl_outer(x : float) : float => uf_inl_called(x) + uf_inl_scaled(x, 3) + uf_inl_static(x)
+def private uf_inl_outer(x : float) : float => (uf_inl_called(x) + uf_inl_scaled(x, 3) +
+    uf_inl_static(x))
+// a static_if per arm return: the dead arm is gone, one tail return
+// left
 [spirv_inline]
-def private uf_inl_static(x : float) : float {           // a static_if per arm return: the dead arm is gone, one tail return left
+def private uf_inl_static(x : float) : float {
     static_if (typeinfo sizeof(x) == 4) {
         return x * 2.0f
     } else {
@@ -1329,9 +1333,11 @@ def private uf_inl_static(x : float) : float {           // a static_if per arm 
     }
 }
 
-// userfn_inline: [spirv_inline] helpers visited in place - no OpFunction and no OpFunctionCall for them, a by-reference
-// parameter bound to the caller's lvalue (an element of a local array), a tail value, a nested inline, and a plain helper
-// called from an inlined body
+// userfn_inline: [spirv_inline] helpers visited in place - no
+// OpFunction and no OpFunctionCall for them, a by-reference
+// parameter bound to the caller's lvalue (an element of a local
+// array), a tail value, a nested inline, and a plain helper called
+// from an inlined body
 [compute_shader(local_size_x=64, name="userfn_inline_spv"), marker(no_coverage)]
 def userfn_inline {
     let i = int(gl_GlobalInvocationID.x)
@@ -1347,8 +1353,10 @@ struct UfInlArgs {
     gain : float
 }
 
-// userfn_inline_method: [spirv_inline] kernel-class methods - a self-method chain reading members and the push block, and a
-// by-reference method over an element of a local array, all visited in the kernel body
+// userfn_inline_method: [spirv_inline] kernel-class methods - a
+// self-method chain reading members and the push block, and a
+// by-reference method over an element of a local array, all visited
+// in the kernel body
 class UfInlKern {
     @ssbo @binding = 0 xs : array<float>
     @ssbo @binding = 1 ys : array<float>

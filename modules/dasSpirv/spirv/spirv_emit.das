@@ -157,7 +157,9 @@ struct EmitCtx {
     decode_methods : table<uint64; FunctionPtr> // intptr(ExprField of coopmatLoadTensorDecode's self.<method> argument) -> the devirtualized decode Function, resolved at discovery
     callback_funcs : table<uint64; CallbackFn>  // intptr(Function) -> registered [spirv_combine] / [spirv_per_element] function (referenced via @@ from coopmatReduce / coopmatPerElement)
     callback_order : array<uint64>              // callback_funcs keys in stable emission order (first-reference order)
-    inline_ret     : array<uint>                //!< the [spirv_inline] bodies being visited in place, innermost last: each slot takes its tail return's value id
+    //! the [spirv_inline] bodies being visited in place, innermost
+    //! last: each slot takes its tail return's value id
+    inline_ret     : array<uint>
 }
 
 // A user-defined daslang function called from a shader: emitted as its own OpFunction. Ids are
@@ -173,7 +175,9 @@ struct UserFunc {
                             // members are module-scope OpVariables, so the body needs no receiver
     block_arg : int = -1    //!< a directly called [spirv_decode] method whose block argument is a plane element: the das index of that parameter (its uint INDEX travels, the body chains through the plane); -1 = the value form
     block_ssbo : uint64     //!< intptr(Variable) of the plane the element form indexes
-    inline_body : bool      //!< a [spirv_inline] function: every call site visits its body in place, no OpFunction
+    //! a [spirv_inline] function: every call site visits its body in
+    //! place, no OpFunction
+    inline_body : bool
 }
 
 // Per ref-argument copy-in/copy-out scratch: a Function-storage OpVariable hoisted into the calling
@@ -4832,10 +4836,12 @@ class SpirvEmit : AstVisitor {
     }
 
     [arch(at="../ARCHITECTURE.md#emit-time-inline")]
-    def emit_inline_call(uf : UserFunc; arguments : dasvector`ptr`Expression; skip, fshift : int; resKey : uint64) {
+    def emit_inline_call(uf : UserFunc; arguments : dasvector`ptr`Expression; skip, fshift : int;
+                         resKey : uint64) {
         let f = unsafe(reinterpret<FunctionPtr>(uf.fn))
         if (!inline_returns_at_tail(f)) {
-            errs |> push("[spirv_inline] '{f.name}': an inlined function returns only from its last statement")
+            errs |> push("[spirv_inline] '{f.name}': an inlined function returns only " +
+                "from its last statement")
             return
         }
         for (arg, i in arguments, count()) {
@@ -4848,13 +4854,15 @@ class SpirvEmit : AstVisitor {
             }
             let pv = f.arguments[fi]
             if (fi == uf.block_arg || spills_struct_param(*m, pv._type)) {
-                errs |> push("[spirv_inline] '{f.name}': parameter '{pv.name}' takes a plane element or a struct with array members, which only a called OpFunction binds")
+                errs |> push("[spirv_inline] '{f.name}': parameter '{pv.name}' takes a plane " +
+                    "element or a struct with array members, which only a called OpFunction binds")
                 return
             }
             if (is_out_param(pv._type)) {
                 let p = ptr_of(arg)
                 if (p.id == 0u) return
-                ctx.local_vars[intptr(pv)] = LocalVar(ptr_id = p.id, value_type = p.pty, storage = root_storage_of(arg))
+                ctx.local_vars[intptr(pv)] = LocalVar(ptr_id = p.id, value_type = p.pty,
+                                                      storage = root_storage_of(arg))
             } else {
                 let v = value_of(arg)
                 if (v == 0u) return
@@ -8207,7 +8215,8 @@ class SpirvInlineScan : AstVisitor {
 }
 
 [arch(at="../ARCHITECTURE.md#emit-time-inline")]
-def private collect_inline_locals(var m : SpirvModule; var ctx : EmitCtx; f : FunctionPtr; var seen : table<uint64>; var errors : array<string>) {
+def private collect_inline_locals(var m : SpirvModule; var ctx : EmitCtx; f : FunctionPtr;
+                                  var seen : table<uint64>; var errors : array<string>) {
     var v = new SpirvInlineScan(ctx = unsafe(addr(ctx)))
     make_visitor(*v) $(mv_adapter) {
         v.adapter = mv_adapter
@@ -8229,7 +8238,8 @@ def private collect_inline_locals(var m : SpirvModule; var ctx : EmitCtx; f : Fu
 }
 
 [arch(at="../ARCHITECTURE.md#emit-time-inline")]
-def private collect_entry_locals(var m : SpirvModule; var ctx : EmitCtx; f : FunctionPtr; var errors : array<string>) {
+def private collect_entry_locals(var m : SpirvModule; var ctx : EmitCtx; f : FunctionPtr;
+                                 var errors : array<string>) {
     collect_locals(m, ctx, f.body, errors)
     alloc_call_temps(m, ctx, f, errors)
     var seen : table<uint64>
