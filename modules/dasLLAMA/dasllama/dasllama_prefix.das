@@ -76,7 +76,8 @@ struct PrefixCache {
     states : array<PrefixState> // a recurrent model's checkpoints
     max_states : int64          // checkpoint budget (LRU-drops past it); 0 = a recurrent model caches nothing
     max_state_bytes : int64     //! the checkpoints' byte budget (snapshots and held pages); 0 = unbounded, the count alone bounds them
-    state_bytes : int64         //! the standing checkpoints' bytes, each held page counted once (`prefix_states_bytes_`)
+    state_bytes : int64         //! the standing checkpoints' bytes, each held page counted once (`prefix_state_charge`)
+    state_holds : array<int>    //! per pool group, how many standing checkpoints hold it: a page is charged as the first takes it and freed as the last lets it go
     n_state_hits : int64
     n_state_inserts : int64
     n_state_evicted : int64
@@ -142,18 +143,24 @@ def private prefix_state_bytes_(pool : KVPool; snap : DnSnapshot; n : int64) : i
     return snapshot_bytes_(snap, n) + held * page_bytes_(pool)
 }
 
-//! what the standing checkpoints cost together: every snapshot and token list, and each held page ONCE - the checkpoints
-//! of one conversation share every page under their fork, so their own figures summed would charge those pages twice
-def private prefix_states_bytes_(cache : PrefixCache; pool : KVPool) : int64 {
-    var held : table<int>
-    var total = 0l
-    for (st in cache.states) {
-        total += snapshot_bytes_(st.snap, long_length(st.tokens))
-        for (g in st.groups) {
-            held |> insert(g)
+//! a checkpoint's standing (`hold` 1) or dropping (-1) charged to the standing checkpoints' bytes: its snapshot and token list,
+//! and each of its pages only as the first checkpoint holds it or the last lets it go - the checkpoints of one conversation share
+//! every page under their fork, so their own figures summed would charge those pages twice
+def private prefix_state_charge(var cache : PrefixCache; pool : KVPool; st : PrefixState; hold : int) {
+    cache.state_bytes += int64(hold) * snapshot_bytes_(st.snap, long_length(st.tokens))
+    let page = page_bytes_(pool)
+    for (g in st.groups) {
+        if (g >= length(cache.state_holds)) {
+            cache.state_holds |> resize(max(g + 1, 2 * length(cache.state_holds)))
+        }
+        if (hold > 0 && cache.state_holds[g] == 0) {
+            cache.state_bytes += page
+        }
+        cache.state_holds[g] += hold
+        if (hold < 0 && cache.state_holds[g] == 0) {
+            cache.state_bytes -= page
         }
     }
-    return total + long_length(held) * page_bytes_(pool)
 }
 
 //! Where a recurrent session's prefill of `prompt` stops to leave a checkpoint, `matched` tokens attached: the caller's
@@ -187,6 +194,7 @@ def prefix_take_spare_(var cache : PrefixCache) : DnSnapshot {
 }
 
 def private prefix_state_drop(var cache : PrefixCache; var pool : KVPool; at : int) {
+    prefix_state_charge(cache, pool, cache.states[at], -1)
     for (g in cache.states[at].groups) {
         kv_pool_release_group(pool, g)
     }
@@ -196,7 +204,6 @@ def private prefix_state_drop(var cache : PrefixCache; var pool : KVPool; at : i
     }
     delete cache.states[at]   //! erase is a raw remove: the owned arrays go first
     cache.states |> erase(at)
-    cache.state_bytes = prefix_states_bytes_(cache, pool)
 }
 
 //! the checkpoint to drop first, the one at `exempt` never (the checkpoint just inserted stands): the tail used longest
@@ -377,9 +384,9 @@ def prefix_insert_snapshot_(var cache : PrefixCache; var pool : KVPool; s : Sess
         e.groups |> push(s.block_table[i])
         pool.refcnt[s.block_table[i]] ++
     }
+    prefix_state_charge(cache, pool, e, 1)
     cache.states |> emplace(e)
     cache.n_state_inserts ++
-    cache.state_bytes = prefix_states_bytes_(cache, pool)
     while (long_length(cache.states) > cache.max_states ||
            (cache.max_state_bytes > 0l && cache.state_bytes > cache.max_state_bytes)) {
         let victim = prefix_state_victim(cache, length(cache.states) - 1)   //! the newest stands, even alone past the budget: a budget under one checkpoint caches the last one
