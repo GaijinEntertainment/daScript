@@ -6,9 +6,9 @@ command that steps it, the prompt warm the window chain gives its slab, the roll
 rejected device verify takes from the copies the verify command made, the verify window a
 declined verify seat runs the CPU verify in, and the speculative knob's per-step gate on the
 carry. A head that rides the hyper-connection chain - its routed experts on the host beside the
-trunk's - is `ARCHITECTURE_GPU_VULKAN_HC.md#hc-draft-head`, its verify `#hc-verify-rows`. The residency plan,
-the marks swap and the logits landing the head rides are in
-`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`; the same-slab verify that re-warms the head's rows a
+trunk's - is `ARCHITECTURE_GPU_VULKAN_HC.md#hc-draft-head`, its verify `#hc-verify-rows`. The model's residency
+the head rides is in `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`, the logits landing in
+`ARCHITECTURE_GPU_VULKAN_LANDING.md`; the same-slab verify that re-warms the head's rows a
 round at a time is in `ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command`; the Metal round
 these levers take their shape from is `ARCHITECTURE_GPU_MTP.md`. The GPU backend role table
 these sections build on stays in `ARCHITECTURE_GPU.md#gpu-backends`.

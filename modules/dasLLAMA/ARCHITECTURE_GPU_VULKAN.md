@@ -4,16 +4,14 @@ Companion to `ARCHITECTURE_GPU.md`; a section is cited by its anchor. This docum
 carries the prefill window chain, the Q8 requant byte store, the decode GEMV family's grid
 codebook buffer, the tile probe's shared descriptor set layout, the roster of Vulkan capabilities the tier keys its routes on, and how the
 `[vk_dispatch]` lens derives `readonly` from a class family's accesses. The token command's
-attention key split, the attention-side planes (the q/k/v bias, the sink logits, the output bias),
-the K/V mirror's block codecs are in `ARCHITECTURE_GPU_VULKAN_ATTN.md`; the recurrent block of the window, the segmented
-window and the short window's peel are in `ARCHITECTURE_GPU_VULKAN_WINDOW.md`. The MoE block of that window, the token
-command's routed twin and their gemma-4 form are in `ARCHITECTURE_GPU_VULKAN_MOE.md`. The
+attention and the K/V mirror's codecs are in `ARCHITECTURE_GPU_VULKAN_ATTN.md`; what the window does a session at a time
+is in `ARCHITECTURE_GPU_VULKAN_WINDOW.md`. The routed block of that window and of the token command is in
+`ARCHITECTURE_GPU_VULKAN_MOE.md`. The
 cooperative-matrix tiles the chain's GEMMs run on - the cm2 decode spelling, the tile pick and
 the coopmat mode ladder, the class-pipeline build seat, the MoE expert chain on those tiles, and
 the KHR arm's hand-staged kq tile - are in `ARCHITECTURE_GPU_VULKAN_GEMM.md`, and the decode GEMV
 family's lane split by row length is `ARCHITECTURE_GPU_VULKAN_GEMM.md#kq-gemv-lanes`. What a
-model has to fit on the card before any of this runs - the residency plan, and the marks swap
-that lets one GPU slot serve many models - is in `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`, the NextN
+model has to fit on the card before any of this runs is in `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`, the NextN
 draft head the driver homes is `ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head`, and the
 N-row token command a batched step's rows go through is in `ARCHITECTURE_GPU_VULKAN_NROW.md`, and
 the hyper-connection chain with its host-served routed experts is `ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command`.

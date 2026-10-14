@@ -1,16 +1,13 @@
 # dasLLAMA Architecture - the Vulkan tier's model residency
 
-Companion to `ARCHITECTURE_GPU_VULKAN.md`; a section is cited by its anchor. This
-document carries the residency plan that sizes a whole model before a byte uploads and the marks
-swap that lets one GPU slot serve many models; the token command's logits landing on the
-transfer queue is in `ARCHITECTURE_GPU_VULKAN_LANDING.md`. The NextN draft head the driver homes beside the trunk, its draft command, the
-prompt warm the window chain gives its slab and the rollback a rejected verify takes on the
-device, are in `ARCHITECTURE_GPU_VULKAN_MTP.md`. The N-row token command a batched step's rows go through, and the residual
-step's two forms it holds bit for bit, are in `ARCHITECTURE_GPU_VULKAN_NROW.md`. The prefill
-chain and byte stores that run once a model is resident are in `ARCHITECTURE_GPU_VULKAN.md`, and
-the cooperative-matrix GEMM tiles under them are in `ARCHITECTURE_GPU_VULKAN_GEMM.md`; the per-op
-tier's decode era is in `ARCHITECTURE_GPU_VULKAN_DECODE.md`. The GPU backend role table these
-sections build on stays in `ARCHITECTURE_GPU.md#gpu-backends`.
+Companion to `ARCHITECTURE_GPU_VULKAN.md`; a section is cited by its anchor. This document carries the residency plan
+that sizes a whole model before a byte uploads, the checkpoints a device-home recurrent stream keeps on the device, the
+token rows' gather off the table's own plane, the marks swap that lets one GPU slot serve many models, and the hydrate a
+call passing to the CPU rails takes first. The driver's other parts are its siblings': the logits landing in
+`ARCHITECTURE_GPU_VULKAN_LANDING.md`, the NextN draft head in `ARCHITECTURE_GPU_VULKAN_MTP.md`, the N-row token command
+in `ARCHITECTURE_GPU_VULKAN_NROW.md`, the prefill chain and byte stores in `ARCHITECTURE_GPU_VULKAN.md`, the
+cooperative-matrix GEMM tiles in `ARCHITECTURE_GPU_VULKAN_GEMM.md`, the per-op tier's decode era in
+`ARCHITECTURE_GPU_VULKAN_DECODE.md`; the GPU backend role table stays in `ARCHITECTURE_GPU.md#gpu-backends`.
 
 ### The residency plan sizes a whole model before a byte uploads {#resident-plan}
 

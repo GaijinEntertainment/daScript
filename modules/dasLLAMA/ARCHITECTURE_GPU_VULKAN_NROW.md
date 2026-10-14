@@ -1,10 +1,11 @@
 # dasLLAMA Architecture - the Vulkan tier's N-row token command
 
 Companion to `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`; a section is cited by its anchor. This
-document carries the N-row token command a batched step's rows go through, its same-slab form the
+document carries the N-row token command a batched step's rows go through, the N-column leaf every
+format has, the column tiles a dispatch past eight columns runs in, the command's same-slab form the
 speculative verify steps one stream's rows through, and the residual step's two forms it holds bit
-for bit. The residency plan, the marks swap and the logits landing
-that the command runs under are in `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`; the decode
+for bit. The model's residency the command runs under is in `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`,
+the logits landing in `ARCHITECTURE_GPU_VULKAN_LANDING.md`; the decode
 attention's forms are `ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-decode-attn-split`; the per-op tier's
 decode era, whose routed block the command's rows form mirrors, is `ARCHITECTURE_GPU_VULKAN_DECODE.md`.
 

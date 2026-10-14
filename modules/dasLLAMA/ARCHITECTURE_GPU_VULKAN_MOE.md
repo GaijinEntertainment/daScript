@@ -2,8 +2,9 @@
 
 Companion to `ARCHITECTURE_GPU_VULKAN.md`; a section is cited by its anchor. This
 document carries the resident driver's routed block in its two eras:
-the MoE block of the prefill window, and the whole-model driver's MoE token command, and the
-gemma-4 form both eras take. The window
+the MoE block of the prefill window with its Q8-fed chain, the whole-model driver's MoE token
+command, the select that reaches 512 experts two logits a thread, and the gemma-4 form both eras
+take. The window
 chain the prefill block runs inside (`ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain`), the recurrent block beside it (`ARCHITECTURE_GPU_VULKAN_WINDOW.md#vk-prefill-dn-block`), the Q8
 requant byte store (`ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store`), the decode GEMV family's grid codebook buffer (`ARCHITECTURE_GPU_VULKAN.md#kq-gemv-grid-buffer`) and the
 tile probe's shared descriptor set layout (`ARCHITECTURE_GPU_VULKAN.md#khrx-shared-set-layout`) are `ARCHITECTURE_GPU_VULKAN.md`'s. The
@@ -13,8 +14,7 @@ decode era - the decode span whose kernels the routed block runs - are in
 the per-op tier's MoE expert chain are in `ARCHITECTURE_GPU_VULKAN_GEMM.md`, and the lane split
 of the decode GEMV family the token command's expert GEMVs take is
 `ARCHITECTURE_GPU_VULKAN_GEMM.md#kq-gemv-lanes`. What a model has to fit on the card before any
-of this runs - the residency plan that sizes the expert planes, and the marks swap - is in
-`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`. The GPU backend
+of this runs is in `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md`. The GPU backend
 role table these sections build on stays in `ARCHITECTURE_GPU.md#gpu-backends`.
 
 ### The MoE block of the prefill window {#vk-prefill-moe-block}

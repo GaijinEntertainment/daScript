@@ -3,8 +3,8 @@
 Companion to `ARCHITECTURE_GPU_VULKAN.md`; a section is cited by its anchor. This document carries the
 token command's attention key split, the attention-side planes the resident driver uploads beside its
 norms - the q/k/v projection bias, gpt-oss's sink logits and its output bias - with the flash tiles'
-sink stamps, the K/V mirror's block codecs, q8_0 and tq4, the segmented window, which holds several
-sessions' chunks, and the short window's peel through the token command. The window chain the flash
+sink stamps, and the K/V mirror's block codecs, q8_0 and tq4, with tq4's attention in the rotated
+basis. The segmented window and the short window's peel are in `ARCHITECTURE_GPU_VULKAN_WINDOW.md`. The window chain the flash
 tiles serve is `ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain`; the token command the decode pass
 sits in is `ARCHITECTURE_GPU_VULKAN_DECODE.md#hybrid-token-command`.
 
