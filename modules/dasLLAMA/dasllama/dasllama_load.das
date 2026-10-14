@@ -1641,7 +1641,7 @@ def load_gguf(path : string; mode : QuantMode = QuantMode.fp32) : Model {
     }
     var t = Model()
     with_dasllama_jobque_() {
-        t <- load_gguf_impl(path, mode)
+        t <- load_gguf_impl(path, mode) // nolint:PERF030
     }
     return <- t
 }

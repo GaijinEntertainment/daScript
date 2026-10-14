@@ -195,20 +195,20 @@ namespace das {
             }
             expr->returnFunc = func;
             if ( failedToCMRES ) return;
-            // we can safely skip makeLocal, invoke, or call
-            // they are going to CMRES directly, and do not affect nothing
             ExprVar * evar = nullptr;
             if ( !func->result->isRefType() ) return;
-            else if ( expr->subexpr->rtti_isInvoke() ) return;
-            else if ( expr->subexpr->rtti_isMakeLocal() ) return;
             // if its return X
             else if ( expr->subexpr->rtti_isVar() ) {
                 evar = (ExprVar *)(expr->subexpr);
             } else {
+                failedToCMRES = true;
                 return;
             }
             if ( evar ) {
-                if ( !evar->local ) return; // if its not local, we safely ignore
+                if ( !evar->local ) {
+                    failedToCMRES = true;
+                    return;
+                }
                 auto var = evar->variable;
                 if ( var->inScope ) {               // if its in scope, we cannot return it as CMRES
                     failedToCMRES = true;

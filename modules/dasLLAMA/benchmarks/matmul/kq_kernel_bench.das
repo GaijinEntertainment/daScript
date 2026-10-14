@@ -91,7 +91,7 @@ def fmt_registries(f : KqFmt) : KqRegistries {
     }
     var regs : KqRegistries
     kq_fmt_stamp(f) $(F) {
-        regs <- kq_registries(F)
+        regs <- kq_registries(F) // nolint:PERF030
     }
     return <- regs
 }
