@@ -4040,6 +4040,7 @@ namespace das {
                   expr->at, CompilationError::lookup_variant_field);
             return Visitor::visit(expr);
         }
+        if (rejectVoidVariantCase(valT, index, expr->name, expr->at, CompilationError::invalid_as)) return Visitor::visit(expr);
         expr->fieldIndex = index;
         TypeDecl::clone(expr->type, valT->argTypes[expr->fieldIndex]);
         expr->type->ref = true;
@@ -4086,6 +4087,7 @@ namespace das {
                   expr->at, CompilationError::lookup_variant_field);
             return Visitor::visit(expr);
         }
+        if (rejectVoidVariantCase(valT, index, expr->name, expr->at, CompilationError::invalid_safe_as)) return Visitor::visit(expr);
         expr->fieldIndex = index;
         TypeDecl::clone(expr->type, valT->argTypes[expr->fieldIndex]);
         expr->skipQQ = expr->type->isPointer();
@@ -4303,6 +4305,7 @@ namespace das {
                           expr->at, CompilationError::lookup_variant_field);
                     return Visitor::visit(expr);
                 }
+                if (rejectVoidVariantCase(valT->firstType, index, expr->name, expr->at, CompilationError::lookup_variant_field)) return Visitor::visit(expr);
                 expr->fieldIndex = index;
             }
         } else {
@@ -4360,6 +4363,7 @@ namespace das {
                           expr->at, CompilationError::lookup_variant_field);
                     return Visitor::visit(expr);
                 }
+                if (rejectVoidVariantCase(valT, index, expr->name, expr->at, CompilationError::lookup_variant_field)) return Visitor::visit(expr);
                 expr->fieldIndex = index;
             } else {
                 error("can't get field '" + expr->name + "' of " + describeType(expr->value->type), "", "",
@@ -4464,6 +4468,7 @@ namespace das {
                       expr->at, CompilationError::lookup_variant_field);
                 return Visitor::visit(expr);
             }
+            if (rejectVoidVariantCase(valT->isGoodVariantType() ? valT : valT->firstType, index, expr->name, expr->at, CompilationError::lookup_variant_field)) return Visitor::visit(expr);
             reportAstChanged();
             auto safeAs = new ExprSafeAsVariant(expr->at, expr->value, expr->name);
             return safeAs;
@@ -4534,6 +4539,10 @@ namespace das {
         expr->argumentIndex = -1;
     }
     ExpressionPtr InferTypes::visit(ExprVar *expr) {
+        if (expr->variantCase) {
+            expr->type = new TypeDecl(Type::tVoid, expr->at);
+            return Visitor::visit(expr);
+        }
         // assume (that on the stack)
         for (auto it = assume.rbegin(), its = assume.rend(); it != its; ++it) {
             auto & ita = *it;
@@ -4635,6 +4644,11 @@ namespace das {
             expr->type->ref = true;
             return Visitor::visit(expr);
         } else if (vars.size() == 0) {
+            if (expr->variantCaseNamed) {
+                error("variant case '" + expr->name + "' needs a value: (" + expr->name + " = ...)", "", "",
+                      expr->at, CompilationError::cant_variant_field);
+                return Visitor::visit(expr);
+            }
             if (verbose) {
                 vars = findMatchingVar(expr->name, true);
                 if (vars.size()) {
@@ -6139,6 +6153,21 @@ namespace das {
     void InferTypes::preVisitCallArg(ExprCall *call, Expression *arg, bool last) {
         Visitor::preVisitCallArg(call, arg, last);
         arg->isCallArgument = true;
+        if (!call->func && call->arguments.size() == 1 && arg->rtti_isVar()) {
+            if (auto aliasT = findAlias(call->name)) {
+                if (aliasT->isVariant()) {
+                    auto var = static_cast<ExprVar *>(arg);
+                    int index = aliasT->findArgumentIndex(var->name);
+                    if (index != -1) {
+                        if (aliasT->argTypes[index]->isVoid()) {
+                            var->variantCase = true;
+                        } else {
+                            var->variantCaseNamed = true;
+                        }
+                    }
+                }
+            }
+        }
         markNoDiscard(arg);
         if (forceInscopePod && isConsumeArgumentCall(arg)) {
             consumeDepth++;
@@ -6162,6 +6191,29 @@ namespace das {
             if (func)
                 func->notInferred();
             return Visitor::visit(expr);
+        }
+        if (!expr->func && !expr->arguments.empty()) {
+            if (auto aliasT = findAlias(expr->name)) {
+                if (aliasT->isVariant()) {
+                    if (expr->arguments.size() == 1 && expr->arguments[0]->rtti_isVar()
+                            && static_cast<ExprVar *>(expr->arguments[0])->variantCase) {
+                        auto caseName = static_cast<ExprVar *>(expr->arguments[0])->name;
+                        reportAstChanged();
+                        auto mkv = new ExprMakeVariant(expr->at);
+                        mkv->makeType = new TypeDecl(*aliasT);
+                        if ( !mkv->makeType->at.fileInfo ) mkv->makeType->at = expr->at;
+                        mkv->variants.push_back(new MakeFieldDecl(expr->arguments[0]->at, caseName, nullptr, false, false));
+                        return mkv;
+                    }
+                    if (findMissingCandidates(expr->name, true).empty() && findMissingGenericCandidates(expr->name, true).empty()) {
+                        string notCase = expr->arguments.size() == 1 && expr->arguments[0]->rtti_isVar()
+                            ? "'" + static_cast<ExprVar *>(expr->arguments[0])->name + "' is not a case of variant " + expr->name + "; " : "";
+                        error(notCase + "variant " + describeType(aliasT) + " is constructed as " + expr->name + "(case = value), or " + expr->name + "(case) for a case with no value", "", "",
+                              expr->at, CompilationError::invalid_variant);
+                        return Visitor::visit(expr);
+                    }
+                }
+            }
         }
         // super(args) constructor rewrite — runs in post-visit so argument types are inferred.
         // Walks up the inheritance chain looking for a parent class constructor that matches the

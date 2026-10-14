@@ -135,6 +135,7 @@ namespace das {
         virtual void beforeVariant ( char * ps, TypeInfo * ti ) override {
             int32_t fidx = *((int32_t *)ps);
             ss << "{\"" << ti->argNames[fidx] << "\":";
+            if ( ti->argTypes[fidx]->type == Type::tVoid ) ss << "null";
         }
         virtual void afterVariant ( char *, TypeInfo * ) override {
             ss << "}";

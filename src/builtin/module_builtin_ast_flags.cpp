@@ -103,7 +103,7 @@ namespace das {
         auto ft = new TypeDecl(Type::tBitfield, cppBindingLineInfo());
         ft->alias = "ExprVarFlags";
         ft->argNames = { "local", "argument", "_block",
-            "thisBlock", "r2v", "r2cr", "write", "under_clone" };
+            "thisBlock", "r2v", "r2cr", "write", "under_clone", "variantCase", "variantCaseNamed" };
         return ft;
     }
 

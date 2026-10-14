@@ -290,6 +290,7 @@ namespace das {
             expr->noSideEffects = true;
             expr->noNativeSideEffects = true;
             for ( const auto & fld : expr->variants ) {
+                if ( !fld->value ) continue;
                 expr->noSideEffects &= fld->value->noSideEffects;
                 expr->noNativeSideEffects &= fld->value->noNativeSideEffects;
             }

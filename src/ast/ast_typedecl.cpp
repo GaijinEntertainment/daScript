@@ -818,9 +818,9 @@ namespace das
                 for ( const auto & arg : argTypes ) {
                     if ( argNames.size()==argTypes.size() ) {
                         const auto & argName = argNames[ai];
-                        if ( !argName.empty() ) stream << argName << ":";
+                        if ( !argName.empty() ) stream << argName << (arg->isVoid() ? "" : ":");
                     }
-                    stream << arg->describe(extra, contracts, dmodule, aliasDefs);
+                    if ( !arg->isVoid() ) stream << arg->describe(extra, contracts, dmodule, aliasDefs);
                     if ( arg != argTypes.back() ) {
                         stream << ";";
                     }

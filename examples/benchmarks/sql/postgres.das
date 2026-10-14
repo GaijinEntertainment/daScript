@@ -30,7 +30,7 @@ def postgres_bench_init {
         to_log(LOG_WARNING, "postgres lane skipped: {r |> unwrap_err}\n")
         return
     }
-    g_db <- r._value
+    g_db <- move_unwrap(r)
     g_schema = "bench_{PQbackendPID(g_db.conn)}"
     g_db |> exec("DROP SCHEMA IF EXISTS {sql_quote_id(g_schema)} CASCADE")
     g_db |> exec("CREATE SCHEMA {sql_quote_id(g_schema)}")

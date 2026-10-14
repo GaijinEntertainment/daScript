@@ -93,11 +93,24 @@ def public is_call_to(wth : Expression?; name, mod : string) {
 def public is_range_call(pat : Expression?) : bool => pat is ExprCall && (pat as ExprCall).name == "interval" && length((pat as ExprCall).arguments) == 2
 
 [macro_function]
+def public variant_call_name(call : ExprCall?) : string {
+    //! The name ``i(n)`` was written with - a call that resolved
+    //! to a function (``some`` from ``daslib/option``) is mangled.
+    return string(call.name) if (call.func == null)
+    return string(call.func.fromGeneric != null ? call.func.fromGeneric.name : call.func.name)
+}
+
+[macro_function]
 def public is_variant_call(typ : TypeDeclPtr; pat : Expression?) : bool {
-    //! ``i(n)`` against a variant with an alternative ``i``.
+    //! ``i(n)`` against a variant with an alternative ``i``, even with
+    //! a function ``i`` in scope; ``nada()`` for an alternative without
+    //! a value.
     if (typ == null || !typ.isVariant || !(pat is ExprCall)) return false
     let call = pat as ExprCall
-    return length(call.arguments) == 1 && get_field_type(typ, string(call.name), false) != null
+    let name = variant_call_name(call)
+    let nargs = length(call.arguments)
+    return (nargs <= 1 && get_field_type(typ, name, false) != null
+            && (nargs == 0) == is_bare_variant_case(typ, name))
 }
 
 [macro_function]
@@ -227,7 +240,12 @@ def private variant_name(typ : TypeDeclPtr) : string {
 }
 
 [macro_function]
-def private variant_key(typ : TypeDeclPtr; alt : das_string) : string => "{variant_name(typ)}({alt} = _)"
+def private variant_key(typ : TypeDeclPtr; alt : string) : string {
+    //! The key spells the arm as a pattern: a case with no value is its
+    //! bare name.
+    let bare = is_bare_variant_case(typ, alt)
+    return bare ? "{variant_name(typ)}({alt})" : "{variant_name(typ)}({alt} = _)"
+}
 
 [macro_function]
 def private is_struct_of(typ : TypeDeclPtr; p : Expression?) : bool {
@@ -276,6 +294,15 @@ def private both(var l : MatchCell; var r : MatchCell) : MatchCell {
 }
 
 [macro_function]
+def private is_irrefutable_single_arm(var p : Expression?) : bool {
+    //! ``V(name)`` or ``V(name = x)``: one arm whose sub-pattern
+    //! (none for a case with no value) can not fail.
+    return false if (!(p is ExprMakeVariant) || length((p as ExprMakeVariant).variants) != 1)
+    var value = (p as ExprMakeVariant).variants[0].value
+    return value == null || is_irrefutable(null, value)
+}
+
+[macro_function]
 def private classify_cell(typ : TypeDeclPtr; var pat : Expression?; cuts : array<int64>) : MatchCell {
     //! What one pattern covers of one column: everything, named values, or values the analysis can't name.
     var p = peel_r2v(pat)
@@ -289,15 +316,16 @@ def private classify_cell(typ : TypeDeclPtr; var pat : Expression?; cuts : array
     return <- MatchCell(keys <- span_keys(p, cuts)) if (!empty(cuts) && is_some(constant_span(p)))
     let key = constant_key(p)
     return <- MatchCell(keys <- [key]) if (!empty(key))
-    if (typ != null && typ.isVariant && p is ExprMakeVariant && length((p as ExprMakeVariant).variants) == 1
-            && is_irrefutable(null, (p as ExprMakeVariant).variants[0].value)) {
-        return <- MatchCell(keys <- [variant_key(typ, (p as ExprMakeVariant).variants[0].name)])
+    if (typ != null && typ.isVariant && is_irrefutable_single_arm(p)) {
+        let alt = string((p as ExprMakeVariant).variants[0].name)
+        return <- MatchCell(keys <- [variant_key(typ, alt)])
     }
     if (typ != null && typ.isVariant && p is ExprAsVariant && is_irrefutable(null, (p as ExprAsVariant).value)) {
-        return <- MatchCell(keys <- [variant_key(typ, (p as ExprAsVariant).name)])
+        return <- MatchCell(keys <- [variant_key(typ, string((p as ExprAsVariant).name))])
     }
-    if (is_variant_call(typ, p) && is_irrefutable(null, (p as ExprCall).arguments[0])) {
-        return <- MatchCell(keys <- [variant_key(typ, (p as ExprCall).name)])
+    if (is_variant_call(typ, p) && (length((p as ExprCall).arguments) == 0
+            || is_irrefutable(null, (p as ExprCall).arguments[0]))) {
+        return <- MatchCell(keys <- [variant_key(typ, variant_call_name(p as ExprCall))])
     }
     return <- MatchCell(opaque = true) if (!is_irrefutable(typ, p))
     return <- MatchCell(keys <- [MATCH_NON_NULL]) if (typ != null && typ.isPointer)
@@ -311,7 +339,8 @@ def private finite_domain(typ : TypeDeclPtr) : MatchDomain {
     } elif (typ != null && typ.baseType == Type.tBool) {
         return <- MatchDomain(finite = true, values <- ["true", "false"])
     } elif (typ != null && typ.isVariant) {
-        return <- MatchDomain(finite = true, values <- [for (n in typ.argNames); variant_key(typ, n)])
+        var values <- [for (n in typ.argNames); variant_key(typ, string(n))]
+        return <- MatchDomain(finite = true, values <- values)
     } elif (typ != null && typ.isPointer && typ.firstType != null && typ.firstType.isStructure) {
         return <- MatchDomain(finite = true, values <- ["null", MATCH_NON_NULL])
     }

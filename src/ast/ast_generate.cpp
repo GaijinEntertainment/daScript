@@ -1906,14 +1906,16 @@ namespace das {
             svi->arguments.push_back(vd);
             svi->arguments.push_back(vi);
             cb->list.push_back(svi);
-            auto lv = new ExprVar(at, "dest");
-            auto lf = new ExprField(at, lv, argn, true);    // raw: generated code must reach the real variant, not an overload
-            lf->alwaysSafe = true;
-            auto rv = new ExprVar(at, "src");
-            auto rf = new ExprField(at, rv, argn, true);
-            rf->alwaysSafe = true;
-            auto cl = new ExprClone(at, lf, rf);
-            cb->list.push_back(cl);
+            if ( !variantType->argTypes[argi]->isVoid() ) {
+                auto lv = new ExprVar(at, "dest");
+                auto lf = new ExprField(at, lv, argn, true);    // raw: generated code must reach the real variant, not an overload
+                lf->alwaysSafe = true;
+                auto rv = new ExprVar(at, "src");
+                auto rf = new ExprField(at, rv, argn, true);
+                rf->alwaysSafe = true;
+                auto cl = new ExprClone(at, lf, rf);
+                cb->list.push_back(cl);
+            }
             auto av = new ExprVar(at, "src");
             auto isv = new ExprIsVariant(at, av, argn);
             isv->no_promotion = true;

@@ -896,6 +896,7 @@ namespace das {
         virtual void preVisit ( ExprMakeVariant * expr ) override {
             Visitor::preVisit(expr);
             for (auto mfd : expr->variants) {
+                if (!mfd->value) continue;
                  if (mfd->moveSemantics) {
                     propagateWrite(mfd->value);
                 } else {

@@ -108,6 +108,7 @@ namespace das {
         void popVarStack();
         void error(const string &err, const string &extra, const string &fixme, const LineInfo &at, CompilationError cerr = CompilationError::unspecified) const;
         void checkEmptyName(const string &name, const char *nodeKind, const LineInfo &at);
+        bool rejectVoidVariantCase(const TypeDeclPtr &variantType, int index, const string &name, const LineInfo &at, CompilationError cerr);
         void reportAstChanged();
         virtual void reportFolding() override;
         string describeType(const TypeDeclPtr &decl) const;

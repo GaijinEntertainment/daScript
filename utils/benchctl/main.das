@@ -86,7 +86,7 @@ def run_subcommand(parsed : ParsedArgs) : string {
     let need_init = !file_exists(parsed.db) && (cmd == "insert" || cmd == "query" || cmd == "compare")
     var open_r <- try_open_sqlite(parsed.db)
     if (open_r |> is_err) return "open database: {open_r |> unwrap_err}"
-    var inscope db <- open_r._value
+    var inscope db <- move_unwrap(open_r)
 
     if (need_init) {
         let init_err = run_reset_cmd(db)

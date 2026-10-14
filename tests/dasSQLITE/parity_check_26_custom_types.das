@@ -138,7 +138,7 @@ def opt_dt_eq(a : Option<DateTime>; b : Option<DateTime>) : bool {
     if (a |> is_none) {
         return true
     }
-    return a._value.unix_seconds == b._value.unix_seconds
+    return unwrap(a).unix_seconds == unwrap(b).unix_seconds
 }
 
 def event_eq(a : Event; b : Event) : bool {

@@ -183,6 +183,23 @@ A variant pattern is spelled like the variant constructor; the field value is it
         }
     }
 
+A case declared without a value is matched by name alone, and counts as one value of the variant
+for coverage:
+
+.. code-block:: das
+
+    variant Maybe {
+        nothing
+        value : int
+    }
+
+    def maybe_match ( m : Maybe ) {
+        return match ( m ) {
+            Maybe(nothing) => -1
+            Maybe(value = n) => n
+        }
+    }
+
 The ``as`` form tests the alternative by name, with the pattern on its left:
 
 .. code-block:: das
@@ -194,7 +211,10 @@ The ``as`` form tests the alternative by name, with the pattern on its left:
         }
     }
 
-The alternative's name can also be called like a function, with the pattern as its argument:
+The call form names the alternative alone, as Rust and OCaml do: ``f(x)`` is ``x as f``. In a
+pattern it always means the alternative, even when a function of that name is in scope; compare
+against a function's result with ``match_expr(f(x))``. Against a value that is not a variant, a
+one-argument call keeps its meaning - ``range(10)``, ``uint8(1)``:
 
 .. code-block:: das
 
@@ -203,6 +223,17 @@ The alternative's name can also be called like a function, with the pattern as i
             i(0) => "int zero"
             i(n) => "int {n}"
             f(x) => "float {x}"
+        }
+    }
+
+A case without a value is called with no argument:
+
+.. code-block:: das
+
+    def maybe_call_match ( m : Maybe ) {
+        return match ( m ) {
+            nothing() => -1
+            value(n) => n
         }
     }
 
@@ -424,6 +455,26 @@ A view works inside a tuple, a struct field or an alternative too:
     }
 
 A view covers nothing for exhaustiveness, so a match with views ends with a ``_`` arm.
+
+String Patterns
+---------------
+
+``"lit" + rest`` matches a string that starts with ``lit``, ``rest + "lit"`` one that ends with
+it, and ``"<" + inner + ">"`` both. ``rest`` is a pattern for what is left without the literal:
+``_`` ignores it, and a name binds it as a new string. A string pattern is a view:
+``"lit" + rest`` is ``(match_strip_prefix(_, "lit") => some(rest))``, where the call returns an
+``Option<string>``, and ``"<" + inner + ">"`` is one view inside another.
+
+.. code-block:: das
+
+    def route ( req : string ) {
+        return match ( req ) {
+            "GET /static/" + _ => "static"
+            "GET " + path => "get {path}"
+            name + ".das" => "script {name}"
+            _ => "other"
+        }
+    }
 
 Table Matching
 --------------

@@ -880,6 +880,14 @@ namespace das {
         return st.back();
     }
 
+    TypeDecl * find_unique_typedef ( smart_ptr_raw<Program> prog, const char * name, Context * context, LineInfoArg * at ) {
+        if ( !name ) return nullptr;
+        if ( !prog ) context->throw_error_at(at, "expecting program");
+        auto al = prog->findAlias(name);
+        if ( al.size()!=1 ) return nullptr;
+        return al.back();
+    }
+
     Structure * module_find_structure ( const Module* module, const char * name, Context * context, LineInfoArg * at ) {
         if ( !module ) context->throw_error_at(at, "expecting module");
         return module->findStructure(name);
@@ -2070,6 +2078,9 @@ namespace das {
                 ->args({"func","baseClass","isExplicit","isConstant"})->unsafeOperation = true;
         addExtern<DAS_BIND_FUN(find_unique_structure)>(*this, lib,  "find_unique_structure",
             SideEffects::accessExternal, "find_unique_structure")
+                ->args({"program","name","context","at"});
+        addExtern<DAS_BIND_FUN(find_unique_typedef)>(*this, lib,  "find_unique_typedef",
+            SideEffects::accessExternal, "find_unique_typedef")
                 ->args({"program","name","context","at"});
         addExtern<DAS_BIND_FUN(module_find_structure)>(*this, lib,  "module_find_structure",
             SideEffects::accessExternal, "module_find_structure")

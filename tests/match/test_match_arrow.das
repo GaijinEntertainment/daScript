@@ -743,3 +743,59 @@ def test_variant_alternative_called_by_name(t : T?) {
     t |> equal(held_kind(Holder(v = IntOrStr(i = 2))), "held int 2")
     t |> equal(held_kind(Holder(v = IntOrStr(s = "y"))), "held str")
 }
+
+variant Answer {
+    nothing
+    maybe
+    amount : int
+}
+
+def private answer_text(a : Answer) : string {
+    return match (a) {
+        nothing() => "nothing"
+        maybe() | amount(0) => "maybe"
+        amount(n) => "{n}"
+    }
+}
+
+[test]
+def test_variant_case_without_value_called_by_name(t : T?) {
+    t |> equal(answer_text(Answer(nothing)), "nothing")
+    t |> equal(answer_text(Answer(maybe)), "maybe")
+    t |> equal(answer_text(Answer(amount = 0)), "maybe")
+    t |> equal(answer_text(Answer(amount = 3)), "3")
+}
+
+def private route(req : string) : string {
+    return match (req) {
+        "GET /static/" + _ => "static"
+        "GET " + path && path != "/" => "get {path}"
+        "GET " + _ => "root"
+        "<" + inner + ">" => "tag {inner}"
+        name + ".das" => "script {name}"
+        _ => "other"
+    }
+}
+
+def private tagged(t : tuple<string; int>) : string {
+    return match (t) {
+        ("a" + _, 1) => "a one"
+        ("a" + r, n) => "a {r} {n}"
+        _ => "other"
+    }
+}
+
+[test]
+def test_string_prefix_and_suffix_patterns(t : T?) {
+    t |> equal(route("GET /static/a.png"), "static")
+    t |> equal(route("GET /x"), "get /x")
+    t |> equal(route("GET /"), "root")
+    t |> equal(route("<b>"), "tag b")
+    t |> equal(route("<>"), "tag ")
+    t |> equal(route(">"), "other")
+    t |> equal(route("main.das"), "script main")
+    t |> equal(route("zz"), "other")
+    t |> equal(tagged(("ab", 1)), "a one")
+    t |> equal(tagged(("ab", 2)), "a b 2")
+    t |> equal(tagged(("b", 1)), "other")
+}

@@ -368,17 +368,44 @@ def match_variant(what : TypeDeclPtr; wths : ExprMakeVariant?; access : Expressi
         return false
     }
     log_m("\t[[variant {mf.name}]] match passed\n")
+    if (mf.value == null) {
+        var cond = new ExprIsVariant(at = wths.at, value = clone_expression(access),
+            name := string(mf.name))
+        cond |> force_at(wths.at)
+        to.conditions |> emplace(cond)
+        return true
+    }
     return match_any(ftype, mf.value, variant_access(access, string(mf.name), wths.at, to), to)
+}
+
+[macro_function]
+def private calls_variant_case(what : TypeDeclPtr; wth : Expression?) : bool {
+    //! A call named after a case of the variant ``what``, with any
+    //! number of arguments.
+    if (what == null || !what.isVariant || !(wth is ExprCall)) return false
+    return get_field_type(what, variant_call_name(wth as ExprCall), false) != null
 }
 
 [macro_function]
 def match_as_variant(what : TypeDeclPtr; wth : Expression?; access : Expression?;
                      var to : MatchTo) {
-    //! ``n as i`` or ``i(n)``: the variant holds ``i``,
-    //! and ``n`` matches its value.
+    //! ``n as i`` or ``i(n)``: the variant holds ``i``, and ``n``
+    //! matches its value. ``nada()``: the variant holds ``nada``.
     let as_form = wth is ExprAsVariant
-    let name = string(as_form ? (wth as ExprAsVariant).name : (wth as ExprCall).name)
-    let value = as_form ? (wth as ExprAsVariant).value : (wth as ExprCall).arguments[0]
+    let name = as_form ? string((wth as ExprAsVariant).name) : variant_call_name(wth as ExprCall)
+    if (!as_form && !is_variant_call(what, wth)) {
+        let text = (is_bare_variant_case(what, name)
+            ? "`{name}` has no value; write `{name}()`"
+            : "`{name}` has a value; write `{name}(x)` or `{name}(_)`")
+        to.errors |> match_error(text, wth.at)
+        return false
+    }
+    var value : Expression?
+    if (as_form) {
+        value = (wth as ExprAsVariant).value
+    } elif (length((wth as ExprCall).arguments) == 1) {
+        value = (wth as ExprCall).arguments[0]
+    }
     if (what.baseType != Type.tVariant) {
         to.errors |> match_error("{describe(what)} is not a variant", wth.at)
         return false
@@ -389,7 +416,8 @@ def match_as_variant(what : TypeDeclPtr; wth : Expression?; access : Expression?
         return false
     }
     log_m("\tas {name} match passed\n")
-    return match_any(ftype, value, variant_access(access, name, wth.at, to), to)
+    var part = variant_access(access, name, wth.at, to)
+    return value == null || match_any(ftype, value, part, to)
 }
 
 [macro_function]
@@ -742,12 +770,53 @@ def private is_view(var pat : Expression?) : bool {
     return reads && !is_pattern_call(head) && mentions_placeholder(head)
 }
 
+def public match_strip_prefix(s, prefix : string) : Option<string> {
+    //! ``s`` without ``prefix``; ``none`` when ``s`` does not start
+    //! with it.
+    return starts_with(s, prefix) ? some(slice(s, length(prefix))) : none(type<string>)
+}
+
+def public match_strip_suffix(s, suffix : string) : Option<string> {
+    //! ``s`` without ``suffix``; ``none`` when ``s`` does not end
+    //! with it.
+    let n = length(s) - length(suffix)
+    return n >= 0 && ends_with(s, suffix) ? some(slice(s, 0, n)) : none(type<string>)
+}
+
+[macro_function]
+def private is_string_pattern(pat : Expression?) : bool {
+    //! ``"pre" + rest`` or ``rest + "suf"``.
+    return false if (!(pat is ExprOp2) || (pat as ExprOp2).op != "+")
+    let op2 = pat as ExprOp2
+    return (match_peel_r2v(op2.left) is ExprConstString
+            || match_peel_r2v(op2.right) is ExprConstString)
+}
+
+[macro_function]
+def private string_view(op2 : ExprOp2?) : Expression? {
+    //! ``x + "suf"`` is ``(match_strip_suffix(_, "suf") => some(x))``
+    //! and ``"pre" + x`` is the view with ``match_strip_prefix``.
+    let suffix = match_peel_r2v(op2.right) is ExprConstString
+    var head = (suffix
+        ? qmacro(match_strip_suffix(_, $e(clone_expression(op2.right))))
+        : qmacro(match_strip_prefix(_, $e(clone_expression(op2.left)))))
+    head.at = op2.at
+    var rest = new ExprCall(at = op2.at, name := "some")
+    rest.arguments |> emplace_new <| clone_expression(suffix ? op2.left : op2.right)
+    var view = new ExprMakeTuple(at = op2.at)
+    view.values |> emplace(head)
+    view.values |> emplace(rest)
+    return view
+}
+
 [macro_function]
 class private ProbeAttacher {
     //! Before type inference, gives every view of an arm a probe: its
     //! call with ``_`` replaced by the path to the value it reads.
-    //! The probe never runs; its type becomes the view's result type.
-    def attach(var pat : Expression?; path : Expression?) : void {
+    //! A string pattern ``"pre" + rest`` becomes its view first.
+    def attach(var pat : Expression?&; path : Expression?) : void {
+        return if (pat == null)
+        pat = is_string_pattern(pat) ? string_view(pat as ExprOp2) : pat
         if (is_view(pat)) {
             view(pat as ExprMakeTuple, path)
         } elif (pat is ExprOp2) {
@@ -814,7 +883,7 @@ class private ProbeAttacher {
 }
 
 [macro_function]
-def add_probes(var pattern : Expression?; expr : ExprCallMacro?) : void {
+def add_probes(var pattern : Expression?&; expr : ExprCallMacro?) : void {
     //! Adds probes to the views of one arm. With one matched value,
     //! ``_`` is that value; with ``match (a, b)``, it is the value of
     //! the view's column.
@@ -884,7 +953,7 @@ def match_any(what : TypeDeclPtr; wth : Expression?; access : Expression?; var t
         }
     } elif (wth is ExprMakeVariant) {
         return match_variant(what, wth as ExprMakeVariant, access, to)
-    } elif (wth is ExprAsVariant || is_variant_call(what, wth)) {
+    } elif (wth is ExprAsVariant || calls_variant_case(what, wth)) {
         return match_as_variant(what, wth, access, to)
     } elif (is_call_to(wth, "match_type", "match")) {
         return match_type(what, wth as ExprCall, access, to)
@@ -989,6 +1058,17 @@ def arm_body(arm : Expression?; as_value : bool; binds : array<Expression?>) : E
 }
 
 [macro_function]
+def private is_bare_case_pattern(call : ExprCall?; arg : Expression?) : bool {
+    //! ``Tags(nada)``: the call names a variant typedef and the argument
+    //! is one of its cases without a value, so the name is the case,
+    //! not a binding.
+    return false if (length(call.arguments) != 1 || !(arg is ExprVar))
+    let vt = compiling_program() |> find_unique_typedef(string(call.name))
+    return false if (vt == null || vt.baseType != Type.tVariant)
+    return is_bare_variant_case(vt, string((arg as ExprVar).name))
+}
+
+[macro_function]
 def prepare_call_pattern(var call : ExprCall?; bind_bare : bool) : array<string> {
     //! A table pattern binds in its values, never its keys; ``match_expr`` and range bounds bind nothing.
     var names : array<string>
@@ -998,8 +1078,18 @@ def prepare_call_pattern(var call : ExprCall?; bind_bare : bool) : array<string>
         }
     } elif (!is_call_to(call, "match_expr", "match") && !is_range_call(call)) {
         for (a in call.arguments) {
-            names |> push_from(prepare_pattern(a, bind_bare))
+            names |> push_from(prepare_pattern(a, bind_bare)) if (!is_bare_case_pattern(call, a))
         }
+    }
+    return <- names
+}
+
+[macro_function]
+def prepare_variant_patterns(var mkv : ExprMakeVariant?; bind_bare : bool) : array<string> {
+    //! A case with no value carries no sub-pattern to bind.
+    var names : array<string>
+    for (mf in mkv.variants) {
+        names |> push_from(prepare_pattern(mf.value, bind_bare)) if (mf.value != null)
     }
     return <- names
 }
@@ -1024,9 +1114,7 @@ def prepare_sub_patterns(var pat : Expression?; bind_bare : bool) : array<string
             }
         }
     } elif (pat is ExprMakeVariant) {
-        for (mf in (pat as ExprMakeVariant).variants) {
-            names |> push_from(prepare_pattern(mf.value, bind_bare))
-        }
+        names <- prepare_variant_patterns(pat as ExprMakeVariant, bind_bare)
     } elif (pat is ExprAsVariant) {
         names <- prepare_pattern((pat as ExprAsVariant).value, bind_bare)
     } elif (pat is ExprCall) {
@@ -1347,8 +1435,8 @@ class MatchMacro : AstCallMacro {
                 (ee as ExprIfThenElse).if_flags.doNotFold = true
                 hide_bound_names(ee, (ee as ExprIfThenElse).cond, false)
             } elif (is_arrow_arm(ee)) {
-                hide_bound_names(ee, (ee as ExprMakeTuple).values[0], true)
                 add_probes((ee as ExprMakeTuple).values[0], expr)
+                hide_bound_names(ee, (ee as ExprMakeTuple).values[0], true)
             }
         }
     }

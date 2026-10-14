@@ -371,7 +371,8 @@ def describeCppTypeEx(typeDecl : TypeDeclPtr;   // nolint:STYLE038 - one arm per
                 write(writer, "TTuple<{typeDecl.tupleSize},{types}>")
             }
         } elif (baseType == Type.tVariant) {
-            let types = (each(typeDecl.argTypes)
+            let allBare = (each(typeDecl.argTypes)._all(_.baseType == Type.tVoid)._fold())
+            let types = allBare ? "" : (each(typeDecl.argTypes)
                 ._select(describeCppTypeEx(_, DescribeConfig(cross_platform = cfg.cross_platform), useAlias))
                 .to_array()
                 ._fold()) |> join(",")
@@ -3315,6 +3316,13 @@ class public CppAot : AstVisitor {
         if (variantIndex == -1) {
             panic("should not infer otherwise");
         }
+        if (decl.value == null) {
+            let setter = get_variant_field(variantType, variantIndex)
+            write(*ss, "{tabs()}{setter}::set({mkvName(expr)}");
+            if (length(expr.variants) != 1) write(*ss, "({index},__context__)");
+            write(*ss, ");\n");
+            return
+        }
         let type_str = describeCppType(variantType.argTypes[variantIndex], DescribeConfig(cross_platform = cross_platform));
         write(*ss, "{tabs()}{get_variant_field(variantType, variantIndex)}::set(");
         write(*ss, "{mkvName(expr)}");
@@ -3325,6 +3333,7 @@ class public CppAot : AstVisitor {
         }
     }
     def override visitExprMakeVariantField(expr : ExprMakeVariant?; index : int; decl : MakeFieldDeclPtr; last : bool) {
+        if (decl.value == null) return decl
         let variantType = fa_element(expr._type)
         let variantIndex = find_argument_index(variantType, string(decl.name))
         if (variantType.argTypes[variantIndex].isPointer && decl.value._type.isPointer && variantType.argTypes[variantIndex].firstType != null && decl.value._type.firstType != null && !is_same_type(variantType.argTypes[variantIndex].firstType, decl.value._type.firstType, false, false, false, false)) {

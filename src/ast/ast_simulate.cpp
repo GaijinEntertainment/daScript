@@ -747,6 +747,10 @@ namespace das
                 svi = sv_makeLocalCopy(mkv->at, mkv->stackTop+voffset, vconst);
             }
             simlist.push_back(svi);
+            if ( !decl->value ) {
+                index ++;
+                continue;
+            }
             // field itself
             auto fieldOffset = mkBaseT->getVariantFieldOffset(fieldVariant);
             uint32_t offset =  voffset + fieldOffset;

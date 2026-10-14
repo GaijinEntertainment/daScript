@@ -583,10 +583,11 @@ namespace das
             stream << das_to_string(info->type) << "<";
             for ( uint32_t a=0, as=info->argCount; a!=as; ++a ) {
                 if ( a!=0 ) stream << "; ";
+                bool noValue = info->type==Type::tVariant && info->argTypes[a]->type==Type::tVoid;
                 if ( info->argNames ) {
-                    stream << info->argNames[a] << ":";
+                    stream << info->argNames[a] << (noValue ? "" : ":");
                 }
-                stream << debug_type(info->argTypes[a]);
+                if ( !noValue ) stream << debug_type(info->argTypes[a]);
             }
             stream << ">";
         } else if ( info->type==Type::tFunction || info->type==Type::tBlock || info->type==Type::tLambda ) {

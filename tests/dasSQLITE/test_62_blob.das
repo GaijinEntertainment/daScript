@@ -115,7 +115,7 @@ def test_optional_blob_null_round_trip(t : T?) {
                 t |> success(r.Body |> is_none(), "NULL BLOB → none")
             } elif (r.Id == 2) {
                 t |> success(r.Body |> is_some(), "non-NULL BLOB → some")
-                t |> equal(length(r.Body._value), 4, "non-null blob length")
+                t |> equal(length(unwrap(r.Body)), 4, "non-null blob length")
             }
         }
     }
@@ -134,7 +134,7 @@ def test_empty_blob_distinct_from_null(t : T?) {
 
         let r1 = db |> query_one("SELECT * FROM Files WHERE Id = 1", type<FileRow>)
         t |> success(r1.Body |> is_some(), "empty blob is some, not none")
-        t |> equal(length(r1.Body._value), 0, "empty blob has zero bytes")
+        t |> equal(length(unwrap(r1.Body)), 0, "empty blob has zero bytes")
 
         let r2 = db |> query_one("SELECT * FROM Files WHERE Id = 2", type<FileRow>)
         t |> success(r2.Body |> is_none(), "NULL blob is none")

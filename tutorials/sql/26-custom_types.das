@@ -149,7 +149,7 @@ def main() {
             if (e.StartsAt |> is_none()) {
                 to_log(LOG_INFO, "event {e.Id} not scheduled\n")
             } else {
-                to_log(LOG_INFO, "event {e.Id} starts at {e.StartsAt._value.unix_seconds}\n")
+                to_log(LOG_INFO, "event {e.Id} starts at {unwrap(e.StartsAt).unix_seconds}\n")
             }
         }
     }

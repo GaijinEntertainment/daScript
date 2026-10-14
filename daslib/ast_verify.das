@@ -690,6 +690,14 @@ class private AstVerifyVisitor : AstVisitor {
         verify_value_elements(expr.values, expr.at, "ExprMakeArray.values")
     }
 
+    def is_bare_case_field(var expr : ExprMakeVariant?; decl : MakeFieldDeclPtr) : bool {
+        var vt : TypeDeclPtr = expr.makeType
+        while (vt != null && vt.baseType == Type.tFixedArray && vt.firstType != null) {
+            vt = vt.firstType
+        }
+        return vt != null && is_bare_variant_case(vt, string(decl.name))
+    }
+
     def check_make_field(var decl : MakeFieldDeclPtr; kind : string) : void {
         if (decl == null) {
             return
@@ -701,7 +709,9 @@ class private AstVerifyVisitor : AstVisitor {
         check_make_field(decl, "MakeFieldDecl")
     }
 
-    def override preVisitExprMakeVariantField(var _expr : ExprMakeVariant?; _index : int; var decl : MakeFieldDeclPtr; _last : bool) : void {
+    def override preVisitExprMakeVariantField(var expr : ExprMakeVariant?; _index : int;
+                                              var decl : MakeFieldDeclPtr; _last : bool) : void {
+        if (decl != null && decl.value == null && is_bare_case_field(expr, decl)) return
         check_make_field(decl, "ExprMakeVariant field")
     }
 

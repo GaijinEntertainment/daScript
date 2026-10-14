@@ -365,7 +365,7 @@ namespace das {
         AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         static constexpr uint32_t getVersion () {
-            return 227;   // 227: a const global folds on the right-hand side of a plain copy
+            return 228;   // 228: a make-variant field of a case with no value carries no expression
         }
 
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;

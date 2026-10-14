@@ -208,7 +208,9 @@ bitfield type and the named single-bit access (`fl.read`) stops compiling.
 
 Variants (tagged unions) are declared like structs, constructed with exactly one field
 (`Value(asInt = 42)`), tested with `is`, read with `as` / `?as ... ?? default`. Writing a
-variant field or switching the active field requires `unsafe`.
+variant field or switching the active field requires `unsafe`. A case declared without a type
+(`variant Maybe { nothing; value : int }`) carries no value: `Maybe(nothing)` constructs it, `is`
+tests it, and `as`, `?as` and field reads do not compile on it.
 
 ## Memory model
 

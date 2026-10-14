@@ -460,11 +460,13 @@ class Perf033MoveScan : AstVisitor {
     }
 
     def override preVisitExprMakeStructField(_expr : ExprMakeStruct?; _index : int; decl : MakeFieldDeclPtr; _last : bool) : void {
-        takes ||= decl != null && decl.flags.moveSemantics && is_param(decl.value)
+        takes ||= (decl != null && decl.value != null && decl.flags.moveSemantics
+            && is_param(decl.value))
     }
 
     def override preVisitExprMakeVariantField(_expr : ExprMakeVariant?; _index : int; decl : MakeFieldDeclPtr; _last : bool) : void {
-        takes ||= decl != null && decl.flags.moveSemantics && is_param(decl.value)
+        takes ||= (decl != null && decl.value != null && decl.flags.moveSemantics
+            && is_param(decl.value))
     }
 
     def override preVisitExprCallArgument(var expr : ExprCall?; arg : ExpressionPtr; _last : bool) : void {

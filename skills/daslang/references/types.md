@@ -175,6 +175,15 @@ not change the index. Anonymous form `variant<i_value:uint; f_value:float>`; two
 when named cases, types, and order all match. A case value takes the struct-field sigils:
 `=` copies a copyable value, `<-` moves, `:=` clones and leaves the source intact.
 
+A case written without a type carries no value: `variant Maybe { nothing; value : int }`
+(anonymous: `variant<nothing; value:int>`). Construct it by name alone, `Maybe(nothing)`; test with
+`is`; inside a `match` (`require daslib/match`), the pattern `Maybe(nothing) => ...` tests it. It has
+no `as`, `?as`, or field read (compile errors) and costs no bytes and no alignment (a variant whose
+cases all lack a type is one `int`). A default-initialized variant is zeroed and so holds case 0:
+list the case without a type first to make it the default. `apply` (`require daslib/apply`) does
+not call its block for it; `print` writes `nothing`, `sprint_json` writes `{"nothing":null}` and
+`sscan_json` reads it back.
+
 ## Fixed arrays
 
 `T[N]` is one type node per dimension, outermost first: `float[4][4]` is 4 rows of `float[4]`.

@@ -4,6 +4,10 @@
 
 ### New Features
 
+#### Variant cases without a value
+
+- **A variant case written without a type is an index-only case** - `variant Maybe { nothing; value : int }` (anonymous: `variant<nothing; value:int>`) declares a case that has an index and no value; `Maybe(nothing)` constructs it, `is` tests it, `match` names it as `Maybe(nothing) => ...` and counts it for coverage, and `as` / `?as` / the unsafe field read refuse it at compile time. Such a case adds nothing to the variant's size or alignment, so a variant of only such cases is one `int`, and listing one first makes a default-initialized variant "unset" for free. `apply` runs nothing for it, print and JSON spell the case name (`{"nothing":null}`), and the AOT, JIT, clone, archive and serializer paths all carry it. `daslib/ast` gains `find_unique_typedef`, the typedef twin of `find_unique_structure`
+
 #### Batched decode on the GPU: `tg128@N` (#4073, #4078, #4081, #4082, #4083, #4085, #4087, #4091, #4094, #4096, #4102)
 
 - **dasllama-server serves a whole-model GPU slot from the device** (#4073) - `gpu = vulkan` serves a model that fits the card whole from the GPU, every stream's K/V cache in a device region; a finished stream parks its rows and the next turn adopts them. gemma-4-E2B Q4_K_M on an RTX 5060 Ti: one chat stream 31 -> 150 tok/s, bench pp512 141 -> 7915, tg128 34 -> 151; four chats decode together instead of queueing. `/v1/stats` and the model card say how a slot is served and count calls handed to the CPU
