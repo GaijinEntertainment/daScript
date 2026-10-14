@@ -783,54 +783,27 @@ typedef GatherStackKqFn = function<(t : Model; fmt : KqFmt; woff : int64; n, row
 var private g_layout_repack_q8 : ModelRepackFn
 var private g_layout_repack_kq : ModelRepackFn
 var private g_layout_repack_mx4 : ModelRepackFn
-var private g_layout_repack_q51 : ModelRepackFn
-var private g_layout_repack_iq4nl32 : ModelRepackFn
+//! one per-32 format's planes repacked in place
+typedef ModelRepackB32Fn = function<(var t : Model; fmt : KqFmt) : void>
+var private g_layout_repack_b32 : ModelRepackB32Fn
 typedef GatherStackB32Fn = function<(t : Model; woff : int64; n, rows, slice_rows : int64;
                                      repacked : bool; mr : int64; var wq : array<uint8>; var ws : array<uint8>) : void>
 var private g_layout_gather : GatherStackFn
 var private g_layout_gather_kq : GatherStackKqFn
-var private g_layout_gather_q51 : GatherStackB32Fn
-var private g_layout_gather_iq4nl32 : GatherStackB32Fn
+var private g_layout_gather_b32 : GatherStackKqFn
 var private g_layout_gather_mx4 : GatherStackB32Fn
-var private g_layout_gather_q4032 : GatherStackB32Fn
-var private g_layout_repack_q4032 : ModelRepackFn
 var private g_layout_hooks_set = false
 
-//! the q4032 planes' repack and gather: iq4nl32's pair over the q4032 planes
-def register_model_layout_q4032(rq : ModelRepackFn; gs : GatherStackB32Fn) {
-    g_layout_repack_q4032 = rq
-    g_layout_gather_q4032 = gs
-}
-
-def layout_repack_q4032(var t : Model) {
-    layout_hooks_check()
-    invoke(g_layout_repack_q4032, t)
-}
-
-var private g_layout_gather_q5032 : GatherStackB32Fn
-var private g_layout_repack_q5032 : ModelRepackFn
-
-//! the q5032 planes' repack and gather: q51's pair shape over the q5032 planes
-def register_model_layout_q5032(rq : ModelRepackFn; gs : GatherStackB32Fn) {
-    g_layout_repack_q5032 = rq
-    g_layout_gather_q5032 = gs
-}
-
-def layout_repack_q5032(var t : Model) {
-    layout_hooks_check()
-    invoke(g_layout_repack_q5032, t)
-}
-
-def register_model_layout(rq8, rkq, rmx4, rq51, riq4nl32 : ModelRepackFn; gs : GatherStackFn; gskq : GatherStackKqFn; gsq51, gsiq4nl32, gsmx4 : GatherStackB32Fn) {
+def register_model_layout(rq8, rkq, rmx4 : ModelRepackFn; rb32 : ModelRepackB32Fn;
+                          gs : GatherStackFn; gskq, gsb32 : GatherStackKqFn;
+                          gsmx4 : GatherStackB32Fn) {
     g_layout_repack_q8 = rq8
     g_layout_repack_kq = rkq
     g_layout_repack_mx4 = rmx4
-    g_layout_repack_q51 = rq51
-    g_layout_repack_iq4nl32 = riq4nl32
+    g_layout_repack_b32 = rb32
     g_layout_gather = gs
     g_layout_gather_kq = gskq
-    g_layout_gather_q51 = gsq51
-    g_layout_gather_iq4nl32 = gsiq4nl32
+    g_layout_gather_b32 = gsb32
     g_layout_gather_mx4 = gsmx4
     g_layout_hooks_set = true
 }
@@ -843,20 +816,10 @@ def layout_gather_dispatch(src : Model; f : KqFmt; woff, n, rows, slice_rows, mr
     let srows = slice_rows > 0l ? slice_rows : rows
     if (f == KqFmt.q8) {
         layout_gather_stack(src, woff, n, rows, srows, mr, kgroup, wbias, wq, ws)
-    } elif (f == KqFmt.q51) {
-        let qmr = disk ? 1l : active_q51_layout_mr()   // the q51 expert stacks sit in the active backend's grp<mr> layout (repack_q51_stacks), disk order at mr 1
-        layout_gather_stack_q51(src, woff, n, rows, srows, qmr > 1l, qmr, wq, ws)
-    } elif (f == KqFmt.iq4nl32) {
-        let qmr = disk ? 1l : active_iq4nl32_layout_mr()   // the iq4nl32 expert stacks sit in the active backend's grp<mr> layout, disk order at mr 1
-        layout_gather_stack_iq4nl32(src, woff, n, rows, srows, qmr > 1l, qmr, wq, ws)
-    } elif (f == KqFmt.q4032) {
-        layout_hooks_check()
-        let qmr = disk ? 1l : active_q4032_layout_mr()
-        invoke(g_layout_gather_q4032, src, woff, n, rows, srows, qmr > 1l, qmr, wq, ws)
-    } elif (f == KqFmt.q5032) {
-        layout_hooks_check()
-        let qmr = disk ? 1l : active_q5032_layout_mr()
-        invoke(g_layout_gather_q5032, src, woff, n, rows, srows, qmr > 1l, qmr, wq, ws)
+    } elif (kq_dense_b32(f)) {
+        // in the active grp<mr> layout (repack_b32_stacks); mr 1 = disk
+        let qmr = disk ? 1l : active_b32_layout_mr(f)
+        layout_gather_stack_b32(src, f, woff, n, rows, srows, qmr > 1l, qmr, wq, ws)
     } elif (f == KqFmt.mx4) {
         // the mx4 stacks ride the Q8 layout's grp<mr> interleave when the CPU repacked them (repack_mx4_stacks under the q8q8 perm), disk order otherwise
         layout_gather_stack_mx4(src, woff, n, rows, srows, src.mx4_repacked, active_q8_layout_mr(), wq, ws)
@@ -886,14 +849,9 @@ def layout_repack_mx4(var t : Model) {
     invoke(g_layout_repack_mx4, t)
 }
 
-def layout_repack_q51(var t : Model) {
+def layout_repack_b32(var t : Model; fmt : KqFmt) {
     layout_hooks_check()
-    invoke(g_layout_repack_q51, t)
-}
-
-def layout_repack_iq4nl32(var t : Model) {
-    layout_hooks_check()
-    invoke(g_layout_repack_iq4nl32, t)
+    invoke(g_layout_repack_b32, t, fmt)
 }
 
 // The GPU walk's gather half of the same hook contract. The residency rail intercepts each gather
@@ -911,10 +869,11 @@ def layout_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice_
     invoke(g_layout_gather_kq, t, fmt, woff, n, rows, slice_rows, repacked, mr, wq, ws)
 }
 
-def layout_gather_stack_q51(t : Model; woff : int64; n, rows, slice_rows : int64;
-                            repacked : bool; mr : int64; var wq : array<uint8>; var ws : array<uint8>) {
+def layout_gather_stack_b32(t : Model; fmt : KqFmt; woff : int64; n, rows, slice_rows : int64;
+                            repacked : bool; mr : int64; var wq : array<uint8>;
+                            var ws : array<uint8>) {
     layout_hooks_check()
-    invoke(g_layout_gather_q51, t, woff, n, rows, slice_rows, repacked, mr, wq, ws)
+    invoke(g_layout_gather_b32, t, fmt, woff, n, rows, slice_rows, repacked, mr, wq, ws)
 }
 
 def layout_gather_stack_mx4(t : Model; woff : int64; n, rows, slice_rows : int64;
@@ -923,11 +882,6 @@ def layout_gather_stack_mx4(t : Model; woff : int64; n, rows, slice_rows : int64
     invoke(g_layout_gather_mx4, t, woff, n, rows, slice_rows, repacked, mr, wq, ws)
 }
 
-def layout_gather_stack_iq4nl32(t : Model; woff : int64; n, rows, slice_rows : int64;
-                                repacked : bool; mr : int64; var wq : array<uint8>; var ws : array<uint8>) {
-    layout_hooks_check()
-    invoke(g_layout_gather_iq4nl32, t, woff, n, rows, slice_rows, repacked, mr, wq, ws)
-}
 
 // ===== whole-model GPU residency hook (registered by dasllama_gpu_resident at [init]) =====
 
@@ -2228,10 +2182,7 @@ def private dlim_cpu_source_impl(var c : DlimCpuConfig) {
             c.kq_mr[int(f)] = active_kq_layout_mr(kq_schema_id(f))
         }
     }
-    c.q51_mr = active_q51_layout_mr()
-    c.iq4nl32_mr = active_iq4nl32_layout_mr()
-    c.q4032_mr = active_q4032_layout_mr()
-    c.q5032_mr = active_q5032_layout_mr()
+    set_dlim_b32_mr(c) $(f) => active_b32_layout_mr(f)
     // OUTCOME, not request: a backend without s16 twins keeps f32 scale planes (wscale_convert_f16)
     c.wscale_f16 = g_wscale_f16 && kernel_backend_has_wscale16()
     c.kquant_native = g_kquant_native
@@ -2267,12 +2218,58 @@ def kq_planes_of(t : Model; fmt : KqFmt; var kq : array<uint8> const?&; var ks :
     }
 }
 
+//! `f`'s quant and scale planes in `t` through `blk`: a superblock
+//! format's kq-table slot, or the per-32 and mx4 formats' own pair;
+//! false for a format that keeps no such pair
+def kq_plane_pair(var t : Model; f : KqFmt;
+                  blk : block<(var q : array<uint8>; var s : array<uint8>) : void>) : bool {
+    if (kq_sb(f)) {
+        invoke(blk, t.kq[int(f)].q, t.kq[int(f)].s)
+    } elif (f == KqFmt.q51) {
+        invoke(blk, t.q51q, t.q51s)
+    } elif (f == KqFmt.iq4nl32) {
+        invoke(blk, t.iq4nl32q, t.iq4nl32s)
+    } elif (f == KqFmt.q4032) {
+        invoke(blk, t.q4032q, t.q4032s)
+    } elif (f == KqFmt.q5032) {
+        invoke(blk, t.q5032q, t.q5032s)
+    } elif (f == KqFmt.mx4) {
+        invoke(blk, t.mxq, t.mxs)
+    } else {
+        return false
+    }
+    return true
+}
+
+//! the read-only twin: `f`'s plane pair in a const `t`
+def kq_plane_pair(t : Model; f : KqFmt;
+                  blk : block<(q : array<uint8>; s : array<uint8>) : void>) : bool {
+    if (kq_sb(f)) {
+        invoke(blk, t.kq[int(f)].q, t.kq[int(f)].s)
+    } elif (f == KqFmt.q51) {
+        invoke(blk, t.q51q, t.q51s)
+    } elif (f == KqFmt.iq4nl32) {
+        invoke(blk, t.iq4nl32q, t.iq4nl32s)
+    } elif (f == KqFmt.q4032) {
+        invoke(blk, t.q4032q, t.q4032s)
+    } elif (f == KqFmt.q5032) {
+        invoke(blk, t.q5032q, t.q5032s)
+    } elif (f == KqFmt.mx4) {
+        invoke(blk, t.mxq, t.mxs)
+    } else {
+        return false
+    }
+    return true
+}
+
 [arch(at="../ARCHITECTURE_ENGINE_FORMATS.md#per-32-rail")]
 def kq_fmt_row_ok(f : KqFmt; n : int64) : KqFmt {
-    if (f == KqFmt.q51 || f == KqFmt.q5032) return n % 32l == 0l ? f : KqFmt.q8
-    if (f == KqFmt.iq4nl && n % 256l != 0l) return n % 32l == 0l ? KqFmt.iq4nl32 : KqFmt.q8
-    if (f == KqFmt.q40 && n % 256l != 0l) return n % 32l == 0l ? KqFmt.q4032 : KqFmt.q8
-    return f == KqFmt.k5 && n % 256l != 0l ? KqFmt.q8 : f
+    let on32 = n % KQ_B32_ELEMS == 0l
+    let off256 = n % KQ_SB_ELEMS != 0l
+    if (f == KqFmt.q51 || f == KqFmt.q5032) return on32 ? f : KqFmt.q8
+    if (f == KqFmt.iq4nl && off256) return on32 ? KqFmt.iq4nl32 : KqFmt.q8
+    if (f == KqFmt.q40 && off256) return on32 ? KqFmt.q4032 : KqFmt.q8
+    return f == KqFmt.k5 && off256 ? KqFmt.q8 : f
 }
 
 def kq_fmt_expert_ok(f : KqFmt; n : int64) : KqFmt => kq_fmt_row_ok(f, n)
@@ -4423,64 +4420,33 @@ def mm_at_mx4_groupn(var y : array<float>; t : Model; offs, boffs : array<int64>
     matmul_mx4q8_groupn(y, t.mxq, t.mxs, offs, nregions, xq, xs, t.fblob, boffs, n, d)
 }
 
-// ===== native q51 dispatch (Q8_0-form activations — NOT the kq Q8_K image) =====
+// ===== native per-32 dispatch (Q8_0-form activations) =====
 
-def mm_at_q51_groupn(var y : array<float>; t : Model; offs : array<int64>; nregions : int64; xq : array<int8>; xs : array<float>; n, d : int64) {
-    matmul_q51q8_groupn(y, t.q51q, t.q51s, offs, nregions, xq, xs, n, d)
+//! `fmt`'s per-32 planes against one Q8_0-form activation a region
+//! (the MoE decode dispatch)
+def mm_at_b32_groupn(var y : array<float>; t : Model; offs : array<int64>; nregions : int64;
+                     xq : array<int8>; xs : array<float>; n, d : int64; fmt : KqFmt) {
+    kq_plane_pair(t, fmt) $(q, s) {
+        matmul_b32q8_groupn(y, q, s, offs, nregions, xq, xs, n, d, fmt)
+    }
 }
 
-def mm_b_q51_pre(var y : array<float>; t : Model; woff : int64; xqb : array<int8>; xsb : array<float>; n, d, npos : int64) {
+//! `npos` Q8_0-form activation rows against `fmt`'s plane at `woff`
+def mm_b32_pre(var y : array<float>; t : Model; woff : int64; xqb : array<int8>; xsb : array<float>;
+               n, d, npos : int64; fmt : KqFmt) {
     let ts_gemm = prof_ticks()
-    matmul_q51q8_batch(y, t.q51q, t.q51s, woff, xqb, xsb, n, d, npos)
+    kq_plane_pair(t, fmt) $(q, s) {
+        matmul_b32q8_batch(y, q, s, woff, xqb, xsb, n, d, npos, fmt)
+    }
     prof_add("mm_gemm", ts_gemm)
 }
 
-def mm_b_q51_groupn(var y : array<float>; t : Model; offs : array<int64>; nregions : int64; xq : array<int8>; xs : array<float>; n, d : int64) {
-    matmul_q51q8_batch_groupn(y, t.q51q, t.q51s, offs, nregions, xq, xs, n, d)
-}
-
-// ===== native iq4nl32 dispatch (Q8_0-form activations, q51's shapes over the per-32 IQ4_NL planes) =====
-
-def mm_at_iq4nl32_groupn(var y : array<float>; t : Model; offs : array<int64>; nregions : int64; xq : array<int8>; xs : array<float>; n, d : int64) {
-    matmul_iq4nl32q8_groupn(y, t.iq4nl32q, t.iq4nl32s, offs, nregions, xq, xs, n, d)
-}
-
-def mm_b_iq4nl32_pre(var y : array<float>; t : Model; woff : int64; xqb : array<int8>; xsb : array<float>; n, d, npos : int64) {
-    let ts_gemm = prof_ticks()
-    matmul_iq4nl32q8_batch(y, t.iq4nl32q, t.iq4nl32s, woff, xqb, xsb, n, d, npos)
-    prof_add("mm_gemm", ts_gemm)
-}
-
-def mm_b_iq4nl32_groupn(var y : array<float>; t : Model; offs : array<int64>; nregions : int64; xq : array<int8>; xs : array<float>; n, d : int64) {
-    matmul_iq4nl32q8_batch_groupn(y, t.iq4nl32q, t.iq4nl32s, offs, nregions, xq, xs, n, d)
-}
-
-def mm_at_q4032_groupn(var y : array<float>; t : Model; offs : array<int64>; nregions : int64; xq : array<int8>; xs : array<float>; n, d : int64) {
-    matmul_q4032q8_groupn(y, t.q4032q, t.q4032s, offs, nregions, xq, xs, n, d)
-}
-
-def mm_b_q4032_pre(var y : array<float>; t : Model; woff : int64; xqb : array<int8>; xsb : array<float>; n, d, npos : int64) {
-    let ts_gemm = prof_ticks()
-    matmul_q4032q8_batch(y, t.q4032q, t.q4032s, woff, xqb, xsb, n, d, npos)
-    prof_add("mm_gemm", ts_gemm)
-}
-
-def mm_b_q4032_groupn(var y : array<float>; t : Model; offs : array<int64>; nregions : int64; xq : array<int8>; xs : array<float>; n, d : int64) {
-    matmul_q4032q8_batch_groupn(y, t.q4032q, t.q4032s, offs, nregions, xq, xs, n, d)
-}
-
-def mm_at_q5032_groupn(var y : array<float>; t : Model; offs : array<int64>; nregions : int64; xq : array<int8>; xs : array<float>; n, d : int64) {
-    matmul_q5032q8_groupn(y, t.q5032q, t.q5032s, offs, nregions, xq, xs, n, d)
-}
-
-def mm_b_q5032_pre(var y : array<float>; t : Model; woff : int64; xqb : array<int8>; xsb : array<float>; n, d, npos : int64) {
-    let ts_gemm = prof_ticks()
-    matmul_q5032q8_batch(y, t.q5032q, t.q5032s, woff, xqb, xsb, n, d, npos)
-    prof_add("mm_gemm", ts_gemm)
-}
-
-def mm_b_q5032_groupn(var y : array<float>; t : Model; offs : array<int64>; nregions : int64; xq : array<int8>; xs : array<float>; n, d : int64) {
-    matmul_q5032q8_batch_groupn(y, t.q5032q, t.q5032s, offs, nregions, xq, xs, n, d)
+//! `fmt`'s per-32 planes against each region's token rows (prefill)
+def mm_b_b32_groupn(var y : array<float>; t : Model; offs : array<int64>; nregions : int64;
+                    xq : array<int8>; xs : array<float>; n, d : int64; fmt : KqFmt) {
+    kq_plane_pair(t, fmt) $(q, s) {
+        matmul_b32q8_batch_groupn(y, q, s, offs, nregions, xq, xs, n, d, fmt)
+    }
 }
 
 // ===== native K-quant dispatch (kquant_native; fmt != q8 tags) =====
@@ -4598,13 +4564,10 @@ def moe_pair_kform(f1, f3 : KqFmt) : bool {
     return k1
 }
 
-//! the grp<mr> interleave a per-32 plane pair sits in: the active layout the load's repack laid (`layout_repack_q51` and its
-//! twin, `mr > 1` alone), disk order on a Metal blob, which no CPU repack touches
-def b32_active_mr(t : Model; fmt : KqFmt) : int64 {
-    return 1l if (t.metal_blob)
-    return fmt == KqFmt.q51 ? active_q51_layout_mr() : (fmt == KqFmt.iq4nl32 ? active_iq4nl32_layout_mr()
-        : (fmt == KqFmt.q5032 ? active_q5032_layout_mr() : active_q4032_layout_mr()))
-}
+//! the grp<mr> interleave a per-32 pair sits in: the active layout
+//! the load's repack laid (`layout_repack_b32`, `mr > 1` alone), disk
+//! order on a Metal blob, which no CPU repack touches
+def b32_active_mr(t : Model; fmt : KqFmt) : int64 => t.metal_blob ? 1l : active_b32_layout_mr(fmt)
 
 //! the per-32 token table's grp<mr>, read on the calling thread: the active layout is a module global, which a job lane's
 //! context holds at its own value, so a parallel embed reads it once outside the lanes (1 where the table is not per-32)
@@ -4614,37 +4577,15 @@ def embed_b32_mr(t : Model) : int64 => emb_kq(t) && kq_dense_b32(t.emb_fmt) ? b3
 //! packed region, rebased to 0)
 def private embed_b32_row(t : Model; fmt : KqFmt; token : int64; var dst : float?; mr : int64) {
     let dim = t.config.dim
-    var qbuf : uint8[20]   //! one block's bytes off a grp row: the widest per-32 block, q51's nibbles and qh word
-    var sbuf : uint8[4]    //! ... and its d | m halves
-    unsafe {
-        var row <- temp_array(dst, dim, type<float>)
-        var tq <- temp_array(addr(qbuf[0]), int(kq_qsb(fmt)), type<uint8>)
-        var ts <- temp_array(addr(sbuf[0]), int(kq_ssb(fmt)), type<uint8>)
-        let blk0 = t.planes_trimmed ? 0l : emb_kq_plane_off(t) / KQ_B32_ELEMS
-        if (t.planes_trimmed) {
-            b32_plane_row_f32(fmt, t.embq, t.embs, dim, t.config.vocab_size, mr, token, row, 0l, blk0, tq, ts)
-        } elif (fmt == KqFmt.q51) {
-            b32_plane_row_f32(fmt, t.q51q, t.q51s, dim, t.config.vocab_size, mr, token, row, 0l, blk0, tq, ts)
-        } elif (fmt == KqFmt.iq4nl32) {
-            b32_plane_row_f32(fmt, t.iq4nl32q, t.iq4nl32s, dim, t.config.vocab_size, mr, token, row, 0l, blk0, tq, ts)
-        } elif (fmt == KqFmt.q5032) {
-            b32_plane_row_f32(fmt, t.q5032q, t.q5032s, dim, t.config.vocab_size, mr, token, row, 0l, blk0, tq, ts)
-        } else {
-            b32_plane_row_f32(fmt, t.q4032q, t.q4032s, dim, t.config.vocab_size, mr, token, row, 0l, blk0, tq, ts)
-        }
-    }
-}
-
-//! `npos` Q8_0-form activation rows against a per-32 dense plane at `woff`: the expert kernels' batch form, one region
-def private mm_b32_pre(var y : array<float>; t : Model; fmt : KqFmt; woff : int64; xq : array<int8>; xs : array<float>; n, d, npos : int64) {
-    if (fmt == KqFmt.q51) {
-        mm_b_q51_pre(y, t, woff, xq, xs, n, d, npos)
-    } elif (fmt == KqFmt.iq4nl32) {
-        mm_b_iq4nl32_pre(y, t, woff, xq, xs, n, d, npos)
-    } elif (fmt == KqFmt.q5032) {
-        mm_b_q5032_pre(y, t, woff, xq, xs, n, d, npos)
+    let vocab = t.config.vocab_size
+    var row <- unsafe(temp_array(dst, dim, type<float>))
+    if (t.planes_trimmed) {
+        kq_plane_row_f32(fmt, t.embq, t.embs, dim, vocab, mr, token, row, 0l)
     } else {
-        mm_b_q4032_pre(y, t, woff, xq, xs, n, d, npos)
+        let blk0 = emb_kq_plane_off(t) / KQ_B32_ELEMS
+        kq_plane_pair(t, fmt) $(q, s) {
+            kq_plane_row_f32(fmt, q, s, dim, vocab, mr, token, row, 0l, blk0)
+        }
     }
 }
 
@@ -4655,7 +4596,7 @@ def mm_f(var y : array<float>; t : Model; fmt : KqFmt; woff : int64; x : array<f
         mm(y, t, woff, x, xq, xs, n, d)
     } elif (kq_dense_b32(fmt)) {
         quantize_q8_0_into(x, n, xq, xs, 0l, 0l)
-        mm_b32_pre(y, t, fmt, woff, xq, xs, n, d, 1l)
+        mm_b32_pre(y, t, woff, xq, xs, n, d, 1l, fmt)
     } else {
         mm_kq(y, t, fmt, woff, x, xq, xs, xbs, n, d)
     }
@@ -4667,7 +4608,7 @@ def mm_pre_f(var y : array<float>; t : Model; fmt : KqFmt; woff : int64; xq : ar
     if (fmt == KqFmt.q8) {
         mm_at_q8_pre(y, t, woff, xq, xs, n, d)
     } elif (kq_dense_b32(fmt)) {
-        mm_b32_pre(y, t, fmt, woff, xq, xs, n, d, 1l)
+        mm_b32_pre(y, t, woff, xq, xs, n, d, 1l, fmt)
     } else {
         mm_at_kq_pre(y, t, fmt, woff, kxq, kxs, kxbs, n, d)
     }
@@ -4683,7 +4624,7 @@ def mm_b_f(var s : Session; var y : array<float>; t : Model; fmt : KqFmt; woff :
         mm_b(y, t, woff, x, s.xqb, s.xsb, n, d, npos)
     } elif (kq_dense_b32(fmt)) {
         requant_rows_q8(x, n, npos, s.xqb, s.xsb)
-        mm_b32_pre(y, t, fmt, woff, s.xqb, s.xsb, n, d, npos)
+        mm_b32_pre(y, t, woff, s.xqb, s.xsb, n, d, npos, fmt)
     } else {
         mm_b_kq(s, y, t, fmt, woff, x, n, d, npos)
     }
@@ -4698,14 +4639,8 @@ def mm_at_f_groupn(var y : array<float>; t : Model; fmt : KqFmt; offs, boffs : a
                    xq : array<int8>; xs : array<float>; kxq : array<int8>; kxs : array<float>; kxbs : array<int>; n, d : int64) {
     if (kq_sb(fmt)) {
         mm_at_kq_groupn(y, t, fmt, offs, nregions, kxq, kxs, kxbs, n, d)
-    } elif (fmt == KqFmt.q51) {
-        mm_at_q51_groupn(y, t, offs, nregions, xq, xs, n, d)
-    } elif (fmt == KqFmt.iq4nl32) {
-        mm_at_iq4nl32_groupn(y, t, offs, nregions, xq, xs, n, d)
-    } elif (fmt == KqFmt.q4032) {
-        mm_at_q4032_groupn(y, t, offs, nregions, xq, xs, n, d)
-    } elif (fmt == KqFmt.q5032) {
-        mm_at_q5032_groupn(y, t, offs, nregions, xq, xs, n, d)
+    } elif (kq_dense_b32(fmt)) {
+        mm_at_b32_groupn(y, t, offs, nregions, xq, xs, n, d, fmt)
     } elif (t.experts_mx4) {
         if (biased) {
             mm_at_mx4_groupn(y, t, offs, boffs, nregions, xq, xs, n, d)
@@ -4726,14 +4661,8 @@ def mm_b_f_groupn(var y : array<float>; t : Model; fmt : KqFmt; offs, boffs : ar
                   xq : array<int8>; xs : array<float>; xbs : array<int>; n, d : int64) {
     if (kq_sb(fmt)) {
         mm_b_kq_groupn(y, t, fmt, offs, nregions, xq, xs, xbs, n, d)
-    } elif (fmt == KqFmt.q51) {
-        mm_b_q51_groupn(y, t, offs, nregions, xq, xs, n, d)
-    } elif (fmt == KqFmt.iq4nl32) {
-        mm_b_iq4nl32_groupn(y, t, offs, nregions, xq, xs, n, d)
-    } elif (fmt == KqFmt.q4032) {
-        mm_b_q4032_groupn(y, t, offs, nregions, xq, xs, n, d)
-    } elif (fmt == KqFmt.q5032) {
-        mm_b_q5032_groupn(y, t, offs, nregions, xq, xs, n, d)
+    } elif (kq_dense_b32(fmt)) {
+        mm_b_b32_groupn(y, t, offs, nregions, xq, xs, n, d, fmt)
     } elif (t.experts_mx4) {
         if (biased) {
             matmul_mx4q8_batch_groupn(y, t.mxq, t.mxs, offs, nregions, xq, xs, t.fblob, boffs, n, d)
@@ -4751,14 +4680,8 @@ def mm_b_f_groupn(var y : array<float>; t : Model; fmt : KqFmt; offs, boffs : ar
 def mm_b_f_pre(var y : array<float>; t : Model; fmt : KqFmt; woff : int64; xq : array<int8>; xs : array<float>; xbs : array<int>; n, d, npos : int64) {
     if (kq_sb(fmt)) {
         mm_b_kq_pre(y, t, fmt, woff, xq, xs, xbs, n, d, npos)
-    } elif (fmt == KqFmt.q51) {
-        mm_b_q51_pre(y, t, woff, xq, xs, n, d, npos)
-    } elif (fmt == KqFmt.iq4nl32) {
-        mm_b_iq4nl32_pre(y, t, woff, xq, xs, n, d, npos)
-    } elif (fmt == KqFmt.q4032) {
-        mm_b_q4032_pre(y, t, woff, xq, xs, n, d, npos)
-    } elif (fmt == KqFmt.q5032) {
-        mm_b_q5032_pre(y, t, woff, xq, xs, n, d, npos)
+    } elif (kq_dense_b32(fmt)) {
+        mm_b32_pre(y, t, woff, xq, xs, n, d, npos, fmt)
     } elif (t.experts_mx4) {
         if (!g_active_mx4_native_batch) {
             panic("mm_b_f_pre: the active backend has no native mx4 batch kernel - expand the region to Q8 at the site")

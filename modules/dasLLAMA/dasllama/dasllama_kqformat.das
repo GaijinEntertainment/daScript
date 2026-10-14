@@ -22,9 +22,12 @@ require daslib/strings_boost
 //! Per-weight storage format under a q8-mode load with native planes: q8 = qblob/qscales;
 //! k4/k5/k6/q40/iq4xs/k3/iq3s/iq3xxs/iq4nl/k2/iq2s/iq2xs/iq2xxs = superblock plane pairs (mixed PER TENSOR); q51 = native Q5_1 per-32
 //! planes; mx4 = the native MXFP4 expert planes (`Model.mxq` / `mxs` under `experts_mx4` - the GPU tiers' stack tag, never a
-//! per-tensor tag the loader writes); iq4nl32 = native IQ4_NL per-32 planes (the expert stacks whose rows are no superblock
-//! multiple - iq4nl's disk blocks with q51's plane form); q4032 = native Q4_0 per-32 planes (a Q4_0 plane whose rows are off the
-//! 256 lattice - iq4nl32's plane form under the linear codebook); q5032 = native Q5_0 per-32 planes on any 32-multiple row
+//! per-tensor tag the loader writes); iq4nl32 = native IQ4_NL per-32
+//! planes (any dense, expert or table plane whose rows are off the
+//! 256 lattice and on the 32 one - iq4nl's disk blocks with q51's
+//! plane form); q4032 = native Q4_0 per-32 planes (a Q4_0 plane off
+//! the 256 lattice - iq4nl32's plane form under the linear codebook);
+//! q5032 = native Q5_0 per-32 planes on any 32-multiple row
 //! (q51's quant plane - 16 nibble bytes + the qh word - under one f16 d, weight d x (q - 16)). New members append — the int value is the device stack tag and the image plane id.
 enum KqFmt : uint8 {
     q8
@@ -387,9 +390,9 @@ let KQ_SB_ELEMS = 256l
 let KQ_B32_ELEMS = 32l
 let KQ_B32_ELEMS_U = 32u   //! the Q8_0 block width as a kernel body reads it (a module `let` is a stamp; the int64 form is the host's)
 
-//! the per-32 formats' device planes (q51, iq4nl32, mx4): a block's quant words in the quant plane - the 16 nibble bytes, and on
-//! q51 the qh word after them - and its scale bytes in the scale plane (q51's d | m halves, iq4nl32's d half, mx4's E8M0 byte);
-//! a block's disk bytes are the two together, which `test_kqformat.das` pins against each row
+//! a per-32 device block: quant words (16 nibble bytes, then q51's
+//! and q5032's qh word) and scale bytes (q51's d | m, mx4's E8M0, the
+//! others' d) - its disk bytes, pinned a row each in test_kqformat
 let KQ_B32_QWORDS = 4u
 let KQ_Q51_QWORDS = 5u
 let KQ_Q51_SBYTES = 4u
@@ -581,6 +584,13 @@ let Q4032_QB = 16l     // Q4_0 quant plane PER 32-BLOCK: 16 nibble bytes (elemen
 let Q4032_SB = 2l      // Q4_0 scale plane PER 32-BLOCK: f16 d
 let Q5032_QB = 20l     // Q5_0 quant plane PER 32-BLOCK: q51's form - 16 nibble bytes (element j low, j + 16 high), then the qh word
 let Q5032_SB = 2l      // Q5_0 scale plane PER 32-BLOCK: f16 d
+//! a per-32 block's nibble bytes: elem j low in byte j, j + 16 high
+let B32_NIB_BYTES = int64(KQ_B32_QWORDS) * 4l
+//! q51's and q5032's qh word after the nibbles: elem k's bit 4 at k
+let B5_QH_BYTES = Q5032_QB - B32_NIB_BYTES
+//! the widest per-32 block's bytes (q51's): a one-block scratch
+let B32_MAX_QB = int(Q51_QB)
+let B32_MAX_SB = int(Q51_SB)
 let IQ4XS_QSB = 128l   // IQ4_XS quant plane: 128 nibble bytes, the disk k/k+16 pairing (q40 tiling)
 let IQ4XS_SSB = 20l    // IQ4_XS scale plane: f16 d, 2 pad, 8 x int8 (ls - 32), 8 pad — the k4 decoded-row shape
 let K3_QSB = 96l    // Q3_K quant plane: 64 qs bytes (four 2-bit lanes each) + 32 hmask bytes, verbatim disk order

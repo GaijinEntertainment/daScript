@@ -1203,64 +1203,26 @@ def kq_scale_doff(fmt : KqFmt; nsb_total, sb0 : int64) : int64 {
     return tail == 0l ? 0l : nsb_total * 16l + sb0 * tail
 }
 
-//! One q51 tensor's plane pair bind: quant plane (20B/block, uint-viewable) at (off/32)*20 and
-//! the f16 d+m scale plane at (off/32)*4 — both verbatim disk splits, never rebaked (the blob
-//! transform leaves q51 planes untouched). off % 128 keeps both binds 16B-aligned.
-def q51_planes_of(dev : MetalDevice?; t : Model; off : int64) : tuple<qbuf : MetalBuffer?; qoff : uint64; sbuf : MetalBuffer?; soff : uint64> {
-    assert(t.metal_blob)
-    let b0 = off / 32l
-    unsafe {
-        return (qbuf = plane_buffer(dev, addr < void? >(t.q51q[0]), uint64(long_length(t.q51q)), t.image_map != null),
-                qoff = uint64(b0 * 20l),
-                sbuf = plane_buffer(dev, addr < void? >(t.q51s[0]), uint64(long_length(t.q51s)), t.image_map != null),
-                soff = uint64(b0 * 4l))
-    }
-}
+//! a per-32 plane pair's binds: quant buffer and offset, then scale's
+typedef B32PlaneBind = tuple<qbuf : MetalBuffer?; qoff : uint64; sbuf : MetalBuffer?; soff : uint64>
 
-//! One iq4nl32 tensor's plane pair bind: nibble plane (16B/block, uint-viewable) at (off/32)*16 and
-//! the f16 d plane at (off/32)*2 — verbatim disk splits, never rebaked. off % 256 keeps both binds 16B-aligned.
-def iq4nl32_planes_of(dev : MetalDevice?; t : Model; off : int64) : tuple<qbuf : MetalBuffer?; qoff : uint64; sbuf : MetalBuffer?; soff : uint64> {
+//! A per-32 tensor's pair bind at block off/32: the quant plane
+//! (uint-viewable) and the scale plane, verbatim disk splits the blob
+//! never rebakes; `metal_blob_off_ok` keeps both binds 16B-aligned.
+def b32_planes_of(dev : MetalDevice?; t : Model; fmt : KqFmt; off : int64) : B32PlaneBind {
     assert(t.metal_blob)
-    let b0 = off / 32l
-    unsafe {
-        return (qbuf = plane_buffer(dev, addr < void? >(t.iq4nl32q[0]), uint64(long_length(t.iq4nl32q)), t.image_map != null),
-                qoff = uint64(b0 * IQ4NL32_QB),
-                sbuf = plane_buffer(dev, addr < void? >(t.iq4nl32s[0]), uint64(long_length(t.iq4nl32s)), t.image_map != null),
-                soff = uint64(b0 * IQ4NL32_SB))
+    let b0 = off / KQ_B32_ELEMS
+    let mapped = t.image_map != null
+    var qp : B32PlaneBind
+    kq_plane_pair(t, fmt) $(q, s) {
+        unsafe {
+            qp = (qbuf = plane_buffer(dev, addr<void?>(q[0]), uint64(long_length(q)), mapped),
+                  qoff = uint64(b0 * kq_qsb(fmt)),
+                  sbuf = plane_buffer(dev, addr<void?>(s[0]), uint64(long_length(s)), mapped),
+                  soff = uint64(b0 * kq_ssb(fmt)))
+        }
     }
-}
-
-//! One q4032 tensor's plane pair bind: iq4nl32's form over the q4032 planes
-def q4032_planes_of(dev : MetalDevice?; t : Model; off : int64) : tuple<qbuf : MetalBuffer?; qoff : uint64; sbuf : MetalBuffer?; soff : uint64> {
-    assert(t.metal_blob)
-    let b0 = off / 32l
-    unsafe {
-        return (qbuf = plane_buffer(dev, addr < void? >(t.q4032q[0]), uint64(long_length(t.q4032q)), t.image_map != null),
-                qoff = uint64(b0 * Q4032_QB),
-                sbuf = plane_buffer(dev, addr < void? >(t.q4032s[0]), uint64(long_length(t.q4032s)), t.image_map != null),
-                soff = uint64(b0 * Q4032_SB))
-    }
-}
-
-//! One q5032 tensor's plane pair bind: q51's 20B quant blocks at (off/32)*20 and the f16 d plane at (off/32)*2 - verbatim disk
-//! splits, never rebaked. off % 256 keeps both binds 16B-aligned.
-def q5032_planes_of(dev : MetalDevice?; t : Model; off : int64) : tuple<qbuf : MetalBuffer?; qoff : uint64; sbuf : MetalBuffer?; soff : uint64> {
-    assert(t.metal_blob)
-    let b0 = off / 32l
-    unsafe {
-        return (qbuf = plane_buffer(dev, addr < void? >(t.q5032q[0]), uint64(long_length(t.q5032q)), t.image_map != null),
-                qoff = uint64(b0 * Q5032_QB),
-                sbuf = plane_buffer(dev, addr < void? >(t.q5032s[0]), uint64(long_length(t.q5032s)), t.image_map != null),
-                soff = uint64(b0 * Q5032_SB))
-    }
-}
-
-//! a per-32 tensor's plane pair bind, by its format
-def b32_planes_of(dev : MetalDevice?; t : Model; fmt : KqFmt; off : int64) : tuple<qbuf : MetalBuffer?; qoff : uint64; sbuf : MetalBuffer?; soff : uint64> {
-    if (fmt == KqFmt.q51) return q51_planes_of(dev, t, off)
-    if (fmt == KqFmt.iq4nl32) return iq4nl32_planes_of(dev, t, off)
-    if (fmt == KqFmt.q5032) return q5032_planes_of(dev, t, off)
-    return q4032_planes_of(dev, t, off)
+    return qp
 }
 
 //! A 4-byte buffer holding one scalar - the caller says where the bytes come from.

@@ -321,15 +321,11 @@ def trim_pack_emb(src : Model; var t : Model; rebase : int64) : bool {
         let ssb = kq_ssb(f)
         t.embq |> reserve_resize(nsb * qsb)
         t.embs |> reserve_resize(nsb * ssb)
-        unsafe {
-            let qp = kq_sb(f) ? addr<void?>(src.kq[int(f)].q[sb0 * qsb]) : (f == KqFmt.q51 ? addr<void?>(src.q51q[sb0 * qsb])
-                : (f == KqFmt.iq4nl32 ? addr<void?>(src.iq4nl32q[sb0 * qsb])
-                : (f == KqFmt.q5032 ? addr<void?>(src.q5032q[sb0 * qsb]) : addr<void?>(src.q4032q[sb0 * qsb]))))
-            let sp = kq_sb(f) ? addr<void?>(src.kq[int(f)].s[sb0 * ssb]) : (f == KqFmt.q51 ? addr<void?>(src.q51s[sb0 * ssb])
-                : (f == KqFmt.iq4nl32 ? addr<void?>(src.iq4nl32s[sb0 * ssb])
-                : (f == KqFmt.q5032 ? addr<void?>(src.q5032s[sb0 * ssb]) : addr<void?>(src.q4032s[sb0 * ssb]))))
-            memcpy(addr<void?>(t.embq[0]), qp, nsb * qsb)
-            memcpy(addr<void?>(t.embs[0]), sp, nsb * ssb)
+        kq_plane_pair(src, f) $(q, s) {
+            unsafe {
+                memcpy(addr<void?>(t.embq[0]), addr<void?>(q[sb0 * qsb]), nsb * qsb)
+                memcpy(addr<void?>(t.embs[0]), addr<void?>(s[sb0 * ssb]), nsb * ssb)
+            }
         }
     }
     return true
@@ -381,27 +377,6 @@ def trim_model_planes(var t : Model) : bool {
             delete q
             delete s
         }
-    }
-    return true
-}
-
-//! format `f`'s quant and scale planes in `t` through `blk` - a superblock format's kq-table slot, or the per-32 and mx4
-//! formats' own pair; false for a format that keeps no such pair
-def kq_plane_pair(var t : Model; f : KqFmt; blk : block<(var q : array<uint8>; var s : array<uint8>) : void>) : bool {
-    if (kq_sb(f)) {
-        invoke(blk, t.kq[int(f)].q, t.kq[int(f)].s)
-    } elif (f == KqFmt.q51) {
-        invoke(blk, t.q51q, t.q51s)
-    } elif (f == KqFmt.iq4nl32) {
-        invoke(blk, t.iq4nl32q, t.iq4nl32s)
-    } elif (f == KqFmt.q4032) {
-        invoke(blk, t.q4032q, t.q4032s)
-    } elif (f == KqFmt.q5032) {
-        invoke(blk, t.q5032q, t.q5032s)
-    } elif (f == KqFmt.mx4) {
-        invoke(blk, t.mxq, t.mxs)
-    } else {
-        return false
     }
     return true
 }

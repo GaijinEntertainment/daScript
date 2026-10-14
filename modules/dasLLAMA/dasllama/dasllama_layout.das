@@ -297,48 +297,38 @@ def private repack_regions(var t : Model; regs : array<StreamReg>) {
     let rq8 = active_repack_q8q8()
     let rkq = active_repack_kq()
     let rmx = active_repack_mx4()
-    let rq51 = active_repack_q51()
-    let riq4 = active_repack_iq4nl32()
-    let rq40 = active_repack_q4032()
-    let rq50 = active_repack_q5032()
+    // plane bases and per-32 repacks by int(KqFmt): a region's format
+    var kqp, ksp : array<uint8?>
+    var rb32 : array<RepackQ51Fn>
+    kqp |> resize(KQ_FMT_COUNT)
+    ksp |> resize(KQ_FMT_COUNT)
+    rb32 |> resize(KQ_FMT_COUNT)
+    for (f in type<KqFmt>) {
+        kq_plane_pair(t, f) $(var q : array<uint8>; var s : array<uint8>) {
+            if (!empty(q)) {
+                kqp[int(f)] = unsafe(addr(q[0]))
+            }
+            if (!empty(s)) {
+                ksp[int(f)] = unsafe(addr(s[0]))
+            }
+        }
+        if (kq_dense_b32(f)) {
+            rb32[int(f)] = active_repack_b32(f)
+        }
+    }
     unsafe {
         var qbp : int8? = null
         var qsp : float? = null
-        var mxqp : uint8? = null
-        var mxsp : uint8? = null
-        var q51qp : uint8? = null
-        var q51sp : uint8? = null
-        var iq4qp : uint8? = null
-        var iq4sp : uint8? = null
-        var q40qp : uint8? = null
-        var q40sp : uint8? = null
-        var q50qp : uint8? = null
-        var q50sp : uint8? = null
-        // the lattice plane pairs' bases, by int(KqFmt); the lanes index them by the region's format
-        var kqp, ksp : array<uint8?>
-        kqp |> resize(KQ_FMT_COUNT)
-        ksp |> resize(KQ_FMT_COUNT)
-        for (pl, i in t.kq, count()) {
-            if (!empty(pl.q)) { kqp[i] = addr(pl.q[0]) }
-            if (!empty(pl.s)) { ksp[i] = addr(pl.s[0]) }
-        }
         if (!empty(t.qblob)) { qbp = addr(t.qblob[0]) }
         if (!empty(t.qscales)) { qsp = addr(t.qscales[0]) }
-        if (!empty(t.mxq)) { mxqp = addr(t.mxq[0]) }
-        if (!empty(t.mxs)) { mxsp = addr(t.mxs[0]) }
-        if (!empty(t.q51q)) { q51qp = addr(t.q51q[0]) }
-        if (!empty(t.q51s)) { q51sp = addr(t.q51s[0]) }
-        if (!empty(t.iq4nl32q)) { iq4qp = addr(t.iq4nl32q[0]) }
-        if (!empty(t.iq4nl32s)) { iq4sp = addr(t.iq4nl32s[0]) }
-        if (!empty(t.q4032q)) { q40qp = addr(t.q4032q[0]) }
-        if (!empty(t.q4032s)) { q40sp = addr(t.q4032s[0]) }
-        if (!empty(t.q5032q)) { q50qp = addr(t.q5032q[0]) }
-        if (!empty(t.q5032s)) { q50sp = addr(t.q5032s[0]) }
+        var mxqp = kqp[int(KqFmt.mx4)]
+        var mxsp = ksp[int(KqFmt.mx4)]
         let rp = addr<StreamReg const?>(regs[0])
         let nr = length(regs)
         let njobs = is_job_que_available() ? min(nr, 4 * (get_total_hw_jobs() + 1)) : 1
         var kqpp = addr(kqp[0])
         var kspp = addr(ksp[0])
+        var rb32p = addr(rb32[0])
         maybe_parallel_for(0, nr, njobs) $(rb, re) {
             unsafe {
                 for (i in range(rb, re)) {
@@ -346,29 +336,31 @@ def private repack_regions(var t : Model; regs : array<StreamReg>) {
                     if (f == 0) {
                         invoke(rq8, qbp + rp[i].off, qsp + rp[i].off / Q8_BLOCK_ELEMS, rp[i].n, rp[i].d)
                     } elif (f == 1) {
-                        invoke(rmx, mxqp + rp[i].off / 2l, mxsp + rp[i].off / 32l, rp[i].n, rp[i].d)
-                    } elif (f == 2) {
-                        invoke(rq51, q51qp + (rp[i].off / 32l) * Q51_QPB, q51sp + (rp[i].off / 32l) * Q51_SPB, rp[i].n, rp[i].d)
-                    } elif (f == IQ4NL32_STREAM_TAG) {
-                        invoke(riq4, iq4qp + (rp[i].off / 32l) * IQ4NL32_QB, iq4sp + (rp[i].off / 32l) * IQ4NL32_SB, rp[i].n, rp[i].d)
-                    } elif (f == Q4032_STREAM_TAG) {
-                        invoke(rq40, q40qp + (rp[i].off / 32l) * Q4032_QB, q40sp + (rp[i].off / 32l) * Q4032_SB, rp[i].n, rp[i].d)
-                    } elif (f == Q5032_STREAM_TAG) {
-                        invoke(rq50, q50qp + (rp[i].off / 32l) * Q5032_QB, q50sp + (rp[i].off / 32l) * Q5032_SB, rp[i].n, rp[i].d)
+                        let mb = rp[i].off / KQ_B32_ELEMS
+                        invoke(rmx, mxqp + rp[i].off / 2l, mxsp + mb, rp[i].n, rp[i].d)
                     } else {
-                        let sb = rp[i].off / 256l
                         var rf = KqFmt.q8
                         if (!kq_fmt_of_stream_code(f, rf)) {
                             panic("repack_regions: region code {f} names no kq format")
                         }
-                        invoke(rkq, kq_schema_id(rf), kqpp[int(rf)] + sb * kq_qsb(rf), kspp[int(rf)] + sb * kq_ssb(rf), rp[i].n, rp[i].d)
+                        let u = rp[i].off / kq_elems(rf)
+                        var qp = kqpp[int(rf)] + u * kq_qsb(rf)
+                        var sp = kspp[int(rf)] + u * kq_ssb(rf)
+                        if (kq_sb(rf)) {
+                            invoke(rkq, kq_schema_id(rf), qp, sp, rp[i].n, rp[i].d)
+                        } else {
+                            invoke(rb32p[int(rf)], qp, sp, rp[i].n, rp[i].d)
+                        }
                     }
                 }
             }
         }
+        kqp |> clear()
+        ksp |> clear()
         delete kqp
         delete ksp
     }
+    delete rb32
 }
 
 // Repack every Q8 2D weight tensor in qblob/qscales into the active backend's interleaved layout,
@@ -708,58 +700,13 @@ def private collect_b32_table_regions(t : Model; var regs : array<StreamReg>; fm
     }
 }
 
-def private collect_q51_regions(t : Model; var regs : array<StreamReg>) {
-    collect_b32_regions(t, regs, KqFmt.q51)
-}
-
-def private collect_iq4nl32_regions(t : Model; var regs : array<StreamReg>) {
-    collect_b32_regions(t, regs, KqFmt.iq4nl32)
-}
-
-def private repack_q51_stacks(var t : Model) {
+//! every plane of per-32 format `fmt` repacked to the active grp<mr>
+def private repack_b32_stacks(var t : Model; fmt : KqFmt) {
     var regs : array<StreamReg>
-    collect_q51_regions(t, regs)
+    collect_b32_regions(t, regs, fmt)
     if (!empty(regs)) {
         repack_regions(t, regs)
-        to_log(LOG_INFO, "dasLLAMA: q51 expert planes repacked to grp{active_q51_layout_mr()}\n")
-    }
-    delete regs
-}
-
-def private repack_iq4nl32_stacks(var t : Model) {
-    var regs : array<StreamReg>
-    collect_iq4nl32_regions(t, regs)
-    if (!empty(regs)) {
-        repack_regions(t, regs)
-        to_log(LOG_INFO, "dasLLAMA: iq4nl32 expert planes repacked to grp{active_iq4nl32_layout_mr()}\n")
-    }
-    delete regs
-}
-
-def private collect_q4032_regions(t : Model; var regs : array<StreamReg>) {
-    collect_b32_regions(t, regs, KqFmt.q4032)
-}
-
-def private repack_q4032_stacks(var t : Model) {
-    var regs : array<StreamReg>
-    collect_q4032_regions(t, regs)
-    if (!empty(regs)) {
-        repack_regions(t, regs)
-        to_log(LOG_INFO, "dasLLAMA: q4032 planes repacked to grp{active_q4032_layout_mr()}\n")
-    }
-    delete regs
-}
-
-def private collect_q5032_regions(t : Model; var regs : array<StreamReg>) {
-    collect_b32_regions(t, regs, KqFmt.q5032)
-}
-
-def private repack_q5032_stacks(var t : Model) {
-    var regs : array<StreamReg>
-    collect_q5032_regions(t, regs)
-    if (!empty(regs)) {
-        repack_regions(t, regs)
-        to_log(LOG_INFO, "dasLLAMA: q5032 planes repacked to grp{active_q5032_layout_mr()}\n")
+        to_log(LOG_INFO, "dasLLAMA: {fmt} planes repacked to grp{active_b32_layout_mr(fmt)}\n")
     }
     delete regs
 }
@@ -771,18 +718,18 @@ def private stream_repack_one(fmt : int; qp, sp : void?; n, d : int64) {
     unsafe {
         if (fmt == 0) {
             invoke(active_repack_q8q8(), reinterpret<int8?>(qp), reinterpret<float?>(sp), n, d)
-        } elif (fmt == 2) {
-            invoke(active_repack_q51(), reinterpret<uint8?>(qp), reinterpret<uint8?>(sp), n, d)
-        } elif (fmt == IQ4NL32_STREAM_TAG) {
-            invoke(active_repack_iq4nl32(), reinterpret<uint8?>(qp), reinterpret<uint8?>(sp), n, d)
-        } elif (fmt == Q4032_STREAM_TAG) {
-            invoke(active_repack_q4032(), reinterpret<uint8?>(qp), reinterpret<uint8?>(sp), n, d)
-        } elif (fmt == Q5032_STREAM_TAG) {
-            invoke(active_repack_q5032(), reinterpret<uint8?>(qp), reinterpret<uint8?>(sp), n, d)
-        } elif (fmt == K2_STREAM_TAG) {
-            invoke(active_repack_kq(), 2, reinterpret<uint8?>(qp), reinterpret<uint8?>(sp), n, d)
+            return
+        }
+        var rf = KqFmt.q8
+        if (!kq_fmt_of_stream_code(fmt, rf)) {
+            panic("stream_repack_one: region code {fmt} names no plane format")
+        }
+        var q = reinterpret<uint8?>(qp)
+        var s = reinterpret<uint8?>(sp)
+        if (kq_dense_b32(rf)) {
+            invoke(active_repack_b32(rf), q, s, n, d)
         } else {
-            invoke(active_repack_kq(), fmt, reinterpret<uint8?>(qp), reinterpret<uint8?>(sp), n, d)
+            invoke(active_repack_kq(), kq_schema_id(rf), q, s, n, d)
         }
     }
 }
@@ -999,24 +946,14 @@ def private moe_gpu_gather_stack_b32(qplane, splane : array<uint8>; qb, sb : int
     }
 }
 
-def moe_gpu_gather_stack_q51(t : Model; woff : int64; n, rows, slice_rows : int64;
-                             repacked : bool; mr : int64; var wq : array<uint8>; var ws : array<uint8>) {
-    moe_gpu_gather_stack_b32(t.q51q, t.q51s, Q51_QB, Q51_SB, woff, n, rows, slice_rows, repacked, mr, wq, ws)
-}
-
-def moe_gpu_gather_stack_iq4nl32(t : Model; woff : int64; n, rows, slice_rows : int64;
-                                 repacked : bool; mr : int64; var wq : array<uint8>; var ws : array<uint8>) {
-    moe_gpu_gather_stack_b32(t.iq4nl32q, t.iq4nl32s, IQ4NL32_QB, IQ4NL32_SB, woff, n, rows, slice_rows, repacked, mr, wq, ws)
-}
-
-def moe_gpu_gather_stack_q4032(t : Model; woff : int64; n, rows, slice_rows : int64;
-                               repacked : bool; mr : int64; var wq : array<uint8>; var ws : array<uint8>) {
-    moe_gpu_gather_stack_b32(t.q4032q, t.q4032s, Q4032_QB, Q4032_SB, woff, n, rows, slice_rows, repacked, mr, wq, ws)
-}
-
-def moe_gpu_gather_stack_q5032(t : Model; woff : int64; n, rows, slice_rows : int64;
-                               repacked : bool; mr : int64; var wq : array<uint8>; var ws : array<uint8>) {
-    moe_gpu_gather_stack_b32(t.q5032q, t.q5032s, Q5032_QB, Q5032_SB, woff, n, rows, slice_rows, repacked, mr, wq, ws)
+//! one stack of per-32 format `fmt` gathered off its own plane pair
+def moe_gpu_gather_b32_stack(t : Model; fmt : KqFmt; woff : int64; n, rows, slice_rows : int64;
+                             repacked : bool; mr : int64; var wq : array<uint8>;
+                             var ws : array<uint8>) {
+    kq_plane_pair(t, fmt) $(q, s) {
+        moe_gpu_gather_stack_b32(q, s, kq_qsb(fmt), kq_ssb(fmt), woff, n, rows, slice_rows,
+            repacked, mr, wq, ws)
+    }
 }
 
 //! Gather one native-MXFP4 expert stack into the GPU tier's device planes: the disk layout (16 nibble bytes and one E8M0
@@ -1275,12 +1212,9 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
 
 [init]
 def private register_layout_hooks {
-    register_model_layout(@@repack_q8_weights, @@repack_kq_weights, @@repack_mx4_stacks, @@repack_q51_stacks, @@repack_iq4nl32_stacks,
-        @@moe_gpu_gather_stack, @@moe_gpu_gather_stack_kq, @@moe_gpu_gather_stack_q51, @@moe_gpu_gather_stack_iq4nl32, @@moe_gpu_gather_stack_mx4)
-    register_model_layout_q4032(@@repack_q4032_stacks, @@moe_gpu_gather_stack_q4032)
-    register_stream_layout_q4032(@@collect_q4032_regions)
-    register_model_layout_q5032(@@repack_q5032_stacks, @@moe_gpu_gather_stack_q5032)
-    register_stream_layout_q5032(@@collect_q5032_regions)
-    register_stream_layout(@@collect_q8_regions, @@collect_kq_regions, @@collect_q51_regions, @@collect_iq4nl32_regions, @@stream_repack_one,
-        @@metal_blob_eligible, @@metal_blob_scale_plane)
+    register_model_layout(@@repack_q8_weights, @@repack_kq_weights, @@repack_mx4_stacks,
+        @@repack_b32_stacks, @@moe_gpu_gather_stack, @@moe_gpu_gather_stack_kq,
+        @@moe_gpu_gather_b32_stack, @@moe_gpu_gather_stack_mx4)
+    register_stream_layout(@@collect_q8_regions, @@collect_kq_regions, @@collect_b32_regions,
+        @@stream_repack_one, @@metal_blob_eligible, @@metal_blob_scale_plane)
 }

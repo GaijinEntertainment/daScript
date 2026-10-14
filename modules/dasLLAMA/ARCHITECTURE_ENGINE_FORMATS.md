@@ -113,9 +113,13 @@ Every materialized cos/sin table is the same fill; the position source is what d
 
 The per-32 formats (`q51`, `iq4nl32`, `q4032`, `q5032`) sit off the superblock lattice: 32-weight blocks, Q8_0-form
 activations, dedicated `Model` plane pairs (`ARCHITECTURE_IMAGE.md#image-kq-table-sb-only`), and in
-`dasllama_math.das` one body per kernel shape (`b32_batch_kernel`, `b32_groupn_kernel`,
+`dasllama_math_default.das` one body per kernel shape (`b32_batch_kernel`, `b32_groupn_kernel`,
 `b32_batch_groupn_kernel`) generic over the `KqTag_<fmt>` it takes last - the tag picks the
-strides, the row expand, the grp scale gather and the expanded-row dot. `iq4nl32` is the IQ4_NL
+strides, the row expand, the grp scale gather and the expanded-row dot; the two 5-bit members share
+q51's leaves under a level and fold arm (`b5_level`, `b5_fold`). Every per-format seat around them
+is a table indexed by `int(KqFmt)` - the backend's `B32Slots` (`KernelBackend.b32`), the layout and
+stream hooks - read by one fmt-taking call (`matmul_b32q8_*`, `mm_b32_pre`, `b32_planes_of`), the
+planes reached through `kq_plane_pair`. `iq4nl32` is the IQ4_NL
 disk block served per-32 and `q4032` the Q4_0 one: `kq_fmt_row_ok` chooses each for a plane whose
 rows are off the 256 lattice and on the 32 lattice (the superblock members `iq4nl` and `q40` serve a
 `% 256` row), and `q51` and `q5032` keep their tags on any 32-multiple row - Q5_0 has no superblock
@@ -229,8 +233,9 @@ repack walks that plane's region alone (`shexp_plane_q8`).
   (`reserve_resize`, `grow_resize`, `ensure_length`, `overwrite_resize`). Kernels themselves
   live in a tier file; a kernel body here is a placement defect.
 - **`dasllama_math_default.das`** - the portable backend, always registered, always correct,
-  out-ranked by any platform tier - and the ONE body of every Q8*Q8 and mx4 kernel shape: each
-  shape is a `def template` over a dot and a chunk-split placeholder, and `[from_template]` stamps
+  out-ranked by any platform tier - the per-32 rail's portable kernels and scalar leaves, which
+  seat every backend's unset per-32 slot (`#per-32-rail`) - and the ONE body of every Q8*Q8 and
+  mx4 kernel shape: each shape is a `def template` over a dot and a chunk-split placeholder, and `[from_template]` stamps
   it per (dot, split) and per weight-scale plane (the f32 plane and the wscale_f16 halfword plane,
   bit-identical over the widened plane). The idot4 stamps the arm64 tier registers live here too:
   the `idot4` builtin is plain das that every target lowers for itself.

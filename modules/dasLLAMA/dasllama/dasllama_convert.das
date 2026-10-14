@@ -13,6 +13,7 @@ require dasllama/dasllama_math       // get_dispatch_lanes — the requant wrapp
 require dasllama/dasllama_math_default   // dequant_kq_row_grp - the repacked plane's group gather behind kq_plane_row_f32
 require dasllama/dasllama_kqformat public   // KqFmt + the plane stride truth (K4_QSB et al.) — re-exported down the gguf chain
 require dasllama/dasllama_tune       // [tuned]: the f16 row converts carry per-box loop hints
+require daslib/array_boost  // nolint:STYLE030 — temp_array is a [template] the rule misses
 require dasllama/dasllama_tune_scope  // nolint:STYLE030 — the dasllama [tune_scope] must be on the AST before this module's [tuned] kernels pick their perms
 
 // Tensor format conversion, platform-neutral: the pure codec layer — LE byte readers, K-quant
@@ -1160,24 +1161,18 @@ def kq_transcode_p(src : uint8 const?; var kq : uint8?; var ks : uint8?; _f : Kq
 //! exact: the 2 scale bytes to ks, the nibbles then qh to kq (q51's quant form).
 def kq_transcode_p(src : uint8 const?; var kq : uint8?; var ks : uint8?; _f : KqTag_q5032) {
     unsafe {
-        bcopy(ks, src, 2l)
-        bcopy(kq, src + 6l, 16l)
-        bcopy(kq + 16l, src + 2l, 4l)
+        bcopy(ks, src, Q5032_SB)
+        bcopy(kq, src + Q5032_SB + B5_QH_BYTES, B32_NIB_BYTES)
+        bcopy(kq + B32_NIB_BYTES, src + Q5032_SB, B5_QH_BYTES)
     }
 }
 
-//! Reference dequant of one q5032-plane 32-block: w = d * (q - 16) with q = nibble | qh_bit << 4 (elem k reads qh bit k, elem
-//! k + 16 bit k + 16), `dequantize_row_q5_0`'s order.
-def dequant_q5032_plane_block(kq : array<uint8> | #; kqo : int64; ks : array<uint8> | #; kso : int64; var dst : array<float> | #; doff : int64) {
-    let d = f16_to_f32(rd_u16(ks, kso))
-    let qh = rd_u32(kq, kqo + 16l)
-    for (k in range64(16l)) {
-        let b = int(kq[kqo + k])
-        let h0 = (int(qh >> uint(k)) & 1) << 4
-        let h1 = (int(qh >> uint(k + 16l)) & 1) << 4
-        dst[doff + k] = float(((b & 15) | h0) - 16) * d
-        dst[doff + k + 16l] = float(((b >> 4) | h1) - 16) * d
-    }
+//! Reference dequant of one q5032-plane 32-block: w = d * (q - 16),
+//! q = nibble | qh_bit << 4 (elem k reads qh bit k, elem k + 16 bit
+//! k + 16), `dequantize_row_q5_0`'s order.
+def dequant_q5032_plane_block(kq : array<uint8> | #; kqo : int64; ks : array<uint8> | #;
+                              kso : int64; var dst : array<float> | #; doff : int64) {
+    dequant_b5_plane_block(kq, kqo, ks, kso, dst, doff, KqTag_q5032())
 }
 
 //! Reference dequant of one q4032-plane 32-block: w = d * (q - 8), `dequantize_row_q4_0`'s order - the codebook block under
@@ -1204,59 +1199,79 @@ def private dequant_nl32_plane_block(kq : array<uint8> | #; kqo : int64; ks : ar
 
 //! Reference dequant of one q51-plane 32-block: w = d * q + m with q = nibble | qh_bit << 4
 //! (elem k reads qh bit k, elem k+16 bit k+16 — the on-disk Q5_1 bit map, kept verbatim).
-def dequant_q51_plane_block(kq : array<uint8> | #; kqo : int64; ks : array<uint8> | #; kso : int64; var dst : array<float> | #; doff : int64) {
-    let d = f16_to_f32(rd_u16(ks, kso))
-    let m = f16_to_f32(rd_u16(ks, kso + 2l))
-    let qh = rd_u32(kq, kqo + 16l)
-    for (k in range64(16l)) {
+def dequant_q51_plane_block(kq : array<uint8> | #; kqo : int64; ks : array<uint8> | #; kso : int64;
+                            var dst : array<float> | #; doff : int64) {
+    dequant_b5_plane_block(kq, kqo, ks, kso, dst, doff, KqTag_q51())
+}
+
+//! one 5-bit per-32 block (q51's quant form) under the format's
+//! level, each weight its block fold over one unit of activation:
+//! q51's d·q + m, q5032's d·(q - 16)
+def private dequant_b5_plane_block(kq : array<uint8> | #; kqo : int64; ks : array<uint8> | #;
+                                   kso : int64; var dst : array<float> | #; doff : int64;
+                                   f : auto(TT)) {
+    let qh = rd_u32(kq, kqo + B32_NIB_BYTES)
+    let sp = unsafe(addr<uint8 const?>(ks[kso]))
+    for (k in range64(B32_NIB_BYTES)) {
         let b = int(kq[kqo + k])
         let h0 = (int(qh >> uint(k)) & 1) << 4
-        let h1 = (int(qh >> uint(k + 16l)) & 1) << 4
-        dst[doff + k] = d * float((b & 15) | h0) + m
-        dst[doff + k + 16l] = d * float((b >> 4) | h1) + m
+        let h1 = (int(qh >> uint(k + B32_NIB_BYTES)) & 1) << 4
+        dst[doff + k] = b5_fold(sp, b5_level((b & 15) | h0, f), 1, f)
+        dst[doff + k + B32_NIB_BYTES] = b5_fold(sp, b5_level((b >> 4) | h1, f), 1, f)
     }
 }
 
-//! one per-32 plane block (block `bi` of the pair) dequantized into dst[doff..]: the format's verbatim block form
-def dequant_b32_plane_block(f : KqFmt; kq : array<uint8> | #; ks : array<uint8> | #; bi : int64; var dst : array<float> | #; doff : int64) {
+//! block `bi` of a per-32 plane pair dequantized into dst[doff..]:
+//! the format's verbatim block form
+def dequant_b32_plane_block(f : KqFmt; kq : array<uint8> | #; ks : array<uint8> | #; bi : int64;
+                            var dst : array<float> | #; doff : int64) {
+    let qo = bi * kq_qsb(f)
+    let so = bi * kq_ssb(f)
     if (f == KqFmt.q51) {
-        dequant_q51_plane_block(kq, bi * Q51_QB, ks, bi * Q51_SB, dst, doff)
+        dequant_q51_plane_block(kq, qo, ks, so, dst, doff)
     } elif (f == KqFmt.iq4nl32) {
-        dequant_iq4nl32_plane_block(kq, bi * IQ4NL32_QB, ks, bi * IQ4NL32_SB, dst, doff)
+        dequant_iq4nl32_plane_block(kq, qo, ks, so, dst, doff)
     } elif (f == KqFmt.q4032) {
-        dequant_q4032_plane_block(kq, bi * Q4032_QB, ks, bi * Q4032_SB, dst, doff)
+        dequant_q4032_plane_block(kq, qo, ks, so, dst, doff)
     } elif (f == KqFmt.q5032) {
-        dequant_q5032_plane_block(kq, bi * Q5032_QB, ks, bi * Q5032_SB, dst, doff)
+        dequant_q5032_plane_block(kq, qo, ks, so, dst, doff)
     } else {
         panic("dequant_b32_plane_block: '{f}' has no per-32 plane pair")
     }
 }
 
-//! Row r of a per-32 plane region (`nout` rows of `nin`, from block `blk0`) as f32 into dst[doff..]: a whole grp<mr> group's row
-//! through `repack_unit_form`'s interleave, a tail row in disk order; `tq` / `ts` are the caller's one-block buffers
-def b32_plane_row_f32(f : KqFmt; kq, ks : array<uint8>; nin, nout, mr, r : int64; var dst : array<float>; doff : int64; blk0 : int64;
-                      var tq : array<uint8> | #; var ts : array<uint8> | #) {
+//! kq_plane_row_f32's per-32 arm: a whole grp<mr> group's row through
+//! `repack_unit_form`'s interleave, a block at a time into a scratch
+//! block; a tail row in disk order
+def private b32_plane_row_f32(f : KqFmt; kq, ks : array<uint8>; nin, nout, mr, r : int64;
+                              var dst : array<float>; doff : int64; blk0 : int64) {
     let nb = nin / KQ_B32_ELEMS
-    let qb = kq_qsb(f)
-    let sb = kq_ssb(f)
     if (mr <= 1l || r >= (nout / mr) * mr) {
         for (bi in range64(nb)) {
             dequant_b32_plane_block(f, kq, ks, blk0 + r * nb + bi, dst, doff + bi * KQ_B32_ELEMS)
         }
         return
     }
+    let qb = kq_qsb(f)
+    let sb = kq_ssb(f)
+    var qbuf : uint8[B32_MAX_QB]
+    var sbuf : uint8[B32_MAX_SB]
     let gbase = blk0 + (r / mr) * mr * nb
     let rg = r % mr
-    for (bi in range64(nb)) {
-        let qo = (gbase + bi * mr) * qb
-        for (j in range64(qb)) {
-            tq[j] = kq[qo + (j / 4l) * 4l * mr + rg * 4l + j % 4l]
+    unsafe {
+        var tq <- temp_array(addr(qbuf[0]), int(qb), type<uint8>)
+        var ts <- temp_array(addr(sbuf[0]), int(sb), type<uint8>)
+        for (bi in range64(nb)) {
+            let qo = (gbase + bi * mr) * qb
+            for (j in range64(qb)) {
+                tq[j] = kq[qo + (j / 4l) * 4l * mr + rg * 4l + j % 4l]
+            }
+            let so = (gbase + bi * mr) * sb + rg * sb
+            for (j in range64(sb)) {
+                ts[j] = ks[so + j]
+            }
+            dequant_b32_plane_block(f, tq, ts, 0l, dst, doff + bi * KQ_B32_ELEMS)
         }
-        let so = (gbase + bi * mr) * sb + rg * sb
-        for (j in range64(sb)) {
-            ts[j] = ks[so + j]
-        }
-        dequant_b32_plane_block(f, tq, ts, 0l, dst, doff + bi * KQ_B32_ELEMS)
     }
 }
 
@@ -1351,11 +1366,15 @@ def quantize_q8_0(src : array<float> | #; n : int64) : Q8Tensor {
     return <- qt
 }
 
-//! Row r of a K-quant plane pair as f32 into dst[doff..]: `mr` = the interleave the plane was repacked to (1 = disk order; a Model's
-//! frozen `kq_active_mr`, a TTS plane's active layout), `sb0` = the plane's first superblock inside a larger pair (a model blob's
-//! region), `metal_blob` = the split GPU scale form.
+//! Row r of a K-quant or per-32 plane pair as f32 into dst[doff..]:
+//! `mr` its repack interleave (1 = disk), `sb0` its first stride unit
+//! in a larger pair, `metal_blob` the split GPU scale form.
 def kq_plane_row_f32(f : KqFmt; kq, ks : array<uint8>; nin, nout, mr : int64; r : int64; var dst : array<float>; doff : int64;
                      sb0 : int64 = 0l; metal_blob : bool = false) {
+    if (!kq_sb(f)) {
+        b32_plane_row_f32(f, kq, ks, nin, nout, mr, r, dst, doff, sb0)
+        return
+    }
     let nsb = nin / kq_elems(f)
     let packed_rows = mr > 1l ? (nout / mr) * mr : 0l
     if (r < packed_rows) {

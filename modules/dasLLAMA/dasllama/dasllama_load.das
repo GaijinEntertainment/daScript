@@ -736,38 +736,32 @@ def private stream_no_repack(fmt : int; qp, sp : void?; n, d : int64) {
     panic("dasLLAMA: no stream-repack hook registered (dasllama_layout's [init] provides it)")
 }
 
+//! one per-32 format's regions
+typedef StreamCollectB32Fn = function<(t : Model; var regs : array<StreamReg>; fmt : KqFmt) : void>
+
+[unused_argument(t, regs, fmt)]
+def private stream_no_collect_b32(t : Model; var regs : array<StreamReg>; fmt : KqFmt) {
+    panic("dasLLAMA: no stream-layout hooks registered (dasllama_layout's [init] provides them)")
+}
+
 var private g_stream_collect_q8 = @@stream_no_collect
 var private g_stream_collect_kq = @@stream_no_collect
-var private g_stream_collect_q51 = @@stream_no_collect
-var private g_stream_collect_iq4nl32 = @@stream_no_collect
-var private g_stream_collect_q4032 = @@stream_no_collect
-var private g_stream_collect_q5032 = @@stream_no_collect
+var private g_stream_collect_b32 = @@stream_no_collect_b32
 var private g_stream_repack = @@stream_no_repack
 var private g_blob_eligible : BlobEligibleFn
 
-//! dasllama_layout registers the streaming-fill collaborators at [init]: the four region
-//! collectors (the repack walkers' build halves), the single-region repack dispatcher, and the
-//! metal-blob pair the streamed build consults to mint the blob flavor straight off the gguf.
-def register_stream_layout(cq8, ckq, cq51, ciq4nl32 : StreamCollectFn; rr : StreamRepackFn;
-                           be : BlobEligibleFn; bsp : BlobScalePlaneFn) {
+//! dasllama_layout's [init] registers the streamed fill's helpers:
+//! the region collectors (the repack walkers' build halves), the
+//! one-region repack, and the metal-blob pair that mints the blob.
+def register_stream_layout(cq8, ckq : StreamCollectFn; cb32 : StreamCollectB32Fn;
+                           rr : StreamRepackFn; be : BlobEligibleFn; bsp : BlobScalePlaneFn) {
     g_stream_collect_q8 = cq8
     g_stream_collect_kq = ckq
-    g_stream_collect_q51 = cq51
-    g_stream_collect_iq4nl32 = ciq4nl32
+    g_stream_collect_b32 = cb32
     g_stream_repack = rr
     g_blob_eligible = be
     g_blob_scale_plane = bsp
     g_blob_hooks_set = true
-}
-
-//! the q4032 planes' region collector, registered beside the four
-def register_stream_layout_q4032(cq4032 : StreamCollectFn) {
-    g_stream_collect_q4032 = cq4032
-}
-
-//! the q5032 planes' region collector, registered beside the four
-def register_stream_layout_q5032(cq5032 : StreamCollectFn) {
-    g_stream_collect_q5032 = cq5032
 }
 
 def register_devw_kq_mirror(f : DevwKqMirrorFn) {
@@ -820,17 +814,10 @@ def stream_collect_regions(t : Model; var regs : array<StreamReg>) {
         return
     }
     invoke(g_stream_collect_q8, t, regs)
-    if (active_q51_layout_mr() > 1l) {
-        invoke(g_stream_collect_q51, t, regs)
-    }
-    if (active_iq4nl32_layout_mr() > 1l) {
-        invoke(g_stream_collect_iq4nl32, t, regs)
-    }
-    if (active_q4032_layout_mr() > 1l) {
-        invoke(g_stream_collect_q4032, t, regs)
-    }
-    if (active_q5032_layout_mr() > 1l) {
-        invoke(g_stream_collect_q5032, t, regs)
+    for (f in type<KqFmt>) {
+        if (kq_dense_b32(f) && active_b32_layout_mr(f) > 1l) {
+            invoke(g_stream_collect_b32, t, regs, f)
+        }
     }
     if (t.kquant_native && kernel_backend_has_kq()) {
         invoke(g_stream_collect_kq, t, regs)
@@ -2480,57 +2467,37 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
             g_stream_plane_total |> clear()
             for (f in type<KqFmt>) {
                 if (kq_sb(f)) {
-                    g_stream_plane_total[kq_plane_name(f, "q")] = (sz.kq_n[int(f)] / 256l) * kq_qsb(f)
+                    let nsb = sz.kq_n[int(f)] / KQ_SB_ELEMS
+                    g_stream_plane_total[kq_plane_name(f, "q")] = nsb * kq_qsb(f)
                 }
             }
-            g_stream_plane_total["q51q"] = (sz.q51_n / 32l) * Q51_QB
-            g_stream_plane_total["iq4nl32q"] = (sz.iq4nl32_n / 32l) * IQ4NL32_QB
-            g_stream_plane_total["q4032q"] = (sz.q4032_n / 32l) * Q4032_QB
-            g_stream_plane_total["q5032q"] = (sz.q5032_n / 32l) * Q5032_QB
+            g_stream_plane_total["q51q"] = (sz.q51_n / KQ_B32_ELEMS) * Q51_QB
+            g_stream_plane_total["iq4nl32q"] = (sz.iq4nl32_n / KQ_B32_ELEMS) * IQ4NL32_QB
+            g_stream_plane_total["q4032q"] = (sz.q4032_n / KQ_B32_ELEMS) * Q4032_QB
+            g_stream_plane_total["q5032q"] = (sz.q5032_n / KQ_B32_ELEMS) * Q5032_QB
             let wb = mode == QuantMode.q8 ? sz.wblob_n : 0l
             g_stream_plane_total[t.metal_blob ? "mblob" : "qblob"] = (t.metal_blob
                 ? (wb / Q8_BLOCK_ELEMS) * (Q8_QPB + Q8_SPB) : wb)
         }
         for (f in type<KqFmt>) {
             if (kq_sb(f) && sz.kq_n[int(f)] > 0l) {
-                let nsb = sz.kq_n[int(f)] / 256l
+                let nsb = sz.kq_n[int(f)] / KQ_SB_ELEMS
                 if (!stream_q) {
                     reserve_resize(t.kq[int(f)].q, nsb * kq_qsb(f))
                 }
                 reserve_resize(t.kq[int(f)].s, nsb * kq_ssb(f))
             }
         }
-        if (sz.q51_n > 0l) {
-            if (!stream_q) {
-                t.q51q |> reserve((sz.q51_n / 32l) * Q51_QB)
-                t.q51q |> resize((sz.q51_n / 32l) * Q51_QB)
+        for (f, ne in [KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q5032],
+                [sz.q51_n, sz.iq4nl32_n, sz.q4032_n, sz.q5032_n]) {
+            continue if (ne <= 0l)
+            let nb = ne / KQ_B32_ELEMS
+            kq_plane_pair(t, f) $(var q : array<uint8>; var s : array<uint8>) {
+                if (!stream_q) {
+                    q |> reserve_resize(nb * kq_qsb(f))
+                }
+                s |> reserve_resize(nb * kq_ssb(f))
             }
-            t.q51s |> reserve((sz.q51_n / 32l) * Q51_SB)
-            t.q51s |> resize((sz.q51_n / 32l) * Q51_SB)
-        }
-        if (sz.iq4nl32_n > 0l) {
-            if (!stream_q) {
-                t.iq4nl32q |> reserve((sz.iq4nl32_n / 32l) * IQ4NL32_QB)
-                t.iq4nl32q |> resize((sz.iq4nl32_n / 32l) * IQ4NL32_QB)
-            }
-            t.iq4nl32s |> reserve((sz.iq4nl32_n / 32l) * IQ4NL32_SB)
-            t.iq4nl32s |> resize((sz.iq4nl32_n / 32l) * IQ4NL32_SB)
-        }
-        if (sz.q4032_n > 0l) {
-            if (!stream_q) {
-                t.q4032q |> reserve((sz.q4032_n / 32l) * Q4032_QB)
-                t.q4032q |> resize((sz.q4032_n / 32l) * Q4032_QB)
-            }
-            t.q4032s |> reserve((sz.q4032_n / 32l) * Q4032_SB)
-            t.q4032s |> resize((sz.q4032_n / 32l) * Q4032_SB)
-        }
-        if (sz.q5032_n > 0l) {
-            if (!stream_q) {
-                t.q5032q |> reserve((sz.q5032_n / 32l) * Q5032_QB)
-                t.q5032q |> resize((sz.q5032_n / 32l) * Q5032_QB)
-            }
-            t.q5032s |> reserve((sz.q5032_n / 32l) * Q5032_SB)
-            t.q5032s |> resize((sz.q5032_n / 32l) * Q5032_SB)
         }
         if (mode == QuantMode.q8) {
             if (!stream_q) {
@@ -2946,17 +2913,10 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
                 if (t.experts_mx4) {
                     layout_repack_mx4(t)
                 }
-                if (active_q51_layout_mr() > 1l) {
-                    layout_repack_q51(t)
-                }
-                if (active_iq4nl32_layout_mr() > 1l) {
-                    layout_repack_iq4nl32(t)
-                }
-                if (active_q4032_layout_mr() > 1l) {
-                    layout_repack_q4032(t)
-                }
-                if (active_q5032_layout_mr() > 1l) {
-                    layout_repack_q5032(t)
+                for (f in type<KqFmt>) {
+                    if (kq_dense_b32(f) && active_b32_layout_mr(f) > 1l) {
+                        layout_repack_b32(t, f)
+                    }
                 }
                 if (t.kquant_native && kernel_backend_has_kq()) {
                     layout_repack_kq(t)
@@ -3052,17 +3012,8 @@ def private restore_load_fn_defaults {
     if (g_stream_collect_kq == null) {
         g_stream_collect_kq = @@stream_no_collect
     }
-    if (g_stream_collect_q51 == null) {
-        g_stream_collect_q51 = @@stream_no_collect
-    }
-    if (g_stream_collect_iq4nl32 == null) {
-        g_stream_collect_iq4nl32 = @@stream_no_collect
-    }
-    if (g_stream_collect_q4032 == null) {
-        g_stream_collect_q4032 = @@stream_no_collect
-    }
-    if (g_stream_collect_q5032 == null) {
-        g_stream_collect_q5032 = @@stream_no_collect
+    if (g_stream_collect_b32 == null) {
+        g_stream_collect_b32 = @@stream_no_collect_b32
     }
     if (g_stream_repack == null) {
         g_stream_repack = @@stream_no_repack

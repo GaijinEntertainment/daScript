@@ -85,6 +85,12 @@ per-format accessor (`kq_sb`, `kq_qsb`, `kq_ssb`, `kq_elems`, `kq_schema_id`, `k
   20 and translates back at every dispatch boundary), so dodge those or claim a distinct code the
   same way, and key every region ladder on the translated kernel id, never on the stream code by
   position.
+- A per-32 member also declares its device-plane block here: `KQ_<FMT>_QWORDS` (its quant words a
+  block, where they are not the four nibble words of `KQ_B32_QWORDS`) and `KQ_<FMT>_SBYTES` (its
+  scale bytes), the numbers the GPU stamps' block constants spell. Pin them in
+  `tests/test_kqformat.das` in the same step: `test_b32_plane_words` holds words and bytes to the
+  row's `disk_bytes`, and `test_metal_b32_block_constants` holds each Metal stamp's literal (`QW`,
+  `SH`, `B32W`, `PW`, `PS`) to the row's strides.
 - A codebook goes here too; a grid or codebook table reaches worker lanes only as a function
   returning the literal (`iq4nl_lut()`, `iq3s_grid()`, `iq2s_grid2()`: a direct
   `return fixed_array<T>(...)`, no local), never as a module global - a team-lane kernel reads a
@@ -154,24 +160,24 @@ by hand:
 
 A per-32 format is OFF the plane table (`ARCHITECTURE_IMAGE.md#image-kq-table-sb-only`): its planes are the
 top-level `Model` pair `<fmt>q` / `<fmt>s` (the `kq_desc` row still sizes them - `qsb`/`ssb` per
-32-block), and every consumer that indexes the table by slot needs its arm by hand. iq4nl32
-took, each a twin of q51's line beside it: `Model.<fmt>q`/`<fmt>s` and the served-bytes
-accounting (`dasllama_common.das`); `LayoutSizes.<fmt>_n`, `KqCursors.<fmt>`, the `kq_take` arm,
-the landing memcpy, the plane alloc, `g_stream_plane_total["<fmt>q"]`, `layout_repack_<fmt>`
-under `mr > 1`, the stream collector `g_stream_collect_<fmt>` and its `register_stream_layout`
-slot (`dasllama_load.das`); `collect_<fmt>_regions`, `repack_<fmt>_stacks`,
-`moe_gpu_gather_stack_<fmt>` - one-line wrappers over the `_b32` generics
-(`collect_b32_regions`, `moe_gpu_gather_stack_b32`) - the `stream_repack_one` arm, the
-`register_model_layout` hook slots and `metal_blob_off_ok` (`dasllama_layout.das`); the
-`layout_gather_dispatch` arm beside the layout hook forwarders - the one gather every GPU placement
-and the vulkan lane's mint take (`dasllama_common.das`); the plane
-deletes in `trim_model_planes` and the format's plane names in `trim_plane_dropped`
-(`dasllama_gpu_resident.das`); the per-format plane branches of `stream_job_view` and the
-scale landing of `stream_job_transcode` (`dasllama_load.das`); the quant-plane names in
-`streamed_q_planes` and the scale planes summed in `vk_mint_extra_bytes`
-(`dasllama_image.das`); `DlimCpuConfig.<fmt>_mr` in the identity string
-(`dasllama_config.das`); `IMAGE_VERSION`; and the `ImgTableProbe` pair + slot cell in
-`tests/test_model_image.das`. The tag rule is `kq_fmt_row_ok` (`dasllama_common.das`; the expert
+32-block). The format joins `kq_dense_b32` (`dasllama_common.das`, the per-32 predicate) and the
+pair accessors - both `kq_plane_pair` overloads (`dasllama_common.das`) and
+`kq_plane_pair_names` (`dasllama_gpu_resident.das`); every seat that indexes the per-32 formats
+then takes it with no arm, since each walks `kq_dense_b32` and keys its table by `int(KqFmt)`:
+the repack, stream-collect and GPU-gather hooks (`register_model_layout`, `register_stream_layout`
+over `repack_b32_stacks`, `collect_b32_regions`, `moe_gpu_gather_b32_stack`), `repack_regions`
+and `stream_repack_one` (`dasllama_layout.das`), `layout_gather_dispatch` (`dasllama_common.das`),
+the eager repack loop under `mr > 1` (`dasllama_load.das`), and the trim's plane deletes and
+`trim_plane_dropped`. What still keys on the format by hand: `Model.<fmt>q`/`<fmt>s` and the
+served-bytes accounting (`dasllama_common.das`); `LayoutSizes.<fmt>_n`, `KqCursors.<fmt>`, the
+`kq_take` arm, the landing memcpy, the plane alloc's format list,
+`g_stream_plane_total["<fmt>q"]`, `stream_field_of`, the per-format plane branches of
+`stream_job_view` and the scale landing of `stream_job_transcode` (`dasllama_load.das`);
+`metal_blob_off_ok` (`dasllama_layout.das`); the quant-plane names in `streamed_q_planes` and the
+scale planes summed in `vk_mint_extra_bytes` (`dasllama_image.das`); `DlimCpuConfig.<fmt>_mr` in
+the identity string and its arms in `dlim_b32_mr` / `set_dlim_b32_mr` (`dasllama_config.das`);
+`IMAGE_VERSION`; and the `ImgTableProbe` pair + slot cell in `tests/test_model_image.das`. The
+tag rule is `kq_fmt_row_ok` (`dasllama_common.das`; the expert
 twin `kq_fmt_expert_ok` is the same rule), one rule for every site through `kq_tag`, and
 `note_demotion` counts a q8 fall alone, so the load report reads no demotion for a plane the
 per-32 twin took. `kq_fmt_of` also tags the PLE token table, so a per-32 member reaching
@@ -269,33 +275,44 @@ Metal PLE gather twins, the Vulkan `EMB` leaf the resident plan seats the table 
   plane-dequant oracle, portable GEMV rows, repack at mr 4/8/16 (dots and row dequants
   bit-exact), 4-token tile vs per-token GEMVs, groupn (disk + grp slices), batch groupn.
 
-A per-32 format's CPU kernels are ONE body over the format tag (`dasllama_math.das`): the
-three expanded-row kernel shapes - `b32_batch_kernel`, `b32_groupn_kernel`,
+A per-32 format's CPU kernels are ONE body over the format tag (`dasllama_math_default.das`, the
+portable tier): the three expanded-row kernel shapes - `b32_batch_kernel`, `b32_groupn_kernel`,
 `b32_batch_groupn_kernel` - take the tag last and reach the format through the `b32_*` overload
 set (`b32_qb`/`b32_sb` strides, `b32_layout_mr`, `b32_expand_row`, `b32_expand_grp_row`,
-`b32_gather_grp_scales`, `b32_dot_e`), so a new per-32 format writes its leaves and six
+`b32_gather_grp_scales`, `b32_dot_e`), so a new per-32 format writes its leaves and those
 one-line overloads, never a kernel shape. The leaves: `dot_<fmt>q8_scalar` (THE float-order
 contract - per 32-block an exact int sum, one float fold), `expand_<fmt>_row` (the row as int8
-bytes the fast kernels MAC over) with the `[tuned]` `dot_<fmt>e` twin of `dot_q51e`, and the
-grp<mr> pair `expand_<fmt>_grp_row` / `gather_<fmt>_grp_scales`. Around them: the
-`KernelBackend` slots `<fmt>_batch` / `groupn_<fmt>` / `<fmt>_batch_groupn` / `repack_<fmt>` /
-`<fmt>_layout` with their `g_*` globals, `activate` copies and restore-default lines, the
-`matmul_<fmt>q8_*` wrappers, `active_<fmt>_layout_mr` / `set_bake_<fmt>_repack` /
-`active_repack_<fmt>`, the `repack_grp(..., KqTag_<fmt>)` overload (`repack_columns` at colw 4 +
-`repack_fields` with a verbatim scale unit), the panic overloads of `dot_kq` / `kq_gemv_gen` /
-`kq_tile_gen` on the tag and the tag in the tag list of `tests/_kq_dot.das`'s panic `grp_row_dot`
-(the stamps bind every member), the `mm_at_<fmt>_groupn` /
-`mm_b_<fmt>_pre` / `mm_b_<fmt>_groupn` routers in `dasllama_common.das`, and the gates in
-`tests/test_kquant.das` twinning q51's (plane unpack, dot vs fp64, groupn / batch /
-batch-groupn bit-match, the grp expand twins at mr 4/8, the GPU gather off grp planes) plus the
-identity / inverse-map cells in `tests/test_repack.das`. The gen-tier family is q51's shape
-twice over: in `dasllama_math_gen.das` the layout companion, the grp scalar walk
-(`<fmt>_grp_row_dot`), the `[tune_perm]` tile with its GEMV and layout companions, and the
-groupn / batch / batch-groupn slots - the slots are ONE body over the tag (`b32g_*`: strides,
-layout, the tile and GEMV stamps, the scalar tail dot, and whether the fold reads the per-32
-activation sums), so a per-32 format writes its leaves and eight one-line overloads; in
-`dasllama_gemm_gen.das` a `TileEmit` flag, a block body (iq4nl32's is the mx4 nibble+LUT dots -
-`emit_lut_nibble_dots`, shared - under an f16 d fold, `emit_block_fold`, shared), the
+bytes the fast kernels MAC over) with the `[tuned]` `dot_<fmt>e` twin of `dot_q51e` where its
+fold is new, and the grp<mr> pair `expand_<fmt>_grp_row` / `gather_<fmt>_grp_scales`. A format
+whose block is a member's block under another level writes each leaf as one call into that
+member's body: iq4nl32 and q4032 share the codebook bodies through their `lut` argument
+(`dot_nl32q8_scalar`, `expand_nl32_row`, `expand_nl32_grp_row`, `dequant_nl32_plane_block`,
+`nl32_grp_row_dot`), q51 and q5032 the 5-bit bodies through the tag's `b5_level` / `b5_fold` /
+`b5_bytes` overloads (`dot_b5q8_scalar`, `expand_b5_row`, `expand_b5_grp_row`,
+`dequant_b5_plane_block` in `dasllama_convert.das`, `b5_grp_row_dot` in `dasllama_math_gen.das`).
+Around them: the three portable stamps `<fmt>q8_batch_kernel` / `<fmt>q8_groupn_kernel` /
+`<fmt>q8_batch_groupn_kernel` and the format's `register_b32_portable` row in
+`dasllama_math_default_register` - the kernels every backend's unset `B32Slots` entry takes;
+the `repack_grp(..., KqTag_<fmt>)` overload (`repack_columns` at colw 4 + `repack_fields` with a
+verbatim scale unit); the panic overloads of `dot_kq` / `kq_gemv_gen` / `kq_tile_gen` on the tag
+and the tag in the tag list of `tests/_kq_dot.das`'s panic `grp_row_dot` (the stamps bind every
+member). The dispatch is the slot table's and takes no arm: `KernelBackend.b32` and the active
+`g_b32` are indexed by `int(KqFmt)`, read by `matmul_b32q8_*`, `active_b32_layout_mr` and
+`active_repack_b32` (`dasllama_math.das`) and by `mm_b32_pre` / `mm_at_b32_groupn` /
+`mm_b_b32_groupn` (`dasllama_common.das`). The gates are `tests/test_kquant.das`'s per-32 cells
+over the tag (`p32_*`: plane unpack, dot vs fp64, groupn / batch / batch-groupn bit-match, the grp
+expand twins at mr 4/8, the GPU gather off grp planes) - the format adds its `p32_*` leaf
+overloads - plus the identity / inverse-map cells in `tests/test_repack.das`. The gen-tier family
+is q51's shape twice over: in `dasllama_math_gen.das` the layout companion, the grp scalar walk
+(`<fmt>_grp_row_dot`), the `[tune_perm]` tile with its GEMV and layout companions, the format's
+`B32Slots` row in `gen_b32_slots` and its `set_bake_b32_repack` line, and the groupn / batch /
+batch-groupn slots - the slots are ONE body over the tag (`b32g_*`: layout, the tile and GEMV
+stamps, the scalar tail dot, and whether the fold reads the per-32 activation sums), so a per-32
+format writes its leaves and those one-line overloads; in
+`dasllama_gemm_gen.das` a `TileEmit` flag, a block body composed of the shared block pieces
+(iq4nl32's is the mx4 nibble+LUT dots, `emit_lut_nibble_dots`, under the f16 d rows
+`load_d16_rows` and the fold `emit_block_fold`; q5032's is q51's code loader `load_b5_codes`
+re-centred to q - 16, the signed `emit_block_dots` over `load_x_halves`, and the same d fold), the
 `emit_one_block` arm, the `nibblePlane` set in `setup_tile_emit`, and the `b32_gemv_gen_impl` /
 `b32_tile_gen_impl` walks parameterized on the block strides; then the registration rows, the
 probe's per-32 family (`b32_tune_family` over `KqFmt.q51` and `KqFmt.iq4nl32` - the fixture
@@ -574,7 +591,8 @@ silently, which is why the tier's gate (`kq_fmt_gpu_supported`) is closed by def
    format's cells red.
 
 A per-32 expert format on Metal takes q51's shape, not the kq one - no scale rebake, both planes
-bound verbatim through `<fmt>_planes_of` (`dasllama_metal_common.das`; `off % 256` keeps a 16 B
+bound verbatim through `b32_planes_of` (`dasllama_metal_common.das`, the pair off `kq_plane_pair`
+and the strides off the descriptor row - no arm; `off % 256` keeps a 16 B
 quant / 2 B scale pair 16B-aligned, and `metal_blob_off_ok` + `moe_site_ok` say the same number):
 a format arm of `MetalBlk32GemvT` (8 threads a block, one float4 each; a codebook is staged to a
 `@workgroup` table as the kq iq4 GEMVs do, which makes the dispatch `tgmem =`) stamped dense and
@@ -587,11 +605,18 @@ base `MetalMoeMulMm<Fmt> : MetalMoeMulMmKqT`, with
 form) - NOT the split-format table, whose rows are kq stamps - plus `moe_fmt_metal_served`,
 `moe_site_ok`, `kq_dense_b32` (the per-32 reduction dims in `moe_metal_ok`, the dense sites'
 plane pair)
-and `kq_fmt_gpu_supported`. Tests: a
+and `kq_fmt_gpu_supported`. A GEMV stamp that declares `fastmath=false` (the per-32 GEMV and its
+K-split twin do: fast math sums a column's dot apart from the small-batch form) gets its
+`FASTMATH_OFF_EXEMPT` row in `REVIEW.das` against `b32_mvb_gate`, and its name on the licensed
+set's line in `ARCHITECTURE_ENGINE.md#engine-core` - without the row the module gate reds on the
+first stamp. Tests: a
 `MoeGemvFmt` member, `<fmt>_test_planes` (exact arithmetic - pow2 d, int x) and the
 `moe_gemv_gate` / `moe_mulmm_b32_gate` rows in `tests/test_metal_prefill_kernels.das` (the
 stamp picker `b32_mm_stamp` is the one place the generated names are spelled), the four twin
-rows in the census's declared blind list, and the served list of `test_moe_metal_expert_formats`.
+rows in the census's declared blind list, the served list of `test_moe_metal_expert_formats`, and
+the format's term in the census lists - `per32_planes` and `PER32_STEMS`
+(`tests/test_metal_format_census.das`) and `per32_planes` (`tests/test_metal_decode_parity.das`),
+which count and name the per-32 sites the census holds the dispatch counts to.
 
 A Metal kernel lever is judged by a kernel-level probe, never by a tg128 row: an end-to-end row
 on the M1 carries about 8 t/s of noise, while the dispatch-loop probe (50 dispatches per encoder,

@@ -39,6 +39,23 @@ struct public DlimCpuConfig {
     rope_override : string   //! the rope-scaling override baked into the rope tables ("" = the file's keys; rope_override_spelling)
 }
 
+//! a per-32 format's repack interleave in `c` (1 off the per-32 rail)
+def public dlim_b32_mr(c : DlimCpuConfig; fmt : KqFmt) : int64 {
+    if (fmt == KqFmt.q51) return c.q51_mr
+    if (fmt == KqFmt.iq4nl32) return c.iq4nl32_mr
+    if (fmt == KqFmt.q4032) return c.q4032_mr
+    if (fmt == KqFmt.q5032) return c.q5032_mr
+    return 1l
+}
+
+//! the per-32 interleaves of `c` from `mr_of`, one call a format
+def public set_dlim_b32_mr(var c : DlimCpuConfig; mr_of : block<(fmt : KqFmt) : int64>) {
+    c.q51_mr = invoke(mr_of, KqFmt.q51)
+    c.iq4nl32_mr = invoke(mr_of, KqFmt.iq4nl32)
+    c.q4032_mr = invoke(mr_of, KqFmt.q4032)
+    c.q5032_mr = invoke(mr_of, KqFmt.q5032)
+}
+
 //! The vulkan flavor's plan inputs, RESOLVED — `coopmat_mode` is the running mode (not the raw
 //! env string), `vram_mb` the concrete budget the plan is computed against. The dense bits and
 //! `cls` are here so every walk-shaping switch is in the identity (the old tag missed them).

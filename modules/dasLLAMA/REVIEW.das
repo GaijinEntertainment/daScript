@@ -257,6 +257,7 @@ def private metal_kernel_name(line : string) : string {
     return slice(line, q0 + 1, q1)
 }
 
+[arch(at = "ARCHITECTURE_ENGINE.md#engine-core")]
 def private check_fastmath_default {
     var files : array<string>
     collect_das_files("modules/dasLLAMA/dasllama", files)
@@ -273,7 +274,10 @@ def private check_fastmath_default {
             }
             if (!key_exists(FASTMATH_OFF_EXEMPT, key)) {
                 gate_finding(p, line_no,
-                    "kernel declares fastmath=false without an exemption row naming the test that fails under fastmath - fastmath is the default; the opt-out ships its demonstrated breakage")
+                    ("kernel declares fastmath=false without an exemption row naming the test that"
+                    + " fails under fastmath - fastmath is the default; the opt-out ships its"
+                    + " demonstrated breakage, and its row ships its line in"
+                    + " ARCHITECTURE_ENGINE.md#engine-core"))
             }
         }
     }
@@ -1707,7 +1711,7 @@ let private GEMM_GEN_FILES = [
     "modules/dasLLAMA/dasllama/dasllama_gemm_gen.das",
     "modules/dasLLAMA/dasllama/dasllama_gemm_schema.das"
 ]
-let private GEMM_GEN_STAMP_HASH = 0xdb041a4703522c9aul
+let private GEMM_GEN_STAMP_HASH = 0x21e4317ad7604a49ul
 
 [arch(at = "ARCHITECTURE_ENGINE_FORMATS.md#cpu-kernel-tiers")]
 def private check_gemm_gen_stamp {

@@ -354,6 +354,14 @@ def test_b32_plane_words(t : T?) {
         t |> equal(int64(KQ_B32_QWORDS * 4u + KQ_MX4_SBYTES), kq_desc(KqFmt.mx4).disk_bytes, "mx4: four nibble words and the E8M0 byte")
         t |> equal(int64(KQ_B32_QWORDS * 4u + KQ_Q4032_SBYTES), kq_desc(KqFmt.q4032).disk_bytes, "q4032: four nibble words and the d half")
         t |> equal(int64(KQ_Q5032_QWORDS * 4u + KQ_Q5032_SBYTES), kq_desc(KqFmt.q5032).disk_bytes, "q5032: five quant words (the nibbles, the qh word) and the d half")
+        t |> equal(B32_NIB_BYTES, 16l, "the 16 nibble bytes of a per-32 block")
+        t |> equal(B5_QH_BYTES, 4l, "the qh word after them")
+        t |> equal(B32_NIB_BYTES + B5_QH_BYTES, kq_qsb(KqFmt.q51), "q51's quant block")
+        t |> equal(B32_NIB_BYTES + B5_QH_BYTES, kq_qsb(KqFmt.q5032), "q5032's quant block")
+        for (f in [KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q5032]) {
+            t |> success(kq_qsb(f) <= int64(B32_MAX_QB) && kq_ssb(f) <= int64(B32_MAX_SB),
+                "{f}: one block fits the one-block scratch")
+        }
     }
 }
 

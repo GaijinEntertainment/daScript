@@ -314,12 +314,23 @@ def private p32_dequant(kq : array<uint8>; ko : int64; ks : array<uint8>; so : i
 def private p32_dequant(kq : array<uint8>; ko : int64; ks : array<uint8>; so : int64; var w : array<float>; wo : int64; _f : KqTag_iq4nl32) => dequant_iq4nl32_plane_block(kq, ko, ks, so, w, wo)
 def private p32_dot(wq : uint8 const?; ws : uint8 const?; xq : int8 const?; xs : float const?; n : int64; _f : KqTag_q51) : float => dot_q51q8_scalar(wq, ws, xq, xs, n)
 def private p32_dot(wq : uint8 const?; ws : uint8 const?; xq : int8 const?; xs : float const?; n : int64; _f : KqTag_iq4nl32) : float => dot_iq4nl32q8_scalar(wq, ws, xq, xs, n)
-def private p32_groupn(var y : array<float>; kq, ks : array<uint8>; offs : array<int64>; nreg : int64; xq : array<int8>; xs : array<float>; n, d : int64; _f : KqTag_q51) => matmul_q51q8_groupn(y, kq, ks, offs, nreg, xq, xs, n, d)
-def private p32_groupn(var y : array<float>; kq, ks : array<uint8>; offs : array<int64>; nreg : int64; xq : array<int8>; xs : array<float>; n, d : int64; _f : KqTag_iq4nl32) => matmul_iq4nl32q8_groupn(y, kq, ks, offs, nreg, xq, xs, n, d)
-def private p32_batch(var y : array<float>; kq, ks : array<uint8>; woff : int64; xq : array<int8>; xs : array<float>; n, d, ntok : int64; _f : KqTag_q51) => matmul_q51q8_batch(y, kq, ks, woff, xq, xs, n, d, ntok)
-def private p32_batch(var y : array<float>; kq, ks : array<uint8>; woff : int64; xq : array<int8>; xs : array<float>; n, d, ntok : int64; _f : KqTag_iq4nl32) => matmul_iq4nl32q8_batch(y, kq, ks, woff, xq, xs, n, d, ntok)
-def private p32_batch_groupn(var y : array<float>; kq, ks : array<uint8>; offs : array<int64>; nreg : int64; xq : array<int8>; xs : array<float>; n, d : int64; _f : KqTag_q51) => matmul_q51q8_batch_groupn(y, kq, ks, offs, nreg, xq, xs, n, d)
-def private p32_batch_groupn(var y : array<float>; kq, ks : array<uint8>; offs : array<int64>; nreg : int64; xq : array<int8>; xs : array<float>; n, d : int64; _f : KqTag_iq4nl32) => matmul_iq4nl32q8_batch_groupn(y, kq, ks, offs, nreg, xq, xs, n, d)
+//! the per-32 slot calls: one body over the tag's format
+def private p32_groupn(var y : array<float>; kq, ks : array<uint8>; offs : array<int64>;
+                       nreg : int64; xq : array<int8>; xs : array<float>; n, d : int64; f) {
+    matmul_b32q8_groupn(y, kq, ks, offs, nreg, xq, xs, n, d, p32_fmt(f))
+}
+def private p32_batch(var y : array<float>; kq, ks : array<uint8>; woff : int64; xq : array<int8>;
+                      xs : array<float>; n, d, ntok : int64; f) {
+    matmul_b32q8_batch(y, kq, ks, woff, xq, xs, n, d, ntok, p32_fmt(f))
+}
+def private p32_batch_groupn(var y : array<float>; kq, ks : array<uint8>; offs : array<int64>;
+                             nreg : int64; xq : array<int8>; xs : array<float>; n, d : int64; f) {
+    matmul_b32q8_batch_groupn(y, kq, ks, offs, nreg, xq, xs, n, d, p32_fmt(f))
+}
+def private p32_gather(m : Model; n, d : int64; repacked : bool; mr : int64;
+                       var wq, ws : array<uint8>; f) {
+    moe_gpu_gather_b32_stack(m, p32_fmt(f), 0l, n, d, d, repacked, mr, wq, ws)
+}
 def private p32_grp_row_dot(qg : uint8 const?; sg : uint8 const?; r, mr : int64; xq : int8 const?; xs : float const?; xbs : int const?; n : int64; _f : KqTag_q51) : float => q51_grp_row_dot(qg, sg, r, mr, xq, xs, xbs, n)
 def private p32_grp_row_dot(qg : uint8 const?; sg : uint8 const?; r, mr : int64; xq : int8 const?; xs : float const?; _xbs : int const?; n : int64; _f : KqTag_iq4nl32) : float => iq4nl32_grp_row_dot(qg, sg, r, mr, xq, xs, n)
 def private p32_expand_grp_row(gq : uint8 const?; r, mr : int64; var qe : int8?; nb : int64; _f : KqTag_q51) => expand_q51_grp_row(gq, r, mr, qe, nb)
@@ -330,38 +341,28 @@ def private p32_expand_row(wq : uint8 const?; var qe : int8?; nb : int64; _f : K
 def private p32_expand_row(wq : uint8 const?; var qe : int8?; nb : int64; _f : KqTag_iq4nl32) => expand_iq4nl32_row(wq, qe, nb)
 def private p32_dot_e(qe : int8 const?; ws : uint8 const?; xq : int8 const?; xs : float const?; n : int64; _f : KqTag_q51) : float => dot_q51e(qe, ws, xq, xs, n)
 def private p32_dot_e(qe : int8 const?; ws : uint8 const?; xq : int8 const?; xs : float const?; n : int64; _f : KqTag_iq4nl32) : float => dot_iq4nl32e(qe, ws, xq, xs, n)
-def private p32_gather(m : Model; n, d : int64; repacked : bool; mr : int64; var wq, ws : array<uint8>; _f : KqTag_q51) => moe_gpu_gather_stack_q51(m, 0l, n, d, d, repacked, mr, wq, ws)
-def private p32_gather(m : Model; n, d : int64; repacked : bool; mr : int64; var wq, ws : array<uint8>; _f : KqTag_iq4nl32) => moe_gpu_gather_stack_iq4nl32(m, 0l, n, d, d, repacked, mr, wq, ws)
 //! q4032: the Q4_0 block is iq4nl32's byte form (an f16 d, 16 nibble bytes), so the hand-packed blocks are iq4nl32's read under q - 8
 def private p32_fmt(_f : KqTag_q4032) : KqFmt => KqFmt.q4032
 def private p32_n(_f : KqTag_q4032) : int64 => 1408l   // the Qwen1.5-MoE expert down row: % 32, NOT % 256
 def private p32_block(blk : int; _f : KqTag_q4032) : array<uint8> => build_iq4nl32_block(blk)
 def private p32_dequant(kq : array<uint8>; ko : int64; ks : array<uint8>; so : int64; var w : array<float>; wo : int64; _f : KqTag_q4032) => dequant_q4032_plane_block(kq, ko, ks, so, w, wo)
 def private p32_dot(wq : uint8 const?; ws : uint8 const?; xq : int8 const?; xs : float const?; n : int64; _f : KqTag_q4032) : float => dot_q4032q8_scalar(wq, ws, xq, xs, n)
-def private p32_groupn(var y : array<float>; kq, ks : array<uint8>; offs : array<int64>; nreg : int64; xq : array<int8>; xs : array<float>; n, d : int64; _f : KqTag_q4032) => matmul_q4032q8_groupn(y, kq, ks, offs, nreg, xq, xs, n, d)
-def private p32_batch(var y : array<float>; kq, ks : array<uint8>; woff : int64; xq : array<int8>; xs : array<float>; n, d, ntok : int64; _f : KqTag_q4032) => matmul_q4032q8_batch(y, kq, ks, woff, xq, xs, n, d, ntok)
-def private p32_batch_groupn(var y : array<float>; kq, ks : array<uint8>; offs : array<int64>; nreg : int64; xq : array<int8>; xs : array<float>; n, d : int64; _f : KqTag_q4032) => matmul_q4032q8_batch_groupn(y, kq, ks, offs, nreg, xq, xs, n, d)
 def private p32_grp_row_dot(qg : uint8 const?; sg : uint8 const?; r, mr : int64; xq : int8 const?; xs : float const?; _xbs : int const?; n : int64; _f : KqTag_q4032) : float => q4032_grp_row_dot(qg, sg, r, mr, xq, xs, n)
 def private p32_expand_grp_row(gq : uint8 const?; r, mr : int64; var qe : int8?; nb : int64; _f : KqTag_q4032) => expand_q4032_grp_row(gq, r, mr, qe, nb)
 def private p32_grp_scales(gs : uint8 const?; r, mr : int64; var ss : uint8?; nb : int64; _f : KqTag_q4032) => gather_iq4nl32_grp_scales(gs, r, mr, ss, nb)
 def private p32_expand_row(wq : uint8 const?; var qe : int8?; nb : int64; _f : KqTag_q4032) => expand_q4032_row(wq, qe, nb)
 def private p32_dot_e(qe : int8 const?; ws : uint8 const?; xq : int8 const?; xs : float const?; n : int64; _f : KqTag_q4032) : float => dot_iq4nl32e(qe, ws, xq, xs, n)
-def private p32_gather(m : Model; n, d : int64; repacked : bool; mr : int64; var wq, ws : array<uint8>; _f : KqTag_q4032) => moe_gpu_gather_stack_q4032(m, 0l, n, d, d, repacked, mr, wq, ws)
 //! q5032: the Q5_0 block - q51's quant form under one f16 d, the signed q - 16 level
 def private p32_fmt(_f : KqTag_q5032) : KqFmt => KqFmt.q5032
 def private p32_n(_f : KqTag_q5032) : int64 => 1408l   // the Qwen1.5-MoE expert down row: % 32, NOT % 256
 def private p32_block(blk : int; _f : KqTag_q5032) : array<uint8> => build_q50_block(blk)
 def private p32_dequant(kq : array<uint8>; ko : int64; ks : array<uint8>; so : int64; var w : array<float>; wo : int64; _f : KqTag_q5032) => dequant_q5032_plane_block(kq, ko, ks, so, w, wo)
 def private p32_dot(wq : uint8 const?; ws : uint8 const?; xq : int8 const?; xs : float const?; n : int64; _f : KqTag_q5032) : float => dot_q5032q8_scalar(wq, ws, xq, xs, n)
-def private p32_groupn(var y : array<float>; kq, ks : array<uint8>; offs : array<int64>; nreg : int64; xq : array<int8>; xs : array<float>; n, d : int64; _f : KqTag_q5032) => matmul_q5032q8_groupn(y, kq, ks, offs, nreg, xq, xs, n, d)
-def private p32_batch(var y : array<float>; kq, ks : array<uint8>; woff : int64; xq : array<int8>; xs : array<float>; n, d, ntok : int64; _f : KqTag_q5032) => matmul_q5032q8_batch(y, kq, ks, woff, xq, xs, n, d, ntok)
-def private p32_batch_groupn(var y : array<float>; kq, ks : array<uint8>; offs : array<int64>; nreg : int64; xq : array<int8>; xs : array<float>; n, d : int64; _f : KqTag_q5032) => matmul_q5032q8_batch_groupn(y, kq, ks, offs, nreg, xq, xs, n, d)
 def private p32_grp_row_dot(qg : uint8 const?; sg : uint8 const?; r, mr : int64; xq : int8 const?; xs : float const?; _xbs : int const?; n : int64; _f : KqTag_q5032) : float => q5032_grp_row_dot(qg, sg, r, mr, xq, xs, n)
 def private p32_expand_grp_row(gq : uint8 const?; r, mr : int64; var qe : int8?; nb : int64; _f : KqTag_q5032) => expand_q5032_grp_row(gq, r, mr, qe, nb)
 def private p32_grp_scales(gs : uint8 const?; r, mr : int64; var ss : uint8?; nb : int64; _f : KqTag_q5032) => gather_iq4nl32_grp_scales(gs, r, mr, ss, nb)
 def private p32_expand_row(wq : uint8 const?; var qe : int8?; nb : int64; _f : KqTag_q5032) => expand_q5032_row(wq, qe, nb)
 def private p32_dot_e(qe : int8 const?; ws : uint8 const?; xq : int8 const?; xs : float const?; n : int64; _f : KqTag_q5032) : float => dot_iq4nl32e(qe, ws, xq, xs, n)
-def private p32_gather(m : Model; n, d : int64; repacked : bool; mr : int64; var wq, ws : array<uint8>; _f : KqTag_q5032) => moe_gpu_gather_stack_q5032(m, 0l, n, d, d, repacked, mr, wq, ws)
 
 //! `m`'s per-32 plane pair of the tag's format set to `kq` / `ks`
 def private p32_put_planes(var m : Model; kq, ks : array<uint8>; _f : KqTag_q51) {

@@ -4403,29 +4403,26 @@ def enc_b32_gemv(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; woff, rows,
     if (ks) {
         g_b32_ks++
     }
+    let qp = b32_planes_of(g_dev, t, fmt, woff)
     if (fmt == KqFmt.q51) {
-        let qp = q51_planes_of(g_dev, t, woff)
         if (ks) {
             enc_kq_q51_ks_c(enc, qp.qbuf, qp.qoff, qp.sbuf, qp.soff, bx, xoff, by, yoff, bn, bd, rows, n)
         } else {
             enc_kq_q51_c(enc, qp.qbuf, qp.qoff, qp.sbuf, qp.soff, bx, xoff, by, yoff, bn, bd, rows, n)
         }
     } elif (fmt == KqFmt.iq4nl32) {
-        let qp = iq4nl32_planes_of(g_dev, t, woff)
         if (ks) {
             enc_kq_iq4nl32_ks_c(enc, qp.qbuf, qp.qoff, qp.sbuf, qp.soff, bx, xoff, by, yoff, bn, bd, rows, n)
         } else {
             enc_kq_iq4nl32_c(enc, qp.qbuf, qp.qoff, qp.sbuf, qp.soff, bx, xoff, by, yoff, bn, bd, rows, n)
         }
     } elif (fmt == KqFmt.q5032) {
-        let qp = q5032_planes_of(g_dev, t, woff)
         if (ks) {
             enc_kq_q5032_ks_c(enc, qp.qbuf, qp.qoff, qp.sbuf, qp.soff, bx, xoff, by, yoff, bn, bd, rows, n)
         } else {
             enc_kq_q5032_c(enc, qp.qbuf, qp.qoff, qp.sbuf, qp.soff, bx, xoff, by, yoff, bn, bd, rows, n)
         }
     } else {
-        let qp = q4032_planes_of(g_dev, t, woff)
         if (ks) {
             enc_kq_q4032_ks_c(enc, qp.qbuf, qp.qoff, qp.sbuf, qp.soff, bx, xoff, by, yoff, bn, bd, rows, n)
         } else {
@@ -4671,17 +4668,14 @@ def enc_kq_gemm_mm_b(enc : MetalComputeEncoder?; fmt : KqFmt; bq : MetalBuffer?;
 //! a dense per-32 plane (q51, iq4nl32, q4032, q5032) over `mp` padded rows through the simdgroup mul_mm tile - its one GEMM form
 def enc_b32_gemm_mm(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; woff : int64; bx, by : MetalBuffer?; yoff : uint64;
                     bk, bn : MetalBuffer?; mp, rows : int64) {
+    let qp = b32_planes_of(g_dev, t, fmt, woff)
     if (fmt == KqFmt.q51) {
-        let qp = q51_planes_of(g_dev, t, woff)
         enc_kq_mm_q51_c(enc, qp.sbuf, qp.soff, qp.qbuf, qp.qoff, bx, by, yoff, bk, bn, mp, rows)
     } elif (fmt == KqFmt.iq4nl32) {
-        let qp = iq4nl32_planes_of(g_dev, t, woff)
         enc_kq_mm_iq4nl32_c(enc, qp.sbuf, qp.soff, qp.qbuf, qp.qoff, bx, by, yoff, bk, bn, mp, rows)
     } elif (fmt == KqFmt.q5032) {
-        let qp = q5032_planes_of(g_dev, t, woff)
         enc_kq_mm_q5032_c(enc, qp.sbuf, qp.soff, qp.qbuf, qp.qoff, bx, by, yoff, bk, bn, mp, rows)
     } else {
-        let qp = q4032_planes_of(g_dev, t, woff)
         enc_kq_mm_q4032_c(enc, qp.sbuf, qp.soff, qp.qbuf, qp.qoff, bx, by, yoff, bk, bn, mp, rows)
     }
 }

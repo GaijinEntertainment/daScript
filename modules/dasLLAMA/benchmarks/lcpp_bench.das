@@ -1315,7 +1315,9 @@ def private dispatch_census(t : Model; fmt : OutFmt) {
     say(fmt, "census: quant={t.quant} kquant_native={t.kquant_native} kq_repacked={t.kq_repacked} mx4_repacked={t.mx4_repacked} experts_mx4={t.experts_mx4}\n")
     say(fmt, "census: caps kq={kernel_backend_has_kq()} kq_batch={kernel_backend_has_kq_batch()} kq_batch_groupn={kernel_backend_has_kq_batch_groupn()} rows={kernel_backend_has_rows()} mx4_rows={kernel_backend_has_mx4_rows()} grouped_prefill={get_moe_grouped_prefill()}\n")
     // the layout-stamp provenance: 1 = disk order (reference layout — no interleave perm applied)
-    say(fmt, "census: layout mr: q8={active_q8_layout_mr()} kq4={kq_active_mr(t, KqFmt.k4)} q51={active_q51_layout_mr()}\n")
+    let kq4_mr = kq_active_mr(t, KqFmt.k4)
+    let q51_mr = active_b32_layout_mr(KqFmt.q51)
+    say(fmt, "census: layout mr: q8={active_q8_layout_mr()} kq4={kq4_mr} q51={q51_mr}\n")
     if (c.n_expert <= 0l) {
         say(fmt, "census: dense model, no MoE dispatch\n")
         return
