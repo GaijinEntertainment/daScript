@@ -23,8 +23,10 @@ or a knob list) - never a value the cell's own claim defines - or that a checked
 its evidence, applies `REVIEW_PINNED_GATES.md` too.** An assert that compares against a
 `../dasllama/` constant by name, not against a literal copy of it, keeps nothing in step.
 
-**A cell that calls a `../dasllama/` `set_*`, `enable_*`, `disable_*` or override call, in its own
-code or through a helper it calls, passes a loader parameter that takes a family's lane, or whose
+**A cell that calls a `../dasllama/` function that writes a module-global or process-global
+value a later load, route choice or kernel dispatch reads - `set_*`, `enable_*`, `disable_*`,
+`pin_*`, `reset_*`, `restore_*`, `register_*`, `select_*_override`, `unset_*` - in its own code
+or through a helper it calls, passes a loader parameter that takes a family's lane, or whose
 claim depends on which route or serving lane runs it - a lane pin, a driver hook, a CPU-vs-GPU
 compare - applies `REVIEW_LANE_PINS.md` (beside this file) too.**
 
@@ -37,9 +39,6 @@ their rows.
 **Weakening `test_metal_float_a_gate.das` - the gate that checks the MSL emitter refuses a float A
 operand (the activation input) to a `tmm2d_*` tiled matrix-multiply call without the
 `[metal_kernel(float_a_ok=true)]` annotation - is a defect.**
-
-**Weakening `st2_source_gate` in `test_metal_prefill_kernels.das` - the check that the StyleTTS2
-harmonic-source kernels match the CPU chain under both resample laws - is a defect.**
 
 **Every PR runs `run.das -- --suite model-free`, and `run.das -- --changed` on a box with the
 models stocked (the stocked files of the areas the change reaches; a core module with no
@@ -110,8 +109,7 @@ clauses true for every cell in the class.**
 **A diff that adds, renames, or drops an arm name - the literal passed to `arm_on(t, name)`
 (`_model_tier.das`), what `--arm` matches - updates the arm census in `CLAUDE.md`'s "Arm filter
 mechanics" section in the same change.** An arm the census does not name is unreachable to
-whoever is choosing what to run. A `REVIEW.das` check comparing the `arm_on(t, "...")` literals
-with that section's names can enforce this rule.
+whoever is choosing what to run.
 
 **A diff that adds, changes, or drops a cell's skip condition other than the runner's own
 `--arm` / `--family` filter - a `t |> skip` or an early return - updates in the same change the
