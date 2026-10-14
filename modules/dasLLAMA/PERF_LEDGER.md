@@ -79,6 +79,12 @@ what it costs today and what the fix would change.
     costs a quarter of the decode and a fifth to a third of the cold window on the bandwidth-bound arm: an A3B's dense
     planes are most of a token's bytes (about 1.9 GB a token at Q8_0 against 1.0 at 4 bits, the eight routed experts
     0.55), and the pure file's window reads the 4-bit experts and dense planes on its own bytes at the q8 tile's rate.
+  - Pure Q4_K (`llama-quantize --pure`, 20.06 GB, 4.5 bpw) against pure IQ4_XS on the same arm, two alternated rounds:
+    decode 187.3, 177.3 / 174.4, 166.9 against 188.6, 182.4 / 168.8, 169.8 - the two within the rounds' drift, so the
+    IQ4_XS lookup costs the bandwidth-bound decode nothing; prefill 2903, 2367 / 2456, 2172 against 4092, 3498 / 3220,
+    3023 tok/s - the Q4_K base-form window GEMM reads a third slower than the IQ4_XS one on this arm at near-equal
+    bytes (the Q8_0-rest twins above show the same gap on their expert planes: 2236 against 2862 at 9k). Open from this
+    reading: the K-quant base-form window tile against the IQ4_XS one (`followup_metal.md`).
 - **MEASURED (2026-10-13) - the Metal routed base form's bars (`tests/test_metal_prefill_parity.das`,
   `test_metal_prefill_moe_base_form`, the `moe-base` arm).** A `tests/run.das` cell; the GPU side is the Metal prefill
   window with the gather panel held off (`set_metal_moe_gather_min(1000000)`, so the gate and up sites ride the base form

@@ -1050,3 +1050,13 @@ round apart from the decode step's at a near-tie; the scheduler keeps the step. 
 work: one dispatch a layer over every segment - a segment table the attention tiles and the scan read their row range,
 key extent and slices from, the batched decode's route-table shape lifted to tiles - so a segment costs its rows alone;
 then the rider is a one-row segment of a window that is no stall.
+
+## 54. The K-quant base-form window GEMM reads a third slower than the IQ4_XS one at near-equal bytes
+
+On the M4 arm (`DASLLAMA_METAL_TENSOR=0`) a pure Q4_K Qwen3.6-35B-A3B prefills at 2400-2900 tok/s against the pure
+IQ4_XS file's 3000-4100 at the same session, while the two decode within the rounds' drift (`PERF_LEDGER.md`, the
+qwen leg's end re-measure entry); the Q8_0-rest twins show the same gap on their expert planes alone. The bytes are
+4.5 against 4.25 a weight, so the difference is the base-form tile's K-quant decode (the 6-bit sub-scales and mins
+unpacked a superblock) against the IQ4_XS lookup, not the bandwidth. The work: the K-quant base-form window tile
+profiled against the IQ4_XS one at the window's row counts, the sub-scale unpack hoisted a superblock the way the
+IQ4_XS tile hoists its lookup.
