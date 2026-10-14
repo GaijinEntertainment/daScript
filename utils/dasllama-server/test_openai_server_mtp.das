@@ -20,7 +20,7 @@ require math                                            // min
 // Qwen3.5-0.8B-MTP-Q8_0.gguf (the NextN head) and tinyllama-1.1b-chat-v1.0.Q8_0.gguf (no head).
 //! the Metal cells skip on a box with no Metal backend
 
-let TEST_PORT = 18150   // 18150-18156: the seven cells' boots; 18097-18147 belong to the sibling suites (test_openai_server*.das, test_setup_mode.das)
+let TEST_PORT = 18150   // 18150-18158: the nine cells' boots; 18097-18147 belong to the sibling suites (test_openai_server*.das, test_setup_mode.das)
 let TEST_CTX = 1024l
 
 let MTP_PATH = path_join(models_dir(), "Qwen3.5-0.8B-MTP-Q8_0.gguf")
