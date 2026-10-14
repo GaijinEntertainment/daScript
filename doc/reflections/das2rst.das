@@ -1454,7 +1454,8 @@ def document_module_lint_config(_root : string) {
         group_by_regex("Lint-surface predicates", mod, %regex~(is_user_authored_body|is_lint_fixture_name|lint_file_skip_reason|drop_skipped_file_issues)$%%),
         group_by_regex("Structured findings", mod, %regex~(make_lint_issue)$%%),
         group_by_regex("Fixes", mod, %regex~(apply_lint_fixes|lint_source_line)$%%),
-        group_by_regex("Format policy", mod, %regex~(format_policy_for|partition_by_format_policy)$%%)
+        group_by_regex("Format policy", mod, %regex~(format_policy_for|partition_by_format_policy)$%%),
+        group_by_regex("Line-length policy", mod, %regex~(line_length_policy_for)$%%)
     )
     document("Repo-level lint configuration", mod, "lint_config.rst", groups)
 }
