@@ -97,6 +97,14 @@ what it costs today and what the fix would change.
   - Pocket row GEMV (1024 x 1024) 9.67 / 9.79, 5.4-5.8 / 5.2-5.7; with LayerNorm + SiLU 12.79 / 12.99, 6.14 / 6.14.
   - With the subgroup reductions behind calls rather than `[spirv_inline]`, the Vulkan stamp read 1.9 us slower. The
     widest move is the 1-row out-norm's 0.33 us on the M5 against the 512-row window's 5.6 us back.
+  - The pair rulings the shared-kernels doc carries beside the table, same instruments: the router's two lane splits on
+    the M5 - a workgroup a row 3.37 against a subgroup a row 3.82 at one column, a subgroup a row 144 against a workgroup
+    a row 745 at 512 columns; the deltanet conv + L2 fold on the M5 at a 512-row window 83 against the fused 75 (a PB of
+    32 reads 108), at 8 rows 3.37 against 3.81 and at 16 rows 4.77 against 5.00, so `DN_CONV_FUSED_ROWS` sits at 16;
+    the one MoE tile walk under both Metal scaffolds within 0.5 % of the per-scaffold walks (the tile lab, two
+    alternated rounds, best of three; the lab's command line is not recorded); the Vulkan cm2 tile's unsplit k-loop
+    beside the split one on the pod, `harness/vk_gemm_probe.das` `cm2:k4`, two alternated rounds: the k4 l and m
+    stamps 1.2 to 1.5 % slower with the split arm alone (gate 0.190 to 0.193 ms, down 0.184 to 0.187 ms).
 - **STATED (2026-10-13) - the lasting buffers the device-home checkpoints, the host-cached claim stash and the Metal
   recurrent pool hold.** Not measured; the formulas are the record, f32 recurrent state, `L` the recurrent layers, `nvh`
   the value heads, `ds` the state size, `cd` the conv width (`2 x groups x ds + inner`), `taps` the conv kernel less one.

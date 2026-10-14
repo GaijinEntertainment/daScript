@@ -41,20 +41,18 @@ Narrowing the row's literal pins or the `ggml_type_bytes` walk is a defect.
 
 **A diff that makes a site - a weight plane a backend's (CPU, Metal, Vulkan) serving call reads -
 read a weight format through a converted copy, or hands a GPU site to the CPU's kernels, on a run
-that sets no lever is a defect - add that backend's kernels for the format at the site instead.** A converted copy is any form other than the
-format's disk encoding or its served form (a `KqFmt` member with its own descriptor row over the
-same GGUF type, `ARCHITECTURE_ENGINE_FORMATS.md#served-form`): a q8 demotion, an f16 or f32
-dequant.
-
-A scratch panel - an f16 tile a window's GEMM dequantizes from the site's own bytes - is not a
-converted copy while the bytes it holds are the current window's alone and no image carries them;
-its buffer may serve the next window.
+with every lever at its default is a defect - add that backend's kernels for the format at the
+site instead.** A lever is an env knob or setter that changes which form a site reads. A converted
+copy is a q8, f16 or f32 form of a format's weights, other than its served form (a `KqFmt` member
+with its own descriptor row over the same GGUF type, `ARCHITECTURE_ENGINE_FORMATS.md#served-form`),
+whose bytes outlive the prefill window - one chunk of prompt rows - that made them, or are written
+to the `.dlim` image.
 
 **A diff that states a backend serves a weight format - in any document, PR description, test
-name, or predicate answering that the format fits - while a site that backend's serving call
-reaches reads the format through a converted copy or on another backend's kernels is a defect -
-state that site as a gap instead, or cite the follow-up row that ledgers it.**
+name, or a predicate that returns true for "this backend runs this format" - while, on a run with
+every lever at its default, a site that backend's serving call reaches reads the format through a
+converted copy or hands a GPU site to the CPU's kernels is a defect - state that site as a gap
+instead, or cite the follow-up row that ledgers it.**
 
-**A diff that adds a lever, off by default, that makes a site read a weight format through a
-converted copy for measurement names that arm in `ARCHITECTURE_GPU_ASYMMETRIES.md` in the same
-change.** Such a lever is a measurement arm, not a served claim.
+**A diff that adds a lever, off by default, that makes a GPU site read a weight format through a
+converted copy names the lever in `ARCHITECTURE_GPU_ASYMMETRIES.md` in the same change.**
