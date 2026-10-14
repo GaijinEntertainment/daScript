@@ -1,0 +1,7 @@
+# The engine's server predates the line-length gate like the module it serves: its flag docs,
+# served notes and test cells are written to the module's wider width. Both measures are unchecked
+# here until the sweep modules/dasLLAMA/followup_general.md row 213 names wraps the tree; then this
+# file goes and the repo limits bind.
+[line_length]
+code = 0
+comment = 0

@@ -2097,7 +2097,8 @@
     the row that differs and whether it is the last token's alone; then either the cold run's last row
     evaled as the cached run evals it, or the difference stated in the server's README.
 213. **The module's `.das` lines run past the repo's line-length limits (code 100 columns, a comment
-    70), and `modules/dasLLAMA/.lint_config` leaves both measures unchecked here.** The sweep, after
+    70), and `modules/dasLLAMA/.lint_config` and `utils/dasllama-server/.lint_config` leave both
+    measures unchecked in the module and its server.** The sweep, after
     the 0.6.5 release: wrap every line over the limit by hand - a continuation line starting with `+`
     or `-` is its own statement, so an arithmetic tail goes inside `(...)` and a kernel stamp's MSL or
     SPIR-V text splits at its own grammar - then delete the `[line_length]` table and the file, so the
