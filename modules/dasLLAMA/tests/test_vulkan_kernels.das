@@ -4161,19 +4161,23 @@ def test_vkd_q5032_gemv(t0 : T?) {
 [test]
 def test_vkd_q5032_float_witness(t0 : T?) {
     t0 |> run("q5032: the scalar dot == the plane-dequant float witness over hashed planes, and a dropped qh bit reads apart") <| @(t : T?) {
-        let nb = 44
-        var inscope wq <- hashed_words(nb * int(KQ_Q5032_QWORDS), 1u, 73u)
-        var inscope ws <- iq4nl32_scale_words(nb, 0.002)
-        var inscope xq <- hashed_words(nb * 8, 31u, 5u)
-        var inscope xs <- [for (b in range(nb)); 0.05 + 0.01 * float(b % 5)]
-        let dot = q5032_gemv_row_oracle(wq, ws, xq, xs, 0, nb)
-        let wit = q5032_gemv_float_oracle(wq, ws, xq, xs, 0, nb)
-        t |> success(abs(dot - wit) <= 1.0e-4 * max(1.0, abs(wit)), "the scalar dot {dot} matches the plane-dequant witness {wit}")
-        for (b in range(nb)) {
-            wq[b * int(KQ_Q5032_QWORDS) + int(KQ_B32_QWORDS)] = 0u
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            let nb = 44
+            var inscope wq <- hashed_words(nb * int(KQ_Q5032_QWORDS), 1u, 73u)
+            var inscope ws <- iq4nl32_scale_words(nb, 0.002)
+            var inscope xq <- hashed_words(nb * 8, 31u, 5u)
+            var inscope xs <- [for (b in range(nb)); 0.05 + 0.01 * float(b % 5)]
+            let dot = q5032_gemv_row_oracle(wq, ws, xq, xs, 0, nb)
+            let wit = q5032_gemv_float_oracle(wq, ws, xq, xs, 0, nb)
+            t |> success(abs(dot - wit) <= 1.0e-4 * max(1.0, abs(wit)), "the scalar dot {dot} matches the plane-dequant witness {wit}")
+            for (b in range(nb)) {
+                wq[b * int(KQ_Q5032_QWORDS) + int(KQ_B32_QWORDS)] = 0u
+            }
+            let dropped = q5032_gemv_float_oracle(wq, ws, xq, xs, 0, nb)
+            t |> success(abs(dropped - wit) > 1.0e-3 * max(1.0, abs(wit)), "the control: the planes with their qh words zeroed read apart ({dropped} vs {wit})")
+        } else {
+            t |> skip("dasVulkan not present")
         }
-        let dropped = q5032_gemv_float_oracle(wq, ws, xq, xs, 0, nb)
-        t |> success(abs(dropped - wit) > 1.0e-3 * max(1.0, abs(wit)), "the control: the planes with their qh words zeroed read apart ({dropped} vs {wit})")
     }
 }
 
@@ -5083,12 +5087,17 @@ def test_vkd_q8_gemv_pair(t0 : T?) {
 
 //! a per-32 plane's scale words for `totblk` blocks: q51's d | m halves, iq4nl32's two halves a word, mx4's four E8M0 bytes a word
 def private blk32_scale_plane(f : KqFmt; totblk : int) : array<uint> {
-    if (f == KqFmt.q51) {
-        return <- [for (b in range(totblk)); packHalf2x16(float2(0.002 * float(1 + b % 7), 0.001 * float(b % 5) - 0.002))]
-    } elif (f == KqFmt.iq4nl32 || f == KqFmt.q4032 || f == KqFmt.q5032) {
-        return <- iq4nl32_scale_words(totblk, 0.002)
+    var words : array<uint>
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        if (f == KqFmt.q51) {
+            words <- [for (b in range(totblk)); packHalf2x16(float2(0.002 * float(1 + b % 7), 0.001 * float(b % 5) - 0.002))]
+        } elif (f == KqFmt.iq4nl32 || f == KqFmt.q4032 || f == KqFmt.q5032) {
+            words <- iq4nl32_scale_words(totblk, 0.002)
+        } else {
+            words <- mx4_scale_words(totblk)
+        }
     }
-    return <- mx4_scale_words(totblk)
+    return <- words
 }
 
 //! the per-32 formats' columns against the engine's scalar dots: column c's activation row (the quants and scales c x nb
@@ -5097,15 +5106,17 @@ def private blk32_ncol_oracle(f : KqFmt; wqh, wsh, xqh : array<uint>; xsh : arra
     let nb = n / 32
     var y_ref : array<float>
     y_ref |> resize(d * ncol_max)
-    for (c in range(ncol_max)) {
-        var inscope xq_c <- [for (i in range(nb * 8)); xqh[c * nb * 8 + i]]
-        var inscope xs_c <- [for (i in range(nb)); xsh[c * nb + i]]
-        for (row in range(d)) {
-            y_ref[c * d + row] = (f == KqFmt.q51 ? q51_gemv_row_oracle(wqh, wsh, xq_c, xs_c, row * nb, nb)
-                : (f == KqFmt.iq4nl32 ? iq4nl32_gemv_row_oracle(wqh, wsh, xq_c, xs_c, row * nb, nb)
-                : (f == KqFmt.q4032 ? q4032_gemv_row_oracle(wqh, wsh, xq_c, xs_c, row * nb, nb)
-                : (f == KqFmt.q5032 ? q5032_gemv_row_oracle(wqh, wsh, xq_c, xs_c, row * nb, nb)
-                : mx4_gemv_row_oracle(wqh, wsh, xq_c, xs_c, row * nb, nb)))))
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        for (c in range(ncol_max)) {
+            var inscope xq_c <- [for (i in range(nb * 8)); xqh[c * nb * 8 + i]]
+            var inscope xs_c <- [for (i in range(nb)); xsh[c * nb + i]]
+            for (row in range(d)) {
+                y_ref[c * d + row] = (f == KqFmt.q51 ? q51_gemv_row_oracle(wqh, wsh, xq_c, xs_c, row * nb, nb)
+                    : (f == KqFmt.iq4nl32 ? iq4nl32_gemv_row_oracle(wqh, wsh, xq_c, xs_c, row * nb, nb)
+                    : (f == KqFmt.q4032 ? q4032_gemv_row_oracle(wqh, wsh, xq_c, xs_c, row * nb, nb)
+                    : (f == KqFmt.q5032 ? q5032_gemv_row_oracle(wqh, wsh, xq_c, xs_c, row * nb, nb)
+                    : mx4_gemv_row_oracle(wqh, wsh, xq_c, xs_c, row * nb, nb)))))
+            }
         }
     }
     return <- y_ref
@@ -5718,7 +5729,7 @@ def private rope_kv_b_row0_arm(t : T?) {
 
 //! one window-form `qkn_rope_cls` dispatch: `nr` rows from row `row0` of planes `rows` deep, their k and v rows `kvrow` apart in the
 //! projection plane (`kv`, the v rows at `vbase`), at positions from `pos0`; the q plane in place, then the K and V mirrors
-def private qkn_window_run(q, kv, cs, wn : array<float>; pc : GkQknRopeArgs; nr, mirn : int) : tuple<q : array<float>; m : array<float>> {
+def private qkn_window_run(q, kv, cs, wn : array<float>; pc; nr, mirn : int) : tuple<q : array<float>; m : array<float>> {
     var out : tuple<q : array<float>; m : array<float>>
     static_if (typeinfo builtin_module_exists(vulkan)) {
         with_cell_planes() $(var cp : CellPlanes) {
