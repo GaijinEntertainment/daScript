@@ -49,6 +49,8 @@ module style_lint shared private
 //!   STYLE039 — non-ASCII byte in a string literal (on by default under daslib/ and modules/, override per module with 'options _ascii_strings'; suppress with '// nolint:STYLE039') — emitted strings and error messages must be ASCII unless intended
 //!   STYLE044 — 'match' block written with the deprecated 'if (pattern) { body }' arms — write 'pattern => $ { body }' arms ('$v(n)' becomes the bare name 'n'; a bare name that compared becomes 'match_expr(name)')
 //!   STYLE041 — bool flag initialized false, set true on terminal paths, then consumed by a single 'if (flag) return ...' — a return value in disguise; return directly at each set site (walk-abort callbacks, negative polarity, non-terminal sets, and init-true flags are exempt)
+//!   STYLE046 — a statement-form 'match' arm whose '$ { }' block
+//!     holds one expression - write 'pattern => EXPR'
 //!   STYLE045 — a &&/||/! condition over one int variable that an
 //!     interval lattice collapses to a single comparison ('x != 1 &&
 //!     x > 0' is 'x >= 2')
@@ -329,6 +331,7 @@ class StyleLintVisitor : AstVisitor {
         st041_candidates |> clear()
         check_defer_pipe(fn)
         check_legacy_match_arms(fn)
+        check_block_match_arms(fn)
         check_style042_expression_body(fn)
         if (analyze_requires && fn._module == this_module) {
             for (a in fn.annotations) {
@@ -396,6 +399,94 @@ class StyleLintVisitor : AstVisitor {
             at.line = uint(ln)
             at.last_line = uint(ln)
             style_warning("STYLE044: 'if (pattern)' match arms are deprecated; write 'pattern => $ \{ body \}' arms - '$v(n)' becomes the bare name 'n', and a bare name that compared becomes 'match_expr(name)'", at)
+        }
+    }
+
+    def in_match_arms(at : LineInfo; ln, first : int) : bool {
+        //! Whether line ``ln`` sits directly in the arms block of a ``match``
+        //! / ``static_match``: the block it is in opens on a match head.
+        var depth = 0
+        for (back in range(ln - first)) {
+            let code = code_line(at, ln - 1 - back)
+            peek_data(code) $(bytes) {
+                for (ch in bytes) {
+                    depth += int(ch) == '}' ? 1 : (int(ch) == '{' ? -1 : 0)
+                }
+            }
+            return match_head_open(code) >= 0 if (depth < 0)
+        }
+        return false
+    }
+
+    def is_arm_expression(code : string) : bool {
+        //! Whether one statement can be a match arm's expression: no
+        //! declaration, control flow, ``delete``, ``unsafe``, postfix ``if``,
+        //! assignment, or brace outside a string.
+        return false if (empty(code) || code_find(code, " if (") >= 0 || code_find(code, "<-") >= 0
+            || ends_with(code, ";"))
+        for (kw in ["return", "let", "var", "if", "elif", "else", "for", "while", "break",
+                    "continue", "delete",
+                    "unsafe", "yield", "pass", "assume", "static_if", "try", "goto", "label"]) {
+            return false if (code == kw || starts_with(code, "{kw} ") || starts_with(code, "{kw}("))
+        }
+        var assigns = false
+        var in_string = false
+        var prev = 0
+        peek_data(code) $(bytes) {
+            for (ch, i in bytes, count()) {
+                let c = int(ch)
+                if (in_string) {
+                    in_string = !(c == '"' && prev != '\\')
+                } elif (c == '"') {
+                    in_string = true
+                } elif (c == '{' || c == '}') {
+                    assigns = true
+                } elif (c == '=') {
+                    let next = i + 1 < length(bytes) ? int(bytes[i + 1]) : 0
+                    assigns ||= (prev != '=' && prev != '!' && prev != '<' && prev != '>'
+                        && next != '=' && next != '>')
+                }
+                prev = c
+            }
+        }
+        return !assigns
+    }
+
+    def check_block_match_arms(fn : FunctionPtr) : void {
+        return if (fn.flags.generated || fn.body == null || fn.at.fileInfo == null
+            || fn.at.line == 0u)
+        let first = int(fn.body.at.line)
+        let last = int(fn.body.at.last_line)
+        for (ln in range(first, last + 1)) {
+            let head = lint_source_line(fn.at, ln)
+            let arrow = code_find(head, "=> $")
+            let code = strip(head)
+            continue if (arrow < 0 || code_line(fn.at, ln) != code
+                || !starts_with(slice(head, arrow), "=> $ \{"))
+            var fix = LintFix(line = ln, column = arrow, last_line = ln)
+            var expr = ""
+            if (ends_with(code, "=> $ \{") && ln + 2 <= last) {
+                let body = lint_source_line(fn.at, ln + 1)
+                let close = lint_source_line(fn.at, ln + 2)
+                let indent = length(head) - length(strip_left(head))
+                continue if (code_find(body, "//") >= 0 || strip(close) != "\}"
+                    || length(close) - length(strip_left(close)) != indent)
+                expr = strip(body)
+                fix.last_line = ln + 2
+                fix.last_column = length(close)
+            } elif (ends_with(code, "\}")) {
+                let close = length(strip_right(head)) - 1
+                expr = strip(slice(head, arrow + 6, close))
+                fix.last_column = close + 1
+            }
+            continue if (empty(expr) || arrow + 3 + length(expr) > STYLE042_MAX_LINE
+                || !is_arm_expression(expr) || !in_match_arms(fn.at, ln, first))
+            fix.replacement = "=> {expr}"
+            var at = fn.at
+            at.line = uint(ln)
+            at.last_line = uint(ln)
+            style_warning("STYLE046: this match arm's block holds one expression; " +
+                "write it without the block - 'pattern => {expr}'", at, fix)
         }
     }
 

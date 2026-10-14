@@ -3505,6 +3505,31 @@ Silent when: the result is a genuine two-sided range or two disjoint intervals
 condition is already a single comparison, or the operands are not ``int``. An
 always-true condition belongs to STYLE010, not here.
 
+STYLE046 — a match arm block that holds one expression
+======================================================
+
+In the statement form of ``match``, an arm whose body is a single expression is
+written without a block::
+
+    // Bad - STYLE046 on both arms
+    match (x) {
+        0 => $ {
+            note(log, "zero")
+        }
+        _ => $ { note(log, "other") }
+    }
+
+    // Good
+    match (x) {
+        0 => note(log, "zero")
+        _ => note(log, "other")
+    }
+
+``--fix`` rewrites the arm. Silent when the block holds a ``return``, a
+declaration, control flow, ``delete``, ``unsafe``, an assignment or a move, a
+postfix ``if``, a comment on the arm, or a brace outside a string, and when the one-line
+arm would pass the 100-column limit.
+
 -----
 Tests
 -----
