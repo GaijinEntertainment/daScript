@@ -848,11 +848,16 @@ absent; set `DASLLAMA_MODELS_DIR`):
   conversations, the replayed first replies, the byte-identical repeat) and its summary off a
   fixed table of answers (shares by kind, the cold start, the openings attached, the medians, a
   refused request counted as failed).
-- `test_server_flags.das` - model-free: the flag-presence test behind the config surface's
-  provenance - a flag the process was given reads present, bare or as `flag=value`, and an
-  absent one or a prefix of a given one reads absent; and the self-speculation default's rule
-  as the slot reads it (`mtp_auto_arms`, the Vulkan arm included) and as the config surface
-  resolves it, with the Metal mode a `--gpu` pick and a `--metal` spelling resolve to.
+- `test_server_flags.das` - the flag-presence test behind the config surface's provenance - a
+  flag the process was given reads present, bare or as `flag=value`, and an absent one or a
+  prefix of a given one reads absent; the self-speculation default's rule as the slot reads it
+  (`mtp_auto_arms`, the Vulkan arm and the catalog `serve_mtp` gate included) and as the config
+  surface resolves it, with the Metal mode a `--gpu` pick and a `--metal` spelling resolve to;
+  and the catalog's `serve_mtp` read off a file's base name - all model-free. One cell is not: a
+  Vulkan slot on the server's defaults over `Qwen3.5-0.8B-MTP-Q8_0.gguf` and
+  `Qwen3.6-35B-A3B-MTP-IQ4_XS-pure.gguf` speculates with its stream device-home, and the
+  device's draft and verify counters count each drafted step; it needs `DASLLAMA_GPU=1` and
+  skips without it.
 - `tests/` - the control page itself, under real Playwright (Node + chromium): badge states,
   models panel, streams/history, chat wire + SSE rendering, the speech studio, config editor,
   exchange section, the confirm-gated controls. Model-free - the page runs against JSON/SSE fixtures captured

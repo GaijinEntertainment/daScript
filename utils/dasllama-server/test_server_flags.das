@@ -1,5 +1,5 @@
 options gen2
-options stack = 524288   // every dasLLAMA program root takes this budget: the slot cell's ModelSlot and the engine's frames overflow the default
+options stack = 524288   // every dasLLAMA program root takes this budget (options stack does not unify up from libs)
 options persistent_heap
 options _dasllama_internal = true   // the K/V room seam the ctx-clamp cell doubles is the engine's, not the facade's
 
@@ -12,9 +12,9 @@ require daslib/clargs                                   // get_user_args / flag_
 require strings
 require daslib/fio                                      // the roster cell writes its config
 require math
-require _server_rig                                     // models_dir / model_missing - the suites' one model root and gate
-require dasllama/dasllama_gpu_resident                  // resident_mirror_dtype, the device's draft and verify counters
-require dasllama/dasllama_scheduler                     // the slot's scheduler stepped in process
+require _server_rig
+require dasllama/dasllama_gpu_resident
+require dasllama/dasllama_scheduler
 
 // Model-free unit coverage for the flag-presence test behind the config surface's provenance:
 // a flag the process was given reads present, in both spellings, and an absent one reads absent;
@@ -294,11 +294,6 @@ def test_roster_from_flags(t : T?) {
 
 let private SLOT_PAGE_ROWS = 64l   //! the server's default paged sessions (`--flat` off): the slot's scheduler as `main.das` builds it
 
-//! A Vulkan slot over a NextN-headed model on the server's defaults - one stream, paged sessions, `mtp` unset: the auto-arm
-//! turns speculation on, its stream homes on the device where every seat of the round runs there, and the drafted steps are
-//! counted by the device's own draft and verify counters with no call passed to the CPU rails - not the slot's predicate
-//! alone. Needs the file under DASLLAMA_GPU=1 and the JIT; skips without them, and where the driver sums the routed experts
-//! on the host (a card that does not hold the experts whole), where the auto-arm stays off by rule.
 def private slot_mtp_device_home(t : T?; file : string) {
     let path = path_join(models_dir(), file)
     return if (model_missing(t, path))
@@ -322,8 +317,8 @@ def private slot_mtp_device_home(t : T?; file : string) {
         }
         s.backend_effective = "gpu:resident"
         s.gpu_regions = gpu_device_sessions()
-        let spec = mtp_auto_arms(1l, false, s.backend_effective, gpu_resident_experts_host())
-        t |> success(spec, "the unset mtp arms one stream whose decode the whole-model driver serves")
+        let spec = mtp_auto_arms(1l, false, s.backend_effective, gpu_resident_experts_host(), "vulkan")
+        t |> success(spec, "the unset mtp arms one stream whose decode the whole-model driver serves, on a catalog row listing vulkan")
         s.sched <- create_scheduler(s.model, 1l, 4l, 64l, SLOT_PAGE_ROWS, (s.model.config.seq_len + SLOT_PAGE_ROWS - 1l) / SLOT_PAGE_ROWS,
                                     KVDtype.f16, spec)
         t |> success(s.sched.mtp && s.sched.paged, "the slot speculates on the server's paged sessions")
@@ -370,7 +365,6 @@ def test_slot_mtp_device_home_moe(t : T?) {
     }
 }
 
-//! the catalog's `serve_mtp` read off a model file's base name, and the platform list it carries
 [test]
 def test_mtp_catalog_platforms(t : T?) {
     t |> run("the catalog's serve_mtp is read off the model file's base name; a file with no row lists none") @(t : T?) {
