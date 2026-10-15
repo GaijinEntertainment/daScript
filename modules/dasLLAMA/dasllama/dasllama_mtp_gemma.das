@@ -88,13 +88,16 @@ struct private DrPlan {
 
 // ===== sidecar discovery =====
 
-//! the stem before the trailing quant token ("...-it-Q4_K_M" -> "...-it"); no marker = the whole stem
+//! the stem before the trailing quant token, `-Q<digit>` or `-IQ<digit>` ("...-it-Q4_K_M" and "...-it-UD-IQ3_XXS" -> "...-it" and
+//! "...-it-UD"); no token = the whole stem
 def private quant_stem(stem : string) : string {
     var cut = -1
     peek_data(stem) $(d : array<uint8> const#) {
         let n = length(d)
-        for (i in range(max(0, n - 2))) {
-            if (int(d[i]) == '-' && int(d[i + 1]) == 'Q' && int(d[i + 2]) >= '0' && int(d[i + 2]) <= '9') {
+        for (i in range(n)) {
+            continue if (int(d[i]) != '-')
+            let q = i + 1 < n && int(d[i + 1]) == 'I' ? i + 2 : i + 1
+            if (q + 1 < n && int(d[q]) == 'Q' && int(d[q + 1]) >= '0' && int(d[q + 1]) <= '9') {
                 cut = i
             }
         }
@@ -102,19 +105,19 @@ def private quant_stem(stem : string) : string {
     return cut < 0 ? stem : slice(stem, 0, cut)
 }
 
-//! The gemma-4 drafter sidecar beside `model_path`: `mtp-<stem>-Q8_0.gguf` when it exists (the
-//! head's quant is chosen independently of the trunk's), else the exact-name `mtp-<basename>`
-//! sibling, else "". A path already naming a head never recurses onto itself.
+//! The gemma-4 drafter sidecar beside `model_path`: `mtp-<stem>-Q8_0.gguf` when it exists (the head's quant is chosen independently
+//! of the trunk's), `<stem>` the quant stem and then that stem with an unsloth `-UD` tag dropped (the upstream head carries none),
+//! else the exact-name `mtp-<basename>` sibling, else "". A path already naming a head never recurses onto itself.
 def gemma_drafter_sidecar(model_path : string) : string {
     let name = base_name(model_path)
     if (name |> starts_with("mtp-")) {
         return ""
     }
     let dir = dir_name(model_path)
-    let stem = trim_suffix(name, ".gguf")
-    let pref = path_join(dir, "mtp-{quant_stem(stem)}-Q8_0.gguf")
-    if (fexist(pref)) {
-        return pref
+    let stem = quant_stem(trim_suffix(name, ".gguf"))
+    for (head in [stem, trim_suffix(stem, "-UD")]) {
+        let pref = path_join(dir, "mtp-{head}-Q8_0.gguf")
+        return pref if (fexist(pref))
     }
     let exact = path_join(dir, "mtp-{name}")
     return fexist(exact) ? exact : ""
@@ -148,8 +151,7 @@ def private plan_tensor(var dr : GemmaDrafter; m : GGUFMeta; var plans : array<D
     }
     let want_type = q8 ? GGML_TYPE_Q8_0 : GGML_TYPE_F32
     if (m.tensors[ti].ggml_type != want_type) {
-        let tn = q8 ? "Q8_0" : "F32"
-        return refuse_off(dr, "tensor '{name}' is type {m.tensors[ti].ggml_type}, expected {tn}")
+        return refuse_off(dr, "tensor '{name}' is {ggml_type_name(m.tensors[ti].ggml_type)}, expected {ggml_type_name(want_type)}: the drafter serves a Q8_0 sidecar alone")
     }
     if (m.tensors[ti].n_elem != want_n) {
         return refuse_off(dr, "tensor '{name}' has {m.tensors[ti].n_elem} elements, expected {want_n}")
@@ -331,6 +333,29 @@ def gemma_drafter_bind_target(var dr : GemmaDrafter; target_n_layers : int64) {
     dr.kv_bound = true
 }
 
+//! Why the drafter `dr` cannot serve the trunk `t` ("" = it can): a per-layer-embedding trunk (the E-series) has no sidecar and
+//! its verify rows need the side input the draft ids index; the trunk's hidden is the drafter's `tdim`; and each drafter layer's
+//! capture layer - the trunk's last of its attention class - carries the drafter's head size and kv heads. Every attach asks it.
+def gemma_drafter_target_why(t : Model; dr : GemmaDrafter) : string {
+    let c = t.config
+    if (has_ple(c)) {
+        return "the trunk carries per-layer embeddings (an E-series model), and no drafter sidecar for one exists"
+    }
+    if (dr.tdim != c.dim) {
+        return "the trunk's hidden is {c.dim} wide, the drafter reads {dr.tdim}"
+    }
+    if (c.n_layers <= 2l) {
+        return "the trunk has {c.n_layers} layers, short of the two capture layers"
+    }
+    for (l in range64(dr.n_layers)) {
+        let kvl = dr.kv_bound ? dr.kv_layer[l] : c.n_layers + dr.kv_layer[l]
+        if (layer_is_sliding(c, kvl) != dr.sliding[l] || layer_head_size(c, kvl) != dr.hs[l] || layer_n_kv_heads(c, kvl) != dr.kvh[l]) {
+            return "drafter layer {l} reads trunk layer {kvl}, which is {layer_n_kv_heads(c, kvl)}x{layer_head_size(c, kvl)} sliding {layer_is_sliding(c, kvl)} - the drafter wants {dr.kvh[l]}x{dr.hs[l]} sliding {dr.sliding[l]}"
+        }
+    }
+    return ""
+}
+
 //! Load the gemma-4 assistant drafter sidecar at `path`. Never panics: any refusal - a wrong
 //! architecture, a missing or non-Q8_0 weight, a stray K/V tensor - lands as `ok = false` plus a
 //! `why`. `target_n_layers > 0` binds `kv_layer` in the same call.
@@ -377,6 +402,11 @@ def load_gemma_drafter(path : string; target_n_layers : int64 = 0l) : GemmaDraft
         gemma_drafter_bind_target(dr, target_n_layers)
     }
     return <- dr
+}
+
+[init]
+def private gemma_drafter_sidecar_init {
+    register_mtp_sidecar(@@gemma_drafter_sidecar)
 }
 
 // ===== CPU reference forward =====

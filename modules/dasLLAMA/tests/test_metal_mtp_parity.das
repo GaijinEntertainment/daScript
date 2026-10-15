@@ -1018,7 +1018,7 @@ def private run_verify_fixture(t : T?; file, tag : string; tol : float; expect_d
             let side = gemma_drafter_sidecar(path)
             if (empty(side)) {
                 t |> skip("{tag}: no assistant drafter sidecar beside {file}")
-            } elif (!attach_gemma_drafter(trg, side)) {
+            } elif (attach_gemma_drafter(trg, side) != "") {
                 t |> failure("{tag}: the drafter {side} beside the carrier did not attach")
             } else {
                 var count <- encode(tr, counting_prompt(1, 40), true, false)

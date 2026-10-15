@@ -2913,19 +2913,137 @@ def private rdec_dn_own_all(var s : Session; n_layers : int64; prefill : bool = 
 
 var private @scratch g_rdec_one_tok : array<int64>   //! the token's id as the gather's one-row list
 
-//! the plan carries the landing's planes: a NextN head and the tier's landing, whatever the knob says at the load
-[arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-spec-knob-gate")]
-def private rdec_carry_planned(c : Config) : bool => c.n_layer_nextn > 0l && rdec_carry_installed()
+var private g_rdec_assist = false   //! an assistant drafter is attached to the armed model: the carry lands every step (`gpu_resident_assist_set`)
 
-//! the carry lands this step: the planned landing and the speculative round on - the knob read per step, so a round switched off pays no carry
+//! the plan carries the landing's planes: a NextN head and the tier's landing, whatever the knob says at the load - or an attached
+//! assistant drafter, whose attach armed the landing after the load
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-spec-knob-gate")]
-def private rdec_carry_on(c : Config) : bool => rdec_carry_planned(c) && get_mtp_spec()
+def private rdec_carry_planned(c : Config) : bool => (c.n_layer_nextn > 0l || g_rdec_assist) && rdec_carry_installed()
+
+//! the carry lands this step: the planned landing and the speculative round on - the knob read per step, so a round switched off pays
+//! no carry - or the assistant drafter attached, which reads it every round
+[arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-spec-knob-gate")]
+def private rdec_carry_on(c : Config) : bool => rdec_carry_planned(c) && (get_mtp_spec() || g_rdec_assist)
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_LANDING.md#logits-transfer-queue")]
 def private rdec_stash_carry(c : Config; var s : Session; row, pos1 : int64) {
     return if (!rdec_carry_on(c))
+    s.mtp_h |> grow_resize(mtp_h_dim(c))   //! a headless model's sessions size no carry at make_run_state
     rdec_land_carry(row, s.mtp_h)
     s.mtp_h_pos1 = pos1
+}
+
+//! The assistant drafter's attach and detach on the armed model (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-assistant-drafter`): the carry
+//! lands every step while `on` holds. The model drop clears it
+def gpu_resident_assist_set(on : bool) {
+    g_rdec_assist = on
+}
+
+//! the region `s`'s assistant round of `nr` rows from `pos` serves in, bound and holding the session's rows to `pos`, or -1 (another
+//! codec or past the region's context, the pass counted; no region but the ones the tick's earlier streams bound, `taken`, free) -
+//! every rung before any state moves, so a refused stream steps plain after the tick's verify and takes no region from it
+[arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-assistant-drafter")]
+def gpu_resident_assist_bind(t : Model; var s : Session; pos, nr : int64; taken : array<int64>) : int64 {
+    return -1l if (!g_rdec_active || !rdec_session_codec_ok(s))
+    if (pos + nr > g_rdec_cap) {
+        rdec_pass_once(RdecPass.cap, pos + nr, g_rdec_cap)
+        return -1l
+    }
+    let nt = long_length(taken)
+    if (!rdec_owns(s, s.rdec_region)) {   //! the least recently used region a bind takes is one the tick has not: those it bound are the most recent
+        var free = false
+        for (i in range64(long_length(g_rdec_regions))) {
+            free = free || (!g_rdec_regions[i].pinned && !rdec_region_repeats(taken, nt, i))
+        }
+        return -1l if (!free)
+    }
+    let r = rdec_bind_region(t, s)
+    return -1l if (r < 0l)
+    rdec_row_bind(t, s, r, pos, 0l, "assistant")
+    return r
+}
+
+var private @scratch g_rdec_av_hid : array<float>
+
+//! The assistant drafter's verify on the N-row token command (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-assistant-drafter`): group g is
+//! `nr[g]` consecutive rows of `sessions[g]` from `pos[g]` in its bound region `regs[g]`, the groups' tokens one after another in `toks`,
+//! as many whole groups a command as its rows hold. Each row's logits land in its session's `mtp_logits_b` - or, under `pick_only`,
+//! its device pick alone - its post-final-norm hidden in `mtp_hrows` and its pick in `mtp_picks` (-1 where the logits landed); each
+//! region then holds the rows the verify wrote. False where a group passes the command's rows
+[arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-assistant-drafter")]
+def gpu_resident_assist_verify(t : Model; var sessions : array<Session?>; toks : array<int64>; pos, nr, regs : array<int64>; pick_only : bool) : bool {
+    let c = t.config
+    let dim = c.dim
+    let vocab = c.vocab_size
+    let ce = g_rdec_cos_elems
+    let at_once = rdec_token_n_rows()
+    let ng = long_length(sessions)
+    var g0 = 0l
+    var tok0 = 0l
+    while (g0 < ng) {
+        var g1 = g0
+        var rows = 0l
+        while (g1 < ng && rows + nr[g1] <= at_once) {
+            rows += nr[g1]
+            g1++
+        }
+        return false if (g1 == g0)
+        g_rdec_x_n |> grow_resize(dim * rows)
+        g_rdec_cos_n |> grow_resize(ce * rows)
+        rdec_rows_planes(rows)
+        var row = 0l
+        for (g in range64(g0, g1)) {
+            var s & = unsafe(*sessions[g])
+            if (!pick_only) {
+                s.mtp_logits_b |> overwrite_resize(nr[g] * vocab)
+            }
+            s.mtp_hrows |> overwrite_resize(nr[g] * dim)
+            s.mtp_picks |> resize(nr[g])
+            for (i in range64(nr[g])) {
+                embed_row(t, toks[tok0 + i], unsafe(addr(g_rdec_x_n[row * dim])))
+                rdec_rope_rows(t, pos[g] + i + s.rope_pos_delta, g_rdec_cos_n, row * ce)
+                rdec_row_plane(row, pos[g] + i, regs[g], pick_only ? null : unsafe(addr(s.mtp_logits_b[i * vocab])))
+                row++
+            }
+            tok0 += nr[g]
+        }
+        if (c.embed_scale != 1.0) {
+            scale_inplace(unsafe(addr(g_rdec_x_n[0])), c.embed_scale, dim * rows)
+        }
+        rdec_token_n(g_rdec_x_n, g_rdec_cos_n, g_rdec_ple_rows, false, g_rdec_poss, g_rdec_cnts, g_rdec_regs, rows, g_rdec_lrows, g_rdec_picks)
+        g_rdec_av_hid |> grow_resize(dim)
+        row = 0l
+        for (g in range64(g0, g1)) {
+            var s & = unsafe(*sessions[g])
+            for (i in range64(nr[g])) {
+                s.mtp_picks[i] = g_rdec_picks[row]
+                rdec_land_carry(row, g_rdec_av_hid)
+                copy_floats(g_rdec_av_hid, 0l, s.mtp_hrows, i * dim, dim)
+                row++
+            }
+            g_rdec_regions[regs[g]].cnt = pos[g] + nr[g]
+            rdec_host_mark(s, false)
+        }
+        g0 = g1
+    }
+    return true
+}
+
+//! the assistant round's commit on the device: the region `s` owns holds its rows to `n_past`, the rejected drafts' rows past it dead
+[arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-assistant-drafter")]
+def gpu_resident_assist_commit(s : Session) {
+    if (rdec_owns(s, s.rdec_region)) {
+        g_rdec_regions[s.rdec_region].cnt = s.n_past
+    }
+}
+
+//! the token rows the N-row command steps at once on the armed driver (0 = it declined the model): an assistant verify's groups ride it
+def gpu_resident_assist_rows() : int64 => g_rdec_active ? rdec_token_n_rows() : 0l
+
+//! position `pos`'s cos/sin plane on the armed driver (every rope class end to end, `resident_cos_elems` floats) into `dst` from `base`
+def gpu_resident_rope_row(t : Model; pos : int64; var dst : array<float>; base : int64) {
+    dst |> grow_resize(base + g_rdec_cos_elems)
+    rdec_rope_rows(t, pos, dst, base)
 }
 
 var private g_rdec_drafts = 0l
@@ -5205,6 +5323,7 @@ def moe_gpu_drop_model_() {
     g_rdec_experts_host = false
     g_rdec_host_layers = 0l
     g_rdec_mirror_slabs = 0l
+    g_rdec_assist = false
     rdec_set_host_experts(false)
     moe_gpu_dn_invalidate()
     rdec_set_active(false)

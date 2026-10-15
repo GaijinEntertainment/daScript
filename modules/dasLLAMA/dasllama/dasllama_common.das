@@ -698,30 +698,111 @@ def mtp_walk_sampled(var s : Session; k, vocab : int64) : int64 {
     return a
 }
 
-//! The assistant drafter's seams, where a driver carries one (the gemma-4 drafter sidecar): the sidecar beside a model
-//! file, the attach, and whether `t` has one attached. Unset = no assistant.
+//! The round's accept walk over `k` drafts: the leading run of verify rows whose pick (`pick`) equals the draft the row
+//! verifies - or, for a sampled stream, the sampled walk - with row a's logits landed as the session's next unless `picks_only`
+//! (the caller publishes row a's pick); every round's walk, the NextN round's and the assistant round's on both backends
+[arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-round-one-join")]
+def mtp_accept_walk(var s : Session; k, vocab : int64; pick : block<(row : int64) : int64>; picks_only : bool = false) : int64 {
+    var a = 0l
+    if (mtp_walk_samples(s)) {
+        a = mtp_walk_sampled(s, k, vocab)
+    } else {
+        while (a < k && invoke(pick, a) == s.mtp_vbatch[a + 1l]) {
+            a++
+        }
+    }
+    if (!picks_only) {
+        copy_floats(s.mtp_logits_b, a * vocab, s.logits, 0l, vocab)
+    }
+    return a
+}
+
+//! The round's commit at `pos` after `a` of `k` drafts, the host half every backend shares: the carry's position, the tallies, `n_past`
+def mtp_round_commit_host(var s : Session; pos, k, a : int64) {
+    s.mtp_h_pos1 = pos + a + 1l
+    s.mtp_accepted += a
+    mtp_pos_note(k, a)
+    s.n_past = pos + a + 1l
+}
+
+//! A GPU driver's assistant-drafter seams (the gemma-4 drafter sidecar), one set a backend: the attach (`""`, or why it refused),
+//! whether `t` has one attached on this backend, and the speculative rounds of a tick's streams at depth `k` - each stream's
+//! accepted draft count in `acc`, the drafts in its `mtp_vbatch[1..]`, the streams whose rows one verify carried returned.
 struct MtpAssistantSeams {
-    sidecar : function<(model_path : string) : string>
-    attach : function<(t : Model; path : string) : bool>
+    attach : function<(t : Model; path : string) : string>
     attached : function<(t : Model) : bool>
-}
-var private g_mtp_assistant : MtpAssistantSeams
-
-def register_mtp_assistant(seams : MtpAssistantSeams) {
-    g_mtp_assistant = seams
+    rounds : function<(t : Model; var sessions : array<Session?>; toks : array<int64>; k : int64; var acc : array<int64>) : int64>
+    detach : function<() : void>
+    stats : function<() : MtpAssistantStats>
 }
 
-//! The assistant drafter file beside `model_path` ("" where none, or no driver carries one).
+//! An attached drafter's device rounds since its attach (the served cells' witness)
+struct MtpAssistantStats {
+    drafted : int64
+    accepted : int64
+    rounds : int64
+    joint : int64      //! verifies whose rows carried two streams or more
+}
+var private g_mtp_assistants : table<string; MtpAssistantSeams>
+var private g_mtp_sidecar : function<(model_path : string) : string>
+
+[arch(at="../ARCHITECTURE_GPU_MTP.md#assistant-drafter-step")]
+def register_mtp_assistant(backend : string; seams : MtpAssistantSeams) {
+    g_mtp_assistants[backend] = seams
+}
+
+//! The assistant drafter's sidecar resolver - backend-free, registered by the drafter's loader
+def register_mtp_sidecar(fn : function<(model_path : string) : string>) {
+    g_mtp_sidecar = fn
+}
+
+//! The assistant drafter file beside `model_path` ("" where none, or no loader is registered).
 def mtp_drafter_sidecar_(model_path : string) : string
-    => g_mtp_assistant.sidecar != null ? invoke(g_mtp_assistant.sidecar, model_path) : ""
+    => g_mtp_sidecar != null ? invoke(g_mtp_sidecar, model_path) : ""
 
-//! Attach the assistant drafter at `path` to `t`; false where no driver carries one or it refused.
-def attach_mtp_drafter_(t : Model; path : string) : bool
-    => g_mtp_assistant.attach != null && invoke(g_mtp_assistant.attach, t, path)
+//! Attach the assistant drafter at `path` to `t` on the backend that serves it; false where no backend took it, each refusal logged.
+def attach_mtp_drafter_(t : Model; path : string) : bool {
+    var whys : array<string>
+    for (name, seams in keys(g_mtp_assistants), values(g_mtp_assistants)) {
+        let why = invoke(seams.attach, t, path)
+        return true if (empty(why))
+        whys |> push("{name}: {why}")
+    }
+    let none = empty(whys) ? "no GPU driver on this build carries an assistant drafter" : join(whys, "; ")
+    to_log(LOG_WARNING, "dasLLAMA: the assistant drafter {path} is not attached - {none}\n")
+    return false
+}
+
+//! The backend `t`'s assistant drafter is attached on ("" = none)
+def private mtp_assistant_backend(t : Model) : string {
+    for (name, seams in keys(g_mtp_assistants), values(g_mtp_assistants)) {
+        return name if (invoke(seams.attached, t))
+    }
+    return ""
+}
 
 //! An assistant drafter is attached to `t`.
-def mtp_assistant_attached(t : Model) : bool
-    => g_mtp_assistant.attached != null && invoke(g_mtp_assistant.attached, t)
+def mtp_assistant_attached(t : Model) : bool => !empty(mtp_assistant_backend(t))
+
+//! Detach `t`'s assistant drafter on the backend it is attached on (none attached: nothing)
+def mtp_assistant_detach_(t : Model) {
+    let be = mtp_assistant_backend(t)
+    if (!empty(be)) {
+        invoke(g_mtp_assistants[be].detach)   // nolint:PERF026 — the backend was found in the table
+    }
+}
+
+//! `t`'s attached drafter's rounds since its attach (zeros with none attached)
+def mtp_assistant_stats_(t : Model) : MtpAssistantStats {
+    let be = mtp_assistant_backend(t)
+    return empty(be) ? MtpAssistantStats() : invoke(g_mtp_assistants[be].stats)   // nolint:PERF026 — the backend was found in the table
+}
+
+//! The assistant rounds of `sessions` at depth `k` on the backend `t`'s drafter is attached on (`MtpAssistantSeams.rounds`)
+def private mtp_assistant_rounds(t : Model; var sessions : array<Session?>; toks : array<int64>; k : int64; var acc : array<int64>) : int64 {
+    let be = mtp_assistant_backend(t)
+    return invoke(g_mtp_assistants[be].rounds, t, sessions, toks, k, acc)   // nolint:PERF026 — the backend was found in the table
+}
 
 //! `t` can run a speculative round: a NextN head of its own, or an assistant drafter attached.
 def mtp_capable_(t : Model) : bool
@@ -732,6 +813,15 @@ def mtp_capable_(t : Model) : bool
 //! override's round seat serves any depth where it owns `t` (`mtp_seats_own`); else the rail is the depth-1 mtp_spec_eval.
 [hot_path]   // the per-round entry a greedy walk re-enters once per committed token
 def mtp_spec_round(t : Model; var s : Session; tok : int64) : int64 {
+    if (mtp_assistant_attached(t)) {
+        g_round1_s |> resize(1)
+        g_round1_s[0] = unsafe(addr(s))
+        g_round1_tok |> resize(1)
+        g_round1_tok[0] = tok
+        mtp_assistant_rounds(t, g_round1_s, g_round1_tok, get_mtp_depth(), g_round1_acc)
+        g_round1_s[0] = null   // borrowed
+        return g_round1_acc[0]
+    }
     if (mtp_seated(t, g_mtp_round_overrides)) {
         return invoke(g_mtp_round_overrides[g_decode_override_name], t, s, tok, get_mtp_depth())   // nolint:PERF026 — mtp_seated holds key_exists, so the index cannot insert
     }
@@ -958,12 +1048,23 @@ def select_decode_override(name : string) : bool {
 //! The armed batch-decode override, or none — eval_batch_ (dasllama_batch) dispatches through these
 //! two rather than the registry going public.
 var private g_batch_same_slab = false
+var private @scratch g_batch_same_rows : array<int64>   //! the same-slab step's groups: a group's row count each, its rows after the group before's
 
 def set_batch_same_slab(on : bool) {
     g_batch_same_slab = on
 }
 
 def batch_same_slab() : bool => g_batch_same_slab
+
+//! The same-slab step's groups (`ARCHITECTURE_GPU_MTP.md#batch-same-slab`): group g is `nr[g]` consecutive positions of one session, its
+//! rows right after group g - 1's - one group a speculating stream of a joint verify. The step reads them under `set_batch_same_slab`
+def set_batch_same_groups(nr : array<int64>) {
+    g_batch_same_rows := nr
+}
+
+def batch_same_group_count() : int64 => long_length(g_batch_same_rows)
+
+def batch_same_group_rows(g : int64) : int64 => g_batch_same_rows[g]
 
 def batch_decode_override_armed() : bool => !empty(g_batch_decode_override_name)
 
@@ -2557,6 +2658,7 @@ struct Session {
     mtp_pre_drawn : bool           //! the accept walk drew this session's next token already: the next sample_ returns mtp_pre_tok and clears this
     mtp_pre_tok : int64
     pick_asked : bool              //! the caller's sampler is a bare argmax: a device driver may land the row's pick alone and leave `logits` unwritten (the scheduler sets it a step)
+    mtp_depth_cap : int64          //! the deepest round this session's caller can take the drafts of (0 = the round's depth): a stream whose emitted tokens may queue a forced close takes depth 1
     pick_ready : bool              //! the driver landed the pick: the next sample_ returns pick_tok and clears this
     pick_tok : int64
     @do_not_delete constrain : TokenConstraint?   //! the stream's token admission (null = none); the stream owns it
@@ -5833,31 +5935,37 @@ def private mtp_reject(t : Model; var s : Session; tok, pos : int64; served, lan
     prof_add("mtp.replay", ts_replay)
 }
 
-//! the depth-1 speculative step over every stream at once: a registered batch override verifies every
-//! stream's rows in one pass; without one each stream steps alone through `mtp_spec_eval`. `accepted[i]`
-//! is stream i's accepted draft or -1; returns how many streams' rows a joint verify carried (0 = none)
+var private @scratch g_round1_s : array<Session?>   //! one stream's round through the assistant seams' rounds
+var private @scratch g_round1_tok : array<int64>
+var private @scratch g_round1_acc : array<int64>
+
+//! the speculative step over every stream at once: an attached assistant drafter's backend runs every stream's round at the
+//! configured depth (`get_mtp_depth`, under each session's `mtp_depth_cap`), a registered batch override verifies every NextN
+//! stream's depth-1 rows in one pass, and otherwise each stream steps alone through `mtp_spec_eval`. `accepted[i]` is how many
+//! drafts stream i accepted, the drafts in its `mtp_vbatch[1..]`; returns how many streams' rows a joint verify carried (0 = none)
 [hot_path]   // the per-step entry the scheduler re-enters once per tick
 def mtp_spec_eval_batch(t : Model; var sessions : array<Session?>; toks : array<int64>; var accepted : array<int64>) : int64 {
     let n = long_length(sessions)
-    if (mtp_assistant_attached(t) && mtp_seated(t, g_mtp_round_overrides)) {
-        //! an assistant drafter's model: the round seat draws each stream's one draft, the joint verify being the NextN head's
-        accepted |> resize(n)   // nolint:PERF026 — the caller's reused per-stream row: it grows to the stream count once and keeps its capacity
-        for (i in range64(n)) {
-            let a = invoke(g_mtp_round_overrides[g_decode_override_name], t, *sessions[i], toks[i], 1l)   // nolint:PERF026 — mtp_seated holds key_exists, so the index cannot insert
-            accepted[i] = a > 0l ? sessions[i].mtp_vbatch[1] : -1l
-        }
-        return 0l
+    if (mtp_assistant_attached(t)) {
+        return mtp_assistant_rounds(t, sessions, toks, get_mtp_depth(), accepted)
     }
     if (mtp_seated(t, g_mtp_spec_batch_overrides)) {
         return invoke(g_mtp_spec_batch_overrides[g_decode_override_name], t, sessions, toks, accepted)   // nolint:PERF026 — mtp_seated holds key_exists, so the index cannot insert
     }
     accepted |> resize(n)   // nolint:PERF026 — the caller's reused per-stream row: it grows to the stream count once and keeps its capacity
     for (i in range64(n)) {
-        var a = 0l
-        accepted[i] = mtp_spec_eval(t, *sessions[i], toks[i], a) ? a : -1l
+        var d = 0l
+        let hit = mtp_spec_eval(t, *sessions[i], toks[i], d)
+        if (hit) {
+            sessions[i].mtp_vbatch[1] = d
+        }
+        accepted[i] = hit ? 1l : 0l
     }
     return 0l
 }
+
+//! A round's depth for `s`: the round's `k` under the session's cap (`Session.mtp_depth_cap`, 0 = none)
+def mtp_depth_for(s : Session; k : int64) : int64 => s.mtp_depth_cap > 0l ? min(k, s.mtp_depth_cap) : k
 
 [cold_path]   //! the round's fail-closed exit: a pick ask beside a sampled walk
 def private mtp_pick_ask_sampled_panic {

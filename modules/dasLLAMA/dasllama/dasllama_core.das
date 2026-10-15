@@ -707,16 +707,28 @@ def moe_gpu_weight_budget() : int64 {
 }
 
 def mtp_drafter_sidecar(model_path : string) : string {
-    //! The assistant drafter file a model ships beside it (gemma-4: `mtp-<stem>-Q8_0.gguf`), "" where
-    //! there is none or no driver carries one. A model with no NextN head of its own speculates
-    //! through it once attached.
+    //! The assistant drafter file a model ships beside it (gemma-4: `mtp-<stem>-Q8_0.gguf`, `<stem>`
+    //! the file name before its quant token, an unsloth `-UD` tag dropped where the head has none), ""
+    //! where there is none. A model with no NextN head of its own speculates through it once attached.
     return mtp_drafter_sidecar_(model_path)
 }
 
 def attach_mtp_drafter(model : Model; path : string) : bool {
-    //! Attach the assistant drafter at `path` to `model` for speculative decode; false where the
-    //! driver refused it (a drafter made for another target) or no driver carries one.
+    //! Attach the assistant drafter at `path` to `model` for speculative decode on the GPU driver that
+    //! serves it (Metal or the Vulkan resident driver); false where every driver refused it (a drafter
+    //! made for another target, a model the driver does not serve whole), each refusal logged.
     return attach_mtp_drafter_(model, path)
+}
+
+def detach_mtp_drafter(model : Model) {
+    //! Detach `model`'s assistant drafter, if one is attached; its rounds stop and plain decode serves.
+    mtp_assistant_detach_(model)
+}
+
+def mtp_drafter_stats(model : Model) : MtpAssistantStats {
+    //! The attached drafter's device rounds since its attach: drafts made, drafts accepted, rounds,
+    //! and the verifies whose rows carried two streams or more. Zeros with no drafter attached.
+    return mtp_assistant_stats_(model)
 }
 
 def mtp_capable(model : Model) : bool {

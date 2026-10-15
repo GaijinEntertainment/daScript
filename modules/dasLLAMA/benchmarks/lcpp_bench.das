@@ -1638,13 +1638,8 @@ def main() : int {
         let c = t.config
         // a model with no NextN head silently no-ops set_mtp_spec — both arms would be identical
         if (cfg.mtp_ab && c.n_layer_nextn <= 0l) {
-            var attached = false   // nolint:LINT003,LINT019 — assigned in the das_metal half
-            static_if (typeinfo builtin_module_exists(das_metal)) {
-                let side = gemma_drafter_sidecar(mpath)
-                if (!empty(side)) {
-                    attached = attach_gemma_drafter(t, side)
-                }
-            }
+            let side = mtp_drafter_sidecar_(mpath)
+            let attached = !empty(side) && attach_mtp_drafter_(t, side)
             if (!attached) {
                 panic("lcpp_bench: --mtp-ab needs a NextN draft head or an assistant drafter sidecar, and {mpath} has neither")
             }
