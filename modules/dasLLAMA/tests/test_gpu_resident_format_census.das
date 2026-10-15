@@ -199,13 +199,14 @@ def test_gpu_resident_format_census_perop(t : T?) {
     }
 }
 
-//! the per-op FFN rail's carriers: a q8, a K-quant (Q8_K feed) and a per-32 (q51) dense FFN, and a per-32 file whose table and
-//! classifier are per-32 too (iq4nl32), each with its family and its bar (of the step's max |logit|: the llama resident file's, the
-//! per-32 table cells')
+//! the per-op FFN rail's carriers: a q8, a K-quant (Q8_K feed) and a per-32 (q51) dense FFN at the llama resident file's bar (of the
+//! step's max |logit|), and a per-32 file whose table and classifier are per-32 too (iq4nl32) at 0.08: its per-op chain - the window's
+//! GEMMs on the device's f16 tiles beside the CPU's int8 dots - reads 0.44-0.73 of a 10.7-19.6 max logit (3.7-6.1%), argmax flips only
+//! at near-ties, the one-step-off control 7.4 and past
 let private PEROP_FFN = fixed_array((file = "Llama-3.2-1B-Instruct-Q8_0.gguf", family = "llama", bar = 0.06),
     (file = "Llama-3.2-1B-Instruct-Q4_K_M.gguf", family = "llama", bar = 0.06),
     (file = "Llama-3.2-1B-Instruct-Q5_1-local.gguf", family = "llama", bar = 0.06),
-    (file = "Qwen2.5-0.5B-Instruct-IQ4_NL-pure-local.gguf", family = "qwen2", bar = 0.06))
+    (file = "Qwen2.5-0.5B-Instruct-IQ4_NL-pure-local.gguf", family = "qwen2", bar = 0.08))
 
 //! `path` loaded with the whole-model route off and the per-op FFN rail pinned to `ffn` (0 or 1), both levers put back
 def private load_perop(path : string; ffn : int) : Model {

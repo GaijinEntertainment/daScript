@@ -1856,7 +1856,7 @@ IQ4_NL `--pure` mint, loaded with the whole-model route off - with the rail off 
 (`moe_gpu_dense_ffn_rows`, the counter's control), with it on (`set_gpu_want_dense_ffn`, put back) every layer's triple and
 q/o pair is the dense rail's and the classifier the tier's, in the file's format, the window's q/o and FFN GEMMs run on the
 device (`moe_gpu_dense_gemm_rows`, five a layer a row at least), every fed step runs each layer's FFN row on the device, and
-the steps hold the CPU chain at the llama file's bar. Arms `vk-per32-iq4nl32`,
+the steps hold the CPU chain at the llama file's bar (the qwen2 mint at 8%, its reading in the carrier list's `//!`). Arms `vk-per32-iq4nl32`,
 `vk-per32-q4032`, `vk-per32-q5032` (family `qwen2`) and `vk-per32-q51` (family `qwen35`): the per-32 `--pure` mints, every site native
 (the census), the table gathered by the window and every step off its `<fmt>_emb_cls_spv` leaf, the forced feed at the
 qwen2 file's bar, and on the Q5_1 hybrid the NextN head armed (`rdec_verify_rows`).
