@@ -189,7 +189,8 @@ crosses the bus per token; the pool holds the parked and the evicted state.
   speculating scheduler only where the driver runs the whole round on the device (`device_pool_on`,
   `gpu_resident_mtp_device_home`). The draft head's K/V rows ride every move beside the trunk's (`rdec_cache_rows`): an
   opening of `n` tokens goes down with the head's rows under `n` that the region holds - every row but the position's own,
-  which the round's seam re-warms - and stays on the card alone where the region holds fewer; an opening that comes up counts
-  the region's head rows to `n - 1` (`rdec_pool_head_rows`). `DASLLAMA_DEVICE_POOL=0` keeps the card's claims and rows alone - the
+  which the round's seam re-warms - and stays on the card alone where the region holds fewer (`rdec_pool_head_rows`); an opening that comes up counts
+  the region's head rows to `n - 1` (`gpu_device_kv_import_`). A head nothing speculates on (`get_mtp_spec` off) rides
+  no move: its rows are never warmed, and the pool serves the plain scheduler as before. `DASLLAMA_DEVICE_POOL=0` keeps the card's claims and rows alone - the
   A/B rail. `gpu_device_kv_pool_moves` counts the rows each direction moved and the wall it took, the upload cost's reading.
 

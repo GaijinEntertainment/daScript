@@ -5023,22 +5023,28 @@ def private rdec_cache_rows(t : Model; var host : Session; lo, hi : int64; up : 
     g_rdec_pool_spans |> clear()
     for (l in range64(c.n_layers)) {
         continue if (!layer_owns_kv(t, l))
-        rdec_host_runs(host, c, l, lo, hi) $(row0, nrows : int64; var kp, vp : uint8?) {
-            g_rdec_pool_spans |> push(RdecKvSpan(l = l, row0 = row0, nrows = nrows, kp = kp, vp = vp))
-        }
+        rdec_pool_queue(host, c, l, lo, hi)
     }
     if (head_hi > lo) {
-        rdec_host_runs(host, c, c.n_layers, lo, head_hi) $(row0, nrows : int64; var kp, vp : uint8?) {
-            g_rdec_pool_spans |> push(RdecKvSpan(l = c.n_layers, row0 = row0, nrows = nrows, kp = kp, vp = vp))
-        }
+        rdec_pool_queue(host, c, c.n_layers, lo, head_hi)
     }
     rdec_kv_spans_move(up)
 }
 
+//! layer `l`'s host runs over [lo, hi) queued on the pool batch
+def private rdec_pool_queue(var host : Session; c : Config; l, lo, hi : int64) {
+    rdec_host_runs(host, c, l, lo, hi) $(row0, nrows : int64; var kp, vp : uint8?) {
+        g_rdec_pool_spans |> push(RdecKvSpan(l = l, row0 = row0, nrows = nrows, kp = kp, vp = vp))
+    }
+}
+
+//! the NextN head's rows ride the pool's moves: the head on the armed driver, with speculation on to warm and read them
+def private rdec_pool_head_on(t : Model) : bool => g_rdec_head_armed && t.config.n_layer_nextn > 0l && get_mtp_spec()
+
 //! the head rows a pooled opening of `n` tokens carries: every row but the position's own, which the round's seam re-warms,
-//! where the region holds them; -2 where it holds fewer, -1 where the head is off the device
+//! where the region holds them; -2 where it holds fewer, -1 where the head rides no move
 def private rdec_pool_head_rows(t : Model; reg : RdecRegion; n : int64) : int64 {
-    return -1l if (!g_rdec_head_armed || t.config.n_layer_nextn <= 0l)
+    return -1l if (!rdec_pool_head_on(t))
     return reg.head_cnt >= n - 1l ? n - 1l : -2l
 }
 
@@ -5092,7 +5098,7 @@ def gpu_device_kv_import_(t : Model; var s : Session; var host : Session; npos :
     let t0 = ref_time_ticks()
     let r = rdec_bind_region(t, s)
     return false if (r < 0l)
-    let head = g_rdec_head_armed && t.config.n_layer_nextn > 0l
+    let head = rdec_pool_head_on(t)
     rdec_cache_rows(t, host, 0l, npos, true, head ? npos - 1l : -1l)
     rdec_claim(s, r, npos)
     if (head) {   //! the pool's pages hold the head's rows under the position: the round's seam writes the position's own

@@ -3912,9 +3912,14 @@ def host_buf_read(hb : HostBuf; var dst : void?; bytes : int64; off : int64 = 0l
 //! with the model's commands and the next use allocates it again
 def batch_cmd_raw : VkCommandBuffer {
     if (unsafe(reinterpret<uint64>(g_gpu.batch_cmd)) == 0ul) {
-        g_gpu.batch_cmd = alloc_cmd()
+        batch_cmd_alloc()
     }
     return g_gpu.batch_cmd
+}
+
+[cold_path]   //! once a model: the first use after the device came up or the model dropped
+def private batch_cmd_alloc {
+    g_gpu.batch_cmd = alloc_cmd()
 }
 
 //! the same on the shared batch command buffer, reset first: the decode's cold state uploads and readbacks
