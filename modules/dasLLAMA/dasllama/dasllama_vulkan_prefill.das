@@ -1520,7 +1520,7 @@ def vulkan_prefill_qkn_fuse : bool => g_pf_qkn_fuse
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
 def private pf_qkn_fused(l : int64) : bool
-    => g_pf_qkn_fuse && g_env_vulkan.vk_fuse && g_rd.qk_norm && !rd_kv_block_codec() && !g_rd.layers[l].kv_shared
+    => g_pf_qkn_fuse && g_env_vulkan.vk_fuse && g_rd.qk_norm && !rd_kv_block_codec()
 
 //! the fused pass over every window part: a part's rows at their positions in their region's slab, `voff` the v rows' base in the
 //! projection plane, the k and v rows `kvrow` apart
@@ -1532,7 +1532,7 @@ def private pf_qkn_rope_enc(raw : VkCommandBuffer; var h : VkHaz; l : int64; vof
     }
     let dim = g_rd.dim   // nolint:LINT021 — the norm row offsets multiply 64-bit before the push-field narrow
     let hs = L.hs
-    let nkvh = L.kvd / hs
+    let nkvh = L.kv_shared ? 0l : L.kvd / hs   //! a shared-KV layer's q heads alone: its donor's rows already sit in the mirror
     let hsmax = g_rd.head_size   // nolint:LINT021 — the q/k norm rows sit at the widest class's stride; the row offset multiplies run 64-bit before the push-field narrow
     let nlfin = rd_norm_final()   // nolint:LINT021 — the norm row offsets multiply 64-bit before the push-field narrow
     for (sg in g_pf_wsegs) {

@@ -80,8 +80,9 @@ step (`cls_ar`) and the f16 activation honor the row base: the fused residual tw
 projections and never run on the last layer, so they index from row 0 by design.
 
 **A q/k-normed layer's norm, rope and K/V store run as the token command's one fused pass (`QknRopeKvT`'s window form,
-`pf_qkn_fused`)** over a window part's rows at their positions of their region's slab; a block-codec mirror, a shared-KV layer
-and the lever `set_vulkan_prefill_qkn_fuse(false)` keep the norm pass and the rope-and-store pass. The two forms reduce the norm
+`pf_qkn_fused`)** over a window part's rows at their positions of their region's slab - a shared-KV layer's pass carries its q
+heads alone, no k head to store; a block-codec mirror and the lever `set_vulkan_prefill_qkn_fuse(false)` keep the norm pass and
+the rope-and-store pass. The two forms reduce the norm
 in another order, so they agree within the split bar, not bit for bit.
 
 **The k and v GEMMs merge into ONE dispatch when the layer's q, k and v weight planes are all
