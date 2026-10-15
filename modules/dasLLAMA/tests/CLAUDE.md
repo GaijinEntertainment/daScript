@@ -1850,11 +1850,13 @@ round; the per-op cell (the route off, every deltanet layer on the per-op rail's
 on Qwen3.6-35B-A3B UD-IQ2_XXS. Arm `vk-gather` (families `qwen3`, `llama`): Qwen3-4B-Instruct-2507 Q4_K_M and
 Llama-3.2-3B-Instruct Q4_K_M, the tied K-quant table gathered by the window (its `kq_emb_<fmt>_cls_spv` count) and by
 every fed step off the classifier's plane, the forced feed against the CPU chain at the split bar (Qwen3-4B's K-quant chain at
-`QWEN_KQ_BAR_REL`, its reading in the constant's `//!`). Arm `vk-perop-ffn` (family `llama`): the per-op FFN rail
-(`../ARCHITECTURE_GPU_VULKAN_PEROP.md#perop-dense-ffn`) on Llama-3.2-1B Q8_0, Q4_K_M and the Q5_1 mint, loaded with the
-whole-model route off - with the rail off a fed run counts no device FFN row (`moe_gpu_dense_ffn_rows`, the counter's
-control), with it on (`set_gpu_want_dense_ffn`, put back) every layer's triple is the rail's, every fed step runs each
-layer's FFN row on the device, and the steps hold the CPU chain at the llama file's bar. Arms `vk-per32-iq4nl32`,
+`QWEN_KQ_BAR_REL`, its reading in the constant's `//!`). Arm `vk-perop-ffn` (families `llama`, `qwen2`): the per-op FFN rail
+(`../ARCHITECTURE_GPU_VULKAN_PEROP.md#perop-dense-ffn`) on Llama-3.2-1B Q8_0, Q4_K_M and the Q5_1 mint and Qwen2.5-0.5B's
+IQ4_NL `--pure` mint, loaded with the whole-model route off - with the rail off a fed run counts no device FFN row
+(`moe_gpu_dense_ffn_rows`, the counter's control), with it on (`set_gpu_want_dense_ffn`, put back) every layer's triple and
+q/o pair is the dense rail's and the classifier the tier's, in the file's format, the window's q/o and FFN GEMMs run on the
+device (`moe_gpu_dense_gemm_rows`, five a layer a row at least), every fed step runs each layer's FFN row on the device, and
+the steps hold the CPU chain at the llama file's bar. Arms `vk-per32-iq4nl32`,
 `vk-per32-q4032`, `vk-per32-q5032` (family `qwen2`) and `vk-per32-q51` (family `qwen35`): the per-32 `--pure` mints, every site native
 (the census), the table gathered by the window and every step off its `<fmt>_emb_cls_spv` leaf, the forced feed at the
 qwen2 file's bar, and on the Q5_1 hybrid the NextN head armed (`rdec_verify_rows`).

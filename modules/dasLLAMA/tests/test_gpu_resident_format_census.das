@@ -199,9 +199,13 @@ def test_gpu_resident_format_census_perop(t : T?) {
     }
 }
 
-//! the per-op FFN rail's carriers: a q8, a K-quant (Q8_K feed) and a per-32 (q51) dense FFN
-let private PEROP_FFN = fixed_array("Llama-3.2-1B-Instruct-Q8_0.gguf", "Llama-3.2-1B-Instruct-Q4_K_M.gguf", "Llama-3.2-1B-Instruct-Q5_1-local.gguf")
-let private PEROP_FFN_BAR = 0.06   //! of the step's max |logit|: the llama resident file's bar
+//! the per-op FFN rail's carriers: a q8, a K-quant (Q8_K feed) and a per-32 (q51) dense FFN, and a per-32 file whose table and
+//! classifier are per-32 too (iq4nl32), each with its family and its bar (of the step's max |logit|: the llama resident file's, the
+//! per-32 table cells')
+let private PEROP_FFN = fixed_array((file = "Llama-3.2-1B-Instruct-Q8_0.gguf", family = "llama", bar = 0.06),
+    (file = "Llama-3.2-1B-Instruct-Q4_K_M.gguf", family = "llama", bar = 0.06),
+    (file = "Llama-3.2-1B-Instruct-Q5_1-local.gguf", family = "llama", bar = 0.06),
+    (file = "Qwen2.5-0.5B-Instruct-IQ4_NL-pure-local.gguf", family = "qwen2", bar = 0.06))
 
 //! `path` loaded with the whole-model route off and the per-op FFN rail pinned to `ffn` (0 or 1), both levers put back
 def private load_perop(path : string; ffn : int) : Model {
@@ -217,9 +221,10 @@ def private load_perop(path : string; ffn : int) : Model {
 
 [test]
 def test_gpu_perop_dense_ffn(t : T?) {
-    for (file in PEROP_FFN) {
+    for (spec in PEROP_FFN) {
+        let file = spec.file
         t |> run("{file} with the whole-model route off: the per-op FFN rail runs every layer's FFN row on the device, the steps against the CPU chain") @(t : T?) {
-            if (!family_on(t, "llama") || !arm_on(t, "vk-perop-ffn")) return
+            if (!family_on(t, spec.family) || !arm_on(t, "vk-perop-ffn")) return
             let path = path_join(models_dir(), file)
             if (!resident_ready(t, path)) return
             with_dasllama_jobque_() {
@@ -255,7 +260,7 @@ def test_gpu_perop_dense_ffn(t : T?) {
                 delete sg
                 moe_gpu_drop_model()
                 var cpu <- feed_alone(tr, mirror_kv_dtype(), prompt, toks)
-                feed_steps_within(t, tr, "{file} per-op FFN ", PROMPT, gpu, cpu, toks, PEROP_FFN_BAR, "per-op")
+                feed_steps_within(t, tr, "{file} per-op FFN ", PROMPT, gpu, cpu, toks, spec.bar, "per-op")
                 t |> equal(rows, STEPS * tr.config.n_layers, "every fed step ran each layer's FFN row on the device ({rows} rows)")
                 delete gpu
                 delete cpu
