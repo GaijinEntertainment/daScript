@@ -113,6 +113,20 @@ def test_attn_chain_unserved_features(t : T?) {
         p.rope_dim = 64l
         t |> equal(attn_chain_unserved_features(p), "")
     }
+    t |> run("the chain names every gemma generation's attention as unserved: the sandwich norms, gemma-2's softcap, gemma-4's v-norm") @(t : T?) {
+        var g3 = Config()
+        g3.rope_neox = true
+        g3.qk_norm = true
+        g3.pre_post_norm = true
+        t |> equal(attn_chain_unserved_features(g3), "pre/post norms", "gemma-3")
+        var g2 := g3
+        g2.qk_norm = false
+        g2.attn_logit_softcap = 50.0
+        t |> equal(attn_chain_unserved_features(g2), "attention logit softcap, pre/post norms", "gemma-2")
+        var g4 := g3
+        g4.v_norm = true
+        t |> equal(attn_chain_unserved_features(g4), "v-norm, pre/post norms", "gemma-4")
+    }
 }
 
 //! a three-layer shell whose layer 1 is recurrent with every deltanet plane at offset 0, its qkv/z/out planes Q4_K

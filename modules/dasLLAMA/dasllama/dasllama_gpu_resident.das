@@ -5370,6 +5370,7 @@ def private walk_budget_say(rail : string; l, layers : int64) {
 }
 
 //! The attention features the per-op attention-quad chain has no arm for, comma-separated; "".
+[arch(at="../ARCHITECTURE_GPU_VULKAN_PEROP.md#perop-attn-gemma")]
 def attn_chain_unserved_features(c : Config) : string {
     var names = ""
     name_list_add(names, c.v_norm, "v-norm")
