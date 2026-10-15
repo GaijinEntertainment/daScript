@@ -458,8 +458,10 @@ def private vk_encode_layer(var g : GemmaDrafterVk; dr : GemmaDrafter; raw : VkC
     }
     let rowwg = da_attn_row_wgs(dr.n_heads, kv_mul, 1l)
     let mirbase = uint(rd_mir_base(L, r))
+    //! the pass's count is the anchor and its query a row past the last key, so a sliding layer reads one key short of its window
+    let win = dr.sliding[l] && L.window > 0l ? uint(L.window - 1l) : 0u
     var pca = DaAttnArgs(kvd = uint(L.kvd), hs = uint(hs), kv_mul = uint(kv_mul), kbase = mirbase, vbase = mirbase, scale = 1.0, qstride = 0u, gated = 0u,
-        window = dr.sliding[l] && L.window > 0l ? uint(L.window - 1l) : 0u, cap = 0.0,   //! the pass's count is the anchor, its query a row past the last key: one key short of the window nsplit = 1u, rqk = dt == KVDtype.tq4 ? DA_RQ_NONE : DA_RQ_Q8, sinkoff = 0u,
+        window = win, cap = 0.0, nsplit = 1u, rqk = dt == KVDtype.tq4 ? DA_RQ_NONE : DA_RQ_Q8, sinkoff = 0u,
         rowwg = uint(rowwg), qrow = uint(qd), cntoff = uint(g.cntoff))
     da_attn_stamp_enc(dt, da_slab_of(false, kv_mul), raw, h, g.s_attn[l], pca, rowwg)
     if (dt == KVDtype.tq4) {
