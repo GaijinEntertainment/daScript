@@ -19,6 +19,10 @@ jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 150
+    # actions: write needed for `gh cache delete` in the sccache refresh step.
+    permissions:
+      contents: read
+      actions: write
     # KEEP THIS, despite nothing deploying to GitHub Pages any more. The environment
     # is now purely a SECRET SCOPE: DASWEB_DEPLOY_KEY is an environment secret on
     # `github-pages` (the repository has no repo-level secrets), and the VPS deploy
@@ -55,7 +59,7 @@ jobs:
         # dlopen fails quietly and das2rst dies on `Unable to initialize some
         # modules: imgui_app`. Version skew is worse than absence — absence
         # at least fails loudly.
-        sudo bash ci/apt_install.sh libgl1-mesa-dev libglu1-mesa-dev xorg-dev libc++-dev libc++abi-dev
+        sudo bash ci/apt_install.sh libgl1-mesa-dev libglu1-mesa-dev xorg-dev libc++-dev libc++abi-dev ccache
 
     - name: Setup Emscripten
       uses: emscripten-core/setup-emsdk@v11
@@ -126,6 +130,15 @@ jobs:
         # for web/build64 below), so hash it too — a change to the build steps must
         # miss a stale cache rather than skip the rebuild and reuse old archives.
         key: wasm-${{ runner.os }}-${{ hashFiles('.github/workflows/pages.yml', 'CMakeLists.txt', 'web/CMakeLists.txt', 'web/stage_playground_imgui_samples.cmake', 'src/**', 'include/**', 'modules/**', 'daslib/**', 'utils/daslang/**', 'utils/daspkg/**', 'examples/games/**', 'examples/graphics/**', 'examples/pathTracer/**', 'examples/dasLLAMA/**', 'web/examples/ui/samples/**', 'tutorials/**', 'dastest/**') }}
+
+    # One sccache slot for both builds: the launchers cover the native host, EM_COMPILER_WRAPPER the
+    # clang each emcc call runs.
+    - uses: ./.github/actions/sccache-slot
+      with:
+        mode: restore
+        key: sccache-pages-linux-Release
+        sccache-size: 3000M
+        ccache-size: 1500M
 
     # Host daslang — one games-capable build (dasLLVM for cross-compile + dasGlfw
     # + dasOpenGL shared modules for the games) that serves BOTH das2rst and the
@@ -208,6 +221,11 @@ jobs:
     - name: "Build WASM (Emscripten): playground + wasm64 examples"
       if: steps.wasm-cache.outputs.cache-hit != 'true'
       run: cmake --build ./build --target build_site_wasm
+
+    - uses: ./.github/actions/sccache-slot
+      with:
+        mode: save
+        key: sccache-pages-linux-Release
 
     - name: "Compile-gate the curated playground samples"
       # The per-sample wasm64 builds used to live here and doubled as the proof
