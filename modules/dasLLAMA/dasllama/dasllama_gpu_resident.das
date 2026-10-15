@@ -5035,11 +5035,11 @@ def private rdec_cache_rows(t : Model; var host : Session; lo, hi : int64; up : 
     rdec_kv_spans_move(up)
 }
 
-//! the head rows a pooled opening of `n` tokens carries: the rows the region holds under `n`, where the armed head holds
-//! every row but the position's own (the round's seam re-warms that one); -1 where the head is off the device
+//! the head rows a pooled opening of `n` tokens carries: every row but the position's own, which the round's seam re-warms,
+//! where the region holds them; -2 where it holds fewer, -1 where the head is off the device
 def private rdec_pool_head_rows(t : Model; reg : RdecRegion; n : int64) : int64 {
     return -1l if (!g_rdec_head_armed || t.config.n_layer_nextn <= 0l)
-    return reg.head_cnt >= n - 1l ? min(reg.head_cnt, n) : -2l
+    return reg.head_cnt >= n - 1l ? n - 1l : -2l
 }
 
 //! the spans queued in `g_rdec_pool_spans` moved up (`up`) or down in
