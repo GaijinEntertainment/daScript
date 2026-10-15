@@ -187,21 +187,23 @@ def test_gemma_drafter_ple_refusal(t : T?) {
         let trunk = path_join(models_dir(), E2B_FILE)
         let side = path_join(models_dir(), "mtp-gemma-4-26B-A4B-it-Q8_0.gguf")
         return if (!model_available(t, trunk) || !model_available(t, side))
-        var tr <- load_model_(trunk, QuantMode.q8)
-        var dr <- load_gemma_drafter(side)
-        t |> success(dr.ok, "the drafter loads (why='{dr.why}')")
-        let why = gemma_drafter_target_why(tr, dr)
-        t |> success(find(why, "per-layer embeddings") >= 0, "the refusal names the per-layer embeddings: '{why}'")
-        t |> success(!attach_mtp_drafter(tr, side), "the facade attaches nothing to the E2B")
-        t |> success(!mtp_capable(tr), "and the E2B cannot speculate")
-        var shell = Model()
-        shell.config := tr.config
-        shell.config.n_embd_per_layer = 0l
-        let why_plain = gemma_drafter_target_why(shell, dr)
-        t |> success(!empty(why_plain) && find(why_plain, "per-layer embeddings") < 0, "the control: the same trunk with no per-layer embeddings refuses on another clause: '{why_plain}'")
-        delete shell
-        delete dr
-        delete tr
+        with_dasllama_jobque_() {   //! the load's transcode runs on the engine's pool
+            var tr <- load_model_(trunk, QuantMode.q8)
+            var dr <- load_gemma_drafter(side)
+            t |> success(dr.ok, "the drafter loads (why='{dr.why}')")
+            let why = gemma_drafter_target_why(tr, dr)
+            t |> success(find(why, "per-layer embeddings") >= 0, "the refusal names the per-layer embeddings: '{why}'")
+            t |> success(!attach_mtp_drafter(tr, side), "the facade attaches nothing to the E2B")
+            t |> success(!mtp_capable(tr), "and the E2B cannot speculate")
+            var shell = Model()
+            shell.config := tr.config
+            shell.config.n_embd_per_layer = 0l
+            let why_plain = gemma_drafter_target_why(shell, dr)
+            t |> success(!empty(why_plain) && find(why_plain, "per-layer embeddings") < 0, "the control: the same trunk with no per-layer embeddings refuses on another clause: '{why_plain}'")
+            delete shell
+            delete dr
+            delete tr
+        }
     }
 }
 
