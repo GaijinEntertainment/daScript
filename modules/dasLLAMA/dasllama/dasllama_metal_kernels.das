@@ -466,6 +466,7 @@ struct SqAttnPartArgs {
     window : uint
     qhs : uint
     gated : uint
+    ring : uint     //! a sliding layer's ring rows: a key's row is its `kv_ring_row` slot; 0 = a row a position
 }
 
 // The comb pair binds ONE kargs shape at slot 2 (both stamps of MetalSqAttnCombT): `nch` is the
@@ -494,6 +495,7 @@ struct SqAttnBArgs {
     hass : uint
     qhs : uint
     gated : uint
+    layr : uint     //! the rings' rows ahead of the layer in a stream's slice (elements, or bytes under a block codec): its base is `lay * cap + layr`
 }
 
 struct SqAttnPartBArgs {
@@ -509,6 +511,8 @@ struct SqAttnPartBArgs {
     window : uint
     qhs : uint
     gated : uint
+    layr : uint     //! the rings' rows ahead of the layer in a stream's slice (elements, or bytes under a block codec): its base is `lay * cap + layr`
+    ring : uint     //! a sliding layer's ring rows: a key's row is its `kv_ring_row` slot; 0 = a row a position
 }
 
 // The split-K "D" attention family binds its uniforms as ONE kargs value. `kstride` is the
@@ -526,6 +530,8 @@ struct SqAttnDArgs {
     softcap : float //! the attention-logit soft cap, 0 where the model has none
     qhs : uint
     gated : uint
+    layr : uint     //! the rings' rows ahead of the layer in a stream's slice (elements, or bytes under a block codec): its base is `lay * cap + layr`
+    ring : uint     //! a sliding layer's ring rows: a key's row is its `kv_ring_row` slot; 0 = a row a position
 }
 
 //! a q head's stride: `hs`, or the gated head's `2 hs` the args carry
@@ -697,14 +703,14 @@ class template MetalSqAttnPartKvT {
         if (c1 <= wstart) {
             return
         }
-        sq_fill_scores(kc, q, scores, 0u, c0, nrows, kv_dim, khoff, qoff, hs, scale, softcap)
+        sq_fill_scores(kc, q, scores, 0u, kv_ring_row(c0, ka.ring), nrows, kv_dim, khoff, qoff, hs, scale, softcap)
         barrier()
         sq_mask_window(scores, c0, nrows, wstart, lid, nt)
         let mm = sq_score_max(scores, red, nrows, lid, nt)
         barrier()                           // red[] is reused for the sum below
         let tot = sq_exp_sum(scores, red, mm, nrows, lid, nt)
         let pbase = ((bb * nheads + h) * nchunks + ci) * (hs + 2u)
-        part[pbase + lid] = sq_gated(sq_vacc(vc, scores, 0u, c0, nrows, kv_dim, khoff, lid), q, qoff + lid, hs, ka.gated)   //! the gate is linear, so a chunk's partial takes it
+        part[pbase + lid] = sq_gated(sq_vacc(vc, scores, 0u, kv_ring_row(c0, ka.ring), nrows, kv_dim, khoff, lid), q, qoff + lid, hs, ka.gated)   //! the gate is linear, so a chunk's partial takes it
         if (lid == 0u) {
             part[pbase + hs] = mm
             part[pbase + hs + 1u] = tot
@@ -768,14 +774,14 @@ class template MetalSqAttnPartQuantT {
         if (c1 <= wstart) {
             return
         }
-        sq_fill_scores_q(ksh, kqb, q, scores, 0u, 0u, c0, nrows, nblk, khblk, qoff, hs, scale, softcap)
+        sq_fill_scores_q(ksh, kqb, q, scores, 0u, 0u, kv_ring_row(c0, ka.ring), nrows, nblk, khblk, qoff, hs, scale, softcap)
         barrier()
         sq_mask_window(scores, c0, nrows, wstart, lid, nt)
         let mm = sq_score_max(scores, red, nrows, lid, nt)
         barrier()                           // red[] is reused for the sum below
         let tot = sq_exp_sum(scores, red, mm, nrows, lid, nt)
         let pbase = ((bb * nheads + h) * nchunks + ci) * (hs + 2u)
-        part[pbase + lid] = sq_gated(sq_vacc_q(vsh, vqb, scores, 0u, 0u, c0, nrows, nblk, khblk, lid), q, qoff + lid, hs, ka.gated)
+        part[pbase + lid] = sq_gated(sq_vacc_q(vsh, vqb, scores, 0u, 0u, kv_ring_row(c0, ka.ring), nrows, nblk, khblk, lid), q, qoff + lid, hs, ka.gated)
         if (lid == 0u) {
             part[pbase + hs] = mm
             part[pbase + hs + 1u] = tot
@@ -1797,7 +1803,7 @@ class template MetalQknRopeRowsT : GkQknRopeKv {
     override EPT = 1
     override V_WG = true
 
-    def row_ahead(lay, depth : uint) : uint => pa.layerbase * lay + (depth - 1u) * pa.kvd
+    def row_ahead(lay, depth : uint) : uint => pa.layerbase * lay + pa.layr + kv_ring_row(depth - 1u, pa.ring) * pa.kvd
 
     def override mir_base(rowi : uint) : uint2 => uint2(rt[rowi].x + row_ahead(rt[rowi].z, rt[rowi].w), rt[rowi].y + row_ahead(rt[rowi].z, rt[rowi].w))
 
@@ -2726,8 +2732,8 @@ class template MetalSqAttnBKvT {
         let nt = gl_WorkGroupSize.x
         let rrow = rt[bb]
         let cnt = rrow.w
-        let kb0 = rrow.x + lay * rrow.z   // lay = the layer's KV-row ELEMENT prefix (Σ kv_dim below l)
-        let vb0 = rrow.y + lay * rrow.z
+        let kb0 = rrow.x + lay * rrow.z + ka.layr   // lay = the layer's flat KV-row ELEMENT prefix, layr the rings' rows ahead
+        let vb0 = rrow.y + lay * rrow.z + ka.layr
         let khoff = (h / kv_mul) * hs
         let qoff = bb * qstride + h * sq_qhs(ka.qhs, hs)
         let yoff = bb * (nheads * hs) + h * hs
@@ -2785,8 +2791,8 @@ class template MetalSqAttnBQuantT {
         let nt = gl_WorkGroupSize.x
         let rrow = rt[bb]
         let cnt = rrow.w
-        let kb0b = rrow.x + lay * rrow.z   // layer slab base, BYTES (lay = the layer's row-BYTE prefix)
-        let vb0b = rrow.y + lay * rrow.z
+        let kb0b = rrow.x + lay * rrow.z + ka.layr   // layer slab base, BYTES (lay = the layer's flat row-BYTE prefix, layr the rings')
+        let vb0b = rrow.y + lay * rrow.z + ka.layr
         let kb0h = kb0b / 2u                      // ... and HALFWORDS for the scale view
         let vb0h = vb0b / 2u
         let khblk = (h / kv_mul) * (hs / 32u)
@@ -2849,8 +2855,8 @@ class template MetalSqAttnPartBKvT {
         }
         let lid = gl_LocalInvocationID.x
         let nt = gl_WorkGroupSize.x
-        let kb0 = rrow.x + lay * rrow.z   // lay = the layer's KV-row ELEMENT prefix (Σ kv_dim below l)
-        let vb0 = rrow.y + lay * rrow.z
+        let kb0 = rrow.x + lay * rrow.z + ka.layr   // lay = the layer's flat KV-row ELEMENT prefix, layr the rings' rows ahead
+        let vb0 = rrow.y + lay * rrow.z + ka.layr
         let khoff = (h / kv_mul) * hs
         let qoff = bb * qstride + h * sq_qhs(ka.qhs, hs)
         let c1 = min(c0 + 64u, cnt)
@@ -2861,14 +2867,14 @@ class template MetalSqAttnPartBKvT {
         if (c1 <= wstart) {
             return
         }
-        sq_fill_scores(kc, q, scores, kb0, c0, nrows, kv_dim, khoff, qoff, hs, scale, softcap)
+        sq_fill_scores(kc, q, scores, kb0, kv_ring_row(c0, ka.ring), nrows, kv_dim, khoff, qoff, hs, scale, softcap)
         barrier()
         sq_mask_window(scores, c0, nrows, wstart, lid, nt)
         let mm = sq_score_max(scores, red, nrows, lid, nt)
         barrier()                           // red[] is reused for the sum below
         let tot = sq_exp_sum(scores, red, mm, nrows, lid, nt)
         let pbase = ((bb * nheads + h) * nchmax + ci) * (hs + 2u)
-        part[pbase + lid] = sq_gated(sq_vacc(vc, scores, vb0, c0, nrows, kv_dim, khoff, lid), q, qoff + lid, hs, ka.gated)
+        part[pbase + lid] = sq_gated(sq_vacc(vc, scores, vb0, kv_ring_row(c0, ka.ring), nrows, kv_dim, khoff, lid), q, qoff + lid, hs, ka.gated)
         if (lid == 0u) {
             part[pbase + hs] = mm
             part[pbase + hs + 1u] = tot
@@ -2928,8 +2934,8 @@ class template MetalSqAttnPartBQuantT {
         }
         let lid = gl_LocalInvocationID.x
         let nt = gl_WorkGroupSize.x
-        let kb0b = rrow.x + lay * rrow.z   // lay = the layer's row-BYTE prefix
-        let vb0b = rrow.y + lay * rrow.z
+        let kb0b = rrow.x + lay * rrow.z + ka.layr   // lay = the layer's flat row-BYTE prefix, layr the rings'
+        let vb0b = rrow.y + lay * rrow.z + ka.layr
         let kb0h = kb0b / 2u
         let vb0h = vb0b / 2u
         let khblk = (h / kv_mul) * (hs / 32u)
@@ -2942,14 +2948,14 @@ class template MetalSqAttnPartBQuantT {
         if (c1 <= wstart) {
             return
         }
-        sq_fill_scores_q(ksh, kqb, q, scores, kb0h, kb0b, c0, nrows, nblk, khblk, qoff, hs, scale, softcap)
+        sq_fill_scores_q(ksh, kqb, q, scores, kb0h, kb0b, kv_ring_row(c0, ka.ring), nrows, nblk, khblk, qoff, hs, scale, softcap)
         barrier()
         sq_mask_window(scores, c0, nrows, wstart, lid, nt)
         let mm = sq_score_max(scores, red, nrows, lid, nt)
         barrier()                           // red[] is reused for the sum below
         let tot = sq_exp_sum(scores, red, mm, nrows, lid, nt)
         let pbase = ((bb * nheads + h) * nchmax + ci) * (hs + 2u)
-        part[pbase + lid] = sq_gated(sq_vacc_q(vsh, vqb, scores, vb0h, vb0b, c0, nrows, nblk, khblk, lid), q, qoff + lid, hs, ka.gated)
+        part[pbase + lid] = sq_gated(sq_vacc_q(vsh, vqb, scores, vb0h, vb0b, kv_ring_row(c0, ka.ring), nrows, nblk, khblk, lid), q, qoff + lid, hs, ka.gated)
         if (lid == 0u) {
             part[pbase + hs] = mm
             part[pbase + hs + 1u] = tot
@@ -3060,6 +3066,8 @@ struct RopeStoreBQ8Args {
     rot : uint
     qhs : uint
     qrow : uint         //! a q row's stride in `qr` (0: `qstride`)
+    layr : uint     //! the rings' rows ahead of the layer in a stream's slice (elements, or bytes under a block codec): its base is `lay * cap + layr`
+    ring : uint     //! a sliding layer's ring rows: a key's row is its `kv_ring_row` slot; 0 = a row a position
 }
 
 // The tq4 mirror is head-cooperative (the FWHT spans a whole head), so it counts heads.
@@ -3086,6 +3094,8 @@ struct RopeStoreBTq4Args {
     rot : uint
     qhs : uint
     qrow : uint
+    layr : uint     //! the rings' rows ahead of the layer in a stream's slice (elements, or bytes under a block codec): its base is `lay * cap + layr`
+    ring : uint     //! a sliding layer's ring rows: a key's row is its `kv_ring_row` slot; 0 = a row a position
 }
 
 // The DeltaNet layer's geometry as ONE kargs value: conv, history advance, per-head L2, the
@@ -3367,8 +3377,8 @@ class template MetalSqAttnDKvT {
             return
         }
         let sl = gl_SubgroupInvocationID
-        let kb0 = rrow.x + lay * rrow.z   // lay = the layer's KV-row ELEMENT prefix (Σ kv_dim below l)
-        let vb0 = rrow.y + lay * rrow.z
+        let kb0 = rrow.x + lay * rrow.z + ka.layr   // lay = the layer's flat KV-row ELEMENT prefix, layr the rings' rows ahead
+        let vb0 = rrow.y + lay * rrow.z + ka.layr
         let khoff = (h / kv_mul) * hs
         let qoff = bb * qstride + h * sq_qhs(ka.qhs, hs)
         let kv4 = kv_dim / 4u
@@ -3386,8 +3396,9 @@ class template MetalSqAttnDKvT {
         while (ss * 32u < cnt) {
             let c0 = ss * 32u
             let nrows = min(c0 + 32u, cnt) - c0
-            var kp = unsafe(addr(kc[(kb0 + c0 * kv_dim + khoff) / 4u + hp * 32u + slc]))
-            var vp = unsafe(addr(vc[(vb0 + c0 * kv_dim + khoff) / 4u + hp * 32u + slc]))
+            let cr = kv_ring_row(c0, ka.ring)   //! a 32-key slice sits whole in a ring: the slice and the ring are multiples of 32
+            var kp = unsafe(addr(kc[(kb0 + cr * kv_dim + khoff) / 4u + hp * 32u + slc]))
+            var vp = unsafe(addr(vc[(vb0 + cr * kv_dim + khoff) / 4u + hp * 32u + slc]))
             // invalid tail lanes keep the -inf seed -> weight 0
             var keep = sqd_score_blk(kp, q4, WIDE ? 0.0 : -3.0e38, nrows, kv4, sl)
             static_if (WIDE) {
@@ -3587,8 +3598,8 @@ class template MetalSqAttnDQuantT {
             return
         }
         let sl = gl_SubgroupInvocationID
-        let kb0b = rrow.x + lay * rrow.z   // lay = the layer's row-BYTE prefix
-        let vb0b = rrow.y + lay * rrow.z
+        let kb0b = rrow.x + lay * rrow.z + ka.layr   // lay = the layer's flat row-BYTE prefix, layr the rings'
+        let vb0b = rrow.y + lay * rrow.z + ka.layr
         let kb0h = kb0b / 2u
         let vb0h = vb0b / 2u
         let khblk = (h / kv_mul) * (hs / 32u) + hp * 4u
@@ -3607,14 +3618,14 @@ class template MetalSqAttnDQuantT {
         while (ss * 32u < cnt) {
             let c0 = ss * 32u
             let nrows = min(c0 + 32u, cnt) - c0
-            var keep = sqd_score_blk_q(kqb, ksh, q4, WIDE ? 0.0 : -3.0e38, c0, nrows, nblk, blkoff, kb0b, kb0h, inb, sl)
+            var keep = sqd_score_blk_q(kqb, ksh, q4, WIDE ? 0.0 : -3.0e38, kv_ring_row(c0, ka.ring), nrows, nblk, blkoff, kb0b, kb0h, inb, sl)
             static_if (WIDE) {
                 keep = sqd_wide_sum(wsc, hp, sl, keep, PARTS == 4u)
             }
             var bm = 0.0
             var btot = 0.0
             let w = sqd_block_weights(keep, sl, nrows, c0, wstart, scale, ka.softcap, bm, btot)
-            let bacc = sqd_vacc_blk_q(vqb, vsh, w, c0, nrows, nblk, blkoff, vb0b, vb0h, inb)
+            let bacc = sqd_vacc_blk_q(vqb, vsh, w, kv_ring_row(c0, ka.ring), nrows, nblk, blkoff, vb0b, vb0h, inb)
             sqd_merge(wacc, wo, bacc, bm, btot, mm, tot)
             ss += nsgs
         }
@@ -3725,11 +3736,11 @@ class MetalRopeStoreBQ8 : MetalRopeStoreQ8Base {
         var id = 0.0
         q8_scale(vals, d, id)
         if (isV) {
-            let vb0b = rrow.y + lay * rrow.z + (rrow.w - 1u) * rowb   // lay = row-byte prefix
+            let vb0b = rrow.y + lay * rrow.z + ka.layr + kv_ring_row(rrow.w - 1u, ka.ring) * rowb   // lay = the flat row-byte prefix, layr the rings'
             let vb0h = vb0b / 2u
             q8_store(vsh, vqb, vals, d, id, vb0h, vb0b, blk)
         } else {
-            let kb0b = rrow.x + lay * rrow.z + (rrow.w - 1u) * rowb
+            let kb0b = rrow.x + lay * rrow.z + ka.layr + kv_ring_row(rrow.w - 1u, ka.ring) * rowb
             let kb0h = kb0b / 2u
             q8_store(ksh, kqb, vals, d, id, kb0h, kb0b, blk)
         }
@@ -3801,10 +3812,10 @@ class MetalRopeStoreBTq4 : MetalRopeStoreTq4Base {
         let rowb = (kv_dim / 32u) * 18u
         let blk = hh * (hs / 32u) + lid / 32u   // block within the K/V row
         if (isK) {
-            let kb0b = rrow.x + lay * rrow.z + (rrow.w - 1u) * rowb   // lay = row-byte prefix
+            let kb0b = rrow.x + lay * rrow.z + ka.layr + kv_ring_row(rrow.w - 1u, ka.ring) * rowb   // lay = the flat row-byte prefix, layr the rings'
             tq4_store(ksh, kqb, d, qv, qother, kb0b, blk, lid, sl)
         } else {
-            let vb0b = rrow.y + lay * rrow.z + (rrow.w - 1u) * rowb
+            let vb0b = rrow.y + lay * rrow.z + ka.layr + kv_ring_row(rrow.w - 1u, ka.ring) * rowb
             tq4_store(vsh, vqb, d, qv, qother, vb0b, blk, lid, sl)
         }
     }

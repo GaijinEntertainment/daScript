@@ -13,6 +13,7 @@ require metal/das_metal_boost
 require dasllama/dasllama_common
 require dasllama/dasllama_gpu_tier   // set_moe_gpu_dn_room_hook: the scheduler's stream count reaches the mirror cache
 require dasllama/dasllama_math
+require dasllama/dasllama_gpu_math   // kv_ring_row: a mirror position's row
 require dasllama/dasllama_kv_codec  // tq4_fill_signs — GPU and CPU must share the exact sign vector
 require dasllama/dasllama_metal_shapes public   // the extracted portable shape gates — re-exported so the driver family keeps its names
 
@@ -127,6 +128,8 @@ struct KVMirror {
     vdt : KVDtype
     cap_rows : int64      // logical rows allocated per layer (grows by rebuild + re-upload)
     watermark : int64     // logical rows [0, watermark) are mirrored; pos < watermark = rewind
+    layout : int64        //! the `mirror_layout` key the slice was cut under: another key re-cuts it
+    ring_stale : bool     //! the rings hold another history's rows (an adopted mirror): the next prepare brings their windows up whole
     tick : int64          // LRU stamp
     koff : uint64         // arena byte offset of the K plane (n_layers slabs of cap_rows rows)
     voff : uint64         // ... and the V plane (koff + bytes/2 — one slice carries both)
@@ -746,11 +749,12 @@ def upload_rows_strided(var buf : MetalBuffer?; src : float const?; rows, width,
     }
 }
 
-//! One mirror row of layer `l` - K and V - copied from the arena back into the session's CPU KV.
-def mirror_row_writeback(var s : Session; seq_len, l, pos, prow, rowb, lb : int64; ab : uint8?; koff, voff : uint64) {
+//! One mirror row of layer `l` - K and V - copied from the arena back into the session's CPU KV: the slab's row `mrow` (a
+//! position's, or its ring slot - `kv_ring_row`) to the cache's physical row `prow`.
+def mirror_row_writeback(var s : Session; seq_len, l, mrow, prow, rowb, lb : int64; ab : uint8?; koff, voff : uint64) {
     unsafe {
-        memcpy(reinterpret<void?>(kv_layer_kbase(s, l, seq_len) + prow * rowb), reinterpret<void?>(ab + koff + lb + pos * rowb), rowb)
-        memcpy(reinterpret<void?>(kv_layer_vbase(s, l, seq_len) + prow * rowb), reinterpret<void?>(ab + voff + lb + pos * rowb), rowb)
+        memcpy(reinterpret<void?>(kv_layer_kbase(s, l, seq_len) + prow * rowb), reinterpret<void?>(ab + koff + lb + mrow * rowb), rowb)
+        memcpy(reinterpret<void?>(kv_layer_vbase(s, l, seq_len) + prow * rowb), reinterpret<void?>(ab + voff + lb + mrow * rowb), rowb)
     }
 }
 
@@ -1254,21 +1258,164 @@ def mirror_evict_to_cap(cap_bytes : uint64; keep : uint64) {
 }
 
 
-//! layer l's slab base (bytes) within a mirror K or V plane of cap rows: every KV codec is linear bytes-per-element for
-//! kvd % 32 == 0, so the layout's element prefix scales straight to bytes (gemma4's two kv-head classes included)
-def mirror_lbase(t : Model; dt : KVDtype; cap, l : int64) : int64 => cap * kv_row_bytes(dt, t.kv_row_prefix[l])
+var g_mirror_ring_slack = MIRROR_RING_SLACK_MIN   //! the rows past a ringed layer's window a slice's ring holds: the most one window of the process wrote, a power of two
+let MIRROR_RING_SLACK_MIN = 512l   //! ... at the least: the window's floor, past every verify's and batch step's rows
+
+//! a mirror slice's layout on model `t`: per layer (the NextN head last) its ring rows (0 = a row a position) and the element
+//! prefixes of the flat layers' rows and of the rings' rows ahead of it - a sharer reads its donor's
+struct MirrorLayout {
+    @exact_size ring : array<int64>
+    @exact_size flat_pre : array<int64>
+    @exact_size ring_pre : array<int64>
+    flat_total : int64   //! a position's elements over the flat layers
+    ring_total : int64   //! every ring's rows' elements
+    slack : int64
+    key : int64          //! the model the layout is of: its prefix sum and layer count with the slack
+}
+
+var @scratch g_mirror_layout : MirrorLayout
+
+//! the layout's identity for `t` under the current slack
+def private mirror_layout_key(t : Model) : int64 {
+    let n = long_length(t.kv_row_prefix)
+    var k = n * 1000003l + g_mirror_ring_slack * 7919l + t.config.sliding_window * 31l + (gpu_kv_ring_on() ? 1l : 0l)
+    for (l in range64(n)) {
+        k = k * 31l + t.kv_row_prefix[l]
+    }
+    return k
+}
+
+//! model `t`'s slice layout under the current slack (`kv_ring_rows` a sliding layer, ringed at every context); cached per model
+[arch(at="../ARCHITECTURE_GPU_KV_RING.md#kv-sliding-ring")]
+def mirror_layout_ensure(t : Model) {
+    let key = mirror_layout_key(t)
+    if (g_mirror_layout.key != key || empty(g_mirror_layout.ring)) {
+        mirror_layout_build(t, key)
+    }
+}
+
+[cold_path]   // once per model and slack
+def private mirror_layout_build(t : Model; key : int64) {
+    let c = t.config
+    let n = long_length(t.kv_row_prefix)
+    var m & = unsafe(g_mirror_layout)
+    m.ring |> reserve_resize(n)
+    m.flat_pre |> reserve_resize(n)
+    m.ring_pre |> reserve_resize(n)
+    m.flat_total = 0l
+    m.ring_total = 0l
+    for (l in range64(n)) {
+        if (kv_shared_layer(t, l)) {
+            let d = t.kv_src[l]
+            m.ring[l] = m.ring[d]
+            m.flat_pre[l] = m.flat_pre[d]
+            m.ring_pre[l] = m.ring_pre[d]
+            continue
+        }
+        let kvd = layer_kv_dim(c, l)
+        m.ring[l] = l < c.n_layers ? kv_ring_rows(c, l, 2147483647l, g_mirror_ring_slack) : 0l
+        m.flat_pre[l] = m.flat_total
+        m.ring_pre[l] = m.ring_total
+        if (m.ring[l] > 0l) {
+            m.ring_total += m.ring[l] * kvd
+        } else {
+            m.flat_total += kvd
+        }
+    }
+    m.slack = g_mirror_ring_slack
+    m.key = key
+}
+
+//! model `t`'s current slice layout key (`mirror_layout_ensure`): a slice cut under another key re-cuts
+def mirror_layout_key_of(t : Model) : int64 {
+    mirror_layout_ensure(t)
+    return g_mirror_layout.key
+}
+
+//! every ring's rows' elements on model `t`'s current layout: 0 = no layer ringed
+def mirror_rings(t : Model) : int64 {
+    mirror_layout_ensure(t)
+    return g_mirror_layout.ring_total
+}
+
+//! layer l's slab base (bytes) within a mirror K or V plane of cap rows: the flat layers' rows ahead of it at the slice's cap,
+//! then the rings' (`mirror_layout`); every KV codec is linear bytes-per-element for kvd % 32 == 0, so an element prefix scales
+//! straight to bytes (gemma4's two kv-head classes included)
+[arch(at="../ARCHITECTURE_GPU_KV_RING.md#kv-sliding-ring")]
+def mirror_lbase(t : Model; dt : KVDtype; cap, l : int64) : int64 {
+    mirror_layout_ensure(t)
+    let m & = unsafe(g_mirror_layout)
+    return cap * kv_row_bytes(dt, m.flat_pre[l]) + kv_row_bytes(dt, m.ring_pre[l])
+}
+
+//! position `pos`'s row of layer l, its byte offset past the layer's slab base: its slot of a ring (`kv_ring_row`), or the position
+[arch(at="../ARCHITECTURE_GPU_KV_RING.md#kv-sliding-ring")]
+def mirror_row_at(t : Model; dt : KVDtype; l, pos : int64) : int64 {
+    mirror_layout_ensure(t)
+    let m & = unsafe(g_mirror_layout)
+    return kv_ring_row(pos, m.ring[l]) * kv_row_bytes(dt, layer_kv_dim(t.config, l))
+}
+
+//! layer l's ring rows on the current layout; 0 = a row a position
+def mirror_ring(t : Model; l : int64) : int64 {
+    mirror_layout_ensure(t)
+    return g_mirror_layout.ring[l]
+}
+
+//! layer l's flat-row prefix and ring-row prefix in a codec's route units (elements, or bytes under a block codec): the per-row
+//! route forms step a stream's slice to the layer as `lay * cap + layr`
+def mirror_route_lay(t : Model; dt : KVDtype; l : int64) : uint2 {
+    mirror_layout_ensure(t)
+    let m & = unsafe(g_mirror_layout)
+    let blockc = kv_block_codec(dt)
+    return uint2(uint(blockc ? kv_row_bytes(dt, m.flat_pre[l]) : m.flat_pre[l]), uint(blockc ? kv_row_bytes(dt, m.ring_pre[l]) : m.ring_pre[l]))
+}
+
+//! the slack a window of `npos` rows asks of model `t`'s rings: where it grows, every slice relayouts at its next prepare
+//! (`mirror_prepare_rows`, the layout key) and no step encoded over the old layout runs
+[arch(at="../ARCHITECTURE_GPU_KV_RING.md#kv-sliding-ring")]
+def mirror_ring_ask(t : Model; npos : int64) {
+    return if (npos <= g_mirror_ring_slack || mirror_rings(t) == 0l)
+    var s = g_mirror_ring_slack
+    while (s < npos) {
+        s *= 2l
+    }
+    mirror_quiesce()
+    g_mirror_ring_slack = s
+    g_arena_epoch++
+}
+
+//! layer l's positions [lo, hi) as runs back to back in its slab, `blk(p0, n, slot)` a run of n positions from p0 at row `slot`:
+//! the span whole on a flat layer; on a ring its last `ring` positions, cut where the slots wrap
+[arch(at="../ARCHITECTURE_GPU_KV_RING.md#kv-sliding-ring")]
+def mirror_ring_pieces(t : Model; l, lo, hi : int64; blk : block<(p0, n, slot : int64) : void>) {
+    return if (hi <= lo)
+    let ring = mirror_ring(t, l)
+    if (ring == 0l) {
+        invoke(blk, lo, hi - lo, lo)
+        return
+    }
+    var p = max(lo, hi - ring)
+    while (p < hi) {
+        let slot = kv_ring_row(p, ring)
+        let n = min(hi - p, ring - slot)
+        invoke(blk, p, n, slot)
+        p += n
+    }
+}
 
 // the slice mirror_prepare would build for (s, pos): chunked high-water cap (pow2 from 256,
-// never past the session's own seq cap) and the K/V plane sizes
+// never past the session's own seq cap; a ring holds its own rows) and the K/V plane sizes
 def private mirror_slice_shape(t : Model; s : Session; needed : int64) : tuple<cap : int64; kbytes : uint64; vbytes : uint64> {
+    mirror_layout_ensure(t)
+    let m & = unsafe(g_mirror_layout)
     var cap = 256l
     while (cap < needed) {
         cap *= 2l
     }
     cap = clamp(cap, needed, t.config.seq_len)
-    let total = kv_row_total(t)
-    return (cap = cap, kbytes = uint64(cap * kv_row_bytes(s.kv_dtype_k, total)),
-            vbytes = uint64(cap * kv_row_bytes(s.kv_dtype_v, total)))
+    return (cap = cap, kbytes = uint64(cap * kv_row_bytes(s.kv_dtype_k, m.flat_total) + kv_row_bytes(s.kv_dtype_k, m.ring_total)),
+            vbytes = uint64(cap * kv_row_bytes(s.kv_dtype_v, m.flat_total) + kv_row_bytes(s.kv_dtype_v, m.ring_total)))
 }
 
 //! the device's largest buffer - the arena is one buffer, so neither a slice nor the arena grows past it
@@ -1463,6 +1610,7 @@ def private mirror_adopt(s : Session; needed : int64) {
     mirror_sig_drop(best)
     mr.uid = s.uid
     mr.watermark = best_pages * s.kv_pool.page_rows
+    mr.ring_stale = true   //! the rings hold the released session's last rows, not the shared opening's
     g_mirrors[s.uid] = mr
     g_mirror_adopted_rows += mr.watermark
 }
@@ -1499,7 +1647,7 @@ def mirror_set_watermark(uid : uint64; rows : int64) {
 }
 
 //! `mirror_prepare` with the capacity asked apart from the rows held: rows [0, pos) mirrored, room for `needed` rows.
-def mirror_prepare_rows(t : Model; var s : Session; pos, needed : int64) : tuple<ok : bool; koff : uint64; voff : uint64; cap : int64> {   // nolint:STYLE038 — evict/rebuild/grow/upload is one sequential decision on shared locals
+def mirror_prepare_rows(t : Model; var s : Session; pos, needed : int64) : tuple<ok : bool; koff : uint64; voff : uint64; cap : int64> {
     let c = t.config
     if (!key_exists(g_mirrors, s.uid)) {
         mirror_adopt(s, needed)
@@ -1508,7 +1656,7 @@ def mirror_prepare_rows(t : Model; var s : Session; pos, needed : int64) : tuple
         // uid is never reused, so dtype can't legitimately change — a mismatch means a stale
         // record; capacity growth rebuilds too (watermark 0 → full re-upload from the CPU cache)
         let mr0 = g_mirrors[s.uid]   // cheap copy — fields tested off it, one lookup per statement
-        if (mr0.cap_rows < needed || mr0.kdt != s.kv_dtype_k || mr0.vdt != s.kv_dtype_v) {
+        if (mr0.cap_rows < needed || mr0.kdt != s.kv_dtype_k || mr0.vdt != s.kv_dtype_v || mr0.layout != mirror_layout_key_of(t)) {
             mirror_release(g_mirrors[s.uid])
             g_mirrors |> erase(s.uid)
         }
@@ -1544,7 +1692,7 @@ def mirror_prepare_rows(t : Model; var s : Session; pos, needed : int64) : tuple
             off = arena_alloc(kbytes + vbytes)
         }
         let mr = KVMirror(uid = s.uid, kdt = s.kv_dtype_k, vdt = s.kv_dtype_v, cap_rows = cap,
-            koff = uint64(off), voff = uint64(off) + kbytes, bytes = kbytes + vbytes)
+            koff = uint64(off), voff = uint64(off) + kbytes, bytes = kbytes + vbytes, layout = mirror_layout_key_of(t))
         g_mirror_bytes += mr.bytes
         g_mirrors[s.uid] = mr
         // the evict target honors the RAW knob (a tiny cap is legitimate idle-eviction policy —
@@ -1561,37 +1709,52 @@ def mirror_prepare_rows(t : Model; var s : Session; pos, needed : int64) : tuple
     let cap = g_mirrors[s.uid].cap_rows
     let koff = g_mirrors[s.uid].koff
     let voff = g_mirrors[s.uid].voff
-    if (wm < pos) {
+    let ring_lo = g_mirrors[s.uid].ring_stale ? 0l : wm   //! the position the rings hold this history's rows from
+    if (wm < pos || ring_lo < wm) {
         // gather logical rows [wm, pos) from the CPU cache (source of truth) — flat sessions are
-        // one run, paged sessions gather through kv_runs; bytes move verbatim (same dtype)
-        let nrun = kv_runs(s, wm, pos, s.kv_runs)
-        unsafe {
-            var kdst = reinterpret<uint8?>(metal_buffer_contents(g_arena)) + koff
-            var vdst = reinterpret<uint8?>(metal_buffer_contents(g_arena)) + voff
-            for (l in range64(c.n_layers + c.n_layer_nextn)) {   // draft slab rides the watermark contract
-                continue if (kv_shared_layer(t, l))   // aliases the source slab — its upload covers l
-                let kvd_l = layer_kv_dim(c, l)
-                let krow = kv_row_bytes(s.kv_dtype_k, kvd_l)
-                let vrow = kv_row_bytes(s.kv_dtype_v, kvd_l)
-                let klb = mirror_lbase(t, s.kv_dtype_k, cap, l)
-                let vlb = mirror_lbase(t, s.kv_dtype_v, cap, l)
-                let kbase = kv_layer_kbase(s, l, c.seq_len)
-                let vbase = kv_layer_vbase(s, l, c.seq_len)
-                for (r in range64(nrun)) {
-                    let j0 = s.kv_runs[r].j0
-                    let nrows = s.kv_runs[r].j1 - j0
-                    let prow = s.kv_runs[r].row0
-                    memcpy(reinterpret<void?>(kdst + klb + j0 * krow),
-                        reinterpret<void?>(kbase + prow * krow), nrows * krow)
-                    memcpy(reinterpret<void?>(vdst + vlb + j0 * vrow),
-                        reinterpret<void?>(vbase + prow * vrow), nrows * vrow)
-                }
-            }
+        // one run, paged sessions gather through kv_runs; bytes move verbatim (same dtype); a ring takes its window alone
+        mirror_layout_ensure(t)
+    let m & = unsafe(g_mirror_layout)
+        for (l in range64(c.n_layers + c.n_layer_nextn)) {   // draft slab rides the watermark contract
+            continue if (kv_shared_layer(t, l))   // aliases the source slab — its upload covers l
+            mirror_upload_layer(t, s, l, m.ring[l] > 0l ? max(ring_lo, pos - m.ring[l]) : wm, pos, koff + uint64(mirror_lbase(t, s.kv_dtype_k, cap, l)),
+                voff + uint64(mirror_lbase(t, s.kv_dtype_v, cap, l)))
         }
         g_mirror_uploaded_rows += pos - wm
         g_mirrors[s.uid].watermark = pos
+        g_mirrors[s.uid].ring_stale = false
     }
     return (ok = true, koff = koff, voff = voff, cap = cap)
+}
+
+//! layer l's positions [lo, hi) from `s`'s cache into its slab at arena offsets `klb` / `vlb`: a flat cache's one run, a paged
+//! cache's a physical run at a time, each cut where a ring's slots wrap (`mirror_row_at`)
+[arch(at="../ARCHITECTURE_GPU_KV_RING.md#kv-sliding-ring")]
+def private mirror_upload_layer(t : Model; var s : Session; l, lo, hi : int64; klb, vlb : uint64) {
+    return if (hi <= lo)
+    let c = t.config
+    let kvd = layer_kv_dim(c, l)
+    let krow = kv_row_bytes(s.kv_dtype_k, kvd)
+    let vrow = kv_row_bytes(s.kv_dtype_v, kvd)
+    let ring = mirror_ring(t, l)
+    let nrun = kv_runs(s, lo, hi, s.kv_runs)
+    unsafe {
+        let ab = reinterpret<uint8?>(metal_buffer_contents(g_arena))
+        let kbase = kv_layer_kbase(s, l, c.seq_len)
+        let vbase = kv_layer_vbase(s, l, c.seq_len)
+        for (r in range64(nrun)) {
+            var j = s.kv_runs[r].j0
+            var prow = s.kv_runs[r].row0
+            while (j < s.kv_runs[r].j1) {
+                let slot = kv_ring_row(j, ring)
+                let n = ring > 0l ? min(s.kv_runs[r].j1 - j, ring - slot) : s.kv_runs[r].j1 - j
+                memcpy(reinterpret<void?>(ab + klb + uint64(slot * krow)), reinterpret<void?>(kbase + prow * krow), n * krow)
+                memcpy(reinterpret<void?>(ab + vlb + uint64(slot * vrow)), reinterpret<void?>(vbase + prow * vrow), n * vrow)
+                j += n
+                prow += n
+            }
+        }
+    }
 }
 
 
@@ -2496,6 +2659,7 @@ struct BatchLanding {
     seq : int64
     vocab : int64
     @scratch @exact_size lrowb : array<int64>      //!< hetero (gemma4): per-layer row bytes; uniform models read one value per layer
+    @scratch @exact_size lring : array<int64>      //!< per-layer ring rows: a sliding layer's row at `kv_ring_row` of its position
     @scratch @exact_size lkbase : array<int64>     //!< per (row i, layer l) flattened i * n_layers + l (caps differ per row)
     @scratch @exact_size lvbase : array<int64>
     bx : MetalBuffer?             //!< the poke targets: the rows' embeds ...
@@ -2696,10 +2860,11 @@ def finish_pending_step {   // nolint:STYLE038 — the pipeline join: wait/error
                 for (l in range64(L.layers)) {
                     let rowb_l = L.lrowb[l]
                     let fb = i * L.layers + l
+                    let mrow = kv_ring_row(pos, L.lring[l])
                     memcpy(reinterpret<void?>(kv_layer_kbase(*sp, l, L.seq) + prow * rowb_l),
-                        reinterpret<void?>(ab + (L.koffs[i] + uint64(L.lkbase[fb] + pos * rowb_l))), rowb_l)
+                        reinterpret<void?>(ab + (L.koffs[i] + uint64(L.lkbase[fb] + mrow * rowb_l))), rowb_l)
                     memcpy(reinterpret<void?>(kv_layer_vbase(*sp, l, L.seq) + prow * rowb_l),
-                        reinterpret<void?>(ab + (L.voffs[i] + uint64(L.lvbase[fb] + pos * rowb_l))), rowb_l)
+                        reinterpret<void?>(ab + (L.voffs[i] + uint64(L.lvbase[fb] + mrow * rowb_l))), rowb_l)
                 }
                 if (lgp != null && !L.sameslab) {
                     memcpy(addr < void? >(sp.logits[0]),

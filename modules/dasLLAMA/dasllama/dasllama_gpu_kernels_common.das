@@ -1963,6 +1963,7 @@ struct GkRopeKvArgs {
     mirbase : uint     //! the layer's base in the mirror planes, ahead of a row's own (the Vulkan token block's; Metal binds the row), or the
                        //! layer index where a row table carries the per-layer stride (Metal's window form)
     ring : uint        //! a sliding layer's ring rows: a row lands at `kv_ring_row` of its position; 0 = the flat slab
+    layr : uint        //! the row-table form: the rings' rows ahead of the layer in a stream's slice, past `mirbase` layers of its stride
 }
 
 //! the rope-and-store args a home builds: the one-row defaults (one row, every stride 0, the bias row, the cos row and the mirror
@@ -2040,7 +2041,7 @@ class template GkRopeKvStore {
     //! its mirror K and V bases, the per-layer stride `pa.mirbase` layers of which sit ahead, and its depth (the row lands at depth - 1)
     def rope_kv_tabled(gid, row : uint; rrow : uint4) {
         if (gid < pa.npairs) {
-            let ahead = pa.mirbase * rrow.z + (rrow.w - 1u) * pa.kvd
+            let ahead = pa.mirbase * rrow.z + pa.layr + kv_ring_row(rrow.w - 1u, pa.ring) * pa.kvd
             rope_kv_pair(row, gid, rrow.x + ahead, rrow.y + ahead)
         }
     }
@@ -2112,6 +2113,7 @@ struct GkQknRopeArgs {
     skipnorm : uint    //! the rope alone, no per-head norm
     hscale : float     //! the q twin's scale (`HX` stamps)
     ring : uint        //! a sliding layer's ring rows: a row lands at `kv_ring_row` of its position; 0 = the flat slab
+    layr : uint        //! Metal's rows form: the rings' rows ahead of the layer in a stream's slice, past its `layerbase` stride
 }
 
 //! The fused per-head q/k RMSNorm, rope and K/V store, a workgroup of `LANES` a head (`ARCHITECTURE_GPU_SHARED_KERNELS.md`):

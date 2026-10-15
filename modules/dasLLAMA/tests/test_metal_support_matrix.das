@@ -1474,6 +1474,77 @@ def private gptoss_row(t : T?; path : string) {
     }
 }
 
+//! the sliding layers' rings against every row kept on the Metal mirror (`../ARCHITECTURE_GPU_KV_RING.md#kv-sliding-ring`): a
+//! counting prompt past the window prefilled in 256-row windows and 24 greedy steps on the blob twin with the ring pinned on, then
+//! off (`set_gpu_kv_ring`, put back), token for token, every step and window served by the device; the ringed layout holds rings
+//! its positions wrap, the flat one none
+[unused_argument(t, path, tag, family, arm)]   // off-Apple the gated body is empty
+def private metal_ring_row(t : T?; path, tag, family, arm : string) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        if (!family_on(t, family) || !arm_on(t, arm) || !model_available(t, path)) {
+            return
+        }
+        var trg <- blob_twin(t, path, 2048l)
+        let prompt <- encode(trg, counting_prompt(1, 400), true, false)
+        t |> success(long_length(prompt) > trg.config.sliding_window + 128l,
+            "{tag}/ring: the {long_length(prompt)}-token prompt runs past the {trg.config.sliding_window}-position window")
+        let pin = gpu_kv_ring_pin()
+        var ids : array<array<int64>>
+        var rings : array<int64>
+        with_dasllama_jobque() {
+            select_decode_override("metal")
+            select_prefill_override("metal")
+            for (ringed in fixed_array(1, 0)) {
+                set_gpu_kv_ring(ringed)
+                let de0 = metal_decode_stats().decodes
+                let pf0 = metal_prefill_stats().prefills
+                var s = make_run_state(trg.config, KVDtype.f16, KVDtype.f16)
+                var got <- ring_row_walk(trg, s, prompt, 256l, 24)
+                rings |> push(mirror_rings(trg))
+                if (ringed == 1) {
+                    let ring = mirror_ring(trg, 0l)
+                    t |> success(ring > 0l && ring < long_length(prompt), "{tag}/ring: the sliding layers' {ring}-row ring wraps under the prompt")
+                }
+                t |> success(metal_decode_stats().decodes - de0 >= 23l && metal_prefill_stats().prefills - pf0 >= long_length(prompt) / 256l,
+                    "{tag}/ring {ringed}: the prompt and the steps served on the device")
+                ids |> emplace(got)
+                delete s
+            }
+            select_decode_override("")
+            select_prefill_override("")
+        }
+        set_gpu_kv_ring(pin)
+        t |> success(rings[0] > 0l && rings[1] == 0l, "{tag}/ring: the ringed layout holds rings ({rings[0]} elements), the flat one none ({rings[1]})")
+        log_gen_texts(trg, "{tag}/ring", ids[1], ids[0])
+        t |> success(ids_equal(ids[0], ids[1]), "{tag}/ring: the ringed mirror generates the flat mirror's tokens")
+        delete ids
+        delete rings
+        delete trg
+    }
+}
+
+//! `prompt` evaluated `chunk` rows a call, then `steps` greedy picks each fed back: the prompt's ids and the picks
+def private ring_row_walk(t : Model; var s : Session; prompt : array<int64>; chunk : int64; steps : int) : array<int64> {
+    var out := prompt
+    var p = 0l
+    while (p < long_length(prompt)) {
+        let e = min(p + chunk, long_length(prompt))
+        var part <- [for (i in range64(p, e)); prompt[i]]
+        eval_(t, s, part)
+        delete part
+        p = e
+    }
+    out |> reserve(length(out) + steps)
+    for (_i in range(steps)) {
+        let pick = argmax_of(s.logits, t.config.vocab_size)
+        out |> push(pick)
+        var one <- [pick]
+        eval_(t, s, one)
+        delete one
+    }
+    return <- out
+}
+
 [unused_argument(t, path)]   // off-Apple the gated body is empty
 def private gemma2_window_row(t : T?; path : string) {
     // sliding-window masking parity: shrink the window post-load (config-driven everywhere —
@@ -1920,6 +1991,7 @@ def test_metal_family_matrix(t : T?) {
                 "gemma3-4b/q8/f16", uint(MetalNeed.neox | MetalNeed.qk_norm | MetalNeed.sliding |
                     MetalNeed.pre_post_norm | MetalNeed.geglu | MetalNeed.qd_neq_dim),
                 "")
+            metal_ring_row(t, path_join(models_dir(), "gemma-3-1b-it-Q8_0.gguf"), "gemma3-1b", "gemma3", "fam-gemma3")
             // gemma4-12B (stage 3): the heterogeneous line — two attention classes (sliding
             // 16q/8kv/256, global 16q/1kv/512 MQA), V-from-K on global layers, v_norm,
             // out_scale on the whole layer output, unit attn scale, final softcap + suppress.
@@ -1956,6 +2028,7 @@ def test_metal_family_matrix(t : T?) {
             // ... and E2B, the MatFormer sub-model: everything E4B has PLUS two per-layer FFN
             // widths (6144/12288) — the per-layer u_hidden bind's model row. 5GB, small tier.
             gemma4e_row(t, path_join(models_dir(), "gemma-4-E2B-it-Q8_0.gguf"), "gemma4e-e2b", true, false)
+            metal_ring_row(t, path_join(models_dir(), "gemma-4-E2B-it-Q8_0.gguf"), "gemma4e-e2b", "gemma4e", "fam-gemma4e")
             // ... and the kq carrier: the k5-plane PLE table's CPU gather over the metal-blob
             // COMPACTED scale strips (16B, not the planar 20B) — the stride that zeroed logits
             gemma4e_row(t, path_join(models_dir(), "gemma-4-E2B-it-Q4_K_M.gguf"), "gemma4e-e2b-kq", true, false)
