@@ -68,11 +68,32 @@ or reach the `.dlim` image.
 the CPU's kernels, on a run with every lever at its default is a defect - add that backend's
 kernels for the format at the site instead.**
 
+**A diff that adds a site, or adds a backend's serving call to a site, serves at it every `KqFmt`
+member that can occur at the site's row length (a superblock member needs the length on the 256
+lattice, a per-32 member on the 32 lattice) on that backend in the same change, or makes the load
+decline a format it does not serve there with a reason naming the site and the format.** A site
+that serves the formats its author's files carried and transcodes the rest serves a format matrix
+nobody chose, and the next file finds the gap at load time with no line saying so.
+
+**A diff that adds or changes a site reading a weight plane whose format is a literal `KqFmt`
+member, or a plane the loader converts to one form whatever its disk type (a `load_big` call with
+no format), is a defect - the loader tags the plane from its disk type through `kq_tag` /
+`kq_fmt_of`, and the site reads the tag.** A literal at the site is a conversion no report names:
+every disk type the file carries becomes the literal's form, and every home that copies the
+literal agrees on the same wrong answer.
+
 **A diff that states a backend serves a weight format - in any document, PR description, test
 name, or a predicate that returns true for "this backend runs this format" - while, on a run with
 every lever at its default, a site that backend's serving call reaches reads the format through a
 converted copy or hands a GPU site to the CPU's kernels is a defect - state that site as a gap
 instead, or cite the follow-up row that ledgers it.**
+
+**A diff that states a backend serves a weight format at a site lands, or cites, a cell that loads
+a file whose plane at that site carries that format - a requantized local file
+(`performance/model_specs.das`, the `-local` recipe rows) where no catalogued file does - and
+asserts both the plane's load tag against the disk type and that the backend's kernel counter for
+the site rose.** A cell that asserts engagement alone passes with the site on a converted copy or
+on the CPU pre-step.
 
 **A diff that adds a lever, off by default, that makes a site read a weight format through a
 converted copy names the lever in the same change - in `ARCHITECTURE_GPU_ASYMMETRIES.md` where
