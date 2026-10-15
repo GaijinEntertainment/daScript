@@ -10,7 +10,7 @@ require dasllama/dasllama_kqformat   // KqFmt - the PLE table's tag
 require dasllama/dasllama_gpu_resident   // resident_plan - the table's seat
 require _format_census   // census_cell - the per-layer planes in their own formats
 require daslib/fio
-require math
+require math   // nolint:STYLE030,LINT019 - abs, read in the vulkan half
 require dasllama/dasllama_ple   // ple_cpu_pre_rows - the CPU pre-step's witness
 require dasllama/dasllama_common   // Model, embed_row, forward, forward_prefill
 require dasllama/dasllama   // create_session
