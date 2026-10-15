@@ -775,7 +775,7 @@ class template ActRqT : RqT {
 
     def act_mul(v, u : float) : float => gk_act_mul(v, u, pa.act)
 
-    //! the up element paired with gate element `eb` (the 32-block form): with `ustride` the rows of `ulen` elements sit `ustride` apart
+    //! the up element paired with gate element `eb`: with `ustride` the rows of `ulen` elements sit `ustride` apart
     def up_at(eb : uint) : uint {
         let ul = max(pa.ulen, 1u)
         return pa.ustride != 0u ? pa.ubase + (eb / ul) * pa.ustride + eb % ul : pa.ubase + eb   //! four elements never cross a row: ulen is a 4-multiple
@@ -785,7 +785,7 @@ class template ActRqT : RqT {
         let ue = up_at(eb)
         return float4(act_mul(gate[eb], up[ue]), act_mul(gate[eb + 1u], up[ue + 1u]), act_mul(gate[eb + 2u], up[ue + 2u]), act_mul(gate[eb + 3u], up[ue + 3u]))
     }
-    def override load1(e : uint) : float => act_mul(gate[e], up[e])
+    def override load1(e : uint) : float => act_mul(gate[e], up[up_at(e)])
 }
 
 [vk_dispatch(name = "q8_actrq_cls", kernel = "run", family = "actrq_cls", grid = "wgs", params = "wgs : int64")]

@@ -1733,7 +1733,7 @@ def test_vkd_kq_gemv_family(t0 : T?) {
                 t |> skip("no Vulkan device, or a kq GEMV class pipeline failed to build")
                 return
             }
-            for (nsb in fixed_array(2, 20)) {   //! superblocks a row: 512 wide, the guarded tail alone; 5120 wide, four unrolled steps and a tail at every lane split
+            for (nsb in fixed_array(1, 2, 20)) {   //! superblocks a row: 256 wide (the E-series projection's row), 512 wide, the guarded tail alone; 5120 wide, four unrolled steps and a tail at every lane split
             let d = 3        // rows per region
             let nreg = 2
             let rows = nreg * d
@@ -2068,20 +2068,33 @@ def test_vkd_act_family(t0 : T?) {
             let nelem = 1024
             var gh <- row_fill(nelem, 29, 0, 0.21, 6.0, 61)
             var uh <- row_fill(nelem, 11, 0, 0.17, 4.0, 47)
-            // arm 0 = q8 (32-blocks), arm 1 = q8k (256-superblocks); arms 2 and 3 the same under the clamped swiglu (gpt-oss's act code on the unbiased kernels)
-            for (arm in range(4)) {
+            //! the E-series side rows: four rows of 256 at layer 1 of three, position-major (`ubase` / `ustride` / `ulen`), and the
+            //! layer's slice gathered contiguous for the oracle
+            let ple = 256
+            let all = 3 * ple
+            let side <- row_fill(4 * all, 13, 0, 0.19, 3.0, 53)
+            let us <- [for (i in range(nelem)); side[(i / ple) * all + ple + i % ple]]
+            // arm 0 = q8 (32-blocks), arm 1 = q8k (256-superblocks); arms 2 and 3 the same under the clamped swiglu (gpt-oss's act code
+            // on the unbiased kernels); arms 4 and 5 under gelu over the strided side rows
+            for (arm in range(6)) {
                 let q8k = (arm & 1) == 1
-                let act = arm >= 2 ? ACT_OAI : ACT_SILU
+                let strided = arm >= 4
+                let act = arm >= 4 ? ACT_GELU : (arm >= 2 ? ACT_OAI : ACT_SILU)
                 let nblk = q8k ? nelem / 256 : nelem / 32
                 var inscope q_cls : array<uint>
                 var inscope s_cls : array<float>
                 with_cell_planes() $(var cp : CellPlanes) {
                     let pg = cp |> in_(gh)
-                    let pu = cp |> in_(uh)
+                    let pu = cp |> in_(strided ? side : uh)
                     let pq = cp |> out_words(int64(nelem), I8_SENTINEL_BITS)   // 1 byte per quant either way
                     let ps = cp |> out_(nblk)
                     var sc = cp |> cls_set(fixed_array(pg, pu, pq, ps), @@set_actrq_cls)
                     var pc = ActArgs(nelem = uint(nelem), act = act, nblk = uint(nblk))
+                    if (strided) {
+                        pc.ubase = uint(ple)
+                        pc.ustride = uint(all)
+                        pc.ulen = uint(ple)
+                    }
                     cp |> cell_record() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
                         if (q8k) {
                             enc_q8k_actrq_cls(raw2, h2, sc, pc, 1l)   // 256 threads cover both shapes at nelem = 1024
@@ -2096,9 +2109,9 @@ def test_vkd_act_family(t0 : T?) {
                 }
                 var inscope q_ref : array<uint>
                 var inscope s_ref : array<float>
-                actrq_oracle(gh, uh, nelem, q8k, act, q_ref, s_ref)
+                actrq_oracle(gh, strided ? us : uh, nelem, q8k, act, q_ref, s_ref)
                 // exp/tanh differ by ulps between backends: quants compare as bytes +-1, scales approx
-                let tag = "{q8k ? "q8k" : "q8"} actrq{act == ACT_OAI ? " under the clamped swiglu" : ""}"
+                let tag = "{q8k ? "q8k" : "q8"} actrq{act == ACT_OAI ? " under the clamped swiglu" : ""}{strided ? " over the strided side rows" : ""}"
                 check_qbytes(t, tag, q_cls, q_ref)
                 check_rows(t, "{tag} scales", s_cls, s_ref, BAR_APPROX_CTRL, FLAT_ROWS)
                 delete q_ref
