@@ -101,8 +101,7 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
      D2: one dispatch, or f16/q8 rows), add+rms pairs 0.68 ms + requants 0.16 (the fused ar+rq twin
      is off on a hybrid because the f32 GEMVs read xb - D3).
    STILL OPEN in this item:
-   (b) the other families Metal serves - MoE (Wave C), gemma4 (PLE, sandwich norms), gpt-oss
-   (sinks, swiglu_oai) - stay per-op; (c) the decode-role profiler (`rdq_sample`) has no
+   (c) the decode-role profiler (`rdq_sample`) has no
    per-role table for the hybrid stamp count - it reports the whole span only, and the prefill's
    per-role table labels a recurrent layer's stamps with the attention head's role names; (d) DONE
    9/5 - the f32 arm is `dn_ba_cls`, gated by `test_vkd_dn_ba` (partial and full tiles) and
@@ -113,8 +112,6 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
 4. **Real batched decode** - the resident mirror is single-sequence; batch rows round-trip
    their KV per step (`rdec_kv_sync` in, `rdec_kv_read` out). Metal has a true batched driver
    (P4). Options: multi-sequence mirror slabs, or per-row device KV like Metal's `KVMirror`.
-6. **mx4 / q51 device kernels** - absent on Vulkan (CPU+Metal only). Needed before gpt-oss
-   (mx4 experts) or gemma-4-26B (q51 stacks) can go resident on PC.
 7. **Tune-race parity** - Metal races tensor-op twins per box (`metal_tensor_race*`); Vulkan
    picks coopmat variants by env (`DASLLAMA_COOPMAT`). Fold the choice into the tune rail.
 8. **Compile-time dispatch census** - Metal's `[lint_macro]` manual-dispatch census
@@ -336,15 +333,6 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
    fallback vs upstream 202.4 / 14986 - 18% / 3%. Fix shape: per-row `+ b[row]` epilogue in
    the qkv class GEMV (bias rows ride the arena or one extra binding, offset in the push),
    same arm for q/k/v; then drop `attn_qkv_bias` from the :534 gate.
-
-14. **The gemma cluster arms - medium family unlock covering gemma2 AND gemma3 (walkthrough
-   2026-08-06: both UNSUPPORTED, per-op fallback; gemma2-2b 22.8 tg / 327 pp vs upstream
-   124.1 / 9566, gemma3-1b 58.5 / 636 vs 236.2 / 21540).** The shared base: sandwich norms
-   (`pre_post_norm` - an extra norm role per layer) + sliding-window alternation (a
-   window-start word in decode attention - TokMeta has room). That pair alone unlocks
-   gemma3; gemma2 additionally needs the two softcap clamps (attn epilogue tanh + cls
-   epilogue); gemma4-dense sits on the same base (plus PLE - its own story). Biggest
-   family-count unlock on the board after qwen2's one-flag bias.
 
 15. **mm L-tile zeroes its whole dispatch on a non-128-multiple weight dim (latent, found by
    the CPU-oracle conversion).** The mode-3 `MmBatch` L-tile GEMM writes all-zeros for the
@@ -1320,16 +1308,6 @@ module) is independent and can land any time - it is pure structure.
     window on E2B - the q8 table is 2.35 GB, a device copy is the alternative). Also here: the driver's prefill GEMMs for the branch run the
     q8 batch tile on the cm2 route (the gate at 256 outputs, the proj at K 256) - a small f16
     route for them is a perf lever once the E-series rows have a baseline.
-48. **The KV mirror keeps every sliding layer's rows at the full context.** The reference exe sizes
-    a sliding layer's cache rows to its window (gemma-3: 1024 on 28 of 34 layers of the 4b, 512 on
-    the 1b; gemma-4: 1024 / 512 on five of six); the mirror sizes every layer to the context, so a
-    gemma-3-4b mirror at 32768 positions holds 4.3 GB where a ringed one holds about 1 GB (the six
-    global layers at the context, the rest at 1024). The ring is a position-modulo on the sliding
-    layers' mirror row (`layerbase + (pos mod window) * kvd`) in the rope store, the attention
-    kernels' key index and the prefill's K/V writes, plus the plan's row count per layer; the
-    decode attention already masks keys below the window, so the ring changes which row a key
-    lives in, not which keys score. Worth its lever on every gemma and on the 26B (30 layers,
-    25 sliding).
 49. **The gemma-4-26B-A4B passes a 16 GB card in every quant.** Its `ffn_down_exps` rows are 704
     wide, a width only the 32-block formats (IQ4_NL, Q5_0, Q5_1, Q8_0) quantize, and
     the K-quant rails' 256-multiple rule (`kq_fmt_row_ok`: the Q8_K activation superblock) demotes

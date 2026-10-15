@@ -276,6 +276,9 @@ family matrix `fam-qwen3 fam-qwen2 fam-phi3 fam-gemma2 fam-gemma3 fam-gemma4 fam
 fam-gemma4moe fam-gptoss fam-gemma4e fam-qwen35 fam-qwen35moe fam-qwen2moe fam-qwen4exp` (needs-derivation pins +
 per-path cells; fam-gemma2 also carries the sliding-window masking parity row, whose census holds
 the capped rows past the single-dispatch ceiling on the fused attention's wide stamp and off the chunked pair;
+fam-gemma3 (gemma-3-1b) and fam-gemma4e (E2B) carry the Metal ring row (`metal_ring_row`): a counting prompt past the window
+prefilled in 256-row windows and 24 greedy steps on the blob twin with the ring pinned on, then off, token for token, every
+window and step on the device, the ringed layout holding rings that wrap under the prompt and the flat one none;
 fam-gemma4/fam-qwen3moe/fam-gemma4moe/fam-gptoss/fam-qwen35moe/fam-qwen2moe are
 DASLLAMA_PARITY_FULL-gated - 7.4/18.5/26.9/12.1/22/15GB; fam-gemma4moe and fam-gptoss are ENGAGE
 + shallow logits TOLERANCE cells only - token parity is not a valid instrument for the 26B, whose double-router
@@ -1094,6 +1097,10 @@ the rows as they are and the fixture's rounding to half stays inside the bar, so
 expectation and the per-mechanism controls are their controls), `test_vkd_da_attn_bw` (the wide-head
 batched attention - heads of 384 and 512, gemma-4's global layers - over offset mirrors, one arm
 under a 24-position sliding window, and its f16-mirror twin beside every arm),
+`test_vkd_da_attn_b_ring` (the chunked tiles - the 8-row, wide and h128 stamps - over a 192-row ring at positions past it,
+against the same keys read flat, the flat read the control) and the flash cells' ring arms (`fa_tile_run` at heads of 128 and 256
+under a 40-key window over a 128-row ring), `test_vkd_da_attn_b_h128`'s window and softcap arms (the h128 coopmat tile at a
+40-key window, a 0.5 cap and both, the oracle without each mechanism the control), the codec stamps' ring arms (`codec_attn_arms`),
 `test_vkd_da_attn_b_gated` (a gated model's chunked attention - q read at the head's [q | gate]
 stride, the output under the gate's sigmoid - on the 8-row tile at 128, the wide tile and its f16
 twin at 512 and the h128 coopmat tile, each against the gated oracle with the ungated oracle as the
@@ -1344,7 +1351,10 @@ and the logits left alone).
 `test_gpu_serving_declines.das` - model-free: the whole-model driver's decline reasons decided
 from a Config or a synthetic Model shell (`resident_unserved_features`,
 `attn_chain_unserved_features`, `resident_layer_decline`) - every unserved feature and layer
-shape is named in the text a user reads, a served one yields ""; the MoE names among them (the
+shape is named in the text a user reads, a served one yields "" (the per-op attention chain naming every gemma generation's
+attention); `test_resident_ring_mirror` holds the rings' plan arithmetic on a gemma-4-26B shell at 32768 x 4 - the ring rows,
+the ring bytes, the ringed mirror past seven times under the flat one, and the pod's flat house plan less the flat mirror plus
+the ringed one under that card's room; the MoE names among them (the
 router shapes the routed block's kernels do not serve, the expert and slot counts past their
 reach; gpt-oss's router bias, biased stacks, clamped swiglu and softmax-weight gate are served,
 a biased stack feeding a K-quant down plane is named by layer, and the attention sinks are named
@@ -2067,7 +2077,13 @@ under tq4 (reads 1.022 against the CPU chain's 1.033, 80 of 80 hits; a 4-bit mir
 at the window's first row reads a perplexity of 13844. `test_gpu_resident_gemma4_e2b_short_window` holds a two-token prompt on the E2B to the window chain (the peel declines a per-layer-embedding model). `test_gpu_resident_gemma4_e2b_block_codecs`
 runs the shared-KV carrier - its upper layers store no K/V row of their own, and under tq4 still
 rotate their query - at forty tokens in the forced-feed form under q8_0 and at 150 + 150 in the
-perplexity form under tq4 (reads 1.032 against 1.032, 148 of 150 hits each). Arm `g4e-ple`
+perplexity form under tq4 (reads 1.032 against 1.032, 148 of 150 hits each).
+`test_gpu_resident_gemma3_ring` and `test_gpu_resident_gemma4_e2b_ring` hold the sliding layers' rings
+(`../ARCHITECTURE_GPU_KV_RING.md#kv-sliding-ring`, `ring_vs_flat` in `_gemma_resident.das`): 1300 prose ids past the window and
+eight fed steps on a ringed load and on a flat one (`set_gpu_kv_ring`, put back) - the logits bit for bit at the prompt and every
+step, the ringed load arming rings and charging less mirror, the row a step off the control - on the f16 and q8_0 mirrors, and
+tq4 too on the E2B. The long-context regions cells assert their load armed the rings and the mirror under the flat plan's; the
+slabbed cells pin the ring off, since their slab count is the flat mirror's. Arm `g4e-ple`
 (`test_gpu_resident_gemma4_e2b_ple_tables`): the E2B Q8_0 file and its emb-Q5_0 / emb-Q5_1 / emb-Q4_0 mints - the plan seats
 the PLE table in its own tag (q8, q5032, q51, q40) and the forced feed's prefill gathers the side rows off it against the CPU chain.
 `test_gpu_resident_moe.das` (`_moe_resident.das` carries the rig, shared with

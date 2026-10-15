@@ -1287,9 +1287,13 @@ def private gemma4_26b_shell() : Model {
     return <- m
 }
 
+let private HOUSE_26B_FLAT_PLAN_MB = 39949l   //! the 26B UD-IQ3_XXS's strict 32768 x 4 plan with every mirror row flat, read on the pod's 32 GB card
+let private HOUSE_32GB_ROOM_MB = 28527l       //! that card's plan room, read in the same load log
+
 //! the sliding layers' rings in the plan (`../ARCHITECTURE_GPU_KV_RING.md#kv-sliding-ring`): on the 26B at 32768 positions over four
 //! regions - the house shape - a sliding layer holds its window and the window chain's 512 rows, rounded to 64, and a global layer
-//! every position; the flat pin charges every layer the whole context, and the ring bytes are what the context does not scale
+//! every position; the flat pin charges every layer the whole context, and the ring bytes are what the context does not scale;
+//! the pod's flat plan less the flat mirror plus the ringed one fits that card's room
 [test]
 def test_resident_ring_mirror(t : T?) {
     t |> run("the 26B's mirror at 32768 x 4 under the rings: 1536 rows a sliding layer, every position a global one") @(t : T?) {
@@ -1312,6 +1316,9 @@ def test_resident_ring_mirror(t : T?) {
         t |> success(flat >= 2l * 4l * 32768l * (25l * 2048l + 5l * 1024l) * 2l, "the flat mirror charges the whole context on every layer ({flat >> 20l} MB)")
         to_log(LOG_INFO, "26B at 32768 x 4, f16: the ringed mirror {ringed >> 20l} MB against {flat >> 20l} MB flat\n")
         t |> success(ringed * 7l < flat, "the rings cut the mirror past seven times ({ringed >> 20l} MB against {flat >> 20l} MB)")
+        let rest = HOUSE_26B_FLAT_PLAN_MB - (flat >> 20l)
+        t |> success((ringed >> 20l) + rest < HOUSE_32GB_ROOM_MB,
+            "the house plan fits the 32 GB card's room under the rings: {(ringed >> 20l) + rest} MB of {HOUSE_32GB_ROOM_MB} (flat {HOUSE_26B_FLAT_PLAN_MB})")
         set_gpu_kv_ring(pin)
         delete m
     }

@@ -32,6 +32,17 @@ shortens its context, and `resident_binding_ctx` bounds the context by the wides
 (25 of 30 layers sliding at window 1024, two kv heads of 512 on the global layers) the strict 32768 x 4-stream f16 plan's mirror
 falls from the whole context on every layer to the five global layers' and 1536 rows of each sliding one.
 
+**On Metal a stream's mirror slice lays its flat layers first and its rings after them** (`MirrorLayout`: a flat layer's
+base is the slice's row capacity times the flat rows ahead of it, a ring's base the flat block plus the rings ahead of it),
+and `mirror_lbase` / `mirror_row_at` / `mirror_ring` are the accessors every store, attention form, writeback and the gemma
+drafter's borrow read; the attention stamps take a ring's base past the per-layer stride as `layr` and map a position through
+`kv_ring_row`. Metal's slack starts at 512 rows and doubles when a prefill window asks for more (`mirror_ring_ask`): the
+layout key changes, the device is quiesced and every slice relayouts at its next prepare. The host cache stays the truth on
+Metal - a ring layer uploads only its last `ring` positions, and a rewind or an adopted slice re-uploads them - so a Metal
+history has no floor. The window feeds a ring in pieces cut at the wrap (`mirror_ring_pieces`), and on a ringed model the
+mirror-fed prefill form stands aside: a window over a sliding layer reads its keys off the panels, since the ring no longer
+holds the cached rows under the window's start.
+
 ### A ringed history continues from its floor {#kv-ring-floor}
 
 **Rows a command wrote past a ring's slack overwrote the window under every earlier position.** A claim's high-water mark

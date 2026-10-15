@@ -1714,7 +1714,7 @@ def mirror_prepare_rows(t : Model; var s : Session; pos, needed : int64) : tuple
         // gather logical rows [wm, pos) from the CPU cache (source of truth) — flat sessions are
         // one run, paged sessions gather through kv_runs; bytes move verbatim (same dtype); a ring takes its window alone
         mirror_layout_ensure(t)
-    let m & = unsafe(g_mirror_layout)
+        let m & = unsafe(g_mirror_layout)
         for (l in range64(c.n_layers + c.n_layer_nextn)) {   // draft slab rides the watermark contract
             continue if (kv_shared_layer(t, l))   // aliases the source slab — its upload covers l
             mirror_upload_layer(t, s, l, m.ring[l] > 0l ? max(ring_lo, pos - m.ring[l]) : wm, pos, koff + uint64(mirror_lbase(t, s.kv_dtype_k, cap, l)),

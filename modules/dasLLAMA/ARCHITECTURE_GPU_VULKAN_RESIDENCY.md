@@ -13,7 +13,7 @@ cooperative-matrix GEMM tiles in `ARCHITECTURE_GPU_VULKAN_GEMM.md`, the per-op t
 
 The resident driver is all-or-nothing, so the plan IS the decision, and it is computed from
 `Model` metadata alone. It sizes four numbers against the tier's weight budget: the dense weight
-planes, the KV mirror at `seq_cap`, the driver's own device scratch, and the headroom the auto
+planes, the KV mirror at `seq_cap` (a sliding layer's ring at its window, `ARCHITECTURE_GPU_KV_RING.md#kv-sliding-ring`), the driver's own device scratch, and the headroom the auto
 arm leaves unfilled (zero when the user pins VRAM). The weight planes are ONE list in placement order
 (`resident_planes`: per plane a row length, row count, format, offset and the role the upload registers it as):
 the plan sums its bytes and the upload reserves it and places it in order (`place_plane` panics on a role out of turn), so the two cannot drift; the router rows,
