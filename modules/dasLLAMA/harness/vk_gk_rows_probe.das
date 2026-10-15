@@ -54,7 +54,7 @@ def private time_cls(name : string; rec : block<(raw : VkCommandBuffer; var h : 
 def main : int {   // nolint:STYLE038 — one-shot probe: the classes, the fixtures and the timing rounds share every buffer
     let classes_ok = (vk_moe_init() && ensure_hc_norm_cls() && ensure_hc_mix_cls() && ensure_hc_comb_cls() && ensure_ple_gate_cls()
         && ensure_ple_conv_cls() && ensure_qk_rms_cls() && ensure_topk_n_cls() && ensure_topk_n2_cls() && ensure_combine_cls()
-        && ensure_dn_scan_p3_cls() && ensure_qkn_rope_f16_cls())
+        && ensure_dn_scan_p3_cls() && ensure_qkn_rope_f16_cls() && ensure_router_gemv_cls() && ensure_router_gemv_bf16_cls())
     if (!classes_ok) {
         print("vk_gk_rows_probe: no Vulkan device, or a class declined\n")
         return 1
@@ -138,6 +138,22 @@ def main : int {   // nolint:STYLE038 — one-shot probe: the classes, the fixtu
         var q4 = qkn
         q4.rowwg = 40u
         enc_qkn_rope_f16_cls(r, h, s_qkn, q4, 160l)
+    }
+    //! the E-series side rows' projection at the E2B shape (35 layers x 256 rows of 1536): the f32 rows against the bf16 word form
+    let pne = 35 * 256
+    let pdim = 1536
+    var s_rf = set_router_gemv_cls(fixed_array(b[0], b[1], b[2], b[3]), fixed_array(bb, bb, bb, bb), fixed_array(0u, 1u, 2u, 0u))
+    var s_rb = set_router_gemv_bf16_cls(fixed_array(b[0], b[1], b[2], b[3]), fixed_array(bb, bb, bb, bb), fixed_array(0u, 1u, 2u, 0u))
+    for (np in fixed_array(1u, 4u)) {
+        let pr = GkRouterArgs(ne = uint(pne), dim = uint(pdim), ncols = np, yscale = 1.0 / sqrt(float(pdim)))
+        time_cls("ple proj f32 rows ne {pne} dim {pdim} {np} cols") $(r; var h) {
+            var p1 = pr
+            router_enc_cols(false, r, h, s_rf, p1, int64(pne))
+        }
+        time_cls("ple proj bf16 rows ne {pne} dim {pdim} {np} cols") $(r; var h) {
+            var p1 = pr
+            router_enc_cols(true, r, h, s_rb, p1, int64(pne))
+        }
     }
     return 0
 }
