@@ -376,6 +376,10 @@ class ClsArAddRms : ArBase {
     override OUT_F32 = true
 }
 
+//! the residual step with no normed row stored: the stream rows updated in place alone (the E-series pre-step's finish)
+[vk_dispatch(name = "cls_ar_add", kernel = "run", grid = "nrows", params = "nrows : int64")]
+class ClsArAdd : ArBase {}
+
 // ar_add_rms + Q8_0 requant in ONE dispatch: the normed row quantizes out of the row stash, so
 // xb never reaches memory. Verbatim reduce/amax/rounding => bit-identical to the split pair.
 [ |> template_struct_instance]

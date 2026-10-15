@@ -1151,6 +1151,59 @@ def private cls_ar_run(x, a, w : array<float>; pc; nrows : int) : tuple<y : arra
     return <- (y = y_out, x = x_out)
 }
 
+//! the residual step with no normed row (`ClsArAdd`, the E-series pre-step's finish): three rows of 256 under the sandwich form - the
+//! partner normed and weighted by the post norm at `pwoff`, the sum under 1/sqrt(2) - bit for bit the stream rows `cls_ar` writes
+//! beside its normed row, and the CPU form at the approx bar
+[test]
+def test_vkd_cls_ar_add(t0 : T?) {
+    t0 |> run("cls_ar_add: the stream rows == cls_ar's, and the CPU sandwich step") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!(vk_moe_init() && ensure_cls_ar() && ensure_cls_ar_add())) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            let dim = 256
+            let nrows = 3
+            let eps = 1e-6
+            let ascale = 1.0 / sqrt(2.0)
+            var fx <- ar_fixture(dim * nrows, dim)
+            let pc = ArArgs(dim = uint(dim), add_on = 1u, woff = 0u, eps = eps, ascale = ascale, pre_on = 1u, pwoff = 0u)
+            var want : array<float>
+            want |> resize(dim * nrows)
+            for (r in range(nrows)) {
+                var sa = 0.0
+                for (k in range(dim)) {
+                    sa += fx.a[r * dim + k] * fx.a[r * dim + k]
+                }
+                let ainv = 1.0 / sqrt(sa / float(dim) + eps)
+                for (k in range(dim)) {
+                    want[r * dim + k] = (fx.x[r * dim + k] + fx.w[k] * fx.a[r * dim + k] * ainv) * ascale
+                }
+            }
+            var r <- cls_ar_run(fx.x, fx.a, fx.w, pc, nrows)
+            with_cell_planes() $(var cp : CellPlanes) {
+                let px = cp |> io_(fx.x)
+                let pa = cp |> in_(fx.a)
+                let pw = cp |> in_(fx.w)
+                var sc = cp |> cls_set(fixed_array(px, pa, pw), @@set_cls_ar_add)
+                var args = pc
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_cls_ar_add(raw, h, sc, args, int64(nrows))
+                }
+                var got <- cp |> plane_run(px)
+                t |> equal(mismatch_exact(got, r.x), 0, "cls_ar_add: the stream rows bit for bit cls_ar's")
+                check(t, "cls_ar_add", got, want, BAR_APPROX, Shape(row_width = dim))
+                delete got
+            }
+            delete r
+            delete want
+            delete fx
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
 //! the classifier epilogue's rows form: `rows` logits rows through one dispatch of `rows` (the whole plane), or a
 //! dispatch of one row `rows` times - the row-at-a-time form is the rows form at one row
 def private cls_epi_rows_run(y : array<float>; supp : array<uint>; vocab, rows : int64; cap : float; a_row_at_a_time : bool) : array<float> {
