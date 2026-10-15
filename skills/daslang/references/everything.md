@@ -7828,12 +7828,12 @@ The TYPEMACRO_BOOST module provides infrastructure for defining type macros — 
 ### Structure macros
 
 - `template_tuple` - Like `[template_structure]`, but produces a typemacro that returns a named tuple instead of cloning a structure.
-- `template_variant` - Like `[template_tuple]`, but the typemacro returns a variant: each field is a case, and a `void` field is a case without a value.
 - `template_structure` - This macro creates typemacro function and associates it with the structure.
 - `typemacro_documentation` - Structure annotation that stores type macro documentation metadata.
 - `typemacro_template` - Structure annotation that marks a struct as a type macro template instance.
-- `tsi_reified` - Marker the reifier appends to a finished instance: a template CHAIN pipes one reifier copy per ancestor, and the surplus copies no-op on sight of this.
 - `template_struct_instance` - Reifies a `struct template` / `class template` parent into the annotated instance at parse time: instance `typedef`s bind the template's type parameters, `override` inits bind its `@template_constant` fields (erased from the result), `@template_gate` fields exist only in stamps where the named bool `@template_constant` is true (`@template_gate = AXIS`, or the string form `"!AXIS"` to invert; a gated-off field is erased as if never written, and the argument stays inert on kept fields — reference a gated field only from `static_if` arms on its axis: a dead `static_if` arm may name it, a dead ternary arm may not, since infer sees both ternary arms), `@template_call` fields rebind free-function callees by name (`override sdot = @@ssdot` — bare-spelled calls AND `@@` addresses; erased too, while `_::sdot` / `__::sdot` keep their normal resolution rules — the pinned escape to the real function), template methods are cloned onto the instance (instance-authored methods win), and the template parent is cut — every later structure annotation sees a finished concrete struct or class.
+- `template_variant` - Like `[template_tuple]`, but the typemacro returns a variant: each field is a case, and a `void` field is a case without a value.
+- `tsi_reified` - Marker the reifier appends to a finished instance: a template CHAIN pipes one reifier copy per ancestor, and the surplus copies no-op on sight of this.
 
 ### Enum helpers
 

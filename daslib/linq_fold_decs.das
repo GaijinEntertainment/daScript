@@ -48,7 +48,7 @@ class DecsAdapter : SourceAdapter {
     [arch(at="ARCHITECTURE_LINQ_FOLD.md#linq-fold-loop-dispatch")]
     def override effective_dispatch(base : LoopDispatch) : LoopDispatch {
         if (rangeInfo != null && base is Each && (rangeInfo.takeExpr != null || rangeInfo.takeWhileCond != null)) {
-            return LoopDispatch(Find = null)
+            return LoopDispatch(Find)
         }
         return base
     }
@@ -363,7 +363,7 @@ def emit_loop_or_count_lane_decs(var bridge : DecsBridgeShape?; tupName : string
         tailStmts <- tailStmts,
         outElemType = retType,
         wrapIter = false,
-        dispatch = adapter->effective_dispatch(LoopDispatch(Each = null))), adapter, at)
+        dispatch = adapter->effective_dispatch(LoopDispatch(Each))), adapter, at)
 }
 
 [macro_function, arch(at="ARCHITECTURE_LINQ_FOLD_SOURCES.md#decs-random-index")]
@@ -1119,8 +1119,8 @@ def emit_decs_min_max_by(var bridge : DecsBridgeShape?;
         return $i(bestElemName)
     }
     let dispatch : LoopDispatch = ((rangeInfo.takeExpr != null || rangeInfo.takeWhileCond != null)
-        ? LoopDispatch(Find = null)
-        : LoopDispatch(Each = null))
+        ? LoopDispatch(Find)
+        : LoopDispatch(Each))
     var adapter = make_decs_term_adapter(bridge, chainInfo, rangeInfo, calls, intermediateEnd)
     var ptw : Expression?
     if (rangeInfo.postTakeWhereCond != null) {

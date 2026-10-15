@@ -82,7 +82,7 @@ key write `js?["value"]`.
 `is` / `as` test the underlying variant through the pointer; `as` on the wrong case crashes.
 
 Cases: `_object` (`table<string; JsonValue?>`), `_array` (`array<JsonValue?>`), `_string`
-(`string`), `_number` (`double`), `_longint` (`int64`), `_bool` (`bool`), `_null` (`void?`).
+(`string`), `_number` (`double`), `_longint` (`int64`), `_bool` (`bool`), `_null` (a case with no value).
 
 A missing key or index through `?[]` / `?.` yields a NON-null node of the `_null` case, not a null
 pointer: `js?["absent"] == null` is false, so `== null` cannot detect a missing key (`read_json`

@@ -7,6 +7,7 @@
 #### Variant cases without a value
 
 - **A variant case written without a type is an index-only case** - `variant Maybe { nothing; value : int }` (anonymous: `variant<nothing; value:int>`) declares a case that has an index and no value; `Maybe(nothing)` constructs it, `is` tests it, `match` names it as `Maybe(nothing) => ...` and counts it for coverage, and `as` / `?as` / the unsafe field read refuse it at compile time. Such a case adds nothing to the variant's size or alignment, so a variant of only such cases is one `int`, and listing one first makes a default-initialized variant "unset" for free. `apply` runs nothing for it, print and JSON spell the case name (`{"nothing":null}`), and the AOT, JIT, clone, archive and serializer paths all carry it. `daslib/ast` gains `find_unique_typedef`, the typedef twin of `find_unique_structure`
+- **daslib's `void?` tags are bare cases** - `JsValue` and `Token` `_null` (json), `LoopDispatch`, `SlotCardinality`, `MatchResult.no_match` and `DistinctGateKind.NonKey` (linq_fold), `MaybeReNode.nothing` (regex) and `TomlToken._newline` (toml) are declared without a type and constructed as `V(name)`; each of those variants drops the 8-byte payload and 8-byte alignment the `void?` carried. rtti's C++-side `RttiValue.nothing` keeps its typed arm, since its layout is a bound C++ type
 
 #### Batched decode on the GPU: `tg128@N` (#4073, #4078, #4081, #4082, #4083, #4085, #4087, #4091, #4094, #4096, #4102)
 

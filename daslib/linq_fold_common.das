@@ -29,10 +29,10 @@ struct LinqCall {
 }
 
 variant LoopDispatch {
-    Each              : void?
-    Find              : void?
-    FindReturn        : void?
-    FindReturnNegated : void?
+    Each
+    Find
+    FindReturn
+    FindReturnNegated
 }
 
 [macro_interface]
@@ -214,9 +214,9 @@ variant SlotMatcher {
 }
 
 variant SlotCardinality {
-    one      : void?
-    optional : void?
-    chain    : void?
+    one
+    optional
+    chain
 }
 
 struct Slot {
@@ -233,7 +233,7 @@ struct Captures {
 }
 
 variant MatchResult {
-    no_match : void?
+    no_match
     matched  : Captures
 }
 
@@ -280,9 +280,9 @@ struct SplicePattern {
 
 def m_literal(s : string) : SlotMatcher => SlotMatcher(literal = s)
 def m_alias(s : string) : SlotMatcher => SlotMatcher(alias = s)
-def c_one() : SlotCardinality => SlotCardinality(one = null)
-def c_opt() : SlotCardinality => SlotCardinality(optional = null)
-def c_chain() : SlotCardinality => SlotCardinality(chain = null)
+def c_one() : SlotCardinality => SlotCardinality(one)
+def c_opt() : SlotCardinality => SlotCardinality(optional)
+def c_chain() : SlotCardinality => SlotCardinality(chain)
 
 def slot_chain_of(var names : array<string>; cap : string) : Slot =>
     Slot(matcher = SlotMatcher(one_of <- names), cardinality = c_chain(), capture_name = cap)
@@ -414,14 +414,14 @@ def match_pattern(p : SplicePattern;
             slot_i ++
             call_i ++
         } elif (slot.cardinality is one) {
-            return MatchResult(no_match = null)
+            return MatchResult(no_match)
         } else {
             slot_i ++
         }
     }
-    if (call_i < length(calls)) return MatchResult(no_match = null)
+    if (call_i < length(calls)) return MatchResult(no_match)
     for (pred in p.requires) {
-        if (!invoke(pred, captures, top, src)) return MatchResult(no_match = null)
+        if (!invoke(pred, captures, top, src)) return MatchResult(no_match)
     }
     return MatchResult(matched <- captures)
 }
@@ -1119,7 +1119,7 @@ struct TerminatorSpec {
     tailStmts         : array<Expression?>
     outElemType       : TypeDeclPtr
     wrapIter          : bool
-    dispatch          : LoopDispatch = LoopDispatch(Each = null)
+    dispatch          : LoopDispatch = LoopDispatch(Each)
 }
 
 [macro_function]
@@ -1163,7 +1163,7 @@ def emit_terminator_lane(var spec : TerminatorSpec; var adapter : SourceAdapter?
 }
 
 variant DistinctGateKind {
-    NonKey : void?
+    NonKey
     KeyLam : Expression?
 }
 
@@ -1190,7 +1190,7 @@ struct FoldArraySpec {
     outElemType     : TypeDeclPtr
     wrapIter        : bool
     customSourceLoop : Expression?
-    dispatch        : LoopDispatch = LoopDispatch(Each = null)
+    dispatch        : LoopDispatch = LoopDispatch(Each)
 }
 
 // nolint:STYLE014 — composes the per-element body the fold-array lane wraps (distinct gate innermost →
@@ -1392,7 +1392,7 @@ def emit_counter_lane(var adapter : SourceAdapter?; accName, itName : string; na
         prologue <- prologue,
         perElementStmts <- perElementStmts,
         tailStmts <- tailStmts,
-        dispatch = adapter->effective_dispatch(LoopDispatch(Each = null))
+        dispatch = adapter->effective_dispatch(LoopDispatch(Each))
     ), adapter, at)
 }
 
@@ -1457,7 +1457,7 @@ def emit_accumulator_lane(
         takeWhileCond = takeWhileCond,
         rangeNames = names,
         tailStmts <- tailStmts,
-        dispatch = adapter->effective_dispatch(LoopDispatch(Each = null))
+        dispatch = adapter->effective_dispatch(LoopDispatch(Each))
     ), adapter, at)
 }
 
@@ -1644,7 +1644,7 @@ def emit_min_max_family_lane(
         takeWhileCond = takeWhileCond,
         rangeNames = names,
         tailStmts <- tailStmts,
-        dispatch = adapter->effective_dispatch(LoopDispatch(Each = null))
+        dispatch = adapter->effective_dispatch(LoopDispatch(Each))
     ), adapter, at)
 }
 
@@ -1703,7 +1703,9 @@ def emit_early_exit_lane(
     }
     var preludeStmts, tailStmts : array<Expression?>
     let directReturn = (adapter == null || adapter->supports_direct_return())
-    var dispatch = directReturn ? LoopDispatch(Each = null) : adapter->effective_dispatch(LoopDispatch(Each = null))
+    var dispatch = (directReturn
+        ? LoopDispatch(Each)
+        : adapter->effective_dispatch(LoopDispatch(Each)))
     if (opName == "first") {
         var retType = mut_result_type(projection, elementType)
         if (directReturn) {
@@ -1732,7 +1734,7 @@ def emit_early_exit_lane(
                 }
                 return $i(resultName)
             }
-            dispatch = LoopDispatch(Find = null)
+            dispatch = LoopDispatch(Find)
         }
     } elif (opName == "first_or_default") {
         let defaultName = qn("dval", at)
@@ -1765,7 +1767,7 @@ def emit_early_exit_lane(
                 }
                 return $i(resultName)
             }
-            dispatch = LoopDispatch(Find = null)
+            dispatch = LoopDispatch(Find)
         }
     } elif (opName == "any") {
         let argCount = length(terminatorCall.arguments)
@@ -1821,7 +1823,7 @@ def emit_early_exit_lane(
                     return true
                 }
             }
-            dispatch = LoopDispatch(FindReturn = null)
+            dispatch = LoopDispatch(FindReturn)
         }
     } elif (opName == "all") {
         var predExpr = peel_lambda_rename_var(terminatorCall.arguments[1], valueName)
@@ -1854,7 +1856,7 @@ def emit_early_exit_lane(
             perMatchStmts |> push <| qmacro_expr() {
                 if (!$e(predExpr)) return true
             }
-            dispatch = LoopDispatch(FindReturnNegated = null)
+            dispatch = LoopDispatch(FindReturnNegated)
         }
     } elif (opName == "contains") {
         let containsValName = qn("cval", at)
@@ -1888,7 +1890,7 @@ def emit_early_exit_lane(
             perMatchStmts |> push <| qmacro_expr() {
                 if ($i(valueName) == $i(containsValName)) return true
             }
-            dispatch = LoopDispatch(FindReturn = null)
+            dispatch = LoopDispatch(FindReturn)
         }
     } elif (opName == "last" || opName == "last_or_default") {
         var retType = mut_result_type(projection, elementType)
@@ -2028,7 +2030,7 @@ def emit_early_exit_lane(
                     }
                     return <- $i(bindName)
                 }
-                dispatch = LoopDispatch(Find = null)
+                dispatch = LoopDispatch(Find)
             }
         }
     } elif (opName == "element_at" || opName == "element_at_or_default") {
@@ -2109,7 +2111,7 @@ def emit_early_exit_lane(
                     return <- $i(resultName)
                 }
             }
-            dispatch = LoopDispatch(Find = null)
+            dispatch = LoopDispatch(Find)
         }
     } elif (opName == "aggregate") {
         var seedExpr = clone_expression(terminatorCall.arguments[1])
@@ -3157,7 +3159,7 @@ def emit_bounded_heap(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expr
     if (oc.distinctName != "") {
         var dgKind : DistinctGateKind = (oc.distinctName == "distinct_by"
             ? DistinctGateKind(KeyLam = oc.distinctKey)
-            : DistinctGateKind(NonKey = null))
+            : DistinctGateKind(NonKey))
         distinctGate = new DistinctGateSpec(
             kind = dgKind, bindName = bindName, bufElemType = clone_type(rowType),
             dsetName = dsetName, dkeyName = dkeyName
@@ -3304,7 +3306,7 @@ def emit_fused_prefilter(var c : Captures; var ctx : EmitCtx; at : LineInfo) : E
     if (oc.distinctName != "") {
         var dgKind : DistinctGateKind = (oc.distinctName == "distinct_by"
             ? DistinctGateKind(KeyLam = oc.distinctKey)
-            : DistinctGateKind(NonKey = null))
+            : DistinctGateKind(NonKey))
         distinctGate = new DistinctGateSpec(
             kind = dgKind, bindName = bindName, bufElemType = bufElemType,
             dsetName = dsetName, dkeyName = dkeyName
@@ -3712,7 +3714,7 @@ def emit_reverse_backward_walk_dset_gate(var c : Captures; var ctx : EmitCtx; at
     let rlenName = qn("rev_len", at)
     var dgKind : DistinctGateKind = (distinctName == "distinct_by"
         ? DistinctGateKind(KeyLam = distinctKey)
-        : DistinctGateKind(NonKey = null))
+        : DistinctGateKind(NonKey))
     var distinctGate = new DistinctGateSpec(
         kind = dgKind, bindName = itName, bufElemType = bufElemType,
         dsetName = dsetName, dkeyName = dkeyName
@@ -4213,7 +4215,7 @@ def emit_hashtable_dedup(var c : Captures; var ctx : EmitCtx; at : LineInfo) : E
         if (dtl == null) return null
         stmts |> push(dtl)
     } else {
-        var srcLoop = ctx.src->wrap_source_loop(LoopDispatch(Each = null), perElement, at)
+        var srcLoop = ctx.src->wrap_source_loop(LoopDispatch(Each), perElement, at)
         if (srcLoop == null) return null
         stmts |> push(srcLoop)
     }
@@ -5085,7 +5087,7 @@ def plan_group_by_core(var calls : array<tuple<ExprCall?; LinqCall?>>;    // nol
         }
         idx --
     }
-    var srcLoop = adapter->wrap_source_loop(LoopDispatch(Each = null), body, at)
+    var srcLoop = adapter->wrap_source_loop(LoopDispatch(Each), body, at)
     if (srcLoop == null) return null
     stmts |> push(srcLoop)
     let needOutput = terminatorName != "count" || trailingWherePred != null
@@ -5952,7 +5954,7 @@ def emit_array_join(var c : Captures; var ctx : EmitCtx; at : LineInfo) : Expres
             }
         }
     }
-    var probeLoop = ctx.src->wrap_source_loop(LoopDispatch(Each = null), pieces.probeOuter, at)
+    var probeLoop = ctx.src->wrap_source_loop(LoopDispatch(Each), pieces.probeOuter, at)
     if (probeLoop == null) return null
     allStmts |> push(probeLoop)
     allStmts |> push(pieces.returnStmt)

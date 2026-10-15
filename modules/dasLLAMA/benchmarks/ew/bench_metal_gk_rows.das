@@ -4,10 +4,10 @@ options _dasllama_internal = true
 
 require dastest/testing_boost
 require dasllama/dasllama_env  // the g_env_* knob globals ([EnvConfig] declarations; ENVIRONMENT.md is generated from them)
-require ?das_metal metal/das_metal_boost  // GPU driver half, Apple builds only
-require ?das_metal dasllama/dasllama_metal_common
-require ?das_metal dasllama/dasllama_metal_kernels  // the production stamps of the templates both homes stamp
-require ?das_metal dasllama/dasllama_metal_prefill  // the window's stamps
+require metal/das_metal_boost  // GPU driver half, Apple builds only
+require dasllama/dasllama_metal_common
+require dasllama/dasllama_metal_kernels  // the production stamps of the templates both homes stamp
+require dasllama/dasllama_metal_prefill  // the window's stamps
 require math
 
 // The row kernels the Metal home stamps off the shared templates

@@ -44,7 +44,7 @@ let private {
 
 variant private TomlToken {
     _symbol   : int       //! single-char punctuation: '=' '[' ']' '\{' '}' ',' '.'
-    _newline  : void?     //! line terminator (significant for grammar)
+    _newline              //! line terminator (significant for grammar)
     _bare     : string    //! unquoted identifier — key, or keyword-value (true/false/inf/nan)
     _string   : string    //! quoted string value (already unescaped)
     _integer  : int64     //! integer literal
@@ -701,7 +701,7 @@ def private next_token(data : array<uint8>&; var st : LexState&; var out : TomlT
     let c = int(data[st.pos])
     if (c == '\n') {
         advance(data, st)
-        out = TomlTokenAt(value = TomlToken(_newline = null), line = start_line, row = start_row)
+        out = TomlTokenAt(value = TomlToken(_newline), line = start_line, row = start_row)
         return true
     }
     if (c == '=' || c == '[' || c == ']' || c == '{' || c == '}' || c == ',' || c == '.') {
