@@ -24,9 +24,10 @@ def iq3s_signed(g, nib : uint) : uint {
 //! gemma's soft cap cap * tanh(v / cap) in softcap4's exp form: a shader tanh NaNs past ~44, while exp(INF) zeroes the term and saturates.
 def softcap_exp(v, cap : float) : float => cap * (1.0 - 2.0 / (1.0 + exp(2.0 * v / cap)))
 
-//! a K/V mirror position's row in its layer's slab: the position itself, or its slot of a sliding layer's ring of `ring` rows
+//! a K/V mirror position's row in its layer's slab: the position itself, or its slot of a sliding layer's ring of `ring` rows; the
+//! modulo never divides by zero, since a shader compiler may take a division as proof its divisor is not zero and drop the flat arm
 [arch(at="../ARCHITECTURE_GPU_KV_RING.md#kv-sliding-ring")]
-def kv_ring_row(pos, ring : uint) : uint => ring == 0u ? pos : pos % ring
+def kv_ring_row(pos, ring : uint) : uint => ring == 0u ? pos : pos % max(ring, 1u)
 
 //! ... the host's form, for the row movers and the plan
 [arch(at="../ARCHITECTURE_GPU_KV_RING.md#kv-sliding-ring")]
