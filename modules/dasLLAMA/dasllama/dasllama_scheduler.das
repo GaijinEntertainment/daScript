@@ -1232,10 +1232,12 @@ def private parked_adopt(var sch : Scheduler; var session : Session; at : int; n
     return adopted ? n : 0l
 }
 
-//! The host pool serves device mode: a paged scheduler, the pool's pages in the device's codec, no draft head (its rows ride no
-//! export), no n-gram side input (its ring may sit on the device), and a model whose device prefill continues past zero
+//! The host pool serves device mode: a paged scheduler, the pool's pages in the device's codec, a draft head only where the
+//! driver runs its whole round on the device (its rows ride the moves beside the trunk's), no n-gram side input (its ring may
+//! sit on the device), and a model whose device prefill continues past zero
 def private device_pool_on(m : Model; sch : Scheduler; session : Session) : bool
-    => (gpu_device_kv_pool_armed() && sch.paged && !sch.mtp && sch.pool.kdt == gpu_device_session_dtype() && empty(session.ple_conv_hist) && gpu_device_prefill_continues(m)
+    => (gpu_device_kv_pool_armed() && sch.paged && (!sch.mtp || gpu_resident_mtp_device_home(m)) && sch.pool.kdt == gpu_device_session_dtype()
+        && empty(session.ple_conv_hist) && gpu_device_prefill_continues(m)
         && (empty(session.dn_state_prefix) || sch.prefix.max_states > 0l))
 
 //! the scheduler's carrier session, made at its first move and pointed at the pool where the scheduler stands now (a moved

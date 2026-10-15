@@ -15,6 +15,7 @@ require _resident_regions
 // Skips off the JIT, without DASLLAMA_GPU=1 on a device the driver serves, or without the file under models_dir().
 // Under DASLLAMA_DEVICE_POOL=0 the pool cell holds the off rail.
 let private REGIONS_FILE = "Qwen3.5-0.8B-Q8_0.gguf"
+let private MTP_FILE = "Qwen3.5-0.8B-MTP-Q8_0.gguf"   //! the same hybrid with its NextN head: the pool cell under a speculating scheduler
 
 [test]
 def test_regions_interleaved_single_steps(t : T?) {
@@ -75,4 +76,9 @@ def test_device_checkpoint_adopt_hybrid(t : T?) {
 [test]
 def test_device_pool_hybrid(t : T?) {
     cell_device_pool(t, REGIONS_FILE)
+}
+
+[test]
+def test_device_pool_mtp_hybrid(t : T?) {
+    cell_device_pool_mtp(t, MTP_FILE)
 }
