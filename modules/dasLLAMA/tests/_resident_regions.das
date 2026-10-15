@@ -124,6 +124,7 @@ struct private RegionsLoad {
     ctx : int64 = REGIONS_RIG_CTX
     host_ctx : int64 = REGIONS_RIG_CTX   //! every host-cached session's K/V cache: the rig's cap, or the mirror's context for a cell whose prompts run past it
     split_forms : bool
+    ring : int = -1   //! the sliding layers' ring pin for the load (`set_gpu_kv_ring`): -1 the environment's, 0 every row kept
 }
 
 //! the two-region cell's rig: the gate, `file` loaded at two regions, `body` inside the engine's job queue, the model deleted after
@@ -135,9 +136,12 @@ def private with_regions_rig(t : T?; file : string; body : block<(tr : Model) : 
 def private with_regions_rig(t : T?; file : string; load : RegionsLoad; body : block<(tr : Model) : void>) {
     if (!regions_ready(t, file)) return
     let levers = resident_levers()
+    let ring_pin = gpu_kv_ring_pin()
     split_forms_pin(load.split_forms)
     set_gpu_ctx_max(load.ctx)
+    set_gpu_kv_ring(load.ring)
     var tr <- load_regions(t, file, load.regions, load.host_ctx)
+    set_gpu_kv_ring(ring_pin)
     restore_resident_levers(levers)
     if (moe_gpu_resident_active()) {
         with_dasllama_jobque_() {
@@ -559,7 +563,22 @@ struct LongCtx {
     streams_bar : LogitsBar = LogitsBar.bit_exact   //! the streams cell's: past the wide position the one-row command's wide twin and the N-row command's split pieces sum the keys in another order, so a carrier bit for bit at short prompts holds the split bar there
 }
 
-def private long_load(lc : LongCtx) : RegionsLoad => RegionsLoad(regions = lc.regions, ctx = lc.ctx, host_ctx = lc.ctx)
+def private long_load(lc : LongCtx; ring : int = -1) : RegionsLoad => RegionsLoad(regions = lc.regions, ctx = lc.ctx, host_ctx = lc.ctx, ring = ring)
+
+//! a long cell's mirror on a sliding model rings its sliding layers: the plan charges the rings, not the whole context, on every layer
+def private rings_armed(t : T?; tr : Model) {
+    return if (tr.config.sliding_window == 0l)
+    t |> success(gpu_resident_kv_ring_slack() > 0l, "the sliding layers ride rings ({gpu_resident_mirror_bytes() >> 20l} MB of mirror over {gpu_resident_mirror_slabs()} slab pairs)")
+}
+
+//! the rows-through-host cells' mirror: in slabs on a flat model, the rings on a sliding one
+def private long_mirror_held(t : T?; tr : Model) {
+    if (tr.config.sliding_window > 0l) {
+        rings_armed(t, tr)
+    } else {
+        t |> success(gpu_resident_mirror_slabs() > 1l, "the mirror binds more than one slab pair ({gpu_resident_mirror_slabs()})")
+    }
+}
 
 def private stream_positions(lc : LongCtx) : array<int64> => <- [for (i in range64(lc.regions)); lc.ctx * (28l + 18l * i) / 100l]
 
@@ -568,8 +587,8 @@ def private stream_positions(lc : LongCtx) : array<int64> => <- [for (i in range
 //! then read what each session reads alone - every layer's sets, sync and readback bound the slab its rows sit in
 [cold_path]
 def cell_regions_slabbed_mirror(t : T?; file : string; lc : LongCtx) {
-    t |> run("a mirror of {lc.regions} regions x {lc.ctx} positions binds in slabs, and the steps over two sessions read what each reads alone") @(t : T?) {
-        with_regions_rig(t, file, long_load(lc)) $(tr) {
+    t |> run("a mirror of {lc.regions} regions x {lc.ctx} positions, every row kept, binds in slabs, and the steps over two sessions read what each reads alone") @(t : T?) {
+        with_regions_rig(t, file, long_load(lc, 0)) $(tr) {
             let slabs = gpu_resident_mirror_slabs()
             t |> success(slabs > 1l, "the mirror binds more than one slab pair at {lc.regions} regions x {lc.ctx} positions ({slabs} slabs)")
             t |> equal(gpu_device_sessions(), lc.regions, "the armed driver serves a device-home session per region asked")
@@ -593,6 +612,7 @@ def cell_long_prompt_against_cpu(t : T?; file : string; lc : LongCtx) {
     t |> run("a {lc.cpu_n}-token prompt on a {lc.regions} x {lc.ctx} mirror: the resident rows against the CPU chain at every step") @(t : T?) {
         with_regions_rig(t, file, long_load(lc)) $(tr) {
             t |> equal(gpu_device_session_ctx(), lc.ctx, "a region holds the whole context asked")
+            rings_armed(t, tr)
             forced_feed_over(t, tr, "long prompt: ", lc.cpu_n, STEPS, lc.cpu_bar_rel, 3l) $ {
                 served_every_call(t)
             }
@@ -607,6 +627,7 @@ def cell_long_continuation(t : T?; file : string; lc : LongCtx) {
     t |> run("a {lc.split_n}-token prompt cut at {lc.split_cut}: the continued prefill and the steps over it against the one-call prefill") @(t : T?) {
         with_regions_rig(t, file, long_load(lc)) $(tr) {
             assert_pf_window(t)
+            rings_armed(t, tr)
             continue_at(t, tr, lc.split_n, lc.split_cut, SPLIT_BAR_REL)
             served_every_call(t)
         }
@@ -622,7 +643,7 @@ def cell_long_rows_through_host(t : T?; file : string; lc : LongCtx) {
     let rows_n = lc.cpu_n / 3l
     t |> run("{rows_n} tokens prefilled on the device, the rows brought down: the CPU chain's steps over them against the CPU chain alone") @(t : T?) {
         with_regions_rig(t, file, long_load(lc)) $(tr) {
-            t |> success(gpu_resident_mirror_slabs() > 1l, "the mirror binds more than one slab pair ({gpu_resident_mirror_slabs()})")
+            long_mirror_held(t, tr)
             var prompt <- prose_ids(rows_n, 5l)
             var toks <- feed_a()
             var s <- create_session(tr, mirror_kv_dtype())
@@ -649,7 +670,7 @@ def cell_long_rows_through_host(t : T?; file : string; lc : LongCtx) {
     }
     t |> run("{rows_n} tokens prefilled on the CPU rails under the prefill pin, the rows uploaded: the resident steps over them against the CPU chain alone") @(t : T?) {
         with_regions_rig(t, file, long_load(lc)) $(tr) {
-            t |> success(gpu_resident_mirror_slabs() > 1l, "the mirror binds more than one slab pair ({gpu_resident_mirror_slabs()})")
+            long_mirror_held(t, tr)
             var prompt <- prose_ids(rows_n, 5l)
             var toks <- feed_a()
             reset_gpu_cpu_passes()
@@ -676,6 +697,7 @@ def cell_long_rows_through_host(t : T?; file : string; lc : LongCtx) {
 def cell_long_streams(t : T?; file : string; lc : LongCtx) {
     t |> run("{lc.regions} device-home streams at {lc.ctx * 28l / 100l} to {lc.ctx * (28l + 18l * (lc.regions - 1l)) / 100l} positions: a batched step over all of them reads what each reads alone") @(t : T?) {
         with_regions_rig(t, file, long_load(lc)) $(tr) {
+            rings_armed(t, tr)
             let n = lc.regions
             var at <- stream_positions(lc)
             t |> equal(gpu_device_sessions(), n, "the armed driver serves a device-home session per region")

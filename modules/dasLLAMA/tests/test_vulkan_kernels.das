@@ -3182,6 +3182,38 @@ def private fa_cell_set(cp; khr, sink : bool; p; psink : int) {
 }
 
 //! the f16-out twin is held to the f32 stamp's output through the clamp-convert, not to the oracle: the two stamps must agree bit for bit
+//! a ring arm's control holds: the ring's rows read a position a row (`flat`, empty on an arm with no ring) miss the oracle
+def private fa_ring_control(t : T?; tag : string; flat, want : array<float>) {
+    return if (empty(flat))
+    t |> success(mismatch_approx(flat, want) > 0, "{tag} control: the ring's rows read a position a row miss the oracle")
+}
+
+//! a ring arm's control: the flash tile's dispatch again with `ring` 0, its out plane read back; nothing off an arm with no ring
+def private fa_flat_read(var cp; khr : bool; hs : int; sink : bool; var sfa; pcf; nheads, rows, py : int) : array<float> {
+    return <- array<float>() if (pcf.ring == 0u)
+    var pflat = pcf
+    pflat.ring = 0u
+    cp |> plane_refill(py)
+    cp |> cell_record() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
+        enc_fa_tile(khr, hs, false, false, sink, false, raw2, h2, sfa, pflat, nheads, rows)
+    }
+    return <- cp |> plane_run(py)
+}
+
+//! a flash cell's K or V plane as a ring of `ring` rows: slot `s` holds the one position of the last `ring` under `kpos` whose
+//! `kv_ring_row` it is, the plane's rows past the ring (to `kpad`) the slack's value; the rows as they are with no ring
+def private fa_ring_rows(rows_f : array<float>; kpos, kpad, kvd, ring : int) : array<float> {
+    return <- clone_to_move(rows_f) if (ring == 0)
+    var out <- [for (_i in range(kpad * kvd)); 10000.0]
+    for (p in range(kpos - ring, kpos)) {
+        let slot = int(kv_ring_row(int64(p), int64(ring)))
+        for (i in range(kvd)) {
+            out[slot * kvd + i] = rows_f[p * kvd + i]
+        }
+    }
+    return <- out
+}
+
 def private fa_tile_run(t : T?; khr : bool) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let tag = khr ? "fa_khr" : "fa_cm2"
@@ -3192,15 +3224,19 @@ def private fa_tile_run(t : T?; khr : bool) {
         let scale = 0.125
         //! the sink arms (gpt-oss): the h64 stamps seeded with a per-head sink logit, whole and under a sliding window
         //! the lead arm: the rows sit `lead` rows into the q and out planes (`FaArgs.row0`, a segment's window row base), the lead rows poison the tile must leave
-        for (arm in fixed_array((hs = 64, window = 0, sink = false, lead = 0), (hs = 128, window = 0, sink = false, lead = 0), (hs = 256, window = 0, sink = false, lead = 0),
-                (hs = 512, window = 0, sink = false, lead = 0), (hs = 128, window = 40, sink = false, lead = 0), (hs = 64, window = 0, sink = true, lead = 0), (hs = 64, window = 40, sink = true, lead = 0),
-                (hs = 64, window = 0, sink = false, lead = 8))) {
+        //! the ring arms: the K/V planes hold the last `ring` positions at their `kv_ring_row` slots, the rows past the ring the slack's value
+        for (arm in fixed_array((hs = 64, window = 0, sink = false, lead = 0, ring = 0), (hs = 128, window = 0, sink = false, lead = 0, ring = 0),
+                (hs = 256, window = 0, sink = false, lead = 0, ring = 0), (hs = 512, window = 0, sink = false, lead = 0, ring = 0),
+                (hs = 128, window = 40, sink = false, lead = 0, ring = 0), (hs = 64, window = 0, sink = true, lead = 0, ring = 0),
+                (hs = 64, window = 40, sink = true, lead = 0, ring = 0), (hs = 64, window = 0, sink = false, lead = 8, ring = 0),
+                (hs = 128, window = 40, sink = false, lead = 0, ring = 128), (hs = 256, window = 40, sink = false, lead = 0, ring = 128))) {
             let hs = arm.hs
             let window = arm.window   //! a sliding layer's arm: the queries attend the `window` positions up to their own
             let sink = arm.sink
             let lead = arm.lead
+            let ring = arm.ring
             let qrows = lead + rows
-            let stag = sink ? " sink" : (lead > 0 ? " row0 {lead}" : "")
+            let stag = sink ? " sink" : (lead > 0 ? " row0 {lead}" : (ring > 0 ? " ring {ring}" : ""))
             var inscope sinkh : array<float>
             sinkh |> resize(nheads)
             for (hh in range(nheads)) {
@@ -3224,12 +3260,15 @@ def private fa_tile_run(t : T?; khr : bool) {
                 kh[i] = 10000.0
                 vh[i] = 10000.0
             }
+            var inscope kplane <- fa_ring_rows(kh, kpos, kpad, kvd, ring)
+            var inscope vplane <- fa_ring_rows(vh, kpos, kpad, kvd, ring)
             var inscope y_cls : array<float>
+            var inscope y_flat_read : array<float>   //! a ring arm's control: the ring's rows read a position a row
             var inscope y16_fused, y16_split : array<float16>
             with_cell_planes() $(var cp : CellPlanes) {
                 let pq = cp |> in_(qfull)
-                let pk = cp |> in_(kh)
-                let pv = cp |> in_(vh)
+                let pk = cp |> in_(kplane)
+                let pv = cp |> in_(vplane)
                 let pk_shadow16 = cp |> out_words(int64(kpad * kvd) * 2l, NAN_SENTINEL_BITS)
                 let pv_shadow16 = cp |> out_words(int64(kpad * kvd) * 2l, NAN_SENTINEL_BITS)
                 let py = cp |> out_(qrows * qd)
@@ -3245,7 +3284,8 @@ def private fa_tile_run(t : T?; khr : bool) {
                 var pcv = gk_f16_rows_args(uint(kpad * kvd))
                 let cvtwgs = int64((kpad * kvd / 4 + 255) / 256)
                 var pcf = FaArgs(rows = uint(rows), w0 = uint(w0), qd = uint(qd),
-                    kvd = uint(kvd), kv_mul = uint(kv_mul), kvbase = 0u, scale = scale, window = uint(window), sinkoff = 0u, row0 = uint(lead))
+                    kvd = uint(kvd), kv_mul = uint(kv_mul), kvbase = 0u, scale = scale, window = uint(window), sinkoff = 0u, row0 = uint(lead),
+                    ring = uint(ring))
                 var pcy = gk_f16_rows_args(uint(qrows * qd))
                 cp |> cell_record() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
                     enc_tower_clamp_cvt_cls(raw2, h2, sck, pcv, cvtwgs)
@@ -3272,6 +3312,8 @@ def private fa_tile_run(t : T?; khr : bool) {
                 y_cls <- [for (i in range(rows * qd)); y_full[lead * qd + i]]
                 y16_fused <- [for (i in range(rows * qd)); y16f_full[lead * qd + i]]
                 y16_split <- [for (i in range(rows * qd)); y16s_full[lead * qd + i]]
+                delete y_flat_read
+                y_flat_read <- fa_flat_read(cp, khr, hs, sink, sfa, pcf, nheads, rows, py)
             }
             // oracle mirrors the kernel's f16 grid: q pre-scales then rounds (the kernel's
             // MatrixTimesScalar-then-convert), K/V round through the shadow; softmax stays f32. The cm2 kernel's
@@ -3301,6 +3343,7 @@ def private fa_tile_run(t : T?; khr : bool) {
                 }
             }
             check_rows(t, "{tag} hs {hs} window {window}{stag} against the CPU oracle", y_cls, y_ref, BAR_APPROX_CTRL, qd, hs)
+            fa_ring_control(t, "{tag} hs {hs} window {window}{stag}", y_flat_read, y_ref)
             if (sink) {   //! the sink control: the sink-free oracle over the same rows must miss - the phantom key carries mass
                 var inscope y_nosink : array<float>
                 y_nosink |> resize(rows * qd)
@@ -3612,7 +3655,7 @@ def private gated_q_panel(f : DaAttnBFix) : array<float> {
 //! under `lead` > 0 the rows sit `lead` rows into the q and out planes (`DaAttnBArgs.row0`, a segment's window row base) behind
 //! poison rows, and the WHOLE out plane comes back - the lead rows at the NaN sentinel, then the rows
 //! `lead` poison rows ahead of the rows and `trail` behind them in the q and out planes (a co-segment's rows, left alone)
-def private da_attn_b_run(f : DaAttnBFix; stamp : int; scale, cap : float; window : int; lead : int = 0; trail : int = 0) : array<float> {
+def private da_attn_b_run(f : DaAttnBFix; stamp : int; scale, cap : float; window : int; lead : int = 0; trail : int = 0; ring : int = 0) : array<float> {
     var y : array<float>
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let f16 = dab_f16(stamp)
@@ -3638,7 +3681,7 @@ def private da_attn_b_run(f : DaAttnBFix; stamp : int; scale, cap : float; windo
             let bits = gather_planes(cp.hazard_bit, planes)
             var pc = DaAttnBArgs(npos = uint(f.npos), nh = uint(f.nheads), kvd = uint(kvd), hs = uint(f.hs), kv_mul = uint(f.kv_mul),
                 kbase = uint(f.kbase), vbase = uint(f.vbase), w0 = uint(f.w0), scale = scale, window = uint(window), cap = cap,
-                qhs = gated ? uint(2 * f.hs) : 0u, gated = gated ? 1u : 0u, row0 = uint(lead))
+                qhs = gated ? uint(2 * f.hs) : 0u, gated = gated ? 1u : 0u, row0 = uint(lead), ring = uint(ring))
             let wgs = int64(f.nheads * ((f.npos + tile - 1) / tile))
             cp |> cell_record() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
                 if (stamp == DAB_B) {
@@ -3815,6 +3858,69 @@ def test_vkd_da_attn_bw(t0 : T?) {
                 delete f
                 delete y_ref
                 delete y_cls
+            }
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+//! `f`'s K and V mirrors as rings of `ring` rows past their bases: slot `s` holds the one position of the last `ring` whose
+//! `kv_ring_row` it is, the rows past the ring zero
+def private da_attn_b_ring_fix(f : DaAttnBFix; ring : int) : DaAttnBFix {
+    var g := f
+    let kvd = (f.nheads / f.kv_mul) * f.hs
+    let kpos = f.w0 + f.npos
+    for (i in range(length(g.kh))) {
+        g.kh[i] = i < f.kbase ? f.kh[i] : 0.0
+    }
+    for (i in range(length(g.vh))) {
+        g.vh[i] = i < f.vbase ? f.vh[i] : 0.0
+    }
+    for (p in range(kpos - ring, kpos)) {
+        let slot = int(kv_ring_row(int64(p), int64(ring)))
+        for (i in range(kvd)) {
+            g.kh[f.kbase + slot * kvd + i] = f.kh[f.kbase + p * kvd + i]
+            g.vh[f.vbase + slot * kvd + i] = f.vh[f.vbase + p * kvd + i]
+        }
+    }
+    return <- g
+}
+
+//! the chunked prefill tiles over a sliding layer's ring: 120 rows at w0 500 under a 40-position window over a 192-row ring (the
+//! window's keys across the slots' wrap), each stamp against the CPU oracle over the flat rows, the same rows read a position a row
+//! (`ring` 0) missing it as the control
+[test]
+def test_vkd_da_attn_b_ring(t0 : T?) {
+    t0 |> run("the chunked attention tiles read a sliding layer's ring == the CPU oracle over the positions") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_moe_init()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            if (!(ensure_da_attn_b_cls() && ensure_da_attn_bw_cls())) {
+                t |> skip("da_attn_b classes declined on this device (workgroup cap)")
+                return
+            }
+            for (stamp in fixed_array(DAB_B, DAB_BW, DAB_H128)) {
+                if (stamp == DAB_H128 && !g_gpu.has_coopmat) {
+                    t |> skip("da_attn_b_h128: no coopmat on this device")
+                    continue
+                }
+                verify(stamp != DAB_H128 || ensure_da_attn_b_h128_cls(), "the h128 class rail must engage on a coopmat device")
+                let wide = stamp == DAB_BW
+                let tag = wide ? "da_attn_bw" : (stamp == DAB_H128 ? "da_attn_b_h128" : "da_attn_b")
+                let scale = wide ? 1.0 : 0.125
+                var f <- wide ? da_attn_b_fix(120, 4, 4, 512, 500, 64, 160, 0.005, 0.18, 0.003, 0.14, false) : da_attn_b_fix(120, 4, 2, 128, 500, 64, 160, 0.05, 1.8, 0.03, 1.4, false)
+                var g <- da_attn_b_ring_fix(f, 192)
+                var inscope y <- da_attn_b_run(g, stamp, scale, 0.0, 40, 0, 0, 192)
+                var inscope y_ref <- da_attn_b_ref(f, scale, 40, 0.0)
+                let bar = stamp == DAB_H128 ? cm_bar(y_ref) : BAR_APPROX_CTRL
+                check_rows(t, "{tag} over a 192-row ring, a 40-position window, against the CPU oracle", y, y_ref, bar, 4 * f.hs, f.hs)
+                var inscope y_flat <- da_attn_b_run(g, stamp, scale, 0.0, 40)
+                t |> success(check_count(y_flat, y_ref, bar) > 0, "{tag} control: the ring's rows read a position a row miss the oracle")
+                delete f
+                delete g
             }
         } else {
             t |> skip("dasVulkan not present")

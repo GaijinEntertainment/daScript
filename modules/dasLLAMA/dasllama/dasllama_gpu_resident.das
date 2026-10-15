@@ -550,6 +550,7 @@ def private resident_emb_f32_want(t : Model) : bool => t.tok_emb_off >= 0l && t.
 struct ResidentPlan {
     weight_bytes : int64
     kv_bytes : int64
+    kv_ring_bytes : int64   //!< the part of `kv_bytes` the sliding layers' rings hold, whatever the context
     scratch_bytes : int64   //!< the driver's own device scratch (prefill window + decode smalls)
     headroom_bytes : int64  //!< desktop slack the auto arm leaves unfilled (0 when VRAM is pinned, or when the OS budget answers)
     budget_bytes : int64
@@ -975,10 +976,11 @@ def resident_region_ctx(seq_cap, bctx, regions : int64) : int64 => bctx > 0l ? m
 def resident_region_ctx_declines(asked, region_ctx : int64; asked_whole : bool) : bool => asked_whole && region_ctx < asked
 
 //! the positions one K/V mirror slab's binding holds under the device's range cap: a slab holds whole layers, so the widest
-//! layer's row bounds every slab's context, whatever the layer count; 0 = no cap known, or no attention layer
-[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
+//! flat layer's row bounds every slab's context, whatever the layer count (a ring's rows are its own count); 0 = no cap known,
+//! or no flat attention layer
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan"), arch(at="../ARCHITECTURE_GPU_KV_RING.md#kv-sliding-ring")]
 def resident_binding_ctx(t : Model; dt : KVDtype; bcap : int64) : int64 {
-    let row_bytes = kv_row_bytes(dt, resident_widest_kv_row(t))
+    let row_bytes = kv_row_bytes(dt, resident_widest_kv_row(t, true))
     let cap = resident_slab_cap_bytes(dt, bcap)
     return (cap > 0l && row_bytes > 0l) ? cap / row_bytes : 0l
 }
@@ -993,10 +995,25 @@ def resident_slab_cap_units(dt : KVDtype; regions : int64) : int64 {
     return cap > 0l ? cap / (max(regions, 1l) * kv_unit_bytes(dt)) : 0l
 }
 
-//! the widest K/V row the mirror holds: the attention layers' (a sharer's row is its donor's), and the NextN head's where the driver takes the head
-def private resident_widest_kv_row(t : Model) : int64 {
+//! the widest K/V row the mirror holds: the attention layers' (a sharer's row is its donor's), and the NextN head's where the driver takes the head;
+//! `flat_only` leaves out the sliding layers a ring holds
+def private resident_widest_kv_row(t : Model; flat_only : bool = false) : int64 {
     let c = t.config
-    return max(resident_attn_maxima(c).kvd, resident_head_on(t) ? layer_kv_dim(c, c.n_layers) : 0l)
+    var kvd = resident_head_on(t) ? layer_kv_dim(c, c.n_layers) : 0l
+    for (l in range64(c.n_layers)) {
+        continue if (layer_is_recurrent(c, l) || (flat_only && gpu_kv_ring_on() && layer_is_sliding(c, l)))
+        kvd = max(kvd, layer_kv_dim(c, l))
+    }
+    return kvd
+}
+
+//! layer `l`'s ring rows in a mirror of `seq_cap` positions a region (`kv_ring_rows` under the window chain's rows; a sharer's
+//! is its donor's); 0 = a row a position, the NextN head and a recurrent layer among them
+[arch(at="../ARCHITECTURE_GPU_KV_RING.md#kv-sliding-ring")]
+def resident_layer_ring(t : Model; l, seq_cap : int64) : int64 {
+    let c = t.config
+    return 0l if (l >= c.n_layers || layer_is_recurrent(c, l))
+    return kv_ring_rows(c, kv_shared_layer(t, l) ? t.kv_src[l] : l, seq_cap, RDEC_PF_ROWS)
 }
 
 //! the K/V mirror's slabs - contiguous layer runs under `cap_units` a region (0 = one slab), every slab at the widest slab's
@@ -1028,8 +1045,9 @@ def resident_mirror_slabs(t : Model; seq_cap : int64; dt : KVDtype; cap_units : 
         s.base[l] = -1l
         let rows = l < c.n_layers ? !layer_is_recurrent(c, l) : (head && c.n_layer_nextn > 0l)
         if (rows && !kv_shared_layer(t, l)) {
+            let ring = resident_layer_ring(t, l, seq_cap)
             owners |> push(l)
-            units |> push(seq_cap * kv_row_units(dt, layer_kv_dim(c, l)))
+            units |> push((ring > 0l ? ring : seq_cap) * kv_row_units(dt, layer_kv_dim(c, l)))
         }
     }
     let limit = slab_limit(units, cap_units)
@@ -1160,6 +1178,7 @@ def resident_plan(t : Model; seq_cap : int64; kdt, vdt : KVDtype; hot_cap : int6
     }
     let (krow, vrow) = resident_kv_row_bytes(t, kdt, vdt)
     p.kv_bytes = resident_mirror_bytes(t, seq_cap, kdt, g_rdec_regions_want)
+    p.kv_ring_bytes = resident_ring_bytes(t, seq_cap, kdt, g_rdec_regions_want)
     p.scratch_bytes = rdec_scratch_bytes(t) + resident_shadow_bytes(t, seq_cap, kdt)
     fill_plan_room(p)
     let n_moe = resident_moe_layers(t)
@@ -1254,8 +1273,20 @@ def private resident_shadow_pos_bytes(t : Model; dt : KVDtype) : int64 => kv_blo
 //! that does not scale, over the mirror's and the shadow's (`shadow_pos`) bytes a position, one part in eight left as slack
 [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
 def resident_fit_ctx(p : ResidentPlan; seq_cap, shadow_pos : int64) : int64 {
-    let fixed = p.weight_bytes + p.hot_bytes + p.scratch_bytes - seq_cap * shadow_pos
-    return (max(p.usable_bytes - fixed, 0l) / 8l * 7l) / (p.kv_bytes / seq_cap + shadow_pos)
+    let fixed = p.weight_bytes + p.hot_bytes + p.scratch_bytes + p.kv_ring_bytes - seq_cap * shadow_pos
+    return (max(p.usable_bytes - fixed, 0l) / 8l * 7l) / ((p.kv_bytes - p.kv_ring_bytes) / seq_cap + shadow_pos)
+}
+
+//! the bytes the sliding layers' rings take of the mirror over `regions` regions, both sides: what the context does not scale
+[arch(at="../ARCHITECTURE_GPU_KV_RING.md#kv-sliding-ring")]
+def resident_ring_bytes(t : Model; seq_cap : int64; dt : KVDtype; regions : int64) : int64 {
+    let c = t.config
+    var units = 0l
+    for (l in range64(c.n_layers)) {
+        continue if (kv_shared_layer(t, l))
+        units += resident_layer_ring(t, l, seq_cap) * kv_row_units(dt, layer_kv_dim(c, l))
+    }
+    return 2l * max(regions, 1l) * units * kv_unit_bytes(dt)
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
@@ -1490,6 +1521,7 @@ var private g_rdec_gen_seq = 0l
 //! One mirror region: a session's whole K/V history on the device.
 struct RdecRegion {
     cnt : int64     //!< cached positions (built as the owner prefills and decodes)
+    hw : int64      //!< the most positions the claim's rows ever reached: a sliding layer's ring slots hold the window under it
     gen : int64     //!< the owning claim's generation; a session whose `rdec_gen` differs owns none of these rows (0 = never claimed)
     used : int64    //!< the tick of its last bind: a session with no region takes the least recently used one
     pinned : bool   //!< a live device-home session owns the rows, which exist nowhere else: no other session takes this region
@@ -1566,6 +1598,7 @@ def private rdec_owns(s : Session; r : int64) : bool
 
 def private rdec_claim(var s : Session; r, cnt : int64) {
     g_rdec_regions[r].cnt = cnt
+    g_rdec_regions[r].hw = cnt
     g_rdec_regions[r].dn_pos = 0l
     for (i in range(RDEC_DN_SNAPS)) {
         g_rdec_regions[r].snap_pos[i] = 0l
@@ -1578,6 +1611,21 @@ def private rdec_claim(var s : Session; r, cnt : int64) {
     g_rdec_regions[r].owner_uid = s.uid
     s.rdec_gen = g_rdec_gen_seq
     s.rdec_region = r
+}
+
+var private g_rdec_ring_slack = 0l   //! the rows past a ringed layer's window its ring holds (`RDEC_PF_ROWS`); 0 = no layer ringed
+
+//! the earliest position a claim whose rows reached `hw` continues from: a ring keeps the window under each position within the
+//! slack of `hw`, and nothing older
+[arch(at="../ARCHITECTURE_GPU_KV_RING.md#kv-ring-floor")]
+def private rdec_ring_floor(hw : int64) : int64 => g_rdec_ring_slack > 0l ? max(0l, hw - g_rdec_ring_slack) : 0l
+
+//! region `r` holds `cnt` of `s`'s rows: the claim's high-water mark rises with it, and the session's ring floor with that
+[arch(at="../ARCHITECTURE_GPU_KV_RING.md#kv-ring-floor")]
+def private rdec_rows_hold(var s : Session; r, cnt : int64) {
+    g_rdec_regions[r].cnt = cnt
+    g_rdec_regions[r].hw = max(g_rdec_regions[r].hw, cnt)
+    s.kv_ring_floor = max(s.kv_ring_floor, rdec_ring_floor(g_rdec_regions[r].hw))
 }
 
 //! `s`'s cache holds every row its region does (`current`), or lacks some; the region carries the answer for whoever takes it
@@ -2167,14 +2215,14 @@ def private resident_rot_swa(c : Config) : int64 => c.head_size_swa > 0l ? c.hea
 def private resident_cos_elems(c : Config) : int64 => resident_rot(c) + (has_dual_rope(c) ? resident_rot_swa(c) : 0l)
 
 //! one attention layer's geometry record for the driver; `mir_base` and `mir_slab` are its seat in the mirror (`resident_mirror_slabs`)
-def private resident_layer_geom(t : Model; l, mir_base, mir_slab : int64) : RdecLayerGeom {
+def private resident_layer_geom(t : Model; l, mir_base, mir_slab, ring : int64) : RdecLayerGeom {
     let c = t.config
     let sliding = layer_is_sliding(c, l)
     let swa_row = sliding && has_dual_rope(c)
     let vfk = resident_v_from_k(c, l)
     return RdecLayerGeom(hs = layer_head_size(c, l), qd = layer_qd(c, l), kvd = layer_kv_dim(c, l),
         hid = resident_dense_width(t, l), rot = swa_row ? resident_rot_swa(c) : resident_rot(c),
-        window = sliding ? c.sliding_window : 0l, mir_base = mir_base, mir_slab = mir_slab,
+        window = sliding ? c.sliding_window : 0l, ring = ring, mir_base = mir_base, mir_slab = mir_slab,
         cbase = swa_row ? resident_rot(c) : 0l, boff = resident_bias_off(c, l),
         pre_post = c.pre_post_norm, gelu = c.ffn_act == FfnAct.gelu,
         vfk = vfk, vnorm = c.v_norm && !vfk,
@@ -2392,7 +2440,7 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
         }
         //! a shared-KV layer attends over its donor's mirror rows: its record carries the donor's seat and no mirror slot of its own
         let kvsh = t.kv_src[l] != l
-        let g = resident_layer_geom(t, l, slabs.base[l], slabs.slab[l])
+        let g = resident_layer_geom(t, l, slabs.base[l], slabs.slab[l], resident_layer_ring(t, l, seq_cap))
         mir_slots[l] = kvsh ? mir_slots[t.kv_src[l]] : mir_idx
         let bq = place_plane(t, planes, cur, ResidentRole.q, l, mr, kg, wb)
         let bk = kvsh ? -1l : place_plane(t, planes, cur, ResidentRole.k, l, mr, kg, wb)
@@ -2446,6 +2494,11 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     g_rdec_experts_host = host_experts
     g_rdec_host_layers = host_layers
     g_rdec_mirror_slabs = slabs.n_slabs
+    g_rdec_mirror_bytes = resident_mirror_bytes(t, seq_cap, rkdt, g_rdec_regions_want)
+    g_rdec_ring_slack = resident_ring_bytes(t, seq_cap, rkdt, 1l) > 0l ? RDEC_PF_ROWS : 0l
+    if (g_rdec_ring_slack > 0l) {
+        to_log(LOG_INFO, "dasLLAMA: resident driver - the sliding layers' K/V rows ride rings of their window plus {RDEC_PF_ROWS} rows ({resident_ring_bytes(t, seq_cap, rkdt, g_rdec_regions_want) >> 20l} MB of the mirror; DASLLAMA_GPU_KV_RING=0 keeps every row)\n")
+    }
     if (host_experts) {
         g_rdec_trace_header = (layers = int(resident_routed_layers(t)), experts = int(c.n_expert), k = int(c.n_expert_used))
         if (!empty(g_env_gpu.moe_trace)) {
@@ -2563,7 +2616,7 @@ def private resident_place_head(t : Model; planes : array<ResidentPlane>; var cu
     }
     let lf = resident_head_fmts(t)
     if (!rdec_set_head(blks[0], int(t.mtp_ehproj_fmt), blks[1], blks[2], blks[3], blks[4], blks[5], blks[6], blks[7],
-            int(lf.fq), int(lf.fk), int(lf.fv), int(lf.fo), int(lf.f1), int(lf.f3), int(lf.f2), resident_layer_geom(t, l, mir_base, mir_slab))) {
+            int(lf.fq), int(lf.fk), int(lf.fv), int(lf.fo), int(lf.f1), int(lf.f3), int(lf.f2), resident_layer_geom(t, l, mir_base, mir_slab, 0l))) {
         to_log(LOG_WARNING, "dasLLAMA: resident driver - the NextN draft head stays off the device (the device declined its classes, the tier's line above); the CPU draft serves\n")
         return
     }
@@ -3155,9 +3208,17 @@ def gpu_resident_experts_host_() : bool => g_rdec_active && g_rdec_experts_host
 def gpu_resident_host_layers() : int64 => g_rdec_active ? g_rdec_host_layers : 0l
 
 var private g_rdec_mirror_slabs = 0l
+var private g_rdec_mirror_bytes = 0l
 
 //! the K/V mirror slabs the armed driver binds (`resident_mirror_slabs`); 0 with no driver armed
 def gpu_resident_mirror_slabs() : int64 => g_rdec_active ? g_rdec_mirror_slabs : 0l
+
+//! the bytes the armed driver's K/V mirror charges the card, both sides over every region (`resident_mirror_bytes`); 0 with no driver armed
+def gpu_resident_mirror_bytes() : int64 => g_rdec_active ? g_rdec_mirror_bytes : 0l
+
+//! the rows past a sliding layer's window its ring holds on the armed driver (`kv_ring_rows`' slack); 0 = no ring armed
+[arch(at="../ARCHITECTURE_GPU_KV_RING.md#kv-sliding-ring")]
+def gpu_resident_kv_ring_slack() : int64 => g_rdec_active ? g_rdec_ring_slack : 0l
 
 //! the rows the last device verify landed
 def moe_gpu_resident_verify_rows() : int64 => long_length(g_rdec_verify_picks)
@@ -3272,7 +3333,7 @@ def private vulkan_resident_verify_go(t : Model; var s : Session; toks : array<i
     copy_floats(s.mtp_hrows, 0l, s.mtp_h0, 0l, carry_dim)
     copy_floats(s.mtp_hrows, (n - 1l) * carry_dim, s.mtp_h, 0l, carry_dim)
     s.mtp_h_pos1 = pos + n
-    g_rdec_regions[r].cnt = pos + n
+    rdec_rows_hold(s, r, pos + n)
     rdec_head_device_wrote(r, pos - 1l, pos + n - 1l)
     rdec_host_mark(s, false)   // the mirror advanced past any earlier hydration
     g_rdec_verifies++
@@ -3301,7 +3362,7 @@ def private vulkan_resident_rollback(t : Model; var s : Session; pos, a : int64)
             invoke(t.blocks.pre_stack_prefill, t, s, g_rdec_verify_toks, a + 1l, pos)
         }
     }
-    g_rdec_regions[r].cnt = pos + a + 1l
+    rdec_rows_hold(s, r, pos + a + 1l)
     rdec_head_rows_cut(s, pos + a)
     g_rdec_rollbacks++
     return true
@@ -3381,7 +3442,7 @@ def private vulkan_resident_decode_go(t : Model; var s : Session; token, pos : i
         rdec_land_pick(s, rdec_token(g_rdec_x, g_rdec_cossin, s.ple_inp, gathered ? token : -1l, pos, cnt, s.pick_asked, s.logits))   //! forward() ran the PLE pre-step into s.ple_inp before the override; empty elsewhere
     }
     rdec_stash_carry(c, s, 0l, pos + 1l)
-    g_rdec_regions[r].cnt = pos + 1l
+    rdec_rows_hold(s, r, pos + 1l)
     rdec_host_mark(s, false)   // the mirror advanced past any earlier hydration
     decode_override_logits_done()   // logits produced on device
     return true
@@ -4289,12 +4350,15 @@ def private rdec_pass_hydrated(t : Model; var s : Session; kind : RdecPass; a, b
 [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
 def private rdec_prefill_region(t : Model; var s : Session; start_pos : int64) : int64 {
     let r = rdec_bind_region(t, s)
+    if (r >= 0l && start_pos == 0l && rdec_owns(s, r)) {
+        g_rdec_regions[r].hw = 0l   //! a prompt from position zero rewrites every slot it reads
+    }
     if (start_pos == 0l || r < 0l) {
         return r
     }
     let owns = rdec_owns(s, r)
     if (owns && g_rdec_regions[r].cnt >= start_pos) {
-        g_rdec_regions[r].cnt = start_pos   // rows past the start are dead: the windows rewrite them
+        rdec_rows_hold(s, r, start_pos)   // rows past the start are dead: the windows rewrite them
         return r
     }
     if (owns && !s.rdec_host_current) {
@@ -4376,7 +4440,7 @@ def private rdec_prefill_landed(t : Model; var s : Session; r, npos, start_pos, 
     if (start_pos == 0l) {
         rdec_claim(s, r, npos)
     } else {
-        g_rdec_regions[r].cnt = start_pos + npos
+        rdec_rows_hold(s, r, start_pos + npos)
     }
     if (warmed) {
         rdec_prefill_head_rows(t, s, r, npos, start_pos)   // after the claim: a fresh prompt's claim zeroes the head rows it would otherwise count
@@ -4624,7 +4688,7 @@ def private rdec_batch_group(t : Model; ws : BatchWorkspace; var sessions : arra
             rdec_select_region(r)   //! the readback reads the selected region: this row's, bound above
             rdec_read_row_kv(t, s, pos)
         }
-        g_rdec_regions[r].cnt = pos + 1l
+        rdec_rows_hold(s, r, pos + 1l)
         rdec_host_mark(s, !s.device_kv)
     }
     prof_add("nrow_land", ts_land)
@@ -4650,7 +4714,7 @@ def private rdec_batch_one_row(t : Model; ws : BatchWorkspace; var s : Session; 
     if (!s.device_kv) {
         rdec_read_row_kv(t, s, pos)
     }
-    g_rdec_regions[r].cnt = pos + 1l
+    rdec_rows_hold(s, r, pos + 1l)
     rdec_host_mark(s, !s.device_kv)
     if (picked >= 0l) {
         rdec_land_pick(s, picked)
@@ -4803,9 +4867,9 @@ def gpu_device_kv_park_(var s : Session) : int64 {
 }
 
 //! Hand the rows `[0, npos)` a kept `claim` holds to the fresh device-home session `s` under a claim of its own; false when the region was
-//! taken or holds fewer rows, and on a recurrent model unless the region's slots or one of its checkpoint rows stand at `npos` - the
-//! checkpoints at or under `npos` stay the new claim's, its prefix being the same tokens
-[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#device-home-checkpoints")]
+//! taken or holds fewer rows, when `npos` sits under the claim's ring floor, and on a recurrent model unless the region's slots or one of
+//! its checkpoint rows stand at `npos` - the checkpoints at or under `npos` stay the new claim's, its prefix being the same tokens
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#device-home-checkpoints"), arch(at="../ARCHITECTURE_GPU_KV_RING.md#kv-ring-floor")]
 def gpu_device_kv_adopt_(var s : Session; claim, npos : int64) : bool {
     if (!g_rdec_active || claim == 0l) {
         return false
@@ -4815,10 +4879,12 @@ def gpu_device_kv_adopt_(var s : Session; claim, npos : int64) : bool {
         let reg = g_rdec_regions[r]
         let recurrent = !empty(s.dn_state_prefix)
         let snap = recurrent && npos != reg.dn_pos ? rdec_snap_at(reg, npos) : -1
-        if (reg.cnt < npos || (recurrent && npos != reg.dn_pos && snap < 0)) {
+        if (reg.cnt < npos || (recurrent && npos != reg.dn_pos && snap < 0) || (npos > 0l && npos < rdec_ring_floor(reg.hw))) {
             return false
         }
         rdec_claim(s, r, npos)
+        g_rdec_regions[r].hw = reg.hw   //! the ring's slots past `npos` still hold the parked claim's rows
+        s.kv_ring_floor = max(s.kv_ring_floor, npos > 0l ? rdec_ring_floor(reg.hw) : 0l)
         for (i in range(RDEC_DN_SNAPS)) {
             if (reg.snap_pos[i] <= npos) {
                 g_rdec_regions[r].snap_pos[i] = reg.snap_pos[i]
@@ -4950,7 +5016,8 @@ def private rdec_pool_head_rows(t : Model; reg : RdecRegion; n : int64) : int64 
 def gpu_device_kv_export_(t : Model; claim : int64; var host : Session; lo, hi : int64) : bool {
     return false if (!g_rdec_active || host.kv_pool == null || host.kv_pool.kdt != g_rdec_kvdt || host.kv_pool.vdt != g_rdec_kvdt)
     let r = rdec_region_of(claim)
-    return false if (r < 0l || g_rdec_regions[r].cnt < hi)
+    return false if (r < 0l || g_rdec_regions[r].cnt < hi || hi < rdec_ring_floor(g_rdec_regions[r].hw))   //! a ring keeps no window under `hi` past its floor
+    host.kv_ring_floor = max(host.kv_ring_floor, rdec_ring_floor(g_rdec_regions[r].hw))
     let head_hi = rdec_pool_head_rows(t, g_rdec_regions[r], hi)
     if (head_hi == POOL_HEAD_ROWS_SHORT) {
         rdec_pool_head_decline_say(hi, g_rdec_regions[r].head_cnt)
@@ -5113,13 +5180,15 @@ def gpu_device_kv_snapshot_(var s : Session; at : int64; var into : DnSnapshot) 
 [arch(at="../ARCHITECTURE_ENGINE_SERVING.md#device-home-pool")]
 def gpu_device_kv_import_(t : Model; var s : Session; var host : Session; npos : int64) : bool {
     return false if (!g_rdec_active || !s.device_kv || s.rdec_gen != 0l || npos <= 0l || npos > g_rdec_cap || host.kv_pool == null
-        || host.kv_pool.kdt != g_rdec_kvdt || host.kv_pool.vdt != g_rdec_kvdt || long_length(host.block_table) * host.kv_pool.page_rows < npos)
+        || host.kv_pool.kdt != g_rdec_kvdt || host.kv_pool.vdt != g_rdec_kvdt || long_length(host.block_table) * host.kv_pool.page_rows < npos
+        || npos < host.kv_ring_floor)
     let t0 = ref_time_ticks()
     let r = rdec_bind_region(t, s)
     return false if (r < 0l)
     let head = rdec_pool_head_on(t)
     rdec_cache_rows(t, host, 0l, npos, true, head ? pool_head_rows_of(npos) : POOL_HEAD_ROWS_NONE)
     rdec_claim(s, r, npos)
+    s.kv_ring_floor = host.kv_ring_floor
     if (head) {
         g_rdec_regions[r].head_cnt = pool_head_rows_of(npos)
         g_rdec_regions[r].head_host = pool_head_rows_of(npos)
@@ -5205,6 +5274,8 @@ def moe_gpu_drop_model_() {
     g_rdec_experts_host = false
     g_rdec_host_layers = 0l
     g_rdec_mirror_slabs = 0l
+    g_rdec_mirror_bytes = 0l
+    g_rdec_ring_slack = 0l
     rdec_set_host_experts(false)
     moe_gpu_dn_invalidate()
     rdec_set_active(false)

@@ -159,6 +159,7 @@ def public rdec_norms_len(n_layers, dim, qk_hs : int64; head : bool) : int64
 struct RdecLayerGeom {
     hs, qd, kvd, hid, rot : int64
     window : int64                  //! positions a sliding layer attends over; 0 = every position
+    ring : int64                    //! a sliding layer's ring rows in the mirror (`kv_ring_row`); 0 = its rows at every position
     mir_base : int64                //! its first unit in its K/V mirror slab (one region's layout; the region stride is the slab's)
     mir_slab : int64                //! the K/V mirror slab its rows sit in (a contiguous run of attention layers under one binding's range)
     cbase : int64                   //! its rope class's row inside a position's cos/sin plane
@@ -862,16 +863,16 @@ struct public RdecKvSpan {
 }
 
 //! Every span moved up (`up`) or down in as few submits as the driver's staging allows; false where no driver serves the batch
-typedef RdecKvXferFn = function<(spans : array<RdecKvSpan>; up : bool) : bool>
+typedef RdecKvXferFn = function<(var spans : array<RdecKvSpan>; up : bool) : bool>
 [unused_argument(spans, up)]
-def private rdec_unset_kv_xfer(spans : array<RdecKvSpan>; up : bool) : bool => false
+def private rdec_unset_kv_xfer(var spans : array<RdecKvSpan>; up : bool) : bool => false
 var g_rdec_kv_xfer = @@rdec_unset_kv_xfer
 
 def public install_rdec_kv_xfer(xfer : RdecKvXferFn) {
     g_rdec_kv_xfer = xfer
 }
 
-def public rdec_kv_xfer(spans : array<RdecKvSpan>; up : bool) : bool => invoke(g_rdec_kv_xfer, spans, up)
+def public rdec_kv_xfer(var spans : array<RdecKvSpan>; up : bool) : bool => invoke(g_rdec_kv_xfer, spans, up)
 def public rdec_dn_snap_save(slot : int64) : bool => invoke(g_rdec_dn_snap_save, slot)
 def public rdec_dn_snap_load(slot : int64) : bool => invoke(g_rdec_dn_snap_load, slot)
 

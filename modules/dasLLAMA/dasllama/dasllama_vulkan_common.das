@@ -13,6 +13,7 @@ require spirv/spirv_dis
 require dasllama/dasllama_math
 require dasllama/dasllama_gpu_tier
 require dasllama/dasllama_kv_dtype   // KVDtype and its unit arithmetic: the mirror's codec
+require dasllama/dasllama_gpu_math   // kv_ring_row: a mirror position's row
 require dasllama/dasllama_gemm_schema
 require dasllama/dasllama_env
 require dasllama/dasllama_config
@@ -2374,7 +2375,8 @@ struct RLayer {
     hs, qd, kvd, hid, rot : int64   //! head size, query width, kv width, dense FFN width, rotary width per head
     kv_mul : int64                  //! query heads per kv head
     window : int64                  //! positions a sliding layer attends over; 0 = every position
-    mir_base : int64                //! this layer's first unit in its K/V mirror slab, one region's layout (its rows are seq_cap x the row's units from there)
+    ring : int64                    //! a sliding layer's ring rows (`kv_ring_row`); 0 = seq_cap rows, a position each
+    mir_base : int64                //! this layer's first unit in its K/V mirror slab, one region's layout (its rows are seq_cap x the row's units from there, or `ring` rows)
     mir_slab : int64                //! the K/V mirror slab the layer's rows sit in (`rd_k_slab` / `rd_v_slab`)
     cbase : int64                   //! its rope class's row base inside a position's cos/sin plane
     boff : int64                    //! its row base in the q/k/v bias plane
@@ -2867,6 +2869,32 @@ def rd_mir_base(L : RLayer) : int64 => rd_mir_base(L, g_rd.region)
 
 //! ... and in region `region`: a segment's
 def rd_mir_base(L : RLayer; region : int64) : int64 => L.mir_base + region * g_rd.mir_units
+
+//! position `pos`'s row in layer `L`'s slab of region `region`, in units: the layer's base, the region's stride and the row's slot of a
+//! sliding layer's ring (`kv_ring_row`) - every host-side read or write of a mirror row and the drafter's borrow address it here
+[arch(at="../ARCHITECTURE_GPU_KV_RING.md#kv-sliding-ring")]
+def rd_mir_row(L : RLayer; region, pos : int64) : int64 => rd_mir_base(L, region) + kv_ring_row(pos, L.ring) * rd_kv_row_units(L.kvd)
+
+//! ... in the selected region
+def rd_mir_row(L : RLayer; pos : int64) : int64 => rd_mir_row(L, g_rd.region, pos)
+
+//! positions [row0, row0 + nrows) of layer `L` as runs whose rows sit back to back in its slab, `blk(p0, n)` a run each: the span
+//! whole on a flat layer; on a ring its last `ring` positions (the rows before them share their slots), cut where the slots wrap
+[arch(at="../ARCHITECTURE_GPU_KV_RING.md#kv-sliding-ring")]
+def rd_ring_runs(L : RLayer; row0, nrows : int64; blk : block<(p0, n : int64) : void>) {
+    return if (nrows <= 0l)
+    if (L.ring == 0l) {
+        invoke(blk, row0, nrows)
+        return
+    }
+    let hi = row0 + nrows
+    var p = max(row0, hi - L.ring)
+    while (p < hi) {
+        let n = min(hi - p, L.ring - kv_ring_row(p, L.ring))
+        invoke(blk, p, n)
+        p += n
+    }
+}
 
 //! one slab's binding, either side: all `regions` copies end to end (every slab the same size)
 def rd_mir_bytes : int64 => g_rd.regions * g_rd.mir_units * kv_unit_bytes(g_rd.kv_dt)

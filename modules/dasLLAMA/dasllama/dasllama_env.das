@@ -143,6 +143,9 @@ struct public GpuTierEnv {
     @clarg_doc = "The whole-model resident driver for a model that fits the card, MoE included; 0 keeps the per-op rails (the A/B lever)."
     gpu_resident : bool = true
 
+    @clarg_doc = "A sliding-window layer's K/V mirror rows on a GPU home hold its window plus the rows one command writes, a position's row at its slot of that ring (both homes); 0 keeps every position's row (the flat slab, the A/B lever). A ringed history serves a continuation that starts no more than that slack under the rows it holds; one further back prefills again."
+    gpu_kv_ring : bool = true
+
     @clarg_default_doc = "follows DASLLAMA_GPU"
     @clarg_doc = "DeltaNet rail on the GPU."
     gpu_dn : Option<bool>

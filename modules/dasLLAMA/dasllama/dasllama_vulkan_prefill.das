@@ -1432,7 +1432,7 @@ def private pf_head_kv_store(raw : VkCommandBuffer; var h : VkHaz; L : RLayer; n
     let ropewg = (nh * int64(pairs) + int64(WG_X) - 1l) / int64(WG_X)
     rope_kv_b_stamp_enc(rd_kv16(), raw, h, g_rd.pf_sets[hb + 4], pcr, ropewg)
     if (kvq) {   // a block codec's store pass; the rope stamp stored the f16 rows itself, and an f16 mirror builds no store set. The warm attends nothing: no q head to rotate under tq4
-        rd_enc_kv_store(raw, h, g_rd.pf_kv_store_sets[L.mir_slab], true, kvd, hs, nh, 0l, kvd / hs, mirb, uint(pos0), uint(g_rd.n_heads * int64(qhs)), uint(qhs))
+        rd_enc_kv_store(raw, h, g_rd.pf_kv_store_sets[L.mir_slab], true, kvd, hs, nh, 0l, kvd / hs, mirb, uint(pos0), uint(g_rd.n_heads * int64(qhs)), uint(qhs), L.ring)
     }
 }
 
@@ -1519,7 +1519,7 @@ def set_vulkan_prefill_qkn_fuse(on : bool) {
 def vulkan_prefill_qkn_fuse : bool => g_pf_qkn_fuse
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
-def private pf_qkn_fused(l : int64) : bool
+def private pf_qkn_fused : bool
     => g_pf_qkn_fuse && g_env_vulkan.vk_fuse && g_rd.qk_norm && !rd_kv_block_codec()
 
 //! the fused pass over every window part: a part's rows at their positions in their region's slab, `voff` the v rows' base in the
@@ -1541,7 +1541,7 @@ def private pf_qkn_rope_enc(raw : VkCommandBuffer; var h : VkHaz; l : int64; vof
             qwoff = uint(nlfin + dim + l * 2l * hsmax), kwoff = uint(nlfin + dim + (l * 2l + 1l) * hsmax),
             eps = g_rd.eps, qstride = uint(qhs), boff = uint(L.boff), hasb = g_rd.has_bias ? 1u : 0u, cbase = uint(L.cbase),
             vfk = L.vfk ? 1u : 0u, vnorm = L.vnorm ? 1u : 0u, rowwg = uint(g_rd.n_heads + nkvh), kvrow = uint(kvrow), qrow = uint(qrow),
-            cosrow = uint(g_rd.cos_elems), win = 1u, pos0 = uint(sg.pos0), row0 = uint(sg.row0), kbase = 0u, vbase = voff)
+            cosrow = uint(g_rd.cos_elems), win = 1u, pos0 = uint(sg.pos0), row0 = uint(sg.row0), kbase = 0u, vbase = voff, ring = uint(L.ring))
         if (rd_kv16()) {
             enc_qkn_rope_f16_cls(raw, h, L.pf_s_qkn_rope, pcf, (g_rd.n_heads + nkvh) * sg.npos)
         } else {
@@ -2071,7 +2071,7 @@ def private pf_attn_block(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : i
         }
     }
     let voff = uint(kv_merged ? kvd : wlen * kvd)   // the v rows' base in pf_kv, kstride apart
-    if (pf_qkn_fused(l)) {
+    if (pf_qkn_fused()) {
         pf_qkn_rope_enc(raw, h, l, voff, kv_merged ? 2l * kvd : kvd, qrow, qhs)
     } else {
         if (g_rd.qk_norm) {
@@ -2092,16 +2092,17 @@ def private pf_attn_block(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : i
                 layerbase = kvq ? 0u : uint(rd_mir_base(g_rd.layers[l], sg.region)), npos = uint(sg.npos), pos0 = uint(kvq ? sg.row0 : sg.pos0),
                 voff = voff, kstride = uint(kv_merged ? 2l * kvd : kvd), qhs = uint(qhs),
                 boff = uint(g_rd.layers[l].boff), hasb = g_rd.has_bias ? 1u : 0u,
-                cstride = uint(cos_elems), cbase = uint(g_rd.layers[l].cbase), row0 = uint(sg.row0))
+                cstride = uint(cos_elems), cbase = uint(g_rd.layers[l].cbase), row0 = uint(sg.row0), ring = kvq ? 0u : uint(g_rd.layers[l].ring))
             rope_kv_b_stamp_enc(rd_kv16(), raw, h, g_rd.pf_sets[b + 4], pcr, ropewg)
         }
     }
     if (kvq) {
         let mirb = uint(rd_mir_base(g_rd.layers[l], g_pf_wsegs[0].region))
-        rd_enc_kv_store(raw, h, g_rd.pf_kv_store_sets[g_rd.layers[l].mir_slab], true, kvd, hs, wlen, g_rd.n_heads, kvsh ? 0l : kvd / hs, mirb, uint(pos0w), uint(qrow), uint(qhs))
+        rd_enc_kv_store(raw, h, g_rd.pf_kv_store_sets[g_rd.layers[l].mir_slab], true, kvd, hs, wlen, g_rd.n_heads, kvsh ? 0l : kvd / hs, mirb, uint(pos0w), uint(qrow), uint(qhs),
+            g_rd.layers[l].ring)
         let kvlen = pos0w + wlen
         let shadow_pos0 = window != 0u && pos0w > int64(window) ? ((pos0w - int64(window)) / 64l) * 64l : 0l   // a sliding layer's tiles start a 64-key step under its window
-        var pch = KvQShadowArgs(kvd = uint(kvd), pos0 = uint(shadow_pos0), rows = uint(kvlen - shadow_pos0), layerbase = mirb)
+        var pch = KvQShadowArgs(kvd = uint(kvd), pos0 = uint(shadow_pos0), rows = uint(kvlen - shadow_pos0), layerbase = mirb, ring = uint(g_rd.layers[l].ring))
         let shwg = (rd_kv_row_units(kvd) * (kvlen - shadow_pos0) + int64(WG_X) - 1l) / int64(WG_X)
         if (kvtq4) {
             enc_kv_tq4_shadow_cls(raw, h, g_rd.pf_kv_shadow_sets[g_rd.layers[l].mir_slab], pch, shwg)
@@ -2113,12 +2114,13 @@ def private pf_attn_block(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : i
     let fa_lands_f16 = pf_fa_lands_f16(fo6)
     for (sg in g_pf_wsegs) {
         let kv_base = kvq ? 0u : uint(rd_mir_base(g_rd.layers[l], sg.region))   // the rows the attention reads: the mirror's, or a block codec's shadow of this layer from 0
+        let kv_ring = kvq ? 0u : uint(g_rd.layers[l].ring)   //! the shadow holds its rows at their positions
         if (g_rd.layers[l].pf_fa || g_rd.layers[l].pf_fakhr) {
             let khr = g_rd.layers[l].pf_fakhr
             var pcf = FaArgs(rows = uint(sg.npos), w0 = uint(sg.pos0), qd = uint(qd),
                 kvd = uint(kvd), kv_mul = kv_mul, kvbase = kv_base,
                 scale = g_rd.scale, qstride = uint(qrow), qhs = uint(qhs), window = window, cap = g_rd.layers[l].attn_cap,
-                sinkoff = uint(l * g_rd.n_heads), row0 = uint(sg.row0))
+                sinkoff = uint(l * g_rd.n_heads), row0 = uint(sg.row0), ring = kv_ring)
             fa_stamp_enc(khr, hs, hs == 256l && rd_attn_gated(), pcf.cap != 0.0, g_rd.has_sinks, fa_lands_f16, raw, h, g_rd.pf_sets[b + 5], pcf,
                 fa_stamp_wgs(khr, g_rd.n_heads, sg.npos))
         } else {
@@ -2126,7 +2128,7 @@ def private pf_attn_block(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : i
             var pca = DaAttnBArgs(npos = uint(sg.npos), nh = uint(g_rd.n_heads), kvd = uint(kvd),
                 hs = uint(hs), kv_mul = kv_mul, kbase = kv_base, vbase = kv_base,
                 w0 = uint(sg.pos0), scale = g_rd.scale, qhs = uint(qhs), gated = rd_attn_gated() ? 1u : 0u, window = window,
-                cap = g_rd.layers[l].attn_cap, row0 = uint(sg.row0))
+                cap = g_rd.layers[l].attn_cap, row0 = uint(sg.row0), ring = kv_ring)
             da_attn_b_stamp_enc(fa128, wide, rd_pf_reads_f16(), raw, h, g_rd.pf_sets[b + 5], pca, attnwg)
         }
     }

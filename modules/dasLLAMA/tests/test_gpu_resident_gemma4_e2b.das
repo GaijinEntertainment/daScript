@@ -76,3 +76,14 @@ def test_gpu_resident_gemma4_e2b_short_window(t : T?) {
         }
     }
 }
+
+//! the sliding layers' rings against the flat mirror (`ring_vs_flat`): 1300 prose ids past the 512-position window - three windows of
+//! the chain - and eight steps, bit for bit, on the f16 mirror and both block codecs (their f16 shadow reads each position's slot)
+[test]
+def test_gpu_resident_gemma4_e2b_ring(t : T?) {
+    for (kv in fixed_array(KVDtype.f16, KVDtype.q8_0, KVDtype.tq4)) {
+        t |> run("gemma-4-E2B Q8_0: the sliding layers' rings against every row kept, a {kv} mirror, 1300 ids and eight steps") @(t : T?) {
+            ring_vs_flat(t, 1300l, GEMMA4E_FILE, kv)
+        }
+    }
+}

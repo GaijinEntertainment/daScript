@@ -2587,21 +2587,21 @@ class template AtAttnTileT {
         }
     }
 
-    def load_k(k0, kend, kbase, kvd, kvh, hs : uint) {
+    def load_k(k0, kend, kbase, kvd, kvh, hs, ring : uint) {
         var i = gl_LocalInvocationID.x
         while (i < KS * hs) {
             let kr = k0 + i / hs
-            kv_stage[(i / hs) * LD + i % hs] = kr < kend ? float(kpanel[kbase + kr * kvd + kvh * hs + i % hs]) : 0.0   // nolint:PERF020 -- KT convert-on-load; a no-op only in the f32 stamp
+            kv_stage[(i / hs) * LD + i % hs] = kr < kend ? float(kpanel[kbase + kv_ring_row(kr, ring) * kvd + kvh * hs + i % hs]) : 0.0   // nolint:PERF020 -- KT convert-on-load; a no-op only in the f32 stamp
             i += 256u
         }
     }
 
     //! the V tile, reusing the K staging at vbase (call only after every K read completed)
-    def load_v(k0, kend, vbase, kvd, kvh, hs : uint) {
+    def load_v(k0, kend, vbase, kvd, kvh, hs, ring : uint) {
         var i = gl_LocalInvocationID.x
         while (i < KS * hs) {
             let kr = k0 + i / hs
-            kv_stage[(i / hs) * LD + i % hs] = kr < kend ? float(vpanel[vbase + kr * kvd + kvh * hs + i % hs]) : 0.0   // nolint:PERF020 -- KT convert-on-load; a no-op only in the f32 stamp
+            kv_stage[(i / hs) * LD + i % hs] = kr < kend ? float(vpanel[vbase + kv_ring_row(kr, ring) * kvd + kvh * hs + i % hs]) : 0.0   // nolint:PERF020 -- KT convert-on-load; a no-op only in the f32 stamp
             i += 256u
         }
     }
@@ -2681,7 +2681,7 @@ class template AtAttnTileT {
         let kend = pa.w0 + min(q0 + TQ, pa.npos)   // causal bound (exclusive) of the tile's last row
         var k0 = k_first(pa.w0, q0, pa.window)
         while (k0 < kend) {
-            load_k(k0, kend, pa.kbase, pa.kvd, kvh, pa.hs)
+            load_k(k0, kend, pa.kbase, pa.kvd, kvh, pa.hs, pa.ring)
             barrier()
             qk_score(r, c, pa.hs, k0, gq, q0, pa.npos, pa.window, pa.scale, pa.cap)
             barrier()
@@ -2702,7 +2702,7 @@ class template AtAttnTileT {
                 o6 *= av
                 o7 *= av
             }
-            load_v(k0, kend, pa.vbase, pa.kvd, kvh, pa.hs)
+            load_v(k0, kend, pa.vbase, pa.kvd, kvh, pa.hs, pa.ring)
             barrier()
             var c2 = 0u
             while (c2 < KS) {
@@ -2776,7 +2776,7 @@ class AtAttn : AtAttnTileT {
         let kend = pa.w0 + min(q0 + TQ, pa.rows)   // causal bound (exclusive) of the tile's last row
         var k0 = 0u
         while (k0 < kend) {
-            load_k(k0, kend, 0u, pa.kvd, kvh, pa.hs)
+            load_k(k0, kend, 0u, pa.kvd, kvh, pa.hs, 0u)
             barrier()
             qk_score(r, c, pa.hs, k0, gq, q0, pa.rows, 0u, pa.scale, 0.0)   //! the per-op tile serves no softcap model
             barrier()
@@ -2793,7 +2793,7 @@ class AtAttn : AtAttnTileT {
                 o6 *= av
                 o7 *= av
             }
-            load_v(k0, kend, 0u, pa.kvd, kvh, pa.hs)
+            load_v(k0, kend, 0u, pa.kvd, kvh, pa.hs, 0u)
             barrier()
             var c2 = 0u
             while (c2 < KS) {
@@ -2883,6 +2883,7 @@ struct FaArgs {
     cap : float     //! the attention logit softcap on the scaled scores (gemma-2: 50), read by the CAP stamps; 0 = none
     sinkoff : uint  //! the SINK stamps: this layer's row base in the sink plane ([n_heads] a layer)
     row0 : uint     //! the segment's first row in the q panel and the out plane: a segmented window dispatches a segment at its rows
+    ring : uint     //! a sliding layer's ring rows: key `j` reads its `kv_ring_row` slot, a multiple of the tile's step; 0 = the flat rows
 }
 
 //! gemma-2's attention logit softcap on a scaled score tile
@@ -2973,7 +2974,7 @@ class template FaT {
                         var qa : coopmatA_f16_16x16
                         coopmatLoad(qa, fq, int(d / 2u), int(hw), 0)
                         var kb : coopmatB_f16_16x16
-                        coopmatLoad(kb, kh, pa.kvbase + krow * pa.kvd + kvh * HS + d, int(pa.kvd), 1)
+                        coopmatLoad(kb, kh, pa.kvbase + kv_ring_row(krow, pa.ring) * pa.kvd + kvh * HS + d, int(pa.kvd), 1)
                         s = coopmatMulAdd(qa, kb, s)
                         d += 16u
                     }
@@ -3024,7 +3025,7 @@ class template FaT {
                         coopmatLoad(pf, fp, int(kc / 2u), 32, 0)
                         for [unroll_full] (f in range(int(HS / 64u))) {
                             var vb : coopmatB_f16_16x16
-                            coopmatLoad(vb, vh, pa.kvbase + (j + kc) * pa.kvd + kvh * HS + sg_col0 + uint(f) * 16u, int(pa.kvd), 0)
+                            coopmatLoad(vb, vh, pa.kvbase + kv_ring_row(j + kc, pa.ring) * pa.kvd + kvh * HS + sg_col0 + uint(f) * 16u, int(pa.kvd), 0)
                             acc[f] = coopmatMulAdd(pf, vb, acc[f])
                         }
                     }
@@ -3068,7 +3069,7 @@ class template FaT {
             tensorLayoutSetStride(tlq, qstride, 1u)
             var tlk : tensorLayout2DPad
             tensorLayoutCreate(tlk)
-            tensorLayoutSetDimension(tlk, kvlen, pa.kvd)
+            tensorLayoutSetDimension(tlk, pa.ring != 0u ? pa.ring : kvlen, pa.kvd)   //! a ring's rows whole: a step never straddles its wrap
             tensorLayoutSetStride(tlk, pa.kvd, 1u)
             var tlo : tensorLayout2DPad
             tensorLayoutCreate(tlo)
@@ -3096,7 +3097,7 @@ class template FaT {
             while [dont_unroll] (j < kmax) {
                 var s : SACC
                 var kt : KB
-                coopmatLoadTensor(kt, kh, pa.kvbase, tlk, j, BC, kvh * HS, HS, tv)
+                coopmatLoadTensor(kt, kh, pa.kvbase, tlk, kv_ring_row(j, pa.ring), BC, kvh * HS, HS, tv)
                 s = coopmatMulAdd(qf, kt, s)
                 static_if (CAP) {
                     coopmatPerElement(s, s, @@facm2_softcap, pa.cap)
@@ -3134,7 +3135,7 @@ class template FaT {
                 coopmatConvert(emf, emd)
                 coopmatMulElem(o, emf, o)
                 var vt : VB
-                coopmatLoadTensor(vt, vh, pa.kvbase, tlk, j, BC, kvh * HS, HS)
+                coopmatLoadTensor(vt, vh, pa.kvbase, tlk, kv_ring_row(j, pa.ring), BC, kvh * HS, HS)
                 o = coopmatMulAdd(pf, vt, o)                                // O = eMdiag*O + P @ V
                 j += BC
             }
@@ -3504,6 +3505,7 @@ struct DaAttnBArgs {
     window : uint   //! a sliding layer's queries attend the `window` positions up to their own; 0 = every position
     cap : float     //! the attention logit softcap on the scaled scores (gemma-2: 50); 0 = none
     row0 : uint     //! the segment's first row in the q panel and the out plane: a segmented window dispatches a segment at its rows
+    ring : uint     //! a sliding layer's ring rows: key `k` reads its `kv_ring_row` slot; 0 = the flat slab
 }
 
 // the wide-head twin of DaAttnB for heads past 256 (gemma-4's global layers, 512): a 4-row q tile and
@@ -3539,7 +3541,7 @@ class template DaAttnBWT : AtAttnTileT {
         let kend = pa.w0 + min(q0 + TQ, pa.npos)   // causal bound (exclusive) of the tile's last row
         var k0 = k_first(pa.w0, q0, pa.window)
         while (k0 < kend) {
-            load_k(k0, kend, pa.kbase, pa.kvd, kvh, hs)
+            load_k(k0, kend, pa.kbase, pa.kvd, kvh, hs, pa.ring)
             barrier()
             if (tid < TQ * KS) {   // lane (r, c) scores query r against position k0 + c
                 qk_score(tid / KS, tid % KS, hs, k0, pa.w0 + q0 + tid / KS, q0, pa.npos, pa.window, pa.scale, pa.cap)
@@ -3551,7 +3553,7 @@ class template DaAttnBWT : AtAttnTileT {
             for (z in range(8)) {
                 o[z] *= av
             }
-            load_v(k0, kend, pa.vbase, pa.kvd, kvh, hs)
+            load_v(k0, kend, pa.vbase, pa.kvd, kvh, hs, pa.ring)
             barrier()
             var c2 = 0u
             while (c2 < KS) {
@@ -3681,7 +3683,7 @@ class template DaAttnBH128T {
                 let kr = k0 + i / 64u
                 let jp = (i % 64u) * 2u
                 if (kr < kend) {
-                    let src = pa.kbase + kr * pa.kvd + kvh * 128u + jp
+                    let src = pa.kbase + kv_ring_row(kr, pa.ring) * pa.kvd + kvh * 128u + jp
                     fbkv[i] = packHalf2x16(float2(float(kpanel[src]), float(kpanel[src + 1u])))   // nolint:PERF020 -- KT convert-on-load; a no-op only in the f32 stamp
                 } else {
                     fbkv[i] = 0u
@@ -3733,7 +3735,7 @@ class template DaAttnBH128T {
                 let kr = k0 + i / 64u
                 let jp = (i % 64u) * 2u
                 if (kr < kend) {
-                    let src = pa.vbase + kr * pa.kvd + kvh * 128u + jp
+                    let src = pa.vbase + kv_ring_row(kr, pa.ring) * pa.kvd + kvh * 128u + jp
                     fbkv[i] = packHalf2x16(float2(float(vpanel[src]), float(vpanel[src + 1u])))   // nolint:PERF020 -- KT convert-on-load; a no-op only in the f32 stamp
                 } else {
                     fbkv[i] = 0u
@@ -3853,6 +3855,7 @@ struct DaAttnArgs {
     rowwg : uint    //! (kv head, slab, split) workgroups a row - `da_attn_row_wgs`: the dispatch past them is the next row, which reads its own `tok` entry; 0 = the whole dispatch is row 0 (the one-row command passes its row's count: the same reading)
     qrow : uint     //! a row's stride in q (the projection row's width)
     cntoff : uint   //! the split form's arrival counters, a word a (row, kv head, slab) group, at this word offset of the partials binding: zero between dispatches
+    ring : uint     //! a sliding layer's ring rows: key `c` reads its `kv_ring_row` slot; 0 = the flat slab
 }
 
 //! a (head, split) partial's floats in the partials plane: the running max, the denom, then the hs accumulators
@@ -4108,14 +4111,14 @@ class template DaAttnT {
         let vb = vbase + kvh * hs + w * 8u
         while (c0 < cend) {
             let clen = min(256u, cend - c0)
-            let krow = kbase + (c0 + min(tid, clen - 1u)) * pa.kvd + kvh * hs
+            let krow = kbase + kv_ring_row(c0 + min(tid, clen - 1u), pa.ring) * pa.kvd + kvh * hs
             var kw : uint4[8]   // nolint:LINT002,LINT019 -- the f32 stamp's static_if leaves the word batches unused; the rule fires in that stamp's compile alone
             var vw : uint4[8]   // nolint:LINT002,LINT019 -- the f32 stamp's static_if leaves the word batches unused; the rule fires in that stamp's compile alone
             static_if (KV16) {
                 if (vec) {
                     for [unroll] (b in range(8)) {
                         kw[b] = kw4[krow / 8u + min(uint(b), vrow_words - 1u)]   //! a head of 64 fills eight words, a wider one takes more batches
-                        vw[b] = vw4[(vb + (c0 + min(my_kgroup + uint(b) * kgroups, clen - 1u)) * pa.kvd) / 8u]
+                        vw[b] = vw4[(vb + kv_ring_row(c0 + min(my_kgroup + uint(b) * kgroups, clen - 1u), pa.ring) * pa.kvd) / 8u]
                     }
                 }
             }
@@ -4146,7 +4149,7 @@ class template DaAttnT {
                     }
                 }
                 static_if (KVQ8 || KVTQ4) {
-                    let kblk = kbase + (c0 + min(tid, clen - 1u)) * (pa.kvd / KQ_B32_ELEMS_U) + kvh * (hs / KQ_B32_ELEMS_U)
+                    let kblk = kbase + kv_ring_row(c0 + min(tid, clen - 1u), pa.ring) * (pa.kvd / KQ_B32_ELEMS_U) + kvh * (hs / KQ_B32_ELEMS_U)
                     var bi = 0u
                     while (bi < hs / KQ_B32_ELEMS_U) {
                         let bb = (kblk + bi) * (KVQ8 ? KV_Q8_BLOCK_BYTES : KV_TQ4_BLOCK_BYTES)
@@ -4255,7 +4258,7 @@ class template DaAttnT {
                     if (vec) {
                         if (jj != my_kgroup) {
                             for [unroll] (b in range(8)) {
-                                vw[b] = vw4[(vb + (c0 + min(jj + uint(b) * kgroups, clen - 1u)) * pa.kvd) / 8u]
+                                vw[b] = vw4[(vb + kv_ring_row(c0 + min(jj + uint(b) * kgroups, clen - 1u), pa.ring) * pa.kvd) / 8u]
                             }
                         }
                         for [unroll] (b in range(8)) {
@@ -4281,7 +4284,7 @@ class template DaAttnT {
                     }
                 }
                 static_if (KVQ8 || KVTQ4) {
-                    let vbb = (vbase + (c0 + jj) * (pa.kvd / KQ_B32_ELEMS_U) + kvh * (hs / KQ_B32_ELEMS_U) + w / 4u) * (KVQ8 ? KV_Q8_BLOCK_BYTES : KV_TQ4_BLOCK_BYTES)
+                    let vbb = (vbase + kv_ring_row(c0 + jj, pa.ring) * (pa.kvd / KQ_B32_ELEMS_U) + kvh * (hs / KQ_B32_ELEMS_U) + w / 4u) * (KVQ8 ? KV_Q8_BLOCK_BYTES : KV_TQ4_BLOCK_BYTES)
                     let vd = kv_blk_scale(vmir[vbb >> 2u], vbb)
                     let vq0 = vbb + 2u + (w & 3u) * (KVQ8 ? 8u : 4u)
                     let v0 = vmir[vq0 >> 2u]
@@ -4310,7 +4313,7 @@ class template DaAttnT {
                     }
                 } else {
                     if (!vec) {
-                        let vrow = vb + (c0 + jj) * pa.kvd
+                        let vrow = vb + kv_ring_row(c0 + jj, pa.ring) * pa.kvd
                         for [unroll] (e in range(8)) {
                             let v = vld(vrow + uint(e))
                             for [unroll] (j in range(G)) {
@@ -9659,7 +9662,7 @@ class template RopeKvStoreT : GkRopeKvStore {
         let np = max(1u, pa.npairs)
         if (gid < np * max(pa.rows, 1u)) {
             let row = gid / np
-            let mir = pa.mirbase + tok[row].mirbase + tok[row].pos * pa.kvd
+            let mir = pa.mirbase + tok[row].mirbase + kv_ring_row(tok[row].pos, pa.ring) * pa.kvd
             rope_kv_pair(row, gid % np, mir, mir)
         }
     }
@@ -9697,6 +9700,7 @@ struct RopeKvBArgs {
     cstride : uint   //! a position's cos/sin plane width (every rope class's row); 0 = hs, the one-class plane
     cbase : uint     //! this layer's rope class's row base inside the plane
     row0 : uint      //! the segment's first row in the q, k/v and cos planes: a segmented window dispatches a segment at its rows
+    ring : uint      //! a sliding layer's ring rows: a row lands at `kv_ring_row` of its position; 0 = the flat slab
 }
 
 // batched rope + KV-store (prefill, npos positions): q roped in place, k/v from the projection
@@ -9736,7 +9740,7 @@ class template RopeKvStoreBT : KvMirStoreT {
                 let kb = window_row * pa.kstride + h * pa.hs
                 let a0 = kvrows[kb + e0] + (pa.hasb != 0u ? bias[pa.boff + pa.qd + bhead + e0] : 0.0)
                 let a1 = kvrows[kb + e1] + (pa.hasb != 0u ? bias[pa.boff + pa.qd + bhead + e1] : 0.0)
-                let mo = pa.layerbase + apos * pa.kvd + h * pa.hs
+                let mo = pa.layerbase + kv_ring_row(apos, pa.ring) * pa.kvd + h * pa.hs
                 let vb = pa.voff + window_row * pa.kstride + h * pa.hs
                 let v0 = kvrows[vb + e0] + (pa.hasb != 0u ? bias[pa.boff + pa.qd + pa.kvd + bhead + e0] : 0.0)
                 let v1 = kvrows[vb + e1] + (pa.hasb != 0u ? bias[pa.boff + pa.qd + pa.kvd + bhead + e1] : 0.0)
@@ -9791,9 +9795,9 @@ class template QknRopeKvT : GkQknRopeKv {
     @ssbo @binding = 6 tok : array<TokMeta>    //! the shared per-token block
 
     def override mir_base(rowi : uint) : uint2 {
-        var mrow = pa.layerbase + (pa.pos0 + rowi) * pa.kvd
+        var mrow = pa.layerbase + kv_ring_row(pa.pos0 + rowi, pa.ring) * pa.kvd
         if (pa.win == 0u) {   //! the token rows' block is read on that form alone: a window's rows run past its extent
-            mrow = pa.layerbase + tok[rowi].mirbase + tok[rowi].pos * pa.kvd
+            mrow = pa.layerbase + tok[rowi].mirbase + kv_ring_row(tok[rowi].pos, pa.ring) * pa.kvd
         }
         return uint2(mrow, mrow)
     }
@@ -9825,6 +9829,7 @@ struct KvQStoreArgs {
     rows : uint
     layerbase : uint  //! this layer's base in the mirror, in blocks
     pos0 : uint       //! the window stamp: staged row 0's absolute position
+    ring : uint       //! a sliding layer's ring rows: a row lands at `kv_ring_row` of its position; 0 = the flat slab
 }
 
 //! The q8_0 K/V store: a thread a 32-element block, each quant rounded under the unrounded f32 inverse scale as `quantize_q8kv_row` rounds it.
@@ -9850,9 +9855,9 @@ class template KvQ8StoreT {
             let src = row * pa.kvd + blk * KQ_B32_ELEMS_U
             var mir_blk = pa.layerbase + blk
             static_if (TOKROW) {
-                mir_blk += tok[row].mirbase + tok[row].pos * nblk
+                mir_blk += tok[row].mirbase + kv_ring_row(tok[row].pos, pa.ring) * nblk
             } else {
-                mir_blk += (pa.pos0 + row) * nblk
+                mir_blk += kv_ring_row(pa.pos0 + row, pa.ring) * nblk
             }
             let sc = mir_blk * KV_Q8_BLOCK_HALVES
             var kmax = 0.0
@@ -9928,6 +9933,7 @@ struct KvTqStoreArgs {
     qrow : uint       //! a row's stride in the q plane
     qstride : uint    //! a q head's stride: hs, or 2 * hs on a gated plane ([q | gate] a head, the gate half left in place)
     inv_sqrt_hs : float       //! the transform's scale 1 / sqrt(hs), as the host computes it
+    ring : uint       //! a sliding layer's ring rows: a row lands at `kv_ring_row` of its position; 0 = the flat slab
 }
 
 //! The tq4 store: a workgroup a head. Per 32-element block the scale is the largest-magnitude value over -8 and each quant
@@ -9981,9 +9987,9 @@ class template KvTq4StoreT : KvTq4WhtBase {
             let nblk = pa.kvd / KQ_B32_ELEMS_U
             var mir_blk = pa.layerbase + hh * (hs / KQ_B32_ELEMS_U)
             static_if (TOKROW) {
-                mir_blk += tok[row].mirbase + tok[row].pos * nblk
+                mir_blk += tok[row].mirbase + kv_ring_row(tok[row].pos, pa.ring) * nblk
             } else {
-                mir_blk += (pa.pos0 + row) * nblk
+                mir_blk += kv_ring_row(pa.pos0 + row, pa.ring) * nblk
             }
             var e = tid
             while (e < hs) {
@@ -10089,6 +10095,7 @@ struct KvQShadowArgs {
     pos0 : uint       //! the first position read
     rows : uint
     layerbase : uint  //! the layer's base in its region of the mirror, in blocks
+    ring : uint       //! a sliding layer's ring rows: position `pos` reads its `kv_ring_row` slot; 0 = the flat slab
 }
 
 //! A block-codec mirror's f16 shadow: a thread a block stores the block's 32 dequantized K and V values as halves at their
@@ -10111,7 +10118,7 @@ class template KvShadowT {
         if (gid < nblk * pa.rows) {
             let pos = pa.pos0 + gid / nblk
             let blk = gid % nblk
-            var bb = pa.layerbase + pos * nblk + blk
+            var bb = pa.layerbase + kv_ring_row(pos, pa.ring) * nblk + blk
             static_if (TQ4) {
                 bb *= KV_TQ4_BLOCK_BYTES
             } else {

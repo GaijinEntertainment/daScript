@@ -1962,16 +1962,18 @@ struct GkRopeKvArgs {
     rows : uint        //! the rows a dispatch covers (0 reads as one)
     mirbase : uint     //! the layer's base in the mirror planes, ahead of a row's own (the Vulkan token block's; Metal binds the row), or the
                        //! layer index where a row table carries the per-layer stride (Metal's window form)
+    ring : uint        //! a sliding layer's ring rows: a row lands at `kv_ring_row` of its position; 0 = the flat slab
 }
 
 //! the rope-and-store args a home builds: the one-row defaults (one row, every stride 0, the bias row, the cos row and the mirror
 //! base bound at their own offsets), and the N-row form's strides and bases where a home passes them
 def gk_rope_kv_args(qd, kvd, hs, npairs_q, npairs : int64; neox, has_bias : bool; rot : int64; boff : int64 = 0l; cbase : int64 = 0l;
-                    rows : int64 = 1l; kvrow : int64 = 0l; qrow : int64 = 0l; cosrow : int64 = 0l; mirbase : int64 = 0l) : GkRopeKvArgs
+                    rows : int64 = 1l; kvrow : int64 = 0l; qrow : int64 = 0l; cosrow : int64 = 0l; mirbase : int64 = 0l;
+                    ring : int64 = 0l) : GkRopeKvArgs
     => GkRopeKvArgs(qd = uint(qd), kvd = uint(kvd), hs = uint(hs), npairs_q = uint(npairs_q), npairs = uint(npairs),
         neox = neox ? 1u : 0u, has_bias = has_bias ? 1u : 0u, rot = uint(rot),
         qrow = uint(qrow), kvrow = uint(kvrow), boff = uint(boff), cstride = uint(cosrow), ccos = uint(cbase),
-        rows = uint(rows), mirbase = uint(mirbase))
+        rows = uint(rows), mirbase = uint(mirbase), ring = uint(ring))
 
 //! The fused rope and K/V store, an invocation a rotation pair of a row: a q pair ropes in place, a k pair ropes into the mirror
 //! K row and copies its v pair into the V row, the bias rows added first, the f16 stamps clamped into the half range, the pairs
@@ -2109,6 +2111,7 @@ struct GkQknRopeArgs {
     nreal : uint       //! the live rows: past them a q head copies its row into its twin and a k head stores nothing; 0 = every row
     skipnorm : uint    //! the rope alone, no per-head norm
     hscale : float     //! the q twin's scale (`HX` stamps)
+    ring : uint        //! a sliding layer's ring rows: a row lands at `kv_ring_row` of its position; 0 = the flat slab
 }
 
 //! The fused per-head q/k RMSNorm, rope and K/V store, a workgroup of `LANES` a head (`ARCHITECTURE_GPU_SHARED_KERNELS.md`):

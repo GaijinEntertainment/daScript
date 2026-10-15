@@ -430,6 +430,7 @@ def private rd_layer_geom(var L : RLayer; g : RdecLayerGeom) {
     L.attn_cap = g.attn_cap
     L.moe_g4 = g.moe_g4
     L.window = g.window
+    L.ring = g.ring
     L.mir_base = g.mir_base
     L.mir_slab = g.mir_slab
     L.cbase = g.cbase
@@ -2247,9 +2248,10 @@ def private rd_attn_rqk(L : RLayer) : uint {
 //! at consecutive positions from `pos0`. tq4's store also rotates `nqh` q heads a row in place (`qrow` a row's stride in the q
 //! plane, `qstride` a head's); `nkh` is the K heads a row stores, 0 on a shared-KV layer.
 [arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-block-codecs"), arch(at="../ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-kv-tq4-basis")]
-def rd_enc_kv_store(raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; window : bool; kvd, hs, rows, nqh, nkh : int64; layerbase, pos0, qrow, qstride : uint) {
+def rd_enc_kv_store(raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; window : bool; kvd, hs, rows, nqh, nkh : int64; layerbase, pos0, qrow, qstride : uint;
+                    ring : int64) {
     if (rd_kvq8() && nkh > 0l) {
-        var pcs = KvQStoreArgs(kvd = uint(kvd), rows = uint(rows), layerbase = layerbase, pos0 = pos0)
+        var pcs = KvQStoreArgs(kvd = uint(kvd), rows = uint(rows), layerbase = layerbase, pos0 = pos0, ring = uint(ring))
         let wgs = (kv_row_units(KVDtype.q8_0, kvd) * rows + int64(WG_X) - 1l) / int64(WG_X)
         if (window) {
             enc_kv_q8_store_b_cls(raw, h, s, pcs, wgs)
@@ -2258,7 +2260,7 @@ def rd_enc_kv_store(raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSe
         }
     } elif (rd_kvtq4() && nqh + nkh > 0l) {
         var pct = KvTqStoreArgs(kvd = uint(kvd), hs = uint(hs), layerbase = layerbase, pos0 = pos0, nqh = uint(nqh), nkh = uint(nkh),
-            qrow = qrow, qstride = qstride, inv_sqrt_hs = 1.0 / sqrt(float(hs)))
+            qrow = qrow, qstride = qstride, inv_sqrt_hs = 1.0 / sqrt(float(hs)), ring = uint(ring))
         if (window) {
             enc_kv_tq4_store_b_cls(raw, h, s, pct, rows * (nqh + 2l * nkh))
         } else {
@@ -2328,7 +2330,7 @@ def private rd_encode_attn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RL
             qwoff = uint(nlfin + dim + l * 2l * hsmax), kwoff = uint(nlfin + dim + (l * 2l + 1l) * hsmax),
             eps = g_rd.eps, qstride = qstride, boff = rd_bias_off(L), hasb = g_rd.has_bias ? 1u : 0u, cbase = uint(L.cbase),
             vfk = L.vfk ? 1u : 0u, vnorm = L.vnorm ? 1u : 0u,
-            rowwg = uint(nqh + nkh), kvrow = kvrow, qrow = q_plane_row, cosrow = uint(g_rd.cos_elems))
+            rowwg = uint(nqh + nkh), kvrow = kvrow, qrow = q_plane_row, cosrow = uint(g_rd.cos_elems), ring = uint(L.ring))
         if (rd_kv16()) {
             enc_qkn_rope_f16_cls(raw, h, L.s_qkn_rope, pcf, (nqh + nkh) * nrows)
         } else {
@@ -2348,7 +2350,7 @@ def private rd_encode_attn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RL
         let npairs = qpairs + (L.kv_shared ? 0l : kvd / 2l)   // the k pairs also store the mirror row: none on a shared-KV layer
         //! the whole head rotates (`rot = hs`): a partial-rope class's table carries the (1, 0) pairs past its rotated width
         var pcr = gk_rope_kv_args(qd, kvd, hs, qpairs, npairs, g_rd.neox, g_rd.has_bias, hs, int64(rd_bias_off(L)), L.cbase,
-            int64(nr), int64(kvrow), int64(q_plane_row), g_rd.cos_elems, int64(storebase))
+            int64(nr), int64(kvrow), int64(q_plane_row), g_rd.cos_elems, int64(storebase), L.ring)
         let rwgs = (npairs * nrows + int64(WG_X) - 1l) / int64(WG_X)
         if (rd_kv16()) {
             enc_rope_kv_f16_cls(raw, h, L.s_rope, pcr, rwgs)
@@ -2358,7 +2360,7 @@ def private rd_encode_attn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RL
         rd_ts(raw, "{pfx}rope")
     }
     if ((nrow_bx & NROW_BX_ROPE) == 0) {
-        rd_enc_kv_store(raw, h, L.s_kv_store, false, kvd, hs, nrows, nqh, nkh, mirbase, 0u, q_plane_row, qstride)
+        rd_enc_kv_store(raw, h, L.s_kv_store, false, kvd, hs, nrows, nqh, nkh, mirbase, 0u, q_plane_row, qstride, L.ring)
     }
     return if (kv_only)
     let rqk = rd_attn_rqk(L)
@@ -2366,7 +2368,7 @@ def private rd_encode_attn_head(raw : VkCommandBuffer; var h : VkHaz; var L : RL
     var pca = DaAttnArgs(kvd = uint(kvd), hs = uint(hs), kv_mul = uint(L.kv_mul),
         kbase = mirbase, vbase = mirbase, scale = g_rd.scale, qstride = qstride, gated = rd_attn_gated() ? 1u : 0u,
         window = uint(L.window), cap = L.attn_cap, nsplit = uint(nsplit), rqk = rqk, sinkoff = uint(l * g_rd.n_heads),
-        rowwg = uint(rowwgs), qrow = q_plane_row, cntoff = uint(g_rd.attn_cnt_off))
+        rowwg = uint(rowwgs), qrow = q_plane_row, cntoff = uint(g_rd.attn_cnt_off), ring = uint(L.ring))
     if ((nrow_bx & NROW_BX_ATTN) == 0) {
         da_attn_stamp_enc(g_rd.kv_dt, da_slab_of(g_rd.has_sinks, L.kv_mul), raw, h, L.s_attn, pca, rowwgs * nrows)
         if (rd_kvtq4()) {
@@ -4314,11 +4316,13 @@ def vk_rdec_kv_sync(l, row0, nrows : int64; kp : uint8 const?; vp : uint8 const?
     let L & = unsafe(l == g_rd.n_layers ? g_rd.head : g_rd.layers[l])
     return if (L.mir_idx < 0l)
     let rowb = rd_kv_row_units(L.kvd) * kv_unit_bytes(g_rd.kv_dt)
-    let base = rd_mir_base(L) * kv_unit_bytes(g_rd.kv_dt) + row0 * rowb
-    unsafe {
-        let slab = rd_slab(L)
-        upload_region_at(slab.k, base, kp + row0 * rowb, nrows * rowb)
-        upload_region_at(slab.v, base, vp + row0 * rowb, nrows * rowb)
+    let slab = rd_slab(L)
+    rd_ring_runs(L, row0, nrows) $(p0, n : int64) {
+        let base = rd_mir_row(L, p0) * kv_unit_bytes(g_rd.kv_dt)
+        unsafe {
+            upload_region_at(slab.k, base, kp + p0 * rowb, n * rowb)
+            upload_region_at(slab.v, base, vp + p0 * rowb, n * rowb)
+        }
     }
 }
 
@@ -4333,34 +4337,46 @@ def vk_rdec_kv_read(l, row0, nrows : int64; var kp : uint8?; var vp : uint8?) {
     let L & = unsafe(l == g_rd.n_layers ? g_rd.head : g_rd.layers[l])
     return if (L.mir_idx < 0l)
     let rowb = rd_kv_row_units(L.kvd) * kv_unit_bytes(g_rd.kv_dt)
-    var p0 = 0l
     var raw = alloc_transient_cmd()   // re-recorded per chunk (the pool allows reset), freed below
-    while (p0 < nrows) {
-        let rows = min(KV_READBACK_ROWS, nrows - p0)
-        let bytes = rows * rowb
-        let off = rd_mir_base(L) * kv_unit_bytes(g_rd.kv_dt) + (row0 + p0) * rowb
-        record_submit_wait(raw, false) $(r : VkCommandBuffer) {
-            let slab = rd_slab(L)
-            cmd_copy_range(r, slab.k, off, g_rd.kv_readback.buf, 0l, bytes)
-            cmd_copy_range(r, slab.v, off, g_rd.kv_readback.buf, bytes, bytes)
+    rd_ring_runs(L, row0, nrows) $(r0, nr : int64) {
+        var p0 = 0l
+        while (p0 < nr) {
+            let rows = min(KV_READBACK_ROWS, nr - p0)
+            let bytes = rows * rowb
+            let off = rd_mir_row(L, r0 + p0) * kv_unit_bytes(g_rd.kv_dt)
+            record_submit_wait(raw, false) $(r : VkCommandBuffer) {
+                let slab = rd_slab(L)
+                cmd_copy_range(r, slab.k, off, g_rd.kv_readback.buf, 0l, bytes)
+                cmd_copy_range(r, slab.v, off, g_rd.kv_readback.buf, bytes, bytes)
+            }
+            unsafe {
+                memcpy(reinterpret<void?>(kp + (r0 + p0) * rowb), g_rd.kv_readback.mapped, bytes)
+                memcpy(reinterpret<void?>(vp + (r0 + p0) * rowb), reinterpret<uint8?>(g_rd.kv_readback.mapped) + bytes, bytes)
+            }
+            p0 += rows
         }
-        unsafe {
-            memcpy(reinterpret<void?>(kp + (row0 + p0) * rowb), g_rd.kv_readback.mapped, bytes)
-            memcpy(reinterpret<void?>(vp + (row0 + p0) * rowb), reinterpret<uint8?>(g_rd.kv_readback.mapped) + bytes, bytes)
-        }
-        p0 += rows
     }
     free_transient_cmd(raw)
 }
 
 let private POOL_XFER_CAP = 256l * 1024l * 1024l   //! the pool staging's ceiling: a move past it runs in batches of this size
+var private @scratch g_pool_xfer_runs : array<RdecKvSpan>
 
 //! The selected region's mirror rows of every span moved to (`up` = false) or from the host in one submit a batch of up to
 //! `POOL_XFER_CAP` bytes, where a span a call would move as a submit each (`vk_rdec_kv_read`): a pooled opening is many short page runs
 [cold_path, arch(at="../ARCHITECTURE_ENGINE_SERVING.md#device-home-pool")]   //! once per pool move, reached through the tier's registered seat
-def vk_rdec_kv_xfer(spans : array<RdecKvSpan>; up : bool) : bool {
+def vk_rdec_kv_xfer(var spans_in : array<RdecKvSpan>; up : bool) : bool {
     rd_chain_settle()
     return false if (g_rd == null || !g_rd.ready)
+    g_pool_xfer_runs |> clear()   //! each span cut to the runs its rows sit in back to back (`rd_ring_runs`)
+    g_pool_xfer_runs |> reserve(length(spans_in))
+    for (sp in spans_in) {
+        let L & = unsafe(sp.l == g_rd.n_layers ? g_rd.head : g_rd.layers[sp.l])
+        rd_ring_runs(L, sp.row0, sp.nrows) $(p0, n : int64) {
+            g_pool_xfer_runs |> push(RdecKvSpan(l = sp.l, row0 = p0, nrows = n, kp = sp.kp, vp = sp.vp))
+        }
+    }
+    let spans & = g_pool_xfer_runs
     var i = 0
     while (i < length(spans)) {
         var j = i
@@ -4390,10 +4406,10 @@ def private pool_xfer_batch(spans : array<RdecKvSpan>; i, j : int; up : bool) {
         pool_xfer_host(spans, i, j, true)
     }
     batch_cmd_one_shot() $(raw : VkCommandBuffer) {
-        pool_xfer_walk(spans, i, j) $(sp : RdecKvSpan; off, bytes, rowb : int64) {
+        pool_xfer_walk(spans, i, j) $(sp : RdecKvSpan; off, bytes, _rowb : int64) {
             let L & = unsafe(sp.l == g_rd.n_layers ? g_rd.head : g_rd.layers[sp.l])
             let slab = rd_slab(L)
-            let at = rd_mir_base(L) * kv_unit_bytes(g_rd.kv_dt) + sp.row0 * rowb
+            let at = rd_mir_row(L, sp.row0) * kv_unit_bytes(g_rd.kv_dt)   //! a span the xfer cut to a ring's run (`rd_ring_runs`)
             if (up) {
                 cmd_copy_range(raw, g_rd.pool_xfer.buf, off, slab.k, at, bytes)
                 cmd_copy_range(raw, g_rd.pool_xfer.buf, off + bytes, slab.v, at, bytes)

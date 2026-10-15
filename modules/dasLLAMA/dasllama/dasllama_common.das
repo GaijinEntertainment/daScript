@@ -2618,6 +2618,7 @@ struct Session {
     rdec_region : int64         //! the mirror region the claim above sits in (meaningful only while `rdec_gen` matches that region's)
     rdec_host_current : bool
     device_kv : bool            //! the K/V lives ONLY in the armed GPU driver's mirror region: no host cache is allocated
+    kv_ring_floor : int64       //! the earliest position a continuation may start at: a GPU mirror that rings the sliding layers holds their history from there on (0 = everywhere)
     dat_gen : int64             // the per-op decode attention block's mirror generation this session claimed (0 = none)
     tail_next1 : int64          // 1 + the layer whose resident FFN may take the decode tail this token (0 = none)
     tail_taken : bool           // the tail took this layer's FFN: the residual add is the device's
@@ -3850,6 +3851,22 @@ def kv_row_total(t : Model; with_head : bool = true) : int64 {
     return tot
 }
 
+//! a call at `pos` reads the sliding layers' rows of the window under it, which a ringed GPU mirror holds from the session's ring floor on:
+//! a start at 0 rebuilds the history and clears the floor, a start under it panics
+[arch(at="../ARCHITECTURE_GPU_KV_RING.md#kv-ring-floor")]
+def kv_ring_floor_check(var s : Session; pos : int64) {
+    if (pos == 0l) {
+        s.kv_ring_floor = 0l
+    } elif (pos < s.kv_ring_floor) {
+        kv_ring_floor_panic(s, pos)
+    }
+}
+
+[cold_path]
+def private kv_ring_floor_panic(s : Session; pos : int64) {
+    panic("dasLLAMA: a call at position {pos} continues a history whose sliding-window layers' rows the GPU mirror's ring holds from position {s.kv_ring_floor} on - prefill again from position 0 (DASLLAMA_GPU_KV_RING=0 keeps every row)")
+}
+
 // The eval capacity tripwire: every session buffer (KV planes, att scratch, run tables) is sized
 // by config seq_len and the store paths write through unsafe pointers, so an eval crossing
 // seq_len corrupts the das heap silently - every eval entry calls this before its first store
@@ -4789,6 +4806,30 @@ def mm_b(var y : array<float>; t : Model; woff : int64; x : array<float>; var xq
 def layer_is_sliding(c : Config; l : int64) : bool => (c.sliding_window > 0l && l < c.n_layers
     && (c.swa_mask != 0ul ? ((c.swa_mask >> uint64(l)) & 1ul) != 0ul : l % c.swa_pattern != c.swa_pattern - 1l))
 
+var private g_gpu_kv_ring_pin = -1   //! a caller's pin over DASLLAMA_GPU_KV_RING for the models loaded next: -1 the environment's, 0 flat, 1 ringed
+
+//! Pin the sliding layers' K/V mirror rings on the models this process arms next: 1 rings them, 0 keeps every position's row,
+//! -1 lets DASLLAMA_GPU_KV_RING decide
+def set_gpu_kv_ring(pin : int) {
+    g_gpu_kv_ring_pin = pin
+}
+
+//! The pin `set_gpu_kv_ring` set: what a caller that pins it puts back
+def gpu_kv_ring_pin : int => g_gpu_kv_ring_pin
+
+//! Whether the next armed mirror rings its sliding layers
+def gpu_kv_ring_on : bool => g_gpu_kv_ring_pin < 0 ? g_env_gpu.gpu_kv_ring : g_gpu_kv_ring_pin != 0
+
+//! the K/V mirror rows layer `l` keeps at a context of `ctx` positions when one command writes at most `slack` rows: a sliding layer's
+//! window and the slack, rounded up to the attention tiles' 64-row step, as a ring (`kv_ring_row`); 0 = a row a position (a global
+//! layer, a ring that would reach the context, the lever off). A shared-KV layer asks its donor's.
+[arch(at="../ARCHITECTURE_GPU_KV_RING.md#kv-sliding-ring")]
+def kv_ring_rows(c : Config; l, ctx, slack : int64) : int64 {
+    return 0l if (!gpu_kv_ring_on() || !layer_is_sliding(c, l))
+    let rows = (c.sliding_window + slack + 63l) / 64l * 64l
+    return rows < ctx ? rows : 0l
+}
+
 // ===== Per-layer attention geometry (gemma4: sliding vs global layer classes differ) =====
 // head_size/n_kv_heads/kv_dim in Config describe the GLOBAL class; the *_swa fields (0 = same)
 // override for sliding layers. Everything downstream sizes scratch to the class maxima.
@@ -5143,6 +5184,7 @@ def forward(t : Model; var s : Session; token, pos : int64) {   // nolint:STYLE0
     let c = t.config
     let dim = c.dim
     dispatch_phase_decode()
+    kv_ring_floor_check(s, pos)
     kv_ensure(s, pos + 1l)   // paged sessions: grow the block table BEFORE any cache-pointer hoist
 
     // token embedding: row `token` into the residual stream
@@ -6570,6 +6612,7 @@ def private forward_prefill_warm(t : Model; var s : Session; tokens : array<int6
 [arch(at="../ARCHITECTURE_GPU_PREFILL_WINDOW.md#prefill-segments")]
 def private forward_prefill_head(t : Model; var s : Session; tokens : array<int64>; npos, start_pos : int64) {
     let c = t.config
+    kv_ring_floor_check(s, start_pos)
     if (npos >= 32l) {
         dispatch_phase_batch()
     }

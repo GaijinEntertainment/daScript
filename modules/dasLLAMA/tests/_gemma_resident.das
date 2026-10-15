@@ -119,6 +119,66 @@ def gemma_forced_feed(t : T?; n : int64; gf : GemmaFile) {
     }
 }
 
+//! one load's run in `ring_vs_flat`: the logits rows, whether the driver armed the rings, and the mirror's bytes on the card
+struct private RingRun {
+    rows : array<array<float>>
+    slack : int64
+    mirror : int64
+    window : int64
+}
+
+//! `path` loaded at mirror codec `kv` under the ring pin `ring` (`set_gpu_kv_ring`, put back), the `n` prose ids and eight fed
+//! steps through it; `ok` false after the skip `resident_admitted` names
+def private ring_run(t : T?; path : string; kv : KVDtype; ring : int; n : int64) : tuple<ok : bool; run : RingRun> {
+    let pin = gpu_kv_ring_pin()
+    set_gpu_kv_ring(ring)
+    var tr <- load_resident_at(path, kv)
+    set_gpu_kv_ring(pin)
+    var run : RingRun
+    let ok = resident_admitted(t, "the whole-model driver armed on the model (the load log names any decline)", "")
+    if (ok) {
+        tr.config.seq_len = min(tr.config.seq_len, GEMMA_RIG_CTX)
+        var ids <- prose_tokens(tr, n + 8l)
+        var prompt <- [for (i in range64(n)); ids[i]]
+        var toks <- [for (i in range64(n, n + 8l)); ids[i]]
+        run.rows <- feed_alone(tr, kv, prompt, toks)
+        served_every_call(t)
+        run.slack = gpu_resident_kv_ring_slack()
+        run.mirror = gpu_resident_mirror_bytes()
+        run.window = tr.config.sliding_window
+        delete ids
+        delete prompt
+        delete toks
+    }
+    moe_gpu_drop_model()
+    delete tr
+    return <- (ok = ok, run <- run)
+}
+
+//! The sliding layers' rings against the flat mirror on one driver: `n` prose ids past the window and eight fed steps on a load that
+//! rings them and on one that keeps every row (`set_gpu_kv_ring`), at mirror codec `kv` - the logits bit for bit at the prompt and every
+//! step, since a ring moves where a row sits and never which rows a query reads or their order; the ringed load arms its rings and charges
+//! the card less mirror than the flat one, which arms none, and the row a step off is the control the compare tells apart
+def ring_vs_flat(t : T?; n : int64; gf : GemmaFile; kv : KVDtype) {
+    return if (!arm_on(t, gf.arm))
+    let path = path_join(models_dir(), gf.file)
+    return if (!resident_ready(t, path))
+    with_dasllama_jobque_() {
+        var inscope ringed <- ring_run(t, path, kv, 1, n)
+        var inscope flat <- ring_run(t, path, kv, 0, n)
+        if (ringed.ok && flat.ok) {
+            t |> success(n > ringed.run.window && ringed.run.window > 0l, "the {n}-token prompt runs past the {ringed.run.window}-position window")
+            t |> success(ringed.run.slack > 0l && flat.run.slack == 0l, "the ringed load armed its rings (slack {ringed.run.slack}), the flat load none ({flat.run.slack})")
+            t |> success(ringed.run.mirror < flat.run.mirror, "the rings charge the card less mirror ({ringed.run.mirror >> 20l} MB) than every row ({flat.run.mirror >> 20l} MB)")
+            for (st in range(length(ringed.run.rows))) {
+                let what = st == 0 ? "the prompt's logits" : "step {st - 1}"
+                check_exact(t, "{what}: the ringed mirror against the flat one, bit for bit", ringed.run.rows[st], flat.run.rows[st])
+                t |> success(logits_maxdiff(ringed.run.rows[st], flat.run.rows[st > 0 ? st - 1 : 1]) > 0.0, "{what} control: the row a step off differs")
+            }
+        }
+    }
+}
+
 //! the same tokens through the window chain at once and through the token command one at a time,
 //! on one arm: the two GPU paths' logits at every shared position against each other, then the CPU
 //! arm's own pair as the yardstick of how far a prefill kernel and a decode kernel sit apart on
