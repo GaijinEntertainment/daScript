@@ -214,7 +214,6 @@ one token id.** Which gather a table takes is its disk type's:
 | Q8_0 | `EmbGather` (four elements a thread off the per-32 plane) | the tied classifier's at its block, or an untied table's linear q8 copy |
 | a superblock format (the 14 `kq_sb` tags) | its `KqEmb<Fmt>` leaf | the tied classifier's K-quant plane, or an untied table's own (`resident_emb_plane`) |
 | F32, F16, BF16 | `EmbGatherF32` | the table's exact f32 rows (F16/BF16 widen without loss, `Model.emb_f32_exact`) uploaded whole under `RDEC_EMB_F32_CAP` |
-| Q4_1 | none: the host embeds | the fp32 rows are a dequant - a converted copy, disclosed at load |
 
 A `KqEmb<Fmt>` leaf is the format's own decode GEMV leaf stamped under `KqGemvLeafT`'s `EMB`: a
 thread a 32-block, element k the int8 lane `blk_decode` leaves and the term pair `blk_fold` reads (the
@@ -222,8 +221,7 @@ per-format arithmetic is the GEMV's own, never re-spelled), the grid formats sta
 the GEMV does. A per-32 table (q51, iq4nl32, q4032, q5032) is the `Blk32GemvRunT` family's `EMB` leaf
 (`Q51Emb`, `Iq4nl32Emb`, `Q4032Emb`, `Q5032Emb`), its block decode the GEMV's own; mx4 never tags a table.
 `resident_arm_emb` hands the plane to the tier (`rdec_set_emb` for a quantized plane in the arena,
-`rdec_upload_emb_f32` for the f32 rows) and logs why the host embeds where it does: a Q4_1 table,
-a prepared image (it does not carry `emb_f32_exact`), a plane past the room or the cap, a trimmed
+`rdec_upload_emb_f32` for the f32 rows) and logs why the host embeds where it does: a prepared image (it does not carry `emb_f32_exact`), a plane past the room or the cap, a trimmed
 image, a per-layer-embedding model whose side table stays on the host, a hyper-connection model (its
 window reads the pre-step's rows). The window binds its ids plane (`pf_ids`); the one-row token command records the gather in place of
 the x upload when the table is placed, reading the step's id from a host-visible word

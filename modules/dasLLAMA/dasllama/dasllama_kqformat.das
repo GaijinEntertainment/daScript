@@ -370,6 +370,12 @@ let GGML_TYPE_Q6_K = 14
 let GGML_TYPE_IQ4_XS = 23
 let GGML_TYPE_BF16 = 30
 let GGML_TYPE_MXFP4 = 39
+// ... and the ids the load declines by name: no reader arm and no `KqFmt` member carries them
+let GGML_TYPE_Q4_1 = 3
+let GGML_TYPE_IQ1_S = 19
+let GGML_TYPE_IQ1_M = 29
+let GGML_TYPE_TQ1_0 = 34
+let GGML_TYPE_TQ2_0 = 35
 
 //! One format's descriptor row - every per-format number a consumer keys off. The stride unit is
 //! one 256-weight superblock on the kq lattice and one 32-weight block for q8/q51/mx4; `qsb` is 0

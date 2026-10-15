@@ -540,7 +540,7 @@ def private resident_emb_plane(t : Model) : tuple<on : bool; f : KqFmt; off : in
 }
 
 //! the table is fp32 rows holding the file's own values (F32 on disk, or F16/BF16 widened without loss), tied or untied: the f32
-//! gather's table; a Q4_1 table's fp32 rows are a dequant and stay the host's
+//! gather's table
 [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#vk-token-gather")]
 def private resident_emb_f32_want(t : Model) : bool => t.tok_emb_off >= 0l && t.emb_f32_exact && !t.planes_trimmed
 
@@ -1902,7 +1902,7 @@ def private resident_arm_emb(t : Model; plan : ResidentPlan; ple_tbl_placed : bo
         }
     } elif (!tied && !emb.on) {
         why = (t.planes_trimmed ? "the image trimmed the table's plane"
-            : "the table's fp32 rows carry no exact mark (`emb_f32_exact`: a Q4_1 dequant, a converted copy the host keeps, or a prepared image, which does not carry the mark)")
+            : "the table's fp32 rows carry no exact mark (`emb_f32_exact`: a prepared image does not carry the mark)")
     } elif (!tied && plan.emb_bytes == 0l) {
         why = "the table's own plane does not fit the room left past the weights and the K/V at this context"
     } elif (!tied && bemb < 0l) {

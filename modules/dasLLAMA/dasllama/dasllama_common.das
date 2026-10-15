@@ -1319,11 +1319,11 @@ struct Model {
     emb_q8 : bool = false
     emb_q8_off : int64
     emb_kq_off : int64 = -1l   //! an untied K-quant token table's offset in emb_fmt's planes (the tied table is the classifier's plane at wcls_off)
-    //! a tied table whose disk type no KqFmt carries (F16, BF16, Q4_1): the fp32 rows serve the embed and the CPU classifier, and a
+    //! a tied table whose disk type no KqFmt carries (F16, BF16): the fp32 rows serve the embed and the CPU classifier, and a
     //! q8 transcode at wcls_off - a converted copy - serves the device classifier (loads under a Metal mode)
     cls_q8_copy : bool = false
-    //! the fp32 table holds the file's own values: F32 on disk, or F16/BF16 widened without loss (a Q4_1 table's fp32 rows are a
-    //! dequant, a converted copy); the Vulkan gather's f32 seat serves this table alone
+    //! the fp32 table holds the file's own values: F32 on disk, or F16/BF16 widened without loss; the Vulkan
+    //! gather's f32 seat serves this table alone
     emb_f32_exact : bool = false
     quant : QuantMode
     rope_freqs : array<float>   // per-pair RoPE scaling (Llama-3.1 NTK-by-parts); empty = none

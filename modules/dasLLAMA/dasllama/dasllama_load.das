@@ -1852,6 +1852,7 @@ def private load_gguf_impl(path : string; var mode : QuantMode) : Model {
 // mapped — config, vocab, plane sizing, tensor reads/transcodes, repack, wscale.
 def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> | #; var mode : QuantMode; ts_load : int64) {   // nolint:STYLE037,STYLE038 — the load pipeline: ordered phases over one shared cursor; splitting it needs its own pass
     var ts_stage = ref_time_ticks()
+    gguf_decline_unread_types(m)
     {
         let arch = gguf_str(m, bytes, "general.architecture")
         resolve_arch(t, arch)   // registry lookup: apply config flags + bind the arch's block kernels

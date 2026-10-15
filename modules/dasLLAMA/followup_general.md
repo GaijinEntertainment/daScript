@@ -1922,10 +1922,6 @@
    scoring 0` for both arms and then scores them anyway (the mint on `i-02a87cabc8fcd2e4c`
    confirmed the q8 bf16 crown on those scores). Done = the child's stamp line reaches the parser,
    or the check is dropped as the dead code it is.
-186. **A Q4_1 tensor refuses the load.** bartowski's `Llama-3.2-1B-Instruct-Q4_0.gguf` keeps
-   `ffn_down` at Q4_1 (GGUF type 3), and the loader stops at `type 3 not supported`; the reference
-   build's Q4_0 carriers routinely mix one. Done = Q4_1 decoded to the q51-style per-32 (d, m) plane, or the
-   loader names the tensor and the format it wants re-quantized to.
 188. **The bf16 panel scatter is written three times.** The
    folds left unapplied: the int8 walk inside `kq_batch_cell_gen` onto `bf16_walk` (the same
    control flow at one group and the tile's four tokens, and since the walk's `tile4` arm the

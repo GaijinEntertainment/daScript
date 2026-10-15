@@ -180,7 +180,9 @@ beside a Vulkan device reads the fast planes, and the device reads the same byte
 detection, the eager and streamed conversion ladders, and the load entry points. It owns nothing the
 forward path touches at run time - a loaded `Model` is the whole handoff - and it requires
 `dasllama_common` back for `Model`/`Session`, so the transformer umbrella requires it `public` and
-breaks the cycle. That re-export is what keeps every consumer on the facade. Every big-weight
+breaks the cycle. That re-export is what keeps every consumer on the facade. A file carrying a tensor
+type the reader has no arm for (Q4_1, IQ1_S, IQ1_M, TQ1_0, TQ2_0) is declined before any plane is read,
+the panic naming the tensor and its type (`gguf_decline_unread_types`). Every big-weight
 conversion is accounted as it runs (`conv_account`, on both the eager and the streamed ladder),
 and a load that converts ends with the report: the file's bytes, then each (disk type ->
 conversion kind) as bytes on disk against bytes served with the delta, biggest overhead first,
@@ -215,7 +217,7 @@ The token table is one plane in the file's format wherever its tag is a `KqFmt` 
 repacked with its format's plane like every region of it. No fp32 table rides beside it, and the
 CPU's `embed_row` and the devices' row gathers read that plane, tied or untied: the Vulkan
 window and token commands gather an untied table's rows on the device off its plane as the Metal
-drivers do. A table whose disk type no member carries (F16, BF16, Q4_1) keeps its
+drivers do. A table whose disk type no member carries (F16, BF16) keeps its
 exact fp32 rows; tied, a load under a Metal mode adds a q8 transcode of it at `wcls_off`
 (`cls_q8_copy`) - a converted copy, logged at the load - for the device classifier, while the
 embed and the CPU classifier read the fp32 rows. The shared expert's gate, up and down planes

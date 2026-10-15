@@ -375,6 +375,14 @@ def test_kq_fmt_row_demotion(t : T?) {
         t |> equal(kq_fmt_row_ok(KqFmt.k5, 704l), KqFmt.q8)
         t |> equal(kq_fmt_row_ok(KqFmt.iq4nl, 768l), KqFmt.iq4nl)
         t |> equal(kq_fmt_row_ok(KqFmt.q40, 768l), KqFmt.q40)
+        // the two other gemma widths off the superblock lattice: 1152 (gemma-3-1b dim), 2112 (gemma-4 26B dense down)
+        for (w in [1152l, 2112l]) {
+            t |> equal(kq_fmt_row_ok(KqFmt.q40, w), KqFmt.q4032, "q40 at {w}")
+            t |> equal(kq_fmt_row_ok(KqFmt.iq4nl, w), KqFmt.iq4nl32, "iq4nl at {w}")
+            t |> equal(kq_fmt_row_ok(KqFmt.k5, w), KqFmt.q8, "k5 at {w}")
+            t |> equal(kq_fmt_row_ok(KqFmt.q51, w), KqFmt.q51, "q51 at {w}")
+            t |> equal(kq_fmt_row_ok(KqFmt.q5032, w), KqFmt.q5032, "q5032 at {w}")
+        }
         // the 256-superblock disk formats never see a non-multiple row (the file cannot hold one)
         t |> equal(kq_fmt_row_ok(KqFmt.iq2xxs, 768l), KqFmt.iq2xxs)
     }
@@ -430,6 +438,29 @@ def test_gguf_need_tensor_refuses(t : T?) {
             gguf_need_tensor(m, "absent.weight", "probe")
         }
         t |> success(find(why, "probe") >= 0 && find(why, "absent.weight") >= 0, "the refusal names both: {why}")
+    }
+}
+
+[test]
+def test_gguf_decline_unread_types(t : T?) {
+    t |> run("a tensor of a type the reader has no arm for declines the load, naming the tensor and the type") @(t : T?) {
+        for (gt, name in [GGML_TYPE_Q4_1, GGML_TYPE_IQ1_S, GGML_TYPE_IQ1_M, GGML_TYPE_TQ1_0, GGML_TYPE_TQ2_0],
+                ["Q4_1", "IQ1_S", "IQ1_M", "TQ1_0", "TQ2_0"]) {
+            var m <- GGUFMeta(tensors <- [GGUFTensorInfo(name = "blk.0.ffn_up.weight", ggml_type = GGML_TYPE_Q8_0, n_elem = 256l),
+                GGUFTensorInfo(name = "blk.0.ffn_down.weight", ggml_type = gt, n_elem = 256l)])
+            let why = panic_text() ${
+                gguf_decline_unread_types(m)
+            }
+            t |> success(find(why, "blk.0.ffn_down.weight") >= 0 && find(why, "{name} on disk") >= 0, "{name}: the decline names the tensor and the type: {why}")
+            delete m
+        }
+        var served <- GGUFMeta(tensors <- [for (gt in [GGML_TYPE_F32, GGML_TYPE_BF16, GGML_TYPE_Q8_0, GGML_TYPE_Q4_K, GGML_TYPE_IQ2_XXS, GGML_TYPE_MXFP4]);
+            GGUFTensorInfo(name = "t{gt}", ggml_type = gt, n_elem = 256l)])
+        let none = panic_text() ${
+            gguf_decline_unread_types(served)
+        }
+        t |> equal(none, "", "a file of served types loads on")
+        delete served
     }
 }
 
