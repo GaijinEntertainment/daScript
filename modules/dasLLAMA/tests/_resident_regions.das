@@ -24,7 +24,7 @@ require ?vulkan dasllama/dasllama_vulkan_classes
 require ?vulkan dasllama/dasllama_vulkan_prefill   // vk_rdec_prefill_segment_windows: the device-mode tick's segmented-window witness
 require _model_tier public   // models_dir() + model_available() presence/size-tier gate
 require _resident_feed   // served_every_call: the shared served witness
-require _compares   // logits_maxdiff / argmax_of: the head-rows cell's draft compare
+require _compares   // the head-rows cell's draft compare
 
 // The resident driver's mirror regions (a small carrier under DASLLAMA_GPU=1): two
 // sessions hold their K/V on the device at once, one region each. The instrument is the driver
@@ -1244,8 +1244,31 @@ def private serve_pooled(m : Model; device : bool; page_rows, max_states : int64
 
 //! the pool scenario's openings: the fourth request attached the first system prompt and the fifth the second
 //! conversation's finished turn on both schedulers, two openings came up from the pool, and every request's tokens agree
+//! the lanes a speculating cell's routes read, pinned: the resident prefill allowed, one draft row a round, speculation as the
+//! cell sets it; `restore_spec_lanes` puts every value back from its getter
+struct private SpecLanes {
+    spec : bool
+    prefill : bool
+    depth : int64
+}
+
+def private pin_spec_lanes() : SpecLanes {
+    let pins = SpecLanes(spec = get_mtp_spec(), prefill = resident_prefill_allowed(), depth = get_mtp_depth_nextn())
+    set_resident_prefill_allowed(true)
+    set_mtp_depth_nextn(1l)
+    return pins
+}
+
+def private restore_spec_lanes(pins : SpecLanes) {
+    set_mtp_spec(pins.spec)
+    set_resident_prefill_allowed(pins.prefill)
+    set_mtp_depth_nextn(pins.depth)
+}
+
+let private POOLED_HISTORY = 100l + 30l + 8l   //! the fifth request's opening: the second system prompt, its turn and its reply
+
 def private hold_pool_openings(t : T?; m : Model; host, pooled : array<SchedEvent>; p : PooledRun; host_name, pooled_name : string) {
-    let history = 100l + 30l + 8l
+    let history = POOLED_HISTORY
     t |> equal(cached_of(host, 4l), 100l, "the host-cached run attached the first system prompt for the fourth request")
     t |> equal(cached_of(host, 5l), history, "and the second conversation's turn for the fifth")
     t |> equal(cached_of(pooled, 4l), 100l, "the fourth request took the first system prompt up from the pool: the region that held it went to the third request")
@@ -1281,6 +1304,8 @@ def cell_device_pool(t : T?; file : string) {
                 return
             }
             let recurrent = tr.config.recr_mask != 0ul
+            let spec0 = get_mtp_spec()
+            set_mtp_spec(false)   //! the pool's moves read it: a carrier with a draft head rides its rows only while speculation is on
             var host, pooled, flat, capped : array<SchedEvent>
             serve_pooled(tr, false, 64l, 256l, host)
             let p = serve_pooled(tr, true, 64l, 256l, pooled)
@@ -1300,6 +1325,7 @@ def cell_device_pool(t : T?; file : string) {
                 delete tc
             }
             served_every_call(t)
+            set_mtp_spec(spec0)
             delete host
             delete pooled
             delete flat
@@ -1327,19 +1353,18 @@ def cell_device_pool_mtp(t : T?; file : string) {
                 t |> skip("the driver does not run every seat of the round on the device for {file}: a speculating slot keeps host-cached sessions")
                 return
             }
-            let spec0 = get_mtp_spec()
+            let pins <- pin_spec_lanes()
             set_mtp_spec(false)
             var plain, host, pooled : array<SchedEvent>
-            let c = serve_pooled(tr, true, 64l, 256l, plain)   //! the control: the same carrier, nothing speculating - the pool serves as it did
+            let control = serve_pooled(tr, true, 64l, 256l, plain)
             set_mtp_spec(true)
             let h = serve_pooled(tr, false, 64l, 256l, host, true)
             let p = serve_pooled(tr, true, 64l, 256l, pooled, true)
-            set_mtp_spec(spec0)
-            let history = 100l + 30l + 8l
-            t |> equal(c.drafted, 0l, "control: the plain device-home scheduler drafted nothing")
-            t |> equal(c.imports, 2l, "control: two openings came up from the pool with nothing speculating")
+            restore_spec_lanes(pins)
+            t |> equal(control.drafted, 0l, "control: the plain device-home scheduler drafted nothing")
+            t |> equal(control.imports, 2l, "control: two openings came up from the pool with nothing speculating")
             t |> equal(cached_of(plain, 4l), 100l, "control: the fourth request took the first system prompt up")
-            t |> equal(cached_of(plain, 5l), history, "control: and the fifth the second conversation's finished turn")
+            t |> equal(cached_of(plain, 5l), POOLED_HISTORY, "control: and the fifth the second conversation's finished turn")
             t |> success(h.drafted > 0l, "the host-cached speculating scheduler drafted ({h.drafted} drafts, {h.accepted} accepted)")
             t |> success(p.drafted > 0l, "the device-home speculating scheduler drafted ({p.drafted} drafts, {p.accepted} accepted)")
             hold_pool_openings(t, tr, host, pooled, p, "host-cached paged speculating", "device-home pooled speculating")
@@ -1373,7 +1398,7 @@ def cell_device_pool_head_rows(t : T?; file : string) {
                 t |> skip("the driver does not run every seat of the round on the device for {file}")
                 return
             }
-            let spec0 = get_mtp_spec()
+            let pins <- pin_spec_lanes()
             set_mtp_spec(true)
             let n = 74l
             let tok = 2000l
@@ -1382,7 +1407,9 @@ def cell_device_pool_head_rows(t : T?; file : string) {
             eval(tr, down, prompt)
             t |> equal(moe_gpu_resident_head_rows(down), n - 1l, "the window chain warmed the head's rows under the position")
             var h0 <- [for (x in down.mtp_h); x]
+            let drafts0 = moe_gpu_resident_drafts()
             var want <- draft_from(tr, down, tok, n - 1l, h0)
+            t |> equal(moe_gpu_resident_drafts(), drafts0 + 1l, "the session that goes down drafted on the device")
             let claim = gpu_device_kv_park(down)
             delete down
             var pool <- create_kv_pool(tr, 64l, gpu_device_session_dtype())
@@ -1392,13 +1419,14 @@ def cell_device_pool_head_rows(t : T?; file : string) {
             t |> success(gpu_device_kv_import(tr, up, carrier, n), "and came up into a fresh device-home session")
             t |> equal(moe_gpu_resident_head_rows(up), n - 1l, "the fresh session counts the head's rows to the position less one")
             var got <- draft_from(tr, up, tok, n - 1l, h0)
+            t |> equal(moe_gpu_resident_drafts(), drafts0 + 2l, "and the fresh session drafted on the device too")
             let peak = logits_maxabs(want.logits)
             let gap = logits_maxdiff(got.logits, want.logits)
             t |> equal(argmax_of(got.logits), argmax_of(want.logits), "the fresh session's draft picks what the session that went down picks")
             t |> success(gap <= 1e-4 * peak, "and its logits are that draft's ({gap} of {peak})")
             gpu_device_kv_park(up)
             served_every_call(t)
-            set_mtp_spec(spec0)
+            restore_spec_lanes(pins)
             delete up
             delete carrier
             delete pool

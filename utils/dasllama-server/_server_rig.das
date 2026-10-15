@@ -71,8 +71,7 @@ def child_daslang_argv(script : string; args : array<string>) : array<string> {
     return <- out
 }
 
-//! `attempts` tries of `req`, 100 ms apart, until one answers true
-def private http_ok_within(attempts : int; req : block<() : bool>) : bool {
+def private retry_until_true(attempts : int; req : block<() : bool>) : bool {
     for (_attempt in range(max(attempts, 1))) {
         return true if (invoke(req))
         sleep(100u)
@@ -87,7 +86,7 @@ def private http_ok_within(attempts : int; req : block<() : bool>) : bool {
 //! up listens later, and a shutdown posted once to a closed port would leave the caller's join waiting on it forever.
 def serve_clients(port, attempts : int; ready_path : string; blk : block<(base_url : string) : void>) : bool {
     let base_url = "http://127.0.0.1:{port}"
-    let ready = http_ok_within(attempts) $() : bool {
+    let ready = retry_until_true(attempts) $() : bool {
         var ok = false
         GET("{base_url}{ready_path}") $(resp) {
             ok = resp != null && resp.status_code == http_status.OK
@@ -97,7 +96,8 @@ def serve_clients(port, attempts : int; ready_path : string; blk : block<(base_u
     if (ready) {
         invoke(blk, base_url)
     }
-    http_ok_within(ready ? 1 : attempts) $() : bool {
+    retry_until_true(ready ? 1 : attempts) $() : bool {   // a server still loading when the poll gave up listens later: the join needs this to land
+
         var taken = false
         POST("{base_url}/shutdown", "") $(resp) {
             taken = resp != null && resp.status_code == http_status.OK

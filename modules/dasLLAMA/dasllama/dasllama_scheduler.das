@@ -279,6 +279,9 @@ def set_device_kv(var sch : Scheduler; on : bool) : bool {
                 ? "keeps their openings in host RAM too (DASLLAMA_DEVICE_POOL=0 turns it off)"
                 : "is off (DASLLAMA_DEVICE_POOL=0): the regions' claims alone hold openings")
             to_log(LOG_INFO, "dasLLAMA scheduler: the host pool {pool_words}\n")
+            if (sch.mtp && gpu_device_kv_pool_armed()) {
+                to_log(LOG_INFO, "dasLLAMA scheduler: a speculating scheduler keeps the host pool only where the driver runs its whole round on the device (gpu_resident_mtp_device_home); elsewhere the regions' claims alone hold openings\n")
+            }
         }
         if (!on) {
             delete sch.parked   // the claims die with the device state
@@ -1295,7 +1298,7 @@ def private pool_keep(m : Model; var sch : Scheduler; claim : int64; tokens : ar
     pool_carrier_done(sch)
     prof_add("sched_pool_down", t0)
     let kind = opening ? "opening" : "tail"
-    to_log(LOG_INFO, "  host pool: {n} tok {kind} down, {n - held} rows read\n")
+    to_log(LOG_INFO, moved ? "  host pool: {n} tok {kind} down, {n - held} rows read\n" : "  host pool: {n} tok {kind} declined - the region no longer holds it, or not every row the {kind} needs\n")
 }
 
 //! the tails a parked claim's region alone holds past `above` copied into the pool before the region is lost; the claim keeps none

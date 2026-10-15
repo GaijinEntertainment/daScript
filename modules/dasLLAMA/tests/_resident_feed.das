@@ -280,7 +280,6 @@ struct Draft {
 }
 
 //! `forward_mtp` of `tok` at head row `row` from the carry `h0`, through whichever seat the process has installed
-[cold_path]
 def draft_from(tr : Model; var s : Session; tok, row : int64; h0 : array<float>) : Draft {
     copy_floats(h0, 0l, s.mtp_h, 0l, long_length(h0))
     forward_mtp(tr, s, tok, row)
