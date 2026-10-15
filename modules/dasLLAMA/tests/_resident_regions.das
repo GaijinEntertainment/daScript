@@ -24,6 +24,7 @@ require ?vulkan dasllama/dasllama_vulkan_classes
 require ?vulkan dasllama/dasllama_vulkan_prefill   // vk_rdec_prefill_segment_windows: the device-mode tick's segmented-window witness
 require _model_tier public   // models_dir() + model_available() presence/size-tier gate
 require _resident_feed   // served_every_call: the shared served witness
+require _compares   // the head-rows cell's draft compare
 
 // The resident driver's mirror regions (a small carrier under DASLLAMA_GPU=1): two
 // sessions hold their K/V on the device at once, one region each. The instrument is the driver
@@ -1204,14 +1205,16 @@ struct private PooledRun {
     evicted : int64
     imports : int64
     exports : int64
+    drafted : int64
+    accepted : int64
 }
 
 //! Five requests one after another on a two-stream scheduler - device-home or host-cached, paged (64-row pages) or flat - over
 //! three 100-token system prompts, more openings than the two regions hold: the first three open one each, the fourth opens
 //! with the first's system prompt again, the fifth continues the second's conversation (its prompt, its eight tokens, a new
 //! turn). Every request marks its system prompt's end as its system and stable opening; `max_states` caps the checkpoints.
-def private serve_pooled(m : Model; device : bool; page_rows, max_states : int64; var events : array<SchedEvent>) : PooledRun {
-    var sch <- create_scheduler(m, 2l, 8l, PF_WINDOW_ROWS, page_rows, 0l, mirror_kv_dtype(), false, -1l, max_states)
+def private serve_pooled(m : Model; device : bool; page_rows, max_states : int64; var events : array<SchedEvent>; mtp : bool = false) : PooledRun {
+    var sch <- create_scheduler(m, 2l, 8l, PF_WINDOW_ROWS, page_rows, 0l, mirror_kv_dtype(), mtp, -1l, max_states)
     set_device_kv(sch, device)
     let moves0 = gpu_device_kv_pool_moves()
     var systems <- [for (k in range64(3l)); prose_ids(100l, 3l + k)]
@@ -1231,11 +1234,47 @@ def private serve_pooled(m : Model; device : bool; page_rows, max_states : int64
     }
     let moves = gpu_device_kv_pool_moves()
     let out = PooledRun(states = length(sch.prefix.states), evicted = sch.prefix.n_state_evicted,
-                        imports = moves.imports - moves0.imports, exports = moves.exports - moves0.exports)
+                        imports = moves.imports - moves0.imports, exports = moves.exports - moves0.exports,
+                        drafted = sch.mtp_drafted, accepted = sch.mtp_accepted)
     set_device_kv(sch, false)
     delete systems
     delete sch
     return out
+}
+
+//! the pool scenario's openings: the fourth request attached the first system prompt and the fifth the second
+//! conversation's finished turn on both schedulers, two openings came up from the pool, and every request's tokens agree
+//! the lanes a speculating cell's routes read, pinned: the resident prefill allowed, one draft row a round, speculation as the
+//! cell sets it; `restore_spec_lanes` puts every value back from its getter
+struct private SpecLanes {
+    spec : bool
+    prefill : bool
+    depth : int64
+}
+
+def private pin_spec_lanes() : SpecLanes {
+    let pins = SpecLanes(spec = get_mtp_spec(), prefill = resident_prefill_allowed(), depth = get_mtp_depth_nextn())
+    set_resident_prefill_allowed(true)
+    set_mtp_depth_nextn(1l)
+    return pins
+}
+
+def private restore_spec_lanes(pins : SpecLanes) {
+    set_mtp_spec(pins.spec)
+    set_resident_prefill_allowed(pins.prefill)
+    set_mtp_depth_nextn(pins.depth)
+}
+
+let private POOLED_HISTORY = 100l + 30l + 8l   //! the fifth request's opening: the second system prompt, its turn and its reply
+
+def private hold_pool_openings(t : T?; m : Model; host, pooled : array<SchedEvent>; p : PooledRun; host_name, pooled_name : string) {
+    let history = POOLED_HISTORY
+    t |> equal(cached_of(host, 4l), 100l, "the host-cached run attached the first system prompt for the fourth request")
+    t |> equal(cached_of(host, 5l), history, "and the second conversation's turn for the fifth")
+    t |> equal(cached_of(pooled, 4l), 100l, "the fourth request took the first system prompt up from the pool: the region that held it went to the third request")
+    t |> equal(cached_of(pooled, 5l), history, "the fifth took the second conversation's finished turn up ({history} tokens): its region went to the fourth")
+    t |> equal(p.imports, 2l, "two openings came up from the pool")
+    hold_streams_equal(t, m, host, pooled, 1l, 6l, 6l, host_name, pooled_name)
 }
 
 //! The host pool behind the regions: openings a region lost - its parked claim evicted by a later stream, its checkpoint row
@@ -1265,22 +1304,17 @@ def cell_device_pool(t : T?; file : string) {
                 return
             }
             let recurrent = tr.config.recr_mask != 0ul
+            let spec0 = get_mtp_spec()
+            set_mtp_spec(false)   //! the pool's moves read it: a carrier with a draft head rides its rows only while speculation is on
             var host, pooled, flat, capped : array<SchedEvent>
             serve_pooled(tr, false, 64l, 256l, host)
             let p = serve_pooled(tr, true, 64l, 256l, pooled)
             let f = serve_pooled(tr, true, 0l, 256l, flat)
-            let history = 100l + 30l + 8l
-            t |> equal(cached_of(host, 4l), 100l, "the host-cached run attached the first system prompt for the fourth request")
-            t |> equal(cached_of(host, 5l), history, "and the second conversation's turn for the fifth")
-            t |> equal(cached_of(pooled, 4l), 100l, "the fourth request took the first system prompt up from the pool: the region that held it went to the third request")
-            t |> equal(cached_of(pooled, 5l), history, "the fifth took the second conversation's finished turn up ({history} tokens): its region went to the fourth")
-            t |> equal(p.imports, 2l, "two openings came up from the pool")
+            hold_pool_openings(t, tr, host, pooled, p, "host-cached paged", "device-home pooled")
             t |> equal(p.exports, recurrent ? 6l : 3l, "each finished turn went down as its region went to another stream, and on a recurrent model each new system prompt's checkpoint as its stream parked; the last two turns stay the regions' ({p.exports} copies)")
             t |> equal(cached_of(flat, 4l), 0l, "control: with no pool the fourth request prefills whole - its opening's region is gone")
             t |> equal(cached_of(flat, 5l), 0l, "and so does the fifth")
             t |> equal(f.imports, 0l, "the flat scheduler keeps no pool")
-            hold_streams_equal(t, tr, host, pooled, 1l, 6l, 6l,
-                               "host-cached paged", "device-home pooled")
             if (recurrent) {
                 let c = serve_pooled(tr, true, 64l, 4l, capped)
                 t |> equal(cached_of(capped, 4l), 100l, "four checkpoints: the system prompts are openings, kept over the tails")
@@ -1291,10 +1325,115 @@ def cell_device_pool(t : T?; file : string) {
                 delete tc
             }
             served_every_call(t)
+            set_mtp_spec(spec0)
             delete host
             delete pooled
             delete flat
             delete capped
+        }
+    }
+}
+
+//! The pool under a speculating scheduler: a device-home stream's draft head holds its own K/V rows in the region, and an
+//! opening that goes down to the pool carries them - a later request that takes the opening up drafts off the head's rows
+//! as the host-cached speculating scheduler does, token for token, every round drafted and verified on the device.
+[cold_path]
+def cell_device_pool_mtp(t : T?; file : string) {
+    t |> run("a speculating device-home scheduler keeps its openings in the host pool: the draft head's rows ride the moves, and a later request drafts off them as the host-cached speculating scheduler does") @(t : T?) {
+        with_regions_rig(t, file) $(tr) {
+            if (!gpu_device_kv_pool_armed()) {
+                t |> skip("DASLLAMA_DEVICE_POOL=0: the pool is off")
+                return
+            }
+            if (!mtp_capable_(tr)) {
+                t |> skip("{file} carries no draft head")
+                return
+            }
+            if (!gpu_resident_mtp_device_home_(tr)) {
+                t |> skip("the driver does not run every seat of the round on the device for {file}: a speculating slot keeps host-cached sessions")
+                return
+            }
+            let pins <- pin_spec_lanes()
+            set_mtp_spec(false)
+            var plain, host, pooled : array<SchedEvent>
+            let control = serve_pooled(tr, true, 64l, 256l, plain)
+            set_mtp_spec(true)
+            let h = serve_pooled(tr, false, 64l, 256l, host, true)
+            let p = serve_pooled(tr, true, 64l, 256l, pooled, true)
+            restore_spec_lanes(pins)
+            t |> equal(control.drafted, 0l, "control: the plain device-home scheduler drafted nothing")
+            t |> equal(control.imports, 2l, "control: two openings came up from the pool with nothing speculating")
+            t |> equal(cached_of(plain, 4l), 100l, "control: the fourth request took the first system prompt up")
+            t |> equal(cached_of(plain, 5l), POOLED_HISTORY, "control: and the fifth the second conversation's finished turn")
+            t |> success(h.drafted > 0l, "the host-cached speculating scheduler drafted ({h.drafted} drafts, {h.accepted} accepted)")
+            t |> success(p.drafted > 0l, "the device-home speculating scheduler drafted ({p.drafted} drafts, {p.accepted} accepted)")
+            hold_pool_openings(t, tr, host, pooled, p, "host-cached paged speculating", "device-home pooled speculating")
+            t |> success(p.exports > 0l, "openings went down to the pool ({p.exports})")
+            t |> equal(p.drafted, h.drafted, "the device-home scheduler drafted as many rounds as the host-cached one")
+            t |> equal(p.accepted, h.accepted, "and accepted as many")
+            served_every_call(t)
+            delete plain
+            delete host
+            delete pooled
+        }
+    }
+}
+
+//! The head rows' ride itself, outside the scheduler: a device-home session's opening parked, exported to a paged carrier
+//! and imported into a fresh device-home session, which counts the head's rows to the position less one and drafts, off
+//! those rows, the logits the session that went down drafts.
+[cold_path]
+def cell_device_pool_head_rows(t : T?; file : string) {
+    t |> run("an opening down to the pool and up again carries the draft head's rows: the fresh session counts them and drafts what the session that went down drafts") @(t : T?) {
+        with_regions_rig(t, file) $(tr) {
+            if (!gpu_device_kv_pool_armed()) {
+                t |> skip("DASLLAMA_DEVICE_POOL=0: the pool is off")
+                return
+            }
+            if (!mtp_capable_(tr)) {
+                t |> skip("{file} carries no draft head")
+                return
+            }
+            if (!gpu_resident_mtp_device_home_(tr)) {
+                t |> skip("the driver does not run every seat of the round on the device for {file}")
+                return
+            }
+            let pins <- pin_spec_lanes()
+            set_mtp_spec(true)
+            let n = 74l
+            let tok = 2000l
+            var prompt <- prose_ids(n, 0l)
+            var down <- device_session(tr)
+            eval(tr, down, prompt)
+            t |> equal(moe_gpu_resident_head_rows(down), n - 1l, "the window chain warmed the head's rows under the position")
+            var h0 <- [for (x in down.mtp_h); x]
+            let drafts0 = moe_gpu_resident_drafts()
+            var want <- draft_from(tr, down, tok, n - 1l, h0)
+            t |> equal(moe_gpu_resident_drafts(), drafts0 + 1l, "the session that goes down drafted on the device")
+            let claim = gpu_device_kv_park(down)
+            delete down
+            var pool <- create_kv_pool(tr, 64l, gpu_device_session_dtype())
+            var carrier <- create_session(tr, pool)
+            t |> success(gpu_device_kv_export(tr, claim, carrier, 0l, n), "the opening went down to a paged carrier")
+            var up <- device_session(tr)
+            t |> success(gpu_device_kv_import(tr, up, carrier, n), "and came up into a fresh device-home session")
+            t |> equal(moe_gpu_resident_head_rows(up), n - 1l, "the fresh session counts the head's rows to the position less one")
+            var got <- draft_from(tr, up, tok, n - 1l, h0)
+            t |> equal(moe_gpu_resident_drafts(), drafts0 + 2l, "and the fresh session drafted on the device too")
+            let peak = logits_maxabs(want.logits)
+            let gap = logits_maxdiff(got.logits, want.logits)
+            t |> equal(argmax_of(got.logits), argmax_of(want.logits), "the fresh session's draft picks what the session that went down picks")
+            t |> success(gap <= 1e-4 * peak, "and its logits are that draft's ({gap} of {peak})")
+            gpu_device_kv_park(up)
+            served_every_call(t)
+            restore_spec_lanes(pins)
+            delete up
+            delete carrier
+            delete pool
+            delete got
+            delete want
+            delete h0
+            delete prompt
         }
     }
 }

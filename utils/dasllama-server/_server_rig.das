@@ -71,23 +71,39 @@ def child_daslang_argv(script : string; args : array<string>) : array<string> {
     return <- out
 }
 
+def private retry_until_true(attempts : int; req : block<() : bool>) : bool {
+    for (_attempt in range(max(attempts, 1))) {
+        return true if (invoke(req))
+        sleep(100u)
+    }
+    return false
+}
+
 //! The client half of a server test. The caller's server thread boots on `port`; this polls `ready_path` there until it
 //! answers 200 (`attempts` tries, 100 ms apart), runs `blk` against the server, then POSTs /shutdown so the thread
-//! returns. False when the server never answered - `blk` did not run; the caller joins its thread either way.
+//! returns. False when the server never answered - `blk` did not run; the caller joins its thread either way, so the
+//! shutdown is posted until the server takes it or as many tries again pass: a server still loading when the poll gave
+//! up listens later, and a shutdown posted once to a closed port would leave the caller's join waiting on it forever.
 def serve_clients(port, attempts : int; ready_path : string; blk : block<(base_url : string) : void>) : bool {
     let base_url = "http://127.0.0.1:{port}"
-    var ready = false
-    for (_attempt in range(attempts)) {
+    let ready = retry_until_true(attempts) $() : bool {
+        var ok = false
         GET("{base_url}{ready_path}") $(resp) {
-            ready = resp != null && resp.status_code == http_status.OK
+            ok = resp != null && resp.status_code == http_status.OK
         }
-        break if (ready)
-        sleep(100u)
+        return ok
     }
     if (ready) {
         invoke(blk, base_url)
     }
-    POST("{base_url}/shutdown", "") $(_resp) {}
+    retry_until_true(ready ? 1 : attempts) $() : bool {   // a server still loading when the poll gave up listens later: the join needs this to land
+
+        var taken = false
+        POST("{base_url}/shutdown", "") $(resp) {
+            taken = resp != null && resp.status_code == http_status.OK
+        }
+        return taken
+    }
     return ready
 }
 

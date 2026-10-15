@@ -111,7 +111,7 @@ def private with_llama_server(model_path : string; port : int; mode : MetalMode 
             }
             finished |> notify_and_release
         }
-        let ready = serve_clients(port, 300, "/v1/models", blk)   // up to ~30s for load + JIT
+        let ready = serve_clients(port, 1200, "/v1/models", blk)   // up to ~2 min: a cold Vulkan load mints the device image first
         finished |> join
         assert(ready, "dasllama server became ready")
     }

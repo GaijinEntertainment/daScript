@@ -2183,19 +2183,3 @@ module) is independent and can land any time - it is pure structure.
     per-op block binds the sink rows and the sliding window and serves gpt-oss's attention layers, and the span, the tail
     fusion and the f16 chain take the routed form, each held by a cell against the CPU chain; this is
     the gpt-oss leg's.
-148. **The server's preserve-thinking replay cell never finishes under the Vulkan tier.**
-    `utils/dasllama-server/test_openai_server.das`'s `test_openai_server_preserve_thinking` (Qwen3-0.6B
-    Q8_0, `DASLLAMA_GPU=1`, the RTX PRO 4500) runs past a 3600 s cap with the host pool on and
-    aborts in `vkCmdBindPipeline` from JIT-compiled driver code with `DASLLAMA_DEVICE_POOL=0`; the
-    tree before the qwen leg (fa7ce42649) runs the same cell past a 600 s cap, so the stall predates
-    the pool. The cell passes on the M5 (Metal) in seconds and the pod's `test_server_flags`
-    device-home MTP cells pass, so the fault sits in the think-block replay's second turn on a
-    device-home slot: a paged device-mode scheduler attaching the whole first exchange off the
-    prefix cache. The work: run the cell under the Vulkan validation layer and a 120 s cap, read
-    which submit never signals (pool on) and which command records a pipeline the slot does not
-    hold (pool off), then hold the cell on the pod beside its Metal run.
-149. **The host pool is off for a drafting (MTP) slot.** `device_pool_on` requires `!sch.mtp`: the
-    draft head's rows ride no export, so a one-stream speculating slot keeps its openings on the
-    card alone and loses them with its region. The work: export and import the head's rows beside
-    the trunk's in `rdec_cache_rows`, then drop the `!sch.mtp` term and hold `cell_device_pool` on
-    a speculating scheduler.

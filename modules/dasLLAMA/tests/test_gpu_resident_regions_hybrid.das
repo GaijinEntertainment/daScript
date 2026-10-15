@@ -13,8 +13,11 @@ require _resident_regions
 // among them), the parked claim that keeps its state beside its rows, and the scheduler's device mode, where a
 // stream prefills in the device's windows and a second turn adopts the rows and the state of the turn it continues.
 // Skips off the JIT, without DASLLAMA_GPU=1 on a device the driver serves, or without the file under models_dir().
-// Under DASLLAMA_DEVICE_POOL=0 the pool cell holds the off rail.
+// Under DASLLAMA_DEVICE_POOL=0 the pool cell holds the off rail. The speculating pool cell loads the same hybrid's -MTP-
+// file (MTP_FILE) and skips under DASLLAMA_DEVICE_POOL=0, without the file, on a file with no draft head, or where the
+// driver does not run the whole speculative round on the device.
 let private REGIONS_FILE = "Qwen3.5-0.8B-Q8_0.gguf"
+let private MTP_FILE = "Qwen3.5-0.8B-MTP-Q8_0.gguf"   //! the same hybrid with its NextN head: the pool cell under a speculating scheduler
 
 [test]
 def test_regions_interleaved_single_steps(t : T?) {
@@ -75,4 +78,14 @@ def test_device_checkpoint_adopt_hybrid(t : T?) {
 [test]
 def test_device_pool_hybrid(t : T?) {
     cell_device_pool(t, REGIONS_FILE)
+}
+
+[test]
+def test_device_pool_mtp_hybrid(t : T?) {
+    cell_device_pool_mtp(t, MTP_FILE)
+}
+
+[test]
+def test_device_pool_head_rows_hybrid(t : T?) {
+    cell_device_pool_head_rows(t, MTP_FILE)
 }

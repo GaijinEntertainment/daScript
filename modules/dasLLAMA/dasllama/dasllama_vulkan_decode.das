@@ -5477,7 +5477,7 @@ def vk_moe_heat_advise(l : int64; b1, b3, b2 : int64; f1, f3, f2 : int; n, nfe :
     let cap = pinned * 2 < pool.nslots ? HEAT_UPLOAD_CAP_FILL : HEAT_UPLOAD_CAP
     var up = 0
     var free_s = 0
-    var raw = g_gpu.batch_cmd
+    var raw = batch_cmd_raw()
     for (i in range64(nwant)) {
         break if (up >= cap)
         let e = unsafe(ids[i])

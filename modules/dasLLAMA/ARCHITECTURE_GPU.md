@@ -204,7 +204,7 @@ that a question answered for one backend has an obvious address in the other. Th
   exception: whisper is not a `Model`, so its hooks are family registries in `dasllama_whisper`, same decline contract).
 - **`dasllama_gpu_resident.das`** - the WHOLE-MODEL residency rail, and the Model's per-format plane-pair accessors (`kq_plane_pair` / `kq_plane_pair_names`) the rail's walk and the mint's section names both read: bake the device layout offline into the flavor
   image, upload a model's stacks to the tier, drive decode/prefill entirely on device, record the routed pick trace
-  (`DASLLAMA_MOE_TRACE`, the pool's offline instrument), and decide the trimmed lane -
+  (`DASLLAMA_MOE_TRACE`, the pool's offline instrument), move the host pool's rows for the device-home regions - the trunk's and the draft head's (`ARCHITECTURE_ENGINE_SERVING.md#device-home-pool`) - and decide the trimmed lane -
   its admission (`resident_would_serve`) and the emb region the CPU keeps (`trim_pack_emb`). It is device-AGNOSTIC - it
   holds no device call and requires no GPU module, reaching the hardware only through the `dasllama_gpu_tier` SPI and
   entering the engine only through common's override registries. `"vulkan"` is the tier string it registers under, not

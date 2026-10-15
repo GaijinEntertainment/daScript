@@ -185,7 +185,12 @@ crosses the bus per token; the pool holds the parked and the evicted state.
   RAM the process may hold: under a container's memory limit (the cgroup's `memory.max`, v1's `memory.limit_in_bytes`) that
   limit, not the host's total, since a pool sized past it makes every new snapshot's pages wait on the container's reclaim.
 - **Where it stands aside.** The pool serves a paged scheduler whose pool codec is the mirror's (the rows move as bytes), with
-  no draft head (the head's rows ride no export) and no n-gram side input (its ring can sit on the device), on a model whose
-  device prefill continues past zero (`device_pool_on`). `DASLLAMA_DEVICE_POOL=0` keeps the card's claims and rows alone - the
+  no n-gram side input (its ring can sit on the device), on a model whose device prefill continues past zero, and under a
+  speculating scheduler only where the driver runs the whole round on the device (`device_pool_on`,
+  `gpu_resident_mtp_device_home`). The draft head's K/V rows ride every move beside the trunk's (`rdec_cache_rows`): an
+  opening of `n` tokens goes down with the head's rows under `n` that the region holds - every row but the position's own,
+  which the round's seam re-warms - and stays on the card alone where the region holds fewer (`rdec_pool_head_rows`); an opening that comes up counts
+  the region's head rows to `n - 1` (`gpu_device_kv_import_`). A head nothing speculates on (`get_mtp_spec` off) rides
+  no move: its rows are never warmed, and the pool serves the plain scheduler as before. `DASLLAMA_DEVICE_POOL=0` keeps the card's claims and rows alone - the
   A/B rail. `gpu_device_kv_pool_moves` counts the rows each direction moved and the wall it took, the upload cost's reading.
 

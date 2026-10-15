@@ -22,3 +22,8 @@ def test_regions_batched_steps_hybrid_k(t : T?) {
 def test_regions_batched_steps_split_hybrid_k(t : T?) {
     cell_regions_batched_steps_split(t, REGIONS_FILE, LogitsBar.split_bar)
 }
+
+[test]
+def test_device_pool_head_rows_hybrid_k(t : T?) {
+    cell_device_pool_head_rows(t, REGIONS_FILE)   // the head's K-quant planes through the pool's moves
+}

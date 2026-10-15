@@ -2235,6 +2235,7 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     g_rdec_seg_pass_said |> clear()
     g_rdec_peel_declined |> clear()
     g_rdec_head_warm_decline_said = false
+    g_rdec_pool_head_decline_said = false
     set_gpu_cpu_pass_reasons([for (k in type<RdecPass>); "{k}"], [for (k in type<RdecPass>); rdec_pass_words(k)])
     vulkan_bake_role(VkBakeRole.arena)
     let gate_why = resident_decline_reason(t)
@@ -4924,15 +4925,41 @@ def gpu_device_kv_pool_armed_() : bool => g_env_engine.device_pool
 //! The rows `[lo, hi)` the device-home session `s` holds in its region copied down into the paged host session `host`'s pages,
 //! which grow to `hi`: the pool's copy of an opening the session's region may lose. False where `s` holds no region with those
 //! rows, or the host pages are not the mirror's codec.
+let private POOL_HEAD_ROWS_NONE = -1l    //! the head rides no move: off the device, or nothing speculates on it
+let private POOL_HEAD_ROWS_SHORT = -2l   //! the region holds fewer head rows than the opening needs: it stays on the card alone
+
+var private g_rdec_pool_head_decline_said = false   //! the latch: the say runs on the first decline alone, each arm resets it
+
+[cold_path]
+def private rdec_pool_head_decline_say(n, held : int64) {
+    return if (g_rdec_pool_head_decline_said)
+    g_rdec_pool_head_decline_said = true
+    to_log(LOG_INFO, "dasLLAMA resident pool: the region's {n} rows stay on the card - it holds {held} of the {n - 1l} head rows a pooled copy needs (said once)\n")
+}
+
+//! the head rows a pooled opening of `n` tokens carries: every row but the position's own, which the round's seam re-warms
+def private pool_head_rows_of(n : int64) : int64 => n - 1l
+
+//! the head rows a pooled opening of `n` tokens carries where the region holds them, else which of the two it lacks
+def private rdec_pool_head_rows(t : Model; reg : RdecRegion; n : int64) : int64 {
+    return POOL_HEAD_ROWS_NONE if (!rdec_pool_head_on(t))
+    return reg.head_cnt >= pool_head_rows_of(n) ? pool_head_rows_of(n) : POOL_HEAD_ROWS_SHORT
+}
+
 [arch(at="../ARCHITECTURE_ENGINE_SERVING.md#device-home-pool")]
 def gpu_device_kv_export_(t : Model; claim : int64; var host : Session; lo, hi : int64) : bool {
     return false if (!g_rdec_active || host.kv_pool == null || host.kv_pool.kdt != g_rdec_kvdt || host.kv_pool.vdt != g_rdec_kvdt)
     let r = rdec_region_of(claim)
     return false if (r < 0l || g_rdec_regions[r].cnt < hi)
+    let head_hi = rdec_pool_head_rows(t, g_rdec_regions[r], hi)
+    if (head_hi == POOL_HEAD_ROWS_SHORT) {
+        rdec_pool_head_decline_say(hi, g_rdec_regions[r].head_cnt)
+        return false
+    }
     let t0 = ref_time_ticks()
     kv_ensure(host, hi)
     rdec_select_region(r)
-    rdec_cache_rows(t, host, lo, hi, false)
+    rdec_cache_rows(t, host, lo, hi, false, head_hi)
     host.n_past = hi
     g_rdec_pool_moves.exports ++
     g_rdec_pool_moves.rows_down += max(hi - lo, 0l)
@@ -5014,20 +5041,31 @@ def private rdec_peek_snapshot(like : Session; slot : int; var into : DnSnapshot
 var private @scratch g_rdec_pool_spans : array<RdecKvSpan>
 var private @scratch g_rdec_pool_dsts : array<RdecDnDst>
 
-//! positions [lo, hi) of every K/V-owning layer between `host`'s cache
-//! and the selected region, in one batch (`rdec_kv_spans_move`);
-//! a shared-KV layer's rows move once, through its donor
-def private rdec_cache_rows(t : Model; var host : Session; lo, hi : int64; up : bool) {
+//! positions [lo, hi) of every K/V-owning layer, and the NextN head's [lo, head_hi) where `head_hi` > `lo`, between `host`'s
+//! cache and the selected region in one batch (`rdec_kv_spans_move`); a shared-KV layer's rows move once, through its donor
+def private rdec_cache_rows(t : Model; var host : Session; lo, hi : int64; up : bool; head_hi : int64 = POOL_HEAD_ROWS_NONE) {
     let c = t.config
     g_rdec_pool_spans |> clear()
     for (l in range64(c.n_layers)) {
         continue if (!layer_owns_kv(t, l))
-        rdec_host_runs(host, c, l, lo, hi) $(row0, nrows : int64; var kp, vp : uint8?) {
-            g_rdec_pool_spans |> push(RdecKvSpan(l = l, row0 = row0, nrows = nrows, kp = kp, vp = vp))
-        }
+        rdec_pool_queue(host, c, l, lo, hi)
+    }
+    if (head_hi > lo) {
+        rdec_pool_queue(host, c, c.n_layers, lo, head_hi)
     }
     rdec_kv_spans_move(up)
 }
+
+//! layer `l`'s host runs over [lo, hi) queued on the pool batch
+def private rdec_pool_queue(var host : Session; c : Config; l, lo, hi : int64) {
+    rdec_host_runs(host, c, l, lo, hi) $(row0, nrows : int64; var kp, vp : uint8?) {
+        g_rdec_pool_spans |> push(RdecKvSpan(l = l, row0 = row0, nrows = nrows, kp = kp, vp = vp))
+    }
+}
+
+//! the NextN head's rows ride the pool's moves: the head on the armed driver, with speculation on to warm and read them
+def private rdec_pool_head_on(t : Model) : bool => g_rdec_head_armed && t.config.n_layer_nextn > 0l && get_mtp_spec()
+
 
 //! the spans queued in `g_rdec_pool_spans` moved up (`up`) or down in
 //! one batch where the driver stages one (`rdec_kv_xfer`), else a span
@@ -5079,8 +5117,13 @@ def gpu_device_kv_import_(t : Model; var s : Session; var host : Session; npos :
     let t0 = ref_time_ticks()
     let r = rdec_bind_region(t, s)
     return false if (r < 0l)
-    rdec_cache_rows(t, host, 0l, npos, true)
+    let head = rdec_pool_head_on(t)
+    rdec_cache_rows(t, host, 0l, npos, true, head ? pool_head_rows_of(npos) : POOL_HEAD_ROWS_NONE)
     rdec_claim(s, r, npos)
+    if (head) {
+        g_rdec_regions[r].head_cnt = pool_head_rows_of(npos)
+        g_rdec_regions[r].head_host = pool_head_rows_of(npos)
+    }
     rdec_host_mark(s, false)
     s.n_past = npos
     g_rdec_pool_moves.imports ++
