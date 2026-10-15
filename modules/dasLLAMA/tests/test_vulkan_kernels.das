@@ -3849,6 +3849,19 @@ def test_vkd_da_attn_b_h128(t0 : T?) {
             delete f
             delete y_ref
             delete y_cls
+            //! a sliding window and the logit softcap, alone and together, over 120 rows at w0 500: the plain oracle misses each arm
+            for (arm in range(3)) {
+                let window = arm == 1 ? 0 : 40
+                let cap = arm == 0 ? 0.0 : 0.5
+                var fw <- da_attn_b_fix(120, 4, 2, 128, 500, 64, 160, 0.05, 1.8, 0.03, 1.4, false)
+                var inscope yw <- da_attn_b_run(fw, DAB_H128, scale, cap, window)
+                var inscope yw_ref <- da_attn_b_ref(fw, scale, window, cap)
+                let tag = "da_attn_b_h128 window {window} cap {cap}"
+                check_rows(t, "{tag} against the CPU oracle", yw, yw_ref, cm_bar(yw_ref), 4 * 128, 128)
+                var inscope yw_plain <- da_attn_b_ref(fw, scale, 0, 0.0)
+                t |> success(check_count(yw, yw_plain, cm_bar(yw_plain)) > 0, "{tag}: the unmasked, uncapped oracle misses the kernel")
+                delete fw
+            }
         } else {
             t |> skip("dasVulkan not present")
         }
