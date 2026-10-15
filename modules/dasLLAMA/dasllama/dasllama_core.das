@@ -722,13 +722,13 @@ def attach_mtp_drafter(model : Model; path : string) : bool {
 
 def detach_mtp_drafter(model : Model) {
     //! Detach `model`'s assistant drafter, if one is attached; its rounds stop and plain decode serves.
-    mtp_assistant_detach_(model)
+    detach_mtp_drafter_(model)
 }
 
 def mtp_drafter_stats(model : Model) : MtpAssistantStats {
     //! The attached drafter's device rounds since its attach: drafts made, drafts accepted, rounds,
     //! and the verifies whose rows carried two streams or more. Zeros with no drafter attached.
-    return mtp_assistant_stats_(model)
+    return mtp_drafter_stats_(model)
 }
 
 def mtp_capable(model : Model) : bool {

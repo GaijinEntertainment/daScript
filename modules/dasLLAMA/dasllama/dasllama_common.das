@@ -785,7 +785,7 @@ def private mtp_assistant_backend(t : Model) : string {
 def mtp_assistant_attached(t : Model) : bool => !empty(mtp_assistant_backend(t))
 
 //! Detach `t`'s assistant drafter on the backend it is attached on (none attached: nothing)
-def mtp_assistant_detach_(t : Model) {
+def detach_mtp_drafter_(t : Model) {
     let be = mtp_assistant_backend(t)
     if (!empty(be)) {
         invoke(g_mtp_assistants[be].detach)
@@ -793,7 +793,7 @@ def mtp_assistant_detach_(t : Model) {
 }
 
 //! `t`'s attached drafter's rounds since its attach (zeros with none attached)
-def mtp_assistant_stats_(t : Model) : MtpAssistantStats {
+def mtp_drafter_stats_(t : Model) : MtpAssistantStats {
     let be = mtp_assistant_backend(t)
     return empty(be) ? MtpAssistantStats() : invoke(g_mtp_assistants[be].stats)
 }
