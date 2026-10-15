@@ -9,6 +9,8 @@ require dasllama/dasllama_gpu_math
 require ?vulkan dasllama/dasllama_rope   // build_rope_row_packed: the rope cells' cos|sin row
 require ?vulkan dasllama/dasllama_math_vulkan  // the MoE GPU tier under test; the test installs its hooks explicitly (no env gate)
 require ?vulkan dasllama/dasllama_vulkan_seams  // the single-op seams (vk_add_rms / rope_kv / decode_attn) on the class rail
+require ?vulkan vulkan   // VkCommandBuffer: the one-shot cell's block argument
+require ?vulkan dasllama/dasllama_vulkan_common   // batch_cmd_one_shot: the shared one-shot command the drop cell holds
 require math
 require _vk_kq_fixtures   // the synthetic kq stacks + pow2 scale sets (shared with test_vulkan_moe_cm2)
 require _kq_fixtures
@@ -198,6 +200,34 @@ def private held(t : T?; tag : string; got, want : array<float>; rel : float; ro
 def private held_nontrivial(t : T?; tag : string; got, want : array<float>; rel : float; row_width : int64) : int {
     t |> success(logits_maxabs(want) > 0.0, "{tag}: the reference is non-trivial")
     return held(t, tag, got, want, rel, row_width)
+}
+
+//! The shared one-shot command (the decode's cold uploads and readbacks, the prefill batch tier's chains) serves before the
+//! prefill batch tier engages and again after a whole-model drop freed it: a server whose prefill runs on the CPU rails
+//! reaches the decode's cold upload with the tier never engaged, and one that drops and re-arms with it engaged once.
+//! Declared first on purpose: nothing has engaged the tier when it runs.
+[test]
+def test_vulkan_one_shot_command(t : T?) {
+    t |> run("vulkan shared one-shot command - serves before the prefill batch tier engages and after a whole-model drop") @(tt : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            install_vk_moe_hooks()
+            if (!vk_device_ready()) {
+                tt |> skip("no Vulkan device")
+                return
+            }
+            batch_cmd_one_shot() $(_raw : VkCommandBuffer) {}
+            tt |> equal(0l, gpu_tier_status_().vram_bytes, "an empty one-shot on a tier nothing engaged submitted and retired")
+            var inscope wq : array<int8>
+            var inscope ws : array<float>
+            fill_q8_quants(wq, ws, DMROWS, N, 5l, false)
+            tt |> success(q8_upload(wq, ws, DMWOFF, N, DMROWS), "a stack uploaded")
+            moe_gpu_drop_model_state()   //! every model-owned command freed: the one-shot's buffer among them
+            batch_cmd_one_shot() $(_raw : VkCommandBuffer) {}
+            tt |> equal(0l, gpu_tier_status_().vram_bytes, "an empty one-shot after the drop submitted and retired on a bare tier")
+        } else {
+            tt |> skip("dasVulkan not installed; the one-shot command is untestable here")
+        }
+    }
 }
 
 [test]

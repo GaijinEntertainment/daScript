@@ -2992,7 +2992,7 @@ def private record_ffn_batch_cmd(s1, s3, s2 : int; nwg_gu, nwg_dn : uint; rows, 
                                  comb_wi_bytes : int64 = 0l; comb_y_bytes : int64 = 0l;
                                  comb_n : int64 = 0l; comb_k : int64 = 0l; comb_r0 : int64 = 0l; comb_r1 : int64 = 0l;
                                  x2q_bytes : int64 = 0l; x2s_bytes : int64 = 0l) {
-    let raw = g_gpu.batch_cmd
+    let raw = batch_cmd_raw()
     var h = cmd_open(raw, true)
     batch_acts_head(raw, h, axq_bytes, axs_bytes, x2q_bytes, x2s_bytes)
     cmd_copy_batch_meta(raw, s1)
@@ -3098,7 +3098,7 @@ def vk_moe_ffn_batch(var goutp : float?; offs1 : int64 const?; offs3 : int64 con
 // one dense chunk: acts + meta staging copies, one tile GEMM over the single whole-plane
 // region, y DMA
 def private record_dense_cmd(si : int; nwg : uint; n, d, y_bytes : int64; axq_bytes, axs_bytes : int64) {
-    record_cmd(g_gpu.batch_cmd, true) $(raw : VkCommandBuffer; var h : VkHaz) {
+    record_cmd(batch_cmd_raw(), true) $(raw : VkCommandBuffer; var h : VkHaz) {
         batch_acts_head(raw, h, axq_bytes, axs_bytes)
         cmd_copy_batch_meta(raw, si)
         stack_batch_enc(raw, h, si, nwg, n, d)
@@ -3175,7 +3175,7 @@ def private ensure_dn_cls_sets {
 def private record_dn_cmd(s_qkv, s_z, s_o : int; nwg_qkv, nwg_z, nwg_out : uint;
                           rows, cd, kd, di, dim, taps, nvh, nkh, ds : int64;
                           axq_bytes, axs_bytes : int64; first, last, o_kq : bool; eps : float; x2q_bytes : int64 = 0l; x2s_bytes : int64 = 0l) {
-    let raw = g_gpu.batch_cmd
+    let raw = batch_cmd_raw()
     var h = cmd_open(raw, true)
     pfq_begin(raw)
     pfq_ts(raw)   // q0: submit start
@@ -3381,7 +3381,7 @@ def private record_at_cmd(s_q, s_k, s_v, s_o : int; nwg_q, nwg_k, nwg_v, nwg_o :
                           rows, w0, qd, kv_dim, dim, n_heads, hs, half, n_kv, kv_mul : int64;
                           axq_bytes, axs_bytes, sm_bytes : int64; o_kq, gated, qknorm, fa, hasb : bool;
                           eps, scale : float; woq : int64) {
-    let raw = g_gpu.batch_cmd
+    let raw = batch_cmd_raw()
     var h = cmd_open(raw, true)
     pfq_begin(raw)
     pfq_ts(raw)
@@ -3795,7 +3795,7 @@ def private ffn_cm2_chunk_rows(n, nfe : int64) : int64 {
 [arch(at="../ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-expert-chain")]
 def private record_ffn_cm2_cmd(s1, s3, s2 : int; nwg_gu, nwg_dn : uint; rows, n, nfe, nk, npos : int64;
                                r0, r1 : int64; is_gelu : bool) {
-    let raw = g_gpu.batch_cmd
+    let raw = batch_cmd_raw()
     var h = cmd_open(raw, true)
     if (r0 == 0l) {
         vhz_dep(raw, h, 0u, VHB_XF, true)

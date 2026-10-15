@@ -2194,8 +2194,3 @@ module) is independent and can land any time - it is pure structure.
     prefix cache. The work: run the cell under the Vulkan validation layer and a 120 s cap, read
     which submit never signals (pool on) and which command records a pipeline the slot does not
     hold (pool off), then hold the cell on the pod beside its Metal run.
-149. **The host pool is off for a drafting (MTP) slot.** `device_pool_on` requires `!sch.mtp`: the
-    draft head's rows ride no export, so a one-stream speculating slot keeps its openings on the
-    card alone and loses them with its region. The work: export and import the head's rows beside
-    the trunk's in `rdec_cache_rows`, then drop the `!sch.mtp` term and hold `cell_device_pool` on
-    a speculating scheduler.

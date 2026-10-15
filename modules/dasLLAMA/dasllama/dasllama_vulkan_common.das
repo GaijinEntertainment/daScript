@@ -1962,6 +1962,7 @@ def vk_drop_model_state {
     }
     free_owned_cmds(g_gpu.pool, g_gpu.model_cmds)
     free_owned_cmds(g_gpu.xfer_pool, g_gpu.model_xcmds)
+    g_gpu.batch_cmd = VkCommandBuffer()   //! freed with the model's commands above: the next one-shot allocates it again
     // every descriptor set came from the chain and every one is model-owned — reset every chunk
     // (chunks are kept, not destroyed: the next model refills from chunk 0)
     let rdpf : VkDescriptorPoolResetFlags
@@ -3906,10 +3907,19 @@ def host_buf_read(hb : HostBuf; var dst : void?; bytes : int64; off : int64 = 0l
     }
 }
 
+//! the shared batch command buffer, allocated on its first use: the prefill batch tier's chains and the decode's cold
+//! uploads and readbacks record on it in turn, and neither waits for the other's tier to engage; a model drop frees it
+//! with the model's commands and the next use allocates it again
+def batch_cmd_raw : VkCommandBuffer {
+    if (unsafe(reinterpret<uint64>(g_gpu.batch_cmd)) == 0ul) {
+        g_gpu.batch_cmd = alloc_cmd()
+    }
+    return g_gpu.batch_cmd
+}
+
 //! the same on the shared batch command buffer, reset first: the decode's cold state uploads and readbacks
 def batch_cmd_one_shot(rec : block<(raw : VkCommandBuffer) : void>) {
-    var raw = g_gpu.batch_cmd
-    record_submit_wait(raw, true, rec)
+    record_submit_wait(batch_cmd_raw(), true, rec)
 }
 
 //! a persistent command on `pool`, model-owned through `owned` (the list the model drop frees)
@@ -4214,7 +4224,7 @@ def ensure_batch_state {
     g_gpu.batch_y1_dev = make_device_buf(BATCH_Y_BYTES)
     g_gpu.batch_y2_dev = make_device_buf(BATCH_Y_BYTES)
     g_gpu.batch_y1 = make_host_buf(BATCH_Y_BYTES, true, [cached = true])
-    g_gpu.batch_cmd = alloc_cmd()
+    batch_cmd_raw()
     // the fused act+requant class sets build in dasllama_vulkan_prefill (this module cannot
     // require the classes module)
     g_gpu.resident_bytes += BATCH_XQ_BYTES + BATCH_XS_BYTES
