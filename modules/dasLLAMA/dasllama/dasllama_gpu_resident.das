@@ -1432,6 +1432,8 @@ def resident_decline_reason(t : Model) : string {
     if (!empty(run)) return run
     let feats = resident_unserved_features(c)
     if (!empty(feats)) return "no arm for: {feats}"
+    let cls_why = resident_cls_decline(t)
+    if (!empty(cls_why)) return cls_why
     if (recurrent_layer_count(c) == c.n_layers) return "no attention layer (the whole-model driver serves attention or hybrid stacks)"
     if (c.hyper_conn && g_rdec_regions_want > 1l) return "hyper-connection residual (qwen4exp) - the split token command serves one mirror region"
     for (l in range64(c.n_layers)) {
@@ -1439,6 +1441,13 @@ def resident_decline_reason(t : Model) : string {
         if (!empty(why)) return why
     }
     return ""
+}
+
+//! the classifier's decline, "" where a device plane carries it: a tied token table whose disk type no `KqFmt` member carries (F32,
+//! F16, BF16) has no classifier plane past the Metal mode's q8 copy - the plan would seat a q8 plane where no bytes sit
+def resident_cls_decline(t : Model) : string {
+    return "" if (!t.config.shared_weights || t.cls_q8 || cls_kq(t) || t.cls_q8_copy)
+    return "the tied classifier: the token table's disk type (F32, F16 or BF16) has no classifier plane on the device (no word-GEMV arm reads the table's own rows) - the per-op rails serve"
 }
 
 //! the driver's run-mode declines - a prefill pinned or overridden away from it: the driver is all-or-nothing across prefill AND
@@ -2459,19 +2468,24 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
             mir_idx++
         }
     }
-    if (ple > 0l) {   //! the pre-step's projection on device where the driver takes it (the cm2 f16 GEMM, or the KHR twin off cm2); the CPU pre-step serves otherwise
+    if (ple > 0l) {   //! the pre-step's projection on device off the file's own rows - bf16, or f32
         let all = c.n_layers * ple
-        var w : array<float>
-        w |> reserve_resize(all * dim)   // E4B: 27.5M floats - the guard wants the final size reserved first
+        var w16 : array<uint16>
+        var w32 : array<float>
         if (t.ple_model_bf16) {
-            widen_bf16(unsafe(addr(w[0])), unsafe(addr<uint16 const?>(t.bf16blob[t.ple_model_off])), all * dim)
+            w16 |> reserve_resize(all * dim)   // E4B: 27.5M halves - the guard wants the final size reserved first
+            unsafe {
+                memcpy(addr(w16[0]), addr<uint16 const?>(t.bf16blob[t.ple_model_off]), all * dim * 2l)
+            }
         } else {
-            copy_floats(t.fblob, t.ple_model_off, w, 0l, all * dim)
+            w32 |> reserve_resize(all * dim)
+            copy_floats(t.fblob, t.ple_model_off, w32, 0l, all * dim)
         }
         var pnorm <- fblob_rows(t, t.ple_pnorm_off, ple)
-        let on = rdec_set_ple_proj(w, pnorm, all)
+        let on = rdec_set_ple_proj(w16, w32, pnorm, all)
         to_log(LOG_INFO, "dasLLAMA: resident driver: the per-layer-embedding pre-step's projection {on ? "runs on device" : "stays on the CPU"}\n")
-        delete w
+        delete w16
+        delete w32
         delete pnorm
     }
     let bcls = place_plane(t, planes, cur, ResidentRole.cls, -1l, mr, kg, wb)
@@ -3405,9 +3419,17 @@ def private vulkan_resident_decode_go(t : Model; var s : Session; token, pos : i
         }
         rdec_land_pick(s, rdec_token_split_host(t, s, pos, cnt, s.pick_asked, s.logits))
     } elif (s.ple_gpu_pending) {
-        g_rdec_one_tok |> resize(1l)
-        g_rdec_one_tok[0] = token
-        resident_prefill_ple_rows(t, g_rdec_one_tok, 1l)
+        if (gathered) {   //! the one-row command gathers the side row off the token id, as the embed row (the table rides the device with it)
+            if (!s.sampled && pos + 2l <= g_rdec_cap && rdec_chain_wanted()) {
+                g_rdec_cossin_next |> grow_resize(g_rdec_cos_elems)
+                rdec_rope_rows(t, pos + 1l + s.rope_pos_delta, g_rdec_cossin_next, 0l)
+                rdec_chain_ask(g_rdec_cossin_next)
+            }
+        } else {
+            g_rdec_one_tok |> resize(1l)
+            g_rdec_one_tok[0] = token
+            resident_prefill_ple_rows(t, g_rdec_one_tok, 1l)
+        }
         rdec_land_pick(s, rdec_token(g_rdec_x, g_rdec_cossin, g_rdec_ple_rows, gathered ? token : -1l, pos, cnt, s.pick_asked, s.logits))
         s.ple_gpu_pending = false
     } else {
@@ -4255,12 +4277,13 @@ def private rdec_segs_gather(t : Model; var segs : array<PrefillSeg>; ids : bool
     return total
 }
 
-//! the segmented window holds a model whose side rows, wide residual, host experts and staged rows are not per call - a recurrent
-//! segment steps its own region's state, a routed block routes every row of the window, a NextN carry lands a row a segment
+//! the segmented window holds a model whose wide residual, host experts and staged rows are not per call - a recurrent segment steps
+//! its own region's state, a routed block routes every row of the window, a NextN carry lands a row a segment, and an E-series
+//! window gathers and finishes every segment's side rows off their ids on the device (the table and the projection placed)
 def private rdec_segs_model_fits(t : Model) : bool {
     let c = t.config
     let codec_ok = g_rdec_kvdt == KVDtype.f16 || g_rdec_kvdt == KVDtype.f32
-    return codec_ok && !has_ple(c) && !c.hyper_conn && !g_rdec_experts_host
+    return codec_ok && (!has_ple(c) || (g_rdec_emb_gpu && rdec_ple_proj_on())) && !c.hyper_conn && !g_rdec_experts_host
 }
 
 //! A device-home scheduler's tick hands `t`'s prefilling streams to the segmented window: the armed driver has the form and the model's chain holds several sessions a window.
@@ -4277,6 +4300,10 @@ def private vulkan_resident_prefill_segments(t : Model; var segs : array<Prefill
         return false
     }
     let ids = segs[0].s.embed_gpu_pending
+    if (has_ple(c) && !ids) {   //! the side rows ride the window off the segments' ids alone
+        rdec_segs_declined("a per-layer-embedding window whose rows the host embedded (the side rows gather off the segments' ids)")
+        return false
+    }
     return false if (!rdec_segs_admitted(t, segs, ids) || !rdec_segs_regions(t, segs))
     let total = rdec_segs_gather(t, segs, ids)
     let vocab = long_length(segs[0].s.logits)
@@ -4436,7 +4463,6 @@ def moe_gpu_resident_peels() : int64 => g_rdec_peels
 //! carry are per call - or "" where the chain's shape fits; the host experts' arm reads the armed plan (`rdec_peel_fits`).
 def rdec_peel_shape_why(c : Config) : string {
     if (c.hyper_conn) return "a hyper-connection chain"
-    if (has_ple(c)) return "a per-layer-embedding model"
     return c.recr_mask != 0ul && !rdec_token_seq_installed() ? "a recurrent model (no in-order rows command installed)" : ""
 }
 
@@ -4476,6 +4502,19 @@ def private rdec_prefill_peel(t : Model; var s : Session; r, npos, start_pos : i
     }
     resident_prefill_rope_rows(t, s.rope_pos_delta + start_pos, npos, ce, g_rdec_cos_n)
     g_rdec_ple_rows |> clear()
+    var ple_raw = false   //! the commands finish the gathered side rows where the projection rides the device; the CPU's finished rows else
+    if (has_ple(c)) {
+        if (s.ple_gpu_pending) {
+            resident_prefill_ple_rows(t, s.ple_gpu_tokens, npos)
+            s.ple_gpu_pending = false
+            ple_raw = true
+        } else {
+            let all = npos * c.n_layers * c.n_embd_per_layer
+            g_rdec_ple_rows |> reserve(all)
+            g_rdec_ple_rows |> resize(all)
+            copy_floats(s.ple_inp, 0l, g_rdec_ple_rows, 0l, all)
+        }
+    }
     rdec_select_region(r)
     if (npos == 1l) {
         rdec_token(g_rdec_x_n, g_rdec_cos_n, g_rdec_ple_rows, -1l, start_pos, start_pos + 1l, false, s.logits)
@@ -4486,7 +4525,7 @@ def private rdec_prefill_peel(t : Model; var s : Session; r, npos, start_pos : i
         for (i in range64(npos)) {   //! a row before the last lands its pick alone, which nobody reads
             rdec_row_plane(i, start_pos + i, r, i == npos - 1l ? unsafe(addr(s.logits[0])) : null)
         }
-        rdec_token_n(g_rdec_x_n, g_rdec_cos_n, g_rdec_ple_rows, false, g_rdec_poss, g_rdec_cnts, g_rdec_regs, npos, g_rdec_lrows, g_rdec_picks)
+        rdec_token_n(g_rdec_x_n, g_rdec_cos_n, g_rdec_ple_rows, ple_raw, g_rdec_poss, g_rdec_cnts, g_rdec_regs, npos, g_rdec_lrows, g_rdec_picks)
     }
     g_rdec_peels++
 }

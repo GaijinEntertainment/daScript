@@ -10,6 +10,11 @@ require dasllama/dasllama_kqformat   // KqFmt - the PLE table's tag
 require dasllama/dasllama_gpu_resident   // resident_plan - the table's seat
 require _format_census   // census_cell - the per-layer planes in their own formats
 require daslib/fio
+require math
+require dasllama/dasllama_ple   // ple_cpu_pre_rows - the CPU pre-step's witness
+require dasllama/dasllama_common   // Model, embed_row, forward, forward_prefill
+require dasllama/dasllama   // create_session
+require ?vulkan dasllama/dasllama_vulkan_decode   // vk_rdec_ple_side_row, vk_rdec_token_gathered - the device pre-step's witnesses
 
 // gemma-4-E2B Q8_0 (the E-series carrier: per-layer embeddings, the upper layers sharing the K/V of the ones below, two
 // dense FFN widths, a sliding window the two-window cell engages): arm `g4e`. Skips off the JIT, without DASLLAMA_GPU=1
@@ -98,12 +103,105 @@ def test_gpu_resident_gemma4_e2b_ple_planes(t : T?) {
     }
 }
 
-//! a two-token prompt on the E-series takes the window chain: the token command's peel declines the per-layer-embedding side rows
+//! the decode step's pre-step on the device (arm `g4e-pre`): the side row the one-row command gathered off the step's token id,
+//! projected under the CPU's 1/sqrt(dim) and finished, read back against the CPU pre-step's row of the same token at 1e-4 of its
+//! largest - the projection without the 1/sqrt(dim) reads the eps alone apart, 1e-3 - with another token's CPU row the control
+[test]
+def test_gpu_resident_gemma4_e2b_ple_pre_step(t : T?) {
+    t |> run("gemma-4-E2B Q8_0: the step's side row built on the device is the CPU pre-step's row") @(t : T?) {
+        with_gemma_rig(t, GemmaFile(file = "gemma-4-E2B-it-Q8_0.gguf", arm = "g4e-pre")) $(tr) {
+            static_if (typeinfo builtin_module_exists(vulkan)) {
+                var prompt <- resident_prompt(40l)
+                var sg <- create_session(tr, mirror_kv_dtype())
+                forward_prefill(tr, sg, prompt, 40l, 0l)
+                let tok = 1234l
+                let g0 = vk_rdec_token_gathered()
+                let cpu0 = ple_cpu_pre_rows()
+                forward(tr, sg, tok, 40l)
+                t |> success(vk_rdec_token_gathered() > g0, "the step's embed row gathered off its token id")
+                t |> equal(ple_cpu_pre_rows() - cpu0, 0l, "the step built no CPU pre-step row")
+                var dev : array<float>
+                vk_rdec_ple_side_row(dev)
+                var inscope cpu <- cpu_side_row(tr, tok)
+                var inscope other <- cpu_side_row(tr, tok + 1l)
+                var mx = 0.0
+                var off = 0.0
+                var big = 0.0
+                for (i in range64(long_length(cpu))) {
+                    mx = max(mx, abs(dev[i] - cpu[i]))
+                    off = max(off, abs(dev[i] - other[i]))
+                    big = max(big, abs(cpu[i]))
+                }
+                let bar = 1e-4 * big
+                to_log(LOG_INFO, "e2b pre-step: device side row against the CPU's: maxdiff {mx}, another token's {off} (bar {bar}, largest {big})\n")
+                t |> success(mx <= bar, "the device side row within 1e-4 of the CPU's largest ({mx} of {bar})")
+                t |> success(off > bar, "another token's CPU row lands outside the bar ({off})")
+                delete dev
+                delete sg
+                delete prompt
+            }
+        }
+    }
+}
+
+//! the CPU pre-step's side row of `tok` on a scratch session: the scaled embedding row, then `ple_pre_decode`
+def private cpu_side_row(tr : Model; tok : int64) : array<float> {
+    var s <- make_run_state(tr.config)
+    embed_row(tr, tok, unsafe(addr(s.x[0])))
+    if (tr.config.embed_scale != 1.0) {
+        for (i in range64(tr.config.dim)) {
+            s.x[i] *= tr.config.embed_scale
+        }
+    }
+    ple_pre_decode(tr, s, tok)
+    let n = tr.config.n_layers * tr.config.n_embd_per_layer
+    var row <- [for (i in range64(n)); s.ple_inp[i]]
+    delete s
+    return <- row
+}
+
+//! a short tail on the E-series peels through the token commands, each row's side input finished on the device: after a 40-row
+//! opening, tails of 1, 2 and 5 rows (one peel counted each) and four fed steps within the split bar of the same tail stepped a row at
+//! a time on a second session, the row one step off the control
 [test]
 def test_gpu_resident_gemma4_e2b_short_window(t : T?) {
-    t |> run("gemma-4-E2B Q8_0: a two-token prompt takes the window chain, not the token command's peel") @(t : T?) {
+    t |> run("gemma-4-E2B Q8_0: short tails peel through the token commands, the side rows riding them") @(t : T?) {
         with_gemma_rig(t, GEMMA4E_FILE) $(tr) {
-            assert_short_window_takes_chain(t, tr, "a per-layer-embedding model")
+            var opening <- resident_prompt(40l)
+            var feed <- resident_feed(5l)
+            let lever = vulkan_prefill_peel()
+            set_vulkan_prefill_peel(true)
+            for (rows in [1l, 2l, 5l]) {
+                var tail <- [for (i in range64(rows)); feed[i]]
+                var steps <- ramp_ids(4l, rows, 2500l, 71l, 4500l)
+                var sa <- create_session(tr, mirror_kv_dtype())
+                eval(tr, sa, opening)
+                let peels0 = moe_gpu_resident_peels()
+                forward_prefill(tr, sa, tail, rows, 40l)
+                t |> equal(moe_gpu_resident_peels() - peels0, 1l, "a tail of {rows} rows peels through the token commands")
+                sa.n_past = 40l + rows
+                var got <- steps_after(tr, sa, steps)
+                var sb <- create_session(tr, mirror_kv_dtype())
+                eval(tr, sb, opening)
+                var inscope one : array<int64>
+                one |> resize(1)
+                for (i in range64(rows)) {
+                    one[0] = tail[i]
+                    eval_(tr, sb, one)
+                }
+                var want <- steps_after(tr, sb, steps)
+                rows_within_control(t, "a tail of {rows} rows", got, want, SPLIT_BAR_REL, 1l, 1.0, $(r) => r == 0l ? "the tail's last row" : "step {r}")
+                served_every_call(t)
+                delete sa
+                delete sb
+                delete got
+                delete want
+                delete tail
+                delete steps
+            }
+            set_vulkan_prefill_peel(lever)
+            delete opening
+            delete feed
         }
     }
 }

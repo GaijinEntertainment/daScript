@@ -1075,6 +1075,13 @@ def vk_rdec_dn_own(l : int64; stp : float?; histp : float?) {
     rdn_state_upload(st, stp, histp, g_rd.dn_parity[slot])
 }
 
+//! the pre-step's projection rows over `ncols` columns of x into the plane its set binds, under the CPU's 1/sqrt(dim) (`ple_pre_finish`)
+def ple_proj_enc(raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; ncols : uint) {
+    let all = g_rd.n_layers * g_rd.ple
+    var pcr = GkRouterArgs(ne = uint(all), dim = uint(g_rd.dim), eps = g_rd.eps, ncols = ncols, yscale = 1.0 / sqrt(float(g_rd.dim)))
+    router_enc_cols(g_rd.ple_wp_bf16, raw, h, set_, pcr, all)
+}
+
 //! The per-layer-embedding seats: the side-input row buffers at the model's ple width (after prepare, before the layers)
 [arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
 def vk_rdec_set_ple(ple : int64; gate_f32 : array<float>; proj_f32 : array<float>) : bool {
@@ -1407,6 +1414,18 @@ def vk_rdec_set_ngram(l, ind, nrows, kern, dil, bkey, bval : int64; norm_rows : 
     }
     rd_invalidate_token()
     return true
+}
+
+//! the one-row command's side row as its last step left it - gathered and finished on the device under the projection - read back
+//! into `out` (a cell's witness of the device pre-step against the CPU's)
+[cold_path]
+def vk_rdec_ple_side_row(var out : array<float>) {
+    assert(g_rd != null && g_rd.ple > 0l, "vk_rdec_ple_side_row before set_ple")
+    let n = g_rd.n_layers * g_rd.ple
+    out |> resize(n)
+    var stage = make_host_buf(n * 4l, false, [cached = true])
+    readback_range(g_rd.ple_dev, VHZ_COS, 0l, stage, unsafe(addr(out[0])), n * 4l)
+    destroy_host_buf(stage)
 }
 
 //! The selected region's conv ring against the session's host ring (`RdecNgramRingFn`): the host's rows up after a CPU prefill or
@@ -2746,14 +2765,14 @@ def private rd_encode_token(var first_seg_raw : VkCommandBuffer; nrows, nsplit :
         }
         vhz_dep(raw, h, 0u, VHZ_COS, true)
         cmd_copy_whole(raw, g_rd.cos_host.buf, g_rd.cos_dev, g_rd.cos_elems * 4l * nrows)
-        if (g_rd.ple > 0l) {   //! the side-input rows ride the cos plane's hazard bit: written here, read by the act step
+        if (g_rd.ple > 0l && one && !verify && g_rd.ple_tok_on) {   //! the step's side row off the table at its token id (the cos plane's hazard bit, as the copy's)
+            emb_cls_enc(g_rd.ple_tbl_fmt, raw, h, g_rd.s_tok_ple, 1l, g_rd.n_layers * g_rd.ple, arena_local_blk(g_rd.ple_tbl_blk), sqrt(float(g_rd.ple)))
+        } elif (g_rd.ple > 0l) {   //! the side-input rows ride the cos plane's hazard bit: written here, read by the act step
             cmd_copy_whole(raw, g_rd.ple_host.buf, g_rd.ple_dev, g_rd.n_layers * g_rd.ple * 4l * nrows)
         }
         rd_ts(raw, "p:upload")
         if (g_rd.ple > 0l && g_rd.ple_gpu) {   //! the pre-step's finish: the projection of the embedded rows, normed a slice at a time and averaged into the gathered rows
-            let all = g_rd.n_layers * g_rd.ple
-            var pcr = GkRouterArgs(ne = uint(all), dim = uint(dim), woff = 0u, obase = 0u, norm_on = 0u, nwoff = 0u, eps = g_rd.eps, ncols = nr, ne_split = 0u, obase_split = 0u)
-            router_enc_cols(true, raw, h, g_rd.s_tok_pleproj, pcr, all)
+            ple_proj_enc(raw, h, g_rd.s_tok_pleproj, nr)
             rd_ts(raw, "t:pleproj")
             var pca = ArArgs(dim = uint(g_rd.ple), add_on = 1u, woff = 0u, eps = g_rd.eps, ascale = 1.0 / sqrt(2.0), pre_on = 1u, pwoff = 0u)
             enc_cls_ar(raw, h, g_rd.s_tok_ple_ar, pca, g_rd.n_layers * nrows)
@@ -3169,7 +3188,7 @@ def vk_rdec_chain_stats : tuple<hits : int64; misses : int64> => (hits = g_rdec_
 [arch(at="../ARCHITECTURE_GPU_VULKAN_LANDING.md#vk-greedy-chain")]
 def vk_rdec_chain_wanted : bool {
     return false if (g_rd == null || !g_rd.ready || vk_rdec_chain_mode() == 0)
-    return (g_rd.log_xfer && rd_emb_on() && g_rd.ple == 0l && !g_rd.carry_live && !g_rd.experts_host && !g_rd.hc
+    return (g_rd.log_xfer && rd_emb_on() && (g_rd.ple == 0l || g_rd.ple_tok_on) && !g_rd.carry_live && !g_rd.experts_host && !g_rd.hc
         && !vk_prof() && !vk_rdec_rerecord_on())
 }
 
@@ -3410,7 +3429,7 @@ def vk_rdec_token(x : array<float>; cossin : array<float>; ple_row : array<float
             }
         }
         memcpy(g_rd.cos_host.mapped, addr<void?>(cossin[0]), g_rd.cos_elems * 4l)
-        if (g_rd.ple > 0l) {
+        if (g_rd.ple > 0l && !(g_rd.ple_tok_on && token >= 0l)) {   //! a step the device gathers brings no row
             assert(long_length(ple_row) >= g_rd.n_layers * g_rd.ple, "vk_rdec_token: the per-layer-embedding row is short")
             memcpy(g_rd.ple_host.mapped, addr<void?>(ple_row[0]), g_rd.n_layers * g_rd.ple * 4l)
         }

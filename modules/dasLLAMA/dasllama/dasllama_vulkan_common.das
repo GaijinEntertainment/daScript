@@ -2675,8 +2675,12 @@ struct RDec {
     // the pre-step's projection on device (cm2 route): the per-layer model projection as an f16 mirror [layers*ple x dim],
     // its [ple] norm row, the window's f16 embedding rows and the projected [np x layers*ple] plane, and the three steps' sets
     ple_gpu : bool
-    ple_w16_dev, ple_pnorm_dev : uint64
+    ple_wp_dev, ple_pnorm_dev : uint64   //! the projection's own rows (bf16 halves under `ple_wp_bf16`, else f32) and its norm row
+    ple_wp_bytes : int64
+    ple_wp_bf16 : bool
+    ple_w16_dev : uint64                 //! the window's f16 panel of the projection, rewritten every window (0 where no f16 tile serves it)
     ple_w16_bytes : int64
+    pf_ple_wcvt_set : VkDescriptorSet    //! the panel's conversion off the own rows
     pf_plexf, pf_plep : uint64
     pf_ple_cvt_set, pf_ple_gemm_set, pf_ple_ar_set : VkDescriptorSet
     //! the token command's half of the pre-step: the projected [layers*ple] row and the two steps' sets (the f16 GEMV over the embedded row, the per-slice finish)
@@ -2716,6 +2720,8 @@ struct RDec {
     ple_tbl_blk : int64 = -1l          //! the E-series token table's arena block: the ids prefill gathers pf_ple from it
     ple_tbl_fmt : int                  //! ... its format slot, the table's own tag - the gather's stamp (`emb_cls_ensure`)
     pf_ple_tbl_set : VkDescriptorSet
+    s_tok_ple : VkDescriptorSet        //! the one-row command's gather of the step's side row off the table, the host's staged row for a step without an id
+    ple_tok_on : bool                  //! ... built: the table placed, the projection held and the step's id on the device
     pf_ids : uint64                    // [MAX_NPOS] token ids for the device-side embed gather
     pf_emb_set : VkDescriptorSet
     pf_arq_sets : array<VkDescriptorSet>   // fused ar+rq|f16 per layer: [l*2] = the ffn site, [l*2+1] = addr_next

@@ -1165,6 +1165,7 @@ class DecCombineSh : DecCombineT {
 [ |> template_struct_instance]
 class template RouterGemvT : GkRouterGemv {
     override NORM = true
+    override YSCALE = true
 
     [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#whole-token-decode-span")]
     def run {
@@ -1178,24 +1179,26 @@ class RouterGemv : RouterGemvT {
     typedef XT = float
 }
 
-//! the f16 rows read as half pairs, one word a step
-[vk_dispatch(name = "router_gemv_f16_cls", grid = "ne", params = "ne : int64")]
-class RouterGemvF16 : RouterGemvT {
+//! the bf16 rows read as bf16 pairs, one word a step (the E-series pre-step's projection, its own rows on the device)
+[vk_dispatch(name = "router_gemv_bf16_cls", grid = "ne", params = "ne : int64")]
+class RouterGemvBf16 : RouterGemvT {
     typedef KT = uint
     typedef XT = float
     override VW = 2u
+    override BF16 = true
 }
 
-//! the router GEMV over `pc.ncols` columns (0 or 1 = one row), past `GEMV_COL_TILE` in tiles of that many, each tile's `col0` its first column
+//! the router GEMV over `pc.ncols` columns (0 or 1 = one row), past `GEMV_COL_TILE` in tiles of that many, each tile's `col0` its first
+//! column; `bf16` the bf16 rows' stamp, else the f32 rows'
 [arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-col-tiles")]
-def router_enc_cols(f16 : bool; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : GkRouterArgs; ne : int64) {
+def router_enc_cols(bf16 : bool; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : GkRouterArgs; ne : int64) {
     let total = max(pc.ncols, 1u)
     var c0 = 0u
     while (c0 < total) {
         pc.col0 = c0
         pc.ncols = min(total - c0, GEMV_COL_TILE)
-        if (f16) {
-            enc_router_gemv_f16_cls(raw, h, set_, pc, ne)
+        if (bf16) {
+            enc_router_gemv_bf16_cls(raw, h, set_, pc, ne)
         } else {
             enc_router_gemv_cls(raw, h, set_, pc, ne)
         }
@@ -8937,6 +8940,18 @@ class TowerClampCvt : GkClampRows {
 
 //! the f32 copy of a clamped GEMM input (the exact lane's f32 tile): the input bounds applied into `dst` so the normed rows stay
 //! whole for the next GEMM's own bounds
+//! bf16 rows widened by their bit shift and stored f16 (saturated at the half range): the E-series projection's per-window f16 panel
+[vk_dispatch(name = "ple_bf16_cvt_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class PleBf16Cvt : GkClampRows {
+    override OUT16 = true
+    override BF16IN = true
+
+    [spirv_kernel(local_size_x = 256, name = "ple_bf16_cvt_cls_spv")]
+    def run {
+        clamp_rows_body()
+    }
+}
+
 [vk_dispatch(name = "tower_clamp_copy_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class TowerClampCopy : GkClampRows {
     override COPY = true
