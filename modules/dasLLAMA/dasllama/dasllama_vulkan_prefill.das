@@ -877,23 +877,43 @@ def private pf_ple_block(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : in
     let dim = g_rd.dim
     let ple = g_rd.ple
     let all = uint(g_rd.n_layers * ple)   //! the side rows' position stride
-    let fmt = g_rd.layers[l].fpg
-    let pg = arena_planes(fmt, g_rd.layers[l].bpg)
-    let pp = arena_planes(fmt, g_rd.layers[l].bpp)
+    let L & = unsafe(g_rd.layers[l])
     //! every step runs the whole window, the FFN's last-layer row slice included: the branch is 256 wide, and the sliced rows' results go unread
-    let x6 = pf_f16_feed(fmt)   //! the gate's feed: the residual rows as f16 (the tile pick and split-k serve the 256-wide GEMM) else their Q8_0 blocks
-    pf_feed_enc(raw, h, g_rd.pf_sets[b + 16], x6, false, 0l, wlen * dim)
+    if (L.bpg < 0l) {   //! the file's f32 rows read the stream as it is, on the f32 tile
+        pfq_ts(raw)
+        var pcg = pf_ple_f32_args(wlen, dim, ple, l * ple * dim)
+        enc_dn_ba_cls(raw, h, g_rd.pf_sets[b + 17], pcg, dn_ba_wgs(wlen, ple / 2l))
+        pfq_ts(raw)
+    } else {
+        let x6 = pf_f16_feed(L.fpg)   //! the gate's feed: the residual rows as f16 (the tile pick and split-k serve the 256-wide GEMM) else their quants
+        pf_feed_enc(raw, h, g_rd.pf_sets[b + 16], x6, kq_sb(L.fpg) && !x6, 0l, wlen * dim)
+        pfq_ts(raw)
+        let xf = pf_feed_planes(x6, g_rd.pf_xf, g_rd.pf_xq, g_rd.pf_xs, dim)
+        let pg = arena_planes(L.fpg, L.bpg)
+        pf_gemm_enc(raw, h, b + 17, L.fpg, pg.wq, pg.ws, xf.q, xf.s, g_rd.pf_gate,
+            pg.wqb, pg.wsb, xf.qn, xf.sn, np * ple * 4l, VHZ_XQ, VHZ_GATE, dim, ple, L.bpg, wlen, x6)
+    }
+    var pca = ActArgs(nelem = uint(wlen * ple), act = ACT_GELU, ubase = uint(l * ple), ustride = all, ulen = uint(ple))
+    if (L.bpp < 0l) {   //! the act's f32 rows (in the up plane, free here) feed the f32 projection
+        enc_ple_act_f32_cls(raw, h, g_rd.pf_sets[b + 18], pca, (wlen * ple + 255l) / 256l)
+        pfq_ts(raw)
+        var pcp = pf_ple_f32_args(wlen, ple, dim, l * ple * dim)
+        enc_dn_ba_cls(raw, h, g_rd.pf_sets[b + 19], pcp, dn_ba_wgs(wlen, dim / 2l))
+        pfq_ts(raw)
+        return
+    }
+    actrq_enc(raw, h, g_rd.pf_sets[b + 18], kq_sb(L.fpp), pca, wlen * ple)
     pfq_ts(raw)
-    let xf = pf_feed_planes(x6, g_rd.pf_xf, g_rd.pf_xq, g_rd.pf_xs, dim)
-    pf_gemm_enc(raw, h, b + 17, fmt, pg.wq, pg.ws, xf.q, xf.s, g_rd.pf_gate,
-        pg.wqb, pg.wsb, xf.qn, xf.sn, np * ple * 4l, VHZ_XQ, VHZ_GATE, dim, ple, g_rd.layers[l].bpg, wlen, x6)
-    var pca = ActArgs(nelem = uint(wlen * ple), act = ACT_GELU, nblk = uint(wlen * ple / 32l),
-        ubase = uint(l * ple), ustride = all, ulen = uint(ple))
-    enc_q8_actrq_cls(raw, h, g_rd.pf_sets[b + 18], pca, (wlen * ple / 4l + 255l) / 256l)
-    pfq_ts(raw)
-    pf_gemm_enc(raw, h, b + 19, fmt, pp.wq, pp.ws, g_gpu.hq_dev, g_gpu.hs_dev, g_rd.pf_ffnout,
-        pp.wqb, pp.wsb, np * ple, np * (ple / 32l) * 4l, np * dim * 4l, VHZ_HQ, VHZ_FFO, ple, dim, g_rd.layers[l].bpp, wlen, false)
+    let pp = arena_planes(L.fpp, L.bpp)
+    pf_gemm_enc(raw, h, b + 19, L.fpp, pp.wq, pp.ws, g_gpu.hq_dev, g_gpu.hs_dev, g_rd.pf_ffnout,
+        pp.wqb, pp.wsb, np * ple, np * (ple / 32l) * 4l, np * dim * 4l, VHZ_HQ, VHZ_FFO, ple, dim, L.bpp, wlen, false)
 }
+
+//! the f32 tile (`DnBaGemm`) as a plain GEMM: `d` rows of `n` at `woff` over the window's rows into y[p * d + e] - its two output
+//! halves laid end to end
+def private pf_ple_f32_args(wlen, n, d, woff : int64) : DnBaArgs
+    => DnBaArgs(npos = uint(wlen), dim = uint(n), nvh = uint(d / 2l), woff = uint(woff), xstride = uint(n), obase_b = 0u,
+        obase_g = uint(d / 2l), ostride = uint(d))
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-window-chain")]
 def private pf_moe_addr_next(raw : VkCommandBuffer; var h : VkHaz; l, wlen, nxt : int64) {
@@ -1005,10 +1025,14 @@ def private pf_setup {
     // f16-fed groups (pf_f16_feed) take f16 convert roles; kq consumers the Q8_K quant/act forms
     var any_f16_feed = false
     var anykq = kq_sb(g_rd.cls_fmt_marker)
+    var ple_f32 = false   //! a per-layer-embedding kind on its f32 rows: the f32 tile and the f32 act
     for (L in g_rd.layers) {
         any_f16_feed = (any_f16_feed || pf_f16_feed(L.fq) || pf_f16_feed(L.fo) || pf_f16_feed(L.f1) || pf_f16_feed(L.f2)
-            || (L.recurrent && (pf_f16_feed(L.fqkv) || pf_f16_feed(L.fz) || pf_f16_feed(L.fout))))
-        anykq = anykq || kq_sb(L.fq) || kq_sb(L.fo) || kq_sb(L.f1) || kq_sb(L.f2) || (L.recurrent && (kq_sb(L.fqkv) || kq_sb(L.fz) || kq_sb(L.fout)))
+            || (L.recurrent && (pf_f16_feed(L.fqkv) || pf_f16_feed(L.fz) || pf_f16_feed(L.fout)))
+            || (L.ple && L.bpg >= 0l && pf_f16_feed(L.fpg)))
+        anykq = (anykq || kq_sb(L.fq) || kq_sb(L.fo) || kq_sb(L.f1) || kq_sb(L.f2) || (L.recurrent && (kq_sb(L.fqkv) || kq_sb(L.fz) || kq_sb(L.fout)))
+            || (L.ple && ((L.bpg >= 0l && kq_sb(L.fpg)) || (L.bpp >= 0l && kq_sb(L.fpp)))))
+        ple_f32 = ple_f32 || (L.ple && (L.bpg < 0l || L.bpp < 0l))
     }
     if (any_f16_feed) {
         assert(np % 32l == 0l, "dasLLAMA vulkan tier: the s tile's unclamped column needs a 32-row-multiple window")   // the resident planes carry no read slack
@@ -1101,7 +1125,8 @@ def private pf_setup {
         && (!sinks || long_length(chunked_hs) == 0l)   //! the sink rides the flash tiles alone: a sink model whose layer fell to the chunked pair declined at the sink upload
         && ensure_q8_actrq_cls() && (!g_rd.qk_norm || ensure_qk_rms_cls())
         && (!any_f16_feed || (ensure_tower_clamp_cvt_cls() && ensure_actf16_cls() && ensure_cls_ar_f16_b()))
-        && (!anykq || (ensure_cls_q8k_rq() && ensure_q8k_actrq_cls())),
+        && (!anykq || (ensure_cls_q8k_rq() && ensure_q8k_actrq_cls()))
+        && (!ple_f32 || (ensure_dn_ba_cls() && ensure_ple_act_f32_cls())),
         "vk prefill: the class rails must engage on a live device")
     if (g_rd.pf_facm2) {
         to_log(LOG_INFO, "dasLLAMA vulkan tier: cm2 flash attention armed ({long_length(fa_hs)} head size(s), {kvq ? "the block-codec mirrors' f16 shadow" : "native f16 mirrors"}; {long_length(chunked_hs)} on the chunked pair)\n")
@@ -1257,10 +1282,23 @@ def private pf_setup {
         // 16 ple_x: the stream rows as they are -> pf_xf (the f16 feed) or pf_xq/pf_xs; 18 ple_act: gelu(gate rows) x the side rows -> hq/hs (17 / 19 are GEMM roles: sets on the encode)
         if (L.ple) {
             let ple = g_rd.ple
-            g_rd.pf_sets[b + 16] = pf_feed_set(pf_f16_feed(L.fpg), g_rd.pf_x, VHZ_X, g_rd.pf_xf, g_rd.pf_xq, g_rd.pf_xs, dim, VHZ_XQ)
-            g_rd.pf_sets[b + 18] = set_actrq_cls(fixed_array(g_rd.pf_gate, g_rd.pf_ple, g_gpu.hq_dev, g_gpu.hs_dev),
-                fixed_array(np * ple * 4l, np * g_rd.n_layers * ple * 4l, BATCH_HQ_BYTES, BATCH_HS_BYTES),
-                fixed_array(VHZ_GATE, VHZ_COS, VHZ_HQ, VHZ_HQ))
+            let side_bytes = np * g_rd.n_layers * ple * 4l
+            if (L.bpg < 0l) {   //! 17: the f32 gate rows over the stream rows (`pf_ple_f32_args`)
+                g_rd.pf_sets[b + 17] = set_dn_ba_cls(fixed_array(g_rd.ple_gf32_dev, g_rd.pf_x, g_rd.pf_gate),
+                    fixed_array(g_rd.ple_gf32_bytes, np * dim * 4l, np * ple * 4l), fixed_array(0u, VHZ_X, VHZ_GATE))
+            } else {
+                g_rd.pf_sets[b + 16] = pf_feed_set(pf_f16_feed(L.fpg), g_rd.pf_x, VHZ_X, g_rd.pf_xf, g_rd.pf_xq, g_rd.pf_xs, dim, VHZ_XQ)
+            }
+            if (L.bpp < 0l) {   //! 18: the act's f32 rows into the up plane; 19: the f32 projection over them
+                g_rd.pf_sets[b + 18] = set_ple_act_f32_cls(fixed_array(g_rd.pf_gate, g_rd.pf_ple, g_rd.pf_up),
+                    fixed_array(np * ple * 4l, side_bytes, np * ple * 4l), fixed_array(VHZ_GATE, VHZ_COS, VHZ_UP))
+                g_rd.pf_sets[b + 19] = set_dn_ba_cls(fixed_array(g_rd.ple_pf32_dev, g_rd.pf_up, g_rd.pf_ffnout),
+                    fixed_array(g_rd.ple_pf32_bytes, np * ple * 4l, np * dim * 4l), fixed_array(0u, VHZ_UP, VHZ_FFO))
+            } else {
+                g_rd.pf_sets[b + 18] = set_actrq_cls(fixed_array(g_rd.pf_gate, g_rd.pf_ple, g_gpu.hq_dev, g_gpu.hs_dev),
+                    fixed_array(np * ple * 4l, side_bytes, BATCH_HQ_BYTES, BATCH_HS_BYTES),
+                    fixed_array(VHZ_GATE, VHZ_COS, VHZ_HQ, VHZ_HQ))
+            }
         }
     }
     let bp = pf_prologue_block()

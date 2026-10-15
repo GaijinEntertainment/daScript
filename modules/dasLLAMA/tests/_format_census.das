@@ -47,7 +47,15 @@ def format_census(tr : Model; m : GGUFMeta) : array<SiteCensus> {
     var emb = SiteCensus(site = "token table")
     var cls = SiteCensus(site = "classifier")
     var eh = SiteCensus(site = "NextN eh_proj")
+    var ple = SiteCensus(site = "per-layer embeddings")
     let c = tr.config
+    if (has_ple(c)) {   //! the gate and projection planes a layer (an F32 kind served as the file's f32 rows) and the token table
+        for (l in range64(c.n_layers)) {
+            census_plane(ple, m, "blk.{l}.inp_gate.weight", ple_plane(tr, l, false).f, tr.ple_gate_f32)
+            census_plane(ple, m, "blk.{l}.proj.weight", ple_plane(tr, l, true).f, tr.ple_proj_f32)
+        }
+        census_plane(ple, m, "per_layer_token_embd.weight", tr.ple_emb_fmt)
+    }
     for (l in range64(c.n_layers + c.n_layer_nextn)) {
         census_plane(attn, m, "blk.{l}.attn_q.weight", fmt_at(tr.wq_fmt, l))
         census_plane(attn, m, "blk.{l}.attn_k.weight", fmt_at(tr.wk_fmt, l))
@@ -70,10 +78,10 @@ def format_census(tr : Model; m : GGUFMeta) : array<SiteCensus> {
     census_plane(emb, m, "token_embd.weight", tr.emb_fmt)
     census_plane(cls, m, c.shared_weights ? "token_embd.weight" : "output.weight", cls_fmt_of(tr))
     census_plane(eh, m, "blk.{c.n_layers}.nextn.eh_proj.weight", tr.mtp_ehproj_fmt)
-    return <- [attn, exps, shexp, dn, ba, emb, cls, eh]
+    return <- [attn, exps, shexp, dn, ba, emb, cls, eh, ple]
 }
 
-//! every site the census tallies, in its order: what a cell on a file carrying them all wants
+//! every site the census tallies but the E-series' per-layer embeddings, in its order: what a cell on a file carrying them all wants
 def census_sites_all() : array<string> {
     return <- ["attention q/k/v/o", "routed experts", "shared expert", "deltanet qkv/gate/out", "deltanet beta/alpha", "token table",
         "classifier", "NextN eh_proj"]

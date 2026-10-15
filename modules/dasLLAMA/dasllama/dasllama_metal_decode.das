@@ -1469,23 +1469,44 @@ struct template LayerEncT {
 
 }
 
+//! `nrows` rows through layer l's gate (dim -> ple) or projection (ple -> dim) off the file's f32 rows: the router GEMV
+//! (`GkRouterGemv`), a column a row
+def private enc_ple_f32(enc : MetalComputeEncoder?; t : Model; l : int64; proj : bool; bx, by : MetalBuffer?; nrows : int64) {
+    let c = t.config
+    let n = proj ? c.n_embd_per_layer : c.dim
+    let d = proj ? c.dim : c.n_embd_per_layer
+    var bw = upload_region(unsafe(addr < void? >(t.fblob[ple_plane(t, l, proj).off])), uint64(n * d * 4l))
+    var ka = moe_router_args(d, n, nrows)
+    enc_moe_router(enc, bw, bx, by, g_one, ka, d, nrows)
+}
+
 //! the single row's PLE between the FFN residual and out_scale: branch = post_norm(proj·(gelu(gate·x) ⊙ side[l]))
 def private ple_single(var e : auto(ET); t : Model; enc : MetalComputeEncoder?; l : int64) {
     let r & = unsafe(*e.r)
     let c = t.config
     let dim = c.dim
     let ple = c.n_embd_per_layer
+    let pg = ple_plane(t, l, false)
+    let pp = ple_plane(t, l, true)
     if (g_skip != "ew") {
         enc_add(enc, r.bx, 0ul, r.bxb, 0ul, r.u_dim, dim)
     }
     if (g_skip != "gemv") {
-        enc_site_gemv(enc, t, KqFmt.q8, t.ple_gate_off + l * dim * ple, ple, dim, r.bx, r.bh12, r.u_dim, r.u_ple)
+        if (pg.f32) {
+            enc_ple_f32(enc, t, l, false, r.bx, r.bh12, 1l)
+        } else {
+            enc_site_gemv(enc, t, pg.f, pg.off, ple, dim, r.bx, r.bh12, r.u_dim, r.u_ple)
+        }
     }
     if (g_skip != "ew") {
         enc_geglu(enc, r.bh12, 0ul, r.bple, uint64(l * ple * 4l), r.u_ple, ple)
     }
     if (g_skip != "gemv") {
-        enc_site_gemv(enc, t, KqFmt.q8, t.ple_proj_off + l * ple * dim, dim, ple, r.bh12, r.bxb, r.u_ple, r.u_dim)
+        if (pp.f32) {
+            enc_ple_f32(enc, t, l, true, r.bh12, r.bxb, 1l)
+        } else {
+            enc_site_gemv(enc, t, pp.f, pp.off, dim, ple, r.bh12, r.bxb, r.u_ple, r.u_dim)
+        }
     }
     if (g_skip != "ew") {
         var bw_pp = upload_region(unsafe(addr < void? >(t.fblob[t.ple_post_off + l * dim])), uint64(dim * 4l))
@@ -1500,17 +1521,27 @@ def private ple_rows(var e : BatchLayerEnc; t : Model; enc : MetalComputeEncoder
     let c = t.config
     let dim = c.dim
     let ple = c.n_embd_per_layer
+    let pg = ple_plane(t, l, false)
+    let pp = ple_plane(t, l, true)
     if (g_skip != "ew") {
         add_rows(e, enc, r.bx, 0ul, r.bxb, 0ul, dim, null)
     }
     if (g_skip != "gemv") {
-        site_batch(e, t, enc, SiteKind.other, KqFmt.q8, t.ple_gate_off + l * dim * ple, ple, dim, ple, r.bx, r.bh12, r.u_dim, r.u_ple, r.u_ple, 0l)
+        if (pg.f32) {
+            enc_ple_f32(enc, t, l, false, r.bx, r.bh12, r.nrows)
+        } else {
+            site_batch(e, t, enc, SiteKind.other, pg.f, pg.off, ple, dim, ple, r.bx, r.bh12, r.u_dim, r.u_ple, r.u_ple, 0l)
+        }
     }
     if (g_skip != "ew") {
         enc_geglu(enc, r.bh12, 0ul, r.bple, uint64(l * r.nrows * ple * 4l), r.u_ple_tot, r.nrows * ple)
     }
     if (g_skip != "gemv") {
-        site_batch(e, t, enc, SiteKind.other, KqFmt.q8, t.ple_proj_off + l * ple * dim, dim, ple, dim, r.bh12, r.bxb, r.u_ple, r.u_dim, r.u_dim, 0l)
+        if (pp.f32) {
+            enc_ple_f32(enc, t, l, true, r.bh12, r.bxb, r.nrows)
+        } else {
+            site_batch(e, t, enc, SiteKind.other, pp.f, pp.off, dim, ple, dim, r.bh12, r.bxb, r.u_ple, r.u_dim, r.u_dim, 0l)
+        }
     }
     if (g_skip != "ew") {
         var bw_pp = upload_region(unsafe(addr < void? >(t.fblob[t.ple_post_off + l * dim])), uint64(dim * 4l))

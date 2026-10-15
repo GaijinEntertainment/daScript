@@ -1134,8 +1134,8 @@ def private depth_cell(t : T?; tr, trg : Model; tag : string; bar : float; stamp
     }
 }
 
-[unused_argument(t, path, tag, hetero_hidden, tokexact)]   // off-Apple the gated body is empty
-def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false; tokexact : bool = true) {
+[unused_argument(t, path, tag, hetero_hidden, tokexact, bar)]   // off-Apple the gated body is empty
+def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false; tokexact : bool = true; bar : float = 8.0) {
     // gemma-4 E-series (E4B): PLE (per-layer embeddings — MetalNeed.ple) + cross-layer KV
     // sharing (the last 18 layers are Q-only and alias layer 22/23's slab/panels). Decode,
     // prefill and the batched step ENGAGE on the blob twin; the batched step is compared row
@@ -1163,6 +1163,11 @@ def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false
         // proves the per-layer u_hidden bind; E4B is width-uniform and passes hetero_hidden=false
         t |> success((ffn_second_hidden(tr) > 0l) == hetero_hidden,
             "{tag}: fixture two-FFN-width shape matches the row's claim (second width {ffn_second_hidden(tr)})")
+        //! the per-layer gate and projection planes in their own formats (the E2B Q4_K_M ships them F32, the Q4_0 file Q4_0)
+        census_cell(t, tr, path, "{tag} planar", ["per-layer embeddings"])
+        let f32_ple = tr.ple_gate_f32 || tr.ple_proj_f32
+        let rt0 = metal_kernel_count_compiled("metal_moe_router")   //! the pipelines compile at the driver's first call
+        let rtb0 = metal_kernel_count_compiled("metal_moe_router_b") + metal_kernel_count_compiled("metal_f32_exact_mulmm")
         var trg <- blob_twin(t, path, 512l)
         let c = trg.config
         let vocab = c.vocab_size
@@ -1207,7 +1212,7 @@ def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false
             let cpu_next = argmax_of(sc.logits, vocab)
             let gpu_next = argmax_of(sa.logits, vocab)
             to_log(LOG_INFO, "{tag} single-stream forced-step: CPU next '{eyeball_str(piece_(tr, cpu_next))}' vs GPU next '{eyeball_str(piece_(tr, gpu_next))}' (maxd {ssmaxd})\n")
-            t |> success(ssmaxd <= 8.0, "{tag}: single-stream forced-step logits within 8.0 (maxd {ssmaxd})")
+            t |> success(ssmaxd <= bar, "{tag}: single-stream forced-step logits within {bar} (maxd {ssmaxd})")
             delete picks
             delete sc
             sc = make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
@@ -1241,12 +1246,12 @@ def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false
                 bmaxd = max(bmaxd, abs(sh.logits[i] - sd.logits[i]))
             }
             to_log(LOG_INFO, "{tag} batched step: CPU next '{eyeball_str(piece_(tr, argmax_of(sc.logits, vocab)))}' / '{eyeball_str(piece_(tr, argmax_of(sd.logits, vocab)))}' vs GPU next '{eyeball_str(piece_(tr, argmax_of(sg.logits, vocab)))}' / '{eyeball_str(piece_(tr, argmax_of(sh.logits, vocab)))}' (maxd {bmaxd})\n")
-            t |> success(bmaxd <= 8.0, "{tag}: batched-step logits within 8.0 of the CPU batched stack, both rows (maxd {bmaxd})")
+            t |> success(bmaxd <= bar, "{tag}: batched-step logits within {bar} of the CPU batched stack, both rows (maxd {bmaxd})")
             var xmaxd = 0.0   //! the control: row A against row B lands outside the bar
             for (i in range64(vocab)) {
                 xmaxd = max(xmaxd, abs(sg.logits[i] - sd.logits[i]))
             }
-            t |> success(xmaxd > 8.0, "{tag}: the cross-row compare lands outside the bar (maxd {xmaxd})")
+            t |> success(xmaxd > bar, "{tag}: the cross-row compare lands outside the bar (maxd {xmaxd})")
             select_decode_override("")
             select_prefill_override("")
             set_metal_prefill_min_npos(64l)
@@ -1267,6 +1272,15 @@ def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false
         }
         t |> success(metal_prefill_stats().prefills - pf0 > 0l, "{tag} prefill: ENGAGES on the GPU")
         t |> success(metal_decode_stats().decodes - de0 > 0l, "{tag} decode: ENGAGES on the GPU")
+        //! no routed expert on an E-series model: the router stamps run the f32 per-layer planes alone (the q8 files' control)
+        let rt_n = metal_kernel_count_compiled("metal_moe_router") - rt0
+        let rtb_n = metal_kernel_count_compiled("metal_moe_router_b") + metal_kernel_count_compiled("metal_f32_exact_mulmm") - rtb0
+        if (f32_ple) {
+            t |> success(rt_n >= 2l * c.n_layers, "{tag}: the decode steps read the f32 gate and projection rows on the router GEMV ({rt_n})")
+            t |> success(rtb_n >= 2l * c.n_layers, "{tag}: the window reads them on the f32 tile or the slab GEMV ({rtb_n})")
+        } else {
+            t |> equal(rt_n + rtb_n, 0l, "{tag}: no f32 per-layer plane, no router stamp dispatched")
+        }
         var bad <- metal_batch_decode_declines()
         t |> success(metal_batch_decode_stats().steps - ba0 > 0l, "{tag} batch: ENGAGES on the GPU")
         t |> equal((bad?["need_ple"] ?? 0l) - (bad0?["need_ple"] ?? 0l), 0l, "{tag} batch: no need_ple decline (the PLE rows form serves)")
@@ -1290,7 +1304,7 @@ def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false
             select_decode_override("")
             select_prefill_override("")
         }
-        depth_cell(t, tr, trg, tag, 8.0, ["MetalSqAttnDXF16_metal_sq_attn_d", "MetalSqAttnDWF16_metal_sq_attn_d"])
+        depth_cell(t, tr, trg, tag, bar, ["MetalSqAttnDXF16_metal_sq_attn_d", "MetalSqAttnDWF16_metal_sq_attn_d"])
         log_gen_texts(tr, "{tag}", cpu_ids, gpu_ids)
         if (tokexact) {
             t |> success(ids_equal(cpu_ids, gpu_ids),
@@ -1305,7 +1319,7 @@ def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false
         }
         delete cpu_ids
         delete gpu_ids
-        cont_logits_cell(t, tr, trg, "{tag}/q8/f16", 8.0)
+        cont_logits_cell(t, tr, trg, "{tag}/q8/f16", bar)
         delete trg
         delete tr
     }
@@ -1959,6 +1973,9 @@ def test_metal_family_matrix(t : T?) {
             // ... and the kq carrier: the k5-plane PLE table's CPU gather over the metal-blob
             // COMPACTED scale strips (16B, not the planar 20B) — the stride that zeroed logits
             gemma4e_row(t, path_join(models_dir(), "gemma-4-E2B-it-Q4_K_M.gguf"), "gemma4e-e2b-kq", true, false)
+            // ... and the Q4_0 file: the per-layer gate and projection planes Q4_0 on disk, read on the q40 forms at every shape
+            // the file's rows sit closer together (the batch cell's two rows 6.6 apart), so its bar is 4.0 (reads 0.6 to 1.3)
+            gemma4e_row(t, path_join(models_dir(), "gemma-4-E2B-it-Q4_0.gguf"), "gemma4e-e2b-q40", true, false, 4.0)
             // gpt-oss-20b (Wave C stage 4): mx4 experts + sinks + softmax_weight + biases
             gptoss_row(t, path_join(models_dir(), "gpt-oss-20b-mxfp4.gguf"))
             // qwen35 (Wave D): the Gated-DeltaNet hybrid — 3-in-4 recurrent layers (state

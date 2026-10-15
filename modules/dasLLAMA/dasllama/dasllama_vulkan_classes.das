@@ -866,6 +866,26 @@ class ActF16B : ActF16T {
     override BIASED = true
 }
 
+//! the per-layer-embedding branch's act as floats, the f32 projection's x: gelu(gate) x the side row, `ActRqT`'s strided side
+//! read (`ubase` / `ustride` / `ulen`), an element a thread
+[vk_dispatch(name = "ple_act_f32_cls", grid = "wgs", params = "wgs : int64")]
+class PleActF32 {
+    @ssbo @binding = 0 gate : array<float>
+    @ssbo @binding = 1 up : array<float>
+    @ssbo @binding = 2 outp : array<float>
+    @push_constant pa : ActArgs
+
+    [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#whole-token-decode-span")]
+    def run {
+        let e = gl_GlobalInvocationID.x
+        if (e < pa.nelem) {
+            let ul = max(pa.ulen, 1u)
+            let ue = pa.ustride != 0u ? pa.ubase + (e / ul) * pa.ustride + e % ul : pa.ubase + e
+            outp[e] = gk_act_mul(gate[e], up[ue], pa.act)
+        }
+    }
+}
+
 struct EmbArgs {
     npos : uint
     dim : uint

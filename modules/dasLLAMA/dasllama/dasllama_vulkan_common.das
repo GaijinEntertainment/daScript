@@ -2389,8 +2389,8 @@ struct RLayer {
     attn_cap : float                //! the attention logit softcap on the scaled scores (gemma-2: 50); 0 = none - the cm2 flash tile's cap stamps take it at h256
     // the per-layer-embedding branch (gemma-4 E-series): gate [dim x ple] and proj [ple x dim] planes, their sets and metas
     ple : bool
-    bpg, bpp : int64
-    fpg : int
+    bpg, bpp : int64                //! the arena blocks; -1 where the plane is the file's f32 rows (`ple_gf32_dev` / `ple_pf32_dev`)
+    fpg, fpp : int                  //! the gate's and the projection's formats
     s_ple_x : VkDescriptorSet       //! the residual row requantized as it is (the gate GEMV's feed)
     s_ple_gate, s_ple_proj : VkDescriptorSet
     s_ple_act : VkDescriptorSet     //! gelu(gate) x this layer's side-input row, requantized (the proj GEMV's feed)
@@ -2667,6 +2667,10 @@ struct RDec {
     ple : int64
     ple_host : HostBuf
     ple_dev, pleg_dev : uint64
+    //! the gate / projection planes that ship F32, every layer's rows in the file's f32 (0 where the kind rides the arena), and
+    //! the act's f32 rows the f32 projection reads [nb x ple]
+    ple_gf32_dev, ple_pf32_dev, pleact_dev : uint64
+    ple_gf32_bytes, ple_pf32_bytes : int64
     pf_ple : uint64
     // the pre-step's projection on device (cm2 route): the per-layer model projection as an f16 mirror [layers*ple x dim],
     // its [ple] norm row, the window's f16 embedding rows and the projected [np x layers*ple] plane, and the three steps' sets

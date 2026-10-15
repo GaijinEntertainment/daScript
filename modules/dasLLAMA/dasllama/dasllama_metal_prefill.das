@@ -7283,6 +7283,24 @@ def private pf_enc_slab_gemv_b(enc : MetalComputeEncoder?; bw, bx, by : MetalBuf
     enc_moe_router_b(enc, bw, bx, by, g_one, ka, d, npos)
 }
 
+//! the window's rows through layer l's per-layer-embedding gate (dim -> ple), or with `proj` its projection (ple -> dim), in the
+//! plane's own format: a tagged plane on its dense site, the file's f32 rows on the f32 tile (`MetalF32ExactMm`) or the slab GEMV
+def private pf_enc_ple_site(enc : MetalComputeEncoder?; t : Model; l : int64; proj : bool; bx, by, bk, bn : MetalBuffer?; mp, npos : int64;
+                            bxh : MetalBuffer?) {
+    let c = t.config
+    let n = proj ? c.n_embd_per_layer : c.dim
+    let d = proj ? c.dim : c.n_embd_per_layer
+    let pp = ple_plane(t, l, proj)
+    if (!pp.f32) {
+        pf_enc_site_mm(enc, t, pp.f, pp.off, d, bx, by, bk, bn, mp, n, npos, bxh)
+        return
+    }
+    var bw = upload_region(unsafe(addr<void?>(t.fblob[pp.off])), uint64(n * d * 4l))
+    if (!pf_enc_router_mm(enc, bw, bx, by, bk, bn, d, n, mp)) {
+        pf_enc_slab_gemv_b(enc, bw, bx, by, n, d, npos)
+    }
+}
+
 
 def private ple_gather_pso_of(fmt : KqFmt) : MetalComputePipeline? {
     if (fmt == KqFmt.q8) return g_pf_pso_ple_gather
@@ -8753,15 +8771,13 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                         enc_add(enc, bx, 0ul, bxb, 0ul, u_total_dim, npos * dim)
                     }
                     if (g_pf_skip != "gemm") {
-                        let bwpg = blob_of(g_dev, t, t.ple_gate_off + l * dim * ple_n)
-                        enc_gemm_mm(enc, bwpg.buf, bwpg.boff, bx, bpleg, u_dim, u_ple, mp, ple_n, 0ul, dim, npos, pf_cvt_panel(enc, bx, mp, dim, g_pf_skip == "act_cvt"))
+                        pf_enc_ple_site(enc, t, l, false, bx, bpleg, u_dim, u_ple, mp, npos, pf_cvt_panel(enc, bx, mp, dim, g_pf_skip == "act_cvt"))
                     }
                     if (g_pf_skip != "ew" && g_pf_skip != "nongemm") {
                         enc_geglu(enc, bpleg, 0ul, bple, uint64(l * npos * ple_n * 4l), u_ple_tot, npos * ple_n)
                     }
                     if (g_pf_skip != "gemm") {
-                        let bwpp = blob_of(g_dev, t, t.ple_proj_off + l * ple_n * dim)
-                        enc_gemm_mm(enc, bwpp.buf, bwpp.boff, bpleg, bxb, u_ple, u_dim, mp, dim, 0ul, ple_n, npos, pf_cvt_panel(enc, bpleg, mp, ple_n, g_pf_skip == "act_cvt"))
+                        pf_enc_ple_site(enc, t, l, true, bpleg, bxb, u_ple, u_dim, mp, npos, pf_cvt_panel(enc, bpleg, mp, ple_n, g_pf_skip == "act_cvt"))
                     }
                     if (g_pf_skip != "ew" && g_pf_skip != "nongemm") {
                         var bw_pn = upload_region(addr < void? >(t.fblob[t.ple_post_off + l * dim]), uint64(dim * 4l))

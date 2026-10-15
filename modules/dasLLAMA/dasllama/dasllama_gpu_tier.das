@@ -899,17 +899,19 @@ def public rdec_head_warm_rows() : int64 => invoke(g_rdec_head_warm_rows)
 
 //! the per-layer-embedding seats (gemma-4 E-series): `set_ple` sizes the side-input rows at the model's ple width
 //! (after prepare, before the layers); `set_ple_layer` wires one layer's gate [dim x ple] and proj [ple x dim] planes
-typedef RdecSetPleFn = function<(ple : int64) : bool>
-typedef RdecSetPleLayerFn = function<(l : int64; bgate : int64; bproj : int64; fmt : int) : void>
+//! `gate_f32` / `proj_f32`: every layer's gate / projection rows where the kind ships F32 (empty where it rides the arena)
+typedef RdecSetPleFn = function<(ple : int64; gate_f32 : array<float>; proj_f32 : array<float>) : bool>
+//! a block of -1 names the kind's f32 rows (`RdecSetPleFn`), else the plane in its format slot (`fgate` / `fproj`)
+typedef RdecSetPleLayerFn = function<(l : int64; bgate : int64; bproj : int64; fgate : int; fproj : int) : void>
 //! the pre-step's projection on device: `w` the per-layer model projection [layers*ple x dim] as f32 rows, `pnorm` its [ple] norm row; false = the driver keeps the CPU pre-step
 typedef RdecSetPleProjFn = function<(w : array<float>; pnorm : array<float>; all : int64) : bool>
 //! the per-layer-embedding token table placed in the arena (`blk`, a plane [vocab x layers*ple] in format slot `fmt`, the table's
 //! own tag): the window chain gathers its side rows on device off the token ids
 typedef RdecSetPleTableFn = function<(blk : int64; fmt : int) : bool>
-[unused_argument(ple)]
-def private rdec_unset_set_ple(ple : int64) : bool => false
-[unused_argument(l, bgate, bproj, fmt)]
-def private rdec_unset_set_ple_layer(l, bgate, bproj : int64; fmt : int) {}
+[unused_argument(ple, gate_f32, proj_f32)]
+def private rdec_unset_set_ple(ple : int64; gate_f32 : array<float>; proj_f32 : array<float>) : bool => false
+[unused_argument(l, bgate, bproj, fgate, fproj)]
+def private rdec_unset_set_ple_layer(l, bgate, bproj : int64; fgate, fproj : int) {}
 [unused_argument(w, pnorm, all)]
 def private rdec_unset_set_ple_proj(w : array<float>; pnorm : array<float>; all : int64) : bool => false
 [unused_argument(blk, fmt)]
@@ -935,8 +937,8 @@ def public install_rdec_ple(set_ple : RdecSetPleFn; set_ple_layer : RdecSetPleLa
 def public rdec_set_ple_table(blk : int64; fmt : int) : bool => invoke(g_rdec_set_ple_table, blk, fmt)
 
 def public rdec_ple_installed() : bool => g_rdec_ple_installed
-def public rdec_set_ple(ple : int64) : bool => invoke(g_rdec_set_ple, ple)
-def public rdec_set_ple_layer(l, bgate, bproj : int64; fmt : int) { invoke(g_rdec_set_ple_layer, l, bgate, bproj, fmt) }
+def public rdec_set_ple(ple : int64; gate_f32 : array<float>; proj_f32 : array<float>) : bool => invoke(g_rdec_set_ple, ple, gate_f32, proj_f32)
+def public rdec_set_ple_layer(l, bgate, bproj : int64; fgate, fproj : int) { invoke(g_rdec_set_ple_layer, l, bgate, bproj, fgate, fproj) }
 //! true once the driver took the pre-step's projection: the prefill then wants the gather half alone (`ple_raw`)
 def public rdec_set_ple_proj(w : array<float>; pnorm : array<float>; all : int64) : bool {
     g_rdec_ple_proj_on = invoke(g_rdec_set_ple_proj, w, pnorm, all)

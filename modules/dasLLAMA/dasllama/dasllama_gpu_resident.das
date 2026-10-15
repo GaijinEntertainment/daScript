@@ -826,11 +826,40 @@ def private push_layer_planes(t : Model; var planes : array<ResidentPlane>; l : 
     if (moe && experts) {
         push_expert_planes(t, planes, l)
     }
-    if (has_ple(c) && !recurrent) {
+    if (has_ple(c) && !recurrent) {   //! a kind that ships F32 rides its own f32 rows, no arena plane (`resident_ple_f32_rows`)
         let ple = c.n_embd_per_layer
-        planes |> push(ResidentPlane(n = dim, rows = ple, f = KqFmt.q8, off = t.ple_gate_off + l * dim * ple, role = ResidentRole.ple_gate, l = l))
-        planes |> push(ResidentPlane(n = ple, rows = dim, f = KqFmt.q8, off = t.ple_proj_off + l * ple * dim, role = ResidentRole.ple_proj, l = l))
+        let pg = ple_plane(t, l, false)
+        let pp = ple_plane(t, l, true)
+        if (!pg.f32) {
+            planes |> push(ResidentPlane(n = dim, rows = ple, f = pg.f, off = pg.off, role = ResidentRole.ple_gate, l = l))
+        }
+        if (!pp.f32) {
+            planes |> push(ResidentPlane(n = ple, rows = dim, f = pp.f, off = pp.off, role = ResidentRole.ple_proj, l = l))
+        }
     }
+}
+
+//! every layer's per-layer-embedding gate (or with `proj`, projection) rows in the file's f32, in layer order, where the kind
+//! ships F32; empty where it rides the arena
+def private resident_ple_f32_rows(t : Model; proj : bool) : array<float> {
+    let c = t.config
+    var rows : array<float>
+    if (!has_ple(c) || !(proj ? t.ple_proj_f32 : t.ple_gate_f32)) {
+        return <- rows
+    }
+    let per = c.dim * c.n_embd_per_layer
+    rows |> reserve_resize(c.n_layers * per)
+    for (l in range64(c.n_layers)) {
+        copy_floats(t.fblob, ple_plane(t, l, proj).off, rows, l * per, per)
+    }
+    return <- rows
+}
+
+//! the device bytes of the per-layer-embedding kinds that ship F32 (`resident_ple_f32_rows`), no arena block
+def private resident_ple_f32_bytes(t : Model) : int64 {
+    let c = t.config
+    let kinds = (t.ple_gate_f32 ? 1l : 0l) + (t.ple_proj_f32 ? 1l : 0l)
+    return has_ple(c) ? kinds * c.n_layers * c.dim * c.n_embd_per_layer * 4l : 0l
 }
 
 //! the whole model's weight planes in the order the upload places them (`resident_upload` walks this list): the
@@ -1169,6 +1198,7 @@ def resident_plan(t : Model; seq_cap : int64; kdt, vdt : KVDtype; hot_cap : int6
         p.weight_bytes += moe_gpu_plane_bytes(pl.n, pl.rows, int(pl.f))
     }
     p.weight_bytes += resident_dn_ba_f32_bytes(t)
+    p.weight_bytes += resident_ple_f32_bytes(t)
     p.weight_bytes += resident_router_bytes(c, n_moe)
     if (p.host_layers > 0l && rdec_hot_installed() && c.n_expert_used <= int64(RDEC_HOT_PICKS)) {
         let room = p.usable_bytes - p.weight_bytes - p.scratch_bytes
@@ -2318,7 +2348,13 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     var mir_slots : array<int64>
     mir_slots |> reserve_resize(c.n_layers)
     let ple = has_ple(c) ? c.n_embd_per_layer : 0l
-    if (ple > 0l && !rdec_set_ple(ple)) return rdec_decline("the per-layer-embedding width {ple} is not a 32-multiple")
+    if (ple > 0l) {
+        var inscope gate_f32 <- resident_ple_f32_rows(t, false)
+        var inscope proj_f32 <- resident_ple_f32_rows(t, true)
+        if (!rdec_set_ple(ple, gate_f32, proj_f32)) {
+            return rdec_decline("the per-layer-embedding seats declined: the width {ple} is not a 32-multiple, or the f32 rows' router GEMV and act found no class")
+        }
+    }
     var ple_tbl_placed = false
     if (plan.ple_tbl_bytes > 0l) {
         //! the table sits in disk order in its own plane, outside the weights' repack: linear q8 rows, or the disk-order superblock and per-32 blocks
@@ -2412,10 +2448,12 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
                 int(lf.fq), int(lf.fk), int(lf.fv), int(lf.fo), int(lf.f1), int(lf.f3), int(lf.f2), g)
         }
         if (ple > 0l) {
-            let bpg = place_plane(t, planes, cur, ResidentRole.ple_gate, l, mr, kg, wb)
-            let bpp = place_plane(t, planes, cur, ResidentRole.ple_proj, l, mr, kg, wb)
-            if (bpg < 0l || bpp < 0l) return rdec_decline("arena placement failed at layer {l} (the per-layer-embedding planes)")
-            rdec_set_ple_layer(l, bpg, bpp, int(KqFmt.q8))
+            let pg = ple_plane(t, l, false)
+            let pp = ple_plane(t, l, true)
+            let bpg = pg.f32 ? -1l : place_plane(t, planes, cur, ResidentRole.ple_gate, l, mr, kg, wb)
+            let bpp = pp.f32 ? -1l : place_plane(t, planes, cur, ResidentRole.ple_proj, l, mr, kg, wb)
+            if ((!pg.f32 && bpg < 0l) || (!pp.f32 && bpp < 0l)) return rdec_decline("arena placement failed at layer {l} (the per-layer-embedding planes)")
+            rdec_set_ple_layer(l, bpg, bpp, int(pg.f), int(pp.f))
         }
         if (!kvsh) {
             mir_idx++

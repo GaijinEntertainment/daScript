@@ -122,16 +122,42 @@ def private ple_pre_prefill_pad_impl(t : Model; var s : Session; npos : int64) {
     ple_pre_finish(t, s, s.x_b, npos)
 }
 
+//! one row through layer l's gate (dim -> ple) or projection (ple -> dim) in the plane's own format
+def private ple_mm(t : Model; var s : Session; var y : array<float>; x : array<float>; l : int64; proj : bool) {
+    let c = t.config
+    let n = proj ? c.n_embd_per_layer : c.dim
+    let d = proj ? c.dim : c.n_embd_per_layer
+    let pp = ple_plane(t, l, proj)
+    if (pp.f32) {
+        mm_fblob(y, t, pp.off, x, n, d)
+    } else {
+        mm_f(y, t, pp.f, pp.off, x, s.xq, s.xs, s.xbs, n, d)
+    }
+}
+
+//! `npos` rows through layer l's gate or projection, the batched form of `ple_mm`
+def private ple_mm_b(t : Model; var s : Session; var y : array<float>; x : array<float>; l, npos : int64; proj : bool) {
+    let c = t.config
+    let n = proj ? c.n_embd_per_layer : c.dim
+    let d = proj ? c.dim : c.n_embd_per_layer
+    let pp = ple_plane(t, l, proj)
+    if (pp.f32) {
+        mm_fblob_b(y, t, pp.off, x, n, d, npos)
+    } else {
+        mm_b_f(s, y, t, pp.f, pp.off, x, n, d, npos)
+    }
+}
+
 // Per-layer block (decode): cur += post_norm(proj · (gelu(inp_gate·cur) ⊙ ple_inp[l])). In place on s.x.
 def private ple_block_decode(t : Model; var s : Session; l : int64) {
     trace_tag(TRACE_TAG_PLE)
     let c = t.config
     let dim = c.dim
     let ple = c.n_embd_per_layer
-    mm(s.ple_gate, t, t.ple_gate_off + l * dim * ple, s.x, s.xq, s.xs, dim, ple)   // dim -> ple
+    ple_mm(t, s, s.ple_gate, s.x, l, false)
     gelu(s.ple_gate, ple)
     mul_inplace(unsafe(addr(s.ple_gate[0])), unsafe(addr(s.ple_inp[l * ple])), ple)  // ⊙ this layer's side input
-    mm(s.xb, t, t.ple_proj_off + l * ple * dim, s.ple_gate, s.xq, s.xs, ple, dim)   // ple -> dim
+    ple_mm(t, s, s.xb, s.ple_gate, l, true)
     rms_at(s.xb, t, t.ple_post_off + l * dim, s.xb, dim)
     add_inplace(unsafe(addr(s.x[0])), unsafe(addr(s.xb[0])), dim)   // residual (pe_in + projected)
 }
@@ -145,12 +171,12 @@ def private ple_block_prefill(t : Model; var s : Session; l : int64; npos : int6
     let dim = c.dim
     let ple = c.n_embd_per_layer
     let all = c.n_layers * ple
-    mm_b(s.ple_gate, t, t.ple_gate_off + l * dim * ple, s.x_b, s.xqb, s.xsb, dim, ple, npos)
+    ple_mm_b(t, s, s.ple_gate, s.x_b, l, npos, false)
     gelu(s.ple_gate, npos * ple)
     for (p in range64(npos)) {
         mul_inplace(unsafe(addr(s.ple_gate[p * ple])), unsafe(addr(s.ple_inp[p * all + l * ple])), ple)
     }
-    mm_b(s.xb_b, t, t.ple_proj_off + l * ple * dim, s.ple_gate, s.xqb, s.xsb, ple, dim, npos)
+    ple_mm_b(t, s, s.xb_b, s.ple_gate, l, npos, true)
     rms_batch(s.xb_b, s.xb_b, t, t.ple_post_off + l * dim, dim, npos)
     add_inplace(unsafe(addr(s.x_b[0])), unsafe(addr(s.xb_b[0])), npos * dim)
 }

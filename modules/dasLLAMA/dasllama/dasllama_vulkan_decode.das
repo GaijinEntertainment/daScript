@@ -1077,26 +1077,33 @@ def vk_rdec_dn_own(l : int64; stp : float?; histp : float?) {
 
 //! The per-layer-embedding seats: the side-input row buffers at the model's ple width (after prepare, before the layers)
 [arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
-def vk_rdec_set_ple(ple : int64) : bool {
+def vk_rdec_set_ple(ple : int64; gate_f32 : array<float>; proj_f32 : array<float>) : bool {
     if (g_gpu != null && g_gpu.dry) {
         return true
     }
     assert(g_rd != null, "vk_rdec_set_ple before prepare")
-    if (ple <= 0l || ple % 32l != 0l) {
-        return false   //! the gate GEMV's output and the act's requant take 32-blocks
+    //! the gate GEMV's output and the act's requant take 32-blocks; the f32 rows want the router GEMV and the f32 act
+    if (ple <= 0l || ple % 32l != 0l || ((!empty(gate_f32) || !empty(proj_f32)) && !(ensure_router_gemv_cls() && ensure_ple_act_f32_cls()))) {
+        return false
     }
     g_rd.ple = ple
     let row_bytes = g_rd.n_layers * ple * 4l * g_rd.nb
     g_rd.ple_host = make_host_buf(row_bytes, false, [cached = true])
     g_rd.ple_dev = make_device_buf(row_bytes)
     g_rd.pleg_dev = make_device_buf(ple * 4l * g_rd.nb)
+    g_rd.pleact_dev = make_device_buf(ple * 4l * g_rd.nb)
+    g_rd.ple_gf32_bytes = long_length(gate_f32) * 4l
+    g_rd.ple_gf32_dev = empty(gate_f32) ? 0ul : rd_upload_rows(gate_f32)
+    g_rd.ple_pf32_bytes = long_length(proj_f32) * 4l
+    g_rd.ple_pf32_dev = empty(proj_f32) ? 0ul : rd_upload_rows(proj_f32)
     rd_unmake_sets()
     rd_invalidate_token()
     return true
 }
 
-//! One layer's per-layer-embedding branch: the gate [dim x ple] and proj [ple x dim] planes and the sets of its four steps
-def vk_rdec_set_ple_layer(l, bgate, bproj : int64; fmt : int) {
+//! One layer's per-layer-embedding branch: the gate [dim x ple] and proj [ple x dim] planes and the sets of its four steps; a
+//! block of -1 is the kind's f32 rows, on the router GEMV (`GkRouterGemv`) with the act's f32 rows between
+def vk_rdec_set_ple_layer(l, bgate, bproj : int64; fgate, fproj : int) {
     if (g_gpu != null && g_gpu.dry) {
         return
     }
@@ -1107,24 +1114,42 @@ def vk_rdec_set_ple_layer(l, bgate, bproj : int64; fmt : int) {
     let ple = g_rd.ple
     var L & = unsafe(g_rd.layers[l])
     L.ple = true
-    L.bpg = bgate; L.bpp = bproj; L.fpg = fmt
-    let pg = arena_planes(fmt, bgate)
-    let pp = arena_planes(fmt, bproj)
-    verify(gemv_cls_ensure(fmt) && ensure_q8_actrq_cls() && ensure_cls_dn_rq(), "vk decode: the per-layer-embedding rails must engage on a live device")
+    L.bpg = bgate; L.bpp = bproj; L.fpg = fgate; L.fpp = fproj
+    let gf32 = bgate < 0l
+    let pf32 = bproj < 0l
+    verify((gf32 || gemv_cls_ensure(fgate)) && (pf32 || gemv_cls_ensure(fproj))
+        && (pf32 || (kq_sb(fproj) ? ensure_q8k_actrq_cls() : ensure_q8_actrq_cls())) && ensure_cls_dn_rq() && (!kq_sb(fgate) || ensure_cls_q8k_rq()),
+        "vk decode: the per-layer-embedding rails must engage on a live device")
     L.m_pg = rd_meta(); L.m_pp = rd_meta()
     let all = g_rd.n_layers * ple
-    // the residual row as it is -> xq/xs (the gate reads the unnormed stream)
+    // the residual row as it is -> xq/xs in the gate's feed form (the gate reads the unnormed stream)
     L.s_ple_x = rd_rq_set(g_rd.x_dev, VHZ_X, g_rd.xq_dev, g_rd.xs_dev, VHZ_XQ, dim)
     // gate GEMV [dim -> ple] into pleg (the FFN gate plane's hazard bit, free by then)
-    L.s_ple_gate = arena_gemv_set_x(fmt, pg, L.m_pg.buf, g_rd.pleg_dev, ple * 4l * nb, VHZ_GATE)
-    // gelu(gate) x this layer's side-input row -> hq/hs (the row's layer base rides the push; the side rows ride the cos plane's bit)
-    L.s_ple_act = set_actrq_cls(fixed_array(g_rd.pleg_dev, g_rd.ple_dev, g_gpu.hq_dev, g_gpu.hs_dev),
-        fixed_array(ple * 4l * nb, all * 4l * nb, BATCH_HQ_BYTES, BATCH_HS_BYTES),
-        fixed_array(VHZ_GATE, VHZ_COS, VHZ_HQ, VHZ_HQ))
-    // proj GEMV [ple -> dim] into ffnout (the residual step's add partner slot)
-    L.s_ple_proj = gemv_planes_set(fmt, pp, L.m_pp.buf, META_BYTES, 0u, g_gpu.hq_dev, g_gpu.hs_dev, ple * nb, (ple / 32l) * 4l * nb, VHZ_HQ, g_rd.ffnout_dev, dim * 4l * nb, VHZ_FFO)
-    L.ple_fused = vk_fuse_on() && fmt == int(KqFmt.q8) && ple <= 256l && ple % 32l == 0l && ensure_cls_ar_rq_b() && ensure_q8_gemv_pleact_cls()
+    if (gf32) {
+        L.s_ple_gate = set_router_gemv_cls(fixed_array(g_rd.ple_gf32_dev, g_rd.x_dev, g_rd.pleg_dev, g_rd.norms_dev),
+            fixed_array(g_rd.ple_gf32_bytes, dim * 4l * nb, ple * 4l * nb, g_rd.norms_bytes), fixed_array(0u, VHZ_X, VHZ_GATE, 0u))
+    } else {
+        L.s_ple_gate = arena_gemv_set_x(fgate, arena_planes(fgate, bgate), L.m_pg.buf, g_rd.pleg_dev, ple * 4l * nb, VHZ_GATE)
+    }
+    // gelu(gate) x this layer's side-input row -> the proj's feed: hq/hs, or the f32 rows (the row's layer base rides the push;
+    // the side rows ride the cos plane's bit)
+    if (pf32) {
+        L.s_ple_act = set_ple_act_f32_cls(fixed_array(g_rd.pleg_dev, g_rd.ple_dev, g_rd.pleact_dev),
+            fixed_array(ple * 4l * nb, all * 4l * nb, ple * 4l * nb), fixed_array(VHZ_GATE, VHZ_COS, VHZ_HQ))
+        L.s_ple_proj = set_router_gemv_cls(fixed_array(g_rd.ple_pf32_dev, g_rd.pleact_dev, g_rd.ffnout_dev, g_rd.norms_dev),
+            fixed_array(g_rd.ple_pf32_bytes, ple * 4l * nb, dim * 4l * nb, g_rd.norms_bytes), fixed_array(0u, VHZ_HQ, VHZ_FFO, 0u))
+    } else {
+        L.s_ple_act = set_actrq_cls(fixed_array(g_rd.pleg_dev, g_rd.ple_dev, g_gpu.hq_dev, g_gpu.hs_dev),
+            fixed_array(ple * 4l * nb, all * 4l * nb, BATCH_HQ_BYTES, BATCH_HS_BYTES),
+            fixed_array(VHZ_GATE, VHZ_COS, VHZ_HQ, VHZ_HQ))
+        // proj GEMV [ple -> dim] into ffnout (the residual step's add partner slot)
+        L.s_ple_proj = gemv_planes_set(fproj, arena_planes(fproj, bproj), L.m_pp.buf, META_BYTES, 0u, g_gpu.hq_dev, g_gpu.hs_dev, ple * nb,
+            (ple / 32l) * 4l * nb, VHZ_HQ, g_rd.ffnout_dev, dim * 4l * nb, VHZ_FFO)
+    }
+    L.ple_fused = (vk_fuse_on() && !gf32 && !pf32 && fgate == int(KqFmt.q8) && fproj == int(KqFmt.q8) && ple <= 256l && ple % 32l == 0l
+        && ensure_cls_ar_rq_b() && ensure_q8_gemv_pleact_cls())
     if (L.ple_fused) {
+        let pp = arena_planes(fproj, bproj)
         L.s_ple_ar_rq = set_ar_rq_stamp(RqStamp.rq, g_rd.ffnout_dev, VHZ_FFO, g_rd.xq_dev, g_rd.xs_dev)
         L.s_ple_pa = set_q8_gemv_pleact_cls(fixed_array(pp.wq, pp.ws, g_rd.pleg_dev, g_rd.ple_dev, g_rd.ffnout_dev),
             fixed_array(pp.wqb, pp.wsb, ple * 4l * nb, all * 4l * nb, dim * 4l * nb),
@@ -2071,8 +2096,12 @@ def private rd_fill_layer_regions(L : RLayer) {
         fill_gemv_regions(L.m_down, L.b2)
     }
     if (L.ple) {
-        fill_gemv_regions(L.m_pg, L.bpg)
-        fill_gemv_regions(L.m_pp, L.bpp)
+        if (L.bpg >= 0l) {
+            fill_gemv_regions(L.m_pg, L.bpg)
+        }
+        if (L.bpp >= 0l) {
+            fill_gemv_regions(L.m_pp, L.bpp)
+        }
     }
 }
 
@@ -2563,11 +2592,16 @@ def private rd_encode_ple(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
     let dim = g_rd.dim
     let ple = g_rd.ple
     let nr = uint(nrows)
-    if (!L.ple_fused) {   //! unfused: the gate's feed still wants its own Q8_0 quants of the rows
-        rq_enc(raw, h, L.s_ple_x, false, 0l, dim * nrows)
-        rd_ts(raw, "p:rq_x")
+    if (L.bpg < 0l) {   //! the f32 rows read the stream as it is
+        var pcg = GkRouterArgs(ne = uint(ple), dim = uint(dim), woff = uint(l * ple * dim), ncols = nr)
+        router_enc_cols(false, raw, h, L.s_ple_gate, pcg, ple)
+    } else {
+        if (!L.ple_fused) {   //! unfused: the gate's feed still wants its own quants of the rows
+            rq_enc(raw, h, L.s_ple_x, kq_sb(L.fpg), 0l, dim * nrows)
+            rd_ts(raw, "p:rq_x")
+        }
+        rd_gemv(L.fpg, raw, h, L.s_ple_gate, dim, ple, ncols, uint(ple))
     }
-    rd_gemv(L.fpg, raw, h, L.s_ple_gate, dim, ple, ncols, uint(ple))
     rd_ts(raw, "p:gate")
     if (L.ple_fused) {
         var pcf = PleActArgs(n = uint(ple), d = uint(dim), wblk = uint(arena_local_blk(L.bpp)), ubase = uint(l * ple), act = ACT_GELU,
@@ -2576,11 +2610,17 @@ def private rd_encode_ple(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
         rd_ts(raw, "p:actproj")
         return
     }
-    var pca = ActArgs(nelem = uint(ple) * nr, act = ACT_GELU, nblk = uint(ple / 32l) * nr,
-        ubase = uint(l * ple), ustride = uint(g_rd.n_layers * ple), ulen = uint(ple))
-    enc_q8_actrq_cls(raw, h, L.s_ple_act, pca, (ple * nrows / 4l + 255l) / 256l)
-    rd_ts(raw, "p:act")
-    rd_gemv(L.fpg, raw, h, L.s_ple_proj, ple, dim, ncols, uint(dim))
+    var pca = ActArgs(nelem = uint(ple) * nr, act = ACT_GELU, ubase = uint(l * ple), ustride = uint(g_rd.n_layers * ple), ulen = uint(ple))
+    if (L.bpp < 0l) {
+        enc_ple_act_f32_cls(raw, h, L.s_ple_act, pca, (ple * nrows + 255l) / 256l)
+        rd_ts(raw, "p:act")
+        var pcp = GkRouterArgs(ne = uint(dim), dim = uint(ple), woff = uint(l * ple * dim), ncols = nr)
+        router_enc_cols(false, raw, h, L.s_ple_proj, pcp, dim)
+    } else {
+        actrq_enc(raw, h, L.s_ple_act, kq_sb(L.fpp), pca, ple * nrows)
+        rd_ts(raw, "p:act")
+        rd_gemv(L.fpp, raw, h, L.s_ple_proj, ple, dim, ncols, uint(dim))
+    }
     rd_ts(raw, "p:proj")
 }
 
@@ -3469,7 +3509,7 @@ def private rd_ensure_n_rail : bool {
             && (!has_dense_triple(L) || (rd_triple_all(L.f1, L.f3, L.f2) $(f) => gemv_cls_ensure_n(f, nb)))
             && (!L.gu_on || q8_gemv_gu_n_ensure(nb))   //! the fused gate-up's N form declines the rail whole, as the GEMV leaves do
             && (!L.moe || topk_n_ensure(g_rd.ne))
-            && (!L.ple || gemv_cls_ensure_n(L.fpg, nb)))
+            && (!L.ple || ((L.bpg < 0l || gemv_cls_ensure_n(L.fpg, nb)) && (L.bpp < 0l || gemv_cls_ensure_n(L.fpp, nb)))))
     }
     if (!ok) {
         to_log(LOG_WARNING, "dasLLAMA vulkan resident: a class of the N-row command declined on this device (an N-column GEMV leaf, the fused add+rms+requant rows stamp, the fused gate-up N form, the per-row top-k, or the per-layer-embedding gate's N leaf) - the batched step runs a row at a time\n")

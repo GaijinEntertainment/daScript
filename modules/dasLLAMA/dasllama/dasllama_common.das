@@ -1162,14 +1162,19 @@ struct Model {
     // layout_offsets; kv_row_prefix aliases a shared layer's slot onto its source's.
     kv_src : array<int64>
     // gemma-4 E-series per-layer embeddings (PLE) — offsets valid only when config.n_embd_per_layer > 0.
-    // The Q8 token table (linear, gathered per token — NOT repacked) + the per-layer Q8 gate/proj live
-    // in the big-weight blob; the fp32 model-proj + the two norm families live in fblob.
+    // The token table (linear, gathered per token — NOT repacked) + the per-layer gate/proj live
+    // in the big-weight planes; the fp32 model-proj + the two norm families live in fblob.
     ple_emb_off : int64     // qblob: Q8 per_layer_token_embd, linear [vocab x (ple*layers)]
     ple_model_off : int64   // fblob: fp32 per_layer_model_proj [dim x (ple*layers)]
     ple_pnorm_off : int64   // fblob: fp32 per_layer_proj_norm [ple]
-    ple_gate_off : int64    // qblob: per_layer_inp_gate, layers x (dim x ple)
-    ple_proj_off : int64    // qblob: per_layer_proj,     layers x (ple x dim)
     ple_post_off : int64    // fblob: fp32 per_layer_post_norm, layers x dim
+    //! per layer: inp_gate [dim -> ple] and proj [ple -> dim] in their tags' planes (`ple_plane`), or in fblob under the f32 marks
+    ple_gate_offs : array<int64>
+    ple_proj_offs : array<int64>
+    ple_gate_fmt : array<KqFmt>   //! per layer, the file's format (empty = q8 everywhere)
+    ple_proj_fmt : array<KqFmt>
+    ple_gate_f32 : bool = false   //! every inp_gate ships F32: the rows stay the file's f32 in fblob
+    ple_proj_f32 : bool = false   //! every proj ships F32, the same
     // per-layer KV-ROW prefix (Σ layer_kv_dim of prior layers), filled by layout_offsets — makes
     // kv_cache_off O(1). seq_len-INDEPENDENT on purpose: tests cap seq_len after load, so the cache
     // offset multiplies by the live value at call time, never a baked one
@@ -1665,6 +1670,15 @@ def cls_tied_f32(t : Model) : bool => t.config.shared_weights && !t.cls_q8 && !t
 
 // Format tag for layer l of a per-kind tag array; empty array (non-kq load) = q8.
 def fmt_at(a : array<KqFmt>; l : int64) : KqFmt => empty(a) ? KqFmt.q8 : a[l]
+
+//! layer l's per-layer-embedding plane - the gate (dim -> ple), or with `proj` the projection (ple -> dim): its tag and offset
+//! in that tag's planes, or `f32` and the offset of the file's f32 rows in fblob
+def ple_plane(t : Model; l : int64; proj : bool) : tuple<f : KqFmt; off : int64; f32 : bool> {
+    if (proj) {
+        return (f = fmt_at(t.ple_proj_fmt, l), off = t.ple_proj_offs[l], f32 = t.ple_proj_f32)
+    }
+    return (f = fmt_at(t.ple_gate_fmt, l), off = t.ple_gate_offs[l], f32 = t.ple_gate_f32)
+}
 
 //! The shared expert's plane of `kind` (1 gate, 3 up, 2 down) on layer l: the plane in the file's format where the loader kept one,
 //! else the q8 transcode the CPU chain reads (dasllama_moe.das's and dasllama_blocks.das's shared-expert sites read only it).
