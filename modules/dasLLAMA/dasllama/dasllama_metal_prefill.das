@@ -423,168 +423,6 @@ class MetalBf16MulMmTH128 : MetalBf16MulMmTensorT {
     override MT = 128u
 }
 
-struct PleArgs {
-    npos : uint
-    ple : uint
-    nlayers : uint
-    sc0 : float         //!< sqrt(ple), folded into the gather's dequant
-    inv_sd : float      //!< 1/sqrt(dim)
-    eps : float
-    inv_s2 : float      //!< 1/sqrt(2)
-}
-
-def private ple_ka(npos, ple, nlayers, dim : int64; eps : float) : PleArgs => (
-    PleArgs(npos = uint(npos), ple = uint(ple), nlayers = uint(nlayers), sc0 = sqrt(float(ple)),
-        inv_sd = 1.0 / sqrt(float(dim)), eps = eps, inv_s2 = 1.0 / sqrt(2.0)))
-
-[ |> template_struct_instance]
-class template MetalPleGatherBaseT {
-    @template_constant Q8 : bool = false    //!< the q8 table: one interleaved 34B blob, both views of it at 0/1
-    @template_constant SB_UINTS : uint = 32u     //!< k5's qh strip adds 8
-    @template_constant QH : bool = false    //!< k5: the 5th bit off the qh strip
-    @template_constant QH0 : uint = 32u     //!< k5's qh strip's first word, past the nibbles
-    @template_constant Q40 : bool = false   //!< q40: one f16 d per 32-block, the linear map (q - 8)
-    @template_constant KSC : bool = true    //!< the packed 6-bit sc/min uint4 view - k4 and k5 alone
-    @ssbo @binding = 0 @role = "weight" @off = "eoff" @template_gate = Q8 wsh : array<float16> //!< ple_emb q8 region, half-scale view (block b at 17*b)
-    @ssbo @binding = 1 @role = "weight" @off = "eoff" @template_gate = Q8 wqb : array<int8>    //!< the SAME region, byte view (quants at 34*b + 2)
-    @ssbo @binding = 0 @role = "weight" @off = "soff" @template_gate = "!Q8" ksh : array<float16> //!< scale plane, half view (k4/k5: d, dmin at 8*blk; q40: the eight per-32-block d)
-    @ssbo @binding = 1 @role = "weight" @off = "soff" @template_gate = KSC ks4 : array<uint4> //!< the SAME 16B block, uint4 view (the packed 6-bit sc/min)
-    @ssbo @binding = 2 @role = "read" tok : array<uint>    //!< [npos] token ids
-    @ssbo @binding = 3 @role = "write" y : array<float>    //!< [n_layers x npos x ple] layer-major side input
-    @uniform @binding = 4 ka : PleArgs
-    @ssbo @binding = 6 @role = "weight" @off = "qoff" @template_gate = "!Q8" kqu : array<uint>    //!< quant plane, uint view
-
-    def abstract decode_el(el : uint; var v : float&) : void
-
-    def gather_body {
-        let l = gl_WorkGroupID.x
-        let p = gl_WorkGroupID.y
-        let i = gl_LocalInvocationID.x      //! tg = ple threads (gate: ple % 32 == 0, <= 1024)
-        let el = tok[p] * (ka.nlayers * ka.ple) + l * ka.ple + i
-        var v = 0.0
-        decode_el(el, v)
-        y[(l * ka.npos + p) * ka.ple + i] = v * ka.sc0
-    }
-}
-
-[metal_dispatch(name = "pf_enc_ple_gather", pso = "g_pf_pso_ple_gather", tg = "ple", grid = "nlayers, npos", params = "nlayers : int64, npos : int64, ple : int64")]
-class MetalPleGatherQ8 : MetalPleGatherBaseT {
-    override Q8 = true
-    override KSC = false
-
-    def override decode_el(el : uint; var v : float&) {
-        let blk = el / 32u
-        let sc = float(wsh[blk * 17u])
-        let q = float(int(wqb[blk * 34u + 2u + (el % 32u)]))
-        v = q * sc
-    }
-
-    [metal_kernel(name="metal_ple_gather_q8_msl")]
-    def metal_ple_gather_q8 {
-        gather_body()
-    }
-}
-
-[ |> template_struct_instance]
-class template MetalPleGatherKqT : MetalPleGatherBaseT {
-    def override decode_el(el : uint; var v : float&) {
-        let blk = el / 256u
-        let js = (el % 256u) / 32u
-        let e = el % 32u
-        static_if (Q40) {
-            let u = kqu[blk * SB_UINTS + js * 4u + el32_word(e)]
-            v = q40_el_level(float(ksh[blk * 8u + js]), el32_nib(u, e))
-        } else {
-            var dsc, dmn : float
-            k45_el_scales(ks4[blk], float(ksh[blk * 8u]), float(ksh[blk * 8u + 1u]), js, dsc, dmn)
-            let u = kqu[blk * SB_UINTS + k45_el_word(js, e)]
-            static_if (QH) {
-                let hu = kqu[blk * SB_UINTS + QH0 + e / 4u]
-                v = k45_el_level(dsc, dmn, k45_el_code(u, hu, js, e))
-            } else {
-                v = k45_el_level(dsc, dmn, k45_el_code(u, 0u, js, e))
-            }
-        }
-    }
-
-    [metal_kernel]
-    def metal_ple_gather_kq {
-        gather_body()
-    }
-}
-
-[metal_dispatch(name = "pf_enc_ple_gather_k4", pso = "g_pf_pso_ple_gather_k4", tg = "ple", grid = "nlayers, npos", params = "nlayers : int64, npos : int64, ple : int64")]
-class MetalPleGatherK4 : MetalPleGatherKqT {}
-
-[metal_dispatch(name = "pf_enc_ple_gather_k5", pso = "g_pf_pso_ple_gather_k5", tg = "ple", grid = "nlayers, npos", params = "nlayers : int64, npos : int64, ple : int64")]
-class MetalPleGatherK5 : MetalPleGatherKqT {
-    override SB_UINTS = 40u
-    override QH = true
-}
-
-[metal_dispatch(name = "pf_enc_ple_gather_q40", pso = "g_pf_pso_ple_gather_q40", tg = "ple", grid = "nlayers, npos", params = "nlayers : int64, npos : int64, ple : int64")]
-class MetalPleGatherQ40 : MetalPleGatherKqT {
-    override Q40 = true
-    override KSC = false
-}
-
-//! the per-32 tables' gather: the 32-block plane pair bound verbatim at the table (`b32_planes_of`), element e of a block off
-//! byte e % 16's nibble (low half below 16) and the qh word's bit e - q51's d x q + m, q5032's (q - 16) x d
-[ |> template_struct_instance]
-class template MetalPleGatherB32T : MetalPleGatherBaseT {
-    @template_constant PW : uint = 5u      //!< quant words a block: the four nibble words and the qh word
-    @template_constant PS : uint = 2u      //!< scale halves a block: q51's d | m, q5032's d
-    @template_constant P50 : bool = false  //!< q5032: the signed level q - 16 under the one d
-
-    def override decode_el(el : uint; var v : float&) {
-        let blk = el / 32u
-        let e = el % 32u
-        let q = el32_code5(kqu[blk * PW + el32_word(e)], kqu[blk * PW + PW - 1u], e)
-        static_if (P50) {
-            v = q5032_el_level(float(ksh[blk * PS]), q)
-        } else {
-            v = q51_el_level(float(ksh[blk * PS]), float(ksh[blk * PS + 1u]), q)
-        }
-    }
-
-    [metal_kernel]
-    def metal_ple_gather_b32 {
-        gather_body()
-    }
-}
-
-[metal_dispatch(name = "pf_enc_ple_gather_q51", pso = "g_pf_pso_ple_gather_q51", tg = "ple", grid = "nlayers, npos", params = "nlayers : int64, npos : int64, ple : int64")]
-class MetalPleGatherQ51 : MetalPleGatherB32T {
-    override KSC = false
-}
-
-[metal_dispatch(name = "pf_enc_ple_gather_q5032", pso = "g_pf_pso_ple_gather_q5032", tg = "ple", grid = "nlayers, npos", params = "nlayers : int64, npos : int64, ple : int64")]
-class MetalPleGatherQ5032 : MetalPleGatherB32T {
-    override KSC = false
-    override PS = 1u
-    override P50 = true
-}
-
-[metal_dispatch(name = "pf_enc_ple_finish", pso = "g_pf_pso_ple_finish", tgmem = "metal_ple_finish_msl_tgmem", tg = "ple", grid = "nlayers, npos", params = "nlayers : int64, npos : int64, ple : int64")]
-class MetalPleFinish : MetalTgReduceBase {
-    @ssbo @binding = 0 @role = "read" proj : array<float>  //!< [mp x n_layers*ple] position-major model_proj·embd
-    @ssbo @binding = 1 @role = "weight" pnorm : array<float> //!< [ple] proj-norm weight
-    @ssbo @binding = 2 @role = "readwrite" y : array<float>     //!< [n_layers x npos x ple] side input, in place
-    @uniform @binding = 4 ka : PleArgs
-
-    [metal_kernel(name="metal_ple_finish_msl")]
-    def metal_ple_finish {
-        let l = gl_WorkGroupID.x
-        let p = gl_WorkGroupID.y
-        let i = gl_LocalInvocationID.x      //! tg = ple threads (gate: ple % 32 == 0, <= 1024)
-        let v = proj[p * (ka.nlayers * ka.ple) + l * ka.ple + i] * ka.inv_sd
-        let inv = tg_rms_inv(v * v, ka.ple, ka.eps)
-        let yi = (l * ka.npos + p) * ka.ple + i
-        y[yi] = (y[yi] + pnorm[i] * (v * inv)) * ka.inv_s2
-    }
-}
-
-
 //! the rows a routed tile's tensor op runs at: a 32-row tile whose expert leaves it eight or sixteen live rows runs
 //! the op at that height (a tile costs its op whatever its live rows; 8 and 16 rows cost 0.62 and 0.69 of 32), every
 //! other tile its own height - both MoE scaffolds' ADAPT arm
@@ -5027,13 +4865,6 @@ var private g_pf_pso_av_dev : MetalComputePipeline?
 var private g_pf_pso_av_dev128 : MetalComputePipeline?
 var private g_pf_pso_av_dev_t : MetalComputePipeline?   //!< the 32-column tail of a head off the 64 lattice
 var private g_pf_pso_av_dev128_t : MetalComputePipeline?
-var private g_pf_pso_ple_gather : MetalComputePipeline?   //!< PLE pre-step: q8 token-row gather
-var private g_pf_pso_ple_gather_k4 : MetalComputePipeline?   //!< PLE pre-step: k4 token-row gather
-var private g_pf_pso_ple_gather_k5 : MetalComputePipeline?   //!< PLE pre-step: k5 token-row gather
-var private g_pf_pso_ple_gather_q40 : MetalComputePipeline?  //!< PLE pre-step: q40 token-row gather
-var private g_pf_pso_ple_gather_q51 : MetalComputePipeline?  //!< PLE pre-step: per-32 q51 token-row gather
-var private g_pf_pso_ple_gather_q5032 : MetalComputePipeline?  //!< PLE pre-step: per-32 q5032 token-row gather
-var private g_pf_pso_ple_finish : MetalComputePipeline?   //!< PLE pre-step: rms + combine, in place
 var private g_pf_pso_qkmm : MetalComputePipeline?
 var private g_pf_pso_avmm : MetalComputePipeline?
 var private g_pf_pso_moe_count : MetalComputePipeline?
@@ -5320,8 +5151,6 @@ def public metal_prefill_shutdown {
     release_handles(g_pf_pso_g4a_attn, g_pf_pso_g4a_glu, g_pf_pso_g4a_dw, g_pf_pso_g4a_axpy)
     release_handles(g_pf_pso_g4a_mag, g_pf_pso_g4a_logmel, g_pf_pso_g4a_lnrelu)
     release_handles(g_pf_pso_q3a_shuffle, g_pf_pso_q3a_pow, g_pf_pso_q3a_logmel_t)
-    release_handles(g_pf_pso_ple_gather, g_pf_pso_ple_gather_k4, g_pf_pso_ple_gather_k5, g_pf_pso_ple_gather_q40, g_pf_pso_ple_gather_q51,
-        g_pf_pso_ple_gather_q5032, g_pf_pso_ple_finish)
     g_pf_inited = false
     g_pf_failed = false
 }
@@ -5474,13 +5303,6 @@ def private metal_prefill_init : bool {   // nolint:STYLE038 — flat one-compil
         g_pf_pso_bf16_mm_t128 = compile_stamp(MetalBf16MulMmT128_metal_bf16_mulmm_t_msl, ok)
         g_pf_pso_bf16_mm_th128 = compile_stamp(MetalBf16MulMmTH128_metal_bf16_mulmm_t_msl, ok)
     }
-    g_pf_pso_ple_gather = compile_stamp(metal_ple_gather_q8_msl, ok)
-    g_pf_pso_ple_gather_k4 = compile_stamp(MetalPleGatherK4_metal_ple_gather_kq_msl, ok)
-    g_pf_pso_ple_gather_k5 = compile_stamp(MetalPleGatherK5_metal_ple_gather_kq_msl, ok)
-    g_pf_pso_ple_gather_q40 = compile_stamp(MetalPleGatherQ40_metal_ple_gather_kq_msl, ok)
-    g_pf_pso_ple_gather_q51 = compile_stamp(MetalPleGatherQ51_metal_ple_gather_b32_msl, ok)
-    g_pf_pso_ple_gather_q5032 = compile_stamp(MetalPleGatherQ5032_metal_ple_gather_b32_msl, ok)
-    g_pf_pso_ple_finish = compile_stamp(metal_ple_finish_msl, ok)
     var perr : string
     var probe = pso_from_source(g_dev, MetalHalfMulMmTH_metal_half_mulmm_th_msl, MetalHalfMulMmTH_metal_half_mulmm_th_msl_entry, MetalHalfMulMmTH_metal_half_mulmm_th_msl_fastmath, perr)
     g_pf_tensor_ok = probe != null
@@ -7302,66 +7124,14 @@ def private pf_enc_ple_site(enc : MetalComputeEncoder?; t : Model; l : int64; pr
 }
 
 
-def private ple_gather_pso_of(fmt : KqFmt) : MetalComputePipeline? {
-    if (fmt == KqFmt.q8) return g_pf_pso_ple_gather
-    if (fmt == KqFmt.k4) return g_pf_pso_ple_gather_k4
-    if (fmt == KqFmt.k5) return g_pf_pso_ple_gather_k5
-    if (fmt == KqFmt.q40) return g_pf_pso_ple_gather_q40
-    if (fmt == KqFmt.q51) return g_pf_pso_ple_gather_q51
-    if (fmt == KqFmt.q5032) return g_pf_pso_ple_gather_q5032
-    return null
-}
-
-def private pf_enc_ple_gather_fmt(enc : MetalComputeEncoder?; t : Model; btok, by : MetalBuffer?;
-                                  var ka : PleArgs; nlayers, npos, ple : int64) {
-    let fmt = t.ple_emb_fmt
-    if (fmt == KqFmt.q8) {
-        let bemb = blob_of(g_dev, t, t.ple_emb_off)
-        pf_enc_ple_gather(enc, bemb.buf, bemb.boff, bemb.buf, btok, by, ka, nlayers, npos, ple)
-        return
-    }
-    //! the per-32 pair bound verbatim at the table, the 32-block index
-    //! relative to it
-    if (kq_dense_b32(fmt)) {
-        let bp = b32_planes_of(g_dev, t, fmt, t.ple_emb_off)
-        if (fmt == KqFmt.q51) {
-            pf_enc_ple_gather_q51(enc, bp.sbuf, bp.soff, btok, by, ka, bp.qbuf, bp.qoff, nlayers, npos, ple)
-        } elif (fmt == KqFmt.q5032) {
-            pf_enc_ple_gather_q5032(enc, bp.sbuf, bp.soff, btok, by, ka, bp.qbuf, bp.qoff, nlayers, npos, ple)
-        } else {
-            panic("metal ple prefill: per-32 table format {fmt} has no gather twin - ple_gather_pso_of admitted it")
-        }
-        return
-    }
-    let bq = kq_quants_of(g_dev, t, fmt, t.ple_emb_off)
-    let bs = kq_scales_of(g_dev, t, fmt, t.ple_emb_off)
-    if (fmt == KqFmt.k4) {
-        pf_enc_ple_gather_k4(enc, bs.buf, bs.soff, bs.buf, btok, by, ka, bq.buf, bq.qoff, nlayers, npos, ple)
-    } elif (fmt == KqFmt.k5) {
-        pf_enc_ple_gather_k5(enc, bs.buf, bs.soff, bs.buf, btok, by, ka, bq.buf, bq.qoff, nlayers, npos, ple)
-    } elif (fmt == KqFmt.q40) {
-        pf_enc_ple_gather_q40(enc, bs.buf, bs.soff, btok, by, ka, bq.buf, bq.qoff, nlayers, npos, ple)
-    } else {
-        panic("metal ple prefill: per-layer embedding table format {fmt} has no gather twin - ple_gather_pso_of admitted it")
-    }
-}
-
 //! true iff THIS window's metal prefill will engage AND the pre-step kernels cover the model
 [unused_argument(s, start_pos)]
 def private metal_ple_pre_gpu_gate(t : Model; s : Session; npos, start_pos : int64) : bool {
-    if (active_prefill_override() != "metal" || !t.metal_blob || !t.ple_model_bf16) {
+    if (active_prefill_override() != "metal" || !metal_ple_dev_ok(t) || (t.config.n_layers * t.config.n_embd_per_layer) % 64l != 0l
+            || prefill_decline_caps(t, npos) != MetalPrefillDecline.none) {
         return false
     }
-    let ple = t.config.n_embd_per_layer
-    let all = t.config.n_layers * ple
-    //! the kq planes bind at the table's base, so base and row stride must both be whole superblocks - that is what makes the kernel's el/256 its plane superblock;
-    //! a per-32 pair binds AT the table, and off % 256 keeps its quant and scale binds 16B-aligned
-    let kq_aligned = t.ple_emb_fmt == KqFmt.q8 || (all % 256l == 0l && t.ple_emb_off % 256l == 0l)
-    if (ple % 32l != 0l || ple > 1024l || all % 64l != 0l || !kq_aligned ||
-            prefill_decline_caps(t, npos) != MetalPrefillDecline.none) {
-        return false
-    }
-    return metal_prefill_init() && ple_gather_pso_of(t.ple_emb_fmt) != null
+    return metal_prefill_init()
 }
 
 //! the hyper-connection window (qwen4exp): the wide residual rows and the mixer's row scratch
@@ -7891,16 +7661,10 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
         } else {
             bple = pool_acquire_untracked_pinned(g_pf_upool, g_dev, bytes_ple_side)
             unsafe {
-                //! transpose each segment's ple_inp (position-major, p*all + l*ple) into the window's layer-major blocks
+                //! each segment's ple_inp, position-major as the window reads it, at the segment's rows
                 var dst = reinterpret<float?>(metal_buffer_contents(bple))
                 for (sg in segs) {
-                    let src = addr < float const? >(sg.s.ple_inp[0])
-                    for (l in range64(c.n_layers)) {
-                        for (p in range64(sg.npos)) {
-                            memcpy(reinterpret<void?>(dst + (l * npos + sg.row0 + p) * ple_n),
-                                reinterpret<void const?>(src + p * ple_all + l * ple_n), ple_n * 4l)
-                        }
-                    }
+                    memcpy(reinterpret<void?>(dst + sg.row0 * ple_all), addr < void? >(sg.s.ple_inp[0]), sg.npos * ple_all * 4l)
                 }
             }
         }
@@ -8023,6 +7787,8 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
     var u_ple = plef ? uniform_u32(uint(ple_n)) : null
     var u_ple_tot = plef ? uniform_u32(uint(npos * ple_n)) : null
     var u_ple_all = ple_gpu ? uniform_u32(uint(ple_all)) : null
+    var u_ple_sq = ple_gpu ? uniform_f32(sqrt(float(ple_n))) : null   //! the q8 table stamp's scale: the gather's sqrt(ple)
+    var u_ple_st = plef ? uniform_u32(uint(ple_all)) : null   //! the side rows' position stride
     //! hetero-only sliding-class uniform twins; uniform models leave these null and bind the base set
     var u_qd_sw = hetero ? uniform_u32(uint(qd_sw)) : null
     var u_kvd_sw = hetero ? uniform_u32(uint(kvd_sw)) : null
@@ -8170,11 +7936,18 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
             if (l == 0l && ple_gpu) {
                 //! the serial encoder orders the three PLE stages: gather -> model_proj GEMM -> rms+combine
                 var pka = ple_ka(npos, ple_n, c.n_layers, dim, c.norm_eps)
-                pf_enc_ple_gather_fmt(enc, t, bple_tok, bple, pka, c.n_layers, npos, ple_n)
-                let bwp = plane_of(g_dev, t, t.bf16blob, t.ple_model_off)
-                pf_enc_bf16_mm(enc, bwp.buf, bwp.boff, bx, bple_proj, u_dim, u_ple_all, mp, ple_all, pf_cvt_panel(enc, bx, mp, dim, g_pf_skip == "act_cvt"), dim)
+                enc_embed_table(enc, t, t.ple_emb_fmt, t.ple_emb_off, ple_all, sqrt(float(ple_n)), bple_tok, 0ul, bple, 0ul, npos, u_ple_all, u_ple_sq)
+                if (t.ple_model_bf16) {
+                    let bwp = plane_of(g_dev, t, t.bf16blob, t.ple_model_off)
+                    pf_enc_bf16_mm(enc, bwp.buf, bwp.boff, bx, bple_proj, u_dim, u_ple_all, mp, ple_all, pf_cvt_panel(enc, bx, mp, dim, g_pf_skip == "act_cvt"), dim)
+                } else {   //! the file's f32 rows on the f32 tile, else the slab GEMV
+                    var bwp = upload_region(unsafe(addr < void? >(t.fblob[t.ple_model_off])), uint64(ple_all * dim * 4l))
+                    if (!pf_enc_router_mm(enc, bwp, bx, bple_proj, u_dim, u_ple_all, ple_all, dim, mp)) {
+                        pf_enc_slab_gemv_b(enc, bwp, bx, bple_proj, dim, ple_all, npos)
+                    }
+                }
                 var bw_pn = upload_region(unsafe(addr < void? >(t.fblob[t.ple_pnorm_off])), uint64(ple_n * 4l))
-                pf_enc_ple_finish(enc, bple_proj, bw_pn, bple, pka, c.n_layers, npos, ple_n)
+                enc_ple_finish(enc, bple_proj, bw_pn, bple, pka, c.n_layers, npos, ple_n)
                 s.ple_gpu_pending = false
             }
             if (warm && l == c.n_layers) {
@@ -8774,7 +8547,7 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                         pf_enc_ple_site(enc, t, l, false, bx, bpleg, u_dim, u_ple, mp, npos, pf_cvt_panel(enc, bx, mp, dim, g_pf_skip == "act_cvt"))
                     }
                     if (g_pf_skip != "ew" && g_pf_skip != "nongemm") {
-                        enc_geglu(enc, bpleg, 0ul, bple, uint64(l * npos * ple_n * 4l), u_ple_tot, npos * ple_n)
+                        enc_geglu_side(enc, bpleg, 0ul, bple, uint64(l * ple_n * 4l), u_ple_tot, u_ple, u_ple_st, npos * ple_n)
                     }
                     if (g_pf_skip != "gemm") {
                         pf_enc_ple_site(enc, t, l, true, bpleg, bxb, u_ple, u_dim, mp, npos, pf_cvt_panel(enc, bpleg, mp, ple_n, g_pf_skip == "act_cvt"))
@@ -9117,13 +8890,15 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
             pool_release(g_pf_pool, bple, bytes_ple_side)
             pool_release(g_pf_pool, bple_proj, bytes_ple_proj)
             pool_release(g_pf_upool, bple_tok, uint64(npos * 4l))
-                    pool_release(g_pf_upool, u_ple_all, 4ul)
-                    } else {
+            pool_release(g_pf_upool, u_ple_all, 4ul)
+            pool_release(g_pf_upool, u_ple_sq, 4ul)
+        } else {
             pool_release(g_pf_upool, bple, bytes_ple_side)
         }
         pool_release(g_pf_pool, bpleg, bytes_ple_g)
         pool_release(g_pf_upool, u_ple, 4ul)
         pool_release(g_pf_upool, u_ple_tot, 4ul)
+        pool_release(g_pf_upool, u_ple_st, 4ul)
     }
     bks |> clear()      //! non-owning handles — the pool owns them now
     bvs |> clear()

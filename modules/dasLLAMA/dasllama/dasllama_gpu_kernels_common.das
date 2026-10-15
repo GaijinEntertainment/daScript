@@ -5,6 +5,7 @@ module dasllama_gpu_kernels_common shared public
 require dasllama/dasllama_lint public
 require daslib/typemacro_boost
 require math
+require daslib/math_bits   // uint_bits_to_float: the bf16 word form widens each half by its bit shift
 require spirv/spirv_shader   // [spirv_inline]: the helpers the SPIR-V emitter visits at their call sites
 
 struct GkAxpyArgs {
@@ -2306,11 +2307,12 @@ struct GkRouterArgs {
     xs : uint            //! a column's stride in x, elements (0 = dim)
     hasb : uint          //! the bias row at `boff` added (`BIAS` stamps: gpt-oss)
     boff : uint
+    yscale : float       //! every logit's scale (`YSCALE` stamps: the per-layer-embedding projection's 1/sqrt(dim))
 }
 
-//! The router GEMV: expert row e's logit for every column, the row's weights read once for all of them; `ROW_WG` gives a row a
-//! workgroup of `LANES` (the subgroups' partials crossing the workgroup slab), else a subgroup (`gl_NumSubgroups` rows a
-//! workgroup); a lane steps `VW` elements a load: 1 (the f32 rows), 2 (the f16 rows as half pairs), 4 (f32 rows and x as float4)
+//! The router GEMV: expert row e's logit for every column, the row's weights read once for all of them; `ROW_WG` gives a row a workgroup
+//! of `LANES`, else a subgroup; a lane steps `VW` elements a load: 1 (f32 rows), 2 (16-bit pairs: f16, or bf16 under `BF16`), 4 (f32 rows
+//! and x as float4); `YSCALE` scales every logit by `pa.yscale`
 [ |> template_struct_instance]
 class template GkRouterGemv {
     @ssbo @binding = 0 @role = "weight" w : array<KT>                                 //! the rows, row-major [ne x dim] a layer, VW elements a word
@@ -2326,6 +2328,8 @@ class template GkRouterGemv {
     @template_constant COL_CLAMP : bool = false   //!< the columns past the last read it again and store nothing, no branch in the dot; else they skip
     @template_constant NORM : bool = false
     @template_constant BIAS : bool = false
+    @template_constant BF16 : bool = false   //!< VW 2: the pair is two bf16 halves, each widened by its bit shift (exact)
+    @template_constant YSCALE : bool = false
 
     //! x's element i of the column at element xb (VW 1 and 2), under the norm row when `norm_on`
     [spirv_inline]
@@ -2348,7 +2352,11 @@ class template GkRouterGemv {
             d = dot4_seq(wv, x[xb / 4u + i])
         } else {
             static_if (VW == 2u) {
-                d = unpackHalf2x16(wv).x * xn(xb, 2u * i) + unpackHalf2x16(wv).y * xn(xb, 2u * i + 1u)
+                static_if (BF16) {
+                    d = uint_bits_to_float(wv << 16u) * xn(xb, 2u * i) + uint_bits_to_float(wv & 0xFFFF0000u) * xn(xb, 2u * i + 1u)
+                } else {
+                    d = unpackHalf2x16(wv).x * xn(xb, 2u * i) + unpackHalf2x16(wv).y * xn(xb, 2u * i + 1u)
+                }
             } else {
                 d = float(wv) * xn(xb, i)   // nolint:PERF020,LINT019 - KT converts; the f32 stamp's cast is free, the rule fires where it lands
             }
@@ -2371,7 +2379,11 @@ class template GkRouterGemv {
         if (pa.ne_split != 0u && e >= pa.ne_split) {
             o = pa.obase_split + cc * (pa.ne - pa.ne_split) + (e - pa.ne_split)
         }
-        logits[o] = v + bias_at(e)
+        static_if (YSCALE) {
+            logits[o] = v * pa.yscale + bias_at(e)
+        } else {
+            logits[o] = v + bias_at(e)
+        }
     }
 
     //! a column's lane partial `v` summed over the subgroup in place, and under `ROW_WG` published at slot `slot` x 128 of the slab

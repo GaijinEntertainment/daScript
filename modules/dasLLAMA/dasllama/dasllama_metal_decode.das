@@ -278,13 +278,17 @@ struct private StepRes {
     u_moe_nsh : MetalBuffer?   // shexp width (qwen35moe; null = no shared expert)
     u_moe_shtot : MetalBuffer?   //! nrows * shexp width - the shared expert's activation span over the rows
     u_hass : MetalBuffer?      // attention sinks present (binds hass on the attn dispatches)
-    // gemma-4 E-series per-layer embeddings — ple steps only; the CPU pre-step's side input
-    // (s.ple_inp, [layers x ple]) pokes into bple each step alongside the embed row
+    // gemma-4 E-series per-layer embeddings — ple steps only: the side rows position-major [rows x layers*ple], built on the
+    // device (`ple_dev`) or poked from the CPU pre-step's s.ple_inp
     ple : bool
-    bple : MetalBuffer?        // the token's per-layer side input rows (poked, GPU-read-only); the batch's rows layer-major, [layers x nrows x ple]
+    bple : MetalBuffer?        // the rows' per-layer side input
     u_ple : MetalBuffer?       // n_embd_per_layer
     u_ple_tot : MetalBuffer?   // nrows x n_embd_per_layer - the batch's row-total for the side multiply
     bytes_ple : uint64
+    ple_dev : bool             //! the step builds the side rows itself (`enc_ple_pre_dev`) off its token ids
+    bple_proj : MetalBuffer?   //! [rows x layers*ple] the embedded rows' projection
+    u_ple_all : MetalBuffer?   //! layers x ple: the side row's width and its rows' stride
+    u_ple_sq : MetalBuffer?    //! sqrt(ple): the q8 table stamp's scale
     // qwen4exp hyper-connections (hc steps only, the single row): the wide residual made on device
     // from the poked embed row, and the mixer's scratch; the two sites' scatter logits keep apart
     hc : bool
@@ -377,6 +381,44 @@ var private g_rope_sin_next_swa : array<float>
 // buffers size to the class maxima and each layer binds its class's uniform set.
 [arch(at="../ARCHITECTURE_GPU_MTP_DECODE.md#verify-row-pad")]
 //! `deepest` = -1 means the step's rows reach no further than `pos`.
+//! the single row builds its side row on the device: the pre-step serves the model and the token's id reaches the step
+//! (`btok_in`, or a chained step's argmax)
+def private metal_ple_decode_dev(t : Model) : bool => metal_ple_dev_ok(t) && emb_dev_gather_ok(t)
+
+//! a step's side rows (`bytes_ple` of them): on the device (`dev`) the gather and projection buffers, read and written by the
+//! step itself; else the poked rows
+def private ple_step_dev(t : Model; var r : StepRes; dev : bool) {
+    r.ple_dev = dev
+    r.u_ple_all = uniform_u32(uint(t.config.n_layers * t.config.n_embd_per_layer))
+    if (dev) {
+        r.bple = pool_acquire(g_pool, g_dev, r.bytes_ple)
+        r.bple_proj = pool_acquire(g_pool, g_dev, r.bytes_ple)
+        r.u_ple_sq = uniform_f32(sqrt(float(t.config.n_embd_per_layer)))
+    } else {
+        r.bple = pool_acquire_untracked(g_upool, g_dev, r.bytes_ple)
+    }
+}
+
+def private ple_step_release(var r : StepRes) {
+    if (r.ple_dev) {
+        pool_release(g_pool, r.bple, r.bytes_ple)
+        pool_release(g_pool, r.bple_proj, r.bytes_ple)
+        pool_release(g_upool, r.u_ple_sq, 4ul)
+    } else {
+        pool_release(g_upool, r.bple, r.bytes_ple)
+    }
+    pool_release(g_upool, r.u_ple_all, 4ul)
+}
+
+//! The decode seat of the E-series pre-step (`register_ple_gpu_decode_gate`): the Metal driver takes the step and builds the
+//! side rows on the device - the single row off its token id, the batched rows off theirs. A step the driver then declines
+//! runs the CPU pre-step late (`metal_decode_served`, the engine's batch fallback)
+[unused_argument(s, pos)]
+def private metal_ple_decode_gate(t : Model; s : Session; npos, pos : int64) : bool {
+    return false if (active_decode_override() != "metal")
+    return npos == 1l ? metal_ple_decode_dev(t) : metal_ple_dev_ok(t)
+}
+
 def private acquire_step(t : Model; s : Session; pos : int64; koff, voff : uint64; cap : int64; draft : bool = false; nrows : int64 = 1l; deepest : int64 = -1l) : StepRes {   // nolint:STYLE037,STYLE038 — flat per-shape buffer/uniform acquire list
     let c = t.config
     let dim = c.dim
@@ -564,11 +606,11 @@ def private acquire_step(t : Model; s : Session; pos : int64; koff, voff : uint6
         r.bdn_gate = pool_acquire(g_pool, g_dev, r.bytes_q)
         r.u_dn_qd2 = uniform_u32(uint(2l * qd))
     }
-    if (has_ple(c)) {   // E-series: the poked side-input rows (CPU pre-step) + the ple width uniform
+    if (has_ple(c)) {   // E-series: the side-input row, built on the device off the step's token id or poked from the CPU pre-step
         r.ple = true
         r.bytes_ple = uint64(c.n_layers * c.n_embd_per_layer * 4l)
-        r.bple = pool_acquire_untracked(g_upool, g_dev, r.bytes_ple)
         r.u_ple = uniform_u32(uint(c.n_embd_per_layer))
+        ple_step_dev(t, r, !draft && nrows == 1l && metal_ple_decode_dev(t))
     }
     if (c.hyper_conn) {   // qwen4exp: the wide residual + the mixer scratch, nrows rows (the single step, the MTP draft and verify rows)
         r.hc = true
@@ -696,7 +738,7 @@ def private poke_step(s : Session; r : StepRes; token : int64) {
             memcpy(metal_buffer_contents(r.bcos_swa), addr < void? >(s.rope_cos_swa[0]), r.bytes_tab_sw)
             memcpy(metal_buffer_contents(r.bsin_swa), addr < void? >(s.rope_sin_swa[0]), r.bytes_tab_sw)
         }
-        if (r.ple) {   // forward()'s ple_pre_decode filled s.ple_inp before the hook
+        if (r.ple && !r.ple_dev) {   // forward()'s ple_pre_decode filled s.ple_inp before the hook
             memcpy(metal_buffer_contents(r.bple), addr < void? >(s.ple_inp[0]), r.bytes_ple)
         }
         if (r.png) {   // the arch's pre-stack step gathered this token's heads before the hook
@@ -1534,7 +1576,7 @@ def private ple_rows(var e : BatchLayerEnc; t : Model; enc : MetalComputeEncoder
         }
     }
     if (g_skip != "ew") {
-        enc_geglu(enc, r.bh12, 0ul, r.bple, uint64(l * r.nrows * ple * 4l), r.u_ple_tot, r.nrows * ple)
+        enc_geglu_side(enc, r.bh12, 0ul, r.bple, uint64(l * ple * 4l), r.u_ple_tot, r.u_ple, r.u_ple_all, r.nrows * ple)
     }
     if (g_skip != "gemv") {
         if (pp.f32) {
@@ -2865,8 +2907,14 @@ def private encode_step(t : Model; var r : StepRes; commit_now : bool; var prev_
         // speculative head: argmax the previous step's logits, gather the winner's embedding row into r.bx (cls_q8 or tied-k6 planes); the escale slot applies embed_scale in the gather
         enc_argmax(enc, prev_blog, r.btok, r.u_vocab)
         enc_embed_dev(enc, t, r.btok, 0ul, r.bx, 0ul, 1l, r.u_dim, r.u_embscale)
+        if (r.ple_dev) {
+            enc_ple_pre_dev(enc, t, r.btok, 0ul, r.bx, r.bple, r.bple_proj, r.u_ple_all, r.u_ple_sq, 1l)
+        }
     } elif (r.btok_in != null) {
         enc_embed_dev(enc, t, r.btok_in, 0ul, r.bx, 0ul, 1l, r.u_dim, r.u_embscale)   //! the poked token's row, gathered on the device
+        if (r.ple_dev) {
+            enc_ple_pre_dev(enc, t, r.btok_in, 0ul, r.bx, r.bple, r.bple_proj, r.u_ple_all, r.u_ple_sq, 1l)
+        }
     }
     // layer-0 attention norm — the per-layer trailing add+rms is fused and feeds the NEXT layer; a hyper-connection model makes the wide residual instead (each layer opens with its own mixer)
     if (g_skip != "ew") {
@@ -3119,7 +3167,7 @@ def private release_step(var r : StepRes) {   // nolint:STYLE037,STYLE038 — fl
         pool_release(g_upool, r.u_dn_qd2, 4ul)
     }
     if (r.ple) {
-        pool_release(g_upool, r.bple, r.bytes_ple)
+        ple_step_release(r)
         pool_release(g_upool, r.u_ple, 4ul)
     }
     if (r.hc) {
@@ -3217,7 +3265,7 @@ def private pre_encode_next(t : Model; s : Session; npos : int64; var prev_blog 
         dn_grp_take(r, 1l, 1l)
     }
     if (r.gpu_logits && prev_blog != null && spec_cls_capable(t) &&
-            !has_ple(t.config) && !s.sampled && spec_armed()) {
+            (!r.ple || r.ple_dev) && !s.sampled && spec_armed()) {
         // speculative chain: the cb runs the moment the previous one drains — CPU tail/sampling/next forward() all overlap GPU execution
         r.spec = true
         // a spec step is IN FLIGHT after forward() returns — must not touch session memory (staging only; acceptance lands it via finish_step)
@@ -3834,15 +3882,13 @@ def private batch_step_poke(L : BatchLanding; ws : BatchWorkspace) {
             memcpy(metal_buffer_contents(L.bcos_swa), addr < void? >(ws.scr.rope_cos_swa[0]), L.bytes_tab_sw)
             memcpy(metal_buffer_contents(L.bsin_swa), addr < void? >(ws.scr.rope_sin_swa[0]), L.bytes_tab_sw)
         }
-        if (L.bple != null) {   // the CPU pre-step's rows (position-major) land layer-major, the layer's block one contiguous multiply
-            let ple_all = L.layers * L.ple_n
-            var dst = reinterpret<float?>(metal_buffer_contents(L.bple))
-            let src = addr < float const? >(ws.scr.ple_inp[0])
-            for (l in range64(L.layers)) {
-                for (p in range64(L.nrows)) {
-                    memcpy(reinterpret<void?>(dst + (l * L.nrows + p) * L.ple_n),
-                        reinterpret<void const?>(src + p * ple_all + l * L.ple_n), L.ple_n * 4l)
-                }
+        if (L.bple != null) {   // the CPU pre-step's rows, position-major as the step reads them
+            memcpy(metal_buffer_contents(L.bple), addr < void? >(ws.scr.ple_inp[0]), L.nrows * L.layers * L.ple_n * 4l)
+        }
+        if (L.ple_tok != null) {   // the rows' token ids the device pre-step gathers by
+            var tp = reinterpret<uint?>(metal_buffer_contents(L.ple_tok))
+            for (i in range64(L.nrows)) {
+                tp[i] = uint(ws.row_tokens[i])
             }
         }
     }
@@ -4182,13 +4228,18 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
     var u_total_dim = uniform_u32(uint(nrows * dim))
     var u_total_h = uniform_u32(uint(nrows * hidden))
     var u_total_h2 = hid2 > 0l ? uniform_u32(uint(nrows * hid2)) : null
-    // the E-series' per-layer side input: the CPU pre-step's rows (position-major) poked layer-major, the layer's block one contiguous multiply
+    // the E-series' per-layer side rows, position-major: built on the device off the rows' token ids, or the CPU pre-step's poked
     let plef = has_ple(c)
     let ple_n = plef ? c.n_embd_per_layer : 0l
     let bytes_ple = uint64(c.n_layers * nrows * ple_n * 4l)
-    var bple = plef ? pool_acquire_untracked(g_upool, g_dev, bytes_ple) : null
+    var ple_r = StepRes(bytes_ple = bytes_ple)   //! the side rows' buffers, `ple_step_dev`'s
+    if (plef) {
+        ple_step_dev(t, ple_r, metal_ple_dev_ok(t))
+    }
     var u_ple = plef ? uniform_u32(uint(ple_n)) : null
     var u_ple_tot = plef ? uniform_u32(uint(nrows * ple_n)) : null
+    let gpu_toks_ple = same && g_b_same_toks != null   //! the same-slab rows' ids ride the device already
+    var ple_tok = (ple_r.ple_dev && !gpu_toks_ple) ? pool_acquire_untracked(g_upool, g_dev, uint64(nrows * 4l)) : null
     // MoE per-step uniforms (the expert twins' stride set; see enc_moe_gemv)
     var u_moe_ne = moe ? uniform_u32(uint(c.n_expert)) : null
     var u_moe_nsh = nsh > 0l ? uniform_u32(uint(nsh)) : null
@@ -4225,7 +4276,8 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
     L.bsin_swa = bsin_swa
     L.bytes_tab = bytes_tab
     L.bytes_tab_sw = bytes_tab_sw
-    L.bple = bple
+    L.bple = ple_r.ple_dev ? default<MetalBuffer?> : ple_r.bple
+    L.ple_tok = ple_tok
     L.ple_n = ple_n
     L.dim = dim
     L.nrows = nrows
@@ -4265,6 +4317,9 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
             L.upooled |> push((buf = u_esc, size = 4ul))
         }
     }
+    if (ple_r.ple_dev) {   //! the rows' side input off their own token ids, after their embed rows landed in bx
+        enc_ple_pre_dev(enc, t, ple_tok != null ? ple_tok : g_b_same_toks, 0ul, bx, ple_r.bple, ple_r.bple_proj, ple_r.u_ple_all, ple_r.u_ple_sq, nrows)
+    }
     // layer-0 attention norm (the per-layer trailing add+rms feeds the NEXT layer's); a hyper-connection model opens the rows' wide residual instead
     var xh0 = false
     if (g_skip != "ew") {
@@ -4283,7 +4338,8 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
     var r = StepRes(valid = true, pos = maxcnt - 1l, chain_pos = maxcnt - nrows, nrows = nrows, kdt = kdt, hetero = hetero, moe = moe,
         chunked = chunked, attn_d = use_attn_d, d_nsgs = d_nsgs, nchmax = nchmax, hid0 = hidden,
         u_hidden2 = u_hidden2, u_total_h2 = u_total_h2,
-        ple = plef, bple = bple, u_ple = u_ple, u_ple_tot = u_ple_tot, bytes_ple = bytes_ple,
+        ple = plef, bple = ple_r.bple, u_ple = u_ple, u_ple_tot = u_ple_tot, bytes_ple = bytes_ple, ple_dev = ple_r.ple_dev,
+        bple_proj = ple_r.bple_proj, u_ple_all = ple_r.u_ple_all, u_ple_sq = ple_r.u_ple_sq,
         hc = hc, png = png, batch_rows = true, bytes_hcd = bytes_hcd, bytes_lr = bytes_lr, bytes_hc = bytes_hc, bytes_ple_in = bytes_ple_in,
         bhc = bhc, bhc_xn = bhc_xn, bhc_gate = bhc_gate, bhc_lo = bhc_lo, bhc_inj_a = bhc_inj_a, bhc_inj_f = bhc_inj_f,
         u_hcd = u_hcd, u_hc = u_hc, u_lr = u_lr, u_lr_tot = u_lr_tot, u_hcd_tot = u_hcd_tot,
@@ -4482,7 +4538,17 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
         L.upooled |> push((buf = u_total_h2, size = 4ul))
     }
     if (plef) {
-        L.upooled |> push((buf = bple, size = bytes_ple))   // nolint:STYLE012
+        if (ple_r.ple_dev) {
+            L.pooled |> push((buf = ple_r.bple, size = bytes_ple))   // nolint:STYLE012
+            L.pooled |> push((buf = ple_r.bple_proj, size = bytes_ple))
+            L.upooled |> push((buf = ple_r.u_ple_sq, size = 4ul))
+        } else {
+            L.upooled |> push((buf = ple_r.bple, size = bytes_ple))
+        }
+        if (ple_tok != null) {
+            L.upooled |> push((buf = ple_tok, size = uint64(nrows * 4l)))
+        }
+        L.upooled |> push((buf = ple_r.u_ple_all, size = 4ul))   // nolint:STYLE012
         L.upooled |> push((buf = u_ple, size = 4ul))
         L.upooled |> push((buf = u_ple_tot, size = 4ul))
     }
@@ -4627,8 +4693,16 @@ def private metal_mtp_owns(t : Model) : bool => t.metal_blob
 
 //! the registered overrides: the drivers, and the pool's spin window follows a step they served
 [hot_path]
-def private metal_decode_served(t : Model; var s : Session; token, pos : int64) : bool
-    => metal_served(metal_decode_forward(t, s, token, pos))
+def private metal_decode_served(t : Model; var s : Session; token, pos : int64) : bool {
+    let ok = metal_served(metal_decode_forward(t, s, token, pos))
+    if (s.ple_gpu_pending) {   //! the gate took the pre-step: the step built it, or the CPU pre-step runs late for the CPU layers
+        if (!ok) {
+            ple_pre_decode(t, s, token)
+        }
+        s.ple_gpu_pending = false
+    }
+    return ok
+}
 
 [hot_path]
 def private metal_batch_decode_served(t : Model; var ws : BatchWorkspace; var sessions : array<Session?>; nrows : int64) : bool
@@ -4641,6 +4715,7 @@ def dasllama_metal_decode_register() {
     // shapes decline per call
     register_decode_override("metal", @@metal_decode_served)
     register_batch_decode_override("metal", @@metal_batch_decode_served)
+    register_ple_gpu_decode_gate(@@metal_ple_decode_gate)
     register_reload_prep(@@discard_pre_encoded_steps)   // a reload orphans the pre-encoded steps — retire them before the regions drop
     register_mirror_quiesce(@@discard_pre_encoded_steps)
     register_mtp_spec_override("metal", @@metal_mtp_spec_eval)

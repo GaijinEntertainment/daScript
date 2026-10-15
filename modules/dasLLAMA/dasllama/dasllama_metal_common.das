@@ -165,6 +165,9 @@ var g_pso_swiglu_b : MetalComputePipeline?
 var g_pso_geglu_hxb : MetalComputePipeline?
 var g_pso_geglu_b : MetalComputePipeline?
 var g_pso_geglu : MetalComputePipeline?
+var g_pso_geglu_side : MetalComputePipeline?   //!< the geglu over a position-major side input (the E-series rows)
+var g_pso_ple_proj_bf16 : MetalComputePipeline?   //!< the per-layer-embedding projection off its native-BF16 rows
+var g_pso_ple_finish : MetalComputePipeline?   //!< the per-layer-embedding pre-step's rms + combine, in place
 var g_pso_geglu_hx : MetalComputePipeline?    // dual-store stamp
 // ===== tower primitives (compiled in the tower driver's init) =====
 var g_pso_ln : MetalComputePipeline?
@@ -2506,7 +2509,8 @@ struct BatchLanding {
     bsin_swa : MetalBuffer?
     bytes_tab : uint64
     bytes_tab_sw : uint64
-    bple : MetalBuffer?           //!< ... and the E-series' per-layer side rows
+    bple : MetalBuffer?           //!< ... and the E-series' per-layer side rows (null where the step builds them, `ple_tok`)
+    ple_tok : MetalBuffer?        //!< the rows' token ids the step's device pre-step gathers by (null where they ride the device already)
     ple_n : int64
     dim : int64
     kdt : KVDtype                 //!< the match key: KV codec, arena epoch, the rows' uids and positions, the model shape

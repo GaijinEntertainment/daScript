@@ -323,28 +323,31 @@ def select_prefill_override(name : string) : bool {
 
 def active_prefill_override : string => g_prefill_override_name
 
-//! The GPU-PLE pre-step gates, one per direction: a prefill override that builds the E-series PLE
-//! side input on device registers the prefill gate, a decode override that gathers the token's row
-//! on device registers the decode gate; on true the hub skips the CPU pre-step for that call only.
+//! The GPU-PLE pre-step gates, one list per direction: every driver that builds the E-series PLE side input on device
+//! registers its prefill gate and its decode gate (a build carries both GPU homes, each gate answering for its own armed
+//! driver); the first gate that takes a call has the hub skip the CPU pre-step for that call only.
 typedef PleGpuGateFn = function<(t : Model; s : Session; npos : int64; start_pos : int64) : bool>
-var private g_ple_gpu_gate : PleGpuGateFn
-var private g_ple_gpu_gate_set = false
-var private g_ple_gpu_decode_gate : PleGpuGateFn
-var private g_ple_gpu_decode_gate_set = false
+var private g_ple_gpu_gates : array<PleGpuGateFn>
+var private g_ple_gpu_decode_gates : array<PleGpuGateFn>
 
 def register_ple_gpu_gate(fn : PleGpuGateFn) {
-    g_ple_gpu_gate = fn
-    g_ple_gpu_gate_set = true
+    g_ple_gpu_gates |> push(fn)
 }
 
 def register_ple_gpu_decode_gate(fn : PleGpuGateFn) {
-    g_ple_gpu_decode_gate = fn
-    g_ple_gpu_decode_gate_set = true
+    g_ple_gpu_decode_gates |> push(fn)
 }
 
-//! the decode gate's answer for a step's rows: true when the armed driver gathers and projects the side input itself
-def ple_gpu_decode_gate(t : Model; s : Session; npos, pos : int64) : bool
-    => g_ple_gpu_decode_gate_set && invoke(g_ple_gpu_decode_gate, t, s, npos, pos)
+//! a gate of `gates` takes the call
+def private ple_gate_taken(gates : array<PleGpuGateFn>; t : Model; s : Session; npos, pos : int64) : bool {
+    for (g in gates) {
+        return true if (invoke(g, t, s, npos, pos))
+    }
+    return false
+}
+
+//! the decode gates' answer for a step's rows: true when the armed driver gathers and projects the side input itself
+def ple_gpu_decode_gate(t : Model; s : Session; npos, pos : int64) : bool => ple_gate_taken(g_ple_gpu_decode_gates, t, s, npos, pos)
 
 typedef EmbedGpuGateFn = function<(t : Model; s : Session; npos : int64; start_pos : int64) : bool>
 var private g_embed_gpu_gate : EmbedGpuGateFn
@@ -458,7 +461,7 @@ def ple_pre_prefill_gated(t : Model; var s : Session; tokens : array<int64>; off
     for (p in range64(npos)) {
         s.ple_gpu_tokens[p] = tokens[off + p]
     }
-    if (g_ple_gpu_gate_set && invoke(g_ple_gpu_gate, t, s, npos, start_pos)) {
+    if (ple_gate_taken(g_ple_gpu_gates, t, s, npos, start_pos)) {
         s.ple_gpu_pending = true
     } else {
         ple_pre_prefill(t, s, s.ple_gpu_tokens, npos)
@@ -469,7 +472,7 @@ def ple_pre_prefill_gated(t : Model; var s : Session; tokens : array<int64>; off
 //! (pad ids stashed — the media path has no tokens), CPU pad impl on decline. The model_proj
 //! GEMM inside the finish is the whole cost, so an eligible driver must get the offer here too.
 def ple_pre_prefill_pad_gated(t : Model; var s : Session; npos, start_pos : int64) {
-    if (g_ple_gpu_gate_set && invoke(g_ple_gpu_gate, t, s, npos, start_pos)) {
+    if (ple_gate_taken(g_ple_gpu_gates, t, s, npos, start_pos)) {
         s.ple_gpu_tokens |> resize(npos)
         for (p in range64(npos)) {
             s.ple_gpu_tokens[p] = 0l

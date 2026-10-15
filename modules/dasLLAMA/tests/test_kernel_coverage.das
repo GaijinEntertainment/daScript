@@ -201,12 +201,6 @@ let private CENSUS_NEVER_DISPATCHED <- [
     // out at 128 (Qwen3-30B-A3B), 60 (Qwen1.5-MoE) and 32 (gpt-oss-20b). Its coverage is
     // moe_select_gate's ne=512 and ne=300 cases in test_metal_prefill_kernels.das
     "MetalMoeSelect512",
-    // the PLE token-table gather twins: the census's only E-series carrier is the E4B Q8_0, whose
-    // table sits on the q8 plane and takes the q8 stamp. A k4/k5/q40 table needs an E-series file
-    // whose per_layer_token_embd is K-quant or Q4_0, and the zoo stocks none. Their coverage is
-    // ple_gather_gate in test_metal_prefill_kernels.das
-    "MetalPleGatherK4_metal_ple_gather_kq", "MetalPleGatherK5_metal_ple_gather_kq",
-    "MetalPleGatherQ40_metal_ple_gather_kq",
     // the unconverted geglu arm of the bound-total MoE activation: the gemma4moe row picks the
     // geglu family on moe_dense_shexp, and its panel always clears CVT_MIN_ROWS, so the HX twin
     // serves and this one never does. Its coverage is ew2_hx_gate(geglu = true, bounded = true) in

@@ -92,8 +92,14 @@ def ple_gather_row(t : Model; row : int64; var dst : array<float>; doff : int64)
     }
 }
 
+var private g_ple_cpu_rows = 0l   //! the rows the CPU pre-step built (decode, prefill, the padded media form)
+
+//! the rows the CPU pre-step built since load: a device-served pre-step leaves it where it was
+def ple_cpu_pre_rows() : int64 => g_ple_cpu_rows
+
 // Decode pre-step: gather the single token's per-layer embedding row, then finish.
 def private ple_pre_decode_impl(t : Model; var s : Session; token : int64) {
+    g_ple_cpu_rows++
     ple_gather_row(t, token, s.ple_inp, 0l)
     ple_pre_finish(t, s, s.x, 1l)
 }
@@ -101,6 +107,7 @@ def private ple_pre_decode_impl(t : Model; var s : Session; token : int64) {
 //! Prefill pre-step: gather every position's per-layer embedding row, then finish (batched).
 //! Public as the late-decline fallback for a driver that claimed the pre-step via the gate.
 def private ple_pre_prefill_impl(t : Model; var s : Session; tokens : array<int64>; npos : int64) {
+    g_ple_cpu_rows += npos
     let all = t.config.n_layers * t.config.n_embd_per_layer
     for (p in range64(npos)) {
         ple_gather_row(t, tokens[p], s.ple_inp, p * all)
@@ -111,6 +118,7 @@ def private ple_pre_prefill_impl(t : Model; var s : Session; tokens : array<int6
 // Prefill-from-embeddings (multimodal) pre-step: no token ids, so the gather uses the padding token
 // (id 0) broadcast across positions.
 def private ple_pre_prefill_pad_impl(t : Model; var s : Session; npos : int64) {
+    g_ple_cpu_rows += npos
     let all = t.config.n_layers * t.config.n_embd_per_layer
     ple_gather_row(t, 0l, s.ple_inp, 0l)
     unsafe {

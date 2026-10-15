@@ -18,6 +18,7 @@ require daslib/fio   // nolint:STYLE030,LINT019 — used only inside the Apple s
 require math   // nolint:STYLE030,LINT019 - used only inside the Apple static_if half
 require _model_tier
 require _format_census   // census_cell: the qwen35 rows' every site in its own format
+require dasllama/dasllama_ple   // ple_cpu_pre_rows - the E-series rows' CPU pre-step witness
 require dasllama/dasllama_image   // nolint:STYLE030,LINT019 - load_model_cached, the qwen4exp row's served image, inside the das_metal half
 require dasllama/dasllama_gguf   // nolint:STYLE030,LINT019 - set_mtp_head_path, the qwen4exp row's split head, inside the das_metal half
 require ../performance/model_specs.das   // nolint:STYLE030,LINT019 — counting_prompt, read only inside the Apple static_if halves
@@ -1182,7 +1183,13 @@ def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false
             t |> success(select_prefill_override("metal"), "{tag}: prefill override registered")
             t |> success(select_decode_override("metal"), "{tag}: decode override registered")
             set_metal_prefill_min_npos(1l)
+            //! the pre-step on the device at every shape: the window's finish, the steps' bf16 projection, no CPU pre-step row
+            let fin0 = metal_kernel_count_compiled("metal_ple_finish")
+            let cpu0 = ple_cpu_pre_rows()
             eval_(trg, sa, pa)
+            let fin_pf = metal_kernel_count_compiled("metal_ple_finish") - fin0
+            t |> success(fin_pf > 0l, "{tag} prefill: the window's PLE pre-step finished on the device ({fin_pf})")
+            let pj0 = metal_kernel_count_compiled("metal_ple_proj_bf16") + metal_kernel_count_compiled("metal_moe_router")
             var cura = argmax_of(sa.logits, vocab)
             var picks : array<int64>
             for (_i in range(2)) {
@@ -1192,6 +1199,9 @@ def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false
                 delete one
                 cura = argmax_of(sa.logits, vocab)
             }
+            let pj_d = metal_kernel_count_compiled("metal_ple_proj_bf16") + metal_kernel_count_compiled("metal_moe_router") - pj0
+            t |> success(pj_d >= 2l, "{tag} decode: every step projected its side row on the device ({pj_d})")
+            t |> equal(ple_cpu_pre_rows() - cpu0, 0l, "{tag}: the prefill and the steps built no CPU pre-step row")
             // the batch cell: the CPU batched stack on the PLANAR model is the control, the
             // blob twin's batched step through the driver (PLE rows, Q-only shared-KV layers,
             // the two FFN widths) must read within the single-stream bar of it
@@ -1238,8 +1248,13 @@ def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false
                 sessg |> push(addr(sh))
             }
             let ba1 = metal_batch_decode_stats().steps
+            let bpj0 = metal_kernel_count_compiled("metal_ple_proj_bf16") + metal_kernel_count_compiled("metal_moe_router")
+            let bcpu0 = ple_cpu_pre_rows()
             eval_batch_(trg, wsg, sessg, cur)
             t |> equal(metal_batch_decode_stats().steps - ba1, 1l, "{tag} batch: the driver served the step")
+            t |> success(metal_kernel_count_compiled("metal_ple_proj_bf16") + metal_kernel_count_compiled("metal_moe_router") > bpj0,
+                "{tag} batch: the rows' side input projected on the device")
+            t |> equal(ple_cpu_pre_rows() - bcpu0, 0l, "{tag} batch: no CPU pre-step row (the host transpose and gather are gone)")
             var bmaxd = 0.0
             for (i in range64(vocab)) {
                 bmaxd = max(bmaxd, abs(sg.logits[i] - sc.logits[i]))
@@ -1296,10 +1311,16 @@ def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false
             select_decode_override("metal")
             select_prefill_override("metal")
             set_metal_prefill_min_npos(1l)
+            let spec_mode = metal_decode_spec_mode()
+            set_metal_decode_speculate(1)   //! the greedy chain pinned on: the E-series chains its steps, each building its side row off the argmax
+            let sp0 = metal_decode_spec_stats()
             var s2 = make_run_state(trg.config, KVDtype.f16, KVDtype.f16)
             let ids2 <- generate(trg, s2, prompt, length(prompt) + 8)
             gpu_ids := ids2
             delete s2
+            let sp1 = metal_decode_spec_stats()
+            set_metal_decode_speculate(spec_mode)
+            t |> success(sp1.hits - sp0.hits > 0l, "{tag}: the greedy chain engaged on the E-series ({sp1.hits - sp0.hits} hits, {sp1.misses - sp0.misses} misses)")
             set_metal_prefill_min_npos(64l)
             select_decode_override("")
             select_prefill_override("")
