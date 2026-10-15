@@ -458,6 +458,7 @@ def private gpu_step_vs_oracle(t : T?; trg : Model; var dr : GemmaDrafter; promp
             vk_gemma_drafter_last_logits(lg)
         }
     }
+    moe_gpu_hydrate_session(trg, s)   //! the oracle reads the host cache: the resident driver's device-only rows come down first
     var out : GemmaDraftOut
     gemma_draft_step_cpu(trg, s, dr, seed, h, anchor, out)
     let dl = logits_maxdiff(lg, out.logits)
