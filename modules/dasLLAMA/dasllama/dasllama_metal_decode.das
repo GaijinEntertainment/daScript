@@ -2760,9 +2760,7 @@ def metal_mtp_spec_eval(t : Model; var s : Session; tok : int64; var accepted : 
 //! mtp_spec_eval_batch's GPU twin: every stream's depth-1 round through one joint verify; a stream's
 //! accepted draft count (its draft in `mtp_vbatch[1]`); returns how many streams' rows the verify carried
 [hot_path]
-def metal_mtp_spec_eval_batch(t : Model; var sessions : array<Session?>; toks : array<int64>; var accepted : array<int64>) : int64 {
-    return metal_mtp_spec_rounds(t, sessions, toks, 1l, accepted)
-}
+def metal_mtp_spec_eval_batch(t : Model; var sessions : array<Session?>; toks : array<int64>; var accepted : array<int64>) : int64 => metal_mtp_spec_rounds(t, sessions, toks, 1l, accepted)
 
 // DASLLAMA_METAL_DECODE_CONCURRENT (default ON): concurrent encoder for the single-stream step,
 // barriers only at tracker-detected hazards (hz_gate in every decode-path enc_* helper); g_skip

@@ -282,39 +282,37 @@ struct private GdraftPins {
 //! The served twin of `file` on this build's GPU home - the metal-blob image under the Metal mode required, else the
 //! whole-model resident driver under `DASLLAMA_GPU=1` at `regions` mirror regions in codec `kv` (a Metal session picks its own
 //! codec) - with its context cut to `ctx`; an empty Model (`n_layers` 0) after the skip that says why
+//! the trunk loaded on the build's GPU home, its context cut to `ctx` (an empty Model where the cell skipped)
 def private gdraft_target(t : T?; file : string; ctx, regions : int64; kv : KVDtype) : Model {
     let target = path_join(models_dir(), file)
-    var trg <- Model()
     static_if (typeinfo builtin_module_exists(das_metal)) {
-        if (!jit_model_available(t, target)) {
-            return <- Model()
-        }
+        return <- Model() if (!jit_model_available(t, target))
         let prior = get_metal_mode()
         set_metal_mode(MetalMode.required)
-        trg <- load_model_cached(target, QuantMode.q8)
+        var trg <- load_model_cached(target, QuantMode.q8)
         set_metal_mode(prior)
         if (!trg.metal_blob) {
             t |> skip("the served image of {file} is not the metal-blob flavor on this box")
             delete trg
             return <- Model()
         }
+        trg.config.seq_len = min(trg.config.seq_len, ctx)
+        return <- trg
     } else {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!resident_ready(t, target)) {
-                return <- Model()
-            }
-            trg <- load_resident_at(target, kv, regions)
+            return <- Model() if (!resident_ready(t, target))
+            var trg <- load_resident_at(target, kv, regions)
             if (!resident_admitted(t, "the whole-model driver armed on the trunk (the load log names any decline)", "")) {
                 delete trg
                 return <- Model()
             }
+            trg.config.seq_len = min(trg.config.seq_len, ctx)
+            return <- trg
         } else {
             t |> skip("no GPU home on this build for the gemma drafter")
             return <- Model()
         }
     }
-    trg.config.seq_len = min(trg.config.seq_len, ctx)
-    return <- trg
 }
 
 //! the GPU home's overrides for the served cells: the Metal prefill and decode, every prompt length on the device
@@ -366,6 +364,7 @@ def private sched_run(trg : Model; prompts : array<array<int64>>; budget : int64
         submit(trg, sch, make_req(i + 1l, prompts[i], budget))
     }
     drain(trg, sch, ev)
+    run.toks |> reserve(long_length(prompts))
     for (i in range64(long_length(prompts))) {
         run.toks |> emplace(toks_of(ev, i + 1l))
     }
@@ -383,6 +382,7 @@ def private sched_run(trg : Model; prompts : array<array<int64>>; budget : int64
 //! opens at another number, so every stream walks its own count
 def private counting_prompts(trg : Model; n : int64) : array<array<int64>> {
     var out : array<array<int64>>
+    out |> reserve(n)
     for (i in range64(n)) {
         let start = 1 + int(i) * 100
         out |> emplace(encode(trg, "Count from {start} to {start + 59}, separated by commas: {counting_prompt(start, start + 22)}", true, false))
@@ -465,10 +465,10 @@ def private gpu_step_vs_oracle(t : T?; trg : Model; var dr : GemmaDrafter; promp
     t |> success(dh <= 0.05, "{tag}: h_next within 0.05 of the oracle (maxd {dh})")
     to_log(LOG_INFO, "gdraft gpu {tag}: anchor {anchor} seed {seed} -> gpu {dg} cpu {out.token}; logits maxd {dl}, h_next maxd {dh}\n")
     if (window_control) {   //! the control: the oracle's sliding layers one key wider - a device pass over the whole window reads as it does
-        dr.sliding_window += 1l
+        dr.sliding_window++
         var wide : GemmaDraftOut
         gemma_draft_step_cpu(trg, s, dr, seed, h, anchor, wide)
-        dr.sliding_window -= 1l
+        dr.sliding_window--
         let dlw = logits_maxdiff(lg, wide.logits)
         t |> success(dl * 8.0 < dlw, "{tag}: the device's sliding layers attend the oracle's window - its logits sit far nearer the oracle ({dl}) than one a key wider ({dlw})")
         to_log(LOG_INFO, "gdraft gpu {tag}: the one-key-wider oracle reads logits maxd {dlw}\n")
@@ -553,6 +553,34 @@ def test_gemma_drafter_depth_knob(t : T?) {
                 to_log(LOG_INFO, "gdraft depth {k}: {spec.accepted} of {spec.drafted} drafts over {rounds} rounds, {spec.ticks} ticks for 32 tokens\n")
                 delete spec
             }
+            //! a reasoning budget that can still force a close holds the stream's rounds at depth 1: a draft past the close would be
+            //! evaled and emitted ahead of it; the stand-in close is two tokens the count never writes. Four budgets in a row put the
+            //! budget inside a depth-3 round whatever the rounds accept
+            set_mtp_depth(3l)
+            var close <- encode(trg, " THE END", false, false)
+            for (budget in range64(5l, 9l)) {
+                var budgeted : array<array<int64>>
+                for (spec in [false, true]) {
+                    var ev : array<SchedEvent>
+                    var sch <- create_scheduler(trg, 1l, 4l, 0l, 64l, 0l, KVDtype.f16, spec)
+                    var req <- make_req(1l, prompts[0], 24l)
+                    req.think_budget = budget
+                    req.think_marks.opened = true
+                    req.think_marks.close := close
+                    t |> success(submit(trg, sch, req), "budget {budget}: the stream is queued (speculating {spec})")
+                    drain(trg, sch, ev)
+                    budgeted |> emplace(toks_of(ev, 1l))
+                    delete sch
+                    delete ev
+                }
+                for (i in range64(long_length(close))) {
+                    t |> equal(budgeted[1][budget + i], close[i], "budget {budget}: the forced close's token {i} lands at the budget on the speculating stream")
+                }
+                log_gen_texts(trg, "gdraft budget {budget} (plain, speculating)", budgeted[0], budgeted[1])
+                t |> success(ids_equal(budgeted[1], budgeted[0]), "budget {budget}: the speculating stream reads as the plain one")
+                delete budgeted
+            }
+            delete close
             clear_mtp_depth()
             delete plain
             delete prompts

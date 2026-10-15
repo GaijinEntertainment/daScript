@@ -20,6 +20,25 @@ def private tmp_models_dir(tag : string) : string {
 }
 
 [test]
+def test_catalog_drafters(t : T?) {
+    t |> run("every assistant drafter resolves pinned, and the gemma-4 26B card carries the upstream head") @(t : T?) {
+        var found = false
+        for (e in model_catalog()) {
+            continue if (empty(e.drafter_file))
+            t |> equal(length(e.drafter_sha256), 64, "{e.name}: drafter sha256 must be 64 hex chars")
+            t |> success(e.drafter_bytes > 0l, "{e.name}: drafter canonical size missing")
+            t |> success(e.drafter_url |> starts_with("https://"), "{e.name}: drafter url must be https")
+            t |> success(find(e.drafter_url, "/resolve/main/") < 0, "{e.name}: drafter url is not commit-pinned")
+            if (e.name == "gemma-4-26b-a4b") {
+                found = true
+                t |> equal(e.drafter_file, "mtp-gemma-4-26B-A4B-it-Q8_0.gguf", "the 26B card's drafter is the upstream Q8_0 head")
+            }
+        }
+        t |> success(found, "the gemma-4 26B card carries its assistant drafter")
+    }
+}
+
+[test]
 def test_catalog_table(t : T?) {
     t |> run("entries are pinned, unique, and exactly one is the default") @(t : T?) {
         var names, files : table<string>
@@ -67,21 +86,6 @@ def test_catalog_table(t : T?) {
             t |> success(find(e.vision_url, "/resolve/main/") < 0, "{e.name}: tower url is not commit-pinned")
         }
         t |> success(towers >= 2, "vision towers shrank: {towers}, expected at least 2")
-    }
-    t |> run("every assistant drafter resolves pinned, and the gemma-4 26B card carries the upstream head") @(t : T?) {
-        var found = false
-        for (e in model_catalog()) {
-            continue if (empty(e.drafter_file))
-            t |> equal(length(e.drafter_sha256), 64, "{e.name}: drafter sha256 must be 64 hex chars")
-            t |> success(e.drafter_bytes > 0l, "{e.name}: drafter canonical size missing")
-            t |> success(e.drafter_url |> starts_with("https://"), "{e.name}: drafter url must be https")
-            t |> success(find(e.drafter_url, "/resolve/main/") < 0, "{e.name}: drafter url is not commit-pinned")
-            if (e.name == "gemma-4-26b-a4b") {
-                found = true
-                t |> equal(e.drafter_file, "mtp-gemma-4-26B-A4B-it-Q8_0.gguf", "the 26B card's drafter is the upstream Q8_0 head")
-            }
-        }
-        t |> success(found, "the gemma-4 26B card carries its assistant drafter")
     }
     t |> run("the ASR tower (parakeet v3) is pinned like any carrier") @(t : T?) {
         let tower <- serve_asr_tower()

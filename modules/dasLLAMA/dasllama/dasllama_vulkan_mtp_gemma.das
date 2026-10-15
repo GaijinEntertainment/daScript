@@ -125,10 +125,9 @@ let private DRAFT_K_MAX = MTP_MAX_ROWS - 1l
 
 //! the q8 tensors of the drafter in the planes' order: (byte offset in the GGUF blob, elements) - the GEMV sites' order
 def private q8_tensors(dr : GemmaDrafter) : array<tuple<boff : int64; n : int64>> {
-    var out : array<tuple<boff : int64; n : int64>>
-    out |> push((boff = dr.pre_proj_off, n = 2l * dr.tdim * dr.dim))
-    out |> push((boff = dr.post_proj_off, n = dr.dim * dr.tdim))
-    out |> push((boff = dr.tok_emb_off, n = dr.dim * dr.vocab))
+    var out <- [(boff = dr.pre_proj_off, n = 2l * dr.tdim * dr.dim), (boff = dr.post_proj_off, n = dr.dim * dr.tdim),
+        (boff = dr.tok_emb_off, n = dr.dim * dr.vocab)]
+    out |> reserve(3l + 5l * dr.n_layers)
     for (l in range64(dr.n_layers)) {
         let qd = dr.n_heads * dr.hs[l]
         out |> push((boff = dr.wq_offs[l], n = dr.dim * qd))
@@ -153,6 +152,7 @@ def private q8_repack(dr : GemmaDrafter; var quants : array<uint8>; var scales :
     scales |> reserve(nblk)
     scales |> resize(nblk)
     var bases : array<int64>
+    bases |> reserve(long_length(tensors))
     var cur = 0l
     for (te in tensors) {
         bases |> push(cur)
@@ -269,7 +269,7 @@ def private vk_target_why(dr : GemmaDrafter) : string {
     return ""
 }
 
-def private gemv_set(var g : GemmaDrafterVk; base, n, d : int64; xq, xs : uint64; xbit : uint; y : uint64; ybit : uint) : GemmaVkGemv {
+def private gemv_set(g : GemmaDrafterVk; base, n, d : int64; xq, xs : uint64; xbit : uint; y : uint64; ybit : uint) : GemmaVkGemv {
     var gv = GemmaVkGemv(meta = make_host_buf(META_BYTES, true), n = n, d = d)
     unsafe {
         var mp = reinterpret<uint?>(gv.meta.mapped)
@@ -289,26 +289,47 @@ def private vk_drafter_init(dr : GemmaDrafter; var g : GemmaDrafterVk) : bool {
     }
     g.hs_mx = hs_mx
     let dt = g_rd.kv_dt
-    var slabs : array<DaSlab>
-    for (l in range64(dr.n_layers)) {
-        slabs |> push(da_slab_of(false, dr.n_heads / dr.kvh[l]))
-    }
+    var slabs <- [for (l in range64(dr.n_layers)); da_slab_of(false, dr.n_heads / dr.kvh[l])]
     if (!vk_classes_ok(dt, slabs)) {
         return false
     }
     var quants : array<uint8>
     var scales : array<uint16>
     var bases <- q8_repack(dr, quants, scales)
+    let made = vk_buffers_make(dr, g, quants, scales)
+    delete quants
+    delete scales
+    if (!made) {
+        delete bases
+        delete slabs
+        vk_buffers_release(g)
+        return false
+    }
+    g.gemvs <- vk_gemvs_make(dr, g, bases)
+    delete bases
+    vk_sets_make(dr, g, slabs)
+    delete slabs
+    let ncmd = g_rd.regions * (DRAFT_K_MAX + 1l)
+    g.cmds |> reserve(ncmd)
+    for (_i in range64(ncmd)) {
+        g.cmds |> push(alloc_cmd())
+    }
+    g.recorded |> resize(ncmd)
+    g.ready = true
+    return true
+}
+
+//! the drafter's weight planes (the repacked q8 `quants` / `scales`, the f32 blob) and scratch on the device and its host
+//! buffers; false where the card has no room
+def private vk_buffers_make(dr : GemmaDrafter; var g : GemmaDrafterVk; quants : array<uint8>; scales : array<uint16>) : bool {
     var oom = false
     g.wqb = long_length(quants)
     g.wsb = long_length(scales) * 2l
     g.wq = dev_from(oom, unsafe(addr<uint8 const?>(quants[0])), g.wqb)
     g.ws = dev_from(oom, unsafe(addr<uint8 const?>(scales[0])), g.wsb)
-    delete quants
-    delete scales
     g.fblob_bytes = long_length(dr.fblob) * 4l
     g.fblob = dev_from(oom, unsafe(addr<uint8 const?>(dr.fblob[0])), g.fblob_bytes)
-    let qdm = dr.n_heads * hs_mx
+    let qdm = dr.n_heads * g.hs_mx
     let cat_n = 2l * dr.tdim
     g.cat = dev_buf(oom, cat_n * 4l)
     g.catq = dev_buf(oom, cat_n)
@@ -318,7 +339,7 @@ def private vk_drafter_init(dr : GemmaDrafter; var g : GemmaDrafterVk) : bool {
     g.xs = dev_buf(oom, (dr.dim / 32l) * 4l)
     g.q = dev_buf(oom, qdm * 4l)
     g.attn = dev_buf(oom, qdm * 4l)
-    g.cntoff = dr.n_heads * (hs_mx + 2l)   //! one key split: the counters past one piece a head
+    g.cntoff = dr.n_heads * (g.hs_mx + 2l)   //! one key split: the counters past one piece a head
     g.part_bytes = (g.cntoff + dr.n_heads) * 4l
     g.part = dev_buf(oom, g.part_bytes)
     g.aq = dev_buf(oom, qdm)
@@ -334,31 +355,41 @@ def private vk_drafter_init(dr : GemmaDrafter; var g : GemmaDrafterVk) : bool {
     let pbytes = int64(CLS_ARGMAX_CHUNKS) * 4l
     g.pmax = dev_buf(oom, pbytes)
     g.pid = dev_buf(oom, pbytes)
-    if (oom) {
-        delete bases
-        delete slabs
-        vk_buffers_release(g)
-        return false
-    }
+    return false if (oom)
     upload_zeros(g.part, 0l, g.part_bytes)
     g.tok = make_host_buf(TOK_META_BYTES, true)
     g.cos = make_host_buf(g_rd.cos_elems * 4l, true)
     g.inp = make_host_buf(16l + dr.tdim * 4l, false)
     g.picks = make_host_buf(MTP_MAX_ROWS * 4l, false, [cached = true])
     g.lout = make_host_buf((dr.vocab + dr.tdim) * 4l, false, [cached = true])
-    g.gemvs |> push(gemv_set(g, bases[0], cat_n, dr.dim, g.catq, g.cats, B_CATQ, g.xin, B_XIN))
-    g.gemvs |> push(gemv_set(g, bases[1], dr.dim, dr.tdim, g.xq, g.xs, B_XQ, g.hnext, B_HN))
-    g.gemvs |> push(gemv_set(g, bases[2], dr.dim, dr.vocab, g.xq, g.xs, B_XQ, g.logits, B_LOG))
+    return true
+}
+
+//! the q8 GEMV sites in the command's order: pre-proj, post-proj, classifier, then each layer's q, o, gate, up, down
+def private vk_gemvs_make(dr : GemmaDrafter; g : GemmaDrafterVk; bases : array<int64>) : array<GemmaVkGemv> {
+    let cat_n = 2l * dr.tdim
+    var out <- [gemv_set(g, bases[0], cat_n, dr.dim, g.catq, g.cats, B_CATQ, g.xin, B_XIN),
+        gemv_set(g, bases[1], dr.dim, dr.tdim, g.xq, g.xs, B_XQ, g.hnext, B_HN),
+        gemv_set(g, bases[2], dr.dim, dr.vocab, g.xq, g.xs, B_XQ, g.logits, B_LOG)]
+    out |> reserve(3l + 5l * dr.n_layers)
     for (l in range64(dr.n_layers)) {
         let qd = dr.n_heads * dr.hs[l]
         let b0 = 3l + l * 5l
-        g.gemvs |> push(gemv_set(g, bases[b0], dr.dim, qd, g.xq, g.xs, B_XQ, g.q, B_Q))
-        g.gemvs |> push(gemv_set(g, bases[b0 + 1l], qd, dr.dim, g.aq, g.aqs, B_AQ, g.o, B_O))
-        g.gemvs |> push(gemv_set(g, bases[b0 + 2l], dr.dim, dr.hidden, g.xq, g.xs, B_XQ, g.gate, B_GATE))
-        g.gemvs |> push(gemv_set(g, bases[b0 + 3l], dr.dim, dr.hidden, g.xq, g.xs, B_XQ, g.up, B_UP))
-        g.gemvs |> push(gemv_set(g, bases[b0 + 4l], dr.hidden, dr.dim, g.hq, g.hqs, B_HQ, g.o, B_O))
+        out |> push(gemv_set(g, bases[b0], dr.dim, qd, g.xq, g.xs, B_XQ, g.q, B_Q))
+        out |> push(gemv_set(g, bases[b0 + 1l], qd, dr.dim, g.aq, g.aqs, B_AQ, g.o, B_O))
+        out |> push(gemv_set(g, bases[b0 + 2l], dr.dim, dr.hidden, g.xq, g.xs, B_XQ, g.gate, B_GATE))
+        out |> push(gemv_set(g, bases[b0 + 3l], dr.dim, dr.hidden, g.xq, g.xs, B_XQ, g.up, B_UP))
+        out |> push(gemv_set(g, bases[b0 + 4l], dr.hidden, dr.dim, g.hq, g.hqs, B_HQ, g.o, B_O))
     }
-    delete bases
+    return <- out
+}
+
+//! the descriptor sets of every non-GEMV class the command dispatches
+def private vk_sets_make(dr : GemmaDrafter; var g : GemmaDrafterVk; slabs : array<DaSlab>) {
+    let dt = g_rd.kv_dt
+    let qdm = dr.n_heads * g.hs_mx
+    let cat_n = 2l * dr.tdim
+    let pbytes = int64(CLS_ARGMAX_CHUNKS) * 4l
     g.s_cat_rq = set_rq_cls(fixed_array(g.cat, g.catq, g.cats), fixed_array(cat_n * 4l, cat_n, (cat_n / 32l) * 4l), fixed_array(B_CAT, B_CATQ, B_CATQ))
     g.s_ar = set_cls_ar_rq_b(fixed_array(g.xin, g.o, g.fblob, g.xq, g.xs), fixed_array(dr.dim * 4l, dr.dim * 4l, g.fblob_bytes, dr.dim, (dr.dim / 32l) * 4l),
         fixed_array(B_XIN, B_O, 0u, B_XQ, B_XQ))
@@ -376,6 +407,7 @@ def private vk_drafter_init(dr : GemmaDrafter; var g : GemmaDrafterVk) : bool {
     }
     g.s_pick_part = set_cls_argmax_part(fixed_array(g.logits, g.pmax, g.pid), fixed_array(dr.vocab * 4l, pbytes, pbytes), fixed_array(B_LOG, B_LOG, B_LOG))
     g.s_pick_fin = set_cls_argmax_fin(fixed_array(g.pmax, g.pid, g.ids), fixed_array(pbytes, pbytes, 16l), fixed_array(B_LOG, B_LOG, B_IDS))
+    g.s_attn |> reserve(dr.n_layers)
     for (l in range64(dr.n_layers)) {
         let L & = unsafe(g_rd.layers[dr.kv_layer[l]])
         let (kmir, vmir) = rd_slab(L)
@@ -392,15 +424,6 @@ def private vk_drafter_init(dr : GemmaDrafter; var g : GemmaDrafterVk) : bool {
         g.s_unrot = set_kv_tq4_unrot_cls(fixed_array(g.attn, g.q, g_rd.tq4_signs_dev), fixed_array(qdm * 4l, qdm * 4l, signb), fixed_array(B_ATT, B_Q, 0u))
         g.s_at_rq = set_rq_cls(fixed_array(g.attn, g.aq, g.aqs), fixed_array(qdm * 4l, qdm, (qdm / 32l) * 4l), fixed_array(B_ATT, B_AQ, B_AQ))
     }
-    delete slabs
-    let ncmd = g_rd.regions * (DRAFT_K_MAX + 1l)
-    g.cmds |> reserve(ncmd)
-    for (_i in range64(ncmd)) {
-        g.cmds |> push(alloc_cmd())
-    }
-    g.recorded |> resize(ncmd)
-    g.ready = true
-    return true
 }
 
 //! one q8 GEMV site's dispatch
@@ -621,9 +644,8 @@ def private vk_drop_forget {
 def private vk_attached_to(t : Model) : bool => g_vk_attached
 
 //! a stream that cannot speculate this round: no carried hidden at its position, a round past the context
-def private vk_round_cold(t : Model; s : Session; pos, k : int64) : bool {
-    return (pos < 1l || s.mtp_h_pos1 != pos || long_length(s.mtp_h) < g_vk_dr.tdim || pos + k + 1l > t.config.seq_len)
-}
+def private vk_round_cold(t : Model; s : Session; pos, k : int64) : bool => (pos < 1l || s.mtp_h_pos1 != pos
+    || long_length(s.mtp_h) < g_vk_dr.tdim || pos + k + 1l > t.config.seq_len)
 
 //! verify row `vr`'s truth: the device's pick where it landed one, else the argmax of the logits it landed
 def private vk_row_pick(s : Session; vr, vocab : int64) : int64 {
@@ -644,7 +666,7 @@ var private @scratch g_vk_cold : array<int64>
 //! every stream's [tok, d_1 .. d_k] on the N-row command, each stream's accept walk and commit; a stream the round cannot take
 //! steps plain after the verify. Returns the warm streams the verify carried
 [hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-assistant-drafter"), arch(at="../ARCHITECTURE_GPU_MTP_ASSISTANT.md#assistant-drafter-rounds")]
-def private vk_gemma_rounds(t : Model; var sessions : array<Session?>; toks : array<int64>; k_req : int64; var acc : array<int64>) : int64 {   // nolint:STYLE037,STYLE038 — binds / draft chains / one verify / walks / commits is one sequential protocol on shared locals
+def private vk_gemma_rounds(t : Model; var sessions : array<Session?>; toks : array<int64>; k_req : int64; var acc : array<int64>) : int64 {   // nolint:STYLE038 — binds / draft chains / one verify / walks / commits is one sequential protocol on shared locals
     let c = t.config
     let n = long_length(sessions)
     let k = clamp(k_req, 1l, DRAFT_K_MAX)
@@ -655,6 +677,12 @@ def private vk_gemma_rounds(t : Model; var sessions : array<Session?>; toks : ar
     g_vk_nr |> clear()
     g_vk_regs |> clear()
     g_vk_cold |> clear()
+    g_vk_sessions |> reserve(n)
+    g_vk_idx |> reserve(n)
+    g_vk_pos |> reserve(n)
+    g_vk_nr |> reserve(n)
+    g_vk_regs |> reserve(n)
+    g_vk_cold |> reserve(n)
     let td = ref_time_ticks()
     for (i in range64(n)) {
         var s & = unsafe(*sessions[i])
@@ -689,6 +717,7 @@ def private vk_gemma_rounds(t : Model; var sessions : array<Session?>; toks : ar
     let ts_verify = prof_ticks()
     var pick_only = ng > 0l
     g_vk_toks |> clear()
+    g_vk_toks |> reserve(ng * MTP_MAX_ROWS)
     for (gi in range64(ng)) {
         var s & = unsafe(*g_vk_sessions[gi])
         pick_only = pick_only && s.pick_asked && !mtp_walk_samples(s)

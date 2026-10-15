@@ -167,6 +167,7 @@ def private gemma_token_rows(var g : GemmaDrafterGpu; rows : int64) {
 }
 
 //! stream slot `si`'s chain inputs, made on first use
+[cold_path]
 def private gemma_slot(var g : GemmaDrafterGpu; dr : GemmaDrafter; si : int64) {
     while (long_length(g.slots) <= si) {
         let rope_b = uint64(g.hs_mx / 2l) * 4ul
@@ -550,7 +551,7 @@ var private @scratch g_gw_toks : array<int64>
 //! (`verify_batch_groups`); each stream's accept walk and commit. `acc[i]` is stream i's accepted count, the drafts in
 //! `mtp_vbatch[1..a]`, its token always committed; a cold stream takes one plain GPU step. Returns the warm streams the verify carried
 [hot_path, arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-round-one-join"), arch(at="../ARCHITECTURE_GPU_MTP_ASSISTANT.md#assistant-drafter-rounds")]
-def private gemma_mtp_spec_rounds(t : Model; var sessions : array<Session?>; toks : array<int64>; k_req : int64; var acc : array<int64>) : int64 {   // nolint:STYLE037,STYLE038 — draft chains / one verify / accept walks / commits is one sequential protocol on shared locals
+def private gemma_mtp_spec_rounds(t : Model; var sessions : array<Session?>; toks : array<int64>; k_req : int64; var acc : array<int64>) : int64 {   // nolint:STYLE038 — draft chains / one verify / accept walks / commits is one sequential protocol on shared locals
     let c = t.config
     let n = long_length(sessions)
     let k = clamp(k_req, 1l, MTP_MAX_ROWS - 1l)

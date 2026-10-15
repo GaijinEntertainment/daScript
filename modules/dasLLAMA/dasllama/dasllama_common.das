@@ -788,14 +788,14 @@ def mtp_assistant_attached(t : Model) : bool => !empty(mtp_assistant_backend(t))
 def mtp_assistant_detach_(t : Model) {
     let be = mtp_assistant_backend(t)
     if (!empty(be)) {
-        invoke(g_mtp_assistants[be].detach)   // nolint:PERF026 — the backend was found in the table
+        invoke(g_mtp_assistants[be].detach)
     }
 }
 
 //! `t`'s attached drafter's rounds since its attach (zeros with none attached)
 def mtp_assistant_stats_(t : Model) : MtpAssistantStats {
     let be = mtp_assistant_backend(t)
-    return empty(be) ? MtpAssistantStats() : invoke(g_mtp_assistants[be].stats)   // nolint:PERF026 — the backend was found in the table
+    return empty(be) ? MtpAssistantStats() : invoke(g_mtp_assistants[be].stats)
 }
 
 //! The assistant rounds of `sessions` at depth `k` on the backend `t`'s drafter is attached on (`MtpAssistantSeams.rounds`)
@@ -1059,7 +1059,10 @@ def batch_same_slab() : bool => g_batch_same_slab
 //! The same-slab step's groups (`ARCHITECTURE_GPU_MTP.md#batch-same-slab`): group g is `nr[g]` consecutive positions of one session, its
 //! rows right after group g - 1's - one group a speculating stream of a joint verify. The step reads them under `set_batch_same_slab`
 def set_batch_same_groups(nr : array<int64>) {
-    g_batch_same_rows := nr
+    g_batch_same_rows |> resize(long_length(nr))
+    for (dst, src in g_batch_same_rows, nr) {
+        dst = src
+    }
 }
 
 def batch_same_group_count() : int64 => long_length(g_batch_same_rows)
@@ -5939,10 +5942,8 @@ var private @scratch g_round1_s : array<Session?>   //! one stream's round throu
 var private @scratch g_round1_tok : array<int64>
 var private @scratch g_round1_acc : array<int64>
 
-//! the speculative step over every stream at once: an attached assistant drafter's backend runs every stream's round at the
-//! configured depth (`get_mtp_depth`, under each session's `mtp_depth_cap`), a registered batch override verifies every NextN
-//! stream's depth-1 rows in one pass, and otherwise each stream steps alone through `mtp_spec_eval`. `accepted[i]` is how many
-//! drafts stream i accepted, the drafts in its `mtp_vbatch[1..]`; returns how many streams' rows a joint verify carried (0 = none)
+//! every stream's speculative step: the attached drafter's rounds, else the NextN batch override, else each stream alone;
+//! `accepted[i]` counts stream i's accepted drafts (in its `mtp_vbatch[1..]`); returns the streams a joint verify carried
 [hot_path, arch(at="../ARCHITECTURE_GPU_MTP_ASSISTANT.md#assistant-drafter-rounds")]   // the per-step entry the scheduler re-enters once per tick
 def mtp_spec_eval_batch(t : Model; var sessions : array<Session?>; toks : array<int64>; var accepted : array<int64>) : int64 {
     let n = long_length(sessions)

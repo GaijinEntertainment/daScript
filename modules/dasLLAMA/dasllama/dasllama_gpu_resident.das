@@ -2965,11 +2965,9 @@ def gpu_resident_assist_bind(t : Model; var s : Session; pos, nr : int64; taken 
 
 var private @scratch g_rdec_av_hid : array<float>
 
-//! The assistant drafter's verify on the N-row token command (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-assistant-drafter`): group g is
-//! `nr[g]` consecutive rows of `sessions[g]` from `pos[g]` in its bound region `regs[g]`, the groups' tokens one after another in `toks`,
-//! as many whole groups a command as its rows hold. Each row's logits land in its session's `mtp_logits_b` - or, under `pick_only`,
-//! its device pick alone - its post-final-norm hidden in `mtp_hrows` and its pick in `mtp_picks` (-1 where the logits landed); each
-//! region then holds the rows the verify wrote. False where a group passes the command's rows
+//! The assistant drafter's verify: group g is `nr[g]` rows of `sessions[g]` from `pos[g]` in region `regs[g]`, its tokens next in
+//! `toks`; each row lands its logits in `mtp_logits_b` (or, under `pick_only`, its pick alone), its hidden in `mtp_hrows`, its pick in
+//! `mtp_picks` (-1 where the logits landed). False where a group passes the command's rows
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-assistant-drafter")]
 def gpu_resident_assist_verify(t : Model; var sessions : array<Session?>; toks : array<int64>; pos, nr, regs : array<int64>; pick_only : bool) : bool {
     let c = t.config
