@@ -4636,13 +4636,18 @@ def mm_pre_f(var y : array<float>; t : Model; fmt : KqFmt; woff : int64; xq : ar
 def fmt_reads_q8k(fmt : KqFmt) : bool => kq_sb(fmt)
 
 // Batched format router: q8 weights ride the batch tile; kq weights take the native kq tile
-// (repacked loads) or the serial-per-position fallback (see mm_b_kq); a per-32 plane its own batch kernel.
+// (repacked loads) or the serial-per-position fallback (see mm_b_kq); a per-32 plane its own batch kernel, or the tier's
+// batch tile where the dense rail holds it.
 def mm_b_f(var s : Session; var y : array<float>; t : Model; fmt : KqFmt; woff : int64; x : array<float>; n, d, npos : int64) {
     if (fmt == KqFmt.q8) {
         mm_b(y, t, woff, x, s.xqb, s.xsb, n, d, npos)
     } elif (kq_dense_b32(fmt)) {
         requant_rows_q8(x, n, npos, s.xqb, s.xsb)
-        mm_b32_pre(y, t, woff, s.xqb, s.xsb, n, d, npos, fmt)
+        if (npos >= 32l && moe_gpu_dense_on_gpu(int(fmt), woff)) {
+            matmul_gpu_dense(y, woff, s.xqb, s.xsb, n, d, npos, int(fmt))
+        } else {
+            mm_b32_pre(y, t, woff, s.xqb, s.xsb, n, d, npos, fmt)
+        }
     } else {
         mm_b_kq(s, y, t, fmt, woff, x, n, d, npos)
     }

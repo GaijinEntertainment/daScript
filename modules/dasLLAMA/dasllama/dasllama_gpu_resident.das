@@ -422,8 +422,8 @@ def private dense_shexp_uploadable(t : Model; l : int64) : bool {
             || t.w1_offs[l] < 0l || t.w2_offs[l] < 0l || t.w3_offs[l] < 0l) {
         return false
     }
-    return (dense_plane_ok(t, fmt_at(t.w1_fmt, l)) && dense_plane_ok(t, fmt_at(t.w2_fmt, l))
-        && dense_plane_ok(t, fmt_at(t.w3_fmt, l)))
+    return (resident_plane_ok(t, fmt_at(t.w1_fmt, l)) && resident_plane_ok(t, fmt_at(t.w2_fmt, l))
+        && resident_plane_ok(t, fmt_at(t.w3_fmt, l)))
 }
 
 
@@ -5526,7 +5526,7 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
     // every token). One slice: the repack groups the plane globally, tail rows disk-order.
     // DASLLAMA_GPU_CLS=0 keeps it on the CPU (A/B lever).
     let cls_fmt = t.config.shared_weights ? t.emb_fmt : t.wcls_fmt
-    let cls_servable = cls_fmt == KqFmt.q8 ? (t.cls_q8 || !t.config.shared_weights) : kq_sb(cls_fmt)
+    let cls_servable = cls_fmt == KqFmt.q8 ? (t.cls_q8 || !t.config.shared_weights) : (kq_sb(cls_fmt) || kq_dense_b32(cls_fmt))
     vulkan_bake_role(VkBakeRole.cls)
     if (cls_servable && gpu_want_cls_upload()
             && moe_gpu_gather_upload(t, cls_fmt, t.wcls_off, dim, t.config.vocab_size, t.config.vocab_size, mr, kgroup, wbias, wq, ws)) {
@@ -5559,7 +5559,7 @@ def moe_gpu_upload_resident(t : Model) {   // nolint:STYLE037,STYLE038 — seven
                 let fo = fmt_at(t.wo_fmt, l)
                 if (t.wq_offs[l] < 0l || t.wo_offs[l] < 0l) {
                     walk_skip(dense_skips, l, "no q/o planes")
-                } elif (!dense_plane_ok(t, fq) || !dense_plane_ok(t, fo)) {
+                } elif (!resident_plane_ok(t, fq) || !resident_plane_ok(t, fo)) {
                     walk_skip(dense_skips, l, "q/o formats {int(fq)}/{int(fo)} not tier-servable")
                 } else {
                     uploads |> push((f = fq, woff = t.wq_offs[l], n = dim, rows = t.config.q_gated ? 2l * qd : qd))
