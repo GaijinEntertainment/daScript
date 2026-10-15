@@ -423,6 +423,8 @@ pattern applies to it - a constant, a range, a struct, a variant alternative:
 
 .. code-block:: das
 
+    require daslib/strings_convert
+
     variant Token {
         num : int
         word : string
@@ -444,6 +446,8 @@ pattern applies to it - a constant, a range, a struct, a variant alternative:
     }
 
 A view works inside a tuple, a struct field or an alternative too:
+
+.. das-doc: given struct Bag { items : array<int> }
 
 .. code-block:: das
 

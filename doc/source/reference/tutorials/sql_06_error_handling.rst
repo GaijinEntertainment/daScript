@@ -45,7 +45,7 @@ on the same failure:
         to_log(LOG_ERROR, "could not open db: {open_result |> unwrap_err}\n")
         return
     }
-    var inscope db <- open_result._value
+    var inscope db <- move_unwrap(open_result)
 
 ``SqlRunner`` finalizes on scope exit (closes the SQLite handle), so
 it must be ``var inscope`` and bound by move (``<-``). Plain
