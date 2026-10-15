@@ -479,9 +479,6 @@ def test_metal_b32_block_constants(t : T?) {
         t |> equal(kq_ssb(KqFmt.q4032), 1l * 2l, "SH = 1 on q4032: its f16 d")
         t |> equal(kq_qsb(KqFmt.q5032), 5l * 4l, "B32W = 5 (MetalKqTileDecodeT's q5032 stamps) and QW = 5 (MetalEmbedB32Q5032, MetalMoeMulMmQ51TensorT): KQ_Q5032_QWORDS words a block")
         t |> equal(kq_ssb(KqFmt.q5032), 1l * 2l, "SH = 1 on q5032: its f16 d")
-        t |> equal(kq_qsb(KqFmt.q5032), int64(5u * 4u), "PW = 5 (MetalPleGatherB32T): q51's and q5032's quant words a block")
-        t |> equal(kq_ssb(KqFmt.q51), 2l * 2l, "PS = 2 on MetalPleGatherQ51: d | m")
-        t |> equal(kq_ssb(KqFmt.q5032), 1l * 2l, "PS = 1 on MetalPleGatherQ5032: its d")
         t |> equal(kq_qsb(KqFmt.q51), int64(5u * 4u),
             "B32W = 5 on the q51 tile stamps, QW = 5 on MetalEmbedB32Q51")
         t |> equal(kq_ssb(KqFmt.q51), int64(2u * 2u),
@@ -492,8 +489,8 @@ def test_metal_b32_block_constants(t : T?) {
 }
 
 //! the Metal K-quant token-table gathers' superblock constants
-//! (`MetalEmbedKqT`'s `SB_UINTS`, `MetalEmbedK45T`'s and
-//! `MetalPleGatherBaseT`'s `QH0`) against the descriptor rows
+//! (`MetalEmbedKqT`'s `SB_UINTS`, `MetalEmbedK45T`'s `QH0`) against
+//! the descriptor rows
 [test]
 def test_metal_kq_table_constants(t : T?) {
     t |> run("SB_UINTS and QH0 are a superblock's quant words and k5's qh strip start") @(t : T?) {

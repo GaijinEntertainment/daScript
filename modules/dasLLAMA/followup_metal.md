@@ -443,8 +443,8 @@ mechanisms landed on the way:
   (`register_ple_gpu_decode_gate`).
 - **The k4/k5/q40 PLE token tables gather on device.** The prefill's GPU pre-step took q8 tables
   only; every other table fell to the serial CPU gather, and the E2B Q4_0 and Q4_K_M files
-  prefilled at 0.49 and 0.51 of llama.cpp on the M5. `MetalPleGatherKqT` stamps the three formats
-  off their native planes; the rows below read 1.11 and 1.18.
+  prefilled at 0.49 and 0.51 of llama.cpp on the M5. The token-table gather family (`MetalEmbed*`)
+  reads them off their native planes; the rows below read 1.11 and 1.18.
 - **The dev-W bake left the expert stacks in.** gemma-4 splits its fused expert stacks per expert
   at load, every slice passed the bake's format-and-size predicate, and a 26B image carried 32 GB of
   panels the routed block never reads (47 GB, an eight-minute bake). The bake refuses expert
