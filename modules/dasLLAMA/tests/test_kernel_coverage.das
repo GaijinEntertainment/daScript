@@ -145,7 +145,18 @@ let private CENSUS_NEVER_DISPATCHED <- [
     // kq_dq_kernel picks the stamp per format
     "MetalKqDequantIq4xs", "MetalKqDequantIq4nl", "MetalKqDequantK3",
     "MetalKqDequantIq3s", "MetalKqDequantIq3xxs", "MetalKqDequantK2", "MetalKqDequantIq2s",
-    "MetalKqDequantIq2xs", "MetalKqDequantIq2xxs",
+    "MetalKqDequantIq2xs", "MetalKqDequantIq2xxs", "MetalKqDequantIq3s4",
+    // the tall and double-buffered dense twins of every split-scale and per-32 format, and the per-32 formats' dense tensor
+    // twins and dev-W passes: no stocked carrier holds a dense plane in these formats at a DRAM-class panel (the gemma4moe
+    // row reaches q40's under its crown). Their coverage is kq_mulmm_gate (tall) and kq_dbuf_gate (the 128- and 32-row
+    // pairs) in test_metal_gemm_kernels.das, and b32_dense_twins in test_metal_prefill_kernels.das
+    "MetalKqMulMmIq4xsTH128", "MetalKqMulMmIq3s4TH128", "MetalKqMulMmIq4nlTH128", "MetalKqMulMmQ40TH128", "MetalKqMulMmK3TH128", "MetalKqMulMmK2TH128", "MetalKqMulMmIq2sTH128", "MetalKqMulMmIq2xsTH128", "MetalKqMulMmIq2xxsTH128",
+    "MetalKqMulMmIq4xsTHDb", "MetalKqMulMmIq3s4THDb", "MetalKqMulMmIq4nlTHDb", "MetalKqMulMmQ40THDb", "MetalKqMulMmK3THDb", "MetalKqMulMmK2THDb", "MetalKqMulMmIq2sTHDb", "MetalKqMulMmIq2xsTHDb", "MetalKqMulMmIq2xxsTHDb", "MetalKqMulMmIq3sTHDb", "MetalKqMulMmIq3xxsTHDb",
+    "MetalKqMulMmIq4xsTHDb128", "MetalKqMulMmIq3s4THDb128", "MetalKqMulMmIq4nlTHDb128", "MetalKqMulMmQ40THDb128", "MetalKqMulMmK3THDb128", "MetalKqMulMmK2THDb128", "MetalKqMulMmIq2sTHDb128", "MetalKqMulMmIq2xsTHDb128", "MetalKqMulMmIq2xxsTHDb128", "MetalKqMulMmIq3sTHDb128", "MetalKqMulMmIq3xxsTHDb128",
+    "MetalKqMulMmQ51T", "MetalKqMulMmQ51TH", "MetalKqMulMmQ51TH128", "MetalKqMulMmQ51THDb", "MetalKqMulMmQ51THDb128", "MetalKqDequantQ51",
+    "MetalKqMulMmIq4nl32T", "MetalKqMulMmIq4nl32TH", "MetalKqMulMmIq4nl32TH128", "MetalKqMulMmIq4nl32THDb", "MetalKqMulMmIq4nl32THDb128", "MetalKqDequantIq4nl32",
+    "MetalKqMulMmQ4032T", "MetalKqMulMmQ4032TH", "MetalKqMulMmQ4032TH128", "MetalKqMulMmQ4032THDb", "MetalKqMulMmQ4032THDb128", "MetalKqDequantQ4032",
+    "MetalKqMulMmQ5032T", "MetalKqMulMmQ5032TH", "MetalKqMulMmQ5032TH128", "MetalKqMulMmQ5032THDb", "MetalKqMulMmQ5032THDb128", "MetalKqDequantQ5032",
     // the split-format MoE expert mul_mm stamps, all four forms (f32-X base, half-X twin, and the
     // tall pair): no stocked MoE carrier holds an expert plane in these formats - the zoo's MoE
     // carriers put Q4_K_M (k4/k6), Q8_0 and mxfp4 expert planes on the schedule. The half-X twin
@@ -710,6 +721,23 @@ def private cov_tower_gemma4uv(t : T?) {
 //! either way. `CENSUS_NEVER_DISPATCHED` has no vocabulary for "blind only off this crown", so the
 //! pair is named here.
 let private CENSUS_CROWN_CONDITIONAL : table<string; string> <- {
+    // the dense tensor twins every format stamps behind its own kq_mulmm crown: the tall and double-buffered forms of the
+    // split-scale formats, every form of the per-32 formats
+    "MetalKqMulMmIq4xsTH128" => "kq_mulmm_iq4xs", "MetalKqMulMmIq4xsTHDb" => "kq_mulmm_iq4xs", "MetalKqMulMmIq4xsTHDb128" => "kq_mulmm_iq4xs",
+    "MetalKqMulMmIq3s4TH128" => "kq_mulmm_iq3s4", "MetalKqMulMmIq3s4THDb" => "kq_mulmm_iq3s4", "MetalKqMulMmIq3s4THDb128" => "kq_mulmm_iq3s4",
+    "MetalKqMulMmIq4nlTH128" => "kq_mulmm_iq4nl", "MetalKqMulMmIq4nlTHDb" => "kq_mulmm_iq4nl", "MetalKqMulMmIq4nlTHDb128" => "kq_mulmm_iq4nl",
+    "MetalKqMulMmQ40TH128" => "kq_mulmm_q40", "MetalKqMulMmQ40THDb" => "kq_mulmm_q40", "MetalKqMulMmQ40THDb128" => "kq_mulmm_q40",
+    "MetalKqMulMmK3TH128" => "kq_mulmm_k3", "MetalKqMulMmK3THDb" => "kq_mulmm_k3", "MetalKqMulMmK3THDb128" => "kq_mulmm_k3",
+    "MetalKqMulMmK2TH128" => "kq_mulmm_k2", "MetalKqMulMmK2THDb" => "kq_mulmm_k2", "MetalKqMulMmK2THDb128" => "kq_mulmm_k2",
+    "MetalKqMulMmIq2sTH128" => "kq_mulmm_iq2s", "MetalKqMulMmIq2sTHDb" => "kq_mulmm_iq2s", "MetalKqMulMmIq2sTHDb128" => "kq_mulmm_iq2s",
+    "MetalKqMulMmIq2xsTH128" => "kq_mulmm_iq2xs", "MetalKqMulMmIq2xsTHDb" => "kq_mulmm_iq2xs", "MetalKqMulMmIq2xsTHDb128" => "kq_mulmm_iq2xs",
+    "MetalKqMulMmIq2xxsTH128" => "kq_mulmm_iq2xxs", "MetalKqMulMmIq2xxsTHDb" => "kq_mulmm_iq2xxs", "MetalKqMulMmIq2xxsTHDb128" => "kq_mulmm_iq2xxs",
+    "MetalKqMulMmIq3sTHDb" => "kq_mulmm_iq3s", "MetalKqMulMmIq3sTHDb128" => "kq_mulmm_iq3s",
+    "MetalKqMulMmIq3xxsTHDb" => "kq_mulmm_iq3xxs", "MetalKqMulMmIq3xxsTHDb128" => "kq_mulmm_iq3xxs",
+    "MetalKqMulMmQ51T" => "kq_mulmm_q51", "MetalKqMulMmQ51TH" => "kq_mulmm_q51", "MetalKqMulMmQ51TH128" => "kq_mulmm_q51", "MetalKqMulMmQ51THDb" => "kq_mulmm_q51", "MetalKqMulMmQ51THDb128" => "kq_mulmm_q51",
+    "MetalKqMulMmIq4nl32T" => "kq_mulmm_iq4nl32", "MetalKqMulMmIq4nl32TH" => "kq_mulmm_iq4nl32", "MetalKqMulMmIq4nl32TH128" => "kq_mulmm_iq4nl32", "MetalKqMulMmIq4nl32THDb" => "kq_mulmm_iq4nl32", "MetalKqMulMmIq4nl32THDb128" => "kq_mulmm_iq4nl32",
+    "MetalKqMulMmQ4032T" => "kq_mulmm_q4032", "MetalKqMulMmQ4032TH" => "kq_mulmm_q4032", "MetalKqMulMmQ4032TH128" => "kq_mulmm_q4032", "MetalKqMulMmQ4032THDb" => "kq_mulmm_q4032", "MetalKqMulMmQ4032THDb128" => "kq_mulmm_q4032",
+    "MetalKqMulMmQ5032T" => "kq_mulmm_q5032", "MetalKqMulMmQ5032TH" => "kq_mulmm_q5032", "MetalKqMulMmQ5032TH128" => "kq_mulmm_q5032", "MetalKqMulMmQ5032THDb" => "kq_mulmm_q5032", "MetalKqMulMmQ5032THDb128" => "kq_mulmm_q5032",
     "MetalKqMvB2K4R2" => "kq_mvb2_k4_r2",
     "MetalKqMvW2K4H" => "kq_rows_half_k4",
     "MetalKqMvW4K4H" => "kq_rows_half_k4",

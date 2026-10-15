@@ -15,6 +15,7 @@ require ?das_metal dasllama/dasllama_metal_kernels  // the Wave C MoE routing ke
 require ?das_metal dasllama/dasllama_metal_common   // the pipeline globals the generated builders read
 require ?das_metal metal/das_metal_boost  // device/pipeline/buffer plumbing + the leak gate
 require ?das_metal _metal_kernel_common   // the MetalCell record, check_buf, the device shell, fixtures
+require ?das_metal _metal_kq_kernels   // kq_mm_form_kernel / kq_dq_kernel: the dense kq kernel pickers
 require daslib/f16_cvt  // f32_to_f16: the q51 gates hand-pack f16 d/m scale halfwords
 require dasllama/dasllama_tts_blocks
 require dasllama/dasllama_gpu_math   // nolint:STYLE030,LINT019 — tts_tanh, tts_hash_normal, sigmoid_f32: the StyleTTS2 gates' CPU forms, inside the Apple half alone
@@ -3508,6 +3509,7 @@ def test_metal_prefill_kernels(t : T?) {
                     moe_b32_rows_gate(t, dev, queue, fr, 160, 12, 6, 2, 3)
                 }
                 b32_mm_gate(t, dev, queue, KqFmt.q51, 96, 128, 64)   // 3 blocks a row, 2 col tiles, 2 row tiles
+                b32_dense_twins(t, dev, queue, KqFmt.q51)
                 moe_mulmm_b32_gate(t, dev, queue, KqFmt.q51, 64, 64, [32, 40, 64])    // padded tail on expert 1
                 moe_mulmm_b32_gate(t, dev, queue, KqFmt.q51, 96, 128, [8, 96])        // 2 col tiles, tiny run + multi-tile
                 moe_mulmm_b32_gate(t, dev, queue, KqFmt.q51, 64, 64, [12, 45])        // the adaptive op's 16-row walk, twice
@@ -3521,6 +3523,7 @@ def test_metal_prefill_kernels(t : T?) {
                 b32_gemv_gate(t, dev, queue, KqFmt.iq4nl32, 96, 24)
                 b32_gemv_gate(t, dev, queue, KqFmt.iq4nl32, 160, 7)
                 b32_mm_gate(t, dev, queue, KqFmt.iq4nl32, 96, 128, 64)
+                b32_dense_twins(t, dev, queue, KqFmt.iq4nl32)
                 moe_mulmm_b32_gate(t, dev, queue, KqFmt.iq4nl32, 64, 64, [32, 40, 64])
                 moe_mulmm_b32_gate(t, dev, queue, KqFmt.iq4nl32, 96, 128, [8, 96])
                 moe_mulmm_b32_gate(t, dev, queue, KqFmt.iq4nl32, 64, 64, [136, 32])
@@ -3530,6 +3533,7 @@ def test_metal_prefill_kernels(t : T?) {
                 b32_gemv_gate(t, dev, queue, KqFmt.q4032, 96, 24)
                 b32_gemv_gate(t, dev, queue, KqFmt.q4032, 160, 7)
                 b32_mm_gate(t, dev, queue, KqFmt.q4032, 96, 128, 64)
+                b32_dense_twins(t, dev, queue, KqFmt.q4032)
                 moe_mulmm_b32_gate(t, dev, queue, KqFmt.q4032, 64, 64, [32, 40, 64])
                 moe_mulmm_b32_gate(t, dev, queue, KqFmt.q4032, 96, 128, [8, 96])
                 moe_mulmm_b32_gate(t, dev, queue, KqFmt.q4032, 64, 64, [136, 32])
@@ -3539,6 +3543,7 @@ def test_metal_prefill_kernels(t : T?) {
                 b32_gemv_gate(t, dev, queue, KqFmt.q5032, 96, 24)
                 b32_gemv_gate(t, dev, queue, KqFmt.q5032, 160, 7)
                 b32_mm_gate(t, dev, queue, KqFmt.q5032, 96, 128, 64)
+                b32_dense_twins(t, dev, queue, KqFmt.q5032)
                 moe_mulmm_b32_gate(t, dev, queue, KqFmt.q5032, 64, 64, [32, 40, 64])
                 moe_mulmm_b32_gate(t, dev, queue, KqFmt.q5032, 96, 128, [8, 96])
                 moe_mulmm_b32_gate(t, dev, queue, KqFmt.q5032, 64, 64, [136, 32])
@@ -4855,6 +4860,92 @@ def private moe_b32_rows_gate(t : T?; var dev, queue; fmt : KqFmt; n, d, net, k,
     }
 }
 
+//! the per-32 fixture's x rows (small ints) and the exact dense product every arm must reproduce bit for bit
+def private b32_mm_want(wref : array<float>; kdim, ndim, mp : int) : tuple<xv : array<float>; want : array<float>> {
+    var xv : array<float>
+    xv |> resize(mp * kdim)
+    for (i in range(mp * kdim)) {
+        xv[i] = float((i * 5) % 9 - 4)
+    }
+    var ref <- dense_ref_env(mp, kdim, ndim, xv) $(j; var w) {
+        for (c in range(kdim)) {
+            w[c] = wref[j * kdim + c]
+        }
+    }
+    delete ref.env
+    return <- (xv = xv, want = ref.want)
+}
+
+//! a per-32 dense tensor twin on the exact fixture, BIT-exact against the CPU product: `form` t / th / th128 / thdb / thdb128;
+//! kdim is a multiple of 64 (the twins' chunk), mp of 128 on the tall forms
+def private b32_mm_twin_gate(t : T?; var dev, queue; fmt : KqFmt; form : string; kdim, ndim, mp : int) {
+    let tag = "dense mul_mm twin {fmt} {form} k={kdim} n={ndim} mp={mp}"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let kt = kq_mm_form_kernel(fmt, form)
+        var pso = mc |> keep_stamp(kt, err)
+        return if (!tensor_pso_or_skip(t, tag, pso, dev, err))
+        var inscope(p0, p1, wref) <- moe_gemv_planes(fmt, ndim, kdim)
+        var inscope w <- b32_mm_want(wref, kdim, ndim, mp)
+        var inscope xh <- [for (x in w.xv); float16(x)]
+        let bw = mc |> in_plain(p0)
+        let bs = mc |> in_plain(p1)
+        let bx = form == "t" ? (mc |> in_(w.xv)) : (mc |> in_plain(xh))
+        let by = mc |> out_words(mp * ndim, -1000.0)
+        let bk = mc |> in_plain([uint(kdim)])
+        let bn = mc |> in_plain([uint(ndim)])
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            invoke(kt.enc, enc, pso, mc.buf[bs], 0ul, mc.buf[bs], 0ul, mc.buf[bw], 0ul, mc.buf[bx], 0ul, mc.buf[by], 0ul, mc.buf[bk], mc.buf[bn], int64(mp), int64(ndim))
+        }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[by], w.want, BAR_EXACT, Shape(row_width = ndim))
+    }
+}
+
+//! a per-32 dev-W chain: the format's dequant pass into a poison-filled f16 panel, then the shared all-device half GEMM,
+//! BIT-exact against the CPU product (the fixture's values are f16-exact)
+def private b32_devw_gate(t : T?; var dev, queue; fmt : KqFmt; kdim, ndim, mp : int) {
+    let tag = "dense dev-W {fmt} k={kdim} n={ndim} mp={mp}"
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let kd = kq_dq_kernel(fmt)
+        let km = kernel_of(@@enc_gemm_hmm_th)
+        var dq_pso = mc |> keep_stamp(kd, err)
+        var mm_pso = mc |> keep_stamp(km, err)
+        return if (!tensor_pso_or_skip(t, tag, mm_pso, dev, err) || !pso_ok(t, tag, dq_pso, err))
+        var inscope(p0, p1, wref) <- moe_gemv_planes(fmt, ndim, kdim)
+        var inscope w <- b32_mm_want(wref, kdim, ndim, mp)
+        var inscope xh <- [for (x in w.xv); float16(x)]
+        let bw = mc |> in_plain(p0)
+        let bs = mc |> in_plain(p1)
+        let bx = mc |> in_plain(xh)
+        let bwh = mc |> out_words(ndim * kdim, float16(-100.0))
+        let by = mc |> out_words(mp * ndim, -1000.0)
+        let bk = mc |> in_plain([uint(kdim)])
+        let bn = mc |> in_plain([uint(ndim)])
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            invoke(kd.enc, enc, dq_pso, mc.buf[bs], 0ul, mc.buf[bs], 0ul, mc.buf[bw], 0ul, mc.buf[bwh], 0ul, mc.buf[bwh], 0ul, mc.buf[bk], mc.buf[bn], mc.buf[bwh], int64(kdim), int64(ndim))
+            invoke(km.enc, enc, mm_pso, mc.buf[bwh], 0ul, mc.buf[bx], 0ul, mc.buf[by], 0ul, mc.buf[bk], mc.buf[bn], int64(mp), int64(ndim))
+        }
+        return if (!ran)
+        check_buf(t, tag, mc.buf[by], w.want, BAR_EXACT, Shape(row_width = ndim))
+    }
+}
+
+//! every dense form of one per-32 format: the five twins at a 32-row and a 128-row panel, the dev-W chain whole and tiled
+def private b32_dense_twins(t : T?; var dev, queue; fmt : KqFmt) {
+    for (form in ["t", "th", "thdb"]) {
+        b32_mm_twin_gate(t, dev, queue, fmt, form, 128, 128, 64)
+        b32_mm_twin_gate(t, dev, queue, fmt, form, 192, 64, 32)   // six blocks a row: the odd 64-chunk count
+    }
+    for (form in ["th128", "thdb128"]) {
+        b32_mm_twin_gate(t, dev, queue, fmt, form, 128, 128, 128)
+        b32_mm_twin_gate(t, dev, queue, fmt, form, 192, 64, 256)
+    }
+    b32_devw_gate(t, dev, queue, fmt, 128, 128, 64)
+    b32_devw_gate(t, dev, queue, fmt, 192, 64, 32)
+}
+
 //! The dense per-32 mul_mm (MetalKqMulMmQ51 / MetalKqMulMmIq4nl32) BIT-exact over `mp` x rows of the exact-arithmetic planes
 //! (the A tile's f16 values are dyadic and f16-exact, the x rows small ints)
 def private b32_mm_gate(t : T?; var dev, queue; fmt : KqFmt; kdim, ndim, mp : int) {
@@ -4866,25 +4957,10 @@ def private b32_mm_gate(t : T?; var dev, queue; fmt : KqFmt; kdim, ndim, mp : in
         var pso = fmt == KqFmt.q51 ? mc |> keep_stamp(sq, err) : mc |> keep_stamp(si, err)
         return if (!pso_ok(t, tag, pso, err))
         var inscope(p0, p1, wref) <- moe_gemv_planes(fmt, ndim, kdim)
-        var inscope xv : array<float>
-        xv |> resize(mp * kdim)
-        for (i in range(mp * kdim)) {
-            xv[i] = float((i * 5) % 9 - 4)
-        }
-        var inscope want : array<float>
-        want |> resize(mp * ndim)
-        for (r in range(mp)) {
-            for (col in range(ndim)) {
-                var acc = 0.0
-                for (c in range(kdim)) {
-                    acc += wref[col * kdim + c] * xv[r * kdim + c]
-                }
-                want[r * ndim + col] = acc
-            }
-        }
+        var inscope w <- b32_mm_want(wref, kdim, ndim, mp)
         let bw = mc |> in_plain(p0)
         let bs = mc |> in_plain(p1)
-        let bx = mc |> in_(xv)
+        let bx = mc |> in_(w.xv)
         let by = mc |> out_words(mp * ndim, -1000.0)
         let bk = mc |> in_plain([uint(kdim)])
         let bn = mc |> in_plain([uint(ndim)])
@@ -4900,7 +4976,7 @@ def private b32_mm_gate(t : T?; var dev, queue; fmt : KqFmt; kdim, ndim, mp : in
             }
         }
         return if (!ran)
-        check_buf(t, tag, mc.buf[by], want, BAR_EXACT, Shape(row_width = ndim))
+        check_buf(t, tag, mc.buf[by], w.want, BAR_EXACT, Shape(row_width = ndim))
     }
 }
 
@@ -5156,9 +5232,9 @@ def private moe_mulmm_b32_gate(t : T?; var dev, queue; fmt : KqFmt; kdim, ndim :
         }
         // the contiguous tensor twin (TH stamp over an f16 X): same exact-arithmetic oracle —
         // pow2 d / quarter m / int x all stage to f16 losslessly, so the twin is BIT-exact too.
-        // The leg keys on the ENGINE's own pick predicate: weakening moe_q51_twin_fits dispatches
+        // The leg keys on the ENGINE's own pick predicate: weakening b32_twin_fits dispatches
         // the twin on the kdim=96 fixture, whose 64-deep K walk reads off the plane and mismatches.
-        return if (!moe_q51_twin_fits(uint(kdim)))
+        return if (!b32_twin_fits(uint(kdim)))
         var terr : string
         var tw_pso = mc |> keep_stamp(ks.th, terr)
         return if (!tensor_pso_or_skip(t, "{tag} twin", tw_pso, dev, terr))
@@ -5172,8 +5248,17 @@ def private moe_mulmm_b32_gate(t : T?; var dev, queue; fmt : KqFmt; kdim, ndim :
         adapt_pad_rows(csr.cnt, csr.base, ndim, -700.0, want_p, none_env)
         let bxh = mc |> in_plain([for (v in xv); float16(v)])
         let by_t = mc |> out_words(pad * ndim, -500.0)
+        //! the split twins bind the dense split layout: the plane pair at slots 0..2, the dim uniforms, the bucket counts and
+        //! bases, their grid the whole-tile count of the fullest expert
+        let bk = mc |> in_plain([uint(kdim)])
+        let bn = mc |> in_plain([uint(ndim)])
+        var maxce = 0
+        for (c in csr.cnt) {
+            maxce = max(maxce, int(c))
+        }
+        let tiles = int64((maxce + 31) / 32)
         let rant = mc |> cell_record(t, "{tag} twin") $(enc : MetalComputeEncoder?) {
-            invoke(ks.th.enc, enc, tw_pso, mc.buf[bs], 0ul, mc.buf[bw], 0ul, mc.buf[bxh], mc.buf[by_t], ka, mc.buf[bcnt], mc.buf[bbase], int64(ndim), int64(pad), int64(ne))
+            invoke(ks.th.enc, enc, tw_pso, mc.buf[bs], 0ul, mc.buf[bs], 0ul, mc.buf[bw], 0ul, mc.buf[bxh], 0ul, mc.buf[by_t], 0ul, mc.buf[bk], mc.buf[bn], mc.buf[bcnt], mc.buf[bbase], int64(pad), int64(ndim), int64(ne), tiles)
         }
         if (rant) {
             check_buf(t, "{tag} twin", mc.buf[by_t], want_t, BAR_EXACT, Shape(row_width = ndim))
@@ -5184,7 +5269,7 @@ def private moe_mulmm_b32_gate(t : T?; var dev, queue; fmt : KqFmt; kdim, ndim :
         if (pso_ok(t, "{tag} T stamp", tf_pso, terr)) {
             let by_f = mc |> out_words(pad * ndim, -600.0)
             let ranf = mc |> cell_record(t, "{tag} T stamp") $(enc : MetalComputeEncoder?) {
-                invoke(ks.t.enc, enc, tf_pso, mc.buf[bs], 0ul, mc.buf[bw], 0ul, mc.buf[bx], mc.buf[by_f], ka, mc.buf[bcnt], mc.buf[bbase], int64(ndim), int64(pad), int64(ne))
+                invoke(ks.t.enc, enc, tf_pso, mc.buf[bs], 0ul, mc.buf[bs], 0ul, mc.buf[bw], 0ul, mc.buf[bx], 0ul, mc.buf[by_f], 0ul, mc.buf[bk], mc.buf[bn], mc.buf[bcnt], mc.buf[bbase], int64(pad), int64(ndim), int64(ne), tiles)
             }
             if (ranf) {
                 check_buf(t, "{tag} T stamp", mc.buf[by_f], want_f, BAR_EXACT, Shape(row_width = ndim))
@@ -5195,15 +5280,11 @@ def private moe_mulmm_b32_gate(t : T?; var dev, queue; fmt : KqFmt; kdim, ndim :
         var tl_pso = mc |> keep_stamp(ks.th128, terr)
         var rm_pso = mc |> keep_stamp(ks.thr, terr)
         t |> success(tl_pso != null && rm_pso != null, "{tag} tall pair: pipeline: {terr}")
-        return if (tl_pso == null || rm_pso == null)
-        var maxce = 0
-        for (c in csr.cnt) {
-            maxce = max(maxce, int(c))
-        }
+        return if (tl_pso == null || rm_pso == null || maxce < 128)   //! the tall pair serves an expert of whole 128-row tiles; a shorter run takes the 32-row twin
         let by_p = mc |> out_words(pad * ndim, -700.0)
         let ranp = mc |> cell_record(t, "{tag} tall pair") $(enc : MetalComputeEncoder?) {
-            invoke(ks.th128.enc, enc, tl_pso, mc.buf[bs], 0ul, mc.buf[bw], 0ul, mc.buf[bxh], mc.buf[by_p], ka, mc.buf[bcnt], mc.buf[bbase], int64(ndim), int64(maxce), int64(ne))
-            invoke(ks.thr.enc, enc, rm_pso, mc.buf[bs], 0ul, mc.buf[bw], 0ul, mc.buf[bxh], mc.buf[by_p], ka, mc.buf[bcnt], mc.buf[bbase], int64(ndim), int64(ne))
+            invoke(ks.th128.enc, enc, tl_pso, mc.buf[bs], 0ul, mc.buf[bs], 0ul, mc.buf[bw], 0ul, mc.buf[bxh], 0ul, mc.buf[by_p], 0ul, mc.buf[bk], mc.buf[bn], mc.buf[bcnt], mc.buf[bbase], int64(pad), int64(ndim), int64(ne), int64(maxce / 128))
+            invoke(ks.thr.enc, enc, rm_pso, mc.buf[bs], 0ul, mc.buf[bs], 0ul, mc.buf[bw], 0ul, mc.buf[bxh], 0ul, mc.buf[by_p], 0ul, mc.buf[bk], mc.buf[bn], mc.buf[bcnt], mc.buf[bbase], int64(pad), int64(ndim), int64(ne), 4l)
         }
         if (ranp) {
             check_buf(t, "{tag} tall pair", mc.buf[by_p], want_p, BAR_EXACT, Shape(row_width = ndim))

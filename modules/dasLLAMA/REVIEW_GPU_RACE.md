@@ -32,13 +32,10 @@ passes a literal binding slot for a SHIPPED class's field instead of naming the 
 it mirrors. A mis-bound arm dispatches, reads the wrong buffer, and its timing selects the wrong
 kernel silently.
 
-**A hand-binding arm the gate does not read - a raw `metal_set_buffer` arm, a probe class
-mirroring a shipped class's slots, or a `kn_buffer(enc, n)` arm whose own function holds neither a
-`pipeline_from_source` over a literal global nor a literal `kn_tgmem` constant - states in the PR
-that its binding order and push-constant layout were verified by hand against the class
-declaration.** `check_race_bind_numbers` reads only `kn_buffer` and kargs literals in functions
-that hold both, so nothing but the PR statement catches a mis-numbered bind elsewhere before the
-arm's figure ranks the kernels.
+**A diff that adds a hand-binding arm, or changes which shipped class an existing one binds, states
+in the PR that the arm's binding order and push-constant layout were checked by hand against that
+class's declaration.** `check_race_bind_numbers` flags only a slot the class never declares, and only
+under `dasllama/`; a swapped pair of declared slots dispatches and ranks the kernels on the wrong data.
 
 **A diff that adds race or knockout code inside the engine (`dasllama/`) puts it in the file that
 owns the kernel family it races, or for a knockout, the file that owns the stage whose cost it

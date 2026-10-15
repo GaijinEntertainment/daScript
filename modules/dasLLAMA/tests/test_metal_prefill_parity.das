@@ -1744,13 +1744,14 @@ def test_metal_prefill_moe_gemv_route(t : T?) {
     }
 }
 
-//! One split-format MoE carrier through the routed block's two GEMM forms: a 280-row window then a 20-row one (both past the
-//! gathered route's knee) with the tensor twins over the gather panel, then the same windows with the panel off - the gate and
-//! up sites on the simdgroup base form a box without the tensor toolchain serves - each leg's last-row logits within `bar` of
-//! the CPU chain's largest, the base kernel's census count rising on the base leg alone, and the control a window whose last
-//! token differs landing outside the bar
+//! One split-format MoE carrier through the routed block's GEMM forms, three legs over a 280-row window then a 20-row one
+//! (both past the gathered route's knee): the tensor twins over the gather panel under the format's `crown`; the same with no
+//! crown, where the 280-row window - 17.5 rows an expert on 128 experts, past the twin pick's knee - takes the simdgroup base
+//! form; and the panel off - every gate and up site on the base form a box without the tensor toolchain serves. Each leg's
+//! last-row logits sit within `bar` of the CPU chain's largest, the base kernel's census count rises on the two base legs
+//! alone, and the control - a window whose last token differs - lands outside the bar
 [cold_path]
-def private moe_base_form_cells(t : T?; path, tag, base_kernel : string; bar : float) {   // nolint:STYLE037,STYLE038,LINT019 — one cell: load, the two legs, the knob restores
+def private moe_base_form_cells(t : T?; path, tag, base_kernel, crown : string; bar : float) {   // nolint:STYLE037,STYLE038,LINT019 — one cell: load, the three legs, the knob restores
     static_if (typeinfo builtin_module_exists(das_metal)) {
         return if (!model_available(t, path))
         let prior_wscale = get_wscale_f16()
@@ -1763,8 +1764,7 @@ def private moe_base_form_cells(t : T?; path, tag, base_kernel : string; bar : f
         let prior_crowns_pinned = metal_tensor_crowns_pinned()
         set_wscale_f16(false)
         set_metal_mode(MetalMode.when_available)   //! the load reads IQ3_S planes as the Metal tier's grid form, as a Metal load does
-        //! no crown: these formats' twins take every window they compiled for
-        pin_metal_tensor_crowns("")
+        pin_metal_tensor_crowns("")   // the load reads no crown; each leg pins its own
         var tr <- load_model_(path, QuantMode.q8)
         if (tr.config.seq_len > 2048l) {
             tr.config.seq_len = 2048l
@@ -1780,12 +1780,19 @@ def private moe_base_form_cells(t : T?; path, tag, base_kernel : string; bar : f
         t |> success(select_prefill_override("metal"), "{tag}: override registered")
         set_metal_prefill_min_npos(1l)
         t |> success(metal_prefill_pso_init(), "{tag}: the prefill kernels compiled - the census reads them")
-        for (leg in ["twins", "base"]) {
+        for (leg in ["twins", "uncrowned", "base"]) {
             let base_leg = leg == "base"
             if (!base_leg && !pf_hmm_ready()) {
-                t |> skip("{tag}/twins: the tensor toolchain is absent - no twin compiled")
+                t |> skip("{tag}/{leg}: the tensor toolchain is absent - no twin compiled")
                 continue
             }
+            pin_metal_tensor_crowns(leg == "twins" ? crown : "")
+            //! the routed crown table fills when the kernels compile, so each leg rebuilds them under its own pin
+            metal_decode_shutdown()
+            metal_prefill_shutdown()
+            select_prefill_override("metal")
+            set_metal_prefill_min_npos(1l)
+            t |> success(metal_prefill_pso_init(), "{tag}/{leg}: the prefill kernels compiled under the leg's crowns")
             let prior_gx = set_metal_moe_gather_min(base_leg ? 1000000l : 1l)
             let served0 = metal_prefill_stats().prefills
             let base0 = metal_kernel_coverage_of(base_kernel)
@@ -1801,8 +1808,10 @@ def private moe_base_form_cells(t : T?; path, tag, base_kernel : string; bar : f
             t |> equal(served, 2l, "{tag}/{leg}: both windows served on the device")
             if (base_leg) {
                 t |> success(based > 0l, "{tag}/{leg}: the gate and up sites rode the base form ({based} dispatches of {base_kernel})")
+            } elif (leg == "uncrowned") {
+                t |> success(based > 0l, "{tag}/{leg}: with no {crown} crown the window past the knee rode the base form ({based} dispatches of {base_kernel})")
             } else {
-                t |> equal(based, 0l, "{tag}/{leg}: with the panel built every routed site rode its tensor twin, the base form none")
+                t |> equal(based, 0l, "{tag}/{leg}: under the {crown} crown every routed site rode its tensor twin, the base form none")
             }
             let g = logits_maxdiff(gpu, cpu)
             let gc = logits_maxdiff(gpu_ctrl, cpu)
@@ -1839,11 +1848,11 @@ def private moe_base_form_cells(t : T?; path, tag, base_kernel : string; bar : f
 def test_metal_prefill_moe_base_form(t : T?) {
     t |> run("the routed simdgroup base form == CPU control on a Q3_K expert stack (Qwen3-30B-A3B UD-Q3_K_XL)") <| @(t : T?) {
         if (!family_on(t, "qwen3moe") || !arm_on(t, "moe-base")) return
-        moe_base_form_cells(t, path_join(models_dir(), "Qwen3-30B-A3B-Instruct-2507-UD-Q3_K_XL.gguf"), "moe-base/qwen3moe-k3", "metal_moe_mulmm_k3", 0.10)
+        moe_base_form_cells(t, path_join(models_dir(), "Qwen3-30B-A3B-Instruct-2507-UD-Q3_K_XL.gguf"), "moe-base/qwen3moe-k3", "metal_moe_mulmm_k3", "moe_mulmm_k3", 0.10)
     }
     t |> run("the routed simdgroup base form == CPU control on IQ2 expert stacks (Qwen3-30B-A3B UD-IQ2_XXS)") <| @(t : T?) {
         if (!family_on(t, "qwen3moe") || !arm_on(t, "moe-base")) return
-        moe_base_form_cells(t, path_join(models_dir(), "Qwen3-30B-A3B-Instruct-2507-UD-IQ2_XXS.gguf"), "moe-base/qwen3moe-iq2xxs", "metal_moe_mulmm_iq2xxs", 0.15)
+        moe_base_form_cells(t, path_join(models_dir(), "Qwen3-30B-A3B-Instruct-2507-UD-IQ2_XXS.gguf"), "moe-base/qwen3moe-iq2xxs", "metal_moe_mulmm_iq2xxs", "moe_mulmm_iq2xxs", 0.15)
     }
 }
 
@@ -1874,7 +1883,7 @@ def test_metal_prefill_kq_tail(t : T?) {
 let private SCRATCH_SHORT = 200l   //! pads to 224 rows: past the base forms' scratch floor, under a crowned K-quant twin's
 let private SCRATCH_LONG = 400l    //! pads to 416 rows: past a crowned K-quant twin's floor
 //! every dense twin crown: a carrier's mixed planes (a K-quant file's Q6_K and Q5_K sites beside its own) all sit on twins
-let private SCRATCH_TWIN_CROWNS = "mulmm_q8,kq_mulmm_k4,kq_mulmm_k5,kq_mulmm_k6,kq_mulmm_iq4xs,kq_mulmm_iq4nl,kq_mulmm_q40,kq_mulmm_k3,kq_mulmm_iq3s,kq_mulmm_iq3xxs,kq_mulmm_k2,kq_mulmm_iq2s,kq_mulmm_iq2xs,kq_mulmm_iq2xxs"
+let private SCRATCH_TWIN_CROWNS = "mulmm_q8,kq_mulmm_k4,kq_mulmm_k5,kq_mulmm_k6,kq_mulmm_iq4xs,kq_mulmm_iq4nl,kq_mulmm_q40,kq_mulmm_k3,kq_mulmm_iq3s,kq_mulmm_iq3xxs,kq_mulmm_k2,kq_mulmm_iq2s,kq_mulmm_iq2xs,kq_mulmm_iq2xxs,kq_mulmm_q51,kq_mulmm_iq4nl32,kq_mulmm_q4032,kq_mulmm_q5032"
 
 //! the last row's logits after one prefill window on an f16 session
 def private one_window_logits(trp : Model; w : array<int64>) : array<float> {
@@ -2002,5 +2011,9 @@ def test_metal_prefill_kq_scratch(t : T?) {
     t |> run("the dense Q8_0 sites' scratch panels on the base forms == CPU control, the crowned twin holding both windows (Llama-3.2-1B Q8_0)") <| @(t : T?) {
         if (!family_on(t, "llama") || !arm_on(t, "kq-scratch")) return
         scratch_panel_cells(t, path_join(models_dir(), "Llama-3.2-1B-Instruct-Q8_0.gguf"), "kq-scratch/llama-q8", 0.08, false)
+    }
+    t |> run("the dense per-32 sites' scratch panels == CPU control, the crowned twin holding the short window (Llama-3.2-1B Q5_1)") <| @(t : T?) {
+        if (!family_on(t, "llama") || !arm_on(t, "kq-scratch")) return
+        scratch_panel_cells(t, path_join(models_dir(), "Llama-3.2-1B-Instruct-Q5_1-local.gguf"), "kq-scratch/llama-q51", 0.08, true)
     }
 }

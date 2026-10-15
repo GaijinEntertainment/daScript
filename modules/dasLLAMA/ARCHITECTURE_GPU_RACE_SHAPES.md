@@ -42,7 +42,7 @@ every tensor template's `XT = float` stamp - the live fallback wherever the half
 (below the convert row floor, panel does not fit, half-X pinned off) - the
 batch-decode/classifier `MetalQ8GemmTensorT` family, whose half-X extension is an open ledger
 item, and the double-buffered `*Db` staging stamps (`MetalQ8MulMmTensorT`'s `BK = 128` stamps,
-`MetalKqMulMmK45DbT`, `MetalKqMulMmK6DbT`), which pin `XT = float16` today - there the flag is scaffolding a future
+the split scaffold's `metal_kq_mulmm_db` kernel every dense format's `THDb` stamp takes), which pin `XT = float16` today - there the flag is scaffolding a future
 float stamp would need, not a live float operand - and the verify-width lab template
 `MetalKqLabK4Tmv8T` in the GEMV lab, whose A operand is the decode driver's f32 x panel.
 - **Fused single-kernel attention (scores in threadgroup, online softmax):** loses 10-80% to

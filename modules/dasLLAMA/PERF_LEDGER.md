@@ -11,6 +11,22 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **MEASURED (2026-10-14) - the K-quant base tile against the IQ4_XS one, and the routed twin pick that made them read a
+  third apart.** `benchmarks/matmul/bench_metal_kq_race.das --fmts k4,iq4xs --tiers mm --rounds 5` on the M5 Max (synthetic
+  planes, 512 rows, `direction-grade`, cv under 3 %): the simdgroup base tiles read within 2 % at every shape - k4 / iq4xs
+  6958 / 7112 GMAC/s on the 2048 x 8192 up plane, 6954 / 7106 on the 5120 x 8192 qkv, 7080 / 7203 on the 5120 x 17408 up,
+  6585 / 6649 on the 8192 x 2048 down - so the K-quant decode costs the tile nothing the codebook lookup does not. The third
+  came from the pick: `benchmarks/prefill_window_probe.das --windows 1024 --kprof 1024` on the 35B (`DASLLAMA_METAL_TENSOR=0`,
+  32 rows an expert, the M5 Max) put the IQ4_XS-pure file's experts on `MetalMoeMulMmIq4xsTH` (53 + 30 ms of a 271 ms window)
+  and the UD-Q4_K_M file's on `metal_moe_mulmm_k4` / `k5` (145 + 70 of 403): the K-quant twins took their twin under a crown
+  or the knee, every other format's whenever it compiled. With one rule for every format the same arm reads base against base -
+  `metal_moe_mulmm_iq4xs` 143 + 71 ms, window 394 ms, against 145 + 70 and 403 - and at 375 tokens (11.7 rows an expert,
+  under the knee) both files ride their twins. The M1 Max (no tensor lane), its profile re-minted with every format's own
+  `moe_mulmm_<fmt>` race: k4, k5, k3, k2, iq2s, iq2xs and iq2xxs crown their routed twin, iq4xs, iq3s4, iq4nl, q40, iq3s,
+  iq3xxs and k6 decline it; the UD-IQ4_XS 35B's IQ3_S experts fall off `MetalMoeMulMmIq3sTHR` onto `metal_moe_mulmm_iq3s` and
+  the 1024-token window reads 1115 to 1065 ms, the Q4_K-pure file's 1029 on both trees (k4 crowned there). The M5 Max crowns
+  every routed family; its 1024-token window on the IQ4_XS-pure file reads 215 ms crowned on both trees.
+
 - **MEASURED (2026-10-13) - the qwen leg's end re-measure: every plane on its own bytes against the stored q8 and f16
   copies, MTP, the greedy chain, the per-op dense-FFN rail, on the house file `Qwen3.6-35B-A3B-MTP-IQ4_XS-pure.gguf`
   (and Llama-3.2-3B Q4_K_M), the M5 Max and the RTX PRO 4500 (Vulkan), the leg against its base `fa7ce42649`.** Every
@@ -82,9 +98,10 @@ what it costs today and what the fix would change.
   - Pure Q4_K (`llama-quantize --pure`, 20.06 GB, 4.5 bpw) against pure IQ4_XS on the same arm, two alternated rounds:
     decode 187.3, 177.3 / 174.4, 166.9 against 188.6, 182.4 / 168.8, 169.8 - the two within the rounds' drift, so the
     IQ4_XS lookup costs the bandwidth-bound decode nothing; prefill 2903, 2367 / 2456, 2172 against 4092, 3498 / 3220,
-    3023 tok/s - the Q4_K base-form window GEMM reads a third slower than the IQ4_XS one on this arm at near-equal
-    bytes (the Q8_0-rest twins above show the same gap on their expert planes: 2236 against 2862 at 9k). Open from this
-    reading: the K-quant base-form window tile against the IQ4_XS one (`followup_metal.md`).
+    3023 tok/s (the Q8_0-rest twins above show the same gap on their expert planes: 2236 against 2862 at 9k). That arm
+    read the Q4_K experts on their base tile against the IQ4_XS experts on their tensor twin, not tile against tile: the
+    routed pick took a K-quant twin under a crown or the knee and every other format's twin whenever it compiled, and
+    the base tiles themselves race even (the 2026-10-14 entry on the routed twin pick).
   - The same six files on the M5's own arm (the box profile re-minted, its tensor crowns applied), two alternated
     rounds, prefill 3k / 9k tok/s then decode 3k / 9k: pure IQ4_XS 5117, 4502 / 4411, 4072 and 189.0, 184.5 / 175.8,
     171.0; pure Q4_K 4627, 4651 / 4153, 4205 and 182.6, 182.7 / 168.5, 169.3; Q4_K + Q8_0 rest 4394, 4531 / 4047, 4132

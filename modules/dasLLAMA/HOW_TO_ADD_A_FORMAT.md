@@ -548,8 +548,8 @@ silently, which is why the tier's gate (`kq_fmt_gpu_supported`) is closed by def
    the `release_handles(...)` rosters; a per-format mul_mm stamp declares itself
    `[metal_dispatch(stamp = "<family>:<fmt>:<form>")]` and the lens derives its names; every
    `g_pso_*` global is declared by hand in `dasllama_metal_common.das`, since the lens only
-   names it. The prefill's per-format picks are tables, one row per format: `pf_kq_split_stamps`
-   (dense split), `pf_kq_deep_stamps` (k4/k5/k6), `pf_moe_kq_row` (every superblock format's routed
+   names it. The prefill's per-format picks are tables, one row per format: `pf_kq_dense_stamps`
+   (every dense format's twins), `pf_moe_kq_row` (every superblock format's routed
    forms - the base and the four twins).
 4. **Ladders:** `enc_kq_gemv`, `enc_kq_gemm_mm_b` (kernels), `pf_enc_kq_site_mm`,
    `enc_site_gemv` (the classifier site prefill and decode share), `moe_site_ok` + the `sb1/2/3`
@@ -597,15 +597,18 @@ quant / 2 B scale pair 16B-aligned, and `metal_blob_off_ok` + `moe_site_ok` say 
 a format arm of `MetalBlk32GemvT` (8 threads a block, one float4 each; a codebook is staged to a
 `@workgroup` table as the kq iq4 GEMVs do, which makes the dispatch `tgmem =`) stamped dense and
 gathered, a per-32 arm of `MetalKqTileDecodeT.kq_decode` stamped as the dense mul_mm and the routed
-base `MetalMoeMulMm<Fmt> : MetalMoeMulMmKqT`, with
-`MetalMoeMulMm<Fmt>TensorT : MetalMoeMulMmKqTensorBase` (a `stage_block` override) and its
-`T`/`TH`/`TH128`/`THR` stamps compiled beside q51's in `pf_compile_moe_kq_twins`; the ladders are
-`enc_moe_gemv` (decode), `pf_moe_th_pso` and a `pf_enc_moe_mm` arm of its own with the
-`moe_q51_twin_fits` pick (the tensor twins walk 64-deep K, so a `kdim % 64` stack takes the base
-form) - NOT the split-format table, whose rows are kq stamps - plus `moe_fmt_metal_served`,
-`moe_site_ok`, `kq_dense_b32` (the per-32 reduction dims in `moe_metal_ok`, the dense sites'
-plane pair)
-and `kq_fmt_gpu_supported`. A GEMV stamp that declares `fastmath=false` (the per-32 GEMV and its
+base `MetalMoeMulMm<Fmt> : MetalMoeMulMmKqT`, and a per-32 arm of `MetalKqMulMmB32TensorT.stage16`
+stamped as the dense `T`/`TH`/`TH128`/`THDb`/`THDb128` twins and the dequant pass (`kq_mm:<fmt>:*`,
+behind the format's `kq_mulmm_<fmt>` crown in `pf_compile_kq_b32_tensor_twins`) and as the routed
+`T`/`TH`/`TH128`/`THR` twins of `MetalMoeMulMmB32SplitT` (`moe_mm_split:<fmt>:*`, compiled beside
+q51's in `pf_compile_moe_b32_twins`); the rows are `pf_kq_b32_stamps` (the dense ladder's) and
+`pf_moe_kq_row` (the routed one's, no `enc_base`: the per-32 base binds the pair without a strip
+view, through `pf_enc_moe_mm_b32`), the races two `race_stems` rows (`kq_mulmm_<fmt>`,
+`moe_mulmm_<fmt>`) in `race_kq_mulmm_b32` and `race_moe_mulmm_formats`, and the pick
+`b32_twin_fits` (the tensor twins walk 64-deep K, so a `kdim % 64` stack takes the base form) - plus
+`moe_fmt_metal_served`, `moe_site_ok`, `kq_dense_b32` (the per-32 reduction dims in
+`moe_metal_ok`, the dense sites' plane pair) and `kq_fmt_gpu_supported`. `check_kq_form_matrix`
+(`REVIEW.das`) reds the module gate on a form, race or pass the new format lacks. A GEMV stamp that declares `fastmath=false` (the per-32 GEMV and its
 K-split twin do: fast math sums a column's dot apart from the small-batch form) gets its
 `FASTMATH_OFF_EXEMPT` row in `REVIEW.das` against `b32_mvb_gate`, and its name on the licensed
 set's line in `ARCHITECTURE_ENGINE.md#engine-core` - without the row the module gate reds on the

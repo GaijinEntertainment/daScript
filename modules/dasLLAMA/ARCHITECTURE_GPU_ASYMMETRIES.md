@@ -80,8 +80,8 @@ asymmetries a stamp family ledgers - stays in `ARCHITECTURE_GPU.md#gpu-backends`
   `kq_rows_half_<fmt>` crown the decode's two-to-eight-row K-quant sites read x as the f16 twin the row producer stores
   beside it (`ARCHITECTURE_GPU_MTP_DECODE.md#kq-rows-crown`), and the knob keeps the f32 forms for an A/B; Vulkan's rows
   sites read f32 x alone.
-- **The K-quant MoE twins' knee is Metal-only** (`set_metal_moe_kq_twin_avg`): on a box whose sidecar carries no
-  `moe_mulmm_k4/k5/k6` crown the routed K-quant sites take the tensor twin where the window's mean rows an expert sit
+- **The superblock MoE twins' knee is Metal-only** (`set_metal_moe_kq_twin_avg`): on a box whose sidecar carries no
+  `moe_mulmm_<fmt>` crown for a routed format the site takes the tensor twin where the window's mean rows an expert sit
   at or under the knee (`ARCHITECTURE_GPU_PREFILL_MOE.md#prefill-moe-kq-twin-pick`); Vulkan's expert tiles have no twin
   to pick.
 - **The window chain's form levers are Metal-only** (`set_metal_prefill_held` holding one crowned form off for an
@@ -153,7 +153,7 @@ asymmetries a stamp family ledgers - stays in `ARCHITECTURE_GPU.md#gpu-backends`
   them; `DASLLAMA_DEVICE_POOL=0` keeps the regions' own claims alone
   (`ARCHITECTURE_ENGINE_SERVING.md#device-home-pool`).
 - **The dev-W f16 panels are a Metal-only knob.** `DASLLAMA_METAL_DEVW` /
-  `set_metal_devw_panels` makes Metal's dense Q8_0 and K-quant prefill sites read a stored f16
+  `set_metal_devw_panels` makes Metal's dense Q8_0, K-quant, iquant and per-32 prefill sites read a stored f16
   copy of their planes in place of the per-window scratch panels
   (`ARCHITECTURE_GPU_PREFILL.md#devw-panel-knees`); Vulkan's prefill tiles read each plane's
   own blocks in the tile load, so that tier has no f16 weight panel for such a knob to keep.

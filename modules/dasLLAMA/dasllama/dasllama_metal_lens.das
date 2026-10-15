@@ -754,6 +754,32 @@ class RacePsoPairStampMacro : AstCallMacro {
     }
 }
 
+[call_macro(name = "race_stems")]
+class RaceStemsMacro : AstCallMacro {
+    //! ``race_stems(race_fn, args...)`` - the call to ``race_fn`` with every ``<Class>_<kernel>_msl`` argument expanded into
+    //! its source, entry, fastmath and tgmem globals, so one stem names one kernel and no hand-written entry name pairs
+    //! one kernel's source with another's entry
+    def override visit(prog : ProgramPtr; mod : Module?; var expr : ExprCallMacro?) : ExpressionPtr {
+        if (length(expr.arguments) < 2 || !(expr.arguments[0] is ExprVar)) {
+            macro_error(prog, expr.at, "race_stems expects (race_fn, args...), got {describe(expr)}")
+            return null
+        }
+        var call = new ExprCall(at = expr.at, name := "{(expr.arguments[0] as ExprVar).name}")
+        for (i in range(1, length(expr.arguments))) {
+            let arg = expr.arguments[i]
+            if (arg is ExprVar && "{(arg as ExprVar).name}" |> ends_with("_msl")) {
+                let stem = "{(arg as ExprVar).name}"
+                for (suffix in ["", "_entry", "_fastmath", "_tgmem"]) {
+                    call.arguments |> emplace_new <| new ExprVar(at = expr.at, name := "{stem}{suffix}")
+                }
+            } else {
+                call.arguments |> emplace_new <| clone_expression(arg)
+            }
+        }
+        return call
+    }
+}
+
 [call_macro(name = "release_handles")]
 class ReleaseHandlesMacro : AstCallMacro {
     //! ``release_handles(a, b, c, ...)`` - one ``release_handle`` per slot named.

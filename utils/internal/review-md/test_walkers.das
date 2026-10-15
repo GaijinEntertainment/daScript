@@ -270,6 +270,10 @@ def test_dasllama_gate_fixtures(t : T?) {
     write_at(t, fixture, "modules/dasLLAMA/dasllama/dasllama_kqformat.das", kqformat_text("q8 k4 k6 k3"))
     write_at(t, fixture, "modules/dasLLAMA/dasllama/dasllama_vulkan_common.das", VK_COMMON_RED)
     write_at(t, fixture, "modules/dasLLAMA/harness/hand_probe.das", "options gen2\n\nlet p = vkCreateComputePipelines(dev, null, 1u, addr(cp), null, addr(h))\n")
+    // a Metal stamp family whose k9 member lacks a form, a race and
+    // a dequant pass its k8 member has
+    write_at(t, fixture, "modules/dasLLAMA/dasllama/dasllama_metal_prefill.das",
+        METAL_FORM_MATRIX_RED)
 
     let red = spawn_at(fixture, [path_join(fixture, "modules/dasLLAMA/REVIEW.das")])
     t |> equal(1, red.rc, "planted fixture is red")
@@ -280,7 +284,18 @@ def test_dasllama_gate_fixtures(t : T?) {
     t |> success(rmdir_rec_result(fixture) is value, "fixture removed")
 }
 
+//! two `kq_mm` stamps for k8 (t and th) beside k8's race and dequant
+//! builder names, one stamp for k9 and nothing else of k9's
+let METAL_FORM_MATRIX_RED = ("options gen2\n\n"
+    + "[metal_dispatch(stamp = \"kq_mm:k8:t\", pso = \"g_p\")]\nclass A \{\}\n"
+    + "[metal_dispatch(stamp = \"kq_mm:k8:th\", pso = \"g_p\")]\nclass B \{\}\n"
+    + "[metal_dispatch(stamp = \"kq_mm:k9:t\", pso = \"g_p\")]\nclass C \{\}\n"
+    + "let R = \"kq_mulmm_k8\"\nlet D = \"enc_kq_dq_k8\"\n")
+
 let DASLLAMA_RED_NEEDLE_CENSUS <- [
+    "format k9 stamps no kq_mm:th while another format of the family does",
+    "format k9 stamps kq_mm twins and races none",
+    "format k9 stamps dense twins and has no dev-W dequant pass",
     "dasllama_image.das: the image layout closure changed",
     "dasllama_vulkan_classes.das: khr_stage16 on KqCm2BatchT has a body",
     "the add+rms row slab triple disagrees: AR_MAX_DIM 4096 (dasllama_vulkan_common.das), ArBase.row[8192], attn_dec_shape_ok's c.dim cap 8192",
