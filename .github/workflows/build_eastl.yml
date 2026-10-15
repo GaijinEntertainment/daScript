@@ -15,6 +15,10 @@ jobs:
   build_eastl:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    # actions: write needed for `gh cache delete` in the sccache refresh step.
+    permissions:
+      contents: read
+      actions: write
     strategy:
       fail-fast: false
       matrix:
@@ -32,9 +36,21 @@ jobs:
             https://github.com/GaijinEntertainment/DagorEngine.git .dagor_headers
           git -C .dagor_headers sparse-checkout set \
             prog/1stPartyLibs/dag prog/3rdPartyLibs/eastl prog/3rdPartyLibs/ska_hash_map prog/dagorInclude/util
+      # One sccache slot per variant: the EASTL shadow config compiles every TU differently from the other lanes.
+      - uses: ./.github/actions/sccache-slot
+        with:
+          mode: restore
+          key: sccache-eastl-${{ matrix.variant }}
+          sccache-size: 1000M
+
       - run: ci/build_eastl_config.sh ${{ matrix.variant }}
         env:
           DAGOR_ROOT: ${{ github.workspace }}/.dagor_headers
       - name: smoke run
         if: matrix.variant == 'pc'
         run: cmake --build build_eastl_pc --target run_eastl_smoke --parallel
+
+      - uses: ./.github/actions/sccache-slot
+        with:
+          mode: save
+          key: sccache-eastl-${{ matrix.variant }}
