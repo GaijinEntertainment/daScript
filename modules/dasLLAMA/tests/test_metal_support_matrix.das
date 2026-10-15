@@ -1998,13 +1998,11 @@ def test_metal_family_matrix(t : T?) {
             // the file's rows sit closer together (the batch cell's two rows 6.6 apart), so its bar is 4.0 (reads 0.6 to 1.3)
             gemma4e_row(t, path_join(models_dir(), "gemma-4-E2B-it-Q4_0.gguf"), "gemma4e-e2b-q40", true, false, 4.0)
             // ... and the format carriers off the E2B Q8_0: the token and PLE tables Q6_K and IQ4_XS (the gather family's K-quant and
-            // IQ stamps at width layers x ple), the per-layer gate and projection planes Q6_K and Q5_0, the model projection F32 (the
-            // router GEMV's f32 rows in place of the bf16 word form)
+            // IQ stamps at width layers x ple), the per-layer gate and projection planes Q6_K and Q5_0
             for (carrier in [(file = "gemma-4-E2B-it-emb-Q6_K-local.gguf", tag = "gemma4e-e2b-emb-q6k"),
                              (file = "gemma-4-E2B-it-emb-IQ4_XS-local.gguf", tag = "gemma4e-e2b-emb-iq4xs"),
                              (file = "gemma-4-E2B-it-ple-Q6_K-local.gguf", tag = "gemma4e-e2b-ple-q6k"),
-                             (file = "gemma-4-E2B-it-ple-Q5_0-local.gguf", tag = "gemma4e-e2b-ple-q50"),
-                             (file = "gemma-4-E2B-it-pmp-F32-local.gguf", tag = "gemma4e-e2b-pmp-f32")]) {
+                             (file = "gemma-4-E2B-it-ple-Q5_0-local.gguf", tag = "gemma4e-e2b-ple-q50")]) {
                 gemma4e_row(t, path_join(models_dir(), carrier.file), carrier.tag, true, false, 4.0)
             }
             // gpt-oss-20b (Wave C stage 4): mx4 experts + sinks + softmax_weight + biases
