@@ -11,6 +11,14 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **STATED (2026-10-15) - the host pool's pages under a speculating device-home scheduler carry the NextN head's rows
+  beside the trunk's.** A pooled opening of `n` tokens holds `n - 1` rows of the head's K/V slab (`layer_kv_dim(c,
+  n_layers)` halves of K and of V a row on the f16 mirror, `4 * kv_dim` bytes): Qwen3.5-0.8B-MTP (head kv_dim 512) 2 KB a
+  row, 2 MB an opening of 1,024 tokens; Qwen3.5-9B-MTP (1,024) 4 KB a row, 4 MB. The pages sit under the pool's own budget
+  (`prefix_groups`, `--prefix-state-mb`) beside the trunk's, so the total the pool holds does not grow; each opening
+  costs its head rows more and the budget keeps one opening fewer. A plain scheduler on the same carrier keeps the pool
+  it had: the head rides no move while speculation is off.
+
 - **MEASURED (2026-10-14) - the K-quant base tile against the IQ4_XS one, and the routed twin pick that made them read a
   third apart.** `benchmarks/matmul/bench_metal_kq_race.das --fmts k4,iq4xs --tiers mm --rounds 5` on the M5 Max (synthetic
   planes, 512 rows, `direction-grade`, cv under 3 %): the simdgroup base tiles read within 2 % at every shape - k4 / iq4xs

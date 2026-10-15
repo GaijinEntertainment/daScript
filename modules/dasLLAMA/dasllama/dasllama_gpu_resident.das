@@ -4934,7 +4934,7 @@ var private g_rdec_pool_head_decline_said = false   //! the latch: the say runs 
 def private rdec_pool_head_decline_say(n, held : int64) {
     return if (g_rdec_pool_head_decline_said)
     g_rdec_pool_head_decline_said = true
-    to_log(LOG_INFO, "dasLLAMA resident pool: an opening of {n} tokens stays on the card - the region holds {held} of the {n - 1l} head rows it needs (said once)\n")
+    to_log(LOG_INFO, "dasLLAMA resident pool: the region's {n} rows stay on the card - it holds {held} of the {n - 1l} head rows a pooled copy needs (said once)\n")
 }
 
 //! the head rows a pooled opening of `n` tokens carries: every row but the position's own, which the round's seam re-warms
