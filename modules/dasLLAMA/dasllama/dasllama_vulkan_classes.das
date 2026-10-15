@@ -3674,7 +3674,7 @@ class template DaAttnBH128T {
             coopmatLoad(qa[c], fbq, int(br * 16u) * 64 + c * 8, 64, 0)
         }
         let kend = pa.w0 + min(q0 + 32u, pa.npos)
-        var k0 = 0u
+        var k0 = (pa.window != 0u && pa.w0 + q0 > pa.window) ? ((pa.w0 + q0 - pa.window) / 32u) * 32u : 0u   //! a sliding layer's first K stage under the tile's first query's window
         while (k0 < kend) {
             i = tid
             while (i < 2048u) {   // K tile, f16 pairs
@@ -3704,7 +3704,8 @@ class template DaAttnBH128T {
             for [unroll] (j in range(8)) {
                 let idx = srow * 32u + cb + uint(j)
                 let gk = k0 + cb + uint(j)
-                let s = (gk <= gq && q0 + srow < pa.npos && gk < kend) ? fbp[idx] * pa.scale : -3.0e38
+                let inwin = pa.window == 0u || gk + pa.window > gq
+                let s = (gk <= gq && inwin && q0 + srow < pa.npos && gk < kend) ? attn_softcap(fbp[idx] * pa.scale, pa.cap) : -3.0e38
                 fbp[idx] = s
                 mloc = max(mloc, s)
             }
