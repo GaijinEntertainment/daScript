@@ -100,6 +100,7 @@ static string deserFile = ""; // -deser <path>: read the AST module cache during
 static string moduleCacheFile = ""; // -module-cache <path>: both - read when present, refresh when the compile diverged
 static bool moduleCacheExplicit = false; // -module-cache given
 static bool noModuleCache = false;  // -no-module-cache: off, over -module-cache and the default alike
+static bool moduleCacheLog = false; // -module-cache-log: print what the module cache did
 static bool noOptimization = false; // -no-optimization: `options optimize = false` for the whole program
 static string hostBinary = "";      // argv[0]
 static string hostOptions = "";     // argv up to "--": the compile's own options key the default cache
@@ -557,11 +558,11 @@ int compile_and_run ( const string & fn, const string & mainFnName, bool outputP
     string explicitCache = noModuleCache ? string() : moduleCacheFile;
     string cacheReadPath = !deserFile.empty() ? deserFile : explicitCache;
     string cacheWritePath = !serFile.empty() ? serFile : explicitCache;
-    bool cacheQuiet = false;
+    // -ser and -deser are explicit rails and always report; a build passes -module-cache on every run
+    bool cacheQuiet = !moduleCacheLog && serFile.empty() && deserFile.empty();
     if ( !moduleCacheExplicit && !noModuleCache && serFile.empty() && deserFile.empty()
         && jitEnabled != JitMode::Executable && !compileOnly && !buildingDocumentation && !debuggerRequired && !useAot ) {
         cacheReadPath = cacheWritePath = ModuleFileCache::defaultPath(fn, hostBinary, hostOptions);
-        cacheQuiet = true;
     }
     moduleCache.install(cacheReadPath, cacheWritePath, cacheQuiet);
     auto compile0 = ref_time_ticks();
@@ -773,9 +774,10 @@ void print_help() {
         << "    --list-shared-modules <path> with -exe: write JSON describing the program's shared modules and daspkg-package .das module sources to <path>\n"
         << "    --force-shared-module <name> with -exe: force-include a shared module by daslang or package name (repeatable)\n"
         << "    -module-cache <path> self-maintaining AST module cache at <path>: read when present, rewritten\n"
-        << "                when the compile diverged; prints 'deser: clean'/'partial'/'FALLBACK'. Default ON,\n"
-        << "                silently, at .cache/daslang/module_cache/<script>-<hash>.dascache for a run that\n"
-        << "                executes; off under -exe (one-unit codegen is the faster binary), -compile-only, -documentation, -use-aot\n"
+        << "                when the compile diverged. Default ON at .cache/daslang/module_cache/<script>-<hash>.dascache\n"
+        << "                for a run that executes; off under -exe (one-unit codegen is the faster binary),\n"
+        << "                -compile-only, -documentation, -use-aot\n"
+        << "    -module-cache-log print what the module cache did: 'deser: clean'/'partial'/'FALLBACK', 'ser: wrote'\n"
         << "    -MD -MF <path> write a Make dependency file naming every source, data file and\n"
         << "                directory this run read, the way a C compiler's -MD does. -MT <target>\n"
         << "                names the rule (default: <path> without its trailing .d). DAS_DEPFILE in\n"
@@ -979,6 +981,7 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
     hostBinary = exeLen ? string(exePath, exeLen) : string(argv[0]);
     for ( int i=1; i < argc && strcmp(argv[i],"--")!=0; ++i ) {
         if ( int skip = das_dep_flag_argc(argv[i]) ) { i += skip - 1; continue; }
+        if ( strcmp(argv[i],"-module-cache-log")==0 ) continue;   // a log switch, not a compile input
         hostOptions += argv[i];
         hostOptions += '\n';
     }
@@ -1120,6 +1123,8 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
                 i += 1;
             } else if ( cmd=="no-module-cache" ) {
                 noModuleCache = true;
+            } else if ( cmd=="module-cache-log" ) {
+                moduleCacheLog = true;
             } else if ( cmd=="no-optimization" ) {
                 noOptimization = true;
             } else if ( cmd=="-list-shared-modules" ) {

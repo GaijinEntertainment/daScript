@@ -31,9 +31,8 @@ def test_generic_instance_origin(t : T?) {
         return
     }
     let root = get_das_root()
-    let argv <- [das_exe(), "-dasroot", root, "-module-cache", "{tmp}/mc.bin",
-        "{root}/dastest/dastest.das", "--", "--test",
-        "{root}/tests/module_cache/_fixtures/mc_generic_origin_drv.das"]
+    let argv <- cached_argv("{tmp}/mc.bin", ["{root}/dastest/dastest.das", "--", "--test",
+        "{root}/tests/module_cache/_fixtures/mc_generic_origin_drv.das"])
     var cold : string
     let coldRc = run_argv(argv, cold)
     let coldOk = report_child(t, "cold", coldRc, cold, "ser: wrote")

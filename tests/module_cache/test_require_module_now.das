@@ -172,7 +172,7 @@ def test_require_module_now_children(t : T?) {
         let script = path_join(tmp, "use_macro.das")
         fwrite(script, macro_driver(""))
         let cacheFile = path_join(tmp, "nested.dascache")
-        let cached = "{das_exe()} -dasroot {get_das_root()} -module-cache \"{cacheFile}\" \"{script}\""
+        let cached = "{das_exe()} -dasroot {get_das_root()} {logged_cache(cacheFile)} \"{script}\""
         var out : string
         t |> success(run_child_reported(t, "cold", cached, out, "LATE 42"), "the macro's late require answers on the cold run")
         let coldSize = long_length(fread(cacheFile))

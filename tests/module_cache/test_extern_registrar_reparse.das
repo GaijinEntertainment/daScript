@@ -29,7 +29,7 @@ def test_extern_registrar_reparse(t : T?) {
         fwrite(path_join(tmp, name), fread(path_join(fixtures, name)))
     }
     let drv = path_join(tmp, "mc_extern_drv.das")
-    let cmd = "{trace_prefix()}\"{das_exe()}\" -dasroot \"{root}\" -module-cache \"{tmp}/mc.bin\" \"{drv}\""
+    let cmd = cached_cmd("{tmp}/mc.bin", drv)
     var cold : string
     let coldRc = run_child(cmd, cold)
     var coldOk = report_child(t, "cold", coldRc, cold, "ser: wrote")
@@ -70,7 +70,7 @@ def test_extern_between_registrars_served(t : T?) {
         fwrite(path_join(tmp, name), fread(path_join(fixtures, name)))
     }
     let drv = path_join(tmp, "mc_extern2_drv.das")
-    let cmd = "{trace_prefix()}\"{das_exe()}\" -dasroot \"{root}\" -module-cache \"{tmp}/mc.bin\" \"{drv}\""
+    let cmd = cached_cmd("{tmp}/mc.bin", drv)
     var cold : string
     t |> success(run_child_reported(t, "cold", cmd, cold, "EXTERN2_DRV=8"), "cold run")
     var warm : string
