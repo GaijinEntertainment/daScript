@@ -2882,17 +2882,8 @@ def rd_mir_row(L : RLayer; pos : int64) : int64 => rd_mir_row(L, g_rd.region, po
 //! whole on a flat layer; on a ring its last `ring` positions (the rows before them share their slots), cut where the slots wrap
 [arch(at="../ARCHITECTURE_GPU_KV_RING.md#kv-sliding-ring")]
 def rd_ring_runs(L : RLayer; row0, nrows : int64; blk : block<(p0, n : int64) : void>) {
-    return if (nrows <= 0l)
-    if (L.ring == 0l) {
-        invoke(blk, row0, nrows)
-        return
-    }
-    let hi = row0 + nrows
-    var p = max(row0, hi - L.ring)
-    while (p < hi) {
-        let n = min(hi - p, L.ring - kv_ring_row(p, L.ring))
-        invoke(blk, p, n)
-        p += n
+    kv_ring_runs(row0, row0 + nrows, L.ring) $(p0, n, _slot : int64) {
+        invoke(blk, p0, n)
     }
 }
 

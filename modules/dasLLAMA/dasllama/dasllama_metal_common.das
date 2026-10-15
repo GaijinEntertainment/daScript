@@ -1385,23 +1385,9 @@ def mirror_ring_ask(t : Model; npos : int64) {
     g_arena_epoch++
 }
 
-//! layer l's positions [lo, hi) as runs back to back in its slab, `blk(p0, n, slot)` a run of n positions from p0 at row `slot`:
-//! the span whole on a flat layer; on a ring its last `ring` positions, cut where the slots wrap
-[arch(at="../ARCHITECTURE_GPU_KV_RING.md#kv-sliding-ring")]
+//! layer l's positions [lo, hi) as `kv_ring_runs` over its ring
 def mirror_ring_pieces(t : Model; l, lo, hi : int64; blk : block<(p0, n, slot : int64) : void>) {
-    return if (hi <= lo)
-    let ring = mirror_ring(t, l)
-    if (ring == 0l) {
-        invoke(blk, lo, hi - lo, lo)
-        return
-    }
-    var p = max(lo, hi - ring)
-    while (p < hi) {
-        let slot = kv_ring_row(p, ring)
-        let n = min(hi - p, ring - slot)
-        invoke(blk, p, n, slot)
-        p += n
-    }
+    kv_ring_runs(lo, hi, mirror_ring(t, l), blk)
 }
 
 // the slice mirror_prepare would build for (s, pos): chunked high-water cap (pow2 from 256,

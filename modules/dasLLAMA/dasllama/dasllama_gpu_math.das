@@ -33,6 +33,24 @@ def kv_ring_row(pos, ring : uint) : uint => ring == 0u ? pos : pos % max(ring, 1
 [arch(at="../ARCHITECTURE_GPU_KV_RING.md#kv-sliding-ring")]
 def kv_ring_row(pos, ring : int64) : int64 => ring == 0l ? pos : pos % ring
 
+//! positions [lo, hi) of a layer whose mirror rows ring at `ring` (0 = flat) as runs back to back in its slab, `blk(p0, n, slot)` a
+//! run of n positions from p0 at row `slot`: the span whole on a flat layer; on a ring its last `ring` positions, cut where the slots wrap
+[arch(at="../ARCHITECTURE_GPU_KV_RING.md#kv-sliding-ring")]
+def kv_ring_runs(lo, hi, ring : int64; blk : block<(p0, n, slot : int64) : void>) {
+    return if (hi <= lo)
+    if (ring == 0l) {
+        invoke(blk, lo, hi - lo, lo)
+        return
+    }
+    var p = max(lo, hi - ring)
+    while (p < hi) {
+        let slot = kv_ring_row(p, ring)
+        let n = min(hi - p, ring - slot)
+        invoke(blk, p, n, slot)
+        p += n
+    }
+}
+
 //! tanh clamped to +-15, where f32 tanh already saturates: a device tanh built from exp answers NaN past about +-44, the CPU +-1
 def tts_tanh(v : float) : float => tanh(clamp(v, -15.0, 15.0))
 
