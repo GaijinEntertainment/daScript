@@ -220,7 +220,15 @@ window and token commands gather an untied table's rows on the device off its pl
 drivers do. A table whose disk type no member carries (F16, BF16) keeps its
 exact fp32 rows; tied, a load under a Metal mode adds a q8 transcode of it at `wcls_off`
 (`cls_q8_copy`) - a converted copy, logged at the load - for the device classifier, while the
-embed and the CPU classifier read the fp32 rows. The shared expert's gate, up and down planes
+embed and the CPU classifier read the fp32 rows; under no Metal mode no device plane carries such
+a tied classifier, so the Vulkan whole-model driver declines the model by name
+(`resident_cls_decline`) and the per-op rails take it. A float per-layer-embedding table (F16, BF16,
+F32) tags q8 and reads its q8 transcode at every home - a converted copy, the gap no stocked file
+reaches. The E-series per-layer `inp_gate` and `proj` planes carry one tag a layer from their disk type
+(`ple_gate_fmt` / `ple_proj_fmt`, `ple_plane`), carved from that format's planes; a kind that ships F32
+keeps the file's f32 rows in fblob (`ple_gate_f32` / `ple_proj_f32`), read by the CPU's fblob GEMVs,
+Metal's router GEMV and f32 tile, and Vulkan's router GEMV, f32 act and f32 tile, and a kind mixing F32
+with another type declines the load. The shared expert's gate, up and down planes
 (the NextN head's triple included) keep the file's format on every load (`wsh*_fmt` /
 `wshk*_offs`; `shexp_plane` picks the plane by its tag), and every home reads that plane: the CPU
 chain's shared-expert sites (`dasllama_moe.das`, `dasllama_blocks.das`) take `shexp_tagged` to the

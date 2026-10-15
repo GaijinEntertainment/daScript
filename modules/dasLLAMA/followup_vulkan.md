@@ -2183,3 +2183,10 @@ module) is independent and can land any time - it is pure structure.
     per-op block binds the sink rows and the sliding window and serves gpt-oss's attention layers, and the span, the tail
     fusion and the f16 chain take the routed form, each held by a cell against the CPU chain; this is
     the gpt-oss leg's.
+
+150. **The N-row command and the short-window peel gather the E-series side rows on the host.** The one-row
+    token command and the ids window gather the side rows off their token ids on the device, but the N-row
+    command (`rdec_ple_side_rows`) and the peel (`rdec_prefill_peel`) carry no ids buffer, so the host gathers
+    the rows (`ple_gather_rows`) and the device finishes them. Done = the N-row command binds its rows' ids
+    and gathers through the table's `emb_cls` stamp as the one-row command does, the E-series batched cells'
+    CPU pre-step row count (`ple_cpu_pre_rows`) at zero.

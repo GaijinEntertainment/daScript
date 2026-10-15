@@ -4081,9 +4081,9 @@ def private rdec_host_experts_rows(l : int64; xb : float const?; logits : float 
     }
 }
 
-//! ONE gate for both PLE pre-step seats, taken when the armed driver holds the projection:
-//! forward_prefill's, where the token ids land in the session's stash and the prefill override gathers the table rows,
-//! and the decode seat's, where the token command gathers the step's own row on device.
+//! ONE gate for both PLE pre-step seats, taken when the armed driver holds the projection: forward_prefill's (the ids window
+//! gathers the table rows on device, the x window finishes the host's) and the decode seat's (the one-row token command gathers
+//! the step's own row off its id; the N-row command and the peel finish host-gathered rows)
 [unused_argument(s, npos, start_pos)]
 def private vulkan_ple_gate(t : Model; s : Session; npos, start_pos : int64) : bool
     => g_rdec_active && has_ple(t.config) && rdec_ple_proj_on()
@@ -4562,8 +4562,8 @@ def private rdec_batch_rows_served(t : Model; ws : BatchWorkspace; sessions : ar
     return true
 }
 
-//! the side-input rows of `n` tokens for the token command, into `g_rdec_ple_rows`: the table rows gathered on device where
-//! the device projects, else the pre-step's finished rows from `src_off` of the workspace's rows (position-major either way)
+//! the side-input rows of `n` tokens for the N-row command, into `g_rdec_ple_rows`: the table rows the host gathers for the device
+//! to finish where the device projects, else the pre-step's finished rows from `src_off` of the workspace's rows (position-major)
 def private rdec_ple_side_rows(t : Model; tokens : array<int64>; n : int64; ws : BatchWorkspace; src_off : int64) {
     if (rdec_ple_proj_on()) {
         resident_prefill_ple_rows(t, tokens, n)
@@ -4718,10 +4718,10 @@ def private rdec_batch_one_row(t : Model; ws : BatchWorkspace; var s : Session; 
     rdec_select_region(r)
     copy_floats(ws.scr.x_b, i * dim, g_rdec_x, 0l, dim)
     rdec_rope_rows(t, ws.rope_positions[i], g_rdec_cossin, 0l)
-    if (has_ple(c)) {
+    let tok = (g_rdec_emb_gpu && i < long_length(ws.row_tokens)) ? ws.row_tokens[i] : -1l
+    if (has_ple(c) && tok < 0l) {   //! a row with its id on the device gathers its side row there
         rdec_batch_ple_row(t, ws, i)
     }
-    let tok = (g_rdec_emb_gpu && i < long_length(ws.row_tokens)) ? ws.row_tokens[i] : -1l
     let picked = g_rdec_experts_host ? rdec_token_split_host(t, s, pos, pos + 1l, s.pick_asked, g_rdec_tmp) : rdec_token(g_rdec_x, g_rdec_cossin, g_rdec_ple_rows, tok, pos, pos + 1l, s.pick_asked, g_rdec_tmp)
     rdec_stash_carry(c, s, 0l, pos + 1l)
     if (!s.device_kv) {
@@ -4789,7 +4789,7 @@ def resident_driver_register() {
     register_mtp_verify_override("vulkan", @@vulkan_resident_verify)
     register_mtp_rollback_override("vulkan", @@vulkan_resident_rollback)
     register_ple_gpu_gate(@@vulkan_ple_gate)
-    register_ple_gpu_decode_gate(@@vulkan_ple_gate)   //! the token command gathers the row on device too
+    register_ple_gpu_decode_gate(@@vulkan_ple_gate)   //! the one-row token command gathers the row on device too
     register_prefill_override_split_span("vulkan")
     register_gpu_upload_resident(@@moe_gpu_upload_resident)
     set_moe_gpu_slice_window_fn(@@vk_slice_window_provider)

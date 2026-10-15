@@ -11,6 +11,7 @@ require dasllama/dasllama_gpu_resident   // resident_plan - the table's seat
 require _format_census   // census_cell - the per-layer planes in their own formats
 require daslib/fio
 require math   // nolint:STYLE030,LINT019 - abs, read in the vulkan half
+require strings
 require dasllama/dasllama_ple   // ple_cpu_pre_rows - the CPU pre-step's witness
 require dasllama/dasllama_common   // Model, embed_row, forward, forward_prefill
 require dasllama/dasllama   // create_session
@@ -158,6 +159,24 @@ def private cpu_side_row(tr : Model; tok : int64) : array<float> {
     var row <- [for (i in range64(n)); s.ple_inp[i]]
     delete s
     return <- row
+}
+
+//! the tied F16 token table (arm `g4e-f16`, the `-local` mint of `../performance/model_specs.das`): no device plane carries the
+//! classifier, so the whole-model driver declines the model by name and the per-op rails take it - never a q8 plane seated where no
+//! bytes sit; the PLE table loads as a q8 transcode (the stated converted copy)
+[test]
+def test_gpu_resident_gemma4_e2b_tied_f16(t : T?) {
+    t |> run("gemma-4-E2B Q8_0 with an F16 token table: the whole-model driver declines the tied classifier by name") @(t : T?) {
+        return if (!arm_on(t, "g4e-f16"))
+        let path = path_join(models_dir(), "gemma-4-E2B-it-Q8_0-embf16-local.gguf")
+        return if (!resident_ready(t, path))
+        var tr <- load_resident(path)
+        t |> success(tr.config.shared_weights && !tr.cls_q8 && !cls_kq(tr), "the tied table carries no q8 or K-quant plane")
+        t |> success(find(resident_decline_reason(tr), "tied classifier") >= 0, "the decline names the tied classifier: {resident_decline_reason(tr)}")
+        t |> success(!moe_gpu_resident_active(), "the whole-model driver stays off the model")
+        t |> equal(tr.ple_emb_fmt, KqFmt.q8, "the F16 PLE table reads its q8 transcode")
+        delete tr
+    }
 }
 
 //! a short tail on the E-series peels through the token commands, each row's side input finished on the device: after a 40-row
