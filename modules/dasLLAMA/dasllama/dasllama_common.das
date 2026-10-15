@@ -746,7 +746,7 @@ struct MtpAssistantStats {
 var private g_mtp_assistants : table<string; MtpAssistantSeams>
 var private g_mtp_sidecar : function<(model_path : string) : string>
 
-[arch(at="../ARCHITECTURE_GPU_MTP.md#assistant-drafter-step")]
+[arch(at="../ARCHITECTURE_GPU_MTP_ASSISTANT.md#assistant-drafter-attach")]
 def register_mtp_assistant(backend : string; seams : MtpAssistantSeams) {
     g_mtp_assistants[backend] = seams
 }
@@ -5943,7 +5943,7 @@ var private @scratch g_round1_acc : array<int64>
 //! configured depth (`get_mtp_depth`, under each session's `mtp_depth_cap`), a registered batch override verifies every NextN
 //! stream's depth-1 rows in one pass, and otherwise each stream steps alone through `mtp_spec_eval`. `accepted[i]` is how many
 //! drafts stream i accepted, the drafts in its `mtp_vbatch[1..]`; returns how many streams' rows a joint verify carried (0 = none)
-[hot_path]   // the per-step entry the scheduler re-enters once per tick
+[hot_path, arch(at="../ARCHITECTURE_GPU_MTP_ASSISTANT.md#assistant-drafter-rounds")]   // the per-step entry the scheduler re-enters once per tick
 def mtp_spec_eval_batch(t : Model; var sessions : array<Session?>; toks : array<int64>; var accepted : array<int64>) : int64 {
     let n = long_length(sessions)
     if (mtp_assistant_attached(t)) {

@@ -416,7 +416,7 @@ def private ar_site(var g : GemmaDrafterVk; dr : GemmaDrafter; raw : VkCommandBu
     enc_cls_ar_rq_b(raw, h, g.s_ar, pc, 1l)
 }
 
-[arch(at="../ARCHITECTURE_GPU_MTP.md#assistant-drafter-step")]
+[arch(at="../ARCHITECTURE_GPU_MTP_ASSISTANT.md#assistant-drafter-step")]
 def private vk_encode_layer(var g : GemmaDrafterVk; dr : GemmaDrafter; raw : VkCommandBuffer; var h : VkHaz; l, r : int64) {
     let hs = dr.hs[l]
     let qd = dr.n_heads * hs
@@ -436,7 +436,7 @@ def private vk_encode_layer(var g : GemmaDrafterVk; dr : GemmaDrafter; raw : VkC
     let rowwg = da_attn_row_wgs(dr.n_heads, kv_mul, 1l)
     let mirbase = uint(rd_mir_base(L, r))
     var pca = DaAttnArgs(kvd = uint(L.kvd), hs = uint(hs), kv_mul = uint(kv_mul), kbase = mirbase, vbase = mirbase, scale = 1.0, qstride = 0u, gated = 0u,
-        window = dr.sliding[l] ? uint(L.window) : 0u, cap = 0.0, nsplit = 1u, rqk = dt == KVDtype.tq4 ? DA_RQ_NONE : DA_RQ_Q8, sinkoff = 0u,
+        window = dr.sliding[l] && L.window > 0l ? uint(L.window - 1l) : 0u, cap = 0.0,   //! the pass's count is the anchor, its query a row past the last key: one key short of the window nsplit = 1u, rqk = dt == KVDtype.tq4 ? DA_RQ_NONE : DA_RQ_Q8, sinkoff = 0u,
         rowwg = uint(rowwg), qrow = uint(qd), cntoff = uint(g.cntoff))
     da_attn_stamp_enc(dt, da_slab_of(false, kv_mul), raw, h, g.s_attn[l], pca, rowwg)
     if (dt == KVDtype.tq4) {
@@ -555,7 +555,7 @@ var private @scratch g_vk_taken : array<int64>
 
 //! The Vulkan attach: `""` with the drafter attached to the trunk the resident driver serves whole, else why it refused. One
 //! drafter at a time; the driver then lands the post-norm hidden every step (the drafter's h input)
-[arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-assistant-drafter")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-assistant-drafter"), arch(at="../ARCHITECTURE_GPU_MTP_ASSISTANT.md#assistant-drafter-attach")]
 def private vk_attach(t : Model; path : string) : string {
     vk_detach()
     if (!moe_gpu_resident_active()) {   //! before the sidecar's read: a trunk this driver does not serve takes no drafter here
@@ -643,7 +643,7 @@ var private @scratch g_vk_cold : array<int64>
 //! twin: every warm stream bound to a region of its own, its chain of drafts on the device at its constant anchor, ONE verify of
 //! every stream's [tok, d_1 .. d_k] on the N-row command, each stream's accept walk and commit; a stream the round cannot take
 //! steps plain after the verify. Returns the warm streams the verify carried
-[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-assistant-drafter")]
+[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-assistant-drafter"), arch(at="../ARCHITECTURE_GPU_MTP_ASSISTANT.md#assistant-drafter-rounds")]
 def private vk_gemma_rounds(t : Model; var sessions : array<Session?>; toks : array<int64>; k_req : int64; var acc : array<int64>) : int64 {   // nolint:STYLE037,STYLE038 — binds / draft chains / one verify / walks / commits is one sequential protocol on shared locals
     let c = t.config
     let n = long_length(sessions)

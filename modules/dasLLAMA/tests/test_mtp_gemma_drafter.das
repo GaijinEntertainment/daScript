@@ -401,9 +401,9 @@ def private same_streams(t : T?; trg : Model; tag : string; plain, spec : SchedR
 
 //! `body` with the drafter beside `file` attached to its served twin on the GPU home, the overrides pinned, the drafter
 //! detached and the drivers down after; skips on a box without the twin or the sidecar
-def private with_served_drafter(t : T?; file : string; regions : int64; kv : KVDtype; body : block<(trg : Model) : void>) {
+def private with_served_drafter(t : T?; file : string; regions : int64; kv : KVDtype; body : block<(trg : Model) : void>; ctx : int64 = 512l) {
     with_dasllama_jobque_() {
-        var trg <- gdraft_target(t, file, 512l, regions, kv)
+        var trg <- gdraft_target(t, file, ctx, regions, kv)
         if (trg.config.n_layers == 0l) {
             delete trg
             return
@@ -429,60 +429,78 @@ def private with_served_drafter(t : T?; file : string; regions : int64; kv : KVD
 
 // the GPU drafter step against the CPU oracle on the served twin: same seed token, same carried
 // hidden, same anchor, so the two must agree on the argmax and sit within GPU-vs-CPU f32 noise
+def private gpu_step_vs_oracle(t : T?; trg : Model; var dr : GemmaDrafter; prompt : array<int64>; tag : string; window_control : bool) {
+    let npos = long_length(prompt)
+    var s <- make_run_state(trg.config, KVDtype.f16, KVDtype.f16)
+    var head <- [for (i in range64(npos - 1l)); prompt[i]]
+    eval_(trg, s, head)
+    var one <- [prompt[npos - 1l]]
+    eval_(trg, s, one)   // one GPU decode step: lands the post-norm hidden the drafter feeds on
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        finish_pending_step()
+    }
+    t |> equal(s.mtp_h_pos1, s.n_past, "{tag}: the decode carried the post-norm hidden for the drafter")
+    let anchor = s.n_past
+    let seed = argmax_of(s.logits, trg.config.vocab_size)
+    var h := s.mtp_h
+    var dg = -1l
+    var hg : array<float>
+    hg |> resize(dr.tdim)
+    var lg : array<float>
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        t |> success(gemma_draft_step_gpu(trg, s, seed, anchor, h, dg, hg), "{tag}: the GPU draft step served")
+        gemma_drafter_last_logits(lg)
+    } else {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            t |> success(vk_gemma_draft_step(trg, s, seed, anchor, h, dg, hg), "{tag}: the device draft step served")
+            vk_gemma_drafter_last_logits(lg)
+        }
+    }
+    var out : GemmaDraftOut
+    gemma_draft_step_cpu(trg, s, dr, seed, h, anchor, out)
+    let dl = logits_maxdiff(lg, out.logits)
+    let dh = logits_maxdiff(hg, out.h_next)
+    t |> equal(out.token, dg, "{tag}: GPU and CPU drafts agree on the token")
+    t |> success(dl <= 0.25, "{tag}: draft logits within 0.25 of the oracle (maxd {dl})")
+    t |> success(dh <= 0.05, "{tag}: h_next within 0.05 of the oracle (maxd {dh})")
+    to_log(LOG_INFO, "gdraft gpu {tag}: anchor {anchor} seed {seed} -> gpu {dg} cpu {out.token}; logits maxd {dl}, h_next maxd {dh}\n")
+    if (window_control) {   //! the control: the oracle's sliding layers one key wider - a device pass over the whole window reads as it does
+        dr.sliding_window += 1l
+        var wide : GemmaDraftOut
+        gemma_draft_step_cpu(trg, s, dr, seed, h, anchor, wide)
+        dr.sliding_window -= 1l
+        let dlw = logits_maxdiff(lg, wide.logits)
+        t |> success(dl * 8.0 < dlw, "{tag}: the device's sliding layers attend the oracle's window - its logits sit far nearer the oracle ({dl}) than one a key wider ({dlw})")
+        to_log(LOG_INFO, "gdraft gpu {tag}: the one-key-wider oracle reads logits maxd {dlw}\n")
+        delete wide
+    }
+    delete out
+    delete lg
+    delete hg
+    delete h
+    delete one
+    delete head
+    delete s
+}
+
 [test]
 def test_gemma_drafter_gpu_step(t : T?) {
     if (!family_on(t, "gemma4moe") || !arm_on(t, "mtp-gdraft-gpu")) {
         return
     }
-    t |> run("the GPU drafter step matches the CPU oracle (argmax, logits, h_next)") @(t : T?) {
-        with_served_drafter(t, TARGET_FILE, 1l, KVDtype.f16) $(trg) {
+    t |> run("the GPU drafter step matches the CPU oracle (argmax, logits, h_next), at a short anchor and one past the sliding window") @(t : T?) {
+        with_served_drafter(t, TARGET_FILE, 1l, KVDtype.f16, $(trg) {
             var dr <- load_gemma_drafter(mtp_drafter_sidecar(path_join(models_dir(), TARGET_FILE)), trg.config.n_layers)
             t |> success(dr.ok, "the oracle's drafter copy loads (why='{dr.why}')")
-            var prompt <- encode(trg, "The capital of France is", true, false)
-            let npos = long_length(prompt)
-            var s <- make_run_state(trg.config, KVDtype.f16, KVDtype.f16)
-            var head <- [for (i in range64(npos - 1l)); prompt[i]]
-            eval_(trg, s, head)
-            var one <- [prompt[npos - 1l]]
-            eval_(trg, s, one)   // one GPU decode step: lands the post-norm hidden the drafter feeds on
-            static_if (typeinfo builtin_module_exists(das_metal)) {
-                finish_pending_step()
-            }
-            t |> equal(s.mtp_h_pos1, s.n_past, "the decode carried the post-norm hidden for the drafter")
-            let anchor = s.n_past
-            let seed = argmax_of(s.logits, trg.config.vocab_size)
-            var h := s.mtp_h
-            var dg = -1l
-            var hg : array<float>
-            hg |> resize(dr.tdim)
-            var lg : array<float>
-            static_if (typeinfo builtin_module_exists(das_metal)) {
-                t |> success(gemma_draft_step_gpu(trg, s, seed, anchor, h, dg, hg), "the GPU draft step served")
-                gemma_drafter_last_logits(lg)
-            } else {
-                static_if (typeinfo builtin_module_exists(vulkan)) {
-                    t |> success(vk_gemma_draft_step(trg, s, seed, anchor, h, dg, hg), "the device draft step served")
-                    vk_gemma_drafter_last_logits(lg)
-                }
-            }
-            var out : GemmaDraftOut
-            gemma_draft_step_cpu(trg, s, dr, seed, h, anchor, out)
-            let dl = logits_maxdiff(lg, out.logits)
-            let dh = logits_maxdiff(hg, out.h_next)
-            t |> equal(out.token, dg, "GPU and CPU drafts agree on the token")
-            t |> success(dl <= 0.25, "draft logits within 0.25 of the oracle (maxd {dl})")
-            t |> success(dh <= 0.05, "h_next within 0.05 of the oracle (maxd {dh})")
-            to_log(LOG_INFO, "gdraft gpu: anchor {anchor} seed {seed} -> gpu {dg} cpu {out.token}; logits maxd {dl}, h_next maxd {dh}\n")
-            delete out
-            delete lg
-            delete hg
-            delete h
-            delete one
-            delete head
-            delete prompt
-            delete s
+            var short <- encode(trg, "The capital of France is", true, false)
+            gpu_step_vs_oracle(t, trg, dr, short, "short", false)
+            var long <- encode(trg, counting_prompt(1, 300), true, false)
+            t |> success(long_length(long) > dr.sliding_window + 8l, "the long prompt ({long_length(long)} tokens) passes the sliding window ({dr.sliding_window})")
+            gpu_step_vs_oracle(t, trg, dr, long, "past the window", true)
+            delete long
+            delete short
             delete dr
-        }
+        }, 2048l)
     }
 }
 

@@ -108,6 +108,7 @@ def private quant_stem(stem : string) : string {
 //! The gemma-4 drafter sidecar beside `model_path`: `mtp-<stem>-Q8_0.gguf` when it exists (the head's quant is chosen independently
 //! of the trunk's), `<stem>` the quant stem and then that stem with an unsloth `-UD` tag dropped (the upstream head carries none),
 //! else the exact-name `mtp-<basename>` sibling, else "". A path already naming a head never recurses onto itself.
+[arch(at="../ARCHITECTURE_GPU_MTP_ASSISTANT.md#assistant-drafter-attach")]
 def gemma_drafter_sidecar(model_path : string) : string {
     let name = base_name(model_path)
     if (name |> starts_with("mtp-")) {
@@ -336,6 +337,7 @@ def gemma_drafter_bind_target(var dr : GemmaDrafter; target_n_layers : int64) {
 //! Why the drafter `dr` cannot serve the trunk `t` ("" = it can): a per-layer-embedding trunk (the E-series) has no sidecar and
 //! its verify rows need the side input the draft ids index; the trunk's hidden is the drafter's `tdim`; and each drafter layer's
 //! capture layer - the trunk's last of its attention class - carries the drafter's head size and kv heads. Every attach asks it.
+[arch(at="../ARCHITECTURE_GPU_MTP_ASSISTANT.md#assistant-drafter-attach")]
 def gemma_drafter_target_why(t : Model; dr : GemmaDrafter) : string {
     let c = t.config
     if (has_ple(c)) {
@@ -460,7 +462,7 @@ def gemma_target_hidden(t : Model; var s : Session; post_norm : bool; var dst : 
     }
 }
 
-[arch(at="../ARCHITECTURE_GPU_MTP.md#assistant-drafter-step")]
+[arch(at="../ARCHITECTURE_GPU_MTP_ASSISTANT.md#assistant-drafter-step")]
 def private drafter_rope_row(dr : GemmaDrafter; var cosr : array<float>; var sinr : array<float>;
                              var ff : array<float>; anchor, hs : int64; slid : bool) {
     let theta = slid ? dr.rope_theta_swa : dr.rope_theta
@@ -472,7 +474,7 @@ def private drafter_rope_row(dr : GemmaDrafter; var cosr : array<float>; var sin
     build_rope_tabs(cosr, sinr, theta, 1.0, 1.0, ff, use_ff, anchor, 1l, hs)
 }
 
-[arch(at="../ARCHITECTURE_GPU_MTP.md#assistant-drafter-step")]
+[arch(at="../ARCHITECTURE_GPU_MTP_ASSISTANT.md#assistant-drafter-step")]
 def private drafter_attention(t : Model; var s : Session; dr : GemmaDrafter; l, anchor : int64;
                               q : array<float>; var attn : array<float>; var scores : array<float>;
                               var kvrow : array<float>) {

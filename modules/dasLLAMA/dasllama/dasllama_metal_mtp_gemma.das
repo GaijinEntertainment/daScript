@@ -179,6 +179,7 @@ def private gemma_slot(var g : GemmaDrafterGpu; dr : GemmaDrafter; si : int64) {
 //! The Metal attach: `""` with the drafter attached to the served gemma-4 target `t` (the trunk `gemma_drafter_target_why`
 //! admits, the metal-blob flavor, a token table the device gathers), else why it refused. One drafter at a time; the target's
 //! decode then carries the post-norm hidden every step (the drafter's h input).
+[arch(at="../ARCHITECTURE_GPU_MTP_ASSISTANT.md#assistant-drafter-attach")]
 def public attach_gemma_drafter(t : Model; path : string) : string {
     detach_gemma_drafter()
     if (!t.metal_blob) {   //! before the sidecar's read: a trunk the Metal drivers do not serve takes no drafter here
@@ -247,7 +248,7 @@ def public gemma_drafter_stats() : tuple<drafted : int64; accepted : int64; roun
 //! verifies since attach whose rows carried two speculating streams or more (the joint tick's witness)
 def public gemma_drafter_joint_verifies() : int64 => g_gemma_joint
 
-[arch(at="../ARCHITECTURE_GPU_MTP.md#assistant-drafter-step")]
+[arch(at="../ARCHITECTURE_GPU_MTP_ASSISTANT.md#assistant-drafter-step")]
 def private gemma_rope_rows(t : Model; var g : GemmaDrafterGpu; si, anchor : int64) {
     var sl & = unsafe(g.slots[si])
     if (sl.rope_pos == anchor) {
@@ -290,7 +291,7 @@ def private gemma_kv_ok(s : Session) : bool {
     return k == s.kv_dtype_v && (k == KVDtype.f16 || k == KVDtype.f32 || k == KVDtype.q8_0 || k == KVDtype.tq4)
 }
 
-[arch(at="../ARCHITECTURE_GPU_MTP.md#assistant-drafter-step")]
+[arch(at="../ARCHITECTURE_GPU_MTP_ASSISTANT.md#assistant-drafter-step")]
 def private encode_gemma_layer(t : Model; s : Session; enc : MetalComputeEncoder?; var g : GemmaDrafterGpu; si, l, cnt : int64; mr : KVMirror) {
     let c = t.config
     let dr & = g_gemma_drafter
@@ -322,7 +323,7 @@ def private encode_gemma_layer(t : Model; s : Session; enc : MetalComputeEncoder
         let lvoff = mr.voff + lb
         let kstride = uint(kdt == KVDtype.f16 || kdt == KVDtype.f32 ? layer_kv_dim(c, kvl) : layer_kv_dim(c, kvl) / 32l)
         let kv_mul = uint(dr.n_heads / dr.kvh[l])
-        let window = sl && c.sliding_window > 0l ? uint(c.sliding_window) : 0u
+        let window = sl && c.sliding_window > 0l ? uint(c.sliding_window - 1l) : 0u   //! the pass's count is the anchor, its query a row past the last key: one key short of the window
         if (cnt > g_attn_single_max) {
             let nchunks = (cnt + ATTN_CHUNK_ROWS - 1l) / ATTN_CHUNK_ROWS
             let need = uint64(dr.n_heads * nchunks * (hs + 2l)) * 4ul
@@ -334,7 +335,7 @@ def private encode_gemma_layer(t : Model; s : Session; enc : MetalComputeEncoder
             var pka = SqAttnPartArgs(cnt = uint(cnt), kstride = kstride, nheads = uint(dr.n_heads), kv_mul = kv_mul, hs = uint(hs),
                 scale = 1.0, nchunks = uint(nchunks), softcap = 0.0, window = window)
             enc_attn_part(enc, kdt, g_arena, g_arena, lkoff, lvoff, g.bq, g.bpart, pka, dr.n_heads * nchunks, hs)
-            let chlo = window > 0u && cnt > c.sliding_window ? uint((cnt - c.sliding_window) / ATTN_CHUNK_ROWS) : 0u
+            let chlo = window > 0u && cnt > int64(window) ? uint((cnt - int64(window)) / ATTN_CHUNK_ROWS) : 0u
             var cka = SqAttnCombArgs(nch = uint(nchunks), nheads = uint(dr.n_heads), hs = uint(hs), chlo = chlo, window = window, hass = 0u)
             enc_attn_comb(enc, g.bpart, g.battn, cka, dr.n_heads, hs)
         } else {
@@ -401,7 +402,7 @@ def public gemma_drafter_last_logits(var dst : array<float>) {
     }
 }
 
-[arch(at="../ARCHITECTURE_GPU_MTP.md#assistant-drafter-step")]
+[arch(at="../ARCHITECTURE_GPU_MTP_ASSISTANT.md#assistant-drafter-step")]
 def private encode_gemma_draft(t : Model; s : Session; enc : MetalComputeEncoder?; var g : GemmaDrafterGpu; si, anchor : int64; mr : KVMirror) {
     let dr & = g_gemma_drafter
     let dim = dr.dim
@@ -548,7 +549,7 @@ var private @scratch g_gw_toks : array<int64>
 //! before), all encoded into ONE command buffer; ONE same-slab batch verify of every stream's [tok, d_1 .. d_k] as a group
 //! (`verify_batch_groups`); each stream's accept walk and commit. `acc[i]` is stream i's accepted count, the drafts in
 //! `mtp_vbatch[1..a]`, its token always committed; a cold stream takes one plain GPU step. Returns the warm streams the verify carried
-[hot_path, arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-round-one-join"), arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-joint-verify")]
+[hot_path, arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-round-one-join"), arch(at="../ARCHITECTURE_GPU_MTP_ASSISTANT.md#assistant-drafter-rounds")]
 def private gemma_mtp_spec_rounds(t : Model; var sessions : array<Session?>; toks : array<int64>; k_req : int64; var acc : array<int64>) : int64 {   // nolint:STYLE037,STYLE038 — draft chains / one verify / accept walks / commits is one sequential protocol on shared locals
     let c = t.config
     let n = long_length(sessions)

@@ -73,7 +73,8 @@ struct ModelSpec {
     serve_ctx : int = 0             // trained context window
     serve_vram_gb : float = 0.0     // advertised working-set hint, not a fit check
     serve_default : bool = false    // the one the getting-started path recommends
-    serve_vision : string           // vision-tower companion NAME ("" = text only); [[serve_vision_tower]] resolves it
+    serve_vision : string           // vision-tower companion NAME ("" = text only); [[serve_companion]] resolves it
+    serve_drafter : string          //! the assistant drafter companion NAME the server attaches beside the file ("" = none); [[serve_companion]] resolves it
     serve_tts : bool = false        // a speech model of the served text-to-speech set ([[serve_tts_set]]); its packs ride the companions
     serve_mtp : string              //! the platforms ("metal", "vulkan", comma list) where the model's self-speculation measured a win at one stream (PERF_LEDGER.md); "" = the server's unset `mtp` decodes plain
 }
@@ -474,7 +475,8 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             bytes = 16947541728l, sha256 = "f2c28b3dc4776931ac6f879e11f203dec637ea0f14267a86ec8f6165f63f293f",
             serve_name = "gemma-4-26b-a4b", serve_display = "Gemma 4 26B-A4B",
             serve_note = "the MoE - 26B quality at 4B active weights per token",
-            serve_ctx = 131072, serve_vram_gb = 19.0, serve_mtp = "metal"),
+            serve_ctx = 131072, serve_vram_gb = 19.0, serve_mtp = "metal",
+            serve_drafter = "mtp-gemma-4-26B-A4B-it-Q8_0.gguf"),
         ModelSpec(file = "Qwen3.8-27B-UD-Q4_K_M.gguf",
             url = "{HF}/unsloth/Qwen3.8-27B-GGUF/resolve/27af057ecb382ddfea5d12837360a8980560e3ed/Qwen3.8-27B-UD-Q4_K_M.gguf",
             bytes = 16464440224l, sha256 = "322e194ff79741c7baa497c240f677f54b201b0efab44ca8e50f122b39123482",
@@ -666,7 +668,7 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             // the assistant drafter rides as a companion: the mtp suite and the ruler attach it beside this target
             companions <- [
                 ProvEntry(name = "mtp-gemma-4-26B-A4B-it-Q8_0.gguf", root = "llm",
-                    url = "{HF}/ggml-org/gemma-4-26B-A4B-it-GGUF/resolve/main/mtp-gemma-4-26B-A4B-it-Q8_0.gguf",
+                    url = "{HF}/ggml-org/gemma-4-26B-A4B-it-GGUF/resolve/bb4531cda34d1ea09d9814959ed4d5833cf2a4c8/mtp-gemma-4-26B-A4B-it-Q8_0.gguf",
                     bytes = 461766784l, sha256 = "ea4f772ffb70e02127c5f142f9ed9af97add7ca0f2bcc7b277244a9771b436bd")],
             // the q51 tier gate: this recipe's ffn_down_exps are Q5_1 on 29 layers, riding the
             // native q51 planes; the Q4_K gate_up stacks ride the kq planes
@@ -950,10 +952,11 @@ def serve_asr_tower() : ProvEntry {
         bytes = 2508463079l, sha256 = "b17956ca991a7f084c978a8a9d4c9785864260b6dd9b72f884344759d913ae7f")
 }
 
-//! The pinned vision-tower companion behind a serving row's `serve_vision` name, resolved
-//! across every row's companions (the tower is size-invariant, so the pinning row and the
-//! serving row may differ). Empty `name` back = no pinned match — the tower reads as absent.
-def serve_vision_tower(name : string) : ProvEntry {
+//! The pinned companion behind a serving row's `serve_vision` or `serve_drafter` name, resolved
+//! across every row's companions (a tower is size-invariant and a drafter rides several quants of
+//! its trunk, so the pinning row and the serving row may differ). Empty `name` back = no pinned
+//! match — the companion reads as absent.
+def serve_companion(name : string) : ProvEntry {
     var all <- model_specs()
     var out <- ProvEntry()
     if (!empty(name)) {
