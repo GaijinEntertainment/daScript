@@ -8,6 +8,8 @@ require dasllama/dasllama_kv_dtype   // KVDtype: the block-codec cells' mirror a
 require _gemma_resident
 require dasllama/dasllama_kqformat   // KqFmt - the PLE table's tag
 require dasllama/dasllama_gpu_resident   // resident_plan - the table's seat
+require _format_census   // census_cell - the per-layer planes in their own formats
+require daslib/fio
 
 // gemma-4-E2B Q8_0 (the E-series carrier: per-layer embeddings, the upper layers sharing the K/V of the ones below, two
 // dense FFN widths, a sliding window the two-window cell engages): arm `g4e`. Skips off the JIT, without DASLLAMA_GPU=1
@@ -63,6 +65,35 @@ def test_gpu_resident_gemma4_e2b_ple_tables(t : T?) {
                 t |> success(plan.ple_tbl_bytes > 0l, "the plan seats the {spec.fmt} table on the device ({plan.ple_tbl_bytes} bytes)")
             }
             gemma_forced_feed(t, 40l, gf)
+        }
+    }
+}
+
+//! the per-layer gate and projection planes in their own formats on the device (arm `g4e-kq`): the E2B Q4_K_M file ships them
+//! F32 - the router GEMV, the f32 act and the f32 tile read the file's rows - and the Q4_0 file Q4_0, on the q40 GEMV and tiles
+//! with the f32 classes undispatched (the control)
+[test]
+def test_gpu_resident_gemma4_e2b_ple_planes(t : T?) {
+    for (spec in [(file = "gemma-4-E2B-it-Q4_K_M.gguf", f32 = true), (file = "gemma-4-E2B-it-Q4_0.gguf", f32 = false)]) {
+        let gf = GemmaFile(file = spec.file, arm = "g4e-kq")
+        t |> run("{spec.file}: the per-layer gate and projection planes in their file format, the forced feed against the CPU chain") @(t : T?) {
+            var armed = false   //! the rig armed the driver on the file (else every cell below skipped, saying why)
+            with_gemma_rig(t, gf) $(tr) {
+                armed = true
+                census_cell(t, tr, path_join(models_dir(), spec.file), "vulkan load", ["per-layer embeddings"])
+                t |> equal(tr.ple_gate_f32 && tr.ple_proj_f32, spec.f32, "the planes ship F32 exactly where the file carries F32")
+            }
+            let act0 = census("ple_act_f32_cls_spv")
+            let gemm0 = census("dn_ba_cls_spv")
+            gemma_forced_feed(t, 40l, gf)
+            return if (!armed || act0 == NO_CENSUS)
+            let act_n = census("ple_act_f32_cls_spv") - act0
+            let gemm_n = census("dn_ba_cls_spv") - gemm0
+            if (spec.f32) {
+                t |> success(act_n > 0l && gemm_n > 0l, "the token command's f32 act ({act_n}) and the window's f32 tile ({gemm_n}) served the f32 rows")
+            } else {
+                t |> equal(act_n + gemm_n, 0l, "no f32 per-layer plane, no f32 act or tile dispatched")
+            }
         }
     }
 }
