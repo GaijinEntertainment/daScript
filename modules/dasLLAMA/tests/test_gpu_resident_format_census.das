@@ -235,13 +235,23 @@ def test_gpu_perop_dense_ffn(t : T?) {
                 delete off
                 var tr <- load_perop(path, 1)
                 t |> success(!moe_gpu_resident_active(), "the whole-model route is off: the per-op rails serve")
+                var qo_marked = 0l
                 for (l in range64(tr.config.n_layers)) {
                     t |> equal(perop_dense_ffn_decline(tr, l), "", "layer {l}'s FFN triple is the per-op rail's formats")
+                    let on_q = moe_gpu_dense_on_gpu(int(fmt_at(tr.wq_fmt, l)), tr.wq_offs[l])
+                    qo_marked += on_q && moe_gpu_dense_on_gpu(int(fmt_at(tr.wo_fmt, l)), tr.wo_offs[l]) ? 1l : 0l
                 }
+                t |> equal(qo_marked, tr.config.n_layers, "the dense rail holds every layer's q/o pair in the file's format ({qo_marked} of {tr.config.n_layers})")
+                let cls_fmt = tr.config.shared_weights ? tr.emb_fmt : tr.wcls_fmt
+                t |> success(moe_gpu_cls_on_gpu(tr.wcls_off), "the classifier plane (format {int(cls_fmt)}) is the tier's")
                 let rows0 = moe_gpu_dense_ffn_rows()
+                let gemm0 = moe_gpu_dense_gemm_rows()
                 var sg <- create_session(tr, mirror_kv_dtype())
                 var gpu <- feed_logits(tr, sg, prompt, toks)
                 let rows = moe_gpu_dense_ffn_rows() - rows0
+                let gemm = moe_gpu_dense_gemm_rows() - gemm0
+                t |> success(gemm >= 5l * tr.config.n_layers * PROMPT,
+                    "the window's q/o and FFN GEMMs ran on the device over every layer's planes ({gemm} rows, {5l * tr.config.n_layers * PROMPT} owed)")
                 delete sg
                 moe_gpu_drop_model()
                 var cpu <- feed_alone(tr, mirror_kv_dtype(), prompt, toks)

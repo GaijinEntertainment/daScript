@@ -2348,10 +2348,16 @@ def public matmul_moe_gpu_attn_dec(var xb2 : array<float>; var k : array<float>;
     }
 }
 
+var private g_dense_gemm_rows = 0l   //! the activation rows the dense rail's batched GEMMs ran on the device, process-wide
+
+//! the activation rows the dense rail's batched GEMMs (`matmul_gpu_dense`) ran on the device so far, every plane summed
+def public moe_gpu_dense_gemm_rows() : int64 => g_dense_gemm_rows
+
 //! Dense batched GEMM on the GPU tier — y [nrows x d] = X·Wᵀ over the resident plane ([d x n]
 //! at woff). xq/xs is the row-major pre-quantized activation image in the plane's own quant form
 //! (q8_0 per-32 for q8, Q8_K per-256 for kq); per-16 block sums are recomputed in-kernel.
 def public matmul_gpu_dense(var y : array<float>; woff : int64; xq : array<int8>; xs : array<float>; n, d, nrows : int64; fmt : int) {
+    g_dense_gemm_rows += nrows
     unsafe {
         invoke(g_moe_gpu_dense, addr(y[0]), woff, addr<int8 const?>(xq[0]), addr<float const?>(xs[0]), n, d, nrows, fmt)
     }
