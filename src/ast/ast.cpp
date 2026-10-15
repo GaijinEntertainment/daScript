@@ -948,6 +948,15 @@ namespace das {
         return observableEffects()!=0;
     }
 
+    bool Function::mayRaise() const {
+        return (sideEffectFlags & uint32_t(SideEffects::mayRaise))!=0;
+    }
+
+    FunctionPtr Function::setMayRaise() {
+        sideEffectFlags |= uint32_t(SideEffects::mayRaise);
+        return this;
+    }
+
     FunctionPtr Function::setSideEffects ( SideEffects seFlags ) {
         sideEffectFlags = uint32_t(seFlags) & ~uint32_t(SideEffects::unsafe);
         if ( uint32_t(seFlags) & uint32_t(SideEffects::unsafe) ) {

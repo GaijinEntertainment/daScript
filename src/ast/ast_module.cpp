@@ -657,7 +657,7 @@ namespace das {
         if ( fn->builtIn && fn->arguments.size()>DAS_MAX_FUNCTION_ARGUMENTS ) {
             DAS_FATAL_ERROR("can't add function %s to module %s, too many arguments, DAS_MAX_FUNCTION_ARGUMENTS=%i\n", mangledName.c_str(), name.c_str(), DAS_MAX_FUNCTION_ARGUMENTS );
         }
-        if ( fn->builtIn && !fn->hasObservableEffects() && fn->result->isVoid() ) {
+        if ( fn->builtIn && !fn->hasObservableEffects() && !fn->mayRaise() && fn->result->isVoid() ) {
             DAS_FATAL_ERROR("can't add function %s to module %s; it has no side effects and no return type\n", mangledName.c_str(), name.c_str() );
         }
         if ( fn->result && !fn->result->ref && fn->result->isWorkhorseType() && !fn->result->isPointer() ) {
