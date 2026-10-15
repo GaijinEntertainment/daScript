@@ -3957,6 +3957,7 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_geglu = compile_stamp(MetalGeglu_metal_ew2_msl, ok)
     g_pso_geglu_side = compile_stamp(MetalGegluSide_metal_ew2_msl, ok)
     g_pso_ple_proj_bf16 = compile_stamp(metal_ple_proj_bf16_msl, ok)
+    g_pso_ple_proj_bf16_one = compile_stamp(metal_ple_proj_bf16_one_msl, ok)
     g_pso_ple_finish = compile_stamp(metal_ple_finish_msl, ok)
     g_pso_geglu_hx = compile_stamp(MetalGegluHX_metal_ew2_msl, ok)
     g_pso_ln = compile_stamp(metal_layernorm_msl, ok)
@@ -5470,7 +5471,7 @@ def metal_kernels_release {
         g_pso_kq_mvb2h_k2, g_pso_kq_mvb4h_k2, g_pso_kq_mvb8h_k2, g_pso_kq_mvb2h_iq2s, g_pso_kq_mvb4h_iq2s, g_pso_kq_mvb8h_iq2s,
         g_pso_kq_mvb2h_iq2xs, g_pso_kq_mvb4h_iq2xs, g_pso_kq_mvb8h_iq2xs, g_pso_kq_mvb2h_iq2xxs, g_pso_kq_mvb4h_iq2xxs, g_pso_kq_mvb8h_iq2xxs)
     release_handles(g_pso_addrms, g_pso_preaddrms, g_one, g_zero, g_pso_geglu, g_pso_geglu_hx)
-    release_handles(g_pso_geglu_side, g_pso_ple_proj_bf16, g_pso_ple_finish)
+    release_handles(g_pso_geglu_side, g_pso_ple_proj_bf16, g_pso_ple_proj_bf16_one, g_pso_ple_finish)
     release_handles(g_pso_ln, g_pso_bias_act, g_pso_act_rows, g_pso_posadd, g_pso_q3v_stem, g_pso_clamp, g_pso_clamp_copy)
     release_handles(g_pso_rope2d, g_pso_head_pad, g_pso_head_unpad, g_pso_geglu_quick, g_pso_wdec_kv, g_pso_wdec_kv_h)
     release_handles(g_pso_im2col2d, g_pso_wdec_attn_part, g_pso_wdec_attn_comb, g_pso_bias_add_res)
@@ -7031,6 +7032,21 @@ class MetalPleProjBf16 : GkRouterGemv {
     }
 }
 
+//! the decode column's stamp of the same: a threadgroup of 256 a row, as the f32 router's one-column stamp reads its rows
+[metal_dispatch(name = "enc_ple_proj_bf16_one", pso = "g_pso_ple_proj_bf16_one", tgmem = "metal_ple_proj_bf16_one_msl_tgmem", tg = 256, grid = "ne, nst", params = "ne : int64, nst : int64")]
+class MetalPleProjBf16One : GkRouterGemv {
+    typedef KT = uint
+    typedef XT = float
+    override VW = 2u
+    override BF16 = true
+    override NC = 1
+
+    [metal_kernel(name="metal_ple_proj_bf16_one_msl")]
+    def metal_ple_proj_bf16_one {
+        router_row(gl_WorkGroupID.x, gl_LocalInvocationID.x, 256u)
+    }
+}
+
 //! the E-series pre-step serves on the device for this blob model: its table in a format the gather family serves, bound at
 //! whole superblocks (a per-32 pair's binds stay 16-byte aligned), a ple width the finish's threadgroup takes
 def metal_ple_dev_ok(t : Model) : bool {
@@ -7053,7 +7069,11 @@ def enc_ple_pre_dev(enc : MetalComputeEncoder?; t : Model; btok : MetalBuffer?; 
     if (t.ple_model_bf16) {
         let bw = plane_of(g_dev, t, t.bf16blob, t.ple_model_off)
         ka.woff = uint(bw.boff / 2ul)
-        enc_ple_proj_bf16(enc, bw.buf, bx, bproj, ka, all, nrows)
+        if (nrows == 1l) {
+            enc_ple_proj_bf16_one(enc, bw.buf, bx, bproj, ka, all, 1l)
+        } else {
+            enc_ple_proj_bf16(enc, bw.buf, bx, bproj, ka, all, nrows)
+        }
     } else {
         var bw = upload_region(unsafe(addr < void? >(t.fblob[t.ple_model_off])), uint64(all * c.dim * 4l))
         enc_moe_router(enc, bw, bx, bproj, g_one, ka, all, nrows)

@@ -255,6 +255,12 @@ def private ple_proj_rows : array<Reading> {
             var k = ka
             enc_ple_proj_bf16(enc, bw, bx, by, k, int64(ne), int64(np))
         })
+        if (np == 1) {
+            rows |> push(time_rows("ple proj bf16 rows ne={ne} dim={dim} 1 col, a threadgroup a row") $(enc) {
+                var k = ka
+                enc_ple_proj_bf16_one(enc, bw, bx, by, k, int64(ne), 1l)
+            })
+        }
     }
     for (buf in fixed_array(bw, bx, by)) {
         metal_release(buf)

@@ -495,9 +495,11 @@ gather). The prefill file's per-32 cells run the small-batch stamps (`b32_mvb_ga
 columns, pad columns and two column groups, y rows past `d`, on the two-row stamps and on the K-split narrow-plane ones, a
 64-block row among them) bit for bit against the same form's one-row GEMV a row at a time over x off
 the dyadic lattice, the GEMV within a double dot's envelope, and the routed GEMV (`moe_b32_rows_gate`: q51, iq4nl32, q4032, q5032 and mx4's
-E8M0 path) over several streams in one dispatch bit for bit against one stream a dispatch; `ple_gather_b32_gate` the q51
-and q5032 PLE table gathers bound past another table's blocks, bit for bit `dequant_b32_plane_block` x sqrt(ple) (a
-poisoned lead element the control). The gemm file's `router_f32_gate` holds the prefill router's tile (`MetalF32ExactMm`) at the 35B-A3B shape and at
+E8M0 path) over several streams in one dispatch bit for bit against one stream a dispatch; the E-series pre-step's cells
+(`ple_proj_bf16_gate`: the bf16 word form of the router GEMV on both stamps - eight columns a simdgroup, and the decode
+column's threadgroup a row at 1536 wide - past a lead of NaN pairs, exact against the dot in double, the poisoned lead
+element the control; `geglu_side_gate`, `ple_finish_gate`); the side rows' gather rides the token-table family, the misc
+file's embed gates. The gemm file's `router_f32_gate` holds the prefill router's tile (`MetalF32ExactMm`) at the 35B-A3B shape and at
 64 experts against the dot in double on operands off the f16 lattice, the half-staged stamp over the same rows missing
 the bar as its control. Four
 cells need no
@@ -1047,7 +1049,7 @@ plain and under the router bias; then the two-deep stamp over 512 experts at ten
 the first 256, the same compares, with the one-deep stamp over the same rows as the control that misses the host select's
 picks), `test_vkd_router_gemv_cols` (the router GEMV over three, eight and twelve x rows - twelve in two column tiles,
 `router_enc_cols` - against the one-row
-dispatch a row at a time, bit for bit, on the f16 and the f32 stamps, with and without the fused
+dispatch a row at a time, bit for bit, on the bf16 and the f32 stamps, with and without the fused
 rms, against a CPU oracle, the widest miss logged with its row and expert, the sentinel past the
 last column standing),
 `test_vkd_q8_gemv_gu_n` (its N-column stamps - two, four and eight columns, and eleven as an eight-column tile and a
@@ -1358,7 +1360,7 @@ no attention layer; a block codec's byte cap on a device that binds four times i
 taking the wider range the control); and the cap a block codec's f16 shadow puts on a region's
 context (`resident_shadow_ctx`: one binding of the widest K/V row's halves, the same under q8_0
 and tq4, halved by a row twice as wide, none under a scalar codec). The Metal serving gates ride the
-same synthetic shells: `test_kq_fmt_one_row_gemv` holds the Metal prefill's one-row GEMV predicate (q8 at any width, a served superblock format - the lut-form IQ3_S among them - at whole superblocks and not at a partial one, a per-32 format at whole 32-blocks and not at a partial one, an mx4 plane at none; Q4_0 repacks to superblocks and has it); `test_peel_shape_arms` holds the token command's peel off the NextN-headed, hyper-connection, per-layer-embedding and recurrent shapes one at a time on dense shells (`rdec_peel_shape_why`), and the device-home tick's segmented-window predicate (`gpu_device_prefill_segments_`) false with no driver armed; `test_moe_metal_expert_formats` sweeps `moe_metal_ok` over the seventeen
+same synthetic shells: `test_kq_fmt_one_row_gemv` holds the Metal prefill's one-row GEMV predicate (q8 at any width, a served superblock format - the lut-form IQ3_S among them - at whole superblocks and not at a partial one, a per-32 format at whole 32-blocks and not at a partial one, an mx4 plane at none; Q4_0 repacks to superblocks and has it); `test_peel_shape_arms` holds the token command's peel off the NextN-headed, hyper-connection and recurrent shapes one at a time on dense shells, a per-layer-embedding shell fitting it (`rdec_peel_shape_why`), and the device-home tick's segmented-window predicate (`gpu_device_prefill_segments_`) false with no driver armed; `test_moe_metal_expert_formats` sweeps `moe_metal_ok` over the seventeen
 expert plane formats the routed block serves and the one tag it declines (mx4), one
 mixed-format model (an mx4-tagged down plane declining it, a lut-form IQ3_S one served), the native-MXFP4 stacks under the plain routed gate (served; the repacked planes
 and gpt-oss's gate over q8 stacks declining), and the drift guard walking every `KqFmt` member - the kernel roster
@@ -2009,8 +2011,8 @@ measures the model's flatness, not the driver; the CPU chain's own two paths lan
 the max logit apart there. The E-series rows: gemma-4-E2B Q8_0 (stocked tier) in the forced-feed
 form at forty tokens, the perplexity form at 150 + 150 and at 520 + 80 (two windows, the 512
 sliding window engaged on the last eight) and the agreement form at eight tokens - the per-layer
-embedding branch after every FFN residual (the CPU pre-step's side rows ride the token command
-and the window chain), twenty layers attending over the K/V of the fifteen below them, and the two
+embedding branch after every FFN residual (the pre-step's side rows built on the device - the
+token command gathers its row off the token id - and riding the token command and the window chain), twenty layers attending over the K/V of the fifteen below them, and the two
 dense FFN widths; gemma-4-E4B Q8_0 (large tier) at forty tokens and 150 + 150; gemma-3-4b Q8_0
 (the dense base at width 2560 and four kv heads) at forty tokens and 150 + 150; gemma-2-2b Q8_0
 (the attention logit softcap on every score - the 8-row prefill tile and the token command take
@@ -2064,12 +2066,19 @@ so the f16 shadow of a sliding layer starts a 64-key step under its window - in 
 form under q8_0 (reads 0.46-1.37 against bars of 3.3-5.1) and the perplexity form (1100 + 80)
 under tq4 (reads 1.022 against the CPU chain's 1.033, 80 of 80 hits; a 4-bit mirror reads one step
 5.0 of a 33.7 max logit from the CPU's, so no logit bar holds it with room); a shadow that starts
-at the window's first row reads a perplexity of 13844. `test_gpu_resident_gemma4_e2b_short_window` holds a two-token prompt on the E2B to the window chain (the peel declines a per-layer-embedding model). `test_gpu_resident_gemma4_e2b_block_codecs`
+at the window's first row reads a perplexity of 13844. `test_gpu_resident_gemma4_e2b_short_window` peels short tails of 1, 2 and 5 rows on the E2B through the token commands, the side rows riding them, within the split bar of the same tail stepped a row at a time. `test_gpu_resident_gemma4_e2b_block_codecs`
 runs the shared-KV carrier - its upper layers store no K/V row of their own, and under tq4 still
 rotate their query - at forty tokens in the forced-feed form under q8_0 and at 150 + 150 in the
 perplexity form under tq4 (reads 1.032 against 1.032, 148 of 150 hits each). Arm `g4e-ple`
 (`test_gpu_resident_gemma4_e2b_ple_tables`): the E2B Q8_0 file and its emb-Q5_0 / emb-Q5_1 / emb-Q4_0 mints - the plan seats
 the PLE table in its own tag (q8, q5032, q51, q40) and the forced feed's prefill gathers the side rows off it against the CPU chain.
+Arm `g4e-kq` (`test_gpu_resident_gemma4_e2b_ple_planes`): the E2B Q4_K_M (the per-layer gate and projection planes F32 on disk,
+read as the file's f32 rows) and Q4_0 (the planes Q4_0) files in the forced feed, the planes' tags asserted against the disk
+type. Arm `g4e-pre` (`test_gpu_resident_gemma4_e2b_ple_pre_step`): the token command's side row - gathered, projected and
+finished on the device - read back (`vk_rdec_ple_side_row`) within 1e-4 of the CPU pre-step's row, another token's row the
+control. Arm `g4e-f16` (`test_gpu_resident_gemma4_e2b_tied_f16`): the `-embf16-local` mint's tied F16 token table declines the
+whole-model driver by name (`tied classifier`), the PLE table tagged q8. Arm `g4f-codec` (`test_gpu_resident_gemma4_e4b_block_codecs`):
+the E4B under a q8_0 mirror in the forced-feed form and a tq4 mirror in the perplexity form.
 `test_gpu_resident_moe.das` (`_moe_resident.das` carries the rig, shared with
 `test_gpu_resident_gptoss.das`) - stocked suite, `-jit` only; the census fixtures (`MoeFixture.census`: the two UD-IQ2_XXS
 files and the Q4_K_M host-layer file) open on the format census, every site the file carries in its own format, and
@@ -3198,8 +3207,11 @@ carry no tag and always run. Family tokens: `llama` (`--suite decode`, `prefill`
 `ultravox`, `whisper`, `voxtral`, `parakeet`, `qwen3a`, `canary`, `gemma4a` (image suite arms),
 `gemma3v`, `qwen25v`, `qwen3v` (the coverage census tower rows), `kitten` (the image suite's
 kitten arm), `kokoro`, `pocket` (the coverage census TTS rows),
-`gemma4e` (support-matrix rows under `fam-gemma4e` - E4B PARITY_FULL-gated; E2B Q8_0 and
-Q4_K_M small-tier always-on, carrying the per-layer-FFN-width and blob-kq-PLE-gather coverage.
+`gemma4e` (support-matrix rows under `fam-gemma4e` - E4B PARITY_FULL-gated; E2B Q8_0, Q4_K_M,
+Q4_0 and the format carriers of `../performance/model_specs.das` (the token and PLE tables Q6_K and
+IQ4_XS, the per-layer gate and projection planes Q6_K and Q5_0) small-tier always-on, carrying the
+per-layer-FFN-width and blob-kq-PLE-gather coverage and the pre-step's device counters at every
+decode shape.
 Both E2B rows assert parity through their forced-feed cells, not token equality, because
 freeform continuations from a 2B sit on near-ties. Every row ends on the depth cell (`depth_cell`):
 three forced steps past a 120-number prompt within the row's bar of the CPU's, the census holding

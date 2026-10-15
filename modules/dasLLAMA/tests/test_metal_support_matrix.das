@@ -1135,6 +1135,12 @@ def private depth_cell(t : T?; tr, trg : Model; tag : string; bar : float; stamp
     }
 }
 
+//! the E-series side rows' projections the device ran: the bf16 word form's two stamps and the f32 router's
+def private ple_proj_count : int64 {
+    return (metal_kernel_count_compiled("metal_ple_proj_bf16") + metal_kernel_count_compiled("metal_ple_proj_bf16_one")
+        + metal_kernel_count_compiled("metal_moe_router"))
+}
+
 [unused_argument(t, path, tag, hetero_hidden, tokexact, bar)]   // off-Apple the gated body is empty
 def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false; tokexact : bool = true; bar : float = 8.0) {
     // gemma-4 E-series (E4B): PLE (per-layer embeddings — MetalNeed.ple) + cross-layer KV
@@ -1189,7 +1195,7 @@ def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false
             eval_(trg, sa, pa)
             let fin_pf = metal_kernel_count_compiled("metal_ple_finish") - fin0
             t |> success(fin_pf > 0l, "{tag} prefill: the window's PLE pre-step finished on the device ({fin_pf})")
-            let pj0 = metal_kernel_count_compiled("metal_ple_proj_bf16") + metal_kernel_count_compiled("metal_moe_router")
+            let pj0 = ple_proj_count()
             var cura = argmax_of(sa.logits, vocab)
             var picks : array<int64>
             for (_i in range(2)) {
@@ -1199,7 +1205,7 @@ def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false
                 delete one
                 cura = argmax_of(sa.logits, vocab)
             }
-            let pj_d = metal_kernel_count_compiled("metal_ple_proj_bf16") + metal_kernel_count_compiled("metal_moe_router") - pj0
+            let pj_d = ple_proj_count() - pj0
             t |> success(pj_d >= 2l, "{tag} decode: every step projected its side row on the device ({pj_d})")
             t |> equal(ple_cpu_pre_rows() - cpu0, 0l, "{tag}: the prefill and the steps built no CPU pre-step row")
             // the batch cell: the CPU batched stack on the PLANAR model is the control, the
@@ -1248,11 +1254,11 @@ def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false
                 sessg |> push(addr(sh))
             }
             let ba1 = metal_batch_decode_stats().steps
-            let bpj0 = metal_kernel_count_compiled("metal_ple_proj_bf16") + metal_kernel_count_compiled("metal_moe_router")
+            let bpj0 = ple_proj_count()
             let bcpu0 = ple_cpu_pre_rows()
             eval_batch_(trg, wsg, sessg, cur)
             t |> equal(metal_batch_decode_stats().steps - ba1, 1l, "{tag} batch: the driver served the step")
-            t |> success(metal_kernel_count_compiled("metal_ple_proj_bf16") + metal_kernel_count_compiled("metal_moe_router") > bpj0,
+            t |> success(ple_proj_count() > bpj0,
                 "{tag} batch: the rows' side input projected on the device")
             t |> equal(ple_cpu_pre_rows() - bcpu0, 0l, "{tag} batch: no CPU pre-step row (the host transpose and gather are gone)")
             var bmaxd = 0.0

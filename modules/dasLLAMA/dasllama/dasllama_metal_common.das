@@ -167,6 +167,7 @@ var g_pso_geglu_b : MetalComputePipeline?
 var g_pso_geglu : MetalComputePipeline?
 var g_pso_geglu_side : MetalComputePipeline?   //!< the geglu over a position-major side input (the E-series rows)
 var g_pso_ple_proj_bf16 : MetalComputePipeline?   //!< the per-layer-embedding projection off its native-BF16 rows
+var g_pso_ple_proj_bf16_one : MetalComputePipeline?   //!< ... its decode column's stamp
 var g_pso_ple_finish : MetalComputePipeline?   //!< the per-layer-embedding pre-step's rms + combine, in place
 var g_pso_geglu_hx : MetalComputePipeline?    // dual-store stamp
 // ===== tower primitives (compiled in the tower driver's init) =====

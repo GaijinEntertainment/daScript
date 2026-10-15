@@ -3591,6 +3591,7 @@ def test_metal_prefill_kernels(t : T?) {
                 // the side rows gather on the token-table family (`enc_embed_table`), whose cells are the misc file's embed gates
                 ple_proj_bf16_gate(t, dev, queue, 96, 70, 1, 3)
                 ple_proj_bf16_gate(t, dev, queue, 96, 70, 11, 3)   // two eight-column groups, the second clamped
+                ple_proj_bf16_gate(t, dev, queue, 1536, 70, 1, 3, true)   // the decode column, every lane past the row's first 512
                 geglu_side_gate(t, dev, queue, 64, 3, 2, 5)
                 ple_finish_gate(t, dev, queue, 3, 64, 5)
                 add_bias_rows_gate(t, dev, queue, 7, 96)
@@ -4004,14 +4005,15 @@ def private moe_reduce_gate(t : T?; var dev, queue; dim, npos, nk : int) {
 
 // ===== prefill misc gates (PLE pre-step, bias epilogue, MTP cat, deltanet ba GEMV) =====
 
-//! the per-layer-embedding projection's bf16 word form (`MetalPleProjBf16`, `GkRouterGemv` under BF16): ne rows of dim bf16 weights
-//! past `lead` words of NaN pairs (a read off the rows' base is a NaN), over npos columns, against the dot in double over the same
-//! values - dyadic and bf16-exact, so the compare is exact; the lead element poisoned is the control
-def private ple_proj_bf16_gate(t : T?; var dev, queue; dim, ne, npos, lead : int) {
-    let tag = "ple_proj_bf16 dim={dim} ne={ne} np={npos} lead={lead}"
+//! the per-layer-embedding projection's bf16 word form (`MetalPleProjBf16`, `GkRouterGemv` under BF16; `one` its decode column's
+//! stamp, a threadgroup a row): ne rows of dim bf16 weights past `lead` words of NaN pairs (a read off the rows' base is a NaN), over
+//! npos columns, against the dot in double over the same values - dyadic and bf16-exact, so the compare is exact; the lead element
+//! poisoned is the control
+def private ple_proj_bf16_gate(t : T?; var dev, queue; dim, ne, npos, lead : int; one : bool = false) {
+    let tag = "ple_proj_bf16{one ? " one" : ""} dim={dim} ne={ne} np={npos} lead={lead}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
-        let sr = stamp_of(@@enc_ple_proj_bf16)
+        let sr = one ? stamp_of(@@enc_ple_proj_bf16_one) : stamp_of(@@enc_ple_proj_bf16)
         var pso = mc |> keep_stamp(sr, err)
         return if (!pso_ok(t, tag, pso, err))
         var inscope w : array<uint>
