@@ -44,3 +44,4 @@ require ?vulkan dasllama/dasllama_math_vulkan  // [init]-only: registers "vulkan
 require ?vulkan dasllama/dasllama_vulkan_asr_dec  // [init]-only: registers the whisper cross-KV and decode-step hooks (the ?das_metal dasllama_metal_asr_dec line's twin on a build without das_metal)
 require ?vulkan dasllama/dasllama_vulkan_tts  // [init]-only: registers the StyleTTS2 and Pocket seats on the Vulkan tower (the ?das_metal dasllama_metal_tower line's TTS half on a build without das_metal)
 require ?vulkan dasllama/dasllama_vulkan_tower  // [init]-only: registers the vision and audio tower encodes (the ?das_metal dasllama_metal_tower line's twin on a build without das_metal); after the tier for the same cache-layout reason
+require ?vulkan dasllama/dasllama_vulkan_mtp_gemma  // [init]-only: registers the gemma assistant drafter's "vulkan" seams on the resident driver (the ?das_metal dasllama_metal_mtp_gemma line's twin); after the tier for the same cache-layout reason

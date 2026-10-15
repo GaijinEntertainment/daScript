@@ -217,7 +217,7 @@ var private GPU_ROLES_METAL <- {
 
 var private GPU_ROLES_VULKAN <- {
     "tts",
-    "classes", "common", "decode", "prefill", "seams", "dispatch", "tower", "asr_dec"
+    "classes", "common", "decode", "prefill", "seams", "dispatch", "tower", "asr_dec", "mtp_gemma"
 }
 
 // the fastmath default, mechanically: a [metal_kernel] declaring fastmath=false reds unless

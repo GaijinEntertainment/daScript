@@ -391,7 +391,7 @@ let MODULE_AREAS <- {
     "dasllama_kv_dtype" => "llm", "dasllama_metal_decode" => "llm", "dasllama_metal_mtp_gemma" => "llm",
     "dasllama_kv_codec" => "llm,audio",   // its f16 dot and axpy serve the parakeet decode
     "dasllama_metal_prefill" => "llm,tts,audio,vision",   // its rope serves the Pocket codec transformer, its attention pair and FastConformer kernels the audio towers, its half convert the vision tower
-    "dasllama_moe" => "llm", "dasllama_mtp_gemma" => "llm",
+    "dasllama_moe" => "llm", "dasllama_mtp_gemma" => "llm", "dasllama_vulkan_mtp_gemma" => "llm",
     "dasllama_parity" => "llm", "dasllama_ple" => "llm", "dasllama_prefix" => "llm", "dasllama_pretok" => "llm",
     // the TTS slab builds its rope tables through it; every gguf load
     // picks its factor tensor through it, and the vision and audio

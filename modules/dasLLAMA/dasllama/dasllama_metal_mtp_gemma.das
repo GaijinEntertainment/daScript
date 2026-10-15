@@ -181,6 +181,9 @@ def private gemma_slot(var g : GemmaDrafterGpu; dr : GemmaDrafter; si : int64) {
 //! decode then carries the post-norm hidden every step (the drafter's h input).
 def public attach_gemma_drafter(t : Model; path : string) : string {
     detach_gemma_drafter()
+    if (!t.metal_blob) {   //! before the sidecar's read: a trunk the Metal drivers do not serve takes no drafter here
+        return "the trunk is not the metal-blob flavor the Metal drivers serve"
+    }
     var dr <- load_gemma_drafter(path)
     if (!dr.ok) {
         let why = clone_string(dr.why)
@@ -193,7 +196,7 @@ def public attach_gemma_drafter(t : Model; path : string) : string {
     if (empty(why) && (!dev_ok || g_dev == null)) {
         why = "no Metal device"
     } elif (empty(why) && !emb_dev_gather_ok(t)) {
-        why = "the trunk is not a served metal-blob model whose token table the device gathers (blob {t.metal_blob})"
+        why = "the device gathers no row of the trunk's token table"
     }
     if (!empty(why)) {
         delete dr
