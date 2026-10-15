@@ -239,6 +239,9 @@ return match (keySide) {            // null guard, is/as and ExprRef2Value peel 
   guards compose with `&&` over bound names and locals. A bare name binds; **`match_expr(localVar)`**
   compares a field against a runtime expression (a `das_string` field compares against a `string`
   local directly).
+- **`name & ExprX(...)` (either order) binds the node at class `ExprX`** - peeled, so `name.field`
+  needs no `as`. `ExprX()` with no fields tests the class only. `x as name` is NOT a binding: it
+  selects a variant alternative.
 - **das-vector fields can NOT be destructured** - `ExprCall.arguments` and `ExprBlock.list` are
   `dasvector`-backed and the array-pattern arm rejects them ("is not an array"). Capture the node
   and index it by hand; this is why deep block-shape probes stay hand-rolled.

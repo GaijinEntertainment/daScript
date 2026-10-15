@@ -49,6 +49,11 @@ module style_lint shared private
 //!   STYLE039 — non-ASCII byte in a string literal (on by default under daslib/ and modules/, override per module with 'options _ascii_strings'; suppress with '// nolint:STYLE039') — emitted strings and error messages must be ASCII unless intended
 //!   STYLE044 — 'match' block written with the deprecated 'if (pattern) { body }' arms — write 'pattern => $ { body }' arms ('$v(n)' becomes the bare name 'n'; a bare name that compared becomes 'match_expr(name)')
 //!   STYLE041 — bool flag initialized false, set true on terminal paths, then consumed by a single 'if (flag) return ...' — a return value in disguise; return directly at each set site (walk-abort callbacks, negative polarity, non-terminal sets, and init-true flags are exempt)
+//!   STYLE046 — a statement-form 'match' arm whose '$ { }' block
+//!     holds one expression - write 'pattern => EXPR'
+//!   STYLE045 — a &&/||/! condition over one int variable that an
+//!     interval lattice collapses to a single comparison ('x != 1 &&
+//!     x > 0' is 'x >= 2')
 
 require daslib/ast_boost
 require daslib/dupe_detect
@@ -58,6 +63,16 @@ require math
 require strings
 
 let STYLE042_MAX_LINE = 100
+
+let private INT64_MIN_V = -9223372036854775807l - 1l
+let private INT64_MAX_V = 9223372036854775807l
+
+// One inclusive interval of the STYLE045 value lattice. int64
+// endpoints so `c - 1` and `c + 1` cannot wrap at an int boundary.
+struct private Ivl {
+    lo : int64
+    hi : int64
+}
 
 // STYLE033 arity caps — never suggest a call shape with no matching overload.
 let MAX_CONCAT_ARITY = 8
@@ -316,6 +331,7 @@ class StyleLintVisitor : AstVisitor {
         st041_candidates |> clear()
         check_defer_pipe(fn)
         check_legacy_match_arms(fn)
+        check_block_match_arms(fn)
         check_style042_expression_body(fn)
         if (analyze_requires && fn._module == this_module) {
             for (a in fn.annotations) {
@@ -383,6 +399,94 @@ class StyleLintVisitor : AstVisitor {
             at.line = uint(ln)
             at.last_line = uint(ln)
             style_warning("STYLE044: 'if (pattern)' match arms are deprecated; write 'pattern => $ \{ body \}' arms - '$v(n)' becomes the bare name 'n', and a bare name that compared becomes 'match_expr(name)'", at)
+        }
+    }
+
+    def in_match_arms(at : LineInfo; ln, first : int) : bool {
+        //! Whether line ``ln`` sits directly in the arms block of a ``match``
+        //! / ``static_match``: the block it is in opens on a match head.
+        var depth = 0
+        for (back in range(ln - first)) {
+            let code = code_line(at, ln - 1 - back)
+            peek_data(code) $(bytes) {
+                for (ch in bytes) {
+                    depth += int(ch) == '}' ? 1 : (int(ch) == '{' ? -1 : 0)
+                }
+            }
+            return match_head_open(code) >= 0 if (depth < 0)
+        }
+        return false
+    }
+
+    def is_arm_expression(code : string) : bool {
+        //! Whether one statement can be a match arm's expression: no
+        //! declaration, control flow, ``delete``, ``unsafe``, postfix ``if``,
+        //! assignment, or brace outside a string.
+        return false if (empty(code) || code_find(code, " if (") >= 0 || code_find(code, "<-") >= 0
+            || ends_with(code, ";"))
+        for (kw in ["return", "let", "var", "if", "elif", "else", "for", "while", "break",
+                    "continue", "delete",
+                    "unsafe", "yield", "pass", "assume", "static_if", "try", "goto", "label"]) {
+            return false if (code == kw || starts_with(code, "{kw} ") || starts_with(code, "{kw}("))
+        }
+        var assigns = false
+        var in_string = false
+        var prev = 0
+        peek_data(code) $(bytes) {
+            for (ch, i in bytes, count()) {
+                let c = int(ch)
+                if (in_string) {
+                    in_string = !(c == '"' && prev != '\\')
+                } elif (c == '"') {
+                    in_string = true
+                } elif (c == '{' || c == '}') {
+                    assigns = true
+                } elif (c == '=') {
+                    let next = i + 1 < length(bytes) ? int(bytes[i + 1]) : 0
+                    assigns ||= (prev != '=' && prev != '!' && prev != '<' && prev != '>'
+                        && next != '=' && next != '>')
+                }
+                prev = c
+            }
+        }
+        return !assigns
+    }
+
+    def check_block_match_arms(fn : FunctionPtr) : void {
+        return if (fn.flags.generated || fn.body == null || fn.at.fileInfo == null
+            || fn.at.line == 0u)
+        let first = int(fn.body.at.line)
+        let last = int(fn.body.at.last_line)
+        for (ln in range(first, last + 1)) {
+            let head = lint_source_line(fn.at, ln)
+            let arrow = code_find(head, "=> $")
+            let code = strip(head)
+            continue if (arrow < 0 || code_line(fn.at, ln) != code
+                || !starts_with(slice(head, arrow), "=> $ \{"))
+            var fix = LintFix(line = ln, column = arrow, last_line = ln)
+            var expr = ""
+            if (ends_with(code, "=> $ \{") && ln + 2 <= last) {
+                let body = lint_source_line(fn.at, ln + 1)
+                let close = lint_source_line(fn.at, ln + 2)
+                let indent = length(head) - length(strip_left(head))
+                continue if (code_find(body, "//") >= 0 || strip(close) != "\}"
+                    || length(close) - length(strip_left(close)) != indent)
+                expr = strip(body)
+                fix.last_line = ln + 2
+                fix.last_column = length(close)
+            } elif (ends_with(code, "\}")) {
+                let close = length(strip_right(head)) - 1
+                expr = strip(slice(head, arrow + 6, close))
+                fix.last_column = close + 1
+            }
+            continue if (empty(expr) || arrow + 3 + length(expr) > STYLE042_MAX_LINE
+                || !is_arm_expression(expr) || !in_match_arms(fn.at, ln, first))
+            fix.replacement = "=> {expr}"
+            var at = fn.at
+            at.line = uint(ln)
+            at.last_line = uint(ln)
+            style_warning("STYLE046: this match arm's block holds one expression; " +
+                "write it without the block - 'pattern => {expr}'", at, fix)
         }
     }
 
@@ -1053,9 +1157,208 @@ class StyleLintVisitor : AstVisitor {
         return null
     }
 
+    // --- STYLE045: a condition equivalent to one simpler comparison ---
+
+    // Interval lattice over one int variable: && intersects, || unites, !
+    // complements. Why subsumption misses it:
+    // doc/source/reference/language/lint.rst.
+
+    def private ivl_full() : array<Ivl> {
+        var r : array<Ivl>
+        r |> push(Ivl(lo = INT64_MIN_V, hi = INT64_MAX_V))
+        return <- r
+    }
+
+    //! Value set for `x <op> c`, as a sorted list of disjoint inclusive
+    //! intervals.
+    def private ivl_from_cmp(op : string; c : int64) : array<Ivl> {
+        var r : array<Ivl>
+        if (op == "==") {
+            r |> push(Ivl(lo = c, hi = c))
+        } elif (op == "!=") {
+            if (c > INT64_MIN_V) {
+                r |> push(Ivl(lo = INT64_MIN_V, hi = c - 1l))
+            }
+            if (c < INT64_MAX_V) {
+                r |> push(Ivl(lo = c + 1l, hi = INT64_MAX_V))
+            }
+        } elif (op == "<") {
+            if (c > INT64_MIN_V) {
+                r |> push(Ivl(lo = INT64_MIN_V, hi = c - 1l))
+            }
+        } elif (op == "<=") {
+            r |> push(Ivl(lo = INT64_MIN_V, hi = c))
+        } elif (op == ">") {
+            if (c < INT64_MAX_V) {
+                r |> push(Ivl(lo = c + 1l, hi = INT64_MAX_V))
+            }
+        } elif (op == ">=") {
+            r |> push(Ivl(lo = c, hi = INT64_MAX_V))
+        }
+        return <- r
+    }
+
+    def private ivl_isect(a, b : array<Ivl>) : array<Ivl> {
+        var r : array<Ivl>
+        for (x in a) {
+            for (y in b) {
+                let lo = max(x.lo, y.lo)
+                let hi = min(x.hi, y.hi)
+                if (lo <= hi) {
+                    r |> push(Ivl(lo = lo, hi = hi))
+                }
+            }
+        }
+        return <- ivl_normalize(r)
+    }
+
+    def private ivl_unite(a, b : array<Ivl>) : array<Ivl> {
+        var r : array<Ivl> // nolint:STYLE033 — concat would pull daslib/linq into this module
+        r |> push_from(a)
+        r |> push_from(b)
+        return <- ivl_normalize(r)
+    }
+
+    // sort by lo, then merge overlapping or adjacent runs
+    def private ivl_normalize(var v : array<Ivl>) : array<Ivl> {
+        var out : array<Ivl>
+        if (empty(v)) return <- out
+        v |> sort() $(p, q) => p.lo < q.lo
+        var cur = v[0]
+        for (i in range(1, length(v))) {
+            let nx = v[i]
+            if (nx.lo <= cur.hi || (cur.hi < INT64_MAX_V && nx.lo == cur.hi + 1l)) {
+                cur = Ivl(lo = cur.lo, hi = max(cur.hi, nx.hi))
+            } else {
+                out |> push(cur)
+                cur = nx
+            }
+        }
+        out |> push(cur)
+        return <- out
+    }
+
+    def private ivl_invert(a : array<Ivl>) : array<Ivl> {
+        var r : array<Ivl>
+        var at = INT64_MIN_V
+        var first = true
+        for (x in a) {
+            if (x.lo > at || (first && x.lo > INT64_MIN_V)) {
+                if (x.lo > INT64_MIN_V && at <= x.lo - 1l) {
+                    r |> push(Ivl(lo = at, hi = x.lo - 1l))
+                }
+            }
+            first = false
+            if (x.hi >= INT64_MAX_V) return <- ivl_normalize(r)
+            at = x.hi + 1l
+        }
+        r |> push(Ivl(lo = at, hi = INT64_MAX_V))
+        return <- ivl_normalize(r)
+    }
+
+    //! The simplest single comparison equal to this value set, or "" when
+    //! none is.
+    def private ivl_render(a : array<Ivl>; vname : string) : string {
+        if (length(a) == 1) {
+            let x = a[0]
+            if (x.lo == INT64_MIN_V && x.hi == INT64_MAX_V) return ""       // STYLE010's job
+            if (x.lo == x.hi) return "{vname} == {x.lo}"
+            if (x.lo == INT64_MIN_V) return "{vname} <= {x.hi}"
+            if (x.hi == INT64_MAX_V) return "{vname} >= {x.lo}"
+            return ""                                                       // two-sided
+        }
+        // exactly one hole is `!=`
+        if (length(a) == 2 && a[0].lo == INT64_MIN_V && a[1].hi == INT64_MAX_V
+            && a[1].lo - a[0].hi == 2l) {
+            return "{vname} != {a[0].hi + 1l}"
+        }
+        return ""
+    }
+
+    // A comparison leaf `v <op> const` (or the Yoda form). Returns false
+    // for any other shape, or for a second distinct variable — the
+    // lattice is single-variable.
+    def private style045_leaf(e : Expression? const; var vr : Variable?&;
+                              var vs : array<Ivl>) : bool {
+        let ex = peel_ref2value_const(e)
+        if (ex == null || !(ex is ExprOp2)) return false
+        let o2 = ex as ExprOp2
+        var op = "{o2.op}"
+        var lhs = peel_ref2value_const(o2.left)
+        var rhs = peel_ref2value_const(o2.right)
+        if (lhs == null || rhs == null) return false
+        var cval = 0l
+        var v : Variable? = null
+        if (lhs is ExprVar && rhs is ExprConstInt) {
+            v = (lhs as ExprVar).variable
+            cval = int64((rhs as ExprConstInt).value)
+        } elif (rhs is ExprVar && lhs is ExprConstInt) {
+            v = (rhs as ExprVar).variable
+            cval = int64((lhs as ExprConstInt).value)
+            if (op == "<") {
+                op = ">"
+            } elif (op == "<=") {
+                op = ">="
+            } elif (op == ">") {
+                op = "<"
+            } elif (op == ">=") {
+                op = "<="
+            }
+        } else {
+            return false
+        }
+        if (v == null || v._type == null || v._type.baseType != Type.tInt
+            || (op != "==" && op != "!=" && op != "<" && op != "<=" && op != ">" && op != ">=")
+            || (vr != null && vr != v)) return false
+        vr = v
+        vs <- ivl_from_cmp(op, cval)   // nolint:PERF030
+        return true
+    }
+
+    // Folds the &&/||/! tree into one value set. leaves counts the
+    // comparisons seen, so a single comparison is never "simplified" into
+    // itself.
+    def private style045_eval(e : Expression? const; var vr : Variable?&;
+                              var leaves : int&; var vs : array<Ivl>) : bool {
+        let ex = peel_ref2value_const(e)
+        if (ex == null) return false
+        if (ex is ExprOp1 && "{(ex as ExprOp1).op}" == "!") {
+            var inner : array<Ivl>
+            if (!style045_eval((ex as ExprOp1).subexpr, vr, leaves, inner)) return false
+            vs <- ivl_invert(inner)   // nolint:PERF030 — out-param, empty on entry
+            return true
+        }
+        if (ex is ExprOp2) {
+            let op = "{(ex as ExprOp2).op}"
+            if (op == "&&" || op == "||") {
+                var l, r : array<Ivl>
+                if (!style045_eval((ex as ExprOp2).left, vr, leaves, l)
+                    || !style045_eval((ex as ExprOp2).right, vr, leaves, r)) return false
+                vs <- op == "&&" ? ivl_isect(l, r) : ivl_unite(l, r)   // nolint:PERF030
+                return true
+            }
+        }
+        if (!style045_leaf(ex, vr, vs)) return false
+        leaves++
+        return true
+    }
+
+    def private check_style045(ifte : ExprIfThenElse?) : void {
+        var vr : Variable? = null
+        var leaves = 0
+        var vs : array<Ivl>
+        if (!style045_eval(ifte.cond, vr, leaves, vs) || leaves < 2 || vr == null) return
+        let simpler = ivl_render(vs, "{vr.name}")
+        if (!empty(simpler)) {
+            style_warning("STYLE045: this condition is equivalent to '{simpler}'; " +
+                "the comparisons collapse over the integers", ifte.at)
+        }
+    }
+
     def override preVisitExprIfThenElse(ifte : ExprIfThenElse?) : void {
         if (ifte.if_flags.isStatic || ifte.genFlags.generated) return
         st037_bump()
+        check_style045(ifte)
         let cond = ifte.cond
         if (cond is ExprConstBool) {
             let cbool = cond as ExprConstBool

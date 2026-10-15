@@ -639,6 +639,20 @@ required (one may still be used to handle null specifically). ``das_string`` fie
 (operator names, identifiers, swizzle masks) compare directly against string literals.
 Node-type checks are exact — ``ExprField`` does not match ``ExprSafeField``.
 
+A node pattern with no fields, ``ExprBreak()``, tests the node type only. A bare name joined to a
+node pattern with ``&`` binds the node at that type, so its fields need no cast:
+
+.. code-block:: das
+
+    require daslib/ast_boost
+
+    def left_of_sum ( e : ExpressionPtr ) {
+        return match ( e ) {
+            ExprOp2(op = "+") & sum => sum.left
+            _ => null
+        }
+    }
+
 Static Matching
 ---------------
 
