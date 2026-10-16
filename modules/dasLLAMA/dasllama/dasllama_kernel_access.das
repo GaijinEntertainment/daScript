@@ -802,7 +802,7 @@ def param_type(at : LineInfo; tok : string; var ok : bool&) : TypeDeclPtr {
 //! shader emitter reads (`as_ann`), before the kernel method is emitted. Under `bind` it takes the binding past
 //! the class's highest, where a lens binds its arguments beside the buffers. A class under two dispatch annotations
 //! passes through the lens twice: a member that carries `as_ann` already keeps the binding its first pass gave it.
-[arch(at="../ARCHITECTURE_GPU.md#gpu-shared-kernels")]
+[arch(at="../ARCHITECTURE_GPU_SHARED_KERNELS.md#gpu-shared-kernels")]
 def public kargs_as(var st : StructurePtr; as_ann : string; bind : bool = false) {
     var top = -1
     for (field in st.fields) {

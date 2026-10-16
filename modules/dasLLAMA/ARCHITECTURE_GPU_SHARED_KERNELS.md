@@ -1,8 +1,56 @@
-# dasLLAMA Architecture - the kernel pairs of the two GPU homes
+# dasLLAMA Architecture - the kernels both GPU homes stamp
 
-Companion to `ARCHITECTURE_GPU.md`; a section is cited by its anchor. This document carries the ledger of the kernels
-the Metal and the Vulkan home both run: which ride one template of `dasllama_gpu_kernels_common.das` and what each stamp
-reads there, and which stay per home and why. The template mechanism itself stays in `ARCHITECTURE_GPU.md#gpu-shared-kernels`.
+Companion to `ARCHITECTURE_GPU.md`; a section is cited by its anchor. This document carries the kernels the Metal and
+the Vulkan home both run: the template mechanism of `dasllama_gpu_kernels_common.das`, and the ledger of which kernels
+ride one template and what each stamp reads there, and which stay per home and why.
+
+### Kernels both homes stamp {#gpu-shared-kernels}
+
+A kernel the Metal and the Vulkan home both run is one `class template` in
+`dasllama_gpu_kernels_common.das`: its `@ssbo` buffers with their `@role`s, its argument struct and its
+body. The module requires no backend and no shader vocabulary - a template's body resolves in the module
+that stamps it. Each home stamps the template as a leaf class under its own dispatch annotation and its
+own kernel method, which calls the body, so a kernel keeps the dispatch name, the pipeline and the census
+key it has on that home.
+
+- **The arguments are one `@kargs` member.** `kargs_as` (`dasllama_kernel_access.das`) runs in both
+  dispatch lenses ahead of the kernel's emission and gives the member the form that home's emitter reads:
+  a `@push_constant` block on Vulkan, a by-value `@uniform` at the binding past the class's highest on
+  Metal - once: a class under two dispatch annotations passes through the lens twice, and the second pass
+  keeps the binding the first gave, so each builder and the kernel agree on it. The struct is a member and
+  not a parameter of the body: a parameter is passed by value, and the
+  emitted kernel then copies the whole struct where a member is read a field at a time.
+- **A body that reads a buffer at an offset takes it as an element offset in its arguments.** Vulkan caches
+  a descriptor set by its binding tuple, so an offset bound per dispatch would be a set per offset; an offset
+  in the arguments is one set. A kernel every site reads from element zero carries none.
+- **The two emitters place the body differently.** The MSL emitter splices a called method flat into the
+  kernel; the SPIR-V emitter keeps it a function the entry point calls. A kernel moved here therefore
+  reads, on Vulkan, as its old words plus one call. Because the MSL emitter splices, a template method of
+  more than one statement cannot sit in value position: a helper that returns a value - a workgroup
+  reduction, a partial sum - is written as a statement method that lands its result in a `var` reference
+  (`wg_max_into`, `wg_sum_into`, `value_sum_into` in `GkPkAttn`). The same splice names a parameter as
+  many times as the body does, so an argument that is a computed expression is refused where the body
+  names the parameter twice: the caller hoists it to a local first. A fixed-array local in a body hoists
+  to a program-scope constant table only when every element is a scalar integer or float literal; a
+  vector literal does not hoist, so a `float4` table is spelled as four scalars a word.
+- **A home's lane primitive is reached by one name.** A template method resolves in the module that
+  stamps it, so a shared reduction calls `gk_subgroup_add` / `gk_subgroup_max`, and each kernel home
+  defines the pair over its own primitive (`subgroupAdd` on Vulkan, `simd_sum` on Metal). A free function
+  in the common module resolves in the common module and sees neither home, so a body that needs a
+  home's primitive keeps it in a method.
+- **A binding a stamp does not use is gated, and a stamp names its element types.** `@template_gate`
+  erases the field at stamping (`daslib/typemacro_boost`, before either emitter reads the class): a gated
+  f16 output or bias row is no parameter of that stamp's builder (`GkRestride`). A body writing one output
+  in two precisions spells its element type as a `typedef` each stamp declares (`OT`), which both emitters take.
+- **A number the drivers verify is a `let` beside the template, and a scale both homes must round
+  alike is computed on the host.** A template constant's default is a literal, so the window a kernel is
+  stamped for is spelled twice - the default and the `let` each driver checks against (`GK_G4A_ATTN_PAST`).
+  A shape-derived scale (`gemma4a_attn_scales`) is passed in the arguments: in the kernel, the homes' intrinsics round it apart.
+- **What stays per home:** the GEMM and attention tiles, which each home builds on its own matrix
+  primitives. A pair whose two forms differ in shape (the TTS elementwise maps run one element a thread on
+  Metal and four an invocation on Vulkan) folds onto one body when both homes profile the same on it, and
+  until then shares its per-element function through `dasllama_gpu_math.das`. Which pairs ride a template, what each stamp
+  reads on its home, and why the rest stay per home: `ARCHITECTURE_GPU_SHARED_KERNELS.md#gpu-kernel-pairs`.
 
 ### The kernel pairs of the two homes {#gpu-kernel-pairs}
 
