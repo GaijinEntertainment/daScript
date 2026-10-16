@@ -1724,11 +1724,13 @@ def lastrow_ab(t : T?; var trsg : Model; prompt : array<int64>; tag : string; ba
 }
 
 //! the last-layer tail narrowed on the gemma sandwich (`lastrow-g`): the attention and FFN branches each under its post norm, the
-//! layer's output scale on gemma-4 - gemma-3-1b and gemma-4-12B Q8_0 (large tier)
+//! layer's output scale on gemma-4, the per-layer embedding's branch over the final row on the E-series - gemma-3-1b, gemma-4-12B
+//! Q8_0 (large tier) and gemma-4-E2B Q8_0
 [test, arch(at="../ARCHITECTURE_GPU_PREFILL.md#prefill-last-row-tail")]
 def test_metal_prefill_lastrow_sandwich(t : T?) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
-        for (fam, file, bar in fixed_array("gemma3", "gemma4"), fixed_array("gemma-3-1b-it-Q8_0.gguf", "gemma-4-12B-it-Q8_0.gguf"), fixed_array(0.05, 0.05)) {
+        for (fam, file, bar in fixed_array("gemma3", "gemma4", "gemma4e"), fixed_array("gemma-3-1b-it-Q8_0.gguf", "gemma-4-12B-it-Q8_0.gguf",
+                "gemma-4-E2B-it-Q8_0.gguf"), fixed_array(0.05, 0.05, 0.05)) {
             t |> run("{file}: the narrowed last-layer tail against the full panel's") @(t : T?) {
                 if (!family_on(t, fam) || !arm_on(t, "lastrow-g")) return
                 let path = path_join(models_dir(), file)

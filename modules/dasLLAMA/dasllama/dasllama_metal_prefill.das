@@ -7131,6 +7131,27 @@ def private pf_enc_ple_site(enc : MetalComputeEncoder?; t : Model; l : int64; pr
 }
 
 
+//! whether layer l's per-layer gate (`proj` off) or projection serves the narrowed last row: the file's f32 rows, or a plane the
+//! one-row GEMV takes
+def private pf_narrow_ple_ok(t : Model; l : int64; proj : bool) : bool {
+    let pp = ple_plane(t, l, proj)
+    return pp.f32 || kq_fmt_one_row_gemv(pp.f, proj ? t.config.n_embd_per_layer : t.config.dim)
+}
+
+//! layer l's per-layer gate (dim -> ple) or projection (ple -> dim) over the narrowed last row at row 0 of `bx` (`pf_narrow_ple_ok`)
+def private pf_enc_narrow_ple(enc : MetalComputeEncoder?; t : Model; l : int64; proj : bool; bx, by, bk, bn : MetalBuffer?) {
+    let c = t.config
+    let n = proj ? c.n_embd_per_layer : c.dim
+    let d = proj ? c.dim : c.n_embd_per_layer
+    let pp = ple_plane(t, l, proj)
+    if (!pp.f32) {
+        pf_enc_narrow_gemv(enc, t, pp.f, pp.off, bx, by, bk, bn, n, d)
+        return
+    }
+    var bw = upload_region(unsafe(addr<void?>(t.fblob[pp.off])), uint64(n * d * 4l))
+    pf_enc_slab_gemv_b(enc, bw, bx, by, n, d, 1l)
+}
+
 //! true iff THIS window's metal prefill will engage AND the pre-step kernels cover the model
 [unused_argument(s, start_pos)]
 def private metal_ple_pre_gpu_gate(t : Model; s : Session; npos, start_pos : int64) : bool {
@@ -8307,12 +8328,13 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                 let u_hid_l = (u_hidden2 == null || hid_l == hidden) ? u_hidden : u_hidden2
                 let u_th_l = (u_total_h2 == null || hid_l == hidden) ? u_total_h : u_total_h2
                 let narrow_last = (g_pf_env_lastrow && !s.keep_hidden && !warm
-                    && l == c.n_layers - 1l && npos > 1l && !recr && !moe && !plef && !hcs.on
+                    && l == c.n_layers - 1l && npos > 1l && !recr && !moe && !hcs.on
                     && l >= nds && !c.q_gated
                     && c.n_layer_nextn == 0l
                     && dim % 32l == 0l && hid_l % 32l == 0l
                     && kq_fmt_one_row_gemv(fmt_at(t.w1_fmt, l), dim) && kq_fmt_one_row_gemv(fmt_at(t.w3_fmt, l), dim)
-                    && kq_fmt_one_row_gemv(fmt_at(t.w2_fmt, l), hid_l))
+                    && kq_fmt_one_row_gemv(fmt_at(t.w2_fmt, l), hid_l)
+                    && (!plef || (pf_narrow_ple_ok(t, l, false) && pf_narrow_ple_ok(t, l, true))))
                 //! the gemma-4 MoE tail as one step (`MetalMoeCombG4Pf`): no seam between the FFN and the residual, a row the step's stash holds
                 let g4_step = (moe && c.moe_dense_shexp && !g_moe_g4_unfused && c.pre_post_norm && !plef && !hcs.on && l >= nds
                     && dim <= ADD_RMS_MAX_DIM && g_pf_skip == "")
@@ -8343,16 +8365,36 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                         if (g_pf_skip != "gemm") {
                             pf_enc_narrow_gemv(enc, t, fmt_at(t.w2_fmt, l), t.w2_offs[l], bhb, bxb, u_hid_l, u_dim, hid_l, dim)
                         }
+                        var bosc : MetalBuffer?
+                        if (c.layer_out_scale) {
+                            bosc = upload_region(addr < void? >(t.fblob[t.out_scale_off + l]), 4ul)
+                        }
                         if (g_pf_skip != "ew" && g_pf_skip != "nongemm") {
                             if (c.pre_post_norm) {   //! ... and the FFN branch's under its own
                                 var bw_pf = upload_region(unsafe(addr < void? >(t.fblob[t.rms_post_ffn_off + l * dim])), uint64(dim * 4l))
                                 pf_enc_rms(enc, bxb, 0ul, bw_pf, bxb, u_dim, u_eps, 1l)
                             }
-                            var bosc : MetalBuffer?
-                            if (c.layer_out_scale) {
-                                bosc = upload_region(addr < void? >(t.fblob[t.out_scale_off + l]), 4ul)
+                            enc_add(enc, bx, nro, bxb, 0ul, u_dim, dim, plef ? null : bosc)   //! the per-layer embedding's branch takes the scale
+                        }
+                        if (plef) {   //! the per-layer embedding's branch over the final row: its side row the layer's at the row's position
+                            let side_off = uint64(((sg.row0 + sg.npos - 1l) * ple_all + l * ple_n) * 4l)
+                            if (g_pf_skip != "ew" && g_pf_skip != "nongemm") {
+                                enc_copy_row(enc, bx, nro, bxb2, 0ul, u_dim, dim)
                             }
-                            enc_add(enc, bx, nro, bxb, 0ul, u_dim, dim, bosc)
+                            if (g_pf_skip != "gemm") {
+                                pf_enc_narrow_ple(enc, t, l, false, bxb2, bpleg, u_dim, u_ple)
+                            }
+                            if (g_pf_skip != "ew" && g_pf_skip != "nongemm") {
+                                enc_geglu(enc, bpleg, 0ul, bple, side_off, u_ple, ple_n)
+                            }
+                            if (g_pf_skip != "gemm") {
+                                pf_enc_narrow_ple(enc, t, l, true, bpleg, bxb, u_ple, u_dim)
+                            }
+                            if (g_pf_skip != "ew" && g_pf_skip != "nongemm") {
+                                var bw_pn = upload_region(unsafe(addr < void? >(t.fblob[t.ple_post_off + l * dim])), uint64(dim * 4l))
+                                pf_enc_rms(enc, bxb, 0ul, bw_pn, bxb, u_dim, u_eps, 1l)
+                                enc_add(enc, bx, nro, bxb, 0ul, u_dim, dim, bosc)
+                            }
                         }
                     }
                 }
@@ -8559,7 +8601,7 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                     var bw_pf = upload_region(addr < void? >(t.fblob[post_ffn]), uint64(dim * 4l))
                     pf_enc_rms(enc, bxb, 0ul, bw_pf, bxb, u_dim, u_eps, npos)
                 }
-                if (plef) {
+                if (plef && !narrow_last) {
                     //! PLE sits between the FFN residual and out_scale (the CPU order): x_b += post_norm(ffn_branch), then
                     //! branch = proj · (gelu(gate · x_b) ⊙ side[l]), its post norm the layer's last seam's
                     if (pf_ew) {
