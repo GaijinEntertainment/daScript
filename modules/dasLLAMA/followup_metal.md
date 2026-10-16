@@ -631,17 +631,6 @@ a class that binds a kargs uniform is un-addressable; the split pickers table on
 classes pass scalars through `params=`. The fix is a cloned parameter type in the lens; the table
 follows, and the sec.15(a) gate then reads one table.
 
-## 19. The batched and rows w13sw kernels have no activation axis
-
-`MetalQ8GemvW13SwT.put_act` branches on the `act` uniform between `msl_silu_mul` and
-`msl_geglu_mul`; the batched family (`enc_gemv_w13sw_b`, `enc_gemv_w13sw_rows`) binds no `act`
-and computes SiLU only. Every live caller is SiLU today: the dense batch gates `fuse13` off
-under geglu, the MTP verify declines non-silu, and gemma's shared expert is the
-`moe_dense_shexp` form through `enc_geglu`, so no gelu architecture reaches the `u_moe_nsh`
-path. A gelu MoE with a loaded `n_ff_shexp` would compute its shared expert with the wrong
-activation; the fix is the `act` binding on the batched family, the same uniform the single-row
-form takes.
-
 ## 20. The mv shells' per-format decode cannot cross a free-function boundary
 
 The B2/B4 and B8 mv shells (`MetalKqMvShellT`, `MetalKqMvB8ShellT`) each carry a per-format

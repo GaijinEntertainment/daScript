@@ -2154,6 +2154,7 @@ class template MetalGemvB24T {
     @uniform @binding = 5 ndim : uint
     @uniform @binding = 6 ddim : uint       // output rows (W13: the hidden width, which is also the y stride)
     @uniform @binding = 7 @template_gate = "!W13" ys : uint         // y ROW stride (== ddim dense)
+    @uniform @binding = 7 @role = "weight" @template_gate = W13 act : uint   //! the W13 stamps' gate activation (`gk_act_mul`: 0 silu, 1 gelu)
     @ssbo @binding = 8 @role = "weight" @off = "w3off" @template_gate = W13 wqb3 : array<int8>
     @ssbo @binding = 9 @role = "weight" @off = "w3off" @template_gate = W13 wsh3 : array<float16>
     @workgroup txp : float4[PANEL]          // [NR streams x 64 float4] X panel chunk
@@ -2232,7 +2233,7 @@ class template MetalGemvB24T {
             static_if (W13) {
                 let u = simd_sum(acc_up[b])
                 if (lane == 0u) {
-                    y[uint(b) * ddim + row] = gk_act_mul(g, u, 0u)
+                    y[uint(b) * ddim + row] = gk_act_mul(g, u, act)
                 }
             } else {
                 if (lane == 0u) {
@@ -5250,19 +5251,20 @@ def enc_mv_site(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; wboff : uint6
 // layout), by is the [B x hidden] swiglu output. Replaces the w1 + w3 GEMVs + the swiglu ew2
 // with one dispatch. Same 4-rows/tg geometry, gridded over the hidden output rows.
 def enc_gemv_w13sw_b(enc : MetalComputeEncoder?; four : bool; bw : MetalBuffer?; w1off, w3off : uint64;
-                     bx, by, bn, bhid : MetalBuffer?; hidden : int64; xoff : uint64 = 0ul; yoff : uint64 = 0ul) {
+                     bx, by, bn, bhid, bact : MetalBuffer?; hidden : int64; xoff : uint64 = 0ul; yoff : uint64 = 0ul) {
     if (four) {
-        enc_w13sw_b4_c(enc, bw, w1off, bw, bx, xoff, by, yoff, bn, bhid, bw, w3off, bw, hidden)
+        enc_w13sw_b4_c(enc, bw, w1off, bw, bx, xoff, by, yoff, bn, bhid, bact, bw, w3off, bw, hidden)
     } else {
-        enc_w13sw_b2_c(enc, bw, w1off, bw, bx, xoff, by, yoff, bn, bhid, bw, w3off, bw, hidden)
+        enc_w13sw_b2_c(enc, bw, w1off, bw, bx, xoff, by, yoff, bn, bhid, bact, bw, w3off, bw, hidden)
     }
 }
 
-// the fused W1|W3 + swiglu site at nrows live rows (enc_gemv_rows's tiling; y stride = hidden)
+// the fused W1|W3 + activation site at nrows live rows (enc_gemv_rows's tiling; y stride = hidden), `bact` the act code (0 silu,
+// 1 gelu)
 def enc_gemv_w13sw_rows(enc : MetalComputeEncoder?; nrows : int64; bw : MetalBuffer?; w1off, w3off : uint64;
-                        bx, by, bn, bhid : MetalBuffer?; n, hidden : int64) {
+                        bx, by, bn, bhid, bact : MetalBuffer?; n, hidden : int64) {
     enc_rows_tiles(nrows, n, hidden) $(four; _live; xo, yo) {
-        enc_gemv_w13sw_b(enc, four, bw, w1off, w3off, bx, by, bn, bhid, hidden, xo, yo)
+        enc_gemv_w13sw_b(enc, four, bw, w1off, w3off, bx, by, bn, bhid, bact, hidden, xo, yo)
     }
 }
 

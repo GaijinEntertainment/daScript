@@ -1873,13 +1873,13 @@ def private panels_verify(var e : VerifyLayerEnc; moe_with_dense : bool; hid_l, 
 }
 
 
-//! the verify rows' fused gate+up dot over the rows form (w2 follows as a rows site)
-[unused_argument(geglu, u_hid_l)]
+//! the verify rows' fused gate+up dot and the act over the rows form (w2 follows as a rows site)
+[unused_argument(u_hid_l)]
 def private w13_fused_verify(var e : VerifyLayerEnc; t : Model; enc : MetalComputeEncoder?; l : int64; hid_l : int64; u_hid_l : MetalBuffer?; geglu : bool; fg : MetalBuffer?) : bool {
     let r & = unsafe(*e.r)
     let bw1 = blob_of(g_dev, t, t.w1_offs[l])
     let bw3 = blob_of(g_dev, t, t.w3_offs[l])
-    enc_gemv_w13sw_rows(enc, r.nrows, bw1.buf, bw1.boff, bw3.boff, r.bxb, fg, r.u_dim, r.u_hidden, t.config.dim, hid_l)
+    enc_gemv_w13sw_rows(enc, r.nrows, bw1.buf, bw1.boff, bw3.boff, r.bxb, fg, r.u_dim, r.u_hidden, geglu ? r.u_one32 : r.u_zero32, t.config.dim, hid_l)
     return true
 }
 
@@ -1990,7 +1990,7 @@ def private enc_shexp(r : StepRes; t : Model; enc : MetalComputeEncoder?; l : in
         if (single) {
             enc_gemv_w13sw(enc, bwsh1.buf, bwsh1.boff, w3off, r.bxb, bp, r.u_dim, r.u_moe_nsh, dim, nsh, r.u_zero32)
         } else {
-            enc_gemv_w13sw_rows(enc, nr, bwsh1.buf, bwsh1.boff, w3off, r.bxb, bp, r.u_dim, r.u_moe_nsh, dim, nsh)
+            enc_gemv_w13sw_rows(enc, nr, bwsh1.buf, bwsh1.boff, w3off, r.bxb, bp, r.u_dim, r.u_moe_nsh, r.u_zero32, dim, nsh)
         }
     } else {
         enc_shexp_site(r, t, enc, single, p1.f, p1.off, nsh, dim, r.bxb, bp, r.u_dim, r.u_moe_nsh, 0l)
@@ -3545,9 +3545,8 @@ def private panels_batch(var e : BatchLayerEnc; moe_with_dense : bool; hid_l, kn
 }
 
 
-//! the batch rows' fused gate+up dot + swiglu straight into the gate panel (w2's input), where
-//! the step's tier chose it (fuse13: the row GEMV tier, a silu model, no knockout)
-[unused_argument(geglu)]
+//! the batch rows' fused gate+up dot + its act (swiglu or geglu) straight into the gate panel (w2's input), where
+//! the step's tier chose it (fuse13: the row GEMV tier, no knockout)
 def private w13_fused_batch(var e : BatchLayerEnc; t : Model; enc : MetalComputeEncoder?; l : int64; hid_l : int64; u_hid_l : MetalBuffer?; geglu : bool; fg : MetalBuffer?) : bool {
     let r & = unsafe(*e.r)
     if (!r.fuse13) {
@@ -3555,7 +3554,7 @@ def private w13_fused_batch(var e : BatchLayerEnc; t : Model; enc : MetalCompute
     }
     let bw1 = blob_of(g_dev, t, t.w1_offs[l])
     let bw3 = blob_of(g_dev, t, t.w3_offs[l])
-    enc_gemv_w13sw_b(enc, r.nrows > 2l, bw1.buf, bw1.boff, bw3.boff, r.bxb, fg, r.u_dim, u_hid_l, hid_l)
+    enc_gemv_w13sw_b(enc, r.nrows > 2l, bw1.buf, bw1.boff, bw3.boff, r.bxb, fg, r.u_dim, u_hid_l, geglu ? r.u_one32 : r.u_zero32, hid_l)
     return true
 }
 
@@ -4032,10 +4031,9 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
     let mv_kdim = mv && (dim % MV_K_ALIGN) == 0l
     let mv_wo = mv && (qd % MV_K_ALIGN) == 0l && (!hetero || (qd_sw % MV_K_ALIGN) == 0l)
     let mv_w2 = mv && (hidden % MV_K_ALIGN) == 0l && (hid2 % MV_K_ALIGN) == 0l
-    let geglu = c.ffn_act != FfnAct.silu    // gemma: gelu gate — the swiglu-fused w13 form stands down
-    // fold w1+w3+swiglu into one fused GEMV on the fixed-B path; a knockout run (g_skip) keeps the
+    // fold w1+w3+the act into one fused GEMV on the fixed-B path; a knockout run (g_skip) keeps the
     // stages separable so its per-stage attribution stays valid
-    let fuse13 = g_bfuse && !mv && !use_gemm && !use_mm && empty(g_skip) && !t.kquant_native && !geglu
+    let fuse13 = g_bfuse && !mv && !use_gemm && !use_mm && empty(g_skip) && !t.kquant_native
     let chunked = maxcnt > g_attn_single_max
     let nchmax = (maxcnt + ATTN_CHUNK_ROWS - 1l) / ATTN_CHUNK_ROWS
     let use_attn_d = attn_d_serves(head_size, hs_sw)
