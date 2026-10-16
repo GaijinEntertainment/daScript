@@ -82,11 +82,10 @@ reused as-is.
 | `metal/das_metal_boost.das` | hand | Host sugar over `das_metal`: `with_metal_device`, `pipeline_from_kernel` (compile + error surfacing), unified-memory buffer helpers, `run_compute_1d` one-liner, live-object leak assert. `require das_metal` -> usable only where the C++ module exists. |
 | `CMakeLists.txt` | hand | `ADD_MODULE_DAS_FROM_DESCRIPTOR(metal metal)` unconditional (rows derived from `.das_module`, emitter everywhere); `IF(APPLE)`: `ADD_MODULE_CPP(DasMetal)` + `ADD_MODULE_LIB` + frameworks. Install rule mirrors dasSpirv's. |
 
-**Extern surface.** `src/dasMetal.mm` binds the compute subset of Metal.framework in eight
-families: device+queue, library+pipeline, buffers, encoding+dispatch, errors+timing, events,
-residency, lifetime. Two carry non-obvious contracts: `metal_buffer_contents(buf) : void?` is
-the unified-memory pointer the host reads and writes directly, with no map/unmap;
-`metal_dispatch_threads` is the Apple-silicon exact-grid fast path.
+**Extern surface.** `src/dasMetal.mm` binds the compute subset of Metal.framework in eight families: device+queue,
+library+pipeline, buffers, encoding+dispatch, errors+timing, events, residency, lifetime. `metal_dispatch_threads` is the
+exact-grid fast path; `metal_buffer_contents(buf) : void?` is the unified-memory pointer the host reads and writes, no map/unmap,
+read in its own autorelease pool - `contents` autoreleases the buffer and no pool drains on a daslang host thread.
 
 **Kernel-signature lowering (the one structural novelty).** MSL has no module-scope device
 globals - and the authoring class's members map onto its model exactly: each `@ssbo`
@@ -139,8 +138,9 @@ Three behavioral layers + enforcement gates:
   needle text is the suite's to judge) are both hand-maintained;
   `check_fail_closed_sync` (`REVIEW.das`) holds them equal in both directions, so an unpinned
   rejection or a stranded assert cannot pass as a green suite.
-- **Leak gate.** Metal objects are invisible to the das leak detectors, so the shim counts live
-  objects - `metal_live_object_count()`.
+- **Leak gate.** The das leak detectors miss Metal objects, so the shim counts live handles (`metal_live_object_count()`);
+  a handle Metal still holds counts zero, so a release cell reads phys_footprint, which counts device buffers, once the
+  frees a release defers land (`metal_footprint_settled()`; `test_buffer_release_returns_memory`).
 
 ## 5. Cross-backend parity - the kernel-model asymmetry ledger {#kernel-model-asymmetry-ledger}
 
