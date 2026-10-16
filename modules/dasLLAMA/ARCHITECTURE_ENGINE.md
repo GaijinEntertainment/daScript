@@ -123,11 +123,9 @@ the module declares every such buffer `@exact_size` and sizes it through a reser
   argmax, so every greedy-chain shortcut stands down for it. The engine knows only the class; the
   grammar behind it is the server's (`utils/dasllama-server/constraints.das` over `modules/dasLR1`).
 - **`dasllama_ple.das`** - gemma-4 E-series per-layer embeddings and the gemma4 MoE FFN. The
-  forward sequence reaches it only through the hooks it registers at init. The Metal token-table
-  gather (`dasllama_metal_prefill.das`) carries one format list in three places - the compiled
-  `g_pf_pso_ple_gather*` pipelines, the `ple_gather_pso_of` pick and the `pf_enc_ple_gather_fmt`
-  encode ladder - and `REVIEW.das`'s `check_ple_gather_sites` holds the three sets equal,
-  licensing no names.
+  forward sequence reaches it only through the hooks it registers at init. The Metal per-layer
+  token-table gather rides the token embed's own dispatch (`enc_embed_table`,
+  `dasllama_metal_kernels.das`), one format dispatch for both tables.
 - **`dasllama_config.das`** - `DlimConfiguration`: every input that changes `.dlim` image BYTES,
   in one struct, plus its identity formatter. A knob that does not change image bytes does not
   belong here; a knob that does and is missing is an image-aliasing bug.

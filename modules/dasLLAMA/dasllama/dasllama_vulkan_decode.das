@@ -700,10 +700,10 @@ def private rd_moe_sets(var L : RLayer) {
             let slots_bytes = MAX_ROUTED_SLOTS * 4l
             if (L.moe_g4) {   //! the host's sum lands as the one routed row of weight one
                 verify(ensure_cls_ar_comb_g4(), "vk decode: a host layer's gemma-4 combine class rail must engage on a live device")
-                L.s_addr_next = set_cls_ar_comb_g4(fixed_array(g_rd.x_dev, g_rd.ffnout_dev, g_rd.norms_dev, g_rd.xb_dev,
-                        g_rd.moe_ident_dev, g_rd.ones_dev, g_rd.hacc_dev),
-                    fixed_array(rows_bytes, rows_bytes, g_rd.norms_bytes, rows_bytes, slots_bytes, slots_bytes, rows_bytes),
-                    fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XB, 0u, 0u, VHZ_MDN))
+                L.s_addr_next = set_cls_ar_comb_g4(fixed_array(g_rd.x_dev, g_rd.moe_ident_dev, g_rd.ones_dev, g_rd.hacc_dev,
+                        g_rd.ffnout_dev, g_rd.norms_dev, g_rd.xb_dev),
+                    fixed_array(rows_bytes, slots_bytes, slots_bytes, rows_bytes, rows_bytes, g_rd.norms_bytes, rows_bytes),
+                    fixed_array(VHZ_X, 0u, 0u, VHZ_MDN, VHZ_FFO, 0u, VHZ_XB))
                 return
             }
             verify(ensure_cls_ar_comb(), "vk decode: a host layer's combine-folded residual class rail must engage on a live device")
@@ -2783,9 +2783,9 @@ def private rd_encode_moe(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
 }
 
 //! the gemma-4 step's args (`GkMoeCombG4`): the k slots off the slot map, both branches normed, their sum normed, the step scaled,
-//! the next norm at `woff`; `presummed` where the down GEMV folded the k rows
+//! the next norm at `woff`; `presummed` where the down GEMV folded the k rows; a host layer's sum is one slot of weight one
 def rd_g4_comb_args(L : RLayer; l, woff : int64; presummed : bool) : GkMoeCombArgs
-    => GkMoeCombArgs(n = uint(g_rd.dim), k = uint(g_rd.k), eps = g_rd.eps, ascale = L.out_scale, presummed = presummed ? 1u : 0u,
+    => GkMoeCombArgs(n = uint(g_rd.dim), k = L.experts_host ? 1u : uint(g_rd.k), eps = g_rd.eps, ascale = L.out_scale, presummed = presummed ? 1u : 0u,
         rpost_off = uint(rd_norm_off(l, RD_NORM_POST_FFN2)), dpost_off = uint(rd_norm_off(l, RD_NORM_POST_FFN1)),
         spost_off = uint(rd_norm_off(l, RD_NORM_POST_FFN)), nwoff = uint(woff))
 

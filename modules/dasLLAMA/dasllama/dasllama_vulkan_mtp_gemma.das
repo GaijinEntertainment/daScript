@@ -646,8 +646,7 @@ def private vk_drop_forget {
 def private vk_attached_to(t : Model) : bool => g_vk_attached
 
 //! a stream that cannot speculate this round: no carried hidden at its position, a round past the context
-def private vk_round_cold(t : Model; s : Session; pos, k : int64) : bool => (pos < 1l || s.mtp_h_pos1 != pos
-    || long_length(s.mtp_h) < g_vk_dr.tdim || pos + k + 1l > t.config.seq_len)
+def private vk_round_cold(t : Model; s : Session; pos, k : int64) : bool => mtp_round_cold_host(t, s, pos, k, g_vk_dr.tdim)
 
 //! verify row `vr`'s truth: the device's pick where it landed one, else the argmax of the logits it landed
 def private vk_row_pick(s : Session; vr, vocab : int64) : int64 {
@@ -739,8 +738,7 @@ def private vk_gemma_rounds(t : Model; var sessions : array<Session?>; toks : ar
             if (pick_only) {
                 land_pick(s, s.mtp_picks[a])
             }
-            copy_floats(s.mtp_hrows, a * c.dim, s.mtp_h, 0l, c.dim)
-            s.mtp_drafted += kd
+            mtp_round_take(s, a, kd, c.dim)
             mtp_round_commit_host(s, pos, kd, a)
             gpu_resident_assist_commit(s)
             g_vk_drafted += kd

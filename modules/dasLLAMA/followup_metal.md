@@ -585,9 +585,7 @@ uses. The bar is the eight `*T` entries of `CENSUS_NEVER_DISPATCHED` in
 (a) A `REVIEW.das` check that reads every per-format dispatch ladder in
 `dasllama/dasllama_metal_kernels.das` and `dasllama/dasllama_metal_prefill.das` (twelve today -
 `enc_kq_gemv`, `enc_kq_mvb`, `enc_kq_gemm_mm_b`, `enc_moe_gemv`, `pf_kq_dq_pso`,
-`pf_moe_kq_row`, `pf_moe_th_pso`, `pf_enc_kq_dq`, `pf_kq_dense_stamps`, plus the PLE pre-step's
-pair `ple_gather_pso_of` and `pf_enc_ple_gather_fmt`, whose format sets must agree with each
-other and with the gate's alignment arm) against the served-format predicates
+`pf_moe_kq_row`, `pf_moe_th_pso`, `pf_enc_kq_dq`, `pf_kq_dense_stamps`) against the served-format predicates
 (`kq_fmt_gpu_supported`, `moe_fmt_metal_served`, `moe_site_ok` in
 `dasllama/dasllama_metal_shapes.das`; `pf_kq_split_fmt` and the rows `pf_moe_kq_row` returns in the prefill) and
 reports an arm whose format no predicate serves - today the ladders' `panic` default arms are the
