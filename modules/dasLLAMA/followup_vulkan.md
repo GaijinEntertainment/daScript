@@ -1603,7 +1603,7 @@ module) is independent and can land any time - it is pure structure.
     regions at 660 positions each and read 151 and 104 summed against the reference's paged 106
     and 46 (`PERF_LEDGER.md`, the gemma section's 5060 Ti rows), where the per-op rails read 15
     and 14. What stands: a model whose weights alone do not fit (the Q8_0 on a 12 GB card, the
-    31B and the 26B IQ3_XXS on this one - the 26B's demoted down-expert rows take its served weights to 15.4 GB; `PERF_LEDGER.md`, the MoE section's 5060 Ti bullet) - a streamed-weights arm, the layers' planes through a device ring the
+    31B and the 26B IQ3_XXS on this one - its served weights read past the card's room; `PERF_LEDGER.md`, the MoE section's 5060 Ti bullet) - a streamed-weights arm, the layers' planes through a device ring the
     step refills ahead of the decode, in layer order, the way the MoE block streams its expert
     groups (`ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-expert-chain`), which beats the driver's blind paging
     because the order is known and the reads are one pass a token; the rate then reads as PCIe's

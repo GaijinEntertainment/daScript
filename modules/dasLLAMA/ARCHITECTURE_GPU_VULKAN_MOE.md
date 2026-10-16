@@ -250,15 +250,16 @@ The top-k folds the checkpoint's per-expert down scale into each routing weight 
 renormalization (`GkTopKArgs.dsoff`, in the decode's and the window's top-k alike, names the layer's row in the
 `[n_moe x ne]` scale plane `rdec_prepare_moe` uploads; `GK_NO_DSCALE` on every other model, the
 binding filled and never read), where the CPU chain scales the picked weights before the expert
-GEMVs. The combine (`ClsArCombG4`, the f16 normed-row twin `ClsArCombG4F16B`) is the residual step
-of the CPU chain's `gemma4_moe_ffn`: the k weighted routed rows summed and normed under the
-routed post norm (`ArArgs.routed_post_off`), the dense row in `ffnout` normed under the dense post norm
-(`pwoff`), the two added and normed under the layer's post-FFN norm (`sum_post_off`), the residual
-`(x + that) * out_scale`, then the next layer's norm - four workgroup reductions over one row
-stash, the dense row re-read from `ffnout` rather than staged twice. Where the down experts are
+GEMVs - the select's `DSCALE` arm both homes stamp (`ARCHITECTURE_GPU_PREFILL_MOE.md#moe-wscale`). The combine
+(`ClsArCombG4`, the f16 normed-row twin `ClsArCombG4F16B`) is the residual step of the CPU chain's `gemma4_moe_ffn` on
+the template both homes stamp (`GkMoeCombG4`, args `GkMoeCombArgs`): the k weighted routed rows summed in slot order
+(`GkMoeCombine.slot_sum_into`, the routed combine's own sum) and normed under the routed post norm (`rpost_off`), the
+dense row in `ffnout` normed under the dense post norm (`dpost_off`), the two added and normed under the layer's post-FFN
+norm (`spost_off`), the residual `(x + that) * out_scale`, then the next layer's norm (`nwoff`) - four workgroup
+reductions over one row stash, the dense row re-read from `ffnout` rather than staged twice. Where the down experts are
 Q5_1 the token command's down GEMV folds the k rows itself (`Q51GemvSum`: a subgroup a row of the
-model dim, the k regions' dots summed under the routing weights), so the combine reads one row
-(`ArArgs.presummed`) where it read k through the slot map; and where the next head's feed is Q8_0
+model dim, the k regions' dots summed under the routing weights), so the combine reads that row
+(`GkMoeCombArgs.presummed`) where it read k through the slot map; and where the next head's feed is Q8_0
 the token command's combine quantizes it itself (`ClsArCombG4Rq`, `RLayer.comb_rq`), so the requant
 dispatch that opened the next layer (or the classifier) goes. The norms plane grows by the
 four rows (`RDEC_NORM_ROWS` 10 with the output-bias row of `ARCHITECTURE_GPU_VULKAN_ATTN.md#vk-attn-planes`; zero on every other model). The plan's unserved list names the

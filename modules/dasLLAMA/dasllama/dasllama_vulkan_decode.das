@@ -2676,7 +2676,7 @@ def rd_g4_comb_args(L : RLayer; l, woff : int64; presummed : bool) : GkMoeCombAr
 
 //! The residual step's push block over a MoE layer's combine: the shared row at its gate when the layer has
 //! one, the k routed rows through the slot map, then the norm at `woff`.
-def rd_ar_comb_args(L : RLayer; l, woff : int64) : ArArgs {
+def rd_ar_comb_args(L : RLayer; woff : int64) : ArArgs {
     if (L.experts_host) {   // the host's sum lands as one row of weight one, the expert bias already in it
         return ArArgs(dim = uint(g_rd.dim), add_on = has_dense_triple(L) ? 1u : 0u, woff = uint(woff), eps = g_rd.eps, ascale = 1.0,
             slots = 1u, lstride = uint(g_rd.ner), gated = g_rd.sh_gated ? 1u : 0u, dbias_on = 0u, dboff = uint(L.router_slot * g_rd.ne * g_rd.dim))
@@ -2786,7 +2786,7 @@ def private rd_encode_token(var first_seg_raw : VkCommandBuffer; nrows, nsplit :
                 rd_encode_host_cut(raw, h, L, 1l, "m:router")
                 seg++
                 rd_host_resume(raw, g_rd.cmd_seg[split_seg_base + seg], h, l, 1l)
-                var pc14h = rd_ar_comb_args(L, l, nxt)
+                var pc14h = rd_ar_comb_args(L, nxt)
                 enc_cls_ar_comb(raw, h, L.s_addr_next, pc14h, 1l)
                 rd_ts(raw, "m:ar2")
                 xq_ready = false
@@ -2829,7 +2829,7 @@ def private rd_encode_token(var first_seg_raw : VkCommandBuffer; nrows, nsplit :
                 continue
             }
             if (L.moe) {
-                var pc14c = rd_ar_comb_args(L, l, nxt)
+                var pc14c = rd_ar_comb_args(L, nxt)
                 if (L.comb_rq) {   //! the next head's Q8_0 feed quantized here
                     enc_cls_ar_comb_rq(raw, h, L.s_comb_rq, pc14c, nrows)
                 } else {
@@ -3598,7 +3598,7 @@ def private rd_record_draft {
             var pcg = rd_g4_comb_args(L, l, nxt, L.edown_sum)
             enc_cls_ar_comb_g4(raw, h, L.s_addr_next, pcg, 1l)
         } else {
-            var pcc = rd_ar_comb_args(L, l, nxt)
+            var pcc = rd_ar_comb_args(L, nxt)
             enc_cls_ar_comb(raw, h, L.s_addr_next, pcc, 1l)
         }
         rd_ts(raw, "m:ar2")

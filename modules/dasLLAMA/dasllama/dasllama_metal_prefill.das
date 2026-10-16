@@ -8738,13 +8738,11 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                     pf_enc_site_mm(enc, t, fmt_at(t.w2_fmt, l), t.w2_offs[l], dim, bhb, bxb, u_hid_l, u_dim, mp, hid_l, npos, bxh_h)
                 }
                 if (g4_step) {   //! the routed sum, both branches' norms and the residual: one step; the next layer opens on its own norm
-                    unsafe {
-                        let rb = uint64(dim * 4l)
-                        var bw_g4 = upload_region_cat3(addr<void?>(t.fblob[t.rms_post_ffn2_off + l * dim]), rb,
-                            addr<void?>(t.fblob[t.rms_post_ffn1_off + l * dim]), rb, addr<void?>(t.fblob[t.rms_post_ffn_off + l * dim]), rb)
-                        var ka = moe_g4_args(dim, c.n_expert_used, c.norm_eps, c.layer_out_scale ? t.fblob[t.out_scale_off + l] : 1.0, moe_gemv_route, false)
-                        enc_moe_comb_g4_pf(enc, bx, bminv, bmsel, moe_gemv_route ? bmg4rt : bmdn, bxb, bw_g4, ka, npos)
-                    }
+                    let rb = uint64(dim * 4l)
+                    var bw_g4 = upload_region_cat3(addr<void?>(t.fblob[t.rms_post_ffn2_off + l * dim]), rb,
+                        addr<void?>(t.fblob[t.rms_post_ffn1_off + l * dim]), rb, addr<void?>(t.fblob[t.rms_post_ffn_off + l * dim]), rb)
+                    var ka = moe_g4_args(dim, c.n_expert_used, c.norm_eps, c.layer_out_scale ? t.fblob[t.out_scale_off + l] : 1.0, moe_gemv_route, false)
+                    enc_moe_comb_g4_pf(enc, bx, bminv, bmsel, moe_gemv_route ? bmg4rt : bmdn, bxb, bw_g4, ka, npos)
                 } elif (g4moe && g_pf_skip != "ew" && g_pf_skip != "nongemm") {
                     //! dense-branch post-norm, then routed + dense summed into bxb for the epilogue
                     var bw_pf1 = upload_region(unsafe(addr < void? >(t.fblob[t.rms_post_ffn1_off + l * dim])), uint64(dim * 4l))

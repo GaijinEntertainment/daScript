@@ -1578,8 +1578,8 @@ def private detect_kq_formats(var t : Model; m : GGUFMeta) {   // nolint:STYLE03
         any ||= t.wo_fmt[l] != KqFmt.q8 || t.w1_fmt[l] != KqFmt.q8 || t.w2_fmt[l] != KqFmt.q8
         any ||= t.w3_fmt[l] != KqFmt.q8
     }
-    // MoE routed expert stacks: one tag per (layer, kind). Biased-experts arches (gpt-oss) stay q8 — the kq groupn carries no bias form
-    if (t.config.n_expert > 0l && !t.config.moe_exps_bias
+    // MoE expert stacks: a tag per (layer, kind); biased (gpt-oss: no kq bias form) and native-MXFP4 (`experts_mx4`) stacks take none
+    if (t.config.n_expert > 0l && !t.config.moe_exps_bias && !t.experts_mx4
             && (t.config.dim * t.config.n_ff_exp) % 256l == 0l) {
         t.we1_fmt |> resize(layers)
         t.we2_fmt |> resize(layers)
@@ -2375,6 +2375,14 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
             let ba0 = t.dn_grouped ? "blk.{frl}.ssm_ba.weight" : "blk.{frl}.ssm_beta.weight"
             t.dn_ba_f32 = gguf_tensor_type(m, ba0) == GGML_TYPE_F32
         }
+        // Native-MXFP4 expert stacks (gpt-oss, a gemma-4 MXFP4_MOE file): on a q8 load whose routed expert stacks are all
+        // MXFP4 on disk - the gate and up stacks apart or as gemma-4's fused gate_up stack - keep them in their native nibble +
+        // E8M0 planes (see Model.experts_mx4) instead of transcoding to Q8: half the resident bytes and decode traffic, exact disk bits.
+        let mx4_gu = ((gguf_tensor_type(m, "blk.0.ffn_gate_exps.weight") == GGML_TYPE_MXFP4
+                && gguf_tensor_type(m, "blk.0.ffn_up_exps.weight") == GGML_TYPE_MXFP4)
+            || gguf_tensor_type(m, "blk.0.ffn_gate_up_exps.weight") == GGML_TYPE_MXFP4)
+        t.experts_mx4 = (t.config.n_expert > 0l && mode == QuantMode.q8 && mx4_gu
+            && gguf_tensor_type(m, "blk.0.ffn_down_exps.weight") == GGML_TYPE_MXFP4)
         // per-tensor K-quant format tags (kquant_native rail; no-op when the knob is off or the
         // file has no K-quant tensors) — must precede layout_offsets, which walks the tags
         detect_kq_formats(t, m)
@@ -2416,13 +2424,6 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
         }
         // per-layer output scalars (gemma4 layer_output_scale) — presence detected from the tensors
         t.config.layer_out_scale = gguf_find_tensor(m, "blk.0.layer_output_scale.weight") >= 0
-        // Native-MXFP4 expert stacks (gpt-oss): on a q8 load whose routed expert stacks are all
-        // MXFP4 on disk, keep them in their native nibble + E8M0 planes (see Model.experts_mx4)
-        // instead of transcoding to Q8 — half the resident bytes and decode traffic, exact disk bits.
-        t.experts_mx4 = (t.config.n_expert > 0l && mode == QuantMode.q8
-            && gguf_tensor_type(m, "blk.0.ffn_gate_exps.weight") == GGML_TYPE_MXFP4
-            && gguf_tensor_type(m, "blk.0.ffn_down_exps.weight") == GGML_TYPE_MXFP4
-            && gguf_tensor_type(m, "blk.0.ffn_up_exps.weight") == GGML_TYPE_MXFP4)
         // gemma-4 E-series: keep per_layer_model_proj in its native BF16 — half the per-token
         // read; dot_bf16's widen is the exact bit shift, so the values match the fp32 expand
         t.ple_model_bf16 = (has_ple(t.config)
@@ -2681,9 +2682,19 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
                     let mo1 = t.we1_offs[l]
                     let mo2 = t.we2_offs[l]
                     let mo3 = t.we3_offs[l]
-                    gguf_transcode_mx4(m, bytes, "blk.{l}.ffn_gate_exps.weight", t.mxq, t.mxs, mo1 / 2l, mo1 / 32l, ne * ege)
+                    if (gguf_find_tensor(m, "blk.{l}.ffn_gate_up_exps.weight") >= 0) {
+                        //! gemma-4's fused stack: expert e's [gate | up] rows split into the gate and up planes, as the q8 rail splits them
+                        for (e in range64(ne)) {
+                            let dst = e * ege
+                            let src = e * 2l * ege
+                            gguf_transcode_mx4(m, bytes, "blk.{l}.ffn_gate_up_exps.weight", t.mxq, t.mxs, (mo1 + dst) / 2l, (mo1 + dst) / 32l, ege, src)
+                            gguf_transcode_mx4(m, bytes, "blk.{l}.ffn_gate_up_exps.weight", t.mxq, t.mxs, (mo3 + dst) / 2l, (mo3 + dst) / 32l, ege, src + ege)
+                        }
+                    } else {
+                        gguf_transcode_mx4(m, bytes, "blk.{l}.ffn_gate_exps.weight", t.mxq, t.mxs, mo1 / 2l, mo1 / 32l, ne * ege)
+                        gguf_transcode_mx4(m, bytes, "blk.{l}.ffn_up_exps.weight", t.mxq, t.mxs, mo3 / 2l, mo3 / 32l, ne * ege)
+                    }
                     gguf_transcode_mx4(m, bytes, "blk.{l}.ffn_down_exps.weight", t.mxq, t.mxs, mo2 / 2l, mo2 / 32l, ne * ege)
-                    gguf_transcode_mx4(m, bytes, "blk.{l}.ffn_up_exps.weight", t.mxq, t.mxs, mo3 / 2l, mo3 / 32l, ne * ege)
                 } elif (t.config.moe_dense_shexp) {
                     // gemma4: experts ship FUSED as ffn_gate_up_exps {dim, 2*nfe, ne} — expert-major,
                     // each [2*nfe x dim] with rows [0..nfe)=gate, [nfe..2*nfe)=up. Split per expert

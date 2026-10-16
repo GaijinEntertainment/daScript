@@ -4006,11 +4006,9 @@ class template GkMoeCombine : GkQ8BlockStore {
     }
 }
 
-//! The gemma-4 MoE layer's residual step, one workgroup a row (the CPU `gemma4_moe_ffn`'s tail): the routed sum (`slot_sum_into`, or
-//! under `presummed` the one row the down GEMV summed) normed under the routed post norm, the dense branch's row normed under its post
-//! norm, the two added and normed under the post-FFN norm, x = (x + that) . ascale in place, then x under the next norm out in the
-//! stamp's form - f32 (`OUT_F32`, its f16 twin beside it under `HX`), f16 (`OUT_F16`), Q8_0 blocks (`OUT_Q8`), or none; the stamp
-//! supplies the row stash and its lanes (`TG`)
+//! The gemma-4 MoE layer's residual step, a workgroup a row (the CPU `gemma4_moe_ffn`'s tail): the routed sum and the dense row
+//! each under its post norm, their sum under the post-FFN norm, x = (x + that) . ascale, then x's next norm out in the stamp's
+//! form - f32 (`HX`: its f16 twin beside), f16, Q8_0 blocks, or none; the stamp supplies the row stash and its lanes (`TG`)
 [ |> template_struct_instance]
 class template GkMoeCombG4 : GkMoeCombine {
     @ssbo @binding = 6 @role = "read" dense : array<float>      //! [rows x n] the dense branch's down rows
@@ -4044,7 +4042,7 @@ class template GkMoeCombG4 : GkMoeCombine {
     //! row `r`'s step: four reductions over the stash (slots 0, 1, 0, then the next norm's 1 - each reduce's barrier sits every
     //! thread past the readers of the slot the next one writes)
     [arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-gemma4-moe-block")]
-    def comb_g4_row(r : uint) {   // nolint:STYLE037 - the three branch norms, the step and the next norm's out forms over one stash
+    def comb_g4_row(r : uint) {
         let n = pa.n
         let base = r * n
         let tid = gl_LocalInvocationID.x

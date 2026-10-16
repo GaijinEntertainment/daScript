@@ -42,6 +42,7 @@ require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed / gpu_want_auto: 
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active: did the whole-model driver take the model
 require _model_tier public   // models_dir() + model_available() presence/size-tier gate, arm_on, live_maxabs, SUPPRESSED_LOGIT
 require _resident_feed public   // resident_ready, load_resident, resident_then_cpu_feed, feed_steps_within, feed_logits
+require _format_census   // census_cell: the routed files' every site in its own format
 
 //! the logits bar, a fraction of the step's max live |logit|. gemma-3-1b's logits move with the activation rounding itself: the CPU
 //! chain's OWN prefill kernel and decode kernel land 0.06-0.10 of the max logit apart on the same
@@ -81,6 +82,7 @@ def private gemma_model(t : T?; file : string) : Model {
     if (!resident_ready(t, path)) return <- Model()
     var tr <- load_resident(path)
     if (!resident_admitted(t, "the whole-model driver armed on the model (the load log names any decline)", " - DASLLAMA_GPU_MIN_CTX=1024 arms the 12B Q8_0 file on a 16 GB card")) {
+        to_log(LOG_WARNING, "{file}: the cell skips on the card's memory decline ({gpu_resident_decline_()})\n")
         delete tr
         return <- Model()
     }
@@ -103,6 +105,33 @@ def with_gemma_rig(t : T?; gf : GemmaFile; body : block<(tr : Model) : void>) {
     delete tr
 }
 
+//! the routed model's weight-format census on the armed driver's load: every site the file carries in its own format, the
+//! expert stacks the native-MXFP4 planes exactly where `mx4` names them, then a 40-token prompt and two fed steps on the driver
+//! with every call served
+def gemma_format_cell(t : T?; gf : GemmaFile; mx4 : bool) {
+    with_gemma_rig(t, gf) $(tr) {
+        census_cell(t, tr, path_join(models_dir(), gf.file), gf.file, ["attention q/k/v/o", "routed experts", "token table", "classifier"])
+        t |> equal(tr.experts_mx4, mx4, "{gf.file}: the expert stacks load as the native-MXFP4 planes exactly where the file carries them")
+        var ids <- prose_tokens(tr, 42l)
+        var prompt <- [for (i in range64(40l)); ids[i]]
+        var toks <- [ids[40], ids[41]]
+        var sg <- create_session(tr, mirror_kv_dtype())
+        let served0 = moe_gpu_resident_prefills()
+        var rows <- feed_logits(tr, sg, prompt, toks) $ {}
+        t |> equal(moe_gpu_resident_prefills(), served0 + 1l, "{gf.file}: the resident window chain served the prompt")
+        served_every_call(t)
+        for (r, i in rows, count()) {
+            let bad = length([for (v in r); v; where !is_finite(v)])
+            t |> equal(bad, 0, "{gf.file}: row {i}'s logits finite")
+        }
+        delete rows
+        delete sg
+        delete ids
+        delete prompt
+        delete toks
+    }
+}
+
 //! prefill `n` tokens + 8 fed steps on the resident driver, then the same on the all-CPU chain; the
 //! prefill logits and every step's within the bar, the one-step-off control past it.
 def gemma_forced_feed(t : T?; n : int64; gf : GemmaFile) {
@@ -111,7 +140,9 @@ def gemma_forced_feed(t : T?; n : int64; gf : GemmaFile) {
         var prompt <- [for (i in range64(n)); ids[i]]
         var toks <- [for (i in range64(n, n + 8l)); ids[i]]
         delete ids
-        var fed <- resident_then_cpu_feed(t, tr, prompt, toks) $ {}
+        var fed <- resident_then_cpu_feed(t, tr, prompt, toks) $ {
+            served_every_call(t)
+        }
         feed_steps_within(t, tr, "", n, fed.gpu, fed.cpu, toks, GEMMA_LOGIT_BAR_REL)
         delete fed
         delete prompt
@@ -140,6 +171,9 @@ def prefill_vs_decode(t : T?; n : int64; gf : GemmaFile) {
             let name = arm == RESIDENT ? "resident" : "cpu"
             var a <- feed_alone(tr, mirror_kv_dtype(), window_prompt, window_steps)
             var b <- feed_alone(tr, mirror_kv_dtype(), token_prompt, token_steps)
+            if (arm == RESIDENT) {
+                served_every_call(t)
+            }
             var worst = 0.0
             var worst_off = 0.0
             for (k in range64(long_length(a))) {
@@ -225,6 +259,7 @@ def ppl_compare(t : T?; n, steps : int64; gf : GemmaFile; hits_slack : int64 = 3
         let g = forced_nll(tr, sg, ids, n, steps)
         t |> success(moe_gpu_resident_active(), "the whole-model driver stayed armed through the run")
         t |> equal(moe_gpu_resident_prefills(), served0 + 1l, "the resident window chain served the {n}-token prompt")
+        served_every_call(t)
         delete sg
         moe_gpu_drop_model()   // every later step is the CPU chain
         var sc <- create_session(tr, mirror_kv_dtype())

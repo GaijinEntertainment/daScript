@@ -507,9 +507,9 @@ fixture flips at token 21 on a 0.03-logit near-tie the Metal chain lands on with
 (the k5 tensor twin holds the double-precision oracle at the production width - the kernel cells
 now run kdim 3840); the token gate is no instrument for that row (`followup_general.md` row 151,
 the fixture margin floor). (b) The routed block serves thirteen expert-plane formats, q40 among
-them: the ggml-org Q4_0 26B carries q40 fused gate_up stacks beside q8 down stacks (a 704-wide
-down row is no multiple of 256, so the loader demotes that plane) and runs the routed block on
-both boxes through the q40 split twins and the q40 expert GEMV. (c) The Google QAT file is the ggml-org checkpoint's twin (its scale tensors are
+them: the ggml-org Q4_0 26B carries q40 fused gate_up stacks beside 704-wide Q4_0 down stacks, which
+serve in their per-32 form (q4032), and runs the routed block on both boxes through the q40 split twins, the q40
+expert GEMV and the q4032 routed stamps. (c) The Google QAT file is the ggml-org checkpoint's twin (its scale tensors are
 byte-identical; only the token table's format and the Q4_0 rounding differ) and diverges on the
 CPU kq-native rails at one token: a top-8 router pick at layer 29 on an 8e-5 margin, which the
 arm64-sdot backend lands the other way - the CPU pregate refuses the file, so its rows stay

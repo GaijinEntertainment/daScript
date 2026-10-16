@@ -2042,7 +2042,7 @@ itself 3.87 on the Q4_K_M positions, where the resident's misses gather in one s
 positions after a flipped pick), so a forced-feed maxdiff against the CPU chain is no instrument
 here, and the perplexity ratio holds only the band - the reference-anchored form is
 `../followup_vulkan.md` item 68. Its planes alone pass a 16 GB
-card (the 704-wide down-expert rows demote to q8), so the cells skip there on the memory decline
+card, so the cells skip there on the memory decline
 and run on a 32 GB card. Its twin `test_gpu_resident_gemma4_26b_k.das` runs the same two cells on
 the model table's official UD-Q4_K_M file, whose 704-wide down stacks are native Q5_1 and ride
 the q51 expert rail (the s and e stamps, the Q8_0-activation decode GEMV) beside the k4 gate and

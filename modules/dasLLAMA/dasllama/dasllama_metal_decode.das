@@ -771,6 +771,7 @@ def private moe_g4_layer_args(t : Model; l : int64) : GkMoeCombArgs {
 
 //! whether layer l's gemma-4 MoE tail runs as the one step (`MetalMoeCombG4`): a pre/post-norm layer with a next layer to norm for,
 //! no per-layer-embedding or hyper-connection seam between, a row the step's stash holds, no knockout active
+[arch(at="../ARCHITECTURE_GPU_PREFILL_MOE.md#metal-g4-moe-step")]
 def private moe_g4_step_serves(t : Model; l : int64; seam : bool) : bool {
     let c = t.config
     return (!g_moe_g4_unfused && c.pre_post_norm && !seam && l + 1l < c.n_layers && c.dim <= ADD_RMS_MAX_DIM && g_skip == "")
@@ -4452,7 +4453,7 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
         L.upooled |> push((buf = u_vocab, size = 4ul))
     }
     if (bsupp != null) {
-        L.upooled |> push((buf = bsupp, size = uint64(nsupp * 4l)))   // nolint:STYLE012
+        L.upooled |> push((buf = bsupp, size = uint64(nsupp * 4l)))
     }
     if (u_winsl != null) {
         L.upooled |> push((buf = u_winsl, size = 4ul))

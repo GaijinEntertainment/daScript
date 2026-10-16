@@ -7000,10 +7000,9 @@ class MetalMoeRouterB : MetalMoeRouterT {
 def moe_router_args(ne, dim, ncols : int64; xs : int64 = 0l; hasb : bool = false) : GkRouterArgs
     => GkRouterArgs(ne = uint(ne), dim = uint(dim), ncols = uint(ncols), xs = uint(xs), hasb = hasb ? 1u : 0u)
 
-//! The router select on the template both homes stamp (`GkTopKRow`): one simdgroup a stream, DEPTH logits a lane; lane 0 writes
-//! the stream's selection row - the picks (`seli`), then their weights (`selw`, the same buffer's float view): the softmax
-//! weights renormed under `norm`, or under `raw` (gpt-oss softmax_weight, the select on the raw logits) the softmax over the picks;
-//! every weight then under the model's global scale and the layer's per-expert down scales (`scale_weight`)
+//! The router select on the template both homes stamp (`GkTopKRow`): one simdgroup a stream, DEPTH logits a lane; lane 0 writes the
+//! picks (`seli`), then their weights (`selw`, the float view): renormed under `norm`, or under `raw` (gpt-oss) the softmax over
+//! the picks, then under the global and the per-expert down scales (`scale_weight`)
 [ |> template_struct_instance]
 class template MetalMoeSelectT : GkTopKRow {
     @ssbo @binding = 0 logits : array<float>                 //! [streams x lstride] router logits
@@ -7260,10 +7259,9 @@ class MetalMoeCombineSh : GkMoeCombine {
     }
 }
 
-//! The gemma-4 MoE step on the template both homes stamp (`GkMoeCombG4`): one threadgroup of 1024 lanes a row, the row stash the
-//! add-rms slab's width (`ADD_RMS_MAX_DIM`); the decode stamps read the slots off the selection rows (`p k + j`, the weights past the
-//! picks) and store the next norm's row in f32 (`Hx`: with its f16 twin), the window's (`Pf`) reads them through the bucket inverse
-//! and stores no norm - the next layer opens on its own
+//! The gemma-4 MoE step on the template both homes stamp (`GkMoeCombG4`): a threadgroup of 1024 lanes a row over the add-rms slab's
+//! stash; the decode stamps read the selection rows' slots and store the next norm in f32 (`Hx`: with its f16 twin), the window's
+//! (`Pf`) reads them through the bucket inverse and stores none (`ARCHITECTURE_GPU_PREFILL_MOE.md#metal-g4-moe-step`)
 [ |> template_struct_instance]
 class template MetalMoeCombG4T : GkMoeCombG4 {
     @workgroup xrow : float[4096]

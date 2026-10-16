@@ -350,8 +350,8 @@ def private census_zoo(t : T?) {
     cov_model(t, path_join(models_dir(), "Qwen1.5-MoE-A2.7B-Chat.Q8_0.gguf"), "qwen2moe",
         [KVDtype.f16], none)
     // gemma4moe: the only carrier of a Q4_0 routed expert plane - the gemma-4 dense-shared MoE
-    // whose fused gate_up stacks are Q4_0 (the 704-wide down stacks demote to q8: no multiple of
-    // 256). No batch shapes, same reason as the other MoE rows; large tier
+    // whose fused gate_up stacks are Q4_0 (the 704-wide down stacks serve as q4032, off the 256
+    // lattice). No batch shapes, same reason as the other MoE rows; large tier
     cov_model(t, path_join(models_dir(), "gemma-4-26B-A4B-it-Q4_0.gguf"), "gemma4moe",
         [KVDtype.f16], none)
     cov_tower(t)
