@@ -2857,10 +2857,18 @@ var private g_dfuse = -1
 
 def private decode_fuse_pre : bool => g_dfuse < 0 ? g_env_metal.fuse : g_dfuse != 0
 
-//! Epilogue-fusion rail for the single-stream decode: 1 forces on, 0 forces the separate
+//! the fuse knob's off announce: the split chain reaches the one-row step and every batched row step
+def private decode_fuse_off_say {
+    to_log(LOG_WARNING, "dasLLAMA metal decode: every decode sandwich seam runs the split chain (the branch's post norm, the add, the next norm) on the one-row step and every batched row step, as asked (set_metal_decode_fuse, DASLLAMA_METAL_FUSE=0)\n")
+}
+
+//! Epilogue-fusion rail for the one-row step and the batched rows: 1 forces on, 0 forces the separate
 //! per-op dispatches, negative restores the env default (`DASLLAMA_METAL_FUSE`).
 def public set_metal_decode_fuse(v : int) {
     g_dfuse = v < 0 ? -1 : (v != 0 ? 1 : 0)
+    if (!decode_fuse_pre()) {
+        decode_fuse_off_say()
+    }
 }
 
 // encode the whole step (prologue rms, n_layers fused blocks, optional GPU classifier) into a
@@ -3414,6 +3422,9 @@ def metal_batch_rows_gathered() : int64 => g_b_emb_gathered
 //! the batched step gathers its rows off their ids (on, the default), or takes the rows the host embeds and pokes up (the A/B control)
 def set_metal_batch_gather(on : bool) {
     g_b_gather = on
+    if (!on) {
+        to_log(LOG_WARNING, "dasLLAMA metal batch decode: the batched rows take the rows the host embeds, not the device gather off their ids, as asked (set_metal_batch_gather)\n")
+    }
     discard_batch_pre()   // a step encoded under the other form would read the other rows
 }
 
@@ -3475,6 +3486,9 @@ def public set_metal_batch_addrms_unfused(v : bool) {
 def public set_metal_moe_g4_unfused(v : bool) : bool {
     let prior = g_moe_g4_unfused
     g_moe_g4_unfused = v
+    if (v) {
+        to_log(LOG_WARNING, "dasLLAMA metal decode: the gemma-4 MoE tail runs its unfused chain, not the one-step form, as asked (set_metal_moe_g4_unfused)\n")
+    }
     discard_batch_pre()
     return prior
 }
@@ -4778,6 +4792,9 @@ def dasllama_metal_decode_register() {
     g_env_logits = g_env_metal.logits
     g_env_batch_mm = g_env_metal.batch_mm
     g_env_attn_d = g_env_metal.attn_d
+    if (!g_env_metal.fuse) {
+        decode_fuse_off_say()
+    }
     if (!g_env_attn_d) {
         to_log(LOG_WARNING, "dasLLAMA metal decode: DASLLAMA_METAL_ATTN_D=0 - the single row, the verify's rows and the batch step take the chunked attention pair past the single-dispatch ceiling (the fused form's control)\n")
     }

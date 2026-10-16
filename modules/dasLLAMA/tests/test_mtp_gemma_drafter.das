@@ -113,7 +113,8 @@ def test_gemma_drafter_attach_checks(t : T?) {
         delete shell
     }
     t |> run("the facade's refusal names every registered backend's own refusal, or that this build registers none") @(t : T?) {
-        t |> equal(mtp_attach_refusal(default<array<string>>), "no GPU driver on this build carries an assistant drafter", "no backend registered")
+        t |> equal(mtp_attach_refusal(default<array<string>>), ("no GPU driver on this build carries an assistant drafter - require dasllama/dasllama_metal_mtp_gemma (dasMetal) or "
+            + "dasllama/dasllama_vulkan_mtp_gemma (dasVulkan)"), "no backend registered names the modules")
         t |> equal(mtp_attach_refusal(["metal: a", "vulkan: b"]), "metal: a; vulkan: b", "each backend's refusal, joined")
         var shell = Model()
         let why = attach_mtp_drafter_(shell, path_join(scratch_path("."), "no-such-drafter.gguf"))

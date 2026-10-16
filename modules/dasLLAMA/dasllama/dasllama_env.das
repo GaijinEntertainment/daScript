@@ -138,7 +138,7 @@ struct public GpuTierEnv {
     gpu_ctx_strict : bool = false
 
     @clarg_default_doc = "0 (the plan's own count)"
-    @clarg_doc = "Serve at least this many routed layers' experts on the host - the first in layer order - on the whole-model driver of a plain MoE, whatever the card holds (set_gpu_host_layers in process): the host-layers form, with its split token command and cut window chain, reached on any card. A hyper-connection model serves every routed layer on the host regardless."
+    @clarg_doc = "Serve at least this many routed layers' experts on the host - the first in layer order - on the whole-model driver of any MoE that routes no more picks a row than the split command serves, the gemma-4 MoE with its parallel dense expert included, whatever the card holds (set_gpu_host_layers in process): the host-layers form, with its split token command and cut window chain, reached on any card. A hyper-connection model serves every routed layer on the host regardless."
     gpu_host_layers : int64 = 0l
 
     @clarg_doc = "The K/V codec the whole-model driver's mirror is asked to arm at, where no caller set one in process (set_gpu_kv_dtype): f16 (the default), q8_0 (half the mirror's bytes) or tq4 (a quarter). Sessions of the armed codec are served; any other spelling reads as f16."

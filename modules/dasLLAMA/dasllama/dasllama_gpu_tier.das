@@ -913,7 +913,9 @@ typedef RdecSetPleTableFn = function<(blk : int64; fmt : int) : bool>
 [unused_argument(ple, gate_f32, proj_f32)]
 def private rdec_unset_set_ple(ple : int64; gate_f32 : array<float>; proj_f32 : array<float>) : bool => false
 [unused_argument(l, bgate, bproj, fgate, fproj)]
-def private rdec_unset_set_ple_layer(l, bgate, bproj : int64; fgate, fproj : int) {}
+def private rdec_unset_set_ple_layer(l, bgate, bproj : int64; fgate, fproj : int) {
+    panic("dasLLAMA: resident per-layer-embedding layer planes hit without an installed GPU driver - require dasllama/dasllama_math_vulkan (the Vulkan tier installs it)")
+}
 [unused_argument(w16, w32, pnorm, all)]
 def private rdec_unset_set_ple_proj(w16 : array<uint16>; w32 : array<float>; pnorm : array<float>; all : int64) : bool => false
 [unused_argument(blk, fmt)]
@@ -1848,7 +1850,7 @@ typedef RdecTokenNFn = function<(x : array<float>; cossin : array<float>; ple : 
 
 [unused_argument(x, cossin, ple, ple_raw, ids, poss, cnts, regs, nrows, lrows, picks)]
 def private rdec_unset_token_n(x : array<float>; cossin : array<float>; ple : array<float>; ple_raw : bool; ids : array<int64>; poss : array<int64>; cnts : array<int64>; regs : array<int64>; nrows : int64; lrows : array<float?>; var picks : array<int64>) {
-    panic("dasLLAMA: resident N-row token hit without an installed GPU driver")
+    panic("dasLLAMA: resident N-row token hit without an installed GPU driver - require dasllama/dasllama_math_vulkan (the Vulkan tier installs it)")
 }
 def private rdec_no_token_n_rows : int64 => 0l
 var private g_rdec_token_n = @@rdec_unset_token_n
