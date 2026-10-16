@@ -7537,7 +7537,7 @@ class MetalMoeCombG4Hx : MetalMoeCombG4T {
 class MetalMoeCombG4Pf : MetalMoeCombG4T {
     override GATHERED = true
     override OUT_F32 = false
-    override SLOT_X4 = false   //! the window's 512 rows run 11% slower with four slot loads in flight a lane (`bench_metal_gk_rows`'s race)
+    override SLOT_X4 = false   //! 121.4 us off against 136.9 on at 512 rows, `debug-jit` (ARCHITECTURE_GPU_SHARED_KERNELS.md's race provenance)
 
     [metal_kernel(name="metal_moe_comb_g4_pf_msl")]
     def metal_moe_comb_g4_pf {
