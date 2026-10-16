@@ -448,7 +448,7 @@ struct public VulkanEnv {
     @clarg_doc = "Prefill record/execute overlap: the window chain submits in ramped chunks (1,2,4,8 layers) so the GPU starts while the CPU still records; 0 pins the single fenced submit (the per-role GPU profile pins it too, so a chunk gap never bills to a role)."
     vk_overlap : bool = true
 
-    @clarg_doc = "Device-side token-embedding gather for the resident prefill and the one-row decode step: a q8 or K-quant table off its own plane (the tied classifier's, or an untied table's where it fits the room past the weights and the K/V), an F32/F16/BF16 table off its exact f32 rows uploaded under a 512 MB cap; 0 keeps the CPU embed loop."
+    @clarg_doc = "Device-side token-embedding gather for the resident prefill and every token command (the one-row step, the N-row command, the NextN verify and draft): a q8 or K-quant table off its own plane (the tied classifier's, or an untied table's where it fits the room past the weights and the K/V), an F32/F16/BF16 table off its exact f32 rows uploaded under a 512 MB cap; 0 keeps the CPU embed loop. `set_gpu_resident_embed` pins it for the next loads in process."
     vk_gpu_embed : bool = true
 
     @clarg_doc = "Pin REQUIRE_FULL_SUBGROUPS on every class pipeline (instrument; measured slower than plain pipelines on the mm_a gate shape, so those are the default)."

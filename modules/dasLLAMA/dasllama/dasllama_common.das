@@ -380,6 +380,22 @@ def register_embed_dev_gates(name : string; prefill, decode : EmbedGpuGateFn) {
     g_embed_dev_decode_gates[name] = decode
 }
 
+var private g_embed_dev_batch_gates : table<string; EmbedGpuGateFn>
+
+//! The batch-decode override `name`'s gather gate: while it is the armed batch override, the gate answers whether its batched
+//! step gathers every row off the row's token id itself - the hub then embeds no row, and embeds them all where the step declines
+[arch(at="../ARCHITECTURE_GPU_ASYMMETRIES.md#gpu-asymmetries")]
+def register_embed_batch_gate(name : string; gate : EmbedGpuGateFn) {
+    g_embed_dev_batch_gates[name] = gate
+}
+
+//! a batched step's rows gather on the device: the armed batch override's gate, on a model whose pre-stack steps read no host row
+def embed_batch_on_device(t : Model; s : Session; nrows, pos : int64) : bool {
+    return false if (t.blocks.pre_stack_decode != null)
+    let own = g_embed_dev_batch_gates?[g_batch_decode_override_name] ?? default<EmbedGpuGateFn>
+    return own != default<EmbedGpuGateFn> && invoke(own, t, s, nrows, pos)
+}
+
 //! the prefill rows gather on the device: the active override's own gate where it registered one, else the installed seat's
 def private embed_prefill_on_device(t : Model; s : Session; npos, start_pos : int64) : bool {
     let own = g_embed_dev_prefill_gates?[g_prefill_override_name] ?? default<EmbedGpuGateFn>

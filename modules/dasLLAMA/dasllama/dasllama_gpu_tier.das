@@ -675,14 +675,14 @@ def public rdec_land_carry(row : int64; var dst : array<float>) { invoke(g_rdec_
 //! the NextN draft head's arm, after the classifier: its eh_proj plane `beh` in format `feh`, its attention quad and FFN triple
 //! at layer index n_layers; false = a class rail declined and the head stays off the device
 typedef RdecSetHeadFn = function<(beh : int64; feh : int; bq : int64; bk : int64; bv : int64; bo : int64; b1 : int64; b3 : int64; b2 : int64; fq : int; fk : int; fv : int; fo : int; f1 : int; f3 : int; f2 : int; g : RdecLayerGeom) : bool>
-//! one NextN draft at head row `row` of the selected region: the host head rows [hyd0, row) at `kp` / `vp` (the head's cache from row 0)
-//! come up, then `x` (the embedded token) and the carry `h` run the head; `rdec_land_carry`'s row 0 takes its hidden, `logits` its logits
-//! unless `pick_only` (they stay on the device), row `row`'s K/V stays on the device (`rdec_kv_read` at layer n_layers on a pass). Answers the argmax id, -1 where the driver holds no head
-typedef RdecDraftFn = function<(x : array<float>; h : array<float>; cossin : array<float>; row : int64; hyd0 : int64; var kp : uint8?; var vp : uint8?; pick_only : bool; var logits : array<float>; experts : RdecHostExpertsFn) : int64>
+//! one NextN draft at head row `row` of the selected region: the host head rows [hyd0, row) at `kp` / `vp` (from row 0) come up, then the token -
+//! its id `token`, gathered on the device, or at -1 `x`, its unscaled row - and the carry `h` run the head; `rdec_land_carry`'s row 0 takes its hidden,
+//! `logits` its logits unless `pick_only`, row `row`'s K/V stays on the device (`rdec_kv_read` at layer n_layers on a pass). The argmax id, -1 with no head
+typedef RdecDraftFn = function<(x : array<float>; token : int64; h : array<float>; cossin : array<float>; row : int64; hyd0 : int64; var kp : uint8?; var vp : uint8?; pick_only : bool; var logits : array<float>; experts : RdecHostExpertsFn) : int64>
 [unused_argument(beh, feh, bq, bk, bv, bo, b1, b3, b2, fq, fk, fv, fo, f1, f3, f2, g)]
 def private rdec_unset_set_head(beh : int64; feh : int; bq, bk, bv, bo, b1, b3, b2 : int64; fq, fk, fv, fo, f1, f3, f2 : int; g : RdecLayerGeom) : bool => false
-[unused_argument(x, h, cossin, row, hyd0, kp, vp, pick_only, logits, experts)]
-def private rdec_unset_draft(x : array<float>; h : array<float>; cossin : array<float>; row, hyd0 : int64; var kp : uint8?; var vp : uint8?; pick_only : bool; var logits : array<float>; experts : RdecHostExpertsFn) : int64 => -1l
+[unused_argument(x, token, h, cossin, row, hyd0, kp, vp, pick_only, logits, experts)]
+def private rdec_unset_draft(x : array<float>; token : int64; h : array<float>; cossin : array<float>; row, hyd0 : int64; var kp : uint8?; var vp : uint8?; pick_only : bool; var logits : array<float>; experts : RdecHostExpertsFn) : int64 => -1l
 var g_rdec_set_head = @@rdec_unset_set_head
 var g_rdec_draft = @@rdec_unset_draft
 var g_rdec_draft_installed = false
@@ -713,15 +713,15 @@ def public rdec_draft_installed() : bool => g_rdec_draft_installed
 def public rdec_set_head(beh : int64; feh : int; bq, bk, bv, bo, b1, b3, b2 : int64; fq, fk, fv, fo, f1, f3, f2 : int; g : RdecLayerGeom) : bool
     => invoke(g_rdec_set_head, beh, feh, bq, bk, bv, bo, b1, b3, b2, fq, fk, fv, fo, f1, f3, f2, g)
 //! `experts` sums a routed head's experts on the host between the draft's segments (the hyper-connection chain); a dense head never calls it
-def public rdec_draft(x : array<float>; h : array<float>; cossin : array<float>; row, hyd0 : int64; var kp : uint8?; var vp : uint8?; pick_only : bool; var logits : array<float>; experts : RdecHostExpertsFn) : int64
-    => invoke(g_rdec_draft, x, h, cossin, row, hyd0, kp, vp, pick_only, logits, experts)
+def public rdec_draft(x : array<float>; token : int64; h : array<float>; cossin : array<float>; row, hyd0 : int64; var kp : uint8?; var vp : uint8?; pick_only : bool; var logits : array<float>; experts : RdecHostExpertsFn) : int64
+    => invoke(g_rdec_draft, x, token, h, cossin, row, hyd0, kp, vp, pick_only, logits, experts)
 
-//! the same-slab verify of one stream's `n` rows at `pos` in the selected region: `x` / `cossin` the rows' residuals and rope rows,
-//! `hemb` / `hcos` the head rows' unscaled embeds and rope rows a position below, `h0` the pre-draft carry; the rows' picks and hidden land
-//! in `picks` / `hid`, their logits in `logits` unless `pick_only` (a guard step lands them for the over-commit check); the head's K/V rows `pos - 1` .. stay on the device. False where it steps no `n` rows
-typedef RdecVerifyFn = function<(x : array<float>; cossin : array<float>; hemb : array<float>; hcos : array<float>; h0 : array<float>; side : array<float>; pos : int64; n : int64; pick_only : bool; var logits : array<float>; var picks : array<int64>; var hid : array<float>; experts : RdecHostExpertsRowsFn) : bool>
-[unused_argument(x, cossin, hemb, hcos, h0, side, pos, n, pick_only, logits, picks, hid, experts)]
-def private rdec_unset_verify(x, cossin, hemb, hcos, h0, side : array<float>; pos, n : int64; pick_only : bool; var logits : array<float>; var picks : array<int64>; var hid : array<float>; experts : RdecHostExpertsRowsFn) : bool => false
+//! the same-slab verify of `n` rows at `pos` in the selected region: `x` / `cossin` the rows and rope rows, `hemb` / `hcos` the head's unscaled embeds and rope
+//! rows a position below (`ids`, where the driver gathers the rows: `x` / `hemb` unread), `h0` the pre-draft carry; picks and hidden land in `picks` / `hid`,
+//! logits in `logits` unless `pick_only` (a guard step lands them); the head's K/V rows `pos - 1` .. stay on the device. False where it steps no `n` rows
+typedef RdecVerifyFn = function<(x : array<float>; cossin : array<float>; hemb : array<float>; hcos : array<float>; h0 : array<float>; side : array<float>; ids : array<int64>; pos : int64; n : int64; pick_only : bool; var logits : array<float>; var picks : array<int64>; var hid : array<float>; experts : RdecHostExpertsRowsFn) : bool>
+[unused_argument(x, cossin, hemb, hcos, h0, side, ids, pos, n, pick_only, logits, picks, hid, experts)]
+def private rdec_unset_verify(x, cossin, hemb, hcos, h0, side : array<float>; ids : array<int64>; pos, n : int64; pick_only : bool; var logits : array<float>; var picks : array<int64>; var hid : array<float>; experts : RdecHostExpertsRowsFn) : bool => false
 def private rdec_no_verify_rows : int64 => 0l
 def public rdec_no_verify_landed_logits : bool => false   //! public: a default argument resolves at the caller's site
 var g_rdec_verify = @@rdec_unset_verify
@@ -743,8 +743,8 @@ def public rdec_verify_installed() : bool => g_rdec_verify_installed
 def public rdec_verify_rows() : int64 => invoke(g_rdec_verify_rows)
 def public rdec_verify_landed_logits() : bool => invoke(g_rdec_verify_landed_logits)
 //! `side` the rows' n-gram side rows and `experts` the host's routed sums of the rows between a hyper-connection chain's segments; empty and unreached elsewhere
-def public rdec_verify(x, cossin, hemb, hcos, h0, side : array<float>; pos, n : int64; pick_only : bool; var logits : array<float>; var picks : array<int64>; var hid : array<float>; experts : RdecHostExpertsRowsFn) : bool
-    => invoke(g_rdec_verify, x, cossin, hemb, hcos, h0, side, pos, n, pick_only, logits, picks, hid, experts)
+def public rdec_verify(x, cossin, hemb, hcos, h0, side : array<float>; ids : array<int64>; pos, n : int64; pick_only : bool; var logits : array<float>; var picks : array<int64>; var hid : array<float>; experts : RdecHostExpertsRowsFn) : bool
+    => invoke(g_rdec_verify, x, cossin, hemb, hcos, h0, side, ids, pos, n, pick_only, logits, picks, hid, experts)
 
 //! the same-slab verify's reject in the selected region: every recurrent slot and ring pair back to the copy the verify command
 //! took after its row `a` - the last row the round committed - so the round takes no host snapshot and replays no step; false

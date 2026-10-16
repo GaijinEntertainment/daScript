@@ -10677,20 +10677,25 @@ class template Blk32GemvT {
         return subgroupAdd(acc)
     }
 
-    //! the routed down GEMV summed under the routing weights: a subgroup a row of the model dim, y[row] = sum_r w[r] dot_r
+    //! the routed down GEMV summed under the routing weights over `pa.ncols` token rows (0 or 1: the one-row command's): a subgroup a
+    //! (token row p, model-dim row), y[p x d + row] = sum_j w[p k + j] dot_(p k + j), token row p's k slots the regions p k .. p k + k - 1
     def sum_shell {
         static_if (SUM) {
-            let row = gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID
-            if (row < pa.d) {
+            let rows = max(pa.ncols, 1u)
+            let rg = gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID
+            if (rg < rows * pa.d) {
+                let p = rg / pa.d
+                let row = rg % pa.d
+                let k = pa.nreg / rows
                 let nb = pa.n / 32u
                 var tot = 0.0
-                var r = 0u
-                while (r < pa.nreg) {
+                var r = p * k
+                while (r < p * k + k) {
                     tot += sw[r] * row_dot(regions[r * 2u] + row * nb, regions[r * 2u + 1u], nb)
                     r++
                 }
                 if (subgroupElect()) {
-                    y[pa.ybase + row] = tot
+                    y[pa.ybase + rg] = tot
                 }
             }
         }

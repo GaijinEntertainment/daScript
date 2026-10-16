@@ -100,8 +100,8 @@ asymmetries a stamp family ledgers - stays in `ARCHITECTURE_GPU.md#gpu-backends`
   stream to it and one same-slab verify carries all their rows (`ARCHITECTURE_GPU_MTP.md#mtp-joint-verify`); on Vulkan and the CPU the tick steps each NextN stream through its own round. An assistant drafter's tick verifies every stream's rows together on both homes.
 - **The assistant drafter's drafts reach its verify on the device on Metal alone.** Metal's verify gathers the draft rows' embeds off
   the chain's token buffer, so drafts and verify run behind one another with no join between
-  (`ARCHITECTURE_GPU_MTP.md#mtp-round-one-join`). The Vulkan N-row command takes host-staged rows - each row's embed and rope row
-  built on the host at its own position - so the draft command lands its ids on the host first, one join a round
+  (`ARCHITECTURE_GPU_MTP.md#mtp-round-one-join`). The Vulkan N-row command takes host-staged ids and rope rows - each row's id
+  staged for its gather and its rope row built on the host at its own position - so the draft command lands its ids on the host first, one join a round
   (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-assistant-drafter`).
 - **The device KV room seat is Metal-only.** `set_gpu_kv_room_hook` has one registrant, the Metal mirror's ceiling
   (`mirror_rows_within_ceiling`); `gpu_kv_room_rows` reads unbounded elsewhere and `device_kv_max_rows` the model's
@@ -166,8 +166,10 @@ asymmetries a stamp family ledgers - stays in `ARCHITECTURE_GPU.md#gpu-backends`
   ids-form prefill installs SEPARATELY from the resident driver bundle (`install_rdec_prefill_ids`),
   so a tier without it never arms the gate - and a decode step through its own gate under its
   override name (`register_embed_dev_gates("vulkan")`); Metal registers both gates under its name
-  (`register_embed_dev_gates("metal")`). Both gather the window's rows and the single-row decode
-  step's row on the device off the table's q8 or K-quant plane by its format - Vulkan off the tied
+  (`register_embed_dev_gates("metal")`). A batched step's rows ride each backend's batch gate
+  (`register_embed_batch_gate`, the hub embedding them late where the override declines). Both gather
+  the window's rows, the decode step's row and a batched step's rows on the device off the table's q8
+  or K-quant plane by its format - Vulkan off the tied
   classifier's plane or an untied table's own plane in the arena (`EmbGather`, the `KqEmb<Fmt>`
   leaves, `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#vk-token-gather`), Metal off the blob planes
   (`MetalEmbedKqT`, one stamp a format; `emb_dev_gather_ok`) - and the step reads a 4-byte token id

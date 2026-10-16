@@ -15,6 +15,7 @@ require vulkan
 require vulkan/vulkan_boost
 require dasllama/dasllama_vulkan_common
 require dasllama/dasllama_vulkan_classes
+require dasllama/dasllama_kqformat   // KqFmt: the routed down's format
 require _vk_probe_fixture   // pfq_arm, pfq_avg_us: the device clock
 
 let private DISPATCHES = 64
@@ -179,6 +180,31 @@ def main : int {   // nolint:STYLE038 — one-shot probe: the classes, the fixtu
                 enc_cls_ar_rq_b(r, h, s_arq, pc, nr)
             }
         }
+    }
+    //! the gemma-4 26B's routed down at its decode shape (704 -> 2816, k 8, Q5_1, every slot its own expert): the summed GEMV both
+    //! commands fold under the routing weights, at one, two and four token rows, against the per-slot leaf the combine sums
+    let dn = 704
+    let dd = 2816
+    let dk = 8
+    let dnb = dn / 32
+    let q51 = int(KqFmt.q51)
+    if (gemv_shell_ensure(q51, GEMV_SHELL_SUM) && gemv_cls_ensure(q51)) {
+        var regs <- [for (i in range(8 * dk)); uint(i % 2 == 0 ? (i / 2) * dd * dnb : (i / 2) * dnb)]
+        upload_region_at(b[2], 0l, unsafe(addr<uint8 const?>(regs[0])), long_length(regs) * 4l)
+        var s_sum = set_q51_gemv_sum_cls(fixed_array(b[0], b[1], b[2], b[3], b[4], b[5], b[1]), fixed_array(bb, bb, bb, bb, bb, bb, bb),
+            fixed_array(0u, 0u, 0u, 0u, 0u, 1u, 0u))
+        var s_leaf = gemv_cls_set(q51, fixed_array(b[0], b[1], b[2], b[3], b[4], b[5]), fixed_array(bb, bb, bb, bb, bb, bb), fixed_array(0u, 0u, 0u, 0u, 0u, 1u))
+        for (nr in fixed_array(1, 2, 4)) {
+            time_cls("down q51 {dn} -> {dd} k {dk} summed, {nr} rows") $(r; var h) {
+                var pc = GemvArgs(n = uint(dn), d = uint(dd), nreg = uint(dk * nr), ncols = uint(nr))
+                gemv_shell_enc(q51, GEMV_SHELL_SUM, r, h, s_sum, pc, gemv_wgs(int64(dd * nr), 0u))
+            }
+            time_cls("down q51 {dn} -> {dd} k {dk} a slot at a time, {nr} rows") $(r; var h) {
+                var pc = GemvArgs(n = uint(dn), d = uint(dd), nreg = uint(dk * nr))
+                gemv_enc(q51, r, h, s_leaf, pc, int64(dk * dd * nr))
+            }
+        }
+        delete regs
     }
     //! the E-series side rows' projection at the E2B shape (35 layers x 256 rows of 1536): the f32 rows against the bf16 word form
     let pne = 35 * 256

@@ -2717,8 +2717,8 @@ struct RDec {
     emb_f32_bytes : int64
     emb_fmt : int                      //! ... its format, the gather's stamp (`emb_cls_ensure`)
     emb_scale : float                  //! ... and the embed scale the one-row command's gather applies
-    tok_ids_host : HostBuf             //! the one-row command's token id, read by its gather where the step brings one (`EMB_ID_HOST` = the row below)
-    tok_xh_host : HostBuf              //! the host's row for a step that brings no token id, read in place by the same gather
+    tok_ids_host : HostBuf             //! the token commands' ids a row, read by their gathers where a row brings one (`EMB_ID_HOST` = the row below)
+    tok_xh_host : HostBuf              //! the host's rows for the rows that bring no token id, `nb` of them, read in place by the same gather
     s_tok_emb : VkDescriptorSet        //! the one-row command's gather set
     ple_tbl_blk : int64 = -1l          //! the E-series token table's arena block: the ids prefill gathers pf_ple from it
     ple_tbl_fmt : int                  //! ... its format slot, the table's own tag - the gather's stamp (`emb_cls_ensure`)

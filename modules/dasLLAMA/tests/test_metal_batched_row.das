@@ -87,6 +87,96 @@ def test_metal_batched_row_eseries(t : T?) {
     }
 }
 
+let private GATHER_STEPS = 6l
+
+//! three host-cached sessions over three prompts batched through GATHER_STEPS steps on the Metal batched driver: every row's
+//! logits a step, with the driver's own step count asserted
+def private metal_batched_logits(t : T?; tr : Model) : array<array<float>> {   // nolint:LINT012,LINT019 — reached from the das_metal halves
+    var rows : array<array<float>>
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        var prompts <- [ <- encode(tr, "Count from one to twenty: one, two, three,", true, false),
+                         <- encode(tr, "The letters of the alphabet in order: a, b, c, d,", true, false),
+                         <- encode(tr, "List the days of the week: Monday, Tuesday,", true, false)]
+        var sessions : array<Session>
+        sessions |> reserve(3)
+        for (p in prompts) {
+            sessions |> emplace <| create_session(tr, KVDtype.f16)
+            eval(tr, sessions[length(sessions) - 1], p)
+        }
+        var sess <- [for (i in range(3)); unsafe(addr(sessions[i]))]
+        var ws <- create_batch_workspace(tr)
+        rows |> reserve(3l * GATHER_STEPS)
+        let steps0 = metal_batch_decode_stats().steps
+        for (st in range64(GATHER_STEPS)) {
+            var toks <- [for (i in range(3)); 400l + 37l * st + 11l * int64(i)]
+            eval_batch(tr, ws, sess, toks)
+            delete toks
+            for (s in sessions) {
+                rows |> push_clone(s.logits)
+            }
+        }
+        t |> equal(metal_batch_decode_stats().steps - steps0, GATHER_STEPS, "every batched step went through the Metal batched driver")
+        sess |> clear()   // borrowed handles: a delete of array<T?> frees the pointees
+        delete ws
+        delete sessions
+        delete prompts
+    }
+    return <- rows
+}
+
+//! the distinct-session batched step gathers its rows off their ids on the device (`metal_batch_rows_gathered` up by every row,
+//! the host embedding none, `batch_rows_host_embedded`), each row's logits at every step bit for bit the same steps' with the
+//! gather off (`set_metal_batch_gather(false)`: the host embeds every row and the step pokes it up), which gathers none - the control
+def private metal_batch_gather_cell(t : T?; file, family : string) {
+    t |> run("the batched step gathers every row off its id, bit for bit the rows the host embeds ({file})") <| @(t : T?) {
+        if (!family_on(t, family)) return
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            let path = path_join(models_dir(), file)
+            return if (!jit_model_available(t, path))
+            let prior_mode = get_metal_mode()
+            set_metal_mode(MetalMode.when_available)
+            var tr <- blob_twin(t, path, 256l)
+            let gather0 = metal_batch_gather()
+            with_dasllama_jobque_() {
+                set_metal_batch_gather(true)
+                let g0 = metal_batch_rows_gathered()
+                let h0 = batch_rows_host_embedded()
+                var dev <- metal_batched_logits(t, tr)
+                t |> equal(metal_batch_rows_gathered() - g0, 3l * GATHER_STEPS, "every batched row gathered off its id")
+                t |> equal(batch_rows_host_embedded() - h0, 0l, "the host embedded no batched row")
+                set_metal_batch_gather(false)
+                let g1 = metal_batch_rows_gathered()
+                let h1 = batch_rows_host_embedded()
+                var host <- metal_batched_logits(t, tr)
+                t |> equal(metal_batch_rows_gathered() - g1, 0l, "with the gather off no batched row gathered: the counter's control")
+                t |> equal(batch_rows_host_embedded() - h1, 3l * GATHER_STEPS, "with the gather off the host embedded every batched row")
+                set_metal_batch_gather(gather0)
+                t |> equal(long_length(dev), long_length(host), "both runs stepped every row")
+                for (i in range64(min(long_length(dev), long_length(host)))) {
+                    let diff = logits_maxdiff(dev[i], host[i])
+                    t |> equal(diff, 0.0, "step {i / 3l}, row {i % 3l}: the gathered rows' logits bit for bit the host rows' (maxdiff {diff})")
+                }
+                delete dev
+                delete host
+            }
+            set_metal_mode(prior_mode)
+            delete tr
+        } else {
+            t |> skip("dasMetal not built")
+        }
+    }
+}
+
+[test]
+def test_metal_batch_gather_llama(t : T?) {
+    metal_batch_gather_cell(t, "Llama-3.2-1B-Instruct-Q8_0.gguf", "llama")
+}
+
+[test]
+def test_metal_batch_gather_eseries(t : T?) {
+    metal_batch_gather_cell(t, "gemma-4-E2B-it-Q8_0.gguf", "gemma")
+}
+
 [test]
 def test_metal_batched_row_shexp(t : T?) {
     t |> run("the batched row serves a shared-expert MoE through the batched driver's rows site (Qwen1.5-MoE-A2.7B Q8)") <| @(t : T?) {

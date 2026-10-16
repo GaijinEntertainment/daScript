@@ -2662,15 +2662,15 @@ struct BatchLanding {
     @scratch @exact_size lkbase : array<int64>     //!< per (row i, layer l) flattened i * n_layers + l (caps differ per row)
     @scratch @exact_size lvbase : array<int64>
     bx : MetalBuffer?             //!< the poke targets: the rows' embeds ...
-    poke_x : bool                 //!< ... unless the same-slab step gathers them on the GPU
+    poke_x : bool                 //!< ... unless the step gathers them on the GPU off the rows' ids
     bcos : MetalBuffer?           //!< ... the rows' rope tables, per class ...
     bsin : MetalBuffer?
     bcos_swa : MetalBuffer?
     bsin_swa : MetalBuffer?
     bytes_tab : uint64
     bytes_tab_sw : uint64
-    bple : MetalBuffer?           //!< ... and the E-series' per-layer side rows (null where the step builds them, `ple_tok`)
-    ple_tok : MetalBuffer?        //!< the rows' token ids the step's device pre-step gathers by (null where they ride the device already)
+    bple : MetalBuffer?           //!< ... and the E-series' per-layer side rows (null where the step builds them, `row_tok`)
+    row_tok : MetalBuffer?        //!< the rows' token ids the step gathers their embed rows and side rows by (null where they ride the device already)
     ple_n : int64
     dim : int64
     kdt : KVDtype                 //!< the match key: KV codec, arena epoch, the rows' uids and positions, the model shape

@@ -1763,7 +1763,7 @@ def vk_rdec_set_emb(emb_block : int64; fmt : int; escale : float) : bool {
         g_rd.emb_fmt = fmt
         rd_tok_emb_staging(escale)
         g_rd.s_tok_emb = emb_cls_set(fmt, arena_planes(fmt, emb_block), g_rd.tok_ids_host.buf, 4l * g_rd.nb, 0u,
-            g_rd.tok_xh_host.buf, g_rd.dim * 4l, g_rd.x_dev, g_rd.dim * 4l * g_rd.nb, VHZ_X)
+            g_rd.tok_xh_host.buf, g_rd.dim * 4l * g_rd.nb, g_rd.x_dev, g_rd.dim * 4l * g_rd.nb, VHZ_X)
         rd_ple_tok_set()
         rd_invalidate_token()
     }
@@ -1779,11 +1779,11 @@ def private rd_ple_tok_set {
     g_rd.ple_tok_on = true
 }
 
-//! the one-row command's gather staging - the step's token id and the host's row a step without one stages - and the scale its rows take
+//! the token commands' gather staging - a row's token id and the host's row a row without one stages, `nb` rows of each - and the scale their rows take
 def private rd_tok_emb_staging(escale : float) {
     g_rd.emb_scale = escale
     g_rd.tok_ids_host = make_host_buf(4l * g_rd.nb, true)
-    g_rd.tok_xh_host = make_host_buf(g_rd.dim * 4l, true)
+    g_rd.tok_xh_host = make_host_buf(g_rd.dim * 4l * g_rd.nb, true)
 }
 
 //! An F32/F16/BF16 table's exact rows uploaded whole as the gather's f32 plane, for the window and the one-row command. False past
@@ -1804,7 +1804,7 @@ def vk_rdec_upload_emb_f32(fblob : array<float>; off, vocab, dim : int64; escale
     g_gpu.resident_bytes += bytes
     upload_region_at(g_rd.emb_f32, 0l, unsafe(addr<uint8 const?>(fblob[int(off)])), bytes)
     rd_tok_emb_staging(escale)
-    g_rd.s_tok_emb = emb_f32_set(g_rd.emb_f32, bytes, g_rd.tok_ids_host.buf, 4l * g_rd.nb, 0u, g_rd.tok_xh_host.buf, g_rd.dim * 4l,
+    g_rd.s_tok_emb = emb_f32_set(g_rd.emb_f32, bytes, g_rd.tok_ids_host.buf, 4l * g_rd.nb, 0u, g_rd.tok_xh_host.buf, g_rd.dim * 4l * g_rd.nb,
         g_rd.x_dev, g_rd.dim * 4l * g_rd.nb, VHZ_X)
     rd_ple_tok_set()
     rd_invalidate_token()
