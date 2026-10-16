@@ -221,6 +221,7 @@ def private race_rows(title : string; names : array<string>; ref : array<double>
         cmps |> push(arm_compare(arm, names[0], got, base, ref))
     }
     var times <- race_arms(title, narms, body)
+    rows |> reserve(length(rows) + narms)
     for (arm in range(narms)) {
         rows |> push(arm_row("race {title}: {names[arm]}", times, arm, cmps[arm]))
     }
@@ -746,7 +747,7 @@ struct private CombStep {
 }
 
 //! the combine slot race's arm `arm` on `s`: 0 the shipped stamp (`SLOT_X4` on), 1 the bench stamp (off)
-def private comb_slot_arm(enc : MetalComputeEncoder?; s : CombStep; arm : int) {   // nolint:STYLE037 - one arm a stamp, four stamps a side
+def private comb_slot_arm(enc : MetalComputeEncoder?; s : CombStep; arm : int) {
     var k = s.kc
     let dim = int64(s.dim)
     let np = int64(s.np)
@@ -783,10 +784,10 @@ def private comb_slot_race(dim, k, np : int; gathered, sh : bool; var rows : arr
         kc = moe_comb_args(int64(dim), int64(k), int64(COMB_GSTRIDE), int64(COMB_GOFF)), dim = dim, np = np, gathered = gathered, sh = sh)
     let shipped = gathered ? (sh ? "MetalMoeReduceSh" : "MetalMoeReduce") : (sh ? "MetalMoeCombineSh" : "MetalMoeCombine")
     let ref <- comb_ref(dim, k, np, gathered, sh)
-    race_rows("{shipped} dim={dim} k={k} {np} rows", ["SLOT_X4 on (the shipped stamp)", "SLOT_X4 off (bench stamp)"], ref, rows, $() {
+    race_rows("{shipped} dim={dim} k={k} {np} rows", ["SLOT_X4 on (the shipped stamp)", "SLOT_X4 off (bench stamp)"], ref, rows, $ {
         fill_pattern(s.acc, np * dim, 0.0)
     }, $(var got) {
-        got <- read_floats(s.acc, np * dim)
+        got |> push_from(read_floats(s.acc, np * dim))
     }, $(enc, a) {
         comb_slot_arm(enc, s, a)
     })
@@ -884,13 +885,13 @@ def private g4_slot_race(np : int; form : G4Form; var rows : array<Reading>) {
         byh = metal_new_buffer(g_dev, uint64(np * dim * 2)), kp = moe_g4_args(int64(dim), int64(k), 1e-6, 0.75, false), np = np, form = form)
     let win = form == G4Form.window
     let shipped = win ? "MetalMoeCombG4Pf" : (form == G4Form.decode ? "MetalMoeCombG4" : "MetalMoeCombG4Hx")
-    var names <- (win ? ["SLOT_X4 off (the shipped stamp)", "SLOT_X4 on (bench stamp)"]
+    let names <- (win ? ["SLOT_X4 off (the shipped stamp)", "SLOT_X4 on (bench stamp)"]
         : ["SLOT_X4 on (the shipped stamp)", "SLOT_X4 off (bench stamp)"])
     let ref <- g4_step_ref(dim, k, np, 0.75lf, win)
-    race_rows("g4 MoE step {shipped} dim={dim} k={k} {np} rows", names, ref, rows, $() {
+    race_rows("g4 MoE step {shipped} dim={dim} k={k} {np} rows", names, ref, rows, $ {
         fill_pattern(s.bx, np * dim, 0.5)
     }, $(var got) {
-        got <- read_floats(s.bx, np * dim)
+        got |> push_from(read_floats(s.bx, np * dim))
     }, $(enc, a) {
         g4_slot_arm(enc, s, a)
     })
@@ -903,8 +904,9 @@ def private g4_slot_race(np : int; form : G4Form; var rows : array<Reading>) {
 //! lowest expert on a tie, then their weights renormalized over the picks
 def private select_ref(ne, k : int) : array<double> {
     var inscope used <- [for (_e in range(ne)); false]
-    var picks : array<double>
-    var lw : array<double>
+    var picks, lw : array<double>
+    picks |> reserve(2 * k)
+    lw |> reserve(k)
     for (_j in range(k)) {
         var best = -1
         for (e in range(ne)) {
@@ -957,12 +959,15 @@ def private select_ds_race(ne, k : int; var rows : array<Reading>) {
         ka = GkTopKArgs(ne = uint(ne), k = uint(k), norm = 1u, lstride = uint(ne), dsoff = GK_NO_DSCALE))
     let ref <- select_ref(ne, k)
     race_rows("moe_select ne={ne} k={k} 1 row", ["the shipped plain stamp", "the down-scale arm compiled in, no row named (bench stamp)"],
-            ref, rows, $() {
+            ref, rows, $ {
         fill_pattern(s.bsel, 2 * k, 0.0)
     }, $(var got) {
         let ip = unsafe(reinterpret<uint?>(metal_buffer_contents(s.bsel)))
         let fp = unsafe(reinterpret<float?>(ip))
-        got <- [for (j in range(2 * k)); j < k ? float(unsafe(ip[j])) : unsafe(fp[j])]
+        got |> reserve(2 * k)
+        for (j in range(2 * k)) {
+            got |> push(j < k ? float(unsafe(ip[j])) : unsafe(fp[j]))
+        }
     }, $(enc, a) {
         select_arm(enc, s, a)
     })
@@ -1205,14 +1210,13 @@ def private seam_lane_race(dim, np : int; hx : bool; var rows : array<Reading>) 
         pwoff = 0u), np = np, hx = hx)
     let win = np >= 64
     let lanes = win ? fixed_array(256, 128, 1024) : fixed_array(1024, 256, 128)
-    var names <- (win ? ["256 lanes (the shipped window builder)", "128 lanes (bench stamp)", "1024 lanes (the decode builder)"]
+    let names <- (win ? ["256 lanes (the shipped window builder)", "128 lanes (bench stamp)", "1024 lanes (the decode builder)"]
         : ["1024 lanes (the shipped decode builder)", "256 lanes (the window builder)", "128 lanes (bench stamp)"])
     let ref <- seam_ref(dim, np, 0.75lf)
-    race_rows("ar dim={dim} {np} rows sandwich seam pre_add_rms{hx ? " hx" : ""}", names, ref, rows, $() {
+    race_rows("ar dim={dim} {np} rows sandwich seam pre_add_rms{hx ? " hx" : ""}", names, ref, rows, $ {
         fill_pattern(s.bx, n, 0.5)
     }, $(var got) {
-        got <- read_floats(s.bx, n)
-        got |> push_from(read_floats(s.by, n))
+        got |> push_from(read_floats(s.bx, n), read_floats(s.by, n))
     }, $(enc, a) {
         seam_lane_arm(enc, s, lanes[a])
     })
