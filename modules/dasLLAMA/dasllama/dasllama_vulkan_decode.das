@@ -2901,8 +2901,13 @@ def private rd_encode_token(var first_seg_raw : VkCommandBuffer; nrows, nsplit :
                 rd_encode_host_cut(raw, h, L, l, 1l, "m:router")
                 seg++
                 rd_host_resume(raw, g_rd.cmd_seg[split_seg_base + seg], h, l, 1l)
-                var pc14h = rd_ar_comb_args(L, nxt)
-                enc_cls_ar_comb(raw, h, L.s_addr_next, pc14h, 1l)
+                if (L.moe_g4) {   //! the host's sum is the one routed row of weight one: the gemma-4 step over the set its class built
+                    var pcg = rd_g4_comb_args(L, l, nxt, false)
+                    enc_cls_ar_comb_g4(raw, h, L.s_addr_next, pcg, 1l)
+                } else {
+                    var pc14h = rd_ar_comb_args(L, nxt)
+                    enc_cls_ar_comb(raw, h, L.s_addr_next, pc14h, 1l)
+                }
                 rd_ts(raw, "m:ar2")
                 xq_ready = false
                 continue
