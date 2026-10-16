@@ -974,20 +974,16 @@ def private stream_job_transcode(m : GGUFMeta; bytes : array<uint8> | #; var dst
             if (r.fmt == Q8_STREAM_TAG) {
                 invoke(g_stream_repack, Q8_STREAM_TAG, addr<void?>(tmp.q8[r.off - j.woff]),
                     addr<void?>(dst.qscales[roff / Q8_BLOCK_ELEMS]), r.n, r.d)
-            } elif (r.fmt == MX4_STREAM_TAG) {
-                invoke(g_stream_repack, MX4_STREAM_TAG, addr<void?>(tmp.q[((r.off - j.woff) / KQ_B32_ELEMS) * MX4_QB]),
-                    addr<void?>(dst.mxs[(roff / KQ_B32_ELEMS) * MX4_SB]), r.n, r.d)
-            } elif (r.fmt == kq_stream_code(KqFmt.q51)) {
-                invoke(g_stream_repack, r.fmt, addr<void?>(tmp.q[((r.off - j.woff) / KQ_B32_ELEMS) * Q51_QPB]),
-                    addr<void?>(dst.q51s[(roff / KQ_B32_ELEMS) * Q51_SPB]), r.n, r.d)
-            } elif (r.fmt == IQ4NL32_STREAM_TAG) {
-                invoke(g_stream_repack, IQ4NL32_STREAM_TAG, addr<void?>(tmp.q[((r.off - j.woff) / KQ_B32_ELEMS) * IQ4NL32_QB]),
-                    addr<void?>(dst.iq4nl32s[(roff / KQ_B32_ELEMS) * IQ4NL32_SB]), r.n, r.d)
             } else {
+                //! every plane-pair format's regions repack here, the quant half in the job's temp and the scale half in place
                 var rf = KqFmt.q8
-                if (kq_fmt_of_stream_code(r.fmt, rf) && kq_sb(rf)) {
-                    invoke(g_stream_repack, r.fmt, addr<void?>(tmp.q[((r.off - j.woff) / kq_elems(rf)) * kq_qsb(rf)]),
-                        addr<void?>(dst.kq[int(rf)].s[(roff / kq_elems(rf)) * kq_ssb(rf)]), r.n, r.d)
+                let qrow = r.off - j.woff
+                let repacked = kq_fmt_of_stream_code(r.fmt, rf) && kq_plane_pair(dst, rf) $(var q : array<uint8>; var s : array<uint8>) {
+                    invoke(g_stream_repack, r.fmt, addr<void?>(tmp.q[(qrow / kq_elems(rf)) * kq_qsb(rf)]),
+                        addr<void?>(s[(roff / kq_elems(rf)) * kq_ssb(rf)]), r.n, r.d)
+                }
+                if (!repacked) {
+                    panic("dasLLAMA: a streamed repack region carries code {r.fmt}, which names no plane-pair format")
                 }
             }
         }

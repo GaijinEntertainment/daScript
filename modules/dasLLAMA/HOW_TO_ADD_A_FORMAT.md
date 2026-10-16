@@ -206,7 +206,8 @@ the repack, stream-collect and GPU-gather hooks (`register_model_layout`, `regis
 over `repack_b32_stacks`, `collect_b32_regions`, `moe_gpu_gather_b32_stack`), `repack_regions`
 and `stream_repack_one` (`dasllama_layout.das`), `layout_gather_dispatch` (`dasllama_common.das`),
 the eager repack loop under `mr > 1`, the plane branches of `stream_job_view` and the scale landing
-of `stream_job_transcode` (`dasllama_load.das`), and the trim's plane deletes and
+and repack regions of `stream_job_transcode` (`dasllama_load.das`; a region code naming no plane pair
+panics there), and the trim's plane deletes and
 `trim_plane_dropped`. What still keys on the format by hand: `Model.<fmt>q`/`<fmt>s` and the
 served-bytes accounting (`dasllama_common.das`); `LayoutSizes.<fmt>_n`, `KqCursors.<fmt>`, the
 `kq_take` arm, the landing memcpy, the plane alloc's format list,

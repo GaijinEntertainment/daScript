@@ -37,6 +37,7 @@ require daslib/apply
 require daslib/fio
 require strings
 require daslib/strings_boost   // split - the mint child's /usr/bin/time lines
+require daslib/enum_trait   // the served-plane compare walks every KqFmt
 require math
 require dasllama/dasllama_audio_io
 require _model_tier
@@ -1008,6 +1009,71 @@ def private time_l_field(out, field : string) : int64 {
         }
     }
     return -1l
+}
+
+//! every served plane of `a` against `b`'s, by name: the q8 pair, the fp32 rows, the lattice table and the top-level pairs
+def private served_plane_mismatches(t : T?; a, b : Model) {
+    t |> equal(count_mismatch(a.qblob, b.qblob), 0l, "qblob")
+    t |> equal(count_mismatch(a.qscales, b.qscales), 0l, "qscales")
+    t |> equal(count_mismatch(a.qscales16, b.qscales16), 0l, "qscales16")
+    t |> equal(count_mismatch(a.fblob, b.fblob), 0l, "fblob")
+    for (f in type<KqFmt>) {
+        let fname = "{f}"
+        var bad_q, bad_s, n_q = 0l
+        kq_plane_pair(a, f) $(qa : array<uint8>; sa : array<uint8>) {
+            kq_plane_pair(b, f) $(qb : array<uint8>; sb : array<uint8>) {
+                bad_q = count_mismatch(qa, qb)
+                bad_s = count_mismatch(sa, sb)
+                n_q = long_length(qa)
+            }
+        }
+        t |> equal(bad_q, 0l, "the {fname} quant plane ({n_q} bytes)")
+        t |> equal(bad_s, 0l, "the {fname} scale plane")
+    }
+}
+
+//! The last row's logits of `m` over `ids`
+def private prompt_logits(m : Model; ids : array<int64>) : array<float> {
+    var s = make_run_state(m.config)
+    eval_(m, s, ids)
+    var out := s.logits
+    delete s
+    return <- out
+}
+
+//! A cold planar mint of a per-32 file streams its planes in the layout the eager load repacks them to: every served plane of
+//! the mapped image is the eager load's byte for byte, and the image's logits are the eager load's bit for bit
+def private b32_streamed_mint(t : T?; path : string) {
+    let img = image_path_for(path, "")
+    remove(img)
+    var tm <- load_model_cached(path, QuantMode.q8, [planar_only = true])
+    t |> success(tm.image_map != null && stat(img).is_valid, "the cold load mints the planar image and maps it")
+    var te <- load_model_(path, QuantMode.q8)
+    served_plane_mismatches(t, te, tm)
+    var ids <- encode(te, "The numbers from one to ten are: one, two, three,")
+    var le <- prompt_logits(te, ids)
+    var lm <- prompt_logits(tm, ids)
+    t |> equal(count_mismatch(le, lm), 0l, "the mapped image's logits are the eager load's")
+    delete lm
+    delete le
+    delete ids
+    delete te
+    delete tm
+    remove(img)
+}
+
+[test]
+def test_b32_streamed_mint(t : T?) {
+    for (file in ["Qwen2.5-0.5B-Instruct-Q4_0-local.gguf", "Qwen2.5-0.5B-Instruct-Q5_0-pure-local.gguf", "Qwen2.5-0.5B-Instruct-IQ4_NL-pure-local.gguf"]) {
+        t |> run("{file} q8: the streamed planar mint serves the eager load's planes and logits") @(t : T?) {
+            if (!family_on(t, "qwen2") || !arm_on(t, "b32-stream")) return
+            let path = path_join(models_dir(), file)
+            return if (!jit_model_available(t, path))
+            with_dasllama_jobque_() {
+                b32_streamed_mint(t, path)
+            }
+        }
+    }
 }
 
 //! A cold planar mint of a native-MXFP4 MoE file streams the expert planes: the minting process's peak physical footprint

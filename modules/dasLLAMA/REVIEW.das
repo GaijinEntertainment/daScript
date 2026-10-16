@@ -890,7 +890,7 @@ let private TTS_BLOCKS_FILE = "modules/dasLLAMA/dasllama/dasllama_tts_blocks.das
 // the TTS block file's *_prepare mints, the layout helpers and the layout constants' declaration
 // lines, hashed in file order. A closure change with IMAGE_VERSION unmoved is red; the finding prints the
 // value to re-stamp with.
-let private IMAGE_LAYOUT_STAMP_VERSION = 50
+let private IMAGE_LAYOUT_STAMP_VERSION = 51
 let private IMAGE_LAYOUT_STAMP_HASH = 0xd233356aacd4064dul
 
 // The helpers that decide WHERE bytes land: the page pad, the plane and total sizing, the

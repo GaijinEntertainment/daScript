@@ -356,7 +356,7 @@ def area_image_arms(area : string) : string {
     } elif (area == "vision") {
         return "gemma4uv,gemma4v,gemma3v,gemma4e,tower"
     } elif (area == "llm") {
-        return "mechanics,smol,untied,metal,mx4"
+        return "mechanics,smol,untied,metal,mx4,b32"
     } elif (area == "tts") {
         return "kitten"
     }

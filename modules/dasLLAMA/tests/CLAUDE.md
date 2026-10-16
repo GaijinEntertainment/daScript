@@ -383,7 +383,10 @@ parakeet qwen3a canary canary-dec gemma4a gemma4uv gemma4uv-metal gemma4v gemma3
 mtower kitten mx4-stream`; `mx4-stream` (families `gemma4moe` / `gptoss`, large tier: gemma-4-26B-A4B's MXFP4_MOE mint and
 gpt-oss-20b mxfp4) is the native-MXFP4 cold mint's streamed fill - a child (`_mx4_mint_root.das`) mints the planar image under
 `/usr/bin/time -l` and its peak memory footprint sits under the mxq + mxs bytes the image holds (macOS; elsewhere the leg skips
-loudly), then the mapped planes are the eager load's byte for byte; `kitten` is the TTS area's arm - the StyleTTS2 carrier (kitten-nano) through
+loudly), then the mapped planes are the eager load's byte for byte; `b32-stream` (family `qwen2`, small tier: Qwen2.5-0.5B's
+Q4_0, Q5_0 and IQ4_NL `-local` mints) is the per-32 streamed planar mint - every served plane of the mapped image (the q8 pair,
+the fp32 rows, the lattice table, every top-level pair) the eager load's byte for byte, and the image's last-row logits on a
+counting prompt the eager load's bit for bit; `kitten` is the TTS area's arm - the StyleTTS2 carrier (kitten-nano) through
 `load_styletts2` on both lanes, and the image loaded by its own path with the family data
 riding its meta; `gemma4e` is the E2B metal-blob
 mint+map arm - the PLE go-live tripwire (`ple_check_table`, which panics when the per-layer
