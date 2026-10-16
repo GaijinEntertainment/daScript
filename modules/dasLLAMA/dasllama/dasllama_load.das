@@ -1909,6 +1909,13 @@ def private load_gguf_impl(path : string; var mode : QuantMode) : Model {
     return <- t
 }
 
+//! `n` MXFP4 elements of tensor `name`, from its element `src`, into the native planes at element `off`: the nibble plane
+//! `MX4_QB` bytes a 32-block, the E8M0 plane `MX4_SB`
+def private mx4_transcode_at(m : GGUFMeta; bytes : array<uint8> | #; name : string; var t : Model; off, n : int64; src : int64 = 0l) {
+    let blk = off / KQ_B32_ELEMS
+    gguf_transcode_mx4(m, bytes, name, t.mxq, t.mxs, blk * MX4_QB, blk * MX4_SB, n, src)
+}
+
 // The load once metadata is parsed and the byte view carrying the KVs (shard 0 for splits) is
 // mapped — config, vocab, plane sizing, tensor reads/transcodes, repack, wscale.
 def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> | #; var mode : QuantMode; ts_load : int64) {   // nolint:STYLE037,STYLE038 — the load pipeline: ordered phases over one shared cursor; splitting it needs its own pass
@@ -2749,14 +2756,14 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
                         for (e in range64(ne)) {
                             let dst = e * ege
                             let src = e * 2l * ege
-                            gguf_transcode_mx4(m, bytes, "blk.{l}.ffn_gate_up_exps.weight", t.mxq, t.mxs, (mo1 + dst) / 2l, (mo1 + dst) / 32l, ege, src)
-                            gguf_transcode_mx4(m, bytes, "blk.{l}.ffn_gate_up_exps.weight", t.mxq, t.mxs, (mo3 + dst) / 2l, (mo3 + dst) / 32l, ege, src + ege)
+                            mx4_transcode_at(m, bytes, "blk.{l}.ffn_gate_up_exps.weight", t, mo1 + dst, ege, src)
+                            mx4_transcode_at(m, bytes, "blk.{l}.ffn_gate_up_exps.weight", t, mo3 + dst, ege, src + ege)
                         }
                     } else {
-                        gguf_transcode_mx4(m, bytes, "blk.{l}.ffn_gate_exps.weight", t.mxq, t.mxs, mo1 / 2l, mo1 / 32l, ne * ege)
-                        gguf_transcode_mx4(m, bytes, "blk.{l}.ffn_up_exps.weight", t.mxq, t.mxs, mo3 / 2l, mo3 / 32l, ne * ege)
+                        mx4_transcode_at(m, bytes, "blk.{l}.ffn_gate_exps.weight", t, mo1, ne * ege)
+                        mx4_transcode_at(m, bytes, "blk.{l}.ffn_up_exps.weight", t, mo3, ne * ege)
                     }
-                    gguf_transcode_mx4(m, bytes, "blk.{l}.ffn_down_exps.weight", t.mxq, t.mxs, mo2 / 2l, mo2 / 32l, ne * ege)
+                    mx4_transcode_at(m, bytes, "blk.{l}.ffn_down_exps.weight", t, mo2, ne * ege)
                 } elif (t.config.moe_dense_shexp) {
                     // gemma4: experts ship FUSED as ffn_gate_up_exps {dim, 2*nfe, ne} — expert-major,
                     // each [2*nfe x dim] with rows [0..nfe)=gate, [nfe..2*nfe)=up. Split per expert

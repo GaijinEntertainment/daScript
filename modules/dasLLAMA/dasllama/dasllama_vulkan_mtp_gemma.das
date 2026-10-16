@@ -10,6 +10,7 @@ require vulkan
 require dasllama/dasllama_common
 require dasllama/dasllama_math   // grow_resize - the scratch sizing
 require dasllama/dasllama_kqformat
+require dasllama/dasllama_gemm_schema   // Q8_BLOCK_ELEMS, Q8_QPB, Q8_SPB - the Q8_0 block walk and the activation scale rows
 require dasllama/dasllama_mtp_gemma
 require dasllama/dasllama_gpu_math   // ACT_GELU
 require dasllama/dasllama_gpu_kernels_common   // gk_rope_kv_args, GkQkRmsArgs
@@ -145,10 +146,10 @@ def private q8_repack(dr : GemmaDrafter; var quants : array<uint8>; var scales :
     var tensors <- q8_tensors(dr)
     var nblk = 0l
     for (te in tensors) {
-        nblk += te.n / 32l
+        nblk += te.n / Q8_BLOCK_ELEMS
     }
-    quants |> reserve(nblk * 32l)
-    quants |> resize(nblk * 32l)
+    quants |> reserve(nblk * Q8_QPB)
+    quants |> resize(nblk * Q8_QPB)
     scales |> reserve(nblk)
     scales |> resize(nblk)
     var bases : array<int64>
@@ -158,10 +159,10 @@ def private q8_repack(dr : GemmaDrafter; var quants : array<uint8>; var scales :
         bases |> push(cur)
         unsafe {
             let src = addr<uint8 const?>(dr.blob[te.boff])
-            for (b in range64(te.n / 32l)) {
-                let bp = src + b * 34l
+            for (b in range64(te.n / Q8_BLOCK_ELEMS)) {
+                let bp = src + b * (Q8_SPB + Q8_QPB)
                 scales[cur] = uint16(uint(bp[0]) | (uint(bp[1]) << 8u))
-                memcpy(addr<void?>(quants[cur * 32l]), reinterpret<void?>(bp + 2l), 32l)
+                memcpy(addr<void?>(quants[cur * Q8_QPB]), reinterpret<void?>(bp + Q8_SPB), Q8_QPB)
                 cur++
             }
         }
@@ -297,7 +298,7 @@ def private gemv_set(g : GemmaDrafterVk; base, n, d : int64; xq, xs : uint64; xb
         mp[1] = 0u
     }
     gv.set_ = gemv_planes_set(int(KqFmt.q8), (wq = g.wq, ws = g.ws, wqb = g.wqb, wsb = g.wsb), gv.meta.buf, META_BYTES, 0u,
-        xq, xs, n, (n / 32l) * 4l, xbit, y, d * 4l, ybit)
+        xq, xs, n, (n / Q8_BLOCK_ELEMS) * 4l, xbit, y, d * 4l, ybit)
     return gv
 }
 
@@ -353,22 +354,22 @@ def private vk_buffers_make(dr : GemmaDrafter; var g : GemmaDrafterVk; quants : 
     let cat_n = 2l * dr.tdim
     g.cat = dev_buf(oom, cat_n * 4l)
     g.catq = dev_buf(oom, cat_n)
-    g.cats = dev_buf(oom, (cat_n / 32l) * 4l)
+    g.cats = dev_buf(oom, (cat_n / Q8_BLOCK_ELEMS) * 4l)
     g.xin = dev_buf(oom, dr.dim * 4l)
     g.xq = dev_buf(oom, dr.dim)
-    g.xs = dev_buf(oom, (dr.dim / 32l) * 4l)
+    g.xs = dev_buf(oom, (dr.dim / Q8_BLOCK_ELEMS) * 4l)
     g.q = dev_buf(oom, qdm * 4l)
     g.attn = dev_buf(oom, qdm * 4l)
     g.cntoff = dr.n_heads * (g.hs_mx + 2l)   //! one key split: the counters past one piece a head
     g.part_bytes = (g.cntoff + dr.n_heads) * 4l
     g.part = dev_buf(oom, g.part_bytes)
     g.aq = dev_buf(oom, qdm)
-    g.aqs = dev_buf(oom, (qdm / 32l) * 4l)
+    g.aqs = dev_buf(oom, (qdm / Q8_BLOCK_ELEMS) * 4l)
     g.o = dev_buf(oom, dr.dim * 4l)
     g.gate = dev_buf(oom, dr.hidden * 4l)
     g.up = dev_buf(oom, dr.hidden * 4l)
     g.hq = dev_buf(oom, dr.hidden)
-    g.hqs = dev_buf(oom, (dr.hidden / 32l) * 4l)
+    g.hqs = dev_buf(oom, (dr.hidden / Q8_BLOCK_ELEMS) * 4l)
     g.logits = dev_buf(oom, dr.vocab * 4l)
     g.hnext = dev_buf(oom, dr.tdim * 4l)
     g.ids = dev_buf(oom, 16l)
@@ -410,10 +411,10 @@ def private vk_sets_make(dr : GemmaDrafter; var g : GemmaDrafterVk; slabs : arra
     let qdm = dr.n_heads * g.hs_mx
     let cat_n = 2l * dr.tdim
     let pbytes = int64(CLS_ARGMAX_CHUNKS) * 4l
-    g.s_cat_rq = set_rq_cls(fixed_array(g.cat, g.catq, g.cats), fixed_array(cat_n * 4l, cat_n, (cat_n / 32l) * 4l), fixed_array(B_CAT, B_CATQ, B_CATQ))
-    g.s_ar = set_cls_ar_rq_b(fixed_array(g.xin, g.o, g.fblob, g.xq, g.xs), fixed_array(dr.dim * 4l, dr.dim * 4l, g.fblob_bytes, dr.dim, (dr.dim / 32l) * 4l),
+    g.s_cat_rq = set_rq_cls(fixed_array(g.cat, g.catq, g.cats), fixed_array(cat_n * 4l, cat_n, (cat_n / Q8_BLOCK_ELEMS) * 4l), fixed_array(B_CAT, B_CATQ, B_CATQ))
+    g.s_ar = set_cls_ar_rq_b(fixed_array(g.xin, g.o, g.fblob, g.xq, g.xs), fixed_array(dr.dim * 4l, dr.dim * 4l, g.fblob_bytes, dr.dim, (dr.dim / Q8_BLOCK_ELEMS) * 4l),
         fixed_array(B_XIN, B_O, 0u, B_XQ, B_XQ))
-    g.s_actrq = set_actrq_cls(fixed_array(g.gate, g.up, g.hq, g.hqs), fixed_array(dr.hidden * 4l, dr.hidden * 4l, dr.hidden, (dr.hidden / 32l) * 4l),
+    g.s_actrq = set_actrq_cls(fixed_array(g.gate, g.up, g.hq, g.hqs), fixed_array(dr.hidden * 4l, dr.hidden * 4l, dr.hidden, (dr.hidden / Q8_BLOCK_ELEMS) * 4l),
         fixed_array(B_GATE, B_UP, B_HQ, B_HQ))
     g.s_qkn = set_qk_rms_cls(fixed_array(g.q, g.q, g.fblob), fixed_array(qdm * 4l, qdm * 4l, g.fblob_bytes), fixed_array(B_Q, B_Q, 0u))
     let cosb = g_rd.cos_elems * 4l
@@ -434,7 +435,7 @@ def private vk_sets_make(dr : GemmaDrafter; var g : GemmaDrafterVk; slabs : arra
         let mirb = rd_mir_bytes()
         g.s_attn |> push(da_attn_stamp_set(dt, slabs[l],
             fixed_array(g.q, kmir, vmir, g.attn, g.tok.buf, g.part, g.aq, g.aqs, g.q),
-            fixed_array(qdm * 4l, mirb, mirb, qdm * 4l, TOK_META_BYTES, g.part_bytes, qdm, (qdm / 32l) * 4l, qdm * 4l),
+            fixed_array(qdm * 4l, mirb, mirb, qdm * 4l, TOK_META_BYTES, g.part_bytes, qdm, (qdm / Q8_BLOCK_ELEMS) * 4l, qdm * 4l),
             fixed_array(B_Q, 0u, 0u, B_ATT, 0u, B_ATT, B_AQ, B_AQ, 0u)))
     }
     if (dt == KVDtype.tq4) {
@@ -442,7 +443,7 @@ def private vk_sets_make(dr : GemmaDrafter; var g : GemmaDrafterVk; slabs : arra
         g.s_tq4 = set_kv_tq4_store_cls(fixed_array(g.q, g.q, g.q, g.q, g.q, g_rd.tq4_signs_dev, g.tok.buf),
             fixed_array(qdm * 4l, qdm * 4l, qdm * 4l, qdm * 4l, qdm * 4l, signb, TOK_META_BYTES), fixed_array(B_Q, 0u, 0u, 0u, 0u, 0u, 0u))
         g.s_unrot = set_kv_tq4_unrot_cls(fixed_array(g.attn, g.q, g_rd.tq4_signs_dev), fixed_array(qdm * 4l, qdm * 4l, signb), fixed_array(B_ATT, B_Q, 0u))
-        g.s_at_rq = set_rq_cls(fixed_array(g.attn, g.aq, g.aqs), fixed_array(qdm * 4l, qdm, (qdm / 32l) * 4l), fixed_array(B_ATT, B_AQ, B_AQ))
+        g.s_at_rq = set_rq_cls(fixed_array(g.attn, g.aq, g.aqs), fixed_array(qdm * 4l, qdm, (qdm / Q8_BLOCK_ELEMS) * 4l), fixed_array(B_ATT, B_AQ, B_AQ))
     }
 }
 

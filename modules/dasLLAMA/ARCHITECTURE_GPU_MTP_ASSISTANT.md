@@ -54,8 +54,8 @@ scheduler's tick hands every speculating stream to the attached home's rounds (`
 whose reasoning budget can still force a close, since a draft past the close would be evaled and not emitted), and emits
 each stream's accepted drafts in order before it samples the next token. A stream with no carried hidden at its
 position, a round past its context or - on Metal - a mirror short of the round's rows steps plain. The warm streams each
-draft their chain at their own anchor from their own token and carried hidden; on Metal every chain encodes into one
-command buffer, its inputs written into a slot a stream, the token rows a stream's group in one token list. One verify
+draft their chain at their own anchor from their own token and carried hidden; on Metal every chain encodes at the head of
+the verify's first command buffer, its inputs written into a slot a stream, the token rows a stream's group in one token list. One verify
 then carries every warm stream's [token, drafts]: on Metal the batch driver's same-slab step in groups
 (`verify_batch_groups`, a group a stream's consecutive rows over its own mirror), on Vulkan the N-row token command
 (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-assistant-drafter`). Each stream's accept walk and host commit are the shared
