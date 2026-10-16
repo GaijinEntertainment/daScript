@@ -1549,6 +1549,17 @@ class template GkQ8BlockStore : GkWgReduce {
 
     def put_out(i : uint; v : float) : void {}   //! element `i` of a normed row stored in the stamp's out form
 
+    //! the normed row from `normed_at` under `inv`, `n` wide, stored at `base` over `tg` lanes, a column a lane a step
+    def store_rows(base, n, tg : uint; inv : float) {
+        var j = gl_LocalInvocationID.x
+        while (j < n) {
+            let nj = normed_at(j, 0.0, inv)
+            let ij = base + j
+            put_out(ij, nj)
+            j += tg
+        }
+    }
+
     //! the normed row from `normed_at` under `inv`, `n` wide, stored at `base` over `tg` lanes with four elements in flight a lane
     [arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#residual-step-fma")]
     def store_x4(base, n, tg : uint; inv : float) {
@@ -1811,12 +1822,11 @@ class template GkAddRmsRows : GkResidualRow {
         static_if (X4) {
             store_x4(base, pa.dim, LANES, inv)
         } else {
-            var j = gl_LocalInvocationID.x
-            while (j < pa.dim) {
-                let nj = normed_at(j, 0.0, inv)
-                let ij = base + j
-                put_out(ij, nj)
-                next_col(j)
+            static_if (LANES == 0u) {
+                let tg = gl_WorkGroupSize.x
+                store_rows(base, pa.dim, tg, inv)
+            } else {
+                store_rows(base, pa.dim, LANES, inv)
             }
         }
     }
@@ -4550,11 +4560,7 @@ class template GkMoeCombG4 : GkMoeCombine {
                 static_if (OUT_X4) {
                     store_x4(base, n, TG, inv)
                 } else {
-                    var k = gl_LocalInvocationID.x
-                    while (k < n) {
-                        put_out(base + k, normed_at(k, 0.0, inv))
-                        k += TG
-                    }
+                    store_rows(base, n, TG, inv)
                 }
             }
         }
