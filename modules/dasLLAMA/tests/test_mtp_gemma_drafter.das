@@ -1089,10 +1089,15 @@ def test_gemma_drafter_past_ring(t : T?) {
         t |> success(ringed.ring > 0l && flat.ring == 0l, "the ringed load rings the sliding capture layer ({ringed.ring} rows), the flat load keeps a row a position ({flat.ring})")
         t |> success(ringed.anchor > ringed.ring, "the anchor {ringed.anchor} sits past the ring: the capture layer holds more keys than its ring's rows")
         t |> equal(ringed.anchor, flat.anchor, "both pins draft at one anchor")
-        check_exact(t, "the one-row chain's logits at the anchor: the ringed mirror against the flat one, bit for bit", ringed.trunk, flat.trunk)
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            //! Metal's AV pass splits a ringed layer's key run at the wrap, so the sums part in order: the picks hold, the bits do not
+            t |> equal(argmax_of(ringed.trunk), argmax_of(flat.trunk), "the one-row chain's pick at the anchor: the ringed mirror's is the flat one's")
+        } else {
+            check_exact(t, "the one-row chain's logits at the anchor: the ringed mirror against the flat one, bit for bit", ringed.trunk, flat.trunk)
+            check_exact(t, "the drafter's first step's logits at the anchor: the ringed mirror against the flat one, bit for bit", ringed.dlogits, flat.dlogits)
+        }
         t |> success(ids_equal(ringed.drafts, flat.drafts), "the drafter's chain at the anchor drafts the flat mirror's tokens ({ringed.drafts} vs {flat.drafts})")
-        check_exact(t, "the drafter's first step's logits at the anchor: the ringed mirror against the flat one, bit for bit", ringed.dlogits, flat.dlogits)
-        to_log(LOG_INFO, "gdraft ring: anchor {ringed.anchor} past the {ringed.ring}-row ring; draft logits ringed vs flat maxd {logits_maxdiff(ringed.dlogits, flat.dlogits)}\n")
+        to_log(LOG_INFO, "gdraft ring: anchor {ringed.anchor} past the {ringed.ring}-row ring; trunk logits ringed vs flat maxd {logits_maxdiff(ringed.trunk, flat.trunk)}, draft logits maxd {logits_maxdiff(ringed.dlogits, flat.dlogits)}\n")
         t |> equal(long_length(ringed.stream.toks[0]), budget, "the ringed stream emits its whole budget")
         to_log(LOG_INFO, "gdraft ring streams (flat, ringed):\n  {flat.text}\n  {ringed.text}\n")
         t |> success(ids_equal(ringed.stream.toks[0], flat.stream.toks[0]), "the ringed speculating stream walks the count as the flat one does")
