@@ -20,6 +20,7 @@ def private bare() : Session {
     s.logits |> resize(VOCAB)
     s.sample_scratch |> resize(VOCAB)
     s.mtp_vbatch |> resize(K + 1l)
+    s.mtp_logits_b |> reserve((K + 1l) * VOCAB)
     s.mtp_logits_b |> resize((K + 1l) * VOCAB)
     return <- s
 }

@@ -1435,9 +1435,10 @@ def vk_rdec_set_ngram(l, ind, nrows, kern, dil, bkey, bval : int64; norm_rows : 
 //! the one-row command's side row as its last step left it - gathered and finished on the device under the projection - read back
 //! into `out` (a cell's witness of the device pre-step against the CPU's)
 [cold_path]
-def vk_rdec_ple_side_row(var out : array<float>) {
+def vk_rdec_ple_side_row(@exact_size var out : array<float>) {
     assert(g_rd != null && g_rd.ple > 0l, "vk_rdec_ple_side_row before set_ple")
     let n = g_rd.n_layers * g_rd.ple
+    out |> reserve(n)
     out |> resize(n)
     var stage = make_host_buf(n * 4l, false, [cached = true])
     readback_range(g_rd.ple_dev, VHZ_COS, 0l, stage, unsafe(addr(out[0])), n * 4l)

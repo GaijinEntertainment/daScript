@@ -856,7 +856,7 @@ def private push_layer_planes(t : Model; var planes : array<ResidentPlane>; l : 
 //! ships F32; empty where it rides the arena
 def private resident_ple_f32_rows(t : Model; proj : bool) : array<float> {
     let c = t.config
-    var rows : array<float>
+    var @exact_size rows : array<float>
     if (!has_ple(c) || !(proj ? t.ple_proj_f32 : t.ple_gate_f32)) {
         return <- rows
     }
@@ -2553,8 +2553,8 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     }
     if (ple > 0l) {   //! the pre-step's projection on device off the file's own rows - bf16, or f32
         let all = c.n_layers * ple
-        var w16 : array<uint16>
-        var w32 : array<float>
+        var @exact_size w16 : array<uint16>
+        var @exact_size w32 : array<float>
         if (t.ple_model_bf16) {
             w16 |> reserve_resize(all * dim)   // E4B: 27.5M halves - the guard wants the final size reserved first
             unsafe {
@@ -3120,7 +3120,7 @@ def gpu_resident_assist_bind(t : Model; var s : Session; pos, nr : int64; taken 
     return r
 }
 
-var private @scratch g_rdec_av_hid : array<float>
+var private @scratch @exact_size g_rdec_av_hid : array<float>
 
 //! The assistant drafter's verify: group g is `nr[g]` rows of `sessions[g]` from `pos[g]` in region `regs[g]`, its tokens next in
 //! `toks`; each row lands its logits in `mtp_logits_b` (or, under `pick_only`, its pick alone), its hidden in `mtp_hrows`, its pick in
@@ -3194,7 +3194,7 @@ def gpu_resident_assist_commit(s : Session) {
 def gpu_resident_assist_rows() : int64 => g_rdec_active ? rdec_token_n_rows() : 0l
 
 //! position `pos`'s cos/sin plane on the armed driver (every rope class end to end, `resident_cos_elems` floats) into `dst` from `base`
-def gpu_resident_rope_row(t : Model; pos : int64; var dst : array<float>; base : int64) {
+def gpu_resident_rope_row(t : Model; pos : int64; @exact_size var dst : array<float>; base : int64) {
     dst |> grow_resize(base + g_rdec_cos_elems)
     rdec_rope_rows(t, pos, dst, base)
 }
@@ -3689,7 +3689,7 @@ def private vulkan_resident_decode_go(t : Model; var s : Session; token, pos : i
     return true
 }
 
-var private @scratch g_rdec_ple_rows : array<float>   //! the gather half of the per-layer-embedding pre-step, position-major, when the driver finishes it on device
+var private @scratch @exact_size g_rdec_ple_rows : array<float>   //! the gather half of the per-layer-embedding pre-step, position-major, when the driver finishes it on device
 
 var private g_rdec_hx_t : Model const?   //! the model and session the host's routed sums run on, set around one split token
 var private g_rdec_hx_s : Session?
