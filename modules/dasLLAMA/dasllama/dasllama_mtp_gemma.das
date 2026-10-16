@@ -443,6 +443,15 @@ def private mv_q8_blob(var y : array<float>; blob : array<uint8>; boff : int64; 
     }
 }
 
+//! the GEMV's input under `q8`: its first `n` through the Q8_0 activation quantizer and back - the row a device requant feeds
+def private q8_feed(var x : array<float>; n : int64; q8 : bool; var xq : array<int8>; var xs : array<float>) {
+    return if (!q8)
+    requant_rows_q8_sized(x, n, 1l, xq, xs)
+    for (i in range64(n)) {
+        x[i] = float(xq[i]) * xs[i / 32l]
+    }
+}
+
 def private rms_f(var o : array<float>; x : array<float>; w : array<float>; woff, n : int64; eps : float) {
     unsafe {
         rmsnorm(addr(o[0]), addr<float const?>(x[0]), addr<float const?>(w[woff]), n, eps)
@@ -517,12 +526,12 @@ def private drafter_attention(t : Model; var s : Session; dr : GemmaDrafter; l, 
     }
 }
 
-//! The drafter's CPU oracle, not a serving rail (it sizes its scratch per call): one step at `anchor`
-//! (the seed's position = the target's n_past: the query ropes there and sees the target keys [0, anchor))
-//! from token `tok` and target hidden `h`; fills `out` with the greedy token, the logits and the next h.
+//! The drafter's CPU oracle, not a serving rail (it sizes its scratch per call): one step at `anchor` (the target's n_past;
+//! the query sees the target keys [0, anchor)) from `tok` and target hidden `h` into `out` (token, logits, next h);
+//! `q8_feed` rounds every GEMV's input through the Q8_0 activation quantizer, as a device whose GEMVs read Q8_0 rows does.
 [cold_path]
 def gemma_draft_step_cpu(t : Model; var s : Session; dr : GemmaDrafter; tok : int64;   // nolint:STYLE038 - one forward pass; the phases share the scratch and must stay in order
-                         h : array<float>; anchor : int64; var out : GemmaDraftOut) {
+                         h : array<float>; anchor : int64; var out : GemmaDraftOut; q8_feed : bool = false) {
     if (!dr.ok) {
         panic("gemma_draft_step_cpu: drafter did not load ({dr.why})")
     }
@@ -542,6 +551,9 @@ def gemma_draft_step_cpu(t : Model; var s : Session; dr : GemmaDrafter; tok : in
         xcat[i] *= escale
     }
     copy_floats(h, 0l, xcat, dr.tdim, dr.tdim)
+    var xq : array<int8>
+    var xs : array<float>
+    q8_feed(xcat, 2l * dr.tdim, q8_feed, xq, xs)
     var xin : array<float>
     xin |> reserve_resize(dim)
     mv_q8_blob(xin, dr.blob, dr.pre_proj_off, xcat, 2l * dr.tdim, dim)
@@ -574,6 +586,7 @@ def gemma_draft_step_cpu(t : Model; var s : Session; dr : GemmaDrafter; tok : in
         let hs = dr.hs[l]
         let qd = dr.n_heads * hs
         rms_f(nrm, xin, dr.fblob, dr.attn_norm_offs[l], dim, eps)
+        q8_feed(nrm, dim, q8_feed, xq, xs)
         mv_q8_blob(q, dr.blob, dr.wq_offs[l], nrm, dim, qd)
         unsafe {
             let qnp = addr<float const?>(dr.fblob[dr.q_norm_offs[l]])
@@ -587,15 +600,18 @@ def gemma_draft_step_cpu(t : Model; var s : Session; dr : GemmaDrafter; tok : in
             rope_scaled_neox_tab(addr(q[0]), hs, qd, addr<float const?>(cosr[0]), addr<float const?>(sinr[0]))
         }
         drafter_attention(t, s, dr, l, anchor, q, attn, scores, kvrow)
+        q8_feed(attn, qd, q8_feed, xq, xs)
         mv_q8_blob(o, dr.blob, dr.wo_offs[l], attn, qd, dim)
         rms_f(o, o, dr.fblob, dr.post_attn_norm_offs[l], dim, eps)
         for (i in range64(dim)) {
             x1[i] = xin[i] + o[i]
         }
         rms_f(nrm, x1, dr.fblob, dr.ffn_norm_offs[l], dim, eps)
+        q8_feed(nrm, dim, q8_feed, xq, xs)
         mv_q8_blob(g, dr.blob, dr.w1_offs[l], nrm, dim, dr.hidden)
         mv_q8_blob(u, dr.blob, dr.w3_offs[l], nrm, dim, dr.hidden)
         geglu(g, u, dr.hidden)
+        q8_feed(g, dr.hidden, q8_feed, xq, xs)
         mv_q8_blob(o, dr.blob, dr.w2_offs[l], g, dr.hidden, dim)
         rms_f(o, o, dr.fblob, dr.post_ffn_norm_offs[l], dim, eps)
         let ls = dr.layer_scale[l]
@@ -604,6 +620,7 @@ def gemma_draft_step_cpu(t : Model; var s : Session; dr : GemmaDrafter; tok : in
         }
     }
     rms_f(nrm, xin, dr.fblob, dr.out_norm_off, dim, eps)
+    q8_feed(nrm, dim, q8_feed, xq, xs)
     out.logits |> reserve_resize(dr.vocab)
     mv_q8_blob(out.logits, dr.blob, dr.tok_emb_off, nrm, dim, dr.vocab)
     var best = 0l

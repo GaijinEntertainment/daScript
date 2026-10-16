@@ -458,9 +458,10 @@ def private gpu_step_vs_oracle(t : T?; trg : Model; var dr : GemmaDrafter; promp
             vk_gemma_drafter_last_logits(lg)
         }
     }
+    let q8 = !(typeinfo builtin_module_exists(das_metal)) && typeinfo builtin_module_exists(vulkan)   //! the oracle's GEMVs read the device's rows: Vulkan's are Q8_0 activation rows, Metal's f32
     moe_gpu_hydrate_session(trg, s)   //! the oracle reads the host cache: the resident driver's device-only rows come down first
     var out : GemmaDraftOut
-    gemma_draft_step_cpu(trg, s, dr, seed, h, anchor, out)
+    gemma_draft_step_cpu(trg, s, dr, seed, h, anchor, out, q8)
     let dl = logits_maxdiff(lg, out.logits)
     let dh = logits_maxdiff(hg, out.h_next)
     t |> equal(out.token, dg, "{tag}: GPU and CPU drafts agree on the token")
@@ -470,7 +471,7 @@ def private gpu_step_vs_oracle(t : T?; trg : Model; var dr : GemmaDrafter; promp
     if (window_control) {   //! the control: the oracle's sliding layers one key wider - a device pass over the whole window reads as it does
         dr.sliding_window++
         var wide : GemmaDraftOut
-        gemma_draft_step_cpu(trg, s, dr, seed, h, anchor, wide)
+        gemma_draft_step_cpu(trg, s, dr, seed, h, anchor, wide, q8)
         dr.sliding_window--
         let dlw = logits_maxdiff(lg, wide.logits)
         t |> success(dl * 8.0 < dlw, "{tag}: the device's sliding layers attend the oracle's window - its logits sit far nearer the oracle ({dl}) than one a key wider ({dlw})")
