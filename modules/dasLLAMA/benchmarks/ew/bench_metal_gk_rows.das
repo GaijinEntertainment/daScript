@@ -238,6 +238,39 @@ def private router_rows : array<Reading> {
     return <- rows
 }
 
+//! the E-series side rows' projection at the E2B shape (35 layers x 256 rows of 1536): the router GEMV's f32 rows against the bf16
+//! word form off the file's own rows, a decode column and a verify's four
+def private ple_proj_rows : array<Reading> {
+    let ne = 35 * 256
+    let dim = 1536
+    var bw = fill_buf(ne * dim, 0.01)
+    var bx = fill_buf(4 * dim, 0.5)
+    var by = fill_buf(4 * ne, 0.0)
+    var rows : array<Reading>
+    rows |> reserve(4)
+    for (np in fixed_array(1, 4)) {
+        let ka = moe_router_args(int64(ne), int64(dim), int64(np))
+        rows |> push(time_rows("ple proj f32 rows ne={ne} dim={dim} {np} cols") $(enc) {
+            var k = ka
+            enc_moe_router(enc, bw, bx, by, g_one, k, int64(ne), int64(np))
+        })
+        rows |> push(time_rows("ple proj bf16 rows ne={ne} dim={dim} {np} cols") $(enc) {
+            var k = ka
+            enc_ple_proj_bf16(enc, bw, bx, by, k, int64(ne), int64(np))
+        })
+        if (np == 1) {
+            rows |> push(time_rows("ple proj bf16 rows ne={ne} dim={dim} 1 col, a threadgroup a row") $(enc) {
+                var k = ka
+                enc_ple_proj_bf16_one(enc, bw, bx, by, k, int64(ne), 1l)
+            })
+        }
+    }
+    for (buf in fixed_array(bw, bx, by)) {
+        metal_release(buf)
+    }
+    return <- rows
+}
+
 //! the Pocket frame's row GEMV at the backbone's 1024: the bare dot and the normed, modulated SiLU over the slab's f32 rows
 def private pk_rows : array<Reading> {
     let n = 1024
@@ -412,7 +445,7 @@ def private run_gk_rows(b : B?) {
     }
     var rows <- seam_rows()
     rows |> push_from(qkn_rows(), router_rows(), pk_rows(), dn_rows())
-    rows |> push_from(gate_rows(), cls_epi_rows(), g4_tail_rows())
+    rows |> push_from(gate_rows(), cls_epi_rows(), g4_tail_rows(), ple_proj_rows())
     var nmeas = 0
     var nvoid = 0
     for (r in rows) {

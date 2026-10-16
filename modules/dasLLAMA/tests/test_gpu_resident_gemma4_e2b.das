@@ -8,6 +8,14 @@ require dasllama/dasllama_kv_dtype   // KVDtype: the block-codec cells' mirror a
 require _gemma_resident
 require dasllama/dasllama_kqformat   // KqFmt - the PLE table's tag
 require dasllama/dasllama_gpu_resident   // resident_plan - the table's seat
+require _format_census   // census_cell - the per-layer planes in their own formats
+require daslib/fio
+require math   // nolint:STYLE030,LINT019 - abs, read in the vulkan half
+require strings
+require dasllama/dasllama_ple   // ple_cpu_pre_rows - the CPU pre-step's witness
+require dasllama/dasllama_common   // Model, embed_row, forward, forward_prefill
+require dasllama/dasllama   // create_session
+require ?vulkan dasllama/dasllama_vulkan_decode   // vk_rdec_ple_side_row, vk_rdec_token_gathered - the device pre-step's witnesses
 
 // gemma-4-E2B Q8_0 (the E-series carrier: per-layer embeddings, the upper layers sharing the K/V of the ones below, two
 // dense FFN widths, a sliding window the two-window cell engages): arm `g4e`. Skips off the JIT, without DASLLAMA_GPU=1
@@ -67,12 +75,166 @@ def test_gpu_resident_gemma4_e2b_ple_tables(t : T?) {
     }
 }
 
-//! a two-token prompt on the E-series takes the window chain: the token command's peel declines the per-layer-embedding side rows
+//! the per-layer gate and projection planes in their own formats on the device (arm `g4e-kq`): the E2B Q4_K_M file ships them
+//! F32 - the router GEMV, the f32 act and the f32 tile read the file's rows, the feed held against the file's f32 chain - and the Q4_0 file Q4_0, on the q40 GEMV and tiles
+//! with the f32 classes undispatched (the control)
+[test]
+def test_gpu_resident_gemma4_e2b_ple_planes(t : T?) {
+    for (spec in [(file = "gemma-4-E2B-it-Q4_K_M.gguf", f32 = true), (file = "gemma-4-E2B-it-Q4_0.gguf", f32 = false)]) {
+        let gf = GemmaFile(file = spec.file, arm = "g4e-kq")
+        t |> run("{spec.file}: the per-layer gate and projection planes in their file format, the forced feed against the CPU chain") @(t : T?) {
+            var armed = false   //! the rig armed the driver on the file (else every cell below skipped, saying why)
+            with_gemma_rig(t, gf) $(tr) {
+                armed = true
+                census_cell(t, tr, path_join(models_dir(), spec.file), "vulkan load", ["per-layer embeddings"])
+                t |> equal(tr.ple_gate_f32 && tr.ple_proj_f32, spec.f32, "the planes ship F32 exactly where the file carries F32")
+            }
+            let act0 = census("ple_act_f32_cls_spv")
+            let gemm0 = census("dn_ba_cls_spv")
+            if (spec.f32) {   //! the Q4_K_M file's CPU q8 chain sits off its f32 chain at one step: `gemma_forced_feed_exact`
+                gemma_forced_feed_exact(t, 40l, gf)
+            } else {
+                gemma_forced_feed(t, 40l, gf)
+            }
+            return if (!armed || act0 == NO_CENSUS)
+            let act_n = census("ple_act_f32_cls_spv") - act0
+            let gemm_n = census("dn_ba_cls_spv") - gemm0
+            if (spec.f32) {
+                t |> success(act_n > 0l && gemm_n > 0l, "the token command's f32 act ({act_n}) and the window's f32 tile ({gemm_n}) served the f32 rows")
+            } else {
+                t |> equal(act_n + gemm_n, 0l, "no f32 per-layer plane, no f32 act or tile dispatched")
+            }
+        }
+    }
+}
+
+//! the decode step's pre-step on the device (arm `g4e-pre`): the side row the one-row command gathered off the step's token id,
+//! projected under the CPU's 1/sqrt(dim) and finished, read back against the CPU pre-step's row of the same token at 1e-4 of its
+//! largest - the projection without the 1/sqrt(dim) reads the eps alone apart, 1e-3 - with another token's CPU row the control
+[test]
+def test_gpu_resident_gemma4_e2b_ple_pre_step(t : T?) {
+    t |> run("gemma-4-E2B Q8_0: the step's side row built on the device is the CPU pre-step's row") @(t : T?) {
+        with_gemma_rig(t, GemmaFile(file = "gemma-4-E2B-it-Q8_0.gguf", arm = "g4e-pre")) $(tr) {
+            static_if (typeinfo builtin_module_exists(vulkan)) {
+                var prompt <- resident_prompt(40l)
+                var sg <- create_session(tr, mirror_kv_dtype())
+                forward_prefill(tr, sg, prompt, 40l, 0l)
+                let tok = 1234l
+                let g0 = vk_rdec_token_gathered()
+                let cpu0 = ple_cpu_pre_rows()
+                forward(tr, sg, tok, 40l)
+                t |> success(vk_rdec_token_gathered() > g0, "the step's embed row gathered off its token id")
+                t |> equal(ple_cpu_pre_rows() - cpu0, 0l, "the step built no CPU pre-step row")
+                var dev : array<float>
+                vk_rdec_ple_side_row(dev)
+                var inscope cpu <- cpu_side_row(tr, tok)
+                var inscope other <- cpu_side_row(tr, tok + 1l)
+                var mx = 0.0
+                var off = 0.0
+                var big = 0.0
+                for (i in range64(long_length(cpu))) {
+                    mx = max(mx, abs(dev[i] - cpu[i]))
+                    off = max(off, abs(dev[i] - other[i]))
+                    big = max(big, abs(cpu[i]))
+                }
+                let bar = 1e-4 * big
+                to_log(LOG_INFO, "e2b pre-step: device side row against the CPU's: maxdiff {mx}, another token's {off} (bar {bar}, largest {big})\n")
+                t |> success(mx <= bar, "the device side row within 1e-4 of the CPU's largest ({mx} of {bar})")
+                t |> success(off > bar, "another token's CPU row lands outside the bar ({off})")
+                delete dev
+                delete sg
+                delete prompt
+            }
+        }
+    }
+}
+
+//! the greedy chain on the E-series (arm `g4e-chain`): a chained step's side row gathers off the pick the device lands in the id
+//! plane, so the chained walk is bit for bit the plain walk (`greedy_chain_cell`)
+[test]
+def test_gpu_resident_gemma4_e2b_greedy_chain(t : T?) {
+    t |> run("gemma-4-E2B Q8_0: the greedy chain over the side rows, bit for bit the plain walk") @(t : T?) {
+        return if (!arm_on(t, "g4e-chain"))
+        greedy_chain_cell(t, path_join(models_dir(), "gemma-4-E2B-it-Q8_0.gguf"))
+    }
+}
+
+//! the CPU pre-step's side row of `tok` on a scratch session: the scaled embedding row, then `ple_pre_decode`
+def private cpu_side_row(tr : Model; tok : int64) : array<float> {
+    var s <- make_run_state(tr.config)
+    embed_row(tr, tok, unsafe(addr(s.x[0])))
+    if (tr.config.embed_scale != 1.0) {
+        for (i in range64(tr.config.dim)) {
+            s.x[i] *= tr.config.embed_scale
+        }
+    }
+    ple_pre_decode(tr, s, tok)
+    let n = tr.config.n_layers * tr.config.n_embd_per_layer
+    var row <- [for (i in range64(n)); s.ple_inp[i]]
+    delete s
+    return <- row
+}
+
+//! the tied F16 token table (arm `g4e-f16`, the `-local` mint of `../performance/model_specs.das`): no device plane carries the
+//! classifier, so the whole-model driver declines the model by name and the per-op rails take it - never a q8 plane seated where no
+//! bytes sit; the PLE table loads as a q8 transcode (the stated converted copy)
+[test]
+def test_gpu_resident_gemma4_e2b_tied_f16(t : T?) {
+    t |> run("gemma-4-E2B Q8_0 with an F16 token table: the whole-model driver declines the tied classifier by name") @(t : T?) {
+        return if (!arm_on(t, "g4e-f16"))
+        let path = path_join(models_dir(), "gemma-4-E2B-it-Q8_0-embf16-local.gguf")
+        return if (!resident_ready(t, path))
+        var tr <- load_resident(path)
+        t |> success(tr.config.shared_weights && !tr.cls_q8 && !cls_kq(tr), "the tied table carries no q8 or K-quant plane")
+        t |> success(find(resident_decline_reason(tr), "tied classifier") >= 0, "the decline names the tied classifier: {resident_decline_reason(tr)}")
+        t |> success(!moe_gpu_resident_active(), "the whole-model driver stays off the model")
+        t |> equal(tr.ple_emb_fmt, KqFmt.q8, "the F16 PLE table reads its q8 transcode")
+        delete tr
+    }
+}
+
+//! a short tail on the E-series peels through the token commands, each row's side input finished on the device: after a 40-row
+//! opening, tails of 1, 2 and 5 rows (one peel counted each) and four fed steps within the split bar of the same tail stepped a row at
+//! a time on a second session, the row one step off the control
 [test]
 def test_gpu_resident_gemma4_e2b_short_window(t : T?) {
-    t |> run("gemma-4-E2B Q8_0: a two-token prompt takes the window chain, not the token command's peel") @(t : T?) {
+    t |> run("gemma-4-E2B Q8_0: short tails peel through the token commands, the side rows riding them") @(t : T?) {
         with_gemma_rig(t, GEMMA4E_FILE) $(tr) {
-            assert_short_window_takes_chain(t, tr, "a per-layer-embedding model")
+            var opening <- resident_prompt(40l)
+            var feed <- resident_feed(5l)
+            let lever = vulkan_prefill_peel()
+            set_vulkan_prefill_peel(true)
+            for (rows in [1l, 2l, 5l]) {
+                var tail <- [for (i in range64(rows)); feed[i]]
+                var steps <- ramp_ids(4l, rows, 2500l, 71l, 4500l)
+                var sa <- create_session(tr, mirror_kv_dtype())
+                eval(tr, sa, opening)
+                let peels0 = moe_gpu_resident_peels()
+                forward_prefill(tr, sa, tail, rows, 40l)
+                t |> equal(moe_gpu_resident_peels() - peels0, 1l, "a tail of {rows} rows peels through the token commands")
+                sa.n_past = 40l + rows
+                var got <- steps_after(tr, sa, steps)
+                var sb <- create_session(tr, mirror_kv_dtype())
+                eval(tr, sb, opening)
+                var inscope one : array<int64>
+                one |> resize(1)
+                for (i in range64(rows)) {
+                    one[0] = tail[i]
+                    eval_(tr, sb, one)
+                }
+                var want <- steps_after(tr, sb, steps)
+                rows_within_control(t, "a tail of {rows} rows", got, want, SPLIT_BAR_REL, 1l, 1.0, $(r) => r == 0l ? "the tail's last row" : "step {r}")
+                served_every_call(t)
+                delete sa
+                delete sb
+                delete got
+                delete want
+                delete tail
+                delete steps
+            }
+            set_vulkan_prefill_peel(lever)
+            delete opening
+            delete feed
         }
     }
 }

@@ -61,8 +61,6 @@ let private DN_LOGIT_BAR_REL_KQ_QUANT_FEED = 0.10
 //! for out), so the device and the CPU chain round on either side of the file's f32 chain - one step reads 0.91 of a 12.3 max
 //! logit apart (the device 0.63 and the CPU chain 0.50 from the f32 row, the device's pick the f32 chain's), the rest 0.42-0.60
 let private DN_LOGIT_BAR_REL_KQ_Q8OUT = 0.08
-//! the device's summed distance from the file's f32 chain, as a ratio of the CPU q8 chain's own: reads a 0.91 ratio (3.42 against 3.77)
-let private F32_DIST_REL = 1.15
 //! the head's K row is the f16-stored projection of a trunk hidden row that already sits within DN_LOGIT_BAR_REL of the CPU chain's, so the row's own rounding stacks on the trunk's: twice the deltanet bar
 let private HEAD_K_BAR_REL = 0.08
 //! the CPU row one down misses a device row by at least this many bars, or the bar is too wide to tell the row from its neighbour
@@ -82,21 +80,6 @@ def private f16_feed_admits_kq() : bool {
     } else {
         return false
     }
-}
-
-//! The mixed twin's same-or-better witness: the same tokens through the file's f32 chain on the CPU (`path` loaded again at
-//! `QuantMode.fp32`, its device state dropped), and the device no further from it than `F32_DIST_REL` of the CPU q8 chain's
-//! own distance, the f32 rows one step off past that bound. `tr` decodes the logged picks.
-def private f32_chain_witness(t : T?; tr : Model; path : string; n : int64; prompt, toks : array<int64>; fed : FeedPair) {
-    var f32_model <- load_model_(path, QuantMode.fp32)
-    moe_gpu_drop_model()
-    var f32_rows <- feed_alone(f32_model, mirror_kv_dtype(), prompt, toks)
-    let what = "{n} tokens against the f32 chain [{tile_arm_tag()}]"
-    let dist = chain_distances(t, tr, what, fed.gpu, fed.cpu, f32_rows, 0, "the f32 chain", "the CPU q8 chain")
-    t |> success(dist.dev_ref <= F32_DIST_REL * dist.cpu_ref, "{what}: the device sits no further from the f32 chain ({dist.dev_ref}) than {F32_DIST_REL} of the CPU q8 chain's own distance ({dist.cpu_ref})")
-    t |> success(dist.dev_ref_ctrl > F32_DIST_REL * dist.cpu_ref, "{what} control: the f32 rows one step off sit past that bound ({dist.dev_ref_ctrl})")
-    delete f32_rows
-    delete f32_model
 }
 
 // prefill `n` tokens + 8 fed steps on the resident driver, then the same on the all-CPU chain; the
@@ -146,8 +129,10 @@ def private hybrid_forced_feed(t : T?; n : int64; file : string; planes : Hybrid
         let f16_rel = q8out ? DN_LOGIT_BAR_REL_KQ_Q8OUT : DN_LOGIT_BAR_REL_KQ_F16_FEED
         let rel = kq ? (f16_feed_admits_kq() ? f16_rel : DN_LOGIT_BAR_REL_KQ_QUANT_FEED) : DN_LOGIT_BAR_REL
         feed_steps_within(t, tr, "", n, fed.gpu, fed.cpu, toks, rel)
-        if (q8out) {
-            f32_chain_witness(t, tr, path, n, prompt, toks, fed)
+        if (q8out) {   //! the mixed twin's same-or-better witness
+            var f32_rows <- f32_chain_rows(path, prompt, toks)
+            f32_chain_witness(t, tr, "{n} tokens against the f32 chain [{tile_arm_tag()}]", fed, f32_rows)
+            delete f32_rows
         }
         delete fed
         delete prompt

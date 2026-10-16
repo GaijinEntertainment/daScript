@@ -180,7 +180,9 @@ beside a Vulkan device reads the fast planes, and the device reads the same byte
 detection, the eager and streamed conversion ladders, and the load entry points. It owns nothing the
 forward path touches at run time - a loaded `Model` is the whole handoff - and it requires
 `dasllama_common` back for `Model`/`Session`, so the transformer umbrella requires it `public` and
-breaks the cycle. That re-export is what keeps every consumer on the facade. Every big-weight
+breaks the cycle. That re-export is what keeps every consumer on the facade. A file carrying a tensor
+type the reader has no arm for (Q4_1, IQ1_S, IQ1_M, TQ1_0, TQ2_0) is declined before any plane is read,
+the panic naming the tensor and its type (`gguf_decline_unread_types`). Every big-weight
 conversion is accounted as it runs (`conv_account`, on both the eager and the streamed ladder),
 and a load that converts ends with the report: the file's bytes, then each (disk type ->
 conversion kind) as bytes on disk against bytes served with the delta, biggest overhead first,
@@ -218,10 +220,18 @@ The token table is one plane in the file's format wherever its tag is a `KqFmt` 
 repacked with its format's plane like every region of it. No fp32 table rides beside it, and the
 CPU's `embed_row` and the devices' row gathers read that plane, tied or untied: the Vulkan
 window and token commands gather an untied table's rows on the device off its plane as the Metal
-drivers do. A table whose disk type no member carries (F16, BF16, Q4_1) keeps its
+drivers do. A table whose disk type no member carries (F16, BF16) keeps its
 exact fp32 rows; tied, a load under a Metal mode adds a q8 transcode of it at `wcls_off`
 (`cls_q8_copy`) - a converted copy, logged at the load - for the device classifier, while the
-embed and the CPU classifier read the fp32 rows. The shared expert's gate, up and down planes
+embed and the CPU classifier read the fp32 rows; under no Metal mode no device plane carries such
+a tied classifier, so the Vulkan whole-model driver declines the model by name
+(`resident_cls_decline`) and the per-op rails take it. A float per-layer-embedding table (F16, BF16,
+F32) tags q8 and reads its q8 transcode at every home - a converted copy, the gap no stocked file
+reaches. The E-series per-layer `inp_gate` and `proj` planes carry one tag a layer from their disk type
+(`ple_gate_fmt` / `ple_proj_fmt`, `ple_plane`), carved from that format's planes; a kind that ships F32
+keeps the file's f32 rows in fblob (`ple_gate_f32` / `ple_proj_f32`), read by the CPU's fblob GEMVs,
+Metal's router GEMV and f32 tile, and Vulkan's router GEMV, f32 act and f32 tile, and a kind mixing F32
+with another type declines the load. The shared expert's gate, up and down planes
 (the NextN head's triple included) keep the file's format on every load (`wsh*_fmt` /
 `wshk*_offs`; `shexp_plane` picks the plane by its tag), and every home reads that plane: the CPU
 chain's shared-expert sites (`dasllama_moe.das`, `dasllama_blocks.das`) take `shexp_tagged` to the

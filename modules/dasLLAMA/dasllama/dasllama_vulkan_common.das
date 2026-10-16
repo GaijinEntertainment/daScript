@@ -2389,8 +2389,8 @@ struct RLayer {
     attn_cap : float                //! the attention logit softcap on the scaled scores (gemma-2: 50); 0 = none - the cm2 flash tile's cap stamps take it at h256
     // the per-layer-embedding branch (gemma-4 E-series): gate [dim x ple] and proj [ple x dim] planes, their sets and metas
     ple : bool
-    bpg, bpp : int64
-    fpg : int
+    bpg, bpp : int64                //! the arena blocks; -1 where the plane is the file's f32 rows (`ple_gf32_dev` / `ple_pf32_dev`)
+    fpg, fpp : int                  //! the gate's and the projection's formats
     s_ple_x : VkDescriptorSet       //! the residual row requantized as it is (the gate GEMV's feed)
     s_ple_gate, s_ple_proj : VkDescriptorSet
     s_ple_act : VkDescriptorSet     //! gelu(gate) x this layer's side-input row, requantized (the proj GEMV's feed)
@@ -2668,12 +2668,20 @@ struct RDec {
     ple : int64
     ple_host : HostBuf
     ple_dev, pleg_dev : uint64
+    //! the gate / projection planes that ship F32, every layer's rows in the file's f32 (0 where the kind rides the arena), and
+    //! the act's f32 rows the f32 projection reads [nb x ple]
+    ple_gf32_dev, ple_pf32_dev, pleact_dev : uint64
+    ple_gf32_bytes, ple_pf32_bytes : int64
     pf_ple : uint64
     // the pre-step's projection on device (cm2 route): the per-layer model projection as an f16 mirror [layers*ple x dim],
     // its [ple] norm row, the window's f16 embedding rows and the projected [np x layers*ple] plane, and the three steps' sets
     ple_gpu : bool
-    ple_w16_dev, ple_pnorm_dev : uint64
+    ple_wp_dev, ple_pnorm_dev : uint64   //! the projection's own rows (bf16 halves under `ple_wp_bf16`, else f32) and its norm row
+    ple_wp_bytes : int64
+    ple_wp_bf16 : bool
+    ple_w16_dev : uint64                 //! the window's f16 panel of the projection, rewritten every window (0 where no f16 tile serves it)
     ple_w16_bytes : int64
+    pf_ple_wcvt_set : VkDescriptorSet    //! the panel's conversion off the own rows
     pf_plexf, pf_plep : uint64
     pf_ple_cvt_set, pf_ple_gemm_set, pf_ple_ar_set : VkDescriptorSet
     //! the token command's half of the pre-step: the projected [layers*ple] row and the two steps' sets (the f16 GEMV over the embedded row, the per-slice finish)
@@ -2713,6 +2721,8 @@ struct RDec {
     ple_tbl_blk : int64 = -1l          //! the E-series token table's arena block: the ids prefill gathers pf_ple from it
     ple_tbl_fmt : int                  //! ... its format slot, the table's own tag - the gather's stamp (`emb_cls_ensure`)
     pf_ple_tbl_set : VkDescriptorSet
+    s_tok_ple : VkDescriptorSet        //! the one-row command's gather of the step's side row off the table, the host's staged row for a step without an id
+    ple_tok_on : bool                  //! ... built: the table placed, the projection held and the step's id on the device
     pf_ids : uint64                    // [MAX_NPOS] token ids for the device-side embed gather
     pf_emb_set : VkDescriptorSet
     pf_arq_sets : array<VkDescriptorSet>   // fused ar+rq|f16 per layer: [l*2] = the ffn site, [l*2+1] = addr_next

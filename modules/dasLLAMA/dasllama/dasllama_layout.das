@@ -98,13 +98,15 @@ def private metal_blob_layout_ok(t : Model) : bool {
     if (!c.shared_weights && emb_kq(t) && !metal_blob_off_ok(t.emb_kq_off, t.emb_fmt)) {
         return false
     }
-    // E-series PLE gate/proj q8 planes bind per layer; the token table / model-proj stay CPU-side
+    // E-series PLE gate/proj planes bind per layer at their tags (the f32 rows ride fblob); the token table / model-proj stay CPU-side
     if (has_ple(c)) {
         let ples = c.dim * c.n_embd_per_layer
-        if ((ples % 256l) != 0l ||
-                !metal_blob_off_ok(t.ple_gate_off, KqFmt.q8) ||
-                !metal_blob_off_ok(t.ple_proj_off, KqFmt.q8)) {
-            return false
+        return false if ((ples % 256l) != 0l)
+        for (l in range64(c.n_layers)) {
+            for (proj in [false, true]) {
+                let pp = ple_plane(t, l, proj)
+                return false if (!pp.f32 && !metal_blob_off_ok(pp.off, pp.f))
+            }
         }
     }
     if (c.hyper_conn) {   // qwen4exp: the mixers' q8 down/up planes bind per site, the head pair once
@@ -404,10 +406,14 @@ def private collect_q8_regions(t : Model; var regs : array<StreamReg>) {
                 push_repack(regs, 0, t.dnout_offs[l], c.ssm_d_inner, dim)
             }
         }
-        if (has_ple(c)) {  // gemma-4 E-series per-layer PLE gate/proj (the emb table stays linear, unpacked)
+        if (has_ple(c) && l < c.n_layers) {  // gemma-4 E-series per-layer PLE gate/proj (the emb table stays linear, unpacked)
             let ple = c.n_embd_per_layer
-            push_repack(regs, 0, t.ple_gate_off + l * dim * ple, dim, ple)
-            push_repack(regs, 0, t.ple_proj_off + l * ple * dim, ple, dim)
+            for (proj in [false, true]) {
+                let pp = ple_plane(t, l, proj)
+                if (!pp.f32 && pp.f == KqFmt.q8) {
+                    push_repack(regs, 0, pp.off, proj ? ple : dim, proj ? dim : ple)
+                }
+            }
         }
         if (c.n_expert > 0l && l >= c.n_layer_dense_lead) {   // MoE: each expert slice is its own 2D tensor, repacked per its shape
             let ege = dim * c.n_ff_exp
@@ -533,6 +539,14 @@ def private collect_kq_regions(t : Model; var regs : array<StreamReg>) {
         }
         if (t.wo_offs[l] >= 0l) {
             push_repack_kq(regs, fmt_at(t.wo_fmt, l), t.wo_offs[l], qd, dim)
+        }
+        if (has_ple(c) && l < c.n_layers) {
+            for (proj in [false, true]) {
+                let pp = ple_plane(t, l, proj)
+                if (!pp.f32) {
+                    push_repack_kq(regs, pp.f, pp.off, proj ? c.n_embd_per_layer : dim, proj ? dim : c.n_embd_per_layer)
+                }
+            }
         }
         if (c.n_expert > 0l && l >= c.n_layer_dense_lead) {
             if (!t.experts_mx4) {   // each expert slice grp-repacks independently, like the Q8 loop
@@ -676,6 +690,14 @@ def private collect_b32_table_regions(t : Model; var regs : array<StreamReg>; fm
                        (f = t.dn_ba_f32 ? KqFmt.q8 : fmt_at(t.dnalpha_fmt, l), off = t.dn_ba_f32 ? -1l : t.dnalpha_offs[l], n = dim, d = c.ssm_dt_rank)]) {
                 if (r.f == fmt && r.off >= 0l) {
                     push_repack(regs, code, r.off, r.n, r.d)
+                }
+            }
+        }
+        if (has_ple(c) && l < c.n_layers) {
+            for (proj in [false, true]) {
+                let pp = ple_plane(t, l, proj)
+                if (!pp.f32 && pp.f == fmt) {
+                    push_repack(regs, code, pp.off, proj ? c.n_embd_per_layer : dim, proj ? dim : c.n_embd_per_layer)
                 }
             }
         }

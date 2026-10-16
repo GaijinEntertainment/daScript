@@ -541,6 +541,23 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         ModelSpec(file = "gemma-4-E2B-it-emb-Q4_0-local.gguf", bytes = 3591765440l,
             sha256 = "bec56582221c7025f8310b9fa6c258a651a4bd92f029afc77b9e5f20f80c3988",
             recipe = "llama-quantize --allow-requantize --token-embedding-type q4_0 gemma-4-E2B-it-Q8_0.gguf gemma-4-E2B-it-emb-Q4_0-local.gguf Q8_0"),
+        // the per-layer-embedding format carriers (tests/test_metal_support_matrix.das gemma4e rows): the token and PLE tables
+        // in a K-quant and an IQ format, the per-layer gate and projection planes in Q6_K and Q5_0
+        ModelSpec(file = "gemma-4-E2B-it-emb-Q6_K-local.gguf", bytes = 4301127104l,
+            sha256 = "51e4cbeb06dc097f63162f0998c03d689a1d7493f992282b0d8c7aca26abac24",
+            recipe = "llama-quantize --allow-requantize --token-embedding-type q6_k gemma-4-E2B-it-Q8_0.gguf gemma-4-E2B-it-emb-Q6_K-local.gguf Q8_0"),
+        ModelSpec(file = "gemma-4-E2B-it-emb-IQ4_XS-local.gguf", bytes = 3505782208l,
+            sha256 = "474fa20d7d00860e38b02c939fdaf89ba8b1d0a53583e11d0426ebbbe53d3174",
+            recipe = "llama-quantize --allow-requantize --token-embedding-type iq4_xs gemma-4-E2B-it-Q8_0.gguf gemma-4-E2B-it-emb-IQ4_XS-local.gguf Q8_0"),
+        ModelSpec(file = "gemma-4-E2B-it-ple-Q6_K-local.gguf", bytes = 4960830912l,
+            sha256 = "0cb8588ddae62932f3cd4978278565be7e06c1a0e9d3d5f33e2aecfff5fddfe6",
+            recipe = "llama-quantize --allow-requantize --tensor-type inp_gate=q6_k --tensor-type 'blk\\.[0-9]+\\.proj\\.weight=q6_k' gemma-4-E2B-it-Q8_0.gguf gemma-4-E2B-it-ple-Q6_K-local.gguf Q8_0"),
+        ModelSpec(file = "gemma-4-E2B-it-ple-Q5_0-local.gguf", bytes = 4957175232l,
+            sha256 = "1262a7e8f58ed271f4aa898ecea38f56bc22c6cbd5810da3a8d1b877ed58969d",
+            recipe = "llama-quantize --allow-requantize --tensor-type inp_gate=q5_0 --tensor-type 'blk\\.[0-9]+\\.proj\\.weight=q5_0' gemma-4-E2B-it-Q8_0.gguf gemma-4-E2B-it-ple-Q5_0-local.gguf Q8_0"),
+        // the tied float table: token_embd and per_layer_token_embd F16 - the classifier's decline by name, the PLE table's q8 transcode
+        ModelSpec(file = "gemma-4-E2B-it-Q8_0-embf16-local.gguf",
+            recipe = "llama-quantize --allow-requantize --token-embedding-type f16 gemma-4-E2B-it-Q8_0.gguf gemma-4-E2B-it-Q8_0-embf16-local.gguf q8_0"),
         // the resident gates' large-tier carriers (tests/test_gpu_resident_gemma4_12b_q8 / _26b / _31b): provenance rows,
         // not board rows - resolve/main floats, so the bytes and sha256 pin the file
         ModelSpec(file = "gemma-4-12B-it-Q8_0.gguf",

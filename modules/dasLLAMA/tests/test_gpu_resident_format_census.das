@@ -273,7 +273,6 @@ def test_gpu_resident_format_census_ba_f32(t : T?) {
                 var prompt <- resident_prompt(PROMPT)
                 var toks <- resident_feed(STEPS)
                 let ba0 = census("dn_ba_cls_spv")
-                let f16_0 = census("router_gemv_f16_cls_spv")
                 var rt0 = 0l
                 var fed <- resident_then_cpu_feed(t, tr, prompt, toks, $ {
                     pf_ba = census("dn_ba_cls_spv") - ba0
@@ -286,7 +285,6 @@ def test_gpu_resident_format_census_ba_f32(t : T?) {
                 if (ba0 != NO_CENSUS) {
                     t |> equal(pf_ba, nrec, "the window's f32 beta/alpha tile ran once per recurrent layer")
                     t |> success(st_rt >= nrec, "the token command recorded an f32 router-form GEMV per recurrent layer at least ({st_rt} over {nrec})")
-                    t |> equal(census("router_gemv_f16_cls_spv") - f16_0, 0l, "no f16 router-form GEMV ran: no f16 copy of the beta/alpha rows")
                 }
                 delete fed
                 delete prompt

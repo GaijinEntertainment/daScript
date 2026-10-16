@@ -19,6 +19,7 @@ require math   // nolint:STYLE030,LINT019 - used only inside the Apple static_if
 require strings   // nolint:STYLE030,LINT019 - starts_with, inside the Apple static_if half
 require _model_tier
 require _format_census   // census_cell: the qwen35 rows' every site in its own format
+require dasllama/dasllama_ple   // ple_cpu_pre_rows - the E-series rows' CPU pre-step witness
 require dasllama/dasllama_image   // nolint:STYLE030,LINT019 - load_model_cached, the qwen4exp row's served image, inside the das_metal half
 require dasllama/dasllama_gguf   // nolint:STYLE030,LINT019 - set_mtp_head_path, the qwen4exp row's split head, inside the das_metal half
 require ../performance/model_specs.das   // nolint:STYLE030,LINT019 — counting_prompt, read only inside the Apple static_if halves
@@ -1135,8 +1136,14 @@ def private depth_cell(t : T?; tr, trg : Model; tag : string; bar : float; stamp
     }
 }
 
-[unused_argument(t, path, tag, hetero_hidden, tokexact)]   // off-Apple the gated body is empty
-def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false; tokexact : bool = true) {
+//! the E-series side rows' projections the device ran: the bf16 word form's two stamps and the f32 router's
+def private ple_proj_count : int64 {
+    return (metal_kernel_count_compiled("metal_ple_proj_bf16") + metal_kernel_count_compiled("metal_ple_proj_bf16_one")
+        + metal_kernel_count_compiled("metal_moe_router"))
+}
+
+[unused_argument(t, path, tag, hetero_hidden, tokexact, bar)]   // off-Apple the gated body is empty
+def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false; tokexact : bool = true; bar : float = 8.0) {
     // gemma-4 E-series (E4B): PLE (per-layer embeddings — MetalNeed.ple) + cross-layer KV
     // sharing (the last 18 layers are Q-only and alias layer 22/23's slab/panels). Decode,
     // prefill and the batched step ENGAGE on the blob twin; the batched step is compared row
@@ -1164,6 +1171,11 @@ def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false
         // proves the per-layer u_hidden bind; E4B is width-uniform and passes hetero_hidden=false
         t |> success((ffn_second_hidden(tr) > 0l) == hetero_hidden,
             "{tag}: fixture two-FFN-width shape matches the row's claim (second width {ffn_second_hidden(tr)})")
+        //! the per-layer gate and projection planes in their own formats (the E2B Q4_K_M ships them F32, the Q4_0 file Q4_0)
+        census_cell(t, tr, path, "{tag} planar", ["per-layer embeddings"])
+        let f32_ple = tr.ple_gate_f32 || tr.ple_proj_f32
+        let rt0 = metal_kernel_count_compiled("metal_moe_router")   //! the pipelines compile at the driver's first call
+        let rtb0 = metal_kernel_count_compiled("metal_moe_router_b") + metal_kernel_count_compiled("metal_f32_exact_mulmm")
         var trg <- blob_twin(t, path, 512l)
         let c = trg.config
         let vocab = c.vocab_size
@@ -1178,7 +1190,13 @@ def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false
             t |> success(select_prefill_override("metal"), "{tag}: prefill override registered")
             t |> success(select_decode_override("metal"), "{tag}: decode override registered")
             set_metal_prefill_min_npos(1l)
+            //! the pre-step on the device at every shape: the window's finish, the steps' bf16 projection, no CPU pre-step row
+            let fin0 = metal_kernel_count_compiled("metal_ple_finish")
+            let cpu0 = ple_cpu_pre_rows()
             eval_(trg, sa, pa)
+            let fin_pf = metal_kernel_count_compiled("metal_ple_finish") - fin0
+            t |> success(fin_pf > 0l, "{tag} prefill: the window's PLE pre-step finished on the device ({fin_pf})")
+            let pj0 = ple_proj_count()
             var cura = argmax_of(sa.logits, vocab)
             var picks : array<int64>
             for (_i in range(2)) {
@@ -1188,6 +1206,9 @@ def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false
                 delete one
                 cura = argmax_of(sa.logits, vocab)
             }
+            let pj_d = ple_proj_count() - pj0
+            t |> success(pj_d >= 2l, "{tag} decode: every step projected its side row on the device ({pj_d})")
+            t |> equal(ple_cpu_pre_rows() - cpu0, 0l, "{tag}: the prefill and the steps built no CPU pre-step row")
             // the batch cell: the CPU batched stack on the PLANAR model is the control, the
             // blob twin's batched step through the driver (PLE rows, Q-only shared-KV layers,
             // the two FFN widths) must read within the single-stream bar of it
@@ -1208,7 +1229,7 @@ def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false
             let cpu_next = argmax_of(sc.logits, vocab)
             let gpu_next = argmax_of(sa.logits, vocab)
             to_log(LOG_INFO, "{tag} single-stream forced-step: CPU next '{eyeball_str(piece_(tr, cpu_next))}' vs GPU next '{eyeball_str(piece_(tr, gpu_next))}' (maxd {ssmaxd})\n")
-            t |> success(ssmaxd <= 8.0, "{tag}: single-stream forced-step logits within 8.0 (maxd {ssmaxd})")
+            t |> success(ssmaxd <= bar, "{tag}: single-stream forced-step logits within {bar} (maxd {ssmaxd})")
             delete picks
             delete sc
             sc = make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
@@ -1234,20 +1255,25 @@ def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false
                 sessg |> push(addr(sh))
             }
             let ba1 = metal_batch_decode_stats().steps
+            let bpj0 = ple_proj_count()
+            let bcpu0 = ple_cpu_pre_rows()
             eval_batch_(trg, wsg, sessg, cur)
             t |> equal(metal_batch_decode_stats().steps - ba1, 1l, "{tag} batch: the driver served the step")
+            t |> success(ple_proj_count() > bpj0,
+                "{tag} batch: the rows' side input projected on the device")
+            t |> equal(ple_cpu_pre_rows() - bcpu0, 0l, "{tag} batch: no CPU pre-step row (the host transpose and gather are gone)")
             var bmaxd = 0.0
             for (i in range64(vocab)) {
                 bmaxd = max(bmaxd, abs(sg.logits[i] - sc.logits[i]))
                 bmaxd = max(bmaxd, abs(sh.logits[i] - sd.logits[i]))
             }
             to_log(LOG_INFO, "{tag} batched step: CPU next '{eyeball_str(piece_(tr, argmax_of(sc.logits, vocab)))}' / '{eyeball_str(piece_(tr, argmax_of(sd.logits, vocab)))}' vs GPU next '{eyeball_str(piece_(tr, argmax_of(sg.logits, vocab)))}' / '{eyeball_str(piece_(tr, argmax_of(sh.logits, vocab)))}' (maxd {bmaxd})\n")
-            t |> success(bmaxd <= 8.0, "{tag}: batched-step logits within 8.0 of the CPU batched stack, both rows (maxd {bmaxd})")
+            t |> success(bmaxd <= bar, "{tag}: batched-step logits within {bar} of the CPU batched stack, both rows (maxd {bmaxd})")
             var xmaxd = 0.0   //! the control: row A against row B lands outside the bar
             for (i in range64(vocab)) {
                 xmaxd = max(xmaxd, abs(sg.logits[i] - sd.logits[i]))
             }
-            t |> success(xmaxd > 8.0, "{tag}: the cross-row compare lands outside the bar (maxd {xmaxd})")
+            t |> success(xmaxd > bar, "{tag}: the cross-row compare lands outside the bar (maxd {xmaxd})")
             select_decode_override("")
             select_prefill_override("")
             set_metal_prefill_min_npos(64l)
@@ -1268,6 +1294,15 @@ def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false
         }
         t |> success(metal_prefill_stats().prefills - pf0 > 0l, "{tag} prefill: ENGAGES on the GPU")
         t |> success(metal_decode_stats().decodes - de0 > 0l, "{tag} decode: ENGAGES on the GPU")
+        //! no routed expert on an E-series model: the router stamps run the f32 per-layer planes alone (the q8 files' control)
+        let rt_n = metal_kernel_count_compiled("metal_moe_router") - rt0
+        let rtb_n = metal_kernel_count_compiled("metal_moe_router_b") + metal_kernel_count_compiled("metal_f32_exact_mulmm") - rtb0
+        if (f32_ple) {
+            t |> success(rt_n >= 2l * c.n_layers, "{tag}: the decode steps read the f32 gate and projection rows on the router GEMV ({rt_n})")
+            t |> success(rtb_n >= 2l * c.n_layers, "{tag}: the window reads them on the f32 tile or the slab GEMV ({rtb_n})")
+        } else {
+            t |> equal(rt_n + rtb_n, 0l, "{tag}: no f32 per-layer plane, no router stamp dispatched")
+        }
         var bad <- metal_batch_decode_declines()
         t |> success(metal_batch_decode_stats().steps - ba0 > 0l, "{tag} batch: ENGAGES on the GPU")
         t |> equal((bad?["need_ple"] ?? 0l) - (bad0?["need_ple"] ?? 0l), 0l, "{tag} batch: no need_ple decline (the PLE rows form serves)")
@@ -1283,15 +1318,21 @@ def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false
             select_decode_override("metal")
             select_prefill_override("metal")
             set_metal_prefill_min_npos(1l)
+            let spec_mode = metal_decode_spec_mode()
+            set_metal_decode_speculate(1)   //! the greedy chain pinned on: the E-series chains its steps, each building its side row off the argmax
+            let sp0 = metal_decode_spec_stats()
             var s2 = make_run_state(trg.config, KVDtype.f16, KVDtype.f16)
             let ids2 <- generate(trg, s2, prompt, length(prompt) + 8)
             gpu_ids := ids2
             delete s2
+            let sp1 = metal_decode_spec_stats()
+            set_metal_decode_speculate(spec_mode)
+            t |> success(sp1.hits - sp0.hits > 0l, "{tag}: the greedy chain engaged on the E-series ({sp1.hits - sp0.hits} hits, {sp1.misses - sp0.misses} misses)")
             set_metal_prefill_min_npos(64l)
             select_decode_override("")
             select_prefill_override("")
         }
-        depth_cell(t, tr, trg, tag, 8.0, ["MetalSqAttnDXF16_metal_sq_attn_d", "MetalSqAttnDWF16_metal_sq_attn_d"])
+        depth_cell(t, tr, trg, tag, bar, ["MetalSqAttnDXF16_metal_sq_attn_d", "MetalSqAttnDWF16_metal_sq_attn_d"])
         log_gen_texts(tr, "{tag}", cpu_ids, gpu_ids)
         if (tokexact) {
             t |> success(ids_equal(cpu_ids, gpu_ids),
@@ -1306,7 +1347,7 @@ def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false
         }
         delete cpu_ids
         delete gpu_ids
-        cont_logits_cell(t, tr, trg, "{tag}/q8/f16", 8.0)
+        cont_logits_cell(t, tr, trg, "{tag}/q8/f16", bar)
         delete trg
         delete tr
     }
@@ -2048,6 +2089,17 @@ def test_metal_family_matrix(t : T?) {
             // ... and the kq carrier: the k5-plane PLE table's CPU gather over the metal-blob
             // COMPACTED scale strips (16B, not the planar 20B) — the stride that zeroed logits
             gemma4e_row(t, path_join(models_dir(), "gemma-4-E2B-it-Q4_K_M.gguf"), "gemma4e-e2b-kq", true, false)
+            // ... and the Q4_0 file: the per-layer gate and projection planes Q4_0 on disk, read on the q40 forms at every shape
+            // the file's rows sit closer together (the batch cell's two rows 6.6 apart), so its bar is 4.0 (reads 0.6 to 1.3)
+            gemma4e_row(t, path_join(models_dir(), "gemma-4-E2B-it-Q4_0.gguf"), "gemma4e-e2b-q40", true, false, 4.0)
+            // ... and the format carriers off the E2B Q8_0: the token and PLE tables Q6_K and IQ4_XS (the gather family's K-quant and
+            // IQ stamps at width layers x ple), the per-layer gate and projection planes Q6_K and Q5_0
+            for (carrier in [(file = "gemma-4-E2B-it-emb-Q6_K-local.gguf", tag = "gemma4e-e2b-emb-q6k"),
+                             (file = "gemma-4-E2B-it-emb-IQ4_XS-local.gguf", tag = "gemma4e-e2b-emb-iq4xs"),
+                             (file = "gemma-4-E2B-it-ple-Q6_K-local.gguf", tag = "gemma4e-e2b-ple-q6k"),
+                             (file = "gemma-4-E2B-it-ple-Q5_0-local.gguf", tag = "gemma4e-e2b-ple-q50")]) {
+                gemma4e_row(t, path_join(models_dir(), carrier.file), carrier.tag, true, false, 4.0)
+            }
             // gpt-oss-20b (Wave C stage 4): mx4 experts + sinks + softmax_weight + biases
             gptoss_row(t, path_join(models_dir(), "gpt-oss-20b-mxfp4.gguf"))
             // qwen35 (Wave D): the Gated-DeltaNet hybrid — 3-in-4 recurrent layers (state

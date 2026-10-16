@@ -1180,7 +1180,7 @@ module) is independent and can land any time - it is pure structure.
     DECODE (the reference exe's logger, one token): the 9B 8.40 ms against our 11.0 profiled, per recurrent
     layer 254 us against 321 - our step 23.5 us against its GATED_DELTA_NET 4.1 + SSM_CONV 5.2 (one
     256-thread workgroup a head with single-thread loops over the 128 columns, against 4096 32-lane
-    workgroups, a state column each), ba 17 against its two MUL_MAT rows ~10 (two `RouterGemvF16` dispatches
+    workgroups, a state column each), ba 17 against its two MUL_MAT rows ~10 (two router GEMV dispatches
     of 32 workgroups with a hazard barrier between them), out 30.7 against its MUL_MAT ~20, up 49.6 against
     its MUL_MAT 42, ar1 + ar2 26 against its ADD + RMS_NORM 18; every GEMV over 12 MB runs at 700-820 GB/s
     on both. The same step and ba floors

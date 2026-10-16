@@ -21,6 +21,11 @@ def test_regions_batched_groups_e2b(t : T?) {
 }
 
 [test]
+def test_regions_batched_side_rows_e2b(t : T?) {
+    cell_regions_batched_side_rows(t, REGIONS_FILE)
+}
+
+[test]
 def test_regions_interleaved_single_steps(t : T?) {
     cell_regions_interleaved_single_steps(t, REGIONS_FILE)
 }

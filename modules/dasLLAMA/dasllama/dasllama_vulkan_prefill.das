@@ -12,7 +12,6 @@ require dasllama/dasllama_vulkan_classes   // the class-kernel rail (generated s
 require dasllama/dasllama_vulkan_decode   // vk_moe_dn_step — the dn chain's npos==1 arm routes through the decode step
 require dasllama/dasllama_kqformat   // KqFmt — the arena fmt slots are its ordinals
 require dasllama/dasllama_gemm_schema   // Q8_BLOCK_ELEMS - the window chain's hyper-connection scale planes
-require dasllama/dasllama_convert   // cvt_f32_to_f16 — the PLE projection's f16 mirror
 require dasllama/dasllama_env   // g_env_vulkan — the vk_kv_merge / vk_overlap / vk_fuse A/B hatches
 require dasllama/dasllama_gpu_tier   // moe_gpu_stream_need — the stream-slot carve's source of truth
 require vulkan
@@ -877,23 +876,43 @@ def private pf_ple_block(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : in
     let dim = g_rd.dim
     let ple = g_rd.ple
     let all = uint(g_rd.n_layers * ple)   //! the side rows' position stride
-    let fmt = g_rd.layers[l].fpg
-    let pg = arena_planes(fmt, g_rd.layers[l].bpg)
-    let pp = arena_planes(fmt, g_rd.layers[l].bpp)
+    let L & = unsafe(g_rd.layers[l])
     //! every step runs the whole window, the FFN's last-layer row slice included: the branch is 256 wide, and the sliced rows' results go unread
-    let x6 = pf_f16_feed(fmt)   //! the gate's feed: the residual rows as f16 (the tile pick and split-k serve the 256-wide GEMM) else their Q8_0 blocks
-    pf_feed_enc(raw, h, g_rd.pf_sets[b + 16], x6, false, 0l, wlen * dim)
+    if (L.bpg < 0l) {   //! the file's f32 rows read the stream as it is, on the f32 tile
+        pfq_ts(raw)
+        var pcg = pf_ple_f32_args(wlen, dim, ple, l * ple * dim)
+        enc_dn_ba_cls(raw, h, g_rd.pf_sets[b + 17], pcg, dn_ba_wgs(wlen, ple / 2l))
+        pfq_ts(raw)
+    } else {
+        let x6 = pf_f16_feed(L.fpg)   //! the gate's feed: the residual rows as f16 (the tile pick and split-k serve the 256-wide GEMM) else their quants
+        pf_feed_enc(raw, h, g_rd.pf_sets[b + 16], x6, kq_sb(L.fpg) && !x6, 0l, wlen * dim)
+        pfq_ts(raw)
+        let xf = pf_feed_planes(x6, g_rd.pf_xf, g_rd.pf_xq, g_rd.pf_xs, dim)
+        let pg = arena_planes(L.fpg, L.bpg)
+        pf_gemm_enc(raw, h, b + 17, L.fpg, pg.wq, pg.ws, xf.q, xf.s, g_rd.pf_gate,
+            pg.wqb, pg.wsb, xf.qn, xf.sn, np * ple * 4l, VHZ_XQ, VHZ_GATE, dim, ple, L.bpg, wlen, x6)
+    }
+    var pca = ActArgs(nelem = uint(wlen * ple), act = ACT_GELU, ubase = uint(l * ple), ustride = all, ulen = uint(ple))
+    if (L.bpp < 0l) {   //! the act's f32 rows (in the up plane, free here) feed the f32 projection
+        enc_ple_act_f32_cls(raw, h, g_rd.pf_sets[b + 18], pca, (wlen * ple + 255l) / 256l)
+        pfq_ts(raw)
+        var pcp = pf_ple_f32_args(wlen, ple, dim, l * ple * dim)
+        enc_dn_ba_cls(raw, h, g_rd.pf_sets[b + 19], pcp, dn_ba_wgs(wlen, dim / 2l))
+        pfq_ts(raw)
+        return
+    }
+    actrq_enc(raw, h, g_rd.pf_sets[b + 18], kq_sb(L.fpp), pca, wlen * ple)
     pfq_ts(raw)
-    let xf = pf_feed_planes(x6, g_rd.pf_xf, g_rd.pf_xq, g_rd.pf_xs, dim)
-    pf_gemm_enc(raw, h, b + 17, fmt, pg.wq, pg.ws, xf.q, xf.s, g_rd.pf_gate,
-        pg.wqb, pg.wsb, xf.qn, xf.sn, np * ple * 4l, VHZ_XQ, VHZ_GATE, dim, ple, g_rd.layers[l].bpg, wlen, x6)
-    var pca = ActArgs(nelem = uint(wlen * ple), act = ACT_GELU, nblk = uint(wlen * ple / 32l),
-        ubase = uint(l * ple), ustride = all, ulen = uint(ple))
-    enc_q8_actrq_cls(raw, h, g_rd.pf_sets[b + 18], pca, (wlen * ple / 4l + 255l) / 256l)
-    pfq_ts(raw)
-    pf_gemm_enc(raw, h, b + 19, fmt, pp.wq, pp.ws, g_gpu.hq_dev, g_gpu.hs_dev, g_rd.pf_ffnout,
-        pp.wqb, pp.wsb, np * ple, np * (ple / 32l) * 4l, np * dim * 4l, VHZ_HQ, VHZ_FFO, ple, dim, g_rd.layers[l].bpp, wlen, false)
+    let pp = arena_planes(L.fpp, L.bpp)
+    pf_gemm_enc(raw, h, b + 19, L.fpp, pp.wq, pp.ws, g_gpu.hq_dev, g_gpu.hs_dev, g_rd.pf_ffnout,
+        pp.wqb, pp.wsb, np * ple, np * (ple / 32l) * 4l, np * dim * 4l, VHZ_HQ, VHZ_FFO, ple, dim, L.bpp, wlen, false)
 }
+
+//! the f32 tile (`DnBaGemm`) as a plain GEMM: `d` rows of `n` at `woff` over the window's rows into y[p * d + e] - its two output
+//! halves laid end to end
+def private pf_ple_f32_args(wlen, n, d, woff : int64) : DnBaArgs
+    => DnBaArgs(npos = uint(wlen), dim = uint(n), nvh = uint(d / 2l), woff = uint(woff), xstride = uint(n), obase_b = 0u,
+        obase_g = uint(d / 2l), ostride = uint(d))
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-window-chain")]
 def private pf_moe_addr_next(raw : VkCommandBuffer; var h : VkHaz; l, wlen, nxt : int64) {
@@ -960,20 +979,32 @@ def private pf_setup {
         let all = g_rd.n_layers * g_rd.ple
         g_rd.pf_ple = make_device_buf(np * all * 4l)
         if (g_rd.ple_gpu) {
-            // the pre-step on device: f16 embedding rows -> the projected plane -> the side rows finished in place
-            let ple_khr = g_gpu.coopmat_mode != COOPMAT_CM2
-            verify(ensure_tower_clamp_cvt_cls() && f16_gemm_ensure(ple_khr) && ensure_cls_ar(), "vk prefill: the per-layer-embedding pre-step's rails must engage")
-            g_rd.pf_plexf = make_device_buf(np * dim * 2l)
+            // the pre-step on device: the projected plane (the f16 tile over the window's panel, else the router GEMV), then the finish
             g_rd.pf_plep = make_device_buf(np * all * 4l)
-            g_rd.pf_ple_cvt_set = set_tower_clamp_cvt_cls(fixed_array(g_rd.pf_x, g_rd.pf_plexf),
-                fixed_array(np * dim * 4l, np * dim * 2l), fixed_array(VHZ_X, VHZ_SK))
-            let gbufs = fixed_array(g_rd.ple_w16_dev, g_rd.pf_plexf, g_rd.pf_plep)
-            let gsizes = fixed_array(g_rd.ple_w16_bytes, np * dim * 2l, np * all * 4l)
-            let ggbits = fixed_array(0u, VHZ_SK, VHZ_MRT)
-            g_rd.pf_ple_gemm_set = f16_gemm_set(ple_khr, gbufs, gsizes, ggbits)
-            //! the residual step's kernel over [np x layers] rows of ple: side = (gathered + pnorm . rms(projected)) / sqrt(2); its normed output lands in the projected plane, unread
-            g_rd.pf_ple_ar_set = set_cls_ar(fixed_array(g_rd.pf_ple, g_rd.pf_plep, g_rd.ple_pnorm_dev, g_rd.pf_plep),
-                fixed_array(np * all * 4l, np * all * 4l, g_rd.ple * 4l, np * all * 4l), fixed_array(VHZ_COS, VHZ_MRT, 0u, VHZ_MRT))
+            if (g_rd.ple_w16_dev != 0ul) {
+                let ple_khr = g_gpu.coopmat_mode != COOPMAT_CM2
+                verify(ensure_tower_clamp_cvt_cls() && ensure_ple_bf16_cvt_cls() && f16_gemm_ensure(ple_khr) && ensure_cls_ar_add(),
+                    "vk prefill: the per-layer-embedding pre-step's rails must engage")
+                g_rd.pf_plexf = make_device_buf(np * dim * 2l)
+                g_rd.pf_ple_cvt_set = set_tower_clamp_cvt_cls(fixed_array(g_rd.pf_x, g_rd.pf_plexf),
+                    fixed_array(np * dim * 4l, np * dim * 2l), fixed_array(VHZ_X, VHZ_SK))
+                let wbufs = fixed_array(g_rd.ple_wp_dev, g_rd.ple_w16_dev)
+                let wsizes = fixed_array(g_rd.ple_wp_bytes, g_rd.ple_w16_bytes)
+                let wbits = fixed_array(0u, VHZ_SK)
+                g_rd.pf_ple_wcvt_set = g_rd.ple_wp_bf16 ? set_ple_bf16_cvt_cls(wbufs, wsizes, wbits) : set_tower_clamp_cvt_cls(wbufs, wsizes, wbits)
+                let gbufs = fixed_array(g_rd.ple_w16_dev, g_rd.pf_plexf, g_rd.pf_plep)
+                let gsizes = fixed_array(g_rd.ple_w16_bytes, np * dim * 2l, np * all * 4l)
+                let ggbits = fixed_array(VHZ_SK, VHZ_SK, VHZ_MRT)
+                g_rd.pf_ple_gemm_set = f16_gemm_set(ple_khr, gbufs, gsizes, ggbits)
+            } else {
+                let gbufs = fixed_array(g_rd.ple_wp_dev, g_rd.pf_x, g_rd.pf_plep, g_rd.ple_pnorm_dev)
+                let gsizes = fixed_array(g_rd.ple_wp_bytes, np * dim * 4l, np * all * 4l, g_rd.ple * 4l)
+                let ggbits = fixed_array(0u, VHZ_X, VHZ_MRT, 0u)
+                g_rd.pf_ple_gemm_set = g_rd.ple_wp_bf16 ? set_router_gemv_bf16_cls(gbufs, gsizes, ggbits) : set_router_gemv_cls(gbufs, gsizes, ggbits)
+            }
+            //! the residual step over [np x layers] rows of ple: side = (gathered + pnorm . rms(projected)) / sqrt(2), no normed row stored
+            g_rd.pf_ple_ar_set = set_cls_ar_add(fixed_array(g_rd.pf_ple, g_rd.pf_plep, g_rd.ple_pnorm_dev),
+                fixed_array(np * all * 4l, np * all * 4l, g_rd.ple * 4l), fixed_array(VHZ_COS, VHZ_MRT, 0u))
         }
     }
     g_rd.pf_logits_host = make_host_buf(g_rd.regions * g_rd.vocab * 4l, false, [cached = true])
@@ -1006,10 +1037,14 @@ def private pf_setup {
     // f16-fed groups (pf_f16_feed) take f16 convert roles; kq consumers the Q8_K quant/act forms
     var any_f16_feed = false
     var anykq = kq_sb(g_rd.cls_fmt_marker)
+    var ple_f32 = false   //! a per-layer-embedding kind on its f32 rows: the f32 tile and the f32 act
     for (L in g_rd.layers) {
         any_f16_feed = (any_f16_feed || pf_f16_feed(L.fq) || pf_f16_feed(L.fo) || pf_f16_feed(L.f1) || pf_f16_feed(L.f2)
-            || (L.recurrent && (pf_f16_feed(L.fqkv) || pf_f16_feed(L.fz) || pf_f16_feed(L.fout))))
-        anykq = anykq || kq_sb(L.fq) || kq_sb(L.fo) || kq_sb(L.f1) || kq_sb(L.f2) || (L.recurrent && (kq_sb(L.fqkv) || kq_sb(L.fz) || kq_sb(L.fout)))
+            || (L.recurrent && (pf_f16_feed(L.fqkv) || pf_f16_feed(L.fz) || pf_f16_feed(L.fout)))
+            || (L.ple && L.bpg >= 0l && pf_f16_feed(L.fpg)))
+        anykq = (anykq || kq_sb(L.fq) || kq_sb(L.fo) || kq_sb(L.f1) || kq_sb(L.f2) || (L.recurrent && (kq_sb(L.fqkv) || kq_sb(L.fz) || kq_sb(L.fout)))
+            || (L.ple && ((L.bpg >= 0l && kq_sb(L.fpg)) || (L.bpp >= 0l && kq_sb(L.fpp)))))
+        ple_f32 = ple_f32 || (L.ple && (L.bpg < 0l || L.bpp < 0l))
     }
     if (any_f16_feed) {
         assert(np % 32l == 0l, "dasLLAMA vulkan tier: the s tile's unclamped column needs a 32-row-multiple window")   // the resident planes carry no read slack
@@ -1102,7 +1137,8 @@ def private pf_setup {
         && (!sinks || long_length(chunked_hs) == 0l)   //! the sink rides the flash tiles alone: a sink model whose layer fell to the chunked pair declined at the sink upload
         && ensure_q8_actrq_cls() && (!g_rd.qk_norm || ensure_qk_rms_cls())
         && (!any_f16_feed || (ensure_tower_clamp_cvt_cls() && ensure_actf16_cls() && ensure_cls_ar_f16_b()))
-        && (!anykq || (ensure_cls_q8k_rq() && ensure_q8k_actrq_cls())),
+        && (!anykq || (ensure_cls_q8k_rq() && ensure_q8k_actrq_cls()))
+        && (!ple_f32 || (ensure_dn_ba_cls() && ensure_ple_act_f32_cls())),
         "vk prefill: the class rails must engage on a live device")
     if (g_rd.pf_facm2) {
         to_log(LOG_INFO, "dasLLAMA vulkan tier: cm2 flash attention armed ({long_length(fa_hs)} head size(s), {kvq ? "the block-codec mirrors' f16 shadow" : "native f16 mirrors"}; {long_length(chunked_hs)} on the chunked pair)\n")
@@ -1258,10 +1294,23 @@ def private pf_setup {
         // 16 ple_x: the stream rows as they are -> pf_xf (the f16 feed) or pf_xq/pf_xs; 18 ple_act: gelu(gate rows) x the side rows -> hq/hs (17 / 19 are GEMM roles: sets on the encode)
         if (L.ple) {
             let ple = g_rd.ple
-            g_rd.pf_sets[b + 16] = pf_feed_set(pf_f16_feed(L.fpg), g_rd.pf_x, VHZ_X, g_rd.pf_xf, g_rd.pf_xq, g_rd.pf_xs, dim, VHZ_XQ)
-            g_rd.pf_sets[b + 18] = set_actrq_cls(fixed_array(g_rd.pf_gate, g_rd.pf_ple, g_gpu.hq_dev, g_gpu.hs_dev),
-                fixed_array(np * ple * 4l, np * g_rd.n_layers * ple * 4l, BATCH_HQ_BYTES, BATCH_HS_BYTES),
-                fixed_array(VHZ_GATE, VHZ_COS, VHZ_HQ, VHZ_HQ))
+            let side_bytes = np * g_rd.n_layers * ple * 4l
+            if (L.bpg < 0l) {   //! 17: the f32 gate rows over the stream rows (`pf_ple_f32_args`)
+                g_rd.pf_sets[b + 17] = set_dn_ba_cls(fixed_array(g_rd.ple_gf32_dev, g_rd.pf_x, g_rd.pf_gate),
+                    fixed_array(g_rd.ple_gf32_bytes, np * dim * 4l, np * ple * 4l), fixed_array(0u, VHZ_X, VHZ_GATE))
+            } else {
+                g_rd.pf_sets[b + 16] = pf_feed_set(pf_f16_feed(L.fpg), g_rd.pf_x, VHZ_X, g_rd.pf_xf, g_rd.pf_xq, g_rd.pf_xs, dim, VHZ_XQ)
+            }
+            if (L.bpp < 0l) {   //! 18: the act's f32 rows into the up plane; 19: the f32 projection over them
+                g_rd.pf_sets[b + 18] = set_ple_act_f32_cls(fixed_array(g_rd.pf_gate, g_rd.pf_ple, g_rd.pf_up),
+                    fixed_array(np * ple * 4l, side_bytes, np * ple * 4l), fixed_array(VHZ_GATE, VHZ_COS, VHZ_UP))
+                g_rd.pf_sets[b + 19] = set_dn_ba_cls(fixed_array(g_rd.ple_pf32_dev, g_rd.pf_up, g_rd.pf_ffnout),
+                    fixed_array(g_rd.ple_pf32_bytes, np * ple * 4l, np * dim * 4l), fixed_array(0u, VHZ_UP, VHZ_FFO))
+            } else {
+                g_rd.pf_sets[b + 18] = set_actrq_cls(fixed_array(g_rd.pf_gate, g_rd.pf_ple, g_gpu.hq_dev, g_gpu.hs_dev),
+                    fixed_array(np * ple * 4l, side_bytes, BATCH_HQ_BYTES, BATCH_HS_BYTES),
+                    fixed_array(VHZ_GATE, VHZ_COS, VHZ_HQ, VHZ_HQ))
+            }
         }
     }
     let bp = pf_prologue_block()
@@ -1601,40 +1650,43 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; ple_rows :
 def ple_proj_shape_ok(dim, all : int64) : bool
     => f16g_shape_ok(dim) || (g_gpu.coopmat_mode == COOPMAT_MM && khr_kq_tile_on() && dim % 16l == 0l && all % 16l == 0l)
 
-//! The pre-step's projection on device: the per-layer model projection as an f16 mirror and its norm row; the
-//! window chain then takes the gather half alone and finishes it - the f16 GEMM, the per-slice norm, the average - before
+//! The pre-step's projection on device off the file's own rows (bf16 halves `w16`, else f32 `w32`) and its norm row: the router GEMV
+//! under 1/sqrt(dim) at the token command, the window's f16 tile over a panel it converts each window (else the router GEMV) before
 //! layer 0. Refused past `pf_ready`: these sets build with the prefill buffers.
 [arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
-def vk_rdec_set_ple_proj(w : array<float>; pnorm : array<float>; all : int64) : bool {
+def vk_rdec_set_ple_proj(w16 : array<uint16>; w32 : array<float>; pnorm : array<float>; all : int64) : bool {
     if (g_gpu != null && g_gpu.dry) {
         return false
     }
     assert(g_rd != null && g_rd.ple > 0l, "vk_rdec_set_ple_proj before set_ple")
-    if (!ple_proj_shape_ok(g_rd.dim, all) || long_length(w) != all * g_rd.dim || long_length(pnorm) != g_rd.ple || g_rd.pf_ready) {
+    let bf16 = !empty(w16)
+    let n = bf16 ? long_length(w16) : long_length(w32)
+    if (n != all * g_rd.dim || long_length(pnorm) != g_rd.ple || g_rd.pf_ready
+            || !((bf16 ? ensure_router_gemv_bf16_cls() : ensure_router_gemv_cls()) && ensure_cls_ar_add())) {
         return false
     }
-    var half : array<uint16>
-    half |> reserve(long_length(w))   // E4B: 27.5M halves - the guard wants the final size reserved first
-    half |> resize(long_length(w))
-    unsafe {
-        cvt_f32_to_f16(addr(half[0]), addr(w[0]), long_length(w))
-    }
-    g_rd.ple_w16_bytes = long_length(half) * 2l
-    g_rd.ple_w16_dev = make_device_buf(g_rd.ple_w16_bytes)
+    g_rd.ple_wp_bf16 = bf16
+    g_rd.ple_wp_bytes = n * (bf16 ? 2l : 4l)
+    g_rd.ple_wp_dev = make_device_buf(g_rd.ple_wp_bytes)
     g_rd.ple_pnorm_dev = make_device_buf(g_rd.ple * 4l)
     unsafe {
-        upload_region_at(g_rd.ple_w16_dev, 0l, addr<uint8 const?>(half[0]), g_rd.ple_w16_bytes)
+        upload_region_at(g_rd.ple_wp_dev, 0l, bf16 ? addr<uint8 const?>(w16[0]) : addr<uint8 const?>(w32[0]), g_rd.ple_wp_bytes)
         upload_region_at(g_rd.ple_pnorm_dev, 0l, addr<uint8 const?>(pnorm[0]), g_rd.ple * 4l)
     }
-    delete half
-    // the token command's half: the projected row plane, the f16 row GEMV over the embedded row (no norm: the wn slot binds the norm row unread) and the per-slice finish in place on the gathered row
-    verify(ensure_router_gemv_f16_cls() && ensure_cls_ar(), "vk decode: the per-layer-embedding pre-step's rails must engage")
+    if (ple_proj_shape_ok(g_rd.dim, all)) {   //! the window's f16 panel, rewritten off the own rows every window
+        g_rd.ple_w16_bytes = n * 2l
+        g_rd.ple_w16_dev = make_device_buf(g_rd.ple_w16_bytes)
+    }
+    // the token command's half: the projected row plane, the row GEMV over the embedded row (no norm: the wn slot binds the norm row
+    // unread) and the per-slice finish in place on the gathered row
     let nb = g_rd.nb
     g_rd.tok_plep = make_device_buf(all * 4l * nb)
-    g_rd.s_tok_pleproj = set_router_gemv_f16_cls(fixed_array(g_rd.ple_w16_dev, g_rd.x_dev, g_rd.tok_plep, g_rd.ple_pnorm_dev),
-        fixed_array(g_rd.ple_w16_bytes, g_rd.dim * 4l * nb, all * 4l * nb, g_rd.ple * 4l), fixed_array(0u, VHZ_X, VHZ_MRT, 0u))
-    g_rd.s_tok_ple_ar = set_cls_ar(fixed_array(g_rd.ple_dev, g_rd.tok_plep, g_rd.ple_pnorm_dev, g_rd.tok_plep),
-        fixed_array(all * 4l * nb, all * 4l * nb, g_rd.ple * 4l, all * 4l * nb), fixed_array(VHZ_COS, VHZ_MRT, 0u, VHZ_MRT))
+    let pbufs = fixed_array(g_rd.ple_wp_dev, g_rd.x_dev, g_rd.tok_plep, g_rd.ple_pnorm_dev)
+    let psizes = fixed_array(g_rd.ple_wp_bytes, g_rd.dim * 4l * nb, all * 4l * nb, g_rd.ple * 4l)
+    let pbits = fixed_array(0u, VHZ_X, VHZ_MRT, 0u)
+    g_rd.s_tok_pleproj = bf16 ? set_router_gemv_bf16_cls(pbufs, psizes, pbits) : set_router_gemv_cls(pbufs, psizes, pbits)
+    g_rd.s_tok_ple_ar = set_cls_ar_add(fixed_array(g_rd.ple_dev, g_rd.tok_plep, g_rd.ple_pnorm_dev),
+        fixed_array(all * 4l * nb, all * 4l * nb, g_rd.ple * 4l), fixed_array(VHZ_COS, VHZ_MRT, 0u))
     g_rd.ple_gpu = true
     rd_invalidate_token()
     return true
@@ -1658,15 +1710,16 @@ def vk_rdec_prefill_segs(x_batch : array<float>; tokens : array<int64>; use_ids 
     rd_chain_settle()
     assert(g_rd != null && !empty(segs), "vk_rdec_prefill_segs: no driver, or no segment")
     let kvq = rd_kv_block_codec()
-    assert(g_rd.ple == 0l && !g_rd.hc && !g_rd.experts_host && !kvq,
-        "vk_rdec_prefill_segs: the chain holds one session a window on a per-layer-embedding or hyper-connection model, routed experts on the host, or a block-codec mirror")
+    let ple_tbl = g_rd.ple > 0l && use_ids && pf_ple_tbl_on()   //! every segment's side rows gathered off its ids and finished on the device
+    assert((g_rd.ple == 0l || ple_tbl) && !g_rd.hc && !g_rd.experts_host && !kvq,
+        "vk_rdec_prefill_segs: the chain holds one session a window on a per-layer-embedding model whose rows the host embedded, a hyper-connection model, routed experts on the host, or a block-codec mirror")
     let nox : array<float>
     vk_demotion_check("prefill")
     var npos = 0l
     for (sg in segs) {
         npos += sg.npos
     }
-    pf_run(x_batch, tokens, use_ids, emb_scale, cos_batch, nox, false, npos, segs[0].pos0, logits, experts, segs)
+    pf_run(x_batch, tokens, use_ids, emb_scale, cos_batch, nox, ple_tbl, npos, segs[0].pos0, logits, experts, segs)
 }
 
 //! The windows that held several sessions' chunks as segments in this process (a cell's witness)
@@ -1698,8 +1751,19 @@ def vk_rdec_set_emb(emb_block : int64; fmt : int; escale : float) : bool {
         rd_tok_emb_staging(escale)
         g_rd.s_tok_emb = emb_cls_set(fmt, arena_planes(fmt, emb_block), g_rd.tok_ids_host.buf, 4l * g_rd.nb, 0u,
             g_rd.tok_xh_host.buf, g_rd.dim * 4l, g_rd.x_dev, g_rd.dim * 4l * g_rd.nb, VHZ_X)
+        rd_ple_tok_set()
         rd_invalidate_token()
     }
+}
+
+//! the token commands' side-row gather, once the per-layer table, the projection and the steps' ids all ride the device: the
+//! table's stamp at the row width layers x ple off each row's token id, a row without one copying the host's staged row
+def private rd_ple_tok_set {
+    return if (g_rd.ple <= 0l || g_rd.ple_tbl_blk < 0l || !g_rd.ple_gpu || !rd_emb_on())
+    let all = g_rd.n_layers * g_rd.ple
+    g_rd.s_tok_ple = emb_cls_set(g_rd.ple_tbl_fmt, arena_planes(g_rd.ple_tbl_fmt, g_rd.ple_tbl_blk), g_rd.tok_ids_host.buf, 4l * g_rd.nb, 0u,
+        g_rd.ple_host.buf, all * 4l * g_rd.nb, g_rd.ple_dev, all * 4l * g_rd.nb, VHZ_COS)
+    g_rd.ple_tok_on = true
 }
 
 //! the one-row command's gather staging - the step's token id and the host's row a step without one stages - and the scale its rows take
@@ -1729,6 +1793,7 @@ def vk_rdec_upload_emb_f32(fblob : array<float>; off, vocab, dim : int64; escale
     rd_tok_emb_staging(escale)
     g_rd.s_tok_emb = emb_f32_set(g_rd.emb_f32, bytes, g_rd.tok_ids_host.buf, 4l * g_rd.nb, 0u, g_rd.tok_xh_host.buf, g_rd.dim * 4l,
         g_rd.x_dev, g_rd.dim * 4l * g_rd.nb, VHZ_X)
+    rd_ple_tok_set()
     rd_invalidate_token()
     return true
 }
@@ -2252,15 +2317,25 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                     emb_cls_enc(g_rd.ple_tbl_fmt, raw, h, g_rd.pf_ple_tbl_set, wlen, g_rd.n_layers * g_rd.ple, arena_local_blk(g_rd.ple_tbl_blk), sqrt(float(g_rd.ple)))
                 }
             }
-            if (ple_raw) {   //! the per-layer-embedding pre-step's finish: the projection of the scaled embedding rows, normed per slice and averaged into the gathered rows
+            if (ple_raw) {   //! the per-layer-embedding pre-step's finish: the projection of the embedded rows under 1/sqrt(dim), normed per slice and averaged into the gathered rows
                 let all = g_rd.n_layers * g_rd.ple
-                var pcc = gk_f16_rows_args(uint(wlen * dim))
-                enc_tower_clamp_cvt_cls(raw, h, g_rd.pf_ple_cvt_set, pcc, (wlen * dim / 4l + 255l) / 256l)
-                var pcg = F16GemmArgs(n = uint(dim), d = uint(all), rows = uint(wlen), woff = 0u, ybase = 0u, ystride = uint(all), ksplit = 0u)
-                let ple_khr = g_gpu.coopmat_mode != COOPMAT_CM2
-                f16_gemm_enc(ple_khr, raw, h, g_rd.pf_ple_gemm_set, pcg, wlen, all)
+                if (g_rd.ple_w16_dev != 0ul) {   //! the window's f16 panel of the projection, then the rows as f16 under the 1/sqrt(dim)
+                    var pcw = gk_f16_rows_args(uint(all * dim))
+                    if (g_rd.ple_wp_bf16) {
+                        enc_ple_bf16_cvt_cls(raw, h, g_rd.pf_ple_wcvt_set, pcw, (all * dim / 4l + 255l) / 256l)
+                    } else {
+                        enc_tower_clamp_cvt_cls(raw, h, g_rd.pf_ple_wcvt_set, pcw, (all * dim / 4l + 255l) / 256l)
+                    }
+                    var pcc = gk_f16_rows_args(uint(wlen * dim), 1.0 / sqrt(float(dim)))
+                    enc_tower_clamp_cvt_cls(raw, h, g_rd.pf_ple_cvt_set, pcc, (wlen * dim / 4l + 255l) / 256l)
+                    var pcg = F16GemmArgs(n = uint(dim), d = uint(all), rows = uint(wlen), woff = 0u, ybase = 0u, ystride = uint(all), ksplit = 0u)
+                    let ple_khr = g_gpu.coopmat_mode != COOPMAT_CM2
+                    f16_gemm_enc(ple_khr, raw, h, g_rd.pf_ple_gemm_set, pcg, wlen, all)
+                } else {
+                    ple_proj_enc(raw, h, g_rd.pf_ple_gemm_set, uint(wlen))
+                }
                 var pca = ArArgs(dim = uint(g_rd.ple), add_on = 1u, woff = 0u, eps = g_rd.eps, ascale = 1.0 / sqrt(2.0), pre_on = 1u, pwoff = 0u)
-                enc_cls_ar(raw, h, g_rd.pf_ple_ar_set, pca, wlen * g_rd.n_layers)
+                enc_cls_ar_add(raw, h, g_rd.pf_ple_ar_set, pca, wlen * g_rd.n_layers)
             }
             if (warm) {
                 vhz_dep(raw, h, VHZ_X, VHZ_UP, true)

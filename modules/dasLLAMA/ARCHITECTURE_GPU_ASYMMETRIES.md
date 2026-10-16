@@ -173,8 +173,7 @@ asymmetries a stamp family ledgers - stays in `ARCHITECTURE_GPU.md#gpu-backends`
   (`MetalEmbedKqT`, one stamp a format; `emb_dev_gather_ok`) - and the step reads a 4-byte token id
   in place of the row (Vulkan's recorded command off a host-visible word, Metal's poke). An
   F32/F16/BF16 table both gather off its exact f32 rows - Metal reading the blob in place in unified
-  memory, Vulkan off a device upload under `RDEC_EMB_F32_CAP` the plan counts first. A Q4_1
-  table's fp32 rows are a dequant: Metal gathers them, Vulkan keeps the host embed for them.
+  memory, Vulkan off a device upload under `RDEC_EMB_F32_CAP` the plan counts first.
 - **The deltanet-resident seats are Vulkan-only.** The whole-model driver's recurrent arm
   installs SEPARATELY from the resident bundle (`install_moe_gpu_resident_dn`: a recurrent
   layer's plane set, its beta/alpha rows, the per-token owner bind and the prefill's slot

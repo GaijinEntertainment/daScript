@@ -22,7 +22,7 @@ struct and the body; a stamp sets the template constants its home needs and maps
 | `GkMoeCombine` | `MetalMoeCombine`, `MetalMoeReduce` (`GATHERED`) | `MoeCombine` (`WINDOW`: the chunk window, the accumulate, the zero-weight skip) | `GATHERED`, `WINDOW`, `SLOT_X4` |
 | `GkDnGate` | `MetalDnGate` / `Sig` (`rsqrt`) | `DnScanP3` / `Sig` | `ZSIG`, `RSQRT` |
 | `GkQknRopeKv` | `MetalQknRope16` / `32` (one row), `MetalQknRopeB16` / `B32` (rows), `MetalPfQkn` / `HX` (the window, the q twin) | `QknRopeKv` / `F16` | `KT`, `CLAMP16`, `V_WG`, `LANES` / `EPT`, `HX` |
-| `GkRouterGemv` | `MetalMoeRouter` (a workgroup a row, the decode column), `MetalMoeRouterB` (a subgroup a row, `COL_CLAMP`, 8 columns) | `RouterGemv` / `F16` (a workgroup a row, `NORM`) | `ROW_WG`, `VW`, `NC`, `COL_CLAMP`, `NORM`, `BIAS` |
+| `GkRouterGemv` | `MetalMoeRouter` (a workgroup a row, the decode column), `MetalMoeRouterB` (a subgroup a row, `COL_CLAMP`, 8 columns), `MetalPleProjBf16` (the E-series side rows' projection: the bf16 words, a subgroup a row, 8 columns), `MetalPleProjBf16One` (its decode column, a workgroup a row) | `RouterGemv` (a workgroup a row, `NORM`), `RouterGemvBf16` (the bf16 words under `YSCALE`) | `ROW_WG`, `VW`, `NC`, `COL_CLAMP`, `NORM`, `BIAS`, `BF16`, `YSCALE` |
 | `GkPkGemv` | `MetalPkGemv*` (f32 rows), `MetalPkGemvQ8*` | `TtsPkGemv*` (`QUAD`) | the epilogues, `QUAD`, `RSQRT` |
 | `GkMoeCombine` `SH` | `MetalMoeCombineSh`, `MetalMoeReduceSh` | the combine twins' `gated` arm | `SH`: the shared row under its gate logit, the router's row `ne` |
 | `GkCat2` | `MetalCat2` | `Cat2` | nothing; position- or stream-major, the a row repeated over the streams |
@@ -79,9 +79,11 @@ templates' stamps, carries the run):
 | the same, 4 rows f16 | 3.66 | 1.95 | - | - |
 | the same, 1 row f16, against the half-twin rope store it replaced | 1.79 | 1.93 | - | - |
 | the window's pass with its q twin, 512 rows | 26.9 | 26.5 | - | - |
-| router, 256 experts dim 2048, 1 column, f32 rows (f16 rows) | 3.82 | 3.37 | 4.2 (4.10) | 4.43 (4.11) |
-| router, 8 columns, f32 rows (f16 rows) | - | - | 14.34 (10.24) | 14.34 (10.24) |
+| router, 256 experts dim 2048, 1 column, f32 rows | 3.82 | 3.37 | 4.2 | 4.43 |
+| router, 8 columns, f32 rows | - | - | 14.34 | 14.34 |
 | router, 512 columns (the window) | 141.6 | 144.4 | - | - |
+| E-series side rows' projection, 35 x 256 rows of 1536, bf16 rows, 1 column (the M5 before: the CPU; Vulkan before: an f16 copy of the rows) | - | 68.8 | 32.83 | 32.86 |
+| the same, 4 columns | - | 79.9 | 74.15 | 74.07 |
 | shared gate: its own GEMV, then the routed combine and the gated add | 3.08 + 2.93 | - | - | - |
 | shared gate as the router's row `ne`, the combine's `SH` arm | - | 0 + 2.01 | - | - |
 | Pocket row GEMV, 1024 x 1024 | 9.67 | 9.79 | 5.4-5.8 | 5.2-5.7 |

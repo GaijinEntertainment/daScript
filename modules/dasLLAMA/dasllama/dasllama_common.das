@@ -323,28 +323,31 @@ def select_prefill_override(name : string) : bool {
 
 def active_prefill_override : string => g_prefill_override_name
 
-//! The GPU-PLE pre-step gates, one per direction: a prefill override that builds the E-series PLE
-//! side input on device registers the prefill gate, a decode override that gathers the token's row
-//! on device registers the decode gate; on true the hub skips the CPU pre-step for that call only.
+//! The GPU-PLE pre-step gates, one list per direction: every driver that builds the E-series PLE side input on device
+//! registers its prefill gate and its decode gate (a build carries both GPU homes, each gate answering for its own armed
+//! driver); the first gate that takes a call has the hub skip the CPU pre-step for that call only.
 typedef PleGpuGateFn = function<(t : Model; s : Session; npos : int64; start_pos : int64) : bool>
-var private g_ple_gpu_gate : PleGpuGateFn
-var private g_ple_gpu_gate_set = false
-var private g_ple_gpu_decode_gate : PleGpuGateFn
-var private g_ple_gpu_decode_gate_set = false
+var private g_ple_gpu_gates : array<PleGpuGateFn>
+var private g_ple_gpu_decode_gates : array<PleGpuGateFn>
 
 def register_ple_gpu_gate(fn : PleGpuGateFn) {
-    g_ple_gpu_gate = fn
-    g_ple_gpu_gate_set = true
+    g_ple_gpu_gates |> push(fn)
 }
 
 def register_ple_gpu_decode_gate(fn : PleGpuGateFn) {
-    g_ple_gpu_decode_gate = fn
-    g_ple_gpu_decode_gate_set = true
+    g_ple_gpu_decode_gates |> push(fn)
 }
 
-//! the decode gate's answer for a step's rows: true when the armed driver gathers and projects the side input itself
-def ple_gpu_decode_gate(t : Model; s : Session; npos, pos : int64) : bool
-    => g_ple_gpu_decode_gate_set && invoke(g_ple_gpu_decode_gate, t, s, npos, pos)
+//! a gate of `gates` takes the call
+def private ple_gate_taken(gates : array<PleGpuGateFn>; t : Model; s : Session; npos, pos : int64) : bool {
+    for (g in gates) {
+        return true if (invoke(g, t, s, npos, pos))
+    }
+    return false
+}
+
+//! the decode gates' answer for a step's rows: true when the armed driver gathers and projects the side input itself
+def ple_gpu_decode_gate(t : Model; s : Session; npos, pos : int64) : bool => ple_gate_taken(g_ple_gpu_decode_gates, t, s, npos, pos)
 
 typedef EmbedGpuGateFn = function<(t : Model; s : Session; npos : int64; start_pos : int64) : bool>
 var private g_embed_gpu_gate : EmbedGpuGateFn
@@ -458,7 +461,7 @@ def ple_pre_prefill_gated(t : Model; var s : Session; tokens : array<int64>; off
     for (p in range64(npos)) {
         s.ple_gpu_tokens[p] = tokens[off + p]
     }
-    if (g_ple_gpu_gate_set && invoke(g_ple_gpu_gate, t, s, npos, start_pos)) {
+    if (ple_gate_taken(g_ple_gpu_gates, t, s, npos, start_pos)) {
         s.ple_gpu_pending = true
     } else {
         ple_pre_prefill(t, s, s.ple_gpu_tokens, npos)
@@ -469,7 +472,7 @@ def ple_pre_prefill_gated(t : Model; var s : Session; tokens : array<int64>; off
 //! (pad ids stashed — the media path has no tokens), CPU pad impl on decline. The model_proj
 //! GEMM inside the finish is the whole cost, so an eligible driver must get the offer here too.
 def ple_pre_prefill_pad_gated(t : Model; var s : Session; npos, start_pos : int64) {
-    if (g_ple_gpu_gate_set && invoke(g_ple_gpu_gate, t, s, npos, start_pos)) {
+    if (ple_gate_taken(g_ple_gpu_gates, t, s, npos, start_pos)) {
         s.ple_gpu_tokens |> resize(npos)
         for (p in range64(npos)) {
             s.ple_gpu_tokens[p] = 0l
@@ -1269,14 +1272,19 @@ struct Model {
     // layout_offsets; kv_row_prefix aliases a shared layer's slot onto its source's.
     kv_src : array<int64>
     // gemma-4 E-series per-layer embeddings (PLE) — offsets valid only when config.n_embd_per_layer > 0.
-    // The Q8 token table (linear, gathered per token — NOT repacked) + the per-layer Q8 gate/proj live
-    // in the big-weight blob; the fp32 model-proj + the two norm families live in fblob.
+    // The token table (linear, gathered per token — NOT repacked) + the per-layer gate/proj live
+    // in the big-weight planes; the fp32 model-proj + the two norm families live in fblob.
     ple_emb_off : int64     // qblob: Q8 per_layer_token_embd, linear [vocab x (ple*layers)]
     ple_model_off : int64   // fblob: fp32 per_layer_model_proj [dim x (ple*layers)]
     ple_pnorm_off : int64   // fblob: fp32 per_layer_proj_norm [ple]
-    ple_gate_off : int64    // qblob: per_layer_inp_gate, layers x (dim x ple)
-    ple_proj_off : int64    // qblob: per_layer_proj,     layers x (ple x dim)
     ple_post_off : int64    // fblob: fp32 per_layer_post_norm, layers x dim
+    //! per layer: inp_gate [dim -> ple] and proj [ple -> dim] in their tags' planes (`ple_plane`), or in fblob under the f32 marks
+    ple_gate_offs : array<int64>
+    ple_proj_offs : array<int64>
+    ple_gate_fmt : array<KqFmt>   //! per layer, the file's format (empty = q8 everywhere)
+    ple_proj_fmt : array<KqFmt>
+    ple_gate_f32 : bool = false   //! every inp_gate ships F32: the rows stay the file's f32 in fblob
+    ple_proj_f32 : bool = false   //! every proj ships F32, the same
     // per-layer KV-ROW prefix (Σ layer_kv_dim of prior layers), filled by layout_offsets — makes
     // kv_cache_off O(1). seq_len-INDEPENDENT on purpose: tests cap seq_len after load, so the cache
     // offset multiplies by the live value at call time, never a baked one
@@ -1426,11 +1434,11 @@ struct Model {
     emb_q8 : bool = false
     emb_q8_off : int64
     emb_kq_off : int64 = -1l   //! an untied K-quant token table's offset in emb_fmt's planes (the tied table is the classifier's plane at wcls_off)
-    //! a tied table whose disk type no KqFmt carries (F16, BF16, Q4_1): the fp32 rows serve the embed and the CPU classifier, and a
+    //! a tied table whose disk type no KqFmt carries (F16, BF16): the fp32 rows serve the embed and the CPU classifier, and a
     //! q8 transcode at wcls_off - a converted copy - serves the device classifier (loads under a Metal mode)
     cls_q8_copy : bool = false
-    //! the fp32 table holds the file's own values: F32 on disk, or F16/BF16 widened without loss (a Q4_1 table's fp32 rows are a
-    //! dequant, a converted copy); the Vulkan gather's f32 seat serves this table alone
+    //! the fp32 table holds the file's own values: F32 on disk, or F16/BF16 widened without loss; the Vulkan
+    //! gather's f32 seat serves this table alone
     emb_f32_exact : bool = false
     quant : QuantMode
     rope_freqs : array<float>   // per-pair RoPE scaling (Llama-3.1 NTK-by-parts); empty = none
@@ -1772,6 +1780,15 @@ def cls_tied_f32(t : Model) : bool => t.config.shared_weights && !t.cls_q8 && !t
 
 // Format tag for layer l of a per-kind tag array; empty array (non-kq load) = q8.
 def fmt_at(a : array<KqFmt>; l : int64) : KqFmt => empty(a) ? KqFmt.q8 : a[l]
+
+//! layer l's per-layer-embedding plane - the gate (dim -> ple), or with `proj` the projection (ple -> dim): its tag and offset
+//! in that tag's planes, or `f32` and the offset of the file's f32 rows in fblob
+def ple_plane(t : Model; l : int64; proj : bool) : tuple<f : KqFmt; off : int64; f32 : bool> {
+    if (proj) {
+        return (f = fmt_at(t.ple_proj_fmt, l), off = t.ple_proj_offs[l], f32 = t.ple_proj_f32)
+    }
+    return (f = fmt_at(t.ple_gate_fmt, l), off = t.ple_gate_offs[l], f32 = t.ple_gate_f32)
+}
 
 //! The shared expert's plane of `kind` (1 gate, 3 up, 2 down) on layer l: the plane in the file's format where the loader kept one,
 //! else the q8 transcode the CPU chain reads (dasllama_moe.das's and dasllama_blocks.das's shared-expert sites read only it).

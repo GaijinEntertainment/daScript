@@ -1076,28 +1076,42 @@ def vk_rdec_dn_own(l : int64; stp : float?; histp : float?) {
     rdn_state_upload(st, stp, histp, g_rd.dn_parity[slot])
 }
 
+//! the pre-step's projection rows over `ncols` columns of x into the plane its set binds, under the CPU's 1/sqrt(dim) (`ple_pre_finish`)
+def ple_proj_enc(raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; ncols : uint) {
+    let all = g_rd.n_layers * g_rd.ple
+    var pcr = GkRouterArgs(ne = uint(all), dim = uint(g_rd.dim), eps = g_rd.eps, ncols = ncols, yscale = 1.0 / sqrt(float(g_rd.dim)))
+    router_enc_cols(g_rd.ple_wp_bf16, raw, h, set_, pcr, all)
+}
+
 //! The per-layer-embedding seats: the side-input row buffers at the model's ple width (after prepare, before the layers)
 [arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
-def vk_rdec_set_ple(ple : int64) : bool {
+def vk_rdec_set_ple(ple : int64; gate_f32 : array<float>; proj_f32 : array<float>) : bool {
     if (g_gpu != null && g_gpu.dry) {
         return true
     }
     assert(g_rd != null, "vk_rdec_set_ple before prepare")
-    if (ple <= 0l || ple % 32l != 0l) {
-        return false   //! the gate GEMV's output and the act's requant take 32-blocks
+    //! the gate GEMV's output and the act's requant take 32-blocks; the f32 rows want the router GEMV and the f32 act
+    if (ple <= 0l || ple % 32l != 0l || ((!empty(gate_f32) || !empty(proj_f32)) && !(ensure_router_gemv_cls() && ensure_ple_act_f32_cls()))) {
+        return false
     }
     g_rd.ple = ple
     let row_bytes = g_rd.n_layers * ple * 4l * g_rd.nb
     g_rd.ple_host = make_host_buf(row_bytes, false, [cached = true])
     g_rd.ple_dev = make_device_buf(row_bytes)
     g_rd.pleg_dev = make_device_buf(ple * 4l * g_rd.nb)
+    g_rd.pleact_dev = make_device_buf(ple * 4l * g_rd.nb)
+    g_rd.ple_gf32_bytes = long_length(gate_f32) * 4l
+    g_rd.ple_gf32_dev = empty(gate_f32) ? 0ul : rd_upload_rows(gate_f32)
+    g_rd.ple_pf32_bytes = long_length(proj_f32) * 4l
+    g_rd.ple_pf32_dev = empty(proj_f32) ? 0ul : rd_upload_rows(proj_f32)
     rd_unmake_sets()
     rd_invalidate_token()
     return true
 }
 
-//! One layer's per-layer-embedding branch: the gate [dim x ple] and proj [ple x dim] planes and the sets of its four steps
-def vk_rdec_set_ple_layer(l, bgate, bproj : int64; fmt : int) {
+//! One layer's per-layer-embedding branch: the gate [dim x ple] and proj [ple x dim] planes and the sets of its four steps; a
+//! block of -1 is the kind's f32 rows, on the router GEMV (`GkRouterGemv`) with the act's f32 rows between
+def vk_rdec_set_ple_layer(l, bgate, bproj : int64; fgate, fproj : int) {
     if (g_gpu != null && g_gpu.dry) {
         return
     }
@@ -1108,24 +1122,42 @@ def vk_rdec_set_ple_layer(l, bgate, bproj : int64; fmt : int) {
     let ple = g_rd.ple
     var L & = unsafe(g_rd.layers[l])
     L.ple = true
-    L.bpg = bgate; L.bpp = bproj; L.fpg = fmt
-    let pg = arena_planes(fmt, bgate)
-    let pp = arena_planes(fmt, bproj)
-    verify(gemv_cls_ensure(fmt) && ensure_q8_actrq_cls() && ensure_cls_dn_rq(), "vk decode: the per-layer-embedding rails must engage on a live device")
+    L.bpg = bgate; L.bpp = bproj; L.fpg = fgate; L.fpp = fproj
+    let gf32 = bgate < 0l
+    let pf32 = bproj < 0l
+    verify((gf32 || gemv_cls_ensure(fgate)) && (pf32 || gemv_cls_ensure(fproj))
+        && (pf32 || (kq_sb(fproj) ? ensure_q8k_actrq_cls() : ensure_q8_actrq_cls())) && ensure_cls_dn_rq() && (!kq_sb(fgate) || ensure_cls_q8k_rq()),
+        "vk decode: the per-layer-embedding rails must engage on a live device")
     L.m_pg = rd_meta(); L.m_pp = rd_meta()
     let all = g_rd.n_layers * ple
-    // the residual row as it is -> xq/xs (the gate reads the unnormed stream)
+    // the residual row as it is -> xq/xs in the gate's feed form (the gate reads the unnormed stream)
     L.s_ple_x = rd_rq_set(g_rd.x_dev, VHZ_X, g_rd.xq_dev, g_rd.xs_dev, VHZ_XQ, dim)
     // gate GEMV [dim -> ple] into pleg (the FFN gate plane's hazard bit, free by then)
-    L.s_ple_gate = arena_gemv_set_x(fmt, pg, L.m_pg.buf, g_rd.pleg_dev, ple * 4l * nb, VHZ_GATE)
-    // gelu(gate) x this layer's side-input row -> hq/hs (the row's layer base rides the push; the side rows ride the cos plane's bit)
-    L.s_ple_act = set_actrq_cls(fixed_array(g_rd.pleg_dev, g_rd.ple_dev, g_gpu.hq_dev, g_gpu.hs_dev),
-        fixed_array(ple * 4l * nb, all * 4l * nb, BATCH_HQ_BYTES, BATCH_HS_BYTES),
-        fixed_array(VHZ_GATE, VHZ_COS, VHZ_HQ, VHZ_HQ))
-    // proj GEMV [ple -> dim] into ffnout (the residual step's add partner slot)
-    L.s_ple_proj = gemv_planes_set(fmt, pp, L.m_pp.buf, META_BYTES, 0u, g_gpu.hq_dev, g_gpu.hs_dev, ple * nb, (ple / 32l) * 4l * nb, VHZ_HQ, g_rd.ffnout_dev, dim * 4l * nb, VHZ_FFO)
-    L.ple_fused = vk_fuse_on() && fmt == int(KqFmt.q8) && ple <= 256l && ple % 32l == 0l && ensure_cls_ar_rq_b() && ensure_q8_gemv_pleact_cls()
+    if (gf32) {
+        L.s_ple_gate = set_router_gemv_cls(fixed_array(g_rd.ple_gf32_dev, g_rd.x_dev, g_rd.pleg_dev, g_rd.norms_dev),
+            fixed_array(g_rd.ple_gf32_bytes, dim * 4l * nb, ple * 4l * nb, g_rd.norms_bytes), fixed_array(0u, VHZ_X, VHZ_GATE, 0u))
+    } else {
+        L.s_ple_gate = arena_gemv_set_x(fgate, arena_planes(fgate, bgate), L.m_pg.buf, g_rd.pleg_dev, ple * 4l * nb, VHZ_GATE)
+    }
+    // gelu(gate) x this layer's side-input row -> the proj's feed: hq/hs, or the f32 rows (the row's layer base rides the push;
+    // the side rows ride the cos plane's bit)
+    if (pf32) {
+        L.s_ple_act = set_ple_act_f32_cls(fixed_array(g_rd.pleg_dev, g_rd.ple_dev, g_rd.pleact_dev),
+            fixed_array(ple * 4l * nb, all * 4l * nb, ple * 4l * nb), fixed_array(VHZ_GATE, VHZ_COS, VHZ_HQ))
+        L.s_ple_proj = set_router_gemv_cls(fixed_array(g_rd.ple_pf32_dev, g_rd.pleact_dev, g_rd.ffnout_dev, g_rd.norms_dev),
+            fixed_array(g_rd.ple_pf32_bytes, ple * 4l * nb, dim * 4l * nb, g_rd.norms_bytes), fixed_array(0u, VHZ_HQ, VHZ_FFO, 0u))
+    } else {
+        L.s_ple_act = set_actrq_cls(fixed_array(g_rd.pleg_dev, g_rd.ple_dev, g_gpu.hq_dev, g_gpu.hs_dev),
+            fixed_array(ple * 4l * nb, all * 4l * nb, BATCH_HQ_BYTES, BATCH_HS_BYTES),
+            fixed_array(VHZ_GATE, VHZ_COS, VHZ_HQ, VHZ_HQ))
+        // proj GEMV [ple -> dim] into ffnout (the residual step's add partner slot)
+        L.s_ple_proj = gemv_planes_set(fproj, arena_planes(fproj, bproj), L.m_pp.buf, META_BYTES, 0u, g_gpu.hq_dev, g_gpu.hs_dev, ple * nb,
+            (ple / 32l) * 4l * nb, VHZ_HQ, g_rd.ffnout_dev, dim * 4l * nb, VHZ_FFO)
+    }
+    L.ple_fused = (vk_fuse_on() && !gf32 && !pf32 && fgate == int(KqFmt.q8) && fproj == int(KqFmt.q8) && ple <= 256l && ple % 32l == 0l
+        && ensure_cls_ar_rq_b() && ensure_q8_gemv_pleact_cls())
     if (L.ple_fused) {
+        let pp = arena_planes(fproj, bproj)
         L.s_ple_ar_rq = set_ar_rq_stamp(RqStamp.rq, g_rd.ffnout_dev, VHZ_FFO, g_rd.xq_dev, g_rd.xs_dev)
         L.s_ple_pa = set_q8_gemv_pleact_cls(fixed_array(pp.wq, pp.ws, g_rd.pleg_dev, g_rd.ple_dev, g_rd.ffnout_dev),
             fixed_array(pp.wqb, pp.wsb, ple * 4l * nb, all * 4l * nb, dim * 4l * nb),
@@ -1383,6 +1415,18 @@ def vk_rdec_set_ngram(l, ind, nrows, kern, dil, bkey, bval : int64; norm_rows : 
     }
     rd_invalidate_token()
     return true
+}
+
+//! the one-row command's side row as its last step left it - gathered and finished on the device under the projection - read back
+//! into `out` (a cell's witness of the device pre-step against the CPU's)
+[cold_path]
+def vk_rdec_ple_side_row(var out : array<float>) {
+    assert(g_rd != null && g_rd.ple > 0l, "vk_rdec_ple_side_row before set_ple")
+    let n = g_rd.n_layers * g_rd.ple
+    out |> resize(n)
+    var stage = make_host_buf(n * 4l, false, [cached = true])
+    readback_range(g_rd.ple_dev, VHZ_COS, 0l, stage, unsafe(addr(out[0])), n * 4l)
+    destroy_host_buf(stage)
 }
 
 //! The selected region's conv ring against the session's host ring (`RdecNgramRingFn`): the host's rows up after a CPU prefill or
@@ -2072,8 +2116,12 @@ def private rd_fill_layer_regions(L : RLayer) {
         fill_gemv_regions(L.m_down, L.b2)
     }
     if (L.ple) {
-        fill_gemv_regions(L.m_pg, L.bpg)
-        fill_gemv_regions(L.m_pp, L.bpp)
+        if (L.bpg >= 0l) {
+            fill_gemv_regions(L.m_pg, L.bpg)
+        }
+        if (L.bpp >= 0l) {
+            fill_gemv_regions(L.m_pp, L.bpp)
+        }
     }
 }
 
@@ -2564,11 +2612,16 @@ def private rd_encode_ple(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
     let dim = g_rd.dim
     let ple = g_rd.ple
     let nr = uint(nrows)
-    if (!L.ple_fused) {   //! unfused: the gate's feed still wants its own Q8_0 quants of the rows
-        rq_enc(raw, h, L.s_ple_x, false, 0l, dim * nrows)
-        rd_ts(raw, "p:rq_x")
+    if (L.bpg < 0l) {   //! the f32 rows read the stream as it is
+        var pcg = GkRouterArgs(ne = uint(ple), dim = uint(dim), woff = uint(l * ple * dim), ncols = nr)
+        router_enc_cols(false, raw, h, L.s_ple_gate, pcg, ple)
+    } else {
+        if (!L.ple_fused) {   //! unfused: the gate's feed still wants its own quants of the rows
+            rq_enc(raw, h, L.s_ple_x, kq_sb(L.fpg), 0l, dim * nrows)
+            rd_ts(raw, "p:rq_x")
+        }
+        rd_gemv(L.fpg, raw, h, L.s_ple_gate, dim, ple, ncols, uint(ple))
     }
-    rd_gemv(L.fpg, raw, h, L.s_ple_gate, dim, ple, ncols, uint(ple))
     rd_ts(raw, "p:gate")
     if (L.ple_fused) {
         var pcf = PleActArgs(n = uint(ple), d = uint(dim), wblk = uint(arena_local_blk(L.bpp)), ubase = uint(l * ple), act = ACT_GELU,
@@ -2577,11 +2630,17 @@ def private rd_encode_ple(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
         rd_ts(raw, "p:actproj")
         return
     }
-    var pca = ActArgs(nelem = uint(ple) * nr, act = ACT_GELU, nblk = uint(ple / 32l) * nr,
-        ubase = uint(l * ple), ustride = uint(g_rd.n_layers * ple), ulen = uint(ple))
-    enc_q8_actrq_cls(raw, h, L.s_ple_act, pca, (ple * nrows / 4l + 255l) / 256l)
-    rd_ts(raw, "p:act")
-    rd_gemv(L.fpg, raw, h, L.s_ple_proj, ple, dim, ncols, uint(dim))
+    var pca = ActArgs(nelem = uint(ple) * nr, act = ACT_GELU, ubase = uint(l * ple), ustride = uint(g_rd.n_layers * ple), ulen = uint(ple))
+    if (L.bpp < 0l) {
+        enc_ple_act_f32_cls(raw, h, L.s_ple_act, pca, (ple * nrows + 255l) / 256l)
+        rd_ts(raw, "p:act")
+        var pcp = GkRouterArgs(ne = uint(dim), dim = uint(ple), woff = uint(l * ple * dim), ncols = nr)
+        router_enc_cols(false, raw, h, L.s_ple_proj, pcp, dim)
+    } else {
+        actrq_enc(raw, h, L.s_ple_act, kq_sb(L.fpp), pca, ple * nrows)
+        rd_ts(raw, "p:act")
+        rd_gemv(L.fpp, raw, h, L.s_ple_proj, ple, dim, ncols, uint(dim))
+    }
     rd_ts(raw, "p:proj")
 }
 
@@ -2709,17 +2768,17 @@ def private rd_encode_token(var first_seg_raw : VkCommandBuffer; nrows, nsplit :
         }
         vhz_dep(raw, h, 0u, VHZ_COS, true)
         cmd_copy_whole(raw, g_rd.cos_host.buf, g_rd.cos_dev, g_rd.cos_elems * 4l * nrows)
-        if (g_rd.ple > 0l) {   //! the side-input rows ride the cos plane's hazard bit: written here, read by the act step
+        if (g_rd.ple > 0l && !verify && !seq && g_rd.ple_tok_on) {   //! each row's side row off the table at its token id (the cos plane's hazard bit, as the copy's)
+            emb_cls_enc(g_rd.ple_tbl_fmt, raw, h, g_rd.s_tok_ple, nrows, g_rd.n_layers * g_rd.ple, arena_local_blk(g_rd.ple_tbl_blk), sqrt(float(g_rd.ple)))
+        } elif (g_rd.ple > 0l) {   //! the side-input rows ride the cos plane's hazard bit: written here, read by the act step
             cmd_copy_whole(raw, g_rd.ple_host.buf, g_rd.ple_dev, g_rd.n_layers * g_rd.ple * 4l * nrows)
         }
         rd_ts(raw, "p:upload")
         if (g_rd.ple > 0l && g_rd.ple_gpu) {   //! the pre-step's finish: the projection of the embedded rows, normed a slice at a time and averaged into the gathered rows
-            let all = g_rd.n_layers * g_rd.ple
-            var pcr = GkRouterArgs(ne = uint(all), dim = uint(dim), woff = 0u, obase = 0u, norm_on = 0u, nwoff = 0u, eps = g_rd.eps, ncols = nr, ne_split = 0u, obase_split = 0u)
-            router_enc_cols(true, raw, h, g_rd.s_tok_pleproj, pcr, all)
+            ple_proj_enc(raw, h, g_rd.s_tok_pleproj, nr)
             rd_ts(raw, "t:pleproj")
             var pca = ArArgs(dim = uint(g_rd.ple), add_on = 1u, woff = 0u, eps = g_rd.eps, ascale = 1.0 / sqrt(2.0), pre_on = 1u, pwoff = 0u)
-            enc_cls_ar(raw, h, g_rd.s_tok_ple_ar, pca, g_rd.n_layers * nrows)
+            enc_cls_ar_add(raw, h, g_rd.s_tok_ple_ar, pca, g_rd.n_layers * nrows)
             rd_ts(raw, "t:plefin")
         }
         let (fuse, fuse_qkr) = rd_fuse_gates()
@@ -3103,6 +3162,14 @@ var private g_rdec_tok_gathered = 0l
 //! The one-row steps whose row the device gathered off the step's token id, in this process (a cell's served witness)
 def vk_rdec_token_gathered : int64 => g_rdec_tok_gathered
 
+var private g_rdec_nrow_gathered = 0l
+
+//! The N-row commands' rows whose side row the device gathered off the row's token id, in this process (a cell's served witness)
+def vk_rdec_nrow_side_gathered : int64 => g_rdec_nrow_gathered
+
+//! the token commands gather the E-series side rows off the rows' ids: the per-layer table, the projection and the ids ride the device
+def vk_rdec_side_gather_on : bool => g_rd != null && g_rd.ple_tok_on
+
 let private RD_CHAIN_ENV = -2   //! `g_vk_chain_pin` unset: the mode is the environment's
 var private g_vk_chain_pin = RD_CHAIN_ENV
 var private g_rdec_chain_hits = 0l
@@ -3139,7 +3206,7 @@ def vk_rdec_chain_stats : tuple<hits : int64; misses : int64> => (hits = g_rdec_
 [arch(at="../ARCHITECTURE_GPU_VULKAN_LANDING.md#vk-greedy-chain")]
 def vk_rdec_chain_wanted : bool {
     return false if (g_rd == null || !g_rd.ready || vk_rdec_chain_mode() == 0)
-    return (g_rd.log_xfer && rd_emb_on() && g_rd.ple == 0l && !g_rd.carry_live && !g_rd.experts_host && !g_rd.hc
+    return (g_rd.log_xfer && rd_emb_on() && (g_rd.ple == 0l || g_rd.ple_tok_on) && !g_rd.carry_live && !g_rd.experts_host && !g_rd.hc
         && !vk_prof() && !vk_rdec_rerecord_on())
 }
 
@@ -3380,7 +3447,7 @@ def vk_rdec_token(x : array<float>; cossin : array<float>; ple_row : array<float
             }
         }
         memcpy(g_rd.cos_host.mapped, addr<void?>(cossin[0]), g_rd.cos_elems * 4l)
-        if (g_rd.ple > 0l) {
+        if (g_rd.ple > 0l && !(g_rd.ple_tok_on && token >= 0l)) {   //! a step the device gathers brings no row
             assert(long_length(ple_row) >= g_rd.n_layers * g_rd.ple, "vk_rdec_token: the per-layer-embedding row is short")
             memcpy(g_rd.ple_host.mapped, addr<void?>(ple_row[0]), g_rd.n_layers * g_rd.ple * 4l)
         }
@@ -3479,7 +3546,7 @@ def private rd_ensure_n_rail : bool {
             && (!has_dense_triple(L) || (rd_triple_all(L.f1, L.f3, L.f2) $(f) => gemv_cls_ensure_n(f, nb)))
             && (!L.gu_on || q8_gemv_gu_n_ensure(nb))   //! the fused gate-up's N form declines the rail whole, as the GEMV leaves do
             && (!L.moe || topk_n_ensure(g_rd.ne))
-            && (!L.ple || gemv_cls_ensure_n(L.fpg, nb)))
+            && (!L.ple || ((L.bpg < 0l || gemv_cls_ensure_n(L.fpg, nb)) && (L.bpp < 0l || gemv_cls_ensure_n(L.fpp, nb)))))
     }
     if (!ok) {
         to_log(LOG_WARNING, "dasLLAMA vulkan resident: a class of the N-row command declined on this device (an N-column GEMV leaf, the fused add+rms+requant rows stamp, the fused gate-up N form, the per-row top-k, or the per-layer-embedding gate's N leaf) - the batched step runs a row at a time\n")
@@ -4195,16 +4262,36 @@ def private rd_land_rows_n(lrows : array<float?>; var picks : array<int64>; nrow
     }
 }
 
+//! the N-row command's gather ids: a row's token id where `ids` carries one, else `EMB_ID_HOST` with the row's side input staged
+def private rd_stage_ple_ids(ple : array<float>; ids : array<int64>; nrows : int64) {
+    let w = g_rd.n_layers * g_rd.ple
+    unsafe {
+        var idp = reinterpret<uint?>(g_rd.tok_ids_host.mapped)
+        for (i in range64(nrows)) {
+            let id = i < long_length(ids) ? ids[i] : -1l
+            if (id >= 0l) {
+                idp[i] = uint(id)
+                g_rdec_nrow_gathered++
+            } else {
+                verify(long_length(ple) >= (i + 1l) * w, "vk_rdec_token_n: a row without its id brings no side row")
+                idp[i] = EMB_ID_HOST
+                memcpy(reinterpret<void?>(reinterpret<float?>(g_rd.ple_host.mapped) + i * w), addr<void?>(ple[i * w]), w * 4l)
+            }
+        }
+    }
+}
+
 //! the N-row submit: `nrows` rows through one command, each row's logits landed at its own pointer, or - where the
 //! pointer is null - the row's argmax id alone into `picks` (`RdecTokenNFn`)
 [hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
-def vk_rdec_token_n(x : array<float>; cossin : array<float>; ple : array<float>; ple_raw : bool; poss : array<int64>; cnts : array<int64>; regs : array<int64>; nrows : int64; lrows : array<float?>; var picks : array<int64>) {
+def vk_rdec_token_n(x : array<float>; cossin : array<float>; ple : array<float>; ple_raw : bool; ids : array<int64>; poss : array<int64>; cnts : array<int64>; regs : array<int64>; nrows : int64; lrows : array<float?>; var picks : array<int64>) {
     rd_chain_settle()
     assert(g_rd != null && g_rd.ready, "vk_rdec_token_n before prepare/set_cls")
     verify(long_length(picks) >= nrows, "vk_rdec_token_n: fewer pick slots than rows")
     verify(nrows >= 2l && nrows <= g_rd.nb, "vk_rdec_token_n: the row count is outside the per-row planes (a one-row step is the one-row command's: its region rides the push, the N-row rows' ride TokMeta)")
     verify(long_length(lrows) >= nrows, "vk_rdec_token_n: fewer logits rows than rows")
-    verify(g_rd.ple <= 0l || long_length(ple) >= g_rd.n_layers * g_rd.ple * nrows, "vk_rdec_token_n: the per-layer-embedding rows are short")
+    verify(g_rd.ple <= 0l || (g_rd.ple_tok_on && long_length(ids) >= nrows) || long_length(ple) >= g_rd.n_layers * g_rd.ple * nrows,
+        "vk_rdec_token_n: the per-layer-embedding rows are short")
     var all_pick = true   //! every row wants its argmax alone: the logits never leave the device
     for (i in range64(nrows)) {
         all_pick = all_pick && lrows[i] == null
@@ -4234,7 +4321,9 @@ def vk_rdec_token_n(x : array<float>; cossin : array<float>; ple : array<float>;
     unsafe {
         memcpy(g_rd.x_host.mapped, addr<void?>(x[0]), g_rd.dim * 4l * nrows)
         memcpy(g_rd.cos_host.mapped, addr<void?>(cossin[0]), g_rd.cos_elems * 4l * nrows)
-        if (g_rd.ple > 0l) {
+        if (g_rd.ple_tok_on) {
+            rd_stage_ple_ids(ple, ids, nrows)
+        } elif (g_rd.ple > 0l) {
             memcpy(g_rd.ple_host.mapped, addr<void?>(ple[0]), g_rd.n_layers * g_rd.ple * 4l * nrows)
         }
         var tm = reinterpret<TokMeta?>(g_rd.tok_meta.mapped)

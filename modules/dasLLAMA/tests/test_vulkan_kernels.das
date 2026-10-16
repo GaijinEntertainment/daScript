@@ -1151,6 +1151,59 @@ def private cls_ar_run(x, a, w : array<float>; pc; nrows : int) : tuple<y : arra
     return <- (y = y_out, x = x_out)
 }
 
+//! the residual step with no normed row (`ClsArAdd`, the E-series pre-step's finish): three rows of 256 under the sandwich form - the
+//! partner normed and weighted by the post norm at `pwoff`, the sum under 1/sqrt(2) - bit for bit the stream rows `cls_ar` writes
+//! beside its normed row, and the CPU form at the approx bar
+[test]
+def test_vkd_cls_ar_add(t0 : T?) {
+    t0 |> run("cls_ar_add: the stream rows == cls_ar's, and the CPU sandwich step") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!(vk_moe_init() && ensure_cls_ar() && ensure_cls_ar_add())) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            let dim = 256
+            let nrows = 3
+            let eps = 1e-6
+            let ascale = 1.0 / sqrt(2.0)
+            var fx <- ar_fixture(dim * nrows, dim)
+            let pc = ArArgs(dim = uint(dim), add_on = 1u, woff = 0u, eps = eps, ascale = ascale, pre_on = 1u, pwoff = 0u)
+            var want : array<float>
+            want |> resize(dim * nrows)
+            for (r in range(nrows)) {
+                var sa = 0.0
+                for (k in range(dim)) {
+                    sa += fx.a[r * dim + k] * fx.a[r * dim + k]
+                }
+                let ainv = 1.0 / sqrt(sa / float(dim) + eps)
+                for (k in range(dim)) {
+                    want[r * dim + k] = (fx.x[r * dim + k] + fx.w[k] * fx.a[r * dim + k] * ainv) * ascale
+                }
+            }
+            var r <- cls_ar_run(fx.x, fx.a, fx.w, pc, nrows)
+            with_cell_planes() $(var cp : CellPlanes) {
+                let px = cp |> io_(fx.x)
+                let pa = cp |> in_(fx.a)
+                let pw = cp |> in_(fx.w)
+                var sc = cp |> cls_set(fixed_array(px, pa, pw), @@set_cls_ar_add)
+                var args = pc
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_cls_ar_add(raw, h, sc, args, int64(nrows))
+                }
+                var got <- cp |> plane_run(px)
+                t |> equal(mismatch_exact(got, r.x), 0, "cls_ar_add: the stream rows bit for bit cls_ar's")
+                check(t, "cls_ar_add", got, want, BAR_APPROX, Shape(row_width = dim))
+                delete got
+            }
+            delete r
+            delete want
+            delete fx
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
 //! the classifier epilogue's rows form: `rows` logits rows through one dispatch of `rows` (the whole plane), or a
 //! dispatch of one row `rows` times - the row-at-a-time form is the rows form at one row
 def private cls_epi_rows_run(y : array<float>; supp : array<uint>; vocab, rows : int64; cap : float; a_row_at_a_time : bool) : array<float> {
@@ -1733,7 +1786,7 @@ def test_vkd_kq_gemv_family(t0 : T?) {
                 t |> skip("no Vulkan device, or a kq GEMV class pipeline failed to build")
                 return
             }
-            for (nsb in fixed_array(2, 20)) {   //! superblocks a row: 512 wide, the guarded tail alone; 5120 wide, four unrolled steps and a tail at every lane split
+            for (nsb in fixed_array(1, 2, 20)) {   //! superblocks a row: 256 wide (the E-series projection's row), 512 wide, the guarded tail alone; 5120 wide, four unrolled steps and a tail at every lane split
             let d = 3        // rows per region
             let nreg = 2
             let rows = nreg * d
@@ -2073,20 +2126,33 @@ def test_vkd_act_family(t0 : T?) {
             let nelem = 1024
             var gh <- row_fill(nelem, 29, 0, 0.21, 6.0, 61)
             var uh <- row_fill(nelem, 11, 0, 0.17, 4.0, 47)
-            // arm 0 = q8 (32-blocks), arm 1 = q8k (256-superblocks); arms 2 and 3 the same under the clamped swiglu (gpt-oss's act code on the unbiased kernels)
-            for (arm in range(4)) {
+            //! the E-series side rows: four rows of 256 at layer 1 of three, position-major (`ubase` / `ustride` / `ulen`), and the
+            //! layer's slice gathered contiguous for the oracle
+            let ple = 256
+            let all = 3 * ple
+            let side <- row_fill(4 * all, 13, 0, 0.19, 3.0, 53)
+            let us <- [for (i in range(nelem)); side[(i / ple) * all + ple + i % ple]]
+            // arm 0 = q8 (32-blocks), arm 1 = q8k (256-superblocks); arms 2 and 3 the same under the clamped swiglu (gpt-oss's act code
+            // on the unbiased kernels); arms 4 and 5 under gelu over the strided side rows
+            for (arm in range(6)) {
                 let q8k = (arm & 1) == 1
-                let act = arm >= 2 ? ACT_OAI : ACT_SILU
+                let strided = arm >= 4
+                let act = arm >= 4 ? ACT_GELU : (arm >= 2 ? ACT_OAI : ACT_SILU)
                 let nblk = q8k ? nelem / 256 : nelem / 32
                 var inscope q_cls : array<uint>
                 var inscope s_cls : array<float>
                 with_cell_planes() $(var cp : CellPlanes) {
                     let pg = cp |> in_(gh)
-                    let pu = cp |> in_(uh)
+                    let pu = cp |> in_(strided ? side : uh)
                     let pq = cp |> out_words(int64(nelem), I8_SENTINEL_BITS)   // 1 byte per quant either way
                     let ps = cp |> out_(nblk)
                     var sc = cp |> cls_set(fixed_array(pg, pu, pq, ps), @@set_actrq_cls)
                     var pc = ActArgs(nelem = uint(nelem), act = act, nblk = uint(nblk))
+                    if (strided) {
+                        pc.ubase = uint(ple)
+                        pc.ustride = uint(all)
+                        pc.ulen = uint(ple)
+                    }
                     cp |> cell_record() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
                         if (q8k) {
                             enc_q8k_actrq_cls(raw2, h2, sc, pc, 1l)   // 256 threads cover both shapes at nelem = 1024
@@ -2101,9 +2167,9 @@ def test_vkd_act_family(t0 : T?) {
                 }
                 var inscope q_ref : array<uint>
                 var inscope s_ref : array<float>
-                actrq_oracle(gh, uh, nelem, q8k, act, q_ref, s_ref)
+                actrq_oracle(gh, strided ? us : uh, nelem, q8k, act, q_ref, s_ref)
                 // exp/tanh differ by ulps between backends: quants compare as bytes +-1, scales approx
-                let tag = "{q8k ? "q8k" : "q8"} actrq{act == ACT_OAI ? " under the clamped swiglu" : ""}"
+                let tag = "{q8k ? "q8k" : "q8"} actrq{act == ACT_OAI ? " under the clamped swiglu" : ""}{strided ? " over the strided side rows" : ""}"
                 check_qbytes(t, tag, q_cls, q_ref)
                 check_rows(t, "{tag} scales", s_cls, s_ref, BAR_APPROX_CTRL, FLAT_ROWS)
                 delete q_ref
@@ -7591,16 +7657,17 @@ def test_vkd_dn_9b_ba(t0 : T?) {
     }
 }
 
-//! the f16 router-form GEMV (the per-layer-embedding projection's rows): ne rows at a row base, the ne outputs at an output base
+//! the bf16 router-form GEMV (the per-layer-embedding projection's own rows): ne rows at a row base, the ne outputs at an output base,
+//! and under an output scale (`yscale`, the projection's 1/sqrt(dim)) the same dots scaled
 [test]
-def test_vkd_router_gemv_f16(t0 : T?) {
-    t0 |> run("router_gemv_f16 (the f16 router-form rows) == the CPU dot at a row base and an output base") <| @(t : T?) {
+def test_vkd_router_gemv_bf16(t0 : T?) {
+    t0 |> run("router_gemv_bf16 (the bf16 router-form rows) == the CPU dot at a row base and an output base") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
             if (!vk_moe_init()) {
                 t |> skip("no Vulkan device")
                 return
             }
-            verify(ensure_router_gemv_f16_cls(), "the router_gemv_f16 class rail must engage on a live device")
+            verify(ensure_router_gemv_bf16_cls(), "the router_gemv_bf16 class rail must engage on a live device")
             let dim = 4096
             let ne = 32
             let woff = ne * dim   // the second layer's alpha rows
@@ -7610,11 +7677,11 @@ def test_vkd_router_gemv_f16(t0 : T?) {
             var xh <- hash_fill(dim, 99u, 1000u, 500.0, 1.0)
             var want : array<float>
             want |> resize(out_n)
-            var wh16 <- pack_f16(wh)
+            var wh16 <- pack_bf16(wh)
             for (e in range(ne)) {
                 var acc = 0.0
                 for (k in range(dim)) {
-                    acc += float(wh16[woff + e * dim + k]) * xh[k]
+                    acc += bf16_value(wh16[woff + e * dim + k]) * xh[k]
                 }
                 want[obase + e] = acc
             }
@@ -7640,7 +7707,7 @@ def test_vkd_router_gemv_f16(t0 : T?) {
             for (e in range(ne)) {
                 var acc = 0.0
                 for (k in range(dim)) {
-                    acc += float(wh16[woff + e * dim + k]) * (xh[k] * wnh[nwoff + k])
+                    acc += bf16_value(wh16[woff + e * dim + k]) * (xh[k] * wnh[nwoff + k])
                 }
                 want3[obase + e] = acc * invn
             }
@@ -7649,22 +7716,22 @@ def test_vkd_router_gemv_f16(t0 : T?) {
                 let px = cp |> in_(xh)
                 let po = cp |> out_(out_n)
                 let pn = cp |> in_(wnh)
-                var sc = cp |> cls_set(fixed_array(pw, px, po, px), @@set_router_gemv_f16_cls)
+                var sc = cp |> cls_set(fixed_array(pw, px, po, px), @@set_router_gemv_bf16_cls)
                 var pc = GkRouterArgs(ne = uint(ne), dim = uint(dim), woff = uint(woff), obase = uint(obase))
                 cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
-                    enc_router_gemv_f16_cls(raw, h, sc, pc, int64(ne))
+                    enc_router_gemv_bf16_cls(raw, h, sc, pc, int64(ne))
                 }
                 var got <- cp |> plane_run(po)
                 let bad = rel_mismatches(got, want, obase, ne)
-                t |> success(bad == 0, "router_gemv_f16: {bad} of {ne} outputs off the CPU dot")
+                t |> success(bad == 0, "router_gemv_bf16: {bad} of {ne} outputs off the CPU dot")
                 var poison := got   // the bar's control: one output pushed past it must red
                 poison[obase] += 1.0 + 2.0 * abs(want[obase])
-                t |> success(rel_mismatches(poison, want, obase, ne) > 0, "router_gemv_f16: the bar reds a poisoned output")
+                t |> success(rel_mismatches(poison, want, obase, ne) > 0, "router_gemv_bf16: the bar reds a poisoned output")
                 delete poison
                 cp |> plane_refill(po)
                 var pc2 = GkRouterArgs(ne = uint(ne), dim = uint(dim), woff = uint(woff), obase = uint(obase), ne_split = uint(ne1), obase_split = uint(obase2))
                 cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
-                    enc_router_gemv_f16_cls(raw, h, sc, pc2, int64(ne))
+                    enc_router_gemv_bf16_cls(raw, h, sc, pc2, int64(ne))
                 }
                 var got2 <- cp |> plane_run(po)
                 let bad2 = rel_mismatches(got2, want2, obase, ne1) + rel_mismatches(got2, want2, obase2, ne1)
@@ -7674,17 +7741,31 @@ def test_vkd_router_gemv_f16(t0 : T?) {
                         gap++
                     }
                 }
-                t |> success(bad2 == 0 && gap == 0, "router_gemv_f16 two bases: {bad2} of {ne} outputs off the CPU dot, {gap} of 4 gap words written")
+                t |> success(bad2 == 0 && gap == 0, "router_gemv_bf16 two bases: {bad2} of {ne} outputs off the CPU dot, {gap} of 4 gap words written")
                 cp |> plane_refill(po)
-                var sc3 = cp |> cls_set(fixed_array(pw, px, po, pn), @@set_router_gemv_f16_cls)
+                var sc3 = cp |> cls_set(fixed_array(pw, px, po, pn), @@set_router_gemv_bf16_cls)
                 var pc3 = GkRouterArgs(ne = uint(ne), dim = uint(dim), woff = uint(woff), obase = uint(obase), norm_on = 1u, nwoff = uint(nwoff), eps = eps)
                 cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
-                    enc_router_gemv_f16_cls(raw, h, sc3, pc3, int64(ne))
+                    enc_router_gemv_bf16_cls(raw, h, sc3, pc3, int64(ne))
                 }
                 var got3 <- cp |> plane_run(po)
                 let bad3 = rel_mismatches(got3, want3, obase, ne)
-                t |> success(bad3 == 0, "router_gemv_f16 norm-folded: {bad3} of {ne} outputs off the CPU chain")
-                t |> success(rel_mismatches(got3, want, obase, ne) > 0, "router_gemv_f16 norm-folded: the control - the unnormed dot must miss")
+                t |> success(bad3 == 0, "router_gemv_bf16 norm-folded: {bad3} of {ne} outputs off the CPU chain")
+                t |> success(rel_mismatches(got3, want, obase, ne) > 0, "router_gemv_bf16 norm-folded: the control - the unnormed dot must miss")
+                cp |> plane_refill(po)
+                var pc4 = GkRouterArgs(ne = uint(ne), dim = uint(dim), woff = uint(woff), obase = uint(obase), yscale = 0.125)
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_router_gemv_bf16_cls(raw, h, sc, pc4, int64(ne))
+                }
+                var got4 <- cp |> plane_run(po)
+                var want4 := want
+                for (e in range(ne)) {
+                    want4[obase + e] *= 0.125
+                }
+                t |> success(rel_mismatches(got4, want4, obase, ne) == 0, "router_gemv_bf16 under the output scale: every output the dot scaled")
+                t |> success(rel_mismatches(got4, want, obase, ne) > 0, "router_gemv_bf16 under the output scale: the control - the unscaled dot must miss")
+                delete got4
+                delete want4
                 delete got
                 delete got2
                 delete got3
@@ -9035,13 +9116,13 @@ def test_vkd_topk_n(t0 : T?) {
     }
 }
 
-//! the router GEMV's descriptor set on the stamp `f16` names
-def private router_set(f16 : bool; bufs; sizes) => f16 ? set_router_gemv_f16_cls(bufs, sizes, fixed_array(0u, 1u, 2u, 0u)) : set_router_gemv_cls(bufs, sizes, fixed_array(0u, 1u, 2u, 0u))
+//! the router GEMV's descriptor set on the stamp `bf16` names
+def private router_set(bf16 : bool; bufs; sizes) => bf16 ? set_router_gemv_bf16_cls(bufs, sizes, fixed_array(0u, 1u, 2u, 0u)) : set_router_gemv_cls(bufs, sizes, fixed_array(0u, 1u, 2u, 0u))
 
-//! the router GEMV recorded on the stamp `f16` names
-def private router_enc(f16 : bool; raw; var h; var sc; var pc; groups : int64) {
-    if (f16) {
-        enc_router_gemv_f16_cls(raw, h, sc, pc, groups)
+//! the router GEMV recorded on the stamp `bf16` names
+def private router_enc(bf16 : bool; raw; var h; var sc; var pc; groups : int64) {
+    if (bf16) {
+        enc_router_gemv_bf16_cls(raw, h, sc, pc, groups)
     } else {
         enc_router_gemv_cls(raw, h, sc, pc, groups)
     }
@@ -9069,14 +9150,14 @@ def private router_cols_oracle(t : T?; arm : string; got, xh, nh, wdev : array<f
 }
 
 //! the router GEMV over `ncols` x rows against the one-row dispatch a row at a time (word for word through `nform_cols_cell`:
-//! one kernel body, the same order) and against a CPU oracle of the same dot - the f16 stamp's weights rounded as the device
+//! one kernel body, the same order) and against a CPU oracle of the same dot - the bf16 stamp's weights truncated as the device
 //! reads them, and under `norm_on` each row's rms under a norm row, as the gemma-4 MoE router reads its input
-def private router_cols_arm(t : T?; ncols : int; norm_on, f16 : bool) {
+def private router_cols_arm(t : T?; ncols : int; norm_on, bf16 : bool) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
-        let stamp = f16 ? "f16" : "f32"
+        let stamp = bf16 ? "bf16" : "f32"
         let form = "router_gemv {stamp}{norm_on ? " under the fused rms" : ""}"
         let arm = "{form} over {ncols} columns"
-        if (f16 ? !ensure_router_gemv_f16_cls() : !ensure_router_gemv_cls()) {
+        if (bf16 ? !ensure_router_gemv_bf16_cls() : !ensure_router_gemv_cls()) {
             t |> skip("{arm}: the class rail declined on this device")
             return
         }
@@ -9087,13 +9168,13 @@ def private router_cols_arm(t : T?; ncols : int; norm_on, f16 : bool) {
         var wh <- hash_fill(ne * dim, 777u, 1000u, 500.0, 1.0)
         var xh <- hash_fill(ncol_max * dim, 31u, 1000u, 500.0, 1.0)
         var nh <- hash_fill(dim, 9u, 1000u, 1000.0, -0.5)
-        var wh16 <- pack_f16(wh)
-        var wdev : array<float>   //! the weights as the device reads them: the f16 stamp's rounded, the f32 stamp's as given
+        var wh16 <- pack_bf16(wh)
+        var wdev : array<float>   //! the weights as the device reads them: the bf16 stamp's truncated, the f32 stamp's as given
         wdev |> resize(ne * dim)
         for (i in range(ne * dim)) {
-            wdev[i] = f16 ? float(wh16[i]) : wh[i]
+            wdev[i] = bf16 ? bf16_value(wh16[i]) : wh[i]
         }
-        let w_bytes = f16 ? long_length(wh16) * 2l : int64(ne * dim) * 4l
+        let w_bytes = bf16 ? long_length(wh16) * 2l : int64(ne * dim) * 4l
         let x_bytes = int64(ncols * dim) * 4l
         let x1_bytes = int64(dim) * 4l
         let n_bytes = int64(dim) * 4l
@@ -9104,7 +9185,7 @@ def private router_cols_arm(t : T?; ncols : int; norm_on, f16 : bool) {
         let eps = 1e-6
         let non = norm_on ? 1u : 0u
         unsafe {
-            if (f16) {
+            if (bf16) {
                 upload_region_at(wd, 0l, addr<uint8 const?>(wh16[0]), w_bytes)
             } else {
                 upload_region_at(wd, 0l, addr<uint8 const?>(wh[0]), w_bytes)
@@ -9115,14 +9196,14 @@ def private router_cols_arm(t : T?; ncols : int; norm_on, f16 : bool) {
         var planes <- nform_cols_cell(t, form, [ncols], ncol_max, [NformPlane(name = "the logits", words = ne, head = obase)], 2u,
             $(c : int; raw : VkCommandBuffer; var h : VkHaz; o : NformOuts) {
                 upload_region_at(xd1, 0l, unsafe(addr<uint8 const?>(xh[c * dim])), x1_bytes)
-                var sc1 = router_set(f16, fixed_array(wd, xd1, o.bufs[0], nd), fixed_array(w_bytes, x1_bytes, o.bytes[0], n_bytes))
+                var sc1 = router_set(bf16, fixed_array(wd, xd1, o.bufs[0], nd), fixed_array(w_bytes, x1_bytes, o.bytes[0], n_bytes))
                 var pc1 = GkRouterArgs(ne = uint(ne), dim = uint(dim), woff = 0u, obase = uint(obase), norm_on = non, nwoff = 0u, eps = eps)
-                router_enc(f16, raw, h, sc1, pc1, int64(ne))
+                router_enc(bf16, raw, h, sc1, pc1, int64(ne))
             },
             $(nc : int; raw : VkCommandBuffer; var h : VkHaz; o : NformOuts) {
-                var sc = router_set(f16, fixed_array(wd, xd, o.bufs[0], nd), fixed_array(w_bytes, x_bytes, o.bytes[0], n_bytes))
+                var sc = router_set(bf16, fixed_array(wd, xd, o.bufs[0], nd), fixed_array(w_bytes, x_bytes, o.bytes[0], n_bytes))
                 var pc = GkRouterArgs(ne = uint(ne), dim = uint(dim), woff = 0u, obase = uint(obase), norm_on = non, nwoff = 0u, eps = eps, ncols = uint(nc))
-                router_enc_cols(f16, raw, h, sc, pc, int64(ne))   //! past eight columns, two tiles (the second's `col0` at eight)
+                router_enc_cols(bf16, raw, h, sc, pc, int64(ne))   //! past eight columns, two tiles (the second's `col0` at eight)
             })
         var got <- plane_floats(planes.nf[0])
         router_cols_oracle(t, arm, got, xh, nh, wdev, ncols, ne, dim, obase, norm_on, eps)
@@ -9135,6 +9216,107 @@ def private router_cols_arm(t : T?; ncols : int; norm_on, f16 : bool) {
         delete wdev
     } else {
         t |> skip("dasVulkan not present")
+    }
+}
+
+//! `src` as bf16 halves, truncated (the CPU reference reads the same values back, `bf16_value`)
+def private pack_bf16(src : array<float>) : array<uint16> => <- [for (v in src); bf16_bits_truncated(v)]
+
+//! the per-layer-embedding branch's f32 act (`PleActF32`, the f32 projection's x): npos gate rows of ple against the side rows'
+//! layer-l slice, position-major rows `all` apart, gelu_tanh(gate) x side against the CPU form at the approx bar; the side read
+//! contiguously (as the stride were ple) misses it, the control
+[test]
+def test_vkd_ple_act_f32(t0 : T?) {
+    t0 |> run("ple_act_f32: gelu(gate) x the strided side rows == the CPU form") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_moe_init()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            verify(ensure_ple_act_f32_cls(), "the ple_act_f32 class rail must engage on a live device")
+            let ple = 64
+            let nl = 3
+            let l = 2
+            let npos = 5
+            let all = nl * ple
+            var gate <- [for (i in range(npos * ple)); 0.21 * float(i % 43) - 4.3]
+            var side <- [for (i in range(npos * all)); 0.17 * float(i % 23) - 1.9]
+            var want, flat : array<float>
+            want |> resize(npos * ple)
+            flat |> resize(npos * ple)
+            for (p in range(npos)) {
+                for (i in range(ple)) {
+                    want[p * ple + i] = act_mul_ref(gate[p * ple + i], side[p * all + l * ple + i], true)
+                    flat[p * ple + i] = act_mul_ref(gate[p * ple + i], side[l * ple + p * ple + i], true)
+                }
+            }
+            t |> success(mismatch_exact(want, flat) > 0, "ple_act_f32: the strided rows differ from the contiguous read (the control)")
+            with_cell_planes() $(var cp : CellPlanes) {
+                let pg = cp |> in_(gate)
+                let ps = cp |> in_(side)
+                let po = cp |> out_(npos * ple)
+                var sc = cp |> cls_set(fixed_array(pg, ps, po), @@set_ple_act_f32_cls)
+                var pc = ActArgs(nelem = uint(npos * ple), act = ACT_GELU, ubase = uint(l * ple), ustride = uint(all), ulen = uint(ple))
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_ple_act_f32_cls(raw, h, sc, pc, int64((npos * ple + 255) / 256))
+                }
+                var got <- cp |> plane_run(po)
+                check(t, "ple_act_f32", got, want, BAR_APPROX, Shape(row_width = ple))
+                delete got
+            }
+            delete gate
+            delete side
+            delete want
+            delete flat
+        } else {
+            t |> skip("dasVulkan not present")
+        }
+    }
+}
+
+//! the per-layer-embedding projection's per-window f16 panel (`PleBf16Cvt`): bf16 halves widened by their bit shift and stored f16
+//! bit for bit the language's half cast of the widened value, a value past the half range saturated, the elements past the count kept
+[test]
+def test_vkd_ple_bf16_cvt(t0 : T?) {
+    t0 |> run("ple_bf16_cvt: the bf16 rows as f16 == the widened value's half, saturated") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            if (!vk_moe_init()) {
+                t |> skip("no Vulkan device")
+                return
+            }
+            verify(ensure_ple_bf16_cvt_cls(), "the ple_bf16_cvt class rail must engage on a live device")
+            let n = 1030
+            var src <- [for (i in range(n)); 0.37 * float(i % 61) - 11.0]
+            src[7] = 1.0e6   //! past the half range: saturates at 65504
+            src[8] = -1.0e6
+            var w16 <- [for (v in src); bf16_bits_truncated(v)]
+            var want <- [for (h in w16); float(float16(clamp(bf16_value(h), -65504.0, 65504.0)))]
+            with_cell_planes() $(var cp : CellPlanes) {
+                let pw = cp |> in_plain(w16)
+                let po = cp |> out_words(int64(n + 2) * 2l, 0xFFFFFFFFu)
+                var sc = cp |> cls_set(fixed_array(pw, po), @@set_ple_bf16_cvt_cls)
+                var pc = gk_f16_rows_args(uint(n))
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    enc_ple_bf16_cvt_cls(raw, h, sc, pc, int64((n / 4 + 255) / 256 + 1))
+                }
+                var got <- cp |> plane_as(po, type<float16>, n + 2)
+                var bad = 0
+                for (i in range(n)) {
+                    bad += float(got[i]) != want[i] ? 1 : 0
+                }
+                t |> equal(bad, 0, "ple_bf16_cvt: every element the widened value's half")
+                t |> equal(float(got[7]), 65504.0, "ple_bf16_cvt: a value past the half range saturates")
+                var tail <- cp |> plane_as(po, type<uint16>, n + 2)
+                t |> success(tail[n] == uint16(0xFFFF) && tail[n + 1] == uint16(0xFFFF), "ple_bf16_cvt: the elements past the count kept")
+                delete got
+                delete tail
+            }
+            delete src
+            delete w16
+            delete want
+        } else {
+            t |> skip("dasVulkan not present")
+        }
     }
 }
 
@@ -9152,7 +9334,7 @@ def test_vkd_router_gemv_cols(t0 : T?) {
             router_cols_arm(t, 3, true, false)    // ... under the gemma-4 router's fused rms
             router_cols_arm(t, 8, true, false)    // ... at the extent, every partial slot live
             router_cols_arm(t, 12, true, false)   // ... past it, in two column tiles
-            router_cols_arm(t, 12, false, true)   // ... the f16 stamp the same
+            router_cols_arm(t, 12, false, true)   // ... the bf16 stamp the same
         } else {
             t |> skip("dasVulkan not present")
         }

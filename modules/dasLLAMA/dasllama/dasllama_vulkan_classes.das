@@ -373,6 +373,10 @@ class ClsArAddRms : ArBase {
     override OUT_F32 = true
 }
 
+//! the residual step with no normed row stored: the stream rows updated in place alone (the E-series pre-step's finish)
+[vk_dispatch(name = "cls_ar_add", kernel = "run", grid = "nrows", params = "nrows : int64")]
+class ClsArAdd : ArBase {}
+
 // ar_add_rms + Q8_0 requant in ONE dispatch: the normed row quantizes out of the row stash, so
 // xb never reaches memory. Verbatim reduce/amax/rounding => bit-identical to the split pair.
 [ |> template_struct_instance]
@@ -716,7 +720,7 @@ class template ActRqT : RqT {
 
     def act_mul(v, u : float) : float => gk_act_mul(v, u, pa.act)
 
-    //! the up element paired with gate element `eb` (the 32-block form): with `ustride` the rows of `ulen` elements sit `ustride` apart
+    //! the up element paired with gate element `eb`: with `ustride` the rows of `ulen` elements sit `ustride` apart
     def up_at(eb : uint) : uint {
         let ul = max(pa.ulen, 1u)
         return pa.ustride != 0u ? pa.ubase + (eb / ul) * pa.ustride + eb % ul : pa.ubase + eb   //! four elements never cross a row: ulen is a 4-multiple
@@ -726,7 +730,7 @@ class template ActRqT : RqT {
         let ue = up_at(eb)
         return float4(act_mul(gate[eb], up[ue]), act_mul(gate[eb + 1u], up[ue + 1u]), act_mul(gate[eb + 2u], up[ue + 2u]), act_mul(gate[eb + 3u], up[ue + 3u]))
     }
-    def override load1(e : uint) : float => act_mul(gate[e], up[e])
+    def override load1(e : uint) : float => act_mul(gate[e], up[up_at(e)])
 }
 
 [vk_dispatch(name = "q8_actrq_cls", kernel = "run", family = "actrq_cls", grid = "wgs", params = "wgs : int64")]
@@ -805,6 +809,26 @@ class ActF16 : ActF16T {}
 [vk_dispatch(name = "actf16_b_cls", grid = "wgs", params = "wgs : int64")]
 class ActF16B : ActF16T {
     override BIASED = true
+}
+
+//! the per-layer-embedding branch's act as floats, the f32 projection's x: gelu(gate) x the side row, `ActRqT`'s strided side
+//! read (`ubase` / `ustride` / `ulen`), an element a thread
+[vk_dispatch(name = "ple_act_f32_cls", grid = "wgs", params = "wgs : int64")]
+class PleActF32 {
+    @ssbo @binding = 0 gate : array<float>
+    @ssbo @binding = 1 up : array<float>
+    @ssbo @binding = 2 outp : array<float>
+    @push_constant pa : ActArgs
+
+    [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#whole-token-decode-span")]
+    def run {
+        let e = gl_GlobalInvocationID.x
+        if (e < pa.nelem) {
+            let ul = max(pa.ulen, 1u)
+            let ue = pa.ustride != 0u ? pa.ubase + (e / ul) * pa.ustride + e % ul : pa.ubase + e
+            outp[e] = gk_act_mul(gate[e], up[ue], pa.act)
+        }
+    }
 }
 
 struct EmbArgs {
@@ -1059,6 +1083,7 @@ class DecCombineSh : DecCombineT {
 [ |> template_struct_instance]
 class template RouterGemvT : GkRouterGemv {
     override NORM = true
+    override YSCALE = true
 
     [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#whole-token-decode-span")]
     def run {
@@ -1072,24 +1097,26 @@ class RouterGemv : RouterGemvT {
     typedef XT = float
 }
 
-//! the f16 rows read as half pairs, one word a step
-[vk_dispatch(name = "router_gemv_f16_cls", grid = "ne", params = "ne : int64")]
-class RouterGemvF16 : RouterGemvT {
+//! the bf16 rows read as bf16 pairs, one word a step (the E-series pre-step's projection, its own rows on the device)
+[vk_dispatch(name = "router_gemv_bf16_cls", grid = "ne", params = "ne : int64")]
+class RouterGemvBf16 : RouterGemvT {
     typedef KT = uint
     typedef XT = float
     override VW = 2u
+    override BF16 = true
 }
 
-//! the router GEMV over `pc.ncols` columns (0 or 1 = one row), past `GEMV_COL_TILE` in tiles of that many, each tile's `col0` its first column
+//! the router GEMV over `pc.ncols` columns (0 or 1 = one row), past `GEMV_COL_TILE` in tiles of that many, each tile's `col0` its first
+//! column; `bf16` the bf16 rows' stamp, else the f32 rows'
 [arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-col-tiles")]
-def router_enc_cols(f16 : bool; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : GkRouterArgs; ne : int64) {
+def router_enc_cols(bf16 : bool; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : GkRouterArgs; ne : int64) {
     let total = max(pc.ncols, 1u)
     var c0 = 0u
     while (c0 < total) {
         pc.col0 = c0
         pc.ncols = min(total - c0, GEMV_COL_TILE)
-        if (f16) {
-            enc_router_gemv_f16_cls(raw, h, set_, pc, ne)
+        if (bf16) {
+            enc_router_gemv_bf16_cls(raw, h, set_, pc, ne)
         } else {
             enc_router_gemv_cls(raw, h, set_, pc, ne)
         }
@@ -8830,6 +8857,18 @@ class TowerClampCvt : GkClampRows {
 
 //! the f32 copy of a clamped GEMM input (the exact lane's f32 tile): the input bounds applied into `dst` so the normed rows stay
 //! whole for the next GEMM's own bounds
+//! bf16 rows widened by their bit shift and stored f16 (saturated at the half range): the E-series projection's per-window f16 panel
+[vk_dispatch(name = "ple_bf16_cvt_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
+class PleBf16Cvt : GkClampRows {
+    override OUT16 = true
+    override BF16IN = true
+
+    [spirv_kernel(local_size_x = 256, name = "ple_bf16_cvt_cls_spv")]
+    def run {
+        clamp_rows_body()
+    }
+}
+
 [vk_dispatch(name = "tower_clamp_copy_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class TowerClampCopy : GkClampRows {
     override COPY = true

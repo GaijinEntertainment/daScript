@@ -440,12 +440,11 @@ mechanisms landed on the way:
   the prefill's device pre-step gate at one position; the Metal gate answered yes, the CPU pre-step
   was skipped, and the Metal decode copied the unfilled host rows - every E-series q8 file served
   garbage from the second token on both boxes. The gate is now two seats, one per direction
-  (`register_ple_gpu_decode_gate`), and Metal registers the prefill one alone (sec.13 is the
-  decode-side gather).
+  (`register_ple_gpu_decode_gate`).
 - **The k4/k5/q40 PLE token tables gather on device.** The prefill's GPU pre-step took q8 tables
   only; every other table fell to the serial CPU gather, and the E2B Q4_0 and Q4_K_M files
-  prefilled at 0.49 and 0.51 of llama.cpp on the M5. `MetalPleGatherKqT` stamps the three formats
-  off their native planes; the rows below read 1.11 and 1.18.
+  prefilled at 0.49 and 0.51 of llama.cpp on the M5. The token-table gather family (`MetalEmbed*`)
+  reads them off their native planes; the rows below read 1.11 and 1.18.
 - **The dev-W bake left the expert stacks in.** gemma-4 splits its fused expert stacks per expert
   at load, every slice passed the bake's format-and-size predicate, and a 26B image carried 32 GB of
   panels the routed block never reads (47 GB, an eight-minute bake). The bake refuses expert
@@ -569,16 +568,6 @@ the M5 Max classifier (d=151936) by 6%, so that site takes the slower form there
 wants the row form at n=2048 and d=4096 where the M5 wants the split (sec.9). Unquirked: a
 two-axis pick over n and d, raced per box in `metal_tensor_race_decode` at both the projection
 and the classifier widths. The bar is no loss on either box.
-
-## 13. The Metal decode builds the E-series PLE side input on the CPU
-
-The Metal decode reads the side input `ple_pre_decode` builds on the host - the token row's
-gather plus the model_proj GEMV (E2B 1536x8960 bf16, E4B 27 MB) and its norm - between the step
-wait and the next commit, while the Vulkan token command gathers the row and projects on device
-(`register_ple_gpu_decode_gate`). Unquirked: a decode-side twin of the prefill's `MetalPleGatherQ8`
-+ `pf_enc_bf16_mm` + `MetalPleFinish` chain at one position, registered as the Metal decode gate.
-The bar is our own E-series tg128 rows of sec.7.2 not regressing on either box (no reference-build
-run: the ratio to llama.cpp is sec.7.2's, re-taken through its rig), the served-pipeline fixture green.
 
 ## 14. The MoE expert mul_mm f32-X (`t`) form has no model-less cell in any format
 

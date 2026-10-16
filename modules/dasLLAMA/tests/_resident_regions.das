@@ -25,6 +25,7 @@ require ?vulkan dasllama/dasllama_vulkan_prefill   // vk_rdec_prefill_segment_wi
 require _model_tier public   // models_dir() + model_available() presence/size-tier gate
 require _resident_feed   // served_every_call: the shared served witness
 require _compares   // the head-rows cell's draft compare
+require dasllama/dasllama_ple   // ple_host_gather_rows: the side rows' host witness
 
 // The resident driver's mirror regions (a small carrier under DASLLAMA_GPU=1): two
 // sessions hold their K/V on the device at once, one region each. The instrument is the driver
@@ -530,6 +531,27 @@ def private batched_steps_body(t : T?; tr : Model; pa, pb : array<int64>; bar : 
     batched_steps_body(t, tr, prompts, feeds, bar)
     delete prompts
     delete feeds
+}
+
+//! the E-series side rows on the device at every decode shape: the sessions alone (the one-row command) and the batched steps (the
+//! N-row command) gather each row's side row off its token id - the host gathers no table row - and the batched rows still read bit for bit what each session reads alone
+def cell_regions_batched_side_rows(t : T?; file : string) {
+    t |> run("the side rows of the sessions alone and of the batched steps gather on the device off the rows' ids") @(t : T?) {
+        with_regions_rig(t, file) $(tr) {
+            static_if (typeinfo builtin_module_exists(vulkan)) {
+                t |> success(has_ple(tr.config) && vk_rdec_side_gather_on(), "the driver gathers the side rows off the ids (the table and the projection on the device)")
+                var pa <- prompt_a()
+                var pb <- prompt_b()
+                let host0 = ple_host_gather_rows()
+                let dev0 = vk_rdec_nrow_side_gathered()
+                batched_steps_body(t, tr, pa, pb, LogitsBar.bit_exact)
+                t |> equal(ple_host_gather_rows() - host0, 0l, "the host gathered no table row")
+                t |> equal(vk_rdec_nrow_side_gathered() - dev0, 2l * STEPS, "every batched row's side row gathered off its id")
+                delete pa
+                delete pb
+            }
+        }
+    }
 }
 
 def cell_regions_batched_steps(t : T?; file : string; bar : LogitsBar = LogitsBar.bit_exact; split_forms : bool = false) {

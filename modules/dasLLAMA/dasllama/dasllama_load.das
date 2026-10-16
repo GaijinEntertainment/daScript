@@ -311,6 +311,17 @@ def private layout_offsets(var t : Model) : LayoutSizes {   // nolint:STYLE037,S
     }
     var mx = 0l
     var pleq8 = 0l
+    //! the file's f32 gate / proj rows in fblob, where they ship F32 (`ple_gate_f32`, `ple_proj_f32`)
+    var pg32 = -1l
+    var pp32 = -1l
+    if (has_ple(c) && t.ple_gate_f32) {
+        pg32 = fo
+        fo += layers * dim * c.n_embd_per_layer
+    }
+    if (has_ple(c) && t.ple_proj_f32) {
+        pp32 = fo
+        fo += layers * dim * c.n_embd_per_layer
+    }
     if (c.n_expert > 0l) {
         // MoE: routed expert stacks — expert e of layer l is a normal 2D matrix at we*_off + (l*n_expert+e)*(dim*n_ff_exp)
         let ege = dim * c.n_ff_exp   // per-expert element count (same for gate/up and down)
@@ -352,7 +363,7 @@ def private layout_offsets(var t : Model) : LayoutSizes {   // nolint:STYLE037,S
     } else {
         fill_dense_ffn_offsets(t, cur, layers, dim, hidden)
     }
-    if (has_ple(c)) {  // gemma-4 E-series PLE big weights: the token table + per-layer Q8 gate/proj
+    if (has_ple(c)) {  // gemma-4 E-series PLE big weights: the token table + the per-layer gate/proj
         let ple = c.n_embd_per_layer
         // gather-only rows, NOT repacked — pinned to the DISK-format plane in every serving mode (the mode owns the wo region, never the table)
         if (t.ple_emb_fmt == KqFmt.q8 && t.quant != QuantMode.q8) {
@@ -361,10 +372,10 @@ def private layout_offsets(var t : Model) : LayoutSizes {   // nolint:STYLE037,S
         } else {
             t.ple_emb_off = kq_take(cur, t.ple_emb_fmt, c.vocab_size * ple * layers)
         }
-        t.ple_gate_off = cur.wo
-        cur.wo += layers * dim * ple
-        t.ple_proj_off = cur.wo
-        cur.wo += layers * ple * dim
+        t.ple_gate_offs |> clear(); t.ple_gate_offs |> reserve(layers)
+        for (l in range64(layers)) { t.ple_gate_offs |> push(t.ple_gate_f32 ? pg32 + l * dim * ple : kq_take(cur, fmt_at(t.ple_gate_fmt, l), dim * ple)) }
+        t.ple_proj_offs |> clear(); t.ple_proj_offs |> reserve(layers)
+        for (l in range64(layers)) { t.ple_proj_offs |> push(t.ple_proj_f32 ? pp32 + l * ple * dim : kq_take(cur, fmt_at(t.ple_proj_fmt, l), ple * dim)) }
     }
     if (c.shared_weights) {
         if (t.cls_q8) {
@@ -1626,6 +1637,10 @@ def private detect_kq_formats(var t : Model; m : GGUFMeta) {   // nolint:STYLE03
     }
     let dn_kq = detect_dn_formats(t, m, layers)
     any ||= dn_kq
+    if (has_ple(t.config)) {
+        let ple_kq = detect_ple_formats(t, m)   //! its own statement: `||=` would skip the tags once `any` holds
+        any ||= ple_kq
+    }
     // E-series PLE token table: gather-only whole rows; row length must be superblock-aligned
     if (has_ple(t.config) && (t.config.n_layers * t.config.n_embd_per_layer) % 256l == 0l) {
         t.ple_emb_fmt = kq_fmt_of(gguf_tensor_type(m, "per_layer_token_embd.weight"))
@@ -1647,8 +1662,54 @@ def private detect_kq_formats(var t : Model; m : GGUFMeta) {   // nolint:STYLE03
         delete t.dnout_fmt
         delete t.dnbeta_fmt
         delete t.dnalpha_fmt
+        delete t.ple_gate_fmt
+        delete t.ple_proj_fmt
     }
     t.kquant_native = any
+}
+
+//! the per-layer-embedding gate and projection planes' tags, one a layer each, true when any is not q8; a kind whose every layer
+//! ships F32 keeps the file's f32 rows (`ple_gate_f32` / `ple_proj_f32`), and a kind mixing F32 with another type declines the load
+def private detect_ple_formats(var t : Model; m : GGUFMeta) : bool {
+    let c = t.config
+    let layers = c.n_layers
+    var any = false
+    t.ple_gate_fmt |> resize(layers)
+    t.ple_proj_fmt |> resize(layers)
+    for (kind in ["inp_gate", "proj"]) {
+        let rows = kind == "proj" ? c.n_embd_per_layer : c.dim
+        let nf32 = count_tensors_of(m, layers, kind, GGML_TYPE_F32)
+        if (nf32 != 0l && nf32 != layers) {
+            panic("dasLLAMA: the per-layer-embedding {kind} planes mix F32 with other types ({nf32} of {layers} layers F32) - no site serves a mixed stack; requantize the kind whole")
+        }
+        let f32 = nf32 == layers
+        if (kind == "proj") {
+            t.ple_proj_f32 = f32
+        } else {
+            t.ple_gate_f32 = f32
+        }
+        for (l in range64(layers)) {
+            let f = f32 ? KqFmt.q8 : kq_tag(m, "blk.{l}.{kind}.weight", rows)
+            if (kind == "proj") {
+                t.ple_proj_fmt[l] = f
+            } else {
+                t.ple_gate_fmt[l] = f
+            }
+            any ||= f != KqFmt.q8
+        }
+    }
+    return any
+}
+
+//! how many of the `layers` per-layer tensors `blk.N.<kind>.weight` ship as ggml type `gt`
+def private count_tensors_of(m : GGUFMeta; layers : int64; kind : string; gt : int) : int64 {
+    var n = 0l
+    for (l in range64(layers)) {
+        if (gguf_tensor_type(m, "blk.{l}.{kind}.weight") == gt) {
+            n++
+        }
+    }
+    return n
 }
 
 //! a device driver on this load reads the shared expert and the tied classifier off planes of their own: an armed GPU tier, or a Metal mode
@@ -1852,6 +1913,7 @@ def private load_gguf_impl(path : string; var mode : QuantMode) : Model {
 // mapped — config, vocab, plane sizing, tensor reads/transcodes, repack, wscale.
 def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> | #; var mode : QuantMode; ts_load : int64) {   // nolint:STYLE037,STYLE038 — the load pipeline: ordered phases over one shared cursor; splitting it needs its own pass
     var ts_stage = ref_time_ticks()
+    gguf_decline_unread_types(m)
     {
         let arch = gguf_str(m, bytes, "general.architecture")
         resolve_arch(t, arch)   // registry lookup: apply config flags + bind the arch's block kernels
@@ -2758,10 +2820,15 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
                 load_big(m, bytes, "blk.{l}.ffn_up.weight", t, t.w3_offs[l], dim * h, scratch, 0l, fmt_at(t.w3_fmt, l))
                 load_big(m, bytes, "blk.{l}.ffn_down.weight", t, t.w2_offs[l], h * dim, scratch, 0l, fmt_at(t.w2_fmt, l))
             }
-            if (has_ple(t.config)) {  // gemma-4 E-series: per-layer PLE gate (dim->ple) + proj (ple->dim), Q8
+            if (has_ple(t.config)) {  // gemma-4 E-series: per-layer PLE gate (dim->ple) + proj (ple->dim), each in its tag's planes
                 let ple = t.config.n_embd_per_layer
-                load_big(m, bytes, "blk.{l}.inp_gate.weight", t, t.ple_gate_off + l * dim * ple, dim * ple, scratch)
-                load_big(m, bytes, "blk.{l}.proj.weight", t, t.ple_proj_off + l * ple * dim, ple * dim, scratch)
+                for (pp, name in [ple_plane(t, l, false), ple_plane(t, l, true)], ["blk.{l}.inp_gate.weight", "blk.{l}.proj.weight"]) {
+                    if (pp.f32) {
+                        gguf_read_tensor_f32(m, bytes, name, t.fblob, pp.off, dim * ple)
+                    } else {
+                        load_big(m, bytes, name, t, pp.off, dim * ple, scratch, 0l, pp.f)
+                    }
+                }
             }
         }
         if (t.config.n_layer_nextn > 0l) {   // MTP/NextN extras (block index n_layers = `layers`)

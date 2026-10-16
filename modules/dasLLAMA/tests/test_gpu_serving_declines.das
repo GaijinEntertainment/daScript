@@ -190,6 +190,27 @@ def test_perop_dense_ffn_mixed_forms(t : T?) {
     }
 }
 
+//! the tied classifier on a table no device plane carries: an F16 table (no q8 tag, no K-quant plane, no Metal-mode copy) is named,
+//! where the resident plan would seat a q8 plane at an offset that holds no bytes; a Q8_0, a K-quant and an untied table pass
+[test]
+def test_resident_cls_decline(t : T?) {
+    t |> run("the tied classifier of an F32/F16/BF16 token table declines the whole-model driver by name") @(t : T?) {
+        var m = Model()
+        m.config.shared_weights = true
+        t |> success(contains(resident_cls_decline(m), "tied classifier"), "a tied table with no classifier plane is named")
+        m.cls_q8 = true
+        t |> equal(resident_cls_decline(m), "", "a tied Q8_0 table's plane serves (the control)")
+        m.cls_q8 = false
+        m.kquant_native = true
+        m.emb_fmt = KqFmt.k6
+        t |> equal(resident_cls_decline(m), "", "a tied K-quant table's plane serves")
+        m.emb_fmt = KqFmt.q8
+        m.config.shared_weights = false
+        t |> equal(resident_cls_decline(m), "", "an untied classifier carries its own plane")
+        delete m
+    }
+}
+
 [test]
 def test_resident_layer_decline(t : T?) {
     t |> run("a recurrent layer without deltanet planes is named by number; the attention layers around it pass") @(t : T?) {
@@ -1246,7 +1267,7 @@ def test_peel_shape_arms(t : T?) {
         t |> equal(rdec_peel_shape_why(hc.config), "a hyper-connection chain", "a hyper-connection chain keeps the chain")
         var ple <- shell(2l, 0ul)
         ple.config.n_embd_per_layer = 64l
-        t |> equal(rdec_peel_shape_why(ple.config), "a per-layer-embedding model", "a per-layer embedding keeps the chain")
+        t |> equal(rdec_peel_shape_why(ple.config), "", "a per-layer embedding fits the peel: the token commands carry the side rows")
         var recr <- shell(2l, 1ul)
         let recr_why = rdec_token_seq_installed() ? "" : "a recurrent model (no in-order rows command installed)"
         t |> equal(rdec_peel_shape_why(recr.config), recr_why, "a recurrent state keeps the chain unless the in-order rows command is installed")

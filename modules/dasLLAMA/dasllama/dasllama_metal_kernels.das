@@ -3956,6 +3956,10 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
         zp[0] = 0u
     }
     g_pso_geglu = compile_stamp(MetalGeglu_metal_ew2_msl, ok)
+    g_pso_geglu_side = compile_stamp(MetalGegluSide_metal_ew2_msl, ok)
+    g_pso_ple_proj_bf16 = compile_stamp(metal_ple_proj_bf16_msl, ok)
+    g_pso_ple_proj_bf16_one = compile_stamp(metal_ple_proj_bf16_one_msl, ok)
+    g_pso_ple_finish = compile_stamp(metal_ple_finish_msl, ok)
     g_pso_geglu_hx = compile_stamp(MetalGegluHX_metal_ew2_msl, ok)
     g_pso_ln = compile_stamp(metal_layernorm_msl, ok)
     g_pso_f32mm = compile_stamp(metal_f32_mulmm_msl, ok)
@@ -4916,26 +4920,9 @@ def enc_embed_dev(enc : MetalComputeEncoder?; t : Model; btok : MetalBuffer?; to
                   bdim, bescale : MetalBuffer?) {
     let dim = t.config.dim
     if (t.emb_q8) {
-        let bemb = blob_of(g_dev, t, t.emb_q8_off)
-        enc_embed(enc, bemb.buf, bemb.boff, btok, bx, bdim, bescale, dim, toff, xoff, nrows)
-    } elif (emb_kq(t) && kq_dense_b32(t.emb_fmt)) {
-        let qp = b32_planes_of(g_dev, t, t.emb_fmt, emb_kq_plane_off(t))
-        var ka = EmbedKqArgs(dim = uint(dim), nsb = uint(dim / KQ_B32_ELEMS), escale = t.config.embed_scale)
-        let units = dim / 16l
-        if (t.emb_fmt == KqFmt.q51) {
-            enc_embed_b32_q51(enc, qp.sbuf, qp.soff, qp.qbuf, qp.qoff, btok, toff, bx, xoff, ka, units, nrows)
-        } elif (t.emb_fmt == KqFmt.iq4nl32) {
-            enc_embed_b32_iq4nl32(enc, qp.sbuf, qp.soff, qp.qbuf, qp.qoff, btok, toff, bx, xoff, ka, units, nrows)
-        } elif (t.emb_fmt == KqFmt.q5032) {
-            enc_embed_b32_q5032(enc, qp.sbuf, qp.soff, qp.qbuf, qp.qoff, btok, toff, bx, xoff, ka, units, nrows)
-        } else {
-            enc_embed_b32_q4032(enc, qp.sbuf, qp.soff, qp.qbuf, qp.qoff, btok, toff, bx, xoff, ka, units, nrows)
-        }
+        enc_embed_table(enc, t, KqFmt.q8, t.emb_q8_off, dim, t.config.embed_scale, btok, toff, bx, xoff, nrows, bdim, bescale)
     } elif (emb_kq(t)) {
-        let off = emb_kq_plane_off(t)
-        let bq = kq_quants_of(g_dev, t, t.emb_fmt, off)
-        let bs = kq_scales_of(g_dev, t, t.emb_fmt, off)
-        enc_embed_kq_rows(enc, t.emb_fmt, bq.buf, bq.qoff, bs.buf, bs.soff, bs.doff, btok, toff, bx, xoff, dim, nrows, t.config.embed_scale)
+        enc_embed_table(enc, t, t.emb_fmt, emb_kq_plane_off(t), dim, t.config.embed_scale, btok, toff, bx, xoff, nrows, bdim, bescale)
     } else {
         assert(toff == 0ul, "the fp32 table's gather reads its token ids from the buffer's start")
         let bemb = plane_of(g_dev, t, t.fblob, t.tok_emb_off)
@@ -4948,6 +4935,37 @@ def enc_embed_dev(enc : MetalComputeEncoder?; t : Model; btok : MetalBuffer?; to
 //! the formats the K-quant token-table gather has a stamp for: every
 //! served plane format but q8
 def emb_kq_gather_fmt(f : KqFmt) : bool => f != KqFmt.q8 && kq_fmt_gpu_supported(f)
+
+//! a table plane in format `fmt` the gather family serves: the q8 linear copy, a per-32 plane or a K-quant plane with a stamp
+def emb_table_gather_fmt(f : KqFmt) : bool => f == KqFmt.q8 || kq_dense_b32(f) || emb_kq_gather_fmt(f)
+
+//! The rows of `nrows` token ids (btok at toff) off the table plane `fmt` at element `off`, `width` elements a row under `escale`, into
+//! bx at xoff: the token table's gather and the E-series per-layer table's (layers x ple under sqrt(ple)); the q8 copy's stamp
+//! reads the width and the scale off the uniforms `bwidth` / `bescale` (null = 1)
+def enc_embed_table(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; off, width : int64; escale : float; btok : MetalBuffer?; toff : uint64;
+                    bx : MetalBuffer?; xoff : uint64; nrows : int64; bwidth, bescale : MetalBuffer?) {
+    if (fmt == KqFmt.q8) {
+        let bemb = blob_of(g_dev, t, off)
+        enc_embed(enc, bemb.buf, bemb.boff, btok, bx, bwidth, bescale, width, toff, xoff, nrows)
+    } elif (kq_dense_b32(fmt)) {
+        let qp = b32_planes_of(g_dev, t, fmt, off)
+        var ka = EmbedKqArgs(dim = uint(width), nsb = uint(width / KQ_B32_ELEMS), escale = escale)
+        let units = width / 16l
+        if (fmt == KqFmt.q51) {
+            enc_embed_b32_q51(enc, qp.sbuf, qp.soff, qp.qbuf, qp.qoff, btok, toff, bx, xoff, ka, units, nrows)
+        } elif (fmt == KqFmt.iq4nl32) {
+            enc_embed_b32_iq4nl32(enc, qp.sbuf, qp.soff, qp.qbuf, qp.qoff, btok, toff, bx, xoff, ka, units, nrows)
+        } elif (fmt == KqFmt.q5032) {
+            enc_embed_b32_q5032(enc, qp.sbuf, qp.soff, qp.qbuf, qp.qoff, btok, toff, bx, xoff, ka, units, nrows)
+        } else {
+            enc_embed_b32_q4032(enc, qp.sbuf, qp.soff, qp.qbuf, qp.qoff, btok, toff, bx, xoff, ka, units, nrows)
+        }
+    } else {
+        let bq = kq_quants_of(g_dev, t, fmt, off)
+        let bs = kq_scales_of(g_dev, t, fmt, off)
+        enc_embed_kq_rows(enc, fmt, bq.buf, bq.qoff, bs.buf, bs.soff, bs.doff, btok, toff, bx, xoff, width, nrows, escale)
+    }
+}
 
 //! the K-quant table rows of `nrows` token ids (btok at toff) into bx at xoff, row stride dim: the scale buffer binds as the
 //! d halves (the compact block at soff, the split plane's d tail at doff) and as the sub-scale strips, the quant plane once
@@ -5458,6 +5476,7 @@ def metal_kernels_release {
         g_pso_kq_mvb2h_k2, g_pso_kq_mvb4h_k2, g_pso_kq_mvb8h_k2, g_pso_kq_mvb2h_iq2s, g_pso_kq_mvb4h_iq2s, g_pso_kq_mvb8h_iq2s,
         g_pso_kq_mvb2h_iq2xs, g_pso_kq_mvb4h_iq2xs, g_pso_kq_mvb8h_iq2xs, g_pso_kq_mvb2h_iq2xxs, g_pso_kq_mvb4h_iq2xxs, g_pso_kq_mvb8h_iq2xxs)
     release_handles(g_pso_addrms, g_pso_preaddrms, g_one, g_zero, g_pso_geglu, g_pso_geglu_hx)
+    release_handles(g_pso_geglu_side, g_pso_ple_proj_bf16, g_pso_ple_proj_bf16_one, g_pso_ple_finish)
     release_handles(g_pso_ln, g_pso_bias_act, g_pso_act_rows, g_pso_posadd, g_pso_q3v_stem, g_pso_clamp, g_pso_clamp_copy)
     release_handles(g_pso_rope2d, g_pso_head_pad, g_pso_head_unpad, g_pso_geglu_quick, g_pso_wdec_kv, g_pso_wdec_kv_h)
     release_handles(g_pso_im2col2d, g_pso_wdec_attn_part, g_pso_wdec_attn_comb, g_pso_bias_add_res)
@@ -6995,6 +7014,111 @@ class MetalMoeRouterB : MetalMoeRouterT {
         if (row < pa.ne) {
             router_row(row, gl_SubgroupInvocationID, gl_SubgroupSize)
         }
+    }
+}
+
+//! The per-layer-embedding pre-step's projection off the native-BF16 rows: the router GEMV's bf16 word form (`GkRouterGemv`) in the
+//! position-blocked stamp's shape - a simdgroup a row, eight columns a simdgroup (the finish applies the 1/sqrt(dim))
+[metal_dispatch(name = "enc_ple_proj_bf16", pso = "g_pso_ple_proj_bf16", tg = 128, grid = "ne/4, nst/8", params = "ne : int64, nst : int64")]
+class MetalPleProjBf16 : GkRouterGemv {
+    typedef KT = uint
+    typedef XT = float
+    override VW = 2u
+    override BF16 = true
+    override ROW_WG = false
+    override COL_CLAMP = true
+    override NC = 8
+
+    [metal_kernel(name="metal_ple_proj_bf16_msl")]
+    def metal_ple_proj_bf16 {
+        let row = gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID
+        if (row < pa.ne) {
+            router_row(row, gl_SubgroupInvocationID, gl_SubgroupSize)
+        }
+    }
+}
+
+//! the decode column's stamp of the same: a threadgroup of 256 a row, as the f32 router's one-column stamp reads its rows
+[metal_dispatch(name = "enc_ple_proj_bf16_one", pso = "g_pso_ple_proj_bf16_one", tgmem = "metal_ple_proj_bf16_one_msl_tgmem", tg = 256, grid = "ne, nst", params = "ne : int64, nst : int64")]
+class MetalPleProjBf16One : GkRouterGemv {
+    typedef KT = uint
+    typedef XT = float
+    override VW = 2u
+    override BF16 = true
+    override NC = 1
+
+    [metal_kernel(name="metal_ple_proj_bf16_one_msl")]
+    def metal_ple_proj_bf16_one {
+        router_row(gl_WorkGroupID.x, gl_LocalInvocationID.x, 256u)
+    }
+}
+
+//! the E-series pre-step serves on the device for this blob model: its table in a format the gather family serves, bound at
+//! whole superblocks (a per-32 pair's binds stay 16-byte aligned), a ple width the finish's threadgroup takes
+def metal_ple_dev_ok(t : Model) : bool {
+    return false if (!has_ple(t.config) || !t.metal_blob || t.planes_trimmed)
+    let ple = t.config.n_embd_per_layer
+    let all = t.config.n_layers * ple
+    let aligned = t.ple_emb_fmt == KqFmt.q8 || (all % 256l == 0l && t.ple_emb_off % 256l == 0l)
+    return emb_table_gather_fmt(t.ple_emb_fmt) && aligned && ple % 32l == 0l && ple <= 1024l
+}
+
+//! The E-series pre-step on the device over `nrows` rows - the CPU's `ple_gather_rows` + `ple_pre_finish`: the side rows off the table
+//! at the token ids in `btok` into `bple`, the embedded rows `bx` projected into `bproj` (bf16 rows, else the f32 router GEMV), the
+//! finish; `ball` / `bsq` the layers x ple and sqrt(ple) uniforms
+def enc_ple_pre_dev(enc : MetalComputeEncoder?; t : Model; btok : MetalBuffer?; toff : uint64; bx, bple, bproj, ball, bsq : MetalBuffer?; nrows : int64) {
+    let c = t.config
+    let ple = c.n_embd_per_layer
+    let all = c.n_layers * ple
+    enc_embed_table(enc, t, t.ple_emb_fmt, t.ple_emb_off, all, sqrt(float(ple)), btok, toff, bple, 0ul, nrows, ball, bsq)
+    var ka = moe_router_args(all, c.dim, nrows)
+    if (t.ple_model_bf16) {
+        let bw = plane_of(g_dev, t, t.bf16blob, t.ple_model_off)
+        ka.woff = uint(bw.boff / 2ul)
+        if (nrows == 1l) {
+            enc_ple_proj_bf16_one(enc, bw.buf, bx, bproj, ka, all, 1l)
+        } else {
+            enc_ple_proj_bf16(enc, bw.buf, bx, bproj, ka, all, nrows)
+        }
+    } else {
+        var bw = upload_region(unsafe(addr < void? >(t.fblob[t.ple_model_off])), uint64(all * c.dim * 4l))
+        enc_moe_router(enc, bw, bx, bproj, g_one, ka, all, nrows)
+    }
+    var bpn = upload_region(unsafe(addr < void? >(t.fblob[t.ple_pnorm_off])), uint64(ple * 4l))
+    enc_ple_finish(enc, bproj, bpn, bple, ple_ka(nrows, ple, c.n_layers, c.dim, c.norm_eps), c.n_layers, nrows, ple)
+}
+
+//! the per-layer-embedding pre-step's args: `npos` rows of `nlayers` slices of `ple`
+struct PleArgs {
+    npos : uint
+    ple : uint
+    nlayers : uint
+    inv_sd : float      //!< 1/sqrt(dim)
+    eps : float
+    inv_s2 : float      //!< 1/sqrt(2)
+}
+
+def ple_ka(npos, ple, nlayers, dim : int64; eps : float) : PleArgs => (
+    PleArgs(npos = uint(npos), ple = uint(ple), nlayers = uint(nlayers), inv_sd = 1.0 / sqrt(float(dim)), eps = eps, inv_s2 = 1.0 / sqrt(2.0)))
+
+//! The pre-step's finish, a threadgroup a (layer, row) slice, in place on the position-major side rows:
+//! side = (side + pnorm * rms(proj * inv_sd)) * inv_s2 - the CPU's `ple_pre_finish` after its gather
+[metal_dispatch(name = "enc_ple_finish", pso = "g_pso_ple_finish", tgmem = "metal_ple_finish_msl_tgmem", tg = "ple", grid = "nlayers, npos", params = "nlayers : int64, npos : int64, ple : int64")]
+class MetalPleFinish : MetalTgReduceBase {
+    @ssbo @binding = 0 @role = "read" proj : array<float>  //!< [npos x n_layers*ple] position-major model_proj·embd
+    @ssbo @binding = 1 @role = "weight" pnorm : array<float> //!< [ple] proj-norm weight
+    @ssbo @binding = 2 @role = "readwrite" y : array<float>     //!< [npos x n_layers*ple] side input, in place
+    @uniform @binding = 4 ka : PleArgs
+
+    [metal_kernel(name="metal_ple_finish_msl")]
+    def metal_ple_finish {
+        let l = gl_WorkGroupID.x
+        let p = gl_WorkGroupID.y
+        let i = gl_LocalInvocationID.x      //! tg = ple threads (gate: ple % 32 == 0, <= 1024)
+        let at = p * (ka.nlayers * ka.ple) + l * ka.ple + i
+        let v = proj[at] * ka.inv_sd
+        let inv = tg_rms_inv(v * v, ka.ple, ka.eps)
+        y[at] = (y[at] + pnorm[i] * (v * inv)) * ka.inv_s2
     }
 }
 
@@ -11475,8 +11599,11 @@ def qk_norm_args(nq, nk, hs, rstride, soffe, koffe, woffe : uint; eps : float; x
 [ |> template_struct_instance]
 class template MetalEw2T {
     @ssbo @binding = 0 @role = "readwrite" @off = "goff" @span = "total*4" g : array<float>     // in place
-    @ssbo @binding = 1 @role = "read" @off = "uoff" @span = "total*4" u : array<float>
+    @ssbo @binding = 1 @role = "read" @off = "uoff" @span = "total*4" @template_gate = "!SIDE" u : array<float>
+    @ssbo @binding = 1 @role = "read" @off = "uoff" @template_gate = SIDE side : array<float>   //!< `SIDE`: rows of `side_len` elements `side_stride` apart
     @uniform @binding = 2 total : uint      // grid guard
+    @uniform @binding = 8 @template_gate = SIDE side_len : uint
+    @uniform @binding = 9 @template_gate = SIDE side_stride : uint
     @uniform @binding = 3 @template_gate = HAS_ASCALE ascale : float
     @ssbo @binding = 4 @role = "write" @template_gate = HX gh : array<float16>   // f16 twin of g (the dual-store stamps)
     @ssbo @binding = 5 @role = "read" @off = "toff" @template_gate = TOTB totb : array<uint>   // the device-side row count (the bucket rail's padded total)
@@ -11487,6 +11614,7 @@ class template MetalEw2T {
     @template_constant TOTB : bool = false
     @template_constant OUT : bool = false
     @template_constant ACT : int = 0   //!< the combine, spelled as its literal: 0 silu(a)*b, 1 gelu_tanh(a)*b, 2 (a+b)*ascale, 3 a*sigmoid(b)
+    @template_constant SIDE : bool = false   //!< the u side is a position-major side input: element e reads row e / side_len at its stride (`ActRqT.up_at`)
 
     def combine(a, b : float) : float {
         static_if (ACT == 0) {
@@ -11513,14 +11641,18 @@ class template MetalEw2T {
             }
         }
         let vv = g[gid]
-        let res = combine(vv, u[gid])
-        static_if (OUT) {
-            o[gid] = res
+        static_if (SIDE) {
+            g[gid] = combine(vv, side[(gid / side_len) * side_stride + gid % side_len])
         } else {
-            g[gid] = res
-        }
-        static_if (HX) {
-            gh[gid] = float16(res)
+            let res = combine(vv, u[gid])
+            static_if (OUT) {
+                o[gid] = res
+            } else {
+                g[gid] = res
+            }
+            static_if (HX) {
+                gh[gid] = float16(res)
+            }
         }
     }
 }
@@ -11547,6 +11679,14 @@ class MetalSwigluB : MetalEw2T {
 [metal_dispatch(name = "enc_geglu", pso = "g_pso_geglu", tg = 64, grid = "total/64", params = "total : int64")]
 class MetalGeglu : MetalEw2T {
     override ACT = 1
+}
+
+//! the geglu over the E-series' side rows, stored position-major [rows x layers*ple]: layer l's block at `uoff`, a row's slice
+//! `side_stride` past the one before
+[metal_dispatch(name = "enc_geglu_side", pso = "g_pso_geglu_side", tg = 64, grid = "total/64", params = "total : int64")]
+class MetalGegluSide : MetalEw2T {
+    override ACT = 1
+    override SIDE = true
 }
 
 [metal_dispatch(name = "enc_geglu_hxb", pso = "g_pso_geglu_hxb", tg = 64, grid = "total/64", params = "total : int64")]

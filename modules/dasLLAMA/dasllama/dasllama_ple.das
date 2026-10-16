@@ -92,8 +92,19 @@ def ple_gather_row(t : Model; row : int64; var dst : array<float>; doff : int64)
     }
 }
 
+var private g_ple_cpu_rows = 0l   //! the rows the CPU pre-step built (decode, prefill, the padded media form)
+
+//! the rows the CPU pre-step built since load: a device-served pre-step leaves it where it was
+def ple_cpu_pre_rows() : int64 => g_ple_cpu_rows
+
+var private g_ple_host_gather_rows = 0l
+
+//! the table rows the host gathered for a device to finish since load: a device that gathers off the ids leaves it where it was
+def ple_host_gather_rows() : int64 => g_ple_host_gather_rows
+
 // Decode pre-step: gather the single token's per-layer embedding row, then finish.
 def private ple_pre_decode_impl(t : Model; var s : Session; token : int64) {
+    g_ple_cpu_rows++
     ple_gather_row(t, token, s.ple_inp, 0l)
     ple_pre_finish(t, s, s.x, 1l)
 }
@@ -101,6 +112,7 @@ def private ple_pre_decode_impl(t : Model; var s : Session; token : int64) {
 //! Prefill pre-step: gather every position's per-layer embedding row, then finish (batched).
 //! Public as the late-decline fallback for a driver that claimed the pre-step via the gate.
 def private ple_pre_prefill_impl(t : Model; var s : Session; tokens : array<int64>; npos : int64) {
+    g_ple_cpu_rows += npos
     let all = t.config.n_layers * t.config.n_embd_per_layer
     for (p in range64(npos)) {
         ple_gather_row(t, tokens[p], s.ple_inp, p * all)
@@ -111,6 +123,7 @@ def private ple_pre_prefill_impl(t : Model; var s : Session; tokens : array<int6
 // Prefill-from-embeddings (multimodal) pre-step: no token ids, so the gather uses the padding token
 // (id 0) broadcast across positions.
 def private ple_pre_prefill_pad_impl(t : Model; var s : Session; npos : int64) {
+    g_ple_cpu_rows += npos
     let all = t.config.n_layers * t.config.n_embd_per_layer
     ple_gather_row(t, 0l, s.ple_inp, 0l)
     unsafe {
@@ -122,16 +135,42 @@ def private ple_pre_prefill_pad_impl(t : Model; var s : Session; npos : int64) {
     ple_pre_finish(t, s, s.x_b, npos)
 }
 
+//! one row through layer l's gate (dim -> ple) or projection (ple -> dim) in the plane's own format
+def private ple_mm(t : Model; var s : Session; var y : array<float>; x : array<float>; l : int64; proj : bool) {
+    let c = t.config
+    let n = proj ? c.n_embd_per_layer : c.dim
+    let d = proj ? c.dim : c.n_embd_per_layer
+    let pp = ple_plane(t, l, proj)
+    if (pp.f32) {
+        mm_fblob(y, t, pp.off, x, n, d)
+    } else {
+        mm_f(y, t, pp.f, pp.off, x, s.xq, s.xs, s.xbs, n, d)
+    }
+}
+
+//! `npos` rows through layer l's gate or projection, the batched form of `ple_mm`
+def private ple_mm_b(t : Model; var s : Session; var y : array<float>; x : array<float>; l, npos : int64; proj : bool) {
+    let c = t.config
+    let n = proj ? c.n_embd_per_layer : c.dim
+    let d = proj ? c.dim : c.n_embd_per_layer
+    let pp = ple_plane(t, l, proj)
+    if (pp.f32) {
+        mm_fblob_b(y, t, pp.off, x, n, d, npos)
+    } else {
+        mm_b_f(s, y, t, pp.f, pp.off, x, n, d, npos)
+    }
+}
+
 // Per-layer block (decode): cur += post_norm(proj · (gelu(inp_gate·cur) ⊙ ple_inp[l])). In place on s.x.
 def private ple_block_decode(t : Model; var s : Session; l : int64) {
     trace_tag(TRACE_TAG_PLE)
     let c = t.config
     let dim = c.dim
     let ple = c.n_embd_per_layer
-    mm(s.ple_gate, t, t.ple_gate_off + l * dim * ple, s.x, s.xq, s.xs, dim, ple)   // dim -> ple
+    ple_mm(t, s, s.ple_gate, s.x, l, false)
     gelu(s.ple_gate, ple)
     mul_inplace(unsafe(addr(s.ple_gate[0])), unsafe(addr(s.ple_inp[l * ple])), ple)  // ⊙ this layer's side input
-    mm(s.xb, t, t.ple_proj_off + l * ple * dim, s.ple_gate, s.xq, s.xs, ple, dim)   // ple -> dim
+    ple_mm(t, s, s.xb, s.ple_gate, l, true)
     rms_at(s.xb, t, t.ple_post_off + l * dim, s.xb, dim)
     add_inplace(unsafe(addr(s.x[0])), unsafe(addr(s.xb[0])), dim)   // residual (pe_in + projected)
 }
@@ -145,12 +184,12 @@ def private ple_block_prefill(t : Model; var s : Session; l : int64; npos : int6
     let dim = c.dim
     let ple = c.n_embd_per_layer
     let all = c.n_layers * ple
-    mm_b(s.ple_gate, t, t.ple_gate_off + l * dim * ple, s.x_b, s.xqb, s.xsb, dim, ple, npos)
+    ple_mm_b(t, s, s.ple_gate, s.x_b, l, npos, false)
     gelu(s.ple_gate, npos * ple)
     for (p in range64(npos)) {
         mul_inplace(unsafe(addr(s.ple_gate[p * ple])), unsafe(addr(s.ple_inp[p * all + l * ple])), ple)
     }
-    mm_b(s.xb_b, t, t.ple_proj_off + l * ple * dim, s.ple_gate, s.xqb, s.xsb, ple, dim, npos)
+    ple_mm_b(t, s, s.xb_b, s.ple_gate, l, npos, true)
     rms_batch(s.xb_b, s.xb_b, t, t.ple_post_off + l * dim, dim, npos)
     add_inplace(unsafe(addr(s.x_b[0])), unsafe(addr(s.xb_b[0])), npos * dim)
 }
@@ -564,6 +603,7 @@ def private ple_gather_rows_impl(t : Model; tokens : array<int64>; npos : int64;
         }
     }
     scale_inplace(unsafe(addr(dst[0])), sqrt(float(t.config.n_embd_per_layer)), npos * all)
+    g_ple_host_gather_rows += npos
 }
 
 [init]

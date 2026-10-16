@@ -375,6 +375,14 @@ def test_kq_fmt_row_demotion(t : T?) {
         t |> equal(kq_fmt_row_ok(KqFmt.k5, 704l), KqFmt.q8)
         t |> equal(kq_fmt_row_ok(KqFmt.iq4nl, 768l), KqFmt.iq4nl)
         t |> equal(kq_fmt_row_ok(KqFmt.q40, 768l), KqFmt.q40)
+        // the two other gemma widths off the superblock lattice: 1152 (gemma-3-1b dim), 2112 (gemma-4 26B dense down)
+        for (w in [1152l, 2112l]) {
+            t |> equal(kq_fmt_row_ok(KqFmt.q40, w), KqFmt.q4032, "q40 at {w}")
+            t |> equal(kq_fmt_row_ok(KqFmt.iq4nl, w), KqFmt.iq4nl32, "iq4nl at {w}")
+            t |> equal(kq_fmt_row_ok(KqFmt.k5, w), KqFmt.q8, "k5 at {w}")
+            t |> equal(kq_fmt_row_ok(KqFmt.q51, w), KqFmt.q51, "q51 at {w}")
+            t |> equal(kq_fmt_row_ok(KqFmt.q5032, w), KqFmt.q5032, "q5032 at {w}")
+        }
         // the 256-superblock disk formats never see a non-multiple row (the file cannot hold one)
         t |> equal(kq_fmt_row_ok(KqFmt.iq2xxs, 768l), KqFmt.iq2xxs)
     }
@@ -433,6 +441,29 @@ def test_gguf_need_tensor_refuses(t : T?) {
     }
 }
 
+[test]
+def test_gguf_decline_unread_types(t : T?) {
+    t |> run("a tensor of a type the reader has no arm for declines the load, naming the tensor and the type") @(t : T?) {
+        for (gt, name in [GGML_TYPE_Q4_1, GGML_TYPE_IQ1_S, GGML_TYPE_IQ1_M, GGML_TYPE_TQ1_0, GGML_TYPE_TQ2_0],
+                ["Q4_1", "IQ1_S", "IQ1_M", "TQ1_0", "TQ2_0"]) {
+            var m <- GGUFMeta(tensors <- [GGUFTensorInfo(name = "blk.0.ffn_up.weight", ggml_type = GGML_TYPE_Q8_0, n_elem = 256l),
+                GGUFTensorInfo(name = "blk.0.ffn_down.weight", ggml_type = gt, n_elem = 256l)])
+            let why = panic_text() ${
+                gguf_decline_unread_types(m)
+            }
+            t |> success(find(why, "blk.0.ffn_down.weight") >= 0 && find(why, "{name} on disk") >= 0, "{name}: the decline names the tensor and the type: {why}")
+            delete m
+        }
+        var served <- GGUFMeta(tensors <- [for (gt in [GGML_TYPE_F32, GGML_TYPE_BF16, GGML_TYPE_Q8_0, GGML_TYPE_Q4_K, GGML_TYPE_IQ2_XXS, GGML_TYPE_MXFP4]);
+            GGUFTensorInfo(name = "t{gt}", ggml_type = gt, n_elem = 256l)])
+        let none = panic_text() ${
+            gguf_decline_unread_types(served)
+        }
+        t |> equal(none, "", "a file of served types loads on")
+        delete served
+    }
+}
+
 //! the Metal per-32 GEMV family's block constants (`MetalBlk32GemvT`'s `BE`, `QW`, `SH`: the template's defaults and the q5_1
 //! stamps' overrides, spelled as literals in the kernel class) against the descriptor rows
 [test]
@@ -448,9 +479,6 @@ def test_metal_b32_block_constants(t : T?) {
         t |> equal(kq_ssb(KqFmt.q4032), 1l * 2l, "SH = 1 on q4032: its f16 d")
         t |> equal(kq_qsb(KqFmt.q5032), 5l * 4l, "B32W = 5 (MetalKqTileDecodeT's q5032 stamps) and QW = 5 (MetalEmbedB32Q5032, MetalMoeMulMmQ51TensorT): KQ_Q5032_QWORDS words a block")
         t |> equal(kq_ssb(KqFmt.q5032), 1l * 2l, "SH = 1 on q5032: its f16 d")
-        t |> equal(kq_qsb(KqFmt.q5032), int64(5u * 4u), "PW = 5 (MetalPleGatherB32T): q51's and q5032's quant words a block")
-        t |> equal(kq_ssb(KqFmt.q51), 2l * 2l, "PS = 2 on MetalPleGatherQ51: d | m")
-        t |> equal(kq_ssb(KqFmt.q5032), 1l * 2l, "PS = 1 on MetalPleGatherQ5032: its d")
         t |> equal(kq_qsb(KqFmt.q51), int64(5u * 4u),
             "B32W = 5 on the q51 tile stamps, QW = 5 on MetalEmbedB32Q51")
         t |> equal(kq_ssb(KqFmt.q51), int64(2u * 2u),
@@ -461,8 +489,8 @@ def test_metal_b32_block_constants(t : T?) {
 }
 
 //! the Metal K-quant token-table gathers' superblock constants
-//! (`MetalEmbedKqT`'s `SB_UINTS`, `MetalEmbedK45T`'s and
-//! `MetalPleGatherBaseT`'s `QH0`) against the descriptor rows
+//! (`MetalEmbedKqT`'s `SB_UINTS`, `MetalEmbedK45T`'s `QH0`) against
+//! the descriptor rows
 [test]
 def test_metal_kq_table_constants(t : T?) {
     t |> run("SB_UINTS and QH0 are a superblock's quant words and k5's qh strip start") @(t : T?) {

@@ -540,7 +540,7 @@ def private resident_emb_plane(t : Model) : tuple<on : bool; f : KqFmt; off : in
 }
 
 //! the table is fp32 rows holding the file's own values (F32 on disk, or F16/BF16 widened without loss), tied or untied: the f32
-//! gather's table; a Q4_1 table's fp32 rows are a dequant and stay the host's
+//! gather's table
 [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#vk-token-gather")]
 def private resident_emb_f32_want(t : Model) : bool => t.tok_emb_off >= 0l && t.emb_f32_exact && !t.planes_trimmed
 
@@ -826,11 +826,40 @@ def private push_layer_planes(t : Model; var planes : array<ResidentPlane>; l : 
     if (moe && experts) {
         push_expert_planes(t, planes, l)
     }
-    if (has_ple(c) && !recurrent) {
+    if (has_ple(c) && !recurrent) {   //! a kind that ships F32 rides its own f32 rows, no arena plane (`resident_ple_f32_rows`)
         let ple = c.n_embd_per_layer
-        planes |> push(ResidentPlane(n = dim, rows = ple, f = KqFmt.q8, off = t.ple_gate_off + l * dim * ple, role = ResidentRole.ple_gate, l = l))
-        planes |> push(ResidentPlane(n = ple, rows = dim, f = KqFmt.q8, off = t.ple_proj_off + l * ple * dim, role = ResidentRole.ple_proj, l = l))
+        let pg = ple_plane(t, l, false)
+        let pp = ple_plane(t, l, true)
+        if (!pg.f32) {
+            planes |> push(ResidentPlane(n = dim, rows = ple, f = pg.f, off = pg.off, role = ResidentRole.ple_gate, l = l))
+        }
+        if (!pp.f32) {
+            planes |> push(ResidentPlane(n = ple, rows = dim, f = pp.f, off = pp.off, role = ResidentRole.ple_proj, l = l))
+        }
     }
+}
+
+//! every layer's per-layer-embedding gate (or with `proj`, projection) rows in the file's f32, in layer order, where the kind
+//! ships F32; empty where it rides the arena
+def private resident_ple_f32_rows(t : Model; proj : bool) : array<float> {
+    let c = t.config
+    var rows : array<float>
+    if (!has_ple(c) || !(proj ? t.ple_proj_f32 : t.ple_gate_f32)) {
+        return <- rows
+    }
+    let per = c.dim * c.n_embd_per_layer
+    rows |> reserve_resize(c.n_layers * per)
+    for (l in range64(c.n_layers)) {
+        copy_floats(t.fblob, ple_plane(t, l, proj).off, rows, l * per, per)
+    }
+    return <- rows
+}
+
+//! the device bytes of the per-layer-embedding kinds that ship F32 (`resident_ple_f32_rows`), no arena block
+def private resident_ple_f32_bytes(t : Model) : int64 {
+    let c = t.config
+    let kinds = (t.ple_gate_f32 ? 1l : 0l) + (t.ple_proj_f32 ? 1l : 0l)
+    return has_ple(c) ? kinds * c.n_layers * c.dim * c.n_embd_per_layer * 4l : 0l
 }
 
 //! the whole model's weight planes in the order the upload places them (`resident_upload` walks this list): the
@@ -1169,6 +1198,7 @@ def resident_plan(t : Model; seq_cap : int64; kdt, vdt : KVDtype; hot_cap : int6
         p.weight_bytes += moe_gpu_plane_bytes(pl.n, pl.rows, int(pl.f))
     }
     p.weight_bytes += resident_dn_ba_f32_bytes(t)
+    p.weight_bytes += resident_ple_f32_bytes(t)
     p.weight_bytes += resident_router_bytes(c, n_moe)
     if (p.host_layers > 0l && rdec_hot_installed() && c.n_expert_used <= int64(RDEC_HOT_PICKS)) {
         let room = p.usable_bytes - p.weight_bytes - p.scratch_bytes
@@ -1402,6 +1432,8 @@ def resident_decline_reason(t : Model) : string {
     if (!empty(run)) return run
     let feats = resident_unserved_features(c)
     if (!empty(feats)) return "no arm for: {feats}"
+    let cls_why = resident_cls_decline(t)
+    if (!empty(cls_why)) return cls_why
     if (recurrent_layer_count(c) == c.n_layers) return "no attention layer (the whole-model driver serves attention or hybrid stacks)"
     if (c.hyper_conn && g_rdec_regions_want > 1l) return "hyper-connection residual (qwen4exp) - the split token command serves one mirror region"
     for (l in range64(c.n_layers)) {
@@ -1409,6 +1441,13 @@ def resident_decline_reason(t : Model) : string {
         if (!empty(why)) return why
     }
     return ""
+}
+
+//! the classifier's decline, "" where a device plane carries it: a tied token table whose disk type no `KqFmt` member carries (F32,
+//! F16, BF16) has no classifier plane past the Metal mode's q8 copy - the plan would seat a q8 plane where no bytes sit
+def resident_cls_decline(t : Model) : string {
+    return "" if (!t.config.shared_weights || t.cls_q8 || cls_kq(t) || t.cls_q8_copy)
+    return "the tied classifier: the token table's disk type (F32, F16 or BF16) has no classifier plane on the device (no word-GEMV arm reads the table's own rows) - the per-op rails serve"
 }
 
 //! the driver's run-mode declines - a prefill pinned or overridden away from it: the driver is all-or-nothing across prefill AND
@@ -1902,7 +1941,7 @@ def private resident_arm_emb(t : Model; plan : ResidentPlan; ple_tbl_placed : bo
         }
     } elif (!tied && !emb.on) {
         why = (t.planes_trimmed ? "the image trimmed the table's plane"
-            : "the table's fp32 rows carry no exact mark (`emb_f32_exact`: a Q4_1 dequant, a converted copy the host keeps, or a prepared image, which does not carry the mark)")
+            : "the table's fp32 rows carry no exact mark (`emb_f32_exact`: a prepared image does not carry the mark)")
     } elif (!tied && plan.emb_bytes == 0l) {
         why = "the table's own plane does not fit the room left past the weights and the K/V at this context"
     } elif (!tied && bemb < 0l) {
@@ -2318,7 +2357,13 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     var mir_slots : array<int64>
     mir_slots |> reserve_resize(c.n_layers)
     let ple = has_ple(c) ? c.n_embd_per_layer : 0l
-    if (ple > 0l && !rdec_set_ple(ple)) return rdec_decline("the per-layer-embedding width {ple} is not a 32-multiple")
+    if (ple > 0l) {
+        var inscope gate_f32 <- resident_ple_f32_rows(t, false)
+        var inscope proj_f32 <- resident_ple_f32_rows(t, true)
+        if (!rdec_set_ple(ple, gate_f32, proj_f32)) {
+            return rdec_decline("the per-layer-embedding seats declined: the width {ple} is not a 32-multiple, or the f32 rows' router GEMV and act found no class")
+        }
+    }
     var ple_tbl_placed = false
     if (plan.ple_tbl_bytes > 0l) {
         //! the table sits in disk order in its own plane, outside the weights' repack: linear q8 rows, or the disk-order superblock and per-32 blocks
@@ -2412,28 +2457,35 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
                 int(lf.fq), int(lf.fk), int(lf.fv), int(lf.fo), int(lf.f1), int(lf.f3), int(lf.f2), g)
         }
         if (ple > 0l) {
-            let bpg = place_plane(t, planes, cur, ResidentRole.ple_gate, l, mr, kg, wb)
-            let bpp = place_plane(t, planes, cur, ResidentRole.ple_proj, l, mr, kg, wb)
-            if (bpg < 0l || bpp < 0l) return rdec_decline("arena placement failed at layer {l} (the per-layer-embedding planes)")
-            rdec_set_ple_layer(l, bpg, bpp, int(KqFmt.q8))
+            let pg = ple_plane(t, l, false)
+            let pp = ple_plane(t, l, true)
+            let bpg = pg.f32 ? -1l : place_plane(t, planes, cur, ResidentRole.ple_gate, l, mr, kg, wb)
+            let bpp = pp.f32 ? -1l : place_plane(t, planes, cur, ResidentRole.ple_proj, l, mr, kg, wb)
+            if ((!pg.f32 && bpg < 0l) || (!pp.f32 && bpp < 0l)) return rdec_decline("arena placement failed at layer {l} (the per-layer-embedding planes)")
+            rdec_set_ple_layer(l, bpg, bpp, int(pg.f), int(pp.f))
         }
         if (!kvsh) {
             mir_idx++
         }
     }
-    if (ple > 0l) {   //! the pre-step's projection on device where the driver takes it (the cm2 f16 GEMM, or the KHR twin off cm2); the CPU pre-step serves otherwise
+    if (ple > 0l) {   //! the pre-step's projection on device off the file's own rows - bf16, or f32
         let all = c.n_layers * ple
-        var w : array<float>
-        w |> reserve_resize(all * dim)   // E4B: 27.5M floats - the guard wants the final size reserved first
+        var w16 : array<uint16>
+        var w32 : array<float>
         if (t.ple_model_bf16) {
-            widen_bf16(unsafe(addr(w[0])), unsafe(addr<uint16 const?>(t.bf16blob[t.ple_model_off])), all * dim)
+            w16 |> reserve_resize(all * dim)   // E4B: 27.5M halves - the guard wants the final size reserved first
+            unsafe {
+                memcpy(addr(w16[0]), addr<uint16 const?>(t.bf16blob[t.ple_model_off]), all * dim * 2l)
+            }
         } else {
-            copy_floats(t.fblob, t.ple_model_off, w, 0l, all * dim)
+            w32 |> reserve_resize(all * dim)
+            copy_floats(t.fblob, t.ple_model_off, w32, 0l, all * dim)
         }
         var pnorm <- fblob_rows(t, t.ple_pnorm_off, ple)
-        let on = rdec_set_ple_proj(w, pnorm, all)
+        let on = rdec_set_ple_proj(w16, w32, pnorm, all)
         to_log(LOG_INFO, "dasLLAMA: resident driver: the per-layer-embedding pre-step's projection {on ? "runs on device" : "stays on the CPU"}\n")
-        delete w
+        delete w16
+        delete w32
         delete pnorm
     }
     let bcls = place_plane(t, planes, cur, ResidentRole.cls, -1l, mr, kg, wb)
@@ -3009,7 +3061,8 @@ def gpu_resident_assist_verify(t : Model; var sessions : array<Session?>; toks :
         if (c.embed_scale != 1.0) {
             scale_inplace(unsafe(addr(g_rdec_x_n[0])), c.embed_scale, dim * rows)
         }
-        rdec_token_n(g_rdec_x_n, g_rdec_cos_n, g_rdec_ple_rows, false, g_rdec_poss, g_rdec_cnts, g_rdec_regs, rows, g_rdec_lrows, g_rdec_picks)
+        g_rdec_side_ids |> clear()   //! the assistant verify serves no per-layer-embedding model, so the rows gather no side rows
+        rdec_token_n(g_rdec_x_n, g_rdec_cos_n, g_rdec_ple_rows, false, g_rdec_side_ids, g_rdec_poss, g_rdec_cnts, g_rdec_regs, rows, g_rdec_lrows, g_rdec_picks)
         g_rdec_av_hid |> grow_resize(dim)
         row = 0l
         for (g in range64(g0, g1)) {
@@ -3484,9 +3537,17 @@ def private vulkan_resident_decode_go(t : Model; var s : Session; token, pos : i
         }
         rdec_land_pick(s, rdec_token_split_host(t, s, pos, cnt, s.pick_asked, s.logits))
     } elif (s.ple_gpu_pending) {
-        g_rdec_one_tok |> resize(1l)
-        g_rdec_one_tok[0] = token
-        resident_prefill_ple_rows(t, g_rdec_one_tok, 1l)
+        if (gathered) {   //! the one-row command gathers the side row off the token id, as the embed row (the table rides the device with it)
+            if (!s.sampled && pos + 2l <= g_rdec_cap && rdec_chain_wanted()) {
+                g_rdec_cossin_next |> grow_resize(g_rdec_cos_elems)
+                rdec_rope_rows(t, pos + 1l + s.rope_pos_delta, g_rdec_cossin_next, 0l)
+                rdec_chain_ask(g_rdec_cossin_next)
+            }
+        } else {
+            g_rdec_one_tok |> resize(1l)
+            g_rdec_one_tok[0] = token
+            resident_prefill_ple_rows(t, g_rdec_one_tok, 1l)
+        }
         rdec_land_pick(s, rdec_token(g_rdec_x, g_rdec_cossin, g_rdec_ple_rows, gathered ? token : -1l, pos, cnt, s.pick_asked, s.logits))
         s.ple_gpu_pending = false
     } else {
@@ -4138,9 +4199,9 @@ def private rdec_host_experts_rows(l : int64; xb : float const?; logits : float 
     }
 }
 
-//! ONE gate for both PLE pre-step seats, taken when the armed driver holds the projection:
-//! forward_prefill's, where the token ids land in the session's stash and the prefill override gathers the table rows,
-//! and the decode seat's, where the token command gathers the step's own row on device.
+//! ONE gate for both PLE pre-step seats, taken when the armed driver holds the projection: forward_prefill's (the ids window
+//! gathers the table rows on device, the x window finishes the host's) and the decode seat's (the one-row token command gathers
+//! the step's own row off its id; the N-row command and the peel finish host-gathered rows)
 [unused_argument(s, npos, start_pos)]
 def private vulkan_ple_gate(t : Model; s : Session; npos, start_pos : int64) : bool
     => g_rdec_active && has_ple(t.config) && rdec_ple_proj_on()
@@ -4334,12 +4395,13 @@ def private rdec_segs_gather(t : Model; var segs : array<PrefillSeg>; ids : bool
     return total
 }
 
-//! the segmented window holds a model whose side rows, wide residual, host experts and staged rows are not per call - a recurrent
-//! segment steps its own region's state, a routed block routes every row of the window, a NextN carry lands a row a segment
+//! the segmented window holds a model whose wide residual, host experts and staged rows are not per call - a recurrent segment steps
+//! its own region's state, a routed block routes every row of the window, a NextN carry lands a row a segment, and an E-series
+//! window gathers and finishes every segment's side rows off their ids on the device (the table and the projection placed)
 def private rdec_segs_model_fits(t : Model) : bool {
     let c = t.config
     let codec_ok = g_rdec_kvdt == KVDtype.f16 || g_rdec_kvdt == KVDtype.f32
-    return codec_ok && !has_ple(c) && !c.hyper_conn && !g_rdec_experts_host
+    return codec_ok && (!has_ple(c) || (g_rdec_emb_gpu && rdec_ple_proj_on())) && !c.hyper_conn && !g_rdec_experts_host
 }
 
 //! A device-home scheduler's tick hands `t`'s prefilling streams to the segmented window: the armed driver has the form and the model's chain holds several sessions a window.
@@ -4356,6 +4418,10 @@ def private vulkan_resident_prefill_segments(t : Model; var segs : array<Prefill
         return false
     }
     let ids = segs[0].s.embed_gpu_pending
+    if (has_ple(c) && !ids) {   //! the side rows ride the window off the segments' ids alone
+        rdec_segs_declined("a per-layer-embedding window whose rows the host embedded (the side rows gather off the segments' ids)")
+        return false
+    }
     return false if (!rdec_segs_admitted(t, segs, ids) || !rdec_segs_regions(t, segs))
     let total = rdec_segs_gather(t, segs, ids)
     let vocab = long_length(segs[0].s.logits)
@@ -4515,7 +4581,6 @@ def moe_gpu_resident_peels() : int64 => g_rdec_peels
 //! carry are per call - or "" where the chain's shape fits; the host experts' arm reads the armed plan (`rdec_peel_fits`).
 def rdec_peel_shape_why(c : Config) : string {
     if (c.hyper_conn) return "a hyper-connection chain"
-    if (has_ple(c)) return "a per-layer-embedding model"
     return c.recr_mask != 0ul && !rdec_token_seq_installed() ? "a recurrent model (no in-order rows command installed)" : ""
 }
 
@@ -4547,6 +4612,7 @@ def private rdec_prefill_peel(t : Model; var s : Session; r, npos, start_pos : i
     let ce = g_rdec_cos_elems
     g_rdec_x_n |> grow_resize(dim * npos)
     g_rdec_cos_n |> grow_resize(ce * npos)
+    let text_ids = s.embed_gpu_pending   //! the rows are the prompt's own ids, embedded off the table
     if (s.embed_gpu_pending) {
         embed_text_rows(t, s.embed_gpu_tokens, g_rdec_x_n, 0l)
         s.embed_gpu_pending = false
@@ -4555,9 +4621,29 @@ def private rdec_prefill_peel(t : Model; var s : Session; r, npos, start_pos : i
     }
     resident_prefill_rope_rows(t, s.rope_pos_delta + start_pos, npos, ce, g_rdec_cos_n)
     g_rdec_ple_rows |> clear()
+    g_rdec_side_ids |> clear()
+    var ple_raw = false   //! the commands finish the gathered side rows where the projection rides the device; the CPU's finished rows else
+    if (has_ple(c)) {
+        if (s.ple_gpu_pending) {
+            if (g_rdec_emb_gpu && text_ids && c.recr_mask == 0ul) {   //! the token commands gather the side rows off the ids
+                g_rdec_side_ids |> push_from(s.ple_gpu_tokens)
+                g_rdec_side_ids |> resize(npos)
+            } else {
+                resident_prefill_ple_rows(t, s.ple_gpu_tokens, npos)
+            }
+            s.ple_gpu_pending = false
+            ple_raw = true
+        } else {
+            let all = npos * c.n_layers * c.n_embd_per_layer
+            g_rdec_ple_rows |> reserve(all)
+            g_rdec_ple_rows |> resize(all)
+            copy_floats(s.ple_inp, 0l, g_rdec_ple_rows, 0l, all)
+        }
+    }
     rdec_select_region(r)
     if (npos == 1l) {
-        rdec_token(g_rdec_x_n, g_rdec_cos_n, g_rdec_ple_rows, -1l, start_pos, start_pos + 1l, false, s.logits)
+        let tok = empty(g_rdec_side_ids) ? -1l : g_rdec_side_ids[0]
+        rdec_token(g_rdec_x_n, g_rdec_cos_n, g_rdec_ple_rows, tok, start_pos, start_pos + 1l, false, s.logits)
     } elif (c.recr_mask != 0ul) {   //! one region's rows: a recurrent layer steps them in order in its slot
         rdec_token_seq(g_rdec_x_n, g_rdec_cos_n, start_pos, npos, s.logits)
     } else {
@@ -4565,7 +4651,7 @@ def private rdec_prefill_peel(t : Model; var s : Session; r, npos, start_pos : i
         for (i in range64(npos)) {   //! a row before the last lands its pick alone, which nobody reads
             rdec_row_plane(i, start_pos + i, r, i == npos - 1l ? unsafe(addr(s.logits[0])) : null)
         }
-        rdec_token_n(g_rdec_x_n, g_rdec_cos_n, g_rdec_ple_rows, false, g_rdec_poss, g_rdec_cnts, g_rdec_regs, npos, g_rdec_lrows, g_rdec_picks)
+        rdec_token_n(g_rdec_x_n, g_rdec_cos_n, g_rdec_ple_rows, ple_raw, g_rdec_side_ids, g_rdec_poss, g_rdec_cnts, g_rdec_regs, npos, g_rdec_lrows, g_rdec_picks)
     }
     g_rdec_peels++
 }
@@ -4602,8 +4688,8 @@ def private rdec_batch_rows_served(t : Model; ws : BatchWorkspace; sessions : ar
     return true
 }
 
-//! the side-input rows of `n` tokens for the token command, into `g_rdec_ple_rows`: the table rows gathered on device where
-//! the device projects, else the pre-step's finished rows from `src_off` of the workspace's rows (position-major either way)
+//! the side-input rows of `n` tokens for the N-row command, into `g_rdec_ple_rows`: the table rows the host gathers for the device
+//! to finish where the device projects, else the pre-step's finished rows from `src_off` of the workspace's rows (position-major)
 def private rdec_ple_side_rows(t : Model; tokens : array<int64>; n : int64; ws : BatchWorkspace; src_off : int64) {
     if (rdec_ple_proj_on()) {
         resident_prefill_ple_rows(t, tokens, n)
@@ -4654,7 +4740,7 @@ def private rdec_region_repeats(regs : array<int64>; n, r : int64) : bool {
 }
 
 var private @scratch g_rdec_bregs : array<int64>   //! a batched step's region a row, bound before its first group runs
-var private @scratch g_rdec_grp_toks : array<int64>
+var private @scratch g_rdec_side_ids : array<int64>   //! the token commands' rows' ids where the device gathers their side rows; empty, the host's rows
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
 def private rdec_batch_rows_at_once(t : Model; ws : BatchWorkspace; var sessions : array<Session?>; nrows : int64) : bool {
@@ -4712,12 +4798,13 @@ def private rdec_batch_group(t : Model; ws : BatchWorkspace; var sessions : arra
     g_rdec_x_n |> grow_resize(dim * nrows)
     g_rdec_cos_n |> grow_resize(ce * nrows)
     let ple_raw = rdec_ple_proj_on()
-    if (has_ple(c)) {
-        g_rdec_grp_toks |> resize(nrows)
-        for (i in range64(nrows)) {
-            g_rdec_grp_toks[i] = ws.row_tokens[row0 + i]
-        }
-        rdec_ple_side_rows(t, g_rdec_grp_toks, nrows, ws, row0 * c.n_layers * c.n_embd_per_layer)
+    g_rdec_side_ids |> resize(has_ple(c) ? nrows : 0l)
+    for (i in range64(long_length(g_rdec_side_ids))) {
+        g_rdec_side_ids[i] = ws.row_tokens[row0 + i]
+    }
+    if (has_ple(c) && !g_rdec_emb_gpu) {   //! with the table on the device the command gathers each row's side row off its id
+        rdec_ple_side_rows(t, g_rdec_side_ids, nrows, ws, row0 * c.n_layers * c.n_embd_per_layer)
+        g_rdec_side_ids |> clear()
     }
     rdec_rows_planes(nrows)
     for (i in range64(nrows)) {
@@ -4728,7 +4815,7 @@ def private rdec_batch_group(t : Model; ws : BatchWorkspace; var sessions : arra
     }
     prof_add("nrow_prep", ts_prep)
     let ts_gpu = prof_ticks()
-    rdec_token_n(g_rdec_x_n, g_rdec_cos_n, g_rdec_ple_rows, ple_raw, g_rdec_poss, g_rdec_cnts, g_rdec_regs, nrows, g_rdec_lrows, g_rdec_picks)
+    rdec_token_n(g_rdec_x_n, g_rdec_cos_n, g_rdec_ple_rows, ple_raw, g_rdec_side_ids, g_rdec_poss, g_rdec_cnts, g_rdec_regs, nrows, g_rdec_lrows, g_rdec_picks)
     prof_add("nrow_gpu", ts_gpu)
     let ts_land = prof_ticks()
     for (i in range64(nrows)) {
@@ -4758,10 +4845,10 @@ def private rdec_batch_one_row(t : Model; ws : BatchWorkspace; var s : Session; 
     rdec_select_region(r)
     copy_floats(ws.scr.x_b, i * dim, g_rdec_x, 0l, dim)
     rdec_rope_rows(t, ws.rope_positions[i], g_rdec_cossin, 0l)
-    if (has_ple(c)) {
+    let tok = (g_rdec_emb_gpu && i < long_length(ws.row_tokens)) ? ws.row_tokens[i] : -1l
+    if (has_ple(c) && tok < 0l) {   //! a row with its id on the device gathers its side row there
         rdec_batch_ple_row(t, ws, i)
     }
-    let tok = (g_rdec_emb_gpu && i < long_length(ws.row_tokens)) ? ws.row_tokens[i] : -1l
     let picked = g_rdec_experts_host ? rdec_token_split_host(t, s, pos, pos + 1l, s.pick_asked, g_rdec_tmp) : rdec_token(g_rdec_x, g_rdec_cossin, g_rdec_ple_rows, tok, pos, pos + 1l, s.pick_asked, g_rdec_tmp)
     rdec_stash_carry(c, s, 0l, pos + 1l)
     if (!s.device_kv) {
@@ -4829,7 +4916,7 @@ def resident_driver_register() {
     register_mtp_verify_override("vulkan", @@vulkan_resident_verify)
     register_mtp_rollback_override("vulkan", @@vulkan_resident_rollback)
     register_ple_gpu_gate(@@vulkan_ple_gate)
-    register_ple_gpu_decode_gate(@@vulkan_ple_gate)   //! the token command gathers the row on device too
+    register_ple_gpu_decode_gate(@@vulkan_ple_gate)   //! the one-row token command gathers the row on device too
     register_prefill_override_split_span("vulkan")
     register_gpu_upload_resident(@@moe_gpu_upload_resident)
     set_moe_gpu_slice_window_fn(@@vk_slice_window_provider)

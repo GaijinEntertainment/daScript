@@ -40,7 +40,7 @@ require dasllama/dasllama_gemm_schema   // the q8 block geometry the mint's zero
 // WhisperModel.enc) contribute their planes under dotted names ("enc.fblob"); string-array
 // fields ride the meta blob via serialize_strings — raw string pointers can't be planes.
 
-let IMAGE_VERSION = 49   // the q5032 plane pair rides the image and a Q5_0 plane keeps its bytes at every site
+let IMAGE_VERSION = 50   // the per-layer-embedding gate and projection planes ride their file formats' planes, or the file's f32 rows
 
 //! The metal (blob-only) flavor's identity tag: q8 planes ride the 34B block_q8_0 blob and the
 //! kq scale planes their GPU forms (convert_model_to_metal_blob) — flavors are per-config and
@@ -784,8 +784,8 @@ def serialize_image_meta(var arch : Archive; var t : Model) {
     arch |> serialize_raw(t.ple_emb_off)
     arch |> serialize_raw(t.ple_model_off)
     arch |> serialize_raw(t.ple_pnorm_off)
-    arch |> serialize_raw(t.ple_gate_off)
-    arch |> serialize_raw(t.ple_proj_off)
+    arch |> serialize_raw(t.ple_gate_f32)
+    arch |> serialize_raw(t.ple_proj_f32)
     arch |> serialize_raw(t.ple_post_off)
     arch |> serialize_raw(t.wscale_f16)
     arch |> serialize_raw(t.metal_blob)

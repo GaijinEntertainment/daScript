@@ -40,23 +40,6 @@
    holding raw session pointers; plus `metal_decode_flush` calls at the test helpers' teardown as
    the interim belt.
 
-4. **The GPU-PLE prefill pre-step never engages on the E4B even though the model qualifies.**
-   The census (family-scoped E4B row, metal prefill serving on device - `attn_qk_mm` counted)
-   shows `metal_ple_gather_q8`, `metal_ple_finish`, and `metal_bf16_mulmm` at zero, yet every
-   static leg of `metal_ple_pre_gpu_gate` holds for the E4B gguf: `per_layer_model_proj` is
-   native BF16, `per_layer_token_embd` is Q8_0, ple=256 passes the shape gates, and the prefill
-   itself did not decline. So the gate returns false on a dynamic leg (consult-time override /
-   `prefill_decline` / `metal_prefill_init` ordering) - the PLE pre-step silently runs its CPU
-   fallback (`ple_pre_prefill`) on every metal prefill window. Done = instrument the gate legs,
-   find the refusing one, fix or document it, and the census E4B row counts all three kernels.
-   One hypothesis is ELIMINATED: the census is not blind to graph-captured dispatches -
-   `kn_pipeline` counts on the immediate path and `gr_encode_node` counts again on replay
-   (`dasllama_metal_common.das:1402`), so a captured dispatch is still tallied. The zero is real.
-   Consequence for reviewers: these three kernels have NO runtime coverage, so a change to them
-   (the PleArgs kargs fold is one) can only be verified structurally - emitted-MSL signature plus
-   bind-list-vs-signature match - until this gap closes or a synthetic gate lands the way
-   `moe_mulmm_q51_gate` does for the gathered q51 mul_mm.
-
 5. **The metal kernel zoo carries four different rope addressing schemes.** Factoring the
    sq_attn family showed the rope-store family does NOT share one skeleton the way attention
    did - its eleven kernels split four ways: pair-per-thread WITH partial rotation
@@ -1575,8 +1558,9 @@
 144. **A 16-bit weight file never serves in its own format.** A bf16 or f16 GGUF (Qwen3-8B-BF16
     on the M5) is requantized to q8 at load under the default mode, and the fp32 mode widens it
     to f32, which the Metal blob form declines, so it serves on the CPU alone; the only native
-    16-bit region is the gemma-4 E-series per-layer-embedding projection, which the
-    `metal_bf16_mulmm` stamps serve. The Metal sweep's bf16 row therefore has no like-for-like
+    16-bit region is the gemma-4 E-series per-layer-embedding projection, which the bf16 word form
+    of `GkRouterGemv` serves at decode on both homes and the `metal_bf16_mulmm` stamps serve in the
+    Metal window. The Metal sweep's bf16 row therefore has no like-for-like
     pair: llama.cpp runs the bf16 weights, das the q8 requant (`followup_metal.md` sec.7).
     Unquirked, one day, because a bf16 file is what a model ships as before anyone quantizes it:
     the loader keeps bf16/f16 planes in their format under a 16-bit quant mode, the dense prefill
@@ -1922,10 +1906,6 @@
    scoring 0` for both arms and then scores them anyway (the mint on `i-02a87cabc8fcd2e4c`
    confirmed the q8 bf16 crown on those scores). Done = the child's stamp line reaches the parser,
    or the check is dropped as the dead code it is.
-186. **A Q4_1 tensor refuses the load.** bartowski's `Llama-3.2-1B-Instruct-Q4_0.gguf` keeps
-   `ffn_down` at Q4_1 (GGUF type 3), and the loader stops at `type 3 not supported`; the reference
-   build's Q4_0 carriers routinely mix one. Done = Q4_1 decoded to the q51-style per-32 (d, m) plane, or the
-   loader names the tensor and the format it wants re-quantized to.
 188. **The bf16 panel scatter is written three times.** The
    folds left unapplied: the int8 walk inside `kq_batch_cell_gen` onto `bf16_walk` (the same
    control flow at one group and the tile's four tokens, and since the walk's `tile4` arm the

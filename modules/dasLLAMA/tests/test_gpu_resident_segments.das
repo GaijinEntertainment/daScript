@@ -453,3 +453,29 @@ def test_gpu_resident_segments_hybrid_mtp(t : T?) {
 def test_gpu_resident_segments_hybrid_moe(t : T?) {
     recurrent_segments_cells(t, "Qwen3.6-35B-A3B-MTP-IQ4_XS-pure.gguf")   //! large tier: the routed block over every row of the window
 }
+
+//! the segmented window on the E-series (gemma-4-E2B Q8_0): every segment's side rows gathered off its ids and finished on the
+//! device in the one window, at the gemma rig's bar (`_gemma_resident.das`: the CPU chain's own two paths sit 6-10% of the max logit
+//! apart on this family, and two window splits round apart the same way)
+[test]
+def test_gpu_resident_segments_gemma4_e2b(t : T?) {
+    let file = "gemma-4-E2B-it-Q8_0.gguf"
+    let path = path_join(models_dir(), file)
+    return if (!family_on(t, "gemma4e") || !resident_ready(t, path))
+    var tr <- load_resident(path, 2l)
+    return if (!resident_admitted(t, "the whole-model driver armed on {file} (the load log names any decline)", ""))
+    t |> success(has_ple(tr.config), "the file carries per-layer embeddings")
+    t |> success(gpu_device_prefill_segments_(tr), "the driver's segmented window takes the per-layer-embedding model")
+    let allowed = resident_prefill_allowed()
+    set_resident_prefill_allowed(true)
+    g_seg_bar_rel = GEMMA_SEG_BAR_REL
+    with_dasllama_jobque_() {
+        segments_cell(t, tr)
+        tails_as_segments(t, tr, LONG_TAIL, LONG_TAIL, "tails past one window")
+    }
+    g_seg_bar_rel = SPLIT_BAR_REL
+    set_resident_prefill_allowed(allowed)
+    delete tr
+}
+
+let private GEMMA_SEG_BAR_REL = 0.16
