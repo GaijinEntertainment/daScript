@@ -1829,6 +1829,23 @@ def rd_tok_row(pos, cnt : int64) {
         mirbase = 0u, dnslot = uint(g_rd.region))
 }
 
+//! the step's input row where the recorded command opens: the host's row in `x_host`, or under the device gather (`rd_emb_on`) the
+//! token id - `EMB_ID_HOST` and the host's row beside it where `token` is -1
+def private rd_stage_row(x : array<float>; token : int64) {
+    unsafe {
+        if (!rd_emb_on()) {
+            memcpy(g_rd.x_host.mapped, addr<void?>(x[0]), g_rd.dim * 4l)
+        } else {
+            *reinterpret<uint?>(g_rd.tok_ids_host.mapped) = token >= 0l ? uint(token) : EMB_ID_HOST
+            if (token < 0l) {
+                memcpy(g_rd.tok_xh_host.mapped, addr<void?>(x[0]), g_rd.dim * 4l)
+            } else {
+                g_rdec_tok_gathered++
+            }
+        }
+    }
+}
+
 //! The split token (`RdecTokenSplitFn`); `side` is the n-gram side input's gathered row, empty on a model without one.
 [hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command")]
 def vk_rdec_token_split(x : array<float>; cossin : array<float>; side : array<float>; pos, cnt : int64; pick_only : bool; var logits : array<float>; experts : RdecHostExpertsFn) : int64 {
@@ -1845,7 +1862,11 @@ def vk_rdec_token_split(x : array<float>; cossin : array<float>; side : array<fl
     let picks_only = pick_only && !guard
     let seg0 = g_rd.region * g_rd.nseg
     unsafe {
-        memcpy(g_rd.x_host.mapped, addr<void?>(x[0]), dim * 4l)
+        if (g_rd.hc) {   //! the hyper-connection command opens on the staged row; every other split command opens as the one-row command does
+            memcpy(g_rd.x_host.mapped, addr<void?>(x[0]), dim * 4l)
+        } else {
+            rd_stage_row(x, -1l)
+        }
         memcpy(g_rd.cos_host.mapped, addr<void?>(cossin[0]), g_rd.cos_elems * 4l)
         if (g_rd.ngram) {
             assert(long_length(side) >= g_rd.ngram_ind, "vk_rdec_token_split: the side input's row is short")
@@ -3382,16 +3403,7 @@ def vk_rdec_token(x : array<float>; cossin : array<float>; ple_row : array<float
     let guard = rd_guard_step(g_rd.tokens_served)
     let picks_only = pick_only && !guard
     unsafe {
-        if (!rd_emb_on()) {
-            memcpy(g_rd.x_host.mapped, addr<void?>(x[0]), g_rd.dim * 4l)
-        } else {
-            *reinterpret<uint?>(g_rd.tok_ids_host.mapped) = token >= 0l ? uint(token) : EMB_ID_HOST
-            if (token < 0l) {
-                memcpy(g_rd.tok_xh_host.mapped, addr<void?>(x[0]), g_rd.dim * 4l)
-            } else {
-                g_rdec_tok_gathered++
-            }
-        }
+        rd_stage_row(x, token)
         memcpy(g_rd.cos_host.mapped, addr<void?>(cossin[0]), g_rd.cos_elems * 4l)
         if (g_rd.ple > 0l) {
             assert(long_length(ple_row) >= g_rd.n_layers * g_rd.ple, "vk_rdec_token: the per-layer-embedding row is short")
