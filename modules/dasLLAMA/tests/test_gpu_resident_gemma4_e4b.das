@@ -9,7 +9,8 @@ require _gemma_resident
 
 // gemma-4-E4B Q8_0 (the larger E-series carrier), large tier: arm `g4f`. Skips off the JIT, without DASLLAMA_GPU=1 on
 // a device the whole-model driver serves, without the file under models_dir(), or when the residency plan does not fit
-// the card (DASLLAMA_GPU_MIN_CTX shortens the mirror).
+// the card (DASLLAMA_GPU_MIN_CTX shortens the mirror); the block-codec cells also skip where the environment arms another
+// mirror codec over the one they ask (DASLLAMA_VK_KV32=1).
 let private GEMMA4E4_FILE = GemmaFile(file = "gemma-4-E4B-it-Q8_0.gguf", arm = "g4f")
 
 [test]

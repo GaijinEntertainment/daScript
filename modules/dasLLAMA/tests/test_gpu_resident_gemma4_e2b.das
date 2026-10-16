@@ -20,7 +20,8 @@ require ?vulkan dasllama/dasllama_vulkan_decode   // vk_rdec_ple_side_row, vk_rd
 // gemma-4-E2B Q8_0 (the E-series carrier: per-layer embeddings, the upper layers sharing the K/V of the ones below, two
 // dense FFN widths, a sliding window the two-window cell engages): arm `g4e`. Skips off the JIT, without DASLLAMA_GPU=1
 // on a device the whole-model driver serves, without the file under models_dir(), or when the residency plan does not
-// fit the card (DASLLAMA_GPU_MIN_CTX shortens the mirror).
+// fit the card (DASLLAMA_GPU_MIN_CTX shortens the mirror); the block-codec cells also skip where the environment arms
+// another mirror codec over the one they ask (DASLLAMA_VK_KV32=1).
 let private GEMMA4E_FILE = GemmaFile(file = "gemma-4-E2B-it-Q8_0.gguf", arm = "g4e")
 
 [test]
@@ -57,9 +58,11 @@ def test_gpu_resident_gemma4_e2b_block_codecs(t : T?) {
 //! the per-layer-embedding table in its own tag on the device (arm `g4e-ple`): E2B Q8_0 with the token and PLE tables
 //! requantized to Q5_0, Q5_1, Q4_0, Q6_K and IQ4_XS (`../performance/model_specs.das`) and the Q8_0 file as the shape control -
 //! the plan seats the table under its tag, and the forced feed's prefill gathers the side rows off it against the CPU chain on
-//! the format's gather leaf (`gather`: its census count rises; the token table the mint requantized with it rides the same leaf)
+//! the format's gather leaf (`gather`: its census count rises; the token table the mint requantized with it rides the same leaf),
+//! every other format's leaf unmoved - on the Q8_0 file every one of them, the leaves' control
 [test]
 def test_gpu_resident_gemma4_e2b_ple_tables(t : T?) {
+    let leaves = fixed_array("q5032_emb_cls_spv", "q51_emb_cls_spv", "kq_emb_q40_cls_spv", "kq_emb_k6_cls_spv", "kq_emb_iq4xs_cls_spv")
     for (spec in [(file = "gemma-4-E2B-it-Q8_0.gguf", fmt = KqFmt.q8, gather = ""),
                   (file = "gemma-4-E2B-it-emb-Q5_0-local.gguf", fmt = KqFmt.q5032, gather = "q5032_emb_cls_spv"),
                   (file = "gemma-4-E2B-it-emb-Q5_1-local.gguf", fmt = KqFmt.q51, gather = "q51_emb_cls_spv"),
@@ -75,11 +78,17 @@ def test_gpu_resident_gemma4_e2b_ple_tables(t : T?) {
                 let plan = resident_plan(tr, 4096l, KVDtype.f16, KVDtype.f16)
                 t |> success(plan.ple_tbl_bytes > 0l, "the plan seats the {spec.fmt} table on the device ({plan.ple_tbl_bytes} bytes)")
             }
-            let g0 = empty(spec.gather) ? NO_CENSUS : census(spec.gather)
+            var inscope g0 <- [for (leaf in leaves); census(leaf)]
             gemma_forced_feed(t, 40l, gf)
-            return if (!armed || g0 == NO_CENSUS)
-            let g_n = census(spec.gather) - g0
-            t |> success(g_n > 0l, "the {spec.fmt} table's rows gathered on its own leaf ({spec.gather}: {g_n})")
+            return if (!armed || g0[0] == NO_CENSUS)
+            for (leaf, before in leaves, g0) {
+                let g_n = census(leaf) - before
+                if (leaf == spec.gather) {
+                    t |> success(g_n > 0l, "the {spec.fmt} table's rows gathered on its own leaf ({leaf}: {g_n})")
+                } else {
+                    t |> equal(g_n, 0l, "another format's leaf ({leaf}) gathers no row of the {spec.fmt} table - the leaves' control")
+                }
+            }
         }
     }
 }
@@ -88,13 +97,16 @@ def test_gpu_resident_gemma4_e2b_ple_tables(t : T?) {
 //! F32 - the router GEMV, the f32 act and the f32 tile read the file's rows, the feed held against the file's f32 chain - the Q4_0 file
 //! Q4_0, and the ple-Q6_K / ple-Q5_0 mints of the Q8_0 file (`../performance/model_specs.das`) Q6_K and Q5_0, each on its format's decode
 //! GEMV (`gemv`: their census counts rise over the fed steps - on the mints no other plane carries the format) with the f32 classes
-//! undispatched (the control)
+//! undispatched (the control); the Q8_0 file (arm `g4e-kq-q8`), whose every plane is Q8_0, dispatches none of the three formats'
+//! GEMVs - their counters' control
 [test]
 def test_gpu_resident_gemma4_e2b_ple_planes(t : T?) {
+    let gemvs = fixed_array("kq_gemv_q40", "kq_gemv_k6", "q5032_gemv")
     for (spec in [(file = "gemma-4-E2B-it-Q4_K_M.gguf", f32 = true, arm = "g4e-kq", gemv = ""),
                   (file = "gemma-4-E2B-it-Q4_0.gguf", f32 = false, arm = "g4e-kq-q40", gemv = "kq_gemv_q40"),
                   (file = "gemma-4-E2B-it-ple-Q6_K-local.gguf", f32 = false, arm = "g4e-kq-ple-q6k", gemv = "kq_gemv_k6"),
-                  (file = "gemma-4-E2B-it-ple-Q5_0-local.gguf", f32 = false, arm = "g4e-kq-ple-q50", gemv = "q5032_gemv")]) {
+                  (file = "gemma-4-E2B-it-ple-Q5_0-local.gguf", f32 = false, arm = "g4e-kq-ple-q50", gemv = "q5032_gemv"),
+                  (file = "gemma-4-E2B-it-Q8_0.gguf", f32 = false, arm = "g4e-kq-q8", gemv = "")]) {
         let gf = GemmaFile(file = spec.file, arm = spec.arm)
         t |> run("{spec.file}: the per-layer gate and projection planes in their file format, the forced feed against the CPU chain") @(t : T?) {
             var armed = false   //! the rig armed the driver on the file (else every cell below skipped, saying why)
@@ -105,25 +117,35 @@ def test_gpu_resident_gemma4_e2b_ple_planes(t : T?) {
             }
             let act0 = census("ple_act_f32_cls_spv")
             let gemm0 = census("dn_ba_cls_spv")
-            let gv0 = empty(spec.gemv) ? 0l : census("{spec.gemv}_cls_spv") + census("{spec.gemv}_n_cls_spv")
+            var inscope gv0 <- [for (g in gemvs); format_gemv_count(g)]
             gemma_forced_feed(t, 40l, gf, spec.f32)   //! the Q4_K_M file's CPU q8 chain sits off its f32 chain at one step: its `exact` form
             return if (!armed || act0 == NO_CENSUS)
             let act_n = census("ple_act_f32_cls_spv") - act0
             let gemm_n = census("dn_ba_cls_spv") - gemm0
             if (spec.f32) {
                 t |> success(act_n > 0l && gemm_n > 0l, "the token command's f32 act ({act_n}) and the window's f32 tile ({gemm_n}) served the f32 rows")
-            } else {
-                t |> equal(act_n + gemm_n, 0l, "no f32 per-layer plane, no f32 act or tile dispatched")
-                let gv_n = census("{spec.gemv}_cls_spv") + census("{spec.gemv}_n_cls_spv") - gv0
-                t |> success(gv_n > 0l, "the fed steps read the planes on their format's GEMV ({spec.gemv}: {gv_n})")
+                return
+            }
+            t |> equal(act_n + gemm_n, 0l, "no f32 per-layer plane, no f32 act or tile dispatched")
+            for (g, before in gemvs, gv0) {
+                let gv_n = format_gemv_count(g) - before
+                if (g == spec.gemv) {
+                    t |> success(gv_n > 0l, "the fed steps read the planes on their format's GEMV ({g}: {gv_n})")
+                } elif (empty(spec.gemv)) {
+                    t |> equal(gv_n, 0l, "an all-Q8_0 file dispatches no {g} - the format GEMVs' control")
+                }
             }
         }
     }
 }
 
+//! a format's decode GEMV dispatches: its one-row and N-column leaves summed
+def private format_gemv_count(gemv : string) : int64 => census("{gemv}_cls_spv") + census("{gemv}_n_cls_spv")
+
 //! the decode step's pre-step on the device (arm `g4e-pre`): the side row the one-row command gathered off the step's token id,
 //! projected under the CPU's 1/sqrt(dim) and finished, read back against the CPU pre-step's row of the same token at 1e-4 of its
-//! largest - the projection without the 1/sqrt(dim) reads the eps alone apart, 1e-3 - with another token's CPU row the control
+//! largest - the projection without the 1/sqrt(dim) reads the eps alone apart, 1e-3 - with another token's CPU row the control;
+//! then a load with the gather off, whose step gathers no row off its id (the gather counter's control)
 [test]
 def test_gpu_resident_gemma4_e2b_ple_pre_step(t : T?) {
     t |> run("gemma-4-E2B Q8_0: the step's side row built on the device is the CPU pre-step's row") @(t : T?) {
@@ -142,13 +164,11 @@ def test_gpu_resident_gemma4_e2b_ple_pre_step(t : T?) {
                 vk_rdec_ple_side_row(dev)
                 var inscope cpu <- cpu_side_row(tr, tok)
                 var inscope other <- cpu_side_row(tr, tok + 1l)
-                var mx = 0.0
-                var off = 0.0
-                var big = 0.0
-                for (i in range64(long_length(cpu))) {
-                    mx = max(mx, abs(dev[i] - cpu[i]))
-                    off = max(off, abs(dev[i] - other[i]))
-                    big = max(big, abs(cpu[i]))
+                let mx = logits_maxdiff(dev, cpu)   //! a NaN on either side reads as infinite
+                let off = logits_maxdiff(dev, other)
+                var big = 0.0   //! the bar's scale: the CPU row's largest finite magnitude
+                for (v in cpu) {
+                    big = max(big, abs(v))
                 }
                 let bar = 1e-4 * big
                 to_log(LOG_INFO, "e2b pre-step: device side row against the CPU's: maxdiff {mx}, another token's {off} (bar {bar}, largest {big})\n")
@@ -159,6 +179,22 @@ def test_gpu_resident_gemma4_e2b_ple_pre_step(t : T?) {
                 delete prompt
             }
         }
+        //! the gather counter's control: a load with the token-table gather off (`set_gpu_resident_embed(0)`) steps on the host's row
+        let pin = gpu_resident_embed_pin()
+        set_gpu_resident_embed(0)
+        with_gemma_rig(t, GemmaFile(file = "gemma-4-E2B-it-Q8_0.gguf", arm = "g4e-pre")) $(tr) {
+            static_if (typeinfo builtin_module_exists(vulkan)) {
+                var prompt <- resident_prompt(40l)
+                var sg <- create_session(tr, mirror_kv_dtype())
+                forward_prefill(tr, sg, prompt, 40l, 0l)
+                let g0 = vk_rdec_token_gathered()
+                forward(tr, sg, 1234l, 40l)
+                t |> equal(vk_rdec_token_gathered() - g0, 0l, "with the gather off the step gathers no embed row off its id - the counter's control")
+                delete sg
+                delete prompt
+            }
+        }
+        set_gpu_resident_embed(pin)
     }
 }
 
