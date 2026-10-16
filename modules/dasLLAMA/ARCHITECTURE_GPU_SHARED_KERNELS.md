@@ -18,8 +18,8 @@ struct and the body; a stamp sets the template constants its home needs and maps
 | `GkPleGate` | `MetalPleGate` (the ring or the panel at `cin`) | `PleGate` (the ring slot off `tok`, or the panel) | `TG`, `RSQRT`, `cin_base` / `cin_store` |
 | `GkPleConv` | `MetalPleConv` | `PleConv` | `row_pos` / `tap`; the CPU chain's (res + gated) + silu(conv) |
 | `GkQkRms` | `MetalQkNorm` (the q and k heads of one buffer, `kwd` the no-wv V fill) | `QkRms` | the grid decode |
-| `GkTopKRow` | `MetalMoeSelect` / `512` (32 lanes, DEPTH 8 / 16, `raw` the gpt-oss form) | `TopKRecords`' `TopKN` / `TopKN2` / `TopKRows` / `TopKRows2` (256 lanes, DEPTH 1 / 2) | `LANES`, `DEPTH` |
-| `GkMoeCombine` | `MetalMoeCombine`, `MetalMoeReduce` (`GATHERED`) | `MoeCombine` (`WINDOW`: the chunk window, the accumulate, the zero-weight skip) | `GATHERED`, `WINDOW` |
+| `GkTopKRow` | `MetalMoeSelect` / `512` (32 lanes, DEPTH 8 / 16, `raw` the gpt-oss form), their `Ds` twins (`DSCALE`: gemma-4's per-expert down scales) | `TopKRecords`' `TopKN` / `TopKN2` / `TopKRows` / `TopKRows2` (256 lanes, DEPTH 1 / 2, `DSCALE`) | `LANES`, `DEPTH`, `DSCALE` |
+| `GkMoeCombine` | `MetalMoeCombine`, `MetalMoeReduce` (`GATHERED`) | `MoeCombine` (`WINDOW`: the chunk window, the accumulate, the zero-weight skip) | `GATHERED`, `WINDOW`, `SLOT_X4` |
 | `GkDnGate` | `MetalDnGate` / `Sig` (`rsqrt`) | `DnScanP3` / `Sig` | `ZSIG`, `RSQRT` |
 | `GkQknRopeKv` | `MetalQknRope16` / `32` (one row), `MetalQknRopeB16` / `B32` (rows), `MetalPfQkn` / `HX` (the window, the q twin) | `QknRopeKv` / `F16` | `KT`, `CLAMP16`, `V_WG`, `LANES` / `EPT`, `HX` |
 | `GkRouterGemv` | `MetalMoeRouter` (a workgroup a row, the decode column), `MetalMoeRouterB` (a subgroup a row, `COL_CLAMP`, 8 columns) | `RouterGemv` / `F16` (a workgroup a row, `NORM`) | `ROW_WG`, `VW`, `NC`, `COL_CLAMP`, `NORM`, `BIAS` |
@@ -27,6 +27,8 @@ struct and the body; a stamp sets the template constants its home needs and maps
 | `GkMoeCombine` `SH` | `MetalMoeCombineSh`, `MetalMoeReduceSh` | the combine twins' `gated` arm | `SH`: the shared row under its gate logit, the router's row `ne` |
 | `GkCat2` | `MetalCat2` | `Cat2` | nothing; position- or stream-major, the a row repeated over the streams |
 | `GkDnConv` | `MetalDnConvN` / `N4` (`PB` 1 / 4, `RING` 8: a group of 16 rows or fewer) | `DnConv` (`PB` 32, `RING` 4) | `PB`, `RING` |
+| `GkMoeCombG4` | `MetalMoeCombG4` / `Hx` (the selection rows' slots, the next norm in f32, `Hx` its f16 twin), `MetalMoeCombG4Pf` (the bucket inverse's slots, no norm out; 1024 lanes, `rsqrt`) | `ClsArCombG4` / `F16B` / `Rq` (the slot map, the next norm in f32, f16 or Q8_0 blocks; 256 lanes, `1 / sqrt`) | `TG`, `RSQRT`, `GATHERED`, `OUT_F32` / `OUT_F16` / `OUT_Q8`, `HX`; the stash |
+| `GkClsEpilogue` | `MetalClsEpilogue` | `ClsEpilogue` | nothing; every row in one dispatch |
 
 The gated FFN's activation is one function on both homes (`gk_act_mul`, `dasllama_gpu_math.das`): the Metal ew2 and
 w13 combines and every Vulkan act class call it, the gelu its clamped tanh form.
@@ -34,6 +36,18 @@ w13 combines and every Vulkan act class call it, the gelu its clamped tanh form.
 - **The inverse rms keeps each home's spelling.** The CPU rmsnorm and the Vulkan bodies spell `1 / sqrt`, the Metal bodies
   `rsqrt`, and a decode parity cell reads the two apart only past the bars it holds; a shared row template therefore carries
   the spelling as its `RSQRT` constant (`GkWgReduce.wg_rms_inv_into`, `GkDnGate`) and no body picks one for both homes.
+- **The gemma-4 MoE step sums the routed rows with the routed combine's own sum** (`GkMoeCombine.slot_sum_into`): `GkMoeCombG4`
+  derives `GkMoeCombine`, which derives `GkQ8BlockStore` for the step's Q8_0 out, so every combine stamp carries the reduce
+  slab it does not read.
+- **The routed sum keeps four slots' loads in flight off the window** (`GkMoeCombine.SLOT_X4`, the sum's order unchanged): the
+  M5's decode combine reads 1.33 against 1.81 us at dim 2048 k 8 (the gated one 1.45 against 2.01) and the gemma-4 step 12.3
+  against 13.3 us, while the gemma-4 window stamp (`MetalMoeCombG4Pf`) reads 8% slower with it (133 against 122.5 us at 512
+  rows) and sums one slot a step.
+- **The Vulkan MoE step stores its next norm four elements in flight a lane** (`GkMoeCombG4.OUT_X4`, the residual step's
+  `ArBase.store_out` form): with the stride loop the pod reads 12.29 against the per-home body's 10.41 us, with it 10.44.
+- **The select's down-scale arm is a stamp of its own on Metal.** The arm costs the plain stamps 0.27 us a dispatch on the M5
+  with no row named, so a down-scale row selects the `Ds` stamps (`ARCHITECTURE_GPU_PREFILL_MOE.md#moe-wscale`); the Vulkan
+  top-k carries the arm on its one stamp, its row named or `GK_NO_DSCALE`.
 - **A one-subgroup stamp skips the workgroup stage.** `GkTopKRow` at `LANES` 32 takes its max, its sum and every pick off the
   subgroup's own reduction, the Metal select's register form; at 256 lanes the subgroups' partials cross the workgroup slab.
 - **The Metal row kernels' value-form reduces sit on `GkWgReduce`'s slab** (`MetalTgReduceBase`), so a Metal row kernel and a
@@ -73,6 +87,11 @@ templates' stamps, carries the run):
 | Pocket row GEMV, 1024 x 1024 | 9.67 | 9.79 | 5.4-5.8 | 5.2-5.7 |
 | Pocket row GEMV, LayerNorm + SiLU | 12.79 | 12.99 | 6.14 | 6.14 |
 | gated attention's deinterleave + sigmoid epilogue, 8 heads of 256, 1 row (4 rows) | 2.19 (2.23) | 0 | - | - |
+| select, 128 experts k 8, the down scales (Metal before: the select, then its scale pass) | 3.89 | 3.30 | 6.14 | 6.14 |
+| gemma-4 MoE tail, dim 2816 k 8, 1 row (Metal before: the combine, three norms, the add, the add-norm) | 17.5 | 12.3 | 10.41 | 10.44 |
+| the same, 512 rows (Metal before: the reduce, three norms, two adds) | 182.4 | 122.5 | - | - |
+| classifier epilogue, vocab 262144 cap 30 two pins, 1 row (Metal before: the softcap row, then the suppress row) | 6.46 | 3.68 | 4.10 | 4.10 |
+| the same, 4 rows (Metal before: the pair a row) | 25.75 | 10.65 | 6.15 | 6.15 |
 
 The Vulkan clock reads in steps of 2.05 us at these sizes, so a Vulkan cell under 8 us moves by whole steps.
 The template stamps' Vulkan words keep their helpers' bodies in place: the router's methods, the Pocket GEMV's and the
@@ -105,9 +124,8 @@ M5 against the 512-row window's 5.6 us back.
 - `MetalMoeCount` / `MetalMoeBucket` / `MoeSched`: an ordered atomics-free schedule against an atomic ladder; and with it the
   expert-row gather (`MetalMoeGatherX` gathers a bucket row off its slot, `MoeGatherF16` scatters a slot into its bucket row:
   the Vulkan schedule writes no bucket-to-slot map). Both clamp into the half range (`half_sat`).
-- `MetalMoeMulMmQ8TensorT` off the kq scaffold, the ADAPT walks, `MetalG4RouterNorm`'s compensated sum, `MetalMoeWScale`
-  against the top-k fold, the gate-up fusion with its Q8 requant against the f32 act, the driver chains, and the hc head
-  mixer's GEMV against its tile.
+- `MetalMoeMulMmQ8TensorT` off the kq scaffold, the ADAPT walks, `MetalG4RouterNorm`'s compensated sum, the gate-up fusion
+  with its Q8 requant against the f32 act, the driver chains, and the hc head mixer's GEMV against its tile.
 - `MetalMoeGemvMx4`: its measured lane map (sixteen blocks in flight, uint2 loads).
 - The router's lane split parts by shape, not by home: a workgroup a row serves the decode column on both homes (M5 3.37
   against the subgroup form's 3.82 us), a subgroup a row the Metal window (144 against the workgroup form's 745 us at 512

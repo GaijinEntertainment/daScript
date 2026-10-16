@@ -4483,9 +4483,9 @@ under the same command line the same hour (every llama.cpp figure `external`). E
   the same hour), then flat ours / theirs Vulkan / CUDA:** gpt-oss-20b 245 +/- 7 / 135 / 293
   (1.82 against Vulkan, 0.84 against CUDA), flat 130 / 61 / 127; Qwen3-30B-A3B UD-IQ2_XXS 237 +/- 1
   / 91 / 359 (2.61 / 0.66), flat 143 / 59 / 135. gemma-4-26B-A4B UD-IQ3_XXS fits no plan on this
-  card (the resident driver declines at 23.9 GB asked of 13.3, its demoted down-expert rows taking
-  the served weights alone to 15.4 GB - a plan figure that tallied each routed layer's dense shared
-  expert twice, the low-format N-row arc's section below; the per-op rails serve 16 summed) where the reference
+  card (the resident driver declines at 23.9 GB asked of 13.3, the served weights alone at 15.4 GB in a
+  plan figure that tallied each routed layer's dense shared expert twice, the low-format N-row arc's section below,
+  and the 704-wide down-expert rows at q8 - they serve in their own per-32 formats; the per-op rails serve 16 summed) where the reference
   pages: 109 on Vulkan, 275 on CUDA - row 81's shape. Against CUDA the two homed carriers read
   0.66 and 0.84. The expert-bucket form (`followup_vulkan.md` item 83's neighbour: the N-column
   expert GEMV a bucket, which decodes a weight block once for every row that picked its expert)

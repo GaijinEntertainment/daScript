@@ -59,6 +59,7 @@ var g_decodes = 0l
 var g_decode_declines : DeclineCounter
 var g_logits_cpu = false
 var g_skip = ""                              // DASLLAMA_METAL_DECODE_SKIP=gemv|attn|ew|moe_rt|moe_sh|qkv|wo knockout rail
+var g_moe_g4_unfused = false                 //! the gemma-4 MoE tail on its unfused chain (`set_metal_moe_g4_unfused`)
 
 var g_signs : MetalBuffer?                  // the tq4 rotation signs, TQ4_SIGNS_MAX_HS floats (a narrower head reads the prefix)
 
@@ -185,8 +186,7 @@ var g_pso_im2col2d : MetalComputePipeline?    // the qwen3a conv2d im2col (k=3, 
 var g_pso_wdec_attn_part : MetalComputePipeline?  // the chunked online-softmax partial
 var g_pso_wdec_attn_comb : MetalComputePipeline?  // the log-sum-exp chunk merge
 var g_pso_bias_add_res : MetalComputePipeline?   // whisper decode: bias + residual add
-var g_pso_softcap : MetalComputePipeline?
-var g_pso_suppress : MetalComputePipeline?
+var g_pso_cls_epi : MetalComputePipeline?   //! the classifier epilogue (`MetalClsEpilogue`): the final softcap, the suppressed ids
 var g_one : MetalBuffer?                    // persistent 1.0f — the rms oscale default bind
 var g_zero : MetalBuffer?                   // persistent 0u — the sink/hass identity bind
 var g_pso_attn16 : MetalComputePipeline?
@@ -236,6 +236,8 @@ var g_pso_emb_b32_q5032 : MetalComputePipeline?
 var g_pso_moe_router : MetalComputePipeline?   // MoE (Wave C): router GEMV over the fp32 slab
 var g_pso_moe_select : MetalComputePipeline?   // softmax + top-k + renorm (one simdgroup)
 var g_pso_moe_select_512 : MetalComputePipeline?   // the 16-deep ladder past 256 experts
+var g_pso_moe_select_ds : MetalComputePipeline?   //! the select with the per-expert down scales (gemma-4)
+var g_pso_moe_select_512_ds : MetalComputePipeline?
 var g_pso_moe_gemv_q8 : MetalComputePipeline?  // expert-indexed GEMV twins (grid.y = slot)
 var g_pso_moe_kq_k4 : MetalComputePipeline?
 var g_pso_moe_kq_k3 : MetalComputePipeline?
@@ -254,8 +256,10 @@ var g_pso_moe_kq_k5 : MetalComputePipeline?
 var g_pso_moe_kq_k6 : MetalComputePipeline?
 var g_pso_moe_combine : MetalComputePipeline?  // weighted top-k reduce into the w2 write shape
 var g_pso_moe_combine_sh : MetalComputePipeline?   //! ... with the gated shared expert's rows added
+var g_pso_moe_comb_g4 : MetalComputePipeline?   //! the gemma-4 MoE step (`MetalMoeCombG4`), its f16-twin and window stamps
+var g_pso_moe_comb_g4_hx : MetalComputePipeline?
+var g_pso_moe_comb_g4_pf : MetalComputePipeline?
 var g_pso_g4rnorm : MetalComputePipeline?      // gemma4 MoE router-input norm (stage 3)
-var g_pso_moe_wscale : MetalComputePipeline?   // gemma4 per-expert down-scale fold
 var g_pso_swiglu_oai : MetalComputePipeline?   // gpt-oss clamped swiglu (stage 4)
 var g_pso_moe_gemv_mx4 : MetalComputePipeline?  // gpt-oss MXFP4 expert GEMV
 var g_pso_moe_gemv_q51 : MetalComputePipeline?  // Q5_1 expert GEMV (per-32 planes)
@@ -1028,19 +1032,24 @@ def upload_region(src : void?; bytes : uint64) : MetalBuffer? {
 }
 
 [cold_path]
-def private region_upload_cat3_new(key : uint64; p0 : void?; b0 : uint64; p1 : void?; b1 : uint64;
-                                   p2 : void?; b2 : uint64) : MetalBuffer? {
-    var buf = metal_new_buffer_untracked(g_dev, b0 + b1 + b2)
+def private region_upload_cat_new(key : uint64; pieces : array<tuple<p : void?; b : uint64>>) : MetalBuffer? {
+    var total = 0ul
+    for (pc in pieces) {
+        total += pc.b
+    }
+    var buf = metal_new_buffer_untracked(g_dev, total)
     unsafe {
         var d = reinterpret<uint8?>(metal_buffer_contents(buf))
-        memcpy(reinterpret<void?>(d), p0, b0)
-        memcpy(reinterpret<void?>(d + b0), p1, b1)
-        if (b2 > 0ul) {
-            memcpy(reinterpret<void?>(d + (b0 + b1)), p2, b2)
+        var at = 0ul
+        for (pc in pieces) {
+            if (pc.b > 0ul) {
+                memcpy(reinterpret<void?>(d + at), pc.p, pc.b)
+            }
+            at += pc.b
         }
     }
     residency_note(buf)
-    g_regions_cat3[key] = RegionEntry(buf = buf, bytes = b0 + b1 + b2)
+    g_regions_cat3[key] = RegionEntry(buf = buf, bytes = total)
     return buf
 }
 
@@ -1050,7 +1059,14 @@ def private region_upload_cat3_new(key : uint64; p0 : void?; b0 : uint64; p1 : v
 def upload_region_cat3(p0 : void?; b0 : uint64; p1 : void?; b1 : uint64; p2 : void?; b2 : uint64) : MetalBuffer? {
     let key = intptr(p0)
     var hit = region_hit(g_regions_cat3, key, b0 + b1 + b2)
-    return hit != null ? hit : region_upload_cat3_new(key, p0, b0, p1, b1, p2, b2)
+    return hit != null ? hit : region_upload_cat_new(key, [(p = p0, b = b0), (p = p1, b = b1), (p = p2, b = b2)])
+}
+
+//! the four regions as one resident buffer, the same contract as `upload_region_cat3` (keyed by the first piece's base)
+def upload_region_cat4(p0 : void?; b0 : uint64; p1 : void?; b1 : uint64; p2 : void?; b2 : uint64; p3 : void?; b3 : uint64) : MetalBuffer? {
+    let key = intptr(p0)
+    var hit = region_hit(g_regions_cat3, key, b0 + b1 + b2 + b3)
+    return hit != null ? hit : region_upload_cat_new(key, [(p = p0, b = b0), (p = p1, b = b1), (p = p2, b = b2), (p = p3, b = b3)])
 }
 
 // ===== the whole-plane resident buffers (blob-only models) =====

@@ -549,6 +549,13 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             url = "{HF}/unsloth/gemma-4-26B-A4B-it-GGUF/resolve/main/gemma-4-26B-A4B-it-UD-IQ3_XXS.gguf",
             bytes = 11416548832l, sha256 = "3b7aec683e176e1d957d007e0fb590611d82aec4db358d99b7f9714b6bc7bfc2",
             parity <- ev_gemma_count([kq_native = true])),
+        // the native-MXFP4 gemma-4 expert carriers (the fused gate_up and the down stacks MXFP4, every other plane the source's):
+        // the M5's off the Q8_0 file, the pod's off the Q4_K_M file the pod stocks
+        ModelSpec(file = "gemma-4-26B-A4B-it-MXFP4_MOE-local.gguf", bytes = 14727181312l,
+            sha256 = "37b45b5b2865a290c83377542b19c9058321b188264990866372d2e10fda69a8",
+            recipe = "llama-quantize --allow-requantize gemma-4-26B-A4B-it-Q8_0.gguf gemma-4-26B-A4B-it-MXFP4_MOE-local.gguf MXFP4_MOE"),
+        ModelSpec(file = "gemma-4-26B-A4B-it-MXFP4_MOE-q4km-local.gguf",
+            recipe = "llama-quantize --allow-requantize gemma-4-26B-A4B-it-Q4_K_M.gguf gemma-4-26B-A4B-it-MXFP4_MOE-q4km-local.gguf MXFP4_MOE"),
         ModelSpec(file = "gemma-4-31B-it-Q4_K_M.gguf",
             url = "{HF}/lmstudio-community/gemma-4-31B-it-GGUF/resolve/main/gemma-4-31B-it-Q4_K_M.gguf",
             bytes = 18687063904l, sha256 = "8f3479643461601703f717931e399cc440dbd5ada598c025d6296c8165d94be9"),

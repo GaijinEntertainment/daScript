@@ -228,10 +228,11 @@ threadgroup slab rather than from device memory.
 Past the final attention only the classifier's logits and the MTP head read the residual stream, and both read
 one row. The last dense layer's FFN therefore runs that final row alone: the add, the norm and the three FFN
 GEMMs dispatch at one row through the fixed-B GEMV forms, not through `enc_gemm_mm`, so the mm-tail peel
-counters (`ARCHITECTURE_GPU_PREFILL.md#gemv-tail-peel`) stay an instrument of the full-panel path only. The
-narrowing declines wherever another consumer reads every row - a session keeping the hidden state, a warm or
-MTP forward (`n_layer_nextn` present), a recurrent, MoE or PLE layer, a sandwich-norm or gated-query model, a
-deepstack-tapped layer - and it engages only at `npos > 1` with `dim` and the layer's hidden width both %32
+counters (`ARCHITECTURE_GPU_PREFILL.md#gemv-tail-peel`) stay an instrument of the full-panel path only. On a
+sandwich-norm model the row's attention branch takes its post norm before the add and its FFN branch its own before
+the residual's, both at the one row. The narrowing declines wherever another consumer reads every row - a session
+keeping the hidden state, a warm or MTP forward (`n_layer_nextn` present), a recurrent, MoE or PLE layer, a
+gated-query model, a deepstack-tapped layer - and it engages only at `npos > 1` with `dim` and the layer's hidden width both %32
 and every FFN weight on a plane with a one-row form - the q8 plane's GEMV, a per-32 plane's, or a superblock format's
 row-batched decode form at one row (`pf_enc_narrow_gemv`; the site's K must be whole blocks of its unit, so a K-quant
 carrier whose `dim` or hidden width is off 256 keeps the full panel) - whatever the mm-tail lever

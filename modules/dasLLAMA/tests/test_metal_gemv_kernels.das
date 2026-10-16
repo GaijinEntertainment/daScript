@@ -577,10 +577,10 @@ def private w13sw_gate(t : T?; var dev, queue; gelu : bool; ndim, hidden : int; 
     }
 }
 
-// MetalGemvW13SwB2/B4: the fixed-B batch twins (silu only; binding 1 is SKIPPED by the class —
+// MetalGemvW13SwB2/B4: the fixed-B batch twins under silu or gelu (binding 1 is SKIPPED by the class —
 // scale views sit at 2/9). ndim = 320 walks one full 256-elem X panel plus the strided tail.
-def private w13sw_b_gate(t : T?; var dev, queue; bwidth, ndim, hidden : int) {
-    let tag = "w13sw_b{bwidth} n={ndim} h={hidden}"
+def private w13sw_b_gate(t : T?; var dev, queue; bwidth, ndim, hidden : int; gelu : bool) {
+    let tag = "w13sw_b{bwidth} n={ndim} h={hidden} {gelu ? "gelu" : "silu"}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
         let st = bwidth == 2 ? stamp_of(@@enc_w13sw_b2_c) : stamp_of(@@enc_w13sw_b4_c)
@@ -593,16 +593,17 @@ def private w13sw_b_gate(t : T?; var dev, queue; bwidth, ndim, hidden : int) {
         var inscope blob3 <- [for (i in range(hidden * nb * 34)); blob1[hidden * nb * 34 + i]]
         var inscope xf : array<float>
         q8_x_fill(bwidth * ndim, xf)
-        var inscope want <- w13_want(wdeq1, xf, bwidth, ndim, hidden, false)
+        var inscope want <- w13_want(wdeq1, xf, bwidth, ndim, hidden, gelu)
         let bw1 = mc |> in_plain(blob1)
         let bw3 = mc |> in_plain(blob3)
         let bx = mc |> in_(xf)
         let by = mc |> out_words(bwidth * hidden, -1000.0)
         let bn = mc |> in_plain([uint(ndim)])
         let bhid = mc |> in_plain([uint(hidden)])
+        let bact = mc |> in_plain([gelu ? 1u : 0u])
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
             stamp_run(st, pso) {
-                invoke(st.enc, enc, mc.buf[bw1], 0ul, mc.buf[bw1], mc.buf[bx], 0ul, mc.buf[by], 0ul, mc.buf[bn], mc.buf[bhid], mc.buf[bw3], 0ul, mc.buf[bw3], int64(hidden))
+                invoke(st.enc, enc, mc.buf[bw1], 0ul, mc.buf[bw1], mc.buf[bx], 0ul, mc.buf[by], 0ul, mc.buf[bn], mc.buf[bhid], mc.buf[bact], mc.buf[bw3], 0ul, mc.buf[bw3], int64(hidden))
             }
         }
         return if (!ran)
@@ -773,8 +774,10 @@ def test_metal_kq_gemv_kernels(t : T?) {
                 w13sw_gate(t, dev, queue, true, 64, 8, row_per_sg = true)
                 w13sw_gate(t, dev, queue, false, 896, 12, row_per_sg = true)   // nb=28: three full 8-block rounds plus a partial one per simdgroup
                 w13sw_gate(t, dev, queue, false, 320, 21, row_per_sg = true)   // h%4 == 1: the row guard's widest slack - three rows past hidden in the last threadgroup
-                w13sw_b_gate(t, dev, queue, 2, 320, 18)
-                w13sw_b_gate(t, dev, queue, 4, 320, 18)
+                w13sw_b_gate(t, dev, queue, 2, 320, 18, false)
+                w13sw_b_gate(t, dev, queue, 4, 320, 18, false)
+                w13sw_b_gate(t, dev, queue, 2, 320, 18, true)   //! the gemma rows' geglu
+                w13sw_b_gate(t, dev, queue, 4, 320, 18, true)
                 // the fixed-B q8 GEMV twins: panel+tail ndim, min-clamp d, ys gaps, padded xs4,
                 // and the b4 nrows=3 store gate / pad-column clamp
                 gemv_b_gate(t, dev, queue, 2, 320, 18, 18)
@@ -853,9 +856,9 @@ def private gemv_sg_gate(t : T?; var queue; ndim, ddim : int) {
     }
 }
 
-// the fused W1|W3 + swiglu tiler on one blob holding the w1 rows then the w3 rows
-def private w13sw_rows_gate(t : T?; var queue; nrows, ndim, hidden : int) {
-    let tag = "w13sw_rows nrows={nrows} n={ndim} h={hidden}"
+// the fused W1|W3 + act tiler on one blob holding the w1 rows then the w3 rows
+def private w13sw_rows_gate(t : T?; var queue; nrows, ndim, hidden : int; gelu : bool) {
+    let tag = "w13sw_rows nrows={nrows} n={ndim} h={hidden} {gelu ? "gelu" : "silu"}"
     with_metal_cell(g_dev, queue) $(var mc : MetalCell) {
         let mp = ((nrows + 3) / 4) * 4
         let wrote = tiler_rows_written(nrows)
@@ -867,7 +870,7 @@ def private w13sw_rows_gate(t : T?; var queue; nrows, ndim, hidden : int) {
         var inscope xf : array<float>
         q8_x_fill(nrows * ndim, xf)
         xf |> resize(mp * ndim)
-        var inscope want <- w13_want(wdeq, xf, wrote, ndim, hidden, false)
+        var inscope want <- w13_want(wdeq, xf, wrote, ndim, hidden, gelu)
         want |> resize(mp * hidden)
         for (i in range(wrote * hidden, mp * hidden)) {
             want[i] = -1000.0
@@ -877,8 +880,9 @@ def private w13sw_rows_gate(t : T?; var queue; nrows, ndim, hidden : int) {
         let by = mc |> out_words(mp * hidden, -1000.0)
         let bn = mc |> in_plain([uint(ndim)])
         let bhid = mc |> in_plain([uint(hidden)])
+        let bact = mc |> in_plain([gelu ? 1u : 0u])
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
-            enc_gemv_w13sw_rows(enc, int64(nrows), mc.buf[bw], 0ul, w3off, mc.buf[bx], mc.buf[by], mc.buf[bn], mc.buf[bhid], int64(ndim), int64(hidden))
+            enc_gemv_w13sw_rows(enc, int64(nrows), mc.buf[bw], 0ul, w3off, mc.buf[bx], mc.buf[by], mc.buf[bn], mc.buf[bhid], mc.buf[bact], int64(ndim), int64(hidden))
         }
         return if (!ran)
         check_buf(t, tag, mc.buf[by], want, lead_poisoned(BAR_Q8_APPROX, want), Shape(row_width = hidden))
@@ -893,8 +897,8 @@ def test_metal_gemv_rows_tiles(t : T?) {
                 gemv_rows_gate(t, queue, 2, 256, 8, 24)
                 gemv_rows_gate(t, queue, 5, 256, 8, 24)
                 gemv_rows_gate(t, queue, int(MTP_MAX_ROWS), 256, 8, 24)
-                w13sw_rows_gate(t, queue, 5, 320, 18)
-                w13sw_rows_gate(t, queue, 9, 320, 18)
+                w13sw_rows_gate(t, queue, 5, 320, 18, false)
+                w13sw_rows_gate(t, queue, 9, 320, 18, true)
             }
         } else {
             t |> skip("das_metal is not built on this platform")

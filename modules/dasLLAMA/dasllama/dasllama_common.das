@@ -2051,7 +2051,7 @@ def public get_kq_q40_native() : bool => g_kq_q40_native
 var private g_kq_q51_native = true
 
 //! Enable/disable the native Q5_1 plane tier for subsequent loads (A/B rail; default ON;
-//! requires kquant_native). Expert stacks only — dense positions always requant to q8.
+//! requires kquant_native): the expert stacks and the dense planes keep the file's Q5_1 bytes.
 def public set_kq_q51_native(on : bool) {
     g_kq_q51_native = on
 }

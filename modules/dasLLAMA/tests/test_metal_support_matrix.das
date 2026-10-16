@@ -16,6 +16,7 @@ require ?das_metal metal/das_metal_boost  // device probe + metal_live_object_co
 require daslib/jobque_boost
 require daslib/fio   // nolint:STYLE030,LINT019 — used only inside the Apple static_if half
 require math   // nolint:STYLE030,LINT019 - used only inside the Apple static_if half
+require strings   // nolint:STYLE030,LINT019 - starts_with, inside the Apple static_if half
 require _model_tier
 require _format_census   // census_cell: the qwen35 rows' every site in its own format
 require dasllama/dasllama_image   // nolint:STYLE030,LINT019 - load_model_cached, the qwen4exp row's served image, inside the das_metal half
@@ -1311,8 +1312,28 @@ def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false
     }
 }
 
-[unused_argument(t, path, tag, tol_pf, tol_step)]   // off-Apple the gated body is empty
-def private gemma4moe_row(t : T?; path : string; tag : string; tol_pf : float = 8.0; tol_step : float = 16.0) {
+let private G4_STEP_PF = "metal_moe_comb_g4_pf"   //! the gemma-4 MoE step's window and decode stamps in the dispatch census
+let private G4_STEP_DEC = "metal_moe_comb_g4"
+
+//! the routed GEMVs' census counts that rose: every `metal_moe_gemv_*` stamp with a dispatch since the reset, logged as one line
+def private routed_gemv_counts : string {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        var inscope cov <- metal_kernel_coverage()
+        return build_string() $(var w) {
+            for (name, n in keys(cov), values(cov)) {
+                if (n > 0l && starts_with(name, "metal_moe_gemv")) {
+                    w |> write(" {name}: {n}")
+                }
+            }
+        }
+    } else {
+        return ""
+    }
+}
+
+[unused_argument(t, path, tag, tol_pf, tol_step, gemvs, mx4)]   // off-Apple the gated body is empty
+def private gemma4moe_row(t : T?; path : string; tag : string; tol_pf : float = 8.0; tol_step : float = 16.0; gemvs : array<string> = array<string>();
+                          mx4 : bool = false) {
     // gemma4-26B-A4B (Wave C stage 3): the parallel dense-shared + routed MoE graph. TOKEN
     // parity is NOT a valid instrument here (wave ruling): the CPU router's double norm is an
     // inverse TEMPERATURE on the expert softmax and the model amplifies ANY float-class
@@ -1335,7 +1356,7 @@ def private gemma4moe_row(t : T?; path : string; tag : string; tol_pf : float = 
             "{tag}: metal_needs derives {expected} (got {derived})")
         let vocab = c.vocab_size
         var prompt <- encode(tr, counting_prompt(1, 20), true, false)
-        var lg0, lg1 : array<float>
+        var lg0, lg1, lq0, lq1 : array<float>   //! the CPU truths on f16 and on q8_0 sessions
         var t0 = 0l
         var t1 = 0l
         with_dasllama_jobque() {
@@ -1345,50 +1366,90 @@ def private gemma4moe_row(t : T?; path : string; tag : string; tol_pf : float = 
             t0 = argmax_of(s.logits, vocab)
             var one <- [t0]
             eval_(tr, s, one)
-            delete one
             lg1 := s.logits
             t1 = argmax_of(s.logits, vocab)
             delete s
+            var sq = make_run_state(c, KVDtype.q8_0, KVDtype.q8_0)
+            eval_(tr, sq, prompt)
+            lq0 := sq.logits
+            eval_(tr, sq, one)
+            lq1 := sq.logits
+            delete sq
+            delete one
         }
+        census_cell(t, tr, path, tag, ["attention q/k/v/o", "routed experts", "token table", "classifier"])
+        t |> equal(tr.experts_mx4, mx4, "{tag}: the expert stacks load as the native-MXFP4 planes exactly where the file carries them")
+        let nl = c.n_layers
         delete tr
         var trg <- blob_twin(t, path, 512l)
         matrix_cell(t, trg, KVDtype.f16, "{tag}/q8/f16", "", "", "")
-        var mpf = 0.0
-        var m1 = 0.0
-        var served = 0l
-        var gpk0 = 0l
-        var gpk1 = 0l
-        with_dasllama_jobque() {
-            select_prefill_override("metal")
-            select_decode_override("metal")
-            set_metal_prefill_min_npos(1l)
-            let pf0 = metal_prefill_stats().prefills
-            let d0 = metal_decode_stats().decodes
-            var s = make_run_state(trg.config, KVDtype.f16, KVDtype.f16)
-            eval_(trg, s, prompt)
-            for (v in range64(vocab)) {
-                mpf = max(mpf, abs(lg0[v] - s.logits[v]))
+        //! the MoE tail as one step (`MetalMoeCombG4`) and, the control, on its unfused chain: the step counted once a layer in the
+        //! window and once a layer past the last an encoded step on the step's legs alone, every leg within the CPU truth's bars;
+        //! the q8_0 leg's decode takes the v-norm arms in the q/k norm's dispatch (the block-codec mirror's form)
+        for (leg_i in range(3)) {
+            let unfused = leg_i == 1
+            let kdt = leg_i == 2 ? KVDtype.q8_0 : KVDtype.f16
+            let leg = unfused ? "{tag} unfused tail" : (leg_i == 2 ? "{tag} q8_0 mirror" : tag)
+            var mpf = 0.0
+            var m1 = 0.0
+            var served = 0l
+            var gpk0 = 0l
+            var gpk1 = 0l
+            var npf = 0l
+            var ndec = 0l
+            with_dasllama_jobque() {
+                let prior_unfused = set_metal_moe_g4_unfused(unfused)
+                select_prefill_override("metal")
+                select_decode_override("metal")
+                set_metal_prefill_min_npos(1l)
+                metal_kernel_coverage_reset()
+                let pf0 = metal_prefill_stats().prefills
+                let d0 = metal_decode_stats().decodes
+                var s = make_run_state(trg.config, kdt, kdt)
+                eval_(trg, s, prompt)
+                for (v in range64(vocab)) {
+                    mpf = max(mpf, abs((leg_i == 2 ? lq0[v] : lg0[v]) - s.logits[v]))
+                }
+                gpk0 = argmax_of(s.logits, vocab)
+                npf = metal_kernel_count_compiled(G4_STEP_PF)
+                var one <- [t0]
+                eval_(trg, s, one)
+                delete one
+                for (v in range64(vocab)) {
+                    m1 = max(m1, abs((leg_i == 2 ? lq1[v] : lg1[v]) - s.logits[v]))
+                }
+                gpk1 = argmax_of(s.logits, vocab)
+                ndec = metal_kernel_count_compiled(G4_STEP_DEC)
+                if (leg_i == 0) {
+                    //! the routed sites' own formats: each stamp the file's expert stacks name dispatched by the forced step
+                    to_log(LOG_INFO, "{leg}: routed GEMVs dispatched:{routed_gemv_counts()}\n")
+                    for (g in gemvs) {
+                        t |> success(metal_kernel_count_compiled(g) > 0l, "{leg}: the routed sites' {g} dispatched")
+                    }
+                }
+                served = (metal_prefill_stats().prefills - pf0) + (metal_decode_stats().decodes - d0)
+                set_metal_prefill_min_npos(64l)
+                select_prefill_override("")
+                select_decode_override("")
+                set_metal_moe_g4_unfused(prior_unfused)
+                delete s
             }
-            gpk0 = argmax_of(s.logits, vocab)
-            var one <- [t0]
-            eval_(trg, s, one)
-            delete one
-            for (v in range64(vocab)) {
-                m1 = max(m1, abs(lg1[v] - s.logits[v]))
+            t |> success(served == 2l, "{leg}: GPU prefill + forced step both served ({served}/2)")
+            t |> success(mpf <= tol_pf, "{leg}: post-prefill logits within {tol_pf} of the CPU truth (measured {mpf})")
+            t |> success(m1 <= tol_step, "{leg}: one forced step within {tol_step} of the CPU truth (measured {m1})")
+            if (unfused) {
+                t |> success(npf == 0l && ndec == 0l, "{leg}: no MoE step dispatched (window {npf}, step {ndec})")
+            } else {
+                t |> success(npf == nl, "{leg}: the window's MoE tail one step a layer ({npf} of {nl})")
+                //! the greedy chain encodes the next step beside the forced one, so the count is whole steps' worth
+                t |> success(ndec > 0l && ndec % (nl - 1l) == 0l, "{leg}: the forced step's MoE tail one step a layer past the last ({ndec}, steps of {nl - 1l})")
             }
-            gpk1 = argmax_of(s.logits, vocab)
-            served = (metal_prefill_stats().prefills - pf0) + (metal_decode_stats().decodes - d0)
-            set_metal_prefill_min_npos(64l)
-            select_prefill_override("")
-            select_decode_override("")
-            delete s
+            to_log(LOG_INFO, "{leg} tolerance cells: post-prefill maxd={mpf} (tol {tol_pf}), forced step maxd={m1} (tol {tol_step}); MoE steps window {npf} step {ndec}; eyeball CPU '{eyeball_str(piece_(trg, t0))}'/'{eyeball_str(piece_(trg, t1))}' vs GPU '{eyeball_str(piece_(trg, gpk0))}'/'{eyeball_str(piece_(trg, gpk1))}'\n")
         }
-        t |> success(served == 2l, "{tag}: GPU prefill + forced step both served ({served}/2)")
-        t |> success(mpf <= tol_pf, "{tag}: post-prefill logits within {tol_pf} of the CPU truth (measured {mpf})")
-        t |> success(m1 <= tol_step, "{tag}: one forced step within {tol_step} of the CPU truth (measured {m1})")
-        to_log(LOG_INFO, "{tag} tolerance cells: post-prefill maxd={mpf} (tol {tol_pf}), forced step maxd={m1} (tol {tol_step}); eyeball CPU '{eyeball_str(piece_(trg, t0))}'/'{eyeball_str(piece_(trg, t1))}' vs GPU '{eyeball_str(piece_(trg, gpk0))}'/'{eyeball_str(piece_(trg, gpk1))}'\n")
         delete lg0
         delete lg1
+        delete lq0
+        delete lq1
         delete prompt
         delete trg
     }
@@ -1710,8 +1771,8 @@ def private gemma4_hetero_q8_row(t : T?; path : string) {
     }
 }
 
-[unused_argument(t, path)]   // off-Apple the gated body is empty
-def private gemma4_hetero_row(t : T?; path : string) {
+[unused_argument(t, path, tag)]   // off-Apple the gated body is empty
+def private gemma4_hetero_row(t : T?; path : string; tag : string = "gemma4-12b/k4"; free_rows : int64 = 128l) {
     // the stage-3 heterogeneous row: needs-derivation pin, per-path cells (all three ENGAGE),
     // a FREEFORM decode-only forced-feed tolerance cell, a counting both-paths generate, a B=2
     // batched-decode parity, and the continuation-prefill numeric cell —
@@ -1738,9 +1799,9 @@ def private gemma4_hetero_row(t : T?; path : string) {
             MetalNeed.geglu | MetalNeed.v_norm | MetalNeed.attn_scale | MetalNeed.out_scale |
             MetalNeed.qd_neq_dim)
         t |> success((uint(derived) & uint(want_bits)) == uint(want_bits),
-            "gemma4-12b/k4: metal_needs derives {want_bits} (got {derived})")
+            "{tag}: metal_needs derives {want_bits} (got {derived})")
         var trg <- blob_twin(t, path, 512l)
-        matrix_cell(t, trg, KVDtype.f16, "gemma4-12b/k4/f16", "", "", "")
+        matrix_cell(t, trg, KVDtype.f16, "{tag}/f16", "", "", "")
         let prompt <- encode(tr, "The old lighthouse keeper watched the storm roll in from the", true, false)
         let count_prompt <- encode(tr, counting_prompt(1, 30), true, false)
         let count_prompt2 <- encode(tr, counting_prompt(7, 36), true, false)
@@ -1749,6 +1810,8 @@ def private gemma4_hetero_row(t : T?; path : string) {
         var served_bat = 0l
         var served_free = 0l
         var fmaxd = 0.0
+        var fmax_at = 0l
+        var fmax_peak = 0.0
         with_dasllama_jobque() {
             cpu_ids <- cached_ids(path, "gen_free_n128") $ {   // nolint:PERF030,LINT019 — fresh empty target, single move; fires only on the das_metal arm
                 var s = make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
@@ -1774,16 +1837,24 @@ def private gemma4_hetero_row(t : T?; path : string) {
             select_decode_override("metal")
             for (q in range64(long_length(prompt) - 1l, long_length(cpu_ids))) {
                 gpu_picks |> push(argmax_of(sb.logits, vocab))
+                var qd = 0.0
                 for (a, b in sa.logits, sb.logits) {
-                    fmaxd = max(fmaxd, abs(a - b))
+                    qd = max(qd, abs(a - b))
+                }
+                if (qd > fmaxd && q - (long_length(prompt) - 1l) < free_rows) {
+                    fmaxd = qd
+                    fmax_at = q
+                    fmax_peak = live_maxabs(sa.logits)
                 }
                 var one <- [cpu_ids[q]]
                 eval_(tr, sa, one)
                 eval_(trg, sb, one)
                 delete one
             }
-            for (a, b in sa.logits, sb.logits) {
-                fmaxd = max(fmaxd, abs(a - b))
+            if (long_length(cpu_ids) - long_length(prompt) < free_rows) {
+                for (a, b in sa.logits, sb.logits) {
+                    fmaxd = max(fmaxd, abs(a - b))
+                }
             }
             served_free = metal_decode_stats().decodes - df0
             delete sa
@@ -1811,20 +1882,20 @@ def private gemma4_hetero_row(t : T?; path : string) {
             select_decode_override("")
             served_bat = metal_batch_decode_stats().steps - ba0
         }
-        to_log(LOG_INFO, "gemma4-12b/k4 freeform CPU text (prompt echo + cont): {eyeball_text(tr, cpu_ids)}\n")
-        to_log(LOG_INFO, "gemma4-12b/k4 freeform GPU greedy-would-be cont (fmaxd {fmaxd}): {eyeball_text(tr, gpu_picks)}\n")
+        to_log(LOG_INFO, "{tag} freeform CPU text (prompt echo + cont): {eyeball_text(tr, cpu_ids)}\n")
+        to_log(LOG_INFO, "{tag} freeform GPU greedy-would-be cont (fmaxd {fmaxd} at row {fmax_at}, CPU max |logit| there {fmax_peak}): {eyeball_text(tr, gpu_picks)}\n")
         t |> success(fmaxd < 8.0,
-            "gemma4-12b/k4: forced-feed freeform decode logits within 8 of CPU over the 128-token stream (measured {fmaxd})")
-        t |> success(served_free > 0l, "gemma4-12b/k4: the forced-feed freeform decode ENGAGED ({served_free} served)")
-        t |> success(served_pf > 0l, "gemma4-12b/k4: the hetero prefill ENGAGED ({served_pf} served)")
-        log_gen_texts(tr, "gemma4-12b/k4 both-paths", cpu_cnt_ids, both_ids)
+            "{tag}: forced-feed freeform decode logits within 8 of CPU over the stream's first {free_rows} of 128 rows (measured {fmaxd})")
+        t |> success(served_free > 0l, "{tag}: the forced-feed freeform decode ENGAGED ({served_free} served)")
+        t |> success(served_pf > 0l, "{tag}: the hetero prefill ENGAGED ({served_pf} served)")
+        log_gen_texts(tr, "{tag} both-paths", cpu_cnt_ids, both_ids)
         t |> success(ids_equal(cpu_cnt_ids, both_ids),
-            "gemma4-12b/k4: metal prefill+decode generate matches the CPU truth token-for-token")
-        t |> success(served_bat > 0l, "gemma4-12b/k4: the hetero batch ENGAGED ({served_bat} served)")
-        log_pair_texts(tr, "gemma4-12b/k4 B=2", cpu_bat, gpu_bat)
+            "{tag}: metal prefill+decode generate matches the CPU truth token-for-token")
+        t |> success(served_bat > 0l, "{tag}: the hetero batch ENGAGED ({served_bat} served)")
+        log_pair_texts(tr, "{tag} B=2", cpu_bat, gpu_bat)
         t |> success(ids_equal(cpu_bat, gpu_bat),
-            "gemma4-12b/k4: B=2 batched decode matches the CPU truth token-for-token")
-        cont_logits_cell(t, tr, trg, "gemma4-12b/k4", 8.0)
+            "{tag}: B=2 batched decode matches the CPU truth token-for-token")
+        cont_logits_cell(t, tr, trg, tag, 8.0)
         delete cpu_ids
         delete gpu_picks
         delete cpu_cnt_ids
@@ -1920,6 +1991,12 @@ def test_metal_family_matrix(t : T?) {
                 "gemma3-4b/q8/f16", uint(MetalNeed.neox | MetalNeed.qk_norm | MetalNeed.sliding |
                     MetalNeed.pre_post_norm | MetalNeed.geglu | MetalNeed.qd_neq_dim),
                 "")
+            // ... and the K-quant carrier: gemma-3-12b Q4_K_M (k4 / k6 planes, the Q6_K token table) on the same three paths;
+            // 7.3GB, DASLLAMA_PARITY_FULL-gated
+            family_cells(t, path_join(models_dir(), "gemma-3-12b-it-Q4_K_M.gguf"), "gemma3",
+                "gemma3-12b/k4/f16", uint(MetalNeed.neox | MetalNeed.qk_norm | MetalNeed.sliding |
+                    MetalNeed.pre_post_norm | MetalNeed.geglu | MetalNeed.qd_neq_dim),
+                "")
             // gemma4-12B (stage 3): the heterogeneous line — two attention classes (sliding
             // 16q/8kv/256, global 16q/1kv/512 MQA), V-from-K on global layers, v_norm,
             // out_scale on the whole layer output, unit attn scale, final softcap + suppress.
@@ -1929,6 +2006,11 @@ def test_metal_family_matrix(t : T?) {
             // the q8 twin drives the hetero fixed-B mul_mv rail (a class the k4 row never
             // dispatches); 12.5GB — DASLLAMA_PARITY_FULL-gated like the row above
             gemma4_hetero_q8_row(t, path_join(models_dir(), "gemma-4-12B-it-Q8_0.gguf"))
+            // the largest dense gemma-4: the 31B Q4_K_M (`../performance/model_specs.das` names its source) on the 12B's row;
+            // 18.7GB, DASLLAMA_PARITY_FULL-gated. Its greedy stream (and llama.cpp's) falls into a one-token loop at the
+            // 30th row; inside the loop both sides pick the loop token while the whole-vocab gap grows to 18, so the bar
+            // holds the 29 rows ahead of it
+            gemma4_hetero_row(t, path_join(models_dir(), "gemma-4-31B-it-Q4_K_M.gguf"), "gemma4-31b/k4", 29l)
             // qwen3moe (Wave C): qwen3 attention + GPU MoE routing — router + top-k select +
             // expert-indexed GEMVs (decode/batch) + gathered mul_mm prefill (k4 gate/up, k6
             // down). All three paths ENGAGE; 18.5GB > the 6GiB tier — DASLLAMA_PARITY_FULL-gated.
@@ -1937,19 +2019,26 @@ def test_metal_family_matrix(t : T?) {
                 "", KVDtype.f16, 6.0)
             // gemma4-26B-A4B (Wave C stage 3): the parallel dense-shared + routed graph —
             // ENGAGE cells + shallow logits tolerances (see the row's ruling comment)
-            gemma4moe_row(t, path_join(models_dir(), "gemma-4-26B-A4B-it-Q8_0.gguf"), "gemma4moe-26b")
+            gemma4moe_row(t, path_join(models_dir(), "gemma-4-26B-A4B-it-Q8_0.gguf"), "gemma4moe-26b", 8.0, 16.0, ["metal_moe_gemv_q8"])
             // ... and the community Q4_K_M file: k4 gate_up + NATIVE q51 down expert stacks —
             // the q51 Metal GEMV/mul_mm twins' model-level pin (15.9GB, PARITY_FULL-gated).
             // Wider step bar: the k4/q51 f16-tile paths measure 13.8 under the same double-router
             // amplifier (post-prefill stays 2.5-class); 24 keeps the ~2x margin discipline
-            gemma4moe_row(t, path_join(models_dir(), "gemma-4-26B-A4B-it-Q4_K_M.gguf"), "gemma4moe-26b-k", 8.0, 24.0)
-            // ... and the ggml-org Q4_0 file: q40 gate_up expert stacks beside q8 down stacks
-            // (a 704-wide down row is no multiple of 256, so the loader demotes it) - the q40
-            // routed twins' model-level pin. Bars are the Q4_K_M row's, not tighter: the same
-            // mixed-quant expert feed rides the same double-router amplifier, whose step spread
-            // across summation orders reaches 13.8 there while one measurement here reads 5.6
-            // (post-prefill 2.4). 14GB, PARITY_FULL-gated
-            gemma4moe_row(t, path_join(models_dir(), "gemma-4-26B-A4B-it-Q4_0.gguf"), "gemma4moe-26b-q40", 8.0, 24.0)
+            gemma4moe_row(t, path_join(models_dir(), "gemma-4-26B-A4B-it-Q4_K_M.gguf"), "gemma4moe-26b-k", 8.0, 24.0, ["metal_moe_gemv_k4", "metal_moe_gemv_q51"])
+            // ... and the ggml-org Q4_0 file: q40 gate_up expert stacks beside the 704-wide down stacks
+            // in their own per-32 form (q4032) - the q40 routed twins' model-level pin. Bars are the
+            // Q4_K_M row's, not tighter: the same mixed-quant expert feed rides the same double-router
+            // amplifier, whose step spread across summation orders reaches 13.8 there. 14GB, PARITY_FULL-gated
+            gemma4moe_row(t, path_join(models_dir(), "gemma-4-26B-A4B-it-Q4_0.gguf"), "gemma4moe-26b-q40", 8.0, 24.0, ["metal_moe_gemv_q40", "metal_moe_gemv_q4032"])
+            // ... and the two Unsloth dynamic files: grid-format gate_up stacks (IQ2_S / IQ3_S on UD-IQ3_XXS,
+            // IQ3_S / IQ4_XS on UD-IQ4_XS) beside the 704-wide IQ4_NL down stacks (iq4nl32) and a Q8_0 last
+            // layer, the Q6_K / Q8_0 token tables - the iquant routed forms' model-level pin, at the Q4_K_M
+            // row's bars. 11-13GB, PARITY_FULL-gated
+            gemma4moe_row(t, path_join(models_dir(), "gemma-4-26B-A4B-it-UD-IQ3_XXS.gguf"), "gemma4moe-26b-iq3xxs", 8.0, 24.0, ["metal_moe_gemv_iq2s", "metal_moe_gemv_iq4nl32"])
+            gemma4moe_row(t, path_join(models_dir(), "gemma-4-26B-A4B-it-UD-IQ4_XS.gguf"), "gemma4moe-26b-iq4xs", 8.0, 24.0, ["metal_moe_gemv_iq4xs", "metal_moe_gemv_iq4nl32"])
+            // ... and the MXFP4_MOE mint (`../performance/model_specs.das`): the fused gate_up and the down stacks MXFP4 on disk, loaded as the
+            // native-MXFP4 planes under gemma-4's GeGLU and per-expert down scale, every other plane Q8_0
+            gemma4moe_row(t, path_join(models_dir(), "gemma-4-26B-A4B-it-MXFP4_MOE-local.gguf"), "gemma4moe-26b-mx4", 8.0, 24.0, ["metal_moe_gemv_mx4"], true)
             // gemma-4 E-series (E4B): PLE (MetalNeed.ple) + cross-layer KV sharing — decode +
             // prefill serve, batch declines need_ple. 7.2GB — DASLLAMA_PARITY_FULL-gated.
             gemma4e_row(t, path_join(models_dir(), "gemma-4-E4B-it-Q8_0.gguf"), "gemma4e-e4b")

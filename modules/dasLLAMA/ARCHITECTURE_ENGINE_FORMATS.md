@@ -191,7 +191,10 @@ inferred from image sizes. A hybrid's deltanet planes - qkv, z, out, beta and al
 file's format on every load, whatever backend is armed: one plane a tag, no q8 transcode beside
 it, the CPU chain and the Metal drivers each reading it in that format. The one exception is a
 grouped (qwen3next) file's out plane, whose input columns the load permutes across superblocks,
-so the q8 transcode is its only form.
+so the q8 transcode is its only form. A dense or routed plane whose disk type no `KqFmt` member carries - F16, BF16,
+F32, and MXFP4 outside a routed stack - is the q8 transcode on every home, the CPU and both devices; the routed stacks
+MXFP4 on disk, the gate and up stacks apart or as gemma-4's fused gate_up stack, load as the native-MXFP4 planes
+(`experts_mx4`). No stocked gemma file carries such a dense or routed plane.
 
 - **`dasllama_image.das`** - the prepared-model `.dlim` rail, and it is ONE rail
   (`ARCHITECTURE_IMAGE.md#there-is-one-way-to-load-a`). Nothing

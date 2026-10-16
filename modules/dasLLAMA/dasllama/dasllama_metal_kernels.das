@@ -2154,6 +2154,7 @@ class template MetalGemvB24T {
     @uniform @binding = 5 ndim : uint
     @uniform @binding = 6 ddim : uint       // output rows (W13: the hidden width, which is also the y stride)
     @uniform @binding = 7 @template_gate = "!W13" ys : uint         // y ROW stride (== ddim dense)
+    @uniform @binding = 7 @role = "weight" @template_gate = W13 act : uint   //! the W13 stamps' gate activation (`gk_act_mul`: 0 silu, 1 gelu)
     @ssbo @binding = 8 @role = "weight" @off = "w3off" @template_gate = W13 wqb3 : array<int8>
     @ssbo @binding = 9 @role = "weight" @off = "w3off" @template_gate = W13 wsh3 : array<float16>
     @workgroup txp : float4[PANEL]          // [NR streams x 64 float4] X panel chunk
@@ -2232,7 +2233,7 @@ class template MetalGemvB24T {
             static_if (W13) {
                 let u = simd_sum(acc_up[b])
                 if (lane == 0u) {
-                    y[uint(b) * ddim + row] = gk_act_mul(g, u, 0u)
+                    y[uint(b) * ddim + row] = gk_act_mul(g, u, act)
                 }
             } else {
                 if (lane == 0u) {
@@ -3974,8 +3975,7 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_wdec_attn_part = compile_stamp(metal_wdec_attn_part_msl, ok)
     g_pso_wdec_attn_comb = compile_stamp(metal_wdec_attn_comb_msl, ok)
     g_pso_bias_add_res = compile_stamp(metal_bias_add_res_msl, ok)
-    g_pso_softcap = compile_stamp(metal_softcap_row_msl, ok)
-    g_pso_suppress = compile_stamp(metal_suppress_row_msl, ok)
+    g_pso_cls_epi = compile_stamp(metal_cls_epi_msl, ok)
     g_pso_attn16 = compile_stamp(MetalSqAttnF16_metal_sq_attn_msl, ok)
     g_pso_attn32 = compile_stamp(MetalSqAttnF32_metal_sq_attn_msl, ok)
     g_pso_attnp16 = compile_stamp(MetalSqAttnPartF16_metal_sq_attn_part_msl, ok)
@@ -4002,6 +4002,8 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_dn_ba = compile_stamp(MetalDnBa_metal_q8_gemv_msl, ok)
     g_pso_moe_select = compile_stamp(MetalMoeSelect_metal_moe_select_msl, ok)
     g_pso_moe_select_512 = compile_stamp(MetalMoeSelect512_metal_moe_select_msl, ok)
+    g_pso_moe_select_ds = compile_stamp(MetalMoeSelectDs_metal_moe_select_msl, ok)
+    g_pso_moe_select_512_ds = compile_stamp(MetalMoeSelect512Ds_metal_moe_select_msl, ok)
     g_pso_moe_gemv_q8 = compile_stamp(metal_moe_gemv_q8_msl, ok)
     g_pso_moe_kq_k4 = compile_stamp(metal_moe_gemv_k4_msl, ok)
     g_pso_moe_kq_k3 = compile_stamp(metal_moe_gemv_k3_msl, ok)
@@ -4019,8 +4021,10 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_moe_kq_k6 = compile_stamp(metal_moe_gemv_k6_msl, ok)
     g_pso_moe_combine = compile_stamp(metal_moe_combine_msl, ok)
     g_pso_moe_combine_sh = compile_stamp(metal_moe_combine_sh_msl, ok)
+    g_pso_moe_comb_g4 = compile_stamp(metal_moe_comb_g4_msl, ok)
+    g_pso_moe_comb_g4_hx = compile_stamp(metal_moe_comb_g4_hx_msl, ok)
+    g_pso_moe_comb_g4_pf = compile_stamp(metal_moe_comb_g4_pf_msl, ok)
     g_pso_g4rnorm = compile_stamp(metal_g4_router_norm_msl, ok)
-    g_pso_moe_wscale = compile_stamp(metal_moe_wscale_msl, ok)
     g_pso_swiglu_oai = compile_stamp(MetalSwigluOai_metal_swiglu_oai_msl, ok)
     g_pso_moe_gemv_mx4 = compile_stamp(metal_moe_gemv_mx4_msl, ok)
     g_pso_moe_gemv_q51 = compile_stamp(metal_moe_gemv_q51_msl, ok)
@@ -5247,19 +5251,20 @@ def enc_mv_site(enc : MetalComputeEncoder?; bwblob : MetalBuffer?; wboff : uint6
 // layout), by is the [B x hidden] swiglu output. Replaces the w1 + w3 GEMVs + the swiglu ew2
 // with one dispatch. Same 4-rows/tg geometry, gridded over the hidden output rows.
 def enc_gemv_w13sw_b(enc : MetalComputeEncoder?; four : bool; bw : MetalBuffer?; w1off, w3off : uint64;
-                     bx, by, bn, bhid : MetalBuffer?; hidden : int64; xoff : uint64 = 0ul; yoff : uint64 = 0ul) {
+                     bx, by, bn, bhid, bact : MetalBuffer?; hidden : int64; xoff : uint64 = 0ul; yoff : uint64 = 0ul) {
     if (four) {
-        enc_w13sw_b4_c(enc, bw, w1off, bw, bx, xoff, by, yoff, bn, bhid, bw, w3off, bw, hidden)
+        enc_w13sw_b4_c(enc, bw, w1off, bw, bx, xoff, by, yoff, bn, bhid, bact, bw, w3off, bw, hidden)
     } else {
-        enc_w13sw_b2_c(enc, bw, w1off, bw, bx, xoff, by, yoff, bn, bhid, bw, w3off, bw, hidden)
+        enc_w13sw_b2_c(enc, bw, w1off, bw, bx, xoff, by, yoff, bn, bhid, bact, bw, w3off, bw, hidden)
     }
 }
 
-// the fused W1|W3 + swiglu site at nrows live rows (enc_gemv_rows's tiling; y stride = hidden)
+// the fused W1|W3 + activation site at nrows live rows (enc_gemv_rows's tiling; y stride = hidden), `bact` the act code (0 silu,
+// 1 gelu)
 def enc_gemv_w13sw_rows(enc : MetalComputeEncoder?; nrows : int64; bw : MetalBuffer?; w1off, w3off : uint64;
-                        bx, by, bn, bhid : MetalBuffer?; n, hidden : int64) {
+                        bx, by, bn, bhid, bact : MetalBuffer?; n, hidden : int64) {
     enc_rows_tiles(nrows, n, hidden) $(four; _live; xo, yo) {
-        enc_gemv_w13sw_b(enc, four, bw, w1off, w3off, bx, by, bn, bhid, hidden, xo, yo)
+        enc_gemv_w13sw_b(enc, four, bw, w1off, w3off, bx, by, bn, bhid, bact, hidden, xo, yo)
     }
 }
 
@@ -5456,7 +5461,7 @@ def metal_kernels_release {
     release_handles(g_pso_ln, g_pso_bias_act, g_pso_act_rows, g_pso_posadd, g_pso_q3v_stem, g_pso_clamp, g_pso_clamp_copy)
     release_handles(g_pso_rope2d, g_pso_head_pad, g_pso_head_unpad, g_pso_geglu_quick, g_pso_wdec_kv, g_pso_wdec_kv_h)
     release_handles(g_pso_im2col2d, g_pso_wdec_attn_part, g_pso_wdec_attn_comb, g_pso_bias_add_res)
-    release_handles(g_pso_f32mm, g_pso_softcap, g_pso_suppress, g_pso_swiglu, g_pso_swiglu_hx, g_pso_swiglu_hxb)
+    release_handles(g_pso_f32mm, g_pso_cls_epi, g_pso_swiglu, g_pso_swiglu_hx, g_pso_swiglu_hxb)
     release_handles(g_pso_swiglu_b, g_pso_geglu_hxb, g_pso_geglu_b, g_pso_attn16, g_pso_attn32, g_pso_attnp16)
     release_handles(g_pso_attnp32, g_pso_attn_q8, g_pso_attnp_q8, g_pso_rpst_q8, g_pso_attn_tq4, g_pso_attnp_tq4)
     release_handles(g_pso_rpst_tq4, g_pso_unsign, g_pso_qknorm, g_pso_attncomb, g_pso_rpst16, g_pso_qkn16)
@@ -5466,10 +5471,11 @@ def metal_kernels_release {
     release_handles(g_pso_emb_kq_k2, g_pso_emb_kq_iq3s, g_pso_emb_kq_iq3xxs, g_pso_emb_kq_iq2s, g_pso_emb_kq_iq2xs, g_pso_emb_kq_iq2xxs)
     release_handles(g_pso_emb_b32_q51, g_pso_emb_b32_iq4nl32, g_pso_emb_b32_q4032, g_pso_emb_b32_q5032)
     release_handles(g_pso_moe_router, g_pso_moe_select, g_pso_moe_select_512, g_pso_moe_gemv_q8, g_pso_moe_kq_k4, g_pso_moe_kq_k3)
+    release_handles(g_pso_moe_select_ds, g_pso_moe_select_512_ds)
     release_handles(g_pso_moe_kq_iq3s, g_pso_moe_kq_iq3xxs, g_pso_moe_kq_iq2s, g_pso_moe_kq_iq2xs, g_pso_moe_kq_iq2xxs, g_pso_moe_kq_iq4xs)
     release_handles(g_pso_moe_kq_iq3s_f4)
-    release_handles(g_pso_moe_kq_q40, g_pso_moe_kq_k5, g_pso_moe_kq_k6, g_pso_moe_combine, g_pso_g4rnorm, g_pso_moe_wscale)
-    release_handles(g_pso_moe_combine_sh)
+    release_handles(g_pso_moe_kq_q40, g_pso_moe_kq_k5, g_pso_moe_kq_k6, g_pso_moe_combine, g_pso_g4rnorm)
+    release_handles(g_pso_moe_combine_sh, g_pso_moe_comb_g4, g_pso_moe_comb_g4_hx, g_pso_moe_comb_g4_pf)
     release_handles(g_pso_swiglu_oai, g_pso_moe_gemv_mx4, g_pso_moe_gemv_q51, g_pso_moe_gemv_iq4nl32, g_pso_dn_conv, g_pso_dn_conv_n, g_pso_dn_conv_n4, g_pso_dn_hist, g_pso_dn_l2)
     release_handles(g_pso_moe_kq_iq4nl, g_pso_moe_kq_k2, g_pso_kq_q51, g_pso_kq_iq4nl32, g_pso_kq_mm_b51, g_pso_kq_mm_b4n32)
     release_handles(g_pso_b32_mvb2_q51, g_pso_b32_mvb4_q51, g_pso_b32_mvb8_q51, g_pso_b32_mvb2_iq4nl32, g_pso_b32_mvb4_iq4nl32, g_pso_b32_mvb8_iq4nl32)
@@ -6996,18 +7002,20 @@ class MetalMoeRouterB : MetalMoeRouterT {
 def moe_router_args(ne, dim, ncols : int64; xs : int64 = 0l; hasb : bool = false) : GkRouterArgs
     => GkRouterArgs(ne = uint(ne), dim = uint(dim), ncols = uint(ncols), xs = uint(xs), hasb = hasb ? 1u : 0u)
 
-//! The router select on the template both homes stamp (`GkTopKRow`): one simdgroup a stream, DEPTH logits a lane; lane 0 writes
-//! the stream's selection row - the picks (`seli`), then their weights (`selw`, the same buffer's float view): the softmax
-//! weights renormed under `norm`, or under `raw` (gpt-oss softmax_weight, the select on the raw logits) the softmax over the picks
+//! The router select on the template both homes stamp (`GkTopKRow`): one simdgroup a stream, DEPTH logits a lane; lane 0 writes the
+//! picks (`seli`), then their weights (`selw`, the float view): renormed under `norm`, or under `raw` (gpt-oss) the softmax over
+//! the picks, then under the global and the per-expert down scales (`scale_weight`)
 [ |> template_struct_instance]
 class template MetalMoeSelectT : GkTopKRow {
     @ssbo @binding = 0 logits : array<float>                 //! [streams x lstride] router logits
     @ssbo @binding = 1 @role = "write" seli : array<uint>    //! the selection rows, uint view: stream s's picks at s 2k
     @ssbo @binding = 2 @role = "alias" selw : array<float>   //! the same rows' float view: stream s's weights at s 2k + k
+    @ssbo @binding = 3 @role = "weight" ds : array<float>    //! the per-expert down scales (gemma-4), read at dsoff when the args name a row
     override LANES = 32u
     override DEPTH = 8
 
     def override logit_at(p, e : uint) : float => logits[p * pa.lstride + e]
+    def override down_scale(e : uint) : float => ds[pa.dsoff + e]
 
     [metal_kernel]
     def metal_moe_select {
@@ -7035,10 +7043,12 @@ class template MetalMoeSelectT : GkTopKRow {
             jj = 0u
             while (jj < pa.k) {
                 var wj = 0.0
+                let ex = min(pick[jj], pa.ne - 1u)
                 if (pa.raw != 0u) {
                     wj = exp(max(pickw[jj] - mxw, -80.0)) / sw
+                    scale_weight(ex, pa.wscale, wj)
                 } else {
-                    pick_weight_into(jj, pa.norm, sw, 0.0, wj)
+                    pick_weight_into(jj, ex, pa.norm, sw, pa.wscale, wj)
                 }
                 selw[sel0 + pa.k + jj] = wj
                 jj++
@@ -7054,6 +7064,18 @@ class MetalMoeSelect : MetalMoeSelectT {
 [metal_dispatch(name = "enc_moe_select_512", pso = "g_pso_moe_select_512", tgmem = "MetalMoeSelect512_metal_moe_select_msl_tgmem", tg = 32, grid = "nst", params = "nst : int64")]
 class MetalMoeSelect512 : MetalMoeSelectT {
     override DEPTH = 16
+}
+
+//! the gemma-4 stamps: the down scales in the select (`ARCHITECTURE_GPU_PREFILL_MOE.md#moe-wscale` says why they are stamps of their own)
+[metal_dispatch(name = "enc_moe_select_ds", pso = "g_pso_moe_select_ds", tgmem = "MetalMoeSelectDs_metal_moe_select_msl_tgmem", tg = 32, grid = "nst", params = "nst : int64")]
+class MetalMoeSelectDs : MetalMoeSelectT {
+    override DSCALE = true
+}
+
+[metal_dispatch(name = "enc_moe_select_512_ds", pso = "g_pso_moe_select_512_ds", tgmem = "MetalMoeSelect512Ds_metal_moe_select_msl_tgmem", tg = 32, grid = "nst", params = "nst : int64")]
+class MetalMoeSelect512Ds : MetalMoeSelectT {
+    override DEPTH = 16
+    override DSCALE = true
 }
 
 // q4_K/q5_K kmask scale decode for ONE 32-element sub-block js (0..7): the 6-bit sc and min -
@@ -7210,7 +7232,7 @@ class MetalMoeGemvMx4 {
 
 //! the routed combine on the template both homes stamp (`GkMoeCombine`), a thread an element of a stream's row: the slots
 //! at p k + j, their weights the selection rows' float view (a row's 2k words, the weights past the k picks)
-[metal_dispatch(name = "enc_moe_combine", pso = "g_pso_moe_combine", tg = 256, grid = "dim/256, nst", params = "dim : int64, nst : int64")]
+[metal_dispatch(name = "enc_moe_combine", pso = "g_pso_moe_combine", tgmem = "metal_moe_combine_msl_tgmem", tg = 256, grid = "dim/256, nst", params = "dim : int64, nst : int64")]
 class MetalMoeCombine : GkMoeCombine {
     override GATHERED = false
     override WINDOW = false
@@ -7225,7 +7247,7 @@ class MetalMoeCombine : GkMoeCombine {
 
 //! ... and its shared-expert stamp: the shared expert's rows under their gate logit's sigmoid added in the same pass
 //! derives GkMoeCombine, the template both homes stamp
-[metal_dispatch(name = "enc_moe_combine_sh", pso = "g_pso_moe_combine_sh", tg = 256, grid = "dim/256, nst", params = "dim : int64, nst : int64")]
+[metal_dispatch(name = "enc_moe_combine_sh", pso = "g_pso_moe_combine_sh", tgmem = "metal_moe_combine_sh_msl_tgmem", tg = 256, grid = "dim/256, nst", params = "dim : int64, nst : int64")]
 class MetalMoeCombineSh : GkMoeCombine {
     override GATHERED = false
     override WINDOW = false
@@ -7237,6 +7259,67 @@ class MetalMoeCombineSh : GkMoeCombine {
             comb_elem(gl_WorkGroupID.y, gl_GlobalInvocationID.x)
         }
     }
+}
+
+//! The gemma-4 MoE step on the template both homes stamp (`GkMoeCombG4`): a threadgroup of 1024 lanes a row over the add-rms slab's
+//! stash; the decode stamps read the selection rows' slots and store the next norm in f32 (`Hx`: with its f16 twin), the window's
+//! (`Pf`) reads them through the bucket inverse and stores none (`ARCHITECTURE_GPU_PREFILL_MOE.md#metal-g4-moe-step`)
+[ |> template_struct_instance]
+class template MetalMoeCombG4T : GkMoeCombG4 {
+    @workgroup xrow : float[4096]
+    override TG = 1024u
+    override RSQRT = true
+    override GATHERED = false
+    override OUT_F32 = true
+
+    def override stash(k : uint; v : float) : void {
+        xrow[k] = v
+    }
+    def override stashed(k : uint) : float => xrow[k]
+}
+
+[metal_dispatch(name = "enc_moe_comb_g4", pso = "g_pso_moe_comb_g4", tgmem = "metal_moe_comb_g4_msl_tgmem", tg = 1024, grid = "nst", params = "nst : int64")]
+class MetalMoeCombG4 : MetalMoeCombG4T {
+    [metal_kernel(name="metal_moe_comb_g4_msl")]
+    def metal_moe_comb_g4 {
+        comb_g4_row(gl_WorkGroupID.x)
+    }
+}
+
+[metal_dispatch(name = "enc_moe_comb_g4_hx", pso = "g_pso_moe_comb_g4_hx", tgmem = "metal_moe_comb_g4_hx_msl_tgmem", tg = 1024, grid = "nst", params = "nst : int64")]
+class MetalMoeCombG4Hx : MetalMoeCombG4T {
+    override HX = true
+
+    [metal_kernel(name="metal_moe_comb_g4_hx_msl")]
+    def metal_moe_comb_g4_hx {
+        comb_g4_row(gl_WorkGroupID.x)
+    }
+}
+
+[metal_dispatch(name = "enc_moe_comb_g4_pf", pso = "g_pso_moe_comb_g4_pf", tgmem = "metal_moe_comb_g4_pf_msl_tgmem", tg = 1024, grid = "npos", params = "npos : int64")]
+class MetalMoeCombG4Pf : MetalMoeCombG4T {
+    override GATHERED = true
+    override OUT_F32 = false
+    override SLOT_X4 = false   //! the window's 512 rows run 8% slower with four slot loads in flight a lane
+
+    [metal_kernel(name="metal_moe_comb_g4_pf_msl")]
+    def metal_moe_comb_g4_pf {
+        comb_g4_row(gl_WorkGroupID.x)
+    }
+}
+
+//! the gemma-4 step's args over `nk` slots a row at width `dim`, the weights the selection rows' (`moe_comb_args`); the norm rows at
+//! the offsets `moe_g4_norms` lays out, the next one's where `next`
+def moe_g4_args(dim, nk : int64; eps, ascale : float; presummed, next : bool) : GkMoeCombArgs {
+    var ka = moe_comb_args(dim, nk)
+    ka.eps = eps
+    ka.ascale = ascale
+    ka.presummed = presummed ? 1u : 0u
+    ka.rpost_off = 0u
+    ka.dpost_off = uint(dim)
+    ka.spost_off = uint(2l * dim)
+    ka.nwoff = next ? uint(3l * dim) : 0u
+    return ka
 }
 
 //! the combine's args over `nk` slots a stream at row width `dim`, the weights the selection rows' (the Metal stamps sum every
@@ -7342,71 +7425,26 @@ class MetalG4RouterNorm {
     }
 }
 
-// gemma4 per-expert down-scale fold (stage 3): selw[row][j] *= ds[seli[row][j]] — the CPU
-// folds ffn_down_exps_s into the selection weights right after select.
-[metal_dispatch(name = "enc_moe_wscale", pso = "g_pso_moe_wscale", tg = 32, grid = "nst", params = "nst : int64")]
-class MetalMoeWScale {
-    @ssbo @binding = 0 seli : array<uint>   // selection rows, uint view (idx of row r at r*2k)
-    @ssbo @binding = 1 @role = "alias" selw : array<float>  // the same buffer, float view (w of row r at r*2k + k)
-    @ssbo @binding = 2 @role = "weight" ds : array<float>    // [ne] this layer's per-expert down scales
-    @uniform @binding = 3 nk : uint
-
-    [metal_kernel(name="metal_moe_wscale_msl")]
-    def metal_moe_wscale {
-        let row = gl_WorkGroupID.x
-        let j = gl_LocalInvocationID.x
-        if (j < nk) {
-            selw[row * 2u * nk + nk + j] *= ds[seli[row * 2u * nk + j]]
-        }
-    }
-}
-
-var private g_wscale_row : MetalBuffer?   //! the model's `expert_weights_scale` once an expert, the scale row `MetalMoeWScale` multiplies by
-var private g_wscale_val = 0.0
-var private g_wscale_ne = 0l
-
-def private wscale_row_drop {
-    if (g_wscale_row != null) {
-        metal_release(g_wscale_row)
-        g_wscale_row = null
-    }
-    g_wscale_ne = 0l
-}
-
-[init]
-def private wscale_row_register {
-    register_reload_prep(@@wscale_row_drop)
-}
-
+//! the router select over `nrows` streams' logits into `bsel`, every picked weight under the model's `expert_weights_scale` and,
+//! where `bds` is the layer's per-expert down-scale row (gemma-4), that expert's scale - the select's own fold, no pass after it
 [arch(at="../ARCHITECTURE_GPU_PREFILL_MOE.md#moe-wscale")]
-def enc_moe_select_rows(enc : MetalComputeEncoder?; c : Config; blg, bsel, bnk : MetalBuffer?; nrows : int64; lstride : int64 = 0l) {
+def enc_moe_select_rows(enc : MetalComputeEncoder?; c : Config; blg, bsel : MetalBuffer?; nrows : int64; lstride : int64 = 0l;
+                        bds : MetalBuffer? = null) {
     let sw = c.moe_gate == MoeGate.softmax_weight
     var ka = GkTopKArgs(ne = uint(c.n_expert), k = uint(c.n_expert_used), norm = !sw && c.norm_topk_prob ? 1u : 0u,
+        wscale = c.expert_weights_scale, dsoff = bds != null ? 0u : GK_NO_DSCALE,
         lstride = uint(lstride > 0l ? lstride : c.n_expert), raw = sw ? 1u : 0u)
-    if (c.n_expert > 256l) {
-        enc_moe_select_512(enc, blg, bsel, bsel, ka, nrows)
-    } else {
-        enc_moe_select(enc, blg, bsel, bsel, ka, nrows)
-    }
-    let ws = c.expert_weights_scale
-    if (ws != 0.0 && ws != 1.0) {
-        if (g_wscale_row == null || g_wscale_val != ws || g_wscale_ne != c.n_expert) {
-            wscale_row_build(ws, c.n_expert)
+    if (bds != null) {
+        if (c.n_expert > 256l) {
+            enc_moe_select_512_ds(enc, blg, bsel, bsel, bds, ka, nrows)
+        } else {
+            enc_moe_select_ds(enc, blg, bsel, bsel, bds, ka, nrows)
         }
-        enc_moe_wscale(enc, bsel, bsel, g_wscale_row, bnk, nrows)
+    } elif (c.n_expert > 256l) {
+        enc_moe_select_512(enc, blg, bsel, bsel, blg, ka, nrows)   //! the down-scale binding is read on a DSCALE stamp alone
+    } else {
+        enc_moe_select(enc, blg, bsel, bsel, blg, ka, nrows)
     }
-}
-
-[cold_path]   // once a model
-def private wscale_row_build(ws : float; ne : int64) {
-    wscale_row_drop()
-    g_wscale_row = metal_new_buffer(g_dev, uint64(ne * 4l))
-    var row = unsafe(reinterpret<float?>(metal_buffer_contents(g_wscale_row)))
-    for (e in range64(ne)) {
-        unsafe(row[e]) = ws
-    }
-    g_wscale_val = ws
-    g_wscale_ne = ne
 }
 
 //! The q8 dot's inner forms (four quants against a float4, a block's eight against two), spelled once: this sum order is the one every q8 kernel's parity holds.
@@ -11553,41 +11591,20 @@ class MetalSigmul : MetalEw2T {
     override ACT = 3
 }
 
-// Suppress-token pinning (gemma4): logits[ids[i]] = -1e30 after the soft cap — the CPU
-// forward's pin value exactly; one thread per suppressed id.
-[metal_dispatch(name = "enc_suppress_row", pso = "g_pso_suppress", tg = 64, grid = "n/64", params = "n : int64")]
-class MetalSuppressRow {
-    @ssbo @binding = 0 @off = "xoff" x : array<float>
-    @ssbo @binding = 1 @role = "weight" ids : array<uint>
-    @uniform @binding = 2 n : uint
-
-    [metal_kernel(name="metal_suppress_row_msl")]
-    def metal_suppress_row {
-        let gid = gl_GlobalInvocationID.x
-        if (gid >= n) {
-            return
-        }
-        x[ids[gid]] = -1.0e30
+//! the classifier tail's epilogue on the template both homes stamp (`GkClsEpilogue`), a thread a logit over every row
+[metal_dispatch(name = "enc_cls_epi", pso = "g_pso_cls_epi", tg = 256, grid = "total/256", params = "total : int64")]
+class MetalClsEpilogue : GkClsEpilogue {
+    [metal_kernel(name="metal_cls_epi_msl")]
+    def metal_cls_epi {
+        epi_elem(gl_GlobalInvocationID.x)
     }
 }
 
-// Logit soft-cap, one thread per element: x = cap * tanh(x / cap) — softcap4's scalar reference
-// (gemma2/gemma4 final_logit_softcap on the GPU classifier row).
-[metal_dispatch(name = "enc_softcap_row", pso = "g_pso_softcap", tg = 64, grid = "total/64", params = "total : int64")]
-class MetalSoftcapRow {
-    @ssbo @binding = 0 @off = "xoff" @span = "total*4" x : array<float>
-    @uniform @binding = 1 total : uint      // grid guard
-    @uniform @binding = 2 cap : float
-
-    [metal_kernel(name="metal_softcap_row_msl")]
-    def metal_softcap_row {
-        let gid = gl_GlobalInvocationID.x
-        if (gid >= total) {
-            return
-        }
-        // tanh via the exp identity (the CPU softcap4's form; Metal tanh NaNs past ~44)
-        x[gid] = softcap_exp(x[gid], cap)
-    }
+//! the epilogue over `rows` logits rows `vocab` wide in `by` from element 0: the final softcap (`cap` 0 = none), then the `nsupp`
+//! suppressed ids in `bsupp` pinned - one dispatch; `bsupp` null carries no pin
+def enc_cls_epi_rows(enc : MetalComputeEncoder?; by, bsupp : MetalBuffer?; vocab, rows : int64; cap : float; nsupp : int64) {
+    var ka = GkClsEpiArgs(vocab = uint(vocab), cap = cap, nsupp = bsupp != null ? uint(nsupp) : 0u, rows = uint(rows))
+    enc_cls_epi(enc, by, bsupp != null ? bsupp : by, ka, vocab * rows)
 }
 
 // Causal depthwise conv over the fused [q;k;v] rows + SiLU (dn_conv_step's batch form): one

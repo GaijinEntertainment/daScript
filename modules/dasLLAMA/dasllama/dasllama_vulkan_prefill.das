@@ -681,12 +681,12 @@ def private pf_moe_layer_sets(l : int64) {
     }
     if (L.moe_g4) {
         verify(ensure_cls_ar_comb_g4() && ensure_cls_ar_comb_g4_f16_b(), "vk prefill: the gemma-4 combine class rails must engage on a live device")
-        L.pf_arcomb_set = set_cls_ar_comb_g4(fixed_array(g_rd.pf_x, g_rd.pf_ffnout, g_rd.norms_dev, g_rd.pf_xb, g_rd.pf_minv, g_rd.pf_mw, g_rd.pf_mdn),
-            fixed_array(np * dim * 4l, np * dim * 4l, g_rd.norms_bytes, np * dim * 4l, nk * 4l, nk * 4l, dn_bytes),
-            fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XB, VHZ_MRT, VHZ_MRT, VHZ_MDN | VHZ_MDN_M))
-        L.pf_arcomb_f16_set = set_cls_ar_comb_g4_f16_b(fixed_array(g_rd.pf_x, g_rd.pf_ffnout, g_rd.norms_dev, g_rd.pf_xf, g_rd.pf_minv, g_rd.pf_mw, g_rd.pf_mdn),
-            fixed_array(np * dim * 4l, np * dim * 4l, g_rd.norms_bytes, np * dim * 2l, nk * 4l, nk * 4l, dn_bytes),
-            fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XQ, VHZ_MRT, VHZ_MRT, VHZ_MDN | VHZ_MDN_M))
+        L.pf_arcomb_set = set_cls_ar_comb_g4(fixed_array(g_rd.pf_x, g_rd.pf_minv, g_rd.pf_mw, g_rd.pf_mdn, g_rd.pf_ffnout, g_rd.norms_dev, g_rd.pf_xb),
+            fixed_array(np * dim * 4l, nk * 4l, nk * 4l, dn_bytes, np * dim * 4l, g_rd.norms_bytes, np * dim * 4l),
+            fixed_array(VHZ_X, VHZ_MRT, VHZ_MRT, VHZ_MDN | VHZ_MDN_M, VHZ_FFO, 0u, VHZ_XB))
+        L.pf_arcomb_f16_set = set_cls_ar_comb_g4_f16_b(fixed_array(g_rd.pf_x, g_rd.pf_minv, g_rd.pf_mw, g_rd.pf_mdn, g_rd.pf_ffnout, g_rd.norms_dev, g_rd.pf_xf),
+            fixed_array(np * dim * 4l, nk * 4l, nk * 4l, dn_bytes, np * dim * 4l, g_rd.norms_bytes, np * dim * 2l),
+            fixed_array(VHZ_X, VHZ_MRT, VHZ_MRT, VHZ_MDN | VHZ_MDN_M, VHZ_FFO, 0u, VHZ_XQ))
         return
     }
     L.pf_arcomb_set = set_cls_ar_comb(fixed_array(g_rd.pf_x, g_rd.pf_ffnout, g_rd.norms_dev, g_rd.pf_xb, g_rd.pf_minv, g_rd.pf_mw, g_rd.pf_mdn, g_rd.pf_mlog, g_rd.moe_db_dev, g_rd.pf_midx),
@@ -899,18 +899,19 @@ def private pf_ple_block(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : in
 def private pf_moe_addr_next(raw : VkCommandBuffer; var h : VkHaz; l, wlen, nxt : int64) {
     var L & = unsafe(g_rd.layers[l])
     let dim = g_rd.dim
-    var pcc = rd_ar_comb_args(L, l, nxt)
+    var pcc = rd_ar_comb_args(L, nxt)
+    var pcg = rd_g4_comb_args(L, l, nxt, false)
     let next_fused = l + 1l < g_rd.n_layers && pf_qkv_feed_fused(l + 1l)
     if (next_fused && pf_qkv6(l + 1l)) {
         if (L.moe_g4) {
-            enc_cls_ar_comb_g4_f16_b(raw, h, L.pf_arcomb_f16_set, pcc, wlen)
+            enc_cls_ar_comb_g4_f16_b(raw, h, L.pf_arcomb_f16_set, pcg, wlen)
         } else {
             enc_cls_ar_comb_f16_b(raw, h, L.pf_arcomb_f16_set, pcc, wlen)
         }
         return
     }
     if (L.moe_g4) {
-        enc_cls_ar_comb_g4(raw, h, L.pf_arcomb_set, pcc, wlen)
+        enc_cls_ar_comb_g4(raw, h, L.pf_arcomb_set, pcg, wlen)
     } else {
         enc_cls_ar_comb(raw, h, L.pf_arcomb_set, pcc, wlen)
     }

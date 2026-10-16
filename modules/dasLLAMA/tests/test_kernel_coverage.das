@@ -201,6 +201,9 @@ let private CENSUS_NEVER_DISPATCHED <- [
     // out at 128 (Qwen3-30B-A3B), 60 (Qwen1.5-MoE) and 32 (gpt-oss-20b). Its coverage is
     // moe_select_gate's ne=512 and ne=300 cases in test_metal_prefill_kernels.das
     "MetalMoeSelect512",
+    // its down-scale twin: a gemma-4 MoE past 256 experts, which no file carries (the 26B routes 128). Its coverage is
+    // moe_select_gate's ne=300 down-scale case in test_metal_prefill_kernels.das
+    "MetalMoeSelect512Ds",
     // the PLE token-table gather twins: the census's only E-series carrier is the E4B Q8_0, whose
     // table sits on the q8 plane and takes the q8 stamp. A k4/k5/q40 table needs an E-series file
     // whose per_layer_token_embd is K-quant or Q4_0, and the zoo stocks none. Their coverage is
@@ -347,8 +350,8 @@ def private census_zoo(t : T?) {
     cov_model(t, path_join(models_dir(), "Qwen1.5-MoE-A2.7B-Chat.Q8_0.gguf"), "qwen2moe",
         [KVDtype.f16], none)
     // gemma4moe: the only carrier of a Q4_0 routed expert plane - the gemma-4 dense-shared MoE
-    // whose fused gate_up stacks are Q4_0 (the 704-wide down stacks demote to q8: no multiple of
-    // 256). No batch shapes, same reason as the other MoE rows; large tier
+    // whose fused gate_up stacks are Q4_0 (the 704-wide down stacks serve as q4032, off the 256
+    // lattice). No batch shapes, same reason as the other MoE rows; large tier
     cov_model(t, path_join(models_dir(), "gemma-4-26B-A4B-it-Q4_0.gguf"), "gemma4moe",
         [KVDtype.f16], none)
     cov_tower(t)
@@ -885,6 +888,9 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // the mx4 experts' fused gate+up+act+requant GEMV (gpt-oss's token command, above the zoo's tier); its coverage is
     // test_vkd_mx4_gemv_gu in test_vulkan_kernels.das
     "mx4_gemv_gu_cls_spv",
+    // the IQ4_XS, iq3s4 and IQ2_S experts' fused gate+up+act+requant GEMVs (the gemma-4 26B's Unsloth dynamic files' gate_up stacks,
+    // above the zoo's tier); their coverage is test_vkd_kq_gemv_k4_gu in test_vulkan_kernels.das
+    "kq_gemv_iq4xs_gu_cls_spv", "kq_gemv_iq3s4_gu_cls_spv", "kq_gemv_iq2s_gu_cls_spv",
     // the biased act twins (gpt-oss's expert stacks carry gate and up bias rows: a carrier above the zoo's tier) - the
     // Q8_0 requant form the token command runs and the f16 form the window chain runs; their coverage is test_vkd_act_family
     "q8_actrq_b_cls_spv", "actf16_b_cls_spv",
@@ -1008,8 +1014,9 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // the batched windowed decode attention and its f16 twin (a sliding window over the batch rows: the gemma
     // carriers, no zoo row); its coverage is test_vkd_da_attn_bw in test_vulkan_kernels.das
     "da_attn_bw_cls_spv", "da_attn_bw_f16_cls_spv",
-    // the q51 routed down GEMV's summing twin (the 26B-A4B Q4_K_M, above the zoo's tier); its coverage is test_vkd_q51_gemv
-    "q51_gemv_sum_cls_spv",
+    // the per-32 routed down GEMVs' summing twins (the 26B-A4B's Q4_K_M, Unsloth dynamic, Q4_0 and MXFP4 files, above the zoo's
+    // tier); their coverage is the per-32 GEMV cells' summed arm (test_vkd_q51_gemv and the iq4nl32 / q4032 / q5032 / mx4 cells)
+    "q51_gemv_sum_cls_spv", "iq4nl32_gemv_sum_cls_spv", "q4032_gemv_sum_cls_spv", "q5032_gemv_sum_cls_spv", "mx4_gemv_sum_cls_spv",
     // the scalar router GEMM: on a cm2 box every MoE carrier whose dim the small f16 GEMM's eight
     // 64-deep chunks divide takes the f16 route, so the scalar tile runs only off it (a dim off
     // 512, the KHR route). Its coverage is test_vkd_moe_routing's router arm in test_vulkan_kernels.das

@@ -485,7 +485,7 @@ def decode_shape_decline(t : Model; needs_ok : MetalNeed; allow_moe : bool = fal
         if ((hs_l % 32l) != 0l || hs_l > 512l || (layer_kv_dim(c, l) % 32l) != 0l) {
             return MetalDecodeDecline.shape
         }
-        // E-series KV sharing: only the single-stream driver has the Q-only arm (allow_kv_share)
+        // E-series KV sharing: a driver with the Q-only arm passes allow_kv_share (the single-row and the batched step both do)
         if (t.kv_src[l] != l && !(allow_kv_share && kv_share_ok(t, l))) {
             return MetalDecodeDecline.layers
         }

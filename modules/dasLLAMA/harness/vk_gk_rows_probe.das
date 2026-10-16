@@ -54,7 +54,7 @@ def private time_cls(name : string; rec : block<(raw : VkCommandBuffer; var h : 
 def main : int {   // nolint:STYLE038 — one-shot probe: the classes, the fixtures and the timing rounds share every buffer
     let classes_ok = (vk_moe_init() && ensure_hc_norm_cls() && ensure_hc_mix_cls() && ensure_hc_comb_cls() && ensure_ple_gate_cls()
         && ensure_ple_conv_cls() && ensure_qk_rms_cls() && ensure_topk_n_cls() && ensure_topk_n2_cls() && ensure_combine_cls()
-        && ensure_dn_scan_p3_cls() && ensure_qkn_rope_f16_cls())
+        && ensure_dn_scan_p3_cls() && ensure_qkn_rope_f16_cls() && ensure_cls_epi() && ensure_cls_ar_comb_g4())
     if (!classes_ok) {
         print("vk_gk_rows_probe: no Vulkan device, or a class declined\n")
         return 1
@@ -112,6 +112,9 @@ def main : int {   // nolint:STYLE038 — one-shot probe: the classes, the fixtu
     time_cls("topk_n ne 256 k 8 1 row") $(r; var h) {
         enc_topk_n_cls(r, h, s_tk, GkTopKArgs(ne = 256u, k = 8u, norm = 1u, lstride = 256u, dsoff = GK_NO_DSCALE), 1l)
     }
+    time_cls("topk_n ne 128 k 8 1 row, the down scales (gemma-4)") $(r; var h) {
+        enc_topk_n_cls(r, h, s_tk, GkTopKArgs(ne = 128u, k = 8u, norm = 1u, lstride = 128u, dsoff = 0u), 1l)
+    }
     time_cls("topk_n2 ne 512 k 10 1 row") $(r; var h) {   //! the family's one set
         enc_topk_n2_cls(r, h, s_tk, GkTopKArgs(ne = 512u, k = 10u, norm = 1u, lstride = 512u, dsoff = GK_NO_DSCALE), 1l)
     }
@@ -138,6 +141,20 @@ def main : int {   // nolint:STYLE038 — one-shot probe: the classes, the fixtu
         var q4 = qkn
         q4.rowwg = 40u
         enc_qkn_rope_f16_cls(r, h, s_qkn, q4, 160l)
+    }
+    let g4dim = 2816u
+    var s_g4 = set_cls_ar_comb_g4(fixed_array(b[0], b[1], b[2], b[3], b[4], b[5], b[0]), fixed_array(bb, bb, bb, bb, bb, bb, bb),
+        fixed_array(1u, 0u, 2u, 4u, 8u, 0u, 16u))
+    time_cls("gemma-4 MoE step dim {g4dim} k 8 1 row") $(r; var h) {
+        enc_cls_ar_comb_g4(r, h, s_g4, GkMoeCombArgs(n = g4dim, k = 8u, eps = 1e-6, ascale = 0.75, rpost_off = 0u, dpost_off = g4dim,
+            spost_off = 2u * g4dim, nwoff = 3u * g4dim), 1l)
+    }
+    let vocab = 262144l
+    var s_epi = set_cls_epi(fixed_array(b[0], b[1]), fixed_array(bb, bb), fixed_array(1u, 0u))
+    for (nr in fixed_array(1l, 4l)) {
+        time_cls("cls epilogue vocab {vocab} cap 30 two pins {nr} rows") $(r; var h) {
+            enc_cls_epi(r, h, s_epi, GkClsEpiArgs(vocab = uint(vocab), cap = 30.0, nsupp = 2u, rows = uint(nr)), (vocab * nr + 255l) / 256l)
+        }
     }
     return 0
 }

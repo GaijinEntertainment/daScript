@@ -2590,7 +2590,7 @@ class MetalMoeBucket {
 }
 
 //! derives GkMoeCombine, the template both homes stamp
-[metal_dispatch(name = "pf_enc_moe_reduce", pso = "g_pf_pso_moe_reduce", tg = 256, grid = "dim/256, npos", params = "dim : int64, npos : int64")]
+[metal_dispatch(name = "pf_enc_moe_reduce", pso = "g_pf_pso_moe_reduce", tgmem = "metal_moe_reduce_msl_tgmem", tg = 256, grid = "dim/256, npos", params = "dim : int64, npos : int64")]
 class MetalMoeReduce : GkMoeCombine {
     override WINDOW = false
     [metal_kernel(name="metal_moe_reduce_msl")]
@@ -2603,7 +2603,7 @@ class MetalMoeReduce : GkMoeCombine {
 
 //! ... and its shared-expert stamp: the shared expert's rows under their gate logit's sigmoid added in the same pass
 //! derives GkMoeCombine, the template both homes stamp
-[metal_dispatch(name = "pf_enc_moe_reduce_sh", pso = "g_pf_pso_moe_reduce_sh", tg = 256, grid = "dim/256, npos", params = "dim : int64, npos : int64")]
+[metal_dispatch(name = "pf_enc_moe_reduce_sh", pso = "g_pf_pso_moe_reduce_sh", tgmem = "metal_moe_reduce_sh_msl_tgmem", tg = 256, grid = "dim/256, npos", params = "dim : int64, npos : int64")]
 class MetalMoeReduceSh : GkMoeCombine {
     override WINDOW = false
     override SH = true
@@ -6805,7 +6805,7 @@ def private pf_moe_router_rows(t : Model; l : int64) : MetalBuffer? {
 [arch(at="../ARCHITECTURE_GPU_PREFILL_MOE.md#prefill-moe-buckets")]
 def private pf_enc_moe_route(enc : MetalComputeEncoder?; t : Model; l : int64;
                              bx, blg, bsel, bcnt, bbase, bbkt, binv, bdim, bne, bnk, brb, btot : MetalBuffer?; npos : int64;
-                             mp : int64 = 0l; bucket : bool = true) {
+                             mp : int64 = 0l; bucket : bool = true; bds : MetalBuffer? = null) {
     let c = t.config
     var bw_rt = pf_moe_router_rows(t, l)
     if (c.moe_router_bias || !pf_enc_router_mm(enc, bw_rt, bx, blg, bdim, bne, c.n_expert, c.dim, mp)) {
@@ -6813,7 +6813,7 @@ def private pf_enc_moe_route(enc : MetalComputeEncoder?; t : Model; l : int64;
         enc_moe_router_b(enc, bw_rt, bx, blg, brb, rka, c.n_expert, npos)
     }
     return if (g_pf_skip == "moe_only_router")   //! attribution: router GEMV alone, no select/CSR
-    enc_moe_select_rows(enc, c, blg, bsel, bnk, npos)
+    enc_moe_select_rows(enc, c, blg, bsel, npos, 0l, bds)
     return if (g_pf_skip == "moe_only_sel" || !bucket)   //! attribution: router + select, no CSR; the gathered route reads the selection alone
     pf_enc_moe_count(enc, bsel, bcnt, btot, bnk, c.n_expert)
     pf_enc_moe_bucket(enc, bsel, bbase, bbkt, binv, btot, bnk, bcnt, bne, c.n_expert + 1l)   // basep[ne] = the padded total
@@ -8029,9 +8029,8 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
     var blog = gpu_logits ? pool_acquire_pinned(g_pf_pool, g_dev, bytes_log) : null
     var blog1 = gpu_logits && nseg > 1l ? pool_acquire_pinned(g_pf_pool, g_dev, uint64(c.vocab_size * 4l)) : null
     var u_vocab = gpu_logits ? uniform_u32(uint(c.vocab_size)) : null
-    var u_flcap = (gpu_logits && c.final_logit_softcap > 0.0) ? uniform_f32(c.final_logit_softcap) : null
     let nsupp = long_length(t.suppress)
-    var bsupp, u_nsupp : MetalBuffer?
+    var bsupp : MetalBuffer?
     if (gpu_logits && nsupp > 0l) {
         bsupp = pool_acquire_untracked_pinned(g_pf_upool, g_dev, uint64(nsupp * 4l))
         unsafe {
@@ -8040,7 +8039,6 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                 sp[i] = uint(t.suppress[i])
             }
         }
-        u_nsupp = uniform_u32(uint(nsupp))
     }
     //! MTP draft-slab warm: ONE extra loop iteration runs the draft block at FULL npos so every
     //! trunk uniform reuses verbatim; the last warm row is garbage by design and causally unread
@@ -8500,16 +8498,25 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                 let u_th_l = (u_total_h2 == null || hid_l == hidden) ? u_total_h : u_total_h2
                 let narrow_last = (g_pf_env_lastrow && !s.keep_hidden && !warm
                     && l == c.n_layers - 1l && npos > 1l && !recr && !moe && !plef && !hcs.on
-                    && !c.pre_post_norm && l >= nds && !c.q_gated
+                    && l >= nds && !c.q_gated
                     && c.n_layer_nextn == 0l
                     && dim % 32l == 0l && hid_l % 32l == 0l
                     && kq_fmt_one_row_gemv(fmt_at(t.w1_fmt, l), dim) && kq_fmt_one_row_gemv(fmt_at(t.w3_fmt, l), dim)
                     && kq_fmt_one_row_gemv(fmt_at(t.w2_fmt, l), hid_l))
+                //! the gemma-4 MoE tail as one step (`MetalMoeCombG4Pf`): no seam between the FFN and the residual, a row the step's stash holds
+                let g4_step = (moe && c.moe_dense_shexp && !g_moe_g4_unfused && c.pre_post_norm && !plef && !hcs.on && l >= nds
+                    && dim <= ADD_RMS_MAX_DIM && g_pf_skip == "")
                 if (narrow_last) {
                     for (sg in segs) {
                         let nro = uint64((sg.row0 + sg.npos - 1l) * dim * 4l)
                         if (g_pf_skip != "ew" && g_pf_skip != "nongemm") {
-                            enc_add(enc, bx, nro, bxb2, nro, u_dim, dim)
+                            if (c.pre_post_norm) {   //! the sandwich: the attention branch's row under its post norm before the add
+                                var bw_pa = upload_region(unsafe(addr < void? >(t.fblob[t.rms_post_att_off + l * dim])), uint64(dim * 4l))
+                                pf_enc_rms(enc, bxb2, nro, bw_pa, bxb, u_dim, u_eps, 1l)
+                                enc_add(enc, bx, nro, bxb, 0ul, u_dim, dim)
+                            } else {
+                                enc_add(enc, bx, nro, bxb2, nro, u_dim, dim)
+                            }
                             pf_enc_rms(enc, bx, nro, bw_ffn, bxb, u_dim, u_eps, 1l)
                         }
                         if (g_pf_skip != "gemm") {
@@ -8527,6 +8534,10 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                             pf_enc_narrow_gemv(enc, t, fmt_at(t.w2_fmt, l), t.w2_offs[l], bhb, bxb, u_hid_l, u_dim, hid_l, dim)
                         }
                         if (g_pf_skip != "ew" && g_pf_skip != "nongemm") {
+                            if (c.pre_post_norm) {   //! ... and the FFN branch's under its own
+                                var bw_pf = upload_region(unsafe(addr < void? >(t.fblob[t.rms_post_ffn_off + l * dim])), uint64(dim * 4l))
+                                pf_enc_rms(enc, bxb, 0ul, bw_pf, bxb, u_dim, u_eps, 1l)
+                            }
                             var bosc : MetalBuffer?
                             if (c.layer_out_scale) {
                                 bosc = upload_region(addr < void? >(t.fblob[t.out_scale_off + l]), 4ul)
@@ -8577,13 +8588,13 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                     if (c.moe_router_bias) {
                         brb = upload_region(unsafe(addr < void? >(t.fblob[t.router_b_off + l * c.n_expert])), uint64(c.n_expert * 4l))
                     }
+                    var bw_ds : MetalBuffer?
+                    if (g4moe) {
+                        bw_ds = upload_region(unsafe(addr < void? >(t.fblob[t.moe_down_scale_off + l * c.n_expert])), uint64(c.n_expert * 4l))
+                    }
                     pf_enc_moe_route(enc, t, l, g4moe ? bmg4rt : bxb, bmlg, bmsel, bmcnt, bmbase, bmbkt, bminv,
                         u_dim, u_moe_ne, u_moe_nk, brb, u_moe_tot, npos,
-                        mp = mp, bucket = !moe_gemv_route)
-                    if (g4moe) {
-                        var bw_ds = upload_region(unsafe(addr < void? >(t.fblob[t.moe_down_scale_off + l * c.n_expert])), uint64(c.n_expert * 4l))
-                        enc_moe_wscale(enc, bmsel, bmsel, bw_ds, u_moe_nk, npos)
-                    }
+                        mp = mp, bucket = !moe_gemv_route, bds = bw_ds)
                     if (nsh > 0l) {
                         //! shexp raw gate dots (σ in the combine) off the router region's last row — bmlg is free once select consumed it
                         var gka = moe_router_args(1l, dim, npos)
@@ -8695,6 +8706,8 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                             pf_enc_moe_gemv_block(enc, t, l, g4moe ? bxb2 : bxb, bmg, bmg2, bmdn, bmsel, g4moe ? bmg4rt : bxb, npos, u_moe_act_tot,
                                 sh ? bxb2 : null, sh ? bmlg : null)
                         }
+                    } elif (g4_step) {
+                        //! the gemma-4 step below sums the routed rows itself
                     } elif (!pf_skip_moe_reduce()) {
                         if (nsh > 0l && !g4moe) {   //! the routed sum and the shared expert's rows under their gate's sigmoid, one pass
                             pf_enc_moe_reduce_sh(enc, bxb, bminv, bmsel, bmdn, bxb2, bmlg, moe_comb_args(dim, c.n_expert_used), dim, npos)
@@ -8702,7 +8715,7 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                             pf_enc_moe_reduce(enc, g4moe ? bmg4rt : bxb, bminv, bmsel, bmdn, moe_comb_args(dim, c.n_expert_used), dim, npos)
                         }
                     }
-                    if (g4moe && g_pf_skip != "ew" && g_pf_skip != "nongemm") {
+                    if (g4moe && !g4_step && g_pf_skip != "ew" && g_pf_skip != "nongemm") {
                         var bw_pf2 = upload_region(unsafe(addr < void? >(t.fblob[t.rms_post_ffn2_off + l * dim])), uint64(dim * 4l))
                         pf_enc_rms(enc, bmg4rt, 0ul, bw_pf2, bmg4rt, u_dim, u_eps, npos)
                     }
@@ -8734,13 +8747,19 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                     bxh_h = pf_hx_panel(enc, bxh_h, bhb, mp, hid_l, g_pf_skip == "act_cvt")
                     pf_enc_site_mm(enc, t, fmt_at(t.w2_fmt, l), t.w2_offs[l], dim, bhb, bxb, u_hid_l, u_dim, mp, hid_l, npos, bxh_h)
                 }
-                if (g4moe && g_pf_skip != "ew" && g_pf_skip != "nongemm") {
+                if (g4_step) {   //! the routed sum, both branches' norms and the residual: one step; the next layer opens on its own norm
+                    let rb = uint64(dim * 4l)
+                    var bw_g4 = upload_region_cat3(addr<void?>(t.fblob[t.rms_post_ffn2_off + l * dim]), rb,
+                        addr<void?>(t.fblob[t.rms_post_ffn1_off + l * dim]), rb, addr<void?>(t.fblob[t.rms_post_ffn_off + l * dim]), rb)
+                    var ka = moe_g4_args(dim, c.n_expert_used, c.norm_eps, c.layer_out_scale ? t.fblob[t.out_scale_off + l] : 1.0, moe_gemv_route, false)
+                    enc_moe_comb_g4_pf(enc, bx, bminv, bmsel, moe_gemv_route ? bmg4rt : bmdn, bxb, bw_g4, ka, npos)
+                } elif (g4moe && g_pf_skip != "ew" && g_pf_skip != "nongemm") {
                     //! dense-branch post-norm, then routed + dense summed into bxb for the epilogue
                     var bw_pf1 = upload_region(unsafe(addr < void? >(t.fblob[t.rms_post_ffn1_off + l * dim])), uint64(dim * 4l))
                     pf_enc_rms(enc, bxb, 0ul, bw_pf1, bxb, u_dim, u_eps, npos)
                     enc_add(enc, bxb, 0ul, bmg4rt, 0ul, u_total_dim, npos * dim)
                 }
-                if (g_pf_skip != "ew" && g_pf_skip != "nongemm") {
+                if (!g4_step && !narrow_last && g_pf_skip != "ew" && g_pf_skip != "nongemm") {
                     if (c.pre_post_norm) {
                         var bw_pf = upload_region(addr < void? >(t.fblob[t.rms_post_ffn_off + l * dim]), uint64(dim * 4l))
                         pf_enc_rms(enc, bxb, 0ul, bw_pf, bxb, u_dim, u_eps, npos)
@@ -8770,7 +8789,7 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                 }
                 if (hcs.on) {
                     pf_hc_combine(enc, t, hcs, bxb, hcs.binj_f)
-                } elif (!narrow_last && g_pf_skip != "ew" && g_pf_skip != "nongemm") {
+                } elif (!g4_step && !narrow_last && g_pf_skip != "ew" && g_pf_skip != "nongemm") {
                     //! layer_out_scale multiplies the WHOLE layer output: (x + branch) * s folds into the
                     //! residual add's ascale slot (a 4-byte view into the weights blob)
                     var bosc : MetalBuffer?
@@ -8808,13 +8827,8 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                         let bwc = blob_of(g_dev, t, t.wcls_off)
                         enc_gemv(enc, bwc.buf, bwc.boff, bxf_i, blog_i, u_dim, u_vocab, c.vocab_size)
                     }
-                    if (u_flcap != null) {
-                        //! final-logit soft cap (gemma2): cap*tanh over the classifier row in place
-                        enc_softcap_row(enc, blog_i, 0ul, u_vocab, u_flcap, c.vocab_size)
-                    }
-                    if (bsupp != null) {
-                        //! gemma4 suppressed ids pin to -1e30 AFTER the cap (the CPU classifier's order)
-                        enc_suppress_row(enc, blog_i, 0ul, bsupp, u_nsupp, nsupp)
+                    if (c.final_logit_softcap > 0.0 || bsupp != null) {   //! the final softcap, then the suppressed ids (the CPU order)
+                        enc_cls_epi_rows(enc, blog_i, bsupp, c.vocab_size, 1l, c.final_logit_softcap, nsupp)
                     }
                     if (nseg > 1l) {
                         enc_copy_row(enc, bxf1, 0ul, bxf, xf_off, u_dim, dim)
@@ -9143,7 +9157,6 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
     }
     if (bsupp != null) {
         pool_release(g_pf_upool, bsupp, uint64(nsupp * 4l))
-        pool_release(g_pf_upool, u_nsupp, 4ul)
     }
     pool_release(g_pf_upool, u_total_dim, 4ul)
     pool_release(g_pf_upool, u_total_h, 4ul)
@@ -9182,9 +9195,6 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
         for (sg in segs) {
             sg.s.embed_gpu_pending = false   //! the window gathered the rows the gate left to it
         }
-    }
-    if (u_flcap != null) {
-        pool_release(g_pf_upool, u_flcap, 4ul)
     }
     if (ok) {
         g_pf_stage_prefills++

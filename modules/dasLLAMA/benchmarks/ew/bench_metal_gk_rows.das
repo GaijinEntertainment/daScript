@@ -118,10 +118,13 @@ def private seam_rows : array<Reading> {
             enc_qk_norm(enc, by, by, bw, qk_norm_args(16u, 2u, 256u, 20u * 256u, 16u * 256u, 16u * 256u, 256u, 1e-6), 18l, 1l)
         },
         time_rows("moe_select ne=256 k=8 1 row") $(enc) {
-            enc_moe_select(enc, bx, by, by, GkTopKArgs(ne = 256u, k = 8u, norm = 1u, lstride = 256u), 1l)
+            enc_moe_select(enc, bx, by, by, bw, GkTopKArgs(ne = 256u, k = 8u, norm = 1u, dsoff = GK_NO_DSCALE, lstride = 256u), 1l)
+        },
+        time_rows("moe_select ne=128 k=8 1 row, the down scales (gemma-4)") $(enc) {
+            enc_moe_select_ds(enc, bx, by, by, bw, GkTopKArgs(ne = 128u, k = 8u, norm = 1u, dsoff = 0u, lstride = 128u), 1l)
         },
         time_rows("moe_select_512 ne=512 k=10 1 row") $(enc) {
-            enc_moe_select_512(enc, bx, by, by, GkTopKArgs(ne = 512u, k = 10u, norm = 1u, lstride = 512u), 1l)
+            enc_moe_select_512(enc, bx, by, by, bw, GkTopKArgs(ne = 512u, k = 10u, norm = 1u, dsoff = GK_NO_DSCALE, lstride = 512u), 1l)
         },
         time_rows("moe_combine dim={dim} k=8 1 row") $(enc) {
             enc_moe_combine(enc, bz, bw, bx, moe_comb_args(int64(dim), 8l), int64(dim), 1l)
@@ -323,14 +326,93 @@ def private gate_rows : array<Reading> {
     return <- rows
 }
 
+//! the gemma-4 MoE layer's tail at the 26B's shape (dim 2816, eight slots): the unfused chain it replaced - the routed combine, the
+//! routed and dense post norms, their add, the post-FFN norm and the residual add with the next norm (the window: the add alone) -
+//! against the one step, at a decode row and a 512-row window
+def private g4_tail_rows : array<Reading> {
+    let dim = 2816
+    let k = 8
+    let np = 512
+    var bx = fill_buf(np * dim, 0.5)
+    var bd = fill_buf(np * dim, 0.25)
+    var brt = fill_buf(np * dim, 0.0)
+    var bdn = fill_buf(np * k * dim, 0.1)
+    var bsel = fill_buf(np * 2 * k, 0.01)
+    var binv = metal_new_buffer(g_dev, uint64(np * k * 4))
+    var ip = unsafe(reinterpret<uint?>(metal_buffer_contents(binv)))
+    for (i in range(np * k)) {
+        unsafe(ip[i]) = uint((i * 7) % (np * k))
+    }
+    var bw = fill_buf(4 * dim, 0.01)
+    var udim = uniform_u32(uint(dim))
+    var ueps = uniform_f32(1e-6)
+    var utot = uniform_u32(uint(np * dim))
+    var ka = moe_g4_args(int64(dim), int64(k), 1e-6, 0.75, false, true)
+    var kp = moe_g4_args(int64(dim), int64(k), 1e-6, 0.75, false, false)
+    var kc = moe_comb_args(int64(dim), int64(k))
+    var rows <- [
+        time_rows("g4 MoE tail dim={dim} k={k} 1 row, unfused (6 dispatches)") $(enc) {
+            enc_moe_combine(enc, brt, bsel, bdn, kc, int64(dim), 1l)
+            enc_rms(enc, brt, 0ul, bw, brt, udim, ueps)
+            enc_rms(enc, bd, 0ul, bw, bd, udim, ueps)
+            enc_add(enc, bd, 0ul, brt, 0ul, udim, int64(dim))
+            enc_rms(enc, bd, 0ul, bw, bd, udim, ueps)
+            enc_addrms_c(enc, bx, bd, bw, bd, udim, ueps, g_one)
+        },
+        time_rows("g4 MoE step dim={dim} k={k} 1 row") $(enc) {
+            enc_moe_comb_g4(enc, bx, bsel, bdn, bd, bw, bd, ka, 1l)
+        },
+        time_rows("g4 MoE tail dim={dim} k={k} {np} rows, unfused (6 dispatches)") $(enc) {
+            pf_enc_moe_reduce(enc, brt, binv, bsel, bdn, kc, int64(dim), int64(np))
+            pf_enc_rms(enc, brt, 0ul, bw, brt, udim, ueps, int64(np))
+            pf_enc_rms(enc, bd, 0ul, bw, bd, udim, ueps, int64(np))
+            enc_add(enc, bd, 0ul, brt, 0ul, utot, int64(np * dim))
+            pf_enc_rms(enc, bd, 0ul, bw, bd, udim, ueps, int64(np))
+            enc_add(enc, bx, 0ul, bd, 0ul, utot, int64(np * dim))
+        },
+        time_rows("g4 MoE step dim={dim} k={k} {np} rows (the window's stamp)") $(enc) {
+            enc_moe_comb_g4_pf(enc, bx, binv, bsel, bdn, bd, bw, kp, int64(np))
+        }
+    ]
+    for (buf in fixed_array(bx, bd, brt, bdn, bsel, binv, bw)) {
+        metal_release(buf)
+    }
+    for (u in fixed_array(udim, ueps, utot)) {
+        pool_release(g_upool, u, 4ul)
+    }
+    return <- rows
+}
+
+//! the classifier epilogue at gemma-4's vocab: the final softcap and two suppressed ids over one row and four rows, one dispatch
+def private cls_epi_rows : array<Reading> {
+    let vocab = 262144
+    var by = fill_buf(4 * vocab, 1.0)
+    var bsupp = metal_new_buffer(g_dev, 8ul)
+    var sp = unsafe(reinterpret<uint?>(metal_buffer_contents(bsupp)))
+    unsafe {
+        sp[0] = 255999u
+        sp[1] = 258880u
+    }
+    var rows : array<Reading>
+    rows |> reserve(2)
+    for (nr in fixed_array(1, 4)) {
+        rows |> push(time_rows("cls epilogue vocab={vocab} cap 30 two pins {nr} rows") $(enc) {
+            enc_cls_epi_rows(enc, by, bsupp, int64(vocab), int64(nr), 30.0, 2l)
+        })
+    }
+    metal_release(by)
+    metal_release(bsupp)
+    return <- rows
+}
+
 def private run_gk_rows(b : B?) {
-    if (!metal_common_init() || !metal_decode_init()) {
+    if (!metal_common_init() || !metal_decode_init() || !metal_prefill_pso_init()) {
         b |> failure("no Metal device: no row timed")
         return
     }
     var rows <- seam_rows()
     rows |> push_from(qkn_rows(), router_rows(), pk_rows(), dn_rows())
-    rows |> push_from(gate_rows())
+    rows |> push_from(gate_rows(), cls_epi_rows(), g4_tail_rows())
     var nmeas = 0
     var nvoid = 0
     for (r in rows) {

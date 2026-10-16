@@ -507,9 +507,9 @@ fixture flips at token 21 on a 0.03-logit near-tie the Metal chain lands on with
 (the k5 tensor twin holds the double-precision oracle at the production width - the kernel cells
 now run kdim 3840); the token gate is no instrument for that row (`followup_general.md` row 151,
 the fixture margin floor). (b) The routed block serves thirteen expert-plane formats, q40 among
-them: the ggml-org Q4_0 26B carries q40 fused gate_up stacks beside q8 down stacks (a 704-wide
-down row is no multiple of 256, so the loader demotes that plane) and runs the routed block on
-both boxes through the q40 split twins and the q40 expert GEMV. (c) The Google QAT file is the ggml-org checkpoint's twin (its scale tensors are
+them: the ggml-org Q4_0 26B carries q40 fused gate_up stacks beside 704-wide Q4_0 down stacks, which
+serve in their per-32 form (q4032), and runs the routed block on both boxes through the q40 split twins, the q40
+expert GEMV and the q4032 routed stamps. (c) The Google QAT file is the ggml-org checkpoint's twin (its scale tensors are
 byte-identical; only the token table's format and the Q4_0 rounding differ) and diverges on the
 CPU kq-native rails at one token: a top-8 router pick at layer 29 on an 8e-5 margin, which the
 arm64-sdot backend lands the other way - the CPU pregate refuses the file, so its rows stay
@@ -630,17 +630,6 @@ kargs uniform instead of a clone, so materializing the builder's function type r
 a class that binds a kargs uniform is un-addressable; the split pickers table only because their
 classes pass scalars through `params=`. The fix is a cloned parameter type in the lens; the table
 follows, and the sec.15(a) gate then reads one table.
-
-## 19. The batched and rows w13sw kernels have no activation axis
-
-`MetalQ8GemvW13SwT.put_act` branches on the `act` uniform between `msl_silu_mul` and
-`msl_geglu_mul`; the batched family (`enc_gemv_w13sw_b`, `enc_gemv_w13sw_rows`) binds no `act`
-and computes SiLU only. Every live caller is SiLU today: the dense batch gates `fuse13` off
-under geglu, the MTP verify declines non-silu, and gemma's shared expert is the
-`moe_dense_shexp` form through `enc_geglu`, so no gelu architecture reaches the `u_moe_nsh`
-path. A gelu MoE with a loaded `n_ff_shexp` would compute its shared expert with the wrong
-activation; the fix is the `act` binding on the batched family, the same uniform the single-row
-form takes.
 
 ## 20. The mv shells' per-format decode cannot cross a free-function boundary
 

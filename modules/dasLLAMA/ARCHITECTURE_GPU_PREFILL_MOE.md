@@ -176,11 +176,27 @@ form measures slower (`benchmarks/matmul/bench_metal_moe_lab.das`, gmm8 section)
 Q6_K is the opposite: a superblock-scalar cache measures slower per mm than reloading per
 k-block (same lab, gmm6 section), so its stage is stateless.
 
-### The routed weights' global scale {#moe-wscale}
+### The routed weights' scales {#moe-wscale}
 
-**A model's `expert_weights_scale` (0 and 1 mean none) multiplies every picked weight after the
-select, on every Metal row shape.** `enc_moe_select_rows` runs the select stamp, then `MetalMoeWScale`
-- the per-expert scale fold gemma-4 runs over its down scales - over a row holding the scale once an
-expert, the CPU `moe_select_core`'s order (renorm, then the scale). The decode, the batch and verify
-rows and the prefill window's route all select through it; the row is a driver buffer rebuilt when
-the scale or the expert count moves and dropped with the weights epoch.
+**A model's `expert_weights_scale` (0 and 1 mean none) and, on gemma-4, the layer's per-expert down scale multiply every
+picked weight inside the select, in the CPU `moe_select_core`'s order: the renorm, the global scale, then the down scale.**
+`GkTopKRow.scale_weight` carries both on both homes: the global scale off `GkTopKArgs.wscale`, the down scale under the
+`DSCALE` template arm off the row `dsoff` names (`GK_NO_DSCALE` none). `enc_moe_select_rows` is the Metal decode's,
+the batch and verify rows' and the prefill window's one select; a down-scale row selects the `DSCALE` stamps
+(`MetalMoeSelectDs`, `MetalMoeSelect512Ds`), because the arm costs the plain stamps 0.27 us a dispatch on the M5 even
+with no row named (2.88 against 3.16 us at 256 experts, 3.75 against 4.03 at 512), while the down-scale stamp replaces the
+select and its separate scale pass (3.30 against 3.89 us at 128 experts). The Vulkan top-k (`TopKRecords`) is one stamp
+with the arm on: its row is named or `GK_NO_DSCALE`.
+
+### The gemma-4 MoE tail as one step {#metal-g4-moe-step}
+
+**A gemma-4 MoE layer's tail on Metal is one dispatch: `GkMoeCombG4`, the Vulkan combine's template.** The routed sum
+(the selection rows' k slots, on the window through the bucket inverse, or the rows the gathered route summed), the routed
+and dense post norms, their sum's post-FFN norm and the residual under the layer's output scale run in one threadgroup a
+row of 1024 lanes over a row stash of `ADD_RMS_MAX_DIM`; the decode stamps then store the next layer's attention norm
+(`MetalMoeCombG4Hx`: with its f16 twin where the rows step carries one), the window's stamp (`MetalMoeCombG4Pf`) stores
+none, the next layer opening on its own. It replaces six dispatches a decode layer (the routed combine, three norms, the
+add, the add-norm) and six a window layer (the reduce, three norms, two adds). The unfused chain stays where a seam sits
+between the FFN and the residual (a per-layer embedding, a hyper-connection, the window's deepstack slices), past the
+stash, on the last decode layer (no next norm to store), under a knockout, and under the tests' pin
+(`set_metal_moe_g4_unfused`). On the M5 the 26B's row reads 12.3 against 17.5 us, a 512-row window 122.5 against 182 us.

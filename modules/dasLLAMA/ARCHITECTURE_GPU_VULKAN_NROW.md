@@ -27,8 +27,8 @@ MoE, per-layer-embedding, shared-KV and recurrent layers and a gated q, and none
 the tail has no N-row form - a routed block beside a per-layer-embedding
 branch, more routed slots than the block's slot planes hold, or a routed layer whose experts serve on
 the host on a plain MoE (the one-row split command serves it, `ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command`) -
-and logs the reason once per armed model. The classifier epilogue (the final softcap and the suppressed ids, `ClsEpilogue`)
-runs once over the rows' logits planes, `ClsEpiArgs.rows` planes `vocab` apart, the id a row's
+and logs the reason once per armed model. The classifier epilogue (the final softcap and the suppressed ids, `ClsEpilogue`, the
+`GkClsEpilogue` stamp) runs once over the rows' logits planes, `GkClsEpiArgs.rows` planes `vocab` apart, the id a row's
 own; the one-row command and the prefill's tail pass one row. The pins matter on the one-row
 path alone: the batch driver's host tail pins the suppressed ids again on every row after the
 override (`dasllama_batch.das`), where the one-row decode returns before its host tail when the
