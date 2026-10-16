@@ -48,10 +48,11 @@ in a forked context or code reachable from a `team_parallel_*` or `maybe_paralle
 wherever the diff puts it, applies `REVIEW_MEMORY.md` (beside this file) too.**
 
 **A change to what enters `performance/records/`, or to a model file's provenance - its source url,
-byte size, sha256 or conversion recipe, wherever it is declared - answers to `performance/REVIEW.md`.** A change to WHICH model file a recorded row or a manifest pins
-answers to it too. A model file here is a `.gguf`, a `.dlim`, an mmproj (a multimodal projector
-weight file), or an image or audio fixture. A test or tool merely opening a stocked model file
-by name does not route.
+byte size, sha256 or conversion recipe, wherever it is declared - answers to
+`performance/REVIEW.md`.** A change to WHICH model file a recorded row or a manifest pins answers to
+it too. A model file here is a `.gguf`, a `.dlim`, an mmproj (a multimodal projector weight file),
+or an image or audio fixture. A test or tool merely opening a stocked model file by name does not
+route.
 
 **A change to the sidecar-exchange client (`dasllama/dasllama_exchange.das`) - the code that
 downloads tune winners to a box and submits that box's winners back - its schema, or a
@@ -196,8 +197,8 @@ race's output lines, one per candidate and each naming it, in the PR body or in 
 row the diff adds.**
 
 **A race that picks a numeric threshold - a cutoff a predicate compares against, or a size a kernel
-variant is compiled for: a row count, a byte size, a lane width - times the chosen value and at least
-one value on each side of it.**
+variant is compiled for: a row count, a byte size, a lane width - times the chosen value and at
+least one value on each side of it.**
 
 **A new CPU or GPU matrix multiply whose weight operand is an f32 plane, outside a
 correctness-comparison path (one whose only job is to produce a reference result to check another
