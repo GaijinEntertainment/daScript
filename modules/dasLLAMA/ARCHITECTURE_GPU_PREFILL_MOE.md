@@ -4,9 +4,9 @@ Companion to `ARCHITECTURE_GPU_PREFILL.md`; a section is cited by its anchor. Th
 document carries the routed block of the Metal prefill driver: the atomics-free
 bucket rail, the tensor-twin scaffold the gathered expert sites ride, the split-format
 expert twins, the K-quant twins' own crowns and the knee that picks them on an uncrowned box,
-the short window's gathered expert route, and the routed weights' global scale every row shape applies. The GEMM form ladder those sites pick from (`ARCHITECTURE_GPU_PREFILL.md#prefill-gemm-ladder`), the dev-W panel knee map
-(`ARCHITECTURE_GPU_PREFILL.md#devw-panel-knees`) and the dense-KQ tensor mul_mm scaffold the split-format twins derive from (`ARCHITECTURE_GPU_PREFILL.md#prefill-kq-tensor-scaffold`)
-stay in `ARCHITECTURE_GPU_PREFILL.md`.
+the short window's gathered expert route, and the routed weights' global scale every row shape applies. The GEMM form ladder those sites pick from (`ARCHITECTURE_GPU_PREFILL_GEMM.md#prefill-gemm-ladder`), the dev-W panel knee map
+(`ARCHITECTURE_GPU_PREFILL_GEMM.md#devw-panel-knees`) and the dense-KQ tensor mul_mm scaffold the split-format twins derive from (`ARCHITECTURE_GPU_PREFILL_GEMM.md#prefill-kq-tensor-scaffold`)
+live in `ARCHITECTURE_GPU_PREFILL_GEMM.md`.
 
 ### The prefill MoE bucket rail {#prefill-moe-buckets}
 
@@ -81,7 +81,7 @@ form it replaced, and the two knockouts). The mx4 twin keeps the 32-row op, sinc
 bias store is MT-only.
 
 The superblock formats' expert twins do not derive from that scaffold: they
-derive from the format's DENSE split class (`ARCHITECTURE_GPU_PREFILL.md#prefill-kq-tensor-scaffold`) with the base's `MOE` axis set and run its
+derive from the format's DENSE split class (`ARCHITECTURE_GPU_PREFILL_GEMM.md#prefill-kq-tensor-scaffold`) with the base's `MOE` axis set and run its
 `stage16` under the dense base's `moe_kernel` entry, whose expert plane rides `nBase` -
 `(e*ndim + n)*nsb + sb` is the plane's superblock, so the decode is one source for both the dense
 and the routed site, and a table format's threadgroup prologue is one override serving both.

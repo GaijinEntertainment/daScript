@@ -2237,7 +2237,7 @@ var private g_metal_devw_panels = false
 //! A/B seat: the Metal prefill's STORED dev-W f16 panels - a converted copy of a dense site's plane, baked into a metal
 //! image (its lane folds the lever) or resident across windows - against the default, the per-window scratch panels.
 //! Default off; the pin or DASLLAMA_METAL_DEVW=1 (the served A/B rail) turns it on.
-[arch(at="../ARCHITECTURE_GPU_PREFILL.md#devw-panel-knees")]
+[arch(at="../ARCHITECTURE_GPU_PREFILL_GEMM.md#devw-panel-knees")]
 def public set_metal_devw_panels(v : bool) {
     g_metal_devw_panels = v
     to_log(LOG_WARNING, "dasLLAMA: set_metal_devw_panels({v}) - the dense Q8_0 and K-quant prefill sites {v ? "read a stored f16 converted copy of their planes" : "read per-window scratch panels past their row floor, their own bytes under it"}\n")

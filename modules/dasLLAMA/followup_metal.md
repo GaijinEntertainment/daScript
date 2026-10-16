@@ -105,7 +105,7 @@ zoo. Facts that decide the order:
   `REVIEW_GPU_KERNEL_CLASSES.md`); the f4-slab GEMV crowns `MetalKqGemvIq3sF4` / `Iq3xxsF4` /
   `Iq2xxsF4` and `MetalKqGemvK5C` beside `K5T` (per-box crowns with their numbers,
   `ARCHITECTURE_GPU_QUANT_PLANES.md#metal-iquant-gemv-grid`); the `*Db` double-buffered shells beside the
-  single-tile shells (`ARCHITECTURE_GPU_PREFILL.md#prefill-gemm-ladder` carries the measurement); the
+  single-tile shells (`ARCHITECTURE_GPU_PREFILL_GEMM.md#prefill-gemm-ladder` carries the measurement); the
   compact-kargs and unread-bind asymmetries (`ARCHITECTURE_GPU.md#gpu-backends`); the four dense
   mul_mm shells (`MetalF32MulMm` xf/y at 1/2, `MetalQ8MulMm` and `MetalBf16MulMm` at 2/3,
   `MetalKqMulMmK45T` at 3/4, the MoE base's kargs at 5); the codebook grid
@@ -155,7 +155,7 @@ zoo. Facts that decide the order:
 
 The nine iquant/split-scale tensor mul_mm twins stamp `T` and `TH` only. k4/k5/k6 additionally
 carry the tall (`TH128`) and double-buffered (`THDb`, `THDb128`) stamps, and that is where the
-tall in-kernel-dequant win lives (`ARCHITECTURE_GPU_PREFILL.md#prefill-gemm-ladder` form 1). Race a tall
+tall in-kernel-dequant win lives (`ARCHITECTURE_GPU_PREFILL_GEMM.md#prefill-gemm-ladder` form 1). Race a tall
 stamp for the iquant scaffold before assuming the k6 result transfers; the arc-end matrix's
 soft spot is the deep-K w2 column (k6 0.91x / iq3s 0.88x / iq3xxs 0.92x vs llama.cpp on m5),
 which is exactly the column a tall stamp serves.
@@ -263,7 +263,7 @@ The three iquant rows are re-times: the sweep first read them 0.91, 0.93 and 0.8
 IQ3_XXS stop), every split-scale site on the staged mul_mm stamp that re-dequantizes W per
 32-row tile, while the K-quant twin rode the image's baked dev-W panels. The nine split-scale
 formats now carry a dev-W dequant pass on their tensor class and bake into the image's
-`devwf16` plane (IMAGE_VERSION 37, `ARCHITECTURE_GPU_PREFILL.md#prefill-kq-tensor-scaffold`): 1.05 on the
+`devwf16` plane (IMAGE_VERSION 37, `ARCHITECTURE_GPU_PREFILL_GEMM.md#prefill-kq-tensor-scaffold`): 1.05 on the
 scratch route, the rows above resident. The IQ2_XS file skips "19" on llama.cpp too; its
 fixture is frozen off that file. The 40-token tg128 reads on a 1B move +-10% between cool
 slots (the IQ2_XXS 1.09 / 1.26 / 1.30 across three re-times); the pp512 reads hold to 1%.
@@ -418,7 +418,7 @@ as `DASLLAMA_METAL_WAIT_SPIN` (`ARCHITECTURE_GPU_MTP_DECODE.md` 2.38): decode 0.
 0.96 -> 1.03 (1.5B), 0.95 -> 1.00 (Llama Q8), 0.93 -> 1.00 (Llama Q4_K_M).
 
 The fourth: **the 128-row tall stamps lose on this GPU** (Llama-1B 5%, the 30B 1%, the 9B
-even) and open only behind the `hmm_tall` crown the mint races (`ARCHITECTURE_GPU_PREFILL.md`,
+even) and open only behind the `hmm_tall` crown the mint races (`ARCHITECTURE_GPU_PREFILL_GEMM.md`,
 the occupancy-floor paragraph); the M5's sidecars carry the crown by hand until its next mint.
 The table above is the family under all four.
 
@@ -942,7 +942,7 @@ the route and the tiles at 8, 32, 64 and 128 tokens on the M1 Max and the M5 Max
 ## 48. The dense K-quant sites keep the tile from nine rows up
 
 A dense K-quant or grid-format projection rides the decode's row-batched GEMV forms on a window of eight rows or fewer
-(`ARCHITECTURE_GPU_PREFILL.md#gemv-tail-peel`) and the 32-row mul_mm tile from nine rows up, remainder included - the
+(`ARCHITECTURE_GPU_PREFILL_GEMM.md#gemv-tail-peel`) and the 32-row mul_mm tile from nine rows up, remainder included - the
 q8 blob's peel takes the remainder off a padded tile, the K-quant sites' takes the whole window or nothing. A window of
 9 to 31 rows on Qwen3.6-27B Q4_K_M pays the tile's floor on the M1 Max - 235 to 282 ms, 3.6 decode steps, flat across
 the band - and 80 ms on the M5 Max's tensor twins (`debug-jit`, the window probe; the board row is the metal pp512 cell of

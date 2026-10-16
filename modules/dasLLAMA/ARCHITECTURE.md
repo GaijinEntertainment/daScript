@@ -82,9 +82,10 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   Vulkan default.
 - `ARCHITECTURE_GPU_QUANT_PLANES.md` - the Metal kq split scale plane, the iquant GEMV grid read
   with its f4-slab twin, and the Metal GEMV site abstraction.
-- `ARCHITECTURE_GPU_PREFILL.md` - the Metal prefill driver's GEMM form ladder, dev-W knee map,
-  attention slab, chunked submission, the f16 twin dual-store, the last-layer FFN tail, and the
-  dense-KQ tensor mul_mm scaffold.
+- `ARCHITECTURE_GPU_PREFILL.md` - the Metal prefill driver's attention slab, pad rows, chunked
+  submission, the f16 twin dual-store, the last-layer FFN tail, and the hyper-connection window.
+- `ARCHITECTURE_GPU_PREFILL_GEMM.md` - the Metal prefill driver's GEMM form ladder, dev-W knee map,
+  GEMV tail peel, and the dense-KQ tensor mul_mm scaffold.
 - `ARCHITECTURE_GPU_PREFILL_MOE.md` - the Metal prefill driver's routed block - the MoE bucket
   rail, its tensor-twin scaffold and the split-format expert twins, the K-quant twins' crowns and
   the knee that picks them, and the short window's gathered expert route.

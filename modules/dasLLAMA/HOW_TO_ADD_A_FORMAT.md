@@ -593,7 +593,7 @@ silently, which is why the tier's gate (`kq_fmt_gpu_supported`) is closed by def
 4. **Ladders:** `enc_kq_gemv`, `enc_kq_gemm_mm_b` (kernels), `pf_enc_kq_site_mm`,
    `enc_site_gemv` (the classifier site prefill and decode share), `moe_site_ok` + the `sb1/2/3`
    predicates (shapes), and last the gate. The tensor side is one class: a `stage16` override on
-   `MetalKqMulMmSplitTensorBase` (`ARCHITECTURE_GPU_PREFILL.md#prefill-kq-tensor-scaffold`) gives the format its T/TH
+   `MetalKqMulMmSplitTensorBase` (`ARCHITECTURE_GPU_PREFILL_GEMM.md#prefill-kq-tensor-scaffold`) gives the format its T/TH
    mul_mm twins, its dev-W dequant pass (`MetalKqDequant<Fmt>`, plus the bake mirror and the split
    set in `pf_kq_split_fmt`), and its routed expert twins (`MetalMoeMulMm<Fmt>SplitT`,
    `ARCHITECTURE_GPU_PREFILL_MOE.md`); the decode GEMV derives from `MetalGemvSiteT` so the

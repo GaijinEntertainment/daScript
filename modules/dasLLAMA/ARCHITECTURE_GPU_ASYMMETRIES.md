@@ -157,7 +157,7 @@ asymmetries a stamp family ledgers - stays in `ARCHITECTURE_GPU.md#gpu-backends`
 - **The dev-W f16 panels are a Metal-only knob.** `DASLLAMA_METAL_DEVW` /
   `set_metal_devw_panels` makes Metal's dense Q8_0, K-quant, iquant and per-32 prefill sites read a stored f16
   copy of their planes in place of the per-window scratch panels
-  (`ARCHITECTURE_GPU_PREFILL.md#devw-panel-knees`); Vulkan's prefill tiles read each plane's
+  (`ARCHITECTURE_GPU_PREFILL_GEMM.md#devw-panel-knees`); Vulkan's prefill tiles read each plane's
   own blocks in the tile load, so that tier has no f16 weight panel for such a knob to keep.
 - **The device-side token-embedding gather covers different tables and calls per backend.** The
   engine asks a probe before it embeds; on true it stashes the token ids, skips the CPU embed
