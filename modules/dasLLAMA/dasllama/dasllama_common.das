@@ -798,13 +798,17 @@ def register_mtp_sidecar(fn : function<(model_path : string) : string>) {
     g_mtp_sidecar = fn
 }
 
-//! The assistant drafter file beside `model_path` ("" where none, or no loader is registered).
-def mtp_drafter_sidecar_(model_path : string) : string
-    => g_mtp_sidecar != null ? invoke(g_mtp_sidecar, model_path) : ""
+//! The assistant drafter file beside `model_path` ("" where none, or no loader is registered - logged with the module to require).
+def mtp_drafter_sidecar_(model_path : string) : string {
+    return invoke(g_mtp_sidecar, model_path) if (g_mtp_sidecar != null)
+    to_log(LOG_WARNING, "dasLLAMA: no assistant drafter sidecar resolver is registered - require dasllama/dasllama_mtp_gemma (dasllama/dasllama_transformer requires it)\n")
+    return ""
+}
 
 //! why no backend took the drafter: each registered backend's refusal (`whys`, "<backend>: <why>"), or that none is registered
 def mtp_attach_refusal(whys : array<string>) : string
-    => empty(whys) ? "no GPU driver on this build carries an assistant drafter" : join(whys, "; ")
+    => (empty(whys) ? "no GPU driver on this build carries an assistant drafter - require dasllama/dasllama_metal_mtp_gemma (dasMetal) or dasllama/dasllama_vulkan_mtp_gemma (dasVulkan)"
+        : join(whys, "; "))
 
 //! Attach the assistant drafter at `path` to `t` on the backend that serves it: "" attached, else every backend's refusal, logged.
 def attach_mtp_drafter_(t : Model; path : string) : string {
@@ -4999,6 +5003,21 @@ def kv_ring_rows(c : Config; l, ctx, slack : int64) : int64 {
     return 0l if (!gpu_kv_ring_on() || !layer_is_sliding(c, l))
     let rows = round_up(c.sliding_window + slack, 64l)
     return rows < ctx ? rows : 0l
+}
+
+//! The announce of a sliding-window model's K/V mirror on GPU home `home`: `ringed` the rings' line, else - the pin or the knob
+//! turned them off - the flat slab's; a model with no sliding layer says nothing
+def kv_ring_announce(c : Config; home, ringed : string) {
+    var sliding = false
+    for (l in range64(c.n_layers)) {
+        sliding ||= layer_is_sliding(c, l)
+    }
+    return if (!sliding)
+    if (gpu_kv_ring_on()) {
+        to_log(LOG_INFO, "dasLLAMA: {home} - the sliding layers' K/V rows ride rings of {ringed} (set_gpu_kv_ring, DASLLAMA_GPU_KV_RING=0 keeps every row)\n")
+    } else {
+        to_log(LOG_WARNING, "dasLLAMA: {home} - the sliding layers' K/V rows keep every position's row, no ring, as asked (set_gpu_kv_ring, DASLLAMA_GPU_KV_RING=0)\n")
+    }
 }
 
 // ===== Per-layer attention geometry (gemma4: sliding vs global layer classes differ) =====

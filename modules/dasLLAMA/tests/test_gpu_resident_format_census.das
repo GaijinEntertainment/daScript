@@ -260,7 +260,9 @@ def test_gpu_perop_dense_ffn(t : T?) {
                     "the window's q/o and FFN GEMMs ran on the device over every layer's planes ({gemm} rows, {5l * tr.config.n_layers * PROMPT} owed)")
                 delete sg
                 moe_gpu_drop_model()
+                let cpu_gemm0 = moe_gpu_dense_gemm_rows()
                 var cpu <- feed_alone(tr, mirror_kv_dtype(), prompt, toks)
+                t |> equal(moe_gpu_dense_gemm_rows() - cpu_gemm0, 0l, "the CPU chain with the model's device state dropped runs no dense GEMM row on the device (the GEMM counter's control)")
                 feed_steps_within(t, tr, "{file} per-op FFN ", PROMPT, gpu, cpu, toks, spec.bar, "per-op")
                 t |> equal(rows, STEPS * tr.config.n_layers, "every fed step ran each layer's FFN row on the device ({rows} rows)")
                 delete gpu

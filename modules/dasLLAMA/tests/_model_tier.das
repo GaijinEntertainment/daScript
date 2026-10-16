@@ -111,6 +111,17 @@ def log_gen_texts(m : Model; tag : string; cpu_ids, gpu_ids : array<int64>) {
     to_log(LOG_INFO, "{tag} GPU text: {eyeball_text(m, gpu_ids)}\n")
 }
 
+//! a logits row's argmax id and its decoded piece
+def pick_text(m : Model; row : array<float>) : string {
+    var inscope one <- [argmax_of(row)]
+    return "{one[0]} '{eyeball_text(m, one)}'"
+}
+
+//! a logits compare's log line: each side's argmax piece beside the measured max difference
+def log_logits_pair(m : Model; tag : string; got, want : array<float>; diff : float) {
+    to_log(LOG_INFO, "{tag}: argmax {pick_text(m, got)} against {pick_text(m, want)}, maxdiff {diff}\n")
+}
+
 //! `prompt` greedily continued `n_gen` ids through `generate` on a fresh session: the prompt's echo past its first id, then the
 //! continuation
 def greedy_gen(tr : Model; prompt : array<int64>; n_gen : int) : array<int64> {

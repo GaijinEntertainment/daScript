@@ -1671,8 +1671,9 @@ def private short_window_cells(t : T?; path, tag : string; bar : float; form : S
 }
 
 //! the last-layer FFN tail narrowed (the final row alone, the classifier's) against the full-panel tail over the first 48 ids of
-//! `prompt` on the blob twin `trsg`, the prefill override selected: the logits within `bar`, the same argmax, the narrowed residual's
-//! row 0 visibly off the full one's (the arm engaged), and `keep_hidden` restoring the full plane bit for bit
+//! `prompt` on the blob twin `trsg`, the prefill override selected: the logits within `bar`, the same window with its last id changed
+//! outside it (the control), the same argmax, the narrowed residual's row 0 visibly off the full one's (the arm engaged), and
+//! `keep_hidden` restoring the full plane bit for bit
 [cold_path, unused_argument(t, trsg, prompt, tag, bar)]   // off-Apple the gated body is empty
 def lastrow_ab(t : T?; var trsg : Model; prompt : array<int64>; tag : string; bar : float) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -1689,12 +1690,21 @@ def lastrow_ab(t : T?; var trsg : Model; prompt : array<int64>; tag : string; ba
         var s_keep <- make_run_state(trsg.config)
         s_keep.keep_hidden = true
         forward_prefill(trsg, s_keep, tlr, nlr, 0l)
-        if (metal_prefill_stats().prefills - served0 == 3l) {
+        //! the bar's control: the full panel's tail over the same window with its last id changed
+        var tctl := tlr
+        tctl[nlr - 1l] = tlr[nlr - 2l]
+        set_metal_prefill_lastrow(false)
+        var s_ctl <- make_run_state(trsg.config)
+        forward_prefill(trsg, s_ctl, tctl, nlr, 0l)
+        set_metal_prefill_lastrow(true)
+        if (metal_prefill_stats().prefills - served0 == 4l) {
             let lmax = logits_maxdiff(s_on.logits, s_off.logits)
+            let lctl = logits_maxdiff(s_on.logits, s_ctl.logits)
             let amax_on = argmax_of(s_on.logits, trsg.config.vocab_size)
             let amax_off = argmax_of(s_off.logits, trsg.config.vocab_size)
-            to_log(LOG_INFO, "{tag} lastrow: narrowed-vs-full logits maxdiff {lmax}\n")
+            to_log(LOG_INFO, "{tag} lastrow: narrowed-vs-full logits maxdiff {lmax}, against the window with its last id changed {lctl}\n")
             t |> success(lmax <= bar, "{tag} lastrow: narrowed logits inside the form-change envelope ({lmax}, bar {bar})")
+            t |> success(lctl > bar, "{tag} lastrow: the window with its last id changed lands outside the bar ({lctl}) - the control")
             // both picks decoded: a near-tie synonym flip and real garbage look the same as ids and completely different as text
             var pick_off <- [amax_off]
             var pick_on <- [amax_on]
@@ -1704,21 +1714,20 @@ def lastrow_ab(t : T?; var trsg : Model; prompt : array<int64>; tag : string; ba
             delete pick_on
             t |> equal(amax_on, amax_off, "{tag} lastrow: argmax unchanged")
             var row0 = 0.0
-            var plane = 0.0
             for (i in range64(dim_s)) {
                 row0 = max(row0, abs(s_on.x_b[i] - s_off.x_b[i]))
             }
-            for (i in range64(nlr * dim_s)) {
-                plane = max(plane, abs(s_keep.x_b[i] - s_off.x_b[i]))
-            }
+            let plane = span_maxdiff(s_keep.x_b, s_off.x_b, 0, 0, int(nlr * dim_s)).diff   //! a NaN on either side reads as infinite
             t |> success(row0 > 1e-4, "{tag} lastrow: row 0 visibly narrowed ({row0}) - the arm engaged")
             t |> equal(plane, 0.0, "{tag} lastrow: keep_hidden restores the full plane bit-exactly")
         } else {
-            t |> failure("{tag} lastrow: the metal prefill declined a leg ({metal_prefill_stats().prefills - served0} of 3 served)")
+            t |> failure("{tag} lastrow: the metal prefill declined a leg ({metal_prefill_stats().prefills - served0} of 4 served)")
         }
         delete s_off
         delete s_on
         delete s_keep
+        delete s_ctl
+        delete tctl
         delete tlr
     }
 }
@@ -1757,6 +1766,8 @@ def test_metal_prefill_lastrow_sandwich(t : T?) {
                 set_wscale_f16(prior_wscale)
             }
         }
+    } else {
+        t |> skip("das_metal is not built on this platform; the Metal prefill's last-row tail is not compiled")
     }
 }
 

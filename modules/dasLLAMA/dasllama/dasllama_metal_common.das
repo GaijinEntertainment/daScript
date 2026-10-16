@@ -1327,10 +1327,12 @@ struct MirrorLayout {
 
 var @scratch g_mirror_layout : MirrorLayout
 
-//! the layout's identity for `t` under the current slack
-def private mirror_layout_key(t : Model) : int64 {
+var private g_mirror_ring_said = 0l   //! the layout key, at the floor slack, whose rings the run announced
+
+//! the layout's identity for `t` under `slack`
+def private mirror_layout_key(t : Model; slack : int64) : int64 {
     let n = long_length(t.kv_row_prefix)
-    var k = n * 1000003l + g_mirror_ring_slack * 7919l + t.config.sliding_window * 31l + (gpu_kv_ring_on() ? 1l : 0l)
+    var k = n * 1000003l + slack * 7919l + t.config.sliding_window * 31l + (gpu_kv_ring_on() ? 1l : 0l)
     for (l in range64(n)) {
         k = k * 31l + t.kv_row_prefix[l]
     }
@@ -1340,7 +1342,7 @@ def private mirror_layout_key(t : Model) : int64 {
 //! model `t`'s slice layout under the current slack (`kv_ring_rows` a sliding layer, ringed at every context); cached per model
 [arch(at="../ARCHITECTURE_GPU_KV_RING.md#kv-sliding-ring")]
 def mirror_layout_ensure(t : Model) {
-    let key = mirror_layout_key(t)
+    let key = mirror_layout_key(t, g_mirror_ring_slack)
     if (g_mirror_layout.key != key || empty(g_mirror_layout.ring)) {
         mirror_layout_build(t, key)
     }
@@ -1376,6 +1378,11 @@ def private mirror_layout_build(t : Model; key : int64) {
     }
     m.slack = g_mirror_ring_slack
     m.key = key
+    let said = mirror_layout_key(t, MIRROR_RING_SLACK_MIN)
+    if (said != g_mirror_ring_said) {
+        g_mirror_ring_said = said
+        kv_ring_announce(c, "metal decode", "their window plus the rows the longest window of the process writes ({m.slack} now)")
+    }
 }
 
 //! model `t`'s current slice layout key (`mirror_layout_ensure`): a slice cut under another key re-cuts
