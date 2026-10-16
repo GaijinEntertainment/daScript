@@ -1647,6 +1647,17 @@ class template MetalAddRmsT : GkAddRmsRows {
     }
     def override stashed(k : uint) : float => xrow[k]
     def override pre_partner(base, k : uint) : float => xrow[k]
+
+    //! `seam_norms`' layout: the post norm at row 0, the next norm past it on a PRE stamp
+    def override norm_base : uint {
+        static_if (PRE) {
+            return pa.dim
+        } else {
+            return 0u
+        }
+    }
+
+    def override pre_base : uint => 0u
 }
 
 //! the plain step, its next norm out as floats
@@ -1681,6 +1692,7 @@ class MetalAddRmsHX : MetalAddRmsT {
     metal_dispatch(name = "pf_enc_preaddrms_b_c", pso = "g_pso_preaddrms", tgmem = "metal_pre_add_rms_msl_tgmem", tg = 256, grid = "nrows", params = "nrows : int64")]
 class MetalPreAddRms : MetalAddRmsT {
     override PRE = true
+    override PRE_SWITCH = false
     override OUT_F32 = true
 
     [metal_kernel(name="metal_pre_add_rms_msl")]
@@ -1694,6 +1706,7 @@ class MetalPreAddRms : MetalAddRmsT {
     metal_dispatch(name = "pf_enc_preaddrms_bhx_c", pso = "g_pso_preaddrms_hx", tgmem = "metal_pre_add_rms_hx_msl_tgmem", tg = 256, grid = "nrows", params = "nrows : int64")]
 class MetalPreAddRmsHX : MetalAddRmsT {
     override PRE = true
+    override PRE_SWITCH = false
     override OUT_F32 = true
     override HX = true
 
@@ -1709,6 +1722,7 @@ class MetalPreAddRmsHX : MetalAddRmsT {
     metal_dispatch(name = "pf_enc_preadd_b_c", pso = "g_pso_preadd", tgmem = "metal_pre_add_msl_tgmem", tg = 256, grid = "nrows", params = "nrows : int64")]
 class MetalPreAdd : MetalAddRmsT {
     override PRE = true
+    override PRE_SWITCH = false
 
     [metal_kernel(name="metal_pre_add_msl")]
     def metal_pre_add {
@@ -5196,8 +5210,7 @@ def enc_residual(enc : MetalComputeEncoder?; t : Model; bx, ba, by, byh : MetalB
         return
     }
     var bw = seam_norms(t, sm)
-    var ka = GkAddRmsArgs(dim = uint(dim), add_on = 1u, woff = pre && out ? uint(dim) : 0u, eps = c.norm_eps,
-        ascale = sm.osc_off >= 0l ? t.fblob[sm.osc_off] : 1.0, pre_on = pre ? 1u : 0u, pwoff = 0u)
+    var ka = GkAddRmsArgs(dim = uint(dim), add_on = 1u, eps = c.norm_eps, ascale = sm.osc_off >= 0l ? t.fblob[sm.osc_off] : 1.0)
     if (!out) {
         if (one) {
             enc_preadd_c(enc, bx, ba, bw, ka)
@@ -7068,14 +7081,38 @@ class MetalKqMulMmQ5032 : MetalKqMulMmK45T {
     override B32W = 5u
 }
 
-//! The router GEMV on the template both homes stamp (`GkRouterGemv`) over the f32 router rows, a lane stepping a float4, the bias row
-//! where `hasb` (gpt-oss)
+//! The router GEMV's Metal shell on the template both homes stamp (`GkRouterGemv`): the stamp's grid onto its rows - a threadgroup
+//! of 256 a row under `ROW_WG`, else a simdgroup a row of the threadgroup's four; a format's template sets the row words
 [ |> template_struct_instance]
-class template MetalMoeRouterT : GkRouterGemv {
+class template MetalRouterGemvT : GkRouterGemv {
+    def grid_row {
+        static_if (ROW_WG) {
+            router_row(gl_WorkGroupID.x, gl_LocalInvocationID.x, 256u)
+        } else {
+            let row = gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID
+            if (row < pa.ne) {
+                router_row(row, gl_SubgroupInvocationID, gl_SubgroupSize)
+            }
+        }
+    }
+}
+
+//! the f32 router rows, a lane stepping a float4, the bias row where `hasb` (gpt-oss)
+[ |> template_struct_instance]
+class template MetalMoeRouterT : MetalRouterGemvT {
     typedef KT = float4
     typedef XT = float4
     override VW = 4u
     override BIAS = true
+}
+
+//! the per-layer-embedding pre-step's projection off its native-BF16 rows: the bf16 word pairs (the finish applies the 1/sqrt(dim))
+[ |> template_struct_instance]
+class template MetalPleProjBf16T : MetalRouterGemvT {
+    typedef KT = uint
+    typedef XT = float
+    override VW = 2u
+    override BF16 = true
 }
 
 //! the one-column stamp: a threadgroup of 256 an expert row, grid.y the streams of a batched decode step (one on the single row)
@@ -7085,7 +7122,7 @@ class MetalMoeRouter : MetalMoeRouterT {
 
     [metal_kernel(name="metal_moe_router_msl")]
     def metal_moe_router {
-        router_row(gl_WorkGroupID.x, gl_LocalInvocationID.x, 256u)
+        grid_row()
     }
 }
 
@@ -7099,46 +7136,32 @@ class MetalMoeRouterB : MetalMoeRouterT {
 
     [metal_kernel(name="metal_moe_router_b_msl")]
     def metal_moe_router_b {
-        let row = gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID
-        if (row < pa.ne) {
-            router_row(row, gl_SubgroupInvocationID, gl_SubgroupSize)
-        }
+        grid_row()
     }
 }
 
-//! The per-layer-embedding pre-step's projection off the native-BF16 rows: the router GEMV's bf16 word form (`GkRouterGemv`) in the
-//! position-blocked stamp's shape - a simdgroup a row, eight columns a simdgroup (the finish applies the 1/sqrt(dim))
+//! the projection's position-blocked stamp of the template both homes stamp (`GkRouterGemv`): a simdgroup a row, eight columns a simdgroup
 [metal_dispatch(name = "enc_ple_proj_bf16", pso = "g_pso_ple_proj_bf16", tg = 128, grid = "ne/4, nst/8", params = "ne : int64, nst : int64")]
-class MetalPleProjBf16 : GkRouterGemv {
-    typedef KT = uint
-    typedef XT = float
-    override VW = 2u
-    override BF16 = true
+class MetalPleProjBf16 : MetalPleProjBf16T {
     override ROW_WG = false
     override COL_CLAMP = true
     override NC = 8
 
     [metal_kernel(name="metal_ple_proj_bf16_msl")]
     def metal_ple_proj_bf16 {
-        let row = gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID
-        if (row < pa.ne) {
-            router_row(row, gl_SubgroupInvocationID, gl_SubgroupSize)
-        }
+        grid_row()
     }
 }
 
-//! the decode column's stamp of the same: a threadgroup of 256 a row, as the f32 router's one-column stamp reads its rows
+//! the projection's decode-column stamp of the template both homes stamp (`GkRouterGemv`): a threadgroup of 256 a row, as the f32
+//! router's one-column stamp reads its rows
 [metal_dispatch(name = "enc_ple_proj_bf16_one", pso = "g_pso_ple_proj_bf16_one", tgmem = "metal_ple_proj_bf16_one_msl_tgmem", tg = 256, grid = "ne, nst", params = "ne : int64, nst : int64")]
-class MetalPleProjBf16One : GkRouterGemv {
-    typedef KT = uint
-    typedef XT = float
-    override VW = 2u
-    override BF16 = true
+class MetalPleProjBf16One : MetalPleProjBf16T {
     override NC = 1
 
     [metal_kernel(name="metal_ple_proj_bf16_one_msl")]
     def metal_ple_proj_bf16_one {
-        router_row(gl_WorkGroupID.x, gl_LocalInvocationID.x, 256u)
+        grid_row()
     }
 }
 
@@ -7206,12 +7229,19 @@ class template MetalMoeSelectT : GkTopKRow {
     @ssbo @binding = 0 logits : array<float>                 //! [streams x lstride] router logits
     @ssbo @binding = 1 @role = "write" seli : array<uint>    //! the selection rows, uint view: stream s's picks at s 2k
     @ssbo @binding = 2 @role = "alias" selw : array<float>   //! the same rows' float view: stream s's weights at s 2k + k
-    @ssbo @binding = 3 @role = "weight" ds : array<float>    //! the per-expert down scales (gemma-4), read at dsoff when the args name a row
+    @ssbo @binding = 3 @role = "weight" @template_gate = DSCALE ds : array<float>   //! the layer's per-expert down-scale row (gemma-4)
     override LANES = 32u
     override DEPTH = 8
 
     def override logit_at(p, e : uint) : float => logits[p * pa.lstride + e]
-    def override down_scale(e : uint) : float => ds[pa.dsoff + e]
+
+    def override down_scale(e : uint) : float {
+        static_if (DSCALE) {
+            return ds[e]
+        } else {
+            return 1.0
+        }
+    }
 
     [metal_kernel]
     def metal_moe_select {
@@ -7266,12 +7296,14 @@ class MetalMoeSelect512 : MetalMoeSelectT {
 [metal_dispatch(name = "enc_moe_select_ds", pso = "g_pso_moe_select_ds", tgmem = "MetalMoeSelectDs_metal_moe_select_msl_tgmem", tg = 32, grid = "nst", params = "nst : int64")]
 class MetalMoeSelectDs : MetalMoeSelectT {
     override DSCALE = true
+    override DSOFF_SWITCH = false
 }
 
 [metal_dispatch(name = "enc_moe_select_512_ds", pso = "g_pso_moe_select_512_ds", tgmem = "MetalMoeSelect512Ds_metal_moe_select_msl_tgmem", tg = 32, grid = "nst", params = "nst : int64")]
 class MetalMoeSelect512Ds : MetalMoeSelectT {
     override DEPTH = 16
     override DSCALE = true
+    override DSOFF_SWITCH = false
 }
 
 // q4_K/q5_K kmask scale decode for ONE 32-element sub-block js (0..7): the 6-bit sc and min -
@@ -7472,10 +7504,18 @@ class template MetalMoeCombG4T : GkMoeCombG4 {
         xrow[k] = v
     }
     def override stashed(k : uint) : float => xrow[k]
+
+    //! `moe_g4_norms`' layout: the four rows a row width apart
+    def override rpost_base : uint => 0u
+    def override dpost_base : uint => pa.n
+    def override spost_base : uint => 2u * pa.n
+    def override next_base : uint => 3u * pa.n
 }
 
 [metal_dispatch(name = "enc_moe_comb_g4", pso = "g_pso_moe_comb_g4", tgmem = "metal_moe_comb_g4_msl_tgmem", tg = 1024, grid = "nst", params = "nst : int64")]
 class MetalMoeCombG4 : MetalMoeCombG4T {
+    override PRESUM_SWITCH = false
+
     [metal_kernel(name="metal_moe_comb_g4_msl")]
     def metal_moe_comb_g4 {
         comb_g4_row(gl_WorkGroupID.x)
@@ -7485,6 +7525,7 @@ class MetalMoeCombG4 : MetalMoeCombG4T {
 [metal_dispatch(name = "enc_moe_comb_g4_hx", pso = "g_pso_moe_comb_g4_hx", tgmem = "metal_moe_comb_g4_hx_msl_tgmem", tg = 1024, grid = "nst", params = "nst : int64")]
 class MetalMoeCombG4Hx : MetalMoeCombG4T {
     override HX = true
+    override PRESUM_SWITCH = false
 
     [metal_kernel(name="metal_moe_comb_g4_hx_msl")]
     def metal_moe_comb_g4_hx {
@@ -7504,17 +7545,13 @@ class MetalMoeCombG4Pf : MetalMoeCombG4T {
     }
 }
 
-//! the gemma-4 step's args over `nk` slots a row at width `dim`, the weights the selection rows' (`moe_comb_args`); the norm rows at
-//! the offsets `moe_g4_norms` lays out, the next one's where `next`
-def moe_g4_args(dim, nk : int64; eps, ascale : float; presummed, next : bool) : GkMoeCombArgs {
+//! the gemma-4 step's args over `nk` slots a row at width `dim`, the weights the selection rows' (`moe_comb_args`); the stamps read
+//! the norm rows at `moe_g4_norms`' layout
+def moe_g4_args(dim, nk : int64; eps, ascale : float; presummed : bool) : GkMoeCombArgs {
     var ka = moe_comb_args(dim, nk)
     ka.eps = eps
     ka.ascale = ascale
     ka.presummed = presummed ? 1u : 0u
-    ka.rpost_off = 0u
-    ka.dpost_off = uint(dim)
-    ka.spost_off = uint(2l * dim)
-    ka.nwoff = next ? uint(3l * dim) : 0u
     return ka
 }
 
@@ -7530,11 +7567,11 @@ def moe_g4_norms(t : Model; l : int64; next : bool) : MetalBuffer? {
     }
 }
 
-//! the gemma-4 step's args for layer l: the model's norm epsilon and the layer's output scale, `presummed` and `next` as `moe_g4_args`
-def moe_g4_layer_args(t : Model; l : int64; presummed, next : bool) : GkMoeCombArgs {
+//! the gemma-4 step's args for layer l: the model's norm epsilon and the layer's output scale, `presummed` as `moe_g4_args`
+def moe_g4_layer_args(t : Model; l : int64; presummed : bool) : GkMoeCombArgs {
     let c = t.config
     let osc = c.layer_out_scale ? t.fblob[t.out_scale_off + l] : 1.0
-    return moe_g4_args(c.dim, c.n_expert_used, c.norm_eps, osc, presummed, next)
+    return moe_g4_args(c.dim, c.n_expert_used, c.norm_eps, osc, presummed)
 }
 
 //! the combine's args over `nk` slots a stream at row width `dim`, the weights the selection rows' (the Metal stamps sum every
@@ -7647,8 +7684,7 @@ def enc_moe_select_rows(enc : MetalComputeEncoder?; c : Config; blg, bsel : Meta
                         bds : MetalBuffer? = null) {
     let sw = c.moe_gate == MoeGate.softmax_weight
     var ka = GkTopKArgs(ne = uint(c.n_expert), k = uint(c.n_expert_used), norm = !sw && c.norm_topk_prob ? 1u : 0u,
-        wscale = c.expert_weights_scale, dsoff = bds != null ? 0u : GK_NO_DSCALE,
-        lstride = uint(lstride > 0l ? lstride : c.n_expert), raw = sw ? 1u : 0u)
+        wscale = c.expert_weights_scale, lstride = uint(lstride > 0l ? lstride : c.n_expert), raw = sw ? 1u : 0u)
     if (bds != null) {
         if (c.n_expert > 256l) {
             enc_moe_select_512_ds(enc, blg, bsel, bsel, bds, ka, nrows)
@@ -7656,9 +7692,9 @@ def enc_moe_select_rows(enc : MetalComputeEncoder?; c : Config; blg, bsel : Meta
             enc_moe_select_ds(enc, blg, bsel, bsel, bds, ka, nrows)
         }
     } elif (c.n_expert > 256l) {
-        enc_moe_select_512(enc, blg, bsel, bsel, blg, ka, nrows)   //! the down-scale binding is read on a DSCALE stamp alone
+        enc_moe_select_512(enc, blg, bsel, bsel, ka, nrows)
     } else {
-        enc_moe_select(enc, blg, bsel, bsel, blg, ka, nrows)
+        enc_moe_select(enc, blg, bsel, bsel, ka, nrows)
     }
 }
 

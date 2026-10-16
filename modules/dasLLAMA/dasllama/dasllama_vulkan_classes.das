@@ -386,16 +386,19 @@ class template ArCombG4T : GkMoeCombG4 {
     }
 }
 
+//! off `ArBase`, the `cls_ar_comb*` siblings' shell: the four-reduce step over the slot map's routed rows and the dense row, its next norm as floats
 [vk_dispatch(name = "cls_ar_comb_g4", kernel = "run", grid = "nrows", params = "nrows : int64")]
 class ClsArCombG4 : ArCombG4T {
     override OUT_F32 = true
 }
 
+//! off `ArBase`, the `cls_ar_comb*` siblings' shell: the four-reduce step over the slot map's routed rows and the dense row, its next norm as f16
 [vk_dispatch(name = "cls_ar_comb_g4_f16_b", kernel = "run", grid = "nrows", params = "nrows : int64")]
 class ClsArCombG4F16B : ArCombG4T {
     override OUT_F16 = true
 }
 
+//! off `ArBase`, the `cls_ar_comb*` siblings' shell: the four-reduce step over the slot map's routed rows and the dense row, its next norm in Q8_0 blocks
 [vk_dispatch(name = "cls_ar_comb_g4_rq", kernel = "run", grid = "nrows", params = "nrows : int64")]
 class ClsArCombG4Rq : ArCombG4T {
     override OUT_Q8 = true
@@ -8175,7 +8178,7 @@ struct F16GemmArgs {
 //! a small f16 x f16 GEMM on the cm2 128 x 128 tile, y[rows x d] = x[rows x n] w[d x n]^T; a k chunk's partial plane lands at ybase + chunk * rows * d (stride d)
 [vk_dispatch(name = "f16_gemm_cm2_cls", grid = "wgs", params = "wgs : int64")]
 class F16GemmCm2 {
-    @ssbo @binding = 0 @role = "weight" w : array<float16>
+    @ssbo @binding = 0 w : array<float16>   //! the weight rows; no `weight` role: the E-series projection binds its f16 panel, rewritten every window
     @ssbo @binding = 1 xf16 : array<float16>
     @ssbo @binding = 2 y : array<float>
     @push_constant pa : F16GemmArgs
@@ -8227,7 +8230,7 @@ class F16GemmCm2 {
 
 [vk_dispatch(name = "f16_gemm_khr_cls", grid = "wgs", params = "wgs : int64")]
 class F16GemmKhr {
-    @ssbo @binding = 0 @role = "weight" w : array<float16>
+    @ssbo @binding = 0 w : array<float16>   //! the weight rows; no `weight` role, as `F16GemmCm2`'s
     @ssbo @binding = 1 xf16 : array<float16>
     @ssbo @binding = 2 y : array<float>
     @push_constant pa : F16GemmArgs
@@ -8665,9 +8668,8 @@ class TowerClampCvt : GkClampRows {
     }
 }
 
-//! the f32 copy of a clamped GEMM input (the exact lane's f32 tile): the input bounds applied into `dst` so the normed rows stay
-//! whole for the next GEMM's own bounds
-//! bf16 rows widened by their bit shift and stored f16 (saturated at the half range): the E-series projection's per-window f16 panel
+//! bf16 rows widened by their bit shift and stored f16 (saturated at the half range), on the template both homes stamp
+//! (`GkClampRows`): the E-series projection's per-window f16 panel
 [vk_dispatch(name = "ple_bf16_cvt_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class PleBf16Cvt : GkClampRows {
     override OUT16 = true
@@ -8679,6 +8681,8 @@ class PleBf16Cvt : GkClampRows {
     }
 }
 
+//! the f32 copy of a clamped GEMM input (the exact lane's f32 tile): the input bounds applied into `dst` so the normed rows stay
+//! whole for the next GEMM's own bounds
 [vk_dispatch(name = "tower_clamp_copy_cls", kernel = "run", grid = "wgs", params = "wgs : int64")]
 class TowerClampCopy : GkClampRows {
     override COPY = true

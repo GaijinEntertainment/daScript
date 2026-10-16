@@ -95,6 +95,12 @@ asymmetries a stamp family ledgers - stays in `ARCHITECTURE_GPU.md#gpu-backends`
   tower's `set_metal_fc_attn_dev`): each picks between two forms the Metal prefill or
   tower driver carries side by side, and the Vulkan chain has one form at each of those sites, so nothing to pick.
   The callers outside the backend are the probe `harness/p0_ko_probe.das` and the cells that hold both forms.
+- **The decode step's per-form A/B levers are Metal-only setters** (`set_metal_batch_gather`: the batched step takes the
+  rows the host embeds instead of gathering them off their ids; `set_metal_moe_g4_unfused`: the gemma-4 MoE tail on its
+  unfused chain instead of the one-step `MetalMoeCombG4`): the Metal decode driver encodes each step afresh, so a setter
+  flips one form between two steps and drops the pre-encoded step; the Vulkan driver builds its token commands' sets at
+  the load and resubmits them, so its counterparts are load-time pins over every command - `set_gpu_resident_embed(0)` for the host-embedded
+  rows, the `g_vk_fuse` pin of `DASLLAMA_VK_FUSE` for the split MoE tail - and no per-step setter.
 - **The NextN speculative round is Metal-only.** `register_mtp_round_override("metal", ...)` has one registrant, `metal_mtp_spec_round`;
   Vulkan serves the CPU round around its draft and verify seats (`ARCHITECTURE_GPU_MTP.md`). The assistant drafter's rounds ride
   `MtpAssistantSeams` on both homes (`ARCHITECTURE_GPU_MTP_ASSISTANT.md#assistant-drafter-step`, `ARCHITECTURE_GPU_VULKAN_MTP.md#resident-assistant-drafter`).

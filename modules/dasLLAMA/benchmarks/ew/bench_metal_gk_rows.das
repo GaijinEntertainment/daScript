@@ -236,13 +236,13 @@ def private seam_rows : array<Reading> {
             enc_qk_norm(enc, by, by, bw, qk_norm_args(16u, 2u, 256u, 20u * 256u, 16u * 256u, 16u * 256u, 256u, 1e-6), 18l, 1l)
         },
         time_rows("moe_select ne=256 k=8 1 row") $(enc) {
-            enc_moe_select(enc, bx, by, by, bw, GkTopKArgs(ne = 256u, k = 8u, norm = 1u, dsoff = GK_NO_DSCALE, lstride = 256u), 1l)
+            enc_moe_select(enc, bx, by, by, GkTopKArgs(ne = 256u, k = 8u, norm = 1u, lstride = 256u), 1l)
         },
         time_rows("moe_select ne=128 k=8 1 row, the down scales (gemma-4)") $(enc) {
-            enc_moe_select_ds(enc, bx, by, by, bw, GkTopKArgs(ne = 128u, k = 8u, norm = 1u, dsoff = 0u, lstride = 128u), 1l)
+            enc_moe_select_ds(enc, bx, by, by, bw, GkTopKArgs(ne = 128u, k = 8u, norm = 1u, lstride = 128u), 1l)
         },
         time_rows("moe_select_512 ne=512 k=10 1 row") $(enc) {
-            enc_moe_select_512(enc, bx, by, by, bw, GkTopKArgs(ne = 512u, k = 10u, norm = 1u, dsoff = GK_NO_DSCALE, lstride = 512u), 1l)
+            enc_moe_select_512(enc, bx, by, by, GkTopKArgs(ne = 512u, k = 10u, norm = 1u, lstride = 512u), 1l)
         },
         time_rows("moe_combine dim={dim} k=8 1 row") $(enc) {
             enc_moe_combine(enc, bz, bw, bx, moe_comb_args(int64(dim), 8l), int64(dim), 1l)
@@ -498,8 +498,7 @@ def private g4_tail_rows : array<Reading> {
     var udim = uniform_u32(uint(dim))
     var ueps = uniform_f32(1e-6)
     var utot = uniform_u32(uint(np * dim))
-    var ka = moe_g4_args(int64(dim), int64(k), 1e-6, 0.75, false, true)
-    var kp = moe_g4_args(int64(dim), int64(k), 1e-6, 0.75, false, false)
+    var ka = moe_g4_args(int64(dim), int64(k), 1e-6, 0.75, false)
     var kc = moe_comb_args(int64(dim), int64(k))
     var rows <- [
         time_rows("g4 MoE tail dim={dim} k={k} 1 row, unfused (6 dispatches)") $(enc) {
@@ -523,7 +522,7 @@ def private g4_tail_rows : array<Reading> {
             enc_add(enc, bx, 0ul, bd, 0ul, utot, int64(np * dim))
         },
         time_rows("g4 MoE step dim={dim} k={k} {np} rows (the window's stamp)") $(enc) {
-            enc_moe_comb_g4_pf(enc, bx, binv, bsel, bdn, bd, bw, kp, int64(np))
+            enc_moe_comb_g4_pf(enc, bx, binv, bsel, bdn, bd, bw, ka, int64(np))
         }
     ]
     for (buf in fixed_array(bx, bd, brt, bdn, bsel, binv, bw)) {
@@ -697,7 +696,7 @@ def private ar_dim_rows(dim, np : int; var rows : array<Reading>) {
     var utot4 = uniform_u32(uint(4 * dim))
     var utotn = uniform_u32(uint(np * dim))
     let kp = GkAddRmsArgs(dim = uint(dim), add_on = 1u, eps = 1e-6, ascale = 1.0)
-    let ks = GkAddRmsArgs(dim = uint(dim), add_on = 1u, woff = uint(dim), eps = 1e-6, ascale = 0.75, pre_on = 1u, pwoff = 0u)
+    let ks = GkAddRmsArgs(dim = uint(dim), add_on = 1u, eps = 1e-6, ascale = 0.75)
     rows |> push(time_rows("ar dim={dim} 1 row: add + norm") $(enc) {
         var k = kp
         enc_addrms_c(enc, bx, ba, bw, by, k)

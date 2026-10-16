@@ -805,7 +805,7 @@ def private moe_g4_step_serves(t : Model; l : int64; seam : bool) : bool {
 
 //! `nrows` rows' gemma-4 step: x updated in place, its next norm into bxb, its f16 twin into bxh where `twin`
 def private moe_g4_step_enc(var r : StepRes; t : Model; enc : MetalComputeEncoder?; l, nrows : int64; twin : bool) {
-    var ka = moe_g4_layer_args(t, l, false, true)
+    var ka = moe_g4_layer_args(t, l, false)
     if (twin) {
         enc_moe_comb_g4_hx(enc, r.bx, r.bmoe_sel, r.bmoe_dn, r.bxb, moe_g4_norms(t, l, true), r.bxb, r.bxh, ka, nrows)
     } else {
