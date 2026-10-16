@@ -443,15 +443,16 @@ def test_gguf_need_tensor_refuses(t : T?) {
 
 [test]
 def test_gguf_decline_unread_types(t : T?) {
-    t |> run("a tensor of a type the reader has no arm for declines the load, naming the tensor and the type") @(t : T?) {
-        for (gt, name in [GGML_TYPE_Q4_1, GGML_TYPE_IQ1_S, GGML_TYPE_IQ1_M, GGML_TYPE_TQ1_0, GGML_TYPE_TQ2_0],
-                ["Q4_1", "IQ1_S", "IQ1_M", "TQ1_0", "TQ2_0"]) {
+    t |> run("a tensor of a type the reader has no arm for declines the load, naming the tensor, the type and the served type to requantize to") @(t : T?) {
+        for (gt, name, target in [GGML_TYPE_Q4_1, GGML_TYPE_IQ1_S, GGML_TYPE_IQ1_M, GGML_TYPE_TQ1_0, GGML_TYPE_TQ2_0],
+                ["Q4_1", "IQ1_S", "IQ1_M", "TQ1_0", "TQ2_0"], ["Q5_1", "IQ2_XXS", "IQ2_XXS", "Q4_0", "Q4_0"]) {
             var m <- GGUFMeta(tensors <- [GGUFTensorInfo(name = "blk.0.ffn_up.weight", ggml_type = GGML_TYPE_Q8_0, n_elem = 256l),
                 GGUFTensorInfo(name = "blk.0.ffn_down.weight", ggml_type = gt, n_elem = 256l)])
             let why = panic_text() ${
                 gguf_decline_unread_types(m)
             }
-            t |> success(find(why, "blk.0.ffn_down.weight") >= 0 && find(why, "{name} on disk") >= 0, "{name}: the decline names the tensor and the type: {why}")
+            t |> success(find(why, "blk.0.ffn_down.weight") >= 0 && find(why, "{name} on disk") >= 0 && find(why, "requantize it to {target}") >= 0,
+                "{name}: the decline names the tensor, the type and the served type {target}: {why}")
             delete m
         }
         var served <- GGUFMeta(tensors <- [for (gt in [GGML_TYPE_F32, GGML_TYPE_BF16, GGML_TYPE_Q8_0, GGML_TYPE_Q4_K, GGML_TYPE_IQ2_XXS, GGML_TYPE_MXFP4]);

@@ -4502,7 +4502,7 @@ under the same command line the same hour (every llama.cpp figure `external`). E
   the served weights alone to 15.4 GB - a plan figure that tallied each routed layer's dense shared
   expert twice, the low-format N-row arc's section below; the per-op rails serve 16 summed) where the reference
   pages: 109 on Vulkan, 275 on CUDA - row 81's shape. Against CUDA the two homed carriers read
-  0.66 and 0.84. The expert-bucket form (`followup_vulkan.md` item 83's neighbour: the N-column
+  0.66 and 0.84. The expert-bucket form (the N-column
   expert GEMV a bucket, which decodes a weight block once for every row that picked its expert)
   is the lever that room names; it would serve a fifth of gpt-oss's slots at four rows and a
   tenth of the 30B's.
@@ -4513,7 +4513,8 @@ under the same command line the same hour (every llama.cpp figure `external`). E
   Q4_K_M within the wide bar against the split one-row command and off by up to 0.13 of the peak
   on five of thirty-two compares against the fused one (the same cells run before the file pinned
   the fused forms off, the pod, cm2 arm) - the folded down sum's rounding through the 26B's
-  router near-ties, item 83. The routed planes at `nb` rows cost the resident image nothing a
+  router near-ties (the N-row routed down now sums its k rows in the GEMV,
+  `ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-block32-leaf`). The routed planes at `nb` rows cost the resident image nothing a
   reader sees: gpt-oss-20b's image reads 10914 MB with a 123 MB mirror at 660 x 4 and 220 MB of
   scratch on the pod, the planes' growth inside the scratch's rounding.
 

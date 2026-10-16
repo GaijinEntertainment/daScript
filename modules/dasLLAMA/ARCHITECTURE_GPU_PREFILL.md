@@ -5,7 +5,7 @@ attention slab, the pad-row and cooperative-op constraints, chunked submission, 
 dual-store, the last-layer FFN tail and the hyper-connection window. Its companions:
 
 - `ARCHITECTURE_GPU_PREFILL_GEMM.md` - the GEMM form ladder, the dev-W panel knee map, the GEMV tail peel and the dense-KQ tensor mul_mm scaffold.
-- `ARCHITECTURE_GPU_PREFILL_MOE.md` - the routed block: the MoE bucket rail, its tensor-twin scaffold, the split-format expert twins, the K-quant twins' pick and the short window's gathered route.
+- `ARCHITECTURE_GPU_PREFILL_MOE.md` - the routed block: the MoE bucket rail, its tensor-twin scaffold, the split-format expert twins, the K-quant twins' pick, the short window's gathered route and the gemma-4 MoE tail as one step (`#metal-g4-moe-step`).
 - `ARCHITECTURE_GPU_PREFILL_WINDOW.md` - the device attention pair, the mirror-fed window, the segmented window, the recurrent scan and hot-load addressing.
 
 ### The prefill attention slab {#prefill-attn-slab}

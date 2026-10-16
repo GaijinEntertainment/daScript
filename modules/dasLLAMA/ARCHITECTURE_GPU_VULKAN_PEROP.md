@@ -1,8 +1,9 @@
 # dasLLAMA Architecture - the Vulkan per-op tier's dense FFN rail and routed form
 
 Companion to `ARCHITECTURE_GPU_VULKAN.md`; a section is cited by its anchor. This document carries the per-op tier's
-dense FFN rail and the routed experts' form on its expert chain. The tier's decode attention block, its streamed expert
-split and the whole-token decode span are in `ARCHITECTURE_GPU_VULKAN_DECODE.md`.
+dense FFN rail, the routed experts' form on its expert chain and the attention-quad chain's gemma decline
+(`#perop-attn-gemma`). The tier's decode attention block, its streamed expert split and the whole-token decode span are in
+`ARCHITECTURE_GPU_VULKAN_DECODE.md`.
 
 ### The expert chain serves gpt-oss's routed form {#perop-routed-form}
 
