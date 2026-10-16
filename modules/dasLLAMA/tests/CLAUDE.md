@@ -182,8 +182,16 @@ the K/V history: floor 0.003-0.01, isolated spikes to 11, argmax never flips). E
 trunk-and-served-twin pair prefills on the GPU twin through the metal prefill override (a planar
 27B prefill costs minutes per session), so the fixture shuts down BOTH drivers before its leak
 gate. The `mtp` suite also carries `test_mtp_gemma_drafter.das` (the gemma-4 assistant drafter,
-also in the model-free suite): `mtp-gdraft-refuse` (the loader's no-panic refusal contract and
-the sidecar resolver's two refusals), `mtp-gdraft-load` (the 440 MiB
+also in the model-free suite): `mtp-gdraft-refuse` (the loader's no-panic refusal contract, the
+sidecar resolver's two refusals, the attach's target check on a gemma-4-26B-shaped shell - a trunk of the
+drafter's own geometry passing, a two-layer trunk and a capture layer of another head size or kv head count
+each refused by its own clause - the facade's refusal text through the assistant registry (every registered
+backend's own early refusal of a planar shell with no resident driver named, `mtp_attach_refusal`'s no-backend
+text), the Vulkan attach's driver check over a facts record (`vk_drafter_trunk_why`: a driver holding every fact
+passing, then each fact's own refusal in its order) and the Vulkan round's bind ladder (`assist_bind_rung`: the
+driver, the codec, the context, a region unpinned and untaken this tick); and, gated on the 440 MiB sidecar and a
+das_metal build, the Metal attach's refusal of a metal-blob shell whose token table the device gathers no row
+of), `mtp-gdraft-load` (the 440 MiB
 `mtp-gemma-4-26B-A4B-it-Q8_0.gguf` sidecar's whole struct - geometry, per-layer head/kv classes,
 blob and fblob sizes against the tensor sum, 32-byte tensor alignment, the p-RoPE table),
 `mtp-gdraft-cpu` (the CPU oracle's one step over a live gemma-4-26B-A4B session - PARITY_FULL,
@@ -192,7 +200,11 @@ GPU draft step with Metal required) and `mtp-gdraft-sched` (the served round: a 
 cannot speculate until the facade attaches the sidecar beside it, then a scheduler told to
 speculate keeps `mtp` on and walks the counting prompt token for token with the plain scheduler,
 drafting and accepting as it goes, both streams decoded in the log, and the same walk with the
-drafter detached as the control that drafts nothing - PARITY_FULL, Metal required). The gpu and
+drafter detached as the control - a scheduler told to speculate stands down (`mtp` off) and drafts nothing - PARITY_FULL, Metal
+required) and `mtp-gdraft-vdecl` (a tick of two streams on two K/V codecs, whose joint verify the batch rail
+declines - each stream's mirror asserted standing, so the round finds both warm and their draft chains run: no stream
+carried, no round counted, each stream one plain step whose logits are a plain decode step's
+bit for bit; the same tick on one codec carrying both streams the control - PARITY_FULL, das_metal builds). The gpu and
 sched arms load the 26B target through `load_model_cached`, so the file mints a `.dlim` for it
 under the same ledgered exception as the parity file's: the Metal MTP rail is what the image
 flavor serves.
@@ -2355,8 +2367,9 @@ cleanly with no model open.
 gemma4a / canary / parakeet: the un-pinned default against the predicate the policy itself consults, both
 pins, and reset from the EXACT pin), and parakeet's SPM detokenizer over a toy vocab.
 `test_mtp_gemma_drafter.das` - stocked suite AND the `mtp` suite: the gemma-4 assistant
-drafter (`dasllama/dasllama_mtp_gemma`); only `mtp-gdraft-refuse` runs with no model, the other
-arms gate on the files and on `--family gemma4moe`.
+drafter (`dasllama/dasllama_mtp_gemma`); only `mtp-gdraft-refuse` runs with no model (its gather cell
+gates on the sidecar, `--family gemma4moe` and a das_metal build), the other arms gate on the files and on
+`--family gemma4moe`.
 `test_model_specs.das` - model-free: the model-set table's shape invariants
 (`../performance/model_specs.das`: unique file/display keys, official => provenance pinned,
 parity-evidence shape), the derived provenance view's invariants (unique names, sha-or-recipe,

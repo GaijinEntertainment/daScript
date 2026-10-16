@@ -787,7 +787,7 @@ def rows_ctx_need(plen, ngen, bplen : int64; npl : int; spec_rows : int64) : int
 //! no sidecar sits beside the model or no backend takes it, which the bench refuses
 def mtp_ab_drafter_attach(t : Model; mpath : string) : bool {
     let side = mtp_drafter_sidecar_(mpath)
-    return !empty(side) && attach_mtp_drafter_(t, side)
+    return !empty(side) && empty(attach_mtp_drafter_(t, side))
 }
 
 //! `--mtp-ab`'s drafter line: the attached drafter's rounds, its draft chain and verify a round, its cold steps' whole time

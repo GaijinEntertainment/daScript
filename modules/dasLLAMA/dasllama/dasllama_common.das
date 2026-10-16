@@ -793,17 +793,21 @@ def register_mtp_sidecar(fn : function<(model_path : string) : string>) {
 def mtp_drafter_sidecar_(model_path : string) : string
     => g_mtp_sidecar != null ? invoke(g_mtp_sidecar, model_path) : ""
 
-//! Attach the assistant drafter at `path` to `t` on the backend that serves it; false where no backend took it, each refusal logged.
-def attach_mtp_drafter_(t : Model; path : string) : bool {
+//! why no backend took the drafter: each registered backend's refusal (`whys`, "<backend>: <why>"), or that none is registered
+def mtp_attach_refusal(whys : array<string>) : string
+    => empty(whys) ? "no GPU driver on this build carries an assistant drafter" : join(whys, "; ")
+
+//! Attach the assistant drafter at `path` to `t` on the backend that serves it: "" attached, else every backend's refusal, logged.
+def attach_mtp_drafter_(t : Model; path : string) : string {
     var whys : array<string>
     for (name, seams in keys(g_mtp_assistants), values(g_mtp_assistants)) {
         let why = invoke(seams.attach, t, path)
-        return true if (empty(why))
+        return "" if (empty(why))
         whys |> push("{name}: {why}")
     }
-    let none = empty(whys) ? "no GPU driver on this build carries an assistant drafter" : join(whys, "; ")
+    let none = mtp_attach_refusal(whys)
     to_log(LOG_WARNING, "dasLLAMA: the assistant drafter {path} is not attached - {none}\n")
-    return false
+    return none
 }
 
 //! The backend `t`'s assistant drafter is attached on ("" = none)
