@@ -32,6 +32,12 @@ what it costs today and what the fix would change.
   - gemma-4-E2B Q4_0, the forced feed against the CPU chain on Vulkan (`test_gpu_resident_gemma4_e2b_ple_planes`, arm
     `g4e-kq-q40`): `GEMMA_LOGIT_BAR_REL` 0.16. Reads 1.25 at the prompt (bar 4.43) and 0.75-1.77 over the steps (bars
     3.29-4.25), every argmax agreeing, the one-step-off control 14.4 and past. Pod.
+  - the four format carriers off the E2B Q8_0 on Vulkan, the forced feed against the CPU chain: `GEMMA_LOGIT_BAR_REL` 0.16.
+    emb-Q6_K and emb-IQ4_XS (`test_gpu_resident_gemma4_e2b_ple_tables`, arm `g4e-ple`) read 0.76 and 0.62 at the prompt
+    (bars 4.17, 4.14), 0.51-1.74 and 0.49-1.17 over the steps (bars 2.91-4.02); ple-Q6_K and ple-Q5_0
+    (`test_gpu_resident_gemma4_e2b_ple_planes`, arms `g4e-kq-ple-q6k`, `g4e-kq-ple-q50`) read 0.86 and 0.71 at the prompt
+    (bar 4.17), 0.59-1.54 and 0.43-0.87 over the steps (bars 2.92-3.97). Every argmax agrees but ple-Q6_K's step 4, a near
+    tie the cell's tie bar admits (the CPU's ' river' 19.61 against the device's ' miller' 19.59). Pod.
   - gemma-3-12b Q4_K_M on Metal (`test_metal_support_matrix`, row `gemma3-12b/k4/f16`, arm `fam-gemma3`): the overrides'
     greedy generate held to the CPU chain token for token, eight tokens after the 30-number count prompt. Reads every
     token equal. M5.
