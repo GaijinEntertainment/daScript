@@ -2204,10 +2204,10 @@ def test_metal_family_matrix(t : T?) {
             // amplifier (post-prefill stays 2.5-class); 24 keeps the ~2x margin discipline
             gemma4moe_row(t, path_join(models_dir(), "gemma-4-26B-A4B-it-Q4_K_M.gguf"), "gemma4moe-26b-k", 8.0, 24.0, ["metal_moe_gemv_k4", "metal_moe_gemv_q51"])
             // ... and the ggml-org Q4_0 file: q40 gate_up expert stacks beside the 704-wide down stacks
-            // in their own per-32 form (q4032) - the q40 routed twins' model-level pin. Bars are the
-            // Q4_K_M row's, not tighter: the same mixed-quant expert feed rides the same double-router
-            // amplifier, whose step spread across summation orders reaches 13.8 there. 14GB, PARITY_FULL-gated
-            gemma4moe_row(t, path_join(models_dir(), "gemma-4-26B-A4B-it-Q4_0.gguf"), "gemma4moe-26b-q40", 8.0, 24.0, ["metal_moe_gemv_q40", "metal_moe_gemv_q4032"])
+            // in their own per-32 form (q4032) - the q40 routed twins' model-level pin. The prefill bar is the
+            // Q4_K_M row's; the step bar is this file's own: its forced step reads 3.4-5.7 across the legs and the
+            // one-step-off control 15.1, so 10 is the bar both sides clear with margin (24 let the control pass). 14GB, PARITY_FULL-gated
+            gemma4moe_row(t, path_join(models_dir(), "gemma-4-26B-A4B-it-Q4_0.gguf"), "gemma4moe-26b-q40", 8.0, 10.0, ["metal_moe_gemv_q40", "metal_moe_gemv_q4032"])
             // ... and the two Unsloth dynamic files: grid-format gate_up stacks (IQ2_S / IQ3_S on UD-IQ3_XXS,
             // IQ3_S / IQ4_XS on UD-IQ4_XS) beside the 704-wide IQ4_NL down stacks (iq4nl32) and a Q8_0 last
             // layer, the Q6_K / Q8_0 token tables - the iquant routed forms' model-level pin, at the Q4_K_M
