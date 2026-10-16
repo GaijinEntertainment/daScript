@@ -241,13 +241,6 @@ def public detach_gemma_drafter {
     g_gemma_attached = false
 }
 
-def public gemma_drafter_attached() : bool => g_gemma_attached
-
-//! drafted / accepted / rounds since attach - the acceptance lens
-def public gemma_drafter_stats() : tuple<drafted : int64; accepted : int64; rounds : int64> => (drafted = g_gemma_drafted, accepted = g_gemma_accepted, rounds = g_gemma_rounds)
-
-//! verifies since attach whose rows carried two speculating streams or more (the joint tick's witness)
-def public gemma_drafter_joint_verifies() : int64 => g_gemma_joint
 
 [arch(at="../ARCHITECTURE_GPU_MTP_ASSISTANT.md#assistant-drafter-step")]
 def private gemma_rope_rows(t : Model; var g : GemmaDrafterGpu; si, anchor : int64) {
@@ -480,9 +473,6 @@ var private g_gemma_us_draft = 0l   // round time split since attach: the draft 
 var private g_gemma_us_verify = 0l  // ... the same-slab verify + walk + commit
 var private g_gemma_us_cold = 0l    // ... cold rounds (one plain step)
 
-//! Round time split since attach, microseconds: draft chain / verify+commit / cold rounds.
-def public gemma_drafter_time() : tuple<draft_us : int64; verify_us : int64; cold_us : int64> => (draft_us = g_gemma_us_draft, verify_us = g_gemma_us_verify, cold_us = g_gemma_us_cold)
-
 //! Bring-up levers: `set_gemma_draft_on_cpu(true)` routes every draft step through the CPU oracle
 //! (the target's live K/V, the same inputs), `set_gemma_trace(true)` logs drafts vs truth per round.
 def public set_gemma_draft_on_cpu(on : bool) {
@@ -682,7 +672,8 @@ def private gemma_mtp_spec_rounds(t : Model; var sessions : array<Session?>; tok
 def private gemma_drafter_attached_to(t : Model) : bool => g_gemma_attached
 
 def private gemma_drafter_seam_stats() : MtpAssistantStats
-    => MtpAssistantStats(drafted = g_gemma_drafted, accepted = g_gemma_accepted, rounds = g_gemma_rounds, joint = g_gemma_joint)
+    => MtpAssistantStats(drafted = g_gemma_drafted, accepted = g_gemma_accepted, rounds = g_gemma_rounds, joint = g_gemma_joint,
+        draft_us = g_gemma_us_draft, verify_us = g_gemma_us_verify, cold_us = g_gemma_us_cold)
 
 [init]
 def gemma_mtp_init {

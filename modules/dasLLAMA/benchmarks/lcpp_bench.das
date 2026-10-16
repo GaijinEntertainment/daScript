@@ -23,9 +23,7 @@ require dasllama/dasllama_tower   // the encode-stage prof rail (set_asr_prof/as
 require ?das_metal dasllama/dasllama_metal_tower   // --asr --ngl: the tower engage counters (anti-sandbag)
 require ?das_metal dasllama/dasllama_metal_asr_dec   // --asr CPU rows pin the wdec driver off (CPU means CPU)
 require ?das_metal dasllama/dasllama_metal_prefill   // --asr --ngl: the chat-decoder prefill engage witness
-require ?das_metal dasllama/dasllama_metal_mtp_gemma   // --mtp-ab on a gemma-4 target: the assistant drafter sidecar attaches here
 require ?das_metal dasllama/dasllama_metal_common   // --prof: the decode drivers' per-step stage report (setup / encode / wait / gpu / readback)
-require dasllama/dasllama_mtp_gemma   // nolint:STYLE030,LINT019 — gemma_drafter_sidecar is read in the das_metal half
 require dasllama/dasllama_chat   // --image: the chat renderer + the two-span image turn
 require dasllama/dasllama_vision_embedder   // --image: the vision embedder (any family) + encode_image_
 require dasllama/dasllama_vision   // --image: VisionImage — the decoded-pixel carrier
@@ -1785,14 +1783,11 @@ def main() : int {
                             say(fmt, "    prompt {pi}: off {pp_off[pi]:.1f} -> on {on_tps:.1f} tok/s (x{ratio:.2f}), accept {pp_ac[pi]}/{pp_dr[pi]} ({prate:.1f}%)\n")
                         }
                     }
-                    static_if (typeinfo builtin_module_exists(das_metal)) {
-                        if (gemma_drafter_attached()) {
-                            let gt = gemma_drafter_time()
-                            let gs = gemma_drafter_stats()
-                            let per = gs.rounds > 0l ? double(gt.draft_us) / double(gs.rounds) / 1000.0lf : 0.0lf
-                            let pver = gs.rounds > 0l ? double(gt.verify_us) / double(gs.rounds) / 1000.0lf : 0.0lf
-                            say(fmt, "  gemma drafter: {gs.rounds} rounds, draft chain {per:.2f} ms/round, verify+commit {pver:.2f} ms/round, cold {double(gt.cold_us) / 1000.0lf:.1f} ms total\n")
-                        }
+                    if (mtp_assistant_attached(t)) {
+                        let gs = mtp_drafter_stats_(t)
+                        let per = gs.rounds > 0l ? double(gs.draft_us) / double(gs.rounds) / 1000.0lf : 0.0lf
+                        let pver = gs.rounds > 0l ? double(gs.verify_us) / double(gs.rounds) / 1000.0lf : 0.0lf
+                        say(fmt, "  gemma drafter: {gs.rounds} rounds ({gs.joint} joint), draft chain {per:.2f} ms/round, verify+commit {pver:.2f} ms/round, cold {double(gs.cold_us) / 1000.0lf:.1f} ms total\n")
                     }
                 }
                 results |> push(st)

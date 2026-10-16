@@ -771,10 +771,8 @@ def private vk_gemma_rounds(t : Model; var sessions : array<Session?>; toks : ar
 }
 
 def private vk_seam_stats() : MtpAssistantStats
-    => MtpAssistantStats(drafted = g_vk_drafted, accepted = g_vk_accepted, rounds = g_vk_rounds, joint = g_vk_joint)
-
-//! Round time split since attach, microseconds: draft chains / verify+commit / the plain steps of streams the round could not take
-def public vk_gemma_drafter_time() : tuple<draft_us : int64; verify_us : int64; cold_us : int64> => (draft_us = g_vk_us_draft, verify_us = g_vk_us_verify, cold_us = g_vk_us_cold)
+    => MtpAssistantStats(drafted = g_vk_drafted, accepted = g_vk_accepted, rounds = g_vk_rounds, joint = g_vk_joint,
+        draft_us = g_vk_us_draft, verify_us = g_vk_us_verify, cold_us = g_vk_us_cold)
 
 [init]
 def private vk_gemma_mtp_init {

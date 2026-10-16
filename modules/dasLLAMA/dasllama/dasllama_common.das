@@ -742,6 +742,9 @@ struct MtpAssistantStats {
     accepted : int64
     rounds : int64
     joint : int64      //! verifies whose rows carried two streams or more
+    draft_us : int64   //! the round's time split, microseconds: the draft chains, the verify with its walks and commits, the plain steps of streams it could not take
+    verify_us : int64
+    cold_us : int64
 }
 var private g_mtp_assistants : table<string; MtpAssistantSeams>
 var private g_mtp_sidecar : function<(model_path : string) : string>
