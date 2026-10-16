@@ -39,9 +39,10 @@ drafter's borrow read; the attention stamps take a ring's base past the per-laye
 `kv_ring_row`. Metal's slack starts at 512 rows and doubles when a prefill window asks for more (`mirror_ring_ask`): the
 layout key changes, the device is quiesced and every slice relayouts at its next prepare. The host cache stays the truth on
 Metal - a ring layer uploads only its last `ring` positions, and a rewind or an adopted slice re-uploads them - so a Metal
-history has no floor. The window feeds a ring in pieces cut at the wrap (`mirror_ring_pieces`), and on a ringed model the
-mirror-fed prefill form stands aside: a window over a sliding layer reads its keys off the panels, since the ring no longer
-holds the cached rows under the window's start.
+history has no floor. The window feeds a ring in pieces cut at the wrap (`mirror_ring_pieces`), and the mirror-fed prefill form
+reads a ringed layer's keys there through `AttnArgs.ring`: the device pair's QK tile reads its 64 keys from a 64-row step, one
+ring piece, and the AV pass splits its key run at the wrap, while the score slab stays a column a position. The slack is at least
+the window's rows, so the ring holds every key a window's queries read once the window's own rows are stored.
 
 ### A ringed history continues from its floor {#kv-ring-floor}
 
