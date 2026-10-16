@@ -783,6 +783,20 @@ def rows_ctx_need(plen, ngen, bplen : int64; npl : int; spec_rows : int64) : int
 
 // Raw corpus file read; leading '#' lines are provenance headers, not corpus bytes.
 // Non-private: tests/test_tok_seed.das gates the header walk.
+//! `--mtp-ab` on a model with no NextN head: the assistant drafter beside `mpath` attached to `t` through the facade - false where
+//! no sidecar sits beside the model or no backend takes it, which the bench refuses
+def mtp_ab_drafter_attach(t : Model; mpath : string) : bool {
+    let side = mtp_drafter_sidecar_(mpath)
+    return !empty(side) && attach_mtp_drafter_(t, side)
+}
+
+//! `--mtp-ab`'s drafter line: the attached drafter's rounds, its draft chain and verify a round, its cold steps' whole time
+def mtp_ab_drafter_line(gs : MtpAssistantStats) : string {
+    let per = gs.rounds > 0l ? double(gs.draft_us) / double(gs.rounds) / 1000.0lf : 0.0lf
+    let pver = gs.rounds > 0l ? double(gs.verify_us) / double(gs.rounds) / 1000.0lf : 0.0lf
+    return "  gemma drafter: {gs.rounds} rounds ({gs.joint} joint), draft chain {per:.2f} ms/round, verify+commit {pver:.2f} ms/round, cold {double(gs.cold_us) / 1000.0lf:.1f} ms total\n"
+}
+
 def tok_read_seed(path : string) : string {
     var text = ""
     fopen(path, "rb") $(f) {
@@ -1636,9 +1650,7 @@ def main() : int {
         let c = t.config
         // a model with no NextN head silently no-ops set_mtp_spec — both arms would be identical
         if (cfg.mtp_ab && c.n_layer_nextn <= 0l) {
-            let side = mtp_drafter_sidecar_(mpath)
-            let attached = !empty(side) && attach_mtp_drafter_(t, side)
-            if (!attached) {
+            if (!mtp_ab_drafter_attach(t, mpath)) {
                 panic("lcpp_bench: --mtp-ab needs a NextN draft head or an assistant drafter sidecar, and {mpath} has neither")
             }
         }
@@ -1784,10 +1796,7 @@ def main() : int {
                         }
                     }
                     if (mtp_assistant_attached(t)) {
-                        let gs = mtp_drafter_stats_(t)
-                        let per = gs.rounds > 0l ? double(gs.draft_us) / double(gs.rounds) / 1000.0lf : 0.0lf
-                        let pver = gs.rounds > 0l ? double(gs.verify_us) / double(gs.rounds) / 1000.0lf : 0.0lf
-                        say(fmt, "  gemma drafter: {gs.rounds} rounds ({gs.joint} joint), draft chain {per:.2f} ms/round, verify+commit {pver:.2f} ms/round, cold {double(gs.cold_us) / 1000.0lf:.1f} ms total\n")
+                        say(fmt, mtp_ab_drafter_line(mtp_drafter_stats_(t)))
                     }
                 }
                 results |> push(st)

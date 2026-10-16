@@ -306,9 +306,25 @@ def private download_start_item(dir, id, file, url, want_sha : string; want_byte
     return ""
 }
 
+//! The download id the state machine registers for entry `e`'s own file (`tower` "") or its companion (`tower` "vision" |
+//! "drafter") - the `download.name` a caller polls
+def public catalog_download_id(e : CatalogEntry; tower : string) : string => empty(tower) ? e.name : "{tower}:{e.name}"
+
+//! The POST /catalog/download ACCEPTED body for entry `e`'s own file (`tower` "") or its companion: the download id and the bytes
+//! the download brings
+def public catalog_download_accepted_json(e : CatalogEntry; tower : string) : string {
+    let bytes = empty(tower) ? e.bytes : catalog_companion(e, tower == "vision" ? CatalogCompanionKind.vision : CatalogCompanionKind.drafter).bytes
+    var doc = JV((ok = true, name = catalog_download_id(e, tower), bytes = bytes))
+    let text = write_json_compact(doc)
+    unsafe {
+        delete doc
+    }
+    return text
+}
+
 //! Start downloading catalog entry `e` into `dir`. One at a time; "" on success, else the refusal.
 def public catalog_download_start(dir : string; e : CatalogEntry) : string =>
-    download_start_item(dir, e.name, e.file, e.url, e.sha256, e.bytes)
+    download_start_item(dir, catalog_download_id(e, ""), e.file, e.url, e.sha256, e.bytes)
 
 //! Start downloading entry `e`'s companion of kind `kind` (download id "<kind>:<name>") beside its file, where the load's
 //! sidecar resolver finds it. "" on success.
@@ -317,7 +333,7 @@ def public catalog_download_start_companion(dir : string; e : CatalogEntry; kind
     if (empty(c.file)) {
         return "'{e.name}' has no {kind == CatalogCompanionKind.vision ? "vision tower" : "assistant drafter"}"
     }
-    return download_start_item(dir, "{kind}:{e.name}", c.file, c.url, c.sha256, c.bytes)
+    return download_start_item(dir, catalog_download_id(e, "{kind}"), c.file, c.url, c.sha256, c.bytes)
 }
 
 //! Start downloading the ASR tower (parakeet v3; download id "asr"). "" on success.

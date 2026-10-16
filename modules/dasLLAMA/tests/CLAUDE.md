@@ -2438,8 +2438,10 @@ fields are absent from the text.
 read back, a longer flat prompt kept, the llama-bench sizing with no real row) and its
 `rows_ctx_need` seam (the rows' context cap: the batched streams' need - prompt, window, a
 slot a stream, the margin, times the self-speculative rows - never under the flat rows' own
-need, and the flat rows alone with no batched row), required
-by relative path (`../benchmarks/lcpp_bench.das`), so it pays the bench's full engine compile.
+need, and the flat rows alone with no batched row) and its `--mtp-ab` seams on a headless model
+(`mtp_ab_drafter_attach`: no sidecar beside the model attaches nothing, and a sidecar no backend reads attaches nothing
+either; `mtp_ab_drafter_line`: the rounds, joint verifies and per-round draft and verify times, zero rounds reading 0 a
+round), required by relative path (`../benchmarks/lcpp_bench.das`), so it pays the bench's full engine compile.
 `test_tokenizer.das` - stocked suite; the corpus cells are fixture-gated (the `ggml-vocab-*.gguf`
 corpora under the models dir, machine-local): the seven vocab families' `.inp`/`.out` corpora
 through `load_tokenizer_auto` -> `encode` / `decode`, ids exact and the decode round-trip
