@@ -1125,16 +1125,12 @@ def private depth_cell(t : T?; tr, trg : Model; tag : string; bar : float; stamp
 
 //! the residual step's seam stamps (`GkAddRmsRows`) the device ran, and the split chain's norm pass
 def private seam_counts : int4 {
-    return int4(int(metal_kernel_count_compiled("metal_pre_add_rms") + metal_kernel_count_compiled("metal_pre_add_rms_hx")),
-        int(metal_kernel_count_compiled("metal_pre_add")), int(metal_kernel_count_compiled("metal_add_rms") + metal_kernel_count_compiled("metal_add_rms_hx")),
-        int(metal_kernel_count_compiled("MetalRmsNorm_metal_rmsnorm") + metal_kernel_count_compiled("MetalRmsNormHX_metal_rmsnorm")))
+    return int4(int(kernels_sum(["metal_pre_add_rms", "metal_pre_add_rms_hx"])), int(kernels_sum(["metal_pre_add"])),
+        int(kernels_sum(["metal_add_rms", "metal_add_rms_hx"])), int(kernels_sum(["MetalRmsNorm_metal_rmsnorm", "MetalRmsNormHX_metal_rmsnorm"])))
 }
 
 //! the E-series side rows' projections the device ran: the bf16 word form's two stamps and the f32 router's
-def private ple_proj_count : int64 {
-    return (metal_kernel_count_compiled("metal_ple_proj_bf16") + metal_kernel_count_compiled("metal_ple_proj_bf16_one")
-        + metal_kernel_count_compiled("metal_moe_router"))
-}
+def private ple_proj_count : int64 => kernels_sum(["metal_ple_proj_bf16", "metal_ple_proj_bf16_one", "metal_moe_router"])
 
 //! the summed census counts of `names` (`metal_kernel_count_compiled`): the dispatches of a format's stamps at a site
 def private kernels_sum(names : array<string>) : int64 {
