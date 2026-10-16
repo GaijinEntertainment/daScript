@@ -142,7 +142,7 @@ def private q8_tensors(dr : GemmaDrafter) : array<tuple<boff : int64; n : int64>
 
 //! the GGUF's 34-byte Q8_0 blocks split into the device plane pair the q8 GEMV reads: 32 quant bytes a block, an f16 scale a
 //! block; each tensor's first block index back, in `q8_tensors` order
-def private q8_repack(dr : GemmaDrafter; var quants : array<uint8>; var scales : array<uint16>) : array<int64> {
+def private q8_repack(dr : GemmaDrafter; @exact_size var quants : array<uint8>; @exact_size var scales : array<uint16>) : array<int64> {
     var tensors <- q8_tensors(dr)
     var nblk = 0l
     for (te in tensors) {
@@ -314,8 +314,8 @@ def private vk_drafter_init(dr : GemmaDrafter; var g : GemmaDrafterVk) : bool {
     if (!vk_classes_ok(dt, slabs)) {
         return false
     }
-    var quants : array<uint8>
-    var scales : array<uint16>
+    var @exact_size quants : array<uint8>
+    var @exact_size scales : array<uint16>
     var bases <- q8_repack(dr, quants, scales)
     let made = vk_buffers_make(dr, g, quants, scales)
     delete quants
@@ -574,10 +574,10 @@ def private vk_draft_chain(t : Model; r, seed, anchor, k : int64; h : array<floa
     }
 }
 
-var private @scratch g_vk_cosrow : array<float>
+var private @scratch @exact_size g_vk_cosrow : array<float>
 
 //! One drafter step on the device against the region `s` holds (the oracle cell's GPU side): the draft token and the next h
-def public vk_gemma_draft_step(t : Model; var s : Session; tok, anchor : int64; h : array<float>; var out_tok : int64&; var h_next : array<float>) : bool {
+def public vk_gemma_draft_step(t : Model; var s : Session; tok, anchor : int64; h : array<float>; var out_tok : int64&; @exact_size var h_next : array<float>) : bool {
     return false if (!g_vk_attached)
     g_vk_taken |> clear()
     let r = gpu_resident_assist_bind(t, s, anchor, 1l, g_vk_taken)
@@ -591,7 +591,7 @@ def public vk_gemma_draft_step(t : Model; var s : Session; tok, anchor : int64; 
 }
 
 //! The last device draft step's full-vocab logits (the oracle comparison reads them; the round never does)
-def public vk_gemma_drafter_last_logits(var dst : array<float>) {
+def public vk_gemma_drafter_last_logits(@exact_size var dst : array<float>) {
     dst |> grow_resize(g_vk_dr.vocab)
     host_buf_read(g_vk_g.lout, unsafe(addr<void?>(dst[0])), g_vk_dr.vocab * 4l)
 }
