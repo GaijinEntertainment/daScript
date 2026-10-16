@@ -623,12 +623,12 @@ def private pf_moe_layer_sets(l : int64) {
     if (L.experts_host) {
         if (!g_rd.hc && L.moe_g4) {   //! the host's sums land as each row's one routed row of weight one
             verify(ensure_cls_ar_comb_g4() && ensure_cls_ar_comb_g4_f16_b(), "vk prefill: a host layer's gemma-4 combine class rails must engage on a live device")
-            L.pf_arcomb_set = set_cls_ar_comb_g4(fixed_array(g_rd.pf_x, g_rd.pf_ffnout, g_rd.norms_dev, g_rd.pf_xb, g_rd.pf_ident_dev, g_rd.pf_ones_dev, g_rd.pf_hacc_dev),
-                fixed_array(np * dim * 4l, np * dim * 4l, g_rd.norms_bytes, np * dim * 4l, np * 4l, np * 4l, np * dim * 4l),
-                fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XB, 0u, 0u, VHZ_MDN))
-            L.pf_arcomb_f16_set = set_cls_ar_comb_g4_f16_b(fixed_array(g_rd.pf_x, g_rd.pf_ffnout, g_rd.norms_dev, g_rd.pf_xf, g_rd.pf_ident_dev, g_rd.pf_ones_dev, g_rd.pf_hacc_dev),
-                fixed_array(np * dim * 4l, np * dim * 4l, g_rd.norms_bytes, np * dim * 2l, np * 4l, np * 4l, np * dim * 4l),
-                fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XQ, 0u, 0u, VHZ_MDN))
+            L.pf_arcomb_set = set_cls_ar_comb_g4(fixed_array(g_rd.pf_x, g_rd.pf_ident_dev, g_rd.pf_ones_dev, g_rd.pf_hacc_dev, g_rd.pf_ffnout, g_rd.norms_dev, g_rd.pf_xb),
+                fixed_array(np * dim * 4l, np * 4l, np * 4l, np * dim * 4l, np * dim * 4l, g_rd.norms_bytes, np * dim * 4l),
+                fixed_array(VHZ_X, 0u, 0u, VHZ_MDN, VHZ_FFO, 0u, VHZ_XB))
+            L.pf_arcomb_f16_set = set_cls_ar_comb_g4_f16_b(fixed_array(g_rd.pf_x, g_rd.pf_ident_dev, g_rd.pf_ones_dev, g_rd.pf_hacc_dev, g_rd.pf_ffnout, g_rd.norms_dev, g_rd.pf_xf),
+                fixed_array(np * dim * 4l, np * 4l, np * 4l, np * dim * 4l, np * dim * 4l, g_rd.norms_bytes, np * dim * 2l),
+                fixed_array(VHZ_X, 0u, 0u, VHZ_MDN, VHZ_FFO, 0u, VHZ_XQ))
         } elif (!g_rd.hc) {
             L.pf_arcomb_set = set_cls_ar_comb(fixed_array(g_rd.pf_x, g_rd.pf_ffnout, g_rd.norms_dev, g_rd.pf_xb, g_rd.pf_ident_dev, g_rd.pf_ones_dev, g_rd.pf_hacc_dev, g_rd.pf_mlog, g_rd.moe_db_dev, g_rd.pf_ident_dev),
                 fixed_array(np * dim * 4l, np * dim * 4l, g_rd.norms_bytes, np * dim * 4l, np * 4l, np * 4l, np * dim * 4l, np * ner * 4l, g_rd.moe_db_bytes, np * 4l),

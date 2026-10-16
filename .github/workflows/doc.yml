@@ -51,6 +51,10 @@ jobs:
     if: github.event_name != 'release' || !startsWith(github.event.release.tag_name, 'dasllama-')
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    # actions: write needed for `gh cache delete` in the sccache refresh step.
+    permissions:
+      contents: read
+      actions: write
     steps:
     - name: "SCM Checkout"
       uses: actions/checkout@v4
@@ -69,6 +73,13 @@ jobs:
         sudo bash ci/apt_install.sh --no-install-recommends \
           mesa-common-dev libglu1-mesa-dev libgl1-mesa-dev libglfw3-dev \
           libx11-dev libxrandr-dev libxcursor-dev libxinerama-dev libxi-dev
+
+    # Its own sccache slot: the doc host's module set (GLFW, Vulkan, Crypto, PUGIXML) is no other lane's.
+    - uses: ./.github/actions/sccache-slot
+      with:
+        mode: restore
+        key: sccache-doc-linux-Release
+        sccache-size: 2000M
 
     - name: "Build: Daslang (for das2rst + imgui2rst + vulkan2rst)"
       run: |
@@ -89,3 +100,8 @@ jobs:
       env:
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: cmake --build ./build --target run_doc --parallel
+
+    - uses: ./.github/actions/sccache-slot
+      with:
+        mode: save
+        key: sccache-doc-linux-Release

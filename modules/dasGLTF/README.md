@@ -92,8 +92,9 @@ reuses its upload. `gltf_pbr_set_point_lights` clears previous shadow settings.
 
 `gltf_pbr_render_depth(renderer, model, scene, root, light_vp)` renders the same
 skinned/rigid transforms into the caller's bound depth framebuffer. Alpha-masked
-materials retain their cutouts; blended primitives are skipped. The depth program
-is created lazily. The caller owns framebuffer, viewport, depth state, and clear.
+materials retain their cutouts; blended primitives are skipped. The opaque and
+masked depth programs are created lazily. The caller owns framebuffer, viewport,
+depth state, and clear.
 
 `gltf_pbr_set_shadow(renderer, depth_tex, light_vp, resolution, bias, strength)`
 enables bilinear PCF shadowing of direct light. Sixteen nearest depth comparisons

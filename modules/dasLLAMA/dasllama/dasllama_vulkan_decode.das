@@ -700,10 +700,10 @@ def private rd_moe_sets(var L : RLayer) {
             let slots_bytes = MAX_ROUTED_SLOTS * 4l
             if (L.moe_g4) {   //! the host's sum lands as the one routed row of weight one
                 verify(ensure_cls_ar_comb_g4(), "vk decode: a host layer's gemma-4 combine class rail must engage on a live device")
-                L.s_addr_next = set_cls_ar_comb_g4(fixed_array(g_rd.x_dev, g_rd.ffnout_dev, g_rd.norms_dev, g_rd.xb_dev,
-                        g_rd.moe_ident_dev, g_rd.ones_dev, g_rd.hacc_dev),
-                    fixed_array(rows_bytes, rows_bytes, g_rd.norms_bytes, rows_bytes, slots_bytes, slots_bytes, rows_bytes),
-                    fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XB, 0u, 0u, VHZ_MDN))
+                L.s_addr_next = set_cls_ar_comb_g4(fixed_array(g_rd.x_dev, g_rd.moe_ident_dev, g_rd.ones_dev, g_rd.hacc_dev,
+                        g_rd.ffnout_dev, g_rd.norms_dev, g_rd.xb_dev),
+                    fixed_array(rows_bytes, slots_bytes, slots_bytes, rows_bytes, rows_bytes, g_rd.norms_bytes, rows_bytes),
+                    fixed_array(VHZ_X, 0u, 0u, VHZ_MDN, VHZ_FFO, 0u, VHZ_XB))
                 return
             }
             verify(ensure_cls_ar_comb(), "vk decode: a host layer's combine-folded residual class rail must engage on a live device")
@@ -1875,8 +1875,9 @@ def rd_tok_row(pos, cnt : int64) {
         mirbase = 0u, dnslot = uint(g_rd.region))
 }
 
-//! the step's input row where the recorded command opens: the host's row in `x_host`, or under the device gather (`rd_emb_on`) the
-//! token id - `EMB_ID_HOST` and the host's row beside it where `token` is -1
+//! the step's row into the recorded command's input: where the table gathers on the device, the id word - `token`, or
+//! `EMB_ID_HOST` for a step that brings none (`token` under 0), whose row goes to the staging row - else the row into the plain feed
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#vk-token-gather")]
 def private rd_stage_row(x : array<float>; token : int64) {
     unsafe {
         if (!rd_emb_on()) {
@@ -1914,17 +1915,12 @@ def vk_rdec_token_split(x : array<float>; cossin : array<float>; side : array<fl
     }
     let ts0 = ref_time_ticks()
     let prof = vk_prof()
-    let dim = g_rd.dim
     var picked : int64
     let guard = rd_guard_step(g_rd.tokens_served)
     let picks_only = pick_only && !guard
     let seg0 = g_rd.region * g_rd.nseg
+    rd_stage_row(x, -1l)
     unsafe {
-        if (g_rd.hc) {   //! the hyper-connection command opens on the staged row; every other split command opens as the one-row command does
-            memcpy(g_rd.x_host.mapped, addr<void?>(x[0]), dim * 4l)
-        } else {
-            rd_stage_row(x, -1l)
-        }
         memcpy(g_rd.cos_host.mapped, addr<void?>(cossin[0]), g_rd.cos_elems * 4l)
         if (g_rd.ngram) {
             assert(long_length(side) >= g_rd.ngram_ind, "vk_rdec_token_split: the side input's row is short")
@@ -2783,9 +2779,9 @@ def private rd_encode_moe(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
 }
 
 //! the gemma-4 step's args (`GkMoeCombG4`): the k slots off the slot map, both branches normed, their sum normed, the step scaled,
-//! the next norm at `woff`; `presummed` where the down GEMV folded the k rows
+//! the next norm at `woff`; `presummed` where the down GEMV folded the k rows; a host layer's sum is one slot of weight one
 def rd_g4_comb_args(L : RLayer; l, woff : int64; presummed : bool) : GkMoeCombArgs
-    => GkMoeCombArgs(n = uint(g_rd.dim), k = uint(g_rd.k), eps = g_rd.eps, ascale = L.out_scale, presummed = presummed ? 1u : 0u,
+    => GkMoeCombArgs(n = uint(g_rd.dim), k = L.experts_host ? 1u : uint(g_rd.k), eps = g_rd.eps, ascale = L.out_scale, presummed = presummed ? 1u : 0u,
         rpost_off = uint(rd_norm_off(l, RD_NORM_POST_FFN2)), dpost_off = uint(rd_norm_off(l, RD_NORM_POST_FFN1)),
         spost_off = uint(rd_norm_off(l, RD_NORM_POST_FFN)), nwoff = uint(woff))
 
@@ -2901,8 +2897,13 @@ def private rd_encode_token(var first_seg_raw : VkCommandBuffer; nrows, nsplit :
                 rd_encode_host_cut(raw, h, L, l, 1l, "m:router")
                 seg++
                 rd_host_resume(raw, g_rd.cmd_seg[split_seg_base + seg], h, l, 1l)
-                var pc14h = rd_ar_comb_args(L, nxt)
-                enc_cls_ar_comb(raw, h, L.s_addr_next, pc14h, 1l)
+                if (L.moe_g4) {   //! the host's sum is the one routed row of weight one: the gemma-4 step over the set its class built
+                    var pcg = rd_g4_comb_args(L, l, nxt, false)
+                    enc_cls_ar_comb_g4(raw, h, L.s_addr_next, pcg, 1l)
+                } else {
+                    var pc14h = rd_ar_comb_args(L, nxt)
+                    enc_cls_ar_comb(raw, h, L.s_addr_next, pc14h, 1l)
+                }
                 rd_ts(raw, "m:ar2")
                 xq_ready = false
                 continue
@@ -3503,8 +3504,8 @@ def vk_rdec_token(x : array<float>; cossin : array<float>; ple_row : array<float
     }
     let guard = rd_guard_step(g_rd.tokens_served)
     let picks_only = pick_only && !guard
+    rd_stage_row(x, token)
     unsafe {
-        rd_stage_row(x, token)
         memcpy(g_rd.cos_host.mapped, addr<void?>(cossin[0]), g_rd.cos_elems * 4l)
         if (g_rd.ple > 0l && !(g_rd.ple_tok_on && token >= 0l)) {   //! a step the device gathers brings no row
             assert(long_length(ple_row) >= g_rd.n_layers * g_rd.ple, "vk_rdec_token: the per-layer-embedding row is short")

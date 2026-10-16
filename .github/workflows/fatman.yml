@@ -7,6 +7,15 @@
 name: fatman
 
 on:
+  push:
+    branches: [master]
+    paths:
+      - 'CMakeLists.txt'
+      - 'web/CMakeLists.txt'
+      - 'examples/fatman/**'
+      - '.github/workflows/fatman.yml'
+      - 'include/**'
+      - 'src/**'
   pull_request:
     paths:
       - 'CMakeLists.txt'
@@ -25,6 +34,10 @@ jobs:
   fatman:
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    # actions: write needed for `gh cache delete` in the sccache refresh step.
+    permissions:
+      contents: read
+      actions: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -54,6 +67,13 @@ jobs:
           git clone --depth 1 --recurse-submodules https://github.com/borisbat/dasImguiImplot.git    modules/dasImguiImplot
           git clone --depth 1 --recurse-submodules https://github.com/borisbat/dasImguiNodeEditor.git modules/dasImguiNodeEditor
 
+      # Its own sccache slot, seeded by the master push: the externals make its module set unique.
+      - uses: ./.github/actions/sccache-slot
+        with:
+          mode: restore
+          key: sccache-fatman-linux-Release
+          sccache-size: 2000M
+
       - name: "Configure (externals absorbed by the modules glob)"
         run: |
           set -eux
@@ -62,3 +82,8 @@ jobs:
 
       - name: "Run the fat man"
         run: cmake --build build --target run_fatman
+
+      - uses: ./.github/actions/sccache-slot
+        with:
+          mode: save
+          key: sccache-fatman-linux-Release

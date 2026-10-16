@@ -137,6 +137,10 @@ struct public GpuTierEnv {
     @clarg_doc = "The context pin (DASLLAMA_GPU_CTX_MAX, set_gpu_ctx_max) is the context asked, not a cap: a K/V mirror the card cannot hold at it declines the resident driver instead of shortening, and the per-op rails serve the asked context; the load log names the room."
     gpu_ctx_strict : bool = false
 
+    @clarg_default_doc = "0 (the plan's own count)"
+    @clarg_doc = "Serve at least this many routed layers' experts on the host - the first in layer order - on the whole-model driver of a plain MoE, whatever the card holds (set_gpu_host_layers in process): the host-layers form, with its split token command and cut window chain, reached on any card. A hyper-connection model serves every routed layer on the host regardless."
+    gpu_host_layers : int64 = 0l
+
     @clarg_doc = "The K/V codec the whole-model driver's mirror is asked to arm at, where no caller set one in process (set_gpu_kv_dtype): f16 (the default), q8_0 (half the mirror's bytes) or tq4 (a quarter). Sessions of the armed codec are served; any other spelling reads as f16."
     gpu_kv : string = ""
 
@@ -199,7 +203,7 @@ struct public GpuTierEnv {
     @clarg_doc = "Hot expert slots a layer. On the per-op tier: hold the N hottest experts of a streamed layer resident (unset = none). On the whole-model driver with the routed experts on the host (a hyper-connection MoE): the slots of the hot expert pool - unset = 64 where the card has the room past the weights and the mirror, else up to 32 out of the mirror's context; a count asks that many; 0 keeps every routed expert on the host."
     gpu_heat : Option<int64>
 
-    @clarg_doc = "Report lifetime GPU queue submissions (real commands plus staging round-trips)."
+    @clarg_doc = "Report lifetime GPU queue submissions (real commands plus staging round-trips), and trace every routed row the host sums - the split token command's host segment and the CPU forward alike - as one moe_k line (the layer, the session, the first pick, the L1 of the feed row and of the routed sum)."
     gpu_prof : bool = false
 
     @clarg_doc = "Record the routed picks of every layer's host expert step under the whole-model driver - a layer, its rows, k expert ids and weights a row, in serving order - and write them to this file when the model drops: the hot expert pool's policy experiments replay the trace offline (harness/hot_pool_sim.das). Unset: no trace."

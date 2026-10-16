@@ -462,7 +462,7 @@ def private vk_encode_layer(var g : GemmaDrafterVk; dr : GemmaDrafter; raw : VkC
     let win = dr.sliding[l] && L.window > 0l ? uint(L.window - 1l) : 0u
     var pca = DaAttnArgs(kvd = uint(L.kvd), hs = uint(hs), kv_mul = uint(kv_mul), kbase = mirbase, vbase = mirbase, scale = 1.0, qstride = 0u, gated = 0u,
         window = win, cap = 0.0, nsplit = 1u, rqk = dt == KVDtype.tq4 ? DA_RQ_NONE : DA_RQ_Q8, sinkoff = 0u,
-        rowwg = uint(rowwg), qrow = uint(qd), cntoff = uint(g.cntoff))
+        rowwg = uint(rowwg), qrow = uint(qd), cntoff = uint(g.cntoff), ring = uint(L.ring))
     da_attn_stamp_enc(dt, da_slab_of(false, kv_mul), raw, h, g.s_attn[l], pca, rowwg)
     if (dt == KVDtype.tq4) {
         var pcu = KvTqUnrotArgs(hs = uint(hs), nh = uint(dr.n_heads), orow = uint(qd), qrow = uint(qd), qstride = uint(hs), inv_sqrt_hs = 1.0 / sqrt(float(hs)))
@@ -646,8 +646,7 @@ def private vk_drop_forget {
 def private vk_attached_to(t : Model) : bool => g_vk_attached
 
 //! a stream that cannot speculate this round: no carried hidden at its position, a round past the context
-def private vk_round_cold(t : Model; s : Session; pos, k : int64) : bool => (pos < 1l || s.mtp_h_pos1 != pos
-    || long_length(s.mtp_h) < g_vk_dr.tdim || pos + k + 1l > t.config.seq_len)
+def private vk_round_cold(t : Model; s : Session; pos, k : int64) : bool => mtp_round_cold_host(t, s, pos, k, g_vk_dr.tdim)
 
 //! verify row `vr`'s truth: the device's pick where it landed one, else the argmax of the logits it landed
 def private vk_row_pick(s : Session; vr, vocab : int64) : int64 {
@@ -739,8 +738,7 @@ def private vk_gemma_rounds(t : Model; var sessions : array<Session?>; toks : ar
             if (pick_only) {
                 land_pick(s, s.mtp_picks[a])
             }
-            copy_floats(s.mtp_hrows, a * c.dim, s.mtp_h, 0l, c.dim)
-            s.mtp_drafted += kd
+            mtp_round_take(s, a, kd, c.dim)
             mtp_round_commit_host(s, pos, kd, a)
             gpu_resident_assist_commit(s)
             g_vk_drafted += kd

@@ -72,3 +72,13 @@ variants have no previous-pose uniforms or binding work. Optional shader creatio
 lazy. Retain at least 544 vertex-uniform vectors for the two 64-joint palettes and
 remaining transforms. Tests cover rigid/root and skeletal pose independence as well
 as the existing packed-skin attribute contracts.
+
+## Shadow depth pass {#shadow-depth-pass}
+
+`gltf_pbr_render_depth` draws opaque and masked casters with separate, lazily created
+depth programs. `gltf_depth_position` computes the rigid or skinned world position.
+Each depth vertex program applies `u_viewProj`; neither computes normals or tangents.
+The opaque program has no material inputs, binds no textures and leaves the caller's
+texture bindings untouched. The masked program adds UV0, vertex colour, base-colour factor and texture, alpha mode, cutoff and the
+unlit flag, preserving alpha coverage. An opaque material's alpha cuts no hole. Blended
+surfaces cast no shadow. The renderer releases both programs in `finalize`.

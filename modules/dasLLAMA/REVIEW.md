@@ -2,7 +2,7 @@
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 docs: `ARCHITECTURE.md`, `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_MEASUREMENT.md`. Planned work:
-`followup_general.md`, `followup_vulkan.md`, `followup_metal.md`; the measured record: `PERF_LEDGER.md`.
+`followup_general.md`, `followup_vulkan.md`, `followup_metal.md`.
 
 **A change to the tokenizer - `dasllama/dasllama_tokenizer.das`, `dasllama/dasllama_spm.das`,
 `dasllama/dasllama_bpe.das` or `dasllama/dasllama_pretok.das` - or to a string any `special_id`
@@ -47,7 +47,8 @@ to a function-typed one, or the `[init]` that sets one; or that adds or changes 
 in a forked context or code reachable from a `team_parallel_*` or `maybe_parallel_for*` body,
 wherever the diff puts it, applies `REVIEW_MEMORY.md` (beside this file) too.**
 
-**A change to what enters `performance/records/`, or to a provenance manifest, answers to
+**A change to what enters `performance/records/`, or to a provenance manifest (the `ProvEntry` rows of
+`performance/model_specs.das`), answers to
 `performance/REVIEW.md`.** A change to WHICH model file a recorded row or a manifest pins
 answers to it too. A model file here is a `.gguf`, a `.dlim`, an mmproj (a multimodal projector
 weight file), or an image or audio fixture. A test or tool merely opening a stocked model file
@@ -71,6 +72,9 @@ area's tests, so a regression there goes unrun.
 **A `[test]` file with a `require dasllama/...` line of its own, wherever the diff puts it, and
 every `dasllama/` change answer to this folder's `tests/REVIEW.md` - open it; the walk does not
 surface it for a `dasllama/`-only diff.**
+
+**A probe, dump or one-shot driver that loads a model or times a kernel outside the test and benchmark trees,
+wherever the diff puts it, answers to this folder's `harness/REVIEW.md` beside its own folder's checklist.**
 
 **A diff that changes a CPU kernel - a function in `dasllama/dasllama_math*.das` that writes an
 output buffer from operand buffers - applies `tests/REVIEW_KERNEL_CELLS.md` too.**
@@ -183,13 +187,6 @@ this file) too.**
 **Weakening the token-exact RoPE fixtures - the tests that pin the angle tables
 `dasllama/dasllama_rope.das` builds - is a defect.**
 
-**Weakening `REVIEW.das`'s `check_verify_decline_before_state_move` is a defect.**
-
-**Weakening `REVIEW.das`'s device-creation check is a defect - a device- or queue-creating call
-spelling missing from `DEVICE_CREATION_CALLS` weakens it.**
-
-**Weakening `check_ple_gather_sites` in `REVIEW.das` is a defect.**
-
 **A diff that cites a timing (in a `PERF_LEDGER.md` row, a `followup_*.md` row, a commit message
 or the PR body) as the reason it picks one candidate over another - a constant's value, a formula,
 or a predicate choosing among kernels that compute the same result - takes the winner from one
@@ -201,11 +198,11 @@ changed, so their timings pick nothing.
 race's output lines, one per candidate and each naming it, in the PR body or in a `PERF_LEDGER.md`
 row the diff adds.**
 
-**A race that picks a numeric threshold times the chosen value and at least one value on each side
-of it.**
+**A race that picks a numeric threshold - a cutoff a predicate compares against, or a size a stamp is built at: a row
+count, a byte size, a lane width - times the chosen value and at least one value on each side of it.**
 
-**A new call that runs a matrix multiply over f32 weight rows - `matmul_batch`, `mm_blob_b`,
-`mm_fblob_b`, per-head `gemm_f32` / `gemm_f32_jo`, or an f32 GPU mm - outside a
+**A new call that multiplies by f32 weight rows - any CPU or GPU matrix multiply whose weight operand is an f32 plane,
+whatever its name - outside a
 correctness-comparison path (one whose only job is to produce a reference result to check another
 against), where a faster-format twin on the same backend already serves the same weights and
 shape, is a defect - call that twin instead.** A site that must stay f32 for another reason is
