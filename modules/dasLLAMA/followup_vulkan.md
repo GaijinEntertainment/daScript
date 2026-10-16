@@ -1925,8 +1925,9 @@ module) is independent and can land any time - it is pure structure.
     box knob's depth plus one, sixteen rows at most, and the scratch's rows serve a reject to any
     `a < k`) and the joint verify across streams. Carriers: Qwen3.5-0.8B-MTP first,
     Qwen3.8-27B with its split Q8_0 head for the rate (Metal reads 1.23x at depth 1, 1.31x at
-    depth 3 on the M5 Max); the invariance cells of `tests/test_mtp.das` and the scheduler arm are the parity, `lcpp_bench
-    --mtp-ab` on the pod the rate, a CUDA reference row per carrier beside it.
+    depth 3 on the M5 Max); the invariance cells of `tests/test_mtp.das` and the scheduler arm hold the speculating run to
+    the plain one (the driver against itself, not a parity), `lcpp_bench --mtp-ab` on the pod the rate, a CUDA reference
+    row per carrier beside it.
 118. **Two vulkan-lane arms still bake from RAM with the planar families kept.** The streaming mint
     (`ARCHITECTURE_IMAGE_VULKAN.md#image-vulkan-mint`) serves the cold load; a planar image already
     mapped (a CPU-mode load's lane found under an armed tier) and the eager rail (a gguf that would
