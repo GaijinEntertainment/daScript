@@ -197,7 +197,11 @@ sched arms load the 26B target through `load_model_cached`, so the file mints a 
 under the same ledgered exception as the parity file's: the Metal MTP rail is what the image
 flavor serves.
 
-Prefill parity: `base mm-tail s16
+Prefill parity: `lastrow-g` (its own test, `test_metal_prefill_lastrow_sandwich`, families `gemma3` / `gemma4`: gemma-3-1b and,
+large tier, gemma-4-12B Q8_0 - the last layer's FFN tail narrowed to the final row on the gemma sandwich, each branch under its
+post norm, against the full panel's tail over 48 counting ids: the logits within the cell's bar, the same argmax, the narrowed
+residual's row 0 off the full one's and `keep_hidden` restoring the full plane bit for bit - `lastrow_ab`, the mm-tail arm's
+SmolLM2 legs' form), `base mm-tail s16
 kq cont attn-dev mirror mirror-codec mirror-cap segs span span-fused span-mrope span-ds dim qkv moe-gemv moe-base kq-tail kq-scratch` (moe-base = the routed
 block's two GEMM forms on split-format expert carriers (`test_metal_prefill_moe_base_form`, family `qwen3moe`, large
 tier: Qwen3-30B-A3B UD-Q3_K_XL and UD-IQ2_XXS, loaded under the Metal mode so IQ3_S planes read their grid form): a 280-row
@@ -279,7 +283,13 @@ the capped rows past the single-dispatch ceiling on the fused attention's wide s
 fam-gemma4/fam-qwen3moe/fam-gemma4moe/fam-gptoss/fam-qwen35moe/fam-qwen2moe are
 DASLLAMA_PARITY_FULL-gated - 7.4/18.5/26.9/12.1/22/15GB; fam-gemma4moe and fam-gptoss are ENGAGE
 + shallow logits TOLERANCE cells only - token parity is not a valid instrument for the 26B, whose double-router
-CPU differs from any float implementation by ~2.5 logits/step by construction;
+CPU differs from any float implementation by ~2.5 logits/step by construction; fam-gemma4moe runs six 26B files (Q8_0,
+Q4_K_M, Q4_0, UD-IQ3_XXS, UD-IQ4_XS and the MXFP4_MOE mint), each opening on the format census (every site the file carries in
+its own format, the expert stacks the native-MXFP4 planes exactly on the mint) and asserting the routed GEMV stamps of the
+file's expert formats dispatched by the forced step; its GPU legs are the MoE tail as one step (`MetalMoeCombG4`: counted once
+a layer in the window, once a layer past the last an encoded step), the tail on its unfused chain under
+`set_metal_moe_g4_unfused` (no step counted, the control), and a q8_0-mirror leg against the CPU chain on q8_0 sessions (the
+decode's v-norm arms in the q/k norm's dispatch);
 fam-qwen35's batch cell asserts the batched step ENGAGES on the deltanet hybrid's blob twin
 and compares it against the single-row GPU step; fam-qwen2moe's batch cell compares the blob
 twin's batched step against the CPU batched stack on the planar model - the two arms the
@@ -2051,8 +2061,11 @@ up stacks. `test_gpu_resident_gemma4_31b.das` holds the largest dense carrier, g
 CPU control of a dense 31B on the reference kernel bodies runs half an hour on an untuned box. Arms: `g2`
 (gemma-2-2b), `g3` (the gemma-3-1b cells), `g3b`
 (gemma-3-4b), `g4k` (the 12B Q4_K_M cells), `g4x` (the 12B Q4_K_M 300-token agreement cell),
-`g4q8` (the 12B Q8_0 cells), `g4e` (E2B), `g4f` (E4B), `g4m` (the 26B-A4B IQ3_XXS), `g4mk` (the
-26B-A4B Q4_K_M), `g31` (the 31B) - the tokens share no substring, so one arm selects one file. Skips
+`g4q8` (the 12B Q8_0 cells), `g4e` (E2B), `g4f` (E4B), `g4m` (the 26B-A4B IQ3_XXS; as a filter it selects `g4mk` too), `g4mk`
+(the 26B-A4B Q4_K_M), `mx26` (the 26B-A4B MXFP4_MOE mint of the Q4_K_M file), `g31` (the 31B). The three 26B files open on the
+format cell (`gemma_format_cell`): every site the file carries in its own format, the expert stacks the native-MXFP4 planes
+exactly on the mint, then a 40-token prompt and two fed steps on the driver, every call served. Every feed and perplexity
+cell of the rig asserts the device served every call (`served_every_call`); a memory decline skips and logs the decline. Skips
 without the model or the armed tier, and on a memory decline (`moe_gpu_resident_memory_decline`:
 the plan did not fit the card at the session's context - the 12B Q8_0 file on a 16 GB card arms
 under `DASLLAMA_GPU_MIN_CTX=1024`); a feature decline stays a red. Two files carry block-codec

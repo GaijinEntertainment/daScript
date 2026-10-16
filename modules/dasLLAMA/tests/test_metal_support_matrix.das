@@ -1771,8 +1771,8 @@ def private gemma4_hetero_q8_row(t : T?; path : string) {
     }
 }
 
-[unused_argument(t, path)]   // off-Apple the gated body is empty
-def private gemma4_hetero_row(t : T?; path : string) {
+[unused_argument(t, path, tag)]   // off-Apple the gated body is empty
+def private gemma4_hetero_row(t : T?; path : string; tag : string = "gemma4-12b/k4") {
     // the stage-3 heterogeneous row: needs-derivation pin, per-path cells (all three ENGAGE),
     // a FREEFORM decode-only forced-feed tolerance cell, a counting both-paths generate, a B=2
     // batched-decode parity, and the continuation-prefill numeric cell —
@@ -1799,9 +1799,9 @@ def private gemma4_hetero_row(t : T?; path : string) {
             MetalNeed.geglu | MetalNeed.v_norm | MetalNeed.attn_scale | MetalNeed.out_scale |
             MetalNeed.qd_neq_dim)
         t |> success((uint(derived) & uint(want_bits)) == uint(want_bits),
-            "gemma4-12b/k4: metal_needs derives {want_bits} (got {derived})")
+            "{tag}: metal_needs derives {want_bits} (got {derived})")
         var trg <- blob_twin(t, path, 512l)
-        matrix_cell(t, trg, KVDtype.f16, "gemma4-12b/k4/f16", "", "", "")
+        matrix_cell(t, trg, KVDtype.f16, "{tag}/f16", "", "", "")
         let prompt <- encode(tr, "The old lighthouse keeper watched the storm roll in from the", true, false)
         let count_prompt <- encode(tr, counting_prompt(1, 30), true, false)
         let count_prompt2 <- encode(tr, counting_prompt(7, 36), true, false)
@@ -1872,20 +1872,20 @@ def private gemma4_hetero_row(t : T?; path : string) {
             select_decode_override("")
             served_bat = metal_batch_decode_stats().steps - ba0
         }
-        to_log(LOG_INFO, "gemma4-12b/k4 freeform CPU text (prompt echo + cont): {eyeball_text(tr, cpu_ids)}\n")
-        to_log(LOG_INFO, "gemma4-12b/k4 freeform GPU greedy-would-be cont (fmaxd {fmaxd}): {eyeball_text(tr, gpu_picks)}\n")
+        to_log(LOG_INFO, "{tag} freeform CPU text (prompt echo + cont): {eyeball_text(tr, cpu_ids)}\n")
+        to_log(LOG_INFO, "{tag} freeform GPU greedy-would-be cont (fmaxd {fmaxd}): {eyeball_text(tr, gpu_picks)}\n")
         t |> success(fmaxd < 8.0,
-            "gemma4-12b/k4: forced-feed freeform decode logits within 8 of CPU over the 128-token stream (measured {fmaxd})")
-        t |> success(served_free > 0l, "gemma4-12b/k4: the forced-feed freeform decode ENGAGED ({served_free} served)")
-        t |> success(served_pf > 0l, "gemma4-12b/k4: the hetero prefill ENGAGED ({served_pf} served)")
-        log_gen_texts(tr, "gemma4-12b/k4 both-paths", cpu_cnt_ids, both_ids)
+            "{tag}: forced-feed freeform decode logits within 8 of CPU over the 128-token stream (measured {fmaxd})")
+        t |> success(served_free > 0l, "{tag}: the forced-feed freeform decode ENGAGED ({served_free} served)")
+        t |> success(served_pf > 0l, "{tag}: the hetero prefill ENGAGED ({served_pf} served)")
+        log_gen_texts(tr, "{tag} both-paths", cpu_cnt_ids, both_ids)
         t |> success(ids_equal(cpu_cnt_ids, both_ids),
-            "gemma4-12b/k4: metal prefill+decode generate matches the CPU truth token-for-token")
-        t |> success(served_bat > 0l, "gemma4-12b/k4: the hetero batch ENGAGED ({served_bat} served)")
-        log_pair_texts(tr, "gemma4-12b/k4 B=2", cpu_bat, gpu_bat)
+            "{tag}: metal prefill+decode generate matches the CPU truth token-for-token")
+        t |> success(served_bat > 0l, "{tag}: the hetero batch ENGAGED ({served_bat} served)")
+        log_pair_texts(tr, "{tag} B=2", cpu_bat, gpu_bat)
         t |> success(ids_equal(cpu_bat, gpu_bat),
-            "gemma4-12b/k4: B=2 batched decode matches the CPU truth token-for-token")
-        cont_logits_cell(t, tr, trg, "gemma4-12b/k4", 8.0)
+            "{tag}: B=2 batched decode matches the CPU truth token-for-token")
+        cont_logits_cell(t, tr, trg, tag, 8.0)
         delete cpu_ids
         delete gpu_picks
         delete cpu_cnt_ids
@@ -1981,6 +1981,12 @@ def test_metal_family_matrix(t : T?) {
                 "gemma3-4b/q8/f16", uint(MetalNeed.neox | MetalNeed.qk_norm | MetalNeed.sliding |
                     MetalNeed.pre_post_norm | MetalNeed.geglu | MetalNeed.qd_neq_dim),
                 "")
+            // ... and the K-quant carrier: gemma-3-12b Q4_K_M (k4 / k6 planes, the Q6_K token table) on the same three paths;
+            // 7.3GB, DASLLAMA_PARITY_FULL-gated
+            family_cells(t, path_join(models_dir(), "gemma-3-12b-it-Q4_K_M.gguf"), "gemma3",
+                "gemma3-12b/k4/f16", uint(MetalNeed.neox | MetalNeed.qk_norm | MetalNeed.sliding |
+                    MetalNeed.pre_post_norm | MetalNeed.geglu | MetalNeed.qd_neq_dim),
+                "")
             // gemma4-12B (stage 3): the heterogeneous line — two attention classes (sliding
             // 16q/8kv/256, global 16q/1kv/512 MQA), V-from-K on global layers, v_norm,
             // out_scale on the whole layer output, unit attn scale, final softcap + suppress.
@@ -1990,6 +1996,9 @@ def test_metal_family_matrix(t : T?) {
             // the q8 twin drives the hetero fixed-B mul_mv rail (a class the k4 row never
             // dispatches); 12.5GB — DASLLAMA_PARITY_FULL-gated like the row above
             gemma4_hetero_q8_row(t, path_join(models_dir(), "gemma-4-12B-it-Q8_0.gguf"))
+            // the largest dense gemma-4: the 31B Q4_K_M (`../performance/model_specs.das` names its source) on the 12B's row;
+            // 18.7GB, DASLLAMA_PARITY_FULL-gated
+            gemma4_hetero_row(t, path_join(models_dir(), "gemma-4-31B-it-Q4_K_M.gguf"), "gemma4-31b/k4")
             // qwen3moe (Wave C): qwen3 attention + GPU MoE routing — router + top-k select +
             // expert-indexed GEMVs (decode/batch) + gathered mul_mm prefill (k4 gate/up, k6
             // down). All three paths ENGAGE; 18.5GB > the 6GiB tier — DASLLAMA_PARITY_FULL-gated.

@@ -8498,7 +8498,7 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                 let u_th_l = (u_total_h2 == null || hid_l == hidden) ? u_total_h : u_total_h2
                 let narrow_last = (g_pf_env_lastrow && !s.keep_hidden && !warm
                     && l == c.n_layers - 1l && npos > 1l && !recr && !moe && !plef && !hcs.on
-                    && !c.pre_post_norm && l >= nds && !c.q_gated
+                    && l >= nds && !c.q_gated
                     && c.n_layer_nextn == 0l
                     && dim % 32l == 0l && hid_l % 32l == 0l
                     && kq_fmt_one_row_gemv(fmt_at(t.w1_fmt, l), dim) && kq_fmt_one_row_gemv(fmt_at(t.w3_fmt, l), dim)
@@ -8510,7 +8510,13 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                     for (sg in segs) {
                         let nro = uint64((sg.row0 + sg.npos - 1l) * dim * 4l)
                         if (g_pf_skip != "ew" && g_pf_skip != "nongemm") {
-                            enc_add(enc, bx, nro, bxb2, nro, u_dim, dim)
+                            if (c.pre_post_norm) {   //! the sandwich: the attention branch's row under its post norm before the add
+                                var bw_pa = upload_region(unsafe(addr < void? >(t.fblob[t.rms_post_att_off + l * dim])), uint64(dim * 4l))
+                                pf_enc_rms(enc, bxb2, nro, bw_pa, bxb, u_dim, u_eps, 1l)
+                                enc_add(enc, bx, nro, bxb, 0ul, u_dim, dim)
+                            } else {
+                                enc_add(enc, bx, nro, bxb2, nro, u_dim, dim)
+                            }
                             pf_enc_rms(enc, bx, nro, bw_ffn, bxb, u_dim, u_eps, 1l)
                         }
                         if (g_pf_skip != "gemm") {
@@ -8528,6 +8534,10 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                             pf_enc_narrow_gemv(enc, t, fmt_at(t.w2_fmt, l), t.w2_offs[l], bhb, bxb, u_hid_l, u_dim, hid_l, dim)
                         }
                         if (g_pf_skip != "ew" && g_pf_skip != "nongemm") {
+                            if (c.pre_post_norm) {   //! ... and the FFN branch's under its own
+                                var bw_pf = upload_region(unsafe(addr < void? >(t.fblob[t.rms_post_ffn_off + l * dim])), uint64(dim * 4l))
+                                pf_enc_rms(enc, bxb, 0ul, bw_pf, bxb, u_dim, u_eps, 1l)
+                            }
                             var bosc : MetalBuffer?
                             if (c.layer_out_scale) {
                                 bosc = upload_region(addr < void? >(t.fblob[t.out_scale_off + l]), 4ul)
@@ -8749,7 +8759,7 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                     pf_enc_rms(enc, bxb, 0ul, bw_pf1, bxb, u_dim, u_eps, npos)
                     enc_add(enc, bxb, 0ul, bmg4rt, 0ul, u_total_dim, npos * dim)
                 }
-                if (!g4_step && g_pf_skip != "ew" && g_pf_skip != "nongemm") {
+                if (!g4_step && !narrow_last && g_pf_skip != "ew" && g_pf_skip != "nongemm") {
                     if (c.pre_post_norm) {
                         var bw_pf = upload_region(addr < void? >(t.fblob[t.rms_post_ffn_off + l * dim]), uint64(dim * 4l))
                         pf_enc_rms(enc, bxb, 0ul, bw_pf, bxb, u_dim, u_eps, npos)

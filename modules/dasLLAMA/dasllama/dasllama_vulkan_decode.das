@@ -745,9 +745,10 @@ def private rd_moe_sets(var L : RLayer) {
             fixed_array(egu_bytes, egu_bytes, BATCH_HQ_BYTES, BATCH_HS_BYTES),
             fixed_array(VHZ_GATE, VHZ_UP, VHZ_HQ, VHZ_HQ))
     }
-    //! one slab: the gate and up stacks share the quant buffer the fused dispatch binds once
-    L.egu = (L.fe1 == int(KqFmt.k4) && L.fe3 == int(KqFmt.k4) && !kq_sb(L.fe2) && nfe % 32l == 0l && pe1.wq == pe3.wq
-        && !g_rd.exps_bias && !g_rd.act_oai && vk_fuse_on() && ensure_kq_gemv_k4_gu_cls())   //! the k4 twin carries no bias rows and no clamped act: a biased or gpt-oss-activated k4 stack takes the three dispatches
+    //! one slab: the gate and up stacks share the quant buffer the fused dispatch binds once; the kq twins carry no bias rows and no
+    //! clamped act, so a biased or gpt-oss-activated stack takes the three dispatches
+    L.egu = (L.fe1 == L.fe3 && kq_gu_fmt(L.fe1) && !kq_sb(L.fe2) && nfe % 32l == 0l && pe1.wq == pe3.wq
+        && !g_rd.exps_bias && !g_rd.act_oai && vk_fuse_on() && kq_gu_cls_ensure(L.fe1))
     if (L.egu) {
         L.s_egu = set_kq_gemv_k4_gu_cls(fixed_array(pe1.wq, pe1.ws, g_rd.moe_meta1_dev, xqb, xsb, g_rd.egate_dev, kq_grid_dev(), g_rd.moe_meta3_dev, g_gpu.hq_dev, g_gpu.hs_dev),
             fixed_array(pe1.wqb, pe1.wsb, META_BYTES, dim, (dim / 32l) * 4l, k * nfe * 4l, KQ_GRID_BYTES, META_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES),
@@ -2631,7 +2632,7 @@ def private rd_encode_moe(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
     if (one && L.egu) {
         pcg.lanes_per_row = gemv_lanes_per_row(L.fe1, dim)
         pcg.act = g_rd.is_gelu ? ACT_GELU : ACT_SILU
-        enc_kq_gemv_k4_gu_cls(raw, h, L.s_egu, pcg, k * nfe / 32l)
+        kq_gu_cls_enc(L.fe1, raw, h, L.s_egu, pcg, k * nfe / 32l)
         rd_ts(raw, "m:e_gu")
     } elif (one && L.egu_mx4) {
         pcg.act = act_code(g_rd.act_oai, g_rd.is_gelu)

@@ -888,6 +888,9 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // the mx4 experts' fused gate+up+act+requant GEMV (gpt-oss's token command, above the zoo's tier); its coverage is
     // test_vkd_mx4_gemv_gu in test_vulkan_kernels.das
     "mx4_gemv_gu_cls_spv",
+    // the IQ4_XS and iq3s4 experts' fused gate+up+act+requant GEMVs (the gemma-4 26B's Unsloth dynamic files' gate_up stacks, above
+    // the zoo's tier); their coverage is test_vkd_kq_gemv_k4_gu in test_vulkan_kernels.das
+    "kq_gemv_iq4xs_gu_cls_spv", "kq_gemv_iq3s4_gu_cls_spv",
     // the biased act twins (gpt-oss's expert stacks carry gate and up bias rows: a carrier above the zoo's tier) - the
     // Q8_0 requant form the token command runs and the f16 form the window chain runs; their coverage is test_vkd_act_family
     "q8_actrq_b_cls_spv", "actf16_b_cls_spv",

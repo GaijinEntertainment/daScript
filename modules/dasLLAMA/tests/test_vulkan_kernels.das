@@ -1951,19 +1951,23 @@ def test_vkd_emb_gather_b32(t0 : T?) {
     }
 }
 
-//! the Q4_K experts' gate+up+act twin against the family cell's oracle run twice: both stacks' rows in one plane
-//! (the up stack's regions after the gate's), the activated rows' Q8_0 blocks within a quant step at every lane
-//! split, the scales within 2e-3; a poisoned oracle element must red
+//! the kq experts' gate+up+act twins (Q4_K, IQ4_XS and the iq3s4 form of IQ3_S) against the family cell's oracle run twice:
+//! both stacks' rows in one plane (the up stack's regions after the gate's), the activated rows' Q8_0 blocks within a quant step at
+//! every lane split, the scales within 2e-3, and the three-kernel path's hidden rows byte for byte; a poisoned oracle element must red
 [test]
 def test_vkd_kq_gemv_k4_gu(t0 : T?) {
-    t0 |> run("Q4_K gate + up GEMVs, the act and its Q8_0 requant in one dispatch == the CPU chain") <| @(t : T?) {
+    t0 |> run("kq gate + up GEMVs, the act and its Q8_0 requant in one dispatch == the CPU chain") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!(ensure_kq_gemv_k4_gu_cls() && ensure_kq_gemv_k4_cls() && ensure_q8_actrq_cls())) {   //! the three-kernel path's rails for the byte compare
+            if (!ensure_q8_actrq_cls()) {   //! the three-kernel path's rails for the byte compare
                 t |> skip("no Vulkan device")
                 return
             }
+            for (fmt in fixed_array(int(KqFmt.k4), int(KqFmt.iq4xs), int(KqFmt.iq3s4))) {
+            if (!(kq_gu_cls_ensure(fmt) && gemv_cls_ensure(fmt))) {
+                t |> failure("the {kq_fmt_of_slot(fmt)} gu and GEMV classes did not build on a live device")
+                continue
+            }
             for (shape in fixed_array((d = 64, nreg = 3), (d = 704, nreg = 8))) {   //! two blocks a slot; the 26B's eight slots of 704
-            let fmt = int(KqFmt.k4)
             let nsb = 11        // 2816 wide: the 26B's routed feed
             let d = shape.d
             let nreg = shape.nreg
@@ -2004,14 +2008,14 @@ def test_vkd_kq_gemv_k4_gu(t0 : T?) {
                     }
                     var pc = GemvArgs(n = uint(nsb * 256), d = uint(d), nreg = uint(nreg), ybase = 0u, lanes_per_row = lanes_per_row, act = ACT_GELU)
                     cp |> cell_record() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
-                        enc_kq_gemv_k4_gu_cls(raw2, h2, s_cls, pc, int64(nblk))
+                        kq_gu_cls_enc(fmt, raw2, h2, s_cls, pc, int64(nblk))
                     }
                     var inscope oq <- cp |> plane_as(poq, type<int8>, rows)
                     var inscope os <- cp |> plane_run(pos)
                     var inscope y_cls <- cp |> plane_run(py)
                     let badg = mismatch_approx(y_cls, y_g)
                     let lanes = lanes_per_row == 0u ? g_gpu.subgroup_size : int64(lanes_per_row)
-                    let tag = "k4 gu {nreg} x {d} at {lanes} lanes per row"
+                    let tag = "{kq_fmt_of_slot(fmt)} gu {nreg} x {d} at {lanes} lanes per row"
                     t |> success(badg == 0, "{tag}: the gate rows match the family's oracle ({badg} of {rows} off)")
                     gu_blocks_hold(t, tag, oq, os, act, nblk)
                     if (lanes_per_row == 16u) {   //! the three-kernel path on the same planes at the served lane split: its hidden rows byte for byte
@@ -2026,8 +2030,8 @@ def test_vkd_kq_gemv_k4_gu(t0 : T?) {
                         var pca = ActArgs(nelem = uint(rows), act = ACT_GELU, nblk = uint(nblk))
                         cp |> plane_refill(py)   //! the gate GEMV writes the fused run's gate plane: the sentinel back first, or a skipped dispatch reads as a match
                         cp |> cell_record() $(raw3 : VkCommandBuffer; var h3 : VkHaz) {
-                            enc_kq_gemv_k4_cls(raw3, h3, s_g, pc2, gemv_wgs(int64(rows), 16u))
-                            enc_kq_gemv_k4_cls(raw3, h3, s_u, pc2, gemv_wgs(int64(rows), 16u))
+                            gemv_cls_enc(fmt, raw3, h3, s_g, pc2, gemv_wgs(int64(rows), 16u))
+                            gemv_cls_enc(fmt, raw3, h3, s_u, pc2, gemv_wgs(int64(rows), 16u))
                             enc_q8_actrq_cls(raw3, h3, s_a, pca, (int64(rows) / 4l + 255l) / 256l)
                         }
                         var inscope oq2 <- cp |> plane_as(poq2, type<int8>, rows)
@@ -2050,6 +2054,7 @@ def test_vkd_kq_gemv_k4_gu(t0 : T?) {
             delete y_g
             delete y_u
             delete act
+            }
             }
         } else {
             t |> skip("dasVulkan not present")
