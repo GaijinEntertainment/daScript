@@ -52,8 +52,12 @@ round kind, so `get_mtp_depth` serves `runtime.mtp_depth_assistant`.
 scheduler's tick hands every speculating stream to the attached home's rounds (`mtp_spec_eval_batch` ->
 `MtpAssistantSeams.rounds`) at `get_mtp_depth`, under each session's cap (`Session.mtp_depth_cap`: depth 1 for a stream
 whose reasoning budget can still force a close, since a draft past the close would be evaled and not emitted), and emits
-each stream's accepted drafts in order before it samples the next token. A stream with no carried hidden at its
-position, a round past its context or - on Metal - a mirror short of the round's rows steps plain. The warm streams each
+each stream's accepted drafts in order before it samples the next token. The round is one protocol on both homes
+(`mtp_assistant_rounds`, `dasllama_mtp_gemma.das`), each home supplying its seams as one `MtpAssistantHooks`: the bind, the
+draft chains, the verify, a verify row's pick, the device's drafts read back, the commit; each home keeps its tallies as one
+`MtpAssistantStats`. A stream the home does not bind - no carried hidden at its position, a round past its context, on
+Metal a mirror short of the round's rows, on Vulkan no region left - and every warm stream of a failed verify steps plain
+after the verify, so a plain step's binding takes no region the round's streams held. The warm streams each
 draft their chain at their own anchor from their own token and carried hidden; on Metal every chain encodes into one
 command buffer, its inputs written into a slot a stream, the token rows a stream's group in one token list. One verify
 then carries every warm stream's [token, drafts]: on Metal the batch driver's same-slab step in groups

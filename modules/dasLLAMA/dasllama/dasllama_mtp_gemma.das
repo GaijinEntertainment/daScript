@@ -10,6 +10,7 @@ require dasllama/dasllama_gguf     // the container reader (+ f16_to_f32 through
 require dasllama/dasllama_math     // rmsnorm / geglu / softmax / rope_scaled_neox_tab
 require dasllama/dasllama_rope     // build_rope_tabs — the anchor's two RoPE class rows
 require daslib/fio
+require daslib/jobque_profile   // prof_ticks / prof_add - the round's time split
 require daslib/strings_boost   // trim_suffix — the sidecar name stem
 require strings
 require math
@@ -634,4 +635,150 @@ def gemma_draft_step_cpu(t : Model; var s : Session; dr : GemmaDrafter; tok : in
     out.token = best
     out.h_next |> reserve_resize(dr.tdim)
     mv_q8_blob(out.h_next, dr.blob, dr.post_proj_off, nrm, dim, dr.tdim)
+}
+
+//! A home's seams of the assistant round (`mtp_assistant_rounds`): a stream's bind at its anchor and depth (its region, or -1
+//! where it steps plain), the warm streams' draft chains and their one verify (false: every warm stream steps plain), a verify
+//! row's pick, the device's drafts read back into a stream's `mtp_vbatch` (null where the host holds them), the commit
+struct MtpAssistantHooks {
+    bind : function<(t : Model; var s : Session; pos, k : int64; taken : array<int64>) : int64>
+    draft : function<(t : Model; var rd : MtpAssistantRound) : bool>
+    verify : function<(t : Model; var rd : MtpAssistantRound; pick_only : bool) : bool>
+    pick : function<(s : Session; row0, vr, vocab : int64) : int64>
+    drafts_in : function<(var s : Session; row0, k : int64) : void>
+    commit : function<(t : Model; var s : Session; pos, k, a : int64) : void>
+    picks : bool   //! the verify lands the picks alone where every warm stream asked a bare argmax
+}
+
+//! A tick's round, reused tick to tick: the warm streams (borrowed handles), their index among the tick's streams, anchor,
+//! row count and region, the verify's token rows, and the tick's streams that step plain
+struct MtpAssistantRound {
+    @scratch sessions : array<Session?>
+    @scratch idx : array<int64>
+    @scratch pos : array<int64>
+    @scratch nr : array<int64>
+    @scratch regs : array<int64>
+    @scratch toks : array<int64>
+    @scratch cold : array<int64>
+}
+
+//! every stream of the tick opened at depth `k` (each under its own cap): a stream its home binds joins the round's warm
+//! streams with its token as row 0, the rest step plain after the verify
+def private mtp_round_gather(t : Model; var sessions : array<Session?>; toks : array<int64>; k : int64; var acc : array<int64>;
+                             hooks : MtpAssistantHooks; var rd : MtpAssistantRound) {
+    let n = long_length(sessions)
+    rd.sessions |> clear()
+    rd.idx |> clear()
+    rd.pos |> clear()
+    rd.nr |> clear()
+    rd.regs |> clear()
+    rd.cold |> clear()
+    rd.sessions |> reserve(n)
+    rd.idx |> reserve(n)
+    rd.pos |> reserve(n)
+    rd.nr |> reserve(n)
+    rd.regs |> reserve(n)
+    rd.cold |> reserve(n)
+    for (i in range64(n)) {
+        var s & = unsafe(*sessions[i])
+        acc[i] = 0l
+        let pos = s.n_past
+        mtp_round_begin(s)
+        if (long_length(s.mtp_vbatch) < MTP_MAX_ROWS) {   // sized for the NextN carriers only at make_run_state
+            s.mtp_vbatch |> reserve_resize(MTP_MAX_ROWS)   // nolint:PERF026 — once per session
+        }
+        let ki = mtp_depth_for(s, k)
+        let r = invoke(hooks.bind, t, s, pos, ki, rd.regs)
+        if (r < 0l) {
+            rd.cold |> push(i)
+            continue
+        }
+        s.mtp_vbatch[0] = toks[i]
+        rd.sessions |> push(sessions[i])
+        rd.idx |> push(i)
+        rd.pos |> push(pos)
+        rd.nr |> push(ki + 1l)
+        rd.regs |> push(r)
+    }
+}
+
+//! each warm stream's accept walk over its verify rows and its commit, the tallies into `st`
+def private mtp_round_walks(t : Model; var acc : array<int64>; hooks : MtpAssistantHooks; var rd : MtpAssistantRound;
+                            pick_only : bool; var st : MtpAssistantStats) {
+    let c = t.config
+    let ng = long_length(rd.sessions)
+    var row = 0l
+    for (gi in range64(ng)) {
+        var s & = unsafe(*rd.sessions[gi])
+        let pos = rd.pos[gi]
+        let kd = rd.nr[gi] - 1l
+        let r0 = row
+        if (hooks.drafts_in != null) {
+            invoke(hooks.drafts_in, s, r0, kd)
+        }
+        let a = mtp_accept_walk(s, kd, c.vocab_size, $(vr) => invoke(hooks.pick, s, r0, vr, c.vocab_size), pick_only)
+        if (pick_only) {
+            land_pick(s, s.mtp_picks[a])
+        }
+        copy_floats(s.mtp_hrows, a * c.dim, s.mtp_h, 0l, c.dim)
+        s.mtp_drafted += kd
+        invoke(hooks.commit, t, s, pos, kd, a)
+        st.drafted += kd
+        st.accepted += a
+        st.rounds++
+        acc[rd.idx[gi]] = a
+        row += rd.nr[gi]
+    }
+    if (ng > 1l) {
+        st.joint++
+    }
+}
+
+//! The assistant drafter's speculative rounds of a tick's streams at depth `k_req` on the home `hooks` names: `acc[i]` is
+//! stream i's accepted count, the drafts in `mtp_vbatch[1..a]`, its token always committed; returns the warm streams the
+//! verify carried
+[hot_path, arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-round-one-join"), arch(at="../ARCHITECTURE_GPU_MTP_ASSISTANT.md#assistant-drafter-rounds")]
+def mtp_assistant_rounds(t : Model; var sessions : array<Session?>; toks : array<int64>; k_req : int64; var acc : array<int64>;
+                         hooks : MtpAssistantHooks; var rd : MtpAssistantRound; var st : MtpAssistantStats) : int64 {
+    let k = clamp(k_req, 1l, MTP_MAX_ROWS - 1l)
+    acc |> resize(long_length(sessions))   // nolint:PERF026 — grows to the stream count once; the callers pass reused scratch
+    mtp_round_gather(t, sessions, toks, k, acc, hooks, rd)
+    var ng = long_length(rd.sessions)
+    let td = ref_time_ticks()
+    let ts_draft = prof_ticks()
+    let dok = ng > 0l && invoke(hooks.draft, t, rd)
+    st.draft_us += int64(get_time_usec(td))
+    prof_add("mtp.draft", ts_draft)
+    let tv = ref_time_ticks()
+    let ts_verify = prof_ticks()
+    var pick_only = hooks.picks && ng > 0l
+    rd.toks |> clear()
+    rd.toks |> reserve(ng * MTP_MAX_ROWS)
+    for (gi in range64(ng)) {
+        let s & = unsafe(*rd.sessions[gi])
+        pick_only = pick_only && s.pick_asked && !mtp_walk_samples(s)
+        for (i in range64(rd.nr[gi])) {
+            rd.toks |> push(s.mtp_vbatch[i])   //! the device rows gather their own ids; the host rows read these where it does not
+        }
+    }
+    let vok = dok && invoke(hooks.verify, t, rd, pick_only)
+    prof_add("mtp.verify", ts_verify)
+    let ts_walk = prof_ticks()
+    if (vok) {
+        mtp_round_walks(t, acc, hooks, rd, pick_only, st)
+    } else {
+        rd.cold |> push_from(rd.idx)
+        ng = 0l
+    }
+    st.verify_us += int64(get_time_usec(tv))
+    prof_add("mtp.walk", ts_walk)
+    let tc = ref_time_ticks()
+    for (i in rd.cold) {   //! after the verify: a plain step's binding takes no region the round's streams held
+        var s & = unsafe(*sessions[i])
+        forward(t, s, toks[i], s.n_past)
+        s.n_past++
+    }
+    st.cold_us += int64(get_time_usec(tc))
+    rd.sessions |> clear()   // borrowed handles
+    return ng
 }

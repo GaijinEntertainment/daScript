@@ -113,39 +113,40 @@ struct private GemmaDrafterVk {
 var private g_vk_dr : GemmaDrafter
 var private g_vk_g : GemmaDrafterVk
 var private g_vk_attached = false
-var private g_vk_drafted = 0l
-var private g_vk_accepted = 0l
-var private g_vk_rounds = 0l
-var private g_vk_joint = 0l
-var private g_vk_us_draft = 0l
-var private g_vk_us_verify = 0l
-var private g_vk_us_cold = 0l
+var private g_vk_stats : MtpAssistantStats   //! the rounds since the attach
 
 let private DRAFT_K_MAX = MTP_MAX_ROWS - 1l
 
-//! the q8 tensors of the drafter in the planes' order: (byte offset in the GGUF blob, elements) - the GEMV sites' order
-def private q8_tensors(dr : GemmaDrafter) : array<tuple<boff : int64; n : int64>> {
-    var out <- [(boff = dr.pre_proj_off, n = 2l * dr.tdim * dr.dim), (boff = dr.post_proj_off, n = dr.dim * dr.tdim),
-        (boff = dr.tok_emb_off, n = dr.dim * dr.vocab)]
+//! one q8 GEMV site: its tensor's byte offset in the GGUF blob, its n x d, the hazard bits of its Q8_0 feed and its out row
+//! (the planes they name: `feed_planes`, `out_plane`)
+typedef private Q8Site = tuple<boff : int64; n : int64; d : int64; xbit : uint; ybit : uint>
+
+//! the drafter's q8 GEMV sites in the command's order - pre-proj, post-proj, classifier, then each layer's q, o, gate, up, down;
+//! the planes' order too
+def private q8_sites(dr : GemmaDrafter) : array<Q8Site> {
+    let cat_n = 2l * dr.tdim
+    var out <- [(boff = dr.pre_proj_off, n = cat_n, d = dr.dim, xbit = B_CATQ, ybit = B_XIN),
+        (boff = dr.post_proj_off, n = dr.dim, d = dr.tdim, xbit = B_XQ, ybit = B_HN),
+        (boff = dr.tok_emb_off, n = dr.dim, d = dr.vocab, xbit = B_XQ, ybit = B_LOG)]
     out |> reserve(3l + 5l * dr.n_layers)
     for (l in range64(dr.n_layers)) {
         let qd = dr.n_heads * dr.hs[l]
-        out |> push((boff = dr.wq_offs[l], n = dr.dim * qd))
-        out |> push((boff = dr.wo_offs[l], n = qd * dr.dim))
-        out |> push((boff = dr.w1_offs[l], n = dr.dim * dr.hidden))
-        out |> push((boff = dr.w3_offs[l], n = dr.dim * dr.hidden))
-        out |> push((boff = dr.w2_offs[l], n = dr.hidden * dr.dim))
+        out |> push((boff = dr.wq_offs[l], n = dr.dim, d = qd, xbit = B_XQ, ybit = B_Q))
+        out |> push((boff = dr.wo_offs[l], n = qd, d = dr.dim, xbit = B_AQ, ybit = B_O))
+        out |> push((boff = dr.w1_offs[l], n = dr.dim, d = dr.hidden, xbit = B_XQ, ybit = B_GATE))
+        out |> push((boff = dr.w3_offs[l], n = dr.dim, d = dr.hidden, xbit = B_XQ, ybit = B_UP))
+        out |> push((boff = dr.w2_offs[l], n = dr.hidden, d = dr.dim, xbit = B_HQ, ybit = B_O))
     }
     return <- out
 }
 
 //! the GGUF's 34-byte Q8_0 blocks split into the device plane pair the q8 GEMV reads: 32 quant bytes a block, an f16 scale a
-//! block; each tensor's first block index back, in `q8_tensors` order
+//! block; each tensor's first block index back, in `q8_sites` order
 def private q8_repack(dr : GemmaDrafter; var quants : array<uint8>; var scales : array<uint16>) : array<int64> {
-    var tensors <- q8_tensors(dr)
+    var tensors <- q8_sites(dr)
     var nblk = 0l
     for (te in tensors) {
-        nblk += te.n / 32l
+        nblk += te.n * te.d / 32l
     }
     quants |> reserve(nblk * 32l)
     quants |> resize(nblk * 32l)
@@ -158,7 +159,7 @@ def private q8_repack(dr : GemmaDrafter; var quants : array<uint8>; var scales :
         bases |> push(cur)
         unsafe {
             let src = addr<uint8 const?>(dr.blob[te.boff])
-            for (b in range64(te.n / 32l)) {
+            for (b in range64(te.n * te.d / 32l)) {
                 let bp = src + b * 34l
                 scales[cur] = uint16(uint(bp[0]) | (uint(bp[1]) << 8u))
                 memcpy(addr<void?>(quants[cur * 32l]), reinterpret<void?>(bp + 2l), 32l)
@@ -169,9 +170,6 @@ def private q8_repack(dr : GemmaDrafter; var quants : array<uint8>; var scales :
     delete tensors
     return <- bases
 }
-
-//! a device buffer of `bytes` made soft: 0 marks `oom`
-def private dev_buf(var oom : bool&; bytes : int64) : uint64 => soft_device_buf(oom, bytes)
 
 //! `bytes` of `src` into a fresh soft device buffer (0 and `oom` where the card has no room)
 def private dev_from(var oom : bool&; src : uint8 const?; bytes : int64) : uint64 {
@@ -331,30 +329,30 @@ def private vk_buffers_make(dr : GemmaDrafter; var g : GemmaDrafterVk; quants : 
     g.fblob = dev_from(oom, unsafe(addr<uint8 const?>(dr.fblob[0])), g.fblob_bytes)
     let qdm = dr.n_heads * g.hs_mx
     let cat_n = 2l * dr.tdim
-    g.cat = dev_buf(oom, cat_n * 4l)
-    g.catq = dev_buf(oom, cat_n)
-    g.cats = dev_buf(oom, (cat_n / 32l) * 4l)
-    g.xin = dev_buf(oom, dr.dim * 4l)
-    g.xq = dev_buf(oom, dr.dim)
-    g.xs = dev_buf(oom, (dr.dim / 32l) * 4l)
-    g.q = dev_buf(oom, qdm * 4l)
-    g.attn = dev_buf(oom, qdm * 4l)
+    g.cat = soft_device_buf(oom, cat_n * 4l)
+    g.catq = soft_device_buf(oom, cat_n)
+    g.cats = soft_device_buf(oom, (cat_n / 32l) * 4l)
+    g.xin = soft_device_buf(oom, dr.dim * 4l)
+    g.xq = soft_device_buf(oom, dr.dim)
+    g.xs = soft_device_buf(oom, (dr.dim / 32l) * 4l)
+    g.q = soft_device_buf(oom, qdm * 4l)
+    g.attn = soft_device_buf(oom, qdm * 4l)
     g.cntoff = dr.n_heads * (g.hs_mx + 2l)   //! one key split: the counters past one piece a head
     g.part_bytes = (g.cntoff + dr.n_heads) * 4l
-    g.part = dev_buf(oom, g.part_bytes)
-    g.aq = dev_buf(oom, qdm)
-    g.aqs = dev_buf(oom, (qdm / 32l) * 4l)
-    g.o = dev_buf(oom, dr.dim * 4l)
-    g.gate = dev_buf(oom, dr.hidden * 4l)
-    g.up = dev_buf(oom, dr.hidden * 4l)
-    g.hq = dev_buf(oom, dr.hidden)
-    g.hqs = dev_buf(oom, (dr.hidden / 32l) * 4l)
-    g.logits = dev_buf(oom, dr.vocab * 4l)
-    g.hnext = dev_buf(oom, dr.tdim * 4l)
-    g.ids = dev_buf(oom, 16l)
+    g.part = soft_device_buf(oom, g.part_bytes)
+    g.aq = soft_device_buf(oom, qdm)
+    g.aqs = soft_device_buf(oom, (qdm / 32l) * 4l)
+    g.o = soft_device_buf(oom, dr.dim * 4l)
+    g.gate = soft_device_buf(oom, dr.hidden * 4l)
+    g.up = soft_device_buf(oom, dr.hidden * 4l)
+    g.hq = soft_device_buf(oom, dr.hidden)
+    g.hqs = soft_device_buf(oom, (dr.hidden / 32l) * 4l)
+    g.logits = soft_device_buf(oom, dr.vocab * 4l)
+    g.hnext = soft_device_buf(oom, dr.tdim * 4l)
+    g.ids = soft_device_buf(oom, 16l)
     let pbytes = int64(CLS_ARGMAX_CHUNKS) * 4l
-    g.pmax = dev_buf(oom, pbytes)
-    g.pid = dev_buf(oom, pbytes)
+    g.pmax = soft_device_buf(oom, pbytes)
+    g.pid = soft_device_buf(oom, pbytes)
     return false if (oom)
     upload_zeros(g.part, 0l, g.part_bytes)
     g.tok = make_host_buf(TOK_META_BYTES, true)
@@ -365,22 +363,35 @@ def private vk_buffers_make(dr : GemmaDrafter; var g : GemmaDrafterVk; quants : 
     return true
 }
 
-//! the q8 GEMV sites in the command's order: pre-proj, post-proj, classifier, then each layer's q, o, gate, up, down
+//! the Q8_0 feed planes (quants, scales) a GEMV site reads under hazard bit `xbit`
+def private feed_planes(g : GemmaDrafterVk; xbit : uint) : tuple<q : uint64; s : uint64> {
+    return (q = g.catq, s = g.cats) if (xbit == B_CATQ)
+    return (q = g.aq, s = g.aqs) if (xbit == B_AQ)
+    return (q = g.hq, s = g.hqs) if (xbit == B_HQ)
+    return (q = g.xq, s = g.xs)
+}
+
+//! the out row a GEMV site writes under hazard bit `ybit`
+def private out_plane(g : GemmaDrafterVk; ybit : uint) : uint64 {
+    return g.xin if (ybit == B_XIN)
+    return g.hnext if (ybit == B_HN)
+    return g.logits if (ybit == B_LOG)
+    return g.q if (ybit == B_Q)
+    return g.gate if (ybit == B_GATE)
+    return g.up if (ybit == B_UP)
+    return g.o
+}
+
+//! the q8 GEMV sites' sets in `q8_sites` order, each over its tensor's first block in `bases`
 def private vk_gemvs_make(dr : GemmaDrafter; g : GemmaDrafterVk; bases : array<int64>) : array<GemmaVkGemv> {
-    let cat_n = 2l * dr.tdim
-    var out <- [gemv_set(g, bases[0], cat_n, dr.dim, g.catq, g.cats, B_CATQ, g.xin, B_XIN),
-        gemv_set(g, bases[1], dr.dim, dr.tdim, g.xq, g.xs, B_XQ, g.hnext, B_HN),
-        gemv_set(g, bases[2], dr.dim, dr.vocab, g.xq, g.xs, B_XQ, g.logits, B_LOG)]
-    out |> reserve(3l + 5l * dr.n_layers)
-    for (l in range64(dr.n_layers)) {
-        let qd = dr.n_heads * dr.hs[l]
-        let b0 = 3l + l * 5l
-        out |> push(gemv_set(g, bases[b0], dr.dim, qd, g.xq, g.xs, B_XQ, g.q, B_Q))
-        out |> push(gemv_set(g, bases[b0 + 1l], qd, dr.dim, g.aq, g.aqs, B_AQ, g.o, B_O))
-        out |> push(gemv_set(g, bases[b0 + 2l], dr.dim, dr.hidden, g.xq, g.xs, B_XQ, g.gate, B_GATE))
-        out |> push(gemv_set(g, bases[b0 + 3l], dr.dim, dr.hidden, g.xq, g.xs, B_XQ, g.up, B_UP))
-        out |> push(gemv_set(g, bases[b0 + 4l], dr.hidden, dr.dim, g.hq, g.hqs, B_HQ, g.o, B_O))
+    var sites <- q8_sites(dr)
+    var out : array<GemmaVkGemv>
+    out |> reserve(long_length(sites))
+    for (st, base in sites, bases) {
+        let x = feed_planes(g, st.xbit)
+        out |> push(gemv_set(g, base, st.n, st.d, x.q, x.s, st.xbit, out_plane(g, st.ybit), st.ybit))
     }
+    delete sites
     return <- out
 }
 
@@ -612,13 +623,7 @@ def private vk_attach(t : Model; path : string) : string {
     gpu_resident_assist_set(true)
     set_mtp_round_kind(MtpRoundKind.assistant)
     g_vk_attached = true
-    g_vk_drafted = 0l
-    g_vk_accepted = 0l
-    g_vk_rounds = 0l
-    g_vk_joint = 0l
-    g_vk_us_draft = 0l
-    g_vk_us_verify = 0l
-    g_vk_us_cold = 0l
+    g_vk_stats = MtpAssistantStats()
     to_log(LOG_INFO, "dasLLAMA gemma drafter attached on the Vulkan resident driver: {path} ({g_vk_dr.n_layers} Q-only layers over target layers {g_vk_dr.kv_layer})\n")
     return ""
 }
@@ -645,134 +650,48 @@ def private vk_drop_forget {
 [unused_argument(t), hot_path]   //! one drafter a process: the attach checked it against its target
 def private vk_attached_to(t : Model) : bool => g_vk_attached
 
-//! a stream that cannot speculate this round: no carried hidden at its position, a round past the context
-def private vk_round_cold(t : Model; s : Session; pos, k : int64) : bool => (pos < 1l || s.mtp_h_pos1 != pos
-    || long_length(s.mtp_h) < g_vk_dr.tdim || pos + k + 1l > t.config.seq_len)
+//! the stream's region for the round at depth `k` (`gpu_resident_assist_bind`, none of `taken`), or -1 where it cannot speculate:
+//! no carried hidden at its position, a round past the context, no region left
+def private vk_round_bind(t : Model; var s : Session; pos, k : int64; taken : array<int64>) : int64 {
+    return -1l if (pos < 1l || s.mtp_h_pos1 != pos || long_length(s.mtp_h) < g_vk_dr.tdim || pos + k + 1l > t.config.seq_len)
+    return gpu_resident_assist_bind(t, s, pos, k + 1l, taken)
+}
 
 //! verify row `vr`'s truth: the device's pick where it landed one, else the argmax of the logits it landed
-def private vk_row_pick(s : Session; vr, vocab : int64) : int64 {
+[unused_argument(row0)]
+def private vk_row_pick(s : Session; row0, vr, vocab : int64) : int64 {
     return s.mtp_picks[vr] if (s.mtp_picks[vr] >= 0l)
     return parallel_argmax(unsafe(addr<float const?>(s.mtp_logits_b[vr * vocab])), vocab)
 }
 
-var private @scratch g_vk_sessions : array<Session?>
-var private @scratch g_vk_idx : array<int64>
-var private @scratch g_vk_pos : array<int64>
-var private @scratch g_vk_nr : array<int64>
-var private @scratch g_vk_regs : array<int64>
-var private @scratch g_vk_toks : array<int64>
-var private @scratch g_vk_cold : array<int64>
-
-//! The gemma speculative ROUNDS of a tick's streams at depth `k_req` on the Vulkan resident driver, `gemma_mtp_spec_rounds`'s
-//! twin: every warm stream bound to a region of its own, its chain of drafts on the device at its constant anchor, ONE verify of
-//! every stream's [tok, d_1 .. d_k] on the N-row command, each stream's accept walk and commit; a stream the round cannot take
-//! steps plain after the verify. Returns the warm streams the verify carried
-[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-assistant-drafter"), arch(at="../ARCHITECTURE_GPU_MTP_ASSISTANT.md#assistant-drafter-rounds")]
-def private vk_gemma_rounds(t : Model; var sessions : array<Session?>; toks : array<int64>; k_req : int64; var acc : array<int64>) : int64 {   // nolint:STYLE038 — binds / draft chains / one verify / walks / commits is one sequential protocol on shared locals
-    let c = t.config
-    let n = long_length(sessions)
-    let k = clamp(k_req, 1l, DRAFT_K_MAX)
-    acc |> resize(n)   // nolint:PERF026 — grows to the stream count once; the callers pass reused scratch
-    g_vk_sessions |> clear()
-    g_vk_idx |> clear()
-    g_vk_pos |> clear()
-    g_vk_nr |> clear()
-    g_vk_regs |> clear()
-    g_vk_cold |> clear()
-    g_vk_sessions |> reserve(n)
-    g_vk_idx |> reserve(n)
-    g_vk_pos |> reserve(n)
-    g_vk_nr |> reserve(n)
-    g_vk_regs |> reserve(n)
-    g_vk_cold |> reserve(n)
-    let td = ref_time_ticks()
-    for (i in range64(n)) {
-        var s & = unsafe(*sessions[i])
-        acc[i] = 0l
-        let pos = s.n_past
-        mtp_round_begin(s)
-        if (long_length(s.mtp_vbatch) < MTP_MAX_ROWS) {
-            s.mtp_vbatch |> reserve_resize(MTP_MAX_ROWS)   // nolint:PERF026 — once per session
-        }
-        let ki = mtp_depth_for(s, k)
-        let r = vk_round_cold(t, s, pos, ki) ? -1l : gpu_resident_assist_bind(t, s, pos, ki + 1l, g_vk_regs)
-        if (r < 0l) {
-            g_vk_cold |> push(i)
-            continue
-        }
-        s.mtp_vbatch[0] = toks[i]
-        g_vk_sessions |> push(sessions[i])
-        g_vk_idx |> push(i)
-        g_vk_pos |> push(pos)
-        g_vk_nr |> push(ki + 1l)
-        g_vk_regs |> push(r)
+//! each warm stream's draft command in its region
+def private vk_round_draft(t : Model; var rd : MtpAssistantRound) : bool {
+    for (gi in range64(long_length(rd.sessions))) {
+        var s & = unsafe(*rd.sessions[gi])
+        vk_draft_chain(t, rd.regs[gi], s.mtp_vbatch[0], rd.pos[gi], rd.nr[gi] - 1l, s.mtp_h, s.mtp_vbatch)
     }
-    var ng = long_length(g_vk_sessions)
-    let ts_draft = prof_ticks()
-    for (gi in range64(ng)) {
-        var s & = unsafe(*g_vk_sessions[gi])
-        vk_draft_chain(t, g_vk_regs[gi], s.mtp_vbatch[0], g_vk_pos[gi], g_vk_nr[gi] - 1l, s.mtp_h, s.mtp_vbatch)
-    }
-    g_vk_us_draft += int64(get_time_usec(td))
-    prof_add("mtp.draft", ts_draft)
-    let tv = ref_time_ticks()
-    let ts_verify = prof_ticks()
-    var pick_only = ng > 0l
-    g_vk_toks |> clear()
-    g_vk_toks |> reserve(ng * MTP_MAX_ROWS)
-    for (gi in range64(ng)) {
-        var s & = unsafe(*g_vk_sessions[gi])
-        pick_only = pick_only && s.pick_asked && !mtp_walk_samples(s)
-        for (i in range64(g_vk_nr[gi])) {
-            g_vk_toks |> push(s.mtp_vbatch[i])
-        }
-    }
-    let vok = ng > 0l && gpu_resident_assist_verify(t, g_vk_sessions, g_vk_toks, g_vk_pos, g_vk_nr, g_vk_regs, pick_only)
-    prof_add("mtp.verify", ts_verify)
-    let ts_walk = prof_ticks()
-    if (vok) {
-        for (gi in range64(ng)) {
-            var s & = unsafe(*g_vk_sessions[gi])
-            let pos = g_vk_pos[gi]
-            let kd = g_vk_nr[gi] - 1l
-            let a = mtp_accept_walk(s, kd, c.vocab_size, $(vr) => vk_row_pick(s, vr, c.vocab_size), pick_only)
-            if (pick_only) {
-                land_pick(s, s.mtp_picks[a])
-            }
-            copy_floats(s.mtp_hrows, a * c.dim, s.mtp_h, 0l, c.dim)
-            s.mtp_drafted += kd
-            mtp_round_commit_host(s, pos, kd, a)
-            gpu_resident_assist_commit(s)
-            g_vk_drafted += kd
-            g_vk_accepted += a
-            g_vk_rounds++
-            acc[g_vk_idx[gi]] = a
-        }
-        if (ng > 1l) {
-            g_vk_joint++
-        }
-    } else {
-        for (gi in range64(ng)) {
-            g_vk_cold |> push(g_vk_idx[gi])
-        }
-        ng = 0l
-    }
-    g_vk_us_verify += int64(get_time_usec(tv))
-    prof_add("mtp.walk", ts_walk)
-    let tc = ref_time_ticks()
-    for (i in g_vk_cold) {   //! after the verify: a plain step's binding takes no region the round's streams held
-        var s & = unsafe(*sessions[i])
-        forward(t, s, toks[i], s.n_past)
-        s.n_past++
-    }
-    g_vk_us_cold += int64(get_time_usec(tc))
-    g_vk_sessions |> clear()   // borrowed handles
-    return ng
+    return true
 }
 
-def private vk_seam_stats() : MtpAssistantStats
-    => MtpAssistantStats(drafted = g_vk_drafted, accepted = g_vk_accepted, rounds = g_vk_rounds, joint = g_vk_joint,
-        draft_us = g_vk_us_draft, verify_us = g_vk_us_verify, cold_us = g_vk_us_cold)
+//! ONE verify of every warm stream's rows on the N-row command
+def private vk_round_verify(t : Model; var rd : MtpAssistantRound; pick_only : bool) : bool
+    => gpu_resident_assist_verify(t, rd.sessions, rd.toks, rd.pos, rd.nr, rd.regs, pick_only)
+
+[unused_argument(t)]
+def private vk_round_commit(t : Model; var s : Session; pos, k, a : int64) {
+    mtp_round_commit_host(s, pos, k, a)
+    gpu_resident_assist_commit(s)
+}
+
+var private g_vk_hooks = MtpAssistantHooks(bind = @@vk_round_bind, draft = @@vk_round_draft, verify = @@vk_round_verify,
+    pick = @@vk_row_pick, commit = @@vk_round_commit, picks = true)
+var private @scratch g_vk_round : MtpAssistantRound
+
+[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-assistant-drafter")]
+def private vk_gemma_rounds(t : Model; var sessions : array<Session?>; toks : array<int64>; k_req : int64; var acc : array<int64>) : int64
+    => mtp_assistant_rounds(t, sessions, toks, k_req, acc, g_vk_hooks, g_vk_round, g_vk_stats)
+
+def private vk_seam_stats() : MtpAssistantStats => g_vk_stats
 
 [init]
 def private vk_gemma_mtp_init {

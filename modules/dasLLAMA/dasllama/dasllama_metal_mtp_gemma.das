@@ -75,10 +75,7 @@ var g_gemma_gpu : GemmaDrafterGpu
 var g_gemma_attached = false
 var g_gemma_ws : BatchWorkspace
 var g_gemma_ws_ok = false
-var g_gemma_drafted = 0l
-var g_gemma_accepted = 0l
-var g_gemma_rounds = 0l
-var g_gemma_joint = 0l   //! verifies whose rows carried two streams or more
+var private g_gemma_stats : MtpAssistantStats   //! the rounds since the attach
 
 def private ubuf_u32(v : uint) : MetalBuffer? => scalar_buffer(metal_new_buffer_untracked(g_dev, 4ul), v)
 
@@ -214,13 +211,7 @@ def public attach_gemma_drafter(t : Model; path : string) : string {
     set_metal_mtp_carry_hidden(true)
     set_mtp_round_kind(MtpRoundKind.assistant)
     g_gemma_attached = true
-    g_gemma_drafted = 0l
-    g_gemma_accepted = 0l
-    g_gemma_rounds = 0l
-    g_gemma_joint = 0l
-    g_gemma_us_draft = 0l
-    g_gemma_us_verify = 0l
-    g_gemma_us_cold = 0l
+    g_gemma_stats = MtpAssistantStats()
     to_log(LOG_INFO, "dasLLAMA gemma drafter attached: {path} ({g_gemma_drafter.n_layers} Q-only layers over target layers {g_gemma_drafter.kv_layer})\n")
     return ""
 }
@@ -469,9 +460,6 @@ var private @scratch g_gemma_hn : array<float>     // ... and the drafter's h_ne
 var private g_gemma_draft_cpu = false
 var private g_gemma_trace = false
 var private g_gemma_cpu_out : GemmaDraftOut
-var private g_gemma_us_draft = 0l   // round time split since attach: the draft chains ...
-var private g_gemma_us_verify = 0l  // ... the same-slab verify + walk + commit
-var private g_gemma_us_cold = 0l    // ... cold rounds (one plain step)
 
 //! Bring-up levers: `set_gemma_draft_on_cpu(true)` routes every draft step through the CPU oracle
 //! (the target's live K/V, the same inputs), `set_gemma_trace(true)` logs drafts vs truth per round.
@@ -509,171 +497,100 @@ def private gemma_draft_step(t : Model; var s : Session; tok, anchor : int64; h 
     return true
 }
 
-// a round that cannot speculate takes one plain GPU step (output-invariant either way)
-def private gemma_plain_step(t : Model; var s : Session; tok, pos : int64) {
-    let tc = ref_time_ticks()
-    forward(t, s, tok, pos)
-    s.n_past = pos + 1l
-    g_gemma_us_cold += int64(get_time_usec(tc))
-}
-
-//! a stream that cannot speculate this round: no Metal blob or device, no carried hidden at its position, a round past the
-//! context, a K/V codec the round does not serve, or a mirror short of the position or of the round's rows
-def private gemma_round_cold(t : Model; s : Session; pos, k : int64) : bool {
+//! a stream that cannot speculate this round (-1; else region 0): no Metal blob or device, no carried hidden at its position, a
+//! round past the context, a K/V codec the round does not serve, or a mirror short of the position or of the round's rows
+[unused_argument(taken)]
+def private gemma_round_bind(t : Model; var s : Session; pos, k : int64; taken : array<int64>) : int64 {   // nolint:LINT014 — the hook's signature: the Vulkan bind binds the session to its region
     let c = t.config
     if (g_dev == null || !t.metal_blob || pos < 1l || s.mtp_h_pos1 != pos || long_length(s.mtp_h) < g_gemma_drafter.tdim ||
             pos + k + 1l > c.seq_len || !gemma_kv_ok(s) || !key_exists(g_mirrors, s.uid)) {
-        return true
+        return -1l
     }
     let mr = g_mirrors[s.uid]
-    return mr.watermark < pos || mr.cap_rows < pos + k + 1l
+    return mr.watermark < pos || mr.cap_rows < pos + k + 1l ? -1l : 0l
 }
 
-var private @scratch g_gw_sessions : array<Session?>   //! the tick's warm streams, a verify group each
-var private @scratch g_gw_idx : array<int64>          //! ... their index among the tick's streams
-var private @scratch g_gw_pos : array<int64>
-var private @scratch g_gw_nr : array<int64>
-var private @scratch g_gw_toks : array<int64>
-
-//! The gemma speculative ROUNDS of a tick's streams at depth `k_req` (each stream's under its `mtp_depth_cap`): every warm
-//! stream's chain of drafts at its constant anchor `n_past` from (its token, the target's post-norm hidden of the position
-//! before), all encoded into ONE command buffer; ONE same-slab batch verify of every stream's [tok, d_1 .. d_k] as a group
-//! (`verify_batch_groups`); each stream's accept walk and commit. `acc[i]` is stream i's accepted count, the drafts in
-//! `mtp_vbatch[1..a]`, its token always committed; a cold stream takes one plain GPU step. Returns the warm streams the verify carried
-[hot_path, arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-round-one-join"), arch(at="../ARCHITECTURE_GPU_MTP_ASSISTANT.md#assistant-drafter-rounds")]
-def private gemma_mtp_spec_rounds(t : Model; var sessions : array<Session?>; toks : array<int64>; k_req : int64; var acc : array<int64>) : int64 {   // nolint:STYLE038 — draft chains / one verify / accept walks / commits is one sequential protocol on shared locals
-    let c = t.config
-    let n = long_length(sessions)
-    let k = clamp(k_req, 1l, MTP_MAX_ROWS - 1l)
-    let dr & = g_gemma_drafter
-    acc |> resize(n)   // nolint:PERF026 — grows to the stream count once; the callers pass reused scratch
-    g_gw_sessions |> clear()
-    g_gw_idx |> clear()
-    g_gw_pos |> clear()
-    g_gw_nr |> clear()
-    g_gemma_h |> grow_resize(dr.tdim)
-    g_gemma_hn |> grow_resize(dr.tdim)
-    for (i in range64(n)) {
-        var s & = unsafe(*sessions[i])
-        acc[i] = 0l
-        let pos = s.n_past
-        mtp_round_begin(s)
-        if (long_length(s.mtp_vbatch) < MTP_MAX_ROWS) {   // sized for the NextN carriers only at make_run_state
-            s.mtp_vbatch |> reserve_resize(MTP_MAX_ROWS)   // nolint:PERF026 — once per session
-        }
-        let ki = mtp_depth_for(s, k)
-        if (gemma_round_cold(t, s, pos, ki)) {
-            gemma_plain_step(t, s, toks[i], pos)
-            continue
-        }
-        s.mtp_vbatch[0] = toks[i]
-        g_gw_sessions |> push(sessions[i])
-        g_gw_idx |> push(i)
-        g_gw_pos |> push(pos)
-        g_gw_nr |> push(ki + 1l)
-    }
-    let ng = long_length(g_gw_sessions)
-    return 0l if (ng == 0l)
+//! every warm stream's chain of drafts, all encoded into ONE command buffer (or the CPU oracle's chains)
+def private gemma_round_draft(t : Model; var rd : MtpAssistantRound) : bool {
     finish_pending_step()
-    let td = ref_time_ticks()
-    let ts_draft = prof_ticks()
-    let gpu_chain = !g_gemma_draft_cpu
+    let ng = long_length(rd.sessions)
+    g_gemma_h |> grow_resize(g_gemma_drafter.tdim)
+    g_gemma_hn |> grow_resize(g_gemma_drafter.tdim)
+    if (g_gemma_draft_cpu) {
+        var ok = true
+        for (gi in range64(ng)) {
+            var s & = unsafe(*rd.sessions[gi])
+            ok = ok && gemma_draft_chain_cpu(t, s, rd.pos[gi], rd.nr[gi] - 1l) == rd.nr[gi] - 1l
+        }
+        return ok
+    }
     var rows = 0l
-    for (nr in g_gw_nr) {
+    for (nr in rd.nr) {
         rows += nr
     }
-    var chain_ok = true
-    if (gpu_chain) {
-        gemma_token_rows(g_gemma_gpu, rows)
-        var cb = metal_new_command_buffer_unretained(g_queue)
-        var enc = metal_new_compute_encoder(cb)
-        var row0 = 0l
-        for (gi in range64(ng)) {
-            var s & = unsafe(*g_gw_sessions[gi])
-            encode_gemma_chain(t, s, g_gemma_gpu, enc, gi, row0, s.mtp_vbatch[0], s.mtp_h, g_gw_pos[gi], g_gw_nr[gi] - 1l)
-            row0 += g_gw_nr[gi]
-        }
-        metal_end_encoding(enc)
-        metal_release(enc)
-        metal_commit(cb)
-        chain_ok = !metal_command_buffer_failed(cb)
-        metal_release(cb)
-    } else {
-        for (gi in range64(ng)) {
-            var s & = unsafe(*g_gw_sessions[gi])
-            chain_ok = chain_ok && gemma_draft_chain_cpu(t, s, g_gw_pos[gi], g_gw_nr[gi] - 1l) == g_gw_nr[gi] - 1l
-        }
-    }
-    g_gemma_us_draft += int64(get_time_usec(td))
-    prof_add("mtp.draft", ts_draft)
-    let tv = ref_time_ticks()
-    let ts_verify = prof_ticks()
-    g_gw_toks |> resize(rows)
-    var row = 0l
+    gemma_token_rows(g_gemma_gpu, rows)
+    var cb = metal_new_command_buffer_unretained(g_queue)
+    var enc = metal_new_compute_encoder(cb)
+    var row0 = 0l
     for (gi in range64(ng)) {
-        for (i in range64(g_gw_nr[gi])) {
-            g_gw_toks[row] = g_gw_sessions[gi].mtp_vbatch[i]   //! the device rows gather their own ids; the host rows read these where it does not
-            row++
-        }
+        var s & = unsafe(*rd.sessions[gi])
+        encode_gemma_chain(t, s, g_gemma_gpu, enc, gi, row0, s.mtp_vbatch[0], s.mtp_h, rd.pos[gi], rd.nr[gi] - 1l)
+        row0 += rd.nr[gi]
     }
-    if (gpu_chain) {
+    metal_end_encoding(enc)
+    metal_release(enc)
+    metal_commit(cb)
+    let ok = !metal_command_buffer_failed(cb)
+    metal_release(cb)
+    return ok
+}
+
+//! ONE same-slab batch verify of every warm stream's rows as a group (`verify_batch_groups`), the device chains' token rows
+//! read in place
+[unused_argument(pick_only)]
+def private gemma_round_verify(t : Model; var rd : MtpAssistantRound; pick_only : bool) : bool {
+    if (!g_gemma_draft_cpu) {
         set_batch_same_slab_tokens(g_gemma_gpu.bvtok)
     }
-    let vok = chain_ok && verify_batch_groups(t, g_gemma_ws, g_gw_sessions, g_gw_toks, g_gw_pos, g_gw_nr)
+    let vok = verify_batch_groups(t, g_gemma_ws, rd.sessions, rd.toks, rd.pos, rd.nr)
     set_batch_same_slab_tokens(null)
     finish_pending_step()
-    if (!vok) {
-        for (gi in range64(ng)) {
-            var s & = unsafe(*g_gw_sessions[gi])
-            gemma_plain_step(t, s, s.mtp_vbatch[0], g_gw_pos[gi])
-        }
-        g_gw_sessions |> clear()
-        return 0l
-    }
-    prof_add("mtp.verify", ts_verify)
-    let ts_walk = prof_ticks()
-    row = 0l
-    for (gi in range64(ng)) {
-        var s & = unsafe(*g_gw_sessions[gi])
-        let pos = g_gw_pos[gi]
-        let kd = g_gw_nr[gi] - 1l
-        let r0 = row
-        if (gpu_chain) {
-            unsafe {
-                let tp = reinterpret<uint?>(metal_buffer_contents(g_gemma_gpu.bvtok))
-                for (i in range64(kd)) {
-                    s.mtp_vbatch[i + 1l] = int64(tp[r0 + i + 1l])
-                }
-            }
-        }
-        let a = mtp_accept_walk(s, kd, c.vocab_size) $(vr) => sameslab_argmax(r0 + vr)
-        if (g_gemma_trace) {
-            mtp_round_trace("gemma", s, pos, kd, kd + 1l, a, c.vocab_size)
-        }
-        copy_floats(s.mtp_hrows, a * c.dim, s.mtp_h, 0l, c.dim)
-        s.mtp_drafted += kd
-        mtp_round_commit(s, pos, kd, a)
-        g_gemma_drafted += kd
-        g_gemma_accepted += a
-        g_gemma_rounds++
-        acc[g_gw_idx[gi]] = a
-        row += g_gw_nr[gi]
-    }
-    if (ng > 1l) {
-        g_gemma_joint++
-    }
-    g_gemma_us_verify += int64(get_time_usec(tv))
-    prof_add("mtp.walk", ts_walk)
-    g_gw_sessions |> clear()   // borrowed handles
-    return ng
+    return vok
 }
+
+[unused_argument(s, vocab)]
+def private gemma_row_pick(s : Session; row0, vr, vocab : int64) : int64 => sameslab_argmax(row0 + vr)
+
+//! the device chain's drafts of the group at `row0` into the stream's `mtp_vbatch[1..k]`
+def private gemma_drafts_in(var s : Session; row0, k : int64) {
+    return if (g_gemma_draft_cpu)
+    unsafe {
+        let tp = reinterpret<uint?>(metal_buffer_contents(g_gemma_gpu.bvtok))
+        for (i in range64(k)) {
+            s.mtp_vbatch[i + 1l] = int64(tp[row0 + i + 1l])
+        }
+    }
+}
+
+def private gemma_round_commit(t : Model; var s : Session; pos, k, a : int64) {
+    if (g_gemma_trace) {
+        mtp_round_trace("gemma", s, pos, k, k + 1l, a, t.config.vocab_size)
+    }
+    mtp_round_commit(s, pos, k, a)
+}
+
+var private g_gemma_hooks = MtpAssistantHooks(bind = @@gemma_round_bind, draft = @@gemma_round_draft, verify = @@gemma_round_verify,
+    pick = @@gemma_row_pick, drafts_in = @@gemma_drafts_in, commit = @@gemma_round_commit, picks = false)
+var private @scratch g_gemma_round : MtpAssistantRound
+
+[hot_path]
+def private gemma_mtp_spec_rounds(t : Model; var sessions : array<Session?>; toks : array<int64>; k_req : int64; var acc : array<int64>) : int64
+    => mtp_assistant_rounds(t, sessions, toks, k_req, acc, g_gemma_hooks, g_gemma_round, g_gemma_stats)
 
 [unused_argument(t), hot_path]   //! one drafter a process: the attach checked it against its target; the batch tick asks every step
 def private gemma_drafter_attached_to(t : Model) : bool => g_gemma_attached
 
-def private gemma_drafter_seam_stats() : MtpAssistantStats
-    => MtpAssistantStats(drafted = g_gemma_drafted, accepted = g_gemma_accepted, rounds = g_gemma_rounds, joint = g_gemma_joint,
-        draft_us = g_gemma_us_draft, verify_us = g_gemma_us_verify, cold_us = g_gemma_us_cold)
+def private gemma_drafter_seam_stats() : MtpAssistantStats => g_gemma_stats
 
 [init]
 def gemma_mtp_init {
