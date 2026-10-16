@@ -67,6 +67,26 @@ layout, and reaches the k4 arm of `dot_kq` only on the disk-order arm.
 
 Classic prefill quantizes each query row and runs its scores through `kv_score` - the dot a cached position takes at decode - so a prefix served by one prefill pass and the same prefix served a token at a time agree bit for bit under the block codecs (q8_0, tq4). Flash prefill tiles with online softmax and reorders the sum, so it holds to a tolerance instead.
 
+### The q8 chain's activation forms are the reference's, site by site {#q8-activation-forms}
+
+A superblock plane (the k and iq families) reads its activation as Q8_K - one f32 scale per 256
+elements and the per-16 quant sums - the form the reference build's CPU dot reads for those weight
+types; a q8 or per-32 plane reads Q8_0, one scale per 32. Everything else runs in f32: the norms,
+RoPE, the scores and the V sum against the f16 cache (the reference rounds the query and the
+probabilities to f16), an F32 plane, and a BF16 plane against its bf16 rows (the reference rounds
+the activation to bf16). No site quantizes coarser than the reference.
+
+On a residual stream with outlier channels the Q8_K step is large for the rest of its block - on
+gemma-4 E2B a down-projection input peaks at 84 times its rms, its elements carry 2.2% relative
+error at 256 against 0.98% at 32, and 16% of its elements round to 0. A forced feed through such
+a chain is chaotic: an ulp moves an element across a rounding tie, one level in a large block
+moves the next layer's input, and the error grows from there. The q8 chain matches its f32
+emulation (the f32 chain with every site's activation Q8_K-rounded) to 3e-7 a layer up to the
+first tie, and an ulp-sized change anywhere - the f32 GEMV's summation order on another ISA,
+`x / d` for `x * (1 / d)` in the rounding - moves a step's top logit by more than one. The q8
+chain then lands anywhere in the band the reference build's quantized CPU path lands in by its
+attention form and batching, and the file's f32 chain is the reference a device chain is held to.
+
 ### A kernel a worker lambda invokes is not `private` {#kernel-visibility-lifted-workers}
 
 The tier kernels run from lambdas the job dispatch lifts out of the function that wrote them, and a lifted body reaches its callee by module-scope name, so every kernel a `parallel_for` body or a registered kernel pointer reaches is declared without `private` - the row-range cores, the groupN kernels and their wscale_f16 twins among them. The same reach is why a backend with no native groupN tier registers the portable one: a `KernelBackend` slot is never null.

@@ -159,9 +159,10 @@ def gemma_forced_feed(t : T?; n : int64; gf : GemmaFile) {
 }
 
 //! the forced feed held against the file's f32 chain (`f32_chain_rows`) where the CPU q8 chain is no reference: on the E2B Q4_K_M
-//! file its activation quantization reads step 4's top logit 16.70 (x64) and 17.85 (arm64) where the f32 chain reads 19.14 and the
-//! reference build 19.04 (CPU) and 19.05 (Metal), the device 19.28 - every row within the bar of the f32 chain, the one-step-off
-//! control past it, and the device no further from that chain than the CPU q8 chain (`f32_chain_witness`)
+//! file the Q8_K activations make the feed chaotic, so step 4's top logit reads 17.85 (arm64), 16.70 (x64) and 18.50 (x64 on the
+//! reference kernel bodies) where the f32 chain reads 19.14, and the reference build's quantized CPU path reads 17.8 to 20.1 by its
+//! attention form and batching, each chain summing as far from the f32 rows - every row within the bar of the f32 chain, the
+//! one-step-off control past it, and the device no further from that chain than the CPU q8 chain (`f32_chain_witness`)
 def gemma_forced_feed_exact(t : T?; n : int64; gf : GemmaFile) {
     with_gemma_rig(t, gf) $(tr) {
         var ids <- prose_tokens(tr, n + 8l)
