@@ -2902,6 +2902,9 @@ def public set_metal_decode_fuse(v : int) {
     decode_fuse_say()
 }
 
+//! The rail `set_metal_decode_fuse` set: 1 on, 0 off, -1 the env default - what a caller that sets it puts back
+def public get_metal_decode_fuse : int => g_dfuse
+
 // encode the whole step (prologue rms, n_layers fused blocks, optional GPU classifier) into a
 // fresh command buffer; commit_now submits it, otherwise the caller commits after poking the
 // inputs (the encode-ahead rail). A spec step OPENS with argmax + embed gather — no CPU poke.
