@@ -775,7 +775,7 @@ def private rd_moe_sets(var L : RLayer) {
     L.edown_sum = L.moe_g4 && kq_block32(L.fe2) && L.fe2 != int(KqFmt.q8) && vk_fuse_on() && b32_sum_cls_ensure(L.fe2)
     if (L.edown_sum) {
         L.s_edown_sum = set_q51_gemv_sum_cls(fixed_array(pe2.wq, pe2.ws, g_rd.moe_meta2_dev, g_gpu.hq_dev, g_gpu.hs_dev, g_rd.edown_dev, g_rd.moe_dw_dev),
-            fixed_array(pe2.wqb, pe2.wsb, META_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES, k * dim * 4l, slots_bytes),
+            fixed_array(pe2.wqb, pe2.wsb, META_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES, edn_bytes, slots_bytes),
             fixed_array(0u, 0u, VHZ_MRT, VHZ_HQ, VHZ_HQ, VHZ_MDN, VHZ_MRT))
     }
     if (L.moe_g4) {
@@ -2770,8 +2770,9 @@ def private rd_encode_moe(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
         rd_ts(raw, "m:e_act")
     }
     var pcd = GemvArgs(n = uint(nfe), d = uint(dim), nreg = uint(k) * nr, ybase = 0u)
-    if (one && L.edown_sum) {
-        b32_sum_cls_enc(L.fe2, raw, h, L.s_edown_sum, pcd, gemv_wgs(dim, 0u))
+    if (L.edown_sum) {   //! each row's k slots folded under their weights into the row's own output row, the one-row command's sum
+        pcd.ncols = nr
+        b32_sum_cls_enc(L.fe2, raw, h, L.s_edown_sum, pcd, gemv_wgs(dim * nrows, 0u))
         rd_ts(raw, "m:e_down_sum")
     } else {
         gemv_enc(L.fe2, raw, h, L.s_edown, pcd, k * dim * nrows)
@@ -2929,8 +2930,8 @@ def private rd_encode_token(var first_seg_raw : VkCommandBuffer; nrows, nsplit :
             var pc14 = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(nxt), eps = g_rd.eps, ascale = L.out_scale,
                 pre_on = (L.pre_post || L.ple) ? 1u : 0u, pwoff = uint(rd_norm_off(l, L.ple ? RD_NORM_PLE_POST : RD_NORM_POST_FFN)))
             if (L.moe_g4) {
-                //! the one-row command's summing down GEMV folded the k rows; the rows and the window chain write them apart
-                var pcg = rd_g4_comb_args(L, l, nxt, one && L.edown_sum)
+                //! the summing down GEMV folded each row's k slots, on the one-row command and the rows alike
+                var pcg = rd_g4_comb_args(L, l, nxt, L.edown_sum)
                 if (L.comb_rq) {   //! the next head's Q8_0 feed quantized here
                     enc_cls_ar_comb_g4_rq(raw, h, L.s_comb_rq, pcg, nrows)
                 } else {

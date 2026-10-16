@@ -631,6 +631,38 @@ def cell_regions_batched_embed_gather(t : T?; file : string) {
     }
 }
 
+//! the coverage census over the per-32 formats' stamps of one GEMV form (`suffix`), summed; NO_CENSUS with no vulkan module
+def private b32_census(suffix : string) : int64 {
+    var n = 0l
+    for (f in fixed_array("q51", "iq4nl32", "q4032", "q5032", "mx4")) {
+        let c = census("{f}{suffix}")
+        return NO_CENSUS if (c == NO_CENSUS)
+        n += c
+    }
+    return n
+}
+
+//! a per-32 routed down on the gemma-4 MoE folded under the routing weights by both commands: the batched steps against the
+//! sessions alone on the one-row command's fused forms within `bar`, the summed down stamps dispatched and no per-slot down leaf
+//! (the census over every per-32 format's stamps) - the rows fold each row's k slots as the one-row command folds its own
+def cell_regions_batched_down_fold(t : T?; file : string; bar : LogitsBar) {
+    t |> run("the batched rows fold the routed down under the routing weights as the one-row command does") @(t : T?) {
+        with_regions_rig(t, file) $(tr) {
+            var pa <- prompt_a()
+            var pb <- prompt_b()
+            let sum0 = b32_census("_gemv_sum_cls_spv")
+            let leaf0 = b32_census("_gemv_cls_spv")
+            batched_steps_body(t, tr, pa, pb, bar)
+            if (sum0 != NO_CENSUS) {
+                t |> success(b32_census("_gemv_sum_cls_spv") > sum0, "the summed down stamps served the routed layers ({b32_census("_gemv_sum_cls_spv") - sum0} dispatches)")
+                t |> equal(b32_census("_gemv_cls_spv") - leaf0, 0l, "no command ran the per-slot down leaf: the rows fold the k slots as the one-row command does")
+            }
+            delete pa
+            delete pb
+        }
+    }
+}
+
 def cell_regions_batched_steps(t : T?; file : string; bar : LogitsBar = LogitsBar.bit_exact; split_forms : bool = false) {
     t |> run("two sessions, a region each: a batched step over both reads what each session reads alone, with no history resync") @(t : T?) {
         with_regions_rig(t, file, RegionsLoad(split_forms = split_forms)) $(tr) {

@@ -1745,27 +1745,6 @@ def private per32_gemv_cell(t : T?; fmt : KqFmt; ns : array<int>; wq_words : int
                 }
                 var inscope y_cls <- plane_run(cp, 5)
                 check_rows(t, "{fmt} GEMV at n {n} against the scalar dot", y_cls, y_ref, BAR_APPROX_CTRL, FLAT_ROWS)
-                //! the summed form: the two regions' rows folded under their weights inside the GEMV, one row of d out
-                if (b32_sum_cls_ensure(int(fmt))) {
-                    var inscope wgt <- [0.625, -0.375]
-                    let pys = cp |> out_(d, 0, 0, 64u)
-                    let psw = cp |> in_(wgt)
-                    var s_sum = cp |> cls_set(fixed_array(0, 1, 2, 3, 4, pys, psw), @@set_q51_gemv_sum_cls)
-                    cp |> cell_record() $(raw3 : VkCommandBuffer; var h3 : VkHaz) {
-                        b32_sum_cls_enc(int(fmt), raw3, h3, s_sum, pc, gemv_wgs(int64(d), 0u))
-                    }
-                    var inscope ys_cls <- cp |> plane_run(pys)
-                    var inscope ys_ref <- [for (row in range(d)); wgt[0] * y_ref[row] + wgt[1] * y_ref[d + row]]
-                    let bads = mismatch_approx(ys_cls, ys_ref)
-                    t |> success(bads == 0, "{fmt} GEMV summed under the weights at n {n} matches the weighted rows ({bads} of {d} off)")
-                    var inscope ys_poison := ys_cls
-                    ys_poison[0] += 1.0 + 2.0 * logits_maxabs(ys_ref)
-                    t |> success(mismatch_approx(ys_poison, ys_ref) > 0, "{fmt} GEMV summed: the bar reds a poisoned row")
-                    delete wgt
-                    delete ys_cls
-                    delete ys_ref
-                    delete ys_poison
-                }
                 var inscope y_poison := y_cls   // the bar's control
                 y_poison[0] += 1.0 + 2.0 * logits_maxabs(y_ref)
                 t |> success(mismatch_approx(y_poison, y_ref) > 0, "the {fmt} GEMV bar reds a poisoned element")
@@ -1774,7 +1753,76 @@ def private per32_gemv_cell(t : T?; fmt : KqFmt; ns : array<int>; wq_words : int
             }
             delete y_ref
             delete f
+            per32_sum_rows_cell(t, fmt, n, wq_words, wq_seed, xq_mul, xq_add, row_oracle, scales)
         }
+    }
+}
+
+let private SUM_SLOTS = 2   //! the summed cell's slots a token row: a row's k picks
+
+//! the routed down GEMV summed under the routing weights (`Blk32GemvT.sum_shell`) over 1, 2 and 4 token rows of SUM_SLOTS slots
+//! each, every slot its own weights and activation row: each row's output the k-row oracle - its slots' scalar dots under their
+//! weights - with a poisoned row as the bar's control, and every row of a wider dispatch bit for bit the same row of a narrower
+//! one over the same planes, so the N-row command's rows fold as the one-row command's row does
+def private per32_sum_rows_cell(t : T?; fmt : KqFmt; n, wq_words : int; wq_seed, xq_mul, xq_add : uint; row_oracle;
+                                scales : block<(totblk : int) : array<uint>>) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        return if (!b32_sum_cls_ensure(int(fmt)))
+        let nb = n / 32
+        let d = 3
+        let widths = fixed_array(1, 2, 4)
+        let nreg = 4 * SUM_SLOTS
+        var inscope wsh <- invoke(scales, nreg * d * nb)
+        var f <- gemv_fix(nreg, d, nb, wq_words, wq_seed + 5u, wsh, nreg * nb, 8, xq_mul, xq_add + 3u, 0.25, 0.125, 5)
+        for (r in range(nreg)) {
+            f.regs[r * 2 + 1] = uint(r * nb)
+        }
+        var inscope wgt <- [for (r in range(nreg)); 0.625 - 0.25 * float(r)]
+        var inscope dots <- [for (i in range(nreg * d)); invoke(row_oracle, f.wqh, f.wsh, f.xqh, f.xsh, (i / d) * d * nb + (i % d) * nb, nb)]
+        var inscope ys_ref : array<float>
+        ys_ref |> resize(4 * d)
+        for (p in range(4)) {
+            for (row in range(d)) {
+                for (j in range(SUM_SLOTS)) {
+                    let r = p * SUM_SLOTS + j
+                    ys_ref[p * d + row] += wgt[r] * dots[r * d + row]
+                }
+            }
+        }
+        with_cell_planes() $(var cp : CellPlanes) {
+            gemv_cell_planes(cp, f, nreg * d)
+            let psw = cp |> in_(wgt)
+            var outs : array<array<float>>
+            for (w in widths) {
+                let pys = cp |> out_(w * d, 0, 0, 64u)
+                var s_sum = cp |> cls_set(fixed_array(0, 1, 2, 3, 4, pys, psw), @@set_q51_gemv_sum_cls)
+                var pc = GemvArgs(n = uint(n), d = uint(d), nreg = uint(w * SUM_SLOTS), ybase = 0u, ncols = uint(w))
+                cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                    b32_sum_cls_enc(int(fmt), raw, h, s_sum, pc, gemv_wgs(int64(w * d), 0u))
+                }
+                var o <- plane_run(cp, pys)
+                outs |> emplace(o)
+            }
+            for (wi in range(3)) {
+                let w = widths[wi]
+                var inscope want <- [for (i in range(w * d)); ys_ref[i]]
+                let bads = mismatch_approx(outs[wi], want)
+                t |> success(bads == 0, "{fmt} GEMV summed over {w} token row(s) at n {n}: every row its k slots' dots under their weights ({bads} of {w * d} off)")
+                var inscope poison := outs[wi]
+                poison[(w - 1) * d] += 1.0 + 2.0 * logits_maxabs(want)
+                t |> success(mismatch_approx(poison, want) > 0, "{fmt} GEMV summed over {w} token row(s): the bar reds a poisoned last row")
+                if (wi > 0) {
+                    let pw = widths[wi - 1]
+                    var same = 0
+                    for (i in range(pw * d)) {
+                        same += outs[wi][i] == outs[wi - 1][i] ? 1 : 0
+                    }
+                    t |> equal(same, pw * d, "{fmt} GEMV summed: the {w}-row dispatch's first {pw} row(s) bit for bit the {pw}-row dispatch's")
+                }
+            }
+            delete outs
+        }
+        delete f
     }
 }
 

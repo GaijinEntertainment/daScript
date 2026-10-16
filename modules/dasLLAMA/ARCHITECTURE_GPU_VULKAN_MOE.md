@@ -259,9 +259,9 @@ the template both homes stamp (`GkMoeCombG4`, args `GkMoeCombArgs`): the k weigh
 dense row in `ffnout` normed under the dense post norm (`dpost_off`), the two added and normed under the layer's post-FFN
 norm (`spost_off`), the residual `(x + that) * out_scale`, then the next layer's norm (`nwoff`) - four workgroup
 reductions over one row stash, the dense row re-read from `ffnout` rather than staged twice. Where the down experts are a
-per-32 format (Q5_1, IQ4_NL off the lattice, Q4_0, Q5_0, MXFP4) the token command's down GEMV folds the k rows itself
-(`Blk32GemvT.sum_shell`, stamped `Q51GemvSum` and its four twins: a subgroup a row of the model dim, the k regions' dots
-summed under the routing weights), so the combine reads that row
+per-32 format (Q5_1, IQ4_NL off the lattice, Q4_0, Q5_0, MXFP4) the token commands' down GEMV folds the k rows itself
+(`Blk32GemvT.sum_shell`, stamped `Q51GemvSum` and its four twins: a subgroup a (token row, model-dim row), the row's k
+regions' dots summed under the routing weights), so the combine reads that row
 (`GkMoeCombArgs.presummed`) where it read k through the slot map; and where the next head's feed is Q8_0
 the token command's combine quantizes it itself (`ClsArCombG4Rq`, `RLayer.comb_rq`), so the requant
 dispatch that opened the next layer (or the classifier) goes. The norms plane grows by the

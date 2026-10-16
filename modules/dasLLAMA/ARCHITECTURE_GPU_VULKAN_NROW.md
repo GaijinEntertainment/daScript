@@ -12,7 +12,10 @@ decode era, whose routed block the command's rows form mirrors, is `ARCHITECTURE
 ### The N-row token command: a batched step's rows through one weight pass {#nrow-token-command}
 
 **A batched decode step runs its rows through ONE recorded command, so a layer's weights stream
-once for the step instead of once a row.** The driver sizes every per-token plane to `RDec.nb`
+once for the step instead of once a row.** Its rows come as their token ids - the batched steps', the
+peel's and the assistant drafter's verify's - and the command gathers each off the resident table as
+the one-row command does (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#vk-token-gather`), so the host embeds
+no batched row. The driver sizes every per-token plane to `RDec.nb`
 rows - `RD_NB_MAX` (`RDEC_NROW_MAX`, sixteen: two of the N-column leaves' eight-column tiles,
 `ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-col-tiles`) whatever the region
 count, so the short window's peel and the speculative verify
@@ -95,8 +98,11 @@ dispatches the same stamp at one workgroup) writes row p's k slots at `p * k` - 
 feed blocks (`GkTopKArgs.xnb1`), the down records each slot's hidden row; and the gate, up and
 down GEMVs are the one-row leaves over `nrows * k` regions (`GemvArgs.nreg`), the act over every
 slot, the combine per row (`ClsArComb`'s position is its workgroup). The rows take the split
-gate and up forms - each fused stamp's twin byte for byte, by the stamps' own cells - and the
-unfolded down, whose fold under the routing weights is the combine's; the site before the block
+gate and up forms - each fused stamp's twin byte for byte, by the stamps' own cells - and the down
+the one-row command takes: where it folds each row's k slots under their routing weights (a per-32
+gemma-4 down, `Blk32GemvT.sum_shell` a subgroup a (row, output row) over the row's own k regions) so
+do the rows, row p's sum the one-row command's arithmetic over its slots (`test_vkd_*_gemv`'s summed
+rows), and the combine reads one presummed row a row; elsewhere the combine sums. The site before the block
 takes the split add-rms and requant pair, since the router reads the normed rows as floats. The
 routed planes hold `nb` rows (`moe_dlog_dev`, `moe_xq_dev` and `moe_xs_dev`, `egate_dev`,
 `eup_dev`, `edown_dev`), every set binding them whole (the one-row command reads row 0), and the rail declines a
@@ -209,7 +215,8 @@ reads the one-row command's logits bit for bit wherever the N-row command does.
 
 **The draft head re-warms in the same command, in Metal's shape**
 (`ARCHITECTURE_GPU_MTP.md#mtp-verify-draft-warm`). After the picks, head row i takes
-`[enorm(embed tok_i) ; hnorm(h_i)]` - `h_0` the pre-draft carry the host uploads, `h_i` the trunk's
+`[enorm(embed tok_i) ; hnorm(h_i)]` - `embed tok_i` gathered unscaled off row i's id as the trunk row
+is (the draft command's gather), `h_0` the pre-draft carry the host uploads, `h_i` the trunk's
 post-norm row `i - 1`, copied out of `xb` into the cat plane on the device - through eh_proj with the
 rows as columns, the head's attention norm and requant, and its k and v projections, norm, rope and
 store: its K/V rows `pos - 1` .. `pos + n - 2` and nothing past them, since no verify reads the
