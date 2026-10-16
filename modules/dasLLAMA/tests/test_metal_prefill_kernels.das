@@ -4363,20 +4363,31 @@ def private mulmm_gate(t : T?; var dev, queue; k, d, m : int) {
 
 //! the select buffer against one expectation pair - winner ids exact, weights within `approx`;
 //! the gate runs it twice, once on the reference and once on the poisoned control expectation
-def private moe_select_bad(bsel; widx : array<uint>; ww : array<float>; nst, k : int) : tuple<idx : int; w : int> {
+def private moe_select_bad(bsel; widx : array<uint>; ww : array<float>; nst, k : int) : tuple<idx : int; w : int; first_idx : int; wmax : float; wmax_at : int> {
     var bidx = 0
     var bw = 0
+    var first_idx = -1
+    var wmax = 0.0
+    var wmax_at = -1
     unsafe {
         var pi = reinterpret<uint?>(metal_buffer_contents(bsel))
         var pw = reinterpret<float?>(metal_buffer_contents(bsel))
         for (s in range(nst)) {
             for (j in range(k)) {
-                bidx += pi[s * 2 * k + j] != widx[s * k + j] ? 1 : 0
+                if (pi[s * 2 * k + j] != widx[s * k + j]) {
+                    bidx++
+                    first_idx = first_idx < 0 ? s * k + j : first_idx
+                }
+                let dw = abs(pw[s * 2 * k + k + j] - ww[s * k + j])
+                if (wmax_at < 0 || dw > wmax) {
+                    wmax = dw
+                    wmax_at = s * k + j
+                }
                 bw += fapprox(pw[s * 2 * k + k + j], ww[s * k + j]) ? 0 : 1
             }
         }
     }
-    return (idx = bidx, w = bw)
+    return (idx = bidx, w = bw, first_idx = first_idx, wmax = wmax, wmax_at = wmax_at)
 }
 
 // The select kernel vs the host select `moe_select_core` (softmax + top-k + norm_topk renorm),
@@ -4440,8 +4451,8 @@ def private moe_select_gate(t : T?; var dev, queue; ne, k, nst : int; ties : boo
         }
         return if (!ran)
         let bad = moe_select_bad(mc.buf[bsel], widx, ww, nst, k)
-        t |> equal(bad.idx, 0)
-        t |> equal(bad.w, 0)
+        t |> equal(bad.idx, 0, "moe_select: every winner id the host select's ({bad.idx} differ, the first at {bad.first_idx})")
+        t |> equal(bad.w, 0, "moe_select: every weight within the shared tolerance ({bad.w} off, the largest difference {bad.wmax} at {bad.wmax_at})")
         // the control: the same compares must RED on a poisoned expectation - the first winner moved
         // to its neighbour id (no id can satisfy both) and its weight off by an added 1.0 + a tenth of
         // itself, past any band `approx` admits on a renormalized weight
