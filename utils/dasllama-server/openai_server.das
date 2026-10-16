@@ -7083,8 +7083,8 @@ def private init_one_scheduler(var s : ModelSlot) {
     var spec = slot_mtp_arms(s.opts, g_sched_defaults.mtp, s_streams, slot_flavor(s) == "metal",
                              s.backend_effective, gpu_resident_experts_host())
     if (spec && s.model.config.n_layer_nextn <= 0l) {
-        let side = mtp_drafter_sidecar(s.path)
-        if (!empty(side) && attach_mtp_drafter(s.model, side)) {
+        let side = attach_mtp_sidecar(s.model, s.path)
+        if (!empty(side)) {
             to_log(LOG_INFO, "dasllama-server: {s.name} speculates through the assistant drafter {base_name(side)}\n")
         } elif (want > 0) {
             to_log(LOG_WARNING, "dasllama-server: mtp requested for {s.name} but the model has no NextN head and no assistant drafter beside it — self-spec stays off\n")
