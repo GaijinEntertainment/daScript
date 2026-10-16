@@ -232,6 +232,10 @@ that a question answered for one backend has an obvious address in the other. Th
   held bit for bit spell as `mad` each multiply that feeds an add.
 - **`dasllama_gpu_kernels_common.das`** - the kernels both kernel homes stamp, each one `class template`
   with its buffers, its argument struct and its body (`ARCHITECTURE_GPU_SHARED_KERNELS.md#gpu-shared-kernels`); it requires no backend.
+  It also holds the table-free helpers outside any class that both homes' kernels splice that carry `[spirv_inline]` (the bf16 pair-word
+  widenings `gk_bf16_lo` / `gk_bf16_hi` / `gk_bf16_at`, the strided side-row index `gk_strided_at`): the marker is the SPIR-V
+  emitter's (`spirv/spirv_shader`, which this file requires for its templates), and `dasllama_gpu_math.das` carries no backend
+  lowering - every CPU chain requires it, and the emitter's module re-exports its builtins publicly.
 - **`dasllama_kernel_access.das`** - the shared body-walk read/write classifier both GPU lenses run
   on, plus the dispatch-lens micro-grammar (the grid/tg/params spec tokenizers and the shared
   AST-emission core: `is_digit_tok`, `role_ok`, `derived_role`, `mk_uint_cast`, `mk_call1`,

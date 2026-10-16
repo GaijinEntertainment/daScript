@@ -65,7 +65,8 @@ function moves the chain with it.**
 **A kernel-side helper - a free `def` outside any class that a kernel body calls - that one
 backend's kernels splice lands in that backend's kernel file (`dasllama/dasllama_metal_kernels.das`,
 `dasllama/dasllama_vulkan_classes.das`); one that both backends' kernels splice and that reads no
-codebook table lands in `dasllama/dasllama_gpu_math.das`, never as a copy per home; a method of a
+codebook table lands in `dasllama/dasllama_gpu_math.das`, never as a copy per home, and in
+`dasllama/dasllama_gpu_kernels_common.das` where it carries `[spirv_inline]`; a method of a
 class template both homes stamp lands with its template.**
 
 **A disk-order -> compute-order transform lands by its consumer: a transform into the layout
