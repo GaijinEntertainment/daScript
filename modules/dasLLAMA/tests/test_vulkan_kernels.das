@@ -8802,13 +8802,14 @@ def private ar_comb_check(t : T?; tag, ctrl : string; xs, got_x, got_y : array<f
     delete got_yf
 }
 
-//! the gemma-4 combine: x = (x + post(post2(sum_j w_j d_j) + post1(dense))) * ascale, then the next norm -
-//! the routed sum and the dense row each under their own post norm, their sum under the layer's, the step
-//! scaled by the output scale; the f32 and f16 normed-row forms against one CPU oracle
+//! the gemma-4 combine on the template both homes stamp (`GkMoeCombG4`): x = (x + post(post2(sum_j w_j d_j) + post1(dense))) *
+//! ascale, then the next norm - the routed sum and the dense row each under their own post norm, their sum under the layer's, the
+//! step scaled by the output scale; the f32, f16 and Q8_0 normed-row forms against `g4_comb_ref`, then the f32 form over rows the
+//! down GEMV summed (`presummed`, a row a position) - the slot map's step the control that misses
 def private moe_ar_comb_g4_arm(t : T?) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let n = 64
-        let k = 8   //! gemma-4's eight routed slots: the row pass's register form full
+        let k = 8   //! gemma-4's eight routed slots
         let npos = 5
         let eps = 1.0e-6
         let ascale = 0.75
@@ -8818,14 +8819,15 @@ def private moe_ar_comb_g4_arm(t : T?) {
         for (i in range(4 * n)) {
             wn[i] = 0.5 + float((i * 3) % 7) * 0.125
         }
+        var summed <- row_fill(npos * n, 13, 0, 0.11, 4.5, 59)   //! the presummed leg's routed rows, a row a position
         let nblk = npos * n / 32
         let rq = ensure_cls_ar_comb_g4_rq()
-        var got_x, got_y : array<float>
+        var got_x, got_y, got_xs, got_ys : array<float>
         var got_h : array<uint>
         var oq : array<int8>
         var os : array<float>
-        var pc = ArArgs(dim = uint(n), add_on = 1u, woff = 0u, eps = eps, ascale = ascale, row0 = 0u,
-            slots = uint(k), pwoff = uint(n), routed_post_off = uint(2 * n), sum_post_off = uint(3 * n))
+        var pc = GkMoeCombArgs(n = uint(n), k = uint(k), eps = eps, ascale = ascale, nwoff = 0u, dpost_off = uint(n),
+            rpost_off = uint(2 * n), spost_off = uint(3 * n))
         with_cell_planes() $(var cp : CellPlanes) {
             let px = cp |> io_(fx.xs)
             let psh = cp |> in_(fx.sh)
@@ -8834,10 +8836,11 @@ def private moe_ar_comb_g4_arm(t : T?) {
             let psi = cp |> in_plain(fx.sidx)
             let psw = cp |> in_(fx.sw)
             let pro = cp |> in_(fx.rows)
+            let pps = cp |> in_(summed)
             let pyh = cp |> out_words(int64(npos * n) * 2l, NAN_SENTINEL_BITS)
             let poq = cp |> out_words(int64(npos * n), NAN_SENTINEL_BITS)
             let pos = cp |> out_(nblk)
-            var sc = cp |> cls_set(fixed_array(px, psh, pwn, pyo, psi, psw, pro), @@set_cls_ar_comb_g4)
+            var sc = cp |> cls_set(fixed_array(px, psi, psw, pro, psh, pwn, pyo), @@set_cls_ar_comb_g4)
             cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                 enc_cls_ar_comb_g4(raw, h, sc, pc, int64(npos))
             }
@@ -8846,7 +8849,7 @@ def private moe_ar_comb_g4_arm(t : T?) {
             delete got_y
             got_y <- cp |> plane_run(pyo)
             cp |> plane_upload(px, fx.xs)
-            var sc16 = cp |> cls_set(fixed_array(px, psh, pwn, pyh, psi, psw, pro), @@set_cls_ar_comb_g4_f16_b)
+            var sc16 = cp |> cls_set(fixed_array(px, psi, psw, pro, psh, pwn, pyh), @@set_cls_ar_comb_g4_f16_b)
             cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                 enc_cls_ar_comb_g4_f16_b(raw, h, sc16, pc, int64(npos))
             }
@@ -8855,7 +8858,7 @@ def private moe_ar_comb_g4_arm(t : T?) {
             //! the quantizing twin: the same step, the normed rows as Q8_0 blocks (two a row)
             if (rq) {
                 cp |> plane_upload(px, fx.xs)
-                var scq = cp |> cls_set(fixed_array(px, psh, pwn, poq, psi, psw, pro, pos), @@set_cls_ar_comb_g4_rq)
+                var scq = cp |> cls_set(fixed_array(px, psi, psw, pro, psh, pwn, poq, pos), @@set_cls_ar_comb_g4_rq)
                 cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                     enc_cls_ar_comb_g4_rq(raw, h, scq, pc, int64(npos))
                 }
@@ -8864,58 +8867,43 @@ def private moe_ar_comb_g4_arm(t : T?) {
                 delete os
                 os <- cp |> plane_run(pos)
             }
+            cp |> plane_upload(px, fx.xs)
+            var pcs = pc
+            pcs.presummed = 1u
+            var scs = cp |> cls_set(fixed_array(px, psi, psw, pps, psh, pwn, pyo), @@set_cls_ar_comb_g4)
+            cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
+                enc_cls_ar_comb_g4(raw, h, scs, pcs, int64(npos))
+            }
+            delete got_xs
+            got_xs <- cp |> plane_run(px)
+            delete got_ys
+            got_ys <- cp |> plane_run(pyo)
         }
-        var want_x, want_y, r, c : array<float>
-        want_x |> resize(npos * n)
-        want_y |> resize(npos * n)
-        r |> resize(n)
-        c |> resize(n)
-        for (p in range(npos)) {
-            var sr = 0.0
-            var sd = 0.0
-            for (i in range(n)) {
-                var v = 0.0
-                for (j in range(k)) {
-                    v += fx.sw[p * k + j] * fx.rows[int(fx.sidx[p * k + j]) * n + i]
-                }
-                r[i] = v
-                sr += v * v
-                sd += fx.sh[p * n + i] * fx.sh[p * n + i]
-            }
-            let inv_r = 1.0 / sqrt(sr / float(n) + eps)
-            let inv_d = 1.0 / sqrt(sd / float(n) + eps)
-            var sc = 0.0
-            for (i in range(n)) {
-                c[i] = wn[2 * n + i] * (r[i] * inv_r) + wn[n + i] * (fx.sh[p * n + i] * inv_d)
-                sc += c[i] * c[i]
-            }
-            let inv_c = 1.0 / sqrt(sc / float(n) + eps)
-            for (i in range(n)) {
-                want_x[p * n + i] = (fx.xs[p * n + i] + wn[3 * n + i] * (c[i] * inv_c)) * ascale
-            }
-            unsafe {
-                rmsnorm(addr<float?>(want_y[p * n]), addr<float const?>(want_x[p * n]), addr<float const?>(wn[0]), int64(n), eps)
-            }
-        }
+        var want <- g4_comb_ref(n, k, npos, fx.sidx, fx.sw, fx.rows, fx.sh, fx.xs, wn, eps, ascale, false)
         //! the quantizing twin held to the oracle's blocks
         if (rq) {
-            let off = q8_blocks_off(oq, os, want_y, nblk)
+            let off = q8_blocks_off(oq, os, want.y, nblk)
             t |> success(off.scales == 0, "the gemma-4 quantizing combine: the block scales match the oracle's normed rows ({off.scales} of {nblk} off)")
             t |> success(off.values == 0, "the gemma-4 quantizing combine: the dequantized rows sit within a quant step of the oracle ({off.values} of {npos * n} off)")
             t |> success(off.poison_inside == 0, "gemma-4 quantizing combine control: the quant bar reds a poisoned oracle element in every block ({off.poison_inside} passed)")
         }
-        ar_comb_check(t, "the gemma-4 combine step", "gemma-4 combine control", fx.xs, got_x, got_y, got_h, want_x, want_y, n)
+        var wsum <- g4_comb_ref(n, k, npos, fx.sidx, fx.sw, summed, fx.sh, fx.xs, wn, eps, ascale, true)
+        check(t, "the gemma-4 combine over presummed rows: the residual rows match the CPU oracle", got_xs, wsum.x, BAR_APPROX, Shape(row_width = n))
+        check(t, "the gemma-4 combine over presummed rows: the normed rows match the CPU oracle", got_ys, wsum.y, BAR_APPROX, Shape(row_width = n))
+        t |> success(mismatch_approx(got_xs, want.x) > 0, "gemma-4 combine control: the slot map's step misses the presummed rows' device step")
+        ar_comb_check(t, "the gemma-4 combine step", "gemma-4 combine control", fx.xs, got_x, got_y, got_h, want.x, want.y, n)
         delete fx
         delete wn
+        delete summed
         delete got_x
         delete got_y
+        delete got_xs
+        delete got_ys
         delete got_h
         delete oq
         delete os
-        delete want_x
-        delete want_y
-        delete r
-        delete c
+        delete want
+        delete wsum
     }
 }
 

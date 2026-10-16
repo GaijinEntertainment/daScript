@@ -119,10 +119,7 @@ struct ArArgs {
     gated : uint    //! the combine twins: the shared expert's gate scales its row
     pre_on : uint   //! the add partner is rms-normed with the row at `pwoff` before the add (a gemma's post-attention / post-FFN norm)
     pwoff : uint
-    routed_post_off : uint   //! the gemma-4 MoE combine's norm rows: `pwoff` norms the dense branch, this the routed sum
-    sum_post_off : uint      //! ... and this the two branches' sum
     no_norm : uint           //! the requant twins quantize the updated row as it is - the E-series residual feeding its per-layer-embedding gate
-    presummed : uint //! the gemma-4 combine: the routed rows arrive summed under their weights in row 0 (the down GEMV folded them)
     dbias_on : uint  //! the combine twins: each routed row takes its expert's down bias (gpt-oss) before its routing weight scales it
     dboff : uint     //! ... this layer's row base in the down-bias plane ([ne x dim] rows a layer)
     abias_on : uint  //! the add partner carries a bias row out of wn before the add (gpt-oss's attention output bias, `RD_NORM_OBIAS`)
@@ -561,92 +558,35 @@ class ClsArCombF16B : ArCombBase {
     override OUT_F16 = true
 }
 
-//! the gemma-4 MoE combine: x = (x + post3(post2(sum_j w_j d_j) + post1(dense))) * ascale, the dense row always on and ungated
+//! the gemma-4 MoE combine on the template both homes stamp (`GkMoeCombG4`): one workgroup a position, the routed slot rows off
+//! the slot map, the next norm's row out in the stamp's form
 [ |> template_struct_instance]
-class template ArCombG4Base : ArBase {
-    @ssbo @binding = 4 slot_idx : array<uint>    //! position -> its k slot rows
-    @ssbo @binding = 5 slot_w : array<float>     //! ... and their routing weights (the per-expert down scale folded in)
-    @ssbo @binding = 6 down_rows : array<float>  //! the routed down-GEMM output rows
+class template ArCombG4T : GkMoeCombG4 {
+    @workgroup row : float[8192]
 
-    //! the position's k weighted routed rows at element k (one row, already summed, under `presummed`)
-    def routed_sum(pk, k : uint) : float {
-        if (pa.presummed != 0u) {
-            return down_rows[k]
-        }
-        var f = 0.0
-        var j = 0u
-        while (j + 4u <= pa.slots) {
-            let d0 = down_rows[slot_idx[pk + j] * pa.dim + k]
-            let d1 = down_rows[slot_idx[pk + j + 1u] * pa.dim + k]
-            let d2 = down_rows[slot_idx[pk + j + 2u] * pa.dim + k]
-            let d3 = down_rows[slot_idx[pk + j + 3u] * pa.dim + k]
-            f += slot_w[pk + j] * d0
-            f += slot_w[pk + j + 1u] * d1
-            f += slot_w[pk + j + 2u] * d2
-            f += slot_w[pk + j + 3u] * d3
-            j += 4u
-        }
-        while (j < pa.slots) {
-            f += slot_w[pk + j] * down_rows[slot_idx[pk + j] * pa.dim + k]
-            j++
-        }
-        return f
+    def override stash(k : uint; v : float) : void {
+        row[k] = v
     }
+    def override stashed(k : uint) : float => row[k]
 
-    [arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-gemma4-moe-block")]
-    def override accum_row(base : uint) : float {
-        let pk = (base / pa.dim) * pa.slots
-        var sr = 0.0
-        var k = gl_LocalInvocationID.x
-        while (k < pa.dim) {
-            let r = routed_sum(pk, k)
-            row[k] = r
-            sr += r * r
-            k += 256u
-        }
-        let inv_r = wg_rms_inv(sr, pa.dim, pa.eps, 0u)
-        var sd = 0.0
-        k = gl_LocalInvocationID.x
-        while (k < pa.dim) {
-            let a = aa[base + k]
-            sd += a * a
-            k += 256u
-        }
-        let inv_d = wg_rms_inv(sd, pa.dim, pa.eps, 1u)
-        var sc = 0.0
-        k = gl_LocalInvocationID.x
-        while (k < pa.dim) {
-            let c = wn[pa.routed_post_off + k] * (row[k] * inv_r) + wn[pa.pwoff + k] * (aa[base + k] * inv_d)
-            row[k] = c
-            sc += c * c
-            k += 256u
-        }
-        let inv_c = wg_rms_inv(sc, pa.dim, pa.eps, 0u)   //! slot 0 again: the slot-1 reduce between sits every thread past this slot's readers
-        var ss = 0.0
-        k = gl_LocalInvocationID.x
-        while (k < pa.dim) {
-            let vv = (xs[base + k] + wn[pa.sum_post_off + k] * (row[k] * inv_c)) * pa.ascale
-            xs[base + k] = vv
-            row[k] = vv
-            ss += vv * vv
-            k += 256u
-        }
-        return ss
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        comb_g4_row(gl_WorkGroupID.x)
     }
 }
 
 [vk_dispatch(name = "cls_ar_comb_g4", kernel = "run", grid = "nrows", params = "nrows : int64")]
-class ClsArCombG4 : ArCombG4Base {
+class ClsArCombG4 : ArCombG4T {
     override OUT_F32 = true
 }
 
 [vk_dispatch(name = "cls_ar_comb_g4_f16_b", kernel = "run", grid = "nrows", params = "nrows : int64")]
-class ClsArCombG4F16B : ArCombG4Base {
+class ClsArCombG4F16B : ArCombG4T {
     override OUT_F16 = true
 }
 
 [vk_dispatch(name = "cls_ar_comb_g4_rq", kernel = "run", grid = "nrows", params = "nrows : int64")]
-class ClsArCombG4Rq : ArCombG4Base {
+class ClsArCombG4Rq : ArCombG4T {
     override OUT_Q8 = true
 }
 

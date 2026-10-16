@@ -56,6 +56,8 @@ def format_census(tr : Model; m : GGUFMeta) : array<SiteCensus> {
         census_plane(exps, m, "blk.{l}.ffn_gate_exps.weight", fmt_at(tr.we1_fmt, l))
         census_plane(exps, m, "blk.{l}.ffn_up_exps.weight", fmt_at(tr.we3_fmt, l))
         census_plane(exps, m, "blk.{l}.ffn_down_exps.weight", fmt_at(tr.we2_fmt, l))
+        census_plane(exps, m, "blk.{l}.ffn_gate_up_exps.weight", fmt_at(tr.we1_fmt, l))   //! the fused stack (gemma-4): both halves' tags
+        census_plane(exps, m, "blk.{l}.ffn_gate_up_exps.weight", fmt_at(tr.we3_fmt, l))
         if (c.n_ff_shexp > 0l) {
             census_plane(shexp, m, "blk.{l}.ffn_gate_shexp.weight", shexp_plane(tr, l, 1).f)
             census_plane(shexp, m, "blk.{l}.ffn_up_shexp.weight", shexp_plane(tr, l, 3).f)

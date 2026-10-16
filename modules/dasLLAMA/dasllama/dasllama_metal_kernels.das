@@ -4021,6 +4021,9 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_moe_kq_k6 = compile_stamp(metal_moe_gemv_k6_msl, ok)
     g_pso_moe_combine = compile_stamp(metal_moe_combine_msl, ok)
     g_pso_moe_combine_sh = compile_stamp(metal_moe_combine_sh_msl, ok)
+    g_pso_moe_comb_g4 = compile_stamp(metal_moe_comb_g4_msl, ok)
+    g_pso_moe_comb_g4_hx = compile_stamp(metal_moe_comb_g4_hx_msl, ok)
+    g_pso_moe_comb_g4_pf = compile_stamp(metal_moe_comb_g4_pf_msl, ok)
     g_pso_g4rnorm = compile_stamp(metal_g4_router_norm_msl, ok)
     g_pso_swiglu_oai = compile_stamp(MetalSwigluOai_metal_swiglu_oai_msl, ok)
     g_pso_moe_gemv_mx4 = compile_stamp(metal_moe_gemv_mx4_msl, ok)
@@ -5471,7 +5474,7 @@ def metal_kernels_release {
     release_handles(g_pso_moe_kq_iq3s, g_pso_moe_kq_iq3xxs, g_pso_moe_kq_iq2s, g_pso_moe_kq_iq2xs, g_pso_moe_kq_iq2xxs, g_pso_moe_kq_iq4xs)
     release_handles(g_pso_moe_kq_iq3s_f4)
     release_handles(g_pso_moe_kq_q40, g_pso_moe_kq_k5, g_pso_moe_kq_k6, g_pso_moe_combine, g_pso_g4rnorm)
-    release_handles(g_pso_moe_combine_sh)
+    release_handles(g_pso_moe_combine_sh, g_pso_moe_comb_g4, g_pso_moe_comb_g4_hx, g_pso_moe_comb_g4_pf)
     release_handles(g_pso_swiglu_oai, g_pso_moe_gemv_mx4, g_pso_moe_gemv_q51, g_pso_moe_gemv_iq4nl32, g_pso_dn_conv, g_pso_dn_conv_n, g_pso_dn_conv_n4, g_pso_dn_hist, g_pso_dn_l2)
     release_handles(g_pso_moe_kq_iq4nl, g_pso_moe_kq_k2, g_pso_kq_q51, g_pso_kq_iq4nl32, g_pso_kq_mm_b51, g_pso_kq_mm_b4n32)
     release_handles(g_pso_b32_mvb2_q51, g_pso_b32_mvb4_q51, g_pso_b32_mvb8_q51, g_pso_b32_mvb2_iq4nl32, g_pso_b32_mvb4_iq4nl32, g_pso_b32_mvb8_iq4nl32)
@@ -7229,7 +7232,7 @@ class MetalMoeGemvMx4 {
 
 //! the routed combine on the template both homes stamp (`GkMoeCombine`), a thread an element of a stream's row: the slots
 //! at p k + j, their weights the selection rows' float view (a row's 2k words, the weights past the k picks)
-[metal_dispatch(name = "enc_moe_combine", pso = "g_pso_moe_combine", tg = 256, grid = "dim/256, nst", params = "dim : int64, nst : int64")]
+[metal_dispatch(name = "enc_moe_combine", pso = "g_pso_moe_combine", tgmem = "metal_moe_combine_msl_tgmem", tg = 256, grid = "dim/256, nst", params = "dim : int64, nst : int64")]
 class MetalMoeCombine : GkMoeCombine {
     override GATHERED = false
     override WINDOW = false
@@ -7244,7 +7247,7 @@ class MetalMoeCombine : GkMoeCombine {
 
 //! ... and its shared-expert stamp: the shared expert's rows under their gate logit's sigmoid added in the same pass
 //! derives GkMoeCombine, the template both homes stamp
-[metal_dispatch(name = "enc_moe_combine_sh", pso = "g_pso_moe_combine_sh", tg = 256, grid = "dim/256, nst", params = "dim : int64, nst : int64")]
+[metal_dispatch(name = "enc_moe_combine_sh", pso = "g_pso_moe_combine_sh", tgmem = "metal_moe_combine_sh_msl_tgmem", tg = 256, grid = "dim/256, nst", params = "dim : int64, nst : int64")]
 class MetalMoeCombineSh : GkMoeCombine {
     override GATHERED = false
     override WINDOW = false
@@ -7256,6 +7259,67 @@ class MetalMoeCombineSh : GkMoeCombine {
             comb_elem(gl_WorkGroupID.y, gl_GlobalInvocationID.x)
         }
     }
+}
+
+//! The gemma-4 MoE step on the template both homes stamp (`GkMoeCombG4`): one threadgroup of 1024 lanes a row, the row stash the
+//! add-rms slab's width (`ADD_RMS_MAX_DIM`); the decode stamps read the slots off the selection rows (`p k + j`, the weights past the
+//! picks) and store the next norm's row in f32 (`Hx`: with its f16 twin), the window's (`Pf`) reads them through the bucket inverse
+//! and stores no norm - the next layer opens on its own
+[ |> template_struct_instance]
+class template MetalMoeCombG4T : GkMoeCombG4 {
+    @workgroup xrow : float[4096]
+    override TG = 1024u
+    override RSQRT = true
+    override GATHERED = false
+    override OUT_F32 = true
+
+    def override stash(k : uint; v : float) : void {
+        xrow[k] = v
+    }
+    def override stashed(k : uint) : float => xrow[k]
+}
+
+[metal_dispatch(name = "enc_moe_comb_g4", pso = "g_pso_moe_comb_g4", tgmem = "metal_moe_comb_g4_msl_tgmem", tg = 1024, grid = "nst", params = "nst : int64")]
+class MetalMoeCombG4 : MetalMoeCombG4T {
+    [metal_kernel(name="metal_moe_comb_g4_msl")]
+    def metal_moe_comb_g4 {
+        comb_g4_row(gl_WorkGroupID.x)
+    }
+}
+
+[metal_dispatch(name = "enc_moe_comb_g4_hx", pso = "g_pso_moe_comb_g4_hx", tgmem = "metal_moe_comb_g4_hx_msl_tgmem", tg = 1024, grid = "nst", params = "nst : int64")]
+class MetalMoeCombG4Hx : MetalMoeCombG4T {
+    override HX = true
+
+    [metal_kernel(name="metal_moe_comb_g4_hx_msl")]
+    def metal_moe_comb_g4_hx {
+        comb_g4_row(gl_WorkGroupID.x)
+    }
+}
+
+[metal_dispatch(name = "enc_moe_comb_g4_pf", pso = "g_pso_moe_comb_g4_pf", tgmem = "metal_moe_comb_g4_pf_msl_tgmem", tg = 1024, grid = "npos", params = "npos : int64")]
+class MetalMoeCombG4Pf : MetalMoeCombG4T {
+    override GATHERED = true
+    override OUT_F32 = false
+
+    [metal_kernel(name="metal_moe_comb_g4_pf_msl")]
+    def metal_moe_comb_g4_pf {
+        comb_g4_row(gl_WorkGroupID.x)
+    }
+}
+
+//! the gemma-4 step's args over `nk` slots a row at width `dim`, the weights the selection rows' (`moe_comb_args`); the norm rows at
+//! the offsets `moe_g4_norms` lays out, the next one's where `next`
+def moe_g4_args(dim, nk : int64; eps, ascale : float; presummed, next : bool) : GkMoeCombArgs {
+    var ka = moe_comb_args(dim, nk)
+    ka.eps = eps
+    ka.ascale = ascale
+    ka.presummed = presummed ? 1u : 0u
+    ka.rpost_off = 0u
+    ka.dpost_off = uint(dim)
+    ka.spost_off = uint(2l * dim)
+    ka.nwoff = next ? uint(3l * dim) : 0u
+    return ka
 }
 
 //! the combine's args over `nk` slots a stream at row width `dim`, the weights the selection rows' (the Metal stamps sum every

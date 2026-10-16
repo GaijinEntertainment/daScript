@@ -3578,6 +3578,8 @@ def test_metal_prefill_kernels(t : T?) {
                 dn_deint_sigmul_gate(t, dev, queue, 3, 64, 2)
                 combine_sh_gate(t, dev, queue, 1, 96, 8, 257, 256)   // the decode shape: the gate logit the router's row ne
                 combine_sh_gate(t, dev, queue, 5, 64, 4, 1, 0)       // ... and the window's: a gate logit a position
+                moe_comb_g4_gate(t, dev, queue, 3, 96, 8)            // the gemma-4 step: a row under the threadgroup's lanes
+                moe_comb_g4_gate(t, dev, queue, 2, 2816, 8)          // ... the 26B's row, three columns a lane
 
                 // ===== MoE plumbing (router batch GEMV, CSR pair, wscale, reduce, swiglu-oai) =====
                 swiglu_oai_gate(t, dev, queue, 256)
@@ -5965,6 +5967,121 @@ def private combine_sh_gate(t : T?; var dev, queue; npos, dim, k, gs, go : int) 
         return if (!ran)
         check_buf(t, tag, mc.buf[bacc], want, BAR_FP, Shape(row_width = dim))
     }
+}
+
+//! The gemma-4 MoE step's three stamps against `g4_comb_ref` over `npos` rows `dim` wide, `k` slots a row whose weights sit in
+//! the selection rows (past the k picks): the decode stamp (the slots at p k + j, the next norm's row in f32) and its f16-twin
+//! stamp, the window's stamp (the slots through a permutation, no norm out) and the window's over rows the route summed
+//! (`presummed`); each residual moved off its input, the twin the RNE narrow of the f32 row, the slot map's step the control
+//! the presummed rows' device step misses
+def private moe_comb_g4_gate(t : T?; var dev, queue; npos, dim, k : int) {
+    let tag = "moe_comb_g4 npos={npos} dim={dim} k={k}"
+    let eps = 1.0e-6
+    let ascale = 0.75
+    var inscope sel : array<uint>
+    var inscope sw <- [for (i in range(npos * k)); 0.125 + float(i % 5) * 0.25]
+    var inscope ident <- [for (i in range(npos * k)); uint(i)]
+    var inscope perm <- [for (i in range(npos * k)); uint((i * 7) % (npos * k))]
+    sel |> resize(npos * 2 * k)
+    for (p in range(npos)) {
+        for (j in range(k)) {
+            sel[p * 2 * k + j] = uint(j)
+            sel[p * 2 * k + k + j] = float_bits_to_uint(sw[p * k + j])
+        }
+    }
+    var inscope dn <- row_fill(npos * k * dim, 7, 0, 0.13, 5.5, 93)
+    var inscope dense <- row_fill(npos * dim, 5, 0, 0.2, 3.0, 41)
+    var inscope xs <- row_fill(npos * dim, 11, 0, 0.1, 1.7, 37)
+    var inscope summed <- row_fill(npos * dim, 13, 0, 0.11, 4.5, 59)
+    var inscope wn <- [for (i in range(4 * dim)); 0.5 + float((i * 3) % 7) * 0.125]
+    var inscope wor : array<float>   //! the oracle's row order: the next norm, the dense post, the routed post, the post-FFN
+    wor |> reserve(4 * dim)
+    wor |> push_from([for (i in range(dim)); wn[3 * dim + i]])
+    wor |> push_from([for (i in range(dim)); wn[dim + i]])
+    wor |> push_from([for (i in range(dim)); wn[i]])
+    wor |> push_from([for (i in range(dim)); wn[2 * dim + i]])
+    var want <- g4_comb_ref(dim, k, npos, ident, sw, dn, dense, xs, wor, eps, ascale, false)
+    var wantp <- g4_comb_ref(dim, k, npos, perm, sw, dn, dense, xs, wor, eps, ascale, false)
+    var wants <- g4_comb_ref(dim, k, npos, perm, sw, summed, dense, xs, wor, eps, ascale, true)
+    var ka = moe_g4_args(int64(dim), int64(k), eps, ascale, false, true)
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let st = stamp_of(@@enc_moe_comb_g4)
+        var pso = mc |> keep_stamp(st, err)
+        return if (!pso_ok(t, tag, pso, err))
+        let bx = mc |> io_(xs)
+        let bsel = mc |> in_plain(sel)
+        let bdn = mc |> in_(dn)
+        let bden = mc |> in_(dense)
+        let bwn = mc |> in_(wn)
+        let by = mc |> out_(npos * dim)
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(st, pso) {
+                invoke(st.enc, enc, mc.buf[bx], mc.buf[bsel], mc.buf[bdn], mc.buf[bden], mc.buf[bwn], mc.buf[by], ka, int64(npos))
+            }
+        }
+        return if (!ran)
+        var inscope gx <- buf_download(mc.buf[bx], npos * dim, type<float>)
+        t |> success(mismatch_approx(gx, xs) > 0, "{tag}: the in-place residual rows moved off their input")
+        check_buf(t, "{tag} residual", mc.buf[bx], want.x, BAR_APPROX, Shape(row_width = dim))
+        check_buf(t, "{tag} next norm", mc.buf[by], want.y, BAR_APPROX, Shape(row_width = dim))
+    }
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let st = stamp_of(@@enc_moe_comb_g4_hx)
+        var pso = mc |> keep_stamp(st, err)
+        return if (!pso_ok(t, tag, pso, err))
+        let bx = mc |> io_(xs)
+        let bsel = mc |> in_plain(sel)
+        let bdn = mc |> in_(dn)
+        let bden = mc |> in_(dense)
+        let bwn = mc |> in_(wn)
+        let by = mc |> out_(npos * dim)
+        let bh = mc |> out_words(npos * dim / 2, NAN_SENTINEL_BITS)
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(st, pso) {
+                invoke(st.enc, enc, mc.buf[bx], mc.buf[bsel], mc.buf[bdn], mc.buf[bden], mc.buf[bwn], mc.buf[by], mc.buf[bh], ka, int64(npos))
+            }
+        }
+        return if (!ran)
+        check_buf(t, "{tag} hx: next norm", mc.buf[by], want.y, BAR_APPROX, Shape(row_width = dim))
+        check_hx_narrow(t, "{tag} hx: the f16 twin", mc.buf[bh], mc.buf[by], npos * dim, npos * dim)
+    }
+    var kp = moe_g4_args(int64(dim), int64(k), eps, ascale, false, false)
+    var kps = moe_g4_args(int64(dim), int64(k), eps, ascale, true, false)
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        var err : string
+        let st = stamp_of(@@enc_moe_comb_g4_pf)
+        var pso = mc |> keep_stamp(st, err)
+        return if (!pso_ok(t, tag, pso, err))
+        let bx = mc |> io_(xs)
+        let bperm = mc |> in_plain(perm)
+        let bsel = mc |> in_plain(sel)
+        let bdn = mc |> in_(dn)
+        let bsum = mc |> in_(summed)
+        let bden = mc |> in_(dense)
+        let bwn = mc |> in_(wn)
+        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(st, pso) {
+                invoke(st.enc, enc, mc.buf[bx], mc.buf[bperm], mc.buf[bsel], mc.buf[bdn], mc.buf[bden], mc.buf[bwn], kp, int64(npos))
+            }
+        }
+        return if (!ran)
+        check_buf(t, "{tag} pf: residual", mc.buf[bx], wantp.x, BAR_APPROX, Shape(row_width = dim))
+        mc |> plane_upload(bx, xs)
+        let ran2 = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
+            stamp_run(st, pso) {
+                invoke(st.enc, enc, mc.buf[bx], mc.buf[bperm], mc.buf[bsel], mc.buf[bsum], mc.buf[bden], mc.buf[bwn], kps, int64(npos))
+            }
+        }
+        return if (!ran2)
+        check_buf(t, "{tag} pf presummed: residual", mc.buf[bx], wants.x, BAR_APPROX, Shape(row_width = dim))
+        var inscope gx <- buf_download(mc.buf[bx], npos * dim, type<float>)
+        t |> success(mismatch_approx(gx, wantp.x) > 0, "{tag}: the slot map's step misses the presummed rows' device step")
+    }
+    delete want
+    delete wantp
+    delete wants
 }
 
 //! a routing of npos tokens over k distinct experts each, from a seeded walk; the per-expert counts the bucket rail pads

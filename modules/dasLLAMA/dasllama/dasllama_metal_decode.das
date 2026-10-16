@@ -755,6 +755,38 @@ def private add_rms_single(var e : SingleLayerEnc; enc : MetalComputeEncoder?; b
     enc_add_rms_site(enc, bx, ba, bw, by, e.r.u_dim, e.r.u_eps, dim, bosc)
 }
 
+//! the gemma-4 MoE step's norms rows, `moe_g4_args`'s layout: layer l's routed, dense and post-FFN norms, then the next layer's
+//! attention norm
+def private moe_g4_norms(t : Model; l : int64) : MetalBuffer? {
+    let dim = t.config.dim
+    let rb = uint64(dim * 4l)
+    unsafe {
+        return upload_region_cat4(addr<void?>(t.fblob[t.rms_post_ffn2_off + l * dim]), rb, addr<void?>(t.fblob[t.rms_post_ffn1_off + l * dim]), rb,
+            addr<void?>(t.fblob[t.rms_post_ffn_off + l * dim]), rb, addr<void?>(t.fblob[t.rms_att_off + (l + 1l) * dim]), rb)
+    }
+}
+
+//! the gemma-4 step's args for layer l: the model's norm epsilon and the layer's output scale
+def private moe_g4_layer_args(t : Model; l : int64) : GkMoeCombArgs {
+    let c = t.config
+    let osc = c.layer_out_scale ? t.fblob[t.out_scale_off + l] : 1.0
+    return moe_g4_args(c.dim, c.n_expert_used, c.norm_eps, osc, false, true)
+}
+
+//! whether layer l's gemma-4 MoE tail runs as the one step (`MetalMoeCombG4`): a pre/post-norm layer with a next layer to norm for,
+//! no per-layer-embedding or hyper-connection seam between, a row the step's stash holds, no knockout active
+def private moe_g4_step_serves(t : Model; l : int64; seam : bool) : bool {
+    let c = t.config
+    return (!g_moe_g4_unfused && c.pre_post_norm && !seam && l + 1l < c.n_layers && c.dim <= ADD_RMS_MAX_DIM && g_skip == "")
+}
+
+//! the single row's gemma-4 step: x updated in place, its next norm into bxb
+def private moe_g4_step_single(var e : SingleLayerEnc; t : Model; enc : MetalComputeEncoder?; l : int64) {
+    var r & = unsafe(*e.r)
+    var ka = moe_g4_layer_args(t, l)
+    enc_moe_comb_g4(enc, r.bx, r.bmoe_sel, r.bmoe_dn, r.bxb, moe_g4_norms(t, l), r.bxb, ka, 1l)
+}
+
 def private rms_single(var e : SingleLayerEnc; enc : MetalComputeEncoder?; bs : MetalBuffer?; soff : uint64; bw, bd : MetalBuffer?) {
     enc_rms(enc, bs, soff, bw, bd, e.r.u_dim, e.r.u_eps)
 }
@@ -1148,6 +1180,7 @@ struct template LayerEncT {
     @template_call recurrent = @@recurrent_single
     @template_call w13_fused = @@w13_fused_single
     @template_call panels = @@panels_single
+    @template_call moe_g4_step = @@moe_g4_step_single
 
     //! one layer's dispatch chain; the phases are hz-barrier coupled
     def encode(t : Model; enc : MetalComputeEncoder?; l : int64; var dnli : int64&) {   // nolint:STYLE037,STYLE038 — one layer's dispatch chain
@@ -1319,13 +1352,18 @@ struct template LayerEncT {
                 }
             }
             let moe_with_dense = r.moe && c.moe_dense_shexp
+            let g4_step = moe_with_dense && moe_g4_step_serves(t, l, r.ple || r.hc)
             let knfe = r.moe ? c.n_expert_used * c.n_ff_exp : 0l
             var pan = panels(self, moe_with_dense, hid_l, knfe)
             if (r.moe) {
-                encode_moe(t, enc, l, pan, moe_with_dense, knfe)
+                encode_moe(t, enc, l, pan, moe_with_dense, g4_step, knfe)
             }
             if (!r.moe || moe_with_dense) {
                 dense_ffn(t, enc, l, pan, moe_with_dense, geglu, hid_l, u_hid_l)
+            }
+            if (g4_step) {   //! the routed sum, both branches' norms, the residual and the next norm: one step
+                moe_g4_step(self, t, enc, l)
+                return
             }
             if (moe_with_dense && g_skip != "ew") {
                                 var bw_post_dense = upload_region(addr < void? >(t.fblob[t.rms_post_ffn1_off + l * dim]), uint64(dim * 4l))
@@ -1397,7 +1435,7 @@ struct template LayerEncT {
     }
 
     //! the routed FFN: router -> select -> experts -> combine; moe_with_dense = gemma4's parallel-dense form
-    def encode_moe(t : Model; enc : MetalComputeEncoder?; l : int64; var pan : FfnPanels; moe_with_dense : bool; knfe : int64) {
+    def encode_moe(t : Model; enc : MetalComputeEncoder?; l : int64; var pan : FfnPanels; moe_with_dense, g4_step : bool; knfe : int64) {
         let c = t.config
         let dim = c.dim
         let nr = r.nrows
@@ -1452,7 +1490,7 @@ struct template LayerEncT {
                 }
                 if (shg && g_skip != "ew") {   //! the routed sum and the shared expert's rows under their gate's sigmoid, one pass
                     enc_moe_combine_sh(enc, r.bxb, r.bmoe_sel, r.bmoe_dn, r.bxb2, r.bmoe_lg, moe_comb_args(dim, c.n_expert_used, ner, c.n_expert), dim, nr)
-                } else {
+                } elif (!g4_step) {   //! the gemma-4 step sums the routed rows itself
                     enc_moe_combine(enc, moe_with_dense ? r.bmoe_rt : r.bxb, r.bmoe_sel, r.bmoe_dn, moe_comb_args(dim, c.n_expert_used), dim, nr)
                 }
             }
@@ -1460,7 +1498,7 @@ struct template LayerEncT {
                 r.xh_ok = false   //! the routed sum (and the shared expert's rows in bh12) landed with no twin
                 r.fgh_ok = false
             }
-            if (moe_with_dense && g_skip != "ew") {
+            if (moe_with_dense && !g4_step && g_skip != "ew") {
                                 var bw_post_routed = upload_region(addr < void? >(t.fblob[t.rms_post_ffn2_off + l * dim]), uint64(dim * 4l))
                 rms(self, enc, r.bmoe_rt, 0ul, bw_post_routed, r.bmoe_rt)
             }
@@ -1756,6 +1794,19 @@ def private add_rms_rows(var e : auto(ET); enc : MetalComputeEncoder?; bx, ba, b
     }
 }
 
+//! the rows' gemma-4 step: every row's x updated in place, its next norm into bxb with the f16 twin where the step carries one
+def private moe_g4_step_rows(var e : auto(ET); t : Model; enc : MetalComputeEncoder?; l : int64) {
+    var r & = unsafe(*e.r)
+    var ka = moe_g4_layer_args(t, l)
+    let twin = r.bxh != null
+    if (twin) {
+        enc_moe_comb_g4_hx(enc, r.bx, r.bmoe_sel, r.bmoe_dn, r.bxb, moe_g4_norms(t, l), r.bxb, r.bxh, ka, r.nrows)
+    } else {
+        enc_moe_comb_g4(enc, r.bx, r.bmoe_sel, r.bmoe_dn, r.bxb, moe_g4_norms(t, l), r.bxb, ka, r.nrows)
+    }
+    r.xh_ok = twin
+}
+
 def private total_rows(e : auto(ET); u : MetalBuffer?; n : int64) : tuple<b : MetalBuffer?; n : int64> {
     let r & = unsafe(*e.r)
     if (u != r.u_dim && u != r.u_hidden && u != r.u_qd && u != r.u_moe_knfe && !(u != null && u == r.u_hidden2)) {
@@ -2019,6 +2070,7 @@ struct private VerifyLayerEnc : LayerEncT {
     override recurrent = @@recurrent_verify
     override w13_fused = @@w13_fused_verify
     override panels = @@panels_verify
+    override moe_g4_step = @@moe_g4_step_rows
 }
 
 // one verify-shaped B=2 layer (batch-form sites, same-slab brt row at l*32) — the trunk
@@ -3390,6 +3442,15 @@ def public set_metal_batch_addrms_unfused(v : bool) {
     discard_batch_pre()   // a step encoded under the other form would serve it one step late
 }
 
+//! pin the gemma-4 MoE tail to its unfused chain (the routed combine, the three post norms, the add and the next add-norm), the
+//! tests' control for the one-step form (`MetalMoeCombG4`); returns the pin it replaced
+def public set_metal_moe_g4_unfused(v : bool) : bool {
+    let prior = g_moe_g4_unfused
+    g_moe_g4_unfused = v
+    discard_batch_pre()
+    return prior
+}
+
 // one-deep encode-ahead for the batch driver: a step commits BEFORE the previous is waited on, so
 // sessions hold the PREVIOUS step's logits until the next call. WRONG for logit-gated sampling
 // (eval_batch's contract) — OPT-IN for benches only: DASLLAMA_METAL_BATCH_PIPE=1, gpu-logits only.
@@ -3611,6 +3672,7 @@ struct private BatchLayerEnc : LayerEncT {
     override w13_fused = @@w13_fused_batch
     override panels = @@panels_batch
     override ple = @@ple_rows
+    override moe_g4_step = @@moe_g4_step_rows
 }
 
 //! The BatchDecodeOverrideFn (P4): one eval_batch step's whole layer stack GPU-resident — B rows

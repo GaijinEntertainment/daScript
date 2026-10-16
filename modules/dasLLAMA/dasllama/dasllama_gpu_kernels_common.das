@@ -3898,13 +3898,20 @@ struct GkMoeCombArgs {
     woff : uint      //! the weights' base in a row (the Metal selection rows' k, past the picks)
     gstride : uint   //! the shared expert's gate logit: a row's stride in `gate` and its index there (`SH` stamps)
     goff : uint
+    eps : float      //! the gemma-4 step's (`GkMoeCombG4`): the norms' epsilon
+    ascale : float   //! ... the layer's output scale over the updated residual
+    presummed : uint //! ... the routed rows arrive summed under their weights, one row a position (the down GEMV folded them)
+    rpost_off : uint //! ... the norms plane's rows: the routed post norm, the dense post norm, the post-FFN norm, the next norm
+    dpost_off : uint
+    spost_off : uint
+    nwoff : uint
 }
 
 //! The routed experts' combine, row p's element i its k slots' down rows under their weights in slot order (the CPU axpy chain's);
 //! `WINDOW` skips a slot outside the dispatch's window or at zero weight, `GATHERED` reads the slot rows at `slot_idx`, `SH` adds the
 //! shared expert's row under its gate logit's sigmoid (`ARCHITECTURE_GPU_SHARED_KERNELS.md`)
 [ |> template_struct_instance]
-class template GkMoeCombine {
+class template GkMoeCombine : GkQ8BlockStore {
     @ssbo @binding = 0 @role = "readwrite" acc_rows : array<float>                     //! [rows x n] the combined rows (in and out)
     @ssbo @binding = 1 @role = "read" @template_gate = GATHERED slot_idx : array<uint>  //! row -> its k slot rows
     @ssbo @binding = 2 @role = "read" slot_w : array<float>                            //! ... and their routing weights
@@ -3933,11 +3940,12 @@ class template GkMoeCombine {
         }
     }
 
-    def comb_elem(p, i : uint) {
+    //! row p's k slots at element i added onto `acc` under their weights, in slot order
+    [spirv_inline]
+    def slot_sum_into(p, i : uint; var acc : float&) {
         let n = pa.n
         let k = pa.k
         let wb = p * (pa.wstride == 0u ? k : pa.wstride) + pa.woff
-        var acc = acc_start(p * n + i)
         var j = 0u
         while (j < k) {
             let jb = slot_row(p, j)
@@ -3951,9 +3959,121 @@ class template GkMoeCombine {
             }
             j++
         }
+    }
+
+    def comb_elem(p, i : uint) {
+        let n = pa.n
+        var acc = acc_start(p * n + i)
+        slot_sum_into(p, i, acc)
         static_if (SH) {
             acc += sig_gate(sh_rows[p * n + i], gate[p * pa.gstride + pa.goff])
         }
         acc_rows[p * n + i] = acc
+    }
+}
+
+//! The gemma-4 MoE layer's residual step, one workgroup a row (the CPU `gemma4_moe_ffn`'s tail): the routed sum (`slot_sum_into`, or
+//! under `presummed` the one row the down GEMV summed) normed under the routed post norm, the dense branch's row normed under its post
+//! norm, the two added and normed under the post-FFN norm, x = (x + that) . ascale in place, then x under the next norm out in the
+//! stamp's form - f32 (`OUT_F32`, its f16 twin beside it under `HX`), f16 (`OUT_F16`), Q8_0 blocks (`OUT_Q8`), or none; the stamp
+//! supplies the row stash and its lanes (`TG`)
+[ |> template_struct_instance]
+class template GkMoeCombG4 : GkMoeCombine {
+    @ssbo @binding = 6 @role = "read" dense : array<float>      //! [rows x n] the dense branch's down rows
+    @ssbo @binding = 7 @role = "weight" wn : array<float>       //! the norms plane
+    @ssbo @binding = 8 @role = "write" @template_gate = OUT_F32 yo : array<float>
+    @ssbo @binding = 8 @role = "write" @template_gate = OUT_F16 outh : array<float16>
+    @ssbo @binding = 8 @role = "write" @template_gate = OUT_Q8 outq : array<int8>
+    @ssbo @binding = 9 @role = "write" @template_gate = OUT_Q8 outs : array<float>
+    @ssbo @binding = 10 @role = "write" @template_gate = HX yh : array<float16>
+    @template_constant TG : uint = 256u          //!< the workgroup's lanes, the row loops' stride
+    @template_constant OUT_F32 : bool = false
+    @template_constant OUT_F16 : bool = false
+    @template_constant HX : bool = false
+    override WINDOW = false
+
+    def abstract stash(k : uint; v : float) : void   //! column `k` of the row kept for the lane's own re-read
+    def abstract stashed(k : uint) : float
+
+    //! the routed rows of row `p` at element `k`
+    def routed_into(p, k : uint; var r : float&) {
+        if (pa.presummed != 0u) {
+            r = down_rows[p * pa.n + k]
+        } else {
+            r = 0.0
+            slot_sum_into(p, k, r)
+        }
+    }
+
+    def override normed_at(e : uint; mean, inv : float) : float => wn[pa.nwoff + e] * (stashed(e) * inv)
+
+    //! row `r`'s step: four reductions over the stash (slots 0, 1, 0, then the next norm's 1 - each reduce's barrier sits every
+    //! thread past the readers of the slot the next one writes)
+    [arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-gemma4-moe-block")]
+    def comb_g4_row(r : uint) {   // nolint:STYLE037 - the three branch norms, the step and the next norm's out forms over one stash
+        let n = pa.n
+        let base = r * n
+        let tid = gl_LocalInvocationID.x
+        var sr = 0.0
+        var k = tid
+        while (k < n) {
+            var rv = 0.0
+            routed_into(r, k, rv)
+            stash(k, rv)
+            sr += rv * rv
+            k += TG
+        }
+        var inv_r = 0.0
+        wg_rms_inv_into(sr, n, pa.eps, 0u, inv_r)
+        var sd = 0.0
+        k = tid
+        while (k < n) {
+            let a = dense[base + k]
+            sd += a * a
+            k += TG
+        }
+        var inv_d = 0.0
+        wg_rms_inv_into(sd, n, pa.eps, 1u, inv_d)
+        var sc = 0.0
+        k = tid
+        while (k < n) {
+            let c = wn[pa.rpost_off + k] * (stashed(k) * inv_r) + wn[pa.dpost_off + k] * (dense[base + k] * inv_d)
+            stash(k, c)
+            sc += c * c
+            k += TG
+        }
+        var inv_c = 0.0
+        wg_rms_inv_into(sc, n, pa.eps, 0u, inv_c)
+        var ss = 0.0
+        k = tid
+        while (k < n) {
+            let vv = (acc_rows[base + k] + wn[pa.spost_off + k] * (stashed(k) * inv_c)) * pa.ascale
+            acc_rows[base + k] = vv
+            stash(k, vv)
+            ss += vv * vv
+            k += TG
+        }
+        static_if (OUT_F32 || OUT_F16 || OUT_Q8) {
+            var inv = 0.0
+            wg_rms_inv_into(ss, n, pa.eps, 1u, inv)
+            static_if (OUT_Q8) {
+                blk_pass(0u, n / KQ_B32_ELEMS_U, r * (n / KQ_B32_ELEMS_U), 0.0, inv)
+            } else {
+                k = tid
+                while (k < n) {
+                    let v = normed_at(k, 0.0, inv)
+                    static_if (OUT_F32) {
+                        yo[base + k] = v
+                    }
+                    static_if (OUT_F16) {
+                        outh[base + k] = float16(v)
+                    }
+                    static_if (HX) {
+                        yh[base + k] = float16(v)
+                    }
+                    k += TG
+                }
+            }
+        }
     }
 }

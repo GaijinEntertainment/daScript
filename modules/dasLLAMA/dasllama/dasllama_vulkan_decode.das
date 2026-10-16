@@ -770,10 +770,10 @@ def private rd_moe_sets(var L : RLayer) {
     }
     if (L.moe_g4) {
         verify(ensure_cls_ar_comb_g4(), "vk decode: the gemma-4 combine-folded residual class rail must engage on a live device")
-        L.s_addr_next = set_cls_ar_comb_g4(fixed_array(g_rd.x_dev, g_rd.ffnout_dev, g_rd.norms_dev, g_rd.xb_dev,
-                g_rd.moe_ident_dev, g_rd.moe_dw_dev, g_rd.edown_dev),
-            fixed_array(rows_bytes, rows_bytes, g_rd.norms_bytes, rows_bytes, slots_bytes, slots_bytes, edn_bytes),
-            fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XB, 0u, VHZ_MRT, VHZ_MDN))
+        L.s_addr_next = set_cls_ar_comb_g4(fixed_array(g_rd.x_dev, g_rd.moe_ident_dev, g_rd.moe_dw_dev, g_rd.edown_dev,
+                g_rd.ffnout_dev, g_rd.norms_dev, g_rd.xb_dev),
+            fixed_array(rows_bytes, slots_bytes, slots_bytes, edn_bytes, rows_bytes, g_rd.norms_bytes, rows_bytes),
+            fixed_array(VHZ_X, 0u, VHZ_MRT, VHZ_MDN, VHZ_FFO, 0u, VHZ_XB))
         return
     }
     verify(ensure_cls_ar_comb(), "vk decode: the combine-folded residual class rail must engage on a live device")
@@ -799,9 +799,9 @@ def private rd_ensure_comb_sets {
         L.comb_rq = vk_fuse_on() && fn.fmt == int(KqFmt.q8) && !fn.storex && (L.moe_g4 ? ensure_cls_ar_comb_g4_rq() : ensure_cls_ar_comb_rq())
         continue if (!L.comb_rq)
         if (L.moe_g4) {
-            L.s_comb_rq = set_cls_ar_comb_g4_rq(fixed_array(g_rd.x_dev, g_rd.ffnout_dev, g_rd.norms_dev, g_rd.xq_dev, g_rd.moe_ident_dev, g_rd.moe_dw_dev, g_rd.edown_dev, g_rd.xs_dev),
-                fixed_array(rows_bytes, rows_bytes, g_rd.norms_bytes, dim * nb, slots_bytes, slots_bytes, edn_bytes, (dim / 32l) * 4l * nb),
-                fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XQ, 0u, VHZ_MRT, VHZ_MDN, VHZ_XQ))
+            L.s_comb_rq = set_cls_ar_comb_g4_rq(fixed_array(g_rd.x_dev, g_rd.moe_ident_dev, g_rd.moe_dw_dev, g_rd.edown_dev, g_rd.ffnout_dev, g_rd.norms_dev, g_rd.xq_dev, g_rd.xs_dev),
+                fixed_array(rows_bytes, slots_bytes, slots_bytes, edn_bytes, rows_bytes, g_rd.norms_bytes, dim * nb, (dim / 32l) * 4l * nb),
+                fixed_array(VHZ_X, 0u, VHZ_MRT, VHZ_MDN, VHZ_FFO, 0u, VHZ_XQ, VHZ_XQ))
         } else {
             L.s_comb_rq = set_cls_ar_comb_rq(fixed_array(g_rd.x_dev, g_rd.ffnout_dev, g_rd.norms_dev, g_rd.xq_dev,
                     g_rd.moe_ident_dev, g_rd.moe_dw_dev, g_rd.edown_dev, g_rd.moe_dlog_dev, g_rd.moe_db_dev, g_rd.moe_eidx_dev, g_rd.xs_dev),
@@ -2667,14 +2667,16 @@ def private rd_encode_moe(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
     }
 }
 
+//! the gemma-4 step's args (`GkMoeCombG4`): the k slots off the slot map, both branches normed, their sum normed, the step scaled,
+//! the next norm at `woff`; `presummed` where the down GEMV folded the k rows
+def rd_g4_comb_args(L : RLayer; l, woff : int64; presummed : bool) : GkMoeCombArgs
+    => GkMoeCombArgs(n = uint(g_rd.dim), k = uint(g_rd.k), eps = g_rd.eps, ascale = L.out_scale, presummed = presummed ? 1u : 0u,
+        rpost_off = uint(rd_norm_off(l, RD_NORM_POST_FFN2)), dpost_off = uint(rd_norm_off(l, RD_NORM_POST_FFN1)),
+        spost_off = uint(rd_norm_off(l, RD_NORM_POST_FFN)), nwoff = uint(woff))
+
 //! The residual step's push block over a MoE layer's combine: the shared row at its gate when the layer has
 //! one, the k routed rows through the slot map, then the norm at `woff`.
 def rd_ar_comb_args(L : RLayer; l, woff : int64) : ArArgs {
-    if (L.moe_g4) {   //! both branches normed, their sum normed, the step scaled: the gemma-4 form's rows
-        return ArArgs(dim = uint(g_rd.dim), add_on = 1u, woff = uint(woff), eps = g_rd.eps, ascale = L.out_scale,
-            slots = uint(g_rd.k), pwoff = uint(rd_norm_off(l, RD_NORM_POST_FFN1)),
-            routed_post_off = uint(rd_norm_off(l, RD_NORM_POST_FFN2)), sum_post_off = uint(rd_norm_off(l, RD_NORM_POST_FFN)))
-    }
     if (L.experts_host) {   // the host's sum lands as one row of weight one, the expert bias already in it
         return ArArgs(dim = uint(g_rd.dim), add_on = has_dense_triple(L) ? 1u : 0u, woff = uint(woff), eps = g_rd.eps, ascale = 1.0,
             slots = 1u, lstride = uint(g_rd.ner), gated = g_rd.sh_gated ? 1u : 0u, dbias_on = 0u, dboff = uint(L.router_slot * g_rd.ne * g_rd.dim))
@@ -2814,15 +2816,22 @@ def private rd_encode_token(var first_seg_raw : VkCommandBuffer; nrows, nsplit :
             }
             var pc14 = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(nxt), eps = g_rd.eps, ascale = L.out_scale,
                 pre_on = (L.pre_post || L.ple) ? 1u : 0u, pwoff = uint(rd_norm_off(l, L.ple ? RD_NORM_PLE_POST : RD_NORM_POST_FFN)))
+            if (L.moe_g4) {
+                //! the one-row command's summing down GEMV folded the k rows; the rows and the window chain write them apart
+                var pcg = rd_g4_comb_args(L, l, nxt, one && L.edown_sum)
+                if (L.comb_rq) {   //! the next head's Q8_0 feed quantized here
+                    enc_cls_ar_comb_g4_rq(raw, h, L.s_comb_rq, pcg, nrows)
+                } else {
+                    enc_cls_ar_comb_g4(raw, h, L.s_addr_next, pcg, nrows)
+                }
+                rd_ts(raw, "m:ar2")
+                xq_ready = L.comb_rq
+                continue
+            }
             if (L.moe) {
                 var pc14c = rd_ar_comb_args(L, l, nxt)
-                pc14c.presummed = (one && L.edown_sum) ? 1u : 0u   //! the one-row command's summing down GEMV folded the k rows; the rows and the window chain write them apart
-                if (L.comb_rq && L.moe_g4) {   //! the next head's Q8_0 feed quantized here
-                    enc_cls_ar_comb_g4_rq(raw, h, L.s_comb_rq, pc14c, nrows)
-                } elif (L.comb_rq) {
+                if (L.comb_rq) {   //! the next head's Q8_0 feed quantized here
                     enc_cls_ar_comb_rq(raw, h, L.s_comb_rq, pc14c, nrows)
-                } elif (L.moe_g4) {
-                    enc_cls_ar_comb_g4(raw, h, L.s_addr_next, pc14c, nrows)
                 } else {
                     enc_cls_ar_comb(raw, h, L.s_addr_next, pc14c, nrows)
                 }
@@ -3585,11 +3594,11 @@ def private rd_record_draft {
     rd_encode_ffn(raw, h, L, l, nxt, 1l, 1u, 0)
     if (L.moe) {   //! a routed head's block as a routed trunk layer's: the experts on the shared expert's feed, the combine's residual step
         rd_encode_moe(raw, h, L, l, 1l)
-        var pcc = rd_ar_comb_args(L, l, nxt)
-        pcc.presummed = L.edown_sum ? 1u : 0u
         if (L.moe_g4) {
-            enc_cls_ar_comb_g4(raw, h, L.s_addr_next, pcc, 1l)
+            var pcg = rd_g4_comb_args(L, l, nxt, L.edown_sum)
+            enc_cls_ar_comb_g4(raw, h, L.s_addr_next, pcg, 1l)
         } else {
+            var pcc = rd_ar_comb_args(L, l, nxt)
             enc_cls_ar_comb(raw, h, L.s_addr_next, pcc, 1l)
         }
         rd_ts(raw, "m:ar2")
