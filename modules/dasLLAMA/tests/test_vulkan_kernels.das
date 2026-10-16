@@ -1778,7 +1778,15 @@ def private per32_sum_rows_cell(t : T?; fmt : KqFmt; n, wq_words : int; wq_seed,
             f.regs[r * 2 + 1] = uint(r * nb)
         }
         var inscope wgt <- [for (r in range(nreg)); 0.625 - 0.25 * float(r)]
-        var inscope dots <- [for (i in range(nreg * d)); invoke(row_oracle, f.wqh, f.wsh, f.xqh, f.xsh, (i / d) * d * nb + (i % d) * nb, nb)]
+        var inscope dots : array<float>
+        dots |> reserve(nreg * d)
+        for (r in range(nreg)) {   //! the oracle reads its activation row from block 0: each slot's row cut out of the plane
+            var inscope xq <- [for (w in range(nb * 8)); f.xqh[r * nb * 8 + w]]
+            var inscope xs <- [for (b in range(nb)); f.xsh[r * nb + b]]
+            for (row in range(d)) {
+                dots |> push(invoke(row_oracle, f.wqh, f.wsh, xq, xs, r * d * nb + row * nb, nb))
+            }
+        }
         var inscope ys_ref : array<float>
         ys_ref |> resize(4 * d)
         for (p in range(4)) {
