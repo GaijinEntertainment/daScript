@@ -837,6 +837,37 @@ def q8_gather_rows(wp : int8 const?; s16p : uint16 const?; s32p : float const?; 
     }
 }
 
+//! the GGUF's 34-byte Q8_0 blocks of `tensors` (byte offset in `blob`, elements) split into the device plane pair the q8 GEMV
+//! reads: 32 quant bytes a block, an f16 scale a block; each tensor's first block index back, in the list's order (the Vulkan
+//! assistant drafter's upload form)
+def q8_repack(blob : array<uint8>; tensors : array<tuple<boff : int64; n : int64>>; @exact_size var quants : array<uint8>;
+              @exact_size var scales : array<uint16>) : array<int64> {
+    var nblk = 0l
+    for (te in tensors) {
+        nblk += te.n / Q8_BLOCK_ELEMS
+    }
+    quants |> reserve(nblk * Q8_QPB)
+    quants |> resize(nblk * Q8_QPB)
+    scales |> reserve(nblk)
+    scales |> resize(nblk)
+    var bases : array<int64>
+    bases |> reserve(long_length(tensors))
+    var cur = 0l
+    for (te in tensors) {
+        bases |> push(cur)
+        unsafe {
+            let src = addr<uint8 const?>(blob[te.boff])
+            for (b in range64(te.n / Q8_BLOCK_ELEMS)) {
+                let bp = src + b * (Q8_SPB + Q8_QPB)
+                scales[cur] = uint16(uint(bp[0]) | (uint(bp[1]) << 8u))
+                memcpy(addr<void?>(quants[cur * Q8_QPB]), reinterpret<void?>(bp + Q8_SPB), Q8_QPB)
+                cur++
+            }
+        }
+    }
+    return <- bases
+}
+
 // Interleave one PREPARED Q8 region (split planes, f32 scales, possibly grp<mr>-repacked) into
 // the Metal 34B-block stream (f16 scale + 32 quants per block, row-major) — the whisper-decoder
 // upload's per-region step; the region is ONE repack unit (rows/mr groups + a row-major tail).

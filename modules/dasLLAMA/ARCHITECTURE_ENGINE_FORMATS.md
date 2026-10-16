@@ -59,7 +59,8 @@ anchor.
   mapping. Codecs live in `dasllama_convert`; this file finds bytes, it does not decode them.
 - **`dasllama_layout.das`** - disk-format -> compute-layout transforms at LOAD scope: the blob
   transform, the CPU repack walkers, the GPU tier gathers, the per-region q8->Metal-34B
-  un-repack (`q8_region_to_metal_blob`, the ASR-decoder driver's upload form), and the refusal
+  un-repack (`q8_region_to_metal_blob`, the ASR-decoder driver's upload form), the GGUF Q8_0 blocks'
+  split into the quant and f16 scale planes (`q8_repack`, the Vulkan assistant drafter's upload form), and the refusal
   half (`can this model take the blob form`) split out so the image writer can commit without
   loading.
 - **`dasllama_tokenizer.das`** - the tokenizer facade: backend selection off the GGUF metadata and
