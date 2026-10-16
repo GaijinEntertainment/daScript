@@ -1,6 +1,7 @@
 //! The suites' shared compares (`_compares.das`) against hand-built rows: a NaN or a length difference is never inside a bar, each `check` bar kind passes its rows and reds one past it, and the poisoned-expectation control reds a bar too loose to see it. No skips.
 options gen2
 options _dasllama_internal = true
+options persistent_heap   // a dastest root frees what it deletes only on this heap; the linear heap holds every carrier a cell deleted until the context ends
 
 require dastest/testing_boost public
 require _compares

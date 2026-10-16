@@ -1,6 +1,7 @@
 options gen2
 options indenting = 4
 options no_aot     // invokes the compiler at runtime (compile_file) — not AOT-linkable
+options persistent_heap   // a dastest root frees what it deletes only on this heap; the linear heap holds every carrier a cell deleted until the context ends
 
 require dastest/testing_boost public
 require daslib/ast
