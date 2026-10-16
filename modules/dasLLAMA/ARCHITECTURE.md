@@ -162,6 +162,8 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   (`ARCHITECTURE_MEASUREMENT_FAT_START.md#box-runtime-file`).
 - `ARCHITECTURE_MEASUREMENT_SERVED.md` - the client clock around a live chat server's turns and
   what its figures are (`ARCHITECTURE_MEASUREMENT_SERVED.md#served-turn-instrument`).
+- `ARCHITECTURE_MEASUREMENT_FORCED_FEED.md` - the reference build's forced feed on the E2B Q4_K_M:
+  its driver, build, command line and readings (`ARCHITECTURE_MEASUREMENT_FORCED_FEED.md#reference-forced-feed`).
 - `ARCHITECTURE_MEASUREMENT_VK_GEMM_PROBE.md` - the Vulkan GEMM probe's arms, the shapes they run
   at, and the alternates they are read against.
 - `ARCHITECTURE_MEASUREMENT_KERNEL_RACE.md` - the instruments that time a kernel away from the
