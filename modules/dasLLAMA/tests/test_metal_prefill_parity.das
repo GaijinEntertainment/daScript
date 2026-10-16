@@ -1673,7 +1673,7 @@ def private short_window_cells(t : T?; path, tag : string; bar : float; form : S
 //! the last-layer FFN tail narrowed (the final row alone, the classifier's) against the full-panel tail over the first 48 ids of
 //! `prompt` on the blob twin `trsg`, the prefill override selected: the logits within `bar`, the same argmax, the narrowed residual's
 //! row 0 visibly off the full one's (the arm engaged), and `keep_hidden` restoring the full plane bit for bit
-[unused_argument(t, trsg, prompt, tag, bar)]   // off-Apple the gated body is empty
+[cold_path, unused_argument(t, trsg, prompt, tag, bar)]   // off-Apple the gated body is empty
 def lastrow_ab(t : T?; var trsg : Model; prompt : array<int64>; tag : string; bar : float) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
         let nlr = 48l

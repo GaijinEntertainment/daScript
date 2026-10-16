@@ -3419,7 +3419,7 @@ def set_metal_batch_gather(on : bool) {
 
 def metal_batch_gather() : bool => g_b_gather
 
-[unused_argument(s, npos, pos)]
+[hot_path, unused_argument(s, npos, pos)]
 def private metal_batch_embed_gate(t : Model; s : Session; npos, pos : int64) : bool => g_b_gather && emb_dev_gather_ok(t)
 
 //! encodes the drafts that write the same-slab rows' ids onto the verify's own command buffer

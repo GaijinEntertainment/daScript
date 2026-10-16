@@ -353,6 +353,7 @@ struct private SchedRun {
     mtp : bool
 }
 
+[cold_path]
 def private sched_run(trg : Model; prompts : array<array<int64>>; budget : int64; kv : KVDtype; spec : bool) : SchedRun {
     var run : SchedRun
     var ev : array<SchedEvent>
@@ -507,6 +508,7 @@ def private vk_window_witness(t : T?; trg : Model; dr : GemmaDrafter; var s : Se
 // the GPU drafter step against the CPU oracle on the served twin: same seed token, same carried hidden, same anchor, so the two
 // agree on the argmax and sit within the home's feed rounding - a Q8_0 feed at a rounding tie lands one level over when the sums
 // differ by ulps, and one level in a large-value block moves the 26B's draft by up to 0.3 (`VK_FEED_FLIP_BAR`)
+[cold_path]
 def private gpu_step_vs_oracle(t : T?; trg : Model; var dr : GemmaDrafter; prompt : array<int64>; tag : string; window_control : bool) {
     let npos = long_length(prompt)
     var s <- make_run_state(trg.config, KVDtype.f16, KVDtype.f16)

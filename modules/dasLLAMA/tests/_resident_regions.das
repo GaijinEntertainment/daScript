@@ -540,6 +540,7 @@ def private batched_steps_body(t : T?; tr : Model; pa, pb : array<int64>; bar : 
 
 //! the E-series side rows on the device at every decode shape: the sessions alone (the one-row command) and the batched steps (the
 //! N-row command) gather each row's side row off its token id - the host gathers no table row - and the batched rows still read bit for bit what each session reads alone
+[cold_path]
 def cell_regions_batched_side_rows(t : T?; file : string) {
     t |> run("the side rows of the sessions alone and of the batched steps gather on the device off the rows' ids") @(t : T?) {
         with_regions_rig(t, file) $(tr) {
@@ -597,6 +598,7 @@ def private batched_rows_logits(t : T?; tr : Model) : array<array<float>> {
 //! batched row counted by `vk_rdec_nrow_embed_gathered`, the host embedding none, and each row's logits at every step bit for bit the
 //! same steps' on a load with the gather off (`set_gpu_resident_embed(0)`, the `DASLLAMA_VK_GPU_EMBED=0` form: every row embedded on
 //! the host and staged up), which moves the counter by nothing and embeds every row on the host - the counters' control
+[cold_path]
 def cell_regions_batched_embed_gather(t : T?; file : string) {
     t |> run("the batched rows gather their token rows on the device, bit for bit the rows the host embeds") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -646,6 +648,7 @@ def private b32_census(suffix : string) : int64 {
 //! a per-32 routed down on the gemma-4 MoE folded under the routing weights by both commands: the batched steps against the
 //! sessions alone on the one-row command's fused forms within `bar`, the summed down stamps dispatched and no per-slot down leaf
 //! (the census over every per-32 format's stamps) - the rows fold each row's k slots as the one-row command folds its own
+[cold_path]
 def cell_regions_batched_down_fold(t : T?; file : string; bar : LogitsBar) {
     t |> run("the batched rows fold the routed down under the routing weights as the one-row command does") @(t : T?) {
         with_regions_rig(t, file) $(tr) {

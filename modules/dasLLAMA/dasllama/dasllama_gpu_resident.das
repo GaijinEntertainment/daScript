@@ -5021,7 +5021,7 @@ def private vulkan_embed_decode_gate(t : Model; s : Session; npos, pos : int64) 
 
 //! a batched step leaves its rows to the driver: the token commands gather every row off its id, where no routed layer's split
 //! command opens on the host's row
-[unused_argument(t, s, npos, pos), arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
+[hot_path, unused_argument(t, s, npos, pos), arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
 def private vulkan_embed_batch_gate(t : Model; s : Session; npos, pos : int64) : bool => g_rdec_active && g_rdec_emb_gpu && !g_rdec_experts_host
 
 [init, arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]

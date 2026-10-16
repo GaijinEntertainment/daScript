@@ -1810,7 +1810,7 @@ def fmt_at(a : array<KqFmt>; l : int64) : KqFmt => empty(a) ? KqFmt.q8 : a[l]
 
 //! gemma-4's per-expert down scales folded into the first `n` picks' routing weights `w` (their experts `idx`) of layer l: the CPU
 //! chain's fold, which the resident driver's host rows share; no-op off a gemma-4 MoE
-[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-gemma4-moe-block")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-gemma4-moe-block")]
 def moe_down_scale_fold(t : Model; l : int64; idx : array<int64>; var w : array<float>; n : int64) {
     return if (!t.config.moe_dense_shexp)
     let row = t.moe_down_scale_off + l * t.config.n_expert
