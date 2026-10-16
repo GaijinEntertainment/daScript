@@ -622,8 +622,15 @@ def private pf_moe_layer_sets(l : int64) {
     L.pf_router_set = set_router_gemm_cls(fixed_array(g_rd.router_dev, g_rd.pf_xb, g_rd.pf_mlog),
         fixed_array(g_rd.router_bytes, np * dim * 4l, np * ner * 4l), fixed_array(0u, VHZ_XB, VHZ_MRT))
     if (L.experts_host) {
-        if (!g_rd.hc) {
-            verify(!L.moe_g4, "vk prefill: a host layer takes the plain combine")
+        if (!g_rd.hc && L.moe_g4) {   //! the host's sums land as each row's one routed row of weight one
+            verify(ensure_cls_ar_comb_g4() && ensure_cls_ar_comb_g4_f16_b(), "vk prefill: a host layer's gemma-4 combine class rails must engage on a live device")
+            L.pf_arcomb_set = set_cls_ar_comb_g4(fixed_array(g_rd.pf_x, g_rd.pf_ffnout, g_rd.norms_dev, g_rd.pf_xb, g_rd.pf_ident_dev, g_rd.pf_ones_dev, g_rd.pf_hacc_dev),
+                fixed_array(np * dim * 4l, np * dim * 4l, g_rd.norms_bytes, np * dim * 4l, np * 4l, np * 4l, np * dim * 4l),
+                fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XB, 0u, 0u, VHZ_MDN))
+            L.pf_arcomb_f16_set = set_cls_ar_comb_g4_f16_b(fixed_array(g_rd.pf_x, g_rd.pf_ffnout, g_rd.norms_dev, g_rd.pf_xf, g_rd.pf_ident_dev, g_rd.pf_ones_dev, g_rd.pf_hacc_dev),
+                fixed_array(np * dim * 4l, np * dim * 4l, g_rd.norms_bytes, np * dim * 2l, np * 4l, np * 4l, np * dim * 4l),
+                fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XQ, 0u, 0u, VHZ_MDN))
+        } elif (!g_rd.hc) {
             L.pf_arcomb_set = set_cls_ar_comb(fixed_array(g_rd.pf_x, g_rd.pf_ffnout, g_rd.norms_dev, g_rd.pf_xb, g_rd.pf_ident_dev, g_rd.pf_ones_dev, g_rd.pf_hacc_dev, g_rd.pf_mlog, g_rd.moe_db_dev, g_rd.pf_ident_dev),
                 fixed_array(np * dim * 4l, np * dim * 4l, g_rd.norms_bytes, np * dim * 4l, np * 4l, np * 4l, np * dim * 4l, np * ner * 4l, g_rd.moe_db_bytes, np * 4l),
                 fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XB, 0u, 0u, VHZ_MDN, VHZ_MRT, 0u, 0u))
@@ -803,6 +810,14 @@ def private pf_moe_q8_experts(raw : VkCommandBuffer; var h : VkHaz; l, nk : int6
     pfq_ts(raw)
 }
 
+//! the gemma-4 routed feed: x under the routed branch's pre norm into pf_xb, the rows the gather (or the host) reads
+[arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-gemma4-moe-block")]
+def private pf_moe_g4_feed(raw : VkCommandBuffer; var h : VkHaz; l, wlen : int64) {
+    var pcn = ArArgs(dim = uint(g_rd.dim), add_on = 0u, woff = uint(rd_norm_off(l, RD_NORM_PRE_FFN2)), eps = g_rd.eps, ascale = 1.0)
+    enc_cls_ar(raw, h, g_rd.pf_sets[int(l * PF_ROLES) + 8], pcn, wlen)
+    pfq_ts(raw)
+}
+
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block")]
 def private pf_moe_block(raw : VkCommandBuffer; var h : VkHaz; l, wlen : int64) {
     var L & = unsafe(g_rd.layers[l])
@@ -812,16 +827,13 @@ def private pf_moe_block(raw : VkCommandBuffer; var h : VkHaz; l, wlen : int64) 
     let nfe = g_rd.nfe
     let ner = uint(g_rd.ner)
     let nk = wlen * k
-    let addrms_set = int(l * PF_ROLES) + 8
     pf_moe_router(raw, h, l, wlen)
     var pct = GkTopKArgs(ne = uint(ne), k = uint(k), norm = g_rd.norm_topk ? 1u : 0u, lstride = ner, wscale = g_rd.wscale,
         dsoff = L.moe_g4 ? uint(L.router_slot * ne) : GK_NO_DSCALE, rbias_on = g_rd.router_bias ? 1u : 0u, rboff = uint(L.router_slot * ne))
     topk_rows_enc(ne, raw, h, L.pf_topk_set, pct, wlen)
     pfq_ts(raw)
-    if (L.moe_g4) {   //! the routed feed: x under the routed branch's pre norm, the rows the gather reads
-        var pcn = ArArgs(dim = uint(dim), add_on = 0u, woff = uint(rd_norm_off(l, RD_NORM_PRE_FFN2)), eps = g_rd.eps, ascale = 1.0)
-        enc_cls_ar(raw, h, g_rd.pf_sets[addrms_set], pcn, wlen)
-        pfq_ts(raw)
+    if (L.moe_g4) {
+        pf_moe_g4_feed(raw, h, l, wlen)
     }
     let bounds = pf_moe_bounds(nk)
     let tcs = int64(SCHED_S_ROWS)
@@ -2325,6 +2337,9 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 }
                 if (moe && g_rd.layers[l].experts_host) {
                     pf_moe_router(raw, h, l, wlen)
+                    if (g_rd.layers[l].moe_g4) {
+                        pf_moe_g4_feed(raw, h, l, wlen)
+                    }
                     pf_host_cut(raw, raw, h, l, wlen, 0l, experts)
                 } elif (moe) {
                     pf_moe_block(raw, h, l, wlen)

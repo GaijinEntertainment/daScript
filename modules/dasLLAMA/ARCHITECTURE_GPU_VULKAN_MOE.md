@@ -265,3 +265,11 @@ four rows (`RDEC_NORM_ROWS` 10 with the output-bias row of `ARCHITECTURE_GPU_VUL
 dense shared expert only where no backend installed the MoE seats; the plan sizes an MoE layer
 at its expert triple plus the FFN triple, and the layer decline reads the FFN triple's formats on
 the dense rail.
+
+**A gemma-4 layer whose experts serve on the host keeps the rest of the block on the device.** Where the plan moves the
+first routed layers' experts to the host (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan`), such a layer runs the dense
+triple, writes the routed feed into xb and runs the router GEMV off its own rms of x (`norm_on`, so xb keeps the feed), and the
+segment lands the feed and the logits (`ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command`; the window chain the same over its rows).
+The host selects, folds the down scale into the weights (`rdec_host_down_scale`, as `gemma4_moe_ffn` does) and sums the
+experts; the next segment's combine reads that sum as one routed row of weight one (`ArArgs.slots` 1 over the ramp map and the
+ones row) under the same three norms. The hot expert pool stays off a gemma-4 model: its device sums carry no down scale.

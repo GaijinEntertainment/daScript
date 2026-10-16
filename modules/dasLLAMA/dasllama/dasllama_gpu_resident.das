@@ -1189,7 +1189,7 @@ def resident_plan(t : Model; seq_cap : int64; kdt, vdt : KVDtype; hot_cap : int6
     }
     p.weight_bytes += resident_dn_ba_f32_bytes(t)
     p.weight_bytes += resident_router_bytes(c, n_moe)
-    if (p.host_layers > 0l && rdec_hot_installed() && c.n_expert_used <= int64(RDEC_HOT_PICKS)) {
+    if (p.host_layers > 0l && rdec_hot_installed() && c.n_expert_used <= int64(RDEC_HOT_PICKS) && !c.moe_dense_shexp) {   //! the pool's device sums carry no gemma-4 down scale
         let room = p.usable_bytes - p.weight_bytes - p.scratch_bytes
         let floor_kv = g_rdec_regions_want * resident_hot_floor_ctx(seq_cap, rdec_ctx_asked_whole()) * (krow + vrow) * 8l / 7l
         let fit = resident_hot_fit(resident_hot_ask(), hot_cap, room - p.kv_bytes, room - floor_kv, resident_hot_slot_bytes_host_layers(t, p.host_layers), c.n_expert)
@@ -1344,7 +1344,7 @@ def resident_plan_pick(t : Model; rkdt : KVDtype; var seq_cap : int64&; announce
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command")]
-def resident_host_layers_ok(c : Config) : bool => c.n_expert > 0l && !c.hyper_conn && !c.moe_dense_shexp && rdec_hc_installed() && c.n_expert_used <= int64(RDEC_HOT_PICKS)
+def resident_host_layers_ok(c : Config) : bool => c.n_expert > 0l && !c.hyper_conn && rdec_hc_installed() && c.n_expert_used <= int64(RDEC_HOT_PICKS)
 
 //! the bytes of a routed layer's gate, up and down planes over `n_exp` experts in device layout
 def private resident_expert_planes_bytes(t : Model; l, n_exp : int64) : int64 {
@@ -1401,7 +1401,7 @@ def private resident_plan_host_layers(t : Model; rkdt : KVDtype; seq_cap : int64
         h++
     }
     if (announce && plan.fits) {
-        to_log(LOG_INFO, "dasLLAMA: resident driver - a plain MoE the card does not hold whole at {seq_cap} positions asked whole (set_gpu_ctx_strict, DASLLAMA_GPU_CTX_STRICT): the first {h} of {n_moe} routed layers' experts serve on the host, the rest on the device\n")
+        to_log(LOG_INFO, "dasLLAMA: resident driver - a MoE the card does not hold whole at {seq_cap} positions asked whole (set_gpu_ctx_strict, DASLLAMA_GPU_CTX_STRICT): the first {h} of {n_moe} routed layers' experts serve on the host, the rest on the device\n")
     }
     return plan
 }
@@ -3851,10 +3851,21 @@ def private rdec_host_experts_step(l : int64; xb : float const?; logits : float 
             ebp = addr<float const?>(t.fblob[t.exp_probs_off + l * ne])
         }
         moe_select(c, addr(s.moe_logits[0]), s.moe_idx, s.moe_w, 0l, ebp)
+        rdec_host_down_scale(t, l, s.moe_idx, s.moe_w, c.n_expert_used)
         moe_routed_note(t, s, l)
         rdec_trace_picks(l, 1l, c.n_expert_used, addr<int64 const?>(s.moe_idx[0]), addr<float const?>(s.moe_w[0]))
         moe_routed_sum_k(t, s, l, rdec_hot_on(l) ? rdec_hot_step(t, s, l) : c.n_expert_used)
         memcpy(reinterpret<void?>(acc), addr<void const?>(s.moe_acc[0]), c.dim * 4l)
+    }
+}
+
+//! gemma-4's per-expert down scale folded into the first `n` picks' routing weights, as `gemma4_moe_ffn` folds it; no-op elsewhere
+[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-gemma4-moe-block")]
+def private rdec_host_down_scale(t : Model; l : int64; idx : array<int64>; var w : array<float>; n : int64) {
+    return if (!t.config.moe_dense_shexp)
+    let row = t.moe_down_scale_off + l * t.config.n_expert
+    for (j in range64(n)) {
+        w[j] *= t.fblob[row + idx[j]]
     }
 }
 
@@ -4067,6 +4078,7 @@ def private rdec_host_experts_rows(l : int64; xb : float const?; logits : float 
             memcpy(addr<void?>(s.moe_rlog[r * ne]), reinterpret<void const?>(logits + (row0 + r) * ner), ne * 4l)
         }
         moe_routed_rows_select(t, s, l, nrows)
+        rdec_host_down_scale(t, l, s.moe_idx_b, s.moe_w_b, nrows * c.n_expert_used)
         rdec_trace_picks(l, nrows, c.n_expert_used, addr<int64 const?>(s.moe_idx_b[0]), addr<float const?>(s.moe_w_b[0]))
         if (g_rdec_verify_rows_in_flight) {
             let chained = rdec_hot_on(l) && rdec_hot_rows_step(t, s, l, nrows)

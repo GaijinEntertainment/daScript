@@ -691,13 +691,21 @@ def private rd_moe_sets(var L : RLayer) {
     let k = g_rd.k
     if (g_rd.experts_host && L.be1 < 0l) {
         L.experts_host = true
-        L.s_router = set_router_gemv_cls(fixed_array(g_rd.router_dev, g_rd.xb_dev, g_rd.moe_dlog_dev, g_rd.norms_dev),
-            fixed_array(g_rd.router_bytes, dim * 4l * nb, g_rd.ner * 4l * nb, g_rd.norms_bytes), fixed_array(0u, VHZ_XB, VHZ_MRT, 0u))
+        let rx = L.moe_g4 ? g_rd.x_dev : g_rd.xb_dev   //! the gemma-4 router norms x itself: xb holds the routed feed the host reads
+        L.s_router = set_router_gemv_cls(fixed_array(g_rd.router_dev, rx, g_rd.moe_dlog_dev, g_rd.norms_dev),
+            fixed_array(g_rd.router_bytes, dim * 4l * nb, g_rd.ner * 4l * nb, g_rd.norms_bytes), fixed_array(0u, L.moe_g4 ? VHZ_X : VHZ_XB, VHZ_MRT, 0u))
         if (!g_rd.hc) {
-            verify(!L.moe_g4, "vk decode: a gemma-4 routed block has no host form")
-            verify(ensure_cls_ar_comb(), "vk decode: a host layer's combine-folded residual class rail must engage on a live device")
             let rows_bytes = dim * 4l * nb
             let slots_bytes = MAX_ROUTED_SLOTS * 4l
+            if (L.moe_g4) {   //! the host's sum lands as the one routed row of weight one
+                verify(ensure_cls_ar_comb_g4(), "vk decode: a host layer's gemma-4 combine class rail must engage on a live device")
+                L.s_addr_next = set_cls_ar_comb_g4(fixed_array(g_rd.x_dev, g_rd.ffnout_dev, g_rd.norms_dev, g_rd.xb_dev,
+                        g_rd.moe_ident_dev, g_rd.ones_dev, g_rd.hacc_dev),
+                    fixed_array(rows_bytes, rows_bytes, g_rd.norms_bytes, rows_bytes, slots_bytes, slots_bytes, rows_bytes),
+                    fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XB, 0u, 0u, VHZ_MDN))
+                return
+            }
+            verify(ensure_cls_ar_comb(), "vk decode: a host layer's combine-folded residual class rail must engage on a live device")
             L.s_addr_next = set_cls_ar_comb(fixed_array(g_rd.x_dev, g_rd.ffnout_dev, g_rd.norms_dev, g_rd.xb_dev,
                     g_rd.moe_ident_dev, g_rd.ones_dev, g_rd.hacc_dev, g_rd.moe_dlog_dev, g_rd.moe_db_dev, g_rd.moe_eidx_dev),
                 fixed_array(rows_bytes, rows_bytes, g_rd.norms_bytes, rows_bytes, slots_bytes, slots_bytes, rows_bytes, g_rd.ner * 4l * nb, g_rd.moe_db_bytes, slots_bytes),
@@ -1672,9 +1680,12 @@ def private rd_encode_routed_sum(raw : VkCommandBuffer; var h : VkHaz; l : int64
 }
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command")]
-def private rd_encode_host_cut(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; nrows : int64; stamp : string) {
+def private rd_encode_host_cut(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; l, nrows : int64; stamp : string) {
+    if (L.moe_g4) {   //! the routed feed the host reads; the router norms x itself
+        rd_encode_g4_pre2(raw, h, L, l, nrows, false)
+    }
     var pcr = GkRouterArgs(ne = uint(g_rd.ner), dim = uint(g_rd.dim), woff = uint(L.router_slot * g_rd.ner * g_rd.dim), obase = 0u,
-        norm_on = 0u, nwoff = 0u, eps = g_rd.eps, ncols = uint(nrows))
+        norm_on = L.moe_g4 ? 1u : 0u, nwoff = L.moe_g4 ? uint(rd_norm_off(l, RD_NORM_ROUTER)) : 0u, eps = g_rd.eps, ncols = uint(nrows))
     router_enc_cols(false, raw, h, L.s_router, pcr, g_rd.ner)
     if (!empty(stamp)) {
         rd_ts(raw, stamp)
@@ -1749,7 +1760,7 @@ def private rd_record_hc_segments_n(nrows : int64; seq : bool; var segs : array<
             rd_encode_hc_layer(raw, h, L, l, nrows, seq, fuse_qkr, nlfin)
             if (L.moe) {
                 verify(L.experts_host, "vk decode: the hyper-connection chain serves routed experts on the host alone")
-                rd_encode_host_cut(raw, h, L, nrows, "")
+                rd_encode_host_cut(raw, h, L, l, nrows, "")
                 seg++
                 rd_host_resume(raw, segs[seg0 + seg], h, l, nrows)
             }
@@ -2586,6 +2597,19 @@ def private rd_encode_ple(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
     rd_ts(raw, "p:proj")
 }
 
+//! the gemma-4 routed feed: x under the routed branch's pre norm into xb, or (`fused`) straight into the experts' Q8 image
+[arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-gemma4-moe-block")]
+def private rd_encode_g4_pre2(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; l, nrows : int64; fused : bool) {
+    var pcn = ArArgs(dim = uint(g_rd.dim), add_on = 0u, woff = uint(rd_norm_off(l, RD_NORM_PRE_FFN2)), eps = g_rd.eps, ascale = 1.0)
+    if (fused) {
+        enc_ar_rq_stamp(L.pre2_stamp, raw, h, L.s_pre2_rq, pcn)
+        rd_ts(raw, "m:pre2_rq")
+    } else {
+        enc_cls_ar(raw, h, L.s_addr_ffn, pcn, nrows)
+        rd_ts(raw, "m:pre2")
+    }
+}
+
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#resident-moe-token")]
 def private rd_encode_moe(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; l, nrows : int64) {
     let dim = g_rd.dim
@@ -2593,15 +2617,8 @@ def private rd_encode_moe(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
     let k = g_rd.k
     let one = nrows == 1l
     let nr = uint(nrows)
-    if (L.moe_g4) {   //! the routed feed: x under the routed branch's pre norm into xb (the dense triple's requant took the FFN-normed row already)
-        var pcn = ArArgs(dim = uint(dim), add_on = 0u, woff = uint(rd_norm_off(l, RD_NORM_PRE_FFN2)), eps = g_rd.eps, ascale = 1.0)
-        if (one && L.pre2_fused) {
-            enc_ar_rq_stamp(L.pre2_stamp, raw, h, L.s_pre2_rq, pcn)
-            rd_ts(raw, "m:pre2_rq")
-        } else {
-            enc_cls_ar(raw, h, L.s_addr_ffn, pcn, nrows)
-            rd_ts(raw, "m:pre2")
-        }
+    if (L.moe_g4) {   //! the dense triple's requant took the FFN-normed row already
+        rd_encode_g4_pre2(raw, h, L, l, nrows, one && L.pre2_fused)
     }
     if (L.xe_own && !(one && L.pre2_fused)) {
         rq_enc(raw, h, L.s_quant_xe, L.fe1, dim * nrows)
@@ -2672,9 +2689,9 @@ def private rd_encode_moe(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
 //! The residual step's push block over a MoE layer's combine: the shared row at its gate when the layer has
 //! one, the k routed rows through the slot map, then the norm at `woff`.
 def rd_ar_comb_args(L : RLayer; l, woff : int64) : ArArgs {
-    if (L.moe_g4) {   //! both branches normed, their sum normed, the step scaled: the gemma-4 form's rows
+    if (L.moe_g4) {   //! both branches normed, their sum normed, the step scaled: the gemma-4 form's rows; a host layer's sum is one row of weight one
         return ArArgs(dim = uint(g_rd.dim), add_on = 1u, woff = uint(woff), eps = g_rd.eps, ascale = L.out_scale,
-            slots = uint(g_rd.k), pwoff = uint(rd_norm_off(l, RD_NORM_POST_FFN1)),
+            slots = L.experts_host ? 1u : uint(g_rd.k), pwoff = uint(rd_norm_off(l, RD_NORM_POST_FFN1)),
             routed_post_off = uint(rd_norm_off(l, RD_NORM_POST_FFN2)), sum_post_off = uint(rd_norm_off(l, RD_NORM_POST_FFN)))
     }
     if (L.experts_host) {   // the host's sum lands as one row of weight one, the expert bias already in it
@@ -2783,11 +2800,15 @@ def private rd_encode_token(var first_seg_raw : VkCommandBuffer; nrows, nsplit :
             }
             if (L.moe && L.experts_host) {
                 verify(one && split_seg_base >= 0l, "vk decode: a host layer takes the one-row split command alone")
-                rd_encode_host_cut(raw, h, L, 1l, "m:router")
+                rd_encode_host_cut(raw, h, L, l, 1l, "m:router")
                 seg++
                 rd_host_resume(raw, g_rd.cmd_seg[split_seg_base + seg], h, l, 1l)
                 var pc14h = rd_ar_comb_args(L, l, nxt)
-                enc_cls_ar_comb(raw, h, L.s_addr_next, pc14h, 1l)
+                if (L.moe_g4) {
+                    enc_cls_ar_comb_g4(raw, h, L.s_addr_next, pc14h, 1l)
+                } else {
+                    enc_cls_ar_comb(raw, h, L.s_addr_next, pc14h, 1l)
+                }
                 rd_ts(raw, "m:ar2")
                 xq_ready = false
                 continue
@@ -3665,7 +3686,7 @@ def private rd_record_hc_draft {
     vhz_dep(raw, h, VHZ_XB | VHZ_XB2, VHZ_XB, true)
     rd_encode_hc_cat_eh(raw, h, 1l, true, "p:draft_")
     rd_encode_hc_layer(raw, h, L, l, 1l, false, fuse_qkr, nlfin)
-    rd_encode_host_cut(raw, h, L, 1l, "")
+    rd_encode_host_cut(raw, h, L, l, 1l, "")
     pfq_end(raw)
     cmd_close(raw)
     rd_take_stamps(g_rdq_draft, g_pfq_n)

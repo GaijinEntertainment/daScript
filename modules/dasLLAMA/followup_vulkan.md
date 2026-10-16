@@ -883,8 +883,7 @@ module) is independent and can land any time - it is pure structure.
     any new family, every carrier dasLLAMA serves today gets its Vulkan arm at parity - the
     existing families, and the vision and audio towers, whose GPU drivers are Metal today.
     The known gaps on the family side are this ledger's items 3 (the quant KV codecs), 4 (batched
-    decode), 5 (the speculative round), 6 (the mx4 and q51 device kernels behind gpt-oss and
-    gemma-4-26B), the gemma4 pre/post-norm attention decline, and the fully-resident MoE chain:
+    decode), 5 (the speculative round), and the fully-resident MoE chain:
     the 5060 Ti holds Qwen1.5-MoE Q6_K, Qwen3-30B-A3B UD-Q3_K_XL, Qwen3.6-35B-A3B UD-IQ3_S and
     gemma-4-26B-A4B UD-IQ4_XS whole (12.8 to 13.8 GB), the resident driver declines every MoE by
     construction, and the per-op tier reads 0.14x prefill / 0.75x decode against the reference
@@ -1308,20 +1307,6 @@ module) is independent and can land any time - it is pure structure.
     window on E2B - the q8 table is 2.35 GB, a device copy is the alternative). Also here: the driver's prefill GEMMs for the branch run the
     q8 batch tile on the cm2 route (the gate at 256 outputs, the proj at K 256) - a small f16
     route for them is a perf lever once the E-series rows have a baseline.
-49. **The gemma-4-26B-A4B passes a 16 GB card in every quant.** Its `ffn_down_exps` rows are 704
-    wide, a width only the 32-block formats (IQ4_NL, Q5_0, Q5_1, Q8_0) quantize, and
-    the K-quant rails' 256-multiple rule (`kq_fmt_row_ok`: the Q8_K activation superblock) demotes
-    an IQ4_NL or Q5_0 down stack to q8 at load - the UD-IQ3_XXS file's 3947 MB of down planes
-    become 7456 MB, and the resident image reads 14905 MB against a 16 GB card's 12677 MB usable
-    (measured 2026-09-12 on the RTX 5060 Ti; the plan declines on memory and the cells skip). The
-    q51 expert rail (`Q51Cm2T`'s s and e stamps, `Q51Gemv`; `ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block`) serves the UD-Q4_K_M file's native Q5_1 down stacks at 704; the IQ3_XXS and
-    IQ4_NL files still demote their IQ4_NL down stacks. Two levers, either of which puts those
-    on 16 GB: an iq4nl expert rail at 32-wide rows (the same per-32 form as q51: Q8_0 activations
-    in place of Q8_K - the CPU dot, the decode GEMV twin, the tune rows and kernel cells; the cm2
-    e stamps are f16-fed and already step K by 64, which 704 divides), or the streamed-experts
-    form (attention and the dense triple resident, the expert planes streamed a layer at a
-    time - the 16 GB story for every MoE past the card). The block itself holds on a 32 GB card
-    (`test_gpu_resident_gemma4_26b.das`, the RunPod RTX PRO 4500 rows).
 50. **The prefill flash tile runs one workgroup a (head, q tile), which leaves a low-head model's
     attention on a few SMs.** A key split of the tile (every (head, q tile) cut into equal pieces
     with f32 partials and a combine kernel, `pf_fa_nsplit` covering the SM count twice) lost on
@@ -1581,7 +1566,7 @@ module) is independent and can land any time - it is pure structure.
     regions at 660 positions each and read 151 and 104 summed against the reference's paged 106
     and 46 (`PERF_LEDGER.md`, the gemma section's 5060 Ti rows), where the per-op rails read 15
     and 14. What stands: a model whose weights alone do not fit (the Q8_0 on a 12 GB card, the
-    31B and the 26B IQ3_XXS on this one - the 26B's demoted down-expert rows take its served weights to 15.4 GB; `PERF_LEDGER.md`, the MoE section's 5060 Ti bullet) - a streamed-weights arm, the layers' planes through a device ring the
+    31B on this one) - a streamed-weights arm, the layers' planes through a device ring the
     step refills ahead of the decode, in layer order, the way the MoE block streams its expert
     groups (`ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-expert-chain`), which beats the driver's blind paging
     because the order is known and the reads are one pass a token; the rate then reads as PCIe's

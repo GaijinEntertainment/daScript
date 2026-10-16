@@ -32,7 +32,7 @@ built-in 4096 positions, `DASLLAMA_GPU_MIN_CTX` where set, and the caller's own 
 it once per walk, not for a prediction of the plan) where that sits under either, since a caller that
 pinned its context named the shape it serves (`resident_arm_floor`); a pin asked whole
 (`set_gpu_ctx_strict`, `DASLLAMA_GPU_CTX_STRICT`, the server's `--ctx`) is the floor whatever its size.
-Where the asked mirror leaves no room for every plane, a plain MoE moves routed layers' experts to the
+Where the asked mirror leaves no room for every plane, a MoE moves routed layers' experts to the
 host (`resident_plan_host_layers`, `ARCHITECTURE_GPU_VULKAN_HC.md#hc-hot-pool`) and a dense model declines
 naming the context it would fit at; a mirror under the asked context says why (`resident_ctx_shortened_say`). The eighth held back is for
 fragmentation: a mirror sized to the last byte fails on a heap the previous model fragmented
