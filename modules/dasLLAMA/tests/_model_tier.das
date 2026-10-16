@@ -122,6 +122,18 @@ def log_logits_pair(m : Model; tag : string; got, want : array<float>; diff : fl
     to_log(LOG_INFO, "{tag}: argmax {pick_text(m, got)} against {pick_text(m, want)}, maxdiff {diff}\n")
 }
 
+//! a device-gathered run's rows against the host-embedded run's (`per_step` a step): the counts equal, every row's logits pair
+//! logged and its maxdiff 0
+def gathered_rows_bit_same(t : T?; m : Model; tag : string; dev, host : array<array<float>>; per_step : int64) {
+    t |> equal(long_length(dev), long_length(host), "{tag}: both runs stepped every row")
+    for (i in range64(min(long_length(dev), long_length(host)))) {
+        let diff = logits_maxdiff(dev[i], host[i])
+        let at = "{tag} step {i / per_step}, row {i % per_step}"
+        log_logits_pair(m, "{at}: the gathered row against the host row", dev[i], host[i], diff)
+        t |> equal(diff, 0.0, "{at}: the gathered rows' logits bit for bit the host rows' (maxdiff {diff})")
+    }
+}
+
 //! `prompt` greedily continued `n_gen` ids through `generate` on a fresh session: the prompt's echo past its first id, then the
 //! continuation
 def greedy_gen(tr : Model; prompt : array<int64>; n_gen : int) : array<int64> {
