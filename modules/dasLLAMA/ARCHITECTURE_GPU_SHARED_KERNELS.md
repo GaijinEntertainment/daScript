@@ -66,18 +66,18 @@ struct and the body; a stamp sets the template constants its home needs and maps
 | `GkPleGate` | `MetalPleGate` (the ring or the panel at `cin`) | `PleGate` (the ring slot off `tok`, or the panel) | `TG`, `RSQRT`, `cin_base` / `cin_store` |
 | `GkPleConv` | `MetalPleConv` | `PleConv` | `row_pos` / `tap`; the CPU chain's (res + gated) + silu(conv) |
 | `GkQkRms` | `MetalQkNorm` (the q and k heads of one buffer, `kwd` the no-wv V fill) | `QkRms` | the grid decode |
-| `GkTopKRow` | `MetalMoeSelect` / `512` (32 lanes, DEPTH 8 / 16, `raw` the gpt-oss form), their `Ds` twins (`DSCALE`: gemma-4's per-expert down scales) | `TopKRecords`' `TopKN` / `TopKN2` / `TopKRows` / `TopKRows2` (256 lanes, DEPTH 1 / 2, `DSCALE`) | `LANES`, `DEPTH`, `DSCALE` |
+| `GkTopKRow` | `MetalMoeSelect` / `512` (32 lanes, DEPTH 8 / 16, `raw` the gpt-oss form), their `Ds` twins (`DSCALE`: gemma-4's per-expert down scales, the layer's row bound) | `TopKRecords`' `TopKN` / `TopKN2` / `TopKRows` / `TopKRows2` (256 lanes, DEPTH 1 / 2, `DSCALE`, the row named at run time) | `LANES`, `DEPTH`, `DSCALE`, `DSOFF_SWITCH` |
 | `GkMoeCombine` | `MetalMoeCombine`, `MetalMoeReduce` (`GATHERED`) | `MoeCombine` (`WINDOW`: the chunk window, the accumulate, the zero-weight skip) | `GATHERED`, `WINDOW`, `SLOT_X4` |
 | `GkDnGate` | `MetalDnGate` / `Sig` (`rsqrt`) | `DnScanP3` / `Sig` | `ZSIG`, `RSQRT` |
 | `GkQknRopeKv` | `MetalQknRope16` / `32` (one row), `MetalQknRopeB16` / `B32` (rows), `MetalPfQkn` / `HX` (the window, the q twin) | `QknRopeKv` / `F16` | `KT`, `CLAMP16`, `V_WG`, `LANES` / `EPT`, `HX` |
-| `GkRouterGemv` | `MetalMoeRouter` (a workgroup a row, the decode column), `MetalMoeRouterB` (a subgroup a row, `COL_CLAMP`, 8 columns), `MetalPleProjBf16` (the E-series side rows' projection: the bf16 words, a subgroup a row, 8 columns), `MetalPleProjBf16One` (its decode column, a workgroup a row) | `RouterGemv` (a workgroup a row, `NORM`), `RouterGemvBf16` (the bf16 words under `YSCALE`) | `ROW_WG`, `VW`, `NC`, `COL_CLAMP`, `NORM`, `BIAS`, `BF16`, `YSCALE` |
+| `GkRouterGemv` | one Metal shell (`MetalRouterGemvT`: the grid onto the rows under `ROW_WG`) under two formats - the f32 rows (`MetalMoeRouterT`: `MetalMoeRouter`, a workgroup a row, the decode column; `MetalMoeRouterB`, a subgroup a row, `COL_CLAMP`, 8 columns) and the E-series side rows' projection's bf16 words (`MetalPleProjBf16T`: `MetalPleProjBf16One`, `MetalPleProjBf16`, the same two shapes) | `RouterGemv` (a workgroup a row, `NORM`), `RouterGemvBf16` (the bf16 words under `YSCALE`) | `ROW_WG`, `VW`, `NC`, `COL_CLAMP`, `NORM`, `BIAS`, `BF16`, `YSCALE` |
 | `GkPkGemv` | `MetalPkGemv*` (f32 rows), `MetalPkGemvQ8*` | `TtsPkGemv*` (`QUAD`) | the epilogues, `QUAD`, `RSQRT` |
 | `GkMoeCombine` `SH` | `MetalMoeCombineSh`, `MetalMoeReduceSh` | the combine twins' `gated` arm | `SH`: the shared row under its gate logit, the router's row `ne` |
 | `GkCat2` | `MetalCat2` | `Cat2` | nothing; position- or stream-major, the a row repeated over the streams |
 | `GkDnConv` | `MetalDnConvN` / `N4` (`PB` 1 / 4, `RING` 8: a group of 16 rows or fewer) | `DnConv` (`PB` 32, `RING` 4) | `PB`, `RING` |
-| `GkMoeCombG4` | `MetalMoeCombG4` / `Hx` (the selection rows' slots, the next norm in f32, `Hx` its f16 twin), `MetalMoeCombG4Pf` (the bucket inverse's slots, no norm out; 1024 lanes, `rsqrt`) | `ClsArCombG4` / `F16B` / `Rq` (the slot map, the next norm in f32, f16 or Q8_0 blocks; 256 lanes, `1 / sqrt`) | `TG`, `RSQRT`, `GATHERED`, `OUT_F32` / `OUT_F16` / `OUT_Q8`, `HX`; the stash |
+| `GkMoeCombG4` | `MetalMoeCombG4` / `Hx` (the selection rows' slots, the next norm in f32, `Hx` its f16 twin), `MetalMoeCombG4Pf` (the bucket inverse's slots, no norm out; 1024 lanes, `rsqrt`) | `ClsArCombG4` / `F16B` / `Rq` (the slot map, the next norm in f32, f16 or Q8_0 blocks; 256 lanes, `1 / sqrt`) | `TG`, `RSQRT`, `GATHERED`, `OUT_F32` / `OUT_F16` / `OUT_Q8`, `HX`, `PRESUM_SWITCH`; the stash and, on Metal, the norm rows' layout |
 | `GkClsEpilogue` | `MetalClsEpilogue` | `ClsEpilogue` | nothing; every row in one dispatch |
-| `GkAddRmsRows` | `MetalAddRms` / `HX` (the plain step), `MetalPreAddRms` / `HX` (the sandwich seam in one dispatch: the branch normed under its post norm, the add, the next norm), `MetalPreAdd` (no norm out; 1024 lanes a decode row, 256 the window) | `ClsArAddRms` / `F16B`, `ClsArAddRmsRqB` and the `ArAddRmsRq*` stamps (Q8_0 out), the combines' `ArCombBase` (256 lanes) | `LANES`, `PRE`, `PSCALE`, `NORM_SWITCH`, `ARMS`, `X4`, `HX`, `OUT_*` |
+| `GkAddRmsRows` | `MetalAddRms` / `HX` (the plain step), `MetalPreAddRms` / `HX` (the sandwich seam in one dispatch: the branch normed under its post norm, the add, the next norm), `MetalPreAdd` (no norm out; 1024 lanes a decode row, 256 the window) | `ClsArAddRms` / `F16B`, `ClsArAddRmsRqB` and the `ArAddRmsRq*` stamps (Q8_0 out), the combines' `ArCombBase` (256 lanes) | `LANES`, `PRE`, `PRE_SWITCH`, `PSCALE`, `NORM_SWITCH`, `ARMS`, `X4`, `HX`, `OUT_*`; on Metal, the norm rows' layout |
 | `GkPleAct` | `MetalGegluSide` (in place over the gate rows, 64 lanes) | `PleActF32` (`OUT`: the f32 projection's x, 256 lanes) | `OUT`; the side row's index is `gk_strided_at`, `ActRqT.up_at`'s |
 | `GkPleFinish` | `MetalPleFinish` (`XSCALE`: the projection's 1 / sqrt(dim) in the finish, `rsqrt`) | `PleFinish` (the projection arrives scaled, `1 / sqrt`) | `XSCALE`, `RSQRT`; 256 lanes a slice on both |
 
@@ -101,8 +101,14 @@ w13 combines and every Vulkan act class call it, the gelu its clamped tanh form.
 - **The Vulkan MoE step stores its next norm four elements in flight a lane** (`GkMoeCombG4.OUT_X4`, the residual step's
   `GkQ8BlockStore.store_x4` form, which the residual step's `ArBase` stores through): with the stride loop the pod reads 12.29 against the per-home body's 10.41 us, with it 10.44.
 - **The select's down-scale arm is a stamp of its own on Metal.** The arm costs the plain stamps 0.27 us a dispatch on the M5
-  with no row named, so a down-scale row selects the `Ds` stamps (`ARCHITECTURE_GPU_PREFILL_MOE.md#moe-wscale`); the Vulkan
-  top-k carries the arm on its one stamp, its row named or `GK_NO_DSCALE`.
+  with no row named, so a down-scale row selects the `Ds` stamps (`ARCHITECTURE_GPU_PREFILL_MOE.md#moe-wscale`), which bind the
+  layer's row and scale every pick, and the plain stamps bind no down-scale buffer; the Vulkan top-k carries the arm on its one
+  stamp, its row named or `GK_NO_DSCALE` (`DSOFF_SWITCH`).
+- **A value one home fixes and the other varies is a run-time read on the varying home alone.** A `*_SWITCH` constant compiles
+  the read in where a site varies the field (`PRE_SWITCH`: the Vulkan sandwich arm off a layer's `pre_post`; `PRESUM_SWITCH`:
+  the window step's down-GEMV route; `DSOFF_SWITCH`: the Vulkan top-k's row) and out where every site passes one value; a row
+  offset the Metal home's own upload fixes (`seam_norms`, `moe_g4_norms`) is that stamp's accessor over its width, the args'
+  field read only on Vulkan.
 - **A one-subgroup stamp skips the workgroup stage.** `GkTopKRow` at `LANES` 32 takes its max, its sum and every pick off the
   subgroup's own reduction, the Metal select's register form; at 256 lanes the subgroups' partials cross the workgroup slab.
 - **The Metal row kernels' value-form reduces sit on `GkWgReduce`'s slab** (`MetalTgReduceBase`), so a Metal row kernel and a

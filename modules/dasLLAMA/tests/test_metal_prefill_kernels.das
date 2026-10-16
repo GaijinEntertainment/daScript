@@ -4389,9 +4389,9 @@ def private moe_select_gate(t : T?; var dev, queue; ne, k, nst : int; ties : boo
     let tag = "moe select ne={ne} k={k} nst={nst} wscale={wscale} dscale={dscale}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
-        let st = (dscale ? (ne > 256 ? stamp_of(@@enc_moe_select_512_ds) : stamp_of(@@enc_moe_select_ds))
-            : (ne > 256 ? stamp_of(@@enc_moe_select_512) : stamp_of(@@enc_moe_select)))
-        var pso = mc |> keep_stamp(st, err)
+        let sd = ne > 256 ? stamp_of(@@enc_moe_select_512_ds) : stamp_of(@@enc_moe_select_ds)
+        let sp = ne > 256 ? stamp_of(@@enc_moe_select_512) : stamp_of(@@enc_moe_select)
+        var pso = dscale ? (mc |> keep_stamp(sd, err)) : (mc |> keep_stamp(sp, err))
         return if (!pso_ok(t, "moe select", pso, err))
         var inscope lg : array<float>
         lg |> resize(nst * ne)
@@ -4426,11 +4426,16 @@ def private moe_select_gate(t : T?; var dev, queue; ne, k, nst : int; ties : boo
         let blg = mc |> in_(lg)
         let bsel = mc |> out_words(nst * 2 * k, NAN_SENTINEL_BITS)
         let bds = mc |> in_(ds)
-        var ka = GkTopKArgs(ne = uint(ne), k = uint(k), norm = gmode == 0 ? 1u : 0u, wscale = wscale, dsoff = dscale ? 0u : GK_NO_DSCALE,
-            lstride = uint(ne), raw = gmode == 1 ? 1u : 0u)
+        var ka = GkTopKArgs(ne = uint(ne), k = uint(k), norm = gmode == 0 ? 1u : 0u, wscale = wscale, lstride = uint(ne), raw = gmode == 1 ? 1u : 0u)
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
-            stamp_run(st, pso) {   // sel twice: the idx view and the float w view - row layout is in-kernel
-                invoke(st.enc, enc, mc.buf[blg], mc.buf[bsel], mc.buf[bsel], mc.buf[bds], ka, int64(nst))
+            if (dscale) {
+                stamp_run(sd, pso) {   // sel twice: the idx view and the float w view - row layout is in-kernel
+                    invoke(sd.enc, enc, mc.buf[blg], mc.buf[bsel], mc.buf[bsel], mc.buf[bds], ka, int64(nst))
+                }
+            } else {
+                stamp_run(sp, pso) {
+                    invoke(sp.enc, enc, mc.buf[blg], mc.buf[bsel], mc.buf[bsel], ka, int64(nst))
+                }
             }
         }
         return if (!ran)
@@ -5970,7 +5975,7 @@ def private moe_comb_g4_gate(t : T?; var dev, queue; npos, dim, k : int) {
     var want <- g4_comb_ref(dim, k, npos, ident, sw, dn, dense, xs, wor, eps, ascale, false)
     var wantp <- g4_comb_ref(dim, k, npos, perm, sw, dn, dense, xs, wor, eps, ascale, false)
     var wants <- g4_comb_ref(dim, k, npos, perm, sw, summed, dense, xs, wor, eps, ascale, true)
-    var ka = moe_g4_args(int64(dim), int64(k), eps, ascale, false, true)
+    var ka = moe_g4_args(int64(dim), int64(k), eps, ascale, false)
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
         let st = stamp_of(@@enc_moe_comb_g4)
@@ -6014,8 +6019,7 @@ def private moe_comb_g4_gate(t : T?; var dev, queue; npos, dim, k : int) {
         check_buf(t, "{tag} hx: next norm", mc.buf[by], want.y, BAR_APPROX, Shape(row_width = dim))
         check_hx_narrow(t, "{tag} hx: the f16 twin", mc.buf[bh], mc.buf[by], npos * dim, npos * dim)
     }
-    var kp = moe_g4_args(int64(dim), int64(k), eps, ascale, false, false)
-    var kps = moe_g4_args(int64(dim), int64(k), eps, ascale, true, false)
+    var kps = moe_g4_args(int64(dim), int64(k), eps, ascale, true)
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
         let st = stamp_of(@@enc_moe_comb_g4_pf)
@@ -6030,7 +6034,7 @@ def private moe_comb_g4_gate(t : T?; var dev, queue; npos, dim, k : int) {
         let bwn = mc |> in_(wn)
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
             stamp_run(st, pso) {
-                invoke(st.enc, enc, mc.buf[bx], mc.buf[bperm], mc.buf[bsel], mc.buf[bdn], mc.buf[bden], mc.buf[bwn], kp, int64(npos))
+                invoke(st.enc, enc, mc.buf[bx], mc.buf[bperm], mc.buf[bsel], mc.buf[bdn], mc.buf[bden], mc.buf[bwn], ka, int64(npos))
             }
         }
         return if (!ran)

@@ -605,6 +605,10 @@ def gk_bf16_lo(w : uint) : float => uint_bits_to_float(w << 16u)
 [spirv_inline]
 def gk_bf16_hi(w : uint) : float => uint_bits_to_float(w & 0xFFFF0000u)
 
+//! a bf16 pair word's half widened to f32 (exact): the high one where `odd`
+[spirv_inline]
+def gk_bf16_at(w : uint; odd : bool) : float => odd ? gk_bf16_hi(w) : gk_bf16_lo(w)
+
 //! element `e`'s index in rows of `len` elements stored `stride` apart from `base` (a side input stored position-major)
 [spirv_inline]
 def gk_strided_at(e, base, stride, len : uint) : uint => base + (e / len) * stride + e % len
@@ -1600,7 +1604,8 @@ struct GkAddRmsArgs {
 class template GkResidualRow : GkQ8BlockStore {
     @template_constant LANES : uint = 256u          //!< the workgroup's lanes, the row loops' stride; 0 = the threadgroup's own size
     @template_constant NORM_SWITCH : bool = false   //!< the runtime `no_norm` arm of `pa`
-    @template_constant PRE : bool = true            //!< the sandwich arm, `pa.pre_on` switching it at run time
+    @template_constant PRE : bool = true            //!< the sandwich arm
+    @template_constant PRE_SWITCH : bool = true     //!< `pa.pre_on` switches the sandwich arm at run time; off, a PRE stamp always norms the partner
     @template_constant PSCALE : bool = false        //!< the add partner scaled by `pa.pscale` ahead of its norm
     @template_constant X4 : bool = true             //!< four columns in flight a lane where the partner is not normed first
     @template_constant ARMS : bool = true           //!< the run-time `add_on` and `abias_on` arms; off, the stamp always adds and carries no bias row
@@ -1623,11 +1628,19 @@ class template GkResidualRow : GkQ8BlockStore {
         }
     }
 
+    //! the next norm's weight row base in wn: `pa.woff`, or the stamp's own where its layout fixes it
+    [spirv_inline]
+    def norm_base : uint => pa.woff
+
+    //! the add partner's post-norm weight row base in wn: `pa.pwoff`, or the stamp's own where its layout fixes it
+    [spirv_inline]
+    def pre_base : uint => pa.pwoff
+
     def norm_weight(e : uint) : float {
         static_if (NORM_SWITCH) {
-            return pa.no_norm != 0u ? 1.0 : wn[pa.woff + e]
+            return pa.no_norm != 0u ? 1.0 : wn[norm_base() + e]
         } else {
-            return wn[pa.woff + e]
+            return wn[norm_base() + e]
         }
     }
 
@@ -1646,10 +1659,14 @@ class template GkResidualRow : GkQ8BlockStore {
     def accum_row_into(base : uint; var ss : float&) {
         ss = 0.0
         static_if (PRE) {
-            if (pa.pre_on != 0u) {
-                pre_cols_into(base, ss)
+            static_if (PRE_SWITCH) {
+                if (pa.pre_on != 0u) {
+                    pre_cols_into(base, ss)
+                } else {
+                    add_cols_into(base, ss)
+                }
             } else {
-                add_cols_into(base, ss)
+                pre_cols_into(base, ss)
             }
         } else {
             add_cols_into(base, ss)
@@ -1673,7 +1690,7 @@ class template GkResidualRow : GkQ8BlockStore {
         }
         var k = gl_LocalInvocationID.x
         while (k < dim) {
-            let v = (!ARMS || pa.add_on != 0u) ? mad(wn[pa.pwoff + k], pre_partner(base, k) * ainv, xin(base + k)) * pa.ascale : xin(base + k)
+            let v = (!ARMS || pa.add_on != 0u) ? mad(wn[pre_base() + k], pre_partner(base, k) * ainv, xin(base + k)) * pa.ascale : xin(base + k)
             keep(base, k, v, ss)
             next_col(k)
         }
@@ -2214,8 +2231,7 @@ class template GkClampRows {
 
     def load_in(e : uint) : float {
         static_if (BF16IN) {
-            let w = xw[(pa.xoff + e) / 2u]
-            return (pa.xoff + e) % 2u == 0u ? gk_bf16_lo(w) : gk_bf16_hi(w)
+            return gk_bf16_at(xw[(pa.xoff + e) / 2u], (pa.xoff + e) % 2u != 0u)
         } else {
             return x[pa.xoff + e]
         }
@@ -3965,6 +3981,7 @@ class template GkTopKRow : GkWgReduce {
     @template_constant LANES : uint = 256u   //!< the workgroup's lanes
     @template_constant DEPTH : int = 1       //!< the logits a lane holds
     @template_constant DSCALE : bool = false   //!< the per-expert down scale row folds into the picked weights where `dsoff` names one
+    @template_constant DSOFF_SWITCH : bool = true   //!< `pa.dsoff` names the row or `GK_NO_DSCALE` at run time; off, a DSCALE stamp always scales
     @workgroup parti : uint[64]
     @workgroup pick : uint[64]
     @workgroup pickw : float[64]
@@ -4087,7 +4104,11 @@ class template GkTopKRow : GkWgReduce {
             wj *= wscale
         }
         static_if (DSCALE) {
-            if (pa.dsoff != 0xFFFFFFFFu) {   //! GK_NO_DSCALE: the Metal emitter reads no module global
+            static_if (DSOFF_SWITCH) {
+                if (pa.dsoff != 0xFFFFFFFFu) {   //! GK_NO_DSCALE: the Metal emitter reads no module global
+                    wj *= down_scale(ex)
+                }
+            } else {
                 wj *= down_scale(ex)
             }
         }
@@ -4437,6 +4458,7 @@ class template GkMoeCombG4 : GkMoeCombine {
     @template_constant OUT_F16 : bool = false
     @template_constant HX : bool = false
     @template_constant OUT_X4 : bool = false     //!< the next norm's stores four elements in flight a lane
+    @template_constant PRESUM_SWITCH : bool = true   //!< `pa.presummed` picks the summed rows at run time; off, the stamp sums the slots
     override WINDOW = false
 
     def abstract stash(k : uint; v : float) : void   //! column `k` of the row kept for the lane's own re-read
@@ -4444,15 +4466,34 @@ class template GkMoeCombG4 : GkMoeCombine {
 
     //! the routed rows of row `p` at element `k`
     def routed_into(p, k : uint; var r : float&) {
-        if (pa.presummed != 0u) {
-            r = down_rows[p * pa.n + k]
+        static_if (PRESUM_SWITCH) {
+            if (pa.presummed != 0u) {
+                r = down_rows[p * pa.n + k]
+            } else {
+                r = 0.0
+                slot_sum_into(p, k, r)
+            }
         } else {
             r = 0.0
             slot_sum_into(p, k, r)
         }
     }
 
-    def override normed_at(e : uint; mean, inv : float) : float => wn[pa.nwoff + e] * (stashed(e) * inv)
+    //! the norms plane's row bases - the routed post norm, the dense post norm, the post-FFN norm, the next norm: `pa`'s, or the
+    //! stamp's own where its layout fixes them
+    [spirv_inline]
+    def rpost_base : uint => pa.rpost_off
+
+    [spirv_inline]
+    def dpost_base : uint => pa.dpost_off
+
+    [spirv_inline]
+    def spost_base : uint => pa.spost_off
+
+    [spirv_inline]
+    def next_base : uint => pa.nwoff
+
+    def override normed_at(e : uint; mean, inv : float) : float => wn[next_base() + e] * (stashed(e) * inv)
 
     //! row `r`'s step: four reductions over the stash (slots 0, 1, 0, then the next norm's 1 - each reduce's barrier sits every
     //! thread past the readers of the slot the next one writes)
@@ -4484,7 +4525,7 @@ class template GkMoeCombG4 : GkMoeCombine {
         var sc = 0.0
         k = tid
         while (k < n) {
-            let c = wn[pa.rpost_off + k] * (stashed(k) * inv_r) + wn[pa.dpost_off + k] * (dense[base + k] * inv_d)
+            let c = wn[rpost_base() + k] * (stashed(k) * inv_r) + wn[dpost_base() + k] * (dense[base + k] * inv_d)
             stash(k, c)
             sc += c * c
             k += TG
@@ -4494,7 +4535,7 @@ class template GkMoeCombG4 : GkMoeCombine {
         var ss = 0.0
         k = tid
         while (k < n) {
-            let vv = (acc_rows[base + k] + wn[pa.spost_off + k] * (stashed(k) * inv_c)) * pa.ascale
+            let vv = (acc_rows[base + k] + wn[spost_base() + k] * (stashed(k) * inv_c)) * pa.ascale
             acc_rows[base + k] = vv
             stash(k, vv)
             ss += vv * vv
