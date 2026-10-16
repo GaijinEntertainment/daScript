@@ -444,6 +444,18 @@ def private encode_gemma_chain(t : Model; s : Session; var g : GemmaDrafterGpu; 
     }
 }
 
+//! every warm stream's chain onto the verify's first command buffer (`set_batch_same_slab_chain`): stream gi's token rows open
+//! at the sum of the groups before it
+[arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-round-one-join")]
+def private gemma_encode_chains(t : Model; enc : MetalComputeEncoder?) {
+    var row0 = 0l
+    for (gi in range64(long_length(g_gw_sessions))) {
+        let s & = unsafe(*g_gw_sessions[gi])
+        encode_gemma_chain(t, s, g_gemma_gpu, enc, gi, row0, s.mtp_vbatch[0], s.mtp_h, g_gw_pos[gi], g_gw_nr[gi] - 1l)
+        row0 += g_gw_nr[gi]
+    }
+}
+
 def private gemma_draft_chain_cpu(t : Model; var s : Session; pos, k : int64) : int64 {
     let dr & = g_gemma_drafter
     var drafted = 0l
@@ -481,6 +493,8 @@ def public set_gemma_draft_on_cpu(on : bool) {
         to_log(LOG_INFO, "dasLLAMA: gemma drafts route through the CPU oracle (set_gemma_draft_on_cpu)\n")
     }
 }
+
+def public gemma_draft_on_cpu() : bool => g_gemma_draft_cpu
 
 def public set_gemma_trace(on : bool) {
     g_gemma_trace = on
@@ -582,21 +596,8 @@ def private gemma_mtp_spec_rounds(t : Model; var sessions : array<Session?>; tok
         rows += nr
     }
     var chain_ok = true
-    if (gpu_chain) {
+    if (gpu_chain) {   //! the chains encode inside the verify's build (`gemma_encode_chains`)
         gemma_token_rows(g_gemma_gpu, rows)
-        var cb = metal_new_command_buffer_unretained(g_queue)
-        var enc = metal_new_compute_encoder(cb)
-        var row0 = 0l
-        for (gi in range64(ng)) {
-            var s & = unsafe(*g_gw_sessions[gi])
-            encode_gemma_chain(t, s, g_gemma_gpu, enc, gi, row0, s.mtp_vbatch[0], s.mtp_h, g_gw_pos[gi], g_gw_nr[gi] - 1l)
-            row0 += g_gw_nr[gi]
-        }
-        metal_end_encoding(enc)
-        metal_release(enc)
-        metal_commit(cb)
-        chain_ok = !metal_command_buffer_failed(cb)
-        metal_release(cb)
     } else {
         for (gi in range64(ng)) {
             var s & = unsafe(*g_gw_sessions[gi])
@@ -616,7 +617,7 @@ def private gemma_mtp_spec_rounds(t : Model; var sessions : array<Session?>; tok
         }
     }
     if (gpu_chain) {
-        set_batch_same_slab_tokens(g_gemma_gpu.bvtok)
+        set_batch_same_slab_chain(g_gemma_gpu.bvtok, @@gemma_encode_chains)
     }
     let vok = chain_ok && verify_batch_groups(t, g_gemma_ws, g_gw_sessions, g_gw_toks, g_gw_pos, g_gw_nr)
     set_batch_same_slab_tokens(null)

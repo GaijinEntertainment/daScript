@@ -14,14 +14,15 @@ sections build on, the assistant-drafter driver's role row included, stays in
 ### The speculative round on Metal {#mtp-round-one-join}
 
 **The speculative round on Metal is one queue, one join.** A round drafts k tokens and verifies them
-as k+1 same-slab rows of the batch driver. The gemma assistant drafter encodes every speculating
-stream's k steps into ONE command buffer committed without a wait: a stream's draft i embeds token
+as k+1 same-slab rows of the batch driver. The gemma assistant drafter's round is one command buffer
+at every depth: the verify encodes every speculating stream's k steps itself, as a serial pass at the
+head of its first command buffer (`set_batch_same_slab_chain`, the two passes ordered by the
+buffers' tracked hazards; `metal_mtp_chained_rounds` counts the steps). A stream's draft i embeds token
 row `row0 + i` (its seed at its group's first row), its argmax lands in the next row on the device,
 and its post_projection is copied on the device into the next step's input; the batch driver then
-takes that token list (`set_batch_same_slab_tokens`) and gathers the rows' embeddings on its own
-encoder instead of the workspace's CPU rows, lands every row's argmax (`enc_argmax_rows`) with the
-logits, and the host reads tokens and winners only after the verify's join - queue order completes
-the chains first. The drafter's h input is the target's
+gathers the rows' embeddings off that token list on its own encoder instead of the workspace's CPU
+rows, lands every row's argmax (`enc_argmax_rows`) with the logits, and the host reads tokens and
+winners only after the verify's join. The drafter's h input is the target's
 post-output_norm hidden, carried in `s.mtp_h` by the decode on head-less models
 (`set_metal_mtp_carry_hidden`); the pre-norm residual is a lever that measured worse. The two-row
 verify's GPU cost over a one-row step (the rows' weight stream; the per-box margins are in
@@ -108,7 +109,7 @@ parked (`g_chain_rd`) and encoded ahead of the verify on the verify's own serial
 `enc_argmax_rows` landing every row's winner in the step's `btok`; the verify then embeds each
 group's row 1 from that slot on the device (`enc_embed`, into its rows and the head's cat image)
 and the host reads the winners into `mtp_vbatch` only after the verify's join - one commit, one
-join, no readback between the draft and the verify (`metal_mtp_chained_rounds` counts the rounds).
+join, no readback between the draft and the verify (`metal_mtp_chained_rounds` counts the rounds, the assistant's with them).
 The gather reads group gi's winner at its offset in that slot: the q8 copy's and the K-quant planes'
 stamps take any offset, the fp32 table's (an F32/F16/BF16 table) reads the slot's head, so a round of
 one group chains on every table and a round of several on the first two. The draft body reads the groups in the draft
