@@ -3,7 +3,8 @@
 Companion to `ARCHITECTURE_GPU_PREFILL.md`; a section is cited by its anchor. This
 document carries the routed block of the Metal prefill driver: the atomics-free
 bucket rail, the tensor-twin scaffold the gathered expert sites ride, the split-format
-expert twins, the K-quant twins' own crowns and the knee that picks them on an uncrowned box,
+expert twins, the K-quant twins' own crowns and the knee that picks them on an uncrowned box, the gemma-4
+MoE tail as one step (`#metal-g4-moe-step`),
 the short window's gathered expert route, and the routed weights' global scale every row shape applies. The GEMM form ladder those sites pick from (`ARCHITECTURE_GPU_PREFILL_GEMM.md#prefill-gemm-ladder`), the dev-W panel knee map
 (`ARCHITECTURE_GPU_PREFILL_GEMM.md#devw-panel-knees`) and the dense-KQ tensor mul_mm scaffold the split-format twins derive from (`ARCHITECTURE_GPU_PREFILL_GEMM.md#prefill-kq-tensor-scaffold`)
 live in `ARCHITECTURE_GPU_PREFILL_GEMM.md`.

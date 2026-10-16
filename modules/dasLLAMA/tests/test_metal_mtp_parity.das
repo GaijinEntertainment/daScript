@@ -984,6 +984,7 @@ def private vff_arms(t : T?; tr, trg : Model; tag : string; prompt : array<int64
     }
 }
 
+[cold_path]
 def private run_verify_fixture(t : T?; file, tag : string; tol : float; expect_decline : string = "") {   // nolint:LINT012,LINT019 — the body is the das_metal half
     static_if (typeinfo builtin_module_exists(das_metal)) {
         let path = path_join(models_dir(), file)

@@ -418,7 +418,9 @@ def private encode_gemma_draft(t : Model; s : Session; enc : MetalComputeEncoder
 def private encode_gemma_chain(t : Model; s : Session; var g : GemmaDrafterGpu; enc : MetalComputeEncoder?; si, row0, seed : int64; h : array<float>; anchor, k : int64) {
     let dr & = g_gemma_drafter
     let mr = g_mirrors[s.uid]
-    gemma_slot(g, dr, si)
+    if (long_length(g.slots) <= si) {
+        gemma_slot(g, dr, si)
+    }
     gemma_rope_rows(t, g, si, anchor)
     gr_arm(false)
     unsafe {

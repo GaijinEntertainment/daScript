@@ -363,6 +363,11 @@ def main() {
 
         section_device_streams(m, sch)
         delete sch
+        if (mtp_capable(m)) {
+            let st = mtp_drafter_stats(m)   // the assistant's tally so far: its rounds, the verifies that carried two streams or more, and where the time went
+            print("drafter: {st.rounds} rounds, {st.joint} joint, draft {st.draft_us / 1000l}ms, verify {st.verify_us / 1000l}ms, plain {st.cold_us / 1000l}ms\n")
+        }
+        detach_mtp_drafter(m)   // plain decode serves from here; a model with no drafter attached is left as it was
 
         section_gpu_slots(m)
     }

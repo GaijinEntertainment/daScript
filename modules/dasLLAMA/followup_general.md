@@ -2084,13 +2084,15 @@
     SPIR-V text splits at its own grammar - then delete the `[line_length]` table and the file, so the
     repo limits bind the folder; the kernels and model-free suites on both homes hold the wrapped tree.
 
-214. **No row of `PERF_LEDGER.md` reads a prefill past 4096 tokens, and the two GPU homes' prefill
-    throughput is held only at pp512.** A long prompt costs the global layers' attention in the
+214. **The board holds the two GPU homes' prefill throughput at pp512 alone, and the ledger's longest prefill rows stop
+    at 12288 tokens.** A long prompt costs the global layers' attention in the
     square of its length and every per-window stage in its position, so a stage that grows with
-    position hides behind pp512 (the Vulkan window chain on gemma-4-E2B Q8_0 reads 16,400 tok/s at
-    pp512 and about 260 tok/s inside a 120k-token prefill, found by the sliding-window ring cells;
-    Metal on the same file falls 9488 to 2570 tok/s from 512 to 65536, the score-slab attention's
-    shape). The pass, after the gemma leg lands and before the dasCUDA arc: `lcpp_bench` at pp512
+    position hides behind pp512 (`debug-jit`, direction-grade: `lcpp_bench -p <n> -n 0 -r 2` on gemma-4-E2B Q8_0 -
+    the pod's RTX PRO 4500 under `DASLLAMA_GPU=1` reads 16,400 tok/s at pp512, 11,600 at 4096, 8,900 at 16384,
+    3,900 at 65536 and 2,600 at 120000; the M5 Max under `--ngl 1` with the box profile older than the binary
+    reads 9,488 / 10,888 / 5,292 / 2,570 at 512 / 4096 / 16384 / 65536, the score-slab attention's shape; the
+    long-context cells of `tests/test_gpu_resident_regions_gemma4_e2b_ctx128k.das` run their 360k device tokens
+    in about 170 s on the pod). The pass, after the gemma leg lands and before the dasCUDA arc: `lcpp_bench` at pp512
     and pp32768 (and pp65536 where the model's context admits it) on every stocked model on both
     homes, one profiling pass with the per-window stage split on; a model whose pp32768 falls under
     the N-squared expectation set by its global-layer count is investigated to the stage, and the

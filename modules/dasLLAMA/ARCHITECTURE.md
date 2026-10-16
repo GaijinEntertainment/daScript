@@ -89,7 +89,9 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   GEMV tail peel, and the dense-KQ tensor mul_mm scaffold.
 - `ARCHITECTURE_GPU_PREFILL_MOE.md` - the Metal prefill driver's routed block - the MoE bucket
   rail, its tensor-twin scaffold and the split-format expert twins, the K-quant twins' crowns and
-  the knee that picks them, and the short window's gathered expert route.
+  the knee that picks them, and the short window's gathered expert route; the gemma-4 MoE tail as one step
+  (`ARCHITECTURE_GPU_PREFILL_MOE.md#metal-g4-moe-step`).
+
 - `ARCHITECTURE_GPU_PREFILL_WINDOW.md` - the Metal prefill driver's device attention pair (the
   K/V twins, the device-direct QK and AV with the tail stamp of a head off the 64 lattice, the row
   softmax written in place), the mirror-fed window and mirror adoption
@@ -121,7 +123,9 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   trunk: the draft command that steps it, the prompt warm the window chain gives its slab, the
   rollback a rejected device verify takes from the verify command's own copies, the verify
   window a declined verify seat runs the CPU verify in, and the speculative knob's per-step
-  gate on the carry.
+  gate on the carry; the assistant drafter beside a head-less trunk
+  (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-assistant-drafter`).
+
 - `ARCHITECTURE_GPU_VULKAN_NROW.md` - the N-row token command a batched step's rows go through,
   the N-column leaf every format has, the column tiles a dispatch past eight columns runs in,
   its same-slab form the speculative verify steps one stream's rows through, and the residual
@@ -136,13 +140,17 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   hybrid token command and prefill (recurrent layers, gated attention, partial rotary, the
   prefill-to-decode state handoff).
 - `ARCHITECTURE_GPU_VULKAN_PEROP.md` - the per-op tier's dense FFN rail: a dense layer's FFN triple on the dense rail
-  and the decode row it runs on the device.
+  and the decode row it runs on the device; the attention-quad chain's gemma decline
+  (`ARCHITECTURE_GPU_VULKAN_PEROP.md#perop-attn-gemma`).
+
 - `ARCHITECTURE_GPU_VULKAN_MOE.md` - the resident driver's routed block in its two eras - the MoE
   block of the prefill window with its Q8-fed chain, and the whole-model driver's MoE token
   command - the select that reaches 512 experts two logits a thread, and the gemma-4 form both
   eras take.
 - `ARCHITECTURE_GPU_MTP.md` - the Metal speculative round over the batch driver's same-slab
   verify, and the box knob that sets the depth a round drafts.
+- `ARCHITECTURE_GPU_KV_RING.md` - both homes' sliding-layer K/V ring: a sliding layer's mirror rows as a ring of its
+  window and one command's rows (`ARCHITECTURE_GPU_KV_RING.md#kv-sliding-ring`).
 - `ARCHITECTURE_GPU_MTP_ASSISTANT.md` - the gemma-4 assistant drafter on both GPU homes: one
   drafter step, the sidecar and the attach, and the rounds of a scheduler tick.
 - `ARCHITECTURE_GPU_MTP_DECODE.md` - the kernel argument-alignment contract enforced at every
@@ -174,7 +182,9 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   row-group decodes, the VBMI symbol lattice, the tier that selects on the target rather than the
   host, the score dot classic prefill shares with decode, the module-scope visibility a lifted
   worker lambda needs of its kernel, the two interleaves a grp<mr> repack is made of, the bf16
-  tile that keeps its sum in the matrix unit, and the JIT partition a hot leaf instantiates in.
+  tile that keeps its sum in the matrix unit, and the JIT partition a hot leaf instantiates in; the q8 chain's activation forms against the reference's
+  (`ARCHITECTURE_CPU_KERNELS.md#q8-activation-forms`).
+
 - `ARCHITECTURE_TTS.md` - the TTS block home's two layouts, tap stacking, the padded concat
   width, the served carrier on the image rail, the sine source's operation order, the heteronym
   context, the rig's scoring, and the two-tier phoneme pack.

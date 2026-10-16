@@ -127,6 +127,7 @@ def private metal_batched_logits(t : T?; tr : Model) : array<array<float>> {   /
 //! the distinct-session batched step gathers its rows off their ids on the device (`metal_batch_rows_gathered` up by every row,
 //! the host embedding none, `batch_rows_host_embedded`), each row's logits at every step bit for bit the same steps' with the
 //! gather off (`set_metal_batch_gather(false)`: the host embeds every row and the step pokes it up), which gathers none - the control
+[cold_path]
 def private metal_batch_gather_cell(t : T?; file, family : string) {
     t |> run("the batched step gathers every row off its id, bit for bit the rows the host embeds ({file})") <| @(t : T?) {
         if (!family_on(t, family)) return
