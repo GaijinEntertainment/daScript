@@ -1475,22 +1475,22 @@ class template MetalEmbedB32T {
     }
 }
 
-[metal_dispatch(name = "enc_embed_b32_q51", pso = "g_pso_emb_b32_q51", tg = 64, grid = "units/64, nrows", params = "units : int64, nrows : int64")]
+[metal_dispatch(name = "enc_q51_embed_b32", pso = "g_pso_emb_b32_q51", tg = 64, grid = "units/64, nrows", params = "units : int64, nrows : int64")]
 class MetalEmbedB32Q51 : MetalEmbedB32T {
     override Q51 = true
     override QW = 5u
     override SH = 2u
 }
 
-[metal_dispatch(name = "enc_embed_b32_iq4nl32", pso = "g_pso_emb_b32_iq4nl32", tg = 64, grid = "units/64, nrows", params = "units : int64, nrows : int64")]
+[metal_dispatch(name = "enc_iq4nl32_embed_b32", pso = "g_pso_emb_b32_iq4nl32", tg = 64, grid = "units/64, nrows", params = "units : int64, nrows : int64")]
 class MetalEmbedB32Iq4nl32 : MetalEmbedB32T {}
 
-[metal_dispatch(name = "enc_embed_b32_q4032", pso = "g_pso_emb_b32_q4032", tg = 64, grid = "units/64, nrows", params = "units : int64, nrows : int64")]
+[metal_dispatch(name = "enc_q4032_embed_b32", pso = "g_pso_emb_b32_q4032", tg = 64, grid = "units/64, nrows", params = "units : int64, nrows : int64")]
 class MetalEmbedB32Q4032 : MetalEmbedB32T {
     override Q40L = true
 }
 
-[metal_dispatch(name = "enc_embed_b32_q5032", pso = "g_pso_emb_b32_q5032", tg = 64, grid = "units/64, nrows", params = "units : int64, nrows : int64")]
+[metal_dispatch(name = "enc_q5032_embed_b32", pso = "g_pso_emb_b32_q5032", tg = 64, grid = "units/64, nrows", params = "units : int64, nrows : int64")]
 class MetalEmbedB32Q5032 : MetalEmbedB32T {
     override Q50 = true
     override QW = 5u
@@ -4937,7 +4937,11 @@ def enc_embed_dev(enc : MetalComputeEncoder?; t : Model; btok : MetalBuffer?; to
 def emb_kq_gather_fmt(f : KqFmt) : bool => f != KqFmt.q8 && kq_fmt_gpu_supported(f)
 
 //! a table plane in format `fmt` the gather family serves: the q8 linear copy, a per-32 plane or a K-quant plane with a stamp
-def emb_table_gather_fmt(f : KqFmt) : bool => f == KqFmt.q8 || kq_dense_b32(f) || emb_kq_gather_fmt(f)
+def emb_table_gather_fmt(f : KqFmt) : bool => f == KqFmt.q8 || (kq_dense_b32(f) && kq_fmt_gpu_supported(f)) || emb_kq_gather_fmt(f)
+
+//! the members the per-32 table gather (`MetalEmbedB32T`) has no stamp for: q8 (its linear copy's gather), the superblock members
+//! (the K-quant gather) and mx4 (no table carries it)
+let EMBED_B32_SKIP = "q8 k4 k5 k6 q40 iq4xs k3 iq3s iq3xxs iq4nl k2 iq2s iq2xs iq2xxs mx4 iq3s4"
 
 //! The rows of `nrows` token ids (btok at toff) off the table plane `fmt` at element `off`, `width` elements a row under `escale`, into
 //! bx at xoff: the token table's gather and the E-series per-layer table's (layers x ple under sqrt(ple)); the q8 copy's stamp
@@ -4947,18 +4951,13 @@ def enc_embed_table(enc : MetalComputeEncoder?; t : Model; fmt : KqFmt; off, wid
     if (fmt == KqFmt.q8) {
         let bemb = blob_of(g_dev, t, off)
         enc_embed(enc, bemb.buf, bemb.boff, btok, bx, bwidth, bescale, width, toff, xoff, nrows)
-    } elif (kq_dense_b32(fmt)) {
+    } elif (kq_dense_b32(fmt) && kq_fmt_gpu_supported(fmt)) {
         let qp = b32_planes_of(g_dev, t, fmt, off)
         var ka = EmbedKqArgs(dim = uint(width), nsb = uint(width / KQ_B32_ELEMS), escale = escale)
         let units = width / 16l
-        if (fmt == KqFmt.q51) {
-            enc_embed_b32_q51(enc, qp.sbuf, qp.soff, qp.qbuf, qp.qoff, btok, toff, bx, xoff, ka, units, nrows)
-        } elif (fmt == KqFmt.iq4nl32) {
-            enc_embed_b32_iq4nl32(enc, qp.sbuf, qp.soff, qp.qbuf, qp.qoff, btok, toff, bx, xoff, ka, units, nrows)
-        } elif (fmt == KqFmt.q5032) {
-            enc_embed_b32_q5032(enc, qp.sbuf, qp.soff, qp.qbuf, qp.qoff, btok, toff, bx, xoff, ka, units, nrows)
-        } else {
-            enc_embed_b32_q4032(enc, qp.sbuf, qp.soff, qp.qbuf, qp.qoff, btok, toff, bx, xoff, ka, units, nrows)
+        let slot = int(fmt)
+        kq_tile_stamp(slot, EMBED_B32_SKIP, "embed") <| $() {
+            tile_enc_b32(enc, qp.sbuf, qp.soff, qp.qbuf, qp.qoff, btok, toff, bx, xoff, ka, units, nrows)
         }
     } else {
         let bq = kq_quants_of(g_dev, t, fmt, off)
@@ -7149,8 +7148,8 @@ def metal_ple_dev_ok(t : Model) : bool {
     return false if (!has_ple(t.config) || !t.metal_blob || t.planes_trimmed)
     let ple = t.config.n_embd_per_layer
     let all = t.config.n_layers * ple
-    let aligned = t.ple_emb_fmt == KqFmt.q8 || (all % 256l == 0l && t.ple_emb_off % 256l == 0l)
-    return emb_table_gather_fmt(t.ple_emb_fmt) && aligned && ple % 32l == 0l && ple <= 1024l
+    let aligned = t.ple_emb_fmt == KqFmt.q8 || (all % KQ_SB_ELEMS == 0l && t.ple_emb_off % KQ_SB_ELEMS == 0l)
+    return emb_table_gather_fmt(t.ple_emb_fmt) && aligned && ple % KQ_B32_ELEMS == 0l && ple <= 1024l
 }
 
 //! The E-series pre-step on the device over `nrows` rows - the CPU's `ple_gather_rows` + `ple_pre_finish`: the side rows off the table

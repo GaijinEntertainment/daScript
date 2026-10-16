@@ -1149,14 +1149,25 @@ def private ple_proj_count : int64 {
         + metal_kernel_count_compiled("metal_moe_router"))
 }
 
-[unused_argument(t, path, tag, hetero_hidden, tokexact, bar)]   // off-Apple the gated body is empty
-def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false; tokexact : bool = true; bar : float = 8.0) {
+//! the summed census counts of `names` (`metal_kernel_count_compiled`): the dispatches of a format's stamps at a site
+def private kernels_sum(names : array<string>) : int64 {
+    var n = 0l
+    for (k in names) {
+        n += metal_kernel_count_compiled(k)
+    }
+    return n
+}
+
+//! `kernels`: the stamps only the carrier's format at its site dispatches - their summed count rises over the row
+[unused_argument(t, path, tag, hetero_hidden, tokexact, bar, arm, kernels)]   // off-Apple the gated body is empty
+def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false; tokexact : bool = true; bar : float = 8.0;
+                        arm : string = "fam-gemma4e"; kernels : array<string> = array<string>()) {
     // gemma-4 E-series (E4B): PLE (per-layer embeddings — MetalNeed.ple) + cross-layer KV
     // sharing (the last 18 layers are Q-only and alias layer 22/23's slab/panels). Decode,
     // prefill and the batched step ENGAGE on the blob twin; the batched step is compared row
     // for row against the CPU batched stack on the PLANAR model.
     static_if (typeinfo builtin_module_exists(das_metal)) {
-        if (!family_on(t, "gemma4e") || !arm_on(t, "fam-gemma4e") || !model_available(t, path)) {
+        if (!family_on(t, "gemma4e") || !arm_on(t, arm) || !model_available(t, path)) {
             return
         }
         var tr <- load_model_(path, QuantMode.q8)
@@ -1184,6 +1195,7 @@ def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false
         let rt0 = metal_kernel_count_compiled("metal_moe_router")   //! the pipelines compile at the driver's first call
         let rtb0 = metal_kernel_count_compiled("metal_moe_router_b") + metal_kernel_count_compiled("metal_f32_exact_mulmm")
         var trg <- blob_twin(t, path, 512l)
+        let fk0 = kernels_sum(kernels)
         let c = trg.config
         let vocab = c.vocab_size
         let pf0 = metal_prefill_stats().prefills
@@ -1374,6 +1386,10 @@ def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false
         delete cpu_ids
         delete gpu_ids
         cont_logits_cell(t, tr, trg, "{tag}/q8/f16", bar)
+        if (!empty(kernels)) {
+            let fk = kernels_sum(kernels) - fk0
+            t |> success(fk > 0l, "{tag}: the site's format stamps dispatched ({kernels}: {fk})")
+        }
         delete trg
         delete tr
     }
@@ -2194,14 +2210,19 @@ def test_metal_family_matrix(t : T?) {
             gemma4e_row(t, path_join(models_dir(), "gemma-4-E2B-it-Q4_K_M.gguf"), "gemma4e-e2b-kq", true, false)
             // ... and the Q4_0 file: the per-layer gate and projection planes Q4_0 on disk, read on the q40 forms at every shape
             // the file's rows sit closer together (the batch cell's two rows 6.6 apart), so its bar is 4.0 (reads 0.6 to 1.3)
-            gemma4e_row(t, path_join(models_dir(), "gemma-4-E2B-it-Q4_0.gguf"), "gemma4e-e2b-q40", true, false, 4.0)
+            gemma4e_row(t, path_join(models_dir(), "gemma-4-E2B-it-Q4_0.gguf"), "gemma4e-e2b-q40", true, false, 4.0, "fam-gemma4e-q40",
+                ["MetalKqGemvQ40_metal_kq_gemv_iq4", "MetalKqMvB2Q40_metal_kq_mv_iq4", "MetalKqMvB2Q40H_metal_kq_mv_iq4"])
             // ... and the format carriers off the E2B Q8_0: the token and PLE tables Q6_K and IQ4_XS (the gather family's K-quant and
-            // IQ stamps at width layers x ple), the per-layer gate and projection planes Q6_K and Q5_0
-            for (carrier in [(file = "gemma-4-E2B-it-emb-Q6_K-local.gguf", tag = "gemma4e-e2b-emb-q6k"),
-                             (file = "gemma-4-E2B-it-emb-IQ4_XS-local.gguf", tag = "gemma4e-e2b-emb-iq4xs"),
-                             (file = "gemma-4-E2B-it-ple-Q6_K-local.gguf", tag = "gemma4e-e2b-ple-q6k"),
-                             (file = "gemma-4-E2B-it-ple-Q5_0-local.gguf", tag = "gemma4e-e2b-ple-q50")]) {
-                gemma4e_row(t, path_join(models_dir(), carrier.file), carrier.tag, true, false, 4.0)
+            // IQ stamps at width layers x ple, which the token table's gather shares), the per-layer gate and projection planes Q6_K and
+            // Q5_0 (no other plane of the file carries the format, so the stamps count the site alone)
+            for (carrier in [(file = "gemma-4-E2B-it-emb-Q6_K-local.gguf", tag = "gemma4e-e2b-emb-q6k", kernels <- ["MetalEmbedK6_metal_embed_kq"]),
+                             (file = "gemma-4-E2B-it-emb-IQ4_XS-local.gguf", tag = "gemma4e-e2b-emb-iq4xs", kernels <- ["MetalEmbedIq4xs_metal_embed_kq"]),
+                             (file = "gemma-4-E2B-it-ple-Q6_K-local.gguf", tag = "gemma4e-e2b-ple-q6k",
+                              kernels <- ["metal_kq_gemv_k6", "MetalKqMvB2K6_metal_kq_mv_k6"]),
+                             (file = "gemma-4-E2B-it-ple-Q5_0-local.gguf", tag = "gemma4e-e2b-ple-q50",
+                              kernels <- ["metal_kq_gemv_q5032", "metal_kq_gemv_q5032_ks", "MetalB32MvB2Q5032_metal_b32_mvb",
+                                          "MetalB32MvB2Q5032Ks_metal_b32_mvb"])]) {
+                gemma4e_row(t, path_join(models_dir(), carrier.file), carrier.tag, true, false, 4.0, "fam-{carrier.tag}", carrier.kernels)
             }
             // gpt-oss-20b (Wave C stage 4): mx4 experts + sinks + softmax_weight + biases
             gptoss_row(t, path_join(models_dir(), "gpt-oss-20b-mxfp4.gguf"))

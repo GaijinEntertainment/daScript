@@ -2097,7 +2097,8 @@ CPU control of a dense 31B on the reference kernel bodies runs half an hour on a
 (the 26B-A4B Q4_K_M), `mx26` (the 26B-A4B MXFP4_MOE mint of the Q4_K_M file), `host26` (the 26B-A4B IQ3_XXS with host
 experts), `g31` (the 31B). The three 26B files open on the
 format cell (`gemma_format_cell`): every site the file carries in its own format, the expert stacks the native-MXFP4 planes
-exactly on the mint, then a 40-token prompt and two fed steps on the driver, every call served. Every feed and perplexity
+exactly on the mint, then a 40-token prompt and two fed steps on the driver, every call served, and on the mint the fed steps'
+mx4 fused gate + up and summed down stamps counted (`mx4_gemv_gu_cls_spv`, `mx4_gemv_sum_cls_spv`). Every feed and perplexity
 cell of the rig asserts the device served every call (`served_every_call`); a memory decline skips and logs the decline. Skips
 without the model or the armed tier, and on a memory decline (`moe_gpu_resident_memory_decline`:
 the plan did not fit the card at the session's context - the 12B Q8_0 file on a 16 GB card arms
@@ -2120,12 +2121,15 @@ eight fed steps on a ringed load and on a flat one (`set_gpu_kv_ring`, put back)
 step, the ringed load arming rings and charging less mirror, the row a step off the control - on the f16 and q8_0 mirrors, and
 tq4 too on the E2B. The long-context regions cells assert their load armed the rings and the mirror under the flat plan's; the
 slabbed cells pin the ring off, since their slab count is the flat mirror's. Arm `g4e-ple`
-(`test_gpu_resident_gemma4_e2b_ple_tables`): the E2B Q8_0 file and its emb-Q5_0 / emb-Q5_1 / emb-Q4_0 mints - the plan seats
-the PLE table in its own tag (q8, q5032, q51, q40) and the forced feed's prefill gathers the side rows off it against the CPU chain.
+(`test_gpu_resident_gemma4_e2b_ple_tables`): the E2B Q8_0 file and its emb-Q5_0 / emb-Q5_1 / emb-Q4_0 / emb-Q6_K / emb-IQ4_XS
+mints - the plan seats the PLE table in its own tag (q8, q5032, q51, q40, k6, iq4xs) and the forced feed's prefill gathers the side
+rows off it against the CPU chain, the format's gather leaf counted (`<fmt>_emb_cls_spv` / `kq_emb_<fmt>_cls_spv`).
 Arm `g4e-kq` (`test_gpu_resident_gemma4_e2b_ple_planes`): the E2B Q4_K_M (the per-layer gate and projection planes F32 on disk,
 read as the file's f32 rows; the feed held against the file's f32 chain with the same-or-better witness, `gemma_forced_feed`'s `exact` form,
-since its CPU q8 chain reads one step's top logit 1.3-2.4 under the f32 chain, the reference build and the device) and Q4_0 (the
-planes Q4_0) files in the forced feed, the planes' tags asserted against the disk type. Arm `g4e-pre` (`test_gpu_resident_gemma4_e2b_ple_pre_step`): the token command's side row - gathered, projected and
+since its CPU q8 chain reads one step's top logit 1.3-2.4 under the f32 chain, the reference build and the device), Q4_0 (the
+planes Q4_0, arm `g4e-kq-q40`) and the ple-Q6_K / ple-Q5_0 mints (arms `g4e-kq-ple-q6k` / `g4e-kq-ple-q50`) in the forced feed, the
+planes' tags asserted against the disk type and the format's decode GEMV counted over the fed steps (`kq_gemv_q40`, `kq_gemv_k6`,
+`q5032_gemv`, the one-row and N-column leaves summed). Arm `g4e-pre` (`test_gpu_resident_gemma4_e2b_ple_pre_step`): the token command's side row - gathered, projected and
 finished on the device - read back (`vk_rdec_ple_side_row`) within 1e-4 of the CPU pre-step's row, another token's row the
 control. Arm `g4e-f16` (`test_gpu_resident_gemma4_e2b_tied_f16`): the `-embf16-local` mint's tied F16 token table declines the
 whole-model driver by name (`tied classifier`), the PLE table tagged q8. Arm `g4f-codec` (`test_gpu_resident_gemma4_e4b_block_codecs`):
