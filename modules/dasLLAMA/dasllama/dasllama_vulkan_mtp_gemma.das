@@ -246,24 +246,44 @@ def private vk_classes_ok(dt : KVDtype; slabs : array<DaSlab>) : bool {
     return ok
 }
 
-//! why the armed driver cannot take the drafter ("" = it can): the device must hold the trunk whole on the resident driver,
+//! what the armed driver holds of the trunk, as the drafter's attach reads it
+struct public VkDrafterTrunk {
+    served : bool               //! the resident driver serves the trunk whole
+    hc : bool                   //! a hyper-connection trunk
+    emb_table : bool            //! the device holds a token table to gather the seed rows from
+    assist_rows : int64         //! the rows the N-row token command takes (`gpu_resident_assist_rows`)
+    own_kv : array<bool>        //! per trunk layer: it keeps K/V rows of its own on the device
+}
+
+def private vk_trunk_facts() : VkDrafterTrunk {
+    var f : VkDrafterTrunk
+    f.served = moe_gpu_resident_active() && g_rd != null && g_rd.ready
+    return <- f if (!f.served)
+    f.hc = g_rd.hc
+    f.emb_table = g_rd.emb_blk >= 0l || g_rd.emb_f32 != 0ul
+    f.assist_rows = gpu_resident_assist_rows()
+    f.own_kv <- [for (ly in g_rd.layers); ly.mir_idx >= 0l && !ly.kv_shared]
+    return <- f
+}
+
+//! why a driver holding `f` cannot take the drafter ("" = it can): the device must hold the trunk whole on the resident driver,
 //! gather its token table, run the N-row command a round's verify rides, and hold the capture layers' K/V rows itself
-def private vk_target_why(dr : GemmaDrafter) : string {
-    if (!moe_gpu_resident_active() || g_rd == null || !g_rd.ready) {
+def public vk_drafter_trunk_why(f : VkDrafterTrunk; dr : GemmaDrafter) : string {
+    if (!f.served) {
         return "the Vulkan resident driver does not serve the trunk whole (the load log names why)"
     }
-    if (g_rd.hc) {
+    if (f.hc) {
         return "a hyper-connection trunk"
     }
-    if (g_rd.emb_blk < 0l && g_rd.emb_f32 == 0ul) {
+    if (!f.emb_table) {
         return "the device holds no token table to gather the seed rows from"
     }
-    if (gpu_resident_assist_rows() < 2l) {
+    if (f.assist_rows < 2l) {
         return "the N-row token command declined the trunk (its line above), and the round's verify rides it"
     }
     for (l in range64(dr.n_layers)) {
         let kvl = dr.kv_layer[l]
-        if (kvl < 0l || kvl >= long_length(g_rd.layers) || g_rd.layers[kvl].mir_idx < 0l || g_rd.layers[kvl].kv_shared) {
+        if (kvl < 0l || kvl >= long_length(f.own_kv) || !f.own_kv[kvl]) {
             return "the capture layer {kvl} keeps no K/V rows of its own on the device"
         }
     }
@@ -595,7 +615,9 @@ def private vk_attach(t : Model; path : string) : string {
     }
     var why = gemma_drafter_target_why(t, dr)
     if (empty(why)) {
-        why = vk_target_why(dr)
+        var facts <- vk_trunk_facts()
+        why = vk_drafter_trunk_why(facts, dr)
+        delete facts
     }
     if (empty(why) && !vk_drafter_init(dr, g_vk_g)) {
         why = "the device has no room for the drafter's {long_length(dr.blob) >> 20l} MB of planes, or a class it dispatches did not compile"

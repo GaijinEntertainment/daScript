@@ -3079,24 +3079,41 @@ def gpu_resident_assist_set(on : bool) {
     g_rdec_assist = on
 }
 
+//! The rung of the assistant bind's ladder a round stops at: no armed driver, a session on another codec, a round past the region's
+//! context (`end` rows against `cap`), or - for a session owning no region - no region both unpinned and untaken this tick
+enum AssistBindRung {
+    bind
+    inactive
+    codec
+    cap
+    no_region
+}
+
+//! the bind ladder's rung, in its order; `pinned(i)` reads region i's pin, `taken` the regions the tick's earlier streams bound
+def assist_bind_rung(active, codec_ok : bool; end, cap : int64; owns : bool; nregions : int64; taken : array<int64>;
+                     pinned : block<(i : int64) : bool>) : AssistBindRung {
+    return AssistBindRung.inactive if (!active)
+    return AssistBindRung.codec if (!codec_ok)
+    return AssistBindRung.cap if (end > cap)
+    return AssistBindRung.bind if (owns)
+    let nt = long_length(taken)
+    for (i in range64(nregions)) {   //! the least recently used region a bind takes is one the tick has not: those it bound are the most recent
+        return AssistBindRung.bind if (!invoke(pinned, i) && !rdec_region_repeats(taken, nt, i))
+    }
+    return AssistBindRung.no_region
+}
+
 //! the region `s`'s assistant round of `nr` rows from `pos` serves in, bound and holding the session's rows to `pos`, or -1 (another
 //! codec or past the region's context, the pass counted; no region but the ones the tick's earlier streams bound, `taken`, free) -
 //! every rung before any state moves, so a refused stream steps plain after the tick's verify and takes no region from it
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-assistant-drafter")]
 def gpu_resident_assist_bind(t : Model; var s : Session; pos, nr : int64; taken : array<int64>) : int64 {
-    return -1l if (!g_rdec_active || !rdec_session_codec_ok(s))
-    if (pos + nr > g_rdec_cap) {
+    let rung = assist_bind_rung(g_rdec_active, g_rdec_active && rdec_session_codec_ok(s), pos + nr, g_rdec_cap, rdec_owns(s, s.rdec_region),
+        long_length(g_rdec_regions), taken) $(i) => g_rdec_regions[i].pinned
+    if (rung == AssistBindRung.cap) {
         rdec_pass_once(RdecPass.cap, pos + nr, g_rdec_cap)
-        return -1l
     }
-    let nt = long_length(taken)
-    if (!rdec_owns(s, s.rdec_region)) {   //! the least recently used region a bind takes is one the tick has not: those it bound are the most recent
-        var free = false
-        for (i in range64(long_length(g_rdec_regions))) {
-            free = free || (!g_rdec_regions[i].pinned && !rdec_region_repeats(taken, nt, i))
-        }
-        return -1l if (!free)
-    }
+    return -1l if (rung != AssistBindRung.bind)
     let r = rdec_bind_region(t, s)
     return -1l if (r < 0l)
     rdec_row_bind(t, s, r, pos, 0l, "assistant")
@@ -5021,7 +5038,7 @@ def private vulkan_embed_decode_gate(t : Model; s : Session; npos, pos : int64) 
 
 //! a batched step leaves its rows to the driver: the token commands gather every row off its id, where no routed layer's split
 //! command opens on the host's row
-[unused_argument(t, s, npos, pos), arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
+[hot_path, unused_argument(t, s, npos, pos), arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
 def private vulkan_embed_batch_gate(t : Model; s : Session; npos, pos : int64) : bool => g_rdec_active && g_rdec_emb_gpu && !g_rdec_experts_host
 
 [init, arch(at="../ARCHITECTURE_GPU.md#gpu-backends")]

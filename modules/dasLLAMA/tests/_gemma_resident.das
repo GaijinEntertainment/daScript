@@ -126,6 +126,7 @@ def with_gemma_rig(t : T?; gf : GemmaFile; body : block<(tr : Model) : void>) {
 //! the routed model's weight-format census on the armed driver's load: every site the file carries in its own format, the
 //! expert stacks the native-MXFP4 planes exactly where `mx4` names them, then a 40-token prompt and two fed steps on the driver
 //! with every call served
+[cold_path]
 def gemma_format_cell(t : T?; gf : GemmaFile; mx4 : bool) {
     with_gemma_rig(t, gf) $(tr) {
         census_cell(t, tr, path_join(models_dir(), gf.file), gf.file, ["attention q/k/v/o", "routed experts", "token table", "classifier"])
@@ -159,6 +160,7 @@ def gemma_format_cell(t : T?; gf : GemmaFile; mx4 : bool) {
 //! chain reads 19.14, and the reference build's quantized CPU path reads 17.8 to 20.1 by its attention form and batching, each
 //! chain summing as far from the f32 rows - and adds that the device sits no further from that chain than the CPU q8 chain
 //! (`f32_chain_witness`)
+[cold_path]
 def gemma_forced_feed(t : T?; n : int64; gf : GemmaFile; exact : bool = false) {
     with_gemma_rig(t, gf) $(tr) {
         var inscope feed <- prose_feed(tr, n, 8l)
@@ -215,6 +217,7 @@ def private ring_run(t : T?; path : string; kv : KVDtype; ring : int; n : int64)
 //! rings them and on one that keeps every row (`set_gpu_kv_ring`), at mirror codec `kv` - the logits bit for bit at the prompt and every
 //! step, since a ring moves where a row sits and never which rows a query reads or their order; the ringed load arms its rings and charges
 //! the card less mirror than the flat one, which arms none, and the row a step off is the control the compare tells apart
+[cold_path]
 def ring_vs_flat(t : T?; n : int64; gf : GemmaFile; kv : KVDtype) {
     return if (!arm_on(t, gf.arm))
     let path = path_join(models_dir(), gf.file)
@@ -239,6 +242,7 @@ def ring_vs_flat(t : T?; n : int64; gf : GemmaFile; kv : KVDtype) {
 //! on one arm: the two GPU paths' logits at every shared position against each other, then the CPU
 //! arm's own pair as the yardstick of how far a prefill kernel and a decode kernel sit apart on
 //! this model by rounding alone
+[cold_path]
 def prefill_vs_decode(t : T?; n : int64; gf : GemmaFile) {
     with_gemma_rig(t, gf) $(tr) {
         let RESIDENT = 0
@@ -336,6 +340,7 @@ def private forced_nll(tr : Model; var s : Session; ids : array<int64>; n, steps
 //! On the 12B the logits sit within a few points at whole stretches of positions (the reference exe's own
 //! margins read 0.6 to 16 on this text), so a maxdiff bar on a single position measures the model, not the driver;
 //! a routed model's near-tie flips move whole positions, so its slack is wider.
+[cold_path]
 def ppl_compare(t : T?; n, steps : int64; gf : GemmaFile; hits_slack : int64 = 3l; ppl_ratio : float = GEMMA_PPL_RATIO) {
     with_gemma_rig(t, gf) $(tr) {
         var ids <- prose_tokens(tr, n + steps + 1l)

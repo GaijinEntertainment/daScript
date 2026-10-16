@@ -1,11 +1,15 @@
 options gen2
+options stack = 524288   // the load cell runs the engine's loader, which takes the program roots' budget
 options _dasllama_internal = true
 
 require dastest/testing_boost public
 require dasllama/dasllama_convert  // the codec layer under test — direct require pins the new module API
 require dasllama/dasllama_gguf
 require dasllama/dasllama_common    // dequant_kq_plane_sb - the plane dequant the f32 fallback must match
+require dasllama/dasllama_load   // load_model_ - the load's decline of an unread tensor type
+require daslib/fio
 require math
+require strings
 require daslib/enum_trait
 
 // Byte-level GGUF quant-format gates on a synthetic in-memory file: the dequant arm must match an
@@ -104,6 +108,34 @@ def test_gguf_type_sizes(t : T?) {
             tt |> success(kq_ggml_type(f) >= 0, "{f} names a ggml type")
             tt |> success(kq_disk_bytes(f, 256l) > 0l, "{f} has block bytes")
         }
+    }
+}
+
+//! the panic text of a load of `bytes` written as a file of its own
+def private load_panic(bytes : array<uint8>; name : string) : string {
+    let path = path_join(test_temp_dir(), name)
+    fopen(path, "wb") $(f) {
+        fwrite(f, bytes)
+    }
+    return panic_text() ${
+        var m <- load_model_(path, QuantMode.q8)
+        delete m
+    }
+}
+
+[test]
+def test_gguf_load_declines_unread_types(t : T?) {
+    t |> run("the load declines a file carrying a tensor of a type the reader has no arm for, naming the tensor and the type") @(t : T?) {
+        var q41 : array<uint8>
+        q41 |> resize(20)   //! one Q4_1 block: an f16 d and m, 16 nibble bytes
+        let gg <- synth_gguf(GGML_TYPE_Q4_1, 32l, q41)
+        let why = load_panic(gg, "q4_1.gguf")
+        t |> success(find(why, "tensor 't' is Q4_1 on disk") >= 0, "the load names the tensor and its type: {why}")
+        var q8 : array<uint8>
+        q8 |> resize(34)
+        let served <- synth_gguf(GGML_TYPE_Q8_0, 32l, q8)
+        let past = load_panic(served, "q8_0.gguf")
+        t |> success(!empty(past) && find(past, "on disk") < 0, "the control: the same file at Q8_0 reads past the type check and stops on its missing metadata: {past}")
     }
 }
 

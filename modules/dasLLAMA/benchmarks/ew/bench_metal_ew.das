@@ -127,7 +127,7 @@ def private run_ew_lab(b) {   // nolint:STYLE038 — flat lab driver: buffers bo
     var totalbuf = upload_u32(dev, uint(nb * hidden))
     // arm descriptors
     var psos_oa <- [pso_addrms]
-    var bufs_oa <- [xbuf, abuf, wbuf, ybuf, ybuf, argbuf]   //! the lab binds by slot (its one timing loop over raw pipelines): the stamp's args at buffer 5, slot 4 unread
+    var bufs_oa <- [xbuf, abuf, wbuf, ybuf, argbuf]   //! the lab binds by slot (its one timing loop over raw pipelines): the stamp's args ride the binding past the class's highest bound buffer, 4
     var bufss_oa <- [bufs_oa]
     var groups_oa <- [uint3(uint(nb), 1u, 1u)]
     var threads_oa <- [1024u]

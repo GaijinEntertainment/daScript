@@ -85,6 +85,7 @@ def private f16_feed_admits_kq() : bool {
 
 // prefill `n` tokens + 8 fed steps on the resident driver, then the same on the all-CPU chain; the
 // prefill logits and every step's within the deltanet bar, the one-step-off control past it.
+[cold_path]
 def private hybrid_forced_feed(t : T?; n : int64; file : string; planes : HybridPlanes) {
     let kq = planes != HybridPlanes.q8
     let q8out = planes == HybridPlanes.kq_q8out

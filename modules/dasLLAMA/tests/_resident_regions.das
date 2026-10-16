@@ -540,6 +540,7 @@ def private batched_steps_body(t : T?; tr : Model; pa, pb : array<int64>; bar : 
 
 //! the E-series side rows on the device at every decode shape: the sessions alone (the one-row command) and the batched steps (the
 //! N-row command) gather each row's side row off its token id - the host gathers no table row - and the batched rows still read bit for bit what each session reads alone
+[cold_path]
 def cell_regions_batched_side_rows(t : T?; file : string) {
     t |> run("the side rows of the sessions alone and of the batched steps gather on the device off the rows' ids") @(t : T?) {
         with_regions_rig(t, file) $(tr) {
@@ -597,6 +598,7 @@ def private batched_rows_logits(t : T?; tr : Model) : array<array<float>> {
 //! batched row counted by `vk_rdec_nrow_embed_gathered`, the host embedding none, and each row's logits at every step bit for bit the
 //! same steps' on a load with the gather off (`set_gpu_resident_embed(0)`, the `DASLLAMA_VK_GPU_EMBED=0` form: every row embedded on
 //! the host and staged up), which moves the counter by nothing and embeds every row on the host - the counters' control
+[cold_path]
 def cell_regions_batched_embed_gather(t : T?; file : string) {
     t |> run("the batched rows gather their token rows on the device, bit for bit the rows the host embeds") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -646,6 +648,7 @@ def private b32_census(suffix : string) : int64 {
 //! a per-32 routed down on the gemma-4 MoE folded under the routing weights by both commands: the batched steps against the
 //! sessions alone on the one-row command's fused forms within `bar`, the summed down stamps dispatched and no per-slot down leaf
 //! (the census over every per-32 format's stamps) - the rows fold each row's k slots as the one-row command folds its own
+[cold_path]
 def cell_regions_batched_down_fold(t : T?; file : string; bar : LogitsBar) {
     t |> run("the batched rows fold the routed down under the routing weights as the one-row command does") @(t : T?) {
         with_regions_rig(t, file) $(tr) {
@@ -1589,6 +1592,63 @@ def cell_device_pool_head_rows(t : T?; file : string) {
             delete got
             delete want
             delete h0
+            delete prompt
+        }
+    }
+}
+
+//! the session's ring floor over a ringed load (`ARCHITECTURE_GPU_KV_RING.md#kv-ring-floor`): a prompt past the window leaves the
+//! floor at its rows less the ring's slack, a call under it panics, a prompt from 0 resets the region's high-water mark and the floor
+//! with it; a parked claim, an export and an import each refuse a cut under the floor and carry the floor on the rows they move
+[cold_path]
+def cell_ring_floor(t : T?; file : string) {
+    t |> run("a ringed history continues from its ring floor on: under it a call panics and a park, an export and an import refuse") @(t : T?) {
+        with_regions_rig(t, file, RegionsLoad(ring = 1)) $(tr) {
+            let slack = gpu_resident_kv_ring_slack()
+            t |> success(slack > 0l, "the ringed load armed its rings (slack {slack})")
+            return if (slack <= 0l)
+            let n = 1300l
+            let floor = n - slack
+            var prompt <- prose_ids(n, 0l)
+            var short <- prose_ids(40l, 1l)
+            var s <- create_session(tr, mirror_kv_dtype())
+            eval(tr, s, prompt)
+            t |> equal(s.kv_ring_floor, floor, "the prompt's rows less the ring's slack are the floor")
+            s.n_past = 40l
+            let why = panic_text() ${
+                var one <- [prompt[40]]
+                eval(tr, s, one)
+            }
+            t |> success(find(why, "from position {floor} on") >= 0, "a call at 40 continues under the floor and panics: {why}")
+            s.n_past = 0l
+            eval(tr, s, short)
+            t |> equal(s.kv_ring_floor, 0l, "a prompt from 0 rebuilds the history: its 40 rows reach no ring, so no floor")
+            delete s
+            var d <- device_session(tr)
+            eval(tr, d, prompt)
+            t |> equal(d.kv_ring_floor, floor, "a device-home session's floor is the same")
+            let claim = gpu_device_kv_park(d)
+            delete d
+            var a <- device_session(tr)
+            t |> success(!gpu_device_kv_adopt(a, claim, 40l) && a.n_past == 0l, "a parked claim refuses an opening under its floor")
+            t |> success(gpu_device_kv_adopt(a, claim, n), "and hands every row over (the control)")
+            t |> equal(a.kv_ring_floor, floor, "the adopter carries the claim's floor")
+            let claim2 = gpu_device_kv_park(a)
+            delete a
+            var pool <- create_kv_pool(tr, 64l, gpu_device_session_dtype())
+            var carrier <- create_session(tr, pool)
+            t |> success(!gpu_device_kv_export(tr, claim2, carrier, 0l, 40l), "an export ending under the floor refuses")
+            t |> success(gpu_device_kv_export(tr, claim2, carrier, 0l, n), "an export of every row goes down (the control)")
+            t |> equal(carrier.kv_ring_floor, floor, "the carrier carries the floor")
+            var up <- device_session(tr)
+            t |> success(!gpu_device_kv_import(tr, up, carrier, 40l), "an import ending under the carrier's floor refuses")
+            t |> success(gpu_device_kv_import(tr, up, carrier, n), "an import of every row comes up (the control)")
+            t |> equal(up.kv_ring_floor, floor, "the imported session carries the floor")
+            gpu_device_kv_park(up)
+            delete up
+            delete carrier
+            delete pool
+            delete short
             delete prompt
         }
     }

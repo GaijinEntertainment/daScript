@@ -841,7 +841,14 @@ absent; set `DASLLAMA_MODELS_DIR`):
   exchange client against a fake exchange on 127.0.0.1:18131 (lookup/pick, the fetch-and-apply
   gate, applied_box staleness, the privacy strip, both submit rails, policy parsing).
 - `test_model_catalog.das` - model-free: catalog-table invariants (pinned URLs, unique ids,
-  one default), the models-dir precedence, presence detection, download-start refusals.
+  one default), the models-dir precedence, presence detection, download-start refusals, the
+  `/catalog` document's drafter fields (a planted drafter present with its file and canonical bytes,
+  every other row's absent), and the ACCEPTED body's echo (the download id and the bytes of the
+  model, its vision tower or its drafter).
+- `test_catalog_download.das` - model-free and offline: a drafter pinned to a local `file://` source
+  starts its download under the id `drafter:<name>` the document's machine names, and the worker's
+  verify fails bytes off the pinned sha. Its own file: the download machine is process state that
+  `test_model_catalog.das`'s document cells read idle.
 - `test_setup_mode.das` - model-free, runs end to end even interpreted (setup mode never
   infers): a slotless boot serves setup stats and the catalog while every inference route
   fails closed.
