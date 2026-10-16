@@ -1721,14 +1721,7 @@ def private metal_release_row(t : T?; path, tag : string) {
 //! `prompt` evaluated `chunk` rows a call, then `steps` greedy picks each fed back: the prompt's ids and the picks
 def private ring_row_walk(t : Model; var s : Session; prompt : array<int64>; chunk : int64; steps : int) : array<int64> {
     var out := prompt
-    var p = 0l
-    while (p < long_length(prompt)) {
-        let e = min(p + chunk, long_length(prompt))
-        var part <- [for (i in range64(p, e)); prompt[i]]
-        eval_(t, s, part)
-        delete part
-        p = e
-    }
+    eval_chunked(t, s, prompt, long_length(prompt), chunk)
     out |> reserve(length(out) + steps)
     for (_i in range(steps)) {
         let pick = argmax_of(s.logits, t.config.vocab_size)

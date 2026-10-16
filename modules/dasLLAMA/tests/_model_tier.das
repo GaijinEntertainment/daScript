@@ -134,6 +134,18 @@ def gathered_rows_bit_same(t : T?; m : Model; tag : string; dev, host : array<ar
     }
 }
 
+//! the first `n` ids of `ids` evaluated on `s` in calls of `chunk` ids or fewer
+def eval_chunked(t : Model; var s : Session; ids : array<int64>; n, chunk : int64) {
+    var p = 0l
+    while (p < n) {
+        let e = min(p + chunk, n)
+        var part <- [for (i in range64(p, e)); ids[i]]
+        eval_(t, s, part)
+        delete part
+        p = e
+    }
+}
+
 //! `prompt` greedily continued `n_gen` ids through `generate` on a fresh session: the prompt's echo past its first id, then the
 //! continuation
 def greedy_gen(tr : Model; prompt : array<int64>; n_gen : int) : array<int64> {
