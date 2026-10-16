@@ -18,36 +18,49 @@ require math
 // (`dasllama_gpu_kernels_common.das`), each timed alone at a
 // qwen35moe / qwen4exp decode shape through its generated builder: the
 // hyper-connection seams, the n-gram side input, the per-head q/k
-// norm, the router select and the routed combine. A kernel's row is
-// the median GPU time of one dispatch over `g_env_bench.lab_rounds`
+// norm, the router select and the routed combine. A lone kernel's row
+// is the median GPU time of one dispatch over `g_env_bench.lab_rounds`
 // rounds (at least 9) of 200 back-to-back dispatches, with the rounds'
-// cv - a row past 3% cv is VOID and reruns on a quiet box. Warmup:
-// each row runs one round more and drops the first (`time_rows`), and
-// the run opens on a `warm-up` row (hc_init at the seam shape, never
-// reported) that ramps the clocks before the first timed row. A run
-// that times no row - no Metal device, an interpreted run, a build
-// with no Metal - fails. The kernels' numerics are the kernel cells'
+// cv - a row past 3% cv is VOID and reruns on a quiet box; it reads no
+// output back and prints `timing-only`. Warmup: each row runs one
+// round more and drops the first (`time_rows`), and the run opens on a
+// `warm-up` row (hc_init at the seam shape, never reported) that ramps
+// the clocks before the first timed row. A run that times no row - no
+// Metal device, an interpreted run, a build with no Metal - fails. The
+// kernels' numerics are the kernel cells'
 // (`tests/test_metal_misc_kernels.das`,
 // `tests/test_metal_prefill_kernels.das`); this file times them.
 //
 // The races time the shipped picks against their candidates at every
-// row count the pick reads, an arm chosen by its index (`race_arms`): a
-// round times every arm's 200 dispatches in turn, the first round warms
-// each arm and drops, an arm's row its best round with the median and
-// cv beside. Four slot loads in flight on and off (`SLOT_X4`): the
-// gemma-4 MoE step at one and four rows (`MetalMoeCombG4` / `Hx`) and
-// the 512-row window (`MetalMoeCombG4Pf`), the routed combine at one
-// and four rows (`MetalMoeCombine` / `Sh`) and the window's reduce
-// (`MetalMoeReduce` / `Sh`), each against a bench stamp with the
-// constant flipped (`g4_slot_race`, `comb_slot_race`). The select with
-// and without the down-scale arm, no row named (`select_ds_race`). The
-// sandwich seam at 1024, 256 and 128 lanes over one and four rows of
-// the plain pipeline and 512 rows of the f16 twin's, at 2560 and 3840
-// (`seam_lane_race`). The shipped arm is the baseline, checked against
-// a CPU reference in the process; another arm prints `bit-exact vs` the
-// baseline or its difference from the reference, and an arm past
-// `RACE_BOUND` prints the miss and no time. The side rows' projection
-// runs on one weight buffer and on a ring of `PLE_RING` copies.
+// row count the pick reads, an arm chosen by its index (`race_rows`,
+// `race_arms`): a round times every arm's 200 dispatches in turn, the
+// first round warms each arm and drops, an arm's row its best round
+// with the median and cv beside. The shipped arm is the baseline,
+// checked against a CPU reference in the process; another arm prints
+// `bit-exact vs` the baseline or its difference from the reference,
+// and an arm past `RACE_BOUND` prints the miss and no time. The races
+// and their compare regions:
+// - the gemma-4 MoE step with four slot loads in flight on and off
+//   (`SLOT_X4`) at one and four rows (`MetalMoeCombG4` / `Hx`) and the
+//   512-row window (`MetalMoeCombG4Pf`), each against a bench stamp
+//   with the constant flipped (`g4_slot_race`): the stream rows;
+// - the routed combine the same way at one and four rows
+//   (`MetalMoeCombine` / `Sh`) and the window's reduce (`MetalMoeReduce`
+//   / `Sh`, `comb_slot_race`): the combined rows;
+// - the gemma-4 MoE tail, the one step against the unfused chain, at a
+//   decode row and the window (`g4_tail_race`): the stream rows;
+// - the select with and without the down-scale arm, no row named
+//   (`select_ds_race`): the picks, then their weights;
+// - the residual step at 2560 and 3840 (`ar_race`): the plain add +
+//   norm (one arm), the sandwich seam and its no-norm form as one
+//   dispatch against the rms and the add (+ norm): the stream rows and,
+//   where the step stores one, the f32 next norm;
+// - the sandwich seam at 1024, 256 and 128 lanes over one and four rows
+//   of the plain pipeline and 512 rows of the f16 twin's
+//   (`seam_lane_race`): the stream rows and the f32 next norm;
+// - the side rows' projection, the bf16 stamps against the f32 rows, on
+//   one weight buffer and on a ring of `PLE_RING` copies
+//   (`ple_proj_race`): the logits.
 //
 //   bin/daslang -jit dastest/dastest.das -- --bench --test modules/dasLLAMA/benchmarks/ew/bench_metal_gk_rows.das
 
@@ -59,11 +72,11 @@ let private RACE_BOUND = 1e-4lf   //! a race arm's max |gpu - ref| over the comp
 //! the fixture's pattern value at element i
 def private pat(i : int; scale : float) : float => scale * (0.11 * float(i % 47) - 2.5)
 
-//! the first `n` floats of `buf` set to the fixture's pattern
-def private fill_pattern(buf : MetalBuffer?; n : int; scale : float) {
+//! the first `n` floats of `buf` set to the fixture's pattern from element `base` on
+def private fill_pattern(buf : MetalBuffer?; n : int; scale : float; base : int = 0) {
     var p = unsafe(reinterpret<float?>(metal_buffer_contents(buf)))
     for (i in range(n)) {
-        unsafe(p[i]) = pat(i, scale)
+        unsafe(p[i]) = pat(base + i, scale)
     }
 }
 
@@ -117,7 +130,7 @@ def private time_rows(name : string; body : block<(enc : MetalComputeEncoder?) :
     }
     times |> erase(0)   //! the first round warms the pipeline
     let st = round_stats(times)
-    to_log(LOG_INFO, "{name}: {st.med} us a dispatch (cv {st.cv * 100.0lf}%{st.cv > 0.03lf ? " - VOID" : ""})\n")
+    to_log(LOG_INFO, "{name}: {st.med} us a dispatch (cv {st.cv * 100.0lf}%{st.cv > 0.03lf ? " - VOID" : ""}) - timing-only\n")
     return (us = st.med, cv = st.cv)
 }
 
@@ -390,42 +403,111 @@ def private router_rows : array<Reading> {
 
 let private PLE_RING = 8   //! the projection race's weight copies: 440 MB of f32 rows, 220 MB of bf16 words, past the M5 Max's 48 MB SLC
 
-//! the E-series side rows' projection at the E2B shape (35 layers x 256 rows of 1536): the router GEMV's f32 rows against the bf16
-//! word form off the file's own rows, a decode column and a verify's four; dispatch i reads weight copy i % `ring`
-def private ple_proj_rows(ring : int) : array<Reading> {
-    let ne = 35 * 256
-    let dim = 1536
-    var bws <- [for (_i in range(ring)); fill_buf(ne * dim, 0.01)]
-    var bx = fill_buf(4 * dim, 0.5)
-    var by = fill_buf(4 * ne, 0.0)
-    var rows : array<Reading>
-    rows |> reserve(5)
-    var slot = 0
-    for (np in fixed_array(1, 4)) {
-        let ka = moe_router_args(int64(ne), int64(dim), int64(np))
-        rows |> push(time_rows("ple proj f32 rows ne={ne} dim={dim} {np} cols, ring {ring}") $(enc) {
-            var k = ka
-            enc_moe_router(enc, bws[slot], bx, by, g_one, k, int64(ne), int64(np))
-            slot = (slot + 1) % ring
-        })
-        rows |> push(time_rows("ple proj bf16 rows ne={ne} dim={dim} {np} cols, ring {ring}") $(enc) {
-            var k = ka
-            enc_ple_proj_bf16(enc, bws[slot], bx, by, k, int64(ne), int64(np))
-            slot = (slot + 1) % ring
-        })
-        if (np == 1) {
-            rows |> push(time_rows("ple proj bf16 rows ne={ne} dim={dim} 1 col, a threadgroup a row, ring {ring}") $(enc) {
-                var k = ka
-                enc_ple_proj_bf16_one(enc, bws[slot], bx, by, k, int64(ne), 1l)
-                slot = (slot + 1) % ring
-            })
+//! the projection fixture's weight at element i: the pattern value truncated to bf16, so the f32 rows and the bf16 words hold one matrix
+def private ple_w(i : int) : float => unsafe(reinterpret<float>(unsafe(reinterpret<uint>(pat(i, 0.01))) & 0xFFFF0000u))
+
+//! the side rows' projection operands: `ring` copies of the weight matrix as f32 rows and as bf16 words, the columns and the logits
+struct private PleStep {
+    bws : array<MetalBuffer?>   //! the f32 rows, copy i
+    bbs : array<MetalBuffer?>   //! the same rows' bf16 words, copy i
+    bx : MetalBuffer?           //! the columns, `dim` apart
+    by : MetalBuffer?           //! the logits, column c's row r at c * ne + r
+    ka : GkRouterArgs
+    ring : int
+    slot : int                  //! the copy the next dispatch reads
+}
+
+//! the projection race's arm on `s` in its `form` (0 the bf16 words a threadgroup a row, 1 the bf16 words blocked, 2 the f32 rows),
+//! the next weight copy of the ring
+def private ple_proj_arm(enc : MetalComputeEncoder?; var s : PleStep; form : int) {
+    var k = s.ka
+    let ne = int64(s.ka.ne)
+    let np = int64(s.ka.ncols)
+    if (form == 0) {
+        enc_ple_proj_bf16_one(enc, s.bbs[s.slot], s.bx, s.by, k, ne, 1l)
+    } elif (form == 1) {
+        enc_ple_proj_bf16(enc, s.bbs[s.slot], s.bx, s.by, k, ne, np)
+    } else {
+        enc_moe_router(enc, s.bws[s.slot], s.bx, s.by, g_one, k, ne, np)
+    }
+    s.slot = (s.slot + 1) % s.ring
+}
+
+//! the projection's logits on the CPU in double off the fixture: column c's row r the dot of weight row r with column c
+def private ple_proj_ref(ne, dim, np : int) : array<double> {
+    var out : array<double>
+    out |> reserve(np * ne)
+    for (c in range(np)) {
+        for (r in range(ne)) {
+            var acc = 0.0lf
+            for (e in range(dim)) {
+                acc += double(ple_w(r * dim + e)) * double(pat(c * dim + e, 0.5))
+            }
+            out |> push(acc)
         }
     }
-    for (buf in bws) {
-        metal_release(buf)
+    return <- out
+}
+
+//! the E-series side rows' projection at the E2B shape (35 layers x 256 rows of 1536) over `np` columns, its weights on one buffer
+//! or a ring of `ring` copies (dispatch i reads copy i mod `ring`): the shipped bf16 stamp for the column count - a threadgroup a row
+//! at one column, the blocked stamp past it - the baseline, raced against the other bf16 stamp at one column and the f32 rows; the
+//! compare region is the logits
+def private ple_proj_race(np, ring : int; var rows : array<Reading>) {
+    let ne = 35 * 256
+    let dim = 1536
+    let n = ne * dim
+    var s = PleStep(bx = fill_buf(np * dim, 0.5), by = fill_buf(np * ne, 0.0), ka = moe_router_args(int64(ne), int64(dim), int64(np)),
+        ring = ring)
+    s.bws |> reserve(ring)
+    s.bbs |> reserve(ring)
+    for (_i in range(ring)) {
+        s.bws |> push(metal_new_buffer(g_dev, uint64(n) * 4ul))
+        s.bbs |> push(metal_new_buffer(g_dev, uint64(n) * 2ul))
     }
-    metal_release(bx)
-    metal_release(by)
+    var pw = unsafe(reinterpret<float?>(metal_buffer_contents(s.bws[0])))
+    var pb = unsafe(reinterpret<uint16?>(metal_buffer_contents(s.bbs[0])))
+    for (i in range(n)) {
+        let w = ple_w(i)
+        unsafe {
+            pw[i] = w
+            pb[i] = uint16(reinterpret<uint>(w) >> 16u)
+        }
+    }
+    for (i in range(1, ring)) {
+        unsafe {
+            memcpy(metal_buffer_contents(s.bws[i]), metal_buffer_contents(s.bws[0]), int64(n) * 4l)
+            memcpy(metal_buffer_contents(s.bbs[i]), metal_buffer_contents(s.bbs[0]), int64(n) * 2l)
+        }
+    }
+    let forms = np == 1 ? fixed_array(0, 1, 2) : fixed_array(1, 2, 2)
+    let names <- (np == 1 ? ["bf16 words, a threadgroup a row (the shipped stamp)", "bf16 words, blocked", "f32 rows"]
+        : ["bf16 words, blocked (the shipped stamp)", "f32 rows"])
+    let ref <- ple_proj_ref(ne, dim, np)
+    race_rows("ple proj ne={ne} dim={dim} {np} cols, ring {ring}", names, ref, rows, $ {
+        fill_pattern(s.by, np * ne, 0.0)
+    }, $(var got) {
+        got |> push_from(read_floats(s.by, np * ne))
+    }, $(enc, a) {
+        ple_proj_arm(enc, s, forms[a])
+    })
+    for (i in range(ring)) {
+        metal_release(s.bws[i])
+        metal_release(s.bbs[i])
+    }
+    metal_release(s.bx)
+    metal_release(s.by)
+}
+
+//! the projection race over one weight buffer and over the ring, a decode column and a verify's four
+def private ple_proj_rows : array<Reading> {
+    var rows : array<Reading>
+    rows |> reserve(10)
+    for (ring in fixed_array(1, PLE_RING)) {
+        for (np in fixed_array(1, 4)) {
+            ple_proj_race(np, ring, rows)
+        }
+    }
     return <- rows
 }
 
@@ -513,63 +595,6 @@ def private gate_rows : array<Reading> {
     }
     for (buf in fixed_array(bqg, bq, bg, by)) {
         metal_release(buf)
-    }
-    return <- rows
-}
-
-//! the gemma-4 MoE layer's tail at the 26B's shape (dim 2816, eight slots): the unfused chain it replaced - the routed combine, the
-//! routed and dense post norms, their add, the post-FFN norm and the residual add with the next norm (the window: the add alone) -
-//! against the one step, at a decode row and a 512-row window
-def private g4_tail_rows : array<Reading> {
-    let dim = 2816
-    let k = 8
-    let np = 512
-    var bx = fill_buf(np * dim, 0.5)
-    var bd = fill_buf(np * dim, 0.25)
-    var brt = fill_buf(np * dim, 0.0)
-    var bdn = fill_buf(np * k * dim, 0.1)
-    var bsel = fill_buf(np * 2 * k, 0.01)
-    var binv = metal_new_buffer(g_dev, uint64(np * k * 4))
-    var ip = unsafe(reinterpret<uint?>(metal_buffer_contents(binv)))
-    for (i in range(np * k)) {
-        unsafe(ip[i]) = uint((i * 7) % (np * k))
-    }
-    var bw = fill_buf(4 * dim, 0.01)
-    var udim = uniform_u32(uint(dim))
-    var ueps = uniform_f32(1e-6)
-    var utot = uniform_u32(uint(np * dim))
-    var ka = moe_g4_args(int64(dim), int64(k), 1e-6, 0.75, false)
-    var kc = moe_comb_args(int64(dim), int64(k))
-    var rows <- [
-        time_rows("g4 MoE tail dim={dim} k={k} 1 row, unfused (6 dispatches)") $(enc) {
-            enc_moe_combine(enc, brt, bsel, bdn, kc, int64(dim), 1l)
-            enc_rms(enc, brt, 0ul, bw, brt, udim, ueps)
-            enc_rms(enc, bd, 0ul, bw, bd, udim, ueps)
-            enc_add(enc, bd, 0ul, brt, 0ul, udim, int64(dim))
-            enc_rms(enc, bd, 0ul, bw, bd, udim, ueps)
-            var kr = GkAddRmsArgs(dim = uint(dim), add_on = 1u, eps = 1e-6, ascale = 1.0)
-            enc_addrms_c(enc, bx, bd, bw, bd, kr)
-        },
-        time_rows("g4 MoE step dim={dim} k={k} 1 row") $(enc) {
-            enc_moe_comb_g4(enc, bx, bsel, bdn, bd, bw, bd, ka, 1l)
-        },
-        time_rows("g4 MoE tail dim={dim} k={k} {np} rows, unfused (6 dispatches)") $(enc) {
-            pf_enc_moe_reduce(enc, brt, binv, bsel, bdn, kc, int64(dim), int64(np))
-            pf_enc_rms(enc, brt, 0ul, bw, brt, udim, ueps, int64(np))
-            pf_enc_rms(enc, bd, 0ul, bw, bd, udim, ueps, int64(np))
-            enc_add(enc, bd, 0ul, brt, 0ul, utot, int64(np * dim))
-            pf_enc_rms(enc, bd, 0ul, bw, bd, udim, ueps, int64(np))
-            enc_add(enc, bx, 0ul, bd, 0ul, utot, int64(np * dim))
-        },
-        time_rows("g4 MoE step dim={dim} k={k} {np} rows (the window's stamp)") $(enc) {
-            enc_moe_comb_g4_pf(enc, bx, binv, bsel, bdn, bd, bw, ka, int64(np))
-        }
-    ]
-    for (buf in fixed_array(bx, bd, brt, bdn, bsel, binv, bw)) {
-        metal_release(buf)
-    }
-    for (u in fixed_array(udim, ueps, utot)) {
-        pool_release(g_upool, u, 4ul)
     }
     return <- rows
 }
@@ -1026,99 +1051,6 @@ def private cls_epi_rows : array<Reading> {
     return <- rows
 }
 
-//! the residual step's rows at width `dim`: the plain add + norm, the sandwich seam as the pair and as one dispatch, the seam with no
-//! norm stored, each at a decode row, a verify's four rows and a window of `np`
-def private ar_dim_rows(dim, np : int; var rows : array<Reading>) {
-    var bx = fill_buf(np * dim, 0.5)
-    var ba = fill_buf(np * dim, 0.25)
-    var by = fill_buf(np * dim, 0.0)
-    var bh = metal_new_buffer(g_dev, uint64(np * dim * 2))
-    var bw = fill_buf(2 * dim, 0.01)
-    var udim = uniform_u32(uint(dim))
-    var ueps = uniform_f32(1e-6)
-    var utot = uniform_u32(uint(dim))
-    var utot4 = uniform_u32(uint(4 * dim))
-    var utotn = uniform_u32(uint(np * dim))
-    let kp = GkAddRmsArgs(dim = uint(dim), add_on = 1u, eps = 1e-6, ascale = 1.0)
-    let ks = GkAddRmsArgs(dim = uint(dim), add_on = 1u, eps = 1e-6, ascale = 0.75)
-    rows |> push(time_rows("ar dim={dim} 1 row: add + norm") $(enc) {
-        var k = kp
-        enc_addrms_c(enc, bx, ba, bw, by, k)
-    })
-    rows |> push(time_rows("ar dim={dim} 1 row: sandwich seam, rms + add_rms") $(enc) {
-        var k = kp
-        enc_rms(enc, ba, 0ul, bw, ba, udim, ueps)
-        enc_addrms_c(enc, bx, ba, bw, by, k)
-    })
-    rows |> push(time_rows("ar dim={dim} 1 row: sandwich seam, pre_add_rms") $(enc) {
-        var k = ks
-        enc_preaddrms_c(enc, bx, ba, bw, by, k)
-    })
-    rows |> push(time_rows("ar dim={dim} 1 row: sandwich seam no norm out, rms + add") $(enc) {
-        enc_rms(enc, ba, 0ul, bw, ba, udim, ueps)
-        enc_add(enc, bx, 0ul, ba, 0ul, utot, int64(dim))
-    })
-    rows |> push(time_rows("ar dim={dim} 1 row: sandwich seam no norm out, pre_add") $(enc) {
-        var k = ks
-        enc_preadd_c(enc, bx, ba, bw, k)
-    })
-    rows |> push(time_rows("ar dim={dim} 4 rows: add + norm") $(enc) {
-        var k = kp
-        enc_add_rms_b_c(enc, bx, ba, bw, by, k, 4l)
-    })
-    rows |> push(time_rows("ar dim={dim} 4 rows: sandwich seam, rms + add_rms") $(enc) {
-        var k = kp
-        enc_rms_b(enc, ba, 0ul, bw, ba, udim, ueps, 4l)
-        enc_add_rms_b_c(enc, bx, ba, bw, by, k, 4l)
-    })
-    rows |> push(time_rows("ar dim={dim} 4 rows: sandwich seam, pre_add_rms") $(enc) {
-        var k = ks
-        enc_preaddrms_b_c(enc, bx, ba, bw, by, k, 4l)
-    })
-    rows |> push(time_rows("ar dim={dim} 4 rows: sandwich seam no norm out, rms + add") $(enc) {
-        enc_rms_b(enc, ba, 0ul, bw, ba, udim, ueps, 4l)
-        enc_add(enc, bx, 0ul, ba, 0ul, utot4, int64(4 * dim))
-    })
-    rows |> push(time_rows("ar dim={dim} 4 rows: sandwich seam no norm out, pre_add") $(enc) {
-        var k = ks
-        enc_preadd_b_c(enc, bx, ba, bw, k, 4l)
-    })
-    rows |> push(time_rows("ar dim={dim} {np} rows: sandwich seam, rms + add_rms hx") $(enc) {
-        var k = kp
-        pf_enc_rms(enc, ba, 0ul, bw, ba, udim, ueps, int64(np))
-        pf_enc_add_rms_bhx_c(enc, bx, ba, bw, by, bh, k, int64(np))
-    })
-    rows |> push(time_rows("ar dim={dim} {np} rows: sandwich seam, pre_add_rms hx") $(enc) {
-        var k = ks
-        pf_enc_preaddrms_bhx_c(enc, bx, ba, bw, by, bh, k, int64(np))
-    })
-    rows |> push(time_rows("ar dim={dim} {np} rows: sandwich seam no norm out, rms + add") $(enc) {
-        pf_enc_rms(enc, ba, 0ul, bw, ba, udim, ueps, int64(np))
-        enc_add(enc, bx, 0ul, ba, 0ul, utotn, int64(np * dim))
-    })
-    rows |> push(time_rows("ar dim={dim} {np} rows: sandwich seam no norm out, pre_add") $(enc) {
-        var k = ks
-        pf_enc_preadd_b_c(enc, bx, ba, bw, k, int64(np))
-    })
-    for (buf in fixed_array(bx, ba, by, bh, bw)) {
-        metal_release(buf)
-    }
-    for (u in fixed_array(udim, ueps, utot, utot4, utotn)) {
-        pool_release(g_upool, u, 4ul)
-    }
-}
-
-//! the residual step at the gemma-3-12b and E4B widths (`ar_dim_rows`), and the E-series pre-step's finish over 42 layers of 256
-def private ar_rows : array<Reading> {
-    let np = 512
-    var rows : array<Reading>
-    rows |> reserve(32)
-    for (dim in fixed_array(2560, 3840)) {
-        ar_dim_rows(dim, np, rows)
-    }
-    return <- rows
-}
-
 //! the lane race stamps' shell: the sandwich seam stamped as `MetalPreAddRms` is - its loops striding the threadgroup's own size, so
 //! the threadgroup is the lane width - and dispatched at 128 lanes
 [ |> template_struct_instance]
@@ -1250,6 +1182,239 @@ def private seam_lane_rows : array<Reading> {
     return <- rows
 }
 
+//! a one-float buffer holding `v` (a residual add's scale)
+def private scale_buf(v : float) : MetalBuffer? {
+    var buf = metal_new_buffer(g_dev, 4ul)
+    var p = unsafe(reinterpret<float?>(metal_buffer_contents(buf)))
+    unsafe(p[0]) = v
+    return buf
+}
+
+//! the norms plane's row `r` at width `dim` alone in a buffer: the fixture's pattern from element r x dim on (the unfused chain's
+//! norms, which bind a row at element zero)
+def private norm_row_buf(dim, r : int) : MetalBuffer? {
+    var buf = metal_new_buffer(g_dev, uint64(dim * 4))
+    fill_pattern(buf, dim, 0.01, r * dim)
+    return buf
+}
+
+//! the gemma-4 MoE tail's unfused chain's scratch beside the step's operands
+struct private G4Tail {
+    brt : MetalBuffer?    //! the routed rows, then their post norm
+    bt : MetalBuffer?     //! the dense post norm, the branch sum, then its post-FFN norm
+    bwr : MetalBuffer?    //! the routed post norm row
+    bwd : MetalBuffer?    //! the dense post norm row
+    bws : MetalBuffer?    //! the post-FFN norm row
+    bwn : MetalBuffer?    //! the next norm row
+    bosc : MetalBuffer?   //! the residual's scale (the window's add)
+    udim : MetalBuffer?
+    ueps : MetalBuffer?
+    utot : MetalBuffer?
+    kc : GkMoeCombArgs
+}
+
+//! the gemma-4 MoE tail's unfused chain on `s` with scratch `u`: the routed combine (the window: the reduce), the routed and dense
+//! post norms, their add, the post-FFN norm, then the residual add with the next norm (the window: the scaled add alone)
+def private g4_unfused_arm(enc : MetalComputeEncoder?; s : G4Step; u : G4Tail) {
+    var kc = u.kc
+    let dim = int64(s.kp.n)
+    let np = int64(s.np)
+    if (s.form == G4Form.window) {
+        pf_enc_moe_reduce(enc, u.brt, s.binv, s.bsel, s.bdn, kc, dim, np)
+        pf_enc_rms(enc, u.brt, 0ul, u.bwr, u.brt, u.udim, u.ueps, np)
+        pf_enc_rms(enc, s.bd, 0ul, u.bwd, u.bt, u.udim, u.ueps, np)
+        enc_add(enc, u.bt, 0ul, u.brt, 0ul, u.utot, np * dim)
+        pf_enc_rms(enc, u.bt, 0ul, u.bws, u.bt, u.udim, u.ueps, np)
+        enc_add(enc, s.bx, 0ul, u.bt, 0ul, u.utot, np * dim, u.bosc)
+        return
+    }
+    var kr = GkAddRmsArgs(dim = uint(dim), add_on = 1u, eps = 1e-6, ascale = s.kp.ascale)
+    enc_moe_combine(enc, u.brt, s.bsel, s.bdn, kc, dim, np)
+    enc_rms_b(enc, u.brt, 0ul, u.bwr, u.brt, u.udim, u.ueps, np)
+    enc_rms_b(enc, s.bd, 0ul, u.bwd, u.bt, u.udim, u.ueps, np)
+    enc_add(enc, u.bt, 0ul, u.brt, 0ul, u.utot, np * dim)
+    enc_rms_b(enc, u.bt, 0ul, u.bws, u.bt, u.udim, u.ueps, np)
+    enc_add_rms_b_c(enc, s.bx, u.bt, u.bwn, s.by, kr, np)
+}
+
+//! the gemma-4 MoE layer's tail at the 26B's shape (dim 2816, eight slots) over `np` rows: the one step - `MetalMoeCombG4` at the
+//! decode rows, `MetalMoeCombG4Pf` on the window, the shipped form and the baseline - raced against the unfused chain the engine
+//! serves under `set_metal_moe_g4_unfused`; the compare region is the stream rows the tail updates
+def private g4_tail_race(np : int; var rows : array<Reading>) {
+    let dim = 2816
+    let k = 8
+    let form = np >= 64 ? G4Form.window : G4Form.decode
+    var s = G4Step(bx = fill_buf(np * dim, 0.5), binv = slot_map_buf(np * k), bsel = fill_buf(np * 2 * k, 0.01),
+        bdn = fill_buf(np * k * dim, 0.1), bd = fill_buf(np * dim, 0.25), bw = fill_buf(4 * dim, 0.01), by = fill_buf(np * dim, 0.0),
+        byh = metal_new_buffer(g_dev, uint64(np * dim * 2)), kp = moe_g4_args(int64(dim), int64(k), 1e-6, 0.75, false), np = np, form = form)
+    var u = G4Tail(brt = fill_buf(np * dim, 0.0), bt = fill_buf(np * dim, 0.0), bwr = norm_row_buf(dim, 0), bwd = norm_row_buf(dim, 1),
+        bws = norm_row_buf(dim, 2), bwn = norm_row_buf(dim, 3), bosc = scale_buf(0.75), udim = uniform_u32(uint(dim)),
+        ueps = uniform_f32(1e-6), utot = uniform_u32(uint(np * dim)), kc = moe_comb_args(int64(dim), int64(k)))
+    let ref <- g4_step_ref(dim, k, np, 0.75lf, form == G4Form.window)
+    race_rows("g4 MoE tail dim={dim} k={k} {np} rows", ["the one step (the shipped form)", "the unfused chain (6 dispatches)"], ref, rows, $ {
+        fill_pattern(s.bx, np * dim, 0.5)
+    }, $(var got) {
+        got |> push_from(read_floats(s.bx, np * dim))
+    }, $(enc, a) {
+        if (a == 0) {
+            g4_slot_arm(enc, s, 0)
+        } else {
+            g4_unfused_arm(enc, s, u)
+        }
+    })
+    for (buf in fixed_array(s.bx, s.binv, s.bsel, s.bdn, s.bd, s.bw, s.by, s.byh, u.brt, u.bt, u.bwr, u.bwd, u.bws, u.bwn, u.bosc)) {
+        metal_release(buf)
+    }
+    for (b in fixed_array(u.udim, u.ueps, u.utot)) {
+        pool_release(g_upool, b, 4ul)
+    }
+}
+
+//! the gemma-4 MoE tail race at a decode row and over the 512-row window
+def private g4_tail_rows : array<Reading> {
+    var rows : array<Reading>
+    rows |> reserve(4)
+    g4_tail_race(1, rows)
+    g4_tail_race(512, rows)
+    return <- rows
+}
+
+enum private ArForm {
+    plain    //! the add + norm: x = x + a, its next norm out
+    seam     //! the sandwich seam: x = (x + post(a)) . ascale, its next norm out
+    nonorm   //! the seam with no norm stored
+}
+
+//! the residual step's operands at width `dim` over `np` rows, laid out as `SeamStep`'s, with the split chain's scratch
+struct private ArStep {
+    st : SeamStep
+    bt : MetalBuffer?     //! the branch under its post norm (the split chain)
+    bwp : MetalBuffer?    //! the post norm row alone
+    bwn : MetalBuffer?    //! the next norm row alone
+    bosc : MetalBuffer?   //! the residual's scale (the split no-norm seam's add)
+    udim : MetalBuffer?
+    ueps : MetalBuffer?
+    utot : MetalBuffer?
+    form : ArForm
+}
+
+//! the residual race's arm `arm` on `s`: 0 the one dispatch (the shipped form; the plain step's only arm), 1 the split chain - the
+//! branch's rms, then the add + norm (`nonorm`: the scaled add)
+def private ar_arm(enc : MetalComputeEncoder?; s : ArStep; arm : int) {
+    var k = s.st.ks
+    let np = int64(s.st.np)
+    let win = s.st.np >= 64
+    let one = s.st.np == 1
+    let t = s.st
+    if (s.form == ArForm.plain) {
+        k.ascale = 1.0
+        if (one) {
+            enc_addrms_c(enc, t.bx, t.ba, s.bwn, t.by, k)
+        } else {
+            enc_add_rms_b_c(enc, t.bx, t.ba, s.bwn, t.by, k, np)
+        }
+    } elif (arm == 0 && s.form == ArForm.seam) {
+        if (win) {
+            pf_enc_preaddrms_bhx_c(enc, t.bx, t.ba, t.bw, t.by, t.bh, k, np)
+        } elif (one) {
+            enc_preaddrms_c(enc, t.bx, t.ba, t.bw, t.by, k)
+        } else {
+            enc_preaddrms_b_c(enc, t.bx, t.ba, t.bw, t.by, k, np)
+        }
+    } elif (arm == 0) {
+        if (win) {
+            pf_enc_preadd_b_c(enc, t.bx, t.ba, t.bw, k, np)
+        } elif (one) {
+            enc_preadd_c(enc, t.bx, t.ba, t.bw, k)
+        } else {
+            enc_preadd_b_c(enc, t.bx, t.ba, t.bw, k, np)
+        }
+    } else {
+        if (win) {
+            pf_enc_rms(enc, t.ba, 0ul, s.bwp, s.bt, s.udim, s.ueps, np)
+        } else {
+            enc_rms_b(enc, t.ba, 0ul, s.bwp, s.bt, s.udim, s.ueps, np)
+        }
+        if (s.form == ArForm.nonorm) {
+            enc_add(enc, t.bx, 0ul, s.bt, 0ul, s.utot, np * int64(k.dim), s.bosc)
+        } elif (win) {
+            pf_enc_add_rms_bhx_c(enc, t.bx, s.bt, s.bwn, t.by, t.bh, k, np)
+        } else {
+            enc_add_rms_b_c(enc, t.bx, s.bt, s.bwn, t.by, k, np)
+        }
+    }
+}
+
+//! the plain step's stream rows then its next norm after one dispatch, on the CPU in double off the fixture's pattern inputs
+def private ar_plain_ref(dim, np : int) : array<double> {
+    var xs, ys : array<double>
+    xs |> reserve(np * dim)
+    ys |> reserve(np * dim)
+    for (r in range(np)) {
+        var inscope vv <- [for (e in range(dim)); double(pat(r * dim + e, 0.25)) + double(pat(r * dim + e, 0.5))]
+        let inv = ref_rms_inv(vv, 1e-6lf)
+        for (e in range(dim)) {
+            xs |> push(vv[e])
+            ys |> push(double(pat(dim + e, 0.01)) * vv[e] * inv)
+        }
+    }
+    xs |> push_from(ys)
+    return <- xs
+}
+
+//! the residual step at width `dim` over `np` rows in `form`: the plain add + norm (its one arm, checked against the CPU), the
+//! sandwich seam and its no-norm form raced as one dispatch - the shipped form, the baseline - against the split chain (the
+//! branch's rms, then the add + norm or the scaled add); the window's rows ride the f16 twin's pipelines. The compare region is
+//! the stream rows and, where the step stores one, the f32 next norm
+def private ar_race(dim, np : int; form : ArForm; var rows : array<Reading>) {
+    let n = np * dim
+    var s = ArStep(st = SeamStep(bx = fill_buf(n, 0.5), ba = fill_buf(n, 0.25), by = fill_buf(n, 0.0), bh = metal_new_buffer(g_dev, uint64(n * 2)),
+        bw = fill_buf(2 * dim, 0.01), ks = GkAddRmsArgs(dim = uint(dim), add_on = 1u, woff = uint(dim), eps = 1e-6, ascale = 0.75, pre_on = 1u,
+        pwoff = 0u), np = np, hx = np >= 64), bt = fill_buf(n, 0.0), bwp = norm_row_buf(dim, 0), bwn = norm_row_buf(dim, 1),
+        bosc = scale_buf(0.75), udim = uniform_u32(uint(dim)), ueps = uniform_f32(1e-6), utot = uniform_u32(uint(n)), form = form)
+    var ref <- (form == ArForm.plain ? ar_plain_ref(dim, np) : seam_ref(dim, np, 0.75lf))
+    let names <- (form == ArForm.plain ? ["add + norm, one dispatch (the shipped form)"]
+        : (form == ArForm.seam ? ["pre_add_rms, one dispatch (the shipped form)", "rms + add_rms"]
+        : ["pre_add, one dispatch (the shipped form)", "rms + add"]))
+    if (form == ArForm.nonorm) {
+        ref |> resize(n)
+    }
+    let what = form == ArForm.plain ? "add + norm" : (form == ArForm.seam ? "sandwich seam" : "sandwich seam no norm out")
+    race_rows("ar dim={dim} {np} rows {what}{np >= 64 ? " hx" : ""}", names, ref, rows, $ {
+        fill_pattern(s.st.bx, n, 0.5)
+    }, $(var got) {
+        got |> push_from(read_floats(s.st.bx, n))
+        if (form != ArForm.nonorm) {
+            got |> push_from(read_floats(s.st.by, n))
+        }
+    }, $(enc, a) {
+        ar_arm(enc, s, a)
+    })
+    for (buf in fixed_array(s.st.bx, s.st.ba, s.st.by, s.st.bh, s.st.bw, s.bt, s.bwp, s.bwn, s.bosc)) {
+        metal_release(buf)
+    }
+    for (b in fixed_array(s.udim, s.ueps, s.utot)) {
+        pool_release(g_upool, b, 4ul)
+    }
+}
+
+//! the residual step at the gemma-3-12b and E4B widths: the plain step at a decode row and a verify's four, the sandwich seam and
+//! its no-norm form there and over the 512-row window
+def private ar_rows : array<Reading> {
+    var rows : array<Reading>
+    rows |> reserve(40)
+    for (dim in fixed_array(2560, 3840)) {
+        for (np in fixed_array(1, 4)) {
+            ar_race(dim, np, ArForm.plain, rows)
+        }
+        for (np in fixed_array(1, 4, 512)) {
+            ar_race(dim, np, ArForm.seam, rows)
+            ar_race(dim, np, ArForm.nonorm, rows)
+        }
+    }
+    return <- rows
+}
+
 //! the E-series side rows at the E2B shape (35 layers x 256): the act over a layer's side slice and the pre-step's finish, the
 //! decode row and the 512-row window
 def private ple_rows : array<Reading> {
@@ -1287,8 +1452,8 @@ def private run_gk_rows(b : B?) {
     }
     var rows <- seam_rows()
     rows |> push_from(qkn_rows(), router_rows(), pk_rows(), dn_rows())
-    rows |> push_from(gate_rows(), cls_epi_rows(), g4_tail_rows(), ple_proj_rows(1))
-    rows |> push_from(ple_proj_rows(PLE_RING), ar_rows(), ple_rows())
+    rows |> push_from(gate_rows(), cls_epi_rows(), g4_tail_rows(), ple_proj_rows())
+    rows |> push_from(ar_rows(), ple_rows())
     rows |> push_from(moe_race_rows(), seam_lane_rows())
     var nmeas = 0
     var nvoid = 0
