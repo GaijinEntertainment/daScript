@@ -30,20 +30,24 @@ require math
 // (`tests/test_metal_misc_kernels.das`,
 // `tests/test_metal_prefill_kernels.das`); this file times them.
 //
-// Two races time the window's shipped picks against their candidates,
-// an arm chosen by its index (`race_arms`): a round times every arm's
-// 200 dispatches in turn, the first round warms each arm and drops, an
-// arm's row its best round with the median and cv beside. The gemma-4
-// MoE step at 512 rows (`g4_slot_race`): four slot loads in flight a
-// lane off - the shipped `MetalMoeCombG4Pf`, the baseline arm - and on
-// (`BenchMoeCombG4PfX4`); the compare region is the stream rows the
-// step updates. The sandwich seam (pre_add_rms hx) at 512 rows of 2560
-// and 3840 (`seam_lane_race`): the shipped pipeline at 256 lanes - its
-// `pf_` builder, the baseline arm - against 128 and 1024; the compare
-// region is the stream rows and the f32 next norm. Each baseline is
-// checked against a CPU reference in the process; another arm prints
-// `bit-exact vs` the baseline or its difference from the reference,
-// and an arm past `RACE_BOUND` prints the miss and no time.
+// The races time the shipped picks against their candidates at every
+// row count the pick reads, an arm chosen by its index (`race_arms`): a
+// round times every arm's 200 dispatches in turn, the first round warms
+// each arm and drops, an arm's row its best round with the median and
+// cv beside. Four slot loads in flight on and off (`SLOT_X4`): the
+// gemma-4 MoE step at one and four rows (`MetalMoeCombG4` / `Hx`) and
+// the 512-row window (`MetalMoeCombG4Pf`), the routed combine at one
+// and four rows (`MetalMoeCombine` / `Sh`) and the window's reduce
+// (`MetalMoeReduce` / `Sh`), each against a bench stamp with the
+// constant flipped (`g4_slot_race`, `comb_slot_race`). The select with
+// and without the down-scale arm, no row named (`select_ds_race`). The
+// sandwich seam at 1024, 256 and 128 lanes over one and four rows of
+// the plain pipeline and 512 rows of the f16 twin's, at 2560 and 3840
+// (`seam_lane_race`). The shipped arm is the baseline, checked against
+// a CPU reference in the process; another arm prints `bit-exact vs` the
+// baseline or its difference from the reference, and an arm past
+// `RACE_BOUND` prints the miss and no time. The side rows' projection
+// runs on one weight buffer and on a ring of `PLE_RING` copies.
 //
 //   bin/daslang -jit dastest/dastest.das -- --bench --test modules/dasLLAMA/benchmarks/ew/bench_metal_gk_rows.das
 

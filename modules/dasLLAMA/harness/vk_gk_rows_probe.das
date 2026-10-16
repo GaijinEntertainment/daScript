@@ -163,11 +163,11 @@ def main : int {   // nolint:STYLE038 — one-shot probe: the classes, the fixtu
         fixed_array(1u, 0u, 2u, 4u, 8u, 0u, 16u))
     let g4a = GkMoeCombArgs(n = g4dim, k = 8u, eps = 1e-6, ascale = 0.75, rpost_off = 0u, dpost_off = g4dim, spost_off = 2u * g4dim,
         nwoff = 3u * g4dim)
-    time_cls("gemma-4 MoE step dim {g4dim} k 8 1 row") $(r; var h) {
+    time_cls("gemma-4 MoE step dim {int(g4dim)} k 8 1 row") $(r; var h) {
         var pc = g4a
         enc_cls_ar_comb_g4(r, h, s_g4, pc, 1l)
     }
-    time_cls("gemma-4 MoE step dim {g4dim} k 8 1 row, the next norm's stride-loop store (OUT_X4 off, probe stamp)") $(r; var h) {
+    time_cls("gemma-4 MoE step dim {int(g4dim)} k 8 1 row, the next norm's stride-loop store (OUT_X4 off, probe stamp)") $(r; var h) {
         var pc = g4a
         enc_probe_ar_comb_g4_x1(r, h, s_g4x1, pc, 1l)
     }
@@ -239,12 +239,12 @@ def main : int {   // nolint:STYLE038 — one-shot probe: the classes, the fixtu
         for (np in fixed_array(1u, 4u)) {
             let pr = GkRouterArgs(ne = uint(pne), dim = uint(pdim), ncols = np, yscale = 1.0 / sqrt(float(pdim)))
             var slot = 0
-            time_cls("ple proj f32 rows ne {pne} dim {pdim} {np} cols, ring {ring}") $(r; var h) {
+            time_cls("ple proj f32 rows ne {pne} dim {pdim} {int(np)} cols, ring {ring}") $(r; var h) {
                 var p1 = pr
                 router_enc_cols(false, r, h, s_rf[slot], p1, int64(pne))
                 slot = (slot + 1) % ring
             }
-            time_cls("ple proj bf16 rows ne {pne} dim {pdim} {np} cols, ring {ring}") $(r; var h) {
+            time_cls("ple proj bf16 rows ne {pne} dim {pdim} {int(np)} cols, ring {ring}") $(r; var h) {
                 var p1 = pr
                 router_enc_cols(true, r, h, s_rb[slot], p1, int64(pne))
                 slot = (slot + 1) % ring
