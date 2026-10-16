@@ -1991,7 +1991,7 @@ in the constant's `//!`), and every bit-for-bit cell stays bit for bit. Every to
 logs its difference and the one-off row's.
 `test_gpu_resident_gemma*.das` (`_gemma_resident.das` carries the cells; one model a file:
 `gemma3_1b`, `gemma3_4b`, `gemma2`, `gemma4_12b_q8`, `gemma4_12b_k`, `gemma4_e2b`, `gemma4_e4b`,
-`gemma4_26b`, `gemma4_26b_k`, `gemma4_31b` - a process loads one carrier, so no cell inherits another model's device state, and a GPU run
+`gemma4_26b`, `gemma4_26b_k`, `gemma4_26b_host`, `gemma4_31b` - a process loads one carrier, so no cell inherits another model's device state, and a GPU run
 loads ONE model at a time, never a chain) - stocked suite, `-jit` only; the whole-model resident
 driver on the gemma dense base (gemma-3-1b-it-Q8_0, `DASLLAMA_GPU=1`): the sandwich norms (the residual steps
 norm their add partner first), the sliding-window layers beside the global ones with their own rope
@@ -2053,9 +2053,12 @@ positions: the IQ3_XXS file CPU 0.36 / resident 0.18, the Q4_K_M file CPU 0.21 /
 itself 3.87 on the Q4_K_M positions, where the resident's misses gather in one stretch of fourteen
 positions after a flipped pick), so a forced-feed maxdiff against the CPU chain is no instrument
 here, and the perplexity ratio holds only the band - the reference-anchored form is
-`../followup_vulkan.md` item 68. Its planes alone pass a 16 GB
-card (the 704-wide down-expert rows demote to q8), so the cells skip there on the memory decline
-and run on a 32 GB card. Its twin `test_gpu_resident_gemma4_26b_k.das` runs the same two cells on
+`../followup_vulkan.md` item 68. Its cells run on a 32 GB card and skip on a smaller one's memory decline.
+`test_gpu_resident_gemma4_26b_host.das` holds the same file under an 8000 MB plan room with the rig's context asked whole: the
+plan moves the first routed layers' experts to the host (`gpu_resident_host_layers` past zero and short of every layer), the
+device keeping the dense branch, the norms, the router and the routed feed (`../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-gemma4-moe-block`),
+and the 150 + 150 perplexity cell holds the CPU chain at the same ratio and slack with every call served
+(`served_every_call`); the cap binds the device's weight budget at the tier's first init, so the cell has its own file. Its twin `test_gpu_resident_gemma4_26b_k.das` runs the same two cells on
 the model table's official UD-Q4_K_M file, whose 704-wide down stacks are native Q5_1 and ride
 the q51 expert rail (the s and e stamps, the Q8_0-activation decode GEMV) beside the k4 gate and
 up stacks. `test_gpu_resident_gemma4_31b.das` holds the largest dense carrier, gemma-4-31B Q4_K_M
@@ -2064,7 +2067,7 @@ CPU control of a dense 31B on the reference kernel bodies runs half an hour on a
 (gemma-2-2b), `g3` (the gemma-3-1b cells), `g3b`
 (gemma-3-4b), `g4k` (the 12B Q4_K_M cells), `g4x` (the 12B Q4_K_M 300-token agreement cell),
 `g4q8` (the 12B Q8_0 cells), `g4e` (E2B), `g4f` (E4B), `g4m` (the 26B-A4B IQ3_XXS), `g4mk` (the
-26B-A4B Q4_K_M), `g31` (the 31B) - the tokens share no substring, so one arm selects one file. Skips
+26B-A4B Q4_K_M), `host26` (the 26B-A4B IQ3_XXS with host experts), `g31` (the 31B) - the tokens share no substring, so one arm selects one file. Skips
 without the model or the armed tier, and on a memory decline (`moe_gpu_resident_memory_decline`:
 the plan did not fit the card at the session's context - the 12B Q8_0 file on a 16 GB card arms
 under `DASLLAMA_GPU_MIN_CTX=1024`); a feature decline stays a red. Two files carry block-codec

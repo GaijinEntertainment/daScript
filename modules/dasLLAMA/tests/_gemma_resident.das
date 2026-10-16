@@ -27,6 +27,7 @@ let GEMMA_RIG_CTX = 32768l
 struct GemmaFile {
     file : string
     arm : string
+    host_experts : bool   //! the load asks the rig's context whole on a card that cannot hold every expert stack beside it: the driver arms with the first routed layers' experts on the host
 }
 
 [init]
@@ -76,13 +77,20 @@ def private prose_tokens(tr : Model; count : int64) : array<int64> {
 }
 
 //! the fixture loaded on the armed driver, or an empty model (`n_layers` 0) after the skip that says why
-def private gemma_model(t : T?; file : string) : Model {
-    let path = path_join(models_dir(), file)
+def private gemma_model(t : T?; gf : GemmaFile) : Model {
+    let path = path_join(models_dir(), gf.file)
     if (!resident_ready(t, path)) return <- Model()
-    var tr <- load_resident(path)
+    var tr <- load_resident(path, 0l, gf.host_experts ? GEMMA_RIG_CTX : 0l)
+    if (gf.host_experts) {   //! the pinned cap decides the plan whatever the card: a memory decline is the form missing, never a skip
+        t |> success(moe_gpu_resident_active(), "the whole-model driver armed with host experts ({gpu_resident_decline_()})")
+    }
     if (!resident_admitted(t, "the whole-model driver armed on the model (the load log names any decline)", " - DASLLAMA_GPU_MIN_CTX=1024 arms the 12B Q8_0 file on a 16 GB card")) {
         delete tr
         return <- Model()
+    }
+    if (gf.host_experts) {
+        let host = gpu_resident_host_layers()
+        t |> success(host > 0l && host < tr.config.n_layers, "the first {host} of {tr.config.n_layers} routed layers' experts serve on the host, the rest on the device")
     }
     t |> success(tr.config.pre_post_norm && tr.config.sliding_window > 0l && tr.config.ffn_act == FfnAct.gelu,
         "the fixture carries the sandwich norms, a sliding window and the GeGLU FFN (the arms this file gates)")
@@ -94,7 +102,7 @@ def private gemma_model(t : T?; file : string) : Model {
 //! `body` inside the engine's job queue, the model deleted after
 def with_gemma_rig(t : T?; gf : GemmaFile; body : block<(tr : Model) : void>) {
     return if (!arm_on(t, gf.arm))
-    var tr <- gemma_model(t, gf.file)
+    var tr <- gemma_model(t, gf)
     if (tr.config.n_layers > 0l) {
         with_dasllama_jobque_() {
             invoke(body, tr)
@@ -285,6 +293,9 @@ def ppl_compare(t : T?; n, steps : int64; gf : GemmaFile; hits_slack : int64 = 3
         let g = forced_nll(tr, sg, ids, n, steps)
         t |> success(moe_gpu_resident_active(), "the whole-model driver stayed armed through the run")
         t |> equal(moe_gpu_resident_prefills(), served0 + 1l, "the resident window chain served the {n}-token prompt")
+        if (gf.host_experts) {
+            served_every_call(t)
+        }
         delete sg
         moe_gpu_drop_model()   // every later step is the CPU chain
         var sc <- create_session(tr, mirror_kv_dtype())
