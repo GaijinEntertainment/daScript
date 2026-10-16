@@ -1006,6 +1006,8 @@ def private gdraft_chain(t : T?; trg : Model; var s : Session; seed, anchor, k :
                 if (i == 0l) {
                     vk_gemma_drafter_last_logits(lg)
                 }
+            } else {
+                t |> skip("draft step {i}: no GPU home on this build for the gemma drafter")
             }
         }
         drafts |> push(dg)
