@@ -69,9 +69,11 @@ the hot pool's split inside it), the segments' commands are built at the first t
 the N-row command and the rows verify decline a host layer (the one-row split command serves), and the
 prefill window cuts the same way (`#hc-window-chain`). Regions are per segment, so a server's streams each
 keep their mirror region through the split. The plain form takes a routed model that is not a
-hyper-connection model (that model's own chain serves it) and has no gemma-4 parallel dense expert
-(`moe_dense_shexp`, whose combine has no host form), on a tier with the split seats installed and at most
-`RDEC_HOT_PICKS` picks a row (`resident_host_layers_ok`).
+hyper-connection model (that model's own chain serves it) - the gemma-4 block among them, with its combine over the host's
+sum (`ARCHITECTURE_GPU_VULKAN_MOE.md#vk-gemma4-moe-block`) - on a tier with the split seats installed and at most
+`RDEC_HOT_PICKS` picks a row (`resident_host_layers_ok`). The plain form records the one-row command's layers, so its first
+segment opens as that command does: under the device token gather it reads `EMB_ID_HOST` and the host's row beside it
+(`rd_stage_row`), never a row in `x_host` the gather does not read.
 
 ### The hot expert pool {#hc-hot-pool}
 

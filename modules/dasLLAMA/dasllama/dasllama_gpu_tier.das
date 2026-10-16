@@ -159,6 +159,7 @@ def public rdec_norms_len(n_layers, dim, qk_hs : int64; head : bool) : int64
 struct RdecLayerGeom {
     hs, qd, kvd, hid, rot : int64
     window : int64                  //! positions a sliding layer attends over; 0 = every position
+    ring : int64                    //! a sliding layer's ring rows in the mirror (`kv_ring_row`); 0 = its rows at every position
     mir_base : int64                //! its first unit in its K/V mirror slab (one region's layout; the region stride is the slab's)
     mir_slab : int64                //! the K/V mirror slab its rows sit in (a contiguous run of attention layers under one binding's range)
     cbase : int64                   //! its rope class's row inside a position's cos/sin plane
@@ -862,16 +863,16 @@ struct public RdecKvSpan {
 }
 
 //! Every span moved up (`up`) or down in as few submits as the driver's staging allows; false where no driver serves the batch
-typedef RdecKvXferFn = function<(spans : array<RdecKvSpan>; up : bool) : bool>
+typedef RdecKvXferFn = function<(var spans : array<RdecKvSpan>; up : bool) : bool>
 [unused_argument(spans, up)]
-def private rdec_unset_kv_xfer(spans : array<RdecKvSpan>; up : bool) : bool => false
+def private rdec_unset_kv_xfer(var spans : array<RdecKvSpan>; up : bool) : bool => false
 var g_rdec_kv_xfer = @@rdec_unset_kv_xfer
 
 def public install_rdec_kv_xfer(xfer : RdecKvXferFn) {
     g_rdec_kv_xfer = xfer
 }
 
-def public rdec_kv_xfer(spans : array<RdecKvSpan>; up : bool) : bool => invoke(g_rdec_kv_xfer, spans, up)
+def public rdec_kv_xfer(var spans : array<RdecKvSpan>; up : bool) : bool => invoke(g_rdec_kv_xfer, spans, up)
 def public rdec_dn_snap_save(slot : int64) : bool => invoke(g_rdec_dn_snap_save, slot)
 def public rdec_dn_snap_load(slot : int64) : bool => invoke(g_rdec_dn_snap_load, slot)
 
@@ -2350,10 +2351,16 @@ def public matmul_moe_gpu_attn_dec(var xb2 : array<float>; var k : array<float>;
     }
 }
 
+var private g_dense_gemm_rows = 0l   //! the activation rows the dense rail's batched GEMMs ran on the device, process-wide
+
+//! the activation rows the dense rail's batched GEMMs (`matmul_gpu_dense`) ran on the device so far, every plane summed
+def public moe_gpu_dense_gemm_rows() : int64 => g_dense_gemm_rows
+
 //! Dense batched GEMM on the GPU tier — y [nrows x d] = X·Wᵀ over the resident plane ([d x n]
 //! at woff). xq/xs is the row-major pre-quantized activation image in the plane's own quant form
 //! (q8_0 per-32 for q8, Q8_K per-256 for kq); per-16 block sums are recomputed in-kernel.
 def public matmul_gpu_dense(var y : array<float>; woff : int64; xq : array<int8>; xs : array<float>; n, d, nrows : int64; fmt : int) {
+    g_dense_gemm_rows += nrows
     unsafe {
         invoke(g_moe_gpu_dense, addr(y[0]), woff, addr<int8 const?>(xq[0]), addr<float const?>(xs[0]), n, d, nrows, fmt)
     }

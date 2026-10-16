@@ -13,7 +13,7 @@ cooperative-matrix GEMM tiles in `ARCHITECTURE_GPU_VULKAN_GEMM.md`, the per-op t
 
 The resident driver is all-or-nothing, so the plan IS the decision, and it is computed from
 `Model` metadata alone. It sizes four numbers against the tier's weight budget: the dense weight
-planes, the KV mirror at `seq_cap`, the driver's own device scratch, and the headroom the auto
+planes, the KV mirror at `seq_cap` (a sliding layer's ring at its window, `ARCHITECTURE_GPU_KV_RING.md#kv-sliding-ring`), the driver's own device scratch, and the headroom the auto
 arm leaves unfilled (zero when the user pins VRAM). The weight planes are ONE list in placement order
 (`resident_planes`: per plane a row length, row count, format, offset and the role the upload registers it as):
 the plan sums its bytes and the upload reserves it and places it in order (`place_plane` panics on a role out of turn), so the two cannot drift; the router rows,
@@ -32,13 +32,15 @@ built-in 4096 positions, `DASLLAMA_GPU_MIN_CTX` where set, and the caller's own 
 it once per walk, not for a prediction of the plan) where that sits under either, since a caller that
 pinned its context named the shape it serves (`resident_arm_floor`); a pin asked whole
 (`set_gpu_ctx_strict`, `DASLLAMA_GPU_CTX_STRICT`, the server's `--ctx`) is the floor whatever its size.
-Where the asked mirror leaves no room for every plane, a plain MoE moves routed layers' experts to the
+Where the asked mirror leaves no room for every plane, a MoE moves routed layers' experts to the
 host (`resident_plan_host_layers`, `ARCHITECTURE_GPU_VULKAN_HC.md#hc-hot-pool`) and a dense model declines
 naming the context it would fit at; a mirror under the asked context says why (`resident_ctx_shortened_say`). The eighth held back is for
 fragmentation: a mirror sized to the last byte fails on a heap the previous model fragmented
 (`resident_plan_pick`). The pin is what lets a
 four-stream bench row home a 12B at 648 positions a region on a 16 GB card, where the binding
-cap's 6238 a region asks for more K/V than the weights leave.
+cap's 6238 a region asks for more K/V than the weights leave. **A layer's q/k/v, and its gate/up, read one activation image, so a
+group of two activation forms declines the driver** (`resident_layer_decline`); no stocked gemma file mixes them - each group shares
+one form layer by layer - and a file that mixes gate and up rides the per-op dense FFN rail, which feeds each plane its own image.
 
 **The mirror is a run of slabs, each a buffer pair bound as one SSBO range a side, and the
 device's single-binding range caps the context at the widest layer's row before any byte is

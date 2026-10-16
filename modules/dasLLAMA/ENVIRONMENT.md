@@ -50,6 +50,7 @@ Read by the inference engine itself, so these affect any program that loads a mo
 | `DASLLAMA_GPU_CTX_STRICT` | flag | off | The context pin (DASLLAMA_GPU_CTX_MAX, set_gpu_ctx_max) is the context asked, not a cap: a K/V mirror the card cannot hold at it declines the resident driver instead of shortening, and the per-op rails serve the asked context; the load log names the room. |
 | `DASLLAMA_GPU_KV` | text | unset | The K/V codec the whole-model driver's mirror is asked to arm at, where no caller set one in process (set_gpu_kv_dtype): f16 (the default), q8_0 (half the mirror's bytes) or tq4 (a quarter). Sessions of the armed codec are served; any other spelling reads as f16. |
 | `DASLLAMA_GPU_RESIDENT` | flag | on | The whole-model resident driver for a model that fits the card, MoE included; 0 keeps the per-op rails (the A/B lever). |
+| `DASLLAMA_GPU_KV_RING` | flag | on | A sliding-window layer's K/V mirror rows on a GPU home hold its window plus the rows one command writes, a position's row at its slot of that ring (both homes); 0 keeps every position's row (the flat slab, the A/B lever). A ringed history serves a continuation that starts no more than that slack under the rows it holds; one further back prefills again. |
 | `DASLLAMA_GPU_DN` | flag | follows DASLLAMA_GPU | DeltaNet rail on the GPU. |
 | `DASLLAMA_GPU_DND` | flag | follows DASLLAMA_GPU | DeltaNet decode rail on the GPU. |
 | `DASLLAMA_GPU_ATTN` | flag | follows DASLLAMA_GPU | Attention rail on the GPU. |

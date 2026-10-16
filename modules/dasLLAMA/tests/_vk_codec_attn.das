@@ -15,6 +15,7 @@ require dasllama/dasllama_vulkan_common
 require dasllama/dasllama_vulkan_classes
 require dasllama/dasllama_common   // kv_store_row / kv_load_row and the tq4 batch rotations: the CPU cache's own codec
 require dasllama/dasllama_kv_dtype
+require dasllama/dasllama_gpu_math   // kv_ring_row: a ring arm's slots
 require _vkd_oracles
 require _compares
 require _attn_oracle
@@ -101,6 +102,7 @@ struct CodecAttn {
     sink : bool
     g4_twin : bool
     resubmit : bool
+    ring : int      //! a sliding layer's ring rows: the device mirror holds each region's last `ring` positions at their `kv_ring_row` slots, zero rows past them
 }
 
 //! the arm's inputs and what the CPU attention reads of them
@@ -113,6 +115,8 @@ struct private CodecAttnFixture {
     v_model : array<float>
     k : tuple<bytes : array<uint8>; deq : array<float>>
     v : tuple<bytes : array<uint8>; deq : array<float>>
+    kring : array<uint8>       //! a ring arm's device mirrors: each region's last `ring` positions at their slots, the region's rows past the ring zero
+    vring : array<uint8>
     sinks : array<float>
     signs : array<float>
 }
@@ -142,8 +146,32 @@ def private codec_attn_fixture(a : CodecAttn) : CodecAttnFixture {
     let base = qa_units(a.kv, QA_BASE_BLOCKS + QA_REGION_BLOCKS)
     f.k <- codec_mirror(a.kv, f.k_model, a.nrows * a.keys, kvd, a.hs, base, f.signs)
     f.v <- codec_mirror(a.kv, f.v_model, a.nrows * a.keys, kvd, a.hs, base, f.signs)
+    if (a.ring > 0) {
+        var kr <- codec_mirror(a.kv, ring_rows(f.k_model, a, kvd), a.nrows * a.keys, kvd, a.hs, base, f.signs)
+        var vr <- codec_mirror(a.kv, ring_rows(f.v_model, a, kvd), a.nrows * a.keys, kvd, a.hs, base, f.signs)
+        f.kring <- kr.bytes
+        f.vring <- vr.bytes
+        delete kr
+        delete vr
+    }
     f.sinks <- sink_logits(f.q, f.k.deq, a.nheads, a.hs, a.kv_mul, a.keys, kvd, 1.0 / sqrt(float(a.hs)))
     return <- f
+}
+
+//! the K or V rows of every region in a ring arm's layout: slot `s` holds the one position of the region's last `ring` whose
+//! `kv_ring_row` it is, the region's rows past the ring zero
+def private ring_rows(rows_f : array<float>; a : CodecAttn; kvd : int) : array<float> {
+    var out : array<float>
+    out |> resize(length(rows_f))
+    for (r in range(a.nrows)) {
+        for (p in range(a.keys - a.ring, a.keys)) {
+            let slot = int(kv_ring_row(int64(p), int64(a.ring)))
+            for (i in range(kvd)) {
+                out[(r * a.keys + slot) * kvd + i] = rows_f[(r * a.keys + p) * kvd + i]
+            }
+        }
+    }
+    return <- out
 }
 
 //! The CPU attention's rows over the fixture, [rows x heads x hs], through the arm's window, softcap, sink and gate: the
@@ -212,6 +240,9 @@ def private codec_attn_tag(a : CodecAttn; slab : DaSlab) : string {
     if (a.cap != 0.0) {
         tag += ", softcap {a.cap}"
     }
+    if (a.ring != 0) {
+        tag += ", a {a.ring}-row ring"
+    }
     return tag
 }
 
@@ -247,8 +278,8 @@ def codec_attn_arm(t : T?; a : CodecAttn) {
     var control <- codec_control(a, f)
     with_cell_planes() $(var cp : CellPlanes) {
         let qp = cp |> in_(f.q_plane)
-        let kp = cp |> in_plain(f.k.bytes)
-        let vp = cp |> in_plain(f.v.bytes)
+        let kp = cp |> in_plain(a.ring > 0 ? f.kring : f.k.bytes)
+        let vp = cp |> in_plain(a.ring > 0 ? f.vring : f.v.bytes)
         let yp = cp |> out_(a.nrows * qdim)
         let tp = cp |> in_plain(toks)
         let pp = cp |> out_words(int64(cnt_off + a.nrows * rowgroups) * 4l, NAN_SENTINEL_BITS)
@@ -261,7 +292,8 @@ def codec_attn_arm(t : T?; a : CodecAttn) {
         let base = uint(qa_units(a.kv, QA_BASE_BLOCKS))
         var pa = DaAttnArgs(kvd = uint(kvd), hs = uint(a.hs), kv_mul = uint(a.kv_mul), kbase = base, vbase = base,
             scale = 1.0 / sqrt(float(a.hs)), qstride = uint(qstride), gated = a.gated ? 1u : 0u, window = uint(a.window), cap = a.cap,
-            nsplit = uint(a.nsplit), rqk = rqk, sinkoff = 0u, rowwg = uint(rowwgs), qrow = uint(a.nheads * qstride), cntoff = uint(cnt_off))
+            nsplit = uint(a.nsplit), rqk = rqk, sinkoff = 0u, rowwg = uint(rowwgs), qrow = uint(a.nheads * qstride), cntoff = uint(cnt_off),
+            ring = uint(a.ring))
         cp |> cell_record() $(rw : VkCommandBuffer; var h : VkHaz) {
             da_attn_stamp_enc(a.kv, slab, rw, h, s, pa, rowwgs * int64(a.nrows))
         }
@@ -271,6 +303,7 @@ def codec_attn_arm(t : T?; a : CodecAttn) {
             t |> success(check_count(got, control, QA_BAR) > 0, "{tag} control: {a.kv == KVDtype.tq4 ? "the query before its rotation" : "the attention over the rows before the codec stored them"} lands outside the bar")
         }
         codec_attn_mechanism_controls(t, tag, a, f, got)
+        codec_attn_ring_control(t, tag, a, cp, s, pa, slab, rowwgs, yp, want)
         if (a.fold != Fold.none) {
             var quants <- cp |> plane_as(aqp, type<int8>, a.nrows * qdim)
             var scales <- cp |> plane_run(asp)
@@ -304,6 +337,21 @@ def codec_attn_arm(t : T?; a : CodecAttn) {
     delete control
     delete toks
     delete f
+}
+
+//! a ring arm's control: the same rows read a position a row (`ring` 0) - the zero rows past the ring - land outside the bar
+def private codec_attn_ring_control(t : T?; tag : string; a : CodecAttn; var cp : CellPlanes; var s : VkDescriptorSet; pa : DaAttnArgs;
+                                    slab : DaSlab; rowwgs : int64; yp : int; want : array<float>) {
+    return if (a.ring == 0)
+    cp |> plane_refill(yp)
+    var flat = pa
+    flat.ring = 0u
+    cp |> cell_record() $(rw : VkCommandBuffer; var h : VkHaz) {
+        da_attn_stamp_enc(a.kv, slab, rw, h, s, flat, rowwgs * int64(a.nrows))
+    }
+    var flat_got <- cp |> plane_run(yp)
+    t |> success(check_count(flat_got, want, QA_BAR) > 0, "{tag} control: the ring's rows read a position a row land outside the bar")
+    delete flat_got
 }
 
 //! the oracle with each mechanism the arm turns on dropped lands outside the bar, and row 1 misses row 0's oracle
@@ -361,6 +409,8 @@ def codec_attn_arms(t : T?; kv : KVDtype) {
     codec_attn_arm(t, CodecAttn(kv = kv, hs = 64, nheads = 4, kv_mul = 4, gated = true, nsplit = 8))
     codec_attn_arm(t, CodecAttn(kv = kv, hs = 64, nheads = 4, kv_mul = 2, window = 40))
     codec_attn_arm(t, CodecAttn(kv = kv, hs = 256, nheads = 2, kv_mul = 2, window = 40, cap = 1.5))   // gemma-2's sliding layer, the softcap inside the fixture's scores so it moves the row
+    codec_attn_arm(t, CodecAttn(kv = kv, hs = 64, nheads = 4, kv_mul = 2, window = 40, ring = 64))    // the sliding layer's ring: the window's keys across the slots' wrap
+    codec_attn_arm(t, CodecAttn(kv = kv, hs = 256, nheads = 2, kv_mul = 2, window = 100, ring = 128, nrows = 2, nsplit = 4))   // ... two regions, the keys in pieces
     codec_attn_arm(t, CodecAttn(kv = kv, hs = 64, nheads = 8, kv_mul = 8, sink = true))               // the sink stamp: the pass folds the sink at its store
     codec_attn_arm(t, CodecAttn(kv = kv, hs = 64, nheads = 8, kv_mul = 8, sink = true, nsplit = 8))   // ... and the last piece's combine seeds it
 }

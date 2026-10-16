@@ -11,6 +11,7 @@ require dasllama/dasllama_env  // the g_env_* knob globals ([EnvConfig] declarat
 require metal/das_metal_boost
 require dasllama/dasllama_common
 require dasllama/dasllama_math
+require dasllama/dasllama_gpu_math   // kv_ring_row: a mirror position's row
 require dasllama/dasllama_metal_common public
 require dasllama/dasllama_metal_kernels public
 require daslib/typemacro_boost   // [template_struct_instance] — the layer encoder's row-shape stamps
@@ -864,6 +865,7 @@ def private qkn_weights(t : Model; l, head_size : int64) : MetalBuffer? {
 }
 
 //! the single row's rope + KV store: the codec's form over the mirror's byte offsets
+[unused_argument(rowb)]
 def private rope_store_single(var e : SingleLayerEnc; t : Model; enc : MetalComputeEncoder?; l : int64; het, kvsh : bool;
                               bbias, bcos_l, bsin_l : MetalBuffer?; lkoff, lvoff : uint64; rowb, qd, kv_dim, head_size, n_heads : int64) {
     let c = t.config
@@ -886,25 +888,25 @@ def private rope_store_single(var e : SingleLayerEnc; t : Model; enc : MetalComp
             var qka = RopeStoreQ8Args(qd = k_qd_l, head_size = k_hs_l, npairs_q = k_npq_l,
                 nblk = k_nblk_l, neox = r.k_neox, has_bias = r.k_hasb, rot = rs_rot, qhs = qhs)
             enc_rope_store_q8(enc, r.bqkv, uint64((qd + kv_dim) * 4l), g_arena, g_arena,
-                lkoff + uint64(pos * rowb), lvoff + uint64(pos * rowb),
+                lkoff + uint64(mirror_row_at(t, r.kdt, l, pos)), lvoff + uint64(mirror_row_at(t, r.kdt, l, pos)),
                 bcos_l, bsin_l, bbias, qka,
                 kvsh ? qd / 2l : qd / 2l + 2l * (kv_dim / 32l), bq)
         } elif (r.kdt == KVDtype.tq4) {
             var tka = RopeStoreTq4Args(qd = k_qd_l, head_size = k_hs_l, nheads = r.k_nh,
                 kv_mul = k_kvm_l, neox = r.k_neox, has_bias = r.k_hasb, rot = rs_rot, qhs = qhs)
             enc_rope_store_tq4(enc, r.bqkv, uint64((qd + kv_dim) * 4l), g_arena, g_arena,
-                lkoff + uint64(pos * rowb), lvoff + uint64(pos * rowb),
+                lkoff + uint64(mirror_row_at(t, r.kdt, l, pos)), lvoff + uint64(mirror_row_at(t, r.kdt, l, pos)),
                 bcos_l, bsin_l, bbias, tka,
                 kvsh ? n_heads : n_heads + 2l * (kv_dim / head_size), head_size, bq)
         } elif (qkn_fused(c, r.kdt)) {
             var qka = qkn_args(t, l, qd, kv_dim, head_size, int64(rs_rot), r.k_neox != 0u, r.k_hasb != 0u, r.k_eps, 0l, 0l, 0l)
             qka.qstride = qhs
-            enc_qkn_rope(enc, f16v, r.bqkv, g_arena, g_arena, lkoff + uint64(pos * rowb), lvoff + uint64(pos * rowb),
+            enc_qkn_rope(enc, f16v, r.bqkv, g_arena, g_arena, lkoff + uint64(mirror_row_at(t, r.kdt, l, pos)), lvoff + uint64(mirror_row_at(t, r.kdt, l, pos)),
                 bcos_l, bsin_l, 0ul, qkn_weights(t, l, head_size), bbias, qka, kvsh ? n_heads : n_heads + kv_dim / head_size, bq)
         } else {
             var rka = gk_rope_kv_args(int64(k_qd_l), kv_dim, int64(k_hs_l), int64(k_npq_l), int64(k_npall_l), r.k_neox != 0u, r.k_hasb != 0u, int64(rs_rot))
             enc_rope_store(enc, f16v, r.bqkv, uint64((qd + kv_dim) * 4l), g_arena, g_arena,
-                lkoff + uint64(pos * rowb), lvoff + uint64(pos * rowb),
+                lkoff + uint64(mirror_row_at(t, r.kdt, l, pos)), lvoff + uint64(mirror_row_at(t, r.kdt, l, pos)),
                 bcos_l, bsin_l, 0ul, bbias, rka,
                 kvsh ? qd / 2l : (qd + kv_dim) / 2l)
         }
@@ -926,10 +928,10 @@ def private encode_attn_d(t : Model; r : StepRes; enc : MetalComputeEncoder?; l,
     let blockc = r.kdt == KVDtype.q8_0 || r.kdt == KVDtype.tq4
     let c = t.config
     let kvd = uint(layer_kv_dim(c, l))
-    let lay = route_per_layer ? 0u : uint(blockc ? kv_row_bytes(r.kdt, t.kv_row_prefix[l]) : t.kv_row_prefix[l])
+    let lays = route_per_layer ? uint2(0u, 0u) : mirror_route_lay(t, r.kdt, l)
     //! the layer's own head class: `head_size` and the K/V row are its, so its heads a K/V head and its score scale follow
     let gd = qg_direct(c, r.kdt)
-    var dka = SqAttnDArgs(lay = lay, kstride = blockc ? kvd / 32u : kvd, nheads = uint(n_heads),
+    var dka = SqAttnDArgs(lay = lays.x, layr = lays.y, ring = uint(mirror_ring(t, l)), kstride = blockc ? kvd / 32u : kvd, nheads = uint(n_heads),
         kv_mul = uint(n_heads * head_size) / kvd, hs = uint(head_size),
         scale = c.attn_scale > 0.0 ? c.attn_scale : 1.0 / sqrt(float(head_size)),
         qstride = gd ? uint(2l * n_heads * head_size) : uint(n_heads * head_size) + 2u * kvd, nsgs = uint(r.d_nsgs),
@@ -964,7 +966,7 @@ def private attention_single(var e : SingleLayerEnc; t : Model; enc : MetalCompu
     } elif (r.chunked) {
         var pka = SqAttnPartArgs(cnt = cnt, kstride = kstride_l, nheads = uint(n_heads),
             kv_mul = kvm_u, hs = hs_u, scale = scale_u, nchunks = uint(nchunks),
-            softcap = c.attn_logit_softcap, window = lsl ? uint(c.sliding_window) : 0u, qhs = qhs_u, gated = gated_u)
+            softcap = c.attn_logit_softcap, window = lsl ? uint(c.sliding_window) : 0u, qhs = qhs_u, gated = gated_u, ring = uint(mirror_ring(t, l)))
         enc_attn_part(enc, r.kdt, g_arena, g_arena, lkoff, lvoff, bq, r.bpart, pka, n_heads * nchunks, head_size)
         var cka = SqAttnCombArgs(nch = uint(nchunks), nheads = uint(n_heads), hs = hs_u,
             chlo = lsl ? r.k_chlo : 0u, hass = hass_u)
@@ -1292,7 +1294,7 @@ struct template LayerEncT {
                     enc_gemv_qkv_rs(enc, f16v, bwq_.buf, bwq_.boff,
                         uint64((t.wk_offs[l] / 32l) * 34l), uint64((t.wv_offs[l] / 32l) * 34l),
                         r.bxb, r.bqkv, g_arena, g_arena,
-                        lkoff + uint64(pos * rowb), lvoff + uint64(pos * rowb),
+                        lkoff + uint64(mirror_row_at(t, r.kdt, l, pos)), lvoff + uint64(mirror_row_at(t, r.kdt, l, pos)),
                         bcos_l, bsin_l, bbias, fka, qkvd)
                 } else {
                     if (c.q_gated) {
@@ -1971,14 +1973,15 @@ def private rope_store_verify(var e : VerifyLayerEnc; t : Model; enc : MetalComp
     let qrow = gd ? uint(2l * qd) : 0u
     if (r.kdt == KVDtype.tq4) {
         var tka = RopeStoreBTq4Args(lay = 0u, qd = uint(qd), head_size = uint(head_size), nheads = uint(n_heads), kv_mul = r.k_kvm,
-            qstride = qkvd, neox = r.k_neox, has_bias = r.k_hasb, rot = uint(vrot), qhs = qhs, qrow = qrow)
+            qstride = qkvd, neox = r.k_neox, has_bias = r.k_hasb, rot = uint(vrot), qhs = qhs, qrow = qrow, ring = uint(mirror_ring(t, l)))
         enc_rope_store_b_tq4(enc, r.bqkv, bcos_l, bsin_l, r.brt, bbias, tka, n_heads + 2l * (kv_dim / head_size), r.nrows, head_size, rtoff, bq)
     } elif (r.kdt == KVDtype.q8_0) {
         var qka = RopeStoreBQ8Args(lay = 0u, nblk = uint(kv_dim / 32l), qd = uint(qd), head_size = uint(head_size), npairs_q = uint(qd / 2l),
-            qstride = qkvd, neox = r.k_neox, has_bias = r.k_hasb, rot = uint(vrot), qhs = qhs, qrow = qrow)
+            qstride = qkvd, neox = r.k_neox, has_bias = r.k_hasb, rot = uint(vrot), qhs = qhs, qrow = qrow, ring = uint(mirror_ring(t, l)))
         enc_rope_store_b_q8(enc, r.bqkv, bcos_l, bsin_l, r.brt, bbias, qka, qd / 2l + 2l * (kv_dim / 32l), r.nrows, rtoff, bq)
     } elif (qkn_fused(t.config, r.kdt)) {
         var nka = qkn_args(t, l, qd, kv_dim, head_size, vrot, r.k_neox != 0u, r.k_hasb != 0u, r.k_eps, int64(qkvd), vrot / 2l, 0l)
+        nka.ring = uint(mirror_ring(t, l))
         if (gd) {
             nka.qstride = qhs
             nka.qrow = qrow
@@ -1987,7 +1990,7 @@ def private rope_store_verify(var e : VerifyLayerEnc; t : Model; enc : MetalComp
             n_heads + 2l * (kv_dim / head_size), r.nrows, rtoff, bq)
     } else {
         var vrka = gk_rope_kv_args(int64(r.k_qd), int64(r.k_kvd), int64(r.k_hs), int64(r.k_npq), int64(r.k_npall), r.k_neox != 0u, r.k_hasb != 0u, vrot,
-            0l, 0l, r.nrows, int64(qkvd), int64(qkvd), vrot / 2l, 0l)
+            0l, 0l, r.nrows, int64(qkvd), int64(qkvd), vrot / 2l, 0l, mirror_ring(t, l))
         enc_rope_store_b(enc, r.kdt == KVDtype.f16, r.bqkv, bcos_l, bsin_l, r.brt, bbias, vrka, (qd + kv_dim) / 2l, r.nrows, rtoff)
     }
 }
@@ -2014,7 +2017,7 @@ def private attention_verify(var e : VerifyLayerEnc; t : Model; enc : MetalCompu
     } elif (r.chunked) {
         var pka = SqAttnPartBArgs(lay = 0u, kstride = kstride, nheads = uint(n_heads),
             kv_mul = uint(n_heads / c.n_kv_heads), hs = uint(head_size), scale = vscale,
-            qstride = qstride, nchmax = uint(nchunks), softcap = c.attn_logit_softcap, window = 0u, qhs = qhs, gated = gated)
+            qstride = qstride, nchmax = uint(nchunks), softcap = c.attn_logit_softcap, window = 0u, qhs = qhs, gated = gated, ring = uint(mirror_ring(t, l)))
         enc_attn_part_b(enc, r.kdt, bq, r.bpart, r.brt, pka, r.nrows, nchunks, n_heads, head_size, [rtoff = rtoff])
         var cka = SqAttnCombArgs(nch = uint(nchunks), nheads = uint(n_heads),
             hs = uint(head_size), window = 0u, hass = 0u)
@@ -2314,7 +2317,7 @@ def private finish_verify_step(t : Model; r : StepRes) : bool {
                     let rowb = kv_row_bytes(s.kv_dtype_k, layer_kv_dim(c, l))
                     let lb = mirror_lbase(t, s.kv_dtype_k, g.cap, l)
                     for (i in range64(g.nr)) {
-                        mirror_row_writeback(s, c.seq_len, l, g.pos + i, kv_phys_row(s, g.pos + i), rowb, lb, ab, g.koff, g.voff)
+                        mirror_row_writeback(s, c.seq_len, l, kv_ring_row(g.pos + i, mirror_ring(t, l)), kv_phys_row(s, g.pos + i), rowb, lb, ab, g.koff, g.voff)
                     }
                 }
                 s.mtp_logits_b |> ensure_length(g.nr * c.vocab_size)
@@ -2494,7 +2497,7 @@ def private land_draft_row(t : Model; var s : Session; pos : int64; cap : int64;
     unsafe {
         let rowb = kv_row_bytes(s.kv_dtype_k, layer_kv_dim(c, l))
         let lb = mirror_lbase(t, s.kv_dtype_k, cap, l)
-        mirror_row_writeback(s, c.seq_len, l, pos, kv_phys_row(s, pos), rowb, lb, ab, koff, voff)
+        mirror_row_writeback(s, c.seq_len, l, kv_ring_row(pos, mirror_ring(t, l)), kv_phys_row(s, pos), rowb, lb, ab, koff, voff)
         if (hx != null) {
             memcpy(addr < void? >(s.mtp_h[0]), hx, mtp_h_dim(c) * 4l)
             s.mtp_h_pos1 = 0l
@@ -3001,7 +3004,7 @@ def private finish_step(t : Model; var s : Session; r : StepRes) : bool {
                 continue if (kv_shared_layer(t, l))   // no rows of its own — the source's copy covers it
                 let rowb = kv_row_bytes(s.kv_dtype_k, layer_kv_dim(c, l))
                 let lb = mirror_lbase(t, s.kv_dtype_k, cap, l)
-                mirror_row_writeback(s, c.seq_len, l, pos, prow, rowb, lb, ab, r.koff, r.voff)
+                mirror_row_writeback(s, c.seq_len, l, kv_ring_row(pos, mirror_ring(t, l)), prow, rowb, lb, ab, r.koff, r.voff)
             }
             if (r.gpu_logits && r.bnc == null) {   // zero-copy steps: the GPU already wrote s.logits
                 memcpy(addr < void? >(s.logits[0]), metal_buffer_contents(r.blog), r.bytes_log)
@@ -3615,7 +3618,9 @@ def private rope_store_batch(var e : BatchLayerEnc; t : Model; enc : MetalComput
                              bbias, bcos_l, bsin_l : MetalBuffer?; lkoff, lvoff : uint64; rowb, qd, kv_dim, head_size, n_heads : int64) {
     var r & = unsafe(*e.r)
     let blockc = r.kdt == KVDtype.q8_0 || r.kdt == KVDtype.tq4
-    let lay_l = uint(blockc ? kv_row_bytes(r.kdt, t.kv_row_prefix[l]) : t.kv_row_prefix[l])
+    let lays = mirror_route_lay(t, r.kdt, l)
+    let lay_l = lays.x
+    let ring_l = uint(mirror_ring(t, l))
     let qkvd = uint(qd + 2l * kv_dim)
     let kvm_l = het ? r.k_kvm_sw : r.k_kvm
     // 0 = full rope; a partial carrier (qwen35: rope 64 of head 256) rotates rot/2 pairs, the rest identity
@@ -3628,17 +3633,19 @@ def private rope_store_batch(var e : BatchLayerEnc; t : Model; enc : MetalComput
     if (r.kdt == KVDtype.tq4) {
         var tka = RopeStoreBTq4Args(lay = lay_l, qd = uint(qd), head_size = uint(head_size),
             nheads = uint(n_heads), kv_mul = kvm_l, qstride = qkvd,
-            neox = r.k_neox, has_bias = r.k_hasb, rot = rot_l, qhs = qhs, qrow = qrow)
+            neox = r.k_neox, has_bias = r.k_hasb, rot = rot_l, qhs = qhs, qrow = qrow, layr = lays.y, ring = ring_l)
         enc_rope_store_b_tq4(enc, r.bqkv, bcos_l, bsin_l, r.brt, bbias, tka,
             kvsh ? n_heads : n_heads + 2l * (kv_dim / head_size), r.nrows, head_size, 0ul, bq)
     } elif (blockc) {
         var qka = RopeStoreBQ8Args(lay = lay_l, nblk = uint(kv_dim / 32l), qd = uint(qd),
             head_size = uint(head_size), npairs_q = uint(qd / 2l), qstride = qkvd,
-            neox = r.k_neox, has_bias = r.k_hasb, rot = rot_l, qhs = qhs, qrow = qrow)
+            neox = r.k_neox, has_bias = r.k_hasb, rot = rot_l, qhs = qhs, qrow = qrow, layr = lays.y, ring = ring_l)
         enc_rope_store_b_q8(enc, r.bqkv, bcos_l, bsin_l, r.brt, bbias, qka,
             kvsh ? qd / 2l : qd / 2l + 2l * (kv_dim / 32l), r.nrows, 0ul, bq)
     } elif (qkn_fused(t.config, r.kdt)) {
         var nka = qkn_args(t, l, qd, kv_dim, head_size, int64(rot_l), r.k_neox != 0u, r.k_hasb != 0u, r.k_eps, int64(qkvd), int64(rot_l) / 2l, int64(lay_l))
+        nka.layr = lays.y
+        nka.ring = ring_l
         if (gd) {
             nka.qstride = qhs
             nka.qrow = qrow
@@ -3648,7 +3655,8 @@ def private rope_store_batch(var e : BatchLayerEnc; t : Model; enc : MetalComput
     } else {
         let npairs = kvsh ? qd / 2l : (qd + kv_dim) / 2l
         var rka = gk_rope_kv_args(qd, kv_dim, head_size, qd / 2l, npairs, r.k_neox != 0u, r.k_hasb != 0u, int64(rot_l),
-            0l, 0l, r.nrows, int64(qkvd), int64(qkvd), int64(rot_l) / 2l, int64(lay_l))
+            0l, 0l, r.nrows, int64(qkvd), int64(qkvd), int64(rot_l) / 2l, int64(lay_l), int64(ring_l))
+        rka.layr = lays.y
         enc_rope_store_b(enc, r.kdt == KVDtype.f16, r.bqkv, bcos_l, bsin_l, r.brt, bbias, rka,
             npairs, r.nrows)
     }
@@ -3664,7 +3672,8 @@ def private attention_batch(var e : BatchLayerEnc; t : Model; enc : MetalCompute
     let blockc = r.kdt == KVDtype.q8_0 || r.kdt == KVDtype.tq4
     let kvd = uint(layer_kv_dim(c, l))
     let qkvd = uint(n_heads * head_size) + 2u * kvd
-    let lay_l = uint(blockc ? kv_row_bytes(r.kdt, t.kv_row_prefix[l]) : t.kv_row_prefix[l])
+    let lays = mirror_route_lay(t, r.kdt, l)
+    let lay_l = lays.x
     let kstride_l = blockc ? kvd / 32u : kvd
     let kvm_l = het ? r.k_kvm_sw : r.k_kvm
     let scale_l = het ? r.k_scale_sw : r.k_scale
@@ -3681,7 +3690,8 @@ def private attention_batch(var e : BatchLayerEnc; t : Model; enc : MetalCompute
         // each row derives wstart from its own cnt; the comb skips that row's below-window chunks
         var pka = SqAttnPartBArgs(lay = lay_l, kstride = kstride_l, nheads = uint(n_heads),
             kv_mul = kvm_l, hs = uint(head_size), scale = scale_l, qstride = qstride,
-            nchmax = uint(r.nchmax), softcap = c.attn_logit_softcap, window = window_l, qhs = qhs, gated = gated)
+            nchmax = uint(r.nchmax), softcap = c.attn_logit_softcap, window = window_l, qhs = qhs, gated = gated, layr = lays.y,
+            ring = uint(mirror_ring(t, l)))
         enc_attn_part_b(enc, r.kdt, bq, r.bpart, r.brt, pka, r.nrows, r.nchmax, n_heads, head_size)
         var cka = SqAttnCombArgs(nch = uint(r.nchmax), nheads = uint(n_heads),
             hs = uint(head_size), window = window_l, hass = hass_u)
@@ -3689,7 +3699,7 @@ def private attention_batch(var e : BatchLayerEnc; t : Model; enc : MetalCompute
     } else {
         var bka = SqAttnBArgs(lay = lay_l, kstride = kstride_l, nheads = uint(n_heads),
             kv_mul = kvm_l, hs = uint(head_size), scale = scale_l, qstride = qstride,
-            softcap = c.attn_logit_softcap, hass = hass_u, qhs = qhs, gated = gated)
+            softcap = c.attn_logit_softcap, hass = hass_u, qhs = qhs, gated = gated, layr = lays.y)
         enc_attn_b(enc, r.kdt, bq, r.bxb, r.brt, bka, r.nrows, n_heads, head_size, bsnk)
     }
 }
@@ -4687,10 +4697,12 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
     // hetero (gemma4): per-layer row bytes + per-(row, layer) slab bases — uniform models
     // capture the same values the old l * cap * rowb arithmetic produced
     L.lrowb |> grow_resize(c.n_layers)
+    L.lring |> grow_resize(c.n_layers)
     L.lkbase |> grow_resize(nrows * c.n_layers)
     L.lvbase |> grow_resize(nrows * c.n_layers)
     for (l in range64(c.n_layers)) {
         L.lrowb[l] = kv_row_bytes(kdt, layer_kv_dim(c, l))
+        L.lring[l] = mirror_ring(t, l)
         for (i in range64(nrows)) {
             L.lkbase[i * c.n_layers + l] = mirror_lbase(t, kdt, L.caps[i], l)
             L.lvbase[i * c.n_layers + l] = mirror_lbase(t, kdt, L.caps[i], l)

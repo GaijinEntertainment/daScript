@@ -10,7 +10,7 @@ out); `ARCHITECTURE_GPU_TOWER.md` (the Metal tower's attention routes and encode
 StyleTTS2 chain); `ARCHITECTURE_GPU_TOWER_POCKET.md` (the Metal tower's Pocket TTS seats); `ARCHITECTURE_GPU_QUANT_PLANES.md` (the Metal quant
 plane reads and the GEMV site abstraction); `ARCHITECTURE_GPU_MTP.md` (the Metal speculative
 round, the depth a round drafts, and the verify and batch-driver mechanics); `ARCHITECTURE_GPU_MTP_ASSISTANT.md` (the assistant drafter on both homes);
-`ARCHITECTURE_GPU_VULKAN.md` (the Vulkan resident driver).
+`ARCHITECTURE_GPU_KV_RING.md` (both homes' sliding-layer K/V ring); `ARCHITECTURE_GPU_VULKAN.md` (the Vulkan resident driver).
 
 ### GPU backends {#gpu-backends}
 

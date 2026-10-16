@@ -27,6 +27,7 @@ let GEMMA_RIG_CTX = 32768l
 struct GemmaFile {
     file : string
     arm : string
+    host_experts : bool   //! the load asks the rig's context whole on a card that cannot hold every expert stack beside it: the driver arms with the first routed layers' experts on the host
 }
 
 [init]
@@ -77,14 +78,21 @@ def private prose_tokens(tr : Model; count : int64) : array<int64> {
 }
 
 //! the fixture loaded on the armed driver, or an empty model (`n_layers` 0) after the skip that says why
-def private gemma_model(t : T?; file : string) : Model {
-    let path = path_join(models_dir(), file)
+def private gemma_model(t : T?; gf : GemmaFile) : Model {
+    let path = path_join(models_dir(), gf.file)
     if (!resident_ready(t, path)) return <- Model()
-    var tr <- load_resident(path)
+    var tr <- load_resident(path, 0l, gf.host_experts ? GEMMA_RIG_CTX : 0l)
+    if (gf.host_experts) {   //! the pinned cap decides the plan whatever the card: a memory decline is the form missing, never a skip
+        t |> success(moe_gpu_resident_active(), "the whole-model driver armed with host experts ({gpu_resident_decline_()})")
+    }
     if (!resident_admitted(t, "the whole-model driver armed on the model (the load log names any decline)", " - DASLLAMA_GPU_MIN_CTX=1024 arms the 12B Q8_0 file on a 16 GB card")) {
-        to_log(LOG_WARNING, "{file}: the cell skips on the card's memory decline ({gpu_resident_decline_()})\n")
+        to_log(LOG_WARNING, "{gf.file}: the cell skips on the card's memory decline ({gpu_resident_decline_()})\n")
         delete tr
         return <- Model()
+    }
+    if (gf.host_experts) {
+        let host = gpu_resident_host_layers()
+        t |> success(host > 0l && host < tr.config.n_layers, "the first {host} of {tr.config.n_layers} routed layers' experts serve on the host, the rest on the device")
     }
     t |> success(tr.config.pre_post_norm && tr.config.sliding_window > 0l && tr.config.ffn_act == FfnAct.gelu,
         "the fixture carries the sandwich norms, a sliding window and the GeGLU FFN (the arms this file gates)")
@@ -96,7 +104,7 @@ def private gemma_model(t : T?; file : string) : Model {
 //! `body` inside the engine's job queue, the model deleted after
 def with_gemma_rig(t : T?; gf : GemmaFile; body : block<(tr : Model) : void>) {
     return if (!arm_on(t, gf.arm))
-    var tr <- gemma_model(t, gf.file)
+    var tr <- gemma_model(t, gf)
     if (tr.config.n_layers > 0l) {
         with_dasllama_jobque_() {
             invoke(body, tr)
@@ -168,6 +176,66 @@ def gemma_forced_feed_exact(t : T?; n : int64; gf : GemmaFile) {
         delete fed
         delete prompt
         delete toks
+    }
+}
+
+//! one load's run in `ring_vs_flat`: the logits rows, whether the driver armed the rings, and the mirror's bytes on the card
+struct private RingRun {
+    rows : array<array<float>>
+    slack : int64
+    mirror : int64
+    window : int64
+}
+
+//! `path` loaded at mirror codec `kv` under the ring pin `ring` (`set_gpu_kv_ring`, put back), the `n` prose ids and eight fed
+//! steps through it; `ok` false after the skip `resident_admitted` names
+def private ring_run(t : T?; path : string; kv : KVDtype; ring : int; n : int64) : tuple<ok : bool; run : RingRun> {
+    let pin = gpu_kv_ring_pin()
+    set_gpu_kv_ring(ring)
+    var tr <- load_resident_at(path, kv)
+    set_gpu_kv_ring(pin)
+    var run : RingRun
+    let ok = resident_admitted(t, "the whole-model driver armed on the model (the load log names any decline)", "")
+    if (ok) {
+        tr.config.seq_len = min(tr.config.seq_len, GEMMA_RIG_CTX)
+        var ids <- prose_tokens(tr, n + 8l)
+        var prompt <- [for (i in range64(n)); ids[i]]
+        var toks <- [for (i in range64(n, n + 8l)); ids[i]]
+        run.rows <- feed_alone(tr, kv, prompt, toks)
+        served_every_call(t)
+        run.slack = gpu_resident_kv_ring_slack()
+        run.mirror = gpu_resident_mirror_bytes()
+        run.window = tr.config.sliding_window
+        delete ids
+        delete prompt
+        delete toks
+    }
+    moe_gpu_drop_model()
+    delete tr
+    return <- (ok = ok, run <- run)
+}
+
+//! The sliding layers' rings against the flat mirror on one driver: `n` prose ids past the window and eight fed steps on a load that
+//! rings them and on one that keeps every row (`set_gpu_kv_ring`), at mirror codec `kv` - the logits bit for bit at the prompt and every
+//! step, since a ring moves where a row sits and never which rows a query reads or their order; the ringed load arms its rings and charges
+//! the card less mirror than the flat one, which arms none, and the row a step off is the control the compare tells apart
+def ring_vs_flat(t : T?; n : int64; gf : GemmaFile; kv : KVDtype) {
+    return if (!arm_on(t, gf.arm))
+    let path = path_join(models_dir(), gf.file)
+    return if (!resident_ready(t, path))
+    with_dasllama_jobque_() {
+        var inscope ringed <- ring_run(t, path, kv, 1, n)
+        var inscope flat <- ring_run(t, path, kv, 0, n)
+        if (ringed.ok && flat.ok) {
+            t |> success(n > ringed.run.window && ringed.run.window > 0l, "the {n}-token prompt runs past the {ringed.run.window}-position window")
+            t |> success(ringed.run.slack > 0l && flat.run.slack == 0l, "the ringed load armed its rings (slack {ringed.run.slack}), the flat load none ({flat.run.slack})")
+            t |> success(ringed.run.mirror < flat.run.mirror, "the rings charge the card less mirror ({ringed.run.mirror >> 20l} MB) than every row ({flat.run.mirror >> 20l} MB)")
+            for (st in range(length(ringed.run.rows))) {
+                let what = st == 0 ? "the prompt's logits" : "step {st - 1}"
+                check_exact(t, "{what}: the ringed mirror against the flat one, bit for bit", ringed.run.rows[st], flat.run.rows[st])
+                t |> success(logits_maxdiff(ringed.run.rows[st], flat.run.rows[st > 0 ? st - 1 : 1]) > 0.0, "{what} control: the row a step off differs")
+            }
+        }
     }
 }
 

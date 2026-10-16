@@ -55,3 +55,11 @@ def test_scheduler_device_mode(t : T?) {
     cell_scheduler_device_mode(t, REGIONS_FILE)
     cell_scheduler_device_handoff(t, REGIONS_FILE)
 }
+
+//! the window's fused q/k norm, rope and store on a carrier whose shared-KV layers project q alone: the fused form runs no norm
+//! pass, a sharer's q heads riding the fused pass with no k heads; the wide bar, since the two norm orders put the E-series' fed
+//! steps 7.4-7.6% of the max logit apart where the prompt's row holds the split bar
+[test]
+def test_window_qkn_fused_e2b(t : T?) {
+    cell_window_qkn_fused(t, REGIONS_FILE, LogitsBar.wide_bar)
+}

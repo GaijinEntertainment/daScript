@@ -113,6 +113,20 @@ def test_attn_chain_unserved_features(t : T?) {
         p.rope_dim = 64l
         t |> equal(attn_chain_unserved_features(p), "")
     }
+    t |> run("the chain names every gemma generation's attention as unserved: the sandwich norms, gemma-2's softcap, gemma-4's v-norm") @(t : T?) {
+        var g3 = Config()
+        g3.rope_neox = true
+        g3.qk_norm = true
+        g3.pre_post_norm = true
+        t |> equal(attn_chain_unserved_features(g3), "pre/post norms", "gemma-3")
+        var g2 := g3
+        g2.qk_norm = false
+        g2.attn_logit_softcap = 50.0
+        t |> equal(attn_chain_unserved_features(g2), "attention logit softcap, pre/post norms", "gemma-2")
+        var g4 := g3
+        g4.v_norm = true
+        t |> equal(attn_chain_unserved_features(g4), "v-norm, pre/post norms", "gemma-4")
+    }
 }
 
 //! a three-layer shell whose layer 1 is recurrent with every deltanet plane at offset 0, its qkv/z/out planes Q4_K
@@ -1277,5 +1291,56 @@ def test_peel_shape_arms(t : T?) {
         delete hc
         delete ple
         delete recr
+    }
+}
+
+//! gemma-4-26B-A4B's attention geometry on a shell: thirty layers, every sixth global (two kv heads of 512), the other twenty-five
+//! sliding over 1024 positions (eight kv heads of 256)
+def private gemma4_26b_shell() : Model {
+    var m <- shell(30l, 0ul)
+    m.config.sliding_window = 1024l
+    m.config.swa_pattern = 6l
+    m.config.head_size = 512l
+    m.config.n_kv_heads = 2l
+    m.config.head_size_swa = 256l
+    m.config.n_kv_heads_swa = 8l
+    m.config.n_heads = 16l
+    return <- m
+}
+
+let private HOUSE_26B_FLAT_PLAN_MB = 39949l   //! the 26B UD-IQ3_XXS's strict 32768 x 4 plan with every mirror row flat, read on the pod's 32 GB card
+let private HOUSE_32GB_ROOM_MB = 28527l       //! that card's plan room, read in the same load log
+
+//! the sliding layers' rings in the plan (`../ARCHITECTURE_GPU_KV_RING.md#kv-sliding-ring`): on the 26B at 32768 positions over four
+//! regions - the house shape - a sliding layer holds its window and the window chain's 512 rows, rounded to 64, and a global layer
+//! every position; the flat pin charges every layer the whole context, and the ring bytes are what the context does not scale;
+//! the pod's flat plan less the flat mirror plus the ringed one fits that card's room
+[test]
+def test_resident_ring_mirror(t : T?) {
+    t |> run("the 26B's mirror at 32768 x 4 under the rings: 1536 rows a sliding layer, every position a global one") @(t : T?) {
+        let pin = gpu_kv_ring_pin()
+        var m <- gemma4_26b_shell()
+        set_gpu_kv_ring(1)
+        t |> equal(kv_ring_rows(m.config, 0l, 32768l, 512l), 1536l, "a sliding layer: its 1024-position window and the 512 rows a window writes")
+        t |> equal(kv_ring_rows(m.config, 5l, 32768l, 512l), 0l, "a global layer keeps every position")
+        t |> equal(kv_ring_rows(m.config, 0l, 1536l, 512l), 0l, "a ring that would reach the context keeps every position")
+        t |> equal(kv_ring_rows(m.config, 0l, 32768l, 100l), 1152l, "the slack rounds the ring up to the tiles' 64-row step")
+        t |> equal(resident_layer_ring(m, 0l, 32768l), 1536l, "the plan's ring: the window chain's 512 rows of slack")
+        let sliding_units = 25l * 1536l * 2048l
+        let global_units = 5l * 32768l * 1024l
+        t |> equal(resident_ring_bytes(m, 32768l, KVDtype.f16, 4l), 2l * 4l * sliding_units * 2l, "the rings' bytes: both sides of every region, f16")
+        let ringed = resident_mirror_bytes(m, 32768l, KVDtype.f16, 4l)
+        t |> success(ringed >= 2l * 4l * (sliding_units + global_units) * 2l, "the ringed mirror charges every row it seats ({ringed >> 20l} MB)")
+        set_gpu_kv_ring(0)
+        let flat = resident_mirror_bytes(m, 32768l, KVDtype.f16, 4l)
+        t |> equal(resident_ring_bytes(m, 32768l, KVDtype.f16, 4l), 0l, "control: the flat pin rings nothing")
+        t |> success(flat >= 2l * 4l * 32768l * (25l * 2048l + 5l * 1024l) * 2l, "the flat mirror charges the whole context on every layer ({flat >> 20l} MB)")
+        to_log(LOG_INFO, "26B at 32768 x 4, f16: the ringed mirror {ringed >> 20l} MB against {flat >> 20l} MB flat\n")
+        t |> success(ringed * 7l < flat, "the rings cut the mirror past seven times ({ringed >> 20l} MB against {flat >> 20l} MB)")
+        let rest = HOUSE_26B_FLAT_PLAN_MB - (flat >> 20l)
+        t |> success((ringed >> 20l) + rest < HOUSE_32GB_ROOM_MB,
+            "the house plan fits the 32 GB card's room under the rings: {(ringed >> 20l) + rest} MB of {HOUSE_32GB_ROOM_MB} (flat {HOUSE_26B_FLAT_PLAN_MB})")
+        set_gpu_kv_ring(pin)
+        delete m
     }
 }

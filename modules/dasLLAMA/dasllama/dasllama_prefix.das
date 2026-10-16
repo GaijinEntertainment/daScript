@@ -24,6 +24,7 @@ struct PrefixEntry {
     last_use : int64            // LRU clock value of the last attach/insert touch
     chain : int64               // owning PrefixChain id (0 = none; duplicates keep their original)
     nexts : array<uint64>       //! the keys of the pages that followed this one, a donation each (a key the cache dropped misses)
+    ring_floor : int64          //! its donor's ring floor (`Session.kv_ring_floor`): an attach ending under it lacks the sliding layers' window
 }
 
 //! One donated prefix chain, for dashboards: created when a donation contributes at least one
@@ -353,9 +354,10 @@ def prefix_share_pages_(var cache : PrefixCache; var pool : KVPool; var s : Sess
     for (i in range64(n / pr)) {
         let nh = prefix_page_next(cache, tokens, i, pr, h)
         break if (nh == 0ul)
-        let g = unsafe(cache.entries?[nh]).group
-        s.block_table |> push(g)
-        pool.refcnt[g] ++
+        let e = unsafe(cache.entries?[nh])
+        s.block_table |> push(e.group)
+        pool.refcnt[e.group] ++
+        s.kv_ring_floor = max(s.kv_ring_floor, e.ring_floor)
         h = nh
         kept ++
     }
@@ -449,46 +451,33 @@ def prefix_attach_(var cache : PrefixCache; var pool : KVPool; var s : Session; 
     if (!empty(s.dn_state_prefix)) {
         return prefix_attach_state(cache, pool, s, prompt)
     }
-    let np = long_length(prompt)
     let pr = pool.page_rows
-    let pages_max = np > 0l ? (np - 1l) / pr : 0l
-    var hit_hash = 0ul
+    var inscope plan <- prefix_plan(cache, pool, prompt)
     var matched = 0l
     var hit_chain = 0l
-    for (i in range64(pages_max)) {
-        let nh = prefix_page_next(cache, prompt, i, pr, hit_hash)
-        break if (nh == 0ul)
+    s.block_table |> reserve(length(plan.keys) + 1)
+    for (nh in plan.keys) {
         // interior pointer into the table — nothing inserts before the loop exits
         var e = unsafe(cache.entries?[nh])
-        hit_hash = nh
         cache.tick ++
         e.last_use = cache.tick
         hit_chain = e.chain
         s.block_table |> push(e.group)
         pool.refcnt[e.group] ++
+        s.kv_ring_floor = max(s.kv_ring_floor, e.ring_floor)
         matched += pr
         cache.n_hit_pages ++
     }
-    // the page past the whole hits: of the pages that followed the last hit - the first pages when there is none -
-    // the one that shares the most leading rows with the prompt
-    var take = 0ul
-    var rows = 0l
-    for (key in matched > 0l ? cache.entries[hit_hash].nexts : cache.roots) {
-        let opens = shared_rows(cache, key, prompt, matched)
-        if (opens > rows) {
-            rows = opens
-            take = key
-        }
-    }
-    if (rows > 0l) {
-        var e = unsafe(cache.entries?[take])
+    if (plan.rows > 0l) {
+        var e = unsafe(cache.entries?[plan.take])
         cache.tick ++
         e.last_use = cache.tick
         if (hit_chain == 0l) {
             hit_chain = e.chain
         }
         s.block_table |> push(kv_pool_copy_group(pool, e.group))
-        matched += rows
+        s.kv_ring_floor = max(s.kv_ring_floor, e.ring_floor)
+        matched += plan.rows
         cache.n_hit_partial ++
     }
     if (hit_chain != 0l) {
@@ -507,28 +496,65 @@ def prefix_attach_(var cache : PrefixCache; var pool : KVPool; var s : Session; 
 //! which attaches at checkpoints - a caller that needs the count there treats nothing as held.
 def prefix_match_len_(cache : PrefixCache; pool : KVPool; prompt : array<int64>) : int64 {
     return 0l if (!empty(cache.states))
+    var inscope plan <- prefix_plan(cache, pool, prompt)
+    return long_length(plan.keys) * pool.page_rows + plan.rows
+}
+
+//! the pages `prompt` attaches: the whole pages' keys, then the page past them that shares the most leading rows (`take`, `rows`;
+//! 0 = none)
+struct private PrefixPlan {
+    keys : array<uint64>
+    take : uint64
+    rows : int64
+}
+
+//! the pages `prefix_attach_` takes for `prompt`, nothing touched: the whole pages the cache holds, then of the pages that followed
+//! the last of them - the first pages when there is none - the one that shares the most leading rows with the prompt; cut to the
+//! longest run whose every page's ring floor it reaches (`prefix_plan_floor_cut`)
+[arch(at="../ARCHITECTURE_ENGINE_SERVING.md#prefix-tail-page")]
+def private prefix_plan(cache : PrefixCache; pool : KVPool; prompt : array<int64>) : PrefixPlan {
+    var plan : PrefixPlan
     let np = long_length(prompt)
     let pr = pool.page_rows
     let pages_max = np > 0l ? (np - 1l) / pr : 0l
     var hit_hash = 0ul
-    var matched = 0l
     for (i in range64(pages_max)) {
         let nh = prefix_page_next(cache, prompt, i, pr, hit_hash)
         break if (nh == 0ul)
         hit_hash = nh
-        matched += pr
+        plan.keys |> push(nh)
     }
-    var rows = 0l
-    if (matched > 0l) {
-        for (key in unsafe(cache.entries?[hit_hash]).nexts) {
-            rows = max(rows, shared_rows(cache, key, prompt, matched))
-        }
-    } else {
-        for (key in cache.roots) {
-            rows = max(rows, shared_rows(cache, key, prompt, matched))
+    let matched = long_length(plan.keys) * pr
+    for (key in matched > 0l ? unsafe(cache.entries?[hit_hash]).nexts : cache.roots) {
+        let opens = shared_rows(cache, key, prompt, matched)
+        if (opens > plan.rows) {
+            plan.rows = opens
+            plan.take = key
         }
     }
-    return matched + rows
+    prefix_plan_floor_cut(cache, plan, pr)
+    return <- plan
+}
+
+//! `plan` cut to the longest prefix that reaches the ring floor of every page it takes: a page donated off a history a GPU mirror
+//! rang holds the sliding layers' rows from its donor's floor on, so an attach ending under that floor would continue from a window
+//! the page never held
+[arch(at="../ARCHITECTURE_GPU_KV_RING.md#kv-ring-floor")]
+def private prefix_plan_floor_cut(cache : PrefixCache; var plan : PrefixPlan; pr : int64) {
+    var floor = 0l
+    var ok = 0
+    for (key, i in plan.keys, count()) {
+        floor = max(floor, unsafe(cache.entries?[key]).ring_floor)
+        if (int64(i + 1) * pr >= floor) {
+            ok = i + 1
+        }
+    }
+    let whole = ok == length(plan.keys)
+    if (plan.rows > 0l && (!whole || long_length(plan.keys) * pr + plan.rows < max(floor, unsafe(cache.entries?[plan.take]).ring_floor))) {
+        plan.rows = 0l
+        plan.take = 0ul
+    }
+    plan.keys |> resize(ok)
 }
 
 // Drop the least-recently-used entry (release its group hold + its chain's live count).
@@ -597,7 +623,7 @@ def prefix_insert_(var cache : PrefixCache; var pool : KVPool; var s : Session; 
                 chain_id = cache.next_chain_id
                 cache.chains[chain_id] <- PrefixChain(id = chain_id, born_at = ref_time_ticks(), preview = preview)   // clock: control — chain age, eviction bookkeeping
             }
-            var e <- PrefixEntry(group = s.block_table[i], last_use = cache.tick, chain = chain_id)
+            var e <- PrefixEntry(group = s.block_table[i], last_use = cache.tick, chain = chain_id, ring_floor = s.kv_ring_floor)
             e.tokens <- [for (j in range64(lo, hi)); tokens[j]]
             cache.entries[h] <- e
             pool.refcnt[s.block_table[i]] ++

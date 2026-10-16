@@ -39,3 +39,14 @@ forms run as three dense GEMMs instead (`ffn_gpu_gemms`), each fed its own image
 per-32 batch tile - the activation on the host between them. A prefill's FFN GEMMs over the same planes take the dense rail's batch GEMM where the CPU
 batch path consults its marks (`moe_gpu_dense_on_gpu`). `moe_gpu_dense_ffn_rows` counts the rows the rail ran. The image's
 identity spells the half only when it is on (`dlim_vulkan_tag`'s ` F`), so images minted without it keep their tag.
+
+### The attention-quad chain serves no gemma {#perop-attn-gemma}
+
+The per-op tier's attention-quad chain (`DASLLAMA_GPU_ATTN`: the prefill chain over a layer's q/k/v/o quad and the decode
+block over its own mirrors) has no arm for a gemma generation's attention: gemma-2's logit softcap, the sandwich norms
+every gemma carries and gemma-4's weightless v-norm (`attn_chain_unserved_features` names each; the walk logs the decline
+and places no quad). Past the features its walk takes no sliding-window layer, no layer reading another's K/V and no head
+wider than 256, so on gemma-4 its geometry covers neither the global heads of 512 nor the sharers. A gemma the whole-model
+driver declines runs its attention on the CPU under the per-op tier; what keeps a gemma on the device is the whole-model
+plan fitting, and its sliding layers' mirror rows ride a ring of their window to that end
+(`ARCHITECTURE_GPU_KV_RING.md#kv-sliding-ring`).

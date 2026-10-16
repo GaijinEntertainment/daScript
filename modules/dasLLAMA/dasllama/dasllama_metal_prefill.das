@@ -3209,6 +3209,7 @@ struct AttnArgs {
     hass : uint
     uend : uint         //!< > 0 = uniform span end (media rows): queries at [ulo, uend) attend [window floor, uend); 0 = causal
     ulo : uint          //!< uniform span start; read only while uend > 0 (queries outside [ulo, uend) stay causal)
+    ring : uint         //!< the device pair's K/V rows: a sliding layer's ring of the mirror (`kv_ring_row`); 0 = a row a position
 }
 
 [metal_dispatch(name = "enc_qk", pso = "g_pf_pso_qk", tgmem = "metal_attn_qk_msl_tgmem", tg = 128, grid = "mp/32, nk64/32, heads", params = "mp : int64, nk64 : int64, heads : int64")]
@@ -3778,7 +3779,7 @@ class template MetalAttnQKDevT {
         var cp = unsafe(addr(att[(h * ka.qrows + mBase) * ka.np32 + nBase]))
         tmm2d_tg_begin_devab(acc, MT, 64u, 4u)
         tmm2d_tg_step_devab(acc, unsafe(addr(q[mBase * ka.qd + h * ka.head_size])), ka.qd,
-            unsafe(addr(k[nBase * ka.kv_dim + (h / ka.kv_mul) * ka.head_size])), ka.kv_dim, MT, 64u, ka.head_size)
+            unsafe(addr(k[kv_ring_row(nBase, ka.ring) * ka.kv_dim + (h / ka.kv_mul) * ka.head_size])), ka.kv_dim, MT, 64u, ka.head_size)   //! 64 keys from a 64-row step: one ring piece
         tmm2d_tg_store_half(acc, cp, MT, 64u, ka.np32)
     }
 }
@@ -3814,9 +3815,14 @@ class template MetalAttnAVDevT {
         let hi = pf_av_hi(ka.uend, ka.ulo, ka.npos, ka.qoff + mBase, MT)
         var acc : float[8192]
         var cp = unsafe(addr(xb[mBase * ka.qd + h * ka.head_size + vBase]))
+        let wrap = ka.ring == 0u ? hi : min(hi, (lo / ka.ring + 1u) * ka.ring)   //! a ring's keys run back to back up to its wrap, then from slot 0
         tmm2d_tg_begin_devabnt(acc, MT, NT, 4u)
         tmm2d_tg_step_devabnt(acc, unsafe(addr(att[(h * ka.qrows + mBase) * ka.np32 + lo])), ka.np32,
-            unsafe(addr(v[lo * ka.kv_dim + (h / ka.kv_mul) * ka.head_size + vBase])), ka.kv_dim, MT, NT, hi - lo)
+            unsafe(addr(v[kv_ring_row(lo, ka.ring) * ka.kv_dim + (h / ka.kv_mul) * ka.head_size + vBase])), ka.kv_dim, MT, NT, wrap - lo)
+        if (wrap < hi) {
+            tmm2d_tg_step_devabnt(acc, unsafe(addr(att[(h * ka.qrows + mBase) * ka.np32 + wrap])), ka.np32,
+                unsafe(addr(v[kv_ring_row(wrap, ka.ring) * ka.kv_dim + (h / ka.kv_mul) * ka.head_size + vBase])), ka.kv_dim, MT, NT, hi - wrap)
+        }
         tmm2d_tg_rowscale(acc, unsafe(addr(stat[h * ka.qrows + mBase])), MT, NT)
         tmm2d_tg_store(acc, cp, MT, NT, ka.qd)
     }
@@ -7443,7 +7449,13 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
         att_slab_mx = max(att_slab_mx, sg.mp * sg.nk64)
         seq_ok = seq_ok && sg.nk64 <= c.seq_len
     }
-    //! the mirror-fed form: the chunk's K/V rows land in the session's KV mirror as halves and the device pair reads every key there
+    //! the mirror-fed form: the chunk's K/V rows land in the session's KV mirror as halves and the device pair reads every key there,
+    //! a ringed layer's through `kv_ring_row` (`AttnArgs.ring`)
+    var npos_seg = 0l
+    for (sg in segs) {
+        npos_seg = max(npos_seg, sg.npos)
+    }
+    mirror_ring_ask(t, npos_seg)   //! the window's rows sit in a ring whole until the host store reads them back
     var mirk = (g_pf_env_mirror && s.kv_dtype_k == KVDtype.f16 && s.kv_dtype_v == KVDtype.f16 && !s.device_kv
         && (head_size % 32l) == 0l && (hs_sw % 32l) == 0l && g_pf_env_attn && pf_attn_dev_ready()   //! the device pair takes a head off the 64 lattice through its tail stamp
         && seq_ok && g_pf_env_half_x && pf_twin_panels_wanted())   //! the Q twin rides a scratch panel, which covers the widest A panel
@@ -8187,15 +8199,18 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                     for (sg, i in segs, count()) {
                         let lb = uint64(mirror_lbase(t, kvdt, sg.mir_cap, l))
                         let mir_row0 = mirc ? sg.start_pos : 0l
-                        let rows_off = uint64(mir_row0 * kv_row_bytes(kvdt, kvd_l))
                         let pan = pf_seg_panels(seg_panels, int64(i), nl_kv, l, sbks, sbvs, bks, bvs)
-                        if (kvdt == KVDtype.f16) {
-                            let src_row = mirk ? sg.row0 : 0l   //! the window panel's rows at the segment's, the gathered panel's from its first
-                            enc_kv_twin(enc, pan.k, pan.v, g_arena, g_arena, 1.0, (sg.nk - mir_row0) * kvd_l,
-                                (sg.mir_koff + lb + rows_off) / 2ul, (sg.mir_voff + lb + rows_off) / 2ul, uint64(src_row * kvd_l))
-                        } else {
-                            pf_enc_kv_feed(enc, kvdt, pan.k, pan.v, sg.start_pos, sg.npos, kvd_l, hs_l,
-                                sg.mir_koff + lb + rows_off, sg.mir_voff + lb + rows_off, het ? sg.u_kv_sw : sg.u_kv)
+                        let src_row = kvdt == KVDtype.f16 && mirk ? sg.row0 : mir_row0   //! the window panel's rows at the segment's, the gathered panel's at their positions
+                        mirror_ring_pieces(t, l, mir_row0, sg.nk) $(p0, n, slot : int64) {
+                            let rows_off = uint64(slot * kv_row_bytes(kvdt, kvd_l))
+                            let src = src_row + (p0 - mir_row0)
+                            if (kvdt == KVDtype.f16) {
+                                enc_kv_twin(enc, pan.k, pan.v, g_arena, g_arena, 1.0, n * kvd_l,
+                                    (sg.mir_koff + lb + rows_off) / 2ul, (sg.mir_voff + lb + rows_off) / 2ul, uint64(src * kvd_l))
+                            } else {
+                                pf_enc_kv_feed(enc, kvdt, pan.k, pan.v, src, n, kvd_l, hs_l, sg.mir_koff + lb + rows_off, sg.mir_voff + lb + rows_off,
+                                    n == sg.npos ? (het ? sg.u_kv_sw : sg.u_kv) : uniform_u32(uint(n * kvd_l)))
+                            }
                         }
                     }
                 }
@@ -8226,7 +8241,8 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                             window = uint(lsl && c.sliding_window > 0l ? c.sliding_window : 0l),
                             softcap = c.attn_logit_softcap, hass = c.attn_sinks ? 1u : 0u,
                             uend = sg.s.attn_uniform_end > 0l ? uint(sg.s.attn_uniform_end) : 0u,
-                            ulo = sg.s.attn_uniform_end > 0l ? uint(sg.s.attn_uniform_lo) : 0u)
+                            ulo = sg.s.attn_uniform_end > 0l ? uint(sg.s.attn_uniform_lo) : 0u,
+                            ring = mirk ? uint(mirror_ring(t, l)) : 0u)
                         let pan = pf_seg_panels(seg_panels, int64(i), nl_kv, l, sbks, sbvs, bks, bvs)
                         let kpan = pan.k
                         let vpan = pan.v
@@ -8676,10 +8692,11 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                             var kdst = kv_layer_kbase(ss, l, c.seq_len)
                             var vdst = kv_layer_vbase(ss, l, c.seq_len)
                             for (r in range64(sg.store_nrun)) {
-                                let j0 = runsp[r].j0
-                                let nb = (runsp[r].j1 - j0) * rowb
-                                memcpy(reinterpret<void?>(kdst + runsp[r].row0 * rowb), reinterpret<void?>(ab + sg.mir_koff + uint64(lb + j0 * rowb)), nb)
-                                memcpy(reinterpret<void?>(vdst + runsp[r].row0 * rowb), reinterpret<void?>(ab + sg.mir_voff + uint64(lb + j0 * rowb)), nb)
+                                let row0 = runsp[r].row0 - runsp[r].j0   //! the run's cache row of position p is `row0 + p`
+                                mirror_ring_pieces(t, l, runsp[r].j0, runsp[r].j1) $(p0, n, slot : int64) {
+                                    memcpy(reinterpret<void?>(kdst + (row0 + p0) * rowb), reinterpret<void?>(ab + sg.mir_koff + uint64(lb + slot * rowb)), n * rowb)
+                                    memcpy(reinterpret<void?>(vdst + (row0 + p0) * rowb), reinterpret<void?>(ab + sg.mir_voff + uint64(lb + slot * rowb)), n * rowb)
+                                }
                             }
                             continue
                         }

@@ -101,8 +101,7 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
      D2: one dispatch, or f16/q8 rows), add+rms pairs 0.68 ms + requants 0.16 (the fused ar+rq twin
      is off on a hybrid because the f32 GEMVs read xb - D3).
    STILL OPEN in this item:
-   (b) the other families Metal serves - MoE (Wave C), gemma4 (PLE, sandwich norms), gpt-oss
-   (sinks, swiglu_oai) - stay per-op; (c) the decode-role profiler (`rdq_sample`) has no
+   (c) the decode-role profiler (`rdq_sample`) has no
    per-role table for the hybrid stamp count - it reports the whole span only, and the prefill's
    per-role table labels a recurrent layer's stamps with the attention head's role names; (d) DONE
    9/5 - the f32 arm is `dn_ba_cls`, gated by `test_vkd_dn_ba` (partial and full tiles) and
@@ -113,8 +112,6 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
 4. **Real batched decode** - the resident mirror is single-sequence; batch rows round-trip
    their KV per step (`rdec_kv_sync` in, `rdec_kv_read` out). Metal has a true batched driver
    (P4). Options: multi-sequence mirror slabs, or per-row device KV like Metal's `KVMirror`.
-6. **mx4 / q51 device kernels** - absent on Vulkan (CPU+Metal only). Needed before gpt-oss
-   (mx4 experts) or gemma-4-26B (q51 stacks) can go resident on PC.
 7. **Tune-race parity** - Metal races tensor-op twins per box (`metal_tensor_race*`); Vulkan
    picks coopmat variants by env (`DASLLAMA_COOPMAT`). Fold the choice into the tune rail.
 8. **Compile-time dispatch census** - Metal's `[lint_macro]` manual-dispatch census
@@ -336,15 +333,6 @@ Ordered roughly by user-visible value; re-rank against zen2 measurements before 
    fallback vs upstream 202.4 / 14986 - 18% / 3%. Fix shape: per-row `+ b[row]` epilogue in
    the qkv class GEMV (bias rows ride the arena or one extra binding, offset in the push),
    same arm for q/k/v; then drop `attn_qkv_bias` from the :534 gate.
-
-14. **The gemma cluster arms - medium family unlock covering gemma2 AND gemma3 (walkthrough
-   2026-08-06: both UNSUPPORTED, per-op fallback; gemma2-2b 22.8 tg / 327 pp vs upstream
-   124.1 / 9566, gemma3-1b 58.5 / 636 vs 236.2 / 21540).** The shared base: sandwich norms
-   (`pre_post_norm` - an extra norm role per layer) + sliding-window alternation (a
-   window-start word in decode attention - TokMeta has room). That pair alone unlocks
-   gemma3; gemma2 additionally needs the two softcap clamps (attn epilogue tanh + cls
-   epilogue); gemma4-dense sits on the same base (plus PLE - its own story). Biggest
-   family-count unlock on the board after qwen2's one-flag bias.
 
 15. **mm L-tile zeroes its whole dispatch on a non-128-multiple weight dim (latent, found by
    the CPU-oracle conversion).** The mode-3 `MmBatch` L-tile GEMM writes all-zeros for the
@@ -895,8 +883,7 @@ module) is independent and can land any time - it is pure structure.
     any new family, every carrier dasLLAMA serves today gets its Vulkan arm at parity - the
     existing families, and the vision and audio towers, whose GPU drivers are Metal today.
     The known gaps on the family side are this ledger's items 3 (the quant KV codecs), 4 (batched
-    decode), 5 (the speculative round), 6 (the mx4 and q51 device kernels behind gpt-oss and
-    gemma-4-26B), the gemma4 pre/post-norm attention decline, and the fully-resident MoE chain:
+    decode), 5 (the speculative round), and the fully-resident MoE chain:
     the 5060 Ti holds Qwen1.5-MoE Q6_K, Qwen3-30B-A3B UD-Q3_K_XL, Qwen3.6-35B-A3B UD-IQ3_S and
     gemma-4-26B-A4B UD-IQ4_XS whole (12.8 to 13.8 GB), the resident driver declines every MoE by
     construction, and the per-op tier reads 0.14x prefill / 0.75x decode against the reference
@@ -1320,30 +1307,6 @@ module) is independent and can land any time - it is pure structure.
     window on E2B - the q8 table is 2.35 GB, a device copy is the alternative). Also here: the driver's prefill GEMMs for the branch run the
     q8 batch tile on the cm2 route (the gate at 256 outputs, the proj at K 256) - a small f16
     route for them is a perf lever once the E-series rows have a baseline.
-48. **The KV mirror keeps every sliding layer's rows at the full context.** The reference exe sizes
-    a sliding layer's cache rows to its window (gemma-3: 1024 on 28 of 34 layers of the 4b, 512 on
-    the 1b; gemma-4: 1024 / 512 on five of six); the mirror sizes every layer to the context, so a
-    gemma-3-4b mirror at 32768 positions holds 4.3 GB where a ringed one holds about 1 GB (the six
-    global layers at the context, the rest at 1024). The ring is a position-modulo on the sliding
-    layers' mirror row (`layerbase + (pos mod window) * kvd`) in the rope store, the attention
-    kernels' key index and the prefill's K/V writes, plus the plan's row count per layer; the
-    decode attention already masks keys below the window, so the ring changes which row a key
-    lives in, not which keys score. Worth its lever on every gemma and on the 26B (30 layers,
-    25 sliding).
-49. **The gemma-4-26B-A4B passes a 16 GB card in every quant.** Its `ffn_down_exps` rows are 704
-    wide, a width only the 32-block formats (IQ4_NL, Q5_0, Q5_1, Q8_0) quantize, and
-    the K-quant rails' 256-multiple rule (`kq_fmt_row_ok`: the Q8_K activation superblock) demotes
-    an IQ4_NL or Q5_0 down stack to q8 at load - the UD-IQ3_XXS file's 3947 MB of down planes
-    become 7456 MB, and the resident image reads 14905 MB against a 16 GB card's 12677 MB usable
-    (measured 2026-09-12 on the RTX 5060 Ti; the plan declines on memory and the cells skip). The
-    q51 expert rail (`Q51Cm2T`'s s and e stamps, `Q51Gemv`; `ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block`) serves the UD-Q4_K_M file's native Q5_1 down stacks at 704; the IQ3_XXS and
-    IQ4_NL files still demote their IQ4_NL down stacks. Two levers, either of which puts those
-    on 16 GB: an iq4nl expert rail at 32-wide rows (the same per-32 form as q51: Q8_0 activations
-    in place of Q8_K - the CPU dot, the decode GEMV twin, the tune rows and kernel cells; the cm2
-    e stamps are f16-fed and already step K by 64, which 704 divides), or the streamed-experts
-    form (attention and the dense triple resident, the expert planes streamed a layer at a
-    time - the 16 GB story for every MoE past the card). The block itself holds on a 32 GB card
-    (`test_gpu_resident_gemma4_26b.das`, the RunPod RTX PRO 4500 rows).
 50. **The prefill flash tile runs one workgroup a (head, q tile), which leaves a low-head model's
     attention on a few SMs.** A key split of the tile (every (head, q tile) cut into equal pieces
     with f32 partials and a combine kernel, `pf_fa_nsplit` covering the SM count twice) lost on
@@ -1603,7 +1566,7 @@ module) is independent and can land any time - it is pure structure.
     regions at 660 positions each and read 151 and 104 summed against the reference's paged 106
     and 46 (`PERF_LEDGER.md`, the gemma section's 5060 Ti rows), where the per-op rails read 15
     and 14. What stands: a model whose weights alone do not fit (the Q8_0 on a 12 GB card, the
-    31B and the 26B IQ3_XXS on this one - its served weights read past the card's room; `PERF_LEDGER.md`, the MoE section's 5060 Ti bullet) - a streamed-weights arm, the layers' planes through a device ring the
+    31B on this one) - a streamed-weights arm, the layers' planes through a device ring the
     step refills ahead of the decode, in layer order, the way the MoE block streams its expert
     groups (`ARCHITECTURE_GPU_VULKAN_GEMM.md#cm2-expert-chain`), which beats the driver's blind paging
     because the order is known and the reads are one pass a token; the rate then reads as PCIe's

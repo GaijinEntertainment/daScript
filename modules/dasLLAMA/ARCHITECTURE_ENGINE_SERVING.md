@@ -35,8 +35,8 @@ anchor.
   the GPU serves segments (`ARCHITECTURE_GPU_PREFILL_WINDOW.md#prefill-segments`) and run one after
   the other elsewhere; a stream with a media span ahead takes no segment, and when the first
   prefilling stream is one, or the scheduler is device-home on a model the driver's segmented window
-  declines (`gpu_device_prefill_segments`: a recurrent, NextN, routed or hyper-connection model, a
-  per-layer-embedding model whose side rows the device does not gather, or a block-codec mirror - each stream's chunk would cost its own window
+  declines (`gpu_device_prefill_segments`: a per-layer-embedding model whose side rows the device does
+  not gather, a hyper-connection model, routed experts on the host, or a block-codec mirror - each stream's chunk would cost its own window
   and the tick would cut the next stream's prompt short for nothing), the tick is that stream's own
   call, `prefill_one_chunk`) - the quantum `chunk_tokens` while
   a stream decodes, since the call is the stall every decoding stream waits out, and at least `idle_chunk_tokens`

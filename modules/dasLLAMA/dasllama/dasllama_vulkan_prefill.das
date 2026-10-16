@@ -621,8 +621,15 @@ def private pf_moe_layer_sets(l : int64) {
     L.pf_router_set = set_router_gemm_cls(fixed_array(g_rd.router_dev, g_rd.pf_xb, g_rd.pf_mlog),
         fixed_array(g_rd.router_bytes, np * dim * 4l, np * ner * 4l), fixed_array(0u, VHZ_XB, VHZ_MRT))
     if (L.experts_host) {
-        if (!g_rd.hc) {
-            verify(!L.moe_g4, "vk prefill: a host layer takes the plain combine")
+        if (!g_rd.hc && L.moe_g4) {   //! the host's sums land as each row's one routed row of weight one
+            verify(ensure_cls_ar_comb_g4() && ensure_cls_ar_comb_g4_f16_b(), "vk prefill: a host layer's gemma-4 combine class rails must engage on a live device")
+            L.pf_arcomb_set = set_cls_ar_comb_g4(fixed_array(g_rd.pf_x, g_rd.pf_ffnout, g_rd.norms_dev, g_rd.pf_xb, g_rd.pf_ident_dev, g_rd.pf_ones_dev, g_rd.pf_hacc_dev),
+                fixed_array(np * dim * 4l, np * dim * 4l, g_rd.norms_bytes, np * dim * 4l, np * 4l, np * 4l, np * dim * 4l),
+                fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XB, 0u, 0u, VHZ_MDN))
+            L.pf_arcomb_f16_set = set_cls_ar_comb_g4_f16_b(fixed_array(g_rd.pf_x, g_rd.pf_ffnout, g_rd.norms_dev, g_rd.pf_xf, g_rd.pf_ident_dev, g_rd.pf_ones_dev, g_rd.pf_hacc_dev),
+                fixed_array(np * dim * 4l, np * dim * 4l, g_rd.norms_bytes, np * dim * 2l, np * 4l, np * 4l, np * dim * 4l),
+                fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XQ, 0u, 0u, VHZ_MDN))
+        } elif (!g_rd.hc) {
             L.pf_arcomb_set = set_cls_ar_comb(fixed_array(g_rd.pf_x, g_rd.pf_ffnout, g_rd.norms_dev, g_rd.pf_xb, g_rd.pf_ident_dev, g_rd.pf_ones_dev, g_rd.pf_hacc_dev, g_rd.pf_mlog, g_rd.moe_db_dev, g_rd.pf_ident_dev),
                 fixed_array(np * dim * 4l, np * dim * 4l, g_rd.norms_bytes, np * dim * 4l, np * 4l, np * 4l, np * dim * 4l, np * ner * 4l, g_rd.moe_db_bytes, np * 4l),
                 fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XB, 0u, 0u, VHZ_MDN, VHZ_MRT, 0u, 0u))
@@ -802,6 +809,14 @@ def private pf_moe_q8_experts(raw : VkCommandBuffer; var h : VkHaz; l, nk : int6
     pfq_ts(raw)
 }
 
+//! the gemma-4 routed feed: x under the routed branch's pre norm into pf_xb, the rows the gather (or the host) reads
+[arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-gemma4-moe-block")]
+def private pf_moe_g4_feed(raw : VkCommandBuffer; var h : VkHaz; l, wlen : int64) {
+    var pcn = ArArgs(dim = uint(g_rd.dim), add_on = 0u, woff = uint(rd_norm_off(l, RD_NORM_PRE_FFN2)), eps = g_rd.eps, ascale = 1.0)
+    enc_cls_ar(raw, h, g_rd.pf_sets[int(l * PF_ROLES) + 8], pcn, wlen)
+    pfq_ts(raw)
+}
+
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block")]
 def private pf_moe_block(raw : VkCommandBuffer; var h : VkHaz; l, wlen : int64) {
     var L & = unsafe(g_rd.layers[l])
@@ -811,16 +826,13 @@ def private pf_moe_block(raw : VkCommandBuffer; var h : VkHaz; l, wlen : int64) 
     let nfe = g_rd.nfe
     let ner = uint(g_rd.ner)
     let nk = wlen * k
-    let addrms_set = int(l * PF_ROLES) + 8
     pf_moe_router(raw, h, l, wlen)
     var pct = GkTopKArgs(ne = uint(ne), k = uint(k), norm = g_rd.norm_topk ? 1u : 0u, lstride = ner, wscale = g_rd.wscale,
         dsoff = L.moe_g4 ? uint(L.router_slot * ne) : GK_NO_DSCALE, rbias_on = g_rd.router_bias ? 1u : 0u, rboff = uint(L.router_slot * ne))
     topk_rows_enc(ne, raw, h, L.pf_topk_set, pct, wlen)
     pfq_ts(raw)
-    if (L.moe_g4) {   //! the routed feed: x under the routed branch's pre norm, the rows the gather reads
-        var pcn = ArArgs(dim = uint(dim), add_on = 0u, woff = uint(rd_norm_off(l, RD_NORM_PRE_FFN2)), eps = g_rd.eps, ascale = 1.0)
-        enc_cls_ar(raw, h, g_rd.pf_sets[addrms_set], pcn, wlen)
-        pfq_ts(raw)
+    if (L.moe_g4) {
+        pf_moe_g4_feed(raw, h, l, wlen)
     }
     let bounds = pf_moe_bounds(nk)
     let tcs = int64(SCHED_S_ROWS)
@@ -1482,7 +1494,7 @@ def private pf_head_kv_store(raw : VkCommandBuffer; var h : VkHaz; L : RLayer; n
     let ropewg = (nh * int64(pairs) + int64(WG_X) - 1l) / int64(WG_X)
     rope_kv_b_stamp_enc(rd_kv16(), raw, h, g_rd.pf_sets[hb + 4], pcr, ropewg)
     if (kvq) {   // a block codec's store pass; the rope stamp stored the f16 rows itself, and an f16 mirror builds no store set. The warm attends nothing: no q head to rotate under tq4
-        rd_enc_kv_store(raw, h, g_rd.pf_kv_store_sets[L.mir_slab], true, kvd, hs, nh, 0l, kvd / hs, mirb, uint(pos0), uint(g_rd.n_heads * int64(qhs)), uint(qhs))
+        rd_enc_kv_store(raw, h, g_rd.pf_kv_store_sets[L.mir_slab], true, kvd, hs, nh, 0l, kvd / hs, mirb, uint(pos0), uint(g_rd.n_heads * int64(qhs)), uint(qhs), L.ring)
     }
 }
 
@@ -1569,8 +1581,8 @@ def set_vulkan_prefill_qkn_fuse(on : bool) {
 def vulkan_prefill_qkn_fuse : bool => g_pf_qkn_fuse
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain")]
-def private pf_qkn_fused(l : int64) : bool
-    => g_pf_qkn_fuse && g_env_vulkan.vk_fuse && g_rd.qk_norm && !rd_kv_block_codec() && !g_rd.layers[l].kv_shared
+def private pf_qkn_fused : bool
+    => g_pf_qkn_fuse && g_env_vulkan.vk_fuse && g_rd.qk_norm && !rd_kv_block_codec()
 
 //! the fused pass over every window part: a part's rows at their positions in their region's slab, `voff` the v rows' base in the
 //! projection plane, the k and v rows `kvrow` apart
@@ -1582,7 +1594,7 @@ def private pf_qkn_rope_enc(raw : VkCommandBuffer; var h : VkHaz; l : int64; vof
     }
     let dim = g_rd.dim   // nolint:LINT021 — the norm row offsets multiply 64-bit before the push-field narrow
     let hs = L.hs
-    let nkvh = L.kvd / hs
+    let nkvh = L.kv_shared ? 0l : L.kvd / hs   //! a shared-KV layer's q heads alone: its donor's rows already sit in the mirror
     let hsmax = g_rd.head_size   // nolint:LINT021 — the q/k norm rows sit at the widest class's stride; the row offset multiplies run 64-bit before the push-field narrow
     let nlfin = rd_norm_final()   // nolint:LINT021 — the norm row offsets multiply 64-bit before the push-field narrow
     for (sg in g_pf_wsegs) {
@@ -1591,7 +1603,7 @@ def private pf_qkn_rope_enc(raw : VkCommandBuffer; var h : VkHaz; l : int64; vof
             qwoff = uint(nlfin + dim + l * 2l * hsmax), kwoff = uint(nlfin + dim + (l * 2l + 1l) * hsmax),
             eps = g_rd.eps, qstride = uint(qhs), boff = uint(L.boff), hasb = g_rd.has_bias ? 1u : 0u, cbase = uint(L.cbase),
             vfk = L.vfk ? 1u : 0u, vnorm = L.vnorm ? 1u : 0u, rowwg = uint(g_rd.n_heads + nkvh), kvrow = uint(kvrow), qrow = uint(qrow),
-            cosrow = uint(g_rd.cos_elems), win = 1u, pos0 = uint(sg.pos0), row0 = uint(sg.row0), kbase = 0u, vbase = voff)
+            cosrow = uint(g_rd.cos_elems), win = 1u, pos0 = uint(sg.pos0), row0 = uint(sg.row0), kbase = 0u, vbase = voff, ring = uint(L.ring))
         if (rd_kv16()) {
             enc_qkn_rope_f16_cls(raw, h, L.pf_s_qkn_rope, pcf, (g_rd.n_heads + nkvh) * sg.npos)
         } else {
@@ -2137,7 +2149,7 @@ def private pf_attn_block(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : i
         }
     }
     let voff = uint(kv_merged ? kvd : wlen * kvd)   // the v rows' base in pf_kv, kstride apart
-    if (pf_qkn_fused(l)) {
+    if (pf_qkn_fused()) {
         pf_qkn_rope_enc(raw, h, l, voff, kv_merged ? 2l * kvd : kvd, qrow, qhs)
     } else {
         if (g_rd.qk_norm) {
@@ -2158,16 +2170,17 @@ def private pf_attn_block(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : i
                 layerbase = kvq ? 0u : uint(rd_mir_base(g_rd.layers[l], sg.region)), npos = uint(sg.npos), pos0 = uint(kvq ? sg.row0 : sg.pos0),
                 voff = voff, kstride = uint(kv_merged ? 2l * kvd : kvd), qhs = uint(qhs),
                 boff = uint(g_rd.layers[l].boff), hasb = g_rd.has_bias ? 1u : 0u,
-                cstride = uint(cos_elems), cbase = uint(g_rd.layers[l].cbase), row0 = uint(sg.row0))
+                cstride = uint(cos_elems), cbase = uint(g_rd.layers[l].cbase), row0 = uint(sg.row0), ring = kvq ? 0u : uint(g_rd.layers[l].ring))
             rope_kv_b_stamp_enc(rd_kv16(), raw, h, g_rd.pf_sets[b + 4], pcr, ropewg)
         }
     }
     if (kvq) {
         let mirb = uint(rd_mir_base(g_rd.layers[l], g_pf_wsegs[0].region))
-        rd_enc_kv_store(raw, h, g_rd.pf_kv_store_sets[g_rd.layers[l].mir_slab], true, kvd, hs, wlen, g_rd.n_heads, kvsh ? 0l : kvd / hs, mirb, uint(pos0w), uint(qrow), uint(qhs))
+        rd_enc_kv_store(raw, h, g_rd.pf_kv_store_sets[g_rd.layers[l].mir_slab], true, kvd, hs, wlen, g_rd.n_heads, kvsh ? 0l : kvd / hs, mirb, uint(pos0w), uint(qrow), uint(qhs),
+            g_rd.layers[l].ring)
         let kvlen = pos0w + wlen
         let shadow_pos0 = window != 0u && pos0w > int64(window) ? ((pos0w - int64(window)) / 64l) * 64l : 0l   // a sliding layer's tiles start a 64-key step under its window
-        var pch = KvQShadowArgs(kvd = uint(kvd), pos0 = uint(shadow_pos0), rows = uint(kvlen - shadow_pos0), layerbase = mirb)
+        var pch = KvQShadowArgs(kvd = uint(kvd), pos0 = uint(shadow_pos0), rows = uint(kvlen - shadow_pos0), layerbase = mirb, ring = uint(g_rd.layers[l].ring))
         let shwg = (rd_kv_row_units(kvd) * (kvlen - shadow_pos0) + int64(WG_X) - 1l) / int64(WG_X)
         if (kvtq4) {
             enc_kv_tq4_shadow_cls(raw, h, g_rd.pf_kv_shadow_sets[g_rd.layers[l].mir_slab], pch, shwg)
@@ -2179,12 +2192,13 @@ def private pf_attn_block(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : i
     let fa_lands_f16 = pf_fa_lands_f16(fo6)
     for (sg in g_pf_wsegs) {
         let kv_base = kvq ? 0u : uint(rd_mir_base(g_rd.layers[l], sg.region))   // the rows the attention reads: the mirror's, or a block codec's shadow of this layer from 0
+        let kv_ring = kvq ? 0u : uint(g_rd.layers[l].ring)   //! the shadow holds its rows at their positions
         if (g_rd.layers[l].pf_fa || g_rd.layers[l].pf_fakhr) {
             let khr = g_rd.layers[l].pf_fakhr
             var pcf = FaArgs(rows = uint(sg.npos), w0 = uint(sg.pos0), qd = uint(qd),
                 kvd = uint(kvd), kv_mul = kv_mul, kvbase = kv_base,
                 scale = g_rd.scale, qstride = uint(qrow), qhs = uint(qhs), window = window, cap = g_rd.layers[l].attn_cap,
-                sinkoff = uint(l * g_rd.n_heads), row0 = uint(sg.row0))
+                sinkoff = uint(l * g_rd.n_heads), row0 = uint(sg.row0), ring = kv_ring)
             fa_stamp_enc(khr, hs, hs == 256l && rd_attn_gated(), pcf.cap != 0.0, g_rd.has_sinks, fa_lands_f16, raw, h, g_rd.pf_sets[b + 5], pcf,
                 fa_stamp_wgs(khr, g_rd.n_heads, sg.npos))
         } else {
@@ -2192,7 +2206,7 @@ def private pf_attn_block(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : i
             var pca = DaAttnBArgs(npos = uint(sg.npos), nh = uint(g_rd.n_heads), kvd = uint(kvd),
                 hs = uint(hs), kv_mul = kv_mul, kbase = kv_base, vbase = kv_base,
                 w0 = uint(sg.pos0), scale = g_rd.scale, qhs = uint(qhs), gated = rd_attn_gated() ? 1u : 0u, window = window,
-                cap = g_rd.layers[l].attn_cap, row0 = uint(sg.row0))
+                cap = g_rd.layers[l].attn_cap, row0 = uint(sg.row0), ring = kv_ring)
             da_attn_b_stamp_enc(fa128, wide, rd_pf_reads_f16(), raw, h, g_rd.pf_sets[b + 5], pca, attnwg)
         }
     }
@@ -2399,6 +2413,9 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 }
                 if (moe && g_rd.layers[l].experts_host) {
                     pf_moe_router(raw, h, l, wlen)
+                    if (g_rd.layers[l].moe_g4) {
+                        pf_moe_g4_feed(raw, h, l, wlen)
+                    }
                     pf_host_cut(raw, raw, h, l, wlen, 0l, experts)
                 } elif (moe) {
                     pf_moe_block(raw, h, l, wlen)

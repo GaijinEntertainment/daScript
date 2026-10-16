@@ -327,7 +327,7 @@ def private encode_gemma_layer(t : Model; s : Session; enc : MetalComputeEncoder
                 g.bpart_bytes = need
             }
             var pka = SqAttnPartArgs(cnt = uint(cnt), kstride = kstride, nheads = uint(dr.n_heads), kv_mul = kv_mul, hs = uint(hs),
-                scale = 1.0, nchunks = uint(nchunks), softcap = 0.0, window = window)
+                scale = 1.0, nchunks = uint(nchunks), softcap = 0.0, window = window, ring = uint(mirror_ring(t, kvl)))
             enc_attn_part(enc, kdt, g_arena, g_arena, lkoff, lvoff, g.bq, g.bpart, pka, dr.n_heads * nchunks, hs)
             let chlo = window > 0u && cnt > int64(window) ? uint((cnt - int64(window)) / ATTN_CHUNK_ROWS) : 0u
             var cka = SqAttnCombArgs(nch = uint(nchunks), nheads = uint(dr.n_heads), hs = uint(hs), chlo = chlo, window = window, hass = 0u)
