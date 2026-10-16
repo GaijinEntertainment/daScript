@@ -419,10 +419,14 @@ def private pre_add_rms_gate(t : T?; var dev, queue; dim : int) {
     }
 }
 
+let private QKN_V_NONE = 0
+let private QKN_V_FK = 1     //! the k groups also write V: the raw k row under its rms (a layer with no v plane)
+let private QKN_V_NORM = 2   //! nk more groups norm the V rows in place, weightless (gemma-4's v-norm)
+
 // per-head QK-norm: vfusion=false is the in-place decode shape (soffe == koffe), vfusion=true
-// the no-wv form (reads the pre-norm K slice, writes the v segment)
-def private qk_norm_gate(t : T?; var dev, queue; hs, nq, nk, nrows : int; vfusion : bool) {
-    let tag = "qk_norm hs={hs} nq={nq} nk={nk} rows={nrows} vfusion={vfusion}"
+// the no-wv form (reads the pre-norm K slice, writes the v segment); `vmode` the V arms of the in-place shape
+def private qk_norm_gate(t : T?; var dev, queue; hs, nq, nk, nrows : int; vfusion : bool; vmode : int = QKN_V_NONE) {
+    let tag = "qk_norm hs={hs} nq={nq} nk={nk} rows={nrows} vfusion={vfusion} vmode={vmode}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
         let st = stamp_of(@@enc_qk_norm)
@@ -443,6 +447,8 @@ def private qk_norm_gate(t : T?; var dev, queue; hs, nq, nk, nrows : int; vfusio
             w[i] = 0.5 + 0.04 * float(i % 19)
         }
         var inscope want := xv
+        var inscope ones <- [for (_i in range(hs)); 1.0]
+        let vbase = qd + kvd
         for (r in range(nrows)) {
             for (tg2 in range(nq + nk)) {
                 let isK = tg2 >= nq
@@ -453,13 +459,29 @@ def private qk_norm_gate(t : T?; var dev, queue; hs, nq, nk, nrows : int; vfusio
                     rmsnorm(addr(want[wbase]), addr<float const?>(xv[rbase]), addr<float const?>(w[isK ? hs : 0]), int64(hs), EPS)
                 }
             }
+            for (h in range(nk)) {
+                let vrow = r * rstride + vbase + h * hs
+                if (vmode == QKN_V_FK) {
+                    unsafe {
+                        rmsnorm(addr(want[vrow]), addr<float const?>(xv[r * rstride + soffe + h * hs]), addr<float const?>(ones[0]), int64(hs), EPS)
+                    }
+                } elif (vmode == QKN_V_NORM) {
+                    unsafe {
+                        rmsnorm(addr(want[vrow]), addr<float const?>(xv[vrow]), addr<float const?>(ones[0]), int64(hs), EPS)
+                    }
+                }
+            }
         }
         let bx = mc |> io_(xv)
         let bw = mc |> in_(w)
         var ka = qk_norm_args(uint(nq), uint(nk), uint(hs), uint(rstride), uint(soffe), uint(koffe), uint(hs), EPS)
+        ka.vfk = vmode == QKN_V_FK ? 1u : 0u
+        ka.vnorm = vmode == QKN_V_NORM ? 1u : 0u
+        ka.vbase = uint(vbase)
+        let ngroups = nq + nk + (vmode == QKN_V_NORM ? nk : 0)
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
             stamp_run(st, pso) {
-                invoke(st.enc, enc, mc.buf[bx], mc.buf[bx], mc.buf[bw], ka, int64(nq + nk), int64(nrows))
+                invoke(st.enc, enc, mc.buf[bx], mc.buf[bx], mc.buf[bw], ka, int64(ngroups), int64(nrows))
             }
         }
         return if (!ran)
@@ -1937,6 +1959,8 @@ def test_metal_misc_kernels(t : T?) {
                 qk_norm_gate(t, dev, queue, 128, 2, 1, 1, false)
                 qk_norm_gate(t, dev, queue, 512, 2, 1, 2, false)     // past the 256 lanes: a second element a lane (gemma-4's global heads)
                 qk_norm_gate(t, dev, queue, 96, 3, 1, 2, true)       // a head off the lane lattice
+                qk_norm_gate(t, dev, queue, 256, 4, 2, 2, false, QKN_V_NORM)   // gemma-4's v-norm in the same dispatch (the block-codec decode)
+                qk_norm_gate(t, dev, queue, 512, 2, 1, 2, false, QKN_V_FK)     // ... and its no-wv global layers: V off the pre-norm K
                 // the tanh-form CPU geglu; the GPU's exp identity agrees inside the approx bar
                 ew2_act_gate(t, dev, queue, "geglu", stamp_of(@@enc_geglu), 800) $(var want : array<float>; g, u : array<float>) {
                     geglu(want, u, int64(length(g)))

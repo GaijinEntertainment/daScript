@@ -1338,7 +1338,7 @@ def private gemma4moe_row(t : T?; path : string; tag : string; tol_pf : float = 
             "{tag}: metal_needs derives {expected} (got {derived})")
         let vocab = c.vocab_size
         var prompt <- encode(tr, counting_prompt(1, 20), true, false)
-        var lg0, lg1 : array<float>
+        var lg0, lg1, lq0, lq1 : array<float>   //! the CPU truths on f16 and on q8_0 sessions
         var t0 = 0l
         var t1 = 0l
         with_dasllama_jobque() {
@@ -1348,10 +1348,16 @@ def private gemma4moe_row(t : T?; path : string; tag : string; tol_pf : float = 
             t0 = argmax_of(s.logits, vocab)
             var one <- [t0]
             eval_(tr, s, one)
-            delete one
             lg1 := s.logits
             t1 = argmax_of(s.logits, vocab)
             delete s
+            var sq = make_run_state(c, KVDtype.q8_0, KVDtype.q8_0)
+            eval_(tr, sq, prompt)
+            lq0 := sq.logits
+            eval_(tr, sq, one)
+            lq1 := sq.logits
+            delete sq
+            delete one
         }
         census_cell(t, tr, path, tag, ["attention q/k/v/o", "routed experts", "token table", "classifier"])
         let nl = c.n_layers
@@ -1359,9 +1365,12 @@ def private gemma4moe_row(t : T?; path : string; tag : string; tol_pf : float = 
         var trg <- blob_twin(t, path, 512l)
         matrix_cell(t, trg, KVDtype.f16, "{tag}/q8/f16", "", "", "")
         //! the MoE tail as one step (`MetalMoeCombG4`) and, the control, on its unfused chain: the step counted once a layer in the
-        //! window and once a layer past the last an encoded step on the first leg alone, both legs within the CPU truth's bars
-        for (unfused in fixed_array(false, true)) {
-            let leg = unfused ? "{tag} unfused tail" : tag
+        //! window and once a layer past the last an encoded step on the step's legs alone, every leg within the CPU truth's bars;
+        //! the q8_0 leg's decode takes the v-norm arms in the q/k norm's dispatch (the block-codec mirror's form)
+        for (leg_i in range(3)) {
+            let unfused = leg_i == 1
+            let kdt = leg_i == 2 ? KVDtype.q8_0 : KVDtype.f16
+            let leg = unfused ? "{tag} unfused tail" : (leg_i == 2 ? "{tag} q8_0 mirror" : tag)
             var mpf = 0.0
             var m1 = 0.0
             var served = 0l
@@ -1377,10 +1386,10 @@ def private gemma4moe_row(t : T?; path : string; tag : string; tol_pf : float = 
                 metal_kernel_coverage_reset()
                 let pf0 = metal_prefill_stats().prefills
                 let d0 = metal_decode_stats().decodes
-                var s = make_run_state(trg.config, KVDtype.f16, KVDtype.f16)
+                var s = make_run_state(trg.config, kdt, kdt)
                 eval_(trg, s, prompt)
                 for (v in range64(vocab)) {
-                    mpf = max(mpf, abs(lg0[v] - s.logits[v]))
+                    mpf = max(mpf, abs((leg_i == 2 ? lq0[v] : lg0[v]) - s.logits[v]))
                 }
                 gpk0 = argmax_of(s.logits, vocab)
                 npf = metal_kernel_count_compiled(G4_STEP_PF)
@@ -1388,7 +1397,7 @@ def private gemma4moe_row(t : T?; path : string; tag : string; tol_pf : float = 
                 eval_(trg, s, one)
                 delete one
                 for (v in range64(vocab)) {
-                    m1 = max(m1, abs(lg1[v] - s.logits[v]))
+                    m1 = max(m1, abs((leg_i == 2 ? lq1[v] : lg1[v]) - s.logits[v]))
                 }
                 gpk1 = argmax_of(s.logits, vocab)
                 ndec = metal_kernel_count_compiled(G4_STEP_DEC)
@@ -1413,6 +1422,8 @@ def private gemma4moe_row(t : T?; path : string; tag : string; tol_pf : float = 
         }
         delete lg0
         delete lg1
+        delete lq0
+        delete lq1
         delete prompt
         delete trg
     }

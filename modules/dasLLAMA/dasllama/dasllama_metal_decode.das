@@ -1277,7 +1277,7 @@ struct template LayerEncT {
                         enc_copy_row(enc, r.bqkv, uint64((i * qkvd + qd) * 4l), r.bqkv, uint64((i * qkvd + qd + kv_dim) * 4l), u_kvd_l, kv_dim)
                     }
                 }
-                if (c.v_norm && !qkn_fused(c, r.kdt)) {
+                if (c.v_norm && !qkn_fused(c, r.kdt) && !c.qk_norm) {   //! with q/k norm the V arms ride the q/k norm's dispatch below
                     // MAX-width upload: the region cache is address-keyed and both classes read this one plane — a narrower first upload starved the hs-512 class (Metal OOB reads are ZEROS)
                     var bones = upload_region(addr < void? >(t.fblob[t.rms_ones_off]), uint64(max_head_size(c) * 4l))
                     var vka = qk_norm_args(0u, uint(kv_dim / head_size), k_hs_l, k_qkvd_l, t.wv_offs[l] < 0l ? k_qd_l : k_voffe_l, k_voffe_l, 0u, r.k_eps)
@@ -1297,7 +1297,15 @@ struct template LayerEncT {
                     qka.qbase = 0u
                     qka.qhs = 2u * k_hs_l
                 }
-                enc_qk_norm(enc, bqn, r.bqkv, bqkw, qka, n_heads + nkn, r.nrows)
+                var nvn = 0l
+                if (c.v_norm && !kvsh) {   //! V off the pre-norm K (no v plane) or normed in place, weightless: the same dispatch
+                    let nowv = t.wv_offs[l] < 0l
+                    qka.vfk = nowv ? 1u : 0u
+                    qka.vnorm = nowv ? 0u : 1u
+                    qka.vbase = k_voffe_l
+                    nvn = nowv ? 0l : nkn
+                }
+                enc_qk_norm(enc, bqn, r.bqkv, bqkw, qka, n_heads + nkn + nvn, r.nrows)
             }
             if (!recr && g_skip != "ew" && !fused_qkv) {
                 rope_store(self, t, enc, l, het, kvsh, bbias, bcos_l, bsin_l, lkoff, lvoff, rowb, qd, kv_dim, head_size, n_heads)
