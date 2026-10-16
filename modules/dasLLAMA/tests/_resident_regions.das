@@ -543,18 +543,20 @@ def private batched_steps_body(t : T?; tr : Model; pa, pb : array<int64>; bar : 
 [cold_path]
 def cell_regions_batched_side_rows(t : T?; file : string) {
     t |> run("the side rows of the sessions alone and of the batched steps gather on the device off the rows' ids") @(t : T?) {
-        with_regions_rig(t, file) $(tr) {
-            static_if (typeinfo builtin_module_exists(vulkan)) {
-                t |> success(has_ple(tr.config) && vk_rdec_side_gather_on(), "the driver gathers the side rows off the ids (the table and the projection on the device)")
-                var pa <- prompt_a()
-                var pb <- prompt_b()
-                let host0 = ple_host_gather_rows()
-                let dev0 = vk_rdec_nrow_side_gathered()
-                batched_steps_body(t, tr, pa, pb, LogitsBar.bit_exact)
-                t |> equal(ple_host_gather_rows() - host0, 0l, "the host gathered no table row")
-                t |> equal(vk_rdec_nrow_side_gathered() - dev0, 2l * STEPS, "every batched row's side row gathered off its id")
-                delete pa
-                delete pb
+        with_gpu_resident_embed(1) {
+            with_regions_rig(t, file) $(tr) {
+                static_if (typeinfo builtin_module_exists(vulkan)) {
+                    t |> success(has_ple(tr.config) && vk_rdec_side_gather_on(), "the driver gathers the side rows off the ids (the table and the projection on the device)")
+                    var pa <- prompt_a()
+                    var pb <- prompt_b()
+                    let host0 = ple_host_gather_rows()
+                    let dev0 = vk_rdec_nrow_side_gathered()
+                    batched_steps_body(t, tr, pa, pb, LogitsBar.bit_exact)
+                    t |> equal(ple_host_gather_rows() - host0, 0l, "the host gathered no table row")
+                    t |> equal(vk_rdec_nrow_side_gathered() - dev0, 2l * STEPS, "every batched row's side row gathered off its id")
+                    delete pa
+                    delete pb
+                }
             }
         }
     }
@@ -603,35 +605,35 @@ def private batched_rows_logits(t : T?; tr : Model) : array<array<float>> {
 def cell_regions_batched_embed_gather(t : T?; file : string) {
     t |> run("the batched rows gather their token rows on the device, bit for bit the rows the host embeds") @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            let pin = gpu_resident_embed_pin()
             var dev, host : array<array<float>>
-            set_gpu_resident_embed(1)
-            with_regions_rig(t, file) $(tr) {
-                let g0 = vk_rdec_nrow_embed_gathered()
-                let h0 = batch_rows_host_embedded()
-                delete dev
-                dev <- batched_rows_logits(t, tr)
-                t |> equal(vk_rdec_nrow_embed_gathered() - g0, 2l * STEPS, "every batched row's token row gathered off its id")
-                t |> equal(batch_rows_host_embedded() - h0, 0l, "the host embedded no batched row")
-            }
-            set_gpu_resident_embed(0)
-            with_regions_rig(t, file) $(tr) {
-                let g0 = vk_rdec_nrow_embed_gathered()
-                let h0 = batch_rows_host_embedded()
-                let side0 = vk_rdec_nrow_side_gathered()
-                delete host
-                host <- batched_rows_logits(t, tr)
-                t |> equal(vk_rdec_nrow_embed_gathered() - g0, 0l, "with the gather off no batched row gathered: the counter's control")
-                t |> equal(batch_rows_host_embedded() - h0, 2l * STEPS, "with the gather off the host embedded every batched row")
-                t |> equal(vk_rdec_nrow_side_gathered() - side0, 0l, "with the gather off no side row gathered off an id: the side-rows cell's control")
-                t |> equal(long_length(dev), long_length(host), "both loads stepped every row")
-                for (i in range64(min(long_length(dev), long_length(host)))) {
-                    let diff = logits_maxdiff(dev[i], host[i])
-                    log_logits_pair(tr, "step {i / 2l}, row {i % 2l}: the gathered row against the host row", dev[i], host[i], diff)
-                    t |> equal(diff, 0.0, "step {i / 2l}, row {i % 2l}: the gathered rows' logits bit for bit the host rows' (maxdiff {diff})")
+            with_gpu_resident_embed(1) {
+                with_regions_rig(t, file) $(tr) {
+                    let g0 = vk_rdec_nrow_embed_gathered()
+                    let h0 = batch_rows_host_embedded()
+                    delete dev
+                    dev <- batched_rows_logits(t, tr)
+                    t |> equal(vk_rdec_nrow_embed_gathered() - g0, 2l * STEPS, "every batched row's token row gathered off its id")
+                    t |> equal(batch_rows_host_embedded() - h0, 0l, "the host embedded no batched row")
                 }
             }
-            set_gpu_resident_embed(pin)
+            with_gpu_resident_embed(0) {
+                with_regions_rig(t, file) $(tr) {
+                    let g0 = vk_rdec_nrow_embed_gathered()
+                    let h0 = batch_rows_host_embedded()
+                    let side0 = vk_rdec_nrow_side_gathered()
+                    delete host
+                    host <- batched_rows_logits(t, tr)
+                    t |> equal(vk_rdec_nrow_embed_gathered() - g0, 0l, "with the gather off no batched row gathered: the counter's control")
+                    t |> equal(batch_rows_host_embedded() - h0, 2l * STEPS, "with the gather off the host embedded every batched row")
+                    t |> equal(vk_rdec_nrow_side_gathered() - side0, 0l, "with the gather off no side row gathered off an id: the side-rows cell's control")
+                    t |> equal(long_length(dev), long_length(host), "both loads stepped every row")
+                    for (i in range64(min(long_length(dev), long_length(host)))) {
+                        let diff = logits_maxdiff(dev[i], host[i])
+                        log_logits_pair(tr, "step {i / 2l}, row {i % 2l}: the gathered row against the host row", dev[i], host[i], diff)
+                        t |> equal(diff, 0.0, "step {i / 2l}, row {i % 2l}: the gathered rows' logits bit for bit the host rows' (maxdiff {diff})")
+                    }
+                }
+            }
             delete dev
             delete host
         } else {

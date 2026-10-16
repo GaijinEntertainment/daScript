@@ -651,15 +651,16 @@ def private probe_batch_decline(t : Model; var ws : BatchWorkspace; var sessions
 [unused_argument(t, s, npos, start_pos)]
 def private probe_gather_gate(t : Model; s : Session; npos, start_pos : int64) : bool => g_probe_gather
 
-//! the probe override registered and selected for `body`, the selection put back as found
+//! the probe override registered and selected for `body`, then the selection put back as found and the probe unregistered
 def private with_decline_probe(body : block<() : void>) {
+    let prev = active_decode_override()
     register_decode_override(DECLINE_PROBE, @@probe_decode)
     register_batch_decode_override(DECLINE_PROBE, @@probe_batch_decline)
     register_embed_batch_gate(DECLINE_PROBE, @@probe_gather_gate)
-    let prev = active_decode_override()
     select_decode_override(DECLINE_PROBE)
     invoke(body)
     select_decode_override(prev)
+    unregister_decode_override(DECLINE_PROBE)
 }
 
 //! two sessions over prompts a and b, then `steps` batched greedy steps: the last step's logits, both rows

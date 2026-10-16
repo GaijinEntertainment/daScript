@@ -43,6 +43,30 @@ def with_metal_attn_d(on : bool; body : block<void>) {
     }
 }
 
+//! the overrides a Metal cell selects and the prefill's npos floor it lowers, as the process held them before the cell's first
+//! write: `metal_overrides_seat` reads them, `restore_metal_overrides` puts them back
+struct MetalOverridesSeat {
+    prefill : string
+    decode : string
+    min_npos : int64
+}
+
+def metal_overrides_seat() : MetalOverridesSeat {
+    var seat = MetalOverridesSeat(prefill = active_prefill_override(), decode = active_decode_override())
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        seat.min_npos = get_metal_prefill_min_npos()
+    }
+    return seat
+}
+
+def restore_metal_overrides(seat : MetalOverridesSeat) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        set_metal_prefill_min_npos(seat.min_npos)
+    }
+    select_decode_override(seat.decode)
+    select_prefill_override(seat.prefill)
+}
+
 //! the blob-flavor twin of a model file, its context capped: what every Metal parity and serving
 //! cell loads as the device arm
 def blob_twin(t : T?; path : string; seq_cap : int64) : Model {
