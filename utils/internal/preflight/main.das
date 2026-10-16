@@ -35,7 +35,7 @@ require compile_db
 
 [CommandLineArgs]
 struct Config {
-    @clarg_doc = "Run the fast tier and then every lane at once (docs, tests-cpp, interp/JIT/AOT suites, utils tests); module gates need --only"
+    @clarg_doc = "Fast tier, then the lanes: run-only at once, building in turn; modules: --only"
     full : bool
 
     @clarg_doc = "Lanes run serially instead of concurrently (diagnosis; the wall becomes the sum)"
@@ -1612,6 +1612,7 @@ struct GateInfo {
     tier : string
     doc : string
     reach : array<string>
+    builds : bool = false   //! runs `cmake --build` in the shared build dir - two at once collide
 }
 
 def gate_table() : array<GateInfo> {
@@ -1631,14 +1632,26 @@ def gate_table() : array<GateInfo> {
         GateInfo(name = "ci-das", tier = "fast", doc = "compile-only sweep of CI-only das surface (ci_only_das.txt)"),
         GateInfo(name = "ci-matrix", tier = "fast", doc = "python3 ci/test_ci_matrix.py - the CI job matrices per event and the extended_checks role conditions (mirrors CI's core-role step)", reach <- [".github/", "ci/"]),
         GateInfo(name = "compile-sweep", tier = "fast", doc = "compile-only of every program root under utils/, examples/, tutorials/ and the modules' examples and utils, in parallel (the per-PR form of CI's examples and tutorial runs)"),
-        GateInfo(name = "docs", tier = "lane", doc = "the seven doc.yml gates (das2rst, imgui2rst, vulkan2rst, stubs, uncategorized, docs/untracked, sphinx html)", reach <- ["doc/", "daslib/", "src/builtin/", "modules/dasImgui/", "modules/dasVulkan/", "modules/dasLLAMA/dasllama/"]),
+        GateInfo(name = "docs", tier = "lane", builds = true,
+            doc = "the seven doc.yml gates (das2rst, imgui2rst, vulkan2rst, stubs, " +
+                "uncategorized, docs/untracked, sphinx html)",
+            reach <- ["doc/", "daslib/", "src/builtin/", "modules/dasImgui/", "modules/dasVulkan/",
+                "modules/dasLLAMA/dasllama/"]),
         GateInfo(name = "tests-cpp", tier = "lane", doc = "ctest -L small"),
         GateInfo(name = "tests-interp", tier = "lane", doc = "full interpreter suite"),
         GateInfo(name = "tests-jit", tier = "lane", doc = "full JIT suite (skips when dasLLVM absent)"),
-        GateInfo(name = "tests-aot", tier = "lane", doc = "build test_aot + full AOT suite (per-PR CI compiles only the subset; the sweep is nightly's)"),
-        GateInfo(name = "utils-tests", tier = "lane", doc = "run_utils_tests - every utils/*/tests suite (mirrors CI's extended_checks step)", reach <- ["utils/"]),
-        GateInfo(name = "sequence", tier = "module", doc = "sequence game release smoke; nightly CI - run it when working on the game", reach <- ["examples/games/sequence/"]),
-        GateInfo(name = "imgui", tier = "module", doc = "dasImgui playwright suite; nightly CI - run it when working on dasImgui", reach <- ["modules/dasImgui/", "modules/dasGlfw/", "modules/dasClipboard/"]),
+        GateInfo(name = "tests-aot", tier = "lane", builds = true,
+            doc = "build test_aot + full AOT suite (per-PR CI compiles only the subset; " +
+                "the sweep is nightly's)"),
+        GateInfo(name = "utils-tests", tier = "lane", builds = true,
+            doc = "run_utils_tests - every utils/*/tests suite (mirrors CI's extended_checks step)",
+            reach <- ["utils/"]),
+        GateInfo(name = "sequence", tier = "module", builds = true,
+            doc = "sequence game release smoke; nightly CI - run it when working on the game",
+            reach <- ["examples/games/sequence/"]),
+        GateInfo(name = "imgui", tier = "module", builds = true,
+            doc = "dasImgui playwright suite; nightly CI - run it when working on dasImgui",
+            reach <- ["modules/dasImgui/", "modules/dasGlfw/", "modules/dasClipboard/"]),
         GateInfo(name = "dasllama-model-free", tier = "module", doc = "dasLLAMA model-free suite via tests/run.das - the module's every-change gate (run.das -- --changed while working)", reach <- ["modules/dasLLAMA/"]),
         GateInfo(name = "dasllama-stocked", tier = "module", doc = "dasLLAMA stocked suite - every model-gated file; a PR's run on a box with models is run.das -- --changed, which has no lane", reach <- ["modules/dasLLAMA/"])
     ]
@@ -1663,11 +1676,18 @@ def want_gate(cfg : Config; info : GateInfo) : bool {
 
 //! one lane = one child preflight running `--only <gate>` with the parent's settings; every lane at once
 //! (one thread per child), so the wall is the longest lane. The child's own verdict lines are the result.
+//! the lanes that build in the shared build dir, in table order
+def private building_gates() => <- [for (g in gate_table()); g.name; where g.builds]
+
+//! lanes as children: a run-only lane a child each, at once; the
+//! building ones one child, in turn
 def private run_lanes(ctx : PreflightCtx; cfg : Config; names : array<string>) : array<GateResult> {
+    let groups <- lane_groups(names, building_gates())
     var argvs : array<array<string>>
-    argvs |> reserve(length(names))
-    for (name in names) {
-        var inscope av <- [ctx.daslang, "utils/internal/preflight/main.das", "--", "--only", name, "--base", cfg.base,
+    argvs |> reserve(length(groups))
+    for (group in groups) {
+        var inscope av <- [ctx.daslang, "utils/internal/preflight/main.das", "--",
+                   "--only", join(group, ","), "--base", cfg.base,
                    "--daslang", ctx.daslang, "--build-dir", cfg.build_dir]
         if (cfg.jobs > 0) {
             av |> push("-j")
@@ -1693,7 +1713,8 @@ def private run_lanes(ctx : PreflightCtx; cfg : Config; names : array<string>) :
     let children <- run_chunk_workers(argvs)
     var results : array<GateResult>
     results |> reserve(length(names) + 8)   // the docs lane reports its seven gates
-    for (name, child in names, children) {
+    for (group, child in groups, children) {
+        let name = join(group, ",")
         var inscope reports <- parse_gate_reports(child.stdout)
         if (empty(reports)) {
             results |> emplace(GateResult(name = name, status = GateStatus.Fail,
@@ -1927,7 +1948,16 @@ def main() : int { // nolint:STYLE037,STYLE038 — the gate loop + CLI surface; 
                 results |> emplace(r)
             }
         } else {
-            to_log(LOG_INFO, "[RUN ] lanes, concurrently: {join(lanes, ", ")}\n")
+            var at_once, in_turn : array<string>
+            for (group in lane_groups(lanes, building_gates())) {
+                if (length(group) == 1) {
+                    at_once |> push(group[0])
+                } else {
+                    in_turn |> push_from(group)
+                }
+            }
+            let turn = empty(in_turn) ? "" : "; building in turn beside them: {join(in_turn, ", ")}"
+            to_log(LOG_INFO, "[RUN ] lanes at once: {join(at_once, ", ")}{turn}\n")
             let lane_results <- run_lanes(ctx, cfg, lanes)
             for (r in lane_results) {
                 report_gate(r, cfg.verbose)
