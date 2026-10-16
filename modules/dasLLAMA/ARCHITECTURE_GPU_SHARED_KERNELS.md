@@ -88,8 +88,8 @@ w13 combines and every Vulkan act class call it, the gelu its clamped tanh form.
   `rsqrt`, and a decode parity cell reads the two apart only past the bars it holds; a shared row template therefore carries
   the spelling as its `RSQRT` constant (`GkWgReduce.wg_rms_inv_into`, `GkDnGate`) and no body picks one for both homes.
 - **The gemma-4 MoE step sums the routed rows with the routed combine's own sum** (`GkMoeCombine.slot_sum_into`): `GkMoeCombG4`
-  derives `GkMoeCombine`, which derives `GkQ8BlockStore` for the step's Q8_0 out, so every combine stamp carries the reduce
-  slab it does not read.
+  derives `GkMoeCombine`, which derives `GkQ8BlockStore` for the step's Q8_0 out; the `@workgroup` slab the store declares
+  sits on every combine stamp's class, read by the Q8_0 out alone.
 - **The routed sum keeps four slots' loads in flight off the window** (`GkMoeCombine.SLOT_X4`, the sum's order unchanged): the
   M5's decode combine reads 1.33 against 1.81 us at dim 2048 k 8 (the gated one 1.45 against 2.01) and the gemma-4 step 12.3
   against 13.3 us, while the gemma-4 window stamp (`MetalMoeCombG4Pf`) reads 8% slower with it (133 against 122.5 us at 512
