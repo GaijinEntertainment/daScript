@@ -38,6 +38,20 @@ what it costs today and what the fix would change.
     (`test_gpu_resident_gemma4_e2b_ple_planes`, arms `g4e-kq-ple-q6k`, `g4e-kq-ple-q50`) read 0.86 and 0.71 at the prompt
     (bar 4.17), 0.59-1.54 and 0.43-0.87 over the steps (bars 2.92-3.97). Every argmax agrees but ple-Q6_K's step 4, a near
     tie the cell's tie bar admits (the CPU's ' river' 19.61 against the device's ' miller' 19.59). Pod.
+  - Qwen2.5-0.5B IQ4_NL-pure (`-local`), the per-op FFN rail's per-32 carrier on Vulkan, its table and classifier per-32
+    too (`test_gpu_resident_format_census`, arm `vk-perop-ffn`): 0.08 of each row's max |logit|, moved from the llama
+    carriers' 0.06. Reads 0.44-0.73 over the prompt and six steps (bars 0.86-1.57, max logits 10.7-19.6), every argmax
+    agreeing but step 4's near tie (10.70 against 10.79); the one-step-off control 7.4 and past. Pod.
+  - gemma-4-26B-A4B MXFP4_MOE (`-MXFP4_MOE-q4km-local`) on Vulkan, 150 prose ids prefilled and 150 teacher-forced
+    (`test_gpu_resident_gemma4_26b_mx4_ppl`, arm `mx26`): `GEMMA_MOE_PPL_RATIO` 2.0 on the perplexity, and the argmax hits
+    held within 12 of the CPU chain's (`GEMMA4_26B_MX4_HITS_SLACK`). Reads 4.25 against the CPU chain's 3.14 (1.35x), hits
+    128 against 136; the one-position-off control's hits 2. Pod.
+  - gemma-4-26B-A4B UD-IQ3_XXS under an 8000 MB plan room, the first routed layers' experts on the host
+    (`test_gpu_resident_gemma4_26b_host_experts`, arm `host26`): `GEMMA_MOE_PPL_RATIO` 2.0, hits within 12
+    (`GEMMA4_26B_HITS_SLACK`). Reads 3.00 against 4.02 (0.75x), hits 129 against 130; the control's hits 2. Pod.
+  - gemma-4-E4B Q8_0 under a tq4 mirror (`test_gpu_resident_gemma4_e4b_block_codecs`, arm `g4f-codec`): `GEMMA_PPL_RATIO`
+    1.05, hits within 3 (`ppl_compare`'s default). Reads 1.076 against 1.064 (1.011x), hits 148 against 148; the control's
+    hits 0. Its q8_0 forced feed reads 0.53-1.57 against bars 4.11-4.65 at `GEMMA_LOGIT_BAR_REL`. Pod.
   - gemma-3-12b Q4_K_M on Metal (`test_metal_support_matrix`, row `gemma3-12b/k4/f16`, arm `fam-gemma3`): the overrides'
     greedy generate held to the CPU chain token for token, eight tokens after the 30-number count prompt. Reads every
     token equal. M5.
