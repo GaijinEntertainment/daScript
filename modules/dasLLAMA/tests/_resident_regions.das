@@ -561,6 +561,7 @@ struct LongCtx {
     split_cut : int64
     bar : LogitsBar = LogitsBar.bit_exact
     streams_bar : LogitsBar = LogitsBar.bit_exact   //! the streams cell's: past the wide position the one-row command's wide twin and the N-row command's split pieces sum the keys in another order, so a carrier bit for bit at short prompts holds the split bar there
+    streams_rel : float = 0.0   //! > 0: the streams cell's bar, as a share of the max logit, in place of `streams_bar`'s - a carrier whose reading the file states
 }
 
 def private long_load(lc : LongCtx; ring : int = -1) : RegionsLoad => RegionsLoad(regions = lc.regions, ctx = lc.ctx, host_ctx = lc.ctx, ring = ring)
@@ -727,7 +728,12 @@ def cell_long_streams(t : T?; file : string; lc : LongCtx) {
                     eval_batch(tr, ws, rows, toks)
                     delete toks
                     for (i in range64(n)) {
-                        hold_bar(t, tr, owned[i].logits, alone[i][st + 1l], alone[i][st], streams_bar, "batched step {st}, stream {i} at {at[i] + st} positions")
+                        let what = "batched step {st}, stream {i} at {at[i] + st} positions"
+                        if (lc.streams_rel > 0.0) {
+                            hold_within(t, tr, owned[i].logits, alone[i][st + 1l], alone[i][st], what, lc.streams_rel)
+                        } else {
+                            hold_bar(t, tr, owned[i].logits, alone[i][st + 1l], alone[i][st], streams_bar, what)
+                        }
                     }
                 }
             }
