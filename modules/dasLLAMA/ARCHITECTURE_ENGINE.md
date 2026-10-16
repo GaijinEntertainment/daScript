@@ -145,7 +145,7 @@ the module declares every such buffer `@exact_size` and sizes it through a reser
 - **`dasllama_chat.das`** - conversation turns and chat-template application. Per-arch template
   *content* is registered by the arch file (`ARCHITECTURE_ENGINE.md#architecture-registrations`), not written here.
 - **`dasllama_par.das`** - `maybe_parallel_for` plus the dispatch counters its arms call at RUN
-  time, so the module AOTs, and the single-thread gate those arms read (`set_single_thread_`, `ARCHITECTURE_RUNTIME.md#single-thread`). Threading policy (job counts, thresholds) belongs to the caller.
+  time, so the module AOTs, and the single-thread gate those arms read (`set_single_thread_`, `ARCHITECTURE_RUNTIME_JOBQUE.md#single-thread`). Threading policy (job counts, thresholds) belongs to the caller.
 - **`dasllama_boot_restore.das`** - the `[boot_restore]` function annotation: on a module's
   empty `[init]` function it writes the boot-restore guard of every global the module initializes
   `= @@fn`, so the restore list cannot miss a seat; `dasllama_gpu_tier.das` restores its seats

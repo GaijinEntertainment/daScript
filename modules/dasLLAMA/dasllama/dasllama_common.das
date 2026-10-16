@@ -2102,7 +2102,7 @@ def apply_box_profile_runtime_checked(path : string; box_fallback : bool = false
     }
 }
 
-[arch(at="../ARCHITECTURE_RUNTIME.md#hybrid-pool-policy")]
+[arch(at="../ARCHITECTURE_RUNTIME_JOBQUE.md#hybrid-pool-policy")]
 def apply_box_profile_runtime_at(ppath : string) {   // nolint:STYLE038 — a flat knob catalog; a split would invent seams
     let text = fread(ppath)
     if (empty(text)) return

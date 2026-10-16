@@ -195,7 +195,7 @@ def test_gemv_lane_cap_zero_refused_on_hybrid(t : T?) {
     restore_defaults()
 }
 
-[test, arch(at="../ARCHITECTURE_RUNTIME.md#hybrid-pool-policy")]
+[test, arch(at="../ARCHITECTURE_RUNTIME_JOBQUE.md#hybrid-pool-policy")]
 def test_slow_tier_kind_contract(t : T?) {
     if (is_slow_tier_compute()) {
         t |> success(get_total_perf_cores() > 0, "compute slow tier implies known perf-core topology")
