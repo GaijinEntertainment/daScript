@@ -2,8 +2,8 @@
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
 docs: `ARCHITECTURE.md`, `ARCHITECTURE_ENGINE.md`, `ARCHITECTURE_ENGINE_SERVING.md`,
-`ARCHITECTURE_ENGINE_FORMATS.md`, `ARCHITECTURE_GPU.md`, `ARCHITECTURE_MEDIA.md`,
-`ARCHITECTURE_TTS.md`, `ARCHITECTURE_POCKET.md`. Planned work: `followup_general.md`,
+`ARCHITECTURE_ENGINE_FORMATS.md`, `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_SHARED_KERNELS.md`,
+`ARCHITECTURE_MEDIA.md`, `ARCHITECTURE_TTS.md`, `ARCHITECTURE_POCKET.md`. Planned work: `followup_general.md`,
 `followup_vulkan.md` for Vulkan, `followup_metal.md` for Metal.
 
 A charter line is the one line saying what a file under `dasllama/` holds: in
@@ -65,9 +65,11 @@ function moves the chain with it.**
 **A kernel-side helper - a free `def` outside any class that a kernel body calls - that one
 backend's kernels splice lands in that backend's kernel file (`dasllama/dasllama_metal_kernels.das`,
 `dasllama/dasllama_vulkan_classes.das`); one that both backends' kernels splice and that reads no
-codebook table lands in `dasllama/dasllama_gpu_math.das`, never as a copy per home, and in
-`dasllama/dasllama_gpu_kernels_common.das` where it carries `[spirv_inline]`; a method of a
-class template both homes stamp lands with its template.**
+codebook table lands once, never as a copy per backend: in
+`dasllama/dasllama_gpu_kernels_common.das` when it carries `[spirv_inline]`, in
+`dasllama/dasllama_gpu_math.das` otherwise.**
+
+**A method of a class template both backends stamp lands with its template.**
 
 **A disk-order -> compute-order transform lands by its consumer: a transform into the layout
 the CPU kernels read row by row in `dasllama/dasllama_repack.das`, a transform into the layout a
