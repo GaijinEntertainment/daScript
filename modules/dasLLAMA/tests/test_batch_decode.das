@@ -633,3 +633,166 @@ def test_batch_decode_tuned(t : T?) {
         delete tr
     }
 }
+
+let private DECLINE_PROBE = "batch-decline-probe"   //! a fake decode override whose batched step declines every call
+
+var private g_probe_batch_calls = 0l
+var private g_probe_gather = false   //! the probe's embed gate answer: the step gathers its rows itself
+
+[unused_argument(t, s, token, pos)]
+def private probe_decode(t : Model; var s : Session; token, pos : int64) : bool => false
+
+[unused_argument(t, ws, sessions, nrows)]
+def private probe_batch_decline(t : Model; var ws : BatchWorkspace; var sessions : array<Session?>; nrows : int64) : bool {
+    g_probe_batch_calls++
+    return false
+}
+
+[unused_argument(t, s, npos, start_pos)]
+def private probe_gather_gate(t : Model; s : Session; npos, start_pos : int64) : bool => g_probe_gather
+
+//! the probe override registered and selected for `body`, the selection put back as found
+def private with_decline_probe(body : block<() : void>) {
+    register_decode_override(DECLINE_PROBE, @@probe_decode)
+    register_batch_decode_override(DECLINE_PROBE, @@probe_batch_decline)
+    register_embed_batch_gate(DECLINE_PROBE, @@probe_gather_gate)
+    let prev = active_decode_override()
+    select_decode_override(DECLINE_PROBE)
+    invoke(body)
+    select_decode_override(prev)
+}
+
+//! two sessions over prompts a and b, then `steps` batched greedy steps: the last step's logits, both rows
+def private two_row_steps(tr : Model; steps : int64) : array<float> {
+    let c = tr.config
+    let vocab = c.vocab_size
+    var pa <- prompt_a()
+    var pb <- prompt_b()
+    var sa <- make_run_state(c)
+    var sb <- make_run_state(c)
+    eval_(tr, sa, pa)
+    eval_(tr, sb, pb)
+    var ws <- create_batch_workspace_(tr)
+    var both <- [unsafe(addr(sa)), unsafe(addr(sb))]
+    var toks <- [argmax_of(sa.logits, vocab), argmax_of(sb.logits, vocab)]
+    for (_st in range64(steps)) {
+        eval_batch_(tr, ws, both, toks)
+        toks[0] = argmax_of(sa.logits, vocab)
+        toks[1] = argmax_of(sb.logits, vocab)
+    }
+    var out <- [for (i in range64(2l * vocab)); i < vocab ? sa.logits[i] : sb.logits[i - vocab]]
+    both |> clear()   // borrowed handles
+    unsafe {
+        delete both
+    }
+    delete toks
+    delete ws
+    delete sa
+    delete sb
+    delete pa
+    delete pb
+    return <- out
+}
+
+//! one `verify_batch_groups` call over `groups` under the probe: it serves nothing, and reaches the override only where `reached`
+def private verify_decline(t : T?; tr : Model; var ws : BatchWorkspace; var groups : array<Session?>; pos, nr : array<int64>;
+                           reached : bool; what : string) {
+    var toks <- [5l, 6l, 7l, 8l]
+    let calls0 = g_probe_batch_calls
+    t |> success(!verify_batch_groups(tr, ws, groups, toks, pos, nr), "{what}: no verify served")
+    t |> equal(g_probe_batch_calls - calls0, reached ? 1l : 0l,
+        reached ? "{what}: the groups reach the override - the control" : "{what}: declined before the override")
+    groups |> clear()   // borrowed handles
+    delete toks
+}
+
+[test]
+def test_batch_decode_late_embed(t : T?) {
+    t |> run("a batch override that declines after its gather gate took the rows: the rows embed late, the CPU stack reads the plain step's logits (needs stories15M.bin)") @(t : T?) {
+        if (model_missing(t)) {
+            return
+        }
+        var tr <- load_checkpoint(MODEL_PATH)
+        quantize_weights(tr)
+        let prev_fused = get_fused_decode()
+        set_fused_decode(false)
+        with_dasllama_jobque_() {
+            var plain <- two_row_steps(tr, 3l)
+            with_decline_probe() {
+                for (gather in [true, false]) {
+                    g_probe_gather = gather
+                    let calls0 = g_probe_batch_calls
+                    let emb0 = batch_rows_host_embedded()
+                    var got <- two_row_steps(tr, 3l)
+                    t |> equal(g_probe_batch_calls - calls0, 3l, "gate {gather}: the override was asked every step and declined")
+                    t |> equal(batch_rows_host_embedded() - emb0, 6l, "gate {gather}: the host embedded every row once - late where the gate took them")
+                    t |> equal(logits_maxdiff(got, plain), 0.0, "gate {gather}: the CPU stack after the decline reads the plain batched step's logits bit for bit")
+                    delete got
+                }
+            }
+            g_probe_gather = false
+            delete plain
+        }
+        set_fused_decode(prev_fused)
+        delete tr
+    }
+}
+
+[test]
+def test_batch_decode_verify_declines(t : T?) {
+    t |> run("verify_batch_groups declines a group of no rows, a group past the context and groups on two codecs or pools before the override (needs stories15M.bin)") @(t : T?) {
+        if (model_missing(t)) {
+            return
+        }
+        var tr <- load_checkpoint(MODEL_PATH)
+        quantize_weights(tr)
+        let c = tr.config
+        let prev_fused = get_fused_decode()
+        set_fused_decode(false)
+        with_dasllama_jobque_() {
+            var pa <- prompt_a()
+            var pb <- prompt_b()
+            var sa <- make_run_state(c)
+            var sb <- make_run_state(c)
+            var s16 <- make_run_state(c, KVDtype.f16, KVDtype.f16)
+            var pool <- create_kv_pool_(c, 16l, KVDtype.f32, KVDtype.f32)
+            var sp <- make_run_state_paged(c, pool)
+            eval_(tr, sa, pa)
+            eval_(tr, sb, pb)
+            eval_(tr, s16, pb)
+            eval_(tr, sp, pb)
+            var ws <- create_batch_workspace_(tr)
+            with_decline_probe() {
+                g_probe_gather = false
+                var g1 <- [unsafe(addr(sa)), unsafe(addr(sb))]
+                verify_decline(t, tr, ws, g1, [sa.n_past, sb.n_past], [2l, 2l], true, "two groups of two rows each")
+                var g2 <- [unsafe(addr(sa)), unsafe(addr(sb))]
+                verify_decline(t, tr, ws, g2, [sa.n_past, sb.n_past], [2l, 0l], false, "a group of no rows")
+                var g3 <- [unsafe(addr(sa)), unsafe(addr(sb))]
+                verify_decline(t, tr, ws, g3, [sa.n_past, c.seq_len - 1l], [2l, 2l], false, "a group past the context")
+                var g4 <- [unsafe(addr(sa)), unsafe(addr(s16))]
+                verify_decline(t, tr, ws, g4, [sa.n_past, s16.n_past], [2l, 2l], false, "groups on two K/V codecs")
+                var g5 <- [unsafe(addr(sa)), unsafe(addr(sp))]
+                verify_decline(t, tr, ws, g5, [sa.n_past, sp.n_past], [2l, 2l], false, "a flat group beside a paged one")
+                unsafe {
+                    delete g1
+                    delete g2
+                    delete g3
+                    delete g4
+                    delete g5
+                }
+            }
+            delete ws
+            release_kv_pages_(sp)
+            delete sp
+            delete pool
+            delete s16
+            delete sa
+            delete sb
+            delete pa
+            delete pb
+        }
+        set_fused_decode(prev_fused)
+        delete tr
+    }
+}

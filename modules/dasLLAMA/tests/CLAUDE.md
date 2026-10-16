@@ -1762,7 +1762,11 @@ counted and each served alone, and an owner whose region holds fewer rows than i
 fallback's one `gap` pass. The recurrent cells (`recurrent_segments_cells`) run the segments cell, a 2-row tail under the conv
 taps beside a 31-row one, and the two 300-row tails on Qwen3.5-0.8B Q8_0, its NextN-headed twin (the carry a row a segment) and,
 large tier, Qwen3.6-35B-A3B-MTP IQ4_XS (the routed block over every row of the window), each asserting the driver's segmented
-window takes the model. The file never holds more live host-cached sessions than regions: a later
+window takes the model. The E-series cell (`test_gpu_resident_segments_gemma4_e2b`, family `gemma4e`: gemma-4-E2B Q8_0 at the
+gemma rig's bar) runs the segments cell and the two 300-row tails, then the host-embedded decline (`host_embedded_cell`): with the
+tier's token-table gate unseated (`unregister_embed_gpu_gate`, put back as found) the host embeds every row, the side rows have no
+ids to gather off, and two openings ride no segmented window - each its own window, its last row within the bar of the same
+opening prefilled alone with the gate back, the openings' segmented window in the segments cell the counter's control. The file never holds more live host-cached sessions than regions: a later
 prefill would take a live session's region, which the engine leaves to the scheduler's pin. Skips
 without the model or the armed tier, and on a card whose room the plan does not fit at two regions.
 `test_batch_decode.das` - stocked suite, `-jit` only: the CPU batched stack against the
@@ -1779,7 +1783,14 @@ batched layer's projection prologue, f16 KV at 1e-6; a cell whose bar is exact f
 batched greedy and holds the
 tokens, a cell whose bar concedes rounding feeds the reference's tokens and holds the logits, and
 every cell carries the cross-row control (row 0 against row 1's reference lands outside the bar);
-plus the batched bench row's refusal contract on SmolLM2.
+plus the batched bench row's refusal contract on SmolLM2. Two cells on stories15M run under a fake decode override whose
+batched step declines every call (`batch-decline-probe`, its embed batch gate registered beside it, the selection put back as
+found): `test_batch_decode_late_embed` - three batched steps over two sessions with the gate answering that the step gathers
+its rows and with it answering no, the override asked every step, every row embedded on the host once (late where the gate
+took it, `batch_rows_host_embedded`), and the last step's logits bit for bit the same steps with no override; and
+`test_batch_decode_verify_declines` - `verify_batch_groups` over two groups that reach the override (the control), then a
+group of no rows, a group past the context, groups on two K/V codecs and a flat group beside a paged one, each serving
+nothing and never asking the override.
 `test_metal_batched_row.das` is the row's Metal twin: with no whole-model driver homing a
 stream the row runs host-cached through the Metal batched driver - Llama-3.2-1B Q8, the
 E-series gemma-4-E2B Q8, the shared-expert Qwen1.5-MoE-A2.7B Q8 (large-tier), the deltanet
