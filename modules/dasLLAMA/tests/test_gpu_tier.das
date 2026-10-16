@@ -17,6 +17,8 @@ require dasllama/dasllama_config
 require dasllama/dasllama_kv_dtype   // KVDtype: the mirror codec crosses the seam as its ordinal
 require dasllama/dasllama_env   // g_env_gpu: an exported DASLLAMA_GPU answers gpu_want_auto ahead of the want state
 require dasllama/dasllama_common   // segs_served_by_override, the prefill override registry
+require strings
+require _child_run   // the override announces print through to_log and DASLLAMA_METAL_FUSE is read at context init
 
 // ===== rdec doubles: record what arrives, answer distinctively =====
 
@@ -654,5 +656,114 @@ def test_gpu_said_once(t : T?) {
         t |> success(gpu_said_once(said, LOG_INFO, "the test's prefix - ", "a reason"), "a cleared set (an arm) says the reason again")
         t |> equal(length(said), 1, "... and records it again")
         delete said
+    }
+}
+
+//! an unset seat with no CPU form panics naming the module that installs it
+[test]
+def test_unset_seats_name_their_module(t : T?) {
+    t |> run("the N-row token command and the per-layer planes, unset, panic naming dasllama/dasllama_math_vulkan") @(t : T?) {
+        let token_why = panic_text() $ {
+            var picks : array<int64>
+            rdec_token_n(default<array<float>>, default<array<float>>, default<array<float>>, false, default<array<int64>>,
+                default<array<int64>>, default<array<int64>>, default<array<int64>>, 2l, default<array<float?>>, picks)
+        }
+        t |> success(find(token_why, "require dasllama/dasllama_math_vulkan") >= 0, "the N-row token command names the module: {token_why}")
+        let ple_why = panic_text() $ {
+            rdec_set_ple_layer(0l, 0l, 0l, 0, 0)
+        }
+        t |> success(find(ple_why, "require dasllama/dasllama_math_vulkan") >= 0, "the per-layer planes name the module: {ple_why}")
+    }
+}
+
+//! the lines `out` holds between the `CASE <name>` record and the next one ("" where the child ran no such case)
+def private case_lines(out, name : string) : string {
+    let mark = "CASE {name}\n"
+    let at = find(out, mark)
+    return "" if (at < 0)
+    let from = at + length(mark)
+    let next = find(out, "CASE ", from)
+    return slice(out, from, next < 0 ? length(out) : next)
+}
+
+def private count_in(haystack, needle : string) : int {
+    var n = 0
+    var at = find(haystack, needle)
+    while (at >= 0) {
+        n++
+        at = find(haystack, needle, at + length(needle))
+    }
+    return n
+}
+
+let private RING_ON = "dasLLAMA: probe home - the sliding layers' K/V rows ride rings of the probe's rows (set_gpu_kv_ring, DASLLAMA_GPU_KV_RING=0 keeps every row)"
+let private RING_OFF = "dasLLAMA: probe home - the sliding layers' K/V rows keep every position's row, no ring, as asked (set_gpu_kv_ring, DASLLAMA_GPU_KV_RING=0)"
+let private METAL_RING_ON = "dasLLAMA: metal decode - the sliding layers' K/V rows ride rings of their window plus the rows the longest window"
+let private METAL_RING_OFF = "dasLLAMA: metal decode - the sliding layers' K/V rows keep every position's row, no ring, as asked (set_gpu_kv_ring, DASLLAMA_GPU_KV_RING=0)"
+let private EMBED_OFF = "dasLLAMA: resident driver - the host embeds every token row as asked (set_gpu_resident_embed, DASLLAMA_VK_GPU_EMBED=0)"
+let private GATHER_TAIL = " for the prefill window, the one-row step, the N-row command and the NextN draft and verify (set_gpu_resident_embed, DASLLAMA_VK_GPU_EMBED=0 keeps the host embed)"
+let private GATHER_OFF = "dasLLAMA metal batch decode: the batched rows take the rows the host embeds, not the device gather off their ids, as asked (set_metal_batch_gather)"
+let private G4_UNFUSED = "dasLLAMA metal decode: the gemma-4 MoE tail runs its unfused chain, not the one-step form, as asked (set_metal_moe_g4_unfused)"
+let private FUSE_OFF = "dasLLAMA metal decode: every decode sandwich seam runs the split chain (the branch's post norm, the add, the next norm) on the one-row step and every batched row step, as asked (set_metal_decode_fuse, DASLLAMA_METAL_FUSE=0)"
+
+//! the announce root under `fuse` for DASLLAMA_METAL_FUSE ("" unset), at the info floor the ringed and gather lines print at
+def private announce_child(t : T?; fuse : string) : string {
+    var out : string
+    let rc = run_child(child_cmd("_override_announce_root.das", [(name = "DASLLAMA_METAL_FUSE", value = fuse), (name = "DAS_LOG_LEVEL", value = "info")]), out)
+    t |> equal(rc, 0, "the announce root ran (DASLLAMA_METAL_FUSE='{fuse}'):\n{out}")
+    t |> success(find(out, "ROOT_DONE") >= 0, "the announce root reached its end:\n{out}")
+    return out
+}
+
+//! every override the GPU homes announce prints its line where it takes effect, naming the setter and the env spelling, and
+//! prints nothing where it does not
+[test]
+def test_override_announces(t : T?) {
+    let out = announce_child(t, "")
+    t |> run("the sliding layers' rings announce both states, and a model with no sliding layer says nothing") @(t : T?) {
+        t |> success(find(case_lines(out, "ring_on"), RING_ON) >= 0, "the ringed line:\n{case_lines(out, "ring_on")}")
+        t |> success(find(case_lines(out, "ring_on"), RING_OFF) < 0, "... and no flat line beside it")
+        t |> success(find(case_lines(out, "ring_off"), RING_OFF) >= 0, "the flat line under the pin:\n{case_lines(out, "ring_off")}")
+        t |> success(find(case_lines(out, "ring_off"), RING_ON) < 0, "... and no ringed line beside it")
+        t |> success(find(case_lines(out, "ring_none"), "sliding layers") < 0, "no sliding layer, no line in either state:\n{case_lines(out, "ring_none")}")
+    }
+    t |> run("the host embed announces under the pin where the ids seat would gather, and the device gather names every token command") @(t : T?) {
+        t |> success(find(case_lines(out, "embed_pinned_off"), EMBED_OFF) >= 0, "the pinned host embed:\n{case_lines(out, "embed_pinned_off")}")
+        t |> success(find(case_lines(out, "embed_pinned_off_no_seat"), EMBED_OFF) < 0, "no ids seat, no line")
+        t |> success(find(case_lines(out, "embed_pinned_off_hc"), EMBED_OFF) < 0, "a hyper-connection model, no line")
+        t |> success(find(case_lines(out, "embed_on"), EMBED_OFF) < 0, "the gather on, no line")
+        let lines = case_lines(out, "embed_gather_lines")
+        t |> success(find(lines, "the token rows gather on the device off the table's exact f32 rows{GATHER_TAIL}") >= 0, "the f32 rows' line:\n{lines}")
+        t |> success(find(lines, "the token rows gather on the device off the table's own Q4_1 plane{GATHER_TAIL}") >= 0, "the plane's line:\n{lines}")
+    }
+    let metal = find(out, "CASE metal_gather_off") >= 0
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        t |> success(metal, "a das_metal build runs the Metal cases")
+    } else {
+        t |> success(!metal, "a build without das_metal runs no Metal case")
+    }
+    return if (!metal)
+    t |> run("the Metal ring announces once a layout, ringed and flat") @(t : T?) {
+        t |> equal(count_in(case_lines(out, "metal_ring_twice"), METAL_RING_ON), 1, "two reads of one layout, one ringed line:\n{case_lines(out, "metal_ring_twice")}")
+        t |> equal(count_in(case_lines(out, "metal_ring_flat"), METAL_RING_OFF), 1, "the flat layout's line:\n{case_lines(out, "metal_ring_flat")}")
+    }
+    t |> run("the batch gather and the gemma-4 MoE tail pins announce their off state alone") @(t : T?) {
+        t |> success(find(case_lines(out, "metal_gather_off"), GATHER_OFF) >= 0, "the gather off:\n{case_lines(out, "metal_gather_off")}")
+        t |> success(find(case_lines(out, "metal_gather_on"), GATHER_OFF) < 0, "the gather back on, no line")
+        t |> success(find(case_lines(out, "metal_g4_unfused"), G4_UNFUSED) >= 0, "the unfused tail:\n{case_lines(out, "metal_g4_unfused")}")
+        t |> success(find(case_lines(out, "metal_g4_fused"), G4_UNFUSED) < 0, "the pin put back, no line")
+    }
+    t |> run("the fuse knob announces once a state: unset, the setter's off says it once and an off after an on again") @(t : T?) {
+        t |> equal(count_in(out, FUSE_OFF), 2, "two off states, two lines:\n{out}")
+        t |> equal(count_in(case_lines(out, "metal_fuse_restore"), FUSE_OFF), 0, "restoring the default on says nothing")
+        t |> equal(count_in(case_lines(out, "metal_fuse_off"), FUSE_OFF), 1, "two offs, one line")
+        t |> equal(count_in(case_lines(out, "metal_fuse_on_off"), FUSE_OFF), 1, "on then off, one line")
+    }
+    let off = announce_child(t, "0")
+    t |> run("DASLLAMA_METAL_FUSE=0 announces at context init, and the setter's restore and second off say nothing more") @(t : T?) {
+        t |> equal(count_in(off, FUSE_OFF), 2, "the init's line and the off after an on:\n{off}")
+        t |> equal(count_in(case_lines(off, "metal_fuse_restore"), FUSE_OFF), 0, "the restore to the knob's off says nothing")
+        t |> equal(count_in(case_lines(off, "metal_fuse_off"), FUSE_OFF), 0, "the setter's off, already said, says nothing")
+        t |> equal(count_in(case_lines(off, "metal_fuse_on_off"), FUSE_OFF), 1, "on then off says it again")
     }
 }

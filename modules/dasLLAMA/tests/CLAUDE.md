@@ -1383,7 +1383,12 @@ reinstall, and the seat unset again at the cell's end so the process reads it as
 second subtest the norms plane's head block - past the trunk's q/k rows and its own q/k slot, never
 on the final norm's row) and the same-slab verify seat (`test_rdec_verify_seat`: the rows, their ids (and a call's empty ids),
 the position, the pick ask and every landing forwarded, the picks and hidden rows landed under the ask
-and the logits left alone).
+and the logits left alone); the unset N-row token command and per-layer planes panicking with the module to require
+(`test_unset_seats_name_their_module`); and the overrides' announces (`test_override_announces`: two children on
+`_override_announce_root.das` through `_child_run.das`, unset and under `DASLLAMA_METAL_FUSE=0`, each case's lines read between
+its `CASE` records - the sliding layers' rings ringed, flat and silent on a model with none, on Metal once a layout; the pinned
+host embed only where the ids seat would gather; both device-gather lines; the Metal batch gather, gemma-4 MoE tail and fuse
+pins, the fuse line once a state, the knob's at context init).
 `test_gpu_serving_declines.das` - model-free: the whole-model driver's decline reasons decided
 from a Config or a synthetic Model shell (`resident_unserved_features`,
 `attn_chain_unserved_features`, `resident_layer_decline`) - every unserved feature and layer
