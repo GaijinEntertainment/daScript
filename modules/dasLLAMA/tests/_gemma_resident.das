@@ -164,7 +164,7 @@ def gemma_format_cell(t : T?; gf : GemmaFile; mx4 : bool) {
 //! chain reads 19.14, and the reference build's quantized CPU path reads 17.8 to 20.1 by its attention form and batching, each
 //! chain summing as far from the f32 rows - and adds that the device sits no further from that chain than the CPU q8 chain
 //! (`f32_chain_witness`)
-[cold_path]
+[cold_path, arch(at="../ARCHITECTURE_MEASUREMENT_FORCED_FEED.md#reference-forced-feed")]
 def gemma_forced_feed(t : T?; n : int64; gf : GemmaFile; exact : bool = false) {
     with_gemma_rig(t, gf) $(tr) {
         var inscope feed <- prose_feed(tr, n, 8l)

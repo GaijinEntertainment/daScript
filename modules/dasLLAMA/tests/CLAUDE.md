@@ -2201,7 +2201,8 @@ rows off it against the CPU chain, the format's gather leaf counted (`<fmt>_emb_
 other format's leaf unmoved - on the Q8_0 file every one, the leaves' control.
 Arm `g4e-kq` (`test_gpu_resident_gemma4_e2b_ple_planes`): the E2B Q4_K_M (the per-layer gate and projection planes F32 on disk,
 read as the file's f32 rows; the feed held against the file's f32 chain with the same-or-better witness, `gemma_forced_feed`'s `exact` form,
-since its CPU q8 chain reads one step's top logit 1.3-2.4 under the f32 chain, the reference build and the device), Q4_0 (the
+since its CPU q8 chain reads one step's top logit 1.3-2.4 under the f32 chain, the reference build and the device; the reference's
+recipe and readings: `../ARCHITECTURE_MEASUREMENT_FORCED_FEED.md#reference-forced-feed`), Q4_0 (the
 planes Q4_0, arm `g4e-kq-q40`) and the ple-Q6_K / ple-Q5_0 mints (arms `g4e-kq-ple-q6k` / `g4e-kq-ple-q50`) in the forced feed, the
 planes' tags asserted against the disk type and the format's decode GEMV counted over the fed steps (`kq_gemv_q40`, `kq_gemv_k6`,
 `q5032_gemv`, the one-row and N-column leaves summed); the Q8_0 file (arm `g4e-kq-q8`) dispatches none of the three, their
