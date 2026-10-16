@@ -14,6 +14,7 @@ require ?das_metal dasllama/dasllama_metal_decode   // metal_decode_shutdown
 require ?das_metal dasllama/dasllama_metal_prefill   // the metal prefill override + shutdown
 require ?das_metal metal/das_metal_boost   // metal_live_object_count - the leak gate
 require ?vulkan dasllama/dasllama_vulkan_mtp_gemma   // the subject's Vulkan half: one draft step on the resident driver
+require dasllama/dasllama_gpu_resident   // nolint:STYLE030,LINT019 — moe_gpu_resident_prefills, read in the vulkan half: the window witness's re-upload
 require daslib/jobque_boost
 require daslib/fio
 require math
@@ -429,8 +430,88 @@ def private with_served_drafter(t : T?; file : string; regions : int64; kv : KVD
     }
 }
 
-// the GPU drafter step against the CPU oracle on the served twin: same seed token, same carried
-// hidden, same anchor, so the two must agree on the argmax and sit within GPU-vs-CPU f32 noise
+//! a Q8_0-fed device's distance from the Q8_0-fed oracle: 0.1 to 0.3 where the feed flips a level, 1e-5 where it does not (the
+//! oracle against itself with its hidden 1e-6 apart moves 0.11 the same way)
+let private VK_FEED_FLIP_BAR = 0.5
+
+//! the device step over `s`'s host rows brought up again - another session's device prefill takes the one region first - with
+//! layer `l`'s K and V rows at `row` held at `v` for the step and put back after (`row` < 0 touches none): the step's logits
+def private vk_reuploaded_draft(t : T?; trg : Model; var s : Session; prompt : array<int64>; seed, anchor : int64; h : array<float>;
+                                l, row : int64; v : float) : array<float> {
+    var lg : array<float>
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        let c = trg.config
+        let kvd = layer_kv_dim(c, l)
+        let prow = row >= 0l ? kv_phys_row(s, row) : 0l
+        var kept_k, kept_v, fill : array<float>
+        if (row >= 0l) {
+            kept_k |> resize(kvd)
+            kept_v |> resize(kvd)
+            fill |> resize(kvd)
+            for (f in fill) {
+                f = v
+            }
+            unsafe {
+                kv_load_row(kv_layer_kbase(s, l, c.seq_len), s.kv_dtype_k, kvd, prow, 0l, kvd, addr(kept_k[0]))
+                kv_load_row(kv_layer_vbase(s, l, c.seq_len), s.kv_dtype_v, kvd, prow, 0l, kvd, addr(kept_v[0]))
+                kv_store_row(kv_layer_kbase(s, l, c.seq_len), s.kv_dtype_k, kvd, prow, 0l, kvd, addr<float const?>(fill[0]))
+                kv_store_row(kv_layer_vbase(s, l, c.seq_len), s.kv_dtype_v, kvd, prow, 0l, kvd, addr<float const?>(fill[0]))
+            }
+        }
+        var s2 <- make_run_state(c, s.kv_dtype_k, s.kv_dtype_v)
+        var p40 <- [for (i in range64(min(40l, long_length(prompt)))); prompt[i]]
+        let pf0 = moe_gpu_resident_prefills()
+        eval_(trg, s2, p40)
+        t |> success(moe_gpu_resident_prefills() > pf0, "the stealing session prefilled on the device, so the next step brings the host rows up")
+        var dg = -1l
+        var hg : array<float>
+        hg |> resize(long_length(h))
+        t |> success(vk_gemma_draft_step(trg, s, seed, anchor, h, dg, hg), "the device draft step over the brought-up rows served")
+        vk_gemma_drafter_last_logits(lg)
+        if (row >= 0l) {
+            unsafe {
+                kv_store_row(kv_layer_kbase(s, l, c.seq_len), s.kv_dtype_k, kvd, prow, 0l, kvd, addr<float const?>(kept_k[0]))
+                kv_store_row(kv_layer_vbase(s, l, c.seq_len), s.kv_dtype_v, kvd, prow, 0l, kvd, addr<float const?>(kept_v[0]))
+            }
+        }
+        delete hg
+        delete p40
+        delete s2
+        delete fill
+        delete kept_v
+        delete kept_k
+    }
+    return <- lg
+}
+
+//! the Vulkan window witness by the rows: the same host rows brought up read as the device's own, the sliding capture layer's key one
+//! past the window poisoned moves nothing, and its window's first key poisoned moves the draft (the control)
+def private vk_window_witness(t : T?; trg : Model; dr : GemmaDrafter; var s : Session; prompt : array<int64>; seed, anchor : int64;
+                              h, lg : array<float>; tag : string) {
+    var ls = -1l
+    for (l in range64(dr.n_layers)) {
+        if (ls < 0l && dr.sliding[l]) {
+            ls = dr.kv_layer[l]
+        }
+    }
+    let ro = anchor - dr.sliding_window
+    var base <- vk_reuploaded_draft(t, trg, s, prompt, seed, anchor, h, ls, -1l, 0.0)
+    t |> equal(logits_maxdiff(base, lg), 0.0, "{tag}: the host rows brought up read as the device's own, bit for bit")
+    var po <- vk_reuploaded_draft(t, trg, s, prompt, seed, anchor, h, ls, ro, 4.0)
+    var pi <- vk_reuploaded_draft(t, trg, s, prompt, seed, anchor, h, ls, ro + 1l, 4.0)
+    let dpo = logits_maxdiff(po, base)
+    let dpi = logits_maxdiff(pi, base)
+    t |> equal(dpo, 0.0, "{tag}: layer {ls}'s key {ro}, one past the sliding window, moves nothing")
+    t |> success(dpi > 0.01, "{tag}: the window's first key {ro + 1l} moves the draft (maxd {dpi}) - the control")
+    to_log(LOG_INFO, "gdraft gpu {tag}: poisoned key past the window moves {dpo}, the window's first key {dpi}\n")
+    delete pi
+    delete po
+    delete base
+}
+
+// the GPU drafter step against the CPU oracle on the served twin: same seed token, same carried hidden, same anchor, so the two
+// agree on the argmax and sit within the home's feed rounding - a Q8_0 feed at a rounding tie lands one level over when the sums
+// differ by ulps, and one level in a large-value block moves the 26B's draft by up to 0.3 (`VK_FEED_FLIP_BAR`)
 def private gpu_step_vs_oracle(t : T?; trg : Model; var dr : GemmaDrafter; prompt : array<int64>; tag : string; window_control : bool) {
     let npos = long_length(prompt)
     var s <- make_run_state(trg.config, KVDtype.f16, KVDtype.f16)
@@ -465,10 +546,21 @@ def private gpu_step_vs_oracle(t : T?; trg : Model; var dr : GemmaDrafter; promp
     let dl = logits_maxdiff(lg, out.logits)
     let dh = logits_maxdiff(hg, out.h_next)
     t |> equal(out.token, dg, "{tag}: GPU and CPU drafts agree on the token")
-    t |> success(dl <= 0.25, "{tag}: draft logits within 0.25 of the oracle (maxd {dl})")
-    t |> success(dh <= 0.05, "{tag}: h_next within 0.05 of the oracle (maxd {dh})")
+    let lbar = q8 ? VK_FEED_FLIP_BAR : 0.25
+    let hbar = q8 ? VK_FEED_FLIP_BAR : 0.05
+    t |> success(dl <= lbar, "{tag}: draft logits within {lbar} of the oracle (maxd {dl})")
+    t |> success(dh <= hbar, "{tag}: h_next within {hbar} of the oracle (maxd {dh})")
     to_log(LOG_INFO, "gdraft gpu {tag}: anchor {anchor} seed {seed} -> gpu {dg} cpu {out.token}; logits maxd {dl}, h_next maxd {dh}\n")
-    if (window_control) {   //! the control: the oracle's sliding layers one key wider - a device pass over the whole window reads as it does
+    if (q8) {   //! the bar's control: the oracle drafting off the next token id lands past it
+        var other : GemmaDraftOut
+        gemma_draft_step_cpu(trg, s, dr, (seed + 1l) % trg.config.vocab_size, h, anchor, other, q8)
+        let dlo = logits_maxdiff(lg, other.logits)
+        t |> success(dlo > lbar, "{tag}: the oracle off another seed token reads past the bar ({dlo}) - the control")
+        delete other
+    }
+    if (window_control && q8) {
+        vk_window_witness(t, trg, dr, s, prompt, seed, anchor, h, lg, tag)
+    } elif (window_control) {   //! the control: the oracle's sliding layers one key wider - a device pass over the whole window reads as it does
         dr.sliding_window++
         var wide : GemmaDraftOut
         gemma_draft_step_cpu(trg, s, dr, seed, h, anchor, wide, q8)
