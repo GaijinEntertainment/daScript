@@ -215,6 +215,9 @@ def test_resident_cls_decline(t : T?) {
         m.cls_q8 = true
         t |> equal(resident_cls_decline(m), "", "a tied Q8_0 table's plane serves (the control)")
         m.cls_q8 = false
+        m.cls_q8_copy = true
+        t |> equal(resident_cls_decline(m), "", "a tied F16 table whose load kept the classifier's q8 copy serves off the copy")
+        m.cls_q8_copy = false
         m.kquant_native = true
         m.emb_fmt = KqFmt.k6
         t |> equal(resident_cls_decline(m), "", "a tied K-quant table's plane serves")
@@ -608,6 +611,18 @@ def test_resident_fit_ctx(t : T?) {
         t |> equal(resident_fit_ctx(plan, asked, 0l), ((room - 100l * mb) / 8l * 7l) / kv_pos, "the hot pool's bytes come off the room")
         plan.weight_bytes = 900l * mb
         t |> equal(resident_fit_ctx(plan, asked, 0l), 0l, "weights past the room: no context fits")
+    }
+    t |> run("a ringed mirror's rings are bytes the context does not scale: they come off the room, and the rest of the mirror scales") @(t : T?) {
+        let mb = 1_048_576l
+        let asked = 100000l
+        let flat_pos = 1000l        //! the global layers' rows a position
+        let ring_bytes = 40l * mb   //! the sliding layers' rings, fixed at any context past their reach
+        let plan = ResidentPlan(usable_bytes = 800l * mb, weight_bytes = 500l * mb, kv_bytes = asked * flat_pos + ring_bytes, kv_ring_bytes = ring_bytes)
+        let room = 800l * mb - 500l * mb - ring_bytes
+        let want = (room / 8l * 7l) / flat_pos
+        t |> equal(resident_fit_ctx(plan, asked, 0l), want, "the room past the weights and the rings, over the global layers' bytes a position")
+        let scaled = ((800l * mb - 500l * mb) / 8l * 7l) / ((asked * flat_pos + ring_bytes) / asked)
+        t |> success(scaled < want, "the rings charged a position at the asked context hold fewer positions ({scaled} against {want})")
     }
 }
 
@@ -1341,5 +1356,31 @@ def test_resident_ring_mirror(t : T?) {
                 "the house plan fits the 32 GB card's room under the rings: {(ringed >> 20l) + rest} MB of {HOUSE_32GB_ROOM_MB} (flat {HOUSE_26B_FLAT_PLAN_MB})")
         }
         delete m
+    }
+}
+
+def private ring_floor_panics(var s : Session; pos : int64) : bool {
+    var tripped = false
+    try {
+        kv_ring_floor_check(s, pos)
+    } recover {
+        tripped = true
+    }
+    return tripped
+}
+
+[test]
+def test_kv_ring_floor_check(t : T?) {
+    t |> run("a call at or past the ring floor continues, one under it panics, and a start at 0 rebuilds the history and clears the floor") @(t : T?) {
+        var s : Session
+        s.kv_ring_floor = 6l
+        t |> success(!ring_floor_panics(s, 8l), "a call past the floor continues")
+        t |> success(!ring_floor_panics(s, 6l), "a call at the floor continues")
+        t |> equal(s.kv_ring_floor, 6l, "and leaves the floor standing")
+        t |> success(ring_floor_panics(s, 3l), "a call under the floor panics: the ring holds no window under it")
+        t |> success(!ring_floor_panics(s, 0l), "a start at 0 continues nothing")
+        t |> equal(s.kv_ring_floor, 0l, "and clears the floor")
+        t |> success(!ring_floor_panics(s, 3l), "so the same call at 3 continues the rebuilt history (the control)")
+        delete s
     }
 }

@@ -512,8 +512,8 @@ the dyadic lattice, the GEMV within a double dot's envelope, and the routed GEMV
 E8M0 path) over several streams in one dispatch bit for bit against one stream a dispatch; the E-series pre-step's cells
 (`ple_proj_bf16_gate`: the bf16 word form of the router GEMV on both stamps - eight columns a simdgroup, and the decode
 column's threadgroup a row at 1536 wide - past a lead of NaN pairs, exact against the dot in double, the poisoned lead
-element the control; `geglu_side_gate`, `ple_finish_gate` - the residual step's PSCALE stamp, the finish without the prescale
-its control); the side rows' gather rides the token-table family, the misc file's embed gates. The prefill file's `qk_rope_gate`
+element the control; `geglu_side_gate`, `ple_finish_gate` - the finish's `XSCALE` stamp (`GkPleFinish`), the finish without the
+prescale its control); the side rows' gather rides the token-table family, the misc file's embed gates. The prefill file's `qk_rope_gate`
 carries the window's V arms (V off the pre-norm k rows, the v-norm in place, the V panel bit for bit untouched with neither), and
 the misc file's `add_rms_gate` every residual stamp (`GkAddRmsRows`: the plain step, the sandwich seam, the seam with no norm
 stored, the f16 twins) through its one-row, rows and window builders, the sandwich rows held off the plain step's as the control. The gemm file's `router_f32_gate` holds the prefill router's tile (`MetalF32ExactMm`) at the 35B-A3B shape and at
@@ -1372,7 +1372,8 @@ from a Config or a synthetic Model shell (`resident_unserved_features`,
 shape is named in the text a user reads, a served one yields "" (the per-op attention chain naming every gemma generation's
 attention); `test_resident_ring_mirror` holds the rings' plan arithmetic on a gemma-4-26B shell at 32768 x 4 - the ring rows,
 the ring bytes, the ringed mirror past seven times under the flat one, and the pod's flat house plan less the flat mirror plus
-the ringed one under that card's room; the MoE names among them (the
+the ringed one under that card's room, and `test_kv_ring_floor_check` the session's ring floor (`kv_ring_floor_check`: a call at or
+past it continues, one under it panics, a start at 0 clears it and the same call then continues); the MoE names among them (the
 router shapes the routed block's kernels do not serve, the expert and slot counts past their
 reach; gpt-oss's router bias, biased stacks, clamped swiglu and softmax-weight gate are served,
 a biased stack feeding a K-quant down plane is named by layer, and the attention sinks are named
@@ -1417,7 +1418,8 @@ where that is shorter, and one region for a count under one. `test_resident_fit_
 a plan past its room shortens to (`resident_fit_ctx`): the room past the weights, the pool and the
 staged rows over the mirror's and a block codec's shadow's bytes a position, seven eighths of it -
 the shadow charged whole at the asked context holds fewer positions (the control) - and the same
-over the mirror alone under a scalar codec, 0 where the weights pass the room. `test_resident_mirror_codec_ask` is
+over the mirror alone under a scalar codec, 0 where the weights pass the room; its second subtest the rings - their bytes off the
+room, the rest of the mirror over the context (the rings charged a position at the asked context hold fewer, the control). `test_resident_mirror_codec_ask` is
 the mirror codec the plan arms, on shells: a block codec's geometry (`kv_codec_geometry_why`: a
 96-wide head holds q8_0 and tq4 names it, a 48-wide head q8_0 names, a scalar codec holds any),
 the ask folded to f16 where the model cannot hold it and for an f32 ask
@@ -2493,7 +2495,10 @@ shares every page of the deepest opening into the carrier, copies none, restores
 holds no pages and counts a hit, the probe `prefix_state_match_len_` reading its count; on a model with no
 recurrent state the page chain's whole pages under the asked count), and the dropped checkpoints' snapshots
 (`test_prefix_spare_snapshots`: two of three dropped wait for reuse with their arrays, an empty cache hands an empty one,
-the release drops them); model-gated (stories15M): attached pages plus a tail eval read the cold
+the release drops them), and the pages' ring floors (`test_prefix_ring_floor`: a page carries its donor's `kv_ring_floor`, an
+attach - and the probe beside it - cuts to the longest run ending at or past every taken page's floor, a copied page past the
+whole hits dropped when its rows end under its own floor, the session left at the deepest floor it took; a carrier's shared
+pages carry theirs, a floor-0 chain's the control); model-gated (stories15M): attached pages plus a tail eval read the cold
 prefill's logits bit for bit, and the page past the whole hits (`test_prefix_tail_copy`): a
 donation's partial tail page is an entry beside its whole ones, a prompt that shares rows with it
 takes a COPY (the donor's page stays the cache's alone, `n_hit_partial` counts the take) and lands
@@ -2779,7 +2784,9 @@ as the control on both bars), and the n-gram side input's gather, window and row
 (`test_ngram_gather`, `test_ngram_window`, `test_ngram_row_decoders`).
 `test_ple_check.das` - model-free: the gemma4 router input's row identity (`gemma4_router` over
 npos rows against the npos = 1 decode call, bit for bit, on a synthetic scale row) and the PLE go-live tripwire (`ple_check_table`) on synthetic
-Model shells - short plane trips per format arm (the per-32 q51 / q5032 arms one byte short included), full plane passes, non-PLE exempt.
+Model shells - short plane trips per format arm (the per-32 q51 / q5032 arms one byte short included), full plane passes, non-PLE exempt; and the per-layer planes' tags off the file's types (`test_ple_plane_formats`,
+`detect_ple_formats` over a synthetic meta: an all-F32 kind marked f32, a Q6_K kind tagged k6, a kind mixing F32 with Q8_0
+panicking by name, gate and projection alike).
 `test_ple_modes.das` - stocked suite; model-gated (E2B Q8_0 + Q4_K_M, small tier): the PLE
 token table's pinned-plane rail across serving modes - fp32 keeps the Q8_0 table on a
 dedicated q8 plane (offset 0, plane == table exactly, gather rows BIT-match the file dequant,
