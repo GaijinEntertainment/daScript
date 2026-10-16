@@ -11363,7 +11363,7 @@ class KqGemvBase {
         let lanes_per_row = pa.lanes_per_row == 0u ? gl_SubgroupSize : pa.lanes_per_row
         let lane = gl_SubgroupInvocationID
         let row_lane = lane % lanes_per_row
-        let rg = (gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID) * (gl_SubgroupSize / lanes_per_row) + lane / lanes_per_row
+        let rg = gemv_lane_row(gl_WorkGroupID.x, gl_SubgroupID, lane, lanes_per_row, gl_SubgroupSize, gl_NumSubgroups)
         let live = rg < pa.nreg * pa.d
         let nreg = max(pa.nreg, 1u)   //! the divisor guarded: a dead lane computes it too
         let r = rg % nreg
@@ -11385,7 +11385,7 @@ class KqGemvBase {
         let lanes_per_row = pa.lanes_per_row == 0u ? gl_SubgroupSize : pa.lanes_per_row
         let lane = gl_SubgroupInvocationID
         let row_lane = lane % lanes_per_row
-        let rg = (gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID) * (gl_SubgroupSize / lanes_per_row) + lane / lanes_per_row
+        let rg = gemv_lane_row(gl_WorkGroupID.x, gl_SubgroupID, lane, lanes_per_row, gl_SubgroupSize, gl_NumSubgroups)
         let live = rg < pa.nreg * pa.d
         var acc : float[8]
         for [unroll] (c in range(8)) {
@@ -11744,8 +11744,8 @@ class template KqGemvLeafT : KqGemvBase {
     @ssbo @binding = 7 @template_gate = GU regions3 : array<uint>   //! the up stack's (rel_wblock, xblock) pairs per slot
     @ssbo @binding = 8 @template_gate = GU outq : array<int8>       //! the activated hidden rows' Q8_0 quants (the down GEMV's feed)
     @ssbo @binding = 9 @template_gate = GU outs : array<float>      //! ... and their per-block scales
-    @workgroup @template_gate = GU wg_g : float[32]   //! the block's gate dots
-    @workgroup @template_gate = GU wg_u : float[32]   //! ... and up dots
+    @workgroup @template_gate = GU wg_g : float[256]   //! a turn's gate dots, a lane's at its slot
+    @workgroup @template_gate = GU wg_u : float[256]   //! ... and up dots
     @template_constant EMB : bool = false       //!< the token-table gather (`emb_shell`) in place of either GEMV shell
     @template_constant GRID : bool = false      //!< a grid-codebook format: `GRID_WORDS` words of `gridb` from `GRID_OFF` stage into `gridw` ahead of the shell
     @template_constant GRID_WORDS : uint = 64u  //!< the codebook's words and its first word in `gridb` - literals (template constants), held equal to the format's `KQ_GRID_<FMT>_WORDS` / `KQ_GRID_<FMT>` by REVIEW.das
@@ -11788,13 +11788,15 @@ class template KqGemvLeafT : KqGemvBase {
             let lanes_per_row = pa.lanes_per_row == 0u ? gl_SubgroupSize : pa.lanes_per_row
             let lane = gl_SubgroupInvocationID
             let row_lane = lane % lanes_per_row
-            let per_sg = gl_SubgroupSize / lanes_per_row   // the rows a subgroup holds at once
-            let per_turn = gl_NumSubgroups * per_sg        // ... and the workgroup
+            let per_turn = gl_NumSubgroups * (gl_SubgroupSize / lanes_per_row)   // the rows the workgroup holds at once
+            let slot = gl_SubgroupID * gl_SubgroupSize + lane
             let row0 = gl_WorkGroupID.x * 32u
             let nsb = pa.n / 256u
+            var gj = 0.0   //! subgroup 0's lane j < 32: row j's gate and up dots, gathered off the turn that serves it
+            var uj = 0.0
             var t = 0u
             while (t * per_turn < 32u) {
-                let lr = t * per_turn + gl_SubgroupID * per_sg + lane / lanes_per_row
+                let lr = gemv_lane_row(t, gl_SubgroupID, lane, lanes_per_row, gl_SubgroupSize, gl_NumSubgroups)
                 let rg = row0 + lr
                 let live = lr < 32u && rg < pa.nreg * pa.d
                 var g = 0.0
@@ -11809,16 +11811,21 @@ class template KqGemvLeafT : KqGemvBase {
                 g = fold_lanes(g, lanes_per_row)
                 u = fold_lanes(u, lanes_per_row)
                 if (live && row_lane == 0u) {
-                    wg_g[lr] = g
-                    wg_u[lr] = u
                     y[pa.ybase + rg] = g   //! the gate rows land in the family's y as well: the dot half's own witness
                 }
+                wg_g[slot] = g   //! every lane of a row holds its folded dots
+                wg_u[slot] = u
+                barrier()
+                if (gl_SubgroupID == 0u && lane < 32u && lane >= t * per_turn && lane < (t + 1u) * per_turn) {
+                    let src = gemv_lane_row_slot(lane, t, lanes_per_row, gl_SubgroupSize, gl_NumSubgroups)
+                    gj = wg_g[src]
+                    uj = wg_u[src]
+                }
+                barrier()
                 t++
             }
-            barrier()
             if (gl_SubgroupID == 0u) {   // the block's activation and Q8_0 quant: one lane an output row
-                let li = min(lane, 31u)
-                let a = lane < 32u ? gk_act_mul(wg_g[li], wg_u[li], pa.act) : 0.0
+                let a = lane < 32u ? gk_act_mul(gj, uj, pa.act) : 0.0
                 let s = q8_lane_scale(a)
                 if (lane == 0u) {
                     outs[gl_WorkGroupID.x] = s.x

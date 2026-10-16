@@ -9,6 +9,7 @@ require dasllama/dasllama_sampling
 require dasllama/dasllama_gpu_resident
 require dasllama/dasllama_gpu_tier   // install_moe_gpu_resident_bias - the bias seat a served qwen2 needs
 require ?vulkan dasllama/dasllama_vulkan_decode   // rd_routed_slots_fit - the N-row command's slot cap, where the module exists
+require ?vulkan dasllama/dasllama_vulkan_prefill  // ple_proj_bf16_why - the bf16 projection's dim gate, where the module exists
 require dasllama/dasllama_metal_shapes   // moe_metal_ok - the Metal routed block's admission, portable
 require dasllama/dasllama_image   // save_model_image / load_model_image / image_identity - the trimmed lane's map under the ring pin
 require dasllama/dasllama_arch_llama   // the arch the trimmed lane's shell names, registered for its map
@@ -1468,5 +1469,33 @@ def test_resident_host_layers_pin(t : T?) {
         t |> equal(resident_host_layers_want(hc, 24l, 4l), -1l, "a hyper-connection model takes no ask: every routed layer serves on the host regardless")
         let dense = Config()
         t |> equal(resident_host_layers_want(dense, 0l, 4l), -1l, "a dense model takes no ask")
+    }
+}
+
+//! the E-series pre-step's projection K gates: Metal's `metal_ple_dev_ok` serves a model dim the projection's word walk steps
+//! whole - pairs on the bf16 rows, float4s on the f32 router's - and Vulkan's `ple_proj_bf16_why` names an odd dim for the bf16 stamp
+[test]
+def test_ple_proj_dim_gates(t : T?) {
+    t |> run("the pre-step's projection declines a dim off its word, on each home") @(t : T?) {
+        var m = Model()
+        m.config.n_layers = 2l
+        m.config.n_embd_per_layer = 256l
+        m.metal_blob = true
+        m.ple_model_bf16 = true
+        m.config.dim = 1536l
+        t |> success(metal_ple_dev_ok(m), "the bf16 rows serve an even dim (the E2B's 1536)")
+        m.config.dim = 1537l
+        t |> success(!metal_ple_dev_ok(m), "... and decline an odd one")
+        m.config.dim = 1538l
+        t |> success(metal_ple_dev_ok(m), "the bf16 rows serve an even dim off the float4 lattice")
+        m.ple_model_bf16 = false
+        t |> success(!metal_ple_dev_ok(m), "... where the f32 router's float4 walk declines it")
+        m.config.dim = 1536l
+        t |> success(metal_ple_dev_ok(m), "the f32 router serves a dim on the float4 lattice")
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            t |> equal(ple_proj_bf16_why(1536l), "", "the Vulkan bf16 stamp serves an even dim")
+            let why = ple_proj_bf16_why(1537l)
+            t |> success(find(why, "even dim") >= 0 && find(why, "1537") >= 0, "... and names an odd one: '{why}'")
+        }
     }
 }
