@@ -199,4 +199,4 @@ none, the next layer opening on its own. It replaces six dispatches a decode lay
 add, the add-norm) and six a window layer (the reduce, three norms, two adds). The unfused chain stays where a seam sits
 between the FFN and the residual (a per-layer embedding, a hyper-connection, the window's deepstack slices), past the
 stash, on the last decode layer (no next norm to store), under a knockout, and under the tests' pin
-(`set_metal_moe_g4_unfused`). On the M5 the 26B's row reads 13.3 against 17.5 us, a 512-row window 123 against 182 us.
+(`set_metal_moe_g4_unfused`). On the M5 the 26B's row reads 12.3 against 17.5 us, a 512-row window 122.5 against 182 us.

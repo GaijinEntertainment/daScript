@@ -4036,6 +4036,7 @@ class template GkMoeCombG4 : GkMoeCombine {
     @template_constant OUT_F32 : bool = false
     @template_constant OUT_F16 : bool = false
     @template_constant HX : bool = false
+    @template_constant OUT_X4 : bool = false     //!< the next norm's stores four elements in flight a lane
     override WINDOW = false
 
     def abstract stash(k : uint; v : float) : void   //! column `k` of the row kept for the lane's own re-read
@@ -4099,27 +4100,62 @@ class template GkMoeCombG4 : GkMoeCombine {
             ss += vv * vv
             k += TG
         }
+        store_next(r, ss)
+    }
+
+    //! row `r`'s next norm out of the residual's sum of squares `ss`, in the stamp's form (Q8_0 blocks, or the element stores)
+    def store_next(r : uint; ss : float) {
+        let n = pa.n
         static_if (OUT_F32 || OUT_F16 || OUT_Q8) {
             var inv = 0.0
             wg_rms_inv_into(ss, n, pa.eps, 1u, inv)
             static_if (OUT_Q8) {
                 blk_pass(0u, n / KQ_B32_ELEMS_U, r * (n / KQ_B32_ELEMS_U), 0.0, inv)
             } else {
-                k = tid
-                while (k < n) {
-                    let v = normed_at(k, 0.0, inv)
-                    static_if (OUT_F32) {
-                        yo[base + k] = v
+                let base = r * n
+                var k = gl_LocalInvocationID.x
+                static_if (OUT_X4) {
+                    let last = n - 1u
+                    while (k < n) {
+                        let k1 = min(k + TG, last)
+                        let k2 = min(k + 2u * TG, last)
+                        let k3 = min(k + 3u * TG, last)
+                        let n0 = normed_at(k, 0.0, inv)
+                        let n1 = normed_at(k1, 0.0, inv)
+                        let n2 = normed_at(k2, 0.0, inv)
+                        let n3 = normed_at(k3, 0.0, inv)
+                        put_norm(base + k, n0)
+                        if (k + TG < n) {
+                            put_norm(base + k1, n1)
+                        }
+                        if (k + 2u * TG < n) {
+                            put_norm(base + k2, n2)
+                        }
+                        if (k + 3u * TG < n) {
+                            put_norm(base + k3, n3)
+                        }
+                        k += 4u * TG
                     }
-                    static_if (OUT_F16) {
-                        outh[base + k] = float16(v)
+                } else {
+                    while (k < n) {
+                        put_norm(base + k, normed_at(k, 0.0, inv))
+                        k += TG
                     }
-                    static_if (HX) {
-                        yh[base + k] = float16(v)
-                    }
-                    k += TG
                 }
             }
+        }
+    }
+
+    //! element `i` of the next norm stored in the stamp's out forms
+    def put_norm(i : uint; v : float) {
+        static_if (OUT_F32) {
+            yo[i] = v
+        }
+        static_if (OUT_F16) {
+            outh[i] = float16(v)
+        }
+        static_if (HX) {
+            yh[i] = float16(v)
         }
     }
 }

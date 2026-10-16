@@ -563,6 +563,7 @@ class ClsArCombF16B : ArCombBase {
 [ |> template_struct_instance]
 class template ArCombG4T : GkMoeCombG4 {
     @workgroup row : float[8192]
+    override OUT_X4 = true   //! the residual step's store form (`ArBase.store_out`): the stride loop reads 1.9 us slower on the pod
 
     def override stash(k : uint; v : float) : void {
         row[k] = v
