@@ -92,17 +92,16 @@ the module declares every such buffer `@exact_size` and sizes it through a reser
 - **`dasllama_mtp_gemma.das`** - the gemma-4 assistant drafter (`gemma4-assistant`), which is a
   SIDECAR head, not a trunk block: it owns no K/V projection and borrows the target trunk's cache
   at two capture layers, so it never rides the arch registry or `forward_mtp`. The file holds the
-  sidecar resolver, the refusing loader (`GemmaDrafter`, whose `blob` is raw GGUF Q8_0 = the Metal
-  34B form, so the GPU encoder uploads it with no repack), and the CPU reference forward the GPU
-  encoder is scored against. That oracle carries its own Q8_0 dot and GEMV and its own attention
-  dot over decoded rows - reference arithmetic, not a tier kernel or a codec primitive, so no
-  tier specializes it. A refusal is `ok = false` plus a `why`, never a panic - a drafter is
+  sidecar resolver, the refusing loader (`GemmaDrafter`, its `blob` raw GGUF Q8_0), the trunk check
+  every attach asks (`gemma_drafter_target_why`), and the CPU reference forward the GPU encoders
+  are scored against (`ARCHITECTURE_GPU_MTP_ASSISTANT.md`). That oracle carries its own Q8_0 dot and
+  GEMV and its own attention dot over decoded rows - reference arithmetic, not a tier kernel or a
+  codec primitive, so no tier specializes it. A refusal is `ok = false` plus a `why`, never a panic - a drafter is
   optional and a bad sidecar must degrade to plain decode. A server or scheduler reaches the
-  drafter through the engine's assistant seams (`MtpAssistantSeams` in `dasllama_common`:
-  `mtp_drafter_sidecar_`, `attach_mtp_drafter_`, `mtp_capable_`), which the Metal drafter driver
-  registers at init and which read as "no assistant" where no driver did - `mtp_capable_` is what
-  a scheduler's `mtp` asks for, a NextN head of the model's own or an attached drafter, so a
-  head-less target speculates once attached and never before.
+  drafter through the engine's assistant seams (`MtpAssistantSeams` in `dasllama_common`, one set
+  a backend), which each GPU drafter driver registers at init and which read as "no assistant" where no
+  driver took the trunk - `mtp_capable_` is what a scheduler's `mtp` asks for, a NextN head of the
+  model's own or an attached drafter, so a head-less target speculates once attached and never before.
 - **`dasllama_sampling.das`** - token sampling and the generation drivers: the sampler over
   `dasllama_common`'s `SamplingParams`. A top-k within `SAMPLE_TOPK_FAST_CAP` is a candidate-list
   sampler - one pass over the row selects the k largest logits into a heap (ties at the k-th all
@@ -234,11 +233,11 @@ reference below the indexer's `indexer_top_k` budget.
   (the tune-generator contract).
 - **`performance/model_specs.das`** - the ONE model-set table: per carrier, the profiled-catalog
   fields, the official-board flag, the serving-catalog fields (`serve_*`, incl. `serve_vision`
-  naming a tower companion by name), the provenance pin (exact HF repo + revision + sha256, or the
+  and `serve_drafter` naming a tower or drafter companion by name), the provenance pin (exact HF repo + revision + sha256, or the
   on-box conversion recipe; companions hang off their owning entry, and a companion shared by
   several rows is referenced from the others by name), and the frozen parity evidence as data
   (pinned ids + arms). `llm_catalog` / `official_catalog` / `models_provenance` are views over it;
-  `serve_vision_tower` resolves a tower name to its pinned companion, and `serve_asr_tower` is the
+  `serve_companion` resolves a tower or drafter name to its pinned companion, and `serve_asr_tower` is the
   one standalone pinned artifact the file carries - the serving ASR tower (parakeet v3), consumed
   by `asr_catalog`'s v3 row in `profile_common.das` (the pin's single source lives here, not there).
 - **`performance/box_ident.das`** - the hardware-keyed box tag: the fleet table maps every

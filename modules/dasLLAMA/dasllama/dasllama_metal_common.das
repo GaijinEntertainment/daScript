@@ -2492,6 +2492,7 @@ struct BatchLanding {
     @scratch upooled : array<tuple<buf : MetalBuffer?; size : uint64>>
     blog : MetalBuffer?
     sameslab : bool
+    @scratch grp_nr : array<int64>   //!< the same-slab step's groups: a group's rows each, one session's consecutive positions
     bxf : MetalBuffer?            //!< the rows' post-final-norm hidden (nrows x dim)
     bxf_bytes : int64
     bvarg : MetalBuffer?          //!< the rows' GPU argmax (uint per row), landed into g_sameslab_arg
@@ -2558,6 +2559,7 @@ def release_landing(var L : BatchLanding&) {
     L.upooled |> clear()
     L.blog = null
     L.sameslab = false
+    L.grp_nr |> clear()
     L.bxf = null
     L.bvarg = null
     L.xb = null
@@ -2616,22 +2618,29 @@ def argmax_row(v : array<float>; row, n : int64) : int64 {
 // path (pipe mode skips it — stale). A dispatch error sets g_land_err (sync reruns on CPU; a pipelined step is lost).
 [arch(at="../ARCHITECTURE_GPU_MTP.md#batch-same-slab")]
 def private land_sameslab_rows(var L : BatchLanding&; lgp : uint8?) {
-    var s0 = L.sessions[0]
     let vb = L.vocab * 4l
+    let hb = L.bxf != null ? L.bxf_bytes / L.nrows : 0l
+    var row0 = 0l
+    for (n in L.grp_nr) {   //! a group's rows land in its own session
+        var sg = L.sessions[row0]
+        unsafe {
+            if (lgp != null) {
+                sg.mtp_logits_b |> ensure_length(n * L.vocab)
+                memcpy(addr < void? >(sg.mtp_logits_b[0]), reinterpret<void?>(lgp + row0 * vb), n * vb)
+                if (long_length(sg.mtp_logits) >= L.vocab) {   // sized only on NextN-headed sessions
+                    memcpy(addr < void? >(sg.mtp_logits[0]), reinterpret<void?>(lgp + row0 * vb), vb)
+                }
+            }
+            if (L.bxf != null) {
+                if (long_length(sg.mtp_hrows) * 4l < n * hb) {
+                    sg.mtp_hrows |> resize(n * hb / 4l)
+                }
+                memcpy(addr < void? >(sg.mtp_hrows[0]), reinterpret<void?>(reinterpret<uint8?>(metal_buffer_contents(L.bxf)) + row0 * hb), n * hb)
+            }
+        }
+        row0 += n
+    }
     unsafe {
-        if (lgp != null) {
-            s0.mtp_logits_b |> ensure_length(L.nrows * L.vocab)
-            memcpy(addr < void? >(s0.mtp_logits_b[0]), reinterpret<void?>(lgp), L.nrows * vb)
-            if (long_length(s0.mtp_logits) >= L.vocab) {   // sized only on NextN-headed sessions
-                memcpy(addr < void? >(s0.mtp_logits[0]), reinterpret<void?>(lgp), vb)
-            }
-        }
-        if (L.bxf != null) {
-            if (long_length(s0.mtp_hrows) * 4l < L.bxf_bytes) {
-                s0.mtp_hrows |> resize(L.bxf_bytes / 4l)
-            }
-            memcpy(addr < void? >(s0.mtp_hrows[0]), metal_buffer_contents(L.bxf), L.bxf_bytes)
-        }
         if (L.bvarg != null) {
             if (long_length(g_sameslab_arg) < L.nrows) {
                 g_sameslab_arg |> resize(L.nrows)

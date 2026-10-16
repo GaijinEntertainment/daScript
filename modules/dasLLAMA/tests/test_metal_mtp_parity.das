@@ -1018,7 +1018,7 @@ def private run_verify_fixture(t : T?; file, tag : string; tol : float; expect_d
             let side = gemma_drafter_sidecar(path)
             if (empty(side)) {
                 t |> skip("{tag}: no assistant drafter sidecar beside {file}")
-            } elif (!attach_gemma_drafter(trg, side)) {
+            } elif (attach_gemma_drafter(trg, side) != "") {
                 t |> failure("{tag}: the drafter {side} beside the carrier did not attach")
             } else {
                 var count <- encode(tr, counting_prompt(1, 40), true, false)
@@ -1027,7 +1027,7 @@ def private run_verify_fixture(t : T?; file, tag : string; tol : float; expect_d
                 set_gemma_carry_pre_norm(arm_on(t, "mtp-count-pre"))
                 for (depth in [1l, 2l, 4l]) {
                     count_cell(t, tr, trg, tag, count, depth)
-                    let st = gemma_drafter_stats()
+                    let st = mtp_drafter_stats(trg)
                     to_log(LOG_INFO, "gemma drafter {tag} k{depth}: rounds={st.rounds} drafted={st.drafted} accepted={st.accepted}\n")
                     if (depth < 4l && arm_on(t, "mtp-sampled-{tag}")) {
                         count_cell(t, tr, trg, tag, count, depth, true)

@@ -20,6 +20,25 @@ def private tmp_models_dir(tag : string) : string {
 }
 
 [test]
+def test_catalog_drafters(t : T?) {
+    t |> run("every assistant drafter resolves pinned, and the gemma-4 26B card carries the upstream head") @(t : T?) {
+        var found = false
+        for (e in model_catalog()) {
+            continue if (empty(e.drafter_file))
+            t |> equal(length(e.drafter_sha256), 64, "{e.name}: drafter sha256 must be 64 hex chars")
+            t |> success(e.drafter_bytes > 0l, "{e.name}: drafter canonical size missing")
+            t |> success(e.drafter_url |> starts_with("https://"), "{e.name}: drafter url must be https")
+            t |> success(find(e.drafter_url, "/resolve/main/") < 0, "{e.name}: drafter url is not commit-pinned")
+            if (e.name == "gemma-4-26b-a4b") {
+                found = true
+                t |> equal(e.drafter_file, "mtp-gemma-4-26B-A4B-it-Q8_0.gguf", "the 26B card's drafter is the upstream Q8_0 head")
+            }
+        }
+        t |> success(found, "the gemma-4 26B card carries its assistant drafter")
+    }
+}
+
+[test]
 def test_catalog_table(t : T?) {
     t |> run("entries are pinned, unique, and exactly one is the default") @(t : T?) {
         var names, files : table<string>
@@ -177,6 +196,17 @@ def test_download_refusals(t : T?) {
         var unpinned = bare
         unpinned.vision_file = "mmproj-x.gguf"
         let r2 = catalog_download_start_vision(dir, unpinned)
+        t |> success(find(r2, "no pinned artifact") >= 0, "got: {r2}")
+        rmdir(dir)
+    }
+    t |> run("an entry with no assistant drafter refuses the drafter download; an unpinned drafter refuses too") @(t : T?) {
+        let dir = tmp_models_dir("drafter")
+        let bare = CatalogEntry(name = "x", file = "x.gguf", bytes = 4l, sha256 = "00", url = "https://example.invalid/x")
+        let r1 = catalog_download_start_drafter(dir, bare)
+        t |> success(find(r1, "no assistant drafter") >= 0, "got: {r1}")
+        var unpinned = bare
+        unpinned.drafter_file = "mtp-x-Q8_0.gguf"
+        let r2 = catalog_download_start_drafter(dir, unpinned)
         t |> success(find(r2, "no pinned artifact") >= 0, "got: {r2}")
         rmdir(dir)
     }

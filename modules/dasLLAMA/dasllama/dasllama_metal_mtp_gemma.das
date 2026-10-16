@@ -17,9 +17,20 @@ require dasllama/dasllama_metal_lens   // release_handles
 require dasllama/dasllama_metal_kernels
 require dasllama/dasllama_metal_decode
 
+//! One speculating stream's host-written chain inputs: its carried hidden and its anchor's rope rows for both attention classes.
+//! A tick encodes every stream's chain into one command buffer before any runs, so each stream writes its own.
+struct GemmaStreamIn {
+    bh : MetalBuffer?          // [tdim] the target's post-norm hidden the chain opens on
+    bcos : MetalBuffer?        // the anchor's rope row, full class (hs_full / 2)
+    bsin : MetalBuffer?
+    bcos_sw : MetalBuffer?     // ... sliding class (hs_sw / 2)
+    bsin_sw : MetalBuffer?
+    rope_pos : int64           // the anchor the rows hold (-1 = none)
+}
+
 //! The attached gemma-4 assistant drafter on the GPU: the q8 weights uploaded once, persistent
-//! activation buffers, and the round's rope rows for both attention classes. The drafter has no
-//! K/V of its own - its four Q-only layers read the TARGET's K/V mirror at the two capture layers.
+//! activation buffers, and a stream slot's chain inputs. The drafter has no K/V of its own - its
+//! four Q-only layers read the TARGET's K/V mirror at the two capture layers.
 struct GemmaDrafterGpu {
     ready : bool
     bblob : MetalBuffer?
@@ -35,14 +46,12 @@ struct GemmaDrafterGpu {
     blog : MetalBuffer?        // [vocab] logits
     bhnext : MetalBuffer?      // [tdim] post_projection hidden = the next step's h
     btok_out : MetalBuffer?    // [1] argmax out
-    bvtok : MetalBuffer?       //! [MTP_MAX_ROWS] the round's token list
+    bvtok : MetalBuffer?       //! the tick's token rows: a stream's seed then its drafts at its group's first row
+    bvtok_rows : int64
+    btok1 : MetalBuffer?       //! [1] a step's id at offset 0, for the gather that reads its list from the start
     u_one1 : MetalBuffer?      // uniform 1: the one-token copies
     bpart : MetalBuffer?       // chunked attention partials (grown on demand)
     bpart_bytes : uint64
-    bcos : MetalBuffer?        // the anchor's rope row, full class (hs_full / 2)
-    bsin : MetalBuffer?
-    bcos_sw : MetalBuffer?     // ... sliding class (hs_sw / 2)
-    bsin_sw : MetalBuffer?
     u_dim : MetalBuffer?
     u_tdim : MetalBuffer?
     u_cat : MetalBuffer?
@@ -51,12 +60,14 @@ struct GemmaDrafterGpu {
     u_eps : MetalBuffer?
     u_escale : MetalBuffer?
     u_qd : array<MetalBuffer?>      // per layer 16 * hs
+    u_hs : array<MetalBuffer?>      // per layer hs (the tq4 un-rotation's head)
     u_scale : array<MetalBuffer?>   // per layer layer_output_scale
-    cos_tab : array<float>          // host rope rows for the anchor (rebuilt per round)
+    slots : array<GemmaStreamIn>    // a speculating stream's inputs a slot, grown to the tick's streams
+    hs_mx : int64
+    cos_tab : array<float>          // host rope rows for an anchor (rebuilt per slot and anchor)
     sin_tab : array<float>
     cos_sw : array<float>
     sin_sw : array<float>
-    rope_pos : int64                // the anchor the rows hold (-1 = none)
 }
 
 var g_gemma_drafter : GemmaDrafter
@@ -67,28 +78,42 @@ var g_gemma_ws_ok = false
 var g_gemma_drafted = 0l
 var g_gemma_accepted = 0l
 var g_gemma_rounds = 0l
+var g_gemma_joint = 0l   //! verifies whose rows carried two streams or more
 
 def private ubuf_u32(v : uint) : MetalBuffer? => scalar_buffer(metal_new_buffer_untracked(g_dev, 4ul), v)
 
 def private ubuf_f32(v : float) : MetalBuffer? => scalar_buffer(metal_new_buffer_untracked(g_dev, 4ul), v)
 
+def private gemma_slot_release(var sl : GemmaStreamIn) {
+    release_handles(sl.bh, sl.bcos, sl.bsin, sl.bcos_sw, sl.bsin_sw)
+    sl.rope_pos = -1l
+}
+
 def private gemma_gpu_release(var g : GemmaDrafterGpu) {
     release_handles(g.bx, g.bxin, g.bxn, g.bo, g.bq, g.battn)
     release_handles(g.bg, g.bu, g.bhn, g.blog, g.bhnext)
-    release_handles(g.btok_out, g.bvtok, g.u_one1, g.bpart, g.bcos, g.bsin)
-    release_handles(g.bcos_sw, g.bsin_sw, g.u_dim, g.u_tdim, g.u_cat, g.u_hidden)
+    release_handles(g.btok_out, g.bvtok, g.btok1, g.u_one1, g.bpart)
+    release_handles(g.u_dim, g.u_tdim, g.u_cat, g.u_hidden)
     release_handles(g.u_vocab, g.u_eps, g.u_escale)
     for (u in g.u_qd) {
+        metal_release(u)
+    }
+    for (u in g.u_hs) {
         metal_release(u)
     }
     for (u in g.u_scale) {
         metal_release(u)
     }
+    for (sl in g.slots) {
+        gemma_slot_release(sl)
+    }
     g.u_qd |> clear()
+    g.u_hs |> clear()
     g.u_scale |> clear()
+    g.slots |> clear()
     g.bblob = null   // an upload_region - the region cache owns it
     g.bpart_bytes = 0ul
-    g.rope_pos = -1l
+    g.bvtok_rows = 0l
     g.ready = false
 }
 
@@ -98,6 +123,7 @@ def private gemma_gpu_init(dr : GemmaDrafter; escale : float; var g : GemmaDraft
         hs_mx = max(hs_mx, h)
     }
     let f4 = 4ul
+    g.hs_mx = hs_mx
     g.bx = metal_new_buffer(g_dev, uint64(2l * dr.tdim) * f4)
     g.bxin = metal_new_buffer(g_dev, uint64(dr.dim) * f4)
     g.bxn = metal_new_buffer(g_dev, uint64(dr.dim) * f4)
@@ -110,12 +136,8 @@ def private gemma_gpu_init(dr : GemmaDrafter; escale : float; var g : GemmaDraft
     g.blog = metal_new_buffer(g_dev, uint64(dr.vocab) * f4)
     g.bhnext = metal_new_buffer(g_dev, uint64(dr.tdim) * f4)
     g.btok_out = metal_new_buffer(g_dev, 64ul)
-    g.bvtok = metal_new_buffer(g_dev, 64ul)
+    g.btok1 = metal_new_buffer(g_dev, 4ul)
     g.u_one1 = ubuf_u32(1u)
-    g.bcos = metal_new_buffer(g_dev, uint64(hs_mx / 2l) * f4)
-    g.bsin = metal_new_buffer(g_dev, uint64(hs_mx / 2l) * f4)
-    g.bcos_sw = metal_new_buffer(g_dev, uint64(hs_mx / 2l) * f4)
-    g.bsin_sw = metal_new_buffer(g_dev, uint64(hs_mx / 2l) * f4)
     g.u_dim = ubuf_u32(uint(dr.dim))
     g.u_tdim = ubuf_u32(uint(dr.tdim))
     g.u_cat = ubuf_u32(uint(2l * dr.tdim))
@@ -124,33 +146,63 @@ def private gemma_gpu_init(dr : GemmaDrafter; escale : float; var g : GemmaDraft
     g.u_eps = ubuf_f32(dr.eps)
     g.u_escale = ubuf_f32(escale)
     g.u_qd |> reserve(dr.n_layers)
+    g.u_hs |> reserve(dr.n_layers)
     g.u_scale |> reserve(dr.n_layers)
     for (l in range64(dr.n_layers)) {
         g.u_qd |> push(ubuf_u32(uint(dr.n_heads * dr.hs[l])))
+        g.u_hs |> push(ubuf_u32(uint(dr.hs[l])))
         g.u_scale |> push(ubuf_f32(dr.layer_scale[l]))
     }
     g.bblob = upload_region(unsafe(addr < void? >(dr.blob[0])), uint64(long_length(dr.blob)))
-    g.rope_pos = -1l
+    gemma_token_rows(g, MTP_MAX_ROWS)
     g.ready = true
 }
 
-//! Attach the drafter GGUF at `path` for the served gemma-4 target `t` (its dim must equal the
-//! drafter's tdim, the target must be the metal-blob flavor with a Q8 token table). One drafter at
-//! a time; the target's decode then carries the post-norm hidden every step (the drafter's h input).
-def public attach_gemma_drafter(t : Model; path : string) : bool {
+//! the tick's token rows grown to `rows`: a stream's group of seed and drafts each
+def private gemma_token_rows(var g : GemmaDrafterGpu; rows : int64) {
+    return if (g.bvtok_rows >= rows)
+    release_handle(g.bvtok)
+    g.bvtok_rows = max(rows, 2l * g.bvtok_rows)
+    g.bvtok = metal_new_buffer(g_dev, uint64(g.bvtok_rows * 4l))
+}
+
+//! stream slot `si`'s chain inputs, made on first use
+[cold_path]
+def private gemma_slot(var g : GemmaDrafterGpu; dr : GemmaDrafter; si : int64) {
+    while (long_length(g.slots) <= si) {
+        let rope_b = uint64(g.hs_mx / 2l) * 4ul
+        g.slots |> push(GemmaStreamIn(bh = metal_new_buffer(g_dev, uint64(dr.tdim) * 4ul),
+            bcos = metal_new_buffer(g_dev, rope_b), bsin = metal_new_buffer(g_dev, rope_b),
+            bcos_sw = metal_new_buffer(g_dev, rope_b), bsin_sw = metal_new_buffer(g_dev, rope_b), rope_pos = -1l))
+    }
+}
+
+//! The Metal attach: `""` with the drafter attached to the served gemma-4 target `t` (the trunk `gemma_drafter_target_why`
+//! admits, the metal-blob flavor, a token table the device gathers), else why it refused. One drafter at a time; the target's
+//! decode then carries the post-norm hidden every step (the drafter's h input).
+[arch(at="../ARCHITECTURE_GPU_MTP_ASSISTANT.md#assistant-drafter-attach")]
+def public attach_gemma_drafter(t : Model; path : string) : string {
     detach_gemma_drafter()
+    if (!t.metal_blob) {   //! before the sidecar's read: a trunk the Metal drivers do not serve takes no drafter here
+        return "the trunk is not the metal-blob flavor the Metal drivers serve"
+    }
     var dr <- load_gemma_drafter(path)
     if (!dr.ok) {
-        to_log(LOG_WARNING, "dasLLAMA gemma drafter: {path}: {dr.why}\n")
+        let why = clone_string(dr.why)
         delete dr
-        return false
+        return why
     }
     let c = t.config
     let dev_ok = metal_common_init()   // the device comes up lazily with the first GPU step; attach may run before that
-    if (!dev_ok || g_dev == null || !t.metal_blob || dr.tdim != c.dim || c.n_layers < 2l || !t.cls_q8) {
-        to_log(LOG_WARNING, "dasLLAMA gemma drafter: {path} refused - needs a served metal-blob gemma-4 target with dim {dr.tdim} and a q8 token table (dim {c.dim}, blob {t.metal_blob}, cls_q8 {t.cls_q8}, device {dev_ok})\n")
+    var why = gemma_drafter_target_why(t, dr)
+    if (empty(why) && (!dev_ok || g_dev == null)) {
+        why = "no Metal device"
+    } elif (empty(why) && !emb_dev_gather_ok(t)) {
+        why = "the device gathers no row of the trunk's token table"
+    }
+    if (!empty(why)) {
         delete dr
-        return false
+        return why
     }
     delete g_gemma_drafter
     g_gemma_drafter <- dr
@@ -165,11 +217,12 @@ def public attach_gemma_drafter(t : Model; path : string) : bool {
     g_gemma_drafted = 0l
     g_gemma_accepted = 0l
     g_gemma_rounds = 0l
+    g_gemma_joint = 0l
     g_gemma_us_draft = 0l
     g_gemma_us_verify = 0l
     g_gemma_us_cold = 0l
     to_log(LOG_INFO, "dasLLAMA gemma drafter attached: {path} ({g_gemma_drafter.n_layers} Q-only layers over target layers {g_gemma_drafter.kv_layer})\n")
-    return true
+    return ""
 }
 
 def public detach_gemma_drafter {
@@ -188,14 +241,11 @@ def public detach_gemma_drafter {
     g_gemma_attached = false
 }
 
-def public gemma_drafter_attached() : bool => g_gemma_attached
 
-//! drafted / accepted / rounds since attach - the acceptance lens
-def public gemma_drafter_stats() : tuple<drafted : int64; accepted : int64; rounds : int64> => (drafted = g_gemma_drafted, accepted = g_gemma_accepted, rounds = g_gemma_rounds)
-
-[arch(at="../ARCHITECTURE_GPU_MTP.md#assistant-drafter-step")]
-def private gemma_rope_rows(t : Model; var g : GemmaDrafterGpu; anchor : int64) {
-    if (g.rope_pos == anchor) {
+[arch(at="../ARCHITECTURE_GPU_MTP_ASSISTANT.md#assistant-drafter-step")]
+def private gemma_rope_rows(t : Model; var g : GemmaDrafterGpu; si, anchor : int64) {
+    var sl & = unsafe(g.slots[si])
+    if (sl.rope_pos == anchor) {
         return
     }
     let c = t.config
@@ -217,19 +267,26 @@ def private gemma_rope_rows(t : Model; var g : GemmaDrafterGpu; anchor : int64) 
     }
     unsafe {
         if (hs_full > 0l) {
-            memcpy(metal_buffer_contents(g.bcos), addr < void? >(g.cos_tab[0]), uint64(hs_full / 2l) * 4ul)
-            memcpy(metal_buffer_contents(g.bsin), addr < void? >(g.sin_tab[0]), uint64(hs_full / 2l) * 4ul)
+            memcpy(metal_buffer_contents(sl.bcos), addr < void? >(g.cos_tab[0]), uint64(hs_full / 2l) * 4ul)
+            memcpy(metal_buffer_contents(sl.bsin), addr < void? >(g.sin_tab[0]), uint64(hs_full / 2l) * 4ul)
         }
         if (hs_sw > 0l) {
-            memcpy(metal_buffer_contents(g.bcos_sw), addr < void? >(g.cos_sw[0]), uint64(hs_sw / 2l) * 4ul)
-            memcpy(metal_buffer_contents(g.bsin_sw), addr < void? >(g.sin_sw[0]), uint64(hs_sw / 2l) * 4ul)
+            memcpy(metal_buffer_contents(sl.bcos_sw), addr < void? >(g.cos_sw[0]), uint64(hs_sw / 2l) * 4ul)
+            memcpy(metal_buffer_contents(sl.bsin_sw), addr < void? >(g.sin_sw[0]), uint64(hs_sw / 2l) * 4ul)
         }
     }
-    g.rope_pos = anchor
+    sl.rope_pos = anchor
 }
 
-[arch(at="../ARCHITECTURE_GPU_MTP.md#assistant-drafter-step")]
-def private encode_gemma_layer(t : Model; s : Session; enc : MetalComputeEncoder?; var g : GemmaDrafterGpu; l, cnt : int64; mr : KVMirror) {
+//! the round's K/V codecs: the decode's every mirror codec on both sides alike (the attention stamps read each; tq4's query rotates
+//! into the stored rows' basis and its output rotates back)
+def private gemma_kv_ok(s : Session) : bool {
+    let k = s.kv_dtype_k
+    return k == s.kv_dtype_v && (k == KVDtype.f16 || k == KVDtype.f32 || k == KVDtype.q8_0 || k == KVDtype.tq4)
+}
+
+[arch(at="../ARCHITECTURE_GPU_MTP_ASSISTANT.md#assistant-drafter-step")]
+def private encode_gemma_layer(t : Model; s : Session; enc : MetalComputeEncoder?; var g : GemmaDrafterGpu; si, l, cnt : int64; mr : KVMirror) {
     let c = t.config
     let dr & = g_gemma_drafter
     let dim = dr.dim
@@ -238,6 +295,8 @@ def private encode_gemma_layer(t : Model; s : Session; enc : MetalComputeEncoder
     let kvl = dr.kv_layer[l]
     let kdt = s.kv_dtype_k
     let sl = dr.sliding[l]
+    let bcos = sl ? g.slots[si].bcos_sw : g.slots[si].bcos
+    let bsin = sl ? g.slots[si].bsin_sw : g.slots[si].bsin
     unsafe {
         var bw_an = upload_region(addr < void? >(dr.fblob[dr.attn_norm_offs[l]]), uint64(dim) * 4ul)
         enc_rms(enc, g.bxin, 0ul, bw_an, g.bxn, g.u_dim, g.u_eps)
@@ -245,15 +304,20 @@ def private encode_gemma_layer(t : Model; s : Session; enc : MetalComputeEncoder
         var bw_qn = upload_region(addr < void? >(dr.fblob[dr.q_norm_offs[l]]), uint64(hs) * 4ul)
         var qka = qk_norm_args(uint(dr.n_heads), 0u, uint(hs), uint(qd), 0u, 0u, 0u, dr.eps)
         enc_qk_norm(enc, g.bq, g.bq, bw_qn, qka, dr.n_heads, 1l)
-        // rope on Q only: every pair is a Q pair, so the fused store's K/V lanes never run
-        var rka = gk_rope_kv_args(qd, 0l, hs, qd / 2l, qd / 2l, c.rope_neox, false, hs)
-        enc_rope_store(enc, true, g.bq, 0ul, g_arena, g_arena, 0ul, 0ul, sl ? g.bcos_sw : g.bcos, sl ? g.bsin_sw : g.bsin, 0ul, g_one, rka, qd / 2l)
+        if (kdt == KVDtype.tq4) {   // rope on Q only, rotated into the tq4 rows' basis: the q heads' threadgroups alone, so nothing stores
+            var tka = RopeStoreTq4Args(qd = uint(qd), head_size = uint(hs), nheads = uint(dr.n_heads), kv_mul = uint(dr.n_heads / dr.kvh[l]),
+                neox = c.rope_neox ? 1u : 0u, has_bias = 0u, rot = uint(hs), qhs = 0u)
+            enc_rope_store_tq4(enc, g.bq, 0ul, g_arena, g_arena, 0ul, 0ul, bcos, bsin, g.bq, tka, dr.n_heads, hs)
+        } else {   // rope on Q only: every pair is a Q pair, so the fused store's K/V lanes never run
+            var rka = gk_rope_kv_args(qd, 0l, hs, qd / 2l, qd / 2l, c.rope_neox, false, hs)
+            enc_rope_store(enc, true, g.bq, 0ul, g_arena, g_arena, 0ul, 0ul, bcos, bsin, 0ul, g_one, rka, qd / 2l)
+        }
         let lb = uint64(mirror_lbase(t, kdt, mr.cap_rows, kvl))
         let lkoff = mr.koff + lb
         let lvoff = mr.voff + lb
         let kstride = uint(kdt == KVDtype.f16 || kdt == KVDtype.f32 ? layer_kv_dim(c, kvl) : layer_kv_dim(c, kvl) / 32l)
         let kv_mul = uint(dr.n_heads / dr.kvh[l])
-        let window = sl && c.sliding_window > 0l ? uint(c.sliding_window) : 0u
+        let window = sl && c.sliding_window > 0l ? uint(c.sliding_window - 1l) : 0u   //! the pass's count is the anchor, its query a row past the last key: one key short of the window
         if (cnt > g_attn_single_max) {
             let nchunks = (cnt + ATTN_CHUNK_ROWS - 1l) / ATTN_CHUNK_ROWS
             let need = uint64(dr.n_heads * nchunks * (hs + 2l)) * 4ul
@@ -265,13 +329,16 @@ def private encode_gemma_layer(t : Model; s : Session; enc : MetalComputeEncoder
             var pka = SqAttnPartArgs(cnt = uint(cnt), kstride = kstride, nheads = uint(dr.n_heads), kv_mul = kv_mul, hs = uint(hs),
                 scale = 1.0, nchunks = uint(nchunks), softcap = 0.0, window = window)
             enc_attn_part(enc, kdt, g_arena, g_arena, lkoff, lvoff, g.bq, g.bpart, pka, dr.n_heads * nchunks, hs)
-            let chlo = window > 0u && cnt > c.sliding_window ? uint((cnt - c.sliding_window) / ATTN_CHUNK_ROWS) : 0u
+            let chlo = window > 0u && cnt > int64(window) ? uint((cnt - int64(window)) / ATTN_CHUNK_ROWS) : 0u
             var cka = SqAttnCombArgs(nch = uint(nchunks), nheads = uint(dr.n_heads), hs = uint(hs), chlo = chlo, window = window, hass = 0u)
             enc_attn_comb(enc, g.bpart, g.battn, cka, dr.n_heads, hs)
         } else {
             var ska = SqAttnArgs(cnt = uint(cnt), kstride = kstride, nheads = uint(dr.n_heads), kv_mul = kv_mul, hs = uint(hs),
                 scale = 1.0, softcap = 0.0, hass = 0u)
             enc_attn(enc, kdt, g_arena, g_arena, lkoff, lvoff, g.bq, g.battn, ska, dr.n_heads, hs)
+        }
+        if (kdt == KVDtype.tq4) {
+            enc_fwht_unsign(enc, g.battn, g.u_hs[l], g.u_qd[l], dr.n_heads, 1l, hs)
         }
         enc_gemv(enc, g.bblob, uint64(dr.wo_offs[l]), g.battn, g.bo, g.u_qd[l], g.u_dim, dim)
         var bw_pan = upload_region(addr < void? >(dr.fblob[dr.post_attn_norm_offs[l]]), uint64(dim) * 4ul)
@@ -294,7 +361,12 @@ def private encode_gemma_layer(t : Model; s : Session; enc : MetalComputeEncoder
 def public gemma_draft_step_gpu(t : Model; s : Session; tok, anchor : int64; h : array<float>; var out_tok : int64&; var h_next : array<float>) : bool {
     let dr & = g_gemma_drafter
     var g & = g_gemma_gpu
-    var cb = encode_gemma_chain(t, s, g, tok, h, anchor, 1l)
+    var cb = metal_new_command_buffer_unretained(g_queue)
+    var enc = metal_new_compute_encoder(cb)
+    encode_gemma_chain(t, s, g, enc, 0l, 0l, tok, h, anchor, 1l)
+    metal_end_encoding(enc)
+    metal_release(enc)
+    metal_commit(cb)
     metal_wait_until_completed(cb)
     let ok = !metal_command_buffer_failed(cb)
     if (ok) {
@@ -324,13 +396,13 @@ def public gemma_drafter_last_logits(var dst : array<float>) {
     }
 }
 
-[arch(at="../ARCHITECTURE_GPU_MTP.md#assistant-drafter-step")]
-def private encode_gemma_draft(t : Model; s : Session; enc : MetalComputeEncoder?; var g : GemmaDrafterGpu; anchor : int64; mr : KVMirror) {
+[arch(at="../ARCHITECTURE_GPU_MTP_ASSISTANT.md#assistant-drafter-step")]
+def private encode_gemma_draft(t : Model; s : Session; enc : MetalComputeEncoder?; var g : GemmaDrafterGpu; si, anchor : int64; mr : KVMirror) {
     let dr & = g_gemma_drafter
     let dim = dr.dim
     enc_gemv(enc, g.bblob, uint64(dr.pre_proj_off), g.bx, g.bxin, g.u_cat, g.u_dim, dim)
     for (l in range64(dr.n_layers)) {
-        encode_gemma_layer(t, s, enc, g, l, anchor, mr)
+        encode_gemma_layer(t, s, enc, g, si, l, anchor, mr)
     }
     var bw_on = upload_region(unsafe(addr < void? >(dr.fblob[dr.out_norm_off])), uint64(dim) * 4ul)
     enc_rms(enc, g.bxin, 0ul, bw_on, g.bhn, g.u_dim, g.u_eps)
@@ -339,43 +411,37 @@ def private encode_gemma_draft(t : Model; s : Session; enc : MetalComputeEncoder
     enc_gemv(enc, g.bblob, uint64(dr.post_proj_off), g.bhn, g.bhnext, g.u_dim, g.u_tdim, dr.tdim)
 }
 
-//! The drafter's `k` chained steps at the constant anchor in ONE committed command buffer: step i embeds `bvtok[i]` (`seed` at 0)
-//! beside `h` at step 0 and the step before's post-projection after it, its argmax landing in `bvtok[i + 1]`; the caller waits
+//! Stream slot `si`'s `k` chained drafter steps at the constant anchor onto `enc`: step i embeds token row `row0 + i` (`seed` at
+//! `row0`) beside `h` at step 0 and the step before's post-projection after it, its argmax landing in row `row0 + i + 1`. The
+//! slot's inputs are written here, so a tick's streams encode into one command buffer before any runs
 [arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-round-one-join")]
-def private encode_gemma_chain(t : Model; s : Session; var g : GemmaDrafterGpu; seed : int64; h : array<float>; anchor, k : int64) : MetalCommandBuffer? {
+def private encode_gemma_chain(t : Model; s : Session; var g : GemmaDrafterGpu; enc : MetalComputeEncoder?; si, row0, seed : int64; h : array<float>; anchor, k : int64) {
     let dr & = g_gemma_drafter
     let mr = g_mirrors[s.uid]
-    gemma_rope_rows(t, g, anchor)
-    var cb = metal_new_command_buffer_unretained(g_queue)
-    var enc = metal_new_compute_encoder(cb)
+    gemma_slot(g, dr, si)
+    gemma_rope_rows(t, g, si, anchor)
     gr_arm(false)
     unsafe {
         var tp = reinterpret<uint?>(metal_buffer_contents(g.bvtok))
-        tp[0] = uint(seed)
-        var bxp = reinterpret<uint8?>(metal_buffer_contents(g.bx))
-        memcpy(reinterpret<void?>(bxp + dr.tdim * 4l), addr < void? >(h[0]), uint64(dr.tdim) * 4ul)
-        let temb = blob_of(g_dev, t, t.emb_q8_off)   // the target's q8 token table (the decode's own embed source)
-        for (i in range64(k)) {
-            if (i > 0l) {
-                enc_copy_row(enc, g.bhnext, 0ul, g.bx, uint64(dr.tdim * 4l), g.u_tdim, dr.tdim)
-            }
-            enc_embed(enc, temb.buf, temb.boff, g.bvtok, g.bx, g.u_tdim, g.u_escale, dr.tdim, uint64(i * 4l), 0ul)
-            encode_gemma_draft(t, s, enc, g, anchor, mr)
-            enc_copy_row(enc, g.btok_out, 0ul, g.bvtok, uint64((i + 1l) * 4l), g.u_one1, 1l)
-        }
+        tp[row0] = uint(seed)
+        memcpy(metal_buffer_contents(g.slots[si].bh), addr < void? >(h[0]), uint64(dr.tdim) * 4ul)
     }
-    metal_end_encoding(enc)
-    metal_release(enc)
-    metal_commit(cb)
-    return cb
-}
-
-[arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-round-one-join")]
-def private gemma_draft_chain_gpu(t : Model; s : Session; seed, anchor, k : int64) : bool {
-    var cb = encode_gemma_chain(t, s, g_gemma_gpu, seed, s.mtp_h, anchor, k)
-    let ok = !metal_command_buffer_failed(cb)
-    metal_release(cb)
-    return ok
+    enc_copy_row(enc, g.slots[si].bh, 0ul, g.bx, uint64(dr.tdim * 4l), g.u_tdim, dr.tdim)
+    let at = emb_dev_gather_at_ok(t)   //! the fp32 table's gather reads its id at the list's start: the step's id moves there first
+    for (i in range64(k)) {
+        if (i > 0l) {
+            enc_copy_row(enc, g.bhnext, 0ul, g.bx, uint64(dr.tdim * 4l), g.u_tdim, dr.tdim)
+        }
+        let trow = uint64((row0 + i) * 4l)
+        if (at) {
+            enc_embed_dev(enc, t, g.bvtok, trow, g.bx, 0ul, 1l, g.u_tdim, g.u_escale)
+        } else {
+            enc_copy_row(enc, g.bvtok, trow, g.btok1, 0ul, g.u_one1, 1l)
+            enc_embed_dev(enc, t, g.btok1, 0ul, g.bx, 0ul, 1l, g.u_tdim, g.u_escale)
+        }
+        encode_gemma_draft(t, s, enc, g, si, anchor, mr)
+        enc_copy_row(enc, g.btok_out, 0ul, g.bvtok, uint64((row0 + i + 1l) * 4l), g.u_one1, 1l)
+    }
 }
 
 def private gemma_draft_chain_cpu(t : Model; var s : Session; pos, k : int64) : int64 {
@@ -403,12 +469,9 @@ var private @scratch g_gemma_hn : array<float>     // ... and the drafter's h_ne
 var private g_gemma_draft_cpu = false
 var private g_gemma_trace = false
 var private g_gemma_cpu_out : GemmaDraftOut
-var private g_gemma_us_draft = 0l   // round time split since attach: the draft chain ...
+var private g_gemma_us_draft = 0l   // round time split since attach: the draft chains ...
 var private g_gemma_us_verify = 0l  // ... the same-slab verify + walk + commit
 var private g_gemma_us_cold = 0l    // ... cold rounds (one plain step)
-
-//! Round time split since attach, microseconds: draft chain / verify+commit / cold rounds.
-def public gemma_drafter_time() : tuple<draft_us : int64; verify_us : int64; cold_us : int64> => (draft_us = g_gemma_us_draft, verify_us = g_gemma_us_verify, cold_us = g_gemma_us_cold)
 
 //! Bring-up levers: `set_gemma_draft_on_cpu(true)` routes every draft step through the CPU oracle
 //! (the target's live K/V, the same inputs), `set_gemma_trace(true)` logs drafts vs truth per round.
@@ -446,100 +509,175 @@ def private gemma_draft_step(t : Model; var s : Session; tok, anchor : int64; h 
     return true
 }
 
-
 // a round that cannot speculate takes one plain GPU step (output-invariant either way)
-def private gemma_plain_step(t : Model; var s : Session; tok, pos : int64) : int64 {
+def private gemma_plain_step(t : Model; var s : Session; tok, pos : int64) {
     let tc = ref_time_ticks()
     forward(t, s, tok, pos)
     s.n_past = pos + 1l
     g_gemma_us_cold += int64(get_time_usec(tc))
-    return 0l
 }
 
-//! The gemma speculative ROUND: k chained drafts at the constant anchor `pos` from (tok, the
-//! target's post-norm hidden of the position before), ONE same-slab batch verify of
-//! [tok, d_1 .. d_k], the accept walk, the commit. Same contract as metal_mtp_spec_round: returns a,
-//! the accepted drafts are s.mtp_vbatch[1..a], tok is always committed; a cold round takes one
-//! plain GPU step and returns 0. A model without a drafter (the NextN carriers) takes the metal round.
-[hot_path, arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-round-one-join")]
-def public gemma_mtp_spec_round(t : Model; var s : Session; tok : int64; k_req : int64) : int64 {
-    if (!g_gemma_attached) {
-        return metal_mtp_spec_round(t, s, tok, k_req)
-    }
+//! a stream that cannot speculate this round: no Metal blob or device, no carried hidden at its position, a round past the
+//! context, a K/V codec the round does not serve, or a mirror short of the position or of the round's rows
+def private gemma_round_cold(t : Model; s : Session; pos, k : int64) : bool {
     let c = t.config
-    let pos = s.n_past
-    mtp_round_begin(s)
+    if (g_dev == null || !t.metal_blob || pos < 1l || s.mtp_h_pos1 != pos || long_length(s.mtp_h) < g_gemma_drafter.tdim ||
+            pos + k + 1l > c.seq_len || !gemma_kv_ok(s) || !key_exists(g_mirrors, s.uid)) {
+        return true
+    }
+    let mr = g_mirrors[s.uid]
+    return mr.watermark < pos || mr.cap_rows < pos + k + 1l
+}
+
+var private @scratch g_gw_sessions : array<Session?>   //! the tick's warm streams, a verify group each
+var private @scratch g_gw_idx : array<int64>          //! ... their index among the tick's streams
+var private @scratch g_gw_pos : array<int64>
+var private @scratch g_gw_nr : array<int64>
+var private @scratch g_gw_toks : array<int64>
+
+//! The gemma speculative ROUNDS of a tick's streams at depth `k_req` (each stream's under its `mtp_depth_cap`): every warm
+//! stream's chain of drafts at its constant anchor `n_past` from (its token, the target's post-norm hidden of the position
+//! before), all encoded into ONE command buffer; ONE same-slab batch verify of every stream's [tok, d_1 .. d_k] as a group
+//! (`verify_batch_groups`); each stream's accept walk and commit. `acc[i]` is stream i's accepted count, the drafts in
+//! `mtp_vbatch[1..a]`, its token always committed; a cold stream takes one plain GPU step. Returns the warm streams the verify carried
+[hot_path, arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-round-one-join"), arch(at="../ARCHITECTURE_GPU_MTP_ASSISTANT.md#assistant-drafter-rounds")]
+def private gemma_mtp_spec_rounds(t : Model; var sessions : array<Session?>; toks : array<int64>; k_req : int64; var acc : array<int64>) : int64 {   // nolint:STYLE038 — draft chains / one verify / accept walks / commits is one sequential protocol on shared locals
+    let c = t.config
+    let n = long_length(sessions)
     let k = clamp(k_req, 1l, MTP_MAX_ROWS - 1l)
     let dr & = g_gemma_drafter
-    if (long_length(s.mtp_vbatch) < MTP_MAX_ROWS) {   // sized for the NextN carriers only at make_run_state
-        s.mtp_vbatch |> reserve_resize(MTP_MAX_ROWS)   // nolint:PERF026 — once per session
-    }
+    acc |> resize(n)   // nolint:PERF026 — grows to the stream count once; the callers pass reused scratch
+    g_gw_sessions |> clear()
+    g_gw_idx |> clear()
+    g_gw_pos |> clear()
+    g_gw_nr |> clear()
     g_gemma_h |> grow_resize(dr.tdim)
     g_gemma_hn |> grow_resize(dr.tdim)
-    var cold = (g_dev == null || !t.metal_blob || pos < 1l || s.mtp_h_pos1 != pos || long_length(s.mtp_h) < dr.tdim ||
-        pos + k + 1l > c.seq_len || s.kv_dtype_k != KVDtype.f16 || s.kv_dtype_v != KVDtype.f16 || !key_exists(g_mirrors, s.uid))
-    if (!cold) {
-        let mr = g_mirrors[s.uid]
-        cold = mr.watermark < pos || mr.cap_rows < pos + k + 1l
+    for (i in range64(n)) {
+        var s & = unsafe(*sessions[i])
+        acc[i] = 0l
+        let pos = s.n_past
+        mtp_round_begin(s)
+        if (long_length(s.mtp_vbatch) < MTP_MAX_ROWS) {   // sized for the NextN carriers only at make_run_state
+            s.mtp_vbatch |> reserve_resize(MTP_MAX_ROWS)   // nolint:PERF026 — once per session
+        }
+        let ki = mtp_depth_for(s, k)
+        if (gemma_round_cold(t, s, pos, ki)) {
+            gemma_plain_step(t, s, toks[i], pos)
+            continue
+        }
+        s.mtp_vbatch[0] = toks[i]
+        g_gw_sessions |> push(sessions[i])
+        g_gw_idx |> push(i)
+        g_gw_pos |> push(pos)
+        g_gw_nr |> push(ki + 1l)
     }
-    if (cold) {
-        return gemma_plain_step(t, s, tok, pos)
-    }
+    let ng = long_length(g_gw_sessions)
+    return 0l if (ng == 0l)
     finish_pending_step()
     let td = ref_time_ticks()
     let ts_draft = prof_ticks()
-    s.mtp_vbatch[0] = tok
     let gpu_chain = !g_gemma_draft_cpu
-    let drafted = gpu_chain ? (gemma_draft_chain_gpu(t, s, tok, pos, k) ? k : 0l) : gemma_draft_chain_cpu(t, s, pos, k)
-    if (drafted == 0l) {
-        return gemma_plain_step(t, s, tok, pos)
+    var rows = 0l
+    for (nr in g_gw_nr) {
+        rows += nr
+    }
+    var chain_ok = true
+    if (gpu_chain) {
+        gemma_token_rows(g_gemma_gpu, rows)
+        var cb = metal_new_command_buffer_unretained(g_queue)
+        var enc = metal_new_compute_encoder(cb)
+        var row0 = 0l
+        for (gi in range64(ng)) {
+            var s & = unsafe(*g_gw_sessions[gi])
+            encode_gemma_chain(t, s, g_gemma_gpu, enc, gi, row0, s.mtp_vbatch[0], s.mtp_h, g_gw_pos[gi], g_gw_nr[gi] - 1l)
+            row0 += g_gw_nr[gi]
+        }
+        metal_end_encoding(enc)
+        metal_release(enc)
+        metal_commit(cb)
+        chain_ok = !metal_command_buffer_failed(cb)
+        metal_release(cb)
+    } else {
+        for (gi in range64(ng)) {
+            var s & = unsafe(*g_gw_sessions[gi])
+            chain_ok = chain_ok && gemma_draft_chain_cpu(t, s, g_gw_pos[gi], g_gw_nr[gi] - 1l) == g_gw_nr[gi] - 1l
+        }
     }
     g_gemma_us_draft += int64(get_time_usec(td))
     prof_add("mtp.draft", ts_draft)
     let tv = ref_time_ticks()
     let ts_verify = prof_ticks()
-    let nr = drafted + 1l
+    g_gw_toks |> resize(rows)
+    var row = 0l
+    for (gi in range64(ng)) {
+        for (i in range64(g_gw_nr[gi])) {
+            g_gw_toks[row] = g_gw_sessions[gi].mtp_vbatch[i]   //! the device rows gather their own ids; the host rows read these where it does not
+            row++
+        }
+    }
     if (gpu_chain) {
         set_batch_same_slab_tokens(g_gemma_gpu.bvtok)
     }
-    let vok = verify_batch_step(t, g_gemma_ws, s, s.mtp_vbatch, pos, nr)
+    let vok = chain_ok && verify_batch_groups(t, g_gemma_ws, g_gw_sessions, g_gw_toks, g_gw_pos, g_gw_nr)
     set_batch_same_slab_tokens(null)
+    finish_pending_step()
     if (!vok) {
-        return gemma_plain_step(t, s, tok, pos)
+        for (gi in range64(ng)) {
+            var s & = unsafe(*g_gw_sessions[gi])
+            gemma_plain_step(t, s, s.mtp_vbatch[0], g_gw_pos[gi])
+        }
+        g_gw_sessions |> clear()
+        return 0l
     }
     prof_add("mtp.verify", ts_verify)
     let ts_walk = prof_ticks()
-    if (gpu_chain) {
-        unsafe {
-            let tp = reinterpret<uint?>(metal_buffer_contents(g_gemma_gpu.bvtok))
-            for (i in range64(drafted)) {
-                s.mtp_vbatch[i + 1l] = int64(tp[i + 1l])
+    row = 0l
+    for (gi in range64(ng)) {
+        var s & = unsafe(*g_gw_sessions[gi])
+        let pos = g_gw_pos[gi]
+        let kd = g_gw_nr[gi] - 1l
+        let r0 = row
+        if (gpu_chain) {
+            unsafe {
+                let tp = reinterpret<uint?>(metal_buffer_contents(g_gemma_gpu.bvtok))
+                for (i in range64(kd)) {
+                    s.mtp_vbatch[i + 1l] = int64(tp[r0 + i + 1l])
+                }
             }
         }
+        let a = mtp_accept_walk(s, kd, c.vocab_size) $(vr) => sameslab_argmax(r0 + vr)
+        if (g_gemma_trace) {
+            mtp_round_trace("gemma", s, pos, kd, kd + 1l, a, c.vocab_size)
+        }
+        copy_floats(s.mtp_hrows, a * c.dim, s.mtp_h, 0l, c.dim)
+        s.mtp_drafted += kd
+        mtp_round_commit(s, pos, kd, a)
+        g_gemma_drafted += kd
+        g_gemma_accepted += a
+        g_gemma_rounds++
+        acc[g_gw_idx[gi]] = a
+        row += g_gw_nr[gi]
     }
-    g_gemma_drafted += drafted
-    g_gemma_rounds++
-    let a = mtp_accept_walk(s, drafted, c.vocab_size) $(row) => sameslab_argmax(row)
-    if (g_gemma_trace) {
-        mtp_round_trace("gemma", s, pos, drafted, drafted, a, c.vocab_size)
+    if (ng > 1l) {
+        g_gemma_joint++
     }
-    unsafe {
-        memcpy(addr < void? >(s.mtp_h[0]), addr < void? >(s.mtp_hrows[a * c.dim]), uint64(c.dim) * 4ul)
-    }
-    s.mtp_drafted += drafted
-    mtp_round_commit(s, pos, drafted, a)
-    g_gemma_accepted += a
     g_gemma_us_verify += int64(get_time_usec(tv))
     prof_add("mtp.walk", ts_walk)
-    return a
+    g_gw_sessions |> clear()   // borrowed handles
+    return ng
 }
 
 [unused_argument(t), hot_path]   //! one drafter a process: the attach checked it against its target; the batch tick asks every step
 def private gemma_drafter_attached_to(t : Model) : bool => g_gemma_attached
 
+def private gemma_drafter_seam_stats() : MtpAssistantStats
+    => MtpAssistantStats(drafted = g_gemma_drafted, accepted = g_gemma_accepted, rounds = g_gemma_rounds, joint = g_gemma_joint,
+        draft_us = g_gemma_us_draft, verify_us = g_gemma_us_verify, cold_us = g_gemma_us_cold)
+
 [init]
 def gemma_mtp_init {
-    register_mtp_round_override("metal", @@gemma_mtp_spec_round)
     register_reload_prep(@@detach_gemma_drafter)
-    register_mtp_assistant(MtpAssistantSeams(sidecar = @@gemma_drafter_sidecar, attach = @@attach_gemma_drafter, attached = @@gemma_drafter_attached_to))
+    register_mtp_assistant("metal", MtpAssistantSeams(attach = @@attach_gemma_drafter, attached = @@gemma_drafter_attached_to,
+        rounds = @@gemma_mtp_spec_rounds, detach = @@detach_gemma_drafter, stats = @@gemma_drafter_seam_stats))
 }

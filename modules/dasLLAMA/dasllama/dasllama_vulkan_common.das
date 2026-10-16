@@ -2587,6 +2587,7 @@ struct RDec {
     ch : RdChain                  //! the chained step in flight
     carry : bool                  //! the plan's carry, whatever the knob said at the load: the landing's planes exist, and the final site can store the rows' post-final-norm hidden in xb_dev and land it into hid_host beside the logits (a NextN-headed model whose tier installed the landing)
     carry_live : bool             //! the carry as this step wants it - `carry` and the speculative round on; a flip re-records the commands whose last site stores or lands the row (`rd_carry_sync`)
+    carry_assist : bool           //! an attached assistant drafter reads the carry every step, the speculative knob notwithstanding (`vk_rdec_carry_arm`)
     hid_host : HostBuf            //! the landed carry rows: the token command's, or the window chain's last row at row 0
     head_norm_base : int64        //! the NextN draft head's norm block in the norms plane (`rdec_head_norm_base`); 0 = prepared without the head
     head_on : bool                //! the head is set (`vk_rdec_set_head`): the draft command serves

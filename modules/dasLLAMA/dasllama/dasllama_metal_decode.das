@@ -2324,32 +2324,10 @@ def private mtp_round_cold(t : Model; s : Session; pos, k : int64) : bool {
     return cold
 }
 
-//! The round's accept walk over `k` drafts: the leading run of verify rows whose pick (`pick`) equals the draft the row
-//! verifies - or, for a sampled stream, the sampled walk - with row a's logits landed as the session's next; the NextN round and
-//! the assistant round both
-[arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-round-one-join")]
-def mtp_accept_walk(var s : Session; k, vocab : int64; pick : block<(row : int64) : int64>) : int64 {
-    var a = 0l
-    if (mtp_walk_samples(s)) {
-        a = mtp_walk_sampled(s, k, vocab)
-    } else {
-        while (a < k && invoke(pick, a) == s.mtp_vbatch[a + 1l]) {
-            a++
-        }
-    }
-    unsafe {
-        memcpy(addr < void? >(s.logits[0]), addr < void? >(s.mtp_logits_b[a * vocab]), vocab * 4l)
-    }
-    return a
-}
-
-//! The round's commit at `pos` after `a` of `k` drafts: the carry's position, the mirror's watermark, the tallies, `n_past`
+//! The round's commit at `pos` after `a` of `k` drafts: the host half (`mtp_round_commit_host`) and the mirror's watermark
 def mtp_round_commit(var s : Session; pos, k, a : int64) {
-    s.mtp_h_pos1 = pos + a + 1l
     g_mirrors[s.uid].watermark = pos + a + 1l
-    s.mtp_accepted += a
-    mtp_pos_note(k, a)
-    s.n_past = pos + a + 1l
+    mtp_round_commit_host(s, pos, k, a)
 }
 
 //! a stream that leaves the round before its verify: one plain step commits its token
@@ -2831,16 +2809,9 @@ def metal_mtp_spec_eval(t : Model; var s : Session; tok : int64; var accepted : 
 }
 
 //! mtp_spec_eval_batch's GPU twin: every stream's depth-1 round through one joint verify; a stream's
-//! accepted draft, or -1; returns how many streams' rows the verify carried
+//! accepted draft count (its draft in `mtp_vbatch[1]`); returns how many streams' rows the verify carried
 [hot_path]
-def metal_mtp_spec_eval_batch(t : Model; var sessions : array<Session?>; toks : array<int64>; var accepted : array<int64>) : int64 {
-    let joined = metal_mtp_spec_rounds(t, sessions, toks, 1l, g_round_acc)
-    accepted |> resize(long_length(sessions))   // nolint:PERF026 — grows to the stream count once; the caller keeps the array across ticks
-    for (sp, ac, a in sessions, accepted, g_round_acc) {
-        ac = a > 0l ? sp.mtp_vbatch[1] : -1l
-    }
-    return joined
-}
+def metal_mtp_spec_eval_batch(t : Model; var sessions : array<Session?>; toks : array<int64>; var accepted : array<int64>) : int64 => metal_mtp_spec_rounds(t, sessions, toks, 1l, accepted)
 
 // DASLLAMA_METAL_DECODE_CONCURRENT (default ON): concurrent encoder for the single-stream step,
 // barriers only at tracker-detected hazards (hz_gate in every decode-path enc_* helper); g_skip
@@ -3733,24 +3704,54 @@ def metal_batch_decode_forward(t : Model; var ws : BatchWorkspace; var sessions 
 //! The recurrent rows' group table words at `positions + poff`: a row a session against its own mirror, or the same-slab
 //! rows as one group over their one session's (`ARCHITECTURE_GPU_MTP.md#dn-group-stages`); false = a row with no state
 def private batch_dn_rows(ws : BatchWorkspace; var sessions : array<Session?>; nrows, poff : int64) : bool {
-    let same = batch_same_slab()
-    let ng = same ? 1l : nrows
+    let ng = batch_row_groups(nrows)
     dn_grp_clear()
     g_b_ple_bases |> clear()
     g_b_dn_soffs |> clear()
     dn_mirror_room(ng)
     g_b_ple_bases |> reserve(ng)
     g_b_dn_soffs |> reserve(ng)
-    for (i in range64(ng)) {
+    for (i in range64(nrows)) {
+        continue if (g_b_grp_nr[i] == 0l)
         var sp = sessions[i]
         var dm = dn_mirror_prepare(*sp, ws.positions[i] + poff)
         return false if (!dm.ok)
-        dn_grp_push(i, same ? nrows : 1l, dm.state_off, dm.state_off, dm.conv_off, dm.conv_off)
+        dn_grp_push(i, g_b_grp_nr[i], dm.state_off, dm.state_off, dm.conv_off, dm.conv_off)
         g_b_ple_bases |> push(dm.ple_off)
         g_b_dn_soffs |> push(dm.state_off)
     }
     g_b_dn_ng = ng
     return true
+}
+
+var private @scratch g_b_grp_nr : array<int64>   //! a row's group size where the row opens its group, 0 past the group's first row
+
+//! The step's row groups: under the same-slab step one session's consecutive rows a group (`batch_same_group_rows`), else a row a
+//! group; fills `g_b_grp_nr` and returns the group count
+[arch(at="../ARCHITECTURE_GPU_MTP.md#batch-same-slab")]
+def private batch_row_groups(nrows : int64) : int64 {
+    g_b_grp_nr |> resize(nrows)
+    let same = batch_same_slab()
+    var row = 0l
+    var g = 0l
+    while (row < nrows) {
+        let n = same ? (g < batch_same_group_count() ? clamp(batch_same_group_rows(g), 1l, nrows - row) : nrows - row) : 1l
+        for (i in range64(n)) {
+            g_b_grp_nr[row + i] = i == 0l ? n : 0l
+        }
+        row += n
+        g++
+    }
+    return g
+}
+
+//! the deepest group's rows: the recurrent stages' longest walk
+def private batch_group_rows_max(nrows : int64) : int64 {
+    var m = 0l
+    for (i in range64(nrows)) {
+        m = max(m, g_b_grp_nr[i])
+    }
+    return m
 }
 
 def private batch_step_land(t : Model; ws : BatchWorkspace; var sessions : array<Session?>; nrows : int64; var L : BatchLanding&) : bool {
@@ -3784,11 +3785,12 @@ def batch_rows_prepare(t : Model; ws : BatchWorkspace; var sessions : array<Sess
     // reserve the whole step's arena demand BEFORE pinning — growth is a release-all rebuild
     // and cannot run once the batch's rows are pinned (the readiness check above already
     // finished any in-flight step when a session needs a new slice)
-    let same = batch_same_slab()
+    batch_row_groups(nrows)
     var demand = 0ul
     var largest = 0ul
-    for (i in range64(same ? 1l : nrows)) {
-        let d = mirror_arena_demand(t, *sessions[i], ws.positions[same ? nrows - 1l : i] + poff)
+    for (i in range64(nrows)) {
+        continue if (g_b_grp_nr[i] == 0l)
+        let d = mirror_arena_demand(t, *sessions[i], ws.positions[i + g_b_grp_nr[i] - 1l] + poff)
         demand += d
         largest = max(largest, d)
     }
@@ -3811,7 +3813,7 @@ def batch_rows_prepare(t : Model; ws : BatchWorkspace; var sessions : array<Sess
         maxcnt = 0l
         for (i in range64(nrows)) {
             var sp = sessions[i]
-            if (!same || i == 0l) {
+            if (g_b_grp_nr[i] > 0l) {
                 mir_same = mirror_prepare(t, *sp, ws.positions[i] + poff)
             }
             let mir = mir_same
@@ -4311,7 +4313,7 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
         bple_emb = bple_emb, bple_key = bple_key, bple_gated = bple_gated, bple_val = bple_val, u_ple_in = u_ple_in,
         dn = dn, bdn_qkv = bdn_qkv, bdn_cv = bdn_cv, bdn_z = bdn_z, bdn_o = bdn_o, bdn_b = bdn_b, bdn_g = bdn_g,
         u_cd = u_cd, u_nvh = u_nvh, u_nvh2 = u_nvh2, u_di = u_di, dn_ba_rows = dn && t.dn_ba_f32,
-        bdn_grp = dn_tab.buf, dn_ng = g_b_dn_ng, dn_npmax = same ? nrows : 1l,
+        bdn_grp = dn_tab.buf, dn_ng = g_b_dn_ng, dn_npmax = batch_group_rows_max(nrows),
         bdn_qg = bdn_qg, bdn_gate = bdn_gate, u_dn_qd2 = u_dn_qd2, u_total_qd = u_total_qd,
         bx = bx, bxb = bxb, bxb2 = bxb2, bqkv = bqkv, bh12 = bhb, bh12b = bhb2, bpart = bpart,
         bxh = bxh, bfgh = bfgh, bytes_xh = bytes_xh, bytes_fgh = bytes_fgh, xh_ok = xh0,
@@ -4372,10 +4374,11 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
         // (the KV writeback stays). All-or-nothing per step: one unwrappable session keeps the whole
         // step on the landing scatter. Pipe mode writes s.logits ASYNCHRONOUSLY — fixed-token-only.
         if (same) {
-            var bvarg = pool_acquire(g_pool, g_dev, 64ul)
+            let bytes_arg = uint64(max(nrows, 16l) * 4l)
+            var bvarg = pool_acquire(g_pool, g_dev, bytes_arg)
             enc_argmax_rows(enc, blog, bvarg, u_vocab, nrows)
             L.bvarg = bvarg
-            L.pooled |> push((buf = bvarg, size = 64ul))
+            L.pooled |> push((buf = bvarg, size = bytes_arg))
         }
         nc_all = !same
         for (i in range64(nrows)) {
@@ -4545,6 +4548,14 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
     }
     L.blog = gpu_logits && !nc_all ? blog : null   // nc steps: the GPU scatter already fed s.logits
     L.sameslab = same
+    L.grp_nr |> clear()
+    if (same) {
+        for (n in g_b_grp_nr) {
+            if (n > 0l) {
+                L.grp_nr |> push(n)
+            }
+        }
+    }
     //! a plain step on a NextN-headed (or carry-armed) model lands each row's post-norm hidden into its session's `mtp_h`, so the stream's next speculative round starts warm - the same-slab verify lands the rows into `mtp_hrows` instead
     let carry = same || c.n_layer_nextn > 0l || g_mtp_carry_hidden
     L.bxf = carry && gpu_logits ? (hc ? bhc : (g_mtp_carry_pre && c.n_layer_nextn <= 0l ? bx : bxf)) : null   //! a hyper-connection model's carry is the wide residual row before the head mixer

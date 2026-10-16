@@ -141,7 +141,7 @@ def vk_rdec_prepare(n_layers, n_attn, dim, qd, kv_dim, head_size, n_heads, hidde
     r.carry = carry
     r.carry_live = carry && get_mtp_spec()
     r.x_dev = make_device_buf(dim * 4l * nb)
-    r.xb_dev = make_device_buf(dim * 4l * nb, carry && r.log_xfer)   // the carry's rows leave on the transfer queue as the logits do
+    r.xb_dev = make_device_buf(dim * 4l * nb, r.log_xfer)   //! the carry's rows leave on the transfer queue as the logits do - an assistant drafter arms the carry after the load (`vk_rdec_carry_arm`)
     if (carry) {
         r.hid_host = make_host_buf(dim * 4l * nb, false, [cached = true, xfer_shared = r.log_xfer])
     }
@@ -3076,7 +3076,7 @@ def private rdq_host_add(var led : RdqLedger; ts0, t1, t2, t3, t4 : int64) {
 //! re-records every command and landing copy whose last site stores or lands the row, so a round switched off pays no carry
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-spec-knob-gate")]
 def rd_carry_sync {
-    let want = g_rd.carry && get_mtp_spec()
+    let want = g_rd.carry && (get_mtp_spec() || g_rd.carry_assist)
     return if (want == g_rd.carry_live)
     g_rd.carry_live = want
     rd_unmake_sets()
@@ -3555,6 +3555,20 @@ def private rd_carry_width : int64 => g_rd.hc ? g_rd.hc_n * g_rd.dim : g_rd.dim
 def private rd_carry_src : uint64 => g_rd.hc ? g_rd.hccarry_out_dev : g_rd.xb_dev
 
 def private rd_carry_bit : uint => g_rd.hc ? VHZ_X : VHZ_XB
+
+//! An assistant drafter's carry, armed after the load (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-spec-knob-gate`): the landing's host rows made
+//! where the plan made none, and every step lands the post-final-norm row while `on` holds, the speculative knob notwithstanding; the
+//! next served entry re-records the commands whose last site stores or lands it (`rd_carry_sync`). False where no driver is armed
+[arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-spec-knob-gate")]
+def vk_rdec_carry_arm(on : bool) : bool {
+    return false if (g_rd == null || !g_rd.ready || g_rd.hc)
+    if (on && !g_rd.carry) {
+        g_rd.hid_host = make_host_buf(g_rd.dim * 4l * g_rd.nb, false, [cached = true, xfer_shared = g_rd.log_xfer])
+        g_rd.carry = true
+    }
+    g_rd.carry_assist = on
+    return true
+}
 
 [hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_LANDING.md#logits-transfer-queue")]   //! per token, reached through the tier's registered seat
 def vk_rdec_land_carry(row : int64; var dst : array<float>) {

@@ -141,6 +141,8 @@ Each companion's sections are anchored by topic; a citation spells `<doc>.md#<an
   eras take.
 - `ARCHITECTURE_GPU_MTP.md` - the Metal speculative round over the batch driver's same-slab
   verify, and the box knob that sets the depth a round drafts.
+- `ARCHITECTURE_GPU_MTP_ASSISTANT.md` - the gemma-4 assistant drafter on both GPU homes: one
+  drafter step, the sidecar and the attach, and the rounds of a scheduler tick.
 - `ARCHITECTURE_GPU_MTP_DECODE.md` - the kernel argument-alignment contract enforced at every
   dispatch, the K-quant small-batch crown and the row-buffer pad a multi-row verify dispatches
   under, the single-row driver's greedy chain, and the decode layer encoder.

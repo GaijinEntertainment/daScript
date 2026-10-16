@@ -40,16 +40,23 @@ struct public CatalogEntry {
     vision_url : string
     vision_bytes : int64
     vision_sha256 : string
+    drafter_file : string  //! the pinned assistant drafter the load attaches beside the file ("" = none)
+    drafter_url : string
+    drafter_bytes : int64
+    drafter_sha256 : string
 }
 
 def private catalog_entry_of(s : ModelSpec) : CatalogEntry {
-    let tower <- serve_vision_tower(s.serve_vision)
+    let tower <- serve_companion(s.serve_vision)
+    let drafter <- serve_companion(s.serve_drafter)
     return CatalogEntry(name = s.serve_name, display = s.serve_display,
         note = s.serve_note, file = s.file, url = s.url, bytes = s.bytes,
         sha256 = s.sha256, ctx = s.serve_ctx, vram_hint_gb = s.serve_vram_gb,
         is_default = s.serve_default,
         vision_file = tower.name, vision_url = tower.url,
-        vision_bytes = tower.bytes, vision_sha256 = tower.sha256)
+        vision_bytes = tower.bytes, vision_sha256 = tower.sha256,
+        drafter_file = drafter.name, drafter_url = drafter.url,
+        drafter_bytes = drafter.bytes, drafter_sha256 = drafter.sha256)
 }
 
 //! The serving catalog: a VIEW over `model_specs()` (the one model set) — rows carrying a
@@ -301,6 +308,15 @@ def public catalog_download_start_vision(dir : string; e : CatalogEntry) : strin
     return download_start_item(dir, "vision:{e.name}", e.vision_file, e.vision_url, e.vision_sha256, e.vision_bytes)
 }
 
+//! Start downloading entry `e`'s assistant drafter (download id "drafter:<name>") beside its file, where the load's sidecar
+//! resolver finds it. "" on success.
+def public catalog_download_start_drafter(dir : string; e : CatalogEntry) : string {
+    if (empty(e.drafter_file)) {
+        return "'{e.name}' has no assistant drafter"
+    }
+    return download_start_item(dir, "drafter:{e.name}", e.drafter_file, e.drafter_url, e.drafter_sha256, e.drafter_bytes)
+}
+
 //! Start downloading the ASR tower (parakeet v3; download id "asr"). "" on success.
 def public catalog_download_start_asr(dir : string) : string {
     let tower <- serve_asr_tower()
@@ -352,6 +368,7 @@ def public catalog_state_json(dir : string; ram_gb : int; vram_mb : int64; needs
         let local = catalog_local_path(dir, e)
         let vision_path = empty(e.vision_file) ? "" : path_join(dir, e.vision_file)
         let vision_present = !empty(vision_path) && stat(vision_path).is_valid
+        let drafter_present = !empty(e.drafter_file) && stat(path_join(dir, e.drafter_file)).is_valid
         entries |> push(JV((
             name = e.name, display = e.display, note = e.note, file = e.file,
             bytes = e.bytes, sha256 = e.sha256, ctx = e.ctx,
@@ -359,7 +376,9 @@ def public catalog_state_json(dir : string; ram_gb : int; vram_mb : int64; needs
             present = !empty(local), path = local,
             vision_file = e.vision_file, vision_bytes = e.vision_bytes,
             vision_present = vision_present,
-            vision_path = vision_present ? vision_path : "")))
+            vision_path = vision_present ? vision_path : "",
+            drafter_file = e.drafter_file, drafter_bytes = e.drafter_bytes,
+            drafter_present = drafter_present)))
     }
     let asr_tower <- serve_asr_tower()
     let asr_path = path_join(dir, asr_tower.name)

@@ -1939,9 +1939,10 @@ module) is independent and can land any time - it is pure structure.
     ping-pong, the concat when the width differs, the head-block loop - is identical and could run
     once over an encoder interface, about 450 lines.
 
-116. **The speculative round has no Vulkan round seat.** The round's four backend seats
+116. **The NextN speculative round has no Vulkan round seat.** The round's four backend seats
     (`register_mtp_spec_override`, `_spec_batch_`, `_round_`, `_seam_` in `dasllama_common.das`)
-    are filled by the Metal decode driver and the Metal gemma drafter alone. The resident driver
+    are filled by the Metal decode driver alone; the gemma assistant drafter's rounds ride their own seams on both
+    homes (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-assistant-drafter`). The resident driver
     homes the NextN draft head and serves the round's draft through its own seat
     (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head`), under the Vulkan owner
     (`register_mtp_seat_owner`, "the resident driver is armed on t"), serves the round's
@@ -1970,10 +1971,9 @@ module) is independent and can land any time - it is pure structure.
     resident driver: the Vulkan round seat (`register_mtp_round_override("vulkan", ...)`) - a
     round at depth k > 1 (the verify's per-row planes and the rollback scratch already hold the
     box knob's depth plus one, sixteen rows at most, and the scratch's rows serve a reject to any
-    `a < k`) and the joint verify across streams - then the gemma assistant drafter. Carriers: Qwen3.5-0.8B-MTP first,
+    `a < k`) and the joint verify across streams. Carriers: Qwen3.5-0.8B-MTP first,
     Qwen3.8-27B with its split Q8_0 head for the rate (Metal reads 1.23x at depth 1, 1.31x at
-    depth 3 on the M5 Max), gemma-4-26B with the assistant drafter as the second round kind; the
-    invariance cells of `tests/test_mtp.das` and the scheduler arm are the parity, `lcpp_bench
+    depth 3 on the M5 Max); the invariance cells of `tests/test_mtp.das` and the scheduler arm are the parity, `lcpp_bench
     --mtp-ab` on the pod the rate, a CUDA reference row per carrier beside it.
 118. **Two vulkan-lane arms still bake from RAM with the planar families kept.** The streaming mint
     (`ARCHITECTURE_IMAGE_VULKAN.md#image-vulkan-mint`) serves the cold load; a planar image already

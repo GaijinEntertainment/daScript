@@ -90,17 +90,19 @@ asymmetries a stamp family ledgers - stays in `ARCHITECTURE_GPU.md#gpu-backends`
   tower's `set_metal_fc_attn_dev`): each picks between two forms the Metal prefill or
   tower driver carries side by side, and the Vulkan chain has one form at each of those sites, so nothing to pick.
   The callers outside the backend are the probe `harness/p0_ko_probe.das` and the cells that hold both forms.
-- **The speculative round is Metal-only.** `register_mtp_round_override("metal", ...)` has one registrant, `gemma_mtp_spec_round`
-  (falling through to `metal_mtp_spec_round` with no drafter); Vulkan serves the CPU round around its draft and verify seats (`ARCHITECTURE_GPU_MTP.md`).
+- **The NextN speculative round is Metal-only.** `register_mtp_round_override("metal", ...)` has one registrant, `metal_mtp_spec_round`;
+  Vulkan serves the CPU round around its draft and verify seats (`ARCHITECTURE_GPU_MTP.md`). The assistant drafter's rounds ride
+  `MtpAssistantSeams` on both homes (`ARCHITECTURE_GPU_MTP_ASSISTANT.md#assistant-drafter-step`, `ARCHITECTURE_GPU_VULKAN_MTP.md#resident-assistant-drafter`).
 - **The same-slab verify seat is Vulkan-only.** `register_mtp_verify_override("vulkan", ...)` has one registrant, the resident driver's same-slab verify (`ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command`), which the CPU round takes in place of its two-row prefill; a verify the seat declines runs the CPU two-row prefill inside a window the resident prefill declines by name (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-window`). Metal's same-slab verify runs inside its round seat.
 - **The device rollback seat is Vulkan-only.** `register_mtp_rollback_override("vulkan", ...)` has one registrant, the reject of a verify the resident seat served - the region's recurrent slots back from the copies the verify command took, no snapshot and no replayed step (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-verify-rollback`; the tier seat is `install_rdec_rollback`). Metal's reject replays on its shadow region inside its round seat.
-- **The joint speculative tick is Metal-only.** `register_mtp_spec_batch_override("metal", ...)`
+- **The joint NextN speculative tick is Metal-only.** `register_mtp_spec_batch_override("metal", ...)`
   has one registrant, `metal_mtp_spec_eval_batch`: the scheduler's tick hands every speculative
-  stream to it and one same-slab verify carries all their rows (`ARCHITECTURE_GPU_MTP.md#mtp-joint-verify`); on Vulkan and the CPU the tick steps each stream through its own round.
-- **The assistant drafter's seams are Metal-only.** `register_mtp_assistant` has one registrant, the gemma drafter
-  driver (`ARCHITECTURE_ENGINE.md`, the `dasllama_mtp_gemma.das` charter): `mtp_drafter_sidecar_` reads "" and
-  `attach_mtp_drafter_` false on a build with no Metal, so a scheduler on Vulkan or the CPU speculates on a
-  NextN head alone.
+  stream to it and one same-slab verify carries all their rows (`ARCHITECTURE_GPU_MTP.md#mtp-joint-verify`); on Vulkan and the CPU the tick steps each NextN stream through its own round. An assistant drafter's tick verifies every stream's rows together on both homes.
+- **The assistant drafter's drafts reach its verify on the device on Metal alone.** Metal's verify gathers the draft rows' embeds off
+  the chain's token buffer, so drafts and verify run behind one another with no join between
+  (`ARCHITECTURE_GPU_MTP.md#mtp-round-one-join`). The Vulkan N-row command takes host-staged rows - each row's embed and rope row
+  built on the host at its own position - so the draft command lands its ids on the host first, one join a round
+  (`ARCHITECTURE_GPU_VULKAN_MTP.md#resident-assistant-drafter`).
 - **The device KV room seat is Metal-only.** `set_gpu_kv_room_hook` has one registrant, the Metal mirror's ceiling
   (`mirror_rows_within_ceiling`); `gpu_kv_room_rows` reads unbounded elsewhere and `device_kv_max_rows` the model's
   own context, since the Vulkan plan sizes its regions at the load (`set_gpu_ctx_max`).
