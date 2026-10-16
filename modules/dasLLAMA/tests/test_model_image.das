@@ -36,9 +36,11 @@ require daslib/archive
 require daslib/apply
 require daslib/fio
 require strings
+require daslib/strings_boost   // split - the mint child's /usr/bin/time lines
 require math
 require dasllama/dasllama_audio_io
 require _model_tier
+require _child_run   // run_child / das_exe - the mx4-stream arm's mint child
 
 // The prepared-model image (.dlim) rail. The mechanics arm exercises save/load on a synthetic
 // carrier (no models, runs everywhere incl. CI): value round trip, dotted nested-carrier
@@ -994,6 +996,103 @@ def test_metal_flavor_derive(tst : T?) {
             set_metal_mode(MetalMode.off)
             clear_kernel_backend_pin()
             select_kernel_backend(prior_backend)
+        }
+    }
+}
+
+//! the integer `/usr/bin/time -l` prints ahead of the field `field` in `out`, -1 where no line carries it
+def private time_l_field(out, field : string) : int64 {
+    for (line in split(out, "\n")) {
+        if (find(line, field) >= 0) {
+            return to_int64(strip(replace(line, field, "")), false)
+        }
+    }
+    return -1l
+}
+
+//! A cold planar mint of a native-MXFP4 MoE file streams the expert planes: the minting process's peak physical footprint
+//! (`/usr/bin/time -l`, the kernel's high-water mark) stays under the mxq + mxs bytes the image holds, and the mapped planes
+//! are the eager load's byte for byte
+def private mx4_streamed_mint(t : T?; path : string) {
+    let img = image_path_for(path, "")
+    if (get_platform_name() == "darwin") {
+        let root = get_das_root()
+        var out = ""
+        let code = run_child("/usr/bin/time -l \"{das_exe()}\" -jit -dasroot \"{root}\" \"{root}/modules/dasLLAMA/tests/_mx4_mint_root.das\" -- \"{path}\" 2>&1", out)
+        let peak = time_l_field(out, "peak memory footprint")
+        let marker = "MX4_MINT mapped=true mx4=true planes="
+        let at = find(out, marker)
+        let planes = at >= 0 ? to_int64(slice(out, at + length(marker), find(out, "\n", at)), false) : 0l
+        to_log(LOG_INFO, "mx4-stream {base_name(path)}: the mint's peak footprint {peak >> 20l} MB against {planes >> 20l} MB of expert planes\n")
+        t |> success(code == 0 && at >= 0, "the child minted the planar image and mapped it back, the expert stacks native-MXFP4 (exit {code})")
+        t |> success(planes > 0l && peak > 0l && peak < planes,
+            "the mint's peak footprint {peak >> 20l} MB sits under the {planes >> 20l} MB of expert planes it minted")
+        if (at < 0 || peak <= 0l) {
+            to_log(LOG_ERROR, "the mint child's output:\n{out}\n")
+        }
+    } else {
+        t |> skip("the peak-footprint leg reads `/usr/bin/time -l`, a macOS form - the byte compare below still runs")
+        remove(img)
+    }
+    var tm <- load_model_cached(path, QuantMode.q8, [planar_only = true])
+    t |> success(tm.image_map != null && stat(img).is_valid, "the planar image maps")
+    var te <- load_model_(path, QuantMode.q8)
+    t |> equal(count_mismatch(te.mxq, tm.mxq), 0l, "the minted nibble plane is the eager load's")
+    t |> equal(count_mismatch(te.mxs, tm.mxs), 0l, "the minted E8M0 plane is the eager load's")
+    t |> success(te.mx4_repacked == tm.mx4_repacked, "both forms took the same repack ({te.mx4_repacked})")
+    delete te
+    delete tm
+    remove(img)
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        mx4_streamed_metal_mint(t, path)
+    }
+}
+
+//! the metal flavor's cold mint of the same file streams too: its blob plane and native-MXFP4 planes are the in-RAM
+//! transform's byte for byte
+def private mx4_streamed_metal_mint(t : T?; path : string) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        if (!has_decode_override("metal")) {
+            t |> skip("no metal decode override registered - the metal flavor leg needs the Metal tier")
+            return
+        }
+        let prior_backend = active_kernel_backend()
+        pin_kernel_backend("portable")
+        var tr <- load_model_(path, QuantMode.q8)
+        t |> success(convert_model_to_metal_blob(tr), "the in-RAM metal-blob transform")
+        let img_m = image_path_for(path, METAL_IMAGE_TAG)
+        remove(img_m)
+        set_metal_mode(MetalMode.when_available)
+        var tm <- load_model(path, QuantMode.q8)
+        t |> success(tm.image_map != null && tm.metal_blob && tm.experts_mx4, "the cold metal mint serves a blob image, the expert stacks native-MXFP4")
+        t |> equal(count_mismatch(tr.mblob, tm.mblob), 0l, "the streamed blob plane is the in-RAM transform's")
+        t |> equal(count_mismatch(tr.mxq, tm.mxq), 0l, "the streamed nibble plane is the in-RAM transform's")
+        t |> equal(count_mismatch(tr.mxs, tm.mxs), 0l, "the streamed E8M0 plane is the in-RAM transform's")
+        delete tm
+        delete tr
+        remove(img_m)
+        set_metal_mode(MetalMode.off)
+        clear_kernel_backend_pin()
+        select_kernel_backend(prior_backend)
+    }
+}
+
+[test]
+def test_mx4_streamed_mint(t : T?) {
+    t |> run("gemma-4-26B-A4B MXFP4_MOE q8: the cold mint streams the native-MXFP4 expert planes") @(t : T?) {
+        if (!family_on(t, "gemma4moe") || !arm_on(t, "mx4-stream")) return
+        let path = path_join(models_dir(), "gemma-4-26B-A4B-it-MXFP4_MOE-local.gguf")
+        return if (!jit_model_available(t, path))
+        with_dasllama_jobque_() {
+            mx4_streamed_mint(t, path)
+        }
+    }
+    t |> run("gpt-oss-20b mxfp4 q8: the cold mint streams the native-MXFP4 expert planes") @(t : T?) {
+        if (!family_on(t, "gptoss") || !arm_on(t, "mx4-stream")) return
+        let path = path_join(models_dir(), "gpt-oss-20b-mxfp4.gguf")
+        return if (!jit_model_available(t, path))
+        with_dasllama_jobque_() {
+            mx4_streamed_mint(t, path)
         }
     }
 }

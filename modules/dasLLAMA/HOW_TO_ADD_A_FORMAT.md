@@ -205,12 +205,12 @@ then takes it with no arm, since each walks `kq_dense_b32` and keys its table by
 the repack, stream-collect and GPU-gather hooks (`register_model_layout`, `register_stream_layout`
 over `repack_b32_stacks`, `collect_b32_regions`, `moe_gpu_gather_b32_stack`), `repack_regions`
 and `stream_repack_one` (`dasllama_layout.das`), `layout_gather_dispatch` (`dasllama_common.das`),
-the eager repack loop under `mr > 1` (`dasllama_load.das`), and the trim's plane deletes and
+the eager repack loop under `mr > 1`, the plane branches of `stream_job_view` and the scale landing
+of `stream_job_transcode` (`dasllama_load.das`), and the trim's plane deletes and
 `trim_plane_dropped`. What still keys on the format by hand: `Model.<fmt>q`/`<fmt>s` and the
 served-bytes accounting (`dasllama_common.das`); `LayoutSizes.<fmt>_n`, `KqCursors.<fmt>`, the
 `kq_take` arm, the landing memcpy, the plane alloc's format list,
-`g_stream_plane_total["<fmt>q"]`, `stream_field_of`, the per-format plane branches of
-`stream_job_view` and the scale landing of `stream_job_transcode` (`dasllama_load.das`);
+`g_stream_plane_total["<fmt>q"]` and `stream_field_of` (`dasllama_load.das`);
 `metal_blob_off_ok` (`dasllama_layout.das`); the quant-plane names in `streamed_q_planes` and the
 scale planes summed in `vk_mint_extra_bytes` (`dasllama_image.das`); `DlimCpuConfig.<fmt>_mr` in
 the identity string and its arms in `dlim_b32_mr` / `set_dlim_b32_mr` (`dasllama_config.das`);
