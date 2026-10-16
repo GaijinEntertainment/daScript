@@ -438,6 +438,80 @@ def private cls_epi_rows : array<Reading> {
     return <- rows
 }
 
+//! the residual step at the gemma-3-12b and E4B widths: the plain add + norm, the sandwich seam (the branch under its post norm,
+//! the add, the next norm) as the pair and as one dispatch, the seam with no norm stored (the per-layer-embedding residual), each
+//! at a decode row, a verify's four rows and a 512-row window; and the E-series pre-step's finish over 42 layers of 256
+def private ar_rows : array<Reading> {
+    let np = 512
+    var rows : array<Reading>
+    rows |> reserve(24)
+    for (dim in fixed_array(2560, 3840)) {
+        var bx = fill_buf(np * dim, 0.5)
+        var ba = fill_buf(np * dim, 0.25)
+        var by = fill_buf(np * dim, 0.0)
+        var bh = metal_new_buffer(g_dev, uint64(np * dim * 2))
+        var bw = fill_buf(2 * dim, 0.01)
+        var udim = uniform_u32(uint(dim))
+        var ueps = uniform_f32(1e-6)
+        var utot = uniform_u32(uint(dim))
+        var utot4 = uniform_u32(uint(4 * dim))
+        var utotn = uniform_u32(uint(np * dim))
+        rows |> push(time_rows("ar dim={dim} 1 row: add + norm") $(enc) {
+            enc_addrms_c(enc, bx, ba, bw, by, udim, ueps, g_one)
+        })
+        rows |> push(time_rows("ar dim={dim} 1 row: sandwich seam, rms + add_rms") $(enc) {
+            enc_rms(enc, ba, 0ul, bw, ba, udim, ueps)
+            enc_addrms_c(enc, bx, ba, bw, by, udim, ueps, g_one)
+        })
+        rows |> push(time_rows("ar dim={dim} 1 row: sandwich seam, pre_add_rms") $(enc) {
+            enc_preaddrms_c(enc, bx, ba, bw, bw, by, udim, ueps)
+        })
+        rows |> push(time_rows("ar dim={dim} 1 row: sandwich seam no norm out, rms + add") $(enc) {
+            enc_rms(enc, ba, 0ul, bw, ba, udim, ueps)
+            enc_add(enc, bx, 0ul, ba, 0ul, utot, int64(dim))
+        })
+        rows |> push(time_rows("ar dim={dim} 4 rows: add + norm") $(enc) {
+            enc_add_rms_b(enc, bx, ba, bw, by, udim, ueps, 4l)
+        })
+        rows |> push(time_rows("ar dim={dim} 4 rows: sandwich seam, rms + add_rms") $(enc) {
+            enc_rms_b(enc, ba, 0ul, bw, ba, udim, ueps, 4l)
+            enc_add_rms_b(enc, bx, ba, bw, by, udim, ueps, 4l)
+        })
+        rows |> push(time_rows("ar dim={dim} 4 rows: sandwich seam no norm out, rms + add") $(enc) {
+            enc_rms_b(enc, ba, 0ul, bw, ba, udim, ueps, 4l)
+            enc_add(enc, bx, 0ul, ba, 0ul, utot4, int64(4 * dim))
+        })
+        rows |> push(time_rows("ar dim={dim} {np} rows: sandwich seam, rms + add_rms hx") $(enc) {
+            pf_enc_rms(enc, ba, 0ul, bw, ba, udim, ueps, int64(np))
+            pf_enc_add_rms_bhx(enc, bx, ba, bw, by, udim, ueps, bh, int64(np))
+        })
+        rows |> push(time_rows("ar dim={dim} {np} rows: sandwich seam no norm out, rms + add") $(enc) {
+            pf_enc_rms(enc, ba, 0ul, bw, ba, udim, ueps, int64(np))
+            enc_add(enc, bx, 0ul, ba, 0ul, utotn, int64(np * dim))
+        })
+        for (buf in fixed_array(bx, ba, by, bh, bw)) {
+            metal_release(buf)
+        }
+        for (u in fixed_array(udim, ueps, utot, utot4, utotn)) {
+            pool_release(g_upool, u, 4ul)
+        }
+    }
+    let nl = 42
+    let ple = 256
+    var bproj = fill_buf(np * nl * ple, 0.5)
+    var bside = fill_buf(np * nl * ple, 0.25)
+    var bpn = fill_buf(ple, 0.01)
+    for (npos in fixed_array(1, np)) {
+        rows |> push(time_rows("ple finish {nl} layers x {ple} {npos} rows") $(enc) {
+            enc_ple_finish(enc, bproj, bpn, bside, ple_ka(int64(npos), int64(ple), int64(nl), 2560l, 1e-6), int64(nl), int64(npos), int64(ple))
+        })
+    }
+    for (buf in fixed_array(bproj, bside, bpn)) {
+        metal_release(buf)
+    }
+    return <- rows
+}
+
 def private run_gk_rows(b : B?) {
     if (!metal_common_init() || !metal_decode_init() || !metal_prefill_pso_init()) {
         b |> failure("no Metal device: no row timed")
@@ -446,6 +520,7 @@ def private run_gk_rows(b : B?) {
     var rows <- seam_rows()
     rows |> push_from(qkn_rows(), router_rows(), pk_rows(), dn_rows())
     rows |> push_from(gate_rows(), cls_epi_rows(), g4_tail_rows(), ple_proj_rows())
+    rows |> push_from(ar_rows())
     var nmeas = 0
     var nvoid = 0
     for (r in rows) {
