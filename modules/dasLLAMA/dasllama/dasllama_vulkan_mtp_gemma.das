@@ -435,7 +435,7 @@ def private gemv_site(var g : GemmaDrafterVk; raw : VkCommandBuffer; var h : VkH
 
 //! the residual step and the next norm's Q8_0 feed in one dispatch: x += rms(o) . pw (under `add`), then rms(x) . w quantized
 def private ar_site(var g : GemmaDrafterVk; dr : GemmaDrafter; raw : VkCommandBuffer; var h : VkHaz; add : bool; woff, pwoff : int64; ascale : float) {
-    var pc = ArArgs(dim = uint(dr.dim), add_on = add ? 1u : 0u, woff = uint(woff), eps = dr.eps, ascale = ascale, pre_on = add ? 1u : 0u, pwoff = uint(pwoff))
+    var pc = GkAddRmsArgs(dim = uint(dr.dim), add_on = add ? 1u : 0u, woff = uint(woff), eps = dr.eps, ascale = ascale, pre_on = add ? 1u : 0u, pwoff = uint(pwoff))
     enc_cls_ar_rq_b(raw, h, g.s_ar, pc, 1l)
 }
 

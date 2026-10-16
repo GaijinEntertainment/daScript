@@ -984,7 +984,7 @@ def test_vkd_ar_class(t0 : T?) {
             // is its non-vacuity witness (add_on with a[0] = -3.0 must change x2)
             t |> success(x2[0] != x[0], "the seam wrote the residual stream")
             // the class twin through the generated surface
-            var r <- cls_ar_run(x, a, w, ArArgs(dim = uint(dim), add_on = 1u, eps = eps, ascale = ascale), 1)
+            var r <- cls_ar_run(x, a, w, GkAddRmsArgs(dim = uint(dim), add_on = 1u, eps = eps, ascale = ascale), 1)
             var yc <- r.y
             var xc <- r.x
             var bad_y = 0
@@ -1009,7 +1009,7 @@ def test_vkd_ar_class(t0 : T?) {
                 var y3 : array<float>
                 y3 |> resize(dim)
                 vk_add_rms(x3, ab, w, y3, int64(dim), eps, ascale, true)
-                var r3 <- cls_ar_run(x, a, wb, ArArgs(dim = uint(dim), add_on = 1u, eps = eps, ascale = ascale, abias_on = 1u, aboff = uint(dim)), 1)
+                var r3 <- cls_ar_run(x, a, wb, GkAddRmsArgs(dim = uint(dim), add_on = 1u, eps = eps, ascale = ascale, abias_on = 1u, aboff = uint(dim)), 1)
                 var ycb <- r3.y
                 var xcb <- r3.x
                 var bad_yb = 0
@@ -1126,7 +1126,7 @@ def private ar_rq_run(name : string; x, a, w : array<float>; pc; kform, storex :
     return <- r
 }
 
-//! one cls_ar dispatch over `nrows` rows (`pc` the class's ArArgs): the norm plane `w` whole, the residual `x` read and written in
+//! one cls_ar dispatch over `nrows` rows (`pc` the class's GkAddRmsArgs): the norm plane `w` whole, the residual `x` read and written in
 //! place, y under the -999.25 sentinel - a GPU-vs-GPU compare is vacuous-prone, two dead kernels leave two matching zeroed
 //! planes, and no real computation lands the sentinel; y and x come back
 def private cls_ar_run(x, a, w : array<float>; pc; nrows : int) : tuple<y : array<float>; x : array<float>> {
@@ -1167,7 +1167,7 @@ def test_vkd_cls_ar_add(t0 : T?) {
             let eps = 1e-6
             let ascale = 1.0 / sqrt(2.0)
             var fx <- ar_fixture(dim * nrows, dim)
-            let pc = ArArgs(dim = uint(dim), add_on = 1u, woff = 0u, eps = eps, ascale = ascale, pre_on = 1u, pwoff = 0u)
+            let pc = GkAddRmsArgs(dim = uint(dim), add_on = 1u, woff = 0u, eps = eps, ascale = ascale, pre_on = 1u, pwoff = 0u)
             var want : array<float>
             want |> resize(dim * nrows)
             for (r in range(nrows)) {
@@ -1435,7 +1435,7 @@ def test_vkd_cls_ar_row0(t0 : T?) {
                 delete ar
                 delete yr
             }
-            var r <- cls_ar_run(x, a, w, ArArgs(dim = uint(dim), add_on = 1u, eps = eps, ascale = 1.0, row0 = uint(row0)), rows - row0)
+            var r <- cls_ar_run(x, a, w, GkAddRmsArgs(dim = uint(dim), add_on = 1u, eps = eps, ascale = 1.0, row0 = uint(row0)), rows - row0)
             let bad_y = mismatch_exact(r.y, y2)
             let bad_x = mismatch_exact(r.x, x2)
             t |> success(bad_y == 0, "normed rows from row0 bit-exact, the row below still the sentinel ({bad_y} of {total} diverge)")
@@ -4125,7 +4125,7 @@ def test_vkd_requant_family(t0 : T?) {
                 var a <- fx.a
                 var w <- fx.w
                 // the class kernel: x@0, a@1, w@2, outq@3, outs@4
-                let pc = ArArgs(dim = uint(dim), add_on = 1u, eps = eps, ascale = ascale)
+                let pc = GkAddRmsArgs(dim = uint(dim), add_on = 1u, eps = eps, ascale = ascale)
                 var r <- ar_rq_run("cls_ar_rq_b", x, a, w, pc, false, false)
                 var q_cls <- r.q
                 var s_cls <- r.s
@@ -4150,7 +4150,7 @@ def test_vkd_requant_family(t0 : T?) {
                 {
                     var b <- row_fill(dim, 23, 0, 0.09, 3.1, 71)
                     var wb <- biased_norms(w, b)
-                    let pcb = ArArgs(dim = uint(dim), add_on = 1u, eps = eps, ascale = ascale, abias_on = 1u, aboff = uint(dim))
+                    let pcb = GkAddRmsArgs(dim = uint(dim), add_on = 1u, eps = eps, ascale = ascale, abias_on = 1u, aboff = uint(dim))
                     var rb <- ar_rq_run("cls_ar_rq_b", x, a, wb, pcb, false, false)
                     var qb_cls <- rb.q
                     var sb_cls <- rb.s
@@ -4832,7 +4832,7 @@ def private q8_gemv_ar_twin_run(t; n, d : int; pre_on : bool; ascale : float) {
         var pc = GemvArArgs(n = uint(n), d = uint(d), wblk = 0u, xblk = 0u, add_on = 1u, woff = uint(d), pwoff = 0u,
             pre_on = pre_on ? 1u : 0u, no_norm = 0u, eps = eps, ascale = ascale, abias_on = 0u, aboff = uint(2 * d))
         let rpw = 4l * g_gpu.rows_per_wg
-        var pca = ArArgs(dim = uint(d), add_on = 1u, woff = uint(d), eps = eps, ascale = ascale, pre_on = pre_on ? 1u : 0u, pwoff = 0u)
+        var pca = GkAddRmsArgs(dim = uint(d), add_on = 1u, woff = uint(d), eps = eps, ascale = ascale, pre_on = pre_on ? 1u : 0u, pwoff = 0u)
         cp |> cell_record() $(rw : VkCommandBuffer; var h : VkHaz) {
             enc_q8_gemv_ar_cls(rw, h, s_epi, pc, (int64(d) + rpw - 1l) / rpw)
             enc_cls_ar_rq_b(rw, h, s_row, pca, 1l)
@@ -5729,7 +5729,7 @@ def private qkn_rope_arm(t : T?; f16, biased : bool) {
             let pwn = cp |> in_(wnh)
             let ptok = cp |> in_plain([TokMeta()])   // mirror row = layerbase alone
             let pb = biased ? in_(cp, bh) : pcs
-            let planes = fixed_array(pq, pkv, pkm, pvm, pcs, pwn, ptok, pb)
+            let planes = fixed_array(pq, pkv, pkm, pvm, pcs, pwn, ptok, pb, pkv)
             var sc = f16 ? cls_set(cp, planes, @@set_qkn_rope_f16_cls) : cls_set(cp, planes, @@set_qkn_rope_cls)
             cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                 if (f16) {
@@ -5765,9 +5765,11 @@ def private qkn_rope_arm(t : T?; f16, biased : bool) {
 def private qkn_cell_enc(cp; o : NformOuts; ins : int[5]; q : array<float>; pc; wgs : int; raw; var h) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         upload_region_at(o.bufs[0], 0l, unsafe(addr<uint8 const?>(q[0])), long_length(q) * 4l)
-        var sc = set_qkn_rope_cls(fixed_array(o.bufs[0], cp.dev[ins[0]], o.bufs[1], o.bufs[2], cp.dev[ins[1]], cp.dev[ins[2]], cp.dev[ins[3]], cp.dev[ins[4]]),
-            fixed_array(o.bytes[0], cp.bytes[ins[0]], o.bytes[1], o.bytes[2], cp.bytes[ins[1]], cp.bytes[ins[2]], cp.bytes[ins[3]], cp.bytes[ins[4]]),
-            fixed_array(1u, 0u, 2u, 4u, 0u, 0u, 0u, 0u))
+        var sc = set_qkn_rope_cls(fixed_array(o.bufs[0], cp.dev[ins[0]], o.bufs[1], o.bufs[2], cp.dev[ins[1]], cp.dev[ins[2]], cp.dev[ins[3]], cp.dev[ins[4]],
+                cp.dev[ins[0]]),
+            fixed_array(o.bytes[0], cp.bytes[ins[0]], o.bytes[1], o.bytes[2], cp.bytes[ins[1]], cp.bytes[ins[2]], cp.bytes[ins[3]], cp.bytes[ins[4]],
+                cp.bytes[ins[0]]),
+            fixed_array(1u, 0u, 2u, 4u, 0u, 0u, 0u, 0u, 0u))
         var pcv = pc
         enc_qkn_rope_cls(raw, h, sc, pcv, int64(wgs))
     }
@@ -5930,7 +5932,7 @@ def private qkn_window_run(q, kv, cs, wn : array<float>; pc; nr, mirn : int) : t
             let pcs = cp |> in_(cs)
             let pwn = cp |> in_(wn)
             let ptok = cp |> in_plain([TokMeta(pos = 0u), TokMeta(pos = 1u), TokMeta(pos = 2u)])
-            var sc = cp |> cls_set(fixed_array(pq, pkv, pkm, pvm, pcs, pwn, ptok, pcs), @@set_qkn_rope_cls)
+            var sc = cp |> cls_set(fixed_array(pq, pkv, pkm, pvm, pcs, pwn, ptok, pcs, pkv), @@set_qkn_rope_cls)
             var pcv = pc
             cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                 enc_qkn_rope_cls(raw, h, sc, pcv, int64(nr) * int64(pc.rowwg))
@@ -8422,7 +8424,7 @@ def private ar_fused_arm(t : T?; rq : bool) {
             var sca = cp |> cls_set(fixed_array(pxs, paa, pwn, pyo), @@set_cls_ar)
             var scs = rq ? cp |> cls_set(fixed_array(pyo, pas, pbs), @@set_rq_cls) : cp |> cls_set(fixed_array(pyo, pas), @@set_tower_clamp_cvt_cls)
             var scf = rq ? cp |> cls_set(fixed_array(pxf, paa, pwn, paf, pbf), @@set_cls_ar_rq_b) : cp |> cls_set(fixed_array(pxf, paa, pwn, paf), @@set_cls_ar_f16_b)
-            var pca = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(woff), eps = 1e-5, ascale = 1.0)
+            var pca = GkAddRmsArgs(dim = uint(dim), add_on = 1u, woff = uint(woff), eps = 1e-5, ascale = 1.0)
             var pcr = RqArgs(inbase = 0u, nblk = uint(nblk))
             var pcc = gk_f16_rows_args(uint(nrows * dim))
             let swgs = int64((nrows * dim / 4 + 255) / 256)
@@ -8884,7 +8886,7 @@ def private moe_ar_comb_arm(t : T?; gated, with_sh, dbias : bool) {   // nolint:
         var got_h : array<uint>
         var got_q : array<int8>
         var got_s : array<float>
-        var pc = ArArgs(dim = uint(n), add_on = with_sh ? 1u : 0u, woff = 0u, eps = eps, ascale = 1.0, row0 = 0u,
+        var pc = GkAddRmsArgs(dim = uint(n), add_on = with_sh ? 1u : 0u, woff = 0u, eps = eps, ascale = 1.0, row0 = 0u,
             slots = uint(k), lstride = uint(MR_NER), gated = gated ? 1u : 0u, dbias_on = dbias ? 1u : 0u, dboff = dbias ? uint(ne * n) : 0u)
         with_cell_planes() $(var cp : CellPlanes) {
             let px = cp |> io_(fx.xs)

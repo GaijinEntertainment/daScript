@@ -1629,105 +1629,100 @@ class template MetalTgReduceBase : GkWgReduce {
     def tg_rms_inv(sum_sq : float; dim : uint; eps : float) : float => rsqrt(tg_sum_all(sum_sq, part) / float(dim) + eps)
 }
 
-// Fused residual-add + rmsnorm, one threadgroup per row: x += a in place, then y = rms(x)·w
-// (the row stages through the tgmem slab — barrier() is a threadgroup fence only; dim caps at the
-// slab, wider models take enc_add_rms_site). Single-row = the lensed grid=1; batch = enc_add_rms_b.
+//! The residual step's Metal stamps on the template both homes stamp (`GkAddRmsRows`), a threadgroup a row: 1024 lanes, `rsqrt`,
+//! the row staged through the threadgroup slab (`STASH`; dim caps at the slab, a wider row takes the unfused pair) or re-read from
+//! the stream rows it wrote; `PRE` the sandwich arm
 [ |> template_struct_instance]
-class template MetalAddRmsT : MetalTgReduceBase {
-    @ssbo @binding = 0 x : array<float>     // [dim] residual stream, add target
-    @ssbo @binding = 1 a : array<float>     // [dim] addend (fully read before y is written — y may alias a)
-    @ssbo @binding = 2 @role = "weight" w : array<float>     // [dim] norm weight
-    @ssbo @binding = 3 y : array<float>     // [dim] normed out
-    @uniform @binding = 4 dim : uint
-    @uniform @binding = 5 eps : float
-    @uniform @binding = 6 @role = "weight" ascale : float    // (x + a) * ascale — gemma4 layer_out_scale scales
-                                            // the whole layer output; every other site binds 1.0 (g_one)
-    @ssbo @binding = 7 @role = "write" @template_gate = HX yh : array<float16>   // f16 twin of y (the dual-store stamp)
-    @template_constant HX : bool = false
-    @workgroup xrow : float[4096]           // == ADD_RMS_MAX_DIM
+class template MetalAddRmsT : GkAddRmsRows {
+    @workgroup xrow : float[4096]   //! == ADD_RMS_MAX_DIM
+    @template_constant STASH : bool = true
+    override LANES = 1024u
+    override RSQRT = true
+    override PRE = false
+    override X4 = false
 
-    [metal_kernel]
-    def metal_add_rms {
-        let row = gl_WorkGroupID.x
-        let lid = gl_LocalInvocationID.x
-        var ss = 0.0
-        var k = lid
-        while (k < dim) {
-            let vv = (x[row * dim + k] + a[row * dim + k]) * ascale
-            x[row * dim + k] = vv
-            xrow[k] = vv
-            ss += vv * vv
-            k += gl_WorkGroupSize.x
+    def override stash(k : uint; v : float) : void {
+        static_if (STASH) {
+            xrow[k] = v
         }
-        let inv = tg_rms_inv(ss, dim, eps)
-        k = lid
-        while (k < dim) {
-            let ov = w[k] * (xrow[k] * inv)
-            y[row * dim + k] = ov
-            static_if (HX) {
-                yh[row * dim + k] = float16(ov)
-            }
-            k += gl_WorkGroupSize.x
+    }
+    def override stashed(k : uint) : float {
+        static_if (STASH) {
+            return xrow[k]
+        } else {
+            return xs[gl_WorkGroupID.x * pa.dim + k]
+        }
+    }
+    def override pre_partner(base, k : uint) : float {
+        static_if (STASH) {
+            return xrow[k]
+        } else {
+            return apart(base, k)
         }
     }
 }
 
-[metal_dispatch(name = "enc_addrms_c", pso = "g_pso_addrms", tgmem = "MetalAddRms_metal_add_rms_msl_tgmem", tg = 1024, grid = "1"),
-    metal_dispatch(name = "enc_add_rms_b_c", pso = "g_pso_addrms", tgmem = "MetalAddRms_metal_add_rms_msl_tgmem", tg = 1024, grid = "nrows", params = "nrows : int64")]
+//! the plain step, its next norm out as floats
+[metal_dispatch(name = "enc_addrms_c", pso = "g_pso_addrms", tgmem = "metal_add_rms_msl_tgmem", tg = 1024, grid = "1"),
+    metal_dispatch(name = "enc_add_rms_b_c", pso = "g_pso_addrms", tgmem = "metal_add_rms_msl_tgmem", tg = 1024, grid = "nrows", params = "nrows : int64")]
 class MetalAddRms : MetalAddRmsT {
+    override OUT_F32 = true
+
+    [metal_kernel(name="metal_add_rms_msl")]
+    def metal_add_rms {
+        add_rms_row(gl_WorkGroupID.x)
+    }
 }
 
-[metal_dispatch(name = "pf_enc_add_rms_bhx_c", pso = "g_pso_addrms_hx", tgmem = "MetalAddRmsHX_metal_add_rms_msl_tgmem", tg = 1024, grid = "nrows", params = "nrows : int64")]
+//! ... and the f16 twin beside (the dual-store stamp the half-x GEMM forms read)
+[metal_dispatch(name = "pf_enc_add_rms_bhx_c", pso = "g_pso_addrms_hx", tgmem = "metal_add_rms_hx_msl_tgmem", tg = 1024, grid = "nrows", params = "nrows : int64")]
 class MetalAddRmsHX : MetalAddRmsT {
+    override OUT_F32 = true
     override HX = true
+
+    [metal_kernel(name="metal_add_rms_hx_msl")]
+    def metal_add_rms_hx {
+        add_rms_row(gl_WorkGroupID.x)
+    }
 }
 
-// Fused post-attn-norm + residual add + ffn-norm: a_n = rms(a)·wpa; x += a_n; y = rms(x)·wffn — one
-// dispatch collapsing the pre_post_norm chain (enc_rms(a) + enc_add_rms_site) with two register
-// reductions, no inter-dispatch barrier. x is staged for the trailing norm; same slab cap as MetalAddRms.
-[metal_dispatch(name = "enc_preaddrms_c", pso = "g_pso_preaddrms", tgmem = "metal_pre_add_rms_msl_tgmem", tg = 1024, grid = "1")]
-class MetalPreAddRms : MetalTgReduceBase {
-    @ssbo @binding = 0 x : array<float>     // [dim] residual stream, add target + written back
-    @ssbo @binding = 1 a : array<float>     // [dim] attn out (post-wo); wpa norm applies inline during the add
-    @ssbo @binding = 2 @role = "weight" wpa : array<float>   // [dim] post-attention norm weight
-    @ssbo @binding = 3 @role = "weight" wffn : array<float>  // [dim] ffn norm weight
-    @ssbo @binding = 4 y : array<float>     // [dim] ffn-normed out
-    @uniform @binding = 5 dim : uint
-    @uniform @binding = 6 eps : float
-    @workgroup xrow : float[4096]           // == ADD_RMS_MAX_DIM — stages x for the trailing norm
+//! the sandwich seam: the branch under its post norm, the add, the next norm out as floats
+[metal_dispatch(name = "enc_preaddrms_c", pso = "g_pso_preaddrms", tgmem = "metal_pre_add_rms_msl_tgmem", tg = 1024, grid = "1"),
+    metal_dispatch(name = "enc_preaddrms_b_c", pso = "g_pso_preaddrms", tgmem = "metal_pre_add_rms_msl_tgmem", tg = 1024, grid = "nrows", params = "nrows : int64")]
+class MetalPreAddRms : MetalAddRmsT {
+    override PRE = true
+    override OUT_F32 = true
 
     [metal_kernel(name="metal_pre_add_rms_msl")]
     def metal_pre_add_rms {
-        let lid = gl_LocalInvocationID.x
-        // reduction 1: mean(a²) → inv_a
-        var ssa = 0.0
-        var k = lid
-        while (k < dim) {
-            let av = a[k]
-            ssa += av * av
-            k += gl_WorkGroupSize.x
-        }
-        let inva = tg_rms_inv(ssa, dim, eps)
-        // x += a·inva·wpa; stage x; reduction 2: mean(x²) → inv_x
-        var ssx = 0.0
-        k = lid
-        while (k < dim) {
-            let xv = x[k] + a[k] * inva * wpa[k]
-            x[k] = xv
-            xrow[k] = xv
-            ssx += xv * xv
-            k += gl_WorkGroupSize.x
-        }
-        barrier()
-        let invx = tg_rms_inv(ssx, dim, eps)
-        k = lid
-        while (k < dim) {
-            y[k] = wffn[k] * (xrow[k] * invx)
-            k += gl_WorkGroupSize.x
-        }
+        add_rms_row(gl_WorkGroupID.x)
     }
 }
 
+//! ... and the f16 twin beside
+[metal_dispatch(name = "enc_preaddrms_bhx_c", pso = "g_pso_preaddrms_hx", tgmem = "metal_pre_add_rms_hx_msl_tgmem", tg = 1024, grid = "nrows", params = "nrows : int64")]
+class MetalPreAddRmsHX : MetalAddRmsT {
+    override PRE = true
+    override OUT_F32 = true
+    override HX = true
+
+    [metal_kernel(name="metal_pre_add_rms_hx_msl")]
+    def metal_pre_add_rms_hx {
+        add_rms_row(gl_WorkGroupID.x)
+    }
+}
+
+//! the sandwich seam with no norm stored: the stream rows updated alone (the per-layer-embedding residual, the last layer's step)
+[metal_dispatch(name = "enc_preadd_c", pso = "g_pso_preadd", tgmem = "metal_pre_add_msl_tgmem", tg = 1024, grid = "1"),
+    metal_dispatch(name = "enc_preadd_b_c", pso = "g_pso_preadd", tgmem = "metal_pre_add_msl_tgmem", tg = 1024, grid = "nrows", params = "nrows : int64")]
+class MetalPreAdd : MetalAddRmsT {
+    override PRE = true
+
+    [metal_kernel(name="metal_pre_add_msl")]
+    def metal_pre_add {
+        add_rms_row(gl_WorkGroupID.x)
+    }
+}
 
 //! The fused rope and K/V store at one row, the f16-mirror stamp of the template both homes stamp (`GkRopeKvStore`): the q and
 //! k projections in the one QKV buffer (ksrc its second view, vsrc its view at the v offset), the mirror K and V rows bound at
@@ -3947,9 +3942,11 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_rms = compile_stamp(MetalRmsNorm_metal_rmsnorm_msl, ok)
     g_pso_rms_hx = compile_stamp(MetalRmsNormHX_metal_rmsnorm_msl, ok)
     g_pso_add = compile_stamp(MetalAdd_metal_ew2_msl, ok)
-    g_pso_addrms = compile_stamp(MetalAddRms_metal_add_rms_msl, ok)
-    g_pso_addrms_hx = compile_stamp(MetalAddRmsHX_metal_add_rms_msl, ok)
+    g_pso_addrms = compile_stamp(metal_add_rms_msl, ok)
+    g_pso_addrms_hx = compile_stamp(metal_add_rms_hx_msl, ok)
     g_pso_preaddrms = compile_stamp(metal_pre_add_rms_msl, ok)
+    g_pso_preaddrms_hx = compile_stamp(metal_pre_add_rms_hx_msl, ok)
+    g_pso_preadd = compile_stamp(metal_pre_add_msl, ok)
     g_pso_swiglu = compile_stamp(MetalSwiglu_metal_ew2_msl, ok)
     g_pso_swiglu_hx = compile_stamp(MetalSwigluHX_metal_ew2_msl, ok)
     g_pso_swiglu_hxb = compile_stamp(MetalSwigluHXB_metal_ew2_msl, ok)
@@ -4846,9 +4843,9 @@ def enc_qkn_rope(enc : MetalComputeEncoder?; f16 : bool; bqkv, kmb, vmb : MetalB
                  bcos, bsin : MetalBuffer?; toff : uint64; bqkw, bbias : MetalBuffer?; var ka : GkQknRopeArgs; nwg : int64; bq : MetalBuffer? = null) {
     let bqr = bq != null ? bq : bqkv
     if (f16) {
-        enc_qkn_rope16(enc, bqr, bqkv, kmb, koff, vmb, voff, bcos, toff, bqkw, bsin, toff, bbias, ka, nwg, int64(ka.hs / 2u))
+        enc_qkn_rope16(enc, bqr, bqkv, kmb, koff, vmb, voff, bcos, toff, bqkw, bsin, toff, bbias, bqkv, ka, nwg, int64(ka.hs / 2u))
     } else {
-        enc_qkn_rope32(enc, bqr, bqkv, kmb, koff, vmb, voff, bcos, toff, bqkw, bsin, toff, bbias, ka, nwg, int64(ka.hs / 2u))
+        enc_qkn_rope32(enc, bqr, bqkv, kmb, koff, vmb, voff, bcos, toff, bqkw, bsin, toff, bbias, bqkv, ka, nwg, int64(ka.hs / 2u))
     }
 }
 
@@ -4857,9 +4854,9 @@ def enc_qkn_rope_b(enc : MetalComputeEncoder?; f16 : bool; bqkv, bcos, bsin, brt
                    nwg, nrows : int64; rtoff : uint64 = 0ul; bq : MetalBuffer? = null) {
     let bqr = bq != null ? bq : bqkv
     if (f16) {
-        enc_qkn_rope_b16(enc, bqr, bqkv, g_arena, 0ul, g_arena, 0ul, bcos, 0ul, bqkw, bsin, 0ul, bbias, brt, rtoff, ka, nwg, nrows, int64(ka.hs / 2u))
+        enc_qkn_rope_b16(enc, bqr, bqkv, g_arena, 0ul, g_arena, 0ul, bcos, 0ul, bqkw, bsin, 0ul, bbias, brt, rtoff, bqkv, ka, nwg, nrows, int64(ka.hs / 2u))
     } else {
-        enc_qkn_rope_b32(enc, bqr, bqkv, g_arena, 0ul, g_arena, 0ul, bcos, 0ul, bqkw, bsin, 0ul, bbias, brt, rtoff, ka, nwg, nrows, int64(ka.hs / 2u))
+        enc_qkn_rope_b32(enc, bqr, bqkv, g_arena, 0ul, g_arena, 0ul, bcos, 0ul, bqkw, bsin, 0ul, bbias, brt, rtoff, bqkv, ka, nwg, nrows, int64(ka.hs / 2u))
     }
 }
 
@@ -5145,25 +5142,92 @@ def enc_moe_act(enc : MetalComputeEncoder?; c : Config; bg, bu : MetalBuffer?; u
     }
 }
 
-// fused add + rms when dim fits the kernel's row slab, the unfused pair otherwise
-def enc_add_rms_site(enc : MetalComputeEncoder?; bx, ba, bw, by, bdim, beps : MetalBuffer?; dim : int64; bascale : MetalBuffer? = null) {
-    if (dim <= ADD_RMS_MAX_DIM) {
-        enc_addrms_c(enc, bx, ba, bw, by, bdim, beps, bascale != null ? bascale : g_one)
-    } else {
-        enc_add(enc, bx, 0ul, ba, 0ul, bdim, dim, bascale)
-        enc_rms(enc, bx, 0ul, bw, by, bdim, beps)
+//! the uniforms the residual step's split chain reads: the row width, the epsilon and the rows' element count
+struct ResidualUniforms {
+    bdim : MetalBuffer?
+    beps : MetalBuffer?
+    btot : MetalBuffer?
+}
+
+//! one layer seam of the residual step: the branch's post norm (a model-blob row, -1 none), the next norm the seam stores (-1 none)
+//! and the layer's output scale (its model-blob element, -1 for one)
+struct ResidualSeam {
+    pre_off : int64
+    norm_off : int64
+    osc_off : int64
+}
+
+def seam(pre_off, norm_off : int64; osc_off : int64 = -1l) : ResidualSeam => ResidualSeam(pre_off = pre_off, norm_off = norm_off, osc_off = osc_off)
+
+//! the seam's norm rows as one buffer, the post norm first: the args' `pwoff` 0 and `woff` past it
+def private seam_norms(t : Model; sm : ResidualSeam) : MetalBuffer? {
+    let rb = uint64(t.config.dim * 4l)
+    unsafe {
+        if (sm.pre_off >= 0l && sm.norm_off >= 0l) {
+            return upload_region_cat3(addr<void?>(t.fblob[sm.pre_off]), rb, addr<void?>(t.fblob[sm.norm_off]), rb, null, 0ul)
+        }
+        return upload_region(addr<void?>(t.fblob[sm.pre_off >= 0l ? sm.pre_off : sm.norm_off]), rb)
     }
 }
 
-// Fused post-attn-norm + residual add + ffn-norm for pre_post_norm models: a = rms(a)·wpa in place,
-// x += a, y = rms(x)·wffn — one dispatch collapsing enc_rms(a) + enc_add_rms_site. Falls back to the
-// separate pair past the slab cap. `ba` is normed in place (matches the un-fused enc_rms(a) write).
-def enc_pre_add_rms_site(enc : MetalComputeEncoder?; bx, ba, bwpa, bwffn, by, bdim, beps : MetalBuffer?; dim : int64) {
-    if (dim <= ADD_RMS_MAX_DIM) {
-        enc_preaddrms_c(enc, bx, ba, bwpa, bwffn, by, bdim, beps)
+//! x = (x + a') . ascale over `nrows` rows, a' the partner under the seam's post norm, then x's next norm into `by` (`byh` its f16
+//! twin) where the seam names one (`GkAddRmsRows`): one dispatch while the row fits the slab and `split` is off, else the split chain
+[arch(at="../ARCHITECTURE_GPU_SHARED_KERNELS.md#gpu-kernel-pairs")]
+def enc_residual(enc : MetalComputeEncoder?; t : Model; bx, ba, by, byh : MetalBuffer?; sm : ResidualSeam; nrows : int64; single : bool;
+                 split : bool; u : ResidualUniforms) {
+    let c = t.config
+    let dim = c.dim
+    let pre = sm.pre_off >= 0l
+    let out = sm.norm_off >= 0l
+    if (split || dim > ADD_RMS_MAX_DIM || (!pre && !out)) {
+        unsafe {
+            let rb = uint64(dim * 4l)
+            if (pre) {
+                var bwp = upload_region(addr<void?>(t.fblob[sm.pre_off]), rb)
+                if (single) {
+                    enc_rms(enc, ba, 0ul, bwp, ba, u.bdim, u.beps)
+                } else {
+                    enc_rms_b(enc, ba, 0ul, bwp, ba, u.bdim, u.beps, nrows)
+                }
+            }
+            var bosc = sm.osc_off >= 0l ? upload_region(addr<void?>(t.fblob[sm.osc_off]), 4ul) : null
+            enc_add(enc, bx, 0ul, ba, 0ul, u.btot, nrows * dim, bosc)
+            if (out) {
+                var bw = upload_region(addr<void?>(t.fblob[sm.norm_off]), rb)
+                if (byh != null) {
+                    enc_rms_bhx(enc, bx, 0ul, bw, by, u.bdim, u.beps, byh, nrows)
+                } elif (single) {
+                    enc_rms(enc, bx, 0ul, bw, by, u.bdim, u.beps)
+                } else {
+                    enc_rms_b(enc, bx, 0ul, bw, by, u.bdim, u.beps, nrows)
+                }
+            }
+        }
+        return
+    }
+    var bw = seam_norms(t, sm)
+    var ka = GkAddRmsArgs(dim = uint(dim), add_on = 1u, woff = pre && out ? uint(dim) : 0u, eps = c.norm_eps,
+        ascale = sm.osc_off >= 0l ? t.fblob[sm.osc_off] : 1.0, pre_on = pre ? 1u : 0u, pwoff = 0u)
+    if (!out) {
+        if (single) {
+            enc_preadd_c(enc, bx, ba, bw, ka)
+        } else {
+            enc_preadd_b_c(enc, bx, ba, bw, ka, nrows)
+        }
+    } elif (pre) {
+        if (byh != null) {
+            enc_preaddrms_bhx_c(enc, bx, ba, bw, by, byh, ka, nrows)
+        } elif (single) {
+            enc_preaddrms_c(enc, bx, ba, bw, by, ka)
+        } else {
+            enc_preaddrms_b_c(enc, bx, ba, bw, by, ka, nrows)
+        }
+    } elif (byh != null) {
+        pf_enc_add_rms_bhx_c(enc, bx, ba, bw, by, byh, ka, nrows)
+    } elif (single) {
+        enc_addrms_c(enc, bx, ba, bw, by, ka)
     } else {
-        enc_rms(enc, ba, 0ul, bwpa, ba, bdim, beps)
-        enc_add_rms_site(enc, bx, ba, bwffn, by, bdim, beps, dim)
+        enc_add_rms_b_c(enc, bx, ba, bw, by, ka, nrows)
     }
 }
 
@@ -5450,14 +5514,6 @@ def enc_rope_store_b_q8(enc : MetalComputeEncoder?; bqkv, bcos, bsin, brt, bbias
     enc_rpstb_q8_c(enc, bqkv, g_arena, g_arena, g_arena, g_arena, bcos, bsin, brt, rtoff, bbias, ka, bq != null ? bq : bqkv, nthreads, nrows)
 }
 
-def enc_add_rms_b(enc : MetalComputeEncoder?; bx, ba, bw, by, bdim, beps : MetalBuffer?; nrows : int64; bascale : MetalBuffer? = null) {
-    enc_add_rms_b_c(enc, bx, ba, bw, by, bdim, beps, bascale != null ? bascale : g_one, nrows)
-}
-
-def pf_enc_add_rms_bhx(enc : MetalComputeEncoder?; bx, ba, bw, by, bdim, beps, bxh : MetalBuffer?; nrows : int64; bascale : MetalBuffer? = null) {
-    pf_enc_add_rms_bhx_c(enc, bx, ba, bw, by, bdim, beps, bascale != null ? bascale : g_one, bxh, nrows)
-}
-
 // enc_rms_b (the batched prologue) and pf_enc_rms (the prefill 256/tg shape) are
 // [metal_dispatch]-generated from MetalRmsNorm alongside enc_rms.
 
@@ -5486,7 +5542,8 @@ def metal_kernels_release {
         g_pso_kq_mvb2h_iq3s, g_pso_kq_mvb4h_iq3s, g_pso_kq_mvb8h_iq3s, g_pso_kq_mvb2h_iq3xxs, g_pso_kq_mvb4h_iq3xxs, g_pso_kq_mvb8h_iq3xxs,
         g_pso_kq_mvb2h_k2, g_pso_kq_mvb4h_k2, g_pso_kq_mvb8h_k2, g_pso_kq_mvb2h_iq2s, g_pso_kq_mvb4h_iq2s, g_pso_kq_mvb8h_iq2s,
         g_pso_kq_mvb2h_iq2xs, g_pso_kq_mvb4h_iq2xs, g_pso_kq_mvb8h_iq2xs, g_pso_kq_mvb2h_iq2xxs, g_pso_kq_mvb4h_iq2xxs, g_pso_kq_mvb8h_iq2xxs)
-    release_handles(g_pso_addrms, g_pso_preaddrms, g_one, g_zero, g_pso_geglu, g_pso_geglu_hx)
+    release_handles(g_pso_addrms, g_pso_preaddrms, g_pso_preaddrms_hx, g_pso_preadd, g_one, g_zero)
+    release_handles(g_pso_geglu, g_pso_geglu_hx)
     release_handles(g_pso_geglu_side, g_pso_ple_proj_bf16, g_pso_ple_proj_bf16_one, g_pso_ple_finish)
     release_handles(g_pso_ln, g_pso_bias_act, g_pso_act_rows, g_pso_posadd, g_pso_q3v_stem, g_pso_clamp, g_pso_clamp_copy)
     release_handles(g_pso_rope2d, g_pso_head_pad, g_pso_head_unpad, g_pso_geglu_quick, g_pso_wdec_kv, g_pso_wdec_kv_h)
@@ -7096,40 +7153,24 @@ def enc_ple_pre_dev(enc : MetalComputeEncoder?; t : Model; btok : MetalBuffer?; 
         enc_moe_router(enc, bw, bx, bproj, g_one, ka, all, nrows)
     }
     var bpn = upload_region(unsafe(addr < void? >(t.fblob[t.ple_pnorm_off])), uint64(ple * 4l))
-    enc_ple_finish(enc, bproj, bpn, bple, ple_ka(nrows, ple, c.n_layers, c.dim, c.norm_eps), c.n_layers, nrows, ple)
+    enc_ple_finish(enc, bple, bproj, bpn, ple_finish_args(ple, c.dim, c.norm_eps), c.n_layers * nrows)
 }
 
-//! the per-layer-embedding pre-step's args: `npos` rows of `nlayers` slices of `ple`
-struct PleArgs {
-    npos : uint
-    ple : uint
-    nlayers : uint
-    inv_sd : float      //!< 1/sqrt(dim)
-    eps : float
-    inv_s2 : float      //!< 1/sqrt(2)
-}
+//! the per-layer-embedding pre-step's finish args over rows of `ple`: side = (side + pnorm . rms(proj / sqrt(dim))) / sqrt(2)
+def ple_finish_args(ple, dim : int64; eps : float) : GkAddRmsArgs => GkAddRmsArgs(dim = uint(ple), add_on = 1u, eps = eps,
+    ascale = 1.0 / sqrt(2.0), pre_on = 1u, pwoff = 0u, pscale = 1.0 / sqrt(float(dim)))
 
-def ple_ka(npos, ple, nlayers, dim : int64; eps : float) : PleArgs => (
-    PleArgs(npos = uint(npos), ple = uint(ple), nlayers = uint(nlayers), inv_sd = 1.0 / sqrt(float(dim)), eps = eps, inv_s2 = 1.0 / sqrt(2.0)))
-
-//! The pre-step's finish, a threadgroup a (layer, row) slice, in place on the position-major side rows:
-//! side = (side + pnorm * rms(proj * inv_sd)) * inv_s2 - the CPU's `ple_pre_finish` after its gather
-[metal_dispatch(name = "enc_ple_finish", pso = "g_pso_ple_finish", tgmem = "metal_ple_finish_msl_tgmem", tg = "ple", grid = "nlayers, npos", params = "nlayers : int64, npos : int64, ple : int64")]
-class MetalPleFinish : MetalTgReduceBase {
-    @ssbo @binding = 0 @role = "read" proj : array<float>  //!< [npos x n_layers*ple] position-major model_proj·embd
-    @ssbo @binding = 1 @role = "weight" pnorm : array<float> //!< [ple] proj-norm weight
-    @ssbo @binding = 2 @role = "readwrite" y : array<float>     //!< [npos x n_layers*ple] side input, in place
-    @uniform @binding = 4 ka : PleArgs
+//! The pre-step's finish on the residual step's template (`GkAddRmsRows`), a threadgroup of 256 a (position, layer) slice of the
+//! position-major side rows, in place: side = (side + pnorm * rms(proj * pscale)) * ascale - the CPU's `ple_pre_finish` after its gather
+[metal_dispatch(name = "enc_ple_finish", pso = "g_pso_ple_finish", tgmem = "metal_ple_finish_msl_tgmem", tg = 256, grid = "nrows", params = "nrows : int64")]
+class MetalPleFinish : MetalAddRmsT {
+    override PRE = true
+    override PSCALE = true
+    override LANES = 256u
 
     [metal_kernel(name="metal_ple_finish_msl")]
     def metal_ple_finish {
-        let l = gl_WorkGroupID.x
-        let p = gl_WorkGroupID.y
-        let i = gl_LocalInvocationID.x      //! tg = ple threads (gate: ple % 32 == 0, <= 1024)
-        let at = p * (ka.nlayers * ka.ple) + l * ka.ple + i
-        let v = proj[at] * ka.inv_sd
-        let inv = tg_rms_inv(v * v, ka.ple, ka.eps)
-        y[at] = (y[at] + pnorm[i] * (v * inv)) * ka.inv_s2
+        add_rms_row(gl_WorkGroupID.x)
     }
 }
 

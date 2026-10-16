@@ -162,6 +162,8 @@ var g_pso_add : MetalComputePipeline?
 var g_pso_addrms : MetalComputePipeline?
 var g_pso_addrms_hx : MetalComputePipeline?   // dual-store stamp: + the f16 twin panel (prefill spine)
 var g_pso_preaddrms : MetalComputePipeline?
+var g_pso_preaddrms_hx : MetalComputePipeline?
+var g_pso_preadd : MetalComputePipeline?
 var g_pso_swiglu : MetalComputePipeline?
 var g_pso_swiglu_hx : MetalComputePipeline?   // dual-store stamp
 var g_pso_swiglu_hxb : MetalComputePipeline?   // the routed block's activation, guard off the bucket rail's padded total

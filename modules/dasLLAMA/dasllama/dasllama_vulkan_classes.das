@@ -107,25 +107,6 @@ def kv_tq4_quant_hi(by : uint) : float => float(int(by >> 4u) - 8)
 
 // ===== add + rmsnorm =====
 
-struct ArArgs {
-    dim : uint
-    add_on : uint
-    woff : uint     // norm-weight row base in wn (the driver's norms plane is shared per-layer)
-    eps : float
-    ascale : float
-    row0 : uint
-    slots : uint    //! the combine twins: routed slots per position
-    lstride : uint  //! the combine twins: the logits row stride (the gate logit, when `gated`, is the row's last)
-    gated : uint    //! the combine twins: the shared expert's gate scales its row
-    pre_on : uint   //! the add partner is rms-normed with the row at `pwoff` before the add (a gemma's post-attention / post-FFN norm)
-    pwoff : uint
-    no_norm : uint           //! the requant twins quantize the updated row as it is - the E-series residual feeding its per-layer-embedding gate
-    dbias_on : uint  //! the combine twins: each routed row takes its expert's down bias (gpt-oss) before its routing weight scales it
-    dboff : uint     //! ... this layer's row base in the down-bias plane ([ne x dim] rows a layer)
-    abias_on : uint  //! the add partner carries a bias row out of wn before the add (gpt-oss's attention output bias, `RD_NORM_OBIAS`)
-    aboff : uint     //! ... that row's base in wn
-}
-
 // the shared Q8_0 quantize pieces (pure — the amax fold is subgroup-wide)
 def private q8_amax3(m0 : float) : float {
     var m = m0
@@ -171,140 +152,11 @@ class template WgReduceBase : GkQ8BlockStore {
     }
 }
 
-//! the residual step's shell (ARCHITECTURE_GPU_VULKAN_NROW.md#residual-step-fma): a stamp supplies the accessors below and a `pa` carrying the step's fields under these names
+//! the residual step's Vulkan stamps on the template both homes stamp (`GkAddRmsRows`): 256 lanes, the row stash a slab
 [ |> template_struct_instance]
-class template ResidualT : WgReduceBase {
-    @template_constant NORM_SWITCH : bool = false   //!< the runtime `no_norm` arm of `pa`: the requant stamps and the GEMV epilogue read it, the store and combine stamps carry no such call and no branch for it
-
-    def abstract width : uint                         //! the row's width
-    def abstract xin(i : uint) : float                //! the residual stream's element `i`, a row base folded in
-    def abstract xout(i : uint; v : float) : void     //! ... written back
-    def abstract partner(i : uint) : float            //! the add partner's element `i`
-    def abstract stash(k : uint; v : float) : void    //! the row's column `k` kept for the re-read - a slab, or nothing where the row is re-read
-    def abstract stashed(k : uint) : float            //! ... read back
-    def abstract pre_partner(base, k : uint) : float  //! the sandwich form's partner column: off the stash, or recomputed
-
-    def norm_weight(e : uint) : float {
-        static_if (NORM_SWITCH) {
-            return pa.no_norm != 0u ? 1.0 : wn[pa.woff + e]
-        } else {
-            return wn[pa.woff + e]
-        }
-    }
-
-    //! the add partner's element `j` of the row at `base`, its bias row added under `abias_on`
-    def apart(base, j : uint) : float => partner(base + j) + (pa.abias_on != 0u ? wn[pa.aboff + j] : 0.0)
-
-    // the residual add + row stash + sum-of-squares pass over one row at `base`; under pre_on the add
-    // partner is normed first (its own reduce, the row stash holding it meanwhile)
-    [arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#residual-step-fma")]
-    def accum_row(base : uint) : float {
-        let dim = width()
-        var ainv = 0.0
-        if (pa.pre_on != 0u && pa.add_on != 0u) {
-            var sa = 0.0
-            var j = gl_LocalInvocationID.x
-            while (j < dim) {
-                let a = apart(base, j)
-                stash(j, a)
-                sa += a * a
-                j += 256u
-            }
-            ainv = wg_rms_inv(sa, dim, pa.eps, 0u)
-        }
-        var ss = 0.0
-        var k = gl_LocalInvocationID.x
-        if (pa.pre_on != 0u) {   //! the sandwich form: the partner off the row stash, a column a round
-            while (k < dim) {
-                keep(base, k, pa.add_on != 0u ? mad(wn[pa.pwoff + k], pre_partner(base, k) * ainv, xin(base + k)) * pa.ascale : xin(base + k), ss)
-                k += 256u
-            }
-            return ss
-        }
-        let last = dim - 1u
-        while (k < dim) {
-            let k1 = min(k + 256u, last)
-            let k2 = min(k + 512u, last)
-            let k3 = min(k + 768u, last)
-            var v0 = xin(base + k)
-            var v1 = xin(base + k1)
-            var v2 = xin(base + k2)
-            var v3 = xin(base + k3)
-            if (pa.add_on != 0u) {
-                let a0 = apart(base, k)
-                let a1 = apart(base, k1)
-                let a2 = apart(base, k2)
-                let a3 = apart(base, k3)
-                v0 = (v0 + a0) * pa.ascale
-                v1 = (v1 + a1) * pa.ascale
-                v2 = (v2 + a2) * pa.ascale
-                v3 = (v3 + a3) * pa.ascale
-            }
-            keep(base, k, v0, ss)
-            if (k + 256u < dim) {
-                keep(base, k1, v1, ss)
-            }
-            if (k + 512u < dim) {
-                keep(base, k2, v2, ss)
-            }
-            if (k + 768u < dim) {
-                keep(base, k3, v3, ss)
-            }
-            k += 1024u
-        }
-        return ss
-    }
-
-    //! column `k` of the row at `base` kept: written back, stashed for the re-read, its square added to `ss`
-    def keep(base, k : uint; v : float; var ss : float&) {
-        xout(base + k, v)
-        stash(k, v)
-        ss += v * v
-    }
-
-    // workgroup-wide rms inverse from per-thread sum-of-squares partials (slot 1: the add partner's norm took slot 0)
-    def rms_inv(ss0 : float) : float => wg_rms_inv(ss0, width(), pa.eps, 1u)
-
-    //! the row's norm inverse - one under `no_norm` on a NORM_SWITCH stamp (the reduce still runs: its barrier is every thread's)
-    def row_inv(ss : float) : float {
-        let inv = rms_inv(ss)
-        static_if (NORM_SWITCH) {
-            return pa.no_norm != 0u ? 1.0 : inv
-        } else {
-            return inv
-        }
-    }
-
-    //! the normed row quantized out of the stash into Q8_0 blocks from block `qb0` (the block pass over the stash's columns)
-    def quant32(qb0 : uint; inv : float) {
-        static_if (OUT_Q8) {
-            blk_pass(0u, width() / KQ_B32_ELEMS_U, qb0, 0.0, inv)
-        }
-    }
-
-    def override normed_at(e : uint; mean, inv : float) : float => norm_weight(e) * (stashed(e) * inv)
-}
-
-[ |> template_struct_instance]
-class template ArBase : ResidualT {
-    @template_constant OUT_F32 : bool = false   //!< the normed row stored to `yo` as floats (the store leaves)
-    @template_constant OUT_F16 : bool = false   //!< ... to `outh` as halves
-    @ssbo @binding = 0 xs : array<float>   //! the residual stream's rows, updated in place
-    @ssbo @binding = 1 aa : array<float>   //! the add partner rows
-    @ssbo @binding = 2 wn : array<float>   //! the norms plane: the norm weight row at `woff`, the post norm at `pwoff`, the bias row at `aboff`
-    @ssbo @binding = 3 @template_gate = OUT_F32 yo : array<float>
-    @ssbo @binding = 3 @template_gate = OUT_F16 outh : array<float16>
-    @ssbo @binding = 3 @template_gate = OUT_Q8 outq : array<int8>
-    @ssbo @binding = 10 @template_gate = OUT_Q8 outs : array<float>   //! past every combine family's own bindings
-    @push_constant pa : ArArgs
+class template ArBase : GkAddRmsRows {
     @workgroup row : float[8192]
 
-    def override width : uint => pa.dim
-    def override xin(i : uint) : float => xs[i]
-    def override xout(i : uint; v : float) : void {
-        xs[i] = v
-    }
-    def override partner(i : uint) : float => aa[i]
     def override stash(k : uint; v : float) : void {
         row[k] = v
     }
@@ -315,55 +167,9 @@ class template ArBase : ResidualT {
     [spirv_kernel(local_size_x = 256)]
     def run {
         static_if (OUT_F16) {
-            step_row(gl_WorkGroupID.x)
+            add_rms_row(gl_WorkGroupID.x)
         } else {
-            step_row(gl_WorkGroupID.x + pa.row0)
-        }
-    }
-
-    //! row `r` stepped, its normed row stored in the stamp's out form or quantized into its Q8_0 blocks
-    def step_row(r : uint) {
-        let base = r * pa.dim
-        static_if (OUT_Q8) {
-            quant32(r * (pa.dim / 32u), rms_inv(accum_row(base)))
-        } else {
-            store_out(base, rms_inv(accum_row(base)))
-        }
-    }
-
-    [arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#residual-step-fma")]
-    def store_out(base : uint; inv : float) {
-        let last = pa.dim - 1u
-        var k = gl_LocalInvocationID.x
-        while (k < pa.dim) {
-            let k1 = min(k + 256u, last)
-            let k2 = min(k + 512u, last)
-            let k3 = min(k + 768u, last)
-            let n0 = normed_at(k, 0.0, inv)
-            let n1 = normed_at(k1, 0.0, inv)
-            let n2 = normed_at(k2, 0.0, inv)
-            let n3 = normed_at(k3, 0.0, inv)
-            put_out(base + k, n0)
-            if (k + 256u < pa.dim) {
-                put_out(base + k1, n1)
-            }
-            if (k + 512u < pa.dim) {
-                put_out(base + k2, n2)
-            }
-            if (k + 768u < pa.dim) {
-                put_out(base + k3, n3)
-            }
-            k += 1024u
-        }
-    }
-
-    //! the normed row's element `i` stored in the stamp's out form: floats to `yo`, halves to `outh`
-    def put_out(i : uint; v : float) {
-        static_if (OUT_F32) {
-            yo[i] = v
-        }
-        static_if (OUT_F16) {
-            outh[i] = float16(v)
+            add_rms_row(gl_WorkGroupID.x + pa.row0)
         }
     }
 }
@@ -386,8 +192,11 @@ class template ArRqBase : ArBase {
 
     [arch(at="../ARCHITECTURE_GPU_VULKAN.md#vk-prefill-window-chain"), arch(at="../ARCHITECTURE_GPU_VULKAN.md#q8-requant-byte-store")]
     def rq_row(rbase, qb0 : uint) {
-        let ss = accum_row(rbase)
-        quant32(qb0, row_inv(ss))
+        var ss = 0.0
+        accum_row_into(rbase, ss)
+        var inv = 0.0
+        row_inv_into(ss, inv)
+        quant32(qb0, inv)
     }
 }
 
@@ -419,8 +228,10 @@ class template ArRqT : ArRqBase {
 
     [spirv_kernel(local_size_x = 256)]
     def override run {
-        let ss = accum_row(0u)
-        let inv = row_inv(ss)
+        var ss = 0.0
+        accum_row_into(0u, ss)
+        var inv = 0.0
+        row_inv_into(ss, inv)
         static_if (STOREX) {
             var k = gl_LocalInvocationID.x
             while (k < pa.dim) {
@@ -471,7 +282,7 @@ class template ArCombBase : ArBase {
     def drow_at(rb, bb, k : uint) : float => down_rows[rb + k] + dbias[bb + k]
 
     [arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block"), arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#resident-moe-token")]
-    def override accum_row(base : uint) : float {
+    def override accum_row_into(base : uint; var ss : float&) {
         let p = base / pa.dim
         var g = 1.0
         if (pa.gated != 0u) {
@@ -493,7 +304,7 @@ class template ArCombBase : ArBase {
             }
         }
         let last = pa.dim - 1u
-        var ss = 0.0
+        ss = 0.0
         var k = gl_LocalInvocationID.x
         while (k < pa.dim) {
             let k1 = min(k + 256u, last)   //! the clamped columns past the row read a live column and store nothing
@@ -542,7 +353,6 @@ class template ArCombBase : ArBase {
             }
             k += 1024u
         }
-        return ss
     }
 }
 
@@ -10320,7 +10130,7 @@ struct GemvArArgs {
     d : uint        //! its output rows - the residual row's width
     wblk : uint     //! the plane's block base in its slab (one region: the pair rides the push)
     xblk : uint     //! the activation's block base
-    add_on : uint   //! the residual step's `ArArgs` fields (the add partner is the GEMV's own row)
+    add_on : uint   //! the residual step's `GkAddRmsArgs` fields (the add partner is the GEMV's own row)
     woff : uint
     pwoff : uint
     pre_on : uint
@@ -10331,10 +10141,11 @@ struct GemvArArgs {
     aboff : uint      //! ... that row's base in wn
 }
 
-//! the q8 decode GEMV carrying the residual step as its last workgroup's epilogue: a subgroup a row, eight rows a
-//! workgroup, the rows into a `@coherent` y, the last workgroup to arrive running `ArRq`'s step and resetting the counter
+//! the q8 decode GEMV carrying the residual step as its last workgroup's epilogue (the shell both homes stamp, `GkResidualRow`): a
+//! subgroup a row, eight rows a workgroup, the rows into a `@coherent` y, the last workgroup to arrive running `ArRq`'s step and
+//! resetting the counter
 [vk_dispatch(name = "q8_gemv_ar_cls", grid = "wgs", params = "wgs : int64")]
-class Q8GemvAr : ResidualT {
+class Q8GemvAr : GkResidualRow {
     override OUT_Q8 = true
     override NORM_SWITCH = true
     @ssbo @binding = 0 wq4 : array<uint4>          // weight quant words, vec4 view
@@ -10362,7 +10173,10 @@ class Q8GemvAr : ResidualT {
 
     [arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#residual-step-fma")]
     def epilogue {
-        let inv = row_inv(accum_row(0u))
+        var ss = 0.0
+        accum_row_into(0u, ss)
+        var inv = 0.0
+        row_inv_into(ss, inv)
         memoryBarrierBuffer()   //! the row's writes reach the lanes that quantize them
         barrier()
         quant32(0u, inv)

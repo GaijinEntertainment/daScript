@@ -35,13 +35,6 @@ def private upload_u32(dev; v : uint) {
     return buf
 }
 
-def private upload_f32(dev; v : float) {
-    var buf = metal_new_buffer(dev, 4ul)
-    var p = unsafe(reinterpret<float?>(metal_buffer_contents(buf)))
-    unsafe(p[0]) = v
-    return buf
-}
-
 // N back-to-back dispatches per rep with per-dispatch tgmem
 def private time_seq(queue; psos; bufss; groupss; threadss; tgmems; reps : int) : double {
     var err : string
@@ -92,7 +85,7 @@ def private run_ew_lab(b) {   // nolint:STYLE038 — flat lab driver: buffers bo
     }
     var queue = metal_new_command_queue(dev)
     var err : string
-    var pso_addrms = pipeline_from_source(dev, MetalAddRms_metal_add_rms_msl, MetalAddRms_metal_add_rms_msl_entry, true, err)
+    var pso_addrms = pipeline_from_source(dev, metal_add_rms_msl, metal_add_rms_msl_entry, true, err)
     b |> success(pso_addrms != null, "production add+rms kernel compiles")
     var pso_swiglu = pipeline_from_source(dev, MetalSwiglu_metal_ew2_msl, MetalSwiglu_metal_ew2_msl_entry, true, err)
     b |> success(pso_swiglu != null, "production swiglu kernel compiles")
@@ -124,20 +117,21 @@ def private run_ew_lab(b) {   // nolint:STYLE038 — flat lab driver: buffers bo
     var abuf = upload_array(dev, aa, nb * dim * 4l)
     var wbuf = upload_array(dev, w, dim * 4l)
     var ybuf = metal_new_buffer(dev, uint64(nb * dim * 4l))
-    var dimbuf = upload_u32(dev, uint(dim))
-    var epsbuf = upload_f32(dev, eps)
-    var ascalebuf = upload_f32(dev, 1.0)   // (x + a) * ascale — every non-gemma4 site binds 1.0
+    var argbuf = metal_new_buffer(dev, uint64(typeinfo sizeof(type<GkAddRmsArgs>)))
+    unsafe {
+        *reinterpret<GkAddRmsArgs?>(metal_buffer_contents(argbuf)) = GkAddRmsArgs(dim = uint(dim), add_on = 1u, eps = eps, ascale = 1.0)
+    }
     // swiglu: ours in place on g
     var gbuf = upload_array(dev, gg, nb * hidden * 4l)
     var ubuf = upload_array(dev, uu, nb * hidden * 4l)
     var totalbuf = upload_u32(dev, uint(nb * hidden))
     // arm descriptors
     var psos_oa <- [pso_addrms]
-    var bufs_oa <- [xbuf, abuf, wbuf, ybuf, dimbuf, epsbuf, ascalebuf]
+    var bufs_oa <- [xbuf, abuf, wbuf, ybuf, ybuf, argbuf]   //! the lab binds by slot (its one timing loop over raw pipelines): the stamp's args at buffer 5, slot 4 unread
     var bufss_oa <- [bufs_oa]
     var groups_oa <- [uint3(uint(nb), 1u, 1u)]
     var threads_oa <- [1024u]
-    var tgm_oa <- [MetalAddRms_metal_add_rms_msl_tgmem]
+    var tgm_oa <- [metal_add_rms_msl_tgmem]
     var psos_os <- [pso_swiglu]
     var bufs_os <- [gbuf, ubuf, totalbuf]
     var bufss_os <- [bufs_os]
@@ -206,9 +200,7 @@ def private run_ew_lab(b) {   // nolint:STYLE038 — flat lab driver: buffers bo
     metal_release(abuf)
     metal_release(wbuf)
     metal_release(ybuf)
-    metal_release(dimbuf)
-    metal_release(epsbuf)
-    metal_release(ascalebuf)
+    metal_release(argbuf)
     metal_release(gbuf)
     metal_release(ubuf)
     metal_release(totalbuf)

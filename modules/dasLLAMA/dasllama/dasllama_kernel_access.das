@@ -800,7 +800,8 @@ def param_type(at : LineInfo; tok : string; var ok : bool&) : TypeDeclPtr {
 
 //! A shared kernel's argument struct is a `@kargs` member: each dispatch lens gives it the annotation its own
 //! shader emitter reads (`as_ann`), before the kernel method is emitted. Under `bind` it takes the binding past
-//! the class's highest, where a lens binds its arguments beside the buffers.
+//! the class's highest, where a lens binds its arguments beside the buffers. A class under two dispatch annotations
+//! passes through the lens twice: a member that carries `as_ann` already keeps the binding its first pass gave it.
 [arch(at="../ARCHITECTURE_GPU.md#gpu-shared-kernels")]
 def public kargs_as(var st : StructurePtr; as_ann : string; bind : bool = false) {
     var top = -1
@@ -808,7 +809,7 @@ def public kargs_as(var st : StructurePtr; as_ann : string; bind : bool = false)
         top = max(top, find_arg(field.annotation, "binding") ?as tInt ?? -1)
     }
     for (field in st.fields) {
-        if (field.annotation |> find_arg("kargs") is tBool) {
+        if (field.annotation |> find_arg("kargs") is tBool && !(field.annotation |> find_arg(as_ann) is tBool)) {
             field.annotation |> add_annotation_argument(as_ann, true)
             if (bind) {
                 field.annotation |> add_annotation_argument("binding", top + 1)

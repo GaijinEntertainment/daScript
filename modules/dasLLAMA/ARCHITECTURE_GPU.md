@@ -272,7 +272,9 @@ key it has on that home.
 - **The arguments are one `@kargs` member.** `kargs_as` (`dasllama_kernel_access.das`) runs in both
   dispatch lenses ahead of the kernel's emission and gives the member the form that home's emitter reads:
   a `@push_constant` block on Vulkan, a by-value `@uniform` at the binding past the class's highest on
-  Metal. The struct is a member and not a parameter of the body: a parameter is passed by value, and the
+  Metal - once: a class under two dispatch annotations passes through the lens twice, and the second pass
+  keeps the binding the first gave, so each builder and the kernel agree on it. The struct is a member and
+  not a parameter of the body: a parameter is passed by value, and the
   emitted kernel then copies the whole struct where a member is read a field at a time.
 - **A body that reads a buffer at an offset takes it as an element offset in its arguments.** Vulkan caches
   a descriptor set by its binding tuple, so an offset bound per dispatch would be a set per offset; an offset

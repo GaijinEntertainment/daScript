@@ -67,7 +67,7 @@ activation planes (norms, residual adds, rope, swiglu, activation converts, glue
 slice: ~1.7 ms.
 
 **What already exists** - the producer-fused f16 twin family (`_hx`): `pf_enc_rms_hx`,
-`pf_enc_add_rms_bhx` (add+norm+half-emit in one), `enc_swiglu_hx`/`enc_geglu_hx`,
+`pf_enc_add_rms_bhx_c` / `enc_preaddrms_bhx_c` (add+norm+half-emit in one, the sandwich seam too), `enc_swiglu_hx`/`enc_geglu_hx`,
 `enc_qk_rope_hx`. On the dense path these cover the norm and activation producers; the
 standalone `tw_half` fires only through `pf_cvt_panel` fallbacks and at the sites below.
 Measured ceiling of ALL remaining converts (`DASLLAMA_METAL_PREFILL_SKIP=act_cvt` knockout on
