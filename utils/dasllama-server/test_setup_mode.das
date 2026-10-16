@@ -80,6 +80,17 @@ def private check_tower_routes(t : T?; base_url, cat_dir, asr_file : string) {
     POST("{base_url}/catalog/download", "\{\"name\":\"x\",\"tower\":\"bogus\"}") $(resp) {
         t |> success(resp != null && resp.status_code == http_status.BAD_REQUEST, "an unknown tower kind is a 400")
     }
+    var inscope cat <- model_catalog()
+    for (kind in fixed_array("vision", "drafter")) {   //! each companion route reaches its own kind: a row without one refuses by that kind's name
+        let want = kind == "vision" ? "no vision tower" : "no assistant drafter"
+        let bare = find_index_if(cat) $(e) => empty((kind == "vision" ? e.vision : e.drafter).file)
+        t |> success(bare >= 0, "a catalog row carries no {kind}")
+        continue if (bare < 0)
+        POST("{base_url}/catalog/download", "\{\"name\":\"{cat[bare].name}\",\"tower\":\"{kind}\"}") $(resp) {
+            t |> success(resp != null && resp.status_code == http_status.CONFLICT && find(string(resp.body), want) >= 0,
+                "the {kind} route refuses '{cat[bare].name}' as having {want}")
+        }
+    }
     t |> success(!empty(cat_dir) && !empty(asr_file), "the catalog names its dir and the asr tower file")
     mkdir_rec(cat_dir)
     let planted_asr = path_join(cat_dir, asr_file)

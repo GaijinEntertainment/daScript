@@ -22,9 +22,23 @@ require strings
 //! rides no ladder.
 let public TTS_FRONT_END_PACKS : array<string> <- ["tts_g2p.bin", "tts_postag.bin"]
 
+//! A catalog row's pinned companion artifact: the file beside the model, its commit-pinned URL, its canonical size and sha
+//! (`file` "" = none).
+struct public CatalogCompanion {
+    file : string
+    url : string
+    bytes : int64
+    sha256 : string
+}
+
+//! The companion kinds a catalog row carries - its download id is "<kind>:<name>".
+enum public CatalogCompanionKind {
+    vision    //! the pinned vision tower (mmproj); none = text only
+    drafter   //! the pinned assistant drafter the load attaches beside the file
+}
+
 //! One curated model: a commit-pinned, ungated HF file this engine serves today.
-//! `vram_hint_gb` is the advertised working-set hint, not a fit check. The `vision_*`
-//! fields carry the row's pinned vision tower (mmproj) when it has one — "" = text only.
+//! `vram_hint_gb` is the advertised working-set hint, not a fit check.
 struct public CatalogEntry {
     name : string          // route/catalog id (kebab, stable)
     display : string       // human name on the card
@@ -36,15 +50,14 @@ struct public CatalogEntry {
     ctx : int              // trained context length
     vram_hint_gb : float
     is_default : bool      // the one the getting-started path recommends
-    vision_file : string   // pinned vision-tower artifact ("" = text only)
-    vision_url : string
-    vision_bytes : int64
-    vision_sha256 : string
-    drafter_file : string  //! the pinned assistant drafter the load attaches beside the file ("" = none)
-    drafter_url : string
-    drafter_bytes : int64
-    drafter_sha256 : string
+    vision : CatalogCompanion
+    drafter : CatalogCompanion
 }
+
+def private companion_of(p : ProvEntry) : CatalogCompanion => CatalogCompanion(file = p.name, url = p.url, bytes = p.bytes, sha256 = p.sha256)
+
+//! entry `e`'s companion of kind `kind`
+def public catalog_companion(e : CatalogEntry; kind : CatalogCompanionKind) : CatalogCompanion => kind == CatalogCompanionKind.vision ? e.vision : e.drafter
 
 def private catalog_entry_of(s : ModelSpec) : CatalogEntry {
     let tower <- serve_companion(s.serve_vision)
@@ -53,10 +66,7 @@ def private catalog_entry_of(s : ModelSpec) : CatalogEntry {
         note = s.serve_note, file = s.file, url = s.url, bytes = s.bytes,
         sha256 = s.sha256, ctx = s.serve_ctx, vram_hint_gb = s.serve_vram_gb,
         is_default = s.serve_default,
-        vision_file = tower.name, vision_url = tower.url,
-        vision_bytes = tower.bytes, vision_sha256 = tower.sha256,
-        drafter_file = drafter.name, drafter_url = drafter.url,
-        drafter_bytes = drafter.bytes, drafter_sha256 = drafter.sha256)
+        vision = companion_of(tower), drafter = companion_of(drafter))
 }
 
 //! The serving catalog: a VIEW over `model_specs()` (the one model set) — rows carrying a
@@ -300,21 +310,14 @@ def private download_start_item(dir, id, file, url, want_sha : string; want_byte
 def public catalog_download_start(dir : string; e : CatalogEntry) : string =>
     download_start_item(dir, e.name, e.file, e.url, e.sha256, e.bytes)
 
-//! Start downloading entry `e`'s vision tower (download id "vision:<name>"). "" on success.
-def public catalog_download_start_vision(dir : string; e : CatalogEntry) : string {
-    if (empty(e.vision_file)) {
-        return "'{e.name}' has no vision tower"
+//! Start downloading entry `e`'s companion of kind `kind` (download id "<kind>:<name>") beside its file, where the load's
+//! sidecar resolver finds it. "" on success.
+def public catalog_download_start_companion(dir : string; e : CatalogEntry; kind : CatalogCompanionKind) : string {
+    let c = catalog_companion(e, kind)
+    if (empty(c.file)) {
+        return "'{e.name}' has no {kind == CatalogCompanionKind.vision ? "vision tower" : "assistant drafter"}"
     }
-    return download_start_item(dir, "vision:{e.name}", e.vision_file, e.vision_url, e.vision_sha256, e.vision_bytes)
-}
-
-//! Start downloading entry `e`'s assistant drafter (download id "drafter:<name>") beside its file, where the load's sidecar
-//! resolver finds it. "" on success.
-def public catalog_download_start_drafter(dir : string; e : CatalogEntry) : string {
-    if (empty(e.drafter_file)) {
-        return "'{e.name}' has no assistant drafter"
-    }
-    return download_start_item(dir, "drafter:{e.name}", e.drafter_file, e.drafter_url, e.drafter_sha256, e.drafter_bytes)
+    return download_start_item(dir, "{kind}:{e.name}", c.file, c.url, c.sha256, c.bytes)
 }
 
 //! Start downloading the ASR tower (parakeet v3; download id "asr"). "" on success.
@@ -355,6 +358,13 @@ def public catalog_download_tick() {
     }
 }
 
+//! companion `c`'s path under `dir` where it is present, else ""
+def private companion_local_path(dir : string; c : CatalogCompanion) : string {
+    return "" if (empty(c.file))
+    let path = path_join(dir, c.file)
+    return stat(path).is_valid ? path : ""
+}
+
 //! The GET /catalog document: entries with local presence (model AND vision tower), the ASR
 //! tower, the `tts` list (the two front-end packs, then every served speech model; a model row's
 //! `needs_packs` is `needs_packs(path)` on the file once it is here - the server passes the
@@ -366,19 +376,18 @@ def public catalog_state_json(dir : string; ram_gb : int; vram_mb : int64; needs
     entries |> reserve(length(cat))
     for (e in cat) {
         let local = catalog_local_path(dir, e)
-        let vision_path = empty(e.vision_file) ? "" : path_join(dir, e.vision_file)
-        let vision_present = !empty(vision_path) && stat(vision_path).is_valid
-        let drafter_present = !empty(e.drafter_file) && stat(path_join(dir, e.drafter_file)).is_valid
+        let vision_path = companion_local_path(dir, e.vision)
+        let drafter_path = companion_local_path(dir, e.drafter)
         entries |> push(JV((
             name = e.name, display = e.display, note = e.note, file = e.file,
             bytes = e.bytes, sha256 = e.sha256, ctx = e.ctx,
             vram_hint_gb = e.vram_hint_gb, is_default = e.is_default,
             present = !empty(local), path = local,
-            vision_file = e.vision_file, vision_bytes = e.vision_bytes,
-            vision_present = vision_present,
-            vision_path = vision_present ? vision_path : "",
-            drafter_file = e.drafter_file, drafter_bytes = e.drafter_bytes,
-            drafter_present = drafter_present)))
+            vision_file = e.vision.file, vision_bytes = e.vision.bytes,
+            vision_present = !empty(vision_path),
+            vision_path = vision_path,
+            drafter_file = e.drafter.file, drafter_bytes = e.drafter.bytes,
+            drafter_present = !empty(drafter_path))))
     }
     let asr_tower <- serve_asr_tower()
     let asr_path = path_join(dir, asr_tower.name)

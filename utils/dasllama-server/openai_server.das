@@ -1638,16 +1638,15 @@ def private handle_catalog_download(req : FrontReq; var resp : Reply) : http_sta
     }
     for (e in model_catalog()) {
         if (e.name == want) {
-            let refusal = (tower == "vision" ? catalog_download_start_vision(g_catalog_dir, e)
-                         : tower == "drafter" ? catalog_download_start_drafter(g_catalog_dir, e)
-                                              : catalog_download_start(g_catalog_dir, e))
+            let kind = tower == "vision" ? CatalogCompanionKind.vision : CatalogCompanionKind.drafter
+            let refusal = empty(tower) ? catalog_download_start(g_catalog_dir, e) : catalog_download_start_companion(g_catalog_dir, e, kind)
             if (!empty(refusal)) {
                 return resp |> JSON(error_body(refusal, "invalid_request_error"), http_status.CONFLICT)
             }
             // echo the id the download state machine registered, so a caller can match the
             // ACCEPTED body to the download.name it will poll
             let dl_name = empty(tower) ? e.name : "{tower}:{e.name}"
-            let bytes = tower == "vision" ? e.vision_bytes : (tower == "drafter" ? e.drafter_bytes : e.bytes)
+            let bytes = empty(tower) ? e.bytes : catalog_companion(e, kind).bytes
             to_log(LOG_INFO, "dasllama-server: catalog download started: {dl_name} ({bytes >> 20l} MB into {g_catalog_dir})\n")
             return resp |> JSON("\{\"ok\":true,\"name\":{json_str(dl_name)},\"bytes\":{bytes}}", http_status.ACCEPTED)
         }
