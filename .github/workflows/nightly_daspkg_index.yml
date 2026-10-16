@@ -124,6 +124,10 @@ jobs:
     if: github.event_name != 'schedule' || github.repository == 'GaijinEntertainment/daScript'
     runs-on: macos-15
     timeout-minutes: 60
+    # actions: write needed for `gh cache delete` in the sccache refresh step.
+    permissions:
+      contents: read
+      actions: write
     steps:
     - name: "SCM Checkout"
       uses: actions/checkout@v4
@@ -138,6 +142,13 @@ jobs:
       # enough — same dependency build.yml's darwin lanes install.
       run: brew install bison
 
+    # Its own sccache slot, saved by the cron on master.
+    - uses: ./.github/actions/sccache-slot
+      with:
+        mode: restore
+        key: sccache-daspkg-unit-macos15-Release
+        sccache-size: 1000M
+
     - name: "Build: Daslang (Release + dasLLVM)"
       # CMake fetches the prebuilt mac_arm64 LLVM from the repo's llvm-v*
       # release and stages lib/LLVM.dll itself — no brew llvm needed.
@@ -148,3 +159,7 @@ jobs:
     - name: "daspkg unit suite"
       run: cmake --build ./build --config Release --target run_tests_daspkg
 
+    - uses: ./.github/actions/sccache-slot
+      with:
+        mode: save
+        key: sccache-daspkg-unit-macos15-Release

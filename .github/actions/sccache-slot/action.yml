@@ -1,0 +1,64 @@
+name: sccache-slot
+description: A lane's own compiler cache slot on local disk. PRs restore read-only; a master run saves and prunes to the newest slot.
+inputs:
+  mode:
+    description: restore (before the build) or save (after it)
+    required: true
+  key:
+    description: slot key prefix; a run saves <key>@<run_id>
+    required: true
+  sccache-size:
+    description: puts sccache in front of native CMake compiles, capped at this size
+    default: ''
+  ccache-size:
+    description: puts ccache in front of the clang each emcc call runs (sccache refuses emcc's -Xclang flags), capped at this size
+    default: ''
+runs:
+  using: composite
+  steps:
+    - if: inputs.mode == 'restore' && inputs.sccache-size != ''
+      uses: mozilla-actions/sccache-action@v0.0.10
+    - if: inputs.mode == 'restore'
+      shell: bash
+      run: |
+        if [ -n "${{ inputs.sccache-size }}" ]; then
+          echo "SCCACHE_DIR=${{ runner.temp }}/sccache" >> $GITHUB_ENV
+          echo "SCCACHE_GHA_ENABLED=false" >> $GITHUB_ENV
+          echo "SCCACHE_CACHE_SIZE=${{ inputs.sccache-size }}" >> $GITHUB_ENV
+          echo "CMAKE_C_COMPILER_LAUNCHER=sccache" >> $GITHUB_ENV
+          echo "CMAKE_CXX_COMPILER_LAUNCHER=sccache" >> $GITHUB_ENV
+        fi
+        if [ -n "${{ inputs.ccache-size }}" ]; then
+          echo "CCACHE_DIR=${{ runner.temp }}/ccache" >> $GITHUB_ENV
+          echo "CCACHE_MAXSIZE=${{ inputs.ccache-size }}" >> $GITHUB_ENV
+          echo "CCACHE_COMPILERCHECK=content" >> $GITHUB_ENV
+          echo "EM_COMPILER_WRAPPER=ccache" >> $GITHUB_ENV
+        fi
+    - if: inputs.mode == 'restore'
+      uses: actions/cache/restore@v4
+      with:
+        path: |
+          ${{ runner.temp }}/sccache
+          ${{ runner.temp }}/ccache
+        key: ${{ inputs.key }}@${{ github.run_id }}
+        restore-keys: ${{ inputs.key }}@
+    - if: inputs.mode == 'save' && github.ref == 'refs/heads/master'
+      uses: actions/cache/save@v4
+      with:
+        path: |
+          ${{ runner.temp }}/sccache
+          ${{ runner.temp }}/ccache
+        key: ${{ inputs.key }}@${{ github.run_id }}
+    - if: inputs.mode == 'save' && github.ref == 'refs/heads/master'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        SCKEY: ${{ inputs.key }}@
+      run: |
+        # best effort, and the newest entry survives whatever this run saved: a save that produced
+        # nothing must not wipe the last good slot, and a listing hiccup must not fail the lane
+        set +e
+        gh cache list -R ${{ github.repository }} --key "$SCKEY" --limit 100 --json id,createdAt \
+          --jq 'sort_by(.createdAt) | reverse | .[1:] | .[].id' \
+          | while read -r id; do gh cache delete "$id" -R ${{ github.repository }}; done
+        true

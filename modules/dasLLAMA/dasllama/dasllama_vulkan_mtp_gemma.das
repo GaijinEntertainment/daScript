@@ -466,7 +466,7 @@ def private vk_encode_layer(var g : GemmaDrafterVk; dr : GemmaDrafter; raw : VkC
     let win = dr.sliding[l] && L.window > 0l ? uint(L.window - 1l) : 0u
     var pca = DaAttnArgs(kvd = uint(L.kvd), hs = uint(hs), kv_mul = uint(kv_mul), kbase = mirbase, vbase = mirbase, scale = 1.0, qstride = 0u, gated = 0u,
         window = win, cap = 0.0, nsplit = 1u, rqk = dt == KVDtype.tq4 ? DA_RQ_NONE : DA_RQ_Q8, sinkoff = 0u,
-        rowwg = uint(rowwg), qrow = uint(qd), cntoff = uint(g.cntoff))
+        rowwg = uint(rowwg), qrow = uint(qd), cntoff = uint(g.cntoff), ring = uint(L.ring))
     da_attn_stamp_enc(dt, da_slab_of(false, kv_mul), raw, h, g.s_attn[l], pca, rowwg)
     if (dt == KVDtype.tq4) {
         var pcu = KvTqUnrotArgs(hs = uint(hs), nh = uint(dr.n_heads), orow = uint(qd), qrow = uint(qd), qstride = uint(hs), inv_sqrt_hs = 1.0 / sqrt(float(hs)))

@@ -358,3 +358,25 @@ def lint_gate_files(das, md, cpp, cxx_other : array<string>) : array<string> {
     files |> push_from(das, md, cpp, cxx_other)
     return <- [for (f in files); f; where !starts_with(f, "tree-sitter-daslang/")]
 }
+
+//! The lanes as the children that run them: a lane that builds
+//! nothing is a child of its own, run at once with the others; the
+//! lanes named in `builds` share ONE child in the order given, so one
+//! `cmake --build` runs in the build dir at a time - two at once
+//! collide on MSBuild's tlog and object files
+def lane_groups(names : array<string>; builds : array<string>) : array<array<string>> {
+    var groups : array<array<string>>
+    var building : array<string>
+    for (name in names) {
+        if (find_index(builds, name) >= 0) {
+            building |> push(name)
+        } else {
+            var one <- [name]
+            groups |> emplace(one)
+        }
+    }
+    if (!empty(building)) {
+        groups |> emplace(building)
+    }
+    return <- groups
+}

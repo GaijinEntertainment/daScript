@@ -53,7 +53,7 @@ def add_name(var rule : Rule; var name : string) {
         Rule(repeat = rep) => $ { rep.name <- name }
         Rule(option = opt) => $ { opt.name <- name }
         Rule(maybe_repeat = rep) => $ { rep.name <- name }
-        _ => $ { abort("Unreachable") }
+        _ => abort("Unreachable")
     }
 }
 

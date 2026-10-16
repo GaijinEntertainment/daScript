@@ -103,6 +103,32 @@ def private gltf_pbr_vertex {
     v_color0 = a_color0
     gl_Position = u_viewProj * world
 }
+[arch(at="../ARCHITECTURE.md#shadow-depth-pass")]
+def private gltf_depth_position : float4 {
+    let p = float4(a_position, 1.0)
+    if (u_skinned <= .5){return u_model * p}
+    let w = float4(1.0 - a_weights0.y - a_weights0.z - a_weights0.w, a_weights0.yzw)
+    var world = u_joints[clamp(int(a_joints0.x), 0, GLTF_MAX_JOINTS - 1)] * p * w.x
+    if (w.y > 0.0){world += u_joints[clamp(int(a_joints0.y), 0, GLTF_MAX_JOINTS - 1)] * p * w.y
+        if (w.z > 0.0){world += u_joints[clamp(int(a_joints0.z), 0, GLTF_MAX_JOINTS - 1)] * p * w.z
+            if (w.w > 0.0) {
+                world += u_joints[clamp(int(a_joints0.w), 0, GLTF_MAX_JOINTS - 1)] * p * w.w
+            }
+        }
+    }
+    return world
+}
+[vertex_program]
+def gltf_opaque_depth_vs {gl_Position = u_viewProj * gltf_depth_position()}
+[vertex_program]
+def gltf_mask_depth_vs {
+    gl_Position = u_viewProj * gltf_depth_position()
+    v_uv0 = a_uv0
+    v_color0 = a_color0
+}
+[fragment_program]
+def gltf_opaque_depth_fs {}
+
 [vertex_program]
 def gltf_pbr_vs {gltf_pbr_vertex()}
 [vertex_program]
@@ -305,7 +331,7 @@ struct GltfPbrRenderer {
     normalProgram : uint
     aoTex : uint
     aoInverseSize : float2
-    depthProgram : uint
+    depthProgram, depthMaskProgram : uint
     shadowTex : uint
     shadowViewProj : float4x4
     shadowTexel : float2
@@ -399,30 +425,30 @@ def finalize(var r : GltfPbrRenderer) {
     delete r.shadowComparison
     if (r.pointTexture != 0u){gl_binding_invalidate(); glDeleteTextures(1, unsafe(addr(r.pointTexture)))}
     delete r.pointPosition; delete r.pointColor; delete r.pointShadow; delete r.pointUploaded
-    for (program in [r.program, r.depthProgram, r.silhouetteProgram, r.materialProgram, r.surfaceProgram, r.normalProgram, r.motionProgram]){gl_binding_forget_program(program)}
-    if (r.program != 0u) {
-        glDeleteProgram(r.program)
+    for (program in fixed_array(r.program, r.depthProgram, r.depthMaskProgram,
+        r.silhouetteProgram, r.materialProgram, r.surfaceProgram,
+        r.normalProgram, r.motionProgram)) {
+        gl_binding_forget_program(program)
+        if (program != 0u) { glDeleteProgram(program) }
     }
-    if (r.depthProgram != 0u) { glDeleteProgram(r.depthProgram) }
-    if (r.silhouetteProgram != 0u) { glDeleteProgram(r.silhouetteProgram) }
-    if (r.motionProgram != 0u){glDeleteProgram(r.motionProgram)}
-    if (r.surfaceProgram != 0u){glDeleteProgram(r.surfaceProgram)}
-    if (r.materialProgram != 0u){glDeleteProgram(r.materialProgram)}
-    if (r.normalProgram != 0u) { glDeleteProgram(r.normalProgram) }
 }
 
-def private bind_material(model : GltfGlModel; mat : GltfMaterial; opacity : float = 1.0) {
+def private bind_alpha_material(model : GltfGlModel; mat : GltfMaterial) {
     u_base_color_factor = mat.baseColorFactor
-    u_metallic_factor = mat.metallicFactor
-    u_roughness_factor = mat.roughnessFactor
-    u_emissive_factor = mat.emissiveFactor
     u_unlit = mat.unlit ? 1.0 : 0.0
-    u_normal_scale = mat.normalScale
-    u_occlusion_strength = mat.occlusionStrength
     u_alpha_cutoff = mat.alphaCutoff
     u_alpha_mode = (mat.alphaMode == GltfAlphaMode.mask ? 1.0
         : (mat.alphaMode == GltfAlphaMode.blend ? 2.0 : 0.0))
     u_base_color_tex := gltf_gl_resolve_tex(model, mat.baseColorTex, model.whiteTex)
+}
+
+def private bind_material(model : GltfGlModel; mat : GltfMaterial; opacity : float = 1.0) {
+    bind_alpha_material(model, mat)
+    u_metallic_factor = mat.metallicFactor
+    u_roughness_factor = mat.roughnessFactor
+    u_emissive_factor = mat.emissiveFactor
+    u_normal_scale = mat.normalScale
+    u_occlusion_strength = mat.occlusionStrength
     u_metal_rough_tex := gltf_gl_resolve_tex(model, mat.metalRoughTex, model.whiteTex)
     u_normal_tex := gltf_gl_resolve_tex(model, mat.normalTex, model.flatNormalTex)
     u_occlusion_tex := gltf_gl_resolve_tex(model, mat.occlusionTex, model.whiteTex)
@@ -445,39 +471,61 @@ def private bind_skin_palette(scene : GltfScene; skinIndex : int; root : float4x
     }
 }
 
-def private bind_node(scene : GltfScene; node : GltfNode; root : float4x4; var palette : int&) {
+def private bind_node_position(scene : GltfScene; node : GltfNode;
+                               root : float4x4; var palette : int&) {
     if (node.skin >= 0 && node.skin < length(scene.skins)) {
-        if (!gl_binding_filter_active || palette != node.skin){bind_skin_palette(scene, node.skin, root); palette = node.skin}
+        if (!gl_binding_filter_active || palette != node.skin) {
+            bind_skin_palette(scene, node.skin, root)
+            palette = node.skin
+        }
         u_skinned = 1.0
-        u_model = identity4x4()   // skinned path blends the (root-baked) palette; u_model is unused
-        u_normal_matrix = identity3x3()   // unused in the skinned branch
+        u_model = identity4x4()
     } else {
         u_skinned = 0.0
         u_model = root * node.world
-        u_normal_matrix = float3x3(transpose(inverse(u_model)))
     }
 }
 
-//! Render opaque/masked geometry into the caller's bound depth framebuffer.
-//! Lazily creates the depth program; caller owns viewport, clear, depth and FBO state.
-//! Blended surfaces do not cast solid shadows.
+def private bind_node(scene : GltfScene; node : GltfNode; root : float4x4; var palette : int&) {
+    bind_node_position(scene, node, root, palette)
+    if (u_skinned > .5) { u_normal_matrix = identity3x3() }
+    else { u_normal_matrix = float3x3(transpose(inverse(u_model))) }
+}
+
+//! Draw opaque/masked casters into the bound depth framebuffer.
+//! Caller owns viewport, clear, depth and FBO state.
+//! Sets material culling and disables blending.
+//! Masked casters bind their base-colour texture.
+[arch(at="../ARCHITECTURE.md#shadow-depth-pass")]
 def gltf_pbr_render_depth(var r : GltfPbrRenderer; model : GltfGlModel; scene : GltfScene;
                           root, light_vp : float4x4) {
-    if (r.depthProgram == 0u) { r.depthProgram = create_shader_program(@@gltf_pbr_vs, @@gltf_pbr_depth_fs) }
-    gl_use_program_filtered(r.depthProgram)
     u_viewProj = light_vp
     var palette = -1
     for (node in scene.nodes) {
         if (node.mesh < 0 || node.mesh >= length(model.meshes)) { continue }
-        bind_node(scene, node, root, palette)
+        bind_node_position(scene, node, root, palette)
         for (glp in model.meshes[node.mesh].primitives) {
-            if (glp.material >= 0 && glp.material < length(scene.materials)) {
-                let mat = scene.materials[glp.material]
-                if (mat.alphaMode == GltfAlphaMode.blend) { continue }
-                bind_material(model, mat)
-            } else { bind_material(model, GltfMaterial()) }
-            gltf_pbr_vs_bind_uniform(r.depthProgram)
-            gltf_pbr_depth_fs_bind_uniform(r.depthProgram)
+            let has_material = glp.material >= 0 && glp.material < length(scene.materials)
+            let mat = has_material ? scene.materials[glp.material] : GltfMaterial()
+            if (mat.alphaMode == GltfAlphaMode.blend) { continue }
+            gl_material_state_filtered(mat.doubleSided, false)
+            if (mat.alphaMode == GltfAlphaMode.mask) {
+                if (r.depthMaskProgram == 0u) {
+                    r.depthMaskProgram = create_shader_program(
+                        @@gltf_mask_depth_vs, @@gltf_pbr_depth_fs)
+                }
+                gl_use_program_filtered(r.depthMaskProgram)
+                bind_alpha_material(model, mat)
+                gltf_mask_depth_vs_bind_uniform(r.depthMaskProgram)
+                gltf_pbr_depth_fs_bind_uniform(r.depthMaskProgram)
+            } else {
+                if (r.depthProgram == 0u) {
+                    r.depthProgram = create_shader_program(
+                        @@gltf_opaque_depth_vs, @@gltf_opaque_depth_fs)
+                }
+                gl_use_program_filtered(r.depthProgram)
+                gltf_opaque_depth_vs_bind_uniform(r.depthProgram)
+            }
             gltf_gl_draw_primitive(glp)
         }
     }

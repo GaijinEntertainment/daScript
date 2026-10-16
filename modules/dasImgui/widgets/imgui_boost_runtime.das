@@ -683,6 +683,13 @@ def public id_to_bbox(hid : uint) : float4 {
 var g_container_path : array<string>
 var private g_container_path_str : string
 
+struct private ContainerPathEntry {
+    paths : table<string; string>
+}
+var private g_widget_path_cache : table<string; ContainerPathEntry>
+var private g_widget_path_count : int
+let private WIDGET_PATH_CACHE_LIMIT = 8192
+
 def public container_path_push(widget_ident : string) {
     //! Append ``widget_ident`` to the open-container chain; emitted by the ``[container]`` macro prelude.
     g_container_path |> push(widget_ident)
@@ -713,10 +720,23 @@ def public container_path_pop() {
     }
 }
 
+[arch(at="../ARCHITECTURE.md#widget-path-cache")]
 def public widget_path_key(widget_ident : string) : string {
     //! Build a leaf widget's registry key: open container chain (``"/"``-joined) + ``widget_ident``; bare ident when unnested.
     return widget_ident if (empty(g_container_path_str))
-    return "{g_container_path_str}/{widget_ident}"
+    if (key_exists(g_widget_path_cache, g_container_path_str)) {
+        var branch & = unsafe(g_widget_path_cache[g_container_path_str])
+        if (key_exists(branch.paths, widget_ident)) return branch.paths[widget_ident]
+    }
+    let path = "{g_container_path_str}/{widget_ident}"
+    if (g_widget_path_count < WIDGET_PATH_CACHE_LIMIT) {
+        if (!key_exists(g_widget_path_cache, g_container_path_str)) {
+            g_widget_path_cache[clone_string(g_container_path_str)] = ContainerPathEntry()
+        }
+        g_widget_path_cache[g_container_path_str].paths[clone_string(widget_ident)] = path
+        g_widget_path_count++
+    }
+    return path
 }
 
 def public container_path_key() : string {
@@ -724,10 +744,15 @@ def public container_path_key() : string {
     return g_container_path_str
 }
 
+[arch(at="../ARCHITECTURE.md#widget-path-cache")]
 def begin_frame() {
     //! Per-frame reset: bumps the frame counter and clears the per-frame registry, ``hex_id``\ →bbox map, and container path.
     //! Call before rendering widgets; L1 coroutines advance separately via :ref:`advance_coroutines <function-imgui_boost_runtime_advance_coroutines>`.
     g_frame++
+    if (g_widget_path_count >= WIDGET_PATH_CACHE_LIMIT) {
+        delete g_widget_path_cache
+        g_widget_path_count = 0
+    }
     sample_memory()
     g_registry |> clear()
     g_id_to_bbox |> clear()

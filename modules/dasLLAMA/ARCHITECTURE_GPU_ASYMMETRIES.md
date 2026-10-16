@@ -30,8 +30,13 @@ asymmetries a stamp family ledgers - stays in `ARCHITECTURE_GPU.md#gpu-backends`
   per-layer device slots; Metal has every expert resident, so nothing is hot or cold.
 - **A plain MoE's host-layer form is Vulkan-only** (`ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command`,
   `#hc-window-chain`, the host-rows seat): a plain MoE a discrete card does not hold whole beside a context
-  asked whole moves its first routed layers' experts to the host, the token command and the window cut at
-  those layers; Metal holds the model whole from unified memory and cuts nothing.
+  asked whole, or one whose host-layers ask names them, moves its first routed layers' experts to the host,
+  the token command and the window cut at those layers; Metal holds the model whole from unified memory and
+  cuts nothing.
+- **The host-layers ask is read by the Vulkan plan alone** (`set_gpu_host_layers`,
+  `DASLLAMA_GPU_HOST_LAYERS`, `ARCHITECTURE_GPU_VULKAN_HC.md#hc-hot-pool`): it names how many routed
+  layers' experts the Vulkan plan moves to the host whatever the card holds; Metal moves no expert off the
+  device, so the ask has nothing to move.
 - **The strict context pin is read by the Vulkan plan alone** (`set_gpu_ctx_strict`,
   `DASLLAMA_GPU_CTX_STRICT`, `ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan`): Metal's mirror is the
   model's own context in unified memory, so no plan shortens it and the pin has nothing to hold.
