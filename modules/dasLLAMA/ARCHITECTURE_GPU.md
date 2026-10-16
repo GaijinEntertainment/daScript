@@ -236,6 +236,10 @@ that a question answered for one backend has an obvious address in the other. Th
   widenings `gk_bf16_lo` / `gk_bf16_hi` / `gk_bf16_at`, the strided side-row index `gk_strided_at`): the marker is the SPIR-V
   emitter's (`spirv/spirv_shader`, which this file requires for its templates), and `dasllama_gpu_math.das` carries no backend
   lowering - every CPU chain requires it, and the emitter's module re-exports its builtins publicly.
+  One family's branch rides a shared kernel here: the routed top-k select's (`GkTopKRow`) per-expert down-scale arm
+  (`DSCALE`, with `DSOFF_SWITCH`) is gemma-4's MoE - `Config.moe_dense_shexp` with the file's `ffn_down_exps.scale`
+  plane (`Model.moe_down_scale_off`), which folds into the picked weights; every other family's stamp or `GK_NO_DSCALE`
+  leaves the arm off.
 - **`dasllama_kernel_access.das`** - the shared body-walk read/write classifier both GPU lenses run
   on, plus the dispatch-lens micro-grammar (the grid/tg/params spec tokenizers and the shared
   AST-emission core: `is_digit_tok`, `role_ok`, `derived_role`, `mk_uint_cast`, `mk_call1`,
