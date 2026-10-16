@@ -14,6 +14,7 @@ require daslib/jobque_boost
 require daslib/fio
 require math
 require _model_tier   // model_available: the stocked-carrier gate (shards, the large tier)
+require _override_probes   // decode_declines: the fake override's step
 
 // Batched decode vs sequential: eval_batch_ must reproduce the per-session forward() stream —
 // token-for-token greedy, per-step logits, and the final KV caches. Needs llama2.c's
@@ -639,9 +640,6 @@ let private DECLINE_PROBE = "batch-decline-probe"   //! a fake decode override w
 var private g_probe_batch_calls = 0l
 var private g_probe_gather = false   //! the probe's embed gate answer: the step gathers its rows itself
 
-[unused_argument(t, s, token, pos)]
-def private probe_decode(t : Model; var s : Session; token, pos : int64) : bool => false
-
 [unused_argument(t, ws, sessions, nrows)]
 def private probe_batch_decline(t : Model; var ws : BatchWorkspace; var sessions : array<Session?>; nrows : int64) : bool {
     g_probe_batch_calls++
@@ -654,7 +652,7 @@ def private probe_gather_gate(t : Model; s : Session; npos, start_pos : int64) :
 //! the probe override registered and selected for `body`, then the selection put back as found and the probe unregistered
 def private with_decline_probe(body : block<() : void>) {
     let prev = active_decode_override()
-    register_decode_override(DECLINE_PROBE, @@probe_decode)
+    register_decode_override(DECLINE_PROBE, @@decode_declines)
     register_batch_decode_override(DECLINE_PROBE, @@probe_batch_decline)
     register_embed_batch_gate(DECLINE_PROBE, @@probe_gather_gate)
     select_decode_override(DECLINE_PROBE)

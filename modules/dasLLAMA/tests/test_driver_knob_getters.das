@@ -5,6 +5,7 @@ options persistent_heap   // a dastest root frees what it deletes only on this h
 
 require dastest/testing_boost public
 require dasllama/dasllama_common   // mtp_depth_pin / restore_mtp_depth, the decode-override registry
+require _override_probes   // decode_declines: the fake override's step
 require ?das_metal dasllama/dasllama_metal_decode   // get_metal_decode_fuse, metal_mtp_carry_pre
 require ?das_metal dasllama/dasllama_metal_prefill   // get_metal_prefill_lastrow
 require ?das_metal dasllama/dasllama_metal_mtp_gemma   // gemma_trace, gemma_carry_pre_norm
@@ -14,9 +15,6 @@ require ?das_metal dasllama/dasllama_metal_mtp_gemma   // gemma_trace, gemma_car
 // The Metal knobs' cells skip on a build without das_metal.
 
 let private PROBE = "knob-getters-probe"   //! a decode override name no backend registers
-
-[unused_argument(t, s, token, pos)]
-def private probe_decode(t : Model; var s : Session; token, pos : int64) : bool => false
 
 [unused_argument(t, ws, sessions, nrows)]
 def private probe_batch(t : Model; var ws : BatchWorkspace; var sessions : array<Session?>; nrows : int64) : bool => false
@@ -48,7 +46,7 @@ def test_unregister_decode_override(t : T?) {
     t |> run("unregister_decode_override drops the override and its batched step, deselecting it where it is active") @(t : T?) {
         let found = active_decode_override()
         t |> success(!has_decode_override(PROBE), "the probe is not registered before the cell")
-        register_decode_override(PROBE, @@probe_decode)
+        register_decode_override(PROBE, @@decode_declines)
         register_batch_decode_override(PROBE, @@probe_batch)
         t |> success(has_decode_override(PROBE), "the probe registered")
         t |> success(select_decode_override(PROBE), "the probe selects")
@@ -56,7 +54,7 @@ def test_unregister_decode_override(t : T?) {
         t |> success(!has_decode_override(PROBE), "the probe is gone from the registry")
         t |> equal(active_decode_override(), "", "an active override unregistered is deselected")
         t |> success(!select_decode_override(PROBE), "an unregistered name no longer selects")
-        register_decode_override(PROBE, @@probe_decode)
+        register_decode_override(PROBE, @@decode_declines)
         select_decode_override(found)
         unregister_decode_override(PROBE)
         t |> equal(active_decode_override(), found, "an inactive override unregistered leaves the selection as found")
