@@ -654,6 +654,7 @@ def greedy_chain_cell(t : T?; path : string) {
                 let offs = off > 0l ? CHAIN_STEPS / off : 0l
                 let what = off > 0l ? "the walk fed off the pick every {off}rd step" : "the argmax walk"
                 to_log(LOG_INFO, "{path} {what}: {hits} chained steps taken, {misses} discarded\n")
+                log_gen_texts(tr, "{path} {what} (plain, chained)", plain.toks, chained.toks)
                 var differ = 0
                 for (i in range64(CHAIN_STEPS)) {
                     differ += chained.toks[i] != plain.toks[i] ? 1 : 0
@@ -665,6 +666,7 @@ def greedy_chain_cell(t : T?; path : string) {
                 let sa0 = vk_rdec_chain_stats()
                 var adaptive <- chain_walk(tr, prompt, CHAIN_STEPS, off, -1)
                 let sa1 = vk_rdec_chain_stats()
+                log_gen_texts(tr, "{path} {what} (plain, adaptive)", plain.toks, adaptive.toks)
                 for (i in range64(CHAIN_STEPS)) {
                     t |> equal(adaptive.toks[i], plain.toks[i], "{what}, step {i}: adaptive token")
                     t |> equal(logits_maxdiff(adaptive.rows[i], plain.rows[i]), 0.0,

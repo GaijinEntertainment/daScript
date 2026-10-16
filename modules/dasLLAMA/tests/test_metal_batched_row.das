@@ -155,6 +155,7 @@ def private metal_batch_gather_cell(t : T?; file, family : string) {
                 t |> equal(long_length(dev), long_length(host), "both runs stepped every row")
                 for (i in range64(min(long_length(dev), long_length(host)))) {
                     let diff = logits_maxdiff(dev[i], host[i])
+                    log_logits_pair(tr, "{file} step {i / 3l}, row {i % 3l}: the gathered row against the host row", dev[i], host[i], diff)
                     t |> equal(diff, 0.0, "step {i / 3l}, row {i % 3l}: the gathered rows' logits bit for bit the host rows' (maxdiff {diff})")
                 }
                 delete dev
