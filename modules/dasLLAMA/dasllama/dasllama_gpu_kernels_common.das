@@ -3956,6 +3956,7 @@ class template GkMoeCombine : GkQ8BlockStore {
     @template_constant GATHERED : bool = true
     @template_constant SH : bool = false
     @template_constant WINDOW : bool = true   //!< the [r0, r1) window, the accumulate and the zero-weight skip (the Vulkan chunked chain); off, every slot sums from zero
+    @template_constant SLOT_X4 : bool = true  //!< off the window, four slots' loads in flight a step (the sum's order the same)
 
     def slot_row(p, j : uint) : uint {
         static_if (GATHERED) {
@@ -3981,6 +3982,19 @@ class template GkMoeCombine : GkQ8BlockStore {
         let k = pa.k
         let wb = p * (pa.wstride == 0u ? k : pa.wstride) + pa.woff
         var j = 0u
+        static_if (!WINDOW && SLOT_X4) {
+            while (j + 4u <= k) {
+                let d0 = down_rows[slot_row(p, j) * n + i]
+                let d1 = down_rows[slot_row(p, j + 1u) * n + i]
+                let d2 = down_rows[slot_row(p, j + 2u) * n + i]
+                let d3 = down_rows[slot_row(p, j + 3u) * n + i]
+                acc += slot_w[wb + j] * d0
+                acc += slot_w[wb + j + 1u] * d1
+                acc += slot_w[wb + j + 2u] * d2
+                acc += slot_w[wb + j + 3u] * d3
+                j += 4u
+            }
+        }
         while (j < k) {
             let jb = slot_row(p, j)
             let wj = slot_w[wb + j]
