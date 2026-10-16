@@ -2765,8 +2765,8 @@ def private rd_encode_token(var first_seg_raw : VkCommandBuffer; nrows, nsplit :
         }
         vhz_dep(raw, h, 0u, VHZ_COS, true)
         cmd_copy_whole(raw, g_rd.cos_host.buf, g_rd.cos_dev, g_rd.cos_elems * 4l * nrows)
-        if (g_rd.ple > 0l && one && !verify && g_rd.ple_tok_on) {   //! the step's side row off the table at its token id (the cos plane's hazard bit, as the copy's)
-            emb_cls_enc(g_rd.ple_tbl_fmt, raw, h, g_rd.s_tok_ple, 1l, g_rd.n_layers * g_rd.ple, arena_local_blk(g_rd.ple_tbl_blk), sqrt(float(g_rd.ple)))
+        if (g_rd.ple > 0l && !verify && !seq && g_rd.ple_tok_on) {   //! each row's side row off the table at its token id (the cos plane's hazard bit, as the copy's)
+            emb_cls_enc(g_rd.ple_tbl_fmt, raw, h, g_rd.s_tok_ple, nrows, g_rd.n_layers * g_rd.ple, arena_local_blk(g_rd.ple_tbl_blk), sqrt(float(g_rd.ple)))
         } elif (g_rd.ple > 0l) {   //! the side-input rows ride the cos plane's hazard bit: written here, read by the act step
             cmd_copy_whole(raw, g_rd.ple_host.buf, g_rd.ple_dev, g_rd.n_layers * g_rd.ple * 4l * nrows)
         }
@@ -3151,6 +3151,14 @@ var private g_rdec_tok_gathered = 0l
 
 //! The one-row steps whose row the device gathered off the step's token id, in this process (a cell's served witness)
 def vk_rdec_token_gathered : int64 => g_rdec_tok_gathered
+
+var private g_rdec_nrow_gathered = 0l
+
+//! The N-row commands' rows whose side row the device gathered off the row's token id, in this process (a cell's served witness)
+def vk_rdec_nrow_side_gathered : int64 => g_rdec_nrow_gathered
+
+//! the token commands gather the E-series side rows off the rows' ids: the per-layer table, the projection and the ids ride the device
+def vk_rdec_side_gather_on : bool => g_rd != null && g_rd.ple_tok_on
 
 let private RD_CHAIN_ENV = -2   //! `g_vk_chain_pin` unset: the mode is the environment's
 var private g_vk_chain_pin = RD_CHAIN_ENV
@@ -4230,16 +4238,36 @@ def private rd_land_rows_n(lrows : array<float?>; var picks : array<int64>; nrow
     }
 }
 
+//! the N-row command's gather ids: a row's token id where `ids` carries one, else `EMB_ID_HOST` with the row's side input staged
+def private rd_stage_ple_ids(ple : array<float>; ids : array<int64>; nrows : int64) {
+    let w = g_rd.n_layers * g_rd.ple
+    unsafe {
+        var idp = reinterpret<uint?>(g_rd.tok_ids_host.mapped)
+        for (i in range64(nrows)) {
+            let id = i < long_length(ids) ? ids[i] : -1l
+            if (id >= 0l) {
+                idp[i] = uint(id)
+                g_rdec_nrow_gathered++
+            } else {
+                verify(long_length(ple) >= (i + 1l) * w, "vk_rdec_token_n: a row without its id brings no side row")
+                idp[i] = EMB_ID_HOST
+                memcpy(reinterpret<void?>(reinterpret<float?>(g_rd.ple_host.mapped) + i * w), addr<void?>(ple[i * w]), w * 4l)
+            }
+        }
+    }
+}
+
 //! the N-row submit: `nrows` rows through one command, each row's logits landed at its own pointer, or - where the
 //! pointer is null - the row's argmax id alone into `picks` (`RdecTokenNFn`)
 [hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
-def vk_rdec_token_n(x : array<float>; cossin : array<float>; ple : array<float>; ple_raw : bool; poss : array<int64>; cnts : array<int64>; regs : array<int64>; nrows : int64; lrows : array<float?>; var picks : array<int64>) {
+def vk_rdec_token_n(x : array<float>; cossin : array<float>; ple : array<float>; ple_raw : bool; ids : array<int64>; poss : array<int64>; cnts : array<int64>; regs : array<int64>; nrows : int64; lrows : array<float?>; var picks : array<int64>) {
     rd_chain_settle()
     assert(g_rd != null && g_rd.ready, "vk_rdec_token_n before prepare/set_cls")
     verify(long_length(picks) >= nrows, "vk_rdec_token_n: fewer pick slots than rows")
     verify(nrows >= 2l && nrows <= g_rd.nb, "vk_rdec_token_n: the row count is outside the per-row planes (a one-row step is the one-row command's: its region rides the push, the N-row rows' ride TokMeta)")
     verify(long_length(lrows) >= nrows, "vk_rdec_token_n: fewer logits rows than rows")
-    verify(g_rd.ple <= 0l || long_length(ple) >= g_rd.n_layers * g_rd.ple * nrows, "vk_rdec_token_n: the per-layer-embedding rows are short")
+    verify(g_rd.ple <= 0l || (g_rd.ple_tok_on && long_length(ids) >= nrows) || long_length(ple) >= g_rd.n_layers * g_rd.ple * nrows,
+        "vk_rdec_token_n: the per-layer-embedding rows are short")
     var all_pick = true   //! every row wants its argmax alone: the logits never leave the device
     for (i in range64(nrows)) {
         all_pick = all_pick && lrows[i] == null
@@ -4269,7 +4297,9 @@ def vk_rdec_token_n(x : array<float>; cossin : array<float>; ple : array<float>;
     unsafe {
         memcpy(g_rd.x_host.mapped, addr<void?>(x[0]), g_rd.dim * 4l * nrows)
         memcpy(g_rd.cos_host.mapped, addr<void?>(cossin[0]), g_rd.cos_elems * 4l * nrows)
-        if (g_rd.ple > 0l) {
+        if (g_rd.ple_tok_on) {
+            rd_stage_ple_ids(ple, ids, nrows)
+        } elif (g_rd.ple > 0l) {
             memcpy(g_rd.ple_host.mapped, addr<void?>(ple[0]), g_rd.n_layers * g_rd.ple * 4l * nrows)
         }
         var tm = reinterpret<TokMeta?>(g_rd.tok_meta.mapped)

@@ -117,12 +117,13 @@ stamp and the bisect knob past it, the sets one and the same. The router's parti
 sixteen subgroups' worth, twice the tier's floor.
 
 **An E-series row carries its own per-layer-embedding side input, and a shared-KV layer projects
-q alone.** The command takes the rows' side inputs position-major (`RdecTokenNFn`'s `ple` rows:
-the table rows the batch driver gathers from each row's token where the device finishes the
-pre-step, else the pre-step's finished rows as the workspace holds them), uploads them on the
-cos plane's hazard bit, and where the device finishes the pre-step runs the projection as one
-N-column dispatch (`RouterArgs.ncols`, the rows the columns, into `tok_plep`'s rows) and the per-slice
-finish over every row's slices. A layer's branch takes the one-row branch's forms over the rows:
+q alone.** The command takes the rows' side inputs position-major on the cos plane's hazard bit:
+where the driver holds the table and the projection, each row's side row gathered off its token id
+through the table's `emb_cls` stamp (`RdecTokenNFn`'s `ids`, staged in the one-row command's id plane;
+a row without one stages its table row for the gather to copy, `EMB_ID_HOST`), else the pre-step's
+finished rows as the workspace holds them, uploaded whole. Where the device finishes the pre-step it
+runs the projection as one N-column dispatch (`GkRouterArgs.ncols`, the rows the columns, into
+`tok_plep`'s rows) and the per-slice finish over every row's slices. A layer's branch takes the one-row branch's forms over the rows:
 the gate as an N-column GEMV into `pleg_dev`'s rows, then where the one-row branch fuses
 (`RLayer.ple_fused`) the FFN step's rows stamp quantizing the rows as they are and the fused act +
 requant + proj over the columns (`Q8GemvPleAct` with `PleActArgs.ncols`: every column's x built

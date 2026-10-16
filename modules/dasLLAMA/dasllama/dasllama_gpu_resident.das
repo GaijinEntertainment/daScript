@@ -4494,6 +4494,7 @@ def private rdec_prefill_peel(t : Model; var s : Session; r, npos, start_pos : i
     let ce = g_rdec_cos_elems
     g_rdec_x_n |> grow_resize(dim * npos)
     g_rdec_cos_n |> grow_resize(ce * npos)
+    let text_ids = s.embed_gpu_pending   //! the rows are the prompt's own ids, embedded off the table
     if (s.embed_gpu_pending) {
         embed_text_rows(t, s.embed_gpu_tokens, g_rdec_x_n, 0l)
         s.embed_gpu_pending = false
@@ -4502,10 +4503,16 @@ def private rdec_prefill_peel(t : Model; var s : Session; r, npos, start_pos : i
     }
     resident_prefill_rope_rows(t, s.rope_pos_delta + start_pos, npos, ce, g_rdec_cos_n)
     g_rdec_ple_rows |> clear()
+    g_rdec_side_ids |> clear()
     var ple_raw = false   //! the commands finish the gathered side rows where the projection rides the device; the CPU's finished rows else
     if (has_ple(c)) {
         if (s.ple_gpu_pending) {
-            resident_prefill_ple_rows(t, s.ple_gpu_tokens, npos)
+            if (g_rdec_emb_gpu && text_ids && c.recr_mask == 0ul) {   //! the token commands gather the side rows off the ids
+                g_rdec_side_ids |> push_from(s.ple_gpu_tokens)
+                g_rdec_side_ids |> resize(npos)
+            } else {
+                resident_prefill_ple_rows(t, s.ple_gpu_tokens, npos)
+            }
             s.ple_gpu_pending = false
             ple_raw = true
         } else {
@@ -4517,7 +4524,8 @@ def private rdec_prefill_peel(t : Model; var s : Session; r, npos, start_pos : i
     }
     rdec_select_region(r)
     if (npos == 1l) {
-        rdec_token(g_rdec_x_n, g_rdec_cos_n, g_rdec_ple_rows, -1l, start_pos, start_pos + 1l, false, s.logits)
+        let tok = empty(g_rdec_side_ids) ? -1l : g_rdec_side_ids[0]
+        rdec_token(g_rdec_x_n, g_rdec_cos_n, g_rdec_ple_rows, tok, start_pos, start_pos + 1l, false, s.logits)
     } elif (c.recr_mask != 0ul) {   //! one region's rows: a recurrent layer steps them in order in its slot
         rdec_token_seq(g_rdec_x_n, g_rdec_cos_n, start_pos, npos, s.logits)
     } else {
@@ -4525,7 +4533,7 @@ def private rdec_prefill_peel(t : Model; var s : Session; r, npos, start_pos : i
         for (i in range64(npos)) {   //! a row before the last lands its pick alone, which nobody reads
             rdec_row_plane(i, start_pos + i, r, i == npos - 1l ? unsafe(addr(s.logits[0])) : null)
         }
-        rdec_token_n(g_rdec_x_n, g_rdec_cos_n, g_rdec_ple_rows, ple_raw, g_rdec_poss, g_rdec_cnts, g_rdec_regs, npos, g_rdec_lrows, g_rdec_picks)
+        rdec_token_n(g_rdec_x_n, g_rdec_cos_n, g_rdec_ple_rows, ple_raw, g_rdec_side_ids, g_rdec_poss, g_rdec_cnts, g_rdec_regs, npos, g_rdec_lrows, g_rdec_picks)
     }
     g_rdec_peels++
 }
@@ -4614,7 +4622,7 @@ def private rdec_region_repeats(regs : array<int64>; n, r : int64) : bool {
 }
 
 var private @scratch g_rdec_bregs : array<int64>   //! a batched step's region a row, bound before its first group runs
-var private @scratch g_rdec_grp_toks : array<int64>
+var private @scratch g_rdec_side_ids : array<int64>   //! the token commands' rows' ids where the device gathers their side rows; empty, the host's rows
 
 [arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command")]
 def private rdec_batch_rows_at_once(t : Model; ws : BatchWorkspace; var sessions : array<Session?>; nrows : int64) : bool {
@@ -4672,12 +4680,13 @@ def private rdec_batch_group(t : Model; ws : BatchWorkspace; var sessions : arra
     g_rdec_x_n |> grow_resize(dim * nrows)
     g_rdec_cos_n |> grow_resize(ce * nrows)
     let ple_raw = rdec_ple_proj_on()
-    if (has_ple(c)) {
-        g_rdec_grp_toks |> resize(nrows)
-        for (i in range64(nrows)) {
-            g_rdec_grp_toks[i] = ws.row_tokens[row0 + i]
-        }
-        rdec_ple_side_rows(t, g_rdec_grp_toks, nrows, ws, row0 * c.n_layers * c.n_embd_per_layer)
+    g_rdec_side_ids |> resize(has_ple(c) ? nrows : 0l)
+    for (i in range64(long_length(g_rdec_side_ids))) {
+        g_rdec_side_ids[i] = ws.row_tokens[row0 + i]
+    }
+    if (has_ple(c) && !g_rdec_emb_gpu) {   //! with the table on the device the command gathers each row's side row off its id
+        rdec_ple_side_rows(t, g_rdec_side_ids, nrows, ws, row0 * c.n_layers * c.n_embd_per_layer)
+        g_rdec_side_ids |> clear()
     }
     rdec_rows_planes(nrows)
     for (i in range64(nrows)) {
@@ -4688,7 +4697,7 @@ def private rdec_batch_group(t : Model; ws : BatchWorkspace; var sessions : arra
     }
     prof_add("nrow_prep", ts_prep)
     let ts_gpu = prof_ticks()
-    rdec_token_n(g_rdec_x_n, g_rdec_cos_n, g_rdec_ple_rows, ple_raw, g_rdec_poss, g_rdec_cnts, g_rdec_regs, nrows, g_rdec_lrows, g_rdec_picks)
+    rdec_token_n(g_rdec_x_n, g_rdec_cos_n, g_rdec_ple_rows, ple_raw, g_rdec_side_ids, g_rdec_poss, g_rdec_cnts, g_rdec_regs, nrows, g_rdec_lrows, g_rdec_picks)
     prof_add("nrow_gpu", ts_gpu)
     let ts_land = prof_ticks()
     for (i in range64(nrows)) {

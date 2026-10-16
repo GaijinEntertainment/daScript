@@ -94,9 +94,10 @@ that a question answered for one backend has an obvious address in the other. Th
   for the call a gate takes. Both homes gather the side rows through the token-table gather family at
   the width layers x ple under sqrt(ple) (Metal's `enc_embed_table`, Vulkan's `emb_cls` stamps), project
   the embedded rows off the file's own bf16 rows on the bf16 word form of `GkRouterGemv` under the
-  1/sqrt(dim), and finish them on device: Metal at every decode shape and the window, the side rows
-  position-major; Vulkan's one-row token command and window, while its N-row command and the
-  short-window peel finish host-gathered rows. qwen4exp's n-gram
+  1/sqrt(dim), and finish them on device at every decode shape and the window, Metal's side rows
+  position-major; Vulkan's token commands gather each row off its id through one id plane (the
+  one-row and N-row commands and the short-window peel), and only a prompt whose rows the host
+  embeds (media) gathers its side rows on the host. qwen4exp's n-gram
   side input splits the same way with no gate: the CPU pre-stack hook gathers the token's hashed heads (the 28 GB table stays host-side), the Metal decode projects, gates and convolves them (`ARCHITECTURE_GPU_MTP_DECODE.md#metal-layer-enc`).
 - **Per-layer FFN widths (MatFormer E-series, at most two - `ffn_second_hidden`) serve on Metal
   and on the Vulkan whole-model driver**: the Metal decode, batch and prefill drivers bind the

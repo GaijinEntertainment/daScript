@@ -81,9 +81,10 @@ session alone. A session past the region count takes another's region and brings
 from the host, as every session did on the single mirror. An owner whose region another session
 took is served from the host or not at all: where its rows never came down, its next prefill or
 decode panics rather than read another session's history. A batched step over a
-per-layer-embedding model gives each row its own side input (`rdec_batch_ple_row`): the table
-row gathered on device where the driver holds the projection, else that row of the pre-step
-`eval_batch` already ran.
+per-layer-embedding model gives each row its own side input: the table row gathered on device
+off the row's id where the driver holds the table and the projection (the N-row command's ids,
+`RdecTokenNFn`'s `ids`), else that row of the pre-step `eval_batch` already ran
+(`rdec_batch_ple_row`).
 
 **A device-home session's region is its only copy.** `create_device_session` makes a session
 with scratch and no host cache (`Session.device_kv`), so nothing is allocated per request and

@@ -97,6 +97,11 @@ var private g_ple_cpu_rows = 0l   //! the rows the CPU pre-step built (decode, p
 //! the rows the CPU pre-step built since load: a device-served pre-step leaves it where it was
 def ple_cpu_pre_rows() : int64 => g_ple_cpu_rows
 
+var private g_ple_host_gather_rows = 0l
+
+//! the table rows the host gathered for a device to finish since load: a device that gathers off the ids leaves it where it was
+def ple_host_gather_rows() : int64 => g_ple_host_gather_rows
+
 // Decode pre-step: gather the single token's per-layer embedding row, then finish.
 def private ple_pre_decode_impl(t : Model; var s : Session; token : int64) {
     g_ple_cpu_rows++
@@ -599,6 +604,7 @@ def private ple_gather_rows_impl(t : Model; tokens : array<int64>; npos : int64;
         }
     }
     scale_inplace(unsafe(addr(dst[0])), sqrt(float(t.config.n_embd_per_layer)), npos * all)
+    g_ple_host_gather_rows += npos
 }
 
 [init]

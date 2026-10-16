@@ -1755,13 +1755,13 @@ def vk_rdec_set_emb(emb_block : int64; fmt : int; escale : float) : bool {
     }
 }
 
-//! the one-row command's side-row gather, once the per-layer table, the projection and the step's id all ride the device: the
-//! table's stamp at the row width layers x ple off the step's token id, a step without one copying the host's staged row
+//! the token commands' side-row gather, once the per-layer table, the projection and the steps' ids all ride the device: the
+//! table's stamp at the row width layers x ple off each row's token id, a row without one copying the host's staged row
 def private rd_ple_tok_set {
     return if (g_rd.ple <= 0l || g_rd.ple_tbl_blk < 0l || !g_rd.ple_gpu || !rd_emb_on())
     let all = g_rd.n_layers * g_rd.ple
     g_rd.s_tok_ple = emb_cls_set(g_rd.ple_tbl_fmt, arena_planes(g_rd.ple_tbl_fmt, g_rd.ple_tbl_blk), g_rd.tok_ids_host.buf, 4l * g_rd.nb, 0u,
-        g_rd.ple_host.buf, all * 4l, g_rd.ple_dev, all * 4l * g_rd.nb, VHZ_COS)
+        g_rd.ple_host.buf, all * 4l * g_rd.nb, g_rd.ple_dev, all * 4l * g_rd.nb, VHZ_COS)
     g_rd.ple_tok_on = true
 }
 
