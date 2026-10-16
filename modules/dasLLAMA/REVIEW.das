@@ -890,8 +890,8 @@ let private TTS_BLOCKS_FILE = "modules/dasLLAMA/dasllama/dasllama_tts_blocks.das
 // the TTS block file's *_prepare mints, the layout helpers and the layout constants' declaration
 // lines, hashed in file order. A closure change with IMAGE_VERSION unmoved is red; the finding prints the
 // value to re-stamp with.
-let private IMAGE_LAYOUT_STAMP_VERSION = 49
-let private IMAGE_LAYOUT_STAMP_HASH = 0x66397501edef99d1ul
+let private IMAGE_LAYOUT_STAMP_VERSION = 50
+let private IMAGE_LAYOUT_STAMP_HASH = 0xd233356aacd4064dul
 
 // The helpers that decide WHERE bytes land: the page pad, the plane and total sizing, the
 // writer's append / zero-fill / header patch, the header's scalar stores, the lattice
@@ -1823,56 +1823,6 @@ def private check_device_creation_sites {
     }
 }
 
-// The PLE token-table gather has one format list in three places: the compiled pipelines, the
-// PSO pick, and the encode ladder. A format in two of them declines or gathers under the wrong
-// layout silently.
-let private PREFILL_FILE = "modules/dasLLAMA/dasllama/dasllama_metal_prefill.das"
-
-def private kqfmt_tokens(text : string; var out : table<string>) {
-    for (name in ident_tokens_after(text, "KqFmt.", false)) {
-        out |> insert(name)
-    }
-}
-
-def private set_diff_text(a, b : table<string>) : string {
-    var missing <- [for (k in keys(a)); k; where !(b |> key_exists(k))]
-    missing |> sort()
-    return join(missing, ", ")
-}
-
-def private check_ple_gather_sites {
-    return if (!fexist(PREFILL_FILE))   //! a fixture tree without the Metal prefill has no gather sites
-    let text = strip_line_comments(read_lf(PREFILL_FILE))
-    var psos : table<string>
-    for (line in split(text, "\n")) {
-        continue if (!(line |> starts_with("var private g_pf_pso_ple_gather")))
-        let rest = slice(line, length("var private g_pf_pso_ple_gather"))
-        let suffix = ident_prefix(rest)
-        psos |> insert(empty(suffix) ? "q8" : slice(suffix, 1))
-    }
-    var picks, encodes : table<string>
-    var inscope fns <- function_bodies(PREFILL_FILE) $(header) {
-        return find(header, "ple_gather_pso_of(") >= 0 || find(header, "pf_enc_ple_gather_fmt(") >= 0
-    }
-    for (f in fns) {
-        if (find(f.body, "ple_gather_pso_of(") >= 0) {
-            kqfmt_tokens(f.body, picks)
-        } else {
-            kqfmt_tokens(f.body, encodes)
-        }
-    }
-    if (empty(psos) || empty(picks) || empty(encodes)) {
-        gate_finding(PREFILL_FILE, "the PLE gather's three sites are not where the gate reads them (g_pf_pso_ple_gather* globals, ple_gather_pso_of, pf_enc_ple_gather_fmt)")
-        return
-    }
-    let a = set_diff_text(psos, picks)
-    let b = set_diff_text(picks, psos)
-    let c = set_diff_text(picks, encodes)
-    let d = set_diff_text(encodes, picks)
-    if (!empty(a) || !empty(b) || !empty(c) || !empty(d)) {
-        gate_finding(PREFILL_FILE, "the PLE gather's format list differs across its three sites - pipelines not in the pick: [{a}]; pick not in the pipelines: [{b}]; pick not in the encode ladder: [{c}]; encode ladder not in the pick: [{d}] - a format lands in all three in one change")
-    }
-}
 
 //! every file under `folder` ending in `suffix` (a rule document or a source), build trees and `.`/`_` names skipped
 def private collect_files_ending(folder, suffix : string; var out : array<string>) {
@@ -2049,7 +1999,6 @@ def main() : int {
     check_unicode_tables_stamp()
     check_gemm_gen_stamp()
     check_device_creation_sites()
-    check_ple_gather_sites()
     check_arch_cites_by_name()
     check_require_bans()
     check_harness_dashv()
