@@ -4767,6 +4767,7 @@ def private embed_b32_row(t : Model; fmt : KqFmt; token : int64; var dst : float
 
 //! Format router: q8-tagged weights take the classic mm; kq tags take the plane GEMV; a per-32 plane
 //! quantizes x to Q8_0 and takes its own format's kernel.
+[arch(at="../ARCHITECTURE_CPU_KERNELS.md#q8-activation-forms")]
 def mm_f(var y : array<float>; t : Model; fmt : KqFmt; woff : int64; x : array<float>; var xq : array<int8>; var xs : array<float>; var xbs : array<int>; n, d : int64) {
     if (fmt == KqFmt.q8) {
         mm(y, t, woff, x, xq, xs, n, d)

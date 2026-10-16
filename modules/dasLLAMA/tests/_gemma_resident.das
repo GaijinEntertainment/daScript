@@ -147,9 +147,11 @@ def gemma_format_cell(t : T?; gf : GemmaFile; mx4 : bool) {
 
 //! prefill `n` tokens + 8 fed steps on the resident driver with every call served, then the same on the all-CPU chain; the
 //! prefill logits and every step's within the bar, the one-step-off control past it. `exact` holds the rows against the file's f32
-//! chain (`f32_chain_rows`) where the CPU q8 chain is no reference: on the E2B Q4_K_M file its activation quantization reads step
-//! 4's top logit 16.70 (x64) and 17.85 (arm64) where the f32 chain reads 19.14 and the reference build 19.04 (CPU) and 19.05
-//! (Metal), the device 19.28 - and adds that the device sits no further from that chain than the CPU q8 chain (`f32_chain_witness`)
+//! chain (`f32_chain_rows`) where the CPU q8 chain is no reference: on the E2B Q4_K_M file the Q8_K activations make the feed
+//! chaotic, so step 4's top logit reads 17.85 (arm64), 16.70 (x64) and 18.50 (x64 on the reference kernel bodies) where the f32
+//! chain reads 19.14, and the reference build's quantized CPU path reads 17.8 to 20.1 by its attention form and batching, each
+//! chain summing as far from the f32 rows - and adds that the device sits no further from that chain than the CPU q8 chain
+//! (`f32_chain_witness`)
 def gemma_forced_feed(t : T?; n : int64; gf : GemmaFile; exact : bool = false) {
     with_gemma_rig(t, gf) $(tr) {
         var inscope feed <- prose_feed(tr, n, 8l)
