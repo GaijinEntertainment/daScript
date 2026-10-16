@@ -10,8 +10,9 @@ require vulkan
 require dasllama/dasllama_common
 require dasllama/dasllama_math   // grow_resize - the scratch sizing
 require dasllama/dasllama_kqformat
-require dasllama/dasllama_gemm_schema   // Q8_BLOCK_ELEMS, Q8_QPB, Q8_SPB - the Q8_0 block walk and the activation scale rows
+require dasllama/dasllama_gemm_schema   // Q8_BLOCK_ELEMS - the activation scale rows
 require dasllama/dasllama_mtp_gemma
+require dasllama/dasllama_layout   // q8_repack - the drafter's q8 planes off the GGUF blocks
 require dasllama/dasllama_gpu_math   // ACT_GELU
 require dasllama/dasllama_gpu_kernels_common   // gk_rope_kv_args, GkQkRmsArgs
 require dasllama/dasllama_gpu_resident   // the tier's assistant seams: the bind, the N-row verify, the commit, the rope row
@@ -138,37 +139,6 @@ def private q8_tensors(dr : GemmaDrafter) : array<tuple<boff : int64; n : int64>
         out |> push((boff = dr.w2_offs[l], n = dr.hidden * dr.dim))
     }
     return <- out
-}
-
-//! the GGUF's 34-byte Q8_0 blocks split into the device plane pair the q8 GEMV reads: 32 quant bytes a block, an f16 scale a
-//! block; each tensor's first block index back, in `q8_tensors` order
-def private q8_repack(dr : GemmaDrafter; @exact_size var quants : array<uint8>; @exact_size var scales : array<uint16>) : array<int64> {
-    var tensors <- q8_tensors(dr)
-    var nblk = 0l
-    for (te in tensors) {
-        nblk += te.n / Q8_BLOCK_ELEMS
-    }
-    quants |> reserve(nblk * Q8_QPB)
-    quants |> resize(nblk * Q8_QPB)
-    scales |> reserve(nblk)
-    scales |> resize(nblk)
-    var bases : array<int64>
-    bases |> reserve(long_length(tensors))
-    var cur = 0l
-    for (te in tensors) {
-        bases |> push(cur)
-        unsafe {
-            let src = addr<uint8 const?>(dr.blob[te.boff])
-            for (b in range64(te.n / Q8_BLOCK_ELEMS)) {
-                let bp = src + b * (Q8_SPB + Q8_QPB)
-                scales[cur] = uint16(uint(bp[0]) | (uint(bp[1]) << 8u))
-                memcpy(addr<void?>(quants[cur * Q8_QPB]), reinterpret<void?>(bp + Q8_SPB), Q8_QPB)
-                cur++
-            }
-        }
-    }
-    delete tensors
-    return <- bases
 }
 
 //! a device buffer of `bytes` made soft: 0 marks `oom`
@@ -316,7 +286,9 @@ def private vk_drafter_init(dr : GemmaDrafter; var g : GemmaDrafterVk) : bool {
     }
     var @exact_size quants : array<uint8>
     var @exact_size scales : array<uint16>
-    var bases <- q8_repack(dr, quants, scales)
+    var tensors <- q8_tensors(dr)
+    var bases <- q8_repack(dr.blob, tensors, quants, scales)
+    delete tensors
     let made = vk_buffers_make(dr, g, quants, scales)
     delete quants
     delete scales

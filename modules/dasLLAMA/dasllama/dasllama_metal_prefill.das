@@ -19,6 +19,7 @@ require dasllama/dasllama_metal_kernels  // the shared kq decode helpers (grid t
 require dasllama/dasllama_metal_lens
 require dasllama/dasllama_tower
 require dasllama/dasllama_load   // register_devw_kq_mirror: the image bake's CPU twin of the split-scale dequant passes
+require dasllama/dasllama_ple   // ple_plane: the per-layer-embedding planes
 
 // Phase-6 dasMetal: the full-GPU-resident prefill kernel set — everything between the GEMMs:
 // rmsnorm, table-driven RoPE, fused causal-softmax attention scores, the P·V gather, fused

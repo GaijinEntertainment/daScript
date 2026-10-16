@@ -55,6 +55,10 @@ the module declares every such buffer `@exact_size` and sizes it through a reser
   projection (`q_gated`: a 2x-wide q whose second half sigmoid-gates the output) among them - one
   kernel every arch shares, its arms chosen by the model's flags. **Not** the load walk (`ARCHITECTURE_ENGINE_FORMATS.md#the-load-and-image-rail`) and **not** GPU residency
   (`ARCHITECTURE_GPU.md#gpu-backends`) - both left; the seam each left is a registered hook, so neither comes back.
+  The one GPU-residency concern it keeps is the sliding-window K/V ring's engine half, which both homes' mirrors and the
+  `Session` read (`ARCHITECTURE_GPU_KV_RING.md#kv-sliding-ring`): the ring's knob (`set_gpu_kv_ring`, `with_gpu_kv_ring`,
+  `gpu_kv_ring_on`), the rows a layer's mirror keeps (`kv_ring_rows`) and the session's floor (`kv_ring_floor_check`); the
+  mirror itself stays the backends'.
   It remains the module's debt sink; what sits here that is family-specific or platform-specific is
   debt, **not precedent**. Ledgered exceptions the sidecar-apply seam forces
   (the knob rail lives here, and the backends require this module, so their sidecar knobs cannot):

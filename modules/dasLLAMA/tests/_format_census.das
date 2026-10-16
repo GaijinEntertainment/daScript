@@ -9,6 +9,7 @@ module _format_census shared public
 require dasllama/dasllama_lint public
 require dastest/testing_boost public
 require dasllama/dasllama_common   // Model, fmt_at
+require dasllama/dasllama_ple   // ple_plane
 require dasllama/dasllama_gguf   // GGUFMeta, parse_gguf_meta, gguf_tensor_type, ggml_type_name
 require dasllama/dasllama_kqformat   // kq_ggml_type, GGML_TYPE_F32, GGML_TYPE_MXFP4
 require daslib/fio

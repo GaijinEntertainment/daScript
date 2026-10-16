@@ -181,6 +181,23 @@ def kq_fmt_gpu_supported(f : KqFmt) : bool =>
         || f == KqFmt.iq4nl || f == KqFmt.q40 || f == KqFmt.k2 || f == KqFmt.iq2s || f == KqFmt.iq2xs || f == KqFmt.iq2xxs || f == KqFmt.iq3s4
         || kq_dense_b32(f))
 
+//! the formats the K-quant token-table gather has a stamp for: every
+//! served plane format but q8
+def emb_kq_gather_fmt(f : KqFmt) : bool => f != KqFmt.q8 && kq_fmt_gpu_supported(f)
+
+//! a table plane in format `fmt` the gather family serves: the q8 linear copy, a per-32 plane or a K-quant plane with a stamp
+def emb_table_gather_fmt(f : KqFmt) : bool => f == KqFmt.q8 || (kq_dense_b32(f) && kq_fmt_gpu_supported(f)) || emb_kq_gather_fmt(f)
+
+//! the E-series pre-step serves on the device for this blob model: its table in a format the gather family serves, bound at
+//! whole superblocks (a per-32 pair's binds stay 16-byte aligned), a ple width the finish's threadgroup takes
+def metal_ple_dev_ok(t : Model) : bool {
+    return false if (!has_ple(t.config) || !t.metal_blob || t.planes_trimmed)
+    let ple = t.config.n_embd_per_layer
+    let all = t.config.n_layers * ple
+    let aligned = t.ple_emb_fmt == KqFmt.q8 || (all % KQ_SB_ELEMS == 0l && t.ple_emb_off % KQ_SB_ELEMS == 0l)
+    return emb_table_gather_fmt(t.ple_emb_fmt) && aligned && ple % KQ_B32_ELEMS == 0l && ple <= 1024l
+}
+
 //! a plane format with a one-row GEMV on this home: q8's, a superblock format's row-batched decode form at one row, or a per-32
 //! plane's GEMV, whose K (`kdim`) is whole blocks of the format's unit and whose format the Metal kernels serve
 def kq_fmt_one_row_gemv(f : KqFmt; kdim : int64) : bool =>
