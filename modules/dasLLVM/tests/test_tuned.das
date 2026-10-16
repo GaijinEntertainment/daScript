@@ -112,7 +112,7 @@ def test_tuned_sidecar_invalidates_module_cache(t : T?) {
     let env = (get_platform_name() == "windows"
         ? "set \"DAS_TUNE_MANIFEST={manifest}\"&& "
         : "DAS_TUNE_MANIFEST='{manifest}' ")
-    let cmd = "{env}\"{bin}\" -module-cache \"{mc}\" \"{client}\""
+    let cmd = "{env}\"{bin}\" -module-cache-log -module-cache \"{mc}\" \"{client}\""
     var run_out = ""
     var rc = spawn_capture(cmd, run_out)
     t |> equal(rc, 0, "cold run compiles and runs")

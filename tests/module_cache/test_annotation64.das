@@ -10,7 +10,7 @@ def annotation64_cache_roundtrip(t : T?) {
     let tmp = create_temp_directory("das_annotation64", error)
     if (empty(tmp)) { t |> failure(error); return }
     let root = get_das_root()
-    let args <- [das_exe(), "-dasroot", root, "-module-cache", "{tmp}/wide.bin", "{root}/tests/module_cache/_fixtures/mc_annotation64.das"]
+    let args <- cached_argv("{tmp}/wide.bin", ["{root}/tests/module_cache/_fixtures/mc_annotation64.das"])
     var cold, warm : string
     let cold_code = run_and_capture(args, cold)
     t |> success(report_child(t, "cold", cold_code, cold, "wide annotation cache verified"))

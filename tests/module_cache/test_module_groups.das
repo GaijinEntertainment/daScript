@@ -234,7 +234,7 @@ def arms_calls(t : T?; fx : Fixture) {
 
 def arm_cache_stamps_the_expansion(t : T?; fx : Fixture) {
     t |> run("a member joining the group after the record was written cuts the cache off at the requirer") @(t : T?) {
-        let cache = "-module-cache \"{path_join(fx.tmp, "groups.dascache")}\""
+        let cache = logged_cache(path_join(fx.tmp, "groups.dascache"))
         let script = write_driver(fx, "use_cache.das", "require grp_beta/beta\nrequire mid", "alpha_value()")
         fwrite(path_join(fx.betaDir, ".das_module"), DESCRIPTOR_BETA_OUTSIDE)
         var out : string

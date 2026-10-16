@@ -35,7 +35,7 @@ def test_macro_dep_invalidate(t : T?) {
     // the driver runs as the child's MAIN program (not a dastest child): a nested runtime
     // compile caches only under its own module_cache policy, so the main-line require chain
     // is what proves the host's gate
-    let cmd = "\"{das_exe()}\" -dasroot \"{root}\" -module-cache \"{tmp}/mc.bin\" \"{root}/tests/module_cache/_fixtures/mc_dep_drv.das\""
+    let cmd = cached_cmd("{tmp}/mc.bin", "{root}/tests/module_cache/_fixtures/mc_dep_drv.das", "")
     var cold : string
     let coldRc = env_run(dep, cmd, cold)
     var coldOk = report_child(t, "cold", coldRc, cold, "ser: wrote")
@@ -63,7 +63,7 @@ def test_macro_dep_invalidate(t : T?) {
     let depRel = "._mc_dep_probe_rel_{ref_time_ticks()}.txt"
     remove(depRel)
     // a FRESH cache: the phase-1 cache still validates its own (existing) dep and would serve clean
-    let cmd2 = "\"{das_exe()}\" -dasroot \"{root}\" -module-cache \"{tmp}/mc2.bin\" \"{root}/tests/module_cache/_fixtures/mc_dep_drv.das\""
+    let cmd2 = cached_cmd("{tmp}/mc2.bin", "{root}/tests/module_cache/_fixtures/mc_dep_drv.das", "")
     var absent : string
     let absentRc = env_run(depRel, cmd2, absent)
     t |> success(report_child(t, "absent", absentRc, absent, "ser: wrote"), "cold run with an ABSENT dep wrote the cache")

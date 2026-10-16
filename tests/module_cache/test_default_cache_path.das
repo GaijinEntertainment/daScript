@@ -107,7 +107,7 @@ def test_fallback_verdict_names_the_cutoff(t : T?) {
     fwrite(path_join(tmp, "mc_leaf_a.das"), "options gen2\nmodule mc_leaf_a\ndef leaf_a() : int \{\n    return 1\n\}\n")
     fwrite(leafB, "options gen2\nmodule mc_leaf_b\ndef leaf_b() : int \{\n    return 2\n\}\n")
     fwrite(path_join(tmp, "mc_root.das"), "options gen2\nrequire mc_leaf_a\nrequire mc_leaf_b\n[export]\ndef main \{\n    print(\"MARK_verdict \{leaf_a() + leaf_b()\}\\n\")\n\}\n")
-    let cmd = "{das_exe()} -dasroot {get_das_root()} -module-cache {path_join(tmp, "explicit.dascache")} {path_join(tmp, "mc_root.das")}"
+    let cmd = "{das_exe()} -dasroot {get_das_root()} {logged_cache(path_join(tmp, "explicit.dascache"))} {path_join(tmp, "mc_root.das")}"
     var cold : string
     t |> success(run_reported(t, "verdict cold", cmd, cold, "ser: wrote"), "the cold run writes the explicit cache")
     fwrite(leafB, "options gen2\nmodule mc_leaf_b\ndef leaf_b() : int \{\n    return 20\n\}\n")
@@ -134,7 +134,7 @@ def test_policy_change_refuses_the_cache(t : T?) {
     fwrite(path_join(tmp, "mc_pol_leaf.das"), "options gen2\nmodule mc_pol_leaf\ndef leaf() : int \{\n    return 3\n\}\n")
     fwrite(path_join(tmp, "mc_pol_root.das"), "options gen2\nrequire mc_pol_leaf\n[export]\ndef main \{\n    print(\"MARK_policy \{leaf()\}\\n\")\n\}\n")
     let base = "{das_exe()} -dasroot {get_das_root()}"
-    let tail = "-module-cache {path_join(tmp, "explicit.dascache")} {path_join(tmp, "mc_pol_root.das")}"
+    let tail = "{logged_cache(path_join(tmp, "explicit.dascache"))} {path_join(tmp, "mc_pol_root.das")}"
     var cold : string
     t |> success(run_reported(t, "policy cold", "{base} {tail}", cold, "ser: wrote"), "the cold run writes the explicit cache")
     var same : string
@@ -165,7 +165,7 @@ def test_source_stamp_is_content(t : T?) {
     let leafSrc = "options gen2\nmodule mc_stamp_leaf\ndef leaf() : int \{\n    return 2\n\}\n"
     fwrite(leaf, leafSrc)
     fwrite(path_join(tmp, "mc_stamp_root.das"), "options gen2\nrequire mc_stamp_leaf\n[export]\ndef main \{\n    print(\"MARK_stamp \{leaf()\}\\n\")\n\}\n")
-    let cmd = "{das_exe()} -dasroot {get_das_root()} -module-cache {path_join(tmp, "explicit.dascache")} {path_join(tmp, "mc_stamp_root.das")}"
+    let cmd = "{das_exe()} -dasroot {get_das_root()} {logged_cache(path_join(tmp, "explicit.dascache"))} {path_join(tmp, "mc_stamp_root.das")}"
     var cold : string
     t |> success(run_reported(t, "stamp cold", cmd, cold, "ser: wrote"), "the cold run writes the explicit cache")
     sleep(1100u)    //! past the mtime's one-second grain, so the rewrite below moves the mtime
@@ -196,7 +196,7 @@ def test_source_derived_syntax_policy_serves(t : T?) {
     }
     fwrite(path_join(tmp, "mc_gen2_leaf.das"), "options gen2\nmodule mc_gen2_leaf\ndef leaf() : int \{\n    return 5\n\}\n")
     fwrite(path_join(tmp, "mc_gen2_root.das"), "options gen2\nrequire mc_gen2_leaf\n[export]\ndef main \{\n    print(\"MARK_gen2 \{leaf()\}\\n\")\n\}\n")
-    let cmd = "{das_exe()} -dasroot {get_das_root()} -v1syntax -module-cache {path_join(tmp, "explicit.dascache")} {path_join(tmp, "mc_gen2_root.das")}"
+    let cmd = "{das_exe()} -dasroot {get_das_root()} -v1syntax {logged_cache(path_join(tmp, "explicit.dascache"))} {path_join(tmp, "mc_gen2_root.das")}"
     var cold : string
     t |> success(run_reported(t, "gen2 cold", cmd, cold, "MARK_gen2 5"), "a -v1syntax host compiles a module that opts into gen2")
     var warm : string
@@ -329,6 +329,22 @@ def check_damaged_cache(t : T?; base, a : string) {
     t |> equal(cache_files(sa), 1, "the garbage file is rewritten in place")
 }
 
+//! an explicit cache is as silent as the default one, and -module-cache-log makes either print
+def check_log_switch(t : T?; base, a, tmp : string) {
+    let sa = kind_stem("mc_default_a")
+    var explicitRun : string
+    let explicitRc = run("{base} -module-cache {path_join(tmp, "explicit.bin")} {a}", explicitRun)
+    t |> success(report_child(t, "explicit", explicitRc, explicitRun, "MARK_{sa}"), "an explicit -module-cache executes")
+    t |> success(quiet(explicitRun), "an explicit -module-cache says nothing too:\n{explicitRun}")
+    var loud : string
+    let loudRc = run("{base} {logged_cache(path_join(tmp, "explicit.bin"))} {a}", loud)
+    t |> success(report_child(t, "explicit logged", loudRc, loud, "deser: clean"), "-module-cache-log prints the verdict of an explicit cache")
+    var loudDefault : string
+    let loudDefaultRc = run("{base} -module-cache-log {a}", loudDefault)
+    t |> success(report_child(t, "default logged", loudDefaultRc, loudDefault, "deser:"), "-module-cache-log prints the verdict of the default cache")
+    t |> equal(cache_files(sa), 1, "-module-cache-log is not a compile input - it keys no second cache file")
+}
+
 //! the AST module cache is on by default - silent, at a path keyed by script, host flags and DAS* env - and the flags that turn it off or make it loud
 [test]
 def test_default_module_cache(t : T?) {
@@ -364,9 +380,7 @@ def test_default_module_cache(t : T?) {
     t |> equal(cache_files(sa), 1, "the warm run adds no second file")
     check_damaged_cache(t, base, a)
     check_off_modes(t, base, b, c)
-    var loud : string
-    let loudRc = run("{base} -module-cache {path_join(tmp, "explicit.bin")} {a}", loud)
-    t |> success(report_child(t, "explicit", loudRc, loud, "ser: wrote"), "an explicit -module-cache keeps the loud verdict")
+    check_log_switch(t, base, a, tmp)
     let win = get_platform_name() == "windows"
     var envRun : string
     let envRc = run(win ? "set \"DAS_MC_PROBE=1\"&& {base} {a}" : "DAS_MC_PROBE=1 {base} {a}", envRun)
@@ -468,7 +482,7 @@ def test_default_cache_evicts_to_the_limit(t : T?) {
     for (stem in ["ev_a", "ev_b", "ev_c"]) {
         let cachePath = path_join(explicitDir, "{stem}.dascache")
         let script = path_join(tmp, "{stem}.das")
-        t |> success(run_reported(t, "explicit {stem}", "{base} -module-cache {cachePath} {script}", out, "ser: wrote"), "an explicit cache writes under the limit too")
+        t |> success(run_reported(t, "explicit {stem}", "{base} {logged_cache(cachePath)} {script}", out, "ser: wrote"), "an explicit cache writes under the limit too")
     }
     var explicitFiles = 0
     fio::dir(explicitDir) $(name) {

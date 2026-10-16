@@ -51,7 +51,7 @@ def test_cache_corruption_selfheal(t : T?) {
     // child CWD = tmp, same shape as llvm_ast_roundtrip: a popen command that STARTS with a
     // quoted path trips cmd.exe's outer-quote stripping; the cd prefix sidesteps it
     let cd_prefix = get_platform_name() == "windows" ? "cd /d \"{tmp |> replace("/", "\\")}\" && " : "cd \"{tmp}\" && "
-    let base = "{cd_prefix}\"{bin}\" -dasroot \"{get_das_root()}\" -module-cache \"{tmp}/mc.bin\" -compile-only \"{tmp}/_llvm_split_modules_client.das\""
+    let base = "{cd_prefix}\"{bin}\" -dasroot \"{get_das_root()}\" -module-cache-log -module-cache \"{tmp}/mc.bin\" -compile-only \"{tmp}/_llvm_split_modules_client.das\""
     // round 1: cold - builds the cache
     expect_round(t, "heal round 1 cold", base, ["ser: wrote"])
     // round 2: damage the first record's payload - the run must resume past it (reparse in

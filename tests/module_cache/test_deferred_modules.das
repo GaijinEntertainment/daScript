@@ -231,7 +231,7 @@ def arm_math_container_cache(t : T?; fx : Fixture) {
         let driver = path_join(fx.tmp, "math_cache.das")
         fwrite(driver, "options gen2\nrequire math\n[export]\ndef main \{\n    print(\"MATH \{identity3x4()[0].x\}\\n\")\n\}\n")
         for (eagerFirst in [true, false]) {
-            let cache = "-module-cache \"{path_join(fx.tmp, eagerFirst ? "math_eager.bin" : "math_lazy.bin")}\""
+            let cache = logged_cache(path_join(fx.tmp, eagerFirst ? "math_eager.bin" : "math_lazy.bin"))
             var cold : string
             t |> success(run_child_reported(t, "math cold", child_cmd(fx, driver, eagerFirst ? "-ignore-manifest" : "", cache), cold, "MATH 1"), "the first loading order writes the cache")
             var warm : string
@@ -291,7 +291,7 @@ def arms_guards_and_caches(t : T?; fx : Fixture) {
         remove_result(fx.utManifest)
     }
     t |> run("a module cache written by an eager start serves a lazy start, and -log-compile-time shows the reads and the timeline") @(t : T?) {
-        let cache = "-module-cache \"{path_join(fx.tmp, "mc.bin")}\""
+        let cache = logged_cache(path_join(fx.tmp, "mc.bin"))
         var cold : string
         t |> success(run_child_reported(t, "cold cache", child_cmd(fx, fx.plain, "-ignore-manifest -log-compile-time", cache), cold, "PLAIN"), "the eager start writes the cache")
         t |> success(find(cold, "startup: main total") >= 0 && find(cold, "\tmodule scan") >= 0 && find(cold, "\tshutdown ") >= 0, "the timeline prints its laps:\n{cold}")

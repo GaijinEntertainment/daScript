@@ -52,6 +52,7 @@ static string projectFile;
 static string project_root;
 static string moduleCacheFile;  // -module-cache <path>: AST module cache, read+refreshed per (re)compile
 static bool noModuleCache = false;  // -no-module-cache: off, over -module-cache and the default alike
+static bool moduleCacheLog = false; // -module-cache-log: print what the module cache did
 static string hostBinary;           // argv[0]
 static string hostOptions;          // argv up to "--": the compile's own options key the default cache
 static vector<string> load_modules;
@@ -213,10 +214,9 @@ static CompileResult compile_script(const string & fn) {
     // writes nothing, an edit rewrites the stream from the changed module's cutoff. The
     // cache lives in CompileResult - it owns deserialized FileInfos past this return.
     string cachePath = noModuleCache ? string() : moduleCacheFile;
-    bool cacheQuiet = false;
+    bool cacheQuiet = !moduleCacheLog;
     if (cachePath.empty() && !noModuleCache) {
         cachePath = ModuleFileCache::defaultPath(fn, hostBinary, hostOptions);
-        cacheQuiet = true;
     }
     result.moduleCache.install(cachePath, cachePath, cacheQuiet);
     result.program = compileDaScript(fn, result.access, tout, *result.moduleGroup, policies);
@@ -760,7 +760,8 @@ static void print_help() {
     tout << "  -project_root <path> - project root (parent of modules/, default: script's dir)\n";
     tout << "  -load_module <path> - directly load a single dynamic-module folder (the one containing .das_module); repeatable. Shadows same-basename entries from dasroot/project_root.\n";
     tout << "  -module-cache <path> - AST module cache: read when present, refreshed when a compile diverges; pays on every reload.\n"
-            "                        Default ON (silent) at .cache/daslang/module_cache/<script>-<hash>.dascache\n"
+            "                        Default ON at .cache/daslang/module_cache/<script>-<hash>.dascache\n"
+            "  -module-cache-log    - print what the module cache did on each compile\n"
             "  -no-module-cache     - no AST module cache at all\n";
     tout << "  -dasroot <path>    - override DAS_ROOT\n";
     tout << "  -cwd               - change working directory to script's folder\n";
@@ -890,6 +891,7 @@ int main(int argc, char * argv[]) {
     size_t exeLen = getExecutablePathName(exePath, sizeof(exePath));
     hostBinary = exeLen ? string(exePath, exeLen) : string(argv[0]);
     for (int i = 1; i < argc && strcmp(argv[i], "--") != 0; i++) {
+        if (strcmp(argv[i], "-module-cache-log") == 0) continue;   // a log switch, not a compile input
         hostOptions += argv[i];
         hostOptions += '\n';
     }
@@ -905,6 +907,8 @@ int main(int argc, char * argv[]) {
             moduleCacheFile = argv[++i];
         } else if (arg == "-no-module-cache") {
             noModuleCache = true;
+        } else if (arg == "-module-cache-log") {
+            moduleCacheLog = true;
         } else if (arg == "-dasroot" && i + 1 < argc) {
             setDasRoot(argv[++i]);
         } else if (arg == "-cwd") {

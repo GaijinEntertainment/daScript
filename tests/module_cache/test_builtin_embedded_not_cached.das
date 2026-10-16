@@ -56,7 +56,7 @@ def test_builtin_embedded_not_cached(t : T?) {
     let drv = path_join(tmp, "mc_embedded_drv.das")
     fwrite(drv, fread("{root}/tests/module_cache/_fixtures/mc_embedded_drv.das"))
     let cache = path_join(tmp, "mc.bin")
-    let cmd = "{trace_prefix()}\"{das_exe()}\" -dasroot \"{root}\" -module-cache \"{cache}\" \"{drv}\""
+    let cmd = cached_cmd(cache, drv)
     var cold : string
     let coldRc = run_child(cmd, cold)
     var coldOk = report_child(t, "cold", coldRc, cold, "ser: wrote")

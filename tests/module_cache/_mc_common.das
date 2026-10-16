@@ -46,6 +46,17 @@ def trace_prefix() : string {
     return get_platform_name() == "windows" ? "set \"DAS_TRACE_MODULE_LOAD=1\"&& " : "DAS_TRACE_MODULE_LOAD=1 "
 }
 
+def logged_cache(path : string) : string => "-module-cache-log -module-cache \"{path}\""
+
+def cached_cmd(cache, script : string; prefix : string = trace_prefix()) : string =>
+    "{prefix}\"{das_exe()}\" -dasroot \"{get_das_root()}\" {logged_cache(cache)} \"{script}\""
+
+def cached_argv(cache : string; args : array<string>) : array<string> {
+    var argv <- [das_exe(), "-dasroot", get_das_root(), "-module-cache-log", "-module-cache", cache]
+    argv |> push_from(args)
+    return <- argv
+}
+
 //! stderr joins stdout: the scan trace goes through the logger
 def run_child(cmd : string; var output : string&) : int {
     return unsafe(popen_timeout("{cmd} 2>&1", 300.0, $(f) {
