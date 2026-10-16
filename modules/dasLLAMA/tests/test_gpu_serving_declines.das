@@ -1173,6 +1173,7 @@ def private round_shell(recurrent : bool) : Model {
 //! sized so a snapshot has something to copy
 def private round_session() : Session {
     var s <- Session(n_past = 1l, mtp_h_pos1 = 1l)
+    s.mtp_h |> reserve(ROUND_DIM)
     s.mtp_h |> resize(ROUND_DIM)
     s.mtp_vbatch |> resize(2l)
     s.dn_conv_state |> reserve(ROUND_CONV)

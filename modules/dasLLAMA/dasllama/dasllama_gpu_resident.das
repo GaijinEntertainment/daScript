@@ -856,7 +856,7 @@ def private push_layer_planes(t : Model; var planes : array<ResidentPlane>; l : 
 //! ships F32; empty where it rides the arena
 def private resident_ple_f32_rows(t : Model; proj : bool) : array<float> {
     let c = t.config
-    var rows : array<float>
+    var @exact_size rows : array<float>
     if (!has_ple(c) || !(proj ? t.ple_proj_f32 : t.ple_gate_f32)) {
         return <- rows
     }
@@ -2455,7 +2455,7 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
         var inscope gate_f32 <- resident_ple_f32_rows(t, false)
         var inscope proj_f32 <- resident_ple_f32_rows(t, true)
         if (!rdec_set_ple(ple, gate_f32, proj_f32)) {
-            return rdec_decline("the per-layer-embedding seats declined: the width {ple} is not a 32-multiple, or the f32 rows' router GEMV and act found no class")
+            return rdec_decline("the per-layer-embedding seats declined: the width {ple} is not a 32-multiple, the f32 rows' router GEMV and act found no class, or an f32 plane passes the storage range (the tier's line above)")
         }
     }
     var ple_tbl_placed = false
@@ -2564,8 +2564,8 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     }
     if (ple > 0l) {   //! the pre-step's projection on device off the file's own rows - bf16, or f32
         let all = c.n_layers * ple
-        var w16 : array<uint16>
-        var w32 : array<float>
+        var @exact_size w16 : array<uint16>
+        var @exact_size w32 : array<float>
         if (t.ple_model_bf16) {
             w16 |> reserve_resize(all * dim)   // E4B: 27.5M halves - the guard wants the final size reserved first
             unsafe {
@@ -2577,7 +2577,7 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
         }
         var pnorm <- fblob_rows(t, t.ple_pnorm_off, ple)
         let on = rdec_set_ple_proj(w16, w32, pnorm, all)
-        to_log(LOG_INFO, "dasLLAMA: resident driver: the per-layer-embedding pre-step's projection {on ? "runs on device" : "stays on the CPU"}\n")
+        to_log(LOG_INFO, "dasLLAMA: resident driver: the per-layer-embedding pre-step's projection {on ? "runs on device (its window form: the tier's line above)" : "stays on the CPU"}\n")
         delete w16
         delete w32
         delete pnorm
@@ -3132,7 +3132,7 @@ def gpu_resident_assist_bind(t : Model; var s : Session; pos, nr : int64; taken 
     return r
 }
 
-var private @scratch g_rdec_av_hid : array<float>
+var private @scratch @exact_size g_rdec_av_hid : array<float>
 
 //! The assistant drafter's verify: group g is `nr[g]` rows of `sessions[g]` from `pos[g]` in region `regs[g]`, its tokens next in
 //! `toks`; each row lands its logits in `mtp_logits_b` (or, under `pick_only`, its pick alone), its hidden in `mtp_hrows`, its pick in
@@ -3206,7 +3206,7 @@ def gpu_resident_assist_commit(s : Session) {
 def gpu_resident_assist_rows() : int64 => g_rdec_active ? rdec_token_n_rows() : 0l
 
 //! position `pos`'s cos/sin plane on the armed driver (every rope class end to end, `resident_cos_elems` floats) into `dst` from `base`
-def gpu_resident_rope_row(t : Model; pos : int64; var dst : array<float>; base : int64) {
+def gpu_resident_rope_row(t : Model; pos : int64; @exact_size var dst : array<float>; base : int64) {
     dst |> grow_resize(base + g_rdec_cos_elems)
     rdec_rope_rows(t, pos, dst, base)
 }
@@ -3701,7 +3701,7 @@ def private vulkan_resident_decode_go(t : Model; var s : Session; token, pos : i
     return true
 }
 
-var private @scratch g_rdec_ple_rows : array<float>   //! the gather half of the per-layer-embedding pre-step, position-major, when the driver finishes it on device
+var private @scratch @exact_size g_rdec_ple_rows : array<float>   //! the gather half of the per-layer-embedding pre-step, position-major, when the driver finishes it on device
 
 var private g_rdec_hx_t : Model const?   //! the model and session the host's routed sums run on, set around one split token
 var private g_rdec_hx_s : Session?
@@ -3853,7 +3853,8 @@ def private resident_hot_arm(t : Model; plan : ResidentPlan) {
     let ask = (asked == HOT_SLOTS_AUTO ? "" : " (DASLLAMA_GPU_HEAT={asked})") + (rdec_ctx_asked_whole() ? " under the context asked whole (set_gpu_ctx_strict, DASLLAMA_GPU_CTX_STRICT), which the pool yields to" : "")
     if (slots == 0l) {
         let room = plan.usable_bytes - plan.weight_bytes - plan.kv_bytes - plan.scratch_bytes
-        let why = c.n_expert_used > int64(RDEC_HOT_PICKS) ? "{c.n_expert_used} picks a step pass the {RDEC_HOT_PICKS} routed slots" : (asked == HOT_SLOTS_NONE ? "none asked" : "{room >> 20l} MB left past the plan, {slot_bytes >> 20l} MB a slot across the routed layers")
+        let why = (c.moe_dense_shexp ? "a gemma-4 MoE: the pool's device sums carry no per-expert down scale"
+            : c.n_expert_used > int64(RDEC_HOT_PICKS) ? "{c.n_expert_used} picks a step pass the {RDEC_HOT_PICKS} routed slots" : (asked == HOT_SLOTS_NONE ? "none asked" : "{room >> 20l} MB left past the plan, {slot_bytes >> 20l} MB a slot across the routed layers"))
         to_log(LOG_INFO, "dasLLAMA: resident driver - no hot expert pool{ask}: {why}; DASLLAMA_GPU_HEAT=<slots> asks a count, 0 none\n")
         return
     }

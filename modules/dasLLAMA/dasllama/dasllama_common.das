@@ -744,10 +744,19 @@ def mtp_round_commit_host(var s : Session; pos, k, a : int64) {
     s.n_past = pos + a + 1l
 }
 
-//! the rounds neither home drafts: nothing evaled yet (the zero-init `mtp_h_pos1` sentinel collides with position 0), a hidden
-//! row from another position or shorter than the drafter's width, or a round that would run past the context
-def mtp_round_cold_host(t : Model; s : Session; pos, k, tdim : int64) : bool
-    => pos < 1l || s.mtp_h_pos1 != pos || long_length(s.mtp_h) < tdim || pos + k + 1l > t.config.seq_len
+let MTP_COLD_PAST_CONTEXT = "the round would run past the context"   //! the one cold reason that is the work's size
+
+//! why neither home drafts the round ("" where it can): nothing evaled yet (the zero-init `mtp_h_pos1` sentinel collides with
+//! position 0), a hidden row from another position or shorter than the drafter's width, or `MTP_COLD_PAST_CONTEXT`
+def mtp_round_cold_why(t : Model; s : Session; pos, k, tdim : int64) : string {
+    return "nothing is evaled at position 0" if (pos < 1l)
+    return "the carried hidden row is from another position" if (s.mtp_h_pos1 != pos)
+    return "the carried hidden row is shorter than the drafter's width" if (long_length(s.mtp_h) < tdim)
+    return MTP_COLD_PAST_CONTEXT if (pos + k + 1l > t.config.seq_len)
+    return ""
+}
+
+def mtp_round_cold_host(t : Model; s : Session; pos, k, tdim : int64) : bool => mtp_round_cold_why(t, s, pos, k, tdim) != ""
 
 //! the round's `a` accepted drafts landed: the accepted row becomes the next round's hidden row, the draft count moves
 def mtp_round_take(var s : Session; a, kd, dim : int64) {
@@ -1316,8 +1325,8 @@ struct Model {
     //! per layer: inp_gate [dim -> ple] and proj [ple -> dim] in their tags' planes (`ple_plane`), or in fblob under the f32 marks
     ple_gate_offs : array<int64>
     ple_proj_offs : array<int64>
-    ple_gate_fmt : array<KqFmt>   //! per layer, the file's format (empty = q8 everywhere)
-    ple_proj_fmt : array<KqFmt>
+    @exact_size ple_gate_fmt : array<KqFmt>   //! per layer, the file's format (empty = q8 everywhere)
+    @exact_size ple_proj_fmt : array<KqFmt>
     ple_gate_f32 : bool = false   //! every inp_gate ships F32: the rows stay the file's f32 in fblob
     ple_proj_f32 : bool = false   //! every proj ships F32, the same
     // per-layer KV-ROW prefix (Σ layer_kv_dim of prior layers), filled by layout_offsets — makes
@@ -3000,7 +3009,7 @@ struct Session {
     // MTP/NextN self-spec state (empty unless config.n_layer_nextn > 0). mtp_h is the trunk's
     // post-output-norm hidden of the LAST evaluated position (the MTP draft-head handoff);
     // mtp_h_pos1 is that position PLUS ONE (0 = cold, keeps Session zero-init-safe).
-    mtp_h : array<float>           // h_nextn (dim; hc x dim under hyper-connections - the wide residual before the head mixer)
+    @exact_size mtp_h : array<float>           // h_nextn (dim; hc x dim under hyper-connections - the wide residual before the head mixer)
     mtp_h0 : array<float>          // the verify batch's ROW-0 normed hidden (= h_pos). forward_prefill's
                                    // tail only stashes the LAST row, which a reject discards — this is
                                    // what re-seeds mtp_h so a rejected step needs no re-forward
@@ -3012,8 +3021,8 @@ struct Session {
     mtp_logits : array<float>      // verify-batch row-0 logits (vocab; the draft check reads its argmax)
     mtp_vbatch : array<int64>      // the 2-row verify batch [tok, draft] (persistent — no per-step alloc)
     mtp_norm_b : array<float>      // verify-batch final-normed rows (npos x dim), input to the batched classifier
-    @scratch mtp_logits_b : array<float>   // verify-batch logits (rows x vocab), grown once to the round's width
-    @scratch mtp_hrows : array<float>      // verify-batch post-final-norm hidden rows (rows x dim) — the drafter's next input / the carry
+    @scratch @exact_size mtp_logits_b : array<float>   // verify-batch logits (rows x vocab), grown once to the round's width
+    @scratch @exact_size mtp_hrows : array<float>      // verify-batch post-final-norm hidden rows (rows x dim) — the drafter's next input / the carry
     @scratch mtp_picks : array<int64>      //! the last served verify seat's per-row picks, each its row's argmax: the greedy walk's truth, and the token a pick-asking round commits
     mtp_drafted : int64            // session-lifetime telemetry: drafts attempted / accepted
     mtp_accepted : int64

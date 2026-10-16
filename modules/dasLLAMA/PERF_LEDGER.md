@@ -11,6 +11,52 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **STATED (2026-10-16) - the lasting buffers the gemma leg adds: the resident assistant drafter on both homes, the
+  per-layer-embedding planes on the device, the carry's host rows, the concat norm regions and the round scratch.** Not
+  measured; the formulas are the record. The drafter is `mtp-gemma-4-26B-A4B-it-Q8_0.gguf` (`dim` 1024, `tdim` 2816,
+  4 layers of head sizes 256, 256, 256, 512 - `hs_mx` 512, 16 heads, `hidden` 8192, `vocab` 262144; 419,692,544 q8
+  elements) on the 26B-A4B target (`dim` 2816, 30 layers, rope widths 512 + 256, so `cos_elems` 768); the PLE models are
+  gemma-4-E2B (35 layers, `dim` 1536, `ple` 256, `per_layer_model_proj` BF16) and E4B (42, 2560, 256, BF16). `nb` is
+  `RD_NB_MAX` (16), the N-row command's rows; `regions` the mirror regions, one a stream served at once.
+  - Vulkan drafter weights (`dasllama_vulkan_mtp_gemma.das` `vk_buffers_make`), kept while the drafter is attached: the
+    q8 planes as 1 byte an element plus an f16 scale a 32-block (34 / 32 bytes an element) and the f32 rows (norms, q
+    norms, rope table): 445,923,328 B (425.3 MiB) plus 75,776 B on the 26B's drafter - the device twin of the 440 MiB
+    host sidecar row in the MTP depth-N section, which the attach keeps. The repack (`q8_repack`) holds the same 425.3
+    MiB on the host until the upload returns, so the attach's host peak holds the sidecar at least twice.
+  - Vulkan drafter activations: device `4 x (3 tdim + 2 dim + 2 qdm + 2 hidden + vocab) + 2 tdim + dim + qdm + hidden`
+    plus the q8 scale rows (`/ 8` of the four requantized widths), the attention partials (`4 x heads x (hs_mx + 3)`) and
+    528 B of ids and pick partials, `qdm` = heads x `hs_mx`: 1,281,040 B on the 26B's drafter, the `4 x vocab` logits
+    1 MiB of it; host `4 x (vocab + tdim)` landed logits and hidden, `4 x tdim + 16` input, `4 x cos_elems` rope row,
+    4096 B of GEMV meta a site (3 + 5 a layer) and 68 B of step meta: 1,168,468 B. The recorded draft commands are
+    `regions x 9` command buffers (one a region and depth, `MTP_MAX_ROWS`) from the driver's pool, plus `regions x 9`
+    bytes of recorded flags.
+  - Metal drafter slots (`dasllama_metal_mtp_gemma.das` `gemma_slot`): `4 x tdim + 8 x hs_mx` bytes a speculating
+    stream (its carried hidden and the two rope classes' cos/sin rows), grown to the widest tick: 15,360 B a stream on the
+    26B, 61,440 B at four streams; the tick's token rows `bvtok` hold `4 x` the rows at most doubled, 288 B at four
+    streams of nine rows.
+  - Vulkan `ple_wp_dev` (`dasllama_vulkan_prefill.das` `vk_rdec_set_ple_proj`): the PLE projection on its own rows,
+    `n_layers x ple x dim` elements at 2 bytes (BF16) or 4 (F32), beside the window's f16 panel (`ple_w16_dev`, 2 bytes an
+    element) where the shape admits it: 27,525,120 B (26.25 MiB) on E2B, 55,050,240 B (52.5 MiB) on E4B.
+  - The F32 PLE planes, on a file whose gate or projection kind ships F32: `4 x n_layers x dim x ple` bytes a kind, on
+    the Vulkan device (`ple_gf32_dev` / `ple_pf32_dev`) and in the Metal region cache (`enc_ple_f32`,
+    `pf_enc_ple_site`): 55,050,240 B a kind on E2B, 110,100,480 B on E4B. The Metal window's F32 projection rows
+    (`ple_model_off`, a file whose `per_layer_model_proj` ships F32) are the same `4 x n_layers x ple x dim` in the
+    region cache.
+  - Vulkan `pleact_dev` (`dasllama_vulkan_decode.das` `vk_rdec_set_ple`): `4 x ple x nb` = 16,384 B on E2B and E4B
+    (both `ple` 256).
+  - Vulkan `hid_host` (`vk_rdec_carry_arm`), reached by an assistant-armed model with no NextN head: `4 x dim x nb`
+    bytes, cached host memory: 180,224 B on the 26B, 98,304 B on E2B.
+  - Metal concat norm regions (`dasllama_metal_common.das` `upload_region_cat`, `g_regions_cat3`), kept until the region
+    cache drains: a residual seam's post and next norm rows, `8 x dim` bytes, at most two a layer (`seam_norms`) -
+    860,160 B on E2B; the gemma-4 MoE step's routed, dense, post-FFN and next attention norms, `16 x dim` a routed layer
+    and `12 x dim` the last (`moe_g4_norms`) - 1,340,416 B on the 26B, beside its attention seams' 675,840.
+  - Session verify rows under the assistant drafter's verify (`gpu_resident_assist_verify`): `mtp_logits_b` `4 x vocab`
+    and `mtp_hrows` `4 x dim` a row, nine rows at depth 8 - 9,437,184 + 101,376 B a speculating session on the 26B,
+    grown once (the depth-N section's footprint row states the same buffer at Qwen's vocabulary).
+  - Module scratch: `g_rdec_av_hid` `4 x dim` (11,264 B on the 26B); `g_vk_cosrow` `4 x cos_elems` (3,072 B);
+    `g_rdec_row_ids` 8 bytes a row of one command, 128 B at `nb`; `g_b_grp_nr` 8 bytes a row of a batched Metal step;
+    `g_gw_*` and `g_vk_*` 8 bytes a stream each, their token lists `8 x 9` a stream. None passes 12 KiB at four streams.
+
 - **STATED (2026-10-16) - two conclusions of the 2026-09-21 MoE-carriers entry are replaced.** Its 15.4 GB served-weight
   figure for gemma-4-26B-A4B UD-IQ3_XXS named "demoted down-expert rows": the 704-wide down-expert rows serve in their own
   per-32 formats, nothing demotes them (`ARCHITECTURE_ENGINE_FORMATS.md`), so the 15.4 GB is the served weights at their

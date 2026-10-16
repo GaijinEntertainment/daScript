@@ -1663,6 +1663,14 @@ def vk_rdec_prefill(x_batch : array<float>; cos_batch : array<float>; ple_rows :
 def ple_proj_shape_ok(dim, all : int64) : bool
     => f16g_shape_ok(dim) || (g_gpu.coopmat_mode == COOPMAT_MM && khr_kq_tile_on() && dim % 16l == 0l && all % 16l == 0l)
 
+//! why the window's projection takes the router GEMV over the f16 tile ("" where the tile serves it)
+def ple_proj_gemv_why(dim, all, w16_bytes : int64) : string {
+    if (!ple_proj_shape_ok(dim, all)) {
+        return "no f16 tile serves it (the cm2 tile wants a row width of {int64(F16G_BK) * F16G_SPLIT}-multiples, the KHR tile 16-multiples; dim {dim}, {all} rows)"
+    }
+    return vk_range_ok(w16_bytes) ? "" : "its f16 panel ({w16_bytes} bytes) passes the device's storage range {vk_max_storage_range()}"
+}
+
 //! The pre-step's projection on device off the file's own rows (bf16 halves `w16`, else f32 `w32`) and its norm row: the router GEMV
 //! under 1/sqrt(dim) at the token command, the window's f16 tile over a panel it converts each window (else the router GEMV) before
 //! layer 0. Refused past `pf_ready`: these sets build with the prefill buffers.
@@ -1678,18 +1686,26 @@ def vk_rdec_set_ple_proj(w16 : array<uint16>; w32 : array<float>; pnorm : array<
             || !((bf16 ? ensure_router_gemv_bf16_cls() : ensure_router_gemv_cls()) && ensure_ple_finish_cls())) {
         return false
     }
+    let wp_bytes = n * (bf16 ? 2l : 4l)
+    if (!vk_range_ok(wp_bytes)) {   //! the own rows bind whole in the token command's GEMV and the window's
+        to_log(LOG_WARNING, "dasLLAMA vulkan resident: the per-layer-embedding projection rows ({wp_bytes} bytes) pass the device's storage range {vk_max_storage_range()}\n")
+        return false
+    }
     g_rd.ple_wp_bf16 = bf16
-    g_rd.ple_wp_bytes = n * (bf16 ? 2l : 4l)
+    g_rd.ple_wp_bytes = wp_bytes
     g_rd.ple_wp_dev = make_device_buf(g_rd.ple_wp_bytes)
     g_rd.ple_pnorm_dev = make_device_buf(g_rd.ple * 4l)
     unsafe {
         upload_region_at(g_rd.ple_wp_dev, 0l, bf16 ? addr<uint8 const?>(w16[0]) : addr<uint8 const?>(w32[0]), g_rd.ple_wp_bytes)
         upload_region_at(g_rd.ple_pnorm_dev, 0l, addr<uint8 const?>(pnorm[0]), g_rd.ple * 4l)
     }
-    if (ple_proj_shape_ok(g_rd.dim, all)) {   //! the window's f16 panel, rewritten off the own rows every window
+    let gemv_why = ple_proj_gemv_why(g_rd.dim, all, n * 2l)
+    if (gemv_why == "") {   //! the window's f16 panel, rewritten off the own rows every window
         g_rd.ple_w16_bytes = n * 2l
         g_rd.ple_w16_dev = make_device_buf(g_rd.ple_w16_bytes)
     }
+    let form = gemv_why == "" ? "the f16 tile ({g_gpu.coopmat_mode == COOPMAT_CM2 ? "cm2" : "KHR"})" : "the router GEMV: {gemv_why}"
+    to_log(LOG_INFO, "dasLLAMA vulkan resident: the per-layer-embedding window projection runs on {form}\n")
     // the token command's half: the projected row plane, the row GEMV over the embedded row (no norm: the wn slot binds the norm row
     // unread) and the per-slice finish in place on the gathered row
     let nb = g_rd.nb

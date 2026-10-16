@@ -373,7 +373,7 @@ class ClsArCombF16B : ArCombBase {
 [ |> template_struct_instance]
 class template ArCombG4T : GkMoeCombG4 {
     @workgroup row : float[8192]
-    override OUT_X4 = true   //! the residual step's store form (`GkQ8BlockStore.store_x4`): the stride loop reads 1.9 us slower on the pod
+    override OUT_X4 = true   //! the residual step's store form (`GkQ8BlockStore.store_x4`): 10.37 us against the stride loop's 12.29 on the pod, `debug-jit` (ARCHITECTURE_GPU_SHARED_KERNELS.md's provenance line)
 
     def override stash(k : uint; v : float) : void {
         row[k] = v
@@ -530,7 +530,7 @@ class template ActRqT : RqT {
     def act_mul(v, u : float) : float => gk_act_mul(v, u, pa.act)
 
     //! the up element paired with gate element `eb`: with `ustride` the rows of `ulen` elements sit `ustride` apart
-    def up_at(eb : uint) : uint => (pa.ustride != 0u ? gk_strided_at(eb, pa.ubase, pa.ustride, max(pa.ulen, 1u))
+    def up_at(eb : uint) : uint => (pa.ustride != 0u ? gk_strided_at(eb, pa.ubase, pa.ustride, pa.ulen)
         : pa.ubase + eb)   //! four elements never cross a row: ulen is a 4-multiple
 
     def override load4(eb : uint) : float4 {
@@ -10686,10 +10686,11 @@ class template Blk32GemvT {
     def sum_shell {
         static_if (SUM) {
             let rows = max(pa.ncols, 1u)
+            let d = max(pa.d, 1u)
             let rg = gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID
             if (rg < rows * pa.d) {
-                let p = rg / pa.d
-                let row = rg % pa.d
+                let p = rg / d
+                let row = rg % d
                 let k = pa.nreg / rows
                 let nb = pa.n / 32u
                 var tot = 0.0

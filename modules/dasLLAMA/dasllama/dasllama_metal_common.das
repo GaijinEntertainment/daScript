@@ -2821,6 +2821,7 @@ def private land_sameslab_rows(var L : BatchLanding&; lgp : uint8?) {
             }
             if (L.bxf != null) {
                 if (long_length(sg.mtp_hrows) * 4l < n * hb) {
+                    sg.mtp_hrows |> reserve(n * hb / 4l)
                     sg.mtp_hrows |> resize(n * hb / 4l)
                 }
                 memcpy(addr < void? >(sg.mtp_hrows[0]), reinterpret<void?>(reinterpret<uint8?>(metal_buffer_contents(L.bxf)) + row0 * hb), n * hb)

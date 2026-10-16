@@ -63,10 +63,27 @@ crown:
   to sit in cache ranks the kernels by an effect production never sees, and the race then picks
   the slower kernel.
 
-The window races in `benchmarks/ew/bench_metal_gk_rows.das` - the gemma-4 MoE step's slot loads
-(`g4_slot_race`) and the sandwich seam's lanes (`seam_lane_race`) - hold one output across each
-arm's chain: every dispatch updates the stream rows in place and reads its own last write, the
-chain production runs, where each layer's residual step reads the stream the step before it wrote.
+The row kernels' rows and races in `benchmarks/ew/bench_metal_gk_rows.das` hold one output across
+each arm's chain. The residual step's rows (`ar_dim_rows`), the gemma-4 MoE tail's (`g4_tail_rows`)
+and the step, combine and seam races (`g4_slot_race`, `comb_slot_race`, `seam_lane_race`) update
+the stream rows in place or rewrite one combined row, and every dispatch reads or overwrites its own
+last write: the chain production runs, where each layer's residual step reads the stream the step
+before it wrote. The select race (`select_ds_race`) and the side rows' projection
+(`ple_proj_rows`) rewrite one output a dispatch: a decode step's select and projection each feed a
+stage that reads their output, so production runs them as a dependent chain too.
+
+The operands stand against each box's last-level cache: the M5 Max's SLC is 48 MB (Apple's
+figure), the RTX PRO 4500 Blackwell's L2 64 MiB (the CUDA driver's
+`CU_DEVICE_ATTRIBUTE_L2_CACHE_SIZE`; `nvidia-smi -q` does not print it). The side rows' projection
+at the E2B shape (35 x 256 rows of 1536) streams 55 MB of f32 rows or 27.5 MB of bf16 words - both
+inside the pod's L2, the bf16 words inside the SLC - so its f32-against-bf16 rows also run over a
+ring of eight weight copies (`PLE_RING`: 440 MB and 220 MB), dispatch i reading copy i mod 8, in
+both the bench and `harness/vk_gk_rows_probe.das`. One buffer hides the bf16 words' lead the ring
+shows: the pod reads 34.13 against 34.79 us at one column on one buffer, 45.59 against 69.61 over
+the ring (`debug-jit`; the provenance and the rows: `ARCHITECTURE_GPU_SHARED_KERNELS.md#gpu-kernel-pairs`).
+The step and combine races' down rows (46 MB at the gemma-4 window, 33.5 MB at the 512-row reduce) are an activation the down GEMM writes just
+before the step reads it, so production reads them as warm as the race does, and they take no ring;
+every other race streams activations of a few MB.
 
 A race arm owns a transient command queue for its timed pairs and releases it before returning -
 the one exception to the family's shared device and queue (`ARCHITECTURE_GPU.md#gpu-backends`) - so

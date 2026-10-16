@@ -1674,7 +1674,9 @@ def detect_ple_formats(var t : Model; m : GGUFMeta) : bool {
     let c = t.config
     let layers = c.n_layers
     var any = false
+    t.ple_gate_fmt |> reserve(layers)
     t.ple_gate_fmt |> resize(layers)
+    t.ple_proj_fmt |> reserve(layers)
     t.ple_proj_fmt |> resize(layers)
     for (kind in ["inp_gate", "proj"]) {
         let rows = kind == "proj" ? c.n_embd_per_layer : c.dim

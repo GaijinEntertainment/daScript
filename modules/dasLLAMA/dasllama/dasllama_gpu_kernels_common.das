@@ -609,9 +609,10 @@ def gk_bf16_hi(w : uint) : float => uint_bits_to_float(w & 0xFFFF0000u)
 [spirv_inline]
 def gk_bf16_at(w : uint; odd : bool) : float => odd ? gk_bf16_hi(w) : gk_bf16_lo(w)
 
-//! element `e`'s index in rows of `len` elements stored `stride` apart from `base` (a side input stored position-major)
+//! element `e`'s index in rows of `len` elements stored `stride` apart from `base` (a side input stored position-major); a zero
+//! `len` divides as one
 [spirv_inline]
-def gk_strided_at(e, base, stride, len : uint) : uint => base + (e / len) * stride + e % len
+def gk_strided_at(e, base, stride, len : uint) : uint => base + (e / max(len, 1u)) * stride + e % max(len, 1u)
 
 //! the workgroup reductions every row kernel of either home shares: one barrier a reduce, every thread summing the subgroup
 //! partials in the same order, so every thread holds the same sum or max; the lane primitives are each home's
