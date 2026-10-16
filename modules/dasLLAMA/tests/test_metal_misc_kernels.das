@@ -245,10 +245,10 @@ def private embed_b32_gate(t : T?; var dev, queue; f : KqFmt; dim, vocab, lead :
     let tag = "embed_b32 {f} dim={dim} vocab={vocab} lead={lead}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
-        let sq = stamp_of(@@enc_embed_b32_q51)
-        let si = stamp_of(@@enc_embed_b32_iq4nl32)
-        let s4 = stamp_of(@@enc_embed_b32_q4032)
-        let s5 = stamp_of(@@enc_embed_b32_q5032)
+        let sq = stamp_of(@@enc_q51_embed_b32)
+        let si = stamp_of(@@enc_iq4nl32_embed_b32)
+        let s4 = stamp_of(@@enc_q4032_embed_b32)
+        let s5 = stamp_of(@@enc_q5032_embed_b32)
         var pso = f == KqFmt.q51 ? mc |> keep_stamp(sq, err) : (f == KqFmt.iq4nl32 ? mc |> keep_stamp(si, err)
             : (f == KqFmt.q5032 ? mc |> keep_stamp(s5, err) : mc |> keep_stamp(s4, err)))
         return if (!pso_ok(t, tag, pso, err))
