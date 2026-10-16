@@ -520,7 +520,6 @@ def private gemma_plain_step(t : Model; var s : Session; tok, pos : int64) {
 //! a stream that cannot speculate this round: no Metal blob or device, no carried hidden at its position, a round past the
 //! context, a K/V codec the round does not serve, or a mirror short of the position or of the round's rows
 def private gemma_round_cold(t : Model; s : Session; pos, k : int64) : bool {
-    let c = t.config
     if (g_dev == null || !t.metal_blob || mtp_round_cold_host(t, s, pos, k, g_gemma_drafter.tdim) || !gemma_kv_ok(s)
             || !key_exists(g_mirrors, s.uid)) {
         return true
