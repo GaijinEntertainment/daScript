@@ -10,7 +10,8 @@ out); `ARCHITECTURE_GPU_TOWER.md` (the Metal tower's attention routes and encode
 StyleTTS2 chain); `ARCHITECTURE_GPU_TOWER_POCKET.md` (the Metal tower's Pocket TTS seats); `ARCHITECTURE_GPU_QUANT_PLANES.md` (the Metal quant
 plane reads and the GEMV site abstraction); `ARCHITECTURE_GPU_MTP.md` (the Metal speculative
 round, the depth a round drafts, and the verify and batch-driver mechanics); `ARCHITECTURE_GPU_MTP_ASSISTANT.md` (the assistant drafter on both homes);
-`ARCHITECTURE_GPU_KV_RING.md` (both homes' sliding-layer K/V ring); `ARCHITECTURE_GPU_VULKAN.md` (the Vulkan resident driver).
+`ARCHITECTURE_GPU_KV_RING.md` (both homes' sliding-layer K/V ring); `ARCHITECTURE_GPU_SHARED_KERNELS.md` (the
+kernels both homes stamp: the template mechanism and the pair ledger); `ARCHITECTURE_GPU_VULKAN.md` (the Vulkan resident driver).
 
 ### GPU backends {#gpu-backends}
 
@@ -168,8 +169,7 @@ that a question answered for one backend has an obvious address in the other. Th
   `requires=` or `@span` reads) exempts stamp-derived params; a long-form class is refused.
 - **Ledgered kernel-binding asymmetries** - a REVIEW rule firing on one of these is expected, and
   this entry is the sanction: a Metal kernel gate under `tests/` builds its own pipeline from the stamp's MSL and dispatches it through the class's generated `enc_*` builder (its `_pso` twin where the pipeline global is private to its driver), so a gate proves the body and the builder's bind list together - it binds by number only where it dispatches a grid or a bind the builder cannot express, the site saying which; the moe mul_mm TENSOR twins (`MetalMoeMulMmQ8T` / `MetalMoeMulMmMx4T`)
-  keep the pre-family compact kargs slots while their base classes bind the family numbers, so no
-  shared bind path may span the two layouts; the MoE combine pair (`MetalMoeCombine` y/dim/nk at
+  keep the pre-family compact kargs slots while their base classes bind the family numbers; the MoE combine pair (`MetalMoeCombine` y/dim/nk at
   2/3/4, `MetalMoeReduce` at 3/4/5 under its gated `inv`) keeps each leaf's numbers; the in-engine moe mul_mm A/B race harnesses
   (`dasllama_metal_prefill.das`) encode through `kn_moe_mm_family_tail` rather than a per-class
   `enc_*` builder; the iq4 family's iq4nl stamps (`MetalKqGemvIq4T`, `MetalKqMvIq4T`, `MetalKqMvB8Iq4T`) and the mul_mm tensor
@@ -231,7 +231,7 @@ that a question answered for one backend has an obvious address in the other. Th
   `mad` is the fused instruction by definition and leaves a driver nothing to choose, so two bodies
   held bit for bit spell as `mad` each multiply that feeds an add.
 - **`dasllama_gpu_kernels_common.das`** - the kernels both kernel homes stamp, each one `class template`
-  with its buffers, its argument struct and its body (`#gpu-shared-kernels`); it requires no backend.
+  with its buffers, its argument struct and its body (`ARCHITECTURE_GPU_SHARED_KERNELS.md#gpu-shared-kernels`); it requires no backend.
 - **`dasllama_kernel_access.das`** - the shared body-walk read/write classifier both GPU lenses run
   on, plus the dispatch-lens micro-grammar (the grid/tg/params spec tokenizers and the shared
   AST-emission core: `is_digit_tok`, `role_ok`, `derived_role`, `mk_uint_cast`, `mk_call1`,
@@ -259,51 +259,3 @@ in prefill) and the tuner calls those public entries.
 decline COUNTING lives in `<gpu>_common` beside `require_or_panic`, for both paths.
 
 Vulkan is the deliberately-designed model of this shape; Metal converges as it is touched.
-
-### Kernels both homes stamp {#gpu-shared-kernels}
-
-A kernel the Metal and the Vulkan home both run is one `class template` in
-`dasllama_gpu_kernels_common.das`: its `@ssbo` buffers with their `@role`s, its argument struct and its
-body. The module requires no backend and no shader vocabulary - a template's body resolves in the module
-that stamps it. Each home stamps the template as a leaf class under its own dispatch annotation and its
-own kernel method, which calls the body, so a kernel keeps the dispatch name, the pipeline and the census
-key it has on that home.
-
-- **The arguments are one `@kargs` member.** `kargs_as` (`dasllama_kernel_access.das`) runs in both
-  dispatch lenses ahead of the kernel's emission and gives the member the form that home's emitter reads:
-  a `@push_constant` block on Vulkan, a by-value `@uniform` at the binding past the class's highest on
-  Metal - once: a class under two dispatch annotations passes through the lens twice, and the second pass
-  keeps the binding the first gave, so each builder and the kernel agree on it. The struct is a member and
-  not a parameter of the body: a parameter is passed by value, and the
-  emitted kernel then copies the whole struct where a member is read a field at a time.
-- **A body that reads a buffer at an offset takes it as an element offset in its arguments.** Vulkan caches
-  a descriptor set by its binding tuple, so an offset bound per dispatch would be a set per offset; an offset
-  in the arguments is one set. A kernel every site reads from element zero carries none.
-- **The two emitters place the body differently.** The MSL emitter splices a called method flat into the
-  kernel; the SPIR-V emitter keeps it a function the entry point calls. A kernel moved here therefore
-  reads, on Vulkan, as its old words plus one call. Because the MSL emitter splices, a template method of
-  more than one statement cannot sit in value position: a helper that returns a value - a workgroup
-  reduction, a partial sum - is written as a statement method that lands its result in a `var` reference
-  (`wg_max_into`, `wg_sum_into`, `value_sum_into` in `GkPkAttn`). The same splice names a parameter as
-  many times as the body does, so an argument that is a computed expression is refused where the body
-  names the parameter twice: the caller hoists it to a local first. A fixed-array local in a body hoists
-  to a program-scope constant table only when every element is a scalar integer or float literal; a
-  vector literal does not hoist, so a `float4` table is spelled as four scalars a word.
-- **A home's lane primitive is reached by one name.** A template method resolves in the module that
-  stamps it, so a shared reduction calls `gk_subgroup_add` / `gk_subgroup_max`, and each kernel home
-  defines the pair over its own primitive (`subgroupAdd` on Vulkan, `simd_sum` on Metal). A free function
-  in the common module resolves in the common module and sees neither home, so a body that needs a
-  home's primitive keeps it in a method.
-- **A binding a stamp does not use is gated, and a stamp names its element types.** `@template_gate`
-  erases the field at stamping (`daslib/typemacro_boost`, before either emitter reads the class): a gated
-  f16 output or bias row is no parameter of that stamp's builder (`GkRestride`). A body writing one output
-  in two precisions spells its element type as a `typedef` each stamp declares (`OT`), which both emitters take.
-- **A number the drivers verify is a `let` beside the template, and a scale both homes must round
-  alike is computed on the host.** A template constant's default is a literal, so the window a kernel is
-  stamped for is spelled twice - the default and the `let` each driver checks against (`GK_G4A_ATTN_PAST`).
-  A shape-derived scale (`gemma4a_attn_scales`) is passed in the arguments: in the kernel, the homes' intrinsics round it apart.
-- **What stays per home:** the GEMM and attention tiles, which each home builds on its own matrix
-  primitives. A pair whose two forms differ in shape (the TTS elementwise maps run one element a thread on
-  Metal and four an invocation on Vulkan) folds onto one body when both homes profile the same on it, and
-  until then shares its per-element function through `dasllama_gpu_math.das`. Which pairs ride a template, what each stamp
-  reads on its home, and why the rest stay per home: `ARCHITECTURE_GPU_SHARED_KERNELS.md#gpu-kernel-pairs`.

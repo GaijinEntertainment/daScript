@@ -1874,7 +1874,7 @@ module) is independent and can land any time - it is pure structure.
     MoltenVK's converter accepts, and the three files read green under MoltenVK.
 
 115. **The TTS kernel pairs still under two shells, and what each fold costs.** The kernels both GPU
-    homes run as one `class template` (`ARCHITECTURE_GPU.md#gpu-shared-kernels`) cover the Pocket
+    homes run as one `class template` (`ARCHITECTURE_GPU_SHARED_KERNELS.md#gpu-shared-kernels`) cover the Pocket
     row copy, rope and attention, the duration sums, the whole harmonic source, the STFT pair, AdaIN,
     the depthwise rows conv, the residual add-and-scale, Axpy and Concat. What stays twice, by kind:
     (a) the same output under a different thread-to-work split - `TtsElemT` /

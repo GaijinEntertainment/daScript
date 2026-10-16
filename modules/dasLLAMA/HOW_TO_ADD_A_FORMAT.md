@@ -70,7 +70,7 @@ the tree:
    - **A new template** only when the format's index or guard arithmetic differs from every
      family's - and then with the `//!` line, a kernel cell per stamp and a race row.
    A row kernel the format brings that is format-free (a gather epilogue, a reduce) is one
-   template in `dasllama_gpu_kernels_common.das` both homes stamp (`ARCHITECTURE_GPU.md#gpu-shared-kernels`,
+   template in `dasllama_gpu_kernels_common.das` both homes stamp (`ARCHITECTURE_GPU_SHARED_KERNELS.md#gpu-shared-kernels`,
    the ledger `ARCHITECTURE_GPU_SHARED_KERNELS.md#gpu-kernel-pairs`); the GEMV and GEMM tiles stay
    per home, on each home's family template. On Metal the format's tile stamps form a MATRIX
    the module gate holds (`check_kq_form_matrix`, `REVIEW.das`): every `KqFmt` member of a stamp
