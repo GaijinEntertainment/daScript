@@ -105,3 +105,21 @@ from the generator (`imgui_skip_func` in `bind/bind_imgui.das`) and hand-bound i
 interpreter and the JIT both call with a pointer. `tests/texture_ref_abi.das` runs
 interpreted and under `-jit` (CTest `imgui_texture_ref_abi_interpreted` /
 `imgui_texture_ref_abi_jit`) and asserts the handle survives each of the five calls.
+
+## Widget path cache {#widget-path-cache}
+
+`widget_path_key` caches each constructed `<container path>/<ident>` string by
+exact container path and leaf identifier. Repeated lookup of the same pair reuses
+the string without allocating another one. Cache insertion owns copies of both
+key components, so caller-owned buffers can be reused. Bare identifiers remain unchanged.
+
+The cache retains at most 8192 paths. Once full, lookups still construct valid keys
+but retain no new entries. The next `begin_frame` deletes the cache's tables so
+changing identifiers cannot grow retained table storage without bound. Constructed
+path strings remain managed: registry, dispatch and caller references keep them alive
+through cache turnover and normal string collection. The path reuse tests exercise
+identity, bounded storage, resumed caching and references across collection.
+
+A working set of at least 8192 distinct paths each frame saturates the cache each
+frame and gets no cross-frame reuse. The bounded reset policy trades that extra
+work for limited retention; reuse within a frame is still possible.

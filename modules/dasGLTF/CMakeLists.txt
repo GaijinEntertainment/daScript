@@ -4,6 +4,9 @@ IF(NOT DAS_GLTF_INCLUDED)
 
     ADD_MODULE_DAS_FROM_DESCRIPTOR(gltf gltf)
 
+    set_property(GLOBAL APPEND PROPERTY DAS_ARCH_EXTRACT_SPECS
+        "modules/dasGLTF/gltf,modules/dasGLTF/tools|modules/dasGLTF|${DAS_INSTALL_MODULESDIR}/dasGLTF")
+
     install(DIRECTORY ${PROJECT_SOURCE_DIR}/modules/dasGLTF/gltf
         DESTINATION ${DAS_INSTALL_MODULESDIR}/dasGLTF
         FILES_MATCHING

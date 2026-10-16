@@ -377,9 +377,7 @@ def get_rule_type(var gen : ParserGenerator; rule : Rule) : TypeDeclPtr {
             return <- gen.rule_types |> get_value_and_clone_type(nonterm._0)
         }
 
-        Rule(subrule = subrule) => $ {
-            abort("Infer subrule type")
-        }
+        Rule(subrule = subrule) => abort("Infer subrule type")
 
         _ => $ {}
     }
@@ -425,21 +423,13 @@ def set_rule_handle(var subrule_ : Rule_?; handle : string) {
 
                 Terminal(number = _) => $ { subrule_.rule <- Rule(terminal = Terminal(number = handle)) }
 
-                Terminal(whitespace = _) => $ {
-                    abort("Matching repeated whitespace is not allowed")
-                }
+                Terminal(whitespace = _) => abort("Matching repeated whitespace is not allowed")
 
-                Terminal(taborspace = _) => $ {
-                    abort("Matching repeated tab or space is not allowed")
-                }
+                Terminal(taborspace = _) => abort("Matching repeated tab or space is not allowed")
 
-                Terminal(EOL = _) => $ {
-                    abort("Matching repeated EOL is not allowed")
-                }
+                Terminal(EOL = _) => abort("Matching repeated EOL is not allowed")
 
-                Terminal(EOF = _) => $ {
-                    abort("Matching repeated EOF is not allowed")
-                }
+                Terminal(EOF = _) => abort("Matching repeated EOF is not allowed")
 
                 Terminal(string_ = _) => $ { subrule_.rule <- Rule(terminal = Terminal(string_ = handle)) }
 
@@ -559,7 +549,7 @@ def generate(var gen : ParserGenerator; var rule_ : Rule) : array<ExpressionPtr>
 
         Rule(repeat = rule_) => $ { return <- gen |> generate_repeat(rule_) }
 
-        Rule(subrule = subrule) => $ { abort("TODO: Subrule") }
+        Rule(subrule = subrule) => abort("TODO: Subrule")
 
         Rule(option = rule_) => $ { return <- gen |> generate_option(rule_) }
     }
