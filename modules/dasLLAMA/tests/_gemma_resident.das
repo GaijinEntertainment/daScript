@@ -77,26 +77,36 @@ def private prose_tokens(tr : Model; count : int64) : array<int64> {
     return <- [for (i in range64(count)); ids[i]]
 }
 
+//! a prose feed: the first `n` prose ids the prompt, the next `steps` the fed tokens
+struct private ProseFeed {
+    prompt : array<int64>
+    toks : array<int64>
+}
+
+def private prose_feed(tr : Model; n, steps : int64) : ProseFeed {
+    var ids <- prose_tokens(tr, n + steps)
+    var f <- ProseFeed(prompt <- [for (i in range64(n)); ids[i]], toks <- [for (i in range64(n, n + steps)); ids[i]])
+    delete ids
+    return <- f
+}
+
 //! the fixture loaded on the armed driver, or an empty model (`n_layers` 0) after the skip that says why
 def private gemma_model(t : T?; gf : GemmaFile) : Model {
     let path = path_join(models_dir(), gf.file)
-    if (!resident_ready(t, path)) return <- Model()
-    var tr <- load_resident(path, 0l, gf.host_experts ? GEMMA_RIG_CTX : 0l)
-    if (gf.host_experts) {   //! the pinned cap decides the plan whatever the card: a memory decline is the form missing, never a skip
-        t |> success(moe_gpu_resident_active(), "the whole-model driver armed with host experts ({gpu_resident_decline_()})")
+    var tr <- resident_trunk(t, path, GEMMA_RIG_CTX, " - DASLLAMA_GPU_MIN_CTX=1024 arms the 12B Q8_0 file on a 16 GB card") $() : Model {
+        var m <- load_resident(path, 0l, gf.host_experts ? GEMMA_RIG_CTX : 0l)
+        if (gf.host_experts) {   //! the pinned cap decides the plan whatever the card: a memory decline is the form missing, never a skip
+            t |> success(moe_gpu_resident_active(), "the whole-model driver armed with host experts ({gpu_resident_decline_()})")
+        }
+        return <- m
     }
-    if (!resident_admitted(t, "the whole-model driver armed on the model (the load log names any decline)", " - DASLLAMA_GPU_MIN_CTX=1024 arms the 12B Q8_0 file on a 16 GB card")) {
-        to_log(LOG_WARNING, "{gf.file}: the cell skips on the card's memory decline ({gpu_resident_decline_()})\n")
-        delete tr
-        return <- Model()
-    }
+    return <- tr if (tr.config.n_layers == 0l)
     if (gf.host_experts) {
         let host = gpu_resident_host_layers()
         t |> success(host > 0l && host < tr.config.n_layers, "the first {host} of {tr.config.n_layers} routed layers' experts serve on the host, the rest on the device")
     }
     t |> success(tr.config.pre_post_norm && tr.config.sliding_window > 0l && tr.config.ffn_act == FfnAct.gelu,
         "the fixture carries the sandwich norms, a sliding window and the GeGLU FFN (the arms this file gates)")
-    tr.config.seq_len = min(tr.config.seq_len, GEMMA_RIG_CTX)   //! the sessions size their caches to the mirror's cap, not the model's max
     return <- tr
 }
 
@@ -120,12 +130,10 @@ def gemma_format_cell(t : T?; gf : GemmaFile; mx4 : bool) {
     with_gemma_rig(t, gf) $(tr) {
         census_cell(t, tr, path_join(models_dir(), gf.file), gf.file, ["attention q/k/v/o", "routed experts", "token table", "classifier"])
         t |> equal(tr.experts_mx4, mx4, "{gf.file}: the expert stacks load as the native-MXFP4 planes exactly where the file carries them")
-        var ids <- prose_tokens(tr, 42l)
-        var prompt <- [for (i in range64(40l)); ids[i]]
-        var toks <- [ids[40], ids[41]]
+        var inscope feed <- prose_feed(tr, 40l, 2l)
         var sg <- create_session(tr, mirror_kv_dtype())
         let served0 = moe_gpu_resident_prefills()
-        var rows <- feed_logits(tr, sg, prompt, toks) $ {}
+        var rows <- feed_logits(tr, sg, feed.prompt, feed.toks) $ {}
         t |> equal(moe_gpu_resident_prefills(), served0 + 1l, "{gf.file}: the resident window chain served the prompt")
         served_every_call(t)
         for (r, i in rows, count()) {
@@ -134,48 +142,29 @@ def gemma_format_cell(t : T?; gf : GemmaFile; mx4 : bool) {
         }
         delete rows
         delete sg
-        delete ids
-        delete prompt
-        delete toks
     }
 }
 
-//! prefill `n` tokens + 8 fed steps on the resident driver, then the same on the all-CPU chain; the
-//! prefill logits and every step's within the bar, the one-step-off control past it.
-def gemma_forced_feed(t : T?; n : int64; gf : GemmaFile) {
+//! prefill `n` tokens + 8 fed steps on the resident driver with every call served, then the same on the all-CPU chain; the
+//! prefill logits and every step's within the bar, the one-step-off control past it. `exact` holds the rows against the file's f32
+//! chain (`f32_chain_rows`) where the CPU q8 chain is no reference: on the E2B Q4_K_M file its activation quantization reads step
+//! 4's top logit 16.70 (x64) and 17.85 (arm64) where the f32 chain reads 19.14 and the reference build 19.04 (CPU) and 19.05
+//! (Metal), the device 19.28 - and adds that the device sits no further from that chain than the CPU q8 chain (`f32_chain_witness`)
+def gemma_forced_feed(t : T?; n : int64; gf : GemmaFile; exact : bool = false) {
     with_gemma_rig(t, gf) $(tr) {
-        var ids <- prose_tokens(tr, n + 8l)
-        var prompt <- [for (i in range64(n)); ids[i]]
-        var toks <- [for (i in range64(n, n + 8l)); ids[i]]
-        delete ids
-        var fed <- resident_then_cpu_feed(t, tr, prompt, toks) $ {
+        var inscope feed <- prose_feed(tr, n, 8l)
+        var fed <- resident_then_cpu_feed(t, tr, feed.prompt, feed.toks) $ {
             served_every_call(t)
         }
-        feed_steps_within(t, tr, "", n, fed.gpu, fed.cpu, toks, GEMMA_LOGIT_BAR_REL)
+        if (exact) {
+            var f32_rows <- f32_chain_rows(path_join(models_dir(), gf.file), feed.prompt, feed.toks)
+            feed_steps_within(t, tr, "", n, fed.gpu, f32_rows, feed.toks, GEMMA_LOGIT_BAR_REL, "resident", "the f32 chain")
+            f32_chain_witness(t, tr, "{gf.file}: {n} tokens against the f32 chain", fed, f32_rows)
+            delete f32_rows
+        } else {
+            feed_steps_within(t, tr, "", n, fed.gpu, fed.cpu, feed.toks, GEMMA_LOGIT_BAR_REL)
+        }
         delete fed
-        delete prompt
-        delete toks
-    }
-}
-
-//! the forced feed held against the file's f32 chain (`f32_chain_rows`) where the CPU q8 chain is no reference: on the E2B Q4_K_M
-//! file its activation quantization reads step 4's top logit 16.70 (x64) and 17.85 (arm64) where the f32 chain reads 19.14 and the
-//! reference build 19.04 (CPU) and 19.05 (Metal), the device 19.28 - every row within the bar of the f32 chain, the one-step-off
-//! control past it, and the device no further from that chain than the CPU q8 chain (`f32_chain_witness`)
-def gemma_forced_feed_exact(t : T?; n : int64; gf : GemmaFile) {
-    with_gemma_rig(t, gf) $(tr) {
-        var ids <- prose_tokens(tr, n + 8l)
-        var prompt <- [for (i in range64(n)); ids[i]]
-        var toks <- [for (i in range64(n, n + 8l)); ids[i]]
-        delete ids
-        var fed <- resident_then_cpu_feed(t, tr, prompt, toks) $ {}
-        var f32_rows <- f32_chain_rows(path_join(models_dir(), gf.file), prompt, toks)
-        feed_steps_within(t, tr, "", n, fed.gpu, f32_rows, toks, GEMMA_LOGIT_BAR_REL, "resident", "the f32 chain")
-        f32_chain_witness(t, tr, "{gf.file}: {n} tokens against the f32 chain", fed, f32_rows)
-        delete f32_rows
-        delete fed
-        delete prompt
-        delete toks
     }
 }
 
@@ -187,28 +176,26 @@ struct private RingRun {
     window : int64
 }
 
-//! `path` loaded at mirror codec `kv` under the ring pin `ring` (`set_gpu_kv_ring`, put back), the `n` prose ids and eight fed
-//! steps through it; `ok` false after the skip `resident_admitted` names
+//! `path` loaded at mirror codec `kv` under the ring pin `ring` (`with_gpu_kv_ring`), the `n` prose ids and eight fed steps through
+//! it; `ok` false after the skip `resident_trunk` names
 def private ring_run(t : T?; path : string; kv : KVDtype; ring : int; n : int64) : tuple<ok : bool; run : RingRun> {
-    let pin = gpu_kv_ring_pin()
-    set_gpu_kv_ring(ring)
-    var tr <- load_resident_at(path, kv)
-    set_gpu_kv_ring(pin)
+    var tr <- resident_trunk(t, path, GEMMA_RIG_CTX, "") $() : Model {
+        var m <- Model()
+        with_gpu_kv_ring(ring) {
+            delete m
+            m <- load_resident_at(path, kv)
+        }
+        return <- m
+    }
     var run : RingRun
-    let ok = resident_admitted(t, "the whole-model driver armed on the model (the load log names any decline)", "")
+    let ok = tr.config.n_layers > 0l
     if (ok) {
-        tr.config.seq_len = min(tr.config.seq_len, GEMMA_RIG_CTX)
-        var ids <- prose_tokens(tr, n + 8l)
-        var prompt <- [for (i in range64(n)); ids[i]]
-        var toks <- [for (i in range64(n, n + 8l)); ids[i]]
-        run.rows <- feed_alone(tr, kv, prompt, toks)
+        var inscope feed <- prose_feed(tr, n, 8l)
+        run.rows <- feed_alone(tr, kv, feed.prompt, feed.toks)
         served_every_call(t)
         run.slack = gpu_resident_kv_ring_slack()
         run.mirror = gpu_resident_mirror_bytes()
         run.window = tr.config.sliding_window
-        delete ids
-        delete prompt
-        delete toks
     }
     moe_gpu_drop_model()
     delete tr

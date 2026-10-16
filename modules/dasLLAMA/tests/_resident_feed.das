@@ -146,6 +146,15 @@ def with_gpu_kv_dtype(t : T?; kv : KVDtype; body : block<void>) {
     restore_gpu_kv_dtype(kv_pin)
 }
 
+//! `body` under the sliding layers' ring pin `ring` (`set_gpu_kv_ring`: -1 the environment's, 0 every row kept), the pin put back
+//! as it was found - `body` may move the pin itself
+def with_gpu_kv_ring(ring : int; body : block<void>) {
+    let pin = gpu_kv_ring_pin()
+    set_gpu_kv_ring(ring)
+    invoke(body)
+    set_gpu_kv_ring(pin)
+}
+
 //! where a cell pinned a mirror codec, the armed mirror holds it
 def mirror_codec_held(t : T?) {
     let asked = gpu_kv_dtype_pin()
@@ -164,6 +173,20 @@ def resident_admitted(t : T?; armed, note : string) : bool {
     t |> success(moe_gpu_resident_active(), armed)
     mirror_codec_held(t)
     return true
+}
+
+//! the resident trunk at `path` (`load` the load, its levers its own): the gate (`resident_ready`), the admission
+//! (`resident_admitted`, `note` after a memory decline's skip), the context cut to `ctx` - the sessions size their caches to the
+//! mirror's cap, not the model's max; an empty Model (`n_layers` 0) after the skip that says why
+def resident_trunk(t : T?; path : string; ctx : int64; note : string; load : block<() : Model>) : Model {
+    return <- Model() if (!resident_ready(t, path))
+    var tr <- invoke(load)
+    if (!resident_admitted(t, "the whole-model driver armed on the model (the load log names any decline)", note)) {
+        delete tr
+        return <- Model()
+    }
+    tr.config.seq_len = min(tr.config.seq_len, ctx)
+    return <- tr
 }
 
 //! holds that every layer's dense q/k/v/o and FFN planes read the file's own format (`census_plane` against `path`'s tensor

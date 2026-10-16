@@ -285,7 +285,6 @@ struct private GdraftPins {
 //! The served twin of `file` on this build's GPU home - the metal-blob image under the Metal mode required, else the
 //! whole-model resident driver under `DASLLAMA_GPU=1` at `regions` mirror regions in codec `kv` (a Metal session picks its own
 //! codec) - with its context cut to `ctx`; an empty Model (`n_layers` 0) after the skip that says why
-//! the trunk loaded on the build's GPU home, its context cut to `ctx` (an empty Model where the cell skipped)
 def private gdraft_target(t : T?; file : string; ctx, regions : int64; kv : KVDtype) : Model {
     let target = path_join(models_dir(), file)
     static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -303,13 +302,9 @@ def private gdraft_target(t : T?; file : string; ctx, regions : int64; kv : KVDt
         return <- trg
     } else {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            return <- Model() if (!resident_ready(t, target))
-            var trg <- load_resident_at(target, kv, regions)
-            if (!resident_admitted(t, "the whole-model driver armed on the trunk (the load log names any decline)", "")) {
-                delete trg
-                return <- Model()
+            var trg <- resident_trunk(t, target, ctx, "") $() : Model {
+                return <- load_resident_at(target, kv, regions)
             }
-            trg.config.seq_len = min(trg.config.seq_len, ctx)
             return <- trg
         } else {
             t |> skip("no GPU home on this build for the gemma drafter")

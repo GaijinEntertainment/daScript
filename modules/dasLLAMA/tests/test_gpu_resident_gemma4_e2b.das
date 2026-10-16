@@ -91,11 +91,7 @@ def test_gpu_resident_gemma4_e2b_ple_planes(t : T?) {
             }
             let act0 = census("ple_act_f32_cls_spv")
             let gemm0 = census("dn_ba_cls_spv")
-            if (spec.f32) {   //! the Q4_K_M file's CPU q8 chain sits off its f32 chain at one step: `gemma_forced_feed_exact`
-                gemma_forced_feed_exact(t, 40l, gf)
-            } else {
-                gemma_forced_feed(t, 40l, gf)
-            }
+            gemma_forced_feed(t, 40l, gf, spec.f32)   //! the Q4_K_M file's CPU q8 chain sits off its f32 chain at one step: its `exact` form
             return if (!armed || act0 == NO_CENSUS)
             let act_n = census("ple_act_f32_cls_spv") - act0
             let gemm_n = census("dn_ba_cls_spv") - gemm0

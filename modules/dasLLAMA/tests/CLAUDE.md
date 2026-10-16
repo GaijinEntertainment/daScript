@@ -2112,7 +2112,7 @@ slabbed cells pin the ring off, since their slab count is the flat mirror's. Arm
 (`test_gpu_resident_gemma4_e2b_ple_tables`): the E2B Q8_0 file and its emb-Q5_0 / emb-Q5_1 / emb-Q4_0 mints - the plan seats
 the PLE table in its own tag (q8, q5032, q51, q40) and the forced feed's prefill gathers the side rows off it against the CPU chain.
 Arm `g4e-kq` (`test_gpu_resident_gemma4_e2b_ple_planes`): the E2B Q4_K_M (the per-layer gate and projection planes F32 on disk,
-read as the file's f32 rows; the feed held against the file's f32 chain with the same-or-better witness, `gemma_forced_feed_exact`,
+read as the file's f32 rows; the feed held against the file's f32 chain with the same-or-better witness, `gemma_forced_feed`'s `exact` form,
 since its CPU q8 chain reads one step's top logit 1.3-2.4 under the f32 chain, the reference build and the device) and Q4_0 (the
 planes Q4_0) files in the forced feed, the planes' tags asserted against the disk type. Arm `g4e-pre` (`test_gpu_resident_gemma4_e2b_ple_pre_step`): the token command's side row - gathered, projected and
 finished on the device - read back (`vk_rdec_ple_side_row`) within 1e-4 of the CPU pre-step's row, another token's row the
