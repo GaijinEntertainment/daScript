@@ -965,6 +965,153 @@ def test_gemma_drafter_codecs(t : T?) {
     }
 }
 
+//! one ring pin's run in `test_gemma_drafter_past_ring`: the one-row chain's logits at the draft's anchor, the drafter's chain
+//! there (its tokens, its first step's logits), the ring rows of the first sliding capture layer, and the scheduler's speculating
+//! stream with its tallies
+struct private RingDraftRun {
+    ok : bool
+    ring : int64
+    anchor : int64
+    pick : int64   //! the one-row chain's argmax at the anchor, the drafter's seed
+    trunk : array<float>
+    drafts : array<int64>
+    dlogits : array<float>
+    stream : SchedRun
+    text : string   //! the stream decoded
+}
+
+let private RING_DRAFT_K = 3l      //! the drafter's chain depth at the anchor, and the scheduler's depth
+let private RING_ACCEPT_BAND = 0.1   //! the ringed run's accepted drafts within a tenth of the flat run's
+let private RING_PF_CHUNK = 512l   //! the prompt's prefill calls: a ring sized to its widest window stays under the prompt
+
+//! the drafter's chain of `k` steps at `anchor` off `seed` and the carried `h`, every step at the constant anchor as the round runs
+//! it: the tokens, and the first step's logits
+def private gdraft_chain(t : T?; trg : Model; var s : Session; seed, anchor, k : int64; h : array<float>; var drafts : array<int64>;
+                         var lg : array<float>) {
+    var tok = seed
+    var hin := h
+    var hout : array<float>
+    hout |> resize(long_length(h))
+    drafts |> reserve(k)
+    for (i in range64(k)) {
+        var dg = -1l
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            t |> success(gemma_draft_step_gpu(trg, s, tok, anchor, hin, dg, hout), "draft step {i} served on the device")
+            if (i == 0l) {
+                gemma_drafter_last_logits(lg)
+            }
+        } else {
+            static_if (typeinfo builtin_module_exists(vulkan)) {
+                t |> success(vk_gemma_draft_step(trg, s, tok, anchor, hin, dg, hout), "draft step {i} served on the device")
+                if (i == 0l) {
+                    vk_gemma_drafter_last_logits(lg)
+                }
+            }
+        }
+        drafts |> push(dg)
+        tok = dg
+        hin := hout
+    }
+    delete hout
+    delete hin
+}
+
+//! the first sliding capture layer's ring rows on the served load (0 where the layer keeps a row a position)
+def private gdraft_capture_ring(trg : Model; dr : GemmaDrafter) : int64 {
+    for (l in range64(dr.n_layers)) {
+        continue if (!dr.sliding[l])
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            return mirror_ring(trg, dr.kv_layer[l])
+        } else {
+            let slack = gpu_resident_kv_ring_slack()
+            return slack > 0l ? round_up(trg.config.sliding_window + slack, 64l) : 0l
+        }
+    }
+    return 0l
+}
+
+//! the served drafter under ring pin `ring` over the long counting prompt: the prompt prefilled in `RING_PF_CHUNK`-row calls, one
+//! one-row step, the drafter's
+//! chain at the position past it, then a speculating scheduler stream over the same prompt
+def private ring_draft_run(t : T?; ring : int; budget : int64) : RingDraftRun {
+    var run : RingDraftRun
+    with_gpu_kv_ring(ring) {
+        with_served_drafter(t, TARGET_FILE, 1l, KVDtype.f16, $(trg) {
+            var dr <- load_gemma_drafter(mtp_drafter_sidecar(path_join(models_dir(), TARGET_FILE)), trg.config.n_layers)
+            t |> success(dr.ok, "the drafter's geometry loads (why='{dr.why}')")
+            var prompt <- encode(trg, "Count from 1 to 600, separated by commas: {counting_prompt(1, 500)}", true, false)
+            let npos = long_length(prompt)
+            var s <- make_run_state(trg.config, KVDtype.f16, KVDtype.f16)
+            var p0 = 0l
+            while (p0 < npos - 1l) {
+                let n = min(RING_PF_CHUNK, npos - 1l - p0)
+                var part <- [for (i in range64(p0, p0 + n)); prompt[i]]
+                eval_(trg, s, part)
+                delete part
+                p0 += n
+            }
+            var one <- [prompt[npos - 1l]]
+            eval_(trg, s, one)   //! the one-row chain's step at the prompt's last position
+            static_if (typeinfo builtin_module_exists(das_metal)) {
+                finish_pending_step()
+            }
+            run.ring = gdraft_capture_ring(trg, dr)
+            run.anchor = s.n_past
+            run.trunk := s.logits
+            t |> equal(s.mtp_h_pos1, s.n_past, "ring pin {ring}: the step carried the post-norm hidden for the drafter")
+            run.pick = argmax_of(s.logits, trg.config.vocab_size)
+            gdraft_chain(t, trg, s, run.pick, run.anchor, RING_DRAFT_K, s.mtp_h, run.drafts, run.dlogits)
+            delete s
+            set_mtp_depth(RING_DRAFT_K)
+            var prompts : array<array<int64>>
+            prompts |> push_clone(prompt)
+            run.stream <- sched_run(trg, prompts, budget, KVDtype.f16, true)
+            clear_mtp_depth()
+            run.text = decode(trg, run.stream.toks[0])
+            run.ok = true
+            delete prompts
+            delete prompt
+            delete one
+            delete dr
+        }, 4096l)
+    }
+    return <- run
+}
+
+[test]
+def test_gemma_drafter_past_ring(t : T?) {
+    if (!family_on(t, "gemma4moe") || !arm_on(t, "mtp-gdraft-ring")) {
+        return
+    }
+    t |> run("the drafter past a sliding capture layer's ring reads the rows the flat mirror holds: drafts, acceptance and the trunk's logits") @(t : T?) {
+        let budget = 24l
+        var inscope ringed <- ring_draft_run(t, 1, budget)
+        var inscope flat <- ring_draft_run(t, 0, budget)
+        return if (!ringed.ok || !flat.ok)
+        t |> success(ringed.ring > 0l && flat.ring == 0l, "the ringed load rings the sliding capture layer ({ringed.ring} rows), the flat load keeps a row a position ({flat.ring})")
+        t |> success(ringed.anchor > ringed.ring, "the anchor {ringed.anchor} sits past the ring: the capture layer holds more keys than its ring's rows")
+        t |> equal(ringed.anchor, flat.anchor, "both pins draft at one anchor")
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            //! Metal's AV pass splits a ringed layer's key run at the wrap, so the sums part in order: the picks hold, the bits do not
+            t |> equal(ringed.pick, flat.pick, "the one-row chain's pick at the anchor: the ringed mirror's is the flat one's")
+        } else {
+            check_exact(t, "the one-row chain's logits at the anchor: the ringed mirror against the flat one, bit for bit", ringed.trunk, flat.trunk)
+            check_exact(t, "the drafter's first step's logits at the anchor: the ringed mirror against the flat one, bit for bit", ringed.dlogits, flat.dlogits)
+        }
+        t |> success(ids_equal(ringed.drafts, flat.drafts), "the drafter's chain at the anchor drafts the flat mirror's tokens ({ringed.drafts} vs {flat.drafts})")
+        to_log(LOG_INFO, "gdraft ring: anchor {ringed.anchor} past the {ringed.ring}-row ring; trunk logits ringed vs flat maxd {logits_maxdiff(ringed.trunk, flat.trunk)}, draft logits maxd {logits_maxdiff(ringed.dlogits, flat.dlogits)}\n")
+        t |> equal(long_length(ringed.stream.toks[0]), budget, "the ringed stream emits its whole budget")
+        to_log(LOG_INFO, "gdraft ring streams (flat, ringed):\n  {flat.text}\n  {ringed.text}\n")
+        t |> success(ids_equal(ringed.stream.toks[0], flat.stream.toks[0]), "the ringed speculating stream walks the count as the flat one does")
+        let acc_r = ringed.stream.accepted
+        let acc_f = flat.stream.accepted
+        to_log(LOG_INFO, "gdraft ring: accepted {acc_r} of {ringed.stream.drafted} ringed, {acc_f} of {flat.stream.drafted} flat\n")
+        t |> success(acc_f > 0l, "the flat run accepts drafts ({acc_f} of {flat.stream.drafted})")
+        t |> success(float(abs(acc_r - acc_f)) <= RING_ACCEPT_BAND * float(acc_f),
+            "the ringed run accepts within {RING_ACCEPT_BAND} of the flat run's drafts ({acc_r} of {ringed.stream.drafted} vs {acc_f} of {flat.stream.drafted})")
+    }
+}
+
 [test]
 def test_gemma_drafter_kquant_table(t : T?) {
     if (!family_on(t, "gemma4moe") || !arm_on(t, "mtp-gdraft-iq3")) {

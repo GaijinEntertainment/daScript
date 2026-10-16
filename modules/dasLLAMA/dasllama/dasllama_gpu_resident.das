@@ -2444,7 +2444,7 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
         var inscope gate_f32 <- resident_ple_f32_rows(t, false)
         var inscope proj_f32 <- resident_ple_f32_rows(t, true)
         if (!rdec_set_ple(ple, gate_f32, proj_f32)) {
-            return rdec_decline("the per-layer-embedding seats declined: the width {ple} is not a 32-multiple, or the f32 rows' router GEMV and act found no class")
+            return rdec_decline("the per-layer-embedding seats declined: the width {ple} is not a 32-multiple, the f32 rows' router GEMV and act found no class, or an f32 plane passes the storage range (the tier's line above)")
         }
     }
     var ple_tbl_placed = false
@@ -2566,7 +2566,7 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
         }
         var pnorm <- fblob_rows(t, t.ple_pnorm_off, ple)
         let on = rdec_set_ple_proj(w16, w32, pnorm, all)
-        to_log(LOG_INFO, "dasLLAMA: resident driver: the per-layer-embedding pre-step's projection {on ? "runs on device" : "stays on the CPU"}\n")
+        to_log(LOG_INFO, "dasLLAMA: resident driver: the per-layer-embedding pre-step's projection {on ? "runs on device (its window form: the tier's line above)" : "stays on the CPU"}\n")
         delete w16
         delete w32
         delete pnorm
@@ -3841,7 +3841,8 @@ def private resident_hot_arm(t : Model; plan : ResidentPlan) {
     let ask = (asked == HOT_SLOTS_AUTO ? "" : " (DASLLAMA_GPU_HEAT={asked})") + (rdec_ctx_asked_whole() ? " under the context asked whole (set_gpu_ctx_strict, DASLLAMA_GPU_CTX_STRICT), which the pool yields to" : "")
     if (slots == 0l) {
         let room = plan.usable_bytes - plan.weight_bytes - plan.kv_bytes - plan.scratch_bytes
-        let why = c.n_expert_used > int64(RDEC_HOT_PICKS) ? "{c.n_expert_used} picks a step pass the {RDEC_HOT_PICKS} routed slots" : (asked == HOT_SLOTS_NONE ? "none asked" : "{room >> 20l} MB left past the plan, {slot_bytes >> 20l} MB a slot across the routed layers")
+        let why = (c.moe_dense_shexp ? "a gemma-4 MoE: the pool's device sums carry no per-expert down scale"
+            : c.n_expert_used > int64(RDEC_HOT_PICKS) ? "{c.n_expert_used} picks a step pass the {RDEC_HOT_PICKS} routed slots" : (asked == HOT_SLOTS_NONE ? "none asked" : "{room >> 20l} MB left past the plan, {slot_bytes >> 20l} MB a slot across the routed layers"))
         to_log(LOG_INFO, "dasLLAMA: resident driver - no hot expert pool{ask}: {why}; DASLLAMA_GPU_HEAT=<slots> asks a count, 0 none\n")
         return
     }

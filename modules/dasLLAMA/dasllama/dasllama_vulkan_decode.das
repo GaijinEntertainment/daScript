@@ -1102,15 +1102,21 @@ def vk_rdec_set_ple(ple : int64; gate_f32 : array<float>; proj_f32 : array<float
     if (ple <= 0l || ple % 32l != 0l || ((!empty(gate_f32) || !empty(proj_f32)) && !(ensure_router_gemv_cls() && ensure_ple_act_f32_cls()))) {
         return false
     }
+    let gate_bytes = long_length(gate_f32) * 4l
+    let proj_bytes = long_length(proj_f32) * 4l
+    if (!vk_range_ok(gate_bytes) || !vk_range_ok(proj_bytes)) {   //! each f32 plane binds whole in its router GEMV set
+        to_log(LOG_WARNING, "dasLLAMA vulkan resident: the per-layer-embedding f32 gate rows ({gate_bytes} bytes) or projection rows ({proj_bytes}) pass the device's storage range {vk_max_storage_range()}\n")
+        return false
+    }
     g_rd.ple = ple
     let row_bytes = g_rd.n_layers * ple * 4l * g_rd.nb
     g_rd.ple_host = make_host_buf(row_bytes, false, [cached = true])
     g_rd.ple_dev = make_device_buf(row_bytes)
     g_rd.pleg_dev = make_device_buf(ple * 4l * g_rd.nb)
     g_rd.pleact_dev = make_device_buf(ple * 4l * g_rd.nb)
-    g_rd.ple_gf32_bytes = long_length(gate_f32) * 4l
+    g_rd.ple_gf32_bytes = gate_bytes
     g_rd.ple_gf32_dev = empty(gate_f32) ? 0ul : rd_upload_rows(gate_f32)
-    g_rd.ple_pf32_bytes = long_length(proj_f32) * 4l
+    g_rd.ple_pf32_bytes = proj_bytes
     g_rd.ple_pf32_dev = empty(proj_f32) ? 0ul : rd_upload_rows(proj_f32)
     rd_unmake_sets()
     rd_invalidate_token()

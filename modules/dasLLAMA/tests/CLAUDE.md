@@ -201,10 +201,16 @@ cannot speculate until the facade attaches the sidecar beside it, then a schedul
 speculate keeps `mtp` on and walks the counting prompt token for token with the plain scheduler,
 drafting and accepting as it goes, both streams decoded in the log, and the same walk with the
 drafter detached as the control - a scheduler told to speculate stands down (`mtp` off) and drafts nothing - PARITY_FULL, Metal
-required) and `mtp-gdraft-vdecl` (a tick of two streams on two K/V codecs, whose joint verify the batch rail
+required), `mtp-gdraft-vdecl` (a tick of two streams on two K/V codecs, whose joint verify the batch rail
 declines - each stream's mirror asserted standing, so the round finds both warm and their draft chains run: no stream
 carried, no round counted, each stream one plain step whose logits are a plain decode step's
-bit for bit; the same tick on one codec carrying both streams the control - PARITY_FULL, das_metal builds). The gpu and
+bit for bit; the same tick on one codec carrying both streams the control - PARITY_FULL, das_metal builds) and
+`mtp-gdraft-ring` (the drafter past a sliding capture layer's ring: the 26B loaded under the ring pin on and off
+(`with_gpu_kv_ring`), a counting prompt past the ring prefilled in 512-row calls (a Metal ring grows to the widest window),
+one one-row step and a three-step draft chain at the anchor, then a depth-3 speculating stream - the one-row chain's logits
+and the drafter's first step's logits at the anchor bit for bit across the pins on Vulkan (on Metal, whose AV pass splits a
+ringed key run at the wrap, the trunk's pick alike), the drafts and the streams token for token,
+the ringed run's accepted drafts within a tenth of the flat run's - PARITY_FULL, either GPU home). The gpu and
 sched arms load the 26B target through `load_model_cached`, so the file mints a `.dlim` for it
 under the same ledgered exception as the parity file's: the Metal MTP rail is what the image
 flavor serves.
