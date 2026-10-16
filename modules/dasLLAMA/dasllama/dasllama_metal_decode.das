@@ -283,7 +283,6 @@ struct private StepRes {
     ple : bool
     bple : MetalBuffer?        // the rows' per-layer side input
     u_ple : MetalBuffer?       // n_embd_per_layer
-    u_ple_tot : MetalBuffer?   // nrows x n_embd_per_layer - the batch's row-total for the side multiply
     bytes_ple : uint64
     ple_dev : bool             //! the step builds the side rows itself (`enc_ple_pre_dev`) off its token ids
     bple_proj : MetalBuffer?   //! [rows x layers*ple] the embedded rows' projection
@@ -1601,7 +1600,8 @@ def private ple_rows(var e : BatchLayerEnc; t : Model; enc : MetalComputeEncoder
         }
     }
     if (g_skip != "ew") {
-        enc_geglu_side(enc, r.bh12, 0ul, r.bple, uint64(l * ple * 4l), r.u_ple_tot, r.u_ple, r.u_ple_all, r.nrows * ple)
+        var ka = GkPleActArgs(nelem = uint(r.nrows * ple), sbase = uint(l * ple), sstride = uint(t.config.n_layers * ple), slen = uint(ple))
+        enc_geglu_side(enc, r.bh12, r.bple, ka, r.nrows * ple)
     }
     if (g_skip != "gemv") {
         if (pp.f32) {
@@ -4266,7 +4266,6 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
         ple_step_dev(t, ple_r, metal_ple_dev_ok(t))
     }
     var u_ple = plef ? uniform_u32(uint(ple_n)) : null
-    var u_ple_tot = plef ? uniform_u32(uint(nrows * ple_n)) : null
     let gpu_toks_ple = same && g_b_same_toks != null   //! the same-slab rows' ids ride the device already
     var ple_tok = (ple_r.ple_dev && !gpu_toks_ple) ? pool_acquire_untracked(g_upool, g_dev, uint64(nrows * 4l)) : null
     // MoE per-step uniforms (the expert twins' stride set; see enc_moe_gemv)
@@ -4367,7 +4366,7 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
     var r = StepRes(valid = true, pos = maxcnt - 1l, chain_pos = maxcnt - nrows, nrows = nrows, kdt = kdt, hetero = hetero, moe = moe,
         chunked = chunked, attn_d = use_attn_d, d_nsgs = d_nsgs, nchmax = nchmax, hid0 = hidden,
         u_hidden2 = u_hidden2, u_total_h2 = u_total_h2,
-        ple = plef, bple = ple_r.bple, u_ple = u_ple, u_ple_tot = u_ple_tot, bytes_ple = bytes_ple, ple_dev = ple_r.ple_dev,
+        ple = plef, bple = ple_r.bple, u_ple = u_ple, bytes_ple = bytes_ple, ple_dev = ple_r.ple_dev,
         bple_proj = ple_r.bple_proj, u_ple_all = ple_r.u_ple_all, u_ple_sq = ple_r.u_ple_sq,
         hc = hc, png = png, batch_rows = true, bytes_hcd = bytes_hcd, bytes_lr = bytes_lr, bytes_hc = bytes_hc, bytes_ple_in = bytes_ple_in,
         bhc = bhc, bhc_xn = bhc_xn, bhc_gate = bhc_gate, bhc_lo = bhc_lo, bhc_inj_a = bhc_inj_a, bhc_inj_f = bhc_inj_f,
@@ -4568,7 +4567,6 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
         }
         L.upooled |> push((buf = ple_r.u_ple_all, size = 4ul))   // nolint:STYLE012
         L.upooled |> push((buf = u_ple, size = 4ul))
-        L.upooled |> push((buf = u_ple_tot, size = 4ul))
     }
     if (dn) {
         L.pooled |> push((buf = bdn_qkv, size = bytes_dn_cd))   // nolint:STYLE012

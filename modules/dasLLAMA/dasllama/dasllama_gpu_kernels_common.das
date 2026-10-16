@@ -597,6 +597,18 @@ class template GkDwConvRows {
     }
 }
 
+//! a bf16 pair word's low half widened to f32 by its bit shift (exact)
+[spirv_inline]
+def gk_bf16_lo(w : uint) : float => uint_bits_to_float(w << 16u)
+
+//! a bf16 pair word's high half widened to f32 (exact)
+[spirv_inline]
+def gk_bf16_hi(w : uint) : float => uint_bits_to_float(w & 0xFFFF0000u)
+
+//! element `e`'s index in rows of `len` elements stored `stride` apart from `base` (a side input stored position-major)
+[spirv_inline]
+def gk_strided_at(e, base, stride, len : uint) : uint => base + (e / len) * stride + e % len
+
 //! the workgroup reductions every row kernel of either home shares: one barrier a reduce, every thread summing the subgroup
 //! partials in the same order, so every thread holds the same sum or max; the lane primitives are each home's
 //! `gk_subgroup_add` / `gk_subgroup_max`, and the result lands by reference, the statement form the MSL emitter splices
@@ -1529,6 +1541,35 @@ class template GkQ8BlockStore : GkWgReduce {
             }
         }
     }
+
+    def put_out(i : uint; v : float) : void {}   //! element `i` of a normed row stored in the stamp's out form
+
+    //! the normed row from `normed_at` under `inv`, `n` wide, stored at `base` over `tg` lanes with four elements in flight a lane
+    [arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#residual-step-fma")]
+    def store_x4(base, n, tg : uint; inv : float) {
+        let last = n - 1u
+        var j = gl_LocalInvocationID.x
+        while (j < n) {
+            let j1 = min(j + tg, last)
+            let j2 = min(j + 2u * tg, last)
+            let j3 = min(j + 3u * tg, last)
+            let n0 = normed_at(j, 0.0, inv)
+            let n1 = normed_at(j1, 0.0, inv)
+            let n2 = normed_at(j2, 0.0, inv)
+            let n3 = normed_at(j3, 0.0, inv)
+            put_out(base + j, n0)
+            if (j + tg < n) {
+                put_out(base + j1, n1)
+            }
+            if (j + 2u * tg < n) {
+                put_out(base + j2, n2)
+            }
+            if (j + 3u * tg < n) {
+                put_out(base + j3, n3)
+            }
+            j += 4u * tg
+        }
+    }
 }
 
 //! the residual step's arguments, every stamp of `GkResidualRow` reading its fields under these names
@@ -1758,32 +1799,7 @@ class template GkAddRmsRows : GkResidualRow {
     [arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#residual-step-fma")]
     def store_out(base : uint; inv : float) {
         static_if (X4) {
-            let last = pa.dim - 1u
-            var k = gl_LocalInvocationID.x
-            while (k < pa.dim) {
-                let k1 = min(k + LANES, last)
-                let k2 = min(k + 2u * LANES, last)
-                let k3 = min(k + 3u * LANES, last)
-                let n0 = normed_at(k, 0.0, inv)
-                let n1 = normed_at(k1, 0.0, inv)
-                let n2 = normed_at(k2, 0.0, inv)
-                let n3 = normed_at(k3, 0.0, inv)
-                let i0 = base + k
-                put_out(i0, n0)
-                if (k + LANES < pa.dim) {
-                    let i1 = base + k1
-                    put_out(i1, n1)
-                }
-                if (k + 2u * LANES < pa.dim) {
-                    let i2 = base + k2
-                    put_out(i2, n2)
-                }
-                if (k + 3u * LANES < pa.dim) {
-                    let i3 = base + k3
-                    put_out(i3, n3)
-                }
-                k += 4u * LANES
-            }
+            store_x4(base, pa.dim, LANES, inv)
         } else {
             var j = gl_LocalInvocationID.x
             while (j < pa.dim) {
@@ -1796,7 +1812,7 @@ class template GkAddRmsRows : GkResidualRow {
     }
 
     //! the normed row's element `i` stored in the stamp's out form: floats to `yo` (and halves to `yh` under `HX`), halves to `outh`
-    def put_out(i : uint; v : float) {
+    def override put_out(i : uint; v : float) : void {
         static_if (OUT_F32) {
             yo[i] = v
         }
@@ -2199,7 +2215,7 @@ class template GkClampRows {
     def load_in(e : uint) : float {
         static_if (BF16IN) {
             let w = xw[(pa.xoff + e) / 2u]
-            return uint_bits_to_float((pa.xoff + e) % 2u == 0u ? w << 16u : w & 0xFFFF0000u)
+            return (pa.xoff + e) % 2u == 0u ? gk_bf16_lo(w) : gk_bf16_hi(w)
         } else {
             return x[pa.xoff + e]
         }
@@ -2649,7 +2665,7 @@ class template GkRouterGemv {
         } else {
             static_if (VW == 2u) {
                 static_if (BF16) {
-                    d = uint_bits_to_float(wv << 16u) * xn(xb, 2u * i) + uint_bits_to_float(wv & 0xFFFF0000u) * xn(xb, 2u * i + 1u)
+                    d = gk_bf16_lo(wv) * xn(xb, 2u * i) + gk_bf16_hi(wv) * xn(xb, 2u * i + 1u)
                 } else {
                     d = unpackHalf2x16(wv).x * xn(xb, 2u * i) + unpackHalf2x16(wv).y * xn(xb, 2u * i + 1u)
                 }
@@ -2850,6 +2866,82 @@ class template GkGeglu {
             if (e + 3u < pa.nelem) {
                 geglu_at(e + 3u)
             }
+        }
+    }
+}
+
+struct GkPleActArgs {
+    nelem : uint     //! the gate elements: rows x ple
+    sbase : uint     //! the side rows' first element: layer l's slice of row 0
+    sstride : uint   //! a side row's stride: layers x ple
+    slen : uint      //! a slice's width: ple
+}
+
+//! The E-series per-layer-embedding act, an invocation an element: gelu(gate) x the side row's element (`gk_strided_at`: the side
+//! rows position-major, a row's slice `sstride` past the one before); in place over the gate rows, or under `OUT` into `outp`
+[ |> template_struct_instance]
+class template GkPleAct {
+    @ssbo @binding = 0 @role = "readwrite" @template_gate = "!OUT" g : array<float>
+    @ssbo @binding = 0 @role = "read" @template_gate = OUT gin : array<float>
+    @ssbo @binding = 1 @role = "read" side : array<float>
+    @ssbo @binding = 2 @role = "write" @template_gate = OUT outp : array<float>
+    @kargs pa : GkPleActArgs
+    @template_constant OUT : bool = false   //!< the act out of place into `outp` (the f32 projection's x), else over the gate rows
+
+    def act_elem(e : uint) {
+        if (e < pa.nelem) {
+            let u = side[gk_strided_at(e, pa.sbase, pa.sstride, pa.slen)]
+            static_if (OUT) {
+                outp[e] = gk_act_mul(gin[e], u, 1u)   //! 1u: the tanh gelu (`ACT_GELU`)
+            } else {
+                g[e] = gk_act_mul(g[e], u, 1u)
+            }
+        }
+    }
+}
+
+struct GkPleFinArgs {
+    ple : uint      //! a slice's width
+    eps : float
+    inv_sd : float  //! the projection's 1 / sqrt(dim), read by the `XSCALE` stamps
+}
+
+//! The E-series pre-step's finish, a workgroup a (row, layer) slice in place on the position-major side rows (the CPU
+//! `ple_pre_finish` after its gather): side = (side + pnorm . rms(proj)) / sqrt(2); under `XSCALE` the projection rows take their
+//! 1 / sqrt(dim) here, else they arrive scaled
+[ |> template_struct_instance]
+class template GkPleFinish : GkWgReduce {
+    @ssbo @binding = 0 @role = "read" proj : array<float>     //! [rows x layers*ple] the projected rows
+    @ssbo @binding = 1 @role = "weight" pnorm : array<float>  //! [ple] the projection's norm row
+    @ssbo @binding = 2 @role = "readwrite" y : array<float>   //! [rows x layers*ple] the gathered side rows, in place
+    @kargs pa : GkPleFinArgs
+    @template_constant TG : uint = 256u       //!< the workgroup's lanes, the slice loops' stride
+    @template_constant XSCALE : bool = false
+
+    def proj_at(i : uint) : float {
+        static_if (XSCALE) {
+            return proj[i] * pa.inv_sd
+        } else {
+            return proj[i]
+        }
+    }
+
+    def finish_slice(sl : uint) {
+        let base = sl * pa.ple
+        let tid = gl_LocalInvocationID.x
+        var ss = 0.0
+        var k = tid
+        while (k < pa.ple) {
+            let v = proj_at(base + k)
+            ss += v * v
+            k += TG
+        }
+        var inv = 0.0
+        wg_rms_inv_into(ss, pa.ple, pa.eps, 0u, inv)
+        k = tid
+        while (k < pa.ple) {
+            y[base + k] = mad(pnorm[k], proj_at(base + k) * inv, y[base + k]) * 0.70710677   //! 1 / sqrt(2), the f32 the host's division rounds to
+            k += TG
         }
     }
 }
@@ -4421,32 +4513,12 @@ class template GkMoeCombG4 : GkMoeCombine {
                 blk_pass(0u, n / KQ_B32_ELEMS_U, r * (n / KQ_B32_ELEMS_U), 0.0, inv)
             } else {
                 let base = r * n
-                var k = gl_LocalInvocationID.x
                 static_if (OUT_X4) {
-                    let last = n - 1u
-                    while (k < n) {
-                        let k1 = min(k + TG, last)
-                        let k2 = min(k + 2u * TG, last)
-                        let k3 = min(k + 3u * TG, last)
-                        let n0 = normed_at(k, 0.0, inv)
-                        let n1 = normed_at(k1, 0.0, inv)
-                        let n2 = normed_at(k2, 0.0, inv)
-                        let n3 = normed_at(k3, 0.0, inv)
-                        put_norm(base + k, n0)
-                        if (k + TG < n) {
-                            put_norm(base + k1, n1)
-                        }
-                        if (k + 2u * TG < n) {
-                            put_norm(base + k2, n2)
-                        }
-                        if (k + 3u * TG < n) {
-                            put_norm(base + k3, n3)
-                        }
-                        k += 4u * TG
-                    }
+                    store_x4(base, n, TG, inv)
                 } else {
+                    var k = gl_LocalInvocationID.x
                     while (k < n) {
-                        put_norm(base + k, normed_at(k, 0.0, inv))
+                        put_out(base + k, normed_at(k, 0.0, inv))
                         k += TG
                     }
                 }
@@ -4455,7 +4527,7 @@ class template GkMoeCombG4 : GkMoeCombine {
     }
 
     //! element `i` of the next norm stored in the stamp's out forms
-    def put_norm(i : uint; v : float) {
+    def override put_out(i : uint; v : float) : void {
         static_if (OUT_F32) {
             yo[i] = v
         }

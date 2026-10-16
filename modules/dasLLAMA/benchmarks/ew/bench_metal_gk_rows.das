@@ -529,19 +529,35 @@ def private ar_rows : array<Reading> {
     for (dim in fixed_array(2560, 3840)) {
         ar_dim_rows(dim, np, rows)
     }
-    let nl = 42
+    return <- rows
+}
+
+//! the E-series side rows at the E2B shape (35 layers x 256): the act over a layer's side slice and the pre-step's finish, the
+//! decode row and the 512-row window
+def private ple_rows : array<Reading> {
     let ple = 256
-    var bproj = fill_buf(np * nl * ple, 0.5)
-    var bside = fill_buf(np * nl * ple, 0.25)
-    var bpn = fill_buf(ple, 0.01)
-    for (npos in fixed_array(1, np)) {
-        rows |> push(time_rows("ple finish {nl} layers x {ple} {npos} rows") $(enc) {
-            var k = ple_finish_args(int64(ple), 2560l, 1e-6)
-            enc_ple_finish(enc, bside, bproj, bpn, k, int64(nl * npos))
+    let nl = 35
+    let all = nl * ple
+    var rows : array<Reading>
+    rows |> reserve(4)
+    for (np in fixed_array(1, 512)) {
+        var bg = fill_buf(np * ple, 0.5)
+        var bs = fill_buf(np * all, 0.25)
+        var bp = fill_buf(np * all, 0.1)
+        var bpn = fill_buf(ple, 0.01)
+        let kp = GkPleActArgs(nelem = uint(np * ple), sbase = uint(7 * ple), sstride = uint(all), slen = uint(ple))
+        rows |> push(time_rows("ple act ple={ple} nl={nl} {np} rows") $(enc) {
+            var k = kp
+            enc_geglu_side(enc, bg, bs, k, int64(np * ple))
         })
-    }
-    for (buf in fixed_array(bproj, bside, bpn)) {
-        metal_release(buf)
+        let ka = ple_fin_args(int64(ple), 1536l, 1e-6)
+        rows |> push(time_rows("ple finish ple={ple} nl={nl} {np} rows") $(enc) {
+            var k = ka
+            enc_ple_finish(enc, bp, bpn, bs, k, int64(nl * np))
+        })
+        for (buf in fixed_array(bg, bs, bp, bpn)) {
+            metal_release(buf)
+        }
     }
     return <- rows
 }
@@ -554,7 +570,7 @@ def private run_gk_rows(b : B?) {
     var rows <- seam_rows()
     rows |> push_from(qkn_rows(), router_rows(), pk_rows(), dn_rows())
     rows |> push_from(gate_rows(), cls_epi_rows(), g4_tail_rows(), ple_proj_rows())
-    rows |> push_from(ar_rows())
+    rows |> push_from(ar_rows(), ple_rows())
     var nmeas = 0
     var nvoid = 0
     for (r in rows) {

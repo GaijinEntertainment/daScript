@@ -1151,52 +1151,56 @@ def private cls_ar_run(x, a, w : array<float>; pc; nrows : int) : tuple<y : arra
     return <- (y = y_out, x = x_out)
 }
 
-//! the residual step with no normed row (`ClsArAdd`, the E-series pre-step's finish): three rows of 256 under the sandwich form - the
-//! partner normed and weighted by the post norm at `pwoff`, the sum under 1/sqrt(2) - bit for bit the stream rows `cls_ar` writes
-//! beside its normed row, and the CPU form at the approx bar
+//! the E-series pre-step's finish (`PleFinish`, a `GkPleFinish` stamp): three layers' slices of 256 over two rows in place, side =
+//! (side + pnorm . rms(proj)) / sqrt(2) against the CPU form at the approx bar; the slices read as one row miss it, the control
 [test]
-def test_vkd_cls_ar_add(t0 : T?) {
-    t0 |> run("cls_ar_add: the stream rows == cls_ar's, and the CPU sandwich step") <| @(t : T?) {
+def test_vkd_ple_finish(t0 : T?) {
+    t0 |> run("ple_finish: the side rows == the CPU finish a slice at a time") <| @(t : T?) {
         static_if (typeinfo builtin_module_exists(vulkan)) {
-            if (!(vk_moe_init() && ensure_cls_ar() && ensure_cls_ar_add())) {
+            if (!(vk_moe_init() && ensure_ple_finish_cls())) {
                 t |> skip("no Vulkan device")
                 return
             }
-            let dim = 256
-            let nrows = 3
+            let ple = 256
+            let nsl = 6
             let eps = 1e-6
             let ascale = 1.0 / sqrt(2.0)
-            var fx <- ar_fixture(dim * nrows, dim)
-            let pc = GkAddRmsArgs(dim = uint(dim), add_on = 1u, woff = 0u, eps = eps, ascale = ascale, pre_on = 1u, pwoff = 0u)
-            var want : array<float>
-            want |> resize(dim * nrows)
-            for (r in range(nrows)) {
+            var fx <- ar_fixture(ple * nsl, ple)
+            var want, flat : array<float>
+            want |> resize(ple * nsl)
+            flat |> resize(ple * nsl)
+            var sall = 0.0
+            for (k in range(ple * nsl)) {
+                sall += fx.a[k] * fx.a[k]
+            }
+            let finv = 1.0 / sqrt(sall / float(ple * nsl) + eps)
+            for (r in range(nsl)) {
                 var sa = 0.0
-                for (k in range(dim)) {
-                    sa += fx.a[r * dim + k] * fx.a[r * dim + k]
+                for (k in range(ple)) {
+                    sa += fx.a[r * ple + k] * fx.a[r * ple + k]
                 }
-                let ainv = 1.0 / sqrt(sa / float(dim) + eps)
-                for (k in range(dim)) {
-                    want[r * dim + k] = (fx.x[r * dim + k] + fx.w[k] * fx.a[r * dim + k] * ainv) * ascale
+                let ainv = 1.0 / sqrt(sa / float(ple) + eps)
+                for (k in range(ple)) {
+                    want[r * ple + k] = (fx.x[r * ple + k] + fx.w[k] * fx.a[r * ple + k] * ainv) * ascale
+                    flat[r * ple + k] = (fx.x[r * ple + k] + fx.w[k] * fx.a[r * ple + k] * finv) * ascale
                 }
             }
-            var r <- cls_ar_run(fx.x, fx.a, fx.w, pc, nrows)
+            t |> success(mismatch_exact(want, flat) > 0, "ple_finish: the slice norms differ from one norm over every slice (the control)")
             with_cell_planes() $(var cp : CellPlanes) {
-                let px = cp |> io_(fx.x)
                 let pa = cp |> in_(fx.a)
                 let pw = cp |> in_(fx.w)
-                var sc = cp |> cls_set(fixed_array(px, pa, pw), @@set_cls_ar_add)
-                var args = pc
+                let py = cp |> io_(fx.x)
+                var sc = cp |> cls_set(fixed_array(pa, pw, py), @@set_ple_finish_cls)
+                var args = GkPleFinArgs(ple = uint(ple), eps = eps)
                 cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
-                    enc_cls_ar_add(raw, h, sc, args, int64(nrows))
+                    enc_ple_finish_cls(raw, h, sc, args, int64(nsl))
                 }
-                var got <- cp |> plane_run(px)
-                t |> equal(mismatch_exact(got, r.x), 0, "cls_ar_add: the stream rows bit for bit cls_ar's")
-                check(t, "cls_ar_add", got, want, BAR_APPROX, Shape(row_width = dim))
+                var got <- cp |> plane_run(py)
+                check(t, "ple_finish", got, want, BAR_APPROX, Shape(row_width = ple))
                 delete got
             }
-            delete r
             delete want
+            delete flat
             delete fx
         } else {
             t |> skip("dasVulkan not present")
@@ -1746,13 +1750,13 @@ def private per32_gemv_cell(t : T?; fmt : KqFmt; ns : array<int>; wq_words : int
                 var inscope y_cls <- plane_run(cp, 5)
                 check_rows(t, "{fmt} GEMV at n {n} against the scalar dot", y_cls, y_ref, BAR_APPROX_CTRL, FLAT_ROWS)
                 //! the summed form: the two regions' rows folded under their weights inside the GEMV, one row of d out
-                if (b32_sum_cls_ensure(int(fmt))) {
+                if (gemv_shell_ensure(int(fmt), GEMV_SHELL_SUM)) {
                     var inscope wgt <- [0.625, -0.375]
                     let pys = cp |> out_(d, 0, 0, 64u)
                     let psw = cp |> in_(wgt)
                     var s_sum = cp |> cls_set(fixed_array(0, 1, 2, 3, 4, pys, psw), @@set_q51_gemv_sum_cls)
                     cp |> cell_record() $(raw3 : VkCommandBuffer; var h3 : VkHaz) {
-                        b32_sum_cls_enc(int(fmt), raw3, h3, s_sum, pc, gemv_wgs(int64(d), 0u))
+                        gemv_shell_enc(int(fmt), GEMV_SHELL_SUM, raw3, h3, s_sum, pc, gemv_wgs(int64(d), 0u))
                     }
                     var inscope ys_cls <- cp |> plane_run(pys)
                     var inscope ys_ref <- [for (row in range(d)); wgt[0] * y_ref[row] + wgt[1] * y_ref[d + row]]
@@ -2016,7 +2020,7 @@ def test_vkd_kq_gemv_k4_gu(t0 : T?) {
                 return
             }
             for (fmt in fixed_array(int(KqFmt.k4), int(KqFmt.iq4xs), int(KqFmt.iq3s4), int(KqFmt.iq2s))) {   //! iq2s: the grid staged over the 256 lanes
-            if (!(kq_gu_cls_ensure(fmt) && gemv_cls_ensure(fmt))) {
+            if (!(gemv_shell_ensure(fmt, GEMV_SHELL_GU) && gemv_cls_ensure(fmt))) {
                 t |> failure("the {kq_fmt_of_slot(fmt)} gu and GEMV classes did not build on a live device")
                 continue
             }
@@ -2061,7 +2065,7 @@ def test_vkd_kq_gemv_k4_gu(t0 : T?) {
                     }
                     var pc = GemvArgs(n = uint(nsb * 256), d = uint(d), nreg = uint(nreg), ybase = 0u, lanes_per_row = lanes_per_row, act = ACT_GELU)
                     cp |> cell_record() $(raw2 : VkCommandBuffer; var h2 : VkHaz) {
-                        kq_gu_cls_enc(fmt, raw2, h2, s_cls, pc, int64(nblk))
+                        gemv_shell_enc(fmt, GEMV_SHELL_GU, raw2, h2, s_cls, pc, int64(nblk))
                     }
                     var inscope oq <- cp |> plane_as(poq, type<int8>, rows)
                     var inscope os <- cp |> plane_run(pos)
@@ -9343,7 +9347,7 @@ def private router_cols_arm(t : T?; ncols : int; norm_on, bf16 : bool) {
 //! `src` as bf16 halves, truncated (the CPU reference reads the same values back, `bf16_value`)
 def private pack_bf16(src : array<float>) : array<uint16> => <- [for (v in src); bf16_bits_truncated(v)]
 
-//! the per-layer-embedding branch's f32 act (`PleActF32`, the f32 projection's x): npos gate rows of ple against the side rows'
+//! the per-layer-embedding branch's f32 act (`PleActF32`, a `GkPleAct` stamp, the f32 projection's x): npos gate rows of ple against the side rows'
 //! layer-l slice, position-major rows `all` apart, gelu_tanh(gate) x side against the CPU form at the approx bar; the side read
 //! contiguously (as the stride were ple) misses it, the control
 [test]
@@ -9377,7 +9381,7 @@ def test_vkd_ple_act_f32(t0 : T?) {
                 let ps = cp |> in_(side)
                 let po = cp |> out_(npos * ple)
                 var sc = cp |> cls_set(fixed_array(pg, ps, po), @@set_ple_act_f32_cls)
-                var pc = ActArgs(nelem = uint(npos * ple), act = ACT_GELU, ubase = uint(l * ple), ustride = uint(all), ulen = uint(ple))
+                var pc = GkPleActArgs(nelem = uint(npos * ple), sbase = uint(l * ple), sstride = uint(all), slen = uint(ple))
                 cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                     enc_ple_act_f32_cls(raw, h, sc, pc, int64((npos * ple + 255) / 256))
                 }

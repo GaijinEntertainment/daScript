@@ -55,7 +55,8 @@ def main : int {   // nolint:STYLE038 — one-shot probe: the classes, the fixtu
     let classes_ok = (vk_moe_init() && ensure_hc_norm_cls() && ensure_hc_mix_cls() && ensure_hc_comb_cls() && ensure_ple_gate_cls()
         && ensure_ple_conv_cls() && ensure_qk_rms_cls() && ensure_topk_n_cls() && ensure_topk_n2_cls() && ensure_combine_cls()
         && ensure_dn_scan_p3_cls() && ensure_qkn_rope_f16_cls() && ensure_cls_epi() && ensure_cls_ar_comb_g4()
-        && ensure_router_gemv_cls() && ensure_router_gemv_bf16_cls() && ensure_cls_ar() && ensure_cls_ar_add() && ensure_cls_ar_rq_b())
+        && ensure_router_gemv_cls() && ensure_router_gemv_bf16_cls() && ensure_cls_ar() && ensure_cls_ar_rq_b()
+        && ensure_ple_act_f32_cls() && ensure_ple_finish_cls())
     if (!classes_ok) {
         print("vk_gk_rows_probe: no Vulkan device, or a class declined\n")
         return 1
@@ -158,10 +159,8 @@ def main : int {   // nolint:STYLE038 — one-shot probe: the classes, the fixtu
         }
     }
     //! the residual step at the gemma-3-12b and E4B widths: the plain add + norm, the sandwich seam (the branch under its post norm,
-    //! the add, the next norm), the seam with no norm stored and the seam quantizing its norm, at a decode row and four rows; the
-    //! E-series pre-step's finish over 42 layers of 256
+    //! the add, the next norm) and the seam quantizing its norm, at a decode row and four rows
     var s_ar = set_cls_ar(fixed_array(b[0], b[1], b[2], b[3]), fixed_array(bb, bb, bb, bb), fixed_array(1u, 2u, 0u, 4u))
-    var s_ara = set_cls_ar_add(fixed_array(b[0], b[1], b[2]), fixed_array(bb, bb, bb), fixed_array(1u, 2u, 0u))
     var s_arq = set_cls_ar_rq_b(fixed_array(b[0], b[1], b[2], b[3], b[4]), fixed_array(bb, bb, bb, bb, bb), fixed_array(1u, 2u, 0u, 4u, 8u))
     for (adim in fixed_array(2560u, 3840u)) {
         let plain = GkAddRmsArgs(dim = adim, add_on = 1u, woff = 0u, eps = 1e-6, ascale = 1.0)
@@ -175,21 +174,10 @@ def main : int {   // nolint:STYLE038 — one-shot probe: the classes, the fixtu
                 var pc = sand
                 enc_cls_ar(r, h, s_ar, pc, nr)
             }
-            time_cls("ar dim {int(adim)} {nr} rows: sandwich seam no norm out") $(r; var h) {
-                var pc = sand
-                enc_cls_ar_add(r, h, s_ara, pc, nr)
-            }
             time_cls("ar dim {int(adim)} {nr} rows: sandwich seam, Q8_0 out") $(r; var h) {
                 var pc = sand
                 enc_cls_ar_rq_b(r, h, s_arq, pc, nr)
             }
-        }
-    }
-    let fin = GkAddRmsArgs(dim = 256u, add_on = 1u, woff = 0u, eps = 1e-6, ascale = 1.0 / sqrt(2.0), pre_on = 1u, pwoff = 0u)
-    for (np in fixed_array(1l, 512l)) {
-        time_cls("ple finish 42 layers x 256 {np} rows") $(r; var h) {
-            var pc = fin
-            enc_cls_ar_add(r, h, s_ara, pc, 42l * np)
         }
     }
     //! the E-series side rows' projection at the E2B shape (35 layers x 256 rows of 1536): the f32 rows against the bf16 word form
@@ -206,6 +194,21 @@ def main : int {   // nolint:STYLE038 — one-shot probe: the classes, the fixtu
         time_cls("ple proj bf16 rows ne {pne} dim {pdim} {np} cols") $(r; var h) {
             var p1 = pr
             router_enc_cols(true, r, h, s_rb, p1, int64(pne))
+        }
+    }
+    //! the E-series side rows at the E2B shape (35 layers x 256): the act over a layer's side slice and the pre-step's finish
+    let ple = 256
+    let pnl = 35
+    var s_pa = set_ple_act_f32_cls(fixed_array(b[0], b[1], b[2]), fixed_array(bb, bb, bb), fixed_array(1u, 2u, 4u))
+    var s_pf = set_ple_finish_cls(fixed_array(b[1], b[2], b[0]), fixed_array(bb, bb, bb), fixed_array(2u, 0u, 1u))
+    for (np in fixed_array(1, 512)) {
+        time_cls("ple act ple {ple} nl {pnl} {np} rows") $(r; var h) {
+            var pc = GkPleActArgs(nelem = uint(np * ple), sbase = uint(7 * ple), sstride = uint(pnl * ple), slen = uint(ple))
+            enc_ple_act_f32_cls(r, h, s_pa, pc, int64((np * ple + 255) / 256))
+        }
+        time_cls("ple finish ple {ple} nl {pnl} {np} rows") $(r; var h) {
+            var pc = GkPleFinArgs(ple = uint(ple), eps = 1e-6)
+            enc_ple_finish_cls(r, h, s_pf, pc, int64(pnl * np))
         }
     }
     return 0
