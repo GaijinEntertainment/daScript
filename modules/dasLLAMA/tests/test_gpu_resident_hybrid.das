@@ -19,6 +19,7 @@ require dasllama/dasllama_gpu_tier   // moe_gpu_tier_installed / gpu_want_auto: 
 require dasllama/dasllama_gpu_resident   // moe_gpu_resident_active: did the whole-model driver take the hybrid
 require ?vulkan dasllama/dasllama_vulkan_common   // PF_WINDOW, the resolved coopmat mode and the kernel census, where the module exists
 require ?vulkan dasllama/dasllama_vulkan_prefill   // pf_f16_feed: the feed admission the driver acts on
+require ?vulkan dasllama/dasllama_vulkan_decode   // vk_rdec_head_embed_gathered: the head's rows gathered off their ids
 require _model_tier   // models_dir() + model_available() presence/size-tier gate
 require _resident_feed
 require _kv_codec_cells   // the K/V codec cells' rig: the gated carrier under a block-codec mirror
@@ -801,6 +802,26 @@ def private declined_draft_rounds(tr : Model; var s : Session; toks : array<int6
     return <- out
 }
 
+//! the NextN head rows and the N-row command's rows the device gathered off their ids so far; zeros with no vulkan module
+def private head_gathers() : int2 {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        return int2(int(vk_rdec_head_embed_gathered()), int(vk_rdec_nrow_embed_gathered()))
+    } else {
+        return int2(0, 0)
+    }
+}
+
+//! since `g0`: `head` NextN head rows and `trunk` verify trunk rows gathered off their ids where the driver holds the table (the
+//! draft's embed half, the re-warm's halves and the verify's trunk rows), none where the host embeds them
+def private head_gathers_held(t : T?; g0 : int2; head, trunk : int64) {
+    static_if (typeinfo builtin_module_exists(vulkan)) {
+        let on = vk_rdec_token_gather_on()
+        let d = head_gathers() - g0
+        t |> equal(int64(d.x), on ? head : 0l, "the head's embed halves gathered off their ids on the device ({d.x}; the table {on ? "on" : "off"} the device)")
+        t |> equal(int64(d.y), on ? trunk : 0l, "the verify's trunk rows gathered off their ids on the device ({d.y})")
+    }
+}
+
 [test]
 def test_gpu_resident_hybrid_mtp_verify(t : T?) {
     t |> run("Qwen3.5-0.8B-MTP: the round's two verify rows as same-slab rows through the resident seat, bit for bit the two one-row steps of the same tokens; the head's rows stay on the device and come down on a pass, the re-warm's row bit for bit the draft's") @(t : T?) {
@@ -829,11 +850,13 @@ def test_gpu_resident_hybrid_mtp_verify(t : T?) {
             let spec0 = get_mtp_spec()
             set_mtp_spec(true)
             let verifies0 = moe_gpu_resident_verifies()
+            let gathers0 = head_gathers()
             var acc = 0l
             let hit = mtp_spec_eval(tr, s, DRAFT_TOKEN, acc)
             set_mtp_spec(spec0)
             t |> equal(moe_gpu_resident_verifies(), verifies0 + 1l, "the round's verify ran on the device")
             t |> equal(moe_gpu_resident_drafts(), drafts0 + 2l, "the round's draft ran on the device")
+            head_gathers_held(t, gathers0, 1l + VERIFY_ROWS, VERIFY_ROWS)
             served_every_call(t)
             let d = s.mtp_vbatch[1]
             t |> equal(long_length(s.mtp_logits_b), VERIFY_ROWS * c.vocab_size, "every verify row's logits landed: no pick was asked")

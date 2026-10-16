@@ -3233,6 +3233,9 @@ def vk_rdec_head_embed_gathered : int64 => g_rdec_head_emb_gathered
 //! the token commands gather the E-series side rows off the rows' ids: the per-layer table, the projection and the ids ride the device
 def vk_rdec_side_gather_on : bool => g_rd != null && g_rd.ple_tok_on
 
+//! the token commands gather their token rows off the rows' ids: the driver holds the table
+def vk_rdec_token_gather_on : bool => g_rd != null && rd_emb_on()
+
 let private RD_CHAIN_ENV = -2   //! `g_vk_chain_pin` unset: the mode is the environment's
 var private g_vk_chain_pin = RD_CHAIN_ENV
 var private g_rdec_chain_hits = 0l
