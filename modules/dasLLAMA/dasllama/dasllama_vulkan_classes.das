@@ -327,38 +327,12 @@ class template ArBase : ResidualT {
         static_if (OUT_Q8) {
             quant32(r * (pa.dim / 32u), rms_inv(accum_row(base)))
         } else {
-            store_out(base, rms_inv(accum_row(base)))
-        }
-    }
-
-    [arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#residual-step-fma")]
-    def store_out(base : uint; inv : float) {
-        let last = pa.dim - 1u
-        var k = gl_LocalInvocationID.x
-        while (k < pa.dim) {
-            let k1 = min(k + 256u, last)
-            let k2 = min(k + 512u, last)
-            let k3 = min(k + 768u, last)
-            let n0 = normed_at(k, 0.0, inv)
-            let n1 = normed_at(k1, 0.0, inv)
-            let n2 = normed_at(k2, 0.0, inv)
-            let n3 = normed_at(k3, 0.0, inv)
-            put_out(base + k, n0)
-            if (k + 256u < pa.dim) {
-                put_out(base + k1, n1)
-            }
-            if (k + 512u < pa.dim) {
-                put_out(base + k2, n2)
-            }
-            if (k + 768u < pa.dim) {
-                put_out(base + k3, n3)
-            }
-            k += 1024u
+            store_x4(base, pa.dim, 256u, rms_inv(accum_row(base)))
         }
     }
 
     //! the normed row's element `i` stored in the stamp's out form: floats to `yo`, halves to `outh`
-    def put_out(i : uint; v : float) {
+    def override put_out(i : uint; v : float) : void {
         static_if (OUT_F32) {
             yo[i] = v
         }
@@ -372,10 +346,6 @@ class template ArBase : ResidualT {
 class ClsArAddRms : ArBase {
     override OUT_F32 = true
 }
-
-//! the residual step with no normed row stored: the stream rows updated in place alone (the E-series pre-step's finish)
-[vk_dispatch(name = "cls_ar_add", kernel = "run", grid = "nrows", params = "nrows : int64")]
-class ClsArAdd : ArBase {}
 
 // ar_add_rms + Q8_0 requant in ONE dispatch: the normed row quantizes out of the row stash, so
 // xb never reaches memory. Verbatim reduce/amax/rounding => bit-identical to the split pair.
@@ -567,7 +537,7 @@ class ClsArCombF16B : ArCombBase {
 [ |> template_struct_instance]
 class template ArCombG4T : GkMoeCombG4 {
     @workgroup row : float[8192]
-    override OUT_X4 = true   //! the residual step's store form (`ArBase.store_out`): the stride loop reads 1.9 us slower on the pod
+    override OUT_X4 = true   //! the residual step's store form (`GkQ8BlockStore.store_x4`): the stride loop reads 1.9 us slower on the pod
 
     def override stash(k : uint; v : float) : void {
         row[k] = v
@@ -721,10 +691,8 @@ class template ActRqT : RqT {
     def act_mul(v, u : float) : float => gk_act_mul(v, u, pa.act)
 
     //! the up element paired with gate element `eb`: with `ustride` the rows of `ulen` elements sit `ustride` apart
-    def up_at(eb : uint) : uint {
-        let ul = max(pa.ulen, 1u)
-        return pa.ustride != 0u ? pa.ubase + (eb / ul) * pa.ustride + eb % ul : pa.ubase + eb   //! four elements never cross a row: ulen is a 4-multiple
-    }
+    def up_at(eb : uint) : uint => (pa.ustride != 0u ? gk_strided_at(eb, pa.ubase, pa.ustride, max(pa.ulen, 1u))
+        : pa.ubase + eb)   //! four elements never cross a row: ulen is a 4-multiple
 
     def override load4(eb : uint) : float4 {
         let ue = up_at(eb)
@@ -811,23 +779,25 @@ class ActF16B : ActF16T {
     override BIASED = true
 }
 
-//! the per-layer-embedding branch's act as floats, the f32 projection's x: gelu(gate) x the side row, `ActRqT`'s strided side
-//! read (`ubase` / `ustride` / `ulen`), an element a thread
+//! the per-layer-embedding branch's act as floats, the f32 projection's x, on the template both homes stamp (`GkPleAct`): out of
+//! place, an element a thread
 [vk_dispatch(name = "ple_act_f32_cls", grid = "wgs", params = "wgs : int64")]
-class PleActF32 {
-    @ssbo @binding = 0 gate : array<float>
-    @ssbo @binding = 1 up : array<float>
-    @ssbo @binding = 2 outp : array<float>
-    @push_constant pa : ActArgs
+class PleActF32 : GkPleAct {
+    override OUT = true
 
     [spirv_kernel(local_size_x = 256), arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#whole-token-decode-span")]
     def run {
-        let e = gl_GlobalInvocationID.x
-        if (e < pa.nelem) {
-            let ul = max(pa.ulen, 1u)
-            let ue = pa.ustride != 0u ? pa.ubase + (e / ul) * pa.ustride + e % ul : pa.ubase + e
-            outp[e] = gk_act_mul(gate[e], up[ue], pa.act)
-        }
+        act_elem(gl_GlobalInvocationID.x)
+    }
+}
+
+//! the E-series pre-step's finish on the template both homes stamp (`GkPleFinish`): a workgroup a slice, the projection rows
+//! arriving scaled (the router GEMV's `YSCALE`, the window's scaled f16 rows)
+[vk_dispatch(name = "ple_finish_cls", grid = "nslices", params = "nslices : int64")]
+class PleFinish : GkPleFinish {
+    [spirv_kernel(local_size_x = 256)]
+    def run {
+        finish_slice(gl_WorkGroupID.x)
     }
 }
 
@@ -11718,50 +11688,39 @@ def kq_batch_cls_enc_for(fmt : int; q40cm : bool; raw : VkCommandBuffer; var h :
 // The drivers' format pick as ensure/set/enc: every decode GEMV class
 // shares the 6-buffer shape (wq, ws, regions, xq, xs, y) and GemvArgs.
 
-def gemv_cls_ensure(fmt : int) : bool {   // nolint:STYLE037 — kq_tile_stamp's generated arms, one a format's stamp
+//! the decode GEMV shells a format stamps, `kq_tile_stamp`'s tails: the plain rows, the summed routed down stacks (`sum_shell`),
+//! the fused routed gate and up (`gu_shell`)
+let GEMV_SHELLS = "cls sum_cls gu_cls"
+let GEMV_SHELL_PLAIN = 0
+let GEMV_SHELL_SUM = 1   //! the per-32 formats past q8
+let GEMV_SHELL_GU = 2    //! the kq formats the twins stamp
+//! the (format, shell) pairs no stamp serves
+let GEMV_SHELL_SKIP = "q8/sum_cls k2/sum_cls k3/sum_cls k4/sum_cls k5/sum_cls k6/sum_cls q40/sum_cls iq4xs/sum_cls iq3s/sum_cls iq3xxs/sum_cls iq4nl/sum_cls iq2s/sum_cls iq2xs/sum_cls iq2xxs/sum_cls iq3s4/sum_cls q8/gu_cls q51/gu_cls mx4/gu_cls iq4nl32/gu_cls q4032/gu_cls q5032/gu_cls k2/gu_cls k3/gu_cls k5/gu_cls k6/gu_cls q40/gu_cls iq3s/gu_cls iq3xxs/gu_cls iq4nl/gu_cls iq2xs/gu_cls iq2xxs/gu_cls"
+
+//! whether format `fmt` stamps decode GEMV shell `shell`: no pair of `GEMV_SHELL_SKIP` names it
+def gemv_shell_fmt(fmt, shell : int) : bool {
+    let pair = "{kq_fmt_of_slot(fmt)}/{split(GEMV_SHELLS, " ")[shell]}"
+    for (w in split(GEMV_SHELL_SKIP, " ")) {
+        return false if (w == pair)
+    }
+    return true
+}
+
+def gemv_shell_ensure(fmt, shell : int) : bool {   // nolint:STYLE037 — kq_tile_stamp's generated arms, one a format's stamp a shell
     var r = false
-    kq_tile_stamp(fmt, "", "gemv") <| $() {
-        r = tile_ensure_cls()
+    kq_tile_stamp(fmt, GEMV_SHELL_SKIP, "gemv", shell, GEMV_SHELLS) <| $() {
+        r = tile_ensure()
     }
     return r
 }
 
-//! the formats whose routed down stacks take the summed GEMV (`sum_shell`): the per-32 ones
-let B32_SUM_SKIP = "q8 k2 k3 k4 k5 k6 q40 iq4xs iq3s iq3xxs iq4nl iq2s iq2xs iq2xxs iq3s4"
-
-def b32_sum_cls_ensure(fmt : int) : bool {
-    var r = false
-    kq_tile_stamp(fmt, B32_SUM_SKIP, "gemv") <| $() {
-        r = tile_ensure_sum_cls()
-    }
-    return r
-}
-
-def b32_sum_cls_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : GemvArgs; wgs : int64) {
-    kq_tile_stamp(fmt, B32_SUM_SKIP, "gemv") <| $() {
-        tile_enc_sum_cls(raw, h, set_, pc, wgs)
+def gemv_shell_enc(fmt, shell : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : GemvArgs; wgs : int64) {   // nolint:STYLE037 — kq_tile_stamp's generated arms, one a format's stamp a shell
+    kq_tile_stamp(fmt, GEMV_SHELL_SKIP, "gemv", shell, GEMV_SHELLS) <| $() {
+        tile_enc(raw, h, set_, pc, wgs)
     }
 }
 
-//! the formats whose routed gate and up stacks take the fused GEMV (`gu_shell`): the kq ones the twins stamp
-let KQ_GU_SKIP = "q8 q51 mx4 iq4nl32 q4032 q5032 k2 k3 k5 k6 q40 iq3s iq3xxs iq4nl iq2xs iq2xxs"
-
-def kq_gu_fmt(fmt : int) : bool => (fmt == int(KqFmt.k4) || fmt == int(KqFmt.iq4xs) || fmt == int(KqFmt.iq3s4)
-    || fmt == int(KqFmt.iq2s))
-
-def kq_gu_cls_ensure(fmt : int) : bool {
-    var r = false
-    kq_tile_stamp(fmt, KQ_GU_SKIP, "gemv") <| $() {
-        r = tile_ensure_gu_cls()
-    }
-    return r
-}
-
-def kq_gu_cls_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : GemvArgs; wgs : int64) {
-    kq_tile_stamp(fmt, KQ_GU_SKIP, "gemv") <| $() {
-        tile_enc_gu_cls(raw, h, set_, pc, wgs)
-    }
-}
+def gemv_cls_ensure(fmt : int) : bool => gemv_shell_ensure(fmt, GEMV_SHELL_PLAIN)
 
 def gemv_cls_set(fmt : int; bufs : uint64 const[6]; sizes : int64 const[6]; gbits : uint const[6]) : VkDescriptorSet {
     if (fmt == int(KqFmt.q8)) {
@@ -11794,10 +11753,8 @@ def gemv_planes_set(fmt : int; p : tuple<wq : uint64; ws : uint64; wqb : int64; 
         fixed_array(0u, 0u, meta_bit, xbit, xbit, ybit))
 }
 
-def gemv_cls_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : GemvArgs; wgs : int64) {   // nolint:STYLE037 — kq_tile_stamp's generated arms, one a format's stamp
-    kq_tile_stamp(fmt, "", "gemv") <| $() {
-        tile_enc_cls(raw, h, set_, pc, wgs)
-    }
+def gemv_cls_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : GemvArgs; wgs : int64) {
+    gemv_shell_enc(fmt, GEMV_SHELL_PLAIN, raw, h, set_, pc, wgs)
 }
 
 //! the GEMV family's dispatch grid over `rows` output rows at `lanes_per_row` (0 = a whole subgroup per

@@ -29,6 +29,8 @@ struct and the body; a stamp sets the template constants its home needs and maps
 | `GkDnConv` | `MetalDnConvN` / `N4` (`PB` 1 / 4, `RING` 8: a group of 16 rows or fewer) | `DnConv` (`PB` 32, `RING` 4) | `PB`, `RING` |
 | `GkMoeCombG4` | `MetalMoeCombG4` / `Hx` (the selection rows' slots, the next norm in f32, `Hx` its f16 twin), `MetalMoeCombG4Pf` (the bucket inverse's slots, no norm out; 1024 lanes, `rsqrt`) | `ClsArCombG4` / `F16B` / `Rq` (the slot map, the next norm in f32, f16 or Q8_0 blocks; 256 lanes, `1 / sqrt`) | `TG`, `RSQRT`, `GATHERED`, `OUT_F32` / `OUT_F16` / `OUT_Q8`, `HX`; the stash |
 | `GkClsEpilogue` | `MetalClsEpilogue` | `ClsEpilogue` | nothing; every row in one dispatch |
+| `GkPleAct` | `MetalGegluSide` (in place over the gate rows, 64 lanes) | `PleActF32` (`OUT`: the f32 projection's x, 256 lanes) | `OUT`; the side row's index is `gk_strided_at`, `ActRqT.up_at`'s |
+| `GkPleFinish` | `MetalPleFinish` (`XSCALE`: the projection's 1 / sqrt(dim) in the finish, `rsqrt`) | `PleFinish` (the projection arrives scaled, `1 / sqrt`) | `XSCALE`, `RSQRT`; 256 lanes a slice on both |
 
 The gated FFN's activation is one function on both homes (`gk_act_mul`, `dasllama_gpu_math.das`): the Metal ew2 and
 w13 combines and every Vulkan act class call it, the gelu its clamped tanh form.
@@ -44,7 +46,7 @@ w13 combines and every Vulkan act class call it, the gelu its clamped tanh form.
   against 13.3 us, while the gemma-4 window stamp (`MetalMoeCombG4Pf`) reads 8% slower with it (133 against 122.5 us at 512
   rows) and sums one slot a step.
 - **The Vulkan MoE step stores its next norm four elements in flight a lane** (`GkMoeCombG4.OUT_X4`, the residual step's
-  `ArBase.store_out` form): with the stride loop the pod reads 12.29 against the per-home body's 10.41 us, with it 10.44.
+  `GkQ8BlockStore.store_x4` form, which the residual step's `ArBase` stores through): with the stride loop the pod reads 12.29 against the per-home body's 10.41 us, with it 10.44.
 - **The select's down-scale arm is a stamp of its own on Metal.** The arm costs the plain stamps 0.27 us a dispatch on the M5
   with no row named, so a down-scale row selects the `Ds` stamps (`ARCHITECTURE_GPU_PREFILL_MOE.md#moe-wscale`); the Vulkan
   top-k carries the arm on its one stamp, its row named or `GK_NO_DSCALE`.

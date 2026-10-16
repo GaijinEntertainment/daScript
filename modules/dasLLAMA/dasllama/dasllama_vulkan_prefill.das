@@ -906,7 +906,8 @@ def private pf_ple_block(raw : VkCommandBuffer; var h : VkHaz; l : int64; b : in
     }
     var pca = ActArgs(nelem = uint(wlen * ple), act = ACT_GELU, ubase = uint(l * ple), ustride = all, ulen = uint(ple))
     if (L.bpp < 0l) {   //! the act's f32 rows (in the up plane, free here) feed the f32 projection
-        enc_ple_act_f32_cls(raw, h, g_rd.pf_sets[b + 18], pca, (wlen * ple + 255l) / 256l)
+        var pcf = GkPleActArgs(nelem = uint(wlen * ple), sbase = uint(l * ple), sstride = all, slen = uint(ple))
+        enc_ple_act_f32_cls(raw, h, g_rd.pf_sets[b + 18], pcf, (wlen * ple + 255l) / 256l)
         pfq_ts(raw)
         var pcp = pf_ple_f32_args(wlen, ple, dim, l * ple * dim)
         enc_dn_ba_cls(raw, h, g_rd.pf_sets[b + 19], pcp, dn_ba_wgs(wlen, dim / 2l))
@@ -995,7 +996,7 @@ def private pf_setup {
             g_rd.pf_plep = make_device_buf(np * all * 4l)
             if (g_rd.ple_w16_dev != 0ul) {
                 let ple_khr = g_gpu.coopmat_mode != COOPMAT_CM2
-                verify(ensure_tower_clamp_cvt_cls() && ensure_ple_bf16_cvt_cls() && f16_gemm_ensure(ple_khr) && ensure_cls_ar_add(),
+                verify(ensure_tower_clamp_cvt_cls() && ensure_ple_bf16_cvt_cls() && f16_gemm_ensure(ple_khr) && ensure_ple_finish_cls(),
                     "vk prefill: the per-layer-embedding pre-step's rails must engage")
                 g_rd.pf_plexf = make_device_buf(np * dim * 2l)
                 g_rd.pf_ple_cvt_set = set_tower_clamp_cvt_cls(fixed_array(g_rd.pf_x, g_rd.pf_plexf),
@@ -1014,9 +1015,9 @@ def private pf_setup {
                 let ggbits = fixed_array(0u, VHZ_X, VHZ_MRT, 0u)
                 g_rd.pf_ple_gemm_set = g_rd.ple_wp_bf16 ? set_router_gemv_bf16_cls(gbufs, gsizes, ggbits) : set_router_gemv_cls(gbufs, gsizes, ggbits)
             }
-            //! the residual step over [np x layers] rows of ple: side = (gathered + pnorm . rms(projected)) / sqrt(2), no normed row stored
-            g_rd.pf_ple_ar_set = set_cls_ar_add(fixed_array(g_rd.pf_ple, g_rd.pf_plep, g_rd.ple_pnorm_dev),
-                fixed_array(np * all * 4l, np * all * 4l, g_rd.ple * 4l), fixed_array(VHZ_COS, VHZ_MRT, 0u))
+            //! the finish over [np x layers] slices of ple: side = (gathered + pnorm . rms(projected)) / sqrt(2)
+            g_rd.pf_ple_ar_set = set_ple_finish_cls(fixed_array(g_rd.pf_plep, g_rd.ple_pnorm_dev, g_rd.pf_ple),
+                fixed_array(np * all * 4l, g_rd.ple * 4l, np * all * 4l), fixed_array(VHZ_MRT, 0u, VHZ_COS))
         }
     }
     g_rd.pf_logits_host = make_host_buf(g_rd.regions * g_rd.vocab * 4l, false, [cached = true])
@@ -1674,7 +1675,7 @@ def vk_rdec_set_ple_proj(w16 : array<uint16>; w32 : array<float>; pnorm : array<
     let bf16 = !empty(w16)
     let n = bf16 ? long_length(w16) : long_length(w32)
     if (n != all * g_rd.dim || long_length(pnorm) != g_rd.ple || g_rd.pf_ready
-            || !((bf16 ? ensure_router_gemv_bf16_cls() : ensure_router_gemv_cls()) && ensure_cls_ar_add())) {
+            || !((bf16 ? ensure_router_gemv_bf16_cls() : ensure_router_gemv_cls()) && ensure_ple_finish_cls())) {
         return false
     }
     g_rd.ple_wp_bf16 = bf16
@@ -1697,8 +1698,8 @@ def vk_rdec_set_ple_proj(w16 : array<uint16>; w32 : array<float>; pnorm : array<
     let psizes = fixed_array(g_rd.ple_wp_bytes, g_rd.dim * 4l * nb, all * 4l * nb, g_rd.ple * 4l)
     let pbits = fixed_array(0u, VHZ_X, VHZ_MRT, 0u)
     g_rd.s_tok_pleproj = bf16 ? set_router_gemv_bf16_cls(pbufs, psizes, pbits) : set_router_gemv_cls(pbufs, psizes, pbits)
-    g_rd.s_tok_ple_ar = set_cls_ar_add(fixed_array(g_rd.ple_dev, g_rd.tok_plep, g_rd.ple_pnorm_dev),
-        fixed_array(all * 4l * nb, all * 4l * nb, g_rd.ple * 4l), fixed_array(VHZ_COS, VHZ_MRT, 0u))
+    g_rd.s_tok_ple_ar = set_ple_finish_cls(fixed_array(g_rd.tok_plep, g_rd.ple_pnorm_dev, g_rd.ple_dev),
+        fixed_array(all * 4l * nb, g_rd.ple * 4l, all * 4l * nb), fixed_array(VHZ_MRT, 0u, VHZ_COS))
     g_rd.ple_gpu = true
     rd_invalidate_token()
     return true
@@ -2348,8 +2349,8 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 } else {
                     ple_proj_enc(raw, h, g_rd.pf_ple_gemm_set, uint(wlen))
                 }
-                var pca = ArArgs(dim = uint(g_rd.ple), add_on = 1u, woff = 0u, eps = g_rd.eps, ascale = 1.0 / sqrt(2.0), pre_on = 1u, pwoff = 0u)
-                enc_cls_ar_add(raw, h, g_rd.pf_ple_ar_set, pca, wlen * g_rd.n_layers)
+                var pcf = GkPleFinArgs(ple = uint(g_rd.ple), eps = g_rd.eps)
+                enc_ple_finish_cls(raw, h, g_rd.pf_ple_ar_set, pcf, wlen * g_rd.n_layers)
             }
             if (warm) {
                 vhz_dep(raw, h, VHZ_X, VHZ_UP, true)

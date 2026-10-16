@@ -7797,10 +7797,8 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
     var u_qtot = c.q_gated ? uniform_u32(uint(npos * qd)) : null
     var u_rot = (c.rope_dim > 0l && c.rope_dim != head_size) ? uniform_u32(uint(c.rope_dim)) : null
     var u_ple = plef ? uniform_u32(uint(ple_n)) : null
-    var u_ple_tot = plef ? uniform_u32(uint(npos * ple_n)) : null
     var u_ple_all = ple_gpu ? uniform_u32(uint(ple_all)) : null
     var u_ple_sq = ple_gpu ? uniform_f32(sqrt(float(ple_n))) : null   //! the q8 table stamp's scale: the gather's sqrt(ple)
-    var u_ple_st = plef ? uniform_u32(uint(ple_all)) : null   //! the side rows' position stride
     //! hetero-only sliding-class uniform twins; uniform models leave these null and bind the base set
     var u_qd_sw = hetero ? uniform_u32(uint(qd_sw)) : null
     var u_kvd_sw = hetero ? uniform_u32(uint(kvd_sw)) : null
@@ -7945,7 +7943,7 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
             }
             if (l == 0l && ple_gpu) {
                 //! the serial encoder orders the three PLE stages: gather -> model_proj GEMM -> rms+combine
-                var pka = ple_ka(npos, ple_n, c.n_layers, dim, c.norm_eps)
+                var pka = ple_fin_args(ple_n, dim, c.norm_eps)
                 enc_embed_table(enc, t, t.ple_emb_fmt, t.ple_emb_off, ple_all, sqrt(float(ple_n)), bple_tok, 0ul, bple, 0ul, npos, u_ple_all, u_ple_sq)
                 if (t.ple_model_bf16) {
                     let bwp = plane_of(g_dev, t, t.bf16blob, t.ple_model_off)
@@ -7957,7 +7955,7 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                     }
                 }
                 var bw_pn = upload_region(unsafe(addr < void? >(t.fblob[t.ple_pnorm_off])), uint64(ple_n * 4l))
-                enc_ple_finish(enc, bple_proj, bw_pn, bple, pka, c.n_layers, npos, ple_n)
+                enc_ple_finish(enc, bple_proj, bw_pn, bple, pka, c.n_layers * npos)
                 s.ple_gpu_pending = false
             }
             if (warm && l == c.n_layers) {
@@ -8582,7 +8580,8 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                         pf_enc_ple_site(enc, t, l, false, bx, bpleg, u_dim, u_ple, mp, npos, pf_cvt_panel(enc, bx, mp, dim, g_pf_skip == "act_cvt"))
                     }
                     if (g_pf_skip != "ew" && g_pf_skip != "nongemm") {
-                        enc_geglu_side(enc, bpleg, 0ul, bple, uint64(l * ple_n * 4l), u_ple_tot, u_ple, u_ple_st, npos * ple_n)
+                        var ka = GkPleActArgs(nelem = uint(npos * ple_n), sbase = uint(l * ple_n), sstride = uint(ple_all), slen = uint(ple_n))
+                        enc_geglu_side(enc, bpleg, bple, ka, npos * ple_n)
                     }
                     if (g_pf_skip != "gemm") {
                         pf_enc_ple_site(enc, t, l, true, bpleg, bxb, u_ple, u_dim, mp, npos, pf_cvt_panel(enc, bpleg, mp, ple_n, g_pf_skip == "act_cvt"))
@@ -8928,8 +8927,6 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
         }
         pool_release(g_pf_pool, bpleg, bytes_ple_g)
         pool_release(g_pf_upool, u_ple, 4ul)
-        pool_release(g_pf_upool, u_ple_tot, 4ul)
-        pool_release(g_pf_upool, u_ple_st, 4ul)
     }
     bks |> clear()      //! non-owning handles — the pool owns them now
     bvs |> clear()

@@ -756,8 +756,8 @@ def private rd_moe_sets(var L : RLayer) {
     }
     //! one slab: the gate and up stacks share the quant buffer the fused dispatch binds once; the kq twins carry no bias rows and no
     //! clamped act, so a biased or gpt-oss-activated stack takes the three dispatches
-    L.egu = (L.fe1 == L.fe3 && kq_gu_fmt(L.fe1) && !kq_sb(L.fe2) && nfe % 32l == 0l && pe1.wq == pe3.wq
-        && !g_rd.exps_bias && !g_rd.act_oai && vk_fuse_on() && kq_gu_cls_ensure(L.fe1))
+    L.egu = (L.fe1 == L.fe3 && gemv_shell_fmt(L.fe1, GEMV_SHELL_GU) && !kq_sb(L.fe2) && nfe % 32l == 0l && pe1.wq == pe3.wq
+        && !g_rd.exps_bias && !g_rd.act_oai && vk_fuse_on() && gemv_shell_ensure(L.fe1, GEMV_SHELL_GU))
     if (L.egu) {
         L.s_egu = set_kq_gemv_k4_gu_cls(fixed_array(pe1.wq, pe1.ws, g_rd.moe_meta1_dev, xqb, xsb, g_rd.egate_dev, kq_grid_dev(), g_rd.moe_meta3_dev, g_gpu.hq_dev, g_gpu.hs_dev),
             fixed_array(pe1.wqb, pe1.wsb, META_BYTES, dim, (dim / 32l) * 4l, k * nfe * 4l, KQ_GRID_BYTES, META_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES),
@@ -772,7 +772,7 @@ def private rd_moe_sets(var L : RLayer) {
             fixed_array(0u, 0u, VHZ_MRT, VHZ_XQ, VHZ_XQ, VHZ_GATE, VHZ_MRT, 0u, 0u, VHZ_MRT, VHZ_HQ, VHZ_HQ))
     }
     L.s_edown = gemv_planes_set(L.fe2, pe2, g_rd.moe_meta2_dev, META_BYTES, VHZ_MRT, g_gpu.hq_dev, g_gpu.hs_dev, BATCH_HQ_BYTES, BATCH_HS_BYTES, VHZ_HQ, g_rd.edown_dev, edn_bytes, VHZ_MDN)
-    L.edown_sum = L.moe_g4 && kq_block32(L.fe2) && L.fe2 != int(KqFmt.q8) && vk_fuse_on() && b32_sum_cls_ensure(L.fe2)
+    L.edown_sum = L.moe_g4 && gemv_shell_fmt(L.fe2, GEMV_SHELL_SUM) && vk_fuse_on() && gemv_shell_ensure(L.fe2, GEMV_SHELL_SUM)
     if (L.edown_sum) {
         L.s_edown_sum = set_q51_gemv_sum_cls(fixed_array(pe2.wq, pe2.ws, g_rd.moe_meta2_dev, g_gpu.hq_dev, g_gpu.hs_dev, g_rd.edown_dev, g_rd.moe_dw_dev),
             fixed_array(pe2.wqb, pe2.wsb, META_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES, k * dim * 4l, slots_bytes),
@@ -2664,13 +2664,14 @@ def private rd_encode_ple(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
         rd_ts(raw, "p:actproj")
         return
     }
-    var pca = ActArgs(nelem = uint(ple) * nr, act = ACT_GELU, ubase = uint(l * ple), ustride = uint(g_rd.n_layers * ple), ulen = uint(ple))
     if (L.bpp < 0l) {
-        enc_ple_act_f32_cls(raw, h, L.s_ple_act, pca, (ple * nrows + 255l) / 256l)
+        var pcf = GkPleActArgs(nelem = uint(ple) * nr, sbase = uint(l * ple), sstride = uint(g_rd.n_layers * ple), slen = uint(ple))
+        enc_ple_act_f32_cls(raw, h, L.s_ple_act, pcf, (ple * nrows + 255l) / 256l)
         rd_ts(raw, "p:act")
         var pcp = GkRouterArgs(ne = uint(dim), dim = uint(ple), woff = uint(l * ple * dim), ncols = nr)
         router_enc_cols(false, raw, h, L.s_ple_proj, pcp, dim)
     } else {
+        var pca = ActArgs(nelem = uint(ple) * nr, act = ACT_GELU, ubase = uint(l * ple), ustride = uint(g_rd.n_layers * ple), ulen = uint(ple))
         actrq_enc(raw, h, L.s_ple_act, kq_sb(L.fpp), pca, ple * nrows)
         rd_ts(raw, "p:act")
         rd_gemv(L.fpp, raw, h, L.s_ple_proj, ple, dim, ncols, uint(dim))
@@ -2731,7 +2732,7 @@ def private rd_encode_moe(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
     if (one && L.egu) {
         pcg.lanes_per_row = gemv_lanes_per_row(L.fe1, dim)
         pcg.act = g_rd.is_gelu ? ACT_GELU : ACT_SILU
-        kq_gu_cls_enc(L.fe1, raw, h, L.s_egu, pcg, k * nfe / 32l)
+        gemv_shell_enc(L.fe1, GEMV_SHELL_GU, raw, h, L.s_egu, pcg, k * nfe / 32l)
         rd_ts(raw, "m:e_gu")
     } elif (one && L.egu_mx4) {
         pcg.act = act_code(g_rd.act_oai, g_rd.is_gelu)
@@ -2759,7 +2760,7 @@ def private rd_encode_moe(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
     }
     var pcd = GemvArgs(n = uint(nfe), d = uint(dim), nreg = uint(k) * nr, ybase = 0u)
     if (one && L.edown_sum) {
-        b32_sum_cls_enc(L.fe2, raw, h, L.s_edown_sum, pcd, gemv_wgs(dim, 0u))
+        gemv_shell_enc(L.fe2, GEMV_SHELL_SUM, raw, h, L.s_edown_sum, pcd, gemv_wgs(dim, 0u))
         rd_ts(raw, "m:e_down_sum")
     } else {
         gemv_enc(L.fe2, raw, h, L.s_edown, pcd, k * dim * nrows)
@@ -2817,8 +2818,8 @@ def private rd_encode_token(var first_seg_raw : VkCommandBuffer; nrows, nsplit :
         if (g_rd.ple > 0l && g_rd.ple_gpu) {   //! the pre-step's finish: the projection of the embedded rows, normed a slice at a time and averaged into the gathered rows
             ple_proj_enc(raw, h, g_rd.s_tok_pleproj, nr)
             rd_ts(raw, "t:pleproj")
-            var pca = ArArgs(dim = uint(g_rd.ple), add_on = 1u, woff = 0u, eps = g_rd.eps, ascale = 1.0 / sqrt(2.0), pre_on = 1u, pwoff = 0u)
-            enc_cls_ar_add(raw, h, g_rd.s_tok_ple_ar, pca, g_rd.n_layers * nrows)
+            var pcf = GkPleFinArgs(ple = uint(g_rd.ple), eps = g_rd.eps)
+            enc_ple_finish_cls(raw, h, g_rd.s_tok_ple_ar, pcf, g_rd.n_layers * nrows)
             rd_ts(raw, "t:plefin")
         }
         let (fuse, fuse_qkr) = rd_fuse_gates()

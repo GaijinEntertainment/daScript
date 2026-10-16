@@ -3967,7 +3967,7 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
         zp[0] = 0u
     }
     g_pso_geglu = compile_stamp(MetalGeglu_metal_ew2_msl, ok)
-    g_pso_geglu_side = compile_stamp(MetalGegluSide_metal_ew2_msl, ok)
+    g_pso_geglu_side = compile_stamp(metal_geglu_side_msl, ok)
     g_pso_ple_proj_bf16 = compile_stamp(metal_ple_proj_bf16_msl, ok)
     g_pso_ple_proj_bf16_one = compile_stamp(metal_ple_proj_bf16_one_msl, ok)
     g_pso_ple_finish = compile_stamp(metal_ple_finish_msl, ok)
@@ -7096,40 +7096,23 @@ def enc_ple_pre_dev(enc : MetalComputeEncoder?; t : Model; btok : MetalBuffer?; 
         enc_moe_router(enc, bw, bx, bproj, g_one, ka, all, nrows)
     }
     var bpn = upload_region(unsafe(addr < void? >(t.fblob[t.ple_pnorm_off])), uint64(ple * 4l))
-    enc_ple_finish(enc, bproj, bpn, bple, ple_ka(nrows, ple, c.n_layers, c.dim, c.norm_eps), c.n_layers, nrows, ple)
+    var kf = ple_fin_args(ple, c.dim, c.norm_eps)
+    enc_ple_finish(enc, bproj, bpn, bple, kf, c.n_layers * nrows)
 }
 
-//! the per-layer-embedding pre-step's args: `npos` rows of `nlayers` slices of `ple`
-struct PleArgs {
-    npos : uint
-    ple : uint
-    nlayers : uint
-    inv_sd : float      //!< 1/sqrt(dim)
-    eps : float
-    inv_s2 : float      //!< 1/sqrt(2)
-}
+//! the pre-step's finish args: slices of `ple`, the projection scaled by 1 / sqrt(dim) in the finish
+def ple_fin_args(ple, dim : int64; eps : float) : GkPleFinArgs => GkPleFinArgs(ple = uint(ple), eps = eps, inv_sd = 1.0 / sqrt(float(dim)))
 
-def ple_ka(npos, ple, nlayers, dim : int64; eps : float) : PleArgs => (
-    PleArgs(npos = uint(npos), ple = uint(ple), nlayers = uint(nlayers), inv_sd = 1.0 / sqrt(float(dim)), eps = eps, inv_s2 = 1.0 / sqrt(2.0)))
-
-//! The pre-step's finish, a threadgroup a (layer, row) slice, in place on the position-major side rows:
-//! side = (side + pnorm * rms(proj * inv_sd)) * inv_s2 - the CPU's `ple_pre_finish` after its gather
-[metal_dispatch(name = "enc_ple_finish", pso = "g_pso_ple_finish", tgmem = "metal_ple_finish_msl_tgmem", tg = "ple", grid = "nlayers, npos", params = "nlayers : int64, npos : int64, ple : int64")]
-class MetalPleFinish : MetalTgReduceBase {
-    @ssbo @binding = 0 @role = "read" proj : array<float>  //!< [npos x n_layers*ple] position-major model_proj·embd
-    @ssbo @binding = 1 @role = "weight" pnorm : array<float> //!< [ple] proj-norm weight
-    @ssbo @binding = 2 @role = "readwrite" y : array<float>     //!< [npos x n_layers*ple] side input, in place
-    @uniform @binding = 4 ka : PleArgs
+//! The pre-step's finish on the template both homes stamp (`GkPleFinish`), a threadgroup of 256 a (row, layer) slice: the
+//! projection scaled here, the inverse norm `rsqrt`
+[metal_dispatch(name = "enc_ple_finish", pso = "g_pso_ple_finish", tgmem = "metal_ple_finish_msl_tgmem", tg = 256, grid = "nslices", params = "nslices : int64")]
+class MetalPleFinish : GkPleFinish {
+    override XSCALE = true
+    override RSQRT = true
 
     [metal_kernel(name="metal_ple_finish_msl")]
     def metal_ple_finish {
-        let l = gl_WorkGroupID.x
-        let p = gl_WorkGroupID.y
-        let i = gl_LocalInvocationID.x      //! tg = ple threads (gate: ple % 32 == 0, <= 1024)
-        let at = p * (ka.nlayers * ka.ple) + l * ka.ple + i
-        let v = proj[at] * ka.inv_sd
-        let inv = tg_rms_inv(v * v, ka.ple, ka.eps)
-        y[at] = (y[at] + pnorm[i] * (v * inv)) * ka.inv_s2
+        finish_slice(gl_WorkGroupID.x)
     }
 }
 
@@ -11610,11 +11593,8 @@ def qk_norm_args(nq, nk, hs, rstride, soffe, koffe, woffe : uint; eps : float; x
 [ |> template_struct_instance]
 class template MetalEw2T {
     @ssbo @binding = 0 @role = "readwrite" @off = "goff" @span = "total*4" g : array<float>     // in place
-    @ssbo @binding = 1 @role = "read" @off = "uoff" @span = "total*4" @template_gate = "!SIDE" u : array<float>
-    @ssbo @binding = 1 @role = "read" @off = "uoff" @template_gate = SIDE side : array<float>   //!< `SIDE`: rows of `side_len` elements `side_stride` apart
+    @ssbo @binding = 1 @role = "read" @off = "uoff" @span = "total*4" u : array<float>
     @uniform @binding = 2 total : uint      // grid guard
-    @uniform @binding = 8 @template_gate = SIDE side_len : uint
-    @uniform @binding = 9 @template_gate = SIDE side_stride : uint
     @uniform @binding = 3 @template_gate = HAS_ASCALE ascale : float
     @ssbo @binding = 4 @role = "write" @template_gate = HX gh : array<float16>   // f16 twin of g (the dual-store stamps)
     @ssbo @binding = 5 @role = "read" @off = "toff" @template_gate = TOTB totb : array<uint>   // the device-side row count (the bucket rail's padded total)
@@ -11625,7 +11605,6 @@ class template MetalEw2T {
     @template_constant TOTB : bool = false
     @template_constant OUT : bool = false
     @template_constant ACT : int = 0   //!< the combine, spelled as its literal: 0 silu(a)*b, 1 gelu_tanh(a)*b, 2 (a+b)*ascale, 3 a*sigmoid(b)
-    @template_constant SIDE : bool = false   //!< the u side is a position-major side input: element e reads row e / side_len at its stride (`ActRqT.up_at`)
 
     def combine(a, b : float) : float {
         static_if (ACT == 0) {
@@ -11651,19 +11630,14 @@ class template MetalEw2T {
                 return
             }
         }
-        let vv = g[gid]
-        static_if (SIDE) {
-            g[gid] = combine(vv, side[(gid / side_len) * side_stride + gid % side_len])
+        let res = combine(g[gid], u[gid])
+        static_if (OUT) {
+            o[gid] = res
         } else {
-            let res = combine(vv, u[gid])
-            static_if (OUT) {
-                o[gid] = res
-            } else {
-                g[gid] = res
-            }
-            static_if (HX) {
-                gh[gid] = float16(res)
-            }
+            g[gid] = res
+        }
+        static_if (HX) {
+            gh[gid] = float16(res)
         }
     }
 }
@@ -11692,12 +11666,13 @@ class MetalGeglu : MetalEw2T {
     override ACT = 1
 }
 
-//! the geglu over the E-series' side rows, stored position-major [rows x layers*ple]: layer l's block at `uoff`, a row's slice
-//! `side_stride` past the one before
+//! the geglu over the E-series' side rows on the template both homes stamp (`GkPleAct`): in place over the gate rows
 [metal_dispatch(name = "enc_geglu_side", pso = "g_pso_geglu_side", tg = 64, grid = "total/64", params = "total : int64")]
-class MetalGegluSide : MetalEw2T {
-    override ACT = 1
-    override SIDE = true
+class MetalGegluSide : GkPleAct {
+    [metal_kernel(name = "metal_geglu_side_msl")]
+    def metal_geglu_side {
+        act_elem(gl_GlobalInvocationID.x)
+    }
 }
 
 [metal_dispatch(name = "enc_geglu_hxb", pso = "g_pso_geglu_hxb", tg = 64, grid = "total/64", params = "total : int64")]

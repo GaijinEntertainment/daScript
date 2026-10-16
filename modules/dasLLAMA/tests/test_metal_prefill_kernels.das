@@ -4019,8 +4019,8 @@ def private ple_proj_bf16_gate(t : T?; var dev, queue; dim, ne, npos, lead : int
     }
 }
 
-//! the geglu over a position-major side input (`MetalGegluSide`): npos rows' gate slices g [npos x ple] against the side rows'
-//! layer-l slice, rows `stride` apart past `l * ple` - gelu_tanh(g) x side against the CPU form at the approx bar; the rows read
+//! the geglu over a position-major side input (`MetalGegluSide`, a `GkPleAct` stamp): npos rows' gate slices g [npos x ple] against
+//! the side rows' layer-l slice, rows `stride` apart past `l * ple` - gelu_tanh(g) x side against the CPU form at the approx bar; the rows read
 //! contiguously (as the stride were ple) land elsewhere, the control
 def private geglu_side_gate(t : T?; var dev, queue; ple, nlayers, l, npos : int) {
     let tag = "geglu_side ple={ple} nl={nlayers} l={l} np={npos}"
@@ -4044,15 +4044,10 @@ def private geglu_side_gate(t : T?; var dev, queue; ple, nlayers, l, npos : int)
         t |> success(mismatch_exact(want, flat) > 0, "{tag}: the strided rows differ from the contiguous read (the control)")
         let bg = mc |> io_(g)
         let bs = mc |> in_(side)
-        var inscope tot <- [uint(npos * ple)]
-        var inscope ul <- [uint(ple)]
-        var inscope us <- [uint(all)]
-        let btot = mc |> in_plain(tot)
-        let bul = mc |> in_plain(ul)
-        let bus = mc |> in_plain(us)
+        var ka = GkPleActArgs(nelem = uint(npos * ple), sbase = uint(l * ple), sstride = uint(all), slen = uint(ple))
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
             stamp_run(st, pso) {
-                invoke(st.enc, enc, mc.buf[bg], 0ul, mc.buf[bs], uint64(l * ple * 4), mc.buf[btot], mc.buf[bul], mc.buf[bus], int64(npos * ple))
+                invoke(st.enc, enc, mc.buf[bg], mc.buf[bs], ka, int64(npos * ple))
             }
         }
         return if (!ran)
@@ -4060,7 +4055,7 @@ def private geglu_side_gate(t : T?; var dev, queue; ple, nlayers, l, npos : int)
     }
 }
 
-// PLE stage 3 (MetalPleFinish): per (layer, position) slice, in place on the position-major side rows —
+// PLE stage 3 (MetalPleFinish, a `GkPleFinish` stamp): per (layer, position) slice, in place on the position-major side rows —
 // side = (side + pnorm * (v * rsqrt(mean(v^2) + eps))) / sqrt(2), v = proj/sqrt(dim)
 def private ple_finish_gate(t : T?; var dev, queue; nlayers, ple, npos : int) {
     let tag = "ple_finish nl={nlayers} ple={ple} np={npos}"
@@ -4071,8 +4066,9 @@ def private ple_finish_gate(t : T?; var dev, queue; nlayers, ple, npos : int) {
         return if (!pso_ok(t, tag, pso, err))
         let rowlen = nlayers * ple
         let eps = 1.0e-5
-        let inv_sd = 0.125   // stands in for 1/sqrt(dim)
+        let inv_sd = 0.125
         let inv_s2 = 1.0 / sqrt(2.0)
+        let dim = 64   //! inv_sd's 1 / sqrt(dim)
         var inscope proj, pnorm, side : array<float>
         proj |> resize(npos * rowlen)
         pnorm |> resize(ple)
@@ -4101,13 +4097,13 @@ def private ple_finish_gate(t : T?; var dev, queue; nlayers, ple, npos : int) {
                 }
             }
         }
-        var ka = PleArgs(npos = uint(npos), ple = uint(ple), nlayers = uint(nlayers), inv_sd = inv_sd, eps = eps, inv_s2 = inv_s2)
+        var ka = ple_fin_args(int64(ple), int64(dim), eps)
         let bproj = mc |> in_(proj)
         let bpn = mc |> in_(pnorm)
         let by = mc |> io_(side)
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
             stamp_run(sf, pso) {
-                invoke(sf.enc, enc, mc.buf[bproj], mc.buf[bpn], mc.buf[by], ka, int64(nlayers), int64(npos), int64(ple))
+                invoke(sf.enc, enc, mc.buf[bproj], mc.buf[bpn], mc.buf[by], ka, int64(nlayers * npos))
             }
         }
         return if (!ran)

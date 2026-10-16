@@ -55,7 +55,7 @@ def main : int {   // nolint:STYLE038 — one-shot probe: the classes, the fixtu
     let classes_ok = (vk_moe_init() && ensure_hc_norm_cls() && ensure_hc_mix_cls() && ensure_hc_comb_cls() && ensure_ple_gate_cls()
         && ensure_ple_conv_cls() && ensure_qk_rms_cls() && ensure_topk_n_cls() && ensure_topk_n2_cls() && ensure_combine_cls()
         && ensure_dn_scan_p3_cls() && ensure_qkn_rope_f16_cls() && ensure_cls_epi() && ensure_cls_ar_comb_g4()
-        && ensure_router_gemv_cls() && ensure_router_gemv_bf16_cls())
+        && ensure_router_gemv_cls() && ensure_router_gemv_bf16_cls() && ensure_ple_act_f32_cls() && ensure_ple_finish_cls())
     if (!classes_ok) {
         print("vk_gk_rows_probe: no Vulkan device, or a class declined\n")
         return 1
@@ -171,6 +171,21 @@ def main : int {   // nolint:STYLE038 — one-shot probe: the classes, the fixtu
         time_cls("ple proj bf16 rows ne {pne} dim {pdim} {np} cols") $(r; var h) {
             var p1 = pr
             router_enc_cols(true, r, h, s_rb, p1, int64(pne))
+        }
+    }
+    //! the E-series side rows at the E2B shape (35 layers x 256): the act over a layer's side slice and the pre-step's finish
+    let ple = 256
+    let pnl = 35
+    var s_pa = set_ple_act_f32_cls(fixed_array(b[0], b[1], b[2]), fixed_array(bb, bb, bb), fixed_array(1u, 2u, 4u))
+    var s_pf = set_ple_finish_cls(fixed_array(b[1], b[2], b[0]), fixed_array(bb, bb, bb), fixed_array(2u, 0u, 1u))
+    for (np in fixed_array(1, 512)) {
+        time_cls("ple act ple {ple} nl {pnl} {np} rows") $(r; var h) {
+            var pc = GkPleActArgs(nelem = uint(np * ple), sbase = uint(7 * ple), sstride = uint(pnl * ple), slen = uint(ple))
+            enc_ple_act_f32_cls(r, h, s_pa, pc, int64((np * ple + 255) / 256))
+        }
+        time_cls("ple finish ple {ple} nl {pnl} {np} rows") $(r; var h) {
+            var pc = GkPleFinArgs(ple = uint(ple), eps = 1e-6)
+            enc_ple_finish_cls(r, h, s_pf, pc, int64(pnl * np))
         }
     }
     return 0
