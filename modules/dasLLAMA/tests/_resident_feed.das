@@ -453,6 +453,28 @@ def resident_then_cpu_feed(t : T?; tr : Model; prompt, toks : array<int64>; afte
 //! the same with no seat between the resident prefill and its first step
 def resident_then_cpu_feed(t : T?; tr : Model; prompt, toks : array<int64>; after_gpu : block<void>) : FeedPair => <- resident_then_cpu_feed(t, tr, prompt, toks, $ {}, after_gpu)
 
+//! the device's summed distance from the file's f32 chain, as a ratio of the CPU q8 chain's own: the Qwen3.5 mixed twin reads
+//! 0.91 (3.42 against 3.77)
+let F32_DIST_REL = 1.15
+
+//! `prompt` then `toks` through the file at `path` loaded again at `QuantMode.fp32` on the CPU, the device state dropped: the file's
+//! f32 chain, the reference where the CPU q8 chain's activation quantization rounds the device and itself to either side of it
+def f32_chain_rows(path : string; prompt, toks : array<int64>) : array<array<float>> {
+    var f32_model <- load_model_(path, QuantMode.fp32)
+    moe_gpu_drop_model()
+    var rows <- feed_alone(f32_model, mirror_kv_dtype(), prompt, toks)
+    delete f32_model
+    return <- rows
+}
+
+//! the same-or-better witness: the device no further from the f32 chain's rows than `F32_DIST_REL` of the CPU q8 chain's own
+//! summed distance, the f32 rows one step off past that bound; `tr` decodes the logged picks
+def f32_chain_witness(t : T?; tr : Model; what : string; fed : FeedPair; f32_rows : array<array<float>>) {
+    let dist = chain_distances(t, tr, what, fed.gpu, fed.cpu, f32_rows, 0, "the f32 chain", "the CPU q8 chain")
+    t |> success(dist.dev_ref <= F32_DIST_REL * dist.cpu_ref, "{what}: the device sits no further from the f32 chain ({dist.dev_ref}) than {F32_DIST_REL} of the CPU q8 chain's own distance ({dist.cpu_ref})")
+    t |> success(dist.dev_ref_ctrl > F32_DIST_REL * dist.cpu_ref, "{what} control: the f32 rows one step off sit past that bound ({dist.dev_ref_ctrl})")
+}
+
 //! the forced-feed form: an `n`-token `resident_prompt` and `steps` fed tokens through `resident_then_cpu_feed` (`after_gpu`
 //! the caller's witnesses), every row held by `feed_steps_within` at `bar_rel` under `tag`
 def forced_feed_over(t : T?; tr : Model; tag : string; n, steps : int64; bar_rel : float; after_gpu : block<void>) {

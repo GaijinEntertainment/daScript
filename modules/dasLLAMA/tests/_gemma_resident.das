@@ -119,6 +119,27 @@ def gemma_forced_feed(t : T?; n : int64; gf : GemmaFile) {
     }
 }
 
+//! the forced feed held against the file's f32 chain (`f32_chain_rows`) where the CPU q8 chain is no reference: on the E2B Q4_K_M
+//! file its activation quantization reads step 4's top logit 16.70 (x64) and 17.85 (arm64) where the f32 chain reads 19.14 and the
+//! reference build 19.04 (CPU) and 19.05 (Metal), the device 19.28 - every row within the bar of the f32 chain, the one-step-off
+//! control past it, and the device no further from that chain than the CPU q8 chain (`f32_chain_witness`)
+def gemma_forced_feed_exact(t : T?; n : int64; gf : GemmaFile) {
+    with_gemma_rig(t, gf) $(tr) {
+        var ids <- prose_tokens(tr, n + 8l)
+        var prompt <- [for (i in range64(n)); ids[i]]
+        var toks <- [for (i in range64(n, n + 8l)); ids[i]]
+        delete ids
+        var fed <- resident_then_cpu_feed(t, tr, prompt, toks) $ {}
+        var f32_rows <- f32_chain_rows(path_join(models_dir(), gf.file), prompt, toks)
+        feed_steps_within(t, tr, "", n, fed.gpu, f32_rows, toks, GEMMA_LOGIT_BAR_REL, "resident", "the f32 chain")
+        f32_chain_witness(t, tr, "{gf.file}: {n} tokens against the f32 chain", fed, f32_rows)
+        delete f32_rows
+        delete fed
+        delete prompt
+        delete toks
+    }
+}
+
 //! the same tokens through the window chain at once and through the token command one at a time,
 //! on one arm: the two GPU paths' logits at every shared position against each other, then the CPU
 //! arm's own pair as the yardstick of how far a prefill kernel and a decode kernel sit apart on

@@ -76,7 +76,7 @@ def test_gpu_resident_gemma4_e2b_ple_tables(t : T?) {
 }
 
 //! the per-layer gate and projection planes in their own formats on the device (arm `g4e-kq`): the E2B Q4_K_M file ships them
-//! F32 - the router GEMV, the f32 act and the f32 tile read the file's rows - and the Q4_0 file Q4_0, on the q40 GEMV and tiles
+//! F32 - the router GEMV, the f32 act and the f32 tile read the file's rows, the feed held against the file's f32 chain - and the Q4_0 file Q4_0, on the q40 GEMV and tiles
 //! with the f32 classes undispatched (the control)
 [test]
 def test_gpu_resident_gemma4_e2b_ple_planes(t : T?) {
@@ -91,7 +91,11 @@ def test_gpu_resident_gemma4_e2b_ple_planes(t : T?) {
             }
             let act0 = census("ple_act_f32_cls_spv")
             let gemm0 = census("dn_ba_cls_spv")
-            gemma_forced_feed(t, 40l, gf)
+            if (spec.f32) {   //! the Q4_K_M file's CPU q8 chain sits off its f32 chain at one step: `gemma_forced_feed_exact`
+                gemma_forced_feed_exact(t, 40l, gf)
+            } else {
+                gemma_forced_feed(t, 40l, gf)
+            }
             return if (!armed || act0 == NO_CENSUS)
             let act_n = census("ple_act_f32_cls_spv") - act0
             let gemm_n = census("dn_ba_cls_spv") - gemm0
