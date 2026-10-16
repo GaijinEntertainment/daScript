@@ -1638,7 +1638,7 @@ def private handle_catalog_download(req : FrontReq; var resp : Reply) : http_sta
     }
     for (e in model_catalog()) {
         if (e.name == want) {
-            let kind = tower == "vision" ? CatalogCompanionKind.vision : CatalogCompanionKind.drafter
+            let kind = catalog_companion_kind(tower)
             let refusal = empty(tower) ? catalog_download_start(g_catalog_dir, e) : catalog_download_start_companion(g_catalog_dir, e, kind)
             if (!empty(refusal)) {
                 return resp |> JSON(error_body(refusal, "invalid_request_error"), http_status.CONFLICT)
