@@ -229,7 +229,10 @@ window reads the pre-step's rows). The window binds its ids plane (`pf_ids`); th
 the x upload when the table is placed, reading the step's id from a host-visible word
 (`tok_ids_host`) and, for a step that brings no id (`EMB_ID_HOST`: the peel's row, the split
 command's caller), the host's row from a host-visible staging row (`tok_xh_host`) in place - so the
-recorded command serves both. The engine leaves a decode step's row unembedded where the driver
+recorded command serves both. A step that brings no id writes `EMB_ID_HOST` into the id word itself, the
+split command's entry (`vk_rdec_token_split`) included: the word otherwise still holds the pick the chained
+step's prologue copied in (`rd_chain_prologue`), and the gather would embed that last landed pick in place
+of the fed row. The engine leaves a decode step's row unembedded where the driver
 answers the decode gate (`register_embed_dev_gates("vulkan", ...)`, the table placed); the override
 embeds it itself where its path reads a host row (the split command) and the engine backfills it
 where the override declines. The N-row and verify commands keep their row upload: their rows come

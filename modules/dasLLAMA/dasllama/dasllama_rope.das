@@ -37,7 +37,7 @@ let ROPE_FREQS = "rope_freqs.weight"
 //! The per-pair factor tensor a file's rope reads, by the tensors it
 //! ships and the context it serves; "" for none. `orig_ctx` 0 = the
 //! file names no original context, which keeps the short set.
-[arch(at="../ARCHITECTURE_ENGINE.md#rope-scaling-bake")]
+[arch(at="../ARCHITECTURE_ENGINE_MECHANISMS.md#rope-scaling-bake")]
 def rope_factor_tensor(has_short, has_long, has_freqs : bool; seq_len, orig_ctx : int64) : string {
     if (has_long && ((orig_ctx > 0l && seq_len > orig_ctx) || !has_short)) {
         return ROPE_FACTORS_LONG

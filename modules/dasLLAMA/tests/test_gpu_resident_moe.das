@@ -119,6 +119,9 @@ def test_gpu_resident_moe_no_shexp(t : T?) {
 //! 32768 positions asked whole: a 16 GB card cannot hold every expert stack of this 17 GB file beside the mirror, so the first routed layers' go to the host
 let private HOST_LAYERS = MoeFixture(file = "Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf", shexp = false, bar_rel = MOE_LOGIT_BAR_REL, expect_host_layers = true, strict_ctx = 32768l, census = true)
 
+//! the same load asking 30 routed layers onto the host - more than the room forces: the ask raises the plan's own count
+let private HOST_LAYERS_ASKED = MoeFixture(file = "Qwen3-30B-A3B-Instruct-2507-Q4_K_M.gguf", shexp = false, bar_rel = MOE_LOGIT_BAR_REL, expect_host_layers = true, strict_ctx = 32768l, host_layers_ask = 30l)
+
 //! 131072 positions asked whole: on a 16 GB card the mirror leaves room for the dense planes and most of the expert stacks, so the first routed layers' go to the host
 let private HOST_CTX = MoeFixture(file = "Qwen3.6-35B-A3B-UD-IQ2_XXS.gguf", shexp = true, bar_rel = MOE_LOGIT_BAR_REL, expect_host_layers = true, strict_ctx = 131072l, census = true)
 
@@ -141,6 +144,9 @@ def test_gpu_resident_moe_host_layers(t : T?) {
     t |> run("Qwen3-30B-A3B-Q4_K_M: the same across two windows") @(t : T?) {
         assert_pf_window(t)
         moe_forced_feed(t, PF_WINDOW_ROWS + 88l, HOST_LAYERS)
+    }
+    t |> run("Qwen3-30B-A3B-Q4_K_M at the same context with 30 routed layers asked onto the host: the ask raises the count the room forces, one window") @(t : T?) {
+        moe_forced_feed(t, 40l, HOST_LAYERS_ASKED)
     }
 }
 

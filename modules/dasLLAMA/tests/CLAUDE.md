@@ -1667,7 +1667,7 @@ seams, the n-gram side input and the deltanet sigmoid out-gate on the device, th
 between the segments of the window chain and of the split token command - the hybrid file's forced-feed
 logits-tolerance form at the routed block's 20% bar (test_gpu_resident_moe's reading) with the one-step-off
 control, a 48-token prompt and six fed steps, the CPU arm routing as the device arm did through the decode pick
-tape (`ARCHITECTURE_ENGINE.md#moe-pick-tape`: a near-tie of 512 experts flips on kernel-order noise and one
+tape (`ARCHITECTURE_ENGINE_MECHANISMS.md#moe-pick-tape`: a near-tie of 512 experts flips on kernel-order noise and one
 flipped expert of ten moves the row past any bar; the cell asserts the tape aligned select for select, the
 prompt's rows first, and logs the CPU's own decode picks off it); the cell asserts the window chain served the
 prompt (`moe_gpu_resident_prefills` up by one) and the driver stayed armed; where the plan armed the hot
@@ -2102,13 +2102,16 @@ matrices at subgroup 32, and under `DASLLAMA_COOPMAT=sdot4`, the expert pieces r
 route on, one region, and the context pins (`set_gpu_ctx_max` / `set_gpu_ctx_strict`, at their default for
 the fixtures with no asked context) for its load and restores the levers after through their getters, and
 every cell asserts the host-layer count `gpu_resident_host_layers` reads - zero where the card holds the
-experts whole, the red naming the environment knobs that override the pins. Two fixtures take the
+experts whole and the fixture asks none (the load pins the ask at the fixture's, 0 included, so
+`DASLLAMA_GPU_HOST_LAYERS` never reaches it), the red naming the environment knobs that override the pins. Three fixtures take the
 host-layer form: `test_gpu_resident_moe_host_layers` on the 17 GB Qwen3-30B-A3B Q4_K_M with 32768
 positions asked whole, which a 16 GB card does not hold beside every expert, so the plan moves the first
 routed layers' experts to the host (the cell asserts not all did; it skips on a card that holds every stack,
 and on one too small for the mirror and the dense planes, by `moe_gpu_resident_memory_decline`)
 and the split token command and the cut window chain run against the CPU at both lengths, the two-window
-cell pinning the window (`assert_pf_window`); `test_gpu_resident_moe_ctx_strict` on the Qwen3.6-35B
+cell pinning the window (`assert_pf_window`), and its third cell the same load asking 30 routed layers onto
+the host (`MoeFixture.host_layers_ask`, `set_gpu_host_layers`) - past the count the room forces - asserting at
+least 30 serve there; `test_gpu_resident_moe_ctx_strict` on the Qwen3.6-35B
 UD-IQ2_XXS hybrid with the context asked whole (`set_gpu_ctx_max(131072)` + `set_gpu_ctx_strict`, the
 pins read first and put back after the load), asserting the armed region holds exactly that context
 and experts yielded to it. The census witnesses count the device's routed blocks (the layers less the

@@ -210,10 +210,10 @@ session keeps its K/V only in a device K/V region and has no host cache - stay w
 `gpu_device_sessions()`, a scheduler counting as its own `max_streams` of them.** The driver
 panics on a device-home session that finds no region.
 
-**A diff that sets a pin the resident plan reads - a value the loader plans the mirror from:
-`set_gpu_resident_regions`, `set_gpu_ctx_max` / `DASLLAMA_GPU_CTX_MAX`, `set_gpu_ctx_strict` /
-`DASLLAMA_GPU_CTX_STRICT`, `set_gpu_kv_dtype` / `DASLLAMA_GPU_KV` - sets it before the load it
-governs.** A value set after the load never reaches the plan.
+**A diff that calls a `set_gpu_*` or `reset_gpu_*` function of `dasllama/dasllama_core.das` that
+forwards into `dasllama/dasllama_gpu_resident.das` calls it before the load it governs.** The load
+reads these values once, to decide what the whole-model GPU driver holds on the device; a value set
+after the load never reaches that decision.
 
 **A diff that adds an `RdecPass` value gives it its own reader-facing sentence in
 `rdec_pass_words`, in plain words that name no part of the engine - no pass, region, mirror,
