@@ -78,8 +78,10 @@ jobs:
   daspkg_index:
     needs: pre_job
     if: needs.pre_job.outputs.nightly == 'true'
+    # actions: write for the called daspkg_unit_macos job's sccache refresh step.
     permissions:
       contents: read
+      actions: write
     uses: ./.github/workflows/nightly_daspkg_index.yml
 
   imgui:

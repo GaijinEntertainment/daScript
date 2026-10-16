@@ -2302,7 +2302,7 @@ def private rope_override_from_env {
 }
 
 //! The tools' spelling of DASLLAMA_ROPE_SCALING / ROPE_SCALE / YARN_ORIG_CTX, set before the load; the loader checks the kind
-[arch(at = "../ARCHITECTURE_ENGINE.md#rope-scaling-bake")]
+[arch(at = "../ARCHITECTURE_ENGINE_MECHANISMS.md#rope-scaling-bake")]
 def public set_rope_scaling_override(o : RopeScalingOverride) {
     g_rope_override = o
     g_rope_override.kind = to_lower(o.kind)

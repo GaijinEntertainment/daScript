@@ -2429,6 +2429,7 @@ if(_arch_specs AND NOT ${DAS_TOOLS_DISABLED} AND NOT CMAKE_CROSSCOMPILING)
     foreach(_spec IN LISTS _arch_specs)
         string(REPLACE "|" ";" _parts "${_spec}")
         list(GET _parts 0 _scan)
+        string(REPLACE "," ";" _scan "${_scan}")
         list(GET _parts 1 _base)
         list(GET _parts 2 _dest)
         # keyed by base, not list position: a registry reorder must not repoint a

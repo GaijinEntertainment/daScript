@@ -218,8 +218,10 @@ def match_struct(what : TypeDeclPtr; wths : ExprMakeStruct?; access : Expression
         return false
     }
     let wthsLength = length(wths.structs)
+    return true if (wthsLength == 0)
     if (wthsLength != 1) {
-        to.errors |> match_error("{describe(what)} number of elements does not match [[describe(wths.makeType)}[{wthsLength}] ... ]]", wths.at)
+        to.errors |> match_error("{describe(what)} number of elements does not match " +
+            "[[{describe(wths.makeType)}[{wthsLength}] ... ]]", wths.at)
         return false
     }
     var inscope fields : table<string>
@@ -262,7 +264,8 @@ def match_tuple(what : TypeDeclPtr; wths : ExprMakeTuple?; access : Expression?;
     let whatDim = length(what.argTypes)
     if (tagIndex == INT_MAX) {
         if (whatDim != wthsLength) {
-            to.errors |> match_error("{describe(what)} number of elements does not match [[describe(wths.makeType)} ... ]] tuple", wths.at)
+            to.errors |> match_error("{describe(what)} number of elements does not match " +
+                "[[{describe(wths.makeType)} ... ]] tuple", wths.at)
             return false
         }
     } else {
@@ -299,7 +302,8 @@ def match_array(what : TypeDeclPtr; wths : ExprMakeArray?; dynamic : bool; acces
         let whatDim = what.fixedDim
         if (tagIndex == INT_MAX) {
             if (whatDim != wthsLength) {
-                to.errors |> match_error("{describe(what)} number of elements does not match [[describe(wths.makeType)}[{wthsLength}] ... ]] array", wths.at)
+                to.errors |> match_error("{describe(what)} number of elements does not match " +
+                    "[[{describe(wths.makeType)}[{wthsLength}] ... ]] array", wths.at)
                 return false
             }
         } else {
@@ -358,7 +362,8 @@ def match_variant(what : TypeDeclPtr; wths : ExprMakeVariant?; access : Expressi
     }
     let wthsLength = length(wths.variants)
     if (wthsLength != 1) {
-        to.errors |> match_error("{describe(what)} number of variant elements does not match [[describe(wths.makeType)}[{wthsLength}] ... ]]", wths.at)
+        to.errors |> match_error("{describe(what)} number of variant elements does not match " +
+            "[[{describe(wths.makeType)}[{wthsLength}] ... ]]", wths.at)
         return false
     }
     assume mf = wths.variants[0]
@@ -581,8 +586,11 @@ def match_multi(types : array<TypeDeclPtr>; accesses : array<Expression?>; wth :
 }
 
 [macro_function]
-def match_bind(what : TypeDeclPtr; name : ExprVar?; access : Expression?; var to : MatchTo) {
-    //! ``name`` in a ``=>`` arm, ``$v(name)`` in an ``if (pattern)`` arm: binds ``name`` to the matched part.
+def match_bind(what : TypeDeclPtr; name : ExprVar?; access : Expression?; var to : MatchTo;
+               node_class : string = "") {
+    //! ``name`` in a ``=>`` arm, ``$v(name)`` in an ``if (pattern)`` arm:
+    //! binds ``name`` to the matched part. A non-empty ``node_class``
+    //! binds the AST node already narrowed to that class.
     let tname = string(name.name)
     if (to.declarations |> key_exists(tname)) {
         to.errors |> match_error("duplicate variable {bound_name(tname)}", name.at)
@@ -592,11 +600,22 @@ def match_bind(what : TypeDeclPtr; name : ExprVar?; access : Expression?; var to
     if (is_expression_ptr(what)) {
         cap = qmacro(match_peel_r2v($e(cap)))
     }
+    if (!empty(node_class)) {
+        cap = new ExprAsVariant(at = name.at, value = cap, name := node_class)
+    }
     cap |> force_at(name.at)
     unsafe(to.declarations[tname]) = cap
     to.by_ref |> insert(tname) if (what == null || !what.canCopy || what.isPointer)
     log_m("\tadd variable {tname} as {describe(access)}\n")
     return true
+}
+
+def private node_class(what : TypeDeclPtr; pat : Expression?) : string {
+    //! The AST class an ``ExprX(...)`` pattern tests on an Expression
+    //! pointer; empty for any other pattern.
+    return "" if (!is_expression_ptr(what) || !(pat is ExprMakeStruct))
+    let mt = (pat as ExprMakeStruct).makeType
+    return mt != null && mt.isHandle && isExpression(mt) ? string(mt.annotation.name) : ""
 }
 
 [macro_function]
@@ -923,6 +942,31 @@ def match_view(what : TypeDeclPtr; var wth : ExprMakeTuple?; access : Expression
     return match_any(rtype, wth.values[1], compute, to)
 }
 
+def private bound_name_of(pat : Expression?) : ExprVar? {
+    //! The name a bare-name pattern binds; null for any other pattern and
+    //! for ``_``.
+    let bare = match_peel_r2v(pat)
+    return (bare is ExprVar) && (bare as ExprVar).name != "_" ? bare as ExprVar : null
+}
+
+[macro_function]
+def match_both(what : TypeDeclPtr; both : ExprOp2?; access : Expression?; var to : MatchTo) : bool {
+    //! ``p1 & p2``: both match. A name beside an AST class pattern binds
+    //! the node at that class.
+    let left_class = node_class(what, both.left)
+    let right_class = node_class(what, both.right)
+    let left_name = bound_name_of(both.left)
+    let right_name = bound_name_of(both.right)
+    if (!empty(left_class) && right_name != null) {
+        return (match_any(what, both.left, access, to)
+            && match_bind(what, right_name, access, to, left_class))
+    } elif (!empty(right_class) && left_name != null) {
+        return (match_any(what, both.right, access, to)
+            && match_bind(what, left_name, access, to, right_class))
+    }
+    return match_any(what, both.left, access, to) && match_any(what, both.right, access, to)
+}
+
 [macro_function]
 def match_any(what : TypeDeclPtr; wth : Expression?; access : Expression?; var to : MatchTo) {   // nolint:STYLE037 - exact-type `is` ladder over TypeDecl shapes
     //! Matches one pattern against ``access`` of type ``what``: hands the pattern to the match_* for its shape, which adds the runtime tests to ``to.conditions`` and the bound names to ``to.declarations``.
@@ -984,7 +1028,7 @@ def match_any(what : TypeDeclPtr; wth : Expression?; access : Expression?; var t
     } elif (wth.__rtti |> starts_with("ExprConst")) {
         return match_const(what, wth, access, to)
     } elif (to.bind_names && (wth is ExprOp2) && (wth as ExprOp2).op == "&") {
-        return match_any(what, (wth as ExprOp2).left, access, to) && match_any(what, (wth as ExprOp2).right, access, to)
+        return match_both(what, wth as ExprOp2, access, to)
     } elif (to.bind_names) {
         to.errors |> match_error("`{describe_pattern(wth)}` is not a pattern; compare against a computed value with `match_expr({describe_pattern(wth)})`", wth.at)
         return false
@@ -1038,7 +1082,7 @@ def arm_body(arm : Expression?; as_value : bool; binds : array<Expression?>) : E
         nblk.list |> emplace_new <| clone_expression(b)
     }
     var body = arm is ExprIfThenElse ? (arm as ExprIfThenElse).if_true : (arm as ExprMakeTuple).values[1]
-    if (as_value) {
+    if (as_value && !(body is ExprMakeBlock)) {
         nblk.list |> emplace_new <| new ExprReturn(at = arm.at, subexpr = clone_expression(body))
         return nblk
     }
@@ -1519,14 +1563,6 @@ class MatchMacro : AstCallMacro {
         macro_verify(nargs == 2 || arrows > 0, prog, expr.at, "match on several values needs `pattern => body` arms")
         var parent <- match_parent(expr)
         let as_value = arrows > 0 && !parent.is_statement
-        if (as_value) {
-            for (ee in eblk.list) {
-                if ((ee as ExprMakeTuple).values[1] is ExprMakeBlock) {
-                    macro_error(prog, ee.at, "match used as a value takes `pattern => expression` arms, not `$`-block bodies")
-                    return null
-                }
-            }
-        }
         var catch_all = false
         var iff : Expression?
         let eli = length(eblk.list)

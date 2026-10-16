@@ -432,6 +432,18 @@ def public expert_fmt(t : Model; tags : array<KqFmt>; l : int64) : KqFmt => t.ex
 //! an expert plane format the per-op expert chain reads: q8, a superblock format, a per-32 one (the GEMVs and the batch tiles)
 def public expert_chain_fmt_ok(f : KqFmt) : bool => f == KqFmt.q8 || kq_sb(f) || kq_dense_b32(f) || f == KqFmt.mx4
 
+[arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command")]
+def private moe_trace_row(s : Session; l, k, dim : int64) {
+    return if (!g_env_gpu.gpu_prof)
+    var xb_l1 = 0.0
+    var acc_l1 = 0.0
+    for (i in range64(dim)) {
+        xb_l1 += abs(s.xb[i])
+        acc_l1 += abs(s.moe_acc[i])
+    }
+    to_log(LOG_INFO, "moe_k l={l} s={intptr(unsafe(addr(s)))} k={k} e0={s.moe_idx[0]} w0={s.moe_w[0]} xb={xb_l1} acc={acc_l1}\n")   // nolint:PERF026,PERF028,LINT019 - DASLLAMA_GPU_PROF-gated trace; the hot path reaches it only through the resident driver's compile
+}
+
 [arch(at="../ARCHITECTURE_GPU_VULKAN_PEROP.md#perop-routed-form")]
 def public moe_routed_form(t : Model; l : int64) : MoeGpuFfnForm {
     let c = t.config
@@ -678,6 +690,7 @@ def moe_experts_apply(t : Model; var s : Session; l : int64) { // nolint:STYLE03
             prof_add("moe_reduce", ts_red)
         }
     }
+    moe_trace_row(s, l, k, dim)
 }
 
 //! s.xb quantized once into the dedicated moe_xq / moe_xs, which the down requant does not clobber: a q8 shared expert downstream reads that Q8_0 image
@@ -775,6 +788,7 @@ def moe_routed_sum_k(t : Model; var s : Session; l, k : int64) {
     moe_quant_feed(t, s, l, moe_layer_kq(t, l))
     moe_routed_plain(t, s, l, k, c.moe_exps_bias, prof_ticks())
     moe_routed_reduce(s, k, c.dim)
+    moe_trace_row(s, l, k, c.dim)
 }
 
 var private g_shexp_gpu_steps = 0l   //! decode rows whose shared expert the per-op tier's overlapped chain served (read on the main context only)
@@ -987,7 +1001,7 @@ var private @scratch g_moe_tape_lg : array<float>
 
 //! The decode pick tape, a parity instrument: `record` takes every decode select's picks in call order, `replay` pins a
 //! recorded tape and counts the row's own picks it did not carry, `off` stops
-[arch(at="../ARCHITECTURE_ENGINE.md#moe-pick-tape")]
+[arch(at="../ARCHITECTURE_ENGINE_MECHANISMS.md#moe-pick-tape")]
 def moe_pick_tape(mode : MoePickTape) {
     g_moe_tape_mode = mode
     g_moe_tape_pos = 0l
@@ -1000,7 +1014,7 @@ def moe_pick_tape(mode : MoePickTape) {
     }
 }
 
-[arch(at="../ARCHITECTURE_ENGINE.md#moe-pick-tape")]
+[arch(at="../ARCHITECTURE_ENGINE_MECHANISMS.md#moe-pick-tape")]
 def moe_pick_tape_lane(first, stride, k : int64) {
     g_moe_tape_mode = MoePickTape.replay
     g_moe_tape_pos = first * k
@@ -1016,7 +1030,7 @@ def moe_pick_tape_stats() : tuple<seen : int64; miss : int64> => (seen = g_moe_t
 def moe_pick_tape_mode() : tuple<mode : MoePickTape; stride : int64> => (mode = g_moe_tape_mode, stride = g_moe_tape_stride)
 
 //! the rows' taped picks under a replay, null otherwise
-[arch(at="../ARCHITECTURE_ENGINE.md#moe-pick-tape")]
+[arch(at="../ARCHITECTURE_ENGINE_MECHANISMS.md#moe-pick-tape")]
 def moe_pick_tape_rows_begin(npos, k : int64) : int64 const? {
     if (g_moe_tape_mode != MoePickTape.replay) {
         return null

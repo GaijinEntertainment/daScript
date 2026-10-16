@@ -75,6 +75,12 @@ sum (`ARCHITECTURE_GPU_VULKAN_MOE.md#vk-gemma4-moe-block`) - on a tier with the 
 segment opens as that command does: under the device token gather it reads `EMB_ID_HOST` and the host's row beside it
 (`rd_stage_row`), never a row in `x_host` the gather does not read.
 
+**Under `DASLLAMA_GPU_PROF` the host's routed sum shows a stale feed.** Each routed row the host sums logs
+one `moe_k` line - the layer, the session, the first pick and its weight, and the L1 of the feed row and of
+the routed sum (`moe_trace_row`) - from the split command's host segment (`moe_routed_sum_k`) and from the
+CPU forward (`moe_experts_apply`) alike. Over a forced feed, a split-command feed row whose L1 holds
+constant across fed tokens while the CPU chain's moves says the device fed every step the same row.
+
 ### The hot expert pool {#hc-hot-pool}
 
 **A routed layer keeps its hot experts in device slots, and a step's picks split: the device runs the
@@ -85,14 +91,17 @@ card, the host's chain 61 us an expert), so the slots the card has room for pay.
 slots a routed layer (`RdHotLayer`: a gate, an up and a down plane pair, each `slots` experts in the
 plane's device layout, a slot's stride the expert's weight blocks), and the same count on every layer
 with host experts - every routed layer of a hyper-connection model, the first `host_layers` of a plain
-MoE the card does not hold whole at a context asked whole; a layer whose experts the card holds needs
-none. The plan picks those layers (`resident_plan_host_layers`) only under a strict pin (`set_gpu_ctx_strict`,
-the server's `--ctx`), where the mirror at the asked context leaves no room for every expert stack: the
-fewest routed layers' expert stacks - the first in layer order - go to the host for the rest to fit
-(`resident_host_layers_fit`), the pool over those layers takes what is left. Unasked, a plain MoE the card
-does not hold whole stays with the per-op rails, which decode faster at every context (Qwen3-30B-A3B
-Q4_K_M on the reference card, `debug-jit`: tg128 64.0 against this form's 41.8, tg64 at 8192 positions 64.5
-against 47.8) and lose only the long prompt (pp8192 93.4 against this form's flat ~540; `PERF_LEDGER.md`'s
+MoE the card does not hold whole at a context asked whole or that an ask names; a layer whose experts the
+card holds needs none. A host-layers ask (`set_gpu_host_layers`, `DASLLAMA_GPU_HOST_LAYERS`) moves the first
+that many routed layers' expert stacks to the host whatever the card holds, capped at the routed layer count
+(`resident_plan_pick`): the form, its split token command and its cut window chain run on any card, not only
+on one whose room forces them. Under a strict pin (`set_gpu_ctx_strict`, the server's `--ctx`), where the
+mirror at the asked context leaves no room for every expert stack, the plan (`resident_plan_host_layers`)
+moves the fewest routed layers' expert stacks - the first in layer order - for the rest to fit
+(`resident_host_layers_fit`), and never fewer than the ask; the pool over those layers takes what is left.
+With neither, a plain MoE the card does not hold whole stays with the per-op rails, which decode faster at every context (Qwen3-30B-A3B
+Q4_K_M on the reference card, `debug-jit`: tg128 64.0 against this form's 48.4, tg64 at 8192 positions 64.5
+against 46.8) and lose only the long prompt (pp8192 93.4 against this form's flat 431-534; `PERF_LEDGER.md`'s
 host-layers entry carries the rows).
 The count is the resident plan's (`ResidentPlan.hot_slots`, `resident_hot_slots`), sized with the
 mirror because the two share the card's room. Unasked, the pool takes 64 slots where they fit beside

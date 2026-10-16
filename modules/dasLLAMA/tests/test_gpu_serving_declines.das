@@ -1384,3 +1384,34 @@ def test_kv_ring_floor_check(t : T?) {
         delete s
     }
 }
+
+[test]
+def test_resident_host_layers_pin(t : T?) {
+    t |> run("the host-layers pin: set reads back, a negative lifts it, zero pins the plan's own count, put back as found") @(t : T?) {
+        let pin0 = gpu_host_layers_pin_()
+        set_gpu_host_layers_(3l)
+        t |> equal(gpu_host_layers_pin_(), 3l, "a pin of 3 reads back")
+        set_gpu_host_layers_(-7l)
+        t |> equal(gpu_host_layers_pin_(), HOST_LAYERS_UNPINNED, "a negative ask lifts the pin")
+        set_gpu_host_layers_(0l)
+        t |> equal(gpu_host_layers_pin_(), 0l, "zero is a pin - the plan's own count over the environment's ask")
+        set_gpu_host_layers_(pin0)
+        t |> equal(gpu_host_layers_pin_(), pin0, "the pin put back reads as found")
+    }
+    t |> run("the host-layer count an ask puts to the plan: none for no ask, capped at the routed layers where the plain split form takes the model, none where it does not") @(t : T?) {
+        var c = Config()
+        c.n_expert = 64l
+        c.n_expert_used = 4l
+        let plain = rdec_hc_installed()   //! the split seats sit on the Vulkan tier; without them no ask applies
+        t |> equal(resident_host_layers_want(c, 24l, 0l), -1l, "no ask leaves the plan its own count")
+        t |> equal(resident_host_layers_want(c, 24l, 4l), plain ? 4l : -1l, "an ask under the routed count passes whole where the split form takes the model")
+        t |> equal(resident_host_layers_want(c, 24l, 40l), plain ? 24l : -1l, "an ask past the routed count is capped at it")
+        var hc = Config()
+        hc.n_expert = 512l
+        hc.n_expert_used = 10l
+        hc.hyper_conn = true
+        t |> equal(resident_host_layers_want(hc, 24l, 4l), -1l, "a hyper-connection model takes no ask: every routed layer serves on the host regardless")
+        let dense = Config()
+        t |> equal(resident_host_layers_want(dense, 0l, 4l), -1l, "a dense model takes no ask")
+    }
+}
