@@ -38,7 +38,9 @@ naming the context it would fit at; a mirror under the asked context says why (`
 fragmentation: a mirror sized to the last byte fails on a heap the previous model fragmented
 (`resident_plan_pick`). The pin is what lets a
 four-stream bench row home a 12B at 648 positions a region on a 16 GB card, where the binding
-cap's 6238 a region asks for more K/V than the weights leave.
+cap's 6238 a region asks for more K/V than the weights leave. **A layer's q/k/v, and its gate/up, read one activation image, so a
+group of two activation forms declines the driver** (`resident_layer_decline`); no stocked gemma file mixes them - each group shares
+one form layer by layer - and a file that mixes gate and up rides the per-op dense FFN rail, which feeds each plane its own image.
 
 **The mirror is a run of slabs, each a buffer pair bound as one SSBO range a side, and the
 device's single-binding range caps the context at the widest layer's row before any byte is
