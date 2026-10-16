@@ -3530,12 +3530,16 @@ class template GkTopKRow : GkWgReduce {
     @kargs pa : GkTopKArgs
     @template_constant LANES : uint = 256u   //!< the workgroup's lanes
     @template_constant DEPTH : int = 1       //!< the logits a lane holds
+    @template_constant DSCALE : bool = false   //!< the per-expert down scale row folds into the picked weights where `dsoff` names one
     @workgroup parti : uint[64]
     @workgroup pick : uint[64]
     @workgroup pickw : float[64]
 
     //! row `p`'s logit of expert `e` as the select reads it; a stamp reads the row's plane
     def abstract logit_at(p, e : uint) : float
+
+    //! expert `e`'s down scale in the layer's row at `dsoff`; a DSCALE stamp reads its plane
+    def abstract down_scale(e : uint) : float
 
     [arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-topk-depth")]
     def select_row(row, ne, k : uint; raw : bool) {   // nolint:STYLE038 - the softmax and the k argmax passes over the lane's register logits, one pass a pick
@@ -3633,14 +3637,25 @@ class template GkTopKRow : GkWgReduce {
         ws = moe_renorm_sum(ws)
     }
 
-    //! pick jj's routing weight into `wj`: renormalized over the sum `ws` when norm is set, then scaled
-    def pick_weight_into(jj, norm : uint; ws, wscale : float; var wj : float&) {
+    //! pick jj (expert `ex`)'s routing weight into `wj`: renormalized over the sum `ws` when norm is set, then scaled
+    def pick_weight_into(jj, ex, norm : uint; ws, wscale : float; var wj : float&) {
         wj = pickw[jj]
         if (norm != 0u) {
             wj /= ws
         }
+        scale_weight(ex, wscale, wj)
+    }
+
+    //! a picked weight of expert `ex` under the model's global scale, then its down scale - the CPU select's order
+    [arch(at="../ARCHITECTURE_GPU_PREFILL_MOE.md#moe-wscale")]
+    def scale_weight(ex : uint; wscale : float; var wj : float&) {
         if (wscale != 0.0 && wscale != 1.0) {
             wj *= wscale
+        }
+        static_if (DSCALE) {
+            if (pa.dsoff != 0xFFFFFFFFu) {   //! GK_NO_DSCALE: the Metal emitter reads no module global
+                wj *= down_scale(ex)
+            }
         }
     }
 }

@@ -475,10 +475,10 @@ def test_moe_metal_expert_count(t : T?) {
 
 [test]
 def test_moe_metal_expert_weights_scale(t : T?) {
-    t |> run("a global expert_weights_scale serves on Metal: the select's scale pass carries it") @(t : T?) {
+    t |> run("a global expert_weights_scale serves on Metal: the select carries it") @(t : T?) {
         var m <- moe_shell(KqFmt.k4)
         m.config.expert_weights_scale = 2.5
-        t |> success(moe_metal_ok(m), "a scale of 2.5 serves (MetalMoeWScale over the scale row behind the select)")
+        t |> success(moe_metal_ok(m), "a scale of 2.5 serves (the select's args carry it)")
         m.config.n_expert = 513l
         t |> success(!moe_metal_ok(m), "the control: the same shell past the select stamps' reach still declines")
         delete m

@@ -4002,6 +4002,8 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_dn_ba = compile_stamp(MetalDnBa_metal_q8_gemv_msl, ok)
     g_pso_moe_select = compile_stamp(MetalMoeSelect_metal_moe_select_msl, ok)
     g_pso_moe_select_512 = compile_stamp(MetalMoeSelect512_metal_moe_select_msl, ok)
+    g_pso_moe_select_ds = compile_stamp(MetalMoeSelectDs_metal_moe_select_msl, ok)
+    g_pso_moe_select_512_ds = compile_stamp(MetalMoeSelect512Ds_metal_moe_select_msl, ok)
     g_pso_moe_gemv_q8 = compile_stamp(metal_moe_gemv_q8_msl, ok)
     g_pso_moe_kq_k4 = compile_stamp(metal_moe_gemv_k4_msl, ok)
     g_pso_moe_kq_k3 = compile_stamp(metal_moe_gemv_k3_msl, ok)
@@ -4020,7 +4022,6 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_moe_combine = compile_stamp(metal_moe_combine_msl, ok)
     g_pso_moe_combine_sh = compile_stamp(metal_moe_combine_sh_msl, ok)
     g_pso_g4rnorm = compile_stamp(metal_g4_router_norm_msl, ok)
-    g_pso_moe_wscale = compile_stamp(metal_moe_wscale_msl, ok)
     g_pso_swiglu_oai = compile_stamp(MetalSwigluOai_metal_swiglu_oai_msl, ok)
     g_pso_moe_gemv_mx4 = compile_stamp(metal_moe_gemv_mx4_msl, ok)
     g_pso_moe_gemv_q51 = compile_stamp(metal_moe_gemv_q51_msl, ok)
@@ -5466,9 +5467,10 @@ def metal_kernels_release {
     release_handles(g_pso_emb_kq_k2, g_pso_emb_kq_iq3s, g_pso_emb_kq_iq3xxs, g_pso_emb_kq_iq2s, g_pso_emb_kq_iq2xs, g_pso_emb_kq_iq2xxs)
     release_handles(g_pso_emb_b32_q51, g_pso_emb_b32_iq4nl32, g_pso_emb_b32_q4032, g_pso_emb_b32_q5032)
     release_handles(g_pso_moe_router, g_pso_moe_select, g_pso_moe_select_512, g_pso_moe_gemv_q8, g_pso_moe_kq_k4, g_pso_moe_kq_k3)
+    release_handles(g_pso_moe_select_ds, g_pso_moe_select_512_ds)
     release_handles(g_pso_moe_kq_iq3s, g_pso_moe_kq_iq3xxs, g_pso_moe_kq_iq2s, g_pso_moe_kq_iq2xs, g_pso_moe_kq_iq2xxs, g_pso_moe_kq_iq4xs)
     release_handles(g_pso_moe_kq_iq3s_f4)
-    release_handles(g_pso_moe_kq_q40, g_pso_moe_kq_k5, g_pso_moe_kq_k6, g_pso_moe_combine, g_pso_g4rnorm, g_pso_moe_wscale)
+    release_handles(g_pso_moe_kq_q40, g_pso_moe_kq_k5, g_pso_moe_kq_k6, g_pso_moe_combine, g_pso_g4rnorm)
     release_handles(g_pso_moe_combine_sh)
     release_handles(g_pso_swiglu_oai, g_pso_moe_gemv_mx4, g_pso_moe_gemv_q51, g_pso_moe_gemv_iq4nl32, g_pso_dn_conv, g_pso_dn_conv_n, g_pso_dn_conv_n4, g_pso_dn_hist, g_pso_dn_l2)
     release_handles(g_pso_moe_kq_iq4nl, g_pso_moe_kq_k2, g_pso_kq_q51, g_pso_kq_iq4nl32, g_pso_kq_mm_b51, g_pso_kq_mm_b4n32)
@@ -6998,16 +7000,19 @@ def moe_router_args(ne, dim, ncols : int64; xs : int64 = 0l; hasb : bool = false
 
 //! The router select on the template both homes stamp (`GkTopKRow`): one simdgroup a stream, DEPTH logits a lane; lane 0 writes
 //! the stream's selection row - the picks (`seli`), then their weights (`selw`, the same buffer's float view): the softmax
-//! weights renormed under `norm`, or under `raw` (gpt-oss softmax_weight, the select on the raw logits) the softmax over the picks
+//! weights renormed under `norm`, or under `raw` (gpt-oss softmax_weight, the select on the raw logits) the softmax over the picks;
+//! every weight then under the model's global scale and the layer's per-expert down scales (`scale_weight`)
 [ |> template_struct_instance]
 class template MetalMoeSelectT : GkTopKRow {
     @ssbo @binding = 0 logits : array<float>                 //! [streams x lstride] router logits
     @ssbo @binding = 1 @role = "write" seli : array<uint>    //! the selection rows, uint view: stream s's picks at s 2k
     @ssbo @binding = 2 @role = "alias" selw : array<float>   //! the same rows' float view: stream s's weights at s 2k + k
+    @ssbo @binding = 3 @role = "weight" ds : array<float>    //! the per-expert down scales (gemma-4), read at dsoff when the args name a row
     override LANES = 32u
     override DEPTH = 8
 
     def override logit_at(p, e : uint) : float => logits[p * pa.lstride + e]
+    def override down_scale(e : uint) : float => ds[pa.dsoff + e]
 
     [metal_kernel]
     def metal_moe_select {
@@ -7035,10 +7040,12 @@ class template MetalMoeSelectT : GkTopKRow {
             jj = 0u
             while (jj < pa.k) {
                 var wj = 0.0
+                let ex = min(pick[jj], pa.ne - 1u)
                 if (pa.raw != 0u) {
                     wj = exp(max(pickw[jj] - mxw, -80.0)) / sw
+                    scale_weight(ex, pa.wscale, wj)
                 } else {
-                    pick_weight_into(jj, pa.norm, sw, 0.0, wj)
+                    pick_weight_into(jj, ex, pa.norm, sw, pa.wscale, wj)
                 }
                 selw[sel0 + pa.k + jj] = wj
                 jj++
@@ -7054,6 +7061,18 @@ class MetalMoeSelect : MetalMoeSelectT {
 [metal_dispatch(name = "enc_moe_select_512", pso = "g_pso_moe_select_512", tgmem = "MetalMoeSelect512_metal_moe_select_msl_tgmem", tg = 32, grid = "nst", params = "nst : int64")]
 class MetalMoeSelect512 : MetalMoeSelectT {
     override DEPTH = 16
+}
+
+//! the gemma-4 stamps: the down scales in the select (`ARCHITECTURE_GPU_PREFILL_MOE.md#moe-wscale` says why they are stamps of their own)
+[metal_dispatch(name = "enc_moe_select_ds", pso = "g_pso_moe_select_ds", tgmem = "MetalMoeSelectDs_metal_moe_select_msl_tgmem", tg = 32, grid = "nst", params = "nst : int64")]
+class MetalMoeSelectDs : MetalMoeSelectT {
+    override DSCALE = true
+}
+
+[metal_dispatch(name = "enc_moe_select_512_ds", pso = "g_pso_moe_select_512_ds", tgmem = "MetalMoeSelect512Ds_metal_moe_select_msl_tgmem", tg = 32, grid = "nst", params = "nst : int64")]
+class MetalMoeSelect512Ds : MetalMoeSelectT {
+    override DEPTH = 16
+    override DSCALE = true
 }
 
 // q4_K/q5_K kmask scale decode for ONE 32-element sub-block js (0..7): the 6-bit sc and min -
@@ -7342,71 +7361,26 @@ class MetalG4RouterNorm {
     }
 }
 
-// gemma4 per-expert down-scale fold (stage 3): selw[row][j] *= ds[seli[row][j]] — the CPU
-// folds ffn_down_exps_s into the selection weights right after select.
-[metal_dispatch(name = "enc_moe_wscale", pso = "g_pso_moe_wscale", tg = 32, grid = "nst", params = "nst : int64")]
-class MetalMoeWScale {
-    @ssbo @binding = 0 seli : array<uint>   // selection rows, uint view (idx of row r at r*2k)
-    @ssbo @binding = 1 @role = "alias" selw : array<float>  // the same buffer, float view (w of row r at r*2k + k)
-    @ssbo @binding = 2 @role = "weight" ds : array<float>    // [ne] this layer's per-expert down scales
-    @uniform @binding = 3 nk : uint
-
-    [metal_kernel(name="metal_moe_wscale_msl")]
-    def metal_moe_wscale {
-        let row = gl_WorkGroupID.x
-        let j = gl_LocalInvocationID.x
-        if (j < nk) {
-            selw[row * 2u * nk + nk + j] *= ds[seli[row * 2u * nk + j]]
-        }
-    }
-}
-
-var private g_wscale_row : MetalBuffer?   //! the model's `expert_weights_scale` once an expert, the scale row `MetalMoeWScale` multiplies by
-var private g_wscale_val = 0.0
-var private g_wscale_ne = 0l
-
-def private wscale_row_drop {
-    if (g_wscale_row != null) {
-        metal_release(g_wscale_row)
-        g_wscale_row = null
-    }
-    g_wscale_ne = 0l
-}
-
-[init]
-def private wscale_row_register {
-    register_reload_prep(@@wscale_row_drop)
-}
-
+//! the router select over `nrows` streams' logits into `bsel`, every picked weight under the model's `expert_weights_scale` and,
+//! where `bds` is the layer's per-expert down-scale row (gemma-4), that expert's scale - the select's own fold, no pass after it
 [arch(at="../ARCHITECTURE_GPU_PREFILL_MOE.md#moe-wscale")]
-def enc_moe_select_rows(enc : MetalComputeEncoder?; c : Config; blg, bsel, bnk : MetalBuffer?; nrows : int64; lstride : int64 = 0l) {
+def enc_moe_select_rows(enc : MetalComputeEncoder?; c : Config; blg, bsel : MetalBuffer?; nrows : int64; lstride : int64 = 0l;
+                        bds : MetalBuffer? = null) {
     let sw = c.moe_gate == MoeGate.softmax_weight
     var ka = GkTopKArgs(ne = uint(c.n_expert), k = uint(c.n_expert_used), norm = !sw && c.norm_topk_prob ? 1u : 0u,
+        wscale = c.expert_weights_scale, dsoff = bds != null ? 0u : GK_NO_DSCALE,
         lstride = uint(lstride > 0l ? lstride : c.n_expert), raw = sw ? 1u : 0u)
-    if (c.n_expert > 256l) {
-        enc_moe_select_512(enc, blg, bsel, bsel, ka, nrows)
-    } else {
-        enc_moe_select(enc, blg, bsel, bsel, ka, nrows)
-    }
-    let ws = c.expert_weights_scale
-    if (ws != 0.0 && ws != 1.0) {
-        if (g_wscale_row == null || g_wscale_val != ws || g_wscale_ne != c.n_expert) {
-            wscale_row_build(ws, c.n_expert)
+    if (bds != null) {
+        if (c.n_expert > 256l) {
+            enc_moe_select_512_ds(enc, blg, bsel, bsel, bds, ka, nrows)
+        } else {
+            enc_moe_select_ds(enc, blg, bsel, bsel, bds, ka, nrows)
         }
-        enc_moe_wscale(enc, bsel, bsel, g_wscale_row, bnk, nrows)
+    } elif (c.n_expert > 256l) {
+        enc_moe_select_512(enc, blg, bsel, bsel, blg, ka, nrows)   //! the down-scale binding is read on a DSCALE stamp alone
+    } else {
+        enc_moe_select(enc, blg, bsel, bsel, blg, ka, nrows)
     }
-}
-
-[cold_path]   // once a model
-def private wscale_row_build(ws : float; ne : int64) {
-    wscale_row_drop()
-    g_wscale_row = metal_new_buffer(g_dev, uint64(ne * 4l))
-    var row = unsafe(reinterpret<float?>(metal_buffer_contents(g_wscale_row)))
-    for (e in range64(ne)) {
-        unsafe(row[e]) = ws
-    }
-    g_wscale_val = ws
-    g_wscale_ne = ne
 }
 
 //! The q8 dot's inner forms (four quants against a float4, a block's eight against two), spelled once: this sum order is the one every q8 kernel's parity holds.

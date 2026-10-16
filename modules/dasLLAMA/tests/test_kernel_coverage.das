@@ -201,6 +201,9 @@ let private CENSUS_NEVER_DISPATCHED <- [
     // out at 128 (Qwen3-30B-A3B), 60 (Qwen1.5-MoE) and 32 (gpt-oss-20b). Its coverage is
     // moe_select_gate's ne=512 and ne=300 cases in test_metal_prefill_kernels.das
     "MetalMoeSelect512",
+    // its down-scale twin: a gemma-4 MoE past 256 experts, which no file carries (the 26B routes 128). Its coverage is
+    // moe_select_gate's ne=300 down-scale case in test_metal_prefill_kernels.das
+    "MetalMoeSelect512Ds",
     // the PLE token-table gather twins: the census's only E-series carrier is the E4B Q8_0, whose
     // table sits on the q8 plane and takes the q8 stamp. A k4/k5/q40 table needs an E-series file
     // whose per_layer_token_embd is K-quant or Q4_0, and the zoo stocks none. Their coverage is

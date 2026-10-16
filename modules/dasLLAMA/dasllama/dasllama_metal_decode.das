@@ -1429,11 +1429,11 @@ struct template LayerEncT {
                 } else {
                     enc_moe_router(enc, bw_rt, r.bxb, r.bmoe_lg, brb, rka, ner, nr)
                 }
-                enc_moe_select_rows(enc, c, r.bmoe_lg, r.bmoe_sel, r.u_moe_k, nr, ner)
+                var bw_ds : MetalBuffer?
                 if (moe_with_dense) {
-                    var bw_ds = upload_region(addr < void? >(t.fblob[t.moe_down_scale_off + l * c.n_expert]), uint64(c.n_expert * 4l))
-                    enc_moe_wscale(enc, r.bmoe_sel, r.bmoe_sel, bw_ds, r.u_moe_k, nr)
+                    bw_ds = upload_region(addr < void? >(t.fblob[t.moe_down_scale_off + l * c.n_expert]), uint64(c.n_expert * 4l))
                 }
+                enc_moe_select_rows(enc, c, r.bmoe_lg, r.bmoe_sel, nr, ner, bw_ds)
                 if (g_skip != "moe_rt") {   // moe_rt knockout: the routed expert GEMVs only (router/select stay live)
                     enc_moe_gate_up(enc, t, l, nr, bmx, pan.mg, pan.mu, r.bmoe_sel, uint64(pan.mu_col * 4l),
                         moe_args(self, r.k_dim, r.k_moe_nfe, 0u, 0u, mx4_hasb, false))

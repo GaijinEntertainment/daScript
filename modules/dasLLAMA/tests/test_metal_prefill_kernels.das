@@ -5,7 +5,7 @@ options _cyclomatic_complexity = 0  // same — the arm ladders follow the kerne
 options _dasllama_internal = true
 
 require dastest/testing_boost public
-require daslib/math_bits           // float<->uint bits — the moe_wscale sel-buffer pun
+require daslib/math_bits           // float<->uint bits — the selection buffer pun
 require dasllama/dasllama_math
 require dasllama/dasllama_convert  // used only inside the Apple static_if half; off-Apple lint sees the branch compiled out
 require dasllama/dasllama_gemm_schema  // kq_qsb — the ONE per-format quant-plane stride source
@@ -3475,7 +3475,11 @@ def test_metal_prefill_kernels(t : T?) {
                 moe_select_gate(t, dev, queue, 300, 8, 2, true)    // past 256 with pad lanes and exact ties, two stream rows
                 moe_select_gate(t, dev, queue, 128, 8, 3, false)   // batch: one stream row per tg
                 moe_select_gate(t, dev, queue, 32, 4, 1, false, 1)  // gpt-oss softmax_weight mode
-                moe_select_gate(t, dev, queue, 128, 8, 3, false, 0, 2.5)   // a global expert_weights_scale behind the select
+                moe_select_gate(t, dev, queue, 128, 8, 3, false, 0, 2.5)   // a global expert_weights_scale in the select
+                moe_select_gate(t, dev, queue, 128, 8, 3, false, 0, 1.0, true)   // gemma-4: the per-expert down scales in the select
+                moe_select_gate(t, dev, queue, 128, 8, 2, false, 0, 2.5, true)  // ... after the global scale, the CPU order
+                moe_select_gate(t, dev, queue, 32, 4, 2, false, 1, 2.5)          // the global scale on the softmax_weight picks
+                moe_select_gate(t, dev, queue, 300, 8, 2, true, 0, 1.0, true)    // the 16-deep down-scale stamp, past 256 with exact ties
                 moe_router_gate(t, dev, queue, 64, 128, 1, false)
                 moe_gemv_gate(t, dev, queue, KqFmt.q8, 96, 24, 5, 3, 1, false)   // shared x (the gate/up sites)
                 moe_gemv_gate(t, dev, queue, KqFmt.q8, 64, 32, 7, 4, 1, true)    // per-slot x rows (the down site)
@@ -3579,7 +3583,6 @@ def test_metal_prefill_kernels(t : T?) {
                 swiglu_oai_gate(t, dev, queue, 256)
                 swiglu_oai_pf_gate(t, dev, queue, 16, [32, 40, 8], 32)   // 32 ghost rows stay untouched
                 g4_router_norm_gate(t, dev, queue, 5, 96)
-                moe_wscale_gate(t, dev, queue, 13, 2, 7)
                 moe_router_gate(t, dev, queue, 64, 7, 13, false)         // ne=7: row guard; np=13: stream clamp
                 moe_router_gate(t, dev, queue, 64, 7, 13, true)
                 moe_csr_gate(t, dev, queue, 13, 5, 2)
@@ -3719,46 +3722,6 @@ def private g4_router_norm_gate(t : T?; var dev, queue; rows, dim : int) {
         }
         return if (!ran)
         check_buf(t, tag, mc.buf[by], want, BAR_FP, Shape(row_width = dim))
-    }
-}
-
-// gemma4 per-expert down-scale fold (MetalMoeWScale): selw[r][j] *= ds[seli[r][j]] in place on
-// the mixed sel buffer (uint idx half + float w half) — compared as raw uint bits
-def private moe_wscale_gate(t : T?; var dev, queue; rows, nk, ne : int) {
-    let tag = "moe_wscale rows={rows} nk={nk}"
-    with_metal_cell(dev, queue) $(var mc : MetalCell) {
-        var err : string
-        let st = stamp_of(@@enc_moe_wscale)
-        var pso = mc |> keep_stamp(st, err)
-        return if (!pso_ok(t, tag, pso, err))
-        var inscope ds : array<float>
-        ds |> resize(ne)
-        for (e in range(ne)) {
-            ds[e] = float((e * 3) % 7 - 3) * 0.5
-        }
-        var inscope sel, want : array<uint>
-        sel |> resize(rows * 2 * nk)
-        want |> resize(rows * 2 * nk)
-        for (r in range(rows)) {
-            for (j in range(nk)) {
-                let idx = uint((r * 3 + j * 5) % ne)
-                let w = float((r + j * 7) % 9 - 4) * 0.25
-                sel[r * 2 * nk + j] = idx
-                sel[r * 2 * nk + nk + j] = float_bits_to_uint(w)
-                want[r * 2 * nk + j] = idx
-                want[r * 2 * nk + nk + j] = float_bits_to_uint(w * ds[int(idx)])
-            }
-        }
-        let bsel = mc |> in_plain(sel)
-        let bds = mc |> in_(ds)
-        let bnk = mc |> in_plain([uint(nk)])
-        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
-            stamp_run(st, pso) {   // the sel buffer twice: its uint idx view and its float w view
-                invoke(st.enc, enc, mc.buf[bsel], mc.buf[bsel], mc.buf[bds], mc.buf[bnk], int64(rows))
-            }
-        }
-        return if (!ran)
-        check_buf_exact(t, tag, mc.buf[bsel], want)
     }
 }
 
@@ -4451,18 +4414,16 @@ def private moe_select_bad(bsel; widx : array<uint>; ww : array<float>; nst, k :
 // one stream row per threadgroup ([k idx u32][k w f32] per row). idx must match EXACTLY — ties
 // are exact-equal logits, so both sides agree by the lowest-index rule; w compares within the
 // shared fp tolerance (hardware exp vs the CPU's exp).
-//! `wscale` other than 1 runs `MetalMoeWScale` over a row of that scale behind the select - the global
-//! `expert_weights_scale` arm of `enc_moe_select_rows` - against the host select at the same scale
-def private moe_select_gate(t : T?; var dev, queue; ne, k, nst : int; ties : bool; gmode : int = 0; wscale : float = 1.0) {
-    let tag = "moe select ne={ne} k={k} nst={nst} wscale={wscale}"
+//! `wscale` other than 1 is the model's global `expert_weights_scale` in the select's args, against the host select at the same
+//! scale; `dscale` binds a per-expert down-scale row (gemma-4) the select folds into each pick after it
+def private moe_select_gate(t : T?; var dev, queue; ne, k, nst : int; ties : bool; gmode : int = 0; wscale : float = 1.0; dscale : bool = false) {
+    let tag = "moe select ne={ne} k={k} nst={nst} wscale={wscale} dscale={dscale}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
-        let st = ne > 256 ? stamp_of(@@enc_moe_select_512) : stamp_of(@@enc_moe_select)
-        let sws = stamp_of(@@enc_moe_wscale)
+        let st = (dscale ? (ne > 256 ? stamp_of(@@enc_moe_select_512_ds) : stamp_of(@@enc_moe_select_ds))
+            : (ne > 256 ? stamp_of(@@enc_moe_select_512) : stamp_of(@@enc_moe_select)))
         var pso = mc |> keep_stamp(st, err)
         return if (!pso_ok(t, "moe select", pso, err))
-        var pso_ws = mc |> keep_stamp(sws, err)
-        return if (!pso_ok(t, "moe wscale", pso_ws, err))
         var inscope lg : array<float>
         lg |> resize(nst * ne)
         for (i in range(nst * ne)) {
@@ -4486,20 +4447,21 @@ def private moe_select_gate(t : T?; var dev, queue; ne, k, nst : int; ties : boo
             }
         }
         var inscope widx <- [for (i in sidx); uint(i)]
+        var inscope ds <- [for (e in range(ne)); float(1 + (e * 3) % 7) * 0.25]
+        var inscope wunds := ww
+        if (dscale) {
+            for (i in range(nst * k)) {
+                ww[i] *= ds[sidx[i]]
+            }
+        }
         let blg = mc |> in_(lg)
         let bsel = mc |> out_words(nst * 2 * k, NAN_SENTINEL_BITS)
-        let bnk = mc |> in_plain([uint(k)])
-        var ka = GkTopKArgs(ne = uint(ne), k = uint(k), norm = gmode == 0 ? 1u : 0u, lstride = uint(ne), raw = gmode == 1 ? 1u : 0u)
-        var inscope wrow <- [for (_e in range(ne)); wscale]
-        let bws = mc |> in_(wrow)
+        let bds = mc |> in_(ds)
+        var ka = GkTopKArgs(ne = uint(ne), k = uint(k), norm = gmode == 0 ? 1u : 0u, wscale = wscale, dsoff = dscale ? 0u : GK_NO_DSCALE,
+            lstride = uint(ne), raw = gmode == 1 ? 1u : 0u)
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
             stamp_run(st, pso) {   // sel twice: the idx view and the float w view - row layout is in-kernel
-                invoke(st.enc, enc, mc.buf[blg], mc.buf[bsel], mc.buf[bsel], ka, int64(nst))
-            }
-            if (wscale != 1.0) {
-                stamp_run(sws, pso_ws) {
-                    invoke(sws.enc, enc, mc.buf[bsel], mc.buf[bsel], mc.buf[bws], mc.buf[bnk], int64(nst))
-                }
+                invoke(st.enc, enc, mc.buf[blg], mc.buf[bsel], mc.buf[bsel], mc.buf[bds], ka, int64(nst))
             }
         }
         return if (!ran)
@@ -4518,6 +4480,9 @@ def private moe_select_gate(t : T?; var dev, queue; ne, k, nst : int; ties : boo
         if (wscale != 1.0) {
             var inscope wun <- [for (v in ww); v / wscale]
             t |> success(moe_select_bad(mc.buf[bsel], widx, wun, nst, k).w > 0, "{tag}: the unscaled weights miss the device's")
+        }
+        if (dscale) {
+            t |> success(moe_select_bad(mc.buf[bsel], widx, wunds, nst, k).w > 0, "{tag}: the weights without the down scales miss the device's")
         }
     }
 }

@@ -118,10 +118,13 @@ def private seam_rows : array<Reading> {
             enc_qk_norm(enc, by, by, bw, qk_norm_args(16u, 2u, 256u, 20u * 256u, 16u * 256u, 16u * 256u, 256u, 1e-6), 18l, 1l)
         },
         time_rows("moe_select ne=256 k=8 1 row") $(enc) {
-            enc_moe_select(enc, bx, by, by, GkTopKArgs(ne = 256u, k = 8u, norm = 1u, lstride = 256u), 1l)
+            enc_moe_select(enc, bx, by, by, bw, GkTopKArgs(ne = 256u, k = 8u, norm = 1u, dsoff = GK_NO_DSCALE, lstride = 256u), 1l)
+        },
+        time_rows("moe_select ne=128 k=8 1 row, the down scales (gemma-4)") $(enc) {
+            enc_moe_select_ds(enc, bx, by, by, bw, GkTopKArgs(ne = 128u, k = 8u, norm = 1u, dsoff = 0u, lstride = 128u), 1l)
         },
         time_rows("moe_select_512 ne=512 k=10 1 row") $(enc) {
-            enc_moe_select_512(enc, bx, by, by, GkTopKArgs(ne = 512u, k = 10u, norm = 1u, lstride = 512u), 1l)
+            enc_moe_select_512(enc, bx, by, by, bw, GkTopKArgs(ne = 512u, k = 10u, norm = 1u, dsoff = GK_NO_DSCALE, lstride = 512u), 1l)
         },
         time_rows("moe_combine dim={dim} k=8 1 row") $(enc) {
             enc_moe_combine(enc, bz, bw, bx, moe_comb_args(int64(dim), 8l), int64(dim), 1l)

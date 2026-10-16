@@ -6805,7 +6805,7 @@ def private pf_moe_router_rows(t : Model; l : int64) : MetalBuffer? {
 [arch(at="../ARCHITECTURE_GPU_PREFILL_MOE.md#prefill-moe-buckets")]
 def private pf_enc_moe_route(enc : MetalComputeEncoder?; t : Model; l : int64;
                              bx, blg, bsel, bcnt, bbase, bbkt, binv, bdim, bne, bnk, brb, btot : MetalBuffer?; npos : int64;
-                             mp : int64 = 0l; bucket : bool = true) {
+                             mp : int64 = 0l; bucket : bool = true; bds : MetalBuffer? = null) {
     let c = t.config
     var bw_rt = pf_moe_router_rows(t, l)
     if (c.moe_router_bias || !pf_enc_router_mm(enc, bw_rt, bx, blg, bdim, bne, c.n_expert, c.dim, mp)) {
@@ -6813,7 +6813,7 @@ def private pf_enc_moe_route(enc : MetalComputeEncoder?; t : Model; l : int64;
         enc_moe_router_b(enc, bw_rt, bx, blg, brb, rka, c.n_expert, npos)
     }
     return if (g_pf_skip == "moe_only_router")   //! attribution: router GEMV alone, no select/CSR
-    enc_moe_select_rows(enc, c, blg, bsel, bnk, npos)
+    enc_moe_select_rows(enc, c, blg, bsel, npos, 0l, bds)
     return if (g_pf_skip == "moe_only_sel" || !bucket)   //! attribution: router + select, no CSR; the gathered route reads the selection alone
     pf_enc_moe_count(enc, bsel, bcnt, btot, bnk, c.n_expert)
     pf_enc_moe_bucket(enc, bsel, bbase, bbkt, binv, btot, bnk, bcnt, bne, c.n_expert + 1l)   // basep[ne] = the padded total
@@ -8577,13 +8577,13 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                     if (c.moe_router_bias) {
                         brb = upload_region(unsafe(addr < void? >(t.fblob[t.router_b_off + l * c.n_expert])), uint64(c.n_expert * 4l))
                     }
+                    var bw_ds : MetalBuffer?
+                    if (g4moe) {
+                        bw_ds = upload_region(unsafe(addr < void? >(t.fblob[t.moe_down_scale_off + l * c.n_expert])), uint64(c.n_expert * 4l))
+                    }
                     pf_enc_moe_route(enc, t, l, g4moe ? bmg4rt : bxb, bmlg, bmsel, bmcnt, bmbase, bmbkt, bminv,
                         u_dim, u_moe_ne, u_moe_nk, brb, u_moe_tot, npos,
-                        mp = mp, bucket = !moe_gemv_route)
-                    if (g4moe) {
-                        var bw_ds = upload_region(unsafe(addr < void? >(t.fblob[t.moe_down_scale_off + l * c.n_expert])), uint64(c.n_expert * 4l))
-                        enc_moe_wscale(enc, bmsel, bmsel, bw_ds, u_moe_nk, npos)
-                    }
+                        mp = mp, bucket = !moe_gemv_route, bds = bw_ds)
                     if (nsh > 0l) {
                         //! shexp raw gate dots (σ in the combine) off the router region's last row — bmlg is free once select consumed it
                         var gka = moe_router_args(1l, dim, npos)

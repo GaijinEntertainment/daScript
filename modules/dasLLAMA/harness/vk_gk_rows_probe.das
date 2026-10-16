@@ -112,6 +112,9 @@ def main : int {   // nolint:STYLE038 — one-shot probe: the classes, the fixtu
     time_cls("topk_n ne 256 k 8 1 row") $(r; var h) {
         enc_topk_n_cls(r, h, s_tk, GkTopKArgs(ne = 256u, k = 8u, norm = 1u, lstride = 256u, dsoff = GK_NO_DSCALE), 1l)
     }
+    time_cls("topk_n ne 128 k 8 1 row, the down scales (gemma-4)") $(r; var h) {
+        enc_topk_n_cls(r, h, s_tk, GkTopKArgs(ne = 128u, k = 8u, norm = 1u, lstride = 128u, dsoff = 0u), 1l)
+    }
     time_cls("topk_n2 ne 512 k 10 1 row") $(r; var h) {   //! the family's one set
         enc_topk_n2_cls(r, h, s_tk, GkTopKArgs(ne = 512u, k = 10u, norm = 1u, lstride = 512u, dsoff = GK_NO_DSCALE), 1l)
     }

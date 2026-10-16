@@ -1272,8 +1272,10 @@ class template TopKRecords : GkTopKRow {
     @ssbo @binding = 5 @role = "weight" ds : array<float>     //! the per-expert down scales (gemma-4), read at dsoff when the push names a row
     @ssbo @binding = 6 @role = "weight" rb : array<float>     //! the router biases ([ne] a layer, gpt-oss), read at rboff under `rbias_on`
     @ssbo @binding = 7 eidx : array<uint>    //! the picks' experts, a slot each: the bias rows the act and the combine read
+    override DSCALE = true
 
     def override logit_at(p, e : uint) : float => logits[p * pa.lstride + e] + (pa.rbias_on != 0u ? rb[pa.rboff + e] : 0.0)
+    def override down_scale(e : uint) : float => ds[pa.dsoff + e]
 
     //! row `p`: its logits selected, its k slots' records written by thread 0
     def row_picks(p : uint) {
@@ -1292,10 +1294,7 @@ class template TopKRecords : GkTopKRow {
             let s = p * pa.k + jj
             let ex = min(pick[jj], pa.ne - 1u)   // a NaN row leaves the sentinel: never a wild weight block
             var wj = 0.0
-            pick_weight_into(jj, pa.norm, ws, pa.wscale, wj)
-            if (pa.dsoff != GK_NO_DSCALE) {
-                wj *= ds[pa.dsoff + ex]
-            }
+            pick_weight_into(jj, ex, pa.norm, ws, pa.wscale, wj)
             w[s] = wj
             eidx[s] = ex
             static_if (META) {

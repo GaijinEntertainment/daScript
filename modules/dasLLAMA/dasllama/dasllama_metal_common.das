@@ -236,6 +236,8 @@ var g_pso_emb_b32_q5032 : MetalComputePipeline?
 var g_pso_moe_router : MetalComputePipeline?   // MoE (Wave C): router GEMV over the fp32 slab
 var g_pso_moe_select : MetalComputePipeline?   // softmax + top-k + renorm (one simdgroup)
 var g_pso_moe_select_512 : MetalComputePipeline?   // the 16-deep ladder past 256 experts
+var g_pso_moe_select_ds : MetalComputePipeline?   //! the select with the per-expert down scales (gemma-4)
+var g_pso_moe_select_512_ds : MetalComputePipeline?
 var g_pso_moe_gemv_q8 : MetalComputePipeline?  // expert-indexed GEMV twins (grid.y = slot)
 var g_pso_moe_kq_k4 : MetalComputePipeline?
 var g_pso_moe_kq_k3 : MetalComputePipeline?
@@ -255,7 +257,6 @@ var g_pso_moe_kq_k6 : MetalComputePipeline?
 var g_pso_moe_combine : MetalComputePipeline?  // weighted top-k reduce into the w2 write shape
 var g_pso_moe_combine_sh : MetalComputePipeline?   //! ... with the gated shared expert's rows added
 var g_pso_g4rnorm : MetalComputePipeline?      // gemma4 MoE router-input norm (stage 3)
-var g_pso_moe_wscale : MetalComputePipeline?   // gemma4 per-expert down-scale fold
 var g_pso_swiglu_oai : MetalComputePipeline?   // gpt-oss clamped swiglu (stage 4)
 var g_pso_moe_gemv_mx4 : MetalComputePipeline?  // gpt-oss MXFP4 expert GEMV
 var g_pso_moe_gemv_q51 : MetalComputePipeline?  // Q5_1 expert GEMV (per-32 planes)
