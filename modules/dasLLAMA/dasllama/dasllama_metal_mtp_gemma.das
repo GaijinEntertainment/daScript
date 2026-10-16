@@ -211,7 +211,7 @@ def public attach_gemma_drafter(t : Model; path : string) : string {
     delete g_gemma_ws
     g_gemma_ws <- create_batch_workspace_(t)
     g_gemma_ws_ok = true
-    set_metal_mtp_carry_hidden(true)
+    set_metal_mtp_carry_hidden(true, g_gemma_carry_pre)
     set_mtp_round_kind(MtpRoundKind.assistant)
     g_gemma_attached = true
     g_gemma_drafted = 0l
@@ -482,6 +482,7 @@ var private @scratch g_gemma_h : array<float>      // the chain's h input (tdim)
 var private @scratch g_gemma_hn : array<float>     // ... and the drafter's h_next
 var private g_gemma_draft_cpu = false
 var private g_gemma_trace = false
+var private g_gemma_carry_pre = false
 var private g_gemma_cpu_out : GemmaDraftOut
 var private g_gemma_us_draft = 0l   // round time split since attach: the draft chains ...
 var private g_gemma_us_verify = 0l  // ... the same-slab verify + walk + commit
@@ -502,16 +503,21 @@ def public set_gemma_trace(on : bool) {
     g_gemma_trace = on
 }
 
+def public gemma_trace() : bool => g_gemma_trace
+
 //! The drafter's h input: the target's post-output_norm hidden (default) or the pre-norm residual.
-//! Takes effect from the next decode step's landing.
+//! Takes effect from the next decode step's landing; a choice made before an attach applies at it.
 def public set_gemma_carry_pre_norm(on : bool) {
+    g_gemma_carry_pre = on
     if (g_gemma_attached) {
         set_metal_mtp_carry_hidden(true, on)
-        if (on) {
-            to_log(LOG_INFO, "dasLLAMA: gemma drafter reads the pre-norm residual (set_gemma_carry_pre_norm)\n")
-        }
+    }
+    if (on) {
+        to_log(LOG_INFO, "dasLLAMA: gemma drafter reads the pre-norm residual (set_gemma_carry_pre_norm)\n")
     }
 }
+
+def public gemma_carry_pre_norm() : bool => g_gemma_carry_pre
 
 def private gemma_draft_step(t : Model; var s : Session; tok, anchor : int64; h : array<float>; var out_tok : int64&; var h_next : array<float>) : bool {
     if (!g_gemma_draft_cpu) {

@@ -320,6 +320,11 @@ fam-gemma3 (gemma-3-1b) and fam-gemma4e (E2B) carry the Metal ring row (`metal_r
 prefilled in 256-row windows and 24 greedy steps on the blob twin with the ring pinned on, then off, token for token, every
 window and step on the device, the ringed layout holding rings that wrap under the prompt and the flat one none, and the
 ringed mirror feeding every window the flat one feeds (`metal_prefill_mirror_served`);
+`fam-gemma4e-release` (E2B Q8_0) is the release row (`metal_release_row`): three load-serve-delete cycles of the blob twin,
+each closed at both drivers' shutdown, every cycle's four steps served on the device, the process footprint once the
+device's deferred frees land (`metal_footprint_settled`) at the second and third close within 512 MB of the first and the
+live-object count zero after -
+a buffer the binding leaves alive adds the 5.3 GB blob a cycle;
 fam-gemma4/fam-qwen3moe/fam-gemma4moe/fam-gptoss/fam-qwen35moe/fam-qwen2moe are
 DASLLAMA_PARITY_FULL-gated - 7.4/18.5/26.9/12.1/22/15GB; fam-gemma4moe and fam-gptoss are ENGAGE
 + shallow logits TOLERANCE cells only - token parity is not a valid instrument for the 26B, whose double-router
@@ -1849,7 +1854,7 @@ tokens, a cell whose bar concedes rounding feeds the reference's tokens and hold
 every cell carries the cross-row control (row 0 against row 1's reference lands outside the bar);
 plus the batched bench row's refusal contract on SmolLM2. Two cells on stories15M run under a fake decode override whose
 batched step declines every call (`batch-decline-probe`, its embed batch gate registered beside it, the selection put back as
-found): `test_batch_decode_late_embed` - three batched steps over two sessions with the gate answering that the step gathers
+found and the probe unregistered after): `test_batch_decode_late_embed` - three batched steps over two sessions with the gate answering that the step gathers
 its rows and with it answering no, the override asked every step, every row embedded on the host once (late where the gate
 took it, `batch_rows_host_embedded`), and the last step's logits bit for bit the same steps with no override; and
 `test_batch_decode_verify_declines` - `verify_batch_groups` over two groups that reach the override (the control), then a
@@ -2624,6 +2629,12 @@ pointee's const, the staged GEMM's device step and the device-pair step and stor
 inline-addr operands (a wrong role on either refused), a generic helper resolved by base name, and
 a body that delegates to methods. Without das_metal the device-pair cell skips and the other cells
 pass after logging that the lens does not load.
+`test_driver_knob_getters.das` - model-free: the driver knobs' getters and the decode registry's removal verb -
+`mtp_depth_pin` reads whether `set_mtp_depth` pinned a depth and the depth, and `restore_mtp_depth` puts back a pinned and an
+unpinned depth; `unregister_decode_override` drops an override and its batched step, deselecting it where it is active and
+leaving another selection as found; on a das_metal build `get_metal_decode_fuse`, `get_metal_prefill_lastrow`, `gemma_trace` and
+`gemma_carry_pre_norm` read back every value their setters write and the value found once it is put back, the h reading set with no
+drafter attached leaving the decode's carry alone (skips without das_metal).
 `test_kernel_backend.das` - model-free: the kernel-backend registry - the portable backend
 registered at `[init]` with a row-major default active (`test_portable_backend_always_registered`),
 select / pin / for-load pick a registered backend and an unknown name changes nothing
@@ -3374,7 +3385,8 @@ kitten arm), `kokoro`, `pocket` (the coverage census TTS rows),
 `gemma4e` (support-matrix rows under `fam-gemma4e` - E4B PARITY_FULL-gated; E2B Q8_0, Q4_K_M,
 Q4_0 and the format carriers of `../performance/model_specs.das` (the token and PLE tables Q6_K and
 IQ4_XS, the per-layer gate and projection planes Q6_K and Q5_0) small-tier always-on, carrying the
-per-layer-FFN-width and blob-kq-PLE-gather coverage, the residual step's seam census (every encoded layer stack's seams one
+per-layer-FFN-width and blob-kq-PLE-gather coverage, the residual step's seam census under the fuse rail pinned on
+(`set_metal_decode_fuse`, put back) (every encoded layer stack's seams one
 dispatch each - the sandwich seams with a next norm on `metal_pre_add_rms`, the per-layer embedding's residual and the last
 layer's seam on `metal_pre_add`, no plain seam), the window's v-norm on the fused q/k pass with no norm pass of its own, and the
 pre-step's device counters at every

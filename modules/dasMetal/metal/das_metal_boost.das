@@ -11,6 +11,7 @@ module das_metal_boost shared public
 
 require das_metal public
 require math
+require daslib/fio
 
 //! upload a das array into a fresh shared-memory MTLBuffer
 def public buf_upload(dev; arr : array<auto(TT)>) : auto {
@@ -227,6 +228,24 @@ def public pool_drain(var pool : MetalBufferPool) {
     unsafe {
         delete pool.free_bufs
     }
+}
+
+let private SETTLE_MS = 100u
+let private SETTLE_BYTES = 16ul * 1024ul * 1024ul
+let private SETTLE_READS = 30
+
+//! The process footprint (`metal_process_footprint`) once the device has landed the frees a release defers: read until two
+//! reads 100 ms apart differ by under 16 MB, at most 3 s.
+def public metal_footprint_settled() : uint64 {
+    var prev = metal_process_footprint()
+    for (_r in range(SETTLE_READS)) {
+        sleep(SETTLE_MS)
+        let now = metal_process_footprint()
+        let moved = now > prev ? now - prev : prev - now
+        prev = now
+        return now if (moved < SETTLE_BYTES)
+    }
+    return prev
 }
 
 //! One command buffer + one compute encoder around `blk`: encode any number of set_pipeline /

@@ -117,6 +117,7 @@ modules/dasLLAMA/
   ARCHITECTURE_MEDIA.md       # companion: the encoder-tower, audio, ASR and vision charters
   ARCHITECTURE_IMAGE.md       # companion: the prepared-image (.dlim) rail
   ARCHITECTURE_RUNTIME.md     # companion: kernel shape, caches, knobs, coverage, the GPU ramp
+  ARCHITECTURE_RUNTIME_JOBQUE.md # companion: the hybrid worker pool, the MoE region split, the job queue, single-thread mode
   ARCHITECTURE_MEASUREMENT.md # companion: the benchmark rig, the tune gate, the instrumentation rails
   ARCHITECTURE_INVARIANTS.md  # companion: the inherited invariants
   REVIEW.md                   # the per-change review checklist

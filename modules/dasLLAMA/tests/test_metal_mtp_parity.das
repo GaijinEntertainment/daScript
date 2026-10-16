@@ -1024,6 +1024,9 @@ def private run_verify_fixture(t : T?; file, tag : string; tol : float; expect_d
                 t |> failure("{tag}: the drafter {side} beside the carrier did not attach")
             } else {
                 var count <- encode(tr, counting_prompt(1, 40), true, false)
+                let prior_trace = gemma_trace()
+                let prior_cpu = gemma_draft_on_cpu()
+                let prior_pre = gemma_carry_pre_norm()
                 set_gemma_trace(arm_on(t, "mtp-count-trace"))
                 set_gemma_draft_on_cpu(arm_on(t, "mtp-count-cpu"))
                 set_gemma_carry_pre_norm(arm_on(t, "mtp-count-pre"))
@@ -1035,9 +1038,9 @@ def private run_verify_fixture(t : T?; file, tag : string; tol : float; expect_d
                         count_cell(t, tr, trg, tag, count, depth, true)
                     }
                 }
-                set_gemma_trace(false)
-                set_gemma_draft_on_cpu(false)
-                set_gemma_carry_pre_norm(false)
+                set_gemma_trace(prior_trace)
+                set_gemma_draft_on_cpu(prior_cpu)
+                set_gemma_carry_pre_norm(prior_pre)
                 detach_gemma_drafter()
                 delete count
             }

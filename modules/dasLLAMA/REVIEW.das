@@ -1922,6 +1922,29 @@ def private required_modules(path : string) : array<string> {
     return <- out
 }
 
+let private TESTS_DIR = "modules/dasLLAMA/tests"
+
+//! every test root dastest runs declares `options persistent_heap`: a dastest program compiles on the linear heap
+//! without it, where a delete frees nothing until the context ends, so a cell's deleted carriers stay resident
+//! across the file (tests/REVIEW.md)
+def private check_test_heap_model {
+    var files : array<string>
+    collect_das_files(TESTS_DIR, files)
+    for (path in files) {
+        continue if (!starts_with(base_name(path), "test_"))
+        var declared = false
+        for (line in split(fread(path), "\n")) {
+            if (starts_with(line, "options persistent_heap")) {
+                declared = true
+                break
+            }
+        }
+        if (!declared) {
+            gate_finding(path, 1, "a dastest root with no `options persistent_heap` - the linear heap frees nothing a cell deletes until the context ends, so every model a cell loads stays resident across the file; add the line beside `options gen2`")
+        }
+    }
+}
+
 [arch(at = "ARCHITECTURE_MEDIA.md#tower-audio-charters")]
 def private check_require_bans {
     if (fexist(TOWER_FILE)) {
@@ -2001,6 +2024,7 @@ def main() : int {
     check_device_creation_sites()
     check_arch_cites_by_name()
     check_require_bans()
+    check_test_heap_model()
     check_harness_dashv()
     var inscope tut_texts : array<string>
     read_das_stripped(TUTORIAL_DIR, tut_texts)

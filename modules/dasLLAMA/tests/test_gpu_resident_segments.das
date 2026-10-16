@@ -462,21 +462,24 @@ def test_gpu_resident_segments_gemma4_e2b(t : T?) {
     let file = "gemma-4-E2B-it-Q8_0.gguf"
     let path = path_join(models_dir(), file)
     return if (!family_on(t, "gemma4e") || !resident_ready(t, path))
-    var tr <- load_resident(path, 2l)
-    return if (!resident_admitted(t, "the whole-model driver armed on {file} (the load log names any decline)", ""))
-    t |> success(has_ple(tr.config), "the file carries per-layer embeddings")
-    t |> success(gpu_device_prefill_segments_(tr), "the driver's segmented window takes the per-layer-embedding model")
-    let allowed = resident_prefill_allowed()
-    set_resident_prefill_allowed(true)
-    g_seg_bar_rel = GEMMA_SEG_BAR_REL
-    with_dasllama_jobque_() {
-        segments_cell(t, tr)
-        tails_as_segments(t, tr, LONG_TAIL, LONG_TAIL, "tails past one window")
-        host_embedded_cell(t, tr)
+    with_gpu_resident_embed(1) {   //! the segmented window reads the side rows' ids: the load gathers the token table on the device
+        var tr <- load_resident(path, 2l)
+        if (resident_admitted(t, "the whole-model driver armed on {file} (the load log names any decline)", "")) {
+            t |> success(has_ple(tr.config), "the file carries per-layer embeddings")
+            t |> success(gpu_device_prefill_segments_(tr), "the driver's segmented window takes the per-layer-embedding model")
+            let allowed = resident_prefill_allowed()
+            set_resident_prefill_allowed(true)
+            g_seg_bar_rel = GEMMA_SEG_BAR_REL
+            with_dasllama_jobque_() {
+                segments_cell(t, tr)
+                tails_as_segments(t, tr, LONG_TAIL, LONG_TAIL, "tails past one window")
+                host_embedded_cell(t, tr)
+            }
+            g_seg_bar_rel = SPLIT_BAR_REL
+            set_resident_prefill_allowed(allowed)
+        }
+        delete tr
     }
-    g_seg_bar_rel = SPLIT_BAR_REL
-    set_resident_prefill_allowed(allowed)
-    delete tr
 }
 
 //! the E-series window whose rows the host embedded: with the tier's token-table gate unseated the prefill embeds every row on

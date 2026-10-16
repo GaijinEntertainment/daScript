@@ -1,6 +1,7 @@
 options gen2
 options stack = 524288
 options _dasllama_internal = true
+options persistent_heap   // a dastest root frees what it deletes only on this heap; the linear heap holds every carrier a cell deleted until the context ends
 
 // The host-layers form reached by a pin (`DASLLAMA_GPU=1`, large tier): each fixture asks the plan for at least its first
 // four routed layers' experts on the host (`set_gpu_host_layers`), so the split token command and the cut window chain run

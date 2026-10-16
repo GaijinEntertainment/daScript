@@ -608,6 +608,8 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                     }
                     var trsg <- blob_twin(t, spath, 2048l)
                     let sprompt <- encode(trs, counting_prompt(COUNT_TO), true, false)
+                    let seat = metal_overrides_seat()
+                    let prior_lastrow = get_metal_prefill_lastrow()
                     t |> success(select_prefill_override("metal"), "override registered (mm-tail smol)")
                     //! the peel-count arithmetic below assumes every layer's FFN rides the mm path
                     set_metal_prefill_lastrow(false)
@@ -638,11 +640,11 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                     } else {
                         feint("metal prefill declined on smol; the alignment-guard leg skipped\n")
                     }
-                    set_metal_prefill_lastrow(true)
+                    set_metal_prefill_lastrow(prior_lastrow)
                     with_dasllama_jobque() {
                         lastrow_ab(t, trsg, sprompt, "smol", 2e-2)   //! narrowed rides the mm-tail gemv, full stages X to f16 - measured ~7e-3 here
                     }
-                    select_prefill_override("")
+                    restore_metal_overrides(seat)
                     delete trs
                     delete trsg
                 }
@@ -763,8 +765,7 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                 let prev_crowns = get_metal_tensor_crowns()
                 pin_metal_tensor_crowns("mulmm_q8,attn_qkmm,attn_dev")
                 metal_prefill_shutdown()
-                let prev_override = active_prefill_override()
-                let prev_min_npos = get_metal_prefill_min_npos()
+                let seat = metal_overrides_seat()
                 select_prefill_override("metal")
                 set_metal_prefill_min_npos(1l)
                 let was_held = set_metal_prefill_held("attn_dev", true)
@@ -784,8 +785,7 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                 t |> equal(metal_kernel_count("MetalAttnAVDev128_metal_attn_av_dev"), n_attn, "the 128-row AV stamp served the continuation")
                 var device_off <- two_window_logits(trag, w1, w2_off)
                 set_metal_prefill_held("attn_dev", was_held)
-                select_prefill_override(prev_override)
-                set_metal_prefill_min_npos(prev_min_npos)
+                restore_metal_overrides(seat)
                 let mag = logits_maxabs(staged)
                 let diff = logits_maxdiff(device, staged)
                 let diff_off = logits_maxdiff(device_off, staged)
@@ -828,9 +828,7 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                 let prev_crowns = get_metal_tensor_crowns()
                 pin_metal_tensor_crowns("mulmm_q8,attn_qkmm,attn_dev")
                 metal_prefill_shutdown()
-                let prev_override = active_prefill_override()
-                let prev_decode = active_decode_override()
-                let prev_min_npos = get_metal_prefill_min_npos()
+                let seat = metal_overrides_seat()
                 let prev_mirror = get_metal_prefill_mirror()
                 let prev_adopt = get_metal_mirror_adopt()
                 select_prefill_override("metal")
@@ -902,9 +900,7 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                 var fresh <- adopt_run(trmg, w1, whole, false)
                 t |> equal(fresh.matched, 0l, "nothing donated, nothing attached")
                 t |> equal(fresh.adopted, 0l, "a reused group id under a new stamp adopts nothing")
-                select_decode_override(prev_decode)
-                select_prefill_override(prev_override)
-                set_metal_prefill_min_npos(prev_min_npos)
+                restore_metal_overrides(seat)
                 set_metal_prefill_mirror(prev_mirror)
                 unpin_metal_tensor_crowns()
                 set_metal_tensor_crowns(prev_crowns)
@@ -940,9 +936,7 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                 let longp <- encode(tr, counting_prompt(ATTN_DEV_COUNT_TO), true, false)
                 var w1 <- [for (i in range(ATTN_DEV_W1)); longp[i]]
                 var w2 <- [for (i in range(ATTN_DEV_W1, ATTN_DEV_W1 + 20)); longp[i]]
-                let prev_override = active_prefill_override()
-                let prev_decode = active_decode_override()
-                let prev_min_npos = get_metal_prefill_min_npos()
+                let seat = metal_overrides_seat()
                 let prev_mirror = get_metal_prefill_mirror()
                 for (kdt in [KVDtype.q8_0, KVDtype.tq4, KVDtype.f32]) {
                     select_prefill_override("")
@@ -981,9 +975,7 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                     t |> equal(up_off, int64(ATTN_DEV_W1 + 20), "{kdt} control: the first decode step uploads every prompt row")
                     t |> success(ids_equal(cpu, gpu_off), "{kdt} control: the knob off reads the same tokens")
                 }
-                select_decode_override(prev_decode)
-                select_prefill_override(prev_override)
-                set_metal_prefill_min_npos(prev_min_npos)
+                restore_metal_overrides(seat)
                 set_metal_prefill_mirror(prev_mirror)
                 metal_prefill_shutdown()
                 metal_decode_shutdown()
@@ -1002,9 +994,7 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
             if (arm_on(t, "mirror-cap")) {
                 set_wscale_f16(false)
                 pin_kernel_backend("portable")
-                let prev_override = active_prefill_override()
-                let prev_decode = active_decode_override()
-                let prev_min_npos = get_metal_prefill_min_npos()
+                let seat = metal_overrides_seat()
                 let prev_cap = get_metal_decode_mirror_cap_mb()
                 let row_bytes = kv_row_bytes(KVDtype.f32, kv_row_total(tr)) * 2l
                 var trcg <- blob_twin(t, path, 2048l)
@@ -1078,9 +1068,7 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                     set_metal_tensor_crowns(prev_crowns)
                     delete trlg
                 }
-                select_decode_override(prev_decode)
-                select_prefill_override(prev_override)
-                set_metal_prefill_min_npos(prev_min_npos)
+                restore_metal_overrides(seat)
                 metal_prefill_shutdown()
                 metal_decode_shutdown()
                 clear_kernel_backend_pin()
@@ -1095,9 +1083,7 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                 set_wscale_f16(false)
                 pin_kernel_backend("portable")
                 let prev_crowns = get_metal_tensor_crowns()
-                let prev_override = active_prefill_override()
-                let prev_decode = active_decode_override()
-                let prev_min_npos = get_metal_prefill_min_npos()
+                let seat = metal_overrides_seat()
                 select_prefill_override("metal")
                 select_decode_override("metal")
                 set_metal_prefill_min_npos(1l)
@@ -1168,9 +1154,7 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                     }
                     delete trsg
                 }
-                select_decode_override(prev_decode)
-                select_prefill_override(prev_override)
-                set_metal_prefill_min_npos(prev_min_npos)
+                restore_metal_overrides(seat)
                 unpin_metal_tensor_crowns()
                 set_metal_tensor_crowns(prev_crowns)
                 metal_prefill_shutdown()
@@ -1570,8 +1554,7 @@ def private short_window_cells(t : T?; path, tag : string; bar : float; form : S
         let prior_wscale = get_wscale_f16()
         let prior_backend = active_kernel_backend()
         let prior_pin = kernel_backend_pin()
-        let prior_override = active_prefill_override()
-        let prior_min_npos = get_metal_prefill_min_npos()
+        let seat = metal_overrides_seat()
         let prior_tail = get_metal_prefill_mm_tail()
         set_wscale_f16(false)
         pin_kernel_backend("portable")
@@ -1625,8 +1608,7 @@ def private short_window_cells(t : T?; path, tag : string; bar : float; form : S
             if (!route) {
                 set_metal_prefill_mm_tail(true)
             }
-            set_metal_prefill_min_npos(prior_min_npos)
-            select_prefill_override(prior_override)
+            restore_metal_overrides(seat)
             if (served == 0l) {
                 t |> skip("{tag}/{n}: metal prefill declined (no Metal device?); the {form_name}'s parity skipped")
                 continue
@@ -1681,6 +1663,7 @@ def lastrow_ab(t : T?; var trsg : Model; prompt : array<int64>; tag : string; ba
         var tlr <- [for (i in range64(nlr)); prompt[i]]
         let dim_s = trsg.config.dim
         let served0 = metal_prefill_stats().prefills
+        let prior_lastrow = get_metal_prefill_lastrow()
         set_metal_prefill_lastrow(false)
         var s_off <- make_run_state(trsg.config)
         forward_prefill(trsg, s_off, tlr, nlr, 0l)
@@ -1696,7 +1679,7 @@ def lastrow_ab(t : T?; var trsg : Model; prompt : array<int64>; tag : string; ba
         set_metal_prefill_lastrow(false)
         var s_ctl <- make_run_state(trsg.config)
         forward_prefill(trsg, s_ctl, tctl, nlr, 0l)
-        set_metal_prefill_lastrow(true)
+        set_metal_prefill_lastrow(prior_lastrow)
         if (metal_prefill_stats().prefills - served0 == 4l) {
             let lmax = logits_maxdiff(s_on.logits, s_off.logits)
             let lctl = logits_maxdiff(s_on.logits, s_ctl.logits)
@@ -1745,7 +1728,7 @@ def test_metal_prefill_lastrow_sandwich(t : T?) {
                 let path = path_join(models_dir(), file)
                 return if (!model_available(t, path))
                 let prior_wscale = get_wscale_f16()             // process-wide knobs - restored below
-                let prior_backend = active_kernel_backend()
+                let prior_backend = kernel_backend_seat()
                 set_wscale_f16(false)       // the resident path reads the f32 scale plane (declines on s16)
                 pin_kernel_backend("portable")  // ...and row-major weights
                 var tr <- load_model_(path, QuantMode.q8)
@@ -1753,16 +1736,15 @@ def test_metal_prefill_lastrow_sandwich(t : T?) {
                 delete tr
                 var trg <- blob_twin(t, path, 2048l)
                 with_dasllama_jobque() {
+                    let seat = metal_overrides_seat()
                     t |> success(select_prefill_override("metal"), "override registered ({file})")
                     set_metal_prefill_min_npos(1l)
                     lastrow_ab(t, trg, prompt, file, bar)
-                    set_metal_prefill_min_npos(64l)
-                    select_prefill_override("")
+                    restore_metal_overrides(seat)
                 }
                 delete prompt
                 delete trg
-                clear_kernel_backend_pin()
-                select_kernel_backend(prior_backend)
+                restore_kernel_backend(prior_backend)
                 set_wscale_f16(prior_wscale)
             }
         }
@@ -1800,8 +1782,7 @@ def private moe_base_form_cells(t : T?; path, tag, base_kernel, crown : string; 
         let prior_wscale = get_wscale_f16()
         let prior_backend = active_kernel_backend()
         let prior_pin = kernel_backend_pin()
-        let prior_override = active_prefill_override()
-        let prior_min_npos = get_metal_prefill_min_npos()
+        let seat = metal_overrides_seat()
         let prior_mode = get_metal_mode()
         let prior_crowns = get_metal_tensor_crowns()
         let prior_crowns_pinned = metal_tensor_crowns_pinned()
@@ -1868,9 +1849,8 @@ def private moe_base_form_cells(t : T?; path, tag, base_kernel, crown : string; 
             unpin_metal_tensor_crowns()
             set_metal_tensor_crowns(prior_crowns)
         }
-        set_metal_prefill_min_npos(prior_min_npos)
         set_metal_mode(prior_mode)
-        select_prefill_override(prior_override)
+        restore_metal_overrides(seat)
         metal_prefill_shutdown()
         metal_decode_shutdown()
         if (empty(prior_pin)) {
@@ -1988,8 +1968,7 @@ def private scratch_panel_cells(t : T?; path, tag : string; bar : float; twin_lo
         let prior_wscale = get_wscale_f16()
         let prior_backend = active_kernel_backend()
         let prior_pin = kernel_backend_pin()
-        let prior_override = active_prefill_override()
-        let prior_min_npos = get_metal_prefill_min_npos()
+        let seat = metal_overrides_seat()
         let prior_crowns = get_metal_tensor_crowns()
         let prior_crowns_pinned = metal_tensor_crowns_pinned()
         set_wscale_f16(false)
@@ -2024,8 +2003,7 @@ def private scratch_panel_cells(t : T?; path, tag : string; bar : float; twin_lo
             unpin_metal_tensor_crowns()
             set_metal_tensor_crowns(prior_crowns)
         }
-        set_metal_prefill_min_npos(prior_min_npos)
-        select_prefill_override(prior_override)
+        restore_metal_overrides(seat)
         metal_prefill_shutdown()
         if (empty(prior_pin)) {
             clear_kernel_backend_pin()

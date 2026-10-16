@@ -1,6 +1,7 @@
 options gen2
 options _comment_hygiene = true
 options _dasllama_internal = true
+options persistent_heap   // a dastest root frees what it deletes only on this heap; the linear heap holds every carrier a cell deleted until the context ends
 
 // Targeted tests for dasllama_repack — the grp<mr> weight repacks, the disk-order K-quant
 // extractors, and the kq panel unpack. Byte-level, model-free, platform-neutral (pure CPU).

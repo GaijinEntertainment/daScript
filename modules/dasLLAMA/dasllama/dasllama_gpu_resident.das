@@ -536,6 +536,15 @@ def set_gpu_resident_embed(pin : int) {
 
 def gpu_resident_embed_pin : int => g_rdec_emb_pin
 
+//! `body` under the token-table gather pin `pin` (`set_gpu_resident_embed`), the pin put back as it was found - `body` may move the
+//! pin itself
+def with_gpu_resident_embed(pin : int; body : block<void>) {
+    let found = g_rdec_emb_pin
+    set_gpu_resident_embed(pin)
+    invoke(body)
+    set_gpu_resident_embed(found)
+}
+
 def private resident_gpu_embed : bool => g_rdec_emb_pin < 0 ? g_env_vulkan.vk_gpu_embed : g_rdec_emb_pin != 0
 
 //! the format a device gather serves a token table - or the per-layer-embedding table - in: q8, a superblock format or a per-32 one

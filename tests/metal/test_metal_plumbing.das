@@ -210,3 +210,35 @@ def test_pool_release_null_guard(t : T?) {
         }
     }
 }
+
+let RELEASE_PROBE_BYTES = 256ul * 1024ul * 1024ul
+let RELEASE_SLACK_BYTES = 64ul * 1024ul * 1024ul
+
+//! a buffer whose contents the host wrote gives its pages back at release: three write-release cycles of 256 MB leave the
+//! process footprint within 64 MB of where it started, where a buffer the binding left alive adds 256 MB a cycle
+[test]
+def test_buffer_release_returns_memory(t : T?) {
+    t |> run("a released buffer's pages leave the process footprint") <| @(t : T?) {
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            with_metal_device() $(dev : MetalDevice?) {
+                if (dev == null) {
+                    feint("no Metal device; nothing to check\n")
+                    return
+                }
+                let base = metal_footprint_settled()
+                t |> success(base > 0ul, "the footprint reads ({base} bytes)")
+                for (c in range(3)) {
+                    var b = metal_new_buffer_untracked(dev, RELEASE_PROBE_BYTES)
+                    unsafe(memset8(metal_buffer_contents(b), 1u8, int(RELEASE_PROBE_BYTES)))
+                    metal_release(b)
+                    let now = metal_footprint_settled()
+                    t |> success(now < base + RELEASE_SLACK_BYTES,
+                        "cycle {c}: the footprint returns within 64 MB of its start ({int64(now) / 1048576l - int64(base) / 1048576l} MB above it)")
+                }
+            }
+            t |> equal(metal_live_object_count(), 0l)
+        } else {
+            feint("das_metal is not built on this platform; nothing to check\n")
+        }
+    }
+}
