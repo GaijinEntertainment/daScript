@@ -92,12 +92,14 @@ w13 combines and every Vulkan act class call it, the gelu its clamped tanh form.
   sits on every combine stamp's class, read by the Q8_0 out alone.
 - **The routed sum keeps four slots' loads in flight off the window** (`GkMoeCombine.SLOT_X4`, the sum's order unchanged): the
   M5's decode combine reads 1.33 against 1.81 us at dim 2048 k 8 (the gated one 1.45 against 2.01) and the gemma-4 step 12.3
-  against 13.3 us, while the gemma-4 window stamp (`MetalMoeCombG4Pf`) reads 8% slower with it (133 against 122.5 us at 512
-  rows) and sums one slot a step.
+  against 13.3 us, while the gemma-4 window stamp (`MetalMoeCombG4Pf`) reads 11% slower with it (137.4 against 122.6 us at
+  512 rows, the two stamps raced in one process by `bench_metal_gk_rows`) and sums one slot a step.
 - **The residual step's sandwich seam is one dispatch on both homes** (`GkAddRmsRows.PRE`: the branch normed under its post
   norm, the add and the next norm in one pass). The M5's 512-row window at dim 2560 reads 32.9 us against the rms + add_rms
   pair's 41.9 (the no-norm seam 22.5 against 33.4), at dim 3840 40.7 against 59.1 (28.2 against 53.0); the pod's rows read
-  the same clock steps as the per-home bodies (4.14 / 6.14 / 8.19 us at dim 2560 and 3840, one and four rows).
+  the same clock steps as the per-home bodies (4.14 / 6.14 / 8.19 us at dim 2560 and 3840, one and four rows). The window's
+  stamps run 256 lanes: raced in one process the seam reads 27.7 us at 256 against 35.0 at 128 and 52.9 at 1024 (dim 2560),
+  40.7 against 55.1 and 61.1 (dim 3840); the decode rows keep 1024.
 - **The Vulkan MoE step stores its next norm four elements in flight a lane** (`GkMoeCombG4.OUT_X4`, the residual step's
   `GkQ8BlockStore.store_x4` form, which the residual step's `ArBase` stores through): with the stride loop the pod reads 12.29 against the per-home body's 10.41 us, with it 10.44.
 - **The select's down-scale arm is a stamp of its own on Metal.** The arm costs the plain stamps 0.27 us a dispatch on the M5
