@@ -472,10 +472,58 @@ def test_gpu_resident_segments_gemma4_e2b(t : T?) {
     with_dasllama_jobque_() {
         segments_cell(t, tr)
         tails_as_segments(t, tr, LONG_TAIL, LONG_TAIL, "tails past one window")
+        host_embedded_cell(t, tr)
     }
     g_seg_bar_rel = SPLIT_BAR_REL
     set_resident_prefill_allowed(allowed)
     delete tr
+}
+
+//! the E-series window whose rows the host embedded: with the tier's token-table gate unseated the prefill embeds every row on
+//! the host, so the side rows have no ids to gather off and the segmented form declines the call - the counter unmoved (the
+//! openings' segmented window in `segments_cell` its control), each session's opening then its own window, its last row within
+//! the bar of the same opening prefilled alone with the gate back
+def private host_embedded_cell(t : T?; tr : Model) {
+    var open_a <- resident_prompt(OPEN_ROWS, 0l)
+    var open_b <- resident_prompt(OPEN_ROWS, 7l)
+    var opens : array<array<int64>>
+    opens |> reserve(2l)
+    opens |> push_clone(open_a)
+    opens |> push_clone(open_b)
+    var sa <- create_session(tr, mirror_kv_dtype())
+    var sb <- create_session(tr, mirror_kv_dtype())
+    var sess <- [unsafe(addr(sa)), unsafe(addr(sb))]
+    let had_gate = embed_gpu_gate_installed()
+    let gate = embed_gpu_gate()
+    unregister_embed_gpu_gate()
+    let sw0 = segment_windows()
+    eval_segments_(tr, sess, opens)
+    if (had_gate) {
+        register_embed_gpu_gate(gate)
+    }
+    sess |> clear()
+    t |> success(had_gate, "the tier seats the token-table gate the cell unseats")
+    t |> equal(segment_windows() - sw0, 0l, "host-embedded rows on a per-layer-embedding model: no segmented window")
+    t |> equal(sa.n_past, OPEN_ROWS, "session A prefilled its opening alone")
+    t |> equal(sb.n_past, OPEN_ROWS, "session B prefilled its opening alone")
+    let got <- [ <- logits_of(sa, tr.config.vocab_size), <- logits_of(sb, tr.config.vocab_size)]
+    delete sa   //! the two regions go free before the references take them
+    delete sb
+    var ra <- create_session(tr, mirror_kv_dtype())
+    var rb <- create_session(tr, mirror_kv_dtype())
+    open_session(tr, ra, open_a)
+    open_session(tr, rb, open_b)
+    let want <- [ <- logits_of(ra, tr.config.vocab_size), <- logits_of(rb, tr.config.vocab_size)]
+    rows_within_control(t, "the host-embedded openings, each alone", got, want, g_seg_bar_rel, 1l, 1.0, $(r) => r == 0l ? "session A's last row (B's as the control)" : "session B's last row")
+    log_argmax_rows(tr, "the host-embedded openings: the gathered solo rows, then the host-embedded rows", got, want)
+    unsafe {
+        delete sess
+    }
+    delete ra
+    delete rb
+    delete opens
+    delete open_a
+    delete open_b
 }
 
 let private GEMMA_SEG_BAR_REL = 0.16
