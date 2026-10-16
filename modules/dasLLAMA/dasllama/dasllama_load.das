@@ -2822,7 +2822,7 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
             }
             if (has_ple(t.config)) {  // gemma-4 E-series: per-layer PLE gate (dim->ple) + proj (ple->dim), each in its tag's planes
                 let ple = t.config.n_embd_per_layer
-                for (pp, name in [ple_plane(t, l, false), ple_plane(t, l, true)], ["blk.{l}.inp_gate.weight", "blk.{l}.proj.weight"]) {
+                for (pp, name in ple_planes(t, l), ["blk.{l}.inp_gate.weight", "blk.{l}.proj.weight"]) {
                     if (pp.f32) {
                         gguf_read_tensor_f32(m, bytes, name, t.fblob, pp.off, dim * ple)
                     } else {

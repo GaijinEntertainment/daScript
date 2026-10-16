@@ -274,6 +274,6 @@ the dense rail.
 first routed layers' experts to the host (`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan`), such a layer runs the dense
 triple, writes the routed feed into xb and runs the router GEMV off its own rms of x (`norm_on`, so xb keeps the feed), and the
 segment lands the feed and the logits (`ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command`; the window chain the same over its rows).
-The host selects, folds the down scale into the weights (`rdec_host_down_scale`, as `gemma4_moe_ffn` does) and sums the
+The host selects, folds the down scale into the weights (`moe_down_scale_fold`, the CPU `gemma4_moe_ffn`'s own fold) and sums the
 experts; the next segment's combine reads that sum as one routed row of weight one (`ArArgs.slots` 1 over the ramp map and the
 ones row) under the same three norms. The hot expert pool stays off a gemma-4 model: its device sums carry no down scale.

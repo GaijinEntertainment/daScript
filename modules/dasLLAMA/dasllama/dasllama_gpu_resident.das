@@ -1028,12 +1028,7 @@ def resident_slab_cap_units(dt : KVDtype; regions : int64) : int64 {
 //! `flat_only` leaves out the sliding layers a ring holds
 def private resident_widest_kv_row(t : Model; flat_only : bool = false) : int64 {
     let c = t.config
-    var kvd = resident_head_on(t) ? layer_kv_dim(c, c.n_layers) : 0l
-    for (l in range64(c.n_layers)) {
-        continue if (layer_is_recurrent(c, l) || (flat_only && gpu_kv_ring_on() && layer_is_sliding(c, l)))
-        kvd = max(kvd, layer_kv_dim(c, l))
-    }
-    return kvd
+    return max(resident_head_on(t) ? layer_kv_dim(c, c.n_layers) : 0l, resident_attn_maxima(c, flat_only).kvd)
 }
 
 //! layer `l`'s ring rows in a mirror of `seq_cap` positions a region (`kv_ring_rows` under the window chain's rows; a sharer's
@@ -1171,13 +1166,13 @@ def resident_shadow_ctx(t : Model; dt : KVDtype; bcap : int64) : int64 {
     return (kv_block_codec(dt) && bcap > 0l && kvd > 0l) ? bcap / (2l * kvd) : 0l
 }
 
-//! the attention layers' widest q row, K/V row and head
-def private resident_attn_maxima(c : Config) : tuple<qd : int64; kvd : int64; hs : int64> {
+//! the attention layers' widest q row, K/V row and head; `flat_only` leaves out the sliding layers a ring holds
+def private resident_attn_maxima(c : Config; flat_only : bool = false) : tuple<qd : int64; kvd : int64; hs : int64> {
     var qd = 0l
     var kvd = 0l
     var hs = 0l
     for (l in range64(c.n_layers)) {
-        continue if (layer_is_recurrent(c, l))
+        continue if (layer_is_recurrent(c, l) || (flat_only && gpu_kv_ring_on() && layer_is_sliding(c, l)))
         qd = max(qd, layer_qd(c, l))
         kvd = max(kvd, layer_kv_dim(c, l))
         hs = max(hs, layer_head_size(c, l))
@@ -4029,21 +4024,11 @@ def private rdec_host_experts_step(l : int64; xb : float const?; logits : float 
             ebp = addr<float const?>(t.fblob[t.exp_probs_off + l * ne])
         }
         moe_select(c, addr(s.moe_logits[0]), s.moe_idx, s.moe_w, 0l, ebp)
-        rdec_host_down_scale(t, l, s.moe_idx, s.moe_w, c.n_expert_used)
+        moe_down_scale_fold(t, l, s.moe_idx, s.moe_w, c.n_expert_used)
         moe_routed_note(t, s, l)
         rdec_trace_picks(l, 1l, c.n_expert_used, addr<int64 const?>(s.moe_idx[0]), addr<float const?>(s.moe_w[0]))
         moe_routed_sum_k(t, s, l, rdec_hot_on(l) ? rdec_hot_step(t, s, l) : c.n_expert_used)
         memcpy(reinterpret<void?>(acc), addr<void const?>(s.moe_acc[0]), c.dim * 4l)
-    }
-}
-
-//! gemma-4's per-expert down scale folded into the first `n` picks' routing weights, as `gemma4_moe_ffn` folds it; no-op elsewhere
-[hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-gemma4-moe-block")]
-def private rdec_host_down_scale(t : Model; l : int64; idx : array<int64>; var w : array<float>; n : int64) {
-    return if (!t.config.moe_dense_shexp)
-    let row = t.moe_down_scale_off + l * t.config.n_expert
-    for (j in range64(n)) {
-        w[j] *= t.fblob[row + idx[j]]
     }
 }
 
@@ -4256,7 +4241,7 @@ def private rdec_host_experts_rows(l : int64; xb : float const?; logits : float 
             memcpy(addr<void?>(s.moe_rlog[r * ne]), reinterpret<void const?>(logits + (row0 + r) * ner), ne * 4l)
         }
         moe_routed_rows_select(t, s, l, nrows)
-        rdec_host_down_scale(t, l, s.moe_idx_b, s.moe_w_b, nrows * c.n_expert_used)
+        moe_down_scale_fold(t, l, s.moe_idx_b, s.moe_w_b, nrows * c.n_expert_used)
         rdec_trace_picks(l, nrows, c.n_expert_used, addr<int64 const?>(s.moe_idx_b[0]), addr<float const?>(s.moe_w_b[0]))
         if (g_rdec_verify_rows_in_flight) {
             let chained = rdec_hot_on(l) && rdec_hot_rows_step(t, s, l, nrows)

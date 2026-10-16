@@ -13,7 +13,7 @@ require metal/das_metal_boost
 require dasllama/dasllama_common
 require dasllama/dasllama_gpu_tier   // set_moe_gpu_dn_room_hook: the scheduler's stream count reaches the mirror cache
 require dasllama/dasllama_math
-require dasllama/dasllama_gpu_math   // kv_ring_row: a mirror position's row
+require dasllama/dasllama_gpu_math   // kv_ring_row / kv_ring_runs: a mirror position's row, a span's runs
 require dasllama/dasllama_kv_codec  // tq4_fill_signs — GPU and CPU must share the exact sign vector
 require dasllama/dasllama_metal_shapes public   // the extracted portable shape gates — re-exported so the driver family keeps its names
 
@@ -1063,17 +1063,10 @@ def private region_upload_cat_new(key : uint64; pieces : array<tuple<p : void?; 
     return buf
 }
 
-// lazily upload up to three CONSECUTIVE-ROW regions as ONE resident buffer, keyed by the first
-// piece's base address — the fused QKV / W1W3 GEMV streams (one dispatch, continuous row
-// indexing). Load-once-stable like upload_region; b2 == 0 makes it a two-piece concat.
-def upload_region_cat3(p0 : void?; b0 : uint64; p1 : void?; b1 : uint64; p2 : void?; b2 : uint64) : MetalBuffer? {
-    let key = intptr(p0)
-    var hit = region_hit(g_regions_cat3, key, b0 + b1 + b2)
-    return hit != null ? hit : region_upload_cat_new(key, [(p = p0, b = b0), (p = p1, b = b1), (p = p2, b = b2)])
-}
-
-//! the four regions as one resident buffer, the same contract as `upload_region_cat3` (keyed by the first piece's base)
-def upload_region_cat4(p0 : void?; b0 : uint64; p1 : void?; b1 : uint64; p2 : void?; b2 : uint64; p3 : void?; b3 : uint64) : MetalBuffer? {
+//! up to four CONSECUTIVE-ROW regions uploaded lazily as ONE resident buffer, keyed by the first piece's base address - the fused
+//! QKV / W1W3 GEMV streams (one dispatch, continuous row indexing); load-once-stable like `upload_region`, a piece of 0 bytes absent
+def upload_region_cat(p0 : void?; b0 : uint64; p1 : void?; b1 : uint64; p2 : void? = null; b2 : uint64 = 0ul; p3 : void? = null;
+                      b3 : uint64 = 0ul) : MetalBuffer? {
     let key = intptr(p0)
     var hit = region_hit(g_regions_cat3, key, b0 + b1 + b2 + b3)
     return hit != null ? hit : region_upload_cat_new(key, [(p = p0, b = b0), (p = p1, b = b1), (p = p2, b = b2), (p = p3, b = b3)])
@@ -1751,15 +1744,12 @@ def private mirror_upload_layer(t : Model; var s : Session; l, lo, hi : int64; k
         let kbase = kv_layer_kbase(s, l, c.seq_len)
         let vbase = kv_layer_vbase(s, l, c.seq_len)
         for (r in range64(nrun)) {
-            var j = s.kv_runs[r].j0
-            var prow = s.kv_runs[r].row0
-            while (j < s.kv_runs[r].j1) {
-                let slot = kv_ring_row(j, ring)
-                let n = ring > 0l ? min(s.kv_runs[r].j1 - j, ring - slot) : s.kv_runs[r].j1 - j
+            let j0 = s.kv_runs[r].j0
+            let row0 = s.kv_runs[r].row0
+            kv_ring_runs(j0, s.kv_runs[r].j1, ring) $(p0, n, slot) {
+                let prow = row0 + (p0 - j0)
                 memcpy(reinterpret<void?>(ab + klb + uint64(slot * krow)), reinterpret<void?>(kbase + prow * krow), n * krow)
                 memcpy(reinterpret<void?>(ab + vlb + uint64(slot * vrow)), reinterpret<void?>(vbase + prow * vrow), n * vrow)
-                j += n
-                prow += n
             }
         }
     }
