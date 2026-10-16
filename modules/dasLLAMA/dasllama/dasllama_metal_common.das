@@ -51,8 +51,14 @@ struct private RegionEntry {
     bytes : uint64
 }
 
+//! a concatenated region: its buffer and every piece it was built from, each piece's base address and byte count in order
+struct private CatRegionEntry {
+    @do_not_delete buf : MetalBuffer?   // released explicitly (flush/release/retire)
+    pieces : uint64[8]
+}
+
 var @scratch g_regions : table<uint64; RegionEntry>  // base address -> resident PLAIN region; upload-once, steady-state [] is a hit
-var @scratch g_regions_cat3 : table<uint64; RegionEntry>  // first-piece base -> resident CONCAT region
+var @scratch g_regions_cat3 : table<uint64; CatRegionEntry>  //! the pieces' hash -> resident CONCAT region
 var @scratch g_region_retire : array<MetalBuffer?>  // grown-out buffers: unretained cbs may still bind them — released only at the quiesce boundaries
 var g_pool : MetalBufferPool
 var g_upool : MetalBufferPool                // UNTRACKED pool: uniforms + rope rows (GPU-read-only)
@@ -1042,7 +1048,7 @@ def upload_region(src : void?; bytes : uint64) : MetalBuffer? {
 }
 
 [cold_path]
-def private region_upload_cat_new(key : uint64; pieces : array<tuple<p : void?; b : uint64>>) : MetalBuffer? {
+def private region_upload_cat_new(key : uint64; sig : uint64[8]; pieces : array<tuple<p : void?; b : uint64>>) : MetalBuffer? {
     var total = 0ul
     for (pc in pieces) {
         total += pc.b
@@ -1059,17 +1065,36 @@ def private region_upload_cat_new(key : uint64; pieces : array<tuple<p : void?; 
         }
     }
     residency_note(buf)
-    g_regions_cat3[key] = RegionEntry(buf = buf, bytes = total)
+    g_regions_cat3[key] = CatRegionEntry(buf = buf, pieces = sig)
     return buf
 }
 
-//! up to four CONSECUTIVE-ROW regions uploaded lazily as ONE resident buffer, keyed by the first piece's base address - the fused
-//! QKV / W1W3 GEMV streams (one dispatch, continuous row indexing); load-once-stable like `upload_region`, a piece of 0 bytes absent
+//! the cached concat at `key` when it was built from exactly the pieces `sig` names, else null - an entry another signature hashed
+//! to is retired first: the old buffer may be bound in an in-flight unretained cb
+def private region_cat_hit(key : uint64; sig : uint64[8]) : MetalBuffer? {
+    return null if (!key_exists(g_regions_cat3, key))
+    var cached = g_regions_cat3[key]
+    var same = true
+    for (a, b in cached.pieces, sig) {
+        same = same && a == b
+    }
+    return cached.buf if (same)
+    g_region_retire |> push(cached.buf)
+    return null
+}
+
+//! up to four CONSECUTIVE-ROW regions uploaded lazily as ONE resident buffer, keyed by every piece's base address and byte count -
+//! the fused QKV / W1W3 GEMV streams (one dispatch, continuous row indexing); load-once-stable like `upload_region`, a piece of 0
+//! bytes absent
 def upload_region_cat(p0 : void?; b0 : uint64; p1 : void?; b1 : uint64; p2 : void? = null; b2 : uint64 = 0ul; p3 : void? = null;
                       b3 : uint64 = 0ul) : MetalBuffer? {
-    let key = intptr(p0)
-    var hit = region_hit(g_regions_cat3, key, b0 + b1 + b2 + b3)
-    return hit != null ? hit : region_upload_cat_new(key, [(p = p0, b = b0), (p = p1, b = b1), (p = p2, b = b2), (p = p3, b = b3)])
+    let sig = fixed_array(intptr(p0), b0, intptr(p1), b1, intptr(p2), b2, intptr(p3), b3)
+    var key = 14695981039346656037ul
+    for (v in sig) {
+        key = (key ^ v) * 1099511628211ul
+    }
+    var hit = region_cat_hit(key, sig)
+    return hit != null ? hit : region_upload_cat_new(key, sig, [(p = p0, b = b0), (p = p1, b = b1), (p = p2, b = b2), (p = p3, b = b3)])
 }
 
 // ===== the whole-plane resident buffers (blob-only models) =====
@@ -1570,10 +1595,19 @@ def private mirror_orphan_register {
     register_kv_release_listener(@@mirror_orphan)
     set_gpu_kv_room_hook(@@mirror_rows_within_ceiling)
     register_reload_prep(@@mirror_sigs_drop_all)
+    register_reload_prep(@@mirror_ring_slack_reset)
     g_mirror_adopt = g_env_metal.mirror_adopt
     if (!g_mirror_adopt) {
         to_log(LOG_WARNING, "dasLLAMA metal decode: DASLLAMA_METAL_MIRROR_ADOPT=0 - a released session's mirror goes back to the arena and the next session uploads its rows\n")
     }
+}
+
+//! a model swap: the next model's rings are cut at its own windows from the floor, and no step encoded over the old layout runs
+[cold_path]
+def private mirror_ring_slack_reset {
+    return if (g_mirror_ring_slack == MIRROR_RING_SLACK_MIN)
+    g_mirror_ring_slack = MIRROR_RING_SLACK_MIN
+    g_arena_epoch++
 }
 
 [cold_path]   // a model swap: the released mirrors' signatures name pages of the model going out
