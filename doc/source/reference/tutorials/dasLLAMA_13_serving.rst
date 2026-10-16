@@ -106,6 +106,17 @@ others by a chunk, not by its whole length. Results come back as
        events |> clear()
    }
 
+When the round is over, ``mtp_drafter_stats`` reads the assistant's tally —
+its rounds, the joint verifies that carried two streams or more, and the
+microseconds split between the draft chains, the verify and the plain steps —
+and ``detach_mtp_drafter`` stops its rounds, so plain decode serves again:
+
+.. code-block:: das
+
+   let st = mtp_drafter_stats(m)
+   print("drafter: {st.rounds} rounds, {st.joint} joint, verify {st.verify_us / 1000l}ms\n")
+   detach_mtp_drafter(m)   // a model with no drafter attached is left as it was
+
 The tutorial prints one digit — the stream id — per generated piece, so the
 run shows continuous batching literally::
 
