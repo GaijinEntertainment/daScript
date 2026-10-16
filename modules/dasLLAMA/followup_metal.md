@@ -418,7 +418,7 @@ as `DASLLAMA_METAL_WAIT_SPIN` (`ARCHITECTURE_GPU_MTP_DECODE.md` 2.38): decode 0.
 0.96 -> 1.03 (1.5B), 0.95 -> 1.00 (Llama Q8), 0.93 -> 1.00 (Llama Q4_K_M).
 
 The fourth: **the 128-row tall stamps lose on this GPU** (Llama-1B 5%, the 30B 1%, the 9B
-even) and open only behind the `hmm_tall` crown the mint races (`ARCHITECTURE_GPU_PREFILL_GEMM.md`,
+even) and open only behind the `hmm_tall` crown the mint races (`ARCHITECTURE_GPU_PREFILL_GEMM.md#prefill-gemm-ladder`,
 the occupancy-floor paragraph); the M5's sidecars carry the crown by hand until its next mint.
 The table above is the family under all four.
 
@@ -583,7 +583,7 @@ uses. The bar is the eight `*T` entries of `CENSUS_NEVER_DISPATCHED` in
 ## 15. Metal review gates found the shape of
 
 (a) A `REVIEW.das` check that reads every per-format dispatch ladder in
-`dasllama/dasllama_metal_kernels.das` and `dasllama/dasllama_metal_prefill.das` (twelve today -
+`dasllama/dasllama_metal_kernels.das` and `dasllama/dasllama_metal_prefill.das` (nine today -
 `enc_kq_gemv`, `enc_kq_mvb`, `enc_kq_gemm_mm_b`, `enc_moe_gemv`, `pf_kq_dq_pso`,
 `pf_moe_kq_row`, `pf_moe_th_pso`, `pf_enc_kq_dq`, `pf_kq_dense_stamps`) against the served-format predicates
 (`kq_fmt_gpu_supported`, `moe_fmt_metal_served`, `moe_site_ok` in

@@ -1159,7 +1159,7 @@ def private kernels_sum(names : array<string>) : int64 {
 }
 
 //! `kernels`: the stamps only the carrier's format at its site dispatches - their summed count rises over the row
-[unused_argument(t, path, tag, hetero_hidden, tokexact, bar, arm, kernels)]   // off-Apple the gated body is empty
+[cold_path, unused_argument(t, path, tag, hetero_hidden, tokexact, bar, arm, kernels)]   // off-Apple the gated body is empty
 def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false; tokexact : bool = true; bar : float = 8.0;
                         arm : string = "fam-gemma4e"; kernels : array<string> = array<string>()) {
     // gemma-4 E-series (E4B): PLE (per-layer embeddings — MetalNeed.ple) + cross-layer KV
@@ -1414,7 +1414,7 @@ def private routed_gemv_counts : string {
     }
 }
 
-[unused_argument(t, path, tag, tol_pf, tol_step, gemvs, mx4)]   // off-Apple the gated body is empty
+[cold_path, unused_argument(t, path, tag, tol_pf, tol_step, gemvs, mx4)]   // off-Apple the gated body is empty
 def private gemma4moe_row(t : T?; path : string; tag : string; tol_pf : float = 8.0; tol_step : float = 16.0; gemvs : array<string> = array<string>();
                           mx4 : bool = false) {
     // gemma4-26B-A4B (Wave C stage 3): the parallel dense-shared + routed MoE graph. TOKEN
@@ -1622,7 +1622,7 @@ def private gptoss_row(t : T?; path : string) {
 //! counting prompt past the window prefilled in 256-row windows and 24 greedy steps on the blob twin with the ring pinned on, then
 //! off (`set_gpu_kv_ring`, put back), token for token, every step and window served by the device; the ringed layout holds rings
 //! its positions wrap, the flat one none, and the ringed mirror feeds every window the flat one feeds (`metal_prefill_mirror_served`)
-[unused_argument(t, path, tag, family, arm)]   // off-Apple the gated body is empty
+[cold_path, unused_argument(t, path, tag, family, arm)]   // off-Apple the gated body is empty
 def private metal_ring_row(t : T?; path, tag, family, arm : string) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
         if (!family_on(t, family) || !arm_on(t, arm) || !model_available(t, path)) {
@@ -1929,7 +1929,7 @@ def private gemma4_hetero_q8_row(t : T?; path : string) {
     }
 }
 
-[unused_argument(t, path, tag)]   // off-Apple the gated body is empty
+[cold_path, unused_argument(t, path, tag)]   // off-Apple the gated body is empty
 def private gemma4_hetero_row(t : T?; path : string; tag : string = "gemma4-12b/k4"; free_rows : int64 = 128l) {
     // the stage-3 heterogeneous row: needs-derivation pin, per-path cells (all three ENGAGE),
     // a FREEFORM decode-only forced-feed tolerance cell, a counting both-paths generate, a B=2

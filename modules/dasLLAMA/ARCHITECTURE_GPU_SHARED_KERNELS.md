@@ -77,12 +77,20 @@ struct and the body; a stamp sets the template constants its home needs and maps
 | `GkDnConv` | `MetalDnConvN` / `N4` (`PB` 1 / 4, `RING` 8: a group of 16 rows or fewer) | `DnConv` (`PB` 32, `RING` 4) | `PB`, `RING` |
 | `GkMoeCombG4` | `MetalMoeCombG4` / `Hx` (the selection rows' slots, the next norm in f32, `Hx` its f16 twin), `MetalMoeCombG4Pf` (the bucket inverse's slots, no norm out; 1024 lanes, `rsqrt`) | `ClsArCombG4` / `F16B` / `Rq` (the slot map, the next norm in f32, f16 or Q8_0 blocks; 256 lanes, `1 / sqrt`) | `TG`, `RSQRT`, `GATHERED`, `OUT_F32` / `OUT_F16` / `OUT_Q8`, `HX`, `PRESUM_SWITCH`; the stash and, on Metal, the norm rows' layout |
 | `GkClsEpilogue` | `MetalClsEpilogue` | `ClsEpilogue` | nothing; every row in one dispatch |
-| `GkAddRmsRows` | `MetalAddRms` / `HX` (the plain step), `MetalPreAddRms` / `HX` (the sandwich seam in one dispatch: the branch normed under its post norm, the add, the next norm), `MetalPreAdd` (no norm out; 1024 lanes a decode row, 256 the window) | `ClsArAddRms` / `F16B`, `ClsArAddRmsRqB` and the `ArAddRmsRq*` stamps (Q8_0 out), the combines' `ArCombBase` (256 lanes) | `LANES`, `PRE`, `PRE_SWITCH`, `PSCALE`, `NORM_SWITCH`, `ARMS`, `X4`, `HX`, `OUT_*`; on Metal, the norm rows' layout |
+| `GkAddRmsRows` | `MetalAddRms` / `HX` (the plain step), `MetalPreAddRms` / `HX` (the sandwich seam in one dispatch: the branch normed under its post norm, the add, the next norm), `MetalPreAdd` (no norm out; 1024 lanes a decode row, 256 the window) | `ClsArAddRms` / `F16B`, `ClsArAddRmsRqB` and the `ArAddRmsRq*` stamps (Q8_0 out), the combines' `ArCombBase` (256 lanes) | `LANES`, `PRE`, `PRE_SWITCH`, `NORM_SWITCH`, `ARMS`, `X4`, `HX`, `OUT_*`; on Metal, the norm rows' layout |
 | `GkPleAct` | `MetalGegluSide` (in place over the gate rows, 64 lanes) | `PleActF32` (`OUT`: the f32 projection's x, 256 lanes) | `OUT`; the side row's index is `gk_strided_at`, `ActRqT.up_at`'s |
 | `GkPleFinish` | `MetalPleFinish` (`XSCALE`: the projection's 1 / sqrt(dim) in the finish, `rsqrt`) | `PleFinish` (the projection arrives scaled, `1 / sqrt`) | `XSCALE`, `RSQRT`; 256 lanes a slice on both |
 
 The gated FFN's activation is one function on both homes (`gk_act_mul`, `dasllama_gpu_math.das`): the Metal ew2 and
 w13 combines and every Vulkan act class call it, the gelu its clamped tanh form.
+
+**Where the figures below come from** (the bullets and the table, every reading `debug-jit`, at under 3% cv). Metal:
+`./bin/daslang -jit dastest/dastest.das -- --bench --test modules/dasLLAMA/benchmarks/ew/bench_metal_gk_rows.das` on the M5
+Max under `DAS_TUNE_MANIFEST=modules/dasLLAMA/performance/m5.tune.json`, `DAS_TUNE_POLICY` unset - direction-grade, since the
+box profile predates the binary; a race is its `race <kernel>` lines (the arms in one process, an arm's best round of at
+least 9), any other row the median. Vulkan: `./bin/daslang -jit modules/dasLLAMA/harness/vk_gk_rows_probe.das` on the RTX PRO
+4500 Blackwell pod, `DASLLAMA_COOPMAT` unset, the median of 9 rounds of 8 submits of 64 dispatches; the device clock steps by
+2.05 us at these sizes, so a cell under 8 us moves by whole steps. A bullet's pair is raced in one process.
 
 - **The inverse rms keeps each home's spelling.** The CPU rmsnorm and the Vulkan bodies spell `1 / sqrt`, the Metal bodies
   `rsqrt`, and a decode parity cell reads the two apart only past the bars it holds; a shared row template therefore carries
@@ -90,22 +98,27 @@ w13 combines and every Vulkan act class call it, the gelu its clamped tanh form.
 - **The gemma-4 MoE step sums the routed rows with the routed combine's own sum** (`GkMoeCombine.slot_sum_into`): `GkMoeCombG4`
   derives `GkMoeCombine`, which derives `GkQ8BlockStore` for the step's Q8_0 out; the `@workgroup` slab the store declares
   sits on every combine stamp's class, read by the Q8_0 out alone.
-- **The routed sum keeps four slots' loads in flight off the window** (`GkMoeCombine.SLOT_X4`, the sum's order unchanged): the
-  M5's decode combine reads 1.33 against 1.81 us at dim 2048 k 8 (the gated one 1.45 against 2.01) and the gemma-4 step 12.3
-  against 13.3 us, while the gemma-4 window stamp (`MetalMoeCombG4Pf`) reads 11% slower with it (137.4 against 122.6 us at
-  512 rows, the two stamps raced in one process by `bench_metal_gk_rows`) and sums one slot a step.
+- **The routed sum keeps four slots' loads in flight off the window** (`GkMoeCombine.SLOT_X4`, the sum's order unchanged), and
+  the gemma-4 window stamp (`MetalMoeCombG4Pf`) sums one slot a step. On against off on the M5, `debug-jit`: the decode combine
+  at dim 2048 k 8 reads 1.28 against 1.82 us at one row and 1.31 against 1.91 at four (the gated one 1.42 against 1.98, 1.46
+  against 2.02); the gemma-4 decode step at dim 2816 k 8 12.01 against 13.36 at one row and 12.06 against 13.50 at four (`Hx`
+  11.98 against 13.33, 12.03 against 13.43); the window's reduce at 512 rows of 2048 38.10 against 38.86 (the gated one 41.83
+  against 42.56); the gemma-4 window stamp 136.91 against 121.38.
 - **The residual step's sandwich seam is one dispatch on both homes** (`GkAddRmsRows.PRE`: the branch normed under its post
-  norm, the add and the next norm in one pass). The M5's 512-row window at dim 2560 reads 32.9 us against the rms + add_rms
-  pair's 41.9 (the no-norm seam 22.5 against 33.4), at dim 3840 40.7 against 59.1 (28.2 against 53.0); the pod's rows read
-  the same clock steps as the per-home bodies (4.14 / 6.14 / 8.19 us at dim 2560 and 3840, one and four rows). The window's
-  stamps run 256 lanes: raced in one process the seam reads 27.7 us at 256 against 35.0 at 128 and 52.9 at 1024 (dim 2560),
-  40.7 against 55.1 and 61.1 (dim 3840); the decode rows keep 1024.
+  norm, the add and the next norm in one pass). The M5's 512-row window, `debug-jit`, at dim 2560 reads 27.42 us against the
+  rms + add_rms pair's 35.80 (the no-norm seam 18.62 against 33.37), at dim 3840 40.42 against 54.41 (27.94 against 52.96).
+  The window's stamps run 256 lanes and the decode builders 1024. At 512 rows on the f16 twin's pipeline the seam reads 27.54
+  us at 256 lanes against 34.95 at 128 and 52.71 at 1024 (dim 2560), 40.39 against 53.98 and 59.85 (dim 3840). At the decode
+  rows on the plain pipeline, dim 3840, 1024 lanes reads 6.67 / 6.74 us at one / four rows against 256's 6.68 / 6.87 and 128's
+  11.19 / 11.61; at dim 2560 256 lanes reads 4.87 / 5.09 against 1024's 6.14 / 6.30 (128: 7.81 / 8.13).
 - **The Vulkan MoE step stores its next norm four elements in flight a lane** (`GkMoeCombG4.OUT_X4`, the residual step's
-  `GkQ8BlockStore.store_x4` form, which the residual step's `ArBase` stores through): with the stride loop the pod reads 12.29 against the per-home body's 10.41 us, with it 10.44.
-- **The select's down-scale arm is a stamp of its own on Metal.** The arm costs the plain stamps 0.27 us a dispatch on the M5
-  with no row named, so a down-scale row selects the `Ds` stamps (`ARCHITECTURE_GPU_PREFILL_MOE.md#moe-wscale`), which bind the
-  layer's row and scale every pick, and the plain stamps bind no down-scale buffer; the Vulkan top-k carries the arm on its one
-  stamp, its row named or `GK_NO_DSCALE` (`DSOFF_SWITCH`).
+  `GkQ8BlockStore.store_x4` form, which the residual step's `ArBase` stores through): the pod reads 10.37 us with it against
+  12.29 with the stride loop (`ProbeArCombG4X1`), `debug-jit`.
+- **The select's down-scale arm is a stamp of its own on Metal.** With no row named the arm costs the plain stamps 0.20 us a
+  dispatch on the M5, `debug-jit` (2.83 against 3.04 us at 256 experts k 8, 3.65 against 3.90 at 512 k 10), so a down-scale
+  row selects the `Ds` stamps (`ARCHITECTURE_GPU_PREFILL_MOE.md#moe-wscale`), which bind the layer's row and scale every pick,
+  and the plain stamps bind no down-scale buffer; the Vulkan top-k carries the arm on its one stamp, its row named or
+  `GK_NO_DSCALE` (`DSOFF_SWITCH`).
 - **A value one home fixes and the other varies is a run-time read on the varying home alone.** A `*_SWITCH` constant compiles
   the read in where a site varies the field (`PRE_SWITCH`: the Vulkan sandwich arm off a layer's `pre_post`; `PRESUM_SWITCH`:
   the window step's down-GEMV route; `DSOFF_SWITCH`: the Vulkan top-k's row) and out where every site passes one value; a row
@@ -120,10 +133,12 @@ w13 combines and every Vulkan act class call it, the gelu its clamped tanh form.
 - **The grid-codebook decode GEMVs ride one shell on Metal** (`MetalKqGridGemvT`: iq3s, iq3xxs, iq2s, iq2xs, iq2xxs, dense and
   routed); a format supplies its block's term (`blk_sum`), and the iq2xxs F4 stamp its staged grid (`grid_prologue`).
 
-**What each stamp reads on its home.** One dispatch alone, the kernel bench (`benchmarks/ew/bench_metal_gk_rows.das`, M5 Max)
-and the Vulkan probe (`harness/vk_gk_rows_probe.das`, RTX PRO 4500 Blackwell), median of the rounds at under 3% cv, the
-per-home body before the template against the stamp, in us (`PERF_LEDGER.md`, the 2026-10-13 entry on the shared row
-templates' stamps, carries the run):
+**What each stamp reads on its home.** One dispatch alone, in us, the per-home body before the template against the stamp. A
+before cell is the same instrument at the parent of the commit that brought its row in, `direction-grade`: `4459db710d` for the
+rows the templates landed with (`PERF_LEDGER.md`, the 2026-10-13 entry on the shared row templates' stamps), `5d3db7852d` for
+the router's one- and eight-column f32 rows, `1d357ad171` for the projection's Vulkan rows, `611775848f` for its fold onto the
+router's Metal shell, `7f5c27186a` for the gemma-4 select, MoE tail and classifier epilogue rows. The projection's f32 rows are
+its in-process alternate on both homes:
 
 | Kernel, shape | M5 before | M5 stamp | Vulkan before | Vulkan stamp |
 |---|---:|---:|---:|---:|
@@ -145,8 +160,10 @@ templates' stamps, carries the run):
 | router, 256 experts dim 2048, 1 column, f32 rows | 3.82 | 3.37 | 4.2 | 4.43 |
 | router, 8 columns, f32 rows | - | - | 14.34 | 14.34 |
 | router, 512 columns (the window) | 141.6 | 144.4 | - | - |
-| E-series side rows' projection, 35 x 256 rows of 1536, bf16 rows, 1 column (the M5 before: the CPU; Vulkan before: an f16 copy of the rows) | - | 68.8 | 32.83 | 32.86 |
-| the same, 4 columns | - | 79.9 | 74.15 | 74.07 |
+| E-series side rows' projection, 35 x 256 rows of 1536, bf16 rows, 1 column (the M5 before: the CPU; Vulkan before: an f16 copy of the rows) | - | 45.88 | 32.83 | 32.86 |
+| the same, 4 columns | - | 80.13 | 74.15 | 74.07 |
+| the same, the f32 rows (the alternate), 1 / 4 columns | - | 62.88 / 144.51 | - | 34.79 / 94.15 |
+| the same over a ring of 8 weight copies, bf16 / f32 at 1 column, then at 4 | - | 53.66 / 95.07, 79.87 / 161.98 | - | 45.59 / 69.61, 83.86 / 108.44 |
 | the same, the bf16 stamps on the router's Metal shell (`MetalRouterGemvT`; Metal before: the stamps off `GkRouterGemv` directly), the decode column's stamp / the blocked stamp at 1 and 4 columns | 46.00 / 77.40 / 79.91 | 45.14 / 77.90 / 80.49 | - | - |
 | shared gate: its own GEMV, then the routed combine and the gated add | 3.08 + 2.93 | - | - | - |
 | shared gate as the router's row `ne`, the combine's `SH` arm | - | 0 + 2.01 | - | - |
@@ -159,7 +176,6 @@ templates' stamps, carries the run):
 | classifier epilogue, vocab 262144 cap 30 two pins, 1 row (Metal before: the softcap row, then the suppress row) | 6.46 | 3.68 | 4.10 | 4.10 |
 | the same, 4 rows (Metal before: the pair a row) | 25.75 | 10.65 | 6.15 | 6.15 |
 
-The Vulkan clock reads in steps of 2.05 us at these sizes, so a Vulkan cell under 8 us moves by whole steps.
 The template stamps' Vulkan words keep their helpers' bodies in place: the router's methods, the Pocket GEMV's and the
 `gk_subgroup_*` shims carry `[spirv_inline]` - the SPIR-V emitter visits such a helper's body at each call site, so the
 stamp pays no function call for it - since the driver compiled the stamp 1.9 us slower with the subgroup reductions

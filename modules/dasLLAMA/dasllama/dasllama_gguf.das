@@ -89,12 +89,19 @@ let private GGML_TYPE_NAMES <- {
 //! The ggml type's upstream spelling for logs ("Q4_K", "IQ3_S"); "type N" for one the loader does not know.
 def ggml_type_name(gt : int) : string => GGML_TYPE_NAMES?[gt] ?? "type {gt}"
 
+//! the served type nearest an unread one: Q4_1's (d, m) per-32 plane is Q5_1's shape at one bit less, the 1-bit iquants
+//! sit under IQ2_XXS, the ternaries under Q4_0
+let private NEAREST_SERVED_TYPE <- {
+    GGML_TYPE_Q4_1 => "Q5_1", GGML_TYPE_IQ1_S => "IQ2_XXS", GGML_TYPE_IQ1_M => "IQ2_XXS", GGML_TYPE_TQ1_0 => "Q4_0", GGML_TYPE_TQ2_0 => "Q4_0"
+}
+
 //! The load's decline of a file carrying a tensor type the reader has no arm for (Q4_1, IQ1_S, IQ1_M, TQ1_0, TQ2_0, ...):
-//! one panic before any plane is read, naming the tensor and its type
+//! one panic before any plane is read, naming the tensor, its type and the served type to requantize it to
 def gguf_decline_unread_types(m : GGUFMeta) {
     let bad = find_index_if(m.tensors) $(ti) => ggml_type_bytes(ti.ggml_type, ti.n_elem) == 0l
     if (bad >= 0) {
-        panic("dasLLAMA: tensor '{m.tensors[bad].name}' is {ggml_type_name(m.tensors[bad].ggml_type)} on disk - the GGUF reader carries no arm for that type; requantize the file to a served type")
+        let gt = m.tensors[bad].ggml_type
+        panic("dasLLAMA: tensor '{m.tensors[bad].name}' is {ggml_type_name(gt)} on disk - the GGUF reader carries no arm for that type; requantize it to {NEAREST_SERVED_TYPE?[gt] ?? "a served type (Q8_0)"} (llama-quantize --tensor-type)")
     }
 }
 

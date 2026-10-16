@@ -232,6 +232,7 @@ def test_state_json(t : T?) {
                 for (e in entries.value as _array) {
                     t |> equal(e?["present"] ?? true, false, "nothing is present in a fresh dir")
                     t |> equal(e?["vision_present"] ?? true, false, "no tower is present in a fresh dir")
+                    t |> equal(e?["drafter_present"] ?? true, false, "no drafter is present in a fresh dir")
                 }
             }
             t |> equal(doc?["asr"]?["present"] ?? true, false, "the asr tower is absent in a fresh dir")
@@ -280,6 +281,72 @@ def test_state_json(t : T?) {
         }
         remove(planted)
         rmdir(dir)
+    }
+}
+
+[test]
+def test_state_json_drafter(t : T?) {
+    t |> run("a planted drafter reads present, its file and canonical bytes named; the other rows' drafters read absent") @(t : T?) {
+        let dir = tmp_models_dir("drafterdoc")
+        var want : CatalogEntry
+        for (e in model_catalog()) {
+            if (empty(want.name) && !empty(e.drafter.file)) {
+                want = e
+            }
+        }
+        t |> success(!empty(want.name), "the catalog carries at least one assistant drafter")
+        let planted = path_join(dir, want.drafter.file)
+        fopen(planted, "wb") $(f) {
+            if (f != null) {
+                f |> fwrite("GGUF")
+            }
+        }
+        var jerr = ""
+        var doc = read_json(catalog_state_json(dir, 0, 0l, @@needs_packs_by_name), jerr)
+        t |> success(doc != null, "state json parses: {jerr}")
+        let entries = doc?["entries"]
+        var seen = false
+        if (entries != null && (entries.value is _array)) {
+            for (e in entries.value as _array) {
+                let name = "{e?["name"] ?? ""}"
+                if (name == want.name) {
+                    seen = true
+                    t |> equal(e?["drafter_present"] ?? false, true, "the planted drafter reads present")
+                    t |> equal(e?["drafter_file"] ?? "", want.drafter.file, "the row names its drafter's file")
+                    t |> equal(e?["drafter_bytes"] ?? 0l, want.drafter.bytes, "the row carries the drafter's canonical bytes, not the model's")
+                    t |> success(want.drafter.bytes != want.bytes, "the fixture tells the drafter's bytes from the model's")
+                } else {
+                    t |> equal(e?["drafter_present"] ?? true, false, "{name}: a row whose drafter is not planted reads it absent")
+                }
+            }
+        }
+        t |> success(seen, "the drafter-carrying entry is in the document")
+        unsafe {
+            delete doc
+        }
+        remove(planted)
+        rmdir(dir)
+    }
+}
+
+[test]
+def test_download_accepted_json(t : T?) {
+    t |> run("the ACCEPTED body echoes the download id the state machine registers and the bytes of what downloads") @(t : T?) {
+        var e = CatalogEntry(name = "x", file = "x.gguf", bytes = 11l)
+        e.vision.bytes = 22l
+        e.drafter.bytes = 33l
+        for (tower, name, bytes in fixed_array("", "vision", "drafter"), fixed_array("x", "vision:x", "drafter:x"), fixed_array(11l, 22l, 33l)) {
+            var jerr = ""
+            var doc = read_json(catalog_download_accepted_json(e, tower), jerr)
+            t |> success(doc != null, "'{tower}': the body parses: {jerr}")
+            t |> equal(doc?["ok"] ?? false, true, "'{tower}': ok")
+            t |> equal(doc?["name"] ?? "", name, "'{tower}': the echoed name is the download id")
+            t |> equal(doc?["name"] ?? "", catalog_download_id(e, tower), "'{tower}': ... the id the state machine registers")
+            t |> equal(doc?["bytes"] ?? 0l, bytes, "'{tower}': the echoed bytes are the downloaded file's")
+            unsafe {
+                delete doc
+            }
+        }
     }
 }
 

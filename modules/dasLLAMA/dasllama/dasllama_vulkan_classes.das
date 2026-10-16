@@ -373,7 +373,7 @@ class ClsArCombF16B : ArCombBase {
 [ |> template_struct_instance]
 class template ArCombG4T : GkMoeCombG4 {
     @workgroup row : float[8192]
-    override OUT_X4 = true   //! the residual step's store form (`GkQ8BlockStore.store_x4`): the stride loop reads 1.9 us slower on the pod
+    override OUT_X4 = true   //! the residual step's store form (`GkQ8BlockStore.store_x4`): 10.37 us against the stride loop's 12.29 on the pod, `debug-jit` (ARCHITECTURE_GPU_SHARED_KERNELS.md's provenance line)
 
     def override stash(k : uint; v : float) : void {
         row[k] = v

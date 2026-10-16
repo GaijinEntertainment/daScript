@@ -7156,7 +7156,7 @@ def private metal_ple_pre_gpu_gate(t : Model; s : Session; npos, start_pos : int
             || prefill_decline_caps(t, npos) != MetalPrefillDecline.none) {
         return false
     }
-    return metal_prefill_init()
+    return g_pf_inited || metal_prefill_init()
 }
 
 //! the hyper-connection window (qwen4exp): the wide residual rows and the mixer's row scratch

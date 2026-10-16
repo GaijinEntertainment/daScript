@@ -1670,7 +1670,7 @@ def private detect_kq_formats(var t : Model; m : GGUFMeta) {   // nolint:STYLE03
 
 //! the per-layer-embedding gate and projection planes' tags, one a layer each, true when any is not q8; a kind whose every layer
 //! ships F32 keeps the file's f32 rows (`ple_gate_f32` / `ple_proj_f32`), and a kind mixing F32 with another type declines the load
-def private detect_ple_formats(var t : Model; m : GGUFMeta) : bool {
+def detect_ple_formats(var t : Model; m : GGUFMeta) : bool {
     let c = t.config
     let layers = c.n_layers
     var any = false

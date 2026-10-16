@@ -11,6 +11,15 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **STATED (2026-10-16) - two conclusions of the 2026-09-21 MoE-carriers entry are replaced.** Its 15.4 GB served-weight
+  figure for gemma-4-26B-A4B UD-IQ3_XXS named "demoted down-expert rows": the 704-wide down-expert rows serve in their own
+  per-32 formats, nothing demotes them (`ARCHITECTURE_ENGINE_FORMATS.md`), so the 15.4 GB is the served weights at their
+  own formats inside a plan figure that tallied each routed layer's dense shared expert twice. Its "fits no plan on this
+  card" conclusion for the same file on a 16 GB card is replaced: the host-experts plan serves it under an 8000 MB room
+  with the first routed layers' experts on the host and every call served (`tests/test_gpu_resident_gemma4_26b_host.das`,
+  arm `host26`, the pod's RTX PRO 4500 under `DASLLAMA_PARITY_FULL=1`); the rate rows of that form land with the leg's
+  re-measure entry.
+
 - **STATED (2026-10-15) - the host pool's pages under a speculating device-home scheduler carry the NextN head's rows
   beside the trunk's.** A pooled opening of `n` tokens holds `n - 1` rows of the head's K/V slab (`layer_kv_dim(c,
   n_layers)` halves of K and of V a row on the f16 mirror, `4 * kv_dim` bytes): Qwen3.5-0.8B-MTP (head kv_dim 512) 2 KB a
@@ -4489,11 +4498,11 @@ under the same command line the same hour (every llama.cpp figure `external`). E
   the same hour), then flat ours / theirs Vulkan / CUDA:** gpt-oss-20b 245 +/- 7 / 135 / 293
   (1.82 against Vulkan, 0.84 against CUDA), flat 130 / 61 / 127; Qwen3-30B-A3B UD-IQ2_XXS 237 +/- 1
   / 91 / 359 (2.61 / 0.66), flat 143 / 59 / 135. gemma-4-26B-A4B UD-IQ3_XXS fits no plan on this
-  card (the resident driver declines at 23.9 GB asked of 13.3, the served weights alone at 15.4 GB in a
-  plan figure that tallied each routed layer's dense shared expert twice, the low-format N-row arc's section below,
-  and the 704-wide down-expert rows at q8 - they serve in their own per-32 formats; the per-op rails serve 16 summed) where the reference
+  card (the resident driver declines at 23.9 GB asked of 13.3, its demoted down-expert rows taking
+  the served weights alone to 15.4 GB - a plan figure that tallied each routed layer's dense shared
+  expert twice, the low-format N-row arc's section below; the per-op rails serve 16 summed) where the reference
   pages: 109 on Vulkan, 275 on CUDA - row 81's shape. Against CUDA the two homed carriers read
-  0.66 and 0.84. The expert-bucket form (`followup_vulkan.md` item 83's neighbour: the N-column
+  0.66 and 0.84. The expert-bucket form (the N-column
   expert GEMV a bucket, which decodes a weight block once for every row that picked its expert)
   is the lever that room names; it would serve a fifth of gpt-oss's slots at four rows and a
   tenth of the 30B's.
@@ -4504,7 +4513,8 @@ under the same command line the same hour (every llama.cpp figure `external`). E
   Q4_K_M within the wide bar against the split one-row command and off by up to 0.13 of the peak
   on five of thirty-two compares against the fused one (the same cells run before the file pinned
   the fused forms off, the pod, cm2 arm) - the folded down sum's rounding through the 26B's
-  router near-ties, item 83. The routed planes at `nb` rows cost the resident image nothing a
+  router near-ties (the N-row routed down now sums its k rows in the GEMV,
+  `ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-block32-leaf`). The routed planes at `nb` rows cost the resident image nothing a
   reader sees: gpt-oss-20b's image reads 10914 MB with a 123 MB mirror at 660 x 4 and 220 MB of
   scratch on the pod, the planes' growth inside the scratch's rounding.
 

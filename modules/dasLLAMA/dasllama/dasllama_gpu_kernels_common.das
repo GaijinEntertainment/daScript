@@ -1595,7 +1595,6 @@ struct GkAddRmsArgs {
     dboff : uint     //! ... this layer's row base in the down-bias plane ([ne x dim] rows a layer)
     abias_on : uint  //! the add partner carries a bias row out of wn before the add (gpt-oss's attention output bias)
     aboff : uint     //! ... that row's base in wn
-    pscale : float   //! the add partner's scale ahead of its norm (`PSCALE` stamps: the E-series pre-step's 1/sqrt(dim))
 }
 
 //! The residual step's shell, a workgroup of `LANES` a row: x = (x + a) . ascale, under `pre_on` the add partner rms-normed under
@@ -1607,7 +1606,6 @@ class template GkResidualRow : GkQ8BlockStore {
     @template_constant NORM_SWITCH : bool = false   //!< the runtime `no_norm` arm of `pa`
     @template_constant PRE : bool = true            //!< the sandwich arm
     @template_constant PRE_SWITCH : bool = true     //!< `pa.pre_on` switches the sandwich arm at run time; off, a PRE stamp always norms the partner
-    @template_constant PSCALE : bool = false        //!< the add partner scaled by `pa.pscale` ahead of its norm
     @template_constant X4 : bool = true             //!< four columns in flight a lane where the partner is not normed first
     @template_constant ARMS : bool = true           //!< the run-time `add_on` and `abias_on` arms; off, the stamp always adds and carries no bias row
 
@@ -1645,14 +1643,8 @@ class template GkResidualRow : GkQ8BlockStore {
         }
     }
 
-    //! the add partner's element `j` of the row at `base`, its bias row added under `abias_on`, scaled under `PSCALE`
-    def apart(base, j : uint) : float {
-        static_if (PSCALE) {
-            return (partner(base + j) + (ARMS && pa.abias_on != 0u ? wn[pa.aboff + j] : 0.0)) * pa.pscale
-        } else {
-            return partner(base + j) + (ARMS && pa.abias_on != 0u ? wn[pa.aboff + j] : 0.0)
-        }
-    }
+    //! the add partner's element `j` of the row at `base`, its bias row added under `abias_on`
+    def apart(base, j : uint) : float => partner(base + j) + (ARMS && pa.abias_on != 0u ? wn[pa.aboff + j] : 0.0)
 
     //! the residual add, the row stash and the sum of squares over the row at `base` into `ss`; under `pre_on` the partner is normed
     //! first (its own reduce, the stash holding it meanwhile)

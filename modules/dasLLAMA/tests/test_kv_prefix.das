@@ -273,6 +273,94 @@ def test_prefix_first_page_edges(t : T?) {
     }
 }
 
+//! a finished session of `toks` donated into `cache` with the ring floor `floor` (a GPU mirror rang its sliding layers from there on)
+def private donate_ringed(var cache : PrefixCache; var pool : KVPool; c : Config; toks : array<int64>; floor : int64) {
+    var s <- make_run_state_paged(c, pool)
+    kv_ensure(s, long_length(toks))
+    s.n_past = long_length(toks)
+    s.kv_ring_floor = floor
+    prefix_insert_(cache, pool, s, toks)
+    release_kv_pages_(s)
+    delete s
+}
+
+//! what a fresh session attaches of `prompt`, the probe's count beside it, and the ring floor the attach left the session at
+struct private RingedAttach {
+    rows : int64
+    probe : int64
+    floor : int64
+}
+
+def private attach_ringed(var cache : PrefixCache; var pool : KVPool; c : Config; prompt : array<int64>) : RingedAttach {
+    var w <- make_run_state_paged(c, pool)
+    var out = RingedAttach(probe = prefix_match_len_(cache, pool, prompt))
+    out.rows = prefix_attach_(cache, pool, w, prompt)
+    out.floor = w.kv_ring_floor
+    release_kv_pages_(w)
+    delete w
+    return out
+}
+
+[test]
+def test_prefix_ring_floor(t : T?) {
+    t |> run("a page carries its donor's ring floor: an attach ends at or past every taken page's floor and leaves the session at the deepest") @(t : T?) {
+        let c = mk_config(2l, 4l, 2l, 16l, 32l)
+        var pool <- create_kv_pool_(c, 4l, KVDtype.f32, KVDtype.f32)
+        var cache <- create_prefix_cache_()
+        var ta <- [for (i in range64(12l)); 100l + i]
+        donate_ringed(cache, pool, c, ta, 0l)   // A0 A1 A2, floor 0
+        var tb <- [for (i in range64(12l)); i < 8l ? 100l + i : 700l + i]
+        donate_ringed(cache, pool, c, tb, 10l)   // A0 A1 again, then B2 at floor 10
+        var tc <- [for (i in range64(12l)); 300l + i]
+        donate_ringed(cache, pool, c, tc, 6l)   // C0 C1 C2, floor 6
+        // the page past the whole hits carries its own floor: two rows of B2 reach 10, one row does not
+        var reach <- [100l, 101l, 102l, 103l, 104l, 105l, 106l, 107l, 708l, 709l, 999l]
+        let r1 = attach_ringed(cache, pool, c, reach)
+        t |> equal(r1.rows, 10l, "two rows of B2 past A0 A1 end at B2's floor: attached")
+        t |> equal(r1.probe, 10l, "the probe reads what the attach attaches")
+        t |> equal(r1.floor, 10l, "the copied page's floor is the session's, the whole pages' floor 0 under it")
+        var short <- [100l, 101l, 102l, 103l, 104l, 105l, 106l, 107l, 708l, 999l]
+        let r2 = attach_ringed(cache, pool, c, short)
+        t |> equal(r2.rows, 8l, "one row of B2 ends under its floor 10: the copy is dropped, the whole pages stand")
+        t |> equal(r2.probe, 8l, "the probe cuts the same")
+        t |> equal(r2.floor, 0l, "and the session carries the whole pages' floor alone")
+        // whole pages carry their floor too: a prompt ending under C's floor attaches none of C
+        var under <- [for (i in range64(7l)); 300l + i]
+        let r3 = attach_ringed(cache, pool, c, under)
+        t |> equal(r3.rows, 0l, "C0 ends at 4 under the floor 6, and the two rows of C1 past it are cut with it")
+        t |> equal(r3.probe, 0l, "the probe cuts the same")
+        var whole <- [for (i in range64(9l)); 300l + i]
+        let r4 = attach_ringed(cache, pool, c, whole)
+        t |> equal(r4.rows, 8l, "C0 C1 end at 8, past the floor 6: both attached")
+        t |> equal(r4.floor, 6l, "and the session carries the whole pages' floor")
+        var past <- [for (i in range64(10l)); 300l + i]
+        let r5 = attach_ringed(cache, pool, c, past)
+        t |> equal(r5.rows, 9l, "a row of C2 past them ends at 9, past its floor: attached too")
+        var carrier <- make_run_state_paged(c, pool)
+        t |> equal(prefix_share_pages_(cache, pool, carrier, tc, 8l), 8l, "a carrier shares C0 C1")
+        t |> equal(carrier.kv_ring_floor, 6l, "and carries their floor")
+        release_kv_pages_(carrier)
+        var plain <- make_run_state_paged(c, pool)
+        t |> equal(prefix_share_pages_(cache, pool, plain, ta, 8l), 8l, "the control: a carrier shares A0 A1")
+        t |> equal(plain.kv_ring_floor, 0l, "and carries floor 0")
+        release_kv_pages_(plain)
+        prefix_release_(cache, pool)
+        t |> equal(long_length(pool.free_groups), pool.capacity_groups, "every page is back in the pool")
+        delete plain
+        delete carrier
+        delete past
+        delete whole
+        delete under
+        delete short
+        delete reach
+        delete tc
+        delete tb
+        delete ta
+        delete cache
+        delete pool
+    }
+}
+
 [test]
 def test_prefix_verify_tokens(t : T?) {
     t |> run("hashes route, tokens verify: a corrupted entry refuses to attach") @(t : T?) {
