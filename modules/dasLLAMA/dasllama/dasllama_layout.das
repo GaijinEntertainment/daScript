@@ -15,6 +15,7 @@ require dasllama/dasllama_gguf          // K6_SSB — the k6 disk scale stride
 require dasllama/dasllama_gemm_schema   // kq_qsb/kq_ssb — the fmt-id plane strides
 require dasllama/dasllama_par           // maybe_parallel_for + jobque probes
 require dasllama/dasllama_load   // StreamReg + the streaming-fill hook contract this file registers into
+require dasllama/dasllama_ple   // ple_planes: the per-layer-embedding planes the walkers pack
 require daslib/enum_trait   // the plane table walks the KqFmt enum
 require strings   // the scale-plane name's format prefix
 require math

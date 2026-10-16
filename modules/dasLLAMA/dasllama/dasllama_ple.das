@@ -22,6 +22,32 @@ require math
 // A per-(token, layer) side input mixed into each layer's output. ple_inp is POSITION-major:
 // (p, l, i) at p*(layers*ple)+l*ple+i.
 
+//! gemma-4's per-expert down scales folded into the first `n` picks' routing weights `w` (their experts `idx`) of layer l: the CPU
+//! chain's fold, which the resident driver's host rows share; no-op off a gemma-4 MoE
+[arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-gemma4-moe-block")]
+def moe_down_scale_fold(t : Model; l : int64; idx : array<int64>; var w : array<float>; n : int64) {
+    return if (!t.config.moe_dense_shexp)
+    let row = t.moe_down_scale_off + l * t.config.n_expert
+    for (j in range64(n)) {
+        w[j] *= t.fblob[row + idx[j]]
+    }
+}
+
+typedef PlePlane = tuple<f : KqFmt; off : int64; f32 : bool; n : int64; d : int64>
+
+//! layer l's per-layer-embedding plane - the gate (dim -> ple), or with `proj` the projection (ple -> dim): its tag and offset
+//! in that tag's planes, or `f32` and the offset of the file's f32 rows in fblob; `n` its input width, `d` its output rows
+def ple_plane(t : Model; l : int64; proj : bool) : PlePlane {
+    let c = t.config
+    if (proj) {
+        return (f = fmt_at(t.ple_proj_fmt, l), off = t.ple_proj_offs[l], f32 = t.ple_proj_f32, n = c.n_embd_per_layer, d = c.dim)
+    }
+    return (f = fmt_at(t.ple_gate_fmt, l), off = t.ple_gate_offs[l], f32 = t.ple_gate_f32, n = c.dim, d = c.n_embd_per_layer)
+}
+
+//! layer l's two per-layer-embedding planes, the gate then the projection (`ple_plane`)
+def ple_planes(t : Model; l : int64) : PlePlane[2] => fixed_array(ple_plane(t, l, false), ple_plane(t, l, true))
+
 // Pre-step finish (shared by decode/prefill): given the gathered+sqrt(ple)-scaled token rows already
 // in s.ple_inp[0..npos*all), add the projected embedding branch. proj = rmsnorm((1/√dim)·(model_proj·
 // embd)); ple_inp = (gathered + proj)/√2. embd_scaled is the sqrt(dim)-scaled residual (s.x / s.x_b).

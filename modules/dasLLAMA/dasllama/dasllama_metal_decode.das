@@ -12,6 +12,7 @@ require metal/das_metal_boost
 require dasllama/dasllama_common
 require dasllama/dasllama_math
 require dasllama/dasllama_gpu_math   // kv_ring_row: a mirror position's row
+require dasllama/dasllama_ple   // ple_plane: the per-layer-embedding planes
 require dasllama/dasllama_metal_common public
 require dasllama/dasllama_metal_kernels public
 require daslib/typemacro_boost   // [template_struct_instance] — the layer encoder's row-shape stamps
