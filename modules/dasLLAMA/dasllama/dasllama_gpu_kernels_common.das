@@ -1630,9 +1630,7 @@ class template GkResidualRow : GkQ8BlockStore {
     }
 
     //! the add partner's element `j` of the row at `base`, its bias row added under `abias_on`
-    def apart(base, j : uint) : float {
-        return partner(base + j) + (ARMS && pa.abias_on != 0u ? wn[pa.aboff + j] : 0.0)
-    }
+    def apart(base, j : uint) : float => partner(base + j) + (ARMS && pa.abias_on != 0u ? wn[pa.aboff + j] : 0.0)
 
     //! the residual add, the row stash and the sum of squares over the row at `base` into `ss`; under `pre_on` the partner is normed
     //! first (its own reduce, the stash holding it meanwhile)
