@@ -4946,13 +4946,6 @@ def enc_embed_dev(enc : MetalComputeEncoder?; t : Model; btok : MetalBuffer?; to
     }
 }
 
-//! the formats the K-quant token-table gather has a stamp for: every
-//! served plane format but q8
-def emb_kq_gather_fmt(f : KqFmt) : bool => f != KqFmt.q8 && kq_fmt_gpu_supported(f)
-
-//! a table plane in format `fmt` the gather family serves: the q8 linear copy, a per-32 plane or a K-quant plane with a stamp
-def emb_table_gather_fmt(f : KqFmt) : bool => f == KqFmt.q8 || (kq_dense_b32(f) && kq_fmt_gpu_supported(f)) || emb_kq_gather_fmt(f)
-
 //! the members the per-32 table gather (`MetalEmbedB32T`) has no stamp for: q8 (its linear copy's gather), the superblock members
 //! (the K-quant gather) and mx4 (no table carries it)
 let EMBED_B32_SKIP = "q8 k4 k5 k6 q40 iq4xs k3 iq3s iq3xxs iq4nl k2 iq2s iq2xs iq2xxs mx4 iq3s4"
@@ -7165,42 +7158,6 @@ class MetalPleProjBf16One : MetalPleProjBf16T {
     }
 }
 
-//! the E-series pre-step serves on the device for this blob model: its table in a format the gather family serves, bound at
-//! whole superblocks (a per-32 pair's binds stay 16-byte aligned), a ple width the finish's threadgroup takes
-def metal_ple_dev_ok(t : Model) : bool {
-    return false if (!has_ple(t.config) || !t.metal_blob || t.planes_trimmed)
-    let ple = t.config.n_embd_per_layer
-    let all = t.config.n_layers * ple
-    let aligned = t.ple_emb_fmt == KqFmt.q8 || (all % KQ_SB_ELEMS == 0l && t.ple_emb_off % KQ_SB_ELEMS == 0l)
-    return emb_table_gather_fmt(t.ple_emb_fmt) && aligned && ple % KQ_B32_ELEMS == 0l && ple <= 1024l
-}
-
-//! The E-series pre-step on the device over `nrows` rows - the CPU's `ple_gather_rows` + `ple_pre_finish`: the side rows off the table
-//! at the token ids in `btok` into `bple`, the embedded rows `bx` projected into `bproj` (bf16 rows, else the f32 router GEMV), the
-//! finish; `ball` / `bsq` the layers x ple and sqrt(ple) uniforms
-def enc_ple_pre_dev(enc : MetalComputeEncoder?; t : Model; btok : MetalBuffer?; toff : uint64; bx, bple, bproj, ball, bsq : MetalBuffer?; nrows : int64) {
-    let c = t.config
-    let ple = c.n_embd_per_layer
-    let all = c.n_layers * ple
-    enc_embed_table(enc, t, t.ple_emb_fmt, t.ple_emb_off, all, sqrt(float(ple)), btok, toff, bple, 0ul, nrows, ball, bsq)
-    var ka = moe_router_args(all, c.dim, nrows)
-    if (t.ple_model_bf16) {
-        let bw = plane_of(g_dev, t, t.bf16blob, t.ple_model_off)
-        ka.woff = uint(bw.boff / 2ul)
-        if (nrows == 1l) {
-            enc_ple_proj_bf16_one(enc, bw.buf, bx, bproj, ka, all, 1l)
-        } else {
-            enc_ple_proj_bf16(enc, bw.buf, bx, bproj, ka, all, nrows)
-        }
-    } else {
-        var bw = upload_region(unsafe(addr < void? >(t.fblob[t.ple_model_off])), uint64(all * c.dim * 4l))
-        enc_moe_router(enc, bw, bx, bproj, g_one, ka, all, nrows)
-    }
-    var bpn = upload_region(unsafe(addr < void? >(t.fblob[t.ple_pnorm_off])), uint64(ple * 4l))
-    var kf = ple_fin_args(ple, c.dim, c.norm_eps)
-    enc_ple_finish(enc, bproj, bpn, bple, kf, c.n_layers * nrows)
-}
-
 //! the pre-step's finish args: slices of `ple`, the projection scaled by 1 / sqrt(dim) in the finish
 def ple_fin_args(ple, dim : int64; eps : float) : GkPleFinArgs => GkPleFinArgs(ple = uint(ple), eps = eps, inv_sd = 1.0 / sqrt(float(dim)))
 
@@ -7553,18 +7510,6 @@ def moe_g4_args(dim, nk : int64; eps, ascale : float; presummed : bool) : GkMoeC
     ka.ascale = ascale
     ka.presummed = presummed ? 1u : 0u
     return ka
-}
-
-//! the gemma-4 step's norm rows of layer l in `moe_g4_args`'s layout: the routed, dense and post-FFN norms, then the next layer's
-//! attention norm where `next`
-def moe_g4_norms(t : Model; l : int64; next : bool) : MetalBuffer? {
-    let dim = t.config.dim
-    let rb = uint64(dim * 4l)
-    unsafe {
-        return upload_region_cat(addr<void?>(t.fblob[t.rms_post_ffn2_off + l * dim]), rb, addr<void?>(t.fblob[t.rms_post_ffn1_off + l * dim]), rb,
-            addr<void?>(t.fblob[t.rms_post_ffn_off + l * dim]), rb, next ? addr<void?>(t.fblob[t.rms_att_off + (l + 1l) * dim]) : null,
-            next ? rb : 0ul)
-    }
 }
 
 //! the gemma-4 step's args for layer l: the model's norm epsilon and the layer's output scale, `presummed` as `moe_g4_args`

@@ -1097,6 +1097,18 @@ def upload_region_cat(p0 : void?; b0 : uint64; p1 : void?; b1 : uint64; p2 : voi
     return hit != null ? hit : region_upload_cat_new(key, sig, [(p = p0, b = b0), (p = p1, b = b1), (p = p2, b = b2), (p = p3, b = b3)])
 }
 
+//! the gemma-4 step's norm rows of layer l in `moe_g4_args`'s layout: the routed, dense and post-FFN norms, then the next layer's
+//! attention norm where `next`
+def moe_g4_norms(t : Model; l : int64; next : bool) : MetalBuffer? {
+    let dim = t.config.dim
+    let rb = uint64(dim * 4l)
+    unsafe {
+        return upload_region_cat(addr<void?>(t.fblob[t.rms_post_ffn2_off + l * dim]), rb, addr<void?>(t.fblob[t.rms_post_ffn1_off + l * dim]), rb,
+            addr<void?>(t.fblob[t.rms_post_ffn_off + l * dim]), rb, next ? addr<void?>(t.fblob[t.rms_att_off + (l + 1l) * dim]) : null,
+            next ? rb : 0ul)
+    }
+}
+
 // ===== the whole-plane resident buffers (blob-only models) =====
 // Each GPU-ready plane becomes ONE resident buffer (zero-copy page wrap when image-mapped, else a
 // one-time untracked copy); tensors bind at byte offsets, keeping in-kernel indices REGION-relative — a 13GB blob's absolute byte indices overflow the kernels' uint32 index math.

@@ -385,6 +385,32 @@ var private g_rope_sin_next_swa : array<float>
 //! (`btok_in`, or a chained step's argmax)
 def private metal_ple_decode_dev(t : Model) : bool => metal_ple_dev_ok(t) && emb_dev_gather_ok(t)
 
+//! The E-series pre-step on the device over `nrows` rows - the CPU's `ple_gather_rows` + `ple_pre_finish`: the side rows off the table
+//! at the token ids in `btok` into `bple`, the embedded rows `bx` projected into `bproj` (bf16 rows, else the f32 router GEMV), the
+//! finish; `ball` / `bsq` the layers x ple and sqrt(ple) uniforms
+def enc_ple_pre_dev(enc : MetalComputeEncoder?; t : Model; btok : MetalBuffer?; toff : uint64; bx, bple, bproj, ball, bsq : MetalBuffer?; nrows : int64) {
+    let c = t.config
+    let ple = c.n_embd_per_layer
+    let all = c.n_layers * ple
+    enc_embed_table(enc, t, t.ple_emb_fmt, t.ple_emb_off, all, sqrt(float(ple)), btok, toff, bple, 0ul, nrows, ball, bsq)
+    var ka = moe_router_args(all, c.dim, nrows)
+    if (t.ple_model_bf16) {
+        let bw = plane_of(g_dev, t, t.bf16blob, t.ple_model_off)
+        ka.woff = uint(bw.boff / 2ul)
+        if (nrows == 1l) {
+            enc_ple_proj_bf16_one(enc, bw.buf, bx, bproj, ka, all, 1l)
+        } else {
+            enc_ple_proj_bf16(enc, bw.buf, bx, bproj, ka, all, nrows)
+        }
+    } else {
+        var bw = upload_region(unsafe(addr < void? >(t.fblob[t.ple_model_off])), uint64(all * c.dim * 4l))
+        enc_moe_router(enc, bw, bx, bproj, g_one, ka, all, nrows)
+    }
+    var bpn = upload_region(unsafe(addr < void? >(t.fblob[t.ple_pnorm_off])), uint64(ple * 4l))
+    var kf = ple_fin_args(ple, c.dim, c.norm_eps)
+    enc_ple_finish(enc, bproj, bpn, bple, kf, c.n_layers * nrows)
+}
+
 //! a step's side rows (`bytes_ple` of them): on the device (`dev`) the gather and projection buffers, read and written by the
 //! step itself; else the poked rows
 def private ple_step_dev(t : Model; var r : StepRes; dev : bool) {
