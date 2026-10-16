@@ -63,6 +63,11 @@ crown:
   to sit in cache ranks the kernels by an effect production never sees, and the race then picks
   the slower kernel.
 
+The window races in `benchmarks/ew/bench_metal_gk_rows.das` - the gemma-4 MoE step's slot loads
+(`g4_slot_race`) and the sandwich seam's lanes (`seam_lane_race`) - hold one output across each
+arm's chain: every dispatch updates the stream rows in place and reads its own last write, the
+chain production runs, where each layer's residual step reads the stream the step before it wrote.
+
 A race arm owns a transient command queue for its timed pairs and releases it before returning -
 the one exception to the family's shared device and queue (`ARCHITECTURE_GPU.md#gpu-backends`) - so
 the tune-time race never queues behind served work.
