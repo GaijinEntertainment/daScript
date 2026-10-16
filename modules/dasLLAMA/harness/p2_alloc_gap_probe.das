@@ -30,7 +30,7 @@ def fill_x_f16(buf; total : int64) {
     }
 }
 
-[export, arch(at="../ARCHITECTURE_GPU_PREFILL.md#prefill-gemm-ladder")]
+[export, arch(at="../ARCHITECTURE_GPU_PREFILL_GEMM.md#prefill-gemm-ladder")]
 def main {
     static_if (typeinfo builtin_module_exists(das_metal)) {
         var dev = metal_create_system_default_device()

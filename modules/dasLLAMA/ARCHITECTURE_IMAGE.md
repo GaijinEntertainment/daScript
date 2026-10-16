@@ -169,7 +169,7 @@ to a runtime one. The first served prefill seeds the resident-panel cache with z
 and holds no dedicated memory; sites the bake does not cover (q51 - the dev-W route has no
 dequant kernel for it - and owned gguf loads) stay on the runtime path, resident under
 `DASLLAMA_METAL_DEVW_RESIDENT` or scratch. Which form a site's prefill takes under the lever, and
-why the default is a per-window scratch panel rather than a stored one, is `ARCHITECTURE_GPU_PREFILL.md#devw-panel-knees`.
+why the default is a per-window scratch panel rather than a stored one, is `ARCHITECTURE_GPU_PREFILL_GEMM.md#devw-panel-knees`.
 
 The bake set is the minting PROGRAM's, not the box's: the split-scale formats bake only where
 the Metal prefill module registered its mirror, so a program on the same box whose module graph

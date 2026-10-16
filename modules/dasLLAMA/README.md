@@ -109,7 +109,8 @@ modules/dasLLAMA/
   ARCHITECTURE_ENGINE_FORMATS.md # companion: the format, load-rail and CPU-kernel-tier charters
   ARCHITECTURE_GPU.md         # companion: the GPU backend role table, the backend asymmetries
   ARCHITECTURE_GPU_RACE_SHAPES.md # companion: the refuted kernel shapes and the sanctioned float-A stamps
-  ARCHITECTURE_GPU_PREFILL.md # companion: the Metal prefill driver's GEMM ladder
+  ARCHITECTURE_GPU_PREFILL.md # companion: the Metal prefill driver - attention slab, chunked submission, twin dual-store
+  ARCHITECTURE_GPU_PREFILL_GEMM.md # companion: the Metal prefill driver's GEMM ladder, dev-W knees, tail peel, KQ tensor scaffold
   ARCHITECTURE_GPU_VULKAN.md  # companion: the Vulkan resident driver - window chain, Q8 requant store, GEMV grid codebooks
   ARCHITECTURE_GPU_VULKAN_GEMM.md # companion: the Vulkan GEMM tiles - cm2 decode lanes, tile pick, class pipelines, expert chain, the KHR kq tile
   ARCHITECTURE_GPU_VULKAN_RESIDENCY.md # companion: the Vulkan residency plan and the GPU-slot marks swap
