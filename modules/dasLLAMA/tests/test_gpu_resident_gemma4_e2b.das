@@ -218,12 +218,7 @@ def test_gpu_resident_gemma4_e2b_greedy_chain(t : T?) {
 //! the CPU pre-step's side row of `tok` on a scratch session: the scaled embedding row, then `ple_pre_decode`
 def private cpu_side_row(tr : Model; tok : int64) : array<float> {
     var s <- make_run_state(tr.config)
-    embed_row(tr, tok, unsafe(addr(s.x[0])))
-    if (tr.config.embed_scale != 1.0) {
-        for (i in range64(tr.config.dim)) {
-            s.x[i] *= tr.config.embed_scale
-        }
-    }
+    embed_text_rows(tr, [tok], s.x, 0l)
     ple_pre_decode(tr, s, tok)
     let n = tr.config.n_layers * tr.config.n_embd_per_layer
     var row <- [for (i in range64(n)); s.ple_inp[i]]
