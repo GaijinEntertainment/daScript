@@ -1272,8 +1272,8 @@ def private resident_pinned_seq_cap(t : Model; announce : bool) : int64 {
 }
 
 //! the plan the walk uploads against; `seq_cap` comes back as the context the plan settled on; `announce` prints the
-//! pinned cap once per walk - a prediction of the plan asks quietly
-[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan")]
+//! pinned cap and the host-layers ask once per walk - a prediction of the plan asks quietly
+[arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#resident-plan"), arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-hot-pool")]
 def resident_plan_pick(t : Model; rkdt : KVDtype; var seq_cap : int64&; announce : bool = true) : ResidentPlan {
     seq_cap = resident_pinned_seq_cap(t, announce)
     let asked = seq_cap
@@ -1290,8 +1290,10 @@ def resident_plan_pick(t : Model; rkdt : KVDtype; var seq_cap : int64&; announce
         short.reason = "one K/V mirror slab's range on this device ({moe_gpu_binding_cap(g_rdec_regions_want) >> 20l} MB) holds {seq_cap} positions of the widest attention layer's rows over {g_rdec_regions_want} regions, under the {asked} asked whole (set_gpu_ctx_strict, DASLLAMA_GPU_CTX_STRICT) - fewer regions would hold more"
         return short
     }
-    var plan = resident_plan(t, seq_cap, rkdt, rkdt)
-    var room_bound = false
+    let host_ask = resident_host_layers_ask()
+    let host_want = resident_host_layers_want(t.config, resident_moe_layers(t), host_ask)
+    var plan = resident_plan(t, seq_cap, rkdt, rkdt, HOT_SLOTS_AUTO, host_want)
+    var room_bound, host_said = false
     if (!plan.fits && plan.weight_bytes > 0l && plan.kv_bytes > 0l) {
         let fit_ctx = resident_fit_ctx(plan, seq_cap, resident_shadow_pos_bytes(t, rkdt))
         if (fit_ctx >= rdec_min_ctx()) {
@@ -1299,12 +1301,20 @@ def resident_plan_pick(t : Model; rkdt : KVDtype; var seq_cap : int64&; announce
             room_bound = true
             plan = resident_plan(t, seq_cap, rkdt, rkdt, plan.hot_slots, plan.host_layers)
         } elif (rdec_ctx_asked_whole() && resident_host_layers_ok(t.config)) {
-            plan = resident_plan_host_layers(t, rkdt, seq_cap, announce)
+            plan = resident_plan_host_layers(t, rkdt, seq_cap, announce)   //! says its own count, the ask's note inside it
+            host_said = true
         } elif (rdec_ctx_asked_whole()) {
             plan.reason = "{plan.reason} - the context was asked whole ({rdec_ctx_pin()} positions a region: set_gpu_ctx_strict, DASLLAMA_GPU_CTX_STRICT), so the mirror is not shortened to fit"
         } elif (resident_host_layers_ok(t.config)) {
             plan.reason = "{plan.reason} - a context asked whole (set_gpu_ctx_strict, the server's --ctx) would serve it with the experts the card cannot hold on the host; unasked, the per-op rails serve this model"
         }
+    }
+    if (announce && host_ask > 0l && host_want < 0l) {   //! the ask said after the plan settled, so a room-bound re-plan does not swallow it
+        let why = t.config.hyper_conn ? "a hyper-connection model serves every routed layer on the host" : "the plain split form does not take this model - no routed experts, a gemma-4 parallel dense expert, no split seats installed, or more picks a row than it serves"
+        to_log(LOG_WARNING, "dasLLAMA: resident driver - the {host_ask} routed layers asked onto the host (set_gpu_host_layers, DASLLAMA_GPU_HOST_LAYERS) do not apply: {why}\n")
+    } elif (announce && plan.fits && host_want > 0l && !host_said) {
+        let cap_note = host_ask > host_want ? " ({host_ask} asked: the model routes {host_want} layers)" : ""
+        to_log(LOG_INFO, "dasLLAMA: resident driver - the first {plan.host_layers} routed layers' experts serve on the host as asked{cap_note} (set_gpu_host_layers, DASLLAMA_GPU_HOST_LAYERS)\n")
     }
     if (announce && plan.fits && seq_cap < asked) {
         resident_ctx_shortened_say(plan, asked, seq_cap, room_bound)
@@ -1363,14 +1373,16 @@ def private resident_plan_host_layers(t : Model; rkdt : KVDtype; seq_cap : int64
     delete need
     return all_host if (h0 < 0l)
     var plan = all_host
-    var h = h0
+    let ask = resident_host_layers_ask()
+    var h = clamp(ask, h0, n_moe)
     while (h <= n_moe) {   // the pool over the host layers takes room the count did not see: one more layer to the host where the candidate misses
         plan = resident_plan(t, seq_cap, rkdt, rkdt, HOT_SLOTS_AUTO, h)
         break if (plan.fits)
         h++
     }
     if (announce && plan.fits) {
-        to_log(LOG_INFO, "dasLLAMA: resident driver - a plain MoE the card does not hold whole at {seq_cap} positions asked whole (set_gpu_ctx_strict, DASLLAMA_GPU_CTX_STRICT): the first {h} of {n_moe} routed layers' experts serve on the host, the rest on the device\n")
+        let ask_note = ask > h0 ? " - {ask} asked (set_gpu_host_layers, DASLLAMA_GPU_HOST_LAYERS) where {h0} would fit" : ""
+        to_log(LOG_INFO, "dasLLAMA: resident driver - a plain MoE the card does not hold whole at {seq_cap} positions asked whole (set_gpu_ctx_strict, DASLLAMA_GPU_CTX_STRICT): the first {h} of {n_moe} routed layers' experts serve on the host{ask_note}, the rest on the device\n")
     }
     return plan
 }
@@ -1715,6 +1727,22 @@ var private g_rdec_ctx_max = 0l   //! the in-process cap on the mirror's positio
 var private g_rdec_ctx_strict = false
 var private g_rdec_kv_want = KVDtype.f16   //! the mirror codec the caller asked for the models loaded next: its sessions' codec
 var private g_rdec_kv_pinned = false          //! ... once a caller asked; before that DASLLAMA_GPU_KV decides
+let HOST_LAYERS_UNPINNED = -1l   //! no host-layers pin in process: DASLLAMA_GPU_HOST_LAYERS decides
+var private g_rdec_host_layers_pin = HOST_LAYERS_UNPINNED   //! routed layers' experts asked onto the host for the models loaded next
+
+//! the in-process DASLLAMA_GPU_HOST_LAYERS: a negative `n` lifts the pin, 0 asks none past the plan's own
+def set_gpu_host_layers_(n : int64) {
+    g_rdec_host_layers_pin = n < 0l ? HOST_LAYERS_UNPINNED : n
+}
+
+//! the pin as set, `HOST_LAYERS_UNPINNED` where none is: a fixture reads it before it pins and puts it back
+def gpu_host_layers_pin_() : int64 => g_rdec_host_layers_pin
+
+def private resident_host_layers_ask() : int64 => g_rdec_host_layers_pin != HOST_LAYERS_UNPINNED ? g_rdec_host_layers_pin : g_env_gpu.gpu_host_layers
+
+//! the host-layer count an ask of `ask` puts to the plan on a model routing `n_moe` layers: the ask capped at `n_moe` where the
+//! plain split form takes the model (`resident_host_layers_ok`), -1 (the plan's own count) for no ask or a model it does not
+def resident_host_layers_want(c : Config; n_moe, ask : int64) : int64 => ask > 0l && resident_host_layers_ok(c) ? min(ask, n_moe) : -1l
 
 //! Cap the resident driver's KV mirror at `n` positions for the models this process loads next (0 lifts the pin):
 //! the in-process form of DASLLAMA_GPU_CTX_MAX. A program serving long contexts leaves it alone.

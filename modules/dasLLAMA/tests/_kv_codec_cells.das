@@ -68,7 +68,6 @@ def cell_codec_distance(t : T?; file : string; n : int64; kv : KVDtype; cpu_pref
 
 //! `cell_codec_distance`'s three chains over a model the caller loaded with the mirror armed at `kv`, inside the engine's job
 //! queue; the model's device state is dropped when it returns
-[cold_path]
 def codec_distance_over(t : T?; tr : Model; n : int64; kv : KVDtype; cpu_prefill : bool; dist_rel, pair_rel : float) {
     var prompt <- resident_prompt(n)
     var toks <- resident_feed(CODEC_FED_STEPS)

@@ -105,18 +105,20 @@ def resident_ready(t : T?; path : string) : bool {
 
 //! the levers a resident load pins, as the cell found them: the whole-model route's lever (never `gpu_want_resident`, which
 //! folds the environment's knob in and would pin the lever off under DASLLAMA_GPU_RESIDENT=0), the mirror regions asked
-//! for, and the Vulkan fuse pin where the module exists
+//! for, the context pins, the host-layers pin, and the Vulkan fuse pin where the module exists
 struct ResidentLevers {
     route : bool
     regions : int64
     ctx_max : int64
     ctx_strict : bool
+    host_layers : int64
     fuse : int
 }
 
 def resident_levers() : ResidentLevers {
     let pins = gpu_ctx_pins()
-    var l = ResidentLevers(route = gpu_resident_route_lever(), regions = gpu_resident_regions_want(), ctx_max = pins.ctx_max, ctx_strict = pins.strict, fuse = -1)
+    var l = ResidentLevers(route = gpu_resident_route_lever(), regions = gpu_resident_regions_want(), ctx_max = pins.ctx_max, ctx_strict = pins.strict,
+                           host_layers = gpu_host_layers_pin(), fuse = -1)
     static_if (typeinfo builtin_module_exists(vulkan)) {
         l.fuse = g_vk_fuse
     }
@@ -128,6 +130,7 @@ def restore_resident_levers(l : ResidentLevers) {
     set_gpu_resident_regions_(l.regions)
     set_gpu_ctx_max(l.ctx_max)
     set_gpu_ctx_strict(l.ctx_strict)
+    set_gpu_host_layers(l.host_layers)
     static_if (typeinfo builtin_module_exists(vulkan)) {
         g_vk_fuse = l.fuse
     }
@@ -206,8 +209,9 @@ def census(kernel : string) : int64 {
 
 //! `path` loaded at q8 with the whole-model route pinned on - at `regions` mirror regions where it is past 0, the context
 //! pinned and asked whole at `strict_ctx` positions where it is past 0, else at the caller's own context pin, never strict -
-//! whatever an earlier cell left; every lever put back after
-def load_resident(path : string; regions : int64 = 0l; strict_ctx : int64 = 0l) : Model {
+//! and `host_layers` routed layers' experts asked onto the host (0: the plan's own count, pinned so the environment's ask
+//! does not reach the load) whatever an earlier cell left; every lever put back after
+def load_resident(path : string; regions : int64 = 0l; strict_ctx : int64 = 0l; host_layers : int64 = 0l) : Model {
     let levers = resident_levers()
     if (regions > 0l) {
         set_gpu_resident_regions_(regions)
@@ -216,6 +220,7 @@ def load_resident(path : string; regions : int64 = 0l; strict_ctx : int64 = 0l) 
         set_gpu_ctx_max(strict_ctx)
     }
     set_gpu_ctx_strict(strict_ctx > 0l)
+    set_gpu_host_layers(host_layers)
     set_gpu_resident_route(true)
     var tr <- load_model_(path, QuantMode.q8)
     restore_resident_levers(levers)

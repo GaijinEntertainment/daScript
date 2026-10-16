@@ -43,6 +43,7 @@ struct MoeFixture {
     expect_host_layers : bool = false   //! the card does not hold the experts whole: the driver arms with some routed layers' experts on the host
     strict_ctx : int64 = 0l      //! > 0: the load pins this context whole (`set_gpu_ctx_max` + `set_gpu_ctx_strict`), and the armed region holds it
     census : bool = false        //! every site the file carries read in its own format (`census_cell`): a file whose planes all sit on their formats' lattices
+    host_layers_ask : int64 = 0l //! > 0: the load asks at least this many routed layers' experts onto the host (`set_gpu_host_layers`) whatever the card holds - the host-layers form on any card
 }
 
 //! the logits bar as a fraction of the step's max |logit|: the routed chain's CPU-vs-device noise class (test_gpu_moe_shexp.das's
@@ -131,7 +132,7 @@ def moe_fixture_admitted(t : T?; tr : Model; fx : MoeFixture) : int64 {
     if (fx.window > 0l) {
         t |> equal(tr.config.sliding_window, fx.window, "the fixture's sliding layers attend {fx.window} keys")
     }
-    if (fx.expect_host_layers && !moe_gpu_resident_active() && moe_gpu_resident_memory_decline()) {
+    if ((fx.expect_host_layers || fx.host_layers_ask > 0l) && !moe_gpu_resident_active() && moe_gpu_resident_memory_decline()) {
         t |> skip("the card holds neither the mirror asked whole ({fx.strict_ctx}) nor the dense planes beside it - the host-layer form needs a larger card (the load log names the room)")
         return -1l
     }
@@ -143,7 +144,9 @@ def moe_fixture_admitted(t : T?; tr : Model; fx : MoeFixture) : int64 {
         t |> skip("the card holds every expert stack beside the {fx.strict_ctx}-position mirror - the host-layer form needs a smaller card")
         return -1l
     }
-    if (fx.expect_host_layers) {
+    if (fx.host_layers_ask > 0l) {   //! the ask is a floor: a card that holds the rest moves exactly that many, one that does not moves more
+        t |> success(host_layers >= fx.host_layers_ask, "at least the first {fx.host_layers_ask} routed layers' experts serve on the host as the fixture asked (set_gpu_host_layers): {host_layers} of {tr.config.n_layers} do")
+    } elif (fx.expect_host_layers) {
         t |> success(host_layers < tr.config.n_layers, "the card does not hold the experts whole: the first {host_layers} of {tr.config.n_layers} routed layers' experts serve on the host, the rest on the device")
     } else {
         t |> equal(host_layers, 0l, "every expert on the device (the cell pins ctx_max {fx.strict_ctx} and strict {fx.strict_ctx > 0l}; DASLLAMA_GPU_CTX_MAX / DASLLAMA_GPU_CTX_STRICT in the environment override the pins)")
@@ -157,10 +160,11 @@ def moe_fixture_admitted(t : T?; tr : Model; fx : MoeFixture) : int64 {
 //! prefill `n` tokens + the fed steps on the resident driver, then the same on the all-CPU chain; the
 //! prefill logits and every step's within the bar, the one-step-off control past it, the routed
 //! block's census growing by the MoE layer count per window and per step
+[cold_path]
 def moe_forced_feed(t : T?; n : int64; fx : MoeFixture) {
     let path = path_join(models_dir(), fx.file)
     if (!resident_ready(t, path)) return
-    var tr <- load_resident(path, 1l, fx.strict_ctx)   //! one region: the context asked whole is the region's
+    var tr <- load_resident(path, 1l, fx.strict_ctx, fx.host_layers_ask)   //! one region: the context asked whole is the region's
     let host_layers = moe_fixture_admitted(t, tr, fx)
     if (host_layers < 0l) {
         delete tr
@@ -264,10 +268,11 @@ def moe_perop_heat_cell(t : T?; fx : MoeFixture; resident, slots : int64) {
 
 //! the K/V codec rig's distance form (`codec_distance_over`) on a MoE fixture the driver admitted, the mirror asked at `kv`
 //! by the caller's pin: the device at `kv`, the CPU at `kv` and the CPU at f16 over an `n`-token prompt and the rig's fed steps
+[cold_path]
 def moe_codec_distance(t : T?; n : int64; fx : MoeFixture; kv : KVDtype; dist_rel, pair_rel : float) {
     let path = path_join(models_dir(), fx.file)
     if (!resident_ready(t, path)) return
-    var tr <- load_resident(path, 1l, fx.strict_ctx)
+    var tr <- load_resident(path, 1l, fx.strict_ctx, fx.host_layers_ask)
     if (moe_fixture_admitted(t, tr, fx) >= 0l) {
         with_dasllama_jobque_() {
             codec_distance_over(t, tr, n, kv, false, dist_rel, pair_rel)

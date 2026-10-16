@@ -1262,6 +1262,12 @@ what it costs today and what the fix would change.
   | the per-op rails (`DASLLAMA_GPU_RESIDENT=0`: master's shape for this file) | 398.14 | 64.03 | 93.39 | 64.52 |
   | the whole-model driver, 28 of 48 layers' experts on the host, the mirror on device | 517.88 (290.36 with the first window's one-time cost inside the pass) | 41.81 | 533.97 | 47.79 |
 
+  The second row's decode cells were taken while the split token command embedded the last landed pick in place
+  of the fed token on a model whose table gathers on the device (every step the same token, the routing frozen
+  with it); re-measured 2026-10-16 with the fix, the same command, environment, box and one rep: pp512 348.31
+  (the first window's one-time cost inside the pass), tg128 48.40, pp8192 431.02, tg64 after 8192 46.79 -
+  direction-grade, and every sentence below that sets one row against the other stands.
+
   The per-op rails' decode does not slow with the position (64.0 at 640, 64.5 at 8192, direction-grade); the
   host-layer form's token is 24 ms against 15.6 (direction-grade) - the 28 fence round-trips a token, the cost
   the hyper-connection carrier pays too - so it keeps the per-op rails' place for an unasked context and
@@ -1577,7 +1583,7 @@ what it costs today and what the fix would change.
   (direction-grade across the two); tg-real64 22.57 -> 18.57 and 22.61 -> 18.73 at 62.7%. The device
   accepts 14 points under the CPU (65.8 against 79.9, the two rails' processes, direction-grade): the
   device draft and the verify rows route their near-ties apart, as every arm pair on this model does
-  (`ARCHITECTURE_ENGINE.md#moe-pick-tape`). The round under
+  (`ARCHITECTURE_ENGINE_MECHANISMS.md#moe-pick-tape`). The round under
   `DASLLAMA_GPU_PROF=1` (debug-jit): the draft 4 ms, the verify 81 ms of which the device 25 and the
   host's sums of the two rows' misses 56, the pool serving 48-53% of the rows' picks; a plain real-text
   token 45 ms = device 22 + the host's sums 22.7 at hits 31-45% a layer (the per-layer line of the
@@ -1699,7 +1705,7 @@ what it costs today and what the fix would change.
   form before the hot pool; the entry above carries its 48-token form): `tests/run.das` cell
   `test_gpu_resident_hc.das`, a 24-token prompt through the window chain and six fed steps, the
   CPU arm routing as the device arm did through the decode pick tape
-  (`ARCHITECTURE_ENGINE.md#moe-pick-tape`) - every row within 0.20 x max|logit| (the prompt's row
+  (`ARCHITECTURE_ENGINE_MECHANISMS.md#moe-pick-tape`) - every row within 0.20 x max|logit| (the prompt's row
   0.88 against 2.55, the steps 0.62-0.86 against bars 2.00-2.48, argmax equal on all seven), the
   one-step-off control 5.81-10.64, 1440 selects replayed, the CPU's own decode top-k off the tape 62
   of 2880 picks; without the tape the arms read 1.8-4.1 with two argmax flips, and the CPU chain on

@@ -6990,7 +6990,7 @@ struct private SchedDefaults {
 
 var private g_sched_defaults = SchedDefaults()
 
-//! Whether an unset `mtp` arms a slot: one stream whose decode runs on a GPU - the Metal flavor, or the whole model resident on a Vulkan device (`backend_effective` "gpu:resident"). On the CPU, on a slot the device serves in part, and where the resident driver sums the routed experts on the host (`experts_host`: a hyper-connection MoE the card does not hold whole - `PERF_LEDGER.md`'s NextN entry), the verify round costs more than the accepted drafts return. Non-private: test_openai_server_mtp.das gates it.
+//! Whether an unset `mtp` arms a slot: one stream whose decode runs on a GPU - the Metal flavor, or the whole model resident on a Vulkan device (`backend_effective` "gpu:resident"). On the CPU, on a slot the device serves in part, and where the resident driver sums the routed experts on the host (`experts_host`: a hyper-connection MoE, a plain MoE the card does not hold whole, or one whose host-layers ask moved them - `PERF_LEDGER.md`'s NextN entry), the verify round costs more than the accepted drafts return. Non-private: test_openai_server_mtp.das gates it.
 def mtp_auto_arms(streams : int64; on_metal : bool; backend_effective : string; experts_host : bool = false; platforms : string = "") : bool
     => streams == 1l && decodes_on_gpu(on_metal, backend_effective, experts_host) && mtp_platform_listed(platforms, on_metal ? "metal" : "vulkan")
 
