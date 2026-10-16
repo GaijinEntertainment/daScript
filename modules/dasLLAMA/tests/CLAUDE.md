@@ -186,9 +186,9 @@ also in the model-free suite): `mtp-gdraft-refuse` (the loader's no-panic refusa
 sidecar resolver's two refusals, the attach's target check on a gemma-4-26B-shaped shell - a trunk of the
 drafter's own geometry passing, a two-layer trunk and a capture layer of another head size or kv head count
 each refused by its own clause - the facade's refusal text through the assistant registry (every registered
-backend's own early refusal of a planar shell with no resident driver named, `mtp_attach_refusal_`'s no-backend
+backend's own early refusal of a planar shell with no resident driver named, `mtp_attach_refusal`'s no-backend
 text), the Vulkan attach's driver check over a facts record (`vk_drafter_trunk_why`: a driver holding every fact
-passing, then each fact's own refusal in its order) and the Vulkan round's bind ladder (`assist_bind_rung_`: the
+passing, then each fact's own refusal in its order) and the Vulkan round's bind ladder (`assist_bind_rung`: the
 driver, the codec, the context, a region unpinned and untaken this tick); and, gated on the 440 MiB sidecar and a
 das_metal build, the Metal attach's refusal of a metal-blob shell whose token table the device gathers no row
 of), `mtp-gdraft-load` (the 440 MiB

@@ -113,8 +113,8 @@ def test_gemma_drafter_attach_checks(t : T?) {
         delete shell
     }
     t |> run("the facade's refusal names every registered backend's own refusal, or that this build registers none") @(t : T?) {
-        t |> equal(mtp_attach_refusal_(default<array<string>>), "no GPU driver on this build carries an assistant drafter", "no backend registered")
-        t |> equal(mtp_attach_refusal_(["metal: a", "vulkan: b"]), "metal: a; vulkan: b", "each backend's refusal, joined")
+        t |> equal(mtp_attach_refusal(default<array<string>>), "no GPU driver on this build carries an assistant drafter", "no backend registered")
+        t |> equal(mtp_attach_refusal(["metal: a", "vulkan: b"]), "metal: a; vulkan: b", "each backend's refusal, joined")
         var shell = Model()
         let why = attach_mtp_drafter_(shell, path_join(scratch_path("."), "no-such-drafter.gguf"))
         t |> success(!empty(why), "a shell takes no drafter: '{why}'")
@@ -166,7 +166,7 @@ def test_gemma_drafter_bind_ladder(t : T?) {
         let none : array<int64>
         var took0 <- [0l]
         let rung = $(active, codec : bool; end : int64; owns : bool; taken : array<int64>; pin0, pin1 : bool) : AssistBindRung {
-            return assist_bind_rung_(active, codec, end, 64l, owns, 2l, taken) $(i) => i == 0l ? pin0 : pin1
+            return assist_bind_rung(active, codec, end, 64l, owns, 2l, taken) $(i) => i == 0l ? pin0 : pin1
         }
         t |> equal(rung(true, true, 64l, false, none, false, true), AssistBindRung.bind, "the control: a round inside the context with region 0 free binds")
         t |> equal(rung(false, true, 64l, false, none, false, false), AssistBindRung.inactive, "no armed driver")

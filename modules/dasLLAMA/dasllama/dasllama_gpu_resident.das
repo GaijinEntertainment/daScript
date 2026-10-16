@@ -3062,8 +3062,8 @@ enum AssistBindRung {
 }
 
 //! the bind ladder's rung, in its order; `pinned(i)` reads region i's pin, `taken` the regions the tick's earlier streams bound
-def assist_bind_rung_(active, codec_ok : bool; end, cap : int64; owns : bool; nregions : int64; taken : array<int64>;
-                      pinned : block<(i : int64) : bool>) : AssistBindRung {
+def assist_bind_rung(active, codec_ok : bool; end, cap : int64; owns : bool; nregions : int64; taken : array<int64>;
+                     pinned : block<(i : int64) : bool>) : AssistBindRung {
     return AssistBindRung.inactive if (!active)
     return AssistBindRung.codec if (!codec_ok)
     return AssistBindRung.cap if (end > cap)
@@ -3080,7 +3080,7 @@ def assist_bind_rung_(active, codec_ok : bool; end, cap : int64; owns : bool; nr
 //! every rung before any state moves, so a refused stream steps plain after the tick's verify and takes no region from it
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-assistant-drafter")]
 def gpu_resident_assist_bind(t : Model; var s : Session; pos, nr : int64; taken : array<int64>) : int64 {
-    let rung = assist_bind_rung_(g_rdec_active, g_rdec_active && rdec_session_codec_ok(s), pos + nr, g_rdec_cap, rdec_owns(s, s.rdec_region),
+    let rung = assist_bind_rung(g_rdec_active, g_rdec_active && rdec_session_codec_ok(s), pos + nr, g_rdec_cap, rdec_owns(s, s.rdec_region),
         long_length(g_rdec_regions), taken) $(i) => g_rdec_regions[i].pinned
     if (rung == AssistBindRung.cap) {
         rdec_pass_once(RdecPass.cap, pos + nr, g_rdec_cap)
