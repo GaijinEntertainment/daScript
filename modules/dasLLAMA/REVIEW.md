@@ -160,7 +160,8 @@ what-lands-where rules.
 to a require, new or existing, in `dasllama/dasllama.das` or in a file it reaches through `public`
 requires alone, or adds an `[EnvConfig]` area struct, applies `REVIEW_FACADE.md` too.**
 
-**A diff that does any of these, wherever it sits, applies `REVIEW_KQ_FORMATS.md`: turns a
+**A diff that does any of these, wherever it sits, applies `REVIEW_KQ_FORMATS.md`: adds a site a
+backend serves a weight plane at, or changes which `KqFmt` members a site serves; turns a
 weight-format id (a `KqFmt` member, a GGUF type number, or the int a generated kernel takes as its
 format parameter) into plane strides; reads a per-block or per-element byte count of one weight
 format; writes as a literal a number fixed by one weight format (its kernel format id, its element
