@@ -312,16 +312,8 @@ def private layout_offsets(var t : Model) : LayoutSizes {   // nolint:STYLE037,S
     var mx = 0l
     var pleq8 = 0l
     //! the file's f32 gate / proj rows in fblob, where they ship F32 (`ple_gate_f32`, `ple_proj_f32`)
-    var pg32 = -1l
-    var pp32 = -1l
-    if (has_ple(c) && t.ple_gate_f32) {
-        pg32 = fo
-        fo += layers * dim * c.n_embd_per_layer
-    }
-    if (has_ple(c) && t.ple_proj_f32) {
-        pp32 = fo
-        fo += layers * dim * c.n_embd_per_layer
-    }
+    let pg32 = ple_f32_base(has_ple(c) && t.ple_gate_f32, fo, layers * dim * c.n_embd_per_layer)
+    let pp32 = ple_f32_base(has_ple(c) && t.ple_proj_f32, fo, layers * dim * c.n_embd_per_layer)
     if (c.n_expert > 0l) {
         // MoE: routed expert stacks — expert e of layer l is a normal 2D matrix at we*_off + (l*n_expert+e)*(dim*n_ff_exp)
         let ege = dim * c.n_ff_exp   // per-expert element count (same for gate/up and down)
@@ -372,10 +364,8 @@ def private layout_offsets(var t : Model) : LayoutSizes {   // nolint:STYLE037,S
         } else {
             t.ple_emb_off = kq_take(cur, t.ple_emb_fmt, c.vocab_size * ple * layers)
         }
-        t.ple_gate_offs |> clear(); t.ple_gate_offs |> reserve(layers)
-        for (l in range64(layers)) { t.ple_gate_offs |> push(t.ple_gate_f32 ? pg32 + l * dim * ple : kq_take(cur, fmt_at(t.ple_gate_fmt, l), dim * ple)) }
-        t.ple_proj_offs |> clear(); t.ple_proj_offs |> reserve(layers)
-        for (l in range64(layers)) { t.ple_proj_offs |> push(t.ple_proj_f32 ? pp32 + l * ple * dim : kq_take(cur, fmt_at(t.ple_proj_fmt, l), ple * dim)) }
+        ple_kind_offs(t.ple_gate_offs, cur, t.ple_gate_fmt, t.ple_gate_f32, pg32, layers, dim * ple)
+        ple_kind_offs(t.ple_proj_offs, cur, t.ple_proj_fmt, t.ple_proj_f32, pp32, layers, ple * dim)
     }
     if (c.shared_weights) {
         if (t.cls_q8) {
@@ -1662,31 +1652,42 @@ def private detect_kq_formats(var t : Model; m : GGUFMeta) {   // nolint:STYLE03
 //! ships F32 keeps the file's f32 rows (`ple_gate_f32` / `ple_proj_f32`), and a kind mixing F32 with another type declines the load
 def detect_ple_formats(var t : Model; m : GGUFMeta) : bool {
     let c = t.config
-    let layers = c.n_layers
+    let gate = detect_ple_kind(m, c.n_layers, "inp_gate", c.dim, t.ple_gate_fmt, t.ple_gate_f32)
+    let proj = detect_ple_kind(m, c.n_layers, "proj", c.n_embd_per_layer, t.ple_proj_fmt, t.ple_proj_f32)
+    return gate || proj
+}
+
+//! one per-layer-embedding kind's tags into `fmts`, `rows` a tensor's row width, and whether it keeps the file's f32 rows into
+//! `f32`: true when any layer's tag is not q8
+def private detect_ple_kind(m : GGUFMeta; layers : int64; kind : string; rows : int64; var fmts : array<KqFmt>; var f32 : bool&) : bool {
+    f32 = ple_kind_f32(m, layers, kind)
+    fmts |> reserve(layers)
+    fmts |> resize(layers)
     var any = false
-    t.ple_gate_fmt |> reserve(layers)
-    t.ple_gate_fmt |> resize(layers)
-    t.ple_proj_fmt |> reserve(layers)
-    t.ple_proj_fmt |> resize(layers)
-    for (kind in ["inp_gate", "proj"]) {
-        let rows = kind == "proj" ? c.n_embd_per_layer : c.dim
-        let f32 = ple_kind_f32(m, layers, kind)
-        if (kind == "proj") {
-            t.ple_proj_f32 = f32
-        } else {
-            t.ple_gate_f32 = f32
-        }
-        for (l in range64(layers)) {
-            let f = f32 ? KqFmt.q8 : kq_tag(m, "blk.{l}.{kind}.weight", rows)
-            if (kind == "proj") {
-                t.ple_proj_fmt[l] = f
-            } else {
-                t.ple_gate_fmt[l] = f
-            }
-            any ||= f != KqFmt.q8
-        }
+    for (l in range64(layers)) {
+        fmts[l] = f32 ? KqFmt.q8 : kq_tag(m, "blk.{l}.{kind}.weight", rows)
+        any ||= fmts[l] != KqFmt.q8
     }
     return any
+}
+
+//! where a per-layer-embedding kind ships F32 (`on`) the base of its `n` floats in fblob at the cursor `fo`, which moves past them;
+//! -1 elsewhere
+def private ple_f32_base(on : bool; var fo : int64&; n : int64) : int64 {
+    return -1l if (!on)
+    let base = fo
+    fo += n
+    return base
+}
+
+//! one per-layer-embedding kind's plane offsets, a layer each: its f32 rows `n` floats a layer from `base`, or its plane in its own
+//! format off the cursors
+def private ple_kind_offs(var offs : array<int64>; var cur : KqCursors; fmts : array<KqFmt>; f32 : bool; base, layers, n : int64) {
+    offs |> clear()
+    offs |> reserve(layers)
+    for (l in range64(layers)) {
+        offs |> push(f32 ? base + l * n : kq_take(cur, fmt_at(fmts, l), n))
+    }
 }
 
 //! whether the per-layer tensors `blk.N.<kind>.weight` ship F32, layer 0's answer; the first layer that answers otherwise
