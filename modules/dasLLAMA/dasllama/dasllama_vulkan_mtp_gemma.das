@@ -141,9 +141,6 @@ def private q8_tensors(dr : GemmaDrafter) : array<tuple<boff : int64; n : int64>
     return <- out
 }
 
-//! a device buffer of `bytes` made soft: 0 marks `oom`
-def private dev_buf(var oom : bool&; bytes : int64) : uint64 => soft_device_buf(oom, bytes)
-
 //! `bytes` of `src` into a fresh soft device buffer (0 and `oom` where the card has no room)
 def private dev_from(var oom : bool&; src : uint8 const?; bytes : int64) : uint64 {
     let h = soft_device_buf(oom, bytes)
@@ -328,30 +325,30 @@ def private vk_buffers_make(dr : GemmaDrafter; var g : GemmaDrafterVk; quants : 
     g.fblob = dev_from(oom, unsafe(addr<uint8 const?>(dr.fblob[0])), g.fblob_bytes)
     let qdm = dr.n_heads * g.hs_mx
     let cat_n = 2l * dr.tdim
-    g.cat = dev_buf(oom, cat_n * 4l)
-    g.catq = dev_buf(oom, cat_n)
-    g.cats = dev_buf(oom, (cat_n / Q8_BLOCK_ELEMS) * 4l)
-    g.xin = dev_buf(oom, dr.dim * 4l)
-    g.xq = dev_buf(oom, dr.dim)
-    g.xs = dev_buf(oom, (dr.dim / Q8_BLOCK_ELEMS) * 4l)
-    g.q = dev_buf(oom, qdm * 4l)
-    g.attn = dev_buf(oom, qdm * 4l)
+    g.cat = soft_device_buf(oom, cat_n * 4l)
+    g.catq = soft_device_buf(oom, cat_n)
+    g.cats = soft_device_buf(oom, (cat_n / Q8_BLOCK_ELEMS) * 4l)
+    g.xin = soft_device_buf(oom, dr.dim * 4l)
+    g.xq = soft_device_buf(oom, dr.dim)
+    g.xs = soft_device_buf(oom, (dr.dim / Q8_BLOCK_ELEMS) * 4l)
+    g.q = soft_device_buf(oom, qdm * 4l)
+    g.attn = soft_device_buf(oom, qdm * 4l)
     g.cntoff = dr.n_heads * (g.hs_mx + 2l)   //! one key split: the counters past one piece a head
     g.part_bytes = (g.cntoff + dr.n_heads) * 4l
-    g.part = dev_buf(oom, g.part_bytes)
-    g.aq = dev_buf(oom, qdm)
-    g.aqs = dev_buf(oom, (qdm / Q8_BLOCK_ELEMS) * 4l)
-    g.o = dev_buf(oom, dr.dim * 4l)
-    g.gate = dev_buf(oom, dr.hidden * 4l)
-    g.up = dev_buf(oom, dr.hidden * 4l)
-    g.hq = dev_buf(oom, dr.hidden)
-    g.hqs = dev_buf(oom, (dr.hidden / Q8_BLOCK_ELEMS) * 4l)
-    g.logits = dev_buf(oom, dr.vocab * 4l)
-    g.hnext = dev_buf(oom, dr.tdim * 4l)
-    g.ids = dev_buf(oom, 16l)
+    g.part = soft_device_buf(oom, g.part_bytes)
+    g.aq = soft_device_buf(oom, qdm)
+    g.aqs = soft_device_buf(oom, (qdm / Q8_BLOCK_ELEMS) * 4l)
+    g.o = soft_device_buf(oom, dr.dim * 4l)
+    g.gate = soft_device_buf(oom, dr.hidden * 4l)
+    g.up = soft_device_buf(oom, dr.hidden * 4l)
+    g.hq = soft_device_buf(oom, dr.hidden)
+    g.hqs = soft_device_buf(oom, (dr.hidden / Q8_BLOCK_ELEMS) * 4l)
+    g.logits = soft_device_buf(oom, dr.vocab * 4l)
+    g.hnext = soft_device_buf(oom, dr.tdim * 4l)
+    g.ids = soft_device_buf(oom, 16l)
     let pbytes = int64(CLS_ARGMAX_CHUNKS) * 4l
-    g.pmax = dev_buf(oom, pbytes)
-    g.pid = dev_buf(oom, pbytes)
+    g.pmax = soft_device_buf(oom, pbytes)
+    g.pid = soft_device_buf(oom, pbytes)
     return false if (oom)
     upload_zeros(g.part, 0l, g.part_bytes)
     g.tok = make_host_buf(TOK_META_BYTES, true)
