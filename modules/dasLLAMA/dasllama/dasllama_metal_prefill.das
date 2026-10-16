@@ -8407,7 +8407,7 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                     //! reads the rows, the layer's own or a routed layer's shared expert, and so does the router's GEMM
                     bxh_ffn = pf_twin_panel(mp, dim)
                     enc_residual(enc, t, bx, bxb2, bxb, bxh_ffn, seam(c.pre_post_norm ? t.rms_post_att_off + l * dim : -1l, t.rms_ffn_off + l * dim),
-                        npos, false, false, ResidualUniforms(bdim = u_dim, beps = u_eps, btot = u_total_dim))
+                        npos, ResidualForm.window, false, ResidualUniforms(bdim = u_dim, beps = u_eps, btot = u_total_dim))
                 }
                 if (moe && g_pf_skip != "gemm" && g_pf_skip != "moe") {
                     //! g4moe routes its own router norm and pre_ffn2 input through bxb2 and reduces into bmg4rt
@@ -8605,7 +8605,7 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                     //! PLE sits between the FFN residual and out_scale (the CPU order): x_b += post_norm(ffn_branch), then
                     //! branch = proj · (gelu(gate · x_b) ⊙ side[l]), its post norm the layer's last seam's
                     if (pf_ew) {
-                        enc_residual(enc, t, bx, bxb, null, null, seam(post_ffn, -1l), npos, false, false, pf_uni)
+                        enc_residual(enc, t, bx, bxb, null, null, seam(post_ffn, -1l), npos, ResidualForm.window, false, pf_uni)
                     }
                     if (g_pf_skip != "gemm") {
                         pf_enc_ple_site(enc, t, l, false, bx, bpleg, u_dim, u_ple, mp, npos, pf_cvt_panel(enc, bx, mp, dim, g_pf_skip == "act_cvt"))
@@ -8623,7 +8623,7 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                     //! the layer's last seam: the branch under its post norm, the add under the layer's output scale (gemma-4); the
                     //! next layer opens on its own norm
                     let pre = plef ? t.ple_post_off + l * dim : post_ffn
-                    enc_residual(enc, t, bx, bxb, null, null, seam(pre, -1l, c.layer_out_scale ? t.out_scale_off + l : -1l), npos, false, false, pf_uni)
+                    enc_residual(enc, t, bx, bxb, null, null, seam(pre, -1l, c.layer_out_scale ? t.out_scale_off + l : -1l), npos, ResidualForm.window, false, pf_uni)
                     if (l < nds) {   //! deepstack: slice l adds to the layer output (every row; text tails are zero)
                         enc_add(enc, bx, 0ul, bds, uint64(l * npos * dim * 4l), u_total_dim, npos * dim)
                     }

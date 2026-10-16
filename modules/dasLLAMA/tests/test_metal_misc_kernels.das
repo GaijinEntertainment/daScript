@@ -329,8 +329,8 @@ enum private ArStamp {
 
 //! the residual step against the CPU's sequential form, under the 1e-4 bar (simd_sum reassociation): x = (x + a') . ascale,
 //! a' = rmsnorm(a) . wpa on the sandwich stamps, y = rmsnorm(x) . w; the sandwich stamps' rows told apart from the plain form's
-def private add_rms_gate(t : T?; var dev, queue; stamp : ArStamp; single : bool; dim, nrows : int; ascale : float) {
-    let tag = "add_rms {stamp}{single ? " 1-row grid" : ""} dim={dim} rows={nrows} ascale={ascale}"
+def private add_rms_gate(t : T?; var dev, queue; stamp : ArStamp; single : bool; dim, nrows : int; ascale : float; window : bool = false) {
+    let tag = "add_rms {stamp}{single ? " 1-row grid" : ""}{window ? " window" : ""} dim={dim} rows={nrows} ascale={ascale}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
         let s1 = stamp_of(@@enc_addrms_c)
@@ -341,6 +341,11 @@ def private add_rms_gate(t : T?; var dev, queue; stamp : ArStamp; single : bool;
         let ph = stamp_of(@@enc_preaddrms_bhx_c)
         let a1 = stamp_of(@@enc_preadd_c)
         let ab = stamp_of(@@enc_preadd_b_c)
+        let wb = stamp_of(@@pf_enc_add_rms_b_c)
+        let wh = stamp_of(@@pf_enc_add_rms_bhx_c)
+        let wp = stamp_of(@@pf_enc_preaddrms_b_c)
+        let wph = stamp_of(@@pf_enc_preaddrms_bhx_c)
+        let wa = stamp_of(@@pf_enc_preadd_b_c)
         var pso = (stamp == ArStamp.plain ? mc |> keep_stamp(s1, err) : (stamp == ArStamp.plain_hx ? mc |> keep_stamp(sh, err)
             : (stamp == ArStamp.pre ? mc |> keep_stamp(p1, err) : (stamp == ArStamp.pre_hx ? mc |> keep_stamp(ph, err) : mc |> keep_stamp(a1, err)))))
         return if (!pso_ok(t, tag, pso, err))
@@ -384,7 +389,29 @@ def private add_rms_gate(t : T?; var dev, queue; stamp : ArStamp; single : bool;
         let bh = mc |> out_words(total, float16(PAD_SENTINEL))
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
             let (x, a, w1, y, yh) = (mc.buf[bx], mc.buf[ba], mc.buf[bw], mc.buf[by], mc.buf[bh])
-            if (stamp == ArStamp.plain) {
+            if (window) {   //! the window's builders: the same kernels at 256 lanes a row
+                if (stamp == ArStamp.plain) {
+                    stamp_run(wb, pso) {
+                        invoke(wb.enc, enc, x, a, w1, y, ka, int64(nrows))
+                    }
+                } elif (stamp == ArStamp.plain_hx) {
+                    stamp_run(wh, pso) {
+                        invoke(wh.enc, enc, x, a, w1, y, yh, ka, int64(nrows))
+                    }
+                } elif (stamp == ArStamp.pre) {
+                    stamp_run(wp, pso) {
+                        invoke(wp.enc, enc, x, a, w1, y, ka, int64(nrows))
+                    }
+                } elif (stamp == ArStamp.pre_hx) {
+                    stamp_run(wph, pso) {
+                        invoke(wph.enc, enc, x, a, w1, y, yh, ka, int64(nrows))
+                    }
+                } else {
+                    stamp_run(wa, pso) {
+                        invoke(wa.enc, enc, x, a, w1, ka, int64(nrows))
+                    }
+                }
+            } elif (stamp == ArStamp.plain) {
                 if (single) {   //! the single-row builder's one threadgroup
                     stamp_run(s1, pso) {
                         invoke(s1.enc, enc, x, a, w1, y, ka)
@@ -1979,6 +2006,10 @@ def test_metal_misc_kernels(t : T?) {
                 }
                 for (st in fixed_array(ArStamp.plain_hx, ArStamp.pre_hx)) {
                     add_rms_gate(t, dev, queue, st, false, 1500, 3, 0.75)
+                }
+                for (st in fixed_array(ArStamp.plain, ArStamp.plain_hx, ArStamp.pre, ArStamp.pre_hx, ArStamp.pre_add)) {
+                    add_rms_gate(t, dev, queue, st, false, 2560, 5, 0.75, true)
+                    add_rms_gate(t, dev, queue, st, false, 4096, 2, 1.0, true)
                 }
                 qk_norm_gate(t, dev, queue, 64, 4, 2, 2, false)     // in-place decode shape
                 qk_norm_gate(t, dev, queue, 64, 4, 2, 2, true)      // the no-wv V-fusion shape

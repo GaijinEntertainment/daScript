@@ -1557,11 +1557,12 @@ struct GkAddRmsArgs {
 //! `pa` carrying `GkAddRmsArgs`' fields under their names
 [ |> template_struct_instance]
 class template GkResidualRow : GkQ8BlockStore {
-    @template_constant LANES : uint = 256u          //!< the workgroup's lanes, the row loops' stride
+    @template_constant LANES : uint = 256u          //!< the workgroup's lanes, the row loops' stride; 0 = the threadgroup's own size
     @template_constant NORM_SWITCH : bool = false   //!< the runtime `no_norm` arm of `pa`
     @template_constant PRE : bool = true            //!< the sandwich arm, `pa.pre_on` switching it at run time
     @template_constant PSCALE : bool = false        //!< the add partner scaled by `pa.pscale` ahead of its norm
     @template_constant X4 : bool = true             //!< four columns in flight a lane where the partner is not normed first
+    @template_constant ARMS : bool = true           //!< the run-time `add_on` and `abias_on` arms; off, the stamp always adds and carries no bias row
 
     def abstract width : uint                         //! the row's width
     def abstract xin(i : uint) : float                //! the residual stream's element `i`, a row base folded in
@@ -1570,6 +1571,16 @@ class template GkResidualRow : GkQ8BlockStore {
     def abstract stash(k : uint; v : float) : void    //! the row's column `k` kept for the re-read - a slab, or nothing where the row is re-read
     def abstract stashed(k : uint) : float            //! ... read back
     def abstract pre_partner(base, k : uint) : float  //! the sandwich form's partner column: off the stash, or recomputed
+
+    //! column `k` stepped a lane-stride on: `LANES`, or the threadgroup's own size where the stamp leaves it 0
+    [spirv_inline]
+    def next_col(var k : uint&) {
+        static_if (LANES == 0u) {
+            k += gl_WorkGroupSize.x
+        } else {
+            k += LANES
+        }
+    }
 
     def norm_weight(e : uint) : float {
         static_if (NORM_SWITCH) {
@@ -1582,9 +1593,9 @@ class template GkResidualRow : GkQ8BlockStore {
     //! the add partner's element `j` of the row at `base`, its bias row added under `abias_on`, scaled under `PSCALE`
     def apart(base, j : uint) : float {
         static_if (PSCALE) {
-            return (partner(base + j) + (pa.abias_on != 0u ? wn[pa.aboff + j] : 0.0)) * pa.pscale
+            return (partner(base + j) + (ARMS && pa.abias_on != 0u ? wn[pa.aboff + j] : 0.0)) * pa.pscale
         } else {
-            return partner(base + j) + (pa.abias_on != 0u ? wn[pa.aboff + j] : 0.0)
+            return partner(base + j) + (ARMS && pa.abias_on != 0u ? wn[pa.aboff + j] : 0.0)
         }
     }
 
@@ -1608,22 +1619,22 @@ class template GkResidualRow : GkQ8BlockStore {
     def pre_cols_into(base : uint; var ss : float&) {
         let dim = width()
         var ainv = 0.0
-        if (pa.add_on != 0u) {
+        if ((!ARMS || pa.add_on != 0u)) {
             var sa = 0.0
             var j = gl_LocalInvocationID.x
             while (j < dim) {
                 let a = apart(base, j)
                 stash(j, a)
                 sa += a * a
-                j += LANES
+                next_col(j)
             }
             wg_rms_inv_into(sa, dim, pa.eps, 0u, ainv)
         }
         var k = gl_LocalInvocationID.x
         while (k < dim) {
-            let v = pa.add_on != 0u ? mad(wn[pa.pwoff + k], pre_partner(base, k) * ainv, xin(base + k)) * pa.ascale : xin(base + k)
+            let v = (!ARMS || pa.add_on != 0u) ? mad(wn[pa.pwoff + k], pre_partner(base, k) * ainv, xin(base + k)) * pa.ascale : xin(base + k)
             keep(base, k, v, ss)
-            k += LANES
+            next_col(k)
         }
     }
 
@@ -1641,7 +1652,7 @@ class template GkResidualRow : GkQ8BlockStore {
                 var v1 = xin(base + k1)
                 var v2 = xin(base + k2)
                 var v3 = xin(base + k3)
-                if (pa.add_on != 0u) {
+                if ((!ARMS || pa.add_on != 0u)) {
                     let a0 = apart(base, k)
                     let a1 = apart(base, k1)
                     let a2 = apart(base, k2)
@@ -1666,9 +1677,9 @@ class template GkResidualRow : GkQ8BlockStore {
         } else {
             while (k < dim) {
                 let x = xin(base + k)
-                let v = pa.add_on != 0u ? (x + apart(base, k)) * pa.ascale : x
+                let v = (!ARMS || pa.add_on != 0u) ? (x + apart(base, k)) * pa.ascale : x
                 keep(base, k, v, ss)
-                k += LANES
+                next_col(k)
             }
         }
     }
@@ -1743,34 +1754,44 @@ class template GkAddRmsRows : GkResidualRow {
         }
     }
 
-    //! the normed row of the row at `base` under `inv`, four columns in flight a lane
+    //! the normed row of the row at `base` under `inv`, four columns in flight a lane under `X4`
     [arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#residual-step-fma")]
     def store_out(base : uint; inv : float) {
-        let last = pa.dim - 1u
-        var k = gl_LocalInvocationID.x
-        while (k < pa.dim) {
-            let k1 = min(k + LANES, last)
-            let k2 = min(k + 2u * LANES, last)
-            let k3 = min(k + 3u * LANES, last)
-            let n0 = normed_at(k, 0.0, inv)
-            let n1 = normed_at(k1, 0.0, inv)
-            let n2 = normed_at(k2, 0.0, inv)
-            let n3 = normed_at(k3, 0.0, inv)
-            let i0 = base + k
-            put_out(i0, n0)
-            if (k + LANES < pa.dim) {
-                let i1 = base + k1
-                put_out(i1, n1)
+        static_if (X4) {
+            let last = pa.dim - 1u
+            var k = gl_LocalInvocationID.x
+            while (k < pa.dim) {
+                let k1 = min(k + LANES, last)
+                let k2 = min(k + 2u * LANES, last)
+                let k3 = min(k + 3u * LANES, last)
+                let n0 = normed_at(k, 0.0, inv)
+                let n1 = normed_at(k1, 0.0, inv)
+                let n2 = normed_at(k2, 0.0, inv)
+                let n3 = normed_at(k3, 0.0, inv)
+                let i0 = base + k
+                put_out(i0, n0)
+                if (k + LANES < pa.dim) {
+                    let i1 = base + k1
+                    put_out(i1, n1)
+                }
+                if (k + 2u * LANES < pa.dim) {
+                    let i2 = base + k2
+                    put_out(i2, n2)
+                }
+                if (k + 3u * LANES < pa.dim) {
+                    let i3 = base + k3
+                    put_out(i3, n3)
+                }
+                k += 4u * LANES
             }
-            if (k + 2u * LANES < pa.dim) {
-                let i2 = base + k2
-                put_out(i2, n2)
+        } else {
+            var j = gl_LocalInvocationID.x
+            while (j < pa.dim) {
+                let nj = normed_at(j, 0.0, inv)
+                let ij = base + j
+                put_out(ij, nj)
+                next_col(j)
             }
-            if (k + 3u * LANES < pa.dim) {
-                let i3 = base + k3
-                put_out(i3, n3)
-            }
-            k += 4u * LANES
         }
     }
 

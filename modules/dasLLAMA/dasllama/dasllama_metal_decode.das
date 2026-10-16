@@ -793,7 +793,7 @@ def private total_single(var e : SingleLayerEnc; u : MetalBuffer?; n : int64) : 
 //! the single row's residual step at seam `sm` (`enc_residual`); the fuse knob off splits a sandwich seam
 def private residual_single(var e : SingleLayerEnc; t : Model; enc : MetalComputeEncoder?; bx, ba, by : MetalBuffer?; sm : ResidualSeam) {
     var r & = unsafe(*e.r)
-    enc_residual(enc, t, bx, ba, by, null, sm, 1l, true, sm.pre_off >= 0l && !decode_fuse_pre(), ResidualUniforms(bdim = r.u_dim, beps = r.u_eps, btot = r.u_dim))
+    enc_residual(enc, t, bx, ba, by, null, sm, 1l, ResidualForm.one_row, sm.pre_off >= 0l && !decode_fuse_pre(), ResidualUniforms(bdim = r.u_dim, beps = r.u_eps, btot = r.u_dim))
 }
 
 //! the gemma-4 MoE step's norms rows, `moe_g4_args`'s layout: layer l's routed, dense and post-FFN norms, then the next layer's
@@ -1834,7 +1834,7 @@ def private residual_rows(var e : auto(ET); t : Model; enc : MetalComputeEncoder
     let stores = by == r.bxb && sm.norm_off >= 0l
     let twin = r.bxh != null && stores
     let split = g_b_addrms_unfused || (sm.pre_off >= 0l && !decode_fuse_pre())
-    enc_residual(enc, t, bx, ba, by, twin ? r.bxh : null, sm, r.nrows, false, split, ResidualUniforms(bdim = r.u_dim, beps = r.u_eps, btot = r.u_total_dim))
+    enc_residual(enc, t, bx, ba, by, twin ? r.bxh : null, sm, r.nrows, ResidualForm.rows, split, ResidualUniforms(bdim = r.u_dim, beps = r.u_eps, btot = r.u_total_dim))
     if (stores) {
         r.xh_ok = twin
     }

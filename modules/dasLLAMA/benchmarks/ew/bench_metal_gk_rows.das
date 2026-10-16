@@ -503,7 +503,7 @@ def private ar_dim_rows(dim, np : int; var rows : array<Reading>) {
     })
     rows |> push(time_rows("ar dim={dim} {np} rows: sandwich seam, pre_add_rms hx") $(enc) {
         var k = ks
-        enc_preaddrms_bhx_c(enc, bx, ba, bw, by, bh, k, int64(np))
+        pf_enc_preaddrms_bhx_c(enc, bx, ba, bw, by, bh, k, int64(np))
     })
     rows |> push(time_rows("ar dim={dim} {np} rows: sandwich seam no norm out, rms + add") $(enc) {
         pf_enc_rms(enc, ba, 0ul, bw, ba, udim, ueps, int64(np))
@@ -511,7 +511,7 @@ def private ar_dim_rows(dim, np : int; var rows : array<Reading>) {
     })
     rows |> push(time_rows("ar dim={dim} {np} rows: sandwich seam no norm out, pre_add") $(enc) {
         var k = ks
-        enc_preadd_b_c(enc, bx, ba, bw, k, int64(np))
+        pf_enc_preadd_b_c(enc, bx, ba, bw, k, int64(np))
     })
     for (buf in fixed_array(bx, ba, by, bh, bw)) {
         metal_release(buf)
