@@ -145,6 +145,7 @@ templates' stamps, carries the run):
 | router, 512 columns (the window) | 141.6 | 144.4 | - | - |
 | E-series side rows' projection, 35 x 256 rows of 1536, bf16 rows, 1 column (the M5 before: the CPU; Vulkan before: an f16 copy of the rows) | - | 68.8 | 32.83 | 32.86 |
 | the same, 4 columns | - | 79.9 | 74.15 | 74.07 |
+| the same, the bf16 stamps on the router's Metal shell (`MetalRouterGemvT`; Metal before: the stamps off `GkRouterGemv` directly), the decode column's stamp / the blocked stamp at 1 and 4 columns | 46.00 / 77.40 / 79.91 | 45.14 / 77.90 / 80.49 | - | - |
 | shared gate: its own GEMV, then the routed combine and the gated add | 3.08 + 2.93 | - | - | - |
 | shared gate as the router's row `ne`, the combine's `SH` arm | - | 0 + 2.01 | - | - |
 | Pocket row GEMV, 1024 x 1024 | 9.67 | 9.79 | 5.4-5.8 | 5.2-5.7 |
