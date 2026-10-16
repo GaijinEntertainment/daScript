@@ -2103,3 +2103,15 @@
     or `-` is its own statement, so an arithmetic tail goes inside `(...)` and a kernel stamp's MSL or
     SPIR-V text splits at its own grammar - then delete the `[line_length]` table and the file, so the
     repo limits bind the folder; the kernels and model-free suites on both homes hold the wrapped tree.
+
+214. **No row of `PERF_LEDGER.md` reads a prefill past 4096 tokens, and the two GPU homes' prefill
+    throughput is held only at pp512.** A long prompt costs the global layers' attention in the
+    square of its length and every per-window stage in its position, so a stage that grows with
+    position hides behind pp512 (the Vulkan window chain on gemma-4-E2B Q8_0 reads 16,400 tok/s at
+    pp512 and about 260 tok/s inside a 120k-token prefill, found by the sliding-window ring cells;
+    Metal on the same file falls 9488 to 2570 tok/s from 512 to 65536, the score-slab attention's
+    shape). The pass, after the gemma leg lands and before the dasCUDA arc: `lcpp_bench` at pp512
+    and pp32768 (and pp65536 where the model's context admits it) on every stocked model on both
+    homes, one profiling pass with the per-window stage split on; a model whose pp32768 falls under
+    the N-squared expectation set by its global-layer count is investigated to the stage, and the
+    stage is fixed in that pass. The rows land in `PERF_LEDGER.md` beside the pp512 rows.
