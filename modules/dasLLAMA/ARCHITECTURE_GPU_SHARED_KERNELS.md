@@ -105,8 +105,8 @@ least 9), any other row the median. Vulkan: `./bin/daslang -jit modules/dasLLAMA
   11.98 against 13.33, 12.03 against 13.43); the window's reduce at 512 rows of 2048 38.10 against 38.86 (the gated one 41.83
   against 42.56); the gemma-4 window stamp 136.91 against 121.38.
 - **The residual step's sandwich seam is one dispatch on both homes** (`GkAddRmsRows.PRE`: the branch normed under its post
-  norm, the add and the next norm in one pass). The M5's 512-row window, `debug-jit`, at dim 2560 reads 27.42 us against the
-  rms + add_rms pair's 35.80 (the no-norm seam 18.62 against 33.37), at dim 3840 40.42 against 54.41 (27.94 against 52.96).
+  norm, the add and the next norm in one pass). The M5's 512-row window, `debug-jit`, at dim 2560 reads 27.51 us against the
+  rms + add_rms pair's 36.56 (the no-norm seam 18.79 against 39.04), at dim 3840 40.69 against 55.80 (27.74 against 56.72).
   The window's stamps run 256 lanes and the decode builders 1024. At 512 rows on the f16 twin's pipeline the seam reads 27.54
   us at 256 lanes against 34.95 at 128 and 52.71 at 1024 (dim 2560), 40.39 against 53.98 and 59.85 (dim 3840). At the decode
   rows on the plain pipeline, dim 3840, 1024 lanes reads 6.67 / 6.74 us at one / four rows against 256's 6.68 / 6.87 and 128's
@@ -137,7 +137,8 @@ least 9), any other row the median. Vulkan: `./bin/daslang -jit modules/dasLLAMA
 before cell is the same instrument at the parent of the commit that brought its row in, `direction-grade`: `4459db710d` for the
 rows the templates landed with (`PERF_LEDGER.md`, the 2026-10-13 entry on the shared row templates' stamps), `5d3db7852d` for
 the router's one- and eight-column f32 rows, `1d357ad171` for the projection's Vulkan rows, `611775848f` for its fold onto the
-router's Metal shell, `7f5c27186a` for the gemma-4 select, MoE tail and classifier epilogue rows. The projection's f32 rows are
+router's Metal shell, `7f5c27186a` for the gemma-4 select, MoE tail (Vulkan) and classifier epilogue rows; the gemma-4 MoE tail's
+M5 before cells are the unfused chain raced in one process. The projection's f32 rows are
 its in-process alternate on both homes:
 
 | Kernel, shape | M5 before | M5 stamp | Vulkan before | Vulkan stamp |
@@ -160,10 +161,10 @@ its in-process alternate on both homes:
 | router, 256 experts dim 2048, 1 column, f32 rows | 3.82 | 3.37 | 4.2 | 4.43 |
 | router, 8 columns, f32 rows | - | - | 14.34 | 14.34 |
 | router, 512 columns (the window) | 141.6 | 144.4 | - | - |
-| E-series side rows' projection, 35 x 256 rows of 1536, bf16 rows, 1 column (the M5 before: the CPU; Vulkan before: an f16 copy of the rows) | - | 45.88 | 32.83 | 32.86 |
-| the same, 4 columns | - | 80.13 | 74.15 | 74.07 |
-| the same, the f32 rows (the alternate), 1 / 4 columns | - | 62.88 / 144.51 | - | 34.79 / 94.15 |
-| the same over a ring of 8 weight copies, bf16 / f32 at 1 column, then at 4 | - | 53.66 / 95.07, 79.87 / 161.98 | - | 45.59 / 69.61, 83.86 / 108.44 |
+| E-series side rows' projection, 35 x 256 rows of 1536, bf16 rows, 1 column (the M5 before: the CPU; Vulkan before: an f16 copy of the rows) | - | 45.47 | 32.83 | 32.86 |
+| the same, 4 columns | - | 79.98 | 74.15 | 74.07 |
+| the same, the f32 rows (the alternate), 1 / 4 columns | - | 72.83 / 149.11 | - | 34.79 / 94.15 |
+| the same over a ring of 8 weight copies, bf16 / f32 at 1 column, then at 4 | - | 56.08 / 103.30, 80.14 / 163.00 | - | 45.59 / 69.61, 83.86 / 108.44 |
 | the same, the bf16 stamps on the router's Metal shell (`MetalRouterGemvT`; Metal before: the stamps off `GkRouterGemv` directly), the decode column's stamp / the blocked stamp at 1 and 4 columns | 46.00 / 77.40 / 79.91 | 45.14 / 77.90 / 80.49 | - | - |
 | shared gate: its own GEMV, then the routed combine and the gated add | 3.08 + 2.93 | - | - | - |
 | shared gate as the router's row `ne`, the combine's `SH` arm | - | 0 + 2.01 | - | - |
@@ -171,8 +172,8 @@ its in-process alternate on both homes:
 | Pocket row GEMV, LayerNorm + SiLU | 12.79 | 12.99 | 6.14 | 6.14 |
 | gated attention's deinterleave + sigmoid epilogue, 8 heads of 256, 1 row (4 rows) | 2.19 (2.23) | 0 | - | - |
 | select, 128 experts k 8, the down scales (Metal before: the select, then its scale pass) | 3.89 | 3.30 | 6.14 | 6.14 |
-| gemma-4 MoE tail, dim 2816 k 8, 1 row (Metal before: the combine, three norms, the add, the add-norm) | 17.5 | 12.3 | 10.41 | 10.44 |
-| the same, 512 rows (Metal before: the reduce, three norms, two adds) | 182.4 | 122.5 | - | - |
+| gemma-4 MoE tail, dim 2816 k 8, 1 row (Metal before: the combine, three norms, the add, the add-norm) | 17.29 | 11.98 | 10.41 | 10.44 |
+| the same, 512 rows (Metal before: the reduce, three norms, two adds) | 188.75 | 120.30 | - | - |
 | classifier epilogue, vocab 262144 cap 30 two pins, 1 row (Metal before: the softcap row, then the suppress row) | 6.46 | 3.68 | 4.10 | 4.10 |
 | the same, 4 rows (Metal before: the pair a row) | 25.75 | 10.65 | 6.15 | 6.15 |
 

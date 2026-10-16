@@ -1818,32 +1818,6 @@ def cls_tied_f32(t : Model) : bool => t.config.shared_weights && !t.cls_q8 && !t
 // Format tag for layer l of a per-kind tag array; empty array (non-kq load) = q8.
 def fmt_at(a : array<KqFmt>; l : int64) : KqFmt => empty(a) ? KqFmt.q8 : a[l]
 
-//! gemma-4's per-expert down scales folded into the first `n` picks' routing weights `w` (their experts `idx`) of layer l: the CPU
-//! chain's fold, which the resident driver's host rows share; no-op off a gemma-4 MoE
-[arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-gemma4-moe-block")]
-def moe_down_scale_fold(t : Model; l : int64; idx : array<int64>; var w : array<float>; n : int64) {
-    return if (!t.config.moe_dense_shexp)
-    let row = t.moe_down_scale_off + l * t.config.n_expert
-    for (j in range64(n)) {
-        w[j] *= t.fblob[row + idx[j]]
-    }
-}
-
-typedef PlePlane = tuple<f : KqFmt; off : int64; f32 : bool; n : int64; d : int64>
-
-//! layer l's per-layer-embedding plane - the gate (dim -> ple), or with `proj` the projection (ple -> dim): its tag and offset
-//! in that tag's planes, or `f32` and the offset of the file's f32 rows in fblob; `n` its input width, `d` its output rows
-def ple_plane(t : Model; l : int64; proj : bool) : PlePlane {
-    let c = t.config
-    if (proj) {
-        return (f = fmt_at(t.ple_proj_fmt, l), off = t.ple_proj_offs[l], f32 = t.ple_proj_f32, n = c.n_embd_per_layer, d = c.dim)
-    }
-    return (f = fmt_at(t.ple_gate_fmt, l), off = t.ple_gate_offs[l], f32 = t.ple_gate_f32, n = c.dim, d = c.n_embd_per_layer)
-}
-
-//! layer l's two per-layer-embedding planes, the gate then the projection (`ple_plane`)
-def ple_planes(t : Model; l : int64) : PlePlane[2] => fixed_array(ple_plane(t, l, false), ple_plane(t, l, true))
-
 //! The shared expert's plane of `kind` (1 gate, 3 up, 2 down) on layer l: the plane in the file's format where the loader kept one,
 //! else the q8 transcode the CPU chain reads (dasllama_moe.das's and dasllama_blocks.das's shared-expert sites read only it).
 def shexp_plane(t : Model; l : int64; kind : int) : tuple<f : KqFmt; off : int64> {

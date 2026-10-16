@@ -286,7 +286,7 @@ def codec_attn_arm(t : T?; a : CodecAttn) {
             t |> success(check_count(got, control, QA_BAR) > 0, "{tag} control: {a.kv == KVDtype.tq4 ? "the query before its rotation" : "the attention over the rows before the codec stored them"} lands outside the bar")
         }
         codec_attn_mechanism_controls(t, tag, a, f, got)
-        codec_attn_ring_control(t, tag, a, cp, s, pa, slab, rowwgs, yp, want)
+        codec_attn_ring_control(t, tag, a, cp, s, pa, slab, rowwgs, yp, pp, cnt_off, rowgroups, want)
         if (a.fold != Fold.none) {
             var quants <- cp |> plane_as(aqp, type<int8>, a.nrows * qdim)
             var scales <- cp |> plane_run(asp)
@@ -324,9 +324,11 @@ def codec_attn_arm(t : T?; a : CodecAttn) {
 
 //! a ring arm's control: the same rows read a position a row (`ring` 0) - the zero rows past the ring - land outside the bar
 def private codec_attn_ring_control(t : T?; tag : string; a : CodecAttn; var cp : CellPlanes; var s : VkDescriptorSet; pa : DaAttnArgs;
-                                    slab : DaSlab; rowwgs : int64; yp : int; want : array<float>) {
+                                    slab : DaSlab; rowwgs : int64; yp, pp, cnt_off, rowgroups : int; want : array<float>) {
     return if (a.ring == 0)
     cp |> plane_refill(yp)
+    cp |> plane_refill(pp)
+    upload_zeros(cp.dev[pp], int64(cnt_off) * 4l, int64(a.nrows * rowgroups) * 4l)   //! the partials and the arrival counters start as the first run found them
     var flat = pa
     flat.ring = 0u
     cp |> cell_record() $(rw : VkCommandBuffer; var h : VkHaz) {

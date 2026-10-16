@@ -64,12 +64,12 @@ crown:
   the slower kernel.
 
 The row kernels' rows and races in `benchmarks/ew/bench_metal_gk_rows.das` hold one output across
-each arm's chain. The residual step's rows (`ar_dim_rows`), the gemma-4 MoE tail's (`g4_tail_rows`)
+each arm's chain. The residual step's and the gemma-4 MoE tail's races (`ar_race`, `g4_tail_race`)
 and the step, combine and seam races (`g4_slot_race`, `comb_slot_race`, `seam_lane_race`) update
 the stream rows in place or rewrite one combined row, and every dispatch reads or overwrites its own
 last write: the chain production runs, where each layer's residual step reads the stream the step
 before it wrote. The select race (`select_ds_race`) and the side rows' projection
-(`ple_proj_rows`) rewrite one output a dispatch: a decode step's select and projection each feed a
+(`ple_proj_race`) rewrite one output a dispatch: a decode step's select and projection each feed a
 stage that reads their output, so production runs them as a dependent chain too.
 
 The operands stand against each box's last-level cache: the M5 Max's SLC is 48 MB (Apple's

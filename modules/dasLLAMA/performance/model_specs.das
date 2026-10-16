@@ -689,11 +689,15 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
         ModelSpec(file = "gemma-4-26B-A4B-it-Q4_K_M.gguf", display = "gemma-4-26B-A4B-q4k", quant_label = "q4_k_m", official = true,
             url = "{HF}/unsloth/gemma-4-26B-A4B-it-GGUF/resolve/main/gemma-4-26B-A4B-it-UD-Q4_K_M.gguf",
             bytes = 16947541728l, sha256 = "f2c28b3dc4776931ac6f879e11f203dec637ea0f14267a86ec8f6165f63f293f",
-            // the assistant drafter rides as a companion: the mtp suite and the ruler attach it beside this target
+            // the assistant drafter rides as a companion: the mtp suite and the ruler attach it beside this target; its Q4_0
+            // twin is the drafter file's type-decline fixture (the drafter serves a Q8_0 sidecar alone)
             companions <- [
                 ProvEntry(name = "mtp-gemma-4-26B-A4B-it-Q8_0.gguf", root = "llm",
                     url = "{HF}/ggml-org/gemma-4-26B-A4B-it-GGUF/resolve/bb4531cda34d1ea09d9814959ed4d5833cf2a4c8/mtp-gemma-4-26B-A4B-it-Q8_0.gguf",
-                    bytes = 461766784l, sha256 = "ea4f772ffb70e02127c5f142f9ed9af97add7ca0f2bcc7b277244a9771b436bd")],
+                    bytes = 461766784l, sha256 = "ea4f772ffb70e02127c5f142f9ed9af97add7ca0f2bcc7b277244a9771b436bd"),
+                ProvEntry(name = "mtp-gemma-4-26B-A4B-it-Q4_0.gguf", root = "llm",
+                    url = "{HF}/ggml-org/gemma-4-26B-A4B-it-GGUF/resolve/bb4531cda34d1ea09d9814959ed4d5833cf2a4c8/mtp-gemma-4-26B-A4B-it-Q4_0.gguf",
+                    bytes = 251939520l, sha256 = "e00b0ce326d03d8f6f6972ad2320fe90b6ff25a3da5fc51bec15efe283052aa2")],
             // the q51 tier gate: this recipe's ffn_down_exps are Q5_1 on 29 layers, riding the
             // native q51 planes; the Q4_K gate_up stacks ride the kq planes
             parity <- ev_gemma4_26b_q4km()),

@@ -11,6 +11,60 @@ what it costs today and what the fix would change.
 
 ## Entries
 
+- **MEASURED (2026-10-16) - the gemma leg's parity bars, one row a file and bar.** Each row names the cell, the bar
+  (its constant where it has one), the reading and the box. The Vulkan box is the RTX PRO 4500 (32 GB) pod, its cells run
+  one file through `dastest` under `DASLLAMA_GPU=1 DASLLAMA_PARITY_FULL=1` with the cell's arm in `DASLLAMA_TEST_ARMS`;
+  the Metal box is the M5 Max, through `tests/run.das -- --arm <family>` under `DASLLAMA_PARITY_FULL=1`.
+  - gemma-4-26B-A4B Q4_K_M, the assistant drafter's device step against the CPU oracle on Vulkan
+    (`test_gemma_drafter_gpu_step`, arm `mtp-gdraft-gpu`): `VK_FEED_FLIP_BAR` 0.5 on the draft logits and on `h_next`,
+    the oracle reading Q8_0 activation rows as the device's GEMVs do. Reads 0.30 / 0.29 at the short anchor and 8.6e-6 /
+    8.1e-6 one past the sliding window, both drafts' argmax the oracle's; the oracle drafting off the next token id lands
+    past the bar (the control). Pod.
+  - gemma-4-E2B Q4_K_M, the forced feed held to the file's f32 chain on Vulkan (`test_gpu_resident_gemma4_e2b_ple_planes`,
+    arm `g4e-kq`): `GEMMA_LOGIT_BAR_REL` 0.16 of each row's max |logit|, the prompt and eight steps. Reads 0.26 at the prompt
+    (bar 4.05) and 0.73-1.82 over the steps (bars 2.88-3.95), every row's argmax the f32 chain's, the one-step-off control
+    17-26; step 4's top logit 19.28 on the device where the f32 chain reads 19.14. Pod.
+  - the same file and cell, `F32_DIST_REL` 1.15 (`f32_chain_witness`): the device's summed distance from the f32 chain over
+    the CPU q8 chain's own. Reads 9.54 against 13.50 (0.71), the f32 rows one step off 188.7. Pod.
+  - gemma-4-E2B Q8_0, the decode step's side row built on the device against the CPU pre-step's row on Vulkan
+    (`test_gpu_resident_gemma4_e2b_ple_pre_step`, arm `g4e-pre`): 1e-4 of the CPU row's largest value. Reads 2.9e-6 of a
+    1.6e-3 bar (largest 15.98); another token's CPU row 7.69 off (the control). Pod.
+  - gemma-4-E2B Q4_0, the forced feed against the CPU chain on Vulkan (`test_gpu_resident_gemma4_e2b_ple_planes`, arm
+    `g4e-kq-q40`): `GEMMA_LOGIT_BAR_REL` 0.16. Reads 1.25 at the prompt (bar 4.43) and 0.75-1.77 over the steps (bars
+    3.29-4.25), every argmax agreeing, the one-step-off control 14.4 and past. Pod.
+  - the four format carriers off the E2B Q8_0 on Vulkan, the forced feed against the CPU chain: `GEMMA_LOGIT_BAR_REL` 0.16.
+    emb-Q6_K and emb-IQ4_XS (`test_gpu_resident_gemma4_e2b_ple_tables`, arm `g4e-ple`) read 0.76 and 0.62 at the prompt
+    (bars 4.17, 4.14), 0.51-1.74 and 0.49-1.17 over the steps (bars 2.91-4.02); ple-Q6_K and ple-Q5_0
+    (`test_gpu_resident_gemma4_e2b_ple_planes`, arms `g4e-kq-ple-q6k`, `g4e-kq-ple-q50`) read 0.86 and 0.71 at the prompt
+    (bar 4.17), 0.59-1.54 and 0.43-0.87 over the steps (bars 2.92-3.97). Every argmax agrees but ple-Q6_K's step 4, a near
+    tie the cell's tie bar admits (the CPU's ' river' 19.61 against the device's ' miller' 19.59). Pod.
+  - Qwen2.5-0.5B IQ4_NL-pure (`-local`), the per-op FFN rail's per-32 carrier on Vulkan, its table and classifier per-32
+    too (`test_gpu_resident_format_census`, arm `vk-perop-ffn`): 0.08 of each row's max |logit|, moved from the llama
+    carriers' 0.06. Reads 0.44-0.73 over the prompt and six steps (bars 0.86-1.57, max logits 10.7-19.6), every argmax
+    agreeing but step 4's near tie (10.70 against 10.79); the one-step-off control 7.4 and past. Pod.
+  - gemma-4-26B-A4B MXFP4_MOE (`-MXFP4_MOE-q4km-local`) on Vulkan, 150 prose ids prefilled and 150 teacher-forced
+    (`test_gpu_resident_gemma4_26b_mx4_ppl`, arm `mx26`): `GEMMA_MOE_PPL_RATIO` 2.0 on the perplexity, and the argmax hits
+    held within 12 of the CPU chain's (`GEMMA4_26B_MX4_HITS_SLACK`). Reads 4.25 against the CPU chain's 3.14 (1.35x), hits
+    128 against 136; the one-position-off control's hits 2. Pod.
+  - gemma-4-26B-A4B UD-IQ3_XXS under an 8000 MB plan room, the first routed layers' experts on the host
+    (`test_gpu_resident_gemma4_26b_host_experts`, arm `host26`): `GEMMA_MOE_PPL_RATIO` 2.0, hits within 12
+    (`GEMMA4_26B_HITS_SLACK`). Reads 3.00 against 4.02 (0.75x), hits 129 against 130; the control's hits 2. Pod.
+  - gemma-4-E4B Q8_0 under a tq4 mirror (`test_gpu_resident_gemma4_e4b_block_codecs`, arm `g4f-codec`): `GEMMA_PPL_RATIO`
+    1.05, hits within 3 (`ppl_compare`'s default). Reads 1.076 against 1.064 (1.011x), hits 148 against 148; the control's
+    hits 0. Its q8_0 forced feed reads 0.53-1.57 against bars 4.11-4.65 at `GEMMA_LOGIT_BAR_REL`. Pod.
+  - gemma-3-12b Q4_K_M on Metal (`test_metal_support_matrix`, row `gemma3-12b/k4/f16`, arm `fam-gemma3`): the overrides'
+    greedy generate held to the CPU chain token for token, eight tokens after the 30-number count prompt. Reads every
+    token equal. M5.
+  - gemma-4-26B-A4B UD-IQ3_XXS, UD-IQ4_XS and MXFP4_MOE (`-MXFP4_MOE-local`) on Metal (`gemma4moe_row`, arm
+    `fam-gemma4moe`): 8.0 on the post-prefill logits and 24.0 on the forced step, on the fused tail, the unfused tail and
+    a q8_0 mirror. Read post-prefill / forced step: UD-IQ3_XXS 3.45 / 5.28, 3.38 / 6.69, 3.13 / 15.95; UD-IQ4_XS 2.07 /
+    5.34, 2.25 / 5.02, 1.73 / 4.95; MXFP4_MOE 2.11 / 10.60, 2.02 / 11.71, 2.40 / 14.02; the eyeball picks agree on every
+    row. M5.
+  - gemma-4-E2B Q4_0 and the four format carriers off the E2B Q8_0 (emb-Q6_K, emb-IQ4_XS, ple-Q6_K, ple-Q5_0 `-local`
+    mints) on Metal (`gemma4e_row`, arms `fam-gemma4e-q40` and `fam-gemma4e-e2b-*`): 4.0 on the single-stream forced step,
+    the batched step's two rows and the depth cell. Read single / batched / depth: Q4_0 0.63 / 1.28 / 1.08; emb-Q6_K 0.30 /
+    0.51 / 0.67; emb-IQ4_XS 0.43 / 0.75 / 0.72; ple-Q6_K 0.72 / 0.73 / 0.64; ple-Q5_0 0.33 / 0.53 / 0.55; every argmax
+    agreeing. M5.
 - **STATED (2026-10-16) - the lasting buffers the gemma leg adds: the resident assistant drafter on both homes, the
   per-layer-embedding planes on the device, the carry's host rows, the concat norm regions and the round scratch.** Not
   measured; the formulas are the record. The drafter is `mtp-gemma-4-26B-A4B-it-Q8_0.gguf` (`dim` 1024, `tdim` 2816,

@@ -125,7 +125,7 @@ def with_gemma_rig(t : T?; gf : GemmaFile; body : block<(tr : Model) : void>) {
 
 //! the routed model's weight-format census on the armed driver's load: every site the file carries in its own format, the
 //! expert stacks the native-MXFP4 planes exactly where `mx4` names them, then a 40-token prompt and two fed steps on the driver
-//! with every call served
+//! with every call served, the steps' mx4 stamps counted where `mx4` and none dispatched where not
 [cold_path]
 def gemma_format_cell(t : T?; gf : GemmaFile; mx4 : bool) {
     with_gemma_rig(t, gf) $(tr) {
@@ -139,10 +139,14 @@ def gemma_format_cell(t : T?; gf : GemmaFile; mx4 : bool) {
         var rows <- feed_logits(tr, sg, feed.prompt, feed.toks) $ {}
         t |> equal(moe_gpu_resident_prefills(), served0 + 1l, "{gf.file}: the resident window chain served the prompt")
         served_every_call(t)
-        if (mx4 && gu0 != NO_CENSUS) {   //! the fed steps' routed sites on the mx4 stamps: the fused gate + up and the summed down
+        if (gu0 != NO_CENSUS) {   //! the fed steps' routed sites on the mx4 stamps: the fused gate + up and the summed down
             let gu_n = census("mx4_gemv_gu_cls_spv") - gu0
             let sum_n = census("mx4_gemv_sum_cls_spv") - sum0
-            t |> success(gu_n > 0l && sum_n > 0l, "{gf.file}: the steps' routed gate + up ({gu_n}) and summed down ({sum_n}) on the mx4 stamps")
+            if (mx4) {
+                t |> success(gu_n > 0l && sum_n > 0l, "{gf.file}: the steps' routed gate + up ({gu_n}) and summed down ({sum_n}) on the mx4 stamps")
+            } else {   //! the control: a file with no MXFP4 stack dispatches neither stamp
+                t |> equal(gu_n + sum_n, 0l, "{gf.file}: no mx4 stack, no mx4 stamp dispatched (gate + up {gu_n}, summed down {sum_n})")
+            }
         }
         for (r, i in rows, count()) {
             let bad = length([for (v in r); v; where !is_finite(v)])
@@ -160,7 +164,7 @@ def gemma_format_cell(t : T?; gf : GemmaFile; mx4 : bool) {
 //! chain reads 19.14, and the reference build's quantized CPU path reads 17.8 to 20.1 by its attention form and batching, each
 //! chain summing as far from the f32 rows - and adds that the device sits no further from that chain than the CPU q8 chain
 //! (`f32_chain_witness`)
-[cold_path]
+[cold_path, arch(at="../ARCHITECTURE_MEASUREMENT_FORCED_FEED.md#reference-forced-feed")]
 def gemma_forced_feed(t : T?; n : int64; gf : GemmaFile; exact : bool = false) {
     with_gemma_rig(t, gf) $(tr) {
         var inscope feed <- prose_feed(tr, n, 8l)

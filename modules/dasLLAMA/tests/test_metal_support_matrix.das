@@ -1013,17 +1013,10 @@ def private qwen2moe_row(t : T?; path : string) {
             let ba1 = metal_batch_decode_stats().steps
             eval_batch_(trg, wsg, sessg, cur)
             t |> equal(metal_batch_decode_stats().steps - ba1, 1l, "qwen2moe batch: the driver served the step")
-            var bmaxd = 0.0
-            for (i in range64(vocab)) {
-                bmaxd = max(bmaxd, abs(sg.logits[i] - sc.logits[i]))
-                bmaxd = max(bmaxd, abs(sh.logits[i] - sd.logits[i]))
-            }
+            let bmaxd = max(span_maxdiff(sg.logits, sc.logits, 0, 0, int(vocab)).diff, span_maxdiff(sh.logits, sd.logits, 0, 0, int(vocab)).diff)
             to_log(LOG_INFO, "qwen2moe batched step: CPU next '{eyeball_str(piece_(tr, argmax_of(sc.logits, vocab)))}' / '{eyeball_str(piece_(tr, argmax_of(sd.logits, vocab)))}' vs GPU next '{eyeball_str(piece_(tr, argmax_of(sg.logits, vocab)))}' / '{eyeball_str(piece_(tr, argmax_of(sh.logits, vocab)))}' (maxd {bmaxd})\n")
             t |> success(bmaxd <= 8.0, "qwen2moe: batched-step logits within 8.0 of the CPU batched stack, both rows (maxd {bmaxd})")
-            var xmaxd = 0.0   //! the control: row A against row B lands outside the bar
-            for (i in range64(vocab)) {
-                xmaxd = max(xmaxd, abs(sg.logits[i] - sd.logits[i]))
-            }
+            let xmaxd = span_maxdiff(sg.logits, sd.logits, 0, 0, int(vocab)).diff   //! the control: row A against row B lands outside the bar
             t |> success(xmaxd > 8.0, "qwen2moe: the cross-row compare lands outside the bar (maxd {xmaxd})")
             select_decode_override("")
             select_prefill_override("")
@@ -1252,6 +1245,11 @@ def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false
             // the two FFN widths) must read within the single-stream bar of it
             var sc = make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
             var sd = make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
+            //! the device counters' control: the planar model under the same overrides declines the drivers by name, so its
+            //! prefill and forced steps finish, project and dispatch nothing on the device
+            let cfin0 = metal_kernel_count_compiled("metal_ple_finish")
+            let cpj0 = ple_proj_count()
+            let cfk0 = kernels_sum(kernels)
             eval_(tr, sc, pa)
             // cont_logits_cell below rides the B=2 verify rail — a per-layer width mis-bind
             // shows only in the single-stream loop, which this forced-step compare covers
@@ -1260,10 +1258,10 @@ def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false
                 eval_(tr, sc, one)
                 delete one
             }
-            var ssmaxd = 0.0
-            for (i in range64(vocab)) {
-                ssmaxd = max(ssmaxd, abs(sc.logits[i] - sa.logits[i]))
-            }
+            t |> equal(metal_kernel_count_compiled("metal_ple_finish") - cfin0, 0l, "{tag}: the planar model's prefill finishes no PLE pre-step on the device - the finish counter's control")
+            t |> equal(ple_proj_count() - cpj0, 0l, "{tag}: the planar model's steps project no side row on the device - the projection counter's control")
+            t |> equal(kernels_sum(kernels) - cfk0, 0l, "{tag}: the planar model dispatches none of the site's format stamps ({kernels}) - their control")
+            let ssmaxd = span_maxdiff(sc.logits, sa.logits, 0, 0, int(vocab)).diff
             let cpu_next = argmax_of(sc.logits, vocab)
             let gpu_next = argmax_of(sa.logits, vocab)
             to_log(LOG_INFO, "{tag} single-stream forced-step: CPU next '{eyeball_str(piece_(tr, cpu_next))}' vs GPU next '{eyeball_str(piece_(tr, gpu_next))}' (maxd {ssmaxd})\n")
@@ -1300,17 +1298,10 @@ def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false
             t |> success(ple_proj_count() > bpj0,
                 "{tag} batch: the rows' side input projected on the device")
             t |> equal(ple_cpu_pre_rows() - bcpu0, 0l, "{tag} batch: no CPU pre-step row (the host transpose and gather are gone)")
-            var bmaxd = 0.0
-            for (i in range64(vocab)) {
-                bmaxd = max(bmaxd, abs(sg.logits[i] - sc.logits[i]))
-                bmaxd = max(bmaxd, abs(sh.logits[i] - sd.logits[i]))
-            }
+            let bmaxd = max(span_maxdiff(sg.logits, sc.logits, 0, 0, int(vocab)).diff, span_maxdiff(sh.logits, sd.logits, 0, 0, int(vocab)).diff)
             to_log(LOG_INFO, "{tag} batched step: CPU next '{eyeball_str(piece_(tr, argmax_of(sc.logits, vocab)))}' / '{eyeball_str(piece_(tr, argmax_of(sd.logits, vocab)))}' vs GPU next '{eyeball_str(piece_(tr, argmax_of(sg.logits, vocab)))}' / '{eyeball_str(piece_(tr, argmax_of(sh.logits, vocab)))}' (maxd {bmaxd})\n")
             t |> success(bmaxd <= bar, "{tag}: batched-step logits within {bar} of the CPU batched stack, both rows (maxd {bmaxd})")
-            var xmaxd = 0.0   //! the control: row A against row B lands outside the bar
-            for (i in range64(vocab)) {
-                xmaxd = max(xmaxd, abs(sg.logits[i] - sd.logits[i]))
-            }
+            let xmaxd = span_maxdiff(sg.logits, sd.logits, 0, 0, int(vocab)).diff   //! the control: row A against row B lands outside the bar
             t |> success(xmaxd > bar, "{tag}: the cross-row compare lands outside the bar (maxd {xmaxd})")
             select_decode_override("")
             select_prefill_override("")
@@ -1364,8 +1355,16 @@ def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false
             gpu_ids := ids2
             delete s2
             let sp1 = metal_decode_spec_stats()
+            set_metal_decode_speculate(0)   //! the hits' control: the chain pinned off chains no step
+            var s4 = make_run_state(trg.config, KVDtype.f16, KVDtype.f16)
+            let ids4 <- generate(trg, s4, prompt, length(prompt) + 8)
+            delete s4
+            let sp2 = metal_decode_spec_stats()
             set_metal_decode_speculate(spec_mode)
             t |> success(sp1.hits - sp0.hits > 0l, "{tag}: the greedy chain engaged on the E-series ({sp1.hits - sp0.hits} hits, {sp1.misses - sp0.misses} misses)")
+            t |> equal(sp2.hits - sp1.hits, 0l, "{tag}: the chain pinned off takes no chained step - the hits' control")
+            log_gen_texts(trg, "{tag} chain on, chain off", ids2, ids4)
+            t |> success(ids_equal(ids2, ids4), "{tag}: the chained walk emits the unchained walk's tokens")
             set_metal_prefill_min_npos(64l)
             select_decode_override("")
             select_prefill_override("")
@@ -1442,7 +1441,12 @@ def private gemma4moe_row(t : T?; path : string; tag : string; tol_pf : float = 
         var lg0, lg1, lq0, lq1 : array<float>   //! the CPU truths on f16 and on q8_0 sessions
         var t0 = 0l
         var t1 = 0l
+        //! the routed GEMVs' control: the truths run on the planar model under the Metal overrides, which decline it by name, so
+        //! none of the file's routed stamps dispatches
+        let cpu_gemv0 = kernels_sum(gemvs)
         with_dasllama_jobque() {
+            select_prefill_override("metal")
+            select_decode_override("metal")
             var s = make_run_state(c, KVDtype.f16, KVDtype.f16)
             eval_(tr, s, prompt)
             lg0 := s.logits
@@ -1459,7 +1463,10 @@ def private gemma4moe_row(t : T?; path : string; tag : string; tol_pf : float = 
             lq1 := sq.logits
             delete sq
             delete one
+            select_prefill_override("")
+            select_decode_override("")
         }
+        t |> equal(kernels_sum(gemvs) - cpu_gemv0, 0l, "{tag}: the planar truths dispatch none of the routed stamps ({gemvs}) - their control")
         census_cell(t, tr, path, tag, ["attention q/k/v/o", "routed experts", "token table", "classifier"])
         t |> equal(tr.experts_mx4, mx4, "{tag}: the expert stacks load as the native-MXFP4 planes exactly where the file carries them")
         let nl = c.n_layers
@@ -1475,6 +1482,8 @@ def private gemma4moe_row(t : T?; path : string; tag : string; tol_pf : float = 
             let leg = unfused ? "{tag} unfused tail" : (leg_i == 2 ? "{tag} q8_0 mirror" : tag)
             var mpf = 0.0
             var m1 = 0.0
+            var mpf_off = 0.0   //! the bars' controls: each GPU row against the CPU truth one step off
+            var m1_off = 0.0
             var served = 0l
             var gpk0 = 0l
             var gpk1 = 0l
@@ -1490,17 +1499,15 @@ def private gemma4moe_row(t : T?; path : string; tag : string; tol_pf : float = 
                 let d0 = metal_decode_stats().decodes
                 var s = make_run_state(trg.config, kdt, kdt)
                 eval_(trg, s, prompt)
-                for (v in range64(vocab)) {
-                    mpf = max(mpf, abs((leg_i == 2 ? lq0[v] : lg0[v]) - s.logits[v]))
-                }
+                mpf = span_maxdiff(leg_i == 2 ? lq0 : lg0, s.logits, 0, 0, int(vocab)).diff
+                mpf_off = span_maxdiff(leg_i == 2 ? lq1 : lg1, s.logits, 0, 0, int(vocab)).diff
                 gpk0 = argmax_of(s.logits, vocab)
                 npf = metal_kernel_count_compiled(G4_STEP_PF)
                 var one <- [t0]
                 eval_(trg, s, one)
                 delete one
-                for (v in range64(vocab)) {
-                    m1 = max(m1, abs((leg_i == 2 ? lq1[v] : lg1[v]) - s.logits[v]))
-                }
+                m1 = span_maxdiff(leg_i == 2 ? lq1 : lg1, s.logits, 0, 0, int(vocab)).diff
+                m1_off = span_maxdiff(leg_i == 2 ? lq0 : lg0, s.logits, 0, 0, int(vocab)).diff
                 gpk1 = argmax_of(s.logits, vocab)
                 ndec = metal_kernel_count_compiled(G4_STEP_DEC)
                 if (leg_i == 0) {
@@ -1520,6 +1527,8 @@ def private gemma4moe_row(t : T?; path : string; tag : string; tol_pf : float = 
             t |> success(served == 2l, "{leg}: GPU prefill + forced step both served ({served}/2)")
             t |> success(mpf <= tol_pf, "{leg}: post-prefill logits within {tol_pf} of the CPU truth (measured {mpf})")
             t |> success(m1 <= tol_step, "{leg}: one forced step within {tol_step} of the CPU truth (measured {m1})")
+            t |> success(mpf_off > tol_pf, "{leg}: the post-prefill row against the CPU truth one step on lands outside the bar ({mpf_off}) - the control")
+            t |> success(m1_off > tol_step, "{leg}: the forced step against the CPU truth one step back lands outside the bar ({m1_off}) - the control")
             if (unfused) {
                 t |> success(npf == 0l && ndec == 0l, "{leg}: no MoE step dispatched (window {npf}, step {ndec})")
             } else {
@@ -1970,6 +1979,8 @@ def private gemma4_hetero_row(t : T?; path : string; tag : string = "gemma4-12b/
         var fmaxd = 0.0
         var fmax_at = 0l
         var fmax_peak = 0.0
+        var foff_min = INFINITE_DIFF
+        var foff_at = 0l
         with_dasllama_jobque() {
             cpu_ids <- cached_ids(path, "gen_free_n128") $ {   // nolint:PERF030,LINT019 — fresh empty target, single move; fires only on the das_metal arm
                 var s = make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
@@ -1993,27 +2004,33 @@ def private gemma4_hetero_row(t : T?; path : string; tag : string = "gemma4-12b/
             eval_(tr, sb, prompt)
             let df0 = metal_decode_stats().decodes
             select_decode_override("metal")
+            var prev_cpu : array<float>   //! the bar's control: each GPU row against the CPU row one step back
             for (q in range64(long_length(prompt) - 1l, long_length(cpu_ids))) {
                 gpu_picks |> push(argmax_of(sb.logits, vocab))
-                var qd = 0.0
-                for (a, b in sa.logits, sb.logits) {
-                    qd = max(qd, abs(a - b))
-                }
-                if (qd > fmaxd && q - (long_length(prompt) - 1l) < free_rows) {
+                let qd = logits_maxdiff(sa.logits, sb.logits)
+                let held = q - (long_length(prompt) - 1l) < free_rows
+                if (qd > fmaxd && held) {
                     fmaxd = qd
                     fmax_at = q
                     fmax_peak = live_maxabs(sa.logits)
                 }
+                if (held && !empty(prev_cpu)) {
+                    let qoff = logits_maxdiff(prev_cpu, sb.logits)
+                    if (qoff < foff_min) {
+                        foff_min = qoff
+                        foff_at = q
+                    }
+                }
+                prev_cpu := sa.logits
                 var one <- [cpu_ids[q]]
                 eval_(tr, sa, one)
                 eval_(trg, sb, one)
                 delete one
             }
             if (long_length(cpu_ids) - long_length(prompt) < free_rows) {
-                for (a, b in sa.logits, sb.logits) {
-                    fmaxd = max(fmaxd, abs(a - b))
-                }
+                fmaxd = max(fmaxd, logits_maxdiff(sa.logits, sb.logits))
             }
+            delete prev_cpu
             served_free = metal_decode_stats().decodes - df0
             delete sa
             delete sb
@@ -2044,6 +2061,8 @@ def private gemma4_hetero_row(t : T?; path : string; tag : string = "gemma4-12b/
         to_log(LOG_INFO, "{tag} freeform GPU greedy-would-be cont (fmaxd {fmaxd} at row {fmax_at}, CPU max |logit| there {fmax_peak}): {eyeball_text(tr, gpu_picks)}\n")
         t |> success(fmaxd < 8.0,
             "{tag}: forced-feed freeform decode logits within 8 of CPU over the stream's first {free_rows} of 128 rows (measured {fmaxd})")
+        t |> success(foff_min >= 8.0,
+            "{tag}: every held GPU row against the CPU row one step back lands outside the bar (nearest {foff_min} at row {foff_at}) - the control")
         t |> success(served_free > 0l, "{tag}: the forced-feed freeform decode ENGAGED ({served_free} served)")
         t |> success(served_pf > 0l, "{tag}: the hetero prefill ENGAGED ({served_pf} served)")
         log_gen_texts(tr, "{tag} both-paths", cpu_cnt_ids, both_ids)
@@ -2185,10 +2204,10 @@ def test_metal_family_matrix(t : T?) {
             // amplifier (post-prefill stays 2.5-class); 24 keeps the ~2x margin discipline
             gemma4moe_row(t, path_join(models_dir(), "gemma-4-26B-A4B-it-Q4_K_M.gguf"), "gemma4moe-26b-k", 8.0, 24.0, ["metal_moe_gemv_k4", "metal_moe_gemv_q51"])
             // ... and the ggml-org Q4_0 file: q40 gate_up expert stacks beside the 704-wide down stacks
-            // in their own per-32 form (q4032) - the q40 routed twins' model-level pin. Bars are the
-            // Q4_K_M row's, not tighter: the same mixed-quant expert feed rides the same double-router
-            // amplifier, whose step spread across summation orders reaches 13.8 there. 14GB, PARITY_FULL-gated
-            gemma4moe_row(t, path_join(models_dir(), "gemma-4-26B-A4B-it-Q4_0.gguf"), "gemma4moe-26b-q40", 8.0, 24.0, ["metal_moe_gemv_q40", "metal_moe_gemv_q4032"])
+            // in their own per-32 form (q4032) - the q40 routed twins' model-level pin. The prefill bar is the
+            // Q4_K_M row's; the step bar is this file's own: its forced step reads 3.4-5.7 across the legs and the
+            // one-step-off control 15.1, so 10 is the bar both sides clear with margin (24 let the control pass). 14GB, PARITY_FULL-gated
+            gemma4moe_row(t, path_join(models_dir(), "gemma-4-26B-A4B-it-Q4_0.gguf"), "gemma4moe-26b-q40", 8.0, 10.0, ["metal_moe_gemv_q40", "metal_moe_gemv_q4032"])
             // ... and the two Unsloth dynamic files: grid-format gate_up stacks (IQ2_S / IQ3_S on UD-IQ3_XXS,
             // IQ3_S / IQ4_XS on UD-IQ4_XS) beside the 704-wide IQ4_NL down stacks (iq4nl32) and a Q8_0 last
             // layer, the Q6_K / Q8_0 token tables - the iquant routed forms' model-level pin, at the Q4_K_M

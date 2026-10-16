@@ -1197,6 +1197,7 @@ def test_vkd_ple_finish(t0 : T?) {
                 }
                 var got <- cp |> plane_run(py)
                 check(t, "ple_finish", got, want, BAR_APPROX, Shape(row_width = ple))
+                t |> success(moved_off(want, fx.x, 0, BAR_APPROX), "ple_finish: the finish moved element 0 off its input past the bar (the in-place compare's control)")
                 delete got
             }
             delete want
@@ -1818,18 +1819,11 @@ def private per32_sum_rows_cell(t : T?; fmt : KqFmt; n, wq_words : int; wq_seed,
             for (wi in range(3)) {
                 let w = widths[wi]
                 var inscope want <- [for (i in range(w * d)); ys_ref[i]]
-                let bads = mismatch_approx(outs[wi], want)
-                t |> success(bads == 0, "{fmt} GEMV summed over {w} token row(s) at n {n}: every row its k slots' dots under their weights ({bads} of {w * d} off)")
-                var inscope poison := outs[wi]
-                poison[(w - 1) * d] += 1.0 + 2.0 * logits_maxabs(want)
-                t |> success(mismatch_approx(poison, want) > 0, "{fmt} GEMV summed over {w} token row(s): the bar reds a poisoned last row")
+                check(t, "{fmt} GEMV summed over {w} token row(s) at n {n}: every row its k slots' dots under their weights", outs[wi], want, BAR_APPROX, Shape(row_width = d))
                 if (wi > 0) {
                     let pw = widths[wi - 1]
-                    var same = 0
-                    for (i in range(pw * d)) {
-                        same += outs[wi][i] == outs[wi - 1][i] ? 1 : 0
-                    }
-                    t |> equal(same, pw * d, "{fmt} GEMV summed: the {w}-row dispatch's first {pw} row(s) bit for bit the {pw}-row dispatch's")
+                    var inscope head <- [for (i in range(pw * d)); outs[wi][i]]
+                    check_exact(t, "{fmt} GEMV summed: the {w}-row dispatch's first {pw} row(s) bit for bit the {pw}-row dispatch's", head, outs[wi - 1])
                 }
             }
             delete outs
@@ -7910,7 +7904,9 @@ def test_vkd_router_gemv_bf16(t0 : T?) {
                 for (e in range(ne)) {
                     want4[obase + e] *= 0.125
                 }
-                t |> success(rel_mismatches(got4, want4, obase, ne) == 0, "router_gemv_bf16 under the output scale: every output the dot scaled")
+                var inscope g4 <- [for (i in range(ne)); got4[obase + i]]
+                var inscope w4 <- [for (i in range(ne)); want4[obase + i]]
+                check(t, "router_gemv_bf16 under the output scale: every output the dot scaled", g4, w4, Bar(rel = 1e-3, abs_floor = 1e-3), FLAT_SHAPE)
                 t |> success(rel_mismatches(got4, want, obase, ne) > 0, "router_gemv_bf16 under the output scale: the control - the unscaled dot must miss")
                 delete got4
                 delete want4
@@ -9102,6 +9098,7 @@ def private moe_ar_comb_g4_arm(t : T?) {
                 os <- cp |> plane_run(pos)
             }
             cp |> plane_upload(px, fx.xs)
+            cp |> plane_refill(pyo)
             var pcs = pc
             pcs.presummed = 1u
             var scs = cp |> cls_set(fixed_array(px, psi, psw, pps, psh, pwn, pyo), @@set_cls_ar_comb_g4)
@@ -9445,14 +9442,11 @@ def test_vkd_ple_bf16_cvt(t0 : T?) {
                     enc_ple_bf16_cvt_cls(raw, h, sc, pc, int64((n / 4 + 255) / 256 + 1))
                 }
                 var got <- cp |> plane_as(po, type<float16>, n + 2)
-                var bad = 0
-                for (i in range(n)) {
-                    bad += float(got[i]) != want[i] ? 1 : 0
-                }
-                t |> equal(bad, 0, "ple_bf16_cvt: every element the widened value's half")
+                var inscope gotf <- [for (i in range(n)); float(got[i])]
+                check_exact(t, "ple_bf16_cvt: every element the widened value's half", gotf, want)
                 t |> equal(float(got[7]), 65504.0, "ple_bf16_cvt: a value past the half range saturates")
                 var tail <- cp |> plane_as(po, type<uint16>, n + 2)
-                t |> success(tail[n] == uint16(0xFFFF) && tail[n + 1] == uint16(0xFFFF), "ple_bf16_cvt: the elements past the count kept")
+                t |> success(tail[n] == uint16(0xFFFF) && tail[n + 1] == uint16(0xFFFF), "ple_bf16_cvt: the elements past the count kept (read {tail[n]}, {tail[n + 1]})")
                 delete got
                 delete tail
             }

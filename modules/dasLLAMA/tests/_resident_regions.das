@@ -597,7 +597,8 @@ def private batched_rows_logits(t : T?; tr : Model) : array<array<float>> {
 //! the batched rows' token rows gathered on the device off their ids (`ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command`): every
 //! batched row counted by `vk_rdec_nrow_embed_gathered`, the host embedding none, and each row's logits at every step bit for bit the
 //! same steps' on a load with the gather off (`set_gpu_resident_embed(0)`, the `DASLLAMA_VK_GPU_EMBED=0` form: every row embedded on
-//! the host and staged up), which moves the counter by nothing and embeds every row on the host - the counters' control
+//! the host and staged up), which moves the counter by nothing, gathers no side row off an id (`vk_rdec_nrow_side_gathered`, the
+//! side-rows cell's counter) and embeds every row on the host - the counters' control
 [cold_path]
 def cell_regions_batched_embed_gather(t : T?; file : string) {
     t |> run("the batched rows gather their token rows on the device, bit for bit the rows the host embeds") @(t : T?) {
@@ -617,19 +618,24 @@ def cell_regions_batched_embed_gather(t : T?; file : string) {
             with_regions_rig(t, file) $(tr) {
                 let g0 = vk_rdec_nrow_embed_gathered()
                 let h0 = batch_rows_host_embedded()
+                let side0 = vk_rdec_nrow_side_gathered()
                 delete host
                 host <- batched_rows_logits(t, tr)
                 t |> equal(vk_rdec_nrow_embed_gathered() - g0, 0l, "with the gather off no batched row gathered: the counter's control")
                 t |> equal(batch_rows_host_embedded() - h0, 2l * STEPS, "with the gather off the host embedded every batched row")
+                t |> equal(vk_rdec_nrow_side_gathered() - side0, 0l, "with the gather off no side row gathered off an id: the side-rows cell's control")
+                t |> equal(long_length(dev), long_length(host), "both loads stepped every row")
+                for (i in range64(min(long_length(dev), long_length(host)))) {
+                    let diff = logits_maxdiff(dev[i], host[i])
+                    log_logits_pair(tr, "step {i / 2l}, row {i % 2l}: the gathered row against the host row", dev[i], host[i], diff)
+                    t |> equal(diff, 0.0, "step {i / 2l}, row {i % 2l}: the gathered rows' logits bit for bit the host rows' (maxdiff {diff})")
+                }
             }
             set_gpu_resident_embed(pin)
-            t |> equal(long_length(dev), long_length(host), "both loads stepped every row")
-            for (i in range64(min(long_length(dev), long_length(host)))) {
-                let diff = logits_maxdiff(dev[i], host[i])
-                t |> equal(diff, 0.0, "step {i / 2l}, row {i % 2l}: the gathered rows' logits bit for bit the host rows' (maxdiff {diff})")
-            }
             delete dev
             delete host
+        } else {
+            t |> skip("no dasVulkan module on this build: the batched rows' device gather is the Vulkan driver's")
         }
     }
 }
@@ -667,12 +673,18 @@ def cell_regions_batched_down_fold(t : T?; file : string; bar : LogitsBar) {
     }
 }
 
+//! `split_forms` pins the fuse knob off for the load: the routed down then folds no row under its weights, so the summed down
+//! stamps stay where they were - the fold cell's control
 def cell_regions_batched_steps(t : T?; file : string; bar : LogitsBar = LogitsBar.bit_exact; split_forms : bool = false) {
     t |> run("two sessions, a region each: a batched step over both reads what each session reads alone, with no history resync") @(t : T?) {
         with_regions_rig(t, file, RegionsLoad(split_forms = split_forms)) $(tr) {
             var pa <- prompt_a()
             var pb <- prompt_b()
+            let sum0 = b32_census("_gemv_sum_cls_spv")
             batched_steps_body(t, tr, pa, pb, bar)
+            if (split_forms && sum0 != NO_CENSUS) {
+                t |> equal(b32_census("_gemv_sum_cls_spv") - sum0, 0l, "the split forms fold no routed down: no summed down stamp dispatched")
+            }
             delete pa
             delete pb
         }

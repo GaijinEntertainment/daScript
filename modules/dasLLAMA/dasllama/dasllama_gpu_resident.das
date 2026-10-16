@@ -26,6 +26,7 @@ require daslib/fio
 require strings
 require dasllama/dasllama_moe   // moe_select + moe_routed_sum: the host's routed sum between a split token command's segments
 require dasllama/dasllama_blocks   // moe_routed_sum_rows: the host's routed sums of a window's rows between the hyper-connection chain's segments
+require dasllama/dasllama_ple   // ple_plane, moe_down_scale_fold: the per-layer-embedding planes and the gemma-4 down-scale fold
 require math
 
 //! The upload-walk stage a baked gather belongs to — set by the walk, stamped per entry.
