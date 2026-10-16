@@ -1413,28 +1413,18 @@ def test_trim_lane_ring_pin(t : T?) {
     }
 }
 
-def private ring_floor_panics(var s : Session; pos : int64) : bool {
-    var tripped = false
-    try {
-        kv_ring_floor_check(s, pos)
-    } recover {
-        tripped = true
-    }
-    return tripped
-}
-
 [test]
 def test_kv_ring_floor_check(t : T?) {
     t |> run("a call at or past the ring floor continues, one under it panics, and a start at 0 rebuilds the history and clears the floor") @(t : T?) {
         var s : Session
         s.kv_ring_floor = 6l
-        t |> success(!ring_floor_panics(s, 8l), "a call past the floor continues")
-        t |> success(!ring_floor_panics(s, 6l), "a call at the floor continues")
+        t |> success(empty(panic_text() $ { kv_ring_floor_check(s, 8l) }), "a call past the floor continues")
+        t |> success(empty(panic_text() $ { kv_ring_floor_check(s, 6l) }), "a call at the floor continues")
         t |> equal(s.kv_ring_floor, 6l, "and leaves the floor standing")
-        t |> success(ring_floor_panics(s, 3l), "a call under the floor panics: the ring holds no window under it")
-        t |> success(!ring_floor_panics(s, 0l), "a start at 0 continues nothing")
+        t |> success(!empty(panic_text() $ { kv_ring_floor_check(s, 3l) }), "a call under the floor panics: the ring holds no window under it")
+        t |> success(empty(panic_text() $ { kv_ring_floor_check(s, 0l) }), "a start at 0 continues nothing")
         t |> equal(s.kv_ring_floor, 0l, "and clears the floor")
-        t |> success(!ring_floor_panics(s, 3l), "so the same call at 3 continues the rebuilt history (the control)")
+        t |> success(empty(panic_text() $ { kv_ring_floor_check(s, 3l) }), "so the same call at 3 continues the rebuilt history (the control)")
         delete s
     }
 }
