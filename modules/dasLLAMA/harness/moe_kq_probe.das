@@ -19,7 +19,7 @@ require math
 // Each cell times REPS rounds after one untimed warmup round.
 // ATTRIBUTION SWEEP: attributes the MoE CPU pp gap across kernel shape (dense vs narrow D),
 // per-expert M, the groupn walk, routing skew, and the 32-row sub-region split - the cells
-// behind ARCHITECTURE_RUNTIME.md's moe-region-split numbers (620 vs 3929 GFLOP/s on zipf k4).
+// behind ARCHITECTURE_RUNTIME_JOBQUE.md's moe-region-split numbers (620 vs 3929 GFLOP/s on zipf k4).
 // The MoE k4 batch-GEMM discriminator, four cells at equal weight footprint (~127 MB each side):
 //   A dense-flat:   32 sets  d=2816, M=512  (the dense pp regime)
 //   B narrow-flat: 128 sets  d= 704, M=512  (A->B isolates the narrow expert D)

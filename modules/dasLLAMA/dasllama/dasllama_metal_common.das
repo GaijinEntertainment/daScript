@@ -3013,7 +3013,7 @@ def register_reload_prep(f : function<void>) {
 
 //! A Metal driver's forward answer, passed through: a served one (`ok`) puts the pool on the GPU-served spin
 //! window, where it stays until the next weights load. Workers spinning the CPU window through a GPU window burn a core each.
-[arch(at="../ARCHITECTURE_RUNTIME.md#browser-workers-spin")]
+[arch(at="../ARCHITECTURE_RUNTIME_JOBQUE.md#browser-workers-spin")]
 def metal_served(ok : bool) : bool {
     if (ok && !get_dispatch_gpu_served()) {
         set_dispatch_gpu_served(true)

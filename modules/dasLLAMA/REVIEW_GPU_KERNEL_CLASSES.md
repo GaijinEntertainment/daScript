@@ -11,14 +11,16 @@ count, a row count). A base shell is the dispatch-less base class whose methods 
 splices flat into each deriving class. A stamp is a kernel class that compiles to a shader module -
 standalone, a template instance or a base-shell derivative.
 
-**A kernel twin that binds a different kargs (kernel-argument struct) type than its sibling twin,
-or shifts a shared field to a different binding number, is a defect - even where one twin ignores
-that field; a field a `@template_gate` omits on one twin is a shared field still, and keeps the
-number the other twin binds it at.**
+**A kernel twin that binds a different kargs (kernel-argument struct) type than its sibling twin
+is a defect, even where one twin ignores a field of it.**
 
-**A bind path shared between the moe mul_mm tensor twins (`MetalMoeMulMmQ8T` / `MetalMoeMulMmMx4T`, the compact kargs
-slots) and their base classes (the family binding numbers) is a defect - the two layouts are ledgered apart
-(`ARCHITECTURE_GPU.md#gpu-backends`, the kernel-binding asymmetries entry).**
+**Kernel twins keep every `@binding` number they both declare; a field a `@template_gate` omits on
+one twin leaves a hole at its number and renumbers nothing, and the kargs slot the lens assigns -
+one past the stamp's highest kept binding - follows each stamp's own builder.** Two stamps whose
+declared numbers differ never share a host function that binds by number: the moe mul_mm tensor
+twins (`MetalMoeMulMmQ8T` / `MetalMoeMulMmMx4T`, the compact slots) and the family layouts
+(`MetalMoeMulMmQ8` / `MetalMoeMulMmMx4` on `MetalMoeMulMmBase`, the combine pair alike) bind
+through their own builders, the two layouts ledgered apart (`ARCHITECTURE_GPU.md#gpu-backends`).
 
 **Kernel twins are written once: as stamps of one `class template`, as classes deriving one base
 shell, or - where the value that selects the difference is a run-time count - as one class whose
@@ -39,8 +41,9 @@ class as a `@template_constant` where the class's stamps differ on it, pass it a
 argument of the shared method the stamp's kernel calls, or write it as a literal or a module `let`
 in the body - never a module `var`.**
 
-**A stamp sets only `@template_constant`s its own compiled body reads: a `static_if` arm, a
-`@template_gate`, an expression, a loop bound, an array extent.** A constant
+**A stamp, or an intermediate template between a stamp and its base, sets only
+`@template_constant`s the stamp's compiled body reads: a `static_if` arm, a `@template_gate`, an
+expression, a loop bound, an array extent.** A constant
 no such site reads is a defect - move it to the template whose body reads it, or make the body
 read it. A read that sits only inside a `static_if` arm the stamp's own constants compile out is
 not a read.
@@ -71,27 +74,27 @@ shell they derive from, gives the class a `//!` line above its `[metal_dispatch]
 `[vk_dispatch]` declaration naming the body difference that keeps it out of that template or
 shell.**
 
-**A diff that makes a kernel class stamp or derive a template both homes stamp
-(`dasllama/dasllama_gpu_kernels_common.das`), which it did not before, gives the class a `//!`
-line above its declaration naming the template it joined.**
+**A diff that makes a kernel class stamp or derive - through an intermediate template too - a
+template both backends (Metal and Vulkan) stamp (`dasllama/dasllama_gpu_kernels_common.das`), which
+it did not before, gives the class a `//!` line above its own declaration naming the template it
+joined.**
 
 **A diff that adds or changes a `[metal_dispatch]` / `[vk_dispatch]` binding that no site writes
 after arming - a binding filled before the first encode and never written again - puts
 `@role = "weight"` on a field at that binding.**
 
-**`@role = "weight"` on per-encode data the kernel reads - a pooled buffer the host refills
-each encode - is a defect, judged per stamp by the buffer its dispatch sites bind; a per-encode
-field either omits `@role` or names the access its body performs.** `weight` means never written
-during a step on either home: the Metal builder records no hazard for it and the Vulkan lens
-leaves its ordering to the bits a site passes by hand, so nothing orders the kernel's read after
-the encode that refilled the buffer; neither lens refuses a `weight` field the body only reads.
+**`@role = "weight"` on data written during a step - a pooled buffer the host refills each encode,
+or one another kernel rewrites - is a defect, judged per stamp by the buffer its dispatch sites
+bind; such a field either omits `@role` or names the access its body performs.** Neither lens
+orders a `weight` read after the write that refilled the buffer, and neither refuses the role on a
+field the body only reads.
 
 A new census key is a kernel name that `modules/dasLLAMA/tests/test_kernel_coverage.das` counts,
-that an init of the engine's Metal or Vulkan driver compiles at run time, and that the pre-change
-tree does not compile. A crown is a kernel family a box's tune sidecar enables.
+that the engine's Metal or Vulkan driver compiles at run time - at its init or at a model's load -
+and that the pre-change tree does not compile. A crown is a kernel family a box's tune sidecar enables.
 
 **A diff that adds a `[metal_dispatch]` or `[vk_dispatch]` class under `dasllama/` that no init of
-the engine's Metal or Vulkan driver compiles is a defect - the class moves under `benchmarks/`,
+the engine's Metal or Vulkan driver compiles is a defect - the class moves under `modules/dasLLAMA/benchmarks/`,
 into the bench that compiles it.**
 
 **A diff that adds a new census key a census row dispatches names, in the PR body, that row and
@@ -164,7 +167,8 @@ only host-side - by the `grid=` / `tg=` spec, a `requires=` item, or an `@span` 
 the device, so it does not count.
 
 **Never bind a scalar that a stamp's other bound scalars already determine by integer
-arithmetic - derive it in that stamp's body from them instead.** Binding an integer count
+arithmetic at every dispatch site of that stamp - derive it in the stamp's body from them
+instead.** Binding an integer count
 separately adds a second place to get it wrong.
 
 **A diff that adds or changes a kernel-class method whose returned value is used anywhere but

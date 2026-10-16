@@ -890,7 +890,7 @@ let private TTS_BLOCKS_FILE = "modules/dasLLAMA/dasllama/dasllama_tts_blocks.das
 // the TTS block file's *_prepare mints, the layout helpers and the layout constants' declaration
 // lines, hashed in file order. A closure change with IMAGE_VERSION unmoved is red; the finding prints the
 // value to re-stamp with.
-let private IMAGE_LAYOUT_STAMP_VERSION = 50
+let private IMAGE_LAYOUT_STAMP_VERSION = 51
 let private IMAGE_LAYOUT_STAMP_HASH = 0xd233356aacd4064dul
 
 // The helpers that decide WHERE bytes land: the page pad, the plane and total sizing, the
@@ -1924,21 +1924,23 @@ def private required_modules(path : string) : array<string> {
 
 let private TESTS_DIR = "modules/dasLLAMA/tests"
 
-//! every test root dastest runs declares `options persistent_heap`: a dastest program compiles on the linear heap
-//! without it, where a delete frees nothing until the context ends, so a cell's deleted carriers stay resident
-//! across the file (tests/REVIEW.md)
+//! every file dastest runs - one holding a `[test]` function - declares `options persistent_heap`: a dastest
+//! program compiles on the linear heap without it, where a delete frees nothing until the context ends, so a
+//! cell's deleted carriers stay resident across the file
 def private check_test_heap_model {
     var files : array<string>
     collect_das_files(TESTS_DIR, files)
     for (path in files) {
-        continue if (!starts_with(base_name(path), "test_"))
         var declared = false
+        var holds_test = false
         for (line in split(fread(path), "\n")) {
             if (starts_with(line, "options persistent_heap")) {
                 declared = true
-                break
+            } elif (starts_with(line, "[test]") || starts_with(line, "[test,") || starts_with(line, "[test(")) {
+                holds_test = true
             }
         }
+        continue if (!holds_test)
         if (!declared) {
             gate_finding(path, 1, "a dastest root with no `options persistent_heap` - the linear heap frees nothing a cell deletes until the context ends, so every model a cell loads stays resident across the file; add the line beside `options gen2`")
         }

@@ -8,10 +8,6 @@ A cell is one `t |> run` subtest, or a `[test]` function that runs no subtest, a
 of every helper it calls; a test file is a `.das` dastest runs - one holding a `[test]` function, or
 one whose `cant_`, `failed_` or `invalid_` prefix makes its compile the assertion.
 
-**A test file declares `options persistent_heap`.** dastest compiles a root on the linear heap without
-it, where a delete frees nothing until the context ends, so every carrier a cell deletes stays resident
-across the file; `../REVIEW.das` checks every `test_*.das` under this folder.
-
 **A kernel-unit cell - one in which its own code, a helper in its file or a `_*.das` helper module
 dispatches a `[metal_dispatch]` / `[vk_dispatch]` class or calls a `../dasllama/dasllama_math*.das`
 kernel (a function writing an output buffer from operand buffers), directly or through a
@@ -202,6 +198,10 @@ dumps. Any one of these names the producer: a row in `../performance/model_specs
 `companions` list; a row in `asr_catalog` (`../performance/profile_common.das`); a convert
 script in `../harness/`; for an oracle dump, the mint script stocked beside the dumps under
 `models_dir()`, named by the test that loads the dump.
+
+**A diff that adds a cell reading a companion artifact beside a model file names that companion in
+the `companions` of that model file's row in `../performance/model_specs.das`, in the same change.**
+A box that fetches the row alone then has what the cell reads.
 
 **A test that reads a vision encode oracle dump without naming the minting arm in its header - the
 backend, the flash-attention setting and the mmproj precision the dump came from - is a defect.**

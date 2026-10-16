@@ -50,7 +50,7 @@ def maybe_parallel_for_indexed(range_begin, range_end : int; num_jobs : int;
 var private g_single_thread = false
 var private g_single_announced = false
 
-[arch(at="../ARCHITECTURE_RUNTIME.md#single-thread")]
+[arch(at="../ARCHITECTURE_RUNTIME_JOBQUE.md#single-thread")]
 def set_single_thread_(on : bool) {
     g_single_thread = on
 }
@@ -62,7 +62,7 @@ def private announce_single_thread() {
     to_log(LOG_INFO, "dasLLAMA: single thread - this context runs every kernel on its calling thread and never dispatches to the job queue (set_single_thread(false) turns it off; DASLLAMA_SINGLE_THREAD=1 is the environment spelling)\n")
 }
 
-[init, arch(at="../ARCHITECTURE_RUNTIME.md#single-thread")]
+[init, arch(at="../ARCHITECTURE_RUNTIME_JOBQUE.md#single-thread")]
 def private single_thread_env() {
     set_single_thread_(g_env_engine.single_thread)
 }
@@ -75,7 +75,7 @@ var g_disp_chunks = 0l   // chunks (jobs) pushed across those dispatches
 var g_disp_inline = 0l   // maybe_parallel_for calls that ran inline instead
 var private g_jobque_checked = false
 
-[arch(at="../ARCHITECTURE_RUNTIME.md#jobque-policy"), cold_path]   // runs once, on the first dispatch: its log line is not the kernels' hot path
+[arch(at="../ARCHITECTURE_RUNTIME_JOBQUE.md#jobque-policy"), cold_path]   // runs once, on the first dispatch: its log line is not the kernels' hot path
 def private check_jobque_configured() {
     return if (!is_job_que_available())   // no queue: the arms run inline, nothing to configure
     g_jobque_checked = true

@@ -718,13 +718,13 @@ class template MetalSqAttnPartKvT {
     }
 }
 
-[metal_dispatch(name = "enc_attnp16_c", pso = "g_pso_attnp16", tgmem = "MetalSqAttnPartF16_metal_sq_attn_part_msl_tgmem", tg = "head_size", grid = "ntg", params = "ntg : int64, head_size : int64")]
+[metal_dispatch(name = "enc_attnp16_c", pso = "g_pso_attnp16", tgmem = "MetalSqAttnPartF16_metal_sq_attn_part_msl_tgmem", tg = "head_size", grid = "ntg", params = "ntg : int64, head_size : int64", requires = "ka.ring % 64")]
 class MetalSqAttnPartF16 : MetalSqAttnPartKvT {
     typedef KT = float16
 }
 
 // f32-mirror twin — same math, f32 K/V loads.
-[metal_dispatch(name = "enc_attnp32_c", pso = "g_pso_attnp32", tgmem = "MetalSqAttnPartF32_metal_sq_attn_part_msl_tgmem", tg = "head_size", grid = "ntg", params = "ntg : int64, head_size : int64")]
+[metal_dispatch(name = "enc_attnp32_c", pso = "g_pso_attnp32", tgmem = "MetalSqAttnPartF32_metal_sq_attn_part_msl_tgmem", tg = "head_size", grid = "ntg", params = "ntg : int64, head_size : int64", requires = "ka.ring % 64")]
 class MetalSqAttnPartF32 : MetalSqAttnPartKvT {
     typedef KT = float
 }
@@ -790,13 +790,13 @@ class template MetalSqAttnPartQuantT {
 }
 
 // q8_0 instance — 34B/32-elem q8_0 blocks.
-[metal_dispatch(name = "enc_attnp_q8_c", pso = "g_pso_attnp_q8", tgmem = "MetalSqAttnPartQ8_metal_sq_attn_part_msl_tgmem", tg = "head_size", grid = "ntg", params = "ntg : int64, head_size : int64")]
+[metal_dispatch(name = "enc_attnp_q8_c", pso = "g_pso_attnp_q8", tgmem = "MetalSqAttnPartQ8_metal_sq_attn_part_msl_tgmem", tg = "head_size", grid = "ntg", params = "ntg : int64, head_size : int64", requires = "ka.ring % 64")]
 class MetalSqAttnPartQ8 : MetalSqAttnPartQuantT {
     typedef QB = int8
 }
 
 // tq4 instance — 18B rotated 4-bit blocks (rotated basis; fwht-unsign runs downstream).
-[metal_dispatch(name = "enc_attnp_tq4_c", pso = "g_pso_attnp_tq4", tgmem = "MetalSqAttnPartTq4_metal_sq_attn_part_msl_tgmem", tg = "head_size", grid = "ntg", params = "ntg : int64, head_size : int64")]
+[metal_dispatch(name = "enc_attnp_tq4_c", pso = "g_pso_attnp_tq4", tgmem = "MetalSqAttnPartTq4_metal_sq_attn_part_msl_tgmem", tg = "head_size", grid = "ntg", params = "ntg : int64, head_size : int64", requires = "ka.ring % 64")]
 class MetalSqAttnPartTq4 : MetalSqAttnPartQuantT {
     typedef QB = uint8
     override sq_fill_scores_q = @@sq_fill_scores_tq4
@@ -2884,13 +2884,13 @@ class template MetalSqAttnPartBKvT {
     }
 }
 
-[metal_dispatch(name = "enc_attnpb16_c", pso = "g_pso_attnpb16", tgmem = "MetalSqAttnPartBF16_metal_sq_attn_part_b_msl_tgmem", tg = "head_size", grid = "wgs", params = "wgs : int64, head_size : int64")]
+[metal_dispatch(name = "enc_attnpb16_c", pso = "g_pso_attnpb16", tgmem = "MetalSqAttnPartBF16_metal_sq_attn_part_b_msl_tgmem", tg = "head_size", grid = "wgs", params = "wgs : int64, head_size : int64", requires = "ka.ring % 64")]
 class MetalSqAttnPartBF16 : MetalSqAttnPartBKvT {
     typedef KT = float16
 }
 
 // f32-mirror twin.
-[metal_dispatch(name = "enc_attnpb32_c", pso = "g_pso_attnpb32", tgmem = "MetalSqAttnPartBF32_metal_sq_attn_part_b_msl_tgmem", tg = "head_size", grid = "wgs", params = "wgs : int64, head_size : int64")]
+[metal_dispatch(name = "enc_attnpb32_c", pso = "g_pso_attnpb32", tgmem = "MetalSqAttnPartBF32_metal_sq_attn_part_b_msl_tgmem", tg = "head_size", grid = "wgs", params = "wgs : int64, head_size : int64", requires = "ka.ring % 64")]
 class MetalSqAttnPartBF32 : MetalSqAttnPartBKvT {
     typedef KT = float
 }
@@ -2966,13 +2966,13 @@ class template MetalSqAttnPartBQuantT {
 }
 
 // q8_0 instance.
-[metal_dispatch(name = "enc_attnpb_q8_c", pso = "g_pso_attnpb_q8", tgmem = "MetalSqAttnPartBQ8_metal_sq_attn_part_b_msl_tgmem", tg = "head_size", grid = "wgs", params = "wgs : int64, head_size : int64")]
+[metal_dispatch(name = "enc_attnpb_q8_c", pso = "g_pso_attnpb_q8", tgmem = "MetalSqAttnPartBQ8_metal_sq_attn_part_b_msl_tgmem", tg = "head_size", grid = "wgs", params = "wgs : int64, head_size : int64", requires = "ka.ring % 64")]
 class MetalSqAttnPartBQ8 : MetalSqAttnPartBQuantT {
     typedef QB = int8
 }
 
 // tq4 instance — nibble reads.
-[metal_dispatch(name = "enc_attnpb_tq4_c", pso = "g_pso_attnpb_tq4", tgmem = "MetalSqAttnPartBTq4_metal_sq_attn_part_b_msl_tgmem", tg = "head_size", grid = "wgs", params = "wgs : int64, head_size : int64")]
+[metal_dispatch(name = "enc_attnpb_tq4_c", pso = "g_pso_attnpb_tq4", tgmem = "MetalSqAttnPartBTq4_metal_sq_attn_part_b_msl_tgmem", tg = "head_size", grid = "wgs", params = "wgs : int64, head_size : int64", requires = "ka.ring % 64")]
 class MetalSqAttnPartBTq4 : MetalSqAttnPartBQuantT {
     typedef QB = uint8
     override sq_fill_scores_q = @@sq_fill_scores_tq4
@@ -3420,26 +3420,26 @@ class template MetalSqAttnDKvT {
     }
 }
 
-[metal_dispatch(name = "enc_attnd16_c", pso = "g_pso_attnd16", tgmem = "MetalSqAttnDF16_metal_sq_attn_d_msl_tgmem", tg = 128, grid = "nheads, nsgs/4, nrows", params = "nheads : int64, nsgs : int64, nrows : int64")]
+[metal_dispatch(name = "enc_attnd16_c", pso = "g_pso_attnd16", tgmem = "MetalSqAttnDF16_metal_sq_attn_d_msl_tgmem", tg = 128, grid = "nheads, nsgs/4, nrows", params = "nheads : int64, nsgs : int64, nrows : int64", requires = "ka.ring % 32")]
 class MetalSqAttnDF16 : MetalSqAttnDKvT {
     typedef KT = half4
 }
 
 // f32-mirror twin — float4 view, no conversion.
-[metal_dispatch(name = "enc_attnd32_c", pso = "g_pso_attnd32", tgmem = "MetalSqAttnDF32_metal_sq_attn_d_msl_tgmem", tg = 128, grid = "nheads, nsgs/4, nrows", params = "nheads : int64, nsgs : int64, nrows : int64")]
+[metal_dispatch(name = "enc_attnd32_c", pso = "g_pso_attnd32", tgmem = "MetalSqAttnDF32_metal_sq_attn_d_msl_tgmem", tg = 128, grid = "nheads, nsgs/4, nrows", params = "nheads : int64, nsgs : int64, nrows : int64", requires = "ka.ring % 32")]
 class MetalSqAttnDF32 : MetalSqAttnDKvT {
     typedef KT = float4
 }
 
 // the head-of-256 pair: a threadgroup a slice group, two simdgroups each half the head
-[metal_dispatch(name = "enc_attndw16_c", pso = "g_pso_attndw16", tgmem = "MetalSqAttnDWF16_metal_sq_attn_d_msl_tgmem", tg = 64, grid = "nheads, nsgs, nrows", params = "nheads : int64, nsgs : int64, nrows : int64")]
+[metal_dispatch(name = "enc_attndw16_c", pso = "g_pso_attndw16", tgmem = "MetalSqAttnDWF16_metal_sq_attn_d_msl_tgmem", tg = 64, grid = "nheads, nsgs, nrows", params = "nheads : int64, nsgs : int64, nrows : int64", requires = "ka.ring % 32")]
 class MetalSqAttnDWF16 : MetalSqAttnDKvT {
     typedef KT = half4
     override WIDE = true
     override PARTS = 2u
 }
 
-[metal_dispatch(name = "enc_attndw32_c", pso = "g_pso_attndw32", tgmem = "MetalSqAttnDWF32_metal_sq_attn_d_msl_tgmem", tg = 64, grid = "nheads, nsgs, nrows", params = "nheads : int64, nsgs : int64, nrows : int64")]
+[metal_dispatch(name = "enc_attndw32_c", pso = "g_pso_attndw32", tgmem = "MetalSqAttnDWF32_metal_sq_attn_d_msl_tgmem", tg = 64, grid = "nheads, nsgs, nrows", params = "nheads : int64, nsgs : int64, nrows : int64", requires = "ka.ring % 32")]
 class MetalSqAttnDWF32 : MetalSqAttnDKvT {
     typedef KT = float4
     override WIDE = true
@@ -3447,14 +3447,14 @@ class MetalSqAttnDWF32 : MetalSqAttnDKvT {
 }
 
 // the head-of-512 pair: four simdgroups each a quarter of the head
-[metal_dispatch(name = "enc_attndx16_c", pso = "g_pso_attndx16", tgmem = "MetalSqAttnDXF16_metal_sq_attn_d_msl_tgmem", tg = 128, grid = "nheads, nsgs, nrows", params = "nheads : int64, nsgs : int64, nrows : int64")]
+[metal_dispatch(name = "enc_attndx16_c", pso = "g_pso_attndx16", tgmem = "MetalSqAttnDXF16_metal_sq_attn_d_msl_tgmem", tg = 128, grid = "nheads, nsgs, nrows", params = "nheads : int64, nsgs : int64, nrows : int64", requires = "ka.ring % 32")]
 class MetalSqAttnDXF16 : MetalSqAttnDKvT {
     typedef KT = half4
     override WIDE = true
     override PARTS = 4u
 }
 
-[metal_dispatch(name = "enc_attndx32_c", pso = "g_pso_attndx32", tgmem = "MetalSqAttnDXF32_metal_sq_attn_d_msl_tgmem", tg = 128, grid = "nheads, nsgs, nrows", params = "nheads : int64, nsgs : int64, nrows : int64")]
+[metal_dispatch(name = "enc_attndx32_c", pso = "g_pso_attndx32", tgmem = "MetalSqAttnDXF32_metal_sq_attn_d_msl_tgmem", tg = 128, grid = "nheads, nsgs, nrows", params = "nheads : int64, nsgs : int64, nrows : int64", requires = "ka.ring % 32")]
 class MetalSqAttnDXF32 : MetalSqAttnDKvT {
     typedef KT = float4
     override WIDE = true
@@ -3640,27 +3640,27 @@ class template MetalSqAttnDQuantT {
 
 // q8_0 instance — K/V loads are 4 scalar int8s + block scale per position (34B blocks break
 // half4 alignment); scale folds in before the simd_sum.
-[metal_dispatch(name = "enc_attnd_q8_c", pso = "g_pso_attnd_q8", tgmem = "MetalSqAttnDQ8_metal_sq_attn_d_msl_tgmem", tg = 128, grid = "nheads, nsgs/4, nrows", params = "nheads : int64, nsgs : int64, nrows : int64")]
+[metal_dispatch(name = "enc_attnd_q8_c", pso = "g_pso_attnd_q8", tgmem = "MetalSqAttnDQ8_metal_sq_attn_d_msl_tgmem", tg = 128, grid = "nheads, nsgs/4, nrows", params = "nheads : int64, nsgs : int64, nrows : int64", requires = "ka.ring % 32")]
 class MetalSqAttnDQ8 : MetalSqAttnDQuantT {
     typedef QB = int8
 }
 
 // tq4 instance — nibble reads: lane's 4 elements = 2 nibble bytes of block sl/8.
-[metal_dispatch(name = "enc_attnd_tq4_c", pso = "g_pso_attnd_tq4", tgmem = "MetalSqAttnDTq4_metal_sq_attn_d_msl_tgmem", tg = 128, grid = "nheads, nsgs/4, nrows", params = "nheads : int64, nsgs : int64, nrows : int64")]
+[metal_dispatch(name = "enc_attnd_tq4_c", pso = "g_pso_attnd_tq4", tgmem = "MetalSqAttnDTq4_metal_sq_attn_d_msl_tgmem", tg = 128, grid = "nheads, nsgs/4, nrows", params = "nheads : int64, nsgs : int64, nrows : int64", requires = "ka.ring % 32")]
 class MetalSqAttnDTq4 : MetalSqAttnDQuantT {
     typedef QB = uint8
     override LANE_BYTES = 2u
 }
 
 // the head-of-256 quant pair: a threadgroup a slice group, two simdgroups each half the head
-[metal_dispatch(name = "enc_attndw_q8_c", pso = "g_pso_attndw_q8", tgmem = "MetalSqAttnDWQ8_metal_sq_attn_d_msl_tgmem", tg = 64, grid = "nheads, nsgs, nrows", params = "nheads : int64, nsgs : int64, nrows : int64")]
+[metal_dispatch(name = "enc_attndw_q8_c", pso = "g_pso_attndw_q8", tgmem = "MetalSqAttnDWQ8_metal_sq_attn_d_msl_tgmem", tg = 64, grid = "nheads, nsgs, nrows", params = "nheads : int64, nsgs : int64, nrows : int64", requires = "ka.ring % 32")]
 class MetalSqAttnDWQ8 : MetalSqAttnDQuantT {
     typedef QB = int8
     override WIDE = true
     override PARTS = 2u
 }
 
-[metal_dispatch(name = "enc_attndw_tq4_c", pso = "g_pso_attndw_tq4", tgmem = "MetalSqAttnDWTq4_metal_sq_attn_d_msl_tgmem", tg = 64, grid = "nheads, nsgs, nrows", params = "nheads : int64, nsgs : int64, nrows : int64")]
+[metal_dispatch(name = "enc_attndw_tq4_c", pso = "g_pso_attndw_tq4", tgmem = "MetalSqAttnDWTq4_metal_sq_attn_d_msl_tgmem", tg = 64, grid = "nheads, nsgs, nrows", params = "nheads : int64, nsgs : int64, nrows : int64", requires = "ka.ring % 32")]
 class MetalSqAttnDWTq4 : MetalSqAttnDQuantT {
     typedef QB = uint8
     override LANE_BYTES = 2u
@@ -3669,14 +3669,14 @@ class MetalSqAttnDWTq4 : MetalSqAttnDQuantT {
 }
 
 // the head-of-512 quant pair: four simdgroups each a quarter of the head
-[metal_dispatch(name = "enc_attndx_q8_c", pso = "g_pso_attndx_q8", tgmem = "MetalSqAttnDXQ8_metal_sq_attn_d_msl_tgmem", tg = 128, grid = "nheads, nsgs, nrows", params = "nheads : int64, nsgs : int64, nrows : int64")]
+[metal_dispatch(name = "enc_attndx_q8_c", pso = "g_pso_attndx_q8", tgmem = "MetalSqAttnDXQ8_metal_sq_attn_d_msl_tgmem", tg = 128, grid = "nheads, nsgs, nrows", params = "nheads : int64, nsgs : int64, nrows : int64", requires = "ka.ring % 32")]
 class MetalSqAttnDXQ8 : MetalSqAttnDQuantT {
     typedef QB = int8
     override WIDE = true
     override PARTS = 4u
 }
 
-[metal_dispatch(name = "enc_attndx_tq4_c", pso = "g_pso_attndx_tq4", tgmem = "MetalSqAttnDXTq4_metal_sq_attn_d_msl_tgmem", tg = 128, grid = "nheads, nsgs, nrows", params = "nheads : int64, nsgs : int64, nrows : int64")]
+[metal_dispatch(name = "enc_attndx_tq4_c", pso = "g_pso_attndx_tq4", tgmem = "MetalSqAttnDXTq4_metal_sq_attn_d_msl_tgmem", tg = 128, grid = "nheads, nsgs, nrows", params = "nheads : int64, nsgs : int64, nrows : int64", requires = "ka.ring % 32")]
 class MetalSqAttnDXTq4 : MetalSqAttnDQuantT {
     typedef QB = uint8
     override LANE_BYTES = 2u
@@ -7105,7 +7105,7 @@ class template MetalPleProjBf16T : MetalRouterGemvT {
 }
 
 //! the one-column stamp: a threadgroup of 256 an expert row, grid.y the streams of a batched decode step (one on the single row)
-[metal_dispatch(name = "enc_moe_router", pso = "g_pso_moe_router", tgmem = "metal_moe_router_msl_tgmem", tg = 256, grid = "ne, nst", params = "ne : int64, nst : int64")]
+[metal_dispatch(name = "enc_moe_router", pso = "g_pso_moe_router", tgmem = "metal_moe_router_msl_tgmem", tg = 256, grid = "ne, nst", params = "ne : int64, nst : int64", requires = "pa.dim % 4, pa.woff % 4, pa.xs % 4")]
 class MetalMoeRouter : MetalMoeRouterT {
     override NC = 1
 
@@ -7117,7 +7117,7 @@ class MetalMoeRouter : MetalMoeRouterT {
 
 //! the position-blocked prefill stamp: a simdgroup an expert row, eight positions a simdgroup (the prefill router's cost is the
 //! rows' traffic); also the prefill's f32 GEMV
-[metal_dispatch(name = "enc_moe_router_b", pso = "g_pso_moe_router_b", tg = 128, grid = "ne/4, nst/8", params = "ne : int64, nst : int64")]
+[metal_dispatch(name = "enc_moe_router_b", pso = "g_pso_moe_router_b", tg = 128, grid = "ne/4, nst/8", params = "ne : int64, nst : int64", requires = "pa.dim % 4, pa.woff % 4, pa.xs % 4")]
 class MetalMoeRouterB : MetalMoeRouterT {
     override ROW_WG = false
     override COL_CLAMP = true
@@ -7130,7 +7130,7 @@ class MetalMoeRouterB : MetalMoeRouterT {
 }
 
 //! the projection's position-blocked stamp of the template both homes stamp (`GkRouterGemv`): a simdgroup a row, eight columns a simdgroup
-[metal_dispatch(name = "enc_ple_proj_bf16", pso = "g_pso_ple_proj_bf16", tg = 128, grid = "ne/4, nst/8", params = "ne : int64, nst : int64")]
+[metal_dispatch(name = "enc_ple_proj_bf16", pso = "g_pso_ple_proj_bf16", tg = 128, grid = "ne/4, nst/8", params = "ne : int64, nst : int64", requires = "pa.dim % 2, pa.woff % 2")]
 class MetalPleProjBf16 : MetalPleProjBf16T {
     override ROW_WG = false
     override COL_CLAMP = true
@@ -7144,7 +7144,7 @@ class MetalPleProjBf16 : MetalPleProjBf16T {
 
 //! the projection's decode-column stamp of the template both homes stamp (`GkRouterGemv`): a threadgroup of 256 a row, as the f32
 //! router's one-column stamp reads its rows
-[metal_dispatch(name = "enc_ple_proj_bf16_one", pso = "g_pso_ple_proj_bf16_one", tgmem = "metal_ple_proj_bf16_one_msl_tgmem", tg = 256, grid = "ne, nst", params = "ne : int64, nst : int64")]
+[metal_dispatch(name = "enc_ple_proj_bf16_one", pso = "g_pso_ple_proj_bf16_one", tgmem = "metal_ple_proj_bf16_one_msl_tgmem", tg = 256, grid = "ne, nst", params = "ne : int64, nst : int64", requires = "pa.dim % 2, pa.woff % 2")]
 class MetalPleProjBf16One : MetalPleProjBf16T {
     override NC = 1
 
