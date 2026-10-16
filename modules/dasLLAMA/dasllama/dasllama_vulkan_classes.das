@@ -10751,6 +10751,8 @@ def blk32_scale(fmt : KqTag_mx4; sw, wb : uint) : float2 {
 class template Blk32GemvT {
     @template_constant Q51 : bool = false      //!< a Q5_1 plane
     @template_constant MX4 : bool = false      //!< an MXFP4 plane; neither constant: an IQ4_NL per-32 plane
+    @template_constant SUM : bool = false      //!< the routed down GEMV summed under the routing weights (`sum_shell`)
+    @ssbo @binding = 6 @template_gate = SUM sw : array<float>   //! the k routing weights (the per-expert down scale folded in)
     @ssbo @binding = 0 wq : array<uint>        // weight quant words, five a block on q51, four elsewhere
     @ssbo @binding = 1 wsu : array<uint>       // per-block scales: f16 d | f16 m (q51), f16 d two blocks a word (iq4nl32), E8M0 bytes four blocks a word (mx4)
     @ssbo @binding = 2 regions : array<uint>   // (rel_wblock, xblock) pairs per region
@@ -10815,6 +10817,25 @@ class template Blk32GemvT {
             bi0 += gl_SubgroupSize
         }
         return subgroupAdd(acc)
+    }
+
+    //! the routed down GEMV summed under the routing weights: a subgroup a row of the model dim, y[row] = sum_r w[r] dot_r
+    def sum_shell {
+        static_if (SUM) {
+            let row = gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID
+            if (row < pa.d) {
+                let nb = pa.n / 32u
+                var tot = 0.0
+                var r = 0u
+                while (r < pa.nreg) {
+                    tot += sw[r] * row_dot(regions[r * 2u] + row * nb, regions[r * 2u + 1u], nb)
+                    r++
+                }
+                if (subgroupElect()) {
+                    y[pa.ybase + row] = tot
+                }
+            }
+        }
     }
 }
 
@@ -10939,28 +10960,61 @@ class Q51GemvN : Blk32GemvRunT {
     override NCOL = true
 }
 
-//! the routed down GEMV summed under the routing weights: a subgroup a row of the model dim, y[row] = sum_r w[r] dot_r
+//! the routed down GEMV summed under the routing weights (`Blk32GemvT.sum_shell`) on each per-32 format's stacks, one set layout
 [vk_dispatch(name = "q51_gemv_sum_cls", grid = "wgs", params = "wgs : int64")]
 class Q51GemvSum : Blk32GemvT {
     typedef FMT = KqTag_q51
     override Q51 = true
-    @ssbo @binding = 6 sw : array<float>   //! the k routing weights (the per-expert down scale folded in)
+    override SUM = true
 
     [spirv_kernel(local_size_x = 64, local_size_x_id = 0, name = "q51_gemv_sum_cls_spv")]
     def run {
-        let row = gl_WorkGroupID.x * gl_NumSubgroups + gl_SubgroupID
-        if (row < pa.d) {
-            let nb = pa.n / 32u
-            var tot = 0.0
-            var r = 0u
-            while (r < pa.nreg) {
-                tot += sw[r] * row_dot(regions[r * 2u] + row * nb, regions[r * 2u + 1u], nb)
-                r++
-            }
-            if (subgroupElect()) {
-                y[pa.ybase + row] = tot
-            }
-        }
+        sum_shell()
+    }
+}
+
+[vk_dispatch(name = "iq4nl32_gemv_sum_cls", kernel = "run", family = "q51_gemv_sum_cls", grid = "wgs", params = "wgs : int64")]
+class Iq4nl32GemvSum : Blk32GemvT {
+    typedef FMT = KqTag_iq4nl32
+    override SUM = true
+
+    [spirv_kernel(local_size_x = 64, local_size_x_id = 0, name = "iq4nl32_gemv_sum_cls_spv")]
+    def run {
+        sum_shell()
+    }
+}
+
+[vk_dispatch(name = "q4032_gemv_sum_cls", kernel = "run", family = "q51_gemv_sum_cls", grid = "wgs", params = "wgs : int64")]
+class Q4032GemvSum : Blk32GemvT {
+    typedef FMT = KqTag_q4032
+    override SUM = true
+
+    [spirv_kernel(local_size_x = 64, local_size_x_id = 0, name = "q4032_gemv_sum_cls_spv")]
+    def run {
+        sum_shell()
+    }
+}
+
+[vk_dispatch(name = "q5032_gemv_sum_cls", kernel = "run", family = "q51_gemv_sum_cls", grid = "wgs", params = "wgs : int64")]
+class Q5032GemvSum : Blk32GemvT {
+    typedef FMT = KqTag_q5032
+    override SUM = true
+
+    [spirv_kernel(local_size_x = 64, local_size_x_id = 0, name = "q5032_gemv_sum_cls_spv")]
+    def run {
+        sum_shell()
+    }
+}
+
+[vk_dispatch(name = "mx4_gemv_sum_cls", kernel = "run", family = "q51_gemv_sum_cls", grid = "wgs", params = "wgs : int64")]
+class Mx4GemvSum : Blk32GemvT {
+    typedef FMT = KqTag_mx4
+    override MX4 = true
+    override SUM = true
+
+    [spirv_kernel(local_size_x = 64, local_size_x_id = 0, name = "mx4_gemv_sum_cls_spv")]
+    def run {
+        sum_shell()
     }
 }
 
@@ -11622,6 +11676,23 @@ def gemv_cls_ensure(fmt : int) : bool {   // nolint:STYLE037 — kq_tile_stamp's
         r = tile_ensure_cls()
     }
     return r
+}
+
+//! the formats whose routed down stacks take the summed GEMV (`sum_shell`): the per-32 ones
+let B32_SUM_SKIP = "q8 k2 k3 k4 k5 k6 q40 iq4xs iq3s iq3xxs iq4nl iq2s iq2xs iq2xxs iq3s4"
+
+def b32_sum_cls_ensure(fmt : int) : bool {
+    var r = false
+    kq_tile_stamp(fmt, B32_SUM_SKIP, "gemv") <| $() {
+        r = tile_ensure_sum_cls()
+    }
+    return r
+}
+
+def b32_sum_cls_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : VkDescriptorSet; var pc : GemvArgs; wgs : int64) {
+    kq_tile_stamp(fmt, B32_SUM_SKIP, "gemv") <| $() {
+        tile_enc_sum_cls(raw, h, set_, pc, wgs)
+    }
 }
 
 //! the formats whose routed gate and up stacks take the fused GEMV (`gu_shell`): the kq ones the twins stamp

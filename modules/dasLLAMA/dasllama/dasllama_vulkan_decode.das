@@ -763,7 +763,7 @@ def private rd_moe_sets(var L : RLayer) {
             fixed_array(0u, 0u, VHZ_MRT, VHZ_XQ, VHZ_XQ, VHZ_GATE, VHZ_MRT, 0u, 0u, VHZ_MRT, VHZ_HQ, VHZ_HQ))
     }
     L.s_edown = gemv_planes_set(L.fe2, pe2, g_rd.moe_meta2_dev, META_BYTES, VHZ_MRT, g_gpu.hq_dev, g_gpu.hs_dev, BATCH_HQ_BYTES, BATCH_HS_BYTES, VHZ_HQ, g_rd.edown_dev, edn_bytes, VHZ_MDN)
-    L.edown_sum = L.moe_g4 && L.fe2 == int(KqFmt.q51) && vk_fuse_on() && ensure_q51_gemv_sum_cls()
+    L.edown_sum = L.moe_g4 && kq_block32(L.fe2) && L.fe2 != int(KqFmt.q8) && vk_fuse_on() && b32_sum_cls_ensure(L.fe2)
     if (L.edown_sum) {
         L.s_edown_sum = set_q51_gemv_sum_cls(fixed_array(pe2.wq, pe2.ws, g_rd.moe_meta2_dev, g_gpu.hq_dev, g_gpu.hs_dev, g_rd.edown_dev, g_rd.moe_dw_dev),
             fixed_array(pe2.wqb, pe2.wsb, META_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES, k * dim * 4l, slots_bytes),
@@ -2660,7 +2660,7 @@ def private rd_encode_moe(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
     }
     var pcd = GemvArgs(n = uint(nfe), d = uint(dim), nreg = uint(k) * nr, ybase = 0u)
     if (one && L.edown_sum) {
-        enc_q51_gemv_sum_cls(raw, h, L.s_edown_sum, pcd, gemv_wgs(dim, 0u))
+        b32_sum_cls_enc(L.fe2, raw, h, L.s_edown_sum, pcd, gemv_wgs(dim, 0u))
         rd_ts(raw, "m:e_down_sum")
     } else {
         gemv_enc(L.fe2, raw, h, L.s_edown, pcd, k * dim * nrows)

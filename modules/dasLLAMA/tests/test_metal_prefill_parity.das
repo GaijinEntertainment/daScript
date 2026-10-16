@@ -639,7 +639,9 @@ def test_metal_prefill_parity(t : T?) {   // nolint:STYLE038 — flat arm list, 
                         feint("metal prefill declined on smol; the alignment-guard leg skipped\n")
                     }
                     set_metal_prefill_lastrow(true)
-                    lastrow_ab(t, trsg, sprompt, "smol", 2e-2)   //! narrowed rides the mm-tail gemv, full stages X to f16 - measured ~7e-3 here
+                    with_dasllama_jobque() {
+                        lastrow_ab(t, trsg, sprompt, "smol", 2e-2)   //! narrowed rides the mm-tail gemv, full stages X to f16 - measured ~7e-3 here
+                    }
                     select_prefill_override("")
                     delete trs
                     delete trsg
@@ -1723,25 +1725,34 @@ def lastrow_ab(t : T?; var trsg : Model; prompt : array<int64>; tag : string; ba
 
 //! the last-layer tail narrowed on the gemma sandwich (`lastrow-g`): the attention and FFN branches each under its post norm, the
 //! layer's output scale on gemma-4 - gemma-3-1b and gemma-4-12B Q8_0 (large tier)
-[test]
+[test, arch(at="../ARCHITECTURE_GPU_PREFILL.md#prefill-last-row-tail")]
 def test_metal_prefill_lastrow_sandwich(t : T?) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
-        for (fam, file, bar in fixed_array("gemma3", "gemma4"), fixed_array("gemma-3-1b-it-Q8_0.gguf", "gemma-4-12B-it-Q8_0.gguf"), fixed_array(0.25, 0.5)) {
+        for (fam, file, bar in fixed_array("gemma3", "gemma4"), fixed_array("gemma-3-1b-it-Q8_0.gguf", "gemma-4-12B-it-Q8_0.gguf"), fixed_array(0.05, 0.05)) {
             t |> run("{file}: the narrowed last-layer tail against the full panel's") @(t : T?) {
                 if (!family_on(t, fam) || !arm_on(t, "lastrow-g")) return
                 let path = path_join(models_dir(), file)
                 return if (!model_available(t, path))
+                let prior_wscale = get_wscale_f16()             // process-wide knobs - restored below
+                let prior_backend = active_kernel_backend()
+                set_wscale_f16(false)       // the resident path reads the f32 scale plane (declines on s16)
+                pin_kernel_backend("portable")  // ...and row-major weights
                 var tr <- load_model_(path, QuantMode.q8)
                 var prompt <- encode(tr, counting_prompt(1, 30), true, false)
                 delete tr
                 var trg <- blob_twin(t, path, 2048l)
                 with_dasllama_jobque() {
                     t |> success(select_prefill_override("metal"), "override registered ({file})")
+                    set_metal_prefill_min_npos(1l)
                     lastrow_ab(t, trg, prompt, file, bar)
+                    set_metal_prefill_min_npos(64l)
                     select_prefill_override("")
                 }
                 delete prompt
                 delete trg
+                clear_kernel_backend_pin()
+                select_kernel_backend(prior_backend)
+                set_wscale_f16(prior_wscale)
             }
         }
     }

@@ -164,9 +164,10 @@ the driver's router plane - every MoE layer's rows and, when the shared expert i
 row last - into one logits row; the top-k (`TopKN` at one workgroup, the span's kernel over the decode's core)
 writes the k routing weights and the three expert GEMVs' slot regions, each a `(block, feed
 block)` pair whose block is the expert plane's slab-local base plus the pick's stride; gate and
-up run the class GEMV over k regions, the act writes k hidden rows (Q4_K gate and up stacks in one
-slab feeding a Q8_0 down take `KqGemvK4Gu` for the three - both dots, the act and its requant a
-32-row block a workgroup, one dispatch where three ran; `RLayer.egu`), down runs k regions into the
+up run the class GEMV over k regions, the act writes k hidden rows (Q4_K, IQ4_XS or iq3s4 gate and up stacks in one
+slab feeding a per-32 down take the leaf template's fused arm for the three - `KqGemvLeafT.gu_shell`, stamped `KqGemvK4Gu`,
+`KqGemvIq4xsGu`, `KqGemvIq3s4Gu`: both dots, the act and its requant a 32-row block a workgroup, one dispatch where three
+ran; `RLayer.egu`), down runs k regions into the
 routed rows; and the residual step that follows folds the combine in (`ClsArComb`, the prefill's
 `ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block` kernel at one row): the shared expert's row in `ffnout` at the sigmoid of its gate
 logit, the k weighted routed rows through the top-k's slot map, then the next layer's norm - a
@@ -256,9 +257,10 @@ the template both homes stamp (`GkMoeCombG4`, args `GkMoeCombArgs`): the k weigh
 (`GkMoeCombine.slot_sum_into`, the routed combine's own sum) and normed under the routed post norm (`rpost_off`), the
 dense row in `ffnout` normed under the dense post norm (`dpost_off`), the two added and normed under the layer's post-FFN
 norm (`spost_off`), the residual `(x + that) * out_scale`, then the next layer's norm (`nwoff`) - four workgroup
-reductions over one row stash, the dense row re-read from `ffnout` rather than staged twice. Where the down experts are
-Q5_1 the token command's down GEMV folds the k rows itself (`Q51GemvSum`: a subgroup a row of the
-model dim, the k regions' dots summed under the routing weights), so the combine reads that row
+reductions over one row stash, the dense row re-read from `ffnout` rather than staged twice. Where the down experts are a
+per-32 format (Q5_1, IQ4_NL off the lattice, Q4_0, Q5_0, MXFP4) the token command's down GEMV folds the k rows itself
+(`Blk32GemvT.sum_shell`, stamped `Q51GemvSum` and its four twins: a subgroup a row of the model dim, the k regions' dots
+summed under the routing weights), so the combine reads that row
 (`GkMoeCombArgs.presummed`) where it read k through the slot map; and where the next head's feed is Q8_0
 the token command's combine quantizes it itself (`ClsArCombG4Rq`, `RLayer.comb_rq`), so the requant
 dispatch that opened the next layer (or the classifier) goes. The norms plane grows by the

@@ -1664,8 +1664,8 @@ def private gu_blocks_hold(t : T?; tag : string; oq : array<int8>; os, act : arr
 
 //! a per-32 format's decode GEMV - one lane a block over Q8_0 activations, `d` rows in each of two regions - at each width
 //! in `ns`, against the scalar dot's float order (`row_oracle` a row) with its poisoned element; the weight quants `wq_words`
-//! a block hashed at `i + wq_seed`, `scales` the format's scale plane over a block count; q51 also folds the two regions
-//! under their weights inside the summed twin
+//! a block hashed at `i + wq_seed`, `scales` the format's scale plane over a block count; each also folds the two regions
+//! under their weights inside its summed twin
 def private per32_gemv_cell(t : T?; fmt : KqFmt; ns : array<int>; wq_words : int; wq_seed, xq_mul, xq_add : uint; row_oracle;
                             scales : block<(totblk : int) : array<uint>>) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
@@ -1693,21 +1693,21 @@ def private per32_gemv_cell(t : T?; fmt : KqFmt; ns : array<int>; wq_words : int
                 var inscope y_cls <- plane_run(cp, 5)
                 check_rows(t, "{fmt} GEMV at n {n} against the scalar dot", y_cls, y_ref, BAR_APPROX_CTRL, FLAT_ROWS)
                 //! the summed form: the two regions' rows folded under their weights inside the GEMV, one row of d out
-                if (fmt == KqFmt.q51 && ensure_q51_gemv_sum_cls()) {
+                if (b32_sum_cls_ensure(int(fmt))) {
                     var inscope wgt <- [0.625, -0.375]
                     let pys = cp |> out_(d, 0, 0, 64u)
                     let psw = cp |> in_(wgt)
                     var s_sum = cp |> cls_set(fixed_array(0, 1, 2, 3, 4, pys, psw), @@set_q51_gemv_sum_cls)
                     cp |> cell_record() $(raw3 : VkCommandBuffer; var h3 : VkHaz) {
-                        enc_q51_gemv_sum_cls(raw3, h3, s_sum, pc, gemv_wgs(int64(d), 0u))
+                        b32_sum_cls_enc(int(fmt), raw3, h3, s_sum, pc, gemv_wgs(int64(d), 0u))
                     }
                     var inscope ys_cls <- cp |> plane_run(pys)
                     var inscope ys_ref <- [for (row in range(d)); wgt[0] * y_ref[row] + wgt[1] * y_ref[d + row]]
                     let bads = mismatch_approx(ys_cls, ys_ref)
-                    t |> success(bads == 0, "q51 GEMV summed under the weights at n {n} matches the weighted rows ({bads} of {d} off)")
+                    t |> success(bads == 0, "{fmt} GEMV summed under the weights at n {n} matches the weighted rows ({bads} of {d} off)")
                     var inscope ys_poison := ys_cls
                     ys_poison[0] += 1.0 + 2.0 * logits_maxabs(ys_ref)
-                    t |> success(mismatch_approx(ys_poison, ys_ref) > 0, "q51 GEMV summed: the bar reds a poisoned row")
+                    t |> success(mismatch_approx(ys_poison, ys_ref) > 0, "{fmt} GEMV summed: the bar reds a poisoned row")
                     delete wgt
                     delete ys_cls
                     delete ys_ref

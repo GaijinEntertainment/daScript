@@ -941,7 +941,8 @@ same two regions, whole and under a k split with the reduce, wherever the device
 matrices at subgroup 32; q51's expert rail rides `test_vkd_q51_cm2_batch` - its s and e stamps
 on a cm2 device and its KHR tile wherever the device has KHR cooperative matrices at subgroup 32,
 over the per-32 plane with hand-packed d | m words - and `test_vkd_q51_gemv`,
-its Q8_0-activation decode GEMV against the scalar dot's float order at 704 and 1408; mx4's rail
+its Q8_0-activation decode GEMV against the scalar dot's float order at 704 and 1408 (every per-32 GEMV cell also runs the
+format's summed twin, the two regions folded under their weights, against the weighted rows); mx4's rail
 rides `test_vkd_mx4_cm2_batch` (the same three arms over the doubled-magnitude plane, every nibble
 code reached), `test_vkd_mx4_gemv` (the Q8_0-fed decode GEMV at 704 and gpt-oss's 2880) and
 `test_vkd_mx4_gemv_gu` (the fused gate + up + act + requant twin byte for byte against the split
@@ -1048,8 +1049,8 @@ rows of one slot a dispatch a row (the row in the push, the same-slab verify's f
 one-row dispatch run a row at a time on the state and ring the row before it left - every row's o
 row, then the slot's state and both ring images after the last row, bit for bit, the state and the
 second row's ring image asserted moved off their inputs, and row 1 stepped from the untouched state
-as the control that misses. The gemma-family cells: `test_vkd_kq_gemv_k4_gu` (the Q4_K gate + up GEMVs with the act and
-its Q8_0 requant in one dispatch, against the three-kernel path byte for byte and the CPU chain),
+as the control that misses. The gemma-family cells: `test_vkd_kq_gemv_k4_gu` (the Q4_K, IQ4_XS and iq3s4 gate + up GEMVs with
+the act and its Q8_0 requant in one dispatch, against the three-kernel path byte for byte and the CPU chain),
 `test_vkd_q8_gemv_gu` (the fused q8 gate + up + act + requant, gelu and silu, two depths),
 `test_vkd_topk_n` (the N-row command's per-row top-k over four rows against the one-row top-k run a row at a time - the
 picks, the weights and the weight blocks bit for bit, every slot's feed blocks its row's - and against the host select,

@@ -1014,8 +1014,9 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // the batched windowed decode attention and its f16 twin (a sliding window over the batch rows: the gemma
     // carriers, no zoo row); its coverage is test_vkd_da_attn_bw in test_vulkan_kernels.das
     "da_attn_bw_cls_spv", "da_attn_bw_f16_cls_spv",
-    // the q51 routed down GEMV's summing twin (the 26B-A4B Q4_K_M, above the zoo's tier); its coverage is test_vkd_q51_gemv
-    "q51_gemv_sum_cls_spv",
+    // the per-32 routed down GEMVs' summing twins (the 26B-A4B's Q4_K_M, Unsloth dynamic, Q4_0 and MXFP4 files, above the zoo's
+    // tier); their coverage is the per-32 GEMV cells' summed arm (test_vkd_q51_gemv and the iq4nl32 / q4032 / q5032 / mx4 cells)
+    "q51_gemv_sum_cls_spv", "iq4nl32_gemv_sum_cls_spv", "q4032_gemv_sum_cls_spv", "q5032_gemv_sum_cls_spv", "mx4_gemv_sum_cls_spv",
     // the scalar router GEMM: on a cm2 box every MoE carrier whose dim the small f16 GEMM's eight
     // 64-deep chunks divide takes the f16 route, so the scalar tile runs only off it (a dim off
     // 512, the KHR route). Its coverage is test_vkd_moe_routing's router arm in test_vulkan_kernels.das
