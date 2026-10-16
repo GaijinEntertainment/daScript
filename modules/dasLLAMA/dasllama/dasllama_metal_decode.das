@@ -3457,6 +3457,22 @@ def set_metal_mtp_carry_hidden(on : bool; pre : bool = false) {
 def metal_mtp_carry_pre() : bool => g_mtp_carry_pre
 
 var private g_b_same_toks : MetalBuffer?
+var private g_b_emb_gathered = 0l
+var private g_b_gather = true
+
+//! The batched steps' rows whose embed row the device gathered off the row's id, in this process (a cell's served witness)
+def metal_batch_rows_gathered() : int64 => g_b_emb_gathered
+
+//! the batched step gathers its rows off their ids (on, the default), or takes the rows the host embeds and pokes up (the A/B control)
+def set_metal_batch_gather(on : bool) {
+    g_b_gather = on
+    discard_batch_pre()   // a step encoded under the other form would read the other rows
+}
+
+def metal_batch_gather() : bool => g_b_gather
+
+[unused_argument(s, npos, pos)]
+def private metal_batch_embed_gate(t : Model; s : Session; npos, pos : int64) : bool => g_b_gather && emb_dev_gather_ok(t)
 
 //! The same-slab verify's rows come as a GPU token buffer (the draft chain's argmax outputs, never
 //! read back): the driver dequantizes their embeddings on the encoder instead of taking the
@@ -3953,8 +3969,8 @@ def private batch_step_poke(L : BatchLanding; ws : BatchWorkspace) {
         if (L.bple != null) {   // the CPU pre-step's rows, position-major as the step reads them
             memcpy(metal_buffer_contents(L.bple), addr < void? >(ws.scr.ple_inp[0]), L.nrows * L.layers * L.ple_n * 4l)
         }
-        if (L.ple_tok != null) {   // the rows' token ids the device pre-step gathers by
-            var tp = reinterpret<uint?>(metal_buffer_contents(L.ple_tok))
+        if (L.row_tok != null) {   // the rows' token ids the device gathers their rows and side rows by
+            var tp = reinterpret<uint?>(metal_buffer_contents(L.row_tok))
             for (i in range64(L.nrows)) {
                 tp[i] = uint(ws.row_tokens[i])
             }
@@ -4302,8 +4318,10 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
     }
     var u_ple = plef ? uniform_u32(uint(ple_n)) : null
     var u_ple_tot = plef ? uniform_u32(uint(nrows * ple_n)) : null
-    let gpu_toks_ple = same && g_b_same_toks != null   //! the same-slab rows' ids ride the device already
-    var ple_tok = (ple_r.ple_dev && !gpu_toks_ple) ? pool_acquire_untracked(g_upool, g_dev, uint64(nrows * 4l)) : null
+    let same_toks = same && g_b_same_toks != null   //! the same-slab rows' ids ride the device already
+    let gpu_toks = (g_b_gather || same_toks) && emb_dev_gather_ok(t)   //! every row's embed off its id: the same-slab rows' ids on the device, else the rows' ids poked up
+    var row_tok = ((gpu_toks || ple_r.ple_dev) && !same_toks) ? pool_acquire_untracked(g_upool, g_dev, uint64(nrows * 4l)) : null
+    var btoks = row_tok != null ? row_tok : g_b_same_toks
     // MoE per-step uniforms (the expert twins' stride set; see enc_moe_gemv)
     var u_moe_ne = moe ? uniform_u32(uint(c.n_expert)) : null
     var u_moe_nsh = nsh > 0l ? uniform_u32(uint(nsh)) : null
@@ -4331,7 +4349,6 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
     var u_nch = (!use_attn_d && chunked) ? uniform_u32(uint(nchmax)) : null
     var u_nsgs = use_attn_d ? uniform_u32(uint(d_nsgs)) : null
     var u_vocab = gpu_logits ? uniform_u32(uint(c.vocab_size)) : null
-    let gpu_toks = same && g_b_same_toks != null && emb_dev_gather_ok(t)
     L.bx = bx
     L.poke_x = !gpu_toks
     L.bcos = bcos
@@ -4341,7 +4358,7 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
     L.bytes_tab = bytes_tab
     L.bytes_tab_sw = bytes_tab_sw
     L.bple = ple_r.ple_dev ? default<MetalBuffer?> : ple_r.bple
-    L.ple_tok = ple_tok
+    L.row_tok = row_tok
     L.ple_n = ple_n
     L.dim = dim
     L.nrows = nrows
@@ -4376,13 +4393,14 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
     var enc = conc ? metal_new_compute_encoder_concurrent(cb) : metal_new_compute_encoder(cb)
     if (gpu_toks) {
         var u_esc = c.embed_scale != 1.0 ? uniform_f32(c.embed_scale) : g_one
-        enc_embed_dev(enc, t, g_b_same_toks, 0ul, bx, 0ul, nrows, u_dim, u_esc)
+        enc_embed_dev(enc, t, btoks, 0ul, bx, 0ul, nrows, u_dim, u_esc)
+        g_b_emb_gathered += nrows
         if (u_esc != g_one) {
             L.upooled |> push((buf = u_esc, size = 4ul))
         }
     }
     if (ple_r.ple_dev) {   //! the rows' side input off their own token ids, after their embed rows landed in bx
-        enc_ple_pre_dev(enc, t, ple_tok != null ? ple_tok : g_b_same_toks, 0ul, bx, ple_r.bple, ple_r.bple_proj, ple_r.u_ple_all, ple_r.u_ple_sq, nrows)
+        enc_ple_pre_dev(enc, t, btoks, 0ul, bx, ple_r.bple, ple_r.bple_proj, ple_r.u_ple_all, ple_r.u_ple_sq, nrows)
     }
     // layer-0 attention norm (the per-layer trailing add+rms feeds the NEXT layer's); a hyper-connection model opens the rows' wide residual instead
     var xh0 = false
@@ -4598,12 +4616,12 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
         } else {
             L.upooled |> push((buf = ple_r.bple, size = bytes_ple))
         }
-        if (ple_tok != null) {
-            L.upooled |> push((buf = ple_tok, size = uint64(nrows * 4l)))
-        }
         L.upooled |> push((buf = ple_r.u_ple_all, size = 4ul))   // nolint:STYLE012
         L.upooled |> push((buf = u_ple, size = 4ul))
         L.upooled |> push((buf = u_ple_tot, size = 4ul))
+    }
+    if (row_tok != null) {
+        L.upooled |> push((buf = row_tok, size = uint64(nrows * 4l)))
     }
     if (dn) {
         L.pooled |> push((buf = bdn_qkv, size = bytes_dn_cd))   // nolint:STYLE012
@@ -4787,6 +4805,7 @@ def dasllama_metal_decode_register() {
     register_mtp_seam_override("metal", @@metal_mtp_seam_row)
     register_mtp_seat_owner("metal", @@metal_mtp_owns)
     register_embed_dev_gates("metal", @@metal_embed_dev_gate, @@metal_embed_dev_gate)
+    register_embed_batch_gate("metal", @@metal_batch_embed_gate)
     g_env_logits = g_env_metal.logits
     g_env_batch_mm = g_env_metal.batch_mm
     g_env_attn_d = g_env_metal.attn_d

@@ -32,7 +32,9 @@ norm (`rdec_norms_len`) - since layer `n_layers`' own rows would index the final
 sits outside `RDec.layers`, so no trunk walk sees it. Where the head rides, the per-row quant
 planes (`xq_dev`, `xs_dev`) hold twice `dim` a row: eh_proj reads the `[enorm ; hnorm]` row through
 them (`vk_rdec_prepare`'s `wide`, `vk_rdec_set_head`'s `xq_bytes`). The draft command, one per region, norms the
-uploaded embed row and carry `h` into one `[enorm ; hnorm]` row, runs eh_proj into x, the layer
+token's embed row - gathered unscaled off its id into x and copied into the pair where the table rides the device
+(`ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#vk-token-gather`), the host's row else - and the uploaded carry `h` into one
+`[enorm ; hnorm]` row, runs eh_proj into x (which the gather's row no longer needs), the layer
 through the token command's attention and FFN encoders on its slot at row `pos - 1` (the head's
 own `TokMeta` block and rope rows) - a routed head's block as a routed trunk layer's: the shared
 expert, then the router, the top-k, the expert GEMVs (`rd_encode_moe`) and the combine's residual

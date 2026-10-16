@@ -208,9 +208,10 @@ crosses the bus: a save and a load are device copies.
 
 ### The token rows gather on the device off the table's own plane {#vk-token-gather}
 
-**Where the table sits on the device in a format a gather reads, neither the window nor the one-row
-step brings a row across the bus: the window gathers its rows off the token ids, the step off its
-one token id.** Which gather a table takes is its disk type's:
+**Where the table sits on the device in a format a gather reads, neither the window nor a token
+command brings a row across the bus: the window gathers its rows off the token ids, the one-row step
+off its one token id, the N-row command, the verify and the draft off their rows' ids.** Which gather
+a table takes is its disk type's:
 
 | Table on disk | Gather | Its plane |
 |---|---|---|
@@ -226,15 +227,15 @@ the GEMV does. A per-32 table (q51, iq4nl32, q4032, q5032) is the `Blk32GemvRunT
 `resident_arm_emb` hands the plane to the tier (`rdec_set_emb` for a quantized plane in the arena,
 `rdec_upload_emb_f32` for the f32 rows) and logs why the host embeds where it does: a prepared image (it does not carry `emb_f32_exact`), a plane past the room or the cap, a trimmed
 image, a per-layer-embedding model whose side table stays on the host, a hyper-connection model (its
-window reads the pre-step's rows). The window binds its ids plane (`pf_ids`); the one-row token command records the gather in place of
-the x upload when the table is placed, reading the step's id from a host-visible word
-(`tok_ids_host`) and, for a step that brings no id (`EMB_ID_HOST`: the peel's row, the split
-command's caller), the host's row from a host-visible staging row (`tok_xh_host`) in place - so the
-recorded command serves both. The engine leaves a decode step's row unembedded where the driver
-answers the decode gate (`register_embed_dev_gates("vulkan", ...)`, the table placed); the override
-embeds it itself where its path reads a host row (the split command) and the engine backfills it
-where the override declines. The N-row and verify commands keep their row upload: their rows come
-embedded from the batch engine and the round.
+window reads the pre-step's rows). The window binds its ids plane (`pf_ids`); every token command but
+the in-order rows command (the recurrent peel) records the gather in place of the x upload, each row's
+id read from `tok_ids_host` and, for a row with none (`EMB_ID_HOST`: a non-text row, the split
+command's caller), the host's row staged in `tok_xh_host` (`nb` of each), so one record serves both.
+The engine leaves a decode step's row unembedded under the decode gate (`register_embed_dev_gates`),
+a batched step's rows under the batch gate (`register_embed_batch_gate`: no routed layer's experts on
+the host), and embeds them late where the override declines; the split command embeds its own row.
+`vk_rdec_nrow_embed_gathered` counts the N-row and verify rows, `vk_rdec_head_embed_gathered` the NextN
+head's; `set_gpu_resident_embed` pins `DASLLAMA_VK_GPU_EMBED` for a load.
 
 **A MoE is planned like a dense model with bigger FFN planes.** Its weight planes are the
 attention quads, every MoE layer's expert triple (`[ne x nfe x dim]` twice and `[ne x dim x
