@@ -1477,7 +1477,7 @@ def private gptoss_row(t : T?; path : string) {
 //! the sliding layers' rings against every row kept on the Metal mirror (`../ARCHITECTURE_GPU_KV_RING.md#kv-sliding-ring`): a
 //! counting prompt past the window prefilled in 256-row windows and 24 greedy steps on the blob twin with the ring pinned on, then
 //! off (`set_gpu_kv_ring`, put back), token for token, every step and window served by the device; the ringed layout holds rings
-//! its positions wrap, the flat one none
+//! its positions wrap, the flat one none, and the ringed mirror feeds every window the flat one feeds (`metal_prefill_mirror_served`)
 [unused_argument(t, path, tag, family, arm)]   // off-Apple the gated body is empty
 def private metal_ring_row(t : T?; path, tag, family, arm : string) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -1491,6 +1491,7 @@ def private metal_ring_row(t : T?; path, tag, family, arm : string) {
         let pin = gpu_kv_ring_pin()
         var ids : array<array<int64>>
         var rings : array<int64>
+        var fed : array<int64>   //! each leg's windows on the mirror-fed form
         with_dasllama_jobque() {
             select_decode_override("metal")
             select_prefill_override("metal")
@@ -1498,8 +1499,10 @@ def private metal_ring_row(t : T?; path, tag, family, arm : string) {
                 set_gpu_kv_ring(ringed)
                 let de0 = metal_decode_stats().decodes
                 let pf0 = metal_prefill_stats().prefills
+                let mf0 = metal_prefill_mirror_served()
                 var s = make_run_state(trg.config, KVDtype.f16, KVDtype.f16)
                 var got <- ring_row_walk(trg, s, prompt, 256l, 24)
+                fed |> push(metal_prefill_mirror_served() - mf0)
                 rings |> push(mirror_rings(trg))
                 if (ringed == 1) {
                     let ring = mirror_ring(trg, 0l)
@@ -1515,10 +1518,12 @@ def private metal_ring_row(t : T?; path, tag, family, arm : string) {
         }
         set_gpu_kv_ring(pin)
         t |> success(rings[0] > 0l && rings[1] == 0l, "{tag}/ring: the ringed layout holds rings ({rings[0]} elements), the flat one none ({rings[1]})")
+        t |> success(fed[1] > 0l && fed[0] == fed[1], "{tag}/ring: every window the flat mirror feeds, the ringed one feeds too ({fed[0]} ringed, {fed[1]} flat)")
         log_gen_texts(trg, "{tag}/ring", ids[1], ids[0])
         t |> success(ids_equal(ids[0], ids[1]), "{tag}/ring: the ringed mirror generates the flat mirror's tokens")
         delete ids
         delete rings
+        delete fed
         delete trg
     }
 }

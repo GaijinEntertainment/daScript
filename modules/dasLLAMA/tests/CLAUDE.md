@@ -278,7 +278,8 @@ per-path cells; fam-gemma2 also carries the sliding-window masking parity row, w
 the capped rows past the single-dispatch ceiling on the fused attention's wide stamp and off the chunked pair;
 fam-gemma3 (gemma-3-1b) and fam-gemma4e (E2B) carry the Metal ring row (`metal_ring_row`): a counting prompt past the window
 prefilled in 256-row windows and 24 greedy steps on the blob twin with the ring pinned on, then off, token for token, every
-window and step on the device, the ringed layout holding rings that wrap under the prompt and the flat one none;
+window and step on the device, the ringed layout holding rings that wrap under the prompt and the flat one none, and the
+ringed mirror feeding every window the flat one feeds (`metal_prefill_mirror_served`);
 fam-gemma4/fam-qwen3moe/fam-gemma4moe/fam-gptoss/fam-qwen35moe/fam-qwen2moe are
 DASLLAMA_PARITY_FULL-gated - 7.4/18.5/26.9/12.1/22/15GB; fam-gemma4moe and fam-gptoss are ENGAGE
 + shallow logits TOLERANCE cells only - token parity is not a valid instrument for the 26B, whose double-router
