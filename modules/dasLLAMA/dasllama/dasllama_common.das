@@ -744,10 +744,19 @@ def mtp_round_commit_host(var s : Session; pos, k, a : int64) {
     s.n_past = pos + a + 1l
 }
 
-//! the rounds neither home drafts: nothing evaled yet (the zero-init `mtp_h_pos1` sentinel collides with position 0), a hidden
-//! row from another position or shorter than the drafter's width, or a round that would run past the context
-def mtp_round_cold_host(t : Model; s : Session; pos, k, tdim : int64) : bool
-    => pos < 1l || s.mtp_h_pos1 != pos || long_length(s.mtp_h) < tdim || pos + k + 1l > t.config.seq_len
+let MTP_COLD_PAST_CONTEXT = "the round would run past the context"   //! the one cold reason that is the work's size
+
+//! why neither home drafts the round ("" where it can): nothing evaled yet (the zero-init `mtp_h_pos1` sentinel collides with
+//! position 0), a hidden row from another position or shorter than the drafter's width, or `MTP_COLD_PAST_CONTEXT`
+def mtp_round_cold_why(t : Model; s : Session; pos, k, tdim : int64) : string {
+    return "nothing is evaled at position 0" if (pos < 1l)
+    return "the carried hidden row is from another position" if (s.mtp_h_pos1 != pos)
+    return "the carried hidden row is shorter than the drafter's width" if (long_length(s.mtp_h) < tdim)
+    return MTP_COLD_PAST_CONTEXT if (pos + k + 1l > t.config.seq_len)
+    return ""
+}
+
+def mtp_round_cold_host(t : Model; s : Session; pos, k, tdim : int64) : bool => mtp_round_cold_why(t, s, pos, k, tdim) != ""
 
 //! the round's `a` accepted drafts landed: the accepted row becomes the next round's hidden row, the draft count moves
 def mtp_round_take(var s : Session; a, kd, dim : int64) {

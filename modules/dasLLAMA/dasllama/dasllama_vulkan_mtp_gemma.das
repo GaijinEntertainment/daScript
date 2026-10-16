@@ -325,9 +325,13 @@ def private vk_buffers_make(dr : GemmaDrafter; var g : GemmaDrafterVk; quants : 
     var oom = false
     g.wqb = long_length(quants)
     g.wsb = long_length(scales) * 2l
+    g.fblob_bytes = long_length(dr.fblob) * 4l
+    if (!vk_range_ok(max(max(g.wqb, g.wsb), max(g.fblob_bytes, dr.vocab * 4l)))) {   //! each plane binds whole in every GEMV set it feeds
+        to_log(LOG_WARNING, "dasLLAMA gemma drafter: a plane (quants {g.wqb} bytes, scales {g.wsb}, f32 rows {g.fblob_bytes}, logits {dr.vocab * 4l}) passes the device's storage range {vk_max_storage_range()}\n")
+        return false
+    }
     g.wq = dev_from(oom, unsafe(addr<uint8 const?>(quants[0])), g.wqb)
     g.ws = dev_from(oom, unsafe(addr<uint8 const?>(scales[0])), g.wsb)
-    g.fblob_bytes = long_length(dr.fblob) * 4l
     g.fblob = dev_from(oom, unsafe(addr<uint8 const?>(dr.fblob[0])), g.fblob_bytes)
     let qdm = dr.n_heads * g.hs_mx
     let cat_n = 2l * dr.tdim
@@ -597,7 +601,7 @@ def private vk_attach(t : Model; path : string) : string {
         why = vk_target_why(dr)
     }
     if (empty(why) && !vk_drafter_init(dr, g_vk_g)) {
-        why = "the device has no room for the drafter's {long_length(dr.blob) >> 20l} MB of planes, or a class it dispatches did not compile"
+        why = "the device has no room for the drafter's {long_length(dr.blob) >> 20l} MB of planes, a plane passes the storage range, or a class it dispatches did not compile (the line above names a range)"
     }
     if (empty(why) && !vk_rdec_carry_arm(true)) {
         why = "the driver took no carry landing"
@@ -619,6 +623,7 @@ def private vk_attach(t : Model; path : string) : string {
     g_vk_us_draft = 0l
     g_vk_us_verify = 0l
     g_vk_us_cold = 0l
+    g_vk_cold_said |> clear()
     to_log(LOG_INFO, "dasLLAMA gemma drafter attached on the Vulkan resident driver: {path} ({g_vk_dr.n_layers} Q-only layers over target layers {g_vk_dr.kv_layer})\n")
     return ""
 }
@@ -645,8 +650,18 @@ def private vk_drop_forget {
 [unused_argument(t), hot_path]   //! one drafter a process: the attach checked it against its target
 def private vk_attached_to(t : Model) : bool => g_vk_attached
 
-//! a stream that cannot speculate this round: no carried hidden at its position, a round past the context
-def private vk_round_cold(t : Model; s : Session; pos, k : int64) : bool => mtp_round_cold_host(t, s, pos, k, g_vk_dr.tdim)
+var private g_vk_cold_said : table<string>   //! the cold reasons said since the attach, a reason once
+
+//! a stream that cannot speculate this round: no carried hidden at its position, a round past the context; every reason but the
+//! context's bound said once
+def private vk_round_cold(t : Model; s : Session; pos, k : int64) : bool {
+    let why = mtp_round_cold_why(t, s, pos, k, g_vk_dr.tdim)
+    return false if (why == "")
+    if (why != MTP_COLD_PAST_CONTEXT) {
+        gpu_said_once(g_vk_cold_said, LOG_INFO, "gemma drafter on the Vulkan resident driver - a stream steps plain this round: ", why)
+    }
+    return true
+}
 
 //! verify row `vr`'s truth: the device's pick where it landed one, else the argmax of the logits it landed
 def private vk_row_pick(s : Session; vr, vocab : int64) : int64 {
