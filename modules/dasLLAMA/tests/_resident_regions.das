@@ -1594,6 +1594,63 @@ def cell_device_pool_head_rows(t : T?; file : string) {
     }
 }
 
+//! the session's ring floor over a ringed load (`ARCHITECTURE_GPU_KV_RING.md#kv-ring-floor`): a prompt past the window leaves the
+//! floor at its rows less the ring's slack, a call under it panics, a prompt from 0 resets the region's high-water mark and the floor
+//! with it; a parked claim, an export and an import each refuse a cut under the floor and carry the floor on the rows they move
+[cold_path]
+def cell_ring_floor(t : T?; file : string) {
+    t |> run("a ringed history continues from its ring floor on: under it a call panics and a park, an export and an import refuse") @(t : T?) {
+        with_regions_rig(t, file, RegionsLoad(ring = 1)) $(tr) {
+            let slack = gpu_resident_kv_ring_slack()
+            t |> success(slack > 0l, "the ringed load armed its rings (slack {slack})")
+            return if (slack <= 0l)
+            let n = 1300l
+            let floor = n - slack
+            var prompt <- prose_ids(n, 0l)
+            var short <- prose_ids(40l, 1l)
+            var s <- create_session(tr, mirror_kv_dtype())
+            eval(tr, s, prompt)
+            t |> equal(s.kv_ring_floor, floor, "the prompt's rows less the ring's slack are the floor")
+            s.n_past = 40l
+            let why = panic_text() ${
+                var one <- [prompt[40]]
+                eval(tr, s, one)
+            }
+            t |> success(find(why, "from position {floor} on") >= 0, "a call at 40 continues under the floor and panics: {why}")
+            s.n_past = 0l
+            eval(tr, s, short)
+            t |> equal(s.kv_ring_floor, 0l, "a prompt from 0 rebuilds the history: its 40 rows reach no ring, so no floor")
+            delete s
+            var d <- device_session(tr)
+            eval(tr, d, prompt)
+            t |> equal(d.kv_ring_floor, floor, "a device-home session's floor is the same")
+            let claim = gpu_device_kv_park(d)
+            delete d
+            var a <- device_session(tr)
+            t |> success(!gpu_device_kv_adopt(a, claim, 40l) && a.n_past == 0l, "a parked claim refuses an opening under its floor")
+            t |> success(gpu_device_kv_adopt(a, claim, n), "and hands every row over (the control)")
+            t |> equal(a.kv_ring_floor, floor, "the adopter carries the claim's floor")
+            let claim2 = gpu_device_kv_park(a)
+            delete a
+            var pool <- create_kv_pool(tr, 64l, gpu_device_session_dtype())
+            var carrier <- create_session(tr, pool)
+            t |> success(!gpu_device_kv_export(tr, claim2, carrier, 0l, 40l), "an export ending under the floor refuses")
+            t |> success(gpu_device_kv_export(tr, claim2, carrier, 0l, n), "an export of every row goes down (the control)")
+            t |> equal(carrier.kv_ring_floor, floor, "the carrier carries the floor")
+            var up <- device_session(tr)
+            t |> success(!gpu_device_kv_import(tr, up, carrier, 40l), "an import ending under the carrier's floor refuses")
+            t |> success(gpu_device_kv_import(tr, up, carrier, n), "an import of every row comes up (the control)")
+            t |> equal(up.kv_ring_floor, floor, "the imported session carries the floor")
+            gpu_device_kv_park(up)
+            delete up
+            delete carrier
+            delete pool
+            delete short
+            delete prompt
+        }
+    }
+}
+
 def cell_scheduler_device_prefill_chunks(t : T?; file : string) {
     t |> run("a device-home stream prefills in the device's windows, and a model whose prefill cannot continue in one call") @(t : T?) {
         with_regions_rig(t, file) $(tr) {

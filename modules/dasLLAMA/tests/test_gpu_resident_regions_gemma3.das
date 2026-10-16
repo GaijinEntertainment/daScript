@@ -27,3 +27,8 @@ def test_regions_batched_steps_split_g3(t : T?) {
 def test_regions_batched_first_g3(t : T?) {
     cell_regions_batched_first(t, REGIONS_FILE)
 }
+
+[test]
+def test_regions_ring_floor_g3(t : T?) {
+    cell_ring_floor(t, REGIONS_FILE)
+}
