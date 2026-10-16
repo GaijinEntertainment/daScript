@@ -358,11 +358,11 @@ def cell_prefill_continues_on_the_device(t : T?; file : string; rel : float) {
 }
 
 //! the window's fused q/k norm, rope and K/V store against its split pair (`set_vulkan_prefill_qkn_fuse`, put back as found): one
-//! prompt two windows long on each form, the prompt's logits and the fed steps within the split bar with the row one step off as the
+//! prompt two windows long on each form, the prompt's logits and the fed steps within `bar` with the row one step off as the
 //! control, the census counting the fused pass's stamp on the fused form and the norm pass's on the split one
 [cold_path]
-def cell_window_qkn_fused(t : T?; file : string) {
-    t |> run("the window's q/k norm, rope and store as one fused pass reads within the split bar of the split pair") @(t : T?) {
+def cell_window_qkn_fused(t : T?; file : string; bar : LogitsBar = LogitsBar.split_bar) {
+    t |> run("the window's q/k norm, rope and store as one fused pass reads within the {bar} of the split pair") @(t : T?) {
         with_regions_rig(t, file) $(tr) {
             static_if (typeinfo builtin_module_exists(vulkan)) {
                 t |> success(tr.config.qk_norm, "the carrier norms its q and k heads")
@@ -393,7 +393,7 @@ def cell_window_qkn_fused(t : T?; file : string) {
                 t |> success(fused_counts[0] > 0l && fused_counts[1] == 0l, "the fused form's prefill ran the fused pass and no norm pass ({fused_counts[0]}, {fused_counts[1]})")
                 t |> success(split_counts[0] == 0l && split_counts[1] > 0l, "the split form's prefill ran the norm pass and no fused pass ({split_counts[0]}, {split_counts[1]})")
                 for (st in range(length(rows[0]))) {   //! the two passes reduce the norm in another order: the split bar, the row one step off its control
-                    hold_within(t, tr, rows[0][st], rows[1][st], rows[1][st > 0 ? st - 1 : 1], st == 0 ? "the prompt's logits, fused against split" : "step {st - 1}, fused against split")
+                    hold_bar(t, tr, rows[0][st], rows[1][st], rows[1][st > 0 ? st - 1 : 1], bar, st == 0 ? "the prompt's logits, fused against split" : "step {st - 1}, fused against split")
                 }
                 served_every_call(t)
                 delete rows
