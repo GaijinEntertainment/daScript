@@ -47,9 +47,8 @@ to a function-typed one, or the `[init]` that sets one; or that adds or changes 
 in a forked context or code reachable from a `team_parallel_*` or `maybe_parallel_for*` body,
 wherever the diff puts it, applies `REVIEW_MEMORY.md` (beside this file) too.**
 
-**A change to what enters `performance/records/`, or to a provenance manifest (the `ProvEntry` rows of
-`performance/model_specs.das`), answers to
-`performance/REVIEW.md`.** A change to WHICH model file a recorded row or a manifest pins
+**A change to what enters `performance/records/`, or to a model file's provenance - its source url,
+byte size, sha256 or conversion recipe, wherever it is declared - answers to `performance/REVIEW.md`.** A change to WHICH model file a recorded row or a manifest pins
 answers to it too. A model file here is a `.gguf`, a `.dlim`, an mmproj (a multimodal projector
 weight file), or an image or audio fixture. A test or tool merely opening a stocked model file
 by name does not route.
@@ -72,9 +71,6 @@ area's tests, so a regression there goes unrun.
 **A `[test]` file with a `require dasllama/...` line of its own, wherever the diff puts it, and
 every `dasllama/` change answer to this folder's `tests/REVIEW.md` - open it; the walk does not
 surface it for a `dasllama/`-only diff.**
-
-**A probe, dump or one-shot driver that loads a model or times a kernel outside the test and benchmark trees,
-wherever the diff puts it, answers to this folder's `harness/REVIEW.md` beside its own folder's checklist.**
 
 **A diff that changes a CPU kernel - a function in `dasllama/dasllama_math*.das` that writes an
 output buffer from operand buffers - applies `tests/REVIEW_KERNEL_CELLS.md` too.**
@@ -199,11 +195,11 @@ changed, so their timings pick nothing.
 race's output lines, one per candidate and each naming it, in the PR body or in a `PERF_LEDGER.md`
 row the diff adds.**
 
-**A race that picks a numeric threshold - a cutoff a predicate compares against, or a size a stamp is built at: a row
-count, a byte size, a lane width - times the chosen value and at least one value on each side of it.**
+**A race that picks a numeric threshold - a cutoff a predicate compares against, or a size a kernel
+variant is compiled for: a row count, a byte size, a lane width - times the chosen value and at least
+one value on each side of it.**
 
-**A new call that multiplies by f32 weight rows - any CPU or GPU matrix multiply whose weight operand is an f32 plane,
-whatever its name - outside a
+**A new CPU or GPU matrix multiply whose weight operand is an f32 plane, outside a
 correctness-comparison path (one whose only job is to produce a reference result to check another
 against), where a faster-format twin on the same backend already serves the same weights and
 shape, is a defect - call that twin instead.** A site that must stay f32 for another reason is

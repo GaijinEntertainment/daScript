@@ -296,3 +296,7 @@ so an unlisted format decodes under whatever the pick's default arm holds.
 `metal_ple_pre_gpu_gate` admit that format only where the table's base and row stride are each a
 whole number of the format's blocks.** A base off the format's own block grid is gathered
 under a layout that is not its own.
+
+**A diff that adds a call that creates a GPU device or a command queue, under a spelling
+`DEVICE_CREATION_CALLS` in `REVIEW.das` does not list, adds that spelling to the list in the same
+change.** The gate finds only the spellings it lists, so a new one passes it silently.
