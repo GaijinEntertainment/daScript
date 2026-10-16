@@ -1680,6 +1680,54 @@ def private metal_ring_row(t : T?; path, tag, family, arm : string) {
     }
 }
 
+let RELEASE_ROW_SLACK_BYTES = 512ul * 1024ul * 1024ul   //! under a fifth of the E2B blob a cycle would keep
+
+//! a deleted row's device memory leaves the process: three load-serve-delete cycles of the blob twin, each closed at the
+//! drivers' teardown, leave the footprint within 512 MB of the first cycle's close, where weights the binding left alive
+//! add the blob a cycle
+[unused_argument(t, path, tag)]   // off-Apple the gated body is empty
+def private metal_release_row(t : T?; path, tag : string) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        if (!family_on(t, "gemma4e") || !arm_on(t, "fam-gemma4e-release") || !model_available(t, path)) {
+            return
+        }
+        var closes : array<uint64>
+        closes |> reserve(3)
+        for (cycle in range(3)) {
+            var trg <- blob_twin(t, path, 512l)
+            var inscope prompt <- encode(trg, counting_prompt(1, 20), true, false)
+            var served = 0l
+            var ngen = 0
+            with_dasllama_jobque() {
+                select_decode_override("metal")
+                select_prefill_override("metal")
+                set_metal_prefill_min_npos(1l)
+                let de0 = metal_decode_stats().decodes
+                var s = make_run_state(trg.config, KVDtype.f16, KVDtype.f16)
+                var inscope ids <- generate(trg, s, prompt, length(prompt) + 4)
+                ngen = length(ids) - length(prompt)
+                served = metal_decode_stats().decodes - de0
+                delete s
+                set_metal_prefill_min_npos(64l)
+                select_decode_override("")
+                select_prefill_override("")
+            }
+            t |> success(ngen == 4 && served > 0l, "{tag}/release cycle {cycle}: {ngen} steps, {served} served on the device")
+            delete trg
+            metal_decode_shutdown()
+            metal_prefill_shutdown()
+            closes |> push(metal_footprint_settled())
+            to_log(LOG_INFO, "{tag}/release cycle {cycle}: footprint {int64(closes[cycle]) / 1048576l} MB at the close\n")
+        }
+        for (cycle in range(1, 3)) {
+            t |> success(closes[cycle] < closes[0] + RELEASE_ROW_SLACK_BYTES,
+                "{tag}/release cycle {cycle}: the footprint returns within 512 MB of the first close ({int64(closes[cycle]) / 1048576l - int64(closes[0]) / 1048576l} MB above it)")
+        }
+        t |> equal(metal_live_object_count(), 0l, "{tag}/release: every GPU object the drivers hold releases: {metal_live_object_report()}")
+        delete closes
+    }
+}
+
 //! `prompt` evaluated `chunk` rows a call, then `steps` greedy picks each fed back: the prompt's ids and the picks
 def private ring_row_walk(t : Model; var s : Session; prompt : array<int64>; chunk : int64; steps : int) : array<int64> {
     var out := prompt
@@ -2224,6 +2272,7 @@ def test_metal_family_matrix(t : T?) {
             // widths (6144/12288) — the per-layer u_hidden bind's model row. 5GB, small tier.
             gemma4e_row(t, path_join(models_dir(), "gemma-4-E2B-it-Q8_0.gguf"), "gemma4e-e2b", true, false)
             metal_ring_row(t, path_join(models_dir(), "gemma-4-E2B-it-Q8_0.gguf"), "gemma4e-e2b", "gemma4e", "fam-gemma4e")
+            metal_release_row(t, path_join(models_dir(), "gemma-4-E2B-it-Q8_0.gguf"), "gemma4e-e2b")
             // ... and the kq carrier: the k5-plane PLE table's CPU gather over the metal-blob
             // COMPACTED scale strips (16B, not the planar 20B) — the stride that zeroed logits
             gemma4e_row(t, path_join(models_dir(), "gemma-4-E2B-it-Q4_K_M.gguf"), "gemma4e-e2b-kq", true, false)

@@ -177,12 +177,14 @@ def test_ple_plane_formats(t : T?) {
         let why = panic_text() ${
             detect_ple_formats(shell, mixed)
         }
-        t |> success(find(why, "inp_gate planes mix F32 with other types (1 of 2 layers F32)") >= 0, "a gate stack of one F32 and one Q8_0 layer declines by name: {why}")
-        var mixed_proj <- ple_planes_meta([GGML_TYPE_Q8_0, GGML_TYPE_Q8_0], [GGML_TYPE_Q8_0, GGML_TYPE_F32])
+        t |> success(find(why, "inp_gate planes mix F32 with other types - tensor 'blk.1.inp_gate.weight' is Q8_0, 'blk.0.inp_gate.weight' is F32") >= 0,
+            "a gate stack of one F32 and one Q8_0 layer declines naming the differing tensor and both types: {why}")
+        var mixed_proj <- ple_planes_meta([GGML_TYPE_Q8_0, GGML_TYPE_Q8_0], [GGML_TYPE_Q6_K, GGML_TYPE_F32])
         let why_proj = panic_text() ${
             detect_ple_formats(shell, mixed_proj)
         }
-        t |> success(find(why_proj, "proj planes mix F32") >= 0, "and a projection stack the same: {why_proj}")
+        t |> success(find(why_proj, "proj planes mix F32 with other types - tensor 'blk.1.proj.weight' is F32, 'blk.0.proj.weight' is Q6_K") >= 0,
+            "and a projection stack the same, whichever side layer 0 takes: {why_proj}")
         delete mixed_proj
         delete mixed
         delete kq

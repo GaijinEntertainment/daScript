@@ -10,6 +10,9 @@ require dasllama/dasllama_gpu_tier   // install_moe_gpu_resident_bias - the bias
 require ?vulkan dasllama/dasllama_vulkan_decode   // rd_routed_slots_fit - the N-row command's slot cap, where the module exists
 require ?vulkan dasllama/dasllama_vulkan_prefill  // ple_proj_bf16_why - the bf16 projection's dim gate, where the module exists
 require dasllama/dasllama_metal_shapes   // moe_metal_ok - the Metal routed block's admission, portable
+require dasllama/dasllama_image   // save_model_image / load_model_image / image_identity - the trimmed lane's map under the ring pin
+require dasllama/dasllama_arch_llama   // the arch the trimmed lane's shell names, registered for its map
+require daslib/fio
 require strings
 require daslib/strings_boost
 require daslib/enum_trait   // the format-set drift guard walks the whole KqFmt enum
@@ -1357,6 +1360,56 @@ def test_resident_ring_mirror(t : T?) {
             t |> success((ringed >> 20l) + rest < HOUSE_32GB_ROOM_MB,
                 "the house plan fits the 32 GB card's room under the rings: {(ringed >> 20l) + rest} MB of {HOUSE_32GB_ROOM_MB} (flat {HOUSE_26B_FLAT_PLAN_MB})")
         }
+        delete m
+    }
+}
+
+//! the ring pin sits outside a trimmed vulkan lane's identity (`../ARCHITECTURE_IMAGE_VULKAN.md#image-vulkan-mint`): it moves the
+//! mirror the plan charges, the plan a lane's map asks again, and no byte of the image - so a lane mapped by name declines under
+//! the run's knobs and names the pin among the knobs its identity leaves out
+[test]
+def test_trim_lane_ring_pin(t : T?) {
+    t |> run("the ring pin moves the plan a trimmed lane's map asks again, never the lane's identity, and the map's decline names it") @(t : T?) {
+        var m <- gemma4_26b_shell()
+        var ids : array<string>
+        var mirrors : array<int64>
+        for (pin in [1, 0]) {
+            with_gpu_kv_ring(pin) {
+                ids |> push(image_identity(moe_gpu_bake_tag()))
+                mirrors |> push(resident_mirror_bytes(m, 32768l, KVDtype.f16, 4l))
+            }
+        }
+        t |> equal(ids[0], ids[1], "the lane's identity reads the same under either pin: the image holds no K/V row")
+        t |> success(mirrors[0] * 7l < mirrors[1], "the plan charges the ringed mirror under one pin and the flat one under the other ({mirrors[0] >> 20l} MB against {mirrors[1] >> 20l} MB)")
+        var terr = ""
+        let path = path_join(temp_directory(terr), "dasllama_trim_lane_ring_{ref_time_ticks()}.dlim")
+        let route = gpu_resident_route_lever()
+        set_gpu_resident_route(false)   //! the route off: the decline is this run's on every box, a device or none
+        for (trimmed in [true, false]) {
+            var lane = Model()
+            lane.arch = "llama"
+            lane.quant = QuantMode.q8
+            lane.config.n_layers = 2l
+            lane.planes_trimmed = trimmed
+            t |> success(save_model_image(lane, path), "a {trimmed ? "trimmed" : "planar"} shell's image saves")
+            var mapped = false
+            let why = panic_text() $ {
+                var back = Model()
+                mapped = load_model_image(path, back)
+                delete back
+            }
+            if (trimmed) {
+                t |> success(find(why, "is a trimmed vulkan lane") >= 0 && find(why, "DASLLAMA_GPU_KV_RING / set_gpu_kv_ring") >= 0
+                    && find(why, "sit outside the lane's identity") >= 0, "the trimmed lane's map declines under this run's knobs, naming the ring pin: {why}")
+            } else {
+                t |> success(empty(why) && mapped, "control: the planar shell maps with no decline ({why})")
+            }
+            delete lane
+            remove(path)
+        }
+        set_gpu_resident_route(route)
+        delete ids
+        delete mirrors
         delete m
     }
 }

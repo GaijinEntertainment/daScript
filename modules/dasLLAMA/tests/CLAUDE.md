@@ -320,6 +320,11 @@ fam-gemma3 (gemma-3-1b) and fam-gemma4e (E2B) carry the Metal ring row (`metal_r
 prefilled in 256-row windows and 24 greedy steps on the blob twin with the ring pinned on, then off, token for token, every
 window and step on the device, the ringed layout holding rings that wrap under the prompt and the flat one none, and the
 ringed mirror feeding every window the flat one feeds (`metal_prefill_mirror_served`);
+`fam-gemma4e-release` (E2B Q8_0) is the release row (`metal_release_row`): three load-serve-delete cycles of the blob twin,
+each closed at both drivers' shutdown, every cycle's four steps served on the device, the process footprint once the
+device's deferred frees land (`metal_footprint_settled`) at the second and third close within 512 MB of the first and the
+live-object count zero after -
+a buffer the binding leaves alive adds the 5.3 GB blob a cycle;
 fam-gemma4/fam-qwen3moe/fam-gemma4moe/fam-gptoss/fam-qwen35moe/fam-qwen2moe are
 DASLLAMA_PARITY_FULL-gated - 7.4/18.5/26.9/12.1/22/15GB; fam-gemma4moe and fam-gptoss are ENGAGE
 + shallow logits TOLERANCE cells only - token parity is not a valid instrument for the 26B, whose double-router
@@ -380,7 +385,10 @@ bakes, a 384-wide one and a 32-row one do not - and expert exclusion - an `*_exp
 slice bakes nothing, a shared-expert site and a mis-spelt suffix still bake - are pure taxonomy
 over a job list, plus the split-scale transform's idempotence over one carrier) `smol untied metal metal-untied gemma tower whisper voxtral
 parakeet qwen3a canary canary-dec gemma4a gemma4uv gemma4uv-metal gemma4v gemma3v gemma4e
-mtower kitten`; `kitten` is the TTS area's arm - the StyleTTS2 carrier (kitten-nano) through
+mtower kitten mx4-stream`; `mx4-stream` (families `gemma4moe` / `gptoss`, large tier: gemma-4-26B-A4B's MXFP4_MOE mint and
+gpt-oss-20b mxfp4) is the native-MXFP4 cold mint's streamed fill - a child (`_mx4_mint_root.das`) mints the planar image under
+`/usr/bin/time -l` and its peak memory footprint sits under the mxq + mxs bytes the image holds (macOS; elsewhere the leg skips
+loudly), then the mapped planes are the eager load's byte for byte; `kitten` is the TTS area's arm - the StyleTTS2 carrier (kitten-nano) through
 `load_styletts2` on both lanes, and the image loaded by its own path with the family data
 riding its meta; `gemma4e` is the E2B metal-blob
 mint+map arm - the PLE go-live tripwire (`ple_check_table`, which panics when the per-layer
@@ -1426,7 +1434,9 @@ from a Config or a synthetic Model shell (`resident_unserved_features`,
 shape is named in the text a user reads, a served one yields "" (the per-op attention chain naming every gemma generation's
 attention); `test_resident_ring_mirror` holds the rings' plan arithmetic on a gemma-4-26B shell at 32768 x 4 - the ring rows,
 the ring bytes, the ringed mirror past seven times under the flat one, and the pod's flat house plan less the flat mirror plus
-the ringed one under that card's room, and `test_kv_ring_floor_check` the session's ring floor (`kv_ring_floor_check`: a call at or
+the ringed one under that card's room, `test_trim_lane_ring_pin` the ring pin outside a trimmed vulkan lane's identity (the identity
+the same under either pin, the plan's mirror not, and a trimmed shell's `.dlim` mapped by name under the route off declining by
+name with the ring pin among the knobs the identity leaves out - a planar shell mapping with no decline the control), and `test_kv_ring_floor_check` the session's ring floor (`kv_ring_floor_check`: a call at or
 past it continues, one under it panics, a start at 0 clears it and the same call then continues); the MoE names among them (the
 router shapes the routed block's kernels do not serve, the expert and slot counts past their
 reach; gpt-oss's router bias, biased stacks, clamped swiglu and softmax-weight gate are served,
@@ -2873,8 +2883,8 @@ as the control on both bars), and the n-gram side input's gather, window and row
 `test_ple_check.das` - model-free: the gemma4 router input's row identity (`gemma4_router` over
 npos rows against the npos = 1 decode call, bit for bit, on a synthetic scale row) and the PLE go-live tripwire (`ple_check_table`) on synthetic
 Model shells - short plane trips per format arm (the per-32 q51 / q5032 arms one byte short included), full plane passes, non-PLE exempt; and the per-layer planes' tags off the file's types (`test_ple_plane_formats`,
-`detect_ple_formats` over a synthetic meta: an all-F32 kind marked f32, a Q6_K kind tagged k6, a kind mixing F32 with Q8_0
-panicking by name, gate and projection alike).
+`detect_ple_formats` over a synthetic meta: an all-F32 kind marked f32, a Q6_K kind tagged k6, a kind mixing F32 with another
+type panicking on the first layer that differs from layer 0, naming that tensor and both types, gate and projection alike).
 `test_ple_modes.das` - stocked suite; model-gated (E2B Q8_0 + Q4_K_M, small tier): the PLE
 token table's pinned-plane rail across serving modes - fp32 keeps the Q8_0 table on a
 dedicated q8 plane (offset 0, plane == table exactly, gather rows BIT-match the file dequant,
