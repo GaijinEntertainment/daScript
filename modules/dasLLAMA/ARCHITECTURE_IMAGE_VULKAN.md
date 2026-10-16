@@ -49,10 +49,14 @@ anything but the whole-model driver after the plan accepted declines the mint. A
 the CPU embed alone: a call the driver passes to the CPU rails panics by name, the NextN draft's CPU fallback included.
 A model the plan would not take whole keeps its planar families under the trim, and the load says so; the lane's
 identity folds the lever on every tier, the dry tier's included, so a flip re-bakes it. The identity does not fold the
-context pin, the mirror codec or the resident route (`DASLLAMA_GPU_CTX_MAX`, `DASLLAMA_GPU_KV` / `set_gpu_kv_dtype`, `DASLLAMA_VK_KV32`, `DASLLAMA_GPU_RESIDENT`),
+context pin, the mirror codec, the resident route or the host-layers ask (`DASLLAMA_GPU_CTX_MAX`, `DASLLAMA_GPU_KV` /
+`set_gpu_kv_dtype`, `DASLLAMA_VK_KV32`, `DASLLAMA_GPU_RESIDENT`, `DASLLAMA_GPU_HOST_LAYERS` / `set_gpu_host_layers`),
 so a trimmed lane the driver would decline under this run's knobs is caught before its upload: the map asks the plan
 again, deletes the lane and mints under the run's knobs - or, where the caller named the `.dlim` itself and no gguf
-stands behind it, panics by name with the decline (`load_model_image`). A streamed MoE's expert planes stay planar
+stands behind it, panics by name with the decline (`load_model_image`). A MoE lane never trims, so its planar expert
+planes are always written; a lane baked under one host-layers count and mapped under another leaves the baked plan at
+the first routed layer the counts disagree on, and the walk regathers its expert entries live off those planes from
+there, the load warning (`vk_bake_slice_off`). A streamed MoE's expert planes stay planar
 (`VkBakeRole.expert_stream`: decode runs them on the CPU); the eager rail (a gguf that would not open for streaming, a
 chunk that would not allocate) and a planar image already mapped bake the lane from RAM or the mapping with the families
 kept, the eager rail writing the CPU lane beside it and serving that.

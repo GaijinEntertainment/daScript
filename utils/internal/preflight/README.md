@@ -12,8 +12,10 @@ The budget the tiers serve: a full run fits 20 minutes on the M5 box.
 # program root under utils/, examples/, tutorials/ and the modules' examples and utils, in parallel)
 daslang utils/internal/preflight/main.das
 
-# --full adds the lanes, every one at once so the wall is the longest: docs (the seven doc.yml
-# gates), tests-cpp, tests-interp, tests-jit, tests-aot (builds test_aot first), utils-tests
+# --full adds the lanes: the run-only ones at once (tests-cpp, tests-interp, tests-jit) beside the
+# lanes that build in the shared build dir, one after another (docs - the seven doc.yml gates -,
+# tests-aot, which builds test_aot first, and utils-tests): two cmake --build in one build dir
+# collide on MSBuild's tlog and object files, so the wall is the longer of the two sides
 daslang utils/internal/preflight/main.das -- --full
 daslang utils/internal/preflight/main.das -- --full --serial     # the lanes one after another, for diagnosis
 

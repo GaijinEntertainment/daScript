@@ -1683,7 +1683,7 @@ class template GkResidualRow : GkQ8BlockStore {
             while (j < dim) {
                 let a = apart(base, j)
                 stash(j, a)
-                sa += a * a
+                sa = mad(a, a, sa)
                 next_col(j)
             }
             wg_rms_inv_into(sa, dim, pa.eps, 0u, ainv)
@@ -1746,7 +1746,7 @@ class template GkResidualRow : GkQ8BlockStore {
     def keep(base, k : uint; v : float; var ss : float&) {
         xout(base + k, v)
         stash(k, v)
-        ss += v * v
+        ss = mad(v, v, ss)
     }
 
     //! the row's norm inverse off its sum of squares (slot 1: the add partner's norm took slot 0) - one under `no_norm` on a

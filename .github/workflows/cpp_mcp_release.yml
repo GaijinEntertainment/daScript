@@ -16,6 +16,15 @@ name: cpp-mcp release
 # modules, so every external module (dasHV/OpenSSL, GLFW, Audio, ...) is disabled
 # — no vcpkg/openssl/apt module deps, and a ~360-step build instead of 2000+.
 on:
+  push:
+    branches: [master]
+    paths:
+      - 'utils/mcp/**'
+      - 'utils/common/**'
+      - 'ci/make_cpp_mcp_bundle.sh'
+      - 'ci/smoke_test_cpp_mcp.sh'
+      - '.github/workflows/cpp_mcp_release.yml'
+      - 'CMakeLists.txt'
   pull_request:
     paths:
       - 'utils/mcp/**'
@@ -37,6 +46,10 @@ jobs:
     if: github.event_name != 'release' || !startsWith(github.event.release.tag_name, 'dasllama-')
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
+    # contents: write for the release upload; actions: write for `gh cache delete` in the sccache refresh step.
+    permissions:
+      contents: write
+      actions: write
     strategy:
       fail-fast: false
       # Vary the matrix by event: a PR builds only linux (a cheap, cross-platform-
@@ -44,7 +57,7 @@ jobs:
       # because the `matrix` context is NOT available in a job-level `if` (only
       # github/needs/vars/inputs are), whereas `github` IS available in strategy.
       matrix:
-        include: ${{ fromJSON( github.event_name == 'pull_request' && '[{"name":"linux-x86_64","runner":"ubuntu-latest","asset":"cpp-mcp-linux-x86_64","ext":"tar.gz"}]' || '[{"name":"linux-x86_64","runner":"ubuntu-latest","asset":"cpp-mcp-linux-x86_64","ext":"tar.gz"},{"name":"linux-arm64","runner":"ubuntu-24.04-arm","asset":"cpp-mcp-linux-arm64","ext":"tar.gz"},{"name":"darwin-arm64","runner":"macos-14","asset":"cpp-mcp-darwin-arm64","ext":"tar.gz"},{"name":"windows-x64","runner":"windows-latest","asset":"cpp-mcp-windows-x64","ext":"zip"}]' ) }}
+        include: ${{ fromJSON( (github.event_name == 'pull_request' || github.event_name == 'push') && '[{"name":"linux-x86_64","runner":"ubuntu-latest","asset":"cpp-mcp-linux-x86_64","ext":"tar.gz"}]' || '[{"name":"linux-x86_64","runner":"ubuntu-latest","asset":"cpp-mcp-linux-x86_64","ext":"tar.gz"},{"name":"linux-arm64","runner":"ubuntu-24.04-arm","asset":"cpp-mcp-linux-arm64","ext":"tar.gz"},{"name":"darwin-arm64","runner":"macos-14","asset":"cpp-mcp-darwin-arm64","ext":"tar.gz"},{"name":"windows-x64","runner":"windows-latest","asset":"cpp-mcp-windows-x64","ext":"zip"}]' ) }}
 
     steps:
       - name: SCM Checkout
@@ -58,6 +71,15 @@ jobs:
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: x64
+
+      # One sccache slot per cell, seeded by the master push. A release builds clean; the Windows
+      # cell runs on dispatch and release only, so no master push would seed its slot.
+      - uses: ./.github/actions/sccache-slot
+        if: github.event_name != 'release' && runner.os != 'Windows'
+        with:
+          mode: restore
+          key: sccache-cpp-mcp-${{ matrix.name }}-Release
+          sccache-size: 500M
 
       - name: Configure + build cpp-mcp
         run: |
@@ -81,6 +103,12 @@ jobs:
 
       - name: Assemble and smoke-test bundle
         run: cmake --build build --target check_cpp_mcp_bundle --parallel
+
+      - uses: ./.github/actions/sccache-slot
+        if: github.event_name != 'release' && runner.os != 'Windows'
+        with:
+          mode: save
+          key: sccache-cpp-mcp-${{ matrix.name }}-Release
 
       - name: Package (zip)
         if: runner.os == 'Windows'

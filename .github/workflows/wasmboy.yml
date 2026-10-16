@@ -10,6 +10,15 @@
 name: wasmboy
 
 on:
+  push:
+    branches: [master]
+    paths:
+      - 'CMakeLists.txt'
+      - 'web/**'
+      - 'examples/fatman/**'
+      - '.github/workflows/wasmboy.yml'
+      - 'include/**'
+      - 'src/**'
   pull_request:
     paths:
       - 'CMakeLists.txt'
@@ -28,6 +37,10 @@ jobs:
   wasmboy:
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    # actions: write needed for `gh cache delete` in the sccache refresh step.
+    permissions:
+      contents: read
+      actions: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -50,6 +63,15 @@ jobs:
           git clone --depth 1 --recurse-submodules https://github.com/borisbat/dasImguiImplot.git    modules/dasImguiImplot
           git clone --depth 1 --recurse-submodules https://github.com/borisbat/dasImguiNodeEditor.git modules/dasImguiNodeEditor
 
+      # Its own sccache slot, seeded by the master push. EM_COMPILER_WRAPPER puts sccache in front of
+      # the clang each emcc call runs.
+      - run: sudo bash ci/apt_install.sh --no-install-recommends ccache
+      - uses: ./.github/actions/sccache-slot
+        with:
+          mode: restore
+          key: sccache-wasmboy-Release
+          ccache-size: 2000M
+
       - name: "Configure + build the threaded playground interpreter (daslang_static; the same config pages.yml deploys)"
         run: |
           set -eux
@@ -62,3 +84,8 @@ jobs:
           # emsdk-bundled Node: deterministic version that supports the modern wasm
           # EH proposal flag (try_table/exnref — gated in Node 22, default-on 24+).
           "$EMSDK_NODE" --experimental-wasm-exnref web/test/wasmboy_node.js . web/output
+
+      - uses: ./.github/actions/sccache-slot
+        with:
+          mode: save
+          key: sccache-wasmboy-Release

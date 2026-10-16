@@ -173,6 +173,10 @@ jobs:
     if: needs.pre_job.outputs.should_skip != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    # actions: write needed for `gh cache delete` in the sccache refresh step.
+    permissions:
+      contents: read
+      actions: write
     steps:
     - name: "SCM Checkout"
       uses: actions/checkout@v4
@@ -181,6 +185,14 @@ jobs:
     # on the ubuntu runners — the matrix linux64 job relies on it the same way).
     - name: "Get CMake + Ninja"
       uses: lukka/get-cmake@latest
+
+    # Its own sccache slot: gcc objects never hit a clang cell's cache. sccache stores only a
+    # compile that succeeded, so a -Werror failure is never served from it.
+    - uses: ./.github/actions/sccache-slot
+      with:
+        mode: restore
+        key: sccache-linux-gcc-Release
+        sccache-size: 2000M
 
     - name: "Build: Daslang (gcc -Werror)"
       run: |
@@ -192,3 +204,8 @@ jobs:
           -DDAS_SQLITE_DISABLED=OFF \
           -DDAS_LLVM_DISABLED=ON
         cmake --build ./build-gcc --parallel
+
+    - uses: ./.github/actions/sccache-slot
+      with:
+        mode: save
+        key: sccache-linux-gcc-Release

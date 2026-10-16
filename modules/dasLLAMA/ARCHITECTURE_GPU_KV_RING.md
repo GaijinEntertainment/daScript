@@ -32,8 +32,9 @@ shortens its context, and `resident_binding_ctx` bounds the context by the wides
 (25 of 30 layers sliding at window 1024, two kv heads of 512 on the global layers) the strict 32768 x 4-stream f16 plan's mirror
 falls from the whole context on every layer to the five global layers' and 1536 rows of each sliding one.
 
-**On Metal a stream's mirror slice lays its flat layers first and its rings after them** (`MirrorLayout`: a flat layer's
-base is the slice's row capacity times the flat rows ahead of it, a ring's base the flat block plus the rings ahead of it),
+**On Metal a stream's mirror slice lays its layers in layer order, a flat layer taking the slice's row capacity of rows and
+a ringed one its ring's rows** (`MirrorLayout`: a layer's base is the capacity times the flat rows ahead of it plus the ring
+rows ahead of it),
 and `mirror_lbase` / `mirror_row_at` / `mirror_ring` are the accessors every store, attention form, writeback and the gemma
 drafter's borrow read; the attention stamps take a ring's base past the per-layer stride as `layr` and map a position through
 `kv_ring_row`. Metal's slack starts at 512 rows and doubles when a prefill window asks for more (`mirror_ring_ask`): the
