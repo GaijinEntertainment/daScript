@@ -310,7 +310,7 @@ struct public MetalEnv {
     @clarg_doc = "Concurrent encoder for the single-stream decode step, with barriers only at detected hazards."
     decode_concurrent : bool = true
 
-    @clarg_doc = "The R1 epilogue-fusion kernel (post_attn_rms + add_rms); 0 restores separate dispatches for A/B."
+    @clarg_doc = "Every decode sandwich seam as one residual step (the branch's post norm, the add, the next norm); 0 restores the split chain for A/B."
     fuse : bool = true
 
     @clarg_default_doc = "-1 (adaptive)"

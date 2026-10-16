@@ -112,7 +112,7 @@ Apple GPU backend. Absent on non-Apple builds, where setting them does nothing.
 | `DASLLAMA_METAL_PF_CAPTURE` | flag | on | Record each prefill chunk as a step graph and replay on a concurrent encoder; 0 is serial-encode rollback. |
 | `DASLLAMA_METAL_SCHED` | number | 1 | Graph scheduling mode for replay; 0 keeps capture order. |
 | `DASLLAMA_METAL_DECODE_CONCURRENT` | flag | on | Concurrent encoder for the single-stream decode step, with barriers only at detected hazards. |
-| `DASLLAMA_METAL_FUSE` | flag | on | The R1 epilogue-fusion kernel (post_attn_rms + add_rms); 0 restores separate dispatches for A/B. |
+| `DASLLAMA_METAL_FUSE` | flag | on | Every decode sandwich seam as one residual step (the branch's post norm, the add, the next norm); 0 restores the split chain for A/B. |
 | `DASLLAMA_METAL_SPEC` | number | -1 (adaptive) | The single-row Metal decode's greedy chain (the next step pre-encoded on the GPU's own argmax): 0 off, 1 forced, -1 adaptive (backs off after a miss). A session sampled at temp > 0 never chains, whatever the mode. |
 | `DASLLAMA_METAL_GEMV_TG` | number | 4 | Rows per MoE router/expert GEMV threadgroup, clamped 1..32 (the dense GEMV geometry is fixed). |
 | `DASLLAMA_METAL_WAIT_SPIN` | flag | on | The single-row decode's step wait spins on the command buffer's GPU end time before the blocking wait: the calling thread owns the step and a blocking wake returns late on a box whose cores the jobque lanes fill (M4 Pro: 0.35 ms per token, a step every third step); 0 blocks in waitUntilCompleted alone - the A/B rail. |

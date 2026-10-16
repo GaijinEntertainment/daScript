@@ -2868,9 +2868,8 @@ def public set_metal_decode_concurrent(v : int) {
     g_dconc = v < 0 ? -1 : (v != 0 ? 1 : 0)
 }
 
-// DASLLAMA_METAL_FUSE (default ON): the R1 epilogue-fusion kernel MetalPreAddRms (post_attn_rms +
-// add_rms, the pre_post_norm path) — off restores the separate per-op dispatches for A/B. (The moe_with_dense
-// post_ffn1_rms+add fusion was measured and REFUTED, −1.0% on the 26B — see the ledger.)
+// DASLLAMA_METAL_FUSE (default ON): every sandwich seam as one residual step (`MetalPreAddRms` / `MetalPreAdd`) - off
+// restores the split chain (the branch's post norm, the add, the next norm) for A/B
 var private g_dfuse = -1
 
 def private decode_fuse_pre : bool => g_dfuse < 0 ? g_env_metal.fuse : g_dfuse != 0

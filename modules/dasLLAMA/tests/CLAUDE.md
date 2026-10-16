@@ -197,9 +197,9 @@ sched arms load the 26B target through `load_model_cached`, so the file mints a 
 under the same ledgered exception as the parity file's: the Metal MTP rail is what the image
 flavor serves.
 
-Prefill parity: `lastrow-g` (its own test, `test_metal_prefill_lastrow_sandwich`, families `gemma3` / `gemma4`: gemma-3-1b and,
-large tier, gemma-4-12B Q8_0 - the last layer's FFN tail narrowed to the final row on the gemma sandwich, each branch under its
-post norm, against the full panel's tail over 48 counting ids: the logits within the cell's bar, the same argmax, the narrowed
+Prefill parity: `lastrow-g` (its own test, `test_metal_prefill_lastrow_sandwich`, families `gemma3` / `gemma4` / `gemma4e`:
+gemma-3-1b, gemma-4-E2B Q8_0 and, large tier, gemma-4-12B Q8_0 - the last layer's FFN tail narrowed to the final row on the gemma
+sandwich, each branch under its post norm, the E-series' per-layer embedding branch over the final row too, against the full panel's tail over 48 counting ids: the logits within the cell's bar, the same argmax, the narrowed
 residual's row 0 off the full one's and `keep_hidden` restoring the full plane bit for bit - `lastrow_ab`, the mm-tail arm's
 SmolLM2 legs' form), `base mm-tail s16
 kq cont attn-dev mirror mirror-codec mirror-cap segs span span-fused span-mrope span-ds dim qkv moe-gemv moe-base kq-tail kq-scratch` (moe-base = the routed
@@ -512,8 +512,11 @@ the dyadic lattice, the GEMV within a double dot's envelope, and the routed GEMV
 E8M0 path) over several streams in one dispatch bit for bit against one stream a dispatch; the E-series pre-step's cells
 (`ple_proj_bf16_gate`: the bf16 word form of the router GEMV on both stamps - eight columns a simdgroup, and the decode
 column's threadgroup a row at 1536 wide - past a lead of NaN pairs, exact against the dot in double, the poisoned lead
-element the control; `geglu_side_gate`, `ple_finish_gate`); the side rows' gather rides the token-table family, the misc
-file's embed gates. The gemm file's `router_f32_gate` holds the prefill router's tile (`MetalF32ExactMm`) at the 35B-A3B shape and at
+element the control; `geglu_side_gate`, `ple_finish_gate` - the residual step's PSCALE stamp, the finish without the prescale
+its control); the side rows' gather rides the token-table family, the misc file's embed gates. The prefill file's `qk_rope_gate`
+carries the window's V arms (V off the pre-norm k rows, the v-norm in place, the V panel bit for bit untouched with neither), and
+the misc file's `add_rms_gate` every residual stamp (`GkAddRmsRows`: the plain step, the sandwich seam, the seam with no norm
+stored, the f16 twins) through its one-row, rows and window builders, the sandwich rows held off the plain step's as the control. The gemm file's `router_f32_gate` holds the prefill router's tile (`MetalF32ExactMm`) at the 35B-A3B shape and at
 64 experts against the dot in double on operands off the f16 lattice, the half-staged stamp over the same rows missing
 the bar as its control. Four
 cells need no
@@ -3252,7 +3255,10 @@ kitten arm), `kokoro`, `pocket` (the coverage census TTS rows),
 `gemma4e` (support-matrix rows under `fam-gemma4e` - E4B PARITY_FULL-gated; E2B Q8_0, Q4_K_M,
 Q4_0 and the format carriers of `../performance/model_specs.das` (the token and PLE tables Q6_K and
 IQ4_XS, the per-layer gate and projection planes Q6_K and Q5_0) small-tier always-on, carrying the
-per-layer-FFN-width and blob-kq-PLE-gather coverage and the pre-step's device counters at every
+per-layer-FFN-width and blob-kq-PLE-gather coverage, the residual step's seam census (every encoded layer stack's seams one
+dispatch each - the sandwich seams with a next norm on `metal_pre_add_rms`, the per-layer embedding's residual and the last
+layer's seam on `metal_pre_add`, no plain seam), the window's v-norm on the fused q/k pass with no norm pass of its own, and the
+pre-step's device counters at every
 decode shape.
 Both E2B rows assert parity through their forced-feed cells, not token equality, because
 freeform continuations from a 2B sit on near-ties. Every row ends on the depth cell (`depth_cell`):
