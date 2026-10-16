@@ -972,6 +972,7 @@ struct private RingDraftRun {
     ok : bool
     ring : int64
     anchor : int64
+    pick : int64   //! the one-row chain's argmax at the anchor, the drafter's seed
     trunk : array<float>
     drafts : array<int64>
     dlogits : array<float>
@@ -1058,7 +1059,8 @@ def private ring_draft_run(t : T?; ring : int; budget : int64) : RingDraftRun {
             run.anchor = s.n_past
             run.trunk := s.logits
             t |> equal(s.mtp_h_pos1, s.n_past, "ring pin {ring}: the step carried the post-norm hidden for the drafter")
-            gdraft_chain(t, trg, s, argmax_of(s.logits, trg.config.vocab_size), run.anchor, RING_DRAFT_K, s.mtp_h, run.drafts, run.dlogits)
+            run.pick = argmax_of(s.logits, trg.config.vocab_size)
+            gdraft_chain(t, trg, s, run.pick, run.anchor, RING_DRAFT_K, s.mtp_h, run.drafts, run.dlogits)
             delete s
             set_mtp_depth(RING_DRAFT_K)
             var prompts : array<array<int64>>
@@ -1091,7 +1093,7 @@ def test_gemma_drafter_past_ring(t : T?) {
         t |> equal(ringed.anchor, flat.anchor, "both pins draft at one anchor")
         static_if (typeinfo builtin_module_exists(das_metal)) {
             //! Metal's AV pass splits a ringed layer's key run at the wrap, so the sums part in order: the picks hold, the bits do not
-            t |> equal(argmax_of(ringed.trunk), argmax_of(flat.trunk), "the one-row chain's pick at the anchor: the ringed mirror's is the flat one's")
+            t |> equal(ringed.pick, flat.pick, "the one-row chain's pick at the anchor: the ringed mirror's is the flat one's")
         } else {
             check_exact(t, "the one-row chain's logits at the anchor: the ringed mirror against the flat one, bit for bit", ringed.trunk, flat.trunk)
             check_exact(t, "the drafter's first step's logits at the anchor: the ringed mirror against the flat one, bit for bit", ringed.dlogits, flat.dlogits)
