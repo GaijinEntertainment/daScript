@@ -2857,8 +2857,14 @@ var private g_dfuse = -1
 
 def private decode_fuse_pre : bool => g_dfuse < 0 ? g_env_metal.fuse : g_dfuse != 0
 
-//! the fuse knob's off announce: the split chain reaches the one-row step and every batched row step
-def private decode_fuse_off_say {
+var private g_dfuse_said = -1   //! the fuse state the announce last saw: -1 none, 0 off, 1 on (on prints nothing)
+
+//! the fuse knob's off announce, once per state: the split chain reaches the one-row step and every batched row step
+def private decode_fuse_say {
+    let on = decode_fuse_pre()
+    let said = g_dfuse_said
+    g_dfuse_said = on ? 1 : 0
+    return if (on || said == 0)
     to_log(LOG_WARNING, "dasLLAMA metal decode: every decode sandwich seam runs the split chain (the branch's post norm, the add, the next norm) on the one-row step and every batched row step, as asked (set_metal_decode_fuse, DASLLAMA_METAL_FUSE=0)\n")
 }
 
@@ -2866,9 +2872,7 @@ def private decode_fuse_off_say {
 //! per-op dispatches, negative restores the env default (`DASLLAMA_METAL_FUSE`).
 def public set_metal_decode_fuse(v : int) {
     g_dfuse = v < 0 ? -1 : (v != 0 ? 1 : 0)
-    if (!decode_fuse_pre()) {
-        decode_fuse_off_say()
-    }
+    decode_fuse_say()
 }
 
 // encode the whole step (prologue rms, n_layers fused blocks, optional GPU classifier) into a
@@ -4792,9 +4796,7 @@ def dasllama_metal_decode_register() {
     g_env_logits = g_env_metal.logits
     g_env_batch_mm = g_env_metal.batch_mm
     g_env_attn_d = g_env_metal.attn_d
-    if (!g_env_metal.fuse) {
-        decode_fuse_off_say()
-    }
+    decode_fuse_say()
     if (!g_env_attn_d) {
         to_log(LOG_WARNING, "dasLLAMA metal decode: DASLLAMA_METAL_ATTN_D=0 - the single row, the verify's rows and the batch step take the chunked attention pair past the single-dispatch ceiling (the fused form's control)\n")
     }

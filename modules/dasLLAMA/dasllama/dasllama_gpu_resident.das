@@ -2001,6 +2001,17 @@ def private resident_place_table(t : Model; tbl : ResidentPlane; mr, kg, wb : in
     return b0
 }
 
+//! the device gather's announce: the token rows of every token command gather off `src`
+def resident_emb_gather_say(src : string) {
+    to_log(LOG_INFO, "dasLLAMA: resident driver - the token rows gather on the device off {src} for the prefill window, the one-row step, the N-row command and the NextN draft and verify (set_gpu_resident_embed, DASLLAMA_VK_GPU_EMBED=0 keeps the host embed)\n")
+}
+
+//! the host embed's announce where the pin or the knob turned the gather off on a model whose ids seat (`seat`) would take it
+def resident_emb_pin_say(c : Config; seat : bool) {
+    return if (resident_gpu_embed() || !seat || c.hyper_conn)
+    to_log(LOG_WARNING, "dasLLAMA: resident driver - the host embeds every token row as asked (set_gpu_resident_embed, DASLLAMA_VK_GPU_EMBED=0)\n")
+}
+
 //! the token-table gather armed off the plane that holds the table - a tied table's classifier plane `bcls`, an untied one's own
 //! `bemb` - for the ids prefill and the one-row command; false, the reason logged, where the host embeds
 [arch(at="../ARCHITECTURE_GPU_VULKAN_RESIDENCY.md#vk-token-gather")]
@@ -2019,7 +2030,7 @@ def private resident_arm_emb(t : Model; plan : ResidentPlan; ple_tbl_placed : bo
             why = "the f32 table's upload declined (the device range, the weight budget or the gather class)"
         }
         if (empty(why)) {
-            to_log(LOG_INFO, "dasLLAMA: resident driver - the token rows gather on the device off the table's exact f32 rows for the prefill window, the one-row step, the N-row command and the NextN draft and verify (set_gpu_resident_embed, DASLLAMA_VK_GPU_EMBED=0 keeps the host embed)\n")
+            resident_emb_gather_say("the table's exact f32 rows")
             return true
         }
     } elif (!tied && !emb.on) {
@@ -2036,7 +2047,7 @@ def private resident_arm_emb(t : Model; plan : ResidentPlan; ple_tbl_placed : bo
         to_log(LOG_INFO, "dasLLAMA: resident driver - the host embeds every token row: {why}\n")
         return false
     }
-    to_log(LOG_INFO, "dasLLAMA: resident driver - the token rows gather on the device off the {tied ? "tied classifier" : "table's own"} {f} plane for the prefill window, the one-row step, the N-row command and the NextN draft and verify (set_gpu_resident_embed, DASLLAMA_VK_GPU_EMBED=0 keeps the host embed)\n")
+    resident_emb_gather_say("the {tied ? "tied classifier" : "table's own"} {f} plane")
     return true
 }
 
@@ -2600,9 +2611,7 @@ def resident_upload(t : Model; seq_cap : int64; rkdt : KVDtype; plan : ResidentP
     //! a per-layer-embedding model keeps the CPU embed unless its token table sits on the device too: the pre-step wants both gathers in one
     //! place; a hyper-connection model keeps it too - its window chain reads the pre-step's rows, never token ids
     g_rdec_emb_gpu = resident_emb_gather_want(c) && resident_arm_emb(t, plan, ple_tbl_placed, bcls, bemb)
-    if (!resident_gpu_embed() && rdec_prefill_ids_installed() && !c.hyper_conn) {
-        to_log(LOG_WARNING, "dasLLAMA: resident driver - the host embeds every token row as asked (set_gpu_resident_embed, DASLLAMA_VK_GPU_EMBED=0)\n")
-    }
+    resident_emb_pin_say(c, rdec_prefill_ids_installed())
     var norms : array<float>
     let norms_len = rdec_norms_len(c.n_layers, dim, c.qk_norm ? hs : 0l, head)
     norms |> reserve_resize(norms_len)
