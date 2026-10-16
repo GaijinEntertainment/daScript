@@ -183,20 +183,20 @@ def private qkn_rows : array<Reading> {
             enc_rpst32_c(enc, bqkv, bqkv, bqkv, uint64((qd + kvd) * 4), bkm, 0ul, bvm, 0ul, bw, bcs, 0ul, bcs, rka1, int64((qd + kvd) / 2))
         },
         time_rows("qkn fused f32 hs={hs} q {nh} k {nkv} 1 row") $(enc) {
-            enc_qkn_rope32(enc, bqkv, bqkv, bkm, 0ul, bvm, 0ul, bcs, 0ul, bw, bcs, 0ul, bw, qkn, int64(nh + nkv), int64(hs / 2))
+            enc_qkn_rope32(enc, bqkv, bqkv, bkm, 0ul, bvm, 0ul, bcs, 0ul, bw, bcs, 0ul, bw, bqkv, qkn, int64(nh + nkv), int64(hs / 2))
         },
         time_rows("qkn fused f16 hs={hs} q {nh} k {nkv} 1 row") $(enc) {
-            enc_qkn_rope16(enc, bqkv, bqkv, bkm, 0ul, bvm, 0ul, bcs, 0ul, bw, bcs, 0ul, bw, qkn, int64(nh + nkv), int64(hs / 2))
+            enc_qkn_rope16(enc, bqkv, bqkv, bkm, 0ul, bvm, 0ul, bcs, 0ul, bw, bcs, 0ul, bw, bqkv, qkn, int64(nh + nkv), int64(hs / 2))
         },
         time_rows("qkn split f16 hs={hs} q {nh} k {nkv} 4 rows (qk_norm + rope_store_b)") $(enc) {
             enc_qk_norm(enc, bqkv, bqkv, bw, nka, int64(nh + nkv), 4l)
             enc_rpstb16_c(enc, bqkv, bqkv, bqkv, 0ul, bkm, 0ul, bvm, 0ul, bw, bcs, 0ul, bcs, brt, 0ul, rka, int64((qd + kvd) / 2), 4l)
         },
         time_rows("qkn fused f16 hs={hs} q {nh} k {nkv} 4 rows") $(enc) {
-            enc_qkn_rope_b16(enc, bqkv, bqkv, bkm, 0ul, bvm, 0ul, bcs, 0ul, bw, bcs, 0ul, bw, brt, 0ul, qkn, int64(nh + 2 * nkv), 4l, int64(hs / 2))
+            enc_qkn_rope_b16(enc, bqkv, bqkv, bkm, 0ul, bvm, 0ul, bcs, 0ul, bw, bcs, 0ul, bw, brt, 0ul, bqkv, qkn, int64(nh + 2 * nkv), 4l, int64(hs / 2))
         },
         time_rows("pf qkn hx hs={hs} q {nh} k {nkv} {npf} rows (one fused pass)") $(enc) {
-            enc_pf_qkn_hx_pso(enc, pso_pf, bpq, bpk, bpk, 0ul, bpk, 0ul, bpcs, 0ul, bw, bpcs, bpcs, bph, pfa, int64(nh + nkv), int64(npf), int64(hs / 2))
+            enc_pf_qkn_hx_pso(enc, pso_pf, bpq, bpk, bpk, 0ul, bpk, 0ul, bpcs, 0ul, bw, bpcs, bpcs, bph, bpk, pfa, int64(nh + nkv), int64(npf), int64(hs / 2))
         }
     ]
     for (buf in fixed_array(bw, bqkv, bkm, bvm, bcs, brt, bpq, bpk, bph, bpcs)) {
@@ -390,7 +390,8 @@ def private g4_tail_rows : array<Reading> {
             enc_rms(enc, bd, 0ul, bw, bd, udim, ueps)
             enc_add(enc, bd, 0ul, brt, 0ul, udim, int64(dim))
             enc_rms(enc, bd, 0ul, bw, bd, udim, ueps)
-            enc_addrms_c(enc, bx, bd, bw, bd, udim, ueps, g_one)
+            var kr = GkAddRmsArgs(dim = uint(dim), add_on = 1u, eps = 1e-6, ascale = 1.0)
+            enc_addrms_c(enc, bx, bd, bw, bd, kr)
         },
         time_rows("g4 MoE step dim={dim} k={k} 1 row") $(enc) {
             enc_moe_comb_g4(enc, bx, bsel, bdn, bd, bw, bd, ka, 1l)
@@ -438,6 +439,113 @@ def private cls_epi_rows : array<Reading> {
     return <- rows
 }
 
+//! the residual step's rows at width `dim`: the plain add + norm, the sandwich seam as the pair and as one dispatch, the seam with no
+//! norm stored, each at a decode row, a verify's four rows and a window of `np`
+def private ar_dim_rows(dim, np : int; var rows : array<Reading>) {
+    var bx = fill_buf(np * dim, 0.5)
+    var ba = fill_buf(np * dim, 0.25)
+    var by = fill_buf(np * dim, 0.0)
+    var bh = metal_new_buffer(g_dev, uint64(np * dim * 2))
+    var bw = fill_buf(2 * dim, 0.01)
+    var udim = uniform_u32(uint(dim))
+    var ueps = uniform_f32(1e-6)
+    var utot = uniform_u32(uint(dim))
+    var utot4 = uniform_u32(uint(4 * dim))
+    var utotn = uniform_u32(uint(np * dim))
+    let kp = GkAddRmsArgs(dim = uint(dim), add_on = 1u, eps = 1e-6, ascale = 1.0)
+    let ks = GkAddRmsArgs(dim = uint(dim), add_on = 1u, woff = uint(dim), eps = 1e-6, ascale = 0.75, pre_on = 1u, pwoff = 0u)
+    rows |> push(time_rows("ar dim={dim} 1 row: add + norm") $(enc) {
+        var k = kp
+        enc_addrms_c(enc, bx, ba, bw, by, k)
+    })
+    rows |> push(time_rows("ar dim={dim} 1 row: sandwich seam, rms + add_rms") $(enc) {
+        var k = kp
+        enc_rms(enc, ba, 0ul, bw, ba, udim, ueps)
+        enc_addrms_c(enc, bx, ba, bw, by, k)
+    })
+    rows |> push(time_rows("ar dim={dim} 1 row: sandwich seam, pre_add_rms") $(enc) {
+        var k = ks
+        enc_preaddrms_c(enc, bx, ba, bw, by, k)
+    })
+    rows |> push(time_rows("ar dim={dim} 1 row: sandwich seam no norm out, rms + add") $(enc) {
+        enc_rms(enc, ba, 0ul, bw, ba, udim, ueps)
+        enc_add(enc, bx, 0ul, ba, 0ul, utot, int64(dim))
+    })
+    rows |> push(time_rows("ar dim={dim} 1 row: sandwich seam no norm out, pre_add") $(enc) {
+        var k = ks
+        enc_preadd_c(enc, bx, ba, bw, k)
+    })
+    rows |> push(time_rows("ar dim={dim} 4 rows: add + norm") $(enc) {
+        var k = kp
+        enc_add_rms_b_c(enc, bx, ba, bw, by, k, 4l)
+    })
+    rows |> push(time_rows("ar dim={dim} 4 rows: sandwich seam, rms + add_rms") $(enc) {
+        var k = kp
+        enc_rms_b(enc, ba, 0ul, bw, ba, udim, ueps, 4l)
+        enc_add_rms_b_c(enc, bx, ba, bw, by, k, 4l)
+    })
+    rows |> push(time_rows("ar dim={dim} 4 rows: sandwich seam, pre_add_rms") $(enc) {
+        var k = ks
+        enc_preaddrms_b_c(enc, bx, ba, bw, by, k, 4l)
+    })
+    rows |> push(time_rows("ar dim={dim} 4 rows: sandwich seam no norm out, rms + add") $(enc) {
+        enc_rms_b(enc, ba, 0ul, bw, ba, udim, ueps, 4l)
+        enc_add(enc, bx, 0ul, ba, 0ul, utot4, int64(4 * dim))
+    })
+    rows |> push(time_rows("ar dim={dim} 4 rows: sandwich seam no norm out, pre_add") $(enc) {
+        var k = ks
+        enc_preadd_b_c(enc, bx, ba, bw, k, 4l)
+    })
+    rows |> push(time_rows("ar dim={dim} {np} rows: sandwich seam, rms + add_rms hx") $(enc) {
+        var k = kp
+        pf_enc_rms(enc, ba, 0ul, bw, ba, udim, ueps, int64(np))
+        pf_enc_add_rms_bhx_c(enc, bx, ba, bw, by, bh, k, int64(np))
+    })
+    rows |> push(time_rows("ar dim={dim} {np} rows: sandwich seam, pre_add_rms hx") $(enc) {
+        var k = ks
+        pf_enc_preaddrms_bhx_c(enc, bx, ba, bw, by, bh, k, int64(np))
+    })
+    rows |> push(time_rows("ar dim={dim} {np} rows: sandwich seam no norm out, rms + add") $(enc) {
+        pf_enc_rms(enc, ba, 0ul, bw, ba, udim, ueps, int64(np))
+        enc_add(enc, bx, 0ul, ba, 0ul, utotn, int64(np * dim))
+    })
+    rows |> push(time_rows("ar dim={dim} {np} rows: sandwich seam no norm out, pre_add") $(enc) {
+        var k = ks
+        pf_enc_preadd_b_c(enc, bx, ba, bw, k, int64(np))
+    })
+    for (buf in fixed_array(bx, ba, by, bh, bw)) {
+        metal_release(buf)
+    }
+    for (u in fixed_array(udim, ueps, utot, utot4, utotn)) {
+        pool_release(g_upool, u, 4ul)
+    }
+}
+
+//! the residual step at the gemma-3-12b and E4B widths (`ar_dim_rows`), and the E-series pre-step's finish over 42 layers of 256
+def private ar_rows : array<Reading> {
+    let np = 512
+    var rows : array<Reading>
+    rows |> reserve(32)
+    for (dim in fixed_array(2560, 3840)) {
+        ar_dim_rows(dim, np, rows)
+    }
+    let nl = 42
+    let ple = 256
+    var bproj = fill_buf(np * nl * ple, 0.5)
+    var bside = fill_buf(np * nl * ple, 0.25)
+    var bpn = fill_buf(ple, 0.01)
+    for (npos in fixed_array(1, np)) {
+        rows |> push(time_rows("ple finish {nl} layers x {ple} {npos} rows") $(enc) {
+            var k = ple_finish_args(int64(ple), 2560l, 1e-6)
+            enc_ple_finish(enc, bside, bproj, bpn, k, int64(nl * npos))
+        })
+    }
+    for (buf in fixed_array(bproj, bside, bpn)) {
+        metal_release(buf)
+    }
+    return <- rows
+}
+
 def private run_gk_rows(b : B?) {
     if (!metal_common_init() || !metal_decode_init() || !metal_prefill_pso_init()) {
         b |> failure("no Metal device: no row timed")
@@ -446,6 +554,7 @@ def private run_gk_rows(b : B?) {
     var rows <- seam_rows()
     rows |> push_from(qkn_rows(), router_rows(), pk_rows(), dn_rows())
     rows |> push_from(gate_rows(), cls_epi_rows(), g4_tail_rows(), ple_proj_rows())
+    rows |> push_from(ar_rows())
     var nmeas = 0
     var nvoid = 0
     for (r in rows) {

@@ -1531,6 +1531,284 @@ class template GkQ8BlockStore : GkWgReduce {
     }
 }
 
+//! the residual step's arguments, every stamp of `GkResidualRow` reading its fields under these names
+struct GkAddRmsArgs {
+    dim : uint
+    add_on : uint
+    woff : uint      //! the norm weight row's base in wn
+    eps : float
+    ascale : float
+    row0 : uint
+    slots : uint     //! the combine twins: routed slots per position
+    lstride : uint   //! the combine twins: the logits row stride (the gate logit, when `gated`, is the row's last)
+    gated : uint     //! the combine twins: the shared expert's gate scales its row
+    pre_on : uint    //! the add partner is rms-normed with the row at `pwoff` before the add (a gemma's post-attention / post-FFN norm)
+    pwoff : uint
+    no_norm : uint   //! the requant twins quantize the updated row as it is - the E-series residual feeding its per-layer-embedding gate
+    dbias_on : uint  //! the combine twins: each routed row takes its expert's down bias (gpt-oss) before its routing weight scales it
+    dboff : uint     //! ... this layer's row base in the down-bias plane ([ne x dim] rows a layer)
+    abias_on : uint  //! the add partner carries a bias row out of wn before the add (gpt-oss's attention output bias)
+    aboff : uint     //! ... that row's base in wn
+    pscale : float   //! the add partner's scale ahead of its norm (`PSCALE` stamps: the E-series pre-step's 1/sqrt(dim))
+}
+
+//! The residual step's shell, a workgroup of `LANES` a row: x = (x + a) . ascale, under `pre_on` the add partner rms-normed under
+//! its weight row first (the gemma sandwich), the updated row kept and its squares summed; a stamp supplies the accessors and a
+//! `pa` carrying `GkAddRmsArgs`' fields under their names
+[ |> template_struct_instance]
+class template GkResidualRow : GkQ8BlockStore {
+    @template_constant LANES : uint = 256u          //!< the workgroup's lanes, the row loops' stride; 0 = the threadgroup's own size
+    @template_constant NORM_SWITCH : bool = false   //!< the runtime `no_norm` arm of `pa`
+    @template_constant PRE : bool = true            //!< the sandwich arm, `pa.pre_on` switching it at run time
+    @template_constant PSCALE : bool = false        //!< the add partner scaled by `pa.pscale` ahead of its norm
+    @template_constant X4 : bool = true             //!< four columns in flight a lane where the partner is not normed first
+    @template_constant ARMS : bool = true           //!< the run-time `add_on` and `abias_on` arms; off, the stamp always adds and carries no bias row
+
+    def abstract width : uint                         //! the row's width
+    def abstract xin(i : uint) : float                //! the residual stream's element `i`, a row base folded in
+    def abstract xout(i : uint; v : float) : void     //! ... written back
+    def abstract partner(i : uint) : float            //! the add partner's element `i`
+    def abstract stash(k : uint; v : float) : void    //! the row's column `k` kept for the re-read - a slab, or nothing where the row is re-read
+    def abstract stashed(k : uint) : float            //! ... read back
+    def abstract pre_partner(base, k : uint) : float  //! the sandwich form's partner column: off the stash, or recomputed
+
+    //! column `k` stepped a lane-stride on: `LANES`, or the threadgroup's own size where the stamp leaves it 0
+    [spirv_inline]
+    def next_col(var k : uint&) {
+        static_if (LANES == 0u) {
+            k += gl_WorkGroupSize.x
+        } else {
+            k += LANES
+        }
+    }
+
+    def norm_weight(e : uint) : float {
+        static_if (NORM_SWITCH) {
+            return pa.no_norm != 0u ? 1.0 : wn[pa.woff + e]
+        } else {
+            return wn[pa.woff + e]
+        }
+    }
+
+    //! the add partner's element `j` of the row at `base`, its bias row added under `abias_on`, scaled under `PSCALE`
+    def apart(base, j : uint) : float {
+        static_if (PSCALE) {
+            return (partner(base + j) + (ARMS && pa.abias_on != 0u ? wn[pa.aboff + j] : 0.0)) * pa.pscale
+        } else {
+            return partner(base + j) + (ARMS && pa.abias_on != 0u ? wn[pa.aboff + j] : 0.0)
+        }
+    }
+
+    //! the residual add, the row stash and the sum of squares over the row at `base` into `ss`; under `pre_on` the partner is normed
+    //! first (its own reduce, the stash holding it meanwhile)
+    [arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#residual-step-fma")]
+    def accum_row_into(base : uint; var ss : float&) {
+        ss = 0.0
+        static_if (PRE) {
+            if (pa.pre_on != 0u) {
+                pre_cols_into(base, ss)
+            } else {
+                add_cols_into(base, ss)
+            }
+        } else {
+            add_cols_into(base, ss)
+        }
+    }
+
+    //! the sandwich form over the row at `base`: the partner normed first, then off the row stash a column a round
+    def pre_cols_into(base : uint; var ss : float&) {
+        let dim = width()
+        var ainv = 0.0
+        if ((!ARMS || pa.add_on != 0u)) {
+            var sa = 0.0
+            var j = gl_LocalInvocationID.x
+            while (j < dim) {
+                let a = apart(base, j)
+                stash(j, a)
+                sa += a * a
+                next_col(j)
+            }
+            wg_rms_inv_into(sa, dim, pa.eps, 0u, ainv)
+        }
+        var k = gl_LocalInvocationID.x
+        while (k < dim) {
+            let v = (!ARMS || pa.add_on != 0u) ? mad(wn[pa.pwoff + k], pre_partner(base, k) * ainv, xin(base + k)) * pa.ascale : xin(base + k)
+            keep(base, k, v, ss)
+            next_col(k)
+        }
+    }
+
+    //! the plain add over the row at `base`: four columns in flight a lane under `X4`
+    def add_cols_into(base : uint; var ss : float&) {
+        let dim = width()
+        var k = gl_LocalInvocationID.x
+        static_if (X4) {
+            let last = dim - 1u
+            while (k < dim) {
+                let k1 = min(k + LANES, last)
+                let k2 = min(k + 2u * LANES, last)
+                let k3 = min(k + 3u * LANES, last)
+                var v0 = xin(base + k)
+                var v1 = xin(base + k1)
+                var v2 = xin(base + k2)
+                var v3 = xin(base + k3)
+                if ((!ARMS || pa.add_on != 0u)) {
+                    let a0 = apart(base, k)
+                    let a1 = apart(base, k1)
+                    let a2 = apart(base, k2)
+                    let a3 = apart(base, k3)
+                    v0 = (v0 + a0) * pa.ascale
+                    v1 = (v1 + a1) * pa.ascale
+                    v2 = (v2 + a2) * pa.ascale
+                    v3 = (v3 + a3) * pa.ascale
+                }
+                keep(base, k, v0, ss)
+                if (k + LANES < dim) {
+                    keep(base, k1, v1, ss)
+                }
+                if (k + 2u * LANES < dim) {
+                    keep(base, k2, v2, ss)
+                }
+                if (k + 3u * LANES < dim) {
+                    keep(base, k3, v3, ss)
+                }
+                k += 4u * LANES
+            }
+        } else {
+            while (k < dim) {
+                let x = xin(base + k)
+                let v = (!ARMS || pa.add_on != 0u) ? (x + apart(base, k)) * pa.ascale : x
+                keep(base, k, v, ss)
+                next_col(k)
+            }
+        }
+    }
+
+    //! column `k` of the row at `base` kept: written back, stashed for the re-read, its square added to `ss`
+    def keep(base, k : uint; v : float; var ss : float&) {
+        xout(base + k, v)
+        stash(k, v)
+        ss += v * v
+    }
+
+    //! the row's norm inverse off its sum of squares (slot 1: the add partner's norm took slot 0) - one under `no_norm` on a
+    //! NORM_SWITCH stamp (the reduce still runs: its barrier is every thread's)
+    def row_inv_into(ss : float; var inv : float&) {
+        wg_rms_inv_into(ss, width(), pa.eps, 1u, inv)
+        static_if (NORM_SWITCH) {
+            if (pa.no_norm != 0u) {
+                inv = 1.0
+            }
+        }
+    }
+
+    //! the normed row quantized out of the stash into Q8_0 blocks from block `qb0` (the block pass over the stash's columns)
+    def quant32(qb0 : uint; inv : float) {
+        static_if (OUT_Q8) {
+            blk_pass(0u, width() / KQ_B32_ELEMS_U, qb0, 0.0, inv)
+        }
+    }
+
+    def override normed_at(e : uint; mean, inv : float) : float => norm_weight(e) * (stashed(e) * inv)
+}
+
+//! The residual step a workgroup a row over the step's planes (`GkResidualRow`), its normed row out in the stamp's form - f32
+//! (`HX`: its f16 twin beside), f16, Q8_0 blocks, or none (the stream rows updated alone); the stamp supplies the row stash
+[ |> template_struct_instance]
+class template GkAddRmsRows : GkResidualRow {
+    @ssbo @binding = 0 @role = "readwrite" xs : array<float>   //! the residual stream's rows, updated in place
+    @ssbo @binding = 1 @role = "read" aa : array<float>        //! the add partner rows
+    @ssbo @binding = 2 @role = "weight" wn : array<float>      //! the norms plane: the norm row at `woff`, the post norm at `pwoff`, the bias row at `aboff`
+    @ssbo @binding = 3 @role = "write" @template_gate = OUT_F32 yo : array<float>
+    @ssbo @binding = 3 @role = "write" @template_gate = OUT_F16 outh : array<float16>
+    @ssbo @binding = 3 @role = "write" @template_gate = OUT_Q8 outq : array<int8>
+    @ssbo @binding = 10 @role = "write" @template_gate = OUT_Q8 outs : array<float>   //! past every combine family's own bindings
+    @ssbo @binding = 12 @role = "write" @template_gate = HX yh : array<float16>       //! the f32 row's f16 twin
+    @kargs pa : GkAddRmsArgs
+    @template_constant OUT_F32 : bool = false
+    @template_constant OUT_F16 : bool = false
+    @template_constant HX : bool = false
+
+    def override width : uint => pa.dim
+    def override xin(i : uint) : float => xs[i]
+    def override xout(i : uint; v : float) : void {
+        xs[i] = v
+    }
+    def override partner(i : uint) : float => aa[i]
+
+    //! row `r` stepped, its normed row stored in the stamp's out form or quantized into its Q8_0 blocks
+    def add_rms_row(r : uint) {
+        let base = r * pa.dim
+        var ss = 0.0
+        accum_row_into(base, ss)
+        static_if (OUT_Q8) {
+            var inv = 0.0
+            row_inv_into(ss, inv)
+            quant32(r * (pa.dim / KQ_B32_ELEMS_U), inv)
+        } else {
+            static_if (OUT_F32 || OUT_F16) {
+                var inv = 0.0
+                row_inv_into(ss, inv)
+                store_out(base, inv)
+            }
+        }
+    }
+
+    //! the normed row of the row at `base` under `inv`, four columns in flight a lane under `X4`
+    [arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#residual-step-fma")]
+    def store_out(base : uint; inv : float) {
+        static_if (X4) {
+            let last = pa.dim - 1u
+            var k = gl_LocalInvocationID.x
+            while (k < pa.dim) {
+                let k1 = min(k + LANES, last)
+                let k2 = min(k + 2u * LANES, last)
+                let k3 = min(k + 3u * LANES, last)
+                let n0 = normed_at(k, 0.0, inv)
+                let n1 = normed_at(k1, 0.0, inv)
+                let n2 = normed_at(k2, 0.0, inv)
+                let n3 = normed_at(k3, 0.0, inv)
+                let i0 = base + k
+                put_out(i0, n0)
+                if (k + LANES < pa.dim) {
+                    let i1 = base + k1
+                    put_out(i1, n1)
+                }
+                if (k + 2u * LANES < pa.dim) {
+                    let i2 = base + k2
+                    put_out(i2, n2)
+                }
+                if (k + 3u * LANES < pa.dim) {
+                    let i3 = base + k3
+                    put_out(i3, n3)
+                }
+                k += 4u * LANES
+            }
+        } else {
+            var j = gl_LocalInvocationID.x
+            while (j < pa.dim) {
+                let nj = normed_at(j, 0.0, inv)
+                let ij = base + j
+                put_out(ij, nj)
+                next_col(j)
+            }
+        }
+    }
+
+    //! the normed row's element `i` stored in the stamp's out form: floats to `yo` (and halves to `yh` under `HX`), halves to `outh`
+    def put_out(i : uint; v : float) {
+        static_if (OUT_F32) {
+            yo[i] = v
+        }
+        static_if (OUT_F16) {
+            outh[i] = float16(v)
+        }
+        static_if (HX) {
+            yh[i] = float16(v)
+        }
+    }
+}
+
 struct GkWdecCombArgs {
     dim : uint
     nchunks : uint
@@ -2141,11 +2419,13 @@ class template GkQknRopeKv : GkWgReduce {
     @ssbo @binding = 5 @role = "weight" wn : array<float>                //! the q and k norm-weight rows
     @ssbo @binding = 7 @role = "weight" bias : array<float>              //! the [q | k | v] projection biases (`hasb`), else a placeholder
     @ssbo @binding = 9 @role = "write" @template_gate = HX qh : array<float16>   //! the q rows' half twin, under `hscale`
+    @ssbo @binding = 10 @role = "read" vsrc : array<float>   //! the V projection rows: the [q | k | v] rows again, or the window's own V panel
     @kargs pa : GkQknRopeArgs
     @template_constant CLAMP16 : bool = true
     @template_constant LANES : uint = 256u
     @template_constant EPT : int = 1   //!< the rotation pairs a thread holds: LANES x EPT covers the widest head's, 256
     @template_constant V_WG : bool = false   //!< the V rows take workgroups of their own past the k heads; else a k head's stores its V row
+    @template_constant V_IN_PLACE : bool = false   //!< the V store's target is the V source itself: a k head stores its V row only under an arm
     @template_constant HX : bool = false
 
     def abstract mir_base(rowi : uint) : uint2           //! row rowi's mirror K and V row bases, ahead of the head's own
@@ -2217,8 +2497,8 @@ class template GkQknRopeKv : GkWgReduce {
             b[c] = 0.0
             if (p < npair) {
                 let ix = pair_ix(p)
-                a[c] = (rdk || vplain ? kvsrc[sbase + ix.x] : qrows[sbase + ix.x]) + (pa.hasb != 0u ? bias[pa.boff + bbase + ix.x] : 0.0)
-                b[c] = (rdk || vplain ? kvsrc[sbase + ix.y] : qrows[sbase + ix.y]) + (pa.hasb != 0u ? bias[pa.boff + bbase + ix.y] : 0.0)
+                a[c] = (rdk ? kvsrc[sbase + ix.x] : (vplain ? vsrc[sbase + ix.x] : qrows[sbase + ix.x])) + (pa.hasb != 0u ? bias[pa.boff + bbase + ix.x] : 0.0)
+                b[c] = (rdk ? kvsrc[sbase + ix.y] : (vplain ? vsrc[sbase + ix.y] : qrows[sbase + ix.y])) + (pa.hasb != 0u ? bias[pa.boff + bbase + ix.y] : 0.0)
                 ss += a[c] * a[c] + b[c] * b[c]
             }
         }
@@ -2269,7 +2549,7 @@ class template GkQknRopeKv : GkWgReduce {
             }
         }
         static_if (!V_WG) {
-            if (is_k) {
+            if (is_k && (!V_IN_PLACE || pa.vfk != 0u || pa.vnorm != 0u)) {
                 var wa, wb : float[EPT]
                 var ws = 0.0
                 for [unroll_full] (c in range(EPT)) {
@@ -2281,8 +2561,8 @@ class template GkQknRopeKv : GkWgReduce {
                         wb[c] = b[c] * inv
                     } elif (p < npair) {
                         let ix = pair_ix(p)
-                        wa[c] = kvsrc[vi + ix.x] + (pa.hasb != 0u ? bias[pa.boff + vb + ix.x] : 0.0)
-                        wb[c] = kvsrc[vi + ix.y] + (pa.hasb != 0u ? bias[pa.boff + vb + ix.y] : 0.0)
+                        wa[c] = vsrc[vi + ix.x] + (pa.hasb != 0u ? bias[pa.boff + vb + ix.x] : 0.0)
+                        wb[c] = vsrc[vi + ix.y] + (pa.hasb != 0u ? bias[pa.boff + vb + ix.y] : 0.0)
                         ws += wa[c] * wa[c] + wb[c] * wb[c]
                     }
                 }

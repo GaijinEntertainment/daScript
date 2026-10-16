@@ -137,7 +137,7 @@ def private qkn_record_rows(t : T?; var mc : MetalCell; tag : string; st : auto(
     return mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
         stamp_run(st, pso) {
             invoke(st.enc, enc, mc.buf[b[0]], mc.buf[b[0]], mc.buf[b[1]], 0ul, mc.buf[b[2]], 0ul, mc.buf[b[3]], 0ul, mc.buf[b[4]], mc.buf[b[5]], 0ul,
-                mc.buf[b[6]], mc.buf[b[7]], 0ul, ka, nwg, nb, int64(ka.hs / 2u))
+                mc.buf[b[6]], mc.buf[b[7]], 0ul, mc.buf[b[0]], ka, nwg, nb, int64(ka.hs / 2u))
         }
     }
 }
@@ -150,7 +150,7 @@ def private qkn_record_one(t : T?; var mc : MetalCell; tag : string; st : auto(S
     return mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
         stamp_run(st, pso) {
             invoke(st.enc, enc, mc.buf[b[0]], mc.buf[b[0]], mc.buf[b[1]], koffb, mc.buf[b[2]], voffb, mc.buf[b[3]], 0ul, mc.buf[b[4]], mc.buf[b[5]], 0ul,
-                mc.buf[b[6]], ka, nwg, int64(ka.hs / 2u))
+                mc.buf[b[6]], mc.buf[b[0]], ka, nwg, int64(ka.hs / 2u))
         }
     }
 }

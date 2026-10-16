@@ -58,9 +58,14 @@ let EPS = 1.0e-5
 let private BAR_FP = Bar(rel = 1e-4, poison_scaled = true)   //! the shared fp bar (fapprox); the poisoned last element moves 0.5 of its magnitude floored at 1
 
 //! GENERIC (untyped dev/queue) so it instantiates only inside the Apple static_if.
+let private QKR_V_NONE = 0
+let private QKR_V_FK = 1     //! the k heads store V: the raw k row under its own rms (a layer with no v plane)
+let private QKR_V_NORM = 2   //! the k heads norm the V panel's rows in place, weightless (gemma-4's v-norm)
+
+//! the window's q/k norm and rope in place over its panels, and under `vmode` the V panel's rows: with no arm the V panel stands
 [arch(at="../ARCHITECTURE_GPU_PREFILL.md#prefill-twin-dual-store")]
-def private qk_rope_gate(t : T?; var dev, queue; hx, donorm, neox, partial : bool) {
-    let tag = "qk_rope{hx ? " hx" : ""}{donorm ? " norm" : ""}{neox ? " neox" : ""}{partial ? " part" : ""}"
+def private qk_rope_gate(t : T?; var dev, queue; hx, donorm, neox, partial : bool; vmode : int = QKR_V_NONE) {
+    let tag = "qk_rope{hx ? " hx" : ""}{donorm ? " norm" : ""}{neox ? " neox" : ""}{partial ? " part" : ""} v={vmode}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
         let kr = kernel_of(@@enc_pf_qkn)
@@ -78,9 +83,10 @@ def private qk_rope_gate(t : T?; var dev, queue; hx, donorm, neox, partial : boo
         let k_panel_lead = 24   //! the K panel's rows sit this many floats into their buffer
         let rot = partial ? hs / 2 : hs
         let halfr = rot / 2
-        var inscope xv, kv, wv, tc, ts, want, wantk : array<float>
+        var inscope xv, kv, vv, wv, tc, ts, want, wantk, wantv : array<float>
         xv |> resize(nrows * rstride)
         kv |> resize(k_panel_lead + nrows * kvd)
+        vv |> resize(k_panel_lead + nrows * kvd)
         wv |> resize(2 * hs)
         tc |> resize(nreal * halfr)
         ts |> resize(nreal * halfr)
@@ -89,6 +95,7 @@ def private qk_rope_gate(t : T?; var dev, queue; hx, donorm, neox, partial : boo
         }
         for (k in range(k_panel_lead + nrows * kvd)) {
             kv[k] = 0.17 * float(k % 23) - 1.5
+            vv[k] = 0.13 * float(k % 19) - 1.1
         }
         for (k in range(2 * hs)) {
             wv[k] = 0.8 + 0.05 * float(k % 7) + (k >= hs ? 0.1 : 0.0)
@@ -99,8 +106,18 @@ def private qk_rope_gate(t : T?; var dev, queue; hx, donorm, neox, partial : boo
         }
         want := xv
         wantk := kv
+        wantv := vv
+        var inscope ones <- [for (_k in range(hs)); 1.0]
         unsafe {
             for (p in range(nreal)) {
+                for (h in range(nk)) {
+                    let rb = k_panel_lead + p * kvd + h * hs
+                    if (vmode == QKR_V_FK) {
+                        rmsnorm(addr(wantv[rb]), addr<float const?>(kv[rb]), addr<float const?>(ones[0]), int64(hs), EPS)
+                    } elif (vmode == QKR_V_NORM) {
+                        rmsnorm(addr(wantv[rb]), addr<float const?>(vv[rb]), addr<float const?>(ones[0]), int64(hs), EPS)
+                    }
+                }
                 if (donorm) {
                     for (h in range(nh)) {
                         let rb = p * rstride + h * hs
@@ -122,26 +139,35 @@ def private qk_rope_gate(t : T?; var dev, queue; hx, donorm, neox, partial : boo
         t |> success(moved > 0, "{tag}: oracle is not the identity ({moved} moved)")
         let bx = mc |> io_(xv)
         let bk = mc |> io_(kv)
+        let bv = mc |> io_(vv)
         let bw = mc |> in_(wv)
         let btc = mc |> in_(tc)
         let bts = mc |> in_(ts)
         let bxh = hx ? (mc |> out_words(nrows * rstride, float16(-77.0))) : -1
         var ka = GkQknRopeArgs(kvd = uint(kvd), hs = uint(hs), half = uint(halfr), neox = neox || partial ? 1u : 0u, nh = uint(nh),
             kwoff = uint(hs), eps = EPS, win = 1u, kbase = uint(k_panel_lead), kvrow = uint(kvd), qrow = uint(rstride), cosrow = uint(halfr),
-            nreal = uint(nreal), skipnorm = donorm ? 0u : 1u, hscale = 1.0)
+            nreal = uint(nreal), skipnorm = donorm ? 0u : 1u, hscale = 1.0, vbase = uint(k_panel_lead), vfk = vmode == QKR_V_FK ? 1u : 0u,
+            vnorm = vmode == QKR_V_NORM ? 1u : 0u)
         let nwg = int64(nh + nk)
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
             if (hx) {
-                invoke(krh.enc, enc, pso, mc.buf[bx], mc.buf[bk], mc.buf[bk], 0ul, mc.buf[bk], 0ul, mc.buf[btc], 0ul, mc.buf[bw], mc.buf[bts],
-                    mc.buf[btc], mc.buf[bxh], ka, nwg, int64(nrows), int64(hs / 2))
+                invoke(krh.enc, enc, pso, mc.buf[bx], mc.buf[bk], mc.buf[bk], 0ul, mc.buf[bv], 0ul, mc.buf[btc], 0ul, mc.buf[bw], mc.buf[bts],
+                    mc.buf[btc], mc.buf[bxh], mc.buf[bv], ka, nwg, int64(nrows), int64(hs / 2))
             } else {
-                invoke(kr.enc, enc, pso, mc.buf[bx], mc.buf[bk], mc.buf[bk], 0ul, mc.buf[bk], 0ul, mc.buf[btc], 0ul, mc.buf[bw], mc.buf[bts],
-                    mc.buf[btc], ka, nwg, int64(nrows), int64(hs / 2))
+                invoke(kr.enc, enc, pso, mc.buf[bx], mc.buf[bk], mc.buf[bk], 0ul, mc.buf[bv], 0ul, mc.buf[btc], 0ul, mc.buf[bw], mc.buf[bts],
+                    mc.buf[btc], mc.buf[bv], ka, nwg, int64(nrows), int64(hs / 2))
             }
         }
         return if (!ran)
         check_buf(t, tag, mc.buf[bx], want, BAR_FP, Shape(row_width = rstride, head_width = hs))
         check_buf(t, "{tag} K panel", mc.buf[bk], wantk, BAR_FP, Shape(row_width = kvd, head_width = hs))
+        if (vmode == QKR_V_NONE) {
+            check_buf_exact(t, "{tag} V panel untouched", mc.buf[bv], vv)
+        } else {
+            check_buf(t, "{tag} V panel", mc.buf[bv], wantv, BAR_FP, Shape(row_width = kvd, head_width = hs))
+            var inscope got <- buf_download(mc.buf[bv], length(vv), type<float>)
+            t |> success(check_count(got, vv, BAR_FP) > 0, "{tag}: the V rows moved off their input")
+        }
         if (hx) {
             check_hx_narrow(t, "{tag} f16 twin", mc.buf[bxh], mc.buf[bx], nrows * rstride, nrows * rstride)
         }
@@ -3313,6 +3339,8 @@ def test_metal_prefill_kernels(t : T?) {
                 qk_rope_gate(t, dev, queue, false, true, false, false)   //! classic pairing with norm
                 qk_rope_gate(t, dev, queue, true, false, false, false)   //! rope-only + twin, llama class
                 qk_rope_gate(t, dev, queue, false, false, true, true)    //! partial rot, Wave D class
+                qk_rope_gate(t, dev, queue, false, true, true, false, QKR_V_FK)    //! gemma-4's global layers: V off the pre-norm k rows
+                qk_rope_gate(t, dev, queue, true, true, true, false, QKR_V_NORM)   //! ... its v-norm in place, the twin beside
 
                 tower_flash_kvhc_gate(t, dev, queue)
                 tower_win_gate(t, dev, queue)
@@ -3599,6 +3627,7 @@ def test_metal_prefill_kernels(t : T?) {
                 ple_proj_bf16_gate(t, dev, queue, 1536, 70, 1, 3, true)   // the decode column, every lane past the row's first 512
                 geglu_side_gate(t, dev, queue, 64, 3, 2, 5)
                 ple_finish_gate(t, dev, queue, 3, 64, 5)
+                ple_finish_gate(t, dev, queue, 35, 256, 2)   //! the E2B's slices
                 add_bias_rows_gate(t, dev, queue, 7, 96)
                 cat2_gate(t, dev, queue, 5, 48, 1, 0, 0, 0, 0)
                 cat2_gate(t, dev, queue, 3, 40, 4, 0, 0, 0, 0)       // the hc draft and warm: the a row repeats per stream
@@ -4060,8 +4089,8 @@ def private geglu_side_gate(t : T?; var dev, queue; ple, nlayers, l, npos : int)
     }
 }
 
-// PLE stage 3 (MetalPleFinish): per (layer, position) slice, in place on the position-major side rows —
-// side = (side + pnorm * (v * rsqrt(mean(v^2) + eps))) / sqrt(2), v = proj/sqrt(dim)
+//! PLE stage 3 (`MetalPleFinish`, the residual step's template): per (position, layer) slice, in place on the position-major side
+//! rows - side = (side + pnorm * (v * rsqrt(mean(v^2) + eps))) / sqrt(2), v = proj/sqrt(dim); the rows without the prescale the control
 def private ple_finish_gate(t : T?; var dev, queue; nlayers, ple, npos : int) {
     let tag = "ple_finish nl={nlayers} ple={ple} np={npos}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
@@ -4071,7 +4100,8 @@ def private ple_finish_gate(t : T?; var dev, queue; nlayers, ple, npos : int) {
         return if (!pso_ok(t, tag, pso, err))
         let rowlen = nlayers * ple
         let eps = 1.0e-5
-        let inv_sd = 0.125   // stands in for 1/sqrt(dim)
+        let dim = 64   //! 1/sqrt(dim) = 0.125, a scale the norm's eps tells apart from none
+        let inv_sd = 1.0 / sqrt(float(dim))
         let inv_s2 = 1.0 / sqrt(2.0)
         var inscope proj, pnorm, side : array<float>
         proj |> resize(npos * rowlen)
@@ -4086,32 +4116,39 @@ def private ple_finish_gate(t : T?; var dev, queue; nlayers, ple, npos : int) {
         for (i in range(nlayers * npos * ple)) {
             side[i] = 0.07 * float(i % 19) - 0.6
         }
-        var inscope want, v : array<float>
+        var inscope want, unscaled, v, u : array<float>
         want |> resize(nlayers * npos * ple)
+        unscaled |> resize(nlayers * npos * ple)
         v |> resize(ple)
+        u |> resize(ple)
         for (l in range(nlayers)) {
             for (p in range(npos)) {
                 for (i in range(ple)) {
-                    v[i] = proj[p * rowlen + l * ple + i] * inv_sd
+                    u[i] = proj[p * rowlen + l * ple + i]
+                    v[i] = u[i] * inv_sd
                 }
                 rmsnorm(v, v, pnorm, int64(ple), eps)
+                rmsnorm(u, u, pnorm, int64(ple), eps)
                 for (i in range(ple)) {
                     let yi = p * rowlen + l * ple + i
                     want[yi] = (side[yi] + v[i]) * inv_s2
+                    unscaled[yi] = (side[yi] + u[i]) * inv_s2
                 }
             }
         }
-        var ka = PleArgs(npos = uint(npos), ple = uint(ple), nlayers = uint(nlayers), inv_sd = inv_sd, eps = eps, inv_s2 = inv_s2)
+        var ka = ple_finish_args(int64(ple), int64(dim), eps)
         let bproj = mc |> in_(proj)
         let bpn = mc |> in_(pnorm)
         let by = mc |> io_(side)
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
             stamp_run(sf, pso) {
-                invoke(sf.enc, enc, mc.buf[bproj], mc.buf[bpn], mc.buf[by], ka, int64(nlayers), int64(npos), int64(ple))
+                invoke(sf.enc, enc, mc.buf[by], mc.buf[bproj], mc.buf[bpn], ka, int64(nlayers * npos))
             }
         }
         return if (!ran)
         check_buf(t, tag, mc.buf[by], want, BAR_FP, Shape(row_width = ple))
+        var inscope got <- buf_download(mc.buf[by], nlayers * npos * ple, type<float>)
+        t |> success(check_count(got, unscaled, BAR_FP) > 0, "{tag}: the rows read off the finish without the prescale")
     }
 }
 

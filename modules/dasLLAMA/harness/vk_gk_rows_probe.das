@@ -55,7 +55,7 @@ def main : int {   // nolint:STYLE038 — one-shot probe: the classes, the fixtu
     let classes_ok = (vk_moe_init() && ensure_hc_norm_cls() && ensure_hc_mix_cls() && ensure_hc_comb_cls() && ensure_ple_gate_cls()
         && ensure_ple_conv_cls() && ensure_qk_rms_cls() && ensure_topk_n_cls() && ensure_topk_n2_cls() && ensure_combine_cls()
         && ensure_dn_scan_p3_cls() && ensure_qkn_rope_f16_cls() && ensure_cls_epi() && ensure_cls_ar_comb_g4()
-        && ensure_router_gemv_cls() && ensure_router_gemv_bf16_cls())
+        && ensure_router_gemv_cls() && ensure_router_gemv_bf16_cls() && ensure_cls_ar() && ensure_cls_ar_add() && ensure_cls_ar_rq_b())
     if (!classes_ok) {
         print("vk_gk_rows_probe: no Vulkan device, or a class declined\n")
         return 1
@@ -130,8 +130,8 @@ def main : int {   // nolint:STYLE038 — one-shot probe: the classes, the fixtu
     time_cls("dn_scan_p3 nvh 32 ds 128 512 rows") $(r; var h) {
         enc_dn_scan_p3_cls(r, h, s_dn, GkDnGateArgs(nvh = 32u, di = 4096u, ds = 128u, eps = 1e-6), 512l)
     }
-    var s_qkn = set_qkn_rope_f16_cls(fixed_array(b[0], b[1], b[2], b[3], b[4], b[5], tokb.buf, b[5]),
-        fixed_array(bb, bb, bb, bb, bb, bb, TOK_META_BYTES * 8l, bb), fixed_array(1u, 0u, 2u, 4u, 0u, 0u, 0u, 0u))
+    var s_qkn = set_qkn_rope_f16_cls(fixed_array(b[0], b[1], b[2], b[3], b[4], b[5], tokb.buf, b[5], b[1]),
+        fixed_array(bb, bb, bb, bb, bb, bb, TOK_META_BYTES * 8l, bb, bb), fixed_array(1u, 0u, 2u, 4u, 0u, 0u, 0u, 0u, 0u))
     let qkn = GkQknRopeArgs(qd = 4096u, kvd = 1024u, hs = 128u, half = 64u, neox = 1u, nh = 32u, kwoff = 128u, eps = 1e-6,
         kvrow = 6144u, qrow = 6144u, cosrow = 128u)
     time_cls("qkn_rope f16 hs 128 q 32 k 8 1 row") $(r; var h) {
@@ -155,6 +155,41 @@ def main : int {   // nolint:STYLE038 — one-shot probe: the classes, the fixtu
     for (nr in fixed_array(1l, 4l)) {
         time_cls("cls epilogue vocab {vocab} cap 30 two pins {nr} rows") $(r; var h) {
             enc_cls_epi(r, h, s_epi, GkClsEpiArgs(vocab = uint(vocab), cap = 30.0, nsupp = 2u, rows = uint(nr)), (vocab * nr + 255l) / 256l)
+        }
+    }
+    //! the residual step at the gemma-3-12b and E4B widths: the plain add + norm, the sandwich seam (the branch under its post norm,
+    //! the add, the next norm), the seam with no norm stored and the seam quantizing its norm, at a decode row and four rows; the
+    //! E-series pre-step's finish over 42 layers of 256
+    var s_ar = set_cls_ar(fixed_array(b[0], b[1], b[2], b[3]), fixed_array(bb, bb, bb, bb), fixed_array(1u, 2u, 0u, 4u))
+    var s_ara = set_cls_ar_add(fixed_array(b[0], b[1], b[2]), fixed_array(bb, bb, bb), fixed_array(1u, 2u, 0u))
+    var s_arq = set_cls_ar_rq_b(fixed_array(b[0], b[1], b[2], b[3], b[4]), fixed_array(bb, bb, bb, bb, bb), fixed_array(1u, 2u, 0u, 4u, 8u))
+    for (adim in fixed_array(2560u, 3840u)) {
+        let plain = GkAddRmsArgs(dim = adim, add_on = 1u, woff = 0u, eps = 1e-6, ascale = 1.0)
+        let sand = GkAddRmsArgs(dim = adim, add_on = 1u, woff = 0u, eps = 1e-6, ascale = 0.75, pre_on = 1u, pwoff = adim)
+        for (nr in fixed_array(1l, 4l)) {
+            time_cls("ar dim {int(adim)} {nr} rows: add + norm") $(r; var h) {
+                var pc = plain
+                enc_cls_ar(r, h, s_ar, pc, nr)
+            }
+            time_cls("ar dim {int(adim)} {nr} rows: sandwich seam") $(r; var h) {
+                var pc = sand
+                enc_cls_ar(r, h, s_ar, pc, nr)
+            }
+            time_cls("ar dim {int(adim)} {nr} rows: sandwich seam no norm out") $(r; var h) {
+                var pc = sand
+                enc_cls_ar_add(r, h, s_ara, pc, nr)
+            }
+            time_cls("ar dim {int(adim)} {nr} rows: sandwich seam, Q8_0 out") $(r; var h) {
+                var pc = sand
+                enc_cls_ar_rq_b(r, h, s_arq, pc, nr)
+            }
+        }
+    }
+    let fin = GkAddRmsArgs(dim = 256u, add_on = 1u, woff = 0u, eps = 1e-6, ascale = 1.0 / sqrt(2.0), pre_on = 1u, pwoff = 0u)
+    for (np in fixed_array(1l, 512l)) {
+        time_cls("ple finish 42 layers x 256 {np} rows") $(r; var h) {
+            var pc = fin
+            enc_cls_ar_add(r, h, s_ara, pc, 42l * np)
         }
     }
     //! the E-series side rows' projection at the E2B shape (35 layers x 256 rows of 1536): the f32 rows against the bf16 word form

@@ -521,10 +521,11 @@ def private rd_attn_sets(var L : RLayer; mir_idx : int64; bq, bk, bv, bo : int64
             L.s_qkn = set_qk_rms_cls(fixed_array(g_rd.q_dev, g_rd.kv_dev, g_rd.norms_dev),
                 fixed_array(qplane, (qd + 2l * kvd) * 4l * nb, g_rd.norms_bytes),
                 fixed_array(VHZ_Q, VHZ_KVK, 0u))
-            // the fused twin (class): norm rows bind the norms buffer, mirror row rides TokMeta, the bias rows their buffer
-            let qrbufs = fixed_array(g_rd.q_dev, g_rd.kv_dev, kstore, vstore, cos, g_rd.norms_dev, storetok, bias_bind.buf)
-            let qrsizes = fixed_array(qplane, (qd + 2l * kvd) * 4l * nb, storebytes, storebytes, cosbytes * nb, g_rd.norms_bytes, TOK_META_BYTES * nb, bias_bind.bytes)
-            let qrbits = fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, storebit, storebit, VHZ_COS, 0u, 0u, 0u)
+            // the fused twin (class): norm rows bind the norms buffer, mirror row rides TokMeta, the bias rows their buffer, the V source the projection rows
+            let qrbufs = fixed_array(g_rd.q_dev, g_rd.kv_dev, kstore, vstore, cos, g_rd.norms_dev, storetok, bias_bind.buf, g_rd.kv_dev)
+            let qrsizes = fixed_array(qplane, (qd + 2l * kvd) * 4l * nb, storebytes, storebytes, cosbytes * nb, g_rd.norms_bytes, TOK_META_BYTES * nb, bias_bind.bytes,
+                (qd + 2l * kvd) * 4l * nb)
+            let qrbits = fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, storebit, storebit, VHZ_COS, 0u, 0u, 0u, VHZ_KVK | VHZ_KVV)
             L.s_qkn_rope = (kv16 ? set_qkn_rope_f16_cls(qrbufs, qrsizes, qrbits)
                 : set_qkn_rope_cls(qrbufs, qrsizes, qrbits))
         }
@@ -1856,7 +1857,7 @@ def private rd_encode_hc_verify_warm(raw : VkCommandBuffer; var h : VkHaz; nrows
     vhz_dep(raw, h, VHZ_X | rd_carry_bit(), VHZ_GATE, true)
     cmd_copy_whole(raw, g_rd.hccarry_dev, g_rd.hcsrc_dev, wrowb)
     cmd_copy_range(raw, g_rd.hccarry_out_dev, 0l, g_rd.hcsrc_dev, wrowb, (nrows - 1l) * wrowb)
-    var pce = ArArgs(dim = uint(dim), add_on = 0u, woff = hb + uint(RDEC_HEAD_ENORM * dim), eps = g_rd.eps, ascale = 1.0, row0 = 0u)
+    var pce = GkAddRmsArgs(dim = uint(dim), add_on = 0u, woff = hb + uint(RDEC_HEAD_ENORM * dim), eps = g_rd.eps, ascale = 1.0, row0 = 0u)
     enc_cls_ar(raw, h, g_rd.head_s_emb_ar, pce, nrows)
     var pcn = GkHcNormArgs(dim = uint(dim), hc = uint(hc), woff = uint(g_rd.hc_hnorm_row * hcd), row0 = 0u, eps = g_rd.eps)
     enc_hc_norm_cls(raw, h, g_rd.s_hc_norm_vsrc, pcn, hc * nrows)
@@ -2201,7 +2202,7 @@ def private ensure_ar_rq_stamp(stamp : RqStamp) : bool {
 }
 
 //! the stamp's dispatch: one workgroup on the one-row stamps, a workgroup a row on the rows stamp
-def private enc_ar_rq_stamp(stamp : RqStamp; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : ArArgs; rows : int64 = 1l) {
+def private enc_ar_rq_stamp(stamp : RqStamp; raw : VkCommandBuffer; var h : VkHaz; var s : VkDescriptorSet; var pc : GkAddRmsArgs; rows : int64 = 1l) {
     if (stamp == RqStamp.rq || stamp == RqStamp.rq_b) {
         enc_cls_ar_rq_b(raw, h, s, pc, stamp == RqStamp.rq ? 1l : rows)
     } elif (stamp == RqStamp.rqx) {
@@ -2681,7 +2682,7 @@ def private rd_encode_ple(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
 //! the gemma-4 routed feed: x under the routed branch's pre norm into xb, or (`fused`) straight into the experts' Q8 image
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-gemma4-moe-block")]
 def private rd_encode_g4_pre2(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; l, nrows : int64; fused : bool) {
-    var pcn = ArArgs(dim = uint(g_rd.dim), add_on = 0u, woff = uint(rd_norm_off(l, RD_NORM_PRE_FFN2)), eps = g_rd.eps, ascale = 1.0)
+    var pcn = GkAddRmsArgs(dim = uint(g_rd.dim), add_on = 0u, woff = uint(rd_norm_off(l, RD_NORM_PRE_FFN2)), eps = g_rd.eps, ascale = 1.0)
     if (fused) {
         enc_ar_rq_stamp(L.pre2_stamp, raw, h, L.s_pre2_rq, pcn)
         rd_ts(raw, "m:pre2_rq")
@@ -2706,7 +2707,7 @@ def private rd_encode_moe(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
         rd_ts(raw, "m:rq_e")
     }
     if (L.moe_g4 && !L.rtn_fused) {   //! the router's input: a weightless rms of x under the router scale over sqrt(dim), into xb
-        var pcn = ArArgs(dim = uint(dim), add_on = 0u, woff = uint(rd_norm_off(l, RD_NORM_ROUTER)), eps = g_rd.eps, ascale = 1.0)
+        var pcn = GkAddRmsArgs(dim = uint(dim), add_on = 0u, woff = uint(rd_norm_off(l, RD_NORM_ROUTER)), eps = g_rd.eps, ascale = 1.0)
         enc_cls_ar(raw, h, L.s_addr_ffn, pcn, nrows)
         rd_ts(raw, "m:rtn")
     }
@@ -2776,12 +2777,12 @@ def rd_g4_comb_args(L : RLayer; l, woff : int64; presummed : bool) : GkMoeCombAr
 
 //! The residual step's push block over a MoE layer's combine: the shared row at its gate when the layer has
 //! one, the k routed rows through the slot map, then the norm at `woff`.
-def rd_ar_comb_args(L : RLayer; woff : int64) : ArArgs {
+def rd_ar_comb_args(L : RLayer; woff : int64) : GkAddRmsArgs {
     if (L.experts_host) {   // the host's sum lands as one row of weight one, the expert bias already in it
-        return ArArgs(dim = uint(g_rd.dim), add_on = has_dense_triple(L) ? 1u : 0u, woff = uint(woff), eps = g_rd.eps, ascale = 1.0,
+        return GkAddRmsArgs(dim = uint(g_rd.dim), add_on = has_dense_triple(L) ? 1u : 0u, woff = uint(woff), eps = g_rd.eps, ascale = 1.0,
             slots = 1u, lstride = uint(g_rd.ner), gated = g_rd.sh_gated ? 1u : 0u, dbias_on = 0u, dboff = uint(L.router_slot * g_rd.ne * g_rd.dim))
     }
-    return ArArgs(dim = uint(g_rd.dim), add_on = has_dense_triple(L) ? 1u : 0u, woff = uint(woff), eps = g_rd.eps, ascale = 1.0,
+    return GkAddRmsArgs(dim = uint(g_rd.dim), add_on = has_dense_triple(L) ? 1u : 0u, woff = uint(woff), eps = g_rd.eps, ascale = 1.0,
         slots = uint(g_rd.k), lstride = uint(g_rd.ner), gated = g_rd.sh_gated ? 1u : 0u,
         dbias_on = g_rd.exps_bias ? 1u : 0u, dboff = uint(L.router_slot * g_rd.ne * g_rd.dim))
 }
@@ -2817,7 +2818,7 @@ def private rd_encode_token(var first_seg_raw : VkCommandBuffer; nrows, nsplit :
         if (g_rd.ple > 0l && g_rd.ple_gpu) {   //! the pre-step's finish: the projection of the embedded rows, normed a slice at a time and averaged into the gathered rows
             ple_proj_enc(raw, h, g_rd.s_tok_pleproj, nr)
             rd_ts(raw, "t:pleproj")
-            var pca = ArArgs(dim = uint(g_rd.ple), add_on = 1u, woff = 0u, eps = g_rd.eps, ascale = 1.0 / sqrt(2.0), pre_on = 1u, pwoff = 0u)
+            var pca = GkAddRmsArgs(dim = uint(g_rd.ple), add_on = 1u, woff = 0u, eps = g_rd.eps, ascale = 1.0 / sqrt(2.0), pre_on = 1u, pwoff = 0u)
             enc_cls_ar_add(raw, h, g_rd.s_tok_ple_ar, pca, g_rd.n_layers * nrows)
             rd_ts(raw, "t:plefin")
         }
@@ -2825,7 +2826,7 @@ def private rd_encode_token(var first_seg_raw : VkCommandBuffer; nrows, nsplit :
         if (one && fuse) {
             rd_ensure_fused_sets()
         }
-        var pc_pro = ArArgs(dim = uint(dim), add_on = 0u, woff = 0u, eps = g_rd.eps, ascale = 1.0)
+        var pc_pro = GkAddRmsArgs(dim = uint(dim), add_on = 0u, woff = 0u, eps = g_rd.eps, ascale = 1.0)
         //! the rows form fuses a site wherever its feed is Q8_0 (the `rq_b` stamp, a row a workgroup); the one-row form fuses under the lever and its bisect
         let bx = vk_fuse_bisect_bits()
         let f0 = rd_head_feed(g_rd.layers[0])
@@ -2857,7 +2858,7 @@ def private rd_encode_token(var first_seg_raw : VkCommandBuffer; nrows, nsplit :
             } else {
                 rd_encode_attn_head(raw, h, L, l, fuse_qkr, nlfin, rd_layer_pieces(L, nsplit, nrows), nrows, ncols, nrow_bx)
             }
-            var pc8 = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(rd_norm_off(l, RD_NORM_FFN)), eps = g_rd.eps, ascale = 1.0,
+            var pc8 = GkAddRmsArgs(dim = uint(dim), add_on = 1u, woff = uint(rd_norm_off(l, RD_NORM_FFN)), eps = g_rd.eps, ascale = 1.0,
                 pre_on = L.pre_post ? 1u : 0u, pwoff = uint(rd_norm_off(l, RD_NORM_POST_ATT)),
                 abias_on = g_rd.has_obias ? 1u : 0u, aboff = uint(rd_norm_off(l, RD_NORM_OBIAS)))
             let ffn_fused = one ? att_fused : (!kq_sb(L.f1) && !L.moe)   //! the rows form: the shared expert's feed, or on a bare routed block the experts' own (their format is the layer's f1)
@@ -2897,7 +2898,7 @@ def private rd_encode_token(var first_seg_raw : VkCommandBuffer; nrows, nsplit :
             }
             if (L.ple) {
                 // the FFN residual first (no scale, the normed output unused); the branch leaves its projection in ffnout for the step below
-                var pc14a = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(nxt), eps = g_rd.eps, ascale = 1.0,
+                var pc14a = GkAddRmsArgs(dim = uint(dim), add_on = 1u, woff = uint(nxt), eps = g_rd.eps, ascale = 1.0,
                     pre_on = L.pre_post ? 1u : 0u, pwoff = uint(rd_norm_off(l, RD_NORM_POST_FFN)))
                 if (one && L.down_ar) {   //! the down GEMV's epilogue took the step
                 } elif (L.ple_fused) {   //! the step quantizes the rows it writes, as they are: the gate's feed
@@ -2914,7 +2915,7 @@ def private rd_encode_token(var first_seg_raw : VkCommandBuffer; nrows, nsplit :
                 }
                 rd_encode_ple(raw, h, L, l, nrows, ncols)
             }
-            var pc14 = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(nxt), eps = g_rd.eps, ascale = L.out_scale,
+            var pc14 = GkAddRmsArgs(dim = uint(dim), add_on = 1u, woff = uint(nxt), eps = g_rd.eps, ascale = L.out_scale,
                 pre_on = (L.pre_post || L.ple) ? 1u : 0u, pwoff = uint(rd_norm_off(l, L.ple ? RD_NORM_PLE_POST : RD_NORM_POST_FFN)))
             if (L.moe_g4) {
                 //! the one-row command's summing down GEMV folded the k rows; the rows and the window chain write them apart
@@ -3698,7 +3699,7 @@ def private rd_record_draft {
     rd_stamps_begin(raw)
     rd_encode_head_cat_eh(raw, h, 1l, "p:upload", "p:draft_", g_rd.s_prologue, L.s_quant_xb)
     rd_encode_attn_head(raw, h, L, l, rd_head_fuse_qkr(), rd_norm_final(), rd_layer_pieces(L, rd_split_pieces(), 1l), 1l, 1u, 0)
-    var pcf = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(hb + RDEC_HEAD_FFN * dim), eps = g_rd.eps, ascale = 1.0)
+    var pcf = GkAddRmsArgs(dim = uint(dim), add_on = 1u, woff = uint(hb + RDEC_HEAD_FFN * dim), eps = g_rd.eps, ascale = 1.0)
     enc_cls_ar(raw, h, L.s_addr_ffn, pcf, 1l)
     rd_ts(raw, "a:ar1")
     rq_enc(raw, h, L.s_quant_xb2, L.f1, dim)
@@ -3716,7 +3717,7 @@ def private rd_record_draft {
         }
         rd_ts(raw, "m:ar2")
     } else {
-        var pco = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(nxt), eps = g_rd.eps, ascale = 1.0)
+        var pco = GkAddRmsArgs(dim = uint(dim), add_on = 1u, woff = uint(nxt), eps = g_rd.eps, ascale = 1.0)
         enc_cls_ar(raw, h, L.s_addr_next, pco, 1l)
     }
     rd_encode_draft_pick(raw, h)
@@ -3778,7 +3779,7 @@ def private rd_record_hc_draft {
     vhz_dep(raw, h, 0u, VHZ_COS, true)
     cmd_copy_whole(raw, g_rd.head_cos_host.buf, g_rd.head_cos_dev, g_rd.cos_elems * 4l)
     rd_ts(raw, "p:upload")
-    var pce = ArArgs(dim = uint(dim), add_on = 0u, woff = uint(g_rd.head_norm_base + RDEC_HEAD_ENORM * dim), eps = g_rd.eps, ascale = 1.0, row0 = 0u)
+    var pce = GkAddRmsArgs(dim = uint(dim), add_on = 0u, woff = uint(g_rd.head_norm_base + RDEC_HEAD_ENORM * dim), eps = g_rd.eps, ascale = 1.0, row0 = 0u)
     enc_cls_ar(raw, h, g_rd.head_s_cat_ar, pce, 1l)
     var pcn = GkHcNormArgs(dim = uint(dim), hc = uint(hc), woff = uint(g_rd.hc_hnorm_row * hcd), row0 = 0u, eps = g_rd.eps)
     enc_hc_norm_cls(raw, h, g_rd.s_hc_norm_carry, pcn, hc)
@@ -3916,16 +3917,16 @@ def private rd_encode_head_cat_eh(raw : VkCommandBuffer; var h : VkHaz; nrows : 
         cmd_copy_rows(raw, g_rd.xb_dev, 0l, row_bytes, g_rd.head_cat_in_dev, 3l * row_bytes, 2l * row_bytes, row_bytes, nrows - 1l)
     }
     for (i in range64(nrows)) {   // a row pair a head row: the norms differ between the pair's halves, so each half takes its own dispatch
-        var pce = ArArgs(dim = uint(dim), add_on = 0u, woff = hb + uint(RDEC_HEAD_ENORM * dim), eps = g_rd.eps, ascale = 1.0, row0 = uint(2l * i))
+        var pce = GkAddRmsArgs(dim = uint(dim), add_on = 0u, woff = hb + uint(RDEC_HEAD_ENORM * dim), eps = g_rd.eps, ascale = 1.0, row0 = uint(2l * i))
         enc_cls_ar(raw, h, g_rd.head_s_cat_ar, pce, 1l)
-        var pch = ArArgs(dim = uint(dim), add_on = 0u, woff = hb + uint(RDEC_HEAD_HNORM * dim), eps = g_rd.eps, ascale = 1.0, row0 = uint(2l * i + 1l))
+        var pch = GkAddRmsArgs(dim = uint(dim), add_on = 0u, woff = hb + uint(RDEC_HEAD_HNORM * dim), eps = g_rd.eps, ascale = 1.0, row0 = uint(2l * i + 1l))
         enc_cls_ar(raw, h, g_rd.head_s_cat_ar, pch, 1l)
     }
     rq_enc(raw, h, g_rd.head_s_cat_rq, g_rd.head_eh_fmt, 2l * dim * nrows)
     rd_ts(raw, "{pfx}cat")
     rd_gemv(g_rd.head_eh_fmt, raw, h, g_rd.head_s_eh, 2l * dim, dim, uint(nrows), uint(dim))
     rd_ts(raw, "{pfx}eh")
-    var pca = ArArgs(dim = uint(dim), add_on = 0u, woff = hb + uint(RDEC_HEAD_ATT * dim), eps = g_rd.eps, ascale = 1.0)
+    var pca = GkAddRmsArgs(dim = uint(dim), add_on = 0u, woff = hb + uint(RDEC_HEAD_ATT * dim), eps = g_rd.eps, ascale = 1.0)
     enc_cls_ar(raw, h, norm_set, pca, nrows)
     rq_enc(raw, h, rq_set, L.fq, dim * nrows)
     rd_ts(raw, "{pfx}attnorm")
@@ -5184,7 +5185,7 @@ def private tail_cmd_for(s1, s3, s2, sq : int; woq_next : int64; fq_next : int; 
             ffn_chain_enc(raw, h, fc, s1, s3, s2, nrows, n, nfe, is_gelu)
             var pcc = DecCombineArgs(n = uint(n), k = uint(nrows))
             enc_dec_combine_cls(raw, h, tc.s_comb, pcc, (n + 255l) / 256l)
-            var pca = ArArgs(dim = uint(n), add_on = 0u, woff = 0u, eps = eps, ascale = 1.0)
+            var pca = GkAddRmsArgs(dim = uint(n), add_on = 0u, woff = 0u, eps = eps, ascale = 1.0)
             enc_cls_ar(raw, h, tc.s_ar, pca, 1l)
             rq_enc(raw, h, tc.s_rq, fq_next, n)
             vhz_dep(raw, h, VHG_XRES | VHG_ACTS, 0u, true)
@@ -5311,7 +5312,7 @@ def private span_record(a : MoeSpanDec) {
         at_chain_enc(raw, h, L, a.fq[li], a.fk[li], a.fv[li], a.fo[li], dim, qd, kvd, a.hs, a.n_heads, a.kv_mul, a.scale, a.eps, a.neox, a.qk_norm)
         vhz_dep(raw, h, VHZ_XB2 | VHZ_KVK | VHZ_KVV, 0u, true)
         cmd_copy_range(raw, g_gpu.dat_kv_dev, qd * 4l, g_gpu.span_out.buf, li * 2l * kvd * 4l, 2l * kvd * 4l)
-        var pcar = ArArgs(dim = uint(dim), add_on = 1u, woff = uint((li * 2l + 1l) * dim), eps = a.eps, ascale = 1.0)
+        var pcar = GkAddRmsArgs(dim = uint(dim), add_on = 1u, woff = uint((li * 2l + 1l) * dim), eps = a.eps, ascale = 1.0)
         enc_cls_ar(raw, h, SL.s_ar_ffn, pcar, 1l)
         rq_enc(raw, h, SL.s_rq_g1, a.f1[li], dim)
         rq_enc(raw, h, SL.s_rq_g3, a.f3[li], dim)
@@ -5344,7 +5345,7 @@ def private span_record(a : MoeSpanDec) {
             enc_dec_combine_cls(raw, h, SL.s_comb, pcc, (dim + 255l) / 256l)
         }
         if (li + 1l < nl) {
-            var pca2 = ArArgs(dim = uint(dim), add_on = 0u, woff = uint((li + 1l) * 2l * dim), eps = a.eps, ascale = 1.0)
+            var pca2 = GkAddRmsArgs(dim = uint(dim), add_on = 0u, woff = uint((li + 1l) * 2l * dim), eps = a.eps, ascale = 1.0)
             enc_cls_ar(raw, h, SL.s_ar_att, pca2, 1l)
             rq_enc(raw, h, SL.s_rq_att, a.fq[li + 1l], dim)
             vhz_dep(raw, h, VHS_ACTS, 0u)
@@ -5810,9 +5811,9 @@ def private dat_layer_sets(woq, wok, wov, woo : int64; fq, fk, fv, fo : int; rms
             upload_region_at(L.norms, hs * 4l, reinterpret<uint8 const?>(rmskp), hs * 4l)
         }
         L.s_qkr = set_qkn_rope_f16_cls(
-            fixed_array(g_gpu.dat_q_dev, g_gpu.dat_kv_dev, L.k_mir, L.v_mir, g_gpu.dat_cos.buf, L.norms, g_gpu.dat_tok.buf, bbuf),
-            fixed_array(qd * 4l, (qd + 2l * kvd) * 4l, mirbytes, mirbytes, hs * 4l, 2l * hs * 4l, TOK_META_BYTES, bbytes),
-            fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, VHZ_MIR, VHZ_MIR, 0u, 0u, 0u, 0u))
+            fixed_array(g_gpu.dat_q_dev, g_gpu.dat_kv_dev, L.k_mir, L.v_mir, g_gpu.dat_cos.buf, L.norms, g_gpu.dat_tok.buf, bbuf, g_gpu.dat_kv_dev),
+            fixed_array(qd * 4l, (qd + 2l * kvd) * 4l, mirbytes, mirbytes, hs * 4l, 2l * hs * 4l, TOK_META_BYTES, bbytes, (qd + 2l * kvd) * 4l),
+            fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, VHZ_MIR, VHZ_MIR, 0u, 0u, 0u, 0u, VHZ_KVK | VHZ_KVV))
     } else {
         L.s_qkr = set_rope_kv_f16_cls(
             fixed_array(g_gpu.dat_q_dev, g_gpu.dat_kv_dev, g_gpu.dat_kv_dev, L.k_mir, L.v_mir, bbuf, g_gpu.dat_cos.buf, g_gpu.dat_cos.buf, g_gpu.dat_tok.buf),

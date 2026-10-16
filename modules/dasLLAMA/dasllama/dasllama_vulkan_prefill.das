@@ -743,7 +743,7 @@ def private pf_moe_router(raw : VkCommandBuffer; var h : VkHaz; l, wlen : int64)
     let ner = g_rd.ner
     let addrms_set = int(l * PF_ROLES) + 8
     if (L.moe_g4) {   //! the router's input: a weightless rms of x under the router scale over sqrt(dim)
-        var pcn = ArArgs(dim = uint(dim), add_on = 0u, woff = uint(rd_norm_off(l, RD_NORM_ROUTER)), eps = g_rd.eps, ascale = 1.0)
+        var pcn = GkAddRmsArgs(dim = uint(dim), add_on = 0u, woff = uint(rd_norm_off(l, RD_NORM_ROUTER)), eps = g_rd.eps, ascale = 1.0)
         enc_cls_ar(raw, h, g_rd.pf_sets[addrms_set], pcn, wlen)
         pfq_ts(raw)
     }
@@ -812,7 +812,7 @@ def private pf_moe_q8_experts(raw : VkCommandBuffer; var h : VkHaz; l, nk : int6
 //! the gemma-4 routed feed: x under the routed branch's pre norm into pf_xb, the rows the gather (or the host) reads
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#vk-gemma4-moe-block")]
 def private pf_moe_g4_feed(raw : VkCommandBuffer; var h : VkHaz; l, wlen : int64) {
-    var pcn = ArArgs(dim = uint(g_rd.dim), add_on = 0u, woff = uint(rd_norm_off(l, RD_NORM_PRE_FFN2)), eps = g_rd.eps, ascale = 1.0)
+    var pcn = GkAddRmsArgs(dim = uint(g_rd.dim), add_on = 0u, woff = uint(rd_norm_off(l, RD_NORM_PRE_FFN2)), eps = g_rd.eps, ascale = 1.0)
     enc_cls_ar(raw, h, g_rd.pf_sets[int(l * PF_ROLES) + 8], pcn, wlen)
     pfq_ts(raw)
 }
@@ -1427,7 +1427,7 @@ def private pf_hc_head_warm(raw : VkCommandBuffer; var h : VkHaz; w0, wlen, pos0
         cmd_copy_range(raw, g_rd.pf_hcres, 0l, g_rd.head_pf_hsrc_w, wrowb, (wlen - 1l) * wrowb)
         var pcn = GkHcNormArgs(dim = uint(dim), hc = uint(hc), woff = uint(g_rd.hc_hnorm_row * hcd), row0 = src_row0, eps = g_rd.eps)
         enc_hc_norm_cls(raw, h, g_rd.head_pf_s_hnorm, pcn, nh * hc)
-        var pce = ArArgs(dim = uint(dim), add_on = 0u, woff = hbn + uint(RDEC_HEAD_ENORM * dim), eps = g_rd.eps, ascale = 1.0, row0 = src_row0)
+        var pce = GkAddRmsArgs(dim = uint(dim), add_on = 0u, woff = hbn + uint(RDEC_HEAD_ENORM * dim), eps = g_rd.eps, ascale = 1.0, row0 = src_row0)
         enc_cls_ar(raw, h, g_rd.head_pf_s_enorm, pce, nh)
         var pcc = GkCat2Args(d = uint(dim), rows = uint(nh * hc), rep = uint(hc), smaj = 1u, np = uint(nh), a0 = src_row0,
             b0 = src_row0 * uint(hc))
@@ -1512,16 +1512,16 @@ def private pf_head_warm(raw : VkCommandBuffer; var h : VkHaz; w0, wlen, pos0 : 
     let hbn = uint(g_rd.head_norm_base)
     vhz_dep(raw, h, VHZ_XB, VHZ_GATE, true)
     cmd_copy_range(raw, g_rd.pf_xb, 0l, g_rd.head_pf_hsrc, rowb, (wlen - 1l) * rowb)
-    var pch = ArArgs(dim = uint(dim), add_on = 0u, woff = hbn + uint(RDEC_HEAD_HNORM * dim), eps = g_rd.eps, ascale = 1.0, row0 = src_row0)
+    var pch = GkAddRmsArgs(dim = uint(dim), add_on = 0u, woff = hbn + uint(RDEC_HEAD_HNORM * dim), eps = g_rd.eps, ascale = 1.0, row0 = src_row0)
     enc_cls_ar(raw, h, g_rd.pf_sets[hb + 7], pch, nh)
     vhz_dep(raw, h, VHZ_XB, VHZ_GATE, true)
     cmd_copy_range(raw, g_rd.pf_xb, (wlen - 1l) * rowb, g_rd.head_pf_hsrc, 0l, rowb)
-    var pce = ArArgs(dim = uint(dim), add_on = 0u, woff = hbn + uint(RDEC_HEAD_ENORM * dim), eps = g_rd.eps, ascale = 1.0, row0 = src_row0)
+    var pce = GkAddRmsArgs(dim = uint(dim), add_on = 0u, woff = hbn + uint(RDEC_HEAD_ENORM * dim), eps = g_rd.eps, ascale = 1.0, row0 = src_row0)
     enc_cls_ar(raw, h, g_rd.pf_sets[hb + 6], pce, nh)
     var pcc = GkCat2Args(d = uint(dim), rows = uint(nh), a0 = src_row0, b0 = src_row0)
     enc_cat2_cls(raw, h, g_rd.head_pf_s_cat2, pcc, (nh * dim + 255l) / 256l)
     pf_head_eh_enc(raw, h, nh, 1l, g_rd.pf_x, np * dim * 4l)
-    var pca = ArArgs(dim = uint(dim), add_on = 0u, woff = hbn + uint(RDEC_HEAD_ATT * dim), eps = g_rd.eps, ascale = 1.0)
+    var pca = GkAddRmsArgs(dim = uint(dim), add_on = 0u, woff = hbn + uint(RDEC_HEAD_ATT * dim), eps = g_rd.eps, ascale = 1.0)
     enc_cls_ar(raw, h, g_rd.pf_sets[pf_prologue_block()], pca, nh)
     pf_head_kv_store(raw, h, L, nh, pos0 + w0 - carry)
 }
@@ -1614,7 +1614,7 @@ def private pf_qkn_rope_enc(raw : VkCommandBuffer; var h : VkHaz; l : int64; vof
 }
 
 //! the fused pass's set over the window's planes: the q rows, the projection rows, the layer's slab, the rope rows, the norm rows,
-//! the token block (bound, unread by the window form) and the bias rows
+//! the token block (bound, unread by the window form), the bias rows and the projection rows again as the V source
 def private pf_qkn_rope_set(L : RLayer) : VkDescriptorSet {
     let np = g_rd.pf_np
     let kvd = g_rd.kv_dim
@@ -1622,10 +1622,10 @@ def private pf_qkn_rope_set(L : RLayer) : VkDescriptorSet {
     let slab = rd_slab(L)
     let bias_buf = g_rd.has_bias ? g_rd.bias_dev : g_rd.norms_dev
     let bias_bytes = g_rd.has_bias ? g_rd.bias_bytes : g_rd.norms_bytes
-    let bufs = fixed_array(g_rd.pf_q, g_rd.pf_kv, slab.k, slab.v, g_rd.pf_cos, g_rd.norms_dev, g_rd.tok_meta.buf, bias_buf)
+    let bufs = fixed_array(g_rd.pf_q, g_rd.pf_kv, slab.k, slab.v, g_rd.pf_cos, g_rd.norms_dev, g_rd.tok_meta.buf, bias_buf, g_rd.pf_kv)
     let sizes = fixed_array(np * qrow * 4l, np * 2l * kvd * 4l, rd_mir_bytes(), rd_mir_bytes(), np * g_rd.cos_elems * 4l, g_rd.norms_bytes,
-        TOK_META_BYTES * g_rd.nb, bias_bytes)
-    let bits = fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, VHZ_MIR, VHZ_MIR, VHZ_COS, 0u, 0u, 0u)
+        TOK_META_BYTES * g_rd.nb, bias_bytes, np * 2l * kvd * 4l)
+    let bits = fixed_array(VHZ_Q, VHZ_KVK | VHZ_KVV, VHZ_MIR, VHZ_MIR, VHZ_COS, 0u, 0u, 0u, VHZ_KVK | VHZ_KVV)
     return rd_kv16() ? set_qkn_rope_f16_cls(bufs, sizes, bits) : set_qkn_rope_cls(bufs, sizes, bits)
 }
 
@@ -2348,14 +2348,14 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 } else {
                     ple_proj_enc(raw, h, g_rd.pf_ple_gemm_set, uint(wlen))
                 }
-                var pca = ArArgs(dim = uint(g_rd.ple), add_on = 1u, woff = 0u, eps = g_rd.eps, ascale = 1.0 / sqrt(2.0), pre_on = 1u, pwoff = 0u)
+                var pca = GkAddRmsArgs(dim = uint(g_rd.ple), add_on = 1u, woff = 0u, eps = g_rd.eps, ascale = 1.0 / sqrt(2.0), pre_on = 1u, pwoff = 0u)
                 enc_cls_ar_add(raw, h, g_rd.pf_ple_ar_set, pca, wlen * g_rd.n_layers)
             }
             if (warm) {
                 vhz_dep(raw, h, VHZ_X, VHZ_UP, true)
                 cmd_copy_range(raw, g_rd.pf_x, 0l, g_rd.head_pf_wemb, 0l, wlen * dim * 4l)
             }
-            var pc_pro = ArArgs(dim = uint(dim), add_on = 0u, woff = 0u, eps = g_rd.eps, ascale = 1.0)
+            var pc_pro = GkAddRmsArgs(dim = uint(dim), add_on = 0u, woff = 0u, eps = g_rd.eps, ascale = 1.0)
             enc_cls_ar(raw, h, g_rd.pf_sets[bp + 0], pc_pro, wlen)   // prologue norm
             pfq_ts(raw)
             let overlap = g_env_vulkan.vk_overlap && !vk_prof() && !g_rd.experts_host
@@ -2386,7 +2386,7 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 pf_attn_block(raw, h, l, b, wlen, pos0 + w0, l > 0l && pf_qkv_feed_fused(l))
                 }
                 let pre_on = g_rd.layers[l].pre_post ? 1u : 0u
-                var pc8 = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(rd_norm_off(l, RD_NORM_FFN)), eps = g_rd.eps, ascale = 1.0,
+                var pc8 = GkAddRmsArgs(dim = uint(dim), add_on = 1u, woff = uint(rd_norm_off(l, RD_NORM_FFN)), eps = g_rd.eps, ascale = 1.0,
                     pre_on = pre_on, pwoff = uint(rd_norm_off(l, RD_NORM_POST_ATT)),
                     abias_on = g_rd.has_obias ? 1u : 0u, aboff = uint(rd_norm_off(l, RD_NORM_OBIAS)))
                 let moe = g_rd.layers[l].moe   //! the routed block reads the normed rows the fused twin never stores
@@ -2424,12 +2424,12 @@ def private pf_run(x_batch : array<float>; ids : array<int64>; use_ids : bool; e
                 let lple = g_rd.layers[l].ple
                 if (lple) {
                     // the FFN residual first (no scale, the normed rows unused); the branch leaves its projection in pf_ffnout for the step below
-                    var pc14a = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(nxt), eps = g_rd.eps, ascale = 1.0, row0 = uint(ffn_row0),
+                    var pc14a = GkAddRmsArgs(dim = uint(dim), add_on = 1u, woff = uint(nxt), eps = g_rd.eps, ascale = 1.0, row0 = uint(ffn_row0),
                         pre_on = pre_on, pwoff = uint(rd_norm_off(l, RD_NORM_POST_FFN)))
                     enc_cls_ar(raw, h, g_rd.pf_sets[b + 14], pc14a, ffn_rows)
                     pf_ple_block(raw, h, l, b, wlen, np)
                 }
-                var pc14 = ArArgs(dim = uint(dim), add_on = 1u, woff = uint(nxt), eps = g_rd.eps, ascale = g_rd.layers[l].out_scale, row0 = uint(ffn_row0),
+                var pc14 = GkAddRmsArgs(dim = uint(dim), add_on = 1u, woff = uint(nxt), eps = g_rd.eps, ascale = g_rd.layers[l].out_scale, row0 = uint(ffn_row0),
                     pre_on = (pre_on != 0u || lple) ? 1u : 0u, pwoff = uint(rd_norm_off(l, lple ? RD_NORM_PLE_POST : RD_NORM_POST_FFN)))
                 let next_qkv6 = l + 1l < g_rd.n_layers && pf_qkv6(l + 1l)
                 if (moe) {

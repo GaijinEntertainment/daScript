@@ -1136,6 +1136,13 @@ def private depth_cell(t : T?; tr, trg : Model; tag : string; bar : float; stamp
     }
 }
 
+//! the residual step's seam stamps (`GkAddRmsRows`) the device ran, and the split chain's norm pass
+def private seam_counts : int4 {
+    return int4(int(metal_kernel_count_compiled("metal_pre_add_rms") + metal_kernel_count_compiled("metal_pre_add_rms_hx")),
+        int(metal_kernel_count_compiled("metal_pre_add")), int(metal_kernel_count_compiled("metal_add_rms") + metal_kernel_count_compiled("metal_add_rms_hx")),
+        int(metal_kernel_count_compiled("MetalRmsNorm_metal_rmsnorm") + metal_kernel_count_compiled("MetalRmsNormHX_metal_rmsnorm")))
+}
+
 //! the E-series side rows' projections the device ran: the bf16 word form's two stamps and the f32 router's
 def private ple_proj_count : int64 {
     return (metal_kernel_count_compiled("metal_ple_proj_bf16") + metal_kernel_count_compiled("metal_ple_proj_bf16_one")
@@ -1193,10 +1200,18 @@ def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false
             //! the pre-step on the device at every shape: the window's finish, the steps' bf16 projection, no CPU pre-step row
             let fin0 = metal_kernel_count_compiled("metal_ple_finish")
             let cpu0 = ple_cpu_pre_rows()
+            let qn0 = metal_kernel_count_compiled("metal_qk_norm")
+            let pq0 = metal_kernel_count_compiled("metal_pf_qkn_rope") + metal_kernel_count_compiled("metal_pf_qkn_rope_hx")
             eval_(trg, sa, pa)
             let fin_pf = metal_kernel_count_compiled("metal_ple_finish") - fin0
             t |> success(fin_pf > 0l, "{tag} prefill: the window's PLE pre-step finished on the device ({fin_pf})")
+            //! the window's v-norm rides the fused q/k pass: no norm pass of its own
+            let qn_pf = metal_kernel_count_compiled("metal_qk_norm") - qn0
+            let pq_pf = metal_kernel_count_compiled("metal_pf_qkn_rope") + metal_kernel_count_compiled("metal_pf_qkn_rope_hx") - pq0
+            t |> success(pq_pf > 0l && qn_pf == 0l, "{tag} prefill: the v-norm rows on the fused q/k pass ({pq_pf}), no norm pass ({qn_pf})")
             let pj0 = ple_proj_count()
+            let sm0 = seam_counts()
+            let st0 = metal_decode_stats().decodes
             var cura = argmax_of(sa.logits, vocab)
             var picks : array<int64>
             for (_i in range(2)) {
@@ -1206,6 +1221,17 @@ def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false
                 delete one
                 cura = argmax_of(sa.logits, vocab)
             }
+            //! a step's seams one dispatch each: the attention side and the per-layer embedding's post seam with the next norm, the
+            //! FFN's residual ahead of the per-layer embedding and the last layer's seam with none - no norm pass between
+            let sm = seam_counts() - sm0
+            let nst = int(metal_decode_stats().decodes - st0)
+            let nl = int(c.n_layers)
+            let nenc = sm.x / (2 * nl - 1)   //! the encoded layer stacks: the steps, and the greedy chain's pre-encoded one
+            to_log(LOG_INFO, "{tag} decode: {nst} steps, {nenc} encoded stacks' seams - pre_add_rms {sm.x}, pre_add {sm.y}, add_rms {sm.z}, rms {sm.w}\n")
+            t |> success(nst > 0 && nenc >= nst, "{tag} decode: the steps ran on the device ({nst} steps, {nenc} stacks)")
+            t |> equal(sm.x, nenc * (2 * nl - 1), "{tag} decode: the sandwich seams with a next norm, one dispatch each")
+            t |> equal(sm.y, nenc * (nl + 1), "{tag} decode: the seams with no norm stored, one dispatch each")
+            t |> equal(sm.z, 0, "{tag} decode: no plain seam on the sandwich")
             let pj_d = ple_proj_count() - pj0
             t |> success(pj_d >= 2l, "{tag} decode: every step projected its side row on the device ({pj_d})")
             t |> equal(ple_cpu_pre_rows() - cpu0, 0l, "{tag}: the prefill and the steps built no CPU pre-step row")

@@ -318,104 +318,152 @@ def private embed_b32_gate(t : T?; var dev, queue; f : KqFmt; dim, vocab, lead :
     }
 }
 
-// the fused add+rms family: sequential CPU mirror, simd_sum reassociation under the 1e-4 bar
-def private add_rms_gate(t : T?; var dev, queue; batched : bool; dim, nrows : int; ascale : float) {
-    let tag = "add_rms{batched ? "_b" : ""} dim={dim} rows={nrows} ascale={ascale}"
+//! the residual step's Metal stamps (`GkAddRmsRows`): which builder a cell dispatches
+enum private ArStamp {
+    plain        //! the add + norm
+    plain_hx     //! ... with the f16 twin beside
+    pre          //! the sandwich seam: the partner under its post norm, the add, the norm
+    pre_hx       //! ... with the f16 twin beside
+    pre_add      //! the sandwich seam with no norm stored
+}
+
+//! the residual step against the CPU's sequential form, under the 1e-4 bar (simd_sum reassociation): x = (x + a') . ascale,
+//! a' = rmsnorm(a) . wpa on the sandwich stamps, y = rmsnorm(x) . w; the sandwich stamps' rows told apart from the plain form's
+def private add_rms_gate(t : T?; var dev, queue; stamp : ArStamp; single : bool; dim, nrows : int; ascale : float; window : bool = false) {
+    let tag = "add_rms {stamp}{single ? " 1-row grid" : ""}{window ? " window" : ""} dim={dim} rows={nrows} ascale={ascale}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
         let s1 = stamp_of(@@enc_addrms_c)
         let sb = stamp_of(@@enc_add_rms_b_c)
-        var pso = mc |> keep_stamp(s1, err)   //! the single-row and batched builders dispatch the one MetalAddRms kernel
+        let sh = stamp_of(@@pf_enc_add_rms_bhx_c)
+        let p1 = stamp_of(@@enc_preaddrms_c)
+        let pb = stamp_of(@@enc_preaddrms_b_c)
+        let ph = stamp_of(@@enc_preaddrms_bhx_c)
+        let a1 = stamp_of(@@enc_preadd_c)
+        let ab = stamp_of(@@enc_preadd_b_c)
+        let wb = stamp_of(@@pf_enc_add_rms_b_c)
+        let wh = stamp_of(@@pf_enc_add_rms_bhx_c)
+        let wp = stamp_of(@@pf_enc_preaddrms_b_c)
+        let wph = stamp_of(@@pf_enc_preaddrms_bhx_c)
+        let wa = stamp_of(@@pf_enc_preadd_b_c)
+        var pso = (stamp == ArStamp.plain ? mc |> keep_stamp(s1, err) : (stamp == ArStamp.plain_hx ? mc |> keep_stamp(sh, err)
+            : (stamp == ArStamp.pre ? mc |> keep_stamp(p1, err) : (stamp == ArStamp.pre_hx ? mc |> keep_stamp(ph, err) : mc |> keep_stamp(a1, err)))))
         return if (!pso_ok(t, tag, pso, err))
+        let pre = stamp != ArStamp.plain && stamp != ArStamp.plain_hx
         let total = nrows * dim
         var inscope xv, av, w : array<float>
         xv |> resize(total)
         av |> resize(total)
-        w |> resize(dim)
+        w |> resize(2 * dim)   //! [post norm | norm]: the args' pwoff 0, woff dim
         for (i in range(total)) {
             xv[i] = 0.11 * float(i % 43) - 2.3
             av[i] = 0.07 * float(i % 31) - 1.1
         }
-        for (i in range(dim)) {
-            w[i] = 0.5 + 0.04 * float(i % 13)
+        for (i in range(2 * dim)) {
+            w[i] = i < dim ? 0.4 + 0.05 * float(i % 11) : 0.5 + 0.04 * float(i % 13)
         }
-        var inscope want_x, want_y : array<float>
+        var inscope want_x, want_y, plain_x, an : array<float>
         want_x |> resize(total)
         want_y |> resize(total)
+        plain_x |> resize(total)
+        an |> resize(total)
+        unsafe {
+            for (r in range(nrows)) {
+                rmsnorm(addr(an[r * dim]), addr<float const?>(av[r * dim]), addr<float const?>(w[0]), int64(dim), EPS)
+            }
+        }
         for (i in range(total)) {
-            want_x[i] = (xv[i] + av[i]) * ascale
+            want_x[i] = (xv[i] + (pre ? an[i] : av[i])) * ascale
+            plain_x[i] = (xv[i] + av[i]) * ascale
         }
         unsafe {
             for (r in range(nrows)) {
-                rmsnorm(addr(want_y[r * dim]), addr<float const?>(want_x[r * dim]), addr<float const?>(w[0]), int64(dim), EPS)
+                rmsnorm(addr(want_y[r * dim]), addr<float const?>(want_x[r * dim]), addr<float const?>(w[dim]), int64(dim), EPS)
             }
         }
+        var ka = GkAddRmsArgs(dim = uint(dim), add_on = 1u, woff = uint(dim), eps = EPS, ascale = ascale, pre_on = pre ? 1u : 0u, pwoff = 0u)
         let bx = mc |> io_(xv)
         let ba = mc |> in_(av)
         let bw = mc |> in_(w)
         let by = mc |> out_words(total, PAD_SENTINEL)
-        let bdim = mc |> in_plain([uint(dim)])
-        let beps = mc |> in_plain([EPS])
-        let basc = mc |> in_plain([ascale])
+        let bh = mc |> out_words(total, float16(PAD_SENTINEL))
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
-            let (x, a, w1, y, d, e, s) = (mc.buf[bx], mc.buf[ba], mc.buf[bw], mc.buf[by], mc.buf[bdim], mc.buf[beps], mc.buf[basc])
-            if (batched) {
-                stamp_run(sb, pso) {
-                    invoke(sb.enc, enc, x, a, w1, y, d, e, s, int64(nrows))
+            let (x, a, w1, y, yh) = (mc.buf[bx], mc.buf[ba], mc.buf[bw], mc.buf[by], mc.buf[bh])
+            if (window) {   //! the window's builders: the same kernels at 256 lanes a row
+                if (stamp == ArStamp.plain) {
+                    stamp_run(wb, pso) {
+                        invoke(wb.enc, enc, x, a, w1, y, ka, int64(nrows))
+                    }
+                } elif (stamp == ArStamp.plain_hx) {
+                    stamp_run(wh, pso) {
+                        invoke(wh.enc, enc, x, a, w1, y, yh, ka, int64(nrows))
+                    }
+                } elif (stamp == ArStamp.pre) {
+                    stamp_run(wp, pso) {
+                        invoke(wp.enc, enc, x, a, w1, y, ka, int64(nrows))
+                    }
+                } elif (stamp == ArStamp.pre_hx) {
+                    stamp_run(wph, pso) {
+                        invoke(wph.enc, enc, x, a, w1, y, yh, ka, int64(nrows))
+                    }
+                } else {
+                    stamp_run(wa, pso) {
+                        invoke(wa.enc, enc, x, a, w1, ka, int64(nrows))
+                    }
                 }
-            } else {   // the single-row builder's one threadgroup: nrows is 1 on every unbatched arm
-                stamp_run(s1, pso) {
-                    invoke(s1.enc, enc, x, a, w1, y, d, e, s)
+            } elif (stamp == ArStamp.plain) {
+                if (single) {   //! the single-row builder's one threadgroup
+                    stamp_run(s1, pso) {
+                        invoke(s1.enc, enc, x, a, w1, y, ka)
+                    }
+                } else {
+                    stamp_run(sb, pso) {
+                        invoke(sb.enc, enc, x, a, w1, y, ka, int64(nrows))
+                    }
+                }
+            } elif (stamp == ArStamp.plain_hx) {
+                stamp_run(sh, pso) {
+                    invoke(sh.enc, enc, x, a, w1, y, yh, ka, int64(nrows))
+                }
+            } elif (stamp == ArStamp.pre) {
+                if (single) {
+                    stamp_run(p1, pso) {
+                        invoke(p1.enc, enc, x, a, w1, y, ka)
+                    }
+                } else {
+                    stamp_run(pb, pso) {
+                        invoke(pb.enc, enc, x, a, w1, y, ka, int64(nrows))
+                    }
+                }
+            } elif (stamp == ArStamp.pre_hx) {
+                stamp_run(ph, pso) {
+                    invoke(ph.enc, enc, x, a, w1, y, yh, ka, int64(nrows))
+                }
+            } elif (single) {
+                stamp_run(a1, pso) {
+                    invoke(a1.enc, enc, x, a, w1, ka)
+                }
+            } else {
+                stamp_run(ab, pso) {
+                    invoke(ab.enc, enc, x, a, w1, ka, int64(nrows))
                 }
             }
         }
         return if (!ran)
         check_buf(t, "{tag} x", mc.buf[bx], want_x, BAR_TIGHT, Shape(row_width = dim))
-        check_buf(t, "{tag} y", mc.buf[by], want_y, BAR_TIGHT, Shape(row_width = dim))
-    }
-}
-
-def private pre_add_rms_gate(t : T?; var dev, queue; dim : int) {
-    let tag = "pre_add_rms dim={dim}"
-    with_metal_cell(dev, queue) $(var mc : MetalCell) {
-        var err : string
-        let st = stamp_of(@@enc_preaddrms_c)
-        var pso = mc |> keep_stamp(st, err)
-        return if (!pso_ok(t, tag, pso, err))
-        var inscope xv, av, wpa, wffn : array<float>
-        xv |> resize(dim)
-        av |> resize(dim)
-        wpa |> resize(dim)
-        wffn |> resize(dim)
-        for (i in range(dim)) {
-            xv[i] = 0.09 * float(i % 41) - 1.9
-            av[i] = 0.13 * float(i % 37) - 2.1
-            wpa[i] = 0.4 + 0.05 * float(i % 11)
-            wffn[i] = 0.6 + 0.03 * float(i % 17)
+        if (stamp == ArStamp.pre_add) {
+            var inscope untouched <- [for (_i in range(total)); PAD_SENTINEL]
+            check_buf(t, "{tag} y untouched", mc.buf[by], untouched, BAR_EXACT, Shape(row_width = dim))
+        } else {
+            check_buf(t, "{tag} y", mc.buf[by], want_y, BAR_TIGHT, Shape(row_width = dim))
         }
-        var inscope want_x, want_y : array<float>
-        want_x |> resize(dim)
-        want_y |> resize(dim)
-        rmsnorm(want_x, av, wpa, int64(dim), EPS)
-        for (i in range(dim)) {
-            want_x[i] = xv[i] + want_x[i]
+        if (stamp == ArStamp.plain_hx || stamp == ArStamp.pre_hx) {
+            check_hx_narrow(t, "{tag} y twin", mc.buf[bh], mc.buf[by], total, total)
         }
-        rmsnorm(want_y, want_x, wffn, int64(dim), EPS)
-        let bx = mc |> io_(xv)
-        let ba = mc |> in_(av)
-        let bwpa = mc |> in_(wpa)
-        let bwffn = mc |> in_(wffn)
-        let by = mc |> out_words(dim, PAD_SENTINEL)
-        let bdim = mc |> in_plain([uint(dim)])
-        let beps = mc |> in_plain([EPS])
-        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
-            stamp_run(st, pso) {
-                invoke(st.enc, enc, mc.buf[bx], mc.buf[ba], mc.buf[bwpa], mc.buf[bwffn], mc.buf[by], mc.buf[bdim], mc.buf[beps])
-            }
+        if (pre) {
+            var inscope got <- buf_download(mc.buf[bx], total, type<float>)
+            t |> success(check_count(got, plain_x, BAR_TIGHT) > 0, "{tag}: the rows read off the plain step's (the partner is normed)")
         }
-        return if (!ran)
-        check_buf(t, "{tag} x", mc.buf[bx], want_x, BAR_TIGHT, FLAT_SHAPE)
-        check_buf(t, "{tag} y", mc.buf[by], want_y, BAR_TIGHT, FLAT_SHAPE)
     }
 }
 
@@ -1950,10 +1998,19 @@ def test_metal_misc_kernels(t : T?) {
                 embed_kq_gate(t, dev, queue, stamp_of(@@enc_embed_kq_iq2xxs), 25, 768, 5)
                 embed_f32_gate(t, dev, queue, 96, 5, 3, 0)
                 embed_f32_gate(t, dev, queue, 512, 3, 2, 64)
-                add_rms_gate(t, dev, queue, false, 1500, 1, 1.0)
-                add_rms_gate(t, dev, queue, false, 1024, 1, 0.5)    // the gemma4 layer_out_scale slot
-                add_rms_gate(t, dev, queue, true, 1500, 3, 1.0)
-                pre_add_rms_gate(t, dev, queue, 1500)
+                for (st in fixed_array(ArStamp.plain, ArStamp.pre, ArStamp.pre_add)) {
+                    add_rms_gate(t, dev, queue, st, true, 1500, 1, 1.0)
+                    add_rms_gate(t, dev, queue, st, true, 1024, 1, 0.5)    //! the gemma4 layer_out_scale slot
+                    add_rms_gate(t, dev, queue, st, false, 1500, 3, 0.75)
+                    add_rms_gate(t, dev, queue, st, false, 4096, 2, 1.0)    //! the slab's whole width
+                }
+                for (st in fixed_array(ArStamp.plain_hx, ArStamp.pre_hx)) {
+                    add_rms_gate(t, dev, queue, st, false, 1500, 3, 0.75)
+                }
+                for (st in fixed_array(ArStamp.plain, ArStamp.plain_hx, ArStamp.pre, ArStamp.pre_hx, ArStamp.pre_add)) {
+                    add_rms_gate(t, dev, queue, st, false, 2560, 5, 0.75, true)
+                    add_rms_gate(t, dev, queue, st, false, 4096, 2, 1.0, true)
+                }
                 qk_norm_gate(t, dev, queue, 64, 4, 2, 2, false)     // in-place decode shape
                 qk_norm_gate(t, dev, queue, 64, 4, 2, 2, true)      // the no-wv V-fusion shape
                 qk_norm_gate(t, dev, queue, 128, 2, 1, 1, false)

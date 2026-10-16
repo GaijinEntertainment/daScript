@@ -3143,18 +3143,18 @@ class MetalRope {
     }
 }
 
-//! The window's q/k norm and rope on the template both homes stamp (`GkQknRopeKv`), in place over the q panel and the K panel:
-//! the K panel is both `kvsrc` and `kmir`, its rows at `kbase` past the buffer's start; a threadgroup a head row, the rows past
-//! `nreal` pad; the HX stamp also lands the q panel's half twin
+//! The window's q/k norm and rope (`GkQknRopeKv`) in place over its panels - K `kvsrc` and `kmir` at `kbase`, V `vsrc` and `vmir`
+//! at `vbase`, a k head storing its V row only under `vnorm` / `vfk`; a threadgroup a head row, the rows past `nreal` pad, the HX
+//! stamp the q panel's half twin
 [ |> template_struct_instance]
 class template MetalPfQknT : GkQknRopeKv {
     @ssbo @binding = 6 @role = "read" tsin : array<float>   //! the rope table's sin rows
     override CLAMP16 = false
     override LANES = 256u
     override EPT = 1
-    override V_WG = true
+    override V_IN_PLACE = true
 
-    def override mir_base(rowi : uint) : uint2 => uint2((pa.row0 + rowi) * pa.kvrow + pa.kbase, 0u)
+    def override mir_base(rowi : uint) : uint2 => uint2((pa.row0 + rowi) * pa.kvrow + pa.kbase, (pa.row0 + rowi) * pa.kvrow + pa.vbase)
 
     def override rope_sin(cb, j : uint) : float => tsin[cb + j]
 }
@@ -3181,16 +3181,17 @@ class MetalPfQknHX : MetalPfQknT {
 }
 
 //! the window's q/k norm and rope over the q panel `bq` and the K panel at byte `koff` of `bk`: `nq` q heads and `nk` k heads of
-//! `npos` live rows over `nrows` (the q twin's padded rows under `bqh`), the norm rows at `bqkw` unless `norm` is off
-def pf_enc_qkn(enc : MetalComputeEncoder?; bq, bk : MetalBuffer?; koff : uint64; bcos, bsin, bqkw, bqh : MetalBuffer?; nq, nk, qd, kvd, hs, rot : int64;
-               neox, norm : bool; eps, hscale : float; npos, nrows : int64) {
+//! `npos` live rows over `nrows` (the q twin's padded rows under `bqh`), the norm rows at `bqkw` unless `norm` is off; the V panel
+//! `bv` at the same offset takes the k heads' V rows under `vfk` (V the k row under its own rms) or `vnorm` (normed in place)
+def pf_enc_qkn(enc : MetalComputeEncoder?; bq, bk, bv : MetalBuffer?; koff : uint64; bcos, bsin, bqkw, bqh : MetalBuffer?; nq, nk, qd, kvd, hs, rot : int64;
+               neox, norm, vfk, vnorm : bool; eps, hscale : float; npos, nrows : int64) {
     var ka = GkQknRopeArgs(kvd = uint(kvd), hs = uint(hs), half = uint(rot / 2l), neox = neox ? 1u : 0u, nh = uint(nq), kwoff = uint(hs), eps = eps,
-        win = 1u, kbase = uint(koff / 4ul), kvrow = uint(kvd), qrow = uint(qd), cosrow = uint(rot / 2l), nreal = uint(npos),
-        skipnorm = norm ? 0u : 1u, hscale = hscale)
+        win = 1u, kbase = uint(koff / 4ul), vbase = uint(koff / 4ul), kvrow = uint(kvd), qrow = uint(qd), cosrow = uint(rot / 2l), nreal = uint(npos),
+        skipnorm = norm ? 0u : 1u, hscale = hscale, vfk = vfk ? 1u : 0u, vnorm = vnorm ? 1u : 0u)
     if (bqh != null) {
-        enc_pf_qkn_hx(enc, bq, bk, bk, 0ul, bk, 0ul, bcos, 0ul, bqkw, bsin, bcos, bqh, ka, nq + nk, nrows, hs / 2l)
+        enc_pf_qkn_hx(enc, bq, bk, bk, 0ul, bv, 0ul, bcos, 0ul, bqkw, bsin, bcos, bqh, bv, ka, nq + nk, nrows, hs / 2l)
     } else {
-        enc_pf_qkn(enc, bq, bk, bk, 0ul, bk, 0ul, bcos, 0ul, bqkw, bsin, bcos, ka, nq + nk, nrows, hs / 2l)
+        enc_pf_qkn(enc, bq, bk, bk, 0ul, bv, 0ul, bcos, 0ul, bqkw, bsin, bcos, bv, ka, nq + nk, nrows, hs / 2l)
     }
 }
 
@@ -7130,6 +7131,27 @@ def private pf_enc_ple_site(enc : MetalComputeEncoder?; t : Model; l : int64; pr
 }
 
 
+//! whether layer l's per-layer gate (`proj` off) or projection serves the narrowed last row: the file's f32 rows, or a plane the
+//! one-row GEMV takes
+def private pf_narrow_ple_ok(t : Model; l : int64; proj : bool) : bool {
+    let pp = ple_plane(t, l, proj)
+    return pp.f32 || kq_fmt_one_row_gemv(pp.f, proj ? t.config.n_embd_per_layer : t.config.dim)
+}
+
+//! layer l's per-layer gate (dim -> ple) or projection (ple -> dim) over the narrowed last row at row 0 of `bx` (`pf_narrow_ple_ok`)
+def private pf_enc_narrow_ple(enc : MetalComputeEncoder?; t : Model; l : int64; proj : bool; bx, by, bk, bn : MetalBuffer?) {
+    let c = t.config
+    let n = proj ? c.n_embd_per_layer : c.dim
+    let d = proj ? c.dim : c.n_embd_per_layer
+    let pp = ple_plane(t, l, proj)
+    if (!pp.f32) {
+        pf_enc_narrow_gemv(enc, t, pp.f, pp.off, bx, by, bk, bn, n, d)
+        return
+    }
+    var bw = upload_region(unsafe(addr<void?>(t.fblob[pp.off])), uint64(n * d * 4l))
+    pf_enc_slab_gemv_b(enc, bw, bx, by, n, d, 1l)
+}
+
 //! true iff THIS window's metal prefill will engage AND the pre-step kernels cover the model
 [unused_argument(s, start_pos)]
 def private metal_ple_pre_gpu_gate(t : Model; s : Session; npos, start_pos : int64) : bool {
@@ -7945,7 +7967,6 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
             }
             if (l == 0l && ple_gpu) {
                 //! the serial encoder orders the three PLE stages: gather -> model_proj GEMM -> rms+combine
-                var pka = ple_ka(npos, ple_n, c.n_layers, dim, c.norm_eps)
                 enc_embed_table(enc, t, t.ple_emb_fmt, t.ple_emb_off, ple_all, sqrt(float(ple_n)), bple_tok, 0ul, bple, 0ul, npos, u_ple_all, u_ple_sq)
                 if (t.ple_model_bf16) {
                     let bwp = plane_of(g_dev, t, t.bf16blob, t.ple_model_off)
@@ -7957,7 +7978,7 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                     }
                 }
                 var bw_pn = upload_region(unsafe(addr < void? >(t.fblob[t.ple_pnorm_off])), uint64(ple_n * 4l))
-                enc_ple_finish(enc, bple_proj, bw_pn, bple, pka, c.n_layers, npos, ple_n)
+                enc_ple_finish(enc, bple, bple_proj, bw_pn, ple_finish_args(ple_n, dim, c.norm_eps), c.n_layers * npos)
                 s.ple_gpu_pending = false
             }
             if (warm && l == c.n_layers) {
@@ -8122,7 +8143,14 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                         }
                     }
                 }
-                if (!recr && !kvsh && (!has_wv || c.v_norm) && g_pf_skip != "ew" && g_pf_skip != "nongemm") {
+                //! rot mirrors enc_rope's @default: the null u_rot bind means "the class's own hs"
+                let rot_l = c.rope_dim > 0l && c.rope_dim != head_size ? c.rope_dim : hs_l
+                let qkr_on = (g_pf_env_qkr && g_pf_pso_qkr != null && g_pf_pso_qkr_hx != null
+                    && hs_l % 2l == 0l && hs_l <= 512l && rot_l % 2l == 0l && rot_l >= 2l && rot_l <= hs_l)
+                //! a v-norm layer's V rows ride the fused q/k pass (`MetalPfQknT`: V off the k row's registers where the layer has no v
+                //! plane, else normed in place); otherwise the copy and the norm pass below
+                let v_fused = qkr_on && c.v_norm && !recr && !kvsh && !has_bias
+                if (!recr && !kvsh && !v_fused && (!has_wv || c.v_norm) && g_pf_skip != "ew" && g_pf_skip != "nongemm") {
                     //! no-wv layers copy the PRE-norm/PRE-rope K rows into the V panel, then v_norm runs the
                     //! weightless per-head RMS in place - the CPU mm_qkv order, BEFORE qk_norm touches k
                     if (!has_wv) {
@@ -8145,10 +8173,6 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                     tw_bias(enc, bks[l], bbk, GkBiasActArgs(d = uint(kv_dim), nelem = uint(npos * kv_dim), boff = 0u, act = BIAS_ACT_NONE, xoff = uint(koff / 4ul)))
                     tw_bias(enc, bvs[l], bbv, GkBiasActArgs(d = uint(kv_dim), nelem = uint(npos * kv_dim), boff = 0u, act = BIAS_ACT_NONE, xoff = uint(koff / 4ul)))
                 }
-                //! rot mirrors enc_rope's @default: the null u_rot bind means "the class's own hs"
-                let rot_l = c.rope_dim > 0l && c.rope_dim != head_size ? c.rope_dim : hs_l
-                let qkr_on = (g_pf_env_qkr && g_pf_pso_qkr != null && g_pf_pso_qkr_hx != null
-                    && hs_l % 2l == 0l && hs_l <= 512l && rot_l % 2l == 0l && rot_l >= 2l && rot_l <= hs_l)
                 var bqh_q : MetalBuffer? = null    //! the fused arm's q twin, claimed at rope time - the QK site consumes it
                 var bqh_q_live = false
                 if (!recr && qkr_on && g_pf_skip != "ew" && g_pf_skip != "nongemm") {
@@ -8160,9 +8184,9 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                     bqh_q = (mirk || mp >= CVT_MIN_ROWS) ? pf_twin_panel(mp, qd_l) : null
                     bqh_q_live = true
                     let twin = !head_kv && bqh_q != null && g_pf_skip != "act_cvt"
-                    pf_enc_qkn(enc, bq, kvsh ? bq : bks[l], koff, bcos_l, bsin_l, bqkw, twin ? bqh_q : null, head_kv ? 0l : n_heads,
-                        kvsh ? 0l : kvd_l / hs_l, qd_l, kvd_l, hs_l, rot_l, c.rope_neox, has_qkn, c.norm_eps, mirk ? scale_l : 1.0,
-                        npos, twin ? mp : npos)
+                    pf_enc_qkn(enc, bq, kvsh ? bq : bks[l], kvsh ? bq : bvs[l], koff, bcos_l, bsin_l, bqkw, twin ? bqh_q : null, head_kv ? 0l : n_heads,
+                        kvsh ? 0l : kvd_l / hs_l, qd_l, kvd_l, hs_l, rot_l, c.rope_neox, has_qkn, v_fused && !has_wv, v_fused && has_wv, c.norm_eps,
+                        mirk ? scale_l : 1.0, npos, twin ? mp : npos)
                 }
                 if (!recr && !qkr_on && has_qkn && g_pf_skip != "ew" && g_pf_skip != "nongemm") {
                     //! per-head QK-norm before rope — the chunk's q panel and its new K rows
@@ -8304,12 +8328,13 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                 let u_hid_l = (u_hidden2 == null || hid_l == hidden) ? u_hidden : u_hidden2
                 let u_th_l = (u_total_h2 == null || hid_l == hidden) ? u_total_h : u_total_h2
                 let narrow_last = (g_pf_env_lastrow && !s.keep_hidden && !warm
-                    && l == c.n_layers - 1l && npos > 1l && !recr && !moe && !plef && !hcs.on
+                    && l == c.n_layers - 1l && npos > 1l && !recr && !moe && !hcs.on
                     && l >= nds && !c.q_gated
                     && c.n_layer_nextn == 0l
                     && dim % 32l == 0l && hid_l % 32l == 0l
                     && kq_fmt_one_row_gemv(fmt_at(t.w1_fmt, l), dim) && kq_fmt_one_row_gemv(fmt_at(t.w3_fmt, l), dim)
-                    && kq_fmt_one_row_gemv(fmt_at(t.w2_fmt, l), hid_l))
+                    && kq_fmt_one_row_gemv(fmt_at(t.w2_fmt, l), hid_l)
+                    && (!plef || (pf_narrow_ple_ok(t, l, false) && pf_narrow_ple_ok(t, l, true))))
                 //! the gemma-4 MoE tail as one step (`MetalMoeCombG4Pf`): no seam between the FFN and the residual, a row the step's stash holds
                 let g4_step = (moe && c.moe_dense_shexp && !g_moe_g4_unfused && c.pre_post_norm && !plef && !hcs.on && l >= nds
                     && dim <= ADD_RMS_MAX_DIM && g_pf_skip == "")
@@ -8340,16 +8365,36 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                         if (g_pf_skip != "gemm") {
                             pf_enc_narrow_gemv(enc, t, fmt_at(t.w2_fmt, l), t.w2_offs[l], bhb, bxb, u_hid_l, u_dim, hid_l, dim)
                         }
+                        var bosc : MetalBuffer?
+                        if (c.layer_out_scale) {
+                            bosc = upload_region(addr < void? >(t.fblob[t.out_scale_off + l]), 4ul)
+                        }
                         if (g_pf_skip != "ew" && g_pf_skip != "nongemm") {
                             if (c.pre_post_norm) {   //! ... and the FFN branch's under its own
                                 var bw_pf = upload_region(unsafe(addr < void? >(t.fblob[t.rms_post_ffn_off + l * dim])), uint64(dim * 4l))
                                 pf_enc_rms(enc, bxb, 0ul, bw_pf, bxb, u_dim, u_eps, 1l)
                             }
-                            var bosc : MetalBuffer?
-                            if (c.layer_out_scale) {
-                                bosc = upload_region(addr < void? >(t.fblob[t.out_scale_off + l]), 4ul)
+                            enc_add(enc, bx, nro, bxb, 0ul, u_dim, dim, plef ? null : bosc)   //! the per-layer embedding's branch takes the scale
+                        }
+                        if (plef) {   //! the per-layer embedding's branch over the final row: its side row the layer's at the row's position
+                            let side_off = uint64(((sg.row0 + sg.npos - 1l) * ple_all + l * ple_n) * 4l)
+                            if (g_pf_skip != "ew" && g_pf_skip != "nongemm") {
+                                enc_copy_row(enc, bx, nro, bxb2, 0ul, u_dim, dim)
                             }
-                            enc_add(enc, bx, nro, bxb, 0ul, u_dim, dim, bosc)
+                            if (g_pf_skip != "gemm") {
+                                pf_enc_narrow_ple(enc, t, l, false, bxb2, bpleg, u_dim, u_ple)
+                            }
+                            if (g_pf_skip != "ew" && g_pf_skip != "nongemm") {
+                                enc_geglu(enc, bpleg, 0ul, bple, side_off, u_ple, ple_n)
+                            }
+                            if (g_pf_skip != "gemm") {
+                                pf_enc_narrow_ple(enc, t, l, true, bpleg, bxb, u_ple, u_dim)
+                            }
+                            if (g_pf_skip != "ew" && g_pf_skip != "nongemm") {
+                                var bw_pn = upload_region(unsafe(addr < void? >(t.fblob[t.ple_post_off + l * dim])), uint64(dim * 4l))
+                                pf_enc_rms(enc, bxb, 0ul, bw_pn, bxb, u_dim, u_eps, 1l)
+                                enc_add(enc, bx, nro, bxb, 0ul, u_dim, dim, bosc)
+                            }
                         }
                     }
                 }
@@ -8358,28 +8403,11 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                     pf_hc_combine(enc, t, hcs, bxb2, hcs.binj_a)
                     pf_hc_mix_site(enc, t, hcs, l, true, bxb, hcs.binj_f)
                 } elif (!narrow_last && g_pf_skip != "ew" && g_pf_skip != "nongemm") {
-                    if (c.pre_post_norm) {
-                        //! gemma sandwich: norm the attention branch IN PLACE before the residual add
-                        var bw_pa = upload_region(addr < void? >(t.fblob[t.rms_post_att_off + l * dim]), uint64(dim * 4l))
-                        pf_enc_rms(enc, bxb2, 0ul, bw_pa, bxb2, u_dim, u_eps, npos)
-                    }
-                    let want_hx = true   //! a dense FFN reads the rows - the layer's own or a routed layer's shared expert - and so does the router's GEMM
-                    if (dim <= ADD_RMS_MAX_DIM && g_pso_addrms != null) {
-                        bxh_ffn = want_hx && g_pso_addrms_hx != null ? pf_twin_panel(mp, dim) : null
-                        if (bxh_ffn != null) {
-                            pf_enc_add_rms_bhx(enc, bx, bxb2, bw_ffn, bxb, u_dim, u_eps, bxh_ffn, npos)
-                        } else {
-                            enc_add_rms_b(enc, bx, bxb2, bw_ffn, bxb, u_dim, u_eps, npos)
-                        }
-                    } else {
-                        enc_add(enc, bx, 0ul, bxb2, 0ul, u_total_dim, npos * dim)
-                        bxh_ffn = want_hx && g_pso_rms_hx != null ? pf_twin_panel(mp, dim) : null
-                        if (bxh_ffn != null) {
-                            pf_enc_rms_hx(enc, bx, 0ul, bw_ffn, bxb, u_dim, u_eps, bxh_ffn, npos)
-                        } else {
-                            pf_enc_rms(enc, bx, 0ul, bw_ffn, bxb, u_dim, u_eps, npos)
-                        }
-                    }
+                    //! the attention branch under its post norm (the sandwich), the add and the FFN norm with its f16 twin - a dense FFN
+                    //! reads the rows, the layer's own or a routed layer's shared expert, and so does the router's GEMM
+                    bxh_ffn = pf_twin_panel(mp, dim)
+                    enc_residual(enc, t, bx, bxb2, bxb, bxh_ffn, seam(c.pre_post_norm ? t.rms_post_att_off + l * dim : -1l, t.rms_ffn_off + l * dim),
+                        npos, ResidualForm.window, false, ResidualUniforms(bdim = u_dim, beps = u_eps, btot = u_total_dim))
                 }
                 if (moe && g_pf_skip != "gemm" && g_pf_skip != "moe") {
                     //! g4moe routes its own router norm and pre_ffn2 input through bxb2 and reduces into bmg4rt
@@ -8566,17 +8594,18 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                     pf_enc_rms(enc, bxb, 0ul, bw_pf1, bxb, u_dim, u_eps, npos)
                     enc_add(enc, bxb, 0ul, bmg4rt, 0ul, u_total_dim, npos * dim)
                 }
-                if (!g4_step && !narrow_last && g_pf_skip != "ew" && g_pf_skip != "nongemm") {
-                    if (c.pre_post_norm) {
-                        var bw_pf = upload_region(addr < void? >(t.fblob[t.rms_post_ffn_off + l * dim]), uint64(dim * 4l))
-                        pf_enc_rms(enc, bxb, 0ul, bw_pf, bxb, u_dim, u_eps, npos)
-                    }
+                let pf_ew = g_pf_skip != "ew" && g_pf_skip != "nongemm"
+                let pf_uni = ResidualUniforms(bdim = u_dim, beps = u_eps, btot = u_total_dim)
+                let post_ffn = c.pre_post_norm ? t.rms_post_ffn_off + l * dim : -1l   //! the FFN branch's post norm (the sandwich)
+                if (hcs.on && post_ffn >= 0l && !g4_step && !narrow_last && pf_ew) {
+                    var bw_pf = upload_region(addr < void? >(t.fblob[post_ffn]), uint64(dim * 4l))
+                    pf_enc_rms(enc, bxb, 0ul, bw_pf, bxb, u_dim, u_eps, npos)
                 }
-                if (plef) {
-                    //! PLE sits between the FFN residual and out_scale (the CPU order): x_b += ffn_branch, then
-                    //! branch = post_norm(proj · (gelu(gate · x_b) ⊙ side[l]))
-                    if (g_pf_skip != "ew" && g_pf_skip != "nongemm") {
-                        enc_add(enc, bx, 0ul, bxb, 0ul, u_total_dim, npos * dim)
+                if (plef && !narrow_last) {
+                    //! PLE sits between the FFN residual and out_scale (the CPU order): x_b += post_norm(ffn_branch), then
+                    //! branch = proj · (gelu(gate · x_b) ⊙ side[l]), its post norm the layer's last seam's
+                    if (pf_ew) {
+                        enc_residual(enc, t, bx, bxb, null, null, seam(post_ffn, -1l), npos, ResidualForm.window, false, pf_uni)
                     }
                     if (g_pf_skip != "gemm") {
                         pf_enc_ple_site(enc, t, l, false, bx, bpleg, u_dim, u_ple, mp, npos, pf_cvt_panel(enc, bx, mp, dim, g_pf_skip == "act_cvt"))
@@ -8587,21 +8616,14 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                     if (g_pf_skip != "gemm") {
                         pf_enc_ple_site(enc, t, l, true, bpleg, bxb, u_ple, u_dim, mp, npos, pf_cvt_panel(enc, bpleg, mp, ple_n, g_pf_skip == "act_cvt"))
                     }
-                    if (g_pf_skip != "ew" && g_pf_skip != "nongemm") {
-                        var bw_pn = upload_region(addr < void? >(t.fblob[t.ple_post_off + l * dim]), uint64(dim * 4l))
-                        pf_enc_rms(enc, bxb, 0ul, bw_pn, bxb, u_dim, u_eps, npos)
-                    }
                 }
                 if (hcs.on) {
                     pf_hc_combine(enc, t, hcs, bxb, hcs.binj_f)
-                } elif (!g4_step && !narrow_last && g_pf_skip != "ew" && g_pf_skip != "nongemm") {
-                    //! layer_out_scale multiplies the WHOLE layer output: (x + branch) * s folds into the
-                    //! residual add's ascale slot (a 4-byte view into the weights blob)
-                    var bosc : MetalBuffer?
-                    if (c.layer_out_scale) {
-                        bosc = upload_region(addr < void? >(t.fblob[t.out_scale_off + l]), 4ul)
-                    }
-                    enc_add(enc, bx, 0ul, bxb, 0ul, u_total_dim, npos * dim, bosc)
+                } elif (!g4_step && !narrow_last && pf_ew) {
+                    //! the layer's last seam: the branch under its post norm, the add under the layer's output scale (gemma-4); the
+                    //! next layer opens on its own norm
+                    let pre = plef ? t.ple_post_off + l * dim : post_ffn
+                    enc_residual(enc, t, bx, bxb, null, null, seam(pre, -1l, c.layer_out_scale ? t.out_scale_off + l : -1l), npos, ResidualForm.window, false, pf_uni)
                     if (l < nds) {   //! deepstack: slice l adds to the layer output (every row; text tails are zero)
                         enc_add(enc, bx, 0ul, bds, uint64(l * npos * dim * 4l), u_total_dim, npos * dim)
                     }

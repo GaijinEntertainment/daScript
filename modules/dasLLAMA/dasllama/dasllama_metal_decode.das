@@ -790,8 +790,10 @@ def private panels_single(var e : SingleLayerEnc; moe_with_dense : bool; hid_l, 
 [unused_argument(e)]
 def private total_single(var e : SingleLayerEnc; u : MetalBuffer?; n : int64) : tuple<b : MetalBuffer?; n : int64> => (b = u, n = n)
 
-def private add_rms_single(var e : SingleLayerEnc; enc : MetalComputeEncoder?; bx, ba, bw, by : MetalBuffer?; dim : int64; bosc : MetalBuffer?) {
-    enc_add_rms_site(enc, bx, ba, bw, by, e.r.u_dim, e.r.u_eps, dim, bosc)
+//! the single row's residual step at seam `sm` (`enc_residual`); the fuse knob off splits a sandwich seam
+def private residual_single(var e : SingleLayerEnc; t : Model; enc : MetalComputeEncoder?; bx, ba, by : MetalBuffer?; sm : ResidualSeam) {
+    var r & = unsafe(*e.r)
+    enc_residual(enc, t, bx, ba, by, null, sm, 1l, ResidualForm.one_row, sm.pre_off >= 0l && !decode_fuse_pre(), ResidualUniforms(bdim = r.u_dim, beps = r.u_eps, btot = r.u_dim))
 }
 
 //! the gemma-4 MoE step's norms rows, `moe_g4_args`'s layout: layer l's routed, dense and post-FFN norms, then the next layer's
@@ -1212,7 +1214,7 @@ struct template LayerEncT {
     @template_call site = @@site_single
     @template_call ple = @@ple_single
     @template_call total = @@total_single
-    @template_call add_rms = @@add_rms_single
+    @template_call residual = @@residual_single
     @template_call rms = @@rms_single
     @template_call add = @@add_single
     @template_call moe_args = @@moe_args_single
@@ -1385,20 +1387,8 @@ struct template LayerEncT {
             if (r.hc) {   // the attention output scatters into the streams; the ffn site's mixer makes the next block input
                 hc_combine_step(*r, t, enc, r.bxb2, r.bhc_inj_a)
                 hc_mix_site(*r, t, enc, l, true, r.bxb, r.bhc_inj_f)
-            } elif (g_skip != "ew") {
-                var bw_ffn = upload_region(addr < void? >(t.fblob[t.rms_ffn_off + l * dim]), uint64(dim * 4l))
-                if (c.pre_post_norm) {
-                    var bw_pa = upload_region(addr < void? >(t.fblob[t.rms_post_att_off + l * dim]), uint64(dim * 4l))
-                    if (SINGLE && decode_fuse_pre()) {
-                        // post_attn_rms + add_rms collapse to one dispatch (R1 chain-depth fusion)
-                        enc_pre_add_rms_site(enc, r.bx, r.bxb2, bw_pa, bw_ffn, r.bxb, r.u_dim, r.u_eps, dim)
-                    } else {
-                        rms(self, enc, r.bxb2, 0ul, bw_pa, r.bxb2)
-                        add_rms(self, enc, r.bx, r.bxb2, bw_ffn, r.bxb, dim, null)
-                    }
-                } else {
-                    add_rms(self, enc, r.bx, r.bxb2, bw_ffn, r.bxb, dim, null)
-                }
+            } elif (g_skip != "ew") {   //! the attention branch under its post norm (the sandwich), the add, the FFN norm: one step
+                residual(self, t, enc, r.bx, r.bxb2, r.bxb, seam(c.pre_post_norm ? t.rms_post_att_off + l * dim : -1l, t.rms_ffn_off + l * dim))
             }
             let moe_with_dense = r.moe && c.moe_dense_shexp
             let g4_step = moe_with_dense && moe_g4_step_serves(t, l, r.ple || r.hc)
@@ -1419,29 +1409,29 @@ struct template LayerEncT {
                 rms(self, enc, r.bxb, 0ul, bw_post_dense, r.bxb)
                 add(self, enc, r.bxb, 0ul, r.bmoe_rt, 0ul, dim, null)
             }
-            if (g_skip != "ew") {
-                if (c.pre_post_norm) {
-                    var bw_pf = upload_region(addr < void? >(t.fblob[t.rms_post_ffn_off + l * dim]), uint64(dim * 4l))
-                    rms(self, enc, r.bxb, 0ul, bw_pf, r.bxb)
-                }
-            }
-            if (r.ple) {
-                ple(self, t, enc, l)
-            }
+            let post_ffn = c.pre_post_norm ? t.rms_post_ffn_off + l * dim : -1l   //! the FFN branch's post norm (the sandwich)
             if (r.hc) {
+                if (post_ffn >= 0l && g_skip != "ew") {
+                    rms(self, enc, r.bxb, 0ul, upload_region(addr < void? >(t.fblob[post_ffn]), uint64(dim * 4l)), r.bxb)
+                }
                 hc_combine_step(*r, t, enc, r.bxb, r.bhc_inj_f)
+                return
+            }
+            //! the layer's last seam: the branch under its post norm, the add under the layer's output scale (gemma-4), the next
+            //! layer's attention norm - the per-layer embedding stands between the FFN's add and that seam, its own branch's post norm
+            //! in the seam's place
+            let next_norm = l + 1l < c.n_layers ? t.rms_att_off + (l + 1l) * dim : -1l
+            let osc = c.layer_out_scale ? t.out_scale_off + l : -1l
+            if (r.ple) {
+                if (g_skip != "ew") {
+                    residual(self, t, enc, r.bx, r.bxb, null, seam(post_ffn, -1l))
+                }
+                ple(self, t, enc, l)
+                if (g_skip != "ew") {
+                    residual(self, t, enc, r.bx, r.bxb, r.bxb, seam(t.ple_post_off + l * dim, next_norm, osc))
+                }
             } elif (g_skip != "ew") {
-                // gemma4 layer_out_scale: (x + branch) * s folds into the residual add (a 4-byte view into the weights blob)
-                var bosc : MetalBuffer?
-                if (c.layer_out_scale) {
-                    bosc = upload_region(addr < void? >(t.fblob[t.out_scale_off + l]), 4ul)
-                }
-                if (l + 1l < c.n_layers) {
-                    var bw_attn = upload_region(addr < void? >(t.fblob[t.rms_att_off + (l + 1l) * dim]), uint64(dim * 4l))
-                    add_rms(self, enc, r.bx, r.bxb, bw_attn, r.bxb, dim, bosc)
-                } else {
-                    add(self, enc, r.bx, 0ul, r.bxb, 0ul, dim, bosc)
-                }
+                residual(self, t, enc, r.bx, r.bxb, r.bxb, seam(post_ffn, next_norm, osc))
             }
         }
     }
@@ -1567,7 +1557,7 @@ def private enc_ple_f32(enc : MetalComputeEncoder?; t : Model; l : int64; proj :
     enc_moe_router(enc, bw, bx, by, g_one, ka, d, nrows)
 }
 
-//! the single row's PLE between the FFN residual and out_scale: branch = post_norm(proj·(gelu(gate·x) ⊙ side[l]))
+//! the single row's PLE branch between the FFN residual and the layer's last seam: proj·(gelu(gate·x) ⊙ side[l]) into bxb
 def private ple_single(var e : auto(ET); t : Model; enc : MetalComputeEncoder?; l : int64) {
     let r & = unsafe(*e.r)
     let c = t.config
@@ -1575,9 +1565,6 @@ def private ple_single(var e : auto(ET); t : Model; enc : MetalComputeEncoder?; 
     let ple = c.n_embd_per_layer
     let pg = ple_plane(t, l, false)
     let pp = ple_plane(t, l, true)
-    if (g_skip != "ew") {
-        enc_add(enc, r.bx, 0ul, r.bxb, 0ul, r.u_dim, dim)
-    }
     if (g_skip != "gemv") {
         if (pg.f32) {
             enc_ple_f32(enc, t, l, false, r.bx, r.bh12, 1l)
@@ -1595,14 +1582,10 @@ def private ple_single(var e : auto(ET); t : Model; enc : MetalComputeEncoder?; 
             enc_site_gemv(enc, t, pp.f, pp.off, dim, ple, r.bh12, r.bxb, r.u_ple, r.u_dim)
         }
     }
-    if (g_skip != "ew") {
-        var bw_pp = upload_region(unsafe(addr < void? >(t.fblob[t.ple_post_off + l * dim])), uint64(dim * 4l))
-        enc_rms(enc, r.bxb, 0ul, bw_pp, r.bxb, r.u_dim, r.u_eps)
-    }
 }
 
-//! the rows' PLE, the same chain over every row: the gate and the projection as row sites, the side
-//! multiply over the layer's block of the layer-major side plane, the post norm a row at a time
+//! the rows' PLE branch, the same chain over every row: the gate and the projection as row sites, the side
+//! multiply over the layer's block of the layer-major side plane
 def private ple_rows(var e : BatchLayerEnc; t : Model; enc : MetalComputeEncoder?; l : int64) {
     let r & = unsafe(*e.r)
     let c = t.config
@@ -1610,9 +1593,6 @@ def private ple_rows(var e : BatchLayerEnc; t : Model; enc : MetalComputeEncoder
     let ple = c.n_embd_per_layer
     let pg = ple_plane(t, l, false)
     let pp = ple_plane(t, l, true)
-    if (g_skip != "ew") {
-        add_rows(e, enc, r.bx, 0ul, r.bxb, 0ul, dim, null)
-    }
     if (g_skip != "gemv") {
         if (pg.f32) {
             enc_ple_f32(enc, t, l, false, r.bx, r.bh12, r.nrows)
@@ -1629,10 +1609,6 @@ def private ple_rows(var e : BatchLayerEnc; t : Model; enc : MetalComputeEncoder
         } else {
             site_batch(e, t, enc, SiteKind.other, pp.f, pp.off, dim, ple, dim, r.bh12, r.bxb, r.u_ple, r.u_dim, r.u_dim, 0l)
         }
-    }
-    if (g_skip != "ew") {
-        var bw_pp = upload_region(unsafe(addr < void? >(t.fblob[t.ple_post_off + l * dim])), uint64(dim * 4l))
-        rms_rows(e, enc, r.bxb, 0ul, bw_pp, r.bxb)
     }
 }
 
@@ -1851,25 +1827,15 @@ def private moe_args_rows(var e : auto(ET); ndim, ddim, eplane, xs, hasb : uint;
         bxs = down ? r.k_moe_knfe : r.k_dim, bys = down ? r.k_moe_kdim : r.k_moe_knfe, hasb = hasb)
 }
 
-//! the norm into bxb dual-stores its f16 twin where the step carries one (the k4 half-x forms' x)
-def private add_rms_rows(var e : auto(ET); enc : MetalComputeEncoder?; bx, ba, bw, by : MetalBuffer?; dim : int64; bosc : MetalBuffer?) {
+//! the rows' residual step at seam `sm` (`enc_residual`): the norm into bxb dual-stores its f16 twin where the step carries one
+//! (the k4 half-x forms' x); the unfused pin, and the fuse knob off on a sandwich seam, split it
+def private residual_rows(var e : auto(ET); t : Model; enc : MetalComputeEncoder?; bx, ba, by : MetalBuffer?; sm : ResidualSeam) {
     var r & = unsafe(*e.r)
-    let twin = r.bxh != null && by == r.bxb
-    if (dim <= ADD_RMS_MAX_DIM && !g_b_addrms_unfused) {
-        if (twin) {
-            pf_enc_add_rms_bhx(enc, bx, ba, bw, by, r.u_dim, r.u_eps, r.bxh, r.nrows, bosc)
-        } else {
-            enc_add_rms_b(enc, bx, ba, bw, by, r.u_dim, r.u_eps, r.nrows, bosc)
-        }
-    } else {
-        enc_add(enc, bx, 0ul, ba, 0ul, r.u_total_dim, r.nrows * dim, bosc)
-        if (twin) {
-            enc_rms_bhx(enc, bx, 0ul, bw, by, r.u_dim, r.u_eps, r.bxh, r.nrows)
-        } else {
-            enc_rms_b(enc, bx, 0ul, bw, by, r.u_dim, r.u_eps, r.nrows)
-        }
-    }
-    if (by == r.bxb) {
+    let stores = by == r.bxb && sm.norm_off >= 0l
+    let twin = r.bxh != null && stores
+    let split = g_b_addrms_unfused || (sm.pre_off >= 0l && !decode_fuse_pre())
+    enc_residual(enc, t, bx, ba, by, twin ? r.bxh : null, sm, r.nrows, ResidualForm.rows, split, ResidualUniforms(bdim = r.u_dim, beps = r.u_eps, btot = r.u_total_dim))
+    if (stores) {
         r.xh_ok = twin
     }
 }
@@ -2142,7 +2108,7 @@ def private enc_dn_tape_ba(var r : StepRes; enc : MetalComputeEncoder?; nvh, row
 struct private VerifyLayerEnc : LayerEncT {
     override site = @@site_verify
     override total = @@total_rows
-    override add_rms = @@add_rms_rows
+    override residual = @@residual_rows
     override rms = @@rms_rows
     override add = @@add_rows
     override moe_args = @@moe_args_rows
@@ -2902,9 +2868,8 @@ def public set_metal_decode_concurrent(v : int) {
     g_dconc = v < 0 ? -1 : (v != 0 ? 1 : 0)
 }
 
-// DASLLAMA_METAL_FUSE (default ON): the R1 epilogue-fusion kernel MetalPreAddRms (post_attn_rms +
-// add_rms, the pre_post_norm path) — off restores the separate per-op dispatches for A/B. (The moe_with_dense
-// post_ffn1_rms+add fusion was measured and REFUTED, −1.0% on the 26B — see the ledger.)
+// DASLLAMA_METAL_FUSE (default ON): every sandwich seam as one residual step (`MetalPreAddRms` / `MetalPreAdd`) - off
+// restores the split chain (the branch's post norm, the add, the next norm) for A/B
 var private g_dfuse = -1
 
 def private decode_fuse_pre : bool => g_dfuse < 0 ? g_env_metal.fuse : g_dfuse != 0
@@ -3716,7 +3681,7 @@ def private recurrent_batch(var e : BatchLayerEnc; t : Model; enc : MetalCompute
 struct private BatchLayerEnc : LayerEncT {
     override site = @@site_batch
     override total = @@total_rows
-    override add_rms = @@add_rms_rows
+    override residual = @@residual_rows
     override rms = @@rms_rows
     override add = @@add_rows
     override moe_args = @@moe_args_rows

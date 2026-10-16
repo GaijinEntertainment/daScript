@@ -1657,7 +1657,7 @@ module) is independent and can land any time - it is pure structure.
     Still open, each a fold only after its probe row reads flat: the 8-row / 4-row flash Q-tiles (`FaT`),
     `MmBatchT`'s two tile edges, the hand-unrolled `DnScan` / `DaAttnBH128T` register blocks, the batch
     tiles' `stage_w` lane helpers against `KqGemvLeafT.grid4`; and the Q8 byte store spelled by
-    `GkQ8BlockStore.blk_store` and `ResidualT.quant32` (a template fold, pinned by the codec stamps' dump).
+    `GkQ8BlockStore.blk_store` and `GkResidualRow.quant32` (a template fold, pinned by the codec stamps' dump).
 94. **The qwen25v Vulkan chain's remaining f16 sources.** The chain (`ARCHITECTURE_GPU_TOWER_VULKAN.md`
     2.2ar) holds the exact CPU chain within 1e-2 x rms through eight blocks and within 0.02 to 0.09
     x rms at 32 blocks (the Metal rung's order) with the window layers in f32; what re-rolls the
