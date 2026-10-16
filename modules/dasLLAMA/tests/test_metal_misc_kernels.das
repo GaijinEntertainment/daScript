@@ -13,6 +13,7 @@ require dasllama/dasllama_qwen3v   // q3v_reorder_src - the stem assemble gate's
 require _kernel_oracles   // pos_add_2d_ref
 require ?das_metal dasllama/dasllama_metal_kernels  // the decode elementwise/misc kernel set (Apple builds)
 require ?das_metal dasllama/dasllama_metal_common   // the pipeline globals the generated builders read
+require ?das_metal dasllama/dasllama_common   // bump_weights_epoch: the region and ring-slack drops
 require ?das_metal dasllama/dasllama_kqformat   // kq_fmt_of_id - the token-table gather gates name their format
 require ?das_metal dasllama/dasllama_convert    // dequant_b32_plane_block - the per-32 gather gate's rows
 require ?das_metal dasllama/dasllama_metal_prefill  // metal_moe_kq_twin_pick + its knee knob - the K-quant MoE twins' pick cell
@@ -245,10 +246,10 @@ def private embed_b32_gate(t : T?; var dev, queue; f : KqFmt; dim, vocab, lead :
     let tag = "embed_b32 {f} dim={dim} vocab={vocab} lead={lead}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
-        let sq = stamp_of(@@enc_embed_b32_q51)
-        let si = stamp_of(@@enc_embed_b32_iq4nl32)
-        let s4 = stamp_of(@@enc_embed_b32_q4032)
-        let s5 = stamp_of(@@enc_embed_b32_q5032)
+        let sq = stamp_of(@@enc_q51_embed_b32)
+        let si = stamp_of(@@enc_iq4nl32_embed_b32)
+        let s4 = stamp_of(@@enc_q4032_embed_b32)
+        let s5 = stamp_of(@@enc_q5032_embed_b32)
         var pso = f == KqFmt.q51 ? mc |> keep_stamp(sq, err) : (f == KqFmt.iq4nl32 ? mc |> keep_stamp(si, err)
             : (f == KqFmt.q5032 ? mc |> keep_stamp(s5, err) : mc |> keep_stamp(s4, err)))
         return if (!pso_ok(t, tag, pso, err))
@@ -354,7 +355,7 @@ def private add_rms_gate(t : T?; var dev, queue; stamp : ArStamp; single : bool;
         var inscope xv, av, w : array<float>
         xv |> resize(total)
         av |> resize(total)
-        w |> resize(2 * dim)   //! [post norm | norm]: the args' pwoff 0, woff dim
+        w |> resize(2 * dim)   //! [post norm | norm], `seam_norms`' layout on a sandwich stamp; a plain stamp binds the norm row alone
         for (i in range(total)) {
             xv[i] = 0.11 * float(i % 43) - 2.3
             av[i] = 0.07 * float(i % 31) - 1.1
@@ -381,10 +382,11 @@ def private add_rms_gate(t : T?; var dev, queue; stamp : ArStamp; single : bool;
                 rmsnorm(addr(want_y[r * dim]), addr<float const?>(want_x[r * dim]), addr<float const?>(w[dim]), int64(dim), EPS)
             }
         }
-        var ka = GkAddRmsArgs(dim = uint(dim), add_on = 1u, woff = uint(dim), eps = EPS, ascale = ascale, pre_on = pre ? 1u : 0u, pwoff = 0u)
+        var ka = GkAddRmsArgs(dim = uint(dim), add_on = 1u, eps = EPS, ascale = ascale)
+        var inscope wnorm <- [for (i in range(dim)); w[dim + i]]
         let bx = mc |> io_(xv)
         let ba = mc |> in_(av)
-        let bw = mc |> in_(w)
+        let bw = pre ? mc |> in_(w) : mc |> in_(wnorm)
         let by = mc |> out_words(total, PAD_SENTINEL)
         let bh = mc |> out_words(total, float16(PAD_SENTINEL))
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
@@ -2214,6 +2216,53 @@ def test_metal_served(t : T?) {
         t |> success(!metal_served(false), "a later decline still passes through")
         t |> success(get_dispatch_gpu_served(), "and the window stays until the next weights load")
         set_dispatch_gpu_served(was)
+    } else {
+        t |> skip("das_metal is not built on this platform; the Metal drivers are not compiled")
+    }
+}
+
+//! the concatenated weight regions key on every piece: two concats over one first piece and two different second pieces each
+//! hold their own bytes, and a repeat of either is its cached buffer
+[test]
+def test_metal_region_cat_keys(t : T?) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        with_metal_decode_gate(t) $(var _queue) {
+            var inscope a <- [for (i in range(64)); float(i)]
+            var inscope b <- [for (i in range(64)); 100.0 + float(i)]
+            var inscope c <- [for (i in range(64)); 200.0 + float(i)]
+            let rb = 256ul
+            let regions0 = weight_regions_cached()
+            unsafe {
+                let ab = upload_region_cat(addr<void?>(a[0]), rb, addr<void?>(b[0]), rb)
+                let ac = upload_region_cat(addr<void?>(a[0]), rb, addr<void?>(c[0]), rb)
+                var inscope got_ab <- buf_download(ab, 128, type<float>)
+                var inscope got_ac <- buf_download(ac, 128, type<float>)
+                t |> equal(got_ab[64], 100.0, "the first concat's second piece is b's")
+                t |> equal(got_ac[64], 200.0, "the second concat's second piece is c's, not the first concat's")
+                t |> equal(got_ac[63], 63.0, "both concats lead with a")
+                t |> success(upload_region_cat(addr<void?>(a[0]), rb, addr<void?>(b[0]), rb) == ab, "a repeat of the first concat is its cached buffer")
+                t |> success(upload_region_cat(addr<void?>(a[0]), rb, addr<void?>(c[0]), rb) == ac, "... and of the second")
+            }
+            t |> equal(weight_regions_cached() - regions0, 2l, "two concats, two cached regions")
+            bump_weights_epoch()
+        }
+    } else {
+        t |> skip("das_metal is not built on this platform; the Metal drivers are not compiled")
+    }
+}
+
+//! a model swap returns the mirror rings' slack to its floor: the next model's rings are cut at its own windows, not the
+//! outgoing model's widest, and the steps encoded over the old layout are stale
+[test]
+def test_metal_ring_slack_reload(t : T?) {
+    static_if (typeinfo builtin_module_exists(das_metal)) {
+        let was = g_mirror_ring_slack
+        g_mirror_ring_slack = 4l * MIRROR_RING_SLACK_MIN
+        let epoch0 = g_arena_epoch
+        bump_weights_epoch()
+        t |> equal(g_mirror_ring_slack, MIRROR_RING_SLACK_MIN, "the reload returns the slack to its floor")
+        t |> success(g_arena_epoch > epoch0, "the reload's slack drop stales the steps encoded over the old layout")
+        g_mirror_ring_slack = was
     } else {
         t |> skip("das_metal is not built on this platform; the Metal drivers are not compiled")
     }

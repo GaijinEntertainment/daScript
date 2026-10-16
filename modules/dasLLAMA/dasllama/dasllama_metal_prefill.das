@@ -8579,7 +8579,7 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                     pf_enc_site_mm(enc, t, fmt_at(t.w2_fmt, l), t.w2_offs[l], dim, bhb, bxb, u_hid_l, u_dim, mp, hid_l, npos, bxh_h)
                 }
                 if (g4_step) {   //! the routed sum, both branches' norms and the residual: one step; the next layer opens on its own norm
-                    var ka = moe_g4_layer_args(t, l, moe_gemv_route, false)
+                    var ka = moe_g4_layer_args(t, l, moe_gemv_route)
                     enc_moe_comb_g4_pf(enc, bx, bminv, bmsel, moe_gemv_route ? bmg4rt : bmdn, bxb, moe_g4_norms(t, l, false), ka, npos)
                 } elif (g4moe && g_pf_skip != "ew" && g_pf_skip != "nongemm") {
                     //! dense-branch post-norm, then routed + dense summed into bxb for the epilogue

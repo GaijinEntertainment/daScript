@@ -101,7 +101,7 @@ def private metal_blob_layout_ok(t : Model) : bool {
     // E-series PLE gate/proj planes bind per layer at their tags (the f32 rows ride fblob); the token table / model-proj stay CPU-side
     if (has_ple(c)) {
         let ples = c.dim * c.n_embd_per_layer
-        return false if ((ples % 256l) != 0l)
+        return false if ((ples % KQ_SB_ELEMS) != 0l)
         for (l in range64(c.n_layers)) {
             for (pp in ple_planes(t, l)) {
                 return false if (!pp.f32 && !metal_blob_off_ok(pp.off, pp.f))

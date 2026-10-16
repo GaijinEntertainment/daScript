@@ -8,38 +8,87 @@ require metal/das_metal_boost  // GPU driver half, Apple builds only
 require dasllama/dasllama_metal_common
 require dasllama/dasllama_metal_kernels  // the production stamps of the templates both homes stamp
 require dasllama/dasllama_metal_prefill  // the window's stamps
+require metal/msl_shader  // [metal_kernel]: the races' bench-side stamps
+require dasllama/dasllama_metal_lens  // [metal_dispatch], compile_stamp: their builders and pipelines
+require dasllama/dasllama_gpu_math  // rms_inv: the template bodies the bench-side stamps compile
 require math
 
 // The row kernels the Metal home stamps off the shared templates
 // (`dasllama_gpu_kernels_common.das`), each timed alone at a
 // qwen35moe / qwen4exp decode shape through its generated builder: the
 // hyper-connection seams, the n-gram side input, the per-head q/k
-// norm, the router select and the routed combine. One instrument, no
-// race: a kernel's row is the median GPU time of one dispatch over
-// `g_env_bench.lab_rounds` rounds (at least 9) of 200 back-to-back
-// dispatches, with the rounds' cv - a row past 3% cv is VOID and
-// reruns on a quiet box. Warmup: each row runs one round more and
-// drops the first (`time_rows`), and the run opens on a `warm-up` row
-// (hc_init at the seam shape, never reported) that ramps the clocks
-// before the first timed row. A run that times no row - no Metal
-// device, an interpreted run, a build with no Metal - fails. The
-// kernels' numerics are the kernel cells'
+// norm, the router select and the routed combine. A kernel's row is
+// the median GPU time of one dispatch over `g_env_bench.lab_rounds`
+// rounds (at least 9) of 200 back-to-back dispatches, with the rounds'
+// cv - a row past 3% cv is VOID and reruns on a quiet box. Warmup:
+// each row runs one round more and drops the first (`time_rows`), and
+// the run opens on a `warm-up` row (hc_init at the seam shape, never
+// reported) that ramps the clocks before the first timed row. A run
+// that times no row - no Metal device, an interpreted run, a build
+// with no Metal - fails. The kernels' numerics are the kernel cells'
 // (`tests/test_metal_misc_kernels.das`,
 // `tests/test_metal_prefill_kernels.das`); this file times them.
+//
+// Two races time the window's shipped picks against their candidates,
+// an arm chosen by its index (`race_arms`): a round times every arm's
+// 200 dispatches in turn, the first round warms each arm and drops, an
+// arm's row its best round with the median and cv beside. The gemma-4
+// MoE step at 512 rows (`g4_slot_race`): four slot loads in flight a
+// lane off - the shipped `MetalMoeCombG4Pf`, the baseline arm - and on
+// (`BenchMoeCombG4PfX4`); the compare region is the stream rows the
+// step updates. The sandwich seam (pre_add_rms hx) at 512 rows of 2560
+// and 3840 (`seam_lane_race`): the shipped pipeline at 256 lanes - its
+// `pf_` builder, the baseline arm - against 128 and 1024; the compare
+// region is the stream rows and the f32 next norm. Each baseline is
+// checked against a CPU reference in the process; another arm prints
+// `bit-exact vs` the baseline or its difference from the reference,
+// and an arm past `RACE_BOUND` prints the miss and no time.
 //
 //   bin/daslang -jit dastest/dastest.das -- --bench --test modules/dasLLAMA/benchmarks/ew/bench_metal_gk_rows.das
 
 let private REPS = 200
 let private MIN_ROUNDS = 9
 
+let private RACE_BOUND = 1e-4lf   //! a race arm's max |gpu - ref| over the compare region, over the region's max |ref|
+
+//! the fixture's pattern value at element i
+def private pat(i : int; scale : float) : float => scale * (0.11 * float(i % 47) - 2.5)
+
+//! the first `n` floats of `buf` set to the fixture's pattern
+def private fill_pattern(buf : MetalBuffer?; n : int; scale : float) {
+    var p = unsafe(reinterpret<float?>(metal_buffer_contents(buf)))
+    for (i in range(n)) {
+        unsafe(p[i]) = pat(i, scale)
+    }
+}
+
 //! a buffer of `n` floats, element i the fixture's pattern value
 def private fill_buf(n : int; scale : float) : MetalBuffer? {
     var buf = metal_new_buffer(g_dev, uint64(n * 4))
-    var p = unsafe(reinterpret<float?>(metal_buffer_contents(buf)))
-    for (i in range(n)) {
-        unsafe(p[i]) = scale * (0.11 * float(i % 47) - 2.5)
-    }
+    fill_pattern(buf, n, scale)
     return buf
+}
+
+//! the first `n` floats of `buf` read back
+def private read_floats(buf : MetalBuffer?; n : int) : array<float> {
+    let p = unsafe(reinterpret<float?>(metal_buffer_contents(buf)))
+    return <- [for (i in range(n)); unsafe(p[i])]
+}
+
+//! the median, the best and the cv of a row's per-dispatch times
+def private round_stats(times : array<double>) : tuple<med : double; best : double; cv : double> {
+    var sorted := times
+    sorted |> sort()
+    var mean = 0.0lf
+    for (v in times) {
+        mean += v
+    }
+    mean /= double(length(times))
+    var var2 = 0.0lf
+    for (v in times) {
+        var2 += (v - mean) * (v - mean)
+    }
+    return (med = sorted[length(sorted) / 2], best = sorted[0], cv = sqrt(var2 / double(length(times))) / mean)
 }
 
 //! the median per-dispatch GPU time in us of `body` over the rounds, and the rounds' cv
@@ -62,24 +111,93 @@ def private time_rows(name : string; body : block<(enc : MetalComputeEncoder?) :
         times |> push(ms * 1000.0lf / double(REPS))
     }
     times |> erase(0)   //! the first round warms the pipeline
-    var sorted := times
-    sorted |> sort()
-    let med = sorted[length(sorted) / 2]
-    var mean = 0.0lf
-    for (v in times) {
-        mean += v
-    }
-    mean /= double(length(times))
-    var var2 = 0.0lf
-    for (v in times) {
-        var2 += (v - mean) * (v - mean)
-    }
-    let cv = sqrt(var2 / double(length(times))) / mean
-    to_log(LOG_INFO, "{name}: {med} us a dispatch (cv {cv * 100.0lf}%{cv > 0.03lf ? " - VOID" : ""})\n")
-    return (us = med, cv = cv)
+    let st = round_stats(times)
+    to_log(LOG_INFO, "{name}: {st.med} us a dispatch (cv {st.cv * 100.0lf}%{st.cv > 0.03lf ? " - VOID" : ""})\n")
+    return (us = st.med, cv = st.cv)
 }
 
 typedef Reading = tuple<us : double; cv : double>
+
+//! the per-dispatch GPU times in us of `narms` arms, a list an arm, interleaved: a round times each arm's REPS dispatches of `body`
+//! in turn, and the first round warms every arm and drops; empty on a dispatch failure
+def private race_arms(name : string; narms : int; body : block<(enc : MetalComputeEncoder?; arm : int) : void>) : array<array<double>> {
+    let rounds = max(g_env_bench.lab_rounds, MIN_ROUNDS)
+    var times : array<array<double>>
+    times |> resize(narms)
+    for (r in range(rounds + 1)) {
+        for (a in range(narms)) {
+            var err : string
+            var ms = 0.0lf
+            let ok = with_compute_encoder_timed(g_queue, err, ms) $(enc) {
+                for (_i in range(REPS)) {
+                    invoke(body, enc, a)
+                }
+            }
+            if (!ok) {
+                to_log(LOG_ERROR, "{name}: arm {a} dispatch failed: {err}\n")
+                var none : array<array<double>>
+                return <- none
+            }
+            if (r > 0) {
+                times[a] |> push(ms * 1000.0lf / double(REPS))
+            }
+        }
+    }
+    return <- times
+}
+
+//! arm `arm` of `body` dispatched once and waited on
+def private dispatch_once(arm : int; body : block<(enc : MetalComputeEncoder?; arm : int) : void>) : bool {
+    var err : string
+    var ms = 0.0lf
+    let ok = with_compute_encoder_timed(g_queue, err, ms) $(enc) {
+        invoke(body, enc, arm)
+    }
+    if (!ok) {
+        to_log(LOG_ERROR, "arm {arm} dispatch failed: {err}\n")
+    }
+    return ok
+}
+
+struct private ArmCompare {
+    err : double    //! max |gpu - ref| over the compare region, over its max |ref|
+    text : string   //! the row's compare
+}
+
+//! arm `arm`'s compare over its compare region `got`: bit-exact vs the baseline arm's `base` where an arm past the baseline matches
+//! it bit for bit, else its difference from the CPU reference `ref`
+def private arm_compare(arm : int; base_name : string; got, base : array<float>; ref : array<double>) : ArmCompare {
+    var dmax = 0.0lf
+    var rmax = 0.0lf
+    var same = arm > 0 && length(got) == length(base)
+    for (g, r, i in got, ref, count()) {
+        dmax = max(dmax, abs(double(g) - r))
+        rmax = max(rmax, abs(r))
+        if (same && unsafe(reinterpret<uint>(g)) != unsafe(reinterpret<uint>(base[i]))) {
+            same = false
+        }
+    }
+    let err = rmax > 0.0lf ? dmax / rmax : dmax
+    if (same) {
+        return ArmCompare(err = err, text = "bit-exact vs {base_name}")
+    }
+    return ArmCompare(err = err, text = "{err} <= {RACE_BOUND} vs CPU reference")
+}
+
+//! race arm `arm`'s row off the race's `times` (`race_arms`): its best round, the median and cv beside, and its compare - or the
+//! miss and the bound alone
+def private arm_row(name : string; times : array<array<double>>; arm : int; cmp : ArmCompare) : Reading {
+    if (cmp.err > RACE_BOUND) {
+        to_log(LOG_INFO, "{name}: MISS - {cmp.err} past the bound {RACE_BOUND} vs CPU reference\n")
+        return (us = -1.0lf, cv = 1.0lf)
+    }
+    if (arm >= length(times)) {
+        return (us = -1.0lf, cv = 1.0lf)
+    }
+    let st = round_stats(times[arm])
+    to_log(LOG_INFO, "{name}: best {st.best} us a dispatch, median {st.med} (cv {st.cv * 100.0lf}%{st.cv > 0.03lf ? " - VOID" : ""}) - {cmp.text}\n")
+    return (us = st.best, cv = st.cv)
+}
 
 //! the hyper-connection seams, the n-gram side input, the per-head q/k norm, the router select, the routed combine and the deltanet
 //! out-norm at a qwen35moe / qwen4exp shape
@@ -118,13 +236,13 @@ def private seam_rows : array<Reading> {
             enc_qk_norm(enc, by, by, bw, qk_norm_args(16u, 2u, 256u, 20u * 256u, 16u * 256u, 16u * 256u, 256u, 1e-6), 18l, 1l)
         },
         time_rows("moe_select ne=256 k=8 1 row") $(enc) {
-            enc_moe_select(enc, bx, by, by, bw, GkTopKArgs(ne = 256u, k = 8u, norm = 1u, dsoff = GK_NO_DSCALE, lstride = 256u), 1l)
+            enc_moe_select(enc, bx, by, by, GkTopKArgs(ne = 256u, k = 8u, norm = 1u, lstride = 256u), 1l)
         },
         time_rows("moe_select ne=128 k=8 1 row, the down scales (gemma-4)") $(enc) {
-            enc_moe_select_ds(enc, bx, by, by, bw, GkTopKArgs(ne = 128u, k = 8u, norm = 1u, dsoff = 0u, lstride = 128u), 1l)
+            enc_moe_select_ds(enc, bx, by, by, bw, GkTopKArgs(ne = 128u, k = 8u, norm = 1u, lstride = 128u), 1l)
         },
         time_rows("moe_select_512 ne=512 k=10 1 row") $(enc) {
-            enc_moe_select_512(enc, bx, by, by, bw, GkTopKArgs(ne = 512u, k = 10u, norm = 1u, dsoff = GK_NO_DSCALE, lstride = 512u), 1l)
+            enc_moe_select_512(enc, bx, by, by, GkTopKArgs(ne = 512u, k = 10u, norm = 1u, lstride = 512u), 1l)
         },
         time_rows("moe_combine dim={dim} k=8 1 row") $(enc) {
             enc_moe_combine(enc, bz, bw, bx, moe_comb_args(int64(dim), 8l), int64(dim), 1l)
@@ -380,8 +498,7 @@ def private g4_tail_rows : array<Reading> {
     var udim = uniform_u32(uint(dim))
     var ueps = uniform_f32(1e-6)
     var utot = uniform_u32(uint(np * dim))
-    var ka = moe_g4_args(int64(dim), int64(k), 1e-6, 0.75, false, true)
-    var kp = moe_g4_args(int64(dim), int64(k), 1e-6, 0.75, false, false)
+    var ka = moe_g4_args(int64(dim), int64(k), 1e-6, 0.75, false)
     var kc = moe_comb_args(int64(dim), int64(k))
     var rows <- [
         time_rows("g4 MoE tail dim={dim} k={k} 1 row, unfused (6 dispatches)") $(enc) {
@@ -405,7 +522,7 @@ def private g4_tail_rows : array<Reading> {
             enc_add(enc, bx, 0ul, bd, 0ul, utot, int64(np * dim))
         },
         time_rows("g4 MoE step dim={dim} k={k} {np} rows (the window's stamp)") $(enc) {
-            enc_moe_comb_g4_pf(enc, bx, binv, bsel, bdn, bd, bw, kp, int64(np))
+            enc_moe_comb_g4_pf(enc, bx, binv, bsel, bdn, bd, bw, ka, int64(np))
         }
     ]
     for (buf in fixed_array(bx, bd, brt, bdn, bsel, binv, bw)) {
@@ -414,6 +531,132 @@ def private g4_tail_rows : array<Reading> {
     for (u in fixed_array(udim, ueps, utot)) {
         pool_release(g_upool, u, 4ul)
     }
+    return <- rows
+}
+
+//! the gemma-4 window step stamped as `MetalMoeCombG4Pf` is, but with four slot loads in flight a lane: the slot race's second arm
+[metal_dispatch(name = "bench_enc_moe_comb_g4_pf_x4", pso = "g_bench_pso_moe_comb_g4_pf_x4", tgmem = "bench_moe_comb_g4_pf_x4_msl_tgmem", tg = 1024,
+    grid = "npos", params = "npos : int64")]
+class BenchMoeCombG4PfX4 : MetalMoeCombG4T {
+    override GATHERED = true
+    override OUT_F32 = false
+    override SLOT_X4 = true
+
+    [metal_kernel(name="bench_moe_comb_g4_pf_x4_msl")]
+    def bench_moe_comb_g4_pf_x4 {
+        comb_g4_row(gl_WorkGroupID.x)
+    }
+}
+
+var private g_bench_pso_moe_comb_g4_pf_x4 : MetalComputePipeline?
+
+//! the gemma-4 window step's operands at width `dim`, `k` slots a row over `np` rows, laid out as `g4_tail_rows`' window rows
+struct private G4Step {
+    bx : MetalBuffer?     //! the stream rows, updated in place
+    binv : MetalBuffer?   //! row p's slot j's down row at p * k + j
+    bsel : MetalBuffer?   //! the selection rows: k picks, then k weights
+    bdn : MetalBuffer?    //! the slots' down rows
+    bd : MetalBuffer?     //! the dense branch's rows
+    bw : MetalBuffer?     //! the norms plane: the routed, dense and post-FFN norms
+    kp : GkMoeCombArgs
+    np : int
+}
+
+//! the slot race's arm `arm` on `s`: 0 the shipped window stamp (`SLOT_X4` off), 1 the bench stamp (`SLOT_X4` on)
+def private g4_slot_arm(enc : MetalComputeEncoder?; s : G4Step; arm : int) {
+    var k = s.kp
+    if (arm == 0) {
+        enc_moe_comb_g4_pf(enc, s.bx, s.binv, s.bsel, s.bdn, s.bd, s.bw, k, int64(s.np))
+    } else {
+        bench_enc_moe_comb_g4_pf_x4(enc, s.bx, s.binv, s.bsel, s.bdn, s.bd, s.bw, k, int64(s.np))
+    }
+}
+
+//! rsqrt(mean + eps) of the squares of `v`, in double
+def private ref_rms_inv(v : array<double>; eps : double) : double {
+    var ss = 0.0lf
+    for (e in v) {
+        ss += e * e
+    }
+    return 1.0lf / sqrt(ss / double(length(v)) + eps)
+}
+
+//! the window step's stream rows after one dispatch, on the CPU in double off the fixture's pattern inputs
+def private g4_step_ref(dim, k, np : int; ascale : double) : array<double> {
+    var out : array<double>
+    out |> reserve(np * dim)
+    for (p in range(np)) {
+        var inscope rv <- [for (_e in range(dim)); 0.0lf]
+        for (j in range(k)) {
+            let wj = double(pat(p * 2 * k + k + j, 0.01))
+            let row = ((p * k + j) * 7) % (np * k)
+            for (e in range(dim)) {
+                rv[e] += wj * double(pat(row * dim + e, 0.1))
+            }
+        }
+        var inscope dv <- [for (e in range(dim)); double(pat(p * dim + e, 0.25))]
+        let inv_r = ref_rms_inv(rv, 1e-6lf)
+        let inv_d = ref_rms_inv(dv, 1e-6lf)
+        var inscope cv <- [for (e in range(dim)); double(pat(e, 0.01)) * rv[e] * inv_r + double(pat(dim + e, 0.01)) * dv[e] * inv_d]
+        let inv_c = ref_rms_inv(cv, 1e-6lf)
+        for (e in range(dim)) {
+            out |> push((double(pat(p * dim + e, 0.5)) + double(pat(2 * dim + e, 0.01)) * cv[e] * inv_c) * ascale)
+        }
+    }
+    return <- out
+}
+
+//! the gemma-4 MoE window step at the 26B's shape (dim 2816, eight slots, 512 rows), raced with four slot loads in flight a lane off
+//! - the shipped `MetalMoeCombG4Pf`, the baseline - and on (`BenchMoeCombG4PfX4`)
+def private g4_slot_race : array<Reading> {
+    let dim = 2816
+    let k = 8
+    let np = 512
+    var rows : array<Reading>
+    rows |> reserve(2)
+    var ok = true
+    g_bench_pso_moe_comb_g4_pf_x4 = compile_stamp(bench_moe_comb_g4_pf_x4_msl, ok)
+    if (!ok) {
+        rows |> push((us = -1.0lf, cv = 1.0lf))
+        return <- rows
+    }
+    var s = G4Step(bx = fill_buf(np * dim, 0.5), bsel = fill_buf(np * 2 * k, 0.01), bdn = fill_buf(np * k * dim, 0.1),
+        bd = fill_buf(np * dim, 0.25), bw = fill_buf(4 * dim, 0.01), kp = moe_g4_args(int64(dim), int64(k), 1e-6, 0.75, false, false),
+        np = np)
+    s.binv = metal_new_buffer(g_dev, uint64(np * k * 4))
+    var ip = unsafe(reinterpret<uint?>(metal_buffer_contents(s.binv)))
+    for (i in range(np * k)) {
+        unsafe(ip[i]) = uint((i * 7) % (np * k))
+    }
+    let names = fixed_array("SLOT_X4 off (the shipped window stamp)", "SLOT_X4 on (bench stamp)")
+    let ref <- g4_step_ref(dim, k, np, 0.75lf)
+    var base : array<float>
+    var cmps : array<ArmCompare>
+    for (arm in range(2)) {
+        fill_pattern(s.bx, np * dim, 0.5)
+        let sent = dispatch_once(arm) $(enc, a) {
+            g4_slot_arm(enc, s, a)
+        }
+        if (!sent) {
+            cmps |> push(ArmCompare(err = 1.0lf, text = "no dispatch"))
+            continue
+        }
+        var inscope got <- read_floats(s.bx, np * dim)
+        if (arm == 0) {
+            base := got
+        }
+        cmps |> push(arm_compare(arm, names[0], got, base, ref))
+    }
+    var times <- race_arms("g4 slot race", 2) $(enc, a) {
+        g4_slot_arm(enc, s, a)
+    }
+    for (arm in range(2)) {
+        rows |> push(arm_row("race g4 MoE step dim={dim} k={k} {np} rows: {names[arm]}", times, arm, cmps[arm]))
+    }
+    for (buf in fixed_array(s.bx, s.binv, s.bsel, s.bdn, s.bd, s.bw)) {
+        metal_release(buf)
+    }
+    metal_release(g_bench_pso_moe_comb_g4_pf_x4)
     return <- rows
 }
 
@@ -453,7 +696,7 @@ def private ar_dim_rows(dim, np : int; var rows : array<Reading>) {
     var utot4 = uniform_u32(uint(4 * dim))
     var utotn = uniform_u32(uint(np * dim))
     let kp = GkAddRmsArgs(dim = uint(dim), add_on = 1u, eps = 1e-6, ascale = 1.0)
-    let ks = GkAddRmsArgs(dim = uint(dim), add_on = 1u, woff = uint(dim), eps = 1e-6, ascale = 0.75, pre_on = 1u, pwoff = 0u)
+    let ks = GkAddRmsArgs(dim = uint(dim), add_on = 1u, eps = 1e-6, ascale = 0.75)
     rows |> push(time_rows("ar dim={dim} 1 row: add + norm") $(enc) {
         var k = kp
         enc_addrms_c(enc, bx, ba, bw, by, k)
@@ -532,6 +775,122 @@ def private ar_rows : array<Reading> {
     return <- rows
 }
 
+//! the sandwich seam stamped as `MetalPreAddRmsHX` is - its loops striding the threadgroup's own size, so the threadgroup is the
+//! lane width - and dispatched at 128 lanes: the lane race's narrow arm
+[metal_dispatch(name = "bench_enc_preaddrms_bhx_128", pso = "g_bench_pso_preaddrms_hx", tgmem = "bench_pre_add_rms_hx_msl_tgmem", tg = 128,
+    grid = "nrows", params = "nrows : int64")]
+class BenchPreAddRmsHX : MetalAddRmsT {
+    override PRE = true
+    override OUT_F32 = true
+    override HX = true
+
+    [metal_kernel(name="bench_pre_add_rms_hx_msl")]
+    def bench_pre_add_rms_hx {
+        add_rms_row(gl_WorkGroupID.x)
+    }
+}
+
+var private g_bench_pso_preaddrms_hx : MetalComputePipeline?
+
+//! the sandwich seam's operands at width `dim` over `np` rows, laid out as `ar_dim_rows`' window rows
+struct private SeamStep {
+    bx : MetalBuffer?   //! the stream rows, updated in place
+    ba : MetalBuffer?   //! the branch rows, normed under the post norm before the add
+    by : MetalBuffer?   //! the next norm, f32
+    bh : MetalBuffer?   //! ... its f16 twin
+    bw : MetalBuffer?   //! the norms plane: the post norm, then the next norm at `dim`
+    ks : GkAddRmsArgs
+    np : int
+}
+
+//! the lane race's arm `arm` on `s`: 0 the shipped window builder (256 lanes), 1 the shipped pipeline at 128 lanes, 2 its decode
+//! builder (1024 lanes)
+def private seam_lane_arm(enc : MetalComputeEncoder?; s : SeamStep; arm : int) {
+    var k = s.ks
+    if (arm == 0) {
+        pf_enc_preaddrms_bhx_c(enc, s.bx, s.ba, s.bw, s.by, s.bh, k, int64(s.np))
+    } elif (arm == 1) {
+        bench_enc_preaddrms_bhx_128(enc, s.bx, s.ba, s.bw, s.by, s.bh, k, int64(s.np))
+    } else {
+        enc_preaddrms_bhx_c(enc, s.bx, s.ba, s.bw, s.by, s.bh, k, int64(s.np))
+    }
+}
+
+//! the seam's stream rows then its f32 next norm after one dispatch, on the CPU in double off the fixture's pattern inputs
+def private seam_ref(dim, np : int; ascale : double) : array<double> {
+    var xs, ys : array<double>
+    xs |> reserve(np * dim)
+    ys |> reserve(np * dim)
+    for (r in range(np)) {
+        var inscope av <- [for (e in range(dim)); double(pat(r * dim + e, 0.25))]
+        let ainv = ref_rms_inv(av, 1e-6lf)
+        var inscope vv <- [for (e in range(dim)); (double(pat(e, 0.01)) * av[e] * ainv + double(pat(r * dim + e, 0.5))) * ascale]
+        let inv = ref_rms_inv(vv, 1e-6lf)
+        for (e in range(dim)) {
+            xs |> push(vv[e])
+            ys |> push(double(pat(dim + e, 0.01)) * vv[e] * inv)
+        }
+    }
+    xs |> push_from(ys)
+    return <- xs
+}
+
+//! the window's sandwich seam (pre_add_rms hx) at width `dim` over `np` rows, raced at 256 lanes - the shipped `pf_` builder, the
+//! baseline - against 128 and 1024 on the same pipeline
+def private seam_lane_race(dim, np : int; var rows : array<Reading>) {
+    let n = np * dim
+    var s = SeamStep(bx = fill_buf(n, 0.5), ba = fill_buf(n, 0.25), by = fill_buf(n, 0.0), bh = metal_new_buffer(g_dev, uint64(n * 2)),
+        bw = fill_buf(2 * dim, 0.01), ks = GkAddRmsArgs(dim = uint(dim), add_on = 1u, woff = uint(dim), eps = 1e-6, ascale = 0.75, pre_on = 1u,
+        pwoff = 0u), np = np)
+    rows |> reserve(length(rows) + 3)
+    let names = fixed_array("256 lanes (the shipped window builder)", "128 lanes (bench builder)", "1024 lanes (the decode builder)")
+    let ref <- seam_ref(dim, np, 0.75lf)
+    var base : array<float>
+    var cmps : array<ArmCompare>
+    for (arm in range(3)) {
+        fill_pattern(s.bx, n, 0.5)
+        let sent = dispatch_once(arm) $(enc, a) {
+            seam_lane_arm(enc, s, a)
+        }
+        if (!sent) {
+            cmps |> push(ArmCompare(err = 1.0lf, text = "no dispatch"))
+            continue
+        }
+        var inscope got <- read_floats(s.bx, n)
+        got |> push_from(read_floats(s.by, n))
+        if (arm == 0) {
+            base := got
+        }
+        cmps |> push(arm_compare(arm, names[0], got, base, ref))
+    }
+    var times <- race_arms("seam lane race dim={dim}", 3) $(enc, a) {
+        seam_lane_arm(enc, s, a)
+    }
+    for (arm in range(3)) {
+        rows |> push(arm_row("race ar dim={dim} {np} rows sandwich seam pre_add_rms hx: {names[arm]}", times, arm, cmps[arm]))
+    }
+    for (buf in fixed_array(s.bx, s.ba, s.by, s.bh, s.bw)) {
+        metal_release(buf)
+    }
+}
+
+//! the lane race at the gemma-3-12b and E4B widths over the 512-row window
+def private seam_lane_rows : array<Reading> {
+    var rows : array<Reading>
+    var ok = true
+    g_bench_pso_preaddrms_hx = compile_stamp(bench_pre_add_rms_hx_msl, ok)
+    if (!ok) {
+        rows |> push((us = -1.0lf, cv = 1.0lf))
+        return <- rows
+    }
+    rows |> reserve(6)
+    for (dim in fixed_array(2560, 3840)) {
+        seam_lane_race(dim, 512, rows)
+    }
+    metal_release(g_bench_pso_preaddrms_hx)
+    return <- rows
+}
+
 //! the E-series side rows at the E2B shape (35 layers x 256): the act over a layer's side slice and the pre-step's finish, the
 //! decode row and the 512-row window
 def private ple_rows : array<Reading> {
@@ -571,6 +930,7 @@ def private run_gk_rows(b : B?) {
     rows |> push_from(qkn_rows(), router_rows(), pk_rows(), dn_rows())
     rows |> push_from(gate_rows(), cls_epi_rows(), g4_tail_rows(), ple_proj_rows())
     rows |> push_from(ar_rows(), ple_rows())
+    rows |> push_from(g4_slot_race(), seam_lane_rows())
     var nmeas = 0
     var nvoid = 0
     for (r in rows) {

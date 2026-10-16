@@ -133,9 +133,16 @@ def gemma_format_cell(t : T?; gf : GemmaFile; mx4 : bool) {
         var inscope feed <- prose_feed(tr, 40l, 2l)
         var sg <- create_session(tr, mirror_kv_dtype())
         let served0 = moe_gpu_resident_prefills()
+        let gu0 = census("mx4_gemv_gu_cls_spv")
+        let sum0 = census("mx4_gemv_sum_cls_spv")
         var rows <- feed_logits(tr, sg, feed.prompt, feed.toks) $ {}
         t |> equal(moe_gpu_resident_prefills(), served0 + 1l, "{gf.file}: the resident window chain served the prompt")
         served_every_call(t)
+        if (mx4 && gu0 != NO_CENSUS) {   //! the fed steps' routed sites on the mx4 stamps: the fused gate + up and the summed down
+            let gu_n = census("mx4_gemv_gu_cls_spv") - gu0
+            let sum_n = census("mx4_gemv_sum_cls_spv") - sum0
+            t |> success(gu_n > 0l && sum_n > 0l, "{gf.file}: the steps' routed gate + up ({gu_n}) and summed down ({sum_n}) on the mx4 stamps")
+        }
         for (r, i in rows, count()) {
             let bad = length([for (v in r); v; where !is_finite(v)])
             t |> equal(bad, 0, "{gf.file}: row {i}'s logits finite")

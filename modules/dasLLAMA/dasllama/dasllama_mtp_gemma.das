@@ -448,7 +448,7 @@ def private q8_feed(var x : array<float>; n : int64; q8 : bool; var xq : array<i
     return if (!q8)
     requant_rows_q8_sized(x, n, 1l, xq, xs)
     for (i in range64(n)) {
-        x[i] = float(xq[i]) * xs[i / 32l]
+        x[i] = float(xq[i]) * xs[i / KQ_B32_ELEMS]
     }
 }
 

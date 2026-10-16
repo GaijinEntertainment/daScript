@@ -55,33 +55,47 @@ def test_gpu_resident_gemma4_e2b_block_codecs(t : T?) {
 }
 
 //! the per-layer-embedding table in its own tag on the device (arm `g4e-ple`): E2B Q8_0 with the token and PLE tables
-//! requantized to Q5_0, Q5_1 and Q4_0 (`../performance/model_specs.das`) and the Q8_0 file as the shape control - the plan
-//! seats the table under its tag, and the forced feed's prefill gathers the side rows off it against the CPU chain
+//! requantized to Q5_0, Q5_1, Q4_0, Q6_K and IQ4_XS (`../performance/model_specs.das`) and the Q8_0 file as the shape control -
+//! the plan seats the table under its tag, and the forced feed's prefill gathers the side rows off it against the CPU chain on
+//! the format's gather leaf (`gather`: its census count rises; the token table the mint requantized with it rides the same leaf)
 [test]
 def test_gpu_resident_gemma4_e2b_ple_tables(t : T?) {
-    for (spec in [(file = "gemma-4-E2B-it-Q8_0.gguf", fmt = KqFmt.q8),
-                  (file = "gemma-4-E2B-it-emb-Q5_0-local.gguf", fmt = KqFmt.q5032),
-                  (file = "gemma-4-E2B-it-emb-Q5_1-local.gguf", fmt = KqFmt.q51),
-                  (file = "gemma-4-E2B-it-emb-Q4_0-local.gguf", fmt = KqFmt.q40)]) {
+    for (spec in [(file = "gemma-4-E2B-it-Q8_0.gguf", fmt = KqFmt.q8, gather = ""),
+                  (file = "gemma-4-E2B-it-emb-Q5_0-local.gguf", fmt = KqFmt.q5032, gather = "q5032_emb_cls_spv"),
+                  (file = "gemma-4-E2B-it-emb-Q5_1-local.gguf", fmt = KqFmt.q51, gather = "q51_emb_cls_spv"),
+                  (file = "gemma-4-E2B-it-emb-Q4_0-local.gguf", fmt = KqFmt.q40, gather = "kq_emb_q40_cls_spv"),
+                  (file = "gemma-4-E2B-it-emb-Q6_K-local.gguf", fmt = KqFmt.k6, gather = "kq_emb_k6_cls_spv"),
+                  (file = "gemma-4-E2B-it-emb-IQ4_XS-local.gguf", fmt = KqFmt.iq4xs, gather = "kq_emb_iq4xs_cls_spv")]) {
         let gf = GemmaFile(file = spec.file, arm = "g4e-ple")
         t |> run("{spec.file}: the {spec.fmt} per-layer-embedding table seats on the device and the prefill gathers off it") @(t : T?) {
+            var armed = false
             with_gemma_rig(t, gf) $(tr) {
+                armed = true
                 t |> equal(tr.ple_emb_fmt, spec.fmt, "the PLE table keeps its disk format's tag")
                 let plan = resident_plan(tr, 4096l, KVDtype.f16, KVDtype.f16)
                 t |> success(plan.ple_tbl_bytes > 0l, "the plan seats the {spec.fmt} table on the device ({plan.ple_tbl_bytes} bytes)")
             }
+            let g0 = empty(spec.gather) ? NO_CENSUS : census(spec.gather)
             gemma_forced_feed(t, 40l, gf)
+            return if (!armed || g0 == NO_CENSUS)
+            let g_n = census(spec.gather) - g0
+            t |> success(g_n > 0l, "the {spec.fmt} table's rows gathered on its own leaf ({spec.gather}: {g_n})")
         }
     }
 }
 
 //! the per-layer gate and projection planes in their own formats on the device (arm `g4e-kq`): the E2B Q4_K_M file ships them
-//! F32 - the router GEMV, the f32 act and the f32 tile read the file's rows, the feed held against the file's f32 chain - and the Q4_0 file Q4_0, on the q40 GEMV and tiles
-//! with the f32 classes undispatched (the control)
+//! F32 - the router GEMV, the f32 act and the f32 tile read the file's rows, the feed held against the file's f32 chain - the Q4_0 file
+//! Q4_0, and the ple-Q6_K / ple-Q5_0 mints of the Q8_0 file (`../performance/model_specs.das`) Q6_K and Q5_0, each on its format's decode
+//! GEMV (`gemv`: their census counts rise over the fed steps - on the mints no other plane carries the format) with the f32 classes
+//! undispatched (the control)
 [test]
 def test_gpu_resident_gemma4_e2b_ple_planes(t : T?) {
-    for (spec in [(file = "gemma-4-E2B-it-Q4_K_M.gguf", f32 = true), (file = "gemma-4-E2B-it-Q4_0.gguf", f32 = false)]) {
-        let gf = GemmaFile(file = spec.file, arm = "g4e-kq")
+    for (spec in [(file = "gemma-4-E2B-it-Q4_K_M.gguf", f32 = true, arm = "g4e-kq", gemv = ""),
+                  (file = "gemma-4-E2B-it-Q4_0.gguf", f32 = false, arm = "g4e-kq-q40", gemv = "kq_gemv_q40"),
+                  (file = "gemma-4-E2B-it-ple-Q6_K-local.gguf", f32 = false, arm = "g4e-kq-ple-q6k", gemv = "kq_gemv_k6"),
+                  (file = "gemma-4-E2B-it-ple-Q5_0-local.gguf", f32 = false, arm = "g4e-kq-ple-q50", gemv = "q5032_gemv")]) {
+        let gf = GemmaFile(file = spec.file, arm = spec.arm)
         t |> run("{spec.file}: the per-layer gate and projection planes in their file format, the forced feed against the CPU chain") @(t : T?) {
             var armed = false   //! the rig armed the driver on the file (else every cell below skipped, saying why)
             with_gemma_rig(t, gf) $(tr) {
@@ -91,6 +105,7 @@ def test_gpu_resident_gemma4_e2b_ple_planes(t : T?) {
             }
             let act0 = census("ple_act_f32_cls_spv")
             let gemm0 = census("dn_ba_cls_spv")
+            let gv0 = empty(spec.gemv) ? 0l : census("{spec.gemv}_cls_spv") + census("{spec.gemv}_n_cls_spv")
             gemma_forced_feed(t, 40l, gf, spec.f32)   //! the Q4_K_M file's CPU q8 chain sits off its f32 chain at one step: its `exact` form
             return if (!armed || act0 == NO_CENSUS)
             let act_n = census("ple_act_f32_cls_spv") - act0
@@ -99,6 +114,8 @@ def test_gpu_resident_gemma4_e2b_ple_planes(t : T?) {
                 t |> success(act_n > 0l && gemm_n > 0l, "the token command's f32 act ({act_n}) and the window's f32 tile ({gemm_n}) served the f32 rows")
             } else {
                 t |> equal(act_n + gemm_n, 0l, "no f32 per-layer plane, no f32 act or tile dispatched")
+                let gv_n = census("{spec.gemv}_cls_spv") + census("{spec.gemv}_n_cls_spv") - gv0
+                t |> success(gv_n > 0l, "the fed steps read the planes on their format's GEMV ({spec.gemv}: {gv_n})")
             }
         }
     }

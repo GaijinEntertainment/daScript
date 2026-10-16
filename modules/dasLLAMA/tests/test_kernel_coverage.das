@@ -1008,9 +1008,25 @@ let private VK_CENSUS_NEVER_DISPATCHED <- [
     // the batched windowed decode attention and its f16 twin (a sliding window over the batch rows: the gemma
     // carriers, no zoo row); its coverage is test_vkd_da_attn_bw in test_vulkan_kernels.das
     "da_attn_bw_cls_spv", "da_attn_bw_f16_cls_spv",
-    // the per-32 routed down GEMVs' summing twins (the 26B-A4B's Q4_K_M, Unsloth dynamic, Q4_0 and MXFP4 files, above the zoo's
-    // tier); their coverage is the per-32 GEMV cells' summed arm (test_vkd_q51_gemv and the iq4nl32 / q4032 / q5032 / mx4 cells)
+    // the per-32 routed down GEMVs' summing twins serve only the gemma-4 MoE's device experts, and no zoo row loads a 26B-A4B file
+    // (above the zoo's tier). A key a line - its carrier's down stacks, the stocked file that runs it, the model-free cell's summed arm:
+    // q51: gemma-4-26B-A4B-it-Q4_K_M.gguf (Q5_1 down), test_gpu_resident_gemma4_26b_k.das and
+    //      test_gpu_resident_regions_gemma4moe.das; test_vkd_q51_gemv
+    // iq4nl32: gemma-4-26B-A4B-it-UD-IQ3_XXS.gguf (IQ4_NL down), test_gpu_resident_gemma4_26b.das; test_vkd_iq4nl32_gemv
+    // q4032: gemma-4-26B-A4B-it-Q4_0.gguf (Q4_0 down), no stocked Vulkan file (the Metal census's gemma4moe row alone loads it);
+    //        test_vkd_q4032_gemv
+    // q5032: no stocked file carries a Q5_0 down stack; test_vkd_q5032_gemv
+    // mx4: gemma-4-26B-A4B-it-MXFP4_MOE-q4km-local.gguf (MXFP4 down), test_gpu_resident_gemma4_26b_mx4.das; test_vkd_mx4_gemv
     "q51_gemv_sum_cls_spv", "iq4nl32_gemv_sum_cls_spv", "q4032_gemv_sum_cls_spv", "q5032_gemv_sum_cls_spv", "mx4_gemv_sum_cls_spv",
+    // the E-series per-layer-embedding pre-step's classes serve only an E-series load, and no Vulkan census row loads one (the
+    // E-series rows are Metal's). A key a line - the stocked file that dispatches it, the model-free cell:
+    // ple_act_f32: gemma-4-E2B-it-Q4_K_M.gguf's F32 per-layer planes, test_gpu_resident_gemma4_e2b.das (arm g4e-kq, its count
+    //              asserted); test_vkd_ple_act_f32
+    // ple_finish: every E-series device pre-step, gemma-4-E2B-it-Q8_0.gguf in test_gpu_resident_gemma4_e2b.das; test_vkd_ple_finish
+    // router_gemv_bf16: the BF16 projection's decode column, gemma-4-E2B-it-Q8_0.gguf in test_gpu_resident_gemma4_e2b.das;
+    //                   test_vkd_router_gemv_bf16
+    // ple_bf16_cvt: the BF16 projection's per-window f16 panel, the same file's prefill windows; test_vkd_ple_bf16_cvt
+    "ple_act_f32_cls_spv", "ple_finish_cls_spv", "router_gemv_bf16_cls_spv", "ple_bf16_cvt_cls_spv",
     // the scalar router GEMM: on a cm2 box every MoE carrier whose dim the small f16 GEMM's eight
     // 64-deep chunks divide takes the f16 route, so the scalar tile runs only off it (a dim off
     // 512, the KHR route). Its coverage is test_vkd_moe_routing's router arm in test_vulkan_kernels.das
