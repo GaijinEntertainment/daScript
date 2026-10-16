@@ -744,6 +744,50 @@ def mtp_round_commit_host(var s : Session; pos, k, a : int64) {
     s.n_past = pos + a + 1l
 }
 
+//! A tick's warm streams, the ones a round's verify carries: each stream's handle, its index among the tick's streams, its
+//! anchor, its rows (the token and its drafts) and the home's word for it (`aux`: the Vulkan region it binds)
+struct MtpRoundGather {
+    @scratch sessions : array<Session?>
+    @scratch idx : array<int64>
+    @scratch pos : array<int64>
+    @scratch nr : array<int64>
+    @scratch aux : array<int64>
+}
+
+//! The round's opening over a tick's streams at depth `k`, every home's: each stream's accepted count zeroed, its round begun,
+//! its depth under its cap; `warm` answers a stream's word (`aux`) or -1 where the stream steps plain this round (the block has
+//! taken its plain step or queued it), and a warm stream's token heads its rows. Returns the warm streams gathered
+[arch(at="../ARCHITECTURE_GPU_MTP_ASSISTANT.md#assistant-drafter-rounds")]
+def mtp_round_gather(var g : MtpRoundGather; var sessions : array<Session?>; toks : array<int64>; k : int64; var acc : array<int64>;
+                     warm : block<(var s : Session; i, pos, ki : int64) : int64>) : int64 {
+    let n = long_length(sessions)
+    acc |> resize(n)   // nolint:PERF026,LINT019 — fires from the [hot_path] rounds' compiles; grows to the stream count once, the callers pass reused scratch
+    g.sessions |> clear()
+    g.idx |> clear()
+    g.pos |> clear()
+    g.nr |> clear()
+    g.aux |> clear()
+    for (i in range64(n)) {
+        var s & = unsafe(*sessions[i])
+        acc[i] = 0l
+        let pos = s.n_past
+        mtp_round_begin(s)
+        if (long_length(s.mtp_vbatch) < MTP_MAX_ROWS) {   // sized for the NextN carriers only at make_run_state
+            s.mtp_vbatch |> reserve_resize(MTP_MAX_ROWS)   // nolint:PERF026,LINT019 — fires from the [hot_path] rounds' compiles; once per session
+        }
+        let ki = mtp_depth_for(s, k)
+        let aux = invoke(warm, s, i, pos, ki)
+        continue if (aux < 0l)
+        s.mtp_vbatch[0] = toks[i]
+        g.sessions |> push(sessions[i])
+        g.idx |> push(i)
+        g.pos |> push(pos)
+        g.nr |> push(ki + 1l)
+        g.aux |> push(aux)
+    }
+    return long_length(g.sessions)
+}
+
 let MTP_COLD_PAST_CONTEXT = "the round would run past the context"   //! the one cold reason that is the work's size
 
 //! why neither home drafts the round ("" where it can): nothing evaled yet (the zero-init `mtp_h_pos1` sentinel collides with
