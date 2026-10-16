@@ -772,7 +772,7 @@ struct MtpAssistantStats {
     accepted : int64
     rounds : int64
     joint : int64      //! verifies whose rows carried two streams or more
-    draft_us : int64   //! the round's time split, microseconds: the draft chains, the verify with its walks and commits, the plain steps of streams it could not take
+    draft_us : int64   //! the round's time split, microseconds: the CPU draft chains (a GPU chain rides the verify's command buffer and sits in verify_us), the verify with its walks and commits, the plain steps of streams it could not take or whose verify it declined
     verify_us : int64
     cold_us : int64
 }

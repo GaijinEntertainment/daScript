@@ -824,7 +824,7 @@ def test_gemma_drafter_verify_decline(t : T?) {
                     } else {
                         t |> equal(carried, 0l, "two codecs: the verify carries no stream")
                         t |> equal(st1.rounds - st0.rounds, 0l, "two codecs: no round counted")
-                        t |> success(st1.draft_us > st0.draft_us, "two codecs: both streams warm - their draft chains ran ahead of the verify")
+                        t |> success(st1.verify_us == st0.verify_us, "two codecs: the declined verify's rounds charge no verify time - the streams' chains ride the verify's command buffer and never ran")
                         for (i in range64(2l)) {
                             t |> equal(acc[i], 0l, "stream {i}: no draft accepted")
                             var one <- [toks[i]]
