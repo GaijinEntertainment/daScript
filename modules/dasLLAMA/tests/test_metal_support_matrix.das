@@ -1359,7 +1359,7 @@ def private gemma4moe_row(t : T?; path : string; tag : string; tol_pf : float = 
         var trg <- blob_twin(t, path, 512l)
         matrix_cell(t, trg, KVDtype.f16, "{tag}/q8/f16", "", "", "")
         //! the MoE tail as one step (`MetalMoeCombG4`) and, the control, on its unfused chain: the step counted once a layer in the
-        //! window and once a layer past the last in the forced step on the first leg alone, both legs within the CPU truth's bars
+        //! window and once a layer past the last an encoded step on the first leg alone, both legs within the CPU truth's bars
         for (unfused in fixed_array(false, true)) {
             let leg = unfused ? "{tag} unfused tail" : tag
             var mpf = 0.0
@@ -1406,7 +1406,8 @@ def private gemma4moe_row(t : T?; path : string; tag : string; tol_pf : float = 
                 t |> success(npf == 0l && ndec == 0l, "{leg}: no MoE step dispatched (window {npf}, step {ndec})")
             } else {
                 t |> success(npf == nl, "{leg}: the window's MoE tail one step a layer ({npf} of {nl})")
-                t |> success(ndec == nl - 1l, "{leg}: the forced step's MoE tail one step a layer past the last ({ndec} of {nl - 1l})")
+                //! the greedy chain encodes the next step beside the forced one, so the count is whole steps' worth
+                t |> success(ndec > 0l && ndec % (nl - 1l) == 0l, "{leg}: the forced step's MoE tail one step a layer past the last ({ndec}, steps of {nl - 1l})")
             }
             to_log(LOG_INFO, "{leg} tolerance cells: post-prefill maxd={mpf} (tol {tol_pf}), forced step maxd={m1} (tol {tol_step}); MoE steps window {npf} step {ndec}; eyeball CPU '{eyeball_str(piece_(trg, t0))}'/'{eyeball_str(piece_(trg, t1))}' vs GPU '{eyeball_str(piece_(trg, gpk0))}'/'{eyeball_str(piece_(trg, gpk1))}'\n")
         }

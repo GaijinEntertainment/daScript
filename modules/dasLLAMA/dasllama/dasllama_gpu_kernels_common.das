@@ -3500,6 +3500,40 @@ class template GkPleConv {
     }
 }
 
+struct GkClsEpiArgs {
+    vocab : uint
+    cap : float     //! the final logit softcap; 0 = none
+    nsupp : uint    //! suppressed token ids in `supp`
+    rows : uint     //! logits rows in `y`, `vocab` apart
+}
+
+//! The classifier tail's epilogue in place, an invocation a logit over `rows` rows: the final logit softcap (`softcap_exp`), then
+//! the checkpoint's suppressed ids pinned to -1e30 - after the cap, so the pin survives it; each logit scans the few ids
+[ |> template_struct_instance]
+class template GkClsEpilogue {
+    @ssbo @binding = 0 @role = "readwrite" y : array<float>   //! the logits rows
+    @ssbo @binding = 1 @role = "weight" supp : array<uint>    //! the suppressed ids (a placeholder when nsupp is 0)
+    @kargs pa : GkClsEpiArgs
+
+    def epi_elem(gid : uint) {
+        if (gid < pa.vocab * pa.rows) {
+            let id = pa.nsupp > 0u ? gid % pa.vocab : 0u   //! the row's id, wanted by the pins alone
+            var v = y[gid]
+            if (pa.cap > 0.0) {
+                v = softcap_exp(v, pa.cap)
+            }
+            var j = 0u
+            while (j < pa.nsupp) {
+                if (supp[j] == id) {
+                    v = -1.0e30
+                }
+                j++
+            }
+            y[gid] = v
+        }
+    }
+}
+
 let GK_NO_DSCALE = 0xFFFFFFFFu   //! `GkTopKArgs.dsoff`'s "no per-expert down scale" sentinel
 
 struct GkTopKArgs {

@@ -194,7 +194,7 @@ struct private StepRes {
     u_zero32 : MetalBuffer?   // 0u — the window/chlo bind for global (non-sliding) layers
     u_winsl : MetalBuffer?    // sliding span (sliding models only; sliding layers bind it as `window`)
     u_chlo : MetalBuffer?     // first live chunk = wstart/64 (sliding models only; the comb skip)
-    u_flcap : MetalBuffer?    // final-logit soft cap (gpu_logits x softcap models only)
+    cls_epi : bool            //! the classifier epilogue runs: a final softcap or suppressed ids (gpu_logits only)
     // the SLIDING-class uniform twins (hetero models — gemma4's 16q/8kv/256 vs 16q/1kv/512;
     // uniform models leave these null and every layer binds the base set)
     hetero : bool
@@ -236,8 +236,7 @@ struct private StepRes {
     k_voffe : uint    // v segment element offset (qd + kvd)
     k_voffe_sw : uint
     u_embscale : MetalBuffer?  // sqrt(dim) embed scale on the spec chain's GPU gather (gemma)
-    bsupp : MetalBuffer?       // suppressed token ids (u32) + count — the gemma4 logits pin
-    u_nsupp : MetalBuffer?
+    bsupp : MetalBuffer?       // suppressed token ids (u32) - the gemma4 logits pin
     // MoE routing (Wave C) — moe steps only; bh12 sizes to max(2*hidden, 2*k*nfe)
     moe : bool
     bmoe_lg : MetalBuffer?     // [ne] router logits
@@ -616,9 +615,7 @@ def private acquire_step(t : Model; s : Session; pos : int64; koff, voff : uint6
         !tied_f32 &&
         t.wcls_off >= 0l)
     if (r.gpu_logits) {
-        if (c.final_logit_softcap > 0.0) {   // cap*tanh epilogue rides after the classifier GEMV
-            r.u_flcap = uniform_f32(c.final_logit_softcap)
-        }
+        r.cls_epi = c.final_logit_softcap > 0.0 || !empty(t.suppress)   //! cap*tanh, then the pins, after the classifier GEMV
         if (!empty(t.suppress)) {   // gemma4: pin the suppressed ids to -1e30 after the cap
             r.bytes_supp = uint64(long_length(t.suppress) * 4l)
             r.bsupp = pool_acquire_untracked(g_upool, g_dev, r.bytes_supp)
@@ -628,7 +625,6 @@ def private acquire_step(t : Model; s : Session; pos : int64; koff, voff : uint6
                     sp[i] = uint(t.suppress[i])
                 }
             }
-            r.u_nsupp = uniform_u32(uint(length(t.suppress)))
         }
         if (c.embed_scale != 1.0) {   // the spec gather's escale bind (gemma; identity rides g_one)
             r.u_embscale = uniform_f32(c.embed_scale)
@@ -2211,14 +2207,8 @@ def private enc_cls_tail_rows(t : Model; var r : StepRes; enc : MetalComputeEnco
         norm_rows(enc, single, r.bx, bwfin, r.bxf, r.u_dim, r.u_eps, nr)
     }
     site_rows(enc, t, single, cls_fmt_of(t), t.wcls_off, c.vocab_size, dim, r.bxf, bcls, r.u_dim, r.u_vocab, nr)
-    let vb = uint64(c.vocab_size * 4l)
-    for (i in range64(nr)) {
-        if (r.u_flcap != null) {
-            enc_softcap_row(enc, bcls, uint64(i) * vb, r.u_vocab, r.u_flcap, c.vocab_size)
-        }
-        if (r.bsupp != null) {
-            enc_suppress_row(enc, bcls, uint64(i) * vb, r.bsupp, r.u_nsupp, int64(r.bytes_supp / 4ul))
-        }
+    if (r.cls_epi) {
+        enc_cls_epi_rows(enc, bcls, r.bsupp, c.vocab_size, nr, c.final_logit_softcap, int64(r.bytes_supp / 4ul))
     }
 }
 
@@ -3073,9 +3063,6 @@ def private release_step(var r : StepRes) {   // nolint:STYLE037,STYLE038 — fl
     if (r.u_chlo != null) {
         pool_release(g_upool, r.u_chlo, 4ul)
     }
-    if (r.u_flcap != null) {
-        pool_release(g_upool, r.u_flcap, 4ul)
-    }
     if (r.hetero) {
         pool_release(g_upool, r.u_hs_sw, 4ul)
         pool_release(g_upool, r.u_kvd_sw, 4ul)
@@ -3088,7 +3075,6 @@ def private release_step(var r : StepRes) {   // nolint:STYLE037,STYLE038 — fl
     }
     if (r.bsupp != null) {
         pool_release(g_upool, r.bsupp, r.bytes_supp)
-        pool_release(g_upool, r.u_nsupp, 4ul)
     }
     if (r.moe) {
         pool_release(g_pool, r.bmoe_lg, r.bytes_moe_lg)
@@ -4194,11 +4180,9 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
     // the V-from-K / v_norm sites: v segment element offset within a fused-QKV row, per class
     // per-row depths differ, so the batch kernels derive wstart from `window` + their row's cnt
     var u_winsl = c.sliding_window > 0l ? uniform_u32(uint(c.sliding_window)) : null
-    var u_flcap = (gpu_logits && c.final_logit_softcap > 0.0) ? uniform_f32(c.final_logit_softcap) : null
-    var u_fltot = u_flcap != null ? uniform_u32(uint(nrows * c.vocab_size)) : null
-    // suppressed token ids pin to -1e30 after the cap (gemma4) — per live row, the CPU order
+    // suppressed token ids pin to -1e30 after the cap (gemma4), the CPU order
     let nsupp = long_length(t.suppress)
-    var bsupp, u_nsupp : MetalBuffer?
+    var bsupp : MetalBuffer?
     if (gpu_logits && nsupp > 0l) {
         bsupp = pool_acquire_untracked(g_upool, g_dev, uint64(nsupp * 4l))
         unsafe {
@@ -4207,7 +4191,6 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
                 sp[i] = uint(t.suppress[i])
             }
         }
-        u_nsupp = uniform_u32(uint(nsupp))
     }
     var u_s16 = uniform_u32(s16 ? 1u : 0u)
     var u_total_dim = uniform_u32(uint(nrows * dim))
@@ -4375,15 +4358,8 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
             enc_rms_b(enc, bx, 0ul, bwfin, bxf, u_dim, u_eps, nrows)
         }
         enc_batch_site(enc, t, bt, cls_fmt, t.wcls_off, c.vocab_size, dim, c.vocab_size, bxf, blog, u_dim, u_vocab, u_vocab, 0l, mv_kdim, 0l, cls64)
-        if (u_flcap != null) {
-            // final-logit soft cap (gemma2): cap*tanh over the live rows' contiguous logits
-            enc_softcap_row(enc, blog, 0ul, u_fltot, u_flcap, nrows * c.vocab_size)
-        }
-        if (bsupp != null) {
-            // gemma4 suppressed ids pin to -1e30 AFTER the cap (the CPU order) — per live row
-            for (i in range64(nrows)) {
-                enc_suppress_row(enc, blog, uint64(i * c.vocab_size * 4l), bsupp, u_nsupp, nsupp)
-            }
+        if (c.final_logit_softcap > 0.0 || bsupp != null) {   //! the final softcap, then the suppressed ids, over the live rows
+            enc_cls_epi_rows(enc, blog, bsupp, c.vocab_size, nrows, c.final_logit_softcap, nsupp)
         }
         // zero-copy logits: scatter each staging row into its session's wrapped storage ON the cb
         // (the KV writeback stays). All-or-nothing per step: one unwrappable session keeps the whole
@@ -4467,13 +4443,8 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
         L.pooled |> push((buf = blog, size = bytes_log))
         L.upooled |> push((buf = u_vocab, size = 4ul))
     }
-    if (u_flcap != null) {
-        L.upooled |> push((buf = u_flcap, size = 4ul))   // nolint:STYLE012
-        L.upooled |> push((buf = u_fltot, size = 4ul))
-    }
     if (bsupp != null) {
         L.upooled |> push((buf = bsupp, size = uint64(nsupp * 4l)))   // nolint:STYLE012
-        L.upooled |> push((buf = u_nsupp, size = 4ul))
     }
     if (u_winsl != null) {
         L.upooled |> push((buf = u_winsl, size = 4ul))

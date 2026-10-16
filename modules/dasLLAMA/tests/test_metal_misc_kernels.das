@@ -1399,67 +1399,34 @@ def private im2col2d_gate(t : T?; var dev, queue; iw, ih, cin, kd, sstride : int
     }
 }
 
-def private suppress_row_gate(t : T?; var dev, queue; total, nids : int) {
-    let tag = "suppress_row total={total} nids={nids}"
+//! the classifier epilogue (`MetalClsEpilogue`) over `rows` logits rows `vocab` wide in one dispatch: the final softcap at `cap`
+//! (0: none) against `cap * tanh(x / cap)`, then the `nids` suppressed ids (0: none) pinned to -1e30 on every row
+def private cls_epi_gate(t : T?; var dev, queue; vocab, rows, nids : int; cap : float) {
+    let tag = "cls_epi vocab={vocab} rows={rows} nids={nids} cap={cap}"
     with_metal_cell(dev, queue) $(var mc : MetalCell) {
         var err : string
-        let st = stamp_of(@@enc_suppress_row)
+        let st = stamp_of(@@enc_cls_epi)
         var pso = mc |> keep_stamp(st, err)
         return if (!pso_ok(t, tag, pso, err))
-        var inscope xv : array<float>
-        xv |> resize(total)
-        for (i in range(total)) {
-            xv[i] = 0.19 * float(i % 53) - 4.9
-        }
-        var inscope ids : array<uint>
-        ids |> resize(nids)
-        for (i in range(nids)) {
-            ids[i] = uint((i * 37 + 5) % total)
-        }
-        var inscope want := xv
-        for (i in range(nids)) {
-            want[int(ids[i])] = -1.0e30
+        let total = vocab * rows
+        var inscope xv <- [for (i in range(total)); 0.31 * float(i % 61) - 9.2]   //! spans well past +-cap so the saturation arms run
+        var inscope ids <- [for (i in range(max(nids, 1))); uint((i * 37 + 5) % vocab)]
+        var inscope want <- [for (v in xv); cap > 0.0 ? cap * tanh(v / cap) : v]
+        for (r in range(rows)) {
+            for (i in range(nids)) {
+                want[r * vocab + int(ids[i])] = -1.0e30
+            }
         }
         let bx = mc |> io_(xv)
         let bids = mc |> in_plain(ids)
-        let bn = mc |> in_plain([uint(nids)])
+        var ka = GkClsEpiArgs(vocab = uint(vocab), cap = cap, nsupp = uint(nids), rows = uint(rows))
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
             stamp_run(st, pso) {
-                invoke(st.enc, enc, mc.buf[bx], 0ul, mc.buf[bids], mc.buf[bn], int64(nids))
+                invoke(st.enc, enc, mc.buf[bx], mc.buf[bids], ka, int64(total))
             }
         }
         return if (!ran)
-        check_buf(t, tag, mc.buf[bx], want, BAR_BITS, FLAT_SHAPE)
-    }
-}
-
-def private softcap_row_gate(t : T?; var dev, queue; total : int; cap : float) {
-    let tag = "softcap_row total={total} cap={cap}"
-    with_metal_cell(dev, queue) $(var mc : MetalCell) {
-        var err : string
-        let st = stamp_of(@@enc_softcap_row)
-        var pso = mc |> keep_stamp(st, err)
-        return if (!pso_ok(t, tag, pso, err))
-        var inscope xv : array<float>
-        xv |> resize(total)
-        for (i in range(total)) {
-            xv[i] = 0.31 * float(i % 61) - 9.2   // spans well past +-cap so the saturation arms run
-        }
-        var inscope want : array<float>
-        want |> resize(total)
-        for (i in range(total)) {
-            want[i] = cap * tanh(xv[i] / cap)    // softcap4's scalar reference
-        }
-        let bx = mc |> io_(xv)
-        let btot = mc |> in_plain([uint(total)])
-        let bcap = mc |> in_plain([cap])
-        let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
-            stamp_run(st, pso) {
-                invoke(st.enc, enc, mc.buf[bx], 0ul, mc.buf[btot], mc.buf[bcap], int64(total))
-            }
-        }
-        return if (!ran)
-        check_buf(t, tag, mc.buf[bx], want, BAR_TIGHT, FLAT_SHAPE)
+        check_buf(t, tag, mc.buf[bx], want, BAR_TIGHT, Shape(row_width = vocab))
     }
 }
 
@@ -2037,8 +2004,9 @@ def test_metal_misc_kernels(t : T?) {
                 im2col2d_gate(t, dev, queue, 10, 12, 1, 32, 1)      // conv1 shape: cin 1, K padded 9->32
                 im2col2d_gate(t, dev, queue, 10, 8, 4, 36, 8)       // dense K, strided source (padded rows)
                 im2col2d_gate(t, dev, queue, 5, 6, 4, 36, 4)        // odd grid, tight source
-                suppress_row_gate(t, dev, queue, 2000, 37)
-                softcap_row_gate(t, dev, queue, 900, 30.0)
+                cls_epi_gate(t, dev, queue, 900, 3, 7, 30.0)   //! a row off the threadgroup grid, three rows in the one dispatch
+                cls_epi_gate(t, dev, queue, 2000, 1, 37, 0.0)  //! the pins alone
+                cls_epi_gate(t, dev, queue, 900, 2, 0, 30.0)   //! the cap alone
                 // ===== the hyper-connection mixer + the n-gram side input (qwen4exp) =====
                 hc_norm_gate(t, dev, queue, 2560, 4, 1)      // the served shape, the single row
                 hc_norm_gate(t, dev, queue, 100, 3, 5)       // under one threadgroup stride, five rows

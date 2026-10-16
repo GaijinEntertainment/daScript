@@ -3974,8 +3974,7 @@ def metal_decode_init : bool {   // nolint:STYLE038 — a flat compile_pso per k
     g_pso_wdec_attn_part = compile_stamp(metal_wdec_attn_part_msl, ok)
     g_pso_wdec_attn_comb = compile_stamp(metal_wdec_attn_comb_msl, ok)
     g_pso_bias_add_res = compile_stamp(metal_bias_add_res_msl, ok)
-    g_pso_softcap = compile_stamp(metal_softcap_row_msl, ok)
-    g_pso_suppress = compile_stamp(metal_suppress_row_msl, ok)
+    g_pso_cls_epi = compile_stamp(metal_cls_epi_msl, ok)
     g_pso_attn16 = compile_stamp(MetalSqAttnF16_metal_sq_attn_msl, ok)
     g_pso_attn32 = compile_stamp(MetalSqAttnF32_metal_sq_attn_msl, ok)
     g_pso_attnp16 = compile_stamp(MetalSqAttnPartF16_metal_sq_attn_part_msl, ok)
@@ -5460,7 +5459,7 @@ def metal_kernels_release {
     release_handles(g_pso_ln, g_pso_bias_act, g_pso_act_rows, g_pso_posadd, g_pso_q3v_stem, g_pso_clamp, g_pso_clamp_copy)
     release_handles(g_pso_rope2d, g_pso_head_pad, g_pso_head_unpad, g_pso_geglu_quick, g_pso_wdec_kv, g_pso_wdec_kv_h)
     release_handles(g_pso_im2col2d, g_pso_wdec_attn_part, g_pso_wdec_attn_comb, g_pso_bias_add_res)
-    release_handles(g_pso_f32mm, g_pso_softcap, g_pso_suppress, g_pso_swiglu, g_pso_swiglu_hx, g_pso_swiglu_hxb)
+    release_handles(g_pso_f32mm, g_pso_cls_epi, g_pso_swiglu, g_pso_swiglu_hx, g_pso_swiglu_hxb)
     release_handles(g_pso_swiglu_b, g_pso_geglu_hxb, g_pso_geglu_b, g_pso_attn16, g_pso_attn32, g_pso_attnp16)
     release_handles(g_pso_attnp32, g_pso_attn_q8, g_pso_attnp_q8, g_pso_rpst_q8, g_pso_attn_tq4, g_pso_attnp_tq4)
     release_handles(g_pso_rpst_tq4, g_pso_unsign, g_pso_qknorm, g_pso_attncomb, g_pso_rpst16, g_pso_qkn16)
@@ -11591,41 +11590,20 @@ class MetalSigmul : MetalEw2T {
     override ACT = 3
 }
 
-// Suppress-token pinning (gemma4): logits[ids[i]] = -1e30 after the soft cap — the CPU
-// forward's pin value exactly; one thread per suppressed id.
-[metal_dispatch(name = "enc_suppress_row", pso = "g_pso_suppress", tg = 64, grid = "n/64", params = "n : int64")]
-class MetalSuppressRow {
-    @ssbo @binding = 0 @off = "xoff" x : array<float>
-    @ssbo @binding = 1 @role = "weight" ids : array<uint>
-    @uniform @binding = 2 n : uint
-
-    [metal_kernel(name="metal_suppress_row_msl")]
-    def metal_suppress_row {
-        let gid = gl_GlobalInvocationID.x
-        if (gid >= n) {
-            return
-        }
-        x[ids[gid]] = -1.0e30
+//! the classifier tail's epilogue on the template both homes stamp (`GkClsEpilogue`), a thread a logit over every row
+[metal_dispatch(name = "enc_cls_epi", pso = "g_pso_cls_epi", tg = 256, grid = "total/256", params = "total : int64")]
+class MetalClsEpilogue : GkClsEpilogue {
+    [metal_kernel(name="metal_cls_epi_msl")]
+    def metal_cls_epi {
+        epi_elem(gl_GlobalInvocationID.x)
     }
 }
 
-// Logit soft-cap, one thread per element: x = cap * tanh(x / cap) — softcap4's scalar reference
-// (gemma2/gemma4 final_logit_softcap on the GPU classifier row).
-[metal_dispatch(name = "enc_softcap_row", pso = "g_pso_softcap", tg = 64, grid = "total/64", params = "total : int64")]
-class MetalSoftcapRow {
-    @ssbo @binding = 0 @off = "xoff" @span = "total*4" x : array<float>
-    @uniform @binding = 1 total : uint      // grid guard
-    @uniform @binding = 2 cap : float
-
-    [metal_kernel(name="metal_softcap_row_msl")]
-    def metal_softcap_row {
-        let gid = gl_GlobalInvocationID.x
-        if (gid >= total) {
-            return
-        }
-        // tanh via the exp identity (the CPU softcap4's form; Metal tanh NaNs past ~44)
-        x[gid] = softcap_exp(x[gid], cap)
-    }
+//! the epilogue over `rows` logits rows `vocab` wide in `by` from element 0: the final softcap (`cap` 0 = none), then the `nsupp`
+//! suppressed ids in `bsupp` pinned - one dispatch; `bsupp` null carries no pin
+def enc_cls_epi_rows(enc : MetalComputeEncoder?; by, bsupp : MetalBuffer?; vocab, rows : int64; cap : float; nsupp : int64) {
+    var ka = GkClsEpiArgs(vocab = uint(vocab), cap = cap, nsupp = bsupp != null ? uint(nsupp) : 0u, rows = uint(rows))
+    enc_cls_epi(enc, by, bsupp != null ? bsupp : by, ka, vocab * rows)
 }
 
 // Causal depthwise conv over the fused [q;k;v] rows + SiLU (dn_conv_step's batch form): one

@@ -8029,9 +8029,8 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
     var blog = gpu_logits ? pool_acquire_pinned(g_pf_pool, g_dev, bytes_log) : null
     var blog1 = gpu_logits && nseg > 1l ? pool_acquire_pinned(g_pf_pool, g_dev, uint64(c.vocab_size * 4l)) : null
     var u_vocab = gpu_logits ? uniform_u32(uint(c.vocab_size)) : null
-    var u_flcap = (gpu_logits && c.final_logit_softcap > 0.0) ? uniform_f32(c.final_logit_softcap) : null
     let nsupp = long_length(t.suppress)
-    var bsupp, u_nsupp : MetalBuffer?
+    var bsupp : MetalBuffer?
     if (gpu_logits && nsupp > 0l) {
         bsupp = pool_acquire_untracked_pinned(g_pf_upool, g_dev, uint64(nsupp * 4l))
         unsafe {
@@ -8040,7 +8039,6 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                 sp[i] = uint(t.suppress[i])
             }
         }
-        u_nsupp = uniform_u32(uint(nsupp))
     }
     //! MTP draft-slab warm: ONE extra loop iteration runs the draft block at FULL npos so every
     //! trunk uniform reuses verbatim; the last warm row is garbage by design and causally unread
@@ -8821,13 +8819,8 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                         let bwc = blob_of(g_dev, t, t.wcls_off)
                         enc_gemv(enc, bwc.buf, bwc.boff, bxf_i, blog_i, u_dim, u_vocab, c.vocab_size)
                     }
-                    if (u_flcap != null) {
-                        //! final-logit soft cap (gemma2): cap*tanh over the classifier row in place
-                        enc_softcap_row(enc, blog_i, 0ul, u_vocab, u_flcap, c.vocab_size)
-                    }
-                    if (bsupp != null) {
-                        //! gemma4 suppressed ids pin to -1e30 AFTER the cap (the CPU classifier's order)
-                        enc_suppress_row(enc, blog_i, 0ul, bsupp, u_nsupp, nsupp)
+                    if (c.final_logit_softcap > 0.0 || bsupp != null) {   //! the final softcap, then the suppressed ids (the CPU order)
+                        enc_cls_epi_rows(enc, blog_i, bsupp, c.vocab_size, 1l, c.final_logit_softcap, nsupp)
                     }
                     if (nseg > 1l) {
                         enc_copy_row(enc, bxf1, 0ul, bxf, xf_off, u_dim, dim)
@@ -9156,7 +9149,6 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
     }
     if (bsupp != null) {
         pool_release(g_pf_upool, bsupp, uint64(nsupp * 4l))
-        pool_release(g_pf_upool, u_nsupp, 4ul)
     }
     pool_release(g_pf_upool, u_total_dim, 4ul)
     pool_release(g_pf_upool, u_total_h, 4ul)
@@ -9195,9 +9187,6 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
         for (sg in segs) {
             sg.s.embed_gpu_pending = false   //! the window gathered the rows the gate left to it
         }
-    }
-    if (u_flcap != null) {
-        pool_release(g_pf_upool, u_flcap, 4ul)
     }
     if (ok) {
         g_pf_stage_prefills++

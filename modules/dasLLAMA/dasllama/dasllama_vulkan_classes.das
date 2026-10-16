@@ -874,39 +874,12 @@ class EmbGatherF32 : EmbGatherT {
     override WF = true
 }
 
-struct ClsEpiArgs {
-    vocab : uint
-    cap : float     //! the final logit softcap; 0 = none
-    nsupp : uint    //! suppressed token ids in `supp`
-    rows : uint     //! logits rows in `y`, `vocab` apart: the N-row command's rows, 1 on the one-row command
-}
-
-//! the classifier tail's epilogue in place over `rows` logits rows: the final logit softcap, then the
-//! checkpoint's suppressed ids pinned to -1e30 - after the cap, so the pin survives it
+//! the classifier tail's epilogue on the template both homes stamp (`GkClsEpilogue`), an invocation a logit
 [vk_dispatch(name = "cls_epi", grid = "wgs", params = "wgs : int64")]
-class ClsEpilogue {
-    @ssbo @binding = 0 y : array<float>      // the logits rows
-    @ssbo @binding = 1 @role = "weight" supp : array<uint>    // the suppressed ids (a placeholder when nsupp is 0)
-    @push_constant pa : ClsEpiArgs
-
+class ClsEpilogue : GkClsEpilogue {
     [spirv_kernel(local_size_x = 256, name = "cls_epi_spv")]
     def run {
-        let gid = gl_GlobalInvocationID.x
-        if (gid < pa.vocab * pa.rows) {
-            let id = pa.nsupp > 0u ? gid % pa.vocab : 0u   // the row's id, wanted by the pins alone
-            var v = y[gid]
-            if (pa.cap > 0.0) {
-                v = softcap_exp(v, pa.cap)
-            }
-            var j = 0u
-            while (j < pa.nsupp) {
-                if (supp[j] == id) {
-                    v = -1.0e30
-                }
-                j++
-            }
-            y[gid] = v
-        }
+        epi_elem(gl_GlobalInvocationID.x)
     }
 }
 

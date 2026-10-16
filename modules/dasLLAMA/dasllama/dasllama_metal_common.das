@@ -186,8 +186,7 @@ var g_pso_im2col2d : MetalComputePipeline?    // the qwen3a conv2d im2col (k=3, 
 var g_pso_wdec_attn_part : MetalComputePipeline?  // the chunked online-softmax partial
 var g_pso_wdec_attn_comb : MetalComputePipeline?  // the log-sum-exp chunk merge
 var g_pso_bias_add_res : MetalComputePipeline?   // whisper decode: bias + residual add
-var g_pso_softcap : MetalComputePipeline?
-var g_pso_suppress : MetalComputePipeline?
+var g_pso_cls_epi : MetalComputePipeline?   //! the classifier epilogue (`MetalClsEpilogue`): the final softcap, the suppressed ids
 var g_one : MetalBuffer?                    // persistent 1.0f — the rms oscale default bind
 var g_zero : MetalBuffer?                   // persistent 0u — the sink/hass identity bind
 var g_pso_attn16 : MetalComputePipeline?

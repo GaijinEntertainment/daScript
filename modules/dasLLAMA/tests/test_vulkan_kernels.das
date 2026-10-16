@@ -1163,7 +1163,7 @@ def private cls_epi_rows_run(y : array<float>; supp : array<uint>; vocab, rows :
                 let py = cp |> io_(copy_span(y, r0 * vocab, per * vocab))
                 let ps = cp |> in_plain(supp)
                 var s = cp |> cls_set(fixed_array(py, ps), @@set_cls_epi)
-                var pc = ClsEpiArgs(vocab = uint(vocab), cap = cap, nsupp = uint(length(supp)), rows = uint(per))
+                var pc = GkClsEpiArgs(vocab = uint(vocab), cap = cap, nsupp = uint(length(supp)), rows = uint(per))
                 cp |> cell_record() $(raw : VkCommandBuffer; var h : VkHaz) {
                     enc_cls_epi(raw, h, s, pc, (vocab * per + 255l) / 256l)
                 }
