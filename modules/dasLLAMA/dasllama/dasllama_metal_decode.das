@@ -385,30 +385,26 @@ var private g_rope_sin_next_swa : array<float>
 //! (`btok_in`, or a chained step's argmax)
 def private metal_ple_decode_dev(t : Model) : bool => metal_ple_dev_ok(t) && emb_dev_gather_ok(t)
 
-//! The E-series pre-step on the device over `nrows` rows - the CPU's `ple_gather_rows` + `ple_pre_finish`: the side rows off the table
-//! at the token ids in `btok` into `bple`, the embedded rows `bx` projected into `bproj` (bf16 rows, else the f32 router GEMV), the
-//! finish; `ball` / `bsq` the layers x ple and sqrt(ple) uniforms
+//! The E-series pre-step on the device over `nrows` decode rows (`enc_ple_pre`): the embedded rows `bx` projected into `bproj` on
+//! the GEMV forms - the bf16 rows, else the f32 router GEMV
 def enc_ple_pre_dev(enc : MetalComputeEncoder?; t : Model; btok : MetalBuffer?; toff : uint64; bx, bple, bproj, ball, bsq : MetalBuffer?; nrows : int64) {
-    let c = t.config
-    let ple = c.n_embd_per_layer
-    let all = c.n_layers * ple
-    enc_embed_table(enc, t, t.ple_emb_fmt, t.ple_emb_off, all, sqrt(float(ple)), btok, toff, bple, 0ul, nrows, ball, bsq)
-    var ka = moe_router_args(all, c.dim, nrows)
-    if (t.ple_model_bf16) {
-        let bw = plane_of(g_dev, t, t.bf16blob, t.ple_model_off)
-        ka.woff = uint(bw.boff / 2ul)
-        if (nrows == 1l) {
-            enc_ple_proj_bf16_one(enc, bw.buf, bx, bproj, ka, all, 1l)
+    enc_ple_pre(enc, t, btok, toff, bple, bproj, ball, bsq, nrows) $ {
+        let c = t.config
+        let all = c.n_layers * c.n_embd_per_layer
+        var ka = moe_router_args(all, c.dim, nrows)
+        if (t.ple_model_bf16) {
+            let bw = plane_of(g_dev, t, t.bf16blob, t.ple_model_off)
+            ka.woff = uint(bw.boff / 2ul)
+            if (nrows == 1l) {
+                enc_ple_proj_bf16_one(enc, bw.buf, bx, bproj, ka, all, 1l)
+            } else {
+                enc_ple_proj_bf16(enc, bw.buf, bx, bproj, ka, all, nrows)
+            }
         } else {
-            enc_ple_proj_bf16(enc, bw.buf, bx, bproj, ka, all, nrows)
+            var bw = upload_region(unsafe(addr < void? >(t.fblob[t.ple_model_off])), uint64(all * c.dim * 4l))
+            enc_moe_router(enc, bw, bx, bproj, g_one, ka, all, nrows)
         }
-    } else {
-        var bw = upload_region(unsafe(addr < void? >(t.fblob[t.ple_model_off])), uint64(all * c.dim * 4l))
-        enc_moe_router(enc, bw, bx, bproj, g_one, ka, all, nrows)
     }
-    var bpn = upload_region(unsafe(addr < void? >(t.fblob[t.ple_pnorm_off])), uint64(ple * 4l))
-    var kf = ple_fin_args(ple, c.dim, c.norm_eps)
-    enc_ple_finish(enc, bproj, bpn, bple, kf, c.n_layers * nrows)
 }
 
 //! a step's side rows (`bytes_ple` of them): on the device (`dev`) the gather and projection buffers, read and written by the
@@ -1562,68 +1558,53 @@ struct template LayerEncT {
 
 }
 
-//! `nrows` rows through layer l's gate (dim -> ple) or projection (ple -> dim) off the file's f32 rows: the router GEMV
+//! `nrows` rows through a per-layer gate (dim -> ple) or projection (ple -> dim) plane off the file's f32 rows: the router GEMV
 //! (`GkRouterGemv`), a column a row
-def private enc_ple_f32(enc : MetalComputeEncoder?; t : Model; l : int64; proj : bool; bx, by : MetalBuffer?; nrows : int64) {
-    let pp = ple_plane(t, l, proj)
+def private enc_ple_f32(enc : MetalComputeEncoder?; t : Model; pp : PlePlane; bx, by : MetalBuffer?; nrows : int64) {
     var bw = upload_region(unsafe(addr < void? >(t.fblob[pp.off])), uint64(pp.n * pp.d * 4l))
     var ka = moe_router_args(pp.d, pp.n, nrows)
     enc_moe_router(enc, bw, bx, by, g_one, ka, pp.d, nrows)
 }
 
-//! the single row's PLE branch between the FFN residual and the layer's last seam: proj·(gelu(gate·x) ⊙ side[l]) into bxb
-def private ple_single(var e : auto(ET); t : Model; enc : MetalComputeEncoder?; l : int64) {
-    let r & = unsafe(*e.r)
-    let c = t.config
-    let dim = c.dim
-    let ple = c.n_embd_per_layer
+//! layer l's PLE branch over `nrows` rows between the FFN residual and the layer's last seam: proj·(gelu(gate·x) ⊙ side[l]) into
+//! bxb, a plane in its own format through the stamp's weight site (`site`: the plane, x, y and their two widths' uniforms), the
+//! file's f32 rows on the router GEMV; the side multiply over the layer's block of the layer-major side plane
+def private ple_branch(r : StepRes; t : Model; enc : MetalComputeEncoder?; l, nrows : int64;
+                       site : block<(pp : PlePlane; bx, by, bn, bd : MetalBuffer?) : void>) {
+    let ple = t.config.n_embd_per_layer
     let pg = ple_plane(t, l, false)
     let pp = ple_plane(t, l, true)
     if (g_skip != "gemv") {
         if (pg.f32) {
-            enc_ple_f32(enc, t, l, false, r.bx, r.bh12, 1l)
+            enc_ple_f32(enc, t, pg, r.bx, r.bh12, nrows)
         } else {
-            enc_site_gemv(enc, t, pg.f, pg.off, ple, dim, r.bx, r.bh12, r.u_dim, r.u_ple)
+            invoke(site, pg, r.bx, r.bh12, r.u_dim, r.u_ple)
         }
     }
     if (g_skip != "ew") {
-        enc_geglu(enc, r.bh12, 0ul, r.bple, uint64(l * ple * 4l), r.u_ple, ple)
+        var ka = GkPleActArgs(nelem = uint(nrows * ple), sbase = uint(l * ple), sstride = uint(t.config.n_layers * ple), slen = uint(ple))
+        enc_geglu_side(enc, r.bh12, r.bple, ka, nrows * ple)
     }
     if (g_skip != "gemv") {
         if (pp.f32) {
-            enc_ple_f32(enc, t, l, true, r.bh12, r.bxb, 1l)
+            enc_ple_f32(enc, t, pp, r.bh12, r.bxb, nrows)
         } else {
-            enc_site_gemv(enc, t, pp.f, pp.off, dim, ple, r.bh12, r.bxb, r.u_ple, r.u_dim)
+            invoke(site, pp, r.bh12, r.bxb, r.u_ple, r.u_dim)
         }
     }
 }
 
-//! the rows' PLE branch, the same chain over every row: the gate and the projection as row sites, the side
-//! multiply over the layer's block of the layer-major side plane
+//! the single row's PLE branch: the planes on the one-row GEMV
+def private ple_single(var e : auto(ET); t : Model; enc : MetalComputeEncoder?; l : int64) {
+    ple_branch(*e.r, t, enc, l, 1l) $(pp; bx, by, bn, bd) {
+        enc_site_gemv(enc, t, pp.f, pp.off, pp.d, pp.n, bx, by, bn, bd)
+    }
+}
+
+//! the rows' PLE branch: the planes as row sites
 def private ple_rows(var e : BatchLayerEnc; t : Model; enc : MetalComputeEncoder?; l : int64) {
-    let r & = unsafe(*e.r)
-    let c = t.config
-    let dim = c.dim
-    let ple = c.n_embd_per_layer
-    let pg = ple_plane(t, l, false)
-    let pp = ple_plane(t, l, true)
-    if (g_skip != "gemv") {
-        if (pg.f32) {
-            enc_ple_f32(enc, t, l, false, r.bx, r.bh12, r.nrows)
-        } else {
-            site_batch(e, t, enc, SiteKind.other, pg.f, pg.off, ple, dim, ple, r.bx, r.bh12, r.u_dim, r.u_ple, r.u_ple, 0l)
-        }
-    }
-    if (g_skip != "ew") {
-        var ka = GkPleActArgs(nelem = uint(r.nrows * ple), sbase = uint(l * ple), sstride = uint(t.config.n_layers * ple), slen = uint(ple))
-        enc_geglu_side(enc, r.bh12, r.bple, ka, r.nrows * ple)
-    }
-    if (g_skip != "gemv") {
-        if (pp.f32) {
-            enc_ple_f32(enc, t, l, true, r.bh12, r.bxb, r.nrows)
-        } else {
-            site_batch(e, t, enc, SiteKind.other, pp.f, pp.off, dim, ple, dim, r.bh12, r.bxb, r.u_ple, r.u_dim, r.u_dim, 0l)
-        }
+    ple_branch(*e.r, t, enc, l, e.r.nrows) $(pp; bx, by, bn, bd) {
+        site_batch(e, t, enc, SiteKind.other, pp.f, pp.off, pp.d, pp.n, pp.d, bx, by, bn, bd, bd, 0l)
     }
 }
 

@@ -7115,6 +7115,15 @@ def private pf_enc_slab_gemv_b(enc : MetalComputeEncoder?; bw, bx, by : MetalBuf
     enc_moe_router_b(enc, bw, bx, by, g_one, ka, d, npos)
 }
 
+//! the window's rows through the file's f32 rows at `off` in fblob (`n` in, `d` out): the f32 tile (`MetalF32ExactMm`), else the
+//! slab GEMV
+def private pf_enc_f32_rows(enc : MetalComputeEncoder?; t : Model; off, n, d : int64; bx, by, bk, bn : MetalBuffer?; mp, npos : int64) {
+    var bw = upload_region(unsafe(addr<void?>(t.fblob[off])), uint64(n * d * 4l))
+    if (!pf_enc_router_mm(enc, bw, bx, by, bk, bn, d, n, mp)) {
+        pf_enc_slab_gemv_b(enc, bw, bx, by, n, d, npos)
+    }
+}
+
 //! the window's rows through layer l's per-layer-embedding gate (dim -> ple), or with `proj` its projection (ple -> dim), in the
 //! plane's own format: a tagged plane on its dense site, the file's f32 rows on the f32 tile (`MetalF32ExactMm`) or the slab GEMV
 def private pf_enc_ple_site(enc : MetalComputeEncoder?; t : Model; l : int64; proj : bool; bx, by, bk, bn : MetalBuffer?; mp, npos : int64;
@@ -7124,10 +7133,7 @@ def private pf_enc_ple_site(enc : MetalComputeEncoder?; t : Model; l : int64; pr
         pf_enc_site_mm(enc, t, pp.f, pp.off, pp.d, bx, by, bk, bn, mp, pp.n, npos, bxh)
         return
     }
-    var bw = upload_region(unsafe(addr<void?>(t.fblob[pp.off])), uint64(pp.n * pp.d * 4l))
-    if (!pf_enc_router_mm(enc, bw, bx, by, bk, bn, pp.d, pp.n, mp)) {
-        pf_enc_slab_gemv_b(enc, bw, bx, by, pp.n, pp.d, npos)
-    }
+    pf_enc_f32_rows(enc, t, pp.off, pp.n, pp.d, bx, by, bk, bn, mp, npos)
 }
 
 
@@ -7135,21 +7141,18 @@ def private pf_enc_ple_site(enc : MetalComputeEncoder?; t : Model; l : int64; pr
 //! one-row GEMV takes
 def private pf_narrow_ple_ok(t : Model; l : int64; proj : bool) : bool {
     let pp = ple_plane(t, l, proj)
-    return pp.f32 || kq_fmt_one_row_gemv(pp.f, proj ? t.config.n_embd_per_layer : t.config.dim)
+    return pp.f32 || kq_fmt_one_row_gemv(pp.f, pp.n)
 }
 
 //! layer l's per-layer gate (dim -> ple) or projection (ple -> dim) over the narrowed last row at row 0 of `bx` (`pf_narrow_ple_ok`)
 def private pf_enc_narrow_ple(enc : MetalComputeEncoder?; t : Model; l : int64; proj : bool; bx, by, bk, bn : MetalBuffer?) {
-    let c = t.config
-    let n = proj ? c.n_embd_per_layer : c.dim
-    let d = proj ? c.dim : c.n_embd_per_layer
     let pp = ple_plane(t, l, proj)
     if (!pp.f32) {
-        pf_enc_narrow_gemv(enc, t, pp.f, pp.off, bx, by, bk, bn, n, d)
+        pf_enc_narrow_gemv(enc, t, pp.f, pp.off, bx, by, bk, bn, pp.n, pp.d)
         return
     }
-    var bw = upload_region(unsafe(addr<void?>(t.fblob[pp.off])), uint64(n * d * 4l))
-    pf_enc_slab_gemv_b(enc, bw, bx, by, n, d, 1l)
+    var bw = upload_region(unsafe(addr<void?>(t.fblob[pp.off])), uint64(pp.n * pp.d * 4l))
+    pf_enc_slab_gemv_b(enc, bw, bx, by, pp.n, pp.d, 1l)
 }
 
 //! true iff THIS window's metal prefill will engage AND the pre-step kernels cover the model
@@ -7965,19 +7968,14 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
             }
             if (l == 0l && ple_gpu) {
                 //! the serial encoder orders the three PLE stages: gather -> model_proj GEMM -> rms+combine
-                var pka = ple_fin_args(ple_n, dim, c.norm_eps)
-                enc_embed_table(enc, t, t.ple_emb_fmt, t.ple_emb_off, ple_all, sqrt(float(ple_n)), bple_tok, 0ul, bple, 0ul, npos, u_ple_all, u_ple_sq)
-                if (t.ple_model_bf16) {
-                    let bwp = plane_of(g_dev, t, t.bf16blob, t.ple_model_off)
-                    pf_enc_bf16_mm(enc, bwp.buf, bwp.boff, bx, bple_proj, u_dim, u_ple_all, mp, ple_all, pf_cvt_panel(enc, bx, mp, dim, g_pf_skip == "act_cvt"), dim)
-                } else {   //! the file's f32 rows on the f32 tile, else the slab GEMV
-                    var bwp = upload_region(unsafe(addr < void? >(t.fblob[t.ple_model_off])), uint64(ple_all * dim * 4l))
-                    if (!pf_enc_router_mm(enc, bwp, bx, bple_proj, u_dim, u_ple_all, ple_all, dim, mp)) {
-                        pf_enc_slab_gemv_b(enc, bwp, bx, bple_proj, dim, ple_all, npos)
+                enc_ple_pre(enc, t, bple_tok, 0ul, bple, bple_proj, u_ple_all, u_ple_sq, npos) $ {
+                    if (t.ple_model_bf16) {
+                        let bwp = plane_of(g_dev, t, t.bf16blob, t.ple_model_off)
+                        pf_enc_bf16_mm(enc, bwp.buf, bwp.boff, bx, bple_proj, u_dim, u_ple_all, mp, ple_all, pf_cvt_panel(enc, bx, mp, dim, g_pf_skip == "act_cvt"), dim)
+                    } else {
+                        pf_enc_f32_rows(enc, t, t.ple_model_off, dim, ple_all, bx, bple_proj, u_dim, u_ple_all, mp, npos)
                     }
                 }
-                var bw_pn = upload_region(unsafe(addr < void? >(t.fblob[t.ple_pnorm_off])), uint64(ple_n * 4l))
-                enc_ple_finish(enc, bple_proj, bw_pn, bple, pka, c.n_layers * npos)
                 s.ple_gpu_pending = false
             }
             if (warm && l == c.n_layers) {

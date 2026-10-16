@@ -7174,6 +7174,20 @@ class MetalPleFinish : GkPleFinish {
     }
 }
 
+//! The E-series pre-step on the device over `nrows` rows - the CPU's `ple_gather_rows` + `ple_pre_finish`: the side rows off the
+//! table at the token ids in `btok` into `bple`, the embedded rows projected into `bproj` (`project`: the driver's projection form),
+//! the finish; `ball` / `bsq` the layers x ple and sqrt(ple) uniforms
+def enc_ple_pre(enc : MetalComputeEncoder?; t : Model; btok : MetalBuffer?; toff : uint64; bple, bproj, ball, bsq : MetalBuffer?; nrows : int64;
+                project : block<() : void>) {
+    let c = t.config
+    let ple = c.n_embd_per_layer
+    enc_embed_table(enc, t, t.ple_emb_fmt, t.ple_emb_off, c.n_layers * ple, sqrt(float(ple)), btok, toff, bple, 0ul, nrows, ball, bsq)
+    invoke(project)
+    var bpn = upload_region(unsafe(addr < void? >(t.fblob[t.ple_pnorm_off])), uint64(ple * 4l))
+    var kf = ple_fin_args(ple, c.dim, c.norm_eps)
+    enc_ple_finish(enc, bproj, bpn, bple, kf, c.n_layers * nrows)
+}
+
 //! the router GEMV's args: `ne` rows of `dim` over `ncols` columns `xs` apart (0 = dim), the bias row where `hasb`
 def moe_router_args(ne, dim, ncols : int64; xs : int64 = 0l; hasb : bool = false) : GkRouterArgs
     => GkRouterArgs(ne = uint(ne), dim = uint(dim), ncols = uint(ncols), xs = uint(xs), hasb = hasb ? 1u : 0u)
