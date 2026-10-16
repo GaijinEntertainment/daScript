@@ -194,8 +194,9 @@ speculate keeps `mtp` on and walks the counting prompt token for token with the 
 drafting and accepting as it goes, both streams decoded in the log, and the same walk with the
 drafter detached as the control that drafts nothing - PARITY_FULL, Metal required), `mtp-gdraft-ring` (the drafter past a
 sliding capture layer's ring: the 26B loaded under the ring pin on and off (`with_gpu_kv_ring`), a counting prompt past the
-ring, one one-row step and a three-step draft chain at the anchor, then a depth-3 speculating stream - the one-row chain's
-logits at the anchor bit for bit across the pins, the drafts and the streams token for token, the ringed run's accepted
+ring prefilled in 512-row calls (a Metal ring grows to the widest window), one one-row step and a three-step draft chain at
+the anchor, then a depth-3 speculating stream - the one-row chain's logits and the drafter's first step's logits at the anchor
+bit for bit across the pins, the drafts and the streams token for token, the ringed run's accepted
 drafts within a tenth of the flat run's - PARITY_FULL, either GPU home). The gpu and
 sched arms load the 26B target through `load_model_cached`, so the file mints a `.dlim` for it
 under the same ledgered exception as the parity file's: the Metal MTP rail is what the image

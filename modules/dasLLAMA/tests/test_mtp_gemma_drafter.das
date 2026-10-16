@@ -749,7 +749,8 @@ struct private RingDraftRun {
 }
 
 let private RING_DRAFT_K = 3l      //! the drafter's chain depth at the anchor, and the scheduler's depth
-let private RING_ACCEPT_BAND = 0.1   //! the ringed run's accepted drafts within a tenth of the flat run's (reads 0: the drafts agree)
+let private RING_ACCEPT_BAND = 0.1   //! the ringed run's accepted drafts within a tenth of the flat run's
+let private RING_PF_CHUNK = 512l   //! the prompt's prefill calls: a ring sized to its widest window stays under the prompt
 
 //! the drafter's chain of `k` steps at `anchor` off `seed` and the carried `h`, every step at the constant anchor as the round runs
 //! it: the tokens, and the first step's logits
@@ -797,7 +798,8 @@ def private gdraft_capture_ring(trg : Model; dr : GemmaDrafter) : int64 {
     return 0l
 }
 
-//! the served drafter under ring pin `ring` over the long counting prompt: the prompt prefilled, one one-row step, the drafter's
+//! the served drafter under ring pin `ring` over the long counting prompt: the prompt prefilled in `RING_PF_CHUNK`-row calls, one
+//! one-row step, the drafter's
 //! chain at the position past it, then a speculating scheduler stream over the same prompt
 def private ring_draft_run(t : T?; ring : int; budget : int64) : RingDraftRun {
     var run : RingDraftRun
@@ -808,8 +810,14 @@ def private ring_draft_run(t : T?; ring : int; budget : int64) : RingDraftRun {
             var prompt <- encode(trg, "Count from 1 to 600, separated by commas: {counting_prompt(1, 500)}", true, false)
             let npos = long_length(prompt)
             var s <- make_run_state(trg.config, KVDtype.f16, KVDtype.f16)
-            var head <- [for (i in range64(npos - 1l)); prompt[i]]
-            eval_(trg, s, head)
+            var p0 = 0l
+            while (p0 < npos - 1l) {
+                let n = min(RING_PF_CHUNK, npos - 1l - p0)
+                var part <- [for (i in range64(p0, p0 + n)); prompt[i]]
+                eval_(trg, s, part)
+                delete part
+                p0 += n
+            }
             var one <- [prompt[npos - 1l]]
             eval_(trg, s, one)   //! the one-row chain's step at the prompt's last position
             static_if (typeinfo builtin_module_exists(das_metal)) {
@@ -831,7 +839,6 @@ def private ring_draft_run(t : T?; ring : int; budget : int64) : RingDraftRun {
             delete prompts
             delete prompt
             delete one
-            delete head
             delete dr
         }, 4096l)
     }
@@ -853,13 +860,14 @@ def test_gemma_drafter_past_ring(t : T?) {
         t |> equal(ringed.anchor, flat.anchor, "both pins draft at one anchor")
         check_exact(t, "the one-row chain's logits at the anchor: the ringed mirror against the flat one, bit for bit", ringed.trunk, flat.trunk)
         t |> success(ids_equal(ringed.drafts, flat.drafts), "the drafter's chain at the anchor drafts the flat mirror's tokens ({ringed.drafts} vs {flat.drafts})")
-        let dl = logits_maxdiff(ringed.dlogits, flat.dlogits)
-        to_log(LOG_INFO, "gdraft ring: anchor {ringed.anchor} past the {ringed.ring}-row ring; draft logits ringed vs flat maxd {dl}\n")
+        check_exact(t, "the drafter's first step's logits at the anchor: the ringed mirror against the flat one, bit for bit", ringed.dlogits, flat.dlogits)
+        to_log(LOG_INFO, "gdraft ring: anchor {ringed.anchor} past the {ringed.ring}-row ring; draft logits ringed vs flat maxd {logits_maxdiff(ringed.dlogits, flat.dlogits)}\n")
         t |> equal(long_length(ringed.stream.toks[0]), budget, "the ringed stream emits its whole budget")
         to_log(LOG_INFO, "gdraft ring streams (flat, ringed):\n  {flat.text}\n  {ringed.text}\n")
         t |> success(ids_equal(ringed.stream.toks[0], flat.stream.toks[0]), "the ringed speculating stream walks the count as the flat one does")
         let acc_r = ringed.stream.accepted
         let acc_f = flat.stream.accepted
+        to_log(LOG_INFO, "gdraft ring: accepted {acc_r} of {ringed.stream.drafted} ringed, {acc_f} of {flat.stream.drafted} flat\n")
         t |> success(acc_f > 0l, "the flat run accepts drafts ({acc_f} of {flat.stream.drafted})")
         t |> success(float(abs(acc_r - acc_f)) <= RING_ACCEPT_BAND * float(acc_f),
             "the ringed run accepts within {RING_ACCEPT_BAND} of the flat run's drafts ({acc_r} of {ringed.stream.drafted} vs {acc_f} of {flat.stream.drafted})")
