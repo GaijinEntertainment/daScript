@@ -792,26 +792,37 @@ def test_gemma_drafter_verify_decline(t : T?) {
             with_served_drafter(t, TARGET_FILE, 1l, KVDtype.f16) $(trg) {
                 set_mtp_depth(1l)
                 var prompt <- encode(trg, "Count from 1 to 60, separated by commas: {counting_prompt(1, 23)}", true, false)
-                for (mixed in [true, false]) {
+                var probe <- make_run_state(trg.config, KVDtype.f16, KVDtype.f16)
+                let slice = mirror_arena_demand(trg, probe, long_length(prompt) + 2l)
+                delete probe
+                //! room for six f16 slices: the tick's two streams beside the dead sessions' slices the LRU keeps - an arena that holds
+                //! fewer evicts a live stream's mirror, and a stream with none steps plain before any verify
+                t |> success(mirror_reserve(6ul * slice, slice), "the mirror arena holds six slices")
+                for (mixed in [false, true]) {
                     var inscope kvs <- [KVDtype.f16, mixed ? KVDtype.q8_0 : KVDtype.f16]
                     var sa <- stepped_session(trg, prompt, kvs[0])
                     var sb <- stepped_session(trg, prompt, kvs[1])
-                    var pa <- stepped_session(trg, prompt, kvs[0])
-                    var pb <- stepped_session(trg, prompt, kvs[1])
                     var spec <- [unsafe(addr(sa)), unsafe(addr(sb))]
-                    var plain <- [unsafe(addr(pa)), unsafe(addr(pb))]
                     var toks <- [for (sp in spec); argmax_of(sp.logits, trg.config.vocab_size)]
+                    for (sp in spec) {
+                        t |> success(mirror_stands(*sp, sp.n_past, sp.n_past + 2l), "{kvs}: the stream's mirror holds its rows - the round finds it warm")
+                    }
                     var acc : array<int64>
                     let st0 = mtp_drafter_stats(trg)
                     let carried = mtp_spec_eval_batch(trg, spec, toks, acc)
                     finish_pending_step()
                     let st1 = mtp_drafter_stats(trg)
+                    var pa <- stepped_session(trg, prompt, kvs[0])   //! after the tick: the twins' mirrors take no slot the tick's streams hold
+                    var pb <- stepped_session(trg, prompt, kvs[1])
+                    var plain <- [unsafe(addr(pa)), unsafe(addr(pb))]
+                    to_log(LOG_INFO, "gdraft vdecl {kvs}: carried {carried}, rounds +{st1.rounds - st0.rounds}, draft_us +{st1.draft_us - st0.draft_us}, carry rows {sa.mtp_h_pos1}/{sb.mtp_h_pos1} at {sa.n_past}/{sb.n_past}\n")
                     if (!mixed) {   //! the control: one codec across the streams, the joint verify carries both
                         t |> equal(carried, 2l, "one codec: the joint verify carries both streams")
                         t |> equal(st1.rounds - st0.rounds, 2l, "one codec: both rounds counted")
                     } else {
                         t |> equal(carried, 0l, "two codecs: the verify carries no stream")
                         t |> equal(st1.rounds - st0.rounds, 0l, "two codecs: no round counted")
+                        t |> success(st1.draft_us > st0.draft_us, "two codecs: both streams warm - their draft chains ran ahead of the verify")
                         for (i in range64(2l)) {
                             t |> equal(acc[i], 0l, "stream {i}: no draft accepted")
                             var one <- [toks[i]]

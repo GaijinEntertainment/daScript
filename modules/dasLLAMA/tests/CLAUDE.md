@@ -202,7 +202,8 @@ speculate keeps `mtp` on and walks the counting prompt token for token with the 
 drafting and accepting as it goes, both streams decoded in the log, and the same walk with the
 drafter detached as the control - a scheduler told to speculate stands down (`mtp` off) and drafts nothing - PARITY_FULL, Metal
 required) and `mtp-gdraft-vdecl` (a tick of two streams on two K/V codecs, whose joint verify the batch rail
-declines: no stream carried, no round counted, each stream one plain step whose logits are a plain decode step's
+declines - each stream's mirror asserted standing, so the round finds both warm and their draft chains run: no stream
+carried, no round counted, each stream one plain step whose logits are a plain decode step's
 bit for bit; the same tick on one codec carrying both streams the control - PARITY_FULL, das_metal builds). The gpu and
 sched arms load the 26B target through `load_model_cached`, so the file mints a `.dlim` for it
 under the same ledgered exception as the parity file's: the Metal MTP rail is what the image
