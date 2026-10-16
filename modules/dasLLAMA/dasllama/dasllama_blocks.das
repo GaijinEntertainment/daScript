@@ -1561,6 +1561,17 @@ def private moe_prefill_park(var s : Session; nk, dim : int64) {
     prof_add("moe_park", ts_park)
 }
 
+//! one mx4 region at `off` (`n` in, `d` out) expanded to Q8 into the scratch `wq` / `ws`, then its GEMM over `cnt` Q8_0 rows into `y`
+def private moe_expert_mx4_mm(t : Model; var y : array<float>; @scratch var wq : array<int8>; @scratch var ws : array<float>;
+                              xq : array<int8>; xs : array<float>; off, n, d, cnt : int64) {
+    let ts_ex = prof_ticks()
+    expand_mx4_region_q8(t, off, n, d, wq, ws)
+    prof_add("moe_expand", ts_ex)
+    let ts_g = prof_ticks()
+    matmul_q8q8_batch(y, wq, ws, xq, xs, n, d, cnt)
+    prof_add("mm_gemm", ts_g)
+}
+
 //! one expert's gate and up GEMMs over its `cnt` gathered rows (`moe_gather_rows`'s image) into the hidden panels: the stacks'
 //! batch tiles in their own forms, or on an mx4 stack with no native mx4 batch kernel each region expanded to Q8 first
 def moe_expert_gate_up(t : Model; var s : Session; f1, f3 : KqFmt; off1, off3, dim, nfe, cnt : int64) {
@@ -1569,18 +1580,8 @@ def moe_expert_gate_up(t : Model; var s : Session; f1, f3 : KqFmt; off1, off3, d
         mm_b_f_pre(s.moe_ghb2, t, f3, off3, s.moe_gxq, s.moe_gxs, s.moe_gxbs, dim, nfe, cnt)
         return
     }
-    let ts_ex = prof_ticks()
-    expand_mx4_region_q8(t, off1, dim, nfe, s.mx4_wq, s.mx4_ws)
-    prof_add("moe_expand", ts_ex)
-    let ts_g1 = prof_ticks()
-    matmul_q8q8_batch(s.moe_ghb, s.mx4_wq, s.mx4_ws, s.moe_gxq, s.moe_gxs, dim, nfe, cnt)
-    prof_add("mm_gemm", ts_g1)
-    let ts_ex2 = prof_ticks()
-    expand_mx4_region_q8(t, off3, dim, nfe, s.mx4_wq, s.mx4_ws)
-    prof_add("moe_expand", ts_ex2)
-    let ts_g2 = prof_ticks()
-    matmul_q8q8_batch(s.moe_ghb2, s.mx4_wq, s.mx4_ws, s.moe_gxq, s.moe_gxs, dim, nfe, cnt)
-    prof_add("mm_gemm", ts_g2)
+    moe_expert_mx4_mm(t, s.moe_ghb, s.mx4_wq, s.mx4_ws, s.moe_gxq, s.moe_gxs, off1, dim, nfe, cnt)
+    moe_expert_mx4_mm(t, s.moe_ghb2, s.mx4_wq, s.mx4_ws, s.moe_gxq, s.moe_gxs, off3, dim, nfe, cnt)
 }
 
 //! ... and its down GEMM over the requantized hidden rows into the parked down rows, the same two forms
@@ -1589,12 +1590,7 @@ def moe_expert_down(t : Model; var s : Session; f2 : KqFmt; off2, dim, nfe, cnt 
         mm_b_f_pre(s.moe_gout, t, f2, off2, s.moe_hq, s.moe_hs, s.moe_hbs, nfe, dim, cnt)
         return
     }
-    let ts_ex3 = prof_ticks()
-    expand_mx4_region_q8(t, off2, nfe, dim, s.mx4_wq, s.mx4_ws)
-    prof_add("moe_expand", ts_ex3)
-    let ts_g3 = prof_ticks()
-    matmul_q8q8_batch(s.moe_gout, s.mx4_wq, s.mx4_ws, s.moe_hq, s.moe_hs, nfe, dim, cnt)
-    prof_add("mm_gemm", ts_g3)
+    moe_expert_mx4_mm(t, s.moe_gout, s.mx4_wq, s.mx4_ws, s.moe_hq, s.moe_hs, off2, nfe, dim, cnt)
 }
 
 //! one batched GEMM chain per touched expert (the unfused arm); the raw down rows park for the ordered reduce; under `split`
