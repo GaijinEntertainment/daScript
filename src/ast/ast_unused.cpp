@@ -3,6 +3,7 @@
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_visitor.h"
 #include "daScript/ast/ast_generate.h"
+#include "ast_can_raise.h"
 
 namespace das {
 
@@ -934,6 +935,25 @@ namespace das {
         virtual bool canVisitEnumeration ( Enumeration * /*en*/ ) override { return false; }
 
     // ExprLet
+        // A dead local whose initializer can raise keeps the EVALUATION, not the
+        // variable: the let becomes a bare statement, so the frame does not grow.
+        // An operator-topped init stays a let - a bare `a + b` statement trips the
+        // top-level no-side-effect lint, the same reason ast_dse.cpp keeps those whole.
+        virtual ExpressionPtr visitBlockExpression ( ExprBlock * block, Expression * expr ) override {
+            if ( expr->rtti_isLet() ) {
+                auto let = static_cast<ExprLet *>(expr);
+                if ( let->variables.size()==1 ) {
+                    auto & var = let->variables[0];
+                    if ( !var->access_ref && !var->access_pass && !var->access_get && var->init
+                            && var->init->noSideEffects && !var->init->rtti_isOp1() && !var->init->rtti_isOp2()
+                            && canRaise(var->init) ) {
+                        reportFolding();
+                        return var->init;
+                    }
+                }
+            }
+            return Visitor::visitBlockExpression(block, expr);
+        }
         virtual VariablePtr visitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
             if ( !var->access_get && !var->access_ref && !var->access_init && !var->access_pass ) {
                 reportFolding();
@@ -948,7 +968,8 @@ namespace das {
                 reportFolding();
                 return nullptr;
             }
-            if ( !var->access_ref && !var->access_pass && !var->access_get && var->init->noSideEffects ) {
+            if ( !var->access_ref && !var->access_pass && !var->access_get && var->init->noSideEffects
+                    && !canRaise(var->init) ) {
                 reportFolding();
                 return nullptr;
             }
