@@ -1164,6 +1164,26 @@ def blob_only_panic(t : Model; what : string) {
 
 def has_decode_override(name : string) : bool => key_exists(g_decode_overrides, name)
 
+//! Drops the decode override `name` and every seat registered under its name - the batched step, the token-table gather
+//! gates, the speculative round's seats - deselecting it first where it is the active one
+def unregister_decode_override(name : string) {
+    if (g_decode_override_name == name) {
+        select_decode_override("")
+    }
+    g_decode_overrides |> erase(name)
+    g_batch_decode_overrides |> erase(name)
+    g_embed_dev_decode_gates |> erase(name)
+    g_embed_dev_batch_gates |> erase(name)
+    g_mtp_spec_overrides |> erase(name)
+    g_mtp_spec_batch_overrides |> erase(name)
+    g_mtp_seam_overrides |> erase(name)
+    g_mtp_round_overrides |> erase(name)
+    g_mtp_draft_overrides |> erase(name)
+    g_mtp_verify_overrides |> erase(name)
+    g_mtp_rollback_overrides |> erase(name)
+    g_mtp_seat_owners |> erase(name)
+}
+
 //! How the Metal pipeline engages — ONE knob for all three GPU paths (prefill, single-stream
 //! decode, batched decode).
 enum MetalMode {
@@ -5601,6 +5621,20 @@ def set_mtp_depth(k : int64) {
 //! Back to the box defaults - the per-kind knobs decide again.
 def clear_mtp_depth {
     g_mtp_depth_explicit = false
+}
+
+//! What `set_mtp_depth` and `clear_mtp_depth` left: whether an explicit depth stands, and the depth set
+struct MtpDepthPin {
+    pinned : bool
+    depth : int64
+}
+
+//! The pin a caller that sets the depth puts back through `restore_mtp_depth`
+def mtp_depth_pin : MtpDepthPin => MtpDepthPin(pinned = g_mtp_depth_explicit, depth = g_mtp_depth)
+
+def restore_mtp_depth(pin : MtpDepthPin) {
+    g_mtp_depth = pin.depth
+    g_mtp_depth_explicit = pin.pinned
 }
 
 def set_mtp_depth_nextn(k : int64) {

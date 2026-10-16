@@ -22,6 +22,7 @@ require _model_tier   // models_dir() + model_available() presence/size-tier gat
 require _scratch_dir   // scratch_path: the refusal fixtures' files
 require _scheduler_rig   // make_req / drain / toks_of - the served round rides the scheduler
 require _resident_feed   // resident_ready / load_resident_at / served_every_call - the Vulkan home's trunk
+require _metal_blob_twin   // metal_overrides_seat / restore_metal_overrides - the served cells' override pins
 require ../performance/model_specs.das   // counting_prompt - the served cells' tie-proof prompts
 
 [init]
@@ -415,13 +416,6 @@ def test_gemma_drafter_cpu_step(t : T?) {
 
 // ===== the GPU home: the served target, its drivers, the served rounds =====
 
-//! the overrides and the Metal prefill floor the served cells pin, as the cell found them
-struct private GdraftPins {
-    prefill : string
-    decode : string
-    min_npos : int64
-}
-
 //! The served twin of `file` on this build's GPU home - the metal-blob image under the Metal mode required, else the
 //! whole-model resident driver under `DASLLAMA_GPU=1` at `regions` mirror regions in codec `kv` (a Metal session picks its own
 //! codec) - with its context cut to `ctx`; an empty Model (`n_layers` 0) after the skip that says why
@@ -454,23 +448,14 @@ def private gdraft_target(t : T?; file : string; ctx, regions : int64; kv : KVDt
 }
 
 //! the GPU home's overrides for the served cells: the Metal prefill and decode, every prompt length on the device
-def private gdraft_pin() : GdraftPins {
-    var p = GdraftPins(prefill = active_prefill_override(), decode = active_decode_override())
+def private gdraft_pin() : MetalOverridesSeat {
+    let seat = metal_overrides_seat()
     static_if (typeinfo builtin_module_exists(das_metal)) {
-        p.min_npos = get_metal_prefill_min_npos()
         select_prefill_override("metal")
         select_decode_override("metal")
         set_metal_prefill_min_npos(1l)
     }
-    return p
-}
-
-def private gdraft_unpin(p : GdraftPins) {
-    static_if (typeinfo builtin_module_exists(das_metal)) {
-        set_metal_prefill_min_npos(p.min_npos)
-    }
-    select_decode_override(p.decode)
-    select_prefill_override(p.prefill)
+    return seat
 }
 
 //! the GPU home's drivers down after a cell, and its leak gate
@@ -595,7 +580,7 @@ def private with_served_drafter(t : T?; file : string; regions : int64; kv : KVD
         invoke(body, trg)
         detach_mtp_drafter(trg)
         t |> success(!mtp_capable(trg), "detached, the target cannot speculate")
-        gdraft_unpin(pins)
+        restore_metal_overrides(pins)
         delete trg
         gdraft_shutdown(t)
     }
@@ -800,6 +785,7 @@ def test_gemma_drafter_served(t : T?) {
     }
     t |> run("a scheduler speculates through the attached drafter at depth 1 and matches the plain scheduler") @(t : T?) {
         with_served_drafter(t, TARGET_FILE, 1l, KVDtype.f16) $(trg) {
+            let depth_pin = mtp_depth_pin()
             set_mtp_depth(1l)
             var prompts <- counting_prompts(trg, 1l)
             var plain <- sched_run(t, trg, prompts, 24l, KVDtype.f16, false)
@@ -818,7 +804,7 @@ def test_gemma_drafter_served(t : T?) {
             t |> equal(off.drafted, 0l, "and drafts nothing")
             same_streams(t, trg, "gdraft sched detached", plain, off, 24l)
             delete off
-            clear_mtp_depth()
+            restore_mtp_depth(depth_pin)
             delete plain
             delete spec
             delete prompts
@@ -850,6 +836,7 @@ def test_gemma_drafter_verify_decline(t : T?) {
     t |> run("a tick whose joint verify the batch rail declines (two streams on two K/V codecs) steps every stream plain, as a plain decode step does") @(t : T?) {
         static_if (typeinfo builtin_module_exists(das_metal)) {
             with_served_drafter(t, TARGET_FILE, 1l, KVDtype.f16) $(trg) {
+                let depth_pin = mtp_depth_pin()
                 set_mtp_depth(1l)
                 var prompt <- encode(trg, "Count from 1 to 60, separated by commas: {counting_prompt(1, 23)}", true, false)
                 var probe <- make_run_state(trg.config, KVDtype.f16, KVDtype.f16)
@@ -904,7 +891,7 @@ def test_gemma_drafter_verify_decline(t : T?) {
                     delete pa
                     delete pb
                 }
-                clear_mtp_depth()
+                restore_mtp_depth(depth_pin)
                 delete prompt
             }
         } else {
@@ -924,6 +911,7 @@ def test_gemma_drafter_depth_knob(t : T?) {
             let np = long_length(prompts[0])
             t |> success(np / 64l < (np + 32l) / 64l, "the walk's rounds cross a 64-row page ({np} prompt rows): the round grows a paged session's pages")
             var plain <- sched_run(t, trg, prompts, 32l, KVDtype.f16, false)
+            let depth_pin = mtp_depth_pin()
             for (k in [3l, 1l]) {
                 set_mtp_depth(k)
                 let st0 = mtp_drafter_stats(trg)
@@ -967,7 +955,7 @@ def test_gemma_drafter_depth_knob(t : T?) {
                 delete budgeted
             }
             delete close
-            clear_mtp_depth()
+            restore_mtp_depth(depth_pin)
             delete plain
             delete prompts
         }
@@ -983,6 +971,7 @@ def test_gemma_drafter_joint(t : T?) {
         with_served_drafter(t, TARGET_FILE, 3l, KVDtype.f16) $(trg) {
             var prompts <- counting_prompts(trg, 3l)
             var plain <- sched_run(t, trg, prompts, 24l, KVDtype.f16, false)
+            let depth_pin = mtp_depth_pin()
             for (k in [1l, 2l]) {
                 set_mtp_depth(k)
                 let st0 = mtp_drafter_stats(trg)
@@ -1004,7 +993,7 @@ def test_gemma_drafter_joint(t : T?) {
             t |> success(sj1.rounds > sj0.rounds, "one stream: the drafter ran rounds ({sj1.rounds - sj0.rounds})")
             t |> equal(sj1.joint - sj0.joint, 0l, "one stream: no joint verify counted - the counter's control")
             delete lone
-            clear_mtp_depth()
+            restore_mtp_depth(depth_pin)
             delete plain
             delete prompts
         }
@@ -1019,6 +1008,7 @@ def test_gemma_drafter_codecs(t : T?) {
     t |> run("the drafter's rounds read a q8_0 and a tq4 mirror: speculating sessions walk the count as plain ones on the same codec") @(t : T?) {
         for (kv in [KVDtype.q8_0, KVDtype.tq4]) {
             with_served_drafter(t, TARGET_FILE, 1l, kv) $(trg) {
+                let depth_pin = mtp_depth_pin()
                 set_mtp_depth(2l)
                 var prompts <- counting_prompts(trg, 1l)
                 var plain <- sched_run(t, trg, prompts, 24l, kv, false)
@@ -1028,7 +1018,7 @@ def test_gemma_drafter_codecs(t : T?) {
                 same_streams(t, trg, "gdraft {kv}", plain, spec, 24l)
                 t |> success(st1.rounds > st0.rounds, "{kv}: the rounds ran on the device ({st1.rounds - st0.rounds}), none cold for the codec")
                 t |> success(spec.accepted > 0l, "{kv}: drafts were accepted ({spec.accepted} of {spec.drafted})")
-                clear_mtp_depth()
+                restore_mtp_depth(depth_pin)
                 delete plain
                 delete spec
                 delete prompts
@@ -1136,11 +1126,12 @@ def private ring_draft_run(t : T?; ring : int; budget : int64) : RingDraftRun {
             run.pick = argmax_of(s.logits, trg.config.vocab_size)
             gdraft_chain(t, trg, s, run.pick, run.anchor, RING_DRAFT_K, s.mtp_h, run.drafts, run.dlogits)
             delete s
+            let depth_pin = mtp_depth_pin()
             set_mtp_depth(RING_DRAFT_K)
             var prompts : array<array<int64>>
             prompts |> push_clone(prompt)
             run.stream <- sched_run(t, trg, prompts, budget, KVDtype.f16, true)
-            clear_mtp_depth()
+            restore_mtp_depth(depth_pin)
             run.text = decode(trg, run.stream.toks[0])
             run.ok = true
             delete prompts
@@ -1194,13 +1185,14 @@ def test_gemma_drafter_kquant_table(t : T?) {
     t |> run("the drafter attaches to the UD-IQ3_XXS trunk, whose Q6_K token table the seed embed gathers, and speculates") @(t : T?) {
         with_served_drafter(t, IQ3_FILE, 1l, KVDtype.f16) $(trg) {
             t |> equal(trg.emb_fmt, KqFmt.k6, "the trunk's token table is Q6_K (the K-quant seed gather)")
+            let depth_pin = mtp_depth_pin()
             set_mtp_depth(2l)
             var prompts <- counting_prompts(trg, 1l)
             var plain <- sched_run(t, trg, prompts, 24l, KVDtype.f16, false)
             var spec <- sched_run(t, trg, prompts, 24l, KVDtype.f16, true)
             same_streams(t, trg, "gdraft iq3", plain, spec, 24l)
             t |> success(spec.drafted > 0l && spec.accepted > 0l, "the rounds drafted and accepted ({spec.accepted} of {spec.drafted})")
-            clear_mtp_depth()
+            restore_mtp_depth(depth_pin)
             delete plain
             delete spec
             delete prompts

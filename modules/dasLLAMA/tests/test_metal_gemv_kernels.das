@@ -3,6 +3,7 @@ options stack = 524288   // every dasLLAMA program root takes this budget
 options _function_length = 0        // per-kernel gates: fixture + builder dispatch + oracle compare, one flat run each
 options _cyclomatic_complexity = 0  // same — the arm ladders follow the kernel's own binding/variant axes
 options _dasllama_internal = true
+options persistent_heap   // a dastest root frees what it deletes only on this heap; the linear heap holds every carrier a cell deleted until the context ends
 
 require dastest/testing_boost public
 require ?das_metal dasllama/dasllama_metal_kernels  // the kq GEMV / KqMv / MoeGemv kernel set (Apple builds)

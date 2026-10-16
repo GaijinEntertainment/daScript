@@ -72,6 +72,8 @@ def test_gpu_resident_gemma4_e2b_ple_tables(t : T?) {
         let gf = GemmaFile(file = spec.file, arm = "g4e-ple")
         t |> run("{spec.file}: the {spec.fmt} per-layer-embedding table seats on the device and the prefill gathers off it") @(t : T?) {
             var armed = false
+            let pin = gpu_resident_embed_pin()
+            set_gpu_resident_embed(1)   //! the prefill's side rows gather off the ids: the loads gather the token table on the device
             with_gemma_rig(t, gf) $(tr) {
                 armed = true
                 t |> equal(tr.ple_emb_fmt, spec.fmt, "the PLE table keeps its disk format's tag")
@@ -80,6 +82,7 @@ def test_gpu_resident_gemma4_e2b_ple_tables(t : T?) {
             }
             var inscope g0 <- [for (leaf in leaves); census(leaf)]
             gemma_forced_feed(t, 40l, gf)
+            set_gpu_resident_embed(pin)
             return if (!armed || g0[0] == NO_CENSUS)
             for (leaf, before in leaves, g0) {
                 let g_n = census(leaf) - before
@@ -149,55 +152,56 @@ def private format_gemv_count(gemv : string) : int64 => census("{gemv}_cls_spv")
 [test]
 def test_gpu_resident_gemma4_e2b_ple_pre_step(t : T?) {
     t |> run("gemma-4-E2B Q8_0: the step's side row built on the device is the CPU pre-step's row") @(t : T?) {
-        with_gemma_rig(t, GemmaFile(file = "gemma-4-E2B-it-Q8_0.gguf", arm = "g4e-pre")) $(tr) {
-            static_if (typeinfo builtin_module_exists(vulkan)) {
-                var prompt <- resident_prompt(40l)
-                var sg <- create_session(tr, mirror_kv_dtype())
-                let served0 = moe_gpu_resident_prefills()
-                forward_prefill(tr, sg, prompt, 40l, 0l)
-                t |> equal(moe_gpu_resident_prefills(), served0 + 1l, "the resident window chain served the prompt")
-                let tok = 1234l
-                let g0 = vk_rdec_token_gathered()
-                let cpu0 = ple_cpu_pre_rows()
-                forward(tr, sg, tok, 40l)
-                t |> success(vk_rdec_token_gathered() > g0, "the step's embed row gathered off its token id")
-                t |> equal(ple_cpu_pre_rows() - cpu0, 0l, "the step built no CPU pre-step row")
-                served_every_call(t)
-                var dev : array<float>
-                vk_rdec_ple_side_row(dev)
-                var inscope cpu <- cpu_side_row(tr, tok)
-                var inscope other <- cpu_side_row(tr, tok + 1l)
-                let mx = logits_maxdiff(dev, cpu)   //! a NaN on either side reads as infinite
-                let off = logits_maxdiff(dev, other)
-                var big = 0.0   //! the bar's scale: the CPU row's largest finite magnitude
-                for (v in cpu) {
-                    big = max(big, abs(v))
+        with_gpu_resident_embed(1) {   //! the step gathers its row off its token id
+            with_gemma_rig(t, GemmaFile(file = "gemma-4-E2B-it-Q8_0.gguf", arm = "g4e-pre")) $(tr) {
+                static_if (typeinfo builtin_module_exists(vulkan)) {
+                    var prompt <- resident_prompt(40l)
+                    var sg <- create_session(tr, mirror_kv_dtype())
+                    let served0 = moe_gpu_resident_prefills()
+                    forward_prefill(tr, sg, prompt, 40l, 0l)
+                    t |> equal(moe_gpu_resident_prefills(), served0 + 1l, "the resident window chain served the prompt")
+                    let tok = 1234l
+                    let g0 = vk_rdec_token_gathered()
+                    let cpu0 = ple_cpu_pre_rows()
+                    forward(tr, sg, tok, 40l)
+                    t |> success(vk_rdec_token_gathered() > g0, "the step's embed row gathered off its token id")
+                    t |> equal(ple_cpu_pre_rows() - cpu0, 0l, "the step built no CPU pre-step row")
+                    served_every_call(t)
+                    var dev : array<float>
+                    vk_rdec_ple_side_row(dev)
+                    var inscope cpu <- cpu_side_row(tr, tok)
+                    var inscope other <- cpu_side_row(tr, tok + 1l)
+                    let mx = logits_maxdiff(dev, cpu)   //! a NaN on either side reads as infinite
+                    let off = logits_maxdiff(dev, other)
+                    var big = 0.0   //! the bar's scale: the CPU row's largest finite magnitude
+                    for (v in cpu) {
+                        big = max(big, abs(v))
+                    }
+                    let bar = 1e-4 * big
+                    to_log(LOG_INFO, "e2b pre-step: device side row against the CPU's: maxdiff {mx}, another token's {off} (bar {bar}, largest {big})\n")
+                    t |> success(mx <= bar, "the device side row within 1e-4 of the CPU's largest ({mx} of {bar})")
+                    t |> success(off > bar, "another token's CPU row lands outside the bar ({off})")
+                    delete dev
+                    delete sg
+                    delete prompt
                 }
-                let bar = 1e-4 * big
-                to_log(LOG_INFO, "e2b pre-step: device side row against the CPU's: maxdiff {mx}, another token's {off} (bar {bar}, largest {big})\n")
-                t |> success(mx <= bar, "the device side row within 1e-4 of the CPU's largest ({mx} of {bar})")
-                t |> success(off > bar, "another token's CPU row lands outside the bar ({off})")
-                delete dev
-                delete sg
-                delete prompt
             }
         }
         //! the gather counter's control: a load with the token-table gather off (`set_gpu_resident_embed(0)`) steps on the host's row
-        let pin = gpu_resident_embed_pin()
-        set_gpu_resident_embed(0)
-        with_gemma_rig(t, GemmaFile(file = "gemma-4-E2B-it-Q8_0.gguf", arm = "g4e-pre")) $(tr) {
-            static_if (typeinfo builtin_module_exists(vulkan)) {
-                var prompt <- resident_prompt(40l)
-                var sg <- create_session(tr, mirror_kv_dtype())
-                forward_prefill(tr, sg, prompt, 40l, 0l)
-                let g0 = vk_rdec_token_gathered()
-                forward(tr, sg, 1234l, 40l)
-                t |> equal(vk_rdec_token_gathered() - g0, 0l, "with the gather off the step gathers no embed row off its id - the counter's control")
-                delete sg
-                delete prompt
+        with_gpu_resident_embed(0) {
+            with_gemma_rig(t, GemmaFile(file = "gemma-4-E2B-it-Q8_0.gguf", arm = "g4e-pre")) $(tr) {
+                static_if (typeinfo builtin_module_exists(vulkan)) {
+                    var prompt <- resident_prompt(40l)
+                    var sg <- create_session(tr, mirror_kv_dtype())
+                    forward_prefill(tr, sg, prompt, 40l, 0l)
+                    let g0 = vk_rdec_token_gathered()
+                    forward(tr, sg, 1234l, 40l)
+                    t |> equal(vk_rdec_token_gathered() - g0, 0l, "with the gather off the step gathers no embed row off its id - the counter's control")
+                    delete sg
+                    delete prompt
+                }
             }
         }
-        set_gpu_resident_embed(pin)
     }
 }
 

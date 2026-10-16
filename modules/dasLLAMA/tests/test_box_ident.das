@@ -1,6 +1,7 @@
 options gen2
 options indenting = 4
 options stack = 524288
+options persistent_heap   // a dastest root frees what it deletes only on this heap; the linear heap holds every carrier a cell deleted until the context ends
 
 // model-free: the hardware-keyed box tag (box_ident) - the fleet table maps every recorded
 // box's CPU brand to the store tag its records already carry, the override always wins, and
