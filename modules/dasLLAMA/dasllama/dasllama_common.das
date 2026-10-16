@@ -744,6 +744,17 @@ def mtp_round_commit_host(var s : Session; pos, k, a : int64) {
     s.n_past = pos + a + 1l
 }
 
+//! the rounds neither home drafts: nothing evaled yet (the zero-init `mtp_h_pos1` sentinel collides with position 0), a hidden
+//! row from another position or shorter than the drafter's width, or a round that would run past the context
+def mtp_round_cold_host(t : Model; s : Session; pos, k, tdim : int64) : bool
+    => pos < 1l || s.mtp_h_pos1 != pos || long_length(s.mtp_h) < tdim || pos + k + 1l > t.config.seq_len
+
+//! the round's `a` accepted drafts landed: the accepted row becomes the next round's hidden row, the draft count moves
+def mtp_round_take(var s : Session; a, kd, dim : int64) {
+    copy_floats(s.mtp_hrows, a * dim, s.mtp_h, 0l, dim)
+    s.mtp_drafted += kd
+}
+
 //! A GPU driver's assistant-drafter seams (the gemma-4 drafter sidecar), one set a backend: the attach (`""`, or why it refused),
 //! whether `t` has one attached on this backend, and the speculative rounds of a tick's streams at depth `k` - each stream's
 //! accepted draft count in `acc`, the drafts in its `mtp_vbatch[1..]`, the streams whose rows one verify carried returned.
@@ -2291,7 +2302,7 @@ def private rope_override_from_env {
 }
 
 //! The tools' spelling of DASLLAMA_ROPE_SCALING / ROPE_SCALE / YARN_ORIG_CTX, set before the load; the loader checks the kind
-[arch(at = "../ARCHITECTURE_ENGINE.md#rope-scaling-bake")]
+[arch(at = "../ARCHITECTURE_ENGINE_MECHANISMS.md#rope-scaling-bake")]
 def public set_rope_scaling_override(o : RopeScalingOverride) {
     g_rope_override = o
     g_rope_override.kind = to_lower(o.kind)

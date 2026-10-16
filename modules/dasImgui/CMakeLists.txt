@@ -253,6 +253,12 @@ IF(COMMAND ADD_MODULE_CPP)
     ADD_MODULE_DAS_FROM_DESCRIPTOR(imgui commands)
     ADD_MODULE_DAS_FROM_DESCRIPTOR(imgui daslib)
 
+    set(_imgui_arch_dirs widgets text markdown commands terminal daslib examples)
+    list(TRANSFORM _imgui_arch_dirs PREPEND "modules/dasImgui/")
+    list(JOIN _imgui_arch_dirs "," _imgui_arch_scan)
+    set_property(GLOBAL APPEND PROPERTY DAS_ARCH_EXTRACT_SPECS
+        "${_imgui_arch_scan}|modules/dasImgui|${DAS_INSTALL_MODULESDIR}/dasImgui")
+
     # SDK payload: everything the .das_module mounts, the runtime font, and the
     # examples. Without the das layer an installed SDK's `require imgui/...`
     # resolves the descriptor to files that do not exist (the shared_module and

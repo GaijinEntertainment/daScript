@@ -521,8 +521,8 @@ def private gemma_plain_step(t : Model; var s : Session; tok, pos : int64) {
 //! context, a K/V codec the round does not serve, or a mirror short of the position or of the round's rows
 def private gemma_round_cold(t : Model; s : Session; pos, k : int64) : bool {
     let c = t.config
-    if (g_dev == null || !t.metal_blob || pos < 1l || s.mtp_h_pos1 != pos || long_length(s.mtp_h) < g_gemma_drafter.tdim ||
-            pos + k + 1l > c.seq_len || !gemma_kv_ok(s) || !key_exists(g_mirrors, s.uid)) {
+    if (g_dev == null || !t.metal_blob || mtp_round_cold_host(t, s, pos, k, g_gemma_drafter.tdim) || !gemma_kv_ok(s)
+            || !key_exists(g_mirrors, s.uid)) {
         return true
     }
     let mr = g_mirrors[s.uid]
@@ -650,8 +650,7 @@ def private gemma_mtp_spec_rounds(t : Model; var sessions : array<Session?>; tok
         if (g_gemma_trace) {
             mtp_round_trace("gemma", s, pos, kd, kd + 1l, a, c.vocab_size)
         }
-        copy_floats(s.mtp_hrows, a * c.dim, s.mtp_h, 0l, c.dim)
-        s.mtp_drafted += kd
+        mtp_round_take(s, a, kd, c.dim)
         mtp_round_commit(s, pos, kd, a)
         g_gemma_drafted += kd
         g_gemma_accepted += a

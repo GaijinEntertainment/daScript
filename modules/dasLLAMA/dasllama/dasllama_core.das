@@ -804,6 +804,19 @@ def set_gpu_ctx_max(n : int64) {
     set_gpu_ctx_max_(n)
 }
 
+def set_gpu_host_layers(n : int64) {
+    //! Serve at least ``n`` routed layers' experts on the host - the first in layer order - on the whole-model GPU driver
+    //! of a plain MoE loaded next, whatever the card holds (DASLLAMA_GPU_HOST_LAYERS in the environment): the host-layers
+    //! form reached on any card. A negative ``n`` lifts the pin; ``gpu_host_layers_pin`` reads it.
+    set_gpu_host_layers_(n)
+}
+
+def gpu_host_layers_pin() : int64 {
+    //! The host-layers pin as set (``set_gpu_host_layers``), or -1 where none is - what a caller reads before it
+    //! pins and hands back to ``set_gpu_host_layers`` after.
+    return gpu_host_layers_pin_()
+}
+
 def set_gpu_kv_dtype(dt : KVDtype) {
     //! Ask the whole-model GPU driver to hold its K/V mirror in codec ``dt`` for the models loaded next - the codec of
     //! their sessions (``gpu_device_session_dtype`` reads what armed). ``q8_0`` is about half the default ``f16`` mirror's
@@ -841,9 +854,9 @@ def gpu_resident_decline() : string {
 }
 
 def gpu_resident_experts_host() : bool {
-    //! Whether the whole-model driver serving the model loaded last sums some routed layers' experts
-    //! on the host (a hyper-connection MoE, or a plain MoE the card does not hold whole) - the form
-    //! whose speculative round does not pay, so a server slot leaves the round off unless asked.
+    //! Whether the whole-model driver serving the model loaded last sums some routed layers' experts on the host (a
+    //! hyper-connection MoE, a plain MoE the card does not hold whole, or one whose host-layers ask - ``set_gpu_host_layers``,
+    //! ``DASLLAMA_GPU_HOST_LAYERS`` - moved them) - the form whose speculative round does not pay, so a server slot leaves it off.
     return gpu_resident_experts_host_()
 }
 

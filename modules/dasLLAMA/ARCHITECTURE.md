@@ -26,9 +26,10 @@ A companion's sections are listed in three places: its line in this document's r
 (under `File charters` or `Mechanisms`), the companion's own opening, and the routing sentence of
 any sibling companion that sends a reader to it.
 
-- `ARCHITECTURE_ENGINE.md` - the engine core, arch-registration and support charters, and
-  the decode pick tape a parity cell pins one arm's routing on another with
-  (`ARCHITECTURE_ENGINE.md#moe-pick-tape`).
+- `ARCHITECTURE_ENGINE.md` - the engine core, arch-registration and support charters.
+- `ARCHITECTURE_ENGINE_MECHANISMS.md` - the RoPE scaling the loader folds into the `Model` once
+  (`ARCHITECTURE_ENGINE_MECHANISMS.md#rope-scaling-bake`), and the decode pick tape a parity cell
+  pins one arm's routing on another with (`ARCHITECTURE_ENGINE_MECHANISMS.md#moe-pick-tape`).
 - `ARCHITECTURE_ENGINE_SERVING.md` - the serving charter, the prefix cache's partial page
   (`ARCHITECTURE_ENGINE_SERVING.md#prefix-tail-page`), its checkpoints on a recurrent model, the
   reasoning budget that closes a thinking span for the model, and the host pool behind

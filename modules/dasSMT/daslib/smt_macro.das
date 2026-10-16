@@ -8,6 +8,7 @@ require daslib/ast
 require daslib/ast_boost
 require daslib/templates_boost
 require daslib/macro_boost
+require daslib/match
 
 //! `constrain` — natural logical syntax for assertions:
 //!
@@ -91,48 +92,59 @@ def private sort_fn_for(td : TypeDeclPtr) : string {
 def private lower_block_stmts(prog : ProgramPtr; blk : ExprBlock?; ctxName : string;
                               onSolver : bool; accName : string; var stmts : array<ExpressionPtr>) : bool {
     for (stmt in blk.list) {
-        if (stmt is ExprLet) {
-            let lt = stmt as ExprLet
-            for (v in lt.variables) {
-                let fname = sort_fn_for(v._type)
-                if (empty(fname)) {
-                    macro_error(prog, v.at,
-                        "constrain block: unsupported unknown type for `{v.name}` - use int, uint, uint64, float, double, bool or string")
-                    return false
-                }
-                let vname = string(v.name)
-                stmts |> push <| qmacro_expr() {
-                    let $i(v.name) = $c(fname)($i(ctxName), $v(vname))
-                }
-                if (v.init != null) {
-                    if (onSolver) {
-                        stmts |> push <| qmacro_expr() {
-                            add($i(ctxName), $i(v.name) == $e(rewrite_bool_ops(v.init)))
-                        }
-                    } else {
-                        stmts |> push <| qmacro_expr() {
-                            $i(accName) |> push($i(v.name) == $e(rewrite_bool_ops(v.init)))
+        match (stmt) {
+            ExprLet() & lt => $ {
+                for (v in lt.variables) {
+                    let fname = sort_fn_for(v._type)
+                    if (empty(fname)) {
+                        macro_error(prog, v.at,
+                            "constrain block: unsupported unknown type for `{v.name}` - " +
+                            "use int, uint, uint64, float, double, bool or string")
+                        return false
+                    }
+                    let vname = string(v.name)
+                    stmts |> push <| qmacro_expr() {
+                        let $i(v.name) = $c(fname)($i(ctxName), $v(vname))
+                    }
+                    if (v.init != null) {
+                        if (onSolver) {
+                            stmts |> push <| qmacro_expr() {
+                                add($i(ctxName), $i(v.name) == $e(rewrite_bool_ops(v.init)))
+                            }
+                        } else {
+                            stmts |> push <| qmacro_expr() {
+                                $i(accName) |> push($i(v.name) == $e(rewrite_bool_ops(v.init)))
+                            }
                         }
                     }
                 }
             }
-        } elif (stmt is ExprIfThenElse || stmt is ExprFor || stmt is ExprWhile || stmt is ExprReturn) {
-            macro_error(prog, stmt.at,
-                "constrain block: only unknown declarations and constraint expressions are supported, got {describe(stmt)}")
-            return false
-        } else {
-            if (onSolver) {
-                stmts |> push <| qmacro_expr() {
-                    add($i(ctxName), $e(rewrite_bool_ops(stmt)))
-                }
-            } else {
-                stmts |> push <| qmacro_expr() {
-                    $i(accName) |> push($e(rewrite_bool_ops(stmt)))
+            ExprIfThenElse() | ExprFor() | ExprWhile() | ExprReturn() => $ {
+                macro_error(prog, stmt.at,
+                    "constrain block: only unknown declarations and constraint expressions " +
+                    "are supported, " +
+                    "got {describe(stmt)}")
+                return false
+            }
+            _ => $ {
+                if (onSolver) {
+                    stmts |> push <| qmacro_expr() {
+                        add($i(ctxName), $e(rewrite_bool_ops(stmt)))
+                    }
+                } else {
+                    stmts |> push <| qmacro_expr() {
+                        $i(accName) |> push($e(rewrite_bool_ops(stmt)))
+                    }
                 }
             }
         }
     }
     return true
+}
+
+def private block_arg(arg : ExpressionPtr) : ExprBlock? => match (arg) {
+    ExprMakeBlock(_block = ExprBlock() & blk) => blk
+    _ => null
 }
 
 [call_macro(name="constrain")]
@@ -144,10 +156,9 @@ class private ConstrainMacro : AstCallMacro {
     def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
         macro_verify(call.arguments |> length == 2, prog, call.at,
             "expecting solver |> constrain(expression) or solver |> constrain() <| block")
-        if (call.arguments[1] is ExprMakeBlock) {
+        let blk = block_arg(call.arguments[1])
+        if (blk != null) {
             // block form: declarations become unknowns, statements become assertions
-            let imb = call.arguments[1] as ExprMakeBlock
-            let blk = imb._block as ExprBlock
             var stmts : array<ExpressionPtr>
             if (!lower_block_stmts(prog, blk, "smtSlv_", true, "", stmts)) {
                 return null
@@ -168,10 +179,9 @@ class private ConstrainMacro : AstCallMacro {
 class private SmtFormulaMacro : AstCallMacro {
     def override canVisitArgument(call : ExprCallMacro?; argIndex : int) : bool => argIndex == 0
     def override visit(prog : ProgramPtr; mod : Module?; var call : ExprCallMacro?) : Expression? {
-        macro_verify(call.arguments |> length == 2 && call.arguments[1] is ExprMakeBlock, prog, call.at,
+        let blk = call.arguments |> length == 2 ? block_arg(call.arguments[1]) : null
+        macro_verify(blk != null, prog, call.at,
             "expecting solver |> smt_formula() with a block argument")
-        let imb = call.arguments[1] as ExprMakeBlock
-        let blk = imb._block as ExprBlock
         var stmts : array<ExpressionPtr>
         if (!lower_block_stmts(prog, blk, "smtCtx_", false, "smtAcc_", stmts)) {
             return null
@@ -219,24 +229,28 @@ class private SmtFnEmitter {
         return true
     }
 
-    def emit_branch(e : ExpressionPtr; g : string) : bool {
-        if (e is ExprBlock) {
-            return emit_block(e as ExprBlock, g)
-        }
-        return emit_stmt(e, g)
+    def emit_branch(e : ExpressionPtr; g : string) : bool => match (e) {
+        ExprBlock() & blk => emit_block(blk, g)
+        _ => emit_stmt(e, g)
     }
 
     def emit_stmt(stmt : ExpressionPtr; g : string) : bool {
-        if (stmt is ExprLet) {
-            return emit_let(stmt as ExprLet)
-        } elif (stmt is ExprCopy) {
-            return emit_copy(stmt as ExprCopy, g)
-        } elif (stmt is ExprIfThenElse) {
-            return emit_if(stmt as ExprIfThenElse, g)
-        } elif (stmt is ExprReturn) {
-            return emit_return(stmt as ExprReturn, g)
-        } elif (stmt is ExprFor) {
-            return emit_for(stmt as ExprFor, g)
+        match (stmt) {
+            ExprLet() & lt => $ {
+                return emit_let(lt)
+            }
+            ExprCopy() & cp => $ {
+                return emit_copy(cp, g)
+            }
+            ExprIfThenElse() & ift => $ {
+                return emit_if(ift, g)
+            }
+            ExprReturn() & ret => $ {
+                return emit_return(ret, g)
+            }
+            ExprFor() & efor => $ {
+                return emit_for(efor, g)
+            }
         }
         err = "[smt_fn]: unsupported statement `{describe(stmt)}` - v1 supports initialized locals, assignments, if/else, return, and literal-range for loops"
         return false
@@ -256,11 +270,14 @@ class private SmtFnEmitter {
     }
 
     def emit_copy(cp : ExprCopy?; g : string) : bool {
-        if (!(cp.left is ExprVar)) {
+        let vname = match (cp.left) {
+            ExprVar(name = n) => "{n}"
+            _ => ""
+        }
+        if (empty(vname)) {
             err = "[smt_fn]: only assignments to locals are supported"
             return false
         }
-        let vname = "{(cp.left as ExprVar).name}"
         stmts |> push <| qmacro_expr() {
             $i(vname) = ite($i(g), s_lift(smtCtx_, $e(rewrite_bool_ops(cp.right))), $i(vname))
         }
@@ -313,31 +330,35 @@ class private SmtFnEmitter {
         }
         var lo = 0
         var hi = 0
-        if (efor.sources[0] is ExprConstRange) {
-            let rng = (efor.sources[0] as ExprConstRange).value
-            lo = rng.x
-            hi = rng.y
-        } elif (efor.sources[0] is ExprCall) {
-            let rcall = efor.sources[0] as ExprCall
-            var boundsOk = rcall.name == "range"
-            if (boundsOk) {
+        match (efor.sources[0]) {
+            ExprConstRange(value = rng) => $ {
+                lo = rng.x
+                hi = rng.y
+            }
+            ExprCall() & rcall => $ {
+                var bounds : array<int>
                 for (a in rcall.arguments) {
-                    boundsOk &&= a is ExprConstInt
+                    match (a) {
+                        ExprConstInt(value = iv) => bounds |> push(iv)
+                    }
+                }
+                if (rcall.name != "range" || empty(bounds)
+                    || length(bounds) != length(rcall.arguments) || length(bounds) > 2) {
+                    err = ("[smt_fn]: for loop must iterate " +
+                        "`range(<int literal>[, <int literal>])` so it can be unrolled")
+                    return false
+                }
+                if (length(bounds) == 1) {
+                    hi = bounds[0]
+                } else {
+                    lo = bounds[0]
+                    hi = bounds[1]
                 }
             }
-            if (!boundsOk || empty(rcall.arguments) || length(rcall.arguments) > 2) {
-                err = "[smt_fn]: for loop must iterate `range(<int literal>[, <int literal>])` so it can be unrolled"
+            _ => $ {
+                err = "[smt_fn]: for loop must iterate a literal range so it can be unrolled"
                 return false
             }
-            if (length(rcall.arguments) == 1) {
-                hi = (rcall.arguments[0] as ExprConstInt).value
-            } else {
-                lo = (rcall.arguments[0] as ExprConstInt).value
-                hi = (rcall.arguments[1] as ExprConstInt).value
-            }
-        } else {
-            err = "[smt_fn]: for loop must iterate a literal range so it can be unrolled"
-            return false
         }
         let van = "{efor.iterators[0]}"
         for (k in range(lo, hi)) {
