@@ -15,7 +15,6 @@ require dasllama/dasllama_vulkan_common
 require dasllama/dasllama_vulkan_classes
 require dasllama/dasllama_common   // kv_store_row / kv_load_row and the tq4 batch rotations: the CPU cache's own codec
 require dasllama/dasllama_kv_dtype
-require dasllama/dasllama_gpu_math   // kv_ring_row: a ring arm's slots
 require _vkd_oracles
 require _compares
 require _attn_oracle
@@ -147,8 +146,8 @@ def private codec_attn_fixture(a : CodecAttn) : CodecAttnFixture {
     f.k <- codec_mirror(a.kv, f.k_model, a.nrows * a.keys, kvd, a.hs, base, f.signs)
     f.v <- codec_mirror(a.kv, f.v_model, a.nrows * a.keys, kvd, a.hs, base, f.signs)
     if (a.ring > 0) {
-        var kr <- codec_mirror(a.kv, ring_rows(f.k_model, a, kvd), a.nrows * a.keys, kvd, a.hs, base, f.signs)
-        var vr <- codec_mirror(a.kv, ring_rows(f.v_model, a, kvd), a.nrows * a.keys, kvd, a.hs, base, f.signs)
+        var kr <- codec_mirror(a.kv, ring_laid_rows(f.k_model, a.nrows, a.keys, a.keys, kvd, a.ring, 0, 0.0), a.nrows * a.keys, kvd, a.hs, base, f.signs)
+        var vr <- codec_mirror(a.kv, ring_laid_rows(f.v_model, a.nrows, a.keys, a.keys, kvd, a.ring, 0, 0.0), a.nrows * a.keys, kvd, a.hs, base, f.signs)
         f.kring <- kr.bytes
         f.vring <- vr.bytes
         delete kr
@@ -156,22 +155,6 @@ def private codec_attn_fixture(a : CodecAttn) : CodecAttnFixture {
     }
     f.sinks <- sink_logits(f.q, f.k.deq, a.nheads, a.hs, a.kv_mul, a.keys, kvd, 1.0 / sqrt(float(a.hs)))
     return <- f
-}
-
-//! the K or V rows of every region in a ring arm's layout: slot `s` holds the one position of the region's last `ring` whose
-//! `kv_ring_row` it is, the region's rows past the ring zero
-def private ring_rows(rows_f : array<float>; a : CodecAttn; kvd : int) : array<float> {
-    var out : array<float>
-    out |> resize(length(rows_f))
-    for (r in range(a.nrows)) {
-        for (p in range(a.keys - a.ring, a.keys)) {
-            let slot = int(kv_ring_row(int64(p), int64(a.ring)))
-            for (i in range(kvd)) {
-                out[(r * a.keys + slot) * kvd + i] = rows_f[(r * a.keys + p) * kvd + i]
-            }
-        }
-    }
-    return <- out
 }
 
 //! The CPU attention's rows over the fixture, [rows x heads x hs], through the arm's window, softcap, sink and gate: the

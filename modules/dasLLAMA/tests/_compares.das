@@ -463,6 +463,9 @@ def bf16_value(h : uint16) : float => uint_bits_to_float(uint(h) << 16u)
 //! `x`'s bf16 word by TRUNCATION - its top 16 bits, rounding toward zero (the engine's own bf16 narrowing rounds to nearest-even)
 def bf16_bits_truncated(x : float) : uint16 => uint16(float_bits_to_uint(x) >> 16u)
 
+//! `src` as bf16 words, each truncated (`bf16_bits_truncated`; `bf16_value` reads them back)
+def pack_bf16(src : array<float>) : array<uint16> => <- [for (v in src); bf16_bits_truncated(v)]
+
 //! the index of the first largest of `v`'s first `n` elements - the engine's `parallel_argmax`
 def argmax_of(v : array<float>; n : int64) : int64 => parallel_argmax(v, n)
 

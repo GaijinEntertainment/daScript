@@ -5163,7 +5163,7 @@ def private seam_norms(t : Model; sm : ResidualSeam) : MetalBuffer? {
     let rb = uint64(t.config.dim * 4l)
     unsafe {
         if (sm.pre_off >= 0l && sm.norm_off >= 0l) {
-            return upload_region_cat3(addr<void?>(t.fblob[sm.pre_off]), rb, addr<void?>(t.fblob[sm.norm_off]), rb, null, 0ul)
+            return upload_region_cat(addr<void?>(t.fblob[sm.pre_off]), rb, addr<void?>(t.fblob[sm.norm_off]), rb)
         }
         return upload_region(addr<void?>(t.fblob[sm.pre_off >= 0l ? sm.pre_off : sm.norm_off]), rb)
     }

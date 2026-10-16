@@ -1616,7 +1616,6 @@ def private metal_ring_row(t : T?; path, tag, family, arm : string) {
         let prompt <- encode(trg, counting_prompt(1, 400), true, false)
         t |> success(long_length(prompt) > trg.config.sliding_window + 128l,
             "{tag}/ring: the {long_length(prompt)}-token prompt runs past the {trg.config.sliding_window}-position window")
-        let pin = gpu_kv_ring_pin()
         var ids : array<array<int64>>
         var rings : array<int64>
         var fed : array<int64>   //! each leg's windows on the mirror-fed form
@@ -1624,27 +1623,27 @@ def private metal_ring_row(t : T?; path, tag, family, arm : string) {
             select_decode_override("metal")
             select_prefill_override("metal")
             for (ringed in fixed_array(1, 0)) {
-                set_gpu_kv_ring(ringed)
-                let de0 = metal_decode_stats().decodes
-                let pf0 = metal_prefill_stats().prefills
-                let mf0 = metal_prefill_mirror_served()
-                var s = make_run_state(trg.config, KVDtype.f16, KVDtype.f16)
-                var got <- ring_row_walk(trg, s, prompt, 256l, 24)
-                fed |> push(metal_prefill_mirror_served() - mf0)
-                rings |> push(mirror_rings(trg))
-                if (ringed == 1) {
-                    let ring = mirror_ring(trg, 0l)
-                    t |> success(ring > 0l && ring < long_length(prompt), "{tag}/ring: the sliding layers' {ring}-row ring wraps under the prompt")
+                with_gpu_kv_ring(ringed) {
+                    let de0 = metal_decode_stats().decodes
+                    let pf0 = metal_prefill_stats().prefills
+                    let mf0 = metal_prefill_mirror_served()
+                    var s = make_run_state(trg.config, KVDtype.f16, KVDtype.f16)
+                    var got <- ring_row_walk(trg, s, prompt, 256l, 24)
+                    fed |> push(metal_prefill_mirror_served() - mf0)
+                    rings |> push(mirror_rings(trg))
+                    if (ringed == 1) {
+                        let ring = mirror_ring(trg, 0l)
+                        t |> success(ring > 0l && ring < long_length(prompt), "{tag}/ring: the sliding layers' {ring}-row ring wraps under the prompt")
+                    }
+                    t |> success(metal_decode_stats().decodes - de0 >= 23l && metal_prefill_stats().prefills - pf0 >= long_length(prompt) / 256l,
+                        "{tag}/ring {ringed}: the prompt and the steps served on the device")
+                    ids |> emplace(got)
+                    delete s
                 }
-                t |> success(metal_decode_stats().decodes - de0 >= 23l && metal_prefill_stats().prefills - pf0 >= long_length(prompt) / 256l,
-                    "{tag}/ring {ringed}: the prompt and the steps served on the device")
-                ids |> emplace(got)
-                delete s
             }
             select_decode_override("")
             select_prefill_override("")
         }
-        set_gpu_kv_ring(pin)
         t |> success(rings[0] > 0l && rings[1] == 0l, "{tag}/ring: the ringed layout holds rings ({rings[0]} elements), the flat one none ({rings[1]})")
         t |> success(fed[1] > 0l && fed[0] == fed[1], "{tag}/ring: every window the flat mirror feeds, the ringed one feeds too ({fed[0]} ringed, {fed[1]} flat)")
         log_gen_texts(trg, "{tag}/ring", ids[1], ids[0])

@@ -4964,6 +4964,15 @@ def set_gpu_kv_ring(pin : int) {
 //! The pin `set_gpu_kv_ring` set: what a caller that pins it puts back
 def gpu_kv_ring_pin : int => g_gpu_kv_ring_pin
 
+//! `body` under the sliding layers' ring pin `ring` (`set_gpu_kv_ring`), the pin put back as it was found - `body` may move the pin
+//! itself
+def with_gpu_kv_ring(ring : int; body : block<void>) {
+    let pin = g_gpu_kv_ring_pin
+    set_gpu_kv_ring(ring)
+    invoke(body)
+    set_gpu_kv_ring(pin)
+}
+
 //! Whether the next armed mirror rings its sliding layers
 def gpu_kv_ring_on : bool => g_gpu_kv_ring_pin < 0 ? g_env_gpu.gpu_kv_ring : g_gpu_kv_ring_pin != 0
 

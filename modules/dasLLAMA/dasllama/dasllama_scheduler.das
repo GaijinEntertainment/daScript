@@ -580,15 +580,15 @@ def private advance_with(m : Model; var st : Stream; tok : int64; var events : a
     return true
 }
 
-//! Where the emitted token stands against the reasoning budget: the span's open token enters it, every token inside it counts,
-//! the close token the model writes leaves it, and the budget reached inside it - or the length cap drawing closer than the
-//! forced close is long - queues the forced close for the steps that follow.
 //! the stream's reasoning budget can still force a close: a token it emits may queue one, so its round drafts one token
 def private think_budget_armed(st : Stream) : bool => st.think_budget > 0l && !empty(st.think_marks.close) && st.think_state != 2
 
+//! Where the emitted token stands against the reasoning budget: the span's open token enters it, every token inside it counts,
+//! the close token the model writes leaves it, and the budget reached inside it - or the length cap drawing closer than the
+//! forced close is long - queues the forced close for the steps that follow.
 [arch(at="../ARCHITECTURE_ENGINE_SERVING.md#think-budget")]
 def private think_budget_track(var st : Stream; tok : int64) {
-    return if (st.think_budget <= 0l || empty(st.think_marks.close) || st.think_state == 2)
+    return if (!think_budget_armed(st))
     if (st.think_state == 0) {
         let nopen = length(st.think_marks.open)
         return if (nopen == 0)

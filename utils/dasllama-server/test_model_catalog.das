@@ -24,14 +24,14 @@ def test_catalog_drafters(t : T?) {
     t |> run("every assistant drafter resolves pinned, and the gemma-4 26B card carries the upstream head") @(t : T?) {
         var found = false
         for (e in model_catalog()) {
-            continue if (empty(e.drafter_file))
-            t |> equal(length(e.drafter_sha256), 64, "{e.name}: drafter sha256 must be 64 hex chars")
-            t |> success(e.drafter_bytes > 0l, "{e.name}: drafter canonical size missing")
-            t |> success(e.drafter_url |> starts_with("https://"), "{e.name}: drafter url must be https")
-            t |> success(find(e.drafter_url, "/resolve/main/") < 0, "{e.name}: drafter url is not commit-pinned")
+            continue if (empty(e.drafter.file))
+            t |> equal(length(e.drafter.sha256), 64, "{e.name}: drafter sha256 must be 64 hex chars")
+            t |> success(e.drafter.bytes > 0l, "{e.name}: drafter canonical size missing")
+            t |> success(e.drafter.url |> starts_with("https://"), "{e.name}: drafter url must be https")
+            t |> success(find(e.drafter.url, "/resolve/main/") < 0, "{e.name}: drafter url is not commit-pinned")
             if (e.name == "gemma-4-26b-a4b") {
                 found = true
-                t |> equal(e.drafter_file, "mtp-gemma-4-26B-A4B-it-Q8_0.gguf", "the 26B card's drafter is the upstream Q8_0 head")
+                t |> equal(e.drafter.file, "mtp-gemma-4-26B-A4B-it-Q8_0.gguf", "the 26B card's drafter is the upstream Q8_0 head")
             }
         }
         t |> success(found, "the gemma-4 26B card carries its assistant drafter")
@@ -76,14 +76,14 @@ def test_catalog_table(t : T?) {
         var towers = 0
         for (e in model_catalog()) {
             if (e.is_default) {
-                t |> success(!empty(e.vision_file), "the getting-started default must carry a vision tower")
+                t |> success(!empty(e.vision.file), "the getting-started default must carry a vision tower")
             }
-            continue if (empty(e.vision_file))
+            continue if (empty(e.vision.file))
             towers++
-            t |> equal(length(e.vision_sha256), 64, "{e.name}: tower sha256 must be 64 hex chars")
-            t |> success(e.vision_bytes > 0l, "{e.name}: tower canonical size missing")
-            t |> success(e.vision_url |> starts_with("https://"), "{e.name}: tower url must be https")
-            t |> success(find(e.vision_url, "/resolve/main/") < 0, "{e.name}: tower url is not commit-pinned")
+            t |> equal(length(e.vision.sha256), 64, "{e.name}: tower sha256 must be 64 hex chars")
+            t |> success(e.vision.bytes > 0l, "{e.name}: tower canonical size missing")
+            t |> success(e.vision.url |> starts_with("https://"), "{e.name}: tower url must be https")
+            t |> success(find(e.vision.url, "/resolve/main/") < 0, "{e.name}: tower url is not commit-pinned")
         }
         t |> success(towers >= 2, "vision towers shrank: {towers}, expected at least 2")
     }
@@ -191,22 +191,22 @@ def test_download_refusals(t : T?) {
     t |> run("a towerless entry refuses the vision download; an unpinned item refuses too") @(t : T?) {
         let dir = tmp_models_dir("tower")
         let bare = CatalogEntry(name = "x", file = "x.gguf", bytes = 4l, sha256 = "00", url = "https://example.invalid/x")
-        let r1 = catalog_download_start_vision(dir, bare)
+        let r1 = catalog_download_start_companion(dir, bare, CatalogCompanionKind.vision)
         t |> success(find(r1, "no vision tower") >= 0, "got: {r1}")
         var unpinned = bare
-        unpinned.vision_file = "mmproj-x.gguf"
-        let r2 = catalog_download_start_vision(dir, unpinned)
+        unpinned.vision.file = "mmproj-x.gguf"
+        let r2 = catalog_download_start_companion(dir, unpinned, CatalogCompanionKind.vision)
         t |> success(find(r2, "no pinned artifact") >= 0, "got: {r2}")
         rmdir(dir)
     }
     t |> run("an entry with no assistant drafter refuses the drafter download; an unpinned drafter refuses too") @(t : T?) {
         let dir = tmp_models_dir("drafter")
         let bare = CatalogEntry(name = "x", file = "x.gguf", bytes = 4l, sha256 = "00", url = "https://example.invalid/x")
-        let r1 = catalog_download_start_drafter(dir, bare)
+        let r1 = catalog_download_start_companion(dir, bare, CatalogCompanionKind.drafter)
         t |> success(find(r1, "no assistant drafter") >= 0, "got: {r1}")
         var unpinned = bare
-        unpinned.drafter_file = "mtp-x-Q8_0.gguf"
-        let r2 = catalog_download_start_drafter(dir, unpinned)
+        unpinned.drafter.file = "mtp-x-Q8_0.gguf"
+        let r2 = catalog_download_start_companion(dir, unpinned, CatalogCompanionKind.drafter)
         t |> success(find(r2, "no pinned artifact") >= 0, "got: {r2}")
         rmdir(dir)
     }
@@ -249,8 +249,8 @@ def test_state_json(t : T?) {
         let dir = tmp_models_dir("towerdoc")
         var first_tower = ""
         for (e in model_catalog()) {
-            if (empty(first_tower) && !empty(e.vision_file)) {
-                first_tower = e.vision_file
+            if (empty(first_tower) && !empty(e.vision.file)) {
+                first_tower = e.vision.file
             }
         }
         t |> success(!empty(first_tower), "the catalog carries at least one vision tower")

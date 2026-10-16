@@ -137,12 +137,13 @@ def private with_regions_rig(t : T?; file : string; body : block<(tr : Model) : 
 def private with_regions_rig(t : T?; file : string; load : RegionsLoad; body : block<(tr : Model) : void>) {
     if (!regions_ready(t, file)) return
     let levers = resident_levers()
-    let ring_pin = gpu_kv_ring_pin()
     split_forms_pin(load.split_forms)
     set_gpu_ctx_max(load.ctx)
-    set_gpu_kv_ring(load.ring)
-    var tr <- load_regions(t, file, load.regions, load.host_ctx)
-    set_gpu_kv_ring(ring_pin)
+    var tr <- Model()
+    with_gpu_kv_ring(load.ring) {
+        delete tr
+        tr <- load_regions(t, file, load.regions, load.host_ctx)
+    }
     restore_resident_levers(levers)
     if (moe_gpu_resident_active()) {
         with_dasllama_jobque_() {

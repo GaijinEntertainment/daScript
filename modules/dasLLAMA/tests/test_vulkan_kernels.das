@@ -3275,20 +3275,6 @@ def private fa_flat_read(var cp; khr : bool; hs : int; sink : bool; var sfa; pcf
     return <- cp |> plane_run(py)
 }
 
-//! a flash cell's K or V plane as a ring of `ring` rows: slot `s` holds the one position of the last `ring` under `kpos` whose
-//! `kv_ring_row` it is, the plane's rows past the ring (to `kpad`) the slack's value; the rows as they are with no ring
-def private fa_ring_rows(rows_f : array<float>; kpos, kpad, kvd, ring : int) : array<float> {
-    return <- clone_to_move(rows_f) if (ring == 0)
-    var out <- [for (_i in range(kpad * kvd)); 10000.0]
-    for (p in range(kpos - ring, kpos)) {
-        let slot = int(kv_ring_row(int64(p), int64(ring)))
-        for (i in range(kvd)) {
-            out[slot * kvd + i] = rows_f[p * kvd + i]
-        }
-    }
-    return <- out
-}
-
 def private fa_tile_run(t : T?; khr : bool) {
     static_if (typeinfo builtin_module_exists(vulkan)) {
         let tag = khr ? "fa_khr" : "fa_cm2"
@@ -3335,8 +3321,8 @@ def private fa_tile_run(t : T?; khr : bool) {
                 kh[i] = 10000.0
                 vh[i] = 10000.0
             }
-            var inscope kplane <- fa_ring_rows(kh, kpos, kpad, kvd, ring)
-            var inscope vplane <- fa_ring_rows(vh, kpos, kpad, kvd, ring)
+            var inscope kplane <- ring_laid_rows(kh, 1, kpad, kpos, kvd, ring, 0, 10000.0)
+            var inscope vplane <- ring_laid_rows(vh, 1, kpad, kpos, kvd, ring, 0, 10000.0)
             var inscope y_cls : array<float>
             var inscope y_flat_read : array<float>   //! a ring arm's control: the ring's rows read a position a row
             var inscope y16_fused, y16_split : array<float16>
@@ -3940,28 +3926,6 @@ def test_vkd_da_attn_bw(t0 : T?) {
     }
 }
 
-//! `f`'s K and V mirrors as rings of `ring` rows past their bases: slot `s` holds the one position of the last `ring` whose
-//! `kv_ring_row` it is, the rows past the ring zero
-def private da_attn_b_ring_fix(f : DaAttnBFix; ring : int) : DaAttnBFix {
-    var g := f
-    let kvd = (f.nheads / f.kv_mul) * f.hs
-    let kpos = f.w0 + f.npos
-    for (i in range(length(g.kh))) {
-        g.kh[i] = i < f.kbase ? f.kh[i] : 0.0
-    }
-    for (i in range(length(g.vh))) {
-        g.vh[i] = i < f.vbase ? f.vh[i] : 0.0
-    }
-    for (p in range(kpos - ring, kpos)) {
-        let slot = int(kv_ring_row(int64(p), int64(ring)))
-        for (i in range(kvd)) {
-            g.kh[f.kbase + slot * kvd + i] = f.kh[f.kbase + p * kvd + i]
-            g.vh[f.vbase + slot * kvd + i] = f.vh[f.vbase + p * kvd + i]
-        }
-    }
-    return <- g
-}
-
 //! the chunked prefill tiles over a sliding layer's ring: 120 rows at w0 500 under a 40-position window over a 192-row ring (the
 //! window's keys across the slots' wrap), each stamp against the CPU oracle over the flat rows, the same rows read a position a row
 //! (`ring` 0) missing it as the control
@@ -3987,7 +3951,10 @@ def test_vkd_da_attn_b_ring(t0 : T?) {
                 let tag = wide ? "da_attn_bw" : (stamp == DAB_H128 ? "da_attn_b_h128" : "da_attn_b")
                 let scale = wide ? 1.0 : 0.125
                 var f <- wide ? da_attn_b_fix(120, 4, 4, 512, 500, 64, 160, 0.005, 0.18, 0.003, 0.14, false) : da_attn_b_fix(120, 4, 2, 128, 500, 64, 160, 0.05, 1.8, 0.03, 1.4, false)
-                var g <- da_attn_b_ring_fix(f, 192)
+                var g := f   //! `f`'s K and V mirrors as rings of 192 rows past their bases
+                let kvd = (f.nheads / f.kv_mul) * f.hs
+                g.kh <- ring_laid_rows(f.kh, 1, f.w0 + f.npos, f.w0 + f.npos, kvd, 192, f.kbase, 0.0)
+                g.vh <- ring_laid_rows(f.vh, 1, f.w0 + f.npos, f.w0 + f.npos, kvd, 192, f.vbase, 0.0)
                 var inscope y <- da_attn_b_run(g, stamp, scale, 0.0, 40, 0, 0, 192)
                 var inscope y_ref <- da_attn_b_ref(f, scale, 40, 0.0)
                 let bar = stamp == DAB_H128 ? cm_bar(y_ref) : BAR_APPROX_CTRL
@@ -9343,9 +9310,6 @@ def private router_cols_arm(t : T?; ncols : int; norm_on, bf16 : bool) {
         t |> skip("dasVulkan not present")
     }
 }
-
-//! `src` as bf16 halves, truncated (the CPU reference reads the same values back, `bf16_value`)
-def private pack_bf16(src : array<float>) : array<uint16> => <- [for (v in src); bf16_bits_truncated(v)]
 
 //! the per-layer-embedding branch's f32 act (`PleActF32`, a `GkPleAct` stamp, the f32 projection's x): npos gate rows of ple against the side rows'
 //! layer-l slice, position-major rows `all` apart, gelu_tanh(gate) x side against the CPU form at the approx bar; the side read
