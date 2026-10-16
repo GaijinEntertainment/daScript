@@ -17,6 +17,10 @@ require strings
 // add is not in its norm+weight fusion window).
 // Slot B (1x per layer): our one-thread-per-element swiglu.
 // Shapes: dim 3072, hidden 8192, B=2 rows.
+// Each slot runs one arm, its baseline the CPU reference in float off the same inputs: the
+// add+rms arm's compare region is x (in place, bound 1e-4) and y (bound 1e-3) over the B rows,
+// the swiglu arm's g over the B rows (bound 1e-3). A slot past its bound prints the miss and no
+// time; a slot whose timed rep fails to dispatch prints REFUSED and no time.
 //
 //   bin/daslang -jit dastest/dastest.das -- --bench --test modules/dasLLAMA/benchmarks/ew/bench_metal_ew.das
 
@@ -60,16 +64,29 @@ def private time_seq(queue; psos; bufss; groupss; threadss; tgmems; reps : int) 
     return gpu_ms / double(reps)
 }
 
+//! the best per-dispatch ms over `rounds` timed reps, or -1 the moment a rep fails to dispatch
 def private best_of(queue; psos; bufss; groupss; threadss; tgmems; rounds : int; est : double) : double {
     var best = 1.0e30lf
     for (_round in range(rounds)) {
         let reps = clamp(int(5.0lf / max(est, 0.002lf)) + 1, 1, 512)
         let ms = time_seq(queue, psos, bufss, groupss, threadss, tgmems, reps)
-        if (ms > 0.0lf && ms < best) {
-            best = ms
+        if (ms <= 0.0lf) {
+            return -1.0lf
         }
+        best = min(best, ms)
     }
     return best
+}
+
+//! a slot's report line: the miss and its bound, REFUSED where a rep failed to dispatch, else the time
+def private slot_row(name : string; ok : bool; bound : string; ms : double) {
+    if (!ok) {
+        to_log(LOG_INFO, "{name}: MISS - past the bound {bound} vs the CPU reference\n")
+    } elif (ms < 0.0lf) {
+        to_log(LOG_INFO, "{name}: REFUSED - a timed rep failed to dispatch (the error above)\n")
+    } else {
+        to_log(LOG_INFO, "{name}: {ms * 1000.0lf} us - within {bound} vs the CPU reference\n")
+    }
 }
 
 def private run_ew_lab(b) {   // nolint:STYLE038 — flat lab driver: buffers bound once, then one timed slot per kernel
@@ -170,12 +187,15 @@ def private run_ew_lab(b) {   // nolint:STYLE038 — flat lab driver: buffers bo
     // interleaved best-of
     var b_oa = 1.0e30lf
     var b_os = 1.0e30lf
-    for (_round in range(rounds)) {
-        b_oa = min(b_oa, best_of(queue, psos_oa, bufss_oa, groups_oa, threads_oa, tgm_oa, 1, e_oa))
-        b_os = min(b_os, best_of(queue, psos_os, bufss_os, groups_os, threads_os, tgm_os, 1, e_os))
+    for (_round in range(max(rounds, 1))) {
+        let t_oa = best_of(queue, psos_oa, bufss_oa, groups_oa, threads_oa, tgm_oa, 1, e_oa)
+        let t_os = best_of(queue, psos_os, bufss_os, groups_os, threads_os, tgm_os, 1, e_os)
+        b_oa = b_oa < 0.0lf || t_oa < 0.0lf ? -1.0lf : min(b_oa, t_oa)
+        b_os = b_os < 0.0lf || t_os < 0.0lf ? -1.0lf : min(b_os, t_os)
     }
-    to_log(LOG_INFO, "ew B2 addrms: ours(1 disp) {b_oa * 1000.0lf} us\n")
-    to_log(LOG_INFO, "ew B2 swiglu: ours {b_os * 1000.0lf} us\n")
+    b |> success(b_oa > 0.0lf && b_os > 0.0lf, "every timed rep dispatched")
+    slot_row("ew B2 addrms: ours(1 disp)", ok_oa, "1e-4 x, 1e-3 y", b_oa)
+    slot_row("ew B2 swiglu: ours", ok_os, "1e-3 g", b_os)
     psos_oa |> clear()
     psos_os |> clear()
     bufs_oa |> clear()

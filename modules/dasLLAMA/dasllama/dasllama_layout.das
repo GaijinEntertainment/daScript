@@ -277,7 +277,7 @@ def private compact_kq_scale_strip(var ks : array<uint8>) {
 
 // ===== CPU repack walkers (backend grp<mr> interleave, in place at load) =====
 
-// A repack work item is common's StreamReg (fmt: 0 = q8, 1 = mx4, 2 = q51, 4/5/6/40 = kq).
+// A repack work item is common's StreamReg (fmt: the format's stream code, 0 = q8).
 // Chunking splits huge regions (the classifier) for load balance; 1024 is a multiple of every
 // backend mr, so row groups never straddle a boundary.
 def private push_repack(var regs : array<StreamReg>; fmt : int; off, n, d : int64) {
@@ -337,7 +337,7 @@ def private repack_regions(var t : Model; regs : array<StreamReg>) {
                     let f = rp[i].fmt
                     if (f == 0) {
                         invoke(rq8, qbp + rp[i].off, qsp + rp[i].off / Q8_BLOCK_ELEMS, rp[i].n, rp[i].d)
-                    } elif (f == 1) {
+                    } elif (f == MX4_STREAM_TAG) {
                         let mb = rp[i].off / KQ_B32_ELEMS
                         invoke(rmx, mxqp + rp[i].off / 2l, mxsp + mb, rp[i].n, rp[i].d)
                     } else {
@@ -415,7 +415,13 @@ def private collect_q8_regions(t : Model; var regs : array<StreamReg>) {
         }
         if (c.n_expert > 0l && l >= c.n_layer_dense_lead) {   // MoE: each expert slice is its own 2D tensor, repacked per its shape
             let ege = dim * c.n_ff_exp
-            if (!t.experts_mx4) {   // native-MXFP4 stacks live in mxq/mxs, row-major (no Q8 repack)
+            if (t.experts_mx4) {   //! native-MXFP4 stacks live in mxq/mxs and take the mx layout of the q8 walk's backend
+                for (e in range64(c.n_expert)) {
+                    push_repack(regs, MX4_STREAM_TAG, t.we1_offs[l] + e * ege, dim, c.n_ff_exp)
+                    push_repack(regs, MX4_STREAM_TAG, t.we2_offs[l] + e * ege, c.n_ff_exp, dim)
+                    push_repack(regs, MX4_STREAM_TAG, t.we3_offs[l] + e * ege, dim, c.n_ff_exp)
+                }
+            } else {
                 for (e in range64(c.n_expert)) {
                     if (fmt_at(t.we1_fmt, l) == KqFmt.q8) {
                         push_repack(regs, 0, t.we1_offs[l] + e * ege, dim, c.n_ff_exp)
@@ -596,26 +602,6 @@ def private repack_kq_weights(var t : Model) {
     delete regs
 }
 
-// Repack the native-MXFP4 expert stacks into the active backend's interleaved mx layout, IN PLACE
-// (each expert slice is its own 2D tensor). Mirrors repack_q8_weights' contract: called only after
-// select_matmul_backend_for_load_ picks a repack backend; the pointer is otherwise identity.
-def private repack_mx4_stacks(var t : Model) {
-    let c = t.config
-    let dim = c.dim
-    let ege = dim * c.n_ff_exp
-    var regs : array<StreamReg>
-    for (l in range64(c.n_layers)) {
-        for (e in range64(c.n_expert)) {
-            let base = e * ege
-            push_repack(regs, 1, t.we1_offs[l] + base, dim, c.n_ff_exp)
-            push_repack(regs, 1, t.we2_offs[l] + base, c.n_ff_exp, dim)
-            push_repack(regs, 1, t.we3_offs[l] + base, dim, c.n_ff_exp)
-        }
-    }
-    repack_regions(t, regs)
-    delete regs
-}
-
 // A per-32 format's expert stacks -> the active backend's grp<mr> layout of that format (per-stack:
 // a model can mix q51 downs with k4 gates, e.g. gemma-4-26B-A4B, or iq4nl32 downs with iq3s
 // gates, Qwen3.8-Flash-Next). No-op unless a stack carries the tag.
@@ -744,7 +730,9 @@ def private stream_repack_one(fmt : int; qp, sp : void?; n, d : int64) {
         }
         var q = reinterpret<uint8?>(qp)
         var s = reinterpret<uint8?>(sp)
-        if (kq_dense_b32(rf)) {
+        if (rf == KqFmt.mx4) {
+            invoke(active_repack_mx4(), q, s, n, d)
+        } elif (kq_dense_b32(rf)) {
             invoke(active_repack_b32(rf), q, s, n, d)
         } else {
             invoke(active_repack_kq(), kq_schema_id(rf), q, s, n, d)
@@ -1261,8 +1249,7 @@ def moe_gpu_gather_stack_kq(t : Model; fmt : KqFmt; woff : int64; n, rows, slice
 
 [init]
 def private register_layout_hooks {
-    register_model_layout(@@repack_q8_weights, @@repack_kq_weights, @@repack_mx4_stacks,
-        @@repack_b32_stacks, @@moe_gpu_gather_stack, @@moe_gpu_gather_stack_kq,
+    register_model_layout(@@repack_q8_weights, @@repack_kq_weights, @@repack_b32_stacks, @@moe_gpu_gather_stack, @@moe_gpu_gather_stack_kq,
         @@moe_gpu_gather_b32_stack, @@moe_gpu_gather_stack_mx4)
     register_stream_layout(@@collect_q8_regions, @@collect_kq_regions, @@collect_b32_regions,
         @@stream_repack_one, @@metal_blob_eligible, @@metal_blob_scale_plane)
