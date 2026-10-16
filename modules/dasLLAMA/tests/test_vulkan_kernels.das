@@ -1962,7 +1962,7 @@ def test_vkd_kq_gemv_k4_gu(t0 : T?) {
                 t |> skip("no Vulkan device")
                 return
             }
-            for (fmt in fixed_array(int(KqFmt.k4), int(KqFmt.iq4xs), int(KqFmt.iq3s4))) {
+            for (fmt in fixed_array(int(KqFmt.k4), int(KqFmt.iq4xs), int(KqFmt.iq3s4), int(KqFmt.iq2s))) {   //! iq2s: the grid staged over the 256 lanes
             if (!(kq_gu_cls_ensure(fmt) && gemv_cls_ensure(fmt))) {
                 t |> failure("the {kq_fmt_of_slot(fmt)} gu and GEMV classes did not build on a live device")
                 continue

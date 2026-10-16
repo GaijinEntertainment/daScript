@@ -11696,9 +11696,10 @@ def b32_sum_cls_enc(fmt : int; raw : VkCommandBuffer; var h : VkHaz; var set_ : 
 }
 
 //! the formats whose routed gate and up stacks take the fused GEMV (`gu_shell`): the kq ones the twins stamp
-let KQ_GU_SKIP = "q8 q51 mx4 iq4nl32 q4032 q5032 k2 k3 k5 k6 q40 iq3s iq3xxs iq4nl iq2s iq2xs iq2xxs"
+let KQ_GU_SKIP = "q8 q51 mx4 iq4nl32 q4032 q5032 k2 k3 k5 k6 q40 iq3s iq3xxs iq4nl iq2xs iq2xxs"
 
-def kq_gu_fmt(fmt : int) : bool => fmt == int(KqFmt.k4) || fmt == int(KqFmt.iq4xs) || fmt == int(KqFmt.iq3s4)
+def kq_gu_fmt(fmt : int) : bool => (fmt == int(KqFmt.k4) || fmt == int(KqFmt.iq4xs) || fmt == int(KqFmt.iq3s4)
+    || fmt == int(KqFmt.iq2s))
 
 def kq_gu_cls_ensure(fmt : int) : bool {
     var r = false
@@ -11921,6 +11922,14 @@ class template KqGemvLeafT : KqGemvBase {
     [arch(at="../ARCHITECTURE_GPU_VULKAN_MOE.md#resident-moe-token")]
     def gu_shell {
         static_if (GU) {
+            static_if (GRID) {   //! a grid format's codebook staged over the 256 lanes (`stage_grid` strides 64)
+                var gi = gl_LocalInvocationID.x
+                while (gi < GRID_WORDS) {
+                    gridw[gi] = gridb[GRID_OFF + gi]
+                    gi += 256u
+                }
+                barrier()
+            }
             let lanes_per_row = pa.lanes_per_row == 0u ? gl_SubgroupSize : pa.lanes_per_row
             let lane = gl_SubgroupInvocationID
             let row_lane = lane % lanes_per_row
@@ -12043,7 +12052,7 @@ class KqGemvK4N : K4GemvT {
     override NCOL = true
 }
 
-//! the routed experts' fused gate and up GEMVs (`gu_shell`) on the Q4_K stacks; the iq4xs and iq3s4 twins share its set layout
+//! the routed experts' fused gate and up GEMVs (`gu_shell`) on the Q4_K stacks; the iq4xs, iq3s4 and iq2s twins share its set layout
 [vk_dispatch(name = "kq_gemv_k4_gu_cls", kernel = "run_gu", grid = "wgs", params = "wgs : int64")]
 class KqGemvK4Gu : K4GemvT {
     override GU = true
@@ -12344,6 +12353,16 @@ class KqGemvIq2s : Iq2sGemvT {}
 [vk_dispatch(name = "kq_gemv_iq2s_n_cls", kernel = "run", family = "kq_gemv_cls", grid = "wgs", params = "wgs : int64")]
 class KqGemvIq2sN : Iq2sGemvT {
     override NCOL = true
+}
+
+[vk_dispatch(name = "kq_gemv_iq2s_gu_cls", kernel = "run_gu", family = "kq_gemv_k4_gu_cls", grid = "wgs", params = "wgs : int64")]
+class KqGemvIq2sGu : Iq2sGemvT {
+    override GU = true
+
+    [spirv_kernel(local_size_x = 256, name = "kq_gemv_iq2s_gu_cls_spv")]
+    def run_gu {
+        gu_shell()
+    }
 }
 
 // IQ2_XS: the iq2s u64-grid walk with ksigns-by-parity - each u16 qs word carries a 9-bit

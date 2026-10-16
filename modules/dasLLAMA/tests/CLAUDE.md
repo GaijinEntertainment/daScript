@@ -1049,7 +1049,7 @@ rows of one slot a dispatch a row (the row in the push, the same-slab verify's f
 one-row dispatch run a row at a time on the state and ring the row before it left - every row's o
 row, then the slot's state and both ring images after the last row, bit for bit, the state and the
 second row's ring image asserted moved off their inputs, and row 1 stepped from the untouched state
-as the control that misses. The gemma-family cells: `test_vkd_kq_gemv_k4_gu` (the Q4_K, IQ4_XS and iq3s4 gate + up GEMVs with
+as the control that misses. The gemma-family cells: `test_vkd_kq_gemv_k4_gu` (the Q4_K, IQ4_XS, iq3s4 and IQ2_S gate + up GEMVs with
 the act and its Q8_0 requant in one dispatch, against the three-kernel path byte for byte and the CPU chain),
 `test_vkd_q8_gemv_gu` (the fused q8 gate + up + act + requant, gelu and silu, two depths),
 `test_vkd_topk_n` (the N-row command's per-row top-k over four rows against the one-row top-k run a row at a time - the

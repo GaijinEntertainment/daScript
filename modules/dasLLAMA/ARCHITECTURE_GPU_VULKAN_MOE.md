@@ -164,9 +164,10 @@ the driver's router plane - every MoE layer's rows and, when the shared expert i
 row last - into one logits row; the top-k (`TopKN` at one workgroup, the span's kernel over the decode's core)
 writes the k routing weights and the three expert GEMVs' slot regions, each a `(block, feed
 block)` pair whose block is the expert plane's slab-local base plus the pick's stride; gate and
-up run the class GEMV over k regions, the act writes k hidden rows (Q4_K, IQ4_XS or iq3s4 gate and up stacks in one
+up run the class GEMV over k regions, the act writes k hidden rows (Q4_K, IQ4_XS, iq3s4 or IQ2_S gate and up stacks in one
 slab feeding a per-32 down take the leaf template's fused arm for the three - `KqGemvLeafT.gu_shell`, stamped `KqGemvK4Gu`,
-`KqGemvIq4xsGu`, `KqGemvIq3s4Gu`: both dots, the act and its requant a 32-row block a workgroup, one dispatch where three
+`KqGemvIq4xsGu`, `KqGemvIq3s4Gu`, `KqGemvIq2sGu` (a grid format's codebook staged over the 256 lanes first): both dots, the act
+and its requant a 32-row block a workgroup, one dispatch where three
 ran; `RLayer.egu`), down runs k regions into the
 routed rows; and the residual step that follows folds the combine in (`ClsArComb`, the prefill's
 `ARCHITECTURE_GPU_VULKAN_MOE.md#vk-prefill-moe-block` kernel at one row): the shared expert's row in `ffnout` at the sigmoid of its gate
