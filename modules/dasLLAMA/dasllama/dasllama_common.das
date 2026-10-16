@@ -922,7 +922,6 @@ typedef GatherStackKqFn = function<(t : Model; fmt : KqFmt; woff : int64; n, row
                                     var wq : array<uint8>; var ws : array<uint8>) : void>
 var private g_layout_repack_q8 : ModelRepackFn
 var private g_layout_repack_kq : ModelRepackFn
-var private g_layout_repack_mx4 : ModelRepackFn
 //! one per-32 format's planes repacked in place
 typedef ModelRepackB32Fn = function<(var t : Model; fmt : KqFmt) : void>
 var private g_layout_repack_b32 : ModelRepackB32Fn
@@ -934,12 +933,11 @@ var private g_layout_gather_b32 : GatherStackKqFn
 var private g_layout_gather_mx4 : GatherStackB32Fn
 var private g_layout_hooks_set = false
 
-def register_model_layout(rq8, rkq, rmx4 : ModelRepackFn; rb32 : ModelRepackB32Fn;
+def register_model_layout(rq8, rkq : ModelRepackFn; rb32 : ModelRepackB32Fn;
                           gs : GatherStackFn; gskq, gsb32 : GatherStackKqFn;
                           gsmx4 : GatherStackB32Fn) {
     g_layout_repack_q8 = rq8
     g_layout_repack_kq = rkq
-    g_layout_repack_mx4 = rmx4
     g_layout_repack_b32 = rb32
     g_layout_gather = gs
     g_layout_gather_kq = gskq
@@ -961,7 +959,7 @@ def layout_gather_dispatch(src : Model; f : KqFmt; woff, n, rows, slice_rows, mr
         let qmr = disk ? 1l : active_b32_layout_mr(f)
         layout_gather_stack_b32(src, f, woff, n, rows, srows, qmr > 1l, qmr, wq, ws)
     } elif (f == KqFmt.mx4) {
-        // the mx4 stacks ride the Q8 layout's grp<mr> interleave when the CPU repacked them (repack_mx4_stacks under the q8q8 perm), disk order otherwise
+        // the mx4 stacks ride the Q8 layout's grp<mr> interleave when the CPU repacked them (the q8 walk's mx4 regions under the q8q8 perm), disk order otherwise
         layout_gather_stack_mx4(src, woff, n, rows, srows, src.mx4_repacked, active_q8_layout_mr(), wq, ws)
     } else {
         layout_gather_stack_kq(src, f, woff, n, rows, srows, src.kq_repacked && !disk, disk ? 1l : kq_active_mr(src, f), wq, ws)
@@ -982,11 +980,6 @@ def layout_repack_q8(var t : Model) {
 def layout_repack_kq(var t : Model) {
     layout_hooks_check()
     invoke(g_layout_repack_kq, t)
-}
-
-def layout_repack_mx4(var t : Model) {
-    layout_hooks_check()
-    invoke(g_layout_repack_mx4, t)
 }
 
 def layout_repack_b32(var t : Model; fmt : KqFmt) {

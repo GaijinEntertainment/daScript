@@ -722,8 +722,8 @@ struct FillJob {
     kdim : int64   // the source tensor's row width (dims[0]), so n / kdim is the panel's row count; 0 = the plan resolved no tensor
 }
 
-//! One repack region over a plane (element offset + 2D shape). fmt ids follow the repack
-//! walkers: 0 = q8, 1 = mx4, 2 = q51, 4/5/6/40 = the kq plane pairs.
+//! One repack region over a plane (element offset + 2D shape). fmt is the format's stream code
+//! (`kq_stream_code`), 0 = q8.
 struct StreamReg {
     off : int64
     n : int64
@@ -850,6 +850,8 @@ def stream_field_of(t : Model; fmt : KqFmt) : string {
         return "q4032q"
     } elif (fmt == KqFmt.q5032) {
         return "q5032q"
+    } elif (fmt == KqFmt.mx4) {
+        return "mxq"
     } elif (t.quant == QuantMode.q8) {
         // the blob flavor carries q8 as gguf-native 34B blocks in ONE plane, never the split pair
         return t.metal_blob ? "mblob" : "qblob"
@@ -857,9 +859,12 @@ def stream_field_of(t : Model; fmt : KqFmt) : string {
     return ""
 }
 
+//! a format whose streamed planes stride per superblock or per 32-block: the kq table's, the per-32 pairs, the native-MXFP4 pair
+def private stream_strided(fmt : KqFmt) : bool => kq_sb(fmt) || kq_b32_planes(fmt) || fmt == KqFmt.mx4
+
 // (q plane bytes, scale plane bytes, region fmt id) for one streamed job — pure taxonomy reads
 def private stream_job_shape(t : Model; j : FillJob) : tuple<qb : int64; sb : int64; rfmt : int> {
-    if (kq_sb(j.fmt) || kq_b32_planes(j.fmt)) {
+    if (stream_strided(j.fmt)) {
         let e = kq_elems(j.fmt)
         return (qb = (j.n / e) * kq_qsb(j.fmt), sb = (j.n / e) * kq_ssb(j.fmt), rfmt = kq_stream_code(j.fmt))
     }
@@ -871,7 +876,7 @@ def private stream_job_shape(t : Model; j : FillJob) : tuple<qb : int64; sb : in
 
 // a job's byte offset within its plane (woff is elems; kq/q51 planes stride per superblock/block)
 def private stream_job_qoff(t : Model; j : FillJob) : int64 {
-    if (kq_sb(j.fmt) || kq_b32_planes(j.fmt)) {
+    if (stream_strided(j.fmt)) {
         return (j.woff / kq_elems(j.fmt)) * kq_qsb(j.fmt)
     }
     if (t.metal_blob) {
@@ -933,7 +938,10 @@ def private stream_job_transcode(m : GGUFMeta; bytes : array<uint8> | #; var dst
     let t0 = g_conv_prof ? ref_time_ticks() : 0l
     var kind = ""
     var served = ConvServed.q8
-    if (kq_sb(j.fmt) || kq_b32_planes(j.fmt)) {
+    if (j.fmt == KqFmt.mx4) {   // the file's own nibble and E8M0 bytes, no conversion to account
+        tmp.s |> grow_resize(int(sh.sb))
+        gguf_transcode_mx4(m, bytes, j.name, tmp.q, tmp.s, 0l, 0l, j.n, j.src_off)
+    } elif (stream_strided(j.fmt)) {
         tmp.s |> grow_resize(int(sh.sb))
         kind = transcode_kq_tensor(m, bytes, j.name, j.fmt, tmp.q, tmp.s, 0l, j.n, j.src_off)
         served = ConvServed.kq
@@ -942,23 +950,18 @@ def private stream_job_transcode(m : GGUFMeta; bytes : array<uint8> | #; var dst
         tmp.sf |> grow_resize(int(j.n / Q8_BLOCK_ELEMS))
         kind = transcode_q8_tensor(m, bytes, j.name, tmp.q8, tmp.sf, 0l, 0l, j.n, j.src_off, tmp.scratch)
     }
-    if (account) {
+    if (account && !empty(kind)) {
         conv_note(kind, t0, j.n)
         conv_account(m, j.name, kind, served, j.fmt, j.n)
     }
     let soff = j.woff - rebase
-    unsafe {
-        if (kq_sb(j.fmt)) {
-            memcpy(addr<void?>(dst.kq[int(j.fmt)].s[(soff / kq_elems(j.fmt)) * kq_ssb(j.fmt)]), addr<void?>(tmp.s[0]), sh.sb)
-        } elif (j.fmt == KqFmt.q51) {
-            memcpy(addr<void?>(dst.q51s[(soff / KQ_B32_ELEMS) * Q51_SB]), addr<void?>(tmp.s[0]), sh.sb)
-        } elif (j.fmt == KqFmt.iq4nl32) {
-            memcpy(addr<void?>(dst.iq4nl32s[(soff / KQ_B32_ELEMS) * IQ4NL32_SB]), addr<void?>(tmp.s[0]), sh.sb)
-        } elif (j.fmt == KqFmt.q4032) {
-            memcpy(addr<void?>(dst.q4032s[(soff / KQ_B32_ELEMS) * Q4032_SB]), addr<void?>(tmp.s[0]), sh.sb)
-        } elif (j.fmt == KqFmt.q5032) {
-            memcpy(addr<void?>(dst.q5032s[(soff / KQ_B32_ELEMS) * Q5032_SB]), addr<void?>(tmp.s[0]), sh.sb)
-        } elif (sh.sb == 0l && j.n > 0l && !dst.metal_blob) {
+    let paired = kq_plane_pair(dst, j.fmt) $(var q : array<uint8>; var s : array<uint8>) {
+        unsafe {
+            memcpy(addr<void?>(s[(soff / kq_elems(j.fmt)) * kq_ssb(j.fmt)]), addr<void?>(tmp.s[0]), sh.sb)
+        }
+    }
+    if (!paired && sh.sb == 0l && j.n > 0l && !dst.metal_blob) {
+        unsafe {
             memcpy(addr<void?>(dst.qscales[soff / Q8_BLOCK_ELEMS]), addr<void?>(tmp.sf[0]), (j.n / Q8_BLOCK_ELEMS) * 4l)
         }
     }
@@ -971,6 +974,9 @@ def private stream_job_transcode(m : GGUFMeta; bytes : array<uint8> | #; var dst
             if (r.fmt == Q8_STREAM_TAG) {
                 invoke(g_stream_repack, Q8_STREAM_TAG, addr<void?>(tmp.q8[r.off - j.woff]),
                     addr<void?>(dst.qscales[roff / Q8_BLOCK_ELEMS]), r.n, r.d)
+            } elif (r.fmt == MX4_STREAM_TAG) {
+                invoke(g_stream_repack, MX4_STREAM_TAG, addr<void?>(tmp.q[((r.off - j.woff) / KQ_B32_ELEMS) * MX4_QB]),
+                    addr<void?>(dst.mxs[(roff / KQ_B32_ELEMS) * MX4_SB]), r.n, r.d)
             } elif (r.fmt == kq_stream_code(KqFmt.q51)) {
                 invoke(g_stream_repack, r.fmt, addr<void?>(tmp.q[((r.off - j.woff) / KQ_B32_ELEMS) * Q51_QPB]),
                     addr<void?>(dst.q51s[(roff / KQ_B32_ELEMS) * Q51_SPB]), r.n, r.d)
@@ -1085,25 +1091,14 @@ def stream_job_view(m : GGUFMeta; bytes : array<uint8> | #; t : Model; jobs : ar
     for (i in run) {
         total += jobs[i].n
     }
-    let strided = kq_sb(f) || kq_b32_planes(f)
+    let strided = stream_strided(f)
     let qb = strided ? (total / kq_elems(f)) * kq_qsb(f) : total
     let sb = strided ? (total / kq_elems(f)) * kq_ssb(f) : total / Q8_BLOCK_ELEMS
-    if (kq_sb(f)) {
-        sv.kq[int(f)].q |> grow_resize(qb)
-        sv.kq[int(f)].s |> grow_resize(sb)
-    } elif (f == KqFmt.q51) {
-        sv.q51q |> grow_resize(qb)
-        sv.q51s |> grow_resize(sb)
-    } elif (f == KqFmt.iq4nl32) {
-        sv.iq4nl32q |> grow_resize(qb)
-        sv.iq4nl32s |> grow_resize(sb)
-    } elif (f == KqFmt.q4032) {
-        sv.q4032q |> grow_resize(qb)
-        sv.q4032s |> grow_resize(sb)
-    } elif (f == KqFmt.q5032) {
-        sv.q5032q |> grow_resize(qb)
-        sv.q5032s |> grow_resize(sb)
-    } else {
+    let paired = kq_plane_pair(sv, f) $(var q : array<uint8>; var s : array<uint8>) {
+        q |> grow_resize(qb)
+        s |> grow_resize(sb)
+    }
+    if (!paired) {
         sv.qblob |> grow_resize(qb)
         sv.qscales |> grow_resize(sb)
     }
@@ -1113,18 +1108,13 @@ def stream_job_view(m : GGUFMeta; bytes : array<uint8> | #; t : Model; jobs : ar
         stream_job_transcode(m, bytes, sv, j, regs, rebase, tmp, false)
         let sh = stream_job_shape(sv, j)
         let qoff = strided ? ((j.woff - rebase) / kq_elems(f)) * kq_qsb(f) : j.woff - rebase
-        unsafe {
-            if (kq_sb(f)) {
-                memcpy(addr<void?>(sv.kq[int(f)].q[qoff]), addr<void?>(tmp.q[0]), sh.qb)
-            } elif (f == KqFmt.q51) {
-                memcpy(addr<void?>(sv.q51q[qoff]), addr<void?>(tmp.q[0]), sh.qb)
-            } elif (f == KqFmt.iq4nl32) {
-                memcpy(addr<void?>(sv.iq4nl32q[qoff]), addr<void?>(tmp.q[0]), sh.qb)
-            } elif (f == KqFmt.q4032) {
-                memcpy(addr<void?>(sv.q4032q[qoff]), addr<void?>(tmp.q[0]), sh.qb)
-            } elif (f == KqFmt.q5032) {
-                memcpy(addr<void?>(sv.q5032q[qoff]), addr<void?>(tmp.q[0]), sh.qb)
-            } else {
+        let landed = kq_plane_pair(sv, f) $(var q : array<uint8>; var s : array<uint8>) {
+            unsafe {
+                memcpy(addr<void?>(q[qoff]), addr<void?>(tmp.q[0]), sh.qb)
+            }
+        }
+        if (!landed) {
+            unsafe {
                 memcpy(addr<void?>(sv.qblob[qoff]), addr<void?>(tmp.q8[0]), sh.qb)
             }
         }
@@ -1680,11 +1670,7 @@ def detect_ple_formats(var t : Model; m : GGUFMeta) : bool {
     t.ple_proj_fmt |> resize(layers)
     for (kind in ["inp_gate", "proj"]) {
         let rows = kind == "proj" ? c.n_embd_per_layer : c.dim
-        let nf32 = count_tensors_of(m, layers, kind, GGML_TYPE_F32)
-        if (nf32 != 0l && nf32 != layers) {
-            panic("dasLLAMA: the per-layer-embedding {kind} planes mix F32 with other types ({nf32} of {layers} layers F32) - no site serves a mixed stack; requantize the kind whole")
-        }
-        let f32 = nf32 == layers
+        let f32 = ple_kind_f32(m, layers, kind)
         if (kind == "proj") {
             t.ple_proj_f32 = f32
         } else {
@@ -1703,15 +1689,20 @@ def detect_ple_formats(var t : Model; m : GGUFMeta) : bool {
     return any
 }
 
-//! how many of the `layers` per-layer tensors `blk.N.<kind>.weight` ship as ggml type `gt`
-def private count_tensors_of(m : GGUFMeta; layers : int64; kind : string; gt : int) : int64 {
-    var n = 0l
-    for (l in range64(layers)) {
-        if (gguf_tensor_type(m, "blk.{l}.{kind}.weight") == gt) {
-            n++
+//! whether the per-layer tensors `blk.N.<kind>.weight` ship F32, layer 0's answer; the first layer that answers otherwise
+//! declines the load, naming that tensor and both element types
+def private ple_kind_f32(m : GGUFMeta; layers : int64; kind : string) : bool {
+    let first = "blk.0.{kind}.weight"
+    let gt0 = gguf_tensor_type(m, first)
+    let f32 = gt0 == GGML_TYPE_F32
+    for (l in range64(1l, layers)) {
+        let name = "blk.{l}.{kind}.weight"
+        let gt = gguf_tensor_type(m, name)
+        if ((gt == GGML_TYPE_F32) != f32) {
+            panic("dasLLAMA: the per-layer-embedding {kind} planes mix F32 with other types - tensor '{name}' is {ggml_type_name(gt)}, '{first}' is {ggml_type_name(gt0)}; no site serves a mixed stack, requantize the kind whole")
         }
     }
-    return n
+    return f32
 }
 
 //! a device driver on this load reads the shared expert and the tied classifier off planes of their own: an armed GPU tier, or a Metal mode
@@ -1912,8 +1903,12 @@ def private load_gguf_impl(path : string; var mode : QuantMode) : Model {
 }
 
 //! `n` MXFP4 elements of tensor `name`, from its element `src`, into the native planes at element `off`: the nibble plane
-//! `MX4_QB` bytes a 32-block, the E8M0 plane `MX4_SB`
+//! `MX4_QB` bytes a 32-block, the E8M0 plane `MX4_SB`; under a streaming plan the job is recorded and the fill writes it
 def private mx4_transcode_at(m : GGUFMeta; bytes : array<uint8> | #; name : string; var t : Model; off, n : int64; src : int64 = 0l) {
+    if (g_fill_plan_mode) {
+        g_fill_plan |> push(FillJob(name = name, woff = off, n = n, src_off = src, fmt = KqFmt.mx4, kdim = fill_job_kdim(m, name)))
+        return
+    }
     let blk = off / KQ_B32_ELEMS
     gguf_transcode_mx4(m, bytes, name, t.mxq, t.mxs, blk * MX4_QB, blk * MX4_SB, n, src)
 }
@@ -2501,11 +2496,11 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
             && gguf_tensor_type(m, "per_layer_model_proj.weight") == GGML_TYPE_BF16)
         let kv = t.config.kv_dim
         let qd = t.config.n_heads * t.config.head_size   // query width (== dim except Gemma2)
-        // streaming covers the q8-mode load_big rails; models with direct-write loaders
-        // (mx4 experts, grouped deltanet, bf16 PLE) disarm HERE — before sizing — so the
-        // eager path proceeds with fully materialized planes and an empty job list
-        if (g_fill_plan_mode && (mode != QuantMode.q8 || t.experts_mx4 || t.dn_grouped || t.ple_model_bf16)) {
-            to_log(LOG_INFO, "dasLLAMA: streaming plan disarmed - unstreamed rail (mode {mode}, mx4 {t.experts_mx4}, dn-grouped {t.dn_grouped}, bf16-ple {t.ple_model_bf16}); converting eagerly\n")
+        // streaming covers the q8-mode load_big rails and the native-MXFP4 expert stacks; models with direct-write
+        // loaders (grouped deltanet, bf16 PLE) disarm HERE — before sizing — so the eager path proceeds with fully
+        // materialized planes and an empty job list
+        if (g_fill_plan_mode && (mode != QuantMode.q8 || t.dn_grouped || t.ple_model_bf16)) {
+            to_log(LOG_INFO, "dasLLAMA: streaming plan disarmed - unstreamed rail (mode {mode}, dn-grouped {t.dn_grouped}, bf16-ple {t.ple_model_bf16}); converting eagerly\n")
             g_fill_plan_mode = false
         }
         let sz = layout_offsets(t)
@@ -2514,12 +2509,6 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
         if (sz.bf16_n > 0l) {
             t.bf16blob |> reserve(sz.bf16_n)
             t.bf16blob |> resize(sz.bf16_n)
-        }
-        if (sz.mx_n > 0l) {
-            t.mxq |> reserve(sz.mx_n / 2l)
-            t.mxq |> resize(sz.mx_n / 2l)
-            t.mxs |> reserve(sz.mx_n / 32l)
-            t.mxs |> resize(sz.mx_n / 32l)
         }
         // streaming: big q-halves never materialize (jobs stream them to the writer); small
         // scale halves stay in RAM. Decided HERE — offsets exist, nothing is sized yet — and a
@@ -2547,6 +2536,7 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
             g_stream_plane_total["iq4nl32q"] = (sz.iq4nl32_n / KQ_B32_ELEMS) * IQ4NL32_QB
             g_stream_plane_total["q4032q"] = (sz.q4032_n / KQ_B32_ELEMS) * Q4032_QB
             g_stream_plane_total["q5032q"] = (sz.q5032_n / KQ_B32_ELEMS) * Q5032_QB
+            g_stream_plane_total["mxq"] = (sz.mx_n / KQ_B32_ELEMS) * MX4_QB
             let wb = mode == QuantMode.q8 ? sz.wblob_n : 0l
             g_stream_plane_total[t.metal_blob ? "mblob" : "qblob"] = (t.metal_blob
                 ? (wb / Q8_BLOCK_ELEMS) * (Q8_QPB + Q8_SPB) : wb)
@@ -2560,8 +2550,8 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
                 reserve_resize(t.kq[int(f)].s, nsb * kq_ssb(f))
             }
         }
-        for (f, ne in [KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q5032],
-                [sz.q51_n, sz.iq4nl32_n, sz.q4032_n, sz.q5032_n]) {
+        for (f, ne in [KqFmt.q51, KqFmt.iq4nl32, KqFmt.q4032, KqFmt.q5032, KqFmt.mx4],
+                [sz.q51_n, sz.iq4nl32_n, sz.q4032_n, sz.q5032_n, sz.mx_n]) {
             continue if (ne <= 0l)
             let nb = ne / KQ_B32_ELEMS
             kq_plane_pair(t, f) $(var q : array<uint8>; var s : array<uint8>) {
@@ -2996,10 +2986,7 @@ def private load_gguf_parsed(var t : Model; m : GGUFMeta; bytes : array<uint8> |
                     kq_freeze_repack_mr(t)
                 }
             } else {
-                layout_repack_q8(t)
-                if (t.experts_mx4) {
-                    layout_repack_mx4(t)
-                }
+                layout_repack_q8(t)   //! the native-MXFP4 expert stacks ride the q8 walk's regions
                 for (f in type<KqFmt>) {
                     if (kq_dense_b32(f) && active_b32_layout_mr(f) > 1l) {
                         layout_repack_b32(t, f)

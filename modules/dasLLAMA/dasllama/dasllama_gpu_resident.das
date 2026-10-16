@@ -273,7 +273,7 @@ def private moe_gpu_gather(t : Model; f : KqFmt; woff : int64; n, rows, slice_ro
         return
     }
     if (t.planes_trimmed && !g_vk_mint_on) {   // the mint's own fallthrough reads planes the load left whole; a served trimmed image has none
-        panic("dasLLAMA: planes_trimmed vulkan lane - a live gather is impossible (the whole-model driver declined this run, or the baked plan diverged; the decline line above): the lane's identity folds DASLLAMA_TRIM but not DASLLAMA_GPU_CTX_MAX / DASLLAMA_VK_KV32 / DASLLAMA_GPU_RESIDENT - match the mint's knobs, delete the lane to re-mint, or DASLLAMA_TRIM=0")
+        panic("dasLLAMA: planes_trimmed vulkan lane - a live gather is impossible (the whole-model driver declined this run, or the baked plan diverged; the decline line above): the lane's identity folds DASLLAMA_TRIM but not {trim_lane_run_knobs()} - match the mint's knobs, delete the lane to re-mint, or DASLLAMA_TRIM=0")
     }
     layout_gather_dispatch(t, f, woff, n, rows, slice_rows, mr, kgroup, wbias, wq, ws, disk)
 }
@@ -1539,6 +1539,14 @@ def resident_trim_decline_is_run_mode(why : string) : bool {
     return false if (empty(why))
     return true if (why == TRIM_ROUTE_DECLINE || why == TRIM_PLAN_DECLINE || why == resident_run_mode_decline() || why == "the tier installed no resident-driver seams")
     return (why |> starts_with("routed experts (")) && (why |> ends_with("expert rails serve"))
+}
+
+//! the knobs a trimmed lane's identity leaves out: each moves the plan's fit and none the image's bytes, so the map asks the plan
+//! again under the run's knobs, and a decline names them
+[arch(at="../ARCHITECTURE_IMAGE_VULKAN.md#image-vulkan-mint")]
+def trim_lane_run_knobs() : string {
+    return ("DASLLAMA_GPU_CTX_MAX, DASLLAMA_GPU_KV / set_gpu_kv_dtype, DASLLAMA_VK_KV32, DASLLAMA_GPU_RESIDENT / set_gpu_resident_route, "
+        + "DASLLAMA_GPU_KV_RING / set_gpu_kv_ring, DASLLAMA_GPU_HOST_LAYERS / set_gpu_host_layers and the prefill pin or override")
 }
 
 //! Whether the whole-model driver takes `t` and a trimmed lane of it serves (`resident_trim_decline` answers why not)
