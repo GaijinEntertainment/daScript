@@ -2287,29 +2287,28 @@ def private layout_shell(window : int64) : Model {
 [test]
 def test_metal_mirror_layout_key(t : T?) {
     static_if (typeinfo builtin_module_exists(das_metal)) {
-        let pin = gpu_kv_ring_pin()
         let slack0 = g_mirror_ring_slack
-        set_gpu_kv_ring(1)
         var a <- layout_shell(512l)
         var b <- layout_shell(512l)
-        let ka = mirror_layout_key_of(a)
-        t |> equal(mirror_layout_key_of(b), ka, "two shells of one layout share a key (the control)")
-        b.config.sliding_window = 256l
-        t |> success(mirror_layout_key_of(b) != ka, "another sliding window is another key")
-        b.config.sliding_window = 512l
-        b.kv_row_prefix[3] = 256l
-        t |> success(mirror_layout_key_of(b) != ka, "another row prefix is another key")
-        b.kv_row_prefix[3] = 192l
-        b.kv_row_prefix |> push(256l)
-        t |> success(mirror_layout_key_of(b) != ka, "another layer count is another key")
-        set_gpu_kv_ring(0)
-        t |> success(mirror_layout_key_of(a) != ka, "the ring pin off is another key")
-        set_gpu_kv_ring(1)
-        g_mirror_ring_slack = 2l * MIRROR_RING_SLACK_MIN
-        t |> success(mirror_layout_key_of(a) != ka, "another slack is another key")
-        g_mirror_ring_slack = slack0
-        t |> equal(mirror_layout_key_of(a), ka, "the slack put back is the first key again")
-        set_gpu_kv_ring(pin)
+        with_gpu_kv_ring(1) {
+            let ka = mirror_layout_key_of(a)
+            t |> equal(mirror_layout_key_of(b), ka, "two shells of one layout share a key (the control)")
+            b.config.sliding_window = 256l
+            t |> success(mirror_layout_key_of(b) != ka, "another sliding window is another key")
+            b.config.sliding_window = 512l
+            b.kv_row_prefix[3] = 256l
+            t |> success(mirror_layout_key_of(b) != ka, "another row prefix is another key")
+            b.kv_row_prefix[3] = 192l
+            b.kv_row_prefix |> push(256l)
+            t |> success(mirror_layout_key_of(b) != ka, "another layer count is another key")
+            set_gpu_kv_ring(0)
+            t |> success(mirror_layout_key_of(a) != ka, "the ring pin off is another key")
+            set_gpu_kv_ring(1)
+            g_mirror_ring_slack = 2l * MIRROR_RING_SLACK_MIN
+            t |> success(mirror_layout_key_of(a) != ka, "another slack is another key")
+            g_mirror_ring_slack = slack0
+            t |> equal(mirror_layout_key_of(a), ka, "the slack put back is the first key again")
+        }
         delete a
         delete b
     } else {

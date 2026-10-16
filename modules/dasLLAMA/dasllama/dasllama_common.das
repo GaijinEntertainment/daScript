@@ -5006,7 +5006,7 @@ def with_gpu_kv_ring(ring : int; body : block<void>) {
 }
 
 //! Whether the next armed mirror rings its sliding layers
-def gpu_kv_ring_on : bool => g_gpu_kv_ring_pin < 0 ? g_env_gpu.gpu_kv_ring : g_gpu_kv_ring_pin != 0
+def gpu_kv_ring_on : bool => pin_over_env(g_gpu_kv_ring_pin, g_env_gpu.gpu_kv_ring)
 
 //! the K/V mirror rows layer `l` keeps at a context of `ctx` positions when one command writes at most `slack` rows: a sliding layer's
 //! window and the slack, rounded up to the attention tiles' 64-row step, as a ring (`kv_ring_row`); 0 = a row a position (a global

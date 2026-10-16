@@ -32,51 +32,49 @@ def private ring_shell(window : int64) : Model {
 def private ring_cases {
     var sliding <- ring_shell(512l)
     var flat <- ring_shell(0l)
-    let pin = gpu_kv_ring_pin()
-    mark("ring_on")
-    set_gpu_kv_ring(1)
-    kv_ring_announce(sliding.config, "probe home", "the probe's rows")
-    mark("ring_off")
-    set_gpu_kv_ring(0)
-    kv_ring_announce(sliding.config, "probe home", "the probe's rows")
-    mark("ring_none")
-    set_gpu_kv_ring(1)
-    kv_ring_announce(flat.config, "probe home", "the probe's rows")
-    set_gpu_kv_ring(0)
-    kv_ring_announce(flat.config, "probe home", "the probe's rows")
-    static_if (typeinfo builtin_module_exists(das_metal)) {
-        mark("metal_ring_twice")
-        set_gpu_kv_ring(1)
-        mirror_rings(sliding)
-        mirror_rings(sliding)
-        mark("metal_ring_flat")
+    with_gpu_kv_ring(1) {
+        mark("ring_on")
+        kv_ring_announce(sliding.config, "probe home", "the probe's rows")
+        mark("ring_off")
         set_gpu_kv_ring(0)
-        mirror_rings(sliding)
+        kv_ring_announce(sliding.config, "probe home", "the probe's rows")
+        mark("ring_none")
+        set_gpu_kv_ring(1)
+        kv_ring_announce(flat.config, "probe home", "the probe's rows")
+        set_gpu_kv_ring(0)
+        kv_ring_announce(flat.config, "probe home", "the probe's rows")
+        static_if (typeinfo builtin_module_exists(das_metal)) {
+            mark("metal_ring_twice")
+            set_gpu_kv_ring(1)
+            mirror_rings(sliding)
+            mirror_rings(sliding)
+            mark("metal_ring_flat")
+            set_gpu_kv_ring(0)
+            mirror_rings(sliding)
+        }
     }
-    set_gpu_kv_ring(pin)
     delete flat
     delete sliding
 }
 
 def private embed_cases {
     var c = Config()
-    let pin = gpu_resident_embed_pin()
-    mark("embed_pinned_off")
-    set_gpu_resident_embed(0)
-    resident_emb_pin_say(c, true)
-    mark("embed_pinned_off_no_seat")
-    resident_emb_pin_say(c, false)
-    mark("embed_pinned_off_hc")
-    c.hyper_conn = true
-    resident_emb_pin_say(c, true)
-    c.hyper_conn = false
-    mark("embed_on")
-    set_gpu_resident_embed(1)
-    resident_emb_pin_say(c, true)
-    mark("embed_gather_lines")
-    resident_emb_gather_say("the table's exact f32 rows")
-    resident_emb_gather_say("the table's own Q4_1 plane")
-    set_gpu_resident_embed(pin)
+    with_gpu_resident_embed(0) {
+        mark("embed_pinned_off")
+        resident_emb_pin_say(c, true)
+        mark("embed_pinned_off_no_seat")
+        resident_emb_pin_say(c, false)
+        mark("embed_pinned_off_hc")
+        c.hyper_conn = true
+        resident_emb_pin_say(c, true)
+        c.hyper_conn = false
+        mark("embed_on")
+        set_gpu_resident_embed(1)
+        resident_emb_pin_say(c, true)
+        mark("embed_gather_lines")
+        resident_emb_gather_say("the table's exact f32 rows")
+        resident_emb_gather_say("the table's own Q4_1 plane")
+    }
 }
 
 def private metal_cases {

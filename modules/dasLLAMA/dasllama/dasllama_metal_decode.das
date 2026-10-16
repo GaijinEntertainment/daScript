@@ -2870,7 +2870,7 @@ def metal_mtp_spec_eval_batch(t : Model; var sessions : array<Session?>; toks : 
 // knockouts force serial — skipped dispatches break the declared graph
 var private g_dconc = -1
 
-def private decode_concurrent : bool => g_dconc < 0 ? g_env_metal.decode_concurrent : g_dconc != 0
+def private decode_concurrent : bool => pin_over_env(g_dconc, g_env_metal.decode_concurrent)
 
 //! Concurrent-encoder rail for the single-stream decode: 1 forces on, 0 forces serial,
 //! negative restores the env default (`DASLLAMA_METAL_DECODE_CONCURRENT`).
@@ -2882,7 +2882,7 @@ def public set_metal_decode_concurrent(v : int) {
 // restores the split chain (the branch's post norm, the add, the next norm) for A/B
 var private g_dfuse = -1
 
-def private decode_fuse_pre : bool => g_dfuse < 0 ? g_env_metal.fuse : g_dfuse != 0
+def private decode_fuse_pre : bool => pin_over_env(g_dfuse, g_env_metal.fuse)
 
 var private g_dfuse_said = -1   //! the fuse state the announce last saw: -1 none, 0 off, 1 on (on prints nothing)
 

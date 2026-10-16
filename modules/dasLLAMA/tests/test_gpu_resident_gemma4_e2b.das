@@ -72,24 +72,23 @@ def test_gpu_resident_gemma4_e2b_ple_tables(t : T?) {
         let gf = GemmaFile(file = spec.file, arm = "g4e-ple")
         t |> run("{spec.file}: the {spec.fmt} per-layer-embedding table seats on the device and the prefill gathers off it") @(t : T?) {
             var armed = false
-            let pin = gpu_resident_embed_pin()
-            set_gpu_resident_embed(1)   //! the prefill's side rows gather off the ids: the loads gather the token table on the device
-            with_gemma_rig(t, gf) $(tr) {
-                armed = true
-                t |> equal(tr.ple_emb_fmt, spec.fmt, "the PLE table keeps its disk format's tag")
-                let plan = resident_plan(tr, 4096l, KVDtype.f16, KVDtype.f16)
-                t |> success(plan.ple_tbl_bytes > 0l, "the plan seats the {spec.fmt} table on the device ({plan.ple_tbl_bytes} bytes)")
-            }
-            var inscope g0 <- [for (leaf in leaves); census(leaf)]
-            gemma_forced_feed(t, 40l, gf)
-            set_gpu_resident_embed(pin)
-            return if (!armed || g0[0] == NO_CENSUS)
-            for (leaf, before in leaves, g0) {
-                let g_n = census(leaf) - before
-                if (leaf == spec.gather) {
-                    t |> success(g_n > 0l, "the {spec.fmt} table's rows gathered on its own leaf ({leaf}: {g_n})")
-                } else {
-                    t |> equal(g_n, 0l, "another format's leaf ({leaf}) gathers no row of the {spec.fmt} table - the leaves' control")
+            with_gpu_resident_embed(1) {   //! the prefill's side rows gather off the ids: the loads gather the token table on the device
+                with_gemma_rig(t, gf) $(tr) {
+                    armed = true
+                    t |> equal(tr.ple_emb_fmt, spec.fmt, "the PLE table keeps its disk format's tag")
+                    let plan = resident_plan(tr, 4096l, KVDtype.f16, KVDtype.f16)
+                    t |> success(plan.ple_tbl_bytes > 0l, "the plan seats the {spec.fmt} table on the device ({plan.ple_tbl_bytes} bytes)")
+                }
+                var inscope g0 <- [for (leaf in leaves); census(leaf)]
+                gemma_forced_feed(t, 40l, gf)
+                return if (!armed || g0[0] == NO_CENSUS)
+                for (leaf, before in leaves, g0) {
+                    let g_n = census(leaf) - before
+                    if (leaf == spec.gather) {
+                        t |> success(g_n > 0l, "the {spec.fmt} table's rows gathered on its own leaf ({leaf}: {g_n})")
+                    } else {
+                        t |> equal(g_n, 0l, "another format's leaf ({leaf}) gathers no row of the {spec.fmt} table - the leaves' control")
+                    }
                 }
             }
         }
