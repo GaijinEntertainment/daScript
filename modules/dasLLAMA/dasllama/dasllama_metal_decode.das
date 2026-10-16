@@ -22,7 +22,7 @@ require daslib/typemacro_boost   // [template_struct_instance] — the layer enc
 // AND launch-gap-bound (~4.3us per serial dispatch), so the layer runs 9 fused dispatches:
 //   fused QKV / W1|W3 GEMVs   the P1-lab-proven single-simdgroup-per-row Q8 GEMV
 //                             (MetalQ8Gemv_metal_q8_gemv_msl, f32 activations) over CONCATENATED weight
-//                             regions (upload_region_cat3) into one output buffer each —
+//                             regions (upload_region_cat) into one output buffer each —
 //                             downstream dispatches bind at byte offsets
 //   metal_sq_attn16/32        single-query attention over the KV mirror, one threadgroup per
 //                             (stream, head), simdgroup-cooperative coalesced K scoring; depth
@@ -794,24 +794,6 @@ def private add_rms_single(var e : SingleLayerEnc; enc : MetalComputeEncoder?; b
     enc_add_rms_site(enc, bx, ba, bw, by, e.r.u_dim, e.r.u_eps, dim, bosc)
 }
 
-//! the gemma-4 MoE step's norms rows, `moe_g4_args`'s layout: layer l's routed, dense and post-FFN norms, then the next layer's
-//! attention norm
-def private moe_g4_norms(t : Model; l : int64) : MetalBuffer? {
-    let dim = t.config.dim
-    let rb = uint64(dim * 4l)
-    unsafe {
-        return upload_region_cat4(addr<void?>(t.fblob[t.rms_post_ffn2_off + l * dim]), rb, addr<void?>(t.fblob[t.rms_post_ffn1_off + l * dim]), rb,
-            addr<void?>(t.fblob[t.rms_post_ffn_off + l * dim]), rb, addr<void?>(t.fblob[t.rms_att_off + (l + 1l) * dim]), rb)
-    }
-}
-
-//! the gemma-4 step's args for layer l: the model's norm epsilon and the layer's output scale
-def private moe_g4_layer_args(t : Model; l : int64) : GkMoeCombArgs {
-    let c = t.config
-    let osc = c.layer_out_scale ? t.fblob[t.out_scale_off + l] : 1.0
-    return moe_g4_args(c.dim, c.n_expert_used, c.norm_eps, osc, false, true)
-}
-
 //! whether layer l's gemma-4 MoE tail runs as the one step (`MetalMoeCombG4`): a pre/post-norm layer with a next layer to norm for,
 //! no per-layer-embedding or hyper-connection seam between, a row the step's stash holds, no knockout active
 [arch(at="../ARCHITECTURE_GPU_PREFILL_MOE.md#metal-g4-moe-step")]
@@ -820,11 +802,19 @@ def private moe_g4_step_serves(t : Model; l : int64; seam : bool) : bool {
     return (!g_moe_g4_unfused && c.pre_post_norm && !seam && l + 1l < c.n_layers && c.dim <= ADD_RMS_MAX_DIM && g_skip == "")
 }
 
-//! the single row's gemma-4 step: x updated in place, its next norm into bxb
+//! `nrows` rows' gemma-4 step: x updated in place, its next norm into bxb, its f16 twin into bxh where `twin`
+def private moe_g4_step_enc(var r : StepRes; t : Model; enc : MetalComputeEncoder?; l, nrows : int64; twin : bool) {
+    var ka = moe_g4_layer_args(t, l, false, true)
+    if (twin) {
+        enc_moe_comb_g4_hx(enc, r.bx, r.bmoe_sel, r.bmoe_dn, r.bxb, moe_g4_norms(t, l, true), r.bxb, r.bxh, ka, nrows)
+    } else {
+        enc_moe_comb_g4(enc, r.bx, r.bmoe_sel, r.bmoe_dn, r.bxb, moe_g4_norms(t, l, true), r.bxb, ka, nrows)
+    }
+}
+
+//! the single row's gemma-4 step, no f16 twin
 def private moe_g4_step_single(var e : SingleLayerEnc; t : Model; enc : MetalComputeEncoder?; l : int64) {
-    var r & = unsafe(*e.r)
-    var ka = moe_g4_layer_args(t, l)
-    enc_moe_comb_g4(enc, r.bx, r.bmoe_sel, r.bmoe_dn, r.bxb, moe_g4_norms(t, l), r.bxb, ka, 1l)
+    moe_g4_step_enc(*e.r, t, enc, l, 1l, false)
 }
 
 def private rms_single(var e : SingleLayerEnc; enc : MetalComputeEncoder?; bs : MetalBuffer?; soff : uint64; bw, bd : MetalBuffer?) {
@@ -859,8 +849,8 @@ def private qkn_args(t : Model; l, qd, kv_dim, head_size, rot : int64; neox, has
 //! layer l's [q norm | k norm] weight rows
 def private qkn_weights(t : Model; l, head_size : int64) : MetalBuffer? {
     unsafe {
-        return upload_region_cat3(addr < void? >(t.fblob[t.rms_q_offs[l]]), uint64(head_size * 4l),
-            addr < void? >(t.fblob[t.rms_k_offs[l]]), uint64(head_size * 4l), null, 0ul)
+        return upload_region_cat(addr < void? >(t.fblob[t.rms_q_offs[l]]), uint64(head_size * 4l),
+            addr < void? >(t.fblob[t.rms_k_offs[l]]), uint64(head_size * 4l))
     }
 }
 
@@ -1001,8 +991,8 @@ def private enc_dn_ba_f32(enc : MetalComputeEncoder?; t : Model; l : int64; bx, 
     let nvh = t.config.ssm_dt_rank
     let pb = uint64(dim * nvh * 4l)
     unsafe {
-        var bw = upload_region_cat3(addr < void? >(t.fblob[t.dn_betaf_off + l * dim * nvh]), pb,
-            addr < void? >(t.fblob[t.dn_alphaf_off + l * dim * nvh]), pb, null, 0ul)
+        var bw = upload_region_cat(addr < void? >(t.fblob[t.dn_betaf_off + l * dim * nvh]), pb,
+            addr < void? >(t.fblob[t.dn_alphaf_off + l * dim * nvh]), pb)
         var ka = moe_router_args(2l * nvh, dim, nrows)
         enc_moe_router(enc, bw, bx, by, g_one, ka, 2l * nvh, nrows)
     }
@@ -1280,7 +1270,7 @@ struct template LayerEncT {
             // the [bq | bk | bv] bias plane matches the fused QKV index space, added pre-rope; no bias -> the qkv buffer dummy-binds the slot
             var bbias = r.bqkv
             if (c.attn_qkv_bias) {
-                bbias = upload_region_cat3(
+                bbias = upload_region_cat(
                     addr < void? >(t.bq[l * qd]), uint64(qd * 4l),
                     addr < void? >(t.bk[l * kv_dim]), uint64(kv_dim * 4l),
                     addr < void? >(t.bv[l * kv_dim]), uint64(kv_dim * 4l))
@@ -1330,9 +1320,9 @@ struct template LayerEncT {
                 }
             }
             if (!recr && c.qk_norm && g_skip != "ew" && !qkn_fused(c, r.kdt)) {
-                var bqkw = upload_region_cat3(
+                var bqkw = upload_region_cat(
                     addr < void? >(t.fblob[t.rms_q_offs[l]]), uint64(head_size * 4l),
-                    addr < void? >(t.fblob[t.rms_k_offs[l]]), uint64(head_size * 4l), null, 0ul)
+                    addr < void? >(t.fblob[t.rms_k_offs[l]]), uint64(head_size * 4l))
                 let nkn = kvsh ? 0l : kv_dim / head_size
                 var qka = qk_norm_args(r.k_nh, uint(nkn), k_hs_l, k_qkvd_l, k_qd_l, k_qd_l, k_hs_l, r.k_eps)
                 var bqn = r.bqkv
@@ -1501,8 +1491,8 @@ struct template LayerEncT {
             }
             if (g_skip != "gemv") {
                 let rows_bytes = uint64(c.n_expert * dim * 4l)
-                var bw_rt = (shg ? upload_region_cat3(addr < void? >(t.fblob[t.router_off + l * c.n_expert * dim]), rows_bytes,
-                        addr < void? >(t.fblob[t.shexp_gate_off + l * dim]), uint64(dim * 4l), null, 0ul)
+                var bw_rt = (shg ? upload_region_cat(addr < void? >(t.fblob[t.router_off + l * c.n_expert * dim]), rows_bytes,
+                        addr < void? >(t.fblob[t.shexp_gate_off + l * dim]), uint64(dim * 4l))
                     : upload_region(addr < void? >(t.fblob[t.router_off + l * c.n_expert * dim]), rows_bytes))
                 var brb : MetalBuffer? = g_one
                 if (c.moe_router_bias) {
@@ -1559,12 +1549,10 @@ struct template LayerEncT {
 //! `nrows` rows through layer l's gate (dim -> ple) or projection (ple -> dim) off the file's f32 rows: the router GEMV
 //! (`GkRouterGemv`), a column a row
 def private enc_ple_f32(enc : MetalComputeEncoder?; t : Model; l : int64; proj : bool; bx, by : MetalBuffer?; nrows : int64) {
-    let c = t.config
-    let n = proj ? c.n_embd_per_layer : c.dim
-    let d = proj ? c.dim : c.n_embd_per_layer
-    var bw = upload_region(unsafe(addr < void? >(t.fblob[ple_plane(t, l, proj).off])), uint64(n * d * 4l))
-    var ka = moe_router_args(d, n, nrows)
-    enc_moe_router(enc, bw, bx, by, g_one, ka, d, nrows)
+    let pp = ple_plane(t, l, proj)
+    var bw = upload_region(unsafe(addr < void? >(t.fblob[pp.off])), uint64(pp.n * pp.d * 4l))
+    var ka = moe_router_args(pp.d, pp.n, nrows)
+    enc_moe_router(enc, bw, bx, by, g_one, ka, pp.d, nrows)
 }
 
 //! the single row's PLE between the FFN residual and out_scale: branch = post_norm(proj·(gelu(gate·x) ⊙ side[l]))
@@ -1877,13 +1865,8 @@ def private add_rms_rows(var e : auto(ET); enc : MetalComputeEncoder?; bx, ba, b
 //! the rows' gemma-4 step: every row's x updated in place, its next norm into bxb with the f16 twin where the step carries one
 def private moe_g4_step_rows(var e : auto(ET); t : Model; enc : MetalComputeEncoder?; l : int64) {
     var r & = unsafe(*e.r)
-    var ka = moe_g4_layer_args(t, l)
     let twin = r.bxh != null
-    if (twin) {
-        enc_moe_comb_g4_hx(enc, r.bx, r.bmoe_sel, r.bmoe_dn, r.bxb, moe_g4_norms(t, l), r.bxb, r.bxh, ka, r.nrows)
-    } else {
-        enc_moe_comb_g4(enc, r.bx, r.bmoe_sel, r.bmoe_dn, r.bxb, moe_g4_norms(t, l), r.bxb, ka, r.nrows)
-    }
+    moe_g4_step_enc(r, t, enc, l, r.nrows, twin)
     r.xh_ok = twin
 }
 

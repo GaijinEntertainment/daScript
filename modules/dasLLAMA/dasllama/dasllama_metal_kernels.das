@@ -7457,6 +7457,25 @@ def moe_g4_args(dim, nk : int64; eps, ascale : float; presummed, next : bool) : 
     return ka
 }
 
+//! the gemma-4 step's norm rows of layer l in `moe_g4_args`'s layout: the routed, dense and post-FFN norms, then the next layer's
+//! attention norm where `next`
+def moe_g4_norms(t : Model; l : int64; next : bool) : MetalBuffer? {
+    let dim = t.config.dim
+    let rb = uint64(dim * 4l)
+    unsafe {
+        return upload_region_cat(addr<void?>(t.fblob[t.rms_post_ffn2_off + l * dim]), rb, addr<void?>(t.fblob[t.rms_post_ffn1_off + l * dim]), rb,
+            addr<void?>(t.fblob[t.rms_post_ffn_off + l * dim]), rb, next ? addr<void?>(t.fblob[t.rms_att_off + (l + 1l) * dim]) : null,
+            next ? rb : 0ul)
+    }
+}
+
+//! the gemma-4 step's args for layer l: the model's norm epsilon and the layer's output scale, `presummed` and `next` as `moe_g4_args`
+def moe_g4_layer_args(t : Model; l : int64; presummed, next : bool) : GkMoeCombArgs {
+    let c = t.config
+    let osc = c.layer_out_scale ? t.fblob[t.out_scale_off + l] : 1.0
+    return moe_g4_args(c.dim, c.n_expert_used, c.norm_eps, osc, presummed, next)
+}
+
 //! the combine's args over `nk` slots a stream at row width `dim`, the weights the selection rows' (the Metal stamps sum every
 //! slot from zero: no window)
 def moe_comb_args(dim, nk : int64; gstride : int64 = 1l; goff : int64 = 0l) : GkMoeCombArgs

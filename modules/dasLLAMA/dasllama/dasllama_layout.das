@@ -103,8 +103,7 @@ def private metal_blob_layout_ok(t : Model) : bool {
         let ples = c.dim * c.n_embd_per_layer
         return false if ((ples % 256l) != 0l)
         for (l in range64(c.n_layers)) {
-            for (proj in [false, true]) {
-                let pp = ple_plane(t, l, proj)
+            for (pp in ple_planes(t, l)) {
                 return false if (!pp.f32 && !metal_blob_off_ok(pp.off, pp.f))
             }
         }
@@ -407,11 +406,9 @@ def private collect_q8_regions(t : Model; var regs : array<StreamReg>) {
             }
         }
         if (has_ple(c) && l < c.n_layers) {  // gemma-4 E-series per-layer PLE gate/proj (the emb table stays linear, unpacked)
-            let ple = c.n_embd_per_layer
-            for (proj in [false, true]) {
-                let pp = ple_plane(t, l, proj)
+            for (pp in ple_planes(t, l)) {
                 if (!pp.f32 && pp.f == KqFmt.q8) {
-                    push_repack(regs, 0, pp.off, proj ? ple : dim, proj ? dim : ple)
+                    push_repack(regs, 0, pp.off, pp.n, pp.d)
                 }
             }
         }
@@ -541,10 +538,9 @@ def private collect_kq_regions(t : Model; var regs : array<StreamReg>) {
             push_repack_kq(regs, fmt_at(t.wo_fmt, l), t.wo_offs[l], qd, dim)
         }
         if (has_ple(c) && l < c.n_layers) {
-            for (proj in [false, true]) {
-                let pp = ple_plane(t, l, proj)
+            for (pp in ple_planes(t, l)) {
                 if (!pp.f32) {
-                    push_repack_kq(regs, pp.f, pp.off, proj ? c.n_embd_per_layer : dim, proj ? dim : c.n_embd_per_layer)
+                    push_repack_kq(regs, pp.f, pp.off, pp.n, pp.d)
                 }
             }
         }
@@ -694,10 +690,9 @@ def private collect_b32_table_regions(t : Model; var regs : array<StreamReg>; fm
             }
         }
         if (has_ple(c) && l < c.n_layers) {
-            for (proj in [false, true]) {
-                let pp = ple_plane(t, l, proj)
+            for (pp in ple_planes(t, l)) {
                 if (!pp.f32 && pp.f == fmt) {
-                    push_repack(regs, code, pp.off, proj ? c.n_embd_per_layer : dim, proj ? dim : c.n_embd_per_layer)
+                    push_repack(regs, code, pp.off, pp.n, pp.d)
                 }
             }
         }

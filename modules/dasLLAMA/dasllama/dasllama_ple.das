@@ -137,27 +137,21 @@ def private ple_pre_prefill_pad_impl(t : Model; var s : Session; npos : int64) {
 
 //! one row through layer l's gate (dim -> ple) or projection (ple -> dim) in the plane's own format
 def private ple_mm(t : Model; var s : Session; var y : array<float>; x : array<float>; l : int64; proj : bool) {
-    let c = t.config
-    let n = proj ? c.n_embd_per_layer : c.dim
-    let d = proj ? c.dim : c.n_embd_per_layer
     let pp = ple_plane(t, l, proj)
     if (pp.f32) {
-        mm_fblob(y, t, pp.off, x, n, d)
+        mm_fblob(y, t, pp.off, x, pp.n, pp.d)
     } else {
-        mm_f(y, t, pp.f, pp.off, x, s.xq, s.xs, s.xbs, n, d)
+        mm_f(y, t, pp.f, pp.off, x, s.xq, s.xs, s.xbs, pp.n, pp.d)
     }
 }
 
 //! `npos` rows through layer l's gate or projection, the batched form of `ple_mm`
 def private ple_mm_b(t : Model; var s : Session; var y : array<float>; x : array<float>; l, npos : int64; proj : bool) {
-    let c = t.config
-    let n = proj ? c.n_embd_per_layer : c.dim
-    let d = proj ? c.dim : c.n_embd_per_layer
     let pp = ple_plane(t, l, proj)
     if (pp.f32) {
-        mm_fblob_b(y, t, pp.off, x, n, d, npos)
+        mm_fblob_b(y, t, pp.off, x, pp.n, pp.d, npos)
     } else {
-        mm_b_f(s, y, t, pp.f, pp.off, x, n, d, npos)
+        mm_b_f(s, y, t, pp.f, pp.off, x, pp.n, pp.d, npos)
     }
 }
 
@@ -211,9 +205,7 @@ def private gemma4_moe_ffn(t : Model; var s : Session; l : int64) {
     gemma4_router(t, s.xb2, s.moe_ao, l, dim, 1l)
     mm_fblob(s.moe_logits, t, t.router_off + l * ne * dim, s.xb2, dim, ne)
     moe_select(c, unsafe(addr(s.moe_logits[0])), s.moe_idx, s.moe_w, 0l)
-    for (j in range64(k)) {   // each expert's down output is scaled by ffn_down_exps_s — fold it into w_j
-        s.moe_w[j] *= t.fblob[t.moe_down_scale_off + l * ne + s.moe_idx[j]]
-    }
+    moe_down_scale_fold(t, l, s.moe_idx, s.moe_w, k)
     prof_add("moe_route", ts_route)
     moe_experts_apply(t, s, l)
     let ts_norm1 = prof_ticks()
@@ -383,10 +375,8 @@ def private gemma4_moe_prefill_grouped(t : Model; var s : Session; l : int64; np
     mm_fblob_b(s.moe_rlog, t, t.router_off + l * ne * dim, s.xb2_b, dim, ne, npos)
     for (p in range64(npos)) {
         moe_select(c, unsafe(addr(s.moe_rlog[p * ne])), s.moe_idx_b, s.moe_w_b, p * k)
-        for (j in range64(k)) {
-            s.moe_w_b[p * k + j] *= t.fblob[t.moe_down_scale_off + l * ne + s.moe_idx_b[p * k + j]]
-        }
     }
+    moe_down_scale_fold(t, l, s.moe_idx_b, s.moe_w_b, nk)
     // bucket (position, slot) pairs by expert — CSR in-place cursor trick (moe_cnt[e] ends as its run END)
     for (e in range64(ne)) {
         s.moe_cnt[e] = 0l

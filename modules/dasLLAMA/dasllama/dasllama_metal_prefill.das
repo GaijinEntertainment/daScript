@@ -6624,8 +6624,8 @@ def private pf_moe_router_rows(t : Model; l : int64) : MetalBuffer? {
     let c = t.config
     let rows_bytes = uint64(c.n_expert * c.dim * 4l)
     unsafe {
-        return (c.n_ff_shexp > 0l ? upload_region_cat3(addr<void?>(t.fblob[t.router_off + l * c.n_expert * c.dim]), rows_bytes,
-                addr<void?>(t.fblob[t.shexp_gate_off + l * c.dim]), uint64(c.dim * 4l), null, 0ul)
+        return (c.n_ff_shexp > 0l ? upload_region_cat(addr<void?>(t.fblob[t.router_off + l * c.n_expert * c.dim]), rows_bytes,
+                addr<void?>(t.fblob[t.shexp_gate_off + l * c.dim]), uint64(c.dim * 4l))
             : upload_region(addr<void?>(t.fblob[t.router_off + l * c.n_expert * c.dim]), rows_bytes))
     }
 }
@@ -7115,17 +7115,14 @@ def private pf_enc_slab_gemv_b(enc : MetalComputeEncoder?; bw, bx, by : MetalBuf
 //! plane's own format: a tagged plane on its dense site, the file's f32 rows on the f32 tile (`MetalF32ExactMm`) or the slab GEMV
 def private pf_enc_ple_site(enc : MetalComputeEncoder?; t : Model; l : int64; proj : bool; bx, by, bk, bn : MetalBuffer?; mp, npos : int64;
                             bxh : MetalBuffer?) {
-    let c = t.config
-    let n = proj ? c.n_embd_per_layer : c.dim
-    let d = proj ? c.dim : c.n_embd_per_layer
     let pp = ple_plane(t, l, proj)
     if (!pp.f32) {
-        pf_enc_site_mm(enc, t, pp.f, pp.off, d, bx, by, bk, bn, mp, n, npos, bxh)
+        pf_enc_site_mm(enc, t, pp.f, pp.off, pp.d, bx, by, bk, bn, mp, pp.n, npos, bxh)
         return
     }
-    var bw = upload_region(unsafe(addr<void?>(t.fblob[pp.off])), uint64(n * d * 4l))
-    if (!pf_enc_router_mm(enc, bw, bx, by, bk, bn, d, n, mp)) {
-        pf_enc_slab_gemv_b(enc, bw, bx, by, n, d, npos)
+    var bw = upload_region(unsafe(addr<void?>(t.fblob[pp.off])), uint64(pp.n * pp.d * 4l))
+    if (!pf_enc_router_mm(enc, bw, bx, by, bk, bn, pp.d, pp.n, mp)) {
+        pf_enc_slab_gemv_b(enc, bw, bx, by, pp.n, pp.d, npos)
     }
 }
 
@@ -8155,8 +8152,8 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                     var bcos_l = lsl && dual_rope ? bcos_swa : bcos
                     var bsin_l = lsl && dual_rope ? bsin_swa : bsin
                     //! a model with no q/k norm never reads the weights - bcos_l just keeps the binding valid
-                    var bqkw = has_qkn ? upload_region_cat3(addr < void? >(t.fblob[t.rms_q_offs[l]]), uint64(hs_l * 4l),
-                        addr < void? >(t.fblob[t.rms_k_offs[l]]), uint64(hs_l * 4l), null, 0ul) : bcos_l
+                    var bqkw = has_qkn ? upload_region_cat(addr < void? >(t.fblob[t.rms_q_offs[l]]), uint64(hs_l * 4l),
+                        addr < void? >(t.fblob[t.rms_k_offs[l]]), uint64(hs_l * 4l)) : bcos_l
                     bqh_q = (mirk || mp >= CVT_MIN_ROWS) ? pf_twin_panel(mp, qd_l) : null
                     bqh_q_live = true
                     let twin = !head_kv && bqh_q != null && g_pf_skip != "act_cvt"
@@ -8555,11 +8552,8 @@ def metal_prefill_window(t : Model; var segs : array<PfSeg>) : bool {   // nolin
                     pf_enc_site_mm(enc, t, fmt_at(t.w2_fmt, l), t.w2_offs[l], dim, bhb, bxb, u_hid_l, u_dim, mp, hid_l, npos, bxh_h)
                 }
                 if (g4_step) {   //! the routed sum, both branches' norms and the residual: one step; the next layer opens on its own norm
-                    let rb = uint64(dim * 4l)
-                    var bw_g4 = upload_region_cat3(addr<void?>(t.fblob[t.rms_post_ffn2_off + l * dim]), rb,
-                        addr<void?>(t.fblob[t.rms_post_ffn1_off + l * dim]), rb, addr<void?>(t.fblob[t.rms_post_ffn_off + l * dim]), rb)
-                    var ka = moe_g4_args(dim, c.n_expert_used, c.norm_eps, c.layer_out_scale ? t.fblob[t.out_scale_off + l] : 1.0, moe_gemv_route, false)
-                    enc_moe_comb_g4_pf(enc, bx, bminv, bmsel, moe_gemv_route ? bmg4rt : bmdn, bxb, bw_g4, ka, npos)
+                    var ka = moe_g4_layer_args(t, l, moe_gemv_route, false)
+                    enc_moe_comb_g4_pf(enc, bx, bminv, bmsel, moe_gemv_route ? bmg4rt : bmdn, bxb, moe_g4_norms(t, l, false), ka, npos)
                 } elif (g4moe && g_pf_skip != "ew" && g_pf_skip != "nongemm") {
                     //! dense-branch post-norm, then routed + dense summed into bxb for the epilogue
                     var bw_pf1 = upload_region(unsafe(addr < void? >(t.fblob[t.rms_post_ffn1_off + l * dim])), uint64(dim * 4l))
