@@ -16,6 +16,10 @@ or shifts a shared field to a different binding number, is a defect - even where
 that field; a field a `@template_gate` omits on one twin is a shared field still, and keeps the
 number the other twin binds it at.**
 
+**A bind path shared between the moe mul_mm tensor twins (`MetalMoeMulMmQ8T` / `MetalMoeMulMmMx4T`, the compact kargs
+slots) and their base classes (the family binding numbers) is a defect - the two layouts are ledgered apart
+(`ARCHITECTURE_GPU.md#gpu-backends`, the kernel-binding asymmetries entry).**
+
 **Kernel twins are written once: as stamps of one `class template`, as classes deriving one base
 shell, or - where the value that selects the difference is a run-time count - as one class whose
 body reads the count from its kargs; a twin's own body holds only what the selecting value

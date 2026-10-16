@@ -4265,7 +4265,6 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
         ple_step_dev(t, ple_r, metal_ple_dev_ok(t))
     }
     var u_ple = plef ? uniform_u32(uint(ple_n)) : null
-    var u_ple_tot = plef ? uniform_u32(uint(nrows * ple_n)) : null
     let same_toks = same && g_b_same_toks != null   //! the same-slab rows' ids ride the device already
     let gpu_toks = (g_b_gather || same_toks) && emb_dev_gather_ok(t)   //! every row's embed off its id: the same-slab rows' ids on the device, else the rows' ids poked up
     var row_tok = ((gpu_toks || ple_r.ple_dev) && !same_toks) ? pool_acquire_untracked(g_upool, g_dev, uint64(nrows * 4l)) : null
