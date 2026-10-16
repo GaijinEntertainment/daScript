@@ -1637,7 +1637,7 @@ def main() : int {
         // a model with no NextN head silently no-ops set_mtp_spec — both arms would be identical
         if (cfg.mtp_ab && c.n_layer_nextn <= 0l) {
             let side = mtp_drafter_sidecar_(mpath)
-            let attached = !empty(side) && attach_mtp_drafter_(t, side)
+            let attached = !empty(side) && empty(attach_mtp_drafter_(t, side))
             if (!attached) {
                 panic("lcpp_bench: --mtp-ab needs a NextN draft head or an assistant drafter sidecar, and {mpath} has neither")
             }

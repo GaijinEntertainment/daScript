@@ -717,7 +717,7 @@ def attach_mtp_drafter(model : Model; path : string) : bool {
     //! Attach the assistant drafter at `path` to `model` for speculative decode on the GPU driver that
     //! serves it (Metal or the Vulkan resident driver); false where every driver refused it (a drafter
     //! made for another target, a model the driver does not serve whole), each refusal logged.
-    return attach_mtp_drafter_(model, path)
+    return empty(attach_mtp_drafter_(model, path))
 }
 
 def detach_mtp_drafter(model : Model) {
