@@ -131,13 +131,16 @@ def test_gpu_resident_gemma4_e2b_ple_pre_step(t : T?) {
             static_if (typeinfo builtin_module_exists(vulkan)) {
                 var prompt <- resident_prompt(40l)
                 var sg <- create_session(tr, mirror_kv_dtype())
+                let served0 = moe_gpu_resident_prefills()
                 forward_prefill(tr, sg, prompt, 40l, 0l)
+                t |> equal(moe_gpu_resident_prefills(), served0 + 1l, "the resident window chain served the prompt")
                 let tok = 1234l
                 let g0 = vk_rdec_token_gathered()
                 let cpu0 = ple_cpu_pre_rows()
                 forward(tr, sg, tok, 40l)
                 t |> success(vk_rdec_token_gathered() > g0, "the step's embed row gathered off its token id")
                 t |> equal(ple_cpu_pre_rows() - cpu0, 0l, "the step built no CPU pre-step row")
+                served_every_call(t)
                 var dev : array<float>
                 vk_rdec_ple_side_row(dev)
                 var inscope cpu <- cpu_side_row(tr, tok)
