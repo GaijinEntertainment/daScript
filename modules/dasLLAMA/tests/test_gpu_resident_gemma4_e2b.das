@@ -145,6 +145,16 @@ def test_gpu_resident_gemma4_e2b_ple_pre_step(t : T?) {
     }
 }
 
+//! the greedy chain on the E-series (arm `g4e-chain`): a chained step's side row gathers off the pick the device lands in the id
+//! plane, so the chained walk is bit for bit the plain walk (`greedy_chain_cell`)
+[test]
+def test_gpu_resident_gemma4_e2b_greedy_chain(t : T?) {
+    t |> run("gemma-4-E2B Q8_0: the greedy chain over the side rows, bit for bit the plain walk") @(t : T?) {
+        return if (!arm_on(t, "g4e-chain"))
+        greedy_chain_cell(t, path_join(models_dir(), "gemma-4-E2B-it-Q8_0.gguf"))
+    }
+}
+
 //! the CPU pre-step's side row of `tok` on a scratch session: the scaled embedding row, then `ple_pre_decode`
 def private cpu_side_row(tr : Model; tok : int64) : array<float> {
     var s <- make_run_state(tr.config)

@@ -1922,7 +1922,8 @@ window chain against the same tokens stepped one by one); and the parked claim a
 then refused twice (spent by its adoption, and dead after another session took its region) - every site that holds the bar
 carries its own one-token-off control, and every compare logs both sides' argmax. The E2B file runs the bit-for-bit
 cells on the E-series carrier, where a batched row carries its own per-layer-embedding side
-input, and the groups cell at nine rows (one command, its GEMVs and the per-layer-embedding act in a tile of eight columns and one of one, each row's side row read from its own row base), and the hybrid file on Qwen3.5-0.8B, where each recurrent layer keeps one device state slot
+input gathered on the device off the row's id (`cell_regions_batched_side_rows`: no table row gathered on the host,
+`ple_host_gather_rows`, and every batched row counted by `vk_rdec_nrow_side_gathered`), and the groups cell at nine rows (one command, its GEMVs and the per-layer-embedding act in a tile of eight columns and one of one, each row's side row read from its own row base), and the hybrid file on Qwen3.5-0.8B, where each recurrent layer keeps one device state slot
 per region, so the two sessions' batched steps advance their own deltanet states through the N-row
 command's recurrent form, the gated q - a q projection row that carries the attention's output
 gate beside q - running over the rows; before a session's prefill zeroes its region's slot, it
@@ -2078,7 +2079,9 @@ type. Arm `g4e-pre` (`test_gpu_resident_gemma4_e2b_ple_pre_step`): the token com
 finished on the device - read back (`vk_rdec_ple_side_row`) within 1e-4 of the CPU pre-step's row, another token's row the
 control. Arm `g4e-f16` (`test_gpu_resident_gemma4_e2b_tied_f16`): the `-embf16-local` mint's tied F16 token table declines the
 whole-model driver by name (`tied classifier`), the PLE table tagged q8. Arm `g4f-codec` (`test_gpu_resident_gemma4_e4b_block_codecs`):
-the E4B under a q8_0 mirror in the forced-feed form and a tq4 mirror in the perplexity form.
+the E4B under a q8_0 mirror in the forced-feed form and a tq4 mirror in the perplexity form. Arm `g4e-chain`
+(`test_gpu_resident_gemma4_e2b_greedy_chain`): the greedy chain (`greedy_chain_cell`) on the E2B, each chained step's side row
+gathered off the pick the device lands, the chained walk bit for bit the plain walk.
 `test_gpu_resident_moe.das` (`_moe_resident.das` carries the rig, shared with
 `test_gpu_resident_gptoss.das`) - stocked suite, `-jit` only; the census fixtures (`MoeFixture.census`: the two UD-IQ2_XXS
 files and the Q4_K_M host-layer file) open on the format census, every site the file carries in its own format, and
