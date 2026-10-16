@@ -4390,6 +4390,15 @@ def private moe_select_bad(bsel; widx : array<uint>; ww : array<float>; nst, k :
     return (idx = bidx, w = bw, first_idx = first_idx, wmax = wmax, wmax_at = wmax_at)
 }
 
+//! the select buffer's picks as two runs, stream after stream: the expert ids and their weights
+def private moe_select_rows(bsel; nst, k : int) : tuple<idx : array<uint>; w : array<float>> {
+    var inscope words <- buf_download(bsel, nst * 2 * k, type<uint>)
+    var inscope fw <- buf_download(bsel, nst * 2 * k, type<float>)
+    var idx <- [for (i in range(nst * k)); words[(i / k) * 2 * k + i % k]]
+    var w <- [for (i in range(nst * k)); fw[(i / k) * 2 * k + k + i % k]]
+    return <- (idx = idx, w = w)
+}
+
 // The select kernel vs the host select `moe_select_core` (softmax + top-k + norm_topk renorm),
 // one stream row per threadgroup ([k idx u32][k w f32] per row). idx must match EXACTLY — ties
 // are exact-equal logits, so both sides agree by the lowest-index rule; w compares within the
@@ -4404,6 +4413,11 @@ def private moe_select_gate(t : T?; var dev, queue; ne, k, nst : int; ties : boo
         let sp = ne > 256 ? stamp_of(@@enc_moe_select_512) : stamp_of(@@enc_moe_select)
         var pso = dscale ? (mc |> keep_stamp(sd, err)) : (mc |> keep_stamp(sp, err))
         return if (!pso_ok(t, "moe select", pso, err))
+        var pso_pl : MetalComputePipeline?   //! the down-scale arms' plain twin: the weights the fold starts from
+        if (dscale) {
+            pso_pl = mc |> keep_stamp(sp, err)
+            return if (!pso_ok(t, "moe select plain twin", pso_pl, err))
+        }
         var inscope lg : array<float>
         lg |> resize(nst * ne)
         for (i in range(nst * ne)) {
@@ -4438,10 +4452,18 @@ def private moe_select_gate(t : T?; var dev, queue; ne, k, nst : int; ties : boo
         let bsel = mc |> out_words(nst * 2 * k, NAN_SENTINEL_BITS)
         let bds = mc |> in_(ds)
         var ka = GkTopKArgs(ne = uint(ne), k = uint(k), norm = gmode == 0 ? 1u : 0u, wscale = wscale, lstride = uint(ne), raw = gmode == 1 ? 1u : 0u)
+        var ka1 = ka
+        ka1.wscale = 1.0
+        let bpl = dscale ? (mc |> out_words(nst * 2 * k, NAN_SENTINEL_BITS)) : -1
+        let bun = dscale ? (mc |> out_words(nst * 2 * k, NAN_SENTINEL_BITS)) : -1
         let ran = mc |> cell_record(t, tag) $(enc : MetalComputeEncoder?) {
             if (dscale) {
                 stamp_run(sd, pso) {   // sel twice: the idx view and the float w view - row layout is in-kernel
                     invoke(sd.enc, enc, mc.buf[blg], mc.buf[bsel], mc.buf[bsel], mc.buf[bds], ka, int64(nst))
+                }
+                stamp_run(sp, pso_pl) {   //! the plain twin at the arm's global scale, then at none
+                    invoke(sp.enc, enc, mc.buf[blg], mc.buf[bpl], mc.buf[bpl], ka, int64(nst))
+                    invoke(sp.enc, enc, mc.buf[blg], mc.buf[bun], mc.buf[bun], ka1, int64(nst))
                 }
             } else {
                 stamp_run(sp, pso) {
@@ -4468,8 +4490,30 @@ def private moe_select_gate(t : T?; var dev, queue; ne, k, nst : int; ties : boo
         }
         if (dscale) {
             t |> success(moe_select_bad(mc.buf[bsel], widx, wunds, nst, k).w > 0, "{tag}: the weights without the down scales miss the device's")
+            moe_select_fold_exact(t, tag, mc.buf[bsel], mc.buf[bpl], mc.buf[bun], widx, ds, nst, k, wscale)
         }
     }
+}
+
+//! The down-scale fold bit for bit in the kernel's order (`GkTopKRow.scale_weight`): the plain twin's renormalized weight under
+//! the global scale, then the expert's down scale - each device weight that product exactly. The plain twin's picks are the
+//! host's, its scaled weights its unscaled ones times the scale exactly; under a global scale the swapped order (the down scale,
+//! then the global scale) parts from the kernel's order on the fixture and misses the device's weights, the control
+def private moe_select_fold_exact(t : T?; tag : string; bsel, bpl, bun; widx : array<uint>; ds : array<float>; nst, k : int; wscale : float) {
+    var inscope dv <- moe_select_rows(bsel, nst, k)
+    var inscope pl <- moe_select_rows(bpl, nst, k)
+    var inscope un <- moe_select_rows(bun, nst, k)
+    check_exact(t, "{tag}: the plain twin's picks", pl.idx, widx)
+    var inscope scaled <- [for (i in range(nst * k)); un.w[i] * wscale]
+    check(t, "{tag}: the plain twin's weights under the global scale, bit for bit", pl.w, scaled, BAR_EXACT, Shape(row_width = k))
+    var inscope want <- [for (i in range(nst * k)); pl.w[i] * ds[widx[i]]]
+    check(t, "{tag}: the down scale folded after the global scale, bit for bit", dv.w, want, BAR_EXACT, Shape(row_width = k))
+    return if (wscale == 1.0)
+    var inscope swapped <- [for (i in range(nst * k)); (un.w[i] * ds[widx[i]]) * wscale]
+    let parted = check_count(want, swapped, BAR_EXACT)
+    to_log(LOG_INFO, "{tag}: the swapped fold order parts {parted} of {nst * k} weights\n")
+    t |> success(parted > 0, "{tag}: the swapped fold order parts from the kernel's on the fixture")
+    t |> success(check_count(dv.w, swapped, BAR_EXACT) > 0, "{tag}: the swapped fold order misses the device's weights")
 }
 
 //! the mx4 nibble values: the signed doubled-e2m1 table
