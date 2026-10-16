@@ -13,8 +13,11 @@ options _dasllama_internal = true
 require math
 require vulkan
 require vulkan/vulkan_boost
+require spirv/spirv_shader
 require dasllama/dasllama_vulkan_common
+require dasllama/dasllama_vulkan_dispatch
 require dasllama/dasllama_vulkan_classes
+require dasllama/dasllama_gpu_math   // rms_inv, gk_act_mul: the template body the probe stamp compiles
 require dasllama/dasllama_kqformat   // KqFmt: the routed down's format
 require _vk_probe_fixture   // pfq_arm, pfq_avg_us: the device clock
 
@@ -22,6 +25,14 @@ let private DISPATCHES = 64
 let private SUBMITS = 8
 let private ROUNDS = 9
 let private BUF_BYTES = 64l << 20l
+let private PLE_RING = 8   //! the projection race's weight copies: 440 MB of f32 rows, 220 MB of bf16 words, past the pod's 64 MiB L2
+
+//! `ClsArCombG4` storing its next norm with the stride loop (`OUT_X4` off): the store race's second arm
+[vk_dispatch(name = "probe_ar_comb_g4_x1", kernel = "run", grid = "nrows", params = "nrows : int64")]
+class ProbeArCombG4X1 : ArCombG4T {
+    override OUT_F32 = true
+    override OUT_X4 = false
+}
 
 //! the median per-dispatch device time over the rounds of `rec`'s DISPATCHES dispatches, and the rounds' cv
 def private time_cls(name : string; rec : block<(raw : VkCommandBuffer; var h : VkHaz) : void>) {
@@ -57,7 +68,7 @@ def main : int {   // nolint:STYLE038 — one-shot probe: the classes, the fixtu
         && ensure_ple_conv_cls() && ensure_qk_rms_cls() && ensure_topk_n_cls() && ensure_topk_n2_cls() && ensure_combine_cls()
         && ensure_dn_scan_p3_cls() && ensure_qkn_rope_f16_cls() && ensure_cls_epi() && ensure_cls_ar_comb_g4()
         && ensure_router_gemv_cls() && ensure_router_gemv_bf16_cls() && ensure_cls_ar() && ensure_cls_ar_rq_b()
-        && ensure_ple_act_f32_cls() && ensure_ple_finish_cls())
+        && ensure_ple_act_f32_cls() && ensure_ple_finish_cls() && ensure_probe_ar_comb_g4_x1())
     if (!classes_ok) {
         print("vk_gk_rows_probe: no Vulkan device, or a class declined\n")
         return 1
@@ -148,9 +159,17 @@ def main : int {   // nolint:STYLE038 — one-shot probe: the classes, the fixtu
     let g4dim = 2816u
     var s_g4 = set_cls_ar_comb_g4(fixed_array(b[0], b[1], b[2], b[3], b[4], b[5], b[0]), fixed_array(bb, bb, bb, bb, bb, bb, bb),
         fixed_array(1u, 0u, 2u, 4u, 8u, 0u, 16u))
+    var s_g4x1 = set_probe_ar_comb_g4_x1(fixed_array(b[0], b[1], b[2], b[3], b[4], b[5], b[0]), fixed_array(bb, bb, bb, bb, bb, bb, bb),
+        fixed_array(1u, 0u, 2u, 4u, 8u, 0u, 16u))
+    let g4a = GkMoeCombArgs(n = g4dim, k = 8u, eps = 1e-6, ascale = 0.75, rpost_off = 0u, dpost_off = g4dim, spost_off = 2u * g4dim,
+        nwoff = 3u * g4dim)
     time_cls("gemma-4 MoE step dim {g4dim} k 8 1 row") $(r; var h) {
-        enc_cls_ar_comb_g4(r, h, s_g4, GkMoeCombArgs(n = g4dim, k = 8u, eps = 1e-6, ascale = 0.75, rpost_off = 0u, dpost_off = g4dim,
-            spost_off = 2u * g4dim, nwoff = 3u * g4dim), 1l)
+        var pc = g4a
+        enc_cls_ar_comb_g4(r, h, s_g4, pc, 1l)
+    }
+    time_cls("gemma-4 MoE step dim {g4dim} k 8 1 row, the next norm's stride-loop store (OUT_X4 off, probe stamp)") $(r; var h) {
+        var pc = g4a
+        enc_probe_ar_comb_g4_x1(r, h, s_g4x1, pc, 1l)
     }
     let vocab = 262144l
     var s_epi = set_cls_epi(fixed_array(b[0], b[1]), fixed_array(bb, bb), fixed_array(1u, 0u))
@@ -206,20 +225,30 @@ def main : int {   // nolint:STYLE038 — one-shot probe: the classes, the fixtu
         }
         delete regs
     }
-    //! the E-series side rows' projection at the E2B shape (35 layers x 256 rows of 1536): the f32 rows against the bf16 word form
+    //! the E-series side rows' projection at the E2B shape (35 layers x 256 rows of 1536): the f32 rows against the bf16 word form,
+    //! on one weight buffer and on a ring of PLE_RING copies (dispatch i reads copy i % ring)
     let pne = 35 * 256
     let pdim = 1536
-    var s_rf = set_router_gemv_cls(fixed_array(b[0], b[1], b[2], b[3]), fixed_array(bb, bb, bb, bb), fixed_array(0u, 1u, 2u, 0u))
-    var s_rb = set_router_gemv_bf16_cls(fixed_array(b[0], b[1], b[2], b[3]), fixed_array(bb, bb, bb, bb), fixed_array(0u, 1u, 2u, 0u))
-    for (np in fixed_array(1u, 4u)) {
-        let pr = GkRouterArgs(ne = uint(pne), dim = uint(pdim), ncols = np, yscale = 1.0 / sqrt(float(pdim)))
-        time_cls("ple proj f32 rows ne {pne} dim {pdim} {np} cols") $(r; var h) {
-            var p1 = pr
-            router_enc_cols(false, r, h, s_rf, p1, int64(pne))
-        }
-        time_cls("ple proj bf16 rows ne {pne} dim {pdim} {np} cols") $(r; var h) {
-            var p1 = pr
-            router_enc_cols(true, r, h, s_rb, p1, int64(pne))
+    var wring <- [for (i in range(PLE_RING)); i == 0 ? b[0] : make_device_buf(BUF_BYTES)]
+    for (i in range(1, PLE_RING)) {
+        upload_zeros(wring[i], 0l, BUF_BYTES)
+    }
+    var s_rf <- [for (w in wring); set_router_gemv_cls(fixed_array(w, b[1], b[2], b[3]), fixed_array(bb, bb, bb, bb), fixed_array(0u, 1u, 2u, 0u))]
+    var s_rb <- [for (w in wring); set_router_gemv_bf16_cls(fixed_array(w, b[1], b[2], b[3]), fixed_array(bb, bb, bb, bb), fixed_array(0u, 1u, 2u, 0u))]
+    for (ring in fixed_array(1, PLE_RING)) {
+        for (np in fixed_array(1u, 4u)) {
+            let pr = GkRouterArgs(ne = uint(pne), dim = uint(pdim), ncols = np, yscale = 1.0 / sqrt(float(pdim)))
+            var slot = 0
+            time_cls("ple proj f32 rows ne {pne} dim {pdim} {np} cols, ring {ring}") $(r; var h) {
+                var p1 = pr
+                router_enc_cols(false, r, h, s_rf[slot], p1, int64(pne))
+                slot = (slot + 1) % ring
+            }
+            time_cls("ple proj bf16 rows ne {pne} dim {pdim} {np} cols, ring {ring}") $(r; var h) {
+                var p1 = pr
+                router_enc_cols(true, r, h, s_rb[slot], p1, int64(pne))
+                slot = (slot + 1) % ring
+            }
         }
     }
     //! the E-series side rows at the E2B shape (35 layers x 256): the act over a layer's side slice and the pre-step's finish

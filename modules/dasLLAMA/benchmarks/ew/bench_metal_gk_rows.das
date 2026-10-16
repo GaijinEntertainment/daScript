@@ -11,6 +11,7 @@ require dasllama/dasllama_metal_prefill  // the window's stamps
 require metal/msl_shader  // [metal_kernel]: the races' bench-side stamps
 require dasllama/dasllama_metal_lens  // [metal_dispatch], compile_stamp: their builders and pipelines
 require dasllama/dasllama_gpu_math  // rms_inv: the template bodies the bench-side stamps compile
+require daslib/typemacro_boost  // [template_struct_instance]: the bench-side stamps' shells
 require math
 
 // The row kernels the Metal home stamps off the shared templates
@@ -199,6 +200,32 @@ def private arm_row(name : string; times : array<array<double>>; arm : int; cmp 
     return (us = st.best, cv = st.cv)
 }
 
+//! a race's rows: each arm dispatched once off `reset` and its compare region (`read`) checked (`arm_compare`: arm 0, the baseline,
+//! against the CPU reference `ref`), then the arms raced (`race_arms`), a row an arm
+def private race_rows(title : string; names : array<string>; ref : array<double>; var rows : array<Reading>; reset : block<() : void>;
+                      read : block<(var got : array<float>) : void>; body : block<(enc : MetalComputeEncoder?; arm : int) : void>) {
+    let narms = length(names)
+    var base : array<float>
+    var cmps : array<ArmCompare>
+    for (arm in range(narms)) {
+        invoke(reset)
+        if (!dispatch_once(arm, body)) {
+            cmps |> push(ArmCompare(err = 1.0lf, text = "no dispatch"))
+            continue
+        }
+        var inscope got : array<float>
+        invoke(read, got)
+        if (arm == 0) {
+            base := got
+        }
+        cmps |> push(arm_compare(arm, names[0], got, base, ref))
+    }
+    var times <- race_arms(title, narms, body)
+    for (arm in range(narms)) {
+        rows |> push(arm_row("race {title}: {names[arm]}", times, arm, cmps[arm]))
+    }
+}
+
 //! the hyper-connection seams, the n-gram side input, the per-head q/k norm, the router select, the routed combine and the deltanet
 //! out-norm at a qwen35moe / qwen4exp shape
 def private seam_rows : array<Reading> {
@@ -356,36 +383,44 @@ def private router_rows : array<Reading> {
     return <- rows
 }
 
+let private PLE_RING = 8   //! the projection race's weight copies: 440 MB of f32 rows, 220 MB of bf16 words, past the M5 Max's 48 MB SLC
+
 //! the E-series side rows' projection at the E2B shape (35 layers x 256 rows of 1536): the router GEMV's f32 rows against the bf16
-//! word form off the file's own rows, a decode column and a verify's four
-def private ple_proj_rows : array<Reading> {
+//! word form off the file's own rows, a decode column and a verify's four; dispatch i reads weight copy i % `ring`
+def private ple_proj_rows(ring : int) : array<Reading> {
     let ne = 35 * 256
     let dim = 1536
-    var bw = fill_buf(ne * dim, 0.01)
+    var bws <- [for (_i in range(ring)); fill_buf(ne * dim, 0.01)]
     var bx = fill_buf(4 * dim, 0.5)
     var by = fill_buf(4 * ne, 0.0)
     var rows : array<Reading>
-    rows |> reserve(4)
+    rows |> reserve(5)
+    var slot = 0
     for (np in fixed_array(1, 4)) {
         let ka = moe_router_args(int64(ne), int64(dim), int64(np))
-        rows |> push(time_rows("ple proj f32 rows ne={ne} dim={dim} {np} cols") $(enc) {
+        rows |> push(time_rows("ple proj f32 rows ne={ne} dim={dim} {np} cols, ring {ring}") $(enc) {
             var k = ka
-            enc_moe_router(enc, bw, bx, by, g_one, k, int64(ne), int64(np))
+            enc_moe_router(enc, bws[slot], bx, by, g_one, k, int64(ne), int64(np))
+            slot = (slot + 1) % ring
         })
-        rows |> push(time_rows("ple proj bf16 rows ne={ne} dim={dim} {np} cols") $(enc) {
+        rows |> push(time_rows("ple proj bf16 rows ne={ne} dim={dim} {np} cols, ring {ring}") $(enc) {
             var k = ka
-            enc_ple_proj_bf16(enc, bw, bx, by, k, int64(ne), int64(np))
+            enc_ple_proj_bf16(enc, bws[slot], bx, by, k, int64(ne), int64(np))
+            slot = (slot + 1) % ring
         })
         if (np == 1) {
-            rows |> push(time_rows("ple proj bf16 rows ne={ne} dim={dim} 1 col, a threadgroup a row") $(enc) {
+            rows |> push(time_rows("ple proj bf16 rows ne={ne} dim={dim} 1 col, a threadgroup a row, ring {ring}") $(enc) {
                 var k = ka
-                enc_ple_proj_bf16_one(enc, bw, bx, by, k, int64(ne), 1l)
+                enc_ple_proj_bf16_one(enc, bws[slot], bx, by, k, int64(ne), 1l)
+                slot = (slot + 1) % ring
             })
         }
     }
-    for (buf in fixed_array(bw, bx, by)) {
+    for (buf in bws) {
         metal_release(buf)
     }
+    metal_release(bx)
+    metal_release(by)
     return <- rows
 }
 
@@ -534,41 +569,273 @@ def private g4_tail_rows : array<Reading> {
     return <- rows
 }
 
-//! the gemma-4 window step stamped as `MetalMoeCombG4Pf` is, but with four slot loads in flight a lane: the slot race's second arm
-[metal_dispatch(name = "bench_enc_moe_comb_g4_pf_x4", pso = "g_bench_pso_moe_comb_g4_pf_x4", tgmem = "bench_moe_comb_g4_pf_x4_msl_tgmem", tg = 1024,
-    grid = "npos", params = "npos : int64")]
-class BenchMoeCombG4PfX4 : MetalMoeCombG4T {
-    override GATHERED = true
-    override OUT_F32 = false
-    override SLOT_X4 = true
-
-    [metal_kernel(name="bench_moe_comb_g4_pf_x4_msl")]
-    def bench_moe_comb_g4_pf_x4 {
+//! the gemma-4 step race stamps' shell: `MetalMoeCombG4T` a threadgroup a row, each stamp the shipped one it races with `SLOT_X4`
+//! flipped
+[ |> template_struct_instance]
+class template BenchMoeCombG4T : MetalMoeCombG4T {
+    [metal_kernel]
+    def bench_moe_comb_g4 {
         comb_g4_row(gl_WorkGroupID.x)
     }
 }
 
-var private g_bench_pso_moe_comb_g4_pf_x4 : MetalComputePipeline?
+//! `MetalMoeCombG4Pf` with four slot loads in flight a lane
+[metal_dispatch(name = "bench_enc_moe_comb_g4_pf_x4", pso = "g_bench_pso_moe_comb_g4_pf_x4", tgmem = "BenchMoeCombG4PfX4_bench_moe_comb_g4_msl_tgmem",
+    tg = 1024, grid = "npos", params = "npos : int64")]
+class BenchMoeCombG4PfX4 : BenchMoeCombG4T {
+    override GATHERED = true
+    override OUT_F32 = false
+    override SLOT_X4 = true
+}
 
-//! the gemma-4 window step's operands at width `dim`, `k` slots a row over `np` rows, laid out as `g4_tail_rows`' window rows
+//! `MetalMoeCombG4` with one slot's loads in flight a step
+[metal_dispatch(name = "bench_enc_moe_comb_g4_x1", pso = "g_bench_pso_moe_comb_g4_x1", tgmem = "BenchMoeCombG4X1_bench_moe_comb_g4_msl_tgmem",
+    tg = 1024, grid = "nst", params = "nst : int64")]
+class BenchMoeCombG4X1 : BenchMoeCombG4T {
+    override PRESUM_SWITCH = false
+    override SLOT_X4 = false
+}
+
+//! `MetalMoeCombG4Hx` with one slot's loads in flight a step
+[metal_dispatch(name = "bench_enc_moe_comb_g4_hx_x1", pso = "g_bench_pso_moe_comb_g4_hx_x1", tgmem = "BenchMoeCombG4HxX1_bench_moe_comb_g4_msl_tgmem",
+    tg = 1024, grid = "nst", params = "nst : int64")]
+class BenchMoeCombG4HxX1 : BenchMoeCombG4T {
+    override HX = true
+    override PRESUM_SWITCH = false
+    override SLOT_X4 = false
+}
+
+//! the routed combine race stamps' shell: `GkMoeCombine` a thread an element, one slot's loads in flight a step
+[ |> template_struct_instance]
+class template BenchMoeCombineT : GkMoeCombine {
+    override WINDOW = false
+    override SLOT_X4 = false
+
+    [metal_kernel]
+    def bench_moe_combine {
+        if (gl_GlobalInvocationID.x < pa.n) {
+            comb_elem(gl_WorkGroupID.y, gl_GlobalInvocationID.x)
+        }
+    }
+}
+
+//! `MetalMoeCombine` with one slot's loads in flight a step
+[metal_dispatch(name = "bench_enc_moe_combine_x1", pso = "g_bench_pso_moe_combine_x1", tgmem = "BenchMoeCombineX1_bench_moe_combine_msl_tgmem",
+    tg = 256, grid = "dim/256, nst", params = "dim : int64, nst : int64")]
+class BenchMoeCombineX1 : BenchMoeCombineT {
+    override GATHERED = false
+}
+
+//! `MetalMoeCombineSh` with one slot's loads in flight a step
+[metal_dispatch(name = "bench_enc_moe_combine_sh_x1", pso = "g_bench_pso_moe_combine_sh_x1", tgmem = "BenchMoeCombineShX1_bench_moe_combine_msl_tgmem",
+    tg = 256, grid = "dim/256, nst", params = "dim : int64, nst : int64")]
+class BenchMoeCombineShX1 : BenchMoeCombineT {
+    override GATHERED = false
+    override SH = true
+}
+
+//! `MetalMoeReduce` with one slot's loads in flight a step
+[metal_dispatch(name = "bench_enc_moe_reduce_x1", pso = "g_bench_pso_moe_reduce_x1", tgmem = "BenchMoeReduceX1_bench_moe_combine_msl_tgmem",
+    tg = 256, grid = "dim/256, npos", params = "dim : int64, npos : int64")]
+class BenchMoeReduceX1 : BenchMoeCombineT {
+}
+
+//! `MetalMoeReduceSh` with one slot's loads in flight a step
+[metal_dispatch(name = "bench_enc_moe_reduce_sh_x1", pso = "g_bench_pso_moe_reduce_sh_x1", tgmem = "BenchMoeReduceShX1_bench_moe_combine_msl_tgmem",
+    tg = 256, grid = "dim/256, npos", params = "dim : int64, npos : int64")]
+class BenchMoeReduceShX1 : BenchMoeCombineT {
+    override SH = true
+}
+
+//! `MetalMoeSelect` with the down-scale arm compiled in, its row read at run time (`DSOFF_SWITCH`)
+[metal_dispatch(name = "bench_enc_moe_select_dsw", pso = "g_bench_pso_moe_select_dsw", tgmem = "BenchMoeSelectDsw_metal_moe_select_msl_tgmem",
+    tg = 32, grid = "nst", params = "nst : int64")]
+class BenchMoeSelectDsw : MetalMoeSelectT {
+    override DSCALE = true
+}
+
+//! `MetalMoeSelect512` with the down-scale arm compiled in, its row read at run time
+[metal_dispatch(name = "bench_enc_moe_select_512_dsw", pso = "g_bench_pso_moe_select_512_dsw", tgmem = "BenchMoeSelect512Dsw_metal_moe_select_msl_tgmem",
+    tg = 32, grid = "nst", params = "nst : int64")]
+class BenchMoeSelect512Dsw : MetalMoeSelectT {
+    override DEPTH = 16
+    override DSCALE = true
+}
+
+var private g_bench_pso_moe_comb_g4_pf_x4 : MetalComputePipeline?
+var private g_bench_pso_moe_comb_g4_x1 : MetalComputePipeline?
+var private g_bench_pso_moe_comb_g4_hx_x1 : MetalComputePipeline?
+var private g_bench_pso_moe_combine_x1 : MetalComputePipeline?
+var private g_bench_pso_moe_combine_sh_x1 : MetalComputePipeline?
+var private g_bench_pso_moe_reduce_x1 : MetalComputePipeline?
+var private g_bench_pso_moe_reduce_sh_x1 : MetalComputePipeline?
+var private g_bench_pso_moe_select_dsw : MetalComputePipeline?
+var private g_bench_pso_moe_select_512_dsw : MetalComputePipeline?
+
+//! the MoE race stamps' pipelines; false when one fails to compile
+def private bench_moe_psos_init : bool {
+    var ok = true
+    g_bench_pso_moe_comb_g4_pf_x4 = compile_stamp(BenchMoeCombG4PfX4_bench_moe_comb_g4_msl, ok)
+    g_bench_pso_moe_comb_g4_x1 = compile_stamp(BenchMoeCombG4X1_bench_moe_comb_g4_msl, ok)
+    g_bench_pso_moe_comb_g4_hx_x1 = compile_stamp(BenchMoeCombG4HxX1_bench_moe_comb_g4_msl, ok)
+    g_bench_pso_moe_combine_x1 = compile_stamp(BenchMoeCombineX1_bench_moe_combine_msl, ok)
+    g_bench_pso_moe_combine_sh_x1 = compile_stamp(BenchMoeCombineShX1_bench_moe_combine_msl, ok)
+    g_bench_pso_moe_reduce_x1 = compile_stamp(BenchMoeReduceX1_bench_moe_combine_msl, ok)
+    g_bench_pso_moe_reduce_sh_x1 = compile_stamp(BenchMoeReduceShX1_bench_moe_combine_msl, ok)
+    g_bench_pso_moe_select_dsw = compile_stamp(BenchMoeSelectDsw_metal_moe_select_msl, ok)
+    g_bench_pso_moe_select_512_dsw = compile_stamp(BenchMoeSelect512Dsw_metal_moe_select_msl, ok)
+    return ok
+}
+
+def private bench_moe_psos_release {
+    release_handles(g_bench_pso_moe_comb_g4_pf_x4, g_bench_pso_moe_comb_g4_x1, g_bench_pso_moe_comb_g4_hx_x1, g_bench_pso_moe_combine_x1,
+        g_bench_pso_moe_combine_sh_x1, g_bench_pso_moe_reduce_x1, g_bench_pso_moe_reduce_sh_x1, g_bench_pso_moe_select_dsw,
+        g_bench_pso_moe_select_512_dsw)
+}
+
+let private COMB_GSTRIDE = 257   //! the shared gate's row stride in the router rows: 256 experts, then the gate logit
+let private COMB_GOFF = 256
+
+//! slot j of row p's down row: the selection rows' p k + j, or under `gathered` the bucket inverse's fixture map
+def private slot_row_ref(p, j, k, np : int; gathered : bool) : int => gathered ? ((p * k + j) * 7) % (np * k) : p * k + j
+
+//! the bucket inverse's fixture map over `n` slots (`slot_row_ref`'s gathered rows)
+def private slot_map_buf(n : int) : MetalBuffer? {
+    var buf = metal_new_buffer(g_dev, uint64(n * 4))
+    var ip = unsafe(reinterpret<uint?>(metal_buffer_contents(buf)))
+    for (i in range(n)) {
+        unsafe(ip[i]) = uint((i * 7) % n)
+    }
+    return buf
+}
+
+//! the routed combine's rows after one dispatch, on the CPU in double off the fixture's pattern inputs: row p's k slots under their
+//! weights, and under `sh` the shared row under its gate logit's sigmoid
+def private comb_ref(dim, k, np : int; gathered, sh : bool) : array<double> {
+    var out : array<double>
+    out |> reserve(np * dim)
+    for (p in range(np)) {
+        let gl = double(pat(p * COMB_GSTRIDE + COMB_GOFF, 0.5))
+        for (e in range(dim)) {
+            var acc = 0.0lf
+            for (j in range(k)) {
+                acc += double(pat(p * 2 * k + k + j, 0.01)) * double(pat(slot_row_ref(p, j, k, np, gathered) * dim + e, 0.1))
+            }
+            if (sh) {
+                acc += double(pat(p * dim + e, 0.25)) / (1.0lf + exp(-gl))
+            }
+            out |> push(acc)
+        }
+    }
+    return <- out
+}
+
+//! the routed combine's operands at width `dim`, `k` slots a row over `np` rows
+struct private CombStep {
+    acc : MetalBuffer?     //! the combined rows
+    binv : MetalBuffer?    //! row p's slot j's down row at p * k + j (the window's reduce)
+    bsel : MetalBuffer?    //! the selection rows: k picks, then k weights
+    bdn : MetalBuffer?     //! the slots' down rows
+    bsh : MetalBuffer?     //! the shared expert's rows
+    bgate : MetalBuffer?   //! the router rows' shared gate logit at `COMB_GOFF`
+    kc : GkMoeCombArgs
+    dim : int
+    np : int
+    gathered : bool        //! the window's reduce (`MetalMoeReduce`), else the decode combine (`MetalMoeCombine`)
+    sh : bool              //! the shared-expert stamp
+}
+
+//! the combine slot race's arm `arm` on `s`: 0 the shipped stamp (`SLOT_X4` on), 1 the bench stamp (off)
+def private comb_slot_arm(enc : MetalComputeEncoder?; s : CombStep; arm : int) {   // nolint:STYLE037 - one arm a stamp, four stamps a side
+    var k = s.kc
+    let dim = int64(s.dim)
+    let np = int64(s.np)
+    if (s.gathered && s.sh) {
+        if (arm == 0) {
+            pf_enc_moe_reduce_sh(enc, s.acc, s.binv, s.bsel, s.bdn, s.bsh, s.bgate, k, dim, np)
+        } else {
+            bench_enc_moe_reduce_sh_x1(enc, s.acc, s.binv, s.bsel, s.bdn, s.bsh, s.bgate, k, dim, np)
+        }
+    } elif (s.gathered) {
+        if (arm == 0) {
+            pf_enc_moe_reduce(enc, s.acc, s.binv, s.bsel, s.bdn, k, dim, np)
+        } else {
+            bench_enc_moe_reduce_x1(enc, s.acc, s.binv, s.bsel, s.bdn, k, dim, np)
+        }
+    } elif (s.sh) {
+        if (arm == 0) {
+            enc_moe_combine_sh(enc, s.acc, s.bsel, s.bdn, s.bsh, s.bgate, k, dim, np)
+        } else {
+            bench_enc_moe_combine_sh_x1(enc, s.acc, s.bsel, s.bdn, s.bsh, s.bgate, k, dim, np)
+        }
+    } elif (arm == 0) {
+        enc_moe_combine(enc, s.acc, s.bsel, s.bdn, k, dim, np)
+    } else {
+        bench_enc_moe_combine_x1(enc, s.acc, s.bsel, s.bdn, k, dim, np)
+    }
+}
+
+//! the routed combine at width `dim`, `k` slots over `np` rows, raced with four slot loads in flight a step on - the shipped stamp,
+//! the baseline - and off: the decode combine (`MetalMoeCombine` / `Sh`) or under `gathered` the window's reduce (`MetalMoeReduce` / `Sh`)
+def private comb_slot_race(dim, k, np : int; gathered, sh : bool; var rows : array<Reading>) {
+    var s = CombStep(acc = fill_buf(np * dim, 0.0), binv = slot_map_buf(np * k), bsel = fill_buf(np * 2 * k, 0.01),
+        bdn = fill_buf(np * k * dim, 0.1), bsh = fill_buf(np * dim, 0.25), bgate = fill_buf(np * COMB_GSTRIDE, 0.5),
+        kc = moe_comb_args(int64(dim), int64(k), int64(COMB_GSTRIDE), int64(COMB_GOFF)), dim = dim, np = np, gathered = gathered, sh = sh)
+    let shipped = gathered ? (sh ? "MetalMoeReduceSh" : "MetalMoeReduce") : (sh ? "MetalMoeCombineSh" : "MetalMoeCombine")
+    let ref <- comb_ref(dim, k, np, gathered, sh)
+    race_rows("{shipped} dim={dim} k={k} {np} rows", ["SLOT_X4 on (the shipped stamp)", "SLOT_X4 off (bench stamp)"], ref, rows, $() {
+        fill_pattern(s.acc, np * dim, 0.0)
+    }, $(var got) {
+        got <- read_floats(s.acc, np * dim)
+    }, $(enc, a) {
+        comb_slot_arm(enc, s, a)
+    })
+    for (buf in fixed_array(s.acc, s.binv, s.bsel, s.bdn, s.bsh, s.bgate)) {
+        metal_release(buf)
+    }
+}
+
+enum private G4Form {
+    window      //! `MetalMoeCombG4Pf`: the bucket inverse's slots, no norm out
+    decode      //! `MetalMoeCombG4`: the selection rows' slots, the next norm in f32
+    decode_hx   //! `MetalMoeCombG4Hx`: ... and its f16 twin
+}
+
+//! the gemma-4 step's operands at width `dim`, `k` slots a row over `np` rows, laid out as `g4_tail_rows`' rows
 struct private G4Step {
     bx : MetalBuffer?     //! the stream rows, updated in place
-    binv : MetalBuffer?   //! row p's slot j's down row at p * k + j
+    binv : MetalBuffer?   //! row p's slot j's down row at p * k + j (the window)
     bsel : MetalBuffer?   //! the selection rows: k picks, then k weights
     bdn : MetalBuffer?    //! the slots' down rows
     bd : MetalBuffer?     //! the dense branch's rows
-    bw : MetalBuffer?     //! the norms plane: the routed, dense and post-FFN norms
+    bw : MetalBuffer?     //! the norms plane: the routed, dense and post-FFN norms, then the next norm
+    by : MetalBuffer?     //! the next norm (the decode stamps)
+    byh : MetalBuffer?    //! ... its f16 twin (`decode_hx`)
     kp : GkMoeCombArgs
     np : int
+    form : G4Form
 }
 
-//! the slot race's arm `arm` on `s`: 0 the shipped window stamp (`SLOT_X4` off), 1 the bench stamp (`SLOT_X4` on)
+//! the step slot race's arm `arm` on `s`: 0 the shipped stamp, 1 the bench stamp with `SLOT_X4` flipped
 def private g4_slot_arm(enc : MetalComputeEncoder?; s : G4Step; arm : int) {
     var k = s.kp
-    if (arm == 0) {
-        enc_moe_comb_g4_pf(enc, s.bx, s.binv, s.bsel, s.bdn, s.bd, s.bw, k, int64(s.np))
+    let np = int64(s.np)
+    if (s.form == G4Form.window) {
+        if (arm == 0) {
+            enc_moe_comb_g4_pf(enc, s.bx, s.binv, s.bsel, s.bdn, s.bd, s.bw, k, np)
+        } else {
+            bench_enc_moe_comb_g4_pf_x4(enc, s.bx, s.binv, s.bsel, s.bdn, s.bd, s.bw, k, np)
+        }
+    } elif (s.form == G4Form.decode) {
+        if (arm == 0) {
+            enc_moe_comb_g4(enc, s.bx, s.bsel, s.bdn, s.bd, s.bw, s.by, k, np)
+        } else {
+            bench_enc_moe_comb_g4_x1(enc, s.bx, s.bsel, s.bdn, s.bd, s.bw, s.by, k, np)
+        }
+    } elif (arm == 0) {
+        enc_moe_comb_g4_hx(enc, s.bx, s.bsel, s.bdn, s.bd, s.bw, s.by, s.byh, k, np)
     } else {
-        bench_enc_moe_comb_g4_pf_x4(enc, s.bx, s.binv, s.bsel, s.bdn, s.bd, s.bw, k, int64(s.np))
+        bench_enc_moe_comb_g4_hx_x1(enc, s.bx, s.bsel, s.bdn, s.bd, s.bw, s.by, s.byh, k, np)
     }
 }
 
@@ -581,15 +848,15 @@ def private ref_rms_inv(v : array<double>; eps : double) : double {
     return 1.0lf / sqrt(ss / double(length(v)) + eps)
 }
 
-//! the window step's stream rows after one dispatch, on the CPU in double off the fixture's pattern inputs
-def private g4_step_ref(dim, k, np : int; ascale : double) : array<double> {
+//! the step's stream rows after one dispatch, on the CPU in double off the fixture's pattern inputs
+def private g4_step_ref(dim, k, np : int; ascale : double; gathered : bool) : array<double> {
     var out : array<double>
     out |> reserve(np * dim)
     for (p in range(np)) {
         var inscope rv <- [for (_e in range(dim)); 0.0lf]
         for (j in range(k)) {
             let wj = double(pat(p * 2 * k + k + j, 0.01))
-            let row = ((p * k + j) * 7) % (np * k)
+            let row = slot_row_ref(p, j, k, np, gathered)
             for (e in range(dim)) {
                 rv[e] += wj * double(pat(row * dim + e, 0.1))
             }
@@ -606,57 +873,125 @@ def private g4_step_ref(dim, k, np : int; ascale : double) : array<double> {
     return <- out
 }
 
-//! the gemma-4 MoE window step at the 26B's shape (dim 2816, eight slots, 512 rows), raced with four slot loads in flight a lane off
-//! - the shipped `MetalMoeCombG4Pf`, the baseline - and on (`BenchMoeCombG4PfX4`)
-def private g4_slot_race : array<Reading> {
+//! the gemma-4 MoE step at the 26B's shape (dim 2816, eight slots) over `np` rows in its stamp's `form`, raced with four slot loads
+//! in flight a lane on and off - the shipped stamp the baseline (off on the window, on at the decode rows); the compare region is
+//! the stream rows the step updates
+def private g4_slot_race(np : int; form : G4Form; var rows : array<Reading>) {
     let dim = 2816
     let k = 8
-    let np = 512
+    var s = G4Step(bx = fill_buf(np * dim, 0.5), binv = slot_map_buf(np * k), bsel = fill_buf(np * 2 * k, 0.01),
+        bdn = fill_buf(np * k * dim, 0.1), bd = fill_buf(np * dim, 0.25), bw = fill_buf(4 * dim, 0.01), by = fill_buf(np * dim, 0.0),
+        byh = metal_new_buffer(g_dev, uint64(np * dim * 2)), kp = moe_g4_args(int64(dim), int64(k), 1e-6, 0.75, false), np = np, form = form)
+    let win = form == G4Form.window
+    let shipped = win ? "MetalMoeCombG4Pf" : (form == G4Form.decode ? "MetalMoeCombG4" : "MetalMoeCombG4Hx")
+    var names <- (win ? ["SLOT_X4 off (the shipped stamp)", "SLOT_X4 on (bench stamp)"]
+        : ["SLOT_X4 on (the shipped stamp)", "SLOT_X4 off (bench stamp)"])
+    let ref <- g4_step_ref(dim, k, np, 0.75lf, win)
+    race_rows("g4 MoE step {shipped} dim={dim} k={k} {np} rows", names, ref, rows, $() {
+        fill_pattern(s.bx, np * dim, 0.5)
+    }, $(var got) {
+        got <- read_floats(s.bx, np * dim)
+    }, $(enc, a) {
+        g4_slot_arm(enc, s, a)
+    })
+    for (buf in fixed_array(s.bx, s.binv, s.bsel, s.bdn, s.bd, s.bw, s.by, s.byh)) {
+        metal_release(buf)
+    }
+}
+
+//! one router row's select on the CPU in double off the fixture's logits (pattern scale 1): the k picks by softmax probability, the
+//! lowest expert on a tie, then their weights renormalized over the picks
+def private select_ref(ne, k : int) : array<double> {
+    var inscope used <- [for (_e in range(ne)); false]
+    var picks : array<double>
+    var lw : array<double>
+    for (_j in range(k)) {
+        var best = -1
+        for (e in range(ne)) {
+            if (!used[e] && (best < 0 || pat(e, 1.0) > pat(best, 1.0))) {
+                best = e
+            }
+        }
+        used[best] = true
+        picks |> push(double(best))
+        lw |> push(double(pat(best, 1.0)))
+    }
+    var sw = 0.0lf
+    for (l in lw) {
+        sw += exp(l - lw[0])
+    }
+    for (l in lw) {
+        picks |> push(exp(l - lw[0]) / sw)
+    }
+    return <- picks
+}
+
+//! the select's operands over one router row of `ne` logits
+struct private SelStep {
+    blog : MetalBuffer?   //! the router row
+    bsel : MetalBuffer?   //! the selection row: k picks, then k weights
+    bds : MetalBuffer?    //! the down-scale row the bench stamps bind and, with no row named, never read
+    ka : GkTopKArgs
+}
+
+//! the select race's arm `arm` on `s`: 0 the shipped plain stamp, 1 the bench stamp with the down-scale arm compiled in
+def private select_arm(enc : MetalComputeEncoder?; s : SelStep; arm : int) {
+    var k = s.ka
+    if (s.ka.ne > 256u) {
+        if (arm == 0) {
+            enc_moe_select_512(enc, s.blog, s.bsel, s.bsel, k, 1l)
+        } else {
+            bench_enc_moe_select_512_dsw(enc, s.blog, s.bsel, s.bsel, s.bds, k, 1l)
+        }
+    } elif (arm == 0) {
+        enc_moe_select(enc, s.blog, s.bsel, s.bsel, k, 1l)
+    } else {
+        bench_enc_moe_select_dsw(enc, s.blog, s.bsel, s.bsel, s.bds, k, 1l)
+    }
+}
+
+//! the router select over one row of `ne` experts, `k` picks, raced on its plain stamp - the shipped one, the baseline - against the
+//! stamp with the down-scale arm compiled in and no row named; the compare region is the picks, then their weights
+def private select_ds_race(ne, k : int; var rows : array<Reading>) {
+    var s = SelStep(blog = fill_buf(ne, 1.0), bsel = fill_buf(2 * k, 0.0), bds = fill_buf(ne, 1.0),
+        ka = GkTopKArgs(ne = uint(ne), k = uint(k), norm = 1u, lstride = uint(ne), dsoff = GK_NO_DSCALE))
+    let ref <- select_ref(ne, k)
+    race_rows("moe_select ne={ne} k={k} 1 row", ["the shipped plain stamp", "the down-scale arm compiled in, no row named (bench stamp)"],
+            ref, rows, $() {
+        fill_pattern(s.bsel, 2 * k, 0.0)
+    }, $(var got) {
+        let ip = unsafe(reinterpret<uint?>(metal_buffer_contents(s.bsel)))
+        let fp = unsafe(reinterpret<float?>(ip))
+        got <- [for (j in range(2 * k)); j < k ? float(unsafe(ip[j])) : unsafe(fp[j])]
+    }, $(enc, a) {
+        select_arm(enc, s, a)
+    })
+    for (buf in fixed_array(s.blog, s.bsel, s.bds)) {
+        metal_release(buf)
+    }
+}
+
+//! the MoE races: the gemma-4 step's and the routed combine's slot loads at the decode rows (one, a verify's four) and the 512-row
+//! window, and the select's down-scale arm
+def private moe_race_rows : array<Reading> {
     var rows : array<Reading>
-    rows |> reserve(2)
-    var ok = true
-    g_bench_pso_moe_comb_g4_pf_x4 = compile_stamp(bench_moe_comb_g4_pf_x4_msl, ok)
-    if (!ok) {
+    if (!bench_moe_psos_init()) {
         rows |> push((us = -1.0lf, cv = 1.0lf))
         return <- rows
     }
-    var s = G4Step(bx = fill_buf(np * dim, 0.5), bsel = fill_buf(np * 2 * k, 0.01), bdn = fill_buf(np * k * dim, 0.1),
-        bd = fill_buf(np * dim, 0.25), bw = fill_buf(4 * dim, 0.01), kp = moe_g4_args(int64(dim), int64(k), 1e-6, 0.75, false, false),
-        np = np)
-    s.binv = metal_new_buffer(g_dev, uint64(np * k * 4))
-    var ip = unsafe(reinterpret<uint?>(metal_buffer_contents(s.binv)))
-    for (i in range(np * k)) {
-        unsafe(ip[i]) = uint((i * 7) % (np * k))
+    rows |> reserve(26)
+    for (np in fixed_array(1, 4)) {
+        g4_slot_race(np, G4Form.decode, rows)
+        g4_slot_race(np, G4Form.decode_hx, rows)
+        comb_slot_race(2048, 8, np, false, false, rows)
+        comb_slot_race(2048, 8, np, false, true, rows)
     }
-    let names = fixed_array("SLOT_X4 off (the shipped window stamp)", "SLOT_X4 on (bench stamp)")
-    let ref <- g4_step_ref(dim, k, np, 0.75lf)
-    var base : array<float>
-    var cmps : array<ArmCompare>
-    for (arm in range(2)) {
-        fill_pattern(s.bx, np * dim, 0.5)
-        let sent = dispatch_once(arm) $(enc, a) {
-            g4_slot_arm(enc, s, a)
-        }
-        if (!sent) {
-            cmps |> push(ArmCompare(err = 1.0lf, text = "no dispatch"))
-            continue
-        }
-        var inscope got <- read_floats(s.bx, np * dim)
-        if (arm == 0) {
-            base := got
-        }
-        cmps |> push(arm_compare(arm, names[0], got, base, ref))
-    }
-    var times <- race_arms("g4 slot race", 2) $(enc, a) {
-        g4_slot_arm(enc, s, a)
-    }
-    for (arm in range(2)) {
-        rows |> push(arm_row("race g4 MoE step dim={dim} k={k} {np} rows: {names[arm]}", times, arm, cmps[arm]))
-    }
-    for (buf in fixed_array(s.bx, s.binv, s.bsel, s.bdn, s.bd, s.bw)) {
-        metal_release(buf)
-    }
-    metal_release(g_bench_pso_moe_comb_g4_pf_x4)
+    g4_slot_race(512, G4Form.window, rows)
+    comb_slot_race(2048, 8, 512, true, false, rows)
+    comb_slot_race(2048, 8, 512, true, true, rows)
+    select_ds_race(256, 8, rows)
+    select_ds_race(512, 10, rows)
+    bench_moe_psos_release()
     return <- rows
 }
 
@@ -775,44 +1110,69 @@ def private ar_rows : array<Reading> {
     return <- rows
 }
 
-//! the sandwich seam stamped as `MetalPreAddRmsHX` is - its loops striding the threadgroup's own size, so the threadgroup is the
-//! lane width - and dispatched at 128 lanes: the lane race's narrow arm
-[metal_dispatch(name = "bench_enc_preaddrms_bhx_128", pso = "g_bench_pso_preaddrms_hx", tgmem = "bench_pre_add_rms_hx_msl_tgmem", tg = 128,
-    grid = "nrows", params = "nrows : int64")]
-class BenchPreAddRmsHX : MetalAddRmsT {
+//! the lane race stamps' shell: the sandwich seam stamped as `MetalPreAddRms` is - its loops striding the threadgroup's own size, so
+//! the threadgroup is the lane width - and dispatched at 128 lanes
+[ |> template_struct_instance]
+class template BenchPreAddRmsT : MetalAddRmsT {
     override PRE = true
+    override PRE_SWITCH = false
     override OUT_F32 = true
-    override HX = true
 
-    [metal_kernel(name="bench_pre_add_rms_hx_msl")]
-    def bench_pre_add_rms_hx {
+    [metal_kernel]
+    def bench_pre_add_rms {
         add_rms_row(gl_WorkGroupID.x)
     }
 }
 
+//! `MetalPreAddRms` at 128 lanes
+[metal_dispatch(name = "bench_enc_preaddrms_b_128", pso = "g_bench_pso_preaddrms", tgmem = "BenchPreAddRms_bench_pre_add_rms_msl_tgmem", tg = 128,
+    grid = "nrows", params = "nrows : int64")]
+class BenchPreAddRms : BenchPreAddRmsT {
+}
+
+//! `MetalPreAddRmsHX` at 128 lanes
+[metal_dispatch(name = "bench_enc_preaddrms_bhx_128", pso = "g_bench_pso_preaddrms_hx", tgmem = "BenchPreAddRmsHX_bench_pre_add_rms_msl_tgmem",
+    tg = 128, grid = "nrows", params = "nrows : int64")]
+class BenchPreAddRmsHX : BenchPreAddRmsT {
+    override HX = true
+}
+
+var private g_bench_pso_preaddrms : MetalComputePipeline?
 var private g_bench_pso_preaddrms_hx : MetalComputePipeline?
 
-//! the sandwich seam's operands at width `dim` over `np` rows, laid out as `ar_dim_rows`' window rows
+//! the sandwich seam's operands at width `dim` over `np` rows, laid out as `ar_dim_rows`' rows
 struct private SeamStep {
     bx : MetalBuffer?   //! the stream rows, updated in place
     ba : MetalBuffer?   //! the branch rows, normed under the post norm before the add
     by : MetalBuffer?   //! the next norm, f32
-    bh : MetalBuffer?   //! ... its f16 twin
+    bh : MetalBuffer?   //! ... its f16 twin (`hx`)
     bw : MetalBuffer?   //! the norms plane: the post norm, then the next norm at `dim`
     ks : GkAddRmsArgs
     np : int
+    hx : bool           //! the f16 twin's pipeline (`MetalPreAddRmsHX`), else `MetalPreAddRms`
 }
 
-//! the lane race's arm `arm` on `s`: 0 the shipped window builder (256 lanes), 1 the shipped pipeline at 128 lanes, 2 its decode
-//! builder (1024 lanes)
-def private seam_lane_arm(enc : MetalComputeEncoder?; s : SeamStep; arm : int) {
+//! the lane race's arm at `lanes` on `s`'s pipeline: 1024 the shipped decode builders, 256 the shipped window builder, 128 the bench
+//! stamp
+def private seam_lane_arm(enc : MetalComputeEncoder?; s : SeamStep; lanes : int) {
     var k = s.ks
-    if (arm == 0) {
-        pf_enc_preaddrms_bhx_c(enc, s.bx, s.ba, s.bw, s.by, s.bh, k, int64(s.np))
-    } elif (arm == 1) {
-        bench_enc_preaddrms_bhx_128(enc, s.bx, s.ba, s.bw, s.by, s.bh, k, int64(s.np))
+    let np = int64(s.np)
+    if (s.hx) {
+        if (lanes == 256) {
+            pf_enc_preaddrms_bhx_c(enc, s.bx, s.ba, s.bw, s.by, s.bh, k, np)
+        } elif (lanes == 128) {
+            bench_enc_preaddrms_bhx_128(enc, s.bx, s.ba, s.bw, s.by, s.bh, k, np)
+        } else {
+            enc_preaddrms_bhx_c(enc, s.bx, s.ba, s.bw, s.by, s.bh, k, np)
+        }
+    } elif (lanes == 256) {
+        pf_enc_preaddrms_b_c(enc, s.bx, s.ba, s.bw, s.by, k, np)
+    } elif (lanes == 128) {
+        bench_enc_preaddrms_b_128(enc, s.bx, s.ba, s.bw, s.by, k, np)
+    } elif (s.np == 1) {
+        enc_preaddrms_c(enc, s.bx, s.ba, s.bw, s.by, k)
     } else {
-        enc_preaddrms_bhx_c(enc, s.bx, s.ba, s.bw, s.by, s.bh, k, int64(s.np))
+        enc_preaddrms_b_c(enc, s.bx, s.ba, s.bw, s.by, k, np)
     }
 }
 
@@ -835,59 +1195,50 @@ def private seam_ref(dim, np : int; ascale : double) : array<double> {
     return <- xs
 }
 
-//! the window's sandwich seam (pre_add_rms hx) at width `dim` over `np` rows, raced at 256 lanes - the shipped `pf_` builder, the
-//! baseline - against 128 and 1024 on the same pipeline
-def private seam_lane_race(dim, np : int; var rows : array<Reading>) {
+//! the sandwich seam (pre_add_rms; `hx` its f16 twin) at width `dim` over `np` rows, raced at 1024, 256 and 128 lanes on the same
+//! pipeline - the shipped builder for the row count the baseline: 256 on the 512-row window, 1024 on the decode rows; the compare
+//! region is the stream rows and the f32 next norm
+def private seam_lane_race(dim, np : int; hx : bool; var rows : array<Reading>) {
     let n = np * dim
     var s = SeamStep(bx = fill_buf(n, 0.5), ba = fill_buf(n, 0.25), by = fill_buf(n, 0.0), bh = metal_new_buffer(g_dev, uint64(n * 2)),
         bw = fill_buf(2 * dim, 0.01), ks = GkAddRmsArgs(dim = uint(dim), add_on = 1u, woff = uint(dim), eps = 1e-6, ascale = 0.75, pre_on = 1u,
-        pwoff = 0u), np = np)
-    rows |> reserve(length(rows) + 3)
-    let names = fixed_array("256 lanes (the shipped window builder)", "128 lanes (bench builder)", "1024 lanes (the decode builder)")
+        pwoff = 0u), np = np, hx = hx)
+    let win = np >= 64
+    let lanes = win ? fixed_array(256, 128, 1024) : fixed_array(1024, 256, 128)
+    var names <- (win ? ["256 lanes (the shipped window builder)", "128 lanes (bench stamp)", "1024 lanes (the decode builder)"]
+        : ["1024 lanes (the shipped decode builder)", "256 lanes (the window builder)", "128 lanes (bench stamp)"])
     let ref <- seam_ref(dim, np, 0.75lf)
-    var base : array<float>
-    var cmps : array<ArmCompare>
-    for (arm in range(3)) {
+    race_rows("ar dim={dim} {np} rows sandwich seam pre_add_rms{hx ? " hx" : ""}", names, ref, rows, $() {
         fill_pattern(s.bx, n, 0.5)
-        let sent = dispatch_once(arm) $(enc, a) {
-            seam_lane_arm(enc, s, a)
-        }
-        if (!sent) {
-            cmps |> push(ArmCompare(err = 1.0lf, text = "no dispatch"))
-            continue
-        }
-        var inscope got <- read_floats(s.bx, n)
+    }, $(var got) {
+        got <- read_floats(s.bx, n)
         got |> push_from(read_floats(s.by, n))
-        if (arm == 0) {
-            base := got
-        }
-        cmps |> push(arm_compare(arm, names[0], got, base, ref))
-    }
-    var times <- race_arms("seam lane race dim={dim}", 3) $(enc, a) {
-        seam_lane_arm(enc, s, a)
-    }
-    for (arm in range(3)) {
-        rows |> push(arm_row("race ar dim={dim} {np} rows sandwich seam pre_add_rms hx: {names[arm]}", times, arm, cmps[arm]))
-    }
+    }, $(enc, a) {
+        seam_lane_arm(enc, s, lanes[a])
+    })
     for (buf in fixed_array(s.bx, s.ba, s.by, s.bh, s.bw)) {
         metal_release(buf)
     }
 }
 
-//! the lane race at the gemma-3-12b and E4B widths over the 512-row window
+//! the lane race at the gemma-3-12b and E4B widths: the decode rows (one, a verify's four) on the plain pipeline, the 512-row window
+//! on the f16 twin's
 def private seam_lane_rows : array<Reading> {
     var rows : array<Reading>
     var ok = true
-    g_bench_pso_preaddrms_hx = compile_stamp(bench_pre_add_rms_hx_msl, ok)
+    g_bench_pso_preaddrms = compile_stamp(BenchPreAddRms_bench_pre_add_rms_msl, ok)
+    g_bench_pso_preaddrms_hx = compile_stamp(BenchPreAddRmsHX_bench_pre_add_rms_msl, ok)
     if (!ok) {
         rows |> push((us = -1.0lf, cv = 1.0lf))
         return <- rows
     }
-    rows |> reserve(6)
+    rows |> reserve(18)
     for (dim in fixed_array(2560, 3840)) {
-        seam_lane_race(dim, 512, rows)
+        seam_lane_race(dim, 1, false, rows)
+        seam_lane_race(dim, 4, false, rows)
+        seam_lane_race(dim, 512, true, rows)
     }
-    metal_release(g_bench_pso_preaddrms_hx)
+    release_handles(g_bench_pso_preaddrms, g_bench_pso_preaddrms_hx)
     return <- rows
 }
 
@@ -928,9 +1279,9 @@ def private run_gk_rows(b : B?) {
     }
     var rows <- seam_rows()
     rows |> push_from(qkn_rows(), router_rows(), pk_rows(), dn_rows())
-    rows |> push_from(gate_rows(), cls_epi_rows(), g4_tail_rows(), ple_proj_rows())
-    rows |> push_from(ar_rows(), ple_rows())
-    rows |> push_from(g4_slot_race(), seam_lane_rows())
+    rows |> push_from(gate_rows(), cls_epi_rows(), g4_tail_rows(), ple_proj_rows(1))
+    rows |> push_from(ple_proj_rows(PLE_RING), ar_rows(), ple_rows())
+    rows |> push_from(moe_race_rows(), seam_lane_rows())
     var nmeas = 0
     var nvoid = 0
     for (r in rows) {
