@@ -146,15 +146,6 @@ def with_gpu_kv_dtype(t : T?; kv : KVDtype; body : block<void>) {
     restore_gpu_kv_dtype(kv_pin)
 }
 
-//! `body` under the sliding layers' ring pin `ring` (`set_gpu_kv_ring`: -1 the environment's, 0 every row kept), the pin put back
-//! as it was found - `body` may move the pin itself
-def with_gpu_kv_ring(ring : int; body : block<void>) {
-    let pin = gpu_kv_ring_pin()
-    set_gpu_kv_ring(ring)
-    invoke(body)
-    set_gpu_kv_ring(pin)
-}
-
 //! where a cell pinned a mirror codec, the armed mirror holds it
 def mirror_codec_held(t : T?) {
     let asked = gpu_kv_dtype_pin()

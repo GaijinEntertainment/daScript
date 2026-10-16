@@ -18,7 +18,6 @@ require daslib/fio   // nolint:STYLE030,LINT019 — used only inside the Apple s
 require math   // nolint:STYLE030,LINT019 - used only inside the Apple static_if half
 require strings   // nolint:STYLE030,LINT019 - starts_with, inside the Apple static_if half
 require _model_tier
-require _resident_feed   // with_gpu_kv_ring: the ring pin around each leg
 require _format_census   // census_cell: the qwen35 rows' every site in its own format
 require dasllama/dasllama_ple   // ple_cpu_pre_rows - the E-series rows' CPU pre-step witness
 require dasllama/dasllama_image   // nolint:STYLE030,LINT019 - load_model_cached, the qwen4exp row's served image, inside the das_metal half

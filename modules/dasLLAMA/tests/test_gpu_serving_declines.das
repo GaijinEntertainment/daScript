@@ -6,7 +6,6 @@ require dastest/testing_boost public
 require dasllama/dasllama_common
 require dasllama/dasllama_sampling
 require dasllama/dasllama_gpu_resident
-require _resident_feed   // with_gpu_kv_ring: the ring pin around a block
 require dasllama/dasllama_gpu_tier   // install_moe_gpu_resident_bias - the bias seat a served qwen2 needs
 require ?vulkan dasllama/dasllama_vulkan_decode   // rd_routed_slots_fit - the N-row command's slot cap, where the module exists
 require dasllama/dasllama_metal_shapes   // moe_metal_ok - the Metal routed block's admission, portable
