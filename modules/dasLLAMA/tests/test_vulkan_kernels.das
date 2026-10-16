@@ -9432,7 +9432,7 @@ def test_vkd_ple_bf16_cvt(t0 : T?) {
             var src <- [for (i in range(n)); 0.37 * float(i % 61) - 11.0]
             src[7] = 1.0e6   //! past the half range: saturates at 65504
             src[8] = -1.0e6
-            var w16 <- [for (v in src); bf16_bits_truncated(v)]
+            var w16 <- pack_bf16(src)
             var want <- [for (h in w16); float(float16(clamp(bf16_value(h), -65504.0, 65504.0)))]
             with_cell_planes() $(var cp : CellPlanes) {
                 let pw = cp |> in_plain(w16)
