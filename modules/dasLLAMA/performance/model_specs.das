@@ -549,9 +549,6 @@ def model_specs() : array<ModelSpec> {   // nolint:STYLE038 — flat model-set t
             url = "{HF}/unsloth/gemma-4-26B-A4B-it-GGUF/resolve/main/gemma-4-26B-A4B-it-UD-IQ3_XXS.gguf",
             bytes = 11416548832l, sha256 = "3b7aec683e176e1d957d007e0fb590611d82aec4db358d99b7f9714b6bc7bfc2",
             parity <- ev_gemma_count([kq_native = true])),
-        ModelSpec(file = "gemma-4-26B-A4B-it-UD-IQ4_XS.gguf",
-            url = "{HF}/unsloth/gemma-4-26B-A4B-it-GGUF/resolve/main/gemma-4-26B-A4B-it-UD-IQ4_XS.gguf",
-            bytes = 13597177568l, sha256 = "babd1e389d386352f71600765d37390f7dc993fbfad6725caccf996ffe34aecf"),
         // the native-MXFP4 gemma-4 expert carriers (the fused gate_up and the down stacks MXFP4, every other plane the source's):
         // the M5's off the Q8_0 file, the pod's off the Q4_K_M file the pod stocks
         ModelSpec(file = "gemma-4-26B-A4B-it-MXFP4_MOE-local.gguf", bytes = 14727181312l,
