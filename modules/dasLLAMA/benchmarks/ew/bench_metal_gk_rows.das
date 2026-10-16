@@ -831,7 +831,7 @@ enum private G4Form {
     decode_hx   //! `MetalMoeCombG4Hx`: ... and its f16 twin
 }
 
-//! the gemma-4 step's operands at width `dim`, `k` slots a row over `np` rows, laid out as `g4_tail_rows`' rows
+//! the gemma-4 step's operands at width `dim`, `k` slots a row over `np` rows, laid out as `g4_tail_race`'s
 struct private G4Step {
     bx : MetalBuffer?     //! the stream rows, updated in place
     binv : MetalBuffer?   //! row p's slot j's down row at p * k + j (the window)
@@ -1081,7 +1081,7 @@ class BenchPreAddRmsHX : BenchPreAddRmsT {
 var private g_bench_pso_preaddrms : MetalComputePipeline?
 var private g_bench_pso_preaddrms_hx : MetalComputePipeline?
 
-//! the sandwich seam's operands at width `dim` over `np` rows, laid out as `ar_dim_rows`' rows
+//! the sandwich seam's operands at width `dim` over `np` rows
 struct private SeamStep {
     bx : MetalBuffer?   //! the stream rows, updated in place
     ba : MetalBuffer?   //! the branch rows, normed under the post norm before the add
