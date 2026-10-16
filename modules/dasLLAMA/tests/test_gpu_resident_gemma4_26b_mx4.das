@@ -15,10 +15,14 @@ let private GEMMA4_26B_MX4_FILE = GemmaFile(file = "gemma-4-26B-A4B-it-MXFP4_MOE
 let private GEMMA4_26B_MX4_HITS_SLACK = 12l
 
 [test]
-def test_gpu_resident_gemma4_26b_mx4(t : T?) {
-    t |> run("gemma-4-26B-A4B MXFP4_MOE: every site in its own format - the native-MXFP4 expert stacks among them - and the driver serving every call") @(t : T?) {
+def test_gpu_resident_gemma4_26b_mx4_format(t : T?) {
+    t |> run("gemma-4-26B-A4B MXFP4_MOE: every site in its own format - the native-MXFP4 expert stacks among them, on the mx4 stamps - and the driver serving every call") @(t : T?) {
         gemma_format_cell(t, GEMMA4_26B_MX4_FILE, true)
     }
+}
+
+[test]
+def test_gpu_resident_gemma4_26b_mx4_ppl(t : T?) {
     t |> run("gemma-4-26B-A4B MXFP4_MOE: 150 prose ids prefilled, 150 teacher-forced, scored as a perplexity against the CPU chain - the native-MXFP4 routed rail") @(t : T?) {
         ppl_compare(t, 150l, 150l, GEMMA4_26B_MX4_FILE, GEMMA4_26B_MX4_HITS_SLACK, GEMMA_MOE_PPL_RATIO)
     }
