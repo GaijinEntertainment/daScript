@@ -542,6 +542,8 @@ def test_gemma_drafter_depth_knob(t : T?) {
     t |> run("the scheduler's tick drafts at the depth knob's depth and walks the counting prompt as the plain scheduler does") @(t : T?) {
         with_served_drafter(t, TARGET_FILE, 1l, KVDtype.f16) $(trg) {
             var prompts <- counting_prompts(trg, 1l)
+            let np = long_length(prompts[0])
+            t |> success(np / 64l < (np + 32l) / 64l, "the walk's rounds cross a 64-row page ({np} prompt rows): the round grows a paged session's pages")
             var plain <- sched_run(trg, prompts, 32l, KVDtype.f16, false)
             for (k in [3l, 1l]) {
                 set_mtp_depth(k)

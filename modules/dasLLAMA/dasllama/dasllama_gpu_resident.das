@@ -2992,6 +2992,7 @@ def gpu_resident_assist_verify(t : Model; var sessions : array<Session?>; toks :
         var row = 0l
         for (g in range64(g0, g1)) {
             var s & = unsafe(*sessions[g])
+            kv_ensure(s, pos[g] + nr[g])   //! a paged session's pages for the round's rows, before a pass brings them down
             if (!pick_only) {
                 s.mtp_logits_b |> overwrite_resize(nr[g] * vocab)
             }

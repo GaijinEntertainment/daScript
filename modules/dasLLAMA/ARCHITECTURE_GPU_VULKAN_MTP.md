@@ -265,8 +265,9 @@ step's id and the post-projection, each step's pick copied out to the host. The 
 (`vk_gemma_rounds`) binds every warm stream to a region of its own - a bind never takes a region
 the tick's earlier streams bound (`gpu_resident_assist_bind`), and a stream left without one steps
 plain after the verify - runs each stream's draft command, then verifies every stream's
-[token, drafts] as consecutive rows of its region on the N-row command (`gpu_resident_assist_verify`):
-a row's token block carries its region and position, so one command carries every stream's group,
+[token, drafts] as consecutive rows of its region on the N-row command (`gpu_resident_assist_verify`),
+a paged session's block table grown to the round's rows first so the pass that later brings them
+down finds their pages: a row's token block carries its region and position, so one command carries every stream's group,
 and a row attends the rows the same command stored below it. The rows land their logits - or,
 where every stream asked a bare argmax, their picks alone - and their post-final-norm hidden; the
 shared walk (`mtp_accept_walk`) and host commit run per stream, and the region holds the stream's
