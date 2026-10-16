@@ -1,8 +1,7 @@
 # dasLLAMA GPU Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_ASYMMETRIES.md`, `ARCHITECTURE_GPU_MTP.md`,
-`ARCHITECTURE_GPU_VULKAN_NROW.md`. Planned work: `followup_metal.md`, `followup_vulkan.md`.
+docs: `ARCHITECTURE_GPU.md`, `ARCHITECTURE_GPU_ASYMMETRIES.md`. Planned work: `followup_metal.md`, `followup_vulkan.md`.
 
 **A diff touching a GPU kernel timing arm - code that dispatches a kernel to measure it rather
 than to serve a call: a timing race between kernels, a knockout, an overhead measurement -
@@ -66,6 +65,13 @@ a claim - or changes the text of a Vulkan serving log line a parity rule reads -
 driver's `resident driver armed (...)` line, the per-op tier's `GPU MoE tier:` report, the
 `resident override passed a call` line - applies `REVIEW_GPU_PARITY.md` too.**
 
+**A diff that hands a GPU decode or prefill call the device served to the CPU path; lands a model
+family, backend arm or session shape with a batched decode step; calls `create_device_session`,
+`set_device_kv` or `moe_gpu_drop_model`; calls a `set_gpu_*` or `reset_gpu_*` function; adds an
+`RdecPass` value; changes `trim_model_planes`; stores into, gathers from or releases a device buffer
+holding K or V rows; changes a resident override or a byte copy of mirror rows; or adds or changes a
+GPU path that runs a recurrent forward, applies `REVIEW_GPU_RESIDENT.md` too.**
+
 **A diff that changes a restated property of a kernel class - a binding number, a kargs or
 push-constant layout, a bound struct's layout, threadgroup or workgroup memory, a staging shape or
 the dispatch geometry - resyncs or deletes, in the same change,
@@ -78,6 +84,15 @@ timing arm that carries that body as a hand-written twin, and every arm ledgered
 retained reference; a diff that routes a shape to a sibling kernel class resyncs, in the same
 change, the arms that dispatch the old class at that shape.** An arm timing a body the shipped
 kernel no longer runs at that shape measures the wrong kernel silently.
+
+**A change that can alter what a GPU decode or prefill call on a session computes or selects ships
+GPU-vs-CPU parity on one q8 model, one K-quant model, and one model of a format outside both, for
+each of the three whose path the change reaches - or names both compares in the PR body: its emitted
+kernels byte-identical before and after (the `*_msl` globals or the AIR, Metal's compiled shader IR,
+they build into; the SPIR-V words `DASLLAMA_VK_SPV_DUMP` writes) and the kernel variant the host
+picks, its dispatch selection and every bind argument (buffer, offset, kargs value) unchanged on
+every input.** Such a change is anything the call executes or that selects what it executes; only
+both compares together show the change cannot alter what the path computes or selects.
 
 **Never size a device buffer a dispatch writes to the live count of rows, keys or chunks - size
 it to every element the dispatch's full grid writes.** A dispatch writes whole tiles past the live
@@ -178,13 +193,6 @@ a K/V cache feature for a model family the other backend also serves lands the s
 the other backend in the same change, wherever the other backend's API offers the operations it
 uses on any device it supports; a PR body that defers it is a defect.** A capability one backend
 has makes a served model's behavior depend on the box it runs on.
-
-**A diff that changes what a GPU decode or prefill call on a session computes or selects, hands a
-served call back to the host, lands a batched decode step shape, creates or drops a device session
-or a scheduler's device mode, calls a `set_gpu_*` / `reset_gpu_*` function, adds an `RdecPass`
-value, changes the bake-trim path, stores or shares K/V rows on the device, touches a resident
-override's mirror gating or a mirror codec copy, or adds a GPU recurrent forward, applies
-`REVIEW_GPU_RESIDENT.md` too.**
 
 **A module-level variable in a GPU driver file whose value derives from a loaded model's weights, or
 names, sizes or points at device content built from a loaded model (a served model, a draft or tower
