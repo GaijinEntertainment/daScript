@@ -5373,6 +5373,22 @@ def private cls_softcap_chain(t : Model; var s : Session; cap : float) {
     }
 }
 
+//! Fill ``dst[at*dim ..]`` with the embedding rows of the first ``n`` ``tokens`` (embed_scale applied)
+def embed_text_rows(t : Model; tokens : array<int64>; var dst : array<float>; at, n : int64) {
+    let dim = t.config.dim
+    for (p in range64(n)) {
+        embed_row(t, tokens[p], unsafe(addr(dst[(at + p) * dim])))
+    }
+    if (t.config.embed_scale != 1.0) {  // Gemma2: scale the embedding by sqrt(dim)
+        scale_inplace(unsafe(addr(dst[at * dim])), t.config.embed_scale, n * dim)
+    }
+}
+
+//! every row of ``tokens`` at ``dst[at*dim ..]`` - the text-span half of a multimodal prefill buffer
+def embed_text_rows(t : Model; tokens : array<int64>; var dst : array<float>; at : int64) {
+    embed_text_rows(t, tokens, dst, at, long_length(tokens))
+}
+
 //! token's embedding row into the residual stream s.x, under the model's embed scale
 def private embed_token_row(t : Model; var s : Session; token : int64) {
     embed_row(t, token, unsafe(addr(s.x[0])))

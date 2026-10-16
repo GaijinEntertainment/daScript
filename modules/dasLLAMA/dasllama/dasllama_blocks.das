@@ -2429,19 +2429,6 @@ def eval_embd_body_(t : Model; var s : Session; embd : array<float>; npos, span_
     s.embd_ids |> clear()
 }
 
-//! Fill ``dst[at*dim ..]`` with the embedding rows of ``tokens`` (embed_scale applied) — the
-//! text-span half of a multimodal prefill buffer.
-def embed_text_rows(t : Model; tokens : array<int64>; var dst : array<float>; at : int64) {
-    let dim = t.config.dim
-    let n = long_length(tokens)
-    for (p in range64(n)) {
-        embed_row(t, tokens[p], unsafe(addr(dst[(at + p) * dim])))
-    }
-    if (t.config.embed_scale != 1.0) {
-        scale_inplace(unsafe(addr(dst[at * dim])), t.config.embed_scale, n * dim)
-    }
-}
-
 //! ``eval_``'s embedding-input twin: prefill ``npos`` embedding rows at the session cursor and
 //! advance it. Leaves ``s.logits`` = the last position's logits. ``non_causal`` marks the rows
 //! as a non-causal image span (gemma vision) — see forward_prefill_embd.

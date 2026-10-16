@@ -208,16 +208,9 @@ def batch_rows_host_embedded() : int64 => g_batch_rows_embedded
 
 //! the rows' token embeddings into ws.scr.x_b, under the model's embed scale
 def private batch_rows_embed(t : Model; var ws : BatchWorkspace; tokens : array<int64>; nrows : int64) {
-    let c = t.config
-    let dim = c.dim
     g_batch_rows_embedded += nrows
     let ts_embed = prof_ticks()
-    for (i in range64(nrows)) {
-        embed_row(t, tokens[i], unsafe(addr(ws.scr.x_b[i * dim])))
-    }
-    if (c.embed_scale != 1.0) {  // Gemma2: scale the embedding by sqrt(dim)
-        scale_inplace(unsafe(addr(ws.scr.x_b[0])), c.embed_scale, nrows * dim)
-    }
+    embed_text_rows(t, tokens, ws.scr.x_b, 0l, nrows)
     prof_add("embed", ts_embed)
 }
 
