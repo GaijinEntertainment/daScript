@@ -11548,13 +11548,7 @@ let GEMV_SHELL_GU = 2    //! the kq formats the twins stamp, and mx4's biased tw
 let GEMV_SHELL_SKIP = "q8/sum_cls k2/sum_cls k3/sum_cls k4/sum_cls k5/sum_cls k6/sum_cls q40/sum_cls iq4xs/sum_cls iq3s/sum_cls iq3xxs/sum_cls iq4nl/sum_cls iq2s/sum_cls iq2xs/sum_cls iq2xxs/sum_cls iq3s4/sum_cls q8/gu_cls q51/gu_cls iq4nl32/gu_cls q4032/gu_cls q5032/gu_cls k2/gu_cls k3/gu_cls k5/gu_cls k6/gu_cls q40/gu_cls iq3s/gu_cls iq3xxs/gu_cls iq4nl/gu_cls iq2xs/gu_cls iq2xxs/gu_cls"
 
 //! whether format `fmt` stamps decode GEMV shell `shell`: no pair of `GEMV_SHELL_SKIP` names it
-def gemv_shell_fmt(fmt, shell : int) : bool {
-    let pair = "{kq_fmt_of_slot(fmt)}/{split(GEMV_SHELLS, " ")[shell]}"
-    for (w in split(GEMV_SHELL_SKIP, " ")) {
-        return false if (w == pair)
-    }
-    return true
-}
+def gemv_shell_fmt(fmt, shell : int) : bool => kq_tile_stamped(fmt, GEMV_SHELL_SKIP, shell, GEMV_SHELLS)
 
 def gemv_shell_ensure(fmt, shell : int) : bool {   // nolint:STYLE037 — kq_tile_stamp's generated arms, one a format's stamp a shell
     var r = false

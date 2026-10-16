@@ -185,8 +185,9 @@ def kq_fmt_gpu_supported(f : KqFmt) : bool =>
 //! served plane format but q8
 def emb_kq_gather_fmt(f : KqFmt) : bool => f != KqFmt.q8 && kq_fmt_gpu_supported(f)
 
-//! a table plane in format `fmt` the gather family serves: the q8 linear copy, a per-32 plane or a K-quant plane with a stamp
-def emb_table_gather_fmt(f : KqFmt) : bool => f == KqFmt.q8 || (kq_dense_b32(f) && kq_fmt_gpu_supported(f)) || emb_kq_gather_fmt(f)
+//! a table plane in format `fmt` the gather family serves: the q8 linear copy, a per-32 plane or a K-quant plane with a stamp - every
+//! plane format the Metal kernels read
+def emb_table_gather_fmt(f : KqFmt) : bool => kq_fmt_gpu_supported(f)
 
 //! the E-series pre-step serves on the device for this blob model: its table in a format the gather family serves, bound at
 //! whole superblocks (a per-32 pair's binds stay 16-byte aligned), a ple width the finish's threadgroup takes

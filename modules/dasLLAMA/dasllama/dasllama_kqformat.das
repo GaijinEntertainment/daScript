@@ -232,6 +232,9 @@ def private word_in(list, word : string) : bool {
     return false
 }
 
+//! whether a stamp macro's skip words drop member `f`: the member named, or `!b32` and `f` no per-32 format
+def private stamp_skips(skip : string; f : KqFmt) : bool => word_in(skip, "{f}") || (word_in(skip, "!b32") && !kq_dense_b32(f))
+
 //! a stamp macro's word list: a string literal, or a module `let` of one in the module the call compiles in
 def private macro_words(prog : ProgramPtr; arg : ExpressionPtr) : string {
     if (arg is ExprConstString) {
@@ -265,8 +268,8 @@ def private stamp_block(prog : ProgramPtr; var expr : ExprCallMacro?; what : str
 [call_macro(name = "kq_tile_stamp")]
 class KqTileStamp : AstCallMacro {
     //! ``kq_tile_stamp(fmt[, skip[, family[, tail, tails]]]) <| $() { ... tile_<verb>_<tail>(...) ... }``: the block once per KqFmt member
-    //! on a ladder over ``fmt``, each placeholder renamed by ``kq_tile_target``; ``skip`` members get no arm. With ``tail``/``tails``
-    //! a ``tile_<verb>`` placeholder takes arm ``j``'s word from ``tails`` on an inner ladder over ``tail``, ``<fmt>/<tail>`` skips a pair
+    //! on a ladder over ``fmt``, each placeholder renamed by ``kq_tile_target``; ``skip`` members (``!b32``: all but the per-32 ones) get
+    //! no arm. With ``tail``/``tails`` a ``tile_<verb>`` placeholder takes arm ``j``'s word from ``tails`` on an inner ladder over ``tail``, ``<fmt>/<tail>`` skips a pair
     def override visit(prog : ProgramPtr; mod : Module?; var expr : ExprCallMacro?) : ExpressionPtr {
         let nargs = length(expr.arguments)
         macro_verify((nargs >= 2 && nargs <= 4 || nargs == 6) && expr.arguments[nargs - 1] is ExprMakeBlock, prog, expr.at,
@@ -286,7 +289,7 @@ class KqTileStamp : AstCallMacro {
         var ladder : ExpressionPtr
         for (f in type<KqFmt>) {
             let fname = "{f}"
-            continue if (word_in(skip, fname))
+            continue if (stamp_skips(skip, f))
             var arm : ExpressionPtr
             if (empty(tails)) {
                 arm = renamed_arm(expr.at, root, names) $(n) => kq_tile_target(n, fname, family, "")
@@ -319,6 +322,30 @@ class KqTileStamp : AstCallMacro {
             }
         }
         return ladder
+    }
+}
+
+[call_macro(name = "kq_tile_stamped")]
+class KqTileStamped : AstCallMacro {
+    //! ``kq_tile_stamped(fmt, skip, tail, tails)``: whether ``kq_tile_stamp`` over the same ``skip`` and ``tails`` has an arm for the
+    //! pair (``fmt``, ``tail``) - the pairs read at compile time off the words the stamp itself reads
+    def override visit(prog : ProgramPtr; mod : Module?; var expr : ExprCallMacro?) : ExpressionPtr {
+        macro_verify(length(expr.arguments) == 4 && expr.arguments[0] is ExprVar && expr.arguments[2] is ExprVar, prog, expr.at,
+            "expecting kq_tile_stamped(fmt, skip, tail, tails), the format and the tail plain variables")
+        let skip = macro_words(prog, expr.arguments[1])
+        let tails <- macro_word_list(prog, expr.arguments[3])
+        macro_verify(!empty(tails), prog, expr.at, "kq_tile_stamped's tails are a string literal or a module `let` of one")
+        var fmt = expr.arguments[0]
+        var tail = expr.arguments[2]
+        var any = qmacro(false)
+        for (f in type<KqFmt>) {
+            continue if (stamp_skips(skip, f))
+            for (t, j in tails, count()) {
+                continue if (word_in(skip, "{f}/{t}"))
+                any = qmacro($e(any) || ($e(fmt) == int($v(f)) && $e(tail) == $v(j)))
+            }
+        }
+        return any
     }
 }
 
