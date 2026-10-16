@@ -188,7 +188,7 @@ k on the raw logits (under the router bias) and softmaxes over the picks alone, 
 softmax over every expert renormalized over the picks - the weights the `norm_topk` arm already
 computes - so the host passes `norm_topk` for it and the top-k kernels carry no second gate.
 Native-MXFP4 routed stacks take `KqGemvK4Gu`'s fusion (`Mx4GemvGu` on `Mx4Gemv`'s row dot;
-`RLayer.egu_mx4`): a workgroup owns 32 hidden rows of one slot, a subgroup a row over both
+the `GEMV_SHELL_GU` stamp `RLayer.egu` reads, under its own set layout): a workgroup owns 32 hidden rows of one slot, a subgroup a row over both
 stacks - the up stack's regions at their own binding, inside the gate stack's slab - and the
 first subgroup adds the slot's expert bias rows, activates and quantizes the block with the
 requant kernel's own amax and quant, so the bytes are the split path's. The slot regions are

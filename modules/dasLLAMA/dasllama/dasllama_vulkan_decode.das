@@ -725,7 +725,7 @@ def private rd_moe_sets(var L : RLayer) {
     let xqb = L.xe_own ? g_rd.moe_xq_dev : g_rd.xq_dev
     let xsb = L.xe_own ? g_rd.moe_xs_dev : g_rd.xs_dev
     let xq_bytes = dim * nb
-    let xs_bytes = (dim / 32l) * 4l * nb
+    let xs_bytes = (dim / Q8_BLOCK_ELEMS) * 4l * nb
     let rows_bytes = dim * 4l * nb
     let egu_bytes = nb * k * nfe * 4l
     let edn_bytes = nb * k * dim * 4l
@@ -756,21 +756,19 @@ def private rd_moe_sets(var L : RLayer) {
             fixed_array(VHZ_GATE, VHZ_UP, VHZ_HQ, VHZ_HQ))
     }
     //! one slab: the gate and up stacks share the quant buffer the fused dispatch binds once; the kq twins carry no bias rows and no
-    //! clamped act, so a biased or gpt-oss-activated stack takes the three dispatches
-    L.egu = (L.fe1 == L.fe3 && gemv_shell_fmt(L.fe1, GEMV_SHELL_GU) && !kq_sb(L.fe2) && nfe % 32l == 0l && pe1.wq == pe3.wq
-        && !g_rd.exps_bias && !g_rd.act_oai && vk_fuse_on() && gemv_shell_ensure(L.fe1, GEMV_SHELL_GU))
-    if (L.egu) {
-        L.s_egu = set_kq_gemv_k4_gu_cls(fixed_array(pe1.wq, pe1.ws, g_rd.moe_meta1_dev, xqb, xsb, g_rd.egate_dev, kq_grid_dev(), g_rd.moe_meta3_dev, g_gpu.hq_dev, g_gpu.hs_dev),
-            fixed_array(pe1.wqb, pe1.wsb, META_BYTES, dim, (dim / 32l) * 4l, k * nfe * 4l, KQ_GRID_BYTES, META_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES),
-            fixed_array(0u, 0u, VHZ_MRT, VHZ_XQ, VHZ_XQ, VHZ_GATE, 0u, VHZ_MRT, VHZ_HQ, VHZ_HQ))
-    }
-    //! the mx4 twin (gpt-oss): the gate and up stacks in one slab, the biased act and the Q8_0 requant in the same dispatch
-    L.egu_mx4 = (L.fe1 == int(KqFmt.mx4) && L.fe3 == int(KqFmt.mx4) && !kq_sb(L.fe2) && nfe % 32l == 0l && pe1.wq == pe3.wq
-        && vk_fuse_on() && ensure_mx4_gemv_gu_cls())
-    if (L.egu_mx4) {
+    //! clamped act, so a biased or gpt-oss-activated kq stack takes the three dispatches; the per-32 twin (`Mx4GemvGu`, gpt-oss and
+    //! gemma-4's MXFP4 stacks) carries both, under its own set layout
+    let gu_b32 = !kq_sb(L.fe1)
+    L.egu = (L.fe1 == L.fe3 && gemv_shell_fmt(L.fe1, GEMV_SHELL_GU) && !kq_sb(L.fe2) && nfe % Q8_BLOCK_ELEMS == 0l && pe1.wq == pe3.wq
+        && (gu_b32 || !g_rd.exps_bias && !g_rd.act_oai) && vk_fuse_on() && gemv_shell_ensure(L.fe1, GEMV_SHELL_GU))
+    if (L.egu && gu_b32) {
         L.s_egu = set_mx4_gemv_gu_cls(fixed_array(pe1.wq, pe1.ws, g_rd.moe_meta1_dev, xqb, xsb, g_rd.egate_dev, g_rd.moe_meta3_dev, g_rd.moe_gb_dev, g_rd.moe_ub_dev, g_rd.moe_eidx_dev, g_gpu.hq_dev, g_gpu.hs_dev),
-            fixed_array(pe1.wqb, pe1.wsb, META_BYTES, dim, (dim / 32l) * 4l, k * nfe * 4l, META_BYTES, g_rd.moe_gub_bytes, g_rd.moe_gub_bytes, MAX_ROUTED_SLOTS * 4l, BATCH_HQ_BYTES, BATCH_HS_BYTES),
+            fixed_array(pe1.wqb, pe1.wsb, META_BYTES, dim, (dim / Q8_BLOCK_ELEMS) * 4l, k * nfe * 4l, META_BYTES, g_rd.moe_gub_bytes, g_rd.moe_gub_bytes, MAX_ROUTED_SLOTS * 4l, BATCH_HQ_BYTES, BATCH_HS_BYTES),
             fixed_array(0u, 0u, VHZ_MRT, VHZ_XQ, VHZ_XQ, VHZ_GATE, VHZ_MRT, 0u, 0u, VHZ_MRT, VHZ_HQ, VHZ_HQ))
+    } elif (L.egu) {
+        L.s_egu = set_kq_gemv_k4_gu_cls(fixed_array(pe1.wq, pe1.ws, g_rd.moe_meta1_dev, xqb, xsb, g_rd.egate_dev, kq_grid_dev(), g_rd.moe_meta3_dev, g_gpu.hq_dev, g_gpu.hs_dev),
+            fixed_array(pe1.wqb, pe1.wsb, META_BYTES, dim, (dim / Q8_BLOCK_ELEMS) * 4l, k * nfe * 4l, KQ_GRID_BYTES, META_BYTES, BATCH_HQ_BYTES, BATCH_HS_BYTES),
+            fixed_array(0u, 0u, VHZ_MRT, VHZ_XQ, VHZ_XQ, VHZ_GATE, 0u, VHZ_MRT, VHZ_HQ, VHZ_HQ))
     }
     L.s_edown = gemv_planes_set(L.fe2, pe2, g_rd.moe_meta2_dev, META_BYTES, VHZ_MRT, g_gpu.hq_dev, g_gpu.hs_dev, BATCH_HQ_BYTES, BATCH_HS_BYTES, VHZ_HQ, g_rd.edown_dev, edn_bytes, VHZ_MDN)
     L.edown_sum = L.moe_g4 && gemv_shell_fmt(L.fe2, GEMV_SHELL_SUM) && vk_fuse_on() && gemv_shell_ensure(L.fe2, GEMV_SHELL_SUM)
@@ -811,12 +809,12 @@ def private rd_ensure_comb_sets {
         continue if (!L.comb_rq)
         if (L.moe_g4) {
             L.s_comb_rq = set_cls_ar_comb_g4_rq(fixed_array(g_rd.x_dev, g_rd.moe_ident_dev, g_rd.moe_dw_dev, g_rd.edown_dev, g_rd.ffnout_dev, g_rd.norms_dev, g_rd.xq_dev, g_rd.xs_dev),
-                fixed_array(rows_bytes, slots_bytes, slots_bytes, edn_bytes, rows_bytes, g_rd.norms_bytes, dim * nb, (dim / 32l) * 4l * nb),
+                fixed_array(rows_bytes, slots_bytes, slots_bytes, edn_bytes, rows_bytes, g_rd.norms_bytes, dim * nb, (dim / Q8_BLOCK_ELEMS) * 4l * nb),
                 fixed_array(VHZ_X, 0u, VHZ_MRT, VHZ_MDN, VHZ_FFO, 0u, VHZ_XQ, VHZ_XQ))
         } else {
             L.s_comb_rq = set_cls_ar_comb_rq(fixed_array(g_rd.x_dev, g_rd.ffnout_dev, g_rd.norms_dev, g_rd.xq_dev,
                     g_rd.moe_ident_dev, g_rd.moe_dw_dev, g_rd.edown_dev, g_rd.moe_dlog_dev, g_rd.moe_db_dev, g_rd.moe_eidx_dev, g_rd.xs_dev),
-                fixed_array(rows_bytes, rows_bytes, g_rd.norms_bytes, dim * nb, slots_bytes, slots_bytes, edn_bytes, g_rd.ner * 4l * nb, g_rd.moe_db_bytes, slots_bytes, (dim / 32l) * 4l * nb),
+                fixed_array(rows_bytes, rows_bytes, g_rd.norms_bytes, dim * nb, slots_bytes, slots_bytes, edn_bytes, g_rd.ner * 4l * nb, g_rd.moe_db_bytes, slots_bytes, (dim / Q8_BLOCK_ELEMS) * 4l * nb),
                 fixed_array(VHZ_X, VHZ_FFO, 0u, VHZ_XQ, 0u, VHZ_MRT, VHZ_MDN, VHZ_MRT, 0u, VHZ_MRT, VHZ_XQ))
         }
     }
@@ -1162,9 +1160,10 @@ def vk_rdec_set_ple_layer(l, bgate, bproj : int64; fgate, fproj : int) {
             fixed_array(VHZ_GATE, VHZ_COS, VHZ_HQ, VHZ_HQ))
         // proj GEMV [ple -> dim] into ffnout (the residual step's add partner slot)
         L.s_ple_proj = gemv_planes_set(fproj, arena_planes(fproj, bproj), L.m_pp.buf, META_BYTES, 0u, g_gpu.hq_dev, g_gpu.hs_dev, ple * nb,
-            (ple / 32l) * 4l * nb, VHZ_HQ, g_rd.ffnout_dev, dim * 4l * nb, VHZ_FFO)
+            (ple / Q8_BLOCK_ELEMS) * 4l * nb, VHZ_HQ, g_rd.ffnout_dev, dim * 4l * nb, VHZ_FFO)
     }
-    L.ple_fused = (vk_fuse_on() && !gf32 && !pf32 && fgate == int(KqFmt.q8) && fproj == int(KqFmt.q8) && ple <= 256l && ple % 32l == 0l
+    L.ple_fused = (vk_fuse_on() && !gf32 && !pf32 && kq_fmt_of_slot(fgate) == KqFmt.q8 && kq_fmt_of_slot(fproj) == KqFmt.q8 && ple <= 256l
+        && ple % Q8_BLOCK_ELEMS == 0l
         && ensure_cls_ar_rq_b() && ensure_q8_gemv_pleact_cls())
     if (L.ple_fused) {
         let pp = arena_planes(fproj, bproj)
@@ -2742,17 +2741,13 @@ def private rd_encode_moe(raw : VkCommandBuffer; var h : VkHaz; var L : RLayer; 
     }
     rd_ts(raw, "m:topk")
     var pcg = GemvArgs(n = uint(dim), d = uint(nfe), nreg = uint(k) * nr, ybase = 0u)
-    if (one && L.egu) {
+    if (one && L.egu) {   //! a workgroup an activated Q8_0 block of the hidden rows
         pcg.lanes_per_row = gemv_lanes_per_row(L.fe1, dim)
-        pcg.act = g_rd.is_gelu ? ACT_GELU : ACT_SILU
-        gemv_shell_enc(L.fe1, GEMV_SHELL_GU, raw, h, L.s_egu, pcg, k * nfe / 32l)
-        rd_ts(raw, "m:e_gu")
-    } elif (one && L.egu_mx4) {
         pcg.act = act_code(g_rd.act_oai, g_rd.is_gelu)
         pcg.bias_on = g_rd.exps_bias ? 1u : 0u
         pcg.gboff = uint(L.router_slot * g_rd.ne * nfe)
         pcg.uboff = uint(L.router_slot * g_rd.ne * nfe)
-        enc_mx4_gemv_gu_cls(raw, h, L.s_egu, pcg, k * nfe / 32l)
+        gemv_shell_enc(L.fe1, GEMV_SHELL_GU, raw, h, L.s_egu, pcg, k * nfe / Q8_BLOCK_ELEMS)
         rd_ts(raw, "m:e_gu")
     } else {
         gemv_enc(L.fe1, raw, h, L.s_egate, pcg, k * nfe * nrows)
