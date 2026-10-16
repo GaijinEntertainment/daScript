@@ -152,7 +152,7 @@ and 4, and by the kernel census the verify's rows on the fused single-pass atten
 kernel carries the model's shape (every head class of 64, 96, 128, 256 or 512 on the f16 mirrors, the
 three stamps' counts summed, no chunked dispatch) and on the chunked pair elsewhere, both counts
 logged; at depth 1 every drafted round counted one command buffer (`metal_mtp_chained_rounds`) on a table the device
-gathers, none on an n-gram model (the control); `mtp-count8-<tag>` = the same at depth 8, the deepest round - nine verify
+gathers, none on an n-gram model or under the assistant's CPU-oracle drafts (`mtp-count-cpu`) (the controls); `mtp-count8-<tag>` = the same at depth 8, the deepest round - nine verify
 rows, a carrier with superblock rows planes counting its nine-row sites on one small-batch dispatch each
 (`metal_kq_mvb_wide_count` above zero) and a Q8_0 carrier none;
 `mtp-codec-<tag>` = the depth-2 counting walk on q8_0, tq4 and f32 sessions, the verify's rows storing and reading

@@ -3422,11 +3422,27 @@ def metal_batch_gather() : bool => g_b_gather
 [unused_argument(s, npos, pos)]
 def private metal_batch_embed_gate(t : Model; s : Session; npos, pos : int64) : bool => g_b_gather && emb_dev_gather_ok(t)
 
+//! encodes the drafts that write the same-slab rows' ids onto the verify's own command buffer
+typedef BatchSameSlabChain = function<(t : Model; enc : MetalComputeEncoder?) : void>
+
+var private g_b_same_chain : BatchSameSlabChain
+var private g_b_same_chain_on = false
+
 //! The same-slab verify's rows come as a GPU token buffer (the draft chain's argmax outputs, never
 //! read back): the driver dequantizes their embeddings on the encoder instead of taking the
 //! workspace's CPU-embedded rows, and lands every row's argmax for the accept walk. null = CPU rows.
 def set_batch_same_slab_tokens(var b : MetalBuffer?) {
     g_b_same_toks = b
+    g_b_same_chain_on = false
+}
+
+//! The same-slab rows' ids in `b` are written by drafts the verify itself encodes: `chain` runs at the head of the verify's
+//! first command buffer, so the draft and the verify are one commit and one join (`metal_mtp_chained_rounds` counts the steps)
+[arch(at="../ARCHITECTURE_GPU_MTP.md#mtp-round-one-join")]
+def set_batch_same_slab_chain(var b : MetalBuffer?; chain : BatchSameSlabChain) {
+    g_b_same_toks = b
+    g_b_same_chain = chain
+    g_b_same_chain_on = true
 }
 
 var private g_bconcurrent = true
@@ -4335,8 +4351,15 @@ def batch_step_build(t : Model; ws : BatchWorkspace; var sessions : array<Sessio
     // (the serial encoder implicit-barriers every dispatch). Gated to a full pipeline — a knockout
     // (g_skip) run stays on the serial encoder so a skipped stage can't leave a dependent unbarriered.
     let conc = g_bconcurrent && empty(g_skip)
-    hz_arm(conc)   // the range oracle: the *_b encoders self-declare, hz_gate barriers at real hazards
     var cb = metal_new_command_buffer_unretained(g_queue)
+    if (same_toks && g_b_same_chain_on) {   //! the drafts writing the rows' ids run first, on a serial pass of their own; tracked buffers order the passes
+        var cenc = metal_new_compute_encoder(cb)
+        invoke(g_b_same_chain, t, cenc)
+        metal_end_encoding(cenc)
+        metal_release(cenc)
+        g_chain_rounds++
+    }
+    hz_arm(conc)   // the range oracle: the *_b encoders self-declare, hz_gate barriers at real hazards
     var enc = conc ? metal_new_compute_encoder_concurrent(cb) : metal_new_compute_encoder(cb)
     if (gpu_toks) {
         var u_esc = c.embed_scale != 1.0 ? uniform_f32(c.embed_scale) : g_one

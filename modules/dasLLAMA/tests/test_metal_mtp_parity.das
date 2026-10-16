@@ -320,8 +320,9 @@ def private count_cell(t : T?; tr, trg : Model; tag : string; count : array<int6
             let chained = metal_mtp_chained_rounds() - chained0
             let wide = metal_kq_mvb_wide_count() - wide0
             if (depth == 1l) {
-                //! a depth-1 round chains on any table the device gathers, the n-gram side input's model the control that never does
-                let chains = emb_dev_gather_ok(trg) && !has_ple_ngram(trg.config)
+                //! a depth-1 round chains on any table the device gathers; the n-gram side input's model and the assistant's CPU
+                //! oracle drafts are the controls that never do
+                let chains = emb_dev_gather_ok(trg) && !has_ple_ngram(trg.config) && !gemma_draft_on_cpu()
                 t |> equal(chained, chains ? drafted : 0l, "{tag} {kind} k1: every drafted round {chains ? "rode" : "kept off"} one command buffer (table {trg.emb_fmt}, {chained} chained of {drafted} rounds)")
             }
             if (depth == 8l) {
