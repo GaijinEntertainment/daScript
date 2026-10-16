@@ -56,6 +56,16 @@ what it costs today and what the fix would change.
   - Module scratch: `g_rdec_av_hid` `4 x dim` (11,264 B on the 26B); `g_vk_cosrow` `4 x cos_elems` (3,072 B);
     `g_rdec_row_ids` 8 bytes a row of one command, 128 B at `nb`; `g_b_grp_nr` 8 bytes a row of a batched Metal step;
     `g_gw_*` and `g_vk_*` 8 bytes a stream each, their token lists `8 x 9` a stream. None passes 12 KiB at four streams.
+  - Measured - the Metal release pair (the binding reads `contents` inside an autorelease pool; `REVIEW_MEMORY.md`'s
+    before/after rule). The shape: the support matrix's `fam-gemma4` arm under `DASLLAMA_PARITY_FULL=1` on the M5 Max
+    (128 GB) - gemma-4 12B Q4_K_M and Q8_0, 31B Q4_K_M, the 26B-A4B in six formats, E4B and the E2B rows, a planar load
+    and its blob twin a row, the next row's load the only release between rows. Before: every blob and plane buffer a row
+    uploaded stayed resident after its release - the IOAccelerator category 9 -> 22 -> 45 -> 113 -> 174 GB row over row -
+    and the per-process limit killed the run 9 minutes in at a 193 GB footprint. After: a row's device memory leaves at the
+    next load; the footprint peaks at 75 GB (`phys_footprint_peak`, the 26B Q8_0 row's load; the 31B row holds 71 GB, its
+    planar load beside its blob twin - 47 GB host, 22 GB IOAccelerator, the most IOAccelerator any 5 s sample read) and the
+    arm passes whole in 433 s. One E2B load-serve-delete cycle closed at the drivers' shutdown (`metal_release_row`) adds
+    5,435 MB before and 30 MB after.
 
 - **STATED (2026-10-16) - two conclusions of the 2026-09-21 MoE-carriers entry are replaced.** Its 15.4 GB served-weight
   figure for gemma-4-26B-A4B UD-IQ3_XXS named "demoted down-expert rows": the 704-wide down-expert rows serve in their own
