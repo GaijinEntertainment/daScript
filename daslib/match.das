@@ -1082,7 +1082,7 @@ def arm_body(arm : Expression?; as_value : bool; binds : array<Expression?>) : E
         nblk.list |> emplace_new <| clone_expression(b)
     }
     var body = arm is ExprIfThenElse ? (arm as ExprIfThenElse).if_true : (arm as ExprMakeTuple).values[1]
-    if (as_value) {
+    if (as_value && !(body is ExprMakeBlock)) {
         nblk.list |> emplace_new <| new ExprReturn(at = arm.at, subexpr = clone_expression(body))
         return nblk
     }
@@ -1563,14 +1563,6 @@ class MatchMacro : AstCallMacro {
         macro_verify(nargs == 2 || arrows > 0, prog, expr.at, "match on several values needs `pattern => body` arms")
         var parent <- match_parent(expr)
         let as_value = arrows > 0 && !parent.is_statement
-        if (as_value) {
-            for (ee in eblk.list) {
-                if ((ee as ExprMakeTuple).values[1] is ExprMakeBlock) {
-                    macro_error(prog, ee.at, "match used as a value takes `pattern => expression` arms, not `$`-block bodies")
-                    return null
-                }
-            }
-        }
         var catch_all = false
         var iff : Expression?
         let eli = length(eblk.list)
