@@ -998,7 +998,7 @@ def test_gemma_drafter_joint(t : T?) {
             set_mtp_depth(1l)
             var inscope solo <- counting_prompts(trg, 1l)
             let sj0 = mtp_drafter_stats(trg)
-            var lone <- sched_run(trg, solo, 24l, KVDtype.f16, true)
+            var lone <- sched_run(t, trg, solo, 24l, KVDtype.f16, true)
             let sj1 = mtp_drafter_stats(trg)
             log_gen_texts(trg, "gdraft joint lone stream (plain, speculating)", plain.toks[0], lone.toks[0])
             t |> success(sj1.rounds > sj0.rounds, "one stream: the drafter ran rounds ({sj1.rounds - sj0.rounds})")
@@ -1139,7 +1139,7 @@ def private ring_draft_run(t : T?; ring : int; budget : int64) : RingDraftRun {
             set_mtp_depth(RING_DRAFT_K)
             var prompts : array<array<int64>>
             prompts |> push_clone(prompt)
-            run.stream <- sched_run(trg, prompts, budget, KVDtype.f16, true)
+            run.stream <- sched_run(t, trg, prompts, budget, KVDtype.f16, true)
             clear_mtp_depth()
             run.text = decode(trg, run.stream.toks[0])
             run.ok = true
