@@ -1466,7 +1466,7 @@ def private moe_prefill_bucket(var s : Session; nk, ne : int64) {
     }
 }
 
-[arch(at="../ARCHITECTURE_RUNTIME.md#moe-region-split")]
+[arch(at="../ARCHITECTURE_RUNTIME_JOBQUE.md#moe-region-split")]
 def private moe_prefill_regions_lpt(t : Model; var s : Session; l, nk, split_cap : int64; skip_gpu_experts : bool = false) : int64 {
     let c = t.config
     let dim = c.dim
@@ -1884,7 +1884,7 @@ def private moe_prefill_down_bias(t : Model; var s : Session; l, npos : int64) {
     }
 }
 
-[arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#streamed-layer-split"), arch(at="../ARCHITECTURE_RUNTIME.md#moe-region-split")]
+[arch(at="../ARCHITECTURE_GPU_VULKAN_DECODE.md#streamed-layer-split"), arch(at="../ARCHITECTURE_RUNTIME_JOBQUE.md#moe-region-split")]
 def private ffn_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos : int64) { // nolint:STYLE037,STYLE038 — the grouped MoE prefill is one bucketed pipeline over experts; each stage feeds the next through shared scratch
     let c = t.config
     let dim = c.dim
@@ -2298,7 +2298,7 @@ def ffn_moe_prefill(t : Model; var s : Session; l : int64; npos : int64) {
     }
 }
 
-[arch(at="../ARCHITECTURE_GPU.md#gpu-backends"), arch(at="../ARCHITECTURE_RUNTIME.md#hybrid-pool-policy")]
+[arch(at="../ARCHITECTURE_GPU.md#gpu-backends"), arch(at="../ARCHITECTURE_RUNTIME_JOBQUE.md#hybrid-pool-policy")]
 def forward_prefill_embd(t : Model; var s : Session; embd : array<float>; npos, start_pos : int64;
                          non_causal : bool = false; src_off : int64 = 0l; skip_logits : bool = false;
                          span_lo : int64 = -1l; span_hi : int64 = -1l; ds_wide : bool = false) {

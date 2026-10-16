@@ -1,6 +1,7 @@
 options gen2
 options stack = 524288
 options _dasllama_internal = true
+options persistent_heap   // a dastest root frees what it deletes only on this heap; the linear heap holds every carrier a cell deleted until the context ends
 
 require dastest/testing_boost public
 require dasllama/dasllama_tower

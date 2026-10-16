@@ -974,6 +974,7 @@ def private qwen2moe_row(t : T?; path : string) {
             // row B counts through another decade: two rows whose next token is the same digit read
             // within the bar of each other, and the cross-row control below would red by design
             let pb <- encode(trg, counting_prompt(23, 78), true, false)
+            let seat = metal_overrides_seat()
             t |> success(select_prefill_override("metal"), "qwen2moe: prefill override registered")
             t |> success(select_decode_override("metal"), "qwen2moe: decode override registered")
             set_metal_prefill_min_npos(1l)
@@ -1018,9 +1019,7 @@ def private qwen2moe_row(t : T?; path : string) {
             t |> success(bmaxd <= 8.0, "qwen2moe: batched-step logits within 8.0 of the CPU batched stack, both rows (maxd {bmaxd})")
             let xmaxd = span_maxdiff(sg.logits, sd.logits, 0, 0, int(vocab)).diff   //! the control: row A against row B lands outside the bar
             t |> success(xmaxd > 8.0, "qwen2moe: the cross-row compare lands outside the bar (maxd {xmaxd})")
-            select_decode_override("")
-            select_prefill_override("")
-            set_metal_prefill_min_npos(64l)
+            restore_metal_overrides(seat)
             sess |> clear()   // drop the borrowed handles: delete of array<T?> cascades to the pointees
             sessg |> clear()
             unsafe {
@@ -1051,6 +1050,7 @@ def private qwen2moe_row(t : T?; path : string) {
             let ids <- generate(tr, s, prompt, length(prompt) + 8)
             cpu_ids := ids
             delete s
+            let seat = metal_overrides_seat()
             select_decode_override("metal")
             select_prefill_override("metal")
             set_metal_prefill_min_npos(1l)
@@ -1058,9 +1058,7 @@ def private qwen2moe_row(t : T?; path : string) {
             let ids2 <- generate(trg, s2, prompt, length(prompt) + 8)
             gpu_ids := ids2
             delete s2
-            set_metal_prefill_min_npos(64l)
-            select_decode_override("")
-            select_prefill_override("")
+            restore_metal_overrides(seat)
         }
         log_gen_texts(tr, "qwen2moe", cpu_ids, gpu_ids)
         t |> success(ids_equal(cpu_ids, gpu_ids),
@@ -1088,9 +1086,7 @@ def private depth_cell(t : T?; tr, trg : Model; tag : string; bar : float; stamp
         with_dasllama_jobque() {
             var sc = make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
             eval_(tr, sc, prompt)
-            let prev_prefill = active_prefill_override()
-            let prev_decode = active_decode_override()
-            let prev_min_npos = get_metal_prefill_min_npos()
+            let seat = metal_overrides_seat()
             select_prefill_override("metal")
             select_decode_override("metal")
             set_metal_prefill_min_npos(1l)
@@ -1107,9 +1103,7 @@ def private depth_cell(t : T?; tr, trg : Model; tag : string; bar : float; stamp
                     picks += " {argmax_of(sc.logits, vocab)}/{argmax_of(sg.logits, vocab)}"
                 }
             }
-            set_metal_prefill_min_npos(prev_min_npos)
-            select_decode_override(prev_decode)
-            select_prefill_override(prev_prefill)
+            restore_metal_overrides(seat)
             delete sc
             delete sg
         }
@@ -1199,9 +1193,12 @@ def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false
             var sa = make_run_state(c, KVDtype.f16, KVDtype.f16)
             let pa <- encode(trg, counting_prompt(1, 40), true, false)
             let pb <- encode(trg, counting_prompt(5, 44), true, false)
+            let seat = metal_overrides_seat()
+            let fuse = get_metal_decode_fuse()
             t |> success(select_prefill_override("metal"), "{tag}: prefill override registered")
             t |> success(select_decode_override("metal"), "{tag}: decode override registered")
             set_metal_prefill_min_npos(1l)
+            set_metal_decode_fuse(1)   //! the seam census below counts the fused residual steps
             //! the pre-step on the device at every shape: the window's finish, the steps' bf16 projection, no CPU pre-step row
             let fin0 = metal_kernel_count_compiled("metal_ple_finish")
             let cpu0 = ple_cpu_pre_rows()
@@ -1303,9 +1300,8 @@ def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false
             t |> success(bmaxd <= bar, "{tag}: batched-step logits within {bar} of the CPU batched stack, both rows (maxd {bmaxd})")
             let xmaxd = span_maxdiff(sg.logits, sd.logits, 0, 0, int(vocab)).diff   //! the control: row A against row B lands outside the bar
             t |> success(xmaxd > bar, "{tag}: the cross-row compare lands outside the bar (maxd {xmaxd})")
-            select_decode_override("")
-            select_prefill_override("")
-            set_metal_prefill_min_npos(64l)
+            set_metal_decode_fuse(fuse)
+            restore_metal_overrides(seat)
             sess |> clear()   // drop the borrowed handles: delete of array<T?> cascades to the pointees
             sessg |> clear()
             unsafe {
@@ -1344,6 +1340,7 @@ def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false
             let ids <- generate(tr, s, prompt, length(prompt) + 8)
             cpu_ids := ids
             delete s
+            let seat = metal_overrides_seat()
             select_decode_override("metal")
             select_prefill_override("metal")
             set_metal_prefill_min_npos(1l)
@@ -1365,9 +1362,7 @@ def private gemma4e_row(t : T?; path, tag : string; hetero_hidden : bool = false
             t |> equal(sp2.hits - sp1.hits, 0l, "{tag}: the chain pinned off takes no chained step - the hits' control")
             log_gen_texts(trg, "{tag} chain on, chain off", ids2, ids4)
             t |> success(ids_equal(ids2, ids4), "{tag}: the chained walk emits the unchained walk's tokens")
-            set_metal_prefill_min_npos(64l)
-            select_decode_override("")
-            select_prefill_override("")
+            restore_metal_overrides(seat)
         }
         depth_cell(t, tr, trg, tag, bar, ["MetalSqAttnDXF16_metal_sq_attn_d", "MetalSqAttnDWF16_metal_sq_attn_d"])
         log_gen_texts(tr, "{tag}", cpu_ids, gpu_ids)
@@ -1445,6 +1440,7 @@ def private gemma4moe_row(t : T?; path : string; tag : string; tol_pf : float = 
         //! none of the file's routed stamps dispatches
         let cpu_gemv0 = kernels_sum(gemvs)
         with_dasllama_jobque() {
+            let seat = metal_overrides_seat()
             select_prefill_override("metal")
             select_decode_override("metal")
             var s = make_run_state(c, KVDtype.f16, KVDtype.f16)
@@ -1463,8 +1459,7 @@ def private gemma4moe_row(t : T?; path : string; tag : string; tol_pf : float = 
             lq1 := sq.logits
             delete sq
             delete one
-            select_prefill_override("")
-            select_decode_override("")
+            restore_metal_overrides(seat)
         }
         t |> equal(kernels_sum(gemvs) - cpu_gemv0, 0l, "{tag}: the planar truths dispatch none of the routed stamps ({gemvs}) - their control")
         census_cell(t, tr, path, tag, ["attention q/k/v/o", "routed experts", "token table", "classifier"])
@@ -1491,6 +1486,7 @@ def private gemma4moe_row(t : T?; path : string; tag : string; tol_pf : float = 
             var ndec = 0l
             with_dasllama_jobque() {
                 let prior_unfused = set_metal_moe_g4_unfused(unfused)
+                let seat = metal_overrides_seat()
                 select_prefill_override("metal")
                 select_decode_override("metal")
                 set_metal_prefill_min_npos(1l)
@@ -1518,9 +1514,7 @@ def private gemma4moe_row(t : T?; path : string; tag : string; tol_pf : float = 
                     }
                 }
                 served = (metal_prefill_stats().prefills - pf0) + (metal_decode_stats().decodes - d0)
-                set_metal_prefill_min_npos(64l)
-                select_prefill_override("")
-                select_decode_override("")
+                restore_metal_overrides(seat)
                 set_metal_moe_g4_unfused(prior_unfused)
                 delete s
             }
@@ -1645,6 +1639,7 @@ def private metal_ring_row(t : T?; path, tag, family, arm : string) {
         var rings : array<int64>
         var fed : array<int64>   //! each leg's windows on the mirror-fed form
         with_dasllama_jobque() {
+            let seat = metal_overrides_seat()
             select_decode_override("metal")
             select_prefill_override("metal")
             for (ringed in fixed_array(1, 0)) {
@@ -1666,8 +1661,7 @@ def private metal_ring_row(t : T?; path, tag, family, arm : string) {
                     delete s
                 }
             }
-            select_decode_override("")
-            select_prefill_override("")
+            restore_metal_overrides(seat)
         }
         t |> success(rings[0] > 0l && rings[1] == 0l, "{tag}/ring: the ringed layout holds rings ({rings[0]} elements), the flat one none ({rings[1]})")
         t |> success(fed[1] > 0l && fed[0] == fed[1], "{tag}/ring: every window the flat mirror feeds, the ringed one feeds too ({fed[0]} ringed, {fed[1]} flat)")
@@ -2030,6 +2024,7 @@ def private gemma4_hetero_row(t : T?; path : string; tag : string = "gemma4-12b/
         var foff_min = INFINITE_DIFF
         var foff_at = 0l
         with_dasllama_jobque() {
+            let seat = metal_overrides_seat()
             cpu_ids <- cached_ids(path, "gen_free_n128") $ {   // nolint:PERF030,LINT019 — fresh empty target, single move; fires only on the das_metal arm
                 var s = make_run_state(tr.config, KVDtype.f16, KVDtype.f16)
                 var ids <- generate(tr, s, prompt, length(prompt) + 128)
@@ -2090,9 +2085,7 @@ def private gemma4_hetero_row(t : T?; path : string; tag : string = "gemma4-12b/
             let ids3 <- generate(trg, s3, count_prompt, length(count_prompt) + 8)
             both_ids := ids3
             delete s3
-            set_metal_prefill_min_npos(64l)
-            select_prefill_override("")
-            select_decode_override("")
+            restore_metal_overrides(seat)
             served_pf = metal_prefill_stats().prefills - pf0
             // B=2 batched-decode parity (counting margins — see the header note): CPU truth
             // then the batched metal override, 4 steps per stream over CPU-prefilled state
@@ -2102,7 +2095,7 @@ def private gemma4_hetero_row(t : T?; path : string; tag : string = "gemma4-12b/
             let ba0 = metal_batch_decode_stats().steps
             select_decode_override("metal")
             gpu_bat <- batch_pair_steps(tr, trg, count_prompt, count_prompt2, 4)   // nolint:PERF030,LINT019 — fresh empty target, single move; fires only on the das_metal arm
-            select_decode_override("")
+            restore_metal_overrides(seat)
             served_bat = metal_batch_decode_stats().steps - ba0
         }
         to_log(LOG_INFO, "{tag} freeform CPU text (prompt echo + cont): {eyeball_text(tr, cpu_ids)}\n")

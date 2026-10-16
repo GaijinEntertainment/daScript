@@ -349,7 +349,7 @@ def gemma4_router(t : Model; var rin : array<float>; src : array<float>; l, dim,
 // gemma4 MoE prefill, grouped: batched twin of gemma4_moe_ffn (26B-A4B). Routes, buckets by expert,
 // runs one Q8 batch GEMM chain per touched expert, then the dense shared expert over all positions.
 // Bit-identical per row to the naive per-position path — g_moe_grouped_prefill is a pure perf lever.
-[arch(at="../ARCHITECTURE_RUNTIME.md#moe-region-split")]
+[arch(at="../ARCHITECTURE_RUNTIME_JOBQUE.md#moe-region-split")]
 def private gemma4_moe_prefill_grouped(t : Model; var s : Session; l : int64; npos : int64) { // nolint:STYLE037,STYLE038 — the grouped gemma4 MoE prefill is one bucketed pipeline; its stages share scratch and must stay together
     let c = t.config
     let dim = c.dim

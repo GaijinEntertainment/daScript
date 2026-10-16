@@ -5032,6 +5032,8 @@ def public set_metal_prefill_lastrow(v : bool) {
     to_log(LOG_INFO, "dasLLAMA: set_metal_prefill_lastrow({v}) - prefill tail override\n")
 }
 
+def public get_metal_prefill_lastrow : bool => g_pf_env_lastrow
+
 //! A/B seat: double-buffered W staging on the dense staged GEMMs - the q8 and kq stamps - vs
 //! the single-tile forms (the MoE family stays single-tile either way). Default on;
 //! `DASLLAMA_METAL_DBUF=0` pins them off. Outputs BIT-equal.
