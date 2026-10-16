@@ -1891,6 +1891,18 @@ def private rd_stage_row(x : array<float>; token : int64) {
     }
 }
 
+//! the draft's head row under the device gather: the token id, or `EMB_ID_HOST` and the host's unscaled row beside it where `token` is -1
+def private rd_stage_head_id(x : array<float>; token : int64) {
+    unsafe {
+        *reinterpret<uint?>(g_rd.tok_ids_host.mapped) = token >= 0l ? uint(token) : EMB_ID_HOST
+        if (token < 0l) {
+            memcpy(g_rd.tok_xh_host.mapped, addr<void?>(x[0]), g_rd.dim * 4l)
+        } else {
+            g_rdec_head_emb_gathered++
+        }
+    }
+}
+
 //! The split token (`RdecTokenSplitFn`); `side` is the n-gram side input's gathered row, empty on a model without one.
 [hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-token-command")]
 def vk_rdec_token_split(x : array<float>; cossin : array<float>; side : array<float>; pos, cnt : int64; pick_only : bool; var logits : array<float>; experts : RdecHostExpertsFn) : int64 {
@@ -2800,8 +2812,8 @@ def private rd_encode_token(var first_seg_raw : VkCommandBuffer; nrows, nsplit :
     unsafe {
         var h = cmd_open(raw, true, one && !verify)   //! the one-row command: a chained step submits it again while the running step still holds it
         rd_stamps_begin(raw)
-        if (one && !verify && rd_emb_on()) {   //! the row off the step's token id, or the host's staged row in place: no row crosses the bus ahead of the command
-            rd_emb_enc(raw, h, g_rd.s_tok_emb, 1l, g_rd.emb_scale)
+        if (!seq && rd_emb_on()) {   //! each row off its token id, or the host's staged row in place: no gathered row crosses the bus ahead of the command
+            rd_emb_enc(raw, h, g_rd.s_tok_emb, nrows, g_rd.emb_scale)
         } else {
             vhz_dep(raw, h, 0u, VHZ_X, true)
             cmd_copy_whole(raw, g_rd.x_host.buf, g_rd.x_dev, dim * 4l * nrows)
@@ -3206,6 +3218,16 @@ var private g_rdec_nrow_gathered = 0l
 
 //! The N-row commands' rows whose side row the device gathered off the row's token id, in this process (a cell's served witness)
 def vk_rdec_nrow_side_gathered : int64 => g_rdec_nrow_gathered
+
+var private g_rdec_nrow_emb_gathered = 0l
+
+//! The N-row commands' rows whose token row the device gathered off the row's token id, in this process (a cell's served witness)
+def vk_rdec_nrow_embed_gathered : int64 => g_rdec_nrow_emb_gathered
+
+var private g_rdec_head_emb_gathered = 0l
+
+//! The NextN head rows - a draft's, a verify re-warm's - whose embed half the device gathered off the row's token id, in this process (a cell's served witness)
+def vk_rdec_head_embed_gathered : int64 => g_rdec_head_emb_gathered
 
 //! the token commands gather the E-series side rows off the rows' ids: the per-layer table, the projection and the ids ride the device
 def vk_rdec_side_gather_on : bool => g_rd != null && g_rd.ple_tok_on
@@ -3809,7 +3831,7 @@ def private rd_record_hc_draft {
 }
 
 [hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head"), arch(at="../ARCHITECTURE_GPU_VULKAN_HC.md#hc-draft-head")]   //! per speculative round, reached through the tier's registered seat
-def vk_rdec_draft(x : array<float>; h : array<float>; cossin : array<float>; row, hyd0 : int64; var kp : uint8?; var vp : uint8?; pick_only : bool; var logits : array<float>; experts : RdecHostExpertsFn) : int64 {
+def vk_rdec_draft(x : array<float>; token : int64; h : array<float>; cossin : array<float>; row, hyd0 : int64; var kp : uint8?; var vp : uint8?; pick_only : bool; var logits : array<float>; experts : RdecHostExpertsFn) : int64 {
     rd_chain_settle()
     return -1l if (g_rd == null || !g_rd.ready || !g_rd.head_on || !g_rd.carry)
     rd_carry_sync()
@@ -3827,7 +3849,11 @@ def vk_rdec_draft(x : array<float>; h : array<float>; cossin : array<float>; row
                 rd_record_draft()
             }
         }
-        memcpy(g_rd.head_cat_host.mapped, addr<void?>(x[0]), dim * 4l)
+        if (rd_emb_on() && !g_rd.hc_nextn) {   //! the embed half off the token's id (the host's row staged for the gather where the call brings none)
+            rd_stage_head_id(x, token)
+        } else {
+            memcpy(g_rd.head_cat_host.mapped, addr<void?>(x[0]), dim * 4l)
+        }
         memcpy(reinterpret<void?>(reinterpret<uint8?>(g_rd.head_cat_host.mapped) + dim * 4l), addr<void?>(h[0]), rd_carry_width() * 4l)
         memcpy(g_rd.head_cos_host.mapped, addr<void?>(cossin[0]), g_rd.cos_elems * 4l)
         var tm = reinterpret<TokMeta?>(g_rd.head_tok.mapped)
@@ -3895,17 +3921,25 @@ def vk_rdec_verify_rows : int64 {
 
 def private rd_v_idx(n : int64) : int64 => (g_rd.hybrid ? g_rd.region : 0l) * (g_rd.nb + 1l) + n
 
-//! the head's prologue over `nrows` head rows, the draft command's and the verify re-warm's one shape: the host's [embed ; carry] row pairs and
-//! head rope rows up, row i's carry half from the trunk's post-norm row i - 1 on the device (rows past the first), the embed and carry norms, the
-//! pair's requant, eh_proj with the rows as columns, the head's attention norm into `norm_set`, its feed requant through `rq_set`; stamps `{pfx}cat` / `eh` / `attnorm` behind `upload_stamp` ("" for none)
+//! the head's prologue over `nrows` head rows, the draft's and the verify re-warm's one shape: the [embed ; carry] pairs and rope rows up,
+//! the norms, the pair's requant, eh_proj with the rows as columns, the attention norm into `norm_set`, its feed requant through `rq_set`;
+//! stamps `{pfx}cat` / `eh` / `attnorm` behind `upload_stamp` ("" for none)
 [arch(at="../ARCHITECTURE_GPU_VULKAN_MTP.md#resident-draft-head"), arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command")]
 def private rd_encode_head_cat_eh(raw : VkCommandBuffer; var h : VkHaz; nrows : int64; upload_stamp, pfx : string; var norm_set : VkDescriptorSet; var rq_set : VkDescriptorSet) {
     let dim = g_rd.dim
     let hb = uint(g_rd.head_norm_base)
     let row_bytes = dim * 4l
     let L & = unsafe(g_rd.head)
-    vhz_dep(raw, h, 0u, VHZ_X, true)
-    cmd_copy_whole(raw, g_rd.head_cat_host.buf, g_rd.head_cat_in_dev, 2l * row_bytes * nrows)
+    if (rd_emb_on()) {
+        rd_emb_enc(raw, h, g_rd.s_tok_emb, nrows, 1.0)   // unscaled, as `forward_mtp` embeds
+        vhz_dep(raw, h, VHZ_X, VHZ_X, true)
+        cmd_copy_rows(raw, g_rd.x_dev, 0l, row_bytes, g_rd.head_cat_in_dev, 0l, 2l * row_bytes, row_bytes, nrows)
+        vhz_dep(raw, h, 0u, VHZ_X, true)
+        cmd_copy_range(raw, g_rd.head_cat_host.buf, row_bytes, g_rd.head_cat_in_dev, row_bytes, row_bytes)
+    } else {
+        vhz_dep(raw, h, 0u, VHZ_X, true)
+        cmd_copy_whole(raw, g_rd.head_cat_host.buf, g_rd.head_cat_in_dev, 2l * row_bytes * nrows)
+    }
     vhz_dep(raw, h, 0u, VHZ_COS, true)
     cmd_copy_whole(raw, g_rd.head_cos_host.buf, g_rd.head_cos_dev, g_rd.cos_elems * 4l * nrows)
     if (!empty(upload_stamp)) {
@@ -3995,11 +4029,21 @@ def private rd_v_rows_mismatch(n : int64) : bool {
     return false
 }
 
-def private rd_verify_stage(x, cossin, hcos : array<float>; pos, n : int64) {
+//! the verify's rows up: the host's rows, or - `ids` not empty - every row's token id, the trunk row and the head's embed half gathered off it
+def private rd_verify_stage(x, cossin, hcos : array<float>; ids : array<int64>; pos, n : int64) {
     let r = g_rd.region
     let par = g_rd.hybrid ? g_rd.dn_parity[r] : 0
     unsafe {
-        memcpy(g_rd.x_host.mapped, addr<void?>(x[0]), g_rd.dim * 4l * n)
+        if (empty(ids)) {
+            memcpy(g_rd.x_host.mapped, addr<void?>(x[0]), g_rd.dim * 4l * n)
+        } else {
+            var idp = reinterpret<uint?>(g_rd.tok_ids_host.mapped)
+            for (i in range64(n)) {
+                idp[i] = uint(ids[i])
+            }
+            g_rdec_nrow_emb_gathered += n
+            g_rdec_head_emb_gathered += n
+        }
         memcpy(g_rd.cos_host.mapped, addr<void?>(cossin[0]), g_rd.cos_elems * 4l * n)
         memcpy(g_rd.head_cos_host.mapped, addr<void?>(hcos[0]), g_rd.cos_elems * 4l * n)
         var tm = reinterpret<TokMeta?>(g_rd.tok_meta.mapped)
@@ -4099,7 +4143,8 @@ def private rd_hc_verify(x, cossin, hemb, hcos, h0, side : array<float>; pos, n 
     g_rd_verify_landed_logits = !picks_only
     let prof = vk_prof()
     let ts0 = ref_time_ticks()
-    rd_verify_stage(x, cossin, hcos, pos, n)
+    let noids : array<int64>   //! the hyper-connection chain gathers no row on the device
+    rd_verify_stage(x, cossin, hcos, noids, pos, n)
     unsafe {
         memcpy(g_rd.hemb_host.mapped, addr<void?>(hemb[0]), dim * 4l * n)
         memcpy(reinterpret<void?>(reinterpret<uint8?>(g_rd.head_cat_host.mapped) + dim * 4l), addr<void?>(h0[0]), hcd * 4l)
@@ -4130,7 +4175,7 @@ def private rd_hc_verify(x, cossin, hemb, hcos, h0, side : array<float>; pos, n 
 }
 
 [hot_path, arch(at="../ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-verify-command")]   //! per speculative round, reached through the tier's registered seat
-def vk_rdec_verify(x, cossin, hemb, hcos, h0, side : array<float>; pos, n : int64; pick_only : bool; var logits : array<float>; var picks : array<int64>; var hid : array<float>; experts : RdecHostExpertsRowsFn) : bool {
+def vk_rdec_verify(x, cossin, hemb, hcos, h0, side : array<float>; ids : array<int64>; pos, n : int64; pick_only : bool; var logits : array<float>; var picks : array<int64>; var hid : array<float>; experts : RdecHostExpertsRowsFn) : bool {
     rd_chain_settle()
     if (g_rd != null && g_rd.ready && g_rd.hc) {
         return rd_hc_verify(x, cossin, hemb, hcos, h0, side, pos, n, pick_only, logits, picks, hid, experts)
@@ -4150,11 +4195,16 @@ def vk_rdec_verify(x, cossin, hemb, hcos, h0, side : array<float>; pos, n : int6
     g_rd_verify_landed_logits = !picks_only
     let prof = vk_prof()
     let ts0 = ref_time_ticks()
-    rd_verify_stage(x, cossin, hcos, pos, n)
+    let gather = rd_emb_on()   //! the recorded command gathers the trunk rows and the head's embed halves off the rows' ids
+    verify(!gather || long_length(ids) >= n, "vk_rdec_verify: the device gathers the rows, and the call brings no id a row")
+    let noids : array<int64>
+    rd_verify_stage(x, cossin, hcos, gather ? ids : noids, pos, n)
     unsafe {
         let cat = reinterpret<uint8?>(g_rd.head_cat_host.mapped)
-        for (i in range64(n)) {
-            memcpy(reinterpret<void?>(cat + 2l * i * dim * 4l), addr<void?>(hemb[i * dim]), dim * 4l)
+        if (!gather) {
+            for (i in range64(n)) {
+                memcpy(reinterpret<void?>(cat + 2l * i * dim * 4l), addr<void?>(hemb[i * dim]), dim * 4l)
+            }
         }
         memcpy(reinterpret<void?>(cat + dim * 4l), addr<void?>(h0[0]), dim * 4l)
     }
@@ -4293,19 +4343,29 @@ def private rd_land_rows_n(lrows : array<float?>; var picks : array<int64>; nrow
     }
 }
 
-//! the N-row command's gather ids: a row's token id where `ids` carries one, else `EMB_ID_HOST` with the row's side input staged
-def private rd_stage_ple_ids(ple : array<float>; ids : array<int64>; nrows : int64) {
+//! the N-row command's rows under the device gather: a row's token id where `ids` carries one - its token row and, where the side
+//! rows gather (`ple_tok_on`), its side row off the tables - else `EMB_ID_HOST` with the row's `x` row and side row staged
+def private rd_stage_rows_ids(x, ple : array<float>; ids : array<int64>; nrows : int64) {
+    let dim = g_rd.dim
     let w = g_rd.n_layers * g_rd.ple
+    let side = g_rd.ple > 0l && g_rd.ple_tok_on
     unsafe {
         var idp = reinterpret<uint?>(g_rd.tok_ids_host.mapped)
         for (i in range64(nrows)) {
             let id = i < long_length(ids) ? ids[i] : -1l
             if (id >= 0l) {
                 idp[i] = uint(id)
-                g_rdec_nrow_gathered++
-            } else {
+                g_rdec_nrow_emb_gathered++
+                if (side) {
+                    g_rdec_nrow_gathered++
+                }
+                continue
+            }
+            verify(long_length(x) >= (i + 1l) * dim, "vk_rdec_token_n: a row without its id brings no token row")
+            idp[i] = EMB_ID_HOST
+            memcpy(reinterpret<void?>(reinterpret<float?>(g_rd.tok_xh_host.mapped) + i * dim), addr<void?>(x[i * dim]), dim * 4l)
+            if (side) {
                 verify(long_length(ple) >= (i + 1l) * w, "vk_rdec_token_n: a row without its id brings no side row")
-                idp[i] = EMB_ID_HOST
                 memcpy(reinterpret<void?>(reinterpret<float?>(g_rd.ple_host.mapped) + i * w), addr<void?>(ple[i * w]), w * 4l)
             }
         }
@@ -4350,11 +4410,14 @@ def vk_rdec_token_n(x : array<float>; cossin : array<float>; ple : array<float>;
     let prof = vk_prof()
     let ts0 = ref_time_ticks()
     unsafe {
-        memcpy(g_rd.x_host.mapped, addr<void?>(x[0]), g_rd.dim * 4l * nrows)
+        if (rd_emb_on()) {
+            rd_stage_rows_ids(x, ple, ids, nrows)
+        } else {
+            verify(long_length(x) >= g_rd.dim * nrows, "vk_rdec_token_n: the rows are short, and no table on the device gathers them")
+            memcpy(g_rd.x_host.mapped, addr<void?>(x[0]), g_rd.dim * 4l * nrows)
+        }
         memcpy(g_rd.cos_host.mapped, addr<void?>(cossin[0]), g_rd.cos_elems * 4l * nrows)
-        if (g_rd.ple_tok_on) {
-            rd_stage_ple_ids(ple, ids, nrows)
-        } elif (g_rd.ple > 0l) {
+        if (g_rd.ple > 0l && !g_rd.ple_tok_on) {
             memcpy(g_rd.ple_host.mapped, addr<void?>(ple[0]), g_rd.n_layers * g_rd.ple * 4l * nrows)
         }
         var tm = reinterpret<TokMeta?>(g_rd.tok_meta.mapped)

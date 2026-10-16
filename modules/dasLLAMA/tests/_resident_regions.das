@@ -558,6 +558,79 @@ def cell_regions_batched_side_rows(t : T?; file : string) {
     }
 }
 
+//! two sessions over prompts A and B batched through STEPS steps: every row's logits a step, the N-row command serving every step
+def private batched_rows_logits(t : T?; tr : Model) : array<array<float>> {
+    var prompts <- [ <- prompt_a(), <- prompt_b()]
+    var feeds <- [ <- feed_a(), <- feed_b()]
+    var sessions : array<Session>
+    sessions |> reserve(2)
+    for (p in prompts) {
+        sessions |> emplace <| create_session(tr, mirror_kv_dtype())
+        eval(tr, sessions[length(sessions) - 1], p)
+    }
+    var sess <- [for (i in range(2)); unsafe(addr(sessions[i]))]
+    var rows : array<array<float>>
+    let steps0 = rdec_nrow_steps()
+    with_batch_rows(tr, sess) $(var ws; var sx) {
+        for (st in range64(STEPS)) {
+            var toks <- [for (i in range(2)); feeds[i][st]]
+            eval_batch(tr, ws, sx, toks)
+            delete toks
+            for (s in sessions) {
+                rows |> push_clone(s.logits)
+            }
+        }
+    }
+    t |> equal(rdec_nrow_steps() - steps0, STEPS, "every batched step went through the N-row command")
+    served_every_call(t)
+    unsafe {
+        delete sess
+    }
+    delete sessions
+    delete prompts
+    delete feeds
+    return <- rows
+}
+
+//! the batched rows' token rows gathered on the device off their ids (`ARCHITECTURE_GPU_VULKAN_NROW.md#nrow-token-command`): every
+//! batched row counted by `vk_rdec_nrow_embed_gathered`, the host embedding none, and each row's logits at every step bit for bit the
+//! same steps' on a load with the gather off (`set_gpu_resident_embed(0)`, the `DASLLAMA_VK_GPU_EMBED=0` form: every row embedded on
+//! the host and staged up), which moves the counter by nothing and embeds every row on the host - the counters' control
+def cell_regions_batched_embed_gather(t : T?; file : string) {
+    t |> run("the batched rows gather their token rows on the device, bit for bit the rows the host embeds") @(t : T?) {
+        static_if (typeinfo builtin_module_exists(vulkan)) {
+            let pin = gpu_resident_embed_pin()
+            var dev, host : array<array<float>>
+            set_gpu_resident_embed(1)
+            with_regions_rig(t, file) $(tr) {
+                let g0 = vk_rdec_nrow_embed_gathered()
+                let h0 = batch_rows_host_embedded()
+                delete dev
+                dev <- batched_rows_logits(t, tr)
+                t |> equal(vk_rdec_nrow_embed_gathered() - g0, 2l * STEPS, "every batched row's token row gathered off its id")
+                t |> equal(batch_rows_host_embedded() - h0, 0l, "the host embedded no batched row")
+            }
+            set_gpu_resident_embed(0)
+            with_regions_rig(t, file) $(tr) {
+                let g0 = vk_rdec_nrow_embed_gathered()
+                let h0 = batch_rows_host_embedded()
+                delete host
+                host <- batched_rows_logits(t, tr)
+                t |> equal(vk_rdec_nrow_embed_gathered() - g0, 0l, "with the gather off no batched row gathered: the counter's control")
+                t |> equal(batch_rows_host_embedded() - h0, 2l * STEPS, "with the gather off the host embedded every batched row")
+            }
+            set_gpu_resident_embed(pin)
+            t |> equal(long_length(dev), long_length(host), "both loads stepped every row")
+            for (i in range64(min(long_length(dev), long_length(host)))) {
+                let diff = logits_maxdiff(dev[i], host[i])
+                t |> equal(diff, 0.0, "step {i / 2l}, row {i % 2l}: the gathered rows' logits bit for bit the host rows' (maxdiff {diff})")
+            }
+            delete dev
+            delete host
+        }
+    }
+}
+
 def cell_regions_batched_steps(t : T?; file : string; bar : LogitsBar = LogitsBar.bit_exact; split_forms : bool = false) {
     t |> run("two sessions, a region each: a batched step over both reads what each session reads alone, with no history resync") @(t : T?) {
         with_regions_rig(t, file, RegionsLoad(split_forms = split_forms)) $(tr) {

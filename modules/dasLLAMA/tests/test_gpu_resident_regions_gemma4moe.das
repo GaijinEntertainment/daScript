@@ -26,6 +26,11 @@ def test_regions_batched_steps_g4moe(t : T?) {
 }
 
 [test]
+def test_regions_batched_embed_gather_g4moe(t : T?) {
+    cell_regions_batched_embed_gather(t, REGIONS_FILE)
+}
+
+[test]
 def test_regions_batched_widen_g4moe(t : T?) {
     cell_regions_batched_widen(t, REGIONS_FILE, LogitsBar.wide_bar, split_forms = true)
 }

@@ -170,6 +170,7 @@ def private d_land_carry(row : int64; var dst : array<float>) {
 
 var private g_head_feh = -1
 var private g_draft_row = -1l
+var private g_draft_token = -2l
 var private g_draft_hyd0 = -1l
 var private g_draft_pick_only = false
 
@@ -189,9 +190,10 @@ def private d_no_experts_rows(l : int64; xb : float const?; logits : float const
     panic("the test's verify double never asks the host for experts")
 }
 
-//! the draft double: the row, the hydrate start and the pick ask it was asked for, a sentinel logit where the logits land, a distinctive pick
+//! the draft double: the token, the row, the hydrate start and the pick ask it was asked for, a sentinel logit where the logits land, a distinctive pick
 [unused_argument(x, h, cossin, kp, vp, experts)]
-def private d_draft(x : array<float>; h : array<float>; cossin : array<float>; row, hyd0 : int64; var kp : uint8?; var vp : uint8?; pick_only : bool; var logits : array<float>; experts : RdecHostExpertsFn) : int64 {
+def private d_draft(x : array<float>; token : int64; h : array<float>; cossin : array<float>; row, hyd0 : int64; var kp : uint8?; var vp : uint8?; pick_only : bool; var logits : array<float>; experts : RdecHostExpertsFn) : int64 {
+    g_draft_token = token
     g_draft_row = row
     g_draft_hyd0 = hyd0
     g_draft_pick_only = pick_only
@@ -204,10 +206,12 @@ def private d_draft(x : array<float>; h : array<float>; cossin : array<float>; r
 var private g_verify_pos = -1l
 var private g_verify_n = -1l
 var private g_verify_pick_only = false
+var private g_verify_id_last = -1l
 
-//! the verify double: the position, row count and pick ask it was asked for, a sentinel logit where the logits land, a sentinel hidden, a distinctive pick a row
+//! the verify double: the position, row count, pick ask and last row's id it was asked for, a sentinel logit where the logits land, a sentinel hidden, a distinctive pick a row
 [unused_argument(x, cossin, hemb, hcos, h0, side, experts)]
-def private d_verify(x, cossin, hemb, hcos, h0, side : array<float>; pos, n : int64; pick_only : bool; var logits : array<float>; var picks : array<int64>; var hid : array<float>; experts : RdecHostExpertsRowsFn) : bool {
+def private d_verify(x, cossin, hemb, hcos, h0, side : array<float>; ids : array<int64>; pos, n : int64; pick_only : bool; var logits : array<float>; var picks : array<int64>; var hid : array<float>; experts : RdecHostExpertsRowsFn) : bool {
+    g_verify_id_last = empty(ids) ? -1l : ids[long_length(ids) - 1l]
     g_verify_pos = pos
     g_verify_n = n
     g_verify_pick_only = pick_only
@@ -396,28 +400,30 @@ def test_rdec_draft_seat(t : T?) {
         var logits : array<float>
         logits |> resize(4)
         t |> success(!rdec_draft_installed(), "no draft seat before its install")
-        t |> equal(rdec_draft(rows, rows, rows, 3l, 1l, null, null, false, logits, @@d_no_experts), -1l, "an unset draft seat declines - the CPU draft serves")
+        t |> equal(rdec_draft(rows, -1l, rows, rows, 3l, 1l, null, null, false, logits, @@d_no_experts), -1l, "an unset draft seat declines - the CPU draft serves")
         install_rdec_draft(@@d_set_head, @@d_draft)
         t |> success(rdec_draft_installed(), "the draft install must flip its witness")
         t |> success(rdec_set_head(1l, 5, 2l, 3l, 4l, 5l, 6l, 7l, 8l, 0, 0, 0, 0, 0, 0, 0, RdecLayerGeom()), "the head double's answer forwards")
         t |> equal(g_head_feh, 5)
-        t |> equal(rdec_draft(rows, rows, rows, 9l, 4l, null, null, false, logits, @@d_no_experts), 7l, "the double's pick forwards")
+        t |> equal(rdec_draft(rows, 31l, rows, rows, 9l, 4l, null, null, false, logits, @@d_no_experts), 7l, "the double's pick forwards")
+        t |> equal(g_draft_token, 31l, "the token's id forwards")
         t |> equal(g_draft_row, 9l)
         t |> equal(g_draft_hyd0, 4l)
         t |> success(!g_draft_pick_only, "the logits ask forwards")
         t |> equal(logits[0], 44.0, "the double writes through the logits the forwarder handed it")
         logits[0] = 0.0
-        t |> equal(rdec_draft(rows, rows, rows, 9l, 4l, null, null, true, logits, @@d_no_experts), 7l, "the pick ask forwards and the double still answers the pick")
+        t |> equal(rdec_draft(rows, -1l, rows, rows, 9l, 4l, null, null, true, logits, @@d_no_experts), 7l, "the pick ask forwards and the double still answers the pick")
         t |> success(g_draft_pick_only, "the pick ask reaches the double")
+        t |> equal(g_draft_token, -1l, "a host row's -1 forwards")
         t |> equal(logits[0], 0.0, "under the pick ask the double leaves the logits alone")
         let seat = unset_rdec_draft()
         t |> success(!rdec_draft_installed(), "the unset flips the witness back")
         g_draft_row = -1l
-        t |> equal(rdec_draft(rows, rows, rows, 9l, 4l, null, null, false, logits, @@d_no_experts), -1l, "the unset seat declines")
+        t |> equal(rdec_draft(rows, -1l, rows, rows, 9l, 4l, null, null, false, logits, @@d_no_experts), -1l, "the unset seat declines")
         t |> equal(g_draft_row, -1l, "the unset seat never reaches the installed double")
         reinstall_rdec_draft(seat)
         t |> success(rdec_draft_installed(), "the reinstall flips the witness")
-        t |> equal(rdec_draft(rows, rows, rows, 11l, 0l, null, null, false, logits, @@d_no_experts), 7l, "the seat the unset answered serves again")
+        t |> equal(rdec_draft(rows, -1l, rows, rows, 11l, 0l, null, null, false, logits, @@d_no_experts), 7l, "the seat the unset answered serves again")
         t |> equal(g_draft_row, 11l)
         unset_rdec_draft()   // back to the declining form the cell found: a later cell in this process reads the seat as it was
         t |> success(!rdec_draft_installed(), "the seat is back at its uninstalled state for the rest of the process")
@@ -438,6 +444,8 @@ def test_rdec_draft_seat(t : T?) {
 def test_rdec_verify_seat(t : T?) {
     t |> run("the same-slab verify seat installs apart and forwards the rows, the position, the pick ask and every landing") @(t : T?) {
         let rows : array<float>
+        let noids : array<int64>
+        var ids <- [5l, 6l, 77l]
         var logits, hid : array<float>
         var picks : array<int64>
         logits |> resize(4)
@@ -445,11 +453,12 @@ def test_rdec_verify_seat(t : T?) {
         picks |> resize(3)
         t |> success(!rdec_verify_installed(), "no verify seat before its install")
         t |> equal(rdec_verify_rows(), 0l, "an unset verify steps no rows")
-        t |> success(!rdec_verify(rows, rows, rows, rows, rows, rows, 5l, 2l, false, logits, picks, hid, @@d_no_experts_rows), "an unset verify declines - the CPU verify serves")
+        t |> success(!rdec_verify(rows, rows, rows, rows, rows, rows, noids, 5l, 2l, false, logits, picks, hid, @@d_no_experts_rows), "an unset verify declines - the CPU verify serves")
         install_rdec_verify(@@d_verify, @@d_verify_rows)
         t |> success(rdec_verify_installed(), "the verify install must flip its witness")
         t |> equal(rdec_verify_rows(), 4l, "the rows answer forwards")
-        t |> success(rdec_verify(rows, rows, rows, rows, rows, rows, 41l, 3l, false, logits, picks, hid, @@d_no_experts_rows), "the double's answer forwards")
+        t |> success(rdec_verify(rows, rows, rows, rows, rows, rows, ids, 41l, 3l, false, logits, picks, hid, @@d_no_experts_rows), "the double's answer forwards")
+        t |> equal(g_verify_id_last, 77l, "the rows' ids forward")
         t |> equal(g_verify_pos, 41l)
         t |> equal(g_verify_n, 3l)
         t |> success(!g_verify_pick_only, "the logits ask forwards")
@@ -459,14 +468,16 @@ def test_rdec_verify_seat(t : T?) {
         logits[0] = 0.0
         hid[0] = 0.0
         picks[2] = 0l
-        t |> success(rdec_verify(rows, rows, rows, rows, rows, rows, 43l, 3l, true, logits, picks, hid, @@d_no_experts_rows), "the double's answer forwards under the pick ask")
+        t |> success(rdec_verify(rows, rows, rows, rows, rows, rows, noids, 43l, 3l, true, logits, picks, hid, @@d_no_experts_rows), "the double's answer forwards under the pick ask")
         t |> success(g_verify_pick_only, "the pick ask reaches the double")
+        t |> equal(g_verify_id_last, -1l, "a call with no ids forwards none")
         t |> equal(logits[0], 0.0, "under the pick ask the double leaves the logits alone")
         t |> equal(hid[0], 46.0, "... and still lands the hidden rows")
         t |> equal(picks[2], 12l, "... and every row's pick")
         delete logits
         delete hid
         delete picks
+        delete ids
     }
 }
 

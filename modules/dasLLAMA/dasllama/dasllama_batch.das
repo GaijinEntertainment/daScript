@@ -201,15 +201,16 @@ def attention_batch_decode(t : Model; var ws : BatchWorkspace; sessions : array<
     attn_out_suffix(t, ws.scr, l, nrows)
 }
 
-//! the per-step row prep every batch shape shares: positions already in ws.positions / rope_positions, and `ple_on_device` skips the CPU per-layer-embedding pre-step the armed override runs itself
-def private batch_rows_prep_(t : Model; var ws : BatchWorkspace; tokens : array<int64>; nrows : int64; ple_on_device : bool = false) {
+var private g_batch_rows_embedded = 0l
+
+//! The batched steps' rows the host embedded, in this process (a cell's witness that a device gather left the host none)
+def batch_rows_host_embedded() : int64 => g_batch_rows_embedded
+
+//! the rows' token embeddings into ws.scr.x_b, under the model's embed scale
+def private batch_rows_embed(t : Model; var ws : BatchWorkspace; tokens : array<int64>; nrows : int64) {
     let c = t.config
-    batch_decode_alloc(t, ws.scr, nrows)
-    ws.row_tokens |> grow_resize(nrows)
-    for (i in range64(nrows)) {
-        ws.row_tokens[i] = tokens[i]
-    }
     let dim = c.dim
+    g_batch_rows_embedded += nrows
     let ts_embed = prof_ticks()
     for (i in range64(nrows)) {
         embed_row(t, tokens[i], unsafe(addr(ws.scr.x_b[i * dim])))
@@ -218,6 +219,20 @@ def private batch_rows_prep_(t : Model; var ws : BatchWorkspace; tokens : array<
         scale_inplace(unsafe(addr(ws.scr.x_b[0])), c.embed_scale, nrows * dim)
     }
     prof_add("embed", ts_embed)
+}
+
+//! the per-step row prep every batch shape shares: positions already in ws.positions / rope_positions; `ple_on_device` skips the CPU
+//! per-layer-embedding pre-step the armed override runs itself, `emb_on_device` the rows' embeddings it gathers itself
+def private batch_rows_prep_(t : Model; var ws : BatchWorkspace; tokens : array<int64>; nrows : int64; ple_on_device : bool = false; emb_on_device : bool = false) {
+    let c = t.config
+    batch_decode_alloc(t, ws.scr, nrows)
+    ws.row_tokens |> grow_resize(nrows)
+    for (i in range64(nrows)) {
+        ws.row_tokens[i] = tokens[i]
+    }
+    if (!emb_on_device) {
+        batch_rows_embed(t, ws, tokens, nrows)
+    }
     if (has_ple(c) && !ple_on_device) {  // gemma-4 E-series: per-(row, layer) side input (token-indexed, position-free)
         let ts_ple = prof_ticks()
         ple_pre_prefill(t, ws.scr, tokens, nrows)
@@ -400,7 +415,9 @@ def eval_batch_(t : Model; var ws : BatchWorkspace; var sessions : array<Session
         }
     }
     let ple_on_device = has_ple(c) && batch_decode_override_armed() && ple_gpu_decode_gate(t, *sessions[0], nrows, ws.positions[0])
-    batch_rows_prep_(t, ws, tokens, nrows, ple_on_device)
+    //! the CPU pre-step reads the embedded rows, so the rows gather on the device only beside the device's own pre-step
+    let emb_on_device = (!has_ple(c) || ple_on_device) && batch_decode_override_armed() && embed_batch_on_device(t, *sessions[0], nrows, ws.positions[0])
+    batch_rows_prep_(t, ws, tokens, nrows, ple_on_device, emb_on_device)
     ws.scr.ple_gpu_pending = ple_on_device   //! the CPU stack's tripwire: a skipped pre-step that reaches it panics instead of reading stale rows
     let dim = c.dim
     // layer stack: batched attention + the arch's batched FFN. An active batch-decode override may
@@ -413,6 +430,9 @@ def eval_batch_(t : Model; var ws : BatchWorkspace; var sessions : array<Session
     if (!stack_done && (t.metal_blob || no_cpu_form)) {
         batch_rows_one_at_a_time(t, sessions, tokens, nrows)
         return
+    }
+    if (!stack_done && emb_on_device) {   //! the override declined the step: the rows embed late for the stacks below
+        batch_rows_embed(t, ws, tokens, nrows)
     }
     if (!stack_done && ple_on_device) {   //! the override declined the step: the CPU pre-step runs late for the stacks below
         let ts_ple = prof_ticks()
