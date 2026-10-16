@@ -1,8 +1,8 @@
 # dasLLAMA GPU Resident-Session Code Review Checklist
 
 **Read `REVIEW_COMMON.md` (repo root) first - its contract binds this checklist.** Architecture
-docs: `ARCHITECTURE_GPU_MTP.md`, `ARCHITECTURE_GPU_VULKAN_NROW.md`. Planned work: `followup_metal.md`,
-`followup_vulkan.md`.
+docs: `ARCHITECTURE_GPU_MTP.md`, `ARCHITECTURE_GPU_VULKAN_NROW.md`. Planned work:
+`followup_metal.md`, `followup_vulkan.md`.
 
 **A diff never hands a whole GPU decode or prefill call that the device served before the diff to
 the CPU path - it keeps that call on the device.** A call that
