@@ -1089,9 +1089,9 @@ def private region_cat_hit(key : uint64; sig : uint64[8]) : MetalBuffer? {
 def upload_region_cat(p0 : void?; b0 : uint64; p1 : void?; b1 : uint64; p2 : void? = null; b2 : uint64 = 0ul; p3 : void? = null;
                       b3 : uint64 = 0ul) : MetalBuffer? {
     let sig = fixed_array(intptr(p0), b0, intptr(p1), b1, intptr(p2), b2, intptr(p3), b3)
-    var key = 14695981039346656037ul
+    var key = 0ul
     for (v in sig) {
-        key = (key ^ v) * 1099511628211ul
+        key = hash_combine64(key, v)
     }
     var hit = region_cat_hit(key, sig)
     return hit != null ? hit : region_upload_cat_new(key, sig, [(p = p0, b = b0), (p = p1, b = b1), (p = p2, b = b2), (p = p3, b = b3)])
@@ -1332,11 +1332,12 @@ var private g_mirror_ring_said = 0l   //! the layout key, at the floor slack, wh
 //! the layout's identity for `t` under `slack`
 def private mirror_layout_key(t : Model; slack : int64) : int64 {
     let n = long_length(t.kv_row_prefix)
-    var k = n * 1000003l + slack * 7919l + t.config.sliding_window * 31l + (gpu_kv_ring_on() ? 1l : 0l)
+    var k = hash_combine64(hash_combine64(uint64(n), uint64(slack)), uint64(t.config.sliding_window))
+    k = hash_combine64(k, gpu_kv_ring_on() ? 1ul : 0ul)
     for (l in range64(n)) {
-        k = k * 31l + t.kv_row_prefix[l]
+        k = hash_combine64(k, uint64(t.kv_row_prefix[l]))
     }
-    return k
+    return int64(k)
 }
 
 //! model `t`'s slice layout under the current slack (`kv_ring_rows` a sliding layer, ringed at every context); cached per model
