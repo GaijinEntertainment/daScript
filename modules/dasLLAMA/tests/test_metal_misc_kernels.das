@@ -1969,6 +1969,95 @@ def private mtl_toy_lens_gate(t : T?; var dev, queue; n : int) {
     g_mtl_toy_shift_pso = null
 }
 
+// The alignments the ringed attention, router and PLE projection builders declare (`requires =`): an aligned value passes every
+// builder silently, a misaligned one trips each builder whose contract it breaks, by the builder's name and the broken item. The
+// builders record into a graph capture the cell discards, so no misaligned dispatch reaches the device.
+var private g_align_trips : array<string>
+
+def private record_align_trip(msg : string) {
+    g_align_trips |> push(msg)
+}
+
+def private want_trips(var want : array<string>; names : array<string>; item : string) {
+    want |> reserve(length(want) + length(names))
+    for (n in names) {
+        want |> push("{n}: {item} != 0")
+    }
+}
+
+def private dispatch_align_gate(t : T?; var dev, queue) {
+    let ring64 <- [ "enc_attnp16_c", "enc_attnp32_c", "enc_attnp_q8_c", "enc_attnp_tq4_c", "enc_attnpb16_c", "enc_attnpb32_c",
+                    "enc_attnpb_q8_c", "enc_attnpb_tq4_c", "enc_qk_dev_c", "enc_qk_dev128_c" ]
+    let ring32 <- [ "enc_attnd16_c", "enc_attnd32_c", "enc_attndw16_c", "enc_attndw32_c", "enc_attndx16_c", "enc_attndx32_c",
+                    "enc_attnd_q8_c", "enc_attnd_tq4_c", "enc_attndw_q8_c", "enc_attndw_tq4_c", "enc_attndx_q8_c", "enc_attndx_tq4_c" ]
+    let routers <- [ "enc_moe_router", "enc_moe_router_b" ]
+    let projs <- [ "enc_ple_proj_bf16", "enc_ple_proj_bf16_one" ]
+    with_metal_cell(dev, queue) $(var mc : MetalCell) {
+        let b = mc.buf[mc |> out_words(64, 0.0)]
+        let saved_hook = metal_requires_hook()
+        set_metal_requires_hook(@@record_align_trip)
+        var inscope want : array<string>
+        gr_arm(true)
+        for (ring in fixed_array(0u, 128u, 96u, 48u)) {
+            var pk = SqAttnPartArgs(ring = ring)
+            var pb = SqAttnPartBArgs(ring = ring)
+            var dk = SqAttnDArgs(ring = ring)
+            var qk = AttnArgs(ring = ring)
+            enc_attnp16_c(null, b, 0ul, b, 0ul, b, b, pk, 1l, 32l)
+            enc_attnp32_c(null, b, 0ul, b, 0ul, b, b, pk, 1l, 32l)
+            enc_attnp_q8_c(null, b, 0ul, b, b, 0ul, b, b, b, pk, 1l, 32l)
+            enc_attnp_tq4_c(null, b, 0ul, b, b, 0ul, b, b, b, pk, 1l, 32l)
+            enc_attnpb16_c(null, b, b, b, b, b, 0ul, pb, 1l, 32l)
+            enc_attnpb32_c(null, b, b, b, b, b, 0ul, pb, 1l, 32l)
+            enc_attnpb_q8_c(null, b, b, b, b, b, b, b, 0ul, pb, 1l, 32l)
+            enc_attnpb_tq4_c(null, b, b, b, b, b, b, b, 0ul, pb, 1l, 32l)
+            enc_qk_dev_c(null, b, 0ul, b, 0ul, b, qk, 32l, 64l, 1l)
+            enc_qk_dev128_c(null, b, 0ul, b, 0ul, b, qk, 128l, 64l, 1l)
+            enc_attnd16_c(null, b, b, b, b, b, 0ul, dk, 1l, 4l, 1l)
+            enc_attnd32_c(null, b, b, b, b, b, 0ul, dk, 1l, 4l, 1l)
+            enc_attndw16_c(null, b, b, b, b, b, 0ul, dk, 1l, 4l, 1l)
+            enc_attndw32_c(null, b, b, b, b, b, 0ul, dk, 1l, 4l, 1l)
+            enc_attndx16_c(null, b, b, b, b, b, 0ul, dk, 1l, 4l, 1l)
+            enc_attndx32_c(null, b, b, b, b, b, 0ul, dk, 1l, 4l, 1l)
+            enc_attnd_q8_c(null, b, b, b, b, b, b, b, 0ul, dk, 1l, 4l, 1l)
+            enc_attnd_tq4_c(null, b, b, b, b, b, b, b, 0ul, dk, 1l, 4l, 1l)
+            enc_attndw_q8_c(null, b, b, b, b, b, b, b, 0ul, dk, 1l, 4l, 1l)
+            enc_attndw_tq4_c(null, b, b, b, b, b, b, b, 0ul, dk, 1l, 4l, 1l)
+            enc_attndx_q8_c(null, b, b, b, b, b, b, b, 0ul, dk, 1l, 4l, 1l)
+            enc_attndx_tq4_c(null, b, b, b, b, b, b, b, 0ul, dk, 1l, 4l, 1l)
+            if (ring % 64u != 0u) {
+                want |> want_trips(ring64, "ka.ring % 64")
+            }
+            if (ring % 32u != 0u) {
+                want |> want_trips(ring32, "ka.ring % 32")
+            }
+        }
+        //! (dim, woff, xs): the aligned control, an even dim and woff off the float4 lattice, an odd pair, an xs off the lattice
+        for (s in fixed_array((8l, 4u, 0u), (6l, 2u, 0u), (5l, 1u, 0u), (8l, 0u, 6u))) {
+            var pa = moe_router_args(4l, s._0, 1l, int64(s._2))
+            pa.woff = s._1
+            enc_moe_router(null, b, b, b, b, pa, 4l, 1l)
+            enc_moe_router_b(null, b, b, b, b, pa, 4l, 1l)
+            enc_ple_proj_bf16(null, b, b, b, pa, 4l, 1l)
+            enc_ple_proj_bf16_one(null, b, b, b, pa, 4l, 1l)
+            for (n in routers) {
+                want |> want_trips(s._0 % 4l != 0l ? [n] : array<string>(), "pa.dim % 4")
+                want |> want_trips(s._1 % 4u != 0u ? [n] : array<string>(), "pa.woff % 4")
+                want |> want_trips(s._2 % 4u != 0u ? [n] : array<string>(), "pa.xs % 4")
+            }
+            for (n in projs) {
+                want |> want_trips(s._0 % 2l != 0l ? [n] : array<string>(), "pa.dim % 2")
+                want |> want_trips(s._1 % 2u != 0u ? [n] : array<string>(), "pa.woff % 2")
+            }
+        }
+        gr_arm(false)
+        restore_metal_requires_hook(saved_hook)
+        t |> equal(length(want), 46, "dispatch_align: the misaligned rings and router shapes owe forty-six trips")
+        t |> equal(join(g_align_trips, "\n"), join(want, "\n"), "dispatch_align: each builder trips on exactly the items its value breaks")
+        delete g_align_trips
+    }
+}
+
 [test]
 def test_metal_misc_kernels(t : T?) {
     t |> run("decode elementwise/misc kernels == direct CPU oracles") @(t : T?) {
@@ -2111,6 +2200,7 @@ def test_metal_misc_kernels(t : T?) {
                 ple_conv_gate(t, dev, queue, 100, 3, 4, 3, 10, 0, 14, true)     // the window form from position 0: taps before the sequence and inside the panel
                 ple_conv_gate(t, dev, queue, 100, 3, 4, 3, 10, 23, 6, true)     // a later window: taps in the ring (wrapped) and in the panel
                 mtl_toy_lens_gate(t, dev, queue, 1000)      // n%64 != 0 — the tail workgroup's guard
+                dispatch_align_gate(t, dev, queue)
             }
         } else {
             t |> skip("das_metal is not built on this platform; misc kernel checks skipped")

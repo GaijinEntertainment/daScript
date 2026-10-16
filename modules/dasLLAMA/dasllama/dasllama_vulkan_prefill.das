@@ -1671,6 +1671,10 @@ def ple_proj_gemv_why(dim, all, w16_bytes : int64) : string {
     return vk_range_ok(w16_bytes) ? "" : "its f16 panel ({w16_bytes} bytes) passes the device's storage range {vk_max_storage_range()}"
 }
 
+//! why the bf16 projection rows have no GEMV at model dim `dim`, "" where they do: the stamp (`router_gemv_bf16_cls`) steps a row a
+//! word pair, so an odd dim drops the row's last element
+def ple_proj_bf16_why(dim : int64) : string => dim % 2l == 0l ? "" : "the bf16 rows' word-pair walk wants an even dim, not {dim}"
+
 //! The pre-step's projection on device off the file's own rows (bf16 halves `w16`, else f32 `w32`) and its norm row: the router GEMV
 //! under 1/sqrt(dim) at the token command, the window's f16 tile over a panel it converts each window (else the router GEMV) before
 //! layer 0. Refused past `pf_ready`: these sets build with the prefill buffers.
@@ -1681,6 +1685,11 @@ def vk_rdec_set_ple_proj(w16 : array<uint16>; w32 : array<float>; pnorm : array<
     }
     assert(g_rd != null && g_rd.ple > 0l, "vk_rdec_set_ple_proj before set_ple")
     let bf16 = !empty(w16)
+    let k_why = bf16 ? ple_proj_bf16_why(g_rd.dim) : ""
+    if (k_why != "") {
+        to_log(LOG_WARNING, "dasLLAMA vulkan resident: the per-layer-embedding projection keeps the CPU pre-step - {k_why}\n")
+        return false
+    }
     let n = bf16 ? long_length(w16) : long_length(w32)
     if (n != all * g_rd.dim || long_length(pnorm) != g_rd.ple || g_rd.pf_ready
             || !((bf16 ? ensure_router_gemv_bf16_cls() : ensure_router_gemv_cls()) && ensure_ple_finish_cls())) {

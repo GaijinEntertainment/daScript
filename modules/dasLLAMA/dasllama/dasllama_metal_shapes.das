@@ -189,13 +189,16 @@ def emb_kq_gather_fmt(f : KqFmt) : bool => f != KqFmt.q8 && kq_fmt_gpu_supported
 def emb_table_gather_fmt(f : KqFmt) : bool => f == KqFmt.q8 || (kq_dense_b32(f) && kq_fmt_gpu_supported(f)) || emb_kq_gather_fmt(f)
 
 //! the E-series pre-step serves on the device for this blob model: its table in a format the gather family serves, bound at
-//! whole superblocks (a per-32 pair's binds stay 16-byte aligned), a ple width the finish's threadgroup takes
+//! whole superblocks (a per-32 pair's binds stay 16-byte aligned), a ple width the finish's threadgroup takes, and a model dim
+//! the projection's word walk steps whole: pairs on the bf16 rows (`enc_ple_proj_bf16`), float4s on the f32 router's
 def metal_ple_dev_ok(t : Model) : bool {
     return false if (!has_ple(t.config) || !t.metal_blob || t.planes_trimmed)
     let ple = t.config.n_embd_per_layer
     let all = t.config.n_layers * ple
     let aligned = t.ple_emb_fmt == KqFmt.q8 || (all % KQ_SB_ELEMS == 0l && t.ple_emb_off % KQ_SB_ELEMS == 0l)
-    return emb_table_gather_fmt(t.ple_emb_fmt) && aligned && ple % KQ_B32_ELEMS == 0l && ple <= 1024l
+    let proj_word = t.ple_model_bf16 ? 2l : 4l
+    return (emb_table_gather_fmt(t.ple_emb_fmt) && aligned && ple % KQ_B32_ELEMS == 0l && ple <= 1024l
+        && t.config.dim % proj_word == 0l)
 }
 
 //! a plane format with a one-row GEMV on this home: q8's, a superblock format's row-batched decode form at one row, or a per-32

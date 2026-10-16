@@ -9534,3 +9534,46 @@ def test_vkd_gemv_lane_rule(t0 : T?) {
         }
     }
 }
+
+//! the fused gate + up GEMV's publish (`KqGemvLeafT.gu_shell`) re-derived on the CPU: each turn's lanes write their rows' dots at their own
+//! slots, and subgroup 0's lane j gathers row j off the slot `gemv_lane_row_slot` names - row j's own dots, on the turn that serves it,
+//! for every row of the block, at every subgroup width and lanes-per-row split the shell runs; the rows each lane serves are the
+//! shell's earlier inline mapping, and the row's own index read as a slot is the control that misses
+[test]
+def test_vkd_gu_publish_slots(t0 : T?) {
+    t0 |> run("gu_shell: the slot each row's dots are gathered from holds that row") <| @(t : T?) {
+        for (sgs in fixed_array(32u, 64u)) {
+            let nsg = 256u / sgs
+            for (lpr in fixed_array(8u, 16u, sgs)) {
+                let per_sg = sgs / lpr
+                let per_turn = nsg * per_sg
+                var gathered, hits : uint[32]
+                var flat_misses = 0
+                var slab : uint[256]
+                var turn = 0u
+                while (turn * per_turn < 32u) {
+                    for (sg in urange(nsg)) {
+                        for (lane in urange(sgs)) {
+                            let lr = gemv_lane_row(turn, sg, lane, lpr, sgs, nsg)
+                            t |> equal(lr, turn * per_turn + sg * per_sg + lane / lpr, "sgs {int(sgs)} lpr {int(lpr)}: the shell's row mapping")
+                            slab[sg * sgs + lane] = lr
+                        }
+                    }
+                    for (j in urange(32u)) {
+                        if (j >= turn * per_turn && j < (turn + 1u) * per_turn) {
+                            gathered[j] = slab[gemv_lane_row_slot(j, turn, lpr, sgs, nsg)]
+                            hits[j]++
+                            flat_misses += slab[j] != j ? 1 : 0
+                        }
+                    }
+                    turn++
+                }
+                for (j in urange(32u)) {
+                    t |> equal(hits[j], 1u, "sgs {int(sgs)} lpr {int(lpr)}: row {int(j)} gathered on exactly one turn")
+                    t |> equal(gathered[j], j, "sgs {int(sgs)} lpr {int(lpr)}: row {int(j)} gathered off its own lane's slot")
+                }
+                t |> success(flat_misses > 0, "sgs {int(sgs)} lpr {int(lpr)}: the row's own index read as a slot holds another row (the control)")
+            }
+        }
+    }
+}
