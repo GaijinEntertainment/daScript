@@ -1672,9 +1672,13 @@ def private rdec_bind_region(t : Model; var s : Session) : int64 {
 def private rdec_owns(s : Session; r : int64) : bool
     => s.rdec_gen != 0l && r >= 0l && r < long_length(g_rdec_regions) && g_rdec_regions[r].gen == s.rdec_gen
 
+//! `s` claims region `r` with `cnt` rows written from the start: the claim's high-water mark is those rows, and the session's ring
+//! floor theirs - a one-window prompt past the ring's slack has already overwritten the rows under it
+[arch(at="../ARCHITECTURE_GPU_KV_RING.md#kv-ring-floor")]
 def private rdec_claim(var s : Session; r, cnt : int64) {
     g_rdec_regions[r].cnt = cnt
     g_rdec_regions[r].hw = cnt
+    s.kv_ring_floor = rdec_ring_floor(cnt)
     g_rdec_regions[r].dn_pos = 0l
     for (i in range(RDEC_DN_SNAPS)) {
         g_rdec_regions[r].snap_pos[i] = 0l
